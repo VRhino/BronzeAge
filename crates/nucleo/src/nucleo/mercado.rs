@@ -56,7 +56,7 @@ fn rechazo_de_trueque(e: ErrorTrueque) -> (&'static str, &'static str) {
         ErrorTrueque::LadoVacio => (TRUEQUE_LADO_VACIO, "cada lado del trueque necesita al menos una línea"),
         ErrorTrueque::CantidadNoPositiva => (TRUEQUE_CANTIDAD_NO_POSITIVA, "las cantidades del trueque deben ser mayores que cero"),
         ErrorTrueque::RecursoRepetido => (TRUEQUE_RECURSO_REPETIDO, "un lado del trueque no puede repetir recurso"),
-        ErrorTrueque::NoAutorizado => (NO_AUTORIZADO, "no mandas en esa plaza"),
+        ErrorTrueque::NoAutorizado => (NO_AUTORIZADO, "el comercio de la plaza es de su Tesorero o su Gobernador, residente y dentro"),
         ErrorTrueque::NoEstaPropuesto => (TRUEQUE_NO_ESTA_PROPUESTO, "el trueque ya no está pendiente de respuesta"),
         ErrorTrueque::PropuestaVencida => (TRUEQUE_PROPUESTA_VENCIDA, "el plazo para contestar ya venció"),
     }
@@ -65,7 +65,7 @@ fn rechazo_de_trueque(e: ErrorTrueque) -> (&'static str, &'static str) {
 fn rechazo_de_orden(e: ErrorOrden) -> (&'static str, &'static str) {
     use rechazos::*;
     match e {
-        ErrorOrden::NoAutorizado => (NO_AUTORIZADO, "no mandas en esa plaza"),
+        ErrorOrden::NoAutorizado => (NO_AUTORIZADO, "el Mercado de la plaza es de su Tesorero o su Gobernador, residente y dentro"),
         ErrorOrden::SinMercado => (MERCADO_SIN_MERCADO, "la plaza no tiene un Mercado activo"),
         ErrorOrden::CantidadNoPositiva => (ORDEN_CANTIDAD_NO_POSITIVA, "la cantidad debe ser mayor que cero"),
         ErrorOrden::SinStock => (ORDEN_SIN_STOCK, "el almacén no tiene esa cantidad para vender"),
@@ -359,9 +359,9 @@ impl Nucleo {
         };
         match &p.comando {
             Comando::ProponerTrueque { a, b, lineas_a, lineas_b } => {
-                let faccion_a = self.plaza_o_rechazo(*a)?.faccion;
+                self.plaza_o_rechazo(*a)?;
                 self.plaza_o_rechazo(*b)?;
-                let puede = self.manda_en(p, faccion_a);
+                let puede = self.autorizar_en_plaza(p, *a, None).is_ok();
                 let id = self.estado.comercio.siguiente_acuerdo;
                 let acuerdo = AcuerdoTrueque::proponer(&cr.trueque, id, id32(*a), id32(*b), lineas_a, lineas_b, t, puede).map_err(de_trueque)?;
                 self.estado.comercio.siguiente_acuerdo += 1;
@@ -376,8 +376,8 @@ impl Nucleo {
                 let aceptar = matches!(p.comando, Comando::AceptarTrueque { .. });
                 let i = self.estado.comercio.posicion_acuerdo(*acuerdo).ok_or_else(|| rechazo(rechazos::TRUEQUE_DESCONOCIDO, format!("trueque-{acuerdo}")))?;
                 let (a, b) = (self.estado.comercio.acuerdos[i].a as u64, self.estado.comercio.acuerdos[i].b as u64);
-                let faccion_b = self.plaza_o_rechazo(b)?.faccion;
-                let puede = self.manda_en(p, faccion_b);
+                self.plaza_o_rechazo(b)?;
+                let puede = self.autorizar_en_plaza(p, b, None).is_ok();
                 let ac = &mut self.estado.comercio.acuerdos[i];
                 if aceptar {
                     let vence = ac.aceptar(&cr.trueque, t, puede).map_err(de_trueque)?;
@@ -396,8 +396,8 @@ impl Nucleo {
             }
             Comando::ColocarOrdenMercado { asentamiento, venta, recurso, cantidad, precio } => {
                 let plaza = self.plaza_o_rechazo(*asentamiento)?;
-                let (faccion, tiene_mercado, stock) = (plaza.faccion, nivel_mercado(plaza).is_some(), plaza.economia.almacen.cantidad(*recurso));
-                let puede = self.manda_en(p, faccion);
+                let (tiene_mercado, stock) = (nivel_mercado(plaza).is_some(), plaza.economia.almacen.cantidad(*recurso));
+                let puede = self.autorizar_en_plaza(p, *asentamiento, None).is_ok();
                 // El precio de referencia solo se calcula si hace falta: suma el stock de todas las plazas.
                 let referencia = if precio.is_none() {
                     precio_referencia(&cr.precio, *recurso, stock_global(*recurso, self.estado.asentamientos.values().map(|a| &a.economia.almacen)))
@@ -423,10 +423,8 @@ impl Nucleo {
                     return Err(rechazo(rechazos::ORDEN_NO_ACTIVA, format!("{} ya no está activa", ids::orden_de_mercado(*orden))));
                 }
                 let plaza = o.asentamiento as u64;
-                let faccion = self.plaza_o_rechazo(plaza)?.faccion;
-                if !self.manda_en(p, faccion) {
-                    return Err(rechazo(rechazos::NO_AUTORIZADO, format!("no mandas en as-{plaza}")));
-                }
+                self.plaza_o_rechazo(plaza)?;
+                self.autorizar_en_plaza(p, plaza, None)?;
                 // Retirarla antes de plazo la deja como una expirada (no hay estado «cancelada») y avisa con su propio hecho (Comercio_Caravanas §8.2).
                 let antes = self.ordenes_del_libro();
                 self.estado.comercio.libro.orden_mut(*orden).expect("está en pie").estado = EstadoOrden::Expirada;

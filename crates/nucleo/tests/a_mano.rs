@@ -72,7 +72,8 @@ impl Esc {
     fn ord(&mut self, actor: &str, c: Comando) -> Respuesta {
         self.cuenta += 1;
         let p = Peticion::nueva(actor, &format!("o{}", self.cuenta), c);
-        let p = if actor == "admin" { p.de_admin() } else { p };
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
+        let p = if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) { p.de_admin() } else { p };
         let t = self.n.ahora();
         self.n.aplicar_en(t, p)
     }

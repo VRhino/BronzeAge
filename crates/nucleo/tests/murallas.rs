@@ -3,6 +3,7 @@
 //! sin rastro, la foto a mitad de obra, el determinismo y el hash. Sobre el artefacto de mundo real (`generador/salida/mundo/mundo-*.bin`); las pruebas
 //! se omiten si no está.
 
+mod comun;
 use asentamiento::catalogo::Tipo;
 use asentamiento::recintos::{self, Mejora, Recinto};
 use asentamiento::{Cargo, Costo, Recurso};
@@ -112,7 +113,8 @@ impl Escenario {
     fn ord(&mut self, actor: &str, c: Comando) -> Respuesta {
         self.cuenta += 1;
         let p = Peticion::nueva(actor, &format!("o{}", self.cuenta), c);
-        let p = if actor == "admin" { p.de_admin() } else { p };
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
+        let p = if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) { p.de_admin() } else { p };
         let t = self.n.ahora();
         self.n.aplicar_en(t, p)
     }
@@ -690,7 +692,7 @@ fn la_foto_a_mitad_de_obra_conserva_la_cita_y_se_rechaza_la_del_formato_anterior
 
     let reglas = reglas(true, |_| {});
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN32");
+    assert_eq!(&bytes[..5], b"BAN33");
     let vuelta = Estado::deserializar(&bytes, &reglas, &m.0.hash().to_string()).unwrap();
     assert_eq!(vuelta.serializar(), bytes, "ida y vuelta idéntica");
     assert_eq!(vuelta.asentamientos, e.n.estado().asentamientos);
@@ -728,14 +730,14 @@ fn recuperar_a_mitad_de_obra_de_una_muralla_no_cambia_el_mundo() {
             n.aplicar_en(4 * MIN + 55_000, admin(&format!("dar-{r:?}"), Comando::DarRecursos { asentamiento: id, recurso: r, cantidad: 60_000_000 }));
         }
         assert!(n.aplicar_en(4 * MIN + 55_000, admin("nivel", Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 3 })).aceptada());
-        let orden = |i: &str, c| Peticion::nueva("ana", i, c);
+        let orden = |i: &str, c| comun::como_dueno(Peticion::nueva("ana", i, c));
         assert!(n.aplicar_en(5 * MIN + 1_000, orden("muralla", Comando::ComprometerRecinto { asentamiento: id, cargo: Cargo::MaestroObras, nivel: 1 })).aceptada());
         id
     };
     let mejora = |n: &mut Nucleo, id: u64| {
         let t = 10 * HORA + 13_000;
         n.avanzar_hasta(t);
-        assert!(n.aplicar_en(t, Peticion::nueva("ana", "mejora", Comando::MejorarRecinto { asentamiento: id, cargo: Cargo::MaestroObras, recinto: 1 })).aceptada());
+        assert!(n.aplicar_en(t, comun::como_dueno(Peticion::nueva("ana", "mejora", Comando::MejorarRecinto { asentamiento: id, cargo: Cargo::MaestroObras, recinto: 1 }))).aceptada());
     };
     let final_ = 40 * HORA;
     let sin_parar = {
@@ -775,7 +777,7 @@ fn correr(m: &M, escaso: bool, avanzar: &dyn Fn(&mut Nucleo, Instante)) -> (Resu
     let p = sitio_rico(&n, &m.0, 0, 1);
     let id = fundar(&mut n, 31_000, "a", "ana", 1, p);
     let admin = |i: &str, c| Peticion::nueva("admin", i, c).de_admin();
-    let ana = |i: &str, c| Peticion::nueva("ana", i, c);
+    let ana = |i: &str, c| comun::como_dueno(Peticion::nueva("ana", i, c));
     let t = HORA + 13_579; // nunca coincide con un paso de minuto de la plaza
     avanzar(&mut n, t);
     n.aplicar_en(t, admin("nivel", Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 3 }));

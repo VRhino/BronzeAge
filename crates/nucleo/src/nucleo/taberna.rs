@@ -5,8 +5,7 @@
 //! Dónde se compra y con qué oro: en la taberna de una plaza de la Facción, con el oro de su almacén; en la de un campamento de mercenarios, con el del héroe (el de su almacén personal si reside
 //! allí; si no, el del carro de su columna). Quien compra tiene que estar dentro del lugar (o con su columna a la puerta).
 //!
-//! DUDA: en una plaza, Niebla_De_Guerra §6.1 reserva la compra al Rey, el Embajador o el Gobernador presentes; los cargos son del sistema 5 y, como las demás órdenes de plaza, hoy la puede dar
-//! cualquier ciudadano presente.
+//! En una plaza compra el Rey, el Embajador o el Gobernador, **dentro** de ella (Niebla_De_Guerra §6.1, Proyecciones `compraIntel`; 5E): la columna a la puerta ya no basta.
 
 use super::*;
 use crate::memoria::{EdificioVisto, InformeDePlaza, Mirada, OrigenIntel, Sitio};
@@ -67,6 +66,7 @@ impl Nucleo {
                 if a.faccion != faccion {
                     return Err(rechazo(rechazos::INTEL_PLAZA_AJENA, "la taberna es de una plaza de otra Facción".into()));
                 }
+                self.autorizar_en_plaza(p, x, Some(heroe))?;
                 if h.heroe.presencia.ubicacion != Ubicacion::Asentamiento(x as u32) && !a_la_puerta(a.posicion) {
                     return Err(rechazo(rechazos::INTEL_NO_PRESENTE, "hay que estar en la plaza para comprar en su taberna".into()));
                 }

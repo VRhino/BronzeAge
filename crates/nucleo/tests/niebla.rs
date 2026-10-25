@@ -1,8 +1,9 @@
 //! La niebla en el núcleo (4H T3d, Niebla_De_Guerra §2-§5): lo que graba cada ojo en la memoria de su Facción al cerrar las versiones (lo explorado por una columna, las fichas de lo ajeno con
-//! el último instante en que se vio, lo de un héroe sin bandera), la foto (`BAN32`) y que todo es lo mismo con sesiones y sin ellas; y lo que proyecta la vista de una Facción
+//! el último instante en que se vio, lo de un héroe sin bandera), la foto (`BAN33`) y que todo es lo mismo con sesiones y sin ellas; y lo que proyecta la vista de una Facción
 //! (`proyeccion::vista::Mirada`): lo propio entero, lo ajeno redactado, lo recordado como ficha, lo que ven los aliados y el tramo ajeno que se renueva. Sobre el artefacto de mundo real
 //! (`generador/salida/mundo/mundo-*.bin`); las pruebas se omiten si no está.
 
+mod comun;
 use base::{Instante, Mil, Plan, Punto, MS_POR_MINUTO};
 use contrato::v1::{self as pb, entidad::Cuerpo, TipoEntidad};
 use militar::heroe::Controlador;
@@ -89,7 +90,8 @@ impl Esc {
         self.peticiones += 1;
         let p = Peticion::nueva(actor, &format!("p{}", self.peticiones), c);
         let t = self.n.ahora();
-        self.n.aplicar_en(t, if actor == "admin" { p.de_admin() } else { p })
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
+        self.n.aplicar_en(t, if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) { p.de_admin() } else { p })
     }
 
     fn ok(&mut self, actor: &str, c: Comando) -> Respuesta {
@@ -428,7 +430,7 @@ fn la_memoria_es_la_misma_con_sesiones_y_sin_ellas_y_avanzando_a_trozos_y_viaja_
     assert!(mem.exploracion.contains_key(&1) && mem.fichas.contains_key(&1) && !mem.personal.is_empty() && !mem.vigias.is_empty(), "la partida graba de todo");
 
     let bytes = a.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN32");
+    assert_eq!(&bytes[..5], b"BAN33");
     let vuelta = Estado::deserializar(&bytes, &reglas(), m.0.hash()).expect("la foto vuelve");
     assert_eq!(vuelta.memoria, *mem);
     assert_eq!(vuelta.serializar(), bytes);

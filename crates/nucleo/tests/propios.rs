@@ -99,7 +99,8 @@ impl Esc {
         self.peticiones += 1;
         let p = Peticion::nueva(actor, &format!("prep{}", self.peticiones), c);
         let t = self.n.ahora();
-        self.n.aplicar_en(t, if actor == "admin" { p.de_admin() } else { p })
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
+        self.n.aplicar_en(t, if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) { p.de_admin() } else { p })
     }
 
     fn ok(&mut self, actor: &str, c: Comando) -> nucleo::Respuesta {
@@ -119,6 +120,10 @@ impl Esc {
         if let Some(p) = plaza {
             self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(p as u32)) });
             self.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(p as u32) });
+            // 5E: el primer residente que está dentro gobierna la plaza (sus órdenes de plaza pasan la matriz real).
+            if self.n.estado().asentamientos[&p].cargos.titular(asentamiento::Cargo::Gobernador).is_none() {
+                comun::gobierna(&mut self.n, p, h);
+            }
         }
         h
     }
@@ -175,6 +180,8 @@ fn escenario_con(m: &M, unity: bool) -> Esc {
     x.n.avanzar_hasta(t);
     for plaza in [x.a, x.b] {
         x.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: plaza, pausada: true });
+        // La puerta de antes del sistema 5 (abierta también a los neutrales, que por defecto ya no entran: Q1, 5E): en estas pruebas los neutrales entran.
+        x.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: true, enemigos: false });
     }
     let (a, b) = (x.a, x.b);
     x.ana = x.heroe("ana", 1, Some(a));
@@ -783,6 +790,8 @@ fn con_pueblo(m: &M) -> (Esc, u64, u64) {
     for (r, c) in [(Madera, 150_000), (Piedra, 150_000), (Oro, 50_000)] {
         x.ok("admin", Comando::DarSuministro { ejercito: col, recurso: r, cantidad: c });
     }
+    // 5E: las obras de mapa del panel de la madre las da su Gobernador, dentro de ella.
+    comun::gobernador_de_oficio(&mut x.n, "ana", a);
     let ahora = x.n.ahora();
     x.n.avanzar_hasta((ahora / MS_POR_MINUTO + 1) * MS_POR_MINUTO + 1_000);
     (x, pueblo, col)
@@ -794,6 +803,7 @@ async fn los_pueblos_y_las_avanzadas_de_la_faccion_viajan_en_resumen_con_su_obra
     let (x, pueblo, col) = con_pueblo(m);
     let (as_a, pueblo_id, carro) = (ids::asentamiento(x.a), ids::pueblo(pueblo), x.n.pueblo(pueblo).unwrap().1.carro.expect("el pueblo levantado trae su carro"));
     let heroe = ids::heroe(x.n.ejercito(col).unwrap().columna.lider);
+    let gobernador = ids::heroe(x.n.estado().asentamientos[&x.a].cargos.titular(asentamiento::Cargo::Gobernador).expect("la madre tiene Gobernador"));
     let centro = x.n.estado().asentamientos[&x.a].posicion;
     let sitio = Punto::new(centro.x + 8_000, centro.y);
     let w = arrancar_con(x.n).await;
@@ -826,7 +836,7 @@ async fn los_pueblos_y_las_avanzadas_de_la_faccion_viajan_en_resumen_con_su_obra
     let o = obras(nuevas(deltas_de(&previos, f1)[0]));
     let (pedido, entregado) = (&o[0].requerido.as_ref().unwrap().por_id, &o[0].entregado.as_ref().unwrap().por_id);
     assert_eq!((entregado["piedra"], entregado["madera"] < pedido["madera"], o[0].termina_en_ms), (pedido["piedra"], true, None), "la columna entregó la piedra entera y parte de la madera: la obra sigue pendiente de materiales");
-    let (previos, r) = dar_todo(&mut ana, "v3", orden::Cuerpo::DestruirAvanzada(pb::OrdenDestruirAvanzada { heroe_id: heroe.clone(), avanzada_id: avanzada.clone() })).await;
+    let (previos, r) = dar_todo(&mut ana, "v3", orden::Cuerpo::DestruirAvanzada(pb::OrdenDestruirAvanzada { heroe_id: gobernador, avanzada_id: avanzada.clone() })).await;
     aceptada(&r);
     let q = quitas(deltas_de(&previos, f1)[0]);
     assert!(q.contains(&(TipoEntidad::ObraDeMapa, obra)) && q.contains(&(TipoEntidad::Avanzada, avanzada)), "{q:?}");
@@ -1067,6 +1077,9 @@ async fn quien_cambia_de_faccion_pierde_la_vieja_con_todo_lo_suyo_y_recibe_solo_
     x.ok("ana", Comando::ColocarOrdenMercado { asentamiento: a, venta: true, recurso: Madera, cantidad: 10_000, precio: None });
     let caravana = ids::caravana(x.caravana("ana", a));
     x.ok("gus", Comando::ColocarOrdenMercado { asentamiento: b, venta: true, recurso: Piedra, cantidad: 10_000, precio: None });
+    // Dora, residente de A, es su Tesorera (5E): cuando ana se vaya de F1 (y deje sus cargos), dora seguirá comerciando por A.
+    let dora = x.dora;
+    x.ok("admin", Comando::AsignarCargoLocal { heroe: dora, asentamiento: a, cargo: asentamiento::Cargo::Tesorero, designado: dora });
     let w = arrancar_con(x.n).await;
     let (mut admin_c, _) = w.entrar("admin", TipoCliente::ClienteAdminWeb).await;
     let (mut ana, _, mensajes) = w.conectar(hola_con("ana", TipoCliente::ClienteUnity, &[])).await;

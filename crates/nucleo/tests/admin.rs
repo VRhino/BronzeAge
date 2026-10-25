@@ -100,7 +100,8 @@ impl Esc {
         self.peticiones += 1;
         let p = Peticion::nueva(actor, &format!("prep{}", self.peticiones), c);
         let t = self.n.ahora();
-        let r = self.n.aplicar_en(t, if actor == "admin" { p.de_admin() } else { p });
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
+        let r = self.n.aplicar_en(t, if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) { p.de_admin() } else { p });
         assert!(r.aceptada() || r.resultado == Resultado::SinCambios, "{r:?}");
         r
     }
@@ -128,6 +129,7 @@ fn escenario(m: &M, ajustes: Ajustes) -> Esc {
     x.ok("admin", Comando::FijarFaccionDeHeroe { heroe: ana, faccion: Some(1) });
     x.ok("admin", Comando::FijarResidencia { heroe: ana, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
     x.ok("admin", Comando::ColocarHeroe { heroe: ana, ubicacion: Ubicacion::Asentamiento(plaza as u32) });
+    comun::gobierna(&mut x.n, plaza, ana); // 5E: ana gobierna la plaza
     x.ok("admin", Comando::DarEscuadra { heroe: ana, tropa: Tropa::MiliciaLanceros, cantidad: 10 });
     let (centro, radio) = (x.centro, x.radio);
     x.gus = x.n.crear_ejercito(x.n.ahora(), "gus", 2, en_tierra(&m.0, centro, -(radio + 12 * U), 0), 500, 100_000).unwrap();
@@ -419,6 +421,14 @@ async fn solo_una_sesion_de_administracion_abre_admin_y_las_ordenes_de_administr
     assert_eq!(rechazo(&r), "no_autorizado");
     let (_, r) = dar_todo(&mut admin_c, "x3", admin("fijar_relacion", &[("faccion_a_id", "f-1"), ("faccion_b_id", "f-3"), ("relacion", "alianza")])).await;
     aceptada(&r);
+    // Roles técnicos por membresía (Proyecciones §2.2, 5E): el moderador ve `ADMIN` y no da ninguna orden, ni de administración ni el reloj.
+    let (mut moderador, b, _) = w.conectar(hola("mod:mia", TipoCliente::ClienteAdminWeb)).await;
+    assert_eq!(b.ambitos.iter().map(|a| ambito(&a.ambito)).collect::<Vec<_>>(), ["ADMIN:"]);
+    let (_, r) = dar_todo(&mut moderador, "m1", admin("fijar_relacion", &[("faccion_a_id", "f-1"), ("faccion_b_id", "f-3"), ("relacion", "guerra")])).await;
+    assert_eq!(rechazo(&r), "no_autorizado");
+    let (_, r) = dar_todo(&mut moderador, "m2", reloj_hasta(i64::MAX / 2)).await;
+    assert_eq!(rechazo(&r), "no_autorizado");
+    moderador.cerrar().await;
     // Y la administración no tiene vista (ve todo sin pedirla).
     admin_c.enviar(mc::Cuerpo::Vista(pb::CambiarVista { rectangulo: Some(pb::Rectangulo { min: Some(pb::Punto { x: 0, y: 0 }), max: Some(pb::Punto { x: 1, y: 1 }) }) })).await;
     loop {

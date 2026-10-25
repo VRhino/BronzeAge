@@ -16,7 +16,9 @@ use crate::estado_batallas::EstadoBatallas;
 use crate::estado_combate::EstadoCombate;
 use crate::estado_comercio::EstadoComercio;
 use crate::estado_fundacion::{self, EstadoFundacion};
-use crate::estado_militar::{Acceso, EstadoMilitar, Relacion, Trato};
+use crate::estado_militar::{EstadoMilitar, Relacion, Trato};
+use politica::puerta::Puerta;
+use politica::Cargos;
 use politica::relaciones::TipoRelacion;
 use crate::proyeccion::ambito::Ambito;
 use crate::urbanismo::{Urbanismo, Urbe};
@@ -62,6 +64,9 @@ pub const PRIO_ASENTAMIENTO: u8 = 2;
 /// en el TypeScript (`caducar` iba después de producir).
 pub const PRIO_CADUCA_POLITICA: u8 = 3;
 
+/// BAN33: BAN32 con los cargos locales y la puerta del sistema 5 (tanda 5E): cada plaza guarda el titular de sus cinco cargos (`cargos`) y su puerta por grupos con los vetos (`puerta`, que
+/// sustituye al acceso provisional por relación). BAN32 se rechaza: sus plazas no traen cargos y su acceso no tiene el grupo de los Aedas ni vetos.
+///
 /// BAN32: BAN31 con las correcciones del autor a 5C y la diplomacia de 5D (sistema 5): cada plaza guarda desde cuándo es de su Facción (`de_la_faccion_desde`, 5C-1: la capital
 /// efectiva es la que lleva más tiempo en la Facción), el resto oculto de su tributo (`resto_tributo`, Q3) y si abre su almacén a los aliados (`permite_reabastecer_aliados`); las
 /// relaciones dejan el mapa de pares del andamiaje (`EstadoMilitar::relaciones`) y viven solo en `Estado::politica` (con dirección, estado, fechas, tributo y su historia), y las propuestas
@@ -151,7 +156,7 @@ pub const PRIO_CADUCA_POLITICA: u8 = 3;
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN32";
+const MAGIA: &[u8; 5] = b"BAN33";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -348,9 +353,11 @@ pub struct Asentamiento {
     /// Ocupada hasta este instante (`OCUPACION.duracionMinutos`): su recaudación y su crecimiento valen el `factorRecaudacion` y el `factorCrecimiento` de la
     /// ocupación y su mantenimiento está congelado (`economia.ocupado`). Un evento de la cola la levanta.
     pub ocupada_hasta: Option<Instante>,
-    /// Quién puede entrar en la plaza, por relación con su Facción (Entrar con todo, 2026-10-22). Lo fija quien manda en ella (`FijarAcceso`) y lo heredan sus pueblos
-    /// extractores y sus avanzadas.
-    pub acceso: Acceso,
+    /// Su puerta (5E, Q1; Diplomacia_Facciones §4.3): los grupos a los que está cerrada (`None` = los de `PUERTA.cerradaAPorDefecto`, neutrales y enemigos) y los vetados. La fijan el
+    /// Gobernador o el Rey (`FijarPuerta`), veta el Gobernador (`VetarJugador`) y la heredan sus pueblos extractores y sus avanzadas. La conquista la devuelve a la de por defecto.
+    pub puerta: Puerta,
+    /// Sus cargos locales (5E, Doc 2.2; Diplomacia_Facciones §3.4): el titular de cada uno, que reside en la plaza (Q4). Al dejar de residir, el cargo se vacía; la conquista los vacía todos.
+    pub cargos: Cargos,
     /// Su nombre (`nombreDeCiudadLibre` al fundar, `RenombrarAsentamiento`); vacío = sin nombre (se muestra su id). Es presentación (5C).
     pub nombre: String,
     /// `capitalDeFaccionId`: la marca que deja `DesignarCapital` (5C). Sobrevive a un cambio de dueño, y entonces no vale (Diplomacia_Facciones §3.7).
@@ -986,9 +993,10 @@ impl Estado {
             codec_ciudad::escribir(&mut w, a.urbe.ciudad());
             w.opt_i64(a.protegida_hasta);
             w.opt_i64(a.ocupada_hasta);
-            w.bool(a.acceso.aliados);
-            w.bool(a.acceso.neutrales);
-            w.bool(a.acceso.enemigos);
+            w.opt_u64(a.puerta.cerrada_a.map(|g| u64::from(g.bits())));
+            w.u64(a.puerta.vetados.len() as u64);
+            a.puerta.vetados.iter().for_each(|&h| w.u64(h));
+            politica::CARGOS.iter().for_each(|&c| w.opt_u64(a.cargos.titular(c)));
             w.texto(&a.nombre);
             w.opt_u64(a.capital_de.map(u64::from));
             w.i64(a.de_la_faccion_desde);
@@ -1099,12 +1107,13 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN32`): los cuatro primeros dicen la familia («BAN3» son los formatos 30 a 39, y solo el 32 se admite; «BAN2» y «BAN1», los formatos 20 a 29 y
+        // La cabecera es de 5 bytes (`BAN33`): los cuatro primeros dicen la familia («BAN3» son los formatos 30 a 39, y solo el 33 se admite; «BAN2» y «BAN1», los formatos 20 a 29 y
         // 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'2' => {}
+                b'3' => {}
+                b'2' => return Err(ErrorFormato("foto del formato BAN32 (las plazas no traen sus cargos locales y su puerta es el acceso provisional por relación, sin el grupo de los Aedas ni vetos): ya no se admite")),
                 b'1' => return Err(ErrorFormato("foto del formato BAN31 (las plazas no dicen desde cuándo son de su Facción ni traen el resto de su tributo, y las relaciones son pares sin dirección del andamiaje de administración): ya no se admite")),
                 b'0' => return Err(ErrorFormato("foto del formato BAN30 (la Caravana de Fundación es una marca de la columna, sin titular, origen, coste que devolver ni caducidad, los campamentos no traen el fondo de refundación, las plazas no dicen desde cuándo son de su Facción y las relaciones son pares sin dirección): ya no se admite")),
                 _ => return Err(ErrorFormato("no es un estado del núcleo")),
@@ -1191,7 +1200,16 @@ impl Estado {
             let economia = codec_economia::leer(&mut r)?;
             let urbe = Urbe::desde_ciudad(codec_ciudad::leer(&mut r, asentamiento::recintos::proyeccion(&economia.recintos))?);
             let (protegida_hasta, ocupada_hasta) = (r.opt_i64()?, r.opt_i64()?);
-            let acceso = Acceso { aliados: r.bool()?, neutrales: r.bool()?, enemigos: r.bool()? };
+            let cerrada_a = r.opt_u64()?.map(|b| politica::Grupos::desde_bits(b as u8));
+            let mut vetados = BTreeSet::new();
+            for _ in 0..r.cuenta()? {
+                vetados.insert(r.u64()?);
+            }
+            let puerta = Puerta { cerrada_a, vetados };
+            let mut cargos = Cargos::default();
+            for c in politica::CARGOS {
+                cargos.fijar(c, r.opt_u64()?);
+            }
             let (nombre, capital_de, de_la_faccion_desde) = (r.texto()?, r.opt_u64()?.map(|f| f as u32), r.i64()?);
             let (resto_tributo, permite_reabastecer_aliados) = (r.i64()?, r.bool()?);
             for e in &economia.edificios {
@@ -1202,7 +1220,7 @@ impl Estado {
             for p in &economia.pueblos {
                 s.nodos_reclamados.insert(p.nodo, id);
             }
-            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe, protegida_hasta, ocupada_hasta, acceso, nombre, capital_de, de_la_faccion_desde, resto_tributo, permite_reabastecer_aliados });
+            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe, protegida_hasta, ocupada_hasta, puerta, cargos, nombre, capital_de, de_la_faccion_desde, resto_tributo, permite_reabastecer_aliados });
         }
         for _ in 0..r.cuenta()? {
             let nodo = r.u32()?;

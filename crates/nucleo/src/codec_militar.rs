@@ -475,7 +475,7 @@ fn convocatoria_leer(r: &mut Lector) -> Result<Convocatoria, ErrorFormato> {
 }
 
 pub(crate) fn escribir(w: &mut Escritor, m: &EstadoMilitar) {
-    let EstadoMilitar { heroes, convocatorias, reclutas, tecnologias, residentes: _ } = m;
+    let EstadoMilitar { heroes, convocatorias, reclutas, tecnologias, residentes: _, por_cuenta: _ } = m;
     w.u64(heroes.len() as u64);
     heroes.values().for_each(|h| heroe_escribir(w, h));
     w.u64(convocatorias.len() as u64);

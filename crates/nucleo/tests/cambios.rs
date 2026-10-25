@@ -152,7 +152,8 @@ impl Mundial {
     fn ok(&mut self, actor: &str, c: Comando) -> nucleo::Respuesta {
         self.cuenta += 1;
         let p = Peticion::nueva(actor, &format!("o{}", self.cuenta), c.clone());
-        let (t, p) = (self.n.ahora(), if actor == "admin" { p.de_admin() } else { p });
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
+        let (t, p) = (self.n.ahora(), if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) { p.de_admin() } else { p });
         let r = self.n.aplicar_en(t, p);
         assert!(r.aceptada(), "{c:?}: {r:?}");
         r

@@ -557,4 +557,13 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `refundacion.no_resides` | `REFUNDACION_NO_RESIDES` | Aportar o retirar con el almacén personal sin residir en ese campamento: el almacén vive donde se reside (aquí, con el carro). |
 | `refundacion.sin_aporte` | `REFUNDACION_SIN_APORTE` | Retirar un recurso que el héroe no aportó al fondo de ese campamento. |
 | `caravana.lejos` | `CARAVANA_LEJOS` | Reclamar la Caravana de Fundación lejos de ella (a más de `radioEncuentro`). |
+
+### Cargos locales y puerta (sistema 5, tanda 5E; Diplomacia_Facciones §3.4 y §4.3)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `cargo.no_ciudadano` | `CARGO_NO_CIUDADANO` | El designado para un cargo local no es ciudadano de la Facción dueña de la plaza. |
+| `cargo.no_reside` | `CARGO_NO_RESIDE` | El designado para un cargo local no reside en la plaza (Q4: solo se designa a quien reside). |
+| `cargo.sin_gobernador` | `CARGO_SIN_GOBERNADOR` | Tesorero, General, Maestro de Obras y Sacerdote se designan cuando la plaza ya tiene Gobernador. |
+| `puerta.residente` | `PUERTA_RESIDENTE` | A un residente de la plaza no se le veta (sería el exilio). |
 <!-- /rechazos -->

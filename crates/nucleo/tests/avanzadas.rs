@@ -3,6 +3,7 @@
 //! Unity, las ruinas con su invulnerabilidad, la conquista y la ruina de la madre, la foto, el determinismo y el hash. Sobre el artefacto de mundo real
 //! (`generador/salida/mundo/mundo-*.bin`); las pruebas se omiten si no está.
 
+mod comun;
 use asentamiento::avanzadas::{Estado as EstadoAvanzada, Etapa, TipoObra};
 use asentamiento::catalogo::Tipo;
 use asentamiento::Recurso::{self, *};
@@ -120,8 +121,11 @@ struct Esc {
 impl Esc {
     fn peticion(&mut self, actor: &str, c: Comando) -> Peticion {
         self.cuenta += 1;
+        // Andamiaje (5E): las órdenes de plaza de una cuenta de jugador las da la administración en estos escenarios, salvo con la cuenta precedida de «!», que la da tal cual (para probar
+        // quién puede darlas o el candado de batalla, que la administración no lleva). La matriz entera la prueba `tests/cargos.rs`.
+        let (actor, andamiaje) = actor.strip_prefix('!').map_or((actor, true), |a| (a, false));
         let p = Peticion::nueva(actor, &format!("o{}", self.cuenta), c);
-        if actor == "admin" {
+        if actor == "admin" || andamiaje && comun::mandaba(&self.n, actor, &p.comando) {
             p.de_admin()
         } else {
             p
@@ -197,6 +201,11 @@ impl Esc {
     fn residir(&mut self, heroe: u64) {
         let plaza = self.plaza as u32;
         self.ok("admin", Comando::FijarResidencia { heroe, residencia: Some(Residencia::Asentamiento(plaza)) });
+    }
+    /// La puerta de antes del sistema 5 (5E): abierta también a los neutrales, que por defecto ya no entran (Q1). Para las pruebas en las que un neutral está dentro.
+    fn abrir_a_los_neutrales(&mut self) {
+        let plaza = self.plaza;
+        self.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: true, enemigos: false });
     }
     /// El sitio de la primera avanzada: 8 u al este de la plaza (dentro de su zona de 15).
     fn sitio(&self) -> Punto {
@@ -336,7 +345,7 @@ fn una_avanzada_hereda_el_acceso_de_su_plaza_madre() {
     let heroes: Vec<u64> = [("pro", 1), ("ali", 2), ("neu", 3), ("ene", 4)].into_iter().map(|(c, f)| e.columna(c, f, p).1).collect();
     let de_la_avanzada = |e: &Esc| heroes.iter().map(|&h| e.n.puede_entrar_en_avanzada(h, av)).collect::<Vec<_>>();
     let de_la_madre = |e: &Esc| heroes.iter().map(|&h| Some(e.n.puede_entrar_en_plaza(h, plaza))).collect::<Vec<_>>();
-    assert_eq!(de_la_avanzada(&e), vec![Some(true), Some(true), Some(true), Some(false)], "por defecto, todos menos los enemigos");
+    assert_eq!(de_la_avanzada(&e), vec![Some(true), Some(true), Some(false), Some(false)], "por defecto (Q1), cerrada a neutrales y enemigos");
     assert_eq!(de_la_avanzada(&e), de_la_madre(&e));
     e.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: false, neutrales: true, enemigos: true });
     assert_eq!(de_la_avanzada(&e), vec![Some(true), Some(false), Some(true), Some(true)]);
@@ -561,7 +570,7 @@ fn destruir_a_mano_libera_el_cupo_el_espacio_y_la_guarnicion_y_no_recupera_nada_
     // Cancelar la primera obra.
     let (pendiente, _, heroe) = e.colocar_en(pos);
     let madera = e.almacen(Madera);
-    assert_eq!(e.rechazada("beto", Comando::DestruirAvanzada { heroe, avanzada: pendiente }), rechazos::NO_AUTORIZADO);
+    assert_eq!(e.rechazada("!beto", Comando::DestruirAvanzada { heroe, avanzada: pendiente }), rechazos::NO_AUTORIZADO);
     e.ok("ana", Comando::DestruirAvanzada { heroe, avanzada: pendiente });
     assert!(e.n.avanzada(pendiente).is_none() && e.n.avanzadas_de(plaza).is_empty());
     assert_eq!((e.almacen(Madera), hechos(&e.n, "avanzada.destruida").len()), (madera, 1), "no recupera nada");
@@ -592,7 +601,7 @@ fn cancelar_una_mejora_o_una_reparacion_pierde_lo_entregado_descarta_su_cita_y_d
     let cancelar = |heroe: u64, avanzada: u64| Comando::CancelarObraDeAvanzada { heroe, avanzada };
     let (_, beto) = e.columna("beto", 2, pos);
     assert_eq!(e.rechazada("ana", cancelar(heroe, 9_999)), rechazos::AVANZADA_DESCONOCIDA);
-    assert_eq!(e.rechazada("beto", cancelar(beto, av)), rechazos::NO_AUTORIZADO, "ciudadano de otra Facción");
+    assert_eq!(e.rechazada("!beto", cancelar(beto, av)), rechazos::NO_AUTORIZADO, "ciudadano de otra Facción");
     assert_eq!(e.rechazada("ana", cancelar(heroe, av)), rechazos::AVANZADA_NADA_QUE_CANCELAR, "la primera obra se cancela destruyendo la avanzada");
     e.acabar_obra(av, col);
     assert_eq!(e.rechazada("ana", cancelar(heroe, av)), rechazos::AVANZADA_NADA_QUE_CANCELAR, "operativa y sin obra");
@@ -658,7 +667,7 @@ fn el_gobernador_elige_la_tropa_de_cada_escalon_entre_las_que_tiene_la_faccion()
     let (av, _, heroe) = e.avanzada_de(Etapa::Fuerte);
     let elegir = |tropa: Tropa| Comando::ElegirTropaDeAvanzada { heroe, avanzada: av, tropa };
     assert_eq!(e.rechazada("ana", Comando::ElegirTropaDeAvanzada { heroe, avanzada: 9_999, tropa: Tropa::LancerosMimbre }), rechazos::AVANZADA_DESCONOCIDA);
-    assert_eq!(e.rechazada("beto", elegir(Tropa::LancerosMimbre)), rechazos::NO_AUTORIZADO);
+    assert_eq!(e.rechazada("!beto", elegir(Tropa::LancerosMimbre)), rechazos::NO_AUTORIZADO);
     assert_eq!(e.rechazada("ana", elegir(Tropa::Mineros)), rechazos::AVANZADA_TROPA_NO_ELEGIBLE, "la leva (escalón 1) no defiende avanzadas");
     assert_eq!(e.rechazada("ana", elegir(Tropa::Hequetai)), rechazos::AVANZADA_TROPA_NO_ELEGIBLE, "ni la élite (escalón 5)");
     assert_eq!(e.rechazada("ana", elegir(Tropa::LancerosMimbre)), rechazos::AVANZADA_TROPA_SIN_TECNOLOGIA);
@@ -1100,9 +1109,9 @@ fn con_un_humano_el_ataque_abre_una_batalla_de_unity_sin_convocatoria_con_capaci
     assert_eq!(e.n.batalla_sobre(Ubicacion::Avanzada(av)).map(|b| b.id), Some(id));
     // La avanzada no se toca mientras dura: ni mejorarla ni destruirla ni guarnecerla ni atacarla otra vez.
     let (_, ana) = e.columna("ana", 1, pos);
-    assert_eq!(e.rechazada("ana", Comando::MejorarAvanzada { heroe: ana, avanzada: av }), rechazos::BATALLA_BLOQUEADO);
-    assert_eq!(e.rechazada("ana", Comando::DestruirAvanzada { heroe: ana, avanzada: av }), rechazos::BATALLA_BLOQUEADO);
-    assert_eq!(e.rechazada("ana", Comando::ElegirTropaDeAvanzada { heroe: ana, avanzada: av, tropa: Tropa::MiliciaLanceros }), rechazos::BATALLA_BLOQUEADO);
+    assert_eq!(e.rechazada("!ana", Comando::MejorarAvanzada { heroe: ana, avanzada: av }), rechazos::BATALLA_BLOQUEADO);
+    assert_eq!(e.rechazada("!ana", Comando::DestruirAvanzada { heroe: ana, avanzada: av }), rechazos::BATALLA_BLOQUEADO);
+    assert_eq!(e.rechazada("!ana", Comando::ElegirTropaDeAvanzada { heroe: ana, avanzada: av, tropa: Tropa::MiliciaLanceros }), rechazos::BATALLA_BLOQUEADO);
     assert_eq!(e.rechazada("ana", Comando::RepostarEnAvanzada { heroe: ana, avanzada: av }), rechazos::BATALLA_BLOQUEADO);
     let (_, otro) = e.atacante(Punto::new(pos.x + 2_000, pos.y), &[Tropa::MiliciaLanceros]);
     assert_eq!(e.rechazada("beto", Comando::Atacar { heroe: otro, objetivo: ObjetivoAtaque::Avanzada(av), declara_guerra: false }), rechazos::BATALLA_BLOQUEADO);
@@ -1310,7 +1319,7 @@ fn si_la_madre_es_conquistada_sus_avanzadas_pasan_con_ella_y_su_guarnicion_y_ele
     assert_eq!((s.contenedor, s.cantidad), (Contenedor::Campamento, 0));
     assert!(e.n.tropas_elegidas_de_avanzada(av).is_empty());
     // Ahora manda Beto (F2): puede mejorarla, y Ana ya no.
-    assert_eq!(e.rechazada("ana", Comando::MejorarAvanzada { heroe, avanzada: av }), rechazos::NO_AUTORIZADO);
+    assert_eq!(e.rechazada("!ana", Comando::MejorarAvanzada { heroe, avanzada: av }), rechazos::NO_AUTORIZADO);
     e.nivel(3);
     e.ok("beto", Comando::MejorarAvanzada { heroe: beto, avanzada: av });
     assert_eq!(e.avanzada(av).obra.as_ref().unwrap().tipo, TipoObra::Mejorar);
@@ -1554,7 +1563,7 @@ fn el_estado_de_las_avanzadas_va_en_la_foto_y_cualquier_campo_cambia_el_hash_y_e
     g.repone_en = Some(6_000);
     base.combate.avanzadas.insert(9, g);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN32");
+    assert_eq!(&bytes[..5], b"BAN33");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -1682,6 +1691,7 @@ impl Esc {
 fn se_entra_en_una_avanzada_operativa_con_el_acceso_de_la_madre_y_se_sale_con_todo() {
     let m = con_mundo!();
     let mut e = montar(m, 7, 2);
+    e.abrir_a_los_neutrales();
     let (plaza, pos) = (e.plaza, e.sitio());
     // Una obra no tiene puerta: ni se ve, ni se entra.
     let (av, col, ana) = e.colocar_en(pos);
@@ -1746,6 +1756,7 @@ fn en_una_avanzada_defienden_los_de_dentro_de_la_faccion_de_la_madre_y_los_aliad
         ("puerta", 3, Some(Relacion::Alianza), false, false),
     ] {
         let mut e = montar(m, 7, 2);
+        e.abrir_a_los_neutrales();
         let (plaza, pos) = (e.plaza, e.sitio());
         let (av, col, ana) = e.avanzada_de(Etapa::Fuerte);
         if let Some(r) = relacion {
@@ -1828,6 +1839,7 @@ fn el_residente_y_el_visitante_amigo_que_defienden_una_avanzada_y_la_pierden_que
 fn destruir_a_mano_una_avanzada_saca_al_mapa_a_quien_esta_dentro_con_lo_suyo() {
     let m = con_mundo!();
     let mut e = montar(m, 7, 2);
+    e.abrir_a_los_neutrales();
     let (av, _, ana) = e.atalaya();
     let (cn, neutral) = e.visita("neu", 3, &[Tropa::MiliciaLanceros]);
     e.ok("neu", Comando::EntrarEnAvanzada { avanzada: av, heroe: neutral });
@@ -1842,9 +1854,11 @@ fn destruir_a_mano_una_avanzada_saca_al_mapa_a_quien_esta_dentro_con_lo_suyo() {
 #[test]
 fn si_la_madre_es_conquistada_solo_sale_de_su_avanzada_quien_el_acceso_heredado_ya_no_deja_entrar_y_si_cae_en_ruinas_salen_todos_con_lo_suyo() {
     let m = con_mundo!();
-    // Conquista de la madre (sin defensores: cae sin combate). La avanzada pasa al conquistador (F2) con el acceso heredado: dentro hay un neutral (F3, que el acceso por defecto deja
-    // entrar), un aliado del conquistador (F5) y un enemigo suyo (F4, en guerra con F2, que el acceso por defecto cierra). Salen solo los que ya no podrían entrar: el enemigo.
+    // Conquista de la madre (sin defensores: cae sin combate). La avanzada pasa al conquistador (F2) con la puerta heredada, que vuelve a la de por defecto (Q1: cerrada a neutrales y
+    // enemigos): dentro hay un neutral (F3, al que la madre abrió la puerta), un aliado del conquistador (F5) y un enemigo suyo (F4, en guerra con F2). Salen los que ya no podrían entrar:
+    // el neutral y el enemigo.
     let mut e = montar(m, 7, 2);
+    e.abrir_a_los_neutrales();
     let (plaza, centro) = (e.plaza, e.centro);
     let (av, _, _) = e.avanzada_de(Etapa::Fuerte);
     e.ok("admin", Comando::FijarRelacion { a: 2, b: 5, relacion: Some(Relacion::Alianza) });
@@ -1863,15 +1877,22 @@ fn si_la_madre_es_conquistada_solo_sale_de_su_avanzada_quien_el_acceso_heredado_
     e.ok("beto", Comando::Atacar { heroe: beto, objetivo: ObjetivoAtaque::Asentamiento(plaza), declara_guerra: true });
     tras_la_convocatoria(&mut e.n);
     assert_eq!(e.n.estado().asentamientos[&plaza].faccion, 2);
-    assert_eq!((e.ubicacion(neutral), e.ubicacion(aliado)), (Ubicacion::Avanzada(av), Ubicacion::Avanzada(av)), "el neutral y el aliado del conquistador se quedan dentro");
-    assert!(!e.n.en_el_mapa(cn_neu) && !e.n.en_el_mapa(cn_alia));
+    assert_eq!(e.ubicacion(aliado), Ubicacion::Avanzada(av), "el aliado del conquistador se queda dentro");
+    assert!(!e.n.en_el_mapa(cn_alia));
     assert_eq!((e.ubicacion(enemigo), e.n.en_el_mapa(cn_ene)), (Ubicacion::Columna(cn_ene), true), "el enemigo del conquistador sale al mapa con la columna con la que entró");
+    assert_eq!((e.ubicacion(neutral), e.n.en_el_mapa(cn_neu)), (Ubicacion::Columna(cn_neu), true), "y el neutral, con la puerta de por defecto");
     let echados = hechos(&e.n, "heroe.expulsado");
-    assert_eq!(echados.len(), 1);
-    assert_eq!((dato(&echados[0], "heroe"), dato(&echados[0], "motivo"), dato(&echados[0], "lugar"), echados[0].2.clone()), (enemigo as i64, 2, 2, vec![plaza]));
+    assert_eq!(echados.len(), 2);
+    for x in &echados {
+        assert_eq!((dato(x, "motivo"), dato(x, "lugar"), x.2.clone()), (2, 2, vec![plaza]));
+    }
+    let mut fuera: Vec<i64> = echados.iter().map(|x| dato(x, "heroe")).collect();
+    fuera.sort_unstable();
+    assert_eq!(fuera, { let mut v = vec![neutral as i64, enemigo as i64]; v.sort_unstable(); v });
 
     // Ruina de la madre: una ciudadela queda como ruina sin dueño y la atalaya desaparece; los dos sitios se vacían.
     let mut e = montar(m, 7, 3);
+    e.abrir_a_los_neutrales();
     let plaza = e.plaza;
     let (ciudadela, _, _) = e.avanzada_de(Etapa::Ciudadela);
     let otra = Punto::new(e.centro.x - 8_000, e.centro.y);
@@ -1901,6 +1922,7 @@ fn si_la_madre_es_conquistada_solo_sale_de_su_avanzada_quien_el_acceso_heredado_
 fn por_unity_de_oficio_solo_defiende_la_guarnicion_los_amigos_de_dentro_se_unen_y_al_ataque_solo_se_une_quien_esta_fuera() {
     let m = con_mundo!();
     let mut e = montar_con(Nucleo::nuevo(arranque_unity(m, 7)), m, 2);
+    e.abrir_a_los_neutrales();
     let (plaza, pos) = (e.plaza, e.sitio());
     let (av, col, ana) = e.avanzada_de(Etapa::Fuerte);
     e.ok("admin", Comando::FijarRelacion { a: 1, b: 3, relacion: Some(Relacion::Alianza) });
@@ -1977,6 +1999,7 @@ fn por_unity_de_oficio_solo_defiende_la_guarnicion_los_amigos_de_dentro_se_unen_
 fn durante_el_ataque_a_una_avanzada_quien_esta_dentro_y_no_se_unio_solo_puede_salir_y_el_defensor_unido_no_sale() {
     let m = con_mundo!();
     let mut e = montar_con(Nucleo::nuevo(arranque_unity(m, 7)), m, 2);
+    e.abrir_a_los_neutrales();
     let pos = e.sitio();
     let (av, _, _) = e.avanzada_de(Etapa::Fuerte);
     e.ok("admin", Comando::FijarRelacion { a: 1, b: 3, relacion: Some(Relacion::Alianza) });
@@ -2007,6 +2030,7 @@ fn durante_el_ataque_a_una_avanzada_quien_esta_dentro_y_no_se_unio_solo_puede_sa
 /// el aliado desde dentro); el aliado sale, entra la residente con su carro y otro ejército la derriba (ella pierde la mitad del carro y sale al mapa). Cada orden lleva su
 /// instante: `avanzar` solo decide cómo se mueve el reloj entre ellas.
 fn guion_con_gente(e: &mut Esc, avanzar: &dyn Fn(&mut Esc, Instante)) {
+e.abrir_a_los_neutrales();
     let (plaza, pos) = (e.plaza, e.sitio());
     // Cada columna nace en el instante en que se usa, sea cual sea el modo de avanzar (una columna de administración, sin ración, se muere de hambre en minutos).
     let (col, ana) = e.columna_en(0, "ana", 1, pos, &[Tropa::Lenadores]);
@@ -2077,6 +2101,7 @@ fn una_foto_con_un_heroe_dentro_de_una_avanzada_se_recupera_y_sigue_igual_que_el
     let ajustes = Ajustes { foto_cada: 0, latido_ms: 0, ..Ajustes::default() };
     let con = |ajustes: Ajustes| Arranque { ajustes, ..arranque(m, 9) };
     let guion = |e: &mut Esc| {
+        e.abrir_a_los_neutrales();
         let (av, _, _) = e.atalaya();
         let (col, h) = e.visita("neu", 3, &[Tropa::MiliciaLanceros]);
         e.ok("neu", Comando::EntrarEnAvanzada { avanzada: av, heroe: h });
@@ -2097,7 +2122,7 @@ fn una_foto_con_un_heroe_dentro_de_una_avanzada_se_recupera_y_sigue_igual_que_el
         let mut e = montar_con(n, m, 2);
         let (av, col, h) = guion(&mut e);
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN32");
+        assert_eq!(&bytes[..5], b"BAN33");
         let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
         assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Avanzada(av));
         assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes, e.n.estado().hash()));

@@ -58,7 +58,8 @@ fn montar() -> Option<Mundo500> {
     }
     let ok = |n: &mut Nucleo, actor: &str, id: String, c: Comando| {
         let p = Peticion::nueva(actor, &id, c);
-        let r = n.aplicar_en(0, if actor == "admin" { p.de_admin() } else { p });
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
+        let r = n.aplicar_en(0, if actor == "admin" || comun::mandaba(&n, actor, &p.comando) { p.de_admin() } else { p });
         assert!(r.aceptada(), "{r:?}");
         r
     };
@@ -184,7 +185,7 @@ impl Banco {
         let contador = Arc::new(Mutex::new(Contador::default()));
         tokio::spawn(drenar(drx, contador.clone(), resultados));
         let (rtx, rrx) = oneshot::channel();
-        let identidad = Identidad { cliente_id: cuenta.into(), roles: vec![tipo] };
+        let identidad = Identidad { cliente_id: cuenta.into(), roles: vec![tipo], rol: servidor::RolTecnico::AdministradorPartida };
         self.tx.send(ComandoSesion::Conecta { sesion, identidad, hola: servidor::prueba::hola(&format!("ok:{cuenta}"), tipo), difusion: dtx, respuesta: rtx }).await.unwrap();
         rrx.await.unwrap().expect("bienvenida");
         if let Some((a, b)) = rect {

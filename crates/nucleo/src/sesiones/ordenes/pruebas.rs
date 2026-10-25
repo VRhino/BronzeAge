@@ -212,7 +212,18 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         (orden!(EntrarEnAvanzada, OrdenEntrarEnAvanzada, avanzada_id: s("av-6"), heroe_id: h.clone()), Comando::EntrarEnAvanzada { avanzada: 6, heroe: 7 }),
         (orden!(SalirDeAvanzada, OrdenSalirDeAvanzada, avanzada_id: s("av-6"), heroe_id: h.clone()), Comando::SalirDeAvanzada { avanzada: 6, heroe: 7 }),
         // ── Acceso y murallas ──
-        (orden!(FijarPuerta, OrdenFijarPuerta, asentamiento_id: s("as-3"), heroe_id: h.clone(), cerrada_a: v(&["enemigos", "neutrales"])), Comando::FijarAcceso { asentamiento: 3, aliados: true, neutrales: false, enemigos: false }),
+        (
+            orden!(FijarPuerta, OrdenFijarPuerta, asentamiento_id: s("as-3"), heroe_id: h.clone(), cerrada_a: v(&["enemigos", "neutrales"])),
+            Comando::FijarPuerta { heroe: 7, asentamiento: 3, cerrada_a: politica::Grupos::de([politica::Grupo::Neutrales, politica::Grupo::Enemigos]) },
+        ),
+        (
+            orden!(VetarJugador, OrdenVetarJugador, asentamiento_id: s("as-3"), heroe_id: h.clone(), vetado_id: s("heroe-9"), vetar: true),
+            Comando::VetarJugador { heroe: 7, asentamiento: 3, vetado: 9, vetar: true },
+        ),
+        (
+            orden!(AsignarCargoLocal, OrdenAsignarCargoLocal, asentamiento_id: s("as-3"), cargo: s("tesorero"), heroe_id: s("heroe-9")),
+            Comando::AsignarCargoLocal { heroe: 7, asentamiento: 3, cargo: Cargo::Tesorero, designado: 9 },
+        ),
         (orden!(ComprometerRecinto, OrdenComprometerRecinto, asentamiento_id: s("as-3"), cargo: s("gobernador"), nivel: s("2")), Comando::ComprometerRecinto { asentamiento: 3, cargo: Cargo::Gobernador, nivel: 2 }),
         (orden!(MejorarRecinto, OrdenMejorarRecinto, asentamiento_id: s("as-3"), cargo: s("maestroObras"), recinto_id: s("recinto-3-1")), Comando::MejorarRecinto { asentamiento: 3, cargo: Cargo::MaestroObras, recinto: 1 }),
         (orden!(AbandonarRecinto, OrdenAbandonarRecinto, asentamiento_id: s("as-3"), recinto_id: s("recinto-3-1")), Comando::AbandonarRecinto { asentamiento: 3, recinto: 1 }),
@@ -357,8 +368,8 @@ fn ordenes_no_disponibles() -> Vec<Cuerpo> {
         ($($v:ident),* $(,)?) => { vec![$(Cuerpo::$v(Default::default())),*] };
     }
     vacias![
-        // política y Facciones (sistema 5, desde 5D)
-        AsignarCargoLocal, ProponerAnexion, ResponderAnexion, RetirarAnexion, ProponerFusion, ResponderFusion, RetirarFusion, VetarJugador,
+        // política y Facciones (sistema 5, desde 5E)
+        ProponerAnexion, ResponderAnexion, RetirarAnexion, ProponerFusion, ResponderFusion, RetirarFusion,
         // tecnología, Aedas e intel (sistema 6)
         AdoptarTecnologia, EmpezarEpica, AbandonarEpica, ComprarTecnologiaAeda, AbrirAlijo,
     ]
@@ -423,7 +434,7 @@ fn cada_orden_del_jugador_se_traduce_a_su_comando_con_los_datos_de_la_peticion()
 #[test]
 fn las_ordenes_sin_comando_en_el_nucleo_se_rechazan_con_un_codigo_estable() {
     let sin_comando = ordenes_no_disponibles();
-    assert_eq!(sin_comando.len(), 13);
+    assert_eq!(sin_comando.len(), 11);
     for cuerpo in sin_comando {
         assert_eq!(traduce(cuerpo.clone(), false), Err(rechazos::ORDEN_NO_DISPONIBLE), "{cuerpo:?}");
         assert_eq!(traduce(cuerpo.clone(), true), Err(rechazos::ORDEN_NO_DISPONIBLE), "también para el administrador: {cuerpo:?}");
@@ -488,12 +499,12 @@ fn lo_que_la_orden_deja_implicito_se_resuelve_preguntando_al_mundo() {
     }
     // La batalla se nombra por su UUID.
     assert_eq!(traduce(orden!(CancelarBatalla, OrdenCancelarBatalla, battle_id: s("uuid-1")), false), Err(rechazos::BATALLA_NO_EXISTE));
-    // `quitar_escolta` sin escuadrones retira todas las cedidas; `fijar_puerta` sin grupos cerrados abre a todos y las Aedas no cierran nada.
+    // `quitar_escolta` sin escuadrones retira todas las cedidas; `fijar_puerta` sin grupos cerrados abre a todos, y un grupo repetido cuenta una vez.
     assert_eq!(traduce(orden!(QuitarEscolta, OrdenQuitarEscolta, caravana_id: s("car-2"), heroe_id: h()), false), Ok(Comando::QuitarEscolta { caravana: 2, heroe: 7, escuadras: None }));
-    assert_eq!(traduce(orden!(FijarPuerta, OrdenFijarPuerta, asentamiento_id: s("as-3"), heroe_id: h()), false), Ok(Comando::FijarAcceso { asentamiento: 3, aliados: true, neutrales: true, enemigos: true }));
+    assert_eq!(traduce(orden!(FijarPuerta, OrdenFijarPuerta, asentamiento_id: s("as-3"), heroe_id: h()), false), Ok(Comando::FijarPuerta { heroe: 7, asentamiento: 3, cerrada_a: politica::Grupos::default() }));
     assert_eq!(
-        traduce(orden!(FijarPuerta, OrdenFijarPuerta, asentamiento_id: s("as-3"), heroe_id: h(), cerrada_a: v(&["aedas", "aliados"])), false),
-        Ok(Comando::FijarAcceso { asentamiento: 3, aliados: false, neutrales: true, enemigos: true })
+        traduce(orden!(FijarPuerta, OrdenFijarPuerta, asentamiento_id: s("as-3"), heroe_id: h(), cerrada_a: v(&["aedas", "aliados", "aedas"])), false),
+        Ok(Comando::FijarPuerta { heroe: 7, asentamiento: 3, cerrada_a: politica::Grupos::de([politica::Grupo::Aliados, politica::Grupo::Aedas]) })
     );
     // El ejército y la columna personal salen sin destino: el `objetivo` se rechaza en vez de ignorarse.
     let destino = Some(pb::orden_movilizar_ejercito::Objetivo { tipo: Some(pb::orden_movilizar_ejercito::objetivo::Tipo::AsentamientoId(s("as-3"))) });
@@ -531,7 +542,8 @@ fn un_id_sin_la_forma_de_su_entidad_o_un_valor_fuera_de_su_catalogo_se_rechazan_
         (orden!(ComprarAnimalCaravana, OrdenComprarAnimalCaravana, caravana_id: s("car-2"), carro_indice: 0, tipo_animal: s("dragon")), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(MoverEnCola, OrdenMoverEnCola, asentamiento_id: s("as-3"), edificio_id: s("ed-3-1"), direccion: s("al lado")), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(MoverCargaCaravanaAparcada, OrdenMoverCargaCaravanaAparcada, caravana_id: s("car-2"), recurso: s("madera"), sentido: s("tirar")), rechazos::ORDEN_FORMA_INVALIDA),
-        (orden!(FijarPuerta, OrdenFijarPuerta, asentamiento_id: s("as-3"), cerrada_a: v(&["vecinos"])), rechazos::ORDEN_FORMA_INVALIDA),
+        (orden!(FijarPuerta, OrdenFijarPuerta, asentamiento_id: s("as-3"), heroe_id: h(), cerrada_a: v(&["vecinos"])), rechazos::ORDEN_FORMA_INVALIDA),
+        (orden!(AsignarCargoLocal, OrdenAsignarCargoLocal, asentamiento_id: s("as-3"), cargo: s("rey"), heroe_id: h()), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(UnirseABatalla, OrdenUnirseABatalla, heroe_id: h(), battle_id: s("uuid-9"), lado: Some(s("espectador"))), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(ReclutarEnCampamento, OrdenReclutarEnCampamento, tropa_id: s("milicia_lanceros"), pagar_con: Some(s("honor"))), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(SalirAlMundo, OrdenSalirAlMundo, asentamiento_id: s("as-3"), heroe_id: h(), carga: carga(&[("mithril", 1)])), rechazos::ORDEN_FORMA_INVALIDA),
@@ -564,12 +576,14 @@ fn variantes_de_comando() -> BTreeSet<String> {
 
 #[test]
 fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_disponible() {
-    // Cada variante de `Comando` tiene un único origen: una orden del jugador, la administración o el canal del servidor de batalla (§8, códigos 101-105).
-    let del_jugador: BTreeSet<String> = ordenes_traducidas().iter().map(|(_, c)| nombre(c)).collect();
+    // Cada variante de `Comando` tiene un único origen: una orden del jugador, la administración, el canal del servidor de batalla (§8, códigos 101-105) o, para `FijarAcceso`, ser el alias
+    // de `FijarPuerta` que el núcleo conserva de antes del sistema 5 (5E): ninguna orden del contrato lo da, pero el registro de peticiones lo sigue entendiendo.
+    let mut del_jugador: BTreeSet<String> = ordenes_traducidas().iter().map(|(_, c)| nombre(c)).collect();
+    assert!(del_jugador.insert("FijarAcceso".into()), "el alias no es el comando de ninguna orden");
     let de_administracion: BTreeSet<String> = ordenes_de_administracion().iter().map(|(_, c)| nombre(c)).collect();
     let del_servidor_de_batalla: BTreeSet<String> = ["RegistrarAsignacion", "ConfirmarInicio", "RegistrarTokens", "RegistrarSalida", "AplicarResultado"].map(String::from).into();
     let todos = variantes_de_comando();
-    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (157, 133, 19, 5));
+    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (160, 136, 19, 5));
     let clasificados: Vec<&String> = del_jugador.iter().chain(&de_administracion).chain(&del_servidor_de_batalla).collect();
     assert_eq!(clasificados.len(), todos.len(), "una variante en dos orígenes");
     let sin_clasificar: Vec<&String> = todos.iter().filter(|v| !clasificados.contains(v)).collect();
@@ -605,12 +619,22 @@ fn quien(a: crate::comando::Autoriza) -> &'static str {
         SuCuenta => "su cuenta",
         CuentaDelHeroe => "la cuenta del héroe",
         CuentaDelHeroeAunqueFuera => "la cuenta del héroe, aunque esté fuera",
-        CiudadanoDeLaMadre => "la cuenta del héroe, ciudadano de la madre",
         ReyDeLaFaccion => "la cuenta del héroe, Rey de la Facción",
         CiudadanoDeLaFaccion => "la cuenta del héroe, ciudadano de la Facción (con Rey, solo él)",
         ResidenteDeLaPlaza => "la cuenta del héroe, residente de la plaza",
         AutoridadDiplomatica => "la cuenta del héroe, Rey o Embajador de la Facción",
-        MandaEnLaPlaza => "quien manda en la plaza",
+        Cargo([asentamiento::Cargo::Gobernador]) => "el Gobernador de la plaza, residente y dentro",
+        Cargo([asentamiento::Cargo::Tesorero]) => "el Tesorero de la plaza, residente y dentro",
+        Cargo([asentamiento::Cargo::Gobernador, asentamiento::Cargo::MaestroObras]) => "el Gobernador o el Maestro de Obras de la plaza, residente y dentro",
+        Cargo([asentamiento::Cargo::Gobernador, asentamiento::Cargo::Tesorero]) => "el Gobernador o el Tesorero de la plaza, residente y dentro",
+        Cargo(otros) => unreachable!("sin texto para los cargos {otros:?}"),
+        CargoDeLaOrden => "el titular del cargo de la orden, residente y dentro",
+        ResidenteDentro => "un residente de la plaza, dentro",
+        OperaAparcada => "un residente del origen, dentro de la plaza donde está aparcada",
+        CiudadanoDeLaMadre => "la cuenta del héroe, ciudadano de la madre",
+        AsignaCargoLocal => "el Rey (Gobernador) o el Gobernador, residente y dentro (los demás)",
+        FijaPuerta => "el Gobernador, residente y dentro, o el Rey de la Facción",
+        CompraIntel => "la cuenta del héroe; en una plaza, dentro y Rey, Embajador o Gobernador",
         LiderDeLaColumna => "el Líder de la columna",
         ParticipanteDeLaColumna => "un participante de la columna",
     }
@@ -646,5 +670,5 @@ fn la_matriz_de_autorizacion_del_documento_es_la_del_codigo() {
     let faltan: Vec<String> = codigo.difference(&documento).map(fila).collect();
     let sobran: Vec<String> = documento.difference(&codigo).map(fila).collect();
     assert!(faltan.is_empty() && sobran.is_empty(), "la matriz del documento no es la del código.\nFaltan o no coinciden (como las dice el código):\n{}\nSobran (como las dice el documento):\n{}", faltan.join("\n"), sobran.join("\n"));
-    assert_eq!(codigo.len(), 133 + 19 + 5 + 13, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
+    assert_eq!(codigo.len(), 135 + 19 + 5 + 11, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
 }

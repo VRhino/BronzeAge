@@ -16,8 +16,8 @@
 //!    hasta que `ReponerCarro` compre otro en la madre.
 //!
 //! # Lo provisional
-//! La autorización es la de las demás órdenes de plaza (`manda_en`) y la entrega de materiales exige ser el propietario de la columna; la
-//! guarnición de mineros y el saqueo son del sistema militar.
+//! Marcar, destruir y reponer el carro son obras de mapa del panel de la plaza madre (Doc 4.2.2): las da el Gobernador o el Maestro de Obras de la madre, residente y dentro (5E). La
+//! entrega de materiales exige ser el propietario de la columna; la guarnición de mineros y el saqueo son del sistema militar.
 
 use super::*;
 use crate::nucleo::mercado::id32;
@@ -95,10 +95,8 @@ impl Nucleo {
         let datos = self.estado.reglas.economia.datos.clone();
         match &p.comando {
             Comando::MarcarPueblo { asentamiento, nodo } => {
-                let plaza = self.plaza_o_rechazo(*asentamiento)?;
-                if !self.manda_en(p, plaza.faccion) {
-                    return Err(rechazo(rechazos::NO_AUTORIZADO, format!("no mandas en as-{asentamiento}")));
-                }
+                self.plaza_o_rechazo(*asentamiento)?;
+                self.autorizar_en_plaza(p, *asentamiento, None)?;
                 let geo = self.geografia.as_ref().ok_or_else(|| rechazo(rechazos::SIN_MUNDO, "el núcleo no tiene mundo cargado".into()))?;
                 let n = geo.mapa.nodos.get(*nodo as usize).ok_or_else(|| rechazo(rechazos::PUEBLO_NODO_DESCONOCIDO, format!("nodo-{nodo}")))?;
                 let (tipo, pos) = (n.tipo, n.pos);
@@ -152,9 +150,7 @@ impl Nucleo {
             }
             Comando::DestruirPueblo { pueblo } => {
                 let (plaza, _) = self.pueblo(*pueblo).ok_or_else(|| de_pueblo(ErrorPueblo::NoExiste))?;
-                if !self.manda_en(p, self.estado.asentamientos[&plaza].faccion) {
-                    return Err(rechazo(rechazos::NO_AUTORIZADO, format!("no mandas en as-{plaza}")));
-                }
+                self.autorizar_en_plaza(p, plaza, None)?;
                 let mut ev = vec![];
                 // Quien estaba dentro sale al mapa con lo suyo, a la puerta del pueblo que desaparece.
                 if let Some(puerta) = self.posicion_de_pueblo(*pueblo) {
@@ -170,9 +166,7 @@ impl Nucleo {
             }
             Comando::ReponerCarro { pueblo } => {
                 let (plaza, pu) = self.pueblo(*pueblo).ok_or_else(|| de_pueblo(ErrorPueblo::NoExiste))?;
-                if !self.manda_en(p, self.estado.asentamientos[&plaza].faccion) {
-                    return Err(rechazo(rechazos::NO_AUTORIZADO, format!("no mandas en as-{plaza}")));
-                }
+                self.autorizar_en_plaza(p, plaza, None)?;
                 if !pu.activo() {
                     return Err(rechazo(rechazos::PUEBLO_NO_ESTA_ACTIVO, "el pueblo aún no está levantado".into()));
                 }

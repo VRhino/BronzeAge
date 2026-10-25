@@ -30,7 +30,7 @@ use politica::faccion::ErrorFaccion;
 use politica::residencia::{self, ErrorResidencia};
 use politica::Cargos;
 
-/// La autorización de la política mira las plazas a través del núcleo. Los cargos locales llegan en 5E: hasta entonces ninguna plaza tiene titulares.
+/// La autorización de la política mira las plazas a través del núcleo (los cargos locales, desde 5E).
 impl Vista for Nucleo {
     fn duena(&self, a: u32) -> Option<u32> {
         self.estado.asentamientos.get(&u64::from(a)).map(|p| p.faccion)
@@ -41,8 +41,8 @@ impl Vista for Nucleo {
     fn presente(&self, h: u64, a: u32) -> bool {
         self.heroe(h).is_some_and(|x| x.heroe.presencia.ubicacion == Ubicacion::Asentamiento(a))
     }
-    fn cargos(&self, _a: u32) -> Cargos {
-        Cargos::default()
+    fn cargos(&self, a: u32) -> Cargos {
+        self.estado.asentamientos.get(&u64::from(a)).map(|p| p.cargos).unwrap_or_default()
     }
 }
 
@@ -121,8 +121,11 @@ impl Nucleo {
             e.columna.faccion = ahora;
             self.tr.tocar(Clase::Ejercito, e.id);
         }
-        if let Some(Residencia::Campamento(c)) = residencia {
-            self.reprogramar_anillo(c, t);
+        match residencia {
+            Some(Residencia::Campamento(c)) => self.reprogramar_anillo(c, t),
+            // Quien deja de ser de la Facción dueña de la plaza donde reside (la administración no le muda) deja sus cargos en ella (5E).
+            Some(Residencia::Asentamiento(a)) if self.estado.asentamientos.get(&u64::from(a)).is_some_and(|x| Some(x.faccion) != ahora) => self.vaciar_cargos_de(heroe, u64::from(a)),
+            Some(Residencia::Asentamiento(_)) | None => {}
         }
     }
 
@@ -271,8 +274,9 @@ impl Nucleo {
                 let duena = self.plaza_o_rechazo(*asentamiento)?.faccion;
                 let h = self.heroe(*heroe).expect("existe");
                 let (origen, destino) = (h.heroe.residencia, Residencia::Asentamiento(*asentamiento as u32));
-                // DUDA: los vetos llegan en 5E; hasta entonces ninguna plaza veta.
-                residencia::puede_mudarse(&r, h.residencia_cambiada_en, t, h.faccion, duena, origen == Some(destino), false).map_err(de_residencia)?;
+                // Un vetado de la plaza no se muda a ella (5E).
+                let vetado = self.estado.asentamientos[asentamiento].puerta.vetados.contains(heroe);
+                residencia::puede_mudarse(&r, h.residencia_cambiada_en, t, h.faccion, duena, origen == Some(destino), vetado).map_err(de_residencia)?;
                 self.mudarse_por_orden(t, *heroe, Some(destino))?;
                 let mut datos = vec![("heroe", *heroe as i64), ("asentamiento", *asentamiento as i64)];
                 if let Some(Residencia::Asentamiento(o)) = origen {

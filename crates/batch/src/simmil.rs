@@ -33,7 +33,7 @@
 //! # Lo que comprueba
 //! Cada `Atacar` aceptado pasa por [`auditmil`] (bajas, experiencia, heridos, conservación, carros, botín, héroe solo, cascadas de la conquista); cada media hora,
 //! los invariantes militares de [`ViolacionesMilitares`] (experiencia, hambre, heridos, batallas, reposiciones, ruinas) y cada 6 horas los del comercio y la
-//! economía (`auditoria`). Con `foto`, a mitad de la corrida el núcleo se reconstruye desde su foto `BAN32` y se sigue con el reconstruido.
+//! economía (`auditoria`). Con `foto`, a mitad de la corrida el núcleo se reconstruye desde su foto `BAN33` y se sigue con el reconstruido.
 
 use crate::auditmil::{self, Antes, ViolacionesCombate};
 use crate::auditoria::{auditar_cola, auditar_contenedores, Violaciones};
@@ -208,7 +208,7 @@ pub struct ViolacionesMilitares {
     pub reposicion: u64,
     /// Una plaza en ruinas de la que queda flota, residentes o quien esté dentro.
     pub ruina: u64,
-    /// El hash tras la foto (`BAN32`) ida y vuelta no es el de antes.
+    /// El hash tras la foto (`BAN33`) ida y vuelta no es el de antes.
     pub foto: u64,
 }
 
@@ -554,6 +554,10 @@ impl Sim<'_> {
             });
             self.de_plaza.entry(plaza).or_default().push(self.bots.len() - 1);
         }
+        // 5E: el Guardián gobierna la plaza (ascenso, edificios, flota, pueblo, muralla): el Rey de la Facción le nombra Gobernador con la orden real, sin estar presente; él reside y está dentro.
+        if let Some(i) = self.bots.iter().rposition(|b| b.plaza == plaza && b.rol == Rol::Guardian) {
+            self.gobierna(t, i, plaza);
+        }
     }
 
     // ───────────────────────────── Bucle ─────────────────────────────
@@ -598,7 +602,7 @@ impl Sim<'_> {
         self.comprobar(self.fin);
     }
 
-    /// La foto `BAN32` ida y vuelta: se serializa el núcleo, se escribe como foto en un directorio de persistencia, se reconstruye desde él y se sigue con el
+    /// La foto `BAN33` ida y vuelta: se serializa el núcleo, se escribe como foto en un directorio de persistencia, se reconstruye desde él y se sigue con el
     /// reconstruido (que escribe su registro en ese directorio hasta el final). El hash ha de ser el mismo.
     fn ida_y_vuelta(&mut self) {
         self.leer();
@@ -825,6 +829,28 @@ impl Sim<'_> {
 
     /// El Guardián gobierna: ascenso, edificios, flota, pueblo, muralla y guarnición.
     fn gobernar(&mut self, t: Instante, i: usize, p: u64) {
+        // 5E: las órdenes de la plaza las da su Gobernador, residente y dentro. Una plaza sin Gobernador (recién conquistada, o cuyo Gobernador se mudó) se la pide al Rey de su Facción para quien
+        // gobierna ahora; si ya tiene otro (dos Guardianes reubicados en la misma plaza), este solo pone su leva en la guarnición.
+        if self.gobierna(t, i, p) {
+            self.ordenes_de_plaza(t, i, p);
+        }
+        self.leva_a_la_guarnicion(t, i, p);
+    }
+
+    /// ¿Es el héroe del bot `i` el Gobernador de `p`? Si la plaza no tiene, el Rey de su Facción le nombra (con la orden real, sin estar presente).
+    fn gobierna(&mut self, t: Instante, i: usize, p: u64) -> bool {
+        let heroe = self.bots[i].heroe;
+        let (titular, faccion) = { let a = &self.n.estado().asentamientos[&p]; (a.cargos.titular(Cargo::Gobernador), a.faccion) };
+        match titular {
+            Some(g) => g == heroe,
+            None => {
+                let Some((rey, cuenta)) = self.n.faccion(faccion).and_then(|x| x.rey).and_then(|h| self.n.heroe(h).map(|x| (h, x.cuenta.clone()))) else { return false };
+                self.orden(t, &cuenta, "AsignarCargoLocal", Comando::AsignarCargoLocal { heroe: rey, asentamiento: p, cargo: Cargo::Gobernador, designado: heroe }).aceptada()
+            }
+        }
+    }
+
+    fn ordenes_de_plaza(&mut self, t: Instante, i: usize, p: u64) {
         let (nivel, madera, tiene, recintos, pueblos, mercado_activo) = {
             let a = &self.n.estado().asentamientos[&p];
             let ed = &a.economia.edificios;
@@ -850,7 +876,10 @@ impl Sim<'_> {
         if nivel >= 2 && recintos == 0 {
             self.suya(t, i, "ComprometerRecinto", Comando::ComprometerRecinto { asentamiento: p, cargo: Cargo::Gobernador, nivel: 1 });
         }
-        // La leva (escalón 1) a la guarnición, mientras quepa en el cupo del héroe (puntos de Liderazgo).
+    }
+
+    /// La leva (escalón 1) a la guarnición, mientras quepa en el cupo del héroe (puntos de Liderazgo).
+    fn leva_a_la_guarnicion(&mut self, t: Instante, i: usize, p: u64) {
         let heroe = self.bots[i].heroe;
         let mr = self.n.estado().reglas.economia.militar.clone();
         let mut libre = self.n.cupo_de_guarnicion(p).unwrap_or(0) - self.heroe(i).map_or(0, |h| h.heroe.escuadras.iter().filter(|s| s.en_guarnicion).map(|s| militar::liderazgo::coste(&mr, s.tropa)).sum());

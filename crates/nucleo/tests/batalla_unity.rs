@@ -121,7 +121,8 @@ impl Esc {
     fn ord(&mut self, actor: &str, c: Comando) -> Respuesta {
         self.cuenta += 1;
         let p = Peticion::nueva(actor, &format!("o{}", self.cuenta), c);
-        let p = if actor == "admin" { p.de_admin() } else { p };
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
+        let p = if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) { p.de_admin() } else { p };
         let t = self.n.ahora();
         self.n.aplicar_en(t, p)
     }
@@ -955,7 +956,7 @@ async fn quien_no_llega_a_conectarse_reabre_la_batalla_con_un_ticket_nuevo_para_
 /// La foto de un núcleo con un ticket de asedio congelado (plaza, edificios, recintos) y con un informe de inspección de una plaza vuelve igual; la de antes del cambio, no.
 fn la_foto_vuelve_igual(n: &Nucleo, m: &M) {
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN32");
+    assert_eq!(&bytes[..5], b"BAN33");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas(false), &m.0.hash().to_string()).expect("la foto vuelve");
     assert_eq!(vuelta.serializar(), bytes);
     let viejo = [b"BAN20".as_slice(), &bytes[5..]].concat();

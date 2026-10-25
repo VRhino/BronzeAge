@@ -896,7 +896,7 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_rechaza_el_formato_anterior_
     let (n, id) = a_mitad();
     let reglas = reglas_unity();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN32");
+    assert_eq!(&bytes[..5], b"BAN33");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "hash-de-prueba").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.batallas, n.estado().batallas);
@@ -1200,8 +1200,11 @@ struct Esc {
 impl Esc {
     fn ord(&mut self, actor: &str, c: Comando) -> Respuesta {
         self.cuenta += 1;
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`), salvo con la cuenta precedida de «!», que la da
+        // tal cual (para probar el candado de batalla, que la administración no lleva).
+        let (actor, andamiaje) = actor.strip_prefix('!').map_or((actor, true), |a| (a, false));
         let p = Peticion::nueva(actor, &format!("o{}", self.cuenta), c);
-        self.n.aplicar_en(self.n.ahora(), if actor == "admin" { p.de_admin() } else { p })
+        self.n.aplicar_en(self.n.ahora(), if actor == "admin" || andamiaje && comun::mandaba(&self.n, actor, &p.comando) { p.de_admin() } else { p })
     }
     fn ok(&mut self, actor: &str, c: Comando) -> Respuesta {
         let r = self.ord(actor, c);
@@ -1270,6 +1273,8 @@ fn montar(m: &M, semilla: u64) -> Esc {
     for plaza in [a, b] {
         e.dar(plaza, Madera, 350_000);
         e.ok("admin", Comando::AnadirEdificio { asentamiento: plaza, tipo: Tipo::Mercado });
+        // La puerta de antes del sistema 5 (abierta también a los neutrales, que por defecto ya no entran: Q1, 5E): en estas pruebas los neutrales entran.
+        e.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: true, enemigos: false });
     }
     e.avanzar(9 * HORA);
     e.sin_proteccion();
@@ -1707,7 +1712,8 @@ fn unirse_a_la_defensa_desde_dentro_da_el_mismo_hash_normal_acelerado_y_a_trozos
     assert_eq!(hechos(&normal, "batalla.refuerzos").len(), 3);
     assert_eq!(hechos(&normal, "asentamiento.conquistada").len(), 1);
     let b = hechos(&normal, "asentamiento.conquistada")[0].2[0];
-    assert_eq!(normal.acceso_de_plaza(b), Some(nucleo::Acceso::default()), "al conquistarla su acceso vuelve al de por defecto");
+    let p = &normal.estado().asentamientos[&b];
+    assert_eq!((&p.puerta, p.cargos), (&Default::default(), Default::default()), "al conquistarla su puerta vuelve a la de por defecto y sus cargos se vacían");
     // La foto de después de la conquista recupera lo mismo.
     let bytes = normal.estado().serializar();
     let vuelta = nucleo::Estado::deserializar(&bytes, &arranque_mundo(m, 7).reglas, &m.0.hash().to_string()).unwrap();
@@ -1768,7 +1774,7 @@ fn una_caravana_atacada_por_un_humano_se_juega_en_unity_y_unity_dice_que_carros_
     assert_eq!(candado(&e.n, carla, milicia), Some(id), "la escolta lleva el candado");
     // La caravana queda apartada (su plan en pausa) y nadie la toca; el hecho llega a su plaza de origen.
     assert_eq!(e.n.caravana(ca).unwrap().estado, EstadoCaravana::EnBatalla);
-    assert_eq!(codigo(&e.ord("ana", Comando::AnadirCarro { caravana: ca, tipo: TipoCarro::Basico })), rechazos::BATALLA_BLOQUEADO);
+    assert_eq!(codigo(&e.ord("!ana", Comando::AnadirCarro { caravana: ca, tipo: TipoCarro::Basico })), rechazos::BATALLA_BLOQUEADO);
     assert_eq!(hechos(&e.n, "batalla.abierta")[0].2, vec![a], "se entera la plaza de origen de la caravana");
     // Gana el atacante y Unity dice que se pierde el carro 1: en un aguante se salva el 30 % de la carga.
     let t = e.n.ahora() + MIN;
@@ -2025,7 +2031,7 @@ fn los_bandidos_que_acosan_una_columna_con_dos_caravanas_juegan_las_dos_en_la_mi
         assert_eq!(bt.ticket.defensor.participantes.iter().map(|p| p.heroe).collect::<Vec<_>>(), vec![col.1], "defienden los héroes de la columna; las escoltas cedidas no combaten");
         for ca in [ca1, ca2] {
             assert_eq!(e.n.caravana(ca).unwrap().estado, EstadoCaravana::EnBatalla, "las dos quedan apartadas");
-            assert_eq!(codigo(&e.ord("ana", Comando::AnadirCarro { caravana: ca, tipo: TipoCarro::Basico })), rechazos::BATALLA_BLOQUEADO);
+            assert_eq!(codigo(&e.ord("!ana", Comando::AnadirCarro { caravana: ca, tipo: TipoCarro::Basico })), rechazos::BATALLA_BLOQUEADO);
         }
         assert_eq!(hechos(&e.n, "batalla.abierta").len(), 1);
 
@@ -2041,7 +2047,7 @@ fn los_bandidos_que_acosan_una_columna_con_dos_caravanas_juegan_las_dos_en_la_mi
 
         // La foto a mitad de la batalla lleva las dos caravanas y vuelve idéntica; la del formato anterior (una sola caravana) se rechaza con su motivo.
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN32");
+        assert_eq!(&bytes[..5], b"BAN33");
         let vuelta = nucleo::Estado::deserializar(&bytes, &arranque_mundo(m, 7).reglas, &m.0.hash().to_string()).unwrap();
         assert_eq!((vuelta.serializar(), vuelta.batallas.clone()), (bytes.clone(), e.n.estado().batallas.clone()));
         let viejo = [b"BAN18".as_slice(), &bytes[5..]].concat();
@@ -2141,6 +2147,8 @@ fn con_pueblo(m: &M) -> (Esc, u64, u64, Punto) {
     let madre = fundar(&mut n, 0, "m", "ana", 1, sitio);
     let mut e = Esc { n, a: madre, b: 0, cuenta: 0 };
     e.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: madre, pausada: true });
+    // La puerta de antes del sistema 5 (abierta también a los neutrales, que por defecto ya no entran: Q1, 5E): en estas pruebas los neutrales entran.
+    e.ok("admin", Comando::FijarAcceso { asentamiento: madre, aliados: true, neutrales: true, enemigos: false });
     e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: madre, nivel: 2 });
     for _ in 0..9 {
         e.ok("admin", Comando::AgrandarZona { asentamiento: madre });
@@ -2169,7 +2177,7 @@ fn el_saqueo_de_un_pueblo_en_unity_se_lleva_lo_que_hay_sobre_la_mitad_y_la_guarn
     assert!(matches!(bt.ticket.contexto, combate::ciclo::Contexto::SaqueoPueblo { pueblo: p, .. } if p == pueblo));
     assert_eq!((bt.ticket.defensor.faccion, bt.ticket.defensor.sin_heroe.len(), bt.ticket.defensor.sin_heroe[0].efectivos), (Some(1), 1, 30), "los 30 mineros de serie, con la Facción de la plaza madre");
     assert_eq!(bt.bloqueo.pueblo, Some(pueblo));
-    assert_eq!(codigo(&e.ord("ana", Comando::DestruirPueblo { pueblo })), rechazos::BATALLA_BLOQUEADO, "un pueblo en una batalla no recibe órdenes");
+    assert_eq!(codigo(&e.ord("!ana", Comando::DestruirPueblo { pueblo })), rechazos::BATALLA_BLOQUEADO, "un pueblo en una batalla no recibe órdenes");
     let uuid = e.n.uuid_de_batalla(id);
     assert_eq!(nucleo::proyeccion::propios::pueblo(&e.n, madre, e.n.pueblo(pueblo).unwrap().1).batalla_id, Some(uuid), "el asedio se ve desde fuera: el pueblo lleva la batalla que se juega contra él");
     let otro = e.ejercito("gus", 3, sitio, &[Tropa::EspadachinesBronce]);

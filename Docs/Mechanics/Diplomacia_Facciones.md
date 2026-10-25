@@ -93,6 +93,13 @@ se iba **o** si es el nuevo Rey. Además, si reside en una plaza, **deja la resi
 - **`admitirOtrasFacciones`:** el Rey fija `admiteOtrasEnAtaques`.
 - Un cargo local se vacía al dejar el héroe su residencia en esa plaza (§4.2); un cargo de Facción, al irse el héroe de la Facción.
 
+> **Implementado en Rust (2026-10-25, 5E):** `AsignarCargoLocal { heroe, asentamiento, cargo, designado }` (158, `asignar_cargo_local`; `nucleo/cargos.rs`) con `politica::cargos::asignar_cargo_local`:
+> el Gobernador lo designa el Rey de la Facción dueña sin estar presente; los otros cuatro, el Gobernador residente y dentro, y solo con Gobernador (`cargo.sin_gobernador`); el designado es ciudadano de la
+> Facción dueña (`cargo.no_ciudadano`) y reside en la plaza (`cargo.no_reside`, Q4); ya titular, `sin_cambios`; sustituye al anterior. Hecho `cargo.local_asignado` (`heroe`, `asentamiento`, `faccion` y el
+> `cargo` como texto). Los cargos viven en la plaza (`Asentamiento::cargos`, foto **`BAN33`**) y se vacían al dejar de residir (toda mudanza pasa por `mudar_de_residencia`: las tres órdenes de residencia, dejar
+> la Facción, la reubicación por ruina, el desalojo y `FijarResidencia`), al dejar de ser de la Facción dueña aunque no se mude (`FijarFaccionDeHeroe`) y en la conquista (todos). Una plaza recién fundada
+> no tiene Gobernador. Viajan en el interior de la plaza (`ASENTAMIENTO`, `Asentamiento.cargos`) y en la ficha de las plazas propias (`FACCION`) y en `ADMIN`.
+
 ### 3.5 Nivel de Facción y cupos
 
 ```
@@ -389,6 +396,14 @@ veta**. El grupo `aedas` lo usa `Tecnologia_Aedas.md`.
 > **Decisión Q1 del autor (2026-10-24) e implementado en Rust (5A, reglas puras):** la puerta es la de esta sección: por grupos con `aedas`, vetos del Gobernador, **por defecto cerrada a neutrales y
 > enemigos** (`PUERTA.cerradaAPorDefecto`) y **cerrar o vetar expulsa** a quien ya no puede entrar. `crates/politica::puerta` (`Puerta::puede_entrar` por capas, `fijar`, `vetar`, `expulsados`,
 > `admite_aedas`). El núcleo sigue con `FijarAcceso` hasta 5E, que lo sustituye por `FijarPuerta` y `VetarJugador`.
+
+> **Implementado en Rust (2026-10-25, 5E):** la puerta de esta sección en el núcleo (`Asentamiento::puerta`, `politica::puerta::Puerta`, foto **`BAN33`**; `nucleo/cargos.rs`). `FijarPuerta { heroe,
+> asentamiento, cerrada_a }` (159, `fijar_puerta`) la da el Gobernador residente y dentro o el Rey de la Facción dueña sin estar presente; `VetarJugador { heroe, asentamiento, vetado, vetar }` (160,
+> `vetar_jugador`), solo el Gobernador (`puerta.residente` a un residente); sin cambio, `sin_cambios`. Cerrar o vetar saca al mapa, al instante y con todo lo suyo, a quien está dentro de la plaza, de sus
+> pueblos o de sus avanzadas y ya no puede entrar; con un pueblo o una avanzada de la plaza en batalla, un jugador no la toca (`batalla.bloqueado`). La conquista la devuelve a la de por defecto (y
+> borra los vetos). Hechos `asentamiento.puerta_fijada` (`cerrada_a`, la lista de grupos) y `asentamiento.veto` (`heroe`, `vetado`). `FijarAcceso` (117) queda en el núcleo como alias (cierra los
+> grupos que van a `false`; los Aedas, como estaban). Un vetado de la Facción dueña tampoco repone en la plaza (`puedeReclutarEn`). El grupo `aedas` se guarda y se proyecta; quien lo mira es el
+> sistema 6.
 
 <!-- parametros:CIUDADANIA -->
 ```json

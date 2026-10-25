@@ -30,7 +30,6 @@
 
 use super::*;
 use crate::estado_militar::{EdificioRecordado, PlazaRecordada};
-use crate::estado_militar::Acceso;
 use crate::nucleo::mercado::CAPACIDAD_CARRO;
 use asentamiento::almacen::Almacen;
 use asentamiento::Recurso;
@@ -368,23 +367,15 @@ impl Nucleo {
 
     // ───────────────────────────── Quién entra ─────────────────────────────
 
-    /// El acceso de una plaza: lo que su dueño ha decidido que se permita a cada relación (por defecto, todos menos los enemigos).
-    pub fn acceso_de_plaza(&self, plaza: u64) -> Option<Acceso> {
-        self.estado.asentamientos.get(&plaza).map(|a| a.acceso)
-    }
-
-    /// ¿Le abre la plaza su puerta? Quien reside en ella y los de su Facción, siempre; el resto, según el acceso que fijó su dueño para su relación (aliada o
-    /// vasalla, neutral, enemiga). `false` si el héroe o la plaza no existen.
+    /// ¿Le abre la plaza su puerta (5E, [`cargos`](super::cargos))? Quien reside en ella, siempre; un vetado, nunca; los de su Facción, siempre; el resto, si su grupo (aliados y vasallos,
+    /// neutrales, enemigos) no está cerrado. `false` si el héroe o la plaza no existen.
     pub fn puede_entrar_en_plaza(&self, heroe: u64, plaza: u64) -> bool {
-        let Some(hn) = self.heroe(heroe).filter(|_| self.estado.asentamientos.contains_key(&plaza)) else { return false };
-        hn.heroe.residencia == Some(Residencia::Asentamiento(plaza as u32)) || self.acceso_deja_pasar(heroe, plaza)
+        self.puerta_deja_pasar(heroe, plaza, true)
     }
 
-    /// ¿Deja pasar el acceso de la plaza, con su dueño de ahora, a la relación del héroe? Es `puede_entrar_en_plaza` sin la excepción de la residencia: la mira quien ha de saber
-    /// si seguiría abriéndose la puerta a alguien que deja de residir en ella (la conquista de la madre).
+    /// Es `puede_entrar_en_plaza` sin la excepción de la residencia: la mira quien ha de saber si seguiría abriéndose la puerta a alguien que deja de residir en ella (la conquista de la madre).
     pub(super) fn acceso_deja_pasar(&self, heroe: u64, plaza: u64) -> bool {
-        let (Some(hn), Some(a)) = (self.heroe(heroe), self.estado.asentamientos.get(&plaza)) else { return false };
-        a.acceso.permite(self.estado.trato(a.faccion, hn.faccion))
+        self.puerta_deja_pasar(heroe, plaza, false)
     }
 
     /// ¿Le abriría su puerta un pueblo extractor? Hereda el acceso de su plaza madre (`None` si el pueblo no existe). Se entra con `EntrarEnPueblo` (`dentro`).
@@ -525,26 +516,6 @@ impl Nucleo {
             }
             Comando::Guarnecer { asentamiento, heroe } => self.guarnecer(t, p, *asentamiento, *heroe),
             Comando::EntrarEnCampamento { campamento, heroe } => self.entrar_en_el_campamento(t, p, *campamento, *heroe),
-            Comando::FijarAcceso { asentamiento, aliados, neutrales, enemigos } => {
-                let plaza = self.plaza_o_rechazo(*asentamiento)?;
-                if !self.manda_en(p, plaza.faccion) {
-                    return Err(rechazo(rechazos::NO_AUTORIZADO, "solo quien manda en la plaza decide quién entra".into()));
-                }
-                let nuevo = Acceso { aliados: *aliados, neutrales: *neutrales, enemigos: *enemigos };
-                if plaza.acceso == nuevo {
-                    return Err(Respuesta::sin_cambios(v));
-                }
-                // Un pueblo o una avanzada de la plaza en batalla no recibe órdenes, y echar a quien combate dentro sería una (la administración no lleva candado).
-                if !p.admin && self.sitios_en_batalla(*asentamiento) {
-                    return Err(rechazo(rechazos::BATALLA_BLOQUEADO, "un pueblo o una avanzada de la plaza está en una batalla: la puerta no se toca hasta que acabe".into()));
-                }
-                self.estado.asentamientos.get_mut(asentamiento).expect("existe").acceso = nuevo;
-                self.tr.tocar(Clase::Asentamiento, *asentamiento);
-                // Cerrar la puerta echa al mapa, al instante y con todo lo suyo, a quien ya está dentro y ya no puede entrar.
-                self.cerrar_la_puerta(t, *asentamiento);
-                self.emitir_propio(t, "asentamiento.acceso", vec![*asentamiento], vec![("aliados", nuevo.aliados as i64), ("neutrales", nuevo.neutrales as i64), ("enemigos", nuevo.enemigos as i64)]);
-                Ok(vec![])
-            }
             Comando::VaciarCarro { heroe } => self.vaciar_carro(t, p, *heroe),
             _ => unreachable!("solo se llama con órdenes de salir y entrar"),
         }

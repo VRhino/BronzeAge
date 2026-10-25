@@ -407,14 +407,6 @@ impl Nucleo {
 
     // ───────────────────────────── Órdenes ─────────────────────────────
 
-    /// ¿Puede esta petición mandar en la plaza? Hoy: administración, propietario de alguna columna de la Facción de la plaza o cuenta de algún
-    /// héroe ciudadano de esa Facción (`FijarFaccionDeHeroe`). DUDA: los
-    /// cargos (Gobernador, Maestro de Obras, Tesorero), la residencia y la presencia vendrán del sistema de héroes y residentes; hasta
-    /// entonces esto es lo más simple y conservador (como `Fundar`, que exige ser el propietario de la columna).
-    pub(super) fn manda_en(&self, p: &Peticion, faccion: u32) -> bool {
-        p.admin || self.estado.ejercitos.values().any(|e| e.columna.faccion == Some(faccion) && self.manda_columna(p, e, false)) || self.heroes().any(|h| h.faccion == Some(faccion) && h.cuenta == p.actor)
-    }
-
     /// Plazas de la Facción (salvo `id`) que ocupan un puesto en el nivel `objetivo`: lo tienen como nivel actual o van hacia él.
     fn cupo_ocupado(&self, id: u64, faccion: u32, objetivo: u32) -> u32 {
         self.plazas_de(faccion).filter(|o| o.id != id && (o.nivel_actual() == objetivo || o.economia.ascenso.is_some_and(|s| s.nivel_objetivo == objetivo))).count() as u32
@@ -457,9 +449,7 @@ impl Nucleo {
         let id = *asentamiento;
         let Some(plaza) = self.estado.asentamientos.get(&id) else { return Err(rechazo(rechazos::ASENTAMIENTO_DESCONOCIDO, ids::asentamiento(id))) };
         let faccion = plaza.faccion;
-        if !self.manda_en(p, faccion) {
-            return Err(rechazo(rechazos::NO_AUTORIZADO, format!("no mandas en as-{id}")));
-        }
+        self.autorizar_en_plaza(p, id, None)?;
         let datos = self.estado.reglas.economia.datos.clone();
         let rechazo_obra = |e: ErrorObra| {
             let (c, m) = rechazo_de_obra(e);
@@ -547,9 +537,11 @@ impl Nucleo {
             }
             Comando::ActivarPolitica { politica, cargo, .. } => {
                 let nivel_faccion = self.nivel_de_faccion(faccion);
-                let eco = &mut self.estado.asentamientos.get_mut(&id).expect("existe").economia;
-                // DUDA: sin sistema de cargos, se da por ocupado el cargo que invoca la orden (ya se comprobó que el actor manda en la plaza).
-                let activador = Activador { cargo: *cargo, cargo_ocupado: true, nivel_faccion, sala_consejo: eco.edificios.activos(Tipo::SalaConsejo) > 0 };
+                let plaza = self.estado.asentamientos.get_mut(&id).expect("existe");
+                // El cargo que invoca la orden está ocupado: lo ocupa quien la da (la matriz ya lo comprobó). La administración, que no tiene cargo, activa como si estuviera cubierto.
+                let cargo_ocupado = p.admin || plaza.cargos.ocupado(*cargo);
+                let eco = &mut plaza.economia;
+                let activador = Activador { cargo: *cargo, cargo_ocupado, nivel_faccion, sala_consejo: eco.edificios.activos(Tipo::SalaConsejo) > 0 };
                 let expira = eco.politicas.activar(&datos.politicas, politica, &activador, t).map_err(|e| {
                     let (c, m) = rechazo_de_politica(e);
                     rechazo(c, m.into())

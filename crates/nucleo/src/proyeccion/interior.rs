@@ -26,6 +26,23 @@ fn ritmo_en_escalones(valor: base::Mil, tendencia: base::Mil, maximo: Option<bas
     pb::Ritmo { en_escalones: true, maximo, minimo: Some(0), por_minuto: tendencia, ..constante(valor) }
 }
 
+/// El grupo de la puerta en el contrato.
+fn grupo_de_puerta(g: politica::Grupo) -> pb::GrupoPuerta {
+    match g {
+        politica::Grupo::Neutrales => pb::GrupoPuerta::GrupoNeutrales,
+        politica::Grupo::Aliados => pb::GrupoPuerta::GrupoAliados,
+        politica::Grupo::Enemigos => pb::GrupoPuerta::GrupoEnemigos,
+        politica::Grupo::Aedas => pb::GrupoPuerta::GrupoAedas,
+    }
+}
+
+/// Los titulares de los cargos locales de una plaza (5E): viajan en su interior y, desde fuera, en la ficha de las plazas propias (`FACCION`).
+pub(crate) fn cargos(c: &politica::Cargos) -> pb::Cargos {
+    use asentamiento::Cargo::*;
+    let t = |x| c.titular(x).map(ids::heroe);
+    pb::Cargos { gobernador_id: t(Gobernador), tesorero_id: t(Tesorero), general_id: t(General), maestro_obras_id: t(MaestroObras), sacerdote_id: t(Sacerdote) }
+}
+
 fn rect(r: &trazado::RectLocal) -> pb::RectLocal {
     pb::RectLocal { x: r.x, y: r.y, ancho: r.ancho.max(0) as u32, alto: r.alto.max(0) as u32 }
 }
@@ -112,7 +129,9 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
     p.presentes_ids = n.heroes().filter(|h| matches!(h.heroe.presencia.ubicacion, Ubicacion::Asentamiento(x) if u64::from(x) == id)).map(|h| ids::heroe(h.heroe.id)).collect();
     p.guarnicion_ids = n.guarnicion_de_plaza(id).into_iter().map(ids::escuadra).collect();
     p.cupo_guarnicion = u32::try_from(n.cupo_de_guarnicion(id).unwrap_or(0)).unwrap_or(0);
-    p.puerta_cerrada_a = [(a.acceso.neutrales, pb::GrupoPuerta::GrupoNeutrales), (a.acceso.aliados, pb::GrupoPuerta::GrupoAliados), (a.acceso.enemigos, pb::GrupoPuerta::GrupoEnemigos)].into_iter().filter(|(abierta, _)| !abierta).map(|(_, g)| g as i32).collect();
+    p.puerta_cerrada_a = n.puerta_cerrada_a(id).unwrap_or_default().iter().map(|g| grupo_de_puerta(g) as i32).collect();
+    p.vetados_ids = a.puerta.vetados.iter().map(|&h| ids::heroe(h)).collect();
+    p.cargos = Some(cargos(&a.cargos));
     p.caravanas_aparcadas_ids = e.comercio.flota.iter().filter(|c| c.estado == comercio::caravana::EstadoCaravana::Aparcada && c.anfitriona.is_some_and(|x| u64::from(x) == id)).map(|c| ids::caravana(c.id)).collect();
     p.flota_ids = e.comercio.flota.iter().filter(|c| u64::from(c.origen) == id).map(|c| ids::caravana(c.id)).collect();
 

@@ -137,34 +137,6 @@ pub enum Trato {
     Enemiga,
 }
 
-/// Quién puede entrar en una plaza, por relación con su Facción: el dueño lo decide (`FijarAcceso`) y los pueblos extractores y las avanzadas de la plaza lo
-/// heredan. La misma Facción entra siempre. Por defecto, hasta el sistema político, entran todos menos los enemigos.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Acceso {
-    /// Aliados y vasallos.
-    pub aliados: bool,
-    pub neutrales: bool,
-    pub enemigos: bool,
-}
-
-impl Default for Acceso {
-    fn default() -> Self {
-        Self { aliados: true, neutrales: true, enemigos: false }
-    }
-}
-
-impl Acceso {
-    /// ¿Deja pasar a quien se le trata así? La misma Facción pasa siempre.
-    pub fn permite(&self, trato: Trato) -> bool {
-        match trato {
-            Trato::Propia => true,
-            Trato::Aliada => self.aliados,
-            Trato::Neutral => self.neutrales,
-            Trato::Enemiga => self.enemigos,
-        }
-    }
-}
-
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct EstadoMilitar {
     /// Todos los héroes, por id ascendente.
@@ -180,6 +152,9 @@ pub struct EstadoMilitar {
     /// Plaza → héroes que residen en ella. Es un índice de `Heroe::residencia`: se reconstruye al recuperar y solo lo toca [`EstadoMilitar::mudar`].
     /// Con él, el paso de un minuto de una plaza sin residentes cuesta una consulta.
     pub(crate) residentes: BTreeMap<u64, BTreeSet<u64>>,
+    /// Cuenta → sus héroes, por id. Es un índice: se reconstruye al recuperar y solo lo toca [`EstadoMilitar::insertar`] (un héroe no se borra ni cambia de cuenta). Con él, la
+    /// autorización de una orden que no nombra héroe (la de una plaza) mira solo los de su cuenta (5E).
+    pub(crate) por_cuenta: BTreeMap<String, Vec<u64>>,
 }
 
 impl EstadoMilitar {
@@ -188,7 +163,16 @@ impl EstadoMilitar {
         if let Some(Residencia::Asentamiento(plaza)) = h.heroe.residencia {
             self.residentes.entry(plaza as u64).or_default().insert(h.heroe.id);
         }
+        let ids = self.por_cuenta.entry(h.cuenta.clone()).or_default();
+        if let Err(i) = ids.binary_search(&h.heroe.id) {
+            ids.insert(i, h.heroe.id);
+        }
         self.heroes.insert(h.heroe.id, h);
+    }
+
+    /// Los héroes de una cuenta, por id (la de un jugador tiene uno; la de la administración y sus escenarios, varios héroes de campo).
+    pub fn heroes_de_cuenta(&self, cuenta: &str) -> &[u64] {
+        self.por_cuenta.get(cuenta).map_or(&[], Vec::as_slice)
     }
 
     /// Cambia la residencia de un héroe y mantiene el índice. No suelta la guarnición ni retira la tropa prestada: eso es de quien la cambia.
@@ -215,7 +199,7 @@ impl EstadoMilitar {
 
     /// El héroe de una cuenta, si lo hay (uno por cuenta y partida).
     pub fn heroe_de_cuenta(&self, cuenta: &str) -> Option<&HeroeNucleo> {
-        self.heroes.values().find(|h| !h.sintetico && h.cuenta == cuenta)
+        self.heroes_de_cuenta(cuenta).iter().filter_map(|id| self.heroes.get(id)).find(|h| !h.sintetico)
     }
 
     /// ¿Tiene la Facción adoptada esa tecnología? Las de arranque las tiene toda Facción desde que nace.

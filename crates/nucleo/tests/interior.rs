@@ -88,7 +88,8 @@ impl Aldea {
         self.peticiones += 1;
         let p = Peticion::nueva(actor, &format!("prep{}", self.peticiones), c);
         let t = self.n.ahora();
-        let r = self.n.aplicar_en(t, if actor == "admin" { p.de_admin() } else { p });
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
+        let r = self.n.aplicar_en(t, if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) { p.de_admin() } else { p });
         assert!(r.aceptada() || r.resultado == Resultado::SinCambios, "{r:?}");
         r
     }
@@ -101,6 +102,15 @@ impl Aldea {
         }
         if let Some(u) = dentro {
             self.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: u });
+            // 5E: el primer residente que está dentro gobierna la plaza (sus órdenes de plaza pasan la matriz real).
+            // El segundo es su Maestro de Obras.
+            if let (Some(Residencia::Asentamiento(a)), Ubicacion::Asentamiento(b)) = (residencia, u) {
+                if a == b && self.n.estado().asentamientos[&u64::from(a)].cargos.titular(asentamiento::Cargo::Gobernador).is_none() {
+                    comun::gobierna(&mut self.n, u64::from(a), h);
+                } else if a == b {
+                    self.ok("admin", Comando::AsignarCargoLocal { heroe: h, asentamiento: u64::from(a), cargo: asentamiento::Cargo::MaestroObras, designado: h });
+                }
+            }
         }
         h
     }
@@ -426,10 +436,12 @@ async fn la_foto_de_la_plaza_trae_su_interior_entero_y_es_la_proyeccion_del_nucl
     assert!(t.radio_ul > 0 && !t.calles.is_empty());
     assert!(p.recintos.is_empty() && p.ascenso.is_none() && p.politicas_activas.is_empty());
 
-    // Quién vive y quién está dentro, el acceso por defecto (cerrado a los enemigos), la guarnición y la cuenta de la flota.
+    // Quién vive y quién está dentro, la puerta por defecto (Q1: cerrada a neutrales y enemigos), los cargos (5E), la guarnición y la cuenta de la flota.
     assert_eq!(p.casas_compradas, [h_fundador, h_ana.clone(), h_dora.clone()]);
-    assert_eq!(p.presentes_ids, [h_ana, h_dora]);
-    assert_eq!(p.puerta_cerrada_a, [pb::GrupoPuerta::GrupoEnemigos as i32]);
+    assert_eq!(p.presentes_ids, [h_ana.clone(), h_dora.clone()]);
+    assert_eq!(p.puerta_cerrada_a, [pb::GrupoPuerta::GrupoNeutrales as i32, pb::GrupoPuerta::GrupoEnemigos as i32]);
+    let cargos = p.cargos.as_ref().expect("los cargos viajan en el interior");
+    assert_eq!((cargos.gobernador_id.as_ref(), cargos.tesorero_id.as_ref(), cargos.maestro_obras_id.as_ref(), cargos.general_id.as_ref()), (Some(&h_ana), Some(&h_ana), Some(&h_dora), None));
     assert!(p.guarnicion_ids.is_empty() && p.caravanas_aparcadas_ids.is_empty() && p.flota_ids.is_empty() && p.batalla_id.is_none());
     assert!(b.ambitos.iter().any(|a| ambito(&a.ambito) == format!("ASENTAMIENTO:{as_}") && a.decision == D::ReanudaConFoto as i32));
 
@@ -710,7 +722,10 @@ async fn la_politica_la_guarnicion_el_visitante_y_el_acceso_que_expulsa_viajan_a
     ana.al_dia().await;
     assert!(!ana.plaza.presentes_ids.contains(&h_gus), "se fue");
 
-    // Entra otra vez, ahora por su pie (su columna está a la puerta), y ana cierra la puerta a los neutrales: sale a la fuerza, y la plaza lo cuenta (la puerta y quién queda dentro).
+    // Ana, su Gobernadora, abre la puerta a los neutrales (por defecto, cerrada: Q1); gus entra otra vez, ahora por su pie (su columna está a la puerta), y ana vuelve a cerrársela: sale a la
+    // fuerza, y la plaza lo cuenta (la puerta y quién queda dentro).
+    let (_, r) = ana.dar("a0", orden::Cuerpo::FijarPuerta(pb::OrdenFijarPuerta { asentamiento_id: as_.clone(), heroe_id: h_ana.clone(), cerrada_a: vec![s("enemigos")] })).await;
+    aceptada(&r);
     let (_, r) = dar(&mut gus, "v3", orden::Cuerpo::EntrarEnAsentamiento(pb::OrdenEntrarEnAsentamiento { asentamiento_id: as_.clone(), heroe_id: h_gus.clone() })).await;
     aceptada(&r);
     ana.al_dia().await;

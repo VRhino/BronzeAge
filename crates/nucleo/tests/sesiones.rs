@@ -166,7 +166,7 @@ async fn el_cliente_lento_se_descarta_sin_bloquear_el_mundo() {
     let (dtx, mut drx) = mpsc::channel(2);
     let (rtx, rrx) = oneshot::channel();
     let h = hola("ok:ana", TipoCliente::ClienteUnity);
-    let identidad = servidor::Identidad { cliente_id: "ana".into(), roles: vec![TipoCliente::ClienteUnity] };
+    let identidad = servidor::Identidad { cliente_id: "ana".into(), roles: vec![TipoCliente::ClienteUnity], rol: servidor::RolTecnico::Jugador };
     w.tx.send(ComandoSesion::Conecta { sesion: 777, identidad, hola: h, difusion: dtx, respuesta: rtx }).await.unwrap();
     rrx.await.unwrap().expect("bienvenida");
 
@@ -187,7 +187,7 @@ async fn lo_que_el_contrato_no_puede_traducir_se_rechaza_con_un_codigo_estable()
     let w = arrancar().await;
     let (mut ana, _) = w.entrar("ana", TipoCliente::ClienteUnity).await;
     // Una orden del contrato que el núcleo aún no tiene no se descarta: se rechaza con su código.
-    let (deltas, r) = dar(&mut ana, "x", orden::Cuerpo::VetarJugador(pb::OrdenVetarJugador::default())).await;
+    let (deltas, r) = dar(&mut ana, "x", orden::Cuerpo::ProponerAnexion(pb::OrdenProponerAnexion::default())).await;
     assert_eq!((deltas.len(), rechazo(&r)), (0, "orden.no_disponible"));
     // Una orden vacía, tampoco.
     ana.enviar(mc::Cuerpo::Orden(Orden { peticion_id: "v".into(), ..Default::default() })).await;

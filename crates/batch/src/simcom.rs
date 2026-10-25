@@ -17,7 +17,7 @@
 
 use crate::auditoria::{auditar_cola, Violaciones};
 use crate::geo::{Cargado, Geo};
-use crate::sim::{nucleo_nuevo, ANILLO_CAMPAMENTO, ANILLO_PLAZA, ASCENSO_CADA_MIN, CANDIDATOS, VELOCIDAD, VIVERES};
+use crate::sim::{cuenta_de_gobernador as gobernador, gobernador_de_oficio, nucleo_nuevo, ANILLO_CAMPAMENTO, ANILLO_PLAZA, ASCENSO_CADA_MIN, CANDIDATOS, VELOCIDAD, VIVERES};
 use crate::vigia::Vigia;
 use asentamiento::catalogo::Tipo;
 
@@ -378,6 +378,8 @@ impl Sim<'_> {
             self.admin(t, "DarCaravanaFundacion", Comando::DarCaravanaFundacion { ejercito: columna });
             let r = self.orden(t, &jugador(f), "Fundar", Comando::Fundar { ejercito: columna });
             let Some(&id) = r.creadas.first().filter(|_| r.aceptada()) else { continue };
+            // 5E: las órdenes de la plaza las da su Gobernador de oficio, residente y dentro (`gobernador_de_oficio`, con su cuenta propia).
+            gobernador_de_oficio(&mut self.n, t, id).expect("el Gobernador de oficio de la plaza");
             // Su héroe nace en el campamento más cercano y va en la columna; sin residencia, es un visitante de todos los campamentos.
             let (campamento, cuenta) = (self.campamento_mas_cercano(p), format!("{}-{k}", jugador(f)));
             let h = self.admin(t, "CrearHeroe", Comando::CrearHeroe { cuenta: cuenta.clone(), campamento, controlador: Controlador::Humano });
@@ -471,10 +473,9 @@ impl Sim<'_> {
             return;
         }
         self.programar(t + TURNO_MIN * MIN, Accion::Turno(id));
-        let faccion = self.pjs[&id].info.faccion;
         // Como en `batch territorio`: el «jugador» pide el ascenso cada hora; el núcleo exige los requisitos reales.
         if t % (ASCENSO_CADA_MIN * MIN) < TURNO_MIN * MIN {
-            self.orden(t, &jugador(faccion), "SolicitarAscenso", Comando::SolicitarAscenso { asentamiento: id });
+            self.orden(t, &gobernador(id), "SolicitarAscenso", Comando::SolicitarAscenso { asentamiento: id });
         }
         if self.control {
             return;
@@ -486,12 +487,12 @@ impl Sim<'_> {
 
     /// Construye el Mercado cuando sobra madera y monta la caravana de la plaza (2 carros con buey) cuando el Mercado está activo.
     fn flota(&mut self, t: Instante, id: u64) {
-        let (faccion, madera, mercado, activo) = {
+        let (madera, mercado, activo) = {
             let a = &self.n.estado().asentamientos[&id];
             let ed = &a.economia.edificios;
-            (a.faccion, a.economia.almacen.cantidad(Recurso::Madera), ed.iter().any(|e| e.tipo == Tipo::Mercado), ed.iter().any(|e| e.tipo == Tipo::Mercado && e.activo()))
+            (a.economia.almacen.cantidad(Recurso::Madera), ed.iter().any(|e| e.tipo == Tipo::Mercado), ed.iter().any(|e| e.tipo == Tipo::Mercado && e.activo()))
         };
-        let actor = jugador(faccion);
+        let actor = gobernador(id);
         if !mercado {
             if madera >= COSTE_MERCADO + RESERVA_MADERA {
                 self.orden(t, &actor, "AnadirEdificio(Mercado)", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Mercado });
@@ -573,7 +574,7 @@ impl Sim<'_> {
             (self.vive(v) && (q.info.faccion != mi_faccion) == otra && self.flota_lista(v)).then(|| self.pareja(id, v).map(|o| (v, o)))?
         });
         let Some((socia, (da, q_da, quiere, q_quiere))) = hallada else { return };
-        let r = self.orden(t, &jugador(mi_faccion), "ProponerTrueque", Comando::ProponerTrueque { a: id, b: socia, lineas_a: vec![(da, q_da)], lineas_b: vec![(quiere, q_quiere)] });
+        let r = self.orden(t, &gobernador(id), "ProponerTrueque", Comando::ProponerTrueque { a: id, b: socia, lineas_a: vec![(da, q_da)], lineas_b: vec![(quiere, q_quiere)] });
         if let Some(&ac) = r.creadas.first().filter(|_| r.aceptada()) {
             self.pjs.get_mut(&id).expect("existe").propuesta = Some(ac);
             self.programar(t + RESPUESTA_MIN * MIN, Accion::Responder(ac));
@@ -591,9 +592,8 @@ impl Sim<'_> {
         }
         let almacen = &self.n.estado().asentamientos[&b].economia.almacen;
         let puede = self.flota_lista(b) && lineas.iter().all(|&(r, n)| almacen.cantidad(r) >= n) && entra.iter().all(|&(r, n)| almacen.espacio(r) >= n);
-        let faccion = self.n.estado().asentamientos[&b].faccion;
         let (etiqueta, c) = if puede { ("AceptarTrueque", Comando::AceptarTrueque { acuerdo }) } else { ("RechazarTrueque", Comando::RechazarTrueque { acuerdo }) };
-        self.orden(t, &jugador(faccion), etiqueta, c);
+        self.orden(t, &gobernador(b), etiqueta, c);
     }
 
     // ───────────────────────────── Pueblos y misiones de columna ─────────────────────────────
@@ -605,7 +605,7 @@ impl Sim<'_> {
             return;
         }
         let a = &self.n.estado().asentamientos[&id];
-        let (faccion, nivel) = (a.faccion, a.economia.nivel_actual());
+        let nivel = a.economia.nivel_actual();
         if let Some(pueblo) = p.obra_pendiente {
             // Una obra a medias (el campamento no tenía todos los materiales): otro viaje cuando se reponga.
             if t >= p.proxima_obra {
@@ -617,7 +617,7 @@ impl Sim<'_> {
             return;
         }
         let Some(&(nodo, _)) = self.n.candidatos_de_pueblo(id).iter().find(|(_, tipo)| *tipo == Tipo::Cantera) else { return };
-        let r = self.orden(t, &jugador(faccion), "MarcarPueblo", Comando::MarcarPueblo { asentamiento: id, nodo });
+        let r = self.orden(t, &gobernador(id), "MarcarPueblo", Comando::MarcarPueblo { asentamiento: id, nodo });
         let Some(&pueblo) = r.creadas.first().filter(|_| r.aceptada()) else { return };
         self.pjs.get_mut(&id).expect("existe").obra_pendiente = Some(pueblo);
         self.empezar(t, id, Mision { tipo: Clase::Pueblo, pueblo: Some(pueblo) });
@@ -733,7 +733,7 @@ impl Sim<'_> {
             }
             (Clase::Minerales, Paso::Vender) => {
                 for (recurso, cantidad) in [(Recurso::Cobre, 15_000), (Recurso::Estano, 8_000)] {
-                    let r = self.orden(t, &actor, "ColocarOrdenMercado", Comando::ColocarOrdenMercado { asentamiento: id, venta: false, recurso, cantidad, precio: None });
+                    let r = self.orden(t, &gobernador(id), "ColocarOrdenMercado", Comando::ColocarOrdenMercado { asentamiento: id, venta: false, recurso, cantidad, precio: None });
                     if let Some(&orden) = r.creadas.first().filter(|_| r.aceptada()) {
                         self.orden(t, &actor, "ComerciarEnPlaza", Comando::ComerciarEnPlaza { ejercito: columna, orden, cantidad });
                     }

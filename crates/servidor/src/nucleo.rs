@@ -38,6 +38,20 @@ pub struct Identidad {
     pub cliente_id: String,
     /// Tipos de cliente que este token puede abrir (`Hola.cliente` debe estar aquí, si no `rol_no_permitido`).
     pub roles: Vec<TipoCliente>,
+    /// El rol técnico de su membresía en la partida (Proyecciones_Y_Autorizacion §2.2; sistema 5, tanda 5E).
+    pub rol: RolTecnico,
+}
+
+/// El rol técnico de la membresía de una cuenta en la partida (Proyecciones_Y_Autorizacion §2.2): un eje distinto del de los cargos del juego. Solo matiza las sesiones de administración
+/// (`CLIENTE_ADMIN_WEB`): el **moderador** ve el ámbito `ADMIN` y no da ninguna orden; el administrador de la partida y el global dan las de administración. Para un jugador no cuenta: lo que
+/// puede lo dice la matriz de autorización del núcleo.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RolTecnico {
+    #[default]
+    Jugador,
+    AdministradorPartida,
+    Moderador,
+    AdministradorGlobal,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

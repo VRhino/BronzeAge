@@ -63,6 +63,8 @@ Membresia          { usuarioId, gameId, jugadorId|null, rol, desde, hasta?, moti
 `RolTecnico = jugador | administrador_partida | moderador | administrador_global | servicio_npc`. **Son un eje distinto del de los cargos del juego** (Rey, Gobernador…): un administrador no hereda ningún cargo ni puede actuar como jugador por serlo.
 
 > **En Rust, un solo rol de administración hasta el sistema 5** (decisión del autor, 2026-10-24): toda sesión `CLIENTE_ADMIN_WEB` ve lo mismo (el ámbito `ADMIN` entero) y da todas las órdenes de administración; `moderador` y `administrador_partida` no se distinguen hasta que el sistema 5 traiga las membresías.
+>
+> **Implementado en Rust (2026-10-25, 5E): los roles técnicos por membresía.** El servicio de acceso dice el rol de la membresía de la cuenta (`servidor::Identidad::rol`, `RolTecnico`: `jugador`, `administrador_partida`, `moderador`, `administrador_global`). En una sesión `CLIENTE_ADMIN_WEB` el **moderador ve el ámbito `ADMIN` y no da ninguna orden** (`no_autorizado`); el administrador de la partida y el global dan las de administración (el andamiaje de escenarios y el reloj: en Rust no hay `cancelarBatalla` de administrador, la batalla la cancela quien la inició). Para un jugador el rol no cuenta: lo que puede lo dice la matriz.
 
 `rolEnPartida(actor)`: **manda la `Membresia` vigente** de esa partida; solo si no hay ninguna cae a `administrador_global` (si el usuario figura como tal en la instancia); si tampoco, no tiene rol. (Un administrador global que **además** es jugador de esa partida actúa con el rol `jugador` en los comandos.)
 
@@ -182,13 +184,22 @@ Todos son funciones del estado y del héroe del actor (`yo`). Los de pertenencia
 
 ### 5.1 En Rust: quién da cada orden hoy (4H T7, 2026-10-24)
 
-Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de administración y los cinco mensajes del canal del servidor de batalla, con el comando del núcleo que da cada una y quién puede darla. Es la autorización **provisional** hasta el sistema político (5), que traerá los cargos, la residencia como condición, los vetos y los roles de la membresía; las filas de §5.2 son lo que pedirá entonces.
+Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de administración y los cinco mensajes del canal del servidor de batalla, con el comando del núcleo que da cada una y quién puede darla. Desde 5E es la matriz de §5.2 (cargos, residencia y presencia); las órdenes que el TypeScript no tenía (pueblos, avanzadas, murallas) siguen su misma lógica.
 
 > **Implementado en Rust (2026-10-24, 5B):** las nueve órdenes de la Facción, la ciudadanía y la residencia (128-136) y dos clases nuevas de `Autoriza`: `ReyDeLaFaccion` (`responder_solicitud`, sin excepción, como `responderSolicitudes` de §5.2; `asignar_embajador`) y `CiudadanoDeLaFaccion` (`asignar_rey`: un ciudadano si no hay Rey; con Rey, solo él). Las comprueba el predicado del crate `politica` (`autorizacion::Actor`) sobre el núcleo (`Vista`, sin cargos hasta 5E). El resto de la matriz no cambia hasta 5E.
 
 > **Implementado en Rust (2026-10-24, 5C):** `designar_capital` (137, `ReyDeLaFaccion`) y `renombrar_asentamiento` (143, clase nueva `ResidenteDeLaPlaza`: la cuenta del héroe, que reside en la plaza; basta residir, como el TypeScript). Con 5G-a, quedan 27 órdenes no disponibles.
 
 > **Implementado en Rust (2026-10-24, 5D):** las nueve órdenes de las relaciones entre Facciones (144-152; las 153-157 son de 5G-b) y una clase nueva de `Autoriza`, `AutoridadDiplomatica` (la cuenta del héroe, ciudadano y Rey o Embajador de la Facción que actúa: `politica::autorizacion::Actor::autoridad_diplomatica`). `responder_relacion` y `admitir_otras_facciones` son del Rey (`ReyDeLaFaccion`); `alternar_reabastecer_aliados`, de quien manda en la plaza hasta 5E. Con 5G-b, quedan 13 órdenes no disponibles.
+
+> **Implementado en Rust (2026-10-25, 5E):** la matriz de las órdenes de plaza es la de §5.2. Se retiran `manda_en` y «ciudadano de la madre» (salvo `colocar_avanzada`, `// DUDA:`), y `Autoriza` gana
+> `Cargo(..)` (el titular de alguno de esos cargos, que reside en la plaza y está dentro: `cargo(A, c)`), `CargoDeLaOrden` (el que nombra la orden: `activar_politica`, `comprometer_recinto`, `mejorar_recinto`),
+> `ResidenteDentro` (`reside(A)`, `resideEnOrigen`), `OperaAparcada` (`puedeOperarAparcada`), `AsignaCargoLocal`, `FijaPuerta` y `CompraIntel`; las aplica una sola función (`Nucleo::autorizar_en_plaza`,
+> `crates/nucleo/src/nucleo/cargos.rs`) con los predicados de `politica::autorizacion::Actor`. Las órdenes de plaza no nombran héroe: vale cualquiera de los héroes de la cuenta (índice cuenta → héroes,
+> sin recorrer el mundo). Las obras de mapa (pueblos y la mejora, reparación, destrucción y cancelación de avanzadas) son del panel de la plaza madre (Doc 4.2.2): su Gobernador o su Maestro de Obras,
+> dentro; elegir la tropa de serie, el Gobernador; guarnecer y retirar de una avanzada, la cuenta del héroe (como `asignar_guarnicion`). Órdenes nuevas: `asignar_cargo_local` (158), `fijar_puerta`
+> (159, antes `FijarAcceso`, que se queda en el núcleo como alias) y `vetar_jugador` (160); quedan 11 órdenes no disponibles. El `cargo` de las órdenes de obras no viaja al núcleo: vale el titular de
+> cualquiera de los dos (Gobernador o Maestro de Obras).
 
 - **Quién la da** es `Comando::autoriza` (`crates/nucleo/src/comando.rs`, un `match` sin comodín sobre los 136 comandos: un comando nuevo no compila hasta decidirlo). Cada orden comprueba la suya en su sitio y rechaza con `no_autorizado`; la de administración la comprueba una sola vez `Nucleo::ejecutar`. La administración (`Peticion.admin`) puede con todas salvo las del servidor de batalla, que exigen su credencial (`batalla-servidor:<id>`, `batalla.sin_credencial`).
 - **La sesión** añade dos filtros antes del núcleo (`sesiones::ordenes::traducir`, `sesiones.rs`): la orden genérica de administración y `controlar_reloj` solo los da una sesión `CLIENTE_ADMIN_WEB` (`no_autorizado` en cualquier otra), y los mensajes del canal de batalla solo llegan de una sesión `CLIENTE_SERVIDOR_BATALLA`. El actor de la petición es siempre la cuenta de la sesión, nunca un dato del cuerpo: las órdenes que no nombran héroe usan el de la cuenta.
@@ -197,41 +208,53 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 
 <!-- autorizacion -->
 
-**Quien manda en la plaza**
+**Los cargos de la plaza (sistema 5, 5E)**: titular del cargo, residente y dentro (`cargo(A, c)`); designar al Gobernador y fijar la puerta, también el Rey sin estar presente. De una caravana, la plaza de su origen; de un trueque, la A al proponerlo y la B al contestarlo; de una orden de mercado, la suya; de un pueblo o una avanzada, su plaza madre
 
 | Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
 |---|---|---|---|
-| `abandonar_recinto` | `AbandonarRecinto` | quien manda en la plaza | de la plaza |
-| `aceptar_trueque` | `AceptarTrueque` | quien manda en la plaza | de la plaza B del acuerdo |
-| `activar_politica` | `ActivarPolitica` | quien manda en la plaza | de la plaza; el cargo se da por ocupado |
-| `agregar_carro_caravana` | `AnadirCarro` | quien manda en la plaza | del origen de la caravana |
-| `alternar_auto_construccion` | `AlternarAutoConstruccion` | quien manda en la plaza | de la plaza |
-| `alternar_reabastecer_aliados` | `AlternarReabastecerAliados` | quien manda en la plaza | de la plaza; sin cambio, `sin_cambios` (5D: hasta 5E, quien manda; luego el Gobernador o el Tesorero) |
-| `alternar_receta` | `AlternarReceta` | quien manda en la plaza | de la plaza |
-| `anadir_edificio_manualmente` | `AnadirEdificio` | quien manda en la plaza | de la plaza; el cargo que se invoca se da por ocupado (sistema 5) |
-| `calibrar_reserva_manual` | `CalibrarReserva` | quien manda en la plaza | de la plaza |
-| `cancelar_caravana` | `CancelarCaravana` | quien manda en la plaza | del origen de la caravana |
-| `cancelar_orden_mercado` | `CancelarOrdenMercado` | quien manda en la plaza | de la plaza de la orden |
-| `colocar_orden_mercado` | `ColocarOrdenMercado` | quien manda en la plaza | de la plaza |
-| `comprar_animal_caravana` | `AnadirAnimal` | quien manda en la plaza | del origen de la caravana |
-| `comprometer_recinto` | `ComprometerRecinto` | quien manda en la plaza | de la plaza; el cargo se da por ocupado |
-| `crear_caravana` | `CrearCaravana` | quien manda en la plaza | de la plaza |
-| `destruir_pueblo` | `DestruirPueblo` | quien manda en la plaza | de la plaza madre |
-| `enviar_caravana_al_origen` | `EnviarCaravanaAlOrigen` | quien manda en la plaza | del origen de la caravana |
-| `fijar_puerta` | `FijarAcceso` | quien manda en la plaza | de la plaza; no durante un asedio (`batalla.bloqueado`) |
-| `marcar_pueblo` | `MarcarPueblo` | quien manda en la plaza | de la plaza madre; la columna del héroe a la puerta (`radioPuerta`) del nodo |
-| `mejorar_edificio_ahora` | `MejorarEdificio` | quien manda en la plaza | de la plaza |
-| `mejorar_recinto` | `MejorarRecinto` | quien manda en la plaza | de la plaza; el cargo se da por ocupado |
-| `mover_carga_caravana_aparcada` | `MoverCargaAparcada` | quien manda en la plaza | del origen de la caravana (DUDA: el documento pide además estar presente donde está aparcada) |
-| `mover_carro_caravana` | `MoverCarro` | quien manda en la plaza | del origen de la caravana de la que sale |
-| `mover_en_cola` | `MoverEnCola` | quien manda en la plaza | de la plaza |
-| `preparar_caravana` | `PrepararCaravana` | quien manda en la plaza | del origen de la caravana |
-| `proponer_trueque` | `ProponerTrueque` | quien manda en la plaza | de la plaza A |
-| `quitar_de_cola` | `QuitarDeCola` | quien manda en la plaza | de la plaza |
-| `rechazar_trueque` | `RechazarTrueque` | quien manda en la plaza | de la plaza B del acuerdo |
-| `reponer_carro_de_acarreo` | `ReponerCarro` | quien manda en la plaza | de la plaza madre |
-| `reservar_caravana` | `ReservarCaravana` | quien manda en la plaza | del origen de la caravana |
-| `solicitar_ascenso` | `SolicitarAscenso` | quien manda en la plaza | de la plaza |
+| `abandonar_recinto` | `AbandonarRecinto` | el Gobernador de la plaza, residente y dentro | de la plaza |
+| `aceptar_trueque` | `AceptarTrueque` | el Gobernador o el Tesorero de la plaza, residente y dentro | de la plaza B del acuerdo |
+| `activar_politica` | `ActivarPolitica` | el titular del cargo de la orden, residente y dentro | de la plaza; el cargo que nombra la orden (5E) |
+| `alternar_auto_construccion` | `AlternarAutoConstruccion` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza |
+| `alternar_reabastecer_aliados` | `AlternarReabastecerAliados` | el Gobernador o el Tesorero de la plaza, residente y dentro | de la plaza; sin cambio, `sin_cambios` |
+| `alternar_receta` | `AlternarReceta` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza |
+| `anadir_edificio_manualmente` | `AnadirEdificio` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza (el `cargo` de la orden no viaja al núcleo: vale cualquiera de los dos) |
+| `asignar_cargo_local` | `AsignarCargoLocal` | el Rey (Gobernador) o el Gobernador, residente y dentro (los demás) | de la plaza; el designado es ciudadano de la Facción dueña (`cargo.no_ciudadano`) y reside en la plaza (`cargo.no_reside`, Q4); los otros cuatro, con Gobernador (`cargo.sin_gobernador`); ya titular, `sin_cambios` (5E) |
+| `calibrar_reserva_manual` | `CalibrarReserva` | el Tesorero de la plaza, residente y dentro | de la plaza |
+| `cancelar_obra` | `CancelarObraDeAvanzada` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre; una mejora o reparación en curso |
+| `cancelar_orden_mercado` | `CancelarOrdenMercado` | el Gobernador o el Tesorero de la plaza, residente y dentro | de la plaza de la orden |
+| `colocar_orden_mercado` | `ColocarOrdenMercado` | el Gobernador o el Tesorero de la plaza, residente y dentro | de la plaza |
+| `comprometer_recinto` | `ComprometerRecinto` | el titular del cargo de la orden, residente y dentro | de la plaza |
+| `destruir_avanzada` | `DestruirAvanzada` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre |
+| `destruir_pueblo` | `DestruirPueblo` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre |
+| `elegir_tropa_de_avanzada` | `ElegirTropaDeAvanzada` | el Gobernador de la plaza, residente y dentro | de la plaza madre |
+| `fijar_puerta` | `FijarPuerta` | el Gobernador, residente y dentro, o el Rey de la Facción | de la plaza; los grupos `neutrales`, `aliados`, `enemigos` y `aedas` (`orden.forma_invalida` si no); sin cambio, `sin_cambios`; no con un pueblo o una avanzada de la plaza en batalla (`batalla.bloqueado`); quien ya no puede entrar sale al mapa (5E). `FijarAcceso` (117) es su alias en el núcleo |
+| `marcar_pueblo` | `MarcarPueblo` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre (el panel de la madre, Doc 4.2.2) |
+| `mejorar_avanzada` | `MejorarAvanzada` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre |
+| `mejorar_edificio_ahora` | `MejorarEdificio` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza |
+| `mejorar_recinto` | `MejorarRecinto` | el titular del cargo de la orden, residente y dentro | de la plaza |
+| `mover_en_cola` | `MoverEnCola` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza |
+| `proponer_trueque` | `ProponerTrueque` | el Gobernador o el Tesorero de la plaza, residente y dentro | de la plaza A |
+| `quitar_de_cola` | `QuitarDeCola` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza |
+| `rechazar_trueque` | `RechazarTrueque` | el Gobernador o el Tesorero de la plaza, residente y dentro | de la plaza B del acuerdo |
+| `reparar_avanzada` | `RepararAvanzada` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre (o de la plaza que tiene ahora la zona de una ciudadela sin dueño) |
+| `reponer_carro_de_acarreo` | `ReponerCarro` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre |
+| `solicitar_ascenso` | `SolicitarAscenso` | el Gobernador de la plaza, residente y dentro | de la plaza |
+| `vetar_jugador` | `VetarJugador` | el Gobernador de la plaza, residente y dentro | de la plaza; a un residente no se le veta (`puerta.residente`); sin cambio, `sin_cambios`; vetar saca al mapa a quien está dentro de la plaza, de sus pueblos o de sus avanzadas (5E) |
+
+**Los residentes de la plaza (sistema 5, 5E)**: residir y estar dentro (`reside(A)`, `resideEnOrigen`, `puedeOperarAparcada`)
+
+| Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
+|---|---|---|---|
+| `agregar_carro_caravana` | `AnadirCarro` | un residente de la plaza, dentro | del origen de la caravana |
+| `cancelar_caravana` | `CancelarCaravana` | un residente de la plaza, dentro | del origen de la caravana |
+| `comprar_animal_caravana` | `AnadirAnimal` | un residente de la plaza, dentro | del origen de la caravana |
+| `crear_caravana` | `CrearCaravana` | un residente de la plaza, dentro | de la plaza |
+| `enviar_caravana_al_origen` | `EnviarCaravanaAlOrigen` | un residente del origen, dentro de la plaza donde está aparcada | de la caravana aparcada, como `mover_carga_caravana_aparcada` |
+| `mover_carga_caravana_aparcada` | `MoverCargaAparcada` | un residente del origen, dentro de la plaza donde está aparcada | de la caravana aparcada: residir en su origen y estar dentro de la plaza que la hospeda (`puedeOperarAparcada`) |
+| `mover_carro_caravana` | `MoverCarro` | un residente de la plaza, dentro | del origen de la caravana de la que sale |
+| `preparar_caravana` | `PrepararCaravana` | un residente de la plaza, dentro | del origen de la caravana |
+| `reservar_caravana` | `ReservarCaravana` | un residente de la plaza, dentro | del origen de la caravana |
 
 **La columna**
 
@@ -263,21 +286,18 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `cancelar_batalla` | `CancelarBatalla` | la cuenta del héroe | quien la inició, antes de que empiece la partida (`batalla.no_puede_cancelar`) |
 | `cancelar_convocatoria` | `CancelarConvocatoria` | la cuenta del héroe, aunque esté fuera | el Líder de la convocatoria |
 | `cancelar_formacion` | `CancelarFormacion` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) |
-| `cancelar_obra` | `CancelarObraDeAvanzada` | la cuenta del héroe, ciudadano de la madre | una mejora o reparación en curso |
 | `ceder_liderazgo` | `CederLiderazgo` | la cuenta del héroe | el Líder |
-| `colocar_avanzada` | `ColocarAvanzada` | la cuenta del héroe, ciudadano de la madre | la columna del héroe a la puerta (`radioPuerta`) del sitio |
+| `colocar_avanzada` | `ColocarAvanzada` | la cuenta del héroe, ciudadano de la madre | la columna del héroe a la puerta (`radioPuerta`) del sitio (DUDA de 5E: el panel es del Gobernador o del Maestro de Obras, pero quien coloca está en el sitio) |
 | `comprar_caravana_de_refundacion` | `ComprarCaravanaDeRefundacion` | la cuenta del héroe | en un campamento, ciudadano de una Facción sin plazas (`refundacion.con_plazas`) ni otra Caravana de Fundación (`refundacion.ya_tiene_caravana`); el fondo de su Facción cubre el coste (`refundacion.fondo_corto`) (5G-b) |
 | `comprar_en_campamento` | `ComprarEnCampamento` | la cuenta del héroe | dentro del campamento o a su puerta; cupo diario |
-| `comprar_informe_plaza` | `ComprarInformePlaza` | la cuenta del héroe | como `comprar_mirada`; conocer la plaza |
-| `comprar_mirada` | `ComprarMirada` | la cuenta del héroe | ciudadano, dentro de una plaza de su Facción con Taberna o en un campamento (DUDA: el cargo es del sistema 5) |
+| `comprar_informe_plaza` | `ComprarInformePlaza` | la cuenta del héroe; en una plaza, dentro y Rey, Embajador o Gobernador | como `comprar_mirada`; conocer la plaza |
+| `comprar_mirada` | `ComprarMirada` | la cuenta del héroe; en una plaza, dentro y Rey, Embajador o Gobernador | ciudadano, dentro de una plaza de su Facción con Taberna (el Rey, el Embajador o el Gobernador, `compraIntel`, 5E) o en un campamento |
 | `conectarse` | `Conectarse` | la cuenta del héroe, aunque esté fuera | el único permitido fuera del mundo |
 | `convocar_ejercito` | `ConvocarEjercito` | la cuenta del héroe | dentro de la plaza o del campamento |
 | `crear_heroe` | `CrearHeroe` | su cuenta | una por cuenta (`heroe.ya_existe`); la administración crea los de otra cuenta y los bots |
 | `dejar_de_perseguir` | `DejarDePerseguir` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) |
 | `desarmar_caravana_fundacion` | `DesarmarCaravanaFundacion` | la cuenta del héroe | su titular (`fundacion.no_titular`), con la caravana suelta en su origen (`caravana.no_disponible`) (5G-b) |
 | `desconectarse` | `Desconectarse` | la cuenta del héroe | — |
-| `destruir_avanzada` | `DestruirAvanzada` | la cuenta del héroe, ciudadano de la madre | — |
-| `elegir_tropa_de_avanzada` | `ElegirTropaDeAvanzada` | la cuenta del héroe, ciudadano de la madre | — |
 | `entrar_en_asentamiento` | `EntrarEnAsentamiento` | la cuenta del héroe | su columna a la puerta (`radioPuerta`); el acceso de la plaza (`acceso.cerrado`) |
 | `entrar_en_avanzada` | `EntrarEnAvanzada` | la cuenta del héroe | como `entrar_en_pueblo` |
 | `entrar_en_campamento` | `EntrarEnCampamento` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) si no va solo; su columna a la puerta (`radioPuerta`) |
@@ -285,10 +305,9 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `guardar_loadout` | `GuardarLoadout` | la cuenta del héroe | — |
 | `guardar_en_almacen_personal` | `GuardarEnAlmacenPersonal` | la cuenta del héroe | dentro de su residencia; o el Líder de su columna (`columna.solo_el_lider`) con ella a la puerta de su residencia (`almacen_personal.fuera_de_tu_residencia`) |
 | `guarnecer` | `Guarnecer` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`); su columna a la puerta (`radioPuerta`) |
-| `guarnecer_avanzada` | `GuarnecerAvanzada` | la cuenta del héroe, ciudadano de la madre | su columna a la puerta (`radioPuerta`) de la avanzada |
+| `guarnecer_avanzada` | `GuarnecerAvanzada` | la cuenta del héroe | residente de la plaza madre (`avanzada.no_resides`); su columna a la puerta (`radioPuerta`) de la avanzada |
 | `inspeccionar` | `Inspeccionar` | la cuenta del héroe | el objetivo en el mapa (`inspeccion.a_cubierto`) y a su alcance |
 | `lanzar_caravana_fundacion` | `LanzarCaravanaFundacion` | la cuenta del héroe | ciudadano de la Facción de la plaza (`fundacion.no_ciudadano`) que reside y está en ella (`fundacion.no_resides`, Proy §5.2.4); nivel operativo 2 (`fundacion.nivel_insuficiente`), cooldown de caravanas (`caravana.en_cooldown`), cap con las caravanas vivas (`fundacion.cap_alcanzado`) y el coste (`caravana.sin_recursos`) (5G-b) |
-| `mejorar_avanzada` | `MejorarAvanzada` | la cuenta del héroe, ciudadano de la madre | — |
 | `movilizar_ejercito` | `MovilizarEjercito` | la cuenta del héroe | como `salir_al_mundo` |
 | `ordenar_escuadras` | `OrdenarEscuadras` | la cuenta del héroe | — |
 | `organizar_ejercito` | `OrganizarEjercito` | la cuenta del héroe | el Líder |
@@ -300,7 +319,6 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `reclamar_caravana` | `ReclamarCaravana` | la cuenta del héroe | a bordo de su columna, en mundo abierto, a `radioEncuentro` (`caravana.lejos`) de la Caravana de Fundación de su Facción (`caravana.faccion_ajena`) que vuelve sola (`caravana.no_reclamable`); su columna personal pasa a ser un ejército (5G-b) |
 | `reclutar_en_campamento` | `ReclutarEnCampamento` | la cuenta del héroe | dentro del campamento o a su puerta |
 | `reclutar_tropa` | `ReclutarTropa` | la cuenta del héroe | dentro de la plaza; residente (todo) o de la Facción dueña (solo reponer) |
-| `reparar_avanzada` | `RepararAvanzada` | la cuenta del héroe, ciudadano de la madre | — |
 | `repartir_puntos` | `RepartirPuntos` | la cuenta del héroe | — |
 | `reponer_prestamo` | `ReponerPrestamo` | la cuenta del héroe | dentro del campamento |
 | `repostar` | `Repostar` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`); su columna a la puerta (`radioPuerta`) de la plaza (`repostar.sin_lugar`) |
@@ -309,7 +327,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `responder_peticion_de_convocatoria` | `ResponderPeticionDeConvocatoria` | la cuenta del héroe | el Líder de la convocatoria |
 | `responder_peticion_de_union` | `ResponderPeticionDeUnion` | la cuenta del héroe | el Líder de la columna |
 | `retirar_de_refundacion` | `RetirarDeRefundacion` | la cuenta del héroe | como `aportar_a_refundacion`, sin mirar las plazas; lo que aportó (`refundacion.sin_aporte`), hasta el hueco (5G-b) |
-| `retirar_de_avanzada` | `RetirarDeAvanzada` | la cuenta del héroe, ciudadano de la madre | su columna a la puerta (`radioPuerta`) de la avanzada |
+| `retirar_de_avanzada` | `RetirarDeAvanzada` | la cuenta del héroe | escuadras suyas; su columna a la puerta (`radioPuerta`) de la avanzada |
 | `retirar_guarnicion` | `RetirarGuarnicion` | la cuenta del héroe | — |
 | `sacar_del_almacen_personal` | `SacarDelAlmacenPersonal` | la cuenta del héroe | como `guardar_en_almacen_personal`; hasta lo que cabe en el carro (`carro.no_cabe`) |
 | `salir_al_mundo` | `SalirAlMundo` | la cuenta del héroe | desde su residencia (`salida.solo_de_tu_residencia`); escuadras suyas |
@@ -396,7 +414,6 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `abandonar_epica` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
 | `abrir_alijo` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
 | `adoptar_tecnologia` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
-| `asignar_cargo_local` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `comprar_tecnologia_aeda` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
 | `empezar_epica` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
 | `proponer_anexion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
@@ -405,7 +422,6 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `responder_fusion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `retirar_anexion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 | `retirar_fusion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `vetar_jugador` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 
 <!-- /autorizacion -->
 
@@ -414,6 +430,9 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 La autorización del motor TypeScript (`session/comandos/autorizacion.ts`, verificada contra `3d19d31`): con cargos, residencia y presencia. En Rust aún no existe (§5.1); queda aquí como la regla que el sistema 5 tiene que traer. Las secciones siguientes son sus filas.
 
 > **Implementado en Rust (2026-10-24, 5A, solo los predicados):** `crates/politica::autorizacion` (`Actor` sobre una `Vista` de las plazas que dará el núcleo): `ciudadano`, `rey`, `rey_o_embajador`, `residente`, `presente`, `reside`, `cargo`, `algun_cargo`, `autoridad_diplomatica`, `rey_de_faccion`, `rey_de_la_plaza`, `responde_solicitudes` (fail-closed), `asigna_rey`, `asigna_cargo_local`, `fija_puerta`, `veta`, `mueve_tropa_de`, `opera_aparcada`, `dirige_aedas`, `compra_intel_en`, `compra_tecnologia_aeda`, `se_muda_a` y `ciudadano_o_sin_faccion`, con el fail-open de §4.2. La matriz de §5.1 no cambia hasta 5E, que retira `manda_en` y pasa cada orden a su fila de esta sección.
+
+> **Implementado en Rust (2026-10-25, 5E):** las filas de esta sección son las de §5.1 (ver su nota). `moverCargaCaravanaAparcada` y `enviarCaravanaAlOrigen` miran la plaza donde está aparcada (la de la
+> caravana, no un `asentamientoId` de la orden); `asignarEscolta` y `quitarEscolta` siguen siendo de la cuenta del héroe con la regla de la orden (escuadras suyas en el campamento del origen).
 
 Todas las filas admiten únicamente el rol `jugador` (más `cancelarBatalla`, §5.2.9). La columna «Condición» es lo que se evalúa **además** de «héroe existente y dentro del mundo».
 

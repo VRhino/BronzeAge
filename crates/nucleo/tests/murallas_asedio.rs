@@ -2,6 +2,7 @@
 //! asedio a una plaza, que sigue siendo 1 para la columna, el daño de la conquista y su reparación solos, y lo que viaja a Unity (`recintos_en_pie`) y al dibujo
 //! (`VistaCiudad.murallas`). Sobre el artefacto de mundo real (`generador/salida/mundo/mundo-*.bin`); las pruebas se omiten si no está.
 
+mod comun;
 use asentamiento::recintos::{self, Mejora, Recinto};
 use asentamiento::{Cargo, Recurso};
 use base::{Instante, Punto, MS_POR_MINUTO};
@@ -110,7 +111,8 @@ impl Esc {
     fn ord(&mut self, actor: &str, c: Comando) -> Respuesta {
         self.cuenta += 1;
         let p = Peticion::nueva(actor, &format!("o{}", self.cuenta), c);
-        let p = if actor == "admin" { p.de_admin() } else { p };
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
+        let p = if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) { p.de_admin() } else { p };
         let t = self.n.ahora();
         self.n.aplicar_en(t, p)
     }
@@ -590,7 +592,7 @@ fn guion(m: &M, avanzar: &dyn Fn(&mut Nucleo, Instante)) -> Nucleo {
     for r in asentamiento::recurso::TODOS {
         n.aplicar_en(t, admin(&format!("dar-{r:?}"), Comando::DarRecursos { asentamiento: ib, recurso: r, cantidad: 5_000_000 }));
     }
-    assert!(n.aplicar_en(t + 1, Peticion::nueva("beto", "muralla", Comando::ComprometerRecinto { asentamiento: ib, cargo: Cargo::MaestroObras, nivel: 1 })).aceptada());
+    assert!(n.aplicar_en(t + 1, comun::como_dueno(Peticion::nueva("beto", "muralla", Comando::ComprometerRecinto { asentamiento: ib, cargo: Cargo::MaestroObras, nivel: 1 }))).aceptada());
     // El asedio: «beto» dentro sin tropa y el ejército de «ana» a la puerta (cae sin combate: lo que se mide aquí es la conquista y la reparación).
     let ataque = 26 * HORA + 13_579;
     avanzar(&mut n, ataque);

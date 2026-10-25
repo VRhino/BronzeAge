@@ -98,7 +98,8 @@ impl Esc {
         self.peticiones += 1;
         let p = Peticion::nueva(actor, &format!("prep{}", self.peticiones), c);
         let t = self.n.ahora();
-        let r = self.n.aplicar_en(t, if actor == "admin" { p.de_admin() } else { p });
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
+        let r = self.n.aplicar_en(t, if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) { p.de_admin() } else { p });
         assert!(r.aceptada() || r.resultado == Resultado::SinCambios, "{r:?}");
         r
     }
@@ -129,6 +130,7 @@ fn escenario(m: &M) -> Esc {
     x.ok("admin", Comando::FijarFaccionDeHeroe { heroe: ana, faccion: Some(1) });
     x.ok("admin", Comando::FijarResidencia { heroe: ana, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
     x.ok("admin", Comando::ColocarHeroe { heroe: ana, ubicacion: Ubicacion::Asentamiento(plaza as u32) });
+    comun::gobierna(&mut x.n, plaza, ana); // 5E: ana gobierna su plaza (compra la intel de su taberna)
     let (centro, radio) = (x.centro, x.radio);
     x.gus = x.n.crear_ejercito(x.n.ahora(), "gus", 2, en_tierra(&m.0, centro, -(radio + 12 * U), 0), 500, 100_000).unwrap();
     x.nora = x.n.crear_ejercito(x.n.ahora(), "nora", 3, en_tierra(&m.0, centro, 0, radio + 150 * U), 500, 100_000).unwrap();

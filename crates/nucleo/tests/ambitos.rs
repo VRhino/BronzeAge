@@ -84,7 +84,8 @@ impl Aldea {
         self.peticiones += 1;
         let p = Peticion::nueva(actor, &format!("prep{}", self.peticiones), c);
         let t = self.n.ahora();
-        let r = self.n.aplicar_en(t, if actor == "admin" { p.de_admin() } else { p });
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
+        let r = self.n.aplicar_en(t, if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) { p.de_admin() } else { p });
         assert!(r.aceptada() || r.resultado == Resultado::SinCambios, "{r:?}");
         r
     }
@@ -95,6 +96,10 @@ impl Aldea {
         if let Some(a) = plaza {
             self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(a as u32)) });
             self.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(a as u32) });
+            // 5E: el primer residente que está dentro gobierna la plaza (sus órdenes de plaza pasan la matriz real).
+            if self.n.estado().asentamientos[&a].cargos.titular(asentamiento::Cargo::Gobernador).is_none() {
+                comun::gobierna(&mut self.n, a, h);
+            }
         }
         h
     }

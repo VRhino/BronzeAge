@@ -6,9 +6,8 @@
 //! # El trazo lo calcula el núcleo
 //! La economía no conoce la ciudad. Al comprometer, el núcleo traza el anillo con la ciudad de la plaza (`trazar_recinto`), comprueba el arrabal y que envuelva
 //! al anterior (`edificios_extramuros`, `contiene_a`) y le pasa a la economía el anillo congelado. Todas las comprobaciones van **antes** de tocar nada: un
-//! rechazo no deja rastro. Las órdenes de plaza usan la autorización provisional de las demás (`manda_en`); el cargo que se invoca se da por ocupado (misma
-//! `// DUDA:` que `ActivarPolitica`) y solo valen el Gobernador y el Maestro de Obras. Abandonar es del Gobernador (Murallas §7), pero no lleva cargo: hasta el
-//! sistema 5 lo autoriza lo mismo que las demás.
+//! rechazo no deja rastro. Comprometer y mejorar los da el titular del cargo que nombra la orden, residente y dentro (la matriz de 5E, `cargos`), y solo valen el
+//! Gobernador y el Maestro de Obras; abandonar es del Gobernador (Murallas §7).
 //!
 //! # La obra y el reloj
 //! La primera celda se levanta **en el instante de la orden** (si hay con qué pagarla); cada celda deja una cita `Carga::FinDeObras` en el instante de la siguiente
@@ -147,17 +146,18 @@ impl Nucleo {
             unreachable!("solo se llama con órdenes de murallas")
         };
         let id = *asentamiento;
-        let Some(plaza) = self.estado.asentamientos.get(&id) else { return Err(rechazo(ASENTAMIENTO_DESCONOCIDO, ids::asentamiento(id))) };
-        if !self.manda_en(p, plaza.faccion) {
-            return Err(rechazo(NO_AUTORIZADO, format!("no mandas en as-{id}")));
+        if !self.estado.asentamientos.contains_key(&id) {
+            return Err(rechazo(ASENTAMIENTO_DESCONOCIDO, ids::asentamiento(id)));
         }
+        self.autorizar_en_plaza(p, id, None)?;
+        let plaza = &self.estado.asentamientos[&id];
         let datos = self.estado.reglas.economia.datos.clone();
         let de_recinto = |e: ErrorRecinto| {
             let (c, m) = rechazo_de_recinto(e);
             rechazo(c, m)
         };
         let con_cargo = |cargo: Cargo| match cargo {
-            // DUDA: sin sistema de cargos, se da por ocupado el cargo que invoca la orden (ya se comprobó que el actor manda en la plaza).
+            // Que el actor sea su titular lo comprobó la matriz; aquí, que el cargo sirva para la obra.
             Cargo::Gobernador | Cargo::MaestroObras => Ok(()),
             _ => Err(rechazo(MURALLAS_SIN_CARGO, "solo el Gobernador o el Maestro de Obras encargan o mejoran una muralla".into())),
         };

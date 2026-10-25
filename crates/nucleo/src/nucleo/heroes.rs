@@ -396,7 +396,9 @@ impl Nucleo {
         self.autorizar_heroe(p, heroe, false)?;
         let h = self.heroe(heroe).expect("existe");
         let reside = h.heroe.residencia == Some(Residencia::Asentamiento(plaza32));
-        let permiso = reclutamiento::permiso(reside, h.faccion == Some(faccion), false);
+        // Un vetado de la puerta de la plaza (5E) no repone en ella (`puedeReclutarEn`).
+        let vetado = self.estado.asentamientos[&asentamiento].puerta.vetados.contains(&heroe);
+        let permiso = reclutamiento::permiso(reside, h.faccion == Some(faccion), vetado);
         if permiso == reclutamiento::Permiso::No {
             let (c, m) = rechazo_de_reclutamiento(ErrorReclutamiento::NoPuedes);
             return Err(Respuesta::rechazo(c, m, v));

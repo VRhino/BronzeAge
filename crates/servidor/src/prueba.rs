@@ -20,29 +20,30 @@ use tokio::{net::TcpStream, sync::mpsc, time::timeout};
 use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
 
 use crate::nucleo::{
-    Autenticador, ComandoSesion, Difusion, ErrorAcceso, Identidad, RelojCompartido, SesionId,
+    Autenticador, ComandoSesion, Difusion, ErrorAcceso, Identidad, RelojCompartido, RolTecnico, SesionId,
 };
 
 // ───────────────────────────── Autenticador ─────────────────────────────
 
-/// Tokens: `ok:<cliente>` (Unity, admin web y bot), `bot:<cliente>` (solo bot), `svc:<cliente>` (solo servidor de batalla),
-/// `caido` (servicio de acceso caído); cualquier otro es inválido.
+/// Tokens: `ok:<cliente>` (Unity, admin web y bot; administrador de la partida), `mod:<cliente>` (solo admin web, moderador), `bot:<cliente>` (solo bot), `svc:<cliente>` (solo servidor de
+/// batalla), `caido` (servicio de acceso caído); cualquier otro es inválido.
 pub struct AutenticadorDePrueba;
 
 impl Autenticador for AutenticadorDePrueba {
     async fn autenticar(&self, token: &str) -> Result<Identidad, ErrorAcceso> {
         let (prefijo, cliente) = token.split_once(':').unwrap_or((token, ""));
-        let roles = match prefijo {
-            "ok" => vec![TipoCliente::ClienteUnity, TipoCliente::ClienteAdminWeb, TipoCliente::ClienteBot],
-            "bot" => vec![TipoCliente::ClienteBot],
-            "svc" => vec![TipoCliente::ClienteServidorBatalla],
+        let (roles, rol) = match prefijo {
+            "ok" => (vec![TipoCliente::ClienteUnity, TipoCliente::ClienteAdminWeb, TipoCliente::ClienteBot], RolTecnico::AdministradorPartida),
+            "mod" => (vec![TipoCliente::ClienteAdminWeb], RolTecnico::Moderador),
+            "bot" => (vec![TipoCliente::ClienteBot], RolTecnico::Jugador),
+            "svc" => (vec![TipoCliente::ClienteServidorBatalla], RolTecnico::Jugador),
             "caido" => return Err(ErrorAcceso::NoDisponible),
             _ => return Err(ErrorAcceso::Invalido),
         };
         if cliente.is_empty() {
             return Err(ErrorAcceso::Invalido);
         }
-        Ok(Identidad { cliente_id: cliente.into(), roles })
+        Ok(Identidad { cliente_id: cliente.into(), roles, rol })
     }
 }
 

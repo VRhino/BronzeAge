@@ -133,7 +133,8 @@ impl Actor {
         match c {
             ComandoSesion::Conecta { sesion, identidad, hola, difusion, respuesta } => {
                 let rol = hola.cliente();
-                self.conecta(sesion, identidad.cliente_id, rol, hola, difusion, respuesta);
+                let moderador = identidad.rol == servidor::RolTecnico::Moderador;
+                self.conecta(sesion, identidad.cliente_id, rol, moderador, hola, difusion, respuesta);
             }
             ComandoSesion::Orden { sesion, orden } => self.orden(sesion, orden),
             ComandoSesion::Vista { sesion, rect } => self.vista(sesion, rect),
@@ -159,6 +160,7 @@ impl Actor {
         sesion: SesionId,
         cliente: String,
         rol: pb::TipoCliente,
+        moderador: bool,
         hola: pb::Hola,
         tx: mpsc::Sender<Difusion>,
         respuesta: oneshot::Sender<Result<pb::Bienvenida, pb::ErrorSesion>>,
@@ -175,6 +177,7 @@ impl Actor {
         let v = self.nucleo.version();
         let servidor_de_batalla = (rol == pb::TipoCliente::ClienteServidorBatalla).then(|| cliente.clone());
         let mut s = Sesion::nueva(&self.nucleo, cliente, rol, tx.clone());
+        s.moderador = moderador;
         // Por cada ámbito al que tiene derecho: reanuda si el cliente conserva una versión que el registro alcanza; si no, foto.
         let derechos = derechos(&self.nucleo, &s);
         let mut reanudan: BTreeMap<Ambito, u64> = BTreeMap::new();
@@ -357,9 +360,14 @@ impl Actor {
 
     fn orden(&mut self, sesion: SesionId, orden: pb::Orden) {
         let Some(s) = self.mesa.get(sesion) else { return };
-        let (cliente, admin, tx) = (s.cliente.clone(), s.es_admin(), s.tx.clone());
+        let (cliente, admin, moderador, tx) = (s.cliente.clone(), s.es_admin(), s.moderador, s.tx.clone());
         let id = orden.peticion_id.clone();
-        let respuesta = match ordenes::traducir(&self.nucleo, &orden, &cliente, admin) {
+        // El moderador ve la partida (el ámbito `ADMIN`) y no da órdenes (Proyecciones §2.2, 5E).
+        let traducida = match moderador {
+            true => Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, "el moderador ve la partida y no da órdenes", self.nucleo.version())),
+            false => ordenes::traducir(&self.nucleo, &orden, &cliente, admin),
+        };
+        let respuesta = match traducida {
             Ok(p) => {
                 let r = self.nucleo.aplicar(p);
                 // Causalidad: primero TODAS las Delta (las de eventos que vencieron justo antes y las de esta orden)...

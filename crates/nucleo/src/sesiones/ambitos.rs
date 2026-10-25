@@ -72,6 +72,8 @@ pub(super) struct Sesion {
     pub(super) plazas: BTreeMap<u64, pb::Asentamiento>,
     /// Lo que el cliente tiene de su `VISTA` abierta.
     pub(super) mapa: Option<Mapa>,
+    /// Una sesión de administración de un moderador (`servidor::RolTecnico::Moderador`): ve `ADMIN` y no da órdenes (5E).
+    pub(super) moderador: bool,
 }
 
 /// Lo que el cliente tiene de su `VISTA`: cada entidad con el sello con que se le mandó y la última niebla (la de su perspectiva, compartida: `Mesa::nieblas`).
@@ -83,7 +85,7 @@ pub(super) struct Mapa {
 impl Sesion {
     pub(super) fn nueva(n: &Nucleo, cliente: String, rol: pb::TipoCliente, tx: mpsc::Sender<Difusion>) -> Self {
         let heroe = es_jugador(rol).then(|| heroe_de_cuenta(n, &cliente)).flatten();
-        Sesion { cliente, rol, tx, heroe, abiertos: BTreeMap::new(), vista: None, plazas: BTreeMap::new(), mapa: None }
+        Sesion { cliente, rol, tx, heroe, abiertos: BTreeMap::new(), vista: None, plazas: BTreeMap::new(), mapa: None, moderador: false }
     }
 
     pub(super) fn es_admin(&self) -> bool {

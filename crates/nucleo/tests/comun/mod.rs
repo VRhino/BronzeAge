@@ -106,3 +106,105 @@ impl Escenario {
 pub fn reglas() -> Reglas {
     Reglas { viveres_bajos_pct: 1, ..Reglas::default() }
 }
+
+/// Andamiaje de los escenarios (5E): ¿mandaba la cuenta en la plaza de esta orden con la autorización de antes del sistema 5 (`manda_en`: un héroe suyo ciudadano de la Facción de la
+/// plaza)? Entonces la orden de plaza —las que piden un cargo, residir y estar dentro o fijar la puerta— se da como administración: estas pruebas miden otra cosa y se escribieron con
+/// aquella regla (decisión 9 del plan del sistema 5: el andamiaje de administración se queda para montar escenarios). Quien no mandaba sigue siendo un jugador y la matriz real le rechaza.
+/// Quién puede darlas de verdad lo prueba `tests/cargos.rs`.
+pub fn mandaba(n: &Nucleo, actor: &str, c: &Comando) -> bool {
+    if actor == "admin" || !c.autoriza().es_de_plaza() {
+        return false;
+    }
+    // Unas ruinas de ciudadela sin dueño las repara un ciudadano de la Facción que tiene ahora su zona (la orden lo mira).
+    if let Comando::RepararAvanzada { avanzada, .. } = c {
+        if n.avanzada(*avanzada).is_some_and(|(madre, _)| madre.is_none()) {
+            return n.heroes().any(|h| h.cuenta == actor && h.faccion.is_some());
+        }
+    }
+    let plaza = |id: u64| n.estado().asentamientos.get(&id).map(|a| a.faccion);
+    let origen = |caravana: u64| n.caravana(caravana).and_then(|x| plaza(u64::from(x.origen)));
+    let faccion = match c {
+        Comando::AnadirEdificio { asentamiento, .. }
+        | Comando::QuitarDeCola { asentamiento, .. }
+        | Comando::MoverEnCola { asentamiento, .. }
+        | Comando::MejorarEdificio { asentamiento, .. }
+        | Comando::AlternarAutoConstruccion { asentamiento, .. }
+        | Comando::AlternarReceta { asentamiento, .. }
+        | Comando::CalibrarReserva { asentamiento, .. }
+        | Comando::SolicitarAscenso { asentamiento }
+        | Comando::ActivarPolitica { asentamiento, .. }
+        | Comando::ComprometerRecinto { asentamiento, .. }
+        | Comando::MejorarRecinto { asentamiento, .. }
+        | Comando::AbandonarRecinto { asentamiento, .. }
+        | Comando::ColocarOrdenMercado { asentamiento, .. }
+        | Comando::CrearCaravana { asentamiento }
+        | Comando::MarcarPueblo { asentamiento, .. }
+        | Comando::FijarAcceso { asentamiento, .. }
+        | Comando::FijarPuerta { asentamiento, .. }
+        | Comando::VetarJugador { asentamiento, .. }
+        | Comando::AsignarCargoLocal { asentamiento, .. }
+        | Comando::AlternarReabastecerAliados { asentamiento, .. } => plaza(*asentamiento),
+        Comando::ProponerTrueque { a, .. } => plaza(*a),
+        Comando::AceptarTrueque { acuerdo } | Comando::RechazarTrueque { acuerdo } => n.estado().comercio.acuerdos.iter().find(|x| x.id == *acuerdo).and_then(|x| plaza(u64::from(x.b))),
+        Comando::CancelarOrdenMercado { orden } => n.estado().comercio.libro.buscar(*orden).and_then(|o| plaza(u64::from(o.asentamiento))),
+        Comando::AnadirCarro { caravana, .. }
+        | Comando::AnadirAnimal { caravana, .. }
+        | Comando::ReservarCaravana { caravana, .. }
+        | Comando::PrepararCaravana { caravana, .. }
+        | Comando::CancelarCaravana { caravana }
+        | Comando::MoverCargaAparcada { caravana, .. }
+        | Comando::EnviarCaravanaAlOrigen { caravana } => origen(*caravana),
+        Comando::MoverCarro { de, .. } => origen(*de),
+        Comando::DestruirPueblo { pueblo } | Comando::ReponerCarro { pueblo } => n.pueblo(*pueblo).and_then(|(m, _)| plaza(m)),
+        Comando::MejorarAvanzada { avanzada, .. }
+        | Comando::RepararAvanzada { avanzada, .. }
+        | Comando::DestruirAvanzada { avanzada, .. }
+        | Comando::CancelarObraDeAvanzada { avanzada, .. }
+        | Comando::ElegirTropaDeAvanzada { avanzada, .. } => n.avanzada(*avanzada).and_then(|(m, _)| m).and_then(plaza),
+        _ => None,
+    };
+    faccion.is_some_and(|f| n.heroes().any(|h| h.cuenta == actor && h.faccion == Some(f)))
+}
+
+/// Los cargos de la plaza con los que sus órdenes pasan la matriz real (5E): Gobernador, Tesorero y Maestro de Obras para `heroe`, que reside en ella (Q4). Los designa la administración (el
+/// andamiaje); el héroe tiene que estar dentro para ejercerlos.
+pub fn gobierna(n: &mut Nucleo, plaza: u64, heroe: u64) {
+    use asentamiento::Cargo::*;
+    for (i, cargo) in [Gobernador, Tesorero, MaestroObras].into_iter().enumerate() {
+        let p = Peticion::nueva("admin", &format!("cargo-{plaza}-{heroe}-{i}"), Comando::AsignarCargoLocal { heroe, asentamiento: plaza, cargo, designado: heroe }).de_admin();
+        let t = n.ahora();
+        let r = n.aplicar_en(t, p);
+        assert!(r.aceptada() || r.resultado == nucleo::Resultado::SinCambios, "{cargo:?} para {heroe} en as-{plaza}: {r:?}");
+    }
+}
+
+/// Un Gobernador de oficio de `cuenta` en la plaza (5E): un héroe de campo suyo nuevo que reside en ella, entra (su columna se deshace dentro) y recibe sus cargos ([`gobierna`]). Las órdenes de
+/// plaza de la cuenta que no nombran héroe pasan entonces la matriz real con él; el héroe de la sesión de la cuenta sigue siendo el de antes (el de id menor). Devuelve su id.
+pub fn gobernador_de_oficio(n: &mut Nucleo, cuenta: &str, plaza: u64) -> u64 {
+    let (faccion, puerta) = { let a = &n.estado().asentamientos[&plaza]; (a.faccion, a.posicion) };
+    let t = n.ahora();
+    let col = n.crear_ejercito(t, cuenta, faccion, puerta, 500, 100_000).unwrap();
+    let heroe = n.ejercito(col).unwrap().columna.lider;
+    for (i, c) in [
+        Comando::FijarResidencia { heroe, residencia: Some(militar::heroe::Residencia::Asentamiento(plaza as u32)) },
+        Comando::Guarnecer { asentamiento: plaza, heroe },
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let r = n.aplicar_en(t, Peticion::nueva("admin", &format!("oficio-{plaza}-{heroe}-{i}"), c).de_admin());
+        assert!(r.aceptada(), "{r:?}");
+    }
+    gobierna(n, plaza, heroe);
+    heroe
+}
+
+/// Andamiaje de las pruebas cuya cuenta es siempre la dueña de la plaza (5E): sus órdenes de plaza se dan como administración, como si mandara con la regla de antes del sistema 5 (ver
+/// [`mandaba`]).
+pub fn como_dueno(p: Peticion) -> Peticion {
+    if p.comando.autoriza().es_de_plaza() {
+        p.de_admin()
+    } else {
+        p
+    }
+}

@@ -3,6 +3,7 @@
 //! caravanas en ruta, hook de batalla, determinismo y recuperación desde foto. Sobre el artefacto de mundo real
 //! (`generador/salida/mundo/mundo-*.bin`); las pruebas se omiten si no está.
 
+mod comun;
 use asentamiento::catalogo::Tipo;
 use asentamiento::datos::UNO;
 use asentamiento::Recurso::{self, *};
@@ -123,7 +124,8 @@ impl Escenario {
     fn peticion(&mut self, actor: &str, c: Comando) -> Peticion {
         self.cuenta += 1;
         let p = Peticion::nueva(actor, &format!("o{}", self.cuenta), c);
-        if actor == "admin" {
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
+        if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) {
             p.de_admin()
         } else {
             p
@@ -1418,7 +1420,7 @@ fn medir_caravanas(plazas: usize) {
                 if destino == plaza || !n.estado().asentamientos.contains_key(&plaza) {
                     continue;
                 }
-                let r = n.aplicar_en(inicio, Peticion::nueva("ana", &format!("l{k}"), Comando::PrepararCaravana { caravana: id, destino, carga: vec![(Cobre, 1_000)], salir_en: None }));
+                let r = n.aplicar_en(inicio, comun::como_dueno(Peticion::nueva("ana", &format!("l{k}"), Comando::PrepararCaravana { caravana: id, destino, carga: vec![(Cobre, 1_000)], salir_en: None })));
                 lanzadas += r.aceptada() as u32;
             }
         }

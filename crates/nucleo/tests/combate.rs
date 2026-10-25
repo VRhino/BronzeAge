@@ -354,7 +354,7 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.guarniciones.insert(9, GuarnicionDePueblo { escuadra: combate::pueblo::guarnicion_de_serie(&mc(), 12, 0), repone_en: Some(7_000) });
     base.combate.destruidos.insert(6, vec![100, 200]);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN32");
+    assert_eq!(&bytes[..5], b"BAN33");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -488,7 +488,8 @@ impl Esc {
     fn peticion(&mut self, actor: &str, c: Comando) -> Peticion {
         self.cuenta += 1;
         let p = Peticion::nueva(actor, &format!("o{}", self.cuenta), c);
-        if actor == "admin" {
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
+        if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) {
             p.de_admin()
         } else {
             p
@@ -584,6 +585,10 @@ fn montar_en(mut n: Nucleo, m: &M, con_mercado: bool, campamento_b: usize) -> Es
     let pb = sitio_rico(&n, &m.0, campamento_b, 2);
     let b = fundar(&mut n, 0, "b", "beto", 2, pb);
     let mut e = Esc { n, a, b, cuenta: 0, fijo: None };
+    // La puerta de antes del sistema 5 (abierta también a los neutrales, que por defecto ya no entran: Q1, 5E): en estas pruebas los neutrales entran.
+    for plaza in [a, b] {
+        e.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: true, enemigos: false });
+    }
     if con_mercado {
         for plaza in [a, b] {
             e.dar(plaza, Madera, 350_000);
@@ -1008,6 +1013,8 @@ fn con_pueblo(m: &M, semilla: u64) -> (Esc, u64) {
     let a = fundar(&mut n, 0, "m", "ana", 1, sitio);
     let mut e = Esc { n, a, b: 0, cuenta: 0, fijo: None };
     e.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: a, pausada: true });
+    // La puerta de antes del sistema 5 (abierta también a los neutrales, que por defecto ya no entran: Q1, 5E): en estas pruebas los neutrales entran.
+    e.ok("admin", Comando::FijarAcceso { asentamiento: a, aliados: true, neutrales: true, enemigos: false });
     e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: a, nivel: 2 });
     for _ in 0..9 {
         e.ok("admin", Comando::AgrandarZona { asentamiento: a });
@@ -1289,6 +1296,10 @@ fn una_plaza_sin_bosque_libre_recibe_su_campamento_en_cuanto_se_libera_uno() {
     let libre = n.campamentos_de_bandidos().find(|c| matches!(c.origen, nucleo::OrigenBandidos::Plaza(_)) && valido(&n, c)).cloned().expect("un campamento de plaza con su bosque válido");
     let (a, b) = (*n.estado().asentamientos.keys().next().unwrap(), espera);
     let mut e = Esc { n, a, b, cuenta: 0, fijo: None };
+    // La puerta de antes del sistema 5 (abierta también a los neutrales, que por defecto ya no entran: Q1, 5E): en estas pruebas los neutrales entran.
+    for plaza in [a, b] {
+        e.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: true, enemigos: false });
+    }
     let atacante = e.ejercito("gus", 9_999, libre.posicion, &[Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce]);
     let t = e.n.ahora();
     assert!(e.atacar("gus", atacante.1, ObjetivoAtaque::Campamento(libre.id), false).aceptada());

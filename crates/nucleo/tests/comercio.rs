@@ -5,6 +5,7 @@
 //!
 //! Los almacenes caben 400 de cada recurso (`ALMACEN.capacidadInicialPorRecurso`), así que las cantidades de las pruebas son pequeñas.
 
+mod comun;
 use asentamiento::catalogo::Tipo;
 use asentamiento::datos::UNO;
 use asentamiento::Recurso::{self, *};
@@ -126,7 +127,8 @@ impl Escenario {
     fn peticion(&mut self, actor: &str, c: Comando) -> Peticion {
         self.cuenta += 1;
         let p = Peticion::nueva(actor, &format!("o{}", self.cuenta), c);
-        if actor == "admin" {
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
+        if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) {
             p.de_admin()
         } else {
             p
@@ -1236,7 +1238,7 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
     let rep = reglas.economia.comercio.reputacion.clone();
     let base = estado_con_comercio();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN32");
+    assert_eq!(&bytes[..5], b"BAN33");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.comercio, base.comercio);

@@ -717,7 +717,12 @@ pub fn proyectar(n: &Nucleo, quien: Espectador, clase: Clase, id: u64) -> Proyec
     let un = |tipo: T, id: String, cuerpo: Option<Cuerpo>| Proyeccion { posibles: vec![(tipo, id.clone())], existen: cuerpo.into_iter().map(|c| (tipo, id.clone(), c)).collect() };
     match clase {
         Clase::Ejercito => un(T::Ejercito, ids::ejercito(id), e.ejercitos.get(&id).map(|x| Cuerpo::Ejercito(ejercito(n, x)))),
-        Clase::Asentamiento => un(T::Asentamiento, ids::asentamiento(id), e.asentamientos.get(&id).map(|a| Cuerpo::Asentamiento(super::ficha_de_asentamiento(a, &n.poligono_zona(a.id), batalla_sobre(n, Ubicacion::Asentamiento(a.id as u32)))))),
+        // Desde fuera, de una plaza propia viajan además sus cargos (Doc 1.10.1; 5E).
+        Clase::Asentamiento => un(
+            T::Asentamiento,
+            ids::asentamiento(id),
+            e.asentamientos.get(&id).map(|a| Cuerpo::Asentamiento(pb::Asentamiento { cargos: Some(super::interior::cargos(&a.cargos)), ..super::ficha_de_asentamiento(a, &n.poligono_zona(a.id), batalla_sobre(n, Ubicacion::Asentamiento(a.id as u32))) })),
+        ),
         Clase::Heroe => {
             // El héroe y sus informes de inspección vigentes (los vencidos los descarta el cliente por su `expira_en_ms`).
             let mut p = un(T::Heroe, ids::heroe(id), n.heroe(id).map(|h| Cuerpo::Heroe(heroe(n, h))));

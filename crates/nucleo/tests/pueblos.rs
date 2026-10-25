@@ -3,6 +3,7 @@
 //! la plaza madre, la ruina y la conquista de la madre, determinismo y recuperación desde foto. Sobre el artefacto de mundo real
 //! (`generador/salida/mundo/mundo-*.bin`); las pruebas se omiten si no está.
 
+mod comun;
 use asentamiento::catalogo::Tipo;
 use asentamiento::pueblos::{EstadoPueblo, IngresoAcarreo};
 use asentamiento::Recurso::{self, *};
@@ -96,7 +97,8 @@ impl Escenario {
     fn peticion(&mut self, actor: &str, c: Comando) -> Peticion {
         self.cuenta += 1;
         let p = Peticion::nueva(actor, &format!("o{}", self.cuenta), c);
-        if actor == "admin" {
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
+        if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) {
             p.de_admin()
         } else {
             p
@@ -188,6 +190,8 @@ fn montar_en(mut n: Nucleo, mapa: Arc<Mapa>, nivel: u32, cobre: u32, sitio: Punt
     let plaza = r.creadas[0];
     let mut esc = Escenario { n, plaza, cobre, mapa, cuenta: 0 };
     esc.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: plaza, pausada: true });
+    // La puerta de antes del sistema 5 (abierta también a los neutrales, que por defecto ya no entran: Q1, 5E): en estas pruebas los neutrales entran.
+    esc.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: true, enemigos: false });
     if nivel > 1 {
         esc.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: plaza, nivel });
         // El techo de la zona sube con el nivel: se agranda hasta el del nivel 2 (15 u) para tener nodos con los que elegir.
@@ -934,8 +938,8 @@ fn si_la_madre_cae_en_ruinas_salen_todos_de_su_pueblo_y_si_es_conquistada_solo_l
     let echado = &hechos(&e.n, "heroe.expulsado")[0];
     assert_eq!((dato(echado, "motivo"), dato(echado, "lugar"), dato(echado, "sitio"), echado.1.clone()), (1, 1, pueblo as i64, vec![]), "el hecho no nombra a la plaza que ya no está");
 
-    // Conquista: el pueblo pasa al conquistador (F2) con el acceso heredado. Dentro hay un neutral (F3, que el acceso por defecto deja entrar), un aliado del conquistador (F5) y un enemigo
-    // suyo (F4, en guerra con F2, que el acceso por defecto cierra): salen solo los que ya no podrían entrar, es decir, el enemigo.
+    // Conquista: el pueblo pasa al conquistador (F2) con la puerta heredada, que vuelve a la de por defecto (Q1, 5E: cerrada a neutrales y enemigos). Dentro hay un neutral (F3, al que la
+    // madre abrió la puerta), un aliado del conquistador (F5) y un enemigo suyo (F4, en guerra con F2): salen los que ya no podrían entrar, el neutral y el enemigo.
     let mut e = montar(m, 7, 2);
     let plaza = e.plaza;
     let pueblo = e.pueblo_levantado();
@@ -958,16 +962,19 @@ fn si_la_madre_cae_en_ruinas_salen_todos_de_su_pueblo_y_si_es_conquistada_solo_l
     assert_eq!(e.n.estado().asentamientos[&plaza].faccion, 2);
     assert!(e.n.pueblo(pueblo).is_some_and(|(madre, _)| madre == plaza));
     let [(col_neu, neu), (col_alia, alia), (col_ene, ene)] = visitas[..] else { unreachable!() };
-    assert_eq!((e.ubicacion(neu), e.ubicacion(alia)), (Ubicacion::Pueblo(pueblo), Ubicacion::Pueblo(pueblo)), "el neutral y el aliado del conquistador se quedan dentro");
-    assert!(!e.n.en_el_mapa(col_neu) && !e.n.en_el_mapa(col_alia));
+    assert_eq!(e.ubicacion(alia), Ubicacion::Pueblo(pueblo), "el aliado del conquistador se queda dentro");
+    assert!(!e.n.en_el_mapa(col_alia));
     assert_eq!((e.ubicacion(ene), e.n.en_el_mapa(col_ene)), (Ubicacion::Columna(col_ene), true), "el enemigo del conquistador sale al mapa con la columna con la que entró");
+    assert_eq!((e.ubicacion(neu), e.n.en_el_mapa(col_neu)), (Ubicacion::Columna(col_neu), true), "y el neutral, con la puerta de por defecto");
     let echados = hechos(&e.n, "heroe.expulsado");
-    assert_eq!(echados.len(), 1);
-    assert_eq!((dato(&echados[0], "motivo"), dato(&echados[0], "lugar"), dato(&echados[0], "heroe"), echados[0].1.clone()), (2, 1, ene as i64, vec![plaza]), "cambia de dueño");
+    assert_eq!(echados.len(), 2);
+    for x in &echados {
+        assert_eq!((dato(x, "motivo"), dato(x, "lugar"), x.1.clone()), (2, 1, vec![plaza]), "cambia de dueño");
+    }
 }
 
-/// Al conquistar la plaza su acceso vuelve al de por defecto (todos menos enemigos, respecto al dueño nuevo): lo que el dueño viejo había cerrado a los neutrales ya no cuenta, el neutral que
-/// estaba dentro del pueblo se queda, y el dueño nuevo lo cambia luego con `FijarAcceso` (cerrar la puerta a los neutrales lo saca).
+/// Al conquistar la plaza su puerta vuelve a la de por defecto (Q1, 5E: cerrada a neutrales y enemigos, respecto al dueño nuevo): lo que decidía el dueño viejo ya no cuenta, el aliado suyo que
+/// estaba dentro del pueblo es ahora un neutral y sale, y el dueño nuevo la cambia luego cuando quiere (abrirla a los neutrales le deja volver a entrar).
 #[test]
 fn al_conquistar_la_madre_su_acceso_vuelve_al_de_por_defecto_y_el_pueblo_lo_hereda() {
     let m = con_mundo!();
@@ -989,11 +996,12 @@ fn al_conquistar_la_madre_su_acceso_vuelve_al_de_por_defecto_y_el_pueblo_lo_here
     e.ok("beto", Comando::Atacar { heroe, objetivo: nucleo::ObjetivoAtaque::Asentamiento(plaza), declara_guerra: true });
     tras_la_convocatoria(&mut e.n);
     assert_eq!(e.n.estado().asentamientos[&plaza].faccion, 2);
-    assert_eq!(e.n.acceso_de_plaza(plaza), Some(nucleo::Acceso { aliados: true, neutrales: true, enemigos: false }), "el acceso vuelve al de por defecto");
-    assert_eq!(e.ubicacion(h), Ubicacion::Pueblo(pueblo), "con el acceso reiniciado el neutral (respecto al dueño nuevo) puede entrar: se queda dentro");
-    // El dueño nuevo lo cambia cuando quiere: si cierra a los neutrales, sale al mapa con lo suyo.
-    e.ok("beto", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: false, enemigos: false });
-    assert_eq!((e.ubicacion(h), e.n.en_el_mapa(col)), (Ubicacion::Columna(col), true));
+    assert_eq!(e.n.estado().asentamientos[&plaza].puerta, Default::default(), "la puerta vuelve a la de por defecto");
+    assert_eq!((e.ubicacion(h), e.n.en_el_mapa(col)), (Ubicacion::Columna(col), true), "con la puerta de por defecto el neutral (respecto al dueño nuevo) sale al mapa con lo suyo");
+    // El dueño nuevo la cambia cuando quiere: abierta a los neutrales, puede volver a entrar.
+    assert_eq!(e.n.puede_entrar_en_pueblo(h, pueblo), Some(false));
+    e.ok("beto", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: true, enemigos: false });
+    assert_eq!(e.n.puede_entrar_en_pueblo(h, pueblo), Some(true));
 }
 
 /// El acceso reiniciado sigue cerrando la puerta a los enemigos del dueño nuevo: el visitante del pueblo que está en guerra con el conquistador sale al mapa con lo suyo.
@@ -1085,7 +1093,7 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
     e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN32");
+    assert_eq!(&bytes[..5], b"BAN33");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));

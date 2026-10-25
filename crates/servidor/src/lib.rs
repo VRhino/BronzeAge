@@ -50,6 +50,6 @@ pub mod prueba;
 mod sesion;
 
 pub use nucleo::{
-    codigos, Autenticador, ComandoSesion, Config, Difusion, ErrorAcceso, Identidad, RelojCompartido, SesionId,
+    codigos, Autenticador, ComandoSesion, Config, Difusion, ErrorAcceso, Identidad, RelojCompartido, RolTecnico, SesionId,
 };
 pub use sesion::{servir, Servidor};

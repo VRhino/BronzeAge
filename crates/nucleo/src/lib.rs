@@ -41,7 +41,7 @@
 //!   Las órdenes son los códigos 106-116; la foto es `BAN19`. Las reglas puras son `asentamiento::avanzadas` y `combate::avanzada`.
 //! - Entrar con todo (2026-10-22): quien entra en un lugar lleva consigo tropa, carro, víveres y todas sus caravanas y al salir se lo lleva (no hay «columna aparcada a la
 //!   puerta»); el residente conserva su carro (`HeroeNucleo::carro`, `VaciarCarro` 118); el dueño de la plaza decide por relación quién entra (`FijarAcceso` 117,
-//!   [`Acceso`]; pueblos y avanzadas lo heredan); defienden los de dentro de la misma Facción, aliados o vasallos; al caer el lugar salen al mapa con lo suyo. Foto `BAN17`.
+//!   hoy la puerta de 5E; pueblos y avanzadas lo heredan); defienden los de dentro de la misma Facción, aliados o vasallos; al caer el lugar salen al mapa con lo suyo. Foto `BAN17`.
 //! - Entrar en un pueblo o en una avanzada (2026-10-22): `EntrarEnPueblo`/`SalirDePueblo` (119, 120) y `EntrarEnAvanzada`/`SalirDeAvanzada` (121, 122) con el acceso de su plaza
 //!   madre; dentro se defiende con la regla de relación; cerrar la puerta (`FijarAcceso`) expulsa a quien ya no puede entrar; al atacante solo se une quien está fuera y al
 //!   defensor quien está dentro; el residente que defiende y pierde pierde la mitad de su carro. Foto `BAN18`.
@@ -87,7 +87,7 @@ pub use estado_batallas::{entidad_batalla, EstadoBatallas};
 pub use estado_combate::{entidad_avanzada, entidad_bandidos, entidad_conquista, entidad_guarnicion, es_entidad_avanzada, es_entidad_bandidos, CampamentoBandidos, EstadoCombate, GuarnicionDeAvanzada, GuarnicionDePueblo, OrigenBandidos};
 pub use estado_fundacion::{entidad_fundacion, CaravanaFundacion, EstadoFundacion, Origen as OrigenFundacion, Situacion as SituacionFundacion};
 pub use estado_comercio::{entidad_caravana, entidad_orden, entidad_reputacion, entidad_trueque, EstadoComercio};
-pub use estado_militar::{entidad_formacion, entidad_peticion_de_convocatoria, entidad_peticion_de_union, Acceso, EstadoMilitar, HeroeNucleo, Relacion, Trato};
+pub use estado_militar::{entidad_formacion, entidad_peticion_de_convocatoria, entidad_peticion_de_union, EstadoMilitar, HeroeNucleo, Relacion, Trato};
 pub use generadores::{Cx, GeneradorDeEventos};
 pub use nucleo::{Ajustes, Arranque, ErrorPresupuesto, InformeViabilidad, Metricas, Nucleo, Presupuesto, RecintoEnPie, TokenDeJugador};
 

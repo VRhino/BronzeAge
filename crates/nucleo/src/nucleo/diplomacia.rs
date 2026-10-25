@@ -464,10 +464,8 @@ impl Nucleo {
                 Ok(vec![])
             }
             Comando::AlternarReabastecerAliados { asentamiento, permitido } => {
-                let faccion = self.plaza_o_rechazo(*asentamiento)?.faccion;
-                if !self.manda_en(p, faccion) {
-                    return Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, format!("no mandas en as-{asentamiento}"), v));
-                }
+                self.plaza_o_rechazo(*asentamiento)?;
+                self.autorizar_en_plaza(p, *asentamiento, None)?;
                 let a = self.estado.asentamientos.get_mut(asentamiento).expect("existe");
                 if a.permite_reabastecer_aliados == *permitido {
                     return Err(Respuesta::sin_cambios(v));

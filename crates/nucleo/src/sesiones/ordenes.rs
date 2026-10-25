@@ -506,13 +506,12 @@ impl Ctx<'_> {
 
             // ── Acceso y murallas ──
             Cuerpo::FijarPuerta(o) => {
-                // `cerrada_a` son los grupos a `false`; los vasallos van con los aliados y las Aedas no existen aún en el núcleo (cerrarles la puerta no cierra nada).
-                if let Some(otro) = o.cerrada_a.iter().find(|g| !["neutrales", "aliados", "enemigos", "aedas"].contains(&g.as_str())) {
-                    return self.forma(format!("grupo de la puerta desconocido: {otro}"));
-                }
-                let abierta = |grupo: &str| !o.cerrada_a.iter().any(|g| g == grupo);
-                Comando::FijarAcceso { asentamiento: self.plaza(&o.asentamiento_id)?, aliados: abierta("aliados"), neutrales: abierta("neutrales"), enemigos: abierta("enemigos") }
+                // `cerrada_a` son los grupos a los que se cierra (los vasallos y los señores van con los aliados); repetidos, una vez.
+                let grupos = o.cerrada_a.iter().map(|g| politica::Grupo::desde_nombre(g).map_or_else(|| self.forma(format!("grupo de la puerta desconocido: {g}")), Ok)).collect::<R<Vec<_>>>()?;
+                Comando::FijarPuerta { heroe: self.heroe(&o.heroe_id)?, asentamiento: self.plaza(&o.asentamiento_id)?, cerrada_a: politica::Grupos::de(grupos) }
             }
+            Cuerpo::VetarJugador(o) => Comando::VetarJugador { heroe: self.heroe(&o.heroe_id)?, asentamiento: self.plaza(&o.asentamiento_id)?, vetado: self.heroe(&o.vetado_id)?, vetar: o.vetar },
+            Cuerpo::AsignarCargoLocal(o) => Comando::AsignarCargoLocal { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, cargo: self.cargo(&o.cargo)?, designado: self.heroe(&o.heroe_id)? },
             Cuerpo::ComprometerRecinto(o) => {
                 let nivel = o.nivel.parse::<u8>().map_or_else(|_| self.forma(format!("nivel de recinto desconocido: {}", o.nivel)), Ok)?;
                 Comando::ComprometerRecinto { asentamiento: self.plaza(&o.asentamiento_id)?, cargo: self.cargo(&o.cargo)?, nivel }
@@ -527,7 +526,8 @@ impl Ctx<'_> {
             }
 
             // ── Economía y construcción de una plaza ──
-            // El `cargo` de las órdenes de obras (Gobernador o Maestro de Obras) se ignora: el núcleo autoriza con `manda_en`, y los cargos son del sistema 5.
+            // El `cargo` de las órdenes de obras (Gobernador o Maestro de Obras) no viaja al núcleo: la matriz (5E) acepta al titular de cualquiera de los dos, residente y dentro; el de
+            // activar una política y el de las murallas, sí (la matriz comprueba que sea el titular de ese cargo y la orden, que sirva para lo que pide).
             Cuerpo::AnadirEdificioManualmente(o) => {
                 let tipo = Tipo::desde_nombre(&o.tipo).map_or_else(|| self.forma(format!("tipo de edificio desconocido: {}", o.tipo)), Ok)?;
                 Comando::AnadirEdificio { asentamiento: self.plaza(&o.asentamiento_id)?, tipo }
@@ -670,14 +670,12 @@ impl Ctx<'_> {
             Cuerpo::AlternarReabastecerAliados(o) => Comando::AlternarReabastecerAliados { asentamiento: self.plaza(&o.asentamiento_id)?, permitido: o.permitido },
 
             // ── Lo que el núcleo aún no tiene ──
-            Cuerpo::AsignarCargoLocal(_)
-            | Cuerpo::ProponerAnexion(_)
+            Cuerpo::ProponerAnexion(_)
             | Cuerpo::ResponderAnexion(_)
             | Cuerpo::RetirarAnexion(_)
             | Cuerpo::ProponerFusion(_)
             | Cuerpo::ResponderFusion(_)
-            | Cuerpo::RetirarFusion(_)
-            | Cuerpo::VetarJugador(_) => return self.no_disponible("política y Facciones (sistema 5)"),
+            | Cuerpo::RetirarFusion(_) => return self.no_disponible("política y Facciones (sistema 5)"),
             Cuerpo::AdoptarTecnologia(_)
             | Cuerpo::EmpezarEpica(_)
             | Cuerpo::AbandonarEpica(_)

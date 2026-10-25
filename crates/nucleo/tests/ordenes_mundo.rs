@@ -100,7 +100,8 @@ impl Prep {
         self.cuenta += 1;
         let p = Peticion::nueva(actor, &format!("prep{}", self.cuenta), c);
         let t = self.n.ahora();
-        self.n.aplicar_en(t, if actor == "admin" { p.de_admin() } else { p })
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
+        self.n.aplicar_en(t, if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) { p.de_admin() } else { p })
     }
     fn ok(&mut self, actor: &str, c: Comando) -> Respuesta {
         let r = self.ord(actor, c);
@@ -117,11 +118,13 @@ impl Prep {
         let id = self.n.crear_ejercito(t, cuenta, faccion, p, 500, 100_000).unwrap();
         (id, self.n.ejercito(id).unwrap().columna.lider)
     }
-    /// Funda una plaza de la cuenta en `p` con una columna de fundación.
+    /// Funda una plaza de la cuenta en `p` con una columna de fundación, y la cuenta tiene en ella un Gobernador de oficio (5E: sus órdenes de plaza pasan la matriz real).
     fn plaza(&mut self, cuenta: &str, faccion: u32, p: Punto) -> u64 {
         let (col, _) = self.columna(cuenta, faccion, p);
         self.ok("admin", Comando::DarCaravanaFundacion { ejercito: col });
-        self.ok(cuenta, Comando::Fundar { ejercito: col }).creadas[0]
+        let plaza = self.ok(cuenta, Comando::Fundar { ejercito: col }).creadas[0];
+        comun::gobernador_de_oficio(&mut self.n, cuenta, plaza);
+        plaza
     }
     fn dar(&mut self, plaza: u64, recurso: Recurso, cantidad: i64) {
         self.ok("admin", Comando::DarRecursos { asentamiento: plaza, recurso, cantidad });
@@ -242,6 +245,8 @@ async fn la_economia_el_acceso_y_las_murallas_de_una_plaza_se_ordenan_por_el_con
     }
     p.columna("beto", 2, Punto::new(1_000, 1_000));
     let as_ = id(plaza, "as");
+    // El Rey de F1 es el héroe de campo que fundó la plaza: fija su puerta sin estar dentro (5E).
+    let rey = ids::heroe(p.n.faccion(1).and_then(|f| f.rey).expect("F1 tiene Rey"));
     let w = arrancar_con(p.n).await;
     let (mut ana, _) = w.entrar("ana", TipoCliente::ClienteUnity).await;
     let (mut beto, _) = w.entrar("beto", TipoCliente::ClienteUnity).await;
@@ -264,8 +269,8 @@ async fn la_economia_el_acceso_y_las_murallas_de_una_plaza_se_ordenan_por_el_con
     let (_, r) = dar(&mut ana, "e6", orden::Cuerpo::AnadirEdificioManualmente(pb::OrdenAnadirEdificioManualmente { asentamiento_id: as_.clone(), cargo: s("gobernador"), tipo: s("castillo") })).await;
     assert_eq!(rechazo(&r), "orden.forma_invalida");
 
-    // Acceso: ana cierra la puerta a los neutrales (por defecto estaba cerrada a los enemigos; `cerrada_a` lo dice todo, así que ahora se abre a ellos).
-    let (_, r) = dar(&mut ana, "a1", orden::Cuerpo::FijarPuerta(pb::OrdenFijarPuerta { asentamiento_id: as_.clone(), heroe_id: s("heroe-0"), cerrada_a: vec![s("neutrales")] })).await;
+    // Puerta: el Rey de ana la cierra solo a los neutrales (por defecto estaba cerrada a neutrales y enemigos; `cerrada_a` lo dice todo, así que ahora se abre a los enemigos).
+    let (_, r) = dar(&mut ana, "a1", orden::Cuerpo::FijarPuerta(pb::OrdenFijarPuerta { asentamiento_id: as_.clone(), heroe_id: rey, cerrada_a: vec![s("neutrales")] })).await;
     aceptada(&r);
 
     // Murallas: comprometer una empalizada devuelve el recinto con la plaza en su id; el núcleo decide si se mejora (la plaza de nivel 2, no) y, sin cerrar, se abandona. Uno que no existe se rechaza con el código de la entidad.
@@ -279,7 +284,7 @@ async fn la_economia_el_acceso_y_las_murallas_de_una_plaza_se_ordenan_por_el_con
     let (_, r) = dar(&mut ana, "r4", orden::Cuerpo::AbandonarRecinto(pb::OrdenAbandonarRecinto { asentamiento_id: as_.clone(), recinto_id: format!("recinto-{plaza}-1") })).await;
     aceptada(&r);
     let n = w.parar().await;
-    assert_eq!(n.acceso_de_plaza(plaza).map(|a| (a.aliados, a.neutrales, a.enemigos)), Some((true, false, true)), "la orden fija el acceso entero: solo se cierra lo que dice `cerrada_a`");
+    assert_eq!(n.puerta_cerrada_a(plaza), Some(politica::Grupos::de([politica::Grupo::Neutrales])), "la orden fija la puerta entera: solo se cierra lo que dice `cerrada_a`");
     assert!(n.economia(plaza).unwrap().edificios.iter().any(|e| e.tipo == Tipo::Vivienda && e.id == edificio_n(&edificio[0].1)));
 }
 
@@ -334,6 +339,8 @@ async fn una_avanzada_se_coloca_se_entrega_y_se_destruye_por_el_contrato() {
         p.ok("admin", Comando::DarSuministro { ejercito: col, recurso: r, cantidad: n });
     }
     let (as_, h) = (id(plaza, "as"), ids::heroe(heroe));
+    // Cancelar y destruir son del panel de la plaza madre (5E): los da su Gobernador, dentro de ella (el de oficio de ana).
+    let gobernador = ids::heroe(p.n.estado().asentamientos[&plaza].cargos.titular(asentamiento::Cargo::Gobernador).expect("tiene Gobernador"));
     let w = arrancar_con(p.n).await;
     let (mut ana, _) = w.entrar("ana", TipoCliente::ClienteUnity).await;
 
@@ -345,9 +352,11 @@ async fn una_avanzada_se_coloca_se_entrega_y_se_destruye_por_el_contrato() {
     aceptada(&r);
     // La primera obra no se cancela (se destruye la avanzada): el código es el del núcleo, que encontró la avanzada tras `obra-N`.
     let (_, r) = dar(&mut ana, "v3", orden::Cuerpo::CancelarObra(pb::OrdenCancelarObra { heroe_id: h.clone(), obra_id: obra.1.clone() })).await;
+    assert_eq!(rechazo(&r), "no_autorizado", "el héroe de la columna no es su Gobernador ni está dentro de la madre");
+    let (_, r) = dar(&mut ana, "v3b", orden::Cuerpo::CancelarObra(pb::OrdenCancelarObra { heroe_id: gobernador.clone(), obra_id: obra.1.clone() })).await;
     assert_eq!(rechazo(&r), "avanzada.nada_que_cancelar");
     let avanzada = id(ids::parse_obra(&obra.1).unwrap(), "av");
-    let (_, r) = dar(&mut ana, "v4", orden::Cuerpo::DestruirAvanzada(pb::OrdenDestruirAvanzada { heroe_id: h, avanzada_id: avanzada.clone() })).await;
+    let (_, r) = dar(&mut ana, "v4", orden::Cuerpo::DestruirAvanzada(pb::OrdenDestruirAvanzada { heroe_id: gobernador, avanzada_id: avanzada.clone() })).await;
     aceptada(&r);
     let (_, r) = dar(&mut ana, "v5", orden::Cuerpo::MejorarAvanzada(pb::OrdenMejorarAvanzada { heroe_id: s("heroe-1"), avanzada_id: avanzada })).await;
     assert_eq!(rechazo(&r), "avanzada.desconocida");

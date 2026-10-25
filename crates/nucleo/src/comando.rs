@@ -23,6 +23,7 @@ use militar::heroe::{Controlador, Residencia};
 use militar::inspeccion::Objetivo;
 use militar::presencia::Ubicacion;
 use politica::sigilo::Sigilo;
+use politica::Grupos;
 
 /// Lo que se puede atacar (`OrdenAtacar.Objetivo`, Combate §2): una columna, una caravana, un campamento de bandidos, una plaza, un pueblo extractor o
 /// una avanzada.
@@ -345,8 +346,8 @@ pub enum Comando {
     /// primera obra no se cancela así: se destruye la avanzada.
     CancelarObraDeAvanzada { heroe: u64, avanzada: u64 },
     // ── Entrar con todo (2026-10-22). ──
-    /// Quien manda en la plaza decide quién puede entrar en ella según su relación: aliados y vasallos, neutrales, enemigos. La misma Facción entra siempre; las
-    /// avanzadas y los pueblos de la plaza lo heredan. Hasta el sistema político manda quien manda hoy en la plaza (`manda_en`).
+    /// La puerta por relación de «entrar con todo» (2026-10-22), que se queda como **alias** de [`Comando::FijarPuerta`] (5E): cierra la puerta a los grupos que van a `false`
+    /// (aliados y vasallos, neutrales, enemigos) y la abre a los demás; los Aedas quedan como estaban. No nombra héroe: lo da quien puede fijar la puerta (el Gobernador o el Rey).
     FijarAcceso { asentamiento: u64, aliados: bool, neutrales: bool, enemigos: bool },
     /// El héroe vacía el carro que trajo a su residencia en su almacén personal, hasta donde quepa; lo que no cabe se queda en el carro.
     VaciarCarro { heroe: u64 },
@@ -360,14 +361,14 @@ pub enum Comando {
     EntrarEnAvanzada { avanzada: u64, heroe: u64 },
     /// Sale de una avanzada con todo lo que entró.
     SalirDeAvanzada { avanzada: u64, heroe: u64 },
-    // ── Murallas (2026-10-22, segunda tanda; Murallas.md §4-§8). Misma autorización provisional que las demás órdenes de plaza (`manda_en`); el cargo que se invoca se da por ocupado. ──
+    // ── Murallas (2026-10-22, segunda tanda; Murallas.md §4-§8). Comprometer y mejorar, el cargo que nombra la orden (Gobernador o Maestro de Obras); abandonar, el Gobernador (5E). ──
     /// Compromete un recinto de `nivel` (1 empalizada, 2 muro de piedra, 3 muralla con adarve): traza el anillo, lo congela y empieza a levantarlo celda a celda (comprometer es gratis; cada
     /// celda se paga al levantarla). Con recintos ya hechos es una **ampliación** (arrabal de 6 edificios extramuros y el anillo nuevo envuelve al exterior). `creadas` lleva el id del recinto.
     /// El cargo solo puede ser el Gobernador o el Maestro de Obras.
     ComprometerRecinto { asentamiento: u64, cargo: Cargo, nivel: u8 },
     /// Empieza a mejorar un recinto completo al nivel siguiente (el anillo en pie sigue defendiendo con su nivel de antes). Mismo cargo que comprometer.
     MejorarRecinto { asentamiento: u64, cargo: Cargo, recinto: u32 },
-    /// Abandona un recinto que nunca se cerró: se borra entero, sin devolución. Murallas lo reserva al Gobernador; hasta el sistema 5 lo autoriza `manda_en`.
+    /// Abandona un recinto que nunca se cerró: se borra entero, sin devolución. Lo da el Gobernador (Murallas §8).
     AbandonarRecinto { asentamiento: u64, recinto: u32 },
     // ── La intel de las tabernas (4H T3d; Niebla_De_Guerra §6). La da la cuenta del héroe, que tiene que estar dentro del lugar de la taberna: una plaza de su Facción (paga su almacén) o un
     //    campamento de mercenarios (paga él: su almacén personal si reside allí; si no, el carro de su columna). ──
@@ -430,7 +431,7 @@ pub enum Comando {
     RebelionVasallo { heroe: u64, relacion: u64 },
     /// El Rey admite (o no) a otras Facciones en los ataques de la suya (`admiteOtrasEnAtaques`).
     AdmitirOtrasFacciones { heroe: u64, faccion: u32, admitir: bool },
-    /// Quien manda en la plaza abre (o cierra) su almacén a las columnas aliadas para repostar y cargar caravanas (`permiteReabastecerAliados`). Cerrar no es retroactivo.
+    /// El Gobernador o el Tesorero abre (o cierra) el almacén de la plaza a las columnas aliadas para repostar y cargar caravanas (`permiteReabastecerAliados`). Cerrar no es retroactivo.
     AlternarReabastecerAliados { asentamiento: u64, permitido: bool },
     // ── Refundación y Caravana de Fundación (sistema 5, tanda 5G-b; Fundacion_Y_Refundacion §4, §6 y §9). Las da la cuenta del héroe. Los códigos empiezan en el 153: del 143 al 152
     //    quedan para 5C. Todo en unidades enteras (C3b). ──
@@ -445,6 +446,15 @@ pub enum Comando {
     LanzarCaravanaFundacion { heroe: u64, asentamiento: u64 },
     /// El titular desarma su Caravana de Fundación suelta, parada en su origen, y devuelve lo que costó (a la plaza, o al fondo a nombre de cada aportante).
     DesarmarCaravanaFundacion { heroe: u64, caravana: u64 },
+    // ── Política: los cargos locales y la puerta (sistema 5, tanda 5E; Diplomacia_Facciones §3.4 y §4.3, Proyecciones §5.2). Códigos del 158 al 160 (5F tomó del 168 al 173 y dejó este hueco). ──
+    /// Hace a `designado` titular de `cargo` en la plaza (sustituye al anterior). Al Gobernador lo designa el Rey de la Facción dueña, sin estar presente; a los otros cuatro, el Gobernador,
+    /// residente y dentro, y solo si ya hay Gobernador. El designado es ciudadano de la Facción dueña y reside en la plaza (Q4).
+    AsignarCargoLocal { heroe: u64, asentamiento: u64, cargo: Cargo, designado: u64 },
+    /// Cierra la puerta de la plaza a esos grupos y la abre a los demás (Q1): el Gobernador, residente y dentro, o el Rey de la Facción dueña, sin estar presente. Quien está dentro de la
+    /// plaza, de sus pueblos o de sus avanzadas y ya no puede entrar sale al mapa con lo suyo.
+    FijarPuerta { heroe: u64, asentamiento: u64, cerrada_a: Grupos },
+    /// El Gobernador, residente y dentro, veta a `vetado` (o levanta su veto): no entra, aunque sea de la Facción. A un residente no se le veta. Vetar a quien está dentro le saca al mapa.
+    VetarJugador { heroe: u64, asentamiento: u64, vetado: u64, vetar: bool },
 }
 
 /// El prefijo del actor de los mensajes del servidor de batalla: `batalla-servidor:<id>` (§8).
@@ -478,8 +488,6 @@ pub enum Autoriza {
     CuentaDelHeroe,
     /// La cuenta del héroe, aunque esté fuera del mundo.
     CuentaDelHeroeAunqueFuera,
-    /// La cuenta del héroe, que además es ciudadano de la Facción de la plaza madre de la avanzada.
-    CiudadanoDeLaMadre,
     /// La cuenta del héroe, que además es el Rey de la Facción que nombra la orden (`responderSolicitud` sin excepción: tampoco si la Facción no existe).
     ReyDeLaFaccion,
     /// La cuenta del héroe, que además es ciudadano de la Facción que nombra la orden y, si tiene Rey, su Rey (`asignarRey`).
@@ -489,14 +497,44 @@ pub enum Autoriza {
     /// La cuenta del héroe, que además es ciudadano y Rey o Embajador de la Facción que actúa (`autoridadDiplomatica`, Diplomacia_Facciones §5.1): la que propone, declara, ofrece la paz,
     /// rompe o retira, y la vasalla que se rebela.
     AutoridadDiplomatica,
-    /// Quien manda en la plaza (`Nucleo::manda_en`): una cuenta con un héroe ciudadano de su Facción o una columna de su Facción. De una caravana, la plaza de su origen; de un trueque,
-    /// la plaza A al proponerlo y la B al aceptarlo o rechazarlo; de una orden de mercado, su plaza.
-    MandaEnLaPlaza,
+    /// La cuenta de un héroe titular de alguno de esos cargos en la plaza de la orden, que reside en ella y está dentro (`cargo(A, c)`, Proyecciones §4.3: «la ciudadanía habilita, la
+    /// presencia ejerce»). La plaza es la que nombra la orden; de una caravana, su origen; de un trueque, la A al proponerlo y la B al contestarlo; de una orden de mercado, la suya; de un
+    /// pueblo o una avanzada, su plaza madre. Sin héroe nombrado, vale cualquiera de los de la cuenta (la de un jugador tiene uno).
+    Cargo(&'static [Cargo]),
+    /// Lo mismo, con el cargo que nombra la orden (`params.cargo`): el cliente declara con qué cargo actúa; que ese cargo sirva para la acción lo mira la orden.
+    CargoDeLaOrden,
+    /// La cuenta de un héroe que reside en la plaza de la orden (de una caravana, su origen) y está dentro (`reside(A)`, Proyecciones §5.2.4).
+    ResidenteDentro,
+    /// La cuenta de un héroe que reside en el origen de la caravana y está dentro de la plaza donde está aparcada (`puedeOperarAparcada`).
+    OperaAparcada,
+    /// La cuenta del héroe, ciudadano de la Facción de la plaza madre, con su columna en el sitio (lo mira la orden): colocar una avanzada, que «la coloca el héroe en el sitio» (Doc 4.2.2).
+    /// DUDA: el panel de la madre es del Gobernador o del Maestro de Obras presentes, pero quien coloca está en el sitio y no dentro de la plaza; se queda la regla de antes del sistema 5.
+    CiudadanoDeLaMadre,
+    /// `asignarCargoLocal`: al Gobernador, el Rey de la Facción dueña sin presencia; a los demás, el Gobernador residente y dentro.
+    AsignaCargoLocal,
+    /// `fijarPuerta`: el Gobernador residente y dentro, o el Rey de la Facción dueña sin presencia.
+    FijaPuerta,
+    /// `compraIntel`: la cuenta del héroe; en una plaza, dentro de ella y Rey o Embajador de su Facción o su Gobernador (en un campamento lo mira la orden).
+    CompraIntel,
     /// La cuenta del Líder de la columna.
     LiderDeLaColumna,
     /// La cuenta de cualquier participante de la columna.
     ParticipanteDeLaColumna,
 }
+
+impl Autoriza {
+    /// ¿Es una de las clases de la matriz que miran una plaza (un cargo, residir y estar dentro, fijar la puerta, designar cargos)? Los escenarios de las pruebas y del batch que no miran
+    /// quién da una orden la dan entonces como administración (decisión 9 del plan del sistema 5: el andamiaje de administración se queda para montar escenarios).
+    pub fn es_de_plaza(self) -> bool {
+        matches!(self, Autoriza::Cargo(_) | Autoriza::CargoDeLaOrden | Autoriza::ResidenteDentro | Autoriza::OperaAparcada | Autoriza::FijaPuerta | Autoriza::AsignaCargoLocal)
+    }
+}
+
+/// Los cargos que piden las órdenes de plaza (Proyecciones §5.2.5).
+const GOBERNADOR: &[Cargo] = &[Cargo::Gobernador];
+const TESORERO: &[Cargo] = &[Cargo::Tesorero];
+const GOBERNADOR_O_MAESTRO: &[Cargo] = &[Cargo::Gobernador, Cargo::MaestroObras];
+const GOBERNADOR_O_TESORERO: &[Cargo] = &[Cargo::Gobernador, Cargo::Tesorero];
 
 impl Comando {
     /// Quién puede dar la orden ([`Autoriza`]). Cada variante se nombra a propósito (sin `_`): una orden nueva no compila hasta decidirlo.
@@ -575,8 +613,8 @@ impl Comando {
             | Comando::Atacar { .. }
             | Comando::UnirseABatalla { .. }
             | Comando::CancelarBatalla { .. }
-            | Comando::ComprarMirada { .. }
-            | Comando::ComprarInformePlaza { .. }
+            | Comando::GuarnecerAvanzada { .. }
+            | Comando::RetirarDeAvanzada { .. }
             | Comando::GuardarEnAlmacenPersonal { .. }
             | Comando::SacarDelAlmacenPersonal { .. }
             | Comando::ReclamarCaravana { .. }
@@ -597,45 +635,40 @@ impl Comando {
             }
             Comando::RenombrarAsentamiento { .. } => ResidenteDeLaPlaza,
             Comando::AsignarRey { .. } => CiudadanoDeLaFaccion,
-            Comando::ColocarAvanzada { .. }
-            | Comando::MejorarAvanzada { .. }
-            | Comando::RepararAvanzada { .. }
-            | Comando::DestruirAvanzada { .. }
-            | Comando::CancelarObraDeAvanzada { .. }
-            | Comando::ElegirTropaDeAvanzada { .. }
-            | Comando::GuarnecerAvanzada { .. }
-            | Comando::RetirarDeAvanzada { .. } => CiudadanoDeLaMadre,
             Comando::AnadirEdificio { .. }
             | Comando::QuitarDeCola { .. }
             | Comando::MoverEnCola { .. }
             | Comando::MejorarEdificio { .. }
             | Comando::AlternarAutoConstruccion { .. }
             | Comando::AlternarReceta { .. }
-            | Comando::CalibrarReserva { .. }
-            | Comando::SolicitarAscenso { .. }
-            | Comando::ActivarPolitica { .. }
-            | Comando::ProponerTrueque { .. }
+            | Comando::MarcarPueblo { .. }
+            | Comando::DestruirPueblo { .. }
+            | Comando::ReponerCarro { .. }
+            | Comando::MejorarAvanzada { .. }
+            | Comando::RepararAvanzada { .. }
+            | Comando::DestruirAvanzada { .. }
+            | Comando::CancelarObraDeAvanzada { .. } => Cargo(GOBERNADOR_O_MAESTRO),
+            Comando::ActivarPolitica { .. } | Comando::ComprometerRecinto { .. } | Comando::MejorarRecinto { .. } => CargoDeLaOrden,
+            Comando::SolicitarAscenso { .. } | Comando::AbandonarRecinto { .. } | Comando::ElegirTropaDeAvanzada { .. } | Comando::VetarJugador { .. } => Cargo(GOBERNADOR),
+            Comando::CalibrarReserva { .. } => Cargo(TESORERO),
+            Comando::ProponerTrueque { .. }
             | Comando::AceptarTrueque { .. }
             | Comando::RechazarTrueque { .. }
             | Comando::ColocarOrdenMercado { .. }
             | Comando::CancelarOrdenMercado { .. }
-            | Comando::CrearCaravana { .. }
+            | Comando::AlternarReabastecerAliados { .. } => Cargo(GOBERNADOR_O_TESORERO),
+            Comando::CrearCaravana { .. }
             | Comando::AnadirCarro { .. }
             | Comando::AnadirAnimal { .. }
             | Comando::MoverCarro { .. }
             | Comando::ReservarCaravana { .. }
             | Comando::PrepararCaravana { .. }
-            | Comando::CancelarCaravana { .. }
-            | Comando::MoverCargaAparcada { .. }
-            | Comando::EnviarCaravanaAlOrigen { .. }
-            | Comando::MarcarPueblo { .. }
-            | Comando::DestruirPueblo { .. }
-            | Comando::ReponerCarro { .. }
-            | Comando::FijarAcceso { .. }
-            | Comando::ComprometerRecinto { .. }
-            | Comando::MejorarRecinto { .. }
-            | Comando::AbandonarRecinto { .. }
-            | Comando::AlternarReabastecerAliados { .. } => MandaEnLaPlaza,
+            | Comando::CancelarCaravana { .. } => ResidenteDentro,
+            Comando::MoverCargaAparcada { .. } | Comando::EnviarCaravanaAlOrigen { .. } => OperaAparcada,
+            Comando::ColocarAvanzada { .. } => CiudadanoDeLaMadre,
+            Comando::AsignarCargoLocal { .. } => AsignaCargoLocal,
+            Comando::FijarAcceso { .. } | Comando::FijarPuerta { .. } => FijaPuerta,
+            Comando::ComprarMirada { .. } | Comando::ComprarInformePlaza { .. } => CompraIntel,
             Comando::MarcharA { .. } | Comando::Estacionar { .. } | Comando::Fundar { .. } | Comando::ComerciarEnPlaza { .. } => LiderDeLaColumna,
             Comando::EntregarDeCaravana { .. }
             | Comando::AdjuntarCaravana { .. }
@@ -915,6 +948,15 @@ impl Comando {
             | Comando::RetirarDeRefundacion { heroe, .. }
             | Comando::ComprarCaravanaDeRefundacion { heroe } => i.heroes.push(*heroe),
             Comando::AlternarReabastecerAliados { asentamiento, .. } => i.asentamientos.push(*asentamiento),
+            // La puerta y los cargos de una plaza en batalla no se tocan: echar a quien combate dentro, o cambiar quién la gobierna, sería una orden sobre la batalla.
+            Comando::AsignarCargoLocal { heroe, asentamiento, designado, .. } => {
+                i.heroes.extend([*heroe, *designado]);
+                i.asentamientos.push(*asentamiento);
+            }
+            Comando::FijarPuerta { heroe, asentamiento, .. } | Comando::VetarJugador { heroe, asentamiento, .. } => {
+                i.heroes.push(*heroe);
+                i.asentamientos.push(*asentamiento);
+            }
             Comando::CrearEjercito { .. }
             | Comando::Reloj(_)
             | Comando::FijarNivelFaccion { .. }
@@ -1945,6 +1987,26 @@ impl Peticion {
                 w.u64(*heroe);
                 w.u64(*caravana);
             }
+            Comando::AsignarCargoLocal { heroe, asentamiento, cargo, designado } => {
+                w.u8(158);
+                w.u64(*heroe);
+                w.u64(*asentamiento);
+                w.u8(cargo_a_u8(*cargo));
+                w.u64(*designado);
+            }
+            Comando::FijarPuerta { heroe, asentamiento, cerrada_a } => {
+                w.u8(159);
+                w.u64(*heroe);
+                w.u64(*asentamiento);
+                w.u8(cerrada_a.bits());
+            }
+            Comando::VetarJugador { heroe, asentamiento, vetado, vetar } => {
+                w.u8(160);
+                w.u64(*heroe);
+                w.u64(*asentamiento);
+                w.u64(*vetado);
+                w.bool(*vetar);
+            }
         }
         w.0
     }
@@ -2162,6 +2224,9 @@ impl Peticion {
             155 => Comando::ComprarCaravanaDeRefundacion { heroe: r.u64()? },
             156 => Comando::LanzarCaravanaFundacion { heroe: r.u64()?, asentamiento: r.u64()? },
             157 => Comando::DesarmarCaravanaFundacion { heroe: r.u64()?, caravana: r.u64()? },
+            158 => Comando::AsignarCargoLocal { heroe: r.u64()?, asentamiento: r.u64()?, cargo: cargo_de_u8(r.u8()?)?, designado: r.u64()? },
+            159 => Comando::FijarPuerta { heroe: r.u64()?, asentamiento: r.u64()?, cerrada_a: Grupos::desde_bits(r.u8()?) },
+            160 => Comando::VetarJugador { heroe: r.u64()?, asentamiento: r.u64()?, vetado: r.u64()?, vetar: r.bool()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -2710,6 +2775,15 @@ pub mod rechazos {
     pub const REFUNDACION_SIN_APORTE: &str = "refundacion.sin_aporte";
     /// Reclamar la Caravana de Fundación lejos de ella (a más de `radioEncuentro`).
     pub const CARAVANA_LEJOS: &str = "caravana.lejos";
+    // Cargos locales y puerta (sistema 5, tanda 5E; Diplomacia_Facciones §3.4 y §4.3).
+    /// El designado para un cargo local no es ciudadano de la Facción dueña de la plaza.
+    pub const CARGO_NO_CIUDADANO: &str = "cargo.no_ciudadano";
+    /// El designado para un cargo local no reside en la plaza (Q4: solo se designa a quien reside).
+    pub const CARGO_NO_RESIDE: &str = "cargo.no_reside";
+    /// Tesorero, General, Maestro de Obras y Sacerdote se designan cuando la plaza ya tiene Gobernador.
+    pub const CARGO_SIN_GOBERNADOR: &str = "cargo.sin_gobernador";
+    /// A un residente de la plaza no se le veta (sería el exilio).
+    pub const PUERTA_RESIDENTE: &str = "puerta.residente";
 }
 
 /// Lo que un rechazo cuenta además de su código, para que el cliente decida con ello (`RechazoOrden.detalle`).
@@ -3053,6 +3127,9 @@ mod pruebas {
             Comando::ComprarCaravanaDeRefundacion { heroe: 2 },
             Comando::LanzarCaravanaFundacion { heroe: 2, asentamiento: 5 },
             Comando::DesarmarCaravanaFundacion { heroe: 2, caravana: 4 },
+            Comando::AsignarCargoLocal { heroe: 2, asentamiento: 5, cargo: Cargo::Tesorero, designado: 3 },
+            Comando::FijarPuerta { heroe: 2, asentamiento: 5, cerrada_a: Grupos::de([politica::Grupo::Neutrales, politica::Grupo::Aedas]) },
+            Comando::VetarJugador { heroe: 2, asentamiento: 5, vetado: 7, vetar: true },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Ejercito(9), declara_guerra: false },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Caravana(4), declara_guerra: true },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Campamento(1), declara_guerra: false },

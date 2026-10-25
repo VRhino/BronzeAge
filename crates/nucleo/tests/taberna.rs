@@ -2,6 +2,7 @@
 //! la Facción conoce (con su enfriamiento, su precio por nivel y el aviso sin firma a la plaza espiada), en un campamento de mercenarios (paga el héroe) y en una plaza con Taberna (paga su almacén); lo
 //! que la vista enseña de todo ello y lo que viaja en la foto. Sobre el artefacto de mundo real (`generador/salida/mundo/mundo-*.bin`); las pruebas se omiten si no está.
 
+mod comun;
 use asentamiento::catalogo::Tipo;
 use asentamiento::Recurso::{self, *};
 use base::{Instante, Mil, Punto, MS_POR_MINUTO};
@@ -83,7 +84,8 @@ impl Esc {
         self.peticiones += 1;
         let p = Peticion::nueva(actor, &format!("p{}", self.peticiones), c);
         let t = self.n.ahora();
-        self.n.aplicar_en(t, if actor == "admin" { p.de_admin() } else { p })
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
+        self.n.aplicar_en(t, if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) { p.de_admin() } else { p })
     }
 
     fn ok(&mut self, actor: &str, c: Comando) -> Respuesta {
@@ -247,7 +249,10 @@ fn en_una_plaza_hace_falta_su_taberna_estar_dentro_y_paga_su_almacen() {
     let (propia, eva) = (e.propia, e.eva);
     let centro = e.n.estado().asentamientos[&propia].posicion;
     let comprar = |e: &mut Esc| e.ord("eva", Comando::ComprarMirada { heroe: eva, origen: OrigenIntel::Plaza(propia), centro: hacia_dentro(centro, 50 * U) });
-    assert_eq!(codigo(&comprar(&mut e)), rechazos::INTEL_NO_PRESENTE, "eva está en el campamento");
+    // En una plaza compran el Rey, el Embajador o el Gobernador, dentro de ella (`compraIntel`, 5E): eva es la Embajadora de F1.
+    let rey = e.n.faccion(1).and_then(|f| f.rey).expect("F1 tiene Rey");
+    e.ok("admin", Comando::AsignarEmbajador { heroe: rey, faccion: 1, designado: eva });
+    assert_eq!(codigo(&comprar(&mut e)), rechazos::NO_AUTORIZADO, "eva está en el campamento: fuera de la plaza no compra");
     e.ok("admin", Comando::ColocarHeroe { heroe: eva, ubicacion: Ubicacion::Asentamiento(propia as u32) });
     assert_eq!(codigo(&comprar(&mut e)), rechazos::INTEL_SIN_TABERNA);
     assert_eq!(codigo(&e.ord("eva", Comando::ComprarMirada { heroe: eva, origen: OrigenIntel::Plaza(e.ajena), centro })), rechazos::INTEL_PLAZA_AJENA);

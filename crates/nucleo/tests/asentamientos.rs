@@ -2,6 +2,7 @@
 //! se guarda en las fotos y reacciona a las órdenes. Sobre el artefacto de mundo real (`generador/salida/mundo/mundo-*.bin`); las
 //! pruebas que lo necesitan se omiten si no está.
 
+mod comun;
 use asentamiento::catalogo::Tipo;
 use asentamiento::{Cargo, Recurso};
 use base::{Instante, Punto, MS_POR_MINUTO};
@@ -60,8 +61,9 @@ fn admin(id: &str, c: Comando) -> Peticion {
     Peticion::nueva("admin", id, c).de_admin()
 }
 
+/// La dueña de las plazas de estas pruebas (5E: sus órdenes de plaza, como administración: `comun::como_dueno`).
 fn ana(id: &str, c: Comando) -> Peticion {
-    Peticion::nueva("ana", id, c)
+    comun::como_dueno(Peticion::nueva("ana", id, c))
 }
 
 fn campamento(m: &Mundo, i: usize) -> Punto {
@@ -524,7 +526,7 @@ fn estado_con_una_plaza() -> Estado {
     let eco = &s.reglas.economia.datos;
     let economia = asentamiento::asentamiento::Asentamiento::fundar(eco, 0, &eco.materiales_iniciales, eco.viviendas_iniciales);
     let urbe = nucleo::urbanismo::Urbe::fundar(&s.reglas.economia, 7, 1);
-    s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, acceso: Default::default(), nombre: String::new(), capital_de: None, de_la_faccion_desde: 0, resto_tributo: 0, permite_reabastecer_aliados: false });
+    s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, puerta: Default::default(), cargos: Default::default(), nombre: String::new(), capital_de: None, de_la_faccion_desde: 0, resto_tributo: 0, permite_reabastecer_aliados: false });
     s
 }
 
@@ -995,7 +997,7 @@ fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash_y_el_formato_anterior_se
     let reglas = Reglas::default();
     let base = estado_con_una_plaza();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN32");
+    assert_eq!(&bytes[..5], b"BAN33");
     let viejo = [b"BAN13".as_slice(), &bytes[5..]].concat();
     let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN13 no debe admitirse") };
     assert!(e.to_string().contains("BAN13") && e.to_string().contains("población"), "{e}");

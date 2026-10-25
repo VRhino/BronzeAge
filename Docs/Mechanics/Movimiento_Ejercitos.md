@@ -157,7 +157,7 @@ ritmo de consumo (por minuto) = Σ(cantidad de soldados) × MILITAR.racionPorSol
 - Con las mismas reglas que llenarlos al salir: hasta donde quepa y sin bajar de la reserva de trigo de la plaza. Solo se **narra** (`ejercito.reabastecido`) si llevaba menos de `umbralNarrarReposte` (50 %).
 - **`alternarReabastecerAliados { asentamientoId, permitido }`**: abre o cierra el almacén de la plaza a los ejércitos aliados (Gobernador o Tesorero). Sin cambio → `sinCambios`; con cambio → `logistica.reabastecer_aliados`. Cerrar no es retroactivo.
 
-> **Implementado en Rust (2026-10-24, 5D):** `AlternarReabastecerAliados` (152; hasta 5E la da quien manda en la plaza) guarda `Asentamiento::permite_reabastecer_aliados` (en la foto; la conquista lo cierra, como el acceso); `Nucleo::abre_su_almacen_a` es `puedeRepostarEn`: la plaza propia, siempre; la de una aliada o vasalla (o la señora), si lo permite. Lo miran `Repostar` y `CargarCaravana` (la duda 3 de 5G-a). Repostar en una avanzada sigue siendo solo de la propia Facción.
+> **Implementado en Rust (2026-10-24, 5D):** `AlternarReabastecerAliados` (152; desde 5E, el Gobernador o el Tesorero, residente y dentro) guarda `Asentamiento::permite_reabastecer_aliados` (en la foto; la conquista lo cierra, como el acceso); `Nucleo::abre_su_almacen_a` es `puedeRepostarEn`: la plaza propia, siempre; la de una aliada o vasalla (o la señora), si lo permite. Lo miran `Repostar` y `CargarCaravana` (la duda 3 de 5G-a). Repostar en una avanzada sigue siendo solo de la propia Facción.
 - **`radioReabastecimiento` desaparece** (Doc 5.13): recoger tropas, adjuntar y cargar caravanas y entregar un trueque se hacen en la **puerta**.
 
 ## 9. Caravanas adjuntas

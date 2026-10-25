@@ -29,6 +29,38 @@ pub const EXPANSION_PAUSA_H: i64 = 72;
 pub const ASCENSO_CADA_MIN: i64 = 60;
 pub const VELOCIDAD: i64 = 500;
 pub const VIVERES: i64 = 350_000;
+
+/// La cuenta del Gobernador de oficio de una plaza (5E).
+pub fn cuenta_de_gobernador(plaza: u64) -> String {
+    format!("g{plaza}")
+}
+
+/// El Gobernador de oficio de una plaza recién fundada (5E: las órdenes de plaza las da su Gobernador, residente y dentro). El jugador simulado de estos batches no es un héroe que viaje: es la
+/// plaza misma. Se monta con las órdenes reales salvo el héroe, que crea el andamiaje de administración (`crear_ejercito`, ciudadano de la Facción de la plaza, con su cuenta propia
+/// [`cuenta_de_gobernador`]): se muda a la plaza (`CambiarResidencia`), entra (`Guarnecer`: su columna se deshace dentro), el Rey le nombra Gobernador y él se nombra Tesorero y Maestro de
+/// Obras. Devuelve su id, o `None` si alguna orden no se aceptó (no debería: lo dice la prueba del batch).
+pub fn gobernador_de_oficio(n: &mut Nucleo, t: Instante, plaza: u64) -> Option<u64> {
+    let (faccion, puerta) = n.estado().asentamientos.get(&plaza).map(|a| (a.faccion, a.posicion))?;
+    let rey = n.faccion(faccion).and_then(|f| f.rey)?;
+    let cuenta_rey = n.heroe(rey)?.cuenta.clone();
+    let cuenta = cuenta_de_gobernador(plaza);
+    let columna = n.crear_ejercito(t, &cuenta, faccion, puerta, VELOCIDAD, VIVERES).ok()?;
+    let gobernador = n.ejercito(columna)?.columna.lider;
+    use asentamiento::Cargo::{Gobernador, MaestroObras, Tesorero};
+    let ordenes = [
+        (cuenta.clone(), Comando::CambiarResidencia { heroe: gobernador, asentamiento: plaza }),
+        (cuenta.clone(), Comando::Guarnecer { asentamiento: plaza, heroe: gobernador }),
+        (cuenta_rey, Comando::AsignarCargoLocal { heroe: rey, asentamiento: plaza, cargo: Gobernador, designado: gobernador }),
+        (cuenta.clone(), Comando::AsignarCargoLocal { heroe: gobernador, asentamiento: plaza, cargo: Tesorero, designado: gobernador }),
+        (cuenta.clone(), Comando::AsignarCargoLocal { heroe: gobernador, asentamiento: plaza, cargo: MaestroObras, designado: gobernador }),
+    ];
+    for (i, (actor, c)) in ordenes.into_iter().enumerate() {
+        if !n.aplicar_en(t, Peticion::nueva(&actor, &format!("gob-{plaza}-{i}"), c)).aceptada() {
+            return None;
+        }
+    }
+    Some(gobernador)
+}
 /// Motivo con el que el batch cuenta los sitios descartados por el aviso de ruina (no es un rechazo del núcleo).
 const RECHAZO_CONDENADA: &str = "batch.sitio_condenado";
 
@@ -299,6 +331,7 @@ impl Sim<'_> {
             return self.reintentar(t, f, reintento, desde, primera);
         };
         self.reg.fundaciones.push(Fundacion { instante: t, primera, tras_ms: t - desde, verde: v.color == Viabilidad::Verde });
+        gobernador_de_oficio(&mut self.n, t, plaza).expect("el Gobernador de oficio de la plaza");
         self.tras_fundar(t, f, plaza);
     }
 
@@ -323,7 +356,9 @@ impl Sim<'_> {
             return;
         }
         self.programar(t + ASCENSO_CADA_MIN * MIN, Accion::Ascenso { plaza });
-        let r = self.como_batch(t, Comando::SolicitarAscenso { asentamiento: plaza });
+        // Lo pide su Gobernador de oficio, dentro de ella (5E).
+        let p = self.peticion(&cuenta_de_gobernador(plaza), Comando::SolicitarAscenso { asentamiento: plaza });
+        let r = self.n.aplicar_en(t, p);
         let motivo = match &r.resultado {
             Resultado::Rechazada { codigo, .. } => codigo.to_string(),
             _ => "ok".to_string(),

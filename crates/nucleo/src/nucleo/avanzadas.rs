@@ -28,9 +28,10 @@
 //!
 //! Nada recurre por avanzada ociosa: los únicos plazos son el fin de la obra (en marcha), la reposición (incompleta) y la invulnerabilidad (un día).
 //!
-//! # Lo provisional
-//! La autorización es la de las demás órdenes de plaza: el héroe ha de ser ciudadano de la Facción de la madre (los cargos de Gobernador y Maestro de Obras son del
-//! sistema político). Las elecciones de tropa se comprueban al elegir (tecnología y edificio de la madre) y no se revisan después: si la Facción pierde la tecnología o la madre
+//! # Quién manda
+//! Son obras de mapa del panel de la plaza madre (Doc 4.2.2, 5E): mejorar, reparar, destruir y cancelar las da el Gobernador o el Maestro de Obras de la madre, residente y dentro; elegir la
+//! tropa de serie, el Gobernador (Doc 5.17); colocar, un ciudadano de su Facción con la columna **en el sitio** («la coloca el héroe en el sitio»; DUDA en `Autoriza::CiudadanoDeLaMadre`). Guarnecer y retirar son de la tropa
+//! de cada uno: la cuenta del héroe (guarnece quien reside en la madre). Las elecciones de tropa se comprueban al elegir (tecnología y edificio de la madre) y no se revisan después: si la Facción pierde la tecnología o la madre
 //! el edificio, la elección sigue.
 
 use super::combates::{caidos, DefensoresDeDentro};
@@ -135,15 +136,6 @@ impl Nucleo {
             Some((Some(madre), v)) => Ok((madre, v)),
             _ => Err(Respuesta::rechazo(rechazos::AVANZADA_DESCONOCIDA, ids::avanzada(id), self.estado.version)),
         }
-    }
-
-    /// El héroe es de quien da la orden (o es la administración), está en el mundo y es ciudadano de `faccion`.
-    fn autorizar_ciudadano(&self, p: &Peticion, heroe: u64, faccion: u32) -> Result<(), Respuesta> {
-        self.autorizar_heroe(p, heroe, false)?;
-        if !p.admin && self.heroe(heroe).and_then(|h| h.faccion) != Some(faccion) {
-            return Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, "el héroe no es ciudadano de la Facción de la plaza madre", self.estado.version));
-        }
-        Ok(())
     }
 
     /// Cuenta un hecho de la avanzada: lo oye la plaza madre, si la hay.
@@ -293,8 +285,8 @@ impl Nucleo {
         match &p.comando {
             Comando::ColocarAvanzada { asentamiento, heroe, posicion } => {
                 let plaza = self.plaza_o_rechazo(*asentamiento)?;
-                let (faccion, centro, radio) = (plaza.faccion, plaza.posicion, plaza.radio);
-                self.autorizar_ciudadano(p, *heroe, faccion)?;
+                let (centro, radio) = (plaza.posicion, plaza.radio);
+                self.autorizar_en_plaza(p, *asentamiento, Some(*heroe))?;
                 let (_, e) = self.columna_a_bordo(*heroe)?;
                 if !p.admin && e.posicion_en(t).dist(*posicion) > self.radio_puerta() {
                     return Err(rechazo(rechazos::AVANZADA_FUERA_DEL_SITIO, "la columna del héroe no está en el sitio donde se coloca la avanzada".into()));
@@ -332,7 +324,7 @@ impl Nucleo {
             }
             Comando::MejorarAvanzada { heroe, avanzada } => {
                 let (madre, _) = self.con_madre(*avanzada)?;
-                self.autorizar_ciudadano(p, *heroe, self.estado.asentamientos[&madre].faccion)?;
+                self.autorizar_en_plaza(p, madre, Some(*heroe))?;
                 let mut ev = vec![];
                 self.estado.asentamientos.get_mut(&madre).expect("existe").economia.mejorar_avanzada(&datos, *avanzada, &mut ev).map_err(de_avanzada)?;
                 self.anotar_sucesos(madre, t, &ev);
@@ -342,7 +334,7 @@ impl Nucleo {
             Comando::DestruirAvanzada { heroe, avanzada } => {
                 let (madre, av) = self.con_madre(*avanzada)?;
                 let posicion = av.posicion;
-                self.autorizar_ciudadano(p, *heroe, self.estado.asentamientos[&madre].faccion)?;
+                self.autorizar_en_plaza(p, madre, Some(*heroe))?;
                 let mut ev = vec![];
                 self.estado.asentamientos.get_mut(&madre).expect("existe").economia.destruir_avanzada(*avanzada, &mut ev).map_err(de_avanzada)?;
                 self.vaciar_lugar(t, Ubicacion::Avanzada(*avanzada), posicion, madre, MOTIVO_DESTRUIDO);
@@ -353,7 +345,7 @@ impl Nucleo {
             }
             Comando::CancelarObraDeAvanzada { heroe, avanzada } => {
                 let (madre, _) = self.con_madre(*avanzada)?;
-                self.autorizar_ciudadano(p, *heroe, self.estado.asentamientos[&madre].faccion)?;
+                self.autorizar_en_plaza(p, madre, Some(*heroe))?;
                 let mut ev = vec![];
                 self.estado.asentamientos.get_mut(&madre).expect("existe").economia.cancelar_obra_de_avanzada(*avanzada, &mut ev).map_err(de_avanzada)?;
                 self.perder_obra(*avanzada);
@@ -363,7 +355,7 @@ impl Nucleo {
             Comando::ElegirTropaDeAvanzada { heroe, avanzada, tropa } => {
                 let (madre, v) = self.con_madre(*avanzada)?;
                 let (faccion, punto) = (self.estado.asentamientos[&madre].faccion, v.posicion);
-                self.autorizar_ciudadano(p, *heroe, faccion)?;
+                self.autorizar_en_plaza(p, madre, Some(*heroe))?;
                 let cr = self.estado.reglas.economia.combate.clone();
                 let escalon = regla::escalon_elegible(&cr, *tropa).ok_or_else(|| rechazo(rechazos::AVANZADA_TROPA_NO_ELEGIBLE, "la guarnición de serie solo usa tropas de los escalones 2, 3 y 4".into()))?;
                 // Solo lo que la plaza madre puede reclutar: la tecnología de la Facción y el edificio activo al nivel que pide la tropa.
@@ -500,7 +492,7 @@ impl Nucleo {
             }
             None => return Err(rechazo(rechazos::AVANZADA_DESCONOCIDA, ids::avanzada(avanzada))),
         };
-        self.autorizar_ciudadano(p, heroe, self.estado.asentamientos[&madre].faccion)?;
+        self.autorizar_en_plaza(p, madre, Some(heroe))?;
         let mut ev = vec![];
         let eco = &mut self.estado.asentamientos.get_mut(&madre).expect("existe").economia;
         if let Some(ruinas) = huerfana {
@@ -524,8 +516,8 @@ impl Nucleo {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         let (madre, av) = self.con_madre(avanzada)?;
-        let (faccion, posicion, etapa, punto) = (self.estado.asentamientos[&madre].faccion, av.posicion, av.etapa, av.posicion);
-        self.autorizar_ciudadano(p, heroe, faccion)?;
+        let (posicion, etapa, punto) = (av.posicion, av.etapa, av.posicion);
+        self.autorizar_heroe(p, heroe, false)?;
         let (cid, e) = self.columna_a_bordo(heroe)?;
         if !p.admin && e.posicion_en(t).dist(posicion) > self.radio_puerta() {
             return Err(rechazo(rechazos::AVANZADA_FUERA_DE_LA_PUERTA, "la columna del héroe no está a la puerta de la avanzada".into()));
@@ -578,8 +570,8 @@ impl Nucleo {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         let (madre, av) = self.con_madre(avanzada)?;
-        let (faccion, posicion) = (self.estado.asentamientos[&madre].faccion, av.posicion);
-        self.autorizar_ciudadano(p, heroe, faccion)?;
+        let posicion = av.posicion;
+        self.autorizar_heroe(p, heroe, false)?;
         let (cid, e) = self.columna_a_bordo(heroe)?;
         if !p.admin && e.posicion_en(t).dist(posicion) > self.radio_puerta() {
             return Err(rechazo(rechazos::AVANZADA_FUERA_DE_LA_PUERTA, "la columna del héroe no está a la puerta de la avanzada".into()));

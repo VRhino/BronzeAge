@@ -3,6 +3,7 @@
 //! desconectarse, la ruina de la plaza donde se reside, y determinismo y recuperación desde foto. Sobre el artefacto de mundo real
 //! (`generador/salida/mundo/mundo-*.bin`); las pruebas se omiten si no está.
 
+mod comun;
 use asentamiento::Recurso::{self, *};
 use base::{Instante, Punto, MS_POR_MINUTO};
 use militar::catalogo::Tropa;
@@ -108,7 +109,8 @@ impl Escenario {
     fn peticion(&mut self, actor: &str, c: Comando) -> Peticion {
         self.cuenta += 1;
         let p = Peticion::nueva(actor, &format!("o{}", self.cuenta), c);
-        if actor == "admin" {
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
+        if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) {
             p.de_admin()
         } else {
             p
@@ -930,7 +932,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
     let reglas = Reglas::default();
     let base = estado_con_heroes();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN32");
+    assert_eq!(&bytes[..5], b"BAN33");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.militar, base.militar, "incluido el índice de residentes, que se reconstruye");

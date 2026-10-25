@@ -5,6 +5,7 @@
 //! del acceso a los pueblos y a las avanzadas, en `pueblos.rs` y `avanzadas.rs`. Sobre el artefacto de mundo real (`generador/salida/mundo/mundo-*.bin`); las pruebas
 //! se omiten si no está.
 
+mod comun;
 use asentamiento::catalogo::Tipo;
 use asentamiento::Recurso::{self, *};
 use base::{Instante, Punto, MS_POR_MINUTO};
@@ -16,7 +17,7 @@ use militar::heroe::{Controlador, Residencia};
 use militar::presencia::Ubicacion;
 use militar::racion::{self, Estado as Marcha};
 use mundo::{Mundo, OpcionesValidacion};
-use nucleo::{rechazos, Acceso, Ajustes, Arranque, Carga, Comando, Nucleo, Peticion, Relacion, Reglas, Resultado, Respuesta, SucesoMilitar};
+use nucleo::{rechazos, Ajustes, Arranque, Carga, Comando, Nucleo, Peticion, Relacion, Reglas, Resultado, Respuesta, SucesoMilitar};
 use rutas::Rutas;
 use std::sync::{Arc, OnceLock};
 
@@ -113,7 +114,8 @@ impl Escenario {
     fn peticion(&mut self, actor: &str, c: Comando) -> Peticion {
         self.cuenta += 1;
         let p = Peticion::nueva(actor, &format!("o{}", self.cuenta), c);
-        if actor == "admin" {
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
+        if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) {
             p.de_admin()
         } else {
             p
@@ -209,7 +211,10 @@ fn escenario(m: &M, semilla: u64) -> Escenario {
     let mut n = Nucleo::nuevo(arranque(m, semilla));
     let p = sitio_rico(&n, &m.0, 0, 1);
     let a = fundar(&mut n, 0, "ana", 1, p);
-    Escenario { n, a, cuenta: 0 }
+    let mut e = Escenario { n, a, cuenta: 0 };
+    // La puerta de antes del sistema 5 (abierta también a los neutrales, que por defecto ya no entran: Q1, 5E): en estas pruebas los neutrales entran.
+    e.ok("admin", Comando::FijarAcceso { asentamiento: a, aliados: true, neutrales: true, enemigos: false });
+    e
 }
 
 /// Dos plazas de la Facción 1: la de «ana» junto al campamento 0 y otra junto al 2.
@@ -220,7 +225,12 @@ fn dos_plazas(m: &M, semilla: u64) -> (Escenario, u64) {
     assert!(n.aplicar_en(0, Peticion::nueva("admin", "nivel", Comando::FijarNivelFaccion { faccion: 1, nivel: 2 }).de_admin()).aceptada());
     let pc = sitio_rico(&n, &m.0, 0, 1);
     let c = fundar(&mut n, 0, "ana", 1, pc);
-    (Escenario { n, a, cuenta: 0 }, c)
+    let mut e = Escenario { n, a, cuenta: 0 };
+    // La puerta de antes del sistema 5 (abierta también a los neutrales: Q1, 5E), como en `escenario`.
+    for plaza in [a, c] {
+        e.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: true, enemigos: false });
+    }
+    (e, c)
 }
 
 // ───────────────────────────── 1. El visitante entra con todo y sale con todo ─────────────────────────────
@@ -464,8 +474,8 @@ fn el_duenio_decide_por_relacion_quien_entra_la_misma_faccion_y_los_residentes_s
     let (aliado, vasallo, neutral, enemigo, sin_faccion) = (e.ciudadano("al", Some(2)), e.ciudadano("va", Some(3)), e.ciudadano("ne", Some(4)), e.ciudadano("en", Some(5)), e.ciudadano("sf", None));
     let (residente, _) = e.con_milicia("res");
     let puede = |e: &Escenario| [propio, aliado, vasallo, neutral, enemigo, sin_faccion, residente].map(|h| e.n.puede_entrar_en_plaza(h, a));
-    // Por defecto, hasta el sistema político: entran todos menos los enemigos.
-    assert_eq!(e.n.acceso_de_plaza(a), Some(Acceso { aliados: true, neutrales: true, enemigos: false }));
+    // La de antes del sistema 5 (la del escenario): cerrada solo a los enemigos; quien no tiene Facción es neutral. La de por defecto la prueba `tests/cargos.rs`.
+    assert_eq!(e.n.puerta_cerrada_a(a), Some(politica::Grupos::de([politica::Grupo::Enemigos])));
     assert_eq!(puede(&e), [true, true, true, true, false, true, true]);
 
     // Solo manda quien manda en la plaza: un desconocido no, ni siquiera con una orden válida; la administración sí.
@@ -487,8 +497,9 @@ fn el_duenio_decide_por_relacion_quien_entra_la_misma_faccion_y_los_residentes_s
     // Cerrada a todos: la misma Facción y los residentes siempre pueden entrar.
     e.ok("admin", Comando::FijarAcceso { asentamiento: a, aliados: false, neutrales: false, enemigos: false });
     assert_eq!(puede(&e), [true, false, false, false, false, false, true]);
-    let h = hechos(&e.n, "asentamiento.acceso");
-    assert_eq!((h.len(), h[0].1.clone(), dato(&h[3], "aliados"), dato(&h[3], "enemigos")), (4, vec![a], 0, 0));
+    // Cada cambio deja su hecho (5E: `asentamiento.puerta_fijada`, con los grupos cerrados en sus valores); el primero es el del escenario.
+    let h = hechos(&e.n, "asentamiento.puerta_fijada");
+    assert_eq!((h.len(), h[0].1.clone(), dato(&h[4], "asentamiento")), (5, vec![a], a as i64));
 }
 
 #[test]
@@ -533,9 +544,9 @@ fn una_foto_con_el_acceso_cambiado_se_recupera_y_la_anterior_se_rechaza() {
     e.avanzar(HORA);
     e.ok("admin", Comando::FijarAcceso { asentamiento: e.a, aliados: false, neutrales: true, enemigos: true });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN32");
+    assert_eq!(&bytes[..5], b"BAN33");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
-    assert_eq!(vuelta.asentamientos[&e.a].acceso, Acceso { aliados: false, neutrales: true, enemigos: true });
+    assert_eq!(vuelta.asentamientos[&e.a].puerta.cerrada_a, Some(politica::Grupos::de([politica::Grupo::Aliados])));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
     let viejo = [b"BAN16".as_slice(), &bytes[5..]].concat();
     let Err(err) = nucleo::Estado::deserializar(&viejo, &Reglas::default(), &e.n.estado().mundo_hash) else { panic!("BAN16 no debe admitirse") };
@@ -662,7 +673,7 @@ fn mismas_ordenes_dan_el_mismo_hash_normal_acelerado_y_a_trozos() {
     });
     assert_eq!(normal.hash_estado(), a_trozos.hash_estado(), "en pasos pequeños e irregulares, como el modo en vivo");
     // El guion hizo de verdad lo que se espera.
-    for h in ["jugador.entra_en_asentamiento", "asentamiento.acceso", "heroe.vacia_el_carro", "jugador.sale_de_asentamiento"] {
+    for h in ["jugador.entra_en_asentamiento", "asentamiento.puerta_fijada", "heroe.vacia_el_carro", "jugador.sale_de_asentamiento"] {
         assert!(!hechos(&normal, h).is_empty(), "el guion no produjo «{h}»");
     }
     let ana = normal.heroe_de_cuenta("ana").unwrap();
@@ -716,6 +727,7 @@ fn una_foto_con_un_visitante_dentro_y_un_carro_en_la_residencia_recupera_el_mism
         let p = sitio_rico(&n, &m.0, 0, 1);
         let a = fundar(&mut n, 0, "ana", 1, p);
         let mut e = Escenario { n, a, cuenta: 0 };
+        e.ok("admin", Comando::FijarAcceso { asentamiento: a, aliados: true, neutrales: true, enemigos: false }); // como `escenario`
         let (ana, b, cb) = primera(&mut e);
         assert!(e.n.ejercito(cb).is_some() && !e.n.en_el_mapa(cb));
         let bytes = e.n.estado().serializar();

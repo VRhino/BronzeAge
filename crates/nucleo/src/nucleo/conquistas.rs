@@ -33,7 +33,6 @@
 use super::*;
 use crate::estado::{SucesoCombate, PRIO_ASENTAMIENTO};
 use crate::estado_combate::entidad_conquista;
-use crate::estado_militar::Acceso;
 use combate::conquista::{aplicar_conquista, aplicar_desalojo, faccion_derrotada, planear_desalojo, refugio, residencia_tras_desalojo, Afectado, Salida};
 use comercio::ruina::Motivo as MotivoDeCierre;
 use militar::columna::{Columna, Politica, TipoColumna};
@@ -90,7 +89,8 @@ impl Nucleo {
         let c = {
             let a = self.estado.asentamientos.get_mut(&plaza).expect("existe");
             a.faccion = conquistador;
-            a.acceso = Acceso::default();
+            // La puerta vuelve a la de por defecto y los cargos se vacían (5E): los decidía el dueño de antes, y sus titulares ya no son de la Facción dueña.
+            (a.puerta, a.cargos) = Default::default();
             // Es del conquistador desde ahora: para la capital efectiva cuenta este instante, no su fundación (5C-1). Lo que decidía su dueño de antes se olvida: el resto de su tributo
             // y la apertura de su almacén a los aliados (5D), como el acceso.
             a.de_la_faccion_desde = t;

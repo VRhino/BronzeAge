@@ -165,6 +165,10 @@ Fija o rectifica el destino de la columna **del que va en ella**, tantas veces c
 - La regla que decide quién entra (residente > veto > grupo > propia Facción) está en [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md).
 - **Decisión Q1 del autor (2026-10-24):** esta es la puerta del sistema político (por grupos con `aedas`, vetos, por defecto cerrada a neutrales y enemigos) y **cerrar o vetar expulsa** a quien ya no puede entrar, como `FijarAcceso` hoy. *Implementado en Rust (5A, reglas puras):* `politica::puerta`; las órdenes `FijarPuerta` y `VetarJugador` sustituyen a `FijarAcceso` en 5E.
 
+> **Implementado en Rust (2026-10-25, 5E):** `FijarPuerta` (159) y `VetarJugador` (160) en el núcleo, con la autoridad de esta sección (ver [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) §4.3). La
+> puerta de una plaza nueva está **cerrada a neutrales y enemigos** (las notas de «entrar con todo» de arriba hablan del acceso provisional de antes: por defecto, todos menos los enemigos) y la de una
+> plaza conquistada vuelve a esa. `FijarAcceso` (117) es el alias en el núcleo de la puerta por relación de entonces.
+
 ## 9. La convocatoria (ejército en preparación)
 
 Un héroe **dentro** de una plaza o un campamento convoca un ejército; otros de su Facción **que están dentro del mismo lugar** se le unen, cada uno con la tropa y la carga con las que saldría. **Nadie ha salido todavía**: las escuadras siguen en su campamento y el almacén intacto, así que cancelar o separarse no devuelve nada. Espera **sin caducidad**.
@@ -306,7 +310,7 @@ Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; cont
 <!-- eventos -->
 ```json
 [
-  "asentamiento.acceso", "convocatoria.cancelada", "convocatoria.convocada", "convocatoria.partio", "convocatoria.peticion_caducada", "convocatoria.seleccion_cambiada",
+  "asentamiento.puerta_fijada", "convocatoria.cancelada", "convocatoria.convocada", "convocatoria.partio", "convocatoria.peticion_caducada", "convocatoria.seleccion_cambiada",
   "convocatoria.separado", "convocatoria.unido", "convocatoria.union_pedida", "convocatoria.union_rechazada", "ejercito.entra_en_avanzada", "ejercito.entra_en_campamento",
   "ejercito.entra_en_pueblo", "ejercito.guarnece", "heroe.desalojado", "heroe.expulsado", "heroe.vacia_el_carro", "jugador.entra_en_asentamiento",
   "jugador.entra_en_avanzada", "jugador.entra_en_campamento", "jugador.entra_en_pueblo", "jugador.marcha_fijada", "jugador.sale_al_mundo", "jugador.sale_de_asentamiento",

@@ -43,7 +43,7 @@ impl Nucleo {
         let pueblos: Vec<_> = eco.pueblos.iter().map(|p| p.id).collect();
         let avanzadas: Vec<_> = eco.avanzadas.iter().map(|v| v.id).collect();
         huella(&(
-            (a.faccion, a.radio, vecinas, a.nivel(), a.nivel_actual(), a.protegida_hasta, a.ocupada_hasta, a.acceso),
+            (a.faccion, a.radio, vecinas, a.nivel(), a.nivel_actual(), a.protegida_hasta, a.ocupada_hasta, &a.puerta, a.cargos),
             (edificios, &eco.recintos, &eco.politicas, eco.ascenso, &eco.recetas_pausadas, eco.auto_pausada, eco.reserva_manual),
             (residentes, presentes, guarnicion, flota, aparcadas, pueblos, avanzadas, self.batalla_sobre(militar::presencia::Ubicacion::Asentamiento(a.id as u32)).map(|b| b.id)),
         ))

@@ -187,6 +187,10 @@ impl Nucleo {
         }
         self.tr.tocar(Clase::Heroe, heroe);
         self.estado.militar.mudar(heroe, nueva);
+        // Q4: quien deja de residir en una plaza deja sus cargos en ella.
+        if let Some(Residencia::Asentamiento(a)) = antes.filter(|&r| Some(r) != nueva) {
+            self.vaciar_cargos_de(heroe, u64::from(a));
+        }
         // Llega o se va un residente de un campamento: cambia la demanda de bandidos de su anillo.
         for c in [antes, nueva].into_iter().flatten().filter_map(|r| if let Residencia::Campamento(c) = r { Some(c) } else { None }) {
             self.reprogramar_anillo(c, t);

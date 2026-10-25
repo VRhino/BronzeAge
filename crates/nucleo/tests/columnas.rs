@@ -3,6 +3,7 @@
 //! adjuntas, la desconexión con la columna, las convocatorias, y determinismo y recuperación desde foto. Sobre el artefacto de mundo real
 //! (`generador/salida/mundo/mundo-*.bin`); las pruebas se omiten si no está.
 
+mod comun;
 use asentamiento::Recurso::{self, *};
 use base::{Instante, Punto, MS_POR_MINUTO};
 use militar::catalogo::Tropa;
@@ -98,7 +99,8 @@ impl Escenario {
     fn peticion(&mut self, actor: &str, c: Comando) -> Peticion {
         self.cuenta += 1;
         let p = Peticion::nueva(actor, &format!("o{}", self.cuenta), c);
-        if actor == "admin" {
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
+        if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) {
             p.de_admin()
         } else {
             p
@@ -460,9 +462,8 @@ fn entrar_en_la_propia_residencia_deja_el_carro_con_el_heroe_y_en_otra_plaza_la_
     e.ok("beto", Comando::MarcharA { ejercito: cb, destino });
     let fin = e.ejercito(cb).plan.fin().unwrap();
     e.n.avanzar_hasta(fin);
-    // Un extranjero (Facción 2): por defecto la puerta solo se cierra a los enemigos, así que entraría; el dueño decide cerrarla a los neutrales (`fijarAcceso`).
+    // Un extranjero (Facción 2): la puerta por defecto está cerrada a neutrales y enemigos (Q1, 5E), así que no entra.
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: b, faccion: Some(2) });
-    e.ok("ana", Comando::FijarAcceso { asentamiento: a, aliados: true, neutrales: false, enemigos: false });
     assert_eq!(e.rechazada("beto", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: b }), rechazos::PUERTA_CERRADA);
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: b, faccion: Some(1) });
     e.ok("beto", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: b });

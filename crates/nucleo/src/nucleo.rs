@@ -47,6 +47,7 @@ mod auditoria;
 mod avanzadas;
 mod bandidos;
 mod batallas;
+mod cargos;
 mod columnas;
 mod combates;
 mod conquistas;
@@ -953,9 +954,12 @@ impl Nucleo {
             | Comando::EntrarEnAsentamiento { .. }
             | Comando::SalirDeAsentamiento { .. }
             | Comando::Guarnecer { .. }
-            | Comando::FijarAcceso { .. }
             | Comando::VaciarCarro { .. }
             | Comando::EntrarEnCampamento { .. } => match self.ejecutar_salidas(t, p) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::AsignarCargoLocal { .. } | Comando::FijarPuerta { .. } | Comando::FijarAcceso { .. } | Comando::VetarJugador { .. } => match self.ejecutar_cargos(t, p) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },

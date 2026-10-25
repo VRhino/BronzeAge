@@ -64,14 +64,19 @@ impl Nucleo {
 
     // ───────────────────────────── Órdenes ─────────────────────────────
 
-    /// La caravana, su posición en la flota y la plaza de su origen; el actor debe mandar en esa plaza (residente del origen, §11).
+    /// La caravana, su posición en la flota y la plaza de su origen, con la orden autorizada (Proyecciones §5.2.3-§5.2.4): quien reside en el origen y está dentro (`resideEnOrigen`) o, con la
+    /// caravana aparcada, quien reside en el origen y está dentro de la plaza donde está aparcada (`puedeOperarAparcada`).
     fn caravana_de_orden(&self, p: &Peticion, id: u64) -> Result<(usize, u64), Respuesta> {
         let v = self.estado.version;
         let i = self.estado.comercio.posicion_caravana(id).ok_or_else(|| Respuesta::rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(id), v))?;
         let origen = self.estado.comercio.flota[i].origen as u64;
-        let faccion = self.plaza_o_rechazo(origen)?.faccion;
-        if !self.manda_en(p, faccion) {
-            return Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, format!("no mandas en as-{origen}"), v));
+        self.plaza_o_rechazo(origen)?;
+        if p.comando.autoriza() == Autoriza::OperaAparcada {
+            // DUDA: sin aparcar (enviar al origen la que no lo está la rechaza la orden), la plaza donde hay que estar es su origen.
+            let donde = self.estado.comercio.flota[i].anfitriona.map_or(origen, u64::from);
+            self.autorizar_aparcada(p, origen, donde)?;
+        } else {
+            self.autorizar_en_plaza(p, origen, None)?;
         }
         Ok((i, origen))
     }
@@ -90,10 +95,9 @@ impl Nucleo {
         let desconocida = |id: u64| rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(id));
         match &p.comando {
             Comando::CrearCaravana { asentamiento } => {
-                let plaza = self.plaza_o_rechazo(*asentamiento)?;
-                if !self.manda_en(p, plaza.faccion) {
-                    return Err(rechazo(rechazos::NO_AUTORIZADO, format!("no mandas en as-{asentamiento}")));
-                }
+                self.plaza_o_rechazo(*asentamiento)?;
+                self.autorizar_en_plaza(p, *asentamiento, None)?;
+                let plaza = &self.estado.asentamientos[asentamiento];
                 let ctx = ContextoCrear {
                     mercado_activo: nivel_mercado(plaza).is_some(),
                     ultima_creada: self.estado.comercio.ultima_caravana.get(asentamiento).copied(),
@@ -181,8 +185,6 @@ impl Nucleo {
                 if c.estado != EstadoCaravana::Aparcada {
                     return Err(de_caravana(ErrorCaravana::NoAparcada));
                 }
-                // DUDA: el documento exige además estar presente en la plaza que la hospeda siendo residente del origen: sin héroes ni residencia,
-                // basta con mandar en el origen.
                 let Some(anfitriona) = c.anfitriona.map(u64::from) else { return Err(de_caravana(ErrorCaravana::NoAparcada)) };
                 self.plaza_o_rechazo(anfitriona)?;
                 let factor = self.factores_de(&self.estado.asentamientos[&origen]).capacidad;
