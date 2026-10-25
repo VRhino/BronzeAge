@@ -76,8 +76,8 @@ impl Esc {
         self.peticiones += 1;
         let p = Peticion::nueva(actor, &format!("prep{}", self.peticiones), c);
         let t = self.n.ahora();
-        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
-        let r = self.n.aplicar_en(t, if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) { p.de_admin() } else { p });
+        // 5I (5E-10): sin el andamiaje de `comun::mandaba`; cada cuenta da sus órdenes de plaza con la matriz real.
+        let r = self.n.aplicar_en(t, if actor == "admin" { p.de_admin() } else { p });
         assert!(r.aceptada() || r.resultado == Resultado::SinCambios, "{r:?}");
         r
     }

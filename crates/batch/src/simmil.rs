@@ -57,6 +57,8 @@ use std::collections::{BTreeMap, BTreeSet, BinaryHeap, VecDeque};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+pub(crate) mod pol;
+
 const MIN: i64 = MS_POR_MINUTO;
 const HORA: i64 = 60 * MIN;
 const DIA: i64 = 24 * HORA;
@@ -171,6 +173,10 @@ enum Accion {
     AntesDelAsedio { batalla: u64 },
     /// Acabó la convocatoria y el asedio se resolvió con números: se audita como una orden de ataque.
     FinDelAsedio { batalla: u64 },
+    /// Batch político: el turno de diplomacia de una Facción, la llegada de colonos (y las secesiones) y la llegada de una columna que va a refundar.
+    Diplomacia { faccion: u32 },
+    Colonos,
+    Refundar { tarea: usize },
 }
 
 /// Un asedio abierto que espera el fin de su convocatoria: quién lo abrió, con qué columna y contra qué plaza, y la foto de antes del combate.
@@ -290,6 +296,8 @@ pub struct Corrida {
     /// Hash del núcleo antes y después de la foto ida y vuelta, si se hizo.
     pub foto: Option<([u8; 32], [u8; 32])>,
     pub pared: Duration,
+    /// El batch político (5I): sus medidas e invariantes; `None` en el militar.
+    pub pol: Option<pol::Pol>,
 }
 
 struct Sim<'a> {
@@ -322,12 +330,19 @@ struct Sim<'a> {
     dir_foto: Option<PathBuf>,
     /// Batalla → el asedio con números que espera el fin de su convocatoria.
     asedios: BTreeMap<u64, AsedioAbierto>,
+    /// El batch político (5I): las Facciones y sus relaciones las llevan bots de diplomacia con las órdenes del contrato.
+    pol: Option<pol::Pol>,
 }
 
-/// El arranque del núcleo del batch militar: las reglas de siempre (con los bandidos), sin fotos automáticas.
-fn arranque(c: &Cargado, semilla: u64) -> Arranque {
+/// El arranque del núcleo del batch militar: las reglas de siempre (con los bandidos), sin fotos automáticas. `sin_nobleza` es el experimento del riesgo R1 del batch
+/// político (ninguna plaza llega a los residentes que pide la nobleza); el bloque no cambia.
+fn arranque(c: &Cargado, semilla: u64, sin_nobleza: bool) -> Arranque {
+    let mut reglas = Reglas::default();
+    if sin_nobleza {
+        std::sync::Arc::make_mut(&mut reglas.economia.datos).poblacion.min_ciudadanos_nobleza = u32::MAX;
+    }
     Arranque {
-        reglas: Reglas::default(),
+        reglas,
         ajustes: Ajustes { foto_cada: 0, latido_ms: 0, ..Ajustes::default() },
         semilla,
         inicio: 0,
@@ -340,13 +355,24 @@ fn arranque(c: &Cargado, semilla: u64) -> Arranque {
 /// Corre `plazas` plazas (en Facciones de `PLAZAS_POR_FACCION`) durante `dias` días de mundo. Con `foto`, a mitad de la corrida se serializa el núcleo, se
 /// reconstruye desde esa foto por la persistencia y se sigue con el reconstruido.
 pub fn simular(c: &Cargado, geo: &Geo, plazas: u32, dias: u32, semilla: u64, foto: bool) -> Corrida {
+    simular_con(c, geo, plazas, dias, semilla, foto, None)
+}
+
+/// El batch político (5I): la misma población de héroes bots que el militar, con las Facciones, la ciudadanía, la residencia, los cargos y las relaciones dados por bots de
+/// diplomacia con las órdenes del contrato (ver [`pol`]).
+pub fn simular_politica(c: &Cargado, geo: &Geo, plazas: u32, dias: u32, semilla: u64, foto: bool, ajustes: pol::Ajustes) -> Corrida {
+    simular_con(c, geo, plazas, dias, semilla, foto, Some(ajustes))
+}
+
+fn simular_con(c: &Cargado, geo: &Geo, plazas: u32, dias: u32, semilla: u64, foto: bool, politica: Option<pol::Ajustes>) -> Corrida {
     let t0 = Instant::now();
+    let sin_nobleza = politica.is_some_and(|a| !a.nobleza);
     let mut s = Sim {
-        n: Nucleo::nuevo(arranque(c, semilla)),
+        n: Nucleo::nuevo(arranque(c, semilla, sin_nobleza)),
         c,
         geo,
         semilla,
-        rng: Rng::derivado(semilla, "batch-militar"),
+        rng: Rng::derivado(semilla, if politica.is_some() { "batch-politica" } else { "batch-militar" }),
         fin: dias as i64 * DIA,
         cola: BinaryHeap::new(),
         acciones: Vec::new(),
@@ -368,6 +394,7 @@ pub fn simular(c: &Cargado, geo: &Geo, plazas: u32, dias: u32, semilla: u64, fot
         foto: None,
         dir_foto: None,
         asedios: BTreeMap::new(),
+        pol: politica.map(pol::Pol::nuevo),
     };
     s.fundar_todas(plazas);
     s.arrancar(foto);
@@ -391,6 +418,7 @@ pub fn simular(c: &Cargado, geo: &Geo, plazas: u32, dias: u32, semilla: u64, fot
         inesperadas: s.inesperadas,
         foto: s.foto,
         pared: t0.elapsed(),
+        pol: s.pol,
     }
 }
 
@@ -436,7 +464,13 @@ impl Sim<'_> {
 
     /// Una orden del héroe del bot `i` que tiene que aceptarse (el bot ya comprobó lo que exige): si se rechaza se anota en `inesperadas`, que el informe cuenta como invariante incumplido.
     fn esperada(&mut self, t: Instante, i: usize, etiqueta: &'static str, c: Comando) -> nucleo::Respuesta {
-        let r = self.suya(t, i, etiqueta, c);
+        let cuenta = self.bots[i].cuenta.clone();
+        self.segura(t, &cuenta, etiqueta, c)
+    }
+
+    /// Lo mismo que [`Sim::esperada`] con la cuenta que da la orden (la de un Rey, un colono o un héroe que no es ningún bot militar).
+    fn segura(&mut self, t: Instante, cuenta: &str, etiqueta: &'static str, c: Comando) -> nucleo::Respuesta {
+        let r = self.orden(t, cuenta, etiqueta, c);
         if let Resultado::Rechazada { codigo, .. } = &r.resultado {
             *self.inesperadas.entry((etiqueta, *codigo)).or_insert(0) += 1;
         }
@@ -470,11 +504,15 @@ impl Sim<'_> {
         self.facciones = plazas.div_ceil(PLAZAS_POR_FACCION);
         let mut propias: Vec<Vec<u64>> = vec![Vec::new(); self.facciones as usize];
         let tecnologias: Vec<String> = TECNOLOGIAS.iter().map(|t| t.to_string()).collect();
-        for f in 1..=self.facciones {
-            self.admin(0, "FijarNivelFaccion", Comando::FijarNivelFaccion { faccion: f, nivel: NIVEL_FACCION });
-            self.admin(0, "FijarTecnologias", Comando::FijarTecnologias { faccion: f, tecnologias: tecnologias.clone() });
-            if self.rng.por_debajo(100) < BELICOSA_PCT {
-                self.belicosas.insert(f);
+        if self.pol.is_some() {
+            self.pol_crear_facciones(&tecnologias);
+        } else {
+            for f in 1..=self.facciones {
+                self.admin(0, "FijarNivelFaccion", Comando::FijarNivelFaccion { faccion: f, nivel: NIVEL_FACCION });
+                self.admin(0, "FijarTecnologias", Comando::FijarTecnologias { faccion: f, tecnologias: tecnologias.clone() });
+                if self.rng.por_debajo(100) < BELICOSA_PCT {
+                    self.belicosas.insert(f);
+                }
             }
         }
         let mut minuto = 0;
@@ -500,10 +538,16 @@ impl Sim<'_> {
             // La columna de fundación entra en su plaza: su héroe de campo no es ningún bot.
             let lider = self.n.ejercito(columna).map(|e| e.columna.lider).unwrap_or(0);
             self.orden(t, &jugador(f), "Guarnecer", Comando::Guarnecer { asentamiento: id, heroe: lider });
+            if self.pol.is_some() && suyas.is_empty() {
+                self.pol_rey_en_su_plaza(t, f, id);
+            }
             propias[f as usize - 1].push(id);
             self.nacen_heroes(t, f, k, id, p);
         }
-        self.aliar_parejas(minuto * MIN);
+        // En el batch político las relaciones las deciden los bots de diplomacia.
+        if self.pol.is_none() {
+            self.aliar_parejas(minuto * MIN);
+        }
     }
 
     /// Las parejas aliadas (5D): ya no las fija la administración, sino las reglas reales. El Rey de la impar le propone la alianza al de la par, que la acepta. El Rey de cada Facción es el
@@ -529,9 +573,13 @@ impl Sim<'_> {
             let cuenta = format!("{}-p{k}-h{j}", jugador(f));
             let r = self.orden(t, &cuenta, "CrearHeroe", Comando::CrearHeroe { cuenta: cuenta.clone(), campamento, controlador: Controlador::Humano });
             let Some(&heroe) = r.creadas.first().filter(|_| r.aceptada()) else { continue };
-            self.admin(t, "FijarFaccionDeHeroe", Comando::FijarFaccionDeHeroe { heroe, faccion: Some(f) });
-            self.admin(t, "FijarResidencia", Comando::FijarResidencia { heroe, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
-            self.admin(t, "ColocarHeroe", Comando::ColocarHeroe { heroe, ubicacion: Ubicacion::Asentamiento(plaza as u32) });
+            if self.pol.is_some() {
+                self.pol_ingresar(t, f, heroe, &cuenta, plaza);
+            } else {
+                self.admin(t, "FijarFaccionDeHeroe", Comando::FijarFaccionDeHeroe { heroe, faccion: Some(f) });
+                self.admin(t, "FijarResidencia", Comando::FijarResidencia { heroe, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
+                self.admin(t, "ColocarHeroe", Comando::ColocarHeroe { heroe, ubicacion: Ubicacion::Asentamiento(plaza as u32) });
+            }
             let temerario = rol == Rol::Cazador && self.rng.por_debajo(100) < TEMERARIO_PCT;
             self.bots.push(Bot {
                 heroe,
@@ -559,6 +607,9 @@ impl Sim<'_> {
         if let Some(i) = self.bots.iter().rposition(|b| b.plaza == plaza && b.rol == Rol::Guardian) {
             self.nombrar_gobernador(t, i, plaza);
         }
+        if self.pol.is_some() {
+            self.pol_cargos_iniciales(t, plaza);
+        }
     }
 
     // ───────────────────────────── Bucle ─────────────────────────────
@@ -570,6 +621,9 @@ impl Sim<'_> {
             self.programar(t0 + (i as i64 % TURNO_MIN + 1) * MIN, Accion::Turno { bot: i, cita: None });
         }
         self.programar(t0 + OBSERVAR_MIN * MIN, Accion::Observar);
+        if self.pol.is_some() {
+            self.pol_arrancar(t0);
+        }
         if foto {
             self.programar(self.fin / 2, Accion::Foto);
         }
@@ -595,12 +649,18 @@ impl Sim<'_> {
                     }
                 }
                 Accion::FinDelAsedio { batalla } => self.fin_del_asedio(t, batalla),
+                Accion::Diplomacia { faccion } => self.pol_diplomacia(t, faccion),
+                Accion::Colonos => self.pol_colonos(t),
+                Accion::Refundar { tarea } => self.pol_llega_a_refundar(t, tarea),
             }
         }
         self.n.avanzar_hasta(self.fin);
         self.leer();
         self.muestrear(self.fin / DIA);
         self.comprobar(self.fin);
+        if self.pol.is_some() {
+            self.pol_observar(self.fin);
+        }
     }
 
     /// La foto `BAN35` ida y vuelta: se serializa el núcleo, se escribe como foto en un directorio de persistencia, se reconstruye desde él y se sigue con el
@@ -617,7 +677,8 @@ impl Sim<'_> {
             let almacen = persistencia::Almacen::abrir(&dir, persistencia::Config::default())?;
             almacen.fotos().guardar(&persistencia::Foto::nueva(0, self.n.ahora(), self.n.estado().serializar()))?;
             drop(almacen);
-            Nucleo::con_persistencia(arranque(self.c, self.semilla), &dir, persistencia::Config::default())
+            let sin_nobleza = self.pol.as_ref().is_some_and(|p| !p.ajustes.nobleza);
+            Nucleo::con_persistencia(arranque(self.c, self.semilla, sin_nobleza), &dir, persistencia::Config::default())
         })();
         let Ok(n) = rehecho else {
             self.militares.foto += 1;
@@ -645,9 +706,18 @@ impl Sim<'_> {
         }
     }
 
-    /// ¿Es `otra` una Facción a la que la de `yo` ataca? No a sí misma ni a un aliado; las pacíficas, solo a quien ya está en guerra con ellas.
+    /// La Facción de la que es ciudadano el héroe del bot `i` ahora (0 sin ninguna). En el batch militar no cambia nunca; en el político, con la anexión, la fusión y la secesión.
+    fn faccion_bot(&self, i: usize) -> u32 {
+        self.heroe(i).map_or(self.bots[i].faccion, |h| h.faccion.unwrap_or(0))
+    }
+
+    /// ¿Es `otra` una Facción a la que la de `yo` ataca? No a sí misma ni a un aliado; las pacíficas, solo a quien ya está en guerra con ellas. En el batch político, solo a quien
+    /// está en guerra con ella (la guerra la declaran los bots de diplomacia) o a la aliada que va a traicionar.
     fn enemiga(&self, yo: u32, otra: u32) -> bool {
         let rel = self.n.relacion(yo, otra);
+        if let Some(p) = &self.pol {
+            return otra != yo && otra != 0 && yo != 0 && (rel == Some(Relacion::Guerra) || p.traiciona(yo, otra, self.n.ahora()));
+        }
         otra != yo && otra != 0 && rel != Some(Relacion::Alianza) && (self.belicosas.contains(&yo) || rel == Some(Relacion::Guerra))
     }
 
@@ -730,6 +800,10 @@ impl Sim<'_> {
     // ───────────────────────────── El turno ─────────────────────────────
 
     fn turno(&mut self, t: Instante, i: usize) {
+        // Apartado por una tarea política (la columna que va a refundar): no hace nada más.
+        if self.pol.as_ref().is_some_and(|p| p.ocupado(i, t)) {
+            return;
+        }
         let Some(h) = self.heroe(i) else { return };
         let (ubicacion, residencia) = (h.heroe.presencia.ubicacion, h.heroe.residencia);
         match ubicacion {
@@ -738,6 +812,8 @@ impl Sim<'_> {
             Ubicacion::Columna(c) => self.en_columna(t, i, c),
             Ubicacion::Pueblo(x) => drop(self.suya(t, i, "SalirDePueblo", Comando::SalirDePueblo { pueblo: x, heroe: self.bots[i].heroe })),
             Ubicacion::Avanzada(x) => drop(self.suya(t, i, "SalirDeAvanzada", Comando::SalirDeAvanzada { avanzada: x, heroe: self.bots[i].heroe })),
+            // Batch político: el desalojado que ya se mudó a otra plaza de su Facción sale del campamento y vuelve a casa.
+            Ubicacion::Mercenarios(k) if self.pol.is_some() && self.casa(i).is_some() => self.pol_salir_del_campamento(t, i, k),
             Ubicacion::Mercenarios(_) | Ubicacion::Desconectado(_) => {}
         }
     }
@@ -880,6 +956,9 @@ impl Sim<'_> {
         if nivel >= 2 && recintos == 0 {
             self.suya(t, i, "ComprometerRecinto", Comando::ComprometerRecinto { asentamiento: p, cargo: Cargo::Gobernador, nivel: 1 });
         }
+        if self.pol.is_some() {
+            self.pol_plaza(t, i, p);
+        }
     }
 
     /// La leva (escalón 1) a la guarnición, mientras quepa en el cupo del héroe (puntos de Liderazgo).
@@ -969,7 +1048,7 @@ impl Sim<'_> {
         if !self.heroe(i).is_some_and(|h| h.heroe.presencia.ubicacion == Ubicacion::Asentamiento(p as u32)) {
             return;
         }
-        let f = self.bots[i].faccion;
+        let f = self.faccion_bot(i);
         let Some(conv) = self.n.convocatorias_del_lugar(Lugar::Asentamiento(p as u32)).iter().find(|c| c.faccion == f && !c.integrantes.iter().any(|x| x.heroe == self.bots[i].heroe)).map(|c| c.id) else { return };
         if self.rng.por_debajo(100) < SE_UNE_PCT {
             let (heroe, escuadras) = (self.bots[i].heroe, self.del_campamento(i));
@@ -1027,7 +1106,7 @@ impl Sim<'_> {
         if t < self.bots[i].proxima_caravana {
             return;
         }
-        let f = self.bots[i].faccion;
+        let f = self.faccion_bot(i);
         let Some(hermana) = self.n.plazas_de(f).filter(|a| a.id != p).min_by_key(|a| a.posicion.dist(posicion)).map(|a| a.id) else { return };
         let Some(caravana) = self.n.flota_de(p).iter().find(|k| k.estado == EstadoCaravana::Disponible && k.carros.iter().any(|x| x.animal.is_some())).map(|k| k.id) else { return };
         self.bots[i].proxima_caravana = t + CARAVANA_CADA_H * HORA;
@@ -1139,7 +1218,7 @@ impl Sim<'_> {
 
     /// Elige qué hacer fuera, según el papel.
     fn elegir(&mut self, t: Instante, i: usize, c: u64) {
-        let (rol, f) = (self.bots[i].rol, self.bots[i].faccion);
+        let (rol, f) = (self.bots[i].rol, self.faccion_bot(i));
         if self.bots[i].objetivos >= OBJETIVOS_POR_SALIDA || self.casa(i).is_none() || matches!(rol, Rol::Intendente | Rol::Guardian) {
             return self.volver(t, i, c);
         }
@@ -1272,7 +1351,12 @@ impl Sim<'_> {
             Meta::Aparcar { caravana, plaza } => {
                 // Solo se aparca dentro de la plaza (decisión del autor, 2026-10-24): el ejército entra con todo en la plaza hermana, la aparca, la manda a su origen y sale con lo suyo.
                 // Si la plaza ya no es de su Facción o la caravana ya no va con él (la perdió por el camino), no hay nada que aparcar.
-                let de_los_suyos = self.n.estado().asentamientos.get(&plaza).is_some_and(|a| a.faccion == self.bots[i].faccion);
+                // La hermana, y el origen de la caravana, siguen siendo de su Facción (en el batch político una plaza puede caer en ruinas o cambiar de Facción por el camino), y la
+                // hermana no es ya su casa (la ruina de la suya le reubica en ella).
+                let f = self.faccion_bot(i);
+                let suya = |id: u64| self.n.estado().asentamientos.get(&id).is_some_and(|a| a.faccion == f);
+                let origen = self.n.caravana(caravana).map_or(0, |k| k.origen as u64);
+                let de_los_suyos = suya(plaza) && suya(origen) && self.casa(i) != Some(plaza);
                 let la_lleva = self.n.ejercito(c).is_some_and(|e| e.caravanas_adjuntas.contains(&caravana));
                 if de_los_suyos && la_lleva && self.esperada(t, i, "GuarnecerHermana", Comando::Guarnecer { asentamiento: plaza, heroe }).aceptada() {
                     if self.esperada(t, i, "AparcarCaravana", Comando::AparcarCaravana { caravana, asentamiento: plaza }).aceptada() {
@@ -1329,9 +1413,9 @@ impl Sim<'_> {
     fn refuerzos(&self, t: Instante, i: usize, p: u64) -> Vec<(usize, u64)> {
         let Some(puerta) = self.n.estado().asentamientos.get(&p).map(|a| a.posicion) else { return vec![] };
         let radio = self.n.estado().reglas.economia.militar.logistica.radio_encuentro;
-        let yo = self.bots[i].faccion;
+        let yo = self.faccion_bot(i);
         (0..self.bots.len())
-            .filter(|&j| j != i && (self.bots[j].faccion == yo || self.n.relacion(yo, self.bots[j].faccion) == Some(Relacion::Alianza)))
+            .filter(|&j| j != i && (self.faccion_bot(j) == yo || self.n.relacion(yo, self.faccion_bot(j)) == Some(Relacion::Alianza)))
             .filter_map(|j| {
                 let col = self.n.estado().ejercito_de_heroe(self.bots[j].heroe)?;
                 let e = self.n.ejercito(col)?;
@@ -1364,13 +1448,19 @@ impl Sim<'_> {
 
     fn atacar(&mut self, t: Instante, i: usize, c: u64, obj: ObjetivoAtaque) {
         let heroe = self.bots[i].heroe;
-        let (yo, contra) = (self.bots[i].faccion, self.faccion_de(obj));
+        let (yo, contra) = (self.faccion_bot(i), self.faccion_de(obj));
         let declara_guerra = contra.is_some_and(|f| f != yo && self.n.relacion(yo, f) != Some(Relacion::Guerra));
         let antes = Antes::de(&self.n, c, obj);
         let solo = self.n.soldados_de_columna(c) == Some(0);
+        // Batch político: el arrastre que tiene que traer la guerra que declara este ataque (el de `guerra.confirmar`).
+        let esperado = contra.filter(|_| declara_guerra && self.pol.is_some()).map(|f| (yo, f, self.n.estado().politica.relaciones.arrastre(yo, f)));
+        let version = self.n.version();
         let r = self.suya(t, i, "Atacar", Comando::Atacar { heroe, objetivo: obj, declara_guerra });
         if !r.aceptada() {
             return;
+        }
+        if let Some(e) = esperado {
+            self.pol_tras_guerra(version, Some(e));
         }
         self.medidas.ataques_solos += (solo && matches!(obj, ObjetivoAtaque::Campamento(_))) as u64;
         if let ObjetivoAtaque::Asentamiento(p) = obj {
@@ -1409,7 +1499,7 @@ impl Sim<'_> {
 
     /// Lo que se mide de un ataque ya resuelto (por la orden o, en un asedio, al acabar la convocatoria).
     fn apuntar_combate(&mut self, t: Instante, i: usize, c: u64, obj: ObjetivoAtaque, ef: &auditmil::Efecto) {
-        let yo = self.bots[i].faccion;
+        let yo = self.faccion_bot(i);
         self.combate.sumar(&ef.v);
         let m = &mut self.medidas;
         ef.bajas_por_tropa.iter().for_each(|(&tr, &q)| *m.bajas_por_tropa.entry(tr).or_insert(0) += q);
@@ -1473,7 +1563,13 @@ impl Sim<'_> {
             return;
         }
         let heroe = self.bots[i].heroe;
-        if self.admin(t, "FijarResidencia", Comando::FijarResidencia { heroe, residencia: Some(Residencia::Asentamiento(p as u32)) }).aceptada() {
+        // En el batch político se muda con la orden real (con su cooldown).
+        let r = if self.pol.is_some() {
+            self.suya(t, i, "CambiarResidencia", Comando::CambiarResidencia { heroe, asentamiento: p })
+        } else {
+            self.admin(t, "FijarResidencia", Comando::FijarResidencia { heroe, residencia: Some(Residencia::Asentamiento(p as u32)) })
+        };
+        if r.aceptada() {
             self.volver(t, i, c);
         }
     }
@@ -1499,6 +1595,9 @@ impl Sim<'_> {
             self.muestrear(t / DIA);
         }
         self.comprobar(t);
+        if self.pol.is_some() {
+            self.pol_observar(t);
+        }
     }
 
     /// Lee los hechos nuevos del registro de cambios.
@@ -1510,11 +1609,14 @@ impl Sim<'_> {
         };
         let mut hechos = Vec::new();
         for c in cambios {
-            hechos.extend(c.eventos.iter().map(|e| (e.codigo.to_string(), e.en, e.ejercitos.clone(), e.asentamientos.clone(), e.datos.clone())));
+            hechos.extend(c.eventos.iter().map(|e| (e.codigo.to_string(), e.en, e.ejercitos.clone(), e.asentamientos.clone(), e.datos.clone(), e.valores.clone())));
             self.visto = c.version;
         }
-        for (codigo, t, ejercitos, plazas, datos) in hechos {
+        for (codigo, t, ejercitos, plazas, datos, valores) in hechos {
             self.hecho(&codigo, t, &ejercitos, &plazas, &datos);
+            if self.pol.is_some() {
+                self.pol_hecho(&codigo, t, &plazas, &datos, &valores);
+            }
         }
     }
 
@@ -1607,7 +1709,9 @@ impl Sim<'_> {
         // Una plaza en ruinas no deja nada atrás: ni flota, ni residentes, ni quien esté dentro.
         for &(_, p) in &self.medidas.ruinas {
             let (dentro, reside) = (Ubicacion::Asentamiento(p as u32), Some(Residencia::Asentamiento(p as u32)));
-            v.ruina += (e.asentamientos.contains_key(&p) || e.comercio.flota.iter().any(|k| k.origen as u64 == p) || n.heroes().any(|h| h.heroe.presencia.ubicacion == dentro || h.heroe.residencia == reside)) as u64;
+            // Las adjuntas a una columna (y las de construcción) siguen su camino: Comercio_Caravanas §10.
+            let flota = e.comercio.flota.iter().any(|k| k.origen as u64 == p && !matches!(k.estado, EstadoCaravana::Adjunta) && k.tipo != TipoCaravana::Construccion);
+            v.ruina += (e.asentamientos.contains_key(&p) || flota || n.heroes().any(|h| h.heroe.presencia.ubicacion == dentro || h.heroe.residencia == reside)) as u64;
         }
         // Las murallas dañadas por una conquista que ya se repararon.
         for (p, (_, reparada)) in self.medidas.murallas_danadas.iter_mut().filter(|(_, (_, r))| r.is_none()) {
@@ -1628,7 +1732,7 @@ impl Sim<'_> {
             en_guarnicion += s.cantidad * s.en_guarnicion as i64;
         }
         let vivas: BTreeSet<u32> = e.asentamientos.values().map(|a| a.faccion).collect();
-        let guerras = (1..=self.facciones).flat_map(|a| (a + 1..=self.facciones).map(move |b| (a, b))).filter(|&(a, b)| n.relacion(a, b) == Some(Relacion::Guerra)).count();
+        let guerras = e.politica.relaciones.activas().filter(|r| r.tipo == politica::relaciones::TipoRelacion::Guerra).count();
         let exiliados = self.bots.iter().filter(|b| n.heroe(b.heroe).is_some_and(|h| matches!(h.heroe.residencia, Some(Residencia::Campamento(_))))).count();
         self.muestras.push(Muestra {
             dia: dia as u32,

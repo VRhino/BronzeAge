@@ -8,6 +8,8 @@
 //!   el mapa, peajes, red de caminos, mercenarios y pueblos extractores con acarreo).
 //! - [`militar`] corre el de «militar y combate» (héroes bots que reclutan, salen, comen, persiguen, convocan y combaten con números contra columnas, caravanas,
 //!   bandidos, pueblos, avanzadas y plazas, con los invariantes del combate comprobados orden a orden).
+//! - [`politica`] corre el de «política y Facciones» (la población del militar con Facciones, ciudadanía, residencia, cargos, puerta, relaciones, tributo, capital, anexión,
+//!   fusión, refundación y títulos en manos de bots de diplomacia que solo dan órdenes del contrato, con los invariantes de la política comprobados en cada observación).
 //! - [`escribir`] deja `informe.json` e `informe.html` en una carpeta.
 //! - [`fundir_decisiones`] añade a mano el resumen, las anomalías y las decisiones tras leer los resultados.
 
@@ -15,6 +17,7 @@ mod armar;
 mod armarcom;
 mod armarmil;
 mod armarpob;
+mod armarpol;
 mod auditmil;
 mod auditoria;
 mod economia;
@@ -158,6 +161,38 @@ pub fn militar(c: &Cargado, e: &EscenarioMilitar) -> Informe {
         (a == b, a == foto)
     });
     armarmil::armar(&armarmil::Entrada { c, geo: &geo, e, corrida: &corrida, determinismo, pared_total: t0.elapsed() })
+}
+
+/// Parámetros del escenario político: los del militar y, como experimento del riesgo R1, la nobleza.
+#[derive(Clone, Debug)]
+pub struct EscenarioPolitica {
+    pub plazas: u32,
+    pub dias: u32,
+    pub semilla: u64,
+    /// Repite un escenario reducido (9 plazas y 2 días, o menos) dos veces (mismo hash) y una más con la foto ida y vuelta a mitad (mismo hash que sin ella).
+    pub verificar_determinismo: bool,
+    /// `false`: experimento sin nobleza (riesgo R1); las reglas no cambian.
+    pub nobleza: bool,
+}
+
+impl Default for EscenarioPolitica {
+    fn default() -> Self {
+        Self { plazas: 60, dias: 30, semilla: 42, verificar_determinismo: true, nobleza: true }
+    }
+}
+
+/// Corre el escenario político sobre el mundo y monta el informe. La corrida principal hace también la foto ida y vuelta a mitad de camino.
+pub fn politica(c: &Cargado, e: &EscenarioPolitica) -> Informe {
+    let t0 = Instant::now();
+    let geo = geo::Geo::de(&c.mundo);
+    let ajustes = simmil::pol::Ajustes { nobleza: e.nobleza };
+    let corrida = simmil::simular_politica(c, &geo, e.plazas, e.dias, e.semilla, true, ajustes);
+    let determinismo = e.verificar_determinismo.then(|| {
+        let reducida = |foto| simmil::huella(&simmil::simular_politica(c, &geo, e.plazas.min(9), e.dias.min(2), e.semilla, foto, ajustes));
+        let (a, b, foto) = (reducida(false), reducida(false), reducida(true));
+        (a == b, a == foto)
+    });
+    armarpol::armar(&armarpol::Entrada { c, geo: &geo, e, corrida: &corrida, determinismo, pared_total: t0.elapsed() })
 }
 
 /// 25 Facciones y 2 días, dos veces: ¿mismo `hash_estado()`?

@@ -102,6 +102,12 @@ impl Escenario {
     }
 }
 
+/// `BRONZEAGE_SIN_ANDAMIAJE=1` apaga [`mandaba`] y [`como_dueno`]: todas las órdenes de plaza pasan la matriz real (5E). Sirve para medir qué pruebas dependen todavía del andamiaje
+/// (5I, 5E-10): `BRONZEAGE_SIN_ANDAMIAJE=1 cargo test -p nucleo --no-fail-fast`.
+pub fn sin_andamiaje() -> bool {
+    std::env::var_os("BRONZEAGE_SIN_ANDAMIAJE").is_some()
+}
+
 /// Las reglas de `arranque`.
 pub fn reglas() -> Reglas {
     Reglas { viveres_bajos_pct: 1, ..Reglas::default() }
@@ -111,8 +117,12 @@ pub fn reglas() -> Reglas {
 /// plaza)? Entonces la orden de plaza —las que piden un cargo, residir y estar dentro o fijar la puerta— se da como administración: estas pruebas miden otra cosa y se escribieron con
 /// aquella regla (decisión 9 del plan del sistema 5: el andamiaje de administración se queda para montar escenarios). Quien no mandaba sigue siendo un jugador y la matriz real le rechaza.
 /// Quién puede darlas de verdad lo prueba `tests/cargos.rs`.
+///
+/// Revisado en 5I (2026-10-25, 5E-10): con [`sin_andamiaje`] fallan sin él 179 pruebas en 20 binarios (escenarios montados con «manda quien es ciudadano»: pasarlos a la regla
+/// real es nombrar Gobernador y Tesorero en cada uno); los 10 binarios que pasaban sin él ya no lo usan (`admin`, `ambitos`, `eventos`, `fundacion`, `niebla`, `ordenes_mundo`,
+/// `politica`, `reanudacion`, `taberna`, `vista`). La lista está en el plan del sistema 5, «Avance de 5I».
 pub fn mandaba(n: &Nucleo, actor: &str, c: &Comando) -> bool {
-    if actor == "admin" || !c.autoriza().es_de_plaza() {
+    if actor == "admin" || !c.autoriza().es_de_plaza() || sin_andamiaje() {
         return false;
     }
     // Unas ruinas de ciudadela sin dueño las repara un ciudadano de la Facción que tiene ahora su zona (la orden lo mira).
@@ -178,7 +188,8 @@ pub fn gobierna(n: &mut Nucleo, plaza: u64, heroe: u64) {
 }
 
 /// La puerta por relación de antes de 5E (lo que daba el alias `FijarAcceso`, retirado en 5H, 5E-12): cerrada a los grupos que van a `false` (aliados, neutrales, enemigos) y abierta a los
-/// demás, los Aedas incluidos. Es una `FijarPuerta` sin héroe: para darla como administración (o por una cuenta que mandaba, [`mandaba`]).
+/// demás, los Aedas incluidos. Es una `FijarPuerta` sin héroe: para darla como administración (o por una cuenta que mandaba, [`mandaba`]). Sigue siendo andamiaje (5I): sus
+/// escenarios meten visitantes neutrales; con la puerta real habría que aliar las Facciones, y eso cambia quién defiende.
 pub fn acceso(asentamiento: u64, aliados: bool, neutrales: bool, enemigos: bool) -> Comando {
     use politica::Grupo;
     let cerradas = [(Grupo::Aliados, aliados), (Grupo::Neutrales, neutrales), (Grupo::Enemigos, enemigos)].into_iter().filter(|(_, abierta)| !abierta).map(|(g, _)| g);
@@ -230,7 +241,7 @@ pub fn gobernador_de_oficio(n: &mut Nucleo, cuenta: &str, plaza: u64) -> u64 {
 /// Andamiaje de las pruebas cuya cuenta es siempre la dueña de la plaza (5E): sus órdenes de plaza se dan como administración, como si mandara con la regla de antes del sistema 5 (ver
 /// [`mandaba`]).
 pub fn como_dueno(p: Peticion) -> Peticion {
-    if p.comando.autoriza().es_de_plaza() {
+    if p.comando.autoriza().es_de_plaza() && !sin_andamiaje() {
         p.de_admin()
     } else {
         p

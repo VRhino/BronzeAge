@@ -164,6 +164,21 @@ Cerradas como regla y sin medida pendiente: el choque en campo abierto conserva 
 
 Desde 5C el mantenimiento de una plaza sube con su distancia a la capital de su Facción: `× (1 + distancia / escalaDistancia)`, con `escalaDistancia` = 80 u (`Economia_Construccion.md` §10.1). A 80 u paga el doble; a 300 u, ×4,75; a 1.000 u, ×13,5 y cae en ruinas en un día. **Decisión del autor del 2026-10-24 (5C-2): sin cambio ahora; se calibra en 5I, con el batch político.** Lo que dio `batch comercio` (160 plazas pedidas, 146 colocadas, 30 días, semilla 42; Facciones de seis plazas a 30-70 u unas de otras, nivel 8, cap 6): plazas vivas al final 146 → 140, comprobaciones de ascenso insolventes 0 → 3.319, plazas en nivel 2 al final 114 → 108, trueques cumplidos 136 → 125, caravanas 390 → 338 (8 perdidas por plazas arruinadas), el acarreo pasa del 2,0 % al 9,8 % de la solvencia. Desde las correcciones de 5C (5C-1), conquistar una plaza no cambia la capital del conquistador: la conquistada, si queda lejos de ella, paga la distancia (en la prueba de la flota, a 1.500 u, cae en horas). Medir en 5I, con Facciones de bots que funden y conquisten de verdad, cuánto se puede alejar una plaza de su capital antes de no poder pagarse.
 
+**Medido en 5I (2026-10-25, `batch politica` y `batch comercio`, 30 días, semilla 42; pregunta P1 de `crates/batch/decisiones/politica.json`).** Con 80 u lineal, en el batch político (Facciones que se fusionan y se anexionan) caen en ruinas 21 de 60 plazas, todas lejos de su capital (distancia mediana 1.048 u, ×14), con el multiplicador mediano al final en ×8,3 (p90 ×17,1); en el de comercio (plazas a 30-70 u) el multiplicador mediano es ×1,78 (p90 ×2,30), con 3.319 comprobaciones de ascenso insolventes y 141 plazas vivas de 146. Tres curvas probadas **como experimento local** (el bloque no cambia; el binario del experimento llevaba `asentamiento::mantenimiento::coste` parcheado y se revirtió):
+
+| Curva | Político: vivas / ruinas | Político: multiplicador mediano (p90) | Político: nivel 2 | Comercio: vivas / insolventes | Comercio: multiplicador mediano (p90) |
+|---|---|---|---|---|---|
+| Lineal 80 u (hoy) | 40 / 21 | ×8,3 (×17,1) | 20 | 141 / 3.319 | ×1,78 (×2,30) |
+| Lineal con tope ×3 | 55 / 6 | ×3,0 (×3,0) | 24 | 141 / 3.319 | ×1,78 (×2,30) |
+| **Raíz `1 + √(d/80)`** (recomendada) | 57 / 4 | ×1,95 (×4,5) | 24 | 141 / 664 | ×1,88 (×2,15) |
+| Lineal 200 u | 57 / 3 | ×1,34 (×5,7) | 26 | 145 / 0 | ×1,31 (×1,56) |
+
+La raíz deja igual la expansión cercana (×2 a 80 u) y quita la ruina automática de las uniones y conquistas lejanas (×4,5 a 1.000 u). **Decide el autor.**
+
+## 49. Política: lo que mide el batch político (5I, 2026-10-25)
+
+`batch politica` (60 plazas, 30 días, semilla 42 dos veces con la misma huella y semilla 7; informe en `batch/salida/politica/`, preguntas en `crates/batch/decisiones/politica.json`). Para el autor, además de la distancia (§48, P1): **P2** los títulos cambian de manos 215 veces en 30 días (Ejército más grande 131): ¿un margen para cambiar de manos?; **P3** la Gran Fundición no se alcanza en 30 días (capital de nivel 4); **P4** el cupo de plazas de nivel 2 de una Facción de nivel 3 rechaza 5.134 ascensos; **P5** la nobleza (riesgo R1) aparece en las 18 plazas con Palacio (1.422 nobles, +6,6 % de población, ningún cambio en ruinas ni niveles frente al experimento sin nobleza); **P6** la reputación no sube nunca (mediana 0, mínima −46,5; 38 propuestas de alianza rechazadas por reputación baja: la EE-7 vista desde la política); **P7** la caravana adjunta de una plaza arruinada queda enganchada para siempre; **P8** refundar solo cuesta más de un día (almacén personal lleno, cupo diario de madera del campamento); **P9** si `batch militar` y `batch comercio` pasan a las órdenes reales de ciudadanía y residencia.
+
 ## 30. El batch no ejercita la guerra
 
 Con 30 bots, semilla 7, 120 960 ticks (y 60 480 con trigo ×3) el batch sale idéntico antes y después del trabajo de batallas del 2026-10-06, con cero campañas: los bots no hacen la guerra con este equilibrio, así que persecución, botín repartido, salidas y formación de ejércitos solo los cubren los tests. Para medirlos haría falta un checkpoint de Era II en adelante (los guardados hoy son del formato 1) o bots más belicosos. Ficha: `typescript-final:Consideraciones/Batalla_Este_Lado_Definicion.md`.

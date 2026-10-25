@@ -835,3 +835,74 @@ Hecha sobre `5d1c859` (las decisiones del autor sobre 5E y 5F), rama `tanda-5h`.
 7. **`FijarAcceso`**: se retiró del núcleo y del registro (un 117 ya no se lee); en el `.proto` no había nada que marcar como `reserved`, porque el alias nunca fue una orden del contrato.
 8. **`PropuestaResuelta`** también tipa la `diplomacia.relacion_aceptada` de una relación que fija la administración, sin `propuesta_id`.
 9. **El héroe público** (`HeroePublico`, `VISTA`) sigue sin `faccion_id`: la Facción de lo que se ve va en su columna.
+
+## Avance de 5I (2026-10-25): el batch político
+
+Hecha sobre `12b1f21` (5H, foto `BAN35`), rama `tanda-5i`. Sin cambio de foto, de esquema ni de reglas: el núcleo no cambió. Código en `crates/batch/src/simmil/pol.rs` (los bots y los invariantes) y `crates/batch/src/armarpol.rs` (el informe); prueba corta en `crates/batch/tests/politica.rs`; conclusiones y preguntas en `crates/batch/decisiones/politica.json`.
+
+**Diseño**
+- **`batch politica [--plazas 60] [--dias 30] [--semilla 42] [--nobleza 1]`** es un modo del batch militar (`simmil::simular_politica`): la misma población (tres plazas por Facción, cuatro héroes bots por plaza con sus papeles, combates con números y todos los invariantes del militar), con la política en manos de **bots de diplomacia deterministas** que solo dan órdenes del contrato. El militar sin el modo da la misma huella que antes (6605fff2…).
+- **Al nacer:** el Rey de cada Facción es un héroe del campamento que da `CrearFaccion` y se muda a su primera plaza (`CambiarResidencia`); los cuatro héroes de cada plaza piden el ingreso (`SolicitarIngreso`), el Rey los acepta (`ResponderSolicitud`) y se mudan; el Rey nombra Gobernador al Guardián y Embajador a un Intendente, y el Gobernador nombra Tesorero, General, Maestro de Obras y Sacerdote. El andamiaje que queda: el nivel de partida (`FijarNivelFaccion` a 3: cap 3 y una plaza de nivel 2), la Era I (`FijarTecnologias`, sistema 6), la colonia de cada plaza (`crear_ejercito` + `DarCaravanaFundacion`) y colocar a cada héroe dentro al nacer (`ColocarHeroe`).
+- **Cada 4 h, el turno de cada Facción** (su Rey, o su Embajador la mitad de las veces que la orden lo deja): contesta las solicitudes (admite el 80 %) y las propuestas (alianza 70 %; vasallaje 75 % si es más débil; anexión 25 % sin plazas, 50 % de su señora; fusión 30 %), firma o propone la paz (pasadas 48 h), se rebela si es vasalla y más fuerte que su señora, designa capital al tener una plaza con Palacio (que no sea ya la efectiva), nombra Embajador si le falta, refunda si no tiene plazas y toma como mucho **una iniciativa** con pesos: guerra (las belicosas: la mitad de las veces contra quien tiene un título, si no la mitad contra una que está en un vasallaje, si no la vecina más cercana), alianza (con una de las 4 vecinas), vasallaje con 0,5 de trigo por minuto, anexión (las ambiciosas, de Facciones sin plazas o de sus vasallas), fusión, romper una alianza, liberar a una vasalla, traición (las traicioneras: sus Capitanes atacan a su aliada con `declara_guerra` durante 3 días, Q2), pasar la corona o cambiar la admisión de otras Facciones en sus ataques.
+- **Los Capitanes y Cazadores** solo atacan a quien está en guerra con su Facción (o a la aliada que traicionan); quien conquista se muda con `CambiarResidencia`. **El Gobernador** pide además el Palacio y la Gran Fundición, repone los cargos vacíos con residentes, abre o cierra la puerta a los neutrales, veta y levanta vetos y abre el almacén a las aliadas.
+- **Colonos y secesión:** cada 12 h nace un héroe que pide entrar en dos Facciones con plazas y, admitido, se muda a la plaza suya con menos residentes (también los desalojados, que luego salen del campamento y vuelven a casa). Una vez al día, con el 30 %, un Cazador de una Facción grande la deja (`DejarFaccion`) y, pasado el cooldown, crea la suya.
+- **Refundación** de una Facción sin plazas: junta el fondo en el campamento de su Rey (`AportarARefundacion` del almacén personal; lo que falta lo compra con su oro, `ComprarEnCampamento`; sin oro, uno de los suyos sale a cazar los bandidos del anillo, Cal-5, y vacía el carro en su almacén), compra la Caravana de Refundación, la engancha a su ejército (`SalirDelCampamento`, `AdjuntarCaravana`), marcha a un sitio y funda; los suyos que residen en campamentos se mudan a la plaza nueva.
+
+**Invariantes** (todos a 0 con las semillas 42 y 7): `inv_ciudadania` (un héroe en una sola Facción, la misma en el héroe y en la Facción), `inv_rey` (Rey y Embajador entre los ciudadanos; toda Facción con ciudadanos tiene Rey), `inv_cargos` (cargos locales de residentes ciudadanos de la dueña), `inv_relaciones` (una activa por par, el índice de la activa, una señora por vasalla), `inv_arrastre` (tras cada `DeclararGuerra`, `RebelionVasallo` y `Atacar` con `declara_guerra`: el hecho existe, el bando entero queda en guerra con el atacante y las arrastradas son las de `guerra.confirmar` antes de la orden), `inv_tributo` (cada pago: pagado ≥ recibido, de un vasallaje con tributo de esa vasalla; lo pagado por vasallaje no pasa de lo pactado por minuto; lo perdido es la diferencia), `inv_reputacion` (sin un suceso ni una relación suya —ni el cruce del 0— la reputación sigue el ritmo anterior, con 10 millonésimas de punto de tolerancia por el redondeo de reanclar; ningún suceso pasa del mayor del bloque; nunca fuera de ±100), `inv_traslado` (en cada anexión o fusión aceptada, en el mismo instante: recursos de plazas, pueblos, almacenes personales, carros, columnas, flota, Caravanas de Fundación y fondos, héroes, escuadras, soldados, plazas y caravanas; los ciudadanos y las plazas de la que queda son la unión, cada ciudadano con su Facción, la que desaparece ya no existe), `inv_ids_faccion` (ninguna desaparecida vuelve; la de una fusión no toma un id visto), `inv_xp_faccion` (la experiencia no baja) e `inv_rechazos` (las órdenes que el bot da por seguras: nacer, cargos, Embajador, capital, paz, denegar solicitudes y rechazar propuestas, comprar la caravana, engancharla), más los 23 del militar, la foto `BAN35` de ida y vuelta a mitad de la corrida y la reproducción.
+
+**Fallos encontrados y arreglados** (del batch, no del núcleo):
+1. `inv_ruina` del batch militar contaba como «flota que queda» la caravana **adjunta** a una columna cuya plaza de origen cae en ruinas; Comercio §10 dice que las adjuntas siguen su camino. Ahora no la cuenta (en el militar no había ocurrido nunca).
+2. El Intendente aparcaba en la plaza hermana sin mirar si el origen de su caravana seguía siendo de su Facción ni si la hermana se había vuelto su casa (la ruina de la suya le reubica en ella): dos rechazos en `inv_rechazos`. Ahora lo mira.
+3. El bot designaba capital la plaza que ya era la efectiva (`capital.ya_es_la_capital`, 106 rechazos en la primera corrida). Arreglado en el bot.
+4. El invariante de reputación daba un falso positivo de una millonésima de punto: reanclar el ritmo fuera de un minuto entero (la cita del umbral bajo) redondea. Se tolera y se anota (no es un fallo del núcleo; ver «Dudas»).
+
+**Corridas** (release, 60 plazas × 30 días; el árbol de `12b1f21` contra el de 5I, mismo artefacto de mundo):
+
+| Batch | Antes (`12b1f21`) | 5I | Lo que cambia |
+|---|---|---|---|
+| `batch politica`, semilla 42 (dos veces) | — | huella 404e0eac… las dos veces; 0 violaciones; 8,0 / 8,3 s de CPU por día de mundo; 1.002.622 eventos y 327.740 órdenes | nuevo |
+| `batch politica`, semilla 7 | — | huella 0c37d781…; 0 violaciones; 7,8 s por día | nuevo |
+| `batch militar`, semilla 42 | huella 6605fff2…, 93 métricas de juego | **la misma huella y las 93 iguales**; CPU 10,2 → 9,9 s por día | nada de juego |
+| `batch comercio`, semilla 42 | 101 métricas de juego | **las 101 iguales**; métrica nueva `multiplicador_distancia` (×1,78, p90 ×2,30) | pared 84,9 → 90,3 s |
+| `batch poblacion`, semilla 42 | 86 métricas de juego | **las 86 iguales** | pared 48,9 → 48,6 s |
+
+| Medida (`batch politica`) | Semilla 42 | Semilla 7 |
+|---|---|---|
+| Facciones creadas / al final / con plazas | 25 / 11 / 11 | 28 / 14 / 12 |
+| Ingresos aceptados (colonos nacidos) / mudanzas / residentes por plaza al final | 285 (59) / 310 / 9,1 | 283 (59) / 310 / 6,6 |
+| Cargos locales / Reyes (traspasos) / Embajadores | 383 / 28 / 21 | 392 / 39 / 24 |
+| Puertas fijadas / vetos / expulsados | 408 / 112 / 4 | 530 / 111 / 5 |
+| Alianzas / vasallajes / guerras (arrastradas) | 104 / 22 / 27 (3) | 155 / 23 / 32 (5) |
+| Traiciones (planeadas) / paces / alianzas rotas / liberaciones / rebeliones | 1 (13) / 13 / 76 / 7 / 10 | 0 (1) / 21 / 117 / 11 / 10 |
+| Tributo pagado / perdido (u) | 32.833 / 0 | 26.599 / 0 |
+| Reputación final: mediana / mínima | 0 / −46,5 | 0 / −45,0 |
+| Anexiones / fusiones (plazas en Facciones nuevas) | 7 / 7 (45) | 7 / 7 (40) |
+| Derrotadas / refundadas (tiempo sin plazas) / secesiones | 0 / 1 (1 día) / 7 | 1 / 3 (1 día) / 13 |
+| Títulos: nacen / cambian de manos | 5 / 215 | 11 / 202 |
+| Nivel de Facción mediano (máximo), desde 3 | 5 (6) | 4 (5) |
+| Capitales designadas / plazas con Palacio / nobles | 9 / 18 / 1.422 | 9 / 19 / 1.501 |
+| Plazas vivas / ruinas (lejos de su capital) / multiplicador por distancia mediano (p90) | 40 / 21 (21) / ×8,3 (×17,1) | 54 / 8 (8) / ×2,1 (×15,5) |
+
+**La distancia a la capital (5C-2, P1).** Experimento local (el bloque no cambia: un binario aparte con `asentamiento::mantenimiento::coste` parcheado, revertido), semilla 42:
+
+| Curva | Político: vivas / ruinas | Político: multiplicador mediano (p90) | Comercio: vivas / insolventes | Comercio: multiplicador mediano (p90) |
+|---|---|---|---|---|
+| Lineal 80 u (hoy) | 40 / 21 | ×8,3 (×17,1) | 141 / 3.319 | ×1,78 (×2,30) |
+| Tope ×3 | 55 / 6 | ×3,0 (×3,0) | 141 / 3.319 | ×1,78 (×2,30) |
+| **Raíz `1 + √(d/80)`** (recomendada) | 57 / 4 | ×1,95 (×4,5) | 141 / 664 | ×1,88 (×2,15) |
+| Lineal 200 u | 57 / 3 | ×1,34 (×5,7) | 145 / 0 | ×1,31 (×1,56) |
+
+**La nobleza (riesgo R1, P5).** Con los héroes residiendo en las plazas aparece en toda plaza con Palacio activo (18, 1.422 nobles). Frente a la misma corrida sin nobleza (`--nobleza 0`): población final 26.732 frente a 25.075 (+6,6 %; sin los nobles, +0,9 %), plazas vivas 40 frente a 39, ruinas 21 en las dos, nivel 2 en 20 en las dos. `batch poblacion` no cambia (sus plazas no tienen residentes).
+
+**El andamiaje de las pruebas antiguas (5E-10).** `tests/comun::sin_andamiaje` (`BRONZEAGE_SIN_ANDAMIAJE=1`) apaga `mandaba` y `como_dueno` para medir quién depende todavía de ellos: sin ellos fallan 179 de 539 pruebas del núcleo en 20 binarios (`pueblos` 27, `avanzadas` 29, `caravanas` 21, `comercio` 16, `batallas` 13, `murallas` 12, `murallas_asedio` 11, `combate` 11, `asentamientos` 10, `entrar` 8, `batalla_unity` 7, `a_mano` 6 y uno en `anexion_fusion`, `cambios`, `columnas`, `diplomacia`, `heroes`, `interior`, `propios` y `urbanismo`). En los **10 binarios que pasan sin él** (`admin`, `ambitos`, `eventos`, `fundacion`, `niebla`, `ordenes_mundo`, `politica`, `reanudacion`, `taberna` y `vista`) se quitó: sus órdenes de plaza pasan ya la matriz real. Lo que sigue siendo andamiaje, documentado en `comun/mod.rs` y en la fila de paridad «Política (5I)»: `mandaba`/`como_dueno` en los 20 binarios de arriba (montan escenarios donde «manda quien es ciudadano»; reescribirlos con cargos de verdad es nombrar Gobernador y Tesorero en cada escenario), la puerta de antes abierta a los neutrales (`comun::acceso`, 42 usos en 7 binarios: sus visitantes son neutrales; con la regla real habría que aliar las Facciones, y eso cambia quién defiende) y los cargos dados por la administración (`gobierna`, `gobernador_de_oficio`, `coloca_avanzadas`).
+
+**Pruebas.** `cargo test --workspace --no-fail-fast`: **96 resultados, 1.450 pruebas en verde, 14 ignoradas** (+2: `tests/politica.rs`, con los invariantes y la reproducción de un escenario corto). Auditoría (`BRONZEAGE_AUDITAR_CAMBIOS=1 cargo test -p nucleo -- --skip rendimiento`): **45 resultados, 539 pruebas, 0 fallos**. Las pruebas de sesión no se repitieron 20 veces: la tanda no toca sesión, proyecciones, hechos ni contrato (decisión del autor).
+
+**Dudas para el autor** (las de calibración son P1-P9 de `politica.json`):
+1. **La reputación redondea al reanclar**: la cita del umbral bajo reancla el ritmo en un instante que no es un minuto entero y el valor se desvía una millonésima de punto. Sin efecto de juego; ¿se deja?
+2. **La caravana adjunta de una plaza arruinada** queda enganchada para siempre (P7).
+3. **Los batches militar y de comercio** siguen con `FijarFaccionDeHeroe`/`FijarResidencia` al nacer, para no romper su comparación (P9).
+
+## Estado de cierre del sistema 5 (2026-10-25)
+
+Hecho: las reglas puras (5A), la Facción, la ciudadanía y la residencia (5B), la experiencia, el nivel, la capital, la derrota y el nombre (5C), las relaciones (5D), los cargos, la matriz de autorización y la puerta (5E), la anexión, la fusión, el traslado, la Liga y los títulos (5F), la refundación, el almacén personal y las caravanas a mano (5G), el contrato y las proyecciones (5H, foto `BAN35`) y el batch político (5I). Las 28 órdenes de política y las 10 de 5G están en el contrato; solo quedan `orden.no_disponible` las cinco del sistema 6. **Pendiente del autor:** las decisiones de calibración P1-P9 del batch político (la distancia a la capital la primera), las dudas abiertas de 5H (forma pública de la Facción ajena, coste por orden con 500 vistas) y de 5I. **Pendiente de otros sistemas:** los Aedas residentes, las épicas y la tecnología de la fusión y el título «Mecenas de los Aedas» (sistema 6); que la columna se deshaga dentro al fundar (fila de 5G-b); el andamiaje de las pruebas antiguas (arriba). Siguiente: el sistema 6.

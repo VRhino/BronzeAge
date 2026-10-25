@@ -326,7 +326,18 @@ fn pueblos(x: &Entrada) -> Vec<Metrica> {
         metrica("plazas_nivel3_fin", "Plazas de nivel 3 o más al final", "plazas", INFO, Some((3..=5).map(por_nivel).sum()), "Doc 4.5", "La Facción de nivel 8 da cupo de 3 plazas de nivel 2; el nivel 3 pide además edificios que el jugador no construye (Barracón, Galería de tiro)."),
         metrica("misiones_terminadas_pct", "Viajes de columna que terminan de vuelta en la plaza", "%", min(90.0), pct(c.misiones.values().map(|m| m.1 as usize).sum(), c.misiones.values().map(|m| m.0 as usize).sum()), "Movimiento_Ejercitos (marchas) y Comercio_Caravanas §9", &format!("Viajes de la columna al campamento (y a la obra o al mostrador) lanzados y terminados: {}.", c.misiones.iter().map(|(k, m)| format!("{k} {}/{}", m.1, m.0)).collect::<Vec<_>>().join(", "))),
         metrica("ascenso_insolvente", "Peticiones de ascenso rechazadas por insolvencia", "peticiones", INFO, Some(insolvente), "Economia_Construccion §11.2 (solvencia)", "Desde C2 el acarreo cuenta por lo que ingresa en la madre en las últimas 24 h: un pueblo cuyo acarreo se pierde contra un almacén lleno ya no hace solvente a nadie."),
+        multiplicador_distancia(x),
     ]
+}
+
+/// 5I (5C-2): el multiplicador del mantenimiento por la distancia a la capital de las plazas que no son su capital, al final.
+fn multiplicador_distancia(x: &Entrada) -> Metrica {
+    let (n, e) = (&x.corrida.nucleo, x.corrida.nucleo.estado());
+    let escala = e.reglas.economia.datos.mantenimiento.escala_distancia.max(1) as f64;
+    let v: Vec<f64> = e.asentamientos.values().filter_map(|a| n.capital_de(a.faccion).filter(|&c| c != a.id).and_then(|c| e.asentamientos.get(&c)).map(|c| 1.0 + a.posicion.dist(c.posicion) as f64 / escala)).collect();
+    let (p90, maximo) = (percentil(&mut v.clone(), 0.9), v.iter().copied().fold(0.0, f64::max));
+    let nota = format!("De las {} plazas que no son su capital (`× (1 + distancia / escalaDistancia)`, 80 u); percentil 90 {}, máximo {maximo:.2}.", v.len(), p90.map_or("—".into(), |p| format!("{p:.2}")));
+    metrica("multiplicador_distancia", "Multiplicador del mantenimiento por la distancia a la capital (mediana, al final)", "×", INFO, mediana(&v), "Economia_Construccion §10.1 (5C-2)", &nota)
 }
 
 fn invariantes(x: &Entrada) -> Vec<Metrica> {

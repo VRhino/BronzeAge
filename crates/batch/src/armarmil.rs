@@ -399,7 +399,7 @@ fn mapa(x: &Entrada) -> Mapa {
 }
 
 /// Anomalías automáticas: solo violaciones de invariante y de determinismo.
-fn anomalias(metricas: &[Metrica]) -> Vec<Anomalia> {
+pub(crate) fn anomalias(metricas: &[Metrica]) -> Vec<Anomalia> {
     metricas
         .iter()
         .filter(|m| m.id.starts_with("inv_") || m.id.starts_with("determinismo"))
