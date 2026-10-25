@@ -471,9 +471,10 @@ llega y cuenta como pendiente. `contrato` (1): el significado de los dos dorados
 3. **Quién escribe**: el hilo de las fotos (ahora de la persistencia), no el núcleo, que es quien sincroniza el registro de órdenes y lo hace en el camino de la orden. Así la orden no espera al
    disco de la crónica y el orden respecto de las fotos sale del canal.
 4. **Un fallo al escribir la crónica deja de hacer fotos** en vez de abortar como el registro de órdenes: el mundo sigue y al reiniciar se rehace lo que falte; el precio es una repetición más
-   larga. ¿O prefieres que pare el servidor?
+   larga. **Decidido por el autor (2026-10-25): se queda así.**
 5. **La historia perdida antes de la foto** (el diario borrado o dañado antes de ella) solo se avisa: no hay herramienta para recomponerla, y no siempre se podría, porque `compactar` borra los
-   segmentos del registro de órdenes anteriores a la foto más antigua. ¿Hace falta conservar el registro entero para eso?
+   segmentos del registro de órdenes anteriores a la foto más antigua. **Decidido por el autor (2026-10-25): lo más eficiente para el servidor, así que
+   `compactar` sigue borrando y no se conserva el registro entero; la historia anterior a la foto más antigua solo existe en el diario.**
 6. **Una página puede pasar del límite** si su primera versión tiene más entradas que el límite (va entera para no partirla); en la práctica una versión trae pocas.
 7. **Sin persistencia no se guarda** (pruebas y batch): las páginas van vacías. El batch político y el militar, que comprueban la foto de ida y vuelta abriendo un núcleo persistente sobre una
    foto suelta, reciben el aviso `DiarioPerdido` (no lo miran).
