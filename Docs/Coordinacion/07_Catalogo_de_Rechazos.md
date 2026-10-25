@@ -573,4 +573,13 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `cargo.no_reside` | `CARGO_NO_RESIDE` | El designado para un cargo local no reside en la plaza (Q4: solo se designa a quien reside). |
 | `cargo.sin_gobernador` | `CARGO_SIN_GOBERNADOR` | Tesorero, General, Maestro de Obras y Sacerdote se designan cuando la plaza ya tiene Gobernador. |
 | `puerta.residente` | `PUERTA_RESIDENTE` | A un residente de la plaza no se le veta (sería el exilio). |
+
+### Los alijos (sistema 6, tanda 6F; Generacion_Del_Mundo §12)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `alijo.desconocido` | `ALIJO_DESCONOCIDO` | El id no es el de ningún alijo del artefacto de mundo. |
+| `alijo.no_puedes_buscar` | `ALIJO_NO_PUEDES_BUSCAR` | Los alijos solo los abre un héroe sin Facción o de una Facción sin plazas. |
+| `alijo.ya_abierto` | `ALIJO_YA_ABIERTO` | Cada héroe abre cada alijo una sola vez. |
+| `alijo.lejos` | `ALIJO_LEJOS` | Hay que estar en el sitio: la columna del héroe, en el mapa, a `radioPuerta` del alijo. |
 <!-- /rechazos -->

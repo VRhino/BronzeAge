@@ -1,6 +1,6 @@
 //! La política en el contrato (sistema 5, tanda 5H): las propuestas en `FACCION` de las dos Facciones (y en `ADMIN`), que salen con `QUITA` al contestarlas, retirarlas o podarlas; la Liga en
 //! cada Facción miembro, que cambia con sus relaciones; la ciudadanía y las solicitudes propias en el `Heroe`; la forma pública de las demás Facciones en `VISTA`; los fundadores de cada plaza
-//! (estado nuevo, foto `BAN35`) y los ocho hechos políticos tipados. Lo que llega por el WebSocket real lo prueba el cliente de ejemplo (`tests/cliente_de_ejemplo.rs`). Sobre el artefacto de
+//! (estado nuevo, foto `BAN36`) y los ocho hechos políticos tipados. Lo que llega por el WebSocket real lo prueba el cliente de ejemplo (`tests/cliente_de_ejemplo.rs`). Sobre el artefacto de
 //! mundo real; se omiten si no está.
 
 mod comun;
@@ -183,7 +183,7 @@ fn el_heroe_lleva_su_faccion_y_sus_solicitudes_y_la_vista_la_forma_publica_de_la
     assert!(propios::faccion(&e.n, f2).experiencia > 0, "la entera sí la lleva");
 }
 
-// ───────────────────────────── Los fundadores (BAN35) ─────────────────────────────
+// ───────────────────────────── Los fundadores (BAN36) ─────────────────────────────
 
 #[test]
 fn los_fundadores_viajan_en_la_plaza_dejan_de_serlo_al_mudarse_y_van_en_la_foto_ban35() {
@@ -205,10 +205,10 @@ fn los_fundadores_viajan_en_la_plaza_dejan_de_serlo_al_mudarse_y_van_en_la_foto_
     let Some(Cuerpo::Asentamiento(ficha)) = e.existe(Clase::Asentamiento, plaza) else { panic!("la ficha") };
     assert_eq!(ficha.fundadores_ids.len(), 2);
     assert!(nucleo::proyeccion::vista::plaza_avistada(&e.n, plaza).fundadores_ids.is_empty(), "quién la fundó no se ve desde fuera");
-    // La foto BAN35 los lleva y mueven el hash; BAN34 se rechaza con su motivo.
+    // La foto (BAN35, hoy BAN36) los lleva y mueven el hash; BAN34 se rechaza con su motivo.
     let (reglas, hash) = (Reglas::default(), m.0.hash().to_string());
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN35");
+    assert_eq!(&bytes[..5], b"BAN36");
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     assert_eq!((s.asentamientos[&plaza].fundadores.clone(), s.hash()), (vec![gus, ana], e.n.hash_estado()));
     let mut otro = Estado::deserializar(&bytes, &reglas, &hash).unwrap();

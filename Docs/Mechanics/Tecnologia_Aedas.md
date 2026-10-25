@@ -1430,7 +1430,7 @@ Ninguna abierta. Las **Eras IV y V** son diseño a medias aún sin implementar (
 
 ## Catálogo de eventos
 
-Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. De estos, aún no se emiten 15 (`aedas.canta_descubrimiento`, `aedas.epica_abandonada`, `aedas.epica_capitulo`, `aedas.epica_cumplida`, `aedas.epica_empieza`, `aedas.epica_tecnologia`, `aedas.residente_llega`, `aedas.residente_se_va`, `aedas.revela`, `aedas.venta`, `alijo.abierto`, `era.comienza`, `tecnologia.adoptada`, `tecnologia.aparece`, `tecnologia.logro`).
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. De estos, aún no se emiten 14 (`aedas.canta_descubrimiento`, `aedas.epica_abandonada`, `aedas.epica_capitulo`, `aedas.epica_cumplida`, `aedas.epica_empieza`, `aedas.epica_tecnologia`, `aedas.residente_llega`, `aedas.residente_se_va`, `aedas.revela`, `aedas.venta`, `era.comienza`, `tecnologia.adoptada`, `tecnologia.aparece`, `tecnologia.logro`).
 
 <!-- eventos -->
 ```json

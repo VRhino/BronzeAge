@@ -356,3 +356,22 @@ Recomendada: **A** (con B el umbral pendiente de cada contador dice qué logro f
 6. **Q6 Qué ve todo el mundo del avance:** los logros cumplidos y la Era, como el TypeScript; los contadores en curso, solo la administración. → 6G.
 
 Las 17 decisiones de §7 quedan como decisiones técnicas del agente, sin objeción del autor por ahora.
+
+## Avance de 6F (2026-10-25, rama `tanda-6f`, foto `BAN36`)
+
+Hecha en paralelo con 6A (el crate `tecnologia`) y con la crónica con todo su historial, sobre `7ab7986` (foto `BAN35`): los alijos no dependen de la tecnología.
+
+**Diseño.**
+- **Reglas puras** en `crates/nucleo/src/alijos.rs` (`puede_buscar`, `a_la_vista`, `abrir`, `oro`), sin nada del núcleo, para moverlas tal cual al crate `tecnologia` al integrar 6A (la parte de alijos de 6A, si la escribe, se unifica con esta).
+- **El artefacto** (55 alijos en el de hoy) se lee una vez en la geografía del núcleo (`nucleo/alijos.rs`, `AlijosDelMundo`): id de cadena, posición y oro en milésimas, con una rejilla de 10 u. La rejilla es la de la economía (`economia::Rejilla`, ahora `pub(crate)`): no hacía falta otra. La de encuentros no sirve (es de móviles con plan). No es estado: no entra en la foto.
+- **Estado:** `HeroeNucleo::alijos_abiertos: BTreeSet<u32>` (índices del artefacto), en el códec del héroe tras `residencia_cambiada_en`. Foto `BAN36`; `BAN35` se rechaza con su motivo.
+- **Orden:** `AbrirAlijo { heroe, alijo }`, **174** (el siguiente libre tras el 173), `Autoriza::CuentaDelHeroe`, implica al héroe (candado de batalla). Rechazos en este orden: `alijo.desconocido`, `alijo.no_puedes_buscar`, `alijo.ya_abierto`, `alijo.lejos` (también sin columna en el mapa). El oro va en unidades enteras hacia abajo al carro con `cargar_botin_en`; lo que no cabe se pierde y el alijo queda abierto igual (decisión 10). Hecho `alijo.abierto { heroe, oro, cargado }` con `alijo` = id del artefacto en `valores`, para el héroe y los participantes de su columna.
+- **«A la vista»:** la consulta `Nucleo::alijos_a_la_vista(heroe, t)` (si puede buscar, columna en el mapa a `VISION.jugadorSolo`, sin abrir). Su proyección en `HEROE`, renovada en el muestreo, es de 6G y no se hizo.
+- **Contrato:** `abrir_alijo` mapeada (el héroe de la cuenta; `alijo_id` es el id del artefacto, resuelto por `Consulta::alijo`; uno desconocido se rechaza sin rastro), su fila en la matriz de Proy §5.1 (y la de §5.2 sacada de las de campamento, C7), cuatro rechazos en el catálogo, `Heroe.alijos_abiertos = 22` (ya estaba en el esquema) lleno en `HEROE` y `ADMIN`, dos dorados nuevos (`orden_abrir_alijo`, `foto_heroe_con_alijos_abiertos`). Sin cambio de esquema: `buf breaking` limpio. Quedan 4 órdenes `orden.no_disponible` (tecnología y Aedas).
+- **Sin tick:** abrir no programa nada y un alijo no tiene cita; la prueba lo mira con la longitud de la cola.
+
+**Pruebas** (`crates/nucleo/tests/alijos.rs`, 5; 4 unitarias en `alijos.rs`): ver y abrir una vez por héroe, otro héroe abre el mismo, cada rechazo sin rastro (también con plaza en la Facción), el carro casi lleno y lleno (conservación: entra exactamente lo cargado), la foto `BAN36` ida y vuelta con el hash y `BAN35` rechazada, y por el WebSocket real: abrir, el héroe con su alijo en `HEROE` y en `ADMIN`, `alijo.ya_abierto` y `alijo.desconocido`.
+
+**Cifras.** `cargo test --workspace --no-fail-fast`: 1.462 pruebas en verde, 12 ignoradas, 0 fallos (97 resultados de prueba). Auditoría (`BRONZEAGE_AUDITAR_CAMBIOS=1 cargo test -p nucleo -- --skip rendimiento`): 549 sin fallos. Las pruebas de sesión (los 15 binarios con pruebas por el WebSocket real, 101 pruebas) 20 veces seguidas: 2.020 sin un fallo. `buf lint` y `buf breaking` limpios; dorados verdes en Rust, C# (83) y TypeScript (83). El paso de minuto no se midió: la tanda no lo toca.
+
+**Dudas para el autor (6F).** (1) `alijo.lejos` también cuando el héroe no va en una columna en el mapa (dentro de un lugar no se abre, como el TypeScript). (2) El hecho lo oyen el héroe y los participantes de su columna, porque el oro entra en el carro común. (3) Un alijo desconocido se rechaza en la traducción del contrato, sin pasar por el núcleo, como los demás ids.

@@ -155,6 +155,7 @@ pub fn heroe(n: &Nucleo, h: &HeroeNucleo) -> pb::Heroe {
         racion_en_ms: h.heroe.racion_en,
         viveres: Some(constante(base::entero_arriba(h.heroe.viveres))), // en unidades enteras: la que se está comiendo sigue hasta acabarse (EE-3)
         bandidos_destruidos_en_ms: e.combate.destruidos.get(&h.heroe.id).cloned().unwrap_or_default(),
+        alijos_abiertos: h.alijos_abiertos.iter().filter_map(|&i| n.alijo(i).map(|a| a.id.clone())).collect(), // los ids del artefacto (6F)
         herido_hasta_ms: h.heroe.herido_hasta,
         desconecta_en_ms: h.heroe.presencia.desconecta_en,
         fuera_carro: con_algo(&h.carro),

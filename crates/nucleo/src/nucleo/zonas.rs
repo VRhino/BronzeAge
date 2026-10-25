@@ -20,11 +20,13 @@ pub(crate) struct Geografia {
     mundo: Arc<Mundo>,
     /// Parcelas, nodos y campamentos con su rejilla de búsqueda (los comparte la economía de las plazas).
     pub(super) mapa: Arc<Mapa>,
+    /// Los alijos del artefacto con su rejilla (6F).
+    pub(super) alijos: super::alijos::AlijosDelMundo,
 }
 
 impl Geografia {
     pub(crate) fn de(mundo: Arc<Mundo>) -> Self {
-        Self { mapa: Mapa::de(&mundo), mundo }
+        Self { mapa: Mapa::de(&mundo), alijos: super::alijos::AlijosDelMundo::de(&mundo), mundo }
     }
 
     /// Ancho y alto del mapa, en milésimas.

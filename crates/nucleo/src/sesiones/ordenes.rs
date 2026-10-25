@@ -7,7 +7,7 @@
 //!   batalla de un UUID.
 //! - Un id que no tiene la forma de su entidad se rechaza con el código de «desconocida» de esa entidad (`heroe.desconocido`…); un valor fuera de un catálogo cerrado (recurso, tropa,
 //!   cargo, política, tipo de carro…), con `orden.forma_invalida`. Lo demás (que la entidad exista, las cantidades) lo valida el núcleo.
-//! - Las órdenes del contrato que el núcleo aún no tiene (la política salvo la Facción, la ciudadanía, la residencia, la capital, el nombre y las relaciones de 5B-5D, tecnología, Aedas y refundación) se rechazan con
+//! - Las órdenes del contrato que el núcleo aún no tiene (la tecnología y los Aedas del sistema 6; los alijos llegaron en 6F) se rechazan con
 //!   `orden.no_disponible`; ninguna se descarta en silencio. El `match` sobre `Cuerpo` no tiene comodín: una orden nueva del contrato no compila hasta clasificarla.
 //!
 //! La tabla orden ↔ comando, con lo que cada una ignora, está en `Docs/Mechanics/Comandos_Parametros.md`.
@@ -54,6 +54,8 @@ pub trait Consulta {
     fn obra(&self, id: u64) -> Option<Obra>;
     /// El id del núcleo de una batalla por su UUID.
     fn batalla(&self, uuid: &str) -> Option<u64>;
+    /// El índice de un alijo del artefacto por su id (el del contrato).
+    fn alijo(&self, id: &str) -> Option<u32>;
 }
 
 impl Consulta for Nucleo {
@@ -80,6 +82,9 @@ impl Consulta for Nucleo {
     }
     fn batalla(&self, uuid: &str) -> Option<u64> {
         self.id_de_batalla(uuid)
+    }
+    fn alijo(&self, id: &str) -> Option<u32> {
+        self.alijo_por_id(id)
     }
 }
 
@@ -187,6 +192,9 @@ impl Ctx<'_> {
     }
     fn batalla(&self, uuid: &str) -> R<u64> {
         self.mundo.batalla(uuid).ok_or_else(|| self.no(rechazos::BATALLA_NO_EXISTE, uuid))
+    }
+    fn alijo(&self, id: &str) -> R<u32> {
+        self.mundo.alijo(id).ok_or_else(|| self.no(rechazos::ALIJO_DESCONOCIDO, id))
     }
 
     /// `ed-<plaza>-<n>`: el edificio `n` de esa plaza.
@@ -687,8 +695,8 @@ impl Ctx<'_> {
             Cuerpo::AdoptarTecnologia(_)
             | Cuerpo::EmpezarEpica(_)
             | Cuerpo::AbandonarEpica(_)
-            | Cuerpo::ComprarTecnologiaAeda(_)
-            | Cuerpo::AbrirAlijo(_) => return self.no_disponible("tecnología, Aedas y alijos (sistema 6)"),
+            | Cuerpo::ComprarTecnologiaAeda(_) => return self.no_disponible("tecnología y Aedas (sistema 6)"),
+            Cuerpo::AbrirAlijo(o) => Comando::AbrirAlijo { heroe: self.mi_heroe()?, alijo: self.alijo(&o.alijo_id)? },
             Cuerpo::ComprarMirada(o) => Comando::ComprarMirada { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, centro: self.punto(o.centro.as_ref())? },
             Cuerpo::ComprarInformePlaza(o) => {
                 Comando::ComprarInformePlaza { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, asentamiento: self.plaza(&o.asentamiento_id)? }
