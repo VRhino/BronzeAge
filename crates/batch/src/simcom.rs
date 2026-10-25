@@ -144,6 +144,8 @@ pub struct Corrida {
     pub viajes_por_obra: Vec<u32>,
     /// Misiones de columna (pueblo, cupo, minerales) lanzadas y terminadas.
     pub misiones: BTreeMap<&'static str, (u32, u32)>,
+    /// La vía de juego de la tecnología (6H): turnos de una capital con algo aparecido sin adoptar y el Rey fuera de ella.
+    pub adopcion_rey_fuera: u64,
     pub pared: Duration,
 }
 
@@ -221,6 +223,7 @@ struct Sim<'a> {
     violaciones: Violaciones,
     viajes_por_obra: Vec<u32>,
     misiones: BTreeMap<&'static str, (u32, u32)>,
+    adopcion_rey_fuera: u64,
 }
 
 fn jugador(f: u32) -> String {
@@ -276,6 +279,7 @@ pub fn simular(c: &Cargado, geo: &Geo, plazas: u32, dias: u32, semilla: u64, con
         violaciones: Violaciones::default(),
         viajes_por_obra: Vec::new(),
         misiones: BTreeMap::new(),
+        adopcion_rey_fuera: 0,
     };
     s.fundar_todas(plazas);
     s.arrancar();
@@ -298,6 +302,7 @@ pub fn simular(c: &Cargado, geo: &Geo, plazas: u32, dias: u32, semilla: u64, con
         balance_minerales,
         viajes_por_obra: s.viajes_por_obra,
         misiones: s.misiones,
+        adopcion_rey_fuera: s.adopcion_rey_fuera,
         pared: t0.elapsed(),
     }
 }
@@ -477,12 +482,45 @@ impl Sim<'_> {
         if t % (ASCENSO_CADA_MIN * MIN) < TURNO_MIN * MIN {
             self.orden(t, &gobernador(id), "SolicitarAscenso", Comando::SolicitarAscenso { asentamiento: id });
         }
+        self.adoptar(t, id);
         if self.control {
             return;
         }
         self.flota(t, id);
         self.proponer(t, id);
         self.pueblo(t, id);
+    }
+
+    /// La vía de juego de la tecnología (6H, como en `batch militar`): si la plaza es la capital efectiva de su Facción y le ha aparecido algo sin adoptar, su Rey lo adopta con la orden
+    /// real, dentro de la capital y con la tarifa de su almacén. Aquí el Rey (el héroe de la fundación) va en la columna de la plaza, a la puerta, y la necesita para sus misiones: la primera
+    /// vez le pasa la corona (`AsignarRey`) al Gobernador de oficio de la capital, que reside y está dentro. Si tampoco así hay Rey dentro, se cuenta y se espera.
+    fn adoptar(&mut self, t: Instante, p: u64) {
+        let f = self.n.estado().asentamientos[&p].faccion;
+        if self.n.capital_de(f) != Some(p) {
+            return;
+        }
+        let r = self.n.estado().reglas.economia.tecnologia.clone();
+        let propias = self.n.tecnologia().de(&r, f);
+        let pendientes: Vec<tecnologia::TecId> = propias.aparecidas.iter().filter(|&x| !propias.adoptadas.contiene(x)).collect();
+        let rey_de = |n: &Nucleo| n.faccion(f).and_then(|x| x.rey).and_then(|h| n.heroe(h).map(|x| (h, x.cuenta.clone())));
+        let Some((mut rey, mut cuenta)) = rey_de(&self.n).filter(|_| !pendientes.is_empty()) else { return };
+        let dentro = |n: &Nucleo, h: u64| n.heroe(h).map(|x| x.heroe.presencia.ubicacion) == Some(Ubicacion::Asentamiento(p as u32));
+        if !dentro(&self.n, rey) {
+            let gobernador = self.n.estado().asentamientos[&p].cargos.titular(asentamiento::Cargo::Gobernador).filter(|&g| dentro(&self.n, g));
+            let paso = gobernador.is_some_and(|designado| self.orden(t, &cuenta, "PasarLaCorona", Comando::AsignarRey { heroe: rey, faccion: f, designado }).aceptada());
+            match rey_de(&self.n).filter(|&(h, _)| paso && dentro(&self.n, h)) {
+                Some(nuevo) => (rey, cuenta) = nuevo,
+                None => {
+                    self.adopcion_rey_fuera += 1;
+                    return;
+                }
+            }
+        }
+        for x in pendientes {
+            if self.n.estado().asentamientos[&p].economia.almacen.tiene(r.tarifa(x)) {
+                self.orden(t, &cuenta, "AdoptarTecnologia", Comando::AdoptarTecnologia { heroe: rey, faccion: f, tecnologia: x });
+            }
+        }
     }
 
     /// Construye el Mercado cuando sobra madera y monta la caravana de la plaza (2 carros con buey) cuando el Mercado está activo.

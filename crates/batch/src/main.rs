@@ -3,8 +3,9 @@
 //! `batch poblacion  [--mundo <.bin>] [--plazas 300]    [--dias 30] [--semilla 42] [--salida batch/salida/poblacion]  [--decisiones <.json>] [--murallas 1]`
 //! `batch militar    [--mundo <.bin>] [--plazas 60]     [--dias 30] [--semilla 42] [--salida batch/salida/militar]    [--decisiones <.json>]
 //! `batch politica   [--mundo <.bin>] [--plazas 60]     [--dias 30] [--semilla 42] [--salida batch/salida/politica]   [--decisiones <.json>] [--nobleza 1]`
+//! `batch tecnologia [--mundo <.bin>] [--plazas 60]     [--dias 42] [--semilla 42] [--salida batch/salida/tecnologia] [--decisiones <.json>] [--escala-logros 1]`
 
-use batch::{artefacto_en, cargar, carpeta_por_defecto, comercio, escribir, fundir_decisiones, militar, poblacion_y_ciudad, politica, resumen_en_texto, territorio, Escenario, EscenarioComercio, EscenarioMilitar, EscenarioPoblacion, EscenarioPolitica, Informe};
+use batch::{artefacto_en, cargar, carpeta_por_defecto, comercio, escribir, fundir_decisiones, militar, poblacion_y_ciudad, politica, resumen_en_texto, tecnologia, territorio, Escenario, EscenarioComercio, EscenarioMilitar, EscenarioPoblacion, EscenarioPolitica, EscenarioTecnologia, Informe};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
@@ -16,6 +17,7 @@ enum Sistema {
     Comercio,
     Militar,
     Politica,
+    Tecnologia,
 }
 
 struct Opciones {
@@ -30,6 +32,8 @@ struct Opciones {
     murallas: bool,
     /// Solo política: 0 = experimento sin nobleza (riesgo R1).
     nobleza: bool,
+    /// Solo tecnología: los umbrales de los logros divididos por esto (1 = los del TypeScript).
+    escala_logros: u64,
 }
 
 fn opciones(sistema: Sistema, args: &[String]) -> Result<Opciones, String> {
@@ -39,9 +43,11 @@ fn opciones(sistema: Sistema, args: &[String]) -> Result<Opciones, String> {
         Sistema::Comercio => (EscenarioComercio::default().plazas, "batch/salida/comercio"),
         Sistema::Militar => (EscenarioMilitar::default().plazas, "batch/salida/militar"),
         Sistema::Politica => (EscenarioPolitica::default().plazas, "batch/salida/politica"),
+        Sistema::Tecnologia => (EscenarioTecnologia::default().plazas, "batch/salida/tecnologia"),
     };
     let nombre_cantidad = if sistema == Sistema::Territorio { "--facciones" } else { "--plazas" };
-    let mut o = Opciones { mundo: None, cantidad, dias: 30, semilla: 42, salida: PathBuf::from(salida), decisiones: None, murallas: true, nobleza: true };
+    let dias = if sistema == Sistema::Tecnologia { EscenarioTecnologia::default().dias } else { 30 };
+    let mut o = Opciones { mundo: None, cantidad, dias, semilla: 42, salida: PathBuf::from(salida), decisiones: None, murallas: true, nobleza: true, escala_logros: 1 };
     let mut it = args.iter();
     while let Some(clave) = it.next() {
         let valor = it.next().ok_or(format!("falta el valor de {clave}"))?;
@@ -55,6 +61,7 @@ fn opciones(sistema: Sistema, args: &[String]) -> Result<Opciones, String> {
             "--decisiones" => o.decisiones = Some(valor.into()),
             "--murallas" if sistema == Sistema::Poblacion => o.murallas = numero(valor)? != 0,
             "--nobleza" if sistema == Sistema::Politica => o.nobleza = numero(valor)? != 0,
+            "--escala-logros" if sistema == Sistema::Tecnologia => o.escala_logros = numero(valor)?.max(1),
             otro => return Err(format!("opción desconocida: {otro}")),
         }
     }
@@ -94,6 +101,10 @@ fn ejecutar(sistema: Sistema, args: &[String]) -> Result<(), String> {
             println!("Cargado en {:.1} s; simulando {} plazas con sus Facciones y sus héroes durante {} días...", t0.elapsed().as_secs_f64(), o.cantidad, o.dias);
             politica(&mundo, &EscenarioPolitica { plazas: o.cantidad, dias: o.dias, semilla: o.semilla, nobleza: o.nobleza, ..EscenarioPolitica::default() })
         }
+        Sistema::Tecnologia => {
+            println!("Cargado en {:.1} s; simulando {} plazas con su tecnología durante {} días...", t0.elapsed().as_secs_f64(), o.cantidad, o.dias);
+            tecnologia(&mundo, &EscenarioTecnologia { plazas: o.cantidad, dias: o.dias, semilla: o.semilla, escala_logros: o.escala_logros, ..EscenarioTecnologia::default() })
+        }
     };
     let mut informe = informe;
     if let Some(d) = o.decisiones {
@@ -120,7 +131,8 @@ fn main() -> ExitCode {
         Some((cmd, resto)) if cmd == "comercio" => ejecutar(Sistema::Comercio, resto),
         Some((cmd, resto)) if cmd == "militar" => ejecutar(Sistema::Militar, resto),
         Some((cmd, resto)) if cmd == "politica" => ejecutar(Sistema::Politica, resto),
-        _ => Err("uso: batch territorio|poblacion|comercio|militar|politica [--mundo <.bin>] [--facciones|--plazas N] [--dias 30] [--semilla 42] [--salida <dir>] [--decisiones <.json>]".into()),
+        Some((cmd, resto)) if cmd == "tecnologia" => ejecutar(Sistema::Tecnologia, resto),
+        _ => Err("uso: batch territorio|poblacion|comercio|militar|politica|tecnologia [--mundo <.bin>] [--facciones|--plazas N] [--dias 30] [--semilla 42] [--salida <dir>] [--decisiones <.json>]".into()),
     };
     match resultado {
         Ok(()) => ExitCode::SUCCESS,

@@ -22,9 +22,9 @@
 //!   marcha a un sitio y funda; los suyos que residen en campamentos se mudan a la plaza nueva.
 //!
 //! # Andamiaje de administración que queda
-//! El nivel de partida de cada Facción (`FijarNivelFaccion` a `NIVEL_INICIAL`: «Facciones con historia», luego sube sola con la experiencia), las tecnologías de la Era I
-//! (`FijarTecnologias`, sistema 6), la colonia de cada plaza (`crear_ejercito` + `DarCaravanaFundacion`, como en el militar) y la colocación de cada héroe dentro de su plaza al
-//! nacer (`ColocarHeroe`). Decisión 9 del plan del sistema 5.
+//! El nivel de partida de cada Facción (`FijarNivelFaccion` a `NIVEL_INICIAL`: «Facciones con historia», luego sube sola con la experiencia), la colonia de cada plaza
+//! (`crear_ejercito` + `DarCaravanaFundacion`, como en el militar) y la colocación de cada héroe dentro de su plaza al nacer (`ColocarHeroe`). Decisión 9 del plan del sistema 5.
+//! Las tecnologías van por la vía de juego desde 6H (el Rey adopta en su capital lo que aparece: `Sim::adoptar`).
 //!
 //! # Invariantes (todos a 0)
 //! Ciudadanía única y la misma en el héroe y en la Facción; Rey (y Embajador) entre los ciudadanos; cargos locales de residentes ciudadanos de la dueña; una relación activa por
@@ -327,8 +327,8 @@ impl Sim<'_> {
 
     // ───────────────────────────── El nacimiento ─────────────────────────────
 
-    /// Las Facciones nacen con la orden real: un héroe del campamento de su primera plaza da `CrearFaccion` y es su Rey. Luego, el andamiaje: nivel de partida y Era I.
-    pub(super) fn pol_crear_facciones(&mut self, tecnologias: &[String]) {
+    /// Las Facciones nacen con la orden real: un héroe del campamento de su primera plaza da `CrearFaccion` y es su Rey. Luego, el andamiaje: el nivel de partida.
+    pub(super) fn pol_crear_facciones(&mut self) {
         for k in 1..=self.facciones {
             let campamento = (k as usize % self.geo.campamentos.len()) as u32;
             let cuenta = format!("{}-rey", jugador(k));
@@ -340,7 +340,6 @@ impl Sim<'_> {
                 continue;
             }
             self.admin(0, "FijarNivelFaccion", Comando::FijarNivelFaccion { faccion: k, nivel: NIVEL_INICIAL });
-            self.admin(0, "FijarTecnologias", Comando::FijarTecnologias { faccion: k, tecnologias: tecnologias.to_vec() });
             if self.rng.por_debajo(100) < BELICOSA_PCT {
                 self.belicosas.insert(k);
             }

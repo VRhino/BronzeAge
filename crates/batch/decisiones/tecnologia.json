@@ -1,0 +1,95 @@
+{
+  "resumen": "Batch tecnológico (6H, 2026-10-26, foto `BAN40`, sin cambio de reglas ni de esquema). La población del batch político (60 plazas, cuatro héroes bots por plaza, bots de diplomacia) con bots de tecnología que solo dan órdenes del contrato: el Rey adopta dentro de su capital (y va a ella desde otra plaza suya), el Gobernador de la capital construye hacia los hitos, los de cada plaza compran a los Aedas lo que revelan, les cierran y abren la puerta y encargan épicas, y seis buscadores sin Facción abren alijos y reclutan en su campamento. **No se calibra (Q3)**: las X de los logros, la velocidad y la estancia de los Aedas son las del TypeScript. 42 días (seis semanas: el plazo de la Era I es de cinco), semillas 42 (dos veces, la misma huella aa3c74a0…) y 7 (ff6d80d0…), y el experimento `--escala-logros 1000` (umbrales entre mil) con las mismas semillas (42 dos veces, 06fd3920…; 7, 15f2179b…): **0 violaciones en los 12 invariantes del sistema 6** (logro, contadores, adoptadas, Era cerrada, mínimo y plazo de la Era, compra sin logro, épicas, doble cuenta con el asedio con números (D18), itinerantes, puerta, alijos, crónica guardada) ni en los 33 del político y el militar; `inv_rechazos` 0; foto `BAN40` de ida y vuelta (en el directorio de la partida, con la crónica) igual; la crónica guardada es exactamente la emitida (192 y 199 entradas). Con las X del TS (semilla 42 / 7): la Era II empieza **por plazo el día 35** en las dos (la III, nunca en 42 días); logros de la Era I: carros de guerra 3,1 / 4,7, arquería palacial 4,6 / 5,6, armamento palacial 5,5 / 5,5, metalurgia del cobre 15,6 / 22,2, cantería 18,7 / 20,2, cría caballar 24,6 / nunca, escudos ligeros 26,0 / nunca y aleación del bronce nunca (no se extrae estaño: T2); de las Eras II y III solo cumple el suyo carpintería militar en otras corridas; 72 / 39 adopciones, 90 / 46 tecnologías aparecidas (8 / 6 compradas a los Aedas, 0 por épica), 51 / 41 Aedas residentes, 95 / 72 épicas empezadas y **ninguna cumplida** (T1), 30 alijos abiertos (114 u de oro en total, T3), 80 soldados reclutados en campamentos. Los batches militar, político y de comercio pasan a la vía de juego (sin `FijarTecnologias`): ver la comparación en el plan del sistema 6 («Avance de 6H»).",
+  "anomalias": [
+    {
+      "titulo": "Ninguna épica se cumple",
+      "detalle": "En las cuatro corridas (42 días) se empiezan entre 72 y 147 épicas, se cierran 1-28 capítulos y no se cumple ninguna: el primer capítulo de casi todas es la obra del mismo edificio que pide el hito de su tecnología, así que al terminarla la tecnología aparece por el hito (su logro ya está cumplido: es condición para empezar la épica) y la épica se pierde (`aparecida`, 5-16 por corrida); las que quedan esperan defensas, conquistas o el ascenso al nivel 3, que esta población casi no da, y se abandonan atascadas a los 4 días (48-102). Ver T1.",
+      "causa": "diseno"
+    },
+    {
+      "titulo": "La Era I siempre pasa por plazo: no se extrae estaño",
+      "detalle": "`extraido.estano` queda a 0 en las seis corridas (también con los umbrales entre mil): las plazas casi nunca tienen un nodo de estaño en su zona y los bots solo marcan 1-2 minas. Sin el logro de la aleación del bronce la Era I no completa sus logros y pasa al día 35 por plazo, y el bronce (`fabricado.*`, la Era II) no arranca. Ver T2.",
+      "causa": "diseno"
+    },
+    {
+      "titulo": "El oro de los alijos no paga un recluta de campamento",
+      "detalle": "Los 30 alijos que abren los buscadores dan 114 u de oro en total (unas 3,8 u cada uno, en unidades enteras); el recluta más barato de sus campamentos cuesta 300 u. Para ejercitar el recluta de campamento (Q4) el batch le da a cada buscador, por administración y declarado, el oro de dos reclutas. Ver T3.",
+      "causa": "diseno"
+    }
+  ],
+  "decisiones": [
+    {
+      "id": "T1",
+      "pregunta": "Las épicas no llegan nunca a cumplirse: ¿se quiere que el primer capítulo de una épica sea la obra del mismo edificio que pide el hito de su tecnología?",
+      "contexto": "TA §7.2 y el bloque `EPICAS`: 21 de las 24 épicas empiezan por `obra` de un edificio que pide el hito de su tecnología (fundición, barracón, galería de tiro, corral, caballerizas, cantera, armería, carpintería). Para empezar una épica la tecnología tiene que tener su logro cumplido, así que en cuanto la plaza levanta ese edificio la tecnología aparece por el hito y la épica se pierde. Las únicas que sobreviven son las de hitos con más condiciones (otra tecnología, un nivel interno alto), y esas siguen con defensas, conquistas o ascensos. Medido (42 días): 72-147 empezadas, 0 cumplidas; perdidas por `aparecida` 5-16; abandonadas atascadas 48-102. La regla es la del TS (paridad); no se ha cambiado nada.",
+      "opciones": [
+        {
+          "texto": "Dejarlo como está hasta la fase 7: la épica es la vía de quien no puede cumplir el hito (otra tecnología que no tiene, un edificio que no puede levantar), y eso lo medirán los bots reales.",
+          "recomendada": true,
+          "efecto": "Ningún cambio de reglas; la fila de calibración de la fase 7 lo lleva."
+        },
+        {
+          "texto": "Quitar del primer capítulo la obra del edificio del hito (empezar por otro hecho).",
+          "recomendada": false,
+          "efecto": "Cambia el bloque `EPICAS` (divergencia del TS); las épicas compiten de verdad con el hito."
+        },
+        {
+          "texto": "Que la épica en curso no se pierda si la tecnología aparece por el hito, sino que se cumpla al instante (y cuente para «Mecenas»).",
+          "recomendada": false,
+          "efecto": "Cambia TA §7.1 paso 2 (`aparecida`); las épicas siempre dan algo al que las canta."
+        }
+      ]
+    },
+    {
+      "id": "T2",
+      "pregunta": "En este mundo no se extrae estaño: ¿se revisa en la fase 7 si el artefacto tiene estaño al alcance de las plazas?",
+      "contexto": "`extraido.estano` a 0 en todas las corridas (60 plazas, 42 días, con y sin la escala); `extraido.cobre` llega a 160.000-315.000 con 1-2 minas. Sin estaño no hay logro de la aleación del bronce (245.000 u), ni bronce que fabricar, ni Era I completa: la Era II llega siempre por plazo (día 35). Es un dato del mundo y de los bots mínimos (el Gobernador solo marca minas en nodos de su zona), no de la regla.",
+      "opciones": [
+        {
+          "texto": "Medirlo en la fase 7 con bots reales (que comercian el estaño o fundan cerca de él) junto con las X de los logros.",
+          "recomendada": true,
+          "efecto": "Ningún cambio ahora; se anota en la fila de calibración de la fase 7."
+        },
+        {
+          "texto": "Revisar ya la colocación de los nodos de estaño en el generador del artefacto.",
+          "recomendada": false,
+          "efecto": "Cambia el artefacto de mundo (y todas las cifras de los batches)."
+        }
+      ]
+    },
+    {
+      "id": "T3",
+      "pregunta": "Los alijos dan muy poco oro (≈ 4 u cada uno) para lo que cuesta un recluta de campamento (300 u): ¿es la intención?",
+      "contexto": "Generacion_Del_Mundo §12 y el artefacto (`contenidoVivo.ts`): 55 alijos; los 30 que abren seis buscadores en 42 días suman 114 u. Un héroe sin plaza no puede reclutar en su campamento con lo que encuentra; el batch le da el oro por administración (declarado) para ejercitar la vía de Q4.",
+      "opciones": [
+        {
+          "texto": "Medirlo en la fase 7 con la refundación y los héroes sin plaza de verdad (Cal-5: el oro de los bandidos también es suyo).",
+          "recomendada": true,
+          "efecto": "Ningún cambio ahora."
+        },
+        {
+          "texto": "Subir el oro de los alijos en el generador ya.",
+          "recomendada": false,
+          "efecto": "Cambia el artefacto de mundo."
+        }
+      ]
+    },
+    {
+      "id": "T4",
+      "pregunta": "El Rey solo adopta dentro de la capital: ¿se mantiene, aunque el Rey sea un héroe que está en campaña?",
+      "contexto": "TA §4 y 6C (duda 3: «dentro», no a la puerta). En el batch político la corona pasa a menudo a un héroe bot militar que sale de campaña: 3.172 de 3.181 turnos-hora con algo por adoptar y el Rey fuera de la capital son de un Rey bot (semilla 42). En el de comercio el Rey de la fundación va en la columna de la plaza y el batch le hace pasar la corona al Gobernador de oficio de la capital para poder adoptar.",
+      "opciones": [
+        {
+          "texto": "Mantenerlo (como el TS): adoptar es un acto del Rey en su palacio; los jugadores lo aprenderán.",
+          "recomendada": true,
+          "efecto": "Ningún cambio."
+        },
+        {
+          "texto": "Dejar adoptar al Rey dentro de cualquier plaza de su Facción, pagando de la capital.",
+          "recomendada": false,
+          "efecto": "Cambia TA §4 y el rechazo `tecnologia.rey_fuera_de_la_capital`."
+        }
+      ]
+    }
+  ]
+}

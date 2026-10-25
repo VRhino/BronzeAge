@@ -26,9 +26,13 @@
 //!   Las Facciones van por parejas aliadas: a un aliado no se le ataca.
 //!
 //! # Andamiaje de administración (provisional hasta los sistemas 5 y 6)
-//! La Facción de nivel 8 (`FijarNivelFaccion`), las tecnologías de la Era I (`FijarTecnologias`), las alianzas (`FijarRelacion`), y el héroe de cada papel:
-//! ciudadano de su Facción (`FijarFaccionDeHeroe`), residente en su plaza (`FijarResidencia`, también al quedarse en una plaza conquistada) y dentro de ella
-//! (`ColocarHeroe`). La columna de fundación entra en su plaza tras fundar. Nada más: el oro, el trigo, los materiales y la tropa salen de las plazas.
+//! La Facción de nivel 8 (`FijarNivelFaccion`) y el héroe de cada papel: ciudadano de su Facción (`FijarFaccionDeHeroe`), residente en su plaza (`FijarResidencia`, también al
+//! quedarse en una plaza conquistada) y dentro de ella (`ColocarHeroe`). La columna de fundación entra en su plaza tras fundar. Nada más: el oro, el trigo, los materiales y la tropa
+//! salen de las plazas.
+//!
+//! # Las tecnologías, por la vía de juego (6H)
+//! Ya no hay `FijarTecnologias`: lo que le aparece a una Facción (sus logros y sus hitos, con las cifras del TypeScript, Q3) lo adopta su Rey con `AdoptarTecnologia` cuando está dentro
+//! de su capital y ella tiene la tarifa; lo mira cada hora el turno de gobierno de la capital ([`Sim::adoptar`]).
 //!
 //! # Lo que comprueba
 //! Cada `Atacar` aceptado pasa por [`auditmil`] (bajas, experiencia, heridos, conservación, carros, botín, héroe solo, cascadas de la conquista); cada media hora,
@@ -58,6 +62,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 pub(crate) mod pol;
+pub(crate) mod tec;
 
 const MIN: i64 = MS_POR_MINUTO;
 const HORA: i64 = 60 * MIN;
@@ -98,8 +103,6 @@ pub const CARAVANA_CADA_H: i64 = 4;
 /// Trigo que el ejército saca de la plaza en su carro para pasarlo a víveres en campaña, y carga de cada caravana.
 pub const TRIGO_DE_CAMPANA: i64 = 60_000;
 pub const CARGA_DE_CARAVANA: i64 = 30_000;
-/// La Era I (el sistema 6 las traerá por logros): las tropas de Barracón, Galería de tiro y Caballerizas que una plaza de nivel 2 puede hacer.
-pub const TECNOLOGIAS: [&str; 8] = ["metalurgia_cobre", "aleacion_bronce", "escudos_ligeros", "armamento_palacial", "arqueria_palacial", "cria_caballar", "carros_guerra", "canteria"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Rol {
@@ -177,6 +180,9 @@ enum Accion {
     Diplomacia { faccion: u32 },
     Colonos,
     Refundar { tarea: usize },
+    /// Batch tecnológico: el turno (o la cita de llegada) de un buscador de alijos, y la llegada del Rey que va a su capital a adoptar.
+    Buscador { k: usize, cita: u32 },
+    Rey { faccion: u32 },
 }
 
 /// Un asedio abierto que espera el fin de su convocatoria: quién lo abrió, con qué columna y contra qué plaza, y la foto de antes del combate.
@@ -262,6 +268,11 @@ pub struct Medidas {
     pub persecuciones_sin_alcance: u64,
     pub reclutados_por_tropa: BTreeMap<Tropa, i64>,
     pub hechos: BTreeMap<String, u64>,
+    /// Turnos de gobierno de una capital con algo aparecido sin adoptar y el Rey fuera de ella, y tecnologías que la capital no podía pagar.
+    pub adopcion_rey_fuera: u64,
+    /// De esos turnos, en los que el Rey es un héroe bot militar (tiene su papel y no va a adoptar).
+    pub adopcion_rey_bot: u64,
+    pub adopcion_sin_tarifa: u64,
 }
 
 /// Una foto diaria.
@@ -298,6 +309,8 @@ pub struct Corrida {
     pub pared: Duration,
     /// El batch político (5I): sus medidas e invariantes; `None` en el militar.
     pub pol: Option<pol::Pol>,
+    /// El batch tecnológico (6H): sus medidas e invariantes; `None` en los demás.
+    pub tec: Option<tec::Tec>,
 }
 
 struct Sim<'a> {
@@ -332,14 +345,20 @@ struct Sim<'a> {
     asedios: BTreeMap<u64, AsedioAbierto>,
     /// El batch político (5I): las Facciones y sus relaciones las llevan bots de diplomacia con las órdenes del contrato.
     pol: Option<pol::Pol>,
+    /// El batch tecnológico (6H): bots de tecnología e invariantes orden a orden; el núcleo es persistente desde el principio (la crónica se guarda).
+    tec: Option<tec::Tec>,
 }
 
 /// El arranque del núcleo del batch militar: las reglas de siempre (con los bandidos), sin fotos automáticas. `sin_nobleza` es el experimento del riesgo R1 del batch
-/// político (ninguna plaza llega a los residentes que pide la nobleza); el bloque no cambia.
-fn arranque(c: &Cargado, semilla: u64, sin_nobleza: bool) -> Arranque {
+/// político (ninguna plaza llega a los residentes que pide la nobleza); `escala_logros` > 1, el del batch tecnológico (cada umbral de logro dividido por ella, para ejercitar las
+/// reglas en pocos días). Los bloques no cambian.
+fn arranque(c: &Cargado, semilla: u64, sin_nobleza: bool, escala_logros: u64) -> Arranque {
     let mut reglas = Reglas::default();
     if sin_nobleza {
         std::sync::Arc::make_mut(&mut reglas.economia.datos).poblacion.min_ciudadanos_nobleza = u32::MAX;
+    }
+    if escala_logros > 1 {
+        tec::escalar_logros(std::sync::Arc::make_mut(&mut reglas.economia.tecnologia), escala_logros);
     }
     Arranque {
         reglas,
@@ -355,20 +374,36 @@ fn arranque(c: &Cargado, semilla: u64, sin_nobleza: bool) -> Arranque {
 /// Corre `plazas` plazas (en Facciones de `PLAZAS_POR_FACCION`) durante `dias` días de mundo. Con `foto`, a mitad de la corrida se serializa el núcleo, se
 /// reconstruye desde esa foto por la persistencia y se sigue con el reconstruido.
 pub fn simular(c: &Cargado, geo: &Geo, plazas: u32, dias: u32, semilla: u64, foto: bool) -> Corrida {
-    simular_con(c, geo, plazas, dias, semilla, foto, None)
+    simular_con(c, geo, plazas, dias, semilla, foto, None, None)
 }
 
 /// El batch político (5I): la misma población de héroes bots que el militar, con las Facciones, la ciudadanía, la residencia, los cargos y las relaciones dados por bots de
 /// diplomacia con las órdenes del contrato (ver [`pol`]).
 pub fn simular_politica(c: &Cargado, geo: &Geo, plazas: u32, dias: u32, semilla: u64, foto: bool, ajustes: pol::Ajustes) -> Corrida {
-    simular_con(c, geo, plazas, dias, semilla, foto, Some(ajustes))
+    simular_con(c, geo, plazas, dias, semilla, foto, Some(ajustes), None)
 }
 
-fn simular_con(c: &Cargado, geo: &Geo, plazas: u32, dias: u32, semilla: u64, foto: bool, politica: Option<pol::Ajustes>) -> Corrida {
+/// El batch tecnológico (6H): la población del político con bots de tecnología (obras hacia los hitos, compras a los Aedas, épicas, la puerta a los Aedas, buscadores de alijos
+/// que reclutan en su campamento) y los invariantes del sistema 6 comprobados orden a orden (ver [`tec`]).
+pub fn simular_tecnologia(c: &Cargado, geo: &Geo, plazas: u32, dias: u32, semilla: u64, foto: bool, ajustes: tec::Ajustes) -> Corrida {
+    simular_con(c, geo, plazas, dias, semilla, foto, Some(pol::Ajustes::default()), Some(ajustes))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn simular_con(c: &Cargado, geo: &Geo, plazas: u32, dias: u32, semilla: u64, foto: bool, politica: Option<pol::Ajustes>, tecnologia: Option<tec::Ajustes>) -> Corrida {
     let t0 = Instant::now();
     let sin_nobleza = politica.is_some_and(|a| !a.nobleza);
+    let escala = tecnologia.map_or(1, |a| a.escala_logros);
+    // El batch tecnológico guarda la crónica: su núcleo es persistente desde el principio, en un directorio temporal propio.
+    let (n, dir_foto) = match tecnologia {
+        Some(_) => {
+            let dir = dir_temporal("batch-tecnologia");
+            (Nucleo::con_persistencia(arranque(c, semilla, sin_nobleza, escala), &dir, tec::config()).expect("núcleo persistente del batch tecnológico"), Some(dir))
+        }
+        None => (Nucleo::nuevo(arranque(c, semilla, sin_nobleza, escala)), None),
+    };
     let mut s = Sim {
-        n: Nucleo::nuevo(arranque(c, semilla, sin_nobleza)),
+        n,
         c,
         geo,
         semilla,
@@ -392,9 +427,10 @@ fn simular_con(c: &Cargado, geo: &Geo, plazas: u32, dias: u32, semilla: u64, fot
         experiencia: BTreeMap::new(),
         experiencia_heroe: BTreeMap::new(),
         foto: None,
-        dir_foto: None,
+        dir_foto,
         asedios: BTreeMap::new(),
         pol: politica.map(pol::Pol::nuevo),
+        tec: tecnologia.map(tec::Tec::nuevo),
     };
     s.fundar_todas(plazas);
     s.arrancar(foto);
@@ -419,7 +455,17 @@ fn simular_con(c: &Cargado, geo: &Geo, plazas: u32, dias: u32, semilla: u64, fot
         foto: s.foto,
         pared: t0.elapsed(),
         pol: s.pol,
+        tec: s.tec,
     }
+}
+
+/// Un directorio temporal propio de cada corrida: dos corridas a la vez en el mismo proceso (las pruebas) no se pisan.
+fn dir_temporal(prefijo: &str) -> PathBuf {
+    static K: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let k = K.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!("{prefijo}-{}-{k}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    dir
 }
 
 fn jugador(f: u32) -> String {
@@ -448,6 +494,10 @@ impl Sim<'_> {
             Resultado::SinCambios => cuenta.sin_cambios += 1,
             Resultado::Rechazada { codigo, .. } => *cuenta.rechazos.entry(codigo).or_insert(0) += 1,
             Resultado::Duplicada => unreachable!("los ids de petición no se repiten"),
+        }
+        // Batch tecnológico: los invariantes del sistema 6, orden a orden.
+        if self.tec.is_some() {
+            self.tec_vigilar(t);
         }
         r
     }
@@ -503,13 +553,11 @@ impl Sim<'_> {
     fn fundar_todas(&mut self, plazas: u32) {
         self.facciones = plazas.div_ceil(PLAZAS_POR_FACCION);
         let mut propias: Vec<Vec<u64>> = vec![Vec::new(); self.facciones as usize];
-        let tecnologias: Vec<String> = TECNOLOGIAS.iter().map(|t| t.to_string()).collect();
         if self.pol.is_some() {
-            self.pol_crear_facciones(&tecnologias);
+            self.pol_crear_facciones();
         } else {
             for f in 1..=self.facciones {
                 self.admin(0, "FijarNivelFaccion", Comando::FijarNivelFaccion { faccion: f, nivel: NIVEL_FACCION });
-                self.admin(0, "FijarTecnologias", Comando::FijarTecnologias { faccion: f, tecnologias: tecnologias.clone() });
                 if self.rng.por_debajo(100) < BELICOSA_PCT {
                     self.belicosas.insert(f);
                 }
@@ -624,6 +672,9 @@ impl Sim<'_> {
         if self.pol.is_some() {
             self.pol_arrancar(t0);
         }
+        if self.tec.is_some() {
+            self.tec_arrancar(t0);
+        }
         if foto {
             self.programar(self.fin / 2, Accion::Foto);
         }
@@ -652,6 +703,8 @@ impl Sim<'_> {
                 Accion::Diplomacia { faccion } => self.pol_diplomacia(t, faccion),
                 Accion::Colonos => self.pol_colonos(t),
                 Accion::Refundar { tarea } => self.pol_llega_a_refundar(t, tarea),
+                Accion::Buscador { k, cita } => self.tec_buscador(t, k, cita),
+                Accion::Rey { faccion } => self.tec_rey_llega(t, faccion),
             }
         }
         self.n.avanzar_hasta(self.fin);
@@ -661,12 +714,19 @@ impl Sim<'_> {
         if self.pol.is_some() {
             self.pol_observar(self.fin);
         }
+        if self.tec.is_some() {
+            self.tec_observar(self.fin);
+            self.tec_final();
+        }
     }
 
     /// La foto `BAN40` ida y vuelta: se serializa el núcleo, se escribe como foto en un directorio de persistencia, se reconstruye desde él y se sigue con el
     /// reconstruido (que escribe su registro en ese directorio hasta el final). El hash ha de ser el mismo.
     fn ida_y_vuelta(&mut self) {
         self.leer();
+        if self.tec.is_some() {
+            return self.tec_ida_y_vuelta();
+        }
         let antes = self.n.hash_estado();
         // Un directorio propio de cada foto: dos corridas a la vez en el mismo proceso (las pruebas) no se pisan.
         static FOTOS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -677,8 +737,7 @@ impl Sim<'_> {
             let almacen = persistencia::Almacen::abrir(&dir, persistencia::Config::default())?;
             almacen.fotos().guardar(&persistencia::Foto::nueva(0, self.n.ahora(), self.n.estado().serializar()))?;
             drop(almacen);
-            let sin_nobleza = self.pol.as_ref().is_some_and(|p| !p.ajustes.nobleza);
-            Nucleo::con_persistencia(arranque(self.c, self.semilla, sin_nobleza), &dir, persistencia::Config::default())
+            Nucleo::con_persistencia(self.arranque(), &dir, persistencia::Config::default())
         })();
         let Ok(n) = rehecho else {
             self.militares.foto += 1;
@@ -690,6 +749,12 @@ impl Sim<'_> {
         self.visto = n.version();
         self.n = n;
         self.dir_foto = Some(dir);
+    }
+
+    /// El arranque de este núcleo (el de la corrida, con sus experimentos), para reconstruirlo desde una foto.
+    fn arranque(&self) -> Arranque {
+        let sin_nobleza = self.pol.as_ref().is_some_and(|p| !p.ajustes.nobleza);
+        arranque(self.c, self.semilla, sin_nobleza, self.tec.as_ref().map_or(1, |x| x.ajustes.escala_logros))
     }
 
     // ───────────────────────────── Lo que se mira ─────────────────────────────
@@ -912,6 +977,39 @@ impl Sim<'_> {
             self.ordenes_de_plaza(t, i, p);
         }
         self.leva_a_la_guarnicion(t, i, p);
+        self.adoptar(t, p);
+    }
+
+    /// La vía de juego de la tecnología (6H, sin `FijarTecnologias`): si `p` es la capital efectiva de su Facción y le ha aparecido algo que aún no adoptó, su Rey lo adopta con la
+    /// orden real, dentro de la capital y pagando la tarifa de su Era de su almacén. Con el Rey fuera, o sin la tarifa, espera (se cuenta).
+    fn adoptar(&mut self, t: Instante, p: u64) {
+        let f = self.n.estado().asentamientos[&p].faccion;
+        if self.n.capital_de(f) != Some(p) {
+            return;
+        }
+        let r = self.n.estado().reglas.economia.tecnologia.clone();
+        let propias = self.n.tecnologia().de(&r, f);
+        let pendientes: Vec<tecnologia::TecId> = propias.aparecidas.iter().filter(|&x| !propias.adoptadas.contiene(x)).collect();
+        if pendientes.is_empty() {
+            return;
+        }
+        let Some((rey, cuenta)) = self.n.faccion(f).and_then(|x| x.rey).and_then(|h| self.n.heroe(h).map(|x| (h, x.cuenta.clone()))) else { return };
+        if self.n.heroe(rey).map(|h| h.heroe.presencia.ubicacion) != Some(Ubicacion::Asentamiento(p as u32)) {
+            self.medidas.adopcion_rey_fuera += 1;
+            self.medidas.adopcion_rey_bot += self.bots.iter().any(|b| b.heroe == rey) as u64;
+            // Batch tecnológico: si está en otra plaza suya, va a la capital.
+            if self.tec.is_some() {
+                self.tec_rey_a_la_capital(t, f, rey, p);
+            }
+            return;
+        }
+        for x in pendientes {
+            if self.n.estado().asentamientos[&p].economia.almacen.tiene(r.tarifa(x)) {
+                self.segura(t, &cuenta, "AdoptarTecnologia", Comando::AdoptarTecnologia { heroe: rey, faccion: f, tecnologia: x });
+            } else {
+                self.medidas.adopcion_sin_tarifa += 1;
+            }
+        }
     }
 
     /// ¿Es el héroe del bot `i` el Gobernador de `p`? Si la plaza no tiene, el Rey de su Facción le nombra (con la orden real, sin estar presente).
@@ -958,6 +1056,9 @@ impl Sim<'_> {
         }
         if self.pol.is_some() {
             self.pol_plaza(t, i, p);
+        }
+        if self.tec.is_some() {
+            self.tec_plaza(t, i, p);
         }
     }
 
@@ -1125,7 +1226,7 @@ impl Sim<'_> {
         if let Some(&escolta) = escuadras.last() {
             self.suya(t, i, "AsignarEscolta", Comando::AsignarEscolta { caravana, heroe, escuadras: vec![escolta] });
         }
-        self.suya(t, i, "PrepararCaravana", Comando::PrepararCaravana { caravana, destino: hermana, carga: vec![(Recurso::Trigo, CARGA_DE_CARAVANA)], salir_en: None });
+        self.suya(t, i, "PrepararCaravana", Comando::PrepararCaravana { caravana, destino: hermana, carga: vec![(Recurso::Trigo, if self.tec.is_some() { tec::CARGA_DE_CARAVANA } else { CARGA_DE_CARAVANA })], salir_en: None });
     }
 
     /// Lo que se puede sacar del almacén de la plaza de una lista, hasta la capacidad del carro.
@@ -1598,6 +1699,9 @@ impl Sim<'_> {
         if self.pol.is_some() {
             self.pol_observar(t);
         }
+        if self.tec.is_some() {
+            self.tec_observar(t);
+        }
     }
 
     /// Lee los hechos nuevos del registro de cambios.
@@ -1608,14 +1712,26 @@ impl Sim<'_> {
             return;
         };
         let mut hechos = Vec::new();
+        // Batch tecnológico: la crónica tal como salió (la de las `Delta`), para compararla al final con la guardada.
+        let mut cronica = Vec::new();
+        let con_cronica = self.tec.is_some();
         for c in cambios {
             hechos.extend(c.eventos.iter().map(|e| (e.codigo.to_string(), e.en, e.ejercitos.clone(), e.asentamientos.clone(), e.datos.clone(), e.valores.clone())));
+            if con_cronica {
+                cronica.extend(c.eventos.iter().filter(|e| e.codigo == "cronica.entrada").map(|e| nucleo::proyeccion::eventos::evento_dominio(&self.n, e, c.version)));
+            }
             self.visto = c.version;
+        }
+        if let Some(x) = &mut self.tec {
+            x.emitida.append(&mut cronica);
         }
         for (codigo, t, ejercitos, plazas, datos, valores) in hechos {
             self.hecho(&codigo, t, &ejercitos, &plazas, &datos);
             if self.pol.is_some() {
                 self.pol_hecho(&codigo, t, &plazas, &datos, &valores);
+            }
+            if self.tec.is_some() {
+                self.tec_hecho(&codigo, t, &datos, &valores);
             }
         }
     }

@@ -10,6 +10,8 @@
 //!   bandidos, pueblos, avanzadas y plazas, con los invariantes del combate comprobados orden a orden).
 //! - [`politica`] corre el de «política y Facciones» (la población del militar con Facciones, ciudadanía, residencia, cargos, puerta, relaciones, tributo, capital, anexión,
 //!   fusión, refundación y títulos en manos de bots de diplomacia que solo dan órdenes del contrato, con los invariantes de la política comprobados en cada observación).
+//! - [`tecnologia`] corre el de «tecnología y Aedas» (la población del político con bots de tecnología que construyen hacia los hitos, adoptan, compran a los Aedas, encargan épicas, abren
+//!   alijos y reclutan en los campamentos, con los invariantes del sistema 6 comprobados orden a orden y la crónica guardada).
 //! - [`escribir`] deja `informe.json` e `informe.html` en una carpeta.
 //! - [`fundir_decisiones`] añade a mano el resumen, las anomalías y las decisiones tras leer los resultados.
 
@@ -18,6 +20,7 @@ mod armarcom;
 mod armarmil;
 mod armarpob;
 mod armarpol;
+mod armartec;
 mod auditmil;
 mod auditoria;
 mod economia;
@@ -193,6 +196,38 @@ pub fn politica(c: &Cargado, e: &EscenarioPolitica) -> Informe {
         (a == b, a == foto)
     });
     armarpol::armar(&armarpol::Entrada { c, geo: &geo, e, corrida: &corrida, determinismo, pared_total: t0.elapsed() })
+}
+
+/// Parámetros del escenario tecnológico: los del político y el experimento de los umbrales.
+#[derive(Clone, Debug)]
+pub struct EscenarioTecnologia {
+    pub plazas: u32,
+    pub dias: u32,
+    pub semilla: u64,
+    /// Repite un escenario reducido (9 plazas y 2 días, o menos) dos veces (mismo hash) y una más con la foto ida y vuelta a mitad (mismo hash que sin ella).
+    pub verificar_determinismo: bool,
+    /// 1 = los umbrales de los logros del TypeScript (Q3). Mayor: cada uno dividido por ella (experimento para ejercitar las reglas; el bloque no cambia).
+    pub escala_logros: u64,
+}
+
+impl Default for EscenarioTecnologia {
+    fn default() -> Self {
+        Self { plazas: 60, dias: 42, semilla: 42, verificar_determinismo: true, escala_logros: 1 }
+    }
+}
+
+/// Corre el escenario tecnológico sobre el mundo y monta el informe. La corrida principal hace también la foto ida y vuelta a mitad de camino (en el directorio de la partida).
+pub fn tecnologia(c: &Cargado, e: &EscenarioTecnologia) -> Informe {
+    let t0 = Instant::now();
+    let geo = geo::Geo::de(&c.mundo);
+    let ajustes = simmil::tec::Ajustes { escala_logros: e.escala_logros.max(1) };
+    let corrida = simmil::simular_tecnologia(c, &geo, e.plazas, e.dias, e.semilla, true, ajustes);
+    let determinismo = e.verificar_determinismo.then(|| {
+        let reducida = |foto| simmil::huella(&simmil::simular_tecnologia(c, &geo, e.plazas.min(9), e.dias.min(2), e.semilla, foto, ajustes));
+        let (a, b, foto) = (reducida(false), reducida(false), reducida(true));
+        (a == b, a == foto)
+    });
+    armartec::armar(&armartec::Entrada { c, geo: &geo, e, corrida: &corrida, determinismo, pared_total: t0.elapsed() })
 }
 
 /// 25 Facciones y 2 días, dos veces: ¿mismo `hash_estado()`?

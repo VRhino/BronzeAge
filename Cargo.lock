@@ -38,6 +38,7 @@ dependencies = [
  "base",
  "combate",
  "comercio",
+ "contrato",
  "informe",
  "militar",
  "mundo",
@@ -46,6 +47,7 @@ dependencies = [
  "politica",
  "rutas",
  "serde_json",
+ "tecnologia",
  "territorio",
  "trazado",
 ]

@@ -167,12 +167,12 @@ Líneas de `94cf671` (el sistema 5 y la calibración del sistema 4 las moverán 
 | 6E | l.120 (Aedas en la felicidad y la nobleza), l.135 (el hecho `caravana` de las épicas), l.158 (residentes, épicas, sus dos órdenes) |
 | 6F | l.158 (alijos, `abrir_alijo`) |
 | 6G | l.158 (tecnologías aparecidas y reveladas en el contrato; las 5 órdenes) |
-| 6H | l.126 (batch de comercio sin tecnologías) y l.155 (batch militar con las de la Era I por administración): pasan a la vía de juego |
+| 6H | l.126 (batch de comercio sin tecnologías) y l.155 (batch militar con las de la Era I por administración): pasan a la vía de juego. **Cerradas (6H)**, con la del batch político (5I) y las de 6D-6F que esperaban al batch |
 | Cada una | l.163 (los eventos de su tanda, tabla §1.5) |
 | Fuera | §20 (Eras IV y V, `logistica_campana`, clientes): sigue tal cual |
 
 Fila nueva que abre el sistema 6 (decisión Q3 del autor): **la calibración de las X de los logros y de la velocidad y la estancia de los Aedas, pospuesta a la fase 7** (bots reales);
-se escribe en P al cerrar 6H.
+se escribe en P al cerrar 6H (**escrita**: fila «Tecnología (calibración, fase 7)», con el día de cada logro medido por el batch).
 
 ---------------------------------------------------------------------------------------------------------------------------------------
 
@@ -697,3 +697,80 @@ Los mismos 3.069.110 pasos y la misma versión 50.408; en la carga, las mismas 3
 9. **Las `claves` de una épica solo van a `ADMIN`**, como el texto del TS con los ids del contrato (`obra:ed-6-4:0`, `defensa:as-3:<instante>`, `batalla:<battleId>`). Recomendado: así.
 10. **`aeda-N` y `aeda-rN` comparten la clase `AEDA`** del contrato (ids distintos, cuerpos distintos: `AedaItinerante` y `AedaResidente`). Recomendado: así (ya estaba en el esquema).
 11. **La forma pública lleva los dos bordes de la Era** (`era_minimo_hasta_ms` y `era_plazo_hasta_ms`), no `proxima_era_en`: este diría si la vigente ya tiene todos sus logros, y la forma pública no dice qué logros son de qué Era. Recomendado: así.
+
+## Avance de 6H (2026-10-26, rama `tanda-6h`, sin cambio de foto, de reglas ni de esquema)
+
+Hecha sobre `34e5335e` (6A-6G y la crónica integradas, foto `BAN40`). El núcleo no cambia: la tanda es el batch, una prueba de núcleo nueva (la fabricación) y documentos. **Q3: no se calibra nada**; se comprueban reglas y se informa en qué día cae cada logro y cada Era.
+
+**`batch tecnologia [--plazas 60] [--dias 42] [--semilla 42] [--escala-logros 1]`** (`crates/batch/src/simmil/tec.rs` y `armartec.rs`; prueba corta en `crates/batch/tests/tecnologia.rs`; preguntas T1-T4 en `crates/batch/decisiones/tecnologia.json`) es un modo del batch político (`simmil::simular_tecnologia`): la misma población (tres plazas por Facción, cuatro héroes bots por plaza, bots de diplomacia), con bots de tecnología que solo dan órdenes del contrato. 42 días por defecto: el plazo de la Era I es de cinco semanas. `--escala-logros D` divide cada umbral por `D` (como mínimo 1) en el arranque del núcleo, como experimento para ejercitar en pocos días lo que con las X del TS no llega (el bloque no cambia; el informe lo dice).
+
+- **La vía de juego, para todos los batches** (`Sim::adoptar`, en el turno de gobierno de cada hora): si la plaza es la capital efectiva de su Facción y le apareció algo sin adoptar, su Rey lo adopta con `AdoptarTecnologia`, dentro de la capital y con la tarifa de su almacén; con el Rey fuera o sin la tarifa, espera (se cuenta). En el batch tecnológico, si el Rey (un héroe que no es bot militar) está dentro de otra plaza suya, sale (`SalirAlMundo` de su residencia, `SalirDeAsentamiento` de otra), marcha a la capital y entra (`EntrarEnAsentamiento`). En `batch comercio` (`simcom::Sim::adoptar`) el Rey de la fundación va en la columna de la plaza y la necesita para sus misiones: le pasa la corona (`AsignarRey`) al Gobernador de oficio de la capital, que reside y está dentro, y este adopta. Ningún batch usa ya `FijarTecnologias`.
+- **El Gobernador de la capital construye hacia los hitos** cada 2 h: el primer edificio (o nivel interno) que pide el hito (`edificio`, `capitalEnNivel`) de una tecnología de una Era abierta que a su Facción aún no le apareció y que ninguna plaza suya tiene; no pide lo que el catálogo no deja (nivel de la plaza, tecnología adoptada, nivel interno inexistente) y, tras un `obra.sin_sitio`, espera un día. **Cada plaza de nivel 2** marca un pueblo minero (cobre, estaño, hierro) si a ese `extraido.*` le queda un logro de una Era abierta.
+- **El Gobernador de cada plaza**, con un Aeda itinerante parado en ella, le compra la primera revelada que el almacén puede pagar (`ComprarTecnologiaAeda`); el 3 % de sus turnos les cierra la puerta (`FijarPuerta` con `aedas`) y la reabre a las 12 h; a cada residente sin épica le encarga la posible más a mano (por hecho de cada capítulo: una obra que la plaza puede pedir 0; adopción, batalla y caravana 1; ascenso, defensa, conquista y una obra que no puede pedir 3), levanta o mejora la obra que pide el capítulo en curso, abandona la épica sin un hecho en 4 días (y no la vuelve a empezar en esa plaza) y, al azar, el 1 ‰ de sus turnos. Las caravanas del Intendente llevan 120 u de trigo (en el militar, 30) para que inspiren el capítulo `caravana` (≥ 100 u).
+- **Seis buscadores** sin Facción, uno por campamento, salen (`SalirDelCampamento`), abren hasta tres alijos a 200 u como mucho (`AbrirAlijo`; el 30 % de las veces lo intentan otra vez y tiene que rechazarse con `alijo.ya_abierto` sin rastro), vuelven (`EntrarEnCampamento`), vacían el carro (`VaciarCarro`) y reclutan en su campamento (`ReclutarEnCampamento`, Q4). **Andamiaje declarado:** el oro de los alijos (≈ 4 u cada uno) no paga un recluta (300 u el más barato), así que al nacer la administración les da el de dos (`DarAlmacenPersonal`).
+- **El núcleo es persistente desde el principio**, en un directorio temporal propio (sin `fsync` por lote), para que la crónica se guarde; la foto ida y vuelta a mitad se hace en el **mismo** directorio (apagar, foto, abrir otro núcleo desde ella), y al final se lee el diario entero por páginas (`PedirCronica`, 1.000 por página).
+
+**Invariantes** (todos a 0; los del militar y el político siguen):
+
+| Invariante | Cuándo | Qué |
+|---|---|---|
+| `inv_logro` | tras cada orden | un logro fijado no cambia ni se borra; uno nuevo se fijó en el tramo (entre la orden anterior y esta) y con su contador cruzando el umbral en él; uno sin fijar no tiene el contador cruzado |
+| `inv_contador` | tras cada orden | ninguno de los 24 contadores baja |
+| `inv_adoptadas` | tras cada orden | `adoptadas ⊆ aparecidas` y ninguna revelada está aparecida, en cada Facción |
+| `inv_era_cerrada` | en cada `tecnologia.aparece`, `aedas.venta` y `aedas.epica_tecnologia` (contra la Era de los hechos leídos hasta él) y tras cada orden (el estado) | nada aparece de una Era que no ha empezado, también por la unión de una fusión |
+| `inv_era` | tras cada orden | la Era pasa de una en una, nunca antes de su mínimo (1 semana) ni después de su plazo; la vigente no sigue pasado su plazo ni, con todos sus logros, pasados su mínimo y su último logro |
+| `inv_sin_logro` | en cada hecho de aparición y en cada compra aceptada; tras cada orden | nada aparece sin su logro; comprar nunca salta el logro (y lo comprado lo conocían los Aedas: descubridora + 24 h) |
+| `inv_epica` | tras cada orden | una épica por tecnología y Facción (también tras unificarlas en una anexión o una fusión) y ninguna de una tecnología ya aparecida |
+| `inv_doble` | en cada observación, por tramo | los 14 contadores discretos suben exactamente lo que dicen los hechos leídos, con la tabla de vías de `tecnologia::contador` aplicada a los hechos (`combate.resuelto`, `combate.encuentro`, las caravanas interceptadas por columnas y por bandidos, el campamento destruido, `combate.asedio_*` —**nunca su `batalla.aplicada`, D18**—, el animal comprado, `tropas.reclutadas` y `mercenarios.reclutado`); `conHoplitas` y `conResidentes`, que no viajan en el hecho, no pasan de `batallas.libradas` y `asedios.resistidosEnCombate` |
+| `inv_itinerantes` | tras cada orden | los itinerantes nunca bajan |
+| `inv_puerta_aedas` | tras cada orden (también justo después de cerrarles la puerta) | ningún Aeda parado en una plaza que no existe o que les cierra la puerta |
+| `inv_alijo` | en cada `alijo.abierto` y en cada segundo intento | un héroe abre un alijo una vez; lo cargado no pasa del oro |
+| `inv_cronica` | al final | la crónica guardada es exactamente la emitida (los `EventoDominio` de los cambios de versión), también tras la foto ida y vuelta |
+| `inv_rechazos` | en cada orden que el bot da por segura | adoptar, comprar, empezar y abandonar épicas, la puerta a los Aedas, abrir alijos, salir y entrar del campamento, el Rey que va a la capital |
+
+**Corridas** (release; 60 plazas; el batch tecnológico 42 días; seis o siete procesos a la vez en una máquina de 16 hilos):
+
+| Corrida | Huella | Violaciones | Pared |
+|---|---|---|---|
+| `tecnologia`, semilla 42 (dos veces) | aa3c74a0… las dos | 0 (12 del sistema 6 + 33 del político y el militar; `inv_rechazos` 0); foto ida y vuelta igual; crónica 192 = 192 | 101 s y 102 s (2,4 s de CPU por día) |
+| `tecnologia`, semilla 7 | ff6d80d0… | 0; crónica 199 = 199 | 99 s |
+| `tecnologia --escala-logros 1000`, semilla 42 (dos veces) | 06fd3920… las dos | 0 | 99 s y 100 s |
+| `tecnologia --escala-logros 1000`, semilla 7 | 15f2179b… | 0 | 99 s |
+
+| Medida (X del TS) | Semilla 42 | Semilla 7 | Escala 1000, semilla 42 | Escala 1000, semilla 7 |
+|---|---|---|---|---|
+| Era II / Era III (día) | 35,0 por plazo / — | 35,0 por plazo / — | 35,0 por plazo / — | 35,0 por plazo / — |
+| Adopciones / aparecidas (hito, compra, épica) | 72 / 90 (82, 8, 0) | 39 / 46 (40, 6, 0) | 104 / 119 (97, 22, 0) | 68 / 78 (58, 20, 0) |
+| Aedas itinerantes al final / revelaciones / puertas cerradas con alguno dentro | 7 / 8 / 154 | 7 / 9 / 148 | 7 / 22 / 156 | 7 / 23 / 127 |
+| Residentes llegados / épicas empezadas / capítulos / cumplidas | 51 / 95 / 5 / 0 | 41 / 72 / 1 / 0 | 50 / 111 / 28 / 0 | 45 / 147 / 18 / 0 |
+| Épicas perdidas: `aparecida` / `unificada` / atascadas | 16 / 1 / 63 | 8 / 6 / 48 | 11 / 2 / 70 | 5 / 5 / 102 |
+| Alijos abiertos (oro) / reclutas de campamento | 30 (114 u) / 80 soldados | 30 / 80 | 30 / 80 | 30 / 80 |
+
+**Días de los logros con las X del TS** (semilla 42 / 7; «—», no se cumple en 42 días; entre paréntesis, el día en que aparece por primera vez): Era I: carros de guerra 3,1 / 4,7 (nunca: su hito pide la cría caballar adoptada y Caballerizas y Carpintería de nivel 2), arquería palacial 4,6 (7,2) / 5,6 (7,1), armamento palacial 5,5 (15,6) / 5,5 (22,2), metalurgia del cobre 15,6 / 22,2, cantería 18,7 / 20,2, cría caballar 24,6 / —, escudos ligeros 26,0 / —, aleación del bronce — / — (`extraido.estano` a 0: T2). Eras II y III: ninguno salvo, en otras corridas de prueba, carpintería militar (`conquistas.conMurallaCompleta` ≥ 1, con la primera conquista con muralla). Con los umbrales entre mil, la forja del hierro temprana cumple su logro el día 1,5 y aparece justo el 35,0, en la versión de `era.comienza` (la Era cerrada espera a la suya).
+
+**El militar, el político y el de comercio por la vía de juego** (semilla 42, 30 días; antes = `34e5335e`, con `FijarTecnologias`; R1: solo se informa):
+
+| Batch | Antes | 6H | Lo que cambia |
+|---|---|---|---|
+| `militar` | huella bff6b183…, 93 métricas | huella bc4c51c5…; 44 de 93 iguales; 40 adopciones (el Rey, el héroe de la fundación, está siempre dentro de la primera plaza) | antes tenía la Era I entera desde el minuto 0 (`canteria` ×1,5 incluida) y ahora la va adoptando: combates 6.529 → 7.072, conquistas 16 → 24, bajas 142.365 → 145.971, reclutados 130.247 → 133.709; las tropas reclutadas son las mismas (lanceros, leñadores, granjeros y mineros: la tecnología de Barracón no la usaba ni antes); 0 violaciones; pared 486 → 481 s |
+| `politica` | 131 métricas | 52 de 131 iguales; la corona pasa a menudo a un bot militar que sale de campaña | divergencia caótica de la política: vasallajes 27 → 7, paces 65 → 35, tributo 77.320 → 33.222, anexiones 15 → 9, fusiones 3 → 7, plazas vivas 57 → 54, reclutados 49.317 → 44.621; 0 violaciones; pared 440 → 431 s |
+| `comercio` | 103 métricas | 89 de 103 iguales; 40 coronas pasadas y 40 adopciones (entre ellas `canteria`) | el acarreo sube del 89,8 % al 123,6 % de la producción nominal de los pueblos (cantería ×1,5) y sus viajes de 167.735 a 231.042; peajes 22,1 % → 28,0 % de la carga; lo ingresado por acarreo casi igual (el almacén de la madre se llena: 97,5 % perdido); 0 violaciones; pared 91 → 104 s (con otras seis corridas a la vez) |
+
+**La fabricación de bronce dentro del núcleo** (duda 4 de 6B): `crates/nucleo/tests/fabricacion.rs` levanta en una plaza del mundo real, por las órdenes de construcción, la Fundición de nivel 2 y la Armería de nivel 2 (el primer taller del catálogo con armas de bronce), con la aleación adoptada, artesanos y lingotes, y comprueba en un tramo de un salto de 6 h y en otro minuto a minuto que lo que suben `fabricado.equipoBronce` y `fabricado.armaduraBronce` (en milésimas, con su resto) es exactamente lo que entra en el almacén (1.440 u de equipo y 360 u de armadura en cada tramo).
+
+**Fallos encontrados.** Ninguno del núcleo: los invariantes salieron a 0 desde la primera corrida. Del batch, al montarlo: el Rey que sale de su residencia para ir a la capital tiene que salir al mundo (`salida.desde_tu_residencia` en `inv_rechazos`, 212 en la primera corrida); el recluta de campamento probaba todas las tropas tras un `mercenarios.sin_oro`; el Gobernador pedía obras que el catálogo no deja (nivel, tecnología). Arreglados en el bot.
+
+**Pruebas.** Las cifras de la suite y la auditoría, al final («Cifras»). No se tocó el paso de minuto ni el camino de la orden, ni la sesión, las proyecciones o el contrato: una pasada de la suite.
+
+**Dudas para el autor (6H)** (las cuatro primeras, T1-T4 del fichero de decisiones):
+
+1. **T1. Ninguna épica se cumple**: 21 de las 24 empiezan por la obra de un edificio del hito de su tecnología, y como para empezarla el logro ya está cumplido, terminar esa obra hace aparecer la tecnología por el hito y la épica se pierde (`aparecida`); las demás esperan defensas, conquistas o ascensos. Recomendado: dejarlo hasta la fase 7 (la épica es la vía de quien no puede cumplir el hito).
+2. **T2. No se extrae estaño** en este mundo con estos bots: la aleación del bronce no cumple su logro, la Era I pasa siempre por plazo y no hay bronce que fabricar. Recomendado: medirlo en la fase 7.
+3. **T3. Los alijos dan ≈ 4 u de oro** y un recluta de campamento cuesta 300 u: el batch da el oro por administración (declarado). Recomendado: medirlo en la fase 7 con la refundación y los héroes sin plaza.
+4. **T4. El Rey solo adopta dentro de la capital**; en el político la corona pasa a menudo a un bot militar en campaña (3.172 de 3.181 turnos sin adoptar, semilla 42). Recomendado: mantenerlo.
+5. **El Rey del batch de comercio pasa la corona** al Gobernador de oficio de la capital para poder adoptar (su columna hace las misiones de la plaza). Recomendado: así (es una jugada del contrato; sus cifras de comercio cambian por la cantería, no por la corona).
+6. **`conHoplitas` y `conResidentes` no viajan en los hechos** (`combate.resuelto`, `combate.asedio_*`): el invariante de la doble cuenta solo los acota por arriba. Recomendado: así (añadir el dato al hecho sería un cambio del contrato; las pruebas de 6B los cuentan exactos por cada vía).
+7. **El mínimo de una semana de la Era y el paso por todos los logros no se ejercitan en el batch** (la Era I nunca completa sus logros, T2): los cubren las pruebas de `nucleo/tests/logros.rs` y del crate. Recomendado: así.
+8. **`--escala-logros` es un experimento del batch** (como `--nobleza 0` del político): cambia los umbrales en el arranque del núcleo, no en el bloque, y el informe lo marca. Recomendado: así.
+
+**Cifras.** `cargo test --workspace --no-fail-fast` (una pasada: la tanda no toca la sesión, las proyecciones ni el contrato): 1.582 pruebas en verde (106 resultados, 16 ignoradas, 0 fallos; +3: la fabricación y las dos del batch tecnológico). Auditoría (`BRONZEAGE_AUDITAR_CAMBIOS=1 cargo test -p nucleo -- --skip rendimiento`): 591 sin fallos. `cargo test --release -p batch --test tecnologia`: 2 en verde en 2,5 s. El paso de minuto no se midió: la tanda no lo toca.
