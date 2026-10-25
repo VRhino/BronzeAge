@@ -1,6 +1,7 @@
 //! El cliente de ejemplo (4H T7; la guía de `contratos/README.md`, «Cómo se escribe un cliente»): una partida corta jugada **solo por el contrato**, por el servidor WebSocket real y con
 //! `servidor::prueba::ClienteDeEjemplo`, que guarda lo que le llega en el almacén de referencia (`contrato::almacen`). Un jugador nace en un campamento, compra en su mercado, sale con su columna,
-//! explora bajo la niebla, funda una plaza, construye, recluta, sale con su tropa y ataca a unos bandidos, lo que abre una batalla de Unity. La administración (otra sesión del contrato) pone el
+//! explora bajo la niebla, funda una plaza, construye, recluta y sale con su tropa; acepta en su Facción a otro jugador, que se muda a la plaza y al que nombra su Gobernador, y se alía
+//! con la Facción de un tercero (5H); y ataca a unos bandidos, lo que abre una batalla de Unity. La administración (otra sesión del contrato) pone el
 //! andamiaje que aún no tiene orden de jugador (la Facción, la Caravana de Fundación, la residencia, los recursos, los bandidos y el reloj, parado y adelantado a saltos: determinista). Al final
 //! lo que cada uno acumuló es lo que daría una conexión nueva, y reanudar con ello no trae nada.
 //!
@@ -12,7 +13,7 @@ use base::{Mil, Punto};
 use comun::real::{self, campamento, en_tierra, sitio_rico};
 use comun::sesion::arrancar_con;
 use contrato::almacen::Almacen;
-use contrato::v1::{self as pb, entidad::Cuerpo, orden::Cuerpo as O, TipoCliente, TipoEntidad};
+use contrato::v1::{self as pb, entidad::Cuerpo, evento_dominio::Tipado, orden::Cuerpo as O, TipoCliente, TipoEntidad};
 use nucleo::{Ajustes, Arranque, Nucleo, Reglas};
 use prost_types::{value::Kind, Struct, Value};
 use servidor::prueba::{hola, ClienteDeEjemplo};
@@ -79,7 +80,7 @@ async fn llegar(adm: &mut ClienteDeEjemplo, ana: &mut ClienteDeEjemplo, heroe: &
 }
 
 #[tokio::test]
-async fn un_cliente_que_solo_habla_el_contrato_nace_comercia_explora_funda_construye_recluta_y_abre_una_batalla() {
+async fn un_cliente_que_solo_habla_el_contrato_nace_comercia_explora_funda_construye_recluta_hace_politica_y_abre_una_batalla() {
     let Some(m) = real::mundo() else {
         eprintln!("sin artefacto de mundo real: se omite");
         return;
@@ -162,7 +163,55 @@ async fn un_cliente_que_solo_habla_el_contrato_nace_comercia_explora_funda_const
     let Some(Cuerpo::Heroe(h)) = entidad(&ana.almacen, &format!("HEROE:{heroe}"), TipoEntidad::Heroe, &heroe) else { panic!() };
     assert!(h.plazas_recordadas.get(&plaza).is_some_and(|x| x.almacen.contains_key("madera")), "recuerda el interior de su plaza");
 
-    // 8. Ataca a unos bandidos fuera de toda zona (los pone la administración): con servidores de batalla, la batalla se abre y llega por su ámbito `BATALLA`.
+    // 8. La política, solo por el contrato (5H). Beto nace y pide entrar en la Facción de ana; ana, su Reina, le acepta; beto se muda a la plaza y ana le nombra su Gobernador sin estar en ella
+    //    (Doc 2.2). Gus crea otra Facción, ana le propone una alianza y gus la acepta: la propuesta llega a las dos Facciones y sale al contestarla, y llega la relación con la Liga de las dos.
+    let mut beto = ClienteDeEjemplo::entrar(dir, hola("ok:beto", TipoCliente::ClienteUnity), Almacen::default()).await;
+    let r = beto.aceptada(O::CrearHeroe(pb::OrdenCrearHeroe { display_name: "Beto".into(), campamento_id: camp.clone(), ..Default::default() })).await;
+    let h_beto = creada(&r, TipoEntidad::Heroe);
+    beto.aceptada(O::SolicitarIngreso(pb::OrdenSolicitarIngreso { faccion_id: "f-1".into() })).await;
+    let suyo = |c: &ClienteDeEjemplo, h: &str| match entidad(&c.almacen, &format!("HEROE:{h}"), TipoEntidad::Heroe, h) {
+        Some(Cuerpo::Heroe(x)) => x.clone(),
+        otro => panic!("su héroe: {otro:?}"),
+    };
+    assert_eq!((suyo(&beto, &h_beto).faccion_id, suyo(&beto, &h_beto).solicitudes_faccion_ids), (None, vec!["f-1".to_owned()]), "su solicitud, en su héroe");
+    ana.al_dia().await;
+    assert!(ana.almacen.hechos.iter().any(|(_, e)| matches!(&e.tipado, Some(Tipado::SolicitudDeIngreso(s)) if s.heroe_id == h_beto)), "la Reina oye la solicitud, tipada");
+    let faccion = |c: &ClienteDeEjemplo, ambito: &str, id: &str| match entidad(&c.almacen, ambito, TipoEntidad::Faccion, id) {
+        Some(Cuerpo::Faccion(f)) => f.clone(),
+        otro => panic!("la Facción {id} en {ambito}: {otro:?}"),
+    };
+    assert_eq!(faccion(&ana, "FACCION:f-1", "f-1").solicitudes_ids, [h_beto.clone()]);
+    ana.aceptada(O::ResponderSolicitud(pb::OrdenResponderSolicitud { faccion_id: "f-1".into(), heroe_id: h_beto.clone(), aceptar: true })).await;
+    beto.al_dia().await;
+    assert!(beto.almacen.ambitos.contains_key("FACCION:f-1"), "ciudadano: abre la Facción");
+    assert_eq!((suyo(&beto, &h_beto).faccion_id.as_deref(), suyo(&beto, &h_beto).solicitudes_faccion_ids.len()), (Some("f-1"), 0));
+    beto.aceptada(O::CambiarResidencia(pb::OrdenCambiarResidencia { destino_id: plaza.clone(), heroe_id: h_beto.clone() })).await;
+    ana.aceptada(O::AsignarCargoLocal(pb::OrdenAsignarCargoLocal { asentamiento_id: plaza.clone(), cargo: "gobernador".into(), heroe_id: h_beto.clone() })).await;
+    let Some(Cuerpo::Asentamiento(a)) = entidad(&ana.almacen, "FACCION:f-1", TipoEntidad::Asentamiento, &plaza) else { panic!("la ficha de su plaza") };
+    assert_eq!(a.cargos.clone().and_then(|c| c.gobernador_id), Some(h_beto.clone()), "la Reina nombra al Gobernador sin estar en la plaza");
+    assert!(a.fundadores_ids == [heroe.clone()], "quien la fundó: {:?}", a.fundadores_ids);
+    assert!(ana.almacen.hechos.iter().any(|(_, e)| matches!(&e.tipado, Some(Tipado::CargoAsignado(c)) if c.cargo == "gobernador" && c.heroe_id == h_beto)));
+    let mut gus = ClienteDeEjemplo::entrar(dir, hola("ok:gus", TipoCliente::ClienteUnity), Almacen::default()).await;
+    gus.aceptada(O::CrearHeroe(pb::OrdenCrearHeroe { display_name: "Gus".into(), campamento_id: camp.clone(), ..Default::default() })).await;
+    let r = gus.aceptada(O::CrearFaccion(pb::OrdenCrearFaccion { nombre: "Tebas".into(), sigilo: None })).await;
+    assert_eq!(creada(&r, TipoEntidad::Faccion), "f-2");
+    let r = ana.aceptada(O::ProponerRelacion(pb::OrdenProponerRelacion { tipo: "alianza".into(), faccion_a_id: "f-1".into(), faccion_b_id: "f-2".into(), ..Default::default() })).await;
+    let propuesta = creada(&r, TipoEntidad::Propuesta);
+    assert!(matches!(entidad(&ana.almacen, "FACCION:f-1", TipoEntidad::Propuesta, &propuesta), Some(Cuerpo::Propuesta(_))), "la propuesta, en la Facción que la hace");
+    gus.al_dia().await;
+    assert!(matches!(entidad(&gus.almacen, "FACCION:f-2", TipoEntidad::Propuesta, &propuesta), Some(Cuerpo::Propuesta(p)) if p.propuesta_por == heroe), "y en la que la recibe, con quién la hizo");
+    assert!(gus.almacen.hechos.iter().any(|(_, e)| matches!(&e.tipado, Some(Tipado::PropuestaDiplomatica(p)) if p.propuesta_id == propuesta)));
+    gus.aceptada(O::ResponderRelacion(pb::OrdenResponderRelacion { propuesta_id: propuesta.clone(), aceptar: true })).await;
+    ana.al_dia().await;
+    assert!(entidad(&ana.almacen, "FACCION:f-1", TipoEntidad::Propuesta, &propuesta).is_none(), "contestada, sale de las dos Facciones");
+    assert!(ana.almacen.ambitos["FACCION:f-1"].entidades.values().any(|c| matches!(c, Cuerpo::Relacion(r) if r.faccion_b_id == "f-2" && r.tipo == pb::TipoRelacion::RelacionAlianza as i32)));
+    let liga = faccion(&ana, "FACCION:f-1", "f-1").liga.expect("en una Liga");
+    assert_eq!(liga.miembros_ids, ["f-1", "f-2"]);
+    // Y en su `VISTA`, la forma pública de la otra Facción, con su Liga.
+    let tebas = faccion(&ana, "VISTA:f-1", "f-2");
+    assert!(tebas.nombre == "Tebas" && tebas.liga.is_some() && tebas.capital_id.is_none());
+
+    // 9. Ataca a unos bandidos fuera de toda zona (los pone la administración): con servidores de batalla, la batalla se abre y llega por su ámbito `BATALLA`.
     let lejos = Punto::new(sitio.x + (sitio.x - camp0.x).signum() * 45 * U, sitio.y);
     let destino = en_tierra(&m.0, lejos, 0, 0);
     ana.aceptada(marcha(destino)).await;
@@ -176,8 +225,8 @@ async fn un_cliente_que_solo_habla_el_contrato_nace_comercia_explora_funda_const
     assert!(ana.almacen.ambitos[&batalla].entidades.values().any(|c| matches!(c, Cuerpo::Batalla(_))));
     assert!(ana.almacen.hechos.iter().any(|(_, e)| e.codigo == "evento_pve.abierta" && matches!(e.tipado, Some(pb::evento_dominio::Tipado::BatallaAbierta(_)))), "con su hecho tipado");
 
-    // 9. Lo acumulado es lo que daría una conexión nueva; y quien reanuda con lo que conserva queda igual y no recibe ni un hecho más.
-    for (cliente, token, tipo) in [(ana, "ok:ana", TipoCliente::ClienteUnity), (adm, "ok:adm", TipoCliente::ClienteAdminWeb)] {
+    // 10. Lo acumulado es lo que daría una conexión nueva; y quien reanuda con lo que conserva queda igual y no recibe ni un hecho más.
+    for (cliente, token, tipo) in [(ana, "ok:ana", TipoCliente::ClienteUnity), (beto, "ok:beto", TipoCliente::ClienteUnity), (gus, "ok:gus", TipoCliente::ClienteUnity), (adm, "ok:adm", TipoCliente::ClienteAdminWeb)] {
         let mut cliente = cliente;
         cliente.al_dia().await;
         let (acumulado, conserva) = (cliente.almacen.contenido(), cliente.almacen.clone());

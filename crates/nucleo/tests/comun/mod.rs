@@ -139,7 +139,6 @@ pub fn mandaba(n: &Nucleo, actor: &str, c: &Comando) -> bool {
         | Comando::ColocarOrdenMercado { asentamiento, .. }
         | Comando::CrearCaravana { asentamiento }
         | Comando::MarcarPueblo { asentamiento, .. }
-        | Comando::FijarAcceso { asentamiento, .. }
         | Comando::FijarPuerta { asentamiento, .. }
         | Comando::VetarJugador { asentamiento, .. }
         | Comando::AsignarCargoLocal { asentamiento, .. }
@@ -176,6 +175,14 @@ pub fn gobierna(n: &mut Nucleo, plaza: u64, heroe: u64) {
         let r = n.aplicar_en(t, p);
         assert!(r.aceptada() || r.resultado == nucleo::Resultado::SinCambios, "{cargo:?} para {heroe} en as-{plaza}: {r:?}");
     }
+}
+
+/// La puerta por relación de antes de 5E (lo que daba el alias `FijarAcceso`, retirado en 5H, 5E-12): cerrada a los grupos que van a `false` (aliados, neutrales, enemigos) y abierta a los
+/// demás, los Aedas incluidos. Es una `FijarPuerta` sin héroe: para darla como administración (o por una cuenta que mandaba, [`mandaba`]).
+pub fn acceso(asentamiento: u64, aliados: bool, neutrales: bool, enemigos: bool) -> Comando {
+    use politica::Grupo;
+    let cerradas = [(Grupo::Aliados, aliados), (Grupo::Neutrales, neutrales), (Grupo::Enemigos, enemigos)].into_iter().filter(|(_, abierta)| !abierta).map(|(g, _)| g);
+    Comando::FijarPuerta { heroe: 0, asentamiento, cerrada_a: politica::Grupos::de(cerradas) }
 }
 
 /// Andamiaje de 5E-1: `heroe` puede colocar avanzadas de la plaza (reside en ella y es su Maestro de Obras, lo nombra la administración); su columna tiene que estar en el sitio.

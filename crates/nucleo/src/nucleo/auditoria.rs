@@ -43,7 +43,7 @@ impl Nucleo {
         let pueblos: Vec<_> = eco.pueblos.iter().map(|p| p.id).collect();
         let avanzadas: Vec<_> = eco.avanzadas.iter().map(|v| v.id).collect();
         huella(&(
-            (a.faccion, a.radio, vecinas, a.nivel(), a.nivel_actual(), a.protegida_hasta, a.ocupada_hasta, &a.puerta, a.cargos),
+            (a.faccion, a.radio, vecinas, a.nivel(), a.nivel_actual(), a.protegida_hasta, a.ocupada_hasta, &a.puerta, a.cargos, &a.fundadores, a.permite_reabastecer_aliados, e.comercio.ultima_caravana.get(&a.id)),
             (edificios, &eco.recintos, &eco.politicas, eco.ascenso, &eco.recetas_pausadas, eco.auto_pausada, eco.reserva_manual),
             (residentes, presentes, guarnicion, flota, aparcadas, pueblos, avanzadas, self.batalla_sobre(militar::presencia::Ubicacion::Asentamiento(a.id as u32)).map(|b| b.id)),
         ))
@@ -64,7 +64,9 @@ impl Nucleo {
         let mut m = Huellas::new();
         m.extend(e.ejercitos.iter().map(|(&id, x)| ((Clase::Ejercito, id), huella(x))));
         for (&id, h) in &e.militar.heroes {
-            m.insert((Clase::Heroe, id), huella(h));
+            // Con sus solicitudes de ingreso (5H: viajan en su `Heroe`).
+            let solicitudes: Vec<u32> = e.politica.facciones.iter().filter(|f| f.solicitudes.contains(&id)).map(|f| f.id).collect();
+            m.insert((Clase::Heroe, id), huella(&(h, solicitudes)));
             m.extend(h.heroe.escuadras.iter().map(|x| ((Clase::Escuadra, x.id), huella(x))));
         }
         m.extend(e.comercio.flota.iter().map(|c| ((Clase::Caravana, c.id), huella(c))));
@@ -88,10 +90,11 @@ impl Nucleo {
         // Una Facción es la entidad (sus ciudadanos, solicitudes, cargos, su experiencia...), su reputación, sus tecnologías y sus relaciones.
         m.extend(crate::proyeccion::audiencia::facciones(e).into_iter().map(|f| {
             let relaciones: Vec<_> = e.politica.relaciones.iter().filter(|r| r.incluye(f)).collect();
-            ((Clase::Faccion, f as u64), huella(&(e.politica.facciones.get(f), e.comercio.reputacion.get(&f), e.militar.tecnologias.get(&f), relaciones)))
+            ((Clase::Faccion, f as u64), huella(&(e.politica.facciones.get(f), e.comercio.reputacion.get(&f), e.militar.tecnologias.get(&f), relaciones, self.liga_de(f))))
         }));
         m.extend(e.politica.relaciones.iter().map(|r| ((Clase::Relacion, r.id), huella(r))));
         m.extend(e.politica.titulos.iter().map(|x| ((Clase::Titulo, x.id.indice()), huella(x))));
+        m.extend(e.politica.propuestas.iter().map(|p| ((Clase::Propuesta, p.id), huella(p))));
         m
     }
 

@@ -584,14 +584,13 @@ fn variantes_de_comando() -> BTreeSet<String> {
 
 #[test]
 fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_disponible() {
-    // Cada variante de `Comando` tiene un único origen: una orden del jugador, la administración, el canal del servidor de batalla (§8, códigos 101-105) o, para `FijarAcceso`, ser el alias
-    // de `FijarPuerta` que el núcleo conserva de antes del sistema 5 (5E): ninguna orden del contrato lo da, pero el registro de peticiones lo sigue entendiendo.
-    let mut del_jugador: BTreeSet<String> = ordenes_traducidas().iter().map(|(_, c)| nombre(c)).collect();
-    assert!(del_jugador.insert("FijarAcceso".into()), "el alias no es el comando de ninguna orden");
+    // Cada variante de `Comando` tiene un único origen: una orden del jugador, la administración o el canal del servidor de batalla (§8, códigos 101-105). El alias `FijarAcceso` se retiró en
+    // 5H (5E-12).
+    let del_jugador: BTreeSet<String> = ordenes_traducidas().iter().map(|(_, c)| nombre(c)).collect();
     let de_administracion: BTreeSet<String> = ordenes_de_administracion().iter().map(|(_, c)| nombre(c)).collect();
     let del_servidor_de_batalla: BTreeSet<String> = ["RegistrarAsignacion", "ConfirmarInicio", "RegistrarTokens", "RegistrarSalida", "AplicarResultado"].map(String::from).into();
     let todos = variantes_de_comando();
-    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (166, 142, 19, 5));
+    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (165, 141, 19, 5));
     let clasificados: Vec<&String> = del_jugador.iter().chain(&de_administracion).chain(&del_servidor_de_batalla).collect();
     assert_eq!(clasificados.len(), todos.len(), "una variante en dos orígenes");
     let sin_clasificar: Vec<&String> = todos.iter().filter(|v| !clasificados.contains(v)).collect();

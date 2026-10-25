@@ -377,7 +377,7 @@ impl Nucleo {
         // Su ciudad nace con los mismos edificios iniciales que la economía (ids 0..=viviendas+1).
         let urbe = crate::urbanismo::Urbe::fundar(&self.estado.reglas.economia, self.semilla, id);
         let nombre = self.nombre_de_ciudad_libre(id);
-        self.estado.asentamientos.insert(id, Asentamiento { id, faccion, posicion: punto, fundado_en: t, radio, parcelas: BTreeSet::new(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, puerta: Default::default(), cargos: Default::default(), nombre: nombre.clone(), capital_de: None, de_la_faccion_desde: t, resto_tributo: 0, permite_reabastecer_aliados: false });
+        self.estado.asentamientos.insert(id, Asentamiento { id, faccion, posicion: punto, fundado_en: t, radio, parcelas: BTreeSet::new(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, puerta: Default::default(), cargos: Default::default(), nombre: nombre.clone(), capital_de: None, de_la_faccion_desde: t, resto_tributo: 0, permite_reabastecer_aliados: false, fundadores: Vec::new() });
         self.situar_plaza(id, punto, faccion);
         self.proteger_al_fundar(id, t);
         self.programar_minuto(id, t + base::MS_POR_MINUTO);
@@ -392,9 +392,12 @@ impl Nucleo {
         // 5E-3 (decisión del autor, 2026-10-25): quien funda, el Líder de la columna, es su Gobernador de oficio (Doc 2.2); el Rey puede cambiarlo después. Solo si es uno de los fundadores:
         // el cargo pide residir en la plaza (Q4). DUDA: un Líder que no es ciudadano de la Facción de la caravana no reside en ella y la plaza nace sin Gobernador, como antes de 5E-3.
         let gobernador = fundadores.contains(&lider);
+        let plaza = self.estado.asentamientos.get_mut(&id).expect("recién fundada");
         if gobernador {
-            self.estado.asentamientos.get_mut(&id).expect("recién fundada").cargos.fijar(asentamiento::Cargo::Gobernador, Some(lider));
+            plaza.cargos.fijar(asentamiento::Cargo::Gobernador, Some(lider));
         }
+        // 5H (5B-9): quiénes la fundaron, en su orden; dejan de serlo al mudarse (`mudar_de_residencia`).
+        plaza.fundadores = fundadores;
 
         self.tr.tocar(Clase::Asentamiento, id);
         self.tr.emitir(&self.estado, EventoNucleo {

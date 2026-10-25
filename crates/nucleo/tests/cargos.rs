@@ -1,6 +1,6 @@
 //! Los cargos locales, la matriz de autorización de las órdenes de plaza y la puerta (sistema 5, tanda 5E; Diplomacia_Facciones §3.4 y §4.3, Proyecciones §4.3 y §5.2, Presencia §8): quién designa
 //! cada cargo y a quién (Q4: hay que residir), cuándo se vacía, que el cargo exige residir y estar dentro («la ciudadanía habilita, la presencia ejerce»), la puerta por grupos con su defecto
-//! (Q1: cerrada a neutrales y enemigos), los vetos que expulsan y la foto `BAN34`. Aquí las órdenes las da cada cuenta tal cual, sin el andamiaje de los demás escenarios (`comun::mandaba`).
+//! (Q1: cerrada a neutrales y enemigos), los vetos que expulsan y la foto `BAN35`. Aquí las órdenes las da cada cuenta tal cual, sin el andamiaje de los demás escenarios (`comun::mandaba`).
 //! Casos portados de `typescript-final:src/session/__tests__/{comandosCargos,autorizacionComandos,comandosPresencia}.test.ts` y `engine/__tests__/{cargos,puerta}.test.ts`.
 
 mod comun;
@@ -284,10 +284,7 @@ fn la_puerta_por_defecto_cierra_a_neutrales_y_enemigos_la_fija_el_gobernador_o_e
     assert_eq!((vetos.len(), vetos[0].dato("heroe"), vetos[0].dato("vetado")), (1, Some(cai as i64), Some(1)));
     e.ok("ana", vetar(ana, cai, false));
     assert!(e.n.puede_entrar_en_plaza(cai, plaza));
-    // `FijarAcceso` (117) es su alias: cierra a los grupos que van a `false` y deja los Aedas como estaban.
-    e.ok("rey", Comando::FijarAcceso { asentamiento: plaza, aliados: false, neutrales: true, enemigos: true });
-    assert_eq!(e.n.puerta_cerrada_a(plaza), Some(Grupos::de([Grupo::Aliados, Grupo::Aedas])));
-    assert_eq!(e.no("bea", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: true, enemigos: true }), rechazos::NO_AUTORIZADO);
+    // El alias `FijarAcceso` (117) se retiró en 5H (5E-12): ahora la puerta solo se fija por grupos (lo prueba `comando.rs`).
 }
 
 #[test]
@@ -319,7 +316,7 @@ fn los_cargos_y_la_puerta_viajan_en_la_foto_ban33_y_la_ban32_se_rechaza() {
     e.ok("ana", Comando::VetarJugador { heroe: ana, asentamiento: plaza, vetado: cai, vetar: true });
     assert!(hash0 != hash1 && hash1 != hash2 && hash2 != e.n.hash_estado(), "cada pieza mueve el hash");
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN34");
+    assert_eq!(&bytes[..5], b"BAN35");
     let reglas = e.n.estado().reglas.clone();
     let vuelta = Estado::deserializar(&bytes, &reglas, &e.n.estado().mundo_hash).unwrap();
     let a = &vuelta.asentamientos[&plaza];

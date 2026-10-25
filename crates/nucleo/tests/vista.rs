@@ -224,41 +224,11 @@ impl Cliente {
 }
 
 fn tipo_de(c: &Cuerpo) -> TipoEntidad {
-    match c {
-        Cuerpo::Ejercito(_) => TipoEntidad::Ejercito,
-        Cuerpo::Caravana(_) => TipoEntidad::Caravana,
-        Cuerpo::Asentamiento(_) => TipoEntidad::Asentamiento,
-        Cuerpo::Pueblo(_) => TipoEntidad::Pueblo,
-        Cuerpo::Avanzada(_) => TipoEntidad::Avanzada,
-        Cuerpo::Obra(_) => TipoEntidad::ObraDeMapa,
-        Cuerpo::FichaConocida(_) => TipoEntidad::FichaConocida,
-        Cuerpo::CampamentoBandidos(_) => TipoEntidad::CampamentoBandidos,
-        Cuerpo::CampamentoMercenarios(_) => TipoEntidad::CampamentoMercenarios,
-        Cuerpo::Batalla(_) => TipoEntidad::Batalla,
-        Cuerpo::Heroe(_) => TipoEntidad::Heroe,
-        Cuerpo::ZonaFaccion(_) => TipoEntidad::ZonaFaccion,
-        Cuerpo::RedCaminos(_) => TipoEntidad::RedCaminos,
-        otro => panic!("la vista no lleva {otro:?}"),
-    }
+    TipoEntidad::try_from(contrato::almacen::clave(c).0).unwrap()
 }
 
 fn id_de(c: &Cuerpo) -> String {
-    match c {
-        Cuerpo::Ejercito(x) => x.id.clone(),
-        Cuerpo::Caravana(x) => x.id.clone(),
-        Cuerpo::Asentamiento(x) => x.id.clone(),
-        Cuerpo::Pueblo(x) => x.id.clone(),
-        Cuerpo::Avanzada(x) => x.id.clone(),
-        Cuerpo::Obra(x) => x.id.clone(),
-        Cuerpo::FichaConocida(x) => x.asentamiento_id.clone(),
-        Cuerpo::CampamentoBandidos(x) => x.id.clone(),
-        Cuerpo::CampamentoMercenarios(x) => x.id.clone(),
-        Cuerpo::Batalla(x) => x.id.clone(),
-        Cuerpo::Heroe(x) => x.id.clone(),
-        Cuerpo::ZonaFaccion(x) => x.faccion_id.clone(),
-        Cuerpo::RedCaminos(_) => "red".into(),
-        otro => panic!("la vista no lleva {otro:?}"),
-    }
+    contrato::almacen::clave(c).1
 }
 
 /// Lo que el núcleo proyecta para esa vista ahora mismo: debe ser lo que el cliente acumuló. De lo ajeno que anda, el tramo y el sitio son los del instante en que se mandó (el cliente sigue con

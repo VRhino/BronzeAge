@@ -213,7 +213,7 @@ fn escenario(m: &M, semilla: u64) -> Escenario {
     let a = fundar(&mut n, 0, "ana", 1, p);
     let mut e = Escenario { n, a, cuenta: 0 };
     // La puerta de antes del sistema 5 (abierta también a los neutrales, que por defecto ya no entran: Q1, 5E): en estas pruebas los neutrales entran.
-    e.ok("admin", Comando::FijarAcceso { asentamiento: a, aliados: true, neutrales: true, enemigos: false });
+    e.ok("admin", comun::acceso(a, true, true, false));
     e
 }
 
@@ -228,7 +228,7 @@ fn dos_plazas(m: &M, semilla: u64) -> (Escenario, u64) {
     let mut e = Escenario { n, a, cuenta: 0 };
     // La puerta de antes del sistema 5 (abierta también a los neutrales: Q1, 5E), como en `escenario`.
     for plaza in [a, c] {
-        e.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: true, enemigos: false });
+        e.ok("admin", comun::acceso(plaza, true, true, false));
     }
     (e, c)
 }
@@ -480,22 +480,24 @@ fn el_duenio_decide_por_relacion_quien_entra_la_misma_faccion_y_los_residentes_s
 
     // Solo manda quien manda en la plaza: un desconocido no, ni siquiera con una orden válida; la administración sí.
     let (v, hash) = (e.n.version(), e.n.hash_estado());
-    assert_eq!(e.rechazada("zoe", Comando::FijarAcceso { asentamiento: a, aliados: false, neutrales: false, enemigos: false }), rechazos::NO_AUTORIZADO);
-    assert_eq!(e.rechazada("p", Comando::FijarAcceso { asentamiento: 9_999, aliados: false, neutrales: false, enemigos: false }), rechazos::ASENTAMIENTO_DESCONOCIDO);
+    let todo = politica::Grupos::de(politica::Grupo::TODOS);
+    assert_eq!(e.rechazada("en", Comando::FijarPuerta { heroe: enemigo, asentamiento: a, cerrada_a: todo }), rechazos::NO_AUTORIZADO);
+    assert_eq!(e.rechazada("zoe", Comando::FijarPuerta { heroe: enemigo, asentamiento: a, cerrada_a: todo }), rechazos::NO_AUTORIZADO, "nadie la fija a nombre de otro");
+    assert_eq!(e.rechazada("p", comun::acceso(9_999, false, false, false)), rechazos::ASENTAMIENTO_DESCONOCIDO);
     assert_eq!((e.n.version(), e.n.hash_estado()), (v, hash), "un rechazo no deja rastro");
-    assert_eq!(e.ord("p", Comando::FijarAcceso { asentamiento: a, aliados: true, neutrales: true, enemigos: false }).resultado, Resultado::SinCambios);
+    assert_eq!(e.ord("p", comun::acceso(a, true, true, false)).resultado, Resultado::SinCambios);
 
     // Aliados y vasallos van juntos.
-    e.ok("p", Comando::FijarAcceso { asentamiento: a, aliados: false, neutrales: true, enemigos: false });
+    e.ok("p", comun::acceso(a, false, true, false));
     assert_eq!(puede(&e), [true, false, false, true, false, true, true]);
     // Los neutrales (también quien no tiene Facción).
-    e.ok("p", Comando::FijarAcceso { asentamiento: a, aliados: true, neutrales: false, enemigos: false });
+    e.ok("p", comun::acceso(a, true, false, false));
     assert_eq!(puede(&e), [true, true, true, false, false, false, true]);
     // Abrir la puerta al enemigo.
-    e.ok("p", Comando::FijarAcceso { asentamiento: a, aliados: true, neutrales: true, enemigos: true });
+    e.ok("p", comun::acceso(a, true, true, true));
     assert_eq!(puede(&e), [true; 7]);
     // Cerrada a todos: la misma Facción y los residentes siempre pueden entrar.
-    e.ok("admin", Comando::FijarAcceso { asentamiento: a, aliados: false, neutrales: false, enemigos: false });
+    e.ok("admin", comun::acceso(a, false, false, false));
     assert_eq!(puede(&e), [true, false, false, false, false, false, true]);
     // Cada cambio deja su hecho (5E: `asentamiento.puerta_fijada`, con los grupos cerrados en sus valores); el primero es el del escenario.
     let h = hechos(&e.n, "asentamiento.puerta_fijada");
@@ -525,14 +527,14 @@ fn la_orden_de_entrar_la_respeta_un_enemigo_a_la_puerta_no_entra_hasta_que_se_le
     // entraba) y el siguiente ya no entra. El ciudadano, que es de la misma Facción, no se echa nunca.
     e.ok("al", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: al });
     assert!(!e.n.en_el_mapa(ca));
-    e.ok("ci", Comando::FijarAcceso { asentamiento: a, aliados: false, neutrales: true, enemigos: false });
+    e.ok("ci", comun::acceso(a, false, true, false));
     assert_eq!(e.n.heroe(al).unwrap().heroe.presencia.ubicacion, Ubicacion::Columna(ca), "el que estaba dentro sale al mapa con su columna");
     assert!(e.n.en_el_mapa(ca));
     assert_eq!(e.rechazada("al", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: al }), rechazos::PUERTA_CERRADA, "y ya no vuelve a entrar");
     e.ok("ci", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: ci });
     assert!(e.n.en_el_mapa(ca) && !e.n.en_el_mapa(cc));
     // Se abre la puerta a los enemigos y el enemigo entra.
-    e.ok("ci", Comando::FijarAcceso { asentamiento: a, aliados: true, neutrales: true, enemigos: true });
+    e.ok("ci", comun::acceso(a, true, true, true));
     e.ok("en", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: en });
     assert!(!e.n.en_el_mapa(ce));
 }
@@ -542,9 +544,9 @@ fn una_foto_con_el_acceso_cambiado_se_recupera_y_la_anterior_se_rechaza() {
     let m = con_mundo!();
     let mut e = escenario(m, 7);
     e.avanzar(HORA);
-    e.ok("admin", Comando::FijarAcceso { asentamiento: e.a, aliados: false, neutrales: true, enemigos: true });
+    e.ok("admin", comun::acceso(e.a, false, true, true));
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN34");
+    assert_eq!(&bytes[..5], b"BAN35");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.asentamientos[&e.a].puerta.cerrada_a, Some(politica::Grupos::de([politica::Grupo::Aliados])));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
@@ -643,7 +645,7 @@ fn guion(e: &mut Escenario, avanzar: &dyn Fn(&mut Escenario, Instante)) {
     e.ok_en(fin, "ana", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: ana });
     e.ok_en(fin, "beto", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: b });
     avanzar(e, fin + 10 * MIN);
-    e.ok_en(fin + 10 * MIN, "ana", Comando::FijarAcceso { asentamiento: a, aliados: false, neutrales: true, enemigos: false });
+    e.ok_en(fin + 10 * MIN, "ana", comun::acceso(a, false, true, false));
     avanzar(e, fin + 2 * HORA);
     e.ok_en(fin + 2 * HORA, "ana", Comando::VaciarCarro { heroe: ana });
     e.ok_en(fin + 2 * HORA, "beto", Comando::SalirDeAsentamiento { asentamiento: a, heroe: b });
@@ -709,7 +711,7 @@ fn una_foto_con_un_visitante_dentro_y_un_carro_en_la_residencia_recupera_el_mism
     let segunda = |e: &mut Escenario, ana: u64, b: u64| {
         let a = e.a;
         e.avanzar(3 * HORA);
-        e.ok("ana", Comando::FijarAcceso { asentamiento: a, aliados: true, neutrales: false, enemigos: true });
+        e.ok("ana", comun::acceso(a, true, false, true));
         e.ok("ana", Comando::VaciarCarro { heroe: ana });
         e.avanzar(40 * HORA);
         e.ok("beto", Comando::SalirDeAsentamiento { asentamiento: a, heroe: b });
@@ -727,7 +729,7 @@ fn una_foto_con_un_visitante_dentro_y_un_carro_en_la_residencia_recupera_el_mism
         let p = sitio_rico(&n, &m.0, 0, 1);
         let a = fundar(&mut n, 0, "ana", 1, p);
         let mut e = Escenario { n, a, cuenta: 0 };
-        e.ok("admin", Comando::FijarAcceso { asentamiento: a, aliados: true, neutrales: true, enemigos: false }); // como `escenario`
+        e.ok("admin", comun::acceso(a, true, true, false)); // como `escenario`
         let (ana, b, cb) = primera(&mut e);
         assert!(e.n.ejercito(cb).is_some() && !e.n.en_el_mapa(cb));
         let bytes = e.n.estado().serializar();
@@ -761,7 +763,7 @@ fn cerrar_la_puerta_saca_al_mapa_al_instante_y_con_todo_lo_suyo_a_quien_ya_no_pu
         e.ok("admin", Comando::FijarRelacion { a: x, b: y, relacion: Some(r) });
     }
     // Con la puerta abierta a todos entran de visita, con su columna, un aliado (F2), un neutral (F4), un enemigo (F5) y uno de la propia Facción (F1).
-    e.ok("admin", Comando::FijarAcceso { asentamiento: a, aliados: true, neutrales: true, enemigos: true });
+    e.ok("admin", comun::acceso(a, true, true, true));
     let mut visitas = vec![];
     for (cuenta, faccion) in [("al", 2), ("ne", 4), ("en", 5), ("ci", 1)] {
         let (h, ids) = e.con_prestamo(cuenta, faccion);
@@ -782,7 +784,7 @@ fn cerrar_la_puerta_saca_al_mapa_al_instante_y_con_todo_lo_suyo_a_quien_ya_no_pu
 
     // Se cierra a neutrales y enemigos: salen los dos visitantes con su columna y el que no trajo ninguna con una nueva; los demás siguen dentro.
     let (t, v) = (e.n.ahora(), e.n.version());
-    e.ok("admin", Comando::FijarAcceso { asentamiento: a, aliados: true, neutrales: false, enemigos: false });
+    e.ok("admin", comun::acceso(a, true, false, false));
     assert_eq!(e.n.version(), v + 1, "una sola mutación");
     assert!([al, ci, res].iter().all(|&h| dentro(&e, h)), "el aliado, el de la propia Facción y el residente siguen");
     assert!(!e.n.en_el_mapa(cal) && !e.n.en_el_mapa(cci));
@@ -801,14 +803,14 @@ fn cerrar_la_puerta_saca_al_mapa_al_instante_y_con_todo_lo_suyo_a_quien_ya_no_pu
     assert_eq!(e.rechazada("ne", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: ne }), rechazos::PUERTA_CERRADA);
 
     // Se cierra también a los aliados: sale «al»; la misma Facción y el residente nunca.
-    e.ok("admin", Comando::FijarAcceso { asentamiento: a, aliados: false, neutrales: false, enemigos: false });
+    e.ok("admin", comun::acceso(a, false, false, false));
     assert_eq!(e.n.heroe(al).unwrap().heroe.presencia.ubicacion, Ubicacion::Columna(cal));
     assert!(e.n.en_el_mapa(cal) && dentro(&e, ci) && dentro(&e, res) && !e.n.en_el_mapa(cci));
     assert_eq!(hechos(&e.n, "heroe.expulsado").len(), 4);
 
     // Abrir la puerta no saca a nadie, y repetir lo mismo no cambia nada.
-    e.ok("admin", Comando::FijarAcceso { asentamiento: a, aliados: true, neutrales: true, enemigos: true });
-    assert_eq!(e.ord("admin", Comando::FijarAcceso { asentamiento: a, aliados: true, neutrales: true, enemigos: true }).resultado, Resultado::SinCambios);
+    e.ok("admin", comun::acceso(a, true, true, true));
+    assert_eq!(e.ord("admin", comun::acceso(a, true, true, true)).resultado, Resultado::SinCambios);
     assert_eq!((hechos(&e.n, "heroe.expulsado").len(), dentro(&e, ci), dentro(&e, res)), (4, true, true));
 }
 

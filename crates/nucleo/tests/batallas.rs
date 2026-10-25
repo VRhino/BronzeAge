@@ -898,7 +898,7 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_rechaza_el_formato_anterior_
     let (n, id) = a_mitad();
     let reglas = reglas_unity();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN34");
+    assert_eq!(&bytes[..5], b"BAN35");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "hash-de-prueba").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.batallas, n.estado().batallas);
@@ -1276,7 +1276,7 @@ fn montar(m: &M, semilla: u64) -> Esc {
         e.dar(plaza, Madera, 350_000);
         e.ok("admin", Comando::AnadirEdificio { asentamiento: plaza, tipo: Tipo::Mercado });
         // La puerta de antes del sistema 5 (abierta también a los neutrales, que por defecto ya no entran: Q1, 5E): en estas pruebas los neutrales entran.
-        e.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: true, enemigos: false });
+        e.ok("admin", comun::acceso(plaza, true, true, false));
     }
     e.avanzar(9 * HORA);
     e.sin_proteccion();
@@ -1310,7 +1310,7 @@ fn en_la_convocatoria_defienden_los_aliados_y_los_vasallos_que_estan_dentro_y_lo
     for (x, r) in [(4, Relacion::Alianza), (5, Relacion::Vasallaje), (6, Relacion::Guerra)] {
         e.ok("admin", Comando::FijarRelacion { a: 2, b: x, relacion: Some(r) });
     }
-    e.ok("beto", Comando::FijarAcceso { asentamiento: b, aliados: true, neutrales: true, enemigos: true });
+    e.ok("beto", comun::acceso(b, true, true, true));
     let gente: Vec<(&str, u32, (u64, u64))> = [("alia", 4), ("vasa", 5), ("nora", 3), ("enri", 6)].into_iter().map(|(c, f)| (c, f, e.ejercito(c, f, e.pos(b), &[Tropa::MiliciaLanceros]))).collect();
     for (cuenta, _, col) in &gente {
         e.ok(cuenta, Comando::Guarnecer { asentamiento: b, heroe: col.1 });
@@ -1675,7 +1675,7 @@ fn guion_de_asedio(m: &'static M, avanzar: &dyn Fn(&mut Nucleo, Instante)) -> Nu
     // Â«noraÂ», neutral, entra tambiÃ©n; el dueÃ±o abre la puerta a todos, enemigos incluidos (la conquista lo devolverÃ¡ al de por defecto).
     let nora = e.ejercito("nora", 3, e.pos(b), &[Tropa::MiliciaLanceros]);
     e.ok("nora", Comando::Guarnecer { asentamiento: b, heroe: nora.1 });
-    e.ok("beto", Comando::FijarAcceso { asentamiento: b, aliados: true, neutrales: true, enemigos: true });
+    e.ok("beto", comun::acceso(b, true, true, true));
     let t = e.n.ahora();
     avanzar(&mut e.n, t + MIN);
     assert!(atacar(&mut e.n, t + MIN, "ana", "g1", ana.1, ObjetivoAtaque::Asentamiento(b), true).aceptada());
@@ -2049,7 +2049,7 @@ fn los_bandidos_que_acosan_una_columna_con_dos_caravanas_juegan_las_dos_en_la_mi
 
         // La foto a mitad de la batalla lleva las dos caravanas y vuelve idéntica; la del formato anterior (una sola caravana) se rechaza con su motivo.
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN34");
+        assert_eq!(&bytes[..5], b"BAN35");
         let vuelta = nucleo::Estado::deserializar(&bytes, &arranque_mundo(m, 7).reglas, &m.0.hash().to_string()).unwrap();
         assert_eq!((vuelta.serializar(), vuelta.batallas.clone()), (bytes.clone(), e.n.estado().batallas.clone()));
         let viejo = [b"BAN18".as_slice(), &bytes[5..]].concat();
@@ -2150,7 +2150,7 @@ fn con_pueblo(m: &M) -> (Esc, u64, u64, Punto) {
     let mut e = Esc { n, a: madre, b: 0, cuenta: 0 };
     e.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: madre, pausada: true });
     // La puerta de antes del sistema 5 (abierta también a los neutrales, que por defecto ya no entran: Q1, 5E): en estas pruebas los neutrales entran.
-    e.ok("admin", Comando::FijarAcceso { asentamiento: madre, aliados: true, neutrales: true, enemigos: false });
+    e.ok("admin", comun::acceso(madre, true, true, false));
     e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: madre, nivel: 2 });
     for _ in 0..9 {
         e.ok("admin", Comando::AgrandarZona { asentamiento: madre });

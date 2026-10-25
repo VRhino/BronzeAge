@@ -536,6 +536,8 @@ impl Nucleo {
         self.vigilar_fundaciones(t);
         // Quien entra, sale, se muda o aparca marca el interior de su plaza (solo con sesiones).
         self.marcar_interiores();
+        // Una relación que nace o acaba cambia la Liga de todas las Facciones de la de sus dos extremos (5H: viaja en cada Facción).
+        self.marcar_ligas();
         // Las escuadras de un héroe tocado viajan con él.
         let escuadras: Vec<u64> = self.tr.tocados.de(Clase::Heroe).iter().filter_map(|h| self.estado.militar.heroes.get(h)).flat_map(|h| h.heroe.escuadras.iter().map(|e| e.id)).collect();
         self.tr.tocar_todos(Clase::Escuadra, escuadras);
@@ -972,7 +974,7 @@ impl Nucleo {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },
-            Comando::AsignarCargoLocal { .. } | Comando::FijarPuerta { .. } | Comando::FijarAcceso { .. } | Comando::VetarJugador { .. } => match self.ejecutar_cargos(t, p) {
+            Comando::AsignarCargoLocal { .. } | Comando::FijarPuerta { .. } | Comando::VetarJugador { .. } => match self.ejecutar_cargos(t, p) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },
@@ -1010,7 +1012,7 @@ impl Nucleo {
             | Comando::CambiarResidencia { .. }
             | Comando::ResidirEnCampamento { .. }
             | Comando::DejarResidencia { .. }
-            | Comando::FijarFaccionDeHeroe { .. } => match self.ejecutar_politica(t, p) {
+            | Comando::FijarFaccionDeHeroe { .. } => match self.con_lo_politico(|n| n.ejecutar_politica(t, p)) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },
@@ -1046,7 +1048,7 @@ impl Nucleo {
             | Comando::RomperRelacion { .. }
             | Comando::RebelionVasallo { .. }
             | Comando::AdmitirOtrasFacciones { .. }
-            | Comando::AlternarReabastecerAliados { .. } => match self.ejecutar_diplomacia(t, p) {
+            | Comando::AlternarReabastecerAliados { .. } => match self.con_lo_politico(|n| n.ejecutar_diplomacia(t, p)) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },
@@ -1055,7 +1057,7 @@ impl Nucleo {
             | Comando::RetirarAnexion { .. }
             | Comando::ProponerFusion { .. }
             | Comando::ResponderFusion { .. }
-            | Comando::RetirarFusion { .. } => match self.ejecutar_anexion_y_fusion(t, p) {
+            | Comando::RetirarFusion { .. } => match self.con_lo_politico(|n| n.ejecutar_anexion_y_fusion(t, p)) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },

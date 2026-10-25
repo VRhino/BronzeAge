@@ -8,9 +8,10 @@
 //!   de minuto manda el almacén, la población y poco más, no la ciudad entera. `aplicar` es lo que hace el cliente.
 //! - [`campamento`]: el campamento de mercenarios completo (viaja entero, como todo lo demás): reclutas, stock en venta, contadores del mercado, residentes y presentes, préstamos y tropas que ofrece.
 //!
-//! DUDA: el cargo de cada puesto (Gobernador...) y el nombre son del sistema 5 y salen vacíos; el trazado de una pieza va en milésimas de unidad local como la del ticket (`Edificio.posicion` = centro de
-//! su huella); la prioridad de un edificio en cola es su puntuación, recortada a 32 bits; la fuente de una Leñera se nombra `parcela-<n>`; `Cargos`, `permite_reabastecer_aliados` y `ultima_caravana_creada_en_ms`
-//! salen a su valor por defecto; de los edificios fijos de un campamento (taberna, mercado...) el motor solo conoce sus viviendas y su edificio militar; las celdas de cada recinto van enteras con su
+//! Del sistema 5 (5E y 5H) viajan también los cargos, los fundadores, la puerta con sus vetos, si abre su almacén a los aliados y cuándo creó su última caravana.
+//!
+//! DUDA: el trazado de una pieza va en milésimas de unidad local como la del ticket (`Edificio.posicion` = centro de
+//! su huella); la prioridad de un edificio en cola es su puntuación, recortada a 32 bits; la fuente de una Leñera se nombra `parcela-<n>`; de los edificios fijos de un campamento (taberna, mercado...) el motor solo conoce sus viviendas y su edificio militar; las celdas de cada recinto van enteras con su
 //! `avance` (el cliente deduce las que están en pie y las que faltan) y el progreso de una mejora de recinto no se dibuja.
 
 use super::propios::{batalla_sobre, cantidades, celdas, constante, existencia};
@@ -132,6 +133,10 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
     p.puerta_cerrada_a = n.puerta_cerrada_a(id).unwrap_or_default().iter().map(|g| grupo_de_puerta(g) as i32).collect();
     p.vetados_ids = a.puerta.vetados.iter().map(|&h| ids::heroe(h)).collect();
     p.cargos = Some(cargos(&a.cargos));
+    p.fundadores_ids = a.fundadores.iter().map(|&h| ids::heroe(h)).collect();
+    // Si abre su almacén a los aliados (5D) y cuándo creó su última caravana (el cooldown de crearlas, compartido con la Caravana de Fundación), desde 5H.
+    p.permite_reabastecer_aliados = a.permite_reabastecer_aliados;
+    p.ultima_caravana_creada_en_ms = e.comercio.ultima_caravana.get(&id).copied();
     p.caravanas_aparcadas_ids = e.comercio.flota.iter().filter(|c| c.estado == comercio::caravana::EstadoCaravana::Aparcada && c.anfitriona.is_some_and(|x| u64::from(x) == id)).map(|c| ids::caravana(c.id)).collect();
     p.flota_ids = e.comercio.flota.iter().filter(|c| u64::from(c.origen) == id).map(|c| ids::caravana(c.id)).collect();
 

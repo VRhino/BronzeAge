@@ -1,4 +1,5 @@
-//! Los hechos del núcleo como `EventoDominio` del contrato 05 §8 (4H T5): el `payload` genérico de todos y el mensaje **tipado** de los quince que mueven la interfaz (decisión 8 del autor).
+//! Los hechos del núcleo como `EventoDominio` del contrato 05 §8 (4H T5): el `payload` genérico de todos y el mensaje **tipado** de los que mueven la interfaz (decisión 8 del autor: los quince de
+//! T5 y, desde 5H, los ocho de la política).
 //!
 //! - **A quién se atribuye**: `asentamiento_id` (la primera plaza), `heroes_ids` (los héroes nombrados) y `facciones_ids` (las Facciones que lo oyen enteras), lo que `EventoNucleo::completar` dejó al emitirlo.
 //! - **`payload`**: `ejercitoId` (la primera columna que nombra), `x`/`y` (dónde ocurrió), los datos enteros y los valores de texto y lista. Los datos que nombran una entidad viajan **con el id del
@@ -21,6 +22,14 @@
 //! | `GuerraDeclarada` | `diplomacia.guerra_declarada` (con las arrastradas, 5D) |
 //! | `ObraTerminada` | `construccion.edificio_completado`, `construccion.mejora_completada`, `construccion.recinto_completado`, `pueblo.completado`, `avanzada.completada` |
 //! | `HeroeHerido` | `heroe.herido` |
+//! | `PropuestaDiplomatica` (5H) | `diplomacia.relacion_propuesta`, `.anexion_propuesta`, `.fusion_propuesta` |
+//! | `PropuestaResuelta` (5H) | `diplomacia.relacion_aceptada`, `.relacion_rechazada`, `.relacion_retirada`, `.anexion_rechazada`, `.anexion_retirada`, `.fusion_rechazada`, `.fusion_retirada` |
+//! | `RelacionTerminada` (5H) | `diplomacia.relacion_rota`, `.paz_firmada`, `.rebelion_vasallo`, `.vasallo_liberado` |
+//! | `FaccionesUnidas` (5H) | `diplomacia.anexion`, `diplomacia.fusion` |
+//! | `CargoAsignado` (5H) | `cargo.local_asignado`, `cargo.rey_asignado`, `cargo.embajador_asignado` |
+//! | `TituloCambiado` (5H) | `titulo.nace`, `titulo.cambia_manos` |
+//! | `SolicitudDeIngreso` (5H) | `faccion.solicitud_ingreso` |
+//! | `CiudadaniaCambiada` (5H) | `faccion.creada`, `faccion.ciudadania_union`, `faccion.solicitud_denegada`, `faccion.abandonada` |
 //!
 //! `BatallaAbierta` sale de los datos del propio hecho (contra qué se juega, quién la inició, los dos bandos, el plazo de la convocatoria), así que se tipa igual aunque la batalla ya se haya
 //! retirado del estado al proyectarlo (una reanudación tardía); de su contexto, lo que el ticket no congela (los carros de una caravana, lo protegido de un pueblo) se lee del estado de ahora, como
@@ -166,7 +175,23 @@ fn payload(n: &Nucleo, ev: &EventoNucleo) -> Struct {
     Struct { fields: campos }
 }
 
-/// El mensaje tipado de los quince hechos que mueven la interfaz (ver la tabla del módulo); `None` en el resto.
+/// La clase de propuesta de un hecho de diplomacia (`diplomacia.<clase>_...`).
+fn clase_de_propuesta(codigo: &str) -> &'static str {
+    if codigo.starts_with("diplomacia.anexion") {
+        "anexion"
+    } else if codigo.starts_with("diplomacia.fusion") {
+        "fusion"
+    } else {
+        "relacion"
+    }
+}
+
+/// Un valor de texto del hecho.
+fn texto_de(ev: &EventoNucleo, k: &str) -> Option<String> {
+    ev.valores.iter().find_map(|(c, d)| if let Dato::Texto(s) = d { (*c == k).then(|| s.clone()) } else { None })
+}
+
+/// El mensaje tipado de los hechos que mueven la interfaz (ver la tabla del módulo); `None` en el resto.
 fn tipado(n: &Nucleo, ev: &EventoNucleo) -> Option<Tipado> {
     let dato = |k: &str| ev.dato(k);
     let id = |k: &str| dato(k).map(|v| v as u64);
@@ -246,6 +271,74 @@ fn tipado(n: &Nucleo, ev: &EventoNucleo) -> Option<Tipado> {
         ("pueblo.completado", _) => obra("pueblo", ids::pueblo(id("pueblo")?), None),
         ("avanzada.completada", _) => obra("avanzada", ids::avanzada(id("avanzada")?), dato("etapa").and_then(|v| u32::try_from(v + 1).ok())),
         ("heroe.herido", _) => Tipado::HeroeHerido(pb::HeroeHerido { heroe_id: heroe("heroe"), hasta_ms: dato("hasta")? }),
+        // La política (5H).
+        ("diplomacia.relacion_propuesta" | "diplomacia.anexion_propuesta" | "diplomacia.fusion_propuesta", _) => Tipado::PropuestaDiplomatica(pb::PropuestaDiplomatica {
+            propuesta_id: ids::propuesta(id("propuesta")?),
+            clase: clase_de_propuesta(codigo).into(),
+            faccion_a_id: faccion("faccionA")?,
+            faccion_b_id: faccion("faccionB")?,
+            propuesta_por: heroe("heroe"),
+            tipo: (codigo == "diplomacia.relacion_propuesta").then(|| if dato("tipo") == Some(1) { pb::TipoRelacion::RelacionVasallaje } else { pb::TipoRelacion::RelacionAlianza } as i32),
+            nombre: texto_de(ev, "nombre"),
+        }),
+        (
+            "diplomacia.relacion_aceptada" | "diplomacia.relacion_rechazada" | "diplomacia.relacion_retirada" | "diplomacia.anexion_rechazada" | "diplomacia.anexion_retirada" | "diplomacia.fusion_rechazada"
+            | "diplomacia.fusion_retirada",
+            _,
+        ) => Tipado::PropuestaResuelta(pb::PropuestaResuelta {
+            propuesta_id: id("propuesta").map(ids::propuesta),
+            clase: clase_de_propuesta(codigo).into(),
+            resultado: codigo.rsplit('_').next().unwrap_or_default().into(),
+            faccion_a_id: faccion("faccionA")?,
+            faccion_b_id: faccion("faccionB")?,
+            relacion_id: id("relacion").map(ids::relacion),
+        }),
+        ("diplomacia.relacion_rota" | "diplomacia.paz_firmada" | "diplomacia.rebelion_vasallo" | "diplomacia.vasallo_liberado", _) => Tipado::RelacionTerminada(pb::RelacionTerminada {
+            relacion_id: ids::relacion(id("relacion")?),
+            faccion_a_id: faccion("faccionA")?,
+            faccion_b_id: faccion("faccionB")?,
+            como: match codigo {
+                "diplomacia.relacion_rota" => "rota",
+                "diplomacia.paz_firmada" => "paz",
+                "diplomacia.rebelion_vasallo" => "rebelion",
+                _ => "liberacion",
+            }
+            .into(),
+            por_faccion_id: faccion("faccion"),
+        }),
+        ("diplomacia.anexion" | "diplomacia.fusion", _) => {
+            let fusion = codigo == "diplomacia.fusion";
+            Tipado::FaccionesUnidas(pb::FaccionesUnidas {
+                clase: if fusion { "fusion" } else { "anexion" }.into(),
+                faccion_a_id: faccion("faccionA")?,
+                faccion_b_id: faccion("faccionB")?,
+                resultante_id: if fusion { faccion("faccion")? } else { faccion("faccionA")? },
+                nombre: texto_de(ev, "nombre"),
+            })
+        }
+        ("cargo.local_asignado" | "cargo.rey_asignado" | "cargo.embajador_asignado", _) => Tipado::CargoAsignado(pb::CargoAsignado {
+            heroe_id: heroe("heroe"),
+            cargo: match codigo {
+                "cargo.rey_asignado" => "rey".to_owned(),
+                "cargo.embajador_asignado" => "embajador".to_owned(),
+                _ => texto_de(ev, "cargo")?,
+            },
+            faccion_id: faccion("faccion")?,
+            asentamiento_id: (codigo == "cargo.local_asignado").then(plaza_id),
+        }),
+        ("titulo.nace" | "titulo.cambia_manos", _) => Tipado::TituloCambiado(pb::TituloCambiado { titulo_id: texto_de(ev, "titulo")?, faccion_id: faccion("faccion")?, faccion_anterior_id: faccion("faccionAnterior") }),
+        ("faccion.solicitud_ingreso", _) => Tipado::SolicitudDeIngreso(pb::SolicitudDeIngreso { heroe_id: heroe("heroe"), faccion_id: faccion("faccion")? }),
+        ("faccion.creada" | "faccion.ciudadania_union" | "faccion.solicitud_denegada" | "faccion.abandonada", _) => Tipado::CiudadaniaCambiada(pb::CiudadaniaCambiada {
+            heroe_id: heroe("heroe"),
+            faccion_id: faccion("faccion")?,
+            como: match codigo {
+                "faccion.creada" => "creada",
+                "faccion.ciudadania_union" => "ingreso",
+                "faccion.solicitud_denegada" => "denegada",
+                _ => "abandono",
+            }
+            .into(),
+        }),
         _ => return None,
     })
 }

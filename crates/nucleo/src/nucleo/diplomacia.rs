@@ -160,6 +160,42 @@ impl Nucleo {
         }
     }
 
+    /// Una orden de política (la ciudadanía, la diplomacia, la anexión y la fusión) con lo que el registro tiene que saber además de lo que ella toca (5H): las propuestas que crea, contesta,
+    /// retira, poda (las caducadas de su clase, al añadir otra) o descarta el traslado (`Clase::Propuesta`) y los héroes cuyas solicitudes de ingreso cambian (`Heroe.solicitudes_faccion_ids`:
+    /// pedir, contestar, ganar una ciudadanía que las borra todas, la Facción que desaparece con las suyas). Los dos almacenes son pequeños: se comparan los de antes y los de después.
+    pub(super) fn con_lo_politico<R>(&mut self, orden: impl FnOnce(&mut Self) -> R) -> R {
+        let foto = |n: &Self| -> (BTreeSet<u64>, BTreeSet<(u64, u32)>) {
+            let pol = &n.estado.politica;
+            (pol.propuestas.iter().map(|p| p.id).collect(), pol.facciones.iter().flat_map(|f| f.solicitudes.iter().map(move |&h| (h, f.id))).collect())
+        };
+        let antes = foto(self);
+        let r = orden(self);
+        let ahora = foto(self);
+        self.tr.tocar_todos(Clase::Propuesta, antes.0.symmetric_difference(&ahora.0).copied());
+        self.tr.tocar_todos(Clase::Heroe, antes.1.symmetric_difference(&ahora.1).map(|&(h, _)| h).filter(|h| self.estado.militar.heroes.contains_key(h)));
+        r
+    }
+
+    /// Al cerrar la versión: las Facciones de la Liga de cada extremo de una relación tocada (5H). Al nacer una relación, la Liga nueva contiene a las dos de antes; al acabar, la de antes es
+    /// la unión de las dos nuevas: marcar las Ligas de después basta. Una Facción que desaparece rompe sus relaciones, así que también pasa por aquí.
+    pub(super) fn marcar_ligas(&mut self) {
+        let extremos: BTreeSet<u32> = self.tr.tocados.de(Clase::Relacion).iter().filter_map(|&id| self.estado.politica.relaciones.get(id)).flat_map(|r| [r.a, r.b]).collect();
+        let mut marcadas: BTreeSet<u32> = BTreeSet::new();
+        for f in extremos {
+            if marcadas.contains(&f) {
+                continue;
+            }
+            marcadas.extend(self.liga_de(f).map_or_else(Vec::new, |l| l.miembros));
+        }
+        self.tr.tocar_todos(Clase::Faccion, marcadas.into_iter().map(u64::from));
+    }
+
+    /// La Liga de `f` (Diplomacia §5.7), entre las Facciones que existen como entidad (como `ligas`).
+    pub fn liga_de(&self, f: u32) -> Option<politica::liga::Liga> {
+        let fs = &self.estado.politica.facciones;
+        politica::liga::liga_de(&self.estado.politica.relaciones, f, |x| fs.existe(x))
+    }
+
     /// Lo que cambia con una relación: ella, sus dos Facciones y, si es una alianza, el ritmo de su reputación.
     pub(super) fn tocar_relacion(&mut self, t: Instante, id: u64) {
         let Some(r) = self.estado.politica.relaciones.get(id) else { return };

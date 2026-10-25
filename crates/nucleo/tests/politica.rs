@@ -1,6 +1,6 @@
 //! La Facción como entidad, la ciudadanía y la residencia en el núcleo (sistema 5, tanda 5B; Diplomacia_Facciones §3-§4): crear una Facción, pedir el ingreso y responderlo, el Rey y el
 //! Embajador, dejarla con la sucesión del trono (y Q7), las tres órdenes de residencia con su cooldown, los fundadores que pasan a residir, los ciudadanos de la nobleza (Q8), la proyección de
-//! la Facción y la foto `BAN28` (hoy `BAN34`). De 5C: la experiencia y el nivel derivado, la capital (`designar_capital`, la más antigua, la distancia en el mantenimiento y la Gran Fundición única),
+//! la Facción y la foto `BAN28` (hoy `BAN35`). De 5C: la experiencia y el nivel derivado, la capital (`designar_capital`, la más antigua, la distancia en el mantenimiento y la Gran Fundición única),
 //! el nombre de las plazas (`nombreDeCiudadLibre`, `renombrar_asentamiento`) y la foto que rechaza `BAN29`. Casos portados de `typescript-final:src/session/__tests__/{comandosMembresiaFaccion,comandosResidencia,faccionDeLaColumna}.test.ts` y
 //! `engine/__tests__/residenciaMercenaria.test.ts`. Sobre el artefacto de mundo real; las pruebas se omiten si no está.
 
@@ -314,13 +314,13 @@ fn quien_deja_su_casa_dentro_sigue_de_visita_si_la_puerta_le_admite_y_si_no_sale
     assert!(e.hechos("heroe.expulsado").is_empty());
 
     // Con la puerta abierta a los neutrales (por defecto, cerrada: Q1, 5E), quien deja la Facción también sigue dentro.
-    e.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: true, enemigos: false });
+    e.ok("admin", comun::acceso(plaza, true, true, false));
     e.avanzar(DIA);
     e.ok("ana", Comando::DejarFaccion { heroe: ana });
     assert_eq!((e.n.heroe(ana).unwrap().heroe.presencia.ubicacion, e.faccion_de(ana)), (dentro, None));
 
     // Con la puerta cerrada a los neutrales, sale expulsada al mapa sola: su tropa se queda en su casa nueva; se lleva su carro y sus víveres.
-    e.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: false, enemigos: false });
+    e.ok("admin", comun::acceso(plaza, true, false, false));
     let fuera = e.hechos("heroe.expulsado");
     assert_eq!(fuera.iter().map(|x| dato(x, "heroe")).collect::<Vec<_>>(), vec![ana as i64], "cerrar la puerta echa a la que ya no es de la Facción");
     e.ok("bea", Comando::DejarFaccion { heroe: bea });
@@ -441,7 +441,7 @@ fn la_politica_viaja_en_la_foto_ban32_y_las_ban31_ban30_ban29_y_ban27_se_rechaza
     let e = guion(m, &|e, ms| e.avanzar(ms));
     let (reglas, hash) = (Reglas::default(), m.0.hash().to_string());
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN34");
+    assert_eq!(&bytes[..5], b"BAN35");
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     assert_eq!((s.politica.clone(), s.hash()), (e.n.estado().politica.clone(), e.n.hash_estado()));
     assert!(s.politica.facciones.iter().count() == 2 && s.militar.heroes.values().any(|h| h.residencia_cambiada_en.is_some()));

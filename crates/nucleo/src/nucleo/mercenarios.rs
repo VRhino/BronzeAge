@@ -190,6 +190,10 @@ impl Nucleo {
         // Q4: quien deja de residir en una plaza deja sus cargos en ella.
         if let Some(Residencia::Asentamiento(a)) = antes.filter(|&r| Some(r) != nueva) {
             self.vaciar_cargos_de(heroe, u64::from(a));
+            // Y deja de ser uno de sus fundadores (5H, 5B-9; `faccion.ts` lo quitaba de `heroesFundadoresIds`).
+            if let Some(plaza) = self.estado.asentamientos.get_mut(&u64::from(a)) {
+                plaza.fundadores.retain(|&h| h != heroe);
+            }
         }
         // Llega o se va un residente de un campamento: cambia la demanda de bandidos de su anillo.
         for c in [antes, nueva].into_iter().flatten().filter_map(|r| if let Residencia::Campamento(c) = r { Some(c) } else { None }) {

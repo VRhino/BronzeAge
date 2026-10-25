@@ -163,6 +163,8 @@ pub fn heroe(n: &Nucleo, h: &HeroeNucleo) -> pb::Heroe {
         monedas_heroe: Some(pb::Monedas { bronce: h.heroe.monedas.bronce.max(0) as u64, plata: h.heroe.monedas.plata.max(0) as u64, oro: h.heroe.monedas.oro.max(0) as u64 }),
         cupo_guarnicion: u32::try_from(cupo_guarnicion).unwrap_or(0),
         residencia_id: residencia,
+        faccion_id: h.faccion.map(ids::faccion),
+        solicitudes_faccion_ids: e.politica.facciones.iter().filter(|f| f.solicitudes.contains(&h.heroe.id)).map(|f| ids::faccion(f.id)).collect(),
         plazas_recordadas: h.plazas_recordadas.iter().map(|(&plaza, x)| (ids::asentamiento(u64::from(plaza)), interior_recordado(u64::from(plaza), x))).collect(),
         ..Default::default()
     }
@@ -469,6 +471,7 @@ pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
     let base = pb::Faccion {
         id: ids::faccion(f),
         version: n.version_de(Clase::Faccion, u64::from(f)),
+        liga: n.liga_de(f).map(|l| pb::LigaDeFaccion { miembros_ids: l.miembros.into_iter().map(ids::faccion).collect(), tiene_vasallaje: l.tiene_vasallaje, gran_rey_id: l.gran_rey.map(ids::faccion) }),
         nivel: n.nivel_de_faccion(f),
         capital_id: n.capital_de(f).map(ids::asentamiento),
         reputacion: Some(ritmo(base::Ritmo { valor_en_t0: milesimas(rep.valor_en_t0), por_minuto: milesimas(rep.por_minuto), maximo: rep.maximo.map(milesimas), minimo: rep.minimo.map(milesimas), ..rep })),
@@ -505,6 +508,12 @@ pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
     }
 }
 
+/// La forma pública de otra Facción (5H, `VISTA`; Proyecciones §6: «facciones: públicas en la ficción»): la Facción sin su experiencia, su capital ni cuándo la designó (dónde está su capital es
+/// de la niebla). DUDA: el TypeScript la mandaba entera, con la experiencia; aquí el nivel basta.
+pub fn faccion_publica(n: &Nucleo, f: u32) -> pb::Faccion {
+    pb::Faccion { experiencia: 0, capital_designada_en_ms: None, capital_id: None, ..faccion(n, f) }
+}
+
 /// Las tecnologías de la Facción: las de arranque y las que dio la administración. DUDA: sin `aparecidas` ni `reveladas` hasta el sistema 6.
 pub fn tecnologias(n: &Nucleo, f: u32) -> pb::TecnologiasFaccion {
     let e = n.estado();
@@ -532,6 +541,32 @@ pub fn relacion(n: &Nucleo, r: &RelacionPolitica) -> pb::RelacionPolitica {
         rota_por: r.rota_por.map(ids::faccion),
         rota_en_ms: r.rota_en,
         paz_propuesta_por: r.paz_propuesta_por.map(ids::faccion),
+    }
+}
+
+/// Una propuesta entre dos Facciones (5H, Diplomacia §2.4): de relación (alianza o vasallaje, con su tributo), de anexión o de fusión (con el nombre y el Rey de la Facción nueva). `propuesta_por`
+/// es el héroe que la hizo (5A-7). Viaja mientras está en el almacén, también caducada: el cliente la descarta por `expira_en_ms` (caducar no es un hecho, decisión 4) y sale con `QUITA` al
+/// contestarla, retirarla o podarla.
+pub fn propuesta(n: &Nucleo, p: &politica::Propuesta) -> pb::Propuesta {
+    use pb::propuesta::Clase as C;
+    use politica::propuestas::{Clase as Cp, Pacto};
+    let clase = match &p.clase {
+        Cp::Relacion { pacto, a, b, tributo } => C::Relacion(pb::PropuestaRelacion {
+            tipo: if *pacto == Pacto::Vasallaje { pb::TipoRelacion::RelacionVasallaje } else { pb::TipoRelacion::RelacionAlianza } as i32,
+            faccion_a_id: ids::faccion(*a),
+            faccion_b_id: ids::faccion(*b),
+            tributo: tributo.map(|t| pb::Tributo { recurso: t.recurso.nombre().to_owned(), cantidad_por_minuto: t.cantidad_por_minuto }),
+        }),
+        Cp::Anexion { absorbente, absorbida } => C::Anexion(pb::PropuestaAnexion { absorbente_id: ids::faccion(*absorbente), absorbida_id: ids::faccion(*absorbida) }),
+        Cp::Fusion { a, b, nombre, rey } => C::Fusion(pb::PropuestaFusion { faccion_a_id: ids::faccion(*a), faccion_b_id: ids::faccion(*b), nuevo_nombre: nombre.clone(), nuevo_rey_id: ids::heroe(*rey) }),
+    };
+    pb::Propuesta {
+        id: ids::propuesta(p.id),
+        version: n.version_de(Clase::Propuesta, p.id),
+        propuesta_por: ids::heroe(p.propuesta_por),
+        creada_en_ms: p.creada_en,
+        expira_en_ms: p.expira_en,
+        clase: Some(clase),
     }
 }
 
@@ -728,11 +763,11 @@ pub fn proyectar(n: &Nucleo, quien: Espectador, clase: Clase, id: u64) -> Proyec
     let un = |tipo: T, id: String, cuerpo: Option<Cuerpo>| Proyeccion { posibles: vec![(tipo, id.clone())], existen: cuerpo.into_iter().map(|c| (tipo, id.clone(), c)).collect() };
     match clase {
         Clase::Ejercito => un(T::Ejercito, ids::ejercito(id), e.ejercitos.get(&id).map(|x| Cuerpo::Ejercito(ejercito(n, x)))),
-        // Desde fuera, de una plaza propia viajan además sus cargos (Doc 1.10.1; 5E).
+        // Desde fuera, de una plaza propia viajan además sus cargos (Doc 1.10.1; 5E) y sus fundadores (5H).
         Clase::Asentamiento => un(
             T::Asentamiento,
             ids::asentamiento(id),
-            e.asentamientos.get(&id).map(|a| Cuerpo::Asentamiento(pb::Asentamiento { cargos: Some(super::interior::cargos(&a.cargos)), ..super::ficha_de_asentamiento(a, &n.poligono_zona(a.id), batalla_sobre(n, Ubicacion::Asentamiento(a.id as u32))) })),
+            e.asentamientos.get(&id).map(|a| Cuerpo::Asentamiento(pb::Asentamiento { cargos: Some(super::interior::cargos(&a.cargos)), fundadores_ids: a.fundadores.iter().map(|&h| ids::heroe(h)).collect(), ..super::ficha_de_asentamiento(a, &n.poligono_zona(a.id), batalla_sobre(n, Ubicacion::Asentamiento(a.id as u32))) })),
         ),
         Clase::Heroe => {
             // El héroe y sus informes de inspección vigentes (los vencidos los descarta el cliente por su `expira_en_ms`).
@@ -755,6 +790,7 @@ pub fn proyectar(n: &Nucleo, quien: Espectador, clase: Clase, id: u64) -> Proyec
         ),
         Clase::Batalla => un(T::Batalla, n.uuid_de_batalla(id), n.batalla(id).map(|b| Cuerpo::Batalla(batalla(n, b, quien)))),
         Clase::Relacion => un(T::RelacionPolitica, ids::relacion(id), e.politica.relaciones.get(id).filter(|r| r.activa()).map(|r| Cuerpo::Relacion(relacion(n, r)))),
+        Clase::Propuesta => un(T::Propuesta, ids::propuesta(id), e.politica.propuestas.get(id).map(|p| Cuerpo::Propuesta(propuesta(n, p)))),
         Clase::Faccion => {
             let f = id as u32;
             // La que desapareció en una anexión o una fusión (5F) ya no existe: sale con `QUITA`.

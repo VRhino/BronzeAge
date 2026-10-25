@@ -18,6 +18,10 @@ option csharp_namespace = "BronzeAge.Contract.V1";
 
 // ───────────────────────────── Facción y política ─────────────────────────────
 
+// La Facción. En `FACCION` (la propia) y en `ADMIN`, entera. En `VISTA`, la de cada OTRA Facción que nombra lo que se ve (sus columnas, caravanas, plazas, pueblos, avanzadas,
+// fichas y batallas, y las relaciones y los títulos, que son públicos) como **forma pública** (5H; Proyecciones §6, «facciones: públicas en
+// la ficción»): `id`, `version`, `nombre`, `sigilo`, `nivel`, `reputacion`, `rey_id`, `embajador_id`, `ciudadanos_ids`, `solicitudes_ids`, `derrotada_por`, `admite_otras_en_ataques`
+// y `liga`; sin `experiencia`, `capital_designada_en_ms` ni `capital_id` (dónde está su capital es de la niebla).
 message Faccion {
   string id = 1;
   uint64 version = 2;
@@ -34,6 +38,15 @@ message Faccion {
   optional string derrotada_por = 13;    // "" = colapsó sin ganador; ausente = no derrotada
   bool admite_otras_en_ataques = 14;
   optional string capital_id = 15;       // capital efectiva: la designada con Palacio activo o, si no, la plaza viva más antigua (ausente sin plazas)
+  // La Liga en que está (5H, Diplomacia §5.7): derivada de las relaciones activas; ausente si no está en ninguna.
+  optional LigaDeFaccion liga = 16;
+}
+
+// Una Liga (Diplomacia §5.7): la componente conexa de Facciones unidas por relaciones activas de cualquier clase (la guerra incluida). No tiene id propio: viaja en cada Facción miembro.
+message LigaDeFaccion {
+  repeated string miembros_ids = 1;      // por id, la propia incluida
+  bool tiene_vasallaje = 2;
+  optional string gran_rey_id = 3;       // la señora de un vasallaje de la Liga que no es vasalla en ella (también es el título «Gran Rey»)
 }
 
 enum TipoRelacion {
@@ -71,7 +84,7 @@ message RelacionPolitica {
 message Propuesta {
   string id = 1;
   uint64 version = 2;
-  string propuesta_por = 3;              // facción que propone
+  string propuesta_por = 3;              // el HÉROE que la hizo (`heroe-N`; 5A-7, decidido en 5H: Diplomacia §2.4 y el TypeScript); la Facción que propone es la `a` de su clase
   int64 creada_en_ms = 4;
   int64 expira_en_ms = 5;
   oneof clase {
@@ -221,7 +234,7 @@ message Asentamiento {
   uint64 version = 2;
   optional string nombre = 3;
   string faccion_id = 4;
-  repeated string fundadores_ids = 5;
+  repeated string fundadores_ids = 5;     // quienes la fundaron y siguen residiendo en ella (5H, 5B-9): al mudarse dejan de serlo; la conquista la deja sin ninguno. Interior, ficha propia y ADMIN
   Punto posicion = 6;
   uint32 nivel = 7;                      // alcanzado (monótono)
   uint32 nivel_actual = 8;               // operativo (baja con el mantenimiento)
@@ -499,6 +512,10 @@ message Heroe {
   repeated EscuadraQueLleva escuadras_que_lleva = 35;
   // Cuánto cabe en total en su almacén personal (5G-a, derivado de `ALMACEN_PERSONAL.capacidad`; milésimas): lo que pueden llenar `guardar_en_almacen_personal` y las compras del residente.
   sint64 capacidad_almacen_personal = 36;
+  // Su ciudadanía (5H, 5B-11): la Facción de la que es ciudadano (`f-N`); ausente sin bandera. Solo en el héroe propio (`HEROE`) y en `ADMIN`.
+  optional string faccion_id = 37;
+  // Las Facciones a las que ha pedido el ingreso y aún no han contestado (5H, Diplomacia §3.2): lo que el solicitante ve de sus solicitudes (la Facción las ve en `Faccion.solicitudes_ids`).
+  repeated string solicitudes_faccion_ids = 38;
 }
 
 // Una escuadra que un héroe ajeno lleva en su columna, tal como se ve (`HeroePublico.escuadrasQueLleva`).

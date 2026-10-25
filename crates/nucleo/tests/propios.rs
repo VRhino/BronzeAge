@@ -181,7 +181,7 @@ fn escenario_con(m: &M, unity: bool) -> Esc {
     for plaza in [x.a, x.b] {
         x.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: plaza, pausada: true });
         // La puerta de antes del sistema 5 (abierta también a los neutrales, que por defecto ya no entran: Q1, 5E): en estas pruebas los neutrales entran.
-        x.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: true, enemigos: false });
+        x.ok("admin", comun::acceso(plaza, true, true, false));
     }
     let (a, b) = (x.a, x.b);
     x.ana = x.heroe("ana", 1, Some(a));

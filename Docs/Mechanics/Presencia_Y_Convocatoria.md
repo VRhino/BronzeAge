@@ -167,7 +167,7 @@ Fija o rectifica el destino de la columna **del que va en ella**, tantas veces c
 
 > **Implementado en Rust (2026-10-25, 5E):** `FijarPuerta` (159) y `VetarJugador` (160) en el núcleo, con la autoridad de esta sección (ver [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) §4.3). La
 > puerta de una plaza nueva está **cerrada a neutrales y enemigos** (las notas de «entrar con todo» de arriba hablan del acceso provisional de antes: por defecto, todos menos los enemigos) y la de una
-> plaza conquistada vuelve a esa. `FijarAcceso` (117) es el alias en el núcleo de la puerta por relación de entonces.
+> plaza conquistada vuelve a esa. `FijarAcceso` (117) fue el alias en el núcleo de la puerta por relación de entonces; se retiró en 5H (2026-10-25, 5E-12).
 
 ## 9. La convocatoria (ejército en preparación)
 

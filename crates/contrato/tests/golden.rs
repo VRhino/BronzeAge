@@ -226,3 +226,50 @@ fn los_dorados_de_4h_dicen_lo_que_deben() {
     assert!(matches!(orden_de("orden_repostar_con_lugar"), O::Repostar(o) if o.lugar_id.as_deref() == Some("av-6")));
     assert!(matches!(orden_de("orden_administracion"), O::Administracion(o) if o.codigo == "dar_recursos" && o.parametros.as_ref().unwrap().fields.len() == 1));
 }
+
+/// Lo que los dorados de 5H (la política en el contrato) dicen, leído por Rust.
+#[test]
+fn los_dorados_de_5h_dicen_lo_que_deben() {
+    use evento_dominio::Tipado as T;
+    use mensaje_de_servidor as ms;
+
+    // `FACCION`: la Facción con su Liga y las tres clases de propuesta, cada una con el héroe que la hizo (5A-7).
+    let ms::Cuerpo::Foto(f) = de_servidor("foto_faccion_con_propuestas_y_liga") else { panic!() };
+    let cuerpos: Vec<entidad::Cuerpo> = f.entidades.into_iter().filter_map(|e| e.cuerpo).collect();
+    let [entidad::Cuerpo::Faccion(fa), entidad::Cuerpo::Propuesta(rel), entidad::Cuerpo::Propuesta(anx), entidad::Cuerpo::Propuesta(fus)] = cuerpos.as_slice() else { panic!("{cuerpos:?}") };
+    let liga = fa.liga.as_ref().expect("la Liga");
+    assert_eq!((liga.miembros_ids.len(), liga.tiene_vasallaje, liga.gran_rey_id.as_deref()), (3, true, Some("f-1")));
+    assert!(matches!(&rel.clase, Some(propuesta::Clase::Relacion(r)) if r.tipo == TipoRelacion::RelacionVasallaje as i32 && r.tributo.as_ref().unwrap().cantidad_por_minuto == 1_500));
+    assert!(matches!(&anx.clase, Some(propuesta::Clase::Anexion(a)) if a.absorbida_id == "f-5"));
+    assert!(matches!(&fus.clase, Some(propuesta::Clase::Fusion(x)) if x.nuevo_nombre == "Hélade" && x.nuevo_rey_id == "heroe-9"));
+    assert_eq!((rel.propuesta_por.as_str(), anx.propuesta_por.as_str()), ("heroe-3", "heroe-5"));
+    // Contestarla la quita con `QUITA` y trae la relación, con su hecho tipado.
+    let ms::Cuerpo::Delta(d) = de_servidor("delta_propuesta_contestada") else { panic!() };
+    assert_eq!((d.cambios[0].tipo, d.cambios[0].entidad, d.cambios[0].id.as_str()), (TipoCambio::CambioQuita as i32, TipoEntidad::Propuesta as i32, "prop-40"));
+    assert!(matches!(&d.eventos[0].tipado, Some(T::PropuestaResuelta(r)) if r.resultado == "aceptada" && r.relacion_id.as_deref() == Some("rel-43")));
+    // `VISTA`: la forma pública de otra Facción, sin experiencia ni capital, y el Gran Rey.
+    let ms::Cuerpo::Foto(f) = de_servidor("foto_vista_faccion_publica") else { panic!() };
+    let Some(entidad::Cuerpo::Faccion(p)) = f.entidades[0].cuerpo.clone() else { panic!() };
+    assert!(p.experiencia == 0 && p.capital_id.is_none() && p.capital_designada_en_ms.is_none() && p.liga.is_some() && p.reputacion.unwrap().valor_en_t0 == -4_000);
+    assert!(matches!(&f.entidades[1].cuerpo, Some(entidad::Cuerpo::Titulo(t)) if t.titulo_id == "granRey"));
+    // `HEROE`: su Facción y sus solicitudes (5B-11); `ASENTAMIENTO`: sus fundadores (5B-9) y su Gobernador de oficio (5E-3).
+    let ms::Cuerpo::Foto(f) = de_servidor("foto_heroe_con_faccion_y_solicitudes") else { panic!() };
+    let Some(entidad::Cuerpo::Heroe(h)) = f.entidades[0].cuerpo.clone() else { panic!() };
+    assert_eq!((h.faccion_id.as_deref(), h.solicitudes_faccion_ids.as_slice()), (Some("f-3"), &["f-1".to_owned(), "f-2".to_owned()][..]));
+    let ms::Cuerpo::Foto(f) = de_servidor("foto_asentamiento_con_fundadores") else { panic!() };
+    let Some(entidad::Cuerpo::Asentamiento(a)) = f.entidades[0].cuerpo.clone() else { panic!() };
+    assert_eq!((a.fundadores_ids.as_slice(), a.cargos.unwrap().gobernador_id.as_deref()), (&["heroe-3".to_owned(), "heroe-5".to_owned()][..], Some("heroe-3")));
+    // Los ocho hechos políticos tipados, con su payload.
+    let ms::Cuerpo::Delta(d) = de_servidor("delta_eventos_politicos") else { panic!() };
+    assert_eq!(d.eventos.len(), 8);
+    assert!(d.eventos.iter().all(|e| e.tipado.is_some() && e.payload.is_some()));
+    let t: Vec<&T> = d.eventos.iter().filter_map(|e| e.tipado.as_ref()).collect();
+    assert!(matches!(t[0], T::PropuestaDiplomatica(p) if p.clase == "anexion" && p.tipo.is_none()));
+    assert!(matches!(t[1], T::PropuestaDiplomatica(p) if p.tipo == Some(TipoRelacion::RelacionAlianza as i32)));
+    assert!(matches!(t[2], T::RelacionTerminada(r) if r.como == "rota" && r.por_faccion_id.as_deref() == Some("f-2")));
+    assert!(matches!(t[3], T::FaccionesUnidas(u) if u.resultante_id == "f-9" && u.nombre.as_deref() == Some("Hélade")));
+    assert!(matches!(t[4], T::CargoAsignado(c) if c.cargo == "tesorero" && c.asentamiento_id.as_deref() == Some("as-7")));
+    assert!(matches!(t[5], T::TituloCambiado(x) if x.faccion_anterior_id.as_deref() == Some("f-2")));
+    assert!(matches!(t[6], T::SolicitudDeIngreso(s) if s.heroe_id == "heroe-11"));
+    assert!(matches!(t[7], T::CiudadaniaCambiada(c) if c.como == "ingreso"));
+}

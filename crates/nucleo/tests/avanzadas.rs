@@ -221,7 +221,7 @@ impl Esc {
     /// La puerta de antes del sistema 5 (5E): abierta también a los neutrales, que por defecto ya no entran (Q1). Para las pruebas en las que un neutral está dentro.
     fn abrir_a_los_neutrales(&mut self) {
         let plaza = self.plaza;
-        self.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: true, enemigos: false });
+        self.ok("admin", comun::acceso(plaza, true, true, false));
     }
     /// El sitio de la primera avanzada: 8 u al este de la plaza (dentro de su zona de 15).
     fn sitio(&self) -> Punto {
@@ -363,7 +363,7 @@ fn una_avanzada_hereda_el_acceso_de_su_plaza_madre() {
     let de_la_madre = |e: &Esc| heroes.iter().map(|&h| Some(e.n.puede_entrar_en_plaza(h, plaza))).collect::<Vec<_>>();
     assert_eq!(de_la_avanzada(&e), vec![Some(true), Some(true), Some(false), Some(false)], "por defecto (Q1), cerrada a neutrales y enemigos");
     assert_eq!(de_la_avanzada(&e), de_la_madre(&e));
-    e.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: false, neutrales: true, enemigos: true });
+    e.ok("admin", comun::acceso(plaza, false, true, true));
     assert_eq!(de_la_avanzada(&e), vec![Some(true), Some(false), Some(true), Some(true)]);
     assert_eq!(de_la_avanzada(&e), de_la_madre(&e));
     assert_eq!(e.n.puede_entrar_en_avanzada(heroes[0], 9_999), None, "una avanzada que no existe no tiene puerta");
@@ -1585,7 +1585,7 @@ fn el_estado_de_las_avanzadas_va_en_la_foto_y_cualquier_campo_cambia_el_hash_y_e
     g.repone_en = Some(6_000);
     base.combate.avanzadas.insert(9, g);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN34");
+    assert_eq!(&bytes[..5], b"BAN35");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -1760,7 +1760,7 @@ fn se_entra_en_una_avanzada_operativa_con_el_acceso_de_la_madre_y_se_sale_con_to
 
     // Cerrar la puerta a los neutrales saca al mapa a «neu», con su columna, y a nadie más.
     let colneu = e.n.heroe(neutral).unwrap().columna.unwrap();
-    e.ok("ana", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: false, enemigos: false });
+    e.ok("ana", comun::acceso(plaza, true, false, false));
     assert_eq!((e.ubicacion(neutral), e.n.en_el_mapa(colneu), e.ubicacion(aliado)), (Ubicacion::Columna(colneu), true, Ubicacion::Avanzada(av)));
     let echado = &hechos(&e.n, "heroe.expulsado")[0];
     assert_eq!((dato(echado, "heroe"), dato(echado, "lugar"), dato(echado, "sitio"), dato(echado, "motivo"), echado.2.clone()), (neutral as i64, 2, av as i64, 0, vec![plaza]));
@@ -2071,7 +2071,7 @@ e.abrir_a_los_neutrales();
     e.ok_en(4 * HORA, "alia", Comando::EntrarEnAvanzada { avanzada: av, heroe: aliado });
     e.ok_en(4 * HORA, "neu", Comando::EntrarEnAvanzada { avanzada: av, heroe: neutral });
     avanzar(e, 5 * HORA);
-    e.ok_en(5 * HORA, "ana", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: false, enemigos: false });
+    e.ok_en(5 * HORA, "ana", comun::acceso(plaza, true, false, false));
     avanzar(e, 9 * HORA);
     let (_, primero) = e.columna_en(9 * HORA, "beto", 2, Punto::new(pos.x + 1_000, pos.y), &FUERTE);
     e.ok_en(9 * HORA, "admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Guerra) });
@@ -2144,7 +2144,7 @@ fn una_foto_con_un_heroe_dentro_de_una_avanzada_se_recupera_y_sigue_igual_que_el
         let mut e = montar_con(n, m, 2);
         let (av, col, h) = guion(&mut e);
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN34");
+        assert_eq!(&bytes[..5], b"BAN35");
         let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
         assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Avanzada(av));
         assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes, e.n.estado().hash()));

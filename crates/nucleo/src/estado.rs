@@ -72,6 +72,9 @@ pub fn entidad_titulos() -> u64 {
     17 * crate::estado_comercio::ETIQUETA
 }
 
+/// BAN35: BAN34 con los fundadores de cada plaza (sistema 5, tanda 5H, 5B-9: `Asentamiento::fundadores`, quienes la fundaron y siguen residiendo en ella). BAN34 se rechaza: sus plazas no dicen
+/// quién las fundó.
+///
 /// BAN34: BAN33 con los cargos locales y la puerta del sistema 5 (tanda 5E): cada plaza guarda el titular de sus cinco cargos (`cargos`) y su puerta por grupos con los vetos (`puerta`, que
 /// sustituye al acceso provisional por relación). BAN33 se rechaza: sus plazas no traen cargos y su acceso no tiene el grupo de los Aedas ni vetos.
 ///
@@ -168,7 +171,7 @@ pub fn entidad_titulos() -> u64 {
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN34";
+const MAGIA: &[u8; 5] = b"BAN35";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -381,6 +384,9 @@ pub struct Asentamiento {
     pub resto_tributo: i64,
     /// `permiteReabastecerAliados` (5D, Movimiento_Ejercitos §8): abre su almacén a las columnas aliadas (alianza o vasallaje) para repostar y cargar caravanas.
     pub permite_reabastecer_aliados: bool,
+    /// `heroesFundadoresIds` (5H, 5B-9): quienes la fundaron y siguen residiendo en ella, en su orden (el Líder primero). Quien se muda deja de serlo y la conquista la deja sin ninguno, como en
+    /// el TypeScript; el traslado de una Facción no los toca (la plaza se va con ellos).
+    pub fundadores: Vec<u64>,
 }
 
 impl Asentamiento {
@@ -764,10 +770,12 @@ pub enum Clase {
     Relacion,
     /// Un título de prestigio (5F): su id es su posición en `politica::titulos::TituloId::TODOS`. Público: va a `VISTA` y a `ADMIN`.
     Titulo,
+    /// Una propuesta pendiente entre dos Facciones (5H; relación, anexión o fusión, `Estado::politica.propuestas`): su id es el de la propuesta (`prop-N`). Va a `FACCION` de las dos y a `ADMIN`.
+    Propuesta,
 }
 
 impl Clase {
-    pub const TODAS: [Clase; 17] = [
+    pub const TODAS: [Clase; 18] = [
         Clase::Ejercito,
         Clase::Asentamiento,
         Clase::Interior,
@@ -785,12 +793,13 @@ impl Clase {
         Clase::Batalla,
         Clase::Relacion,
         Clase::Titulo,
+        Clase::Propuesta,
     ];
 }
 
 /// Las entidades cuyo estado cambió en una versión, por clase. Al cerrar la versión cada lista queda ordenada y sin repetir.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Tocados([Vec<u64>; 17]);
+pub struct Tocados([Vec<u64>; 18]);
 
 impl Tocados {
     pub fn marcar(&mut self, clase: Clase, id: u64) {
@@ -1022,6 +1031,8 @@ impl Estado {
             w.i64(a.de_la_faccion_desde);
             w.i64(a.resto_tributo);
             w.bool(a.permite_reabastecer_aliados);
+            w.u64(a.fundadores.len() as u64);
+            a.fundadores.iter().for_each(|&h| w.u64(h));
         }
         w.u64(self.yacimientos.len() as u64);
         for (&nodo, st) in &self.yacimientos {
@@ -1129,12 +1140,13 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN34`): los cuatro primeros dicen la familia («BAN3» son los formatos 30 a 39, y solo el 34 se admite; «BAN2» y «BAN1», los formatos 20 a 29 y
+        // La cabecera es de 5 bytes (`BAN35`): los cuatro primeros dicen la familia («BAN3» son los formatos 30 a 39, y solo el 35 se admite; «BAN2» y «BAN1», los formatos 20 a 29 y
         // 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'4' => {}
+                b'5' => {}
+                b'4' => return Err(ErrorFormato("foto del formato BAN34 (las plazas no dicen quién las fundó): ya no se admite")),
                 b'3' => return Err(ErrorFormato("foto del formato BAN33 (las plazas no traen sus cargos locales y su puerta es el acceso provisional por relación, sin el grupo de los Aedas ni vetos): ya no se admite")),
                 b'2' => return Err(ErrorFormato("foto del formato BAN32 (no trae los títulos de prestigio de la última evaluación ni su plazo, y las plazas no traen sus cargos locales ni su puerta por grupos): ya no se admite")),
                 b'1' => return Err(ErrorFormato("foto del formato BAN31 (las plazas no dicen desde cuándo son de su Facción ni traen el resto de su tributo, y las relaciones son pares sin dirección del andamiaje de administración): ya no se admite")),
@@ -1235,6 +1247,7 @@ impl Estado {
             }
             let (nombre, capital_de, de_la_faccion_desde) = (r.texto()?, r.opt_u64()?.map(|f| f as u32), r.i64()?);
             let (resto_tributo, permite_reabastecer_aliados) = (r.i64()?, r.bool()?);
+            let fundadores = (0..r.cuenta()?).map(|_| r.u64()).collect::<Result<Vec<_>, _>>()?;
             for e in &economia.edificios {
                 if let Some(asentamiento::edificio::Fuente::Nodo(n)) = e.fuente {
                     s.nodos_reclamados.insert(n, id);
@@ -1243,7 +1256,7 @@ impl Estado {
             for p in &economia.pueblos {
                 s.nodos_reclamados.insert(p.nodo, id);
             }
-            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe, protegida_hasta, ocupada_hasta, puerta, cargos, nombre, capital_de, de_la_faccion_desde, resto_tributo, permite_reabastecer_aliados });
+            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe, protegida_hasta, ocupada_hasta, puerta, cargos, nombre, capital_de, de_la_faccion_desde, resto_tributo, permite_reabastecer_aliados, fundadores });
         }
         for _ in 0..r.cuenta()? {
             let nodo = r.u32()?;

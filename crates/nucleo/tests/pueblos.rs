@@ -191,7 +191,7 @@ fn montar_en(mut n: Nucleo, mapa: Arc<Mapa>, nivel: u32, cobre: u32, sitio: Punt
     let mut esc = Escenario { n, plaza, cobre, mapa, cuenta: 0 };
     esc.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: plaza, pausada: true });
     // La puerta de antes del sistema 5 (abierta también a los neutrales, que por defecto ya no entran: Q1, 5E): en estas pruebas los neutrales entran.
-    esc.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: true, enemigos: false });
+    esc.ok("admin", comun::acceso(plaza, true, true, false));
     if nivel > 1 {
         esc.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: plaza, nivel });
         // El techo de la zona sube con el nivel: se agranda hasta el del nivel 2 (15 u) para tener nodos con los que elegir.
@@ -224,10 +224,10 @@ fn un_pueblo_hereda_el_acceso_de_su_plaza_madre() {
     assert_eq!(del_pueblo(&e), vec![Some(true), Some(true), Some(true), Some(false)]);
     assert_eq!(del_pueblo(&e), de_la_madre(&e));
     // Lo que el dueño de la plaza decide cambia a la vez a la plaza y a su pueblo.
-    e.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: false, enemigos: true });
+    e.ok("admin", comun::acceso(plaza, true, false, true));
     assert_eq!(del_pueblo(&e), vec![Some(true), Some(true), Some(false), Some(true)]);
     assert_eq!(del_pueblo(&e), de_la_madre(&e));
-    e.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: false, neutrales: false, enemigos: false });
+    e.ok("admin", comun::acceso(plaza, false, false, false));
     assert_eq!(del_pueblo(&e), vec![Some(true), Some(false), Some(false), Some(false)], "la misma Facción entra siempre");
     assert_eq!(e.n.puede_entrar_en_pueblo(heroes[0], 9_999), None, "un pueblo que no existe no tiene puerta");
 }
@@ -888,7 +888,7 @@ fn cerrar_la_puerta_de_la_plaza_saca_tambien_de_su_pueblo_a_quien_ya_no_puede_en
 
     // Se cierra a los neutrales: salen el del pueblo y el de la plaza, cada uno con su columna y su carga y a la puerta de su sitio; los demás siguen.
     let t = e.n.ahora();
-    e.ok("ana", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: false, enemigos: false });
+    e.ok("ana", comun::acceso(plaza, true, false, false));
     let (col_n, neu) = dentro["neu"];
     assert_eq!((e.ubicacion(neu), e.n.en_el_mapa(col_n), e.n.ejercito(col_n).unwrap().posicion, e.carga(col_n).get(&Madera).copied()), (Ubicacion::Columna(col_n), true, sitio, Some(10_000)));
     assert_eq!((e.ubicacion(nep), e.n.en_el_mapa(colp), e.n.ejercito(colp).unwrap().posicion), (Ubicacion::Columna(colp), true, centro));
@@ -899,7 +899,7 @@ fn cerrar_la_puerta_de_la_plaza_saca_tambien_de_su_pueblo_a_quien_ya_no_puede_en
     assert_eq!(echados.iter().map(|h| (dato(h, "heroe"), dato(h, "lugar"), dato(h, "sitio"), dato(h, "motivo"), h.0, h.1.clone())).collect::<Vec<_>>(), vec![(nep as i64, 0, plaza as i64, 0, t, vec![plaza]), (neu as i64, 1, pueblo as i64, 0, t, vec![plaza])]);
 
     // Se cierra también a los aliados: sale «alia»; la misma Facción y el residente se quedan.
-    e.ok("ana", Comando::FijarAcceso { asentamiento: plaza, aliados: false, neutrales: false, enemigos: false });
+    e.ok("ana", comun::acceso(plaza, false, false, false));
     assert_eq!(e.ubicacion(dentro["alia"].1), Ubicacion::Columna(dentro["alia"].0));
     assert_eq!((e.ubicacion(dentro["pro"].1), e.ubicacion(dentro["res"].1)), (Ubicacion::Pueblo(pueblo), Ubicacion::Pueblo(pueblo)));
 
@@ -983,7 +983,7 @@ fn al_conquistar_la_madre_su_acceso_vuelve_al_de_por_defecto_y_el_pueblo_lo_here
     let pueblo = e.pueblo_levantado();
     // F3 es aliada del dueño (F1): entra aunque se cierre a los neutrales; con F2, que no tiene relación con ella, es neutral.
     e.ok("admin", Comando::FijarRelacion { a: 1, b: 3, relacion: Some(nucleo::Relacion::Alianza) });
-    e.ok("ana", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: false, enemigos: false });
+    e.ok("ana", comun::acceso(plaza, true, false, false));
     let (col, h) = e.visita("alia", 3, pueblo);
     e.ok("alia", Comando::EntrarEnPueblo { pueblo, heroe: h });
     assert_eq!(e.ubicacion(h), Ubicacion::Pueblo(pueblo));
@@ -1000,7 +1000,7 @@ fn al_conquistar_la_madre_su_acceso_vuelve_al_de_por_defecto_y_el_pueblo_lo_here
     assert_eq!((e.ubicacion(h), e.n.en_el_mapa(col)), (Ubicacion::Columna(col), true), "con la puerta de por defecto el neutral (respecto al dueño nuevo) sale al mapa con lo suyo");
     // El dueño nuevo la cambia cuando quiere: abierta a los neutrales, puede volver a entrar.
     assert_eq!(e.n.puede_entrar_en_pueblo(h, pueblo), Some(false));
-    e.ok("beto", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: true, enemigos: false });
+    e.ok("beto", comun::acceso(plaza, true, true, false));
     assert_eq!(e.n.puede_entrar_en_pueblo(h, pueblo), Some(true));
 }
 
@@ -1045,7 +1045,7 @@ fn guion_con_gente(e: &mut Escenario, avanzar: &dyn Fn(&mut Escenario, Instante)
     e.ok_en(8 * HORA, "alia", Comando::EntrarEnPueblo { pueblo: id, heroe: aliado });
     e.ok_en(8 * HORA, "neu", Comando::EntrarEnPueblo { pueblo: id, heroe: neutral });
     avanzar(e, 9 * HORA);
-    e.ok_en(9 * HORA, "ana", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: false, enemigos: false });
+    e.ok_en(9 * HORA, "ana", comun::acceso(plaza, true, false, false));
     avanzar(e, 10 * HORA);
     e.ok_en(10 * HORA, "alia", Comando::SalirDePueblo { pueblo: id, heroe: aliado });
     avanzar(e, 20 * HORA);
@@ -1093,7 +1093,7 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
     e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN34");
+    assert_eq!(&bytes[..5], b"BAN35");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));

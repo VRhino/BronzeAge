@@ -345,10 +345,7 @@ pub enum Comando {
     /// Cancela la mejora o la reparación de la avanzada, en marcha o pendiente de materiales: sin reembolso (lo entregado se pierde) y la avanzada sigue como estaba. La
     /// primera obra no se cancela así: se destruye la avanzada.
     CancelarObraDeAvanzada { heroe: u64, avanzada: u64 },
-    // ── Entrar con todo (2026-10-22). ──
-    /// La puerta por relación de «entrar con todo» (2026-10-22), que se queda como **alias** de [`Comando::FijarPuerta`] (5E): cierra la puerta a los grupos que van a `false`
-    /// (aliados y vasallos, neutrales, enemigos) y la abre a los demás; los Aedas quedan como estaban. No nombra héroe: lo da quien puede fijar la puerta (el Gobernador o el Rey).
-    FijarAcceso { asentamiento: u64, aliados: bool, neutrales: bool, enemigos: bool },
+    // ── Entrar con todo (2026-10-22). El código 117 era `FijarAcceso`, la puerta por relación, alias de `FijarPuerta` desde 5E: retirado en 5H (5E-12); el registro ya no lo lee. ──
     /// El héroe vacía el carro que trajo a su residencia en su almacén personal, hasta donde quepa; lo que no cabe se queda en el carro.
     VaciarCarro { heroe: u64 },
     // ── Entrar en un pueblo extractor o en una avanzada (2026-10-22). ──
@@ -694,7 +691,7 @@ impl Comando {
             Comando::MoverCargaAparcada { .. } | Comando::EnviarCaravanaAlOrigen { .. } => OperaAparcada,
             Comando::ColocarAvanzada { .. } => CargoEnElSitio(GOBERNADOR_O_MAESTRO),
             Comando::AsignarCargoLocal { .. } => AsignaCargoLocal,
-            Comando::FijarAcceso { .. } | Comando::FijarPuerta { .. } => FijaPuerta,
+            Comando::FijarPuerta { .. } => FijaPuerta,
             Comando::ComprarMirada { .. } | Comando::ComprarInformePlaza { .. } => CompraIntel,
             Comando::MarcharA { .. } | Comando::Estacionar { .. } | Comando::Fundar { .. } | Comando::ComerciarEnPlaza { .. } => LiderDeLaColumna,
             Comando::EntregarDeCaravana { .. }
@@ -885,7 +882,6 @@ impl Comando {
             | Comando::AlternarReceta { asentamiento, .. }
             | Comando::CalibrarReserva { asentamiento, .. }
             | Comando::SolicitarAscenso { asentamiento }
-            | Comando::FijarAcceso { asentamiento, .. }
             | Comando::ActivarPolitica { asentamiento, .. }
             | Comando::ComprometerRecinto { asentamiento, .. }
             | Comando::MejorarRecinto { asentamiento, .. }
@@ -1815,13 +1811,6 @@ impl Peticion {
                 w.u64(*avanzada);
                 w.u64(*heroe);
             }
-            Comando::FijarAcceso { asentamiento, aliados, neutrales, enemigos } => {
-                w.u8(117);
-                w.u64(*asentamiento);
-                w.bool(*aliados);
-                w.bool(*neutrales);
-                w.bool(*enemigos);
-            }
             Comando::VaciarCarro { heroe } => {
                 w.u8(118);
                 w.u64(*heroe);
@@ -2236,7 +2225,7 @@ impl Peticion {
             114 => Comando::RepostarEnAvanzada { heroe: r.u64()?, avanzada: r.u64()? },
             115 => Comando::DepositarEnAvanzada { ejercito: r.u64()?, avanzada: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
             116 => Comando::CancelarObraDeAvanzada { heroe: r.u64()?, avanzada: r.u64()? },
-            117 => Comando::FijarAcceso { asentamiento: r.u64()?, aliados: r.bool()?, neutrales: r.bool()?, enemigos: r.bool()? },
+            117 => return Err(ErrorFormato("comando retirado: el 117 era `FijarAcceso`, el alias de `FijarPuerta` (5E-12, retirado en 5H)")),
             118 => Comando::VaciarCarro { heroe: r.u64()? },
             119 => Comando::EntrarEnPueblo { pueblo: r.u64()?, heroe: r.u64()? },
             120 => Comando::SalirDePueblo { pueblo: r.u64()?, heroe: r.u64()? },
@@ -2903,7 +2892,7 @@ pub enum TipoCreado {
     Mirada,
     /// Una Facción nueva (`crearFaccion`).
     Faccion,
-    /// Una propuesta de relación (`proponerRelacion`, 5D). Todavía no es una clase del registro de cambios (la proyección de las propuestas es de 5H): viaja en `creadas` y en sus hechos.
+    /// Una propuesta (`proponerRelacion`, `proponerAnexion`, `proponerFusion`): desde 5H, una clase del registro de cambios (`Clase::Propuesta`) que viaja a `FACCION` de las dos Facciones.
     Propuesta,
 }
 
@@ -2971,6 +2960,18 @@ mod pruebas {
     use super::*;
     use combate::ciclo::{EscuadraDeSalida, Instancia, MotivoSalida};
     use combate::resultado::{Botin, ObjetoBotin, Razon, ResultadoEscuadra, ResultadoHeroe};
+
+    /// 5E-12 (retirado en 5H): el 117 era el alias `FijarAcceso`; una petición vieja con él ya no se lee.
+    #[test]
+    fn el_alias_fijar_acceso_ya_no_se_lee_del_registro() {
+        let b = Peticion::nueva("ana", "p", Comando::VaciarCarro { heroe: 2 }).codificar();
+        let mut viejo = b[..b.len() - 9].to_vec();
+        viejo.push(117);
+        viejo.extend(3u64.to_le_bytes());
+        viejo.extend([1, 0, 1]);
+        let e = Peticion::decodificar(&viejo).err().expect("el 117 está retirado");
+        assert!(e.0.contains("FijarAcceso"), "{}", e.0);
+    }
 
     #[test]
     fn las_ordenes_de_economia_dan_la_vuelta_por_el_registro() {
@@ -3165,7 +3166,6 @@ mod pruebas {
             Comando::Inspeccionar { heroe: 2, objetivo: Objetivo::Asentamiento(5) },
             Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Vasallaje) },
             Comando::FijarRelacion { a: 3, b: 2, relacion: None },
-            Comando::FijarAcceso { asentamiento: 3, aliados: true, neutrales: false, enemigos: true },
             Comando::VaciarCarro { heroe: 2 },
             Comando::EntrarEnPueblo { pueblo: 6, heroe: 2 },
             Comando::SalirDePueblo { pueblo: 6, heroe: 2 },

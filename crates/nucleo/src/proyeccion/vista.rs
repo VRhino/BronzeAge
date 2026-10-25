@@ -10,6 +10,7 @@
 //!   el héroe solo con lo público (`HeroePublico`); lo **recordado** (un sitio ajeno que se vio y ya no se ve), como `FichaConocida`. Además: los campamentos de bandidos que se ven, los de
 //!   mercenarios explorados (o donde reside o está), las batallas que se ven o en que está su Facción (como las ve él: `propios::batalla`), la zona de la Facción, los caminos explorados y la
 //!   intel de la taberna: las Miradas de la Facción (abiertas o enfriando su zona) y sus Informes de plaza. Una Mirada abierta, suya o de un aliado, es un ojo prestado: ve, no explora.
+//!   Públicos, sin niebla: las relaciones activas (5D), los títulos (5F) y, de las demás Facciones que nombra lo que se ve, su forma pública (5H).
 //!
 //! El tramo de lo ajeno se recorta a la unión de los discos de los ojos (decisión del autor, 2026-10-23: no al rectángulo de la vista, que enseñaría camino fuera del alcance); una caravana
 //! grande que solo se ve por llamar la atención, a sus 60 u. La columna se retira en el muestreo siguiente a que deje de verse.
@@ -89,6 +90,8 @@ pub struct Mirada<'n> {
     fichas: BTreeMap<Sitio, Ficha>,
     /// Los Informes de plaza que conserva la Facción (sin los de plazas que ya no existen y se han vuelto a mirar).
     informes: BTreeMap<u64, &'n InformeDePlaza>,
+    /// Las demás Facciones (5H), con la clave y el sello de su forma pública: una vez por perspectiva y no por sesión; cada sesión manda las que nombra lo que ve.
+    publicas: Vec<(u32, Clave, Sello)>,
 }
 
 /// Las Facciones que comparten visión con `f` (alianza o vasallaje, en cualquier dirección: §5.2).
@@ -186,7 +189,8 @@ impl<'n> Mirada<'n> {
         let niebla = celdas.as_ref().zip(visibles.as_ref()).map(|(c, v)| vision::niebla_proyectada(c, v));
         let mias: Vec<(u64, Punto)> = columnas.iter().filter(|(x, _)| propias.contains(&x.id)).map(|&(x, p)| (x.id, p)).collect();
         let suelo = mias.iter().map(|&(id, _)| id).zip(n.faccion_del_suelo(&mias.iter().map(|&(_, p)| p).collect::<Vec<_>>())).collect();
-        Mirada { n, perspectiva, faccion, t, columnas, ojos, propias, suelo, celdas, niebla, fichas, informes }
+        let publicas = e.politica.facciones.iter().map(|f| f.id).filter(|&f| Some(f) != faccion).map(|f| (f, (pb::TipoEntidad::Faccion as i32, ids::faccion(f)), Sello(n.version_de(Clase::Faccion, u64::from(f)), 0))).collect();
+        Mirada { n, perspectiva, faccion, t, columnas, ojos, propias, suelo, celdas, niebla, fichas, informes, publicas }
     }
 
     /// ¿Se ve ahora el punto? (alguno de los ojos a `≤` su alcance, no estricto).
@@ -205,6 +209,8 @@ impl<'n> Mirada<'n> {
         let (n, t) = (self.n, self.t);
         let e = n.estado();
         let mut v: Vec<Visible<'_>> = Vec::new();
+        // Las Facciones que nombra lo que se ve (para su forma pública, 5H).
+        let mut nombradas: Vec<u32> = Vec::new();
         let cuenta = viewer.and_then(|h| cuenta_de(n, h));
         let propia = |x: &Ejercito| self.propias.contains(&x.id) || cuenta.is_some_and(|c| va_en(n, x, c));
 
@@ -224,6 +230,7 @@ impl<'n> Mirada<'n> {
             } else if !x.en_batalla && self.ve(p) {
                 let tramo = self.tramo(&x.plan, x.version, tiene.get(&(pb::TipoEntidad::Ejercito as i32, id.clone())), &self.ojos);
                 let sello = Sello(x.version, tramo.as_ref().map_or_else(|v| *v, |t| t.last().map_or(0, |v| v.en)));
+                nombradas.extend(x.columna.faccion);
                 v.push(visible(pb::TipoEntidad::Ejercito, id, sello, move || Some(Cuerpo::Ejercito(self.ejercito_avistado(x)))));
             } else {
                 continue;
@@ -252,6 +259,7 @@ impl<'n> Mirada<'n> {
                 let grande: Option<Vec<Ojo>> = atencion.then(|| self.ojos.iter().map(|&(o, r)| (o, r.max(radios::CARAVANA_GRANDE))).collect());
                 let tramo = self.tramo(&plan, version, tiene.get(&(pb::TipoEntidad::Caravana as i32, id.clone())), grande.as_deref().unwrap_or(&self.ojos));
                 let sello = Sello(version, tramo.as_ref().map_or_else(|v| *v, |t| t.last().map_or(0, |v| v.en)));
+                nombradas.extend(e.asentamientos.get(&u64::from(c.origen)).map(|a| a.faccion));
                 v.push(visible(pb::TipoEntidad::Caravana, id, sello, move || Some(Cuerpo::Caravana(self.caravana_avistada(c, p, &plan, grande.as_deref().unwrap_or(&self.ojos))))));
             }
         }
@@ -274,6 +282,7 @@ impl<'n> Mirada<'n> {
                 let crate::estado_fundacion::Situacion::Retornando(plan) = &k.situacion else { continue };
                 let tramo = self.tramo(plan, version, tiene.get(&(pb::TipoEntidad::Caravana as i32, id.clone())), &self.ojos);
                 let sello = Sello(version, tramo.as_ref().map_or_else(|v| *v, |t| t.last().map_or(0, |v| v.en)));
+                nombradas.extend(k.faccion);
                 v.push(visible(pb::TipoEntidad::Caravana, id, sello, move || Some(Cuerpo::Caravana(self.fundacion_avistada(k, p, plan)))));
             }
         }
@@ -288,6 +297,7 @@ impl<'n> Mirada<'n> {
                 if duena {
                     v.extend(self.propia_a_la_puerta(viewer, a).unwrap_or_else(|| self.propias_de(Clase::Asentamiento, a.id, a.version)));
                 } else {
+                    nombradas.push(a.faccion);
                     v.push(visible(pb::TipoEntidad::Asentamiento, id, Sello(a.version, 0), move || Some(Cuerpo::Asentamiento(plaza_avistada(n, a.id)))));
                 }
             }
@@ -296,6 +306,7 @@ impl<'n> Mirada<'n> {
                 if rect.contiene(pos) && (duena || self.ve(pos)) {
                     vistos.insert(Sitio::Pueblo(p.id));
                     let version = n.version_de(Clase::Pueblo, p.id);
+                    nombradas.push(a.faccion);
                     v.extend(if duena { self.propias_de(Clase::Pueblo, p.id, version) } else { self.pueblo_avistado(a.id, p, pos, version) });
                 }
             }
@@ -303,6 +314,7 @@ impl<'n> Mirada<'n> {
                 if rect.contiene(x.posicion) && (duena || self.ve(x.posicion)) {
                     vistos.insert(Sitio::Avanzada(x.id));
                     let version = n.version_de(Clase::Avanzada, x.id);
+                    nombradas.push(a.faccion);
                     v.extend(if duena { self.propias_de(Clase::Avanzada, x.id, version) } else { self.avanzada_avistada(Some(a.id), x, version) });
                 }
             }
@@ -318,6 +330,7 @@ impl<'n> Mirada<'n> {
                 Sitio::Avanzada(x) => ids::avanzada(x),
             };
             let d = f.datos;
+            nombradas.push(d.faccion);
             let sello = Sello(u64::from(d.faccion) << 32 | u64::from(d.nivel) << 2 | d.estado as u64, f.conocido_en ^ d.radio.rotate_left(20));
             v.push(visible(pb::TipoEntidad::FichaConocida, id.clone(), sello, move || Some(Cuerpo::FichaConocida(ficha_conocida(s, id.clone(), f)))));
         }
@@ -349,6 +362,7 @@ impl<'n> Mirada<'n> {
         for b in n.batallas_activas() {
             let suya = self.faccion.is_some_and(|f| [b.ticket.atacante.faccion, b.ticket.defensor.faccion].contains(&Some(f)));
             if rect.contiene(b.punto) && (suya || self.ve(b.punto)) {
+                nombradas.extend([b.ticket.atacante.faccion, b.ticket.defensor.faccion].into_iter().flatten());
                 v.push(visible(pb::TipoEntidad::Batalla, n.uuid_de_batalla(b.id), Sello(n.version_de(Clase::Batalla, b.id), 0), move || Some(Cuerpo::Batalla(propios::batalla(n, b, propios::Espectador::Heroe(viewer))))));
             }
         }
@@ -394,10 +408,20 @@ impl<'n> Mirada<'n> {
 
         // Las relaciones activas entre Facciones son públicas (5D): las ve cualquiera, sin niebla ni rectángulo, como en `FACCION`. Una que se rompe sale de la vista.
         for r in e.politica.relaciones.activas() {
+            nombradas.extend([r.a, r.b]);
             v.push(visible(pb::TipoEntidad::RelacionPolitica, ids::relacion(r.id), Sello(n.version_de(Clase::Relacion, r.id), 0), move || Some(Cuerpo::Relacion(propios::relacion(n, r)))));
+        }
+        // Las demás Facciones que nombra lo que se ve (sus columnas, caravanas, plazas, pueblos, avanzadas, fichas y batallas, y las relaciones y los títulos, que son públicos), en su forma pública
+        // (5H): nombre, sigilo, nivel, reputación, dirigentes, ciudadanos, solicitudes y Liga, sin niebla. La propia va entera en `FACCION`. Su clave y su sello se calculan una vez por perspectiva.
+        nombradas.sort_unstable();
+        nombradas.dedup();
+        for (f, clave, sello) in self.publicas.iter().filter(|(f, _, _)| nombradas.binary_search(f).is_ok()) {
+            let f = *f;
+            v.push(Visible { clave: clave.clone(), sello: *sello, cuerpo: Box::new(move || Some(Cuerpo::Faccion(propios::faccion_publica(n, f)))) });
         }
         // Los títulos de prestigio son públicos (5F): los ve cualquiera, como las relaciones. Uno que desaparece sale de la vista.
         for x in &e.politica.titulos {
+            nombradas.push(x.poseedor);
             v.push(visible(pb::TipoEntidad::Titulo, x.id.clave().into(), Sello(n.version_de(Clase::Titulo, x.id.indice()), 0), move || Some(Cuerpo::Titulo(propios::titulo(n, x)))));
         }
         v

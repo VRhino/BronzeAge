@@ -8,7 +8,7 @@
 // (Docs/Coordinacion/05_Contrato_de_Sesion.md §8).
 //
 // FORMA (decisión del autor, 2026-10-22): TODOS los eventos llevan el `payload` genérico (`google.protobuf.Struct` con los campos
-// documentados para cada código: texto, número o lista). Además, los QUINCE que mueven la interfaz llevan un mensaje TIPADO en
+// documentados para cada código: texto, número o lista). Además, los que mueven la interfaz (los quince de 4H T5 y los ocho de la política de 5H) llevan un mensaje TIPADO en
 // `tipado` (el cliente actúa con él sin interpretar el Struct). El tipado y el payload dicen lo mismo: quien no quiera el
 // tipado (la crónica, un cliente simple) usa el payload.
 syntax = "proto3";
@@ -18,6 +18,7 @@ package bronzeage.v1;
 import "google/protobuf/struct.proto";
 import "bronzeage/v1/battle.proto";
 import "bronzeage/v1/common.proto";
+import "bronzeage/v1/entities.proto";
 
 option csharp_namespace = "BronzeAge.Contract.V1";
 
@@ -46,6 +47,15 @@ message EventoDominio {
     GuerraDeclarada guerra_declarada = 22;           // faccion.guerra_declarada
     ObraTerminada obra_terminada = 23;               // construccion.edificio_completado | mejora_completada | recinto_completado, pueblo.completado, avanzada.completada
     HeroeHerido heroe_herido = 24;                   // heroe.herido
+    // La política (5H):
+    PropuestaDiplomatica propuesta_diplomatica = 25; // diplomacia.relacion_propuesta | anexion_propuesta | fusion_propuesta
+    PropuestaResuelta propuesta_resuelta = 26;       // diplomacia.relacion_aceptada | relacion_rechazada | relacion_retirada | anexion_rechazada | anexion_retirada | fusion_rechazada | fusion_retirada
+    RelacionTerminada relacion_terminada = 27;       // diplomacia.relacion_rota | paz_firmada | rebelion_vasallo | vasallo_liberado
+    FaccionesUnidas facciones_unidas = 28;           // diplomacia.anexion | diplomacia.fusion
+    CargoAsignado cargo_asignado = 29;               // cargo.local_asignado | cargo.rey_asignado | cargo.embajador_asignado
+    TituloCambiado titulo_cambiado = 30;             // titulo.nace | titulo.cambia_manos
+    SolicitudDeIngreso solicitud_de_ingreso = 31;    // faccion.solicitud_ingreso
+    CiudadaniaCambiada ciudadania_cambiada = 32;     // faccion.creada | ciudadania_union | solicitud_denegada | abandonada
   }
 }
 
@@ -145,4 +155,73 @@ message ObraTerminada {
 message HeroeHerido {
   string heroe_id = 1;
   int64 hasta_ms = 2;
+}
+
+// ───────────────────────────── La política (5H) ─────────────────────────────
+
+// Una propuesta nueva entre dos Facciones: la contesta el Rey de `faccion_b_id` (`responder_relacion`, `responder_anexion`, `responder_fusion`); la entidad es `Propuesta` en `FACCION`.
+message PropuestaDiplomatica {
+  string propuesta_id = 1;               // `prop-N`
+  string clase = 2;                      // relacion | anexion | fusion
+  string faccion_a_id = 3;               // quien propone (en un vasallaje, la señora; en la anexión, la absorbente)
+  string faccion_b_id = 4;               // quien contesta
+  string propuesta_por = 5;              // el héroe que la hizo
+  optional TipoRelacion tipo = 6;        // en una de relación: alianza o vasallaje
+  optional string nombre = 7;            // en una fusión: el nombre de la Facción nueva
+}
+
+// Una propuesta que se acepta, se rechaza o se retira (la anexión y la fusión aceptadas son `FaccionesUnidas`). La entidad sale de `FACCION` con `QUITA`.
+message PropuestaResuelta {
+  optional string propuesta_id = 1;      // ausente en una relación que fija la administración, sin propuesta
+  string clase = 2;                      // relacion | anexion | fusion
+  string resultado = 3;                  // aceptada | rechazada | retirada
+  string faccion_a_id = 4;
+  string faccion_b_id = 5;
+  optional string relacion_id = 6;       // la relación que nace al aceptarla
+}
+
+// Una relación que acaba (rota, la paz, la rebelión de la vasalla o su liberación). La entidad sale de `FACCION` y `VISTA` con `QUITA`.
+message RelacionTerminada {
+  string relacion_id = 1;
+  string faccion_a_id = 2;               // en un vasallaje, la señora
+  string faccion_b_id = 3;
+  string como = 4;                       // rota | paz | rebelion | liberacion
+  optional string por_faccion_id = 5;    // quien la rompió o firmó la paz
+}
+
+// Dos Facciones que pasan a ser una: la anexión (la absorbente se queda con todo) o la fusión (nace otra).
+message FaccionesUnidas {
+  string clase = 1;                      // anexion | fusion
+  string faccion_a_id = 2;
+  string faccion_b_id = 3;
+  string resultante_id = 4;              // la absorbente, o la Facción nueva de la fusión
+  optional string nombre = 5;            // el de la Facción nueva
+}
+
+// Un cargo que cambia de titular: los locales de una plaza (también el Gobernador de oficio al fundar, 5E-3) y el Rey y el Embajador de la Facción.
+message CargoAsignado {
+  string heroe_id = 1;
+  string cargo = 2;                      // gobernador | tesorero | general | maestroObras | sacerdote | rey | embajador
+  string faccion_id = 3;
+  optional string asentamiento_id = 4;   // solo los locales
+}
+
+// Un título de prestigio que nace o cambia de manos (público).
+message TituloCambiado {
+  string titulo_id = 1;                  // su clave (`faccionMasGrande`, `granRey`...)
+  string faccion_id = 2;                 // quien lo tiene ahora
+  optional string faccion_anterior_id = 3;
+}
+
+// Un héroe pide entrar en la Facción: lo contesta su Rey (`responder_solicitud`).
+message SolicitudDeIngreso {
+  string heroe_id = 1;
+  string faccion_id = 2;
+}
+
+// La ciudadanía de un héroe cambia: crea una Facción (y es su Rey), le aceptan, le deniegan o la deja.
+message CiudadaniaCambiada {
+  string heroe_id = 1;
+  string faccion_id = 2;
+  string como = 3;                       // creada | ingreso | denegada | abandono
 }

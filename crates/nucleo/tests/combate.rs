@@ -356,7 +356,7 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.guarniciones.insert(9, GuarnicionDePueblo { escuadra: combate::pueblo::guarnicion_de_serie(&mc(), 12, 0), repone_en: Some(7_000) });
     base.combate.destruidos.insert(6, vec![100, 200]);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN34");
+    assert_eq!(&bytes[..5], b"BAN35");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -589,7 +589,7 @@ fn montar_en(mut n: Nucleo, m: &M, con_mercado: bool, campamento_b: usize) -> Es
     let mut e = Esc { n, a, b, cuenta: 0, fijo: None };
     // La puerta de antes del sistema 5 (abierta también a los neutrales, que por defecto ya no entran: Q1, 5E): en estas pruebas los neutrales entran.
     for plaza in [a, b] {
-        e.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: true, enemigos: false });
+        e.ok("admin", comun::acceso(plaza, true, true, false));
     }
     if con_mercado {
         for plaza in [a, b] {
@@ -1016,7 +1016,7 @@ fn con_pueblo(m: &M, semilla: u64) -> (Esc, u64) {
     let mut e = Esc { n, a, b: 0, cuenta: 0, fijo: None };
     e.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: a, pausada: true });
     // La puerta de antes del sistema 5 (abierta también a los neutrales, que por defecto ya no entran: Q1, 5E): en estas pruebas los neutrales entran.
-    e.ok("admin", Comando::FijarAcceso { asentamiento: a, aliados: true, neutrales: true, enemigos: false });
+    e.ok("admin", comun::acceso(a, true, true, false));
     e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: a, nivel: 2 });
     for _ in 0..9 {
         e.ok("admin", Comando::AgrandarZona { asentamiento: a });
@@ -1300,7 +1300,7 @@ fn una_plaza_sin_bosque_libre_recibe_su_campamento_en_cuanto_se_libera_uno() {
     let mut e = Esc { n, a, b, cuenta: 0, fijo: None };
     // La puerta de antes del sistema 5 (abierta también a los neutrales, que por defecto ya no entran: Q1, 5E): en estas pruebas los neutrales entran.
     for plaza in [a, b] {
-        e.ok("admin", Comando::FijarAcceso { asentamiento: plaza, aliados: true, neutrales: true, enemigos: false });
+        e.ok("admin", comun::acceso(plaza, true, true, false));
     }
     let atacante = e.ejercito("gus", 9_999, libre.posicion, &[Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce]);
     let t = e.n.ahora();
@@ -1471,7 +1471,7 @@ fn dentro_defienden_la_misma_faccion_los_aliados_y_los_vasallos_y_los_neutrales_
     let (cuentas, mut dentro) = ([("alia", 4), ("vasa", 5), ("pepe", 2), ("nora", 3), ("enri", 6)], vec![]);
     let enemigo_cerrado = s.e.ejercito("cerr", 6, s.e.pos(b), &[Tropa::MiliciaLanceros]);
     assert_eq!(s.e.rechazada("cerr", Comando::Guarnecer { asentamiento: b, heroe: enemigo_cerrado.1 }), rechazos::PUERTA_CERRADA, "por defecto la puerta se cierra a los enemigos");
-    s.e.ok("beto", Comando::FijarAcceso { asentamiento: b, aliados: true, neutrales: true, enemigos: true });
+    s.e.ok("beto", comun::acceso(b, true, true, true));
     for (cuenta, faccion) in cuentas {
         let col = s.e.ejercito(cuenta, faccion, s.e.pos(b), &[Tropa::MiliciaLanceros]);
         s.e.ok(cuenta, Comando::Guarnecer { asentamiento: b, heroe: col.1 });

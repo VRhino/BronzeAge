@@ -18,6 +18,24 @@
 
 > **Implementado en Rust (2026-10-24, fase 4H T7), la matriz y lo que faltaba proyectar.** La matriz de §5.1 es la autorización de hoy, orden a orden, declarada en `Comando::autoriza` y comprobada contra este documento por una prueba; la de administración la aplica una sola vez `Nucleo::ejecutar` (antes, cada orden en su sitio). Los rechazos son un catálogo estable (`Docs/Coordinacion/07_Catalogo_de_Rechazos.md`). La vista lleva ya el suelo bajo cada columna propia (`territorioPorEjercito`), el almacén de la plaza propia a cuya puerta se está (`detalleDeAvistados`), la zona de la Facción fundida y la red de caminos con su escalón y las rutas propias; el héroe, el interior que recuerda de su plaza (`plazasRecordadas`); la administración, qué servidor de batalla tiene cada batalla. Lo que falta (de los sistemas 5 y 6 o de Conquest): filas «Contrato (4H)» de `Docs/Mecanicas a desarrollar.md`.
 
+> **Implementado en Rust (2026-10-25, 5H), la política en el contrato.** Todo lo que el núcleo sabe de la política viaja, de forma aditiva (foto **`BAN35`** por los fundadores de cada plaza):
+> - **Propuestas** (relación, anexión y fusión): clase nueva del registro de cambios (`Clase::Propuesta`, la 18.ª), a `FACCION` de las dos Facciones de su par y a `ADMIN`, entera (`Propuesta` con su clase y,
+>   en `propuesta_por`, **el héroe que la hizo**: 5A-7, como Diplomacia §2.4 y el TypeScript). Viaja mientras está en el almacén, también caducada (caducar no es un hecho: el cliente la descarta por
+>   `expira_en_ms`); sale con `QUITA` al contestarla, retirarla, podarla (al añadir otra de su clase) o descartarla el traslado. Lo marca `Nucleo::con_lo_politico`, que compara el almacén antes y
+>   después de cada orden de política.
+> - **La Liga y el Gran Rey**: `Faccion.liga` (`LigaDeFaccion`: miembros, si tiene vasallaje y su Gran Rey), derivada de las relaciones activas (`politica::liga::liga_de`); cada relación que nace o
+>   acaba marca, al cerrar la versión, las Facciones de la Liga de sus dos extremos (`Nucleo::marcar_ligas`). El Gran Rey es además un título (5F).
+> - **La Facción ajena en `VISTA`**: la de cada otra Facción (entidad) que nombra lo que se ve (sus columnas, caravanas, plazas, pueblos, avanzadas, fichas y batallas, y las relaciones y los títulos, que
+>   son públicos) en su **forma pública** (`propios::faccion_publica`: la Facción sin `experiencia`, `capital_id` ni `capital_designada_en_ms`), sin niebla, reconciliada por su versión
+>   (su clave y su sello, una vez por perspectiva). La propia sigue entera en `FACCION`.
+> - **El héroe**: `Heroe.faccion_id` (5B-11) y `Heroe.solicitudes_faccion_ids` (las Facciones a las que pidió entrar), en `HEROE` y `ADMIN`; `con_lo_politico` marca al héroe cuyas solicitudes cambian.
+> - **La plaza**: `Asentamiento.fundadores_ids` (5B-9; estado nuevo `Asentamiento::fundadores`: quienes la fundaron y siguen residiendo, el Líder primero; quien se muda deja de serlo y la conquista los
+>   borra), en el interior, en la ficha propia de `FACCION` y en `ADMIN` (no en la plaza ajena de la `VISTA`); y en el interior, `permite_reabastecer_aliados` y `ultima_caravana_creada_en_ms`.
+> - **Ocho hechos tipados** de la política (`PropuestaDiplomatica`, `PropuestaResuelta`, `RelacionTerminada`, `FaccionesUnidas`, `CargoAsignado`, `TituloCambiado`, `SolicitudDeIngreso`,
+>   `CiudadaniaCambiada`), además de `GuerraDeclarada`: 23 tipados en total.
+> - **Se retira el alias `FijarAcceso`** (117, 5E-12): ninguna orden del contrato lo daba; el registro de peticiones ya no lo lee. No había campo del `.proto` que reservar.
+> Las relaciones rotas siguen sin proyectarse (5D-2: sale con `QUITA` y su hecho dice cómo acabó). Ninguna orden de política da ya `orden.no_disponible` (quedan las cinco del sistema 6).
+
 ## 1. Alcance y fuentes
 
 Cubre **quién puede hacer qué** y **qué ve cada uno**: los roles técnicos y las superficies del servidor, el camino de un comando desde la petición hasta el motor, los predicados de pertenencia en los que se apoya la autorización, **la matriz de autorización** (en Rust, las 145 órdenes del contrato y los 127 comandos del núcleo, §5.1; la del TypeScript, de 122 comandos, en §5.2), lo que el servidor proyecta a cada audiencia (administración, jugador, eventos) y cómo se reparte por los canales de tiempo real (foto + delta).
@@ -200,7 +218,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 > `crates/nucleo/src/nucleo/cargos.rs`) con los predicados de `politica::autorizacion::Actor`. Las órdenes de plaza no nombran héroe: vale cualquiera de los héroes de la cuenta (índice cuenta → héroes,
 > sin recorrer el mundo). Las obras de mapa (pueblos y la mejora, reparación, destrucción y cancelación de avanzadas) son del panel de la plaza madre (Doc 4.2.2): su Gobernador o su Maestro de Obras,
 > dentro; elegir la tropa de serie, el Gobernador; guarnecer y retirar de una avanzada, la cuenta del héroe (como `asignar_guarnicion`). Órdenes nuevas: `asignar_cargo_local` (158), `fijar_puerta`
-> (159, antes `FijarAcceso`, que se queda en el núcleo como alias) y `vetar_jugador` (160); quedan 11 órdenes no disponibles. El `cargo` de las órdenes de obras no viaja al núcleo: vale el titular de
+> (159, antes `FijarAcceso`, que se quedó en el núcleo como alias hasta 5H: retirado el 2026-10-25, 5E-12; el código 117 ya no se lee) y `vetar_jugador` (160); quedan 11 órdenes no disponibles. El `cargo` de las órdenes de obras no viaja al núcleo: vale el titular de
 > cualquiera de los dos (Gobernador o Maestro de Obras).
 
 - **Quién la da** es `Comando::autoriza` (`crates/nucleo/src/comando.rs`, un `match` sin comodín sobre los 136 comandos: un comando nuevo no compila hasta decidirlo). Cada orden comprueba la suya en su sitio y rechaza con `no_autorizado`; la de administración la comprueba una sola vez `Nucleo::ejecutar`. La administración (`Peticion.admin`) puede con todas salvo las del servidor de batalla, que exigen su credencial (`batalla-servidor:<id>`, `batalla.sin_credencial`).
@@ -602,7 +620,7 @@ La regla fina de cada cosa del mundo (qué se ve, redactado a qué, con memoria 
 | Campo | Capa | Quién lo recibe y qué | Forma |
 |---|---|---|---|
 | `mapaId`, `estadoMapa` | mapa | todos (el estado de los recursos del mapa) | escalar |
-| `facciones` | mapa | **todas**, sin redactar: nombre, nivel, reputación, Rey/Embajador, ciudadanía, solicitudes, sigilo — público en la ficción | colección |
+| `facciones` | mapa | **todas**, sin redactar: nombre, nivel, reputación, Rey/Embajador, ciudadanía, solicitudes, sigilo — público en la ficción (en Rust, 5H: la forma pública en `VISTA`, sin la experiencia ni la capital) | colección |
 | `relaciones`, `titulos` | mapa | **todas**: la diplomacia y el ranking son públicos | colección |
 | `asentamientosAvistados` | mapa | las plazas que se **ven ahora**, redactadas a ficha (`AsentamientoAvistado`); incluye las propias y la que pisa (que `componerProyeccion` quita para el que está dentro) | colección |
 | `asentamientosConocidos` | mapa | la última foto de las vistas alguna vez (`FichaConocida` + `conocidoEn`), menos las que se ven ahora | colección |

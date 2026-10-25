@@ -11,7 +11,7 @@
 //! columna sale con una nueva con su carro y sus víveres. Cada héroe defensor queda fuera con las escuadras con las que combatió y sobrevivieron (en una columna nueva o, si
 //! conservaba la suya para llevar caravanas, sumadas a ella); el resto del campamento de los residentes, guarnición incluida, queda a 0 y se va con ellos a la plaza más cercana
 //! de su Facción (sin ninguna, al campamento de mercenarios más cercano), donde pasan a residir; no hay captura de guarnición. Nadie queda dentro de una plaza que cambia de dueño.
-//! Sus pueblos y avanzadas pasan al conquistador con el acceso heredado de la plaza (`dentro`), que **vuelve al de por defecto** al conquistarla (todos menos enemigos, respecto al dueño nuevo; él lo cambia luego con `FijarAcceso`): salen al mapa con lo suyo solo quienes ese acceso ya no deja entrar (sus enemigos y los
+//! Sus pueblos y avanzadas pasan al conquistador con el acceso heredado de la plaza (`dentro`), que **vuelve al de por defecto** al conquistarla (todos menos enemigos, respecto al dueño nuevo; él lo cambia luego con `FijarPuerta`): salen al mapa con lo suyo solo quienes ese acceso ya no deja entrar (sus enemigos y los
 //! que cierra); los demás se quedan dentro.
 //!
 //! # La protección y la ocupación son eventos
@@ -91,6 +91,8 @@ impl Nucleo {
             a.faccion = conquistador;
             // La puerta vuelve a la de por defecto y los cargos se vacían (5E): los decidía el dueño de antes, y sus titulares ya no son de la Facción dueña.
             (a.puerta, a.cargos) = Default::default();
+            // Y sin fundadores (5H, 5B-9; `combate.ts` dejaba `heroesFundadoresIds` vacío): los que residían salen con el desalojo.
+            a.fundadores.clear();
             // Es del conquistador desde ahora: para la capital efectiva cuenta este instante, no su fundación (5C-1). Lo que decidía su dueño de antes se olvida: el resto de su tributo
             // y la apertura de su almacén a los aliados (5D), como el acceso.
             a.de_la_faccion_desde = t;

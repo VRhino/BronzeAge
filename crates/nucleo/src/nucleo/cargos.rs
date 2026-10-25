@@ -15,7 +15,7 @@
 //! # La puerta (Q1)
 //! Por grupos (neutrales, aliados —con vasallos y señores—, enemigos en guerra y los Aedas) y vetos; por defecto, cerrada a neutrales y enemigos (`PUERTA.cerradaAPorDefecto`). Las capas:
 //! el residente entra siempre, el vetado no entra, la propia Facción entra siempre y los demás si su grupo no está cerrado. Cerrar o vetar saca al mapa, con todo lo suyo, a quien ya está
-//! dentro de la plaza, de sus pueblos o de sus avanzadas (que la heredan) y ya no puede entrar. La conquista la devuelve a la de por defecto. `FijarAcceso` (117) es un alias.
+//! dentro de la plaza, de sus pueblos o de sus avanzadas (que la heredan) y ya no puede entrar. La conquista la devuelve a la de por defecto. El alias `FijarAcceso` (117) se retiró en 5H (5E-12).
 
 use super::*;
 use crate::estado::Dato;
@@ -23,7 +23,7 @@ use militar::heroe::Residencia;
 use politica::autorizacion::Actor;
 use politica::cargos::ErrorCargo;
 use politica::puerta::{ErrorPuerta, Visitante};
-use politica::{Grupo, Grupos};
+use politica::Grupos;
 
 impl Nucleo {
     // ───────────────────────────── La matriz ─────────────────────────────
@@ -111,7 +111,7 @@ impl Nucleo {
 
     // ───────────────────────────── Órdenes ─────────────────────────────
 
-    /// `asignarCargoLocal`, `fijarPuerta` (y su alias `fijarAcceso`) y `vetarJugador`. Rechazos y «sin cambios» salen como `Err` sin haber tocado el estado.
+    /// `asignarCargoLocal`, `fijarPuerta` y `vetarJugador`. Rechazos y «sin cambios» salen como `Err` sin haber tocado el estado.
     pub(super) fn ejecutar_cargos(&mut self, t: Instante, p: &Peticion) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
@@ -143,14 +143,6 @@ impl Nucleo {
                 self.plaza_o_rechazo(*asentamiento)?;
                 self.autorizar_en_plaza(p, *asentamiento, Some(*heroe))?;
                 self.fijar_puerta(t, p, *asentamiento, *cerrada_a)
-            }
-            Comando::FijarAcceso { asentamiento, aliados, neutrales, enemigos } => {
-                self.plaza_o_rechazo(*asentamiento)?;
-                self.autorizar_en_plaza(p, *asentamiento, None)?;
-                let antes = self.puerta_cerrada_a(*asentamiento).expect("la plaza existe");
-                let cerradas = [(Grupo::Aliados, *aliados), (Grupo::Neutrales, *neutrales), (Grupo::Enemigos, *enemigos)].into_iter().filter(|(_, abierta)| !abierta).map(|(g, _)| g);
-                let aedas = antes.contiene(Grupo::Aedas).then_some(Grupo::Aedas);
-                self.fijar_puerta(t, p, *asentamiento, Grupos::de(cerradas.chain(aedas)))
             }
             Comando::VetarJugador { heroe, asentamiento, vetado, vetar } => {
                 self.plaza_o_rechazo(*asentamiento)?;

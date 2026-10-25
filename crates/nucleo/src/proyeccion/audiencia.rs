@@ -12,6 +12,7 @@
 //! | `Acuerdo` | `FACCION` de las dos plazas |
 //! | `Faccion` | `FACCION` de la propia |
 //! | `Relacion` | `FACCION` de las dos Facciones, mientras exista |
+//! | `Propuesta` | `FACCION` de las dos Facciones de su par, mientras esté en el almacén (5H) |
 //!
 //! La convocatoria va a la Facción entera y no a `HEROE` (solo puede unirse quien es de la Facción: Presencia_Y_Convocatoria §9.6). Una entidad puede estar en dos ámbitos a la vez (una caravana
 //! adjunta a tu columna, en `HEROE` y en `FACCION`) y `QUITA` significa «ya no es de este ámbito».
@@ -25,7 +26,7 @@ use crate::estado_militar::HeroeNucleo;
 use std::collections::BTreeSet;
 
 /// Las clases cuyas entidades viajan a un ámbito de jugador, en el orden en que se proyectan.
-pub const CLASES: [Clase; 13] = [
+pub const CLASES: [Clase; 14] = [
     Clase::Ejercito,
     Clase::Asentamiento,
     Clase::Faccion,
@@ -39,6 +40,7 @@ pub const CLASES: [Clase; 13] = [
     Clase::Convocatoria,
     Clase::Batalla,
     Clase::Relacion,
+    Clase::Propuesta,
 ];
 
 /// El héroe de la sesión de una cuenta: el de verdad si lo hay y, si no, el primer héroe de campo.
@@ -109,6 +111,10 @@ pub fn de(e: &Estado, clase: Clase, id: u64) -> Vec<Ambito> {
         Clase::Acuerdo => v.extend(e.comercio.acuerdo(id).into_iter().flat_map(|a| [a.a, a.b]).filter_map(|p| faccion_de_plaza(e, u64::from(p)))),
         Clase::Faccion => v.extend(existe_faccion(e, id as u32).then_some(Ambito::Faccion(id as u32))),
         Clase::Relacion => v.extend(e.politica.relaciones.get(id).into_iter().flat_map(|r| [Ambito::Faccion(r.a), Ambito::Faccion(r.b)])),
+        Clase::Propuesta => v.extend(e.politica.propuestas.get(id).into_iter().flat_map(|p| {
+            let (a, b) = p.clase.par();
+            [Ambito::Faccion(a), Ambito::Faccion(b)]
+        })),
         // Los títulos son públicos: van a la `VISTA` de todos (la decide `proyeccion::vista`) y a `ADMIN`, no a un ámbito de jugador.
         Clase::Campamento | Clase::Bandidos | Clase::Interior | Clase::Titulo => {}
     }
@@ -161,6 +167,7 @@ pub fn todas(e: &Estado, clase: Clase) -> Vec<u64> {
         Clase::Convocatoria => e.militar.convocatorias.keys().copied().collect(),
         Clase::Batalla => e.batallas.batallas.keys().copied().collect(),
         Clase::Relacion => e.politica.relaciones.activas().map(|r| r.id).collect(),
+        Clase::Propuesta => e.politica.propuestas.iter().map(|p| p.id).collect(),
         Clase::Campamento | Clase::Bandidos | Clase::Interior | Clase::Titulo => Vec::new(),
     }
 }

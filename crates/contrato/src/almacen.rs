@@ -49,6 +49,7 @@ pub fn clave(c: &Cuerpo) -> Clave {
         Cuerpo::OrdenMercado(x) => (TipoEntidad::OrdenMercado, x.id.clone()),
         Cuerpo::Batalla(x) => (TipoEntidad::Batalla, x.id.clone()),
         Cuerpo::Relacion(x) => (TipoEntidad::RelacionPolitica, x.id.clone()),
+        Cuerpo::Propuesta(x) => (TipoEntidad::Propuesta, x.id.clone()),
         Cuerpo::Titulo(x) => (TipoEntidad::Titulo, x.titulo_id.clone()),
         Cuerpo::Pueblo(x) => (TipoEntidad::Pueblo, x.id.clone()),
         Cuerpo::Obra(x) => (TipoEntidad::ObraDeMapa, x.id.clone()),

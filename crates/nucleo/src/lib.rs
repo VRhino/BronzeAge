@@ -41,9 +41,9 @@
 //!   Las órdenes son los códigos 106-116; la foto es `BAN19`. Las reglas puras son `asentamiento::avanzadas` y `combate::avanzada`.
 //! - Entrar con todo (2026-10-22): quien entra en un lugar lleva consigo tropa, carro, víveres y todas sus caravanas y al salir se lo lleva (no hay «columna aparcada a la
 //!   puerta»); el residente conserva su carro (`HeroeNucleo::carro`, `VaciarCarro` 118); el dueño de la plaza decide por relación quién entra (`FijarAcceso` 117,
-//!   hoy la puerta de 5E; pueblos y avanzadas lo heredan); defienden los de dentro de la misma Facción, aliados o vasallos; al caer el lugar salen al mapa con lo suyo. Foto `BAN17`.
+//!   hoy la puerta de 5E, `FijarPuerta`; el alias se retiró en 5H; pueblos y avanzadas lo heredan); defienden los de dentro de la misma Facción, aliados o vasallos; al caer el lugar salen al mapa con lo suyo. Foto `BAN17`.
 //! - Entrar en un pueblo o en una avanzada (2026-10-22): `EntrarEnPueblo`/`SalirDePueblo` (119, 120) y `EntrarEnAvanzada`/`SalirDeAvanzada` (121, 122) con el acceso de su plaza
-//!   madre; dentro se defiende con la regla de relación; cerrar la puerta (`FijarAcceso`) expulsa a quien ya no puede entrar; al atacante solo se une quien está fuera y al
+//!   madre; dentro se defiende con la regla de relación; cerrar la puerta (`FijarPuerta`) expulsa a quien ya no puede entrar; al atacante solo se une quien está fuera y al
 //!   defensor quien está dentro; el residente que defiende y pierde pierde la mitad de su carro. Foto `BAN18`.
 //! - Murallas (2026-10-22, tandas segunda y tercera): los recintos son parte de la economía de cada plaza (`asentamiento::recintos`) y se levantan celda a celda, cada una con su cita de fin
 //!   de obras (`Evento::RecintoCelda`), reintentada por el paso de minuto si faltan materiales. `ComprometerRecinto` (123, también amplía), `MejorarRecinto` (124) y

@@ -36,17 +36,35 @@ pub fn ligas(relaciones: &Relaciones, facciones: impl IntoIterator<Item = Faccio
     for f in padre.keys().copied().collect::<Vec<_>>() {
         grupos.entry(raiz(&mut padre, f)).or_default().push(f);
     }
-    let mut vasallajes: Vec<_> = relaciones.activas().filter(|r| r.tipo == TipoRelacion::Vasallaje).collect();
-    vasallajes.sort_by_key(|r| r.id);
-    grupos
-        .into_values()
-        .filter(|m| m.len() > 1)
-        .map(|miembros| {
-            let dentro: Vec<_> = vasallajes.iter().filter(|r| miembros.contains(&r.a) && miembros.contains(&r.b)).collect();
-            let gran_rey = dentro.iter().map(|r| r.a).find(|&s| !dentro.iter().any(|r| r.b == s));
-            Liga { tiene_vasallaje: !dentro.is_empty(), gran_rey, miembros }
-        })
-        .collect()
+    grupos.into_values().filter(|m| m.len() > 1).map(|miembros| con_su_gran_rey(relaciones, miembros)).collect()
+}
+
+/// La Liga de unos miembros (por id): si tiene vasallaje y su Gran Rey, la primera señora (por id de relación) que no es vasalla dentro de ella.
+fn con_su_gran_rey(relaciones: &Relaciones, miembros: Vec<FaccionId>) -> Liga {
+    let mut dentro: Vec<_> = relaciones.activas().filter(|r| r.tipo == TipoRelacion::Vasallaje && miembros.contains(&r.a) && miembros.contains(&r.b)).collect();
+    dentro.sort_by_key(|r| r.id);
+    let gran_rey = dentro.iter().map(|r| r.a).find(|&s| !dentro.iter().any(|r| r.b == s));
+    Liga { tiene_vasallaje: !dentro.is_empty(), gran_rey, miembros }
+}
+
+/// La Liga de `f` (la de [`ligas`] que la contiene), sin calcular las demás: lo que proyecta su Facción (5H). `None` si no está en ninguna. `existe` dice qué Facciones cuentan (las
+/// entidades, como en [`ligas`]). ponytail: recorre las relaciones activas por cada miembro (O(miembros × relaciones)); un índice por Facción si las Ligas crecen.
+pub fn liga_de(relaciones: &Relaciones, f: FaccionId, existe: impl Fn(FaccionId) -> bool) -> Option<Liga> {
+    if !existe(f) {
+        return None;
+    }
+    let mut miembros = vec![f];
+    let mut i = 0;
+    while let Some(&x) = miembros.get(i) {
+        for o in relaciones.activas().filter(|r| r.incluye(x)).map(|r| r.otra(x)) {
+            if existe(o) && !miembros.contains(&o) {
+                miembros.push(o);
+            }
+        }
+        i += 1;
+    }
+    miembros.sort_unstable();
+    (miembros.len() > 1).then(|| con_su_gran_rey(relaciones, miembros))
 }
 
 #[cfg(test)]
@@ -69,5 +87,21 @@ mod pruebas {
         rs.crear(&fs, 1, TipoRelacion::Alianza, 5, 6, None, 0).unwrap();
         assert_eq!(ligas(&rs, fs.iter().map(|f| f.id)), vec![Liga { miembros: vec![5, 6], tiene_vasallaje: false, gran_rey: None }]);
         assert!(ligas(&Relaciones::default(), fs.iter().map(|f| f.id)).is_empty());
+    }
+
+    #[test]
+    fn la_liga_de_una_faccion_es_la_de_ligas_que_la_contiene() {
+        let fs = facciones(6);
+        let mut rs = Relaciones::default();
+        rs.crear(&fs, 1, TipoRelacion::Vasallaje, 2, 3, None, 0).unwrap();
+        rs.crear(&fs, 2, TipoRelacion::Vasallaje, 1, 2, None, 0).unwrap();
+        rs.crear(&fs, 3, TipoRelacion::Guerra, 4, 3, None, 0).unwrap();
+        rs.crear(&fs, 4, TipoRelacion::Alianza, 5, 6, None, 0).unwrap();
+        let todas = ligas(&rs, fs.iter().map(|f| f.id));
+        for f in 1..=6 {
+            assert_eq!(liga_de(&rs, f, |x| fs.existe(x)), todas.iter().find(|l| l.miembros.contains(&f)).cloned(), "la Liga de f-{f}");
+        }
+        assert_eq!(liga_de(&rs, 9, |x| fs.existe(x)), None, "una Facción que no existe no está en ninguna");
+        assert_eq!(liga_de(&rs, 5, |x| x != 6 && fs.existe(x)), None, "sin su única socia, sola no es Liga");
     }
 }
