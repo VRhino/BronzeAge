@@ -85,8 +85,9 @@ fn codigo(r: &Respuesta) -> &'static str {
 type Hecho = (Instante, Vec<u64>, Vec<(&'static str, i64)>);
 
 /// Eventos en la cola salvo las citas de fin de obra, mejora, ascenso y política de las plazas, que nacen y se cumplen solas mientras el mundo avanza.
+/// Las citas de la cola sin las de las obras ni el plazo global de los títulos (5F: lo arma cualquier orden aceptada si no estaba armado).
 fn en_cola(n: &Nucleo) -> usize {
-    n.estado().cola.volcar().iter().filter(|e| !matches!(e.carga, nucleo::Carga::FinDeObras | nucleo::Carga::CaducaPolitica)).count()
+    n.estado().cola.volcar().iter().filter(|e| !matches!(e.carga, nucleo::Carga::FinDeObras | nucleo::Carga::CaducaPolitica | nucleo::Carga::Titulos)).count()
 }
 
 fn hechos(n: &Nucleo, codigo: &str) -> Vec<Hecho> {
@@ -930,7 +931,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
     let reglas = Reglas::default();
     let base = estado_con_heroes();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN32");
+    assert_eq!(&bytes[..5], b"BAN33");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.militar, base.militar, "incluido el índice de residentes, que se reconstruye");

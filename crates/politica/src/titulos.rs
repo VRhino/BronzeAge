@@ -15,6 +15,18 @@ pub enum TituloId {
 }
 
 impl TituloId {
+    /// Todos, en el orden en que se calculan (su posición es el id del registro de cambios del núcleo).
+    pub const TODOS: [TituloId; 5] = [TituloId::FaccionMasGrande, TituloId::MayorPoderEconomico, TituloId::MayorEjercito, TituloId::GranRey, TituloId::MecenasAedas];
+
+    /// La posición en [`TituloId::TODOS`].
+    pub fn indice(self) -> u64 {
+        TituloId::TODOS.iter().position(|&t| t == self).expect("está") as u64
+    }
+
+    pub fn de_indice(i: u64) -> Option<TituloId> {
+        TituloId::TODOS.get(i as usize).copied()
+    }
+
     /// Id estable del contrato (`Titulo.titulo_id`).
     pub fn clave(self) -> &'static str {
         match self {

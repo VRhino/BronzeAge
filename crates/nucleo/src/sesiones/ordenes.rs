@@ -669,15 +669,22 @@ impl Ctx<'_> {
             Cuerpo::AdmitirOtrasFacciones(o) => Comando::AdmitirOtrasFacciones { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, admitir: o.admitir },
             Cuerpo::AlternarReabastecerAliados(o) => Comando::AlternarReabastecerAliados { asentamiento: self.plaza(&o.asentamiento_id)?, permitido: o.permitido },
 
+            // ── La anexión y la fusión (5F) ──
+            Cuerpo::ProponerAnexion(o) => Comando::ProponerAnexion { heroe: self.mi_heroe()?, absorbente: self.faccion(&o.faccion_a_id)?, absorbida: self.faccion(&o.faccion_b_id)? },
+            Cuerpo::ResponderAnexion(o) => Comando::ResponderAnexion { heroe: self.mi_heroe()?, propuesta: self.propuesta(&o.propuesta_id)?, aceptar: o.aceptar },
+            Cuerpo::RetirarAnexion(o) => Comando::RetirarAnexion { heroe: self.mi_heroe()?, propuesta: self.propuesta(&o.propuesta_id)? },
+            Cuerpo::ProponerFusion(o) => Comando::ProponerFusion {
+                heroe: self.mi_heroe()?,
+                a: self.faccion(&o.faccion_a_id)?,
+                b: self.faccion(&o.faccion_b_id)?,
+                nombre: o.nuevo_nombre.clone(),
+                rey: self.heroe(&o.nuevo_rey_id)?,
+            },
+            Cuerpo::ResponderFusion(o) => Comando::ResponderFusion { heroe: self.mi_heroe()?, propuesta: self.propuesta(&o.propuesta_id)?, aceptar: o.aceptar },
+            Cuerpo::RetirarFusion(o) => Comando::RetirarFusion { heroe: self.mi_heroe()?, propuesta: self.propuesta(&o.propuesta_id)? },
+
             // ── Lo que el núcleo aún no tiene ──
-            Cuerpo::AsignarCargoLocal(_)
-            | Cuerpo::ProponerAnexion(_)
-            | Cuerpo::ResponderAnexion(_)
-            | Cuerpo::RetirarAnexion(_)
-            | Cuerpo::ProponerFusion(_)
-            | Cuerpo::ResponderFusion(_)
-            | Cuerpo::RetirarFusion(_)
-            | Cuerpo::VetarJugador(_) => return self.no_disponible("política y Facciones (sistema 5)"),
+            Cuerpo::AsignarCargoLocal(_) | Cuerpo::VetarJugador(_) => return self.no_disponible("política y Facciones (sistema 5)"),
             Cuerpo::AdoptarTecnologia(_)
             | Cuerpo::EmpezarEpica(_)
             | Cuerpo::AbandonarEpica(_)

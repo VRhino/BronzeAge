@@ -209,6 +209,7 @@ fn clave(c: &Cuerpo) -> (i32, String) {
         Cuerpo::Avanzada(x) => (TipoEntidad::Avanzada, &x.id),
         Cuerpo::CampamentoMercenarios(x) => (TipoEntidad::CampamentoMercenarios, &x.id),
         Cuerpo::CampamentoBandidos(x) => (TipoEntidad::CampamentoBandidos, &x.id),
+        Cuerpo::Titulo(x) => (TipoEntidad::Titulo, &x.titulo_id),
         otro => panic!("ADMIN no lleva {otro:?}"),
     };
     (t as i32, id.clone())

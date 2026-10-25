@@ -116,6 +116,8 @@ fn una_columna_ataca_a_otra_y_el_derrotado_queda_herido_pierde_la_mitad_del_carr
         assert!(x.n.aplicar_en(x.n.ahora(), admin(id, Comando::DarSuministro { ejercito: beto.0, recurso: r, cantidad: q })).aceptada());
     }
     let (antes_a, antes_d) = (soldados(&x.n, ana.1, x.fuerte[0]), soldados(&x.n, beto.1, x.debil));
+    // Lo que vence antes del ataque (los títulos de prestigio, a los 10 minutos: 5F) no es de la orden.
+    x.n.avanzar_hasta(10 * MIN);
     let (v, rng0) = (x.n.version(), x.n.estado().rng.estado());
     assert_eq!(rng0, rng_tras(0), "nada gastó una tirada antes");
 
@@ -354,7 +356,7 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.guarniciones.insert(9, GuarnicionDePueblo { escuadra: combate::pueblo::guarnicion_de_serie(&mc(), 12, 0), repone_en: Some(7_000) });
     base.combate.destruidos.insert(6, vec![100, 200]);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN32");
+    assert_eq!(&bytes[..5], b"BAN33");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");

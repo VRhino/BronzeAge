@@ -11,7 +11,8 @@ use std::sync::{Arc, Mutex};
 fn eventos(n: &Nucleo) -> Vec<(String, Instante, u64)> {
     n.cambios_desde(0)
         .expect("registro completo")
-        .flat_map(|cv| cv.eventos.iter().map(|e| (e.codigo.to_string(), e.en, e.ejercitos[0])))
+        // Los hechos de alguna columna (los títulos de prestigio, 5F, no son de ninguna).
+        .flat_map(|cv| cv.eventos.iter().filter_map(|e| Some((e.codigo.to_string(), e.en, *e.ejercitos.first()?))))
         .collect()
 }
 

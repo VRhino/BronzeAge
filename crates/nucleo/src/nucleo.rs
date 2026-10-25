@@ -72,6 +72,8 @@ mod ciudadania;
 mod pueblos;
 mod salidas;
 mod taberna;
+mod titulos;
+mod traslado;
 mod uniones;
 mod viaje;
 mod zonas;
@@ -215,6 +217,9 @@ pub struct Nucleo {
     /// Las batallas que salieron del estado al cumplir su retención y aún no recogió quien las persiste (`tomar_batallas_retiradas`): no entra en el hash ni
     /// en las fotos.
     retiradas: Vec<Batalla>,
+    /// Los traslados de Facción de la transición en curso (`origen`, `destino`), cuya memoria de la niebla se funde al cerrar la versión, después de grabar lo que vieron sus ojos
+    /// (`traslado::fundir_memorias`). Vacío entre transiciones: no se persiste.
+    uniones_de_memoria: Vec<(u32, u32)>,
 }
 
 impl Nucleo {
@@ -323,6 +328,7 @@ impl Nucleo {
             espacio: espacio::Espacio::nuevo(),
             siguiendo: Vec::new(),
             retiradas: Vec::new(),
+            uniones_de_memoria: Vec::new(),
         };
         n.reconstruir_espacio();
         n.reiniciar_muestreo();
@@ -478,6 +484,10 @@ impl Nucleo {
         self.estado.ahora = t;
         self.metricas.eventos += 1;
         let id = ev.clave.entidad;
+        // Lo que pasa en el mundo arma el plazo de los títulos (`titulos`); el propio plazo no lo rearma.
+        if !matches!(ev.carga, Carga::Titulos) {
+            self.armar_titulos(t);
+        }
         if self.ajustes.auditar_cambios {
             self.causa_auditada = format!("el evento {:?} de la entidad {id}", ev.carga);
         }
@@ -494,6 +504,7 @@ impl Nucleo {
             Carga::Combate(suceso) => self.suceso_de_combate(id, suceso, t),
             Carga::Batalla(suceso) => self.suceso_de_batalla(crate::estado_comercio::id_de_entidad(id), suceso, t),
             Carga::Fundacion(suceso) => self.suceso_de_fundacion(crate::estado_comercio::id_de_entidad(id), suceso, t),
+            Carga::Titulos => self.recalcular_titulos(t),
             Carga::Encuentro { otra, otra_generacion } => self.encuentro_vence(id, otra, otra_generacion, t),
             Carga::Externa { generador, tipo, a, b } => {
                 let mut gens = std::mem::take(&mut self.generadores);
@@ -533,6 +544,7 @@ impl Nucleo {
         }
         // Lo que vieron los ojos que la transición tocó queda en la memoria de su Facción.
         self.explorar(t);
+        self.fundir_memorias();
         self.estado.version += 1;
         let v = self.estado.version;
         let mut tocados = std::mem::take(&mut self.tr.tocados);
@@ -765,6 +777,7 @@ impl Nucleo {
         }
         match &r.resultado {
             Resultado::Aceptada => {
+                self.armar_titulos(t);
                 self.metricas.ordenes_aceptadas += 1;
                 self.estado.recordar(&p.actor, &p.peticion_id, r.version_tras);
                 self.registrar(t, ENTRADA_PETICION, p.codificar());
@@ -1030,6 +1043,15 @@ impl Nucleo {
             | Comando::RebelionVasallo { .. }
             | Comando::AdmitirOtrasFacciones { .. }
             | Comando::AlternarReabastecerAliados { .. } => match self.ejecutar_diplomacia(t, p) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::ProponerAnexion { .. }
+            | Comando::ResponderAnexion { .. }
+            | Comando::RetirarAnexion { .. }
+            | Comando::ProponerFusion { .. }
+            | Comando::ResponderFusion { .. }
+            | Comando::RetirarFusion { .. } => match self.ejecutar_anexion_y_fusion(t, p) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },

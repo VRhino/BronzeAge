@@ -8,11 +8,14 @@
 //! | `fundacion.asentamiento_fundado` | la fundación: la fundadora |
 //! | `diplomacia.guerra_declarada` | la guerra: la que declara y la declarada (5D: también la de la orden `declararGuerra` y la de una rebelión) |
 //! | `diplomacia.rebelion_vasallo`, `.vasallo_liberado`, `.vasallo_conquistado` | la rebelión, la liberación y el traspaso de una vasalla: la señora (o la conquistadora) y la vasalla (5D) |
+//! | `diplomacia.anexion` | la anexión: la absorbente y la absorbida (5F) |
+//! | `diplomacia.fusion` | la fusión: las dos que se disuelven y la que nace (5F) |
+//! | `titulo.nace`, `titulo.cambia_manos` | el título: su poseedor (y el anterior); la entrada lleva además la clave del título (5F) |
 //! | `asentamiento.nivel_subio` con nivel ≥ 3 | solo si es la primera plaza del mundo que llega a ese nivel (ninguna otra, fuera de las que suben en la misma versión, lo tenía ya); si suben dos a la vez, la primera |
 //!
 //! DUDA: el canon canta la caída por `combate.asedio_conquista`, que en Rust solo da el asedio con números; la conquista por Unity no lo emite, así que la entrada sale de
-//! `asentamiento.conquistada`, que dan las dos vías. La frase la compone el cliente (el contrato no lleva texto): la entrada no trae la variante de §8. Faltan la anexión y la fusión (5F) y los
-//! públicos de la tecnología y los Aedas (sistema 6): filas de paridad.
+//! `asentamiento.conquistada`, que dan las dos vías. La frase la compone el cliente (el contrato no lleva texto): la entrada no trae la variante de §8. Faltan los públicos de la tecnología y los
+//! Aedas (sistema 6): filas de paridad.
 
 use super::*;
 use crate::estado::Dato;
@@ -34,7 +37,9 @@ impl Nucleo {
                 "asentamiento.conquistada" => datos(h, &["faccion", "faccionAnterior"]),
                 "fundacion.asentamiento_fundado" => datos(h, &["faccion"]),
                 "diplomacia.guerra_declarada" => datos(h, &["atacante", "contra"]),
-                "diplomacia.rebelion_vasallo" | "diplomacia.vasallo_liberado" | "diplomacia.vasallo_conquistado" => datos(h, &["faccionA", "faccionB"]),
+                "diplomacia.rebelion_vasallo" | "diplomacia.vasallo_liberado" | "diplomacia.vasallo_conquistado" | "diplomacia.anexion" => datos(h, &["faccionA", "faccionB"]),
+                "diplomacia.fusion" => datos(h, &["faccionA", "faccionB", "faccion"]),
+                "titulo.nace" | "titulo.cambia_manos" => datos(h, &["faccion", "faccionAnterior"]),
                 "asentamiento.ruinas" => h.facciones.clone(),
                 "asentamiento.nivel_subio" => match h.dato("nivel") {
                     Some(n) if n >= NIVEL_MINIMO_CANTADO && self.primera_en_llegar(hechos, plaza(h), n) && cantados.insert(n) => h.facciones.clone(),
@@ -58,6 +63,8 @@ impl Nucleo {
 fn entrada(h: &EventoNucleo, facciones: Vec<u32>, plaza: Option<u64>) -> EventoNucleo {
     let mut valores = vec![("tipo", Dato::Texto(h.codigo.to_string())), ("faccionIds", Dato::Lista(facciones.iter().map(|&f| Dato::Texto(ids::faccion(f))).collect()))];
     valores.extend(plaza.map(|p| ("asentamientoId", Dato::Texto(ids::asentamiento(p)))));
+    // El título cantado (5F): su clave estable.
+    valores.extend(h.valores.iter().filter(|(k, _)| *k == "titulo").cloned());
     let datos = h.dato("nivel").filter(|_| h.codigo == "asentamiento.nivel_subio").map(|n| ("nivel", n)).into_iter().collect();
     EventoNucleo { valores, publico: true, ..EventoNucleo::nuevo("cronica.entrada", h.en, datos) }
 }

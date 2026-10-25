@@ -2,7 +2,8 @@
 //! (sin `..`): si el crate `politica` añade un campo, esto deja de compilar y obliga a decidir cómo se guarda.
 //!
 //! Formato (little endian, el de `codec`): `facciones{n u64 · n × facción} · salidas{n u64 · n × (héroe u64, instante i64)} · relaciones{n u64 · n × relación} ·
-//! propuestas{n u64 · n × propuesta}`.
+//! propuestas{n u64 · n × propuesta} · títulos{n u64 · n × (título u8 · poseedor u32 · valor i64)} · mayor_desaparecida u32` (desde BAN33, 5F: el título es su posición en
+//! `TituloId::TODOS`).
 //!
 //! Una facción: `id u32 · nombre texto · sigilo{forma, campo, emblema, color_primario, color_secundario, color_emblema, orla, color_orla: 8 × texto} · rey opt_u64 ·
 //! embajador opt_u64 · capital_designada_en opt_i64 · experiencia i64 · ciudadanos{n u64 · n × u64} (en orden de ingreso) · solicitudes{n u64 · n × u64} ·
@@ -18,6 +19,7 @@ use politica::faccion::{Derrota, Faccion, Facciones};
 use politica::propuestas::{Clase, Pacto, Propuesta, Propuestas};
 use politica::relaciones::{EstadoRelacion, RelacionPolitica, Relaciones, TipoRelacion, Tributo};
 use politica::sigilo::Sigilo;
+use politica::titulos::{Titulo, TituloId};
 use politica::Politica;
 
 fn ids_escribir(w: &mut Escritor, v: &[u64]) {
@@ -205,7 +207,7 @@ fn propuesta_leer(r: &mut Lector) -> Result<Propuesta, ErrorFormato> {
 }
 
 pub(crate) fn escribir(w: &mut Escritor, p: &Politica) {
-    let Politica { facciones, relaciones, propuestas } = p;
+    let Politica { facciones, relaciones, propuestas, titulos, mayor_desaparecida } = p;
     w.u64(facciones.iter().count() as u64);
     facciones.iter().for_each(|f| faccion_escribir(w, f));
     w.u64(facciones.salidas().len() as u64);
@@ -217,6 +219,13 @@ pub(crate) fn escribir(w: &mut Escritor, p: &Politica) {
     relaciones.iter().for_each(|x| relacion_escribir(w, x));
     w.u64(propuestas.iter().count() as u64);
     propuestas.iter().for_each(|x| propuesta_escribir(w, x));
+    w.u64(titulos.len() as u64);
+    for &Titulo { id, poseedor, valor } in titulos {
+        w.u8(id.indice() as u8);
+        w.u32(poseedor);
+        w.i64(valor);
+    }
+    w.u32(*mayor_desaparecida);
 }
 
 pub(crate) fn leer(r: &mut Lector) -> Result<Politica, ErrorFormato> {
@@ -224,7 +233,10 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Politica, ErrorFormato> {
     let salidas = (0..r.cuenta()?).map(|_| Ok((r.u64()?, r.i64()?))).collect::<Result<_, ErrorFormato>>()?;
     let relaciones: Vec<RelacionPolitica> = (0..r.cuenta()?).map(|_| relacion_leer(r)).collect::<Result<_, _>>()?;
     let propuestas: Vec<Propuesta> = (0..r.cuenta()?).map(|_| propuesta_leer(r)).collect::<Result<_, _>>()?;
-    Ok(Politica { facciones: Facciones::desde(facciones, salidas), relaciones: Relaciones::desde(relaciones), propuestas: Propuestas::desde(propuestas) })
+    let titulos = (0..r.cuenta()?)
+        .map(|_| Ok(Titulo { id: TituloId::de_indice(u64::from(r.u8()?)).ok_or(ErrorFormato("título desconocido"))?, poseedor: r.u32()?, valor: r.i64()? }))
+        .collect::<Result<_, ErrorFormato>>()?;
+    Ok(Politica { facciones: Facciones::desde(facciones, salidas), relaciones: Relaciones::desde(relaciones), propuestas: Propuestas::desde(propuestas), titulos, mayor_desaparecida: r.u32()? })
 }
 
 #[cfg(test)]
@@ -256,7 +268,8 @@ mod pruebas {
             Propuesta { id: 61, clase: Clase::Anexion { absorbente: 1, absorbida: 2 }, propuesta_por: 10, creada_en: 1, expira_en: 2 },
             Propuesta { id: 62, clase: Clase::Fusion { a: 1, b: 3, nombre: "Argos".into(), rey: 10 }, propuesta_por: 10, creada_en: 1, expira_en: 2 },
         ]);
-        let p = Politica { facciones: fs, relaciones, propuestas };
+        let titulos = vec![Titulo { id: TituloId::FaccionMasGrande, poseedor: 1, valor: 3 }, Titulo { id: TituloId::GranRey, poseedor: 2, valor: 1 }];
+        let p = Politica { facciones: fs, relaciones, propuestas, titulos, mayor_desaparecida: 7 };
         let mut w = Escritor::default();
         escribir(&mut w, &p);
         let mut r = Lector::nuevo(&w.0);

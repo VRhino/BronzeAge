@@ -206,9 +206,11 @@ fn un_paso_sin_novedades_no_sube_la_version() {
     n.avanzar_hasta(5 * MIN);
     assert_eq!(n.version(), v, "los ritmos no cierran versión");
     assert_ne!(n.hash_estado(), h, "pero el estado sí cambia (población, comida, mantenimiento)");
-    // Las citas iniciales de bandidos (una por campamento de mercenarios y una por plaza) se agotan en los primeros minutos; después queda un paso por minuto.
-    let antes = n.metricas().eventos;
+    // Las citas iniciales de bandidos (una por campamento de mercenarios y una por plaza) se agotan en los primeros minutos; después queda un paso por minuto. El plazo de los títulos (5F)
+    // vence a los 10 minutos de lo primero que pasó y se rearma en el paso siguiente: entre los minutos 10 y 15 no hay ninguno.
     n.avanzar_hasta(10 * MIN);
+    let antes = n.metricas().eventos;
+    n.avanzar_hasta(15 * MIN);
     assert_eq!(n.metricas().eventos - antes, 5, "un paso por minuto");
 }
 
@@ -507,9 +509,11 @@ fn una_plaza_que_se_arruina_libera_sus_parcelas_y_nodos_y_su_evento_de_minuto_se
     assert!(n.estado().generaciones.actual(id) > gen_antes);
     n.avanzar_hasta(n.ahora() + 2 * MIN);
     assert_eq!(n.eventos_descartados(), descartados_antes + 1, "el Minuto siguiente de la plaza arruinada se descartó");
-    let eventos_antes = n.metricas().eventos;
+    let (eventos_antes, desde) = (n.metricas().eventos, n.ahora());
+    // El plazo global de los títulos (5F) vence como mucho una vez en diez minutos.
+    let titulos = n.estado().titulos_en.filter(|&x| x > desde && x <= desde + 10 * MIN).map_or(0, |_| 1);
     n.avanzar_hasta(n.ahora() + 10 * MIN);
-    assert_eq!(n.metricas().eventos - eventos_antes, 10, "solo queda el reloj de la otra plaza: un paso por minuto");
+    assert_eq!(n.metricas().eventos - eventos_antes, 10 + titulos, "solo queda el reloj de la otra plaza: un paso por minuto");
     assert!(n.economia(otra).is_some(), "la otra plaza sigue viva");
     // Y el mundo arruinado sobrevive a serializar y recuperar.
     let bytes = n.estado().serializar();
@@ -995,7 +999,7 @@ fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash_y_el_formato_anterior_se
     let reglas = Reglas::default();
     let base = estado_con_una_plaza();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN32");
+    assert_eq!(&bytes[..5], b"BAN33");
     let viejo = [b"BAN13".as_slice(), &bytes[5..]].concat();
     let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN13 no debe admitirse") };
     assert!(e.to_string().contains("BAN13") && e.to_string().contains("población"), "{e}");

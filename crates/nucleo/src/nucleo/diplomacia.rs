@@ -27,7 +27,7 @@ use politica::relaciones::{Declaracion, ErrorDiplomacia, Guerra, RelacionPolitic
 use politica::Politica;
 use std::collections::BTreeSet;
 
-fn de_diplomacia(e: ErrorDiplomacia) -> (&'static str, &'static str) {
+pub(super) fn de_diplomacia(e: ErrorDiplomacia) -> (&'static str, &'static str) {
     use rechazos::*;
     use ErrorDiplomacia::*;
     match e {
@@ -95,7 +95,7 @@ impl Nucleo {
     }
 
     /// ¿Combate la Facción en alguna batalla abierta (la ataca o la defiende)? Una relación no se acepta mientras tanto (§5.3).
-    fn faccion_en_batalla(&self, f: u32) -> bool {
+    pub(super) fn faccion_en_batalla(&self, f: u32) -> bool {
         let t = self.estado.ahora;
         self.batallas().any(|b| b.activa(t) && (b.ticket.atacante.faccion == Some(f) || b.ticket.defensor.faccion == Some(f)))
     }
@@ -121,7 +121,7 @@ impl Nucleo {
     }
 
     /// `autoridadDiplomatica(f)`: el héroe es de la cuenta (y en el mundo) y es Rey o Embajador de `f`. Una Facción que no existe pasa (la orden la rechaza con su código).
-    fn exigir_autoridad(&self, p: &Peticion, heroe: u64, f: u32) -> Result<(), Respuesta> {
+    pub(super) fn exigir_autoridad(&self, p: &Peticion, heroe: u64, f: u32) -> Result<(), Respuesta> {
         self.autorizar_heroe(p, heroe, false)?;
         if p.admin || (Actor { yo: heroe, politica: &self.estado.politica, vista: self }).autoridad_diplomatica(f) {
             return Ok(());
@@ -129,7 +129,7 @@ impl Nucleo {
         Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, format!("solo el Rey o el Embajador de f-{f}"), self.estado.version))
     }
 
-    fn exigir_rey(&self, p: &Peticion, heroe: u64, f: u32) -> Result<(), Respuesta> {
+    pub(super) fn exigir_rey(&self, p: &Peticion, heroe: u64, f: u32) -> Result<(), Respuesta> {
         self.autorizar_heroe(p, heroe, false)?;
         if p.admin || (Actor { yo: heroe, politica: &self.estado.politica, vista: self }).rey_de_faccion(f) {
             return Ok(());
@@ -161,7 +161,7 @@ impl Nucleo {
     }
 
     /// Lo que cambia con una relación: ella, sus dos Facciones y, si es una alianza, el ritmo de su reputación.
-    fn tocar_relacion(&mut self, t: Instante, id: u64) {
+    pub(super) fn tocar_relacion(&mut self, t: Instante, id: u64) {
         let Some(r) = self.estado.politica.relaciones.get(id) else { return };
         let (a, b, alianza) = (r.a, r.b, r.tipo == TipoRelacion::Alianza);
         self.tr.tocar(Clase::Relacion, id);
@@ -171,7 +171,7 @@ impl Nucleo {
         }
     }
 
-    fn hecho_de_relacion(&mut self, t: Instante, codigo: &'static str, facciones: Vec<u32>, datos: Vec<(&'static str, i64)>, valores: Vec<(&'static str, Dato)>) {
+    pub(super) fn hecho_de_relacion(&mut self, t: Instante, codigo: &'static str, facciones: Vec<u32>, datos: Vec<(&'static str, i64)>, valores: Vec<(&'static str, Dato)>) {
         let mut facciones = facciones;
         facciones.sort_unstable();
         facciones.dedup();
@@ -199,7 +199,7 @@ impl Nucleo {
     }
 
     /// Ids del contador común para lo que la regla vaya a crear: se piden mirando y solo se gastan si la regla lo acepta (una orden rechazada no deja rastro).
-    fn ids_desde(&self) -> impl FnMut() -> u64 {
+    pub(super) fn ids_desde(&self) -> impl FnMut() -> u64 {
         let mut siguiente = self.estado.siguiente_id;
         move || {
             siguiente += 1;
@@ -208,7 +208,7 @@ impl Nucleo {
     }
 
     /// Gasta los ids que usaron las relaciones nuevas (las de `ids_desde`).
-    fn gastar_ids_hasta(&mut self, mayor: Option<u64>) {
+    pub(super) fn gastar_ids_hasta(&mut self, mayor: Option<u64>) {
         if let Some(m) = mayor {
             self.estado.siguiente_id = self.estado.siguiente_id.max(m + 1);
         }

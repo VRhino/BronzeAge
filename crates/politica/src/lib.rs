@@ -37,10 +37,14 @@ pub use propuestas::{Propuesta, Propuestas};
 pub use relaciones::{RelacionPolitica, Relaciones};
 pub use tipos::*;
 
-/// Todo el estado político que no cuelga de plazas ni de héroes: Facciones, relaciones y propuestas. El núcleo lo guarda tal cual (5B-5D).
+/// Todo el estado político que no cuelga de plazas ni de héroes: Facciones, relaciones, propuestas y los últimos títulos calculados. El núcleo lo guarda tal cual (5B-5F).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Politica {
     pub facciones: Facciones,
     pub relaciones: Relaciones,
     pub propuestas: Propuestas,
+    /// Los títulos de la última evaluación (§7, 5F): con ellos se narra el cambio de la siguiente. No se proyectan desde aquí (el núcleo los publica).
+    pub titulos: Vec<titulos::Titulo>,
+    /// El id mayor de las Facciones que desaparecieron en una anexión o una fusión (0 si ninguna): el id de una Facción no se vuelve a dar (5F).
+    pub mayor_desaparecida: FaccionId,
 }

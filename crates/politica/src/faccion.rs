@@ -376,18 +376,19 @@ impl Facciones {
         Some(f)
     }
 
-    /// Añade ciudadanos al final, sin repetir (el traslado); quien era ciudadano de otra se mueve a esta.
+    /// Añade ciudadanos al final, sin repetir (el traslado); quien era ciudadano de otra se mueve a esta. Mira el índice (O(log n) por héroe), no la lista.
     pub(crate) fn unir_ciudadanos(&mut self, faccion: FaccionId, nuevos: &[HeroeId]) {
         for &h in nuevos {
-            if let Some(otra) = self.de_heroe.insert(h, faccion).filter(|&o| o != faccion) {
-                if let Some(o) = self.por_id.get_mut(&otra) {
-                    o.ciudadanos.retain(|&x| x != h);
+            match self.de_heroe.insert(h, faccion) {
+                Some(o) if o == faccion => continue,
+                Some(otra) => {
+                    if let Some(o) = self.por_id.get_mut(&otra) {
+                        o.ciudadanos.retain(|&x| x != h);
+                    }
                 }
+                None => {}
             }
-            let f = self.por_id.get_mut(&faccion).expect("existe");
-            if !f.ciudadanos.contains(&h) {
-                f.ciudadanos.push(h);
-            }
+            self.por_id.get_mut(&faccion).expect("existe").ciudadanos.push(h);
         }
     }
 }

@@ -133,7 +133,7 @@ Tres clases. **Ritmo**: el estado guarda `(valor en t₀, ritmo)` y el valor se 
 | Vasallos liberados de un señor desarmado; tributos | El desarme del señor y la vasalla conquistada ocurren en el instante en que una Facción pierde su última plaza; el tributo se paga en el **paso de minuto de cada plaza vasalla** (Q3, en Rust desde 5D, 2026-10-24), al final de su paso, sin eventos propios en la cola |
 | Experiencia de Facción, reputación | Se aplican **al ocurrir** el hecho que las produce; el decaimiento de la reputación es un ritmo |
 | Reposición de mercados de mercenarios | **Evento** agendado (ya era una cita) |
-| Títulos | **Muestreo** o reevaluación cuando cambia lo que mira (Facciones, plazas, relaciones) |
+| Títulos | **Muestreo** o reevaluación cuando cambia lo que mira (Facciones, plazas, relaciones). **Implementado en Rust (2026-10-25, 5F):** un solo plazo **global** (`Carga::Titulos`, prioridad 10) a `TITULOS.cadenciaMinutos` de lo primero que pasa (orden aceptada o evento de la cola que no sea él mismo) sin otro pendiente; al vencer recalcula todo y no se rearma solo (Diplomacia_Facciones §7) |
 | Tecnología, logros, Aedas, residentes | Los contadores suben al ocurrir el hecho; las condiciones de adopción se evalúan al subir un contador; los Aedas itinerantes, eventos programados |
 | Caravanas de fundación (vuelve sola, se desarma, caduca) | **Planes** y eventos de caducidad |
 | Memoria de la niebla y exploración | **Muestreo** (§4) |

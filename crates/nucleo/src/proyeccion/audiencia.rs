@@ -107,17 +107,19 @@ pub fn de(e: &Estado, clase: Clase, id: u64) -> Vec<Ambito> {
         Clase::OrdenMercado => v.extend(e.comercio.libro.ordenes.iter().chain(&e.comercio.libro.historial).find(|o| o.id == id).and_then(|o| faccion_de_plaza(e, u64::from(o.asentamiento)))),
         Clase::Convocatoria => v.extend(e.militar.convocatorias.get(&id).map(|c| Ambito::Faccion(c.faccion))),
         Clase::Acuerdo => v.extend(e.comercio.acuerdo(id).into_iter().flat_map(|a| [a.a, a.b]).filter_map(|p| faccion_de_plaza(e, u64::from(p)))),
-        Clase::Faccion => v.push(Ambito::Faccion(id as u32)),
+        Clase::Faccion => v.extend(existe_faccion(e, id as u32).then_some(Ambito::Faccion(id as u32))),
         Clase::Relacion => v.extend(e.politica.relaciones.get(id).into_iter().flat_map(|r| [Ambito::Faccion(r.a), Ambito::Faccion(r.b)])),
-        Clase::Campamento | Clase::Bandidos | Clase::Interior => {}
+        // Los títulos son públicos: van a la `VISTA` de todos (la decide `proyeccion::vista`) y a `ADMIN`, no a un ámbito de jugador.
+        Clase::Campamento | Clase::Bandidos | Clase::Interior | Clase::Titulo => {}
     }
     v.sort_unstable();
     v.dedup();
     v
 }
 
-/// Las Facciones que existen: las de la entidad (5B: aunque no les quede nadie ni nada) y las que la administración nombra sin crearlas, por su reputación, tecnologías, relaciones,
-/// ciudadanos o plazas.
+/// Las Facciones que se nombran en el mundo: las de la entidad (5B: aunque no les quede nadie ni nada) y las que la administración nombra sin crearlas, por su reputación, tecnologías,
+/// relaciones (también las rotas: el id de una Facción no se vuelve a dar, ni el de la que desapareció en una anexión o una fusión, 5F), ciudadanos o plazas. Si una existe todavía lo dice
+/// [`existe_faccion`].
 pub fn facciones(e: &Estado) -> BTreeSet<u32> {
     e.politica
         .facciones
@@ -130,6 +132,17 @@ pub fn facciones(e: &Estado) -> BTreeSet<u32> {
         .chain(e.militar.heroes.values().filter_map(|h| h.faccion))
         .chain(e.asentamientos.values().map(|a| a.faccion))
         .collect()
+}
+
+/// ¿Existe la Facción `f`? Como entidad, o porque la nombra algo (lo de [`facciones`], sin recorrerlo todo si es una entidad). La que desaparece en una anexión o una fusión ya no existe: sale
+/// del registro con `QUITA`.
+pub fn existe_faccion(e: &Estado, f: u32) -> bool {
+    e.politica.facciones.existe(f)
+        || e.comercio.reputacion.contains_key(&f)
+        || e.militar.tecnologias.contains_key(&f)
+        || e.politica.relaciones.activas().any(|r| r.incluye(f))
+        || e.militar.heroes.values().any(|h| h.faccion == Some(f))
+        || e.asentamientos.values().any(|a| a.faccion == f)
 }
 
 /// Los ids de todas las entidades de una clase (menos `Escuadra`, que se recorre desde sus héroes).
@@ -148,6 +161,6 @@ pub fn todas(e: &Estado, clase: Clase) -> Vec<u64> {
         Clase::Convocatoria => e.militar.convocatorias.keys().copied().collect(),
         Clase::Batalla => e.batallas.batallas.keys().copied().collect(),
         Clase::Relacion => e.politica.relaciones.activas().map(|r| r.id).collect(),
-        Clase::Campamento | Clase::Bandidos | Clase::Interior => Vec::new(),
+        Clase::Campamento | Clase::Bandidos | Clase::Interior | Clase::Titulo => Vec::new(),
     }
 }

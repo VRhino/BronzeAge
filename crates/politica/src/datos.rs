@@ -77,6 +77,8 @@ pub struct Reglas {
     pub caducidad_relacion: Instante,
     pub caducidad_anexion: Instante,
     pub caducidad_fusion: Instante,
+    /// `TITULOS.cadenciaMinutos` (ms): cada cuánto se recalculan los títulos mientras pasa algo en el mundo (§7, 5F).
+    pub cadencia_titulos: Instante,
     pub nivel: ReglasNivel,
     pub sigilo: Catalogo,
 }
@@ -101,6 +103,7 @@ impl Reglas {
             caducidad_relacion: dias(&bloque("RELACION_PROPUESTA"), "caducidadDias"),
             caducidad_anexion: dias(&bloque("ANEXION"), "caducidadDias"),
             caducidad_fusion: dias(&bloque("FUSION"), "caducidadDias"),
+            cadencia_titulos: (num(&bloque("TITULOS"), "cadenciaMinutos") * MS_POR_MINUTO as f64).round() as Instante,
             nivel: ReglasNivel {
                 nivel_maximo: num(&nivel, "nivelMaximo") as u32,
                 umbrales: nivel["xpParaNivel"].as_array().expect("xpParaNivel").iter().map(|x| mil(x.as_f64().expect("umbral"))).collect(),
@@ -140,6 +143,7 @@ mod pruebas {
         let r = Reglas::cargar();
         assert_eq!((r.cooldown_creacion, r.cooldown_residencia, r.cooldown_capital), (7 * DIA, 3 * DIA, 14 * DIA));
         assert_eq!((r.caducidad_relacion, r.caducidad_anexion, r.caducidad_fusion), (3 * DIA, 3 * DIA, 3 * DIA));
+        assert_eq!(r.cadencia_titulos, 10 * MS_POR_MINUTO);
         assert_eq!(r.puerta_por_defecto, Grupos::de([Grupo::Neutrales, Grupo::Enemigos]), "Q1: cerrada a neutrales y enemigos");
         let n = &r.nivel;
         assert_eq!(n.nivel_maximo, 10);
@@ -155,7 +159,7 @@ mod pruebas {
     #[test]
     fn la_identidad_son_los_bloques_del_documento() {
         let t = texto_de_parametros();
-        for nombre in ["CIUDADANIA", "CAPITAL", "PUERTA", "RELACION_PROPUESTA", "ANEXION", "FUSION", "CATALOGO_SIGILO", "NIVEL_FACCION"] {
+        for nombre in ["CIUDADANIA", "CAPITAL", "PUERTA", "RELACION_PROPUESTA", "ANEXION", "FUSION", "CATALOGO_SIGILO", "NIVEL_FACCION", "TITULOS"] {
             assert!(t.contains(&format!("<!-- parametros:{nombre} -->")), "falta {nombre}");
         }
     }

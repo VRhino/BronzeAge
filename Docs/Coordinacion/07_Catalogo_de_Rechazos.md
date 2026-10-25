@@ -537,11 +537,18 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `diplomacia.sin_rey` | `DIPLOMACIA_SIN_REY` | Una de las dos Facciones no tiene Rey que pacte o conteste. |
 | `diplomacia.vasalla_de_tercera` | `DIPLOMACIA_VASALLA_DE_TERCERA` | Una de las dos ya es vasalla de una tercera (una Facción tiene como mucho una señora). |
 | `diplomacia.reputacion_baja` | `DIPLOMACIA_REPUTACION_BAJA` | Proponer una alianza con la reputación por debajo de `REPUTACION.umbralBajoParaEmbajador`. |
-| `diplomacia.ya_pendiente` | `DIPLOMACIA_YA_PENDIENTE` | Ya hay una propuesta de relación vigente entre las dos, en cualquier sentido. |
-| `diplomacia.propuesta_desconocida` | `DIPLOMACIA_PROPUESTA_DESCONOCIDA` | `prop-N` no es ninguna propuesta de relación pendiente (o ya se contestó o se retiró). |
-| `diplomacia.propuesta_caducada` | `DIPLOMACIA_PROPUESTA_CADUCADA` | La propuesta caducó (`RELACION_PROPUESTA.caducidadDias`). |
-| `diplomacia.batalla_abierta` | `DIPLOMACIA_BATALLA_ABIERTA` | Aceptar una relación con una batalla abierta en la que combate alguna de las dos: se contesta cuando termine. |
+| `diplomacia.ya_pendiente` | `DIPLOMACIA_YA_PENDIENTE` | Ya hay una propuesta de esa clase (relación, anexión o fusión) vigente entre las dos, en cualquier sentido. |
+| `diplomacia.propuesta_desconocida` | `DIPLOMACIA_PROPUESTA_DESCONOCIDA` | `prop-N` no es ninguna propuesta pendiente de la clase de la orden (relación, anexión o fusión), o ya se contestó o se retiró. |
+| `diplomacia.propuesta_caducada` | `DIPLOMACIA_PROPUESTA_CADUCADA` | La propuesta caducó (`RELACION_PROPUESTA`, `ANEXION` o `FUSION.caducidadDias`). |
+| `diplomacia.batalla_abierta` | `DIPLOMACIA_BATALLA_ABIERTA` | Aceptar una relación, una anexión o una fusión con una batalla abierta en la que combate alguna de las dos: se contesta cuando termine. |
 | `diplomacia.tributo_invalido` | `DIPLOMACIA_TRIBUTO_INVALIDO` | El tributo de un vasallaje es una cantidad por minuto de un recurso, no negativa. |
+
+### La anexión y la fusión (sistema 5, tanda 5F; `ErrorPropuesta` del crate `politica`; comparten los demás rechazos con las relaciones y con el nombre de una Facción)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `diplomacia.rey_no_valido` | `DIPLOMACIA_REY_NO_VALIDO` | El Rey de la Facción nueva de una fusión ha de ser el Rey de una de las dos. |
+| `diplomacia.proponente_ya_no_es_rey` | `DIPLOMACIA_PROPONENTE_YA_NO_ES_REY` | Al aceptar una fusión, el Rey de la Facción que la propuso ya no es quien la propuso: su consentimiento no vale. |
 
 ### Refundación y Caravana de Fundación (sistema 5, tanda 5G-b; Fundacion_Y_Refundacion §4, §6 y §9)
 

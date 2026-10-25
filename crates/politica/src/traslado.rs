@@ -43,7 +43,8 @@ pub fn planificar(p: &Politica, origen: FaccionId, destino: FaccionId) -> Plan {
     }
     cambios.extend(p.propuestas.iter().filter(|x| x.clase.nombra(origen)).map(|x| Cambio::Descartada { propuesta: x.id }));
     if let (Some(o), Some(d)) = (p.facciones.get(origen), p.facciones.get(destino)) {
-        let nuevos: Vec<_> = o.ciudadanos.iter().copied().filter(|h| !d.ciudadanos.contains(h)).collect();
+        // Con el índice de ciudadanía (O(log n) por héroe): un traslado de miles de ciudadanos no los compara uno a uno.
+        let nuevos: Vec<_> = o.ciudadanos.iter().copied().filter(|&h| p.facciones.faccion_de(h) != Some(d.id)).collect();
         if !nuevos.is_empty() {
             cambios.push(Cambio::Ciudadanos { nuevos });
         }
@@ -73,6 +74,7 @@ pub fn aplicar(p: &mut Politica, plan: &Plan) {
             }
             Cambio::Desaparece => {
                 p.facciones.eliminar(plan.origen);
+                p.mayor_desaparecida = p.mayor_desaparecida.max(plan.origen);
             }
             Cambio::Rota { .. } | Cambio::Ciudadanos { .. } => {}
         }

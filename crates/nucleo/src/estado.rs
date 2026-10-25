@@ -62,6 +62,18 @@ pub const PRIO_ASENTAMIENTO: u8 = 2;
 /// en el TypeScript (`caducar` iba después de producir).
 pub const PRIO_CADUCA_POLITICA: u8 = 3;
 
+/// Prioridad del plazo de los títulos (`Reloj_Y_Eventos` §2: los títulos van después de todo lo demás del mismo instante).
+pub const PRIO_TITULOS: u8 = 10;
+
+/// La entidad del plazo de los títulos: una sola para todo el mundo (etiqueta 17 de `estado_comercio::ETIQUETA`).
+pub fn entidad_titulos() -> u64 {
+    17 * crate::estado_comercio::ETIQUETA
+}
+
+/// BAN33: BAN32 con los títulos de prestigio (sistema 5, tanda 5F; Diplomacia_Facciones §7): los de la última evaluación (`politica::Politica::titulos`, para narrar el cambio de la
+/// siguiente), el instante del plazo de títulos pendiente (`Estado::titulos_en`) y su plazo en la cola (`Carga::Titulos`). BAN32 se rechaza: no trae los títulos de la última evaluación, y
+/// sin ellos la primera de después contaría como «nace» lo que ya existía.
+///
 /// BAN32: BAN31 con las correcciones del autor a 5C y la diplomacia de 5D (sistema 5): cada plaza guarda desde cuándo es de su Facción (`de_la_faccion_desde`, 5C-1: la capital
 /// efectiva es la que lleva más tiempo en la Facción), el resto oculto de su tributo (`resto_tributo`, Q3) y si abre su almacén a los aliados (`permite_reabastecer_aliados`); las
 /// relaciones dejan el mapa de pares del andamiaje (`EstadoMilitar::relaciones`) y viven solo en `Estado::politica` (con dirección, estado, fechas, tributo y su historia), y las propuestas
@@ -151,7 +163,7 @@ pub const PRIO_CADUCA_POLITICA: u8 = 3;
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN32";
+const MAGIA: &[u8; 5] = b"BAN33";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -412,6 +424,8 @@ pub enum Carga {
     Batalla(SucesoBatalla),
     /// Un plazo de una Caravana de Fundación (la entidad es `entidad_fundacion`; prioridad 6, la de las caravanas).
     Fundacion(SucesoFundacion),
+    /// Se recalculan los títulos de prestigio (5F; la entidad es `entidad_titulos`, una sola para todo el mundo; prioridad [`PRIO_TITULOS`]).
+    Titulos,
 }
 
 /// Qué plazo de una Caravana de Fundación vence (Fundacion_Y_Refundacion §7). Cada cambio de situación sube su generación: a una caravana solo le queda en la cola el plazo de la situación en
@@ -741,10 +755,12 @@ pub enum Clase {
     Batalla,
     /// Una relación entre dos Facciones (`Estado::politica.relaciones`, 5D): su id es el de la relación (`rel-N`), que sale del contador común; un mismo par tiene varias a lo largo del tiempo.
     Relacion,
+    /// Un título de prestigio (5F): su id es su posición en `politica::titulos::TituloId::TODOS`. Público: va a `VISTA` y a `ADMIN`.
+    Titulo,
 }
 
 impl Clase {
-    pub const TODAS: [Clase; 16] = [
+    pub const TODAS: [Clase; 17] = [
         Clase::Ejercito,
         Clase::Asentamiento,
         Clase::Interior,
@@ -761,12 +777,13 @@ impl Clase {
         Clase::Convocatoria,
         Clase::Batalla,
         Clase::Relacion,
+        Clase::Titulo,
     ];
 }
 
 /// Las entidades cuyo estado cambió en una versión, por clase. Al cerrar la versión cada lista queda ordenada y sin repetir.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Tocados([Vec<u64>; 16]);
+pub struct Tocados([Vec<u64>; 17]);
 
 impl Tocados {
     pub fn marcar(&mut self, clase: Clase, id: u64) {
@@ -848,6 +865,8 @@ pub struct Estado {
     pub politica: politica::Politica,
     /// Las Caravanas de Fundación y el fondo de refundación de los campamentos (Fundacion_Y_Refundacion; 5G-b).
     pub fundacion: EstadoFundacion,
+    /// Cuándo vence el plazo de los títulos que está en la cola (`Carga::Titulos`, 5F), si hay uno: se arma al pasar algo en el mundo y no se repite solo.
+    pub titulos_en: Option<Instante>,
     pub generaciones: Generaciones,
     pub cola: Cola<Carga>,
     /// De cada actor, sus últimas `peticion_id` aceptadas en orden de llegada, con la versión que produjeron (a lo sumo `Reglas::limite_idempotencia`).
@@ -880,6 +899,7 @@ impl Estado {
             memoria: Memoria::default(),
             politica: politica::Politica::default(),
             fundacion: EstadoFundacion::default(),
+            titulos_en: None,
             generaciones: Generaciones::nuevas(),
             cola: Cola::nueva(),
             vistos: BTreeMap::new(),
@@ -1013,6 +1033,7 @@ impl Estado {
         memoria::escribir(&mut w, &self.memoria);
         codec_politica::escribir(&mut w, &self.politica);
         estado_fundacion::escribir(&mut w, &self.fundacion);
+        w.opt_i64(self.titulos_en);
 
         let gens = self.generaciones.volcar();
         w.u64(gens.len() as u64);
@@ -1070,6 +1091,7 @@ impl Estado {
                     SucesoFundacion::Caduca => 13,
                     SucesoFundacion::Llega => 14,
                 }),
+                Carga::Titulos => w.u8(15),
                 Carga::Externa { generador, tipo, a, b } => {
                     w.u8(2);
                     w.u16(*generador);
@@ -1099,12 +1121,13 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN32`): los cuatro primeros dicen la familia («BAN3» son los formatos 30 a 39, y solo el 32 se admite; «BAN2» y «BAN1», los formatos 20 a 29 y
+        // La cabecera es de 5 bytes (`BAN33`): los cuatro primeros dicen la familia («BAN3» son los formatos 30 a 39, y solo el 33 se admite; «BAN2» y «BAN1», los formatos 20 a 29 y
         // 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'2' => {}
+                b'3' => {}
+                b'2' => return Err(ErrorFormato("foto del formato BAN32 (no trae los títulos de prestigio de la última evaluación ni su plazo): ya no se admite")),
                 b'1' => return Err(ErrorFormato("foto del formato BAN31 (las plazas no dicen desde cuándo son de su Facción ni traen el resto de su tributo, y las relaciones son pares sin dirección del andamiaje de administración): ya no se admite")),
                 b'0' => return Err(ErrorFormato("foto del formato BAN30 (la Caravana de Fundación es una marca de la columna, sin titular, origen, coste que devolver ni caducidad, los campamentos no traen el fondo de refundación, las plazas no dicen desde cuándo son de su Facción y las relaciones son pares sin dirección): ya no se admite")),
                 _ => return Err(ErrorFormato("no es un estado del núcleo")),
@@ -1218,6 +1241,7 @@ impl Estado {
         s.memoria = memoria::leer(&mut r)?;
         s.politica = codec_politica::leer(&mut r)?;
         s.fundacion = estado_fundacion::leer(&mut r)?;
+        s.titulos_en = r.opt_i64()?;
 
         let mut gens = Vec::new();
         for _ in 0..r.cuenta()? {
@@ -1245,6 +1269,7 @@ impl Estado {
                 10 => Carga::Batalla(SucesoBatalla::leer(&mut r)?),
                 13 => Carga::Fundacion(SucesoFundacion::Caduca),
                 14 => Carga::Fundacion(SucesoFundacion::Llega),
+                15 => Carga::Titulos,
                 2 => Carga::Externa { generador: r.u16()?, tipo: r.u16()?, a: r.u64()?, b: r.u64()? },
                 _ => return Err(ErrorFormato("tipo de carga desconocido")),
             };
