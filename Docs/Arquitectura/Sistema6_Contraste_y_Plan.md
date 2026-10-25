@@ -357,12 +357,60 @@ Recomendada: **A** (con B el umbral pendiente de cada contador dice qué logro f
 
 Las 17 decisiones de §7 quedan como decisiones técnicas del agente, sin objeción del autor por ahora.
 
+## Avance de 6A (2026-10-25): reglas puras en `crates/tecnologia`
+
+Hecha en la rama `tanda-6a` (worktree aparte, sobre `7ab7986`, foto `BAN35`; sin cambio de foto ni de esquema). Crate nuevo `crates/tecnologia` (≈ 2.650 líneas con pruebas), sin dependencia
+del núcleo: depende de `base` y `asentamiento` (los helpers de bloques, `Recurso`, `Tipo`, `Almacen`, `Costo`), con `comercio` solo en pruebas (para igualar la escala de la reputación).
+Fuera del crate solo se tocaron el `Cargo.toml` del workspace y `militar`: `militar::datos::ReglasTecnologias` vive ahora en `tecnologia::datos` y `militar` la reexporta (mismo orden
+alfabético de antes, así que el núcleo, las proyecciones y los dorados no cambian). El núcleo no se tocó.
+
+**Datos** (`datos.rs`, de TA): `TECNOLOGIAS` **en el orden del documento** (serde_json ordena las claves; el orden se saca de la posición de cada clave en el bloque, y es el índice
+`TecId`), `ERAS` (plazo en ms), `TARIFA_ADOPCION` (como `Costo` en unidades enteras), `AEDAS` (minutos en ms, bonos en ppm, umbral de reputación en la escala de
+`comercio::reputacion`, carga mínima en milésimas, `cupoPorNivel` indexado por nivel), `EPICAS`, `TITULO_CAPITULO` y `MERCENARIOS.tecnologia` (ppm y ms). Las cifras son las del TS (Q3).
+Los bloques del documento no cambian (la identidad de las reglas del núcleo ya incluye TA por `militar::datos::texto_de_parametros`).
+
+**Módulos y tipos públicos**
+
+| Módulo | Tipos y funciones | Reglas |
+|---|---|---|
+| `lib` | `TecId` (u8), `FaccionId`, `AsentamientoId`, `Conjunto` (mapa de bits de ≤ 64 tecnologías) | |
+| `datos` | `Reglas` (catálogo, Eras, Aedas, campamento, títulos de capítulo, `de_arranque`, `por_contador`), `Definicion`, `Condicion`, `Logro`, `Bonus`, `HechoEpico`, `Capitulo`, `DefinicionEpica`, `Era`, `ReglasAedas`, `ReglasCampamento`, `ReglasTecnologias` | TA §11 |
+| `contador` | `Contador` (enum de los 24, `nombre`, `es_record`), `Delta`, `de_extraccion`, `de_fabricacion`, `combate_resuelto`, `asedio`, `ContextoBatalla`, `batalla_unity`, `reclutamiento`, `PESO_CARROS_GUERRA` | TA §2.1 en origen (decisión 3), D18, **Q4** |
+| `estado` | `EstadoTecnologia` (sumar, aplicar, subir_record, umbral_pendiente, todos_los_logros_de_la_era, fin_del_plazo, avanzar_era, candidatas, hacer_aparecer, conocida_desde, conocida_por_aedas, cantar), `TecnologiasFaccion`, `Primero`, `CambioEra` | TA §1-§3, §6.1; el siguiente umbral en O(1) (a lo sumo un logro por contador); una Era por llamada; sin plazo en la III (decisión 15) |
+| `hito` | `VistaFaccion` (la implementa el núcleo), `cumple`, `faltan`, `Aparicion`, `Revelacion`; en `EstadoTecnologia`: aparecer_por_hito, pide_recurso_en_capital, revelar | TA §3.1, §3 paso 3, §6.3; disparadores de §5.1; `faltan` como índices (decisión 12) |
+| `adopcion` | `ErrorAdopcion`, `ErrorVenta`, `precio_de_venta`, `factor_produccion`; en `EstadoTecnologia`: adoptar, vender, del_campamento, campamento_libre_en, tecnologias_del_campamento | TA §4, §4.1, §5 (C1: adoptada), §6.4; rechazos finos (decisión 9) |
+| `itinerantes` | `AedaItinerante` (llegar, candidatos, salir, esperar, perder_destino, siguiente_evento), `objetivo`, `nacer`, `aeda_en` | TA §6.2; un evento pendiente por Aeda; Q5 la aplica el núcleo con `candidatos` y `salir` |
+| `residentes` | `Residentes` (ajustar, llega, cambiar_de_dueno, al_aparecer, quitar_plaza, de_plaza, de_faccion, cumplidas_de), `AedaResidente`, `NOMBRES`, `cupo`, `Llegada`, `llegada`, `Ajuste`, `factor_felicidad`, `factor_nobleza` | TA §7.1; nivel actual (decisión 5); la llegada exacta con la reputación baja (decisión 6) |
+| `epicas` | `Epica`, `Hecho` (defensa, conquista, batalla, de_unity, obra, ascenso, adopcion, caravana), `Clave`, `ContextoUnity`, `ErrorEpica`, `Avance`; en `Residentes`: empezar_epica, abandonar_epica, avanzar_epicas | TA §7.2; hechos tipados y claves sin cadenas; la épica perdida la devuelven `cambiar_de_dueno` y `al_aparecer` (decisión 11) |
+| `alijos` | `Abiertos`, `ErrorAlijo`, `Apertura`, `a_la_vista`, `abrir` | Gen §12; oro hacia abajo a unidades enteras, lo que no cabe se pierde (decisión 10) |
+
+**Pruebas:** 67 en el crate, todas en verde (más las de `militar`, que siguen pasando con la `ReglasTecnologias` movida). Portadas del TypeScript, con el fichero de origen en cada módulo
+de pruebas: `tecnologia.test.ts` (los 10: catálogo 3, estado 1, avance 3, contadores 3), `aedas.test.ts` (8 de 10: cuántos, nacen, recorrido, revelar 2, vender 3; la puerta cerrada es de
+`politica::puerta` y del núcleo, y revelar durante la estancia lo dispara el núcleo, 6D), `aedasResidentes.test.ts` (20 de 21: catálogo, ciclo de vida 8, efectos 1 de 2, empezar y
+abandonar 3, hechos 3, avance 4; «Mecenas» es de `politica::titulos`), `alijos.test.ts` (2 de 4: ver y abrir; colocar es del generador del artefacto), `canteria.test.ts` (1 de 2: el factor; el
+rendimiento de la Cantera es de la economía, 6C), `reclutamientoMercenario.test.ts` (los 3 de `tecnologiasDelCampamento`) y `comandosTecnologia.test.ts` (la parte de reglas: adopción y
+sus rechazos, compra y su precio, la épica cerrada por una adopción). Además, los invariantes de TA §12 sobre el catálogo, los contadores de una batalla de Unity
+(`resultadoBatalla.ts`), la memoria de claves, la llegada con el cruce de la reputación y los alijos en unidades enteras. `cargo test --workspace --no-fail-fast` (una pasada: la tanda no toca
+sesión, proyecciones ni hechos): **1.519 pruebas en verde** (98 resultados, 14 ignoradas, 0 fallos); `buf lint` limpio.
+
+**Documentos corregidos** (contradicciones de §3 que solo tocaban documentos; gana Mechanics): C1 (G6 6.5b: «la tiene **adoptada**»), C2 (Reloj: los Aedas no consumen azar), C3 (TA y
+Reloj: la aparición se evalúa al ocurrir lo que mira su hito; la Era, al fijar un logro o en su cita), C5 (G6: «las políticas podrán sumar uno» pasa a `Docs/Ideas a diseñar.md` §32).
+Q4 queda escrita en TA §2.1 y §14. La nota «Implementado en Rust (6A)» está en TA §14. Las demás (C4, C6-C10) son de sus tandas.
+
+**Dudas para el autor**
+
+1. **Comprar a un Aeda nunca crea `primeros`.** Un Aeda solo vende lo que conoce, y conocer exige descubridora; así que la compra nunca es «la primera» y la frase de TA §13 («aparecida por
+   épica o compra sí cuenta para el campamento: `primeros` se registra por cualquier vía») solo vale para la épica. Recomendado: dejarlo así y precisar TA §13 en 6D.
+2. **La adopción no rechaza «sin Rey»** en las reglas puras (el TS sí, con `tecnologia.adopcion_invalida`): quien da la orden ya tiene que ser el Rey por la autorización del núcleo, así
+   que el caso no llega. Recomendado: sin rechazo propio.
+3. **La clave de una obra lleva la plaza** (`obra:<plaza>:<edificio>:<nivel>`): en Rust el id de un edificio es de su plaza, no global como en el TS. No cambia ninguna regla.
+
 ## Avance de 6F (2026-10-25, rama `tanda-6f`, foto `BAN36`)
 
 Hecha en paralelo con 6A (el crate `tecnologia`) y con la crónica con todo su historial, sobre `7ab7986` (foto `BAN35`): los alijos no dependen de la tecnología.
 
 **Diseño.**
-- **Reglas puras** en `crates/nucleo/src/alijos.rs` (`puede_buscar`, `a_la_vista`, `abrir`, `oro`), sin nada del núcleo, para moverlas tal cual al crate `tecnologia` al integrar 6A (la parte de alijos de 6A, si la escribe, se unifica con esta).
+- **Reglas puras:** las de `tecnologia::alijos` (6A: `a_la_vista`, `abrir` con `Apertura { oro, cargado }`). 6F las escribió primero en `crates/nucleo/src/alijos.rs`, en paralelo; al integrar con `origin` (6A, `b18a259`) ese módulo se borró y el núcleo usa las del crate (`nucleo` depende ya de `tecnologia`). «Puede buscar» (sin Facción o de una sin plazas) lo calcula el núcleo y se lo pasa.
 - **El artefacto** (55 alijos en el de hoy) se lee una vez en la geografía del núcleo (`nucleo/alijos.rs`, `AlijosDelMundo`): id de cadena, posición y oro en milésimas, con una rejilla de 10 u. La rejilla es la de la economía (`economia::Rejilla`, ahora `pub(crate)`): no hacía falta otra. La de encuentros no sirve (es de móviles con plan). No es estado: no entra en la foto.
 - **Estado:** `HeroeNucleo::alijos_abiertos: BTreeSet<u32>` (índices del artefacto), en el códec del héroe tras `residencia_cambiada_en`. Foto `BAN36`; `BAN35` se rechaza con su motivo.
 - **Orden:** `AbrirAlijo { heroe, alijo }`, **174** (el siguiente libre tras el 173), `Autoriza::CuentaDelHeroe`, implica al héroe (candado de batalla). Rechazos en este orden: `alijo.desconocido`, `alijo.no_puedes_buscar`, `alijo.ya_abierto`, `alijo.lejos` (también sin columna en el mapa). El oro va en unidades enteras hacia abajo al carro con `cargar_botin_en`; lo que no cabe se pierde y el alijo queda abierto igual (decisión 10). Hecho `alijo.abierto { heroe, oro, cargado }` con `alijo` = id del artefacto en `valores`, para el héroe y los participantes de su columna.
@@ -370,8 +418,8 @@ Hecha en paralelo con 6A (el crate `tecnologia`) y con la crónica con todo su h
 - **Contrato:** `abrir_alijo` mapeada (el héroe de la cuenta; `alijo_id` es el id del artefacto, resuelto por `Consulta::alijo`; uno desconocido se rechaza sin rastro), su fila en la matriz de Proy §5.1 (y la de §5.2 sacada de las de campamento, C7), cuatro rechazos en el catálogo, `Heroe.alijos_abiertos = 22` (ya estaba en el esquema) lleno en `HEROE` y `ADMIN`, dos dorados nuevos (`orden_abrir_alijo`, `foto_heroe_con_alijos_abiertos`). Sin cambio de esquema: `buf breaking` limpio. Quedan 4 órdenes `orden.no_disponible` (tecnología y Aedas).
 - **Sin tick:** abrir no programa nada y un alijo no tiene cita; la prueba lo mira con la longitud de la cola.
 
-**Pruebas** (`crates/nucleo/tests/alijos.rs`, 5; 4 unitarias en `alijos.rs`): ver y abrir una vez por héroe, otro héroe abre el mismo, cada rechazo sin rastro (también con plaza en la Facción), el carro casi lleno y lleno (conservación: entra exactamente lo cargado), la foto `BAN36` ida y vuelta con el hash y `BAN35` rechazada, y por el WebSocket real: abrir, el héroe con su alijo en `HEROE` y en `ADMIN`, `alijo.ya_abierto` y `alijo.desconocido`.
+**Pruebas** (`crates/nucleo/tests/alijos.rs`, 5; las unitarias de las reglas son las de `tecnologia::alijos`, 6A): ver y abrir una vez por héroe, otro héroe abre el mismo, cada rechazo sin rastro (también con plaza en la Facción), el carro casi lleno y lleno (conservación: entra exactamente lo cargado), la foto `BAN36` ida y vuelta con el hash y `BAN35` rechazada, y por el WebSocket real: abrir, el héroe con su alijo en `HEROE` y en `ADMIN`, `alijo.ya_abierto` y `alijo.desconocido`.
 
-**Cifras.** `cargo test --workspace --no-fail-fast`: 1.462 pruebas en verde, 12 ignoradas, 0 fallos (97 resultados de prueba). Auditoría (`BRONZEAGE_AUDITAR_CAMBIOS=1 cargo test -p nucleo -- --skip rendimiento`): 549 sin fallos. Las pruebas de sesión (los 15 binarios con pruebas por el WebSocket real, 101 pruebas) 20 veces seguidas: 2.020 sin un fallo. `buf lint` y `buf breaking` limpios; dorados verdes en Rust, C# (83) y TypeScript (83). El paso de minuto no se midió: la tanda no lo toca.
+**Cifras** (tras integrar 6A, `b18a259`). `cargo test --workspace --no-fail-fast`: 1.525 pruebas en verde, 14 ignoradas, 0 fallos (99 resultados de prueba; antes de integrar, 1.462). Auditoría (`BRONZEAGE_AUDITAR_CAMBIOS=1 cargo test -p nucleo -- --skip rendimiento`): 545 sin fallos. Las pruebas de sesión (los 15 binarios con pruebas por el WebSocket real, 101 pruebas) 20 veces seguidas: 2.020 sin un fallo. `buf lint` y `buf breaking` limpios; dorados verdes en Rust, C# (83) y TypeScript (83). El paso de minuto no se midió: la tanda no lo toca.
 
 **Dudas para el autor (6F).** (1) `alijo.lejos` también cuando el héroe no va en una columna en el mapa (dentro de un lugar no se abre, como el TypeScript). (2) El hecho lo oyen el héroe y los participantes de su columna, porque el oro entra en el carro común. (3) Un alijo desconocido se rechaza en la traducción del contrato, sin pasar por el núcleo, como los demás ids.

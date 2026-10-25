@@ -97,7 +97,7 @@ Las Facciones de bots siguen la misma regla (5.15.6).
 
 ## 6.5b Tecnología propia de los campamentos de mercenarios (2026-10-02)
 
-Un campamento de mercenarios (Doc 1.9b) no adopta nada: **desbloquea cada tecnología el último**, al instante y gratis, cuando la tiene el **50 %** de las Facciones vivas (las que conservan algún asentamiento; los bots juegan por la misma vía que los humanos y cuentan igual) **o** han pasado **72 horas** desde que la primera Facción la desbloqueó, lo que llegue antes. Las de arranque ya están. Así se recluta allí lo que una Facción no alcanza por edificio o materiales (Doc 5.8), y la ventaja del primero dura unos días sin ser eterna. Una tecnología que nadie ha desbloqueado no está en el campamento. Cifras en `MERCENARIOS.tecnologia` (placeholder).
+Un campamento de mercenarios (Doc 1.9b) no adopta nada: **desbloquea cada tecnología el último**, al instante y gratis, cuando la tiene **adoptada** el **50 %** de las Facciones vivas (las que conservan algún asentamiento; los bots juegan por la misma vía que los humanos y cuentan igual) **o** han pasado **72 horas** desde que la primera Facción la desbloqueó, lo que llegue antes. Las de arranque ya están. Así se recluta allí lo que una Facción no alcanza por edificio o materiales (Doc 5.8), y la ventaja del primero dura unos días sin ser eterna. Una tecnología que nadie ha desbloqueado no está en el campamento. Cifras en `MERCENARIOS.tecnologia` (placeholder).
 
 ## 6.6 Catálogo
 
@@ -182,8 +182,7 @@ atacan ni se les ataca, no combaten y no se capturan ni se retienen. Son de dos 
 - **Dónde**: en un asentamiento con **Palacio** activo y **Nobleza**; si pierde toda su nobleza, los Aedas se van. Con el
   Palacio desde el nivel 2 (Doc 4.2.1), pueden vivir allí desde ese nivel.
 - **Cupo por asentamiento** (por nivel actual): nivel 2, 1; nivel 3, 2; nivel 4, 3; nivel 5, 4
-  (`AEDAS.residentes.cupoPorNivel`). Si el nivel baja y sobran, se va el último en llegar. Las políticas podrán sumar uno
-  (Doc 4.4).
+  (`AEDAS.residentes.cupoPorNivel`). Si el nivel baja y sobran, se va el último en llegar.
 - **Llegada**: con cupo libre, llega uno cada 24 horas (`AEDAS.residentes.llegadaMinutos`, placeholder). Una Facción con
   reputación de **−50 o menos** (Doc 2.7) los atrae **tres veces más despacio**.
 - **Conquista**: si la plaza cambia de dueño, el Aeda se queda mientras haya nobleza, pero **pierde la épica en curso**.

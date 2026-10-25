@@ -11,7 +11,7 @@ de `Mecanicas a desarrollar.md`. Aparcadas el 2026-10-05 (la cultura y las entra
 | 19 | El mapa político como entidad |
 | 21 | Los 4 gremios escasos a nivel de servidor |
 | 23 | Materiales exóticos |
-| 32 | Cabos políticos aparcados: re-voto en federación, voz exterior, cupo de nivel 4-5, redistribución de Vivienda |
+| 32 | Cabos políticos aparcados: re-voto en federación, voz exterior, cupo de nivel 4-5, redistribución de Vivienda, política que suma un Aeda residente |
 | 33 | Comercio: caravanas militar y de contrabando, intercambio directo, retirada del almacén por el Tesorero |
 | 24 | Ciclo de servidor de 12 meses + Maravilla + legado NPC (pospuesto con las Eras IV-V) |
 | 43 | Cultura del asentamiento (y audio) |
@@ -136,6 +136,8 @@ Salen del triaje de los cabos sueltos políticos (2026-10-06). Ninguno tiene có
 - **Redistribución de Vivienda**: una política que cambie la proporción fija 15/5 de Pesants/Artesanos de cada
   Vivienda. Falta si desplaza cupo de una clase a otra o añade cupo extra, sus valores y de qué cargo es (Maestro de
   Obras o Sacerdote).
+- **Una política que sume un Aeda residente al cupo** (Doc 6.7, antes «las políticas podrán sumar uno», Doc 4.4): no hay
+  tal política en Doc 4.4 ni regla en `Tecnologia_Aedas.md`; aparcada el 2026-10-25 (contradicción C5 del sistema 6).
 
 ## 33. Comercio aparcado
 

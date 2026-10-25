@@ -199,13 +199,8 @@ pub struct ReglasMercenarios {
     pub racion_cada: i64,
 }
 
-/// Las tecnologías del juego (el bloque `TECNOLOGIAS`): hasta el sistema 6 solo interesa cuáles existen y cuáles tiene toda Facción desde que
-/// nace.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ReglasTecnologias {
-    pub todas: Vec<String>,
-    pub de_arranque: Vec<String>,
-}
+/// Las tecnologías del juego (cuáles existen y cuáles tiene toda Facción desde que nace): desde el sistema 6 (6A) viven en el crate `tecnologia`.
+pub use tecnologia::datos::ReglasTecnologias;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Reglas {
@@ -301,11 +296,7 @@ impl Reglas {
                 porcentaje_facciones: ppm(num(&me, "tecnologia.porcentajeFacciones")),
                 racion_cada: entero(&me, "racion.cadaMinutos") * MS_POR_MINUTO,
             },
-            tecnologias: {
-                let t = bloque(TECNOLOGIA, "TECNOLOGIAS");
-                let todas = t.as_object().expect("TECNOLOGIAS es un objeto");
-                ReglasTecnologias { todas: todas.keys().cloned().collect(), de_arranque: todas.iter().filter(|(_, v)| v["deArranque"].as_bool() == Some(true)).map(|(k, _)| k.clone()).collect() }
-            },
+            tecnologias: ReglasTecnologias::cargar(),
         }
     }
 }

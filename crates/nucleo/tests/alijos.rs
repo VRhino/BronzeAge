@@ -1,6 +1,6 @@
 //! Los alijos de exploración (sistema 6, tanda 6F; `Generacion_Del_Mundo.md` §12): `AbrirAlijo` (174) con cada rechazo, el oro al carro de la columna en unidades enteras (lo que no cabe se
 //! pierde, decisión 10 del plan del sistema 6), la conservación, «a la vista», que nada programa eventos, la foto `BAN36` y una prueba por el WebSocket real. Los casos de «ver y abrir un
-//! alijo» de `typescript-final:src/engine/__tests__/alijos.test.ts` (las reglas puras están en `crate::alijos`). Sobre el artefacto de mundo real; se omiten si no está.
+//! alijo» de `typescript-final:src/engine/__tests__/alijos.test.ts` (las reglas puras y sus pruebas están en `tecnologia::alijos`). Sobre el artefacto de mundo real; se omiten si no está.
 
 mod comun;
 
