@@ -455,6 +455,20 @@ pub enum Comando {
     FijarPuerta { heroe: u64, asentamiento: u64, cerrada_a: Grupos },
     /// El Gobernador, residente y dentro, veta a `vetado` (o levanta su veto): no entra, aunque sea de la Facción. A un residente no se le veta. Vetar a quien está dentro le saca al mapa.
     VetarJugador { heroe: u64, asentamiento: u64, vetado: u64, vetar: bool },
+    // ── Política: la anexión y la fusión (sistema 5, tanda 5F; Diplomacia_Facciones §6). Códigos del 168 al 173 (5E tomó del 158 al 160). Aceptar hace el traslado en el acto
+    //    (`nucleo/traslado.rs`). ──
+    /// La autoridad diplomática (Rey o Embajador) de `absorbente` le propone a `absorbida` absorberla (§6.1). Caduca a `ANEXION.caducidadDias`. `creadas` lleva la propuesta.
+    ProponerAnexion { heroe: u64, absorbente: u32, absorbida: u32 },
+    /// El Rey de la absorbida acepta (revalida todo y se hace el traslado de la absorbida a la absorbente) o rechaza.
+    ResponderAnexion { heroe: u64, propuesta: u64, aceptar: bool },
+    /// La autoridad diplomática de la absorbente retira su propuesta mientras siga vigente.
+    RetirarAnexion { heroe: u64, propuesta: u64 },
+    /// El Rey de `a` le propone a `b` disolverse las dos en una Facción nueva llamada `nombre` y con `rey` (el Rey de una de las dos) de Rey (§6.2). `creadas` lleva la propuesta.
+    ProponerFusion { heroe: u64, a: u32, b: u32, nombre: String, rey: u64 },
+    /// El Rey de `b` acepta (revalida, nace la Facción nueva y se trasladan las dos a ella: `creadas` la lleva) o rechaza.
+    ResponderFusion { heroe: u64, propuesta: u64, aceptar: bool },
+    /// El Rey de `a` retira su propuesta mientras siga vigente.
+    RetirarFusion { heroe: u64, propuesta: u64 },
 }
 
 /// El prefijo del actor de los mensajes del servidor de batalla: `batalla-servidor:<id>` (§8).
@@ -629,10 +643,23 @@ impl Comando {
             | Comando::ComprarCaravanaDeRefundacion { .. }
             | Comando::LanzarCaravanaFundacion { .. }
             | Comando::DesarmarCaravanaFundacion { .. } => CuentaDelHeroe,
-            Comando::ResponderSolicitud { .. } | Comando::AsignarEmbajador { .. } | Comando::DesignarCapital { .. } | Comando::ResponderRelacion { .. } | Comando::AdmitirOtrasFacciones { .. } => ReyDeLaFaccion,
-            Comando::ProponerRelacion { .. } | Comando::RetirarRelacion { .. } | Comando::DeclararGuerra { .. } | Comando::ProponerPaz { .. } | Comando::RomperRelacion { .. } | Comando::RebelionVasallo { .. } => {
-                AutoridadDiplomatica
-            }
+            Comando::ResponderSolicitud { .. }
+            | Comando::AsignarEmbajador { .. }
+            | Comando::DesignarCapital { .. }
+            | Comando::ResponderRelacion { .. }
+            | Comando::AdmitirOtrasFacciones { .. }
+            | Comando::ResponderAnexion { .. }
+            | Comando::ProponerFusion { .. }
+            | Comando::ResponderFusion { .. }
+            | Comando::RetirarFusion { .. } => ReyDeLaFaccion,
+            Comando::ProponerRelacion { .. }
+            | Comando::RetirarRelacion { .. }
+            | Comando::DeclararGuerra { .. }
+            | Comando::ProponerPaz { .. }
+            | Comando::RomperRelacion { .. }
+            | Comando::RebelionVasallo { .. }
+            | Comando::ProponerAnexion { .. }
+            | Comando::RetirarAnexion { .. } => AutoridadDiplomatica,
             Comando::RenombrarAsentamiento { .. } => ResidenteDeLaPlaza,
             Comando::AsignarRey { .. } => CiudadanoDeLaFaccion,
             Comando::AnadirEdificio { .. }
@@ -703,7 +730,8 @@ impl Comando {
             Comando::ColocarBandidos { .. } => CampamentoBandidos,
             Comando::ComprarMirada { .. } => Mirada,
             Comando::CrearFaccion { .. } => Faccion,
-            Comando::ProponerRelacion { .. } => Propuesta,
+            Comando::ProponerRelacion { .. } | Comando::ProponerAnexion { .. } | Comando::ProponerFusion { .. } => Propuesta,
+            Comando::ResponderFusion { .. } => Faccion,
             _ => return None,
         })
     }
@@ -946,7 +974,13 @@ impl Comando {
             | Comando::AdmitirOtrasFacciones { heroe, .. }
             | Comando::AportarARefundacion { heroe, .. }
             | Comando::RetirarDeRefundacion { heroe, .. }
-            | Comando::ComprarCaravanaDeRefundacion { heroe } => i.heroes.push(*heroe),
+            | Comando::ComprarCaravanaDeRefundacion { heroe }
+            | Comando::ProponerAnexion { heroe, .. }
+            | Comando::ResponderAnexion { heroe, .. }
+            | Comando::RetirarAnexion { heroe, .. }
+            | Comando::ProponerFusion { heroe, .. }
+            | Comando::ResponderFusion { heroe, .. }
+            | Comando::RetirarFusion { heroe, .. } => i.heroes.push(*heroe),
             Comando::AlternarReabastecerAliados { asentamiento, .. } => i.asentamientos.push(*asentamiento),
             // La puerta y los cargos de una plaza en batalla no se tocan: echar a quien combate dentro, o cambiar quién la gobierna, sería una orden sobre la batalla.
             Comando::AsignarCargoLocal { heroe, asentamiento, designado, .. } => {
@@ -998,6 +1032,7 @@ impl Comando {
             Comando::FijarNivelFaccion { faccion, .. } | Comando::FijarTecnologias { faccion, .. } | Comando::CrearEjercito { faccion, .. } => v.push((Clase::Faccion, u64::from(*faccion))),
             Comando::FijarRelacion { a, b, .. } | Comando::ProponerRelacion { a, b, .. } | Comando::DeclararGuerra { a, b, .. } => v.extend([(Clase::Faccion, u64::from(*a)), (Clase::Faccion, u64::from(*b))]),
             Comando::AdmitirOtrasFacciones { faccion, .. } => v.push((Clase::Faccion, u64::from(*faccion))),
+            Comando::ProponerAnexion { absorbente: a, absorbida: b, .. } | Comando::ProponerFusion { a, b, .. } => v.extend([(Clase::Faccion, u64::from(*a)), (Clase::Faccion, u64::from(*b))]),
             Comando::FijarFaccionDeHeroe { faccion: Some(faccion), .. }
             | Comando::SolicitarIngreso { faccion, .. }
             | Comando::ResponderSolicitud { faccion, .. }
@@ -2007,6 +2042,31 @@ impl Peticion {
                 w.u64(*vetado);
                 w.bool(*vetar);
             }
+            Comando::ProponerAnexion { heroe, absorbente, absorbida } => {
+                w.u8(168);
+                w.u64(*heroe);
+                w.u32(*absorbente);
+                w.u32(*absorbida);
+            }
+            Comando::ResponderAnexion { heroe, propuesta, aceptar } | Comando::ResponderFusion { heroe, propuesta, aceptar } => {
+                w.u8(if matches!(self.comando, Comando::ResponderAnexion { .. }) { 169 } else { 172 });
+                w.u64(*heroe);
+                w.u64(*propuesta);
+                w.bool(*aceptar);
+            }
+            Comando::RetirarAnexion { heroe, propuesta } | Comando::RetirarFusion { heroe, propuesta } => {
+                w.u8(if matches!(self.comando, Comando::RetirarAnexion { .. }) { 170 } else { 173 });
+                w.u64(*heroe);
+                w.u64(*propuesta);
+            }
+            Comando::ProponerFusion { heroe, a, b, nombre, rey } => {
+                w.u8(171);
+                w.u64(*heroe);
+                w.u32(*a);
+                w.u32(*b);
+                w.texto(nombre);
+                w.u64(*rey);
+            }
         }
         w.0
     }
@@ -2227,6 +2287,12 @@ impl Peticion {
             158 => Comando::AsignarCargoLocal { heroe: r.u64()?, asentamiento: r.u64()?, cargo: cargo_de_u8(r.u8()?)?, designado: r.u64()? },
             159 => Comando::FijarPuerta { heroe: r.u64()?, asentamiento: r.u64()?, cerrada_a: Grupos::desde_bits(r.u8()?) },
             160 => Comando::VetarJugador { heroe: r.u64()?, asentamiento: r.u64()?, vetado: r.u64()?, vetar: r.bool()? },
+            168 => Comando::ProponerAnexion { heroe: r.u64()?, absorbente: r.u32()?, absorbida: r.u32()? },
+            169 => Comando::ResponderAnexion { heroe: r.u64()?, propuesta: r.u64()?, aceptar: r.bool()? },
+            170 => Comando::RetirarAnexion { heroe: r.u64()?, propuesta: r.u64()? },
+            171 => Comando::ProponerFusion { heroe: r.u64()?, a: r.u32()?, b: r.u32()?, nombre: r.texto()?, rey: r.u64()? },
+            172 => Comando::ResponderFusion { heroe: r.u64()?, propuesta: r.u64()?, aceptar: r.bool()? },
+            173 => Comando::RetirarFusion { heroe: r.u64()?, propuesta: r.u64()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -2744,16 +2810,21 @@ pub mod rechazos {
     pub const DIPLOMACIA_VASALLA_DE_TERCERA: &str = "diplomacia.vasalla_de_tercera";
     /// Proponer una alianza con la reputación por debajo de `REPUTACION.umbralBajoParaEmbajador`.
     pub const DIPLOMACIA_REPUTACION_BAJA: &str = "diplomacia.reputacion_baja";
-    /// Ya hay una propuesta de relación vigente entre las dos, en cualquier sentido.
+    /// Ya hay una propuesta de esa clase (relación, anexión o fusión) vigente entre las dos, en cualquier sentido.
     pub const DIPLOMACIA_YA_PENDIENTE: &str = "diplomacia.ya_pendiente";
-    /// `prop-N` no es ninguna propuesta de relación pendiente (o ya se contestó o se retiró).
+    /// `prop-N` no es ninguna propuesta pendiente de la clase de la orden (relación, anexión o fusión), o ya se contestó o se retiró.
     pub const DIPLOMACIA_PROPUESTA_DESCONOCIDA: &str = "diplomacia.propuesta_desconocida";
-    /// La propuesta caducó (`RELACION_PROPUESTA.caducidadDias`).
+    /// La propuesta caducó (`RELACION_PROPUESTA`, `ANEXION` o `FUSION.caducidadDias`).
     pub const DIPLOMACIA_PROPUESTA_CADUCADA: &str = "diplomacia.propuesta_caducada";
-    /// Aceptar una relación con una batalla abierta en la que combate alguna de las dos: se contesta cuando termine.
+    /// Aceptar una relación, una anexión o una fusión con una batalla abierta en la que combate alguna de las dos: se contesta cuando termine.
     pub const DIPLOMACIA_BATALLA_ABIERTA: &str = "diplomacia.batalla_abierta";
     /// El tributo de un vasallaje es una cantidad por minuto de un recurso, no negativa.
     pub const DIPLOMACIA_TRIBUTO_INVALIDO: &str = "diplomacia.tributo_invalido";
+    // La anexión y la fusión (sistema 5, tanda 5F; `ErrorPropuesta` del crate `politica`; comparten los demás rechazos con las relaciones y con el nombre de una Facción).
+    /// El Rey de la Facción nueva de una fusión ha de ser el Rey de una de las dos.
+    pub const DIPLOMACIA_REY_NO_VALIDO: &str = "diplomacia.rey_no_valido";
+    /// Al aceptar una fusión, el Rey de la Facción que la propuso ya no es quien la propuso: su consentimiento no vale.
+    pub const DIPLOMACIA_PROPONENTE_YA_NO_ES_REY: &str = "diplomacia.proponente_ya_no_es_rey";
     // Refundación y Caravana de Fundación (sistema 5, tanda 5G-b; Fundacion_Y_Refundacion §4, §6 y §9).
     /// Lanzar una Caravana de Fundación sin residir en la plaza o sin estar dentro de ella (Proyecciones §5.2.4).
     pub const FUNDACION_NO_RESIDES: &str = "fundacion.no_resides";
@@ -3130,6 +3201,12 @@ mod pruebas {
             Comando::AsignarCargoLocal { heroe: 2, asentamiento: 5, cargo: Cargo::Tesorero, designado: 3 },
             Comando::FijarPuerta { heroe: 2, asentamiento: 5, cerrada_a: Grupos::de([politica::Grupo::Neutrales, politica::Grupo::Aedas]) },
             Comando::VetarJugador { heroe: 2, asentamiento: 5, vetado: 7, vetar: true },
+            Comando::ProponerAnexion { heroe: 2, absorbente: 1, absorbida: 3 },
+            Comando::ResponderAnexion { heroe: 2, propuesta: 40, aceptar: true },
+            Comando::RetirarAnexion { heroe: 2, propuesta: 40 },
+            Comando::ProponerFusion { heroe: 2, a: 1, b: 3, nombre: "Argos".into(), rey: 5 },
+            Comando::ResponderFusion { heroe: 2, propuesta: 41, aceptar: false },
+            Comando::RetirarFusion { heroe: 2, propuesta: 41 },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Ejercito(9), declara_guerra: false },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Caravana(4), declara_guerra: true },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Campamento(1), declara_guerra: false },

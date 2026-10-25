@@ -77,6 +77,11 @@ impl RedCaminos {
         self.aristas.is_empty() && self.rutas.is_empty()
     }
 
+    /// El traslado de una Facción que desaparece en una anexión o una fusión (Diplomacia_Facciones §6.3): sus rutas pasan a ser de `a`, con las mismas aristas y el mismo último lanzamiento.
+    pub fn trasladar_faccion(&mut self, de: FaccionId, a: FaccionId) {
+        self.rutas.values_mut().filter(|r| r.faccion == de).for_each(|r| r.faccion = a);
+    }
+
     /// `registrarRuta` (en cada lanzamiento, a mano o por reparto): la ruta anterior del mismo par se **sustituye**; las aristas nuevas se
     /// añaden y las que la ruta nueva ya no pisa **siguen** en la red. Una ruta sin tramos no se registra.
     pub fn registrar_ruta(&mut self, origen: AsentamientoId, destino: AsentamientoId, faccion: FaccionId, ruta: &[Punto], ahora: Instante) -> CambioRed {

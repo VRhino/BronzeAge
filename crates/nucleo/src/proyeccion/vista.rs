@@ -396,6 +396,10 @@ impl<'n> Mirada<'n> {
         for r in e.politica.relaciones.activas() {
             v.push(visible(pb::TipoEntidad::RelacionPolitica, ids::relacion(r.id), Sello(n.version_de(Clase::Relacion, r.id), 0), move || Some(Cuerpo::Relacion(propios::relacion(n, r)))));
         }
+        // Los títulos de prestigio son públicos (5F): los ve cualquiera, como las relaciones. Uno que desaparece sale de la vista.
+        for x in &e.politica.titulos {
+            v.push(visible(pb::TipoEntidad::Titulo, x.id.clave().into(), Sello(n.version_de(Clase::Titulo, x.id.indice()), 0), move || Some(Cuerpo::Titulo(propios::titulo(n, x)))));
+        }
         v
     }
 

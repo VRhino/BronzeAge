@@ -701,6 +701,17 @@ pub fn orden_de_mercado(n: &Nucleo, o: &OrdenMercado) -> pb::OrdenMercado {
     }
 }
 
+/// Un título de prestigio (5F, Diplomacia_Facciones §7): público, con su poseedor y su valor (plazas, oro en unidades, soldados; 1 el Gran Rey). Su id es su clave estable (`faccionMasGrande`...).
+pub fn titulo(n: &Nucleo, x: &politica::titulos::Titulo) -> pb::Titulo {
+    pb::Titulo {
+        titulo_id: x.id.clave().into(),
+        version: n.version_de(Clase::Titulo, x.id.indice()),
+        nombre: x.id.nombre().into(),
+        poseedor_id: ids::faccion(x.poseedor),
+        valor_metrica: x.valor,
+    }
+}
+
 // ───────────────────────────── Por clase del registro de cambios ─────────────────────────────
 
 /// Lo que una entidad del registro de cambios es en el contrato: las entidades que existen ahora y todos los ids en que puede aparecer (lo que no existe, si se quita, sale con `QUITA`).
@@ -746,10 +757,19 @@ pub fn proyectar(n: &Nucleo, quien: Espectador, clase: Clase, id: u64) -> Proyec
         Clase::Relacion => un(T::RelacionPolitica, ids::relacion(id), e.politica.relaciones.get(id).filter(|r| r.activa()).map(|r| Cuerpo::Relacion(relacion(n, r)))),
         Clase::Faccion => {
             let f = id as u32;
-            Proyeccion {
-                posibles: vec![(T::Faccion, ids::faccion(f)), (T::TecnologiaFaccion, ids::faccion(f))],
-                existen: vec![(T::Faccion, ids::faccion(f), Cuerpo::Faccion(faccion(n, f))), (T::TecnologiaFaccion, ids::faccion(f), Cuerpo::Tecnologias(tecnologias(n, f)))],
-            }
+            // La que desapareció en una anexión o una fusión (5F) ya no existe: sale con `QUITA`.
+            let existen = if audiencia::existe_faccion(e, f) {
+                vec![(T::Faccion, ids::faccion(f), Cuerpo::Faccion(faccion(n, f))), (T::TecnologiaFaccion, ids::faccion(f), Cuerpo::Tecnologias(tecnologias(n, f)))]
+            } else {
+                Vec::new()
+            };
+            Proyeccion { posibles: vec![(T::Faccion, ids::faccion(f)), (T::TecnologiaFaccion, ids::faccion(f))], existen }
+        }
+        Clase::Titulo => {
+            let t = politica::titulos::TituloId::de_indice(id);
+            let x = t.and_then(|t| e.politica.titulos.iter().find(|x| x.id == t));
+            let clave = t.map_or_else(|| format!("titulo-{id}"), |t| t.clave().to_string());
+            un(T::Titulo, clave, x.map(|x| Cuerpo::Titulo(titulo(n, x))))
         }
         Clase::Pueblo => {
             let (pueblo_id, obra_id) = (ids::pueblo(id), ids::obra(id));
@@ -777,7 +797,7 @@ pub fn proyectar(n: &Nucleo, quien: Espectador, clase: Clase, id: u64) -> Proyec
 /// Todo lo que hay en el mundo menos las plazas (que `ADMIN` lleva con su interior, `interior::asentamiento`), por clase e id: lo que [`proyectar`] da a la administración.
 ///
 /// DUDA: no están la memoria de la niebla de cada Facción (lo explorado, las fichas, las Miradas y los Informes de plaza: no tienen clase en el registro de cambios), la red de caminos, los
-/// precios de referencia ni el historial de cada héroe (ni, cuando existan, los títulos y las Aedas), que el `admin/partida` del TypeScript sí llevaba (fila «Contrato (4H, T3e)»).
+/// precios de referencia ni el historial de cada héroe (ni, cuando existan, las Aedas; los títulos van desde 5F), que el `admin/partida` del TypeScript sí llevaba (fila «Contrato (4H, T3e)»).
 pub fn todo_menos_plazas(n: &Nucleo) -> Vec<(Clase, u64)> {
     let e = n.estado();
     let mut v: Vec<(Clase, u64)> = audiencia::CLASES.into_iter().filter(|c| !matches!(c, Clase::Asentamiento | Clase::Escuadra)).flat_map(|c| audiencia::todas(e, c).into_iter().map(move |id| (c, id))).collect();
@@ -785,6 +805,7 @@ pub fn todo_menos_plazas(n: &Nucleo) -> Vec<(Clase, u64)> {
     v.extend(n.avanzadas_huerfanas().map(|x| (Clase::Avanzada, x.id)));
     v.extend(n.puertas_de_campamentos().map(|(c, _)| (Clase::Campamento, u64::from(c))));
     v.extend(e.combate.bandidos.keys().map(|&b| (Clase::Bandidos, b)));
+    v.extend(e.politica.titulos.iter().map(|x| (Clase::Titulo, x.id.indice())));
     v
 }
 

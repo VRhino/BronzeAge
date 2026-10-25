@@ -88,9 +88,11 @@ impl Nucleo {
 
     // ───────────────────────────── Ayudas ─────────────────────────────
 
-    /// El id de una Facción nueva: el siguiente a la mayor que se nombra en el mundo (las que nombró la administración sin crearlas también cuentan).
-    fn siguiente_faccion(&self) -> u32 {
-        crate::proyeccion::audiencia::facciones(&self.estado).last().map_or(1, |f| f + 1)
+    /// El id de una Facción nueva: el siguiente a la mayor que se nombra en el mundo (las que nombró la administración sin crearlas también cuentan) o que desapareció en una anexión o una
+    /// fusión (5F: un id no se vuelve a dar).
+    pub(super) fn siguiente_faccion(&self) -> u32 {
+        let mayor = crate::proyeccion::audiencia::facciones(&self.estado).last().copied().unwrap_or(0);
+        mayor.max(self.estado.politica.mayor_desaparecida) + 1
     }
 
     /// Las Facciones a las que `heroe` ha pedido entrar: ganar una ciudadanía borra sus solicitudes en todas, y esas Facciones cambian.
@@ -111,7 +113,7 @@ impl Nucleo {
 
     /// Lo que arrastra que `heroe` cambie de Facción (la Facción ya lo sabe; `antes` es la de antes): su copia en el héroe, su columna si va solo (§3.1-§3.3; la de un ejército no cambia), la
     /// demanda de bandidos del campamento donde reside y las dos Facciones en el registro de cambios.
-    fn tras_cambiar_de_faccion(&mut self, t: Instante, heroe: u64, antes: Option<u32>) {
+    pub(super) fn tras_cambiar_de_faccion(&mut self, t: Instante, heroe: u64, antes: Option<u32>) {
         let ahora = self.estado.politica.facciones.faccion_de(heroe);
         self.tr.tocar_todos(Clase::Faccion, antes.into_iter().chain(ahora).map(u64::from));
         let h = self.heroe_mut(heroe);

@@ -190,6 +190,8 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 
 > **Implementado en Rust (2026-10-24, 5C):** `designar_capital` (137, `ReyDeLaFaccion`) y `renombrar_asentamiento` (143, clase nueva `ResidenteDeLaPlaza`: la cuenta del héroe, que reside en la plaza; basta residir, como el TypeScript). Con 5G-a, quedan 27 órdenes no disponibles.
 
+> **Implementado en Rust (2026-10-25, 5F):** las seis órdenes de la anexión y la fusión (168-173; del 158 al 167 quedan para 5E), sin clase nueva de `Autoriza`: proponer y retirar una anexión, la autoridad diplomática de la absorbente (`AutoridadDiplomatica`); contestarla, el Rey de la absorbida; las tres de la fusión, el Rey (`ReyDeLaFaccion`) de A al proponer y retirar y de B al contestar (§5.2.7). Quedan 7 órdenes no disponibles.
+
 > **Implementado en Rust (2026-10-24, 5D):** las nueve órdenes de las relaciones entre Facciones (144-152; las 153-157 son de 5G-b) y una clase nueva de `Autoriza`, `AutoridadDiplomatica` (la cuenta del héroe, ciudadano y Rey o Embajador de la Facción que actúa: `politica::autorizacion::Actor::autoridad_diplomatica`). `responder_relacion` y `admitir_otras_facciones` son del Rey (`ReyDeLaFaccion`); `alternar_reabastecer_aliados`, de quien manda en la plaza hasta 5E. Con 5G-b, quedan 13 órdenes no disponibles.
 
 > **Implementado en Rust (2026-10-25, 5E):** la matriz de las órdenes de plaza es la de §5.2. Se retiran `manda_en` y «ciudadano de la madre» (salvo `colocar_avanzada`, `// DUDA:`), y `Autoriza` gana
@@ -377,6 +379,17 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `retirar_relacion` | `RetirarRelacion` | la cuenta del héroe, Rey o Embajador de la Facción | de la Facción que propuso; vigente |
 | `romper_relacion` | `RomperRelacion` | la cuenta del héroe, Rey o Embajador de la Facción | de `iniciador_faccion_id`; una alianza (cualquiera de las dos) o un vasallaje (solo la señora: `diplomacia.solo_la_senora`); una guerra no (`diplomacia.guerra_no_se_rompe`) |
 
+**La anexión y la fusión (sistema 5, 5F)**
+
+| Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
+|---|---|---|---|
+| `proponer_anexion` | `ProponerAnexion` | la cuenta del héroe, Rey o Embajador de la Facción | de la absorbente (`faccion_a_id`); distintas (`relacion.consigo_misma`) y existentes (`faccion.no_existe`), la absorbida con Rey (`diplomacia.sin_rey`) y no vasalla de una tercera (`diplomacia.vasalla_de_tercera`); una sola pendiente por par (`diplomacia.ya_pendiente`) |
+| `proponer_fusion` | `ProponerFusion` | la cuenta del héroe, Rey de la Facción | de `faccion_a_id`; las dos con Rey, el Rey nuevo el de una de las dos (`diplomacia.rey_no_valido`), el nombre no vacío (`faccion.nombre_vacio`) ni de una tercera (`faccion.nombre_duplicado`), ninguna vasalla de una tercera; una sola pendiente por par |
+| `responder_anexion` | `ResponderAnexion` | la cuenta del héroe, Rey de la Facción | de la absorbida; vigente (`diplomacia.propuesta_desconocida`, `diplomacia.propuesta_caducada`); aceptar revalida y exige que ninguna de las dos combata en una batalla abierta (`diplomacia.batalla_abierta`); el traslado, en el acto |
+| `responder_fusion` | `ResponderFusion` | la cuenta del héroe, Rey de la Facción | de la Facción B; vigente; aceptar revalida todo, que el Rey de A siga siendo quien la propuso (`diplomacia.proponente_ya_no_es_rey`) y sin batalla abierta; nace la Facción nueva (`creadas`) |
+| `retirar_anexion` | `RetirarAnexion` | la cuenta del héroe, Rey o Embajador de la Facción | de la absorbente; vigente |
+| `retirar_fusion` | `RetirarFusion` | la cuenta del héroe, Rey de la Facción | de la Facción A; vigente |
+
 **Administración y servidor de batalla**
 
 | Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
@@ -416,12 +429,6 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `adoptar_tecnologia` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
 | `comprar_tecnologia_aeda` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
 | `empezar_epica` | — | no disponible | sistema 6 (tecnología, Aedas y alijos) |
-| `proponer_anexion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `proponer_fusion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `responder_anexion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `responder_fusion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `retirar_anexion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
-| `retirar_fusion` | — | no disponible | sistema 5 (política, Facciones, cargos y residencia) |
 
 <!-- /autorizacion -->
 

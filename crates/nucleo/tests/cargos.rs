@@ -1,6 +1,6 @@
 //! Los cargos locales, la matriz de autorización de las órdenes de plaza y la puerta (sistema 5, tanda 5E; Diplomacia_Facciones §3.4 y §4.3, Proyecciones §4.3 y §5.2, Presencia §8): quién designa
 //! cada cargo y a quién (Q4: hay que residir), cuándo se vacía, que el cargo exige residir y estar dentro («la ciudadanía habilita, la presencia ejerce»), la puerta por grupos con su defecto
-//! (Q1: cerrada a neutrales y enemigos), los vetos que expulsan y la foto `BAN33`. Aquí las órdenes las da cada cuenta tal cual, sin el andamiaje de los demás escenarios (`comun::mandaba`).
+//! (Q1: cerrada a neutrales y enemigos), los vetos que expulsan y la foto `BAN34`. Aquí las órdenes las da cada cuenta tal cual, sin el andamiaje de los demás escenarios (`comun::mandaba`).
 //! Casos portados de `typescript-final:src/session/__tests__/{comandosCargos,autorizacionComandos,comandosPresencia}.test.ts` y `engine/__tests__/{cargos,puerta}.test.ts`.
 
 mod comun;
@@ -313,13 +313,13 @@ fn los_cargos_y_la_puerta_viajan_en_la_foto_ban33_y_la_ban32_se_rechaza() {
     e.ok("ana", Comando::VetarJugador { heroe: ana, asentamiento: plaza, vetado: cai, vetar: true });
     assert!(hash0 != hash1 && hash1 != hash2 && hash2 != e.n.hash_estado(), "cada pieza mueve el hash");
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN33");
+    assert_eq!(&bytes[..5], b"BAN34");
     let reglas = e.n.estado().reglas.clone();
     let vuelta = Estado::deserializar(&bytes, &reglas, &e.n.estado().mundo_hash).unwrap();
     let a = &vuelta.asentamientos[&plaza];
     assert_eq!((a.cargos.titular(Cargo::Gobernador), a.cargos.titular(Cargo::Tesorero), a.puerta.cerrada_a, a.puerta.vetados.len()), (Some(ana), Some(bea), Some(Grupos::de([Grupo::Enemigos])), 1));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.hash_estado()));
-    let vieja = [b"BAN32".as_slice(), &bytes[5..]].concat();
-    let error = Estado::deserializar(&vieja, &reglas, &e.n.estado().mundo_hash).err().expect("BAN32 se rechaza");
-    assert!(error.0.contains("BAN32") && error.0.contains("cargos"), "{}", error.0);
+    let vieja = [b"BAN33".as_slice(), &bytes[5..]].concat();
+    let error = Estado::deserializar(&vieja, &reglas, &e.n.estado().mundo_hash).err().expect("BAN33 se rechaza");
+    assert!(error.0.contains("BAN33") && error.0.contains("cargos"), "{}", error.0);
 }

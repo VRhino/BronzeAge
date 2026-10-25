@@ -359,6 +359,16 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         (orden!(ComprarCaravanaDeRefundacion, OrdenComprarCaravanaDeRefundacion), Comando::ComprarCaravanaDeRefundacion { heroe: 7 }),
         (orden!(LanzarCaravanaFundacion, OrdenLanzarCaravanaFundacion, origen_asentamiento_id: s("as-3")), Comando::LanzarCaravanaFundacion { heroe: 7, asentamiento: 3 }),
         (orden!(DesarmarCaravanaFundacion, OrdenDesarmarCaravanaFundacion, caravana_id: s("car-4")), Comando::DesarmarCaravanaFundacion { heroe: 7, caravana: 4 }),
+        // ── La anexión y la fusión (5F) ──
+        (orden!(ProponerAnexion, OrdenProponerAnexion, faccion_a_id: s("f-1"), faccion_b_id: s("f-2")), Comando::ProponerAnexion { heroe: 7, absorbente: 1, absorbida: 2 }),
+        (orden!(ResponderAnexion, OrdenResponderAnexion, propuesta_id: s("prop-40"), aceptar: true), Comando::ResponderAnexion { heroe: 7, propuesta: 40, aceptar: true }),
+        (orden!(RetirarAnexion, OrdenRetirarAnexion, propuesta_id: s("prop-40")), Comando::RetirarAnexion { heroe: 7, propuesta: 40 }),
+        (
+            orden!(ProponerFusion, OrdenProponerFusion, faccion_a_id: s("f-1"), faccion_b_id: s("f-2"), nuevo_nombre: s(" Argos "), nuevo_rey_id: s("heroe-9")),
+            Comando::ProponerFusion { heroe: 7, a: 1, b: 2, nombre: " Argos ".into(), rey: 9 },
+        ),
+        (orden!(ResponderFusion, OrdenResponderFusion, propuesta_id: s("prop-41"), aceptar: false), Comando::ResponderFusion { heroe: 7, propuesta: 41, aceptar: false }),
+        (orden!(RetirarFusion, OrdenRetirarFusion, propuesta_id: s("prop-41")), Comando::RetirarFusion { heroe: 7, propuesta: 41 }),
     ]
 }
 
@@ -368,8 +378,6 @@ fn ordenes_no_disponibles() -> Vec<Cuerpo> {
         ($($v:ident),* $(,)?) => { vec![$(Cuerpo::$v(Default::default())),*] };
     }
     vacias![
-        // política y Facciones (sistema 5, desde 5E)
-        ProponerAnexion, ResponderAnexion, RetirarAnexion, ProponerFusion, ResponderFusion, RetirarFusion,
         // tecnología, Aedas e intel (sistema 6)
         AdoptarTecnologia, EmpezarEpica, AbandonarEpica, ComprarTecnologiaAeda, AbrirAlijo,
     ]
@@ -434,7 +442,7 @@ fn cada_orden_del_jugador_se_traduce_a_su_comando_con_los_datos_de_la_peticion()
 #[test]
 fn las_ordenes_sin_comando_en_el_nucleo_se_rechazan_con_un_codigo_estable() {
     let sin_comando = ordenes_no_disponibles();
-    assert_eq!(sin_comando.len(), 11);
+    assert_eq!(sin_comando.len(), 5);
     for cuerpo in sin_comando {
         assert_eq!(traduce(cuerpo.clone(), false), Err(rechazos::ORDEN_NO_DISPONIBLE), "{cuerpo:?}");
         assert_eq!(traduce(cuerpo.clone(), true), Err(rechazos::ORDEN_NO_DISPONIBLE), "también para el administrador: {cuerpo:?}");
@@ -583,7 +591,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let de_administracion: BTreeSet<String> = ordenes_de_administracion().iter().map(|(_, c)| nombre(c)).collect();
     let del_servidor_de_batalla: BTreeSet<String> = ["RegistrarAsignacion", "ConfirmarInicio", "RegistrarTokens", "RegistrarSalida", "AplicarResultado"].map(String::from).into();
     let todos = variantes_de_comando();
-    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (160, 136, 19, 5));
+    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (166, 142, 19, 5));
     let clasificados: Vec<&String> = del_jugador.iter().chain(&de_administracion).chain(&del_servidor_de_batalla).collect();
     assert_eq!(clasificados.len(), todos.len(), "una variante en dos orígenes");
     let sin_clasificar: Vec<&String> = todos.iter().filter(|v| !clasificados.contains(v)).collect();
@@ -670,5 +678,5 @@ fn la_matriz_de_autorizacion_del_documento_es_la_del_codigo() {
     let faltan: Vec<String> = codigo.difference(&documento).map(fila).collect();
     let sobran: Vec<String> = documento.difference(&codigo).map(fila).collect();
     assert!(faltan.is_empty() && sobran.is_empty(), "la matriz del documento no es la del código.\nFaltan o no coinciden (como las dice el código):\n{}\nSobran (como las dice el documento):\n{}", faltan.join("\n"), sobran.join("\n"));
-    assert_eq!(codigo.len(), 135 + 19 + 5 + 11, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
+    assert_eq!(codigo.len(), 141 + 19 + 5 + 5, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
 }

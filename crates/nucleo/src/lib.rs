@@ -82,7 +82,7 @@ pub mod urbanismo;
 
 pub use codec::ErrorFormato;
 pub use comando::{rechazos, AccionReloj, Autoriza, Comando, Detalle, LadoDelFondo, ObjetivoAtaque, PagarCon, Peticion, Resultado, Respuesta, TipoCreado, ACTOR_SERVIDOR_DE_BATALLA};
-pub use estado::{Asentamiento, Carga, CambioVersion, CitaReputacion, Clase, Dato, Pertenencia, Tocados, Ejercito, Estado, EventoNucleo, PlanEnPausa, Reglas, ReglasEconomia, ReglasTerritorio, SucesoBatalla, SucesoComercio, SucesoCombate, SucesoFundacion, SucesoMilitar, SIN_BANDERA, PRIO_ASENTAMIENTO, PRIO_BANDIDOS, PRIO_BATALLA, PRIO_CADUCA_POLITICA, PRIO_COMERCIO, PRIO_FIN_DE_OBRAS, PRIO_LLEGADA, PRIO_REPUTACION, PRIO_SALIDA, PRIO_UMBRAL};
+pub use estado::{entidad_titulos, PRIO_TITULOS, Asentamiento, Carga, CambioVersion, CitaReputacion, Clase, Dato, Pertenencia, Tocados, Ejercito, Estado, EventoNucleo, PlanEnPausa, Reglas, ReglasEconomia, ReglasTerritorio, SucesoBatalla, SucesoComercio, SucesoCombate, SucesoFundacion, SucesoMilitar, SIN_BANDERA, PRIO_ASENTAMIENTO, PRIO_BANDIDOS, PRIO_BATALLA, PRIO_CADUCA_POLITICA, PRIO_COMERCIO, PRIO_FIN_DE_OBRAS, PRIO_LLEGADA, PRIO_REPUTACION, PRIO_SALIDA, PRIO_UMBRAL};
 pub use estado_batallas::{entidad_batalla, EstadoBatallas};
 pub use estado_combate::{entidad_avanzada, entidad_bandidos, entidad_conquista, entidad_guarnicion, es_entidad_avanzada, es_entidad_bandidos, CampamentoBandidos, EstadoCombate, GuarnicionDeAvanzada, GuarnicionDePueblo, OrigenBandidos};
 pub use estado_fundacion::{entidad_fundacion, CaravanaFundacion, EstadoFundacion, Origen as OrigenFundacion, Situacion as SituacionFundacion};

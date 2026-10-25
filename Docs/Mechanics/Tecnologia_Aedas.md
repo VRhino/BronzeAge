@@ -246,6 +246,8 @@ La variante de una frase es determinista: `hash(clave) mod nº de opciones`, con
 
 > **Implementado en Rust (2026-10-23, 4H T5).** `nucleo/cronica.rs`: al cerrar cada versión, de sus hechos sale `cronica.entrada { tipo, faccionIds, asentamientoId?, nivel? }` **público** (lo oyen todos; sin sitio ni nombrados), de `asentamiento.conquistada` (la conquista por números y por Unity: la de Unity no emite `combate.asedio_conquista`), `asentamiento.ruinas`, `fundacion.asentamiento_fundado`, `faccion.guerra_declarada` (el equivalente de `diplomacia.guerra_declarada` mientras no haya sistema político) y `asentamiento.nivel_subio` con la regla de la primera plaza del mundo desde el nivel 3. El contrato no lleva texto: la frase y su variante las compone el cliente. Faltan las fuentes de la diplomacia (sistema 5) y los públicos de la tecnología y los Aedas (sistema 6).
 
+> **Implementado en Rust (2026-10-25, 5F).** La crónica canta también `diplomacia.anexion` (la absorbente y la absorbida), `diplomacia.fusion` (las dos que se disuelven y la que nace) y los títulos: `titulo.nace` y `titulo.cambia_manos` son hechos públicos y además dejan su `cronica.entrada` (con la clave del título en `titulo`).
+
 ## 9. Comandos y permisos
 
 | Comando | Quién | Qué |

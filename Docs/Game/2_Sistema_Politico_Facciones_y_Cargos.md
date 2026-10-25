@@ -110,6 +110,12 @@ Menú con 2 opciones al ejecutar la acción:
 
 No cuenta contra el Cap de Fundación (vía "pacífica" de crecimiento). Decisiones y alternativas descartadas: `typescript-final:Consideraciones/Anexion_Y_Desarme_Definicion.md`.
 
+**En las dos** (implementado en el motor nuevo el 2026-10-25, tanda 5F; detalle en `Docs/Mechanics/Diplomacia_Facciones.md` §6.3):
+- **Los trueques en curso siguen** (van entre plazas, que cambian de Facción); los que quedan dentro de la misma Facción ya no mueven la reputación al cumplirse o vencer (decisión del autor del 2026-10-24).
+- **La capital**: en la anexión, las plazas de B son de A desde ese momento, así que la capital de A no cambia; en la fusión, la capital de C es la que había designado su Rey o, si no, la plaza más antigua de las dos.
+- **Quien ya no puede estar dentro sale**: un aliado de B que estaba dentro de una plaza de B, y que no lo es de A, sale al mapa con lo suyo, como al cerrar la puerta.
+- Una Facción **derrotada** (sin plazas) que absorbe a otra con plazas deja de estarlo.
+
 ## 2.7 Sistema de reputación/confiabilidad de Facción
 Score PÚBLICO de -100 (nada confiable) a +100 (muy confiable).
 
@@ -143,7 +149,7 @@ El score es PÚBLICO y total (no hay sistema de rumores/espionaje que lo oculte 
 - **Cultura y audio quedan fuera de este apartado**: el audio y la música por cultura entran con la cultura (`Docs/Mecanicas a desarrollar.md` §43). Decisiones y plan del sigilo: `typescript-final:Consideraciones/Identidad_Visual_Definicion.md`.
 
 ## 2.9 Progresión sin condición de victoria
-El juego es un SANDBOX de guerra persistente, SIN condiciones de victoria PARA EL JUGADOR. En vez de victoria personal, existen TÍTULOS DINÁMICOS de PRESTIGIO (sin beneficio mecánico, solo prestigio) que cambian de mano según el poder relativo, reevaluados por dependencia (al cambiar lo que miran) y por muestreo de baja frecuencia. Ejemplos de referencia (lista abierta, no cerrada): imperio/Facción más grande, Facción con mayor poder económico, ejército más grande, "Gran Rey", "Mecenas de los Aedas" (épicas cumplidas ×10 + Aedas residentes, Doc 6.7). El histórico de títulos se narra por los AEDAS/POETAS (ver Doc 6), consultable vía interfaz dedicada Y eventos in-game.
+El juego es un SANDBOX de guerra persistente, SIN condiciones de victoria PARA EL JUGADOR. En vez de victoria personal, existen TÍTULOS DINÁMICOS de PRESTIGIO (sin beneficio mecánico, solo prestigio) que cambian de mano según el poder relativo, reevaluados por dependencia (al cambiar lo que miran) y por muestreo de baja frecuencia. Ejemplos de referencia (lista abierta, no cerrada): imperio/Facción más grande, Facción con mayor poder económico, ejército más grande, "Gran Rey", "Mecenas de los Aedas" (épicas cumplidas ×10 + Aedas residentes, Doc 6.7). El histórico de títulos se narra por los AEDAS/POETAS (ver Doc 6), consultable vía interfaz dedicada Y eventos in-game. **Cadencia** (2026-10-25, tanda 5F): mientras pasa algo en el mundo, los títulos se recalculan cada `TITULOS.cadenciaMinutos` (10 minutos de mundo, placeholder); un título que nace o cambia de manos lo cantan los Aedas y es público para todos.
 
 **El servidor sí tiene un final.** Nadie "gana" la partida como jugador, pero cada INSTANCIA DE SERVIDOR tiene un ciclo de vida acotado (~12 meses, o antes si una Facción completa la Maravilla del ciclo) que termina en un reseteo del mundo, con la Facción que completa la Maravilla persistiendo como legado NPC. Mecanismo completo en `typescript-final:Consideraciones/Roadmap_Escalado.md` Eje 4.
 
