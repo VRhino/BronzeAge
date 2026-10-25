@@ -100,6 +100,11 @@ impl Nucleo {
         m.extend(e.politica.relaciones.iter().map(|r| ((Clase::Relacion, r.id), huella(r))));
         m.extend(e.politica.titulos.iter().map(|x| ((Clase::Titulo, x.id.indice()), huella(x))));
         m.extend(e.politica.propuestas.iter().map(|p| ((Clase::Propuesta, p.id), huella(p))));
+        // 6G: cada Aeda residente con su épica, y la parte pública del estado de tecnología (los contadores no: los mira `ADMIN` en cada reparto; las descubridoras sin cantar tampoco: no son
+        // públicas, y la de una cantada ya no cambia).
+        m.extend(e.residentes.aedas.iter().map(|a| ((Clase::Residente, u64::from(a.id)), huella(a))));
+        let t = &e.tecnologia;
+        m.insert((Clase::Tecnologia, 0), huella(&(t.era, t.era_desde, &t.logros, t.cantadas)));
         m
     }
 

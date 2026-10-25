@@ -7,7 +7,7 @@
 //!   Lo **propio** (las columnas de la Facción y en las que va la cuenta, las caravanas de sus plazas o con destino en ellas, sus plazas, pueblos, avanzadas y obras) viaja como en `FACCION` y `HEROE`;
 //!   lo **ajeno** que se ve, redactado (§5.4, D15): la columna sin composición y solo con el tramo del plan al alcance de los ojos que la ven y dentro de un horizonte de 30 s (que el muestreo
 //!   renueva cuando le quedan menos de 10 s, decisión 6; nunca el destino), la caravana sin cantidades, la plaza como ficha con su zona recortada y sus edificios activos, el pueblo y la avanzada sin almacén ni guarnición,
-//!   el héroe solo con lo público (`HeroePublico`); lo **recordado** (un sitio ajeno que se vio y ya no se ve), como `FichaConocida`. Además: los campamentos de bandidos que se ven, los de
+//!   el héroe solo con lo público (`HeroePublico`), el Aeda itinerante con su posición, su tramo y su plaza (6G); lo **recordado** (un sitio ajeno que se vio y ya no se ve), como `FichaConocida`. Además: los campamentos de bandidos que se ven, los de
 //!   mercenarios explorados (o donde reside o está), las batallas que se ven o en que está su Facción (como las ve él: `propios::batalla`), la zona de la Facción, los caminos explorados y la
 //!   intel de la taberna: las Miradas de la Facción (abiertas o enfriando su zona) y sus Informes de plaza. Una Mirada abierta, suya o de un aliado, es un ojo prestado: ve, no explora.
 //!   Públicos, sin niebla: las relaciones activas (5D), los títulos (5F) y, de las demás Facciones que nombra lo que se ve, su forma pública (5H).
@@ -92,6 +92,8 @@ pub struct Mirada<'n> {
     informes: BTreeMap<u64, &'n InformeDePlaza>,
     /// Las demás Facciones (5H), con la clave y el sello de su forma pública: una vez por perspectiva y no por sesión; cada sesión manda las que nombra lo que ve.
     publicas: Vec<(u32, Clave, Sello)>,
+    /// Los Aedas itinerantes que se ven ahora, con su posición (6G): una vez por perspectiva y no por sesión.
+    aedas: Vec<(&'n tecnologia::itinerantes::AedaItinerante, Punto)>,
 }
 
 /// Las Facciones que comparten visión con `f` (alianza o vasallaje, en cualquier dirección: §5.2).
@@ -190,7 +192,9 @@ impl<'n> Mirada<'n> {
         let mias: Vec<(u64, Punto)> = columnas.iter().filter(|(x, _)| propias.contains(&x.id)).map(|&(x, p)| (x.id, p)).collect();
         let suelo = mias.iter().map(|&(id, _)| id).zip(n.faccion_del_suelo(&mias.iter().map(|&(_, p)| p).collect::<Vec<_>>())).collect();
         let publicas = e.politica.facciones.iter().map(|f| f.id).filter(|&f| Some(f) != faccion).map(|f| (f, (pb::TipoEntidad::Faccion as i32, ids::faccion(f)), Sello(n.version_de(Clase::Faccion, u64::from(f)), 0))).collect();
-        Mirada { n, perspectiva, faccion, t, columnas, ojos, propias, suelo, celdas, niebla, fichas, informes, publicas }
+        let ve = |p: Punto| ojos.iter().any(|&(c, r)| crate::nucleo::cerca(c, p, r));
+        let aedas = e.aedas.iter().map(|a| (a, a.plan.as_ref().and_then(|x| x.posicion_en(t)).unwrap_or(a.posicion))).filter(|&(_, p)| ve(p)).collect();
+        Mirada { n, perspectiva, faccion, t, columnas, ojos, propias, suelo, celdas, niebla, fichas, informes, publicas, aedas }
     }
 
     /// ¿Se ve ahora el punto? (alguno de los ojos a `≤` su alcance, no estricto).
@@ -350,6 +354,17 @@ impl<'n> Mirada<'n> {
             v.push(visible(pb::TipoEntidad::CampamentoBandidos, ids::bandidos(b.id), Sello(n.version_de(Clase::Bandidos, b.id), 0), move || Some(Cuerpo::CampamentoBandidos(propios::campamento_bandidos(n, b)))));
         }
 
+        // Los Aedas itinerantes que se ven ahora (6G; Niebla §5.4), redactados como una columna ajena: dónde están, el tramo visible de su plan si van de camino (con el horizonte corto que el
+        // muestreo renueva) y la plaza en que están parados; nunca adónde van, hasta cuándo se quedan ni dónde estuvieron. No son de nadie ni una clase del registro (6D, duda 7): su sello sale de su
+        // plan o de su estancia.
+        for &(a, p) in self.aedas.iter().filter(|(_, p)| rect.contiene(*p)) {
+            let id = ids::aeda(a.id);
+            let (plan_, huella) = (a.plan.clone().unwrap_or_default(), huella_de_aeda(a));
+            let tramo = self.tramo(&plan_, huella, tiene.get(&(pb::TipoEntidad::Aeda as i32, id.clone())), &self.ojos);
+            let sello = Sello(huella, tramo.as_ref().map_or_else(|v| *v, |t| t.last().map_or(0, |v| v.en)));
+            v.push(visible(pb::TipoEntidad::Aeda, id, sello, move || Some(Cuerpo::AedaItinerante(self.aeda_avistado(a, p, &plan_)))));
+        }
+
         // Campamentos de mercenarios explorados, o donde el héroe reside o está.
         let suyo = |c: u32| viewer.and_then(|h| n.heroe(h)).is_some_and(|h| h.heroe.presencia.ubicacion == Ubicacion::Mercenarios(c) || h.heroe.residencia == Some(militar::heroe::Residencia::Campamento(c)));
         for (c, puerta) in n.puertas_de_campamentos() {
@@ -501,6 +516,18 @@ impl<'n> Mirada<'n> {
         }
     }
 
+    /// El Aeda itinerante que se ve (6G): dónde está ahora, el tramo visible de su plan y la plaza en que está parado.
+    fn aeda_avistado(&self, a: &tecnologia::itinerantes::AedaItinerante, p: Punto, plan_: &Plan) -> pb::AedaItinerante {
+        let tramo = if plan_.vertices.is_empty() { Vec::new() } else { tramo_visible(plan_, self.t, radios::HORIZONTE_MS, &self.ojos) };
+        pb::AedaItinerante {
+            id: ids::aeda(a.id),
+            posicion: Some(punto(p)),
+            en_asentamiento_id: a.en.map(|x| ids::asentamiento(u64::from(x))),
+            plan: (!tramo.is_empty()).then(|| plan(&Plan::nuevo(plan_.generacion, tramo))),
+            ..Default::default()
+        }
+    }
+
     /// La Caravana de Fundación ajena que vuelve sola, como `caravana_avistada`: su tipo, su Facción, dónde está, el tramo visible de su plan y qué lleva, sin cantidades.
     fn fundacion_avistada(&self, k: &crate::estado_fundacion::CaravanaFundacion, p: Punto, plan_: &Plan) -> pb::Caravana {
         let tramo = tramo_visible(plan_, self.t, radios::HORIZONTE_MS, &self.ojos);
@@ -585,6 +612,12 @@ impl<'n> Mirada<'n> {
         }
         v
     }
+}
+
+/// Lo que distingue un tramo de la vida de un Aeda itinerante de otro (6G): cuándo salió o hasta cuándo se queda, dónde y en qué plaza. Hace de versión en su sello (no es una clase del registro).
+fn huella_de_aeda(a: &tecnologia::itinerantes::AedaItinerante) -> u64 {
+    let cuando = a.plan.as_ref().and_then(Plan::inicio).or(a.hasta).unwrap_or(0) as u64;
+    cuando.rotate_left(8) ^ a.en.map_or(0, |x| u64::from(x) + 1) ^ (a.posicion.x as u64).rotate_left(21) ^ (a.posicion.y as u64).rotate_left(42)
 }
 
 /// ¿Va la caravana adjunta a una columna propia?

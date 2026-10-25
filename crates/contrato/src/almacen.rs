@@ -61,6 +61,11 @@ pub fn clave(c: &Cuerpo) -> Clave {
         Cuerpo::RedCaminos(_) => (TipoEntidad::RedCaminos, "red".into()),
         Cuerpo::Mirada(x) => (TipoEntidad::MiradaIntel, x.id.clone()),
         Cuerpo::Informe(x) => (TipoEntidad::InformePlaza, x.asentamiento_id.clone()),
+        // 6G: el estado de tecnología del mundo (una sola entidad), los Aedas (`aeda-N` y `aeda-rN`, la misma clase) y los alijos a la vista.
+        Cuerpo::EstadoTecnologia(_) => (TipoEntidad::EstadoTecnologia, "tecnologia".into()),
+        Cuerpo::AedaItinerante(x) => (TipoEntidad::Aeda, x.id.clone()),
+        Cuerpo::AedaResidente(x) => (TipoEntidad::Aeda, x.id.clone()),
+        Cuerpo::Alijo(x) => (TipoEntidad::Alijo, x.id.clone()),
         otro => panic!("entidad sin clave en el almacén de prueba: {otro:?}"),
     };
     (t as i32, id)

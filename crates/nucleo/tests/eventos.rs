@@ -227,6 +227,98 @@ fn los_quince_mensajes_tipados_dicen_lo_que_su_payload_y_van_y_vuelven_en_bytes(
     assert_eq!((l.values[0].kind.clone(), l.values[1].kind.clone()), (Some(Kind::NumberValue(2.0)), Some(Kind::StringValue("f-1".into()))));
 }
 
+/// Un hecho de prueba con sus datos enteros y sus valores de texto (y de lista).
+fn hecho_con(codigo: &'static str, plaza: Option<u64>, datos: Vec<(&'static str, i64)>, valores: Vec<(&'static str, Dato)>) -> EventoNucleo {
+    EventoNucleo { valores, ..hecho(codigo, plaza, None, datos) }
+}
+
+fn t(s: &str) -> Dato {
+    Dato::Texto(s.into())
+}
+
+/// 6G: los quince hechos de la tecnología y los Aedas (bloque `<!-- eventos -->` de Tecnologia_Aedas) llevan sus diez mensajes tipados, con los ids del contrato, y vuelven igual de sus bytes;
+/// el público de la épica cumplida no dice la tecnología ni la plaza, y el motivo de la épica perdida viaja tal cual (también `unificada`).
+#[test]
+fn los_hechos_de_la_tecnologia_y_los_aedas_llevan_sus_diez_mensajes_tipados() {
+    let n = comun::nucleo(5, 5);
+    let epica = |aeda: &str, como: &str, plaza: Option<&str>, tec: Option<&str>, capitulo: u32, capitulos: u32, motivo: Option<&str>| {
+        Tipado::EpicaCambia(pb::EpicaCambia {
+            aeda_id: aeda.into(),
+            faccion_id: "f-1".into(),
+            asentamiento_id: plaza.map(Into::into),
+            tecnologia_id: tec.map(Into::into),
+            como: como.into(),
+            capitulo,
+            capitulos,
+            motivo: motivo.map(Into::into),
+        })
+    };
+    let casos: Vec<(EventoNucleo, Tipado)> = vec![
+        (hecho_con("tecnologia.logro", None, vec![("umbral", 300)], vec![("contador", t("extraido.cobre"))]), Tipado::LogroCumplido(pb::LogroCumplido { contador: "extraido.cobre".into(), umbral: 300, en_ms: 1_000 })),
+        (hecho_con("era.comienza", None, vec![("orden", 2), ("porPlazo", 1)], vec![("era", t("edad_bronce"))]), Tipado::EraComenzada(pb::EraComenzada { era_id: "edad_bronce".into(), orden: 2, por_plazo: true })),
+        (
+            hecho_con("tecnologia.aparece", Some(3), vec![("faccion", 1), ("primera", 1)], vec![("tecnologia", t("canteria"))]),
+            Tipado::TecnologiaAparecida(pb::TecnologiaAparecida { faccion_id: "f-1".into(), tecnologia_id: "canteria".into(), primera: true }),
+        ),
+        (
+            hecho_con("tecnologia.adoptada", Some(3), vec![("faccion", 1), ("capital", 3)], vec![("tecnologia", t("canteria"))]),
+            Tipado::TecnologiaAdoptada(pb::TecnologiaAdoptada { faccion_id: "f-1".into(), capital_id: "as-3".into(), tecnologia_id: "canteria".into() }),
+        ),
+        (
+            hecho_con("aedas.canta_descubrimiento", None, vec![("faccion", 2)], vec![("tecnologia", t("canteria"))]),
+            Tipado::DescubrimientoCantado(pb::DescubrimientoCantado { descubridora_faccion_id: "f-2".into(), tecnologia_id: "canteria".into() }),
+        ),
+        (
+            hecho_con("aedas.revela", Some(3), vec![("faccion", 1), ("descubridora", 2)], vec![("tecnologia", t("canteria")), ("faltan", Dato::Lista(vec![Dato::Numero(0), Dato::Numero(2)]))]),
+            Tipado::RevelacionDeAeda(pb::RevelacionDeAeda { faccion_id: "f-1".into(), asentamiento_id: "as-3".into(), descubridora_faccion_id: "f-2".into(), tecnologia_id: "canteria".into(), faltan: vec![0, 2] }),
+        ),
+        (
+            hecho_con("aedas.venta", Some(3), vec![("faccion", 1), ("aeda", 4), ("precio", 200_000)], vec![("tecnologia", t("canteria"))]),
+            Tipado::CompraAAeda(pb::CompraAAeda { faccion_id: "f-1".into(), asentamiento_id: "as-3".into(), aeda_id: "aeda-4".into(), tecnologia_id: "canteria".into(), precio: 200_000 }),
+        ),
+        (
+            hecho_con("aedas.residente_llega", Some(3), vec![("aedaResidente", 2), ("faccion", 1)], vec![]),
+            Tipado::ResidenteCambia(pb::ResidenteCambia { aeda_id: "aeda-r2".into(), faccion_id: "f-1".into(), asentamiento_id: "as-3".into(), llega: true, cupo: None }),
+        ),
+        (
+            hecho_con("aedas.residente_se_va", Some(3), vec![("aedaResidente", 2), ("faccion", 1), ("cupo", 0)], vec![]),
+            Tipado::ResidenteCambia(pb::ResidenteCambia { aeda_id: "aeda-r2".into(), faccion_id: "f-1".into(), asentamiento_id: "as-3".into(), llega: false, cupo: Some(0) }),
+        ),
+        (hecho_con("aedas.epica_empieza", Some(3), vec![("capitulo", 0), ("capitulos", 2), ("aedaResidente", 2), ("faccion", 1)], vec![("tecnologia", t("canteria"))]), epica("aeda-r2", "empieza", Some("as-3"), Some("canteria"), 0, 2, None)),
+        (hecho_con("aedas.epica_capitulo", Some(3), vec![("aedaResidente", 2), ("faccion", 1), ("capitulo", 1), ("capitulos", 2)], vec![("tecnologia", t("canteria"))]), epica("aeda-r2", "capitulo", Some("as-3"), Some("canteria"), 1, 2, None)),
+        (hecho_con("aedas.epica_tecnologia", Some(3), vec![("aedaResidente", 2), ("faccion", 1), ("capitulo", 2), ("capitulos", 2)], vec![("tecnologia", t("canteria"))]), epica("aeda-r2", "tecnologia", Some("as-3"), Some("canteria"), 2, 2, None)),
+        (hecho_con("aedas.epica_cumplida", None, vec![("aedaResidente", 2), ("faccion", 1)], vec![]), epica("aeda-r2", "cumplida", None, None, 0, 0, None)),
+        (
+            hecho_con("aedas.epica_abandonada", Some(3), vec![("aedaResidente", 2), ("faccion", 1)], vec![("tecnologia", t("canteria")), ("motivo", t("orden"))]),
+            epica("aeda-r2", "abandonada", Some("as-3"), Some("canteria"), 0, 0, Some("orden")),
+        ),
+        // La perdida por conquista o al unificarse va a la Facción, con la plaza en sus datos.
+        (
+            hecho_con("aedas.epica_abandonada", None, vec![("aedaResidente", 2), ("faccion", 1), ("plaza", 3)], vec![("tecnologia", t("canteria")), ("motivo", t("unificada"))]),
+            epica("aeda-r2", "abandonada", Some("as-3"), Some("canteria"), 0, 0, Some("unificada")),
+        ),
+        (
+            EventoNucleo { heroes: vec![9], ..hecho_con("alijo.abierto", None, vec![("heroe", 9), ("oro", 5_000), ("cargado", 3_000)], vec![("alijo", t("alijo-veta-3"))]) },
+            Tipado::AlijoAbierto(pb::AlijoAbierto { heroe_id: "heroe-9".into(), alijo_id: "alijo-veta-3".into(), oro: 5_000, cargado: 3_000 }),
+        ),
+    ];
+    let mut mensajes = std::collections::HashSet::new();
+    let mut codigos = std::collections::BTreeSet::new();
+    for (ev, esperado) in casos {
+        let d = evento_dominio(&n, &ev, 3);
+        assert_eq!(d.tipado.as_ref(), Some(&esperado), "{}", ev.codigo);
+        mensajes.insert(std::mem::discriminant(&esperado));
+        codigos.insert(ev.codigo.to_string());
+        assert_eq!(pb::EventoDominio::decode(d.encode_to_vec().as_slice()).unwrap(), d, "{} va y vuelve en bytes", ev.codigo);
+    }
+    assert_eq!((mensajes.len(), codigos.len()), (10, 15), "los diez mensajes cubren los quince códigos");
+    // El payload genérico también nombra al Aeda itinerante y a la descubridora con sus ids del contrato.
+    let p = evento_dominio(&n, &hecho_con("aedas.venta", Some(3), vec![("aeda", 4), ("faccion", 1)], vec![]), 3).payload.unwrap();
+    assert_eq!(p.fields["aedaId"].kind, Some(Kind::StringValue("aeda-4".into())));
+    let p = evento_dominio(&n, &hecho_con("aedas.revela", Some(3), vec![("descubridora", 2)], vec![]), 3).payload.unwrap();
+    assert_eq!(p.fields["descubridoraId"].kind, Some(Kind::StringValue("f-2".into())));
+}
+
 // ───────────────────────────── 2. Por la sesión: quién oye qué, la niebla y el mundo igual con sesiones y sin ellas ─────────────────────────────
 
 type M = (Arc<Mundo>, Arc<Rutas>);

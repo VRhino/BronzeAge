@@ -549,3 +549,108 @@ async fn por_la_sesion_el_rey_compra_al_aeda_de_su_plaza_y_su_faccion_oye_la_ven
     let r = &n.estado().reglas.economia.tecnologia;
     assert!(n.tecnologia().de(r, 2).aparecidas.contiene(r.buscar("metalurgia_cobre").unwrap()));
 }
+
+// ───────────────────────────── 6G: lo que ve cada ámbito ─────────────────────────────
+
+/// Las entidades de una lista de mensajes del servidor (fotos y deltas), en orden, con la clave de su ámbito.
+fn cuerpos(mensajes: &[contrato::v1::mensaje_de_servidor::Cuerpo]) -> Vec<(String, contrato::v1::entidad::Cuerpo)> {
+    use contrato::v1::mensaje_de_servidor::Cuerpo as M;
+    let ambito = |a: &Option<contrato::v1::Ambito>| contrato::almacen::clave_de_ambito(a);
+    let mut v = Vec::new();
+    for m in mensajes {
+        match m {
+            M::Foto(f) => v.extend(f.entidades.iter().filter_map(|e| e.cuerpo.clone()).map(|c| (ambito(&f.ambito), c))),
+            M::Delta(d) => v.extend(d.cambios.iter().filter_map(|c| c.datos.as_ref()?.cuerpo.clone()).map(|c| (ambito(&d.ambito), c))),
+            _ => {}
+        }
+    }
+    v
+}
+
+/// La `CambiarVista` del mapa entero.
+fn vista_de_todo() -> contrato::v1::mensaje_de_cliente::Cuerpo {
+    use contrato::v1 as pb;
+    pb::mensaje_de_cliente::Cuerpo::Vista(pb::CambiarVista { rectangulo: Some(pb::Rectangulo { min: Some(pb::Punto { x: 0, y: 0 }), max: Some(pb::Punto { x: 100_000_000, y: 100_000_000 }) }) })
+}
+
+/// 6G por el WebSocket real, con la metalurgia del cobre descubierta por la Facción 1 y revelada a la 2 por los tres Aedas parados en su plaza B. **HEROE**: la forma pública del estado de
+/// tecnología (la Era, el logro cumplido como hecho del mundo, el descubrimiento ya cantado con su descubridora), sin contadores ni logros por tecnología. **FACCION**: las tecnologías de la
+/// propia, con el detalle de la revelada (descubridora y qué condiciones del hito cumple); nunca las de la otra. **VISTA**: los Aedas que se ven, redactados (su plaza; ni hasta cuándo, ni adónde, ni
+/// dónde estuvieron); quien no los ve, no los recibe. **ADMIN**: el estado entero con los contadores, y los Aedas enteros, que se ponen al día cuando cambian sin que cambie la versión.
+#[tokio::test]
+async fn por_la_sesion_cada_ambito_lleva_lo_suyo_de_la_tecnologia_y_de_los_aedas_y_nada_de_lo_ajeno() {
+    use comun::sesion::*;
+    use contrato::v1::{self as pb, entidad::Cuerpo, mensaje_de_servidor as ms, orden, TipoCliente};
+    use servidor::prueba::hola;
+    let m = con_mundo!();
+    let mut e = todos_en_b(m, reglas());
+    let b = e.b;
+    let r = e.ord("bea", Comando::CrearHeroe { cuenta: "bea".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano });
+    let bea = r.creadas[0];
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: bea, faccion: Some(2) });
+    e.ok("admin", Comando::ColocarHeroe { heroe: bea, ubicacion: militar::presencia::Ubicacion::Asentamiento(b as u32) });
+    let desde = e.descubrir_cobre();
+    e.n.avanzar_hasta(desde + DIA);
+    let cobre = e.tec("metalurgia_cobre");
+    assert!(e.propias(2).reveladas.contiene(cobre), "revelada a la Facción 2");
+    let hito = e.n.estado().reglas.economia.tecnologia.def(cobre).hito.len();
+    let w = arrancar_con(e.n).await;
+    let tec_de = |x: &Cuerpo| if let Cuerpo::Tecnologias(t) = x { Some(t.clone()) } else { None };
+
+    // bea (Facción 2): su HEROE, su FACCION y su plaza; después, su VISTA del mapa entero.
+    let (mut c, _, mut recibido) = w.conectar(hola("ok:bea", TipoCliente::ClienteUnity)).await;
+    c.enviar(vista_de_todo()).await;
+    recibido.push(c.esperar().await.cuerpo.unwrap());
+    let todo = cuerpos(&recibido);
+    let publicas: Vec<(&String, &pb::EstadoTecnologia)> = todo.iter().filter_map(|(a, x)| if let Cuerpo::EstadoTecnologia(t) = x { Some((a, t)) } else { None }).collect();
+    assert_eq!(publicas.len(), 1, "una vez, en HEROE");
+    let (a, t) = publicas[0];
+    assert_eq!(a, &format!("HEROE:heroe-{bea}"));
+    assert!(t.contadores.is_empty() && t.logros.is_empty(), "ni contadores en curso ni qué tecnología abre cada logro (Q6)");
+    assert_eq!(t.logros_cumplidos.iter().map(|l| (l.contador.as_str(), l.umbral)).collect::<Vec<_>>(), [("plazasEnNivel.2", 1)]);
+    assert_eq!(t.cantadas, ["metalurgia_cobre"]);
+    assert_eq!(t.primeros.iter().map(|(k, p)| (k.as_str(), p.faccion_id.as_str())).collect::<Vec<_>>(), [("metalurgia_cobre", "f-1")], "solo las descubridoras ya cantadas");
+    let propias: Vec<pb::TecnologiasFaccion> = todo.iter().filter_map(|(_, x)| tec_de(x)).collect();
+    assert!(!propias.is_empty() && propias.iter().all(|t| t.faccion_id == "f-2"), "las tecnologías de otra Facción no viajan nunca");
+    let f2 = &propias[0];
+    assert_eq!(f2.reveladas, ["metalurgia_cobre"]);
+    assert_eq!((f2.detalle_reveladas.len(), f2.detalle_reveladas[0].descubridora_faccion_id.as_str(), f2.detalle_reveladas[0].cumplidas.len()), (1, "f-1", hito));
+    let aedas: Vec<(&String, &pb::AedaItinerante)> = todo.iter().filter_map(|(a, x)| if let Cuerpo::AedaItinerante(x) = x { Some((a, x)) } else { None }).collect();
+    assert_eq!(aedas.len(), 3, "los tres parados en su plaza");
+    for (a, x) in &aedas {
+        assert_eq!(a.as_str(), "VISTA:f-2");
+        assert_eq!(x.en_asentamiento_id.as_deref(), Some(format!("as-{b}").as_str()));
+        assert!(x.hasta_ms.is_none() && x.destino_id.is_none() && x.recientes.is_empty() && x.posicion.is_some(), "redactado: {x:?}");
+    }
+    assert!(!todo.iter().any(|(_, x)| matches!(x, Cuerpo::AedaResidente(_) | Cuerpo::Alijo(_))));
+    c.cerrar().await;
+
+    // ana (Facción 1), con la vista del mapa entero, no ve a los Aedas de B ni las tecnologías de la 2.
+    let (mut c, _, mut recibido) = w.conectar(hola("ok:ana", TipoCliente::ClienteUnity)).await;
+    c.enviar(vista_de_todo()).await;
+    recibido.push(c.esperar().await.cuerpo.unwrap());
+    let todo = cuerpos(&recibido);
+    assert!(!todo.iter().any(|(_, x)| matches!(x, Cuerpo::AedaItinerante(_))), "no los ve");
+    let f1: Vec<pb::TecnologiasFaccion> = todo.iter().filter_map(|(_, x)| tec_de(x)).collect();
+    assert!(f1.len() == 1 && f1[0].faccion_id == "f-1" && f1[0].aparecidas.contains(&"metalurgia_cobre".to_owned()), "{f1:?}");
+    c.cerrar().await;
+
+    // ADMIN: entero, y al día cuando un Aeda cambia (la estancia acaba: sin otra plaza que los acepte, esperan otra) sin que cambie la versión.
+    let (mut adm, _, recibido) = w.conectar(hola("ok:admin", TipoCliente::ClienteAdminWeb)).await;
+    let todo = cuerpos(&recibido);
+    let t = todo.iter().find_map(|(_, x)| if let Cuerpo::EstadoTecnologia(t) = x { Some(t) } else { None }).expect("el estado entero en ADMIN");
+    assert_eq!((t.contadores.get("plazasEnNivel.2"), t.logros.contains_key("metalurgia_cobre"), t.contadores.len()), (Some(&1), true, 24));
+    let enteros: Vec<&pb::AedaItinerante> = todo.iter().filter_map(|(_, x)| if let Cuerpo::AedaItinerante(x) = x { Some(x) } else { None }).collect();
+    assert!(enteros.len() == 3 && enteros.iter().all(|x| x.hasta_ms.is_some() && x.recientes.last() == Some(&format!("as-{b}"))), "con su estancia y dónde estuvieron: {enteros:?}");
+    let fin = enteros.iter().filter_map(|x| x.hasta_ms).min().unwrap();
+    let reloj = |accion: &str, hasta_ms: Option<i64>| orden::Cuerpo::ControlarReloj(pb::OrdenControlarReloj { accion: accion.into(), hasta_ms, ..Default::default() });
+    let (_, r) = dar(&mut adm, "r1", reloj("pausar", None)).await;
+    assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
+    let (deltas, r) = dar(&mut adm, "r2", reloj("avanzar_hasta", Some(fin))).await;
+    assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
+    let al_dia = cuerpos(&deltas.into_iter().map(ms::Cuerpo::Delta).collect::<Vec<_>>());
+    let nuevo = al_dia.iter().filter_map(|(_, x)| if let Cuerpo::AedaItinerante(x) = x { Some(x) } else { None }).find(|x| x.hasta_ms > Some(fin));
+    assert!(nuevo.is_some(), "el Aeda cuya estancia acabó llega a ADMIN con su nueva estancia: {al_dia:?}");
+    adm.cerrar().await;
+    w.parar().await;
+}

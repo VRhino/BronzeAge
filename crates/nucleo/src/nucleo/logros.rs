@@ -121,10 +121,19 @@ impl Nucleo {
             let valores = vec![("contador", Dato::Texto(l.contador.nombre().to_owned()))];
             self.tr.emitir(&self.estado, EventoNucleo { valores, publico: true, ..EventoNucleo::nuevo("tecnologia.logro", t, vec![("umbral", l.umbral as i64)]) });
         }
+        self.tocar_lo_publico();
         // 6C: con el logro, sus tecnologías pueden aparecer a cualquier Facción viva, y la que ya tenía descubridora, cantarse.
         self.mirar_aparicion_de_todas();
         self.cantar(t);
         self.mirar_era(t);
+    }
+
+    /// Un logro o una Era nuevos (6G): la forma pública del estado de tecnología cambia (`HEROE` de todos) y, con ella, las épicas posibles de cada Facción (`TecnologiasFaccion.epicas_posibles`
+    /// mira los logros y la Era). Pocas veces en una partida (un logro por tecnología, una vez cada Era).
+    fn tocar_lo_publico(&mut self) {
+        self.tr.tocar(Clase::Tecnologia, 0);
+        let facciones = crate::proyeccion::audiencia::facciones(&self.estado);
+        self.tr.tocar_todos(Clase::Faccion, facciones.into_iter().map(u64::from));
     }
 
     // ───────────────────────────── La Era ─────────────────────────────
@@ -136,6 +145,7 @@ impl Nucleo {
         let era = &r.eras[cambio.era as usize];
         let datos = vec![("orden", i64::from(era.orden)), ("porPlazo", cambio.por_plazo as i64)];
         self.tr.emitir(&self.estado, EventoNucleo { valores: vec![("era", Dato::Texto(era.id.clone()))], publico: true, ..EventoNucleo::nuevo("era.comienza", t, datos) });
+        self.tocar_lo_publico();
         // 6C: las tecnologías de la Era nueva pueden aparecer y cantarse.
         self.mirar_aparicion_de_todas();
         self.cantar(t);

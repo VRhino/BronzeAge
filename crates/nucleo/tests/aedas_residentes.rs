@@ -464,8 +464,33 @@ async fn por_la_sesion_el_rey_empieza_y_abandona_una_epica_y_su_faccion_oye_el_h
     let fundador = e.rey;
     e.ok("ana", Comando::AsignarRey { heroe: fundador, faccion: 1, designado: rey });
     e.ok("admin", Comando::ColocarHeroe { heroe: rey, ubicacion: militar::presencia::Ubicacion::Asentamiento(plaza as u32) });
+    let r = e.ord("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano });
+    assert!(r.aceptada());
     let w = arrancar_con(e.n).await;
-    let (mut c, _) = w.entrar("ana", TipoCliente::ClienteUnity).await;
+    use contrato::v1::entidad::Cuerpo;
+    let cuerpos = |ms: &[contrato::v1::mensaje_de_servidor::Cuerpo]| -> Vec<(String, Cuerpo)> {
+        use contrato::v1::mensaje_de_servidor::Cuerpo as M;
+        let a = |x: &Option<pb::Ambito>| contrato::almacen::clave_de_ambito(x);
+        ms.iter()
+            .flat_map(|m| match m {
+                M::Foto(f) => f.entidades.iter().filter_map(|e| e.cuerpo.clone()).map(|c| (a(&f.ambito), c)).collect::<Vec<_>>(),
+                M::Delta(d) => d.cambios.iter().filter_map(|c| c.datos.as_ref()?.cuerpo.clone()).map(|c| (a(&d.ambito), c)).collect(),
+                _ => Vec::new(),
+            })
+            .collect()
+    };
+    let residente = |todo: &[(String, Cuerpo)]| todo.iter().rev().find_map(|(a, x)| if let Cuerpo::AedaResidente(r) = x { Some((a.clone(), r.clone())) } else { None });
+    let posibles = |todo: &[(String, Cuerpo)]| todo.iter().rev().find_map(|(_, x)| if let Cuerpo::Tecnologias(t) = x { Some(t.epicas_posibles.clone()) } else { None });
+    // 6G: quien no es de la Facción (eva, sin ella) no ve a sus residentes.
+    let (otra, _, recibido) = w.conectar(servidor::prueba::hola("ok:eva", TipoCliente::ClienteUnity)).await;
+    assert!(residente(&cuerpos(&recibido)).is_none(), "los rivales no ven los residentes ajenos");
+    otra.cerrar().await;
+    let (mut c, _, recibido) = w.conectar(servidor::prueba::hola("ok:ana", TipoCliente::ClienteUnity)).await;
+    // 6G: el residente en FACCION, aún sin épica, y la épica que podría empezar.
+    let todo = cuerpos(&recibido);
+    let (ambito, r1) = residente(&todo).expect("su residente en FACCION");
+    assert_eq!((ambito.as_str(), r1.id.as_str(), r1.asentamiento_id.clone(), r1.faccion_id.as_str(), r1.epica.is_none()), ("FACCION:f-1", "aeda-r1", format!("as-{plaza}"), "f-1", true));
+    assert!(posibles(&todo).expect("sus tecnologías").contains(&"canteria".to_owned()));
     let empezar = |aeda: &str, x: &str| orden::Cuerpo::EmpezarEpica(pb::OrdenEmpezarEpica { asentamiento_id: format!("as-{plaza}"), aeda_id: aeda.into(), tecnologia_id: x.into() });
     let (_, r) = dar(&mut c, "e1", empezar("aeda-9", "canteria")).await;
     assert_eq!(rechazo(&r), "epica.no_vive_aqui", "ya no es `orden.no_disponible`");
@@ -475,6 +500,14 @@ async fn por_la_sesion_el_rey_empieza_y_abandona_una_epica_y_su_faccion_oye_el_h
     assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32, "{r:?}");
     let empieza = deltas.iter().flat_map(|d| &d.eventos).find(|x| x.codigo == "aedas.epica_empieza").expect("el hecho llega a la Facción");
     assert_eq!(empieza.asentamiento_id.as_deref(), Some(format!("as-{plaza}").as_str()));
+    let Some(pb::evento_dominio::Tipado::EpicaCambia(t)) = &empieza.tipado else { panic!("tipado: {empieza:?}") };
+    assert_eq!((t.aeda_id.as_str(), t.como.as_str(), t.tecnologia_id.as_deref(), t.capitulo, t.capitulos), ("aeda-r1", "empieza", Some("canteria"), 0, 2));
+    // 6G: el residente con su épica (sin la memoria de claves, que es de la administración) y la épica ya no es posible.
+    let todo = cuerpos(&deltas.iter().cloned().map(contrato::v1::mensaje_de_servidor::Cuerpo::Delta).collect::<Vec<_>>());
+    let (_, r1) = residente(&todo).expect("el residente en la Delta de FACCION");
+    let x = r1.epica.expect("canta");
+    assert_eq!((x.tecnologia_id.as_str(), x.capitulo, x.capitulos, x.hechos, x.hechos_necesarios, x.claves.len()), ("canteria", 0, 2, 0, 1, 0));
+    assert!(!posibles(&todo).expect("sus tecnologías").contains(&"canteria".to_owned()), "ya la canta");
     let (_, r) = dar(&mut c, "e4", empezar("aeda-r1", "canteria")).await;
     assert_eq!(rechazo(&r), "epica.ya_canta");
     let abandonar = orden::Cuerpo::AbandonarEpica(pb::OrdenAbandonarEpica { asentamiento_id: format!("as-{plaza}"), aeda_id: "aeda-r1".into() });
@@ -482,6 +515,10 @@ async fn por_la_sesion_el_rey_empieza_y_abandona_una_epica_y_su_faccion_oye_el_h
     assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32, "{r:?}");
     assert!(deltas.iter().flat_map(|d| &d.eventos).any(|x| x.codigo == "aedas.epica_abandonada"));
     c.cerrar().await;
+    // 6G: la administración ve al residente.
+    let (adm, _, recibido) = w.conectar(servidor::prueba::hola("ok:admin", TipoCliente::ClienteAdminWeb)).await;
+    assert_eq!(residente(&cuerpos(&recibido)).map(|(a, r)| (a, r.id)), Some(("ADMIN:".to_owned(), "aeda-r1".to_owned())));
+    adm.cerrar().await;
     let n = w.parar().await;
     assert!(n.residentes().aedas[0].epica.is_none());
 }

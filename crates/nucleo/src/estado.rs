@@ -854,10 +854,15 @@ pub enum Clase {
     Titulo,
     /// Una propuesta pendiente entre dos Facciones (5H; relación, anexión o fusión, `Estado::politica.propuestas`): su id es el de la propuesta (`prop-N`). Va a `FACCION` de las dos y a `ADMIN`.
     Propuesta,
+    /// Un Aeda residente (6G; `Estado::residentes`): su id es el N de `aeda-rN`. Va a `FACCION` de la dueña de su plaza y a `ADMIN`.
+    Residente,
+    /// La parte pública del estado de tecnología del mundo (6G; id 0): la Era, los logros, las descubridoras y lo cantado. Va a `HEROE` de todos (es pública) y a `ADMIN`; sus contadores no
+    /// se marcan (los cambia el paso de minuto): `ADMIN` los mira en cada reparto.
+    Tecnologia,
 }
 
 impl Clase {
-    pub const TODAS: [Clase; 18] = [
+    pub const TODAS: [Clase; 20] = [
         Clase::Ejercito,
         Clase::Asentamiento,
         Clase::Interior,
@@ -876,12 +881,14 @@ impl Clase {
         Clase::Relacion,
         Clase::Titulo,
         Clase::Propuesta,
+        Clase::Residente,
+        Clase::Tecnologia,
     ];
 }
 
 /// Las entidades cuyo estado cambió en una versión, por clase. Al cerrar la versión cada lista queda ordenada y sin repetir.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Tocados([Vec<u64>; 18]);
+pub struct Tocados([Vec<u64>; 20]);
 
 impl Tocados {
     pub fn marcar(&mut self, clase: Clase, id: u64) {

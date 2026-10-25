@@ -220,6 +220,66 @@ async fn por_el_websocket_quien_llega_tarde_lee_todo_el_historial() {
     assert_eq!(leer_todo(&mut n, 3), todo, "tras recuperar, la misma");
 }
 
+/// 6G por el WebSocket real: un público del sistema 6 (la Era que empieza por plazo) llega en vivo a quien no es de nadie en su `Delta` de `HEROE`, con su hecho tipado, su entrada de
+/// crónica y la forma pública del estado de tecnología ya en la Era nueva; y la página de la crónica trae la misma entrada que la `Delta`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn por_el_websocket_la_era_que_empieza_llega_en_vivo_a_heroe_y_a_la_cronica() {
+    use comun::sesion::*;
+    use contrato::v1::{evento_dominio::Tipado, mensaje_de_cliente as mc, mensaje_de_servidor as ms, orden, TipoCliente};
+    use servidor::prueba::hola;
+
+    let dir = tempfile::tempdir().unwrap();
+    let mut n = persistente(dir.path(), 1_000);
+    // Una columna de la Facción 1 (la hace existir) y la cita de la Era, que se arma con lo primero que pasa.
+    n.crear_ejercito(0, "ana", 1, c(2, 1), 500, 100_000).unwrap();
+    assert!(n.aplicar_en(0, Peticion::nueva("admin", "t", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["escudos_ligeros".into()] }).de_admin()).aceptada());
+    let r = n.estado().reglas.economia.tecnologia.clone();
+    let plazo = r.eras[0].plazo;
+    let w = arrancar_con(n).await;
+    let (mut ana, _, recibido) = w.conectar(hola("ok:ana", TipoCliente::ClienteUnity)).await;
+    let era_de = |m: &[ms::Cuerpo]| {
+        m.iter()
+            .flat_map(|x| match x {
+                ms::Cuerpo::Foto(f) => f.entidades.iter().filter_map(|e| e.cuerpo.clone()).collect::<Vec<_>>(),
+                ms::Cuerpo::Delta(d) => d.cambios.iter().filter_map(|c| c.datos.as_ref()?.cuerpo.clone()).collect(),
+                _ => Vec::new(),
+            })
+            .filter_map(|c| if let pb::entidad::Cuerpo::EstadoTecnologia(t) = c { Some(t.era) } else { None })
+            .last()
+    };
+    assert_eq!(era_de(&recibido), Some(r.eras[0].id.clone()), "la Era vigente, en su HEROE");
+    let (mut admin, _, _) = w.conectar(hola("ok:admin", TipoCliente::ClienteAdminWeb)).await;
+    let reloj = |accion: &str, hasta_ms: Option<i64>| orden::Cuerpo::ControlarReloj(pb::OrdenControlarReloj { accion: accion.into(), hasta_ms, ..Default::default() });
+    let (_, x) = dar(&mut admin, "r1", reloj("pausar", None)).await;
+    assert_eq!(x.resultado, pb::Resultado::OrdenAceptada as i32);
+    let (_, x) = dar(&mut admin, "r2", reloj("avanzar_hasta", Some(plazo))).await;
+    assert_eq!(x.resultado, pb::Resultado::OrdenAceptada as i32);
+    let d = loop {
+        match ana.esperar().await.cuerpo {
+            Some(ms::Cuerpo::Delta(d)) if d.eventos.iter().any(|e| e.codigo == "era.comienza") => break d,
+            Some(ms::Cuerpo::Delta(_) | ms::Cuerpo::Aviso(_)) => {}
+            o => panic!("llegó {o:?}"),
+        }
+    };
+    assert!(contrato::almacen::clave_de_ambito(&d.ambito).starts_with("HEROE:"), "por su HEROE: es pública");
+    let era = d.eventos.iter().find(|e| e.codigo == "era.comienza").unwrap();
+    assert_eq!(era.tipado, Some(Tipado::EraComenzada(pb::EraComenzada { era_id: r.eras[1].id.clone(), orden: 2, por_plazo: true })));
+    assert_eq!(era_de(&[ms::Cuerpo::Delta(d.clone())]), Some(r.eras[1].id.clone()), "la forma pública, en la misma Delta");
+    let en_vivo: Vec<pb::EventoDominio> = d.eventos.iter().filter(|e| e.codigo == "cronica.entrada").cloned().collect();
+    assert!(!en_vivo.is_empty(), "su entrada de crónica, en vivo");
+    ana.enviar(mc::Cuerpo::PedirCronica(pb::PedirCronica { peticion_id: "c1".into(), ..Default::default() })).await;
+    let pagina = loop {
+        match ana.esperar().await.cuerpo {
+            Some(ms::Cuerpo::Cronica(p)) => break p,
+            Some(ms::Cuerpo::Delta(_) | ms::Cuerpo::Aviso(_)) => {}
+            o => panic!("llegó {o:?}"),
+        }
+    };
+    assert!(en_vivo.iter().all(|e| pagina.entradas.contains(e)), "la página trae las mismas entradas que la Delta");
+    drop(w.parar().await);
+    drop(dir);
+}
+
 /// Un historial largo por el núcleo: 200.000 órdenes que dejan ≈ 100.000 entradas. Mide lo que cuesta escribirlo (el guion persistente; el mismo en memoria, que no guarda la crónica,
 /// como comparación), lo que ocupa, recuperar (con el diario) y leer una página. `cargo test --release -p nucleo --test cronica historial_largo -- --ignored --nocapture`.
 #[test]

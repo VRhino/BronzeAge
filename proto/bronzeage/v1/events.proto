@@ -8,7 +8,7 @@
 // (Docs/Coordinacion/05_Contrato_de_Sesion.md §8).
 //
 // FORMA (decisión del autor, 2026-10-22): TODOS los eventos llevan el `payload` genérico (`google.protobuf.Struct` con los campos
-// documentados para cada código: texto, número o lista). Además, los que mueven la interfaz (los quince de 4H T5 y los ocho de la política de 5H) llevan un mensaje TIPADO en
+// documentados para cada código: texto, número o lista). Además, los que mueven la interfaz (los quince de 4H T5, los ocho de la política de 5H y los diez de la tecnología y los Aedas de 6G) llevan un mensaje TIPADO en
 // `tipado` (el cliente actúa con él sin interpretar el Struct). El tipado y el payload dicen lo mismo: quien no quiera el
 // tipado (la crónica, un cliente simple) usa el payload.
 syntax = "proto3";
@@ -56,6 +56,17 @@ message EventoDominio {
     TituloCambiado titulo_cambiado = 30;             // titulo.nace | titulo.cambia_manos
     SolicitudDeIngreso solicitud_de_ingreso = 31;    // faccion.solicitud_ingreso
     CiudadaniaCambiada ciudadania_cambiada = 32;     // faccion.creada | ciudadania_union | solicitud_denegada | abandonada
+    // La tecnología y los Aedas (6G):
+    LogroCumplido logro_cumplido = 33;               // tecnologia.logro (público; `en_ms` es el del hecho)
+    EraComenzada era_comenzada = 34;                 // era.comienza (público)
+    TecnologiaAparecida tecnologia_aparecida = 35;   // tecnologia.aparece
+    TecnologiaAdoptada tecnologia_adoptada = 36;     // tecnologia.adoptada
+    DescubrimientoCantado descubrimiento_cantado = 37;  // aedas.canta_descubrimiento (público)
+    RevelacionDeAeda revelacion_de_aeda = 38;        // aedas.revela
+    CompraAAeda compra_a_aeda = 39;                  // aedas.venta
+    ResidenteCambia residente_cambia = 40;           // aedas.residente_llega | residente_se_va
+    EpicaCambia epica_cambia = 41;                   // aedas.epica_empieza | epica_capitulo | epica_tecnologia | epica_cumplida | epica_abandonada
+    AlijoAbierto alijo_abierto = 42;                 // alijo.abierto
   }
 }
 
@@ -224,4 +235,79 @@ message CiudadaniaCambiada {
   string heroe_id = 1;
   string faccion_id = 2;
   string como = 3;                       // creada | ingreso | denegada | abandono
+}
+
+// ───────────────────────────── La tecnología y los Aedas (6G) ─────────────────────────────
+
+// Empieza una Era nueva (público): por cumplir todos los logros de la anterior o porque se agotó su plazo.
+message EraComenzada {
+  string era_id = 1;                     // `I`, `II`, `III`...
+  uint32 orden = 2;
+  bool por_plazo = 3;
+}
+
+// A la Facción le aparece una tecnología por su hito: ya la puede adoptar el Rey en la capital (`adoptar_tecnologia`).
+message TecnologiaAparecida {
+  string faccion_id = 1;
+  string tecnologia_id = 2;
+  bool primera = 3;                      // la primera del mundo: la Facción es su descubridora
+}
+
+message TecnologiaAdoptada {
+  string faccion_id = 1;
+  string capital_id = 2;                 // la plaza que pagó la tarifa
+  string tecnologia_id = 3;
+}
+
+// Los Aedas cantan un descubrimiento (público): quién lo hizo y qué. Desde entonces los itinerantes pueden revelarlo y venderlo.
+message DescubrimientoCantado {
+  string descubridora_faccion_id = 1;
+  string tecnologia_id = 2;
+}
+
+// Un Aeda itinerante parado en la plaza le revela a su Facción una tecnología que no tiene: `faltan`, los índices de las condiciones de su hito que aún no cumple.
+message RevelacionDeAeda {
+  string faccion_id = 1;
+  string asentamiento_id = 2;
+  string descubridora_faccion_id = 3;
+  string tecnologia_id = 4;
+  repeated uint32 faltan = 5;
+}
+
+// La plaza le compró una tecnología a un Aeda itinerante: le aparece a su Facción sin su hito.
+message CompraAAeda {
+  string faccion_id = 1;
+  string asentamiento_id = 2;
+  string aeda_id = 3;                    // `aeda-N`
+  string tecnologia_id = 4;
+  sint64 precio = 5;                     // el oro pagado, en milésimas
+}
+
+// Un Aeda residente llega a la plaza o se va (porque bajó su cupo).
+message ResidenteCambia {
+  string aeda_id = 1;                    // `aeda-rN`
+  string faccion_id = 2;
+  string asentamiento_id = 3;
+  bool llega = 4;                        // false: se va
+  optional uint32 cupo = 5;              // al irse, el cupo que quedó
+}
+
+// La épica de un Aeda residente: empieza, cierra un capítulo, hace aparecer su tecnología (privado), se cumple (público, sin la tecnología ni la plaza) o se abandona.
+message EpicaCambia {
+  string aeda_id = 1;                    // `aeda-rN`
+  string faccion_id = 2;
+  optional string asentamiento_id = 3;
+  optional string tecnologia_id = 4;     // ausente en la cumplida (pública)
+  string como = 5;                       // empieza | capitulo | tecnologia | cumplida | abandonada
+  uint32 capitulo = 6;                   // el que empieza ahora (al acabar, = `capitulos`)
+  uint32 capitulos = 7;
+  optional string motivo = 8;            // al abandonarse: orden | conquista | aparecida | unificada
+}
+
+// El héroe abrió un alijo: su oro (en milésimas, ya en unidades enteras) y lo que cupo en el carro; lo demás se perdió.
+message AlijoAbierto {
+  string heroe_id = 1;
+  string alijo_id = 2;
+  sint64 oro = 3;
+  sint64 cargado = 4;
 }

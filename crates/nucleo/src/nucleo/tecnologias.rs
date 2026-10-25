@@ -122,6 +122,12 @@ impl Nucleo {
             }
             let listas = self.estado.tecnologia.listas_por_hito(&r, f, &VistaDeFaccion::de(self, f), r.todas());
             if listas.is_empty() {
+                // 6G: lo que mira el hito cambió, así que las condiciones que la Facción ya cumple de cada revelada (`TecnologiasFaccion.detalle_reveladas`) pueden ser otras. Solo en una versión
+                // que ya se cierra por otra razón: la marca no puede crear una versión (el contador `version` es el mismo con sesiones y sin ellas).
+                let cierra = !self.tr.tocados.esta_vacio() || !self.tr.eventos.is_empty();
+                if cierra && !self.estado.tecnologia.de(&r, f).reveladas.is_empty() {
+                    self.tr.tocar(Clase::Faccion, u64::from(f));
+                }
                 continue;
             }
             let capital = self.capital_de(f);
@@ -178,10 +184,47 @@ impl Nucleo {
             let valores = vec![("tecnologia", Dato::Texto(r.def(x).id.clone()))];
             self.tr.emitir(&self.estado, EventoNucleo { valores, publico: true, ..EventoNucleo::nuevo("aedas.canta_descubrimiento", t, vec![("faccion", i64::from(f))]) });
         }
-        // Una tecnología pasa a ser conocida por los Aedas justo cuando se canta: es lo único nuevo que pueden revelar los que ya están parados (6D).
+        // Una tecnología pasa a ser conocida por los Aedas justo cuando se canta: es lo único nuevo que pueden revelar los que ya están parados (6D). Lo cantado, con su descubridora, es
+        // público (la forma pública del estado de tecnología, 6G).
         if !cantadas.is_empty() {
             self.revelar_donde_hay_aedas();
+            self.tr.tocar(Clase::Tecnologia, 0);
         }
+    }
+
+    // ───────────────────────────── Lo que ve la Facción (6G) ─────────────────────────────
+
+    /// Las reveladas de la Facción, en el orden del catálogo, con su descubridora y, condición a condición de su hito, si ya la cumple (`TecnologiasFaccion.detalle_reveladas`).
+    // DUDA: `recursoEnCapital` cambia con el paso de minuto de la capital, que no marca la Facción mientras el hito entero no se cumpla: esa condición puede ir atrasada hasta el siguiente cambio de la
+    // Facción (las demás, no: lo que miran marca la aparición, `apariciones`).
+    pub fn reveladas_con_detalle(&self, faccion: u32) -> Vec<(TecId, Option<u32>, Vec<bool>)> {
+        let (r, e) = (&self.estado.reglas.economia.tecnologia, &self.estado.tecnologia);
+        let propias = e.de(r, faccion);
+        if propias.reveladas.is_empty() {
+            return Vec::new();
+        }
+        let vista = VistaDeFaccion::de(self, faccion);
+        propias
+            .reveladas
+            .iter()
+            .map(|x| {
+                let faltan = tecnologia::hito::faltan(r, x, &propias, &vista);
+                let cumplidas = (0..r.def(x).hito.len()).map(|i| !faltan.contains(&(i as u8))).collect();
+                (x, e.primeros[x as usize].map(|p| p.faccion), cumplidas)
+            })
+            .collect()
+    }
+
+    /// Las tecnologías cuya épica podría empezar ahora un Aeda residente de la Facción (`epicasPosibles` del TypeScript): con épica, su logro cumplido, su Era abierta, no aparecida a la Facción y
+    /// sin un Aeda suyo que ya la cante.
+    pub fn epicas_posibles(&self, faccion: u32) -> Conjunto {
+        let (r, e) = (&self.estado.reglas.economia.tecnologia, &self.estado.tecnologia);
+        let propias = e.de(r, faccion);
+        let mut cantan = Conjunto::VACIO;
+        self.estado.residentes.aedas.iter().filter(|a| a.faccion == faccion).filter_map(|a| a.epica.as_ref()).for_each(|x| cantan.poner(x.tec));
+        let mut v = Conjunto::VACIO;
+        (0..r.catalogo.len() as TecId).filter(|&x| r.def(x).epica.is_some() && e.logro_cumplido(x) && e.era_abierta(r, x) && !propias.aparecidas.contiene(x) && !cantan.contiene(x)).for_each(|x| v.poner(x));
+        v
     }
 
     // ───────────────────────────── La adopción ─────────────────────────────

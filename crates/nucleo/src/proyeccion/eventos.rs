@@ -1,5 +1,5 @@
 //! Los hechos del núcleo como `EventoDominio` del contrato 05 §8 (4H T5): el `payload` genérico de todos y el mensaje **tipado** de los que mueven la interfaz (decisión 8 del autor: los quince de
-//! T5 y, desde 5H, los ocho de la política).
+//! T5, desde 5H los ocho de la política y desde 6G los diez de la tecnología y los Aedas, que cubren sus quince códigos).
 //!
 //! - **A quién se atribuye**: `asentamiento_id` (la primera plaza), `heroes_ids` (los héroes nombrados) y `facciones_ids` (las Facciones que lo oyen enteras), lo que `EventoNucleo::completar` dejó al emitirlo.
 //! - **`payload`**: `ejercitoId` (la primera columna que nombra), `x`/`y` (dónde ocurrió), los datos enteros y los valores de texto y lista. Los datos que nombran una entidad viajan **con el id del
@@ -30,6 +30,14 @@
 //! | `TituloCambiado` (5H) | `titulo.nace`, `titulo.cambia_manos` |
 //! | `SolicitudDeIngreso` (5H) | `faccion.solicitud_ingreso` |
 //! | `CiudadaniaCambiada` (5H) | `faccion.creada`, `faccion.ciudadania_union`, `faccion.solicitud_denegada`, `faccion.abandonada` |
+//! | `LogroCumplido` (6G) | `tecnologia.logro` (público) |
+//! | `EraComenzada` (6G) | `era.comienza` (público) |
+//! | `TecnologiaAparecida`, `TecnologiaAdoptada` (6G) | `tecnologia.aparece`, `tecnologia.adoptada` |
+//! | `DescubrimientoCantado` (6G) | `aedas.canta_descubrimiento` (público) |
+//! | `RevelacionDeAeda`, `CompraAAeda` (6G) | `aedas.revela`, `aedas.venta` |
+//! | `ResidenteCambia` (6G) | `aedas.residente_llega`, `aedas.residente_se_va` |
+//! | `EpicaCambia` (6G) | `aedas.epica_empieza`, `.epica_capitulo`, `.epica_tecnologia`, `.epica_cumplida` (pública, sin la tecnología), `.epica_abandonada` |
+//! | `AlijoAbierto` (6G) | `alijo.abierto` |
 //!
 //! `BatallaAbierta` sale de los datos del propio hecho (contra qué se juega, quién la inició, los dos bandos, el plazo de la convocatoria), así que se tipa igual aunque la batalla ya se haya
 //! retirado del estado al proyectarlo (una reanudación tardía); de su contexto, lo que el ticket no congela (los carros de una caravana, lo protegido de un pueblo) se lee del estado de ahora, como
@@ -99,6 +107,8 @@ fn id_del_contrato(n: &Nucleo, ev: &EventoNucleo, clave: &str, v: i64) -> Option
         "faccion" | "faccionA" | "faccionB" | "faccionAtacante" | "faccionDefensora" | "faccionAnterior" | "faccionVista" | "faccionQueVe" | "atacante" | "contra" | "por" => faccion(),
         "relacion" => ids::relacion(u),
         "aedaResidente" => ids::aeda_residente(v as u32),
+        "aeda" => ids::aeda(v as u32),
+        "descubridora" => faccion(),
         "propuesta" => ids::propuesta(u),
         "capital" => ids::asentamiento(u),
         "pueblo" => ids::pueblo(u),
@@ -341,6 +351,39 @@ fn tipado(n: &Nucleo, ev: &EventoNucleo) -> Option<Tipado> {
             }
             .into(),
         }),
+        // La tecnología y los Aedas (6G).
+        ("tecnologia.logro", _) => Tipado::LogroCumplido(pb::LogroCumplido { contador: texto_de(ev, "contador")?, umbral: dato("umbral")?, en_ms: ev.en }),
+        ("era.comienza", _) => Tipado::EraComenzada(pb::EraComenzada { era_id: texto_de(ev, "era")?, orden: u32::try_from(dato("orden")?).ok()?, por_plazo: dato("porPlazo") == Some(1) }),
+        ("tecnologia.aparece", _) => Tipado::TecnologiaAparecida(pb::TecnologiaAparecida { faccion_id: faccion("faccion")?, tecnologia_id: texto_de(ev, "tecnologia")?, primera: dato("primera") == Some(1) }),
+        ("tecnologia.adoptada", _) => Tipado::TecnologiaAdoptada(pb::TecnologiaAdoptada { faccion_id: faccion("faccion")?, capital_id: ids::asentamiento(id("capital")?), tecnologia_id: texto_de(ev, "tecnologia")? }),
+        ("aedas.canta_descubrimiento", _) => Tipado::DescubrimientoCantado(pb::DescubrimientoCantado { descubridora_faccion_id: faccion("faccion")?, tecnologia_id: texto_de(ev, "tecnologia")? }),
+        ("aedas.revela", _) => {
+            let faltan = match ev.valores.iter().find(|(k, _)| *k == "faltan").map(|(_, d)| d) {
+                Some(Dato::Lista(l)) => l.iter().filter_map(|d| if let Dato::Numero(i) = d { u32::try_from(*i).ok() } else { None }).collect(),
+                _ => Vec::new(),
+            };
+            Tipado::RevelacionDeAeda(pb::RevelacionDeAeda { faccion_id: faccion("faccion")?, asentamiento_id: plaza_id(), descubridora_faccion_id: faccion("descubridora")?, tecnologia_id: texto_de(ev, "tecnologia")?, faltan })
+        }
+        ("aedas.venta", _) => Tipado::CompraAAeda(pb::CompraAAeda { faccion_id: faccion("faccion")?, asentamiento_id: plaza_id(), aeda_id: ids::aeda(u32::try_from(dato("aeda")?).ok()?), tecnologia_id: texto_de(ev, "tecnologia")?, precio: dato("precio")? }),
+        ("aedas.residente_llega" | "aedas.residente_se_va", _) => Tipado::ResidenteCambia(pb::ResidenteCambia {
+            aeda_id: ids::aeda_residente(u32::try_from(dato("aedaResidente")?).ok()?),
+            faccion_id: faccion("faccion")?,
+            asentamiento_id: plaza_id(),
+            llega: codigo == "aedas.residente_llega",
+            cupo: dato("cupo").and_then(|c| u32::try_from(c).ok()),
+        }),
+        ("aedas.epica_empieza" | "aedas.epica_capitulo" | "aedas.epica_tecnologia" | "aedas.epica_cumplida" | "aedas.epica_abandonada", _) => Tipado::EpicaCambia(pb::EpicaCambia {
+            aeda_id: ids::aeda_residente(u32::try_from(dato("aedaResidente")?).ok()?),
+            faccion_id: faccion("faccion")?,
+            // La de la plaza del hecho o, la perdida por conquista o por aparecer, la de su dato `plaza` (el hecho va a la Facción de antes, no a la plaza).
+            asentamiento_id: plaza.or_else(|| id("plaza")).map(ids::asentamiento),
+            tecnologia_id: texto_de(ev, "tecnologia"),
+            como: codigo.rsplit('_').next().unwrap_or_default().into(),
+            capitulo: dato("capitulo").and_then(|c| u32::try_from(c).ok()).unwrap_or(0),
+            capitulos: dato("capitulos").and_then(|c| u32::try_from(c).ok()).unwrap_or(0),
+            motivo: texto_de(ev, "motivo"),
+        }),
+        ("alijo.abierto", _) => Tipado::AlijoAbierto(pb::AlijoAbierto { heroe_id: heroe("heroe"), alijo_id: texto_de(ev, "alijo")?, oro: dato("oro")?, cargado: dato("cargado")? }),
         _ => return None,
     })
 }

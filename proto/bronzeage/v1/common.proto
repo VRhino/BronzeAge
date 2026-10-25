@@ -131,6 +131,9 @@ enum TipoEntidad {
   // La última foto de un sitio ajeno que la Facción vio y ya no ve (4H T3d, ámbito `VISTA`): su id es el del sitio (`as-N`, `pueblo-N`, `av-N`). Un sitio
   // que se ve viaja como su entidad (`ASENTAMIENTO`, `PUEBLO`, `AVANZADA`, `OBRA_DE_MAPA`); el que solo se recuerda, como ficha: nunca los dos a la vez.
   FICHA_CONOCIDA = 33;
+  // El estado de tecnología del mundo (sistema 6, 6G), una sola entidad con id `tecnologia`: en `HEROE`, su forma pública (la Era, los logros
+  // cumplidos sin decir qué abren y los descubrimientos ya cantados); en `ADMIN`, entero, con los contadores en curso.
+  ESTADO_TECNOLOGIA = 34;
 }
 
 // Ámbito de suscripción de una sesión. El servidor suscribe solo lo que corresponde al héroe (jamás lo pide el cliente):

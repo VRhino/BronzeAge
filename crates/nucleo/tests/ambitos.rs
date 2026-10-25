@@ -287,7 +287,10 @@ async fn el_heroe_nuevo_abre_su_ambito_en_caliente_y_gana_la_faccion_cuando_se_l
     let (previos, r) = dar_todo(&mut nueva, "c1", crear).await;
     let heroe = r.creadas[0].id.clone();
     assert_eq!(etiquetas(&previos), [format!("foto HEROE:{heroe}"), format!("foto CAMPAMENTO:{}", ids::campamento(0))]);
-    assert!(matches!(foto_de(&previos[0]).entidades[..], [pb::Entidad { cuerpo: Some(pb::entidad::Cuerpo::Heroe(_)) }]), "su ámbito es su héroe recién nacido, sin Facción ni escuadras");
+    assert!(
+        matches!(foto_de(&previos[0]).entidades[..], [pb::Entidad { cuerpo: Some(pb::entidad::Cuerpo::Heroe(_)) }, pb::Entidad { cuerpo: Some(pb::entidad::Cuerpo::EstadoTecnologia(_)) }]),
+        "su ámbito es su héroe recién nacido, sin Facción ni escuadras, y lo público de la tecnología (6G)"
+    );
 
     // La administración le da Facción: llega la foto de su ámbito. Y quien no administra no da Facción a nadie.
     let (_, r) = dar(&mut nueva, "c2", admin("fijar_faccion_de_heroe", &[("heroe_id", &heroe), ("faccion_id", "f-1")])).await;

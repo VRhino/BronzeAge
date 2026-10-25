@@ -13,6 +13,10 @@
 //! | `Faccion` | `FACCION` de la propia |
 //! | `Relacion` | `FACCION` de las dos Facciones, mientras exista |
 //! | `Propuesta` | `FACCION` de las dos Facciones de su par, mientras esté en el almacén (5H) |
+//! | `Residente` | `FACCION` de la dueña de su plaza (6G: los rivales no ven los suyos) |
+//!
+//! `Tecnologia` (la forma pública del estado de tecnología del mundo, 6G) es de todos: no tiene pertenencia, la sesión la manda a cada `HEROE` cuando la versión la toca (`Mesa::repartir`), como
+//! un hecho público.
 //!
 //! La convocatoria va a la Facción entera y no a `HEROE` (solo puede unirse quien es de la Facción: Presencia_Y_Convocatoria §9.6). Una entidad puede estar en dos ámbitos a la vez (una caravana
 //! adjunta a tu columna, en `HEROE` y en `FACCION`) y `QUITA` significa «ya no es de este ámbito».
@@ -26,7 +30,7 @@ use crate::estado_militar::HeroeNucleo;
 use std::collections::BTreeSet;
 
 /// Las clases cuyas entidades viajan a un ámbito de jugador, en el orden en que se proyectan.
-pub const CLASES: [Clase; 14] = [
+pub const CLASES: [Clase; 15] = [
     Clase::Ejercito,
     Clase::Asentamiento,
     Clase::Faccion,
@@ -41,6 +45,7 @@ pub const CLASES: [Clase; 14] = [
     Clase::Batalla,
     Clase::Relacion,
     Clase::Propuesta,
+    Clase::Residente,
 ];
 
 /// El héroe de la sesión de una cuenta: el de verdad si lo hay y, si no, el primer héroe de campo.
@@ -115,8 +120,9 @@ pub fn de(e: &Estado, clase: Clase, id: u64) -> Vec<Ambito> {
             let (a, b) = p.clase.par();
             [Ambito::Faccion(a), Ambito::Faccion(b)]
         })),
-        // Los títulos son públicos: van a la `VISTA` de todos (la decide `proyeccion::vista`) y a `ADMIN`, no a un ámbito de jugador.
-        Clase::Campamento | Clase::Bandidos | Clase::Interior | Clase::Titulo => {}
+        Clase::Residente => v.extend(e.residentes.get(id as u32).map(|a| Ambito::Faccion(a.faccion))),
+        // Los títulos son públicos: van a la `VISTA` de todos (la decide `proyeccion::vista`) y a `ADMIN`, no a un ámbito de jugador. El estado de tecnología, a cada `HEROE` (`Mesa::repartir`).
+        Clase::Campamento | Clase::Bandidos | Clase::Interior | Clase::Titulo | Clase::Tecnologia => {}
     }
     v.sort_unstable();
     v.dedup();
@@ -168,6 +174,7 @@ pub fn todas(e: &Estado, clase: Clase) -> Vec<u64> {
         Clase::Batalla => e.batallas.batallas.keys().copied().collect(),
         Clase::Relacion => e.politica.relaciones.activas().map(|r| r.id).collect(),
         Clase::Propuesta => e.politica.propuestas.iter().map(|p| p.id).collect(),
-        Clase::Campamento | Clase::Bandidos | Clase::Interior | Clase::Titulo => Vec::new(),
+        Clase::Residente => e.residentes.aedas.iter().map(|a| u64::from(a.id)).collect(),
+        Clase::Campamento | Clase::Bandidos | Clase::Interior | Clase::Titulo | Clase::Tecnologia => Vec::new(),
     }
 }

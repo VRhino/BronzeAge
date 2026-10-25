@@ -47,6 +47,11 @@ impl Nucleo {
         self.alijos_del_mundo()?.lista.get(i as usize)
     }
 
+    /// Cuántos alijos trae el artefacto (sus índices van de 0 a este número).
+    pub fn alijos_del_artefacto(&self) -> u32 {
+        self.alijos_del_mundo().map_or(0, |a| a.lista.len() as u32)
+    }
+
     /// El índice del alijo con ese id del artefacto (el del contrato). Recorre la lista: son unos cientos y solo lo pide una orden.
     pub fn alijo_por_id(&self, id: &str) -> Option<u32> {
         self.alijos_del_mundo()?.lista.iter().position(|a| a.id == id).map(|i| i as u32)

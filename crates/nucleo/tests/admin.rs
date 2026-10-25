@@ -212,6 +212,9 @@ fn clave(c: &Cuerpo) -> (i32, String) {
         Cuerpo::CampamentoMercenarios(x) => (TipoEntidad::CampamentoMercenarios, &x.id),
         Cuerpo::CampamentoBandidos(x) => (TipoEntidad::CampamentoBandidos, &x.id),
         Cuerpo::Titulo(x) => (TipoEntidad::Titulo, &x.titulo_id),
+        Cuerpo::AedaItinerante(x) => (TipoEntidad::Aeda, &x.id),
+        Cuerpo::AedaResidente(x) => (TipoEntidad::Aeda, &x.id),
+        Cuerpo::EstadoTecnologia(_) => return (TipoEntidad::EstadoTecnologia as i32, "tecnologia".into()),
         otro => panic!("ADMIN no lleva {otro:?}"),
     };
     (t as i32, id.clone())

@@ -296,3 +296,41 @@ fn los_dorados_de_6f_dicen_lo_que_deben() {
     let Some(entidad::Cuerpo::Heroe(h)) = f.entidades[0].cuerpo.clone() else { panic!() };
     assert_eq!(h.alijos_abiertos, ["alijo-mercenarios-0-1", "alijo-veta-3"]);
 }
+
+/// Lo que los dorados de 6G (la tecnología y los Aedas en el contrato) dicen, leído por Rust: cada campo nuevo donde el esquema lo pone y los ids reales.
+#[test]
+fn los_dorados_de_6g_dicen_lo_que_deben() {
+    use entidad::Cuerpo as C;
+    use evento_dominio::Tipado as T;
+    use mensaje_de_servidor as ms;
+    let cuerpos = |f: &Foto| f.entidades.iter().filter_map(|e| e.cuerpo.clone()).collect::<Vec<_>>();
+    // FACCION: las tres listas, el detalle de la revelada, las épicas posibles y el residente con su épica (sin claves).
+    let ms::Cuerpo::Foto(f) = de_servidor("foto_faccion_con_tecnologias_y_residente") else { panic!() };
+    let [C::Tecnologias(t), C::AedaResidente(r)] = &cuerpos(&f)[..] else { panic!("{f:?}") };
+    assert_eq!((t.reveladas.clone(), t.detalle_reveladas[0].descubridora_faccion_id.as_str(), t.detalle_reveladas[0].cumplidas.clone(), t.epicas_posibles.clone()), (vec!["metalurgia_cobre".to_owned()], "f-1", vec![true, false], vec!["metalurgia_cobre".to_owned()]));
+    let e = r.epica.as_ref().unwrap();
+    assert_eq!((r.id.as_str(), e.capitulos, e.hechos_necesarios, e.claves.len()), ("aeda-r1", 2, 3, 0));
+    // HEROE: la forma pública (sin contadores ni logros por tecnología) y un alijo a la vista.
+    let ms::Cuerpo::Foto(f) = de_servidor("foto_heroe_con_tecnologia_publica_y_alijo") else { panic!() };
+    let [C::EstadoTecnologia(t), C::Alijo(a)] = &cuerpos(&f)[..] else { panic!("{f:?}") };
+    assert!(t.contadores.is_empty() && t.logros.is_empty());
+    assert_eq!((t.logros_cumplidos[0].contador.as_str(), t.logros_cumplidos[0].umbral, t.cantadas.clone(), a.id.as_str(), a.oro), ("plazasEnNivel.2", 1, vec!["metalurgia_cobre".to_owned()], "alijo-veta-3", 5_500));
+    // VISTA: el Aeda parado con su plaza y el que anda con su tramo; ni estancia, ni destino, ni dónde estuvo.
+    let ms::Cuerpo::Foto(f) = de_servidor("foto_vista_con_aedas") else { panic!() };
+    let [C::AedaItinerante(x), C::AedaItinerante(y)] = &cuerpos(&f)[..] else { panic!("{f:?}") };
+    assert_eq!((x.en_asentamiento_id.as_deref(), y.plan.as_ref().map(|p| p.vertices.len())), (Some("as-6"), Some(2)));
+    assert!([x, y].iter().all(|a| a.hasta_ms.is_none() && a.destino_id.is_none() && a.recientes.is_empty()));
+    // ADMIN: el estado entero con su contador en curso y su clase propia `ESTADO_TECNOLOGIA`, el Aeda entero y el residente con sus claves.
+    let ms::Cuerpo::Delta(d) = de_servidor("delta_admin_tecnologia_y_aedas") else { panic!() };
+    assert_eq!(d.cambios.iter().map(|c| (c.entidad, c.id.as_str())).collect::<Vec<_>>(), [(TipoEntidad::EstadoTecnologia as i32, "tecnologia"), (TipoEntidad::Aeda as i32, "aeda-1"), (TipoEntidad::Aeda as i32, "aeda-r1")]);
+    let Some(C::EstadoTecnologia(t)) = d.cambios[0].datos.as_ref().and_then(|x| x.cuerpo.clone()) else { panic!() };
+    assert_eq!((t.contadores.get("extraido.cobre"), t.logros.get("metalurgia_cobre")), (Some(&412), Some(&3_600_000)));
+    // Los diez mensajes tipados de la tecnología y los Aedas.
+    let ms::Cuerpo::Delta(d) = de_servidor("delta_eventos_tecnologia") else { panic!() };
+    let tipados: Vec<T> = d.eventos.iter().filter_map(|e| e.tipado.clone()).collect();
+    assert_eq!(tipados.len(), 10);
+    assert!(matches!(&tipados[1], T::EraComenzada(x) if x.era_id == "edad_bronce" && x.por_plazo));
+    assert!(matches!(&tipados[6], T::CompraAAeda(x) if x.aeda_id == "aeda-1" && x.precio == 200_000));
+    assert!(matches!(&tipados[8], T::EpicaCambia(x) if x.motivo.as_deref() == Some("unificada")));
+    assert!(matches!(&tipados[9], T::AlijoAbierto(x) if x.cargado == 3_000));
+}

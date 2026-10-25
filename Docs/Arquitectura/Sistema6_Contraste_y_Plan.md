@@ -148,8 +148,8 @@ No hay contradicciones de fondo entre G6 y TA: el catálogo, las tarifas, el cup
 | DUDA | Tanda | Cómo se cierra |
 |---|---|---|
 | `nucleo/cronica.rs:12` — la caída sale de `asentamiento.conquistada`; faltan los públicos del sistema 6 | 6C | queda la regla de Rust (C4); se añaden las fuentes; la parte de la diplomacia la cierra S5 5D-5F |
-| `proyeccion/propios.rs:441` — sin `aparecidas` ni `reveladas` | 6G | |
-| `proyeccion/propios.rs:703` (la parte de «las Aedas» en `ADMIN`) | 6G | `ADMIN` lleva los Aedas, el estado de tecnología entero y los alijos |
+| `proyeccion/propios.rs:441` — sin `aparecidas` ni `reveladas` | 6G | **cerrada (6G)**: `TecnologiasFaccion` entera, con el detalle de cada revelada (descubridora y `cumplidas[i]`) y las épicas posibles |
+| `proyeccion/propios.rs:703` (la parte de «las Aedas» en `ADMIN`) | 6G | `ADMIN` lleva los Aedas, el estado de tecnología entero y los alijos. **Cerrada (6G)**: los residentes con sus claves por el registro (`Clase::Residente`); el estado entero con los contadores y los itinerantes enteros, comparados en cada reparto; los alijos, en el artefacto y en `Heroe.alijos_abiertos` |
 
 Más los placeholders sin `DUDA` de `construccion.rs:48-59` (tabla §1.3), que se retiran en 6B, 6C y 6E.
 
@@ -645,3 +645,50 @@ Hecha sobre `a5da8bb` (6A, 6B, 6C, 6F y la crónica ya integradas), en paralelo 
 6. **Un `aeda_id` sin la forma `aeda-rN` sale `epica.no_vive_aqui`** en la traducción, sin un código nuevo de «desconocido». Recomendado: así.
 7. **Las épicas se procesan antes que la aparición por hito** al cerrar la versión: si en la misma versión las dos la cumplen, cuenta la épica (y suma a Mecenas). Recomendado: así (el TS avanzaba las épicas con los hechos de la orden y el hito en el tick).
 8. **Empezar o abandonar una épica no lleva el candado de la plaza en batalla**, solo el del héroe (el TS no lo bloqueaba). Recomendado: así.
+
+## Avance de 6G (2026-10-25, rama `tanda-6g`, sin cambio de foto)
+
+Hecha sobre `886466d` (6A-6F y la crónica integradas, foto `BAN40`). Sin órdenes ni comandos nuevos; esquema Protobuf **aditivo** (`buf lint` y `buf breaking` limpios).
+
+**Qué ve cada ámbito**
+
+| Ámbito | Qué lleva del sistema 6 | Qué no |
+|---|---|---|
+| `FACCION` | `TecnologiasFaccion` entera: `aparecidas`, `adoptadas` (las de arranque primero, como desde 6B), `reveladas` y, nuevo, `detalle_reveladas` (de cada revelada su descubridora y `cumplidas[i]`, la condición `i` de su hito cumplida ya o no) y `epicas_posibles` (con épica, logro cumplido, Era abierta, no aparecida y sin un Aeda de la Facción que ya la cante). `AedaResidente` (`aeda-rN`) de sus plazas con su épica: capítulo, hechos, último hecho y, nuevos, `capitulos` y `hechos_necesarios` | las tecnologías y los residentes de otra Facción; las `claves` de las épicas |
+| `HEROE` | la **forma pública** del estado de tecnología del mundo (`EstadoTecnologia`, id `tecnologia`, clase nueva `ESTADO_TECNOLOGIA`), la misma para todos: la Era, `era_desde_ms`, `logros_cumplidos` (nuevo: `{contador, umbral, en}` por orden, sin la tecnología que abren), `cantadas` y, de `primeros`, solo las cantadas (públicas desde su canto). Los `Alijo` que el héroe tiene a la vista (si puede buscarlos), con su sitio y su oro | los contadores en curso y los logros y las descubridoras por tecnología (Q6) |
+| `VISTA` | los `AedaItinerante` (`aeda-N`) que se ven ahora, redactados como una columna ajena: posición, tramo visible del plan (30 s, renovado por el muestreo) y la plaza en que están parados | hasta cuándo se quedan, adónde van, dónde estuvieron |
+| `ADMIN` | todo: el estado de tecnología entero (los 24 contadores, los logros y las descubridoras por tecnología), los residentes con sus `claves` (texto del TS con los ids del contrato), los itinerantes enteros | — |
+
+**Cómo viaja**
+
+- **Por el registro de cambios** (como siempre): `Clase::Residente` (la 19.ª; id = N de `aeda-rN`, pertenece a `FACCION` de su dueña; cada sitio de `nucleo/residentes.rs` que cambia un residente lo marca, y la auditoría lo vigila) y `Clase::Tecnologia` (la 20.ª; id 0, la parte pública: se marca al fijarse un logro, empezar una Era o cantarse algo). La forma pública es de todos: `Mesa::repartir` la mete en el cubo de cada `HEROE` cuando la versión la toca y la `Foto` de `HEROE` la lleva siempre. `TecnologiasFaccion` sigue en la versión de su Facción; desde 6G además se marca la Facción: con un logro o una Era nuevos, todas (sus épicas posibles), y con un cambio que mira un hito, la que tiene reveladas (sus `cumplidas`; solo en una versión que ya se cierra por otra razón, para que el contador `version` sea el mismo con sesiones y sin ellas).
+- **Fuera del registro** (lo que cambia sin subir la versión): los **itinerantes** en `VISTA` se calculan una vez por perspectiva en `Mirada::de` (los que ven sus ojos) y cada sesión filtra su rectángulo; su sello sale de su plan o de su estancia (no son una clase: duda 7 de 6D). Los **alijos a la vista** en `HEROE` los pone al día `Mesa::reconciliar_alijos` con el mismo ritmo que la vista (en cada muestreo, y tras una orden para quien la dio). En `ADMIN`, `Mesa::admin_al_dia` compara en cada reparto el estado de tecnología (con los contadores, que suma el paso de minuto) y los itinerantes con lo que el cliente tiene (sin copiar nada si no cambió) y manda lo que cambió. Al reanudar por deltas, todo esto va entero en la misma `Delta`; si la reanudación es sin novedad, se da por sabido (no hay mensaje de más).
+
+**Contrato.** `TipoEntidad::ESTADO_TECNOLOGIA = 34`; `TecnologiasFaccion.detalle_reveladas` (mensaje nuevo `TecnologiaRevelada`) y `.epicas_posibles`; `EstadoTecnologia.logros_cumplidos` (mensaje nuevo `LogroCumplido`); `EpicaEnCurso.capitulos` y `.hechos_necesarios`; comentarios de qué ve cada ámbito en `AedaResidente`, `AedaItinerante` y `Alijo`. **Diez hechos tipados** que cubren los quince códigos del sistema 6 (`EventoDominio.tipado` 33-42): `LogroCumplido`, `EraComenzada`, `TecnologiaAparecida`, `TecnologiaAdoptada`, `DescubrimientoCantado`, `RevelacionDeAeda`, `CompraAAeda`, `ResidenteCambia`, `EpicaCambia` (con su `motivo`, también `unificada`) y `AlijoAbierto`; el payload genérico nombra además al Aeda (`aedaId`) y a la descubridora (`descubridoraId`). `contrato::almacen` conoce las entidades nuevas. `Comandos_Parametros.md` ya no tiene «Órdenes sin comando».
+
+**Rendimiento** (release, alternando los binarios de la base `886466d` y de 6G):
+
+| Qué | Base | 6G |
+|---|---|---|
+| `rendimiento_de_mil_plazas_tres_dias` (1.000 plazas × 3 días) | 20,41 / 20,45 / 20,44 s | 20,68 / 20,36 / 20,59 s |
+| Carga, 5 min de mundo en pasos de 250 ms con 500 sesiones (el muestreo) | 31,92 / 32,45 / 36,21 s | 32,80 / 33,34 / 35,30 s |
+| Carga, coste por orden con el reloj parado y 500 sesiones | 20.875 / 21.188 / 24.361 µs | 22.057 / 21.939 / 22.369 µs |
+
+Los mismos 3.069.110 pasos y la misma versión 50.408; en la carga, las mismas 3.403 versiones y los mismos bytes por sesión (la foto de `HEROE` crece 0,1 KB/min por la forma pública). Un primer intento, que miraba a cada Aeda contra los ojos de cada sesión, daba +2 s en el muestreo; mirarlos una vez por perspectiva lo deja en el ruido.
+
+**Pruebas.** Nuevas por el WebSocket real, una por ámbito y comprobando lo que **no** se ve: `aedas.rs` (`HEROE` con la forma pública sin contadores ni logros por tecnología; `FACCION` con la revelada y su detalle y nunca las tecnologías de la otra; `VISTA` con los tres Aedas redactados y nada para quien no los ve; `ADMIN` entero y al día cuando un Aeda cambia sin que cambie la versión), `aedas_residentes.rs` (el residente en `FACCION` antes y después de empezar su épica, sin claves; las épicas posibles; nada para quien no es de la Facción; el residente en `ADMIN`; el hecho tipado), `alijos.rs` (el alijo a la vista en la `Foto` de `HEROE`, su `QUITA` al abrirlo, el hecho tipado y nada para quien es de una Facción con plazas), `cronica.rs` (la Era que empieza llega en vivo a `HEROE` con su hecho tipado, su entrada de crónica y la forma pública en la Era nueva, y la misma entrada en la página de la crónica) y `eventos.rs` (los diez tipados de los quince códigos, ida y vuelta en bytes). Cinco dorados nuevos (89 pares) con su significado en `crates/contrato/tests/golden.rs`. Ajustadas las que contaban las entidades de `HEROE` (ahora también la forma pública) y las claves del almacén de prueba.
+
+**Cifras** (antes de integrar). `cargo test --workspace --no-fail-fast`: 1.577 pruebas en verde (104 resultados, 16 ignoradas, 0 fallos). Auditoría (`BRONZEAGE_AUDITAR_CAMBIOS=1 cargo test -p nucleo -- --skip rendimiento`): 589 sin fallos. Dorados: Rust, C# (90 pruebas) y TypeScript (90 pruebas) en verde. Las repeticiones de las pruebas de sesión, tras integrar (abajo).
+
+**Dudas para el autor (6G)**
+
+1. **El Aeda itinerante viaja en `VISTA` con el tramo visible de su plan**, como una columna ajena, no solo con su posición (Niebla §5.4 y el TS: id, posición, plaza). Sin el tramo, uno que anda viajaría en cada muestreo; con él, una vez por tramo. Recomendado: así (Niebla al día).
+2. **Lo que no pasa por el registro** (los contadores y los itinerantes en `ADMIN`, los alijos en `HEROE`) va entero en la `Delta` de una reanudación que trae algo; en una sin novedad se da por sabido: un Aeda que se movió sin que nada más cambiara queda viejo en el cliente de administración hasta su siguiente cambio. Recomendado: así (sin novedad solo pasa con el mundo quieto).
+3. **Los alijos a la vista se renuevan con el muestreo de la vista** y tras cada reparto; sin `VISTA` abierta no se arma un muestreo propio (se renuevan con lo que pase en el mundo). Recomendado: así (quien busca alijos mira el mapa).
+4. **Un héroe que deja de poder buscar alijos estando desconectado** y reanuda por deltas conserva en su cliente los que tenía hasta su siguiente `Foto` de `HEROE`. Recomendado: dejarlo (raro; arreglarlo pide quitar todos los alijos del mundo a cada héroe que reconecta).
+5. **`cumplidas[i]` de una condición `recursoEnCapital` puede ir atrasada** hasta el siguiente cambio de la Facción: el paso de minuto de la capital solo la marca cuando el hito entero ya se cumple. Recomendado: así (hoy solo la pide la aleación del bronce).
+6. **No viajan `eraDe` ni `capitalId`** del `TecnologiaJugador` del TS: el cliente tiene el catálogo y `Faccion.capital_id`. Recomendado: así.
+7. **`Alijo.oro` es el del artefacto, en milésimas** (el mismo mensaje que `ArtefactoDeMundo.alijos`); lo que se carga, en unidades enteras, lo dice `alijo.abierto`. Recomendado: así.
+8. **Al fijarse un logro o empezar una Era se marcan todas las Facciones** (sus épicas posibles miran los logros y la Era): unas decenas de veces por partida. Recomendado: así.
+9. **Las `claves` de una épica solo van a `ADMIN`**, como el texto del TS con los ids del contrato (`obra:ed-6-4:0`, `defensa:as-3:<instante>`, `batalla:<battleId>`). Recomendado: así.
+10. **`aeda-N` y `aeda-rN` comparten la clase `AEDA`** del contrato (ids distintos, cuerpos distintos: `AedaItinerante` y `AedaResidente`). Recomendado: así (ya estaba en el esquema).

@@ -91,6 +91,7 @@ impl Nucleo {
             let ajuste = self.estado.residentes.ajustar(plaza as u32, cupo, t);
             for &aeda in &ajuste.salen {
                 self.contar_residente(plaza, -1);
+                self.tocar_residente(aeda);
                 self.emitir_propio(t, "aedas.residente_se_va", vec![plaza], vec![("aedaResidente", i64::from(aeda)), ("faccion", i64::from(faccion)), ("cupo", i64::from(cupo))]);
             }
             if !ajuste.salen.is_empty() {
@@ -111,6 +112,7 @@ impl Nucleo {
                 Llegada::Llega => {
                     let aeda = self.estado.residentes.llega(plaza as u32, faccion, t);
                     self.contar_residente(plaza, 1);
+                    self.tocar_residente(aeda);
                     self.tocar_residentes(faccion, plaza);
                     self.emitir_propio(t, "aedas.residente_llega", vec![plaza], vec![("aedaResidente", i64::from(aeda)), ("faccion", i64::from(faccion))]);
                     // Si aún cabe otro, la espera vuelve a empezar ahora.
@@ -167,7 +169,12 @@ impl Nucleo {
         }
     }
 
-    /// Los residentes y sus épicas viajan con la Facción (la proyección es de 6G) y cambian la felicidad de la plaza.
+    /// Un residente cambió (llegó, se fue, cambió de dueña o su épica avanzó): viaja como `AedaResidente` a `FACCION` de su dueña (6G).
+    fn tocar_residente(&mut self, aeda: u32) {
+        self.tr.tocar(Clase::Residente, u64::from(aeda));
+    }
+
+    /// Los residentes y sus épicas cambian la Facción (sus épicas posibles, Mecenas) y la felicidad de la plaza.
     fn tocar_residentes(&mut self, faccion: u32, plaza: u64) {
         self.tr.tocar(Clase::Faccion, u64::from(faccion));
         self.tr.tocar(Clase::Asentamiento, plaza);
@@ -176,6 +183,7 @@ impl Nucleo {
     /// La plaza cayó en ruinas (ya no está en el estado): sus residentes desaparecen con su espera y su cita, sin hecho (como el TypeScript).
     pub(super) fn residentes_tras_la_ruina(&mut self, plaza: u64) {
         let fuera = self.estado.residentes.quitar_plaza(plaza as u32);
+        self.tr.tocar_todos(Clase::Residente, fuera.iter().map(|&a| u64::from(a)));
         if !fuera.is_empty() {
             self.espacio.residentes_por_plaza.remove(&plaza);
         }
@@ -185,6 +193,8 @@ impl Nucleo {
     /// La plaza cambió de dueño en una conquista: sus residentes pasan a la conquistadora y **pierden la épica** (`aedas.epica_abandonada { motivo: conquista }`, a la Facción de antes); la plaza se
     /// revisa (la conquista daña edificios y cambia la reputación que mira la llegada).
     pub(super) fn residentes_tras_la_conquista(&mut self, t: Instante, plaza: u64, vieja: u32, nueva: u32) {
+        let pasan: Vec<u64> = self.estado.residentes.de_plaza(plaza as u32).iter().map(|a| u64::from(a.id)).collect();
+        self.tr.tocar_todos(Clase::Residente, pasan);
         for (aeda, tec) in self.estado.residentes.cambiar_de_dueno(plaza as u32, nueva) {
             self.epica_perdida(t, aeda, vieja, tec, Some(plaza), "conquista");
         }
@@ -194,6 +204,9 @@ impl Nucleo {
     /// Anexión y fusión (decisión técnica 13): los residentes de `origen` pasan a `destino` con su épica, y sus épicas cumplidas se suman. La épica de una tecnología que `destino` ya tiene se pierde
     /// (`aparecida`). Las plazas movidas se revisan (la reputación de la dueña cambió).
     pub(super) fn trasladar_residentes(&mut self, t: Instante, origen: u32, destino: u32, plazas: &[u64]) {
+        let res = &mut self.estado.residentes;
+        let pasan: Vec<u64> = res.aedas.iter().filter(|a| a.faccion == origen).map(|a| u64::from(a.id)).collect();
+        self.tr.tocar_todos(Clase::Residente, pasan);
         let res = &mut self.estado.residentes;
         res.aedas.iter_mut().filter(|a| a.faccion == origen).for_each(|a| a.faccion = destino);
         if let Some(n) = res.cumplidas.remove(&origen) {
@@ -230,6 +243,7 @@ impl Nucleo {
         let valores = vec![("tecnologia", Dato::Texto(tecnologia)), ("motivo", Dato::Texto(motivo.into()))];
         self.tr.emitir(&self.estado, EventoNucleo { facciones: vec![faccion], valores, ..EventoNucleo::nuevo("aedas.epica_abandonada", t, datos) });
         self.tr.tocar(Clase::Faccion, u64::from(faccion));
+        self.tocar_residente(aeda);
     }
 
     // ───────────────────────────── Las órdenes ─────────────────────────────
@@ -265,6 +279,7 @@ impl Nucleo {
         let punto = self.estado.asentamientos.get(&plaza).map(|a| a.posicion);
         self.tr.emitir(&self.estado, EventoNucleo { asentamientos: vec![plaza], punto, valores, ..EventoNucleo::nuevo(codigo, t, datos) });
         self.tr.tocar(Clase::Faccion, u64::from(duena));
+        self.tocar_residente(aeda);
         Ok(vec![])
     }
 
@@ -304,6 +319,7 @@ impl Nucleo {
                         let f = a.faccion;
                         self.tr.tocar(Clase::Faccion, u64::from(f));
                     }
+                    self.tocar_residente(aeda);
                 }
                 Avance::Capitulo { aeda, plaza, faccion, tec, capitulo, capitulos } => {
                     self.hecho_de_epica(t, "aedas.epica_capitulo", aeda, plaza, faccion, tec, capitulo, capitulos, &r);
@@ -332,6 +348,7 @@ impl Nucleo {
         let punto = self.estado.asentamientos.get(&plaza).map(|a| a.posicion);
         self.tr.emitir(&self.estado, EventoNucleo { asentamientos: vec![plaza], punto, valores, ..EventoNucleo::nuevo(codigo, t, datos) });
         self.tr.tocar(Clase::Faccion, u64::from(faccion));
+        self.tocar_residente(aeda);
     }
 }
 

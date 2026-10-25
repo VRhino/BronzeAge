@@ -52,8 +52,9 @@ async fn conectar_ordenar_marcha_y_ver_llegar() {
     let ambitos: Vec<_> = b.ambitos.iter().map(|a| (a.ambito.as_ref().unwrap().id.as_str(), a.decision)).collect();
     assert_eq!(ambitos, [("heroe-2", DecisionReanudacion::ReanudaConFoto as i32), ("f-1", DecisionReanudacion::ReanudaConFoto as i32)]);
     let ms::Cuerpo::Foto(f) = &mensajes[0] else { panic!("se esperaba la Foto del héroe") };
-    assert_eq!((f.entidades.len(), f.ambito.as_ref().unwrap().id.as_str()), (2, "heroe-2"), "solo lo suyo: su columna y su héroe");
+    assert_eq!((f.entidades.len(), f.ambito.as_ref().unwrap().id.as_str()), (3, "heroe-2"), "solo lo suyo: su columna y su héroe, y lo público de la tecnología (6G)");
     assert!(matches!(f.entidades[1].cuerpo, Some(pb::entidad::Cuerpo::Heroe(_))));
+    assert!(matches!(f.entidades[2].cuerpo, Some(pb::entidad::Cuerpo::EstadoTecnologia(_))));
     let e = ejercito(&f.entidades[0]);
     assert_eq!((e.id.as_str(), e.estado, e.plan.is_none()), ("ej-1", pb::EstadoColumna::ColumnaEstacionada as i32, true));
 

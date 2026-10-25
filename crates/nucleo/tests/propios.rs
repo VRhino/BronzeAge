@@ -326,6 +326,8 @@ impl Cliente {
             Cuerpo::Avanzada(x) => (TipoEntidad::Avanzada, x.id.clone()),
             Cuerpo::Convocatoria(x) => (TipoEntidad::Convocatoria, x.id.clone()),
             Cuerpo::Batalla(x) => (TipoEntidad::Batalla, x.id.clone()),
+            // La forma pública del estado de tecnología (6G), en todo `HEROE`.
+            Cuerpo::EstadoTecnologia(_) => (TipoEntidad::EstadoTecnologia, "tecnologia".into()),
             otro => panic!("una entidad que no viaja a HEROE ni a FACCION: {otro:?}"),
         };
         self.entidades.insert((tipo as i32, id), e.clone());

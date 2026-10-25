@@ -219,6 +219,9 @@ async fn por_la_sesion_se_abre_un_alijo_y_el_heroe_lo_lleva_en_heroe_y_en_admin(
     assert!(e.n.alijos_a_la_vista(ana, e.n.ahora()).contains(&alijo));
     let w = arrancar_con(e.n).await;
     let (mut c, f) = w.entrar("ana", TipoCliente::ClienteUnity).await;
+    // 6G: el alijo a la vista viaja en su `HEROE`, con su sitio y su oro.
+    let a_la_vista: Vec<pb::Alijo> = f.entidades.iter().filter_map(|e| if let Some(pb::entidad::Cuerpo::Alijo(a)) = &e.cuerpo { Some(a.clone()) } else { None }).collect();
+    assert!(a_la_vista.iter().any(|a| a.id == id && a.oro == m.0.alijos()[alijo as usize].oro && a.posicion.as_ref().map(|p| (p.x, p.y)) == Some((sitio.x, sitio.y))), "{a_la_vista:?}");
     assert!(heroes(f.entidades.into_iter().map(Some))[0].alijos_abiertos.is_empty());
 
     let abrir = |x: &str| orden::Cuerpo::AbrirAlijo(pb::OrdenAbrirAlijo { alijo_id: x.into() });
@@ -227,11 +230,24 @@ async fn por_la_sesion_se_abre_un_alijo_y_el_heroe_lo_lleva_en_heroe_y_en_admin(
     let d = del_heroe(&deltas);
     let h = heroes(d.iter().flat_map(|d| d.cambios.iter().map(|x| x.datos.clone())));
     assert_eq!(h.last().unwrap().alijos_abiertos, vec![id.clone()], "el héroe propio con el alijo abierto, por su id del artefacto");
-    assert!(d.iter().flat_map(|d| &d.eventos).any(|x| x.codigo == "alijo.abierto"), "el hecho llega al héroe");
+    let hecho = d.iter().flat_map(|d| &d.eventos).find(|x| x.codigo == "alijo.abierto").expect("el hecho llega al héroe");
+    let Some(pb::evento_dominio::Tipado::AlijoAbierto(t)) = &hecho.tipado else { panic!("tipado: {hecho:?}") };
+    assert_eq!((t.heroe_id.clone(), t.alijo_id.as_str(), t.oro > 0, t.cargado), (format!("heroe-{ana}"), id.as_str(), true, t.oro));
+    // 6G: abierto, deja de estar a la vista: sale de su `HEROE` (en el reparto de la orden, antes del resultado).
+    assert!(d.iter().flat_map(|d| &d.cambios).any(|x| x.tipo == pb::TipoCambio::CambioQuita as i32 && x.entidad == pb::TipoEntidad::Alijo as i32 && x.id == id), "{d:?}");
     let (_, r) = dar(&mut c, "a2", abrir(&id)).await;
     assert_eq!(rechazo(&r), "alijo.ya_abierto");
     let (_, r) = dar(&mut c, "a3", abrir("alijo-de-nadie")).await;
     assert_eq!(rechazo(&r), "alijo.desconocido", "ya no es `orden.no_disponible`");
+    c.cerrar().await;
+    // 6G: quien es de una Facción con plazas no busca alijos: bea, con la suya, no recibe ninguno aunque esté en el mismo sitio.
+    let mut n = w.parar().await;
+    fundar(&mut n, "otro", 7, en_tierra(&m.0, sitio, 60_000, 0));
+    let t = n.ahora();
+    n.crear_ejercito(t, "bea", 7, sitio, 500, 100_000).unwrap();
+    let w = arrancar_con(n).await;
+    let (c, f) = w.entrar("bea", TipoCliente::ClienteUnity).await;
+    assert!(!f.entidades.iter().any(|e| matches!(e.cuerpo, Some(pb::entidad::Cuerpo::Alijo(_)))), "los alijos solo los ve quien no tiene Facción o es de una sin plazas");
     c.cerrar().await;
     // La administración ve los alijos abiertos de cada héroe.
     let (admin, f) = w.entrar("admin", TipoCliente::ClienteAdminWeb).await;

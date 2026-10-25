@@ -744,6 +744,8 @@ message CampamentoBandidos {
   uint32 poder = 9;
 }
 
+// Un alijo de exploración (Generacion_Del_Mundo §12): en el artefacto (`ArtefactoDeMundo.alijos`) y, desde 6G, en `HEROE` los que el héroe tiene a la vista
+// (si puede buscarlos y no los ha abierto: Niebla_De_Guerra §5.4), renovados con el muestreo de la vista. `oro` en milésimas, el del artefacto.
 message Alijo {
   string id = 1;
   Punto posicion = 2;
@@ -842,12 +844,24 @@ message RedCaminos {
 
 // ───────────────────────────── Tecnología, Aedas, intel ─────────────────────────────
 
+// Las tecnologías de la Facción propia (`FACCION`; las de un rival no viajan nunca). Los tres conjuntos, ordenados por id (las adoptadas: las de arranque y
+// después las demás); desde 6G, el detalle de cada revelada y las épicas que un Aeda residente de la Facción podría empezar ahora.
 message TecnologiasFaccion {
   string faccion_id = 1;
   uint64 version = 2;
   repeated string aparecidas = 3;
   repeated string adoptadas = 4;
   repeated string reveladas = 5;
+  repeated TecnologiaRevelada detalle_reveladas = 6;  // una por cada `reveladas`, en su orden
+  repeated string epicas_posibles = 7;   // con épica, logro cumplido, Era abierta, no aparecida y sin un Aeda de la Facción que ya la cante
+}
+
+// Lo que un Aeda reveló a la Facción (Tecnologia_Aedas §6.3): quién la desbloqueó y, condición a condición de su hito (`TECNOLOGIAS.<id>.hito`, en su orden),
+// si la Facción ya la cumple. El cliente compone la frase con el catálogo.
+message TecnologiaRevelada {
+  string tecnologia_id = 1;
+  string descubridora_faccion_id = 2;
+  repeated bool cumplidas = 3;
 }
 
 // Estado global de tecnología (Eras I-III; las IV y V se definen con el motor nuevo).
@@ -858,6 +872,16 @@ message EstadoTecnologia {
   map<string, int64> logros = 4;
   map<string, PrimeroEnLograr> primeros = 5;
   repeated string cantadas = 6;
+  // 6G: los logros cumplidos como hechos del mundo (`contador` llegó a `umbral` en `en_ms`), por orden, sin decir qué tecnología abren. La forma pública
+  // (`HEROE`) solo lleva `era`, `era_desde_ms`, `logros_cumplidos`, `cantadas` y, de `primeros`, las ya cantadas; `contadores` y `logros` (por id de tecnología)
+  // solo viajan a `ADMIN` (decisión Q6 del autor).
+  repeated LogroCumplido logros_cumplidos = 7;
+}
+
+message LogroCumplido {
+  string contador = 1;                   // `extraido.cobre`, `plazasEnNivel.2`...
+  sint64 umbral = 2;
+  int64 en_ms = 3;
 }
 
 message PrimeroEnLograr {
@@ -870,9 +894,12 @@ message EpicaEnCurso {
   uint32 capitulo = 2;
   uint32 hechos = 3;
   optional int64 ultimo_hecho_en_ms = 4;
-  repeated string claves = 5;
+  repeated string claves = 5;           // solo en `ADMIN`: la memoria de hechos ya contados
+  uint32 capitulos = 6;                  // 6G: cuántos tiene la épica
+  uint32 hechos_necesarios = 7;          // 6G: los que pide el capítulo en curso
 }
 
+// Un Aeda residente (`aeda-rN`), en `FACCION` de la dueña de su plaza (los rivales no ven los suyos) y en `ADMIN`; su épica, sin `claves` salvo en `ADMIN` (6G).
 message AedaResidente {
   string id = 1;
   uint64 version = 2;
@@ -883,6 +910,8 @@ message AedaResidente {
   optional EpicaEnCurso epica = 7;
 }
 
+// Un Aeda itinerante (`aeda-N`). En `VISTA`, redactado como una columna ajena (6G): `posicion`, el tramo visible de su `plan` (horizonte corto, renovado) y la plaza
+// en que está parado; nunca `hasta_ms`, `destino_id` ni `recientes`. En `ADMIN`, entero (`posicion` es donde se paró o de donde salió; con plan, el plan entero).
 message AedaItinerante {
   string id = 1;
   uint64 version = 2;

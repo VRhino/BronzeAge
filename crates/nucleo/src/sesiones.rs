@@ -224,13 +224,23 @@ impl Actor {
         for a in derechos {
             let s = self.mesa.get(sesion).expect("recién insertada");
             let (decision, mensaje) = match (reanudan.get(&a), cubos.remove(&(sesion, a))) {
-                (None, _) => (pb::DecisionReanudacion::ReanudaConFoto, Some(Difusion::Foto(foto(&self.nucleo, s, a, v)))),
-                (Some(&k), Some(cubo)) => match delta(&self.nucleo, s, a, k, v, cubo).delta {
-                    Some(d) => (pb::DecisionReanudacion::ReanudaConDeltas, Some(Difusion::Delta(d))),
-                    // Lo tocado no cambió nada que el cliente vea (la ficha de la plaza sin cambios): nada que mandar.
-                    None => (pb::DecisionReanudacion::ReanudaSinNovedad, None),
+                (None, _) => {
+                    let f = foto(&self.nucleo, s, a, v);
+                    self.mesa.recordar_foto(&self.nucleo, sesion, a);
+                    (pb::DecisionReanudacion::ReanudaConFoto, Some(Difusion::Foto(f)))
+                }
+                (Some(&k), cubo) => match cubo.and_then(|cubo| delta(&self.nucleo, s, a, k, v, cubo).delta) {
+                    // Lo que no pasa por el registro (6G: los alijos de `HEROE`; en `ADMIN`, la tecnología con sus contadores y los Aedas itinerantes) va entero en la misma `Delta`.
+                    Some(mut d) => {
+                        d.cambios.extend(self.mesa.fuera_del_registro(&self.nucleo, sesion, a));
+                        (pb::DecisionReanudacion::ReanudaConDeltas, Some(Difusion::Delta(d)))
+                    }
+                    // Lo tocado no cambió nada que el cliente vea (la ficha de la plaza sin cambios): nada que mandar. Sin novedad, el mundo no se movió: lo de fuera del registro se da por sabido.
+                    None => {
+                        self.mesa.recordar_foto(&self.nucleo, sesion, a);
+                        (pb::DecisionReanudacion::ReanudaSinNovedad, None)
+                    }
                 },
-                (Some(_), None) => (pb::DecisionReanudacion::ReanudaSinNovedad, None),
             };
             if decision == pb::DecisionReanudacion::ReanudaConDeltas {
                 avances.push(a);
@@ -340,6 +350,8 @@ impl Actor {
                 for (id, a, version, plazas) in avances {
                     self.mesa.avanzar(id, a, version, plazas);
                 }
+                // Lo que `ADMIN` ve y no pasa por el registro (6G): los contadores de la tecnología y los Aedas itinerantes.
+                self.mesa.admin_al_dia(&self.nucleo, None, &mut envios);
             }
             None => {
                 // Se perdió registro (no debería ocurrir en vivo): foto completa de todos los ámbitos a todos.
@@ -352,11 +364,14 @@ impl Actor {
         // en el muestreo siguiente; tras un cambio que no viene de una orden, o con el reloj parado (no hay muestreo que esperar), todas al momento.
         let ahora = self.nucleo.ahora();
         let parado = self.reloj.con(|r, _| r.pausado() || r.factor_milesimas() == 0);
+        // Los alijos a la vista del `HEROE` (6G) se renuevan igual, con la columna que anda.
         if ahora >= self.proxima_vista || (hasta != self.entregada && (causante.is_none() || parado)) {
             self.mesa.reconciliar_vistas(&self.nucleo, None, &mut envios);
+            self.mesa.reconciliar_alijos(&self.nucleo, None, &mut envios);
             self.proxima_vista = siguiente_muestreo(ahora);
         } else if hasta != self.entregada {
             self.mesa.reconciliar_vistas(&self.nucleo, causante, &mut envios);
+            self.mesa.reconciliar_alijos(&self.nucleo, causante, &mut envios);
         }
         self.entregada = hasta;
         self.mesa.entregar(envios);

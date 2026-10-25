@@ -37,6 +37,11 @@ ids! {
     u64, "prop", propuesta, parse_propuesta;
 }
 
+/// Un Aeda itinerante, `aeda-N` (6D; decisión técnica 7 del plan del sistema 6).
+pub fn aeda(n: u32) -> String {
+    format!("aeda-{n}")
+}
+
 /// Un Aeda residente, `aeda-rN` (6E, decisión técnica 7 del plan del sistema 6; los itinerantes son `aeda-N`).
 pub fn aeda_residente(n: u32) -> String {
     format!("aeda-r{n}")

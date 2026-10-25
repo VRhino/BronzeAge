@@ -35,6 +35,9 @@ use std::collections::BTreeMap;
 /// Una entidad del contrato lista para viajar: su clase, su id y su cuerpo.
 pub type Proyectada = (pb::TipoEntidad, String, Cuerpo);
 
+/// El id del estado de tecnología del mundo en el contrato (una sola entidad).
+pub const ID_ESTADO_TECNOLOGIA: &str = "tecnologia";
+
 /// Quién mira: el héroe de una sesión de jugador (`None` sin héroe) o la administración (`ADMIN`), que lo ve todo sin redactar menos lo que es secreto de cada jugador (los tokens de batalla).
 /// Decide lo que de una entidad depende de quién la mira: las peticiones de una convocatoria y lo que se ve de una batalla.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -515,7 +518,8 @@ pub fn faccion_publica(n: &Nucleo, f: u32) -> pb::Faccion {
     pb::Faccion { experiencia: 0, capital_designada_en_ms: None, capital_id: None, ..faccion(n, f) }
 }
 
-/// Las tecnologías adoptadas de la Facción (6B, `Estado::tecnologia`): las de arranque y después las demás, cada grupo por su id. DUDA: sin `aparecidas` ni `reveladas` hasta 6G.
+/// Las tecnologías de la Facción (6G, `Estado::tecnologia`; Proyecciones §6.3: las de un rival no viajan nunca): las aparecidas y las reveladas por su id, las adoptadas con las de arranque
+/// primero (como desde 6B); de cada revelada, su descubridora y qué condiciones de su hito cumple ya (en el orden de `reveladas`), y las épicas que podría empezar ahora un Aeda suyo.
 pub fn tecnologias(n: &Nucleo, f: u32) -> pb::TecnologiasFaccion {
     let e = n.estado();
     let r = &e.reglas.economia.tecnologia;
@@ -524,10 +528,122 @@ pub fn tecnologias(n: &Nucleo, f: u32) -> pb::TecnologiasFaccion {
         v.sort();
         v
     };
-    let propias = e.tecnologia.de(r, f).adoptadas;
+    let propias = e.tecnologia.de(r, f);
     let mut adoptadas = nombres(r.de_arranque);
-    adoptadas.extend(nombres(tecnologia::Conjunto(propias.0 & !r.de_arranque.0)));
-    pb::TecnologiasFaccion { faccion_id: ids::faccion(f), version: n.version_de(Clase::Faccion, u64::from(f)), adoptadas, ..Default::default() }
+    adoptadas.extend(nombres(tecnologia::Conjunto(propias.adoptadas.0 & !r.de_arranque.0)));
+    let mut detalle: Vec<pb::TecnologiaRevelada> = n
+        .reveladas_con_detalle(f)
+        .into_iter()
+        .map(|(x, descubridora, cumplidas)| pb::TecnologiaRevelada { tecnologia_id: r.def(x).id.clone(), descubridora_faccion_id: descubridora.map(ids::faccion).unwrap_or_default(), cumplidas })
+        .collect();
+    detalle.sort_by(|a, b| a.tecnologia_id.cmp(&b.tecnologia_id));
+    pb::TecnologiasFaccion {
+        faccion_id: ids::faccion(f),
+        version: n.version_de(Clase::Faccion, u64::from(f)),
+        aparecidas: nombres(propias.aparecidas),
+        adoptadas,
+        reveladas: nombres(propias.reveladas),
+        detalle_reveladas: detalle,
+        epicas_posibles: nombres(n.epicas_posibles(f)),
+    }
+}
+
+/// El estado de tecnología del mundo (6G; la entidad `ESTADO_TECNOLOGIA`, id `tecnologia`). Para un jugador, su forma pública (decisión Q6 del autor; Proyecciones §6.3): la Era, desde cuándo, los
+/// logros cumplidos como hechos del mundo (`contador` llegó a `umbral`, por orden, sin decir qué tecnología abren), lo cantado y, de las descubridoras, solo las cantadas. La administración lo ve
+/// entero: los contadores en curso y los logros y las descubridoras por tecnología.
+pub fn estado_tecnologia(n: &Nucleo, quien: Espectador) -> pb::EstadoTecnologia {
+    let e = n.estado();
+    let (r, t) = (&e.reglas.economia.tecnologia, &e.tecnologia);
+    let admin = quien == Espectador::Admin;
+    let id = |x: usize| r.def(x as tecnologia::TecId).id.clone();
+    let mut logros_cumplidos: Vec<pb::LogroCumplido> = t
+        .logros
+        .iter()
+        .enumerate()
+        .filter_map(|(x, en)| Some((r.def(x as tecnologia::TecId).logro?, (*en)?)))
+        .map(|(l, en)| pb::LogroCumplido { contador: l.contador.nombre().to_owned(), umbral: l.umbral as i64, en_ms: en })
+        .collect();
+    logros_cumplidos.sort_by(|a, b| (a.en_ms, &a.contador, a.umbral).cmp(&(b.en_ms, &b.contador, b.umbral)));
+    let primeros = t
+        .primeros
+        .iter()
+        .enumerate()
+        .filter(|&(x, _)| admin || t.cantadas.contiene(x as tecnologia::TecId))
+        .filter_map(|(x, p)| p.map(|p| (id(x), pb::PrimeroEnLograr { faccion_id: ids::faccion(p.faccion), en_ms: p.en })))
+        .collect();
+    let mut cantadas: Vec<String> = t.cantadas.iter().map(|x| id(x as usize)).collect();
+    cantadas.sort();
+    pb::EstadoTecnologia {
+        era: r.eras[t.era as usize].id.clone(),
+        era_desde_ms: t.era_desde,
+        contadores: if admin { tecnologia::contador::Contador::TODOS.into_iter().map(|c| (c.nombre().to_owned(), t.contador(c) as i64)).collect() } else { Default::default() },
+        logros: if admin { t.logros.iter().enumerate().filter_map(|(x, en)| Some((id(x), (*en)?))).collect() } else { Default::default() },
+        primeros,
+        cantadas,
+        logros_cumplidos,
+    }
+}
+
+/// Un Aeda residente (6G) con su épica: el capítulo en curso, los hechos que lleva y los que pide, cuántos capítulos tiene y cuándo contó el último hecho (el enfriamiento). La memoria de hechos ya
+/// contados (`claves`), solo para la administración.
+pub fn aeda_residente(n: &Nucleo, a: &tecnologia::residentes::AedaResidente, quien: Espectador) -> pb::AedaResidente {
+    let r = &n.estado().reglas.economia.tecnologia;
+    let epica = a.epica.as_ref().map(|x| {
+        let capitulos = r.def(x.tec).epica.as_ref().map_or(&[][..], |d| &d.capitulos[..]);
+        pb::EpicaEnCurso {
+            tecnologia_id: r.def(x.tec).id.clone(),
+            capitulo: u32::from(x.capitulo),
+            hechos: x.hechos,
+            ultimo_hecho_en_ms: x.ultimo_hecho_en,
+            claves: if quien == Espectador::Admin { x.claves.iter().map(|c| clave_de_epica(n, r, c)).collect() } else { Vec::new() },
+            capitulos: capitulos.len() as u32,
+            hechos_necesarios: capitulos.get(usize::from(x.capitulo)).map_or(0, |c| c.cantidad),
+        }
+    });
+    pb::AedaResidente {
+        id: ids::aeda_residente(a.id),
+        version: n.version_de(Clase::Residente, u64::from(a.id)),
+        nombre: a.nombre().into(),
+        asentamiento_id: ids::asentamiento(u64::from(a.plaza)),
+        faccion_id: ids::faccion(a.faccion),
+        llegada_en_ms: a.llegada_en,
+        epica,
+    }
+}
+
+/// La clave de un hecho ya contado por una épica, como la del TypeScript con los ids del contrato (`defensa:as-3:<instante>`, `obra:ed-3-2:1`, `batalla:<battleId>`...).
+fn clave_de_epica(n: &Nucleo, r: &tecnologia::Reglas, c: &tecnologia::epicas::Clave) -> String {
+    use tecnologia::epicas::Clave as K;
+    match *c {
+        K::Defensa { plaza, en } => format!("defensa:{}:{en}", ids::asentamiento(u64::from(plaza))),
+        K::Conquista { plaza, en } => format!("conquista:{}:{en}", ids::asentamiento(u64::from(plaza))),
+        K::Batalla { a, b, en } => format!("batalla:{}:{}:{en}", ids::ejercito(a), ids::ejercito(b)),
+        K::Unity { tipo, batalla } => format!("{}:{}", tipo.nombre(), n.uuid_de_batalla(batalla)),
+        K::Obra { plaza, edificio, nivel } => format!("obra:{}:{nivel}", ids::edificio(u64::from(plaza), edificio)),
+        K::Ascenso { plaza, nivel } => format!("ascenso:{}:{nivel}", ids::asentamiento(u64::from(plaza))),
+        K::Adopcion { faccion, tec } => format!("adopcion:{}:{}", ids::faccion(faccion), r.def(tec).id),
+        K::Caravana(c) => format!("caravana:{}", ids::caravana(c)),
+    }
+}
+
+/// Un Aeda itinerante entero (6G, `ADMIN`): dónde se paró o de dónde salió, la plaza en que está y hasta cuándo, adónde va con su plan entero y las plazas que visitó hace poco. La `VISTA` lo
+/// redacta (`vista::Mirada::contenido`). Los Aedas no son una clase del registro de cambios (moverse no sube la versión): `version` va a 0 y `ADMIN` los compara en cada reparto.
+pub fn aeda_itinerante(a: &tecnologia::itinerantes::AedaItinerante) -> pb::AedaItinerante {
+    pb::AedaItinerante {
+        id: ids::aeda(a.id),
+        version: 0,
+        posicion: Some(punto(a.posicion)),
+        en_asentamiento_id: a.en.map(|p| ids::asentamiento(u64::from(p))),
+        hasta_ms: a.hasta,
+        destino_id: a.destino.map(|p| ids::asentamiento(u64::from(p))),
+        plan: a.plan.as_ref().map(plan),
+        recientes: a.recientes.iter().map(|&p| ids::asentamiento(u64::from(p))).collect(),
+    }
+}
+
+/// Un alijo del artefacto (6G, los que el héroe tiene a la vista en `HEROE`): su id, dónde está y su oro (milésimas, el del artefacto).
+pub fn alijo(n: &Nucleo, i: u32) -> Option<pb::Alijo> {
+    n.alijo(i).map(|a| pb::Alijo { id: a.id.clone(), posicion: Some(punto(a.posicion)), oro: a.oro })
 }
 
 /// Una relación entre dos Facciones (5D): con su dirección (en un vasallaje `a` es la señora; en una guerra, quien la declaró), su tributo, cuándo nació, quién la rompió y quién ofreció la paz.
@@ -809,6 +925,8 @@ pub fn proyectar(n: &Nucleo, quien: Espectador, clase: Clase, id: u64) -> Proyec
             };
             Proyeccion { posibles: vec![(T::Faccion, ids::faccion(f)), (T::TecnologiaFaccion, ids::faccion(f))], existen }
         }
+        Clase::Residente => un(T::Aeda, ids::aeda_residente(id as u32), e.residentes.get(id as u32).map(|a| Cuerpo::AedaResidente(aeda_residente(n, a, quien)))),
+        Clase::Tecnologia => un(T::EstadoTecnologia, ID_ESTADO_TECNOLOGIA.into(), Some(Cuerpo::EstadoTecnologia(estado_tecnologia(n, quien)))),
         Clase::Titulo => {
             let t = politica::titulos::TituloId::de_indice(id);
             let x = t.and_then(|t| e.politica.titulos.iter().find(|x| x.id == t));
@@ -838,10 +956,12 @@ pub fn proyectar(n: &Nucleo, quien: Espectador, clase: Clase, id: u64) -> Proyec
     }
 }
 
-/// Todo lo que hay en el mundo menos las plazas (que `ADMIN` lleva con su interior, `interior::asentamiento`), por clase e id: lo que [`proyectar`] da a la administración.
+/// Todo lo que hay en el mundo menos las plazas (que `ADMIN` lleva con su interior, `interior::asentamiento`), por clase e id: lo que [`proyectar`] da a la administración. Los Aedas itinerantes
+/// no son una clase: la foto de `ADMIN` los añade aparte (`sesiones::ambitos::foto`).
 ///
 /// DUDA: no están la memoria de la niebla de cada Facción (lo explorado, las fichas, las Miradas y los Informes de plaza: no tienen clase en el registro de cambios), la red de caminos, los
-/// precios de referencia ni el historial de cada héroe (ni, cuando existan, las Aedas; los títulos van desde 5F), que el `admin/partida` del TypeScript sí llevaba (fila «Contrato (4H, T3e)»).
+/// precios de referencia ni el historial de cada héroe, que el `admin/partida` del TypeScript sí llevaba (fila «Contrato (4H, T3e)»). Los títulos van desde 5F; los Aedas, sus épicas, el
+/// estado de tecnología del mundo y los alijos (en el artefacto), desde 6G.
 pub fn todo_menos_plazas(n: &Nucleo) -> Vec<(Clase, u64)> {
     let e = n.estado();
     let mut v: Vec<(Clase, u64)> = audiencia::CLASES.into_iter().filter(|c| !matches!(c, Clase::Asentamiento | Clase::Escuadra)).flat_map(|c| audiencia::todas(e, c).into_iter().map(move |id| (c, id))).collect();
@@ -850,6 +970,7 @@ pub fn todo_menos_plazas(n: &Nucleo) -> Vec<(Clase, u64)> {
     v.extend(n.puertas_de_campamentos().map(|(c, _)| (Clase::Campamento, u64::from(c))));
     v.extend(e.combate.bandidos.keys().map(|&b| (Clase::Bandidos, b)));
     v.extend(e.politica.titulos.iter().map(|x| (Clase::Titulo, x.id.indice())));
+    v.push((Clase::Tecnologia, 0));
     v
 }
 
