@@ -1,6 +1,6 @@
 //! Las relaciones entre Facciones en el núcleo (sistema 5, tanda 5D; Diplomacia_Facciones §5): proponer, aceptar, rechazar y retirar una alianza o un vasallaje (quién puede, una sola
 //! pendiente, la caducidad), declarar la guerra con el arrastre por vasallaje (por la orden y al atacar), la traición al aliado (Q2), la paz, romper, la rebelión, la reputación que mueven,
-//! el tributo en el paso de minuto (Q3), el desarme del señor y la vasalla conquistada, reabastecer a los aliados y admitir otras Facciones, la foto `BAN35` y el determinismo.
+//! el tributo en el paso de minuto (Q3), el desarme del señor y la vasalla conquistada, reabastecer a los aliados y admitir otras Facciones, la foto `BAN36` y el determinismo.
 //! Casos de `typescript-final:src/session/__tests__/comandosDiplomacia.test.ts`, `engine/__tests__/{eventosDominioDiplomacia,reputacionVasallos,vasallaConquistada}.test.ts`.
 //! Las pruebas con plazas usan el artefacto de mundo real y se omiten si no está.
 
@@ -439,7 +439,7 @@ fn la_diplomacia_es_determinista_viaja_en_la_foto_ban32_y_nada_espera_en_la_cola
     // La foto lleva las relaciones con su historia, la propuesta pendiente, el resto del tributo y la apertura a los aliados, y cada pieza mueve el hash.
     let (reglas, hash) = (normal.n.estado().reglas.clone(), m.0.hash().to_string());
     let bytes = normal.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN36");
+    assert_eq!(&bytes[..5], b"BAN37");
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     assert_eq!((s.politica.clone(), s.hash()), (normal.n.estado().politica.clone(), normal.n.hash_estado()));
     assert!(s.politica.relaciones.iter().count() >= 3 && s.politica.propuestas.iter().count() == 1);

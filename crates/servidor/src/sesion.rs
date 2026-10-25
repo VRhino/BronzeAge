@@ -371,6 +371,10 @@ async fn bucle<A: Autenticador>(
                         Difusion::Revocado(x) => (ms::Cuerpo::Revocado(x), false),
                         Difusion::Aviso(x) => (ms::Cuerpo::Aviso(x), false),
                         Difusion::Batalla(x) => (ms::Cuerpo::Batalla(x), false),
+                        Difusion::Cronica(x) => {
+                            pendientes = pendientes.saturating_sub(1);
+                            (ms::Cuerpo::Cronica(x), false)
+                        }
                         Difusion::Cerrar(e) => {
                             let f = e.fatal;
                             (ms::Cuerpo::Error(e), f)
@@ -418,15 +422,18 @@ async fn bucle<A: Autenticador>(
                         continue;
                     }
                     Some(mc::Cuerpo::Orden(orden)) => {
-                        if pendientes >= ctx.config.max_ordenes_pendientes {
-                            let msg = format!("más de {} órdenes pendientes; la orden {} no se ejecuta", ctx.config.max_ordenes_pendientes, orden.peticion_id);
-                            if !em.error(error(codigos::DEMASIADAS_ORDENES, &msg, false)).await {
-                                return;
-                            }
+                        let Ok(admitida) = admitir(em, &mut pendientes, ctx.config.max_ordenes_pendientes, &orden.peticion_id).await else { return };
+                        if !admitida {
                             continue;
                         }
-                        pendientes += 1;
                         ComandoSesion::Orden { sesion: id, orden }
+                    }
+                    Some(mc::Cuerpo::PedirCronica(pedir)) => {
+                        let Ok(admitida) = admitir(em, &mut pendientes, ctx.config.max_ordenes_pendientes, &pedir.peticion_id).await else { return };
+                        if !admitida {
+                            continue;
+                        }
+                        ComandoSesion::Cronica { sesion: id, pedir }
                     }
                     Some(mc::Cuerpo::Vista(v)) => match v.rectangulo {
                         Some(rect) => ComandoSesion::Vista { sesion: id, rect },
@@ -460,6 +467,16 @@ async fn bucle<A: Autenticador>(
             }
         }
     }
+}
+
+/// Una orden (o un `PedirCronica`) más, si cabe en el límite de pendientes: `Ok(false)` si no cabe (ya se contestó `demasiadas_ordenes`), `Err` si el socket falló.
+async fn admitir(em: &mut Emisor, pendientes: &mut u32, maximo: u32, peticion_id: &str) -> Result<bool, ()> {
+    if *pendientes >= maximo {
+        let msg = format!("más de {maximo} órdenes pendientes; la orden {peticion_id} no se ejecuta");
+        return if em.error(error(codigos::DEMASIADAS_ORDENES, &msg, false)).await { Ok(false) } else { Err(()) };
+    }
+    *pendientes += 1;
+    Ok(true)
 }
 
 async fn aviso(em: &mut Emisor, codigo: &str, mensaje: &str) {

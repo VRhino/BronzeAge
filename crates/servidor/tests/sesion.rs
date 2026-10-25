@@ -271,6 +271,24 @@ async fn limite_de_ordenes_pendientes() {
     }
 }
 
+/// `PedirCronica` llega al núcleo y su `Cronica` vuelve con el mismo `peticion_id`; ocupa un hueco de pendientes como una orden.
+#[tokio::test]
+async fn la_cronica_se_pide_y_cuenta_como_pendiente() {
+    let pedir = |id: &str| mc::Cuerpo::PedirCronica(contrato::v1::PedirCronica { peticion_id: id.into(), ..Default::default() });
+    let (srv, _) = arrancar(Config { max_ordenes_pendientes: 1, ..Config::default() }).await;
+    let (mut c, _) = ClientePrueba::entrar(srv.direccion, hola("ok:ana", TipoCliente::ClienteUnity)).await;
+    c.esperar().await;
+    for i in 0..3 {
+        c.enviar(pedir(&format!("c{i}"))).await;
+        let Some(ms::Cuerpo::Cronica(r)) = c.esperar().await.cuerpo else { panic!("se esperaba Cronica") };
+        assert_eq!(r.peticion_id, format!("c{i}"), "la respuesta libera el hueco");
+    }
+    c.orden("lenta").await;
+    c.enviar(pedir("c9")).await;
+    let Some(ms::Cuerpo::Error(e)) = c.esperar().await.cuerpo else { panic!("se esperaba ErrorSesion") };
+    assert_eq!((e.codigo.as_str(), e.fatal), ("demasiadas_ordenes", false));
+}
+
 #[tokio::test]
 async fn vista_y_batalla() {
     let (srv, _) = arrancar(Config::default()).await;

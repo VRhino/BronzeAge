@@ -32,15 +32,15 @@ const CELDA: i64 = 10_000;
 pub const REGENERA_GANADO_MIN: i64 = 3;
 pub const REGENERA_MINERAL_MIN: i64 = 10;
 
-/// Puntos indexados por celda para preguntar «los que caen en este disco».
-struct Rejilla {
+/// Puntos indexados por celda para preguntar «los que caen en este disco». La usan también los alijos (`nucleo/alijos.rs`).
+pub(crate) struct Rejilla {
     columnas: i64,
     filas: i64,
     celdas: Vec<Vec<u32>>,
 }
 
 impl Rejilla {
-    fn nueva(ancho: i64, alto: i64, puntos: impl Iterator<Item = (u32, Punto)>) -> Self {
+    pub(crate) fn nueva(ancho: i64, alto: i64, puntos: impl Iterator<Item = (u32, Punto)>) -> Self {
         let (columnas, filas) = (ancho / CELDA + 1, alto / CELDA + 1);
         let mut celdas = vec![Vec::new(); (columnas * filas) as usize];
         for (id, p) in puntos {
@@ -51,7 +51,7 @@ impl Rejilla {
     }
 
     /// Ids cuyo punto está a `radio` o menos de `centro`, en orden ascendente de id.
-    fn en_disco(&self, centro: Punto, radio: Mil, posicion: impl Fn(u32) -> Punto) -> Vec<u32> {
+    pub(crate) fn en_disco(&self, centro: Punto, radio: Mil, posicion: impl Fn(u32) -> Punto) -> Vec<u32> {
         // Los dos extremos se acotan a la rejilla: un punto fuera del mapa vive en la celda del borde, y un disco que empieza más allá
         // del borde aún puede alcanzarlo.
         let celda = |v: i64, n: i64| v.div_euclid(CELDA).clamp(0, n - 1);

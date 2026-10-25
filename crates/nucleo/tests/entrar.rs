@@ -546,7 +546,7 @@ fn una_foto_con_el_acceso_cambiado_se_recupera_y_la_anterior_se_rechaza() {
     e.avanzar(HORA);
     e.ok("admin", comun::acceso(e.a, false, true, true));
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN36");
+    assert_eq!(&bytes[..5], b"BAN37");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.asentamientos[&e.a].puerta.cerrada_a, Some(politica::Grupos::de([politica::Grupo::Aliados])));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));

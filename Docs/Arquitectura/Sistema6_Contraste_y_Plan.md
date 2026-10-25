@@ -404,3 +404,139 @@ Q4 queda escrita en TA §2.1 y §14. La nota «Implementado en Rust (6A)» está
 2. **La adopción no rechaza «sin Rey»** en las reglas puras (el TS sí, con `tecnologia.adopcion_invalida`): quien da la orden ya tiene que ser el Rey por la autorización del núcleo, así
    que el caso no llega. Recomendado: sin rechazo propio.
 3. **La clave de una obra lleva la plaza** (`obra:<plaza>:<edificio>:<nivel>`): en Rust el id de un edificio es de su plaza, no global como en el TS. No cambia ninguna regla.
+
+## Avance de 6F (2026-10-25, rama `tanda-6f`, foto `BAN36`)
+
+Hecha en paralelo con 6A (el crate `tecnologia`) y con la crónica con todo su historial, sobre `7ab7986` (foto `BAN35`): los alijos no dependen de la tecnología.
+
+**Diseño.**
+- **Reglas puras:** las de `tecnologia::alijos` (6A: `a_la_vista`, `abrir` con `Apertura { oro, cargado }`). 6F las escribió primero en `crates/nucleo/src/alijos.rs`, en paralelo; al integrar con `origin` (6A, `b18a259`) ese módulo se borró y el núcleo usa las del crate (`nucleo` depende ya de `tecnologia`). «Puede buscar» (sin Facción o de una sin plazas) lo calcula el núcleo y se lo pasa.
+- **El artefacto** (55 alijos en el de hoy) se lee una vez en la geografía del núcleo (`nucleo/alijos.rs`, `AlijosDelMundo`): id de cadena, posición y oro en milésimas, con una rejilla de 10 u. La rejilla es la de la economía (`economia::Rejilla`, ahora `pub(crate)`): no hacía falta otra. La de encuentros no sirve (es de móviles con plan). No es estado: no entra en la foto.
+- **Estado:** `HeroeNucleo::alijos_abiertos: BTreeSet<u32>` (índices del artefacto), en el códec del héroe tras `residencia_cambiada_en`. Foto `BAN36`; `BAN35` se rechaza con su motivo.
+- **Orden:** `AbrirAlijo { heroe, alijo }`, **174** (el siguiente libre tras el 173), `Autoriza::CuentaDelHeroe`, implica al héroe (candado de batalla). Rechazos en este orden: `alijo.desconocido`, `alijo.no_puedes_buscar`, `alijo.ya_abierto`, `alijo.lejos` (también sin columna en el mapa). El oro va en unidades enteras hacia abajo al carro con `cargar_botin_en`; lo que no cabe se pierde y el alijo queda abierto igual (decisión 10). Hecho `alijo.abierto { heroe, oro, cargado }` con `alijo` = id del artefacto en `valores`, para el héroe y los participantes de su columna.
+- **«A la vista»:** la consulta `Nucleo::alijos_a_la_vista(heroe, t)` (si puede buscar, columna en el mapa a `VISION.jugadorSolo`, sin abrir). Su proyección en `HEROE`, renovada en el muestreo, es de 6G y no se hizo.
+- **Contrato:** `abrir_alijo` mapeada (el héroe de la cuenta; `alijo_id` es el id del artefacto, resuelto por `Consulta::alijo`; uno desconocido se rechaza sin rastro), su fila en la matriz de Proy §5.1 (y la de §5.2 sacada de las de campamento, C7), cuatro rechazos en el catálogo, `Heroe.alijos_abiertos = 22` (ya estaba en el esquema) lleno en `HEROE` y `ADMIN`, dos dorados nuevos (`orden_abrir_alijo`, `foto_heroe_con_alijos_abiertos`). Sin cambio de esquema: `buf breaking` limpio. Quedan 4 órdenes `orden.no_disponible` (tecnología y Aedas).
+- **Sin tick:** abrir no programa nada y un alijo no tiene cita; la prueba lo mira con la longitud de la cola.
+
+**Pruebas** (`crates/nucleo/tests/alijos.rs`, 5; las unitarias de las reglas son las de `tecnologia::alijos`, 6A): ver y abrir una vez por héroe, otro héroe abre el mismo, cada rechazo sin rastro (también con plaza en la Facción), el carro casi lleno y lleno (conservación: entra exactamente lo cargado), la foto `BAN36` ida y vuelta con el hash y `BAN35` rechazada, y por el WebSocket real: abrir, el héroe con su alijo en `HEROE` y en `ADMIN`, `alijo.ya_abierto` y `alijo.desconocido`.
+
+**Cifras** (tras integrar 6A, `b18a259`). `cargo test --workspace --no-fail-fast`: 1.525 pruebas en verde, 14 ignoradas, 0 fallos (99 resultados de prueba; antes de integrar, 1.462). Auditoría (`BRONZEAGE_AUDITAR_CAMBIOS=1 cargo test -p nucleo -- --skip rendimiento`): 545 sin fallos. Las pruebas de sesión (los 15 binarios con pruebas por el WebSocket real, 101 pruebas) 20 veces seguidas: 2.020 sin un fallo. `buf lint` y `buf breaking` limpios; dorados verdes en Rust, C# (83) y TypeScript (83). El paso de minuto no se midió: la tanda no lo toca.
+
+**Dudas para el autor (6F).** (1) `alijo.lejos` también cuando el héroe no va en una columna en el mapa (dentro de un lugar no se abre, como el TypeScript). (2) El hecho lo oyen el héroe y los participantes de su columna, porque el oro entra en el carro común. (3) Un alijo desconocido se rechaza en la traducción del contrato, sin pasar por el núcleo, como los demás ids.
+
+## Avance de la crónica (6C, infraestructura)
+
+Hecho el 2026-10-25 en la rama `tanda-6-cronica`, adelantado del resto de 6C porque no depende de las reglas de tecnología. **Sin cambio de foto** (sigue `BAN35`): la crónica no entra en la
+foto ni en el hash, y la versión y el hash son los mismos con ella y sin ella (lo comprueban las pruebas contra el mismo guion en memoria). Esquema aditivo y dos dorados nuevos (84 pares con los dos de 6F).
+
+**Almacén** (`crates/persistencia/src/diario.rs`, `persistencia::Diario`). Un `Registro` propio (los mismos segmentos con longitud + CRC32) en `<partida>/cronica/`. Cada entrada lleva en sus datos
+la versión que la produjo (8 bytes) y el `EventoDominio` `cronica.entrada` codificado, el mismo que viaja en las `Delta`; la secuencia del registro es su contador propio, sin huecos. Índice en
+memoria: una marca (versión, secuencia, segmento, desplazamiento) cada 256 entradas, que se rehace leyendo el diario una vez al abrirlo. `Registro` gana `anadir_ubicado` (dice dónde quedará cada
+entrada) y `confirmar` (el volcado de `anadir_lote`); nada cambia para el registro de órdenes.
+
+**Escritura** (`crates/nucleo/src/nucleo.rs`, `nucleo/cronica.rs`). Solo en el núcleo persistente: al cerrar cada versión, sus entradas se proyectan y codifican (`apuntar_cronica`, ≈ 0,7 µs cada
+una; las versiones sin entradas no hacen nada) y quedan en una cola que `volcar_log` manda al hilo de las fotos, ahora **hilo de la persistencia**, por el mismo canal que las fotos: así toda entrada
+con versión ≤ la de una foto está escrita antes que la foto (R4), y el hilo sincroniza el diario antes de escribirla. El hilo agrupa en un solo volcado lo que encuentra esperando. Si el diario no se
+puede escribir, el hilo deja de hacer fotos (aviso por `stderr`): al reiniciar se vuelve a una foto anterior y la repetición rehace lo que falte, sin huecos.
+
+**Recuperación.** `Nucleo::con_persistencia` abre el diario con la versión de la foto que carga (0 sin foto): repara la cola dañada como el registro (avisa), **trunca lo posterior** y la repetición del
+registro de órdenes lo vuelve a escribir igual. Si el diario no estaba y había foto, avisa (`Aviso::DiarioPerdido`) y sigue.
+
+**Lectura** (contrato 05 §8). `PedirCronica { peticion_id, desde_version?, hasta_version?, limite }` → `Cronica { peticion_id, entradas, mas_antiguas, mas_recientes, version }`: hacia atrás hasta
+una versión (o desde la última) o hacia delante desde ella; 200 por defecto, 1.000 como mucho; **una página nunca parte las entradas de una versión**. El actor la pasa al hilo de la persistencia
+(`Nucleo::pedir_cronica`), que la contesta detrás de lo ya escrito: no toca el estado ni bloquea el actor, y la página llega hasta la versión del mundo de ese momento. La respuesta va directa al canal
+de la sesión; en el servidor cuenta como pendiente, como una orden. Sin persistencia, página vacía.
+
+**Pruebas.** `persistencia` (3 nuevas y 1 medición): páginas contra el recorte hecho a mano con 7 límites y 10 combinaciones de desde/hasta, cruzando segmentos, y encadenadas hacia atrás y hacia
+delante sin repetir ni saltar; truncar al abrir y volver a escribir; cola cortada reparada con aviso; diario perdido. `nucleo/tests/cronica.rs` (4 nuevas y 1 medición): guardar, apagar, recuperar y
+leer igual que la referencia en memoria, con la misma versión y el mismo hash; **tres cortes tras una foto** (sin apagar, con la crónica por delante de la foto; con el lote siguiente perdido; con el
+lote a medias), y en los tres la crónica de la referencia, también al seguir jugando; las páginas de 200 por defecto, el tope de 1.000 y el encadenado; **por el WebSocket real**, quien llega tarde
+lee todo, una entrada nueva está en la página en cuanto su orden tiene resultado (la misma que llega en la `Delta`) y tras parar y recuperar la misma. `servidor/tests/sesion.rs` (1): `PedirCronica`
+llega y cuenta como pendiente. `contrato` (1): el significado de los dos dorados. TS y C#: 83 dorados cada uno. `cargo test --workspace --no-fail-fast`: 1.461 pruebas en verde (97 resultados, 16 ignoradas); las 105 pruebas de sesión (`admin`, `ambitos`, `batalla_unity`, `cliente_de_ejemplo`, `cronica`, `eventos`, `interior`, `ordenes`, `ordenes_mundo`, `politica`, `propios`, `reanudacion`, `sesiones`, `vista` y `servidor/tests/sesion.rs`) 20 veces seguidas: 2.100 ejecuciones, 0 fallos; `buf lint` y `buf breaking` limpios.
+
+**Mediciones** (release, con otras compilaciones en la máquina a la vez: ruido de ±20 %):
+
+| Qué | Cifra |
+|---|---|
+| Diario solo: 100.000 entradas de 120 bytes (15,4 MB) | escribir 88 ms; abrir e indexar 105 ms; página de las 200 últimas 0,38 ms, de 1.000 hasta la mitad 0,87 ms |
+| Por el núcleo: 200.000 órdenes que dejan 100.003 entradas | 13,3 MB (132 bytes por entrada); página de las 200 últimas 0,66 ms y de 1.000 hasta la mitad 1,6-2,1 ms (con la decodificación y el canal); recuperar 0,22 s (antes 0,11-0,14 s: abrir e indexar el diario) |
+| Coste por orden (las mismas 200.000 órdenes persistentes, una de cada dos canta) | base 2,14-2,68 s, nueva 2,50-2,79 s (media +0,26 s: ≈ 2,6 µs por entrada; nada en las órdenes sin entrada) |
+| Paso de minuto (`asentamientos rendimiento`, 1.000 plazas × 3 días, sin persistencia) | base 28,7 y 27,1 s, nueva 27,1 y 25,9 s; los mismos 3.061.541 pasos y la versión 50.408 |
+
+**Dudas para el autor** (también en la fila de paridad «Crónica (6C, infraestructura)»):
+
+1. **El directorio** va dentro del de la partida (`<partida>/cronica/`), no al lado como decía §5.3: una partida es un solo directorio y dos partidas en la misma carpeta no se pisan.
+2. **La forma guardada** es el `EventoDominio` codificado (≈ 132 bytes por entrada; 100.000 entradas, 13 MB), no el binario fijo de ≈ 40 bytes de §5.3: un solo formato, el mismo que en vivo, y
+   sin códec propio. Si una season da muchas más entradas de las previstas, se puede compactar el formato sin tocar el contrato.
+3. **Quién escribe**: el hilo de las fotos (ahora de la persistencia), no el núcleo, que es quien sincroniza el registro de órdenes y lo hace en el camino de la orden. Así la orden no espera al
+   disco de la crónica y el orden respecto de las fotos sale del canal.
+4. **Un fallo al escribir la crónica deja de hacer fotos** en vez de abortar como el registro de órdenes: el mundo sigue y al reiniciar se rehace lo que falte; el precio es una repetición más
+   larga. ¿O prefieres que pare el servidor?
+5. **La historia perdida antes de la foto** (el diario borrado o dañado antes de ella) solo se avisa: no hay herramienta para recomponerla, y no siempre se podría, porque `compactar` borra los
+   segmentos del registro de órdenes anteriores a la foto más antigua. ¿Hace falta conservar el registro entero para eso?
+6. **Una página puede pasar del límite** si su primera versión tiene más entradas que el límite (va entera para no partirla); en la práctica una versión trae pocas.
+7. **Sin persistencia no se guarda** (pruebas y batch): las páginas van vacías. El batch político y el militar, que comprueban la foto de ida y vuelta abriendo un núcleo persistente sobre una
+   foto suelta, reciben el aviso `DiarioPerdido` (no lo miran).
+8. **La página y las `Delta` se solapan**: la página llega hasta la versión al pedirla y las `Delta` siguen llegando; el cliente reconoce las repetidas por la versión.
+9. **Lo que falta de la crónica en 6C**: los cuatro públicos del sistema 6 (`tecnologia.logro`, `era.comienza`, `aedas.canta_descubrimiento`, `aedas.epica_cumplida`), que entran tal cual cuando
+   existan sus reglas (6B-6E); y `primera_en_llegar` sigue recorriendo las plazas (D16, 6B).
+
+## Avance de 6B (2026-10-25, rama `tanda-6b`, foto `BAN37`)
+
+Hecha sobre `b18a259` (6A) e integrada con 6F (`BAN36`, orden 174) y la crónica (sin foto). Sin comandos ni órdenes nuevas, sin cambio de esquema ni dorados (la proyección es de 6G).
+
+**Estado.** `Estado::tecnologia` (el `EstadoTecnologia` del crate) sustituye a `EstadoMilitar::tecnologias`; `Estado::era_en` dice si la cita de la Era está en la cola. Codec propio
+(`crates/nucleo/src/codec_tecnologia.rs`, desestructurado entero) al final del estado, antes de las generaciones. `ReglasEconomia::tecnologia` lleva las reglas del crate (sus bloques ya entraban en la
+huella con los militares). `EstadoTecnologia` gana `restos` (milésimas de la unidad siguiente) y `sumar_milesimas`: lo extraído y lo fabricado llegan de la economía en milésimas por minuto, no en
+unidades (la decisión técnica 17 suponía unidades), y el contador sube una unidad cuando el resto la completa (a trozos o de una vez da lo mismo). `Conjunto::iter` recorre solo los bits puestos.
+
+**Contar en origen** (`crates/nucleo/src/nucleo/logros.rs`; la tabla de vías está en su cabecera y en TA §2.1):
+
+| Vía | Dónde |
+|---|---|
+| lo extraído (D17) | `FuentesMundo::extraer` anota lo que sale del nodo por contador, en plazas y pueblos; `con_exterior` lo suma al acabar el paso |
+| lo fabricado | gancho nuevo `Fuentes::fabricado` (método por defecto vacío del trait de `asentamiento`), al que `avanzar_minuto` pasa lo que devuelven las recetas, en vez de cambiar el tipo que devuelve `avanzar_minuto` (13 llamadas) |
+| columna contra columna con números | `combate_resuelto(hoplitas)` + `batallas.campoAbierto` (su `combate.encuentro`) |
+| caravana interceptada, acoso que ganan los bandidos, Caravana de Fundación capturada | `caravanas.destruidasOCapturadas` |
+| campamento de bandidos destruido | `bandidos.campamentosDestruidos` |
+| asedio con números (al acabar su convocatoria) | `contador::asedio(conquista, enCombate = hubo tirada, conResidentes = alguna escuadra defensora fuera de la guarnición, muralla)`; `batalla.aplicada` no suma (D18) |
+| batalla de Unity | `aplicar_resultado` con `contadores_de_batalla`, la muralla mirada **antes** de las consecuencias (la conquista la daña); avanzada y saqueo de pueblo: solo `batallas.libradas` (D10) |
+| reclutar en plaza (reponer incluido) y en campamento (Q4) | `contador::reclutamiento` con el edificio de la tropa; ni la guarnición de serie ni la tropa prestada |
+| animal comprado | `AnadirAnimal` |
+| `plazasEnNivel.N` | índice derivado `Espacio::plazas_por_nivel` (no va en la foto; lo reconstruye `reconstruir_espacio` y lo vigila la auditoría): `con_exterior` compara el nivel actual antes y después, más fundar, `FijarNivelAsentamiento` y la ruina; el récord solo al subir |
+
+**Logros y Era.** Al fijar un logro, `tecnologia.logro { umbral; contador como texto }` público y se mira la Era. La Era tiene **una cita global** (`Carga::Era`, entidad `18·ETIQUETA`, prioridad 10)
+armada como la de los títulos (al pasar algo en el mundo con alguna Facción, si no hay otra) en el fin del plazo de la vigente, o en el mismo instante si la vigente ya tiene todos sus logros; al
+cambiar de Era sube su generación y se rearma; la III no tiene cita (decisión 15). `era.comienza { orden, porPlazo; era como texto }` público. El `Exterior` de las plazas lleva el `orden` real
+(`Nucleo::orden_era`). Consultas nuevas: `Nucleo::{tecnologia, orden_era, plazas_en_nivel}`.
+
+**`FijarTecnologias`** queda como administración sobre las reglas reales (decisión 8): las dadas aparecen (`hacer_aparecer`, con su descubridora si nadie la tenía) y las adoptadas son las de
+arranque más las dadas, sin tarifa; aparecer es para siempre. Traslado (5F, decisión 13): en la fusión la Facción nueva tiene la unión de los tres conjuntos; en la anexión las de la absorbida se
+pierden; las descubiertas por la que desaparece pasan a la que la recoge. La proyección `TecnologiasFaccion.adoptadas` sale del estado nuevo con el mismo orden de antes.
+
+**Rendimiento.** El primer intento empeoró el paso de minuto un 7-14 % (`tiene_tecnologia` buscaba el id en el catálogo entero en cada receta y cada candidata de la auto-construcción). Ahora se
+compara solo con las adoptadas de la Facción (`estado::adopta`) y la suma de los flujos no clona las reglas. `rendimiento_de_mil_plazas_tres_dias` (1.000 plazas × 3 días, release), alternando
+binarios con la máquina compartida con otros agentes: base 27,2 / 25,7 / 25,7 s, 6B 26,2 / 35,2 (ruido) / 25,2 s; mismos 3.061.541 pasos y la misma versión 50.408 (en ese escenario no se cumple
+ningún logro).
+
+**Pruebas.** `cargo test --workspace --no-fail-fast` (una pasada; la tanda no toca la sesión ni el contrato): antes de integrar 1.527 en verde (99 resultados, 14 ignoradas; +8), tras integrar 6F y la
+crónica 1.542 (101 resultados, 16 ignoradas), 0 fallos. Auditoría `BRONZEAGE_AUDITAR_CAMBIOS=1 cargo test -p nucleo -- --skip rendimiento`: 555 sin fallos. Una prueba por vía, cada una con su hecho
+y comprobando que cuenta una vez y nada más (`comun::logros_de_hechos`): extracción en `pueblos.rs` (lo que vuelca el carro no se cuenta otra vez), el gancho de fabricación en
+`asentamiento/tests/simulacion.rs`, columnas, caravanas, acoso y campamento con números en `combate.rs`, el asedio con convocatoria con combate y sin él (con el primer logro, umbral 1) en
+`murallas_asedio.rs`, Unity (campo abierto, asedio resistido y conquistado con muralla, campamento, caravana) en `batallas.rs`, reclutar en plaza y en campamento en `heroes.rs`, animales en las
+caravanas de `combate.rs` y `batallas.rs`; y en `tests/logros.rs` la Era por plazo y sin cita en la III, nada en un mundo sin Facciones, la Era normal y a trozos, la foto `BAN37` (cada campo
+cambia el hash, `BAN36` se rechaza con su motivo), `FijarTecnologias` y el récord de plazas por nivel. En `tests/nucleo.rs`, un mundo quieto con Facción solo deja en la cola la cita de la Era.
+
+**Filas de paridad** cerradas o reescritas: «Población y construcción» (tecnologías por administración), Murallas tercera tanda punto (2), «Militar y combate (4E)» (contadores de Unity),
+«Economía y comercio (3B-1)» (`animales.comprados`), «Militar y combate (4B-1)» (`FijarTecnologias`), «Eventos (4H, T5)» (`tecnologia.logro`, `era.comienza`); fila nueva «Tecnología (6B)».
+
+**Dudas para el autor**
+
+1. **Una Era que empieza con todos sus logros ya cumplidos** da paso a la siguiente en una cita del mismo instante (otra evaluación: «una Era por evaluación»). El TS lo hacía en el tick siguiente.
+   Recomendado: así.
+2. **D16 no se cierra**: `primera_en_llegar` de la crónica mira el nivel **alcanzado** (decisión 5) y el índice nuevo es del nivel **actual**; sigue recorriendo las plazas en cada
+   `asentamiento.nivel_subio` de nivel ≥ 3 (raro). Recomendado: dejarlo; si hiciera falta, un segundo índice por nivel alcanzado.
+3. **La Caravana de Fundación capturada** cuenta en `caravanas.destruidasOCapturadas` (deja el mismo hecho que cualquier caravana). Recomendado: que cuente.
+4. **`tecnologia.logro` y `era.comienza` aún no entran en la crónica**: es de 6C (TA §8), con los otros dos públicos.
+5. **La fabricación** se prueba en el gancho del crate `asentamiento` y en `tecnologia::contador` (las cuatro recetas), no con un taller de bronce dentro del núcleo (montarlo pide nivel, artesanos
+   y tecnología; lo cubrirá el batch de 6H).

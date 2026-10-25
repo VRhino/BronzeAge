@@ -1,4 +1,4 @@
-//! La tecnología del mundo en el núcleo (sistema 6, tanda 6B; Tecnologia_Aedas §1-§3): el estado en la foto `BAN36`, la cita global de la Era, los récords de plazas por nivel y
+//! La tecnología del mundo en el núcleo (sistema 6, tanda 6B; Tecnologia_Aedas §1-§3): el estado en la foto `BAN37`, la cita global de la Era, los récords de plazas por nivel y
 //! `FijarTecnologias` sobre las reglas reales. Cada vía de los contadores la prueba el binario de su sistema, con su hecho (D18: un hecho cuenta una vez y nada más):
 //!
 //! | Vía | Prueba |
@@ -96,21 +96,21 @@ fn la_era_es_la_misma_normal_acelerada_y_a_trozos() {
 }
 
 #[test]
-fn la_foto_ban36_lleva_el_estado_de_tecnologia_cada_campo_cambia_el_hash_y_ban35_se_rechaza() {
+fn la_foto_ban37_lleva_el_estado_de_tecnologia_cada_campo_cambia_el_hash_y_ban36_se_rechaza() {
     let mut n = mundo_quieto();
     admin(&mut n, "t", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["escudos_ligeros".into()] });
     let reglas = n.estado().reglas.clone();
     let mundo_hash = n.estado().mundo_hash.clone();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN36");
+    assert_eq!(&bytes[..5], b"BAN37");
     let vuelta = Estado::deserializar(&bytes, &reglas, &mundo_hash).unwrap();
     assert_eq!(vuelta.serializar(), bytes);
     assert_eq!((vuelta.tecnologia.clone(), vuelta.era_en), (n.estado().tecnologia.clone(), n.estado().era_en));
     assert!(vuelta.cola.volcar().iter().any(|e| e.carga == Carga::Era), "la cita de la Era viaja en la cola");
 
-    let vieja = [b"BAN35".as_slice(), &bytes[5..]].concat();
-    let error = Estado::deserializar(&vieja, &reglas, &mundo_hash).err().expect("BAN35 se rechaza");
-    assert!(error.0.contains("BAN35") && error.0.contains("tecnología"), "{}", error.0);
+    let vieja = [b"BAN36".as_slice(), &bytes[5..]].concat();
+    let error = Estado::deserializar(&vieja, &reglas, &mundo_hash).err().expect("BAN36 se rechaza");
+    assert!(error.0.contains("BAN36") && error.0.contains("tecnología"), "{}", error.0);
 
     type Cambio = (&'static str, Box<dyn Fn(&mut Estado)>);
     let cambios: Vec<Cambio> = vec![

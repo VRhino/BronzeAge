@@ -273,3 +273,26 @@ fn los_dorados_de_5h_dicen_lo_que_deben() {
     assert!(matches!(t[6], T::SolicitudDeIngreso(s) if s.heroe_id == "heroe-11"));
     assert!(matches!(t[7], T::CiudadaniaCambiada(c) if c.como == "ingreso"));
 }
+
+/// La crónica por páginas (sistema 6, tanda 6C): la petición hacia atrás desde una versión y la página con sus entradas `cronica.entrada`, la versión del mundo y si quedan más.
+#[test]
+fn la_cronica_por_paginas() {
+    let mensaje_de_cliente::Cuerpo::PedirCronica(p) = de_cliente("pedir_cronica") else { panic!() };
+    assert_eq!((p.peticion_id.as_str(), p.desde_version, p.hasta_version, p.limite), ("cronica-2", None, Some(639), 200));
+    let mensaje_de_servidor::Cuerpo::Cronica(c) = de_servidor("cronica") else { panic!() };
+    assert_eq!((c.peticion_id.as_str(), c.version, c.mas_antiguas, c.mas_recientes), ("cronica-2", 812, true, false));
+    assert!(c.entradas.iter().all(|e| e.codigo == "cronica.entrada" && e.asentamiento_id.is_none() && e.tipado.is_none()));
+    assert!(c.entradas.windows(2).all(|w| w[0].version < w[1].version) && c.entradas.last().unwrap().version <= p.hasta_version.unwrap());
+}
+
+/// Lo que los dorados de 6F (los alijos) dicen, leído por Rust: la orden con el id del artefacto y el héroe con los que abrió.
+#[test]
+fn los_dorados_de_6f_dicen_lo_que_deben() {
+    use mensaje_de_servidor as ms;
+    use orden::Cuerpo as O;
+    let mensaje_de_cliente::Cuerpo::Orden(o) = de_cliente("orden_abrir_alijo") else { panic!() };
+    assert!(matches!(o.cuerpo, Some(O::AbrirAlijo(a)) if a.alijo_id == "alijo-veta-3"));
+    let ms::Cuerpo::Foto(f) = de_servidor("foto_heroe_con_alijos_abiertos") else { panic!() };
+    let Some(entidad::Cuerpo::Heroe(h)) = f.entidades[0].cuerpo.clone() else { panic!() };
+    assert_eq!(h.alijos_abiertos, ["alijo-mercenarios-0-1", "alijo-veta-3"]);
+}

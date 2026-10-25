@@ -139,6 +139,13 @@ impl Actor {
             ComandoSesion::Orden { sesion, orden } => self.orden(sesion, orden),
             ComandoSesion::Vista { sesion, rect } => self.vista(sesion, rect),
             ComandoSesion::Batalla { sesion, mensaje } => self.batalla(sesion, mensaje),
+            ComandoSesion::Cronica { sesion, pedir } => {
+                // La página la lee el hilo de la persistencia, no el actor (Sistema 6 §5.3); la respuesta va directa al canal de la sesión.
+                let Some(tx) = self.mesa.get(sesion).map(|s| s.tx.clone()) else { return };
+                self.nucleo.pedir_cronica(pedir, Box::new(move |c| {
+                    let _ = tx.try_send(Difusion::Cronica(c));
+                }));
+            }
             ComandoSesion::Desconecta { sesion } => {
                 self.mesa.quitar(sesion);
             }

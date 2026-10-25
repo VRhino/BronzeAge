@@ -8,8 +8,8 @@ use std::{
 
 use base::{Instante, RelojMundo};
 use contrato::v1::{
-    Aviso, Bienvenida, Delta, ErrorSesion, Foto, Hola, MensajeDeServidorDeBatalla, MensajeParaServidorDeBatalla, Orden,
-    Rectangulo, Reloj, ResultadoOrden, Revocado, TipoCliente,
+    Aviso, Bienvenida, Cronica, Delta, ErrorSesion, Foto, Hola, MensajeDeServidorDeBatalla, MensajeParaServidorDeBatalla, Orden,
+    PedirCronica, Rectangulo, Reloj, ResultadoOrden, Revocado, TipoCliente,
 };
 use tokio::sync::{mpsc, oneshot};
 
@@ -85,6 +85,8 @@ pub enum ComandoSesion {
     Vista { sesion: SesionId, rect: Rectangulo },
     /// Mensaje de un servidor de batalla (solo si la sesión es `CLIENTE_SERVIDOR_BATALLA`).
     Batalla { sesion: SesionId, mensaje: MensajeDeServidorDeBatalla },
+    /// `PedirCronica`: una página de la crónica. El núcleo la contesta con `Difusion::Cronica` (cuenta como pendiente, como una orden) sin leerla en su hilo.
+    Cronica { sesion: SesionId, pedir: PedirCronica },
     /// La sesión terminó (cliente, red, expulsión o error). Llega siempre tras un `Conecta`, aceptado o no: el núcleo ignora ids que no conoce.
     Desconecta { sesion: SesionId },
 }
@@ -99,6 +101,8 @@ pub enum Difusion {
     Revocado(Revocado),
     Aviso(Aviso),
     Batalla(MensajeParaServidorDeBatalla),
+    /// La respuesta a un `PedirCronica`.
+    Cronica(Cronica),
     /// Error de sesión originado en el núcleo; si es `fatal`, la sesión se cierra tras enviarlo.
     Cerrar(ErrorSesion),
 }

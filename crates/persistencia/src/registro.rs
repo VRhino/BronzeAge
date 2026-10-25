@@ -21,6 +21,13 @@ pub struct Entrada {
     pub datos: Vec<u8>,
 }
 
+/// Dónde empieza una entrada en disco: el segmento (por su primera secuencia) y el desplazamiento dentro de él.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Ubicacion {
+    pub segmento: u64,
+    pub desplazamiento: u64,
+}
+
 /// Cuándo se fuerza el `fsync` (`sync_data`) al disco.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Sincronia {
@@ -77,14 +84,14 @@ fn codificar(buf: &mut Vec<u8>, secuencia: u64, instante: Instante, tipo: u16, d
     buf[ini + 4..ini + 8].copy_from_slice(&crc.to_le_bytes());
 }
 
-enum Fallo {
+pub(crate) enum Fallo {
     /// Faltan bytes: la escritura se cortó.
     Truncado,
     /// Hay bytes pero no cuadran (longitud absurda o CRC distinto).
     Corrupto,
 }
 
-fn decodificar(bytes: &[u8], off: usize) -> Result<(Entrada, usize), Fallo> {
+pub(crate) fn decodificar(bytes: &[u8], off: usize) -> Result<(Entrada, usize), Fallo> {
     let resto = &bytes[off..];
     if resto.len() < CABECERA {
         return Err(Fallo::Truncado);
@@ -117,7 +124,7 @@ pub(crate) struct Segmento {
     pub ruta: PathBuf,
 }
 
-fn nombre_segmento(inicio: u64) -> String {
+pub(crate) fn nombre_segmento(inicio: u64) -> String {
     format!("registro-{inicio:020}.log")
 }
 
@@ -213,6 +220,8 @@ pub struct Registro {
     max_segmento: u64,
     sincronia: Sincronia,
     archivo: Option<File>,
+    /// Primera secuencia del segmento activo (su nombre).
+    inicio_activo: u64,
     /// Bytes ya volcados al segmento activo.
     tam: u64,
     siguiente: u64,
@@ -246,7 +255,7 @@ impl Registro {
         }
         let siguiente = esc.ultima + 1;
         let activo = match (esc.segmentos.last(), esc.fin_ultimo_segmento) {
-            (Some(s), Some(fin)) if fin + 1 == siguiente => Some(s.ruta.clone()),
+            (Some(s), Some(fin)) if fin + 1 == siguiente => Some((s.inicio, s.ruta.clone())),
             _ => None, // sin segmentos, o el último termina antes de una foto: segmento nuevo
         };
         let mut r = Registro {
@@ -254,15 +263,17 @@ impl Registro {
             max_segmento: max_segmento.max(1),
             sincronia,
             archivo: None,
+            inicio_activo: 0,
             tam: 0,
             siguiente,
             buf: Vec::new(),
             sin_sincronizar: false,
             ultimo_sync: Instant::now(),
         };
-        if let Some(ruta) = activo {
+        if let Some((inicio, ruta)) = activo {
             r.archivo = Some(OpenOptions::new().append(true).open(&ruta)?);
             r.tam = fs::metadata(&ruta)?.len();
+            r.inicio_activo = inicio;
         }
         Ok((r, avisos))
     }
@@ -283,6 +294,17 @@ impl Registro {
         for (instante, tipo, datos) in entradas {
             self.empujar(instante, tipo, datos)?;
         }
+        self.confirmar()?;
+        Ok(self.siguiente - 1)
+    }
+
+    /// Prepara una entrada sin volcarla y dice dónde quedará en disco; [`Registro::confirmar`] la escribe (con las demás preparadas).
+    pub fn anadir_ubicado(&mut self, instante: Instante, tipo: u16, datos: &[u8]) -> io::Result<Ubicacion> {
+        self.empujar(instante, tipo, datos)
+    }
+
+    /// Vuelca lo preparado con un solo `write` y hace el `fsync` si la política lo pide.
+    pub fn confirmar(&mut self) -> io::Result<()> {
         self.volcar()?;
         let toca = match self.sincronia {
             Sincronia::Nunca => false,
@@ -292,7 +314,7 @@ impl Registro {
         if toca {
             self.fsync()?;
         }
-        Ok(self.siguiente - 1)
+        Ok(())
     }
 
     /// Fuerza lo escrito a disco, sea cual sea la política.
@@ -301,7 +323,7 @@ impl Registro {
         self.fsync()
     }
 
-    fn empujar(&mut self, instante: Instante, tipo: u16, datos: &[u8]) -> io::Result<()> {
+    fn empujar(&mut self, instante: Instante, tipo: u16, datos: &[u8]) -> io::Result<Ubicacion> {
         if datos.len() > MAX_DATOS {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "entrada demasiado grande"));
         }
@@ -314,10 +336,12 @@ impl Registro {
             let ruta = self.dir.join(nombre_segmento(self.siguiente));
             self.archivo = Some(OpenOptions::new().create(true).append(true).open(ruta)?);
             self.tam = 0;
+            self.inicio_activo = self.siguiente;
         }
+        let u = Ubicacion { segmento: self.inicio_activo, desplazamiento: self.tam + self.buf.len() as u64 };
         codificar(&mut self.buf, self.siguiente, instante, tipo, datos);
         self.siguiente += 1;
-        Ok(())
+        Ok(u)
     }
 
     fn volcar(&mut self) -> io::Result<()> {
