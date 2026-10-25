@@ -124,6 +124,9 @@ impl Nucleo {
         let mut por_nivel = [0u32; super::logros::NIVELES_INDICE];
         self.estado.asentamientos.values().for_each(|a| por_nivel[(a.nivel_actual() as usize).min(super::logros::NIVELES_INDICE - 1)] += 1);
         assert_eq!(por_nivel, self.espacio.plazas_por_nivel, "el índice de plazas por nivel actual no es el de las plazas [{}]", self.causa_auditada);
+        let mut por_alcanzado = [0u32; super::logros::NIVELES_INDICE];
+        self.estado.asentamientos.values().for_each(|a| por_alcanzado[(a.nivel() as usize).min(super::logros::NIVELES_INDICE - 1)] += 1);
+        assert_eq!(por_alcanzado, self.espacio.plazas_por_alcanzado, "el índice de plazas por nivel alcanzado no es el de las plazas [{}]", self.causa_auditada);
         // El índice de residentes por plaza (6E) es el de los residentes, que viven en plazas que existen y son de su dueña; cada cita de llegada es de una plaza que espera.
         assert_eq!(super::residentes::por_plaza(&self.estado.residentes), self.espacio.residentes_por_plaza, "el índice de residentes por plaza no es el de los residentes [{}]", self.causa_auditada);
         let ajenos: Vec<u32> = self.estado.residentes.aedas.iter().filter(|a| self.estado.asentamientos.get(&u64::from(a.plaza)).is_none_or(|p| p.faccion != a.faccion)).map(|a| a.id).collect();

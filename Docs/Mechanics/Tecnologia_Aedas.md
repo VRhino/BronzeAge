@@ -85,8 +85,9 @@ Determinista y **sin generador aleatorio**. Los pasos no se evalúan en un tick:
 1. logros:   para cada tecnología con logro, sin logro cumplido, con contador ≥ umbral:  logros[id] = instante;  evento público tecnologia.logro
 2. Era:      siguiente = la Era que sigue a la vigente (ninguna en la última)
              todos   = TODAS las tecnologías de la Era vigente que tienen logro lo tienen cumplido
+             minimo  = instante − eraDesde ≥ minimoSemanas × 7 días
              porPlazo= instante − eraDesde ≥ plazoSemanas × 7 días
-             si todos ∨ porPlazo:  era = siguiente, eraDesde = instante;  evento público era.comienza { era, porPlazo: !todos }       ← solo UNA Era por evaluación
+             si (todos ∧ minimo) ∨ porPlazo:  era = siguiente, eraDesde = instante;  evento público era.comienza { era, porPlazo: !todos }       ← solo UNA Era por evaluación
 3. aparición: para cada Facción con ≥ 1 asentamiento, para cada tecnología en el orden del catálogo:
              saltar si es de arranque, ya aparecida, sin logro cumplido, o de una Era posterior a la vigente (con la Era ya actualizada en 2)
              si TODAS las condiciones del hito se cumplen → aparece: se añade a aparecidas (y se quita de reveladas);
@@ -111,7 +112,7 @@ Las condiciones del hito se miran con el estado de la Facción **al empezar la e
 
 ### 3.2 Eras
 
-El servidor arranca en la Era I (`reinos_palaciales`). Cada Era tiene un plazo (`ERAS[..].plazoSemanas`) que es un **techo**: la siguiente empieza antes si se cumplen todos los logros de la vigente. Si empieza por plazo, los logros pendientes de la anterior **siguen abiertos**.
+El servidor arranca en la Era I (`reinos_palaciales`). Cada Era tiene un plazo (`ERAS[..].plazoSemanas`) que es un **techo** y un **tiempo mínimo** (`ERAS[..].minimoSemanas`, 1 semana en cada una; decisión del autor, 2026-10-25) que es un **suelo**: la siguiente empieza antes del plazo si se cumplen todos los logros de la vigente, pero nunca antes de su mínimo; si los logros se cumplen antes, la Era pasa al llegar al mínimo. Si empieza por plazo, los logros pendientes de la anterior **siguen abiertos**.
 **Una tecnología de una Era no puede aparecer, venderse ni empezar su épica antes de que esa Era empiece.**
 
 ## 4. Adopción (`adoptarTecnologia`)
@@ -297,16 +298,19 @@ la Era de cada tecnología propia (decide lo que cuesta adoptarla o comprarla); 
   "reinos_palaciales": {
     "orden": 1,
     "nombre": "Reinos palaciales",
+    "minimoSemanas": 1,
     "plazoSemanas": 5
   },
   "crisis_adaptacion": {
     "orden": 2,
     "nombre": "Crisis y adaptación",
+    "minimoSemanas": 1,
     "plazoSemanas": 6
   },
   "polis_imperios": {
     "orden": 3,
     "nombre": "Polis e imperios",
+    "minimoSemanas": 1,
     "plazoSemanas": 7
   }
 }

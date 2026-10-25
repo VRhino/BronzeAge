@@ -49,13 +49,16 @@ pub(super) struct Espacio {
     /// Cuántas plazas hay con cada nivel actual (derivado, no va en la foto; las de nivel ≥ `NIVELES_INDICE − 1`, en la última casilla): de aquí salen los récords `plazasEnNivel.N` (6B) sin
     /// recorrer las plazas.
     pub plazas_por_nivel: [u32; super::logros::NIVELES_INDICE],
+    /// Cuántas plazas hay con cada nivel **alcanzado** (derivado, no va en la foto, como el anterior): de aquí sale la primera plaza del mundo en cada nivel de la crónica sin recorrer las
+    /// plazas.
+    pub plazas_por_alcanzado: [u32; super::logros::NIVELES_INDICE],
     /// Cuántos Aedas residentes viven en cada plaza (derivado, no va en la foto; 6E): lo lee el paso de minuto (la felicidad y la nobleza) sin recorrer los residentes.
     pub residentes_por_plaza: BTreeMap<u64, u32>,
 }
 
 impl Espacio {
     pub fn nuevo() -> Self {
-        Self { rejilla: Rejilla::para_mundo_real(), perseguidores: BTreeMap::new(), plazas_por_faccion: BTreeMap::new(), plazas_por_nivel: Default::default(), residentes_por_plaza: BTreeMap::new() }
+        Self { rejilla: Rejilla::para_mundo_real(), perseguidores: BTreeMap::new(), plazas_por_faccion: BTreeMap::new(), plazas_por_nivel: Default::default(), plazas_por_alcanzado: Default::default(), residentes_por_plaza: BTreeMap::new() }
     }
 }
 
@@ -165,9 +168,11 @@ impl Nucleo {
         }
         self.espacio.plazas_por_faccion.clear();
         self.espacio.plazas_por_nivel = Default::default();
+        self.espacio.plazas_por_alcanzado = Default::default();
         for a in self.estado.asentamientos.values() {
             self.espacio.plazas_por_faccion.entry(a.faccion).or_default().insert(a.id);
             self.espacio.plazas_por_nivel[(a.nivel_actual() as usize).min(super::logros::NIVELES_INDICE - 1)] += 1;
+            self.espacio.plazas_por_alcanzado[(a.nivel() as usize).min(super::logros::NIVELES_INDICE - 1)] += 1;
         }
         self.espacio.residentes_por_plaza = super::residentes::por_plaza(&self.estado.residentes);
         for e in self.estado.ejercitos.values() {
@@ -191,8 +196,9 @@ impl Nucleo {
         self.espacio.rejilla.apuntar(id, 0, &plan_quieto(posicion, self.estado.ahora, 0));
         let nace = !self.espacio.plazas_por_faccion.contains_key(&faccion);
         self.espacio.plazas_por_faccion.entry(faccion).or_default().insert(id);
-        let nivel = self.estado.asentamientos.get(&id).map(|a| a.nivel_actual());
+        let (nivel, alcanzado) = self.estado.asentamientos.get(&id).map(|a| (a.nivel_actual(), a.nivel())).unzip();
         self.contar_nivel(self.estado.ahora, faccion, None, nivel);
+        self.contar_alcanzado(None, alcanzado);
         self.tras_ganar_o_perder_plaza(&[faccion], nace);
     }
 

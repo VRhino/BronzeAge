@@ -481,3 +481,32 @@ async fn por_la_sesion_el_rey_adopta_en_la_capital_y_su_faccion_oye_el_hecho() {
     let n = w.parar().await;
     assert!(n.tiene_tecnologia(1, "canteria"));
 }
+
+#[test]
+fn con_todos_sus_logros_la_era_espera_a_su_minimo_de_una_semana() {
+    let m = con_mundo!();
+    // La Era I con un solo logro, `plazasEnNivel.2 ≥ 1`, que se cumple fijando el nivel de la plaza.
+    let mut e = Escenario::nuevo(
+        m,
+        reglas(|t| {
+            for d in t.catalogo.iter_mut().filter(|d| d.era == 0) {
+                d.logro = None;
+            }
+            con_logro_de_nivel_2(t, "metalurgia_cobre");
+        }),
+    );
+    let r = e.n.estado().reglas.economia.tecnologia.clone();
+    let (desde, semana) = (e.n.tecnologia().era_desde, r.eras[0].minimo);
+    assert_eq!((semana, e.n.estado().era_en), (7 * DIA, Some(desde + r.eras[0].plazo)), "sin el logro, la cita es al fin del plazo");
+    // El último logro llega antes del mínimo: la cita se mueve al mínimo, no pasa en el acto.
+    e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: e.plaza, nivel: 2 });
+    assert!(e.n.tecnologia().todos_los_logros_de_la_era(&r));
+    assert_eq!((e.n.tecnologia().era, e.n.estado().era_en), (0, Some(desde + semana)));
+    e.n.avanzar_hasta(desde + semana - 1);
+    assert_eq!(e.n.tecnologia().era, 0, "antes del mínimo no pasa");
+    e.n.avanzar_hasta(desde + semana);
+    let h = hechos(&e.n, "era.comienza");
+    assert_eq!((e.n.tecnologia().era, h.len(), h[0].en, h[0].dato("porPlazo")), (1, 1, desde + semana, Some(0)));
+    // La Era II, sin sus logros, vuelve a su plazo.
+    assert_eq!(e.n.estado().era_en, Some(desde + semana + r.eras[1].plazo));
+}

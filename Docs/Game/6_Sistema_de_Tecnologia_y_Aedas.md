@@ -47,7 +47,8 @@ La season (12 meses) se divide en cinco Eras, de ~1300 a 323 a. C. (hasta Alejan
 - **El servidor arranca en la Era I**, con dos tecnologías adoptadas por todas las Facciones: `leva_comunal` y
   `hostigamiento_tribal`.
 - Cada Era tiene sus logros del servidor (6.3). **La Era siguiente empieza cuando se cumplen TODOS los logros de la
-  Era, o cuando se agota su plazo**, lo que pase antes: el plazo es un techo, no un suelo.
+  Era, o cuando se agota su plazo**, lo que pase antes: el plazo es un techo. Cada Era dura además **un mínimo de 1 semana**:
+  aunque se cumplan todos sus logros antes, la siguiente no empieza hasta que pasa ese mínimo.
 - Si la Era siguiente empieza por tiempo, los logros pendientes de la anterior siguen abiertos y se pueden cumplir.
 - **Ninguna tecnología de una Era se puede adoptar antes de que esa Era empiece.**
 - **El techo de nivel de asentamiento de cada Era es derivado**: no hay una regla que prohíba subir, sino que la

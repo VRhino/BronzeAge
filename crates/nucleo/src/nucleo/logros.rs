@@ -18,8 +18,8 @@
 //!
 //! # La Era, sin tick
 //! Al fijar un logro se mira si la Era vigente tiene ya todos los suyos; y hay **una cita global** (`Carga::Era`, prioridad 10) al fin de su plazo. Se arma como el plazo de los títulos: al
-//! pasar algo en el mundo con alguna Facción, si no hay otra (`Estado::era_en`). Una Era por evaluación: si la que empieza ya tiene todos sus logros cumplidos, su cita cae en ese mismo
-//! instante y la siguiente empieza en otra evaluación. La última Era (la III, mientras no existan los bloques de la IV y la V) no tiene cita.
+//! pasar algo en el mundo con alguna Facción, si no hay otra (`Estado::era_en`). Cada Era dura al menos su mínimo (`minimoSemanas`, 1 semana; decisión del autor, 2026-10-25): con todos sus
+//! logros, la cita se mueve al mínimo y pasa allí; si los tenía al empezar, pasa al cumplirlo. La última Era (la III, mientras no existan los bloques de la IV y la V) no tiene cita.
 
 use super::*;
 use crate::estado::{entidad_era, Dato, PRIO_ERA};
@@ -60,6 +60,25 @@ impl Nucleo {
     /// Las plazas del mundo con nivel actual ≥ `nivel` (el índice derivado de los récords `plazasEnNivel.N`).
     pub fn plazas_en_nivel(&self, nivel: u32) -> u32 {
         self.espacio.plazas_por_nivel[indice_de_nivel(nivel)..].iter().sum()
+    }
+
+    /// Las plazas del mundo con nivel alcanzado ≥ `nivel` (el índice derivado de la crónica).
+    pub(super) fn plazas_con_alcanzado(&self, nivel: u32) -> u32 {
+        self.espacio.plazas_por_alcanzado[indice_de_nivel(nivel)..].iter().sum()
+    }
+
+    /// Una plaza pasa del nivel alcanzado `antes` a `ahora` (`None`: no existía o ya no existe): mantiene el índice `Espacio::plazas_por_alcanzado`.
+    pub(super) fn contar_alcanzado(&mut self, antes: Option<u32>, ahora: Option<u32>) {
+        if antes == ahora {
+            return;
+        }
+        let indice = &mut self.espacio.plazas_por_alcanzado;
+        if let Some(n) = antes {
+            indice[indice_de_nivel(n)] -= 1;
+        }
+        if let Some(n) = ahora {
+            indice[indice_de_nivel(n)] += 1;
+        }
     }
 
     // ───────────────────────────── Sumar ─────────────────────────────
@@ -129,10 +148,19 @@ impl Nucleo {
 
     // ───────────────────────────── La Era ─────────────────────────────
 
-    /// TA §3 paso 2: si la Era vigente tiene todos sus logros o se agotó su plazo, empieza la siguiente (`era.comienza { era, porPlazo }`, público) y se arma su cita.
+    /// TA §3 paso 2: si la Era vigente tiene todos sus logros y pasó su mínimo, o se agotó su plazo, empieza la siguiente (`era.comienza { era, porPlazo }`, público) y se arma su cita. Si
+    /// aún no pasa pero el último logro adelantó cuándo puede (al mínimo), la cita se mueve allí.
     fn mirar_era(&mut self, t: Instante) {
         let r = self.estado.reglas.economia.tecnologia.clone();
-        let Some(cambio) = self.estado.tecnologia.avanzar_era(&r, t) else { return };
+        let Some(cambio) = self.estado.tecnologia.avanzar_era(&r, t) else {
+            let antes = self.estado.tecnologia.proxima_era_en(&r).map(|en| en.max(t));
+            if self.estado.era_en.is_some() && self.estado.era_en != antes {
+                self.estado.generaciones.subir(entidad_era());
+                self.estado.era_en = None;
+                self.armar_era(t);
+            }
+            return;
+        };
         let era = &r.eras[cambio.era as usize];
         let datos = vec![("orden", i64::from(era.orden)), ("porPlazo", cambio.por_plazo as i64)];
         self.tr.emitir(&self.estado, EventoNucleo { valores: vec![("era", Dato::Texto(era.id.clone()))], publico: true, ..EventoNucleo::nuevo("era.comienza", t, datos) });
@@ -145,15 +173,15 @@ impl Nucleo {
         self.armar_era(t);
     }
 
-    /// Arma la cita de la Era si no hay una y hay alguna Facción: al fin del plazo de la vigente o, si ya tiene todos sus logros, en este mismo instante (una Era por evaluación).
+    /// Arma la cita de la Era si no hay una y hay alguna Facción: al fin del plazo de la vigente o, si ya tiene todos sus logros, al cumplirse su mínimo (1 semana; decisión del autor,
+    /// 2026-10-25: una Era que empieza con todos sus logros cumplidos dura su mínimo, no pasa en el acto).
     pub(super) fn armar_era(&mut self, t: Instante) {
         if self.estado.era_en.is_some() || self.estado.politica.facciones.iter().next().is_none() {
             return;
         }
         let r = &self.estado.reglas.economia.tecnologia;
-        let Some(fin) = self.estado.tecnologia.fin_del_plazo(r) else { return };
-        // DUDA: el TypeScript evaluaba en cada tick; aquí, si la Era que empieza ya tiene todos sus logros, la siguiente empieza en una cita del mismo instante (otra evaluación).
-        let en = if self.estado.tecnologia.todos_los_logros_de_la_era(r) { t } else { fin.max(t) };
+        let Some(en) = self.estado.tecnologia.proxima_era_en(r) else { return };
+        let en = en.max(t);
         let clave = self.estado.generaciones.clave(entidad_era());
         self.estado.cola.programar(en, PRIO_ERA, clave, Carga::Era);
         self.estado.era_en = Some(en);
