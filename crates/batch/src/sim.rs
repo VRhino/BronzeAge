@@ -39,6 +39,9 @@ pub fn cuenta_de_gobernador(plaza: u64) -> String {
 /// plaza misma. Se monta con las órdenes reales salvo el héroe, que crea el andamiaje de administración (`crear_ejercito`, ciudadano de la Facción de la plaza, con su cuenta propia
 /// [`cuenta_de_gobernador`]): se muda a la plaza (`CambiarResidencia`), entra (`Guarnecer`: su columna se deshace dentro), el Rey le nombra Gobernador y él se nombra Tesorero y Maestro de
 /// Obras. Devuelve su id, o `None` si alguna orden no se aceptó (no debería: lo dice la prueba del batch).
+///
+/// Desde 5E-3 (2026-10-25) quien funda ya es el Gobernador de la plaza, pero no sobra este: el Líder de la columna de fundación sigue en el mapa (la columna no se deshace al fundar, fila de
+/// paridad de 5G-b-9, y es la que busca sitio para la siguiente) y el cargo solo se ejerce dentro. El Rey lo sustituye por este, que vive dentro.
 pub fn gobernador_de_oficio(n: &mut Nucleo, t: Instante, plaza: u64) -> Option<u64> {
     let (faccion, puerta) = n.estado().asentamientos.get(&plaza).map(|a| (a.faccion, a.posicion))?;
     let rey = n.faccion(faccion).and_then(|f| f.rey)?;

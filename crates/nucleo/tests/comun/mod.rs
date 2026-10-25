@@ -178,6 +178,27 @@ pub fn gobierna(n: &mut Nucleo, plaza: u64, heroe: u64) {
     }
 }
 
+/// Andamiaje de 5E-1: `heroe` puede colocar avanzadas de la plaza (reside en ella y es su Maestro de Obras, lo nombra la administración); su columna tiene que estar en el sitio.
+pub fn coloca_avanzadas(n: &mut Nucleo, plaza: u64, heroe: u64) {
+    for (i, c) in [
+        Comando::FijarResidencia { heroe, residencia: Some(militar::heroe::Residencia::Asentamiento(plaza as u32)) },
+        Comando::AsignarCargoLocal { heroe, asentamiento: plaza, cargo: asentamiento::Cargo::MaestroObras, designado: heroe },
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let t = n.ahora();
+        let r = n.aplicar_en(t, Peticion::nueva("admin", &format!("maestro-{plaza}-{heroe}-{i}"), c).de_admin());
+        assert!(r.aceptada() || r.resultado == nucleo::Resultado::SinCambios, "{r:?}");
+    }
+}
+
+/// ¿Le falta a la plaza un Gobernador que la gobierne desde dentro? Sin titular, o con el de oficio del fundador (5E-3) fuera de ella (su columna sigue en el mapa): los escenarios de las
+/// pruebas dan entonces el cargo al primer residente que está dentro.
+pub fn sin_gobernador_dentro(n: &Nucleo, plaza: u64) -> bool {
+    n.estado().asentamientos[&plaza].cargos.titular(asentamiento::Cargo::Gobernador).is_none_or(|g| n.heroe(g).is_none_or(|h| h.heroe.presencia.ubicacion != militar::presencia::Ubicacion::Asentamiento(plaza as u32)))
+}
+
 /// Un Gobernador de oficio de `cuenta` en la plaza (5E): un héroe de campo suyo nuevo que reside en ella, entra (su columna se deshace dentro) y recibe sus cargos ([`gobierna`]). Las órdenes de
 /// plaza de la cuenta que no nombran héroe pasan entonces la matriz real con él; el héroe de la sesión de la cuenta sigue siendo el de antes (el de id menor). Devuelve su id.
 pub fn gobernador_de_oficio(n: &mut Nucleo, cuenta: &str, plaza: u64) -> u64 {

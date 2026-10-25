@@ -198,9 +198,25 @@ impl Esc {
     fn dar_escuadra(&mut self, heroe: u64, tropa: Tropa) -> u64 {
         self.ok("admin", Comando::DarEscuadra { heroe, tropa, cantidad: completa(tropa) }).creadas[0]
     }
+    /// Una columna de ana en `p` cuyo héroe puede colocar avanzadas (5E-1): reside en la madre y es su Maestro de Obras (lo nombra la administración, andamiaje; el Gobernador es el
+    /// fundador, 5E-3).
+    fn colocador(&mut self, p: Punto) -> (u64, u64) {
+        let (col, heroe) = self.columna("ana", 1, p);
+        self.maestro(heroe);
+        (col, heroe)
+    }
+    fn maestro(&mut self, heroe: u64) {
+        let plaza = self.plaza;
+        for c in [Comando::FijarResidencia { heroe, residencia: Some(Residencia::Asentamiento(plaza as u32)) }, Comando::AsignarCargoLocal { heroe, asentamiento: plaza, cargo: asentamiento::Cargo::MaestroObras, designado: heroe }] {
+            let r = self.ord("admin", c);
+            assert!(r.aceptada() || r.resultado == Resultado::SinCambios, "{r:?}");
+        }
+    }
+    /// Reside en la madre (si ya residía, porque coloca avanzadas, no cambia nada).
     fn residir(&mut self, heroe: u64) {
         let plaza = self.plaza as u32;
-        self.ok("admin", Comando::FijarResidencia { heroe, residencia: Some(Residencia::Asentamiento(plaza)) });
+        let r = self.ord("admin", Comando::FijarResidencia { heroe, residencia: Some(Residencia::Asentamiento(plaza)) });
+        assert!(r.aceptada() || r.resultado == Resultado::SinCambios, "{r:?}");
     }
     /// La puerta de antes del sistema 5 (5E): abierta también a los neutrales, que por defecto ya no entran (Q1). Para las pruebas en las que un neutral está dentro.
     fn abrir_a_los_neutrales(&mut self) {
@@ -219,7 +235,7 @@ impl Esc {
     }
     /// Coloca una avanzada en `p` con una columna de Ana en el sitio. Devuelve (avanzada, columna, héroe).
     fn colocar_en(&mut self, p: Punto) -> (u64, u64, u64) {
-        let (col, heroe) = self.columna("ana", 1, p);
+        let (col, heroe) = self.colocador(p);
         let plaza = self.plaza;
         let id = self.ok("ana", Comando::ColocarAvanzada { asentamiento: plaza, heroe, posicion: p }).creadas[0];
         (id, col, heroe)
@@ -360,7 +376,7 @@ fn colocar_deja_una_obra_pendiente_que_ocupa_cupo_y_no_cuesta_nada_ni_se_ve_ni_e
     let m = con_mundo!();
     let mut e = montar(m, 7, 2);
     let (plaza, pos) = (e.plaza, e.sitio());
-    let (col, heroe) = e.columna("ana", 1, pos);
+    let (col, heroe) = e.colocador(pos);
     let (cosas, madera, edificios, v0) = (e.n.cosas_en_el_espacio(), e.almacen(Madera), e.n.economia(plaza).unwrap().edificios.len(), e.n.version());
 
     let r = e.ok("ana", Comando::ColocarAvanzada { asentamiento: plaza, heroe, posicion: pos });
@@ -386,7 +402,7 @@ fn colocar_se_rechaza_sin_rastro_y_en_su_orden() {
     let m = con_mundo!();
     let mut e = montar(m, 7, 2);
     let (plaza, pos) = (e.plaza, e.sitio());
-    let (_, heroe) = e.columna("ana", 1, pos);
+    let (_, heroe) = e.colocador(pos);
     let (_, beto) = e.columna("beto", 2, pos);
     let colocar = |asentamiento: u64, heroe: u64, posicion: Punto| Comando::ColocarAvanzada { asentamiento, heroe, posicion };
     assert_eq!(e.rechazada("ana", colocar(9_999, heroe, pos)), rechazos::ASENTAMIENTO_DESCONOCIDO);
@@ -396,24 +412,30 @@ fn colocar_se_rechaza_sin_rastro_y_en_su_orden() {
     // La columna del héroe tiene que estar en el sitio (a ≤ radioPuerta), la zona manda y el asentamiento no vale.
     assert_eq!(e.rechazada("ana", colocar(plaza, heroe, Punto::new(pos.x + 5_000, pos.y))), rechazos::AVANZADA_FUERA_DEL_SITIO);
     let lejos = Punto::new(e.centro.x + 25_000, e.centro.y);
-    let (_, h2) = e.columna("ana", 1, lejos);
+    let (_, h2) = e.colocador(lejos);
     assert_eq!(e.rechazada("ana", colocar(plaza, h2, lejos)), rechazos::AVANZADA_FUERA_DE_LA_ZONA, "la zona de nivel 2 llega a 15 u");
     let dentro = Punto::new(e.centro.x + 1_599, e.centro.y);
-    let (_, h3) = e.columna("ana", 1, dentro);
+    let (_, h3) = e.colocador(dentro);
     assert_eq!(e.rechazada("ana", colocar(plaza, h3, dentro)), rechazos::AVANZADA_DENTRO_DEL_ASENTAMIENTO, "la ciudad mide una décima de la zona (1,5) y la avanzada pide su media anchura (0,1) más");
     // Con la plaza de nivel 1 no hay avanzadas.
     let mut uno = montar(m, 7, 1);
     let (p1, centro) = (uno.plaza, uno.centro);
     let dentro_de_zona = Punto::new(centro.x + 4_000, centro.y);
-    let (_, h) = uno.columna("ana", 1, dentro_de_zona);
+    let (_, h) = uno.colocador(dentro_de_zona);
     assert_eq!(uno.rechazada("ana", Comando::ColocarAvanzada { asentamiento: p1, heroe: h, posicion: dentro_de_zona }), rechazos::AVANZADA_NIVEL_INSUFICIENTE);
+    // 5E-1: la coloca el Gobernador o el Maestro de Obras de la madre, residente, con su columna en el sitio; un ciudadano sin cargo, o un residente que no es el titular, no.
+    let (_, sin_cargo) = e.columna("ana", 1, pos);
+    assert_eq!(e.rechazada("ana", colocar(plaza, sin_cargo, pos)), rechazos::NO_AUTORIZADO, "un ciudadano de la madre sin cargo ya no la coloca");
+    e.residir(sin_cargo);
+    assert_eq!(e.rechazada("ana", colocar(plaza, sin_cargo, pos)), rechazos::NO_AUTORIZADO, "residir no basta: hace falta el cargo");
     // El cupo: dos en el nivel 2, contando las pendientes.
+    e.maestro(heroe);
     e.ok("ana", colocar(plaza, heroe, pos));
     let otro = Punto::new(e.centro.x - 8_000, e.centro.y);
-    let (_, h4) = e.columna("ana", 1, otro);
+    let (_, h4) = e.colocador(otro);
     e.ok("ana", colocar(plaza, h4, otro));
     let tercero = Punto::new(e.centro.x, e.centro.y + 8_000);
-    let (_, h5) = e.columna("ana", 1, tercero);
+    let (_, h5) = e.colocador(tercero);
     assert_eq!(e.rechazada("ana", colocar(plaza, h5, tercero)), rechazos::AVANZADA_SIN_CUPO);
 }
 
@@ -425,14 +447,14 @@ fn colocar_respeta_la_ciudad_de_la_madre_y_no_pisa_otro_elemento_del_mapa() {
     let colocar = |heroe: u64, posicion: Punto| Comando::ColocarAvanzada { asentamiento: plaza, heroe, posicion };
     // La ciudad mide una décima de la zona (la de nivel 2 son 15: 1,5) y la avanzada pide además su media anchura (0,1): justo fuera de 1,6 sí cabe.
     let primera = Punto::new(centro.x + 1_600, centro.y);
-    let (_, h1) = e.columna("ana", 1, primera);
+    let (_, h1) = e.colocador(primera);
     e.ok("ana", colocar(h1, primera));
     // Otro elemento del mapa mide 0,2: a menos de eso de la primera se pisa (también con ella aún pendiente de materiales); a 0,2 justo, no.
     let pisa = Punto::new(primera.x + 199, primera.y);
-    let (_, h2) = e.columna("ana", 1, pisa);
+    let (_, h2) = e.colocador(pisa);
     assert_eq!(e.rechazada("ana", colocar(h2, pisa)), rechazos::AVANZADA_PISA_OTRO_ELEMENTO);
     let cabe = Punto::new(primera.x + 200, primera.y);
-    let (_, h3) = e.columna("ana", 1, cabe);
+    let (_, h3) = e.colocador(cabe);
     e.ok("ana", colocar(h3, cabe));
     assert_eq!(e.n.avanzadas_de(plaza).len(), 2);
 
@@ -443,10 +465,10 @@ fn colocar_respeta_la_ciudad_de_la_madre_y_no_pisa_otro_elemento_del_mapa() {
     let nodo = Mapa::de(&m.0).nodos[cobre as usize].pos;
     e.ok("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: cobre });
     let encima = Punto::new(nodo.x + 100, nodo.y);
-    let (_, h) = e.columna("ana", 1, encima);
+    let (_, h) = e.colocador(encima);
     assert_eq!(e.rechazada("ana", Comando::ColocarAvanzada { asentamiento: plaza, heroe: h, posicion: encima }), rechazos::AVANZADA_PISA_OTRO_ELEMENTO);
     let al_lado = Punto::new(nodo.x + 200, nodo.y);
-    let (_, h) = e.columna("ana", 1, al_lado);
+    let (_, h) = e.colocador(al_lado);
     e.ok("ana", Comando::ColocarAvanzada { asentamiento: plaza, heroe: h, posicion: al_lado });
 }
 
@@ -1412,7 +1434,7 @@ impl Esc {
 fn guion(e: &mut Esc, avanzar: &dyn Fn(&mut Esc, Instante)) {
     let (plaza, pos) = (e.plaza, e.sitio());
     let (col, heroe) = e.columna("ana", 1, pos);
-    e.residir(heroe);
+    e.maestro(heroe);
     let escuadra = e.dar_escuadra(heroe, Tropa::MiliciaLanceros);
     let av = e.ok_en(MIN, "ana", Comando::ColocarAvanzada { asentamiento: plaza, heroe, posicion: pos }).creadas[0];
     avanzar(e, 20 * MIN);
@@ -2034,7 +2056,7 @@ e.abrir_a_los_neutrales();
     let (plaza, pos) = (e.plaza, e.sitio());
     // Cada columna nace en el instante en que se usa, sea cual sea el modo de avanzar (una columna de administración, sin ración, se muere de hambre en minutos).
     let (col, ana) = e.columna_en(0, "ana", 1, pos, &[Tropa::Lenadores]);
-    e.residir(ana);
+    e.maestro(ana);
     let av = e.ok_en(MIN, "ana", Comando::ColocarAvanzada { asentamiento: plaza, heroe: ana, posicion: pos }).creadas[0];
     e.ok_en(MIN, "admin", Comando::FijarRelacion { a: 1, b: 3, relacion: Some(Relacion::Alianza) });
     avanzar(e, 20 * MIN);

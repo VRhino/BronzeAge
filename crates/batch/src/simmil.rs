@@ -555,8 +555,9 @@ impl Sim<'_> {
             self.de_plaza.entry(plaza).or_default().push(self.bots.len() - 1);
         }
         // 5E: el Guardián gobierna la plaza (ascenso, edificios, flota, pueblo, muralla): el Rey de la Facción le nombra Gobernador con la orden real, sin estar presente; él reside y está dentro.
+        // Sustituye al Gobernador de oficio de la fundación (5E-3: el Líder de la columna de fundación, un héroe de campo que no es ningún bot).
         if let Some(i) = self.bots.iter().rposition(|b| b.plaza == plaza && b.rol == Rol::Guardian) {
-            self.gobierna(t, i, plaza);
+            self.nombrar_gobernador(t, i, plaza);
         }
     }
 
@@ -840,14 +841,17 @@ impl Sim<'_> {
     /// ¿Es el héroe del bot `i` el Gobernador de `p`? Si la plaza no tiene, el Rey de su Facción le nombra (con la orden real, sin estar presente).
     fn gobierna(&mut self, t: Instante, i: usize, p: u64) -> bool {
         let heroe = self.bots[i].heroe;
-        let (titular, faccion) = { let a = &self.n.estado().asentamientos[&p]; (a.cargos.titular(Cargo::Gobernador), a.faccion) };
-        match titular {
+        match self.n.estado().asentamientos[&p].cargos.titular(Cargo::Gobernador) {
             Some(g) => g == heroe,
-            None => {
-                let Some((rey, cuenta)) = self.n.faccion(faccion).and_then(|x| x.rey).and_then(|h| self.n.heroe(h).map(|x| (h, x.cuenta.clone()))) else { return false };
-                self.orden(t, &cuenta, "AsignarCargoLocal", Comando::AsignarCargoLocal { heroe: rey, asentamiento: p, cargo: Cargo::Gobernador, designado: heroe }).aceptada()
-            }
+            None => self.nombrar_gobernador(t, i, p),
         }
+    }
+
+    /// El Rey de la Facción de `p` nombra Gobernador al héroe del bot `i`, con la orden real y sin estar presente.
+    fn nombrar_gobernador(&mut self, t: Instante, i: usize, p: u64) -> bool {
+        let (heroe, faccion) = (self.bots[i].heroe, self.n.estado().asentamientos[&p].faccion);
+        let Some((rey, cuenta)) = self.n.faccion(faccion).and_then(|x| x.rey).and_then(|h| self.n.heroe(h).map(|x| (h, x.cuenta.clone()))) else { return false };
+        self.orden(t, &cuenta, "AsignarCargoLocal", Comando::AsignarCargoLocal { heroe: rey, asentamiento: p, cargo: Cargo::Gobernador, designado: heroe }).aceptada()
     }
 
     fn ordenes_de_plaza(&mut self, t: Instante, i: usize, p: u64) {

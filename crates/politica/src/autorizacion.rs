@@ -75,6 +75,12 @@ impl<V: Vista> Actor<'_, V> {
         self.vista.duena(a).is_none() || (self.reside(a) && self.titular(a, c))
     }
 
+    /// Titular de alguno de esos cargos y residente en la plaza, **sin** estar dentro: colocar una avanzada, que «la coloca el héroe en el sitio» (Doc 4.2.2; 5E-1, decisión del autor del
+    /// 2026-10-25). Que su columna esté en el sitio lo mira la orden. Plaza inexistente: verdadero.
+    pub fn cargo_en_el_sitio(&self, a: AsentamientoId, cargos: &[Cargo]) -> bool {
+        self.vista.duena(a).is_none() || (self.residente(a) && cargos.iter().any(|&c| self.titular(a, c)))
+    }
+
     /// `cargo(A, c1) ∨ cargo(A, c2) ∨ …` (comerciar: Tesorero o Gobernador; recetas: Gobernador o Maestro de Obras…).
     pub fn algun_cargo(&self, a: AsentamientoId, cargos: &[Cargo]) -> bool {
         cargos.iter().any(|&c| self.cargo(a, c))

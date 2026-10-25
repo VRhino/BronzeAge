@@ -130,8 +130,14 @@ fn al_gobernador_lo_nombra_el_rey_sin_estar_presente_y_a_los_demas_el_gobernador
     let m = con_mundo!();
     let mut e = E::nuevo(m);
     let (rey, ana, bea, eli, cai, dan) = (e.rey, e.ana, e.bea, e.eli, e.cai, e.dan);
-    assert!(Cargo::Gobernador as usize == 0 && e.titular(Cargo::Gobernador).is_none(), "una plaza recién fundada no tiene Gobernador");
+    // 5E-3 (decisión del autor, 2026-10-25): quien funda (el Líder de la columna, aquí el Rey) es su Gobernador de oficio, con su hecho.
+    assert_eq!(e.titular(Cargo::Gobernador), Some(rey), "quien funda es su Gobernador de oficio");
+    let h = e.hechos("cargo.local_asignado");
+    assert_eq!((h.len(), h[0].dato("heroe"), h[0].asentamientos.clone()), (1, Some(rey as i64), vec![e.plaza]));
     assert!(matches!(e.ubicacion(rey), Ubicacion::Columna(_)), "el Rey está fuera, en su columna");
+    // Deja de residir en ella: el cargo se vacía y la plaza se queda sin Gobernador.
+    e.ok("admin", Comando::FijarResidencia { heroe: rey, residencia: Some(Residencia::Campamento(0)) });
+    assert!(Cargo::Gobernador as usize == 0 && e.titular(Cargo::Gobernador).is_none(), "sin residir no hay cargo");
 
     // Quién designa: el Gobernador, solo el Rey (sin estar presente); los demás, solo el Gobernador.
     assert_eq!(codigo(&e.asignar("ana", ana, Cargo::Gobernador, ana)), rechazos::NO_AUTORIZADO, "una residente sin cargo no se nombra Gobernadora");
@@ -149,8 +155,8 @@ fn al_gobernador_lo_nombra_el_rey_sin_estar_presente_y_a_los_demas_el_gobernador
     assert_eq!((e.titular(Cargo::Gobernador), e.n.version()), (Some(ana), v + 1));
     assert_eq!(e.asignar("rey", rey, Cargo::Gobernador, ana).resultado, Resultado::SinCambios);
     let h = e.hechos("cargo.local_asignado");
-    assert_eq!((h.len(), h[0].dato("heroe"), h[0].dato("asentamiento"), h[0].asentamientos.clone()), (1, Some(ana as i64), Some(e.plaza as i64), vec![e.plaza]));
-    assert!(h[0].valores.iter().any(|(k, v)| *k == "cargo" && *v == nucleo::Dato::Texto("gobernador".into())));
+    assert_eq!((h.len(), h[1].dato("heroe"), h[1].dato("asentamiento"), h[1].asentamientos.clone()), (2, Some(ana as i64), Some(e.plaza as i64), vec![e.plaza]));
+    assert!(h[1].valores.iter().any(|(k, v)| *k == "cargo" && *v == nucleo::Dato::Texto("gobernador".into())));
 
     // La Gobernadora, dentro, designa al resto; uno puede tener varios cargos.
     assert!(e.asignar("ana", ana, Cargo::Tesorero, bea).aceptada());

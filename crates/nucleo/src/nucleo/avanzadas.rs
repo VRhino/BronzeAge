@@ -30,7 +30,7 @@
 //!
 //! # Quién manda
 //! Son obras de mapa del panel de la plaza madre (Doc 4.2.2, 5E): mejorar, reparar, destruir y cancelar las da el Gobernador o el Maestro de Obras de la madre, residente y dentro; elegir la
-//! tropa de serie, el Gobernador (Doc 5.17); colocar, un ciudadano de su Facción con la columna **en el sitio** («la coloca el héroe en el sitio»; DUDA en `Autoriza::CiudadanoDeLaMadre`). Guarnecer y retirar son de la tropa
+//! tropa de serie, el Gobernador (Doc 5.17); colocar, el Gobernador o el Maestro de Obras de la madre, residente, con su columna **en el sitio** en vez de dentro («la coloca el héroe en el sitio»; 5E-1, `Autoriza::CargoEnElSitio`). Guarnecer y retirar son de la tropa
 //! de cada uno: la cuenta del héroe (guarnece quien reside en la madre). Las elecciones de tropa se comprueban al elegir (tecnología y edificio de la madre) y no se revisan después: si la Facción pierde la tecnología o la madre
 //! el edificio, la elección sigue.
 

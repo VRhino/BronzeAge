@@ -194,7 +194,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 
 > **Implementado en Rust (2026-10-24, 5D):** las nueve órdenes de las relaciones entre Facciones (144-152; las 153-157 son de 5G-b) y una clase nueva de `Autoriza`, `AutoridadDiplomatica` (la cuenta del héroe, ciudadano y Rey o Embajador de la Facción que actúa: `politica::autorizacion::Actor::autoridad_diplomatica`). `responder_relacion` y `admitir_otras_facciones` son del Rey (`ReyDeLaFaccion`); `alternar_reabastecer_aliados`, de quien manda en la plaza hasta 5E. Con 5G-b, quedan 13 órdenes no disponibles.
 
-> **Implementado en Rust (2026-10-25, 5E):** la matriz de las órdenes de plaza es la de §5.2. Se retiran `manda_en` y «ciudadano de la madre» (salvo `colocar_avanzada`, `// DUDA:`), y `Autoriza` gana
+> **Implementado en Rust (2026-10-25, 5E):** la matriz de las órdenes de plaza es la de §5.2. Se retiran `manda_en` y «ciudadano de la madre» (`colocar_avanzada` lo dejó el 2026-10-25, 5E-1: lo da el Gobernador o el Maestro de Obras de la madre con su columna en el sitio, `Autoriza::CargoEnElSitio`), y `Autoriza` gana
 > `Cargo(..)` (el titular de alguno de esos cargos, que reside en la plaza y está dentro: `cargo(A, c)`), `CargoDeLaOrden` (el que nombra la orden: `activar_politica`, `comprometer_recinto`, `mejorar_recinto`),
 > `ResidenteDentro` (`reside(A)`, `resideEnOrigen`), `OperaAparcada` (`puedeOperarAparcada`), `AsignaCargoLocal`, `FijaPuerta` y `CompraIntel`; las aplica una sola función (`Nucleo::autorizar_en_plaza`,
 > `crates/nucleo/src/nucleo/cargos.rs`) con los predicados de `politica::autorizacion::Actor`. Las órdenes de plaza no nombran héroe: vale cualquiera de los héroes de la cuenta (índice cuenta → héroes,
@@ -289,7 +289,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `cancelar_convocatoria` | `CancelarConvocatoria` | la cuenta del héroe, aunque esté fuera | el Líder de la convocatoria |
 | `cancelar_formacion` | `CancelarFormacion` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) |
 | `ceder_liderazgo` | `CederLiderazgo` | la cuenta del héroe | el Líder |
-| `colocar_avanzada` | `ColocarAvanzada` | la cuenta del héroe, ciudadano de la madre | la columna del héroe a la puerta (`radioPuerta`) del sitio (DUDA de 5E: el panel es del Gobernador o del Maestro de Obras, pero quien coloca está en el sitio) |
+| `colocar_avanzada` | `ColocarAvanzada` | el Gobernador o el Maestro de Obras de la madre, residente, con su columna en el sitio | la columna del héroe a la puerta (`radioPuerta`) del sitio, no dentro de la plaza (5E-1, decisión del autor del 2026-10-25: el panel de la madre es de esos dos cargos y «la coloca el héroe en el sitio», Doc 4.2.2) |
 | `comprar_caravana_de_refundacion` | `ComprarCaravanaDeRefundacion` | la cuenta del héroe | en un campamento, ciudadano de una Facción sin plazas (`refundacion.con_plazas`) ni otra Caravana de Fundación (`refundacion.ya_tiene_caravana`); el fondo de su Facción cubre el coste (`refundacion.fondo_corto`) (5G-b) |
 | `comprar_en_campamento` | `ComprarEnCampamento` | la cuenta del héroe | dentro del campamento o a su puerta; cupo diario |
 | `comprar_informe_plaza` | `ComprarInformePlaza` | la cuenta del héroe; en una plaza, dentro y Rey, Embajador o Gobernador | como `comprar_mirada`; conocer la plaza |

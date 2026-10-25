@@ -521,9 +521,9 @@ pub enum Autoriza {
     ResidenteDentro,
     /// La cuenta de un héroe que reside en el origen de la caravana y está dentro de la plaza donde está aparcada (`puedeOperarAparcada`).
     OperaAparcada,
-    /// La cuenta del héroe, ciudadano de la Facción de la plaza madre, con su columna en el sitio (lo mira la orden): colocar una avanzada, que «la coloca el héroe en el sitio» (Doc 4.2.2).
-    /// DUDA: el panel de la madre es del Gobernador o del Maestro de Obras presentes, pero quien coloca está en el sitio y no dentro de la plaza; se queda la regla de antes del sistema 5.
-    CiudadanoDeLaMadre,
+    /// La cuenta de un héroe titular de alguno de esos cargos en la plaza madre y residente en ella, con su columna en el sitio (lo mira la orden) en vez de dentro: colocar una avanzada, que «la
+    /// coloca el héroe en el sitio» (Doc 4.2.2; 5E-1, decisión del autor del 2026-10-25: el Gobernador o el Maestro de Obras de la madre).
+    CargoEnElSitio(&'static [Cargo]),
     /// `asignarCargoLocal`: al Gobernador, el Rey de la Facción dueña sin presencia; a los demás, el Gobernador residente y dentro.
     AsignaCargoLocal,
     /// `fijarPuerta`: el Gobernador residente y dentro, o el Rey de la Facción dueña sin presencia.
@@ -692,7 +692,7 @@ impl Comando {
             | Comando::PrepararCaravana { .. }
             | Comando::CancelarCaravana { .. } => ResidenteDentro,
             Comando::MoverCargaAparcada { .. } | Comando::EnviarCaravanaAlOrigen { .. } => OperaAparcada,
-            Comando::ColocarAvanzada { .. } => CiudadanoDeLaMadre,
+            Comando::ColocarAvanzada { .. } => CargoEnElSitio(GOBERNADOR_O_MAESTRO),
             Comando::AsignarCargoLocal { .. } => AsignaCargoLocal,
             Comando::FijarAcceso { .. } | Comando::FijarPuerta { .. } => FijaPuerta,
             Comando::ComprarMirada { .. } | Comando::ComprarInformePlaza { .. } => CompraIntel,

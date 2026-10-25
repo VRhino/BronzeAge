@@ -138,9 +138,10 @@ async fn un_cliente_que_solo_habla_el_contrato_nace_comercia_explora_funda_const
     let interior = format!("ASENTAMIENTO:{plaza}");
     assert!(ana.almacen.ambitos.contains_key(&interior), "dentro de su plaza, su interior");
 
-    // 6. Construye: las obras las da el Gobernador (o el Maestro de Obras), residente y dentro (5E). Ana, Reina de su Facción y residente de la plaza (Q4), se nombra Gobernadora; la obra entra
+    // 6. Construye: las obras las da el Gobernador (o el Maestro de Obras), residente y dentro (5E). Ana fundó la plaza: es su Gobernadora de oficio (5E-3) y reside en ella (Q4); la obra entra
     //    en la cola de la plaza con el id que devuelve el resultado.
-    ana.aceptada(O::AsignarCargoLocal(pb::OrdenAsignarCargoLocal { asentamiento_id: plaza.clone(), cargo: "gobernador".into(), heroe_id: heroe.clone() })).await;
+    let Some(Cuerpo::Asentamiento(a)) = entidad(&ana.almacen, &interior, TipoEntidad::Asentamiento, &plaza) else { panic!("la plaza") };
+    assert_eq!(a.cargos.as_ref().and_then(|c| c.gobernador_id.clone()), Some(heroe.clone()), "quien funda es su Gobernadora de oficio");
     let r = ana.aceptada(O::AnadirEdificioManualmente(pb::OrdenAnadirEdificioManualmente { asentamiento_id: plaza.clone(), cargo: "gobernador".into(), tipo: "vivienda".into() })).await;
     let vivienda = creada(&r, TipoEntidad::Edificio);
     let Some(Cuerpo::Asentamiento(a)) = entidad(&ana.almacen, &interior, TipoEntidad::Asentamiento, &plaza) else { panic!("la plaza") };

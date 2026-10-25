@@ -360,7 +360,39 @@ fn no_se_acepta_con_una_batalla_abierta_y_quien_ya_no_puede_estar_dentro_sale() 
     e.anexion("ana", 1, "beto", 2);
     assert!(matches!(e.n.heroe(gus).unwrap().heroe.presencia.ubicacion, Ubicacion::Columna(_)), "gus salió al mapa");
     let h = e.hechos("heroe.expulsado").into_iter().find(|h| dato(h, "heroe") == gus as i64).expect("expulsado");
-    assert_eq!(dato(&h, "motivo"), 0, "la puerta ya no le admite");
+    assert_eq!(dato(&h, "motivo"), 2, "sale con el motivo de la conquista, `cambia_de_dueno` (5F-9)");
+}
+
+/// 5F-3 (decisión del autor, 2026-10-25): tampoco se acepta si un héroe de alguna de las dos combate en una batalla abierta de otros, incorporado a ella (cambiaría de Facción a mitad de la
+/// batalla). Una vez acabada, sí.
+#[test]
+fn no_se_acepta_si_un_heroe_de_las_dos_combate_incorporado_en_una_batalla_ajena() {
+    let m = con_mundo!();
+    let (mut e, _a, _b) = dos_plazas(m);
+    // F3 (gus) tiene la plaza C y es aliada de F2; dora, de F2, está dentro de C. F4 (hugo) asedia C y dora se une a la defensa.
+    let pc = comun::real::sitio_rico(&e.n, &m.0, 0, 3);
+    let c = comun::real::fundar(&mut e.n, "gus", 3, pc);
+    e.relacion("beto", 2, "gus", 3, false);
+    let (_, dora) = e.columna("dora", 2, pc);
+    e.ok("dora", Comando::Guarnecer { asentamiento: c, heroe: dora });
+    let (r1, r2) = (e.rey(1), e.rey(2));
+    let p = e.ok("ana", Comando::ProponerAnexion { heroe: r1, absorbente: 1, absorbida: 2 }).creadas[0];
+    e.avanzar_hasta_que_se_pueda(c);
+    let (_, h4) = e.columna("hugo", 4, Punto::new(pc.x + 2_000, pc.y));
+    let arqueros = militar::catalogo::Tropa::ArquerosCompuesto;
+    e.ok("admin", Comando::DarEscuadra { heroe: h4, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });
+    e.ok("hugo", Comando::Atacar { heroe: h4, objetivo: ObjetivoAtaque::Asentamiento(c), declara_guerra: true });
+    let id = e.n.batallas().find(|x| x.activa(e.n.ahora())).expect("el asedio es una batalla con convocatoria").id;
+    let tk = &e.n.batalla(id).unwrap().ticket;
+    assert_eq!((tk.atacante.faccion, tk.defensor.faccion), (Some(4), Some(3)), "ni F1 ni F2 son bando");
+    e.ok("dora", Comando::UnirseABatalla { heroe: dora, batalla: id, lado: None });
+    assert!(e.n.batalla(id).unwrap().heroes_que_combaten().any(|h| h == dora), "dora combate incorporada");
+    assert_eq!(e.no("beto", Comando::ResponderAnexion { heroe: r2, propuesta: p, aceptar: true }), rechazos::DIPLOMACIA_BATALLA_ABIERTA);
+    // Con la batalla acabada, se acepta.
+    let fin = e.n.batalla(id).unwrap().expira_en.max(e.n.batalla(id).unwrap().convocatoria_hasta.unwrap_or(0));
+    e.n.avanzar_hasta(fin + MIN);
+    assert!(!e.n.batallas().any(|x| x.activa(e.n.ahora())), "la batalla acabó");
+    e.ok("beto", Comando::ResponderAnexion { heroe: r2, propuesta: p, aceptar: true });
 }
 
 impl E {

@@ -13,9 +13,10 @@
 //! - **la memoria de la niebla** se funde al cerrar la versión, después de grabar lo que vieron los ojos del origen (`fundir_memorias`): lo explorado por unión, las fichas y los Informes con
 //!   los del destino delante, sin los de sitios ya propios, y las Miradas pasan al destino;
 //! - **la reputación y las tecnologías del andamiaje** del origen se borran (en la fusión, la Facción nueva nace con la mayor reputación y la unión de las tecnologías);
-//! - **la puerta**: quien está dentro de un lugar que ya no le admite (un aliado del origen dentro de una plaza suya, que ya no es aliado del dueño) sale al mapa con lo suyo.
+//! - **la puerta**: quien está dentro de un lugar que ya no le admite (un aliado del origen dentro de una plaza suya, que ya no es aliado del dueño) sale al mapa con lo suyo, con el motivo
+//!   `cambia_de_dueno` de la conquista (5F-9).
 //!
-//! Lo que nunca se traslada es una batalla: no se acepta con una batalla abierta de alguna de las dos (§6.1). La experiencia y el Rey los decide `politica` (la fusión: la mayor y el electo).
+//! Lo que nunca se traslada es una batalla: no se acepta con una batalla abierta de alguna de las dos ni con un héroe suyo combatiendo en una, como bando o incorporado (§6.1, 5F-3). La experiencia y el Rey los decide `politica` (la fusión: la mayor y el electo).
 //! Nada de esto deja citas en la cola.
 
 use super::*;
@@ -73,7 +74,7 @@ impl Nucleo {
             Comando::ResponderAnexion { heroe, propuesta, aceptar } => {
                 let (a, b) = self.propuesta_de_union(*propuesta, t, DeUnion::Anexion)?;
                 self.exigir_rey(p, *heroe, b)?;
-                let batalla = self.faccion_en_batalla(a) || self.faccion_en_batalla(b);
+                let batalla = self.union_en_batalla(a, b);
                 let union = self.estado.politica.responder_anexion(*propuesta, *aceptar, batalla, t).map_err(|e| rechazo(de_union(e)))?;
                 self.tr.tocar_todos(Clase::Faccion, [u64::from(a), u64::from(b)]);
                 let datos = vec![("propuesta", *propuesta as i64), ("faccionA", i64::from(a)), ("faccionB", i64::from(b)), ("heroe", *heroe as i64)];
@@ -109,7 +110,7 @@ impl Nucleo {
             Comando::ResponderFusion { heroe, propuesta, aceptar } => {
                 let (a, b) = self.propuesta_de_union(*propuesta, t, DeUnion::Fusion)?;
                 self.exigir_rey(p, *heroe, b)?;
-                let batalla = self.faccion_en_batalla(a) || self.faccion_en_batalla(b);
+                let batalla = self.union_en_batalla(a, b);
                 let union = self.estado.politica.responder_fusion(*propuesta, *aceptar, batalla, t).map_err(|e| rechazo(de_union(e)))?;
                 self.tr.tocar_todos(Clase::Faccion, [u64::from(a), u64::from(b)]);
                 let mut datos = vec![("propuesta", *propuesta as i64), ("faccionA", i64::from(a)), ("faccionB", i64::from(b)), ("heroe", *heroe as i64)];
@@ -134,6 +135,14 @@ impl Nucleo {
             }
             _ => unreachable!("solo se llama con órdenes de anexión y fusión"),
         }
+    }
+
+    /// ¿Impide una batalla abierta la anexión o la fusión de `a` y `b`? Sí si alguna de las dos ataca o defiende una batalla activa (la de las relaciones, 5D-7) o si **algún héroe de las dos**
+    /// combate en una, como bando o incorporado (5F-3, decisión del autor del 2026-10-25): cambiaría de Facción a mitad de la batalla.
+    fn union_en_batalla(&self, a: u32, b: u32) -> bool {
+        let t = self.estado.ahora;
+        let de_las_dos = |h: u64| self.estado.militar.heroes.get(&h).and_then(|x| x.faccion).is_some_and(|f| f == a || f == b);
+        self.faccion_en_batalla(a) || self.faccion_en_batalla(b) || self.batallas().any(|x| x.activa(t) && x.heroes_que_combaten().any(de_las_dos))
     }
 
     /// La propuesta `id`, vigente y de la clase de la orden: `(quien propone, quien contesta)`.
@@ -273,7 +282,8 @@ impl Nucleo {
             self.reprogramar_anillos(t);
         }
 
-        // 8. La puerta: quien está dentro de una plaza del origen, o es ciudadano del origen y está dentro de un lugar ajeno, sale al mapa si el lugar ya no le admite.
+        // 8. La puerta: quien está dentro de una plaza del origen, o es ciudadano del origen y está dentro de un lugar ajeno, sale al mapa si el lugar ya no le admite, con el motivo de la
+        //    conquista (`cambia_de_dueno`; 5F-9, decisión del autor del 2026-10-25).
         let movidas: BTreeSet<u64> = plazas.iter().copied().collect();
         let ciudadanos: BTreeSet<u64> = nuevos.iter().copied().collect();
         let dentro: Vec<u64> = self
@@ -290,7 +300,7 @@ impl Nucleo {
             .map(|h| h.heroe.id)
             .collect();
         for h in dentro {
-            self.echar_si_ya_no_entra(t, h);
+            self.echar_si_ya_no_entra(t, h, super::dentro::MOTIVO_CAMBIA_DE_DUENO);
         }
     }
 

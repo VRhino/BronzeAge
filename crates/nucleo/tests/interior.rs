@@ -105,7 +105,7 @@ impl Aldea {
             // 5E: el primer residente que está dentro gobierna la plaza (sus órdenes de plaza pasan la matriz real).
             // El segundo es su Maestro de Obras.
             if let (Some(Residencia::Asentamiento(a)), Ubicacion::Asentamiento(b)) = (residencia, u) {
-                if a == b && self.n.estado().asentamientos[&u64::from(a)].cargos.titular(asentamiento::Cargo::Gobernador).is_none() {
+                if a == b && comun::sin_gobernador_dentro(&self.n, u64::from(a)) {
                     comun::gobierna(&mut self.n, u64::from(a), h);
                 } else if a == b {
                     self.ok("admin", Comando::AsignarCargoLocal { heroe: h, asentamiento: u64::from(a), cargo: asentamiento::Cargo::MaestroObras, designado: h });

@@ -121,7 +121,7 @@ impl Esc {
             self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(p as u32)) });
             self.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(p as u32) });
             // 5E: el primer residente que está dentro gobierna la plaza (sus órdenes de plaza pasan la matriz real).
-            if self.n.estado().asentamientos[&p].cargos.titular(asentamiento::Cargo::Gobernador).is_none() {
+            if comun::sin_gobernador_dentro(&self.n, p) {
                 comun::gobierna(&mut self.n, p, h);
             }
         }
@@ -792,6 +792,9 @@ fn con_pueblo(m: &M) -> (Esc, u64, u64) {
     }
     // 5E: las obras de mapa del panel de la madre las da su Gobernador, dentro de ella.
     comun::gobernador_de_oficio(&mut x.n, "ana", a);
+    // 5E-1: coloca la avanzada el Maestro de Obras de la madre con su columna en el sitio.
+    let lider = x.n.ejercito(col).unwrap().columna.lider;
+    comun::coloca_avanzadas(&mut x.n, a, lider);
     let ahora = x.n.ahora();
     x.n.avanzar_hasta((ahora / MS_POR_MINUTO + 1) * MS_POR_MINUTO + 1_000);
     (x, pueblo, col)

@@ -239,7 +239,7 @@ impl Nucleo {
                     datos.extend(campamento.map(|c| ("campamento", i64::from(c))));
                 }
                 // Quien está dentro de un lugar cuya puerta ya no le admite sin la Facción sale expulsado al mapa, solo y con su carro (5B-1).
-                datos.extend(self.echar_si_ya_no_entra(t, *heroe).map(|c| ("ejercito", c as i64)));
+                datos.extend(self.echar_si_ya_no_entra(t, *heroe, super::dentro::MOTIVO_PUERTA_CERRADA).map(|c| ("ejercito", c as i64)));
                 self.emitir_propio(t, "faccion.abandonada", vec![], datos);
                 Ok(vec![])
             }

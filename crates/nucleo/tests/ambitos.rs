@@ -97,7 +97,7 @@ impl Aldea {
             self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(a as u32)) });
             self.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(a as u32) });
             // 5E: el primer residente que está dentro gobierna la plaza (sus órdenes de plaza pasan la matriz real).
-            if self.n.estado().asentamientos[&a].cargos.titular(asentamiento::Cargo::Gobernador).is_none() {
+            if comun::sin_gobernador_dentro(&self.n, a) {
                 comun::gobierna(&mut self.n, a, h);
             }
         }

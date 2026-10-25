@@ -339,6 +339,8 @@ async fn una_avanzada_se_coloca_se_entrega_y_se_destruye_por_el_contrato() {
         p.ok("admin", Comando::DarSuministro { ejercito: col, recurso: r, cantidad: n });
     }
     let (as_, h) = (id(plaza, "as"), ids::heroe(heroe));
+    // 5E-1: la coloca el Maestro de Obras de la madre, residente, con su columna en el sitio.
+    comun::coloca_avanzadas(&mut p.n, plaza, heroe);
     // Cancelar y destruir son del panel de la plaza madre (5E): los da su Gobernador, dentro de ella (el de oficio de ana).
     let gobernador = ids::heroe(p.n.estado().asentamientos[&plaza].cargos.titular(asentamiento::Cargo::Gobernador).expect("tiene Gobernador"));
     let w = arrancar_con(p.n).await;

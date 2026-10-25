@@ -9,8 +9,8 @@
 //!
 //! # Los cargos
 //! Al Gobernador lo designa el Rey de la Facción dueña; a los otros cuatro, el Gobernador. El designado es ciudadano de la Facción dueña y **reside en la plaza** (Q4); el cargo se vacía al
-//! dejar de residir (cualquier mudanza pasa por `mudar_de_residencia`), al perder la ciudadanía de la Facción dueña y en la conquista. La plaza recién fundada no tiene Gobernador (como el
-//! TypeScript): lo nombra su Rey.
+//! dejar de residir (cualquier mudanza pasa por `mudar_de_residencia`), al perder la ciudadanía de la Facción dueña y en la conquista. Quien funda la plaza (el Líder de la columna, si es uno de
+//! los fundadores) es su Gobernador de oficio (5E-3, `zonas::fundar`); el Rey puede cambiarlo.
 //!
 //! # La puerta (Q1)
 //! Por grupos (neutrales, aliados —con vasallos y señores—, enemigos en guerra y los Aedas) y vetos; por defecto, cerrada a neutrales y enemigos (`PUERTA.cerradaAPorDefecto`). Las capas:
@@ -39,7 +39,7 @@ impl Nucleo {
                 otro => unreachable!("{otro:?} no nombra cargo"),
             },
             Autoriza::ResidenteDentro => x.reside(a),
-            Autoriza::CiudadanoDeLaMadre => self.estado.asentamientos.get(&u64::from(a)).is_some_and(|p| x.ciudadano(p.faccion)),
+            Autoriza::CargoEnElSitio(cargos) => x.cargo_en_el_sitio(a, cargos),
             Autoriza::AsignaCargoLocal => match comando {
                 Comando::AsignarCargoLocal { cargo, .. } => x.asigna_cargo_local(a, *cargo),
                 otro => unreachable!("{otro:?} no designa cargos"),
@@ -201,7 +201,7 @@ fn quien_la_da(a: Autoriza) -> &'static str {
     match a {
         Autoriza::Cargo(_) | Autoriza::CargoDeLaOrden => "ser el titular del cargo, residir en la plaza y estar dentro",
         Autoriza::ResidenteDentro => "residir en la plaza y estar dentro",
-        Autoriza::CiudadanoDeLaMadre => "ser ciudadano de su Facción",
+        Autoriza::CargoEnElSitio(_) => "ser su Gobernador o su Maestro de Obras, residir en ella y estar con la columna en el sitio",
         Autoriza::AsignaCargoLocal => "al Gobernador lo nombra el Rey; a los demás, el Gobernador, dentro de la plaza",
         Autoriza::FijaPuerta => "ser su Gobernador, dentro de la plaza, o el Rey de su Facción",
         Autoriza::CompraIntel => "estar dentro y ser el Rey, el Embajador o el Gobernador",

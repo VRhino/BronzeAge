@@ -631,14 +631,14 @@ impl Nucleo {
         if self.generadores.is_empty() {
             return;
         }
-        let plan = self.estado.ejercitos[&id].plan.clone();
+        // Una columna dada de baja (`baja_de_columna`) ya no está: su plan se retira.
+        let plan = self.estado.ejercitos.get(&id).filter(|_| nuevo).map(|e| e.plan.clone());
         let mut gens = std::mem::take(&mut self.generadores);
         for (i, g) in gens.iter_mut().enumerate() {
             let mut cx = Cx { estado: &mut self.estado, tr: &mut self.tr, generador: i as u16 };
-            if nuevo {
-                g.plan_cambiado(&mut cx, id, &plan);
-            } else {
-                g.plan_retirado(&mut cx, id);
+            match &plan {
+                Some(plan) => g.plan_cambiado(&mut cx, id, plan),
+                None => g.plan_retirado(&mut cx, id),
             }
         }
         self.generadores = gens;

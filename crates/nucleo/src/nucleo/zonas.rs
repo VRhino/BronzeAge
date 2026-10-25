@@ -349,7 +349,7 @@ impl Nucleo {
         let Some(caravana) = self.estado.fundacion.de_columna(ejercito) else {
             return Err(Respuesta::rechazo(rechazos::SIN_CARAVANA, "la columna no lleva una Caravana de Fundación", v));
         };
-        let punto = e.posicion_en(t);
+        let (punto, lider) = (e.posicion_en(t), e.columna.lider);
         let faccion = e.columna.faccion.ok_or_else(|| Respuesta::rechazo(rechazos::FUNDACION_SIN_FACCION, "una columna sin Facción no funda", v))?;
         // Los fundadores (Fundacion_Y_Refundacion §5.2): el titular y los demás de la columna que son ciudadanos de su Facción, en su orden y hasta `maxJugadoresFundacionGrupal`.
         let fundadores: Vec<u64> = Self::participantes_de(e)
@@ -389,6 +389,12 @@ impl Nucleo {
         for &h in &fundadores {
             self.mudar_de_residencia(h, Some(militar::heroe::Residencia::Asentamiento(id as u32)));
         }
+        // 5E-3 (decisión del autor, 2026-10-25): quien funda, el Líder de la columna, es su Gobernador de oficio (Doc 2.2); el Rey puede cambiarlo después. Solo si es uno de los fundadores:
+        // el cargo pide residir en la plaza (Q4). DUDA: un Líder que no es ciudadano de la Facción de la caravana no reside en ella y la plaza nace sin Gobernador, como antes de 5E-3.
+        let gobernador = fundadores.contains(&lider);
+        if gobernador {
+            self.estado.asentamientos.get_mut(&id).expect("recién fundada").cargos.fijar(asentamiento::Cargo::Gobernador, Some(lider));
+        }
 
         self.tr.tocar(Clase::Asentamiento, id);
         self.tr.emitir(&self.estado, EventoNucleo {
@@ -401,6 +407,10 @@ impl Nucleo {
             valores: if nombre.is_empty() { vec![] } else { vec![("nombre", crate::estado::Dato::Texto(nombre))] },
             ..Default::default()
         });
+        if gobernador {
+            let (datos, valores) = (vec![("asentamiento", id as i64), ("faccion", i64::from(faccion)), ("heroe", lider as i64)], vec![("cargo", crate::estado::Dato::Texto(asentamiento::Cargo::Gobernador.clave().to_owned()))]);
+            self.tr.emitir(&self.estado, EventoNucleo { valores, asentamientos: vec![id], ..EventoNucleo::nuevo("cargo.local_asignado", t, datos) });
+        }
         // La derrota se borra al fundar (§8) y la fundación da experiencia salvo la primera plaza de la Facción (§3.5). La capital puede cambiar: la Facción cambia.
         self.estado.politica.facciones.anular_derrota(faccion);
         self.tr.tocar(Clase::Faccion, u64::from(faccion));
