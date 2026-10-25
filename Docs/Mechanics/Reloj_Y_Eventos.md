@@ -134,7 +134,7 @@ Tres clases. **Ritmo**: el estado guarda `(valor en t₀, ritmo)` y el valor se 
 | Experiencia de Facción, reputación | Se aplican **al ocurrir** el hecho que las produce; el decaimiento de la reputación es un ritmo |
 | Reposición de mercados de mercenarios | **Evento** agendado (ya era una cita) |
 | Títulos | **Muestreo** o reevaluación cuando cambia lo que mira (Facciones, plazas, relaciones). **Implementado en Rust (2026-10-25, 5F):** un solo plazo **global** (`Carga::Titulos`, prioridad 10) a `TITULOS.cadenciaMinutos` de lo primero que pasa (orden aceptada o evento de la cola que no sea él mismo) sin otro pendiente; al vencer recalcula todo y no se rearma solo (Diplomacia_Facciones §7) |
-| Tecnología, logros, Aedas, residentes | Los contadores suben al ocurrir el hecho; las condiciones de adopción se evalúan al subir un contador; los Aedas itinerantes, eventos programados |
+| Tecnología, logros, Aedas, residentes | Los contadores suben al ocurrir el hecho; la aparición se evalúa al ocurrir lo que mira su hito (Sistema 6, plan §5.1) y la Era al fijar un logro o en la cita de su plazo; los Aedas itinerantes, eventos programados |
 | Caravanas de fundación (vuelve sola, se desarma, caduca) | **Planes** y eventos de caducidad |
 | Memoria de la niebla y exploración | **Muestreo** (§4) |
 
@@ -165,7 +165,7 @@ Una columna o una caravana que participa en una batalla activa (`convocando`, `a
 ## 8. El generador aleatorio
 
 - **Una sola secuencia de la partida**, consumida en el orden de la cola (que es total y determinista). Cualquier cambio de orden cambia la partida a partir de ahí, así que el orden de la cola es parte de las reglas.
-- Consumen el generador: el **combate resuelto con números** (varianza de ±15 %), el **nivel y el punto** de un campamento de bandidos nuevo, y los **sorteos de aparición** (Aedas, eventos). El crecimiento de población no. Lo que construye el mundo con una semilla propia (campamentos de mercenarios, alijos, el artefacto de mundo) **no** toca la secuencia de la partida.
+- Consumen el generador: el **combate resuelto con números** (varianza de ±15 %), el **nivel y el punto** de un campamento de bandidos nuevo, y los **sorteos de aparición** de eventos (los Aedas no consumen azar: Tecnologia_Aedas §3). El crecimiento de población no. Lo que construye el mundo con una semilla propia (campamentos de mercenarios, alijos, el artefacto de mundo) **no** toca la secuencia de la partida.
 - Lo que vuelve de un worker (una ruta, un cálculo de combate) entra como un evento más y **se escribe en el registro**, para que una reproducción no dependa de qué hilo terminó antes.
 - El crecimiento de población **no** consume el generador (§10, decisión 1).
 

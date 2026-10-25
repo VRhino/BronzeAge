@@ -466,6 +466,10 @@ pub enum Comando {
     ResponderFusion { heroe: u64, propuesta: u64, aceptar: bool },
     /// El Rey de `a` retira su propuesta mientras siga vigente.
     RetirarFusion { heroe: u64, propuesta: u64 },
+    // ── Los alijos (sistema 6, tanda 6F; Generacion_Del_Mundo §12). Código 174. ──
+    /// El héroe (sin Facción o de una sin plazas) abre el alijo `alijo` (índice del artefacto) con su columna a `radioPuerta`: su oro, en unidades enteras, al carro de la columna (lo que no
+    /// cabe se pierde), y queda abierto para él.
+    AbrirAlijo { heroe: u64, alijo: u32 },
 }
 
 /// El prefijo del actor de los mensajes del servidor de batalla: `batalla-servidor:<id>` (§8).
@@ -638,6 +642,7 @@ impl Comando {
             | Comando::AportarARefundacion { .. }
             | Comando::RetirarDeRefundacion { .. }
             | Comando::ComprarCaravanaDeRefundacion { .. }
+            | Comando::AbrirAlijo { .. }
             | Comando::LanzarCaravanaFundacion { .. }
             | Comando::DesarmarCaravanaFundacion { .. } => CuentaDelHeroe,
             Comando::ResponderSolicitud { .. }
@@ -930,6 +935,7 @@ impl Comando {
             | Comando::Desconectarse { heroe }
             | Comando::Conectarse { heroe }
             | Comando::VaciarCarro { heroe }
+            | Comando::AbrirAlijo { heroe, .. }
             | Comando::GuardarEnAlmacenPersonal { heroe, .. }
             | Comando::SacarDelAlmacenPersonal { heroe, .. }
             | Comando::FijarFaccionDeHeroe { heroe, .. }
@@ -1815,6 +1821,11 @@ impl Peticion {
                 w.u8(118);
                 w.u64(*heroe);
             }
+            Comando::AbrirAlijo { heroe, alijo } => {
+                w.u8(174);
+                w.u64(*heroe);
+                w.u32(*alijo);
+            }
             Comando::ComprometerRecinto { asentamiento, cargo, nivel } => {
                 w.u8(123);
                 w.u64(*asentamiento);
@@ -2282,6 +2293,7 @@ impl Peticion {
             171 => Comando::ProponerFusion { heroe: r.u64()?, a: r.u32()?, b: r.u32()?, nombre: r.texto()?, rey: r.u64()? },
             172 => Comando::ResponderFusion { heroe: r.u64()?, propuesta: r.u64()?, aceptar: r.bool()? },
             173 => Comando::RetirarFusion { heroe: r.u64()?, propuesta: r.u64()? },
+            174 => Comando::AbrirAlijo { heroe: r.u64()?, alijo: r.u32()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -2844,6 +2856,15 @@ pub mod rechazos {
     pub const CARGO_SIN_GOBERNADOR: &str = "cargo.sin_gobernador";
     /// A un residente de la plaza no se le veta (sería el exilio).
     pub const PUERTA_RESIDENTE: &str = "puerta.residente";
+    // Los alijos (sistema 6, tanda 6F; Generacion_Del_Mundo §12).
+    /// El id no es el de ningún alijo del artefacto de mundo.
+    pub const ALIJO_DESCONOCIDO: &str = "alijo.desconocido";
+    /// Los alijos solo los abre un héroe sin Facción o de una Facción sin plazas.
+    pub const ALIJO_NO_PUEDES_BUSCAR: &str = "alijo.no_puedes_buscar";
+    /// Cada héroe abre cada alijo una sola vez.
+    pub const ALIJO_YA_ABIERTO: &str = "alijo.ya_abierto";
+    /// Hay que estar en el sitio: la columna del héroe, en el mapa, a `radioPuerta` del alijo.
+    pub const ALIJO_LEJOS: &str = "alijo.lejos";
 }
 
 /// Lo que un rechazo cuenta además de su código, para que el cliente decida con ello (`RechazoOrden.detalle`).
@@ -3207,6 +3228,7 @@ mod pruebas {
             Comando::ProponerFusion { heroe: 2, a: 1, b: 3, nombre: "Argos".into(), rey: 5 },
             Comando::ResponderFusion { heroe: 2, propuesta: 41, aceptar: false },
             Comando::RetirarFusion { heroe: 2, propuesta: 41 },
+            Comando::AbrirAlijo { heroe: 2, alijo: 7 },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Ejercito(9), declara_guerra: false },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Caravana(4), declara_guerra: true },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Campamento(1), declara_guerra: false },

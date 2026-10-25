@@ -72,6 +72,9 @@ pub fn entidad_titulos() -> u64 {
     17 * crate::estado_comercio::ETIQUETA
 }
 
+/// BAN36: BAN35 con los alijos que abrió cada héroe (sistema 6, tanda 6F: `HeroeNucleo::alijos_abiertos`, por índice del artefacto de mundo). BAN35 se rechaza: sus héroes no dicen qué
+/// alijos abrieron, y cada uno se abre una sola vez.
+///
 /// BAN35: BAN34 con los fundadores de cada plaza (sistema 5, tanda 5H, 5B-9: `Asentamiento::fundadores`, quienes la fundaron y siguen residiendo en ella). BAN34 se rechaza: sus plazas no dicen
 /// quién las fundó.
 ///
@@ -171,7 +174,7 @@ pub fn entidad_titulos() -> u64 {
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN35";
+const MAGIA: &[u8; 5] = b"BAN36";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -1140,12 +1143,13 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN35`): los cuatro primeros dicen la familia («BAN3» son los formatos 30 a 39, y solo el 35 se admite; «BAN2» y «BAN1», los formatos 20 a 29 y
+        // La cabecera es de 5 bytes (`BAN36`): los cuatro primeros dicen la familia («BAN3» son los formatos 30 a 39, y solo el 36 se admite; «BAN2» y «BAN1», los formatos 20 a 29 y
         // 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'5' => {}
+                b'6' => {}
+                b'5' => return Err(ErrorFormato("foto del formato BAN35 (los héroes no dicen qué alijos abrieron): ya no se admite")),
                 b'4' => return Err(ErrorFormato("foto del formato BAN34 (las plazas no dicen quién las fundó): ya no se admite")),
                 b'3' => return Err(ErrorFormato("foto del formato BAN33 (las plazas no traen sus cargos locales y su puerta es el acceso provisional por relación, sin el grupo de los Aedas ni vetos): ya no se admite")),
                 b'2' => return Err(ErrorFormato("foto del formato BAN32 (no trae los títulos de prestigio de la última evaluación ni su plazo, y las plazas no traen sus cargos locales ni su puerta por grupos): ya no se admite")),

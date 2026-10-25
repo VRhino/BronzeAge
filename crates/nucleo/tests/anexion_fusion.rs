@@ -1,7 +1,7 @@
 //! La anexión, la fusión, el traslado de una Facción y los títulos de prestigio en el núcleo (sistema 5, tanda 5F; Diplomacia_Facciones §5.7, §6 y §7): proponer, contestar y retirar con sus
 //! rechazos y su revalidación (quién puede, una sola pendiente, la caducidad, el Rey que ya no es el que propuso, la batalla abierta); el traslado de ciudadanos, columnas, plazas,
 //! relaciones, propuestas, memoria, reputación y tecnologías sin perder ni duplicar nada; los trueques que siguen y ya no mueven la reputación (Q5); quien ya no puede estar dentro y sale; los
-//! títulos con su cadencia, su Gran Rey y su crónica; la foto `BAN33` (hoy `BAN35`) y el determinismo. Casos de `typescript-final:src/session/__tests__/{comandosAnexion,comandosFusion}.test.ts` y
+//! títulos con su cadencia, su Gran Rey y su crónica; la foto `BAN33` (hoy `BAN36`) y el determinismo. Casos de `typescript-final:src/session/__tests__/{comandosAnexion,comandosFusion}.test.ts` y
 //! `engine/__tests__/eventosDominioTitulos.test.ts`. Las pruebas con plazas usan el artefacto de mundo real y se omiten si no está.
 
 mod comun;
@@ -478,7 +478,7 @@ fn la_anexion_y_la_fusion_son_deterministas_y_los_titulos_viajan_en_la_foto_ban3
     assert!(normal.n.faccion(5).is_some_and(|f| f.nombre == "Tebas") && normal.n.titulos().len() == 3);
     let (reglas, hash) = (normal.n.estado().reglas.clone(), normal.n.mundo_hash().to_string());
     let bytes = normal.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN35");
+    assert_eq!(&bytes[..5], b"BAN36");
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!((s.politica.clone(), s.titulos_en, s.hash()), (normal.n.estado().politica.clone(), normal.n.estado().titulos_en, normal.n.hash_estado()));
     let vieja = [b"BAN32".as_slice(), &bytes[5..]].concat();

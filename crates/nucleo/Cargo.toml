@@ -18,6 +18,7 @@ comercio = { path = "../comercio" }
 militar = { path = "../militar" }
 combate = { path = "../combate" }
 politica = { path = "../politica" }
+tecnologia = { path = "../tecnologia" }
 trazado = { path = "../trazado" }
 serde_json = "1"
 contrato = { path = "../contrato" }

@@ -47,6 +47,7 @@ use std::sync::Arc;
 use std::thread::JoinHandle;
 
 mod a_mano;
+mod alijos;
 mod auditoria;
 mod avanzadas;
 mod bandidos;
@@ -83,6 +84,7 @@ mod uniones;
 mod viaje;
 mod zonas;
 
+pub use alijos::Alijo;
 use espacio::{Cosa, Motivo};
 pub(crate) use exploracion::cerca;
 pub use batallas::TokenDeJugador;
@@ -940,6 +942,10 @@ impl Nucleo {
                     Err(r) => return r,
                 }
             }
+            Comando::AbrirAlijo { .. } => match self.ejecutar_alijo(t, p) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
             Comando::ComprarMirada { .. } | Comando::ComprarInformePlaza { .. } => match self.ejecutar_taberna(t, p) {
                 Ok(Some(creada)) => creadas.push(creada),
                 Ok(None) => {}

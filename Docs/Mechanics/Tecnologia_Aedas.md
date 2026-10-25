@@ -1,6 +1,6 @@
 # Tecnología por Eras y Aedas
 
-> **Reescrito el 2026-10-13 para el mundo reactivo.** Donde este documento dice «cada tick», léase **«en cada evaluación»**: los contadores suben **al ocurrir** el hecho (la extracción y la fabricación son ritmos y acumulan al cambiar de ritmo y en cada muestreo), las condiciones de adopción y de Era se evalúan **al subir un contador** y en un muestreo de baja frecuencia, los Aedas itinerantes se mueven por **planes** con eventos de llegada y de fin de estancia, y los residentes llegan por eventos agendados ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §3). **Las Eras IV y V siguen pospuestas** (se definen con el motor nuevo). El «cómo funcionaba» por tick está en `typescript-final:Docs/Mechanics/Tecnologia_Aedas.md`.
+> **Reescrito el 2026-10-13 para el mundo reactivo.** Donde este documento dice «cada tick», léase **«en cada evaluación»**: los contadores suben **al ocurrir** el hecho (la extracción y la fabricación son ritmos y acumulan al cambiar de ritmo y en cada muestreo), la Era se mira al fijarse un logro y en una cita al fin de su plazo, la aparición se evalúa **al ocurrir lo que mira su hito** (los disparadores de `Docs/Arquitectura/Sistema6_Contraste_y_Plan.md` §5.1; sin muestreo), los Aedas itinerantes se mueven por **planes** con eventos de llegada y de fin de estancia, y los residentes llegan por eventos agendados ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §3). **Las Eras IV y V siguen pospuestas** (se definen con el motor nuevo). El «cómo funcionaba» por tick está en `typescript-final:Docs/Mechanics/Tecnologia_Aedas.md`.
 
 Cómo llega una tecnología a una Facción (logro del servidor + hito propio, compra a un Aeda o épica de un residente), cómo avanzan las Eras, cómo se adopta y qué hacen los Aedas: itinerantes que revelan y venden,
 residentes que cantan épicas, y la crónica que narra los hechos públicos.
@@ -62,10 +62,12 @@ Todos los contadores se **suman** salvo `plazasEnNivel.N`, que es un **récord**
 | `caravanas.destruidasOCapturadas` | 1 por `combate.caravana_interceptada_por_ejercito` con `capturada`; 1 por `bandidos.caravana_interceptada`; en Unity, ganador atacante de un asalto de caravana |
 | `bandidos.campamentosDestruidos` | 1 por `combate.campamento_destruido`; en Unity, ganador atacante contra un campamento |
 | `animales.comprados` | 1 por `comercio.caravana_animal_comprado` |
-| `reclutados.escuadrones` | 1 por cada escuadra **nueva** al reclutar (`antes == 0`) |
+| `reclutados.escuadrones` | 1 por cada escuadra **nueva** al reclutar (`antes == 0`), en una plaza (reponer incluido) **o en un campamento de mercenarios** (Q4 del autor, 2026-10-24) |
 | `reclutados.caballeria` | soldados reclutados de una tropa cuyo edificio es Caballerizas, **× 5** si es `carros_guerra`, × 1 el resto |
 | `reclutados.arqueros`, `.escaramuzadores_jabalina`, `.arqueros_compuesto`, `.jinetes_asirios` | los soldados reclutados de esa tropa (`reclutados.<tropaId>` si el contador existe) |
 | `plazasEnNivel.2 / .3` | **récord** de cuántas plazas del mundo han tenido a la vez `nivelActual ≥ N` (se actualiza cada tick) |
+
+Todos los `reclutados.*` cuentan igual en una plaza y en un campamento de mercenarios (Q4 del autor, 2026-10-24; el TS solo contaba la plaza). La guarnición de serie de las avanzadas y la tropa prestada no cuentan.
 
 ## 3. El tick de tecnología (`avanzarTecnologia`)
 
@@ -1430,9 +1432,13 @@ Cada entrada: `era`, `deArranque?`, `logro {contador, umbral}` (el umbral es la 
 
 Ninguna abierta. Las **Eras IV y V** son diseño a medias aún sin implementar (no es una divergencia: el código solo llega a la III).
 
+Divergencia aprobada del TS (Q4 del autor, 2026-10-24): los reclutas de un campamento de mercenarios también suman a `reclutados.*` (§2.1).
+
+> **Implementado en Rust (2026-10-25, 6A): las reglas puras**, en el crate `crates/tecnologia` (sin núcleo; lo conectan 6B-6F). `datos` lee de este documento `TECNOLOGIAS` (en el orden del documento: el índice es el id interno), `ERAS`, `TARIFA_ADOPCION`, `AEDAS`, `EPICAS`, `TITULO_CAPITULO` y `MERCENARIOS.tecnologia`, con los minutos en ms, los factores en ppm y las tarifas en unidades enteras; las cifras son las del TS (Q3). `militar::datos::ReglasTecnologias` vive ahora en este crate (militar la reexporta). `contador`: los 24 contadores como enum y las vías que suman (extracción, fabricación, combate con números, asedio, batalla de Unity, reclutamiento con Q4). `estado`: sumar con el siguiente umbral pendiente en O(1), récords, la Era (una por llamada, cita de fin de plazo, sin plazo en la III), candidatas, `hacer_aparecer`, conocida por los Aedas y la crónica de descubrimientos. `hito`: las cinco condiciones sobre una vista que implementa el núcleo, la aparición por hito y revelar (`faltan` como índices del hito). `adopcion`: adoptar (con rechazos finos), vender, el bonus de producción y las tecnologías del campamento (`primeros` + 72 h o el 50 % de las vivas con ella **adoptada**). `itinerantes`: objetivo, nacimiento repartido por id, llegada con `recientes`, candidatos por distancia y un solo evento pendiente por Aeda. `residentes`: cupo por nivel actual, la llegada exacta con la reputación baja (decisión técnica 6), ajuste al cupo, cambio de dueño, aparición por otra vía y ruina. `epicas`: empezar y abandonar con los nueve rechazos, los hechos tipados con su clave y el avance (enfriamiento, claves recordadas, capítulos, cumplida). `alijos`: ver y abrir (oro hacia abajo a unidades enteras; lo que no cabe se pierde). Las pruebas portan los casos de `tecnologia`, `aedas`, `aedasResidentes`, `alijos`, `canteria`, `tecnologiasDelCampamento` y `comandosTecnologia` del TS (la parte de reglas) y los invariantes de §12 sobre el catálogo.
+
 ## Catálogo de eventos
 
-Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. De estos, aún no se emiten 15 (`aedas.canta_descubrimiento`, `aedas.epica_abandonada`, `aedas.epica_capitulo`, `aedas.epica_cumplida`, `aedas.epica_empieza`, `aedas.epica_tecnologia`, `aedas.residente_llega`, `aedas.residente_se_va`, `aedas.revela`, `aedas.venta`, `alijo.abierto`, `era.comienza`, `tecnologia.adoptada`, `tecnologia.aparece`, `tecnologia.logro`).
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. De estos, aún no se emiten 14 (`aedas.canta_descubrimiento`, `aedas.epica_abandonada`, `aedas.epica_capitulo`, `aedas.epica_cumplida`, `aedas.epica_empieza`, `aedas.epica_tecnologia`, `aedas.residente_llega`, `aedas.residente_se_va`, `aedas.revela`, `aedas.venta`, `era.comienza`, `tecnologia.adoptada`, `tecnologia.aparece`, `tecnologia.logro`).
 
 <!-- eventos -->
 ```json

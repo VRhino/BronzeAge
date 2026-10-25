@@ -284,3 +284,15 @@ fn la_cronica_por_paginas() {
     assert!(c.entradas.iter().all(|e| e.codigo == "cronica.entrada" && e.asentamiento_id.is_none() && e.tipado.is_none()));
     assert!(c.entradas.windows(2).all(|w| w[0].version < w[1].version) && c.entradas.last().unwrap().version <= p.hasta_version.unwrap());
 }
+
+/// Lo que los dorados de 6F (los alijos) dicen, leído por Rust: la orden con el id del artefacto y el héroe con los que abrió.
+#[test]
+fn los_dorados_de_6f_dicen_lo_que_deben() {
+    use mensaje_de_servidor as ms;
+    use orden::Cuerpo as O;
+    let mensaje_de_cliente::Cuerpo::Orden(o) = de_cliente("orden_abrir_alijo") else { panic!() };
+    assert!(matches!(o.cuerpo, Some(O::AbrirAlijo(a)) if a.alijo_id == "alijo-veta-3"));
+    let ms::Cuerpo::Foto(f) = de_servidor("foto_heroe_con_alijos_abiertos") else { panic!() };
+    let Some(entidad::Cuerpo::Heroe(h)) = f.entidades[0].cuerpo.clone() else { panic!() };
+    assert_eq!(h.alijos_abiertos, ["alijo-mercenarios-0-1", "alijo-veta-3"]);
+}

@@ -69,6 +69,8 @@ pub struct HeroeNucleo {
     /// Cuándo cambió de residencia por última vez por una orden suya (`cambiarResidencia`, `residirEnCampamento`, `dejarResidencia`; Diplomacia_Facciones §4.1): el cooldown cuenta desde aquí.
     /// La reubicación forzosa (ruina, conquista), fundar y la administración no lo estampan.
     pub residencia_cambiada_en: Option<Instante>,
+    /// Los alijos que ya abrió, por índice del artefacto de mundo (`Generacion_Del_Mundo.md` §12; 6F, BAN36): cada uno se abre una vez por héroe.
+    pub alijos_abiertos: BTreeSet<u32>,
 }
 
 /// Lo que un héroe recuerda del interior de una plaza al salir al mundo desde ella (Niebla_De_Guerra §4.5): el almacén, la cola (lo que no está activo: lo activo es público y viaja vivo en la
@@ -108,6 +110,7 @@ impl HeroeNucleo {
             informes: Vec::new(),
             plazas_recordadas: BTreeMap::new(),
             residencia_cambiada_en: None,
+            alijos_abiertos: BTreeSet::new(),
         }
     }
 }
