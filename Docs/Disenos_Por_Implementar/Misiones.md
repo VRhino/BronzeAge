@@ -1,6 +1,6 @@
 # Misiones
 
-> **Diseño acordado el 2026-10-26 con el autor. Sin implementar.** Las recompensas y los umbrales son placeholders que se calibran con los batches y los bots. Contexto: `Docs/Mecanicas a desarrollar.md` entrada 49.
+> **Diseño acordado el 2026-10-26 con el autor. Sin implementar** (vive en `Docs/Disenos_Por_Implementar/` hasta que se implemente; ver su README). Las recompensas y los umbrales son placeholders que se calibran con los batches y los bots. Contexto: `Docs/Mecanicas a desarrollar.md` entrada 49.
 
 ## 1. Para qué
 

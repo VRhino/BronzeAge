@@ -1,6 +1,6 @@
 # Mercenarios por contrato
 
-> **Diseño acordado el 2026-10-26 con el autor. Sin implementar.** Ninguna cifra de este documento es vigente: las tarifas, los plazos y los topes son placeholders que se calibran con bots (fase 7). No hay bloque `parametros:` todavía: se crea al implementarlo. Contexto: `Docs/Mecanicas a desarrollar.md` entrada 48; relación con los campamentos en [`Campamentos_Mercenarios.md`](Campamentos_Mercenarios.md).
+> **Diseño acordado el 2026-10-26 con el autor. Sin implementar** (vive en `Docs/Disenos_Por_Implementar/` hasta que se implemente; ver su README). Ninguna cifra de este documento es vigente: las tarifas, los plazos y los topes son placeholders que se calibran con bots (fase 7). No hay bloque `parametros:` todavía: se crea al implementarlo. Contexto: `Docs/Mecanicas a desarrollar.md` entrada 48; relación con los campamentos en [`Campamentos_Mercenarios.md`](../Mechanics/Campamentos_Mercenarios.md).
 
 ## 1. Qué es
 

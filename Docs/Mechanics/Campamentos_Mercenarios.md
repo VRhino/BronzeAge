@@ -4,8 +4,6 @@
 
 ## 1. Alcance y fuentes
 
-> **Diseño acordado el 2026-10-26, sin implementar:** los héroes bot que residen en el campamento podrán ofrecerse y ser contratados por Rey, Embajador o Gobernador como mercenarios de una Facción. Ver [`Mercenarios_Por_Contrato.md`](Mercenarios_Por_Contrato.md).
-
 Un campamento de mercenarios es un **enclave neutral** del mundo abierto: sin Facción, sin zona de influencia, que no crece ni desaparece y al que se puede entrar, residir, comprar, reclutar y refundar. Su mecánica está repartida en varios documentos; este es el **índice** de todas
 ellas (§3) y el lugar donde se describe lo que aún no tenía documento: la **población de reclutas**, el **reclutamiento**, la **tropa prestada** y la **planta** del campamento.
 

@@ -1,10 +1,10 @@
 # Aldea agrícola y cría
 
-> **Diseño acordado el 2026-10-26 con el autor. Sin implementar.** Lo que está marcado **(propuesta)** lo propuso el estudio de diseño y el autor no lo ha confirmado todavía; el resto es decisión suya. Ninguna cifra es vigente: costes, niveles internos, rendimientos y crecimiento son placeholders para el batch de población. Contexto: `Docs/Mecanicas a desarrollar.md` entradas 50 y 51. Modifica, al implementarse, [`Economia_Construccion.md`](Economia_Construccion.md) §5.2, §6.2, §11.1 y §14 (pueblos extractores), `Trazado_Urbano.md` §6.3, `Generacion_Del_Mundo.md` §9 y el canon Doc 1.4, 4.2.2 y 4.5.
+> **Diseño acordado el 2026-10-26 con el autor. Sin implementar** (vive en `Docs/Disenos_Por_Implementar/` hasta que se implemente; ver su README). Lo que está marcado **(propuesta)** lo propuso el estudio de diseño y el autor no lo ha confirmado todavía; el resto es decisión suya. Ninguna cifra es vigente: costes, niveles internos, rendimientos y crecimiento son placeholders para el batch de población. Contexto: `Docs/Mecanicas a desarrollar.md` entradas 50 y 51. Modifica, al implementarse, [`Economia_Construccion.md`](../Mechanics/Economia_Construccion.md) §5.2, §6.2, §11.1 y §14 (pueblos extractores), `Trazado_Urbano.md` §6.3, `Generacion_Del_Mundo.md` §9 y el canon Doc 1.4, 4.2.2 y 4.5.
 
 ## 1. La aldea agrícola (idea 2)
 
-Un tipo nuevo de **pueblo extractor**: la **aldea agrícola** (nombre provisional, para no confundirla con el edificio Granja de la ciudad). Lleva granjas y los **únicos corrales del juego**, y acarrea trigo y ganado a su plaza madre con el carro de siempre ([`Economia_Construccion.md`](Economia_Construccion.md) §14, `crates/asentamiento/src/pueblos.rs`).
+Un tipo nuevo de **pueblo extractor**: la **aldea agrícola** (nombre provisional, para no confundirla con el edificio Granja de la ciudad). Lleva granjas y los **únicos corrales del juego**, y acarrea trigo y ganado a su plaza madre con el carro de siempre ([`Economia_Construccion.md`](../Mechanics/Economia_Construccion.md) §14, `crates/asentamiento/src/pueblos.rs`).
 
 ### 1.1 Qué cambia respecto del pueblo extractor de hoy
 
