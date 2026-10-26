@@ -20,8 +20,8 @@
   "decisiones": [
     {
       "id": "T1",
-      "pregunta": "Las épicas no llegan nunca a cumplirse: ¿se quiere que el primer capítulo de una épica sea la obra del mismo edificio que pide el hito de su tecnología?",
-      "contexto": "TA §7.2 y el bloque `EPICAS`: 21 de las 24 épicas empiezan por `obra` de un edificio que pide el hito de su tecnología (fundición, barracón, galería de tiro, corral, caballerizas, cantera, armería, carpintería). Para empezar una épica la tecnología tiene que tener su logro cumplido, así que en cuanto la plaza levanta ese edificio la tecnología aparece por el hito y la épica se pierde. Las únicas que sobreviven son las de hitos con más condiciones (otra tecnología, un nivel interno alto), y esas siguen con defensas, conquistas o ascensos. Medido (42 días): 72-147 empezadas, 0 cumplidas; perdidas por `aparecida` 5-16; abandonadas atascadas 48-102. La regla es la del TS (paridad); no se ha cambiado nada.",
+      "pregunta": "[Cerrada el 2026-10-26] Las épicas no llegan nunca a cumplirse: ¿se quiere que el primer capítulo de una épica sea la obra del mismo edificio que pide el hito de su tecnología?",
+      "contexto": "TA §7.2 y el bloque `EPICAS`: 21 de las 24 épicas empiezan por `obra` de un edificio que pide el hito de su tecnología (fundición, barracón, galería de tiro, corral, caballerizas, cantera, armería, carpintería). Para empezar una épica la tecnología tiene que tener su logro cumplido, así que en cuanto la plaza levanta ese edificio la tecnología aparece por el hito y la épica se pierde. Las únicas que sobreviven son las de hitos con más condiciones (otra tecnología, un nivel interno alto), y esas siguen con defensas, conquistas o ascensos. Medido (42 días): 72-147 empezadas, 0 cumplidas; perdidas por `aparecida` 5-16; abandonadas atascadas 48-102. La regla es la del TS (paridad); no se ha cambiado nada. Decisión del autor (2026-10-26): como está, para la fase 7.",
       "opciones": [
         {
           "texto": "Dejarlo como está hasta la fase 7: la épica es la vía de quien no puede cumplir el hito (otra tecnología que no tiene, un edificio que no puede levantar), y eso lo medirán los bots reales.",
@@ -42,8 +42,8 @@
     },
     {
       "id": "T2",
-      "pregunta": "En este mundo no se extrae estaño: ¿se revisa en la fase 7 si el artefacto tiene estaño al alcance de las plazas?",
-      "contexto": "`extraido.estano` a 0 en todas las corridas (60 plazas, 42 días, con y sin la escala); `extraido.cobre` llega a 160.000-315.000 con 1-2 minas. Sin estaño no hay logro de la aleación del bronce (245.000 u), ni bronce que fabricar, ni Era I completa: la Era II llega siempre por plazo (día 35). Es un dato del mundo y de los bots mínimos (el Gobernador solo marca minas en nodos de su zona), no de la regla.",
+      "pregunta": "[Cerrada el 2026-10-26] En este mundo no se extrae estaño: ¿se revisa en la fase 7 si el artefacto tiene estaño al alcance de las plazas?",
+      "contexto": "`extraido.estano` a 0 en todas las corridas (60 plazas, 42 días, con y sin la escala); `extraido.cobre` llega a 160.000-315.000 con 1-2 minas. Sin estaño no hay logro de la aleación del bronce (245.000 u), ni bronce que fabricar, ni Era I completa: la Era II llega siempre por plazo (día 35). Es un dato del mundo y de los bots mínimos (el Gobernador solo marca minas en nodos de su zona), no de la regla. Decisión del autor (2026-10-26): para la fase 7.",
       "opciones": [
         {
           "texto": "Medirlo en la fase 7 con bots reales (que comercian el estaño o fundan cerca de él) junto con las X de los logros.",
@@ -59,8 +59,8 @@
     },
     {
       "id": "T3",
-      "pregunta": "Los alijos dan muy poco oro (≈ 4 u cada uno) para lo que cuesta un recluta de campamento (300 u): ¿es la intención?",
-      "contexto": "Generacion_Del_Mundo §12 y el artefacto (`contenidoVivo.ts`): 55 alijos; los 30 que abren seis buscadores en 42 días suman 114 u. Un héroe sin plaza no puede reclutar en su campamento con lo que encuentra; el batch le da el oro por administración (declarado) para ejercitar la vía de Q4.",
+      "pregunta": "[Cerrada el 2026-10-26] Los alijos dan muy poco oro (≈ 4 u cada uno) para lo que cuesta un recluta de campamento (300 u): ¿es la intención?",
+      "contexto": "Generacion_Del_Mundo §12 y el artefacto (`contenidoVivo.ts`): 55 alijos; los 30 que abren seis buscadores en 42 días suman 114 u. Un héroe sin plaza no puede reclutar en su campamento con lo que encuentra; el batch le da el oro por administración (declarado) para ejercitar la vía de Q4. Decisión del autor (2026-10-26): para la fase 7.",
       "opciones": [
         {
           "texto": "Medirlo en la fase 7 con la refundación y los héroes sin plaza de verdad (Cal-5: el oro de los bandidos también es suyo).",
@@ -76,8 +76,8 @@
     },
     {
       "id": "T4",
-      "pregunta": "El Rey solo adopta dentro de la capital: ¿se mantiene, aunque el Rey sea un héroe que está en campaña?",
-      "contexto": "TA §4 y 6C (duda 3: «dentro», no a la puerta). En el batch político la corona pasa a menudo a un héroe bot militar que sale de campaña: 3.172 de 3.181 turnos-hora con algo por adoptar y el Rey fuera de la capital son de un Rey bot (semilla 42). En el de comercio el Rey de la fundación va en la columna de la plaza y el batch le hace pasar la corona al Gobernador de oficio de la capital para poder adoptar.",
+      "pregunta": "[Cerrada el 2026-10-26] El Rey solo adopta dentro de la capital: ¿se mantiene, aunque el Rey sea un héroe que está en campaña?",
+      "contexto": "TA §4 y 6C (duda 3: «dentro», no a la puerta). En el batch político la corona pasa a menudo a un héroe bot militar que sale de campaña: 3.172 de 3.181 turnos-hora con algo por adoptar y el Rey fuera de la capital son de un Rey bot (semilla 42). En el de comercio el Rey de la fundación va en la columna de la plaza y el batch le hace pasar la corona al Gobernador de oficio de la capital para poder adoptar. Decisión del autor (2026-10-26): se mantiene.",
       "opciones": [
         {
           "texto": "Mantenerlo (como el TS): adoptar es un acto del Rey en su palacio; los jugadores lo aprenderán.",

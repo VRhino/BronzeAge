@@ -72,7 +72,7 @@ impl Nucleo {
         let origen = self.estado.comercio.flota[i].origen as u64;
         self.plaza_o_rechazo(origen)?;
         if p.comando.autoriza() == Autoriza::OperaAparcada {
-            // DUDA: sin aparcar (enviar al origen la que no lo está la rechaza la orden), la plaza donde hay que estar es su origen.
+            // Regla (decisión del autor, 2026-10-25, 5E-5): sin aparcar (enviar al origen la que no lo está la rechaza la orden), la plaza donde hay que estar es su origen.
             let donde = self.estado.comercio.flota[i].anfitriona.map_or(origen, u64::from);
             self.autorizar_aparcada(p, origen, donde)?;
         } else {

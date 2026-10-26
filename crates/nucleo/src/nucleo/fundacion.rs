@@ -221,7 +221,8 @@ impl Nucleo {
             .values()
             .filter(|c| match c.situacion {
                 // La de la administración (`DarCaravanaFundacion`) es andamiaje para montar escenarios: va con su columna mientras exista, sea quien sea quien la lleve.
-                // DUDA: así `fundacion.sin_fundadores` sigue pudiendo darse (con la regla real, el titular va en la columna y es ciudadano: siempre hay un fundador).
+                // Decidido por el autor (2026-10-24, 5G-b-2): así `fundacion.sin_fundadores` sigue pudiendo darse (con la regla real, el titular va en la columna y es ciudadano: siempre
+                // hay un fundador).
                 Situacion::Adjunta(e) if c.origen == Origen::Ninguno => tocados.contiene(Clase::Ejercito, e) && !self.estado.ejercitos.contains_key(&e),
                 Situacion::Adjunta(e) => (tocados.contiene(Clase::Ejercito, e) || tocados.contiene(Clase::Heroe, c.titular)) && !self.la_lleva_su_titular(c, e),
                 _ => false,
@@ -511,7 +512,8 @@ impl Nucleo {
         ];
         datos.extend(dueno.map(|f| ("faccionDefensora", i64::from(f))));
         self.hecho_de_combate(if r.gana_atacante { "combate.caravana_interceptada" } else { "combate.caravana_resiste" }, t, vec![id], vec![], punto, datos);
-        // DUDA: la Caravana de Fundación capturada cuenta para `caravanas.destruidasOCapturadas` como cualquier caravana (el hecho es el mismo; el TypeScript no la distinguía).
+        // Regla (decisión del autor, 2026-10-25, 6B-3): la Caravana de Fundación capturada cuenta para `caravanas.destruidasOCapturadas` como cualquier caravana (el hecho es el mismo;
+        // el TypeScript no la distinguía).
         if r.gana_atacante {
             self.contar(t, tecnologia::contador::Delta::uno(tecnologia::Contador::CaravanasDestruidasOCapturadas));
         }

@@ -110,7 +110,8 @@ impl Nucleo {
 
     /// Al cerrar la versión: a cada Facción marcada que siga viva le aparecen las candidatas cuyo hito se cumple (`tecnologia.aparece { faccion, primera; tecnologia }`, privado, atribuido a
     /// su capital).
-    // DUDA: se evalúa con todo lo que cambió la transición, al cerrarla (el TypeScript lo hacía en el tick siguiente); así lo que aparece va en la versión de su causa.
+    // Regla (decisión del autor, 2026-10-25, duda 1 de 6C): se evalúa con todo lo que cambió la transición, al cerrarla (el TypeScript lo hacía en el tick siguiente); así lo que aparece
+    // va en la versión de su causa.
     pub(super) fn apariciones(&mut self, t: Instante) {
         if self.aparicion_pendiente.is_empty() {
             return;
@@ -176,7 +177,8 @@ impl Nucleo {
     }
 
     /// TA §3 paso 4: los Aedas cantan los descubrimientos que ya conocen y aún no cantaron (`aedas.canta_descubrimiento { faccion: la descubridora; tecnologia }`, público, a la crónica).
-    // DUDA: además de en la cita de conocimiento, al fijarse un logro o empezar una Era (una descubridora sin logro, por administración, o de una Era cerrada); el TS lo hacía en el tick siguiente.
+    // Regla (decisión del autor, 2026-10-25, duda 2 de 6C): además de en la cita de conocimiento, al fijarse un logro o empezar una Era (una descubridora sin logro, por administración, o de
+    // una Era cerrada); el TS lo hacía en el tick siguiente.
     pub(super) fn cantar(&mut self, t: Instante) {
         let r = self.estado.reglas.economia.tecnologia.clone();
         let cantadas = self.estado.tecnologia.cantar(&r, t);
@@ -195,8 +197,8 @@ impl Nucleo {
     // ───────────────────────────── Lo que ve la Facción (6G) ─────────────────────────────
 
     /// Las reveladas de la Facción, en el orden del catálogo, con su descubridora y, condición a condición de su hito, si ya la cumple (`TecnologiasFaccion.detalle_reveladas`).
-    // DUDA: `recursoEnCapital` cambia con el paso de minuto de la capital, que no marca la Facción mientras el hito entero no se cumpla: esa condición puede ir atrasada hasta el siguiente cambio de la
-    // Facción (las demás, no: lo que miran marca la aparición, `apariciones`).
+    // Regla (decisión del autor, 2026-10-26, duda 5 de 6G): `recursoEnCapital` cambia con el paso de minuto de la capital, que no marca la Facción mientras el hito entero no se cumpla: esa
+    // condición puede ir atrasada hasta el siguiente cambio de la Facción (las demás, no: lo que miran marca la aparición, `apariciones`).
     pub fn reveladas_con_detalle(&self, faccion: u32) -> Vec<(TecId, Option<u32>, Vec<bool>)> {
         let (r, e) = (&self.estado.reglas.economia.tecnologia, &self.estado.tecnologia);
         let propias = e.de(r, faccion);
@@ -247,7 +249,7 @@ impl Nucleo {
             return Err(rechazo(rechazos::TECNOLOGIA_DESCONOCIDA, "esa tecnología no existe"));
         }
         let capital = self.capital_de(faccion);
-        // DUDA: «el Rey está en la capital» (`estaEnAsentamiento`) es estar dentro de ella; con su columna a la puerta, no.
+        // Regla (decisión del autor, 2026-10-25, duda 3 de 6C): «el Rey está en la capital» (`estaEnAsentamiento`) es estar dentro de ella; con su columna a la puerta, no.
         let en_capital = capital.is_some_and(|c| self.presente(heroe, c as u32));
         let Estado { tecnologia, asentamientos, .. } = &mut self.estado;
         let almacen = capital.map(|c| &mut asentamientos.get_mut(&c).expect("la capital existe").economia.almacen);

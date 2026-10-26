@@ -312,7 +312,7 @@ impl Nucleo {
         }
         // La guarnición come después de la población (Reloj_Y_Eventos §2), la ración de este mismo paso.
         self.alimentar_guarnicion(id, t, racion);
-        // El tributo de la vasalla, al final de su paso (Q3; DUDA: tras comer su guarnición, para que la plaza atienda antes lo suyo).
+        // El tributo de la vasalla, al final de su paso, tras comer su guarnición, para que la plaza atienda antes lo suyo (Q3; regla por decisión del autor, 2026-10-25, 5D-3).
         self.pagar_tributo(id, t);
     }
 

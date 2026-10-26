@@ -224,7 +224,7 @@ impl Nucleo {
 
         // 2. Las plazas: cambian de Facción con todo lo que cuelga de ellas, sus cargos locales incluidos. Van antes que la ciudadanía (5E): un residente que cambia de
         //    Facción y ya no es de la dueña de su plaza deja sus cargos en ella, y aquí la plaza se va con él.
-        // DUDA: si las dos tenían Gran Fundición, el destino se queda con dos (la regla «una por Facción» es de construir, Doc 4.2.1 y 5C-5; ninguna dice que se pierda una).
+        // Regla (decisión del autor, 2026-10-25, 5F-4): si las dos tenían Gran Fundición, el destino se queda con dos (la regla «una por Facción» es de construir, Doc 4.2.1 y 5C-5).
         let plazas: Vec<u64> = self.plazas_de(origen).map(|a| a.id).collect();
         for &id in &plazas {
             let a = self.estado.asentamientos.get_mut(&id).expect("existe");

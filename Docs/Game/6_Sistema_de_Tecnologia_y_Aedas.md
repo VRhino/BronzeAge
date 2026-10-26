@@ -70,7 +70,12 @@ Cuando una Facción cumple el hito de una tecnología cuyo logro ya existe y cuy
 aparece**. La primera Facción en conseguirla —por hito o por épica de un Aeda— queda en la crónica como su descubridora.
 
 Las cifras X de los logros se ajustan para que cada logro se cumpla en una semana concreta de su Era: los de cada
-Era se reparten por su tramo en el orden de adopción, y el último cae una semana antes del plazo.
+Era se reparten por su tramo en el orden de adopción, y el último cae una semana antes del plazo. Ese es el objetivo; hoy
+las X son las del servidor TypeScript y **no se vuelven a medir hasta la fase 7**, con bots reales (decisión del autor,
+2026-10-24): ver 6.6.
+
+Los reclutas cuentan para los logros de reclutamiento igual en un asentamiento (reponer incluido) que en un campamento
+de mercenarios (decisión del autor, 2026-10-24).
 
 ## 6.4 Visibilidad
 
@@ -79,12 +84,14 @@ Era se reparten por su tramo en el orden de adopción, y el último cae una sema
 - Los **Aedas itinerantes** esparcen el conocimiento (6.7): al llegar a un asentamiento, le **revelan** las
   tecnologías que conocen y la Facción aún no tiene aparecidas: cuáles son, qué requisitos de hito le faltan y quién
   las desbloqueó.
+- **Lo público del avance** son los logros cumplidos (sin decir qué tecnología abren) y la Era; los contadores en curso
+  solo los ve la administración (decisión del autor, 2026-10-24).
 - **La ventaja del primero** es ese tiempo: los Aedas conocen una tecnología **24 horas** después de que alguien la
   desbloquea (`AEDAS.retrasoConocimientoMinutos`, 24 · 60, placeholder), no antes. No hay descuento: todos pagan la misma tarifa.
 
 ## 6.5 Adopción
 
-**La adopta el Rey, estando en la capital, y la paga el almacén de la capital.** La adopción es instantánea. La capital
+**La adopta el Rey, estando dentro de la capital (no basta su columna a la puerta), y la paga el almacén de la capital.** La adopción es instantánea. La capital
 la designa el Rey (Doc 2.2) y exige un Palacio activo, con enfriamiento entre designaciones; mientras no designe ninguna, o si la designada pierde el Palacio, es el asentamiento vivo más antiguo de la Facción.
 Las Facciones de bots siguen la misma regla (5.15.6).
 
@@ -102,7 +109,7 @@ Un campamento de mercenarios (Doc 1.9b) no adopta nada: **desbloquea cada tecnol
 
 ## 6.6 Catálogo
 
-Las X de la Era I están balanceadas (calibradas con el batch) en la semana objetivo de su logro (6.3) y caen donde toca. Las de las Eras II y III son provisionales: sus contadores dependen de qué tecnologías adopta cada Facción, y con jugadores NPC se adoptan pocas, así que cada cambio mueve el mundo entero. Siguen sin medida `carpinteria_militar`, `falange_hoplita`, `arqueria_especializada`, `bronce_laminado` y `trabajos_asedio`, cuyo contador no se mueve. "Edificio" en un hito = activo en cualquier asentamiento de la Facción. Las
+Las X son las del servidor TypeScript: las de la Era I se calibraron con su batch (en otro mundo y con otra economía) y las de las Eras II y III eran provisionales (sus contadores dependen de qué tecnologías adopta cada Facción, y con jugadores NPC se adoptan pocas). **No se vuelven a medir hasta la fase 7**, con bots reales (decisión del autor, 2026-10-24). En el mundo de hoy, con los bots mínimos del batch tecnológico (2026-10-26), la Era II llega por plazo el día 35, los logros de la Era I caen entre el día 3 y el 26 (el del bronce no se cumple: no se extrae estaño) y los de las Eras II y III casi no se mueven. Siguen sin medida `carpinteria_militar`, `falange_hoplita`, `arqueria_especializada`, `bronce_laminado` y `trabajos_asedio`, cuyo contador no se mueve. "Edificio" en un hito = activo en cualquier asentamiento de la Facción. Las
 tropas de cada tecnología, con su edificio, equipo y escalón, en Doc 5.8. **Una tecnología también puede dar un
 bonus de producción** en vez de abrir contenido (`bonusProduccion`: un recurso y un factor sobre lo que sacan sus
 extractores): hoy solo `canteria`, que se pensó para la piedra del nivel 3 (Doc 4.5).
@@ -166,7 +173,8 @@ atacan ni se les ataca, no combaten y no se capturan ni se retienen. Son de dos 
   cada uno (`AEDAS.itinerantes.estanciaMinutos`) antes de seguir. Una plaza que **les ha cerrado la puerta con el
   grupo `aedas`** (el exilio, Doc 2.8, que ahora distingue ese cuarto grupo) los deja fuera; el cierre por defecto, a
   neutrales y enemigos, no los incluye. Si se la cierra con un Aeda dentro, el Aeda **sale al instante** hacia su
-  siguiente destino, y lo que ya reveló queda revelado (decisión del autor, 2026-10-24).
+  siguiente destino, y lo que ya reveló queda revelado (decisión del autor, 2026-10-24); el que llega a una plaza que se
+  la cerró mientras iba de camino no entra y sigue hacia la siguiente (2026-10-25).
 - **Se ven** como cualquier columna ajena, solo dentro del radio de visión de la Facción (Doc 5.12.7); no son
   atacables ni retenibles.
 - **Difunden** (6.4): mientras están detenidos en un asentamiento le revelan a su Facción lo que conocen y aún no tiene
@@ -188,6 +196,9 @@ atacan ni se les ataca, no combaten y no se capturan ni se retienen. Son de dos 
 - **Llegada**: con cupo libre, llega uno cada 24 horas (`AEDAS.residentes.llegadaMinutos`, placeholder). Una Facción con
   reputación de **−50 o menos** (Doc 2.7) los atrae **tres veces más despacio**.
 - **Conquista**: si la plaza cambia de dueño, el Aeda se queda mientras haya nobleza, pero **pierde la épica en curso**.
+- **Anexión y fusión** (Doc 2.6): los residentes pasan a la Facción que recoge **con su épica**, y sus épicas cumplidas se
+  suman. Si quedan dos Aedas cantando la misma tecnología, **se unifican**: sigue la más avanzada y el otro la pierde y
+  queda libre (decisión del autor, 2026-10-25).
 - **Qué dan**: cada residente suma un 5 % de crecimiento de población (la felicidad) y un 25 % de crecimiento de nobleza
   (`AEDAS.residentes.bonoFelicidad` y `bonoNobleza`, placeholder), y cuenta para el título de prestigio **«Mecenas de los
   Aedas»** (Doc 2.9): la Facción con mayor valor = épicas cumplidas × 10 + Aedas residentes. Sin efecto mecánico.
@@ -228,6 +239,7 @@ títulos de prestigio (Doc 2.9), descubrimientos (el nombre de la primera Facci�
 retraso de 24 horas ya ha pasado**), épicas cumplidas, asentamientos fundados, caídos o conquistados, la primera ciudad del
 mundo en llegar a los niveles 3, 4 y 5, y guerras declaradas, rebeliones de vasallos, anexiones y fusiones.
 
-Es una **vista de los eventos**, no un registro aparte: cada entrada es un evento público (sin plaza atribuida), así que
-llega a todos los jugadores por el canal de eventos y se consulta en `GET /jugador/partidas/:gameId/cronica`. Lo privado
-se redacta: los rivales saben quién conquista qué plaza, no con qué ni desde dónde. **No afecta al balance.**
+Cada entrada es un **evento público** (sin plaza atribuida), así que llega a todos los jugadores por el canal de eventos,
+y además **se guarda entera**, todo el historial y fuera de la foto del mundo, para que quien llega tarde la lea por
+páginas (`PedirCronica`, contrato 05 §8; decisión del autor, 2026-10-24). Lo privado se redacta: los rivales saben quién
+conquista qué plaza, no con qué ni desde dónde. **No afecta al balance.**

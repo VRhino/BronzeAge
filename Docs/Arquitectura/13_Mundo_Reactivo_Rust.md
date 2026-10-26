@@ -5,6 +5,8 @@
 > `BronzeAgeFase0`. Problemas, decisiones y orden: [`Consideraciones/Reconstruccion_Definicion.md`](../../Consideraciones/Reconstruccion_Definicion.md).
 > Qué cambia para los clientes: [`typescript-final:Docs/Coordinacion/04_Migracion_Mundo_Reactivo.md`](../Coordinacion/04_Migracion_Mundo_Reactivo.md).
 >
+> **Estado (2026-10-26):** el núcleo (fase 5) y las reglas de los seis sistemas (fase 6) están hechos sobre este diseño, en la rama `claude/lucid-curran-6d6ffa`; ver [`Handoff_Fase6.md`](Handoff_Fase6.md), la entrada a la fase 7.
+>
 > Origen: conversación con el usuario (sesión «Cliente jugador», 2026-10-11) tras medir el movimiento del mapa con
 > el contrato 03. Con un tick de 500 ms (valor de prueba) basta interpolar un tick por detrás; con el tick real de
 > **un minuto** eso sería ver la propia columna con más de un minuto de retraso, y extrapolar falla al salir, al

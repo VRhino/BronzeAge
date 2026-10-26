@@ -131,8 +131,8 @@ impl Nucleo {
         }
     }
 
-    /// ¿Va en un ejército (aunque sea solo) o en uno en preparación? Q7 y 5A-4: no deja la Facción. DUDA: la regla dice «una convocatoria con otros héroes»; se rechaza también la de uno
-    /// solo (es de su Facción y, si se fuera, la convocaría un extranjero).
+    /// ¿Va en un ejército (aunque sea solo) o en uno en preparación? Q7 y 5A-4: no deja la Facción. Regla (decisiones del autor del 2026-10-24, 5A-4 y
+    /// 5B-2): se rechaza siempre, también en un ejército de un solo héroe o en una convocatoria en preparación sin otros (es de su Facción y, si se fuera, la convocaría un extranjero).
     fn en_ejercito(&self, heroe: u64) -> bool {
         let columna = self.estado.ejercito_de_heroe(heroe).and_then(|c| self.estado.ejercitos.get(&c));
         columna.is_some_and(|e| e.columna.tipo == TipoColumna::Ejercito) || self.estado.militar.convocatoria_de(heroe).is_some()
@@ -154,7 +154,8 @@ impl Nucleo {
     }
 
     /// El héroe pasa a residir en `nueva` por una orden suya: comprueba el cooldown, que no esté en un ejército en preparación y que su plaza no esté en batalla, se muda y lo estampa.
-    // DUDA: el cooldown y el ejército en preparación son de la regla; que no se cambie de residencia en una convocatoria no lo dice nadie, pero su tropa se iría con él a otra casa.
+    // El cooldown es de la regla; y nadie cambia de residencia yendo en una convocatoria en preparación, porque su tropa se iría con él a otra casa (regla por decisión del autor,
+    // 2026-10-24, 5B-3).
     fn mudarse_por_orden(&mut self, t: Instante, heroe: u64, nueva: Option<Residencia>) -> Result<(), Respuesta> {
         self.sin_convocatoria(heroe)?;
         self.sin_batalla_en_su_plaza(heroe)?;
@@ -223,7 +224,8 @@ impl Nucleo {
             Comando::DejarFaccion { heroe } => {
                 self.autorizar_heroe(p, *heroe, false)?;
                 let en_ejercito = self.en_ejercito(*heroe);
-                // DUDA: 5B-10 habla de mudarse; dejar la Facción también muda a quien reside en una plaza, así que se bloquea igual (después de los rechazos de la regla).
+                // Regla (decisión del autor, 2026-10-24, 5C-9): dejar la Facción también muda a quien reside en una plaza, así que una batalla en ella lo bloquea como 5B-10 (después
+                // de los rechazos de la regla).
                 if self.estado.politica.facciones.faccion_de(*heroe).is_some() && !en_ejercito {
                     self.sin_batalla_en_su_plaza(*heroe)?;
                 }

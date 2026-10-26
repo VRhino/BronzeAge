@@ -12,7 +12,7 @@ referencias antiguas (§34, §39…) sigan valiendo.
 
 | # | Área | Qué se balancea | Cómo se mide |
 |---|---|---|---|
-| 20 | TECNOLOGÍA | X de cada logro de las Eras I-III | batch (`scripts/batch/medidorTecnologia.ts`) |
+| 20 | TECNOLOGÍA | X de cada logro de las Eras I-III | fase 7, con bots reales (Q3); `batch tecnologia` deja el día de cada logro |
 | 30 | MILITAR | El batch no ejercita la guerra: cero campañas con 30 bots | batch con checkpoint de Era II+ o bots más belicosos |
 | 32 | POLÍTICA | Reputación: valor de cada evento, decaimiento y umbrales (`REPUTACION`) | batch / playtest |
 | 32b | POLÍTICA | Caducidad de las propuestas de anexión y de fusión (`ANEXION.caducidadDias`, `FUSION.caducidadDias`) | playtest |
@@ -37,6 +37,8 @@ referencias antiguas (§34, §39…) sigan valiendo.
 
 **Calibrar la X de cada logro** con el batch (`scripts/batch/medidorTecnologia.ts`): cada umbral, en lo que marque su
 contador en su semana objetivo (Doc 6.3). Plan y bitácora: `typescript-final:Consideraciones/Tecnologia_Eras_I-III_Definicion.md`.
+
+**Decisión Q3 del autor (2026-10-24):** las X se portaron tal cual del TypeScript y **no se vuelven a medir hasta la fase 7** (bots reales). El batch tecnológico de Rust (`batch tecnologia`, 6H, 2026-10-26) dejó el día de cada logro y de cada Era con esas X (la Era II llega por plazo el día 35; tabla en `Docs/Arquitectura/Sistema6_Contraste_y_Plan.md`, «Avance de 6H», y en «Para la fase 7» de `Docs/Mecanicas a desarrollar.md`). Lo mismo para la velocidad y la estancia de los Aedas (§42).
 
 ## 34. La economía no llena los víveres de un ejército
 

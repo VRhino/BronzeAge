@@ -81,8 +81,8 @@ impl Nucleo {
         let Some(destino) = self.estado.aedas.get(i).map(|a| a.destino) else { return };
         let Some(d) = destino else { return self.partir_aeda(i, t) };
         let r = &self.estado.reglas.economia.politica;
-        // DUDA: el que llega a una plaza que le cerró la puerta mientras iba de camino no entra y sigue hacia la siguiente (el TypeScript solo miraba la puerta al elegir destino); es la regla
-        // de Q5, «sale quien ya no puede entrar», aplicada a la entrada.
+        // Regla (decisión del autor, 2026-10-25, duda 1 de 6D): el que llega a una plaza que le cerró la puerta mientras iba de camino no entra y sigue hacia la siguiente (el TypeScript solo
+        // miraba la puerta al elegir destino); es la regla de Q5, «sale quien ya no puede entrar», aplicada a la entrada.
         match self.estado.asentamientos.get(&u64::from(d)).filter(|a| a.puerta.admite_aedas(r)).map(|a| a.posicion) {
             Some(posicion) => {
                 let r = self.estado.reglas.economia.tecnologia.clone();

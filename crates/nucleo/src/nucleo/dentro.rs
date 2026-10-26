@@ -205,8 +205,8 @@ impl Nucleo {
     }
 
     /// Quien acaba de dejar su Facción y está dentro de una plaza, un pueblo o una avanzada cuya puerta ya no le admite sale expulsado al mapa con lo suyo: sin columna, solo y con su carro
-    /// (5B-1, 2026-10-24). Devuelve la columna con la que salió. DUDA: la regla habla de la plaza que deja; se aplica igual a cualquier lugar donde esté (la regla de la puerta es «sale
-    /// quien ya no puede entrar»).
+    /// (5B-1, 2026-10-24). Devuelve la columna con la que salió. Regla (decisión del autor, 2026-10-24, 5C-10): vale para
+    /// cualquier lugar donde esté, no solo la plaza que deja (la regla de la puerta es «sale quien ya no puede entrar»).
     pub(super) fn echar_si_ya_no_entra(&mut self, t: Instante, heroe: u64, motivo: i64) -> Option<u64> {
         let lugar = self.heroe(heroe)?.heroe.presencia.ubicacion;
         let (plaza, puerta) = match lugar {

@@ -740,7 +740,8 @@ fn actualiza(tipo: pb::TipoEntidad, id: String, cuerpo: pb::entidad::Cuerpo) -> 
 
 /// Los alijos que entran a la vista del héroe `h` (`ACTUALIZA`) y los que salen (`QUITA`: se alejó, los abrió o ya no puede buscarlos) respecto de lo que el cliente tiene, que queda al día. Si no se
 /// sabe qué tiene (reanudó por deltas) y el héroe puede buscarlos, se le quitan todos los demás alijos del mundo; si no puede buscar, no se le manda nada.
-// DUDA: un héroe que deja de poder buscar alijos estando desconectado y reanuda por deltas conserva en su cliente los que tenía hasta su siguiente `Foto` de `HEROE`.
+// Decidido por el autor (2026-10-26, duda 4 de 6G): un héroe que deja de poder buscar alijos estando desconectado y reanuda por deltas conserva en su cliente los que tenía hasta su
+// siguiente `Foto` de `HEROE` (arreglarlo pediría quitar todos los alijos del mundo a cada héroe que reconecta).
 fn cambios_de_alijos(n: &Nucleo, s: &mut Sesion, h: u64) -> Vec<pb::Cambio> {
     // Lo barato primero: quien no puede buscar y no tiene ninguno (casi todos) no cuesta nada más.
     let busca = n.puede_buscar_alijos(h);
