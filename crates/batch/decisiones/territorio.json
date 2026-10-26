@@ -30,7 +30,7 @@
   "decisiones": [
     {
       "id": "D2",
-      "pregunta": "¿Hago ahora el índice espacial de `viabilidad`?",
+      "pregunta": "[Cerrada el 2026-10-24: hecho, índice espacial de viabilidad en la rama viabilidad-indice; la consulta de territorio pasó de 250 s a 105 s] ¿Hago ahora el índice espacial de `viabilidad`?",
       "contexto": "Es el 59 % del tiempo del escenario (105 s de 177 s, objetivo 120 s). Cada corrida de calibración cuesta 3 minutos y los bots de la fase 7 llamarían a esa consulta muchas veces más.",
       "opciones": [
         {

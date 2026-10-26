@@ -362,8 +362,12 @@ impl Nucleo {
         };
         let (punto, lider) = (e.posicion_en(t), e.columna.lider);
         let faccion = e.columna.faccion.ok_or_else(|| Respuesta::rechazo(rechazos::FUNDACION_SIN_FACCION, "una columna sin Facción no funda", v))?;
-        // Los fundadores (Fundacion_Y_Refundacion §5.2): el titular y los demás de la columna que son ciudadanos de su Facción, en su orden y hasta `maxJugadoresFundacionGrupal`.
-        let fundadores: Vec<u64> = Self::participantes_de(e)
+        // Los fundadores (Fundacion_Y_Refundacion §5.2): el Líder primero, luego el titular y los demás de la columna en su orden, solo los ciudadanos de su Facción y hasta
+        // `maxJugadoresFundacionGrupal`. Con el Líder delante, el recorte nunca lo deja fuera (y es el Gobernador de oficio, 5E-3).
+        let titular = self.estado.fundacion.caravanas.get(&caravana).map(|c| c.titular);
+        let mut orden = Self::participantes_de(e);
+        orden.sort_by_key(|&h| (h != lider, Some(h) != titular));
+        let fundadores: Vec<u64> = orden
             .into_iter()
             .filter(|h| self.estado.militar.heroes.get(h).is_some_and(|x| x.faccion == Some(faccion)))
             .take(self.estado.reglas.economia.datos.max_fundadores)
@@ -400,8 +404,9 @@ impl Nucleo {
         for &h in &fundadores {
             self.mudar_de_residencia(h, Some(militar::heroe::Residencia::Asentamiento(id as u32)));
         }
-        // 5E-3 (decisión del autor, 2026-10-25): quien funda, el Líder de la columna, es su Gobernador de oficio (Doc 2.2); el Rey puede cambiarlo después. Solo si es uno de los fundadores:
-        // el cargo pide residir en la plaza (Q4). DUDA: un Líder que no es ciudadano de la Facción de la caravana no reside en ella y la plaza nace sin Gobernador, como antes de 5E-3.
+        // 5E-3 (decisión del autor, 2026-10-25): quien funda, el Líder de la columna, es su Gobernador de oficio (Doc 2.2); el Rey puede cambiarlo después. El cargo pide residir en la
+        // plaza (Q4), así que solo si es fundador. Decidido por el autor (2026-10-26): el Líder siempre lo es, porque la columna es de una sola Facción y nadie entra ni sale de una Facción
+        // yendo en un ejército; solo la herramienta de administración `FijarFaccionDeHeroe` puede dejar un Líder de otra Facción, y entonces la plaza nace sin Gobernador.
         let gobernador = fundadores.contains(&lider);
         let plaza = self.estado.asentamientos.get_mut(&id).expect("recién fundada");
         if gobernador {

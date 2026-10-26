@@ -521,11 +521,6 @@ impl Nucleo {
         }
     }
 
-    /// `vaciarCarro`: dentro de su residencia, el héroe pasa el carro que trajo a su almacén personal (`ALMACEN_PERSONAL.capacidad`), recurso a recurso y por orden,
-    /// hasta donde quepa. Lo que no cabe se queda en el carro (en la columna que conserva para llevar sus caravanas, si el carro estaba en ella). Entrar en la
-    /// residencia no lo hace solo.
-    // Regla (decisión del autor del 2026-10-26): el almacén personal es siempre el mismo y solo se traslada: una única capacidad viva donde viva (plaza o campamento) y viaja con la
-    // residencia (Doc 2.5).
     /// Las escuadras de la guarnición de la plaza: las de sus residentes que se quedan dentro con soldados (las que defienden de oficio en un asedio).
     pub(crate) fn guarnicion_de_plaza(&self, plaza: u64) -> Vec<u64> {
         self.estado.militar.residentes_de(plaza).flat_map(|h| h.heroe.escuadras.iter()).filter(|s| s.contenedor == Contenedor::Campamento && s.en_guarnicion && s.con_soldados()).map(|s| s.id).collect()
@@ -546,6 +541,11 @@ impl Nucleo {
         self.heroe_mut(heroe).plazas_recordadas.insert(plaza as u32, recuerdo);
     }
 
+    /// `vaciarCarro`: dentro de su residencia, el héroe pasa el carro que trajo a su almacén personal (`ALMACEN_PERSONAL.capacidad`), recurso a recurso y por orden,
+    /// hasta donde quepa. Lo que no cabe se queda en el carro (en la columna que conserva para llevar sus caravanas, si el carro estaba en ella). Entrar en la
+    /// residencia no lo hace solo.
+    // Regla (decisión del autor del 2026-10-26): el almacén personal es siempre el mismo y solo se traslada: una única capacidad viva donde viva (plaza o campamento) y viaja con la
+    // residencia (Doc 2.5).
     fn vaciar_carro(&mut self, t: Instante, p: &Peticion, heroe: u64) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
