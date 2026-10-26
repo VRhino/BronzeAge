@@ -560,7 +560,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `fundacion.no_titular` | `FUNDACION_NO_TITULAR` | Solo su titular desarma o engancha la Caravana de Fundación (y tiene que ir en la columna que la engancha). |
 | `refundacion.con_plazas` | `REFUNDACION_CON_PLAZAS` | Refundar desde un campamento es de una Facción sin ninguna plaza. |
 | `refundacion.ya_tiene_caravana` | `REFUNDACION_YA_TIENE_CARAVANA` | La Facción ya tiene una Caravana de Fundación. |
-| `refundacion.fondo_corto` | `REFUNDACION_FONDO_CORTO` | El fondo de la Facción en el campamento no cubre el coste de la caravana (el mensaje dice cuánto falta). |
+| `refundacion.fondo_corto` | `REFUNDACION_FONDO_CORTO` | El fondo de la Facción en el campamento no cubre el coste de la caravana (el mensaje dice cuánto falta; `detalle.faltan`, por recurso en milésimas). |
 | `refundacion.no_resides` | `REFUNDACION_NO_RESIDES` | Aportar o retirar con el almacén personal sin residir en ese campamento: el almacén vive donde se reside (aquí, con el carro). |
 | `refundacion.sin_aporte` | `REFUNDACION_SIN_APORTE` | Retirar un recurso que el héroe no aportó al fondo de ese campamento. |
 | `caravana.lejos` | `CARAVANA_LEJOS` | Reclamar la Caravana de Fundación lejos de ella (a más de `radioEncuentro`). |

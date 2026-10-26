@@ -938,6 +938,7 @@ name = "servicio"
 version = "0.1.0"
 dependencies = [
  "acceso",
+ "asentamiento",
  "contrato",
  "mundo",
  "nucleo",
@@ -945,6 +946,7 @@ dependencies = [
  "rutas",
  "serde_json",
  "servidor",
+ "sha2",
  "tempfile",
  "tokio",
 ]

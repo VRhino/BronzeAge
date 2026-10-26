@@ -125,6 +125,8 @@ pub struct Config {
     /// Si el mismo puerto sirve el artefacto de mundo: el prefijo de `InfoMundo.url_artefacto` en la `Bienvenida`, al que se le añade el hash
     /// (`/v1/mundo/`: una ruta relativa al servidor). `None`: el núcleo decide (hoy la deja vacía).
     pub url_artefacto: Option<String>,
+    /// Si el mismo puerto sirve el archivo común de datos de juego: su versión y su ruta (`InfoMundo.version_datos_de_juego` y `url_datos_de_juego` de la `Bienvenida`).
+    pub datos_de_juego: Option<(String, String)>,
 }
 
 impl Default for Config {
@@ -138,6 +140,7 @@ impl Default for Config {
             umbral_compresion: 256,
             nivel_zstd: 3,
             url_artefacto: None,
+            datos_de_juego: None,
         }
     }
 }

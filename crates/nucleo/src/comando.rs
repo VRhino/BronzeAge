@@ -2895,7 +2895,7 @@ pub mod rechazos {
     pub const REFUNDACION_CON_PLAZAS: &str = "refundacion.con_plazas";
     /// La Facción ya tiene una Caravana de Fundación.
     pub const REFUNDACION_YA_TIENE_CARAVANA: &str = "refundacion.ya_tiene_caravana";
-    /// El fondo de la Facción en el campamento no cubre el coste de la caravana (el mensaje dice cuánto falta).
+    /// El fondo de la Facción en el campamento no cubre el coste de la caravana (el mensaje dice cuánto falta; `detalle.faltan`, por recurso en milésimas).
     pub const REFUNDACION_FONDO_CORTO: &str = "refundacion.fondo_corto";
     /// Aportar o retirar con el almacén personal sin residir en ese campamento: el almacén vive donde se reside (aquí, con el carro).
     pub const REFUNDACION_NO_RESIDES: &str = "refundacion.no_resides";
@@ -2969,6 +2969,8 @@ pub mod rechazos {
 pub enum Detalle {
     /// `guerra.confirmar`: la Facción contra la que quedaría en guerra quien ataca y las que entrarían por arrastre (aliados y vasallos; vacía hasta el sistema 5).
     Guerra { objetivo: u32, arrastre: Vec<u32> },
+    /// `refundacion.fondo_corto` (fase 7, a petición del frente de bots): lo que le falta al fondo de la Facción para el coste, por recurso, en milésimas.
+    Faltan { recursos: Vec<(Recurso, Mil)> },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

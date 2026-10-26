@@ -97,12 +97,21 @@ fn texto(s: String) -> prost_types::Value {
     prost_types::Value { kind: Some(prost_types::value::Kind::StringValue(s)) }
 }
 
-/// `RechazoOrden.detalle`: para `guerra.confirmar`, `{ objetivo: "f-N", facciones: ["f-N"...] }` (la Facción contra la que se declararía y las que entrarían por arrastre).
+/// `RechazoOrden.detalle`: para `guerra.confirmar`, `{ objetivo: "f-N", facciones: ["f-N"...] }` (la Facción contra la que se declararía y las que entrarían por arrastre); para
+/// `refundacion.fondo_corto`, `{ faltan: { <recurso>: <milésimas> } }`.
 pub fn detalle_de_rechazo(d: &Detalle) -> prost_types::Struct {
-    let Detalle::Guerra { objetivo, arrastre } = d;
-    let arrastre = prost_types::ListValue { values: arrastre.iter().map(|&f| texto(ids::faccion(f))).collect() };
-    let campos = [("objetivo".to_owned(), texto(ids::faccion(*objetivo))), ("facciones".to_owned(), prost_types::Value { kind: Some(prost_types::value::Kind::ListValue(arrastre)) })];
-    prost_types::Struct { fields: campos.into_iter().collect() }
+    use prost_types::{value::Kind, ListValue, Struct, Value};
+    match d {
+        Detalle::Guerra { objetivo, arrastre } => {
+            let arrastre = ListValue { values: arrastre.iter().map(|&f| texto(ids::faccion(f))).collect() };
+            let campos = [("objetivo".to_owned(), texto(ids::faccion(*objetivo))), ("facciones".to_owned(), Value { kind: Some(Kind::ListValue(arrastre)) })];
+            Struct { fields: campos.into_iter().collect() }
+        }
+        Detalle::Faltan { recursos } => {
+            let faltan = recursos.iter().map(|&(r, n)| (r.nombre().to_owned(), Value { kind: Some(Kind::NumberValue(n as f64)) })).collect();
+            Struct { fields: [("faltan".to_owned(), Value { kind: Some(Kind::StructValue(Struct { fields: faltan })) })].into_iter().collect() }
+        }
+    }
 }
 
 /// Una entidad creada por una orden (`ResultadoOrden.creadas`), con su clase y su id del contrato. `None` si el contrato no la tiene como entidad (la parcela de administración).

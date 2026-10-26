@@ -140,6 +140,7 @@ message InfoMundo {
   uint32 version_balance = 5;
   uint32 version_catalogo_tropas = 6;
   string version_datos_de_juego = 7;     // archivo común de datos de juego
+  string url_datos_de_juego = 8;         // dónde descargarlo (por versión); en el servidor Rust, `/v1/datos/<versión>`, relativa al servidor (fase 7)
 }
 
 message Bienvenida {
@@ -254,6 +255,7 @@ message RechazoOrden {
   string mensaje = 2;                    // texto de diagnóstico (no localizado)
   // Lo que el cliente necesita para decidir. `guerra.confirmar` (atacar sin guerra y sin `declara_guerra`):
   // `{ objetivo: "f-N" (la Facción contra la que quedaría en guerra), facciones: ["f-N"...] (las que entrarían por arrastre; vacío hasta el sistema político) }`.
+  // `refundacion.fondo_corto` (fase 7): `{ faltan: { <recurso>: <milésimas> } }`, lo que le falta al fondo de la Facción.
   google.protobuf.Struct detalle = 3;
 }
 

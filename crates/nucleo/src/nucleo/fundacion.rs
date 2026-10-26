@@ -11,7 +11,7 @@
 
 use super::*;
 use crate::codec_economia::recurso_a_u8;
-use crate::comando::LadoDelFondo;
+use crate::comando::{Detalle, LadoDelFondo};
 use crate::estado::{Dato, SucesoFundacion, PRIO_COMERCIO};
 use crate::estado_fundacion::{entidad_fundacion, CaravanaFundacion, Origen, Situacion};
 use asentamiento::datos::UNO;
@@ -33,13 +33,11 @@ fn quitar(carga: &mut Mercancia, r: Recurso, n: Mil) {
     }
 }
 
-impl Nucleo {
-    // ───────────────────────────── Consultas ─────────────────────────────
-
+impl Reglas {
     /// `costoCaravanaFundacion` (§3): los materiales iniciales, la Granja, las Viviendas iniciales y la madera de fabricar la caravana. Con las cifras de hoy, 160 de madera, 20 de piedra,
-    /// 100 de trigo y 100 de oro.
+    /// 100 de trigo y 100 de oro. Solo depende de las reglas: el archivo de datos de juego (fase 7) lo publica tal cual.
     pub fn costo_caravana_fundacion(&self) -> Mercancia {
-        let eco = &self.estado.reglas.economia.datos;
+        let eco = &self.economia.datos;
         let mut c = Mercancia::new();
         for &(r, n) in &eco.materiales_iniciales {
             sumar(&mut c, r, n);
@@ -56,13 +54,27 @@ impl Nucleo {
 
     /// `costoRefundacion` (§3): cada recurso del coste normal por `porcentajeCoste`, **redondeado hacia arriba** a unidades, sin los que quedan en 0. Hoy 64, 8, 40 y 40.
     pub fn costo_refundacion(&self) -> Mercancia {
-        let pct = self.estado.reglas.economia.comercio.mercenarios.porcentaje_refundacion as i128;
+        let pct = self.economia.comercio.mercenarios.porcentaje_refundacion as i128;
         let por_unidad = UNO as i128 * UNIDAD as i128;
         self.costo_caravana_fundacion()
             .into_iter()
             .map(|(r, n)| (r, ((n as i128 * pct + por_unidad - 1) / por_unidad) as Mil * UNIDAD))
             .filter(|&(_, n)| n > 0)
             .collect()
+    }
+}
+
+impl Nucleo {
+    // ───────────────────────────── Consultas ─────────────────────────────
+
+    /// [`Reglas::costo_caravana_fundacion`] de esta partida.
+    pub fn costo_caravana_fundacion(&self) -> Mercancia {
+        self.estado.reglas.costo_caravana_fundacion()
+    }
+
+    /// [`Reglas::costo_refundacion`] de esta partida.
+    pub fn costo_refundacion(&self) -> Mercancia {
+        self.estado.reglas.costo_refundacion()
     }
 
     /// El cap de fundación de la Facción: el de su nivel por experiencia (`politica::nivel::cap_fundacion`, 5C), el mismo que mira `fundar`.
@@ -707,9 +719,11 @@ impl Nucleo {
         }
         let costo = self.costo_refundacion();
         let fondo = self.fondo_de_faccion(campamento, faccion);
-        let faltan: Vec<String> = costo.iter().filter(|(&r, &n)| de(&fondo, r) < n).map(|(&r, &n)| format!("{} {}", (n - de(&fondo, r)) / UNIDAD, r.nombre())).collect();
+        let faltan: Vec<(Recurso, Mil)> = costo.iter().filter(|(&r, &n)| de(&fondo, r) < n).map(|(&r, &n)| (r, n - de(&fondo, r))).collect();
         if !faltan.is_empty() {
-            return Err(rechazo(rechazos::REFUNDACION_FONDO_CORTO, format!("el fondo no cubre el coste: faltan {}", faltan.join(", "))));
+            let texto: Vec<String> = faltan.iter().map(|&(r, n)| format!("{} {}", n / UNIDAD, r.nombre())).collect();
+            let m = format!("el fondo no cubre el coste: faltan {}", texto.join(", "));
+            return Err(Respuesta::rechazo_con(rechazos::REFUNDACION_FONDO_CORTO, m, v, Some(Detalle::Faltan { recursos: faltan })));
         }
         let ciudadanos = self.estado.politica.facciones.get(faccion).map(|f| f.ciudadanos.clone()).unwrap_or_default();
         let fondos = self.estado.fundacion.fondos.entry(campamento).or_default();

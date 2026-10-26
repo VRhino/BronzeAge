@@ -10,15 +10,17 @@ path = "src/main.rs"
 
 [dependencies]
 acceso = { path = "../acceso" }
+asentamiento = { path = "../asentamiento" }
 mundo = { path = "../mundo" }
 nucleo = { path = "../nucleo" }
 persistencia = { path = "../persistencia" }
 rutas = { path = "../rutas" }
+serde_json = "1"
+sha2 = "0.10"
 servidor = { path = "../servidor" }
 tokio = { version = "1.53.2", features = ["rt-multi-thread", "macros", "sync", "net", "signal", "io-std", "io-util"] }
 
 [dev-dependencies]
 contrato = { path = "../contrato" }
-serde_json = "1"
 tempfile = "3"
 tokio = { version = "1.53.2", features = ["rt-multi-thread", "macros", "net", "io-util", "time"] }

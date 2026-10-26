@@ -351,6 +351,11 @@ async fn handshake<A: Autenticador>(
             m.url_artefacto = format!("{base}{}", m.hash);
         }
     }
+    if let (Some(m), Some((version, url))) = (bienvenida.mundo.as_mut(), ctx.config.datos_de_juego.as_ref()) {
+        if m.version_datos_de_juego.is_empty() {
+            (m.version_datos_de_juego, m.url_datos_de_juego) = (version.clone(), url.clone());
+        }
+    }
     if !em.enviar(ms::Cuerpo::Bienvenida(bienvenida)).await {
         return None;
     }

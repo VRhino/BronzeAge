@@ -5,6 +5,9 @@
 //! partida donde se quedó: el reloj de mundo continúa desde el último instante guardado y los tokens vigentes siguen valiendo.
 //!
 //! El mismo puerto sirve el artefacto de mundo por hash (`GET /v1/mundo/<hash>`, contrato 06) y la `Bienvenida` lo anuncia en `InfoMundo.url_artefacto` (ruta relativa al servidor).
+//! Y el archivo común de datos de juego ([`datos`]): `GET /v1/datos/<versión>` (y `GET /v1/datos`, el vigente), anunciado en `InfoMundo.version_datos_de_juego` y `url_datos_de_juego`.
+
+pub mod datos;
 
 use std::{
     future::Future,
@@ -38,6 +41,8 @@ pub fn buscar_mundo(ruta: &Path) -> io::Result<PathBuf> {
 
 /// La ruta del artefacto de mundo, sin el hash.
 pub const RUTA_MUNDO: &str = "/v1/mundo/";
+/// La ruta del archivo de datos de juego (sin versión: el vigente).
+pub const RUTA_DATOS: &str = "/v1/datos";
 
 /// El artefacto de mundo cargado: los bytes (para servirlos tal cual) y el arranque del núcleo.
 pub struct Artefacto {
@@ -66,10 +71,20 @@ pub fn arranque_de(ruta: &Path, semilla: u64) -> io::Result<Artefacto> {
 struct RutasHttp {
     acceso: Acceso,
     mundo: Option<(String, Arc<Vec<u8>>)>,
+    datos: datos::DatosDeJuego,
 }
 
 impl Http for RutasHttp {
     fn atender(&self, p: PeticionHttp) -> Pin<Box<dyn Future<Output = RespuestaHttp> + Send + '_>> {
+        if let Some(resto) = p.ruta.strip_prefix(RUTA_DATOS).filter(|r| r.is_empty() || r.starts_with('/')) {
+            let version = resto.trim_start_matches('/');
+            let r = match p.metodo.as_str() {
+                "GET" if version.is_empty() || version == self.datos.version => RespuestaHttp::json(200, self.datos.json.clone()),
+                "GET" => RespuestaHttp::texto(404, "no hay datos de juego con esa versión"),
+                _ => RespuestaHttp::texto(405, "método no permitido"),
+            };
+            return Box::pin(async move { r });
+        }
         if let Some(hash) = p.ruta.strip_prefix(RUTA_MUNDO) {
             let r = match (&self.mundo, p.metodo.as_str()) {
                 (Some((h, bytes)), "GET") if h == hash => RespuestaHttp { estado: 200, tipo: "application/octet-stream", cuerpo: bytes.as_ref().clone() },
@@ -103,6 +118,7 @@ pub struct Informe {
 
 /// Abre los datos de `datos` (o los crea), lanza el núcleo y escucha en `direccion` (puerto 0: uno libre). Con `artefacto`, el puerto lo sirve por su hash.
 pub async fn arrancar(arranque: Arranque, artefacto: Option<Arc<Vec<u8>>>, datos: &Path, direccion: SocketAddr, acceso: acceso::Config) -> io::Result<(Servicio, Informe)> {
+    let datos_de_juego = datos::datos_de_juego(&arranque.reglas);
     let dir_mundo = datos.join("mundo");
     let n = tokio::task::block_in_place(|| Nucleo::con_persistencia(arranque, &dir_mundo, persistencia::Config::default()))?;
     let acceso = Acceso::abrir(&datos.join("acceso"), acceso)?;
@@ -111,8 +127,12 @@ pub async fn arrancar(arranque: Arranque, artefacto: Option<Arc<Vec<u8>>>, datos
     let (tx, rx) = mpsc::channel(1024);
     let actor = sesiones::lanzar(n, reloj.clone(), rx);
     let mundo = artefacto.map(|b| (informe.mundo_hash.clone(), b));
-    let config = Config { url_artefacto: mundo.is_some().then(|| RUTA_MUNDO.to_owned()), ..Config::default() };
-    let http = Arc::new(RutasHttp { acceso: acceso.clone(), mundo });
+    let config = Config {
+        url_artefacto: mundo.is_some().then(|| RUTA_MUNDO.to_owned()),
+        datos_de_juego: Some((datos_de_juego.version.clone(), format!("{RUTA_DATOS}/{}", datos_de_juego.version))),
+        ..Config::default()
+    };
+    let http = Arc::new(RutasHttp { acceso: acceso.clone(), mundo, datos: datos_de_juego });
     let listener = tokio::net::TcpListener::bind(direccion).await?;
     let srv = servir_con_http(listener, tx.clone(), acceso.clone(), http, reloj, config).await;
     Ok((Servicio { direccion: srv.direccion, acceso, srv, tx, actor }, informe))

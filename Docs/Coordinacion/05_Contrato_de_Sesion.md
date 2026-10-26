@@ -41,6 +41,10 @@ los bots (Rust, sin privilegios: el mismo contrato que un jugador) y los servido
   `url_paquete_unity`) y lo guarda en disco. Si ya tiene el hash vigente (`Hola.mundo_hash_conocido`), no descarga nada. Si el
   hash cambió, el cliente no puede entrar hasta tener el nuevo. En el servidor Rust (fase 7, 2026-10-26) `url_artefacto` es `/v1/mundo/<hash>`, relativa al
   propio servidor, que lo sirve por HTTP en el mismo puerto; `url_paquete_unity` sigue vacía hasta la fase 8.
+- **El archivo común de datos de juego** (las cifras de reglas que ve un jugador) tampoco viaja por la sesión: `InfoMundo.version_datos_de_juego` dice su versión y
+  `InfoMundo.url_datos_de_juego` (campo 8, fase 7, 2026-10-26) dónde bajarlo. En el servidor Rust es `/v1/datos/<versión>`, relativa al servidor: un JSON con cada bloque
+  `<!-- parametros:NOMBRE -->` de `Docs/Mechanics` por documento, las reglas de la partida que no salen de un bloque y la huella de las reglas
+  ([`08_Consumo_del_Contrato.md`](08_Consumo_del_Contrato.md)).
 
 ## 3. Ámbitos y qué recibe cada cliente
 

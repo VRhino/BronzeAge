@@ -14,7 +14,7 @@ use militar::catalogo::Tropa;
 use militar::columna::{Politica, TipoColumna};
 use militar::heroe::{Controlador, Residencia};
 use militar::presencia::Ubicacion;
-use nucleo::{rechazos, Ajustes, Arranque, Carga, Comando, Estado, LadoDelFondo, Nucleo, ObjetivoAtaque, OrigenFundacion, Peticion, Reglas, Respuesta, Resultado, SituacionFundacion};
+use nucleo::{rechazos, Ajustes, Arranque, Carga, Comando, Detalle, Estado, LadoDelFondo, Nucleo, ObjetivoAtaque, OrigenFundacion, Peticion, Reglas, Respuesta, Resultado, SituacionFundacion};
 use std::collections::BTreeMap;
 
 const HORA: i64 = 60 * MS_POR_MINUTO;
@@ -437,6 +437,14 @@ fn el_fondo_se_aporta_y_se_retira_con_el_almacen_o_el_carro_y_la_caravana_de_ref
 
     // Comprar: el fondo tiene que cubrir el coste.
     assert_eq!(e.no("ana", Comando::ComprarCaravanaDeRefundacion { heroe: ana }), rechazos::REFUNDACION_FONDO_CORTO);
+    // El rechazo dice cuánto falta de cada recurso (`detalle.faltan`, fase 7): el coste menos el fondo, solo lo que no llega.
+    let r = e.ord("ana", Comando::ComprarCaravanaDeRefundacion { heroe: ana });
+    let Resultado::Rechazada { detalle: Some(Detalle::Faltan { recursos }), .. } = &r.resultado else { panic!("{r:?}") };
+    let fondo = e.n.fondo_de_faccion(0, f);
+    let esperado: Vec<(Recurso, i64)> =
+        e.n.costo_refundacion().into_iter().map(|(r, n)| (r, n - fondo.get(&r).copied().unwrap_or(0))).filter(|&(_, n)| n > 0).collect();
+    assert_eq!(esperado, [(Madera, 64_000), (Piedra, 8_000), (Trigo, 40_000), (Oro, 10_000)]);
+    assert_eq!(*recursos, esperado);
     e.ok("ana", aportar(ana, Madera, 100_000, Alm));
     for (recurso, n) in [(Oro, 50_000), (Piedra, 8_000), (Trigo, 40_000)] {
         e.ok("beto", aportar(beto, recurso, n, Alm));

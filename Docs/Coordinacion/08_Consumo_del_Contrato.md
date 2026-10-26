@@ -93,7 +93,24 @@ Un reinicio con la misma carpeta y el mismo artefacto sigue la partida donde se 
 2. `POST /v1/sesiones` con `{"nick", "clave"}`. Respuesta `200 {"token", "cuenta_id", "nick", "bot", "expira_ms"}`, con `expira_ms` en ms de época (12 h, `ACCESO.duracionSesionMs`). Cada login da un token nuevo; `401 credenciales_invalidas` si no coincide.
 3. El WebSocket en `ws://<dirección>/` con `Hola.token = <token>` y el `Hola.cliente` que toque: una cuenta de bot solo abre `CLIENTE_BOT`, una humana `CLIENTE_UNITY` y un administrador también `CLIENTE_ADMIN_WEB`. Otro tipo da `ErrorSesion{rol_no_permitido}`; un token caducado o ajeno, `token_invalido`.
 4. El mapa: `Bienvenida.mundo.url_artefacto` es `/v1/mundo/<hash>`, una ruta relativa al servidor. `GET` en esa ruta devuelve el artefacto de mundo tal cual (`application/octet-stream`, contrato 06); con `Hola.mundo_hash_conocido` igual al vigente no hace falta bajarlo otra vez.
-5. Opcional: `GET /v1/sesiones/actual` con `Authorization: sesion <token>` dice de quién es y cuándo caduca. `GET /salud` responde `ok`.
+5. Las cifras de las reglas: `Bienvenida.mundo.url_datos_de_juego` es `/v1/datos/<versión>` (la versión, en `version_datos_de_juego`, es el SHA-256 del archivo; `GET /v1/datos` da el vigente). Es un JSON con `documentos` (cada bloque `<!-- parametros:NOMBRE -->` de `Docs/Mechanics`, ya parseado, por documento y nombre: `documentos.Fundacion_Y_Refundacion.FUNDACION`, por ejemplo), `reglas` (lo que no sale de un bloque: el territorio en milésimas de unidad, el aviso de víveres, la idempotencia y si las batallas van a Unity), `derivados` (lo que el núcleo calcula de varios bloques: `costo_caravana_fundacion` y `costo_refundacion`, por recurso en milésimas) y `huella_reglas`. Son las mismas cifras con las que juega el núcleo: un cliente no las copia a mano. Dónde está lo que más se usa, en la tabla de abajo.
+6. Opcional: `GET /v1/sesiones/actual` con `Authorization: sesion <token>` dice de quién es y cuándo caduca. `GET /salud` responde `ok`.
+
+**Dónde está cada cifra en `/v1/datos`** (dentro de `documentos` las cifras van como en el bloque, en unidades del juego; en `reglas` y `derivados`, en milésimas):
+
+| Qué | Ruta |
+|---|---|
+| Coste de la Caravana de Fundación / de la refundación desde un campamento | `derivados.costo_caravana_fundacion` / `derivados.costo_refundacion` |
+| Catálogo de tropas: poder (`poderBase`), velocidad, tamaño de escuadra y de la leva prestada (`unidadesPorDefecto`), coste y edificio | `documentos.Heroe_Y_Tropa.TROPAS_RECLUTABLES` |
+| Consumo de ración por soldado y minuto, poder por héroe | `documentos.Combate.MILITAR` (`racionPorSoldadoPorMinuto`, `poderPorHeroe`) |
+| Víveres al salir (capacidad por héroe) y consumo en marcha y estacionado | `documentos.Movimiento_Ejercitos.LOGISTICA` (`capacidadViveresPorHeroe`, `factorConsumoEnMarcha`, `factorConsumoEstacionado`) |
+| Ración gratis del campamento (cada cuánto llena los víveres) | `documentos.Campamentos_Mercenarios.MERCENARIOS.racion.cadaMinutos` |
+| Radio de encuentro / radio de puerta / velocidad del jugador | `documentos.Movimiento_Ejercitos.LOGISTICA.radioEncuentro` / `.MOVIMIENTO.radioPuerta` / `.MOVIMIENTO.velocidadJugador` |
+| Visión del jugador solo | `documentos.Movimiento_Ejercitos.VISION.jugadorSolo` (el mismo bloque está en `Niebla_De_Guerra.VISION`) |
+| Anillo de bandidos de un campamento (radios, cuántos por residentes, reaparición) y sus niveles | `documentos.Generacion_Del_Mundo.CAMPAMENTOS_BANDIDOS` (`anillo`, `niveles`) |
+| Coste de paso por terreno | ya va en el artefacto (`GrafoNavegacion.aristas[].coste_milesimas`); el factor por terreno, en `documentos.Comercio_Caravanas.COSTE_MOVIMIENTO` |
+
+Un `refundacion.fondo_corto` dice cuánto falta en `RechazoOrden.detalle.faltan` (`{ <recurso>: <milésimas> }`), además del texto.
 
 Una cuenta nueva entra sin héroe (`Bienvenida.campamentos_para_elegir`) y lo crea con la orden `crear_heroe`. El héroe queda ligado a la cuenta (`cuenta_id`, `u-N`): al volver a entrar con otro token de la misma cuenta, la `Bienvenida` trae su `heroe_id`.
 
