@@ -29,6 +29,7 @@ use tokio_tungstenite::{
     WebSocketStream,
 };
 
+use crate::http::{self, Http, Inicio, Rebobinado, SinHttp};
 use crate::nucleo::{
     codigos, Autenticador, ComandoSesion, Config, Difusion, ErrorAcceso, RelojCompartido, SesionId,
 };
@@ -54,11 +55,23 @@ impl Servidor {
     }
 }
 
-/// Arranca el servidor sobre `listener`. `nucleo` es el canal de comandos del núcleo; `reloj` el reloj de mundo que se sirve en `Pong`.
+/// Arranca el servidor sobre `listener`. `nucleo` es el canal de comandos del núcleo; `reloj` el reloj de mundo que se sirve en `Pong`. Sin HTTP más que `GET /salud`.
 pub async fn servir<A: Autenticador>(
     listener: TcpListener,
     nucleo: mpsc::Sender<ComandoSesion>,
     autenticador: A,
+    reloj: RelojCompartido,
+    config: Config,
+) -> Servidor {
+    servir_con_http(listener, nucleo, autenticador, Arc::new(SinHttp), reloj, config).await
+}
+
+/// Como [`servir`], con `http` atendiendo las peticiones HTTP del mismo puerto (el servicio de acceso, 7B).
+pub async fn servir_con_http<A: Autenticador>(
+    listener: TcpListener,
+    nucleo: mpsc::Sender<ComandoSesion>,
+    autenticador: A,
+    http: Arc<dyn Http>,
     reloj: RelojCompartido,
     config: Config,
 ) -> Servidor {
@@ -67,6 +80,7 @@ pub async fn servir<A: Autenticador>(
     let ctx = Arc::new(Ctx {
         nucleo,
         autenticador,
+        http,
         reloj,
         config,
         registro: Mutex::new(HashMap::new()),
@@ -80,6 +94,7 @@ pub async fn servir<A: Autenticador>(
 struct Ctx<A> {
     nucleo: mpsc::Sender<ComandoSesion>,
     autenticador: A,
+    http: Arc<dyn Http>,
     reloj: RelojCompartido,
     config: Config,
     /// Sesión viva por `cliente_id`.
@@ -138,7 +153,7 @@ enum Entrada {
 }
 
 struct Receptor {
-    stream: SplitStream<WebSocketStream<TcpStream>>,
+    stream: SplitStream<WebSocketStream<Rebobinado>>,
     max: usize,
 }
 
@@ -159,7 +174,7 @@ impl Receptor {
 }
 
 struct Emisor {
-    sink: SplitSink<WebSocketStream<TcpStream>, Message>,
+    sink: SplitSink<WebSocketStream<Rebobinado>, Message>,
     secuencia: u64,
     comprimir: bool,
     escritura: Duration,
@@ -213,7 +228,12 @@ async fn sesion<A: Autenticador>(ctx: Arc<Ctx<A>>, tcp: TcpStream) {
     let cfg = WebSocketConfig::default()
         .max_message_size(Some(ctx.config.max_trama_cliente))
         .max_frame_size(Some(ctx.config.max_trama_cliente));
-    let Ok(Ok(ws)) = timeout(ctx.config.timeout_hola, accept_async_with_config(tcp, Some(cfg))).await else {
+    let flujo = match timeout(ctx.config.timeout_hola, http::leer_inicio(tcp)).await {
+        Ok(Inicio::WebSocket(f)) => f,
+        Ok(Inicio::Http(tcp, p)) => return http::contestar(tcp, p, ctx.http.as_ref()).await,
+        Ok(Inicio::Nada) | Err(_) => return,
+    };
+    let Ok(Ok(ws)) = timeout(ctx.config.timeout_hola, accept_async_with_config(flujo, Some(cfg))).await else {
         return;
     };
     let (sink, stream) = ws.split();

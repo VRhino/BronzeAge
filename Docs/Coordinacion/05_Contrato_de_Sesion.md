@@ -28,8 +28,10 @@ los bots (Rust, sin privilegios: el mismo contrato que un jugador) y los servido
 
 - **WebSocket con tramas binarias**: una trama = un mensaje Protobuf (`MensajeDeCliente` hacia el servidor, `MensajeDeServidor`
   de vuelta). Compresión **zstd** negociada en `Hola.compresiones`.
-- **Autenticación**: el cliente obtiene un `token` del servicio de acceso (fuera del alcance del contrato: fase 3) y lo manda en
-  `Hola`. Un token inválido o caducado cierra la sesión con `ErrorSesion{token_invalido, fatal}`.
+- **Autenticación**: el cliente obtiene un `token` del servicio de acceso (fuera del alcance del contrato) y lo manda en
+  `Hola`. Un token inválido o caducado cierra la sesión con `ErrorSesion{token_invalido, fatal}`. Desde la fase 7 (7B, 2026-10-26) el servicio de acceso
+  está en el mismo puerto que el WebSocket, por HTTP (`POST /v1/registro`, `POST /v1/sesiones`): ver [`08_Consumo_del_Contrato.md`](08_Consumo_del_Contrato.md) y
+  `Docs/Mechanics/Proyecciones_Y_Autorizacion.md` §2.1.
 - **El primer mensaje del cliente es `Hola`**; el servidor responde `Bienvenida` (sesión, héroe, Facción, `InfoMundo`, reloj
   y los ámbitos suscritos con la decisión de reanudación). Cualquier otra cosa antes de `Hola` cierra la sesión.
 - **Jugador sin héroe**: `Bienvenida.heroe_id` ausente, sin ámbitos y `campamentos_para_elegir` (de cada campamento de mercenarios: id, posición, origen, cuántos lo eligieron como inicial y cuántos héroes viven allí; el servidor Rust manda `eligieron_como_inicial = 0` hasta que el núcleo lo guarde). Es lo único que ve hasta que da `crear_heroe`, que le abre su ámbito en la misma sesión. Con héroe, `heroe_id` es su id (`heroe-N`) y `faccion_id`, la de su ciudadanía.
@@ -337,5 +339,5 @@ saqueo de pueblo y ataque a una avanzada ([`Combate.md`](../Mechanics/Combate.md
 ## 13. Decisiones abiertas
 
 1. ~~**Payload de los eventos**~~ — **cerrada (2026-10-22)**: `Struct` genérico para todos y quince mensajes tipados para los que mueven la interfaz (§8).
-2. **Autenticación y acceso** (registro, claves, roles): fase 3, junto al servidor.
+2. ~~**Autenticación y acceso**~~ — **cerrada en lo mínimo (2026-10-26, fase 7, 7B)**: registro con código, cuenta de bot, login con token opaco de `ACCESO.duracionSesionMs` y administradores globales por nick (`crates/acceso`). Quedan las membresías por partida (moderador, administrador de la partida) y los tokens de los servidores de batalla (fase 8).
 3. **Retención de deltas y tamaño del registro**: se fijan al construir el núcleo con mediciones.

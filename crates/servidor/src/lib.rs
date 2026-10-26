@@ -7,6 +7,8 @@
 //!   Se eligió canal (y no una trait `Nucleo`) porque el núcleo es un actor de un solo hilo lógico (mundo reactivo sin tick):
 //!   un canal lo desacopla sin `async_trait`, ordena los comandos por llegada y sirve igual a un núcleo real y al falso.
 //! - La autenticación sí es una trait ([`Autenticador`]), porque llama a un servicio externo.
+//! - El mismo puerto atiende HTTP ([`http`]): una conexión que no pide `Upgrade: websocket` es una petición HTTP/1.1 que contesta un [`Http`] (el servicio de acceso de la fase 7,
+//!   con [`servir_con_http`]) y se cierra.
 //!
 //! # Invariantes que garantiza este crate
 //! 1. **Secuencia**: cada `MensajeDeServidor` de una sesión lleva `secuencia` 1, 2, 3… sin huecos. Hay una sola tarea por sesión que
@@ -45,6 +47,7 @@
 //! foto) en la `Bienvenida`. No hay reanudación a mitad de sesión: un segundo `Hola` recibe `ErrorSesion{hola_repetido}` (no fatal) y
 //! se ignora (decidido el 2026-10-13, contrato 05 §7).
 
+pub mod http;
 pub mod nucleo;
 pub mod prueba;
 mod sesion;
@@ -52,4 +55,5 @@ mod sesion;
 pub use nucleo::{
     codigos, Autenticador, ComandoSesion, Config, Difusion, ErrorAcceso, Identidad, RelojCompartido, RolTecnico, SesionId,
 };
-pub use sesion::{servir, Servidor};
+pub use http::{Http, PeticionHttp, RespuestaHttp, SinHttp};
+pub use sesion::{servir, servir_con_http, Servidor};

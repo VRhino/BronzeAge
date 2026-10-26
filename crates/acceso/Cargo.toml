@@ -1,0 +1,19 @@
+[package]
+name = "acceso"
+version = "0.1.0"
+edition = "2021"
+description = "Servicio de acceso mínimo (fase 7, 7B): registro con código, cuenta de bot, login con token opaco y el Autenticador del servidor"
+
+[dependencies]
+argon2 = { version = "0.5", features = ["std", "rand"] }
+contrato = { path = "../contrato" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+servidor = { path = "../servidor" }
+sha2 = "0.10"
+tokio = { version = "1.53.2", features = ["rt", "sync"] }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1.53.2", features = ["rt-multi-thread", "macros", "net", "io-util", "time"] }
+prost = "0.13"

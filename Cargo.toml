@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-  "crates/contrato", "crates/mundo", "crates/base",
+  "crates/contrato", "crates/acceso", "crates/servicio", "crates/mundo", "crates/base",
   "crates/cola", "crates/rutas", "crates/persistencia", "crates/servidor",
   "crates/encuentros", "crates/vision", "crates/nucleo",
   "crates/territorio", "crates/informe", "crates/batch",
