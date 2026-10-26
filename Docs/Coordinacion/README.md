@@ -18,6 +18,7 @@ que rompa es `bronzeage.v2` con plan de migración.
 | **Eventos de dominio** | `events.proto` | 05 §8 y las tablas de eventos de `Docs/Mechanics` |
 | **Batalla de Unity** | `battle.proto` | [`Mechanics/Batalla_Unity_Ciclo.md`](../Mechanics/Batalla_Unity_Ciclo.md) |
 | **Mundo** (artefacto por hash y paquete de Unity) | `world.proto` | [`06_Contrato_de_Mundo.md`](06_Contrato_de_Mundo.md) |
+| **Cómo lo consumen otros repositorios** (bots, admin web, cliente de jugador): crate `contrato` por ruta o git, `buf generate` en TypeScript, revisión fija | `crates/contrato`, `contratos/ts` | [`08_Consumo_del_Contrato.md`](08_Consumo_del_Contrato.md) |
 | Propuestas entrantes de Codex/Conquest (`BA-*`) y su cierre | [`propuestas/`](propuestas/README.md) | [`propuestas/CIERRE_FASE_2.md`](propuestas/CIERRE_FASE_2.md) |
 
 El contrato HTTP y de canales del servidor TypeScript (`01` modelo JSON, `02` HTTP, `03` tiempo real por segmentos, `04` migración) está en
