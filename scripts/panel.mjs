@@ -4,12 +4,16 @@
 // Viene del panel del TypeScript (rama typescript-final, scripts/panel.mjs), sin su parte de carga y pruebas (telemetría, serie
 // de carga, auditoría e informe): en Rust eso llega por el ámbito ADMIN del contrato 05 y es del admin web (tanda 7H).
 //
+// Partidas (fase 7, para el admin web): cada partida es una carpeta de datos del servidor en `partidas/<nombre>/` (`mundo/`, `acceso/`, `respaldos/` y
+// `partida.json` con su semilla y su artefacto de mundo); la carpeta `datos/` de antes cuenta como la partida «datos». El servidor arranca con la partida
+// actual. La API de partidas está más abajo (`/api/partidas`, `/api/mundo`), con CORS abierto: el admin la recibe como PANEL_URL.
+//
 // Cada servicio puede llevar `cwd` (relativo a la raíz del motor): el motor es esta carpeta y los repos hermanos están al lado
 // (../BronceAgeBotsBrain, ../BronceAgeAdminClient, ../BronzeAgeClient). Si la carpeta no existe, la tarjeta lo dice y no arranca.
 import http from 'node:http';
 import net from 'node:net';
 import { spawn, exec } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -23,22 +27,66 @@ const VITE = (p) => ['--', '--port', p, '--strictPort'];
 // `aviso`: por qué no se puede arrancar todavía (la tarjeta lo dice y deja el botón apagado).
 const SERVICIOS = {
   // `parar`: el servidor se apaga con su foto al leer esa línea por la entrada estándar (Windows no deja mandarle Ctrl+C).
-  'bronzeage-servidor': { tipo: 'backend', parar: 'parar\n', aviso: avisoMundo, con: (p) => ({ env: { BRONZEAGE_DIRECCION: `127.0.0.1:${p}` } }) },
-  // Una tarea que termina sola: sin puerto.
-  'generar-mundo': { tipo: 'tarea' },
+  'bronzeage-servidor': { tipo: 'backend', parar: 'parar\n', aviso: avisoMundo, con: (p) => ({ env: { BRONZEAGE_DIRECCION: `127.0.0.1:${p}`, ...envPartida() } }) },
+  // Una tarea que termina sola: sin puerto. La semilla la elige POST /api/mundo.
+  'generar-mundo': { tipo: 'tarea', con: () => ({ args: [String(mundo.semilla)] }) },
   'bronzeage-bots': { tipo: 'backend', con: (p, P) => ({ env: { BOTS_PUERTO: p, BOTS_SERVIDOR: `http://localhost:${P['bronzeage-servidor']}` } }) },
   'bronzeage-admin': { tipo: 'cliente', con: (p, P) => ({ args: VITE(p), env: {
-    BACKEND_URL: `http://localhost:${P['bronzeage-servidor']}`, BOTS_URL: `ws://localhost:${P['bronzeage-bots']}/control` } }) },
+    BACKEND_URL: `http://localhost:${P['bronzeage-servidor']}`, BOTS_URL: `ws://localhost:${P['bronzeage-bots']}/control`, PANEL_URL: `http://localhost:${PUERTO}` } }) },
   'bronzeage-cliente-jugador': { tipo: 'cliente', con: (p, P) => ({ args: VITE(p), env: { BACKEND_URL: `http://localhost:${P['bronzeage-servidor']}` } }) },
 };
 
 // El servidor necesita el artefacto de mundo (`BRONZEAGE_MUNDO`: un .bin o una carpeta con un mundo-*.bin; por defecto generador/salida/mundo).
 function avisoMundo(c) {
-  const ruta = path.resolve(RAIZ, c.env?.BRONZEAGE_MUNDO ?? process.env.BRONZEAGE_MUNDO ?? 'generador/salida/mundo');
+  const ruta = path.resolve(RAIZ, envPartida().BRONZEAGE_MUNDO ?? c.env?.BRONZEAGE_MUNDO ?? process.env.BRONZEAGE_MUNDO ?? 'generador/salida/mundo');
   if (ruta.endsWith('.bin') ? existsSync(ruta) : existsSync(ruta) && readdirSync(ruta).some((f) => /^mundo-.*\.bin$/.test(f))) return null;
   if (procesos['generar-mundo']?.hijo) return 'generando el artefacto de mundo… (unos 15 min)';
   return `falta el artefacto de mundo en ${ruta}: arranca «generar-mundo» (unos 15 min) o pon BRONZEAGE_MUNDO con la ruta de un mundo-*.bin`;
 }
+
+// ───────────────────────────── Partidas ─────────────────────────────
+
+const PARTIDAS = path.join(RAIZ, 'partidas');
+const MUNDOS = path.join(RAIZ, 'generador/salida/mundo');
+const ACTUAL = path.join(PARTIDAS, 'actual.txt');
+const NOMBRE = /^[a-z0-9][a-z0-9_-]{0,39}$/;
+const leerJson = (f) => { try { return JSON.parse(readFileSync(f, 'utf8')); } catch { return null; } };
+// La carpeta `datos/` de antes de las partidas es la partida «datos» mientras no haya una `partidas/datos`.
+const carpetaPartida = (n) => (n === 'datos' && !existsSync(path.join(PARTIDAS, 'datos')) ? path.join(RAIZ, 'datos') : path.join(PARTIDAS, n));
+const nombresDePartida = () => {
+  const n = existsSync(PARTIDAS) ? readdirSync(PARTIDAS).filter((x) => NOMBRE.test(x) && statSync(path.join(PARTIDAS, x)).isDirectory()) : [];
+  if (existsSync(path.join(RAIZ, 'datos')) && !n.includes('datos')) n.unshift('datos');
+  return n;
+};
+function partidaActual() {
+  const a = existsSync(ACTUAL) ? readFileSync(ACTUAL, 'utf8').trim() : '';
+  return nombresDePartida().includes(a) ? a : nombresDePartida()[0] ?? null;
+}
+function ponerActual(n) { mkdirSync(PARTIDAS, { recursive: true }); writeFileSync(ACTUAL, n); }
+// Los artefactos generados, del más nuevo al más viejo.
+const artefactos = () => (existsSync(MUNDOS) ? readdirSync(MUNDOS).filter((f) => /^mundo-.*\.bin$/.test(f)) : [])
+  .map((f) => ({ archivo: f, hash: f.slice(6, -4), creado_ms: statSync(path.join(MUNDOS, f)).mtimeMs }))
+  .sort((a, b) => b.creado_ms - a.creado_ms);
+function respaldosDe(n) {
+  const dir = path.join(carpetaPartida(n), 'respaldos');
+  return (existsSync(dir) ? readdirSync(dir) : []).map((r) => leerJson(path.join(dir, r, 'respaldo.json'))).filter(Boolean)
+    .sort((a, b) => b.creado_ms - a.creado_ms);
+}
+function infoPartida(n) {
+  const meta = leerJson(path.join(carpetaPartida(n), 'partida.json')) ?? {};
+  return { nombre: n, carpeta: carpetaPartida(n), semilla: meta.semilla ?? 42, mundo: meta.mundo ?? null, creada_ms: meta.creada_ms ?? null,
+    respaldos: respaldosDe(n).length, actual: n === partidaActual() };
+}
+// El entorno del servidor para la partida actual: su carpeta, su semilla y su artefacto (si lo fijó al crearla).
+function envPartida() {
+  const n = partidaActual();
+  if (!n) return { BRONZEAGE_DATOS: path.join(PARTIDAS, 'principal') };
+  const i = infoPartida(n);
+  return { BRONZEAGE_DATOS: i.carpeta, BRONZEAGE_SEMILLA: String(i.semilla), ...(i.mundo ? { BRONZEAGE_MUNDO: path.join(MUNDOS, i.mundo) } : {}) };
+}
+
+// La regeneración del mundo (la tarea «generar-mundo»): con qué semilla y cómo acabó la última.
+const mundo = { semilla: 42, ultima: null };
 
 const puertos = Object.fromEntries(configurations.map((c) => [c.name, c.port]));
 const procesos = {}; // nombre -> { hijo, log[] }
@@ -69,7 +117,11 @@ function arrancar(c) {
   };
   hijo.stdout.on('data', anotar);
   hijo.stderr.on('data', anotar);
-  hijo.on('exit', (code) => { p.hijo = null; p.log.push(`— proceso terminado (código ${code}) —`); });
+  p.fin = new Promise((ok) => hijo.on('exit', (code) => {
+    p.hijo = null; p.log.push(`— proceso terminado (código ${code}) —`);
+    if (c.name === 'generar-mundo') mundo.ultima = { semilla: mundo.semilla, codigo: code, fin_ms: Date.now(), artefacto: artefactos()[0] ?? null };
+    ok(code);
+  }));
   p.hijo = hijo;
   procesos[c.name] = p;
 }
@@ -95,7 +147,8 @@ async function estado() {
     const p = procesos[c.name];
     return {
       nombre: c.name, tipo: SERVICIOS[c.name]?.tipo ?? 'backend', puerto: puertos[c.name],
-      comando: [c.runtimeExecutable, ...c.runtimeArgs].join(' ') + (c.cwd ? `  (en ${c.cwd})` : ''),
+      comando: [c.runtimeExecutable, ...c.runtimeArgs].join(' ') + (c.cwd ? `  (en ${c.cwd})` : '')
+        + (c.name === 'bronzeage-servidor' ? `  [partida ${partidaActual() ?? 'principal (nueva)'}]` : ''),
       falta: !existsSync(carpeta(c)), aviso: SERVICIOS[c.name]?.aviso?.(c) ?? null,
       escucha: puertos[c.name] ? await escucha(puertos[c.name]) : false, lanzado: !!p?.hijo, log: p?.log.slice(-60) ?? [],
     };
@@ -162,20 +215,110 @@ async function pintar(){
 pintar();setInterval(pintar,2000);
 </script></body></html>`;
 
+// Para el servidor si está en marcha y espera a que termine. ¿Estaba en marcha?
+async function pararServidor() {
+  const p = procesos['bronzeage-servidor'];
+  if (!p?.hijo) return false;
+  parar('bronzeage-servidor');
+  await p.fin;
+  return true;
+}
+// Si el servidor se lanzó y, si no pudo, por qué (falta el artefacto de mundo, por ejemplo).
+const arranque = () => ({ arrancado: enMarcha(), aviso: SERVICIOS['bronzeage-servidor'].aviso(servidor()) });
+const servidor = () => configurations.find((c) => c.name === 'bronzeage-servidor');
+const enMarcha = () => !!procesos['bronzeage-servidor']?.hijo;
+
+// La API de partidas. Devuelve [estado, cuerpo].
+async function apiPartidas(metodo, partes, cuerpo) {
+  const [, nombre, accion] = partes; // partidas / <nombre> / <accion>
+  if (!nombre) {
+    if (metodo === 'GET') return [200, { actual: partidaActual(), servidor: { lanzado: enMarcha(), escucha: await escucha(puertos['bronzeage-servidor']) },
+      partidas: nombresDePartida().map(infoPartida), artefactos: artefactos() }];
+    if (metodo !== 'POST') return [405, { error: 'metodo_no_permitido' }];
+    const n = String(cuerpo?.nombre ?? '').trim().toLowerCase();
+    if (!NOMBRE.test(n) || n === 'datos') return [400, { error: 'datos_invalidos', mensaje: 'nombre: de 1 a 40 letras minúsculas, cifras, «_» y «-»' }];
+    if (nombresDePartida().includes(n)) return [409, { error: 'partida_repetida', mensaje: `ya hay una partida ${n}` }];
+    const elegido = cuerpo?.mundo ? artefactos().find((a) => a.archivo === cuerpo.mundo || a.hash === cuerpo.mundo) : artefactos()[0];
+    if (!elegido) return [409, { error: 'sin_mundo', mensaje: 'no hay ese artefacto de mundo: genera uno con POST /api/mundo' }];
+    const semilla = Number(cuerpo?.semilla ?? 42);
+    if (!Number.isSafeInteger(semilla) || semilla < 0) return [400, { error: 'datos_invalidos', mensaje: 'la semilla es un entero ≥ 0' }];
+    mkdirSync(path.join(PARTIDAS, n), { recursive: true });
+    writeFileSync(path.join(PARTIDAS, n, 'partida.json'), JSON.stringify({ nombre: n, semilla, mundo: elegido.archivo, creada_ms: Date.now() }, null, 2));
+    if (cuerpo?.activar !== false) { await pararServidor(); ponerActual(n); arrancar(servidor()); }
+    return [201, { ...infoPartida(n), ...arranque() }];
+  }
+  if (!nombresDePartida().includes(nombre)) return [404, { error: 'no_encontrada', mensaje: `no hay partida ${nombre}` }];
+  if (!accion) {
+    if (metodo === 'GET') return [200, { ...infoPartida(nombre), lista_respaldos: respaldosDe(nombre) }];
+    if (metodo !== 'DELETE') return [405, { error: 'metodo_no_permitido' }];
+    if (nombre === partidaActual() && enMarcha()) return [409, { error: 'partida_en_marcha', mensaje: 'para el servidor o cambia de partida antes de borrarla' }];
+    rmSync(carpetaPartida(nombre), { recursive: true, force: true });
+    return [200, { borrada: nombre, actual: partidaActual() }];
+  }
+  if (metodo !== 'POST' && !(metodo === 'GET' && accion === 'respaldos')) return [405, { error: 'metodo_no_permitido' }];
+  if (accion === 'respaldos') return [200, { respaldos: respaldosDe(nombre) }];
+  if (accion === 'activar') {
+    await pararServidor(); ponerActual(nombre); arrancar(servidor());
+    return [200, { ...infoPartida(nombre), ...arranque() }];
+  }
+  if (accion === 'restaurar') {
+    const r = respaldosDe(nombre).find((x) => x.id === cuerpo?.respaldo);
+    if (!r) return [404, { error: 'no_encontrado', mensaje: 'no hay ese respaldo' }];
+    const carpeta = carpetaPartida(nombre), copia = path.join(carpeta, 'respaldos', r.id);
+    const seguia = nombre === partidaActual() && (await pararServidor());
+    // Antes de pisarla, lo de ahora se guarda como un respaldo más (sin la versión: no la sabe sin el servidor).
+    const antes = `antes-de-restaurar-${Date.now()}`;
+    for (const sub of ['mundo', 'acceso']) if (existsSync(path.join(carpeta, sub))) cpSync(path.join(carpeta, sub), path.join(carpeta, 'respaldos', antes, sub), { recursive: true });
+    writeFileSync(path.join(carpeta, 'respaldos', antes, 'respaldo.json'), JSON.stringify({ id: antes, creado_ms: Date.now(), version: null, instante: null, nota: `lo que había antes de restaurar ${r.id}` }));
+    for (const sub of ['mundo', 'acceso']) {
+      rmSync(path.join(carpeta, sub), { recursive: true, force: true });
+      if (existsSync(path.join(copia, sub))) cpSync(path.join(copia, sub), path.join(carpeta, sub), { recursive: true });
+    }
+    if (seguia) arrancar(servidor());
+    return [200, { restaurado: r, antes, ...(seguia ? arranque() : { arrancado: false, aviso: null }) }];
+  }
+  return [404, { error: 'no_encontrado', mensaje: 'acción desconocida' }];
+}
+
+// La regeneración del mundo: GET dice si está en marcha y cómo acabó la última; POST { semilla } la lanza.
+async function apiMundo(metodo, cuerpo) {
+  const tarea = configurations.find((c) => c.name === 'generar-mundo');
+  if (metodo === 'GET') return [200, { generando: !!procesos['generar-mundo']?.hijo, semilla: mundo.semilla, ultima: mundo.ultima, artefactos: artefactos() }];
+  if (metodo !== 'POST') return [405, { error: 'metodo_no_permitido' }];
+  if (procesos['generar-mundo']?.hijo) return [409, { error: 'ya_generando', mensaje: 'ya se está generando un mundo' }];
+  const semilla = Number(cuerpo?.semilla ?? 42);
+  if (!Number.isSafeInteger(semilla) || semilla < 0) return [400, { error: 'datos_invalidos', mensaje: 'la semilla es un entero ≥ 0' }];
+  mundo.semilla = semilla;
+  arrancar(tarea);
+  return [202, { generando: true, semilla }];
+}
+
+const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS', 'access-control-allow-headers': 'content-type, authorization' };
+const leerCuerpo = (req) => new Promise((ok) => { let b = ''; req.on('data', (d) => { b += d; }); req.on('end', () => { try { ok(b ? JSON.parse(b) : null); } catch { ok(undefined); } }); });
+
 http.createServer(async (req, res) => {
-  const [, api, accion, nombre, valor] = req.url.split('/');
-  if (api !== 'api') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(HTML); }
-  if (accion === 'estado') { res.writeHead(200, { 'content-type': 'application/json' }); return res.end(JSON.stringify(await estado())); }
-  const c = configurations.find((x) => x.name === decodeURIComponent(nombre ?? ''));
-  if (req.method !== 'POST' || !c) { res.writeHead(404); return res.end(); }
+  const partes = new URL(req.url, 'http://x').pathname.split('/').filter(Boolean).map(decodeURIComponent);
+  if (partes[0] !== 'api') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(HTML); }
+  if (req.method === 'OPTIONS') { res.writeHead(204, CORS); return res.end(); }
+  const json = (estado, v) => { res.writeHead(estado, { ...CORS, 'content-type': 'application/json' }); res.end(JSON.stringify(v)); };
+  if (partes[1] === 'partidas' || partes[1] === 'mundo') {
+    const cuerpo = await leerCuerpo(req);
+    if (cuerpo === undefined) return json(400, { error: 'datos_invalidos', mensaje: 'el cuerpo es JSON' });
+    try { return json(...(partes[1] === 'mundo' ? await apiMundo(req.method, cuerpo) : await apiPartidas(req.method, partes.slice(1), cuerpo))); }
+    catch (e) { return json(500, { error: 'interno', mensaje: String(e?.message ?? e) }); }
+  }
+  const [, accion, nombre, valor] = partes;
+  if (accion === 'estado') return json(200, await estado());
+  const c = configurations.find((x) => x.name === (nombre ?? ''));
+  if (req.method !== 'POST' || !c) { res.writeHead(404, CORS); return res.end(); }
   if (accion === 'arrancar') arrancar(c);
   else if (accion === 'parar') parar(c.name);
   else if (accion === 'puerto') {
     const p = Number(valor);
-    if (!Number.isInteger(p) || p < 1 || p > 65535 || procesos[c.name]?.hijo) { res.writeHead(400); return res.end(); }
+    if (!Number.isInteger(p) || p < 1 || p > 65535 || procesos[c.name]?.hijo) { res.writeHead(400, CORS); return res.end(); }
     puertos[c.name] = p;
   }
-  res.writeHead(204); res.end();
+  res.writeHead(204, CORS); res.end();
 }).listen(PUERTO, '127.0.0.1', () => {
   const url = `http://localhost:${PUERTO}`;
   console.log(`Panel en ${url}`);

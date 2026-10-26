@@ -12,8 +12,7 @@
       ],
       "env": {
         "ADMINISTRADORES": "jefa",
-        "CODIGO_REGISTRO_BOTS": "dev-bots",
-        "BRONZEAGE_DATOS": "datos"
+        "CODIGO_REGISTRO_BOTS": "dev-bots"
       },
       "port": 7878
     },

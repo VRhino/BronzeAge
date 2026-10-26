@@ -117,3 +117,35 @@ Un `refundacion.fondo_corto` dice cuánto falta en `RechazoOrden.detalle.faltan`
 Una cuenta nueva entra sin héroe (`Bienvenida.campamentos_para_elegir`) y lo crea con la orden `crear_heroe`. El héroe queda ligado a la cuenta (`cuenta_id`, `u-N`): al volver a entrar con otro token de la misma cuenta, la `Bienvenida` trae su `heroe_id`.
 
 Detalle y diferencias con el TypeScript: `Docs/Mechanics/Proyecciones_Y_Autorizacion.md` §2.1.
+
+## Administrar partidas (admin web, fase 7)
+
+Dos sitios, porque parar y arrancar el proceso no lo puede hacer el propio proceso:
+
+**El servidor** (`crates/servicio/src/admin.rs`), en su mismo puerto y solo con `Authorization: sesion <token>` de una cuenta de `ADMINISTRADORES` (sin token o caducado, `401 token_invalido`; de otra cuenta, `403 no_autorizado`):
+
+| Ruta | Qué |
+|---|---|
+| `GET /v1/admin/partida` | `{ carpeta, mundo_hash, semilla, version, instante, cuentas, bots, codigo_registro, respaldos }` |
+| `GET /v1/admin/registro/codigo` | `{ codigo }` (`null`: registro abierto) |
+| `PUT /v1/admin/registro/codigo` | cuerpo `{ codigo: texto \| null }`; cambia en caliente hasta el próximo reinicio (después vuelve `CODIGO_REGISTRO`) |
+| `POST /v1/admin/respaldos` | foto ahora y copia de `mundo/` y `acceso/` en `<datos>/respaldos/<id>/`; `201 { id, creado_ms, version, instante, mundo_hash, semilla, bytes }` |
+| `GET /v1/admin/respaldos` | `{ respaldos: [...] }`, del más nuevo al más viejo |
+
+El núcleo atiende el respaldo entre dos órdenes y no hace nada más mientras copia, así que la copia es coherente.
+
+**El panel de arranque** (`scripts/panel.mjs`, puerto 3999), que pasa su dirección al admin como `PANEL_URL` (como `BOTS_URL`). CORS abierto, cuerpos JSON. Una partida es una carpeta de datos del servidor en `partidas/<nombre>/` (ignorada por git) con su `partida.json` (`semilla` y `mundo`, el artefacto con el que se creó); la carpeta `datos/` de antes cuenta como la partida `datos`. El servidor del panel arranca siempre con la partida actual.
+
+| Ruta | Qué |
+|---|---|
+| `GET /api/partidas` | `{ actual, servidor: { lanzado, escucha }, partidas: [{ nombre, carpeta, semilla, mundo, creada_ms, respaldos, actual }], artefactos: [{ archivo, hash, creado_ms }] }` |
+| `POST /api/partidas` | `{ nombre, semilla?, mundo?, activar? }`: crea la partida con el artefacto dado (archivo o hash; por defecto el más nuevo) y, salvo `activar: false`, para el servidor y lo arranca con ella. `201`; `409 partida_repetida` o `sin_mundo` |
+| `GET /api/partidas/<nombre>` | la partida y su `lista_respaldos` |
+| `POST /api/partidas/<nombre>/activar` | cambiar de partida: para el servidor (con su foto) y lo arranca con esa |
+| `DELETE /api/partidas/<nombre>` | la borra entera; `409 partida_en_marcha` si es la actual con el servidor encendido |
+| `GET /api/partidas/<nombre>/respaldos` | `{ respaldos }` (los que hizo el servidor) |
+| `POST /api/partidas/<nombre>/restaurar` | `{ respaldo: <id> }`: para el servidor si sirve esa partida, guarda lo de ahora como el respaldo `antes-de-restaurar-<ms>`, copia el respaldo encima y vuelve a arrancar |
+| `GET /api/mundo` | `{ generando, semilla, ultima: { semilla, codigo, fin_ms, artefacto }, artefactos }`: el admin lo consulta para saber cuándo terminó (código 0: bien) |
+| `POST /api/mundo` | `{ semilla }`: lanza la tarea «generar-mundo» con esa semilla (unos 15 min); `202`, o `409 ya_generando` |
+
+Las que arrancan el servidor contestan también `{ arrancado, aviso }`: si no pudo arrancar, `aviso` dice por qué (falta el artefacto de mundo, por ejemplo).

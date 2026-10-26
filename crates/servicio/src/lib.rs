@@ -5,8 +5,10 @@
 //! partida donde se quedó: el reloj de mundo continúa desde el último instante guardado y los tokens vigentes siguen valiendo.
 //!
 //! El mismo puerto sirve el artefacto de mundo por hash (`GET /v1/mundo/<hash>`, contrato 06) y la `Bienvenida` lo anuncia en `InfoMundo.url_artefacto` (ruta relativa al servidor).
+//! Las rutas de administración (`/v1/admin/...`, solo administradores) están en [`admin`].
 //! Y el archivo común de datos de juego ([`datos`]): `GET /v1/datos/<versión>` (y `GET /v1/datos`, el vigente), anunciado en `InfoMundo.version_datos_de_juego` y `url_datos_de_juego`.
 
+pub mod admin;
 pub mod datos;
 
 use std::{
@@ -70,6 +72,7 @@ pub fn arranque_de(ruta: &Path, semilla: u64) -> io::Result<Artefacto> {
 /// El HTTP del puerto: el artefacto de mundo por hash y, lo demás, el servicio de acceso.
 struct RutasHttp {
     acceso: Acceso,
+    admin: admin::Admin,
     mundo: Option<(String, Arc<Vec<u8>>)>,
     datos: datos::DatosDeJuego,
 }
@@ -84,6 +87,9 @@ impl Http for RutasHttp {
                 _ => RespuestaHttp::texto(405, "método no permitido"),
             };
             return Box::pin(async move { r });
+        }
+        if p.ruta.starts_with(admin::RUTA_ADMIN) {
+            return Box::pin(self.admin.atender(p));
         }
         if let Some(hash) = p.ruta.strip_prefix(RUTA_MUNDO) {
             let r = match (&self.mundo, p.metodo.as_str()) {
@@ -119,6 +125,7 @@ pub struct Informe {
 /// Abre los datos de `datos` (o los crea), lanza el núcleo y escucha en `direccion` (puerto 0: uno libre). Con `artefacto`, el puerto lo sirve por su hash.
 pub async fn arrancar(arranque: Arranque, artefacto: Option<Arc<Vec<u8>>>, datos: &Path, direccion: SocketAddr, acceso: acceso::Config) -> io::Result<(Servicio, Informe)> {
     let datos_de_juego = datos::datos_de_juego(&arranque.reglas);
+    let semilla = arranque.semilla;
     let dir_mundo = datos.join("mundo");
     let n = tokio::task::block_in_place(|| Nucleo::con_persistencia(arranque, &dir_mundo, persistencia::Config::default()))?;
     let acceso = Acceso::abrir(&datos.join("acceso"), acceso)?;
@@ -132,7 +139,8 @@ pub async fn arrancar(arranque: Arranque, artefacto: Option<Arc<Vec<u8>>>, datos
         datos_de_juego: Some((datos_de_juego.version.clone(), format!("{RUTA_DATOS}/{}", datos_de_juego.version))),
         ..Config::default()
     };
-    let http = Arc::new(RutasHttp { acceso: acceso.clone(), mundo, datos: datos_de_juego });
+    let admin = admin::Admin { acceso: acceso.clone(), nucleo: tx.clone(), carpeta: datos.to_owned(), mundo_hash: informe.mundo_hash.clone(), semilla };
+    let http = Arc::new(RutasHttp { acceso: acceso.clone(), admin, mundo, datos: datos_de_juego });
     let listener = tokio::net::TcpListener::bind(direccion).await?;
     let srv = servir_con_http(listener, tx.clone(), acceso.clone(), http, reloj, config).await;
     Ok((Servicio { direccion: srv.direccion, acceso, srv, tx, actor }, informe))

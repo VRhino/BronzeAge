@@ -191,6 +191,12 @@ impl NucleoFalso {
                         }
                     }
                     ComandoSesion::Batalla { .. } => {}
+                    ComandoSesion::Admin(crate::PeticionAdmin::Estado { respuesta }) => {
+                        let _ = respuesta.send(crate::EstadoNucleo { version: e.version, instante: reloj.reloj().mundo_ms });
+                    }
+                    ComandoSesion::Admin(crate::PeticionAdmin::Respaldo { respuesta, .. }) => {
+                        let _ = respuesta.send(Err(std::io::Error::other("el núcleo falso no respalda")));
+                    }
                     ComandoSesion::Cronica { sesion, pedir } => {
                         if let Some(s) = e.sesiones.get(&sesion) {
                             let c = contrato::v1::Cronica { peticion_id: pedir.peticion_id, version: e.version, ..Default::default() };

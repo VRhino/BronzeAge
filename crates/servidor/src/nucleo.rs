@@ -2,6 +2,8 @@
 
 use std::{
     future::Future,
+    io,
+    path::PathBuf,
     sync::{Arc, RwLock},
     time::{Duration, Instant as Pared},
 };
@@ -89,6 +91,24 @@ pub enum ComandoSesion {
     Cronica { sesion: SesionId, pedir: PedirCronica },
     /// La sesión terminó (cliente, red, expulsión o error). Llega siempre tras un `Conecta`, aceptado o no: el núcleo ignora ids que no conoce.
     Desconecta { sesion: SesionId },
+    /// Del servicio, no de una sesión: lo que pide la administración del proceso (las rutas `/v1/admin/...`, fase 7).
+    Admin(PeticionAdmin),
+}
+
+/// Lo que la administración del proceso pide al núcleo. Va por el mismo canal que las órdenes, así que se atiende entre dos órdenes.
+#[derive(Debug)]
+pub enum PeticionAdmin {
+    /// La versión y el instante de ahora.
+    Estado { respuesta: oneshot::Sender<EstadoNucleo> },
+    /// Una foto ahora y la copia de la carpeta del núcleo en `destino`, con el núcleo esperando mientras copia (la copia es coherente: foto, registro y crónica).
+    Respaldo { destino: PathBuf, respuesta: oneshot::Sender<io::Result<EstadoNucleo>> },
+}
+
+/// La versión y el instante del núcleo.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EstadoNucleo {
+    pub version: u64,
+    pub instante: Instante,
 }
 
 /// Del núcleo a una sesión, ya construido. El servidor solo numera, comprime y envía, en el orden recibido.

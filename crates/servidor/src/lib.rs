@@ -53,7 +53,7 @@ pub mod prueba;
 mod sesion;
 
 pub use nucleo::{
-    codigos, Autenticador, ComandoSesion, Config, Difusion, ErrorAcceso, Identidad, RelojCompartido, RolTecnico, SesionId,
+    codigos, Autenticador, ComandoSesion, Config, Difusion, ErrorAcceso, EstadoNucleo, Identidad, PeticionAdmin, RelojCompartido, RolTecnico, SesionId,
 };
 pub use http::{Http, PeticionHttp, RespuestaHttp, SinHttp};
 pub use sesion::{servir, servir_con_http, Servidor};

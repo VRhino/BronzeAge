@@ -42,7 +42,7 @@ use militar::heroe::Monedas;
 use contrato::v1 as pb;
 use pb::orden::Cuerpo;
 use sha2::{Digest, Sha256};
-use servidor::{ComandoSesion, Difusion, RelojCompartido, SesionId};
+use servidor::{ComandoSesion, Difusion, EstadoNucleo, PeticionAdmin, RelojCompartido, SesionId};
 use std::collections::BTreeMap;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
@@ -148,6 +148,13 @@ impl Actor {
             }
             ComandoSesion::Desconecta { sesion } => {
                 self.mesa.quitar(sesion);
+            }
+            ComandoSesion::Admin(PeticionAdmin::Estado { respuesta }) => {
+                let _ = respuesta.send(EstadoNucleo { version: self.nucleo.version(), instante: self.nucleo.ahora() });
+            }
+            ComandoSesion::Admin(PeticionAdmin::Respaldo { destino, respuesta }) => {
+                let r = self.nucleo.respaldar(&destino).map(|()| EstadoNucleo { version: self.nucleo.version(), instante: self.nucleo.ahora() });
+                let _ = respuesta.send(r);
             }
         }
     }

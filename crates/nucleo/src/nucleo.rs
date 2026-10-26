@@ -41,7 +41,7 @@ use servidor::RelojCompartido;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, VecDeque};
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread::JoinHandle;
@@ -157,7 +157,23 @@ enum MsgFoto {
     PedirCronica { pedir: contrato::v1::PedirCronica, version: u64, responder: cronica::Responder },
 }
 
+/// Copia `de` en `a` con sus subcarpetas.
+fn copiar_carpeta(de: &Path, a: &Path) -> io::Result<()> {
+    std::fs::create_dir_all(a)?;
+    for e in std::fs::read_dir(de)? {
+        let e = e?;
+        if e.file_type()?.is_dir() {
+            copiar_carpeta(&e.path(), &a.join(e.file_name()))?;
+        } else {
+            std::fs::copy(e.path(), a.join(e.file_name()))?;
+        }
+    }
+    Ok(())
+}
+
 struct Persistencia {
+    /// La carpeta del almacén (para los respaldos).
+    dir: PathBuf,
     almacen: Almacen,
     fotos: mpsc::Sender<MsgFoto>,
     hilo: Option<JoinHandle<()>>,
@@ -330,7 +346,7 @@ impl Nucleo {
         let (fotos, rx) = mpsc::channel();
         let escritor = almacen.fotos();
         let hilo = std::thread::Builder::new().name("nucleo-persistencia".into()).spawn(move || hilo_de_persistencia(escritor, Some(diario), rx))?;
-        n.persist = Some(Persistencia { almacen, fotos, hilo: Some(hilo), pendiente: Vec::new(), desde_foto: repetidas, ultimo_instante_log: ultimo });
+        n.persist = Some(Persistencia { dir: dir.to_owned(), almacen, fotos, hilo: Some(hilo), pendiente: Vec::new(), desde_foto: repetidas, ultimo_instante_log: ultimo });
         if nuevo {
             n.registrar(n.estado.ahora, ENTRADA_INICIO, n.datos_de_inicio(n.estado.ahora));
         }
@@ -1294,6 +1310,16 @@ impl Nucleo {
                 let _ = rx.recv();
             }
         }
+    }
+
+    /// Respaldo en caliente (fase 7, rutas de administración): una foto ahora, espera a que el hilo de la persistencia la escriba (y la crónica), sincroniza el registro y copia la
+    /// carpeta entera en `destino`. Mientras copia el núcleo no atiende nada más, así que la copia se abre como la carpeta: la foto y el registro que la sigue. Sin persistencia, error.
+    pub fn respaldar(&mut self, destino: &Path) -> io::Result<()> {
+        self.foto_ahora();
+        self.esperar_fotos();
+        let Some(p) = &mut self.persist else { return Err(io::Error::other("el núcleo no tiene persistencia")) };
+        p.almacen.registro().sincronizar()?;
+        copiar_carpeta(&p.dir, destino)
     }
 
     /// Parada limpia: escribe un `Avance` final, sincroniza el registro y espera a las fotos.

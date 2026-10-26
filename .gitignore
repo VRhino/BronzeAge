@@ -46,3 +46,4 @@ batch/salida/
 
 # Datos del proceso del servidor (`bronzeage-servidor`: registro, fotos, crónica y cuentas)
 /datos/
+/partidas/

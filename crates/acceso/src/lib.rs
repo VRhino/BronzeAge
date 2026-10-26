@@ -16,7 +16,7 @@ use std::{
     fs::{self, File, OpenOptions},
     future::Future,
     io::{self, BufRead, BufReader, Write},
-    path::Path,
+    path::{Path, PathBuf},
     pin::Pin,
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
@@ -148,6 +148,8 @@ struct Estado {
     sesiones: HashMap<String, SesionGuardada>,
     siguiente: u64,
     ficheros: Option<Ficheros>,
+    /// El código de invitación vigente: el de `Config::codigo_registro` al abrir; lo cambia un administrador en caliente (no se guarda: un reinicio vuelve al de la configuración).
+    codigo_registro: Option<String>,
 }
 
 impl Estado {
@@ -162,6 +164,8 @@ impl Estado {
 
 struct Interior {
     config: Config,
+    /// La carpeta de los ficheros (`None`: en memoria).
+    dir: Option<PathBuf>,
     estado: Mutex<Estado>,
 }
 
@@ -228,7 +232,8 @@ fn anadir<T: Serialize>(f: &mut File, v: &T) -> io::Result<()> {
 impl Acceso {
     /// Sin disco: lo que se registra se pierde al parar.
     pub fn en_memoria(config: Config) -> Self {
-        Self { interior: Arc::new(Interior { config, estado: Mutex::new(Estado::default()) }) }
+        let estado = Estado { codigo_registro: config.codigo_registro.clone(), ..Estado::default() };
+        Self { interior: Arc::new(Interior { config, dir: None, estado: Mutex::new(estado) }) }
     }
 
     /// Abre (o crea) el servicio en `dir`: lee las cuentas y las sesiones aún vigentes y reescribe `sesiones.jsonl` sin las caducadas.
@@ -237,7 +242,7 @@ impl Acceso {
         let (fc, fs_) = (dir.join("cuentas.jsonl"), dir.join("sesiones.jsonl"));
         recortar_cola(&fc)?;
         recortar_cola(&fs_)?;
-        let mut e = Estado::default();
+        let mut e = Estado { codigo_registro: config.codigo_registro.clone(), ..Estado::default() };
         for c in leer_lineas::<Cuenta>(&fc)? {
             e.insertar(c);
         }
@@ -260,7 +265,7 @@ impl Acceso {
         fs::rename(&temporal, &fs_)?;
         let abrir = |f: &Path| OpenOptions::new().create(true).append(true).open(f);
         e.ficheros = Some(Ficheros { cuentas: abrir(&fc)?, sesiones: abrir(&fs_)? });
-        Ok(Self { interior: Arc::new(Interior { config, estado: Mutex::new(e) }) })
+        Ok(Self { interior: Arc::new(Interior { config, dir: Some(dir.to_owned()), estado: Mutex::new(e) }) })
     }
 
     fn estado(&self) -> std::sync::MutexGuard<'_, Estado> {
@@ -284,13 +289,47 @@ impl Acceso {
         self.estado().cuentas.len()
     }
 
+    /// Cuántas de las cuentas son de bot.
+    pub fn bots(&self) -> usize {
+        self.estado().cuentas.values().filter(|c| c.bot).count()
+    }
+
+    /// El código de invitación de las cuentas humanas vigente (`None`: registro abierto).
+    pub fn codigo_registro(&self) -> Option<String> {
+        self.estado().codigo_registro.clone()
+    }
+
+    /// Cambia el código de invitación en caliente (`None` o vacío: registro abierto). No se guarda: al reiniciar vuelve el de la configuración (`CODIGO_REGISTRO`).
+    pub fn cambiar_codigo_registro(&self, codigo: Option<String>) {
+        self.estado().codigo_registro = codigo.map(|c| c.trim().to_owned()).filter(|c| !c.is_empty());
+    }
+
+    /// La cuenta de un token vigente si es de un administrador global (un nick de `ADMINISTRADORES` que no es bot).
+    pub fn administrador(&self, token: &str, ahora: i64) -> Option<Cuenta> {
+        let (c, _) = self.sesion(token, ahora)?;
+        (!c.bot && self.interior.config.administradores.iter().any(|a| normalizar(a) == c.nick)).then_some(c)
+    }
+
+    /// Copia los ficheros a `destino` (respaldo), con el servicio bloqueado mientras copia para que no quede una línea a medias. En memoria no copia nada.
+    pub fn respaldar(&self, destino: &Path) -> io::Result<()> {
+        let Some(dir) = &self.interior.dir else { return Ok(()) };
+        let _e = self.estado();
+        fs::create_dir_all(destino)?;
+        for f in ["cuentas.jsonl", "sesiones.jsonl"] {
+            if dir.join(f).exists() {
+                fs::copy(dir.join(f), destino.join(f))?;
+            }
+        }
+        Ok(())
+    }
+
     /// Alta de cuenta (§2.1). El hash de la clave se calcula fuera del hilo del servidor.
     pub async fn registrar(&self, nick: &str, clave: &str, codigo: Option<&str>) -> Result<Cuenta, ErrorRegistro> {
         let nick = normalizar(nick);
         validar(&nick, clave)?;
         let cfg = &self.interior.config;
         let bot = cfg.codigo_registro_bots.as_deref().is_some_and(|c| Some(c) == codigo);
-        if !bot && cfg.codigo_registro.as_deref().is_some_and(|c| Some(c) != codigo) {
+        if !bot && self.codigo_registro().as_deref().is_some_and(|c| Some(c) != codigo) {
             return Err(ErrorRegistro::CodigoIncorrecto);
         }
         if self.estado().por_nick.contains_key(&nick) {
@@ -360,7 +399,7 @@ impl Acceso {
     /// Quién es el dueño de un token vigente en `ahora`: lo que el servidor necesita para abrir la sesión.
     pub fn identidad(&self, token: &str, ahora: i64) -> Result<Identidad, ErrorAcceso> {
         let (c, _) = self.sesion(token, ahora).ok_or(ErrorAcceso::Invalido)?;
-        let admin = !c.bot && self.interior.config.administradores.iter().any(|a| normalizar(a) == c.nick);
+        let admin = self.administrador(token, ahora).is_some();
         let (roles, rol) = if c.bot {
             (vec![TipoCliente::ClienteBot], RolTecnico::Jugador)
         } else if admin {
@@ -389,7 +428,7 @@ fn texto<'a>(v: &'a Value, campo: &str) -> Option<&'a str> {
 }
 
 /// El token de la cabecera `Authorization: sesion <token>` (o `Bearer <token>`).
-fn token_de(p: &PeticionHttp) -> Option<&str> {
+pub fn token_de(p: &PeticionHttp) -> Option<&str> {
     let v = p.cabecera("authorization")?;
     let (esquema, token) = v.split_once(' ')?;
     (esquema.eq_ignore_ascii_case("sesion") || esquema.eq_ignore_ascii_case("bearer")).then_some(token.trim())

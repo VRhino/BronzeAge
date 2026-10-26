@@ -178,3 +178,86 @@ fn los_datos_de_juego_llevan_todos_los_documentos_con_bloques() {
     assert_eq!(incluidos, con_bloques, "un documento de Mechanics con bloques nuevo va en servicio::datos::DOCUMENTOS");
     assert_eq!(d.version, servicio::datos::datos_de_juego(&Reglas::default()).version, "la versión es estable");
 }
+
+/// Una petición con cuerpo y token de sesión; devuelve el estado y el JSON.
+async fn pedir(dir: SocketAddr, metodo: &str, ruta: &str, token: Option<&str>, cuerpo: Option<Value>) -> (u16, Value) {
+    let mut tcp = tokio::net::TcpStream::connect(dir).await.unwrap();
+    let cuerpo = cuerpo.map(|v| v.to_string()).unwrap_or_default();
+    let auth = token.map(|t| format!("Authorization: sesion {t}\r\n")).unwrap_or_default();
+    let p = format!("{metodo} {ruta} HTTP/1.1\r\nHost: prueba\r\n{auth}Content-Type: application/json\r\nContent-Length: {}\r\n\r\n{cuerpo}", cuerpo.len());
+    tcp.write_all(p.as_bytes()).await.unwrap();
+    let mut r = String::new();
+    tcp.read_to_string(&mut r).await.unwrap();
+    let (cabecera, cuerpo) = r.split_once("\r\n\r\n").unwrap();
+    (cabecera.split(' ').nth(1).unwrap().parse().unwrap(), serde_json::from_str(cuerpo).unwrap_or(Value::Null))
+}
+
+/// Las rutas de administración: solo un administrador; el código de invitación cambia en caliente; un respaldo copia la partida y, copiado sobre la carpeta con el servidor parado,
+/// la devuelve a ese punto.
+#[tokio::test(flavor = "multi_thread")]
+async fn un_administrador_cambia_el_codigo_y_respalda_la_partida() {
+    let datos = tempfile::tempdir().unwrap();
+    let cfg = || acceso::Config { administradores: vec!["jefa".into()], ..acceso() };
+    let (s, _) = servicio::arrancar(arranque_sintetico(), None, datos.path(), libre(), cfg()).await.unwrap();
+    let dir = s.direccion;
+    for nick in ["jefa", "pepe"] {
+        assert_eq!(post(dir, "/v1/registro", json!({ "nick": nick, "clave": "clave larga" })).await.0, 201);
+    }
+    let token = |nick: &'static str| async move { post(dir, "/v1/sesiones", json!({ "nick": nick, "clave": "clave larga" })).await.1["token"].as_str().unwrap().to_owned() };
+    let (jefa, pepe) = (token("jefa").await, token("pepe").await);
+    token_de_bot(dir, "bot-1", true).await;
+
+    // Sin token, 401; con el de un jugador, 403.
+    assert_eq!(pedir(dir, "GET", "/v1/admin/partida", None, None).await.0, 401);
+    assert_eq!(pedir(dir, "GET", "/v1/admin/partida", Some("otro"), None).await.0, 401);
+    assert_eq!(pedir(dir, "GET", "/v1/admin/partida", Some(&pepe), None).await.0, 403);
+    let (e, v) = pedir(dir, "GET", "/v1/admin/partida", Some(&jefa), None).await;
+    assert_eq!(e, 200, "{v}");
+    assert_eq!((v["mundo_hash"].as_str(), v["semilla"].as_u64(), v["cuentas"].as_u64(), v["bots"].as_u64()), (Some("hash-de-prueba"), Some(42), Some(3), Some(1)));
+    assert!(v["version"].is_u64() && v["instante"].is_i64() && v["codigo_registro"].is_null(), "{v}");
+
+    // El código de invitación, en caliente.
+    let (e, v) = pedir(dir, "PUT", "/v1/admin/registro/codigo", Some(&jefa), Some(json!({ "codigo": " amigos " }))).await;
+    assert_eq!((e, v["codigo"].as_str()), (200, Some("amigos")));
+    assert_eq!(pedir(dir, "GET", "/v1/admin/registro/codigo", Some(&jefa), None).await.1["codigo"], json!("amigos"));
+    assert_eq!(post(dir, "/v1/registro", json!({ "nick": "ana", "clave": "clave larga" })).await.0, 403);
+    assert_eq!(post(dir, "/v1/registro", json!({ "nick": "ana", "clave": "clave larga", "codigo": "amigos" })).await.0, 201);
+    assert_eq!(pedir(dir, "PUT", "/v1/admin/registro/codigo", Some(&jefa), Some(json!({ "otro": 1 }))).await.0, 400);
+    assert_eq!(pedir(dir, "PUT", "/v1/admin/registro/codigo", Some(&jefa), Some(json!({ "codigo": null }))).await.1["codigo"], Value::Null);
+    assert_eq!(pedir(dir, "PUT", "/v1/admin/registro/codigo", Some(&pepe), Some(json!({ "codigo": null }))).await.0, 403);
+
+    // Respaldo: la partida con ana y bot-1, en <datos>/respaldos/<id>.
+    let (e, r) = pedir(dir, "POST", "/v1/admin/respaldos", Some(&jefa), None).await;
+    assert_eq!(e, 201, "{r}");
+    let id = r["id"].as_str().unwrap().to_owned();
+    let copia = datos.path().join("respaldos").join(&id);
+    assert!(copia.join("mundo").is_dir() && copia.join("acceso/cuentas.jsonl").is_file() && r["bytes"].as_u64() > Some(0), "{r}");
+    let (_, l) = pedir(dir, "GET", "/v1/admin/respaldos", Some(&jefa), None).await;
+    assert_eq!(l["respaldos"].as_array().map(|a| a.len()), Some(1));
+    assert_eq!(l["respaldos"][0]["id"], json!(id));
+    assert_eq!(pedir(dir, "DELETE", "/v1/admin/respaldos", Some(&jefa), None).await.0, 405);
+    assert_eq!(pedir(dir, "GET", "/v1/admin/nada", Some(&jefa), None).await.0, 404);
+
+    // Algo después del respaldo, y se restaura: la cuenta nueva desaparece y la partida vuelve a la versión del respaldo.
+    assert_eq!(post(dir, "/v1/registro", json!({ "nick": "tardio", "clave": "clave larga" })).await.0, 201);
+    s.parar().await;
+    for sub in ["mundo", "acceso"] {
+        std::fs::remove_dir_all(datos.path().join(sub)).unwrap();
+        copiar(&copia.join(sub), &datos.path().join(sub));
+    }
+    let (s, i) = servicio::arrancar(arranque_sintetico(), None, datos.path(), libre(), cfg()).await.unwrap();
+    assert!(i.recuperado && i.cuentas == 4, "{i:?}");
+    assert!(i.version >= r["version"].as_u64().unwrap(), "{i:?} {r}");
+    s.parar().await;
+}
+
+fn copiar(de: &Path, a: &Path) {
+    std::fs::create_dir_all(a).unwrap();
+    for e in std::fs::read_dir(de).unwrap().flatten() {
+        if e.path().is_dir() {
+            copiar(&e.path(), &a.join(e.file_name()));
+        } else {
+            std::fs::copy(e.path(), a.join(e.file_name())).unwrap();
+        }
+    }
+}
