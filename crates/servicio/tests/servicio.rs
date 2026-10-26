@@ -216,6 +216,13 @@ async fn un_administrador_cambia_el_codigo_y_respalda_la_partida() {
     assert_eq!((v["mundo_hash"].as_str(), v["semilla"].as_u64(), v["cuentas"].as_u64(), v["bots"].as_u64()), (Some("hash-de-prueba"), Some(42), Some(3), Some(1)));
     assert!(v["version"].is_u64() && v["instante"].is_i64() && v["codigo_registro"].is_null(), "{v}");
 
+    // El navegador pregunta antes de un PUT (CORS): se permite.
+    let mut tcp = tokio::net::TcpStream::connect(dir).await.unwrap();
+    tcp.write_all(b"OPTIONS /v1/admin/registro/codigo HTTP/1.1\r\nHost: prueba\r\nAccess-Control-Request-Method: PUT\r\n\r\n").await.unwrap();
+    let mut r = String::new();
+    tcp.read_to_string(&mut r).await.unwrap();
+    assert!(r.starts_with("HTTP/1.1 204") && r.contains("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS"), "{r}");
+
     // El código de invitación, en caliente.
     let (e, v) = pedir(dir, "PUT", "/v1/admin/registro/codigo", Some(&jefa), Some(json!({ "codigo": " amigos " }))).await;
     assert_eq!((e, v["codigo"].as_str()), (200, Some("amigos")));
