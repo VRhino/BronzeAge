@@ -54,7 +54,14 @@ async fn correr() -> Result<(), String> {
         administradores: var("ADMINISTRADORES").map(|v| v.split(',').map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()).collect()).unwrap_or_default(),
         ..acceso::Config::default()
     };
-    let fichero = servicio::buscar_mundo(&mundo).map_err(|e| format!("artefacto de mundo: {e}"))?;
+    let fichero = servicio::buscar_mundo(&mundo).map_err(|e| {
+        let ruta = std::path::absolute(&mundo).unwrap_or(mundo.clone());
+        format!(
+            "no encuentro el artefacto de mundo en {} ({e}). Genéralo con «generar-mundo» en el panel o con `node scripts/generar-mundo.mjs` (unos 15 min), o pon \
+             BRONZEAGE_MUNDO con la ruta de un mundo-*.bin o de su carpeta",
+            ruta.display()
+        )
+    })?;
     println!("mundo: {}", fichero.display());
     let a = servicio::arranque_de(&fichero, semilla).map_err(|e| format!("artefacto de mundo: {e}"))?;
     let (s, i) = servicio::arrancar(a.arranque, Some(a.bytes), &datos, direccion, config.clone()).await.map_err(|e| format!("datos en {}: {e}", datos.display()))?;

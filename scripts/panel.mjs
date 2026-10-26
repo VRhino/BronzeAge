@@ -9,7 +9,7 @@
 import http from 'node:http';
 import net from 'node:net';
 import { spawn, exec } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -20,14 +20,25 @@ const { configurations } = JSON.parse(readFileSync(path.join(RAIZ, '.claude/laun
 // Cómo le dice el panel a cada servicio su puerto y el del servidor. P = los puertos elegidos ahora mismo.
 // El servidor sirve en un solo puerto el WebSocket del contrato 05 y el HTTP del acceso.
 const VITE = (p) => ['--', '--port', p, '--strictPort'];
+// `aviso`: por qué no se puede arrancar todavía (la tarjeta lo dice y deja el botón apagado).
 const SERVICIOS = {
   // `parar`: el servidor se apaga con su foto al leer esa línea por la entrada estándar (Windows no deja mandarle Ctrl+C).
-  'bronzeage-servidor': { tipo: 'backend', parar: 'parar\n', con: (p) => ({ env: { BRONZEAGE_DIRECCION: `127.0.0.1:${p}` } }) },
+  'bronzeage-servidor': { tipo: 'backend', parar: 'parar\n', aviso: avisoMundo, con: (p) => ({ env: { BRONZEAGE_DIRECCION: `127.0.0.1:${p}` } }) },
+  // Una tarea que termina sola: sin puerto.
+  'generar-mundo': { tipo: 'tarea' },
   'bronzeage-bots': { tipo: 'backend', con: (p, P) => ({ env: { BOTS_PUERTO: p, BOTS_SERVIDOR: `http://localhost:${P['bronzeage-servidor']}` } }) },
   'bronzeage-admin': { tipo: 'cliente', con: (p, P) => ({ args: VITE(p), env: {
     BACKEND_URL: `http://localhost:${P['bronzeage-servidor']}`, BOTS_URL: `ws://localhost:${P['bronzeage-bots']}/control` } }) },
   'bronzeage-cliente-jugador': { tipo: 'cliente', con: (p, P) => ({ args: VITE(p), env: { BACKEND_URL: `http://localhost:${P['bronzeage-servidor']}` } }) },
 };
+
+// El servidor necesita el artefacto de mundo (`BRONZEAGE_MUNDO`: un .bin o una carpeta con un mundo-*.bin; por defecto generador/salida/mundo).
+function avisoMundo(c) {
+  const ruta = path.resolve(RAIZ, c.env?.BRONZEAGE_MUNDO ?? process.env.BRONZEAGE_MUNDO ?? 'generador/salida/mundo');
+  if (ruta.endsWith('.bin') ? existsSync(ruta) : existsSync(ruta) && readdirSync(ruta).some((f) => /^mundo-.*\.bin$/.test(f))) return null;
+  if (procesos['generar-mundo']?.hijo) return 'generando el artefacto de mundo… (unos 15 min)';
+  return `falta el artefacto de mundo en ${ruta}: arranca «generar-mundo» (unos 15 min) o pon BRONZEAGE_MUNDO con la ruta de un mundo-*.bin`;
+}
 
 const puertos = Object.fromEntries(configurations.map((c) => [c.name, c.port]));
 const procesos = {}; // nombre -> { hijo, log[] }
@@ -44,7 +55,7 @@ function escucha(puerto) {
 }
 
 function arrancar(c) {
-  if (procesos[c.name]?.hijo || !existsSync(carpeta(c))) return;
+  if (procesos[c.name]?.hijo || !existsSync(carpeta(c)) || SERVICIOS[c.name]?.aviso?.(c)) return;
   const P = Object.fromEntries(Object.entries(puertos).map(([k, v]) => [k, String(v)]));
   const { args = [], env = {} } = SERVICIOS[c.name]?.con(P[c.name], P) ?? {};
   const p = { log: [] };
@@ -85,8 +96,8 @@ async function estado() {
     return {
       nombre: c.name, tipo: SERVICIOS[c.name]?.tipo ?? 'backend', puerto: puertos[c.name],
       comando: [c.runtimeExecutable, ...c.runtimeArgs].join(' ') + (c.cwd ? `  (en ${c.cwd})` : ''),
-      falta: !existsSync(carpeta(c)),
-      escucha: await escucha(puertos[c.name]), lanzado: !!p?.hijo, log: p?.log.slice(-60) ?? [],
+      falta: !existsSync(carpeta(c)), aviso: SERVICIOS[c.name]?.aviso?.(c) ?? null,
+      escucha: puertos[c.name] ? await escucha(puertos[c.name]) : false, lanzado: !!p?.hijo, log: p?.log.slice(-60) ?? [],
     };
   }));
 }
@@ -111,9 +122,10 @@ label{color:var(--sub);font-size:12px;margin-left:auto}
 input{width:76px;background:#0d0b08;color:var(--txt);border:1px solid var(--borde);border-radius:6px;padding:5px 6px;font:inherit}
 input:disabled{opacity:.5}
 pre{background:#0d0b08;border-radius:6px;padding:8px;height:140px;overflow:auto;font-size:11px;margin:10px 0 0;white-space:pre-wrap;color:var(--sub)}
-.est{font-size:12px;color:var(--sub)}.nota{color:var(--sub);font-size:12px;max-width:1200px}
+.est{font-size:12px;color:var(--sub)}.aviso{color:var(--wait);font-size:12px;margin:0 0 8px}.aviso:empty{display:none}.nota{color:var(--sub);font-size:12px;max-width:1200px}
 </style></head><body><h1>⚒ Panel de arranque — BronzeAge</h1>
 <h2>Servicios</h2><div class="grid" id="backend"></div>
+<h2>Tareas</h2><div class="grid" id="tareas"></div>
 <h2>Clientes</h2><div class="grid" id="clientes"></div>
 <p class="nota">La carga, la auditoría y las pruebas se miran en el admin web (ámbito ADMIN del contrato 05).</p>
 <script>
@@ -124,8 +136,8 @@ async function pintar(){
     const n=encodeURIComponent(d.nombre);
     let c=document.getElementById(d.nombre);
     if(!c){c=document.createElement('div');c.className='card';c.id=d.nombre;
-      document.getElementById(d.tipo==='cliente'?'clientes':'backend').append(c);
-      c.innerHTML='<div class="top"><span class="dot"></span><span class="nom"></span><span class="est"></span></div><div class="cmd"></div>'
+      document.getElementById(d.tipo==='cliente'?'clientes':d.tipo==='tarea'?'tareas':'backend').append(c);
+      c.innerHTML='<div class="top"><span class="dot"></span><span class="nom"></span><span class="est"></span></div><div class="cmd"></div><div class="aviso"></div>'
         +'<div class="fila"><button data-a="arrancar">Arrancar</button><button data-a="parar">Parar</button><button class="abrir">Abrir ↗</button>'
         +'<label>puerto <input type="number" min="1" max="65535"></label></div><pre></pre>';
       c.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>post('/api/'+b.dataset.a+'/'+n));
@@ -133,13 +145,15 @@ async function pintar(){
       c.querySelector('input').onchange=e=>post('/api/puerto/'+n+'/'+e.target.value);}
     c.querySelector('.dot').style.background=d.escucha?'var(--on)':d.lanzado?'var(--wait)':'var(--off)';
     c.querySelector('.nom').textContent=d.nombre;
-    c.querySelector('.est').textContent=d.falta?'sin carpeta':d.escucha?(d.lanzado?'encendido':'encendido (externo)'):d.lanzado?'arrancando…':'apagado';
+    c.querySelector('.est').textContent=d.falta?'sin carpeta':d.tipo==='tarea'?(d.lanzado?'en marcha…':'parada'):d.aviso&&!d.lanzado?'no puede arrancar':d.escucha?(d.lanzado?'encendido':'encendido (externo)'):d.lanzado?'arrancando…':'apagado';
     c.querySelector('.cmd').textContent=d.comando;
+    c.querySelector('.aviso').textContent=d.aviso??'';
+    c.querySelector('label').style.display=d.tipo==='tarea'?'none':'';
     const inp=c.querySelector('input');
     if(document.activeElement!==inp)inp.value=d.puerto;
     inp.disabled=d.lanzado; // el puerto se fija al arrancar
     c.querySelector('.abrir').classList.toggle('on',d.tipo==='cliente'&&d.escucha);
-    c.querySelector('[data-a=arrancar]').disabled=d.falta||d.lanzado||d.escucha;
+    c.querySelector('[data-a=arrancar]').disabled=d.falta||!!d.aviso||d.lanzado||d.escucha;
     c.querySelector('[data-a=parar]').disabled=!d.lanzado;
     const pre=c.querySelector('pre'),abajo=pre.scrollTop+pre.clientHeight>=pre.scrollHeight-4;
     pre.textContent=d.log.join('\\n');if(abajo)pre.scrollTop=pre.scrollHeight;

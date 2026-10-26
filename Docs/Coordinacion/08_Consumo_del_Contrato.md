@@ -85,6 +85,8 @@ CODIGO_REGISTRO_BOTS=<código de bots> ADMINISTRADORES=victor cargo run --releas
 | `CODIGO_REGISTRO_BOTS` | código que marca la cuenta como bot; sin él, no se pueden crear bots | — |
 | `ADMINISTRADORES` | nicks de los administradores globales, separados por comas | — |
 
+El artefacto de mundo no está en git (`generador/salida/` se ignora): en un checkout nuevo se genera una vez con `node scripts/generar-mundo.mjs [semilla]` o con la tarea «generar-mundo» del panel (unos 15 minutos; instala las dependencias del generador si faltan). Sin él, el servidor no arranca y lo dice, y el panel deja apagado su botón.
+
 Un reinicio con la misma carpeta y el mismo artefacto sigue la partida donde se quedó, y los tokens vigentes siguen valiendo. Ctrl+C para el proceso con su foto. Sin servidores de batalla: toda batalla se resuelve con números.
 
 **Entrar, paso a paso** (el CORS está abierto, así que el admin web puede llamar desde el navegador):

@@ -4,7 +4,12 @@
     {
       "name": "bronzeage-servidor",
       "runtimeExecutable": "cargo",
-      "runtimeArgs": ["run", "--release", "-p", "servicio"],
+      "runtimeArgs": [
+        "run",
+        "--release",
+        "-p",
+        "servicio"
+      ],
       "env": {
         "ADMINISTRADORES": "jefa",
         "CODIGO_REGISTRO_BOTS": "dev-bots",
@@ -13,9 +18,19 @@
       "port": 7878
     },
     {
+      "name": "generar-mundo",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "scripts/generar-mundo.mjs"
+      ]
+    },
+    {
       "name": "bronzeage-bots",
       "runtimeExecutable": "cargo",
-      "runtimeArgs": ["run", "--release"],
+      "runtimeArgs": [
+        "run",
+        "--release"
+      ],
       "cwd": "../BronceAgeBotsBrain",
       "env": {
         "CODIGO_REGISTRO_BOTS": "dev-bots"
@@ -25,7 +40,10 @@
     {
       "name": "bronzeage-admin",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "cwd": "../BronceAgeAdminClient",
       "port": 5173,
       "autoPort": true
@@ -33,7 +51,10 @@
     {
       "name": "bronzeage-cliente-jugador",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "cwd": "../BronzeAgeClient",
       "port": 5174,
       "autoPort": true
