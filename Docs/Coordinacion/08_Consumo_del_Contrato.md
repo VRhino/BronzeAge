@@ -35,7 +35,7 @@ para que cargo use las credenciales de `git` de la máquina.
 
 ## TypeScript (admin y cliente de jugador): `buf generate`
 
-Se genera con `buf` y `protoc-gen-es`, con las mismas versiones y la misma plantilla que `contratos/ts` (donde pasan los 89 dorados):
+Se genera con `buf` y `protoc-gen-es`, con las mismas versiones y la misma plantilla que `contratos/ts` (donde pasan los 90 dorados):
 
 ```yaml
 # buf.gen.yaml
