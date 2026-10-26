@@ -66,7 +66,10 @@ pub fn clave(c: &Cuerpo) -> Clave {
         Cuerpo::AedaItinerante(x) => (TipoEntidad::Aeda, x.id.clone()),
         Cuerpo::AedaResidente(x) => (TipoEntidad::Aeda, x.id.clone()),
         Cuerpo::Alijo(x) => (TipoEntidad::Alijo, x.id.clone()),
-        otro => panic!("entidad sin clave en el almacén de prueba: {otro:?}"),
+        // Fase 7 (2026-10-26, a petición del frente de bots): el nodo de recurso por su id y la memoria de la Facción por la Facción. Sin brazo comodín: una clase nueva del
+        // `oneof` no compila hasta tener su clave, en vez de tumbar al cliente cuando le llega.
+        Cuerpo::Nodo(x) => (TipoEntidad::NodoRecurso, x.id.clone()),
+        Cuerpo::Memoria(x) => (TipoEntidad::MemoriaFaccion, x.faccion_id.clone()),
     };
     (t as i32, id)
 }
