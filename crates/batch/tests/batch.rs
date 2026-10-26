@@ -21,7 +21,7 @@ macro_rules! con_mundo {
 }
 
 fn pequeno() -> Escenario {
-    Escenario { facciones: 20, dias: 2, semilla: 42, verificar_determinismo: true }
+    Escenario { facciones: 20, dias: 2, semilla: 42, verificar_determinismo: true, estres_fronteras: false }
 }
 
 /// El informe sin lo que depende del reloj de pared (fecha y tiempos), para comparar dos ejecuciones.

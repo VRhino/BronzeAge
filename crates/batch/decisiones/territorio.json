@@ -3,7 +3,7 @@
   "anomalias": [
     {
       "titulo": "Ninguna plaza llega a nivel 3: contactos de frontera y recortes de zona no se han puesto a prueba",
-      "detalle": "A los 30 días el 48,3 % de las plazas vivas es de nivel 2 (212 de 439, techo de zona 15 u) y 0 % de nivel 3 (20 u). Dos plazas de Facciones distintas están a 30 u o más, así que con zonas de 15 u como mucho no pueden tocarse: contactos por plaza 0 y área perdida 0,001 %. Esos verdes no demuestran que las fronteras funcionen, solo que no se ejercitaron. Los ascensos pedidos (una orden por plaza y hora) acabaron en 212 aceptados y 274.869 rechazados: faltan edificios 41 %, sin cupo de la Facción 36 %, falta población 17 %, ascenso en curso 5,5 %, recursos insuficientes 0,2 %. El cupo depende de que el batch suponga la Facción en nivel 2 a las 48 h y en nivel 3 a las 144 h de fundar (el cap de fundación sale de ahí).",
+      "detalle": "A los 30 días el 48,3 % de las plazas vivas es de nivel 2 (212 de 439, techo de zona 15 u) y 0 % de nivel 3 (20 u). Dos plazas de Facciones distintas están a 30 u o más, así que con zonas de 15 u como mucho no pueden tocarse: contactos por plaza 0 y área perdida 0,001 %. Esos verdes no demuestran que las fronteras funcionen, solo que no se ejercitaron. Los ascensos pedidos (una orden por plaza y hora) acabaron en 212 aceptados y 274.869 rechazados: faltan edificios 41 %, sin cupo de la Facción 36 %, falta población 17 %, ascenso en curso 5,5 %, recursos insuficientes 0,2 %. El cupo depende de que el batch suponga la Facción en nivel 2 a las 48 h y en nivel 3 a las 144 h de fundar (el cap de fundación sale de ahí). Para ponerlas a prueba está el modo de estrés `--estres-fronteras 1` (D3): con estrés (400 Facciones, 30 días, semilla 42): 495 plazas, todas de nivel 3; 2,21 contactos de frontera por plaza (máximo 5), área perdida por recortes 7,5 % de media (máxima 26,5 %, verde bajo el 25 % de media), 0 plazas en zona ajena y separación mínima 30,012 u; huella 8b8fff82… igual en dos corridas. El escenario por defecto no cambia (huella 17903d5a…, la misma que antes del cambio).",
       "causa": "medicion"
     },
     {
@@ -52,7 +52,7 @@
     },
     {
       "id": "D3",
-      "pregunta": "¿Cómo ponemos a prueba las fronteras si ninguna plaza llega a nivel 3 en 30 días?",
+      "pregunta": "[Cerrada el 2026-10-26: modo de estrés `--estres-fronteras 1`, que fija el nivel 3 con `FijarNivelAsentamiento` al fundar; con estrés (400 Facciones, 30 días, semilla 42): 495 plazas, todas de nivel 3; 2,21 contactos de frontera por plaza (máximo 5), área perdida por recortes 7,5 % de media (máxima 26,5 %, verde bajo el 25 % de media), 0 plazas en zona ajena y separación mínima 30,012 u; huella 8b8fff82… igual en dos corridas. El escenario por defecto no cambia (huella 17903d5a…, la misma que antes del cambio)] ¿Cómo ponemos a prueba las fronteras si ninguna plaza llega a nivel 3 en 30 días?",
       "contexto": "Los contactos y los recortes de zona solo ocurren con zonas de 20 u (nivel 3), y la economía real no las alcanza en este plazo: faltan edificios, cupo de Facción y población. Hoy esos verdes no demuestran nada.",
       "opciones": [
         {

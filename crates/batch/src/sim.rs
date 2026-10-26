@@ -127,6 +127,7 @@ struct Sim<'a> {
     facciones: Vec<Faccion>,
     reg: Registros,
     contador: u64,
+    estres: bool,
 }
 
 /// El núcleo recién arrancado sobre el mundo (semilla del núcleo = semilla del batch).
@@ -147,7 +148,7 @@ pub fn nucleo_nuevo(c: &Cargado, semilla: u64) -> Nucleo {
 }
 
 /// Corre `facciones` Facciones durante `dias` días de mundo.
-pub fn simular(c: &Cargado, geo: &Geo, facciones: u32, dias: u32, semilla: u64) -> Corrida {
+pub fn simular(c: &Cargado, geo: &Geo, facciones: u32, dias: u32, semilla: u64, estres: bool) -> Corrida {
     let t0 = Instant::now();
     let mut s = Sim {
         n: nucleo_nuevo(c, semilla),
@@ -159,6 +160,7 @@ pub fn simular(c: &Cargado, geo: &Geo, facciones: u32, dias: u32, semilla: u64) 
         facciones: Vec::new(),
         reg: Registros::default(),
         contador: 0,
+        estres,
     };
     s.nacimientos(facciones);
     s.correr();
@@ -344,6 +346,10 @@ impl Sim<'_> {
         let primera = self.faccion(f).plazas.is_empty();
         self.facciones[f as usize - 1].plazas.push(plaza);
         self.facciones[f as usize - 1].ocupada = false;
+        if self.estres {
+            let r = self.admin(t, Comando::FijarNivelAsentamiento { asentamiento: plaza, nivel: 3 });
+            assert!(r.aceptada(), "estrés: FijarNivelAsentamiento 3 rechazado: {:?}", r.resultado);
+        }
         if primera {
             self.programar(t + NIVEL_FACCION_2_H * HORA, Accion::NivelFaccion { f, nivel: 2 });
             self.programar(t + NIVEL_FACCION_3_H * HORA, Accion::NivelFaccion { f, nivel: 3 });

@@ -48,11 +48,14 @@ pub struct Escenario {
     pub semilla: u64,
     /// Repite un escenario reducido dos veces y compara los hashes del estado (unos segundos).
     pub verificar_determinismo: bool,
+    /// Modo de estrés (D3): cada plaza recibe el nivel 3 con `FijarNivelAsentamiento` nada más fundarla, para que las zonas
+    /// lleguen a 20 u y choquen. Fuera del escenario por defecto.
+    pub estres_fronteras: bool,
 }
 
 impl Default for Escenario {
     fn default() -> Self {
-        Self { facciones: 400, dias: 30, semilla: 42, verificar_determinismo: true }
+        Self { facciones: 400, dias: 30, semilla: 42, verificar_determinismo: true, estres_fronteras: false }
     }
 }
 
@@ -61,8 +64,8 @@ pub fn territorio(c: &Cargado, e: &Escenario) -> Informe {
     let t0 = Instant::now();
     let geo = geo::Geo::de(&c.mundo);
     let malla = medidas::sondear_malla(c, &geo, e.semilla);
-    let corrida = sim::simular(c, &geo, e.facciones, e.dias, e.semilla);
-    let determinismo = e.verificar_determinismo.then(|| es_determinista(c, &geo, e.semilla));
+    let corrida = sim::simular(c, &geo, e.facciones, e.dias, e.semilla, e.estres_fronteras);
+    let determinismo = e.verificar_determinismo.then(|| es_determinista(c, &geo, e.semilla, e.estres_fronteras));
     armar::armar(&armar::Entrada { c, geo: &geo, e, corrida: &corrida, malla: &malla, determinismo, pared_total: t0.elapsed() })
 }
 
@@ -231,9 +234,9 @@ pub fn tecnologia(c: &Cargado, e: &EscenarioTecnologia) -> Informe {
 }
 
 /// 25 Facciones y 2 días, dos veces: ¿mismo `hash_estado()`?
-fn es_determinista(c: &Cargado, geo: &geo::Geo, semilla: u64) -> bool {
-    let a = sim::simular(c, geo, 25, 2, semilla);
-    let b = sim::simular(c, geo, 25, 2, semilla);
+fn es_determinista(c: &Cargado, geo: &geo::Geo, semilla: u64, estres: bool) -> bool {
+    let a = sim::simular(c, geo, 25, 2, semilla, estres);
+    let b = sim::simular(c, geo, 25, 2, semilla, estres);
     a.nucleo.hash_estado() == b.nucleo.hash_estado()
 }
 

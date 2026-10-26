@@ -1,4 +1,4 @@
-//! `batch territorio [--mundo <.bin>] [--facciones 400] [--dias 30] [--semilla 42] [--salida batch/salida/territorio] [--decisiones <.json>]`
+//! `batch territorio [--mundo <.bin>] [--facciones 400] [--dias 30] [--semilla 42] [--salida batch/salida/territorio] [--decisiones <.json>] [--estres-fronteras 1]`
 //! `batch comercio   [--mundo <.bin>] [--plazas 160]    [--dias 30] [--semilla 42] [--salida batch/salida/comercio]   [--decisiones <.json>]`
 //! `batch poblacion  [--mundo <.bin>] [--plazas 300]    [--dias 30] [--semilla 42] [--salida batch/salida/poblacion]  [--decisiones <.json>] [--murallas 1]`
 //! `batch militar    [--mundo <.bin>] [--plazas 60]     [--dias 30] [--semilla 42] [--salida batch/salida/militar]    [--decisiones <.json>]
@@ -34,6 +34,8 @@ struct Opciones {
     nobleza: bool,
     /// Solo tecnología: los umbrales de los logros divididos por esto (1 = los del TypeScript).
     escala_logros: u64,
+    /// Solo territorio: 1 = modo de estrés de fronteras (nivel 3 al fundar).
+    estres_fronteras: bool,
 }
 
 fn opciones(sistema: Sistema, args: &[String]) -> Result<Opciones, String> {
@@ -47,7 +49,7 @@ fn opciones(sistema: Sistema, args: &[String]) -> Result<Opciones, String> {
     };
     let nombre_cantidad = if sistema == Sistema::Territorio { "--facciones" } else { "--plazas" };
     let dias = if sistema == Sistema::Tecnologia { EscenarioTecnologia::default().dias } else { 30 };
-    let mut o = Opciones { mundo: None, cantidad, dias, semilla: 42, salida: PathBuf::from(salida), decisiones: None, murallas: true, nobleza: true, escala_logros: 1 };
+    let mut o = Opciones { mundo: None, cantidad, dias, semilla: 42, salida: PathBuf::from(salida), decisiones: None, murallas: true, nobleza: true, escala_logros: 1, estres_fronteras: false };
     let mut it = args.iter();
     while let Some(clave) = it.next() {
         let valor = it.next().ok_or(format!("falta el valor de {clave}"))?;
@@ -62,6 +64,7 @@ fn opciones(sistema: Sistema, args: &[String]) -> Result<Opciones, String> {
             "--murallas" if sistema == Sistema::Poblacion => o.murallas = numero(valor)? != 0,
             "--nobleza" if sistema == Sistema::Politica => o.nobleza = numero(valor)? != 0,
             "--escala-logros" if sistema == Sistema::Tecnologia => o.escala_logros = numero(valor)?.max(1),
+            "--estres-fronteras" if sistema == Sistema::Territorio => o.estres_fronteras = numero(valor)? != 0,
             otro => return Err(format!("opción desconocida: {otro}")),
         }
     }
@@ -81,7 +84,7 @@ fn ejecutar(sistema: Sistema, args: &[String]) -> Result<(), String> {
     let informe: Informe = match sistema {
         Sistema::Territorio => {
             println!("Cargado en {:.1} s; simulando {} Facciones durante {} días...", t0.elapsed().as_secs_f64(), o.cantidad, o.dias);
-            territorio(&mundo, &Escenario { facciones: o.cantidad, dias: o.dias, semilla: o.semilla, ..Escenario::default() })
+            territorio(&mundo, &Escenario { facciones: o.cantidad, dias: o.dias, semilla: o.semilla, estres_fronteras: o.estres_fronteras, ..Escenario::default() })
         }
         Sistema::Poblacion => {
             println!("Cargado en {:.1} s; simulando {} plazas durante {} días...", t0.elapsed().as_secs_f64(), o.cantidad, o.dias);

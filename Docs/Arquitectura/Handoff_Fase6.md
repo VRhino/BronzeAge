@@ -49,11 +49,11 @@ Escrito el 2026-10-21 y reescrito el 2026-10-26, al cerrar la fase 6, como **el 
 
 ## Los batches y sus informes
 
-`cargo run --release -p batch -- <sistema> [opciones]` (uso completo en la cabecera de `crates/batch/src/main.rs`). Cada uno escribe su informe (JSON y HTML) en `batch/salida/<sistema>/` (ignorado por git) y funde las conclusiones y preguntas de `crates/batch/decisiones/<sistema>.json` con `--decisiones`. Todas sus preguntas están cerradas por el autor salvo D2 y D3 de `territorio.json`. Semilla 42 por defecto; cada uno se ha corrido dos veces con la misma huella y con la semilla 7.
+`cargo run --release -p batch -- <sistema> [opciones]` (uso completo en la cabecera de `crates/batch/src/main.rs`). Cada uno escribe su informe (JSON y HTML) en `batch/salida/<sistema>/` (ignorado por git) y funde las conclusiones y preguntas de `crates/batch/decisiones/<sistema>.json` con `--decisiones`. Todas sus preguntas están cerradas por el autor (D2 y D3 de `territorio.json`, el 2026-10-24 y el 2026-10-26). `batch territorio --estres-fronteras 1` es el modo de estrés de fronteras (D3): cada plaza recibe el nivel 3 con `FijarNivelAsentamiento` al fundarla, las zonas llegan a 20 u y chocan, y el informe sale como «Mundo y territorio (ESTRÉS DE FRONTERAS)»; ≈ 230 s. Sin la opción, el escenario es el de siempre. Semilla 42 por defecto; cada uno se ha corrido dos veces con la misma huella y con la semilla 7.
 
 | Batch | Escenario | Pared medida (release) | Decisiones |
 |---|---|---|---|
-| `territorio` | 400 Facciones × 30 días | ≈ 186 s | `territorio.json` (D2, D3 abiertas) |
+| `territorio` | 400 Facciones × 30 días | ≈ 143 s (estrés ≈ 230 s) | `territorio.json` (D2 y D3 cerradas) |
 | `poblacion` | 300 plazas × 30 días (`--murallas 1`) | ≈ 47-74 s | `poblacion.json`, `Calibracion_Sistema4_Decisiones.md` |
 | `comercio` | 160 plazas × 30 días | ≈ 73-104 s | `comercio.json`, ídem |
 | `militar` | 60 plazas × 30 días | ≈ 480 s | `militar.json`, ídem |

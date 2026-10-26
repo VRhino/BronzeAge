@@ -102,7 +102,7 @@ pub fn armar(x: &Entrada) -> Informe {
         plazas.len()
     );
     Informe {
-        sistema: "Mundo y territorio".into(),
+        sistema: if x.e.estres_fronteras { "Mundo y territorio (ESTRÉS DE FRONTERAS)" } else { "Mundo y territorio" }.into(),
         fecha: hoy(),
         mundo_hash: x.c.mundo.hash().into(),
         semilla: x.e.semilla,
@@ -122,6 +122,7 @@ fn parametros(x: &Entrada) -> Vec<Parametro> {
     let u = |v: i64| format!("{} u", v as f64 / 1000.0);
     let lista = |v: &[i64]| v.iter().map(|&t| (t / 1000).to_string()).collect::<Vec<_>>().join(" / ");
     vec![
+        parametro("Modo", if x.e.estres_fronteras { "ESTRÉS DE FRONTERAS: cada plaza recibe el nivel 3 con `FijarNivelAsentamiento` al fundarla (no es el escenario normal)" } else { "normal" }),
         parametro("Facciones simuladas", x.e.facciones),
         parametro("Días de mundo", x.e.dias),
         parametro("Semilla", x.e.semilla),
