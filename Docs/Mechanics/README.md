@@ -71,6 +71,9 @@ Si el canon y `Mechanics` se contradicen, gana `Mechanics` (decisión del autor,
 | [`Proyecciones_Y_Autorizacion.md`](Proyecciones_Y_Autorizacion.md) | ✅ 2026-10-12 | roles técnicos y superficies, el camino de un comando, los predicados de pertenencia, **la matriz de los 122 comandos**, qué proyecta el servidor a cada audiencia (administración, jugador sin y con héroe, eventos, crónica) y los canales de tiempo real (eventos y vistas de foto + delta) |
 | [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) | ✅ 2026-10-12 | cuándo se abre una batalla de Unity, el ticket congelado y su contrato v1, el candado y lo bloqueado, plazos y vencimientos, unirse (a qué bando), los cinco mensajes de Conquest (asignación, inicio, tokens, salida, resultado con su checklist e idempotencia), aplicar el resultado (heridos, conquista, carro, chatarra, XP, reputación) y lo que se cuenta |
 | [`Comandos_Parametros.md`](Comandos_Parametros.md) | ✅ 2026-10-13 | forma de `params` de los 122 comandos (base de los mensajes de orden del contrato 05) |
+| [`Mercenarios_Por_Contrato.md`](Mercenarios_Por_Contrato.md) | 📝 diseño 2026-10-26, sin implementar | mercenarios bot contratados por Rey, Embajador o Gobernador: contratos temporales y permanentes, tabla de trabajos, reglas duras |
+| [`Aldea_Agricola_Y_Cria.md`](Aldea_Agricola_Y_Cria.md) | 📝 diseño 2026-10-26, sin implementar | aldea agrícola (pueblo con granjas y corrales desde el nivel 1), nuevo gate del nivel 2 y cría del ganado |
+| [`Misiones.md`](Misiones.md) | 📝 diseño 2026-10-26, sin implementar | misiones individuales, de Facción y de asentamiento, recompensas |
 | [`Divergencias.md`](Divergencias.md) | ✅ vivo | lo que el código y el canon dicen distinto |
 
 No queda ningún documento pendiente de la lista inicial.
