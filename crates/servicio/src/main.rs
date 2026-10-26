@@ -56,8 +56,8 @@ async fn correr() -> Result<(), String> {
     };
     let fichero = servicio::buscar_mundo(&mundo).map_err(|e| format!("artefacto de mundo: {e}"))?;
     println!("mundo: {}", fichero.display());
-    let arranque = servicio::arranque_de(&fichero, semilla).map_err(|e| format!("artefacto de mundo: {e}"))?;
-    let (s, i) = servicio::arrancar(arranque, &datos, direccion, config.clone()).await.map_err(|e| format!("datos en {}: {e}", datos.display()))?;
+    let a = servicio::arranque_de(&fichero, semilla).map_err(|e| format!("artefacto de mundo: {e}"))?;
+    let (s, i) = servicio::arrancar(a.arranque, Some(a.bytes), &datos, direccion, config.clone()).await.map_err(|e| format!("datos en {}: {e}", datos.display()))?;
     println!(
         "escuchando en {} (WebSocket del contrato 05 y HTTP de acceso); mundo {}; versión {}, instante {} ms{}; {} cuentas; registro {}; bots {}; {} administradores",
         s.direccion,

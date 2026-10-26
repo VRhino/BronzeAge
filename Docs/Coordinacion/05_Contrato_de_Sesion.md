@@ -39,7 +39,8 @@ los bots (Rust, sin privilegios: el mismo contrato que un jugador) y los servido
 - **Identificadores**: todas las entidades se nombran `<prefijo>-<n>` (la Facción también: `f-3`; ver `common.proto`). Dentro de una plaza, `ed-<plaza>-<n>` y `recinto-<plaza>-<n>`. La batalla, un UUID.
 - **El artefacto de mundo no viaja por la sesión**: el cliente lo descarga por hash desde `InfoMundo.url_artefacto` (Unity, desde
   `url_paquete_unity`) y lo guarda en disco. Si ya tiene el hash vigente (`Hola.mundo_hash_conocido`), no descarga nada. Si el
-  hash cambió, el cliente no puede entrar hasta tener el nuevo.
+  hash cambió, el cliente no puede entrar hasta tener el nuevo. En el servidor Rust (fase 7, 2026-10-26) `url_artefacto` es `/v1/mundo/<hash>`, relativa al
+  propio servidor, que lo sirve por HTTP en el mismo puerto; `url_paquete_unity` sigue vacía hasta la fase 8.
 
 ## 3. Ámbitos y qué recibe cada cliente
 

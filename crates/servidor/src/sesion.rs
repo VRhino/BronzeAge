@@ -346,6 +346,11 @@ async fn handshake<A: Autenticador>(
         }
     };
     bienvenida.maximo_ordenes_pendientes = ctx.config.max_ordenes_pendientes;
+    if let (Some(m), Some(base)) = (bienvenida.mundo.as_mut(), ctx.config.url_artefacto.as_deref()) {
+        if m.url_artefacto.is_empty() && !m.hash.is_empty() {
+            m.url_artefacto = format!("{base}{}", m.hash);
+        }
+    }
     if !em.enviar(ms::Cuerpo::Bienvenida(bienvenida)).await {
         return None;
     }

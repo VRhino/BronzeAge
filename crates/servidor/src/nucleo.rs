@@ -122,6 +122,9 @@ pub struct Config {
     /// Tamaño mínimo (bytes) de una trama saliente para comprimirla, si el cliente negoció zstd.
     pub umbral_compresion: usize,
     pub nivel_zstd: i32,
+    /// Si el mismo puerto sirve el artefacto de mundo: el prefijo de `InfoMundo.url_artefacto` en la `Bienvenida`, al que se le añade el hash
+    /// (`/v1/mundo/`: una ruta relativa al servidor). `None`: el núcleo decide (hoy la deja vacía).
+    pub url_artefacto: Option<String>,
 }
 
 impl Default for Config {
@@ -134,6 +137,7 @@ impl Default for Config {
             max_trama_cliente: 1 << 20,
             umbral_compresion: 256,
             nivel_zstd: 3,
+            url_artefacto: None,
         }
     }
 }

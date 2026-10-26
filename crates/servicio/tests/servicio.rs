@@ -49,6 +49,17 @@ async fn post(dir: SocketAddr, ruta: &str, v: Value) -> (u16, Value) {
     (cabecera.split(' ').nth(1).unwrap().parse().unwrap(), serde_json::from_str(cuerpo).unwrap_or(Value::Null))
 }
 
+/// Un `GET` a mano; devuelve el estado y los bytes del cuerpo.
+async fn get(dir: SocketAddr, ruta: &str) -> (u16, Vec<u8>) {
+    let mut tcp = tokio::net::TcpStream::connect(dir).await.unwrap();
+    tcp.write_all(format!("GET {ruta} HTTP/1.1\r\nHost: prueba\r\n\r\n").as_bytes()).await.unwrap();
+    let mut r = Vec::new();
+    tcp.read_to_end(&mut r).await.unwrap();
+    let fin = r.windows(4).position(|w| w == b"\r\n\r\n").unwrap();
+    let cabecera = String::from_utf8_lossy(&r[..fin]).into_owned();
+    (cabecera.split(' ').nth(1).unwrap().parse().unwrap(), r[fin + 4..].to_vec())
+}
+
 /// Alta (si `alta`) y login de un bot; devuelve su token.
 async fn token_de_bot(dir: SocketAddr, nick: &str, alta: bool) -> String {
     let datos = json!({ "nick": nick, "clave": "clave de bot", "codigo": "bots" });
@@ -72,7 +83,7 @@ async fn bienvenida(dir: SocketAddr, token: &str) -> pb::Bienvenida {
 #[tokio::test(flavor = "multi_thread")]
 async fn un_bot_entra_por_el_acceso_real_y_sigue_tras_un_reinicio() {
     let datos = tempfile::tempdir().unwrap();
-    let (s, i) = servicio::arrancar(arranque_sintetico(), datos.path(), libre(), acceso()).await.unwrap();
+    let (s, i) = servicio::arrancar(arranque_sintetico(), None, datos.path(), libre(), acceso()).await.unwrap();
     assert!(!i.recuperado);
     let dir = s.direccion;
     let token = token_de_bot(dir, "bot-1", true).await;
@@ -85,7 +96,7 @@ async fn un_bot_entra_por_el_acceso_real_y_sigue_tras_un_reinicio() {
     assert_eq!(e.codigo, "token_invalido");
     let version = s.parar().await.version();
 
-    let (s, i) = servicio::arrancar(arranque_sintetico(), datos.path(), libre(), acceso()).await.unwrap();
+    let (s, i) = servicio::arrancar(arranque_sintetico(), None, datos.path(), libre(), acceso()).await.unwrap();
     assert!(i.recuperado && i.version == version && i.cuentas == 1, "{i:?}");
     bienvenida(s.direccion, &token).await;
     s.parar().await;
@@ -102,16 +113,26 @@ async fn con_el_mundo_real_el_bot_crea_su_heroe_y_lo_conserva() {
         return;
     };
     let datos = tempfile::tempdir().unwrap();
-    let (s, _) = servicio::arrancar(servicio::arranque_de(&f, 42).unwrap(), datos.path(), libre(), acceso()).await.unwrap();
+    let a = servicio::arranque_de(&f, 42).unwrap();
+    let bytes = a.bytes.clone();
+    let (s, _) = servicio::arrancar(a.arranque, Some(a.bytes.clone()), datos.path(), libre(), acceso()).await.unwrap();
     let token = token_de_bot(s.direccion, "bot-1", true).await;
     let mut bot = ClienteDeEjemplo::entrar(s.direccion, hola(&token, TipoCliente::ClienteBot), Almacen::default()).await;
+    // La `Bienvenida` dice dónde bajar el artefacto, y el mismo puerto lo sirve tal cual.
+    let info = bot.bienvenida.mundo.clone().expect("InfoMundo");
+    assert_eq!(info.url_artefacto, format!("/v1/mundo/{}", info.hash));
+    let (estado, cuerpo) = get(s.direccion, &info.url_artefacto).await;
+    assert_eq!((estado, cuerpo.len()), (200, bytes.len()));
+    assert!(cuerpo == *bytes, "el artefacto servido es el del disco");
+    assert_eq!(get(s.direccion, "/v1/mundo/otro-hash").await.0, 404);
     let camp = bot.bienvenida.campamentos_para_elegir.first().expect("un campamento para nacer").campamento_id.clone();
     let r = bot.aceptada(O::CrearHeroe(pb::OrdenCrearHeroe { display_name: "Bot 1".into(), campamento_id: camp, ..Default::default() })).await;
     let heroe = r.creadas.iter().find(|c| c.entidad == TipoEntidad::Heroe as i32).expect("nació un héroe").id.clone();
     bot.sesion.cerrar().await;
     s.parar().await;
 
-    let (s, i) = servicio::arrancar(servicio::arranque_de(&f, 42).unwrap(), datos.path(), libre(), acceso()).await.unwrap();
+    let a = servicio::arranque_de(&f, 42).unwrap();
+    let (s, i) = servicio::arrancar(a.arranque, Some(a.bytes), datos.path(), libre(), acceso()).await.unwrap();
     assert!(i.recuperado);
     let token = token_de_bot(s.direccion, "bot-1", false).await;
     assert_eq!(bienvenida(s.direccion, &token).await.heroe_id.as_deref(), Some(heroe.as_str()));
