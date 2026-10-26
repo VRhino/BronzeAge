@@ -10,12 +10,26 @@
 //! | `CODIGO_REGISTRO_BOTS` | código que marca la cuenta como bot; sin él, no hay bots | — |
 //! | `ADMINISTRADORES` | nicks de los administradores globales, separados por comas | — |
 //!
-//! Ctrl+C para: cierra las sesiones y apaga el núcleo con su foto.
+//! Ctrl+C, o la línea `parar` por la entrada estándar (la usa el panel de arranque, `scripts/panel.mjs`, porque en Windows no puede mandar Ctrl+C a un
+//! proceso hijo), para el proceso: cierra las sesiones y apaga el núcleo con su foto.
 
 use std::{env, net::SocketAddr, path::PathBuf, process::ExitCode};
 
+use tokio::io::{AsyncBufReadExt, BufReader};
+
 fn var(nombre: &str) -> Option<String> {
     env::var(nombre).ok().filter(|v| !v.trim().is_empty())
+}
+
+/// Espera la línea `parar` en la entrada estándar. Si la entrada se cierra (un proceso sin consola), espera para siempre: solo para Ctrl+C.
+async fn parar_por_la_entrada() {
+    let mut lineas = BufReader::new(tokio::io::stdin()).lines();
+    while let Ok(Some(l)) = lineas.next_line().await {
+        if l.trim() == "parar" {
+            return;
+        }
+    }
+    std::future::pending::<()>().await
 }
 
 #[tokio::main]
@@ -56,7 +70,10 @@ async fn correr() -> Result<(), String> {
         if config.codigo_registro_bots.is_some() { "permitidos" } else { "sin código: no hay" },
         config.administradores.len(),
     );
-    tokio::signal::ctrl_c().await.map_err(|e| format!("señal: {e}"))?;
+    tokio::select! {
+        r = tokio::signal::ctrl_c() => r.map_err(|e| format!("señal: {e}"))?,
+        _ = parar_por_la_entrada() => {}
+    }
     println!("parando...");
     let n = s.parar().await;
     println!("parado en la versión {}, instante {} ms", n.version(), n.ahora());

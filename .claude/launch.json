@@ -2,117 +2,41 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "bronze-age-server",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "run",
-        "server"
-      ],
+      "name": "bronzeage-servidor",
+      "runtimeExecutable": "cargo",
+      "runtimeArgs": ["run", "--release", "-p", "servicio"],
       "env": {
-        "ADMINISTRADORES": "dev:jefa",
-        "INTERVALO_TICK_MS": "5000",
-        "CODIGO_REGISTRO_BOTS": "dev-bots"
+        "ADMINISTRADORES": "jefa",
+        "CODIGO_REGISTRO_BOTS": "dev-bots",
+        "BRONZEAGE_DATOS": "datos"
       },
-      "port": 3000
+      "port": 7878
     },
     {
-      "name": "bronze-age-bots",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "run",
-        "bots"
-      ],
+      "name": "bronzeage-bots",
+      "runtimeExecutable": "cargo",
+      "runtimeArgs": ["run", "--release"],
+      "cwd": "../BronceAgeBotsBrain",
       "env": {
-        "BOTS_TOKEN": "dev-token",
-        "CODIGO_REGISTRO_BOTS": "dev-bots",
-        "BOTS_SERVIDOR": "http://localhost:3000",
-        "BOTS_PUERTO": "4000"
+        "CODIGO_REGISTRO_BOTS": "dev-bots"
       },
       "port": 4000
     },
     {
-      "name": "bronze-age-cliente",
+      "name": "bronzeage-admin",
       "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "--prefix",
-        "cliente",
-        "run",
-        "dev"
-      ],
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "../BronceAgeAdminClient",
       "port": 5173,
       "autoPort": true
     },
     {
-      "name": "bronze-age-cliente-jugador",
+      "name": "bronzeage-cliente-jugador",
       "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "--prefix",
-        "../BronzeAgeClient",
-        "run",
-        "dev"
-      ],
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "../BronzeAgeClient",
       "port": 5174,
       "autoPort": true
-    },
-    {
-      "name": "lab-trazado",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "run",
-        "lab"
-      ],
-      "port": 5180
-    },
-    {
-      "name": "pruebas-server",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "run",
-        "server"
-      ],
-      "env": {
-        "ADMINISTRADORES": "dev:jefa",
-        "INTERVALO_TICK_MS": "5000",
-        "CODIGO_REGISTRO_BOTS": "dev-bots",
-        "PUERTO": "3100",
-        "DIRECTORIO_PARTIDAS": "./partidas-pruebas"
-      },
-      "port": 3100
-    },
-    {
-      "name": "pruebas-cliente",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "--prefix",
-        "cliente",
-        "run",
-        "dev",
-        "--",
-        "--port",
-        "5190",
-        "--strictPort"
-      ],
-      "env": {
-        "BACKEND_URL": "http://localhost:3100",
-        "BOTS_URL": "ws://localhost:4100/control"
-      },
-      "port": 5190
-    },
-    {
-      "name": "pruebas-bots",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "run",
-        "bots"
-      ],
-      "env": {
-        "BOTS_TOKEN": "dev-token",
-        "CODIGO_REGISTRO_BOTS": "dev-bots",
-        "BOTS_SERVIDOR": "http://localhost:3100",
-        "BOTS_PUERTO": "4100",
-        "BOTS_DIRECTORIO": "./partidas-pruebas/bots"
-      },
-      "port": 4100
     }
   ]
 }

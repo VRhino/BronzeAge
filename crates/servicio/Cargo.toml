@@ -15,7 +15,7 @@ nucleo = { path = "../nucleo" }
 persistencia = { path = "../persistencia" }
 rutas = { path = "../rutas" }
 servidor = { path = "../servidor" }
-tokio = { version = "1.53.2", features = ["rt-multi-thread", "macros", "sync", "net", "signal"] }
+tokio = { version = "1.53.2", features = ["rt-multi-thread", "macros", "sync", "net", "signal", "io-std", "io-util"] }
 
 [dev-dependencies]
 contrato = { path = "../contrato" }
