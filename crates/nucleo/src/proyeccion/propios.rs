@@ -513,7 +513,7 @@ pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
 }
 
 /// La forma pública de otra Facción (5H, `VISTA`; Proyecciones §6: «facciones: públicas en la ficción»): la Facción sin su experiencia, su capital ni cuándo la designó (dónde está su capital es
-/// de la niebla). DUDA: el TypeScript la mandaba entera, con la experiencia; aquí el nivel basta.
+/// de la niebla). Regla (decisión del autor del 2026-10-26): de una Facción ajena se ve **solo el nivel**, sin la experiencia exacta ni la capital (el TypeScript la mandaba entera).
 pub fn faccion_publica(n: &Nucleo, f: u32) -> pb::Faccion {
     pb::Faccion { experiencia: 0, capital_designada_en_ms: None, capital_id: None, ..faccion(n, f) }
 }

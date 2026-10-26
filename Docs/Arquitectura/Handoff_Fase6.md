@@ -110,6 +110,6 @@ Una orden cuesta lo que cuesta reconciliar las vistas: con ≈ 450 vistas el tec
 ## Pendientes menores
 
 - Bloques de parámetros repetidos entre documentos de Mechanics (`LIDERAZGO`, `HEROE`, `CHATARRA`, `VISION`, `PRESENCIA`, `MERCENARIOS`): hoy los iguala una prueba; conviene dejar uno solo.
-- `MANTENIMIENTO.escalaDistancia`: el bloque del TypeScript dice 400 y el código lleva 300 como valor vigente (P1); decidir si pasa al bloque (duda abierta).
+- `MANTENIMIENTO.escalaDistancia`: quedó en el bloque (300, P1) el 2026-10-26 y el código lo lee de él; ya no es un valor vigente sobre el bloque del TypeScript (400).
 - El commit `2a7d447` está firmado «Haiku» en vez de «Sonnet»; no se corrige para no reescribir historia subida.
 - Las sesiones de nube no avisan al terminar y no ven los ficheros locales: todo lo que necesiten debe estar en el repositorio (por eso existe este documento). La nube parte de lo que esté en `origin`.

@@ -36,7 +36,7 @@
     {
       "id": "M1",
       "pregunta": "[Cerrada el 2026-10-24] ¿Se refuerza la guarnición de serie de los pueblos extractores o se limita cuántas veces se saquea un pueblo?",
-      "contexto": "Medido: 2.144 saqueos en 30 días, el atacante gana siempre (poder 4,75 veces el de los 30 mineros en la mediana); cada pueblo se saquea unas 39 veces al mes, aunque solo se lleva lo que hay por encima de la mitad del almacén. Combate §7.3, `PUEBLOS_EXTRACTORES.mineros`. Decisión del autor (2026-10-24): se deja tal cual: defender los pueblos es parte del juego; cambiará cuando haya bots (Combate §14, Mecanicas a balancear §47).",
+      "contexto": "Medido: 2.144 saqueos en 30 días, el atacante gana siempre (poder 4,75 veces el de los 30 mineros en la mediana); cada pueblo se saquea unas 39 veces al mes, aunque solo se lleva lo que hay por encima de la mitad del almacén. Combate §7.3, `PUEBLOS_EXTRACTORES.mineros`. Decisión del autor (2026-10-24): se deja tal cual: defender los pueblos es parte del juego; cambiará cuando haya bots (Combate §14; «Para la fase 7» de Mecanicas a desarrollar).",
       "opciones": [
         {
           "texto": "Dejarlo: el 50 % protegido ya limita lo que se pierde y la guarnición solo frena a columnas débiles.",

@@ -5,7 +5,7 @@
 //!
 //! **Valores calibrados** (Comercio_Caravanas, final, y Doc 3): los bloques de TypeScript dicen 600 para `distanciaParaBonusMax` y para
 //! `distanciaReferencia`; lo vigente es **120**. Las velocidades de los animales van ×1,5; `NAVEGACION.espaciadoMin` es 8 y los vados
-//! cada 100. Se aplican al cargar (como `escala_distancia` 80 en `asentamiento::mantenimiento`) y las fija un test.
+//! cada 100. Se aplican al cargar y las fija un test.
 
 use asentamiento::datos::{bloque_de, mil, por, ppm, texto_de_parametros_de};
 use asentamiento::Recurso;

@@ -21,8 +21,8 @@ pub struct ReglasMantenimiento {
     pub peso_vivienda: i64,
     pub peso_pieza_gratuita: i64,
     pub piezas_gratuitas: Vec<Tipo>,
-    /// Distancia a la capital (en milésimas de unidad de mapa) que duplica el coste. **300 unidades** (media región), no las 400 del bloque de
-    /// TypeScript ni las 80 de la calibración de distancias (Economia_Construccion §15; calibración del batch político P1, 2026-10-25).
+    /// Distancia a la capital (en milésimas de unidad de mapa) que duplica el coste: `escalaDistancia` del bloque, **300 unidades** (media
+    /// región; calibración del batch político P1, 2026-10-25).
     pub escala_distancia: Mil,
     pub degradacion_por_deficit_total: Mil,
     pub regeneracion_si_pago_completo: Mil,
@@ -44,8 +44,7 @@ impl ReglasMantenimiento {
             peso_vivienda: ppm(g("pesoVivienda")),
             peso_pieza_gratuita: ppm(g("pesoPiezaGratuita")),
             piezas_gratuitas: b["piezasGratuitas"].as_array().expect("piezasGratuitas").iter().filter_map(|x| Tipo::desde_nombre(x.as_str()?)).collect(),
-            // Vigente (Economia_Construccion §15): el bloque dice 400; la calibración del batch político (P1, 2026-10-25), 300.
-            escala_distancia: 300_000,
+            escala_distancia: mil(g("escalaDistancia")),
             degradacion_por_deficit_total: mil(g("degradacionPorDeficitTotal")),
             regeneracion_si_pago_completo: mil(g("regeneracionSiPagoCompleto")),
             gracia_minutos: g("graciaMinutos") as i64,

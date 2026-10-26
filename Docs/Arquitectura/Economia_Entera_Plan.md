@@ -101,5 +101,5 @@ La **tendencia** «+N/min» del interior de una plaza (4H T3c) es la diferencia 
 - **EE-4** El peaje cobra como mínimo una unidad a toda caravana con carga: si la tasa no llega a una unidad en ningún recurso, una del recurso que más lleva (a igualdad, el primero del catálogo). Nunca deja la carga en cero (decisión del autor del mismo día): una caravana de una sola unidad pasa sin pagar.
 - **EE-5** La reposición de los campamentos es como mínimo una unidad por comercio: se anota al registrar cada comercio en `MercadoMercenario::repone` (nuevo en la foto `BAN27`), sin tocar los contadores de lo comerciado.
 - **EE-6** Se retira la regla de la línea saldada por resto.
-- **EE-7** El salto de la reputación mediana se investiga en la fase 7, con C1b (`Mecanicas a balancear.md` §48).
+- **EE-7** El salto de la reputación mediana se investiga en la fase 7, con C1b (`Mecanicas a balancear.md` §32).
 - Decisión técnica: la huella de las reglas no depende de los finales de línea (`texto_de_parametros_de` quita los `\r`).

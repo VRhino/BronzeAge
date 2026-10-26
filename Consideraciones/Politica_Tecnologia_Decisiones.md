@@ -81,10 +81,10 @@ Leyenda: **CAMBIO** = la decisión cambió el código o una cifra; «como está�
 
 ### 5H, el contrato de la política (2026-10-25)
 - **5A-7** decidido: `propuesta_por` es el héroe. **5E-12** aplicado: `FijarAcceso` retirado.
-- **Las nueve dudas de 5H siguen sin decisión del autor** (forma pública de la Facción ajena, coste por orden con 500 vistas, propuestas caducadas, etc.): ver `Docs/Mecanicas a desarrollar.md`, fila «Política (5H)».
+- **Las nueve dudas de 5H siguen sin decisión del autor** salvo lo que lleva la forma pública (abajo, 2026-10-26): coste por orden con 500 vistas, propuestas caducadas, etc.; ver `Docs/Mecanicas a desarrollar.md`, fila «Política (5H)».
 
 ### Calibración del batch político, 5I (2026-10-25)
-- **P1 Distancia a la capital:** un reino sostiene **media región** (~300 u) alrededor de su capital: `1 + d/300` (×2 a 300 u, ×3 a 600 u, ×4,3 a 1.000 u). **CAMBIO de cifra** (80 → 300 u). → `Economia_Construccion.md` §10.1 y §15, canon 1.0a y 4.5, `Mecanicas a balancear.md` §48; `asentamiento::mantenimiento` (`escala_distancia` 300.000, valor vigente sobre el bloque del TypeScript, que dice 400).
+- **P1 Distancia a la capital:** un reino sostiene **media región** (~300 u) alrededor de su capital: `1 + d/300` (×2 a 300 u, ×3 a 600 u, ×4,3 a 1.000 u). **CAMBIO de cifra** (80 → 300 u). → `Economia_Construccion.md` §10.1 y §15, canon 1.0a y 4.5; `asentamiento::mantenimiento`. Cifras medidas: `crates/batch/decisiones/politica.json` (P1) y `Docs/Arquitectura/Sistema5_Contraste_y_Plan.md` («Calibración del batch político»). Desde el 2026-10-26 la cifra está en el bloque `MANTENIMIENTO` (`escalaDistancia` 300) y el código la lee de él (decisión Q1 del sistema 4: los bloques se reescriben con lo calibrado).
 - **P2 Títulos:** la aspirante tiene que superar a la poseedora en un **5 %**. **CAMBIO.** → Dip §7 (`TITULOS.margenAspirante`), canon 2.9; `politica::titulos::calcular`. Tras aplicar (2026-10-25): en «Facción más grande» el margen se aplica a las plazas y la población solo desempata (como está).
 - **P3** Gran Fundición inalcanzable en 30 días: se deja (fase 7, batches de más semanas).
 - **P4 Cupo de nivel 2** = dos tercios de las plazas de la Facción: `maxNivel2` [1,1,2,2,3,3,3,4,4,5] (`maxNivel3` igual). **CAMBIO de cifra.** → Dip §3.5, canon 2.2.1.
@@ -95,7 +95,12 @@ Leyenda: **CAMBIO** = la decisión cambió el código o una cifra; «como está�
 - **P9** Los batches militar y de comercio siguen con el andamiaje de ciudadanía y residencia.
 - **P10** La millonésima de la reputación al reanclar: se deja.
 - **Peajes de `batch comercio`** al 22 % con el cupo nuevo de nivel 2: se deja para la fase 7 (2026-10-25, tras aplicar).
-- Abierta: si `escalaDistancia` pasa al bloque (hoy el bloque del TypeScript dice 400 y el código lleva 300 como valor vigente).
+- **`escalaDistancia` pasa al bloque** (2026-10-26, por P1 y Q1 del sistema 4): el bloque `MANTENIMIENTO` de `Economia_Construccion.md` dice 300 (antes 400, del TypeScript) y `ReglasMantenimiento::de` lo lee de él en vez de fijar 300 como valor vigente. Sin cambio de cifra efectiva; cambia la huella de reglas.
+
+### `// DUDA:` del sistema 5 decididas al cerrar la fase 6 (2026-10-26)
+- **Forma pública de una Facción ajena** (5H, duda 2): **solo el nivel**, sin la experiencia exacta y sin la capital. Como está. → `proyeccion/propios.rs::faccion_publica` (la DUDA pasa a regla).
+- **Almacén personal de quien reside en una plaza** (Entrar con todo): «el almacén personal es siempre el mismo, solo se traslada»: una única capacidad (`ALMACEN_PERSONAL.capacidad`) viva donde viva, y viaja con la residencia. Como está. → canon 2.5 (ya lo decía), `Comercio_Caravanas.md` §9 (nota bajo el bloque `ALMACEN_PERSONAL`); `nucleo/salidas.rs` (la DUDA pasa a regla).
+- **Líder no ciudadano que funda** (5E-3): para el autor el caso no puede darse («las columnas de ejércitos no pueden ser multifacción, y un ciudadano de la Facción A no puede cargar una caravana de fundación de la Facción B»), así que el Líder siempre sería fundador y Gobernador de oficio. **No aplicada todavía:** al comprobarlo en el código salieron dos vías por las que el Líder puede quedar fuera de los fundadores (la administración, y `CederLiderazgo` en una columna con más de `maxJugadoresFundacionGrupal` ciudadanos); la `// DUDA:` de `nucleo/zonas.rs` y su fila en «Dudas abiertas» de `Docs/Mecanicas a desarrollar.md` siguen hasta que el autor decida.
 
 ## Sistema 6: tecnología y Aedas
 
