@@ -79,6 +79,14 @@ pub(crate) fn adopta(r: &tecnologia::Reglas, adoptadas: tecnologia::Conjunto, id
     adoptadas.iter().any(|t| r.def(t).id == id)
 }
 
+/// Prioridad del plazo de la tabla de precios de mercado (`Carga::Precios`, Reloj_Y_Eventos §2: con los títulos, después de todo lo demás del mismo instante).
+pub const PRIO_PRECIOS: u8 = 10;
+
+/// La entidad del plazo de la tabla de precios de mercado: una sola para todo el mundo (etiqueta 22 de `estado_comercio::ETIQUETA`).
+pub fn entidad_precios() -> u64 {
+    22 * crate::estado_comercio::ETIQUETA
+}
+
 /// Prioridad de la cita del fin del plazo de la Era (`Carga::Era`, Reloj_Y_Eventos §2: con los títulos, después de todo lo demás del mismo instante).
 pub const PRIO_ERA: u8 = 10;
 
@@ -115,6 +123,9 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
     21 * crate::estado_comercio::ETIQUETA | plaza
 }
 
+/// BAN44: BAN43 con la tabla de precios de mercado vigente y su plazo (`Estado::precios`, `Estado::precios_en` y `Estado::precios_rearmar`, al final; `Carga::Precios` en la cola; 2026-10-27). BAN43 a BAN40 se
+/// siguen admitiendo: empiezan sin tabla y la primera se calcula al armar el plazo.
+///
 /// BAN43: BAN42 con el nombre que eligió el jugador para cada héroe (`EstadoMilitar::nombres`, al final del estado militar; 2026-10-27). BAN42, BAN41 y BAN40 se siguen
 /// admitiendo: sus héroes se llaman «Héroe N».
 ///
@@ -242,7 +253,7 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN43";
+const MAGIA: &[u8; 5] = b"BAN44";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -512,6 +523,8 @@ pub enum Carga {
     Fundacion(SucesoFundacion),
     /// Se recalculan los títulos de prestigio (5F; la entidad es `entidad_titulos`, una sola para todo el mundo; prioridad [`PRIO_TITULOS`]).
     Titulos,
+    /// Se recalcula la tabla de precios de mercado (la entidad es `entidad_precios`, una sola para todo el mundo; prioridad [`PRIO_PRECIOS`]).
+    Precios,
     /// Se mira si empieza la Era siguiente (6B; la entidad es `entidad_era`, una sola para todo el mundo; prioridad [`PRIO_ERA`]): al fin del plazo de la vigente, o en el instante en que empezó
     /// una Era cuyos logros ya estaban todos cumplidos.
     Era,
@@ -991,6 +1004,13 @@ pub struct Estado {
     pub fundacion: EstadoFundacion,
     /// Cuándo vence el plazo de los títulos que está en la cola (`Carga::Titulos`, 5F), si hay uno: se arma al pasar algo en el mundo y no se repite solo.
     pub titulos_en: Option<Instante>,
+    /// La tabla de precios de mercado vigente (Comercio_Caravanas §3.1): se calcula al armar su plazo por primera vez y se rehace cada minuto mientras pase algo en el mundo.
+    /// `None` hasta entonces: quien la necesite la calcula con lo de ahora.
+    pub precios: Option<comercio::precio::TablaPrecios>,
+    /// Cuándo vence el plazo de la tabla de precios que está en la cola (`Carga::Precios`), si hay uno: se arma como el de los títulos, al pasar algo en el mundo.
+    pub precios_en: Option<Instante>,
+    /// Pasó algo en el mundo con el plazo de la tabla pendiente: al vencer, se rearma.
+    pub precios_rearmar: bool,
     pub generaciones: Generaciones,
     pub cola: Cola<Carga>,
     /// De cada actor, sus últimas `peticion_id` aceptadas en orden de llegada, con la versión que produjeron (a lo sumo `Reglas::limite_idempotencia`).
@@ -1030,6 +1050,9 @@ impl Estado {
             politica: politica::Politica::default(),
             fundacion: EstadoFundacion::default(),
             titulos_en: None,
+            precios: None,
+            precios_en: None,
+            precios_rearmar: false,
             generaciones: Generaciones::nuevas(),
             cola: Cola::nueva(),
             vistos: BTreeMap::new(),
@@ -1177,6 +1200,20 @@ impl Estado {
         w.opt_i64(self.era_en);
         codec_tecnologia::escribir_aedas(&mut w, &self.aedas);
         codec_tecnologia::escribir_residentes(&mut w, &self.residentes, &self.residentes_citas);
+        w.opt_i64(self.precios_en);
+        w.u8(u8::from(self.precios_rearmar));
+        match &self.precios {
+            None => w.u8(0),
+            Some(tabla) => {
+                w.u8(1);
+                let filas: Vec<_> = tabla.iter().collect();
+                w.u64(filas.len() as u64);
+                for (r, p) in filas {
+                    w.u8(codec_economia::recurso_a_u8(r));
+                    w.i64(p);
+                }
+            }
+        }
 
         let gens = self.generaciones.volcar();
         w.u64(gens.len() as u64);
@@ -1235,6 +1272,7 @@ impl Estado {
                     SucesoFundacion::Llega => 14,
                 }),
                 Carga::Titulos => w.u8(15),
+                Carga::Precios => w.u8(23),
                 Carga::Era => w.u8(16),
                 Carga::Tecnologia(SucesoTecnologia::Conocimiento) => w.u8(17),
                 Carga::Tecnologia(SucesoTecnologia::Campamento) => w.u8(18),
@@ -1269,16 +1307,17 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN43`): los cuatro primeros dicen la familia («BAN4» son los formatos 40 a 49, y se admiten del 40 al 43; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
+        // La cabecera es de 5 bytes (`BAN44`): los cuatro primeros dicen la familia («BAN4» son los formatos 40 a 49, y se admiten del 40 al 44; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
         // 20 a 29 y 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
-        let (mut con_eligieron, mut con_rutas_acarreo, mut con_nombres) = (true, true, true);
+        let (mut con_eligieron, mut con_rutas_acarreo, mut con_nombres, mut con_precios) = (true, true, true, true);
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'3' => {}
-                b'2' => con_nombres = false,
-                b'1' => (con_rutas_acarreo, con_nombres) = (false, false),
-                b'0' => (con_eligieron, con_rutas_acarreo, con_nombres) = (false, false, false),
+                b'4' => {}
+                b'3' => con_precios = false,
+                b'2' => (con_nombres, con_precios) = (false, false),
+                b'1' => (con_rutas_acarreo, con_nombres, con_precios) = (false, false, false),
+                b'0' => (con_eligieron, con_rutas_acarreo, con_nombres, con_precios) = (false, false, false, false),
                 _ => return Err(ErrorFormato("no es un estado del núcleo")),
             }
         } else if magia == *b"BAN3" {
@@ -1419,6 +1458,21 @@ impl Estado {
         s.era_en = r.opt_i64()?;
         s.aedas = codec_tecnologia::leer_aedas(&mut r)?;
         (s.residentes, s.residentes_citas) = codec_tecnologia::leer_residentes(&mut r)?;
+        if con_precios {
+            s.precios_en = r.opt_i64()?;
+            s.precios_rearmar = r.u8()? != 0;
+            s.precios = match r.u8()? {
+                0 => None,
+                1 => {
+                    let mut filas = std::collections::BTreeMap::new();
+                    for _ in 0..r.cuenta()? {
+                        filas.insert(codec_economia::recurso_de_u8(r.u8()?)?, r.i64()?);
+                    }
+                    Some(comercio::precio::TablaPrecios::desde(filas))
+                }
+                _ => return Err(ErrorFormato("tabla de precios mal formada")),
+            };
+        }
 
         let mut gens = Vec::new();
         for _ in 0..r.cuenta()? {
@@ -1447,6 +1501,7 @@ impl Estado {
                 13 => Carga::Fundacion(SucesoFundacion::Caduca),
                 14 => Carga::Fundacion(SucesoFundacion::Llega),
                 15 => Carga::Titulos,
+                23 => Carga::Precios,
                 16 => Carga::Era,
                 17 => Carga::Tecnologia(SucesoTecnologia::Conocimiento),
                 18 => Carga::Tecnologia(SucesoTecnologia::Campamento),

@@ -794,7 +794,10 @@ async fn el_campamento_desde_dentro_trae_reclutas_stock_y_gente_y_una_compra_una
     let m = con_mundo!();
     let x = aldea(m);
     let (camp, h_beto, h_gus) = (ids::campamento(0), ids::heroe(x.beto), ids::heroe(x.gus));
+    let t0 = x.n.ahora();
     let w = arrancar_con(x.n).await;
+    let (mut admin_c, _) = w.entrar("admin", TipoCliente::ClienteAdminWeb).await;
+    pausar(&mut admin_c).await;
     let (mut beto, _, inicial) = w.conectar(hola_con("beto", TipoCliente::ClienteUnity, &[])).await;
     let (mut gus, _, de_gus) = w.conectar(hola_con("gus", TipoCliente::ClienteUnity, &[])).await;
     let (mut ana, _, _) = w.conectar(hola_con("ana", TipoCliente::ClienteUnity, &[])).await;
@@ -849,8 +852,8 @@ async fn el_campamento_desde_dentro_trae_reclutas_stock_y_gente_y_una_compra_una
     c = campamento_de(&previos).expect("la delta del campamento");
     assert_eq!(c.prestamos_ids, [prestada]);
 
-    // El precio sigue al stock de todas las plazas sin que cambie el campamento: con mucha madera en la plaza de ana, la madera del campamento se abarata y beto lo ve.
-    let (mut admin_c, _) = w.entrar("admin", TipoCliente::ClienteAdminWeb).await;
+    // El precio sigue al stock de todas las plazas sin que cambie el campamento, con la tabla de precios de cada minuto: con mucha madera en la plaza de ana, la madera del campamento
+    // se abarata en la tabla siguiente y beto lo ve.
     let antes = c.precios_mercado["madera"];
     let mut dar = admin("dar_recursos", &[("asentamiento_id", &ids::asentamiento(x.plaza)), ("recurso", "madera")]);
     if let orden::Cuerpo::Administracion(o) = &mut dar {
@@ -858,6 +861,7 @@ async fn el_campamento_desde_dentro_trae_reclutas_stock_y_gente_y_una_compra_una
     }
     let (_, r) = dar_todo(&mut admin_c, "a1", dar).await;
     aceptada(&r);
+    avanzar_hasta(&mut admin_c, "a2", t0 + 3 * MIN).await;
     c = campamento_de(&pendiente(&mut beto).await).expect("el campamento con los precios nuevos");
     assert!(c.precios_mercado["madera"] < antes, "{} → {}", antes, c.precios_mercado["madera"]);
 

@@ -561,11 +561,15 @@ impl Nucleo {
         let id = ev.clave.entidad;
         // Lo que pasa en el mundo arma el plazo de los títulos (`titulos`); el propio plazo no lo rearma.
         // El evento de un Aeda itinerante (6D) no arma nada: su viaje no cambia lo que miran los títulos ni la Era (lo que revela o vende sí, y eso va en una orden u otro evento).
-        if !matches!(ev.carga, Carga::Titulos | Carga::Aeda) {
+        // El plazo de la tabla de precios no arma nada (solo rehace la tabla), y ni él ni los otros plazos globales (títulos, Era) lo arman a él: con el mundo quieto, nada se rearma.
+        if !matches!(ev.carga, Carga::Titulos | Carga::Aeda | Carga::Precios) {
             self.armar_titulos(t);
         }
-        if !matches!(ev.carga, Carga::Era | Carga::Aeda) {
+        if !matches!(ev.carga, Carga::Era | Carga::Aeda | Carga::Precios) {
             self.armar_era(t);
+        }
+        if !matches!(ev.carga, Carga::Precios | Carga::Titulos | Carga::Era | Carga::Aeda) {
+            self.armar_precios(t);
         }
         if self.ajustes.auditar_cambios {
             self.causa_auditada = format!("el evento {:?} de la entidad {id}", ev.carga);
@@ -584,6 +588,7 @@ impl Nucleo {
             Carga::Batalla(suceso) => self.suceso_de_batalla(crate::estado_comercio::id_de_entidad(id), suceso, t),
             Carga::Fundacion(suceso) => self.suceso_de_fundacion(crate::estado_comercio::id_de_entidad(id), suceso, t),
             Carga::Titulos => self.recalcular_titulos(t),
+            Carga::Precios => self.recalcular_precios(t),
             Carga::Era => self.cita_de_era(t),
             Carga::Tecnologia(suceso) => self.cita_de_tecnologia(suceso, t),
             Carga::Aeda => self.aeda_vence(id, t),
@@ -874,6 +879,7 @@ impl Nucleo {
             Resultado::Aceptada => {
                 self.armar_titulos(t);
                 self.armar_era(t);
+                self.armar_precios(t);
                 self.metricas.ordenes_aceptadas += 1;
                 self.estado.recordar(&p.actor, &p.peticion_id, r.version_tras);
                 self.registrar(t, ENTRADA_PETICION, p.codificar());

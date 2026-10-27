@@ -9,7 +9,7 @@ use asentamiento::datos::UNO;
 use asentamiento::Recurso::{self, *};
 use base::{Instante, Punto, MS_POR_MINUTO};
 use comercio::caravana::{Animal, EstadoCaravana, TipoCarro};
-use comercio::precio::{comision_de_entrega, ContextoComision, TablaPrecios};
+use comercio::precio::{comision_de_entrega, ContextoComision};
 use comercio::trueque::EstadoTrueque;
 use comercio::{Carga as Mercancia, Lado};
 use mundo::{Mundo, OpcionesValidacion};
@@ -228,11 +228,11 @@ fn escenario(m: &M, semilla: u64) -> Escenario {
 
 
 
-/// La comisión que debe acuñar la entrega de `carga` de `origen` a `destino` con el estado de ahora (precios con el stock de ahora).
+/// La comisión que debe acuñar la entrega de `carga` de `origen` a `destino` con el estado de ahora (precios de la tabla vigente, la del último minuto).
 fn comision_esperada(n: &Nucleo, origen: u64, destino: u64, carga: &[(Recurso, i64)]) -> i64 {
     let r = comercio::Reglas::cargar();
     let e = n.estado();
-    let precios = TablaPrecios::de(&r.precio, e.asentamientos.values().map(|a| &a.economia.almacen));
+    let precios = n.tabla_de_precios();
     let c: Mercancia = carga.iter().copied().collect();
     let (po, pd) = (&e.asentamientos[&origen], &e.asentamientos[&destino]);
     comision_de_entrega(&r.comision, precios.valor(&c), &ContextoComision { mismo_asentamiento: false, misma_faccion: po.faccion == pd.faccion, factor_comision_externa: UNO, distancia_recta: po.posicion.dist(pd.posicion) })

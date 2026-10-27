@@ -14,12 +14,21 @@
 //! Es un ritmo por Facción (`comercio::reputacion`). Tras cada cambio se recalcula su cita (prioridad 9): el cruce del 0 por debajo (se
 //! reancla) o la salida del umbral bajo `umbralBajoParaComision`, que deja de pagar el recargo de la comisión.
 //!
+//! # La tabla de precios
+//! El precio de referencia de cada recurso (§3.1) sale del stock de todas las plazas del mundo. No se suma en cada orden, entrega o compra: se lee de una
+//! tabla (`Estado::precios`) que se rehace en un plazo **global** de la cola (`Carga::Precios`, entidad `entidad_precios`, prioridad 10) a un minuto de que
+//! se arme. Se arma como el de los títulos, cuando pasa algo en el mundo y no hay otro pendiente, y la primera vez calcula ya la tabla; si pasó algo mientras estaba pendiente, al
+//! vencer se rearma solo (cada minuto mientras el mundo se mueva, ninguno con el mundo quieto). Un precio va así hasta
+//! un minuto por detrás del stock (decisión del autor del 2026-10-27: el coste no depende de cuántos lo miren).
+//!
 //! # Política de versión
 //! Una orden aceptada cierra versión (como el resto). Los plazos cierran versión porque emiten hechos (`trueque_expirado`,
 //! `orden_expirada`...); una reputación que sube o baja sola no.
 
 use super::*;
-use crate::estado::{Asentamiento, CitaReputacion, SucesoComercio, PRIO_COMERCIO, PRIO_REPUTACION};
+use crate::estado::{entidad_precios, Asentamiento, CitaReputacion, SucesoComercio, PRIO_COMERCIO, PRIO_PRECIOS, PRIO_REPUTACION};
+use base::MS_POR_MINUTO;
+use std::borrow::Cow;
 use crate::estado_comercio::{entidad_orden, entidad_reputacion, entidad_trueque, id_de_entidad, EstadoComercio};
 use asentamiento::catalogo::Tipo;
 use asentamiento::Recurso;
@@ -29,7 +38,7 @@ use comercio::evento::Evento as EventoComercio;
 use comercio::flota::{cupos, Cupos, FactoresPolitica};
 use comercio::mostrador::{comerciar, Carro, ContextoMostrador, ErrorMostrador};
 use comercio::orden_mercado::{ErrorOrden, EstadoOrden, OrdenMercado, TipoOrden};
-use comercio::precio::{precio_referencia, stock_global, ContextoComision, TablaPrecios};
+use comercio::precio::{ContextoComision, TablaPrecios};
 use comercio::reputacion::Suceso;
 use comercio::trueque::{podar, AcuerdoTrueque, ErrorTrueque, Vencimiento};
 use comercio::{total, Carga as Mercancia, Lado};
@@ -399,12 +408,7 @@ impl Nucleo {
                 let plaza = self.plaza_o_rechazo(*asentamiento)?;
                 let (tiene_mercado, stock) = (nivel_mercado(plaza).is_some(), plaza.economia.almacen.cantidad(*recurso));
                 let puede = self.autorizar_en_plaza(p, *asentamiento, None).is_ok();
-                // El precio de referencia solo se calcula si hace falta: suma el stock de todas las plazas.
-                let referencia = if precio.is_none() {
-                    precio_referencia(&cr.precio, *recurso, stock_global(*recurso, self.estado.asentamientos.values().map(|a| &a.economia.almacen)))
-                } else {
-                    0
-                };
+                let referencia = if precio.is_none() { self.tabla_de_precios().precio(*recurso) } else { 0 };
                 let id = self.estado.comercio.siguiente_orden;
                 let tipo = if *venta { TipoOrden::Venta } else { TipoOrden::Compra };
                 let orden = OrdenMercado::colocar(&cr.mercado, id, id32(*asentamiento), tipo, *recurso, *cantidad, *precio, referencia, t, puede, tiene_mercado, stock).map_err(|e| {
@@ -533,6 +537,50 @@ impl Nucleo {
         Ok(None)
     }
 
+    // ───────────────────────────── La tabla de precios ─────────────────────────────
+
+    /// La tabla de precios de mercado vigente; sin ninguna aún (nada ha pasado en el mundo), la de ahora.
+    pub fn tabla_de_precios(&self) -> Cow<'_, TablaPrecios> {
+        match &self.estado.precios {
+            Some(t) => Cow::Borrowed(t),
+            None => Cow::Owned(self.calcular_precios()),
+        }
+    }
+
+    fn calcular_precios(&self) -> TablaPrecios {
+        TablaPrecios::de(&self.estado.reglas.economia.comercio.precio, self.estado.asentamientos.values().map(|a| &a.economia.almacen))
+    }
+
+    /// Arma el plazo de la tabla de precios si no hay uno pendiente (lo llama todo lo que pasa en el mundo salvo los plazos globales); la primera vez, la calcula ya. Con uno
+    /// pendiente, apunta que algo pasó: al vencer se rearma solo, para que la tabla se rehaga cada minuto mientras el mundo se mueva y no cada dos (el paso de minuto de una plaza
+    /// cae en el mismo instante que el plazo y va antes que él).
+    pub(super) fn armar_precios(&mut self, t: Instante) {
+        if self.estado.precios_en.is_some() {
+            self.estado.precios_rearmar = true;
+            return;
+        }
+        if self.estado.precios.is_none() {
+            self.estado.precios = Some(self.calcular_precios());
+        }
+        self.programar_precios(t);
+    }
+
+    fn programar_precios(&mut self, t: Instante) {
+        let en = t + MS_POR_MINUTO;
+        let clave = self.estado.generaciones.clave(entidad_precios());
+        self.estado.cola.programar(en, PRIO_PRECIOS, clave, Carga::Precios);
+        self.estado.precios_en = Some(en);
+    }
+
+    /// Vence el plazo: la tabla se rehace con el stock de ahora. No sube la versión: lo que la enseña (el interior de un campamento) se pone al día en cada reparto.
+    pub(super) fn recalcular_precios(&mut self, t: Instante) {
+        self.estado.precios_en = None;
+        self.estado.precios = Some(self.calcular_precios());
+        if std::mem::take(&mut self.estado.precios_rearmar) {
+            self.programar_precios(t);
+        }
+    }
+
     // ───────────────────────────── Entregas ─────────────────────────────
 
     /// Entrega `contenido` en el almacén de la plaza `destino` (§4.4, §3.3): cada recurso topado por su capacidad, la comisión **acuñada** y,
@@ -541,7 +589,7 @@ impl Nucleo {
     pub(super) fn liquidar_entrega(&mut self, t: Instante, origen: u64, destino: u64, contenido: &Mercancia) -> Option<ResultadoEntrega> {
         let cr = self.estado.reglas.economia.comercio.clone();
         let (po, pd) = (self.estado.asentamientos.get(&origen)?, self.estado.asentamientos.get(&destino)?);
-        let precios = TablaPrecios::de(&cr.precio, self.estado.asentamientos.values().map(|a| &a.economia.almacen));
+        let precios = self.tabla_de_precios().into_owned();
         let datos = DatosEntrega {
             comision: ContextoComision {
                 mismo_asentamiento: origen == destino,

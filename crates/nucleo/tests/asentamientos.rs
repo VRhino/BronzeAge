@@ -209,11 +209,12 @@ fn un_paso_sin_novedades_no_sube_la_version() {
     assert_eq!(n.version(), v, "los ritmos no cierran versión");
     assert_ne!(n.hash_estado(), h, "pero el estado sí cambia (población, comida, mantenimiento)");
     // Las citas iniciales de bandidos (una por campamento de mercenarios y una por plaza) se agotan en los primeros minutos; después queda un paso por minuto. El plazo de los títulos (5F)
-    // vence a los 10 minutos de lo primero que pasó y se rearma en el paso siguiente: entre los minutos 10 y 15 no hay ninguno.
+    // vence a los 10 minutos de lo primero que pasó y se rearma en el paso siguiente: entre los minutos 10 y 15 no hay ninguno. La tabla de precios de mercado se rehace una vez por
+    // minuto mientras el mundo se mueve (su plazo global, 2026-10-27).
     n.avanzar_hasta(10 * MIN);
     let antes = n.metricas().eventos;
     n.avanzar_hasta(15 * MIN);
-    assert_eq!(n.metricas().eventos - antes, 5, "un paso por minuto");
+    assert_eq!(n.metricas().eventos - antes, 10, "un paso de la plaza y uno de la tabla de precios por minuto");
 }
 
 // ───────────────────────────── 2. Determinismo ─────────────────────────────
@@ -515,7 +516,7 @@ fn una_plaza_que_se_arruina_libera_sus_parcelas_y_nodos_y_su_evento_de_minuto_se
     // El plazo global de los títulos (5F) vence como mucho una vez en diez minutos.
     let titulos = n.estado().titulos_en.filter(|&x| x > desde && x <= desde + 10 * MIN).map_or(0, |_| 1);
     n.avanzar_hasta(n.ahora() + 10 * MIN);
-    assert_eq!(n.metricas().eventos - eventos_antes, 10 + titulos, "solo queda el reloj de la otra plaza: un paso por minuto");
+    assert_eq!(n.metricas().eventos - eventos_antes, 20 + titulos, "solo queda el reloj de la otra plaza: un paso por minuto, y el de la tabla de precios");
     assert!(n.economia(otra).is_some(), "la otra plaza sigue viva");
     // Y el mundo arruinado sobrevive a serializar y recuperar.
     let bytes = n.estado().serializar();
@@ -1001,7 +1002,7 @@ fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash_y_el_formato_anterior_se
     let reglas = Reglas::default();
     let base = estado_con_una_plaza();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN43");
+    assert_eq!(&bytes[..5], b"BAN44");
     let viejo = [b"BAN13".as_slice(), &bytes[5..]].concat();
     let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN13 no debe admitirse") };
     assert!(e.to_string().contains("BAN13") && e.to_string().contains("población"), "{e}");

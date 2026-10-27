@@ -272,14 +272,8 @@ pub fn lo_que_cobra(n: &Nucleo, c: u32, heroe: Option<u64>) -> (std::collections
     let e = n.estado();
     let (cr, mr) = (&e.reglas.economia.comercio, &e.reglas.economia.militar);
     let Some(stock) = n.stock_de_campamento(c) else { return Default::default() };
-    let precios = stock
-        .stock
-        .keys()
-        .filter_map(|&r| {
-            let referencia = comercio::precio::precio_referencia(&cr.precio, r, comercio::precio::stock_global(r, e.asentamientos.values().map(|a| &a.economia.almacen)));
-            Some((r.nombre().to_owned(), comercio::mercenarios::precio_unitario(&cr.mercenarios, referencia)?))
-        })
-        .collect();
+    let tabla = n.tabla_de_precios();
+    let precios = stock.stock.keys().filter_map(|&r| Some((r.nombre().to_owned(), comercio::mercenarios::precio_unitario(&cr.mercenarios, tabla.precio(r))?))).collect();
     let residente = heroe.filter(|&h| n.heroe(h).is_some_and(|x| x.heroe.residencia == Some(militar::heroe::Residencia::Campamento(c))));
     let reclutables = residente
         .and_then(|h| {

@@ -150,7 +150,7 @@ async function estado() {
       comando: [c.runtimeExecutable, ...c.runtimeArgs].join(' ') + (c.cwd ? `  (en ${c.cwd})` : '')
         + (c.name === 'bronzeage-servidor' ? `  [partida ${partidaActual() ?? 'principal (nueva)'}]` : ''),
       falta: !existsSync(carpeta(c)), aviso: SERVICIOS[c.name]?.aviso?.(c) ?? null,
-      escucha: puertos[c.name] ? await escucha(puertos[c.name]) : false, lanzado: !!p?.hijo, log: p?.log.slice(-60) ?? [],
+      escucha: puertos[c.name] ? await escucha(puertos[c.name]) : false, lanzado: !!p?.hijo, log: p?.log.slice(-200) ?? [],
     };
   }));
 }
@@ -161,8 +161,11 @@ const HTML = `<!doctype html><html lang="es"><head><meta charset="utf-8">
 :root{--bg:#14110d;--card:#1f1a14;--borde:#3a2f22;--txt:#eadfcc;--sub:#9c8b72;--on:#5fbf6a;--off:#c4553f;--wait:#d9a63c;--acento:#c98a3b;--cli:#1a1d20;--cli-borde:#2c3640;--cli-acento:#6fa8c9}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.4 system-ui,sans-serif;padding:24px 16px}
 h1{font-size:18px;margin:0 0 18px;letter-spacing:.5px;color:var(--acento)}
-h2{font-size:13px;text-transform:uppercase;letter-spacing:1.5px;color:var(--sub);margin:26px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--borde);max-width:1200px}
-.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));max-width:1200px}
+details{margin:22px 0 0}
+summary{font-size:13px;text-transform:uppercase;letter-spacing:1.5px;color:var(--sub);padding-bottom:6px;margin-bottom:10px;border-bottom:1px solid var(--borde);cursor:pointer;user-select:none;list-style:none}
+summary::-webkit-details-marker{display:none}summary::before{content:"▸";display:inline-block;width:16px;transition:transform .15s;transform-origin:4px 55%}details[open]>summary::before{transform:rotate(90deg)}
+summary:hover{color:var(--txt)}.cuenta{margin-left:8px;letter-spacing:0;text-transform:none;opacity:.7}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr))}
 .card{background:var(--card);border:1px solid var(--borde);border-left:4px solid var(--acento);border-radius:10px;padding:14px}
 #clientes .card{background:var(--cli);border-color:var(--cli-borde);border-left-color:var(--cli-acento)}
 .top{display:flex;align-items:center;gap:10px}.dot{width:12px;height:12px;border-radius:50%;flex:none}
@@ -174,14 +177,20 @@ button:hover:not(:disabled){border-color:var(--acento)}button:disabled{opacity:.
 label{color:var(--sub);font-size:12px;margin-left:auto}
 input{width:76px;background:#0d0b08;color:var(--txt);border:1px solid var(--borde);border-radius:6px;padding:5px 6px;font:inherit}
 input:disabled{opacity:.5}
-pre{background:#0d0b08;border-radius:6px;padding:8px;height:140px;overflow:auto;font-size:11px;margin:10px 0 0;white-space:pre-wrap;color:var(--sub)}
-.est{font-size:12px;color:var(--sub)}.aviso{color:var(--wait);font-size:12px;margin:0 0 8px}.aviso:empty{display:none}.nota{color:var(--sub);font-size:12px;max-width:1200px}
+pre{background:#0d0b08;border-radius:6px;padding:8px;height:clamp(220px,42vh,720px);min-height:120px;resize:vertical;overflow:auto;font-size:11px;margin:10px 0 0;white-space:pre-wrap;color:var(--sub)}
+.est{font-size:12px;color:var(--sub)}.aviso{color:var(--wait);font-size:12px;margin:0 0 8px}.aviso:empty{display:none}.nota{color:var(--sub);font-size:12px;margin-top:22px}
 </style></head><body><h1>⚒ Panel de arranque — BronzeAge</h1>
-<h2>Servicios</h2><div class="grid" id="backend"></div>
-<h2>Tareas</h2><div class="grid" id="tareas"></div>
-<h2>Clientes</h2><div class="grid" id="clientes"></div>
+<details open data-seccion="backend"><summary>Servicios<span class="cuenta"></span></summary><div class="grid" id="backend"></div></details>
+<details open data-seccion="tareas"><summary>Tareas<span class="cuenta"></span></summary><div class="grid" id="tareas"></div></details>
+<details open data-seccion="clientes"><summary>Clientes<span class="cuenta"></span></summary><div class="grid" id="clientes"></div></details>
 <p class="nota">La carga, la auditoría y las pruebas se miran en el admin web (ámbito ADMIN del contrato 05).</p>
 <script>
+// Cada sección se pliega y se acuerda de cómo la dejaste (solo en este navegador).
+for(const d of document.querySelectorAll('details[data-seccion]')){
+  const k='panel.plegada.'+d.dataset.seccion;
+  try{if(localStorage.getItem(k)==='1')d.open=false}catch{}
+  d.ontoggle=()=>{try{localStorage.setItem(k,d.open?'0':'1')}catch{}};
+}
 async function post(u){await fetch(u,{method:'POST'});setTimeout(pintar,300)}
 async function pintar(){
   const datos=await (await fetch('/api/estado')).json();
@@ -210,6 +219,11 @@ async function pintar(){
     c.querySelector('[data-a=parar]').disabled=!d.lanzado;
     const pre=c.querySelector('pre'),abajo=pre.scrollTop+pre.clientHeight>=pre.scrollHeight-4;
     pre.textContent=d.log.join('\\n');if(abajo)pre.scrollTop=pre.scrollHeight;
+  }
+  // En el título de cada sección, cuántos están en marcha: se ve aunque esté plegada.
+  for(const g of document.querySelectorAll('details[data-seccion]')){
+    const de=datos.filter(d=>(d.tipo==='cliente'?'clientes':d.tipo==='tarea'?'tareas':'backend')===g.dataset.seccion);
+    g.querySelector('.cuenta').textContent=de.length?'· '+de.filter(d=>d.escucha||d.lanzado).length+'/'+de.length+' en marcha':'';
   }
 }
 pintar();setInterval(pintar,2000);

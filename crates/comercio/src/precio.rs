@@ -38,6 +38,16 @@ impl TablaPrecios {
         Self { precios }
     }
 
+    /// La tabla con estos precios (ppm por recurso), tal como se guardó.
+    pub fn desde(precios: BTreeMap<Recurso, i64>) -> Self {
+        Self { precios }
+    }
+
+    /// Cada recurso con cotización y su precio (ppm), en orden de recurso.
+    pub fn iter(&self) -> impl Iterator<Item = (Recurso, i64)> + '_ {
+        self.precios.iter().map(|(&r, &p)| (r, p))
+    }
+
     /// Precio (ppm) de `r`; 0 si no cotiza (el oro).
     pub fn precio(&self, r: Recurso) -> i64 {
         self.precios.get(&r).copied().unwrap_or(0)

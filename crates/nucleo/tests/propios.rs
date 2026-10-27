@@ -482,8 +482,8 @@ async fn reclutar_y_guardar_un_loadout_llegan_a_su_heroe_y_a_nadie_mas() {
     assert!(nuevo.liderazgo_total > 0, "el Liderazgo del loadout se deriva de sus escuadras");
     vista_ana.aplicar(del_heroe[0]);
 
-    // La Facción ve cambiar la plaza (reclutar le gasta población y almacén) pero ni una escuadra ni un loadout; el héroe es solo de ana, y la otra Facción no se entera de nada. beto, dentro de su campamento, ve moverse los precios del mercado, que siguen al almacén de todas las plazas.
-    assert_eq!(etiquetas(&pendiente(&mut beto).await), ["delta FACCION:f-1", "delta CAMPAMENTO:camp-0"]);
+    // La Facción ve cambiar la plaza (reclutar le gasta población y almacén) pero ni una escuadra ni un loadout; el héroe es solo de ana, y la otra Facción no se entera de nada.
+    assert_eq!(etiquetas(&pendiente(&mut beto).await), ["delta FACCION:f-1"]);
     assert!(pendiente(&mut gus).await.is_empty());
     // Lo que ana reconstruyó con la foto y los deltas es lo que hay.
     let (_, _, mensajes) = w.conectar(hola_con("ana", TipoCliente::ClienteUnity, &[])).await;

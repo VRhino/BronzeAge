@@ -12,7 +12,7 @@ use asentamiento::Recurso::{self, *};
 use base::{Instante, Punto, MS_POR_MINUTO};
 use comercio::caravana::{Animal, EstadoCaravana, TipoCarro};
 use comercio::orden_mercado::EstadoOrden;
-use comercio::precio::{comision_de_entrega, recargo_por_reputacion, ContextoComision, TablaPrecios};
+use comercio::precio::{comision_de_entrega, recargo_por_reputacion, ContextoComision};
 use comercio::trueque::EstadoTrueque;
 use comercio::{Carga as Mercancia, Lado};
 use mundo::{Mundo, OpcionesValidacion};
@@ -259,11 +259,11 @@ fn tercera_plaza(e: &mut Escenario, m: &M) -> u64 {
     c
 }
 
-/// La comisión que debe acuñar la entrega de `carga` de `origen` a `destino` con el estado de ahora (precios con el stock de ahora).
+/// La comisión que debe acuñar la entrega de `carga` de `origen` a `destino` con el estado de ahora (precios de la tabla vigente, la del último minuto).
 fn comision_esperada(n: &Nucleo, origen: u64, destino: u64, carga: &[(Recurso, i64)]) -> i64 {
     let r = comercio::Reglas::cargar();
     let e = n.estado();
-    let precios = TablaPrecios::de(&r.precio, e.asentamientos.values().map(|a| &a.economia.almacen));
+    let precios = n.tabla_de_precios();
     let c: Mercancia = carga.iter().copied().collect();
     let (po, pd) = (&e.asentamientos[&origen], &e.asentamientos[&destino]);
     comision_de_entrega(
@@ -391,12 +391,9 @@ fn un_trueque_entre_plazas_de_la_misma_faccion_cobra_el_3_por_ciento_y_no_toca_l
     e.ok("admin", Comando::AdjuntarCaravana { caravana: ca, ejercito: col_en_c });
     e.ok("ana", Comando::EntregarDeCaravana { ejercito: col_en_c, caravana: ca, acuerdo: tr });
     assert_eq!(oro(&e.n) - oro0, comision_1);
-    let r = comercio::Reglas::cargar();
     // Misma Facción: 3 % del valor de la madera por el bonus de distancia, no el 8 % de la tasa externa.
     let valor = {
-        let e_ = e.n.estado();
-        let t = TablaPrecios::de(&r.precio, e_.asentamientos.values().map(|p| &p.economia.almacen));
-        t.valor(&[(Madera, 300_000)].into_iter().collect())
+        e.n.tabla_de_precios().valor(&[(Madera, 300_000)].into_iter().collect())
     };
     assert!(comision_1 < valor * 5 / 100 + 2, "{comision_1} {valor}");
     e.ok("admin", Comando::AdjuntarCaravana { caravana: cc, ejercito: col_en_a });
@@ -1238,7 +1235,7 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
     let rep = reglas.economia.comercio.reputacion.clone();
     let base = estado_con_comercio();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN43");
+    assert_eq!(&bytes[..5], b"BAN44");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.comercio, base.comercio);
@@ -1413,4 +1410,35 @@ fn tras_la_convocatoria(n: &mut Nucleo) {
     if let Some(h) = fin {
         n.avanzar_hasta(h);
     }
+}
+
+// ───────────────────────────── La tabla de precios de cada minuto ─────────────────────────────
+
+#[test]
+fn la_tabla_de_precios_se_rehace_cada_minuto_y_no_en_cada_cambio_del_stock_y_va_en_la_foto() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7, true);
+    let b = e.b;
+    let ahora = |n: &Nucleo| comercio::precio::TablaPrecios::de(&n.estado().reglas.economia.comercio.precio, n.estado().asentamientos.values().map(|a| &a.economia.almacen));
+    // Lo que ya pasó armó el plazo y calculó la tabla.
+    let vence = e.n.estado().precios_en.expect("el plazo de la tabla está armado");
+    assert!(e.n.estado().precios.is_some());
+    let vigente = e.n.tabla_de_precios().into_owned();
+
+    // Mucha madera en una plaza: el stock del mundo cambia y el precio de ahora con él, pero la tabla no hasta su plazo.
+    e.dar(b, Madera, 300_000);
+    assert_ne!(ahora(&e.n).precio(Madera), vigente.precio(Madera), "la madera dada mueve el precio de ahora");
+    assert_eq!(e.n.tabla_de_precios().precio(Madera), vigente.precio(Madera), "la orden lee la tabla vigente");
+    assert_eq!(e.n.estado().precios_en, Some(vence), "y no rearma el plazo pendiente");
+
+    // Al vencer, la tabla es la del stock de ese instante (va después de todo lo demás del instante); como pasaron cosas mientras estaba pendiente, el plazo se rearma solo a un minuto.
+    e.avanzar_hasta(vence);
+    assert_eq!(*e.n.tabla_de_precios(), ahora(&e.n));
+    assert_ne!(e.n.tabla_de_precios().precio(Madera), vigente.precio(Madera));
+    assert_eq!((e.n.estado().precios_en, e.n.estado().precios_rearmar), (Some(vence + MIN), false));
+
+    // La foto lleva la tabla y su plazo.
+    let bytes = e.n.estado().serializar();
+    let vuelta = Estado::deserializar(&bytes, &e.n.estado().reglas, &e.n.estado().mundo_hash).unwrap();
+    assert_eq!((&vuelta.precios, vuelta.precios_en), (&e.n.estado().precios, e.n.estado().precios_en));
 }

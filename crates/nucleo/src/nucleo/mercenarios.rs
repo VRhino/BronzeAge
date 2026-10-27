@@ -27,7 +27,6 @@ use asentamiento::datos::UNO;
 use asentamiento::Recurso;
 use comercio::evento::Evento as EventoComercio;
 use comercio::mercenarios::{comprar_residente, comprar_visitante, precio_unitario, ErrorMercenarios, StockCampamento};
-use comercio::precio::{precio_referencia, stock_global};
 use comercio::{de, total, Carga as Mercancia};
 use militar::catalogo::Tropa;
 use militar::escuadra::Contenedor;
@@ -286,7 +285,7 @@ impl Nucleo {
                 if !self.esta_en_el_campamento(*heroe, *campamento, t) {
                     return Err(rechazo(rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA, "el héroe no está en el campamento ni con la columna a su puerta".into()));
                 }
-                let referencia = precio_referencia(&cr.precio, *recurso, stock_global(*recurso, self.estado.asentamientos.values().map(|a| &a.economia.almacen)));
+                let referencia = self.tabla_de_precios().precio(*recurso);
                 let precio = precio_unitario(&cr.mercenarios, referencia);
                 let stock = self.stock_de_campamento(*campamento).expect("el campamento existe").de(*recurso);
                 let residente = self.campamento_de_residencia(*heroe) == Some(*campamento);
