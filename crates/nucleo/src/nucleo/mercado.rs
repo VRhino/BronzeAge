@@ -233,8 +233,7 @@ impl Nucleo {
     }
 
     /// `podarAcuerdosTerminados` (§4.7): se hace al tocar los trueques, no en cada paso (no hay tick).
-    // DUDA: el documento poda al final de cada tick; sin tick, la poda es perezosa (al proponer, vencer o cerrar un trueque) y solo cambia
-    // cuánto tiempo se conservan los terminados en memoria, no ninguna regla.
+    // Regla (el autor, 2026-10-27): la poda es perezosa (al proponer, vencer o cerrar un trueque); solo cambia cuánto se conservan los terminados en memoria.
     fn podar_trueques(&mut self, t: Instante) {
         let cr = self.estado.reglas.economia.comercio.clone();
         let EstadoComercio { acuerdos, flota, .. } = &mut self.estado.comercio;

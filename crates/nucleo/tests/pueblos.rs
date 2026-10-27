@@ -11,7 +11,7 @@ use base::{Instante, Punto, MS_POR_MINUTO};
 use comercio::caravana::{EstadoCaravana, TipoCaravana};
 use mundo::{Mundo, OpcionesValidacion};
 use nucleo::economia::Mapa;
-use militar::heroe::Residencia;
+use militar::heroe::{Controlador, Residencia};
 use militar::presencia::Ubicacion;
 use nucleo::{rechazos, Ajustes, Arranque, Carga, Comando, Nucleo, Peticion, Reglas, Resultado, Respuesta, SucesoMilitar};
 use rutas::Rutas;
@@ -343,7 +343,7 @@ fn los_materiales_se_entregan_en_el_sitio_con_una_columna_de_la_faccion_y_con_to
     let id = e.marcar();
     let sitio = e.n.posicion_de_pueblo(id).unwrap();
     let col = e.columna("ana", 1, sitio);
-    e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 60_000 });
+    e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 58_000 }); // con los 2 que entregan abajo carla y ana, 60
     // La puerta, la Facción y el propietario de la columna se comprueban.
     let lejos = e.columna("ana", 1, Punto::new(sitio.x + 20_000, sitio.y));
     e.ok("admin", Comando::DarSuministro { ejercito: lejos, recurso: Madera, cantidad: 10_000 });
@@ -354,6 +354,20 @@ fn los_materiales_se_entregan_en_el_sitio_con_una_columna_de_la_faccion_y_con_to
     assert_eq!(e.rechazada("beto", Comando::EntregarMateriales { ejercito: col, pueblo: id }), rechazos::NO_AUTORIZADO);
     let vacia = e.columna("ana", 1, sitio);
     assert_eq!(e.rechazada("ana", Comando::EntregarMateriales { ejercito: vacia, pueblo: id }), rechazos::PUEBLO_NADA_QUE_ENTREGAR);
+    // Entregan los ciudadanos de la Facción (Doc 4.2.2), sean o no el Líder: carla va en una columna de ana y entrega lo de ella;
+    // al dejar de ser ciudadana (la columna conserva la bandera de su Líder) ya no.
+    let de_ana = e.columna("ana", 1, sitio);
+    e.ok("admin", Comando::DarSuministro { ejercito: de_ana, recurso: Madera, cantidad: 1_000 });
+    let carla = e.ok("carla", Comando::CrearHeroe { cuenta: "carla".into(), campamento: 0, controlador: Controlador::Humano }).creadas[0];
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: carla, faccion: Some(1) });
+    e.ok("admin", Comando::ColocarHeroe { heroe: carla, ubicacion: Ubicacion::Columna(de_ana) });
+    e.ok("carla", Comando::EntregarMateriales { ejercito: de_ana, pueblo: id });
+    e.ok("admin", Comando::DarSuministro { ejercito: de_ana, recurso: Madera, cantidad: 1_000 });
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: carla, faccion: None });
+    assert_eq!(e.n.ejercito(de_ana).unwrap().columna.faccion, Some(1));
+    assert_eq!(e.rechazada("carla", Comando::EntregarMateriales { ejercito: de_ana, pueblo: id }), rechazos::PUEBLO_FACCION_AJENA);
+    e.ok("ana", Comando::EntregarMateriales { ejercito: de_ana, pueblo: id });
+    assert_eq!(e.pueblo(id).falta(), vec![(Madera, 98_000), (Oro, 12_000)]);
 
     // Una entrega parcial no arranca nada: se anota lo entregado y el carro de la columna queda vacío.
     e.ok("ana", Comando::EntregarMateriales { ejercito: col, pueblo: id });
@@ -367,7 +381,7 @@ fn los_materiales_se_entregan_en_el_sitio_con_una_columna_de_la_faccion_y_con_to
     assert_eq!(e.n.suministro(col)[&Madera], 10_000);
     assert_eq!(e.pueblo(id).estado, EstadoPueblo::EnObra { completa_en: t + 6 * HORA }, "la obra de una mina de cobre dura 6 h");
     assert_eq!(e.rechazada("ana", Comando::EntregarMateriales { ejercito: col, pueblo: id }), rechazos::PUEBLO_NO_ESTA_PENDIENTE);
-    assert_eq!((hechos(&e.n, "pueblo.materiales_entregados").len(), hechos(&e.n, "pueblo.obra_iniciada").len()), (2, 1));
+    assert_eq!((hechos(&e.n, "pueblo.materiales_entregados").len(), hechos(&e.n, "pueblo.obra_iniciada").len()), (4, 1));
     // Mientras se levanta no extrae ni tiene carro; acaba en el primer paso de minuto de la plaza que alcanza su hora (precisión de un minuto).
     e.n.avanzar_hasta(t + 6 * HORA - 1);
     assert!(!e.pueblo(id).activo());

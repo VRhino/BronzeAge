@@ -601,7 +601,16 @@ impl Nucleo {
                     }
                 }
             }
-            self.emitir_propio(t, "heroe.reubicado", vec![], vec![("heroe", id as i64), ("ruina", plaza as i64), ("alMapa", estaba_dentro as i64)]);
+            // La plaza que lo acoge lo anuncia a su Facción (paridad, decisión del autor del 2026-10-27): el hecho se atribuye a ella si se muda a una plaza.
+            let acoge = match (residia, nueva) {
+                (true, Some(Residencia::Asentamiento(a))) => vec![u64::from(a)],
+                _ => vec![],
+            };
+            let mut datos = vec![("heroe", id as i64), ("ruina", plaza as i64), ("alMapa", estaba_dentro as i64)];
+            if let Some(&a) = acoge.first() {
+                datos.push(("destino", a as i64));
+            }
+            self.emitir_propio(t, "heroe.reubicado", acoge, datos);
         }
     }
 }

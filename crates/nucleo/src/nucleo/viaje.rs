@@ -711,6 +711,9 @@ impl Nucleo {
         if !self.manda_columna(p, e, false) {
             return Err(rechazo(rechazos::NO_AUTORIZADO, "la columna no es tuya".into()));
         }
+        if !self.manda_columna(p, e, true) {
+            return Err(rechazo(rechazos::COLUMNA_SOLO_EL_LIDER, "solo el Líder engancha y aparca las caravanas".into()));
+        }
         if !Self::es_ejercito(e) {
             return Err(rechazo(rechazos::COLUMNA_PERSONAL_SIN_CARAVANAS, "solo un ejército lleva caravanas: quien quiere llevar una sale ya como ejército".into()));
         }
@@ -763,6 +766,9 @@ impl Nucleo {
             .ok_or_else(|| rechazo(rechazos::CARAVANA_NO_ESTA_ADJUNTA, "la caravana no va enganchada a ninguna columna".into()))?;
         if !self.manda_columna(p, e, false) {
             return Err(rechazo(rechazos::NO_AUTORIZADO, "la columna no es tuya".into()));
+        }
+        if !self.manda_columna(p, e, true) {
+            return Err(rechazo(rechazos::COLUMNA_SOLO_EL_LIDER, "solo el Líder engancha y aparca las caravanas".into()));
         }
         let anfitriona = self.plaza_o_rechazo(plaza)?;
         let origen = self.estado.comercio.flota[i].origen as u64;

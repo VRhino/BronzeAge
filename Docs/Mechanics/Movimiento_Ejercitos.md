@@ -383,6 +383,11 @@ Con el motor TypeScript (a rehacer en Rust): `regresando`, `origenAsentamientoId
 
 > **Implementado en Rust (2026-10-23, 4H T4: el informe de inspección en el contrato).** Foto `BAN21`. El informe de una plaza ajena guarda también sus recintos de muralla con alguna celda levantada (nivel, anillo entero y celdas levantadas) y los tres informes (columna, caravana, plaza) llegan al ámbito `HEROE` de quien inspeccionó como `InformeInspeccion` (`insp-<héroe>-<objetivo>`, hasta su `expira_en_ms`; el cliente lo descarta al caducar). Ver el contrato 05 §9.
 
+## Decisiones del autor del 2026-10-27 (paridad con TypeScript)
+
+- Descartado como recorte (el autor, 2026-10-27): la persecución calcula el punto de intercepción con la velocidad nominal, sin el coste del terreno; si el terreno o un camino la retrasan o la aceleran, el perseguidor llega al punto sin alcanzar a la presa y rehace su plan allí. Es la regla.
+- Descartado como recorte (el autor, 2026-10-27): una escuadra que ya tiene la moral a 0 cuando su columna pasa hambre (o al unirse) deserta en la siguiente fase de su minuto, no en el instante en que se ancla. Es la regla.
+
 ## Catálogo de eventos
 
 Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. El núcleo los emite todos (`logistica.reabastecer_aliados` desde 5D, 2026-10-24; `faccion.relacion`, el del andamiaje `fijarRelacion`, se retiró en 5D: la administración emite los `diplomacia.*`).

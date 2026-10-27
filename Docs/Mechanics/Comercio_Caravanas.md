@@ -962,6 +962,7 @@ Valores calibrados (2026-10-12): `COMISION.distanciaParaBonusMax` y `ASIGNACION_
 Confirmadas por el autor al repasar las dudas de la paridad (plan «Paridad con TypeScript: plan de tandas», D1-D16): describen lo que ya hace el motor y pasan a ser la regla.
 
 - **D7, pasos de río:** solo se cruzan los ríos por los **vados del mapa**; una ciudad ribereña no abre un paso propio y `radioPasoCiudad` no se usa.
+- Descartado como recorte (el autor, 2026-10-27): la poda de los trueques vencidos es perezosa: se hace al tocarlos (proponer, vencer o cerrar un trueque), no al final de cada tick, que el motor no tiene. Para el jugador el resultado es el mismo.
 
 ## Catálogo de eventos
 

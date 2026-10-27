@@ -310,6 +310,10 @@ Confirmadas por el autor al repasar las dudas de la paridad (plan «Paridad con 
 - **D10:** quien está dentro de la propia plaza cuando esta es conquistada **sale siempre**; la regla de «solo salen los que ya no podrían entrar» es para sus pueblos y avanzadas.
 - **D13:** un residente que sale con tropa de su loadout durante un asedio deja el asedio sin ella y **no vuelve a entrar hasta que acabe** (la plaza asediada rechaza `EntrarEnAsentamiento`); la guarnición con dueño, reservada por la batalla, no se puede llevar.
 - **D16:** un residente que entra con caravanas adjuntas conserva su columna dentro (quieta, sin tropa) y sus participantes comen de sus víveres a ritmo de acampada, como un visitante, hasta que sale o suelta las caravanas.
+- Descartado como recorte (el autor, 2026-10-27): `salirDeAsentamiento` exige estar dentro de esa plaza (`heroe.no_esta_en_la_plaza`), más estricto que el TypeScript, que solo miraba la residencia; y partir con una convocatoria falla entero si la columna de un visitante no puede fundirse con la del Líder (otra Facción, formación o un ejército con caravanas).
+- Descartado como recorte (el autor, 2026-10-27): `reclutarTropa` pide estar dentro de la plaza, como en el TypeScript; un ciudadano que no reside allí solo repone.
+- Descartado como recorte (el autor, 2026-10-27): en un pueblo extractor o una avanzada se entra siempre de visita (nadie reside allí), el ejército por su Líder, con la regla de relación y el acceso de la plaza madre.
+- Descartado como recorte (el autor, 2026-10-27): la guarnición de serie de una avanzada la elige el Gobernador entre las tropas que la madre puede reclutar en ese momento (no se revisa si después pierde alguna) y el núcleo guarda una elección por escalón; la guarnición de jugadores es solo de residentes de la madre, desde su columna a la puerta, con el cupo por héroe y por avanzada del canon.
 
 ## Catálogo de eventos
 

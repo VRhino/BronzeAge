@@ -193,6 +193,9 @@ impl Nucleo {
         if !self.manda_columna(p, e, false) {
             return Err(rechazo(rechazos::NO_AUTORIZADO, "la columna no es tuya".into()));
         }
+        if !self.manda_columna(p, e, true) {
+            return Err(rechazo(rechazos::COLUMNA_SOLO_EL_LIDER, "solo el Líder engancha y aparca las caravanas".into()));
+        }
         self.autorizar_heroe(p, heroe, false)?;
         if !e.columna.participantes.iter().any(|x| x.heroe == heroe) {
             return Err(rechazo(rechazos::NO_AUTORIZADO, "el héroe no va en esa columna".into()));

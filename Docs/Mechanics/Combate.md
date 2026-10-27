@@ -376,6 +376,7 @@ Ninguna abierta.
 Confirmadas por el autor al repasar las dudas de la paridad (plan «Paridad con TypeScript: plan de tandas», D1-D16): describen lo que ya hace el motor y pasan a ser la regla.
 
 - **D6:** al asaltar una caravana, el héroe que ataca puede ser **cualquiera de la columna que no esté herido**, no solo el Líder.
+- Descartado como recorte (el autor, 2026-10-27): los combates del mismo instante se ordenan por la secuencia de la cola de eventos, no por antigüedad. Es la regla.
 
 ## Catálogo de eventos
 

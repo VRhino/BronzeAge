@@ -307,8 +307,12 @@ impl Nucleo {
                     return Err(rechazo(rechazos::NO_AUTORIZADO, "la columna no es tuya".into()));
                 }
                 let (madre, av) = self.con_madre(*avanzada)?;
-                if e.columna.faccion != Some(self.estado.asentamientos[&madre].faccion) {
+                let faccion = self.estado.asentamientos[&madre].faccion;
+                if e.columna.faccion != Some(faccion) {
                     return Err(rechazo(rechazos::AVANZADA_FACCION_AJENA, "la obra es de otra Facción".into()));
+                }
+                if !self.entrega_un_ciudadano(p, e, faccion) {
+                    return Err(rechazo(rechazos::AVANZADA_FACCION_AJENA, "solo entregan los ciudadanos de la Facción de la obra".into()));
                 }
                 if e.posicion_en(t).dist(av.posicion) > self.radio_puerta() {
                     return Err(rechazo(rechazos::AVANZADA_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la obra".into()));

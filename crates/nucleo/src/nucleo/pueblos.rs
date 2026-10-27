@@ -17,7 +17,7 @@
 //!
 //! # Lo provisional
 //! Marcar, destruir y reponer el carro son obras de mapa del panel de la plaza madre (Doc 4.2.2): las da el Gobernador o el Maestro de Obras de la madre, residente y dentro (5E). La
-//! entrega de materiales exige ser el propietario de la columna; la guarnición de mineros y el saqueo son del sistema militar.
+//! entrega de materiales la hace cualquier participante de la columna que sea ciudadano de la Facción; la guarnición de mineros y el saqueo son del sistema militar.
 
 use super::*;
 use crate::nucleo::mercado::id32;
@@ -132,8 +132,12 @@ impl Nucleo {
                     return Err(rechazo(rechazos::NO_AUTORIZADO, "la columna no es tuya".into()));
                 }
                 let (plaza, pu) = self.pueblo(*pueblo).ok_or_else(|| de_pueblo(ErrorPueblo::NoExiste))?;
-                if e.columna.faccion != Some(self.estado.asentamientos[&plaza].faccion) {
+                let faccion = self.estado.asentamientos[&plaza].faccion;
+                if e.columna.faccion != Some(faccion) {
                     return Err(rechazo(rechazos::PUEBLO_FACCION_AJENA, "la obra es de otra Facción".into()));
+                }
+                if !self.entrega_un_ciudadano(p, e, faccion) {
+                    return Err(rechazo(rechazos::PUEBLO_FACCION_AJENA, "solo entregan los ciudadanos de la Facción de la obra".into()));
                 }
                 let sitio = self.posicion_de_pueblo(pu.id).expect("un pueblo está sobre un nodo del mapa");
                 if e.posicion_en(t).dist(sitio) > self.radio_puerta() {

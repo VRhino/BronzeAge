@@ -380,7 +380,7 @@ color de la orla.
 - **`dejarResidencia`:** libera la vivienda y los cargos locales; el héroe pasa **en el acto** al campamento de mercenarios **más cercano a la plaza que deja** (5B-4, 2026-10-24; el TypeScript miraba dónde estaba el héroe; empate: id menor). Estampa cooldown.
 - **Quien se muda estando dentro de la casa que deja** (5B-1, 2026-10-24): su campamento y su almacén personal pasan sin viaje a la casa nueva y él **sigue dentro de visita** si la puerta le admite; solo quien deja además la Facción puede quedarse fuera de la puerta, y entonces sale expulsado al mapa solo, con su carro. **No se muda nadie de una plaza en batalla** (5B-10): ni hacia ella ni desde ella.
 - **`residirEnCampamento(id)`:** cualquier héroe, de cualquier Facción y aunque la suya tenga plazas; deja la plaza (con sus cargos) o el campamento anterior. Estampa cooldown. Sin límite de residentes.
-- **Reubicación forzosa:** al arruinarse una plaza (`reubicarResidentesDeRuina`): a la plaza de su Facción más cercana a la ruina si queda alguna (pasan a residir ahí) y, si no, al campamento más cercano. Al
+- **Reubicación forzosa:** al arruinarse una plaza (`reubicarResidentesDeRuina`): a la plaza de su Facción más cercana a la ruina si queda alguna (pasan a residir ahí) y, si no, al campamento más cercano. El hecho `heroe.reubicado` (`heroe`, `ruina`, `alMapa` y, si pasa a otra plaza, `destino`) lo oye la Facción de la plaza que le acoge (paridad, 2026-10-27); quien acaba en un campamento solo lo ve en su héroe. No mira ningún cupo: la residencia de héroes no tiene tope de viviendas. Al
   conquistarla, → `Combate.md` (desalojo).
 
 ### 4.3 La puerta (`puedeEntrarEn`, `grupoDePuerta`)

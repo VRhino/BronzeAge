@@ -298,18 +298,18 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 
 | Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
 |---|---|---|---|
-| `adjuntar_caravana` | `AdjuntarCaravana` | un participante de la columna | a la puerta de la caravana |
-| `aparcar_caravana` | `AparcarCaravana` | un participante de la columna | la caravana adjunta, con la columna dentro de la plaza (`caravana.soltar_solo_dentro`, como `soltar_caravana`) |
+| `adjuntar_caravana` | `AdjuntarCaravana` | el Líder de la columna | a la puerta de la caravana |
+| `aparcar_caravana` | `AparcarCaravana` | el Líder de la columna | la caravana adjunta, con la columna dentro de la plaza (`caravana.soltar_solo_dentro`, como `soltar_caravana`) |
 | `cargar_caravana` | `CargarCaravana` | un participante de la columna | la caravana adjunta (`caravana.no_esta_adjunta`), a la puerta (`radioPuerta`) de una plaza de su Facción (`caravana.plaza_ajena`); hasta lo que le cabe (`caravana.sin_capacidad`) |
 | `comerciar_en_plaza` | `ComerciarEnPlaza` | el Líder de la columna | a la puerta de la plaza de la orden |
 | `depositar_en_avanzada` | `DepositarEnAvanzada` | un participante de la columna | a la puerta de la avanzada operativa |
 | `entregar_de_caravana` | `EntregarDeCaravana` | un participante de la columna | la caravana adjunta, a la puerta de la plaza B |
-| `entregar_en_obra` | `EntregarMateriales` | un participante de la columna | a la puerta de la obra del pueblo |
-| `entregar_en_obra` | `EntregarMaterialesAAvanzada` | un participante de la columna | a la puerta de la obra de la avanzada |
+| `entregar_en_obra` | `EntregarMateriales` | un participante de la columna | a la puerta de la obra del pueblo; ciudadano de la Facción de la obra |
+| `entregar_en_obra` | `EntregarMaterialesAAvanzada` | un participante de la columna | a la puerta de la obra de la avanzada; ciudadano de la Facción de la obra |
 | `estacionar_ejercito` | `Estacionar` | el Líder de la columna | como `marchar_a` |
 | `fundar` | `Fundar` | el Líder de la columna | con la Caravana de Fundación (`fundacion.sin_caravana`) y Facción |
 | `marchar_a` | `MarcharA` | el Líder de la columna | a bordo, no desde dentro de un lugar (`heroe.dentro_de_un_lugar`), no una formación (`columna.en_formacion`) |
-| `soltar_caravana` | `SoltarCaravana` | un participante de la columna | el héroe va en ella; la caravana adjunta, con la columna dentro de una plaza de su Facción (`caravana.soltar_solo_dentro`): queda aparcada |
+| `soltar_caravana` | `SoltarCaravana` | el Líder de la columna | el héroe va en ella; la caravana adjunta, con la columna dentro de una plaza de su Facción (`caravana.soltar_solo_dentro`): queda aparcada |
 
 **La cuenta del héroe**
 

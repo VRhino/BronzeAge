@@ -875,6 +875,10 @@ fn al_arruinarse_la_plaza_sus_residentes_pasan_a_la_plaza_hermana_mas_cercana_o_
     let reubicados = hechos(&e.n, "heroe.reubicado");
     assert_eq!(reubicados.len(), 4);
     assert!(reubicados.iter().all(|r| r.0 == ruina && dato(r, "ruina") == a as i64 && dato(r, "alMapa") == i64::from(dato(r, "heroe") != fa as i64)));
+    // La Facción de C oye a quien acoge (con su destino); quien va al campamento no lleva destino.
+    let de = |id: u64| reubicados.iter().find(|r| dato(r, "heroe") == id as i64).unwrap();
+    assert_eq!((dato(de(ana), "destino"), de(ana).1.clone()), (c as i64, vec![c]));
+    assert!(de(carla).1.is_empty() && de(carla).2.iter().all(|(k, _)| *k != "destino"));
 }
 
 // ───────────────────────────── 10. Las tecnologías de la administración y quién manda en la plaza ─────────────────────────────

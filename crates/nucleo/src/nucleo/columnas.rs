@@ -127,6 +127,12 @@ impl Nucleo {
         p.admin || if solo_lider { self.cuenta_de(e.columna.lider) == Some(p.actor.as_str()) } else { e.columna.participantes.iter().any(|x| self.cuenta_de(x.heroe) == Some(p.actor.as_str())) }
     }
 
+    /// Quién puede entregar en una obra de mapa de la Facción `faccion` (Doc 4.2.2: «pueden entregar los ciudadanos de la Facción»): un participante
+    /// de la columna que sea ciudadano de esa Facción, sea o no su Líder. La administración, siempre.
+    pub(super) fn entrega_un_ciudadano(&self, p: &Peticion, e: &Ejercito, faccion: u32) -> bool {
+        p.admin || e.columna.participantes.iter().any(|x| self.heroe(x.heroe).is_some_and(|h| h.cuenta == p.actor && h.faccion == Some(faccion)))
+    }
+
     /// Quién puede mover la columna (`marcharA`, `estacionarEjercito`): su Líder, que además tiene que ir a bordo (un héroe dentro de un lugar no
     /// dirige su columna, que está dentro con él), y nunca una formación, que no se mueve. La administración puede con todas las demás.
     pub(super) fn autorizar_movimiento(&self, p: &Peticion, e: &Ejercito) -> Result<(), Respuesta> {

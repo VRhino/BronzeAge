@@ -720,15 +720,18 @@ impl Comando {
             Comando::ComprarMirada { .. } | Comando::ComprarInformePlaza { .. } => CompraIntel,
             Comando::ComprarTecnologiaAeda { .. } => CompraTecnologiaAeda,
             Comando::EmpezarEpica { .. } | Comando::AbandonarEpica { .. } => DirigeAedas,
-            Comando::MarcharA { .. } | Comando::Estacionar { .. } | Comando::Fundar { .. } | Comando::ComerciarEnPlaza { .. } => LiderDeLaColumna,
-            Comando::EntregarDeCaravana { .. }
+            Comando::MarcharA { .. }
+            | Comando::Estacionar { .. }
+            | Comando::Fundar { .. }
+            | Comando::ComerciarEnPlaza { .. }
             | Comando::AdjuntarCaravana { .. }
             | Comando::AparcarCaravana { .. }
+            | Comando::SoltarCaravana { .. } => LiderDeLaColumna,
+            Comando::EntregarDeCaravana { .. }
             | Comando::EntregarMateriales { .. }
             | Comando::EntregarMaterialesAAvanzada { .. }
             | Comando::DepositarEnAvanzada { .. }
-            | Comando::CargarCaravana { .. }
-            | Comando::SoltarCaravana { .. } => ParticipanteDeLaColumna,
+            | Comando::CargarCaravana { .. } => ParticipanteDeLaColumna,
         }
     }
 
