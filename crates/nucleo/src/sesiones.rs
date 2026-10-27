@@ -359,6 +359,8 @@ impl Actor {
                 }
                 // Lo que `ADMIN` ve y no pasa por el registro (6G): los contadores de la tecnología y los Aedas itinerantes.
                 self.mesa.admin_al_dia(&self.nucleo, None, &mut envios);
+                // Y lo que cobra cada campamento a quien está dentro: los precios siguen al stock de las plazas y a la reputación, sin subir la versión.
+                self.mesa.campamentos_al_dia(&self.nucleo, None, &mut envios);
             }
             None => {
                 // Se perdió registro (no debería ocurrir en vivo): foto completa de todos los ámbitos a todos.

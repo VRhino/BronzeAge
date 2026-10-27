@@ -184,7 +184,7 @@ impl Nucleo {
             rechazo(c, m)
         };
         match &p.comando {
-            Comando::CrearHeroe { cuenta, campamento, controlador } => {
+            Comando::CrearHeroe { cuenta, campamento, controlador, nombre } => {
                 if !p.admin && (cuenta != &p.actor || *controlador == Controlador::Bot) {
                     return Err(rechazo(rechazos::NO_AUTORIZADO, "solo la administración crea héroes ajenos o bots".into()));
                 }
@@ -194,10 +194,16 @@ impl Nucleo {
                 if self.puerta_de_campamento(*campamento).is_none() {
                     return Err(rechazo(rechazos::HEROE_CAMPAMENTO_DESCONOCIDO, ids::campamento(*campamento)));
                 }
+                if let Some(x) = nombre.as_deref().filter(|x| x.trim() != *x || x.is_empty() || x.chars().count() > crate::comando::NOMBRE_HEROE_MAX || x.chars().any(char::is_control)) {
+                    return Err(rechazo(rechazos::HEROE_NOMBRE_INVALIDO, format!("«{x}»: el nombre lleva de 1 a {} caracteres, sin espacios a los lados", crate::comando::NOMBRE_HEROE_MAX)));
+                }
                 let (id, loadout) = (self.estado.siguiente_id, self.estado.siguiente_id + 1);
                 self.estado.siguiente_id += 2;
                 let heroe = Heroe::nuevo(&mr, id, *controlador, *campamento, loadout);
                 self.estado.militar.insertar(HeroeNucleo::nuevo(heroe, cuenta, None));
+                if let Some(x) = nombre {
+                    self.estado.militar.nombres.insert(id, x.clone());
+                }
                 *self.estado.militar.eligieron.entry(*campamento).or_insert(0) += 1;
                 self.tr.tocar(Clase::Campamento, u64::from(*campamento));
                 // Un residente nuevo, sin Facción: pide bandidos en el anillo de su campamento.

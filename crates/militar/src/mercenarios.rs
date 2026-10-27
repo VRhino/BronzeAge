@@ -65,6 +65,15 @@ pub fn precio(r: &Reglas, def: &DefTropa, cantidad: i64, factor_reputacion: i64,
     ((numerador + denominador - 1) / denominador) as Mil * 1_000
 }
 
+/// Lo que cuesta un soldado de `def` antes de redondear (milésimas de oro, truncado): el `base × recargo × factorReputación × descuento` de [`precio`], que cobra
+/// `⌈precio_por_soldado × cantidad / 1.000⌉` unidades de oro. Lo enseña el campamento a su residente (2026-10-27).
+pub fn precio_por_soldado(r: &Reglas, def: &DefTropa, factor_reputacion: i64, sin_asentamientos: bool) -> Mil {
+    let equipo: Mil = def.costo_equipo.iter().map(|&(_, n)| n).sum::<Mil>() * r.mercenarios.valor_equipo_en_oro / 1_000;
+    let base = r.reclutamiento.oro_por_escalon[def.escalon as usize - 1] + def.caballos * r.reclutamiento.oro_por_caballo + equipo;
+    let descuento = if sin_asentamientos { r.mercenarios.descuento_sin_asentamientos } else { UNO };
+    (base as i128 * r.mercenarios.recargo as i128 * factor_reputacion as i128 * descuento as i128 / (UNO as i128 * UNO as i128 * UNO as i128)) as Mil
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ErrorMercenarios {
     /// Solo se recluta en el campamento donde se reside.
@@ -327,6 +336,19 @@ mod pruebas {
         assert_eq!(precio(&r, r.tropas.tropa(Tropa::LancerosMimbre), 25, UNO, false), 375_000);
         // Carros de guerra: escalón 4 (7) + 2 caballos × 5 + (1 carro + 1 arma) × 8 = 33; × 1,5 = 49,5; 15 soldados = 742,5 → 743.
         assert_eq!(precio(&r, r.tropas.tropa(Tropa::CarrosGuerra), 15, UNO, false), 743_000);
+    }
+
+    #[test]
+    fn el_precio_por_soldado_por_las_unidades_redondeado_es_el_precio() {
+        let r = r();
+        for d in r.tropas.iter() {
+            for (f, sin) in [(UNO, false), (UNO * 3 / 2, false), (UNO, true)] {
+                let por = precio_por_soldado(&r, d, f, sin);
+                for n in [1, 7, d.unidades] {
+                    assert!((precio(&r, d, n, f, sin) - por * n).abs() < 1_000 + n, "{:?} × {n}", d.tropa);
+                }
+            }
+        }
     }
 
     #[test]

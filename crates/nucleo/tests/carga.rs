@@ -67,7 +67,7 @@ fn montar() -> Option<Mundo500> {
     for k in 0..EN_PLAZA {
         let (a, _, i) = plazas[k % plazas.len()];
         let cuenta = format!("p{k}");
-        let h = ok(&mut n, &cuenta, format!("h{k}"), Comando::CrearHeroe { cuenta: cuenta.clone(), campamento: i, controlador: Controlador::Humano }).creadas[0];
+        let h = ok(&mut n, &cuenta, format!("h{k}"), Comando::CrearHeroe { cuenta: cuenta.clone(), campamento: i, controlador: Controlador::Humano, nombre: None }).creadas[0];
         ok(&mut n, "admin", format!("hf{k}"), Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some((k % plazas.len()) as u32 + 1) });
         ok(&mut n, "admin", format!("hr{k}"), Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(a as u32)) });
         ok(&mut n, "admin", format!("hc{k}"), Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(a as u32) });

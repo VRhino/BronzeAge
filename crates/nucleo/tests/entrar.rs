@@ -162,7 +162,7 @@ impl Escenario {
     }
     /// Un héroe de la cuenta, nacido en el campamento `campamento`.
     fn heroe(&mut self, cuenta: &str, campamento: u32) -> u64 {
-        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano }).creadas[0]
+        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0]
     }
     /// Un héroe de la cuenta ciudadano de la Facción 1, residente y presente en la plaza, con una escuadra de milicia (25 lanceros) en su campamento.
     fn con_milicia(&mut self, cuenta: &str) -> (u64, u64) {
@@ -546,7 +546,7 @@ fn una_foto_con_el_acceso_cambiado_se_recupera_y_la_anterior_se_rechaza() {
     e.avanzar(HORA);
     e.ok("admin", comun::acceso(e.a, false, true, true));
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN42");
+    assert_eq!(&bytes[..5], b"BAN43");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.asentamientos[&e.a].puerta.cerrada_a, Some(politica::Grupos::de([politica::Grupo::Aliados])));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
@@ -611,7 +611,7 @@ impl Escenario {
     /// Como `con_milicia`, pero con cada orden en el instante `t`.
     fn milicia_en(&mut self, t: Instante, cuenta: &str) -> (u64, u64) {
         let a = self.a as u32;
-        let h = self.ok_en(t, cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano }).creadas[0];
+        let h = self.ok_en(t, cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
         self.ok_en(t, "admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
         self.ok_en(t, "admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(a)) });
         self.ok_en(t, "admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(a) });
@@ -620,7 +620,7 @@ impl Escenario {
     }
     /// Como `con_prestamo`, pero con cada orden en el instante `t`.
     fn prestamo_en(&mut self, t: Instante, cuenta: &str, faccion: u32) -> (u64, Vec<u64>) {
-        let h = self.ok_en(t, cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano }).creadas[0];
+        let h = self.ok_en(t, cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
         self.ok_en(t, "admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(faccion) });
         let ids = self.ok_en(t, cuenta, Comando::PedirPrestamo { heroe: h, tropas: vec![Tropa::Granjeros, Tropa::Mineros] }).creadas;
         (h, ids)

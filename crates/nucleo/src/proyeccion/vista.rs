@@ -401,7 +401,7 @@ impl<'n> Mirada<'n> {
         if let Some(m) = &self.celdas {
             let aristas: Vec<&Arista> = e.comercio.red.aristas().filter(|a| arista_en(a, |p| m.explorado_en(p)) && arista_en(a, |p| rect.contiene(p))).collect();
             if !aristas.is_empty() {
-                // DUDA: solo viajan las rutas de la propia Facción (las ajenas dirían quién comercia con quién); el escalón de cada arista cuenta todas.
+                // Regla (decisión del autor del 2026-10-27): solo viajan las rutas de la propia Facción (las ajenas dirían quién comercia con quién); el escalón de cada arista cuenta todas.
                 let faccion = self.faccion;
                 let propia = move |r: &RutaComercial| Some(r.faccion) == faccion;
                 let huella = n.rutas_vigentes().fold(0u64, |h, r| h.rotate_left(7) ^ (u64::from(r.origen) << 32 | u64::from(r.destino)) ^ if propia(r) { r.ultimo_lanzamiento as u64 } else { 0 });
@@ -418,7 +418,9 @@ impl<'n> Mirada<'n> {
         // (5H): nombre, sigilo, nivel, reputación, dirigentes, ciudadanos, solicitudes y Liga, sin niebla. La propia va entera en `FACCION`. Su clave y su sello se calculan una vez por perspectiva.
         nombradas.sort_unstable();
         nombradas.dedup();
-        for (f, clave, sello) in self.publicas.iter().filter(|(f, _, _)| nombradas.binary_search(f).is_ok()) {
+        // Sin bandera, todas (2026-10-27, pedido del autor): son las Facciones a las que puede pedir el ingreso. Quien no tiene Facción mira solo con su héroe: son pocas sesiones.
+        let todas = self.faccion.is_none();
+        for (f, clave, sello) in self.publicas.iter().filter(|(f, _, _)| todas || nombradas.binary_search(f).is_ok()) {
             let f = *f;
             v.push(Visible { clave: clave.clone(), sello: *sello, cuerpo: Box::new(move || Some(Cuerpo::Faccion(propios::faccion_publica(n, f)))) });
         }
@@ -645,18 +647,20 @@ pub fn plaza_avistada(n: &Nucleo, id: u64) -> pb::Asentamiento {
     p
 }
 
-/// El héroe ajeno (`HeroePublico`): nombre, clase, nivel, hasta cuándo está herido y las escuadras que lleva en su columna. Nada de su campamento, sus puntos, su Liderazgo ni si es humano o bot.
+/// El héroe ajeno (`HeroePublico`): nombre, clase, nivel, hasta cuándo está herido y las escuadras que lleva en su columna y su Facción. Nada de su campamento, sus puntos, su Liderazgo ni si es humano o bot.
 pub fn heroe_publico(n: &Nucleo, id: u64) -> pb::Heroe {
     let h = n.heroe(id).expect("el héroe existe");
     let tropas = &n.estado().reglas.economia.militar.tropas;
     pb::Heroe {
         id: ids::heroe(id),
         version: h.heroe.escuadras.iter().map(|s| n.version_de(Clase::Escuadra, s.id)).fold(n.version_de(Clase::Heroe, id), u64::max),
-        display_name: propios::nombre_de_heroe(id),
+        display_name: propios::nombre_de_heroe(n, id),
         class_definition_id: propios::CLASE_POR_DEFECTO.into(),
         avatar: Some(pb::Avatar::default()),
         nivel: h.heroe.nivel,
         herido_hasta_ms: h.heroe.herido_hasta,
+        // Su ciudadanía es pública (decisión del autor del 2026-10-27): la dice su Facción en `ciudadanos_ids` y así se sabe también de un héroe que se ve sin columna.
+        faccion_id: h.faccion.map(ids::faccion),
         escuadras_que_lleva: h
             .heroe
             .escuadras

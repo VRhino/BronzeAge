@@ -14,8 +14,8 @@ Numeración del repaso (bloque A). **Aplicadas el 2026-10-23** (sin commit), sal
 - 5 Pueblo sin ruta por tierra a su madre: no se puede fundar. CAMBIO (rechazo nuevo).
   → **Aplicado.** `MarcarPueblo` rechaza con `pueblo.sin_ruta` (`rechazos::PUEBLO_SIN_RUTA`); `Economia_Construccion.md` §14 y canon Doc 4.2.2 («Requisitos»). Prueba `un_nodo_sin_ruta_por_tierra_hasta_la_madre_no_admite_pueblo` (`nucleo/tests/pueblos.rs`).
 - 6 (ver 1).
-- 7 Granja inicial que no cabe: el autor recuerda que el TS la reubicaba al mejorar; el análisis confirma que el Rust ya reubica en cada cambio de huella igual que el TS y que la fundación sin sitio es inalcanzable. Pendiente de confirmar con el autor.
-  → **Sin aplicar** (pendiente): las `// DUDA:` de `nucleo/urbanismo.rs` (`Urbe::fundar`) y `trazado/src/fundacion.rs` se quedan.
+- 7 Granja inicial que no cabe: el autor recuerda que el TS la reubicaba al mejorar; el análisis confirma que el Rust ya reubica en cada cambio de huella igual que el TS y que la fundación sin sitio es inalcanzable. Confirmado por el autor el 2026-10-27.
+  → **Aplicado** (2026-10-27): las `// DUDA:` de `nucleo/urbanismo.rs` (`Urbe::fundar`) y `trazado/src/fundacion.rs` pasan a regla.
 - 8 Pueblo: 6 casas. La planta interna del pueblo toma el radio que necesite para sus piezas (sin tope de 8 u, que nadie decidió: lo derivó la fase 3C del «0,2 de mapa»). En el mapa del mundo sigue ocupando 0,2. CAMBIO.
   → **Aplicado.** `PUEBLOS_EXTRACTORES.casasDeLaPlanta` = 6 (`Economia_Construccion.md` §14); `urbanismo::planta_de_pueblo` traza desde 8 u, crece si algo no cabe y la vista lleva el disco que contiene las piezas; `Trazado_Urbano.md` (nota de los pueblos) y canon Doc 4.2.2 («Trazado»). Pruebas `la_planta_de_un_pueblo_toma_el_radio_que_necesitan_sus_piezas` y `la_planta_de_un_pueblo_sale_de_su_id...` (`nucleo/src/urbanismo.rs`).
 - 9-11 Trazado (ancla en disco, ancla llena, orden de muralla): el autor quiere revisarlas en detalle frente al TS (el balance del TS importa). Análisis hecho; pendiente de decidir.
@@ -116,3 +116,17 @@ Numeración del repaso (bloque A). **Aplicadas el 2026-10-23** (sin commit), sal
   → **Aplicado.** `Proyecciones_Y_Autorizacion.md` §2.2 y `05` (La administración); ítem cerrado en la fila de T3e.
 - T3d-4 Memoria de la niebla: se recuerda todo lo que se vio, ruinas sin dueño incluidas, y pueblos y avanzadas con su nivel o etapa y su estado (activo, en obra, en ruinas) tal como estaban. CAMBIO (memoria en la foto: misma subida).
   → **Aplicado.** `memoria.rs` (`EstadoSitio` en `DatosSitio`, en la foto `BAN24`), `nucleo/exploracion.rs` (las ruinas sin dueño son sitios de la Facción 0; el estado entra en lo que «cambia» de un sitio), `proyeccion/vista.rs` (`FichaConocida.estado`, `faccion_id` vacío de nadie; la ruina sin dueño que se ve ya no sale además como ficha). Esquema aditivo: `EstadoSitio` y `FichaConocida.estado = 9`. `Niebla_De_Guerra.md` §4.1, `05` (tabla de `VISTA`) y canon Docs/Game 5. Pruebas `el_pueblo_ajeno_que_se_vio_en_obra_se_recuerda_en_obra_aunque_despues_se_termine` (`nucleo/tests/pueblos.rs`) y la de las ruinas de ciudadela de `nucleo/tests/avanzadas.rs` (la ficha de nadie, etapa 3, en ruinas).
+
+## Dudas abiertas de 4H, T7, 5H, 6A y la crónica (decididas por el autor el 2026-10-27)
+
+Repaso de la tabla «Dudas abiertas» de `Docs/Mecanicas a desarrollar.md` (doc «Dudas abiertas del motor: propuesta de cierre»). El autor aceptó la propuesta entera: dos cambios, una confirmación (la 7 de arriba) y el resto como están.
+- T7-1 `movilizarEjercito` también guarda el interior recordado, como `salirAlMundo`. CAMBIO.
+  → **Aplicado.** `nucleo/salidas.rs`; `Niebla_De_Guerra.md` §4.5. Prueba `salir_al_mundo_deja_al_heroe_la_foto_del_interior_de_su_plaza` (`nucleo/tests/columnas.rs`).
+- 5H-9 El héroe público de la `VISTA` lleva `faccion_id`. CAMBIO.
+  → **Aplicado.** `proyeccion/vista.rs` (`heroe_publico`); comentario de `Heroe.faccion_id` en `entities.proto`. Prueba en `nucleo/tests/niebla.rs`.
+- 4H 1-11, T7 2-4, 5H 1-8: como están.
+  → **Aplicado.** Regla en `Proyecciones_Y_Autorizacion.md`, «Decisiones del autor del 2026-10-27»; las `// DUDA:` de `proyeccion/vista.rs` (rutas de la propia Facción), `proyeccion/eventos.rs` (nivel del pueblo) y `sesiones/ambitos.rs` (cliente descartado por lento) pasan a regla.
+- 6A 1-3 (comprar a un Aeda no crea `primeros`; la adopción no rechaza «sin Rey» en las reglas puras; la clave de una obra lleva la plaza): como están.
+  → **Aplicado.** Regla en `Tecnologia_Aedas.md`, «Decisiones del autor del 2026-10-27».
+- Crónica 1-3 y 6-8 (directorio `<partida>/cronica/`; el `EventoDominio` codificado; la escribe el hilo de la persistencia; una página puede pasar del límite; sin persistencia no se guarda; página y `Delta` se solapan y el cliente las reconoce por la versión): como están.
+  → **Aplicado.** Regla en `Tecnologia_Aedas.md`, «Decisiones del autor del 2026-10-27».

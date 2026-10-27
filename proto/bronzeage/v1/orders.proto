@@ -303,6 +303,7 @@ message OrdenCrearHeroe {
     string barba_id = 3;
     string cejas_id = 4;
   }
+  // El nombre del héroe, recortado: de 1 a 24 caracteres sin caracteres de control (`heroe.nombre_invalido`). Vacío deja el héroe sin nombre y se muestra «Héroe N».
   string display_name = 1;
   string campamento_id = 2;
   string class_definition_id = 3;

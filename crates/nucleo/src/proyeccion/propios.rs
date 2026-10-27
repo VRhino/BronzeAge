@@ -6,8 +6,7 @@
 //! Qué ámbito recibe qué lo decide [`super::audiencia`]; aquí solo se dice **qué es** cada cosa en el contrato. Las entidades viajan completas (`reemplaza = true`, decisión 2).
 //!
 //! DUDA: el contrato trae más de lo que el núcleo guarda; hasta que existan sus sistemas, esos campos van a su valor por defecto: nombre, clase, género y avatar del héroe
-//! (decisión 4: «Héroe N», clase `default`), inventario y equipo (Conquest, CQ-004), el titular de una caravana, y el almacén de una avanzada
-//! (el contrato trae una sola `Existencia` y el núcleo un almacén de 29 recursos).
+//! (decisión 4: «Héroe N», clase `default`), inventario y equipo (Conquest, CQ-004) y el titular de una caravana. (El almacén de una avanzada va por recurso desde el 2026-10-27.)
 
 use super::{audiencia, batalla, ids, plan, punto, ritmo};
 use crate::estado::{Clase, Ejercito};
@@ -89,9 +88,9 @@ pub(super) fn batalla_sobre(n: &Nucleo, lugar: Ubicacion) -> Option<String> {
 /// La clase de un héroe hasta que Conquest publique su catálogo (decisión 4 del autor).
 pub(super) const CLASE_POR_DEFECTO: &str = "default";
 
-/// El nombre de un héroe hasta que Conquest publique su catálogo (decisión 4 del autor).
-pub(super) fn nombre_de_heroe(id: u64) -> String {
-    format!("Héroe {id}")
+/// El nombre de un héroe: el que eligió el jugador al crearlo (2026-10-27) o, si no eligió ninguno, «Héroe N».
+pub(super) fn nombre_de_heroe(n: &Nucleo, id: u64) -> String {
+    n.estado().militar.nombres.get(&id).cloned().unwrap_or_else(|| format!("Héroe {id}"))
 }
 
 /// Los atributos base de un héroe (sin equipo: el efectivo es el base hasta CQ-004).
@@ -138,7 +137,7 @@ pub fn heroe(n: &Nucleo, h: &HeroeNucleo) -> pb::Heroe {
         version: n.version_de(Clase::Heroe, h.heroe.id),
         jugador_id: (!h.sintetico).then(|| h.cuenta.clone()),
         es_bot: h.heroe.controlador == militar::heroe::Controlador::Bot,
-        display_name: nombre_de_heroe(h.heroe.id),
+        display_name: nombre_de_heroe(n, h.heroe.id),
         class_definition_id: CLASE_POR_DEFECTO.into(),
         avatar: Some(pb::Avatar::default()),
         nivel: h.heroe.nivel,

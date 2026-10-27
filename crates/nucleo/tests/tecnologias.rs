@@ -390,7 +390,7 @@ fn la_foto_ban38_lleva_las_citas_de_cada_descubrimiento_y_ban37_se_rechaza() {
     let reglas = e.n.estado().reglas.clone();
     let mundo_hash = e.n.estado().mundo_hash.clone();
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN42");
+    assert_eq!(&bytes[..5], b"BAN43");
     let vuelta = Estado::deserializar(&bytes, &reglas, &mundo_hash).unwrap();
     assert_eq!(vuelta.serializar(), bytes);
     assert_eq!(vuelta.hash(), e.n.estado().hash());
@@ -453,7 +453,7 @@ async fn por_la_sesion_el_rey_adopta_en_la_capital_y_su_faccion_oye_el_hecho() {
     let (mut e, _) = con_canteria(m);
     let plaza = e.plaza;
     // Por la sesión se juega con un héroe de verdad (el de administración que fundó no es el de la cuenta): «ana» crea el suyo, entra en la Facción y el fundador le cede el trono.
-    let r = e.ord("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano });
+    let r = e.ord("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None });
     let rey = r.creadas[0];
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: rey, faccion: Some(1) });
     let fundador = e.rey;

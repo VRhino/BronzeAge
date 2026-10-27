@@ -266,7 +266,7 @@ impl Sim<'_> {
         for k in 0..BUSCADORES {
             let campamento = (k % self.geo.campamentos.len().max(1)) as u32;
             let cuenta = format!("buscador-{k}");
-            let r = self.segura(t0, &cuenta, "CrearHeroe", Comando::CrearHeroe { cuenta: cuenta.clone(), campamento, controlador: Controlador::Humano });
+            let r = self.segura(t0, &cuenta, "CrearHeroe", Comando::CrearHeroe { cuenta: cuenta.clone(), campamento, controlador: Controlador::Humano, nombre: None });
             let Some(&heroe) = r.creadas.first().filter(|_| r.aceptada()) else { continue };
             // Andamiaje declarado: el oro de los alijos (unas pocas unidades cada uno) no paga un recluta de campamento, así que la administración le da al nacer el de dos reclutas de la
             // tropa más barata de su campamento, para ejercitar la vía de Q4 (`reclutados.*` también en el campamento).

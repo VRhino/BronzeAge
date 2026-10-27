@@ -30,7 +30,7 @@ impl Ciudad {
     /// `edificiosIniciales`: el Centro Urbano en `(0,0)`, `viviendas_iniciales` viviendas y la granja inicial, cada una colocada
     /// viendo las anteriores, con el `radioCiudad` inicial.
     ///
-    /// DUDA: si la granja no cabe, T §11 la deja caer al origen, encima del Centro Urbano («defensivo»); aquí simplemente no
+    /// Regla (decisión del autor del 2026-10-27): si la granja no cabe, T §11 la deja caer al origen, encima del Centro Urbano («defensivo»); aquí simplemente no
     /// se coloca (nunca se solapan piezas). Compruébese con `pieza(primer_id + 1 + viviendas)`.
     pub fn fundar(e: &EntradaFundacion) -> Ciudad {
         let mut c = Ciudad::vacia(e.semilla, e.params);

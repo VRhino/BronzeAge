@@ -261,7 +261,7 @@ fn la_ficha_de_una_plaza_ajena_es_lo_ultimo_que_se_vio_de_ella_y_cuando_y_nunca_
 fn sin_bandera_lo_explorado_es_del_heroe_y_pasa_a_su_faccion_cuando_entra_en_una() {
     let m = con_mundo!();
     let mut e = Esc { n: nucleo(m), peticiones: 0 };
-    let h = e.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano }).creadas[0];
+    let h = e.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
     let col = e.ok("eva", Comando::SalirDelCampamento { campamento: 0, heroe: h, escuadras: vec![], carga: vec![], politica: militar::columna::Politica::Rechazar }).creadas[0];
     assert_eq!(e.n.ejercito(col).unwrap().columna.faccion, None, "un héroe sin Facción anda sin bandera");
     let p = e.n.ejercito(col).unwrap().posicion;
@@ -351,6 +351,7 @@ fn lo_ajeno_se_ve_redactado_y_el_tramo_ajeno_se_renueva_solo_cuando_le_quedan_me
     let Some(Cuerpo::Heroe(hp)) = contenido.iter().find(|v| v.clave == (TipoEntidad::Heroe as i32, nucleo::proyeccion::ids::heroe(h_gus))).and_then(|v| v.cuerpo()) else { panic!("el héroe ajeno se ve") };
     assert_eq!((hp.jugador_id.clone(), hp.ubicacion.clone(), hp.escuadrones_ids.len(), hp.escuadras_que_lleva.len()), (None, None, 0, 1));
     assert_eq!(hp.escuadras_que_lleva[0].cantidad, 10);
+    assert!(hp.faccion_id.is_some() && hp.faccion_id == e.n.heroe(h_gus).unwrap().faccion.map(nucleo::proyeccion::ids::faccion), "su Facción es pública (2026-10-27)");
 
     // Con el tramo que tiene el cliente aún le quedan más de 10 s: no se renueva (mismo sello). Cuando le quedan menos, sí, y sigue sin enseñar el destino.
     let tiene = BTreeMap::from([(x.clave.clone(), x.sello)]);
@@ -403,7 +404,7 @@ fn partida(m: &M, sesiones: bool, trozos: i64) -> Nucleo {
     let sitio = sitio_rico(&e.n, &m.0, 0, 2);
     e.plaza("gus", 2, sitio);
     let col = e.columna("ana", 1, en_tierra(&m.0, sitio, -60 * U, 10 * U));
-    let h = e.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano }).creadas[0];
+    let h = e.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
     let sola = e.ok("eva", Comando::SalirDelCampamento { campamento: 0, heroe: h, escuadras: vec![], carga: vec![], politica: militar::columna::Politica::Rechazar }).creadas[0];
     let p = e.n.ejercito(sola).unwrap().posicion;
     for (k, destino) in [(0, en_tierra(&m.0, sitio, 70 * U, 10 * U)), (1, en_tierra(&m.0, sitio, 0, -40 * U)), (2, en_tierra(&m.0, sitio, -60 * U, 0))].into_iter() {
@@ -430,7 +431,7 @@ fn la_memoria_es_la_misma_con_sesiones_y_sin_ellas_y_avanzando_a_trozos_y_viaja_
     assert!(mem.exploracion.contains_key(&1) && mem.fichas.contains_key(&1) && !mem.personal.is_empty() && !mem.vigias.is_empty(), "la partida graba de todo");
 
     let bytes = a.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN42");
+    assert_eq!(&bytes[..5], b"BAN43");
     let vuelta = Estado::deserializar(&bytes, &reglas(), m.0.hash()).expect("la foto vuelve");
     assert_eq!(vuelta.memoria, *mem);
     assert_eq!(vuelta.serializar(), bytes);

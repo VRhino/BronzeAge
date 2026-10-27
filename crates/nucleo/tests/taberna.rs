@@ -130,7 +130,7 @@ fn escenario(m: &M) -> Esc {
     let (sa, sb) = (sitio_rico(&x.n, &m.0, 3, 1), sitio_rico(&x.n, &m.0, 0, 2));
     x.propia = x.plaza("fundador_a", 1, sa);
     x.ajena = x.plaza("gus", 2, sb);
-    x.eva = x.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano }).creadas[0];
+    x.eva = x.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
     let eva = x.eva;
     x.ok("admin", Comando::FijarFaccionDeHeroe { heroe: eva, faccion: Some(1) });
     x.ok("admin", Comando::DarAlmacenPersonal { heroe: eva, recurso: Oro, cantidad: 500_000 });
@@ -168,7 +168,7 @@ fn la_mirada_ve_sin_explorar_cuesta_segun_lo_lejos_tiene_cupo_y_enfria_su_zona()
 
     // Lo que no se puede: fuera del mapa, sin estar en el campamento, sin Facción, sin oro.
     assert_eq!(codigo(&e.mirada(Punto::new(-1, 0))), rechazos::INTEL_FUERA_DEL_MAPA);
-    let otro = e.ok("leo", Comando::CrearHeroe { cuenta: "leo".into(), campamento: 0, controlador: Controlador::Humano }).creadas[0];
+    let otro = e.ok("leo", Comando::CrearHeroe { cuenta: "leo".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
     assert_eq!(e.rechazada("leo", Comando::ComprarMirada { heroe: otro, origen: OrigenIntel::Campamento(0), centro: sitio }), rechazos::INTEL_SIN_FACCION);
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: otro, faccion: Some(1) });
     assert_eq!(e.rechazada("leo", Comando::ComprarMirada { heroe: otro, origen: OrigenIntel::Campamento(1), centro: sitio }), rechazos::INTEL_NO_PRESENTE);

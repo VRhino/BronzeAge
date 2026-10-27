@@ -358,7 +358,7 @@ fn los_materiales_se_entregan_en_el_sitio_con_una_columna_de_la_faccion_y_con_to
     // al dejar de ser ciudadana (la columna conserva la bandera de su Líder) ya no.
     let de_ana = e.columna("ana", 1, sitio);
     e.ok("admin", Comando::DarSuministro { ejercito: de_ana, recurso: Madera, cantidad: 1_000 });
-    let carla = e.ok("carla", Comando::CrearHeroe { cuenta: "carla".into(), campamento: 0, controlador: Controlador::Humano }).creadas[0];
+    let carla = e.ok("carla", Comando::CrearHeroe { cuenta: "carla".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: carla, faccion: Some(1) });
     e.ok("admin", Comando::ColocarHeroe { heroe: carla, ubicacion: Ubicacion::Columna(de_ana) });
     e.ok("carla", Comando::EntregarMateriales { ejercito: de_ana, pueblo: id });
@@ -683,7 +683,7 @@ fn un_residente_de_la_madre_cede_a_mano_escolta_al_carro_de_acarreo_y_viaja_con_
     let carro = e.pueblo(id).carro.unwrap();
     // Carla reside en la madre y está dentro: cede una escuadra de su campamento al carro parado en el pueblo. No hay escolta automática.
     assert!(e.n.caravana(carro).unwrap().escolta.is_empty());
-    let carla = e.ok("carla", Comando::CrearHeroe { cuenta: "carla".into(), campamento: 0, controlador: Controlador::Humano }).creadas[0];
+    let carla = e.ok("carla", Comando::CrearHeroe { cuenta: "carla".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: carla, faccion: Some(1) });
     e.ok("admin", Comando::FijarResidencia { heroe: carla, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
     e.ok("admin", Comando::ColocarHeroe { heroe: carla, ubicacion: Ubicacion::Asentamiento(plaza as u32) });
@@ -955,7 +955,7 @@ fn se_entra_en_un_pueblo_con_todo_con_el_acceso_de_la_madre_se_come_de_los_viver
     // El aliado y quien no tiene relación entran (por defecto la puerta solo se cierra a los enemigos); un ejército entero entra por orden de su Líder y se desarma.
     let (_, aliado) = e.visita("alia", 2, pueblo);
     let (cn, neutral) = e.visita("neu", 3, pueblo);
-    let segundo = e.ok("bia", Comando::CrearHeroe { cuenta: "bia".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano }).creadas[0];
+    let segundo = e.ok("bia", Comando::CrearHeroe { cuenta: "bia".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None }).creadas[0];
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: segundo, faccion: Some(3) });
     e.ok("admin", Comando::ColocarHeroe { heroe: segundo, ubicacion: Ubicacion::Columna(cn) });
     e.ok("alia", Comando::EntrarEnPueblo { pueblo, heroe: aliado });
@@ -1202,7 +1202,7 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
     e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN42");
+    assert_eq!(&bytes[..5], b"BAN43");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));

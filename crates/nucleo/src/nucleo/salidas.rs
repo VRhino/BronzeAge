@@ -475,7 +475,9 @@ impl Nucleo {
                 Ok(creadas)
             }
             Comando::MovilizarEjercito { asentamiento, heroe, escuadras, carga, politica } => {
-                self.salir_de_residencia(t, p, *heroe, Lugar::Asentamiento(*asentamiento as u32), escuadras, carga, true, *politica)
+                let creadas = self.salir_de_residencia(t, p, *heroe, Lugar::Asentamiento(*asentamiento as u32), escuadras, carga, true, *politica)?;
+                self.recordar_interior(t, *heroe, *asentamiento);
+                Ok(creadas)
             }
             Comando::SalirDelCampamento { campamento, heroe, escuadras, carga, politica } => self.salir_de_residencia(t, p, *heroe, Lugar::Campamento(*campamento), escuadras, carga, false, *politica),
             Comando::EntrarEnAsentamiento { asentamiento, heroe } => {
@@ -527,7 +529,7 @@ impl Nucleo {
     }
 
     /// Al salir al mundo desde su plaza el héroe se queda con la foto de lo que veía dentro, ya sin la tropa ni la carga que se lleva (Niebla_De_Guerra §4.5): el almacén, la cola y la
-    /// guarnición. DUDA: solo `salirAlMundo`, como en el TypeScript; `movilizarEjercito`, que también sale de la residencia, no la toma.
+    /// guarnición. La toman `salirAlMundo` y `movilizarEjercito`, las dos salidas de la residencia (decisión del autor del 2026-10-27; el TypeScript solo la tomaba en `salirAlMundo`).
     fn recordar_interior(&mut self, t: Instante, heroe: u64, plaza: u64) {
         let eco = &self.estado.asentamientos[&plaza].economia;
         let almacen = asentamiento::recurso::TODOS.iter().map(|&r| (r, eco.almacen.visible(r))).filter(|&(_, n)| n != 0).collect();

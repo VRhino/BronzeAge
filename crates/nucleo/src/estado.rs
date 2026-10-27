@@ -115,6 +115,9 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
     21 * crate::estado_comercio::ETIQUETA | plaza
 }
 
+/// BAN43: BAN42 con el nombre que eligió el jugador para cada héroe (`EstadoMilitar::nombres`, al final del estado militar; 2026-10-27). BAN42, BAN41 y BAN40 se siguen
+/// admitiendo: sus héroes se llaman «Héroe N».
+///
 /// BAN42: BAN41 con la ruta guardada del carro de acarreo de cada pueblo (`EstadoComercio::rutas_acarreo`, al final del comercio; decisión del autor del 2026-10-27).
 /// BAN41 y BAN40 se siguen admitiendo: sus rutas empiezan vacías y cada carro traza y guarda la suya en su próxima salida.
 ///
@@ -239,7 +242,7 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN42";
+const MAGIA: &[u8; 5] = b"BAN43";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -1266,15 +1269,16 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN42`): los cuatro primeros dicen la familia («BAN4» son los formatos 40 a 49, y se admiten el 40, el 41 y el 42; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
+        // La cabecera es de 5 bytes (`BAN43`): los cuatro primeros dicen la familia («BAN4» son los formatos 40 a 49, y se admiten del 40 al 43; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
         // 20 a 29 y 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
-        let (mut con_eligieron, mut con_rutas_acarreo) = (true, true);
+        let (mut con_eligieron, mut con_rutas_acarreo, mut con_nombres) = (true, true, true);
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'2' => {}
-                b'1' => con_rutas_acarreo = false,
-                b'0' => (con_eligieron, con_rutas_acarreo) = (false, false),
+                b'3' => {}
+                b'2' => con_nombres = false,
+                b'1' => (con_rutas_acarreo, con_nombres) = (false, false),
+                b'0' => (con_eligieron, con_rutas_acarreo, con_nombres) = (false, false, false),
                 _ => return Err(ErrorFormato("no es un estado del núcleo")),
             }
         } else if magia == *b"BAN3" {
@@ -1404,7 +1408,7 @@ impl Estado {
             s.contactos.insert((r.u64()?, r.u64()?));
         }
         s.comercio = codec_comercio::leer(&mut r, &s.reglas.economia.comercio, con_rutas_acarreo)?;
-        s.militar = codec_militar::leer(&mut r, con_eligieron)?;
+        s.militar = codec_militar::leer(&mut r, con_eligieron, con_nombres)?;
         s.combate = codec_combate::leer(&mut r)?;
         s.batallas = codec_batallas::leer(&mut r)?;
         s.memoria = memoria::leer(&mut r)?;

@@ -93,7 +93,7 @@ impl Esc {
         self.n.avanzar_hasta(t);
     }
     fn heroe(&mut self, cuenta: &str, campamento: u32) -> u64 {
-        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano }).creadas[0]
+        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0]
     }
     fn personal(&self, h: u64, r: Recurso) -> i64 {
         self.n.heroe(h).unwrap().almacen_personal.get(&r).copied().unwrap_or(0)

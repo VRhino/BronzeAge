@@ -1477,6 +1477,13 @@ Divergencia aprobada del TS (Q4 del autor, 2026-10-24): los reclutas de un campa
 
 > **Decisiones del autor del 2026-10-26** (cierre del sistema 6; registro en `Consideraciones/Politica_Tecnologia_Decisiones.md`): las dudas de 6G y 6H, como están (son las reglas que describen las notas de arriba); T1 (ninguna épica se cumple en el batch: el hito llega antes), T2 (no se extrae estaño) y T3 (el oro de los alijos frente al precio de un recluta) quedan para la fase 7, con las X de los logros (Q3); T4, el Rey adopta solo **dentro** de la capital (§4), se mantiene.
 
+## Decisiones del autor del 2026-10-27 (dudas abiertas de 6A y de la crónica)
+
+Confirmadas por el autor al cerrar las dudas abiertas; describen lo que hace el motor y pasan a ser la regla.
+
+- **6A:** comprar a un Aeda nunca crea `primeros` (§13); la adopción no rechaza «sin Rey» en las reglas puras, porque la autorización ya lo exige; la clave de una obra lleva la plaza.
+- **Crónica (6C):** se guarda en `<partida>/cronica/`, como el `EventoDominio` codificado (≈ 132 B por entrada); la escribe el hilo de la persistencia, no el núcleo; una página puede pasar del límite si su primera versión no cabe; sin persistencia (pruebas, batch) no se guarda; página y `Delta` se solapan y el cliente las reconoce por la versión.
+
 ## Catálogo de eventos
 
 Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. Desde 6E se emiten todos: `tecnologia.logro` y `era.comienza` desde 6B; `tecnologia.aparece`, `tecnologia.adoptada` y `aedas.canta_descubrimiento` desde 6C; `aedas.revela` y `aedas.venta` desde 6D; `aedas.residente_llega`, `aedas.residente_se_va`, `aedas.epica_empieza`, `aedas.epica_capitulo`, `aedas.epica_tecnologia`, `aedas.epica_cumplida` y `aedas.epica_abandonada` desde 6E.

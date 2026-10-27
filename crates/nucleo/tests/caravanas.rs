@@ -184,7 +184,7 @@ impl Escenario {
     }
     /// Un héroe de la cuenta, residente en el campamento `casa`, que va en la columna `columna` (la administración lo coloca: aún no hay `salirAlMundo`).
     fn heroe_en_columna(&mut self, cuenta: &str, casa: u32, columna: u64) -> u64 {
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: casa, controlador: militar::heroe::Controlador::Humano }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: casa, controlador: militar::heroe::Controlador::Humano, nombre: None }).creadas[0];
         self.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: militar::presencia::Ubicacion::Columna(columna) });
         h
     }
@@ -1030,7 +1030,7 @@ fn una_personal_no_lleva_caravanas_el_ejercito_que_guarnece_entra_con_ellas_y_sa
     let mut e = escenario(m, 7);
     e.avanzar(24 * HORA);
     let a = e.a;
-    let h = e.ok("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano }).creadas[0];
+    let h = e.ok("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None }).creadas[0];
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
     e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(militar::heroe::Residencia::Asentamiento(a as u32)) });
     e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: militar::presencia::Ubicacion::Asentamiento(a as u32) });

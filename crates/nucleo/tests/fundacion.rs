@@ -91,7 +91,7 @@ impl Esc {
         self.n.avanzar_hasta(t);
     }
     fn heroe(&mut self, cuenta: &str, campamento: u32) -> u64 {
-        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano }).creadas[0]
+        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0]
     }
     fn almacen(&self, plaza: u64, r: Recurso) -> i64 {
         self.n.economia(plaza).unwrap().almacen.cantidad(r)
@@ -352,7 +352,7 @@ fn sin_su_titular_vuelve_sola_otro_de_su_faccion_la_reclama_y_al_llegar_se_desar
     // A mitad de camino, la foto la guarda tal cual.
     let reglas = Reglas::default();
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN42");
+    assert_eq!(&bytes[..5], b"BAN43");
     let s = Estado::deserializar(&bytes, &reglas, m.0.hash()).unwrap();
     assert_eq!((s.fundacion.clone(), s.hash()), (e.n.estado().fundacion.clone(), e.n.hash_estado()));
     let vieja = [b"BAN30".as_slice(), &bytes[5..]].concat();

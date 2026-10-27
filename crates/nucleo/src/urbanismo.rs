@@ -223,7 +223,7 @@ impl Urbe {
     /// La ciudad de una plaza recién fundada: Centro Urbano (id 0), las Viviendas iniciales y la Granja inicial, con los mismos ids que
     /// los edificios iniciales de la economía (`Asentamiento::fundar`).
     ///
-    /// DUDA: si la Granja inicial no cupiera, el trazado no la coloca (T §11 la dejaría encima del Centro Urbano) y la economía tendría una
+    /// Regla (decisión del autor del 2026-10-27, decisión 7 de las DUDA del código): si la Granja inicial no cupiera, el trazado no la coloca (T §11 la dejaría encima del Centro Urbano) y la economía tendría una
     /// Granja sin pieza: la consulta de la ciudad la ignora y su mejora no la muda. En una ciudad vacía de 288 u.l. no ocurre.
     pub fn fundar(reglas: &crate::ReglasEconomia, semilla_nucleo: u64, id_plaza: u64) -> Self {
         let (eco, urb) = (&reglas.datos, &reglas.urbanismo);

@@ -439,7 +439,7 @@ fn la_diplomacia_es_determinista_viaja_en_la_foto_ban32_y_nada_espera_en_la_cola
     // La foto lleva las relaciones con su historia, la propuesta pendiente, el resto del tributo y la apertura a los aliados, y cada pieza mueve el hash.
     let (reglas, hash) = (normal.n.estado().reglas.clone(), m.0.hash().to_string());
     let bytes = normal.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN42");
+    assert_eq!(&bytes[..5], b"BAN43");
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     assert_eq!((s.politica.clone(), s.hash()), (normal.n.estado().politica.clone(), normal.n.hash_estado()));
     assert!(s.politica.relaciones.iter().count() >= 3 && s.politica.propuestas.iter().count() == 1);

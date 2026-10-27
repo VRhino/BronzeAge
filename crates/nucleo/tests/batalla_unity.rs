@@ -163,7 +163,7 @@ impl Esc {
     /// Un héroe humano de la cuenta, ciudadano de F2, que reside en la plaza B y está dentro, con su loadout activo de una escuadra de milicia.
     fn residente(&mut self, m: &Mundo, cuenta: &str) -> u64 {
         let campamento = campamento_mas_cercano(m, self.pos(self.b));
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0];
         let b = self.b as u32;
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(2) });
         self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(b)) });
@@ -774,7 +774,7 @@ async fn los_bandidos_que_acosan_a_una_columna_de_bots_juegan_una_batalla_sin_hu
 fn residente_de_a(e: &mut Esc, m: &Mundo, cuenta: &str) -> (u64, u64) {
     let a = e.a;
     let campamento = campamento_mas_cercano(m, e.pos(a));
-    let h = e.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano }).creadas[0];
+    let h = e.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0];
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
     e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(a as u32)) });
     e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(a as u32) });
@@ -973,7 +973,7 @@ async fn quien_no_llega_a_conectarse_reabre_la_batalla_con_un_ticket_nuevo_para_
 /// La foto de un núcleo con un ticket de asedio congelado (plaza, edificios, recintos) y con un informe de inspección de una plaza vuelve igual; la de antes del cambio, no.
 fn la_foto_vuelve_igual(n: &Nucleo, m: &M) {
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN42");
+    assert_eq!(&bytes[..5], b"BAN43");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas(false), &m.0.hash().to_string()).expect("la foto vuelve");
     assert_eq!(vuelta.serializar(), bytes);
     let viejo = [b"BAN20".as_slice(), &bytes[5..]].concat();

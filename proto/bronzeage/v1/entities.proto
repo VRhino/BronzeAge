@@ -515,7 +515,7 @@ message Heroe {
   repeated EscuadraQueLleva escuadras_que_lleva = 35;
   // Cuánto cabe en total en su almacén personal (5G-a, derivado de `ALMACEN_PERSONAL.capacidad`; milésimas): lo que pueden llenar `guardar_en_almacen_personal` y las compras del residente.
   sint64 capacidad_almacen_personal = 36;
-  // Su ciudadanía (5H, 5B-11): la Facción de la que es ciudadano (`f-N`); ausente sin bandera. Solo en el héroe propio (`HEROE`) y en `ADMIN`.
+  // Su ciudadanía (5H, 5B-11): la Facción de la que es ciudadano (`f-N`); ausente sin bandera. En el héroe propio (`HEROE`), en `ADMIN` y, desde el 2026-10-27, también en el héroe público de la `VISTA`.
   optional string faccion_id = 37;
   // Las Facciones a las que ha pedido el ingreso y aún no han contestado (5H, Diplomacia §3.2): lo que el solicitante ve de sus solicitudes (la Facción las ve en `Faccion.solicitudes_ids`).
   repeated string solicitudes_faccion_ids = 38;
@@ -783,6 +783,21 @@ message CampamentoMercenarios {
   TrazadoUrbano trazado = 20;
   repeated RectLocal empalizada = 21;
   repeated RectLocal empalizada_puerta = 22;
+  // Lo que cobra el campamento, solo en `CAMPAMENTO` (2026-10-27; no en la `VISTA` ni en `ADMIN`). Se renueva cuando cambia, también sin cambiar la versión.
+  // El precio de cada bien del mercado en ppm de oro por unidad (`precio_referencia` sobre el stock global de todas las plazas × `MERCENARIOS.margen`):
+  // comprar `n` unidades cuesta ⌈n × precio / 1.000.000⌉ de oro, como `comprar_en_campamento`.
+  map<string, sint64> precios_mercado = 23;
+  // Solo para el residente: las tropas del edificio militar del campamento, con su precio para él y si están desbloqueadas.
+  repeated TropaDeCampamento reclutables = 24;
+}
+
+// Una tropa del edificio militar de un campamento tal como la recluta su residente (`reclutar_en_campamento`, 2026-10-27).
+message TropaDeCampamento {
+  string tropa_id = 1;
+  bool desbloqueada = 2;                 // su tecnología está desbloqueada en el campamento (las desbloqueadas son `tropas_ofrecidas`)
+  sint64 precio_por_soldado = 3;         // milésimas de oro, con el recargo, la reputación de su Facción y el descuento sin plazas, antes de redondear
+  sint64 precio_escuadra = 4;            // lo que cuesta una escuadra completa (`unidades` soldados), en milésimas, ya redondeado a oro entero
+  uint32 unidades = 5;                   // soldados de una escuadra completa; reclutar cobra ⌈precio_por_soldado × los que faltan / 1.000⌉ de oro
 }
 
 // ───────────────────────────── Comercio ─────────────────────────────

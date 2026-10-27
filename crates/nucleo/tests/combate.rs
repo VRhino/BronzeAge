@@ -360,7 +360,7 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.guarniciones.insert(9, GuarnicionDePueblo { escuadra: combate::pueblo::guarnicion_de_serie(&mc(), 12, 0), repone_en: Some(7_000) });
     base.combate.destruidos.insert(6, vec![100, 200]);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN42");
+    assert_eq!(&bytes[..5], b"BAN43");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -541,7 +541,7 @@ impl Esc {
     /// Un héroe de la cuenta, ciudadano de `faccion`, que reside en la plaza y está dentro. Nace en el campamento más cercano.
     fn heroe_en(&mut self, m: &Mundo, cuenta: &str, faccion: u32, plaza: u64) -> u64 {
         let campamento = campamento_mas_cercano(m, self.pos(plaza));
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0];
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(faccion) });
         self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
         self.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(plaza as u32) });
@@ -751,7 +751,7 @@ fn un_asedio_que_pierde_hiere_a_todo_el_ejercito_y_la_chatarra_se_queda_en_la_pl
     // Un segundo héroe en el ejército de ana: también queda herido, hayan entrado en la batalla o no.
     let segundo = {
         let campamento = campamento_mas_cercano(&m.0, s.e.pos(b));
-        let h = s.e.ok("carla", Comando::CrearHeroe { cuenta: "carla".into(), campamento, controlador: Controlador::Humano }).creadas[0];
+        let h = s.e.ok("carla", Comando::CrearHeroe { cuenta: "carla".into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0];
         s.e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
         s.e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Columna(ana.0) });
         h
@@ -1229,7 +1229,7 @@ fn la_cita_del_anillo_se_rehace_cuando_llega_o_se_va_un_residente() {
     let t = n.ahora();
     let heroes: Vec<u64> = (0..3)
         .map(|i| {
-            let r = n.aplicar_en(t, admin(&format!("h{i}"), Comando::CrearHeroe { cuenta: format!("res{i}"), campamento: 0, controlador: Controlador::Humano }));
+            let r = n.aplicar_en(t, admin(&format!("h{i}"), Comando::CrearHeroe { cuenta: format!("res{i}"), campamento: 0, controlador: Controlador::Humano, nombre: None }));
             assert!(r.aceptada(), "{r:?}");
             r.creadas[0]
         })

@@ -386,7 +386,7 @@ impl Esc {
     }
 
     fn heroe(&mut self, cuenta: &str, faccion: u32, plaza: Option<u64>) -> u64 {
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(faccion) });
         if let Some(p) = plaza {
             self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(p as u32)) });
@@ -420,7 +420,7 @@ fn escenario(m: &M) -> Esc {
     x.beto = x.heroe("beto", 1, None);
     x.gus = x.heroe("gus", 2, Some(plazas[1]));
     // Hugo nace en el campamento 1, sale con su columna, anda hasta un buen sitio y recibe su Caravana de Fundación.
-    x.hugo = x.ok("hugo", Comando::CrearHeroe { cuenta: "hugo".into(), campamento: 1, controlador: Controlador::Humano }).creadas[0];
+    x.hugo = x.ok("hugo", Comando::CrearHeroe { cuenta: "hugo".into(), campamento: 1, controlador: Controlador::Humano, nombre: None }).creadas[0];
     let hugo = x.hugo;
     x.ok("admin", Comando::FijarFaccionDeHeroe { heroe: hugo, faccion: Some(3) });
     let col = x.ok("hugo", Comando::SalirDelCampamento { campamento: 1, heroe: hugo, escuadras: vec![], carga: vec![], politica: militar::columna::Politica::Rechazar }).creadas[0];

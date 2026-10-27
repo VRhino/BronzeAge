@@ -84,7 +84,7 @@ impl Esc {
 
     /// Un héroe humano de `cuenta`, ciudadano de `faccion`, que reside en `plaza` y está dentro, con una escuadra de milicia en su loadout activo: (héroe, escuadra).
     fn residente(&mut self, cuenta: &str, faccion: u32, plaza: u64, nacer_en: u32) -> (u64, u64) {
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: nacer_en, controlador: Controlador::Humano }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: nacer_en, controlador: Controlador::Humano, nombre: None }).creadas[0];
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(faccion) });
         self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
         self.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(plaza as u32) });
@@ -132,7 +132,7 @@ fn escenario(m: &'static M, semilla: u64, ajustes: Ajustes, dir: Option<&std::pa
     }
     (x.ana, x.escuadra_de_ana) = x.residente("ana", 1, x.a, ia as u32);
     x.beto = x.residente("beto", 2, x.b, ib as u32).0;
-    x.dora = x.ok("dora", Comando::CrearHeroe { cuenta: "dora".into(), campamento: ia as u32, controlador: Controlador::Humano }).creadas[0];
+    x.dora = x.ok("dora", Comando::CrearHeroe { cuenta: "dora".into(), campamento: ia as u32, controlador: Controlador::Humano, nombre: None }).creadas[0];
     x.ok("admin", Comando::DarAlmacenPersonal { heroe: x.dora, recurso: asentamiento::Recurso::Oro, cantidad: 1_000_000 });
     x.nora = x.columna_junto_a_b(m, "nora", 3, 0);
     x.fede = x.columna_junto_a_b(m, "fede", 1, 2 * U);

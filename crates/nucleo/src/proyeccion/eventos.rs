@@ -279,7 +279,7 @@ fn tipado(n: &Nucleo, ev: &EventoNucleo) -> Option<Tipado> {
         ("construccion.edificio_completado", _) => obra("edificio", ids::edificio(plaza?, u32::try_from(dato("edificio")?).ok()?), dato("nivel").and_then(|v| u32::try_from(v).ok())),
         ("construccion.mejora_completada", _) => obra("mejora", ids::edificio(plaza?, u32::try_from(dato("edificio")?).ok()?), dato("nivel").and_then(|v| u32::try_from(v).ok())),
         ("construccion.recinto_completado", _) => obra("recinto", ids::recinto(plaza?, u32::try_from(dato("recinto")?).ok()?), dato("nivel").and_then(|v| u32::try_from(v).ok())),
-        // DUDA: un pueblo no tiene nivel (Economia_Construccion §14): su `ObraTerminada.nivel` va ausente.
+        // Regla (decisión del autor del 2026-10-27): un pueblo no tiene nivel (Economia_Construccion §14): su `ObraTerminada.nivel` va ausente.
         ("pueblo.completado", _) => obra("pueblo", ids::pueblo(id("pueblo")?), None),
         ("avanzada.completada", _) => obra("avanzada", ids::avanzada(id("avanzada")?), dato("etapa").and_then(|v| u32::try_from(v + 1).ok())),
         ("heroe.herido", _) => Tipado::HeroeHerido(pb::HeroeHerido { heroe_id: heroe("heroe"), hasta_ms: dato("hasta")? }),

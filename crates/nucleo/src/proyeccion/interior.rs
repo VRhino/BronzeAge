@@ -260,7 +260,49 @@ pub fn campamento_por_dentro(n: &Nucleo, c: u32, quien: super::propios::Espectad
     let facciones: std::collections::BTreeSet<u32> =
         n.estado().fundacion.fondos.get(&c).into_iter().flatten().filter_map(|(h, _)| n.heroe(*h).and_then(|h| h.faccion)).filter(|f| suya.is_none_or(|s| s == Some(*f))).collect();
     p.fondos = facciones.into_iter().map(|f| (ids::faccion(f), n.fondo_de_faccion(c, f))).filter(|(_, m)| !m.is_empty()).map(|(f, m)| (f, cantidades(m))).collect();
+    if let super::propios::Espectador::Heroe(h) = quien {
+        (p.precios_mercado, p.reclutables) = lo_que_cobra(n, c, h);
+    }
     Some(p)
+}
+
+/// Lo que el campamento `c` cobra a quien está dentro (2026-10-27): el precio de cada bien de su mercado (el de `comprar_en_campamento`, igual para todos) y, si `heroe` reside en él, cada
+/// tropa de su edificio militar con su precio para él y si está desbloqueada. Cambia sin que cambie la versión (el stock de las plazas, la reputación): la sesión lo compara en cada reparto.
+pub fn lo_que_cobra(n: &Nucleo, c: u32, heroe: Option<u64>) -> (std::collections::BTreeMap<String, i64>, Vec<pb::TropaDeCampamento>) {
+    let e = n.estado();
+    let (cr, mr) = (&e.reglas.economia.comercio, &e.reglas.economia.militar);
+    let Some(stock) = n.stock_de_campamento(c) else { return Default::default() };
+    let precios = stock
+        .stock
+        .keys()
+        .filter_map(|&r| {
+            let referencia = comercio::precio::precio_referencia(&cr.precio, r, comercio::precio::stock_global(r, e.asentamientos.values().map(|a| &a.economia.almacen)));
+            Some((r.nombre().to_owned(), comercio::mercenarios::precio_unitario(&cr.mercenarios, referencia)?))
+        })
+        .collect();
+    let residente = heroe.filter(|&h| n.heroe(h).is_some_and(|x| x.heroe.residencia == Some(militar::heroe::Residencia::Campamento(c))));
+    let reclutables = residente
+        .and_then(|h| {
+            let (factor, sin_plazas) = n.condiciones_de_recluta(h, n.ahora());
+            let tropas = n.tropas_del_edificio_de_campamento(c)?;
+            Some(
+                tropas
+                    .into_iter()
+                    .map(|(t, desbloqueada)| {
+                        let d = mr.tropas.tropa(t);
+                        pb::TropaDeCampamento {
+                            tropa_id: t.nombre().to_owned(),
+                            desbloqueada,
+                            precio_por_soldado: militar::mercenarios::precio_por_soldado(mr, d, factor, sin_plazas),
+                            precio_escuadra: militar::mercenarios::precio(mr, d, d.unidades, factor, sin_plazas),
+                            unidades: u32::try_from(d.unidades.max(0)).unwrap_or(u32::MAX),
+                        }
+                    })
+                    .collect(),
+            )
+        })
+        .unwrap_or_default();
+    (precios, reclutables)
 }
 
 #[cfg(test)]

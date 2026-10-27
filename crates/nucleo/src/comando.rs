@@ -74,6 +74,9 @@ pub enum AccionReloj {
     AvanzarHasta(Instante),
 }
 
+/// El nombre más largo de un héroe, en caracteres (2026-10-27).
+pub const NOMBRE_HEROE_MAX: usize = 24;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Comando {
     /// Alta de una columna con su héroe de campo (de la cuenta dada, sin residencia ni loadout), quieta en `posicion`. Andamiaje de administración para
@@ -197,8 +200,8 @@ pub enum Comando {
     // ── Héroes y tropa (Heroe_Y_Tropa, Campamentos_Mercenarios §5-§6). Las da la cuenta del héroe o la administración; la cuenta solo manda en
     //    los suyos. Un héroe fuera del mundo solo puede conectarse. ──
     /// Crea el héroe de una cuenta dentro de un campamento de mercenarios, donde reside. `creadas` lleva su id. El controlador `Bot` solo lo
-    /// pone la administración.
-    CrearHeroe { cuenta: String, campamento: u32, controlador: Controlador },
+    /// pone la administración. `nombre`: el que eligió el jugador (ya validado: sin espacios a los lados, de 1 a [`NOMBRE_HEROE_MAX`] caracteres); sin él, «Héroe N».
+    CrearHeroe { cuenta: String, campamento: u32, controlador: Controlador, nombre: Option<String> },
     /// Recluta tropa en una plaza (las 11 condiciones de `reclutarTropa`) o repone la escuadra que ya se tiene. `creadas` lleva el id de la
     /// escuadra si es nueva.
     ReclutarTropa { asentamiento: u64, heroe: u64, tropa: Tropa },
@@ -1456,11 +1459,15 @@ impl Peticion {
                 w.u8(48);
                 w.u64(*pueblo);
             }
-            Comando::CrearHeroe { cuenta, campamento, controlador } => {
-                w.u8(49);
+            Comando::CrearHeroe { cuenta, campamento, controlador, nombre } => {
+                // Con nombre, la 180 (2026-10-27); sin él, la 49 de siempre, que el registro anterior sigue leyendo.
+                w.u8(if nombre.is_some() { 180 } else { 49 });
                 w.texto(cuenta);
                 w.u32(*campamento);
                 w.u8(controlador_a_u8(*controlador));
+                if let Some(x) = nombre {
+                    w.texto(x);
+                }
             }
             Comando::ReclutarTropa { asentamiento, heroe, tropa } => {
                 w.u8(50);
@@ -2193,7 +2200,7 @@ impl Peticion {
             46 => Comando::EntregarMateriales { ejercito: r.u64()?, pueblo: r.u64()? },
             47 => Comando::DestruirPueblo { pueblo: r.u64()? },
             48 => Comando::ReponerCarro { pueblo: r.u64()? },
-            49 => Comando::CrearHeroe { cuenta: r.texto()?, campamento: r.u32()?, controlador: controlador_de_u8(r.u8()?)? },
+            49 => Comando::CrearHeroe { cuenta: r.texto()?, campamento: r.u32()?, controlador: controlador_de_u8(r.u8()?)?, nombre: None },
             50 => Comando::ReclutarTropa { asentamiento: r.u64()?, heroe: r.u64()?, tropa: tropa_de_u8(r.u8()?)? },
             51 => Comando::ReclutarEnCampamento {
                 heroe: r.u64()?,
@@ -2363,6 +2370,7 @@ impl Peticion {
             177 => Comando::EmpezarEpica { heroe: r.u64()?, asentamiento: r.u64()?, aeda: r.u32()?, tecnologia: r.u8()? },
             178 => Comando::AbandonarEpica { heroe: r.u64()?, asentamiento: r.u64()?, aeda: r.u32()? },
             179 => Comando::PrepararCaravana { caravana: r.u64()?, destino: r.u64()?, carga: leer_lineas(&mut r)?, salir_en: r.opt_i64()?, escolta: Some((r.u64()?, leer_lista_u64(&mut r)?)) },
+            180 => Comando::CrearHeroe { cuenta: r.texto()?, campamento: r.u32()?, controlador: controlador_de_u8(r.u8()?)?, nombre: Some(r.texto()?) },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -2601,6 +2609,8 @@ pub mod rechazos {
     pub const RECLUTAMIENTO_SIN_RESERVA_DE_TRIGO: &str = "reclutamiento.sin_reserva_de_trigo";
     // El héroe, sus puntos, loadouts, escuadras y guarnición (`ErrorHeroe`).
     pub const HEROE_YA_EXISTE: &str = "heroe.ya_existe";
+    /// El nombre del héroe está vacío, empieza o acaba en espacio, pasa de 24 caracteres o lleva caracteres de control.
+    pub const HEROE_NOMBRE_INVALIDO: &str = "heroe.nombre_invalido";
     pub const HEROE_CAMPAMENTO_DESCONOCIDO: &str = "heroe.campamento_desconocido";
     pub const HEROE_PUNTOS_NEGATIVOS: &str = "heroe.puntos_negativos";
     pub const HEROE_NINGUN_PUNTO: &str = "heroe.ningun_punto";
@@ -3240,7 +3250,8 @@ mod pruebas {
             Comando::FijarResidencia { heroe: 2, residencia: Some(Residencia::Asentamiento(3)) },
             Comando::FijarResidencia { heroe: 2, residencia: None },
             Comando::DarAlmacenPersonal { heroe: 2, recurso: Recurso::Oro, cantidad: 9 },
-            Comando::CrearHeroe { cuenta: "ana".into(), campamento: 4, controlador: Controlador::Bot },
+            Comando::CrearHeroe { cuenta: "ana".into(), campamento: 4, controlador: Controlador::Bot, nombre: None },
+            Comando::CrearHeroe { cuenta: "ana".into(), campamento: 4, controlador: Controlador::Humano, nombre: Some("Arkanthos".into()) },
             Comando::ReclutarTropa { asentamiento: 3, heroe: 2, tropa: Tropa::Espartiatas },
             Comando::ReclutarEnCampamento { heroe: 2, tropa: Tropa::LancerosMimbre, pagar_con: PagarCon::Carro },
             Comando::ReclutarEnCampamento { heroe: 2, tropa: Tropa::MiliciaLanceros, pagar_con: PagarCon::AlmacenPersonal },
@@ -3409,7 +3420,7 @@ mod pruebas {
         let mut b = Peticion::nueva("a", "i", Comando::ReclutarEnCampamento { heroe: 1, tropa: Tropa::Arqueros, pagar_con: PagarCon::Carro }).codificar();
         *b.last_mut().unwrap() = 7;
         assert!(Peticion::decodificar(&b).is_err());
-        let mut b = Peticion::nueva("a", "i", Comando::CrearHeroe { cuenta: "a".into(), campamento: 0, controlador: Controlador::Humano }).codificar();
+        let mut b = Peticion::nueva("a", "i", Comando::CrearHeroe { cuenta: "a".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).codificar();
         *b.last_mut().unwrap() = 7;
         assert!(Peticion::decodificar(&b).is_err());
         // Un lado de batalla desconocido tampoco.

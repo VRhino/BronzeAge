@@ -95,7 +95,7 @@ impl Aldea {
     }
 
     fn heroe(&mut self, cuenta: &str, faccion: u32, residencia: Option<Residencia>, dentro: Option<Ubicacion>) -> u64 {
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(faccion) });
         if let Some(r) = residencia {
             self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(r) });
@@ -810,7 +810,13 @@ async fn el_campamento_desde_dentro_trae_reclutas_stock_y_gente_y_una_compra_una
     assert!(c.edificios.len() > 1 && c.prestamos_ids.is_empty(), "{:?} {:?}", c.edificios, c.prestamos_ids);
     assert!(!c.tropas_ofrecidas.is_empty(), "con las tecnologías adoptadas, el campamento ofrece tropa");
     assert_eq!(c.cupo_diario.as_ref().unwrap().por_id["madera"], 60_000);
-    assert_eq!(campamento_de(&de_gus), Some(c.clone()), "el campamento no depende de quien lo mira");
+    let sin_reclutar = |x: &pb::CampamentoMercenarios| pb::CampamentoMercenarios { reclutables: Vec::new(), ..x.clone() };
+    assert_eq!(campamento_de(&de_gus).as_ref().map(sin_reclutar), Some(sin_reclutar(&c)), "el campamento no depende de quien lo mira, salvo lo que le cuesta reclutar (su reputación)");
+    // Lo que cobra (2026-10-27): el precio de cada bien del mercado y, al residente, cada tropa del edificio militar con su precio y si está desbloqueada.
+    assert!(c.precios_mercado["madera"] > 0 && c.precios_mercado.len() == c.mercado.as_ref().unwrap().por_id.len(), "{:?}", c.precios_mercado);
+    let desbloqueadas: Vec<String> = c.reclutables.iter().filter(|t| t.desbloqueada).map(|t| t.tropa_id.clone()).collect();
+    assert_eq!(desbloqueadas, c.tropas_ofrecidas, "las desbloqueadas son las que ofrece");
+    assert!(c.reclutables.iter().all(|t| t.precio_por_soldado > 0 && t.unidades > 0 && t.precio_escuadra >= t.precio_por_soldado * i64::from(t.unidades)), "{:?}", c.reclutables);
 
     // Una compra de beto: el stock baja en lo comprado, para beto y para el visitante que está dentro; el cupo y el almacén personal van en su héroe.
     let antes = c.mercado.as_ref().unwrap().por_id["madera"];
@@ -826,7 +832,7 @@ async fn el_campamento_desde_dentro_trae_reclutas_stock_y_gente_y_una_compra_una
         })
         .expect("su héroe cambió");
     assert_eq!(heroe.cupo_campamento.unwrap().comprado["madera"], 10_000, "el cupo diario lo lleva su héroe");
-    assert_eq!(campamento_de(&deltas_de(pendiente(&mut gus).await)), Some(c.clone()), "el otro de dentro lo ve igual");
+    assert_eq!(campamento_de(&deltas_de(pendiente(&mut gus).await)).as_ref().map(sin_reclutar), Some(sin_reclutar(&c)), "el otro de dentro lo ve igual");
 
     // Una leva: gasta reclutas del campamento (el ritmo vuelve a empezar de un valor menor).
     let tropa = c.tropas_ofrecidas[0].clone();
@@ -843,6 +849,18 @@ async fn el_campamento_desde_dentro_trae_reclutas_stock_y_gente_y_una_compra_una
     c = campamento_de(&previos).expect("la delta del campamento");
     assert_eq!(c.prestamos_ids, [prestada]);
 
+    // El precio sigue al stock de todas las plazas sin que cambie el campamento: con mucha madera en la plaza de ana, la madera del campamento se abarata y beto lo ve.
+    let (mut admin_c, _) = w.entrar("admin", TipoCliente::ClienteAdminWeb).await;
+    let antes = c.precios_mercado["madera"];
+    let mut dar = admin("dar_recursos", &[("asentamiento_id", &ids::asentamiento(x.plaza)), ("recurso", "madera")]);
+    if let orden::Cuerpo::Administracion(o) = &mut dar {
+        o.parametros.as_mut().unwrap().fields.insert(s("cantidad"), Value { kind: Some(Kind::NumberValue(5_000_000.0)) });
+    }
+    let (_, r) = dar_todo(&mut admin_c, "a1", dar).await;
+    aceptada(&r);
+    c = campamento_de(&pendiente(&mut beto).await).expect("el campamento con los precios nuevos");
+    assert!(c.precios_mercado["madera"] < antes, "{} → {}", antes, c.precios_mercado["madera"]);
+
     // Nada de esto llegó a ana, que está en su plaza: ni un mensaje del ámbito del campamento.
     for m in pendiente(&mut ana).await {
         if let ms::Cuerpo::Delta(d) = m {
@@ -850,7 +868,7 @@ async fn el_campamento_desde_dentro_trae_reclutas_stock_y_gente_y_una_compra_una
         }
     }
     let n = w.parar().await;
-    assert_eq!(interior::campamento(&n, 0), Some(c));
+    assert_eq!(interior::campamento(&n, 0), Some(pb::CampamentoMercenarios { precios_mercado: Default::default(), reclutables: Vec::new(), ..c }), "lo que cobra solo va dentro");
 }
 
 // ───────────────────────────── 6. Reanudación y «foto + deltas = foto final» ─────────────────────────────

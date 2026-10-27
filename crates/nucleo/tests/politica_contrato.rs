@@ -62,7 +62,7 @@ impl E {
         r
     }
     fn heroe(&mut self, cuenta: &str) -> u64 {
-        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano }).creadas[0]
+        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0]
     }
     /// Una Facción nueva con su Rey (el héroe de la cuenta).
     fn faccion(&mut self, cuenta: &str, nombre: &str) -> (u32, u64) {
@@ -208,7 +208,7 @@ fn los_fundadores_viajan_en_la_plaza_dejan_de_serlo_al_mudarse_y_van_en_la_foto_
     // La foto (BAN35, hoy BAN36) los lleva y mueven el hash; BAN34 se rechaza con su motivo.
     let (reglas, hash) = (Reglas::default(), m.0.hash().to_string());
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN42");
+    assert_eq!(&bytes[..5], b"BAN43");
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     assert_eq!((s.asentamientos[&plaza].fundadores.clone(), s.hash()), (vec![gus, ana], e.n.hash_estado()));
     let mut otro = Estado::deserializar(&bytes, &reglas, &hash).unwrap();

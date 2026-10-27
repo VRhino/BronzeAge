@@ -332,7 +332,7 @@ impl Sim<'_> {
         for k in 1..=self.facciones {
             let campamento = (k as usize % self.geo.campamentos.len()) as u32;
             let cuenta = format!("{}-rey", jugador(k));
-            let r = self.segura(0, &cuenta, "CrearHeroe", Comando::CrearHeroe { cuenta: cuenta.clone(), campamento, controlador: Controlador::Humano });
+            let r = self.segura(0, &cuenta, "CrearHeroe", Comando::CrearHeroe { cuenta: cuenta.clone(), campamento, controlador: Controlador::Humano, nombre: None });
             let Some(&rey) = r.creadas.first().filter(|_| r.aceptada()) else { continue };
             let r = self.segura(0, &cuenta, "CrearFaccion", Comando::CrearFaccion { heroe: rey, nombre: format!("Casa {k}"), sigilo: None });
             // La Facción nueva toma el id siguiente al mayor del mundo: la k-ésima es la `f{k}` del reparto de plazas.
@@ -807,7 +807,7 @@ impl Sim<'_> {
         // Nace un colono.
         let cuenta = format!("colono-{}", self.p().m.colonos);
         let campamento = self.rng.por_debajo(self.geo.campamentos.len() as u64) as u32;
-        let r = self.segura(t, &cuenta, "CrearHeroe", Comando::CrearHeroe { cuenta: cuenta.clone(), campamento, controlador: Controlador::Humano });
+        let r = self.segura(t, &cuenta, "CrearHeroe", Comando::CrearHeroe { cuenta: cuenta.clone(), campamento, controlador: Controlador::Humano, nombre: None });
         if let Some(&h) = r.creadas.first().filter(|_| r.aceptada()) {
             let p = self.p();
             p.colonos.push(h);

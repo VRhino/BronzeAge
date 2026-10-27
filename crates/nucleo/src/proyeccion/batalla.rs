@@ -54,7 +54,7 @@ fn participante(n: &Nucleo, p: &Participante) -> pb::BattleParticipantSnapshot {
         faccion_id: p.faccion.map(ids::faccion),
         es_bot: p.controlador == Controlador::Bot,
         heroe: Some(pb::HeroSnapshot {
-            display_name: nombre_de_heroe(p.heroe),
+            display_name: nombre_de_heroe(n, p.heroe),
             class_definition_id: CLASE_POR_DEFECTO.to_owned(),
             nivel: h.map_or(1, |h| h.nivel),
             avatar: Some(pb::Avatar::default()),

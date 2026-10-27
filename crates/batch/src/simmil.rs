@@ -619,7 +619,7 @@ impl Sim<'_> {
         }
         for (j, rol) in roles.into_iter().enumerate() {
             let cuenta = format!("{}-p{k}-h{j}", jugador(f));
-            let r = self.orden(t, &cuenta, "CrearHeroe", Comando::CrearHeroe { cuenta: cuenta.clone(), campamento, controlador: Controlador::Humano });
+            let r = self.orden(t, &cuenta, "CrearHeroe", Comando::CrearHeroe { cuenta: cuenta.clone(), campamento, controlador: Controlador::Humano, nombre: None });
             let Some(&heroe) = r.creadas.first().filter(|_| r.aceptada()) else { continue };
             if self.pol.is_some() {
                 self.pol_ingresar(t, f, heroe, &cuenta, plaza);

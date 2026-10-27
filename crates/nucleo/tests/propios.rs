@@ -115,7 +115,7 @@ impl Esc {
 
     /// Un héroe de la cuenta, ciudadano de `faccion`, en el campamento 0; con `plaza`, reside en ella y está dentro.
     fn heroe(&mut self, cuenta: &str, faccion: u32, plaza: Option<u64>) -> u64 {
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(faccion) });
         if let Some(p) = plaza {
             self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(p as u32)) });
@@ -482,8 +482,8 @@ async fn reclutar_y_guardar_un_loadout_llegan_a_su_heroe_y_a_nadie_mas() {
     assert!(nuevo.liderazgo_total > 0, "el Liderazgo del loadout se deriva de sus escuadras");
     vista_ana.aplicar(del_heroe[0]);
 
-    // La Facción ve cambiar la plaza (reclutar le gasta población y almacén) pero ni una escuadra ni un loadout; el héroe es solo de ana, y la otra Facción no se entera de nada.
-    assert_eq!(etiquetas(&pendiente(&mut beto).await), ["delta FACCION:f-1"]);
+    // La Facción ve cambiar la plaza (reclutar le gasta población y almacén) pero ni una escuadra ni un loadout; el héroe es solo de ana, y la otra Facción no se entera de nada. beto, dentro de su campamento, ve moverse los precios del mercado, que siguen al almacén de todas las plazas.
+    assert_eq!(etiquetas(&pendiente(&mut beto).await), ["delta FACCION:f-1", "delta CAMPAMENTO:camp-0"]);
     assert!(pendiente(&mut gus).await.is_empty());
     // Lo que ana reconstruyó con la foto y los deltas es lo que hay.
     let (_, _, mensajes) = w.conectar(hola_con("ana", TipoCliente::ClienteUnity, &[])).await;

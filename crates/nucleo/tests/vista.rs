@@ -125,7 +125,7 @@ fn escenario(m: &M) -> Esc {
         x.ok("admin", Comando::AgrandarZona { asentamiento: plaza });
     }
     x.radio = x.n.estado().asentamientos[&plaza].radio;
-    x.ana = x.ok("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: Controlador::Humano }).creadas[0];
+    x.ana = x.ok("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
     let ana = x.ana;
     x.ok("admin", Comando::FijarFaccionDeHeroe { heroe: ana, faccion: Some(1) });
     x.ok("admin", Comando::FijarResidencia { heroe: ana, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
@@ -134,7 +134,7 @@ fn escenario(m: &M) -> Esc {
     let (centro, radio) = (x.centro, x.radio);
     x.gus = x.n.crear_ejercito(x.n.ahora(), "gus", 2, en_tierra(&m.0, centro, -(radio + 12 * U), 0), 500, 100_000).unwrap();
     x.nora = x.n.crear_ejercito(x.n.ahora(), "nora", 3, en_tierra(&m.0, centro, 0, radio + 150 * U), 500, 100_000).unwrap();
-    x.dora = x.ok("dora", Comando::CrearHeroe { cuenta: "dora".into(), campamento: 0, controlador: Controlador::Humano }).creadas[0];
+    x.dora = x.ok("dora", Comando::CrearHeroe { cuenta: "dora".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
     let t = x.n.ahora();
     x.n.avanzar_hasta((t / MS_POR_MINUTO + 1) * MS_POR_MINUTO + 1_000);
     x.ok("admin", Comando::Reloj(AccionReloj::Pausar));

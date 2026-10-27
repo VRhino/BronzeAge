@@ -143,7 +143,7 @@ impl Escenario {
     }
     /// El héroe de la cuenta, nacido en el campamento `campamento`.
     fn heroe(&mut self, cuenta: &str, campamento: u32) -> u64 {
-        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano }).creadas[0]
+        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0]
     }
     /// Un héroe de la cuenta ya ciudadano de la Facción 1, residente y presente en la plaza.
     fn heroe_en_la_plaza(&mut self, cuenta: &str) -> u64 {
@@ -177,7 +177,7 @@ fn escenario(m: &M, semilla: u64) -> Escenario {
 fn el_heroe_nace_en_un_campamento_con_su_progresion_inicial_y_cada_rechazo_tiene_su_codigo() {
     let m = con_mundo!();
     let mut e = escenario(m, 7);
-    let crear = |cuenta: &str, campamento, controlador| Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador };
+    let crear = |cuenta: &str, campamento, controlador| Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador, nombre: None };
     // Pasada la aparición de los campamentos de bandidos de las plazas, nada más se mueve por sí solo.
     e.avanzar(HORA);
     let (v0, id0) = (e.n.version(), e.n.estado().siguiente_id);
@@ -209,6 +209,17 @@ fn el_heroe_nace_en_un_campamento_con_su_progresion_inicial_y_cada_rechazo_tiene
     assert_eq!(e.n.estado().ejercito_de_heroe(h), None);
     // Cada campamento cuenta quién lo eligió para nacer (`eligieronComoInicial`, paridad P6): solo crece, aunque luego se mude.
     e.ok("admin", crear("carla", 2, Controlador::Humano));
+    // El nombre que elige el jugador se guarda y se proyecta (2026-10-27); sin nombre, «Héroe N». Uno vacío, con espacios a los lados o demasiado largo se rechaza.
+    let con_nombre = |cuenta: &str, nombre: &str| Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 3, controlador: Controlador::Humano, nombre: Some(nombre.into()) };
+    for malo in ["", " Vrhino", "Vrhino ", "abcdefghijklmnopqrstuvwxy"] {
+        assert_eq!(e.rechazada("admin", con_nombre("dora", malo)), rechazos::HEROE_NOMBRE_INVALIDO, "«{malo}»");
+    }
+    let dora = e.ok("admin", con_nombre("dora", "Arkanthos")).creadas[0];
+    assert_eq!(nucleo::proyeccion::propios::heroe(&e.n, e.n.heroe(dora).unwrap()).display_name, "Arkanthos");
+    assert_eq!(nucleo::proyeccion::vista::heroe_publico(&e.n, dora).display_name, "Arkanthos", "también el héroe que ven los demás");
+    assert_eq!(nucleo::proyeccion::propios::heroe(&e.n, e.n.heroe(bot).unwrap()).display_name, format!("Héroe {bot}"));
+    let vuelta = nucleo::Estado::deserializar(&e.n.estado().serializar(), &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
+    assert_eq!(vuelta.militar.nombres.get(&dora).map(String::as_str), Some("Arkanthos"), "el nombre va en la foto (BAN43)");
     assert_eq!((e.n.eligieron_como_inicial(2), e.n.eligieron_como_inicial(1), e.n.eligieron_como_inicial(0)), (2, 1, 0));
     e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Campamento(0)) });
     assert_eq!(e.n.eligieron_como_inicial(2), 2);
@@ -1004,7 +1015,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
     let reglas = Reglas::default();
     let base = estado_con_heroes();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN42");
+    assert_eq!(&bytes[..5], b"BAN43");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.militar, base.militar, "incluido el índice de residentes, que se reconstruye");
@@ -1109,7 +1120,7 @@ impl Escenario {
 fn guion(e: &mut Escenario, avanzar: &dyn Fn(&mut Escenario, Instante)) {
     let (a, base) = (e.a, 24 * HORA);
     avanzar(e, base);
-    let crear = |e: &mut Escenario, cuenta: &str, camp| e.ok_en(base, cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: camp, controlador: Controlador::Humano }).creadas[0];
+    let crear = |e: &mut Escenario, cuenta: &str, camp| e.ok_en(base, cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: camp, controlador: Controlador::Humano, nombre: None }).creadas[0];
     let (ana, beto) = (crear(e, "ana", 0), crear(e, "beto", 0));
     e.ok_en(base, "admin", Comando::FijarFaccionDeHeroe { heroe: ana, faccion: Some(1) });
     e.ok_en(base, "admin", Comando::FijarResidencia { heroe: ana, residencia: Some(Residencia::Asentamiento(a as u32)) });

@@ -75,7 +75,7 @@ impl E {
     }
     /// El héroe de la cuenta, nacido (y residente) dentro del campamento 0.
     fn heroe(&mut self, cuenta: &str) -> u64 {
-        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano }).creadas[0]
+        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0]
     }
     fn crear(&mut self, cuenta: &str, heroe: u64, nombre: &str) -> u32 {
         self.ok(cuenta, Comando::CrearFaccion { heroe, nombre: nombre.into(), sigilo: None }).creadas[0] as u32
@@ -441,7 +441,7 @@ fn la_politica_viaja_en_la_foto_ban32_y_las_ban31_ban30_ban29_y_ban27_se_rechaza
     let e = guion(m, &|e, ms| e.avanzar(ms));
     let (reglas, hash) = (Reglas::default(), m.0.hash().to_string());
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN42");
+    assert_eq!(&bytes[..5], b"BAN43");
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     assert_eq!((s.politica.clone(), s.hash()), (e.n.estado().politica.clone(), e.n.hash_estado()));
     assert!(s.politica.facciones.iter().count() == 2 && s.militar.heroes.values().any(|h| h.residencia_cambiada_en.is_some()));

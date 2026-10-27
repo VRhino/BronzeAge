@@ -382,7 +382,7 @@ fn las_obras_de_la_plaza_avanzan_la_epica_y_el_ultimo_capitulo_la_hace_aparecer_
 fn ida_y_vuelta(e: &Escenario) {
     let (reglas, mundo_hash) = (e.n.estado().reglas.clone(), e.n.estado().mundo_hash.clone());
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN42");
+    assert_eq!(&bytes[..5], b"BAN43");
     let vuelta = Estado::deserializar(&bytes, &reglas, &mundo_hash).unwrap();
     assert_eq!(vuelta.serializar(), bytes);
     assert_eq!(vuelta.hash(), e.n.estado().hash());
@@ -458,13 +458,13 @@ async fn por_la_sesion_el_rey_empieza_y_abandona_una_epica_y_su_faccion_oye_el_h
     let mut e = con_residente(m, reglas(|_| {}));
     let plaza = e.plaza;
     // Por la sesión se juega con un héroe de verdad: «ana» crea el suyo, entra en la Facción, el fundador le cede el trono y la administración lo pone dentro.
-    let r = e.ord("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano });
+    let r = e.ord("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None });
     let rey = r.creadas[0];
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: rey, faccion: Some(1) });
     let fundador = e.rey;
     e.ok("ana", Comando::AsignarRey { heroe: fundador, faccion: 1, designado: rey });
     e.ok("admin", Comando::ColocarHeroe { heroe: rey, ubicacion: militar::presencia::Ubicacion::Asentamiento(plaza as u32) });
-    let r = e.ord("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano });
+    let r = e.ord("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None });
     assert!(r.aceptada());
     let w = arrancar_con(e.n).await;
     use contrato::v1::entidad::Cuerpo;

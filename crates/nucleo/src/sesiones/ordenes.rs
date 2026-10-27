@@ -309,8 +309,10 @@ impl Ctx<'_> {
         Ok(match cuerpo {
             // ── Presencia y héroe ──
             Cuerpo::CrearHeroe(o) => {
-                // DUDA: nombre, clase, género y avatar se ignoran hasta que Conquest publique su catálogo (decisión 4 de 4H): el núcleo no los guarda.
-                Comando::CrearHeroe { cuenta: self.cliente.into(), campamento: self.campamento(&o.campamento_id)?, controlador: Controlador::Humano }
+                // El nombre se guarda (2026-10-27; sin espacios a los lados, vacío = «Héroe N»). DUDA: clase, género y avatar se ignoran hasta que Conquest publique su catálogo (decisión 4
+                // de 4H): el núcleo no los guarda.
+                let nombre = Some(o.display_name.trim().to_owned()).filter(|x| !x.is_empty());
+                Comando::CrearHeroe { cuenta: self.cliente.into(), campamento: self.campamento(&o.campamento_id)?, controlador: Controlador::Humano, nombre }
             }
             Cuerpo::ReclutarTropa(o) => Comando::ReclutarTropa { asentamiento: self.plaza(&o.asentamiento_id)?, heroe: self.heroe(&o.heroe_id)?, tropa: self.tropa(&o.tropa_id)? },
             Cuerpo::ReclutarEnCampamento(o) => {

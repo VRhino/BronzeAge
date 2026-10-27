@@ -153,6 +153,8 @@ pub struct EstadoMilitar {
     /// Cuántos héroes eligieron cada campamento (índice del artefacto) para nacer (`eligieronComoInicial`, M3/D79): solo crece; el que falta, 0. Con los residentes es el
     /// contador doble de la elección (paridad P6).
     pub eligieron: BTreeMap<u32, u32>,
+    /// El nombre que eligió el jugador para cada héroe que lo tiene (`crearHeroe`, 2026-10-27; BAN43): el que falta se llama «Héroe N». Un héroe no se borra, así que nada lo quita.
+    pub nombres: BTreeMap<u64, String>,
     /// Plaza → héroes que residen en ella. Es un índice de `Heroe::residencia`: se reconstruye al recuperar y solo lo toca [`EstadoMilitar::mudar`].
     /// Con él, el paso de un minuto de una plaza sin residentes cuesta una consulta.
     pub(crate) residentes: BTreeMap<u64, BTreeSet<u64>>,

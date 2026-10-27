@@ -273,6 +273,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | Código | Constante | Qué dice |
 |---|---|---|
 | `heroe.ya_existe` | `HEROE_YA_EXISTE` | — |
+| `heroe.nombre_invalido` | `HEROE_NOMBRE_INVALIDO` | El nombre del héroe está vacío, empieza o acaba en espacio, pasa de 24 caracteres o lleva caracteres de control. |
 | `heroe.campamento_desconocido` | `HEROE_CAMPAMENTO_DESCONOCIDO` | — |
 | `heroe.puntos_negativos` | `HEROE_PUNTOS_NEGATIVOS` | — |
 | `heroe.ningun_punto` | `HEROE_NINGUN_PUNTO` | — |

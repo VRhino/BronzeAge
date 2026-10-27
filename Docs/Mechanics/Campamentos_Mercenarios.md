@@ -260,6 +260,7 @@ Ninguna abierta.
 ## Decisiones del autor del 2026-10-27 (paridad con TypeScript)
 
 - Descartado como recorte (el autor, 2026-10-27): un campamento de mercenarios está abierto a todos, sin puerta ni vetos.
+- **Lo que cobra el campamento, en el contrato** (pedido por el cliente de jugador, 2026-10-27): el `CampamentoMercenarios` de `CAMPAMENTO` lleva `precios_mercado`, el precio de cada bien en venta (ppm de oro por unidad, el mismo que cobra `comprarEnCampamento`: `precioReferencia` sobre el stock global de todas las plazas × `MERCENARIOS.margen`) y, solo para quien reside en él, `reclutables`: cada tropa de su edificio militar a su nivel, con su precio por soldado para ese héroe (recargo, reputación de su Facción y descuento sin plazas, antes de redondear), el de una escuadra completa ya redondeado y si su tecnología está desbloqueada. El tope de reclutas es `poblacion.maximo`. Como los precios cambian sin que cambie la versión (el stock de las plazas, la reputación), la sesión los compara en cada reparto y manda el campamento cuando cambian. No van en la `VISTA` ni en `ADMIN`.
 
 ## Catálogo de eventos
 

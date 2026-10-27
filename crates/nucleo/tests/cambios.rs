@@ -165,7 +165,7 @@ impl Mundial {
     }
     /// Un héroe de la cuenta, residente y presente en la plaza, ciudadano de la Facción 1.
     fn residente(&mut self, cuenta: &str, plaza: u64) -> u64 {
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
         let a = plaza as u32;
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
         self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(a)) });

@@ -105,7 +105,7 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
     let pueblo = || s("pueblo-4");
     vec![
         // ── Presencia y héroe ──
-        (orden!(CrearHeroe, OrdenCrearHeroe, display_name: s("Aquiles"), campamento_id: s("camp-4"), class_definition_id: s("guerrero"), genero: s("masculino")), Comando::CrearHeroe { cuenta: "ana".into(), campamento: 4, controlador: Controlador::Humano }),
+        (orden!(CrearHeroe, OrdenCrearHeroe, display_name: s("Aquiles"), campamento_id: s("camp-4"), class_definition_id: s("guerrero"), genero: s("masculino")), Comando::CrearHeroe { cuenta: "ana".into(), campamento: 4, controlador: Controlador::Humano, nombre: Some("Aquiles".into()) }),
         (orden!(ReclutarTropa, OrdenReclutarTropa, asentamiento_id: s("as-3"), heroe_id: h.clone(), tropa_id: s(tropa.nombre()), origen: Some(s("pesants"))), Comando::ReclutarTropa { asentamiento: 3, heroe: 7, tropa }),
         (orden!(ReclutarEnCampamento, OrdenReclutarEnCampamento, tropa_id: s(tropa.nombre()), pagar_con: Some(s("carro"))), Comando::ReclutarEnCampamento { heroe: 7, tropa, pagar_con: PagarCon::Carro }),
         (orden!(PedirPrestamo, OrdenPedirPrestamo, tropa_ids: v(&[tropa.nombre(), Tropa::Lenadores.nombre()])), Comando::PedirPrestamo { heroe: 7, tropas: vec![tropa, Tropa::Lenadores] }),

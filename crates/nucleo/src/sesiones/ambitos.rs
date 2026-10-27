@@ -79,9 +79,15 @@ pub(super) struct Sesion {
     /// Los informes de inspección vigentes que el cliente tiene en su `HEROE`, por id. Al caducar uno sale con `QUITA` en la reconciliación siguiente (caducar no cambia el mundo). `None`: no se
     /// sabe (reanudó por deltas): se toma lo vigente de ahora, sin quitar nada.
     pub(super) informes: Option<BTreeSet<String>>,
+    /// Lo que el cliente tiene de lo que cobra su `CAMPAMENTO` (los precios del mercado y, al residente, los de reclutar: `interior::lo_que_cobra`), que cambia sin que cambie la versión.
+    /// `None`: no se sabe (reanudó por deltas): se manda el campamento.
+    pub(super) cobra: Option<Cobra>,
     /// Lo que el cliente de `ADMIN` tiene de lo que no pasa por el registro de cambios (6G). `None`: no se sabe (reanudó por deltas).
     pub(super) admin_visto: Option<AdminVisto>,
 }
+
+/// Lo que cobra un campamento a quien está dentro, tal como lo tiene el cliente (`interior::lo_que_cobra`).
+pub(super) type Cobra = (BTreeMap<String, i64>, Vec<pb::TropaDeCampamento>);
 
 /// Lo que no pasa por el registro de cambios y `ADMIN` ve igual (6G): el estado de tecnología del mundo con sus contadores (los suma el paso de minuto, que no sube la versión; sin las tecnologías de
 /// cada Facción, que viajan con ella), los Aedas itinerantes (su viaje no sube la versión) y, desde la paridad del 2026-10-27, lo que no tiene clase en el registro (la memoria de la niebla de cada
@@ -124,7 +130,7 @@ pub(super) struct Mapa {
 impl Sesion {
     pub(super) fn nueva(n: &Nucleo, cliente: String, rol: pb::TipoCliente, tx: mpsc::Sender<Difusion>) -> Self {
         let heroe = es_jugador(rol).then(|| heroe_de_cuenta(n, &cliente)).flatten();
-        Sesion { cliente, rol, tx, heroe, abiertos: BTreeMap::new(), vista: None, plazas: BTreeMap::new(), mapa: None, moderador: false, alijos: None, informes: None, admin_visto: None }
+        Sesion { cliente, rol, tx, heroe, abiertos: BTreeMap::new(), vista: None, plazas: BTreeMap::new(), mapa: None, moderador: false, alijos: None, informes: None, cobra: None, admin_visto: None }
     }
 
     pub(super) fn es_admin(&self) -> bool {
@@ -326,7 +332,7 @@ pub(super) fn delta(n: &Nucleo, s: &Sesion, a: Ambito, desde: u64, hasta: u64, c
 /// repartió `k` (o reanudó entonces), así que recibió los hechos que le tocaban hasta `k` por el ámbito que los oía, aunque ese ámbito ya no lo tenga (la plaza que dejó) y otro que también los oye vaya
 /// por detrás (su `FACCION`, que no cambió desde entonces). Sin estado nuevo: lo dice el `Hola` (duda 8 de T5, 4H T6).
 ///
-/// DUDA: un cliente que el servidor descarta por lento a mitad de un reparto pudo aplicar la `Delta` de un ámbito y no la de otro con un hecho de esa misma versión: al reanudar declara la mayor y ese
+/// Regla (decisión del autor del 2026-10-27): un cliente que el servidor descarta por lento a mitad de un reparto pudo aplicar la `Delta` de un ámbito y no la de otro con un hecho de esa misma versión: al reanudar declara la mayor y ese
 /// hecho no le vuelve (el estado sí: lo que le faltó del otro ámbito llega en su `Delta` de reanudación).
 #[derive(Clone, Copy)]
 pub(super) struct Reanuda {
@@ -685,6 +691,7 @@ impl Mesa {
                 s.informes = Some(informes_vigentes(n, h));
             }
             Ambito::Admin => s.admin_visto = Some(AdminVisto::de(n)),
+            Ambito::Campamento(c) => s.cobra = Some(interior::lo_que_cobra(n, c, s.heroe)),
             _ => {}
         }
     }
@@ -696,7 +703,24 @@ impl Mesa {
         match a {
             Ambito::Heroe(h) => cambios_de_heroe(n, s, h),
             Ambito::Admin => cambios_de_admin(n, s),
+            Ambito::Campamento(c) => cambios_de_campamento(n, s, c),
             _ => Vec::new(),
+        }
+    }
+
+    /// Pone al día lo que cobra el `CAMPAMENTO` de cada sesión (de `solo`, si se da): si los precios del mercado o, del residente, los de reclutar cambiaron respecto de lo que tiene el
+    /// cliente, el campamento entero en una `Delta` del ámbito (2026-10-27). En cada reparto, como `ADMIN`: dentro de un campamento hay pocas sesiones y comparar no copia el campamento.
+    pub(super) fn campamentos_al_dia(&mut self, n: &Nucleo, solo: Option<SesionId>, envios: &mut Vec<(SesionId, Difusion)>) {
+        let dentro: Vec<(SesionId, u32)> = self
+            .suscriptores
+            .iter()
+            .filter_map(|(a, ss)| if let Ambito::Campamento(c) = a { Some(ss.iter().filter(|s| solo.is_none_or(|x| x == **s)).map(|&s| (s, *c)).collect::<Vec<_>>()) } else { None })
+            .flatten()
+            .collect();
+        for (id, c) in dentro {
+            let Some(s) = self.sesiones.get_mut(&id) else { continue };
+            let cambios = cambios_de_campamento(n, s, c);
+            entregar_fuera_del_registro(n, id, s, Ambito::Campamento(c), cambios, envios);
         }
     }
 
@@ -791,6 +815,16 @@ fn cambios_de_alijos(n: &Nucleo, s: &mut Sesion, h: u64) -> Vec<pb::Cambio> {
     let mut cambios: Vec<pb::Cambio> = entran.into_iter().filter_map(|i| propios::alijo(n, i)).map(|x| actualiza(pb::TipoEntidad::Alijo, x.id.clone(), pb::entidad::Cuerpo::Alijo(x))).collect();
     cambios.extend(quitar.into_iter().filter_map(|i| n.alijo(i)).map(|x| cambio_quita(pb::TipoEntidad::Alijo, x.id.clone())));
     cambios
+}
+
+/// El campamento entero si lo que cobra cambió respecto de lo que tiene el cliente (todo, si no se sabe), dejándolo anotado.
+fn cambios_de_campamento(n: &Nucleo, s: &mut Sesion, c: u32) -> Vec<pb::Cambio> {
+    let ahora = interior::lo_que_cobra(n, c, s.heroe);
+    if s.cobra.as_ref() == Some(&ahora) {
+        return Vec::new();
+    }
+    s.cobra = Some(ahora);
+    interior::campamento_por_dentro(n, c, s.espectador()).map(|x| actualiza(pb::TipoEntidad::CampamentoMercenarios, x.id.clone(), pb::entidad::Cuerpo::CampamentoMercenarios(x))).into_iter().collect()
 }
 
 /// Lo que `ADMIN` ve y no pasa por el registro, si cambió respecto de lo que el cliente tiene (todo, si no se sabe): el estado de tecnología entero, los Aedas itinerantes que se movieron y lo que no

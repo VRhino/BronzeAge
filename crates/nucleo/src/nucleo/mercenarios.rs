@@ -95,6 +95,23 @@ impl Nucleo {
         Some(leva::tropas_del_campamento(&self.estado.reglas.economia.militar, &[edificio], &self.tecnologia_del_campamento()))
     }
 
+    /// Lo que pesa en el precio de un recluta del campamento para el héroe: el factor de su reputación (la de su Facción; `UNO` sin Facción o con la reputación por encima del
+    /// umbral bajo) y si su Facción no tiene ninguna plaza (descuento).
+    pub fn condiciones_de_recluta(&self, heroe: u64, t: Instante) -> (i64, bool) {
+        let cr = &self.estado.reglas.economia.comercio;
+        let faccion = self.heroe(heroe).and_then(|h| h.faccion);
+        let factor = faccion.map_or(UNO, |f| if self.estado.comercio.reputacion_en(f, t) <= cr.reputacion.umbral_bajo_para_comision { cr.reputacion.factor_comision_por_reputacion_baja } else { UNO });
+        (factor, faccion.is_some_and(|f| self.plazas_de(f).next().is_none()))
+    }
+
+    /// Las tropas que el edificio militar del campamento recluta a su nivel, con si su tecnología está desbloqueada (las desbloqueadas son las que ofrece, [`Nucleo::tropas_del_campamento`]).
+    pub fn tropas_del_edificio_de_campamento(&self, campamento: u32) -> Option<Vec<(Tropa, bool)>> {
+        let edificio = self.edificio_militar(campamento)?;
+        let mr = &self.estado.reglas.economia.militar;
+        let libre = self.tecnologia_del_campamento();
+        Some(mr.tropas.iter().filter(|d| d.edificio != asentamiento::Tipo::CentroUrbano && d.edificio == edificio && d.nivel_requerido <= mr.mercenarios.nivel_edificios).map(|d| (d.tropa, libre(&d.tecnologia))).collect())
+    }
+
     // ───────────────────────────── Ayudas ─────────────────────────────
 
     /// Dónde está la puerta del campamento `i` del artefacto.
@@ -383,9 +400,7 @@ impl Nucleo {
                     (PagarCon::Carro, Some(c)) => (de(&self.estado.ejercitos[&c].columna.carga, Recurso::Oro), Some(c)),
                     (PagarCon::Carro, None) => return Err(rechazo(rechazos::HEROE_SIN_COLUMNA, "para pagar con el carro el héroe debe ir en una columna".into())),
                 };
-                let faccion = self.heroe(*heroe).expect("existe").faccion;
-                let factor_reputacion = faccion.map_or(UNO, |f| if self.estado.comercio.reputacion_en(f, t) <= cr.reputacion.umbral_bajo_para_comision { cr.reputacion.factor_comision_por_reputacion_baja } else { UNO });
-                let sin_asentamientos = faccion.is_some_and(|f| self.plazas_de(f).next().is_none());
+                let (factor_reputacion, sin_asentamientos) = self.condiciones_de_recluta(*heroe, t);
                 let ofrece = self.tropas_del_campamento(campamento).expect("el campamento existe");
                 let mut reclutas = self.reclutas_de(campamento);
                 let puerta = self.puerta_de_campamento(campamento).expect("existe");
