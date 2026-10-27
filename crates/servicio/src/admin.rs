@@ -3,7 +3,7 @@
 //!
 //! | Ruta | Qué |
 //! |---|---|
-//! | `GET /v1/admin/partida` | la partida que sirve el proceso: carpeta, hash del mundo, semilla, versión e instante del núcleo, cuentas y bots, código de registro |
+//! | `GET /v1/admin/partida` | la partida que sirve el proceso: carpeta, id (`partida.id`, el `gameId` del contrato de batalla), hash del mundo, semilla, versión e instante del núcleo, cuentas y bots, código de registro |
 //! | `GET /v1/admin/registro/codigo` | `{ codigo }`: el código de invitación vigente (`null`: registro abierto) |
 //! | `PUT /v1/admin/registro/codigo` | `{ codigo }` (texto, o `null` para abrir el registro): lo cambia en caliente, hasta el próximo reinicio (luego vuelve `CODIGO_REGISTRO`) |
 //! | `POST /v1/admin/respaldos` | respaldo ahora: foto y copia de `mundo/` y `acceso/` en `<datos>/respaldos/<id>/`; `201` con el respaldo |
@@ -34,6 +34,8 @@ pub(crate) struct Admin {
     pub carpeta: PathBuf,
     pub mundo_hash: String,
     pub semilla: u64,
+    /// El `gameId` de la partida (`partida.id`).
+    pub id_partida: String,
 }
 
 fn error(estado: u16, codigo: &str, mensaje: &str) -> RespuestaHttp {
@@ -102,7 +104,7 @@ impl Admin {
                 RespuestaHttp::json(
                     200,
                     json!({
-                        "carpeta": carpeta.display().to_string(), "mundo_hash": self.mundo_hash, "semilla": self.semilla,
+                        "carpeta": carpeta.display().to_string(), "id": self.id_partida, "mundo_hash": self.mundo_hash, "semilla": self.semilla,
                         "version": e.version, "instante": e.instante, "cuentas": self.acceso.cuentas(), "bots": self.acceso.bots(),
                         "codigo_registro": self.acceso.codigo_registro(), "respaldos": self.respaldos().len(),
                     })

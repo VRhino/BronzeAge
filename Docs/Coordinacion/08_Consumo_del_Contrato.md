@@ -126,13 +126,13 @@ Dos sitios, porque parar y arrancar el proceso no lo puede hacer el propio proce
 
 | Ruta | Qué |
 |---|---|
-| `GET /v1/admin/partida` | `{ carpeta, mundo_hash, semilla, version, instante, cuentas, bots, codigo_registro, respaldos }` |
+| `GET /v1/admin/partida` | `{ carpeta, id, mundo_hash, semilla, version, instante, cuentas, bots, codigo_registro, respaldos }`; `id` es el de `<datos>/partida.id`, el `gameId` del contrato de batalla |
 | `GET /v1/admin/registro/codigo` | `{ codigo }` (`null`: registro abierto) |
 | `PUT /v1/admin/registro/codigo` | cuerpo `{ codigo: texto \| null }`; cambia en caliente hasta el próximo reinicio (después vuelve `CODIGO_REGISTRO`) |
 | `POST /v1/admin/respaldos` | foto ahora y copia de `mundo/` y `acceso/` en `<datos>/respaldos/<id>/`; `201 { id, creado_ms, version, instante, mundo_hash, semilla, bytes }` |
 | `GET /v1/admin/respaldos` | `{ respaldos: [...] }`, del más nuevo al más viejo |
 
-El núcleo atiende el respaldo entre dos órdenes y no hace nada más mientras copia, así que la copia es coherente.
+El núcleo atiende el respaldo entre dos órdenes y no hace nada más mientras copia, así que la copia es coherente. El histórico de batallas retiradas está en `<datos>/mundo/batallas.jsonl` (un JSON por línea, Batalla_Unity_Ciclo §3.3), así que va en el respaldo.
 
 **El panel de arranque** (`scripts/panel.mjs`, puerto 3999), que pasa su dirección al admin como `PANEL_URL` (como `BOTS_URL`). CORS abierto, cuerpos JSON. Una partida es una carpeta de datos del servidor en `partidas/<nombre>/` (ignorada por git) con su `partida.json` (`semilla` y `mundo`, el artefacto con el que se creó); la carpeta `datos/` de antes cuenta como la partida `datos`. El servidor del panel arranca siempre con la partida actual.
 

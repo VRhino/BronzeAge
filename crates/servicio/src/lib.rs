@@ -122,12 +122,38 @@ pub struct Informe {
     pub cuentas: usize,
 }
 
+/// El fichero de la carpeta de datos con el id de la partida (el `gameId` del contrato de batalla).
+pub const FICHERO_ID_PARTIDA: &str = "partida.id";
+
+/// El id de la partida de la carpeta `datos` (paridad P4: el `gameId` real del TypeScript): el de `partida.id` o, si falta, uno nuevo que se guarda allí. Una partida que ya existía
+/// sin ese fichero conserva el de antes (el hash del mundo y la semilla, `anterior`), para que el `battleId` de sus batallas no cambie.
+fn id_de_partida(datos: &Path, recuperada: bool, anterior: &str) -> io::Result<String> {
+    let fichero = datos.join(FICHERO_ID_PARTIDA);
+    if let Ok(id) = std::fs::read_to_string(&fichero) {
+        let id = id.trim();
+        if !id.is_empty() {
+            return Ok(id.to_owned());
+        }
+    }
+    let id = if recuperada {
+        anterior.to_owned()
+    } else {
+        let ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
+        format!("p-{ms:x}-{:x}", std::process::id())
+    };
+    std::fs::create_dir_all(datos)?;
+    std::fs::write(&fichero, &id)?;
+    Ok(id)
+}
+
 /// Abre los datos de `datos` (o los crea), lanza el núcleo y escucha en `direccion` (puerto 0: uno libre). Con `artefacto`, el puerto lo sirve por su hash.
 pub async fn arrancar(arranque: Arranque, artefacto: Option<Arc<Vec<u8>>>, datos: &Path, direccion: SocketAddr, acceso: acceso::Config) -> io::Result<(Servicio, Informe)> {
     let datos_de_juego = datos::datos_de_juego(&arranque.reglas);
     let semilla = arranque.semilla;
     let dir_mundo = datos.join("mundo");
-    let n = tokio::task::block_in_place(|| Nucleo::con_persistencia(arranque, &dir_mundo, persistencia::Config::default()))?;
+    let mut n = tokio::task::block_in_place(|| Nucleo::con_persistencia(arranque, &dir_mundo, persistencia::Config::default()))?;
+    let id_partida = id_de_partida(datos, n.recuperado(), &n.id_de_partida())?;
+    n.fijar_id_de_partida(id_partida.clone());
     let acceso = Acceso::abrir(&datos.join("acceso"), acceso)?;
     let informe = Informe { mundo_hash: n.mundo_hash().into(), version: n.version(), ahora: n.ahora(), recuperado: n.recuperado(), cuentas: acceso.cuentas() };
     let reloj = RelojCompartido::nuevo(n.ahora());
@@ -139,7 +165,7 @@ pub async fn arrancar(arranque: Arranque, artefacto: Option<Arc<Vec<u8>>>, datos
         datos_de_juego: Some((datos_de_juego.version.clone(), format!("{RUTA_DATOS}/{}", datos_de_juego.version))),
         ..Config::default()
     };
-    let admin = admin::Admin { acceso: acceso.clone(), nucleo: tx.clone(), carpeta: datos.to_owned(), mundo_hash: informe.mundo_hash.clone(), semilla };
+    let admin = admin::Admin { acceso: acceso.clone(), nucleo: tx.clone(), carpeta: datos.to_owned(), mundo_hash: informe.mundo_hash.clone(), semilla, id_partida };
     let http = Arc::new(RutasHttp { acceso: acceso.clone(), admin, mundo, datos: datos_de_juego });
     let listener = tokio::net::TcpListener::bind(direccion).await?;
     let srv = servir_con_http(listener, tx.clone(), acceso.clone(), http, reloj, config).await;

@@ -263,15 +263,20 @@ impl Nucleo {
         self.batallas_activas().any(|b| b.heroes_que_combaten().any(|h| h == heroe))
     }
 
-    /// El `battleId` del contrato de una batalla: un UUID determinista de la partida (su mundo y su semilla) y del id de la batalla.
-    // DUDA: el núcleo no conoce un `gameId`: se usa el hash del mundo con la semilla, que identifican la partida mientras no haya dos con el mismo mundo y la misma semilla.
+    /// El `battleId` del contrato de una batalla: un UUID determinista del id de la partida ([`Nucleo::id_de_partida`]) y del id de la batalla.
     pub fn uuid_de_batalla(&self, id: u64) -> String {
         uuid_de_batalla(&self.id_de_partida(), id)
     }
 
-    /// El `gameId` del contrato de batalla: el hash del mundo y la semilla.
+    /// El `gameId` del contrato de batalla: el que fijó quien sirve la partida (paridad P4: el servicio lo guarda en `<datos>/partida.id`) o, sin él, el hash del mundo y la semilla
+    /// (que no distinguen dos partidas con el mismo mundo y la misma semilla).
     pub fn id_de_partida(&self) -> String {
-        format!("{}:{}", self.mundo_hash, self.semilla)
+        self.id_partida.clone().unwrap_or_else(|| format!("{}:{}", self.mundo_hash, self.semilla))
+    }
+
+    /// Fija el `gameId` de la partida (antes de servirla: cambia el `battleId` de las batallas).
+    pub fn fijar_id_de_partida(&mut self, id: impl Into<String>) {
+        self.id_partida = Some(id.into());
     }
 
     /// Inversa de [`Nucleo::uuid_de_batalla`]: el id de la partida de un `battleId`, si es de esta partida.
@@ -294,8 +299,8 @@ impl Nucleo {
         }
     }
 
-    /// Las batallas que salieron del estado al cumplir su retención, para que quien persiste las anexe al histórico de la partida (§3.3). Se vacía al leer;
-    /// no es estado: lo no recogido al cerrar el proceso se pierde.
+    /// Las batallas que salieron del estado al cumplir su retención (§3.3), en un núcleo sin persistencia (con ella van al histórico, [`HISTORICO_DE_BATALLAS`]). Se vacía al
+    /// leer; no es estado: lo no recogido al cerrar el proceso se pierde.
     pub fn tomar_batallas_retiradas(&mut self) -> Vec<Batalla> {
         std::mem::take(&mut self.retiradas)
     }
@@ -673,8 +678,12 @@ impl Nucleo {
             }
         }
         let ejercitos = b.bloqueo.ejercitos.iter().copied().filter(|e| self.estado.ejercitos.contains_key(e)).collect();
+        // Lo oye quien combate o combatió en ella aunque no tenga plaza ni siga en una columna del bloqueo (el cursor del TypeScript, §14; paridad P4).
+        let mut heroes: Vec<u64> = b.heroes_que_combaten().chain(b.salidas.iter().map(|s| s.heroe)).filter(|&h| h != SIN_HEROE).collect();
+        heroes.sort_unstable();
+        heroes.dedup();
         let codigo = hecho.codigo(pve);
-        self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed(codigo), en: t, ejercitos, asentamientos: plazas, punto: Some(b.punto), datos, valores, ..Default::default() });
+        self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed(codigo), en: t, ejercitos, asentamientos: plazas, punto: Some(b.punto), datos, valores, heroes, ..Default::default() });
     }
 
     /// Las columnas de un bando que siguen en la batalla, en el orden del bloqueo: la primera es la que abrió o recibió el combate.
@@ -754,7 +763,7 @@ impl Nucleo {
                     self.tr.tocar(Clase::Batalla, id);
                     // Sin esto la retirada cambiaría el estado sin dejar versión. Lo oyen las Facciones de los dos bandos, que la tenían.
                     let facciones = [b.ticket.atacante.faccion, b.ticket.defensor.faccion].into_iter().flatten().collect();
-                    self.retiradas.push(b);
+                    self.archivar_batalla(b);
                     self.tr.emitir(&self.estado, EventoNucleo { facciones, ..EventoNucleo::nuevo("batalla.retirada", t, vec![("batalla", id as i64)]) });
                 }
             }
@@ -1248,4 +1257,70 @@ fn ordenados(tokens: Option<Vec<Token>>) -> Vec<Token> {
     let mut v = tokens.unwrap_or_default();
     v.sort_by_key(|t| t.heroe);
     v
+}
+
+/// El histórico de batallas de la partida (§3.3), en la carpeta del núcleo persistente: un JSON por línea, `{ gameId, archivadaMs, batalla }`.
+pub const HISTORICO_DE_BATALLAS: &str = "batallas.jsonl";
+
+fn lado_json(l: Lado) -> &'static str {
+    match l {
+        Lado::Atacante => "atacante",
+        Lado::Defensor => "defensor",
+    }
+}
+
+impl Nucleo {
+    /// Una batalla retirada: con persistencia se anexa al histórico (paridad P4, `<gameId>.batallas.jsonl` del TypeScript); sin ella se guarda para `tomar_batallas_retiradas`. La repetición
+    /// del registro al recuperar puede anexar otra vez la misma: quien lo lee descarta las repetidas por `batalla.id`, como el TypeScript.
+    fn archivar_batalla(&mut self, b: Batalla) {
+        let Some(dir) = self.persist.as_ref().map(|p| p.dir.clone()) else {
+            self.retiradas.push(b);
+            return;
+        };
+        let linea = format!("{}\n", self.historico_de_batalla(&b));
+        let anexar = || -> std::io::Result<()> {
+            use std::io::Write;
+            std::fs::OpenOptions::new().create(true).append(true).open(dir.join(HISTORICO_DE_BATALLAS))?.write_all(linea.as_bytes())
+        };
+        if let Err(e) = anexar() {
+            eprintln!("nucleo: no se pudo anexar la batalla {} al histórico ({e})", b.id);
+        }
+    }
+
+    /// La línea del histórico: la batalla entera, legible (ids del contrato, instantes de mundo en ms).
+    pub fn historico_de_batalla(&self, b: &Batalla) -> serde_json::Value {
+        use serde_json::json;
+        let escuadras = |v: &[combate::ciclo::EscuadraEnBatalla]| v.iter().map(|s| json!({ "id": s.id, "tropa": format!("{:?}", s.tropa), "efectivos": s.efectivos, "dueno": s.dueno, "nivel": s.nivel })).collect::<Vec<_>>();
+        let participante = |p: &combate::ciclo::Participante| json!({ "heroe": p.heroe, "faccion": p.faccion, "controlador": format!("{:?}", p.controlador), "escuadras": escuadras(&p.escuadras) });
+        let bando = |x: &combate::ciclo::BandoDeTicket| json!({ "faccion": x.faccion, "capacidad": x.capacidad, "participantes": x.participantes.iter().map(participante).collect::<Vec<_>>(), "sinHeroe": escuadras(&x.sin_heroe) });
+        let resultado = b.resultado.as_ref().map(|r| {
+            json!({
+                "resultadoId": r.resultado_id, "revision": r.revision, "intento": r.intento, "inicio": r.inicio, "fin": r.fin, "ganador": lado_json(r.ganador), "razon": format!("{:?}", r.razon),
+                "objetivos": r.objetivos.iter().map(|(o, l)| json!({ "objetivo": o, "lado": l.map(lado_json) })).collect::<Vec<_>>(),
+                "porEscuadra": r.por_escuadra.iter().map(|s| json!({ "escuadra": s.escuadra, "desplegados": s.desplegados, "supervivientes": s.supervivientes_al_cierre, "muertos": s.muertos, "xp": s.xp_ganada })).collect::<Vec<_>>(),
+                "porHeroe": r.por_heroe.iter().map(|h| json!({ "heroe": h.heroe, "participo": h.participo, "sobrevivio": h.sobrevivio_al_cierre, "xp": h.xp_ganada, "derrotado": h.derrotado })).collect::<Vec<_>>(),
+                "versionServidor": r.version_servidor, "carrosPerdidos": r.carros_perdidos,
+            })
+        });
+        let contexto: serde_json::Map<String, serde_json::Value> = objetivo_de_contexto(&b.ticket.contexto).into_iter().map(|(k, v)| (k.to_string(), json!(v))).chain([("tipo".to_string(), json!(numero_de_contexto(&b.ticket.contexto)))]).collect();
+        json!({
+            "gameId": self.id_de_partida(),
+            "archivadaMs": acceso_ahora_ms(),
+            "batalla": {
+                "id": b.id, "battleId": self.uuid_de_batalla(b.id), "estado": format!("{:?}", b.estado), "iniciadaPor": b.iniciada_por, "punto": { "x": b.punto.x, "y": b.punto.y },
+                "contexto": contexto, "revision": b.ticket.revision, "duracionMaxima": b.ticket.duracion_maxima,
+                "atacante": bando(&b.ticket.atacante), "defensor": bando(&b.ticket.defensor),
+                "incorporaciones": b.incorporaciones.iter().map(|i| json!({ "secuencia": i.secuencia, "lado": lado_json(i.lado), "participante": participante(&i.participante) })).collect::<Vec<_>>(),
+                "salidas": b.salidas.iter().map(|s| json!({ "heroe": s.heroe, "motivo": format!("{:?}", s.motivo), "derrotado": s.derrotado, "en": s.en })).collect::<Vec<_>>(),
+                "expiraEn": b.expira_en, "convocatoriaHasta": b.convocatoria_hasta, "iniciadaEn": b.iniciada_en, "aplicadaEn": b.aplicada_en, "cerradaEn": b.cerrada_en,
+                "asignacion": b.asignacion.as_ref().map(|a| json!({ "intento": a.intento, "instancia": { "host": a.instancia.host, "puerto": a.instancia.puerto, "protocolo": a.instancia.protocolo } })),
+                "resultado": resultado,
+            }
+        })
+    }
+}
+
+/// El reloj de pared (ms desde 1970): solo para fechar el archivo, nunca entra en el estado.
+fn acceso_ahora_ms() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64)
 }

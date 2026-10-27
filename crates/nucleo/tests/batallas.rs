@@ -165,7 +165,10 @@ struct Choque {
 }
 
 fn choque() -> Choque {
-    let mut n = nucleo_unity();
+    choque_en(nucleo_unity())
+}
+
+fn choque_en(mut n: Nucleo) -> Choque {
     let ana = columna(&mut n, "ana", 1, c(10, 2));
     let beto = columna(&mut n, "beto", 2, Punto::new(c(10, 2).x + 2_000, c(10, 2).y));
     let fuerte = vec![dar(&mut n, "d1", ana.1, Tropa::EspadachinesBronce), dar(&mut n, "d2", ana.1, Tropa::ArquerosCompuesto)];
@@ -727,6 +730,12 @@ fn con_la_partida_en_curso_la_salida_aplica_las_bajas_hiere_al_derrotado_y_el_re
     assert!(aplicar(&mut x.n, 13 * MIN, "r2", id, bueno).aceptada());
     assert_eq!(soldados(&x.n, beto.1, x.debil), 10, "lo suyo no se vuelve a tocar");
     assert_eq!(x.n.heroe(beto.1).unwrap().heroe.herido_hasta, Some(12 * MIN + 2 * MIN), "ni se le hiere dos veces");
+    // Los hechos de la batalla nombran a quien combate o combatió en ella (el cursor del TypeScript, paridad P4): beto, que ya salió, oye el resultado.
+    let nombrados = |codigo: &str| x.n.cambios_desde(0).unwrap().flat_map(|c| c.eventos.iter()).filter(|e| e.codigo == codigo).map(|e| e.heroes.clone()).collect::<Vec<_>>();
+    let mut ambos = vec![ana.1, beto.1];
+    ambos.sort_unstable();
+    assert_eq!(nombrados("batalla.abierta"), vec![ambos.clone()]);
+    assert_eq!(nombrados("batalla.aplicada"), vec![ambos]);
 }
 
 // ───────────────────────────── 7. Unirse ─────────────────────────────
@@ -2343,4 +2352,35 @@ fn la_batalla_se_ve_bajo_la_niebla_resumida_para_un_espectador_de_otra_faccion_y
     let (b, _) = ver(&x.n, 1, x.ana.1);
     let Some(Cuerpo::Batalla(b)) = b else { panic!("quien combate la ve en su vista") };
     assert!(b.ticket.is_some() && b.lado_propio.is_some(), "entera para quien combate");
+}
+
+// ───────────────────────────── El histórico (paridad P4) ─────────────────────────────
+
+#[test]
+fn con_persistencia_la_batalla_retirada_se_anexa_al_historico_de_la_partida() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut a = comun::arranque(comun::reticula(40, 5));
+    a.reglas.batallas_en_unity = true;
+    let mut n = Nucleo::con_persistencia(a, dir.path(), Default::default()).unwrap();
+    n.fijar_id_de_partida("partida-de-prueba");
+    let mut x = choque_en(n);
+    assert!(atacar(&mut x.n, 10 * MIN, "ana", "a1", x.ana.1, ObjetivoAtaque::Ejercito(x.beto.0), false).aceptada());
+    let id = *x.n.batallas().map(|b| &b.id).next().unwrap();
+    let uuid = x.n.uuid_de_batalla(id);
+    // Nadie la asigna: falla a los 15 minutos y se retira una hora después.
+    x.n.avanzar_hasta(15 * MIN + HORA - 1);
+    assert!(!dir.path().join(nucleo::HISTORICO_DE_BATALLAS).exists(), "aún se conserva en el estado");
+    x.n.avanzar_hasta(15 * MIN + HORA);
+    assert!(x.n.batalla(id).is_none());
+    assert!(x.n.tomar_batallas_retiradas().is_empty(), "con persistencia va al histórico, no se acumula");
+    let texto = std::fs::read_to_string(dir.path().join(nucleo::HISTORICO_DE_BATALLAS)).unwrap();
+    let lineas: Vec<serde_json::Value> = texto.lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+    assert_eq!(lineas.len(), 1);
+    let l = &lineas[0];
+    assert_eq!((l["gameId"].as_str(), l["batalla"]["battleId"].as_str(), l["batalla"]["id"].as_u64()), (Some("partida-de-prueba"), Some(uuid.as_str()), Some(id)));
+    assert_eq!((l["batalla"]["estado"].as_str(), l["batalla"]["cerradaEn"].as_i64(), l["batalla"]["iniciadaPor"].as_u64()), (Some("Fallida"), Some(15 * MIN), Some(x.ana.1)));
+    assert_eq!(l["batalla"]["atacante"]["participantes"][0]["heroe"].as_u64(), Some(x.ana.1));
+    assert!(l["archivadaMs"].as_i64().unwrap() > 0 && l["batalla"]["resultado"].is_null());
+    // El `gameId` fijado cambia el `battleId`: es el de la partida, no el del mundo y la semilla.
+    assert_ne!(nucleo::Nucleo::nuevo(comun::arranque(comun::reticula(40, 5))).uuid_de_batalla(id), uuid);
 }

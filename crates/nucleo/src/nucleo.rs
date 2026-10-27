@@ -91,7 +91,7 @@ mod zonas;
 pub use alijos::Alijo;
 use espacio::{Cosa, Motivo};
 pub(crate) use exploracion::cerca;
-pub use batallas::TokenDeJugador;
+pub use batallas::{TokenDeJugador, HISTORICO_DE_BATALLAS};
 pub use murallas::{ErrorPresupuesto, Presupuesto, RecintoEnPie};
 pub use zonas::InformeViabilidad;
 
@@ -271,6 +271,8 @@ pub struct Nucleo {
     /// Las batallas que salieron del estado al cumplir su retención y aún no recogió quien las persiste (`tomar_batallas_retiradas`): no entra en el hash ni
     /// en las fotos.
     retiradas: Vec<Batalla>,
+    /// El id de la partida que fija quien la sirve (`fijar_id_de_partida`; el servicio lo guarda en la carpeta de datos). Sin él, el hash del mundo y la semilla. No entra en el hash ni en las fotos.
+    id_partida: Option<String>,
     /// Los traslados de Facción de la transición en curso (`origen`, `destino`), cuya memoria de la niebla se funde al cerrar la versión, después de grabar lo que vieron sus ojos
     /// (`traslado::fundir_memorias`). Vacío entre transiciones: no se persiste.
     uniones_de_memoria: Vec<(u32, u32)>,
@@ -396,6 +398,7 @@ impl Nucleo {
             espacio: espacio::Espacio::nuevo(),
             siguiendo: Vec::new(),
             retiradas: Vec::new(),
+            id_partida: None,
             uniones_de_memoria: Vec::new(),
             aparicion_pendiente: Default::default(),
             hechos_epicos: Vec::new(),

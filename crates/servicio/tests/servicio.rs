@@ -114,12 +114,23 @@ async fn un_bot_entra_por_el_acceso_real_y_sigue_tras_un_reinicio() {
     c.enviar(mc::Cuerpo::Hola(hola("ok:bot-1", TipoCliente::ClienteBot))).await;
     let Some(ms::Cuerpo::Error(e)) = c.esperar().await.cuerpo else { panic!("se esperaba el error") };
     assert_eq!(e.codigo, "token_invalido");
-    let version = s.parar().await.version();
+    let n = s.parar().await;
+    let version = n.version();
+    // La partida nueva tiene su propio id (el `gameId` del contrato de batalla, paridad P4), guardado en la carpeta de datos.
+    let id = std::fs::read_to_string(datos.path().join(servicio::FICHERO_ID_PARTIDA)).unwrap();
+    assert!(id.starts_with("p-"), "{id}");
+    assert_eq!(n.id_de_partida(), id);
 
     let (s, i) = servicio::arrancar(arranque_sintetico(), None, datos.path(), libre(), acceso()).await.unwrap();
     assert!(i.recuperado && i.version == version && i.cuentas == 1, "{i:?}");
     bienvenida(s.direccion, &token).await;
-    s.parar().await;
+    assert_eq!(s.parar().await.id_de_partida(), id, "el mismo id tras el reinicio");
+
+    // Una partida que ya existía sin `partida.id` conserva el de antes (hash del mundo y semilla): el `battleId` de sus batallas no cambia.
+    std::fs::remove_file(datos.path().join(servicio::FICHERO_ID_PARTIDA)).unwrap();
+    let (s, _) = servicio::arrancar(arranque_sintetico(), None, datos.path(), libre(), acceso()).await.unwrap();
+    assert_eq!(s.parar().await.id_de_partida(), "hash-de-prueba:42");
+    assert_eq!(std::fs::read_to_string(datos.path().join(servicio::FICHERO_ID_PARTIDA)).unwrap(), "hash-de-prueba:42");
 }
 
 fn mundo_real() -> Option<std::path::PathBuf> {
@@ -215,6 +226,7 @@ async fn un_administrador_cambia_el_codigo_y_respalda_la_partida() {
     assert_eq!(e, 200, "{v}");
     assert_eq!((v["mundo_hash"].as_str(), v["semilla"].as_u64(), v["cuentas"].as_u64(), v["bots"].as_u64()), (Some("hash-de-prueba"), Some(42), Some(3), Some(1)));
     assert!(v["version"].is_u64() && v["instante"].is_i64() && v["codigo_registro"].is_null(), "{v}");
+    assert_eq!(v["id"].as_str().map(|s| s.starts_with("p-")), Some(true), "{v}");
 
     // El navegador pregunta antes de un PUT (CORS): se permite.
     let mut tcp = tokio::net::TcpStream::connect(dir).await.unwrap();

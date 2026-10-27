@@ -100,7 +100,7 @@ pub use estado_fundacion::{entidad_fundacion, CaravanaFundacion, EstadoFundacion
 pub use estado_comercio::{entidad_caravana, entidad_orden, entidad_reputacion, entidad_trueque, EstadoComercio};
 pub use estado_militar::{entidad_formacion, entidad_peticion_de_convocatoria, entidad_peticion_de_union, EstadoMilitar, HeroeNucleo, Relacion, Trato};
 pub use generadores::{Cx, GeneradorDeEventos};
-pub use nucleo::{Alijo, Ajustes, Arranque, ErrorPresupuesto, InformeViabilidad, Metricas, Nucleo, Presupuesto, RecintoEnPie, TokenDeJugador};
+pub use nucleo::{Alijo, Ajustes, Arranque, ErrorPresupuesto, InformeViabilidad, Metricas, Nucleo, Presupuesto, RecintoEnPie, TokenDeJugador, HISTORICO_DE_BATALLAS};
 
 /// sha256 en hexadecimal minúsculas.
 pub fn hex(h: &[u8; 32]) -> String {
