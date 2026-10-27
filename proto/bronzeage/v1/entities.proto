@@ -339,13 +339,14 @@ message Avanzada {
   Punto posicion = 5;
   EstadoAvanzada estado = 6;
   sint64 radio_vision = 7;               // 12 unidades (en milésimas), fijo
-  Existencia almacen = 8;                // fuerte y ciudadela; la atalaya no tiene
+  Existencia almacen = 8;                // sin uso: el almacén de una avanzada es por recurso (`almacen_por_recurso`)
   repeated string guarnicion_serie_ids = 9;    // escuadras de serie (IA, fuera de cupo)
   optional string tropa_elegida_escalon2 = 10; // la elige el Gobernador de la madre (= `tropa_elegida_por_escalon[2]`; se conserva por v1)
   optional int64 invulnerable_hasta_ms = 11;   // fuerte en ruinas: 1 día
   map<uint32, string> tropa_elegida_por_escalon = 12; // escalón (2, 3 o 4) → tropa elegida de las que la madre recluta
   repeated string guarnicion_jugadores_ids = 13;      // escuadrones de jugadores dejados con `guarnecer_avanzada` (dentro del cupo)
   optional string batalla_id = 14;       // asedio visible: el ataque que se juega ahora
+  map<string, Existencia> almacen_por_recurso = 15; // fuerte y ciudadela: lo que hay de cada recurso (id de catálogo); la atalaya no tiene almacén
 }
 
 enum TipoObra {
@@ -543,6 +544,7 @@ message ContenedorEscuadron {
     string ejercito_id = 2;              // en su columna
     string caravana_id = 3;              // escolta cedida
     bool fuera = 4;                      // héroe desconectado
+    string avanzada_id = 5;              // en la guarnición de una avanzada (`guarnecer_avanzada`), fuera del campamento de su plaza
   }
 }
 

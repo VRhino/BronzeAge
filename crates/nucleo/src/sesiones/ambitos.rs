@@ -47,7 +47,7 @@ use crate::proyeccion::audiencia::{heroe_de_sesion, principal};
 use crate::proyeccion::propios::Espectador;
 use crate::proyeccion::vista::{cambio_de_niebla, Clave, Mirada, Perspectiva, Sello};
 use crate::proyeccion::eventos::{batalla_de, evento_dominio};
-use crate::proyeccion::{cambio_quita, interior, propios};
+use crate::proyeccion::{cambio_quita, interior, propios, vista};
 use base::Punto;
 use contrato::v1 as pb;
 use militar::presencia::Ubicacion;
@@ -76,15 +76,20 @@ pub(super) struct Sesion {
     pub(super) moderador: bool,
     /// Los alijos que el cliente tiene en su `HEROE` (6G: los que el héroe tiene a la vista, que cambian al andar su columna sin que nada del mundo cambie). `None`: no se sabe (reanudó por deltas).
     pub(super) alijos: Option<BTreeSet<u32>>,
+    /// Los informes de inspección vigentes que el cliente tiene en su `HEROE`, por id. Al caducar uno sale con `QUITA` en la reconciliación siguiente (caducar no cambia el mundo). `None`: no se
+    /// sabe (reanudó por deltas): se toma lo vigente de ahora, sin quitar nada.
+    pub(super) informes: Option<BTreeSet<String>>,
     /// Lo que el cliente de `ADMIN` tiene de lo que no pasa por el registro de cambios (6G). `None`: no se sabe (reanudó por deltas).
     pub(super) admin_visto: Option<AdminVisto>,
 }
 
 /// Lo que no pasa por el registro de cambios y `ADMIN` ve igual (6G): el estado de tecnología del mundo con sus contadores (los suma el paso de minuto, que no sube la versión; sin las tecnologías de
-/// cada Facción, que viajan con ella) y los Aedas itinerantes (su viaje no sube la versión). Se compara en cada reparto con lo de ahora.
+/// cada Facción, que viajan con ella), los Aedas itinerantes (su viaje no sube la versión) y, desde la paridad del 2026-10-27, lo que no tiene clase en el registro (la memoria de la niebla de cada
+/// Facción, sus Miradas, las zonas fundidas y la red de caminos: `vista::huellas_de_admin`), por su huella. Se compara en cada reparto con lo de ahora.
 pub(super) struct AdminVisto {
     tecnologia: tecnologia::EstadoTecnologia,
     aedas: Vec<tecnologia::itinerantes::AedaItinerante>,
+    sin_clase: BTreeMap<vista::ClaveAdmin, u64>,
 }
 
 impl AdminVisto {
@@ -100,7 +105,7 @@ impl AdminVisto {
             cantadas: t.cantadas,
             por_faccion: BTreeMap::new(),
         };
-        AdminVisto { tecnologia, aedas: n.estado().aedas.clone() }
+        AdminVisto { tecnologia, aedas: n.estado().aedas.clone(), sin_clase: vista::huellas_de_admin(n) }
     }
 
     /// ¿Lo ve igual que ahora? (Sin copiar nada: es lo que se pregunta en cada reparto.)
@@ -119,7 +124,7 @@ pub(super) struct Mapa {
 impl Sesion {
     pub(super) fn nueva(n: &Nucleo, cliente: String, rol: pb::TipoCliente, tx: mpsc::Sender<Difusion>) -> Self {
         let heroe = es_jugador(rol).then(|| heroe_de_cuenta(n, &cliente)).flatten();
-        Sesion { cliente, rol, tx, heroe, abiertos: BTreeMap::new(), vista: None, plazas: BTreeMap::new(), mapa: None, moderador: false, alijos: None, admin_visto: None }
+        Sesion { cliente, rol, tx, heroe, abiertos: BTreeMap::new(), vista: None, plazas: BTreeMap::new(), mapa: None, moderador: false, alijos: None, informes: None, admin_visto: None }
     }
 
     pub(super) fn es_admin(&self) -> bool {
@@ -230,10 +235,11 @@ pub(super) fn foto(n: &Nucleo, s: &Sesion, a: Ambito, version: u64) -> pb::Foto 
         Ambito::Faccion(_) | Ambito::Batalla(_) => n.entidades_de(a).into_iter().flat_map(de).collect(),
         Ambito::Vista(p) => return foto_de_vista(n, s, p, version).0,
         Ambito::Asentamiento(_) => plazas().chain(n.entidades_de(a).into_iter().flat_map(de)).collect(),
-        // Y los Aedas itinerantes enteros, que no son una clase del registro de cambios (6G).
+        // Y lo que no es una clase del registro de cambios: los Aedas itinerantes enteros (6G), la memoria de la niebla de cada Facción, sus Miradas, las zonas y la red (paridad, 2026-10-27).
         Ambito::Admin => {
             let aedas = n.estado().aedas.iter().map(|x| entidad(pb::entidad::Cuerpo::AedaItinerante(propios::aeda_itinerante(x))));
-            plazas().chain(propios::todo_menos_plazas(n).into_iter().flat_map(de)).chain(aedas).collect()
+            let sin_clase = vista::huellas_de_admin(n).into_keys().filter_map(|k| vista::de_admin(n, &k)).map(entidad);
+            plazas().chain(propios::todo_menos_plazas(n).into_iter().flat_map(de)).chain(aedas).chain(sin_clase).collect()
         }
         Ambito::Campamento(c) => de((Clase::Campamento, u64::from(c))).collect(),
     };
@@ -674,7 +680,10 @@ impl Mesa {
     pub(super) fn recordar_foto(&mut self, n: &Nucleo, id: SesionId, a: Ambito) {
         let Some(s) = self.sesiones.get_mut(&id) else { return };
         match a {
-            Ambito::Heroe(h) => s.alijos = Some(alijos_a_la_vista(n, h).into_iter().collect()),
+            Ambito::Heroe(h) => {
+                s.alijos = Some(alijos_a_la_vista(n, h).into_iter().collect());
+                s.informes = Some(informes_vigentes(n, h));
+            }
             Ambito::Admin => s.admin_visto = Some(AdminVisto::de(n)),
             _ => {}
         }
@@ -685,7 +694,7 @@ impl Mesa {
     pub(super) fn fuera_del_registro(&mut self, n: &Nucleo, id: SesionId, a: Ambito) -> Vec<pb::Cambio> {
         let Some(s) = self.sesiones.get_mut(&id) else { return Vec::new() };
         match a {
-            Ambito::Heroe(h) => cambios_de_alijos(n, s, h),
+            Ambito::Heroe(h) => cambios_de_heroe(n, s, h),
             Ambito::Admin => cambios_de_admin(n, s),
             _ => Vec::new(),
         }
@@ -702,7 +711,7 @@ impl Mesa {
             .collect();
         for (id, h) in heroes {
             let Some(s) = self.sesiones.get_mut(&id) else { continue };
-            let cambios = cambios_de_alijos(n, s, h);
+            let cambios = cambios_de_heroe(n, s, h);
             entregar_fuera_del_registro(n, id, s, Ambito::Heroe(h), cambios, envios);
         }
     }
@@ -738,6 +747,29 @@ fn actualiza(tipo: pb::TipoEntidad, id: String, cuerpo: pb::entidad::Cuerpo) -> 
     pb::Cambio { tipo: pb::TipoCambio::CambioActualiza as i32, entidad: tipo as i32, id, datos: Some(pb::Entidad { cuerpo: Some(cuerpo) }), reemplaza: true, ..Default::default() }
 }
 
+/// Lo que el `HEROE` de `h` ve cambiar sin que cambie el mundo: los alijos a la vista y los informes de inspección que caducaron.
+fn cambios_de_heroe(n: &Nucleo, s: &mut Sesion, h: u64) -> Vec<pb::Cambio> {
+    let mut cambios = cambios_de_alijos(n, s, h);
+    cambios.extend(cambios_de_informes(n, s, h));
+    cambios
+}
+
+/// Los ids de los informes de inspección vigentes del héroe de la sesión `h` y de los de campo de su cuenta, que viajan en su `HEROE`.
+fn informes_vigentes(n: &Nucleo, h: u64) -> BTreeSet<String> {
+    let Some(cuenta) = n.heroe(h).map(|x| x.cuenta.as_str()) else { return BTreeSet::new() };
+    let de_la_cuenta = n.estado().militar.heroes.values().filter(|x| x.cuenta == cuenta).map(|x| x.heroe.id);
+    de_la_cuenta.flat_map(|x| n.informes_de_inspeccion(x).into_iter().map(move |i| propios::id_de_informe(x, i))).collect()
+}
+
+/// Los informes de inspección que el cliente tenía y ya no están vigentes (caducaron): `QUITA` (paridad, 2026-10-27; antes los
+/// descartaba el cliente por su `expira_en_ms`). Los nuevos llegan por el registro de cambios, con el héroe.
+fn cambios_de_informes(n: &Nucleo, s: &mut Sesion, h: u64) -> Vec<pb::Cambio> {
+    let ahora = informes_vigentes(n, h);
+    let quitar: Vec<String> = s.informes.as_ref().map(|antes| antes.difference(&ahora).cloned().collect()).unwrap_or_default();
+    s.informes = Some(ahora);
+    quitar.into_iter().map(|id| cambio_quita(pb::TipoEntidad::InformeInspeccion, id)).collect()
+}
+
 /// Los alijos que entran a la vista del héroe `h` (`ACTUALIZA`) y los que salen (`QUITA`: se alejó, los abrió o ya no puede buscarlos) respecto de lo que el cliente tiene, que queda al día. Si no se
 /// sabe qué tiene (reanudó por deltas) y el héroe puede buscarlos, se le quitan todos los demás alijos del mundo; si no puede buscar, no se le manda nada.
 // Decidido por el autor (2026-10-26, duda 4 de 6G): un héroe que deja de poder buscar alijos estando desconectado y reanuda por deltas conserva en su cliente los que tenía hasta su
@@ -761,12 +793,17 @@ fn cambios_de_alijos(n: &Nucleo, s: &mut Sesion, h: u64) -> Vec<pb::Cambio> {
     cambios
 }
 
-/// Lo que `ADMIN` ve y no pasa por el registro, si cambió respecto de lo que el cliente tiene (todo, si no se sabe): el estado de tecnología entero y los Aedas itinerantes que se movieron.
+/// Lo que `ADMIN` ve y no pasa por el registro, si cambió respecto de lo que el cliente tiene (todo, si no se sabe): el estado de tecnología entero, los Aedas itinerantes que se movieron y lo que no
+/// tiene clase cuya huella cambió (`ACTUALIZA`) o que ya no está (`QUITA`: una Mirada que dejó de enfriar, la zona de una Facción que se quedó sin plazas). Al reanudar no se sabe qué tiene el
+/// cliente: se manda todo lo de ahora y nada se quita.
 fn cambios_de_admin(n: &Nucleo, s: &mut Sesion) -> Vec<pb::Cambio> {
     let visto = s.admin_visto.as_ref();
     let tecnologia = visto.is_none_or(|x| !x.igual_tecnologia(n));
     let movidos: Vec<&tecnologia::itinerantes::AedaItinerante> = n.estado().aedas.iter().enumerate().filter(|(i, x)| visto.and_then(|v| v.aedas.get(*i)) != Some(*x)).map(|(_, x)| x).collect();
-    if !tecnologia && movidos.is_empty() {
+    let huellas = vista::huellas_de_admin(n);
+    let cambiadas: Vec<&vista::ClaveAdmin> = huellas.iter().filter(|(k, h)| visto.and_then(|v| v.sin_clase.get(*k)) != Some(*h)).map(|(k, _)| k).collect();
+    let quitadas: Vec<&vista::ClaveAdmin> = visto.map(|v| v.sin_clase.keys().filter(|k| !huellas.contains_key(*k)).collect()).unwrap_or_default();
+    if !tecnologia && movidos.is_empty() && cambiadas.is_empty() && quitadas.is_empty() {
         return Vec::new();
     }
     let mut cambios = Vec::new();
@@ -774,6 +811,8 @@ fn cambios_de_admin(n: &Nucleo, s: &mut Sesion) -> Vec<pb::Cambio> {
         cambios.push(actualiza(pb::TipoEntidad::EstadoTecnologia, propios::ID_ESTADO_TECNOLOGIA.into(), pb::entidad::Cuerpo::EstadoTecnologia(propios::estado_tecnologia(n, Espectador::Admin))));
     }
     cambios.extend(movidos.into_iter().map(|x| actualiza(pb::TipoEntidad::Aeda, crate::proyeccion::ids::aeda(x.id), pb::entidad::Cuerpo::AedaItinerante(propios::aeda_itinerante(x)))));
+    cambios.extend(cambiadas.into_iter().filter_map(|k| Some(actualiza(k.0, k.1.clone(), vista::de_admin(n, k)?))));
+    cambios.extend(quitadas.into_iter().map(|k| cambio_quita(k.0, k.1.clone())));
     s.admin_visto = Some(AdminVisto::de(n));
     cambios
 }

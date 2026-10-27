@@ -105,6 +105,7 @@ para cada tramo:   enCamino = el tramo es una arista de la red de caminos
 - Los **ríos** se cruzan por un vado o por una ciudad ribereña: `pasosRio` = posiciones de asentamientos, que cuentan como paso a menos de `NAVEGACION.radioPasoCiudadMin` (10).
 - Si origen y destino están a menos de un espaciado del grafo, tramo directo si es válido; si no, se «engancha» a los nodos de alrededor y corre A\* con 8 vecinos y heurística admisible.
 - El cálculo es caro y corre **fuera del núcleo** (en paralelo); su resultado entra como un evento más y se escribe en el registro (Reloj_Y_Eventos §8).
+- **Los elementos del mapa no estorban** (decisión del autor del 2026-10-27): plazas, pueblos, avanzadas, campamentos, columnas, caravanas y héroes no ocupan sitio para la ruta; solo el terreno decide. Sus tamaños (`TAMANOS_MAPA`, `Economia_Construccion.md`) son para pintar y para colocar.
 - **Grafo calibrado:** espaciado 8 y ~333 nodos por lado (mapa de 2.667), un vado cada 100 (antes 300), para distinguir plazas a 30.
 
 ## 5. Destino, rumbo y estado

@@ -214,6 +214,10 @@ fn clave(c: &Cuerpo) -> (i32, String) {
         Cuerpo::Titulo(x) => (TipoEntidad::Titulo, &x.titulo_id),
         Cuerpo::AedaItinerante(x) => (TipoEntidad::Aeda, &x.id),
         Cuerpo::AedaResidente(x) => (TipoEntidad::Aeda, &x.id),
+        Cuerpo::Memoria(x) => (TipoEntidad::MemoriaFaccion, &x.faccion_id),
+        Cuerpo::ZonaFaccion(x) => (TipoEntidad::ZonaFaccion, &x.faccion_id),
+        Cuerpo::Mirada(x) => (TipoEntidad::MiradaIntel, &x.id),
+        Cuerpo::RedCaminos(_) => return (TipoEntidad::RedCaminos as i32, "red".into()),
         Cuerpo::EstadoTecnologia(_) => return (TipoEntidad::EstadoTecnologia as i32, "tecnologia".into()),
         otro => panic!("ADMIN no lleva {otro:?}"),
     };
@@ -336,6 +340,8 @@ async fn la_administracion_ve_todo_el_mundo_sin_niebla_ni_redaccion_y_todo_lo_qu
     assert_eq!(de_admin.de(TipoEntidad::CampamentoMercenarios), campamentos);
     assert_eq!(de_admin.get(TipoEntidad::CampamentoBandidos, &bandidos.id), Some(&Cuerpo::CampamentoBandidos(bandidos)));
     assert_eq!(de_admin.de(TipoEntidad::FichaConocida), 0, "sin niebla no hay recuerdos: lo ve todo tal como es");
+    // Lo que no tiene clase en el registro (paridad, 2026-10-27): la zona fundida de cada Facción con plazas y la memoria de la niebla de las que han explorado algo.
+    assert!(de_admin.de(TipoEntidad::ZonaFaccion) >= 1 && de_admin.de(TipoEntidad::MemoriaFaccion) >= 1, "zonas y memorias");
 
     // Gus marcha: a la administración le llega su columna entera, con el plan hasta el destino (lo que a un ajeno nunca se le enseña).
     let (mut gus_c, _, _) = w.conectar(hola_con("gus", TipoCliente::ClienteUnity, &[], &[])).await;
@@ -366,7 +372,7 @@ async fn la_administracion_ve_todo_el_mundo_sin_niebla_ni_redaccion_y_todo_lo_qu
     assert!(p.presentes_ids.contains(&ids::heroe(dora)), "{:?}", p.presentes_ids);
 
     // Pasan tres minutos con la columna en marcha: la plaza llega en cada paso como cambio parcial con máscara (su almacén, no su ciudad) y la llegada de gus, con su hecho.
-    let (mut parciales, mut llego) = (0, false);
+    let (mut parciales, mut llego, mut memoria) = (0, false, false);
     for (k, t) in [1, 2, 3, 4].map(|k| (k, if k < 4 { t0 + k * MS_POR_MINUTO } else { fin.en_ms.max(t0 + 3 * MS_POR_MINUTO) + 1_000 })) {
         let (previos, r) = dar_todo(&mut admin_c, &format!("t{k}"), reloj_hasta(t)).await;
         aceptada(&r);
@@ -376,10 +382,12 @@ async fn la_administracion_ve_todo_el_mundo_sin_niebla_ni_redaccion_y_todo_lo_qu
                 parciales += 1;
             }
             llego |= d.eventos.iter().any(|e| e.codigo == "ejercito.llega" && e.heroes_ids == [ids::heroe(gus)]);
+            memoria |= d.cambios.iter().any(|c| c.entidad == TipoEntidad::MemoriaFaccion as i32);
         }
     }
     assert!(parciales >= 3, "un cambio parcial de la plaza por cada paso de minuto: {parciales}");
     assert!(llego, "los hechos llegan a la administración");
+    assert!(memoria, "lo que explora la columna de gus llega a la memoria de su Facción");
     assert!(de_admin.get(TipoEntidad::Ejercito, &ej_gus).is_some_and(|c| matches!(c, Cuerpo::Ejercito(x) if x.plan.is_none())), "gus ha llegado");
 
     // Foto + deltas = la foto que recibe una sesión de administración nueva.

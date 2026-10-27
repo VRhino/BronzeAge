@@ -152,6 +152,8 @@ pub struct Reglas {
     pub pueblos: crate::pueblos::ReglasPueblos,
     /// `AVANZADAS`: las obras de mapa de las avanzadas (Doc 5.17).
     pub avanzadas: crate::avanzadas::ReglasAvanzadas,
+    /// `TAMANOS_MAPA`: lo que mide cada elemento en el mapa del mundo (para pintar y colocar; el movimiento no los mira).
+    pub tamanos: TamanosMapa,
     /// `MURALLA` (de `Murallas.md`): los recintos de muralla, su coste, su obra y su bono defensivo.
     pub muralla: crate::recintos::ReglasMuralla,
     /// `FUNDACION.materialesIniciales`: lo que trae una plaza recién fundada.
@@ -166,6 +168,40 @@ pub struct Reglas {
     pub madera_extra_caravana: Mil,
     /// `FUNDACION.caducidadCaravanaHoras`, en ms: lo que dura suelta una Caravana de Fundación antes de caducar.
     pub caducidad_caravana: i64,
+}
+
+/// `TAMANOS_MAPA` (Economia_Construccion §14.1, decisión del autor del 2026-10-27): el diámetro, en milésimas de unidad de mapa, del disco que ocupa cada elemento en el mapa del mundo.
+/// Sirven para pintar y para colocar; el movimiento no los mira.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TamanosMapa {
+    pub avanzada: Mil,
+    pub pueblo: Mil,
+    pub campamento_mercenarios: Mil,
+    pub campamento_bandidos: Mil,
+    pub nodo: Mil,
+    pub alijo: Mil,
+    pub heroe: Mil,
+    pub columna: Mil,
+    pub ejercito: Mil,
+    pub caravana: Mil,
+}
+
+impl TamanosMapa {
+    fn de(b: &Value) -> Self {
+        let d = |k: &str| mil(num(b, k));
+        TamanosMapa {
+            avanzada: d("avanzada"),
+            pueblo: d("pueblo"),
+            campamento_mercenarios: d("campamentoMercenarios"),
+            campamento_bandidos: d("campamentoBandidos"),
+            nodo: d("nodo"),
+            alijo: d("alijo"),
+            heroe: d("heroe"),
+            columna: d("columna"),
+            ejercito: d("ejercito"),
+            caravana: d("caravana"),
+        }
+    }
 }
 
 impl Reglas {
@@ -228,6 +264,7 @@ impl Reglas {
             duracion_minutos: num(&pol, "duracionMinutosPorDefecto") as i64,
             catalogo,
         };
+        let tamanos = TamanosMapa::de(&b("TAMANOS_MAPA"));
         let fundacion = b("FUNDACION");
         let materiales_iniciales = fundacion["materialesIniciales"]
             .as_object()
@@ -250,7 +287,8 @@ impl Reglas {
             mantenimiento: crate::mantenimiento::ReglasMantenimiento::de(&b("MANTENIMIENTO")),
             nivel: crate::nivel::ReglasNivel::de(&b("NIVEL_ASENTAMIENTO"), &b("ASCENSO_ASENTAMIENTO")),
             pueblos: crate::pueblos::ReglasPueblos::de(&b("PUEBLOS_EXTRACTORES")),
-            avanzadas: crate::avanzadas::ReglasAvanzadas::de(&b("AVANZADAS")),
+            avanzadas: crate::avanzadas::ReglasAvanzadas::de(&b("AVANZADAS"), &tamanos),
+            tamanos,
             muralla: crate::recintos::ReglasMuralla::de(&b("MURALLA")),
         }
     }

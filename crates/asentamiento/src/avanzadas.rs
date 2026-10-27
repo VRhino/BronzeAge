@@ -123,8 +123,7 @@ pub struct ReglasAvanzadas {
     pub cupo_por_nivel: u32,
     /// Cabida por recurso del almacén de cada etapa.
     pub capacidad_almacen: [Mil; 3],
-    /// Lo que mide un elemento nuevo del mapa (Doc 4.2.2, 5.17: «como mucho 0,2 de mapa»): ocupa un disco de ese diámetro, así que dos elementos no se pisan si
-    /// sus centros distan `tamano` o más.
+    /// Lo que mide la avanzada en el mapa (`TAMANOS_MAPA.avanzada`): el diámetro del disco que ocupa.
     pub tamano: Mil,
     /// Lo que mide la ciudad de la plaza madre en el mapa, como fracción del radio de su zona (ppm): «la ciudad nunca pasa de una décima de su provincia».
     pub ciudad_de_la_zona: i64,
@@ -135,7 +134,7 @@ pub struct ReglasAvanzadas {
 }
 
 impl ReglasAvanzadas {
-    pub fn de(b: &Value) -> Self {
+    pub fn de(b: &Value, tamanos: &crate::datos::TamanosMapa) -> Self {
         let por_etapa = |bloque: &Value| -> [Value; 3] { Etapa::TODAS.map(|e| bloque[e.nombre()].clone()) };
         let numero = |v: &Value| v.as_f64().unwrap_or_else(|| panic!("falta un número en AVANZADAS: {v}"));
         let nivel = por_etapa(&b["nivelMadre"]).map(|v| numero(&v) as u32);
@@ -148,7 +147,7 @@ impl ReglasAvanzadas {
             nivel_madre: nivel,
             cupo_por_nivel: numero(&b["cupoPorNivelDeLaMadre"]) as u32,
             capacidad_almacen: capacidad,
-            tamano: mil(numero(&b["tamano"])),
+            tamano: tamanos.avanzada,
             ciudad_de_la_zona: ppm(numero(&b["fraccionCiudadDeLaZona"])),
             fraccion_reparacion: ppm(numero(&b["fraccionReparacion"])),
             obras,
@@ -171,13 +170,13 @@ impl ReglasAvanzadas {
     }
 
     /// Dónde cabe una avanzada nueva (Doc 5.17, 4.2.2): sin pisar la ciudad de su madre (la distancia a su centro es la de su radio más la mitad del tamaño de la
-    /// avanzada) ni ningún otro elemento del mapa (`otros` son los centros de los demás: avanzadas, pueblos, campamentos). Que esté en la zona y que el héroe esté en el
-    /// sitio lo mira el núcleo.
-    pub fn comprobar_sitio(&self, plaza: Punto, radio_de_zona: Mil, sitio: Punto, otros: impl IntoIterator<Item = Punto>) -> Result<(), ErrorAvanzada> {
+    /// avanzada) ni ningún otro elemento del mapa (`otros` son los centros de los demás, con su diámetro: avanzadas, pueblos, campamentos; dos se pisan si sus centros distan
+    /// menos de la media de sus diámetros). Que esté en la zona y que el héroe esté en el sitio lo mira el núcleo.
+    pub fn comprobar_sitio(&self, plaza: Punto, radio_de_zona: Mil, sitio: Punto, otros: impl IntoIterator<Item = (Punto, Mil)>) -> Result<(), ErrorAvanzada> {
         if sitio.dist(plaza) < self.radio_de_ciudad(radio_de_zona) + self.tamano / 2 {
             return Err(ErrorAvanzada::DentroDelAsentamiento);
         }
-        if otros.into_iter().any(|o| sitio.dist(o) < self.tamano) {
+        if otros.into_iter().any(|(o, d)| sitio.dist(o) < (self.tamano + d) / 2) {
             return Err(ErrorAvanzada::PisaOtroElemento);
         }
         Ok(())
@@ -531,14 +530,17 @@ mod pruebas {
         // Con una zona mayor la ciudad es mayor: lo que valía deja de valer.
         assert_eq!(r.comprobar_sitio(plaza, 30_000, a(2_000, 0), []), Err(ErrorAvanzada::DentroDelAsentamiento));
         assert_eq!(r.comprobar_sitio(plaza, 30_000, a(3_100, 0), []), Ok(()));
-        // Otro elemento (una avanzada, un pueblo, un campamento) a menos de su tamaño (0,2) se pisa; a 0,2 justo, no.
+        // Otro elemento (una avanzada, un pueblo, un campamento) a menos de la media de los dos diámetros (0,2 y 0,2) se pisa; a 0,2 justo, no.
         let sitio = a(8_000, 0);
-        let otros = [a(8_199, 0), a(20_000, 0)];
+        let otros = [(a(8_199, 0), 200), (a(20_000, 0), 200)];
         assert_eq!(r.comprobar_sitio(plaza, 15_000, sitio, otros), Err(ErrorAvanzada::PisaOtroElemento));
-        assert_eq!(r.comprobar_sitio(plaza, 15_000, sitio, [a(8_000, 200), a(7_800, 0)]), Ok(()));
-        assert_eq!(r.comprobar_sitio(plaza, 15_000, sitio, [sitio]), Err(ErrorAvanzada::PisaOtroElemento), "ni encima");
+        assert_eq!(r.comprobar_sitio(plaza, 15_000, sitio, [(a(8_000, 200), 200), (a(7_800, 0), 200)]), Ok(()));
+        assert_eq!(r.comprobar_sitio(plaza, 15_000, sitio, [(sitio, 200)]), Err(ErrorAvanzada::PisaOtroElemento), "ni encima");
+        // Uno más grande pisa desde más lejos: con 1 de diámetro, la media es 0,6.
+        assert_eq!(r.comprobar_sitio(plaza, 15_000, sitio, [(a(8_599, 0), 1_000)]), Err(ErrorAvanzada::PisaOtroElemento));
+        assert_eq!(r.comprobar_sitio(plaza, 15_000, sitio, [(a(8_600, 0), 1_000)]), Ok(()));
         // La ciudad se mira antes que los demás elementos.
-        assert_eq!(r.comprobar_sitio(plaza, 15_000, a(500, 0), [a(500, 0)]), Err(ErrorAvanzada::DentroDelAsentamiento));
+        assert_eq!(r.comprobar_sitio(plaza, 15_000, a(500, 0), [(a(500, 0), 200)]), Err(ErrorAvanzada::DentroDelAsentamiento));
     }
 
     #[test]

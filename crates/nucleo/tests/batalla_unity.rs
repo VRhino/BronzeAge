@@ -24,6 +24,7 @@ use nucleo::proyeccion::ids;
 use nucleo::{Ajustes, Arranque, Comando, Nucleo, Peticion, Reglas, Resultado, Respuesta};
 use rutas::Rutas;
 use servidor::prueba::{hola, ClientePrueba};
+use std::collections::BTreeSet;
 use std::sync::{Arc, OnceLock};
 
 const MIN: i64 = MS_POR_MINUTO;
@@ -904,15 +905,31 @@ async fn el_informe_de_inspeccion_de_una_columna_una_caravana_y_una_plaza_con_su
     assert!(k.escoltada && k.recursos.is_empty(), "si va escoltada y qué lleva, nunca cuánto");
 
     // Foto + deltas = foto final, y solo lo ve quien lo hizo: una sesión nueva de ana ve los tres en su ámbito; gus, ninguno.
-    let (_, _, nueva) = w.conectar(hola("ok:ana", TipoCliente::ClienteUnity)).await;
+    let (mut ana_nueva, _, nueva) = w.conectar(hola("ok:ana", TipoCliente::ClienteUnity)).await;
     let foto = nueva.iter().find_map(|m| if let ms::Cuerpo::Foto(f) = m { Some(f).filter(|f| ambito(&f.ambito) == format!("HEROE:{h_ana}")) } else { None }).expect("la foto de su héroe");
     let en_foto: Vec<&pb::InformeInspeccion> = foto.entidades.iter().filter_map(|e| if let Some(Cuerpo::InformeInspeccion(i)) = e.cuerpo.as_ref() { Some(i) } else { None }).collect();
     assert_eq!(en_foto.len(), 3);
     assert!(en_foto.iter().all(|i| todos.contains(i)), "los mismos informes que fueron llegando por deltas");
     let de_gus = pendiente(&mut gus_c).await;
     assert!(de_gus.iter().all(|m| !matches!(m, ms::Cuerpo::Delta(d) if d.cambios.iter().filter_map(|c| c.datos.as_ref()).any(|e| matches!(&e.cuerpo, Some(Cuerpo::InformeInspeccion(_)))))), "es de quien lo hizo");
+    let n_informes = |n: &Nucleo| n.informes_de_inspeccion(ana.1).iter().any(|i| matches!(&i.contenido, militar::inspeccion::Contenido::Plaza { recintos, .. } if recintos.len() == 1));
+    // Al caducar (10 min) salen del cliente con `QUITA` (paridad, 2026-10-27): caducar no cambia el mundo, lo quita la sesión al reconciliar.
+    let (mut admin, ..) = w.conectar(hola("ok:admin", TipoCliente::ClienteAdminWeb)).await;
+    let hasta = plaza.expira_en_ms.max(todos.iter().map(|i| i.expira_en_ms).max().unwrap()) + MIN;
+    let reloj = orden::Cuerpo::ControlarReloj(pb::OrdenControlarReloj { accion: "avanzar_hasta".into(), factor_milesimas: None, hasta_ms: Some(hasta) });
+    aceptada(&dar(&mut admin, "reloj", reloj).await.1);
+    let quitados: BTreeSet<String> = pendiente(&mut ana_nueva)
+        .await
+        .into_iter()
+        .filter_map(|m| if let ms::Cuerpo::Delta(d) = m { Some(d) } else { None })
+        .filter(|d| ambito(&d.ambito) == format!("HEROE:{h_ana}"))
+        .flat_map(|d| d.cambios)
+        .filter(|c| c.tipo == pb::TipoCambio::CambioQuita as i32 && c.entidad == pb::TipoEntidad::InformeInspeccion as i32)
+        .map(|c| c.id)
+        .collect();
+    assert_eq!(quitados, todos.iter().map(|i| i.id.clone()).collect::<BTreeSet<_>>(), "los tres informes caducados salen del cliente");
     let n = w.parar().await;
-    assert!(n.informes_de_inspeccion(ana.1).iter().any(|i| matches!(&i.contenido, militar::inspeccion::Contenido::Plaza { recintos, .. } if recintos.len() == 1)));
+    assert!(!n_informes(&n), "ya no está vigente");
     la_foto_vuelve_igual(&n, m);
 }
 

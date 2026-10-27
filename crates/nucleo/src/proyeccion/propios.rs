@@ -197,10 +197,11 @@ fn interior_recordado(plaza: u64, x: &PlazaRecordada) -> pb::InteriorRecordado {
     }
 }
 
-/// Una escuadra. DUDA: la guarnición de una avanzada no tiene sitio en `ContenedorEscuadron`: sale como «en el campamento» (la lista `Avanzada.guarnicion_jugadores_ids` dice dónde está de verdad).
+/// Una escuadra. La que está en la guarnición de una avanzada sale con `avanzada_id` (paridad, 2026-10-27; antes, «en el campamento»).
 pub fn escuadron(n: &Nucleo, e: &Escuadra) -> pb::Escuadron {
     let contenedor = match e.contenedor {
-        Contenedor::Campamento | Contenedor::Avanzada(_) => pb::contenedor_escuadron::Donde::Campamento(true),
+        Contenedor::Campamento => pb::contenedor_escuadron::Donde::Campamento(true),
+        Contenedor::Avanzada(a) => pb::contenedor_escuadron::Donde::AvanzadaId(ids::avanzada(a)),
         Contenedor::Ejercito(c) => pb::contenedor_escuadron::Donde::EjercitoId(ids::ejercito(c)),
         Contenedor::Escolta(c) => pb::contenedor_escuadron::Donde::CaravanaId(ids::caravana(c)),
         Contenedor::Fuera => pb::contenedor_escuadron::Donde::Fuera(true),
@@ -236,15 +237,25 @@ pub(super) fn avistadas(a: &[Avistada]) -> Vec<pb::GuarnicionInforme> {
     a.iter().map(|x| pb::GuarnicionInforme { tropa_id: x.tropa.nombre().to_owned(), cantidad: x.cantidad.max(0) as u32, heroe_id: ids::heroe(x.heroe) }).collect()
 }
 
-/// Lo que un héroe sacó de mirar de cerca (`inspeccionar`): una columna, una caravana o la defensa de una plaza con sus recintos. Lo ve solo quien lo hizo y vale hasta `expira_en_ms`: el cliente lo
-/// descarta solo (no hay `QUITA` al caducar, no pasa nada en el mundo).
-pub fn informe_de_inspeccion(n: &Nucleo, heroe: u64, i: &Informe) -> pb::InformeInspeccion {
-    use pb::informe_inspeccion::Contenido as C;
-    let objetivo = match i.objetivo {
+/// El id de objetivo de un informe de inspección.
+fn objetivo_de_informe(i: &Informe) -> String {
+    match i.objetivo {
         Objetivo::Ejercito(x) => ids::ejercito(x),
         Objetivo::Caravana(x) => ids::caravana(x),
         Objetivo::Asentamiento(x) => ids::asentamiento(x),
-    };
+    }
+}
+
+/// El id de un informe de inspección en el contrato (uno por héroe y objetivo).
+pub fn id_de_informe(heroe: u64, i: &Informe) -> String {
+    ids::informe(heroe, &objetivo_de_informe(i))
+}
+
+/// Lo que un héroe sacó de mirar de cerca (`inspeccionar`): una columna, una caravana o la defensa de una plaza con sus recintos. Lo ve solo quien lo hizo y vale hasta `expira_en_ms`; al caducar,
+/// la sesión lo quita con `QUITA` en su reconciliación siguiente (`sesiones::ambitos`, paridad del 2026-10-27).
+pub fn informe_de_inspeccion(n: &Nucleo, heroe: u64, i: &Informe) -> pb::InformeInspeccion {
+    use pb::informe_inspeccion::Contenido as C;
+    let objetivo = objetivo_de_informe(i);
     let contenido = match &i.contenido {
         Contenido::Columna { faccion, heroes, escuadras } => C::Columna(pb::InspeccionColumna { faccion_id: faccion.map(ids::faccion), heroes_ids: heroes.iter().map(|&h| ids::heroe(h)).collect(), escuadras: avistadas(escuadras) }),
         Contenido::Caravana { escoltada, recursos } => C::Caravana(pb::InspeccionCaravana { escoltada: *escoltada, recursos: recursos.iter().map(|r| r.nombre().to_owned()).collect() }),
@@ -759,7 +770,7 @@ pub fn obra_de_pueblo(n: &Nucleo, madre: u64, p: &Pueblo) -> pb::ObraDeMapa {
 }
 
 /// La avanzada que ya es un puesto (operativa o en ruinas). La primera obra, la mejora y la reparación van aparte, en [`obra_de_avanzada`].
-/// DUDA: sin `almacen` (el contrato trae una sola `Existencia` y el núcleo un almacén de 29 recursos) (`batalla_id` sí: el asedio visible).
+/// El almacén va por recurso en `almacen_por_recurso` (`almacen`, de una sola `Existencia`, no se usa); `batalla_id` es el asedio visible.
 pub fn avanzada(n: &Nucleo, madre: Option<u64>, v: &Avanzada) -> pb::Avanzada {
     let e = n.estado();
     let g = e.combate.avanzadas.get(&v.id);
@@ -781,6 +792,12 @@ pub fn avanzada(n: &Nucleo, madre: Option<u64>, v: &Avanzada) -> pb::Avanzada {
         tropa_elegida_por_escalon: g.into_iter().flat_map(|g| &g.elegidas).map(|(&k, t)| (u32::from(k), t.nombre().to_owned())).collect::<BTreeMap<_, _>>().into_iter().collect(),
         guarnicion_jugadores_ids: n.guarnicion_de_jugadores_de_avanzada(v.id).iter().map(|s| ids::escuadra(s.id)).collect(),
         batalla_id: batalla_sobre(n, Ubicacion::Avanzada(v.id)),
+        // Lo que hay de cada recurso, con su tope de la etapa (paridad, 2026-10-27); la atalaya, sin almacén, no lleva ninguno.
+        almacen_por_recurso: asentamiento::recurso::TODOS
+            .iter()
+            .filter(|&&r| v.almacen.capacidad(r) > 0)
+            .map(|&r| (r.nombre().to_owned(), existencia(&v.almacen, r, 0)))
+            .collect(),
         ..Default::default()
     }
 }
@@ -908,7 +925,7 @@ pub fn proyectar(n: &Nucleo, quien: Espectador, clase: Clase, id: u64) -> Proyec
             e.asentamientos.get(&id).map(|a| Cuerpo::Asentamiento(pb::Asentamiento { cargos: Some(super::interior::cargos(&a.cargos)), fundadores_ids: a.fundadores.iter().map(|&h| ids::heroe(h)).collect(), ..super::ficha_de_asentamiento(a, &n.poligono_zona(a.id), batalla_sobre(n, Ubicacion::Asentamiento(a.id as u32))) })),
         ),
         Clase::Heroe => {
-            // El héroe y sus informes de inspección vigentes (los vencidos los descarta el cliente por su `expira_en_ms`).
+            // El héroe y sus informes de inspección vigentes (los vencidos los quita la sesión al reconciliar).
             let mut p = un(T::Heroe, ids::heroe(id), n.heroe(id).map(|h| Cuerpo::Heroe(heroe(n, h))));
             let informes = n.informes_de_inspeccion(id).into_iter().map(|i| informe_de_inspeccion(n, id, i));
             p.existen.extend(informes.map(|i| (T::InformeInspeccion, i.id.clone(), Cuerpo::InformeInspeccion(i))));
@@ -973,9 +990,9 @@ pub fn proyectar(n: &Nucleo, quien: Espectador, clase: Clase, id: u64) -> Proyec
 /// Todo lo que hay en el mundo menos las plazas (que `ADMIN` lleva con su interior, `interior::asentamiento`), por clase e id: lo que [`proyectar`] da a la administración. Los Aedas itinerantes
 /// no son una clase: la foto de `ADMIN` los añade aparte (`sesiones::ambitos::foto`).
 ///
-/// DUDA: no están la memoria de la niebla de cada Facción (lo explorado, las fichas, las Miradas y los Informes de plaza: no tienen clase en el registro de cambios), la red de caminos, los
-/// precios de referencia ni el historial de cada héroe, que el `admin/partida` del TypeScript sí llevaba (fila «Contrato (4H, T3e)»). Los títulos van desde 5F; los Aedas, sus épicas, el
-/// estado de tecnología del mundo y los alijos (en el artefacto), desde 6G.
+/// Lo que no tiene clase en el registro de cambios (la memoria de la niebla de cada Facción, sus Miradas, las zonas fundidas y la red de caminos, desde la paridad del 2026-10-27) lo añade
+/// la foto de `ADMIN` aparte, como los Aedas (`vista::huellas_de_admin`). DUDA: no están los precios de referencia ni el historial de cada héroe, que el `admin/partida` del TypeScript sí llevaba
+/// (fila «Contrato (4H, T3e)»). Los títulos van desde 5F; los Aedas, sus épicas, el estado de tecnología del mundo y los alijos (en el artefacto), desde 6G.
 pub fn todo_menos_plazas(n: &Nucleo) -> Vec<(Clase, u64)> {
     let e = n.estado();
     let mut v: Vec<(Clase, u64)> = audiencia::CLASES.into_iter().filter(|c| !matches!(c, Clase::Asentamiento | Clase::Escuadra)).flat_map(|c| audiencia::todas(e, c).into_iter().map(move |id| (c, id))).collect();

@@ -328,11 +328,7 @@ impl<'n> Mirada<'n> {
             v.extend(self.avanzada_avistada(None, x, n.version_de(Clase::Avanzada, x.id)));
         }
         for (&s, &f) in self.fichas.iter().filter(|(s, f)| !vistos.contains(s) && rect.contiene(f.datos.posicion)) {
-            let id = match s {
-                Sitio::Plaza(x) => ids::asentamiento(x),
-                Sitio::Pueblo(x) => ids::pueblo(x),
-                Sitio::Avanzada(x) => ids::avanzada(x),
-            };
+            let id = id_de_sitio(s);
             let d = f.datos;
             nombradas.push(d.faccion);
             let sello = Sello(u64::from(d.faccion) << 32 | u64::from(d.nivel) << 2 | d.estado as u64, f.conocido_en ^ d.radio.rotate_left(20));
@@ -396,10 +392,7 @@ impl<'n> Mirada<'n> {
             let plazas: Vec<&crate::estado::Asentamiento> = n.plazas_de(f).collect();
             if !plazas.is_empty() {
                 let version = plazas.iter().map(|a| a.version).max().unwrap_or(0);
-                v.push(visible(pb::TipoEntidad::ZonaFaccion, ids::faccion(f), Sello(version, plazas.len() as i64), move || {
-                    let zonas: Vec<Vec<Punto>> = n.plazas_de(f).map(|a| n.poligono_zona(a.id)).collect();
-                    Some(Cuerpo::ZonaFaccion(pb::ZonaFaccion { faccion_id: ids::faccion(f), contornos: territorio::contornos(&zonas).into_iter().map(|l| pb::ContornoZona { puntos: l.into_iter().map(punto).collect() }).collect() }))
-                }));
+                v.push(visible(pb::TipoEntidad::ZonaFaccion, ids::faccion(f), Sello(version, plazas.len() as i64), move || Some(Cuerpo::ZonaFaccion(zona_faccion(n, f)))));
             }
         }
 
@@ -412,18 +405,7 @@ impl<'n> Mirada<'n> {
                 let faccion = self.faccion;
                 let propia = move |r: &RutaComercial| Some(r.faccion) == faccion;
                 let huella = n.rutas_vigentes().fold(0u64, |h, r| h.rotate_left(7) ^ (u64::from(r.origen) << 32 | u64::from(r.destino)) ^ if propia(r) { r.ultimo_lanzamiento as u64 } else { 0 });
-                v.push(visible(pb::TipoEntidad::RedCaminos, "red".into(), Sello(huella, aristas.len() as i64), move || {
-                    let (pesos, reglas) = (n.pesos_de_red(), &e.reglas.economia.comercio.red);
-                    let con_escalon: Vec<(Arista, u8)> = aristas.iter().map(|a| (**a, escalon_de_peso(reglas, pesos.get(*a).copied().unwrap_or(0)))).collect();
-                    let escalones = con_escalon.iter().map(|&(_, e)| u32::from(e)).collect();
-                    let tramos = comercio::red_caminos::tramos_de_red(&con_escalon)
-                        .into_iter()
-                        .enumerate()
-                        .map(|(i, t)| pb::TramoDeRed { id: format!("tramo-{i}"), escalon: u32::from(t.escalon), puntos: t.puntos.into_iter().map(|(x, y)| pb::Punto { x: x * 1_000, y: y * 1_000 }).collect() })
-                        .collect();
-                    let rutas = n.rutas_vigentes().filter(|r| propia(r)).map(ruta_comercial).collect();
-                    Some(Cuerpo::RedCaminos(pb::RedCaminos { version: 0, aristas: aristas.iter().map(|a| id_de_arista(a)).collect(), rutas, escalones, tramos }))
-                }));
+                v.push(visible(pb::TipoEntidad::RedCaminos, "red".into(), Sello(huella, aristas.len() as i64), move || Some(Cuerpo::RedCaminos(red_caminos(n, &aristas, propia)))));
             }
         }
 
@@ -687,7 +669,7 @@ pub fn heroe_publico(n: &Nucleo, id: u64) -> pb::Heroe {
 }
 
 /// Una Mirada de la Facción, abierta o enfriando su zona.
-fn mirada_intel(m: &MiradaIntel) -> pb::MiradaIntel {
+pub(crate) fn mirada_intel(m: &MiradaIntel) -> pb::MiradaIntel {
     pb::MiradaIntel {
         id: ids::mirada(m.id),
         version: 0,
@@ -705,7 +687,7 @@ fn mirada_intel(m: &MiradaIntel) -> pb::MiradaIntel {
 }
 
 /// El Informe de una plaza ajena que conserva la Facción: lo que había el día que se compró (edificios levantados y en obra, recintos, guarnición y quién estaba dentro). Nunca el almacén.
-fn informe_de_plaza(id: u64, i: &InformeDePlaza) -> pb::InformePlaza {
+pub(crate) fn informe_de_plaza(id: u64, i: &InformeDePlaza) -> pb::InformePlaza {
     let militar::inspeccion::Contenido::Plaza { faccion, heroes, guarnicion, recintos } = &i.defensa else { unreachable!("un Informe guarda la defensa de una plaza") };
     pb::InformePlaza {
         asentamiento_id: ids::asentamiento(id),
@@ -732,8 +714,17 @@ fn informe_de_plaza(id: u64, i: &InformeDePlaza) -> pb::InformePlaza {
     }
 }
 
+/// El id de un sitio recordado en el contrato: `as-N`, `pueblo-N` o `av-N`.
+fn id_de_sitio(s: Sitio) -> String {
+    match s {
+        Sitio::Plaza(x) => ids::asentamiento(x),
+        Sitio::Pueblo(x) => ids::pueblo(x),
+        Sitio::Avanzada(x) => ids::avanzada(x),
+    }
+}
+
 /// La ficha de lo que se recuerda de un sitio ajeno.
-fn ficha_conocida(s: Sitio, id: String, f: Ficha) -> pb::FichaConocida {
+pub(crate) fn ficha_conocida(s: Sitio, id: String, f: Ficha) -> pb::FichaConocida {
     let tipo = match s {
         Sitio::Plaza(_) => pb::TipoEntidad::Asentamiento,
         Sitio::Pueblo(_) => pb::TipoEntidad::Pueblo,
@@ -757,12 +748,33 @@ fn ficha_conocida(s: Sitio, id: String, f: Ficha) -> pb::FichaConocida {
     }
 }
 
-/// Una ruta comercial vigente en el contrato (`ruta-<origen>-<destino>`), con sus aristas.
-fn ruta_comercial(r: &RutaComercial) -> pb::RutaComercial {
+/// La zona de la Facción `f`, fundida: el contorno de la unión de las zonas recortadas de sus plazas, con los huecos que rodea sin reclamar (sin contornos si no tiene plazas).
+pub(crate) fn zona_faccion(n: &Nucleo, f: u32) -> pb::ZonaFaccion {
+    let zonas: Vec<Vec<Punto>> = n.plazas_de(f).map(|a| n.poligono_zona(a.id)).collect();
+    pb::ZonaFaccion { faccion_id: ids::faccion(f), contornos: territorio::contornos(&zonas).into_iter().map(|l| pb::ContornoZona { puntos: l.into_iter().map(punto).collect() }).collect() }
+}
+
+/// La red de caminos con estas aristas (el escalón de cada una cuenta todas las rutas vigentes) y las rutas vigentes que pasan `ruta`.
+pub(crate) fn red_caminos(n: &Nucleo, aristas: &[&Arista], ruta: impl Fn(&RutaComercial) -> bool) -> pb::RedCaminos {
+    let (pesos, reglas) = (n.pesos_de_red(), &n.estado().reglas.economia.comercio.red);
+    let con_escalon: Vec<(Arista, u8)> = aristas.iter().map(|a| (**a, escalon_de_peso(reglas, pesos.get(*a).copied().unwrap_or(0)))).collect();
+    let escalones = con_escalon.iter().map(|&(_, e)| u32::from(e)).collect();
+    let tramos = comercio::red_caminos::tramos_de_red(&con_escalon)
+        .into_iter()
+        .enumerate()
+        .map(|(i, t)| pb::TramoDeRed { id: format!("tramo-{i}"), escalon: u32::from(t.escalon), puntos: t.puntos.into_iter().map(|(x, y)| pb::Punto { x: x * 1_000, y: y * 1_000 }).collect() })
+        .collect();
+    let rutas = n.rutas_vigentes().filter(|r| ruta(r)).map(|r| ruta_comercial(n, r)).collect();
+    pb::RedCaminos { version: 0, aristas: aristas.iter().map(|a| id_de_arista(a)).collect(), rutas, escalones, tramos }
+}
+
+/// Una ruta comercial vigente en el contrato (`ruta-<origen>-<destino>`), con sus aristas. La del carro de acarreo de un pueblo (paridad, 2026-10-27) va de la plaza madre al pueblo (`pueblo-N`).
+fn ruta_comercial(n: &Nucleo, r: &RutaComercial) -> pb::RutaComercial {
+    let destino = u64::from(r.destino);
     pb::RutaComercial {
         id: format!("ruta-{}-{}", r.origen, r.destino),
         origen_id: ids::asentamiento(u64::from(r.origen)),
-        destino_id: ids::asentamiento(u64::from(r.destino)),
+        destino_id: if n.estado().comercio.rutas_acarreo.contains_key(&destino) { ids::pueblo(destino) } else { ids::asentamiento(destino) },
         faccion_id: ids::faccion(r.faccion),
         aristas: r.aristas.iter().map(id_de_arista).collect(),
         ultimo_lanzamiento_ms: r.ultimo_lanzamiento,
@@ -782,4 +794,82 @@ fn id_de_arista(a: &comercio::red_caminos::Arista) -> String {
 /// Las entidades de una vista ya proyectadas (la `Foto`), en el orden de `contenido`.
 pub fn proyectar_todo(visibles: &[Visible<'_>]) -> Vec<Proyectada> {
     visibles.iter().filter_map(|x| Some((pb::TipoEntidad::try_from(x.clave.0).ok()?, x.clave.1.clone(), x.cuerpo()?))).collect()
+}
+
+/// Una entidad de `ADMIN` que no tiene clase en el registro de cambios, por tipo e id del contrato.
+pub type ClaveAdmin = (pb::TipoEntidad, String);
+
+/// Mezcla `x` en una huella (FNV-1a por palabras): basta para saber si algo cambió, no es criptográfica.
+fn mezclar(h: u64, x: u64) -> u64 {
+    (h ^ x).wrapping_mul(0x0100_0000_01b3)
+}
+
+/// Lo que `ADMIN` ve y no tiene clase en el registro de cambios (paridad, 2026-10-27; lo llevaba el `admin/partida` del TypeScript), cada cosa con una huella que cambia si cambia lo que se
+/// proyecta: la memoria de la niebla de cada Facción (`MemoriaFaccion`: lo explorado, las fichas y los Informes de plaza), las Miradas que aún enfrían su zona, la zona fundida de cada Facción con
+/// plazas (con el sello de la `VISTA`: la última versión de sus plazas y cuántas son) y la red de caminos entera con todas las rutas vigentes. La sesión compara las huellas en cada reparto.
+pub fn huellas_de_admin(n: &Nucleo) -> BTreeMap<ClaveAdmin, u64> {
+    let (e, t) = (n.estado(), n.ahora());
+    let mem = &e.memoria;
+    let mut v = BTreeMap::new();
+    let facciones: BTreeSet<u32> = mem.exploracion.keys().chain(mem.fichas.keys()).chain(mem.informes.keys()).copied().collect();
+    for f in facciones {
+        let mut h = 0xcbf2_9ce4_8422_2325;
+        for c in mem.exploracion.get(&f).map(Mascara::bytes).unwrap_or_default().chunks(8) {
+            h = mezclar(h, c.iter().fold(0u64, |a, &b| a << 8 | u64::from(b)));
+        }
+        for (&s, x) in mem.fichas.get(&f).into_iter().flatten() {
+            let (k, i) = match s {
+                Sitio::Plaza(i) => (0, i),
+                Sitio::Pueblo(i) => (1, i),
+                Sitio::Avanzada(i) => (2, i),
+            };
+            let d = x.datos;
+            for y in [k, i, x.conocido_en as u64, u64::from(d.faccion), u64::from(d.nivel), d.estado as u64, d.radio as u64, d.posicion.x as u64, d.posicion.y as u64] {
+                h = mezclar(h, y);
+            }
+        }
+        for (&p, i) in mem.informes.get(&f).into_iter().flatten() {
+            h = mezclar(mezclar(h, p), i.conocido_en as u64);
+        }
+        v.insert((pb::TipoEntidad::MemoriaFaccion, ids::faccion(f)), h);
+    }
+    for m in mem.miradas.iter().filter(|m| m.libre_en > t) {
+        v.insert((pb::TipoEntidad::MiradaIntel, ids::mirada(m.id)), m.libre_en as u64);
+    }
+    let mut plazas: BTreeMap<u32, (u64, u64)> = BTreeMap::new();
+    for a in e.asentamientos.values() {
+        let x = plazas.entry(a.faccion).or_default();
+        *x = (x.0.max(a.version), x.1 + 1);
+    }
+    for (f, (version, cuantas)) in plazas {
+        v.insert((pb::TipoEntidad::ZonaFaccion, ids::faccion(f)), mezclar(version, cuantas));
+    }
+    let aristas = e.comercio.red.aristas().count() as u64;
+    if aristas > 0 {
+        let huella = n.rutas_vigentes().fold(aristas, |h, r| mezclar(mezclar(h, u64::from(r.origen) << 32 | u64::from(r.destino)), r.ultimo_lanzamiento as u64));
+        v.insert((pb::TipoEntidad::RedCaminos, "red".into()), huella);
+    }
+    v
+}
+
+/// El cuerpo de una entidad de [`huellas_de_admin`]. La memoria de una Facción va sin la exploración personal de los héroes sin bandera (no es de ninguna Facción).
+pub fn de_admin(n: &Nucleo, (tipo, id): &ClaveAdmin) -> Option<Cuerpo> {
+    let e = n.estado();
+    let mem = &e.memoria;
+    match tipo {
+        pb::TipoEntidad::MemoriaFaccion => {
+            let f = ids::parse_faccion(id)?;
+            Some(Cuerpo::Memoria(pb::MemoriaFaccion {
+                faccion_id: id.clone(),
+                version: 0,
+                exploracion: mem.exploracion.get(&f).map(|m| m.bytes().to_vec()).unwrap_or_default(),
+                asentamientos: mem.fichas.get(&f).into_iter().flatten().map(|(&s, &x)| (id_de_sitio(s), ficha_conocida(s, id_de_sitio(s), x))).collect(),
+                informes: mem.informes.get(&f).into_iter().flatten().map(|(&p, i)| (ids::asentamiento(p), informe_de_plaza(p, i))).collect(),
+            }))
+        }
+        pb::TipoEntidad::MiradaIntel => mem.miradas.iter().find(|m| ids::mirada(m.id) == *id).map(|m| Cuerpo::Mirada(mirada_intel(m))),
+        pb::TipoEntidad::ZonaFaccion => Some(Cuerpo::ZonaFaccion(zona_faccion(n, ids::parse_faccion(id)?))),
+        pb::TipoEntidad::RedCaminos => Some(Cuerpo::RedCaminos(red_caminos(n, &e.comercio.red.aristas().collect::<Vec<_>>(), |_| true))),
+        _ => None,
+    }
 }

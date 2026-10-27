@@ -80,7 +80,8 @@ pub fn de(e: &Estado, clase: Clase, id: u64) -> Vec<Ambito> {
                 v = heroes_de(e, x.columna.participantes.iter().map(|p| p.heroe));
             }
         }
-        Clase::Heroe => v.extend(e.militar.heroes.get(&id).filter(|h| principal(e, h) == Some(id)).map(|_| Ambito::Heroe(id))),
+        // El héroe de la sesión, y los de campo de su cuenta con él (paridad, 2026-10-27: antes un héroe de campo no tenía `Heroe`).
+        Clase::Heroe => v.extend(e.militar.heroes.get(&id).and_then(|h| principal(e, h)).map(Ambito::Heroe)),
         Clase::Escuadra => unreachable!("el ámbito de una escuadra es el de su dueño"),
         Clase::Caravana => {
             if let Some(c) = e.comercio.caravana(id) {

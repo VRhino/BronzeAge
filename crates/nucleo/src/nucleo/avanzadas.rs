@@ -119,15 +119,16 @@ impl Nucleo {
 
     // ───────────────────────────── Ayudas ─────────────────────────────
 
-    /// Los centros de lo que ya ocupa el mapa y mide lo mismo que una avanzada (Doc 4.2.2): las avanzadas en cualquier estado (también unas ruinas sin dueño), los pueblos
+    /// Los centros de lo que ya ocupa el mapa, con su diámetro de `TAMANOS_MAPA` (Doc 4.2.2): las avanzadas en cualquier estado (también unas ruinas sin dueño), los pueblos
     /// extractores sobre su nodo y los campamentos de mercenarios y de bandidos.
-    fn elementos_de_mapa(&self) -> Vec<Punto> {
+    fn elementos_de_mapa(&self) -> Vec<(Punto, Mil)> {
         let (asentamientos, combate) = (&self.estado.asentamientos, &self.estado.combate);
+        let t = &self.estado.reglas.economia.datos.tamanos;
         let nodos = self.geografia.as_ref().map_or(&[][..], |g| &g.mapa.nodos[..]);
-        let avanzadas = asentamientos.values().flat_map(|a| a.economia.avanzadas.iter()).chain(combate.huerfanas.values()).map(|v| v.posicion);
-        let pueblos = asentamientos.values().flat_map(|a| a.economia.pueblos.iter()).filter_map(|p| nodos.get(p.nodo as usize)).map(|n| n.pos);
-        let mercenarios = self.geografia.iter().flat_map(|g| g.mapa.campamentos.iter().copied());
-        avanzadas.chain(pueblos).chain(mercenarios).chain(combate.bandidos.values().map(|b| b.posicion)).collect()
+        let avanzadas = asentamientos.values().flat_map(|a| a.economia.avanzadas.iter()).chain(combate.huerfanas.values()).map(|v| (v.posicion, t.avanzada));
+        let pueblos = asentamientos.values().flat_map(|a| a.economia.pueblos.iter()).filter_map(|p| nodos.get(p.nodo as usize)).map(|n| (n.pos, t.pueblo));
+        let mercenarios = self.geografia.iter().flat_map(|g| g.mapa.campamentos.iter().map(|&c| (c, t.campamento_mercenarios)));
+        avanzadas.chain(pueblos).chain(mercenarios).chain(combate.bandidos.values().map(|b| (b.posicion, t.campamento_bandidos))).collect()
     }
 
     /// La avanzada y su plaza madre; las ruinas sin dueño no tienen madre y no reciben órdenes (salvo repararlas).
