@@ -70,6 +70,8 @@ Si el canon y `Mechanics` se contradicen, gana `Mechanics` (decisión del autor,
 | [`Campamentos_Mercenarios.md`](Campamentos_Mercenarios.md) | ✅ 2026-10-12 | índice de todo lo del campamento (dónde está cada cosa) y lo nuevo: población de reclutas, reclutar y su precio, tropa prestada y su retirada, y la planta |
 | [`Proyecciones_Y_Autorizacion.md`](Proyecciones_Y_Autorizacion.md) | ✅ 2026-10-12 | roles técnicos y superficies, el camino de un comando, los predicados de pertenencia, **la matriz de los 122 comandos**, qué proyecta el servidor a cada audiencia (administración, jugador sin y con héroe, eventos, crónica) y los canales de tiempo real (eventos y vistas de foto + delta) |
 | [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) | ✅ 2026-10-12 | cuándo se abre una batalla de Unity, el ticket congelado y su contrato v1, el candado y lo bloqueado, plazos y vencimientos, unirse (a qué bando), los cinco mensajes de Conquest (asignación, inicio, tokens, salida, resultado con su checklist e idempotencia), aplicar el resultado (heridos, conquista, carro, chatarra, XP, reputación) y lo que se cuenta |
+| [`Misiones.md`](Misiones.md) | ✅ 2026-10-27 | misiones de héroe, plaza y Facción: catálogo, contadores en origen, reclamar, proyección |
+| [`Misiones_Textos.md`](Misiones_Textos.md) | ✅ 2026-10-27 | títulos y textos de cada misión y nombre de cada contador; van en `GET /v1/datos`, fuera de la huella y de la foto |
 | [`Comandos_Parametros.md`](Comandos_Parametros.md) | ✅ 2026-10-13 | forma de `params` de los 122 comandos (base de los mensajes de orden del contrato 05) |
 | [`Divergencias.md`](Divergencias.md) | ✅ vivo | lo que el código y el canon dicen distinto |
 

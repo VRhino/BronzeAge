@@ -67,7 +67,7 @@ Cada dueño lleva sus misiones en su ámbito, en el campo `misiones` (`Mision`):
 - Cada una lleva su `id`, su `previa`, sus condiciones (`contador`, `avance`, `umbral`; en una cumplida o reclamada el avance es el umbral) y su recompensa: `recompensa` (oro o recursos, `Cantidades` en milésimas) o `recompensa_experiencia` (milésimas, como `Faccion.experiencia`).
 - El avance viaja con su dueño: cada contador que cambia toca al héroe, a la plaza o a la Facción.
 
-Detalle en `Docs/Coordinacion/05_Contrato_de_Sesion.md`.
+Detalle en `Docs/Coordinacion/05_Contrato_de_Sesion.md`. Los títulos y textos de cada misión y el nombre de cada contador no viajan con el dueño: están en [`Misiones_Textos.md`](Misiones_Textos.md), que va en `GET /v1/datos` (fuera de la huella y de la foto).
 
 ### 5.1 Hechos
 

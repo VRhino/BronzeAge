@@ -323,4 +323,24 @@ mod pruebas {
         let bytes = w.0;
         assert_eq!(leer(&mut Lector::nuevo(&bytes), &r).unwrap(), e);
     }
+
+    /// El catálogo de textos (`Misiones_Textos.md`, fuera de la huella) está entero: cada misión con su título y su texto, cada contador con su nombre, y nada que no exista.
+    #[test]
+    fn cada_mision_y_cada_contador_tiene_su_texto() {
+        let doc = include_str!("../../../Docs/Mechanics/Misiones_Textos.md");
+        let v = asentamiento::datos::bloque_de(doc, "TEXTOS_MISIONES").unwrap_or_else(|e| panic!("{e}"));
+        let r = Reglas::cargar();
+        let misiones = v["misiones"].as_object().expect("misiones");
+        let contadores = v["contadores"].as_object().expect("contadores");
+        for m in &r.misiones {
+            let t = &misiones.get(&m.id).unwrap_or_else(|| panic!("{} sin texto", m.id));
+            assert!(t["titulo"].as_str().is_some_and(|x| !x.is_empty()) && t["texto"].as_str().is_some_and(|x| !x.is_empty()), "{}: título y texto", m.id);
+            for (c, _) in &m.condiciones {
+                assert!(contadores.get(c).and_then(Value::as_str).is_some_and(|x| !x.is_empty()), "contador {c} sin nombre");
+            }
+        }
+        assert_eq!(misiones.len(), r.misiones.len(), "textos de misiones que no existen");
+        let usados: BTreeSet<&str> = r.misiones.iter().flat_map(|m| m.condiciones.iter().map(|(c, _)| c.as_str())).collect();
+        assert!(contadores.keys().all(|c| usados.contains(c.as_str())), "nombres de contadores que nadie usa");
+    }
 }

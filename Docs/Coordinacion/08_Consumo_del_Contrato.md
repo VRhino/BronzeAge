@@ -110,6 +110,7 @@ Un reinicio con la misma carpeta y el mismo artefacto sigue la partida donde se 
 | Radio de encuentro / radio de puerta / velocidad del jugador | `documentos.Movimiento_Ejercitos.LOGISTICA.radioEncuentro` / `.MOVIMIENTO.radioPuerta` / `.MOVIMIENTO.velocidadJugador` |
 | Visión del jugador solo | `documentos.Movimiento_Ejercitos.VISION.jugadorSolo` (el mismo bloque está en `Niebla_De_Guerra.VISION`) |
 | Anillo de bandidos de un campamento (radios, cuántos por residentes, reaparición) y sus niveles | `documentos.Generacion_Del_Mundo.CAMPAMENTOS_BANDIDOS` (`anillo`, `niveles`) |
+| Misiones: catálogo (condiciones, previas, recompensas) y sus textos (título, qué hacer y nombre de cada contador) | `documentos.Misiones.MISIONES` y `documentos.Misiones_Textos.TEXTOS_MISIONES` (`misiones.<id>.titulo`/`.texto`, `contadores.<contador>`) |
 | Coste de paso por terreno | ya va en el artefacto (`GrafoNavegacion.aristas[].coste_milesimas`); el factor por terreno, en `documentos.Comercio_Caravanas.COSTE_MOVIMIENTO` |
 
 Un `refundacion.fondo_corto` dice cuánto falta en `RechazoOrden.detalle.faltan` (`{ <recurso>: <milésimas> }`), además del texto.
