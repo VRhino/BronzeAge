@@ -332,7 +332,7 @@ mod pruebas {
         let granja = c.tipo(Tipo::Granja);
         assert_eq!((granja.trabajadores, granja.tiempo_minutos), (4_000, 120));
         let trigo: Vec<Mil> = granja.niveles.iter().map(|n| n.produccion_base_trigo).collect();
-        assert_eq!(trigo, vec![60_000, 90_000, 120_000, 180_000], "60 / 90 / 120 / 180 por minuto");
+        assert_eq!(trigo, vec![120_000, 180_000, 240_000, 360_000], "120 / 180 / 240 / 360 por minuto (el doble del TypeScript, 2026-10-27)");
         assert_eq!(c.tipo(Tipo::Almacen).capacidad_por_recurso, 300_000);
         assert_eq!(c.tipo(Tipo::Palacio).nivel(3).unwrap().capacidad_nobles, 400_000);
         assert_eq!(c.tipo(Tipo::Granero).nivel(4).unwrap().capacidad_trigo, 6_000_000);

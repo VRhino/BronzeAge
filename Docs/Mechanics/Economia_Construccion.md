@@ -181,7 +181,7 @@ pesants → el excedente; artesanos → `artesanos − trabajadoresTransformacio
 
 | Edificio | Producción por tick | Notas |
 |---|---|---|
-| Granja | `produccionTrigoDeGranja(nivelInterno) × fertilidadZona × ratioManoObra × factorProduccionTrigo` | `produccionTrigoDeGranja` = `niveles[nivel].produccionBaseTrigo` (60/90/120/180) |
+| Granja | `produccionTrigoDeGranja(nivelInterno) × fertilidadZona × ratioManoObra × factorProduccionTrigo` | `produccionTrigoDeGranja` = `niveles[nivel].produccionBaseTrigo` (120/180/240/360; el doble de las del TypeScript, 60/90/120/180, por decisión del autor el 2026-10-27 al entrar la fertilidad real de la zona) |
 | Leñera | `produccionBaseMadera × bosque.densidad × ratioManoObra` | no usa fertilidad ni tecnología; si el bosque no existe, no produce |
 | Cantera, Mina (oro), Mina de cobre / estaño / hierro, Corral | `mapa.extraer(fuenteId, produccionBase × ratioManoObra × factorTecnologia)` | rinde piedra, oro, cobre, estaño, hierro, livestock. Solo si el nodo tiene stock |
 
@@ -617,13 +617,13 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
       "madera": 30
     },
     "tiempoConstruccionMinutos": 120,
-    "produccionBaseTrigo": 60,
+    "produccionBaseTrigo": 120,
     "trabajadoresRequeridos": 4,
     "niveles": {
       "1": {
         "trabajadoresRequeridos": 4,
         "recetas": [],
-        "produccionBaseTrigo": 60,
+        "produccionBaseTrigo": 120,
         "tamano": {
           "ancho": 2,
           "alto": 2
@@ -632,7 +632,7 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
       "2": {
         "trabajadoresRequeridos": 4,
         "recetas": [],
-        "produccionBaseTrigo": 90,
+        "produccionBaseTrigo": 180,
         "tamano": {
           "ancho": 2,
           "alto": 3
@@ -645,7 +645,7 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
       "3": {
         "trabajadoresRequeridos": 4,
         "recetas": [],
-        "produccionBaseTrigo": 120,
+        "produccionBaseTrigo": 240,
         "tamano": {
           "ancho": 4,
           "alto": 3
@@ -658,7 +658,7 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
       "4": {
         "trabajadoresRequeridos": 4,
         "recetas": [],
-        "produccionBaseTrigo": 180,
+        "produccionBaseTrigo": 360,
         "tamano": {
           "ancho": 6,
           "alto": 6
