@@ -61,7 +61,13 @@ Cada avance se suma **en origen**, en el sitio que produce el hecho y al ocurrir
 
 ## 5. Proyección
 
-Cada dueño lleva sus misiones en su ámbito (`HEROE` el héroe propio, el interior de la plaza para quien está dentro o la gobierna, la Facción para sus ciudadanos): las activas con su avance y las cumplidas sin reclamar o reclamadas. Detalle en `Docs/Coordinacion/05_Contrato_de_Sesion.md`.
+Cada dueño lleva sus misiones en su ámbito, en el campo `misiones` (`Mision`): `Heroe` en `HEROE` (el héroe propio), `Asentamiento` en `ASENTAMIENTO` (el interior, para quien está dentro o la gobierna) y `Faccion` en `FACCION` (la propia; la forma pública de una Facción ajena no las lleva). `ADMIN` las ve todas.
+
+- Viajan, en el orden del catálogo, las **activas**, las **cumplidas** (por reclamar) y las **reclamadas** (`EstadoMision`). Las que esperan a su previa y las deshabilitadas no.
+- Cada una lleva su `id`, su `previa`, sus condiciones (`contador`, `avance`, `umbral`; en una cumplida o reclamada el avance es el umbral) y su recompensa: `recompensa` (oro o recursos, `Cantidades` en milésimas) o `recompensa_experiencia` (milésimas, como `Faccion.experiencia`).
+- El avance viaja con su dueño: cada contador que cambia toca al héroe, a la plaza o a la Facción.
+
+Detalle en `Docs/Coordinacion/05_Contrato_de_Sesion.md`.
 
 ### 5.1 Hechos
 

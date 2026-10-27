@@ -54,8 +54,17 @@ impl Nucleo {
     /// Suma `n` al contador de `d`, si alguna misión activa lo usa, y fija las que se cumplen.
     pub(super) fn avance(&mut self, t: Instante, d: Dueno, contador: &str, n: u64) {
         let r = self.estado.reglas.economia.misiones.clone();
+        let antes = self.estado.misiones.de(d).cloned();
         let cumplidas = self.estado.misiones.sumar(&r, d, contador, n);
         self.tras_avance(t, d, cumplidas, false);
+        self.tocar_si_cambio(d, antes);
+    }
+
+    /// El avance de las misiones viaja con su dueño: si cambió algo, se toca.
+    fn tocar_si_cambio(&mut self, d: Dueno, antes: Option<crate::misiones::DeDueno>) {
+        if self.estado.misiones.de(d) != antes.as_ref() {
+            self.tocar_dueno(d);
+        }
     }
 
     /// Lo mismo para cada héroe de la lista.
@@ -67,7 +76,9 @@ impl Nucleo {
 
     /// Mira los contadores de estado que usan las misiones activas de `d` y fija las que se cumplen.
     pub(super) fn mirar_misiones(&mut self, t: Instante, d: Dueno) {
+        let antes = self.estado.misiones.de(d).cloned();
         self.tras_avance(t, d, Vec::new(), true);
+        self.tocar_si_cambio(d, antes);
     }
 
     /// Anuncia las misiones cumplidas y, si se cumplió alguna (que activa sus siguientes) o se pide `mirar`, lee los contadores de estado de las activas, hasta que no se cumple ninguna más.

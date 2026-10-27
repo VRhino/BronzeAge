@@ -157,6 +157,7 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
     p.auto_construccion_pausada = eco.auto_pausada;
     p.recetas_pausadas = eco.recetas_pausadas.iter().map(|r| r.nombre().to_owned()).collect();
     p.reserva_manual = Some(cantidades(TODOS.iter().copied().zip(eco.reserva_manual).filter(|&(_, v)| v != 0)));
+    p.misiones = super::propios::misiones(n, crate::misiones::Dueno::Asentamiento(id));
     Some(p)
 }
 

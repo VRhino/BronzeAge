@@ -40,6 +40,33 @@ message Faccion {
   optional string capital_id = 15;       // capital efectiva: la designada con Palacio activo o, si no, la plaza viva más antigua (ausente sin plazas)
   // La Liga en que está (5H, Diplomacia §5.7): derivada de las relaciones activas; ausente si no está en ninguna.
   optional LigaDeFaccion liga = 16;
+  // Sus misiones (Misiones §5): solo en la Facción propia (`FACCION`) y en `ADMIN`; vacío en la forma pública.
+  repeated Mision misiones = 17;
+}
+
+enum EstadoMision {
+  ESTADO_MISION_NO_ESPECIFICADO = 0;
+  MISION_ACTIVA = 1;      // se puede cumplir: habilitada y con su previa cumplida
+  MISION_CUMPLIDA = 2;    // cumplida y sin reclamar: `reclamar_recompensa`
+  MISION_RECLAMADA = 3;
+}
+
+// Una condición de una misión: el contador, lo que lleva y lo que pide. En una cumplida, `avance` es el umbral.
+message CondicionMision {
+  string contador = 1;
+  uint64 avance = 2;
+  uint64 umbral = 3;
+}
+
+// Una misión de su dueño (el héroe, la plaza o la Facción; Misiones §5). Solo viajan las activas, las cumplidas y las reclamadas: las que esperan
+// a su previa y las deshabilitadas, no.
+message Mision {
+  string id = 1;                          // el del catálogo: H1, A4, F3...
+  EstadoMision estado = 2;
+  repeated CondicionMision condiciones = 3;
+  optional string previa = 4;
+  Cantidades recompensa = 5;              // oro (al almacén personal, en las del héroe) o recursos (al almacén de la plaza), en milésimas
+  sint64 recompensa_experiencia = 6;      // experiencia de Facción
 }
 
 // Una Liga (Diplomacia §5.7): la componente conexa de Facciones unidas por relaciones activas de cualquier clase (la guerra incluida). No tiene id propio: viaja en cada Facción miembro.
@@ -286,6 +313,8 @@ message Asentamiento {
   // en cada paso de minuto de la plaza, igual con sesiones y sin ellas; un cambio parcial del paso de minuto la lleva siempre (máscara
   // `version_interior`, detrás de `version`) y una reanudación la compara con la del cliente (`Hola.versiones_interiores_conocidas`).
   uint64 version_interior = 43;
+  // Sus misiones (Misiones §5): interior (quien está dentro o la gobierna) y `ADMIN`.
+  repeated Mision misiones = 44;
 }
 
 // Rectángulo en UNIDADES LOCALES del asentamiento (esquina mínima y tamaño). El espacio local está centrado en el Centro Urbano.
@@ -519,6 +548,8 @@ message Heroe {
   optional string faccion_id = 37;
   // Las Facciones a las que ha pedido el ingreso y aún no han contestado (5H, Diplomacia §3.2): lo que el solicitante ve de sus solicitudes (la Facción las ve en `Faccion.solicitudes_ids`).
   repeated string solicitudes_faccion_ids = 38;
+  // Sus misiones (Misiones §5): solo en el héroe propio (`HEROE`) y en `ADMIN`.
+  repeated Mision misiones = 39;
 }
 
 // Una escuadra que un héroe ajeno lleva en su columna, tal como se ve (`HeroePublico.escuadrasQueLleva`).

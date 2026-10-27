@@ -142,6 +142,17 @@ fn el_heroe_cumple_su_cadena_en_origen_y_reclama_el_oro_una_vez() {
     assert_eq!(x.oro_personal(h), antes + 10 * UNIDAD, "10 de oro al almacén personal");
     assert_eq!(x.rechazo("ana", reclamar(h, d, "H1")), rechazos::MISION_YA_RECLAMADA);
     assert_eq!(x.hechos("mision.reclamada").len(), 1);
+    // La proyección (Misiones §5): las activas con su avance, las cumplidas y las reclamadas, en el orden del catálogo; las que esperan a su previa no viajan.
+    use contrato::v1 as pb;
+    let vistas = nucleo::proyeccion::propios::misiones(&x.n, d);
+    let estados: Vec<(&str, i32)> = vistas.iter().map(|v| (v.id.as_str(), v.estado)).collect();
+    let (activa, cumplida, reclamada) = (pb::EstadoMision::MisionActiva as i32, pb::EstadoMision::MisionCumplida as i32, pb::EstadoMision::MisionReclamada as i32);
+    assert_eq!(estados, [("H1", reclamada), ("H2", activa), ("H3", cumplida), ("H4", activa), ("H5", activa), ("H11", activa), ("H13", activa)]);
+    let h3 = &vistas[2];
+    assert_eq!((h3.condiciones[0].contador.as_str(), h3.condiciones[0].avance, h3.condiciones[0].umbral), ("llegadas", 1, 1));
+    assert_eq!(h3.previa.as_deref(), Some("H1"));
+    assert_eq!(h3.recompensa.as_ref().unwrap().por_id.get("oro"), Some(&(10 * UNIDAD)));
+    assert_eq!(vistas[1].condiciones[0].avance, 0, "el préstamo de antes no cuenta para H2");
     // La foto lleva las misiones (BAN46) y se lee igual.
     let bytes = x.n.estado().serializar();
     assert_eq!(&bytes[..5], b"BAN46");
@@ -196,6 +207,13 @@ fn la_plaza_cumple_por_estado_al_completar_el_edificio_y_la_cadena_sigue_en_el_m
     x.ok("admin", reclamar(0, d, "A4"));
     assert_eq!(almacen(&x, Recurso::Piedra), piedra + 300 * UNIDAD);
     assert_eq!(x.rechazo("admin", reclamar(0, d, "A4")), rechazos::MISION_YA_RECLAMADA);
+    // El interior de la plaza las lleva (Misiones §5) y la Facción pública no lleva las suyas.
+    let interior = nucleo::proyeccion::interior::asentamiento(&x.n, a).unwrap();
+    let a4 = interior.misiones.iter().find(|v| v.id == "A4").unwrap();
+    assert_eq!(a4.estado, contrato::v1::EstadoMision::MisionReclamada as i32);
+    assert_eq!(a4.recompensa.as_ref().unwrap().por_id.get("piedra"), Some(&(300 * UNIDAD)));
+    assert!(interior.misiones.iter().all(|v| v.id != "A1"), "la deshabilitada no viaja");
+    assert!(nucleo::proyeccion::propios::faccion_publica(&x.n, x.n.estado().asentamientos[&a].faccion).misiones.is_empty());
     // Una foto anterior a las misiones arranca la plaza mirando su estado, sin hecho.
     let r = &x.n.estado().reglas.economia.misiones;
     assert!(r.buscar(ClaseDueno::Asentamiento, "A1").is_some());
@@ -212,4 +230,7 @@ fn reclamar_lo_de_una_plaza_es_de_su_gobernador_y_lo_de_una_faccion_de_su_rey() 
     let faccion = x.n.heroe(h).unwrap().faccion.expect("es ciudadano de la que crea");
     assert_eq!(x.rechazo("beto", reclamar(h, Dueno::Faccion(faccion), "F1")), rechazos::NO_AUTORIZADO, "beto no es la cuenta del héroe");
     assert_eq!(x.rechazo("ana", reclamar(h, Dueno::Faccion(faccion), "F1")), rechazos::MISION_NO_CUMPLIDA);
+    // La Facción propia las lleva: las primeras de cada cadena, activas y a 0.
+    let ids: Vec<String> = nucleo::proyeccion::propios::faccion(&x.n, faccion).misiones.into_iter().map(|v| v.id).collect();
+    assert_eq!(ids, ["F1", "F7", "F10"]);
 }

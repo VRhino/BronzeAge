@@ -169,8 +169,44 @@ pub fn heroe(n: &Nucleo, h: &HeroeNucleo) -> pb::Heroe {
         faccion_id: h.faccion.map(ids::faccion),
         solicitudes_faccion_ids: e.politica.facciones.iter().filter(|f| f.solicitudes.contains(&h.heroe.id)).map(|f| ids::faccion(f.id)).collect(),
         plazas_recordadas: h.plazas_recordadas.iter().map(|(&plaza, x)| (ids::asentamiento(u64::from(plaza)), interior_recordado(u64::from(plaza), x))).collect(),
+        misiones: misiones(n, crate::misiones::Dueno::Heroe(h.heroe.id)),
         ..Default::default()
     }
+}
+
+/// Las misiones de un dueño (Misiones §5), en el orden del catálogo: las activas con su avance, las cumplidas y las reclamadas. Las que esperan a su previa y las deshabilitadas no viajan.
+pub fn misiones(n: &Nucleo, d: crate::misiones::Dueno) -> Vec<pb::Mision> {
+    use crate::misiones::{DeDueno, Recompensa};
+    let r = &n.estado().reglas.economia.misiones;
+    let vacio = DeDueno::default();
+    let x = n.misiones_de(d).unwrap_or(&vacio);
+    r.de(d.clase())
+        .filter_map(|(i, m)| {
+            let estado = if x.reclamadas.contains(&i) {
+                pb::EstadoMision::MisionReclamada
+            } else if x.cumplidas.contains(&i) {
+                pb::EstadoMision::MisionCumplida
+            } else if x.activa(r, i) {
+                pb::EstadoMision::MisionActiva
+            } else {
+                return None;
+            };
+            let hecha = estado != pb::EstadoMision::MisionActiva;
+            let (recompensa, recompensa_experiencia) = match &m.recompensa {
+                &Recompensa::Oro(oro) => (cantidades([(Recurso::Oro, oro)]), 0),
+                Recompensa::Recursos(lista) => (cantidades(lista.iter().copied()), 0),
+                &Recompensa::Experiencia(xp) => (pb::Cantidades::default(), xp),
+            };
+            Some(pb::Mision {
+                id: m.id.clone(),
+                estado: estado as i32,
+                condiciones: m.condiciones.iter().map(|(c, u)| pb::CondicionMision { contador: c.clone(), avance: if hecha { *u } else { x.contador(c).min(*u) }, umbral: *u }).collect(),
+                previa: m.previa.map(|p| r.misiones[p as usize].id.clone()),
+                recompensa: Some(recompensa),
+                recompensa_experiencia,
+            })
+        })
+        .collect()
 }
 
 /// La foto del interior de una plaza que el héroe dejó al salir al mundo (Niebla_De_Guerra §4.5): el almacén como cifras fijas (sin capacidad ni tendencia: es lo que había), la cola con su
@@ -531,6 +567,7 @@ pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
             politica::faccion::Derrota::Colapso => String::new(),
         }),
         admite_otras_en_ataques: x.admite_otras_en_ataques,
+        misiones: misiones(n, crate::misiones::Dueno::Faccion(f)),
         ..base
     }
 }
@@ -538,7 +575,7 @@ pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
 /// La forma pública de otra Facción (5H, `VISTA`; Proyecciones §6: «facciones: públicas en la ficción»): la Facción sin su experiencia, su capital ni cuándo la designó (dónde está su capital es
 /// de la niebla). Regla (decisión del autor del 2026-10-26): de una Facción ajena se ve **solo el nivel**, sin la experiencia exacta ni la capital (el TypeScript la mandaba entera).
 pub fn faccion_publica(n: &Nucleo, f: u32) -> pb::Faccion {
-    pb::Faccion { experiencia: 0, capital_designada_en_ms: None, capital_id: None, ..faccion(n, f) }
+    pb::Faccion { experiencia: 0, capital_designada_en_ms: None, capital_id: None, misiones: vec![], ..faccion(n, f) }
 }
 
 /// Las tecnologías de la Facción (6G, `Estado::tecnologia`; Proyecciones §6.3: las de un rival no viajan nunca): las aparecidas y las reveladas por su id, las adoptadas con las de arranque
