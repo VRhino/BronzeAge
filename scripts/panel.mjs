@@ -6,7 +6,8 @@
 //
 // Partidas (fase 7, para el admin web): cada partida es una carpeta de datos del servidor en `partidas/<nombre>/` (`mundo/`, `acceso/`, `respaldos/` y
 // `partida.json` con su semilla y su artefacto de mundo); la carpeta `datos/` de antes cuenta como la partida «datos». El servidor arranca con la partida
-// actual. La API de partidas está más abajo (`/api/partidas`, `/api/mundo`), con CORS abierto: el admin la recibe como PANEL_URL.
+// actual. La API de partidas está más abajo (`/api/partidas`, `/api/mundo`), con CORS abierto. Desde el 2026-10-27 (decisión del autor) las partidas y el mundo se
+// manejan desde la pestaña «Mundo y partidas» del propio panel, que funciona con el servidor apagado; el admin web ya no las lleva.
 //
 // Cada servicio puede llevar `cwd` (relativo a la raíz del motor): el motor es esta carpeta y los repos hermanos están al lado
 // (../BronceAgeBotsBrain, ../BronceAgeAdminClient, ../BronzeAgeClient). Si la carpeta no existe, la tarjeta lo dice y no arranca.
@@ -181,12 +182,41 @@ label{color:var(--sub);font-size:12px;margin-left:auto}
 input{width:76px;background:#0d0b08;color:var(--txt);border:1px solid var(--borde);border-radius:6px;padding:5px 6px;font:inherit}
 input:disabled{opacity:.5}
 pre{background:#0d0b08;border-radius:6px;padding:8px;height:clamp(220px,42vh,720px);min-height:120px;resize:vertical;overflow:auto;font-size:11px;margin:10px 0 0;white-space:pre-wrap;color:var(--sub)}
+.pestanas{display:flex;gap:6px;margin:0 0 18px;border-bottom:1px solid var(--borde)}
+.pestanas button{border-radius:8px 8px 0 0;border-bottom:none;padding:8px 18px;background:transparent;color:var(--sub)}
+.pestanas button.on{background:var(--card);color:var(--txt);border-color:var(--acento)}
+.vista{display:none}.vista.on{display:block}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--borde);vertical-align:top}
+th{color:var(--sub);font-weight:500;font-size:12px}td .fila{gap:6px}td button{padding:4px 10px;font-size:12px}
+.form{display:flex;gap:10px;flex-wrap:wrap;align-items:end}.form label{margin:0;display:flex;flex-direction:column;gap:4px}
+.form input,.form select{width:auto;min-width:90px;background:#0d0b08;color:var(--txt);border:1px solid var(--borde);border-radius:6px;padding:5px 6px;font:inherit}
+.msg{font-size:12px;margin-top:10px;min-height:16px}.msg.error{color:var(--off)}.msg.ok{color:var(--on)}
+.activa{color:var(--on);font-weight:600}.peligro{border-color:var(--off);color:var(--off)}
+.respaldos td{font-size:12px;color:var(--sub)}
 .est{font-size:12px;color:var(--sub)}.aviso{color:var(--wait);font-size:12px;margin:0 0 8px}.aviso:empty{display:none}.nota{color:var(--sub);font-size:12px;margin-top:22px}
 </style></head><body><h1>⚒ Panel de arranque — BronzeAge</h1>
+<nav class="pestanas"><button data-vista="partidas">Mundo y partidas</button><button data-vista="servicios">Servicios</button></nav>
+<section class="vista" id="v-partidas">
+<details open data-seccion="partidas"><summary>Partidas<span class="cuenta" id="p-cuenta"></span></summary>
+<div class="card"><table><thead><tr><th>Partida</th><th>Semilla</th><th>Mundo</th><th>Creada</th><th>Estado</th><th></th></tr></thead><tbody id="p-lista"></tbody></table>
+<div class="msg" id="p-msg"></div></div></details>
+<details open data-seccion="nueva"><summary>Nueva partida</summary>
+<div class="card"><div class="form"><label>Nombre<input id="n-nombre" placeholder="misiones" maxlength="40"></label>
+<label>Semilla<input id="n-semilla" type="number" min="0" value="42"></label>
+<label>Mundo<select id="n-mundo"></select></label>
+<label style="flex-direction:row;align-items:center"><input id="n-activar" type="checkbox" checked style="width:auto"> activarla y arrancar el servidor</label>
+<button id="n-crear">Crear</button></div><div class="msg" id="n-msg"></div></div></details>
+<details open data-seccion="mundo"><summary>Mundo</summary>
+<div class="card"><div class="form"><label>Semilla<input id="m-semilla" type="number" min="0" value="42"></label><button id="m-generar">Generar mundo (unos 15 min)</button>
+<span class="est" id="m-estado"></span></div>
+<table style="margin-top:12px"><thead><tr><th>Artefacto</th><th>Creado</th></tr></thead><tbody id="m-lista"></tbody></table><div class="msg" id="m-msg"></div></div></details>
+</section>
+<section class="vista" id="v-servicios">
 <details open data-seccion="backend"><summary>Servicios<span class="cuenta"></span></summary><div class="grid" id="backend"></div></details>
 <details open data-seccion="tareas"><summary>Tareas<span class="cuenta"></span></summary><div class="grid" id="tareas"></div></details>
 <details open data-seccion="clientes"><summary>Clientes<span class="cuenta"></span></summary><div class="grid" id="clientes"></div></details>
 <p class="nota">La carga, la auditoría y las pruebas se miran en el admin web (ámbito ADMIN del contrato 05).</p>
+</section>
 <script>
 // Cada sección se pliega y se acuerda de cómo la dejaste (solo en este navegador).
 for(const d of document.querySelectorAll('details[data-seccion]')){
@@ -195,6 +225,67 @@ for(const d of document.querySelectorAll('details[data-seccion]')){
   d.ontoggle=()=>{try{localStorage.setItem(k,d.open?'0':'1')}catch{}};
 }
 async function post(u){await fetch(u,{method:'POST'});setTimeout(pintar,300)}
+// Las dos pestañas; se acuerda de la última (solo en este navegador).
+function verVista(v){for(const b of document.querySelectorAll('.pestanas button'))b.classList.toggle('on',b.dataset.vista===v);
+  for(const s of document.querySelectorAll('.vista'))s.classList.toggle('on',s.id==='v-'+v);try{localStorage.setItem('panel.vista',v)}catch{}}
+document.querySelectorAll('.pestanas button').forEach(b=>b.onclick=()=>verVista(b.dataset.vista));
+let vista='partidas';try{vista=localStorage.getItem('panel.vista')||vista}catch{}verVista(vista);
+// La API de partidas y mundo con JSON; deja el resultado en la línea de mensajes msg.
+async function api(metodo,u,cuerpo,msg){
+  const el=document.getElementById(msg);el.className='msg';el.textContent='…';
+  try{const r=await fetch(u,{method:metodo,headers:{'content-type':'application/json'},body:cuerpo?JSON.stringify(cuerpo):undefined});
+    const v=await r.json().catch(()=>({}));
+    if(!r.ok){el.className='msg error';el.textContent=v.mensaje||v.error||('error '+r.status);return null}
+    el.className='msg ok';el.textContent=v.aviso?('hecho; el servidor no arranca: '+v.aviso):'hecho';pintarPartidas();setTimeout(pintar,300);return v;
+  }catch(e){el.className='msg error';el.textContent=String(e);return null}
+}
+const fecha=ms=>ms?new Date(ms).toLocaleString('es-ES',{dateStyle:'short',timeStyle:'short'}):'—';
+const celda=(tr,t,cl)=>{const td=document.createElement('td');td.textContent=t;if(cl)td.className=cl;tr.append(td);return td};
+const boton=(td,t,f,cl)=>{const b=document.createElement('button');b.textContent=t;b.onclick=f;if(cl)b.className=cl;td.querySelector('.fila').append(b);return b};
+const abiertos=new Set(); // partidas con la lista de respaldos desplegada
+async function pintarPartidas(){
+  let d,m;try{[d,m]=await Promise.all([(await fetch('/api/partidas')).json(),(await fetch('/api/mundo')).json()])}catch{return}
+  const lista=document.getElementById('p-lista');lista.textContent='';
+  document.getElementById('p-cuenta').textContent='· '+d.partidas.length+(d.actual?' · activa: '+d.actual:' · ninguna activa');
+  for(const p of d.partidas){
+    const tr=document.createElement('tr'),n=encodeURIComponent(p.nombre);
+    celda(tr,p.nombre,p.actual?'activa':'');celda(tr,String(p.semilla));celda(tr,p.mundo?p.mundo.slice(6,18)+'…':'el último');celda(tr,fecha(p.creada_ms));
+    celda(tr,p.actual?(p.en_marcha?'activa · servidor en marcha':'activa · servidor parado'):'guardada');
+    const acc=celda(tr,'');acc.innerHTML='<div class="fila"></div>';
+    if(!p.actual)boton(acc,'Activar',()=>api('POST','/api/partidas/'+n+'/activar',null,'p-msg'));
+    else{if(!p.en_marcha)boton(acc,'Arrancar',()=>api('POST','/api/partidas/'+n+'/activar',null,'p-msg'));
+      boton(acc,'Apagar',()=>api('POST','/api/partidas/'+n+'/apagar',null,'p-msg'));}
+    boton(acc,'Respaldar',()=>api('POST','/api/partidas/'+n+'/respaldar',{nota:prompt('Nota del respaldo (opcional)')??''},'p-msg'));
+    boton(acc,'Respaldos ('+p.respaldos+')',()=>{abiertos.has(p.nombre)?abiertos.delete(p.nombre):abiertos.add(p.nombre);pintarPartidas()});
+    boton(acc,'Borrar',()=>{if(confirm('¿Borrar la partida «'+p.nombre+'» con sus respaldos?'+(p.actual?' Es la activa: se apaga el servidor.':'')+' No se puede deshacer.'))
+      api('DELETE','/api/partidas/'+n,{confirmar:true},'p-msg')},'peligro');
+    lista.append(tr);
+    if(abiertos.has(p.nombre)){
+      const fila=document.createElement('tr');fila.className='respaldos';const td=document.createElement('td');td.colSpan=6;fila.append(td);lista.append(fila);
+      const rs=(await (await fetch('/api/partidas/'+n+'/respaldos')).json()).respaldos??[];
+      if(!rs.length)td.textContent='Sin respaldos.';
+      const t=document.createElement('table');td.append(t);
+      for(const r of rs){const f=document.createElement('tr');celda(f,fecha(r.creado_ms));celda(f,r.nota||r.id);
+        const a=celda(f,'');a.innerHTML='<div class="fila"></div>';
+        boton(a,'Restaurar',()=>{if(confirm('¿Restaurar «'+p.nombre+'» al respaldo de '+fecha(r.creado_ms)+'? Lo de ahora se guarda antes como otro respaldo.'))
+          api('POST','/api/partidas/'+n+'/restaurar',{respaldo:r.id},'p-msg')});t.append(f)}
+    }
+  }
+  if(!d.partidas.length){const tr=document.createElement('tr');celda(tr,'No hay partidas: crea una abajo.').colSpan=6;lista.append(tr)}
+  const sel=document.getElementById('n-mundo'),antes=sel.value;sel.textContent='';
+  for(const a of m.artefactos){const o=document.createElement('option');o.value=a.archivo;o.textContent=a.hash.slice(0,12)+'… ('+fecha(a.creado_ms)+')';sel.append(o)}
+  if(antes)sel.value=antes;
+  document.getElementById('n-crear').disabled=!m.artefactos.length;
+  const ml=document.getElementById('m-lista');ml.textContent='';
+  for(const a of m.artefactos){const tr=document.createElement('tr');celda(tr,a.archivo);celda(tr,fecha(a.creado_ms));ml.append(tr)}
+  if(!m.artefactos.length){const tr=document.createElement('tr');celda(tr,'No hay ningún artefacto de mundo: genera uno.').colSpan=2;ml.append(tr)}
+  document.getElementById('m-generar').disabled=m.generando;
+  document.getElementById('m-estado').textContent=m.generando?'generando con la semilla '+m.semilla+'…':m.ultima?('último: semilla '+m.ultima.semilla+(m.ultima.codigo===0?', bien':', falló (código '+m.ultima.codigo+'; mira su log en Servicios)')):'';
+}
+document.getElementById('n-crear').onclick=()=>api('POST','/api/partidas',{nombre:document.getElementById('n-nombre').value,semilla:Number(document.getElementById('n-semilla').value),
+  mundo:document.getElementById('n-mundo').value||undefined,activar:document.getElementById('n-activar').checked},'n-msg');
+document.getElementById('m-generar').onclick=()=>api('POST','/api/mundo',{semilla:Number(document.getElementById('m-semilla').value)},'m-msg');
+pintarPartidas();setInterval(pintarPartidas,4000);
 async function pintar(){
   const datos=await (await fetch('/api/estado')).json();
   for(const d of datos){
@@ -224,7 +315,7 @@ async function pintar(){
     pre.textContent=d.log.join('\\n');if(abajo)pre.scrollTop=pre.scrollHeight;
   }
   // En el título de cada sección, cuántos están en marcha: se ve aunque esté plegada.
-  for(const g of document.querySelectorAll('details[data-seccion]')){
+  for(const g of document.querySelectorAll('#v-servicios details[data-seccion]')){
     const de=datos.filter(d=>(d.tipo==='cliente'?'clientes':d.tipo==='tarea'?'tareas':'backend')===g.dataset.seccion);
     g.querySelector('.cuenta').textContent=de.length?'· '+de.filter(d=>d.escucha||d.lanzado).length+'/'+de.length+' en marcha':'';
   }
@@ -283,6 +374,18 @@ async function apiPartidas(metodo, partes, cuerpo) {
     const estaba = await pararServidor();
     ponerActual(null);
     return [200, { apagada: nombre, estaba_en_marcha: estaba, actual: null }];
+  }
+  if (accion === 'respaldar') {
+    // Copia `mundo/` y `acceso/` a `respaldos/<id>`. Si el servidor sirve esta partida, se para (guarda su foto), se copia y se vuelve a arrancar.
+    const carpeta = carpetaPartida(nombre);
+    const seguia = nombre === partidaActual() && (await pararServidor());
+    const id = `panel-${Date.now()}`;
+    for (const sub of ['mundo', 'acceso']) if (existsSync(path.join(carpeta, sub))) cpSync(path.join(carpeta, sub), path.join(carpeta, 'respaldos', id, sub), { recursive: true });
+    mkdirSync(path.join(carpeta, 'respaldos', id), { recursive: true });
+    const r = { id, creado_ms: Date.now(), version: null, instante: null, nota: String(cuerpo?.nota ?? '').slice(0, 200) || 'desde el panel' };
+    writeFileSync(path.join(carpeta, 'respaldos', id, 'respaldo.json'), JSON.stringify(r));
+    if (seguia) arrancar(servidor());
+    return [201, { respaldo: r, ...(seguia ? arranque() : { arrancado: false, aviso: null }) }];
   }
   if (accion === 'activar') {
     await pararServidor(); ponerActual(nombre); arrancar(servidor());

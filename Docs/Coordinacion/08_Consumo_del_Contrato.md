@@ -135,7 +135,7 @@ Dos sitios, porque parar y arrancar el proceso no lo puede hacer el propio proce
 
 El núcleo atiende el respaldo entre dos órdenes y no hace nada más mientras copia, así que la copia es coherente. El histórico de batallas retiradas está en `<datos>/mundo/batallas.jsonl` (un JSON por línea, Batalla_Unity_Ciclo §3.3), así que va en el respaldo.
 
-**El panel de arranque** (`scripts/panel.mjs`, puerto 3999), que pasa su dirección al admin como `PANEL_URL` (como `BOTS_URL`). CORS abierto, cuerpos JSON. Una partida es una carpeta de datos del servidor en `partidas/<nombre>/` (ignorada por git) con su `partida.json` (`semilla` y `mundo`, el artefacto con el que se creó); la carpeta `datos/` de antes cuenta como la partida `datos`. El servidor del panel arranca siempre con la partida actual.
+**El panel de arranque** (`scripts/panel.mjs`, puerto 3999), que pasa su dirección al admin como `PANEL_URL` (como `BOTS_URL`). CORS abierto, cuerpos JSON. Desde el 2026-10-27 las partidas y el mundo se gestionan en la pestaña «Mundo y partidas» del propio panel (la otra pestaña, «Servicios», es la vista de procesos de siempre), porque funcionan con el servidor apagado; el admin ya no las lleva. Una partida es una carpeta de datos del servidor en `partidas/<nombre>/` (ignorada por git) con su `partida.json` (`semilla` y `mundo`, el artefacto con el que se creó); la carpeta `datos/` de antes cuenta como la partida `datos`. El servidor del panel arranca siempre con la partida actual.
 
 | Ruta | Qué |
 |---|---|
@@ -145,7 +145,8 @@ El núcleo atiende el respaldo entre dos órdenes y no hace nada más mientras c
 | `POST /api/partidas/<nombre>/activar` | cambiar de partida: para el servidor (con su foto) y lo arranca con esa |
 | `POST /api/partidas/<nombre>/apagar` | solo la activa: para el servidor (con su foto) y deja el panel **sin partida activa**; la partida se queda guardada. `{ apagada, estaba_en_marcha, actual: null }`; `409 no_es_la_activa` |
 | `DELETE /api/partidas/<nombre>` | la borra entera. La activa pide el cuerpo `{ "confirmar": true }` (si no, `409 partida_activa`): para el servidor, la borra y deja el panel sin partida activa |
-| `GET /api/partidas/<nombre>/respaldos` | `{ respaldos }` (los que hizo el servidor) |
+| `GET /api/partidas/<nombre>/respaldos` | `{ respaldos }` (los del servidor y los del panel) |
+| `POST /api/partidas/<nombre>/respaldar` | `{ nota? }`: copia `mundo/` y `acceso/` en `respaldos/panel-<ms>/`. Si es la activa y está en marcha, para el servidor (con su foto), copia y lo vuelve a arrancar. `201` |
 | `POST /api/partidas/<nombre>/restaurar` | `{ respaldo: <id> }`: para el servidor si sirve esa partida, guarda lo de ahora como el respaldo `antes-de-restaurar-<ms>`, copia el respaldo encima y vuelve a arrancar |
 | `GET /api/mundo` | `{ generando, semilla, ultima: { semilla, codigo, fin_ms, artefacto }, artefactos }`: el admin lo consulta para saber cuándo terminó (código 0: bien) |
 | `POST /api/mundo` | `{ semilla }`: lanza la tarea «generar-mundo» con esa semilla (unos 15 min); `202`, o `409 ya_generando` |
