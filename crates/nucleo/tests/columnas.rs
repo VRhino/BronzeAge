@@ -882,6 +882,35 @@ fn repostar_llena_los_viveres_en_una_plaza_propia_sin_bajar_de_su_reserva_y_solo
     assert_eq!(hechos(&e.n, "ejercito.reabastecido").len(), 1);
 }
 
+#[test]
+fn una_columna_personal_de_la_faccion_reposta_sola_en_la_zona_de_lo_que_sobra_y_algo_mas_rapido_de_lo_que_come() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let (pl, centro) = (e.a, e.plaza());
+    e.avanzar(24 * HORA);
+    e.dar(pl, Trigo, 5_000_000);
+    // Dos columnas personales con su milicia que salen llenas: una se queda a la puerta, en la zona; la otra marcha fuera de ella.
+    let (a, milicia_a) = e.con_milicia("ana");
+    let (b, milicia_b) = e.con_milicia("beto");
+    let quieta = e.ok("ana", Comando::SalirAlMundo { asentamiento: pl, heroe: a, escuadras: vec![milicia_a], carga: vec![] }).creadas[0];
+    let fuera = e.ok("beto", Comando::SalirAlMundo { asentamiento: pl, heroe: b, escuadras: vec![milicia_b], carga: vec![] }).creadas[0];
+    let destino = comun::real::en_tierra(&m.0, centro, 150_000, 0);
+    e.ok("beto", Comando::MarcharA { ejercito: fuera, destino });
+    // Un ejército de la Facción en la zona no reposta solo (lo hace con la orden), aunque lleve poco.
+    let ejercito = e.n.crear_ejercito(e.n.ahora(), "carla", 1, Punto::new(centro.x + 2_000, centro.y), 500, 50_000).unwrap();
+    assert_eq!(e.ejercito(ejercito).columna.tipo, TipoColumna::Ejercito);
+    let tope = e.ejercito(quieta).columna.viveres.maximo.unwrap();
+    e.avanzar(10 * HORA);
+    assert!(!e.n.en_zona(pl, e.ejercito(fuera).posicion_en(e.n.ahora())), "la otra acabó fuera de la zona");
+    let come = -e.ejercito(quieta).columna.viveres.por_minuto;
+    assert!(come * 600 > 50_000, "en diez horas se comería más de 50 unidades: {come}");
+    // La de la zona recibe cada minuto 1,25 veces lo que come (en unidades enteras hacia arriba): sigue casi llena. La de fuera y el ejército, no.
+    assert!(tope - e.viveres(quieta) < 2_000, "{} de {tope}", e.viveres(quieta));
+    assert!(tope - e.viveres(fuera) > 40_000, "{} de {tope}", e.viveres(fuera));
+    assert!(e.viveres(ejercito) < 50_000);
+    assert!(hechos(&e.n, "ejercito.reabastecido").is_empty(), "el goteo no es noticia");
+}
+
 // ───────────────────────────── 10. Convocatorias ─────────────────────────────
 
 fn convocar(e: &mut Escenario, cuenta: &str, h: u64, ids: &[u64], politica: Politica) -> u64 {

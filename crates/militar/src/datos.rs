@@ -94,6 +94,9 @@ pub struct ReglasLogistica {
     pub radio_encuentro: Mil,
     /// Solo se narra repostar si los víveres iban por debajo de esta parte de la capacidad (ppm).
     pub umbral_narrar_reposte: i64,
+    /// Lo que pasa cada minuto la plaza a una columna personal de su Facción dentro de su zona, por cada unidad que esta come por minuto (ppm; repostaje automático, decisión
+    /// del autor del 2026-10-27: algo más rápido de lo que se lo gasta).
+    pub factor_repostaje_en_zona: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -249,6 +252,7 @@ impl Reglas {
                 factor_estacionado: ppm(num(&lg, "factorConsumoEstacionado")),
                 radio_encuentro: mil(num(&lg, "radioEncuentro")),
                 umbral_narrar_reposte: ppm(num(&lg, "umbralNarrarReposte")),
+                factor_repostaje_en_zona: ppm(num(&lg, "factorRepostajeEnZona")),
             },
             movimiento: ReglasMovimiento {
                 velocidad_jugador: mil(num(&mv, "velocidadJugador")),
@@ -356,7 +360,7 @@ mod pruebas {
         assert_eq!((r.reclutamiento.oro_por_caballo, r.reclutamiento.horizonte_comida), (5_000, 8));
         // Calibración de distancias (Movimiento_Ejercitos §14): los bloques ya traen lo vigente.
         assert_eq!((r.logistica.capacidad_carro, r.logistica.capacidad_viveres, r.logistica.radio_encuentro), (500_000, 350_000, 3_000));
-        assert_eq!(r.logistica.umbral_narrar_reposte, 500_000);
+        assert_eq!((r.logistica.umbral_narrar_reposte, r.logistica.factor_repostaje_en_zona), (500_000, 1_250_000));
         assert_eq!((r.logistica.factor_marcha, r.logistica.factor_estacionado), (250_000, 100_000));
         assert_eq!((r.movimiento.velocidad_jugador, r.movimiento.consumo_por_participante, r.movimiento.radio_puerta), (33_000, 500, 2_000));
         assert_eq!((r.movimiento.vida_peticion_union, r.movimiento.radio_inspeccion, r.inspeccion.informe), (10_000, 8_000, 10 * MS_POR_MINUTO));

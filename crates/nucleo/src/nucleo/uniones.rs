@@ -12,7 +12,7 @@ use crate::estado::{SucesoMilitar, PRIO_LLEGADA};
 use crate::nucleo::salidas::Destino;
 use asentamiento::datos::UNO;
 use asentamiento::Recurso;
-use militar::columna::{ErrorColumna, Politica};
+use militar::columna::{ErrorColumna, Politica, TipoColumna};
 use militar::convocatoria::Lugar;
 use militar::escuadra::Contenedor;
 use militar::presencia::Ubicacion;
@@ -258,8 +258,8 @@ impl Nucleo {
 
     /// `repostar` (Movimiento_Ejercitos §8): el Líder, con la columna a la puerta de una plaza que le abre su almacén, rellena los víveres de la columna
     /// hasta donde quepan y sin bajar de la reserva de trigo de la plaza. Es la misma operación que llenarlos al salir.
-    // DUDA: una columna personal reposta sola dentro de la zona de la plaza (evento de entrada en la zona más un ritmo); mientras no exista, la orden vale
-    // también para ella (fila de paridad). `puedeRepostarEn` (5D): la plaza propia, y la de una aliada o vasalla que lo permite (`permiteReabastecerAliados`).
+    // La orden vale también para una columna personal, que además reposta sola dentro de la zona de una plaza de su Facción ([`Nucleo::repostar_en_la_zona`]). `puedeRepostarEn`
+    // (5D): la plaza propia, y la de una aliada o vasalla que lo permite (`permiteReabastecerAliados`).
     fn repostar(&mut self, t: Instante, p: &Peticion, heroe: u64, asentamiento: u64) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
@@ -297,6 +297,50 @@ impl Nucleo {
             self.evento_de_columna("ejercito.reabastecido", t, id, vec![asentamiento], vec![("heroe", heroe as i64), ("repuesto", tomado)]);
         }
         Ok(vec![])
+    }
+
+    /// Repostaje automático (Movimiento_Ejercitos §8, decisión del autor del 2026-10-27), en el paso de minuto de la plaza `plaza`: cada columna **personal** de su Facción que está en el
+    /// mapa dentro de su zona real y no tiene los víveres llenos recibe `factorRepostajeEnZona` veces lo que come en un minuto (en unidades enteras hacia arriba, al menos una), hasta su
+    /// tope y solo de lo que a la plaza le sobra por encima de su reserva de trigo; sin sobra no reposta a nadie. Las columnas van por id. No se narra: es un goteo.
+    pub(super) fn repostar_en_la_zona(&mut self, plaza: u64, t: Instante) {
+        let Some((yo, vecinos)) = self.zona_real(plaza) else { return };
+        let factor = self.estado.reglas.economia.militar.logistica.factor_repostaje_en_zona;
+        let candidatas: Vec<(u64, Mil)> = self
+            .estado
+            .ejercitos
+            .values()
+            .filter(|e| e.columna.tipo == TipoColumna::Personal && e.columna.faccion == Some(yo.faccion) && !e.en_batalla && self.columna_en_el_mapa(e))
+            .filter(|e| e.columna.viveres.maximo.unwrap_or(0) - e.columna.viveres.valor_en(t) >= base::UNIDAD)
+            .filter(|e| territorio::en_zona(e.posicion_en(t), &yo, &vecinos))
+            .map(|e| {
+                let por_minuto = asentamiento::datos::por((-e.columna.viveres.por_minuto).max(0), factor);
+                (e.id, ((por_minuto + base::UNIDAD - 1) / base::UNIDAD).max(1) * base::UNIDAD)
+            })
+            .collect();
+        if candidatas.is_empty() {
+            return;
+        }
+        let mr = self.estado.reglas.economia.militar.clone();
+        let Some(consumo) = self.con_exterior(plaza, t, |eco, x| eco.resumen_de_reclutamiento(x.reglas, x).consumo_poblacion) else { return };
+        let reserva = reclutamiento::reserva_de_trigo(&mr, consumo, self.soldados_del_campamento(plaza));
+        let mut de_sobra = (self.estado.asentamientos[&plaza].economia.almacen.cantidad(Recurso::Trigo) - reserva).max(0);
+        let mut total = 0;
+        for (id, oferta) in candidatas {
+            if de_sobra < base::UNIDAD {
+                break;
+            }
+            let e = self.estado.ejercitos.get_mut(&id).expect("existe");
+            let tomado = racion::llenar_en_unidades(&mut e.columna.viveres, t, oferta.min(de_sobra));
+            if tomado > 0 {
+                de_sobra -= tomado;
+                total += tomado;
+                self.reprogramar_columna(id, t);
+            }
+        }
+        if total > 0 {
+            self.estado.asentamientos.get_mut(&plaza).expect("existe").economia.almacen.quitar(Recurso::Trigo, total);
+            self.tr.tocar(Clase::Asentamiento, plaza);
+        }
     }
 
     /// Dónde reposta el Líder cuando la orden no lo dice (`repostar` sin `lugar_id`): la plaza o la avanzada operativa más cercana a la puerta (`radioPuerta`) de la columna

@@ -957,6 +957,12 @@ Valores calibrados (2026-10-12): `COMISION.distanciaParaBonusMax` y `ASIGNACION_
 
 > **Implementado en Rust (2026-10-21, fase 4E).** Contra una caravana atacada por un humano la batalla se juega en Unity: la caravana queda apartada (`apartar_caravana`: plan en pausa, `EnBatalla`) y al acabar vuelve a su viaje con el plan desplazado; si gana el atacante, Unity dice qué carros se pierden (`carros_perdidos`, por su posición en la lista de carros) y el servidor aplica `caer_caravana` con ellos: en una disputa (A) los carros perdidos con su animal y su carga, en un aguante (B) el 70 % de la carga y la mitad de los carros sin perder nunca el último (el 30 % salvado sigue en él, Combate §7.1), la escolta a 0 y de vuelta al campamento de su héroe y, sin carros (solo en A), la caravana desaparece. Detalle: [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md).
 
+## Decisiones del autor del 2026-10-27 (paridad con TypeScript)
+
+Confirmadas por el autor al repasar las dudas de la paridad (plan «Paridad con TypeScript: plan de tandas», D1-D16): describen lo que ya hace el motor y pasan a ser la regla.
+
+- **D7, pasos de río:** solo se cruzan los ríos por los **vados del mapa**; una ciudad ribereña no abre un paso propio y `radioPasoCiudad` no se usa.
+
 ## Catálogo de eventos
 
 Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. El núcleo los emite todos.

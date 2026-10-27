@@ -141,9 +141,16 @@ impl Nucleo {
     /// `fertilidadZona` de la plaza (ppm): la mejor fertilidad del artefacto en su zona real, recortada por las vecinas en contacto como sus sitios (Economia_Construccion §5).
     /// `None` sin plaza o sin mundo.
     pub fn fertilidad_de_zona(&self, id: u64) -> Option<i64> {
-        let (geo, a) = (self.geografia.as_ref()?, self.estado.asentamientos.get(&id)?);
+        let geo = self.geografia.as_ref()?;
+        let (yo, vecinos) = self.zona_real(id)?;
+        Some(geo.fertilidad_de_zona(&yo, &vecinos))
+    }
+
+    /// El disco de la plaza y los de las vecinas de otra Facción en contacto, que lo recortan: su zona real para muchas consultas seguidas (`territorio::en_zona`).
+    pub(super) fn zona_real(&self, id: u64) -> Option<(Disco, Vec<Disco>)> {
+        let a = self.estado.asentamientos.get(&id)?;
         let disco = |o: &Asentamiento| Disco { centro: o.posicion, radio: o.radio, faccion: o.faccion };
-        let vecinos: Vec<Disco> = self
+        let vecinos = self
             .estado
             .contactos
             .iter()
@@ -151,7 +158,7 @@ impl Nucleo {
             .filter_map(|o| self.estado.asentamientos.get(&o))
             .map(disco)
             .collect();
-        Some(geo.fertilidad_de_zona(&disco(a), &vecinos))
+        Some((disco(a), vecinos))
     }
 
     /// ¿Cae `p` en la zona real de la plaza (disco recortado por las fronteras con otras Facciones)?

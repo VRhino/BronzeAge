@@ -440,6 +440,16 @@ El ticket y el contrato de resultado (v1) se amplían, siempre en aditivo, con l
 - Toda agresión entre Facciones exige guerra o la declara; unirse como atacante a un asedio ajeno no la declara.
 - No se envía nada de esto a Conquest sin permiso del usuario.
 
+## Decisiones del autor del 2026-10-27 (paridad con TypeScript)
+
+Confirmadas por el autor al repasar las dudas de la paridad (plan «Paridad con TypeScript: plan de tandas», D1-D16): describen lo que ya hace el motor y pasan a ser la regla.
+
+- **D5:** la chatarra de una avanzada que resiste va al almacén de su plaza madre, como la de un pueblo.
+- **D11:** la batalla de una caravana contra bandidos lleva el prefijo `batalla.` en sus hechos, no `evento_pve.` (ese es solo el del campamento).
+- **D12:** un campamento no vuelve a acosar a la misma columna mientras se conserve su batalla de acoso (`acoso_ya_jugado`, una hora tras cerrarse); no hay guarda con estado propio ni formato de foto nuevo.
+- **D14:** unirse a una persecución o a una caravana no cambia, y la avanzada que resiste o cae sin conquista sigue leyéndose como «gana el atacante».
+- **D15:** mientras un pueblo o una avanzada de la plaza está en una batalla, cerrar la puerta o vetar se **rechaza** (`batalla.bloqueado`); no se expulsa a quien combate dentro.
+
 ## Catálogo de eventos
 
 Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. El núcleo los emite todos.

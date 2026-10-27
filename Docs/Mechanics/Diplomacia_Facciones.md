@@ -713,6 +713,12 @@ La crónica de los Aedas canta la anexión, la fusión, la liberación de vasall
 ## 13. Divergencias
 Anotadas en [`Divergencias.md`](Divergencias.md).
 
+## Decisiones del autor del 2026-10-27 (paridad con TypeScript)
+
+Confirmadas por el autor al repasar las dudas de la paridad (plan «Paridad con TypeScript: plan de tandas», D1-D16): describen lo que ya hace el motor y pasan a ser la regla.
+
+- **D9:** la reputación es un ritmo continuo: con alianzas cuyo bonus no supera al decaimiento queda en **0**, sin el resto que dejaba el TypeScript.
+
 ## Catálogo de eventos
 
 Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. De estos, aún no se emiten 2 (`asentamiento.veto` y `cargo.local_asignado`, de 5E); los ocho de la anexión y la fusión y los dos de los títulos se emiten desde 5F (2026-10-25); los diez de 5B se emiten desde el 2026-10-24, `faccion.nivel_subio` y `faccion.capital_designada` desde 5C y los doce de las relaciones (`diplomacia.relacion_propuesta`, `_aceptada`, `_rechazada`, `_retirada`, `diplomacia.relacion_rota`, `diplomacia.guerra_declarada` —que sustituye a `faccion.guerra_declarada`—, `diplomacia.paz_propuesta`, `diplomacia.paz_firmada`, `diplomacia.rebelion_vasallo`, `diplomacia.vasallo_liberado`, `diplomacia.vasallo_conquistado`, `diplomacia.tributo_pagado`) y `faccion.admision_en_ataques` desde 5D (el mismo día).

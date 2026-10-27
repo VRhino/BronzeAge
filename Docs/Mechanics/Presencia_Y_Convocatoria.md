@@ -303,6 +303,14 @@ Un héroe `fuera` del mundo: solo `conectarse` (§7).
 
 Ninguna abierta.
 
+## Decisiones del autor del 2026-10-27 (paridad con TypeScript)
+
+Confirmadas por el autor al repasar las dudas de la paridad (plan «Paridad con TypeScript: plan de tandas», D1-D16): describen lo que ya hace el motor y pasan a ser la regla.
+
+- **D10:** quien está dentro de la propia plaza cuando esta es conquistada **sale siempre**; la regla de «solo salen los que ya no podrían entrar» es para sus pueblos y avanzadas.
+- **D13:** un residente que sale con tropa de su loadout durante un asedio deja el asedio sin ella y **no vuelve a entrar hasta que acabe** (la plaza asediada rechaza `EntrarEnAsentamiento`); la guarnición con dueño, reservada por la batalla, no se puede llevar.
+- **D16:** un residente que entra con caravanas adjuntas conserva su columna dentro (quieta, sin tropa) y sus participantes comen de sus víveres a ritmo de acampada, como un visitante, hasta que sale o suelta las caravanas.
+
 ## Catálogo de eventos
 
 Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. El núcleo los emite todos.
