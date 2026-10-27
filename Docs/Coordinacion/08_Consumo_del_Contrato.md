@@ -138,11 +138,12 @@ El núcleo atiende el respaldo entre dos órdenes y no hace nada más mientras c
 
 | Ruta | Qué |
 |---|---|
-| `GET /api/partidas` | `{ actual, servidor: { lanzado, escucha }, partidas: [{ nombre, carpeta, semilla, mundo, creada_ms, respaldos, actual }], artefactos: [{ archivo, hash, creado_ms }] }` |
+| `GET /api/partidas` | `{ actual, servidor: { lanzado, escucha }, partidas: [{ nombre, carpeta, semilla, mundo, creada_ms, respaldos, actual, en_marcha }], artefactos: [{ archivo, hash, creado_ms }] }`. `actual: null` es «sin partida activa»: el servidor no arranca hasta crear o activar una |
 | `POST /api/partidas` | `{ nombre, semilla?, mundo?, activar? }`: crea la partida con el artefacto dado (archivo o hash; por defecto el más nuevo) y, salvo `activar: false`, para el servidor y lo arranca con ella. `201`; `409 partida_repetida` o `sin_mundo` |
 | `GET /api/partidas/<nombre>` | la partida y su `lista_respaldos` |
 | `POST /api/partidas/<nombre>/activar` | cambiar de partida: para el servidor (con su foto) y lo arranca con esa |
-| `DELETE /api/partidas/<nombre>` | la borra entera; `409 partida_en_marcha` si es la actual con el servidor encendido |
+| `POST /api/partidas/<nombre>/apagar` | solo la activa: para el servidor (con su foto) y deja el panel **sin partida activa**; la partida se queda guardada. `{ apagada, estaba_en_marcha, actual: null }`; `409 no_es_la_activa` |
+| `DELETE /api/partidas/<nombre>` | la borra entera. La activa pide el cuerpo `{ "confirmar": true }` (si no, `409 partida_activa`): para el servidor, la borra y deja el panel sin partida activa |
 | `GET /api/partidas/<nombre>/respaldos` | `{ respaldos }` (los que hizo el servidor) |
 | `POST /api/partidas/<nombre>/restaurar` | `{ respaldo: <id> }`: para el servidor si sirve esa partida, guarda lo de ahora como el respaldo `antes-de-restaurar-<ms>`, copia el respaldo encima y vuelve a arrancar |
 | `GET /api/mundo` | `{ generando, semilla, ultima: { semilla, codigo, fin_ms, artefacto }, artefactos }`: el admin lo consulta para saber cuándo terminó (código 0: bien) |

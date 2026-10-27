@@ -38,6 +38,7 @@ const SERVICIOS = {
 
 // El servidor necesita el artefacto de mundo (`BRONZEAGE_MUNDO`: un .bin o una carpeta con un mundo-*.bin; por defecto generador/salida/mundo).
 function avisoMundo(c) {
+  if (!partidaActual()) return 'no hay partida activa: crea una o activa una de la lista (POST /api/partidas o /api/partidas/<nombre>/activar)';
   const ruta = path.resolve(RAIZ, envPartida().BRONZEAGE_MUNDO ?? c.env?.BRONZEAGE_MUNDO ?? process.env.BRONZEAGE_MUNDO ?? 'generador/salida/mundo');
   if (ruta.endsWith('.bin') ? existsSync(ruta) : existsSync(ruta) && readdirSync(ruta).some((f) => /^mundo-.*\.bin$/.test(f))) return null;
   if (procesos['generar-mundo']?.hijo) return 'generando el artefacto de mundo… (unos 15 min)';
@@ -58,11 +59,13 @@ const nombresDePartida = () => {
   if (existsSync(path.join(RAIZ, 'datos')) && !n.includes('datos')) n.unshift('datos');
   return n;
 };
+// La partida activa: la de `actual.txt`. Ese archivo vacío es «sin partida activa» (tras apagarla o borrarla); sin el archivo, la primera que haya.
 function partidaActual() {
-  const a = existsSync(ACTUAL) ? readFileSync(ACTUAL, 'utf8').trim() : '';
-  return nombresDePartida().includes(a) ? a : nombresDePartida()[0] ?? null;
+  if (!existsSync(ACTUAL)) return nombresDePartida()[0] ?? null;
+  const a = readFileSync(ACTUAL, 'utf8').trim();
+  return nombresDePartida().includes(a) ? a : null;
 }
-function ponerActual(n) { mkdirSync(PARTIDAS, { recursive: true }); writeFileSync(ACTUAL, n); }
+function ponerActual(n) { mkdirSync(PARTIDAS, { recursive: true }); writeFileSync(ACTUAL, n ?? ''); }
 // Los artefactos generados, del más nuevo al más viejo.
 const artefactos = () => (existsSync(MUNDOS) ? readdirSync(MUNDOS).filter((f) => /^mundo-.*\.bin$/.test(f)) : [])
   .map((f) => ({ archivo: f, hash: f.slice(6, -4), creado_ms: statSync(path.join(MUNDOS, f)).mtimeMs }))
@@ -75,12 +78,12 @@ function respaldosDe(n) {
 function infoPartida(n) {
   const meta = leerJson(path.join(carpetaPartida(n), 'partida.json')) ?? {};
   return { nombre: n, carpeta: carpetaPartida(n), semilla: meta.semilla ?? 42, mundo: meta.mundo ?? null, creada_ms: meta.creada_ms ?? null,
-    respaldos: respaldosDe(n).length, actual: n === partidaActual() };
+    respaldos: respaldosDe(n).length, actual: n === partidaActual(), en_marcha: n === partidaActual() && enMarcha() };
 }
 // El entorno del servidor para la partida actual: su carpeta, su semilla y su artefacto (si lo fijó al crearla).
 function envPartida() {
   const n = partidaActual();
-  if (!n) return { BRONZEAGE_DATOS: path.join(PARTIDAS, 'principal') };
+  if (!n) return {};
   const i = infoPartida(n);
   return { BRONZEAGE_DATOS: i.carpeta, BRONZEAGE_SEMILLA: String(i.semilla), ...(i.mundo ? { BRONZEAGE_MUNDO: path.join(MUNDOS, i.mundo) } : {}) };
 }
@@ -148,7 +151,7 @@ async function estado() {
     return {
       nombre: c.name, tipo: SERVICIOS[c.name]?.tipo ?? 'backend', puerto: puertos[c.name],
       comando: [c.runtimeExecutable, ...c.runtimeArgs].join(' ') + (c.cwd ? `  (en ${c.cwd})` : '')
-        + (c.name === 'bronzeage-servidor' ? `  [partida ${partidaActual() ?? 'principal (nueva)'}]` : ''),
+        + (c.name === 'bronzeage-servidor' ? `  [partida ${partidaActual() ?? 'ninguna'}]` : ''),
       falta: !existsSync(carpeta(c)), aviso: SERVICIOS[c.name]?.aviso?.(c) ?? null,
       escucha: puertos[c.name] ? await escucha(puertos[c.name]) : false, lanzado: !!p?.hijo, log: p?.log.slice(-200) ?? [],
     };
@@ -265,12 +268,22 @@ async function apiPartidas(metodo, partes, cuerpo) {
   if (!accion) {
     if (metodo === 'GET') return [200, { ...infoPartida(nombre), lista_respaldos: respaldosDe(nombre) }];
     if (metodo !== 'DELETE') return [405, { error: 'metodo_no_permitido' }];
-    if (nombre === partidaActual() && enMarcha()) return [409, { error: 'partida_en_marcha', mensaje: 'para el servidor o cambia de partida antes de borrarla' }];
+    // La activa se borra solo con `confirmar: true`: se apaga el servidor (con su foto, que se borra con ella) y queda sin partida activa.
+    const activa = nombre === partidaActual();
+    if (activa && cuerpo?.confirmar !== true) return [409, { error: 'partida_activa', mensaje: 'es la partida activa: borrarla apaga el servidor; repite con { "confirmar": true }' }];
+    if (activa) { await pararServidor(); ponerActual(null); }
     rmSync(carpetaPartida(nombre), { recursive: true, force: true });
     return [200, { borrada: nombre, actual: partidaActual() }];
   }
   if (metodo !== 'POST' && !(metodo === 'GET' && accion === 'respaldos')) return [405, { error: 'metodo_no_permitido' }];
   if (accion === 'respaldos') return [200, { respaldos: respaldosDe(nombre) }];
+  if (accion === 'apagar') {
+    // Apaga el servidor si sirve esta partida (con su foto) y deja el panel sin partida activa; la partida queda guardada para activarla después.
+    if (nombre !== partidaActual()) return [409, { error: 'no_es_la_activa', mensaje: `${nombre} no es la partida activa` }];
+    const estaba = await pararServidor();
+    ponerActual(null);
+    return [200, { apagada: nombre, estaba_en_marcha: estaba, actual: null }];
+  }
   if (accion === 'activar') {
     await pararServidor(); ponerActual(nombre); arrancar(servidor());
     return [200, { ...infoPartida(nombre), ...arranque() }];
