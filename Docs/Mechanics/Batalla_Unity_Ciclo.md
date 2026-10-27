@@ -299,7 +299,7 @@ Los efectos de una batalla en curso sobre las plazas (construir, mejorar…) se 
 
 ## 10. Lo que se cuenta
 
-**Eventos** (`eventosDeBatalla`), uno **por plaza implicada** (la de origen de cada columna bloqueada y de cada caravana, y la asediada): se entera cada hogar, no el mundo. Códigos: `batalla.abierta`, `.refuerzos`, `.asignada`, `.en_curso`, `.salida`, `.revisada`, `.aplicada` (con `ganador`), `.cancelada`, `.fallida`. Contra un **campamento de bandidos** el prefijo es **`evento_pve.`** en lugar de `batalla.` (no es una batalla entre Facciones).
+**Eventos** (`eventosDeBatalla`), uno **por plaza implicada** (la de origen de cada columna bloqueada y de cada caravana, y la asediada): se entera cada hogar, no el mundo. Códigos: `batalla.abierta`, `.refuerzos`, `.asignada`, `.en_curso`, `.salida`, `.revisada`, `.aplicada` (con `ganador`), `.cancelada`, `.fallida`. Contra un **campamento de bandidos** el prefijo es **`evento_pve.`** en lugar de `batalla.` (no es una batalla entre Facciones). Además, dos del motor Rust (fase 4E): **`batalla.convocatoria_cerrada`**, al vencer la convocatoria de una batalla que va a Unity (la cita con la que el contrato publica el ticket), y **`batalla.retirada`** `{ batalla }`, cuando una batalla ya cerrada deja de conservarse (la oyen las Facciones de los dos bandos, que la tenían en su proyección). Las dos llevan siempre el prefijo `batalla.`.
 
 `PayloadBatalla` = `{ battleId, contexto, punto, bandos (por lado: Facción, nº de héroes, capacidad), faccionAtacanteId, faccionDefensoraId, ganador? }`: **nunca** tokens, escuadras ni listas de héroes. Las épicas de los Aedas leen de aquí las Facciones de cada bando (Doc 6.7).
 

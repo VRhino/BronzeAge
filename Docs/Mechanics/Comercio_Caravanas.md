@@ -812,6 +812,12 @@ Un id inexistente se deja pasar a propósito para que el comando devuelva el err
 | `mercado.orden_colocada`, `mercado.orden_expirada` | comando / tick | narración |
 | `mercado.comercio_en_plaza` | comando | mercado de mercenarios (`entreFacciones`) |
 | `mercenarios.comprado` | `comprarEnCampamento` | narración |
+| `comercio.flota_traspasada` `{ caravanas }` | conquista (§10): las caravanas de la plaza conquistada pasan a la Facción que conquista | narración de la plaza |
+| `reputacion.cambio` `{ faccion, delta, valor }` | todo cambio de reputación de una Facción (trueques, vasallaje, rebelión; §4.6) | narración; `batch politica` |
+| `reputacion.umbral_bajo` `{ faccion, entra, valor }` | la reputación cruza el umbral bajo (−40): `entra` 1 al bajar de él, 0 al recuperarse | narración |
+| `faccion.experiencia` `{ faccion, motivo, cantidad, experiencia }` | toda experiencia de Facción (`motivo`: 1 trueque, 2 combate, 3 batalla, 4 edificio, 5 conquista, 6 ascenso, 7 fundación, 8 bandidos; `cantidad` y `experiencia` en milésimas) | narración; nivel de Facción (`Diplomacia_Facciones.md` §3.5) |
+
+El TypeScript emitía también `comercio.preparacion_terminada`; el motor Rust no: el fin de la preparación es la salida de la caravana (`comercio.caravana_sale`).
 
 ## 13. Parámetros
 
