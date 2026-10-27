@@ -79,14 +79,17 @@ function respaldosDe(n) {
 function infoPartida(n) {
   const meta = leerJson(path.join(carpetaPartida(n), 'partida.json')) ?? {};
   return { nombre: n, carpeta: carpetaPartida(n), semilla: meta.semilla ?? 42, mundo: meta.mundo ?? null, creada_ms: meta.creada_ms ?? null,
+    administradores: meta.administradores ?? listaAdmins(servidor().env?.ADMINISTRADORES),
     respaldos: respaldosDe(n).length, actual: n === partidaActual(), en_marcha: n === partidaActual() && enMarcha() };
 }
-// El entorno del servidor para la partida actual: su carpeta, su semilla y su artefacto (si lo fijó al crearla).
+// Los nicks de administrador como lista, desde texto «a, b» o desde una lista.
+const listaAdmins = (v) => (Array.isArray(v) ? v : String(v ?? '').split(',')).map((x) => String(x).trim()).filter(Boolean);
+// El entorno del servidor para la partida actual: su carpeta, su semilla, su artefacto (si lo fijó al crearla) y sus administradores.
 function envPartida() {
   const n = partidaActual();
   if (!n) return {};
   const i = infoPartida(n);
-  return { BRONZEAGE_DATOS: i.carpeta, BRONZEAGE_SEMILLA: String(i.semilla), ...(i.mundo ? { BRONZEAGE_MUNDO: path.join(MUNDOS, i.mundo) } : {}) };
+  return { BRONZEAGE_DATOS: i.carpeta, BRONZEAGE_SEMILLA: String(i.semilla), ADMINISTRADORES: i.administradores.join(','), ...(i.mundo ? { BRONZEAGE_MUNDO: path.join(MUNDOS, i.mundo) } : {}) };
 }
 
 // La regeneración del mundo (la tarea «generar-mundo»): con qué semilla y cómo acabó la última.
@@ -198,12 +201,13 @@ th{color:var(--sub);font-weight:500;font-size:12px}td .fila{gap:6px}td button{pa
 <nav class="pestanas"><button data-vista="partidas">Mundo y partidas</button><button data-vista="servicios">Servicios</button></nav>
 <section class="vista" id="v-partidas">
 <details open data-seccion="partidas"><summary>Partidas<span class="cuenta" id="p-cuenta"></span></summary>
-<div class="card"><table><thead><tr><th>Partida</th><th>Semilla</th><th>Mundo</th><th>Creada</th><th>Estado</th><th></th></tr></thead><tbody id="p-lista"></tbody></table>
+<div class="card"><table><thead><tr><th>Partida</th><th>Semilla</th><th>Mundo</th><th>Creada</th><th>Administradores</th><th>Estado</th><th></th></tr></thead><tbody id="p-lista"></tbody></table>
 <div class="msg" id="p-msg"></div></div></details>
 <details open data-seccion="nueva"><summary>Nueva partida</summary>
 <div class="card"><div class="form"><label>Nombre<input id="n-nombre" placeholder="misiones" maxlength="40"></label>
 <label>Semilla<input id="n-semilla" type="number" min="0" value="42"></label>
 <label>Mundo<select id="n-mundo"></select></label>
+<label>Administradores<input id="n-admins" placeholder="tu nick, otro"></label>
 <label style="flex-direction:row;align-items:center"><input id="n-activar" type="checkbox" checked style="width:auto"> activarla y arrancar el servidor</label>
 <button id="n-crear">Crear</button></div><div class="msg" id="n-msg"></div></div></details>
 <details open data-seccion="mundo"><summary>Mundo</summary>
@@ -249,19 +253,21 @@ async function pintarPartidas(){
   document.getElementById('p-cuenta').textContent='· '+d.partidas.length+(d.actual?' · activa: '+d.actual:' · ninguna activa');
   for(const p of d.partidas){
     const tr=document.createElement('tr'),n=encodeURIComponent(p.nombre);
-    celda(tr,p.nombre,p.actual?'activa':'');celda(tr,String(p.semilla));celda(tr,p.mundo?p.mundo.slice(6,18)+'…':'el último');celda(tr,fecha(p.creada_ms));
+    celda(tr,p.nombre,p.actual?'activa':'');celda(tr,String(p.semilla));celda(tr,p.mundo?p.mundo.slice(6,18)+'…':'el último');celda(tr,fecha(p.creada_ms));celda(tr,p.administradores.join(', ')||'ninguno');
     celda(tr,p.actual?(p.en_marcha?'activa · servidor en marcha':'activa · servidor parado'):'guardada');
     const acc=celda(tr,'');acc.innerHTML='<div class="fila"></div>';
     if(!p.actual)boton(acc,'Activar',()=>api('POST','/api/partidas/'+n+'/activar',null,'p-msg'));
     else{if(!p.en_marcha)boton(acc,'Arrancar',()=>api('POST','/api/partidas/'+n+'/activar',null,'p-msg'));
       boton(acc,'Apagar',()=>api('POST','/api/partidas/'+n+'/apagar',null,'p-msg'));}
+    boton(acc,'Administradores',()=>{const v=prompt('Nicks de administrador, separados por comas (se reinicia el servidor si está en marcha)',p.administradores.join(', '));
+      if(v!==null)api('POST','/api/partidas/'+n+'/administradores',{administradores:v},'p-msg')});
     boton(acc,'Respaldar',()=>api('POST','/api/partidas/'+n+'/respaldar',{nota:prompt('Nota del respaldo (opcional)')??''},'p-msg'));
     boton(acc,'Respaldos ('+p.respaldos+')',()=>{abiertos.has(p.nombre)?abiertos.delete(p.nombre):abiertos.add(p.nombre);pintarPartidas()});
     boton(acc,'Borrar',()=>{if(confirm('¿Borrar la partida «'+p.nombre+'» con sus respaldos?'+(p.actual?' Es la activa: se apaga el servidor.':'')+' No se puede deshacer.'))
       api('DELETE','/api/partidas/'+n,{confirmar:true},'p-msg')},'peligro');
     lista.append(tr);
     if(abiertos.has(p.nombre)){
-      const fila=document.createElement('tr');fila.className='respaldos';const td=document.createElement('td');td.colSpan=6;fila.append(td);lista.append(fila);
+      const fila=document.createElement('tr');fila.className='respaldos';const td=document.createElement('td');td.colSpan=7;fila.append(td);lista.append(fila);
       const rs=(await (await fetch('/api/partidas/'+n+'/respaldos')).json()).respaldos??[];
       if(!rs.length)td.textContent='Sin respaldos.';
       const t=document.createElement('table');td.append(t);
@@ -271,7 +277,7 @@ async function pintarPartidas(){
           api('POST','/api/partidas/'+n+'/restaurar',{respaldo:r.id},'p-msg')});t.append(f)}
     }
   }
-  if(!d.partidas.length){const tr=document.createElement('tr');celda(tr,'No hay partidas: crea una abajo.').colSpan=6;lista.append(tr)}
+  if(!d.partidas.length){const tr=document.createElement('tr');celda(tr,'No hay partidas: crea una abajo.').colSpan=7;lista.append(tr)}
   const sel=document.getElementById('n-mundo'),antes=sel.value;sel.textContent='';
   for(const a of m.artefactos){const o=document.createElement('option');o.value=a.archivo;o.textContent=a.hash.slice(0,12)+'… ('+fecha(a.creado_ms)+')';sel.append(o)}
   if(antes)sel.value=antes;
@@ -283,7 +289,8 @@ async function pintarPartidas(){
   document.getElementById('m-estado').textContent=m.generando?'generando con la semilla '+m.semilla+'…':m.ultima?('último: semilla '+m.ultima.semilla+(m.ultima.codigo===0?', bien':', falló (código '+m.ultima.codigo+'; mira su log en Servicios)')):'';
 }
 document.getElementById('n-crear').onclick=()=>api('POST','/api/partidas',{nombre:document.getElementById('n-nombre').value,semilla:Number(document.getElementById('n-semilla').value),
-  mundo:document.getElementById('n-mundo').value||undefined,activar:document.getElementById('n-activar').checked},'n-msg');
+  mundo:document.getElementById('n-mundo').value||undefined,activar:document.getElementById('n-activar').checked,
+  ...(document.getElementById('n-admins').value.trim()?{administradores:document.getElementById('n-admins').value}:{})},'n-msg');
 document.getElementById('m-generar').onclick=()=>api('POST','/api/mundo',{semilla:Number(document.getElementById('m-semilla').value)},'m-msg');
 pintarPartidas();setInterval(pintarPartidas,4000);
 async function pintar(){
@@ -350,8 +357,9 @@ async function apiPartidas(metodo, partes, cuerpo) {
     if (!elegido) return [409, { error: 'sin_mundo', mensaje: 'no hay ese artefacto de mundo: genera uno con POST /api/mundo' }];
     const semilla = Number(cuerpo?.semilla ?? 42);
     if (!Number.isSafeInteger(semilla) || semilla < 0) return [400, { error: 'datos_invalidos', mensaje: 'la semilla es un entero ≥ 0' }];
+    const administradores = cuerpo?.administradores === undefined ? listaAdmins(servidor().env?.ADMINISTRADORES) : listaAdmins(cuerpo.administradores);
     mkdirSync(path.join(PARTIDAS, n), { recursive: true });
-    writeFileSync(path.join(PARTIDAS, n, 'partida.json'), JSON.stringify({ nombre: n, semilla, mundo: elegido.archivo, creada_ms: Date.now() }, null, 2));
+    writeFileSync(path.join(PARTIDAS, n, 'partida.json'), JSON.stringify({ nombre: n, semilla, mundo: elegido.archivo, creada_ms: Date.now(), administradores }, null, 2));
     if (cuerpo?.activar !== false) { await pararServidor(); ponerActual(n); arrancar(servidor()); }
     return [201, { ...infoPartida(n), ...arranque() }];
   }
@@ -386,6 +394,15 @@ async function apiPartidas(metodo, partes, cuerpo) {
     writeFileSync(path.join(carpeta, 'respaldos', id, 'respaldo.json'), JSON.stringify(r));
     if (seguia) arrancar(servidor());
     return [201, { respaldo: r, ...(seguia ? arranque() : { arrancado: false, aviso: null }) }];
+  }
+  if (accion === 'administradores') {
+    // Cambia los nicks de administrador de la partida (los que pueden abrir el admin web). Si el servidor la sirve, se reinicia para aplicarlo.
+    const fichero = path.join(carpetaPartida(nombre), 'partida.json');
+    const meta = { ...(leerJson(fichero) ?? { nombre, semilla: infoPartida(nombre).semilla }), administradores: listaAdmins(cuerpo?.administradores) };
+    const seguia = nombre === partidaActual() && (await pararServidor());
+    writeFileSync(fichero, JSON.stringify(meta, null, 2));
+    if (seguia) arrancar(servidor());
+    return [200, { ...infoPartida(nombre), ...(seguia ? arranque() : { arrancado: false, aviso: null }) }];
   }
   if (accion === 'activar') {
     await pararServidor(); ponerActual(nombre); arrancar(servidor());
