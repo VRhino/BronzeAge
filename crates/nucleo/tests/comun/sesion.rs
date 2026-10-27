@@ -17,12 +17,14 @@ pub struct Servicio {
     actor: JoinHandle<Nucleo>,
 }
 
-pub async fn arrancar_con(n: Nucleo) -> Servicio {
+pub async fn arrancar_con(mut n: Nucleo) -> Servicio {
     let reloj = RelojCompartido::nuevo(n.ahora());
     let (tx, rx) = mpsc::channel(1024);
+    let nombres = servidor::NombresHeroes::default();
+    n.conectar_nombres(nombres.clone());
     let actor = sesiones::lanzar(n, reloj.clone(), rx);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let srv = servir(listener, tx.clone(), AutenticadorDePrueba, reloj, Config::default()).await;
+    let srv = servir(listener, tx.clone(), AutenticadorDePrueba, reloj, Config { nombres, ..Config::default() }).await;
     Servicio { srv, tx, actor }
 }
 

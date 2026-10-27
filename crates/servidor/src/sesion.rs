@@ -180,13 +180,15 @@ struct Emisor {
     escritura: Duration,
     umbral: usize,
     nivel: i32,
+    nombres: crate::NombresHeroes,
 }
 
 impl Emisor {
     /// Numera y encola un mensaje. Es el único punto donde nace una `secuencia`.
     async fn encolar(&mut self, cuerpo: ms::Cuerpo) -> bool {
         self.secuencia += 1;
-        let mut bytes = MensajeDeServidor { secuencia: self.secuencia, cuerpo: Some(cuerpo) }.encode_to_vec();
+        let mut bytes = MensajeDeServidor { secuencia: self.secuencia, cuerpo: Some(cuerpo), ..Default::default() }.encode_to_vec();
+        self.nombres.anadir(&mut bytes);
         if self.comprimir && bytes.len() >= self.umbral {
             if let Ok(c) = zstd::bulk::compress(&bytes, self.nivel) {
                 if c.len() < bytes.len() {
@@ -244,6 +246,7 @@ async fn sesion<A: Autenticador>(ctx: Arc<Ctx<A>>, tcp: TcpStream) {
         escritura: ctx.config.timeout_escritura,
         umbral: ctx.config.umbral_compresion,
         nivel: ctx.config.nivel_zstd,
+        nombres: ctx.config.nombres.clone(),
     };
     let mut rx = Receptor { stream, max: ctx.config.max_trama_cliente };
     let id = ctx.siguiente_id.fetch_add(1, Ordering::Relaxed);

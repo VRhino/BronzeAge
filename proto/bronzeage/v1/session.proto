@@ -336,4 +336,7 @@ message MensajeDeServidor {
     MensajeParaServidorDeBatalla batalla = 10;
     Cronica cronica = 11;
   }
+  // Los nombres de los héroes con nombre cuyo id (`heroe-N`) aparece en este mensaje, por id (2026-10-27): el contrato nombra a los héroes por id
+  // (la Facción, la convocatoria, las columnas, los cargos, los hechos...) y el cliente los pinta con esto. El que falta no tiene nombre: «Héroe N».
+  map<string, string> nombres_heroes = 12;
 }

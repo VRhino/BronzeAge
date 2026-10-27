@@ -147,6 +147,8 @@ pub struct Config {
     pub url_artefacto: Option<String>,
     /// Si el mismo puerto sirve el archivo común de datos de juego: su versión y su ruta (`InfoMundo.version_datos_de_juego` y `url_datos_de_juego` de la `Bienvenida`).
     pub datos_de_juego: Option<(String, String)>,
+    /// Los nombres de los héroes que la sesión añade a cada mensaje (`MensajeDeServidor.nombres_heroes`); el núcleo los apunta (`Nucleo::conectar_nombres`).
+    pub nombres: crate::NombresHeroes,
 }
 
 impl Default for Config {
@@ -161,6 +163,7 @@ impl Default for Config {
             nivel_zstd: 3,
             url_artefacto: None,
             datos_de_juego: None,
+            nombres: crate::NombresHeroes::default(),
         }
     }
 }

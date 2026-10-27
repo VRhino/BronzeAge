@@ -235,6 +235,8 @@ pub struct Nucleo {
     generadores: Vec<Box<dyn GeneradorDeEventos>>,
     geografia: Option<zonas::Geografia>,
     reloj: Option<RelojCompartido>,
+    /// El directorio de nombres de héroe de las sesiones (`servidor::NombresHeroes`), si las hay: se le apunta cada nombre nuevo.
+    nombres: Option<servidor::NombresHeroes>,
     tr: Transicion,
     /// Un registro por versión, contiguos: el de la versión `v` está en la posición `v - base_registro - 1`.
     registro: VecDeque<CambioVersion>,
@@ -378,6 +380,7 @@ impl Nucleo {
             generadores: Vec::new(),
             geografia: a.mundo.map(zonas::Geografia::de),
             reloj: None,
+            nombres: None,
             tr: Transicion::default(),
             registro: VecDeque::new(),
             base_registro,
@@ -490,6 +493,14 @@ impl Nucleo {
             }
         }
         self.generadores.push(g);
+    }
+
+    /// Conecta el directorio de nombres de héroe de las sesiones: le apunta los de ahora y, desde entonces, cada uno nuevo.
+    pub fn conectar_nombres(&mut self, nombres: servidor::NombresHeroes) {
+        for (&id, nombre) in &self.estado.militar.nombres {
+            nombres.poner(id, nombre);
+        }
+        self.nombres = Some(nombres);
     }
 
     /// Conecta el reloj de mundo compartido (modo en vivo): lo deja en el instante, factor y pausa del estado.

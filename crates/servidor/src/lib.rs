@@ -48,6 +48,7 @@
 //! se ignora (decidido el 2026-10-13, contrato 05 §7).
 
 pub mod http;
+pub mod nombres;
 pub mod nucleo;
 pub mod prueba;
 mod sesion;
@@ -56,4 +57,5 @@ pub use nucleo::{
     codigos, Autenticador, ComandoSesion, Config, Difusion, ErrorAcceso, EstadoNucleo, Identidad, PeticionAdmin, RelojCompartido, RolTecnico, SesionId,
 };
 pub use http::{Http, PeticionHttp, RespuestaHttp, SinHttp};
+pub use nombres::NombresHeroes;
 pub use sesion::{servir, servir_con_http, Servidor};

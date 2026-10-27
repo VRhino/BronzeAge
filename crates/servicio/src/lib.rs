@@ -158,11 +158,14 @@ pub async fn arrancar(arranque: Arranque, artefacto: Option<Arc<Vec<u8>>>, datos
     let informe = Informe { mundo_hash: n.mundo_hash().into(), version: n.version(), ahora: n.ahora(), recuperado: n.recuperado(), cuentas: acceso.cuentas() };
     let reloj = RelojCompartido::nuevo(n.ahora());
     let (tx, rx) = mpsc::channel(1024);
+    let nombres = servidor::NombresHeroes::default();
+    n.conectar_nombres(nombres.clone());
     let actor = sesiones::lanzar(n, reloj.clone(), rx);
     let mundo = artefacto.map(|b| (informe.mundo_hash.clone(), b));
     let config = Config {
         url_artefacto: mundo.is_some().then(|| RUTA_MUNDO.to_owned()),
         datos_de_juego: Some((datos_de_juego.version.clone(), format!("{RUTA_DATOS}/{}", datos_de_juego.version))),
+        nombres,
         ..Config::default()
     };
     let admin = admin::Admin { acceso: acceso.clone(), nucleo: tx.clone(), carpeta: datos.to_owned(), mundo_hash: informe.mundo_hash.clone(), semilla, id_partida };

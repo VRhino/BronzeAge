@@ -297,7 +297,11 @@ async fn el_heroe_nuevo_abre_su_ambito_en_caliente_y_gana_la_faccion_cuando_se_l
     assert_eq!(rechazo(&r), "no_autorizado");
     let (_, r) = dar(&mut admin_c, "c3", admin("fijar_faccion_de_heroe", &[("heroe_id", &heroe), ("faccion_id", "f-1")])).await;
     assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
-    assert_eq!(etiquetas(&siguientes(&mut nueva, 2).await), ["foto FACCION:f-1".to_owned(), format!("delta HEROE:{heroe}")]);
+    let (foto, delta) = (nueva.esperar().await, nueva.esperar().await);
+    assert_eq!(etiquetas(&[foto.cuerpo.clone().unwrap(), delta.cuerpo.clone().unwrap()]), ["foto FACCION:f-1".to_owned(), format!("delta HEROE:{heroe}")]);
+    // Cada mensaje lleva el nombre de los héroes con nombre que nombra (2026-10-27): la Facción la nombra entre sus ciudadanos; los de la aldea no tienen nombre.
+    assert_eq!(foto.nombres_heroes, [(heroe.clone(), "Nueva".to_owned())].into());
+    assert_eq!(delta.nombres_heroes, [(heroe.clone(), "Nueva".to_owned())].into());
     assert!(pendiente(&mut nueva).await.is_empty());
     w.parar().await;
 }

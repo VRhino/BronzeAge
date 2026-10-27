@@ -25,6 +25,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 49 | PROGRESIÓN | Misiones individuales, de Facción y de asentamiento (`Docs/Disenos_Por_Implementar/Misiones.md`) | nada |
 | 50 | ECONOMÍA | Aldea agrícola, corrales solo en ella y nuevo gate del nivel 2 (`Docs/Disenos_Por_Implementar/Aldea_Agricola_Y_Cria.md` §1) | Corral y Granja dentro de la ciudad |
 | 51 | ECONOMÍA | Cría ampliada: sin nodos de livestock, rebaños en los corrales de las aldeas (`Aldea_Agricola_Y_Cria.md` §2; necesita 49 y 50) | livestock como nodos libres |
+| 54 | MILITAR / LOGÍSTICA | Marcha forzada: ×1,5 la velocidad en el mapa y ×2 el consumo de víveres al moverse (pedida por el autor el 2026-10-27) | nada |
 | — | PARIDAD | Recortes temporales del motor Rust frente al TypeScript (sección «Paridad con TypeScript») | el motor no está migrado hasta cerrarlos |
 | — | DUDAS | Ninguna sin decisión desde el 2026-10-27 (sección «Dudas abiertas»: las `// DUDA:` que quedan en el código) | — |
 | — | FASE 7 | Todo lo que se dejó para los bots reales y la fase 7 (sección «Para la fase 7») | — |
@@ -62,6 +63,16 @@ Cuatro ideas del autor, estudiadas y decididas en un hilo de solo diseño; sin c
 - **50. Aldea agrícola**: `Docs/Disenos_Por_Implementar/Aldea_Agricola_Y_Cria.md` §1. Pendiente: pueblo sin nodo y por tipo, cupo 1/3/4/5/6, gate del nivel 2, Corral fuera de la ciudad y calibración del coste en `batch poblacion`.
 - **51. Cría ampliada**: `Aldea_Agricola_Y_Cria.md` §2. Pendiente: rebaño, tabla de especies, mundo sin nodos de livestock; depende de 49 y 50.
 - **Fuera de alcance**: carne y leche (también del MVP) y las misiones entre humanos van a `Docs/Ideas a diseñar.md` (entradas 52 y 53 de ese archivo).
+
+## 54. Marcha forzada (pedida por el autor el 2026-10-27)
+
+Una columna en marcha forzada va **1,5 veces más rápida** en el mapa y **gasta el doble de víveres** mientras se mueve (parada, come lo normal). Es todo lo decidido; falta diseñar el resto antes de implementarla:
+
+- Cómo se activa: si es una orden de la columna que se enciende y se apaga, o una opción de cada orden de marcha.
+- Quién puede darla: el líder de la columna, o también el General de la plaza.
+- Si tiene límite de duración o un coste además de los víveres: moral, cansancio de la tropa o algún efecto al llegar a una batalla.
+- Si afecta a las caravanas adjuntas y a los ejércitos de varios héroes.
+- Cómo encaja con el ritmo de víveres, que hoy es lineal por tramo, y con los umbrales y las persecuciones, que se calculan con la velocidad.
 
 ## Paridad con TypeScript: recortes temporales del motor Rust (2026-10-18)
 

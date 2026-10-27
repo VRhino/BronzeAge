@@ -152,7 +152,7 @@ async fn drenar(mut rx: mpsc::Receiver<Difusion>, cuenta: Arc<Mutex<Contador>>, 
             let _ = tx.send(r.clone());
         }
         secuencia += 1;
-        let bytes = pb::MensajeDeServidor { secuencia, cuerpo: Some(c) }.encode_to_vec();
+        let bytes = pb::MensajeDeServidor { secuencia, cuerpo: Some(c), ..Default::default() }.encode_to_vec();
         let z = if bytes.len() >= 256 { zstd::bulk::compress(&bytes, 3).unwrap().len() } else { bytes.len() };
         let mut k = cuenta.lock().unwrap();
         k.mensajes += 1;

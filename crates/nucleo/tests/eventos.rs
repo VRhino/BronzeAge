@@ -607,7 +607,7 @@ async fn lo_que_la_niebla_oculta_no_llega_en_un_hecho() {
     assert!(!codigos(&de_beto).contains(&"jugador.marcha_fijada".to_owned()), "la marcha es de quien marcha");
     assert!(oidos(&de_beto).iter().all(|(a, _)| a != "VISTA:f-1"), "ningún hecho de F1 va por la vista");
     assert!(hechos_de(&de_gus).is_empty(), "gus no oye nada de ana: {:?}", codigos(&de_gus));
-    let bytes: Vec<u8> = de_gus.iter().flat_map(|m| pb::MensajeDeServidor { secuencia: 0, cuerpo: Some(m.clone()) }.encode_to_vec()).collect();
+    let bytes: Vec<u8> = de_gus.iter().flat_map(|m| pb::MensajeDeServidor { secuencia: 0, cuerpo: Some(m.clone()), ..Default::default() }.encode_to_vec()).collect();
     assert!(!bytes.windows(9).any(|w| w == b"objetivoX"), "el destino de ana no llega a gus en ningún mensaje");
     w.parar().await;
 }

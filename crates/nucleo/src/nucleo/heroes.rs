@@ -203,6 +203,9 @@ impl Nucleo {
                 self.estado.militar.insertar(HeroeNucleo::nuevo(heroe, cuenta, None));
                 if let Some(x) = nombre {
                     self.estado.militar.nombres.insert(id, x.clone());
+                    if let Some(d) = &self.nombres {
+                        d.poner(id, x);
+                    }
                 }
                 *self.estado.militar.eligieron.entry(*campamento).or_insert(0) += 1;
                 self.tr.tocar(Clase::Campamento, u64::from(*campamento));
