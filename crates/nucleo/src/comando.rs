@@ -476,6 +476,8 @@ pub enum Comando {
     /// El héroe (sin Facción o de una sin plazas) abre el alijo `alijo` (índice del artefacto) con su columna a `radioPuerta`: su oro, en unidades enteras, al carro de la columna (lo que no
     /// cabe se pierde), y queda abierto para él.
     AbrirAlijo { heroe: u64, alijo: u32 },
+    /// Reclama la recompensa de una misión cumplida de un héroe, una plaza o una Facción (Misiones §4).
+    ReclamarRecompensa { heroe: u64, dueno: crate::misiones::Dueno, mision: String },
     // ── La tecnología (sistema 6, tanda 6C; Tecnologia_Aedas §4). Código 175. ──
     /// El Rey de `faccion`, presente en su capital efectiva, adopta la tecnología `tecnologia` (índice del catálogo) ya aparecida: la paga el almacén de la capital con la tarifa de su Era,
     /// al instante.
@@ -559,6 +561,8 @@ pub enum Autoriza {
     LiderDeLaColumna,
     /// La cuenta de cualquier participante de la columna.
     ParticipanteDeLaColumna,
+    /// `reclamarRecompensa`: la cuenta del héroe; la misión de un héroe, si es suya; la de una plaza, su Gobernador (o, sin Gobernador, un residente); la de una Facción, su Rey.
+    ReclamaMision,
 }
 
 impl Autoriza {
@@ -725,6 +729,7 @@ impl Comando {
             Comando::ComprarMirada { .. } | Comando::ComprarInformePlaza { .. } => CompraIntel,
             Comando::ComprarTecnologiaAeda { .. } => CompraTecnologiaAeda,
             Comando::EmpezarEpica { .. } | Comando::AbandonarEpica { .. } => DirigeAedas,
+            Comando::ReclamarRecompensa { .. } => ReclamaMision,
             Comando::MarcharA { .. }
             | Comando::Estacionar { .. }
             | Comando::MarchaForzada { .. }
@@ -970,6 +975,7 @@ impl Comando {
             | Comando::Conectarse { heroe }
             | Comando::VaciarCarro { heroe }
             | Comando::AbrirAlijo { heroe, .. }
+            | Comando::ReclamarRecompensa { heroe, .. }
             | Comando::GuardarEnAlmacenPersonal { heroe, .. }
             | Comando::SacarDelAlmacenPersonal { heroe, .. }
             | Comando::FijarFaccionDeHeroe { heroe, .. }
@@ -1880,6 +1886,12 @@ impl Peticion {
                 w.u64(*heroe);
                 w.u32(*alijo);
             }
+            Comando::ReclamarRecompensa { heroe, dueno, mision } => {
+                w.u8(182);
+                w.u64(*heroe);
+                crate::misiones::escribir_dueno(&mut w, *dueno);
+                w.texto(mision);
+            }
             Comando::AdoptarTecnologia { heroe, faccion, tecnologia } => {
                 w.u8(175);
                 w.u64(*heroe);
@@ -2380,6 +2392,7 @@ impl Peticion {
             179 => Comando::PrepararCaravana { caravana: r.u64()?, destino: r.u64()?, carga: leer_lineas(&mut r)?, salir_en: r.opt_i64()?, escolta: Some((r.u64()?, leer_lista_u64(&mut r)?)) },
             180 => Comando::CrearHeroe { cuenta: r.texto()?, campamento: r.u32()?, controlador: controlador_de_u8(r.u8()?)?, nombre: Some(r.texto()?) },
             181 => Comando::MarchaForzada { ejercito: r.u64()?, activa: r.bool()? },
+            182 => Comando::ReclamarRecompensa { heroe: r.u64()?, dueno: crate::misiones::leer_dueno(&mut r)?, mision: r.texto()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -2994,6 +3007,15 @@ pub mod rechazos {
     pub const EPICA_OTRO_LA_CANTA: &str = "epica.otro_la_canta";
     /// Abandonar: el Aeda no canta ninguna épica.
     pub const EPICA_NO_CANTA: &str = "epica.no_canta";
+    // Las misiones (mecánica 49; Misiones §4).
+    /// No hay misión con ese id para esa clase de dueño (`duenoId` de un héroe, una plaza o una Facción).
+    pub const MISION_DESCONOCIDA: &str = "mision.desconocida";
+    /// La misión aún no se ha cumplido.
+    pub const MISION_NO_CUMPLIDA: &str = "mision.no_cumplida";
+    /// La recompensa de la misión ya se reclamó.
+    pub const MISION_YA_RECLAMADA: &str = "mision.ya_reclamada";
+    /// Los recursos de la recompensa no caben enteros en el almacén de la plaza: se reclaman cuando haya sitio.
+    pub const MISION_ALMACEN_LLENO: &str = "mision.almacen_lleno";
 }
 
 /// Lo que un rechazo cuenta además de su código, para que el cliente decida con ello (`RechazoOrden.detalle`).
@@ -3363,6 +3385,8 @@ mod pruebas {
             Comando::ResponderFusion { heroe: 2, propuesta: 41, aceptar: false },
             Comando::RetirarFusion { heroe: 2, propuesta: 41 },
             Comando::AbrirAlijo { heroe: 2, alijo: 7 },
+            Comando::ReclamarRecompensa { heroe: 2, dueno: crate::misiones::Dueno::Asentamiento(5), mision: "A2".into() },
+            Comando::ReclamarRecompensa { heroe: 2, dueno: crate::misiones::Dueno::Faccion(3), mision: "F1".into() },
             Comando::AdoptarTecnologia { heroe: 2, faccion: 1, tecnologia: 2 },
             Comando::ComprarTecnologiaAeda { heroe: 2, asentamiento: 5, tecnologia: 2 },
             Comando::EmpezarEpica { heroe: 2, asentamiento: 3, aeda: 4, tecnologia: 5 },

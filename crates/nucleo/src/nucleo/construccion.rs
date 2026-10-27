@@ -408,6 +408,7 @@ impl Nucleo {
             self.tr.emitir(&self.estado, evento_nucleo(id, t, punto, e, reglas));
         }
         self.tr.tocar(Clase::Asentamiento, id);
+        self.misiones_de_sucesos(id, t, sucesos);
         // Un edificio que se completa o se mejora y un ascenso son disparadores de la aparición de su Facción (6C, `edificio` y `capitalEnNivel`).
         if sucesos.iter().any(|s| matches!(s, EventoEco::EdificioCompletado { .. } | EventoEco::MejoraCompletada { .. } | EventoEco::NivelSubio { .. })) {
             self.mirar_aparicion(faccion);
@@ -637,6 +638,8 @@ impl Nucleo {
                 let punto = self.estado.asentamientos[&id].posicion;
                 let indice = datos.politicas.catalogo.iter().position(|q| &q.id == politica).map_or(-1, |i| i as i64);
                 self.tr.emitir(&self.estado, EventoNucleo { codigo: "politica.activada".into(), en: t, ejercitos: vec![], asentamientos: vec![id], punto: Some(punto), datos: vec![("politica", indice), ("expiraEn", expira)], ..Default::default() });
+                let faccion = self.estado.asentamientos[&id].faccion;
+                self.avance(t, Dueno::Faccion(faccion), "politicas", 1);
                 let clave = self.estado.generaciones.clave(id);
                 self.estado.cola.programar(expira, PRIO_CADUCA_POLITICA, clave, Carga::CaducaPolitica);
             }

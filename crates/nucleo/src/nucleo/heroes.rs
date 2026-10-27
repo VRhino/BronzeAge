@@ -239,6 +239,7 @@ impl Nucleo {
                 let reparto = Atributos { fuerza: *fuerza, destreza: *destreza, armadura: *armadura, vitalidad: *vitalidad };
                 self.heroe_mut(*heroe).heroe.repartir_atributos(&mr, reparto).map_err(de_heroe)?;
                 self.emitir_propio(t, "heroe.puntos_repartidos", vec![], vec![("heroe", *heroe as i64), ("fuerza", *fuerza), ("destreza", *destreza), ("armadura", *armadura), ("vitalidad", *vitalidad)]);
+                self.avance(t, Dueno::Heroe(*heroe), "atributos", 1);
                 Ok(vec![])
             }
             Comando::OrdenarEscuadras { heroe, escuadras } => {
@@ -442,6 +443,7 @@ impl Nucleo {
         self.tr.tocar(Clase::Asentamiento, asentamiento);
         // Los logros `reclutados.*` (6B), reponer incluido.
         self.contar(t, tecnologia::contador::reclutamiento(tropa.nombre(), mr.tropas.tropa(tropa).edificio, hecho.cantidad.max(0) as u64, hecho.nueva));
+        self.avance_de_reclutamiento(t, heroe, mr.tropas.tropa(tropa).edificio, hecho.cantidad.max(0) as u64, hecho.nueva);
         self.emitir_propio(
             t,
             "tropas.reclutadas",

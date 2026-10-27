@@ -22,9 +22,8 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 20 | TECNOLOGÍA | Eras IV y V (pospuestas con el motor nuevo) | Eras I-III en canon y en Rust |
 | 39 | POLÍTICA | Elección del Rey de Facción por voto entre representantes (decidido el 2026-10-17: queda aquí, no implementada) | el Rey se asigna, sin votación |
 | 48 | MILITAR / POLÍTICA | Mercenarios por contrato (diseño cerrado el 2026-10-26; `Docs/Disenos_Por_Implementar/Mercenarios_Por_Contrato.md`) | nada |
-| 49 | PROGRESIÓN | Misiones individuales, de Facción y de asentamiento (`Docs/Disenos_Por_Implementar/Misiones.md`) | nada |
 | 50 | ECONOMÍA | Aldea agrícola, corrales solo en ella y nuevo gate del nivel 2 (`Docs/Disenos_Por_Implementar/Aldea_Agricola_Y_Cria.md` §1) | Corral y Granja dentro de la ciudad |
-| 51 | ECONOMÍA | Cría ampliada: sin nodos de livestock, rebaños en los corrales de las aldeas (`Aldea_Agricola_Y_Cria.md` §2; necesita 49 y 50) | livestock como nodos libres |
+| 51 | ECONOMÍA | Cría ampliada: sin nodos de livestock, rebaños en los corrales de las aldeas (`Aldea_Agricola_Y_Cria.md` §2; necesita 50) | livestock como nodos libres |
 | — | PARIDAD | Recortes temporales del motor Rust frente al TypeScript (sección «Paridad con TypeScript») | el motor no está migrado hasta cerrarlos |
 | — | DUDAS | Ninguna sin decisión desde el 2026-10-27 (sección «Dudas abiertas»: las `// DUDA:` que quedan en el código) | — |
 | — | FASE 7 | Todo lo que se dejó para los bots reales y la fase 7 (sección «Para la fase 7») | — |
@@ -58,9 +57,8 @@ Decidido el 2026-10-17: la elección del Rey por voto entre representantes (ante
 Cuatro ideas del autor, estudiadas y decididas en un hilo de solo diseño; sin código ni tandas todavía (las tandas se crean cuando el autor lo pida). Cada una tiene su documento de `Docs/Disenos_Por_Implementar/` con lo decidido, lo propuesto y lo que toca; este apunte es el pendiente:
 
 - **48. Mercenarios por contrato**: `Docs/Disenos_Por_Implementar/Mercenarios_Por_Contrato.md`. Bots contratados como miembros de la Facción por Rey, Embajador o Gobernador (este con alcance de su plaza), temporales con trabajo de la tabla y permanentes como ciudadanos con marca. Pendiente: implementar tras los bots de la fase 7 (necesita el runner jugando por el contrato 05), calibrar tarifas, plazos y topes, y la pestaña de control en BronzeAgeClient.
-- **49. Misiones**: `Docs/Disenos_Por_Implementar/Misiones.md`. Pendiente: catálogo completo, implementación sobre los contadores en origen de 6B, panel en el cliente.
 - **50. Aldea agrícola**: `Docs/Disenos_Por_Implementar/Aldea_Agricola_Y_Cria.md` §1. Pendiente: pueblo sin nodo y por tipo, cupo 1/3/4/5/6, gate del nivel 2, Corral fuera de la ciudad y calibración del coste en `batch poblacion`.
-- **51. Cría ampliada**: `Aldea_Agricola_Y_Cria.md` §2. Pendiente: rebaño, tabla de especies, mundo sin nodos de livestock; depende de 49 y 50.
+- **51. Cría ampliada**: `Aldea_Agricola_Y_Cria.md` §2. Pendiente: rebaño, tabla de especies, mundo sin nodos de livestock; depende de 50 (las misiones, 49, ya están).
 - **Fuera de alcance**: carne y leche (también del MVP) y las misiones entre humanos van a `Docs/Ideas a diseñar.md` (entradas 52 y 53 de ese archivo).
 
 ## Paridad con TypeScript: recortes temporales del motor Rust (2026-10-18)

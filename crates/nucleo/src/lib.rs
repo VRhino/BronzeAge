@@ -82,6 +82,7 @@ mod estado_combate;
 mod estado_comercio;
 mod estado_fundacion;
 mod estado_militar;
+pub mod misiones;
 mod generadores;
 pub mod memoria;
 mod nucleo;

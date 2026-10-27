@@ -149,6 +149,8 @@ impl Nucleo {
                 let eco = &mut self.estado.asentamientos.get_mut(&plaza).expect("existe").economia;
                 let tomado = eco.entregar_a_pueblo(t, &datos, *pueblo, &disponible, &mut ev).map_err(de_pueblo)?;
                 self.quitar_de_columna(*ejercito, &tomado);
+                let lider = self.estado.ejercitos[ejercito].columna.lider;
+                self.avance(t, Dueno::Heroe(lider), "entregas", 1);
                 self.tr.tocar(Clase::Ejercito, *ejercito);
                 self.anotar_sucesos(plaza, t, &ev);
                 Ok(None)

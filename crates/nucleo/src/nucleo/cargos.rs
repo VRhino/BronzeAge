@@ -139,6 +139,7 @@ impl Nucleo {
                 let valores = vec![("cargo", Dato::Texto(cargo.clave().to_owned()))];
                 let datos = vec![("asentamiento", *asentamiento as i64), ("faccion", i64::from(faccion)), ("heroe", *designado as i64)];
                 self.tr.emitir(&self.estado, EventoNucleo { valores, asentamientos: vec![*asentamiento], ..EventoNucleo::nuevo("cargo.local_asignado", t, datos) });
+                self.avance(t, Dueno::Faccion(faccion), "cargos", 1);
                 Ok(vec![])
             }
             Comando::FijarPuerta { heroe, asentamiento, cerrada_a } => {

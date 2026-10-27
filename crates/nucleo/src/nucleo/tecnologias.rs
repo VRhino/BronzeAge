@@ -262,6 +262,7 @@ impl Nucleo {
         let datos = vec![("faccion", i64::from(faccion)), ("capital", capital as i64)];
         let valores = vec![("tecnologia", Dato::Texto(r.def(x).id.clone()))];
         self.tr.emitir(&self.estado, EventoNucleo { asentamientos: vec![capital], punto, valores, ..EventoNucleo::nuevo("tecnologia.adoptada", t, datos) });
+        self.avance(t, Dueno::Faccion(faccion), "tecnologias", 1);
         self.tr.tocar(Clase::Asentamiento, capital);
         // Una adopción puede dejar a la mitad de las vivas con ella (los campamentos) y cumplir una condición `tecnologia` de otro hito.
         self.tocar_todos_los_campamentos();

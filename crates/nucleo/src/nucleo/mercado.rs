@@ -627,6 +627,11 @@ impl Nucleo {
         self.registrar_comercio_de_mercenarios(cierre.entre_facciones, &cierre.intercambiado);
         let ev = EventoComercio::TruequeCumplido { acuerdo, entre_facciones: cierre.entre_facciones, intercambiado: cierre.intercambiado };
         self.emitir_comercio(t, ev, vec![a, b], &[("trasVencer", cierre.tras_vencer as i64)]);
+        // Las misiones de trueque cuentan solo con otra Facción (Misiones §3).
+        if cierre.entre_facciones {
+            self.avance(t, Dueno::Faccion(facciones.0), "trueques", 1);
+            self.avance(t, Dueno::Faccion(facciones.1), "trueques", 1);
+        }
         for (faccion, suceso) in cierre.reputacion {
             self.aplicar_reputacion(t, faccion, suceso);
         }

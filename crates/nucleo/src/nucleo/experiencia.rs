@@ -34,6 +34,8 @@ pub(super) mod motivo {
     pub const ASCENSO: i64 = 6;
     pub const FUNDACION: i64 = 7;
     pub const BANDIDOS: i64 = 8;
+    /// La recompensa de una misión de Facción (Misiones §4).
+    pub const MISION: i64 = 9;
 }
 
 fn rechazo_de_capital(e: ErrorCapital) -> (&'static str, String) {
@@ -203,6 +205,7 @@ impl Nucleo {
                 self.mirar_aparicion(*faccion);
                 self.tr.tocar(Clase::Faccion, u64::from(*faccion));
                 self.emitir_propio(t, "faccion.capital_designada", vec![*asentamiento], vec![("faccion", i64::from(*faccion)), ("asentamiento", *asentamiento as i64), ("heroe", *heroe as i64)]);
+                self.mirar_misiones(t, Dueno::Faccion(*faccion));
                 Ok(vec![])
             }
             Comando::RenombrarAsentamiento { heroe, asentamiento, nombre } => {

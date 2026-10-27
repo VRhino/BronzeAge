@@ -142,6 +142,7 @@ impl Nucleo {
                 self.comprobar_fusion(&plan, faccion)?;
                 self.aplicar_salida(t, &plan, Destino::Unirse(*ejercito));
                 self.evento_de_columna("ejercito.refuerzo", t, *ejercito, vec![*asentamiento], vec![("heroe", *heroe as i64), ("escuadras", plan.escuadras.len() as i64), ("cargaTotal", comercio::total(&plan.carga))]);
+                self.avance(t, Dueno::Heroe(*heroe), "uniones", 1);
                 Ok(vec![])
             }
             Comando::UnirseEnCampo { heroe, ejercito } => {
@@ -155,6 +156,7 @@ impl Nucleo {
                     let plazas = objetivo.columna.faccion.map_or(vec![], |_| vec![]);
                     self.fusionar_columna(t, *ejercito, propia).map_err(de_columna)?;
                     self.evento_de_columna("columna.union_en_campo", t, *ejercito, plazas, vec![("heroe", *heroe as i64), ("columna", propia as i64)]);
+                    self.avance(t, Dueno::Heroe(*heroe), "uniones", 1);
                     return Ok(vec![]);
                 }
                 let otra = e1.columna.clone();
@@ -186,6 +188,7 @@ impl Nucleo {
                     Some(otra) => {
                         self.fusionar_columna(t, *ejercito, otra).expect("comprobado");
                         self.evento_de_columna("columna.union_en_campo", t, *ejercito, vec![], vec![("heroe", *solicitante as i64), ("columna", otra as i64)]);
+                        self.avance(t, Dueno::Heroe(*solicitante), "uniones", 1);
                     }
                     None => self.evento_de_columna("columna.union_rechazada", t, *ejercito, vec![], vec![("heroe", *solicitante as i64)]),
                 }
@@ -292,6 +295,7 @@ impl Nucleo {
         self.estado.asentamientos.get_mut(&asentamiento).expect("existe").economia.almacen.quitar(Recurso::Trigo, tomado);
         self.tr.tocar(Clase::Asentamiento, asentamiento);
         self.reprogramar_columna(id, t);
+        self.avance(t, Dueno::Heroe(heroe), "repostajes", 1);
         // Solo es noticia lo que llena unos víveres que iban por debajo del umbral; el goteo no.
         if llevaba < cap * mr.logistica.umbral_narrar_reposte / UNO {
             self.evento_de_columna("ejercito.reabastecido", t, id, vec![asentamiento], vec![("heroe", heroe as i64), ("repuesto", tomado)]);

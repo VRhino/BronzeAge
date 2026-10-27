@@ -181,7 +181,7 @@ Salen de los documentos de decisión que se retiran. Ninguno tiene código.
 
 ## 52. Misiones que un humano coloca para otros humanos
 
-**Estado: idea, sin diseñar.** Salió del diseño de las misiones (`Docs/Disenos_Por_Implementar/Misiones.md`, 2026-10-26): el catálogo de misiones es del juego; que un jugador cree misiones para otros jugadores es otra idea. Hay que decidir quién puede crearlas, qué paga el creador (la recompensa saldría de su bolsillo), cómo se comprueba el cumplimiento y cómo se evita el abuso (misiones entre cuentas del mismo dueño).
+**Estado: idea, sin diseñar.** Salió del diseño de las misiones (`Docs/Mechanics/Misiones.md`, diseñado el 2026-10-26): el catálogo de misiones es del juego; que un jugador cree misiones para otros jugadores es otra idea. Hay que decidir quién puede crearlas, qué paga el creador (la recompensa saldría de su bolsillo), cómo se comprueba el cumplimiento y cómo se evita el abuso (misiones entre cuentas del mismo dueño).
 
 ## 53. Carne y leche del ganado
 

@@ -483,7 +483,7 @@ fn la_anexion_y_la_fusion_son_deterministas_y_los_titulos_viajan_en_la_foto_ban3
     assert!(normal.n.faccion(5).is_some_and(|f| f.nombre == "Tebas") && normal.n.titulos().len() == 3);
     let (reglas, hash) = (normal.n.estado().reglas.clone(), normal.n.mundo_hash().to_string());
     let bytes = normal.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN45");
+    assert_eq!(&bytes[..5], b"BAN46");
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!((s.politica.clone(), s.titulos_en, s.hash()), (normal.n.estado().politica.clone(), normal.n.estado().titulos_en, normal.n.hash_estado()));
     let vieja = [b"BAN32".as_slice(), &bytes[5..]].concat();

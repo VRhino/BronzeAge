@@ -29,7 +29,7 @@ Hoy (Doc 4.5): 200 pesants + **3 de los 7** tipos de extracción. Con los minera
 
 ### 1.3 Misión de asentamiento
 
-Al fundar un asentamiento, su primera misión es levantar la aldea agrícola ([`Misiones.md`](Misiones.md)).
+Al fundar un asentamiento, su primera misión es levantar la aldea agrícola ([`Misiones.md`](../Mechanics/Misiones.md), misión A1).
 
 ## 2. Cría ampliada (idea 4)
 

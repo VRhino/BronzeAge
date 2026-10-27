@@ -31,6 +31,7 @@ use combate::ciclo::Batalla;
 use crate::estado_militar::HeroeNucleo;
 use mundo::Mundo;
 use crate::generadores::{Cx, GeneradorDeEventos, Transicion};
+use crate::misiones::Dueno;
 use crate::proyeccion::ids;
 use base::{Instante, Mil, Plan, Punto};
 use cola::Evento;
@@ -81,6 +82,9 @@ mod residentes;
 mod salidas;
 mod taberna;
 mod logros;
+mod misiones;
+
+pub(crate) use misiones::arrancar_misiones;
 mod tecnologias;
 mod titulos;
 mod traslado;
@@ -790,6 +794,8 @@ impl Nucleo {
         }
         self.detener(id, t);
         self.evento("ejercito.llega", t, id, Some(ultimo.p), vec![]);
+        let heroes: Vec<u64> = self.estado.ejercitos.get(&id).map(|e| e.columna.participantes.iter().map(|p| p.heroe).collect()).unwrap_or_default();
+        self.avance_de_heroes(t, &heroes, "llegadas", 1);
     }
 
     fn umbral(&mut self, id: u64, objetivo: Mil, t: Instante) {
@@ -1033,6 +1039,11 @@ impl Nucleo {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },
+            Comando::ReclamarRecompensa { heroe, dueno, mision } => {
+                if let Err(r) = self.reclamar_recompensa(t, p, *heroe, *dueno, mision) {
+                    return r;
+                }
+            }
             Comando::AdoptarTecnologia { .. } => match self.ejecutar_adopcion(t, p) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,

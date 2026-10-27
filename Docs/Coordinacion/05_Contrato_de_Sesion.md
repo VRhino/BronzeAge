@@ -18,7 +18,7 @@ los bots (Rust, sin privilegios: el mismo contrato que un jugador) y los servido
 |---|---|
 | `common.proto` | Convenciones, `Punto`, `Plan`, `Ritmo`, `Existencia`, `Sigilo`, `Ambito` |
 | `entities.proto` | **Modelo de datos completo**: todas las entidades del dominio (ver [`01_Modelo_de_datos.md`](01_Modelo_de_datos.md)) |
-| `orders.proto` | Las 145 órdenes del cliente (135 de la fase 2 y 10 de 4H, `Orden.cuerpo` 145-154; la última es la orden genérica de administración) y la envoltura `Orden` |
+| `orders.proto` | Las 147 órdenes del cliente (135 de la fase 2, 10 de 4H, `Orden.cuerpo` 145-154, con la genérica de administración en la 154; `marcha_forzada` 155 y `reclamar_recompensa` 156, 2026-10-27) y la envoltura `Orden` |
 | `events.proto` | `EventoDominio` |
 | `battle.proto` | Ciclo de batalla de Unity (ticket, asignación, tokens, inicio, salida, resultado) y la entidad `Batalla` |
 | `session.proto` | Mensajes de cliente y de servidor, foto/delta, resultado causal, reloj, reanudación |

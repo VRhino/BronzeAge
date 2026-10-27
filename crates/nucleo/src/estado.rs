@@ -123,6 +123,9 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
     21 * crate::estado_comercio::ETIQUETA | plaza
 }
 
+/// BAN46: BAN45 con las misiones de cada dueño (`Estado::misiones`, al final; mecánica 49, 2026-10-27). BAN45 a BAN40 se siguen admitiendo: cada plaza y cada Facción arrancan sus misiones
+/// al cargar, mirando sus contadores de estado (Misiones §8).
+///
 /// BAN45: BAN44 con las columnas en marcha forzada (la lista de sus ids, al final del estado; `Columna::forzada`; 2026-10-27). BAN44 a BAN40 se siguen admitiendo: ninguna columna va forzada.
 ///
 /// BAN44: BAN43 con la tabla de precios de mercado vigente y su plazo (`Estado::precios`, `Estado::precios_en` y `Estado::precios_rearmar`, al final; `Carga::Precios` en la cola; 2026-10-27). BAN43 a BAN40 se
@@ -255,7 +258,7 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN45";
+const MAGIA: &[u8; 5] = b"BAN46";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -300,6 +303,8 @@ pub struct ReglasEconomia {
     pub politica: Arc<politica::Reglas>,
     /// El catálogo de tecnologías, las Eras, los Aedas y los logros (Tecnologia_Aedas; crate `tecnologia`). Sus bloques ya entran en la huella con los militares.
     pub tecnologia: Arc<tecnologia::Reglas>,
+    /// El catálogo de misiones (`MISIONES` de Misiones.md, mecánica 49).
+    pub misiones: Arc<crate::misiones::Reglas>,
     huella: String,
 }
 
@@ -311,11 +316,12 @@ impl ReglasEconomia {
             + &comercio::datos::texto_de_parametros()
             + &militar::datos::texto_de_parametros()
             + &combate::datos::texto_de_parametros()
-            + &politica::datos::texto_de_parametros();
+            + &politica::datos::texto_de_parametros()
+            + &asentamiento::datos::texto_de_parametros_de(crate::misiones::DOC_MISIONES);
         let huella = crate::hex(&Sha256::digest(bloques).into());
         let datos = asentamiento::Reglas::cargar();
         let urbanismo = Arc::new(Urbanismo::cargar(&datos));
-        Self { datos: Arc::new(datos), urbanismo, comercio: Arc::new(comercio::Reglas::cargar()), militar: Arc::new(militar::Reglas::cargar()), combate: Arc::new(combate::Reglas::cargar()), politica: Arc::new(politica::Reglas::cargar()), tecnologia: Arc::new(tecnologia::Reglas::cargar()), huella }
+        Self { datos: Arc::new(datos), urbanismo, comercio: Arc::new(comercio::Reglas::cargar()), militar: Arc::new(militar::Reglas::cargar()), combate: Arc::new(combate::Reglas::cargar()), politica: Arc::new(politica::Reglas::cargar()), tecnologia: Arc::new(tecnologia::Reglas::cargar()), misiones: Arc::new(crate::misiones::Reglas::cargar()), huella }
     }
     /// Identidad de las reglas (sha256 en hexadecimal de los bloques de parámetros de los documentos de Mechanics de los que salen).
     pub fn huella(&self) -> &str {
@@ -1013,6 +1019,8 @@ pub struct Estado {
     pub precios_en: Option<Instante>,
     /// Pasó algo en el mundo con el plazo de la tabla pendiente: al vencer, se rearma.
     pub precios_rearmar: bool,
+    /// Las misiones de cada dueño (mecánica 49, Misiones §2; BAN46).
+    pub misiones: crate::misiones::EstadoMisiones,
     pub generaciones: Generaciones,
     pub cola: Cola<Carga>,
     /// De cada actor, sus últimas `peticion_id` aceptadas en orden de llegada, con la versión que produjeron (a lo sumo `Reglas::limite_idempotencia`).
@@ -1055,6 +1063,7 @@ impl Estado {
             precios: None,
             precios_en: None,
             precios_rearmar: false,
+            misiones: Default::default(),
             generaciones: Generaciones::nuevas(),
             cola: Cola::nueva(),
             vistos: BTreeMap::new(),
@@ -1221,6 +1230,7 @@ impl Estado {
         for id in forzadas {
             w.u64(id);
         }
+        crate::misiones::escribir(&mut w, &self.misiones);
 
         let gens = self.generaciones.volcar();
         w.u64(gens.len() as u64);
@@ -1314,18 +1324,19 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN45`): los cuatro primeros dicen la familia («BAN4» son los formatos 40 a 49, y se admiten del 40 al 45; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
+        // La cabecera es de 5 bytes (`BAN46`): los cuatro primeros dicen la familia («BAN4» son los formatos 40 a 49, y se admiten del 40 al 46; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
         // 20 a 29 y 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
-        let (mut con_eligieron, mut con_rutas_acarreo, mut con_nombres, mut con_precios, mut con_forzadas) = (true, true, true, true, true);
+        let (mut con_eligieron, mut con_rutas_acarreo, mut con_nombres, mut con_precios, mut con_forzadas, mut con_misiones) = (true, true, true, true, true, true);
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'5' => {}
-                b'4' => con_forzadas = false,
-                b'3' => (con_precios, con_forzadas) = (false, false),
-                b'2' => (con_nombres, con_precios, con_forzadas) = (false, false, false),
-                b'1' => (con_rutas_acarreo, con_nombres, con_precios, con_forzadas) = (false, false, false, false),
-                b'0' => (con_eligieron, con_rutas_acarreo, con_nombres, con_precios, con_forzadas) = (false, false, false, false, false),
+                b'6' => {}
+                b'5' => con_misiones = false,
+                b'4' => (con_forzadas, con_misiones) = (false, false),
+                b'3' => (con_precios, con_forzadas, con_misiones) = (false, false, false),
+                b'2' => (con_nombres, con_precios, con_forzadas, con_misiones) = (false, false, false, false),
+                b'1' => (con_rutas_acarreo, con_nombres, con_precios, con_forzadas, con_misiones) = (false, false, false, false, false),
+                b'0' => (con_eligieron, con_rutas_acarreo, con_nombres, con_precios, con_forzadas, con_misiones) = (false, false, false, false, false, false),
                 _ => return Err(ErrorFormato("no es un estado del núcleo")),
             }
         } else if magia == *b"BAN3" {
@@ -1486,6 +1497,11 @@ impl Estado {
                 let id = r.u64()?;
                 s.ejercitos.get_mut(&id).ok_or(ErrorFormato("marcha forzada de una columna que no está"))?.columna.forzada = true;
             }
+        }
+        if con_misiones {
+            s.misiones = crate::misiones::leer(&mut r, &s.reglas.economia.misiones)?;
+        } else {
+            crate::nucleo::arrancar_misiones(&mut s);
         }
 
         let mut gens = Vec::new();

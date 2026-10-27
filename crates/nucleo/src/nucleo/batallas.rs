@@ -1052,6 +1052,27 @@ impl Nucleo {
         self.hecho_epico(tecnologia::epicas::Hecho::de_unity(id, contexto, b.ticket.atacante.faccion, b.ticket.defensor.faccion, Some(res.ganador == Lado::Atacante)));
         self.consecuencias_de_batalla(t, &b, &res, &efectos);
         self.contar(t, logros);
+        // Las misiones (Misiones §3): cada héroe que participó libró una batalla; los atacantes que la ganan a un campamento lo destruyen; un asedio se resiste o se conquista.
+        let heroes: Vec<u64> = [Lado::Atacante, Lado::Defensor].into_iter().flat_map(|l| self.participantes_del_lado(&b, l)).map(|q| q.heroe).filter(|&h| res.por_heroe.iter().any(|x| x.heroe == h && x.participo)).collect();
+        self.avance_de_heroes(t, &heroes, "batallas", 1);
+        match b.ticket.contexto {
+            Contexto::CampamentoBandidos { .. } if res.ganador == Lado::Atacante => {
+                let atacantes: Vec<u64> = self.participantes_del_lado(&b, Lado::Atacante).iter().map(|q| q.heroe).collect();
+                self.avance_de_heroes(t, &atacantes, "bandidos", 1);
+                if let Some(f) = b.ticket.atacante.faccion {
+                    self.avance(t, Dueno::Faccion(f), "bandidos", 1);
+                }
+            }
+            Contexto::Asedio { asentamiento } => {
+                let plaza = asentamiento as u64;
+                match b.ticket.atacante.faccion {
+                    Some(f) if res.ganador == Lado::Atacante && self.estado.asentamientos.get(&plaza).is_some_and(|a| a.faccion == f) => self.avance(t, Dueno::Faccion(f), "conquistas", 1),
+                    _ if res.ganador == Lado::Defensor => self.avance(t, Dueno::Asentamiento(plaza), "asedios", 1),
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
         // La experiencia de Facción: por cada héroe que participó, a la Facción con la que entró (la del ticket), sin filtro de dignidad (5C). Contra un campamento de bandidos, solo la
         // de bandidos al destruirlo (5C-4, decisión del autor del 2026-10-24): el mismo premio con Unity que con números.
         let participo = |h: u64| res.por_heroe.iter().any(|x| x.heroe == h && x.participo);

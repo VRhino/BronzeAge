@@ -182,6 +182,17 @@ impl Ctx<'_> {
     fn faccion(&self, s: &str) -> R<u32> {
         self.id(ids::parse_faccion, rechazos::ORDEN_FORMA_INVALIDA, s)
     }
+    /// El dueño de una misión: `heroe-N`, `as-N` o `faccion-N` (Misiones §4).
+    fn dueno_de_mision(&self, s: &str) -> R<crate::misiones::Dueno> {
+        use crate::misiones::Dueno;
+        if let Some(h) = ids::parse_heroe(s) {
+            Ok(Dueno::Heroe(h))
+        } else if let Some(a) = ids::parse_asentamiento(s) {
+            Ok(Dueno::Asentamiento(a))
+        } else {
+            self.faccion(s).map(Dueno::Faccion)
+        }
+    }
     fn relacion(&self, s: &str) -> R<u64> {
         self.id(ids::parse_relacion, rechazos::DIPLOMACIA_RELACION_DESCONOCIDA, s)
     }
@@ -706,6 +717,7 @@ impl Ctx<'_> {
             Cuerpo::AbandonarEpica(o) => Comando::AbandonarEpica { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, aeda: self.aeda_residente(&o.aeda_id)? },
             Cuerpo::AdoptarTecnologia(o) => Comando::AdoptarTecnologia { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, tecnologia: self.tecnologia(&o.tecnologia_id)? },
             Cuerpo::AbrirAlijo(o) => Comando::AbrirAlijo { heroe: self.mi_heroe()?, alijo: self.alijo(&o.alijo_id)? },
+            Cuerpo::ReclamarRecompensa(o) => Comando::ReclamarRecompensa { heroe: self.mi_heroe()?, dueno: self.dueno_de_mision(&o.dueno_id)?, mision: o.mision_id.clone() },
             Cuerpo::ComprarMirada(o) => Comando::ComprarMirada { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, centro: self.punto(o.centro.as_ref())? },
             Cuerpo::ComprarInformePlaza(o) => {
                 Comando::ComprarInformePlaza { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, asentamiento: self.plaza(&o.asentamiento_id)? }

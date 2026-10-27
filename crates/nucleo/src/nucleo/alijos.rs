@@ -107,6 +107,7 @@ impl Nucleo {
         let datos = vec![("heroe", heroe as i64), ("oro", apertura.oro), ("cargado", cargado)];
         // Solo lo oye quien lo abre (decisión del autor), no los demás de la columna aunque el oro vaya al carro común.
         self.tr.emitir(&self.estado, EventoNucleo { heroes: vec![heroe], valores: vec![("alijo", Dato::Texto(id))], ..EventoNucleo::nuevo("alijo.abierto", t, datos) });
+        self.avance(t, Dueno::Heroe(heroe), "alijos", 1);
         Ok(vec![])
     }
 }

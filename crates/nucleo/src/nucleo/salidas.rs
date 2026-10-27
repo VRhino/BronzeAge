@@ -224,6 +224,7 @@ impl Nucleo {
     pub(super) fn aplicar_salida(&mut self, t: Instante, plan: &PlanDeSalida, destino: Destino) -> u64 {
         let mr = self.estado.reglas.economia.militar.clone();
         let PlanDeSalida { heroe, lugar, escuadras, carga, trigo, racion_gratis, retoma, .. } = plan;
+        self.avance(t, Dueno::Heroe(*heroe), "salidas", 1);
         // 1. Lo que sale del almacén.
         match lugar {
             Lugar::Asentamiento(a) => {

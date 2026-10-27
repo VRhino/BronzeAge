@@ -286,6 +286,9 @@ impl Nucleo {
         self.tr.emitir(&self.estado, EventoNucleo { asentamientos: vec![plaza], punto, valores, ..EventoNucleo::nuevo(codigo, t, datos) });
         self.tr.tocar(Clase::Faccion, u64::from(duena));
         self.tocar_residente(aeda);
+        if codigo == "aedas.epica_empieza" {
+            self.avance(t, Dueno::Faccion(duena), "epicas", 1);
+        }
         Ok(vec![])
     }
 

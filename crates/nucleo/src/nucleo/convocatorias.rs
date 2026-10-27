@@ -119,7 +119,10 @@ impl Nucleo {
                 self.estado.militar.convocatorias.insert(*convocatoria, c);
                 self.tr.tocar(Clase::Convocatoria, *convocatoria);
                 match union {
-                    Union::Unido => self.hecho_de_convocatoria(t, "convocatoria.unido", del, vec![("convocatoria", *convocatoria as i64), ("heroe", *heroe as i64)]),
+                    Union::Unido => {
+                        self.hecho_de_convocatoria(t, "convocatoria.unido", del, vec![("convocatoria", *convocatoria as i64), ("heroe", *heroe as i64)]);
+                        self.avance(t, Dueno::Heroe(*heroe), "uniones", 1);
+                    }
                     Union::Pedida { expira_en } => {
                         self.estado.generaciones.subir(entidad_peticion_de_convocatoria(*heroe));
                         let clave = self.estado.generaciones.clave(entidad_peticion_de_convocatoria(*heroe));
@@ -146,6 +149,9 @@ impl Nucleo {
                 self.estado.generaciones.subir(entidad_peticion_de_convocatoria(*solicitante));
                 let codigo = if *aceptar { "convocatoria.unido" } else { "convocatoria.union_rechazada" };
                 self.hecho_de_convocatoria(t, codigo, del, vec![("convocatoria", *convocatoria as i64), ("heroe", *solicitante as i64)]);
+                if *aceptar {
+                    self.avance(t, Dueno::Heroe(*solicitante), "uniones", 1);
+                }
                 Ok(vec![])
             }
             Comando::CambiarSeleccionDeConvocatoria { heroe, escuadras, carga } => {

@@ -323,6 +323,8 @@ impl Nucleo {
                 let eco = &mut self.estado.asentamientos.get_mut(&madre).expect("existe").economia;
                 let tomado = eco.entregar_a_avanzada(t, &datos, *avanzada, &disponible, &mut ev).map_err(de_avanzada)?;
                 self.quitar_de_columna(*ejercito, &tomado);
+                let lider = self.estado.ejercitos[ejercito].columna.lider;
+                self.avance(t, Dueno::Heroe(lider), "entregas", 1);
                 self.tr.tocar(Clase::Ejercito, *ejercito);
                 self.anotar_sucesos(madre, t, &ev);
                 Ok(vec![])
@@ -415,6 +417,7 @@ impl Nucleo {
                 self.estado.asentamientos.get_mut(&madre).and_then(|a| a.economia.avanzadas.iter_mut().find(|v| v.id == *avanzada)).expect("existe").almacen.quitar(Recurso::Trigo, tomado);
                 self.reprogramar_columna(cid, t);
                 self.hecho_de_avanzada(t, "avanzada.reabastecimiento", Some(madre), posicion, vec![("avanzada", *avanzada as i64), ("heroe", *heroe as i64), ("repuesto", tomado)]);
+                self.avance(t, Dueno::Heroe(*heroe), "repostajes", 1);
                 Ok(vec![])
             }
             Comando::DepositarEnAvanzada { ejercito, avanzada, recurso, cantidad } => {

@@ -191,6 +191,8 @@ impl Nucleo {
                 self.tras_cambiar_de_faccion(t, *heroe, None);
                 let nombre = self.estado.politica.facciones.get(id).expect("acaba de nacer").nombre.clone();
                 self.tr.emitir(&self.estado, EventoNucleo { valores: vec![("nombre", Dato::Texto(nombre))], ..EventoNucleo::nuevo("faccion.creada", t, vec![("faccion", i64::from(id)), ("heroe", *heroe as i64)]) });
+                // Quien la crea es su primer ciudadano.
+                self.avance(t, Dueno::Heroe(*heroe), "ciudadania", 1);
                 Ok(vec![u64::from(id)])
             }
             Comando::SolicitarIngreso { heroe, faccion } => {
@@ -219,6 +221,9 @@ impl Nucleo {
                     "faccion.solicitud_denegada"
                 };
                 self.emitir_propio(t, codigo, vec![], vec![("faccion", i64::from(*faccion)), ("heroe", *solicitante as i64)]);
+                if *aceptar {
+                    self.avance(t, Dueno::Heroe(*solicitante), "ciudadania", 1);
+                }
                 Ok(vec![])
             }
             Comando::DejarFaccion { heroe } => {
@@ -271,6 +276,7 @@ impl Nucleo {
                 self.estado.politica.facciones.asignar_embajador(*faccion, *designado).map_err(de_faccion)?;
                 self.tr.tocar(Clase::Faccion, u64::from(*faccion));
                 self.emitir_propio(t, "cargo.embajador_asignado", vec![], vec![("faccion", i64::from(*faccion)), ("heroe", *designado as i64)]);
+                self.avance(t, Dueno::Faccion(*faccion), "cargos", 1);
                 Ok(vec![])
             }
             Comando::CambiarResidencia { heroe, asentamiento } => {

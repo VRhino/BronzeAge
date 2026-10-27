@@ -617,4 +617,13 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `epica.ya_aparecida` | `EPICA_YA_APARECIDA` | La tecnología ya le ha aparecido a la Facción. |
 | `epica.otro_la_canta` | `EPICA_OTRO_LA_CANTA` | Otro Aeda de la Facción ya canta la épica de esa tecnología. |
 | `epica.no_canta` | `EPICA_NO_CANTA` | Abandonar: el Aeda no canta ninguna épica. |
+
+### Las misiones (mecánica 49; Misiones §4)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `mision.desconocida` | `MISION_DESCONOCIDA` | No hay misión con ese id para esa clase de dueño (`duenoId` de un héroe, una plaza o una Facción). |
+| `mision.no_cumplida` | `MISION_NO_CUMPLIDA` | La misión aún no se ha cumplido. |
+| `mision.ya_reclamada` | `MISION_YA_RECLAMADA` | La recompensa de la misión ya se reclamó. |
+| `mision.almacen_lleno` | `MISION_ALMACEN_LLENO` | Los recursos de la recompensa no caben enteros en el almacén de la plaza: se reclaman cuando haya sitio. |
 <!-- /rechazos -->

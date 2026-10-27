@@ -28,6 +28,7 @@ const DOCUMENTOS: &[(&str, &str)] = &[
     ("Fundacion_Y_Refundacion", include_str!("../../../Docs/Mechanics/Fundacion_Y_Refundacion.md")),
     ("Generacion_Del_Mundo", include_str!("../../../Docs/Mechanics/Generacion_Del_Mundo.md")),
     ("Heroe_Y_Tropa", include_str!("../../../Docs/Mechanics/Heroe_Y_Tropa.md")),
+    ("Misiones", include_str!("../../../Docs/Mechanics/Misiones.md")),
     ("Movimiento_Ejercitos", include_str!("../../../Docs/Mechanics/Movimiento_Ejercitos.md")),
     ("Murallas", include_str!("../../../Docs/Mechanics/Murallas.md")),
     ("Niebla_De_Guerra", include_str!("../../../Docs/Mechanics/Niebla_De_Guerra.md")),

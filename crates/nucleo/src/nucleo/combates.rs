@@ -366,6 +366,7 @@ impl Nucleo {
         let (columnas, punto) = ([self.columnas_de(&atac.escuadras), self.columnas_de(&def.escuadras)].concat(), self.estado.ejercitos[&id].posicion_en(t));
         let hoplitas = super::logros::con_hoplitas(atac.escuadras.iter().chain(&def.escuadras).map(|s| s.tropa));
         let (participantes_a, participantes_d) = (Self::participantes_de(&self.estado.ejercitos[&id]), Self::participantes_de(&self.estado.ejercitos[&x]));
+        let combatieron = [participantes_a.clone(), participantes_d.clone()].concat();
         if let Some((a, b)) = guerra {
             self.declarar_guerra(t, a, b);
         }
@@ -418,6 +419,7 @@ impl Nucleo {
         self.hecho_epico(tecnologia::epicas::Hecho::batalla((id, banderas.0 as u32), (x, banderas.1 as u32), ganador == id, t));
         // Los logros (6B): una batalla librada (con hoplitas, si los había) y en campo abierto (el encuentro).
         self.contar(t, tecnologia::contador::combate_resuelto(hoplitas).con(tecnologia::Contador::BatallasCampoAbierto, 1));
+        self.avance_de_heroes(t, &combatieron, "batallas", 1);
         Ok(())
     }
 
@@ -598,6 +600,14 @@ impl Nucleo {
         if r.destruido {
             self.contar(t, tecnologia::contador::Delta::uno(tecnologia::Contador::BandidosCampamentosDestruidos));
         }
+        // Las misiones (Misiones §3): todos combatieron; si cae, lo destruyen ellos y su Facción.
+        self.avance_de_heroes(t, &participantes, "batallas", 1);
+        if r.destruido {
+            self.avance_de_heroes(t, &participantes, "bandidos", 1);
+            if let Some(f) = self.estado.ejercitos.get(&id).and_then(|e| e.columna.faccion) {
+                self.avance(t, Dueno::Faccion(f), "bandidos", 1);
+            }
+        }
         Ok(())
     }
 
@@ -740,6 +750,15 @@ impl Nucleo {
         // Los logros del asedio (6B), aquí y no en la `batalla.aplicada` que deja su convocatoria (D18): `enCombate` es que hubo tirada (no cayó sin defensores).
         let en_combate = matches!(resultado, Asedio::Combate(_));
         self.contar(t, tecnologia::contador::asedio(conquistada, en_combate, en_combate && defensores_en_persona, muralla_completa));
+        // Las misiones (Misiones §3): con combate, atacantes y defensores libran una batalla; la plaza que resiste en combate y la Facción que conquista.
+        if en_combate {
+            self.avance_de_heroes(t, &[participantes.clone(), defensa.tropa.heroes.to_vec()].concat(), "batallas", 1);
+        }
+        if conquistada {
+            self.avance(t, Dueno::Faccion(yo), "conquistas", 1);
+        } else if en_combate {
+            self.avance(t, Dueno::Asentamiento(x), "asedios", 1);
+        }
         // El hecho de épica (6E), también aquí y no en `batalla.aplicada` (D18): la defensa de la plaza o la conquista de la atacante, solo con combate.
         self.hecho_epico(if conquistada { tecnologia::epicas::Hecho::conquista(en_combate, x as u32, yo, t) } else { tecnologia::epicas::Hecho::defensa(en_combate, x as u32, faccion_vieja, t) });
         if conquistada {

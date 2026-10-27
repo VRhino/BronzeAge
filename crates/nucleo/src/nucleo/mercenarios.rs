@@ -340,6 +340,7 @@ impl Nucleo {
                     return Err(de_mercenarios(ErrorMercenarios::VivereLlenos));
                 }
                 let datos = vec![("campamento", *campamento as i64), ("heroe", *heroe as i64), ("cantidad", falta)];
+                self.avance(t, Dueno::Heroe(*heroe), "repostajes", 1);
                 match self.columna_de(*heroe) {
                     Some(c) => {
                         let e = self.estado.ejercitos.get_mut(&c).expect("existe");
@@ -457,6 +458,7 @@ impl Nucleo {
                     vec![("campamento", campamento as i64), ("heroe", *heroe as i64), ("tropa", crate::codec_militar::tropa_a_u8(*tropa) as i64), ("cantidad", hecho.cantidad), ("oro", hecho.oro), ("escuadra", hecho.escuadra as i64), ("nueva", nueva as i64)],
                 );
                 self.contar(t, reclutado);
+                self.avance_de_reclutamiento(t, *heroe, mr.tropas.tropa(*tropa).edificio, hecho.cantidad.max(0) as u64, nueva);
                 Ok(if nueva { vec![hecho.escuadra] } else { vec![] })
             }
             Comando::PedirPrestamo { heroe, tropas } => {
@@ -480,6 +482,7 @@ impl Nucleo {
                 )
                 .map_err(de_leva)?;
                 self.emitir_propio(t, "mercenarios.prestamo", vec![], vec![("campamento", campamento as i64), ("heroe", *heroe as i64), ("escuadras", creadas.len() as i64)]);
+                self.avance(t, Dueno::Heroe(*heroe), "prestamos", 1);
                 Ok(creadas)
             }
             Comando::ReponerPrestamo { heroe } => {

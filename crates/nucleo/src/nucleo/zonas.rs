@@ -477,6 +477,8 @@ impl Nucleo {
             let (datos, valores) = (vec![("asentamiento", id as i64), ("faccion", i64::from(faccion)), ("heroe", lider as i64)], vec![("cargo", crate::estado::Dato::Texto(asentamiento::Cargo::Gobernador.clave().to_owned()))]);
             self.tr.emitir(&self.estado, EventoNucleo { valores, asentamientos: vec![id], ..EventoNucleo::nuevo("cargo.local_asignado", t, datos) });
         }
+        self.avance(t, Dueno::Faccion(faccion), "fundaciones", 1);
+        self.mirar_misiones(t, Dueno::Asentamiento(id));
         // La derrota se borra al fundar (§8) y la fundación da experiencia salvo la primera plaza de la Facción (§3.5). La capital puede cambiar: la Facción cambia.
         self.estado.politica.facciones.anular_derrota(faccion);
         self.tr.tocar(Clase::Faccion, u64::from(faccion));

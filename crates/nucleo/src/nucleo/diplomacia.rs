@@ -385,6 +385,10 @@ impl Nucleo {
         } else {
             self.tocar_relacion(t, id);
             self.hecho_de_relacion(t, "diplomacia.relacion_aceptada", vec![a, b], vec![("relacion", id as i64), ("faccionA", i64::from(a)), ("faccionB", i64::from(b)), ("tipo", tipo_codigo(tipo))], vec![]);
+            if tipo == TipoRelacion::Alianza {
+                self.avance(t, Dueno::Faccion(a), "aliados", 1);
+                self.avance(t, Dueno::Faccion(b), "aliados", 1);
+            }
         }
         Ok(vec![])
     }
@@ -430,6 +434,10 @@ impl Nucleo {
                 self.tocar_relacion(t, id);
                 datos.push(("relacion", id as i64));
                 self.hecho_de_relacion(t, "diplomacia.relacion_aceptada", vec![a, b], datos, vec![]);
+                if pacto == Pacto::Alianza {
+                    self.avance(t, Dueno::Faccion(a), "aliados", 1);
+                    self.avance(t, Dueno::Faccion(b), "aliados", 1);
+                }
                 if pacto == Pacto::Vasallaje {
                     // Una vasalla sin plazas derrotada por otra pasa a quien la derrotó (Diplomacia §12: `derrotadaPor` no caduca mientras no tenga plaza).
                     self.pasar_vasalla_conquistada(t, b);
