@@ -284,16 +284,16 @@ impl Actor {
         }
     }
 
-    /// Lo que ve un jugador sin héroe: de cada campamento de mercenarios, dónde está y cuántos viven en él (`Bienvenida.campamentos_para_elegir`). DUDA: `eligieron_como_inicial` va a 0 (no se guarda aún).
+    /// Lo que ve un jugador sin héroe: de cada campamento de mercenarios, dónde está y cuántos viven en él (`Bienvenida.campamentos_para_elegir`), con cuántos lo eligieron para nacer.
     fn campamentos_para_elegir(&self) -> Vec<pb::CampamentoParaElegir> {
         let elegibles = self.nucleo.campamentos_para_elegir();
         elegibles
             .into_iter()
-            .map(|(c, puerta, origen, residentes)| pb::CampamentoParaElegir {
+            .map(|(c, puerta, origen, residentes, eligieron)| pb::CampamentoParaElegir {
                 campamento_id: ids::campamento(c),
                 posicion: Some(pb::Punto { x: puerta.x, y: puerta.y }),
                 origen,
-                eligieron_como_inicial: 0,
+                eligieron_como_inicial: eligieron,
                 residentes: residentes as u32,
             })
             .collect()

@@ -22,7 +22,7 @@ pub struct Entrada<'a> {
     pub geo: &'a Geo,
     pub e: &'a EscenarioMilitar,
     pub corrida: &'a Corrida,
-    /// (misma semilla ⇒ mismo hash, foto `BAN40` a mitad ⇒ mismo hash que sin ella) en el escenario reducido.
+    /// (misma semilla ⇒ mismo hash, foto `BAN41` a mitad ⇒ mismo hash que sin ella) en el escenario reducido.
     pub determinismo: Option<(bool, bool)>,
     pub pared_total: Duration,
 }
@@ -294,7 +294,7 @@ fn invariantes(x: &Entrada) -> Vec<Metrica> {
         uno("inv_ruina", "Plazas en ruinas que dejan algo atrás", mv.ruina, "Comercio_Caravanas §10 y Combate §9", "Sin flota, sin residentes y sin nadie dentro."),
         uno("inv_reposicion", "Guarniciones de serie repuestas a deshora", mv.reposicion, "Combate §7.3 y §7.4", "El pueblo se completa a un minero cada 12 min desde la primera baja (con todas las bajas del episodio); la avanzada, a un soldado cada 6 h / soldados de su guarnición completa, también desde la primera baja."),
         uno("inv_batalla", "Batallas o cosas apartadas fuera de la convocatoria de un asedio", mv.batalla, "Batalla_Unity_Ciclo §2 y §4", "Sin servidores de batalla todo se resuelve con números; solo un asedio abre una batalla, que dura su convocatoria de 30 s (M8): ninguna otra, ninguna activa pasada la convocatoria y nada apartado fuera de ellas."),
-        uno("inv_foto", "Foto ida y vuelta a mitad de la corrida con otro hash", mv.foto, "Reloj_Y_Eventos (foto `BAN40`)", "A mitad de la corrida se serializa el núcleo, se reconstruye por la persistencia y se sigue con el reconstruido."),
+        uno("inv_foto", "Foto ida y vuelta a mitad de la corrida con otro hash", mv.foto, "Reloj_Y_Eventos (foto `BAN41`)", "A mitad de la corrida se serializa el núcleo, se reconstruye por la persistencia y se sigue con el reconstruido."),
         uno("inv_almacen", "Almacenes fuera de [0, capacidad]", v.almacen, "Economia_Construccion §15", "Cada 6 horas de mundo."),
         uno("inv_carga", "Carros y caravanas por encima de su capacidad", v.carga, "Comercio_Caravanas §5", "Cada 6 horas de mundo."),
         uno("inv_fracciones", "Cantidades almacenadas que no son unidades enteras", v.fraccion, "Economia_Construccion §4 (economía entera, C3b)", "Almacenes, carros, caravanas, almacenes personales, existencias, trueques y órdenes: cada 6 horas de mundo."),
@@ -321,7 +321,7 @@ fn rendimiento(x: &Entrada) -> Vec<Metrica> {
 fn determinismo(x: &Entrada) -> Vec<Metrica> {
     vec![
         metrica("determinismo", "Reproducción del azar (mismo escenario reducido, dos veces)", "1 = igual", (Some(1.0), Some(1.0)), x.determinismo.map(|d| d.0 as u8 as f64), "Arquitectura/13 §4 (núcleo determinista)", "El escenario reducido con la misma semilla dos veces: mismo `hash_estado()` final."),
-        metrica("determinismo_foto", "Foto ida y vuelta (BAN40) a mitad del escenario reducido", "1 = igual", (Some(1.0), Some(1.0)), x.determinismo.map(|d| d.1 as u8 as f64), "Reloj_Y_Eventos (foto)", "El escenario reducido reconstruido desde su foto a mitad de camino acaba con el mismo hash que sin interrumpir."),
+        metrica("determinismo_foto", "Foto ida y vuelta (BAN41) a mitad del escenario reducido", "1 = igual", (Some(1.0), Some(1.0)), x.determinismo.map(|d| d.1 as u8 as f64), "Reloj_Y_Eventos (foto)", "El escenario reducido reconstruido desde su foto a mitad de camino acaba con el mismo hash que sin interrumpir."),
     ]
 }
 

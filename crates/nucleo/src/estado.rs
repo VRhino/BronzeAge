@@ -115,6 +115,9 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
     21 * crate::estado_comercio::ETIQUETA | plaza
 }
 
+/// BAN41: BAN40 con cuántos héroes eligieron cada campamento de mercenarios para nacer (`EstadoMilitar::eligieron`, paridad P6, al final del estado militar). BAN40 se
+/// sigue admitiendo: ese contador solo crece y empieza en 0.
+///
 /// BAN40: BAN39 (6D, los Aedas itinerantes) con los Aedas residentes y sus épicas (sistema 6, tanda 6E; `codec_tecnologia::escribir_residentes`): cada residente (su N, su plaza,
 /// su Facción, cuándo llegó y su épica con el capítulo, los hechos, el último y sus claves), el contador de ids, desde cuándo espera cada plaza con cupo libre, las épicas cumplidas por Facción
 /// y la cita de llegada de cada plaza que espera (`Estado::residentes_citas` y `Carga::Residentes`). BAN39 y BAN38 se rechazan: no traen los residentes ni las épicas, que no se pueden deducir.
@@ -233,7 +236,7 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN40";
+const MAGIA: &[u8; 5] = b"BAN41";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -1260,12 +1263,14 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN40`): los cuatro primeros dicen la familia («BAN4» son los formatos 40 a 49, y solo el 40 se admite; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
+        // La cabecera es de 5 bytes (`BAN41`): los cuatro primeros dicen la familia («BAN4» son los formatos 40 a 49, y se admiten el 40 y el 41; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
         // 20 a 29 y 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
+        let mut con_eligieron = true;
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'0' => {}
+                b'1' => {}
+                b'0' => con_eligieron = false,
                 _ => return Err(ErrorFormato("no es un estado del núcleo")),
             }
         } else if magia == *b"BAN3" {
@@ -1395,7 +1400,7 @@ impl Estado {
             s.contactos.insert((r.u64()?, r.u64()?));
         }
         s.comercio = codec_comercio::leer(&mut r, &s.reglas.economia.comercio)?;
-        s.militar = codec_militar::leer(&mut r)?;
+        s.militar = codec_militar::leer(&mut r, con_eligieron)?;
         s.combate = codec_combate::leer(&mut r)?;
         s.batallas = codec_batallas::leer(&mut r)?;
         s.memoria = memoria::leer(&mut r)?;

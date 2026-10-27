@@ -147,7 +147,8 @@ pub enum Comando {
     /// Pone o quita `reservadaManual` (fuera del reparto automático).
     ReservarCaravana { caravana: u64, reservada: bool },
     /// Lanza a mano una caravana: reserva la carga del almacén y queda `preparando` (o sale ya, con un solo carro y sin `salir_en`).
-    PrepararCaravana { caravana: u64, destino: u64, carga: Vec<(Recurso, Mil)>, salir_en: Option<Instante> },
+    /// `escolta`: el héroe que cede y sus escuadras, cedidas en el mismo lanzamiento como con `AsignarEscolta` (paridad P5, `escoltaEscuadronIds`).
+    PrepararCaravana { caravana: u64, destino: u64, carga: Vec<(Recurso, Mil)>, salir_en: Option<Instante>, escolta: Option<(u64, Vec<u64>)> },
     /// Cancela una caravana `preparando`: la carga vuelve al almacén de su origen (topada por su capacidad).
     CancelarCaravana { caravana: u64 },
     /// Carga o descarga una caravana aparcada contra el almacén de la plaza que la hospeda.
@@ -890,9 +891,12 @@ impl Comando {
             | Comando::CancelarCaravana { caravana }
             | Comando::MoverCargaAparcada { caravana, .. }
             | Comando::EnviarCaravanaAlOrigen { caravana } => i.caravanas.push(*caravana),
-            Comando::PrepararCaravana { caravana, destino, .. } => {
+            Comando::PrepararCaravana { caravana, destino, escolta, .. } => {
                 i.caravanas.push(*caravana);
                 i.asentamientos.push(*destino);
+                if let Some((heroe, _)) = escolta {
+                    i.heroes.push(*heroe);
+                }
             }
             Comando::MoverCarro { de, a, .. } => i.caravanas.extend([*de, *a]),
             Comando::ProponerTrueque { a, b, .. } => i.asentamientos.extend([*a, *b]),
@@ -1353,12 +1357,17 @@ impl Peticion {
                 w.u64(*caravana);
                 w.bool(*reservada);
             }
-            Comando::PrepararCaravana { caravana, destino, carga, salir_en } => {
-                w.u8(32);
+            Comando::PrepararCaravana { caravana, destino, carga, salir_en, escolta } => {
+                // Sin escolta, la etiqueta 32 de siempre; con ella, la 179 (lo mismo más el héroe y sus escuadras), para que los logs viejos sigan leyéndose.
+                w.u8(if escolta.is_some() { 179 } else { 32 });
                 w.u64(*caravana);
                 w.u64(*destino);
                 lineas(&mut w, carga);
                 w.opt_i64(*salir_en);
+                if let Some((heroe, escuadras)) = escolta {
+                    w.u64(*heroe);
+                    lista_u64(&mut w, escuadras);
+                }
             }
             Comando::CancelarCaravana { caravana } => {
                 w.u8(33);
@@ -2164,7 +2173,7 @@ impl Peticion {
             29 => Comando::AnadirAnimal { caravana: r.u64()?, carro: r.u32()?, animal: animal_de_u8(r.u8()?)? },
             30 => Comando::MoverCarro { de: r.u64()?, a: r.u64()?, carro: r.u32()? },
             31 => Comando::ReservarCaravana { caravana: r.u64()?, reservada: r.bool()? },
-            32 => Comando::PrepararCaravana { caravana: r.u64()?, destino: r.u64()?, carga: leer_lineas(&mut r)?, salir_en: r.opt_i64()? },
+            32 => Comando::PrepararCaravana { caravana: r.u64()?, destino: r.u64()?, carga: leer_lineas(&mut r)?, salir_en: r.opt_i64()?, escolta: None },
             33 => Comando::CancelarCaravana { caravana: r.u64()? },
             34 => Comando::MoverCargaAparcada { caravana: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()?, cargar: r.bool()? },
             35 => Comando::EnviarCaravanaAlOrigen { caravana: r.u64()? },
@@ -2350,6 +2359,7 @@ impl Peticion {
             176 => Comando::ComprarTecnologiaAeda { heroe: r.u64()?, asentamiento: r.u64()?, tecnologia: r.u8()? },
             177 => Comando::EmpezarEpica { heroe: r.u64()?, asentamiento: r.u64()?, aeda: r.u32()?, tecnologia: r.u8()? },
             178 => Comando::AbandonarEpica { heroe: r.u64()?, asentamiento: r.u64()?, aeda: r.u32()? },
+            179 => Comando::PrepararCaravana { caravana: r.u64()?, destino: r.u64()?, carga: leer_lineas(&mut r)?, salir_en: r.opt_i64()?, escolta: Some((r.u64()?, leer_lista_u64(&mut r)?)) },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -3131,8 +3141,9 @@ mod pruebas {
             Comando::AnadirAnimal { caravana: 1, carro: 0, animal: Animal::Camello },
             Comando::MoverCarro { de: 1, a: 2, carro: 1 },
             Comando::ReservarCaravana { caravana: 1, reservada: true },
-            Comando::PrepararCaravana { caravana: 1, destino: 4, carga: vec![(Recurso::Madera, 1_000)], salir_en: Some(77) },
-            Comando::PrepararCaravana { caravana: 1, destino: 4, carga: vec![], salir_en: None },
+            Comando::PrepararCaravana { caravana: 1, destino: 4, carga: vec![(Recurso::Madera, 1_000)], salir_en: Some(77), escolta: None },
+            Comando::PrepararCaravana { caravana: 1, destino: 4, carga: vec![], salir_en: None, escolta: None },
+            Comando::PrepararCaravana { caravana: 1, destino: 4, carga: vec![(Recurso::Cobre, 5)], salir_en: None, escolta: Some((2, vec![5, 6])) },
             Comando::CancelarCaravana { caravana: 1 },
             Comando::MoverCargaAparcada { caravana: 1, recurso: Recurso::Trigo, cantidad: 5, cargar: false },
             Comando::EnviarCaravanaAlOrigen { caravana: 1 },

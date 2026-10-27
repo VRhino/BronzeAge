@@ -272,7 +272,7 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         (orden!(ReservarCaravana, OrdenReservarCaravana, caravana_id: s("car-2"), reservada: true), Comando::ReservarCaravana { caravana: 2, reservada: true }),
         (
             orden!(PrepararCaravana, OrdenPrepararCaravana, caravana_id: s("car-2"), heroe_id: h.clone(), destino_asentamiento_id: s("as-4"), carga: carga(&[("madera", 5_000)]), salir_en: Some(9_000)),
-            Comando::PrepararCaravana { caravana: 2, destino: 4, carga: madera(), salir_en: Some(9_000) },
+            Comando::PrepararCaravana { caravana: 2, destino: 4, carga: madera(), salir_en: Some(9_000), escolta: None },
         ),
         (orden!(CancelarCaravana, OrdenCancelarCaravana, caravana_id: s("car-2")), Comando::CancelarCaravana { caravana: 2 }),
         (
@@ -535,8 +535,11 @@ fn lo_que_la_orden_deja_implicito_se_resuelve_preguntando_al_mundo() {
     assert_eq!(traduce(orden!(MovilizarEjercito, OrdenMovilizarEjercito, asentamiento_id: s("as-3"), heroe_id: h(), objetivo: destino), false), Err(rechazos::OBJETIVO_NO_SOPORTADO));
     let destino = Some(pb::orden_salir_del_campamento::Objetivo { tipo: Some(pb::orden_salir_del_campamento::objetivo::Tipo::Punto(pb::Punto { x: 1, y: 2 })) });
     assert_eq!(traduce(orden!(SalirDelCampamento, OrdenSalirDelCampamento, campamento_id: s("camp-1"), heroe_id: h(), objetivo: destino), false), Err(rechazos::OBJETIVO_NO_SOPORTADO));
-    // La escolta se cede antes de lanzar la caravana.
-    assert_eq!(traduce(orden!(PrepararCaravana, OrdenPrepararCaravana, caravana_id: s("car-2"), destino_asentamiento_id: s("as-4"), escolta_escuadron_ids: v(&["esc-1"])), false), Err(rechazos::CARAVANA_ESCOLTA_INVALIDA));
+    // La escolta puede cederse al lanzar la caravana: la cede el héroe de la orden (paridad P5).
+    assert_eq!(
+        traduce(orden!(PrepararCaravana, OrdenPrepararCaravana, caravana_id: s("car-2"), heroe_id: h(), destino_asentamiento_id: s("as-4"), escolta_escuadron_ids: v(&["esc-1", "esc-2"])), false),
+        Ok(Comando::PrepararCaravana { caravana: 2, destino: 4, carga: vec![], salir_en: None, escolta: Some((7, vec![1, 2])) })
+    );
 }
 
 #[test]

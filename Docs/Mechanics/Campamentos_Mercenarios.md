@@ -33,7 +33,7 @@ ellas (§3) y el lugar donde se describe lo que aún no tenía documento: la **p
 | `origen` | Variante de aspecto `0‥MERCENARIOS.origenes−1`; solo cambia cómo se ve. |
 | `edificios` | `[taberna, vivienda ×10, mercado, un militar]` (barracón, galería de tiro o caballerizas, elegido por la posición). Fijo: no se construye. |
 | `residentesIds` | Héroes que residen aquí (cualquier Facción, sin límite, aunque su Facción tenga plazas). |
-| `eligieronComoInicial` | Cuántos héroes lo eligieron al nacer (solo crece). |
+| `eligieronComoInicial` | Cuántos héroes lo eligieron al nacer (solo crece). En Rust (paridad P6, 2026-10-27), `EstadoMilitar::eligieron` (foto `BAN41`; una `BAN40` se admite y empieza en 0), sumado por `CrearHeroe`; sale en `Bienvenida.campamentos_para_elegir` y en el `CampamentoMercenarios` del ámbito `CAMPAMENTO`. |
 | `poblacion`, `poblacionEn` | Reclutas disponibles en ese instante (§4). |
 | `mercado` | Stock en venta ([`Comercio_Caravanas.md`](Comercio_Caravanas.md) §9). |
 | `fondos` | Fondo de refundación por héroe ([`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md) §9). En Rust (5G-b), `Estado::fundacion.fondos`; el contrato lo da por Facción. |

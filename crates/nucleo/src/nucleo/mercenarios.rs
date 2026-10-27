@@ -108,11 +108,16 @@ impl Nucleo {
     }
 
     /// Los campamentos donde un jugador sin héroe puede nacer (`Bienvenida.campamentos_para_elegir`): de cada uno del artefacto, su índice, su puerta, su origen y cuántos héroes residen
-    /// en él. DUDA: `eligieronComoInicial` no se guarda todavía (fila de paridad «Militar y combate (4B-1)»); la sesión lo manda a 0.
-    pub fn campamentos_para_elegir(&self) -> Vec<(u32, Punto, u32, usize)> {
+    /// en él y cuántos lo eligieron para nacer.
+    pub fn campamentos_para_elegir(&self) -> Vec<(u32, Punto, u32, usize, u32)> {
         let Some(g) = self.geografia.as_ref() else { return Vec::new() };
         let residentes = |c: u32| self.heroes().filter(|h| h.heroe.residencia == Some(Residencia::Campamento(c))).count();
-        g.campamentos_del_artefacto().into_iter().zip(0u32..).map(|((puerta, origen), c)| (c, puerta, origen, residentes(c))).collect()
+        g.campamentos_del_artefacto().into_iter().zip(0u32..).map(|((puerta, origen), c)| (c, puerta, origen, residentes(c), self.eligieron_como_inicial(c))).collect()
+    }
+
+    /// Cuántos héroes eligieron el campamento `c` para nacer (`eligieronComoInicial`): solo crece.
+    pub fn eligieron_como_inicial(&self, campamento: u32) -> u32 {
+        self.estado.militar.eligieron.get(&campamento).copied().unwrap_or(0)
     }
 
     /// El origen cultural del campamento `c` del artefacto (el de su dueño por defecto: `Bienvenida.campamentos_para_elegir`).

@@ -198,6 +198,8 @@ impl Nucleo {
                 self.estado.siguiente_id += 2;
                 let heroe = Heroe::nuevo(&mr, id, *controlador, *campamento, loadout);
                 self.estado.militar.insertar(HeroeNucleo::nuevo(heroe, cuenta, None));
+                *self.estado.militar.eligieron.entry(*campamento).or_insert(0) += 1;
+                self.tr.tocar(Clase::Campamento, u64::from(*campamento));
                 // Un residente nuevo, sin Facción: pide bandidos en el anillo de su campamento.
                 self.reprogramar_anillo(*campamento, t);
                 self.emitir_propio(t, "heroe.creado", vec![], vec![("heroe", id as i64), ("campamento", *campamento as i64)]);
@@ -454,13 +456,22 @@ impl Nucleo {
         self.autorizar_heroe(p, heroe, false)?;
         let origen = self.estado.comercio.flota[ci].origen as u64;
         let cupo = self.cupos_de(self.plaza_o_rechazo(origen)?).escolta;
-        let mr = self.estado.reglas.economia.militar.clone();
+        let nuevas = self.seleccionar_escolta(heroe, escuadras, origen).map_err(de_caravana)?;
+        self.estado.comercio.flota[ci].asignar_escolta(nuevas.clone(), cupo).map_err(de_caravana)?;
+        self.ceder_escolta(t, caravana, heroe, &nuevas, origen);
+        Ok(vec![])
+    }
+
+    /// Las escuadras que `heroe` puede ceder de escolta a una caravana de `origen` (`seleccionarEscoltaCaravana`): reside allí y cada una es suya, está en su
+    /// campamento, fuera de la guarnición y con soldados. No toca nada.
+    pub(super) fn seleccionar_escolta(&self, heroe: u64, escuadras: &[u64], origen: u64) -> Result<Vec<EscuadraCedida>, comercio::caravana::ErrorCaravana> {
+        let mr = &self.estado.reglas.economia.militar;
         let h = &self.heroe(heroe).expect("existe").heroe;
         let candidatas: Vec<CandidataEscolta> = escuadras
             .iter()
             .map(|&id| match h.escuadra(id) {
                 Some(e) => CandidataEscolta {
-                    escuadra: EscuadraCedida { id, heroe, liderazgo: liderazgo::coste(&mr, e.tropa) },
+                    escuadra: EscuadraCedida { id, heroe, liderazgo: liderazgo::coste(mr, e.tropa) },
                     es_del_heroe: true,
                     en_campamento: e.contenedor == Contenedor::Campamento,
                     en_guarnicion: e.en_guarnicion,
@@ -470,13 +481,15 @@ impl Nucleo {
             })
             .collect();
         let reside = h.residencia == Some(Residencia::Asentamiento(origen as u32));
-        let nuevas = comercio::caravana::seleccionar_escolta(reside, &candidatas).map_err(de_caravana)?;
-        self.estado.comercio.flota[ci].asignar_escolta(nuevas.clone(), cupo).map_err(de_caravana)?;
-        for e in &nuevas {
+        comercio::caravana::seleccionar_escolta(reside, &candidatas)
+    }
+
+    /// Marca como escolta de la caravana las escuadras que ya admitió y lo avisa.
+    pub(super) fn ceder_escolta(&mut self, t: Instante, caravana: u64, heroe: u64, nuevas: &[EscuadraCedida], origen: u64) {
+        for e in nuevas {
             self.heroe_mut(heroe).heroe.escuadra_mut(e.id).expect("es suya").contenedor = Contenedor::Escolta(caravana);
         }
         self.emitir_comercio(t, EventoComercio::CaravanaEscoltaCedida { caravana }, vec![origen], &[("heroe", heroe as i64), ("escuadras", nuevas.len() as i64)]);
-        Ok(vec![])
     }
 
     /// `quitarEscolta`: solo con la caravana parada en su origen; cada héroe retira únicamente las suyas (todas las suyas si no se dice cuáles).

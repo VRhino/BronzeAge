@@ -2,7 +2,7 @@
 //! **entera** (sin `..`): si el crate `militar` añade un campo, esto deja de compilar y obliga a decidir cómo se guarda.
 //!
 //! Formato (little endian, el de `codec`): `héroes{n u64 · n × héroe} · convocatorias{n u64 · n × convocatoria} · reclutas{n u64 · n ×
-//! (campamento u32, población i64, en i64)}`. Las relaciones viven en `Estado::politica` desde BAN32 (5D, `codec_politica`) y las tecnologías de las Facciones, en `Estado::tecnologia` desde BAN36
+//! (campamento u32, población i64, en i64)} · eligieron{n u64 · n × (campamento u32, cuántos u32)}` (lo último desde BAN41). Las relaciones viven en `Estado::politica` desde BAN32 (5D, `codec_politica`) y las tecnologías de las Facciones, en `Estado::tecnologia` desde BAN36
 //! (6B, `codec_tecnologia`).
 //!
 //! Un héroe: `id u64 · cuenta texto · facción opt_u64 · controlador u8 (0 humano, 1 bot) · liderazgo_base i64 · presencia{ubicación ·
@@ -479,7 +479,7 @@ fn convocatoria_leer(r: &mut Lector) -> Result<Convocatoria, ErrorFormato> {
 }
 
 pub(crate) fn escribir(w: &mut Escritor, m: &EstadoMilitar) {
-    let EstadoMilitar { heroes, convocatorias, reclutas, residentes: _, por_cuenta: _ } = m;
+    let EstadoMilitar { heroes, convocatorias, reclutas, eligieron, residentes: _, por_cuenta: _ } = m;
     w.u64(heroes.len() as u64);
     heroes.values().for_each(|h| heroe_escribir(w, h));
     w.u64(convocatorias.len() as u64);
@@ -490,9 +490,15 @@ pub(crate) fn escribir(w: &mut Escritor, m: &EstadoMilitar) {
         w.i64(*poblacion);
         w.i64(*en);
     }
+    w.u64(eligieron.len() as u64);
+    for (&campamento, &n) in eligieron {
+        w.u32(campamento);
+        w.u32(n);
+    }
 }
 
-pub(crate) fn leer(r: &mut Lector) -> Result<EstadoMilitar, ErrorFormato> {
+/// `con_eligieron`: la foto trae lo que eligió cada campamento (desde BAN41); en una BAN40 empieza en 0.
+pub(crate) fn leer(r: &mut Lector, con_eligieron: bool) -> Result<EstadoMilitar, ErrorFormato> {
     let mut m = EstadoMilitar::default();
     for _ in 0..r.cuenta()? {
         m.insertar(heroe_leer(r)?);
@@ -504,6 +510,12 @@ pub(crate) fn leer(r: &mut Lector) -> Result<EstadoMilitar, ErrorFormato> {
     for _ in 0..r.cuenta()? {
         let campamento = r.u32()?;
         m.reclutas.insert(campamento, Reclutas { poblacion: r.i64()?, en: r.i64()? });
+    }
+    if con_eligieron {
+        for _ in 0..r.cuenta()? {
+            let campamento = r.u32()?;
+            m.eligieron.insert(campamento, r.u32()?);
+        }
     }
     Ok(m)
 }

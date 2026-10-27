@@ -360,7 +360,7 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.guarniciones.insert(9, GuarnicionDePueblo { escuadra: combate::pueblo::guarnicion_de_serie(&mc(), 12, 0), repone_en: Some(7_000) });
     base.combate.destruidos.insert(6, vec![100, 200]);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN40");
+    assert_eq!(&bytes[..5], b"BAN41");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -842,7 +842,7 @@ impl Esc {
     fn lanzar(&mut self, caravana: u64) -> Instante {
         let (a, b) = (self.a, self.b);
         self.dar(a, Cobre, 300_000);
-        self.ok("ana", Comando::PrepararCaravana { caravana, destino: b, carga: vec![(Cobre, 100_000)], salir_en: None });
+        self.ok("ana", Comando::PrepararCaravana { caravana, destino: b, carga: vec![(Cobre, 100_000)], salir_en: None, escolta: None });
         for _ in 0..600 {
             if self.n.caravana(caravana).unwrap().estado == EstadoCaravana::EnTransito {
                 return self.n.caravana(caravana).unwrap().plan.as_ref().unwrap().inicio().unwrap();
@@ -926,7 +926,7 @@ fn una_caravana_atacada_fuera_de_toda_zona_es_una_disputa_de_carros_y_sin_carros
     // Una caravana de un solo carro lo pierde entero: desaparece (sin aguante no se salva nada) con un hecho de pérdida.
     let cb = e.caravana("ana", a, 1);
     e.dar(a, Cobre, 100_000);
-    e.ok("ana", Comando::PrepararCaravana { caravana: cb, destino: b, carga: vec![(Cobre, 50_000)], salir_en: None });
+    e.ok("ana", Comando::PrepararCaravana { caravana: cb, destino: b, carga: vec![(Cobre, 50_000)], salir_en: None, escolta: None });
     let t1 = loop {
         e.avanzar(MIN);
         if e.n.caravana(cb).unwrap().estado == EstadoCaravana::EnTransito {

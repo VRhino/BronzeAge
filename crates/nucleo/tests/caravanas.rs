@@ -406,7 +406,7 @@ fn el_tiempo_de_viaje_sale_de_la_velocidad_del_animal_y_del_coste_del_terreno() 
     // el caballo (36) tarda lo que dicen el terreno y su velocidad; el buey (24) sale después, ya por el camino que el caballo abrió.
     let t = e.n.ahora();
     for c in [caballo, buey] {
-        e.ok("ana", Comando::PrepararCaravana { caravana: c, destino: b, carga: vec![(Cobre, 10_000)], salir_en: None });
+        e.ok("ana", Comando::PrepararCaravana { caravana: c, destino: b, carga: vec![(Cobre, 10_000)], salir_en: None, escolta: None });
         assert_eq!(e.caravana_de(c).estado, EstadoCaravana::EnTransito);
         assert_eq!(e.caravana_de(c).prepara_hasta, None);
     }
@@ -424,7 +424,7 @@ fn el_tiempo_de_viaje_sale_de_la_velocidad_del_animal_y_del_coste_del_terreno() 
     let medio = e.n.posicion_de_caravana(caballo, e.n.ahora()).unwrap();
     assert!(medio != pa && medio != pb && medio.dist(pa) < pa.dist(pb) + 1_000);
     // Un rechazo: sin ruta por tierra o a una plaza que no existe no sale ni gasta nada.
-    assert_eq!(e.rechazada("ana", Comando::PrepararCaravana { caravana: caballo, destino: b, carga: vec![(Cobre, 1_000)], salir_en: None }), rechazos::CARAVANA_NO_DISPONIBLE);
+    assert_eq!(e.rechazada("ana", Comando::PrepararCaravana { caravana: caballo, destino: b, carga: vec![(Cobre, 1_000)], salir_en: None, escolta: None }), rechazos::CARAVANA_NO_DISPONIBLE);
 }
 
 /// Funda en el trayecto de A a B una plaza de `faccion` y la deja en el camino. Devuelve su id.
@@ -454,7 +454,7 @@ fn una_ciudad_ajena_en_el_camino_cobra_el_peaje_a_la_ida_y_no_al_regreso() {
     let car = e.caravana("ana", a, 1, true);
     let cobre_c0 = cantidad(&e.n, c, Cobre);
     let t = e.n.ahora();
-    e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 100_000)], salir_en: None });
+    e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 100_000)], salir_en: None, escolta: None });
     let lanzada = e.caravana_de(car).clone();
     // El trazado pasa por la ciudad ajena: un peaje fijado al lanzar, en el avance en que el plan llega a su centro.
     assert_eq!(lanzada.peajes.len(), 1);
@@ -491,7 +491,7 @@ fn una_ciudad_de_la_propia_faccion_en_el_camino_no_cobra_peaje() {
     let c = plaza_en_el_camino(&mut e, m, 1);
     e.dar(a, Cobre, 100_000);
     let car = e.caravana("ana", a, 1, true);
-    e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 100_000)], salir_en: None });
+    e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 100_000)], salir_en: None, escolta: None });
     assert!(e.caravana_de(car).peajes.is_empty());
     let directa = m.1.ruta(pos(&e.n, a), pos(&e.n, b), &Opciones::default()).unwrap();
     assert_eq!(e.caravana_de(car).ruta, directa.puntos, "sin paso forzado: la ruta es la del A* sin más, y {c} es solo una plaza que queda en el camino");
@@ -508,7 +508,7 @@ fn la_vista_lleva_la_red_con_el_escalon_de_cada_arista_y_las_rutas_propias() {
     e.dar(a, Cobre, 100_000);
     let car = e.caravana("ana", a, 2, true);
     let t = e.n.ahora();
-    e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 50_000)], salir_en: Some(t + HORA) });
+    e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 50_000)], salir_en: Some(t + HORA), escolta: None });
     let faccion = e.n.estado().asentamientos[&a].faccion;
     let rect = vision::Rect { min: Punto::new(0, 0), max: Punto::new(3_000_000, 3_000_000) };
     let mirada = Mirada::de(&e.n, Perspectiva::Faccion(faccion));
@@ -531,7 +531,7 @@ fn cancelar_la_preparacion_deja_el_camino_y_sus_eventos_no_vuelven() {
     e.dar(a, Cobre, 100_000);
     let car = e.caravana("ana", a, 2, true);
     let t = e.n.ahora();
-    e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 50_000)], salir_en: Some(t + HORA) });
+    e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 50_000)], salir_en: Some(t + HORA), escolta: None });
     // La ruta entra en la red ya, aunque luego se cancele.
     let pesos = e.n.pesos_de_red();
     assert!(!pesos.is_empty() && pesos.values().all(|&p| p == 1));
@@ -545,7 +545,7 @@ fn cancelar_la_preparacion_deja_el_camino_y_sus_eventos_no_vuelven() {
     e.avanzar(3 * HORA);
     assert!(hechos(&e.n, "comercio.caravana_sale").is_empty(), "el fin de la preparación cancelada no sale");
     // Ya en ruta no se cancela.
-    e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 10_000)], salir_en: None });
+    e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 10_000)], salir_en: None, escolta: None });
     assert_eq!(e.caravana_de(car).estado, EstadoCaravana::Preparando, "dos carros: 2 min de preparación");
     e.avanzar(2 * MIN);
     assert_eq!(e.caravana_de(car).estado, EstadoCaravana::EnTransito);
@@ -593,9 +593,9 @@ fn la_ruina_del_destino_hace_dar_la_vuelta_a_la_caravana_y_la_del_origen_la_pier
     // preparación; la tercera queda `preparando` hasta el mismo instante de la ruina.
     let cb2 = e.caravana("beto", b, 1, true);
     let cobre_b0 = cantidad(&e.n, b, Cobre);
-    e.ok("ana", Comando::PrepararCaravana { caravana: ca, destino: b, carga: vec![(Cobre, 100_000)], salir_en: None });
-    e.ok("beto", Comando::PrepararCaravana { caravana: cb, destino: a, carga: vec![(Cobre, 50_000)], salir_en: None });
-    e.ok("beto", Comando::PrepararCaravana { caravana: cb2, destino: a, carga: vec![(Cobre, 20_000)], salir_en: Some(ruina) });
+    e.ok("ana", Comando::PrepararCaravana { caravana: ca, destino: b, carga: vec![(Cobre, 100_000)], salir_en: None, escolta: None });
+    e.ok("beto", Comando::PrepararCaravana { caravana: cb, destino: a, carga: vec![(Cobre, 50_000)], salir_en: None, escolta: None });
+    e.ok("beto", Comando::PrepararCaravana { caravana: cb2, destino: a, carga: vec![(Cobre, 20_000)], salir_en: Some(ruina), escolta: None });
     e.avanzar_hasta(ruina - 1);
     assert!(e.n.economia(a).is_some(), "la ruina llega exactamente a su hora");
     assert_eq!((e.caravana_de(ca).estado, e.caravana_de(cb).estado, e.caravana_de(cb2).estado), (EstadoCaravana::EnTransito, EstadoCaravana::EnTransito, EstadoCaravana::Preparando));
@@ -703,8 +703,8 @@ fn la_conquista_pasa_la_flota_hace_volver_a_las_que_iban_y_destruye_la_aparcada(
     e.ok("ana", Comando::MoverCargaAparcada { caravana: cc, recurso: Madera, cantidad: 5_000, cargar: true });
     let tr = e.trueque(&[(Cobre, 1_000)], &[(Estano, 1_000)]);
     let cobre_b0 = cantidad(&e.n, b, Cobre);
-    e.ok("ana", Comando::PrepararCaravana { caravana: ca, destino: b, carga: vec![(Cobre, 100_000)], salir_en: None });
-    e.ok("beto", Comando::PrepararCaravana { caravana: cb, destino: a, carga: vec![(Cobre, 50_000)], salir_en: None });
+    e.ok("ana", Comando::PrepararCaravana { caravana: ca, destino: b, carga: vec![(Cobre, 100_000)], salir_en: None, escolta: None });
+    e.ok("beto", Comando::PrepararCaravana { caravana: cb, destino: a, carga: vec![(Cobre, 50_000)], salir_en: None, escolta: None });
     e.avanzar(20 * MIN);
     let ahora = e.n.ahora();
     // El asedio se resuelve al acabar su convocatoria de 30 s: ahí es donde la pilla la conquista.
@@ -756,7 +756,7 @@ fn la_ruta_va_el_doble_de_rapido_la_segunda_vez_y_la_red_se_poda_a_los_4320_minu
 
     let lanzar = |e: &mut Escenario| {
         let t = e.n.ahora();
-        e.ok("ana", Comando::PrepararCaravana { caravana: ca, destino: b, carga: vec![(Cobre, 10_000)], salir_en: None });
+        e.ok("ana", Comando::PrepararCaravana { caravana: ca, destino: b, carga: vec![(Cobre, 10_000)], salir_en: None, escolta: None });
         let ida = fin_del_plan(e, ca) - t;
         e.avanzar_hasta(fin_del_plan(e, ca));
         e.avanzar_hasta(fin_del_plan(e, ca));
@@ -782,7 +782,7 @@ fn la_ruta_va_el_doble_de_rapido_la_segunda_vez_y_la_red_se_poda_a_los_4320_minu
     assert_eq!(e.n.red_de_caminos().rutas().count(), 1, "sin tick: sigue guardada hasta que alguien arranque otra ruta");
     // Arrancar otra ruta la poda; las aristas del camino viejo siguen como sendero y siguen siendo más rápidas.
     let t3 = e.n.ahora();
-    e.ok("beto", Comando::PrepararCaravana { caravana: cb, destino: a, carga: vec![(Cobre, 10_000)], salir_en: None });
+    e.ok("beto", Comando::PrepararCaravana { caravana: cb, destino: a, carga: vec![(Cobre, 10_000)], salir_en: None, escolta: None });
     let red = e.n.red_de_caminos();
     assert_eq!((red.rutas().count(), red.ruta(a as u32, b as u32).is_none(), red.ruta(b as u32, a as u32).is_some()), (1, true, true));
     assert!(red.aristas().count() >= aristas);
@@ -839,7 +839,7 @@ fn un_camino_compartido_abierto_pide_diez_rutas_de_tres_facciones_fuera_de_las_z
                 continue;
             }
             // Lanzar y cancelar: la ruta entra en la red al lanzar, aunque la caravana no llegue a salir.
-            e.ok(&actor, Comando::PrepararCaravana { caravana: c, destino, carga: vec![(Cobre, 1_000)], salir_en: Some(t + HORA) });
+            e.ok(&actor, Comando::PrepararCaravana { caravana: c, destino, carga: vec![(Cobre, 1_000)], salir_en: Some(t + HORA), escolta: None });
             e.ok(&actor, Comando::CancelarCaravana { caravana: c });
         }
     }
@@ -1089,7 +1089,7 @@ fn una_arista_que_acaba_de_ser_camino_acelera_a_la_caravana_que_ya_iba_por_ella(
     e.avanzar(10 * MIN);
     let ahora = e.n.ahora();
     let ca = e.caravana("ana", a, 1, true);
-    e.ok("ana", Comando::PrepararCaravana { caravana: ca, destino: c, carga: vec![(Cobre, 1_000)], salir_en: None });
+    e.ok("ana", Comando::PrepararCaravana { caravana: ca, destino: c, carga: vec![(Cobre, 1_000)], salir_en: None, escolta: None });
     let car = e.caravana_de(cc);
     let (fin1, gen1) = (car.plan.as_ref().unwrap().fin().unwrap(), car.plan.as_ref().unwrap().generacion);
     assert!(gen1 > gen0, "plan nuevo, generación nueva");
@@ -1125,8 +1125,8 @@ fn dos_caravanas_que_se_cruzan_dejan_su_encuentro_y_una_en_batalla_no_cambia_mie
     let ca = e.caravana("ana", a, 1, true);
     let cb = e.caravana("beto", b, 1, true);
     let t0 = e.n.ahora();
-    e.ok("ana", Comando::PrepararCaravana { caravana: ca, destino: b, carga: vec![(Cobre, 10_000)], salir_en: None });
-    e.ok("beto", Comando::PrepararCaravana { caravana: cb, destino: a, carga: vec![(Cobre, 10_000)], salir_en: None });
+    e.ok("ana", Comando::PrepararCaravana { caravana: ca, destino: b, carga: vec![(Cobre, 10_000)], salir_en: None, escolta: None });
+    e.ok("beto", Comando::PrepararCaravana { caravana: cb, destino: a, carga: vec![(Cobre, 10_000)], salir_en: None, escolta: None });
     // Van una contra otra por el mismo camino: se encuentran en el instante exacto en que se acercan a 3 unidades (un evento, no un sondeo).
     let (fin_a, fin_b) = (fin_del_plan(&e, ca), fin_del_plan(&e, cb));
     let (plan_a, plan_b) = (e.caravana_de(ca).plan.clone().unwrap(), e.caravana_de(cb).plan.clone().unwrap());
@@ -1169,7 +1169,7 @@ fn los_carros_perdidos_en_batalla_se_llevan_su_parte_de_la_carga_y_sin_carros_no
     let (a, b) = (e.a, e.b);
     e.dar(a, Cobre, 200_000);
     let car = e.caravana("ana", a, 2, true);
-    e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 100_000)], salir_en: None });
+    e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 100_000)], salir_en: None, escolta: None });
     e.avanzar(5 * MIN);
     let t = e.n.ahora();
     assert!(e.n.caravana_entra_en_batalla(t, car));
@@ -1183,7 +1183,7 @@ fn los_carros_perdidos_en_batalla_se_llevan_su_parte_de_la_carga_y_sin_carros_no
     assert_eq!(cantidad(&e.n, b, Cobre) - cobre_b0, 50_000, "llega lo que quedó");
     // Sin carros se destruye con su carga.
     let c2 = e.caravana("ana", a, 1, true);
-    e.ok("ana", Comando::PrepararCaravana { caravana: c2, destino: b, carga: vec![(Cobre, 10_000)], salir_en: None });
+    e.ok("ana", Comando::PrepararCaravana { caravana: c2, destino: b, carga: vec![(Cobre, 10_000)], salir_en: None, escolta: None });
     let t = e.n.ahora();
     assert!(e.n.caravana_entra_en_batalla(t, c2));
     let p = e.n.aplicar_perdida_de_carros(t, c2, &[0]).unwrap();
@@ -1205,7 +1205,7 @@ fn si_en_la_batalla_se_pierde_el_animal_mas_lento_el_plan_en_pausa_sigue_a_la_ve
     let car = e.caravana("ana", a, 1, true);
     e.ok("ana", Comando::AnadirCarro { caravana: car, tipo: TipoCarro::Basico });
     e.ok("ana", Comando::AnadirAnimal { caravana: car, carro: 1, animal: Animal::Caballo });
-    e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 10_000)], salir_en: None });
+    e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 10_000)], salir_en: None, escolta: None });
     e.avanzar(5 * MIN);
     let t = e.n.ahora();
     let queda = fin_del_plan(&e, car) - t;
@@ -1248,7 +1248,7 @@ fn una_caravana_grande_llama_la_atencion_a_60_unidades_y_una_pequena_no() {
         e.n.crear_ejercito(t, "beto", 2, Punto::new(v.x + 45_000, v.y), 500, 100_000).unwrap();
         // Las dos plazas no cuentan como observadoras: solo la columna del vigía.
         let car = e.caravana("ana", a, carros, true);
-        e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 10_000)], salir_en: None });
+        e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 10_000)], salir_en: None, escolta: None });
         e.avanzar(2 * carros as i64 * MIN); // la preparación de 2 min por carro de más
         let fin = fin_del_plan(&e, car);
         e.avanzar_hasta(fin);
@@ -1282,10 +1282,10 @@ fn guion(e: &mut Escenario, m: &M, avanzar: &dyn Fn(&mut Escenario, Instante)) {
     e.trueque(&[(Cobre, 60_000)], &[(Estano, 30_000)]);
     avanzar(e, base + 20 * MIN);
     e.ok_en(base + 20 * MIN, "ana", Comando::ComprarEnCampamento { heroe: ana, campamento: 0, recurso: Cobre, cantidad: 5_000 });
-    e.ok_en(base + 20 * MIN, "ana", Comando::PrepararCaravana { caravana: c3, destino: b, carga: vec![(Cobre, 20_000)], salir_en: Some(base + HORA) });
+    e.ok_en(base + 20 * MIN, "ana", Comando::PrepararCaravana { caravana: c3, destino: b, carga: vec![(Cobre, 20_000)], salir_en: Some(base + HORA), escolta: None });
     avanzar(e, base + 30 * MIN);
     e.ok_en(base + 30 * MIN, "ana", Comando::CancelarCaravana { caravana: c3 });
-    e.ok_en(base + 30 * MIN, "ana", Comando::PrepararCaravana { caravana: c3, destino: b, carga: vec![(Cobre, 15_000)], salir_en: None });
+    e.ok_en(base + 30 * MIN, "ana", Comando::PrepararCaravana { caravana: c3, destino: b, carga: vec![(Cobre, 15_000)], salir_en: None, escolta: None });
     avanzar(e, base + 90 * MIN);
     e.ok_en(base + 90 * MIN, "ana", Comando::RepostarEnCampamento { heroe: ana, campamento: 0 });
     avanzar(e, base + 5 * HORA);
@@ -1337,7 +1337,7 @@ fn recuperar_desde_foto_con_una_caravana_a_medio_camino_da_el_mismo_mundo() {
         e.avanzar(11 * MIN);
         let manual = e.caravana("beto", b, 2, true);
         let salir = e.n.ahora() + 6 * HORA;
-        e.ok("beto", Comando::PrepararCaravana { caravana: manual, destino: a, carga: vec![(Estano, 5_000)], salir_en: Some(salir) });
+        e.ok("beto", Comando::PrepararCaravana { caravana: manual, destino: a, carga: vec![(Estano, 5_000)], salir_en: Some(salir), escolta: None });
     };
     let segunda_mitad = |e: &mut Escenario| e.avanzar(10 * HORA);
 
@@ -1449,7 +1449,7 @@ fn medir_caravanas(plazas: usize) {
                 if destino == plaza || !n.estado().asentamientos.contains_key(&plaza) {
                     continue;
                 }
-                let r = n.aplicar_en(inicio, comun::como_dueno(Peticion::nueva("ana", &format!("l{k}"), Comando::PrepararCaravana { caravana: id, destino, carga: vec![(Cobre, 1_000)], salir_en: None })));
+                let r = n.aplicar_en(inicio, comun::como_dueno(Peticion::nueva("ana", &format!("l{k}"), Comando::PrepararCaravana { caravana: id, destino, carga: vec![(Cobre, 1_000)], salir_en: None, escolta: None })));
                 lanzadas += r.aceptada() as u32;
             }
         }

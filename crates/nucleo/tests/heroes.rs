@@ -207,6 +207,13 @@ fn el_heroe_nace_en_un_campamento_con_su_progresion_inicial_y_cada_rechazo_tiene
     assert_eq!((creados.len(), dato(&creados[0], "heroe"), dato(&creados[0], "campamento")), (2, h as i64, 2));
     // El héroe no tiene columna ni plaza: no hay nada que mover en el mapa.
     assert_eq!(e.n.estado().ejercito_de_heroe(h), None);
+    // Cada campamento cuenta quién lo eligió para nacer (`eligieronComoInicial`, paridad P6): solo crece, aunque luego se mude.
+    e.ok("admin", crear("carla", 2, Controlador::Humano));
+    assert_eq!((e.n.eligieron_como_inicial(2), e.n.eligieron_como_inicial(1), e.n.eligieron_como_inicial(0)), (2, 1, 0));
+    e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Campamento(0)) });
+    assert_eq!(e.n.eligieron_como_inicial(2), 2);
+    let elegir: Vec<(u32, usize, u32)> = e.n.campamentos_para_elegir().into_iter().filter(|c| c.0 <= 2).map(|(c, _, _, residentes, eligieron)| (c, residentes, eligieron)).collect();
+    assert_eq!(elegir, vec![(0, 1, 0), (1, 1, 1), (2, 1, 2)]);
 }
 
 // ───────────────────────────── 2. Reclutar en una plaza ─────────────────────────────
@@ -731,7 +738,7 @@ fn la_escolta_se_cede_con_la_caravana_parada_en_su_origen_y_vuelve_al_campamento
     e.dar(a, Cobre, 100_000);
     e.ok("ana", asignar(c, &[milicia]));
     let salir = e.n.ahora() + HORA;
-    e.ok("ana", Comando::PrepararCaravana { caravana: c, destino: b, carga: vec![(Cobre, 20_000)], salir_en: Some(salir) });
+    e.ok("ana", Comando::PrepararCaravana { caravana: c, destino: b, carga: vec![(Cobre, 20_000)], salir_en: Some(salir), escolta: None });
     assert_eq!(contenedor(&e, milicia), Contenedor::Escolta(c));
     assert_eq!(e.rechazada("ana", asignar(c, &[lenadores])), rechazos::CARAVANA_NO_DISPONIBLE, "solo con la caravana parada");
     e.ok("ana", Comando::CancelarCaravana { caravana: c });
@@ -740,7 +747,7 @@ fn la_escolta_se_cede_con_la_caravana_parada_en_su_origen_y_vuelve_al_campamento
     // Viaja con la caravana y vuelve al campamento cuando la caravana llega a casa.
     e.ok("ana", asignar(c, &[milicia, lenadores]));
     e.avanzar(11 * MIN);
-    e.ok("ana", Comando::PrepararCaravana { caravana: c, destino: b, carga: vec![(Cobre, 20_000)], salir_en: None });
+    e.ok("ana", Comando::PrepararCaravana { caravana: c, destino: b, carga: vec![(Cobre, 20_000)], salir_en: None, escolta: None });
     assert_eq!(e.n.caravana(c).unwrap().estado, comercio::caravana::EstadoCaravana::EnTransito);
     let ida = e.n.caravana(c).unwrap().plan.as_ref().unwrap().fin().unwrap();
     e.n.avanzar_hasta(ida - 1);
@@ -759,6 +766,48 @@ fn la_escolta_se_cede_con_la_caravana_parada_en_su_origen_y_vuelve_al_campamento
     e.n.aplicar_perdida_de_carros(t, c, &[0]).expect("pierde su único carro");
     assert!(e.n.caravana(c).is_none());
     assert_eq!(contenedor(&e, milicia), Contenedor::Campamento);
+}
+
+#[test]
+fn la_escolta_tambien_se_cede_al_preparar_la_caravana_y_si_algo_falla_no_se_cede_nada() {
+    // Paridad P5 (`prepararCaravana { heroeId, escoltaEscuadronIds }`): mismas condiciones y mismo cupo que `asignarEscolta`, en el mismo lanzamiento.
+    let m = con_mundo!();
+    let (mut e, b) = escenario_de_escolta(m);
+    let a = e.a;
+    let h = e.heroe_en_la_plaza("ana");
+    let milicia = e.ok("ana", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: Tropa::MiliciaLanceros }).creadas[0];
+    let lenadores = e.ok("ana", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: Tropa::Lenadores }).creadas[0];
+    let c = e.ok("ana", Comando::CrearCaravana { asentamiento: a }).creadas[0];
+    e.ok("ana", Comando::AnadirCarro { caravana: c, tipo: comercio::caravana::TipoCarro::Basico });
+    e.ok("ana", Comando::AnadirAnimal { caravana: c, carro: 0, animal: comercio::caravana::Animal::Buey });
+    e.ok("ana", Comando::ReservarCaravana { caravana: c, reservada: true });
+    e.dar(a, Cobre, 100_000);
+    let contenedor = |e: &Escenario, id| e.n.escuadra(id).unwrap().1.contenedor;
+    let salir = e.n.ahora() + HORA;
+    let preparar = |carga: i64, escolta: Option<(u64, Vec<u64>)>| Comando::PrepararCaravana { caravana: c, destino: b, carga: vec![(Cobre, carga)], salir_en: Some(salir), escolta };
+
+    // Los rechazos de la escolta no dejan rastro: ni carga reservada ni escuadras fuera del campamento.
+    let cobre = e.n.economia(a).unwrap().almacen.cantidad(Cobre);
+    assert_eq!(e.rechazada("beto", preparar(20_000, Some((h, vec![milicia])))), rechazos::NO_AUTORIZADO, "cada residente cede lo suyo");
+    assert_eq!(e.rechazada("ana", preparar(20_000, Some((h, vec![99_999])))), rechazos::CARAVANA_ESCOLTA_INVALIDA, "tiene que ser suya");
+    assert_eq!(e.rechazada("ana", preparar(20_000, Some((h, vec![milicia, milicia])))), rechazos::CARAVANA_ESCOLTA_INVALIDA, "sin repetidas");
+    // Un fallo de la caravana (aquí, más carga de la que cabe) tampoco cede la escolta.
+    assert_ne!(e.rechazada("ana", preparar(10_000_000, Some((h, vec![milicia])))), "");
+    assert_eq!(e.n.economia(a).unwrap().almacen.cantidad(Cobre), cobre);
+    assert!(e.n.caravana(c).unwrap().escolta.is_empty() && contenedor(&e, milicia) == Contenedor::Campamento);
+
+    // Con todo en regla, sale preparándose ya escoltada, y cancelarla devuelve la escolta.
+    e.ok("ana", preparar(20_000, Some((h, vec![milicia, lenadores]))));
+    assert_eq!((contenedor(&e, milicia), contenedor(&e, lenadores)), (Contenedor::Escolta(c), Contenedor::Escolta(c)));
+    assert_eq!(e.n.caravana(c).unwrap().escolta.iter().map(|x| (x.id, x.heroe, x.liderazgo)).collect::<Vec<_>>(), vec![(milicia, h, 14), (lenadores, h, 7)]);
+    assert_eq!(hechos(&e.n, "comercio.caravana_escolta_cedida").len(), 1);
+    e.ok("ana", Comando::CancelarCaravana { caravana: c });
+    assert_eq!((contenedor(&e, milicia), contenedor(&e, lenadores)), (Contenedor::Campamento, Contenedor::Campamento));
+
+    // La que ya tenía cedida cuenta en el mismo cupo de la caravana.
+    e.ok("ana", Comando::AsignarEscolta { caravana: c, heroe: h, escuadras: vec![milicia] });
+    e.ok("ana", preparar(20_000, Some((h, vec![lenadores]))));
+    assert_eq!(e.n.caravana(c).unwrap().escolta.iter().map(|x| x.id).collect::<Vec<_>>(), vec![milicia, lenadores]);
 }
 
 // ───────────────────────────── 9. La ruina de la plaza donde se reside ─────────────────────────────
@@ -908,6 +957,7 @@ fn estado_con_heroes() -> nucleo::Estado {
     otro.presencia.fuera = true;
     s.militar.insertar(nucleo::HeroeNucleo::nuevo(otro, "bot", None));
     s.militar.reclutas.insert(2, militar::mercenarios::Reclutas { poblacion: 40_000, en: 1_234 });
+    s.militar.eligieron.insert(2, 3);
     s.militar.convocatorias.insert(
         7,
         militar::convocatoria::Convocatoria {
@@ -942,7 +992,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
     let reglas = Reglas::default();
     let base = estado_con_heroes();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN40");
+    assert_eq!(&bytes[..5], b"BAN41");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.militar, base.militar, "incluido el índice de residentes, que se reconstruye");
@@ -1015,6 +1065,9 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
         ("reclutas.en", Box::new(|m| m.reclutas.get_mut(&2).unwrap().en += 1)),
         ("reclutas.otro", Box::new(|m| {
             m.reclutas.insert(3, militar::mercenarios::Reclutas { poblacion: 1, en: 0 });
+        })),
+        ("eligieron", Box::new(|m| {
+            m.eligieron.insert(2, 4);
         })),
     ];
     let mut vistos = std::collections::HashSet::from([base.hash()]);

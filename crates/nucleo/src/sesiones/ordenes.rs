@@ -612,11 +612,9 @@ impl Ctx<'_> {
             }
             Cuerpo::ReservarCaravana(o) => Comando::ReservarCaravana { caravana: self.caravana(&o.caravana_id)?, reservada: o.reservada },
             Cuerpo::PrepararCaravana(o) => {
-                // La escolta se cede antes (`asignar_escolta`): ceder en el mismo lanzamiento no existe (Heroe_Y_Tropa).
-                if !o.escolta_escuadron_ids.is_empty() {
-                    return Err(self.no(rechazos::CARAVANA_ESCOLTA_INVALIDA, "la escolta se cede antes, con asignar_escolta"));
-                }
-                Comando::PrepararCaravana { caravana: self.caravana(&o.caravana_id)?, destino: self.plaza(&o.destino_asentamiento_id)?, carga: self.cantidades(o.carga.as_ref())?, salir_en: o.salir_en }
+                // La escolta puede cederse en el mismo lanzamiento (como `asignar_escolta`, con `heroe_id` como quien cede); sin escuadras, no hay escolta nueva.
+                let escolta = if o.escolta_escuadron_ids.is_empty() { None } else { Some((self.heroe(&o.heroe_id)?, self.escuadras(&o.escolta_escuadron_ids)?)) };
+                Comando::PrepararCaravana { caravana: self.caravana(&o.caravana_id)?, destino: self.plaza(&o.destino_asentamiento_id)?, carga: self.cantidades(o.carga.as_ref())?, salir_en: o.salir_en, escolta }
             }
             Cuerpo::CancelarCaravana(o) => Comando::CancelarCaravana { caravana: self.caravana(&o.caravana_id)? },
             Cuerpo::MoverCargaCaravanaAparcada(o) => {

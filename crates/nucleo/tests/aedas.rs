@@ -1,7 +1,7 @@
 //! Los Aedas itinerantes en el núcleo (sistema 6, tanda 6D; Tecnologia_Aedas §6). Sobre el artefacto de mundo real (`generador/salida/mundo/mundo-*.bin`; las pruebas se omiten si no
 //! está). Portan los casos de `typescript-final:src/engine/__tests__/aedas.test.ts` que miran el mundo (cuántos nacen y dónde, el recorrido, la puerta, revelar y vender; las reglas puras de
 //! cuántos y de los candidatos están en `tecnologia::itinerantes`, 6A) y la parte de la compra de `session/__tests__/comandosTecnologia.test.ts`; además, la puerta que se cierra con un Aeda
-//! dentro (Q5 del autor), que ningún Aeda queda ocioso, la foto `BAN39` (hoy `BAN40`) y el determinismo.
+//! dentro (Q5 del autor), que ningún Aeda queda ocioso, la foto `BAN39` (hoy `BAN41`) y el determinismo.
 //!
 //! Dos plazas: A, de la Facción 1 («ana»), y B, de la Facción 2 («bea»). La metalurgia del cobre tiene en estas pruebas el logro `plazasEnNivel.2 ≥ 1` (lo cumple `FijarNivelAsentamiento`);
 //! la descubre la Facción 1 por administración (`FijarTecnologias`), y desde entonces los Aedas la conocen a las 24 h.
@@ -437,7 +437,7 @@ fn la_foto_ban39_lleva_los_aedas_y_su_evento_y_ban38_se_rechaza() {
     let reglas = e.n.estado().reglas.clone();
     let mundo_hash = e.n.estado().mundo_hash.clone();
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN40");
+    assert_eq!(&bytes[..5], b"BAN41");
     let vuelta = Estado::deserializar(&bytes, &reglas, &mundo_hash).unwrap();
     assert_eq!(vuelta.serializar(), bytes);
     assert_eq!(vuelta.hash(), e.n.estado().hash());

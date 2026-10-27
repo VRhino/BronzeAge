@@ -170,7 +170,7 @@ impl Nucleo {
                 }
                 Ok(None)
             }
-            Comando::PrepararCaravana { caravana, destino, carga, salir_en } => self.preparar_caravana(t, p, *caravana, *destino, carga, *salir_en),
+            Comando::PrepararCaravana { caravana, destino, carga, salir_en, escolta } => self.preparar_caravana(t, p, *caravana, *destino, carga, *salir_en, escolta.as_ref()),
             Comando::CancelarCaravana { caravana } => {
                 let (i, origen) = self.caravana_de_orden(p, *caravana)?;
                 let (devuelto, perdido) = self.cancelar_preparacion(i, origen).map_err(de_caravana)?;
@@ -231,13 +231,26 @@ impl Nucleo {
 
     /// `prepararCaravana` (§5.6): valida con el crate sobre una copia, reserva la carga del almacén y deja la caravana `preparando` hasta
     /// `sale_en`, o la hace salir ya si no hay espera (un solo carro y sin `salir_en`). La ruta es el trazado de §7.2 (zonas ajenas con peaje y
-    /// atracción de la red); se registra en la red aunque luego se cancele.
-    fn preparar_caravana(&mut self, t: Instante, p: &Peticion, caravana: u64, destino: u64, carga: &[(Recurso, Mil)], salir_en: Option<Instante>) -> Result<Option<u64>, Respuesta> {
+    /// atracción de la red); se registra en la red aunque luego se cancele. Con `escolta`, el héroe cede esas escuadras en el mismo lanzamiento, con las
+    /// mismas condiciones que `asignarEscolta` y dentro del mismo cupo (paridad P5): o sale todo o nada.
+    #[allow(clippy::too_many_arguments)]
+    fn preparar_caravana(&mut self, t: Instante, p: &Peticion, caravana: u64, destino: u64, carga: &[(Recurso, Mil)], salir_en: Option<Instante>, escolta: Option<&(u64, Vec<u64>)>) -> Result<Option<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         let cr = self.estado.reglas.economia.comercio.clone();
         let (i, origen_id) = self.caravana_de_orden(p, caravana)?;
         self.plaza_o_rechazo(destino)?;
+        let escolta_nueva = match escolta {
+            Some((heroe, escuadras)) => {
+                self.autorizar_heroe(p, *heroe, false)?;
+                let nuevas = self.seleccionar_escolta(*heroe, escuadras, origen_id).map_err(|e| {
+                    let (c, m) = rechazo_de_caravana(e);
+                    rechazo(c, m.into())
+                })?;
+                Some((*heroe, nuevas))
+            }
+            None => None,
+        };
         let origen = &self.estado.asentamientos[&origen_id];
         let (cupos, factores) = (self.cupos_de(origen), self.factores_de(origen));
         // La ruta por tierra: sin ella el crate rechaza con `SinRuta` (después de las demás validaciones).
@@ -250,7 +263,7 @@ impl Nucleo {
         let lanzamiento = Lanzamiento {
             destino: id32(destino),
             carga: carga_por_recurso,
-            escolta_nueva: vec![],
+            escolta_nueva: escolta_nueva.as_ref().map(|(_, e)| e.clone()).unwrap_or_default(),
             cupo_escolta: cupos.escolta,
             salir_en,
             factor_capacidad: factores.capacidad,
@@ -268,6 +281,9 @@ impl Nucleo {
         self.estado.comercio.flota[i] = copia;
         self.estado.asentamientos.get_mut(&origen_id).expect("existe").economia.almacen = almacen;
         self.tr.tocar(Clase::Asentamiento, origen_id);
+        if let Some((heroe, nuevas)) = &escolta_nueva {
+            self.ceder_escolta(t, caravana, *heroe, nuevas, origen_id);
+        }
         if preparacion.estado == EstadoCaravana::Preparando {
             self.programar_comercio(preparacion.sale_en, entidad_caravana(caravana), SucesoComercio::FinPreparacion);
         } else {

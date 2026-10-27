@@ -254,11 +254,11 @@ async fn cada_sesion_abre_los_ambitos_que_le_corresponden_y_ninguno_mas() {
     let (_, b, mensajes) = w.conectar(hola("svc:srv", TipoCliente::ClienteServidorBatalla)).await;
     assert!(b.ambitos.is_empty() && mensajes.is_empty() && b.heroe_id.is_none());
 
-    // Un jugador sin héroe no tiene ámbitos: ve dónde puede nacer, con cuántos héroes viven ya en cada campamento (beto y gus, en el 0).
+    // Un jugador sin héroe no tiene ámbitos: ve dónde puede nacer, con cuántos héroes viven ya en cada campamento (beto y gus, en el 0) y cuántos lo eligieron para nacer (los cuatro, paridad P6).
     let (_, b, mensajes) = w.conectar(hola_con("nueva", TipoCliente::ClienteUnity, &[])).await;
     assert!(b.heroe_id.is_none() && b.faccion_id.is_none() && b.ambitos.is_empty() && mensajes.is_empty());
     let cero = b.campamentos_para_elegir.iter().find(|c| c.campamento_id == camp).expect("el campamento 0");
-    assert_eq!((cero.residentes, cero.eligieron_como_inicial), (2, 0));
+    assert_eq!((cero.residentes, cero.eligieron_como_inicial), (2, 4));
     assert_eq!(b.campamentos_para_elegir.len(), mundo().unwrap().0.campamentos().len());
 
     // Lo que un cliente diga conocer de un ámbito que no le corresponde no le abre nada: ni la plaza, ni la administración, ni una Facción ajena.

@@ -198,6 +198,7 @@ pub fn campamento(n: &Nucleo, c: u32) -> Option<pb::CampamentoMercenarios> {
         origen,
         edificios: std::iter::once(militar).chain(std::iter::repeat_n("vivienda".to_owned(), mr.mercenarios.viviendas)).collect(),
         residentes_ids: n.heroes().filter(|h| residente(h)).map(|h| ids::heroe(h.heroe.id)).collect(),
+        eligieron_como_inicial: n.eligieron_como_inicial(c),
         poblacion: Some(pb::Ritmo {
             valor_en_t0: reclutas.poblacion,
             t0_ms: reclutas.en,

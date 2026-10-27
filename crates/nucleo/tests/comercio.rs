@@ -705,7 +705,7 @@ fn preparar_reserva_la_carga_registra_el_fin_y_cancelar_la_devuelve_topada_por_l
     let (a, b) = (e.a, e.b);
     // Un casco sin animal no tiene capacidad; con un solo carro no hay preparación y la salida sería inmediata (3B-2).
     let c = e.ok("ana", Comando::CrearCaravana { asentamiento: a }).creadas[0];
-    let preparar = |carga: Vec<(Recurso, i64)>, salir_en| Comando::PrepararCaravana { caravana: c, destino: b, carga, salir_en };
+    let preparar = |carga: Vec<(Recurso, i64)>, salir_en| Comando::PrepararCaravana { caravana: c, destino: b, carga, salir_en, escolta: None };
     assert_eq!(e.rechazada("ana", preparar(vec![(Madera, 1_000)], None)), rechazos::CARAVANA_SIN_CAPACIDAD);
     e.ok("ana", Comando::AnadirCarro { caravana: c, tipo: TipoCarro::Basico });
     e.ok("ana", Comando::AnadirAnimal { caravana: c, carro: 0, animal: Animal::Buey });
@@ -717,8 +717,8 @@ fn preparar_reserva_la_carga_registra_el_fin_y_cancelar_la_devuelve_topada_por_l
     assert_eq!(e.rechazada("ana", preparar(vec![(Madera, -5)], Some(t + HORA))), rechazos::CARAVANA_CARGA_INVALIDA);
     assert_eq!(e.rechazada("ana", preparar(vec![(Estano, 1_000)], Some(t + HORA))), rechazos::CARAVANA_SIN_STOCK);
     assert_eq!(e.rechazada("beto", preparar(vec![(Madera, 1_000)], Some(t + HORA))), rechazos::NO_AUTORIZADO);
-    assert_eq!(e.rechazada("ana", Comando::PrepararCaravana { caravana: c, destino: 999, carga: vec![(Madera, 1_000)], salir_en: Some(t + HORA) }), rechazos::ASENTAMIENTO_DESCONOCIDO);
-    assert_eq!(e.rechazada("ana", Comando::PrepararCaravana { caravana: 999, destino: b, carga: vec![(Madera, 1_000)], salir_en: Some(t + HORA) }), rechazos::CARAVANA_DESCONOCIDA);
+    assert_eq!(e.rechazada("ana", Comando::PrepararCaravana { caravana: c, destino: 999, carga: vec![(Madera, 1_000)], salir_en: Some(t + HORA), escolta: None }), rechazos::ASENTAMIENTO_DESCONOCIDO);
+    assert_eq!(e.rechazada("ana", Comando::PrepararCaravana { caravana: 999, destino: b, carga: vec![(Madera, 1_000)], salir_en: Some(t + HORA), escolta: None }), rechazos::CARAVANA_DESCONOCIDA);
     assert_eq!(e.n.caravana(c).unwrap().estado, EstadoCaravana::Disponible, "un rechazo no cambia nada");
     // Con dos carros, la preparación cuenta (2 min por carro de más) y la carga se reserva ya.
     e.ok("ana", Comando::AnadirCarro { caravana: c, tipo: TipoCarro::Basico });
@@ -760,7 +760,7 @@ fn preparar_reserva_la_carga_registra_el_fin_y_cancelar_la_devuelve_topada_por_l
     // El fin de la preparación cancelada no vuelve a salir, y una caravana que se prepara de nuevo tiene su propio plazo.
     e.avanzar(10 * MIN);
     assert!(hechos(&e.n, "comercio.caravana_sale").is_empty());
-    e.ok("ana", Comando::PrepararCaravana { caravana: c, destino: b, carga: vec![(Madera, 10_000)], salir_en: None });
+    e.ok("ana", Comando::PrepararCaravana { caravana: c, destino: b, carga: vec![(Madera, 10_000)], salir_en: None, escolta: None });
     let t2 = e.n.ahora();
     e.avanzar(2 * MIN);
     assert_eq!(hechos(&e.n, "comercio.caravana_sale").iter().map(|h| (h.0, dato(h, "caravana"))).collect::<Vec<_>>(), vec![(t2 + 2 * MIN, c as i64)]);
@@ -879,7 +879,7 @@ fn en_el_mismo_instante_el_fin_de_preparacion_sale_antes_que_las_caducidades() {
     let vence = t0 + DIA;
     // La caducidad del trueque se programa primero; el fin de preparación y la orden, después, todos para `vence`.
     let tr = e.ok("ana", Comando::ProponerTrueque { a, b, lineas_a: vec![(Madera, 1_000)], lineas_b: vec![(Cobre, 1_000)] }).creadas[0];
-    e.ok("ana", Comando::PrepararCaravana { caravana: c, destino: b, carga: vec![(Madera, 10_000)], salir_en: Some(vence) });
+    e.ok("ana", Comando::PrepararCaravana { caravana: c, destino: b, carga: vec![(Madera, 10_000)], salir_en: Some(vence), escolta: None });
     e.avanzar_hasta(vence - 200 * MIN);
     let orden = e.ok("ana", Comando::ColocarOrdenMercado { asentamiento: a, venta: true, recurso: Madera, cantidad: 1_000, precio: Some(PUNTO) }).creadas[0];
     assert_eq!((e.n.acuerdo(tr).unwrap().expira_en, e.n.caravana(c).unwrap().prepara_hasta, e.n.libro_ordenes().orden(orden).unwrap().expira_en), (vence, Some(vence), vence));
@@ -940,8 +940,8 @@ fn una_plaza_que_cae_en_ruinas_cierra_sus_trueques_sin_penalizar_pierde_su_flota
         e.dar(plaza, Cobre, 200_000);
     }
     let salir = e.n.ahora() + 2 * DIA;
-    e.ok("ana", Comando::PrepararCaravana { caravana: ca, destino: b, carga: vec![(Cobre, 100_000)], salir_en: Some(salir) });
-    e.ok("beto", Comando::PrepararCaravana { caravana: cb, destino: a, carga: vec![(Cobre, 50_000)], salir_en: Some(salir) });
+    e.ok("ana", Comando::PrepararCaravana { caravana: ca, destino: b, carga: vec![(Cobre, 100_000)], salir_en: Some(salir), escolta: None });
+    e.ok("beto", Comando::PrepararCaravana { caravana: cb, destino: a, carga: vec![(Cobre, 50_000)], salir_en: Some(salir), escolta: None });
     let t1 = e.ok("ana", Comando::ProponerTrueque { a, b, lineas_a: vec![(Cobre, 1_000)], lineas_b: vec![(Piedra, 1_000)] }).creadas[0];
     e.ok("beto", Comando::AceptarTrueque { acuerdo: t1 });
     let t2 = e.ok("beto", Comando::ProponerTrueque { a: b, b: a, lineas_a: vec![(Piedra, 1_000)], lineas_b: vec![(Cobre, 1_000)] }).creadas[0];
@@ -1003,7 +1003,7 @@ fn la_conquista_pasa_la_flota_anula_los_trueques_devuelve_las_caravanas_y_destru
     }
     e.dar(b, Cobre, 100_000);
     let salir = e.n.ahora() + 2 * DIA;
-    e.ok("beto", Comando::PrepararCaravana { caravana: cb, destino: a, carga: vec![(Cobre, 20_000)], salir_en: Some(salir) });
+    e.ok("beto", Comando::PrepararCaravana { caravana: cb, destino: a, carga: vec![(Cobre, 20_000)], salir_en: Some(salir), escolta: None });
     let cc1 = e.caravana_aparcada_en("ana", c, col_a, a, 1);
     e.avanzar(11 * MIN);
     let cc2 = e.caravana_aparcada_en("ana", c, col_a, a, 1);
@@ -1065,7 +1065,7 @@ fn guion(e: &mut Escenario, avanzar: &dyn Fn(&mut Escenario, Instante)) {
     let v = e.ok("ana", Comando::ColocarOrdenMercado { asentamiento: a, venta: true, recurso: Madera, cantidad: 50_000, precio: Some(2 * PUNTO) }).creadas[0];
     avanzar(e, base + 10 * MIN);
     e.ok_en(base + 10 * MIN, "beto", Comando::ComerciarEnPlaza { ejercito: col, orden: v, cantidad: 20_000 });
-    e.ok_en(base + 10 * MIN, "ana", Comando::PrepararCaravana { caravana: c, destino: b, carga: vec![(Madera, 100_000)], salir_en: Some(base + 3 * HORA) });
+    e.ok_en(base + 10 * MIN, "ana", Comando::PrepararCaravana { caravana: c, destino: b, carga: vec![(Madera, 100_000)], salir_en: Some(base + 3 * HORA), escolta: None });
     avanzar(e, base + HORA);
     let v2 = e.ok_en(base + HORA, "ana", Comando::ColocarOrdenMercado { asentamiento: a, venta: false, recurso: Cobre, cantidad: 5_000, precio: None }).creadas[0];
     e.ok_en(base + HORA, "ana", Comando::CancelarOrdenMercado { orden: v2 });
@@ -1122,7 +1122,7 @@ fn recuperar_desde_foto_en_mitad_de_un_trueque_da_el_mismo_mundo() {
             e.ok("ana", Comando::AnadirAnimal { caravana: c, carro: k, animal: Animal::Buey });
         }
         let salir = e.n.ahora() + 12 * HORA;
-        e.ok("ana", Comando::PrepararCaravana { caravana: c, destino: b, carga: vec![(Madera, 50_000)], salir_en: Some(salir) });
+        e.ok("ana", Comando::PrepararCaravana { caravana: c, destino: b, carga: vec![(Madera, 50_000)], salir_en: Some(salir), escolta: None });
         let v = e.ok("ana", Comando::ColocarOrdenMercado { asentamiento: a, venta: true, recurso: Madera, cantidad: 30_000, precio: Some(PUNTO) }).creadas[0];
         e.ok("beto", Comando::ComerciarEnPlaza { ejercito: col, orden: v, cantidad: 10_000 });
         c
@@ -1238,7 +1238,7 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
     let rep = reglas.economia.comercio.reputacion.clone();
     let base = estado_con_comercio();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN40");
+    assert_eq!(&bytes[..5], b"BAN41");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.comercio, base.comercio);
