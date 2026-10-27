@@ -804,7 +804,8 @@ impl Nucleo {
         // La guarnición de serie nace completa la primera vez que se la necesita.
         if !self.estado.combate.guarniciones.contains_key(&x) {
             let sid = self.nuevo_id();
-            let escuadra = reglas_pueblo::guarnicion_de_serie(&cr, sid, t);
+            let aldea = self.pueblo(x).is_some_and(|(_, p)| p.es_aldea());
+            let escuadra = reglas_pueblo::guarnicion_de_serie(&cr, sid, aldea, t);
             self.estado.combate.guarniciones.insert(x, crate::estado_combate::GuarnicionDePueblo { escuadra, repone_en: None });
             self.tr.tocar(Clase::Pueblo, x);
         }
@@ -845,6 +846,9 @@ impl Nucleo {
             let mut carros = [CarroDeColumna { carga, capacidad }];
             let almacen = &mut self.estado.asentamientos.get_mut(&madre).expect("existe").economia.pueblos.iter_mut().find(|p| p.id == x).expect("existe").almacen;
             llevado = reglas_pueblo::saquear(&cr, almacen, &mut carros);
+            for (r, n) in self.saquear_rebano(madre, x, &mut carros) {
+                *llevado.entry(r).or_insert(0) += n;
+            }
             let [CarroDeColumna { carga, .. }] = carros;
             self.estado.ejercitos.get_mut(&id).expect("existe").columna.carga = carga;
             self.tr.tocar(Clase::Ejercito, id);
@@ -877,7 +881,7 @@ impl Nucleo {
     /// §7.3: uno cada 12 minutos desde la primera baja; un combate durante la reposición no la reinicia).
     pub(super) fn guardar_guarnicion(&mut self, pueblo: u64, escuadra: Escuadra, t: Instante) {
         let cr = self.estado.reglas.economia.combate.clone();
-        let incompleta = escuadra.cantidad < cr.pueblos.mineros;
+        let incompleta = escuadra.cantidad < reglas_pueblo::completa(&cr, &escuadra);
         let g = self.estado.combate.guarniciones.get_mut(&pueblo).expect("existe");
         self.tr.tocar(Clase::Pueblo, pueblo);
         g.escuadra = escuadra;

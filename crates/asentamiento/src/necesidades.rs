@@ -3,7 +3,7 @@
 //! compromete (se paga y se encola) en orden de score mientras haya cupo y fondos. Nunca elige dónde: eso es del trazado.
 //!
 //! Cambios de la reconstrucción respecto a TypeScript, ya decididos: los minerales y toda Cantera salvo la primera van por pueblo
-//! extractor (Doc 4.2.2), así que la cola automática solo propone la primera Cantera y el Corral; un candidato que no se
+//! extractor (Doc 4.2.2), así que la cola automática solo propone la primera Cantera (el Corral es de las aldeas agrícolas, §14.2); un candidato que no se
 //! compromete no deja rastro.
 
 use crate::asentamiento::{Asentamiento, Evento, Exterior};
@@ -108,16 +108,12 @@ impl Asentamiento {
             }
         }
 
-        // 3. Extractores internos: la primera Cantera (sin piedra no hay ascenso al nivel 2) y el Corral.
-        for tipo in [Tipo::Cantera, Tipo::Corral] {
-            let existentes = self.edificios.en_cualquier_estado(tipo) as u32;
-            let necesita = if tipo == Tipo::Cantera { existentes == 0 } else { existentes < c.extraccion_maxima_por_tipo };
-            if !necesita || self.pendiente(tipo) || !self.puede_pagar(r, x, tipo, reserva) {
-                continue;
-            }
+        // 3. Extractores internos: la primera Cantera (sin piedra no hay ascenso al nivel 2). El Corral es de las aldeas agrícolas.
+        let tipo = Tipo::Cantera;
+        if self.edificios.en_cualquier_estado(tipo) == 0 && !self.pendiente(tipo) && self.puede_pagar(r, x, tipo, reserva) {
             if let Some(fuente) = self.proponer(x, tipo, &u, ev) {
                 let sin_cupo = self.extractor_minutos_sin_cupo.iter().find(|(t, _)| *t == tipo).map_or(0, |p| p.1);
-                let urgencia = if existentes > 0 { 40 } else { 100 } + (sin_cupo * c.extractor_bonus_por_minuto).min(c.extractor_bonus_maximo);
+                let urgencia = 100 + (sin_cupo * c.extractor_bonus_por_minuto).min(c.extractor_bonus_maximo);
                 candidatos.push(Candidato { tipo, score: c.bandas.extractor_base + urgencia, fuente });
                 propuestos_extractor.push(tipo);
             }

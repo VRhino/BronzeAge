@@ -564,14 +564,20 @@ fn radio_que_ocupan(piezas: &[PiezaVista]) -> i32 {
 /// **el radio que necesiten sus piezas** (Economia_Construccion §14: la planta es un espacio interno; en el mapa el pueblo sigue ocupando 0,2).
 /// Función pura de la semilla del núcleo y del id del pueblo: no se guarda y el mismo pueblo da siempre la misma planta. Es lo que se ve dentro
 /// y el mapa de su batalla de saqueo. Los ids de las piezas son sus posiciones en la planta (el ancla es la 0), no ids de edificio de ninguna
-/// economía.
-pub fn planta_de_pueblo(reglas: &crate::ReglasEconomia, semilla_nucleo: u64, id_pueblo: u64, extractor: Tipo) -> VistaCiudad {
+/// economía. Una aldea agrícola (§14.2) tiene una Granja por ancla y, en las afueras, el resto de sus `granjas` y sus `corrales` (`aldea`, los de su nivel):
+/// su planta cambia al subir de nivel.
+pub fn planta_de_pueblo(reglas: &crate::ReglasEconomia, semilla_nucleo: u64, id_pueblo: u64, extractor: Tipo, aldea: Option<(u32, u32)>) -> VistaCiudad {
     let urb = &reglas.urbanismo;
     let semilla = trazado::hash(semilla_nucleo, "pueblo", &[id_pueblo as i64]);
     let perfil = Perfil::por_tradicion(semilla);
     let base = urb.parametros(&reglas.datos);
     let casas = reglas.datos.pueblos.casas_de_la_planta as usize;
-    let resto: Vec<(Tipo, Categoria)> = std::iter::repeat_n((Tipo::Vivienda, Categoria::Residencial), casas).chain([(Tipo::Almacen, Categoria::Generico), (Tipo::Corral, Categoria::Afueras)]).collect();
+    let (granjas, corrales) = aldea.map_or((0, 0), |(g, c)| (g.saturating_sub(1) as usize, c as usize));
+    let resto: Vec<(Tipo, Categoria)> = std::iter::repeat_n((Tipo::Vivienda, Categoria::Residencial), casas)
+        .chain([(Tipo::Almacen, Categoria::Generico), (Tipo::Corral, Categoria::Afueras)])
+        .chain(std::iter::repeat_n((Tipo::Granja, Categoria::Afueras), granjas))
+        .chain(std::iter::repeat_n((Tipo::Corral, Categoria::Afueras), corrales))
+        .collect();
     let trazar = |radio_ul: i32| {
         let params = Parametros { radio_inicial_ul: radio_ul, radio_afueras_min_ul: radio_ul / 2, ancho_banda_afueras_ul: radio_ul / 2, ..base };
         let pedido = |id: u32, tipo: Tipo, categoria: Categoria, rol: Rol| Pedido { id, tipo: tipo_a_u16(tipo), categoria, rol, huella: urb.huella(tipo, 1), permitir_rotacion: true, perfil, radio_ul };
@@ -714,9 +720,9 @@ mod pruebas {
     #[test]
     fn la_planta_de_un_pueblo_sale_de_su_id_con_la_mina_de_ancla_y_no_se_guarda() {
         let r = ReglasEconomia::default();
-        let a = planta_de_pueblo(&r, 42, 7, Tipo::MinaCobre);
-        assert_eq!(a, planta_de_pueblo(&r, 42, 7, Tipo::MinaCobre), "función pura");
-        assert_ne!(a, planta_de_pueblo(&r, 42, 8, Tipo::MinaCobre), "cada pueblo tiene la suya");
+        let a = planta_de_pueblo(&r, 42, 7, Tipo::MinaCobre, None);
+        assert_eq!(a, planta_de_pueblo(&r, 42, 7, Tipo::MinaCobre, None), "función pura");
+        assert_ne!(a, planta_de_pueblo(&r, 42, 8, Tipo::MinaCobre, None), "cada pueblo tiene la suya");
         assert_eq!((a.piezas[0].id, a.piezas[0].tipo, a.piezas[0].centro), (0, Tipo::MinaCobre, Punto::new(1_500, 1_500)), "el ancla en el origen");
         let de = |t: Tipo| a.piezas.iter().filter(|p| p.tipo == t).count();
         assert_eq!((de(Tipo::Vivienda), de(Tipo::Almacen), de(Tipo::Corral)), (6, 1, 1), "6 casas, el almacén y el corral del buey");
@@ -724,10 +730,22 @@ mod pruebas {
     }
 
     #[test]
+    fn la_planta_de_una_aldea_lleva_sus_granjas_y_sus_corrales_y_crece_con_el_nivel() {
+        let r = ReglasEconomia::default();
+        let de = |v: &VistaCiudad, t: Tipo| v.piezas.iter().filter(|p| p.tipo == t).count();
+        let uno = planta_de_pueblo(&r, 42, 7, Tipo::Granja, Some((2, 1)));
+        assert_eq!(uno.piezas[0].tipo, Tipo::Granja, "una Granja de ancla");
+        assert_eq!((de(&uno, Tipo::Granja), de(&uno, Tipo::Corral)), (2, 2), "2 granjas, su corral y el del buey");
+        let tres = planta_de_pueblo(&r, 42, 7, Tipo::Granja, Some((6, 3)));
+        assert_eq!((de(&tres, Tipo::Granja), de(&tres, Tipo::Corral)), (6, 4));
+        assert!(tres.radio_ul >= uno.radio_ul);
+    }
+
+    #[test]
     fn la_planta_de_un_pueblo_toma_el_radio_que_necesitan_sus_piezas() {
         let r = ReglasEconomia::default();
         for id in 0..40 {
-            let a = planta_de_pueblo(&r, 42, id, Tipo::MinaHierro);
+            let a = planta_de_pueblo(&r, 42, id, Tipo::MinaHierro, None);
             assert_eq!(a.piezas.len(), 1 + 6 + 2, "pueblo {id}: caben todas, también el corral de las afueras");
             // El radio de la planta cubre todas sus piezas (sin el tope de 8 u.): ninguna esquina queda fuera del disco.
             assert!(a.radio_ul > RADIO_MINIMO_DE_PUEBLO_UL, "pueblo {id}: 9 piezas con sus calles no caben en 8 u. ({} u.)", a.radio_ul);

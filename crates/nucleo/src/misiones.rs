@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, BTreeSet};
 pub const DOC_MISIONES: &str = include_str!("../../../Docs/Mechanics/Misiones.md");
 
 /// Los contadores que no se suman: se leen del estado (Misiones §3).
-pub const DE_ESTADO: &[&str] = &["mercado", "barracon", "nivel", "artesanos", "nobles", "capital"];
+pub const DE_ESTADO: &[&str] = &["mercado", "barracon", "nivel", "artesanos", "nobles", "aldeas", "capital"];
 
 /// De quién es una misión.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -299,7 +299,7 @@ mod pruebas {
         assert_eq!(r.de(ClaseDueno::Faccion).count(), 12);
         let f4 = r.buscar(ClaseDueno::Faccion, "F4").unwrap();
         assert_eq!(r.misiones[f4 as usize].previa, r.buscar(ClaseDueno::Faccion, "F3"));
-        assert!(!r.misiones[r.buscar(ClaseDueno::Asentamiento, "A1").unwrap() as usize].habilitada);
+        assert!(r.misiones[r.buscar(ClaseDueno::Asentamiento, "A1").unwrap() as usize].habilitada, "la A1 se activa con la aldea agrícola");
         assert_eq!(r.misiones[r.buscar(ClaseDueno::Heroe, "H1").unwrap() as usize].recompensa, Recompensa::Oro(10 * UNIDAD));
     }
 

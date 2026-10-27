@@ -86,6 +86,7 @@ fn rechazo_de_obra(e: ErrorObra) -> (&'static str, &'static str) {
         ErrorObra::TopeAlmacenes => (OBRA_TOPE_ALMACENES, "se alcanzó el máximo de Almacenes del nivel"),
         ErrorObra::TopeViviendas => (OBRA_TOPE_VIVIENDAS, "se alcanzó el máximo de Viviendas del nivel"),
         ErrorObra::NivelInsuficiente => (OBRA_NIVEL_INSUFICIENTE, "el nivel de la plaza no alcanza para ese edificio"),
+        ErrorObra::SoloEnAldea => (OBRA_SOLO_EN_ALDEA, "el Corral solo se levanta en una aldea agrícola"),
         ErrorObra::SoloPorPueblo => (OBRA_SOLO_POR_PUEBLO, "los minerales y toda Cantera tras la primera solo se explotan con un pueblo extractor"),
         ErrorObra::TopeTransformacion => (OBRA_TOPE_TRANSFORMACION, "se alcanzó el máximo de talleres de ese tipo del nivel"),
         ErrorObra::GranFundicion => (OBRA_GRAN_FUNDICION, "la Gran Fundición pide nivel de Facción, ser la capital y que no haya otra"),
@@ -106,6 +107,7 @@ fn rechazo_de_bloqueo(b: &Bloqueo) -> (&'static str, String) {
         Bloqueo::AscensoEnCurso => (ASCENSO_EN_CURSO, "ya hay un ascenso en curso".into()),
         Bloqueo::FaltaPoblacion => (ASCENSO_FALTA_POBLACION, "falta población".into()),
         Bloqueo::FaltanEdificios => (ASCENSO_FALTAN_EDIFICIOS, "faltan edificios".into()),
+        Bloqueo::FaltaAldea => (ASCENSO_FALTA_ALDEA, "falta una aldea agrícola activa".into()),
         Bloqueo::SinCupoDeFaccion => (ASCENSO_SIN_CUPO_DE_FACCION, "la Facción no tiene cupo para ese nivel".into()),
         Bloqueo::RecursosInsuficientes => (ASCENSO_RECURSOS_INSUFICIENTES, "faltan recursos para la obra de ascenso".into()),
         Bloqueo::Insolvente(r) => (ASCENSO_INSOLVENTE, format!("no cubriría el mantenimiento del nivel nuevo: {}", r.iter().map(|r| r.nombre()).collect::<Vec<_>>().join(", "))),
@@ -152,6 +154,9 @@ fn evento_nucleo(id: u64, t: Instante, punto: Punto, e: &EventoEco, reglas: &ase
         EventoEco::PuebloCompletado { id } => ("pueblo.completado", vec![("pueblo", *id as i64)]),
         EventoEco::PuebloLleno { id } => ("pueblo.almacen_lleno", vec![("pueblo", *id as i64)]),
         EventoEco::PuebloDestruido { id } => ("pueblo.destruido", vec![("pueblo", *id as i64)]),
+        EventoEco::AldeaMarcada { id, pos } => ("aldea.marcada", vec![("pueblo", *id as i64), ("x", pos.x), ("y", pos.y)]),
+        EventoEco::AldeaMejoraMarcada { id, nivel } => ("aldea.mejora_marcada", vec![("pueblo", *id as i64), ("nivel", i64::from(*nivel))]),
+        EventoEco::AldeaSubio { id, nivel } => ("aldea.subio", vec![("pueblo", *id as i64), ("nivel", i64::from(*nivel))]),
         EventoEco::AvanzadaObraMarcada { id, tipo, posicion } => ("avanzada.obra_marcada", vec![("avanzada", *id as i64), ("tipo", *tipo as i64), ("x", posicion.x), ("y", posicion.y)]),
         EventoEco::AvanzadaEntrega { id, cantidad } => ("avanzada.materiales_entregados", vec![("avanzada", *id as i64), ("cantidad", *cantidad)]),
         EventoEco::AvanzadaObraIniciada { id, tipo, completa_en } => ("avanzada.obra_iniciada", vec![("avanzada", *id as i64), ("tipo", *tipo as i64), ("completaEn", *completa_en)]),
@@ -298,7 +303,7 @@ impl Nucleo {
             let mut datos = vec![("nodo", nodo as i64), ("recurso", recurso(nodo))];
             if let Some(e) = a.economia.edificios.iter().find(|e| e.fuente == Some(Fuente::Nodo(nodo))) {
                 datos.extend([("edificio", e.id as i64), ("tipo", tipo_a_u8(e.tipo) as i64)]);
-            } else if let Some(p) = a.economia.pueblos.iter().find(|p| p.nodo == nodo) {
+            } else if let Some(p) = a.economia.pueblos.iter().find(|p| p.nodo() == Some(nodo)) {
                 datos.extend([("pueblo", p.id as i64), ("tipo", tipo_a_u8(p.tipo) as i64)]);
             }
             hechos.push(("construccion.yacimiento_agotado", datos));
@@ -389,7 +394,10 @@ impl Nucleo {
                 | EventoEco::PuebloObraIniciada { id: pueblo, .. }
                 | EventoEco::PuebloCompletado { id: pueblo }
                 | EventoEco::PuebloLleno { id: pueblo }
-                | EventoEco::PuebloDestruido { id: pueblo } => self.tr.tocar(Clase::Pueblo, *pueblo),
+                | EventoEco::PuebloDestruido { id: pueblo }
+                | EventoEco::AldeaMarcada { id: pueblo, .. }
+                | EventoEco::AldeaMejoraMarcada { id: pueblo, .. }
+                | EventoEco::AldeaSubio { id: pueblo, .. } => self.tr.tocar(Clase::Pueblo, *pueblo),
                 EventoEco::AvanzadaObraMarcada { id: avanzada, .. }
                 | EventoEco::AvanzadaEntrega { id: avanzada, .. }
                 | EventoEco::AvanzadaCompletada { id: avanzada, .. }
@@ -410,7 +418,10 @@ impl Nucleo {
         self.tr.tocar(Clase::Asentamiento, id);
         self.misiones_de_sucesos(id, t, sucesos);
         // Un edificio que se completa o se mejora y un ascenso son disparadores de la aparición de su Facción (6C, `edificio` y `capitalEnNivel`).
-        if sucesos.iter().any(|s| matches!(s, EventoEco::EdificioCompletado { .. } | EventoEco::MejoraCompletada { .. } | EventoEco::NivelSubio { .. })) {
+        let aldeas: Vec<u64> = self.estado.asentamientos.get(&id).map(|a| a.economia.pueblos.iter().filter(|p| p.es_aldea()).map(|p| p.id).collect()).unwrap_or_default();
+        let es_aldea = |p: u64| aldeas.contains(&p);
+        let aldea_completada = sucesos.iter().any(|s| matches!(*s, EventoEco::PuebloCompletado { id: p } if es_aldea(p)));
+        if aldea_completada || sucesos.iter().any(|s| matches!(s, EventoEco::EdificioCompletado { .. } | EventoEco::MejoraCompletada { .. } | EventoEco::NivelSubio { .. })) {
             self.mirar_aparicion(faccion);
         }
         // Los hechos de épica de la plaza (6E, TA §7.2): la obra (con el tipo del edificio) y el ascenso. Un Palacio completado puede abrir el cupo de residentes.
@@ -426,6 +437,8 @@ impl Nucleo {
                     tipo.map(|tipo| tecnologia::epicas::Hecho::obra(id as u32, faccion, e, tipo, Some(nivel)))
                 }
                 EventoEco::NivelSubio { nivel } => Some(tecnologia::epicas::Hecho::ascenso(id as u32, faccion, nivel.min(u8::MAX as u32) as u8)),
+                // La aldea agrícola levanta los corrales de la Facción: es la «obra de corral» de las épicas (con su id de pueblo, apartado de los de edificio).
+                EventoEco::PuebloCompletado { id: p } if es_aldea(p) => Some(tecnologia::epicas::Hecho::obra(id as u32, faccion, 0x8000_0000 | p as u32, Tipo::Corral, None)),
                 _ => None,
             };
             self.hecho_epico(hecho);
@@ -463,13 +476,15 @@ impl Nucleo {
         // Los pueblos desaparecen con su madre (Doc 4.2.2); sus carros, que la tienen por origen, se pierden en la cascada de comercio. Con las avanzadas, la atalaya y el
         // fuerte desaparecen y la ciudadela queda como ruina sin dueño (Doc 5.17).
         for p in &a.economia.pueblos {
-            self.estado.nodos_reclamados.remove(&p.nodo);
+            if let Some(n) = p.nodo() {
+                self.estado.nodos_reclamados.remove(&n);
+            }
             self.tr.tocar(Clase::Pueblo, p.id);
             self.olvidar_ruta_de_acarreo(p.id);
         }
         // Quien estaba dentro de sus pueblos o avanzadas sale al mapa con lo suyo, a la puerta de cada uno.
         let nodos = self.geografia.as_ref().map_or(&[][..], |g| &g.mapa.nodos[..]);
-        let pueblos: Vec<(u64, Punto)> = a.economia.pueblos.iter().filter_map(|p| nodos.get(p.nodo as usize).map(|n| (p.id, n.pos))).collect();
+        let pueblos: Vec<(u64, Punto)> = a.economia.pueblos.iter().filter_map(|p| crate::economia::posicion_de_pueblo(nodos, p).map(|pos| (p.id, pos))).collect();
         let avanzadas: Vec<(u64, Punto)> = a.economia.avanzadas.iter().map(|v| (v.id, v.posicion)).collect();
         self.vaciar_pueblos_y_avanzadas(t, id, &pueblos, &avanzadas);
         self.avanzadas_de_la_madre_arruinada(a.economia.avanzadas, t);

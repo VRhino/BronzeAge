@@ -771,8 +771,8 @@ pub fn pueblo(n: &Nucleo, madre: u64, p: &Pueblo) -> pb::Pueblo {
         id: ids::pueblo(p.id),
         version: n.version_de(Clase::Pueblo, p.id),
         asentamiento_madre_id: ids::asentamiento(madre),
-        nodo_id: ids::nodo(p.nodo),
-        tipo_extractor: p.tipo.nombre().into(),
+        nodo_id: p.nodo().map(ids::nodo).unwrap_or_default(),
+        tipo_extractor: p.nombre_de_tipo().into(),
         posicion: n.posicion_de_pueblo(p.id).map(punto),
         almacen_local: Some(existencia(&p.almacen, recurso, 0)),
         carro_acarreo_id: p.carro.map(ids::caravana),
@@ -780,6 +780,18 @@ pub fn pueblo(n: &Nucleo, madre: u64, p: &Pueblo) -> pb::Pueblo {
         guarnicion_repone_en_ms: guarnicion.and_then(|g| g.repone_en),
         batalla_id: batalla_sobre(n, Ubicacion::Pueblo(p.id)),
         version_interior: n.version_interior(madre).unwrap_or(0),
+        nivel_aldea: p.es_aldea().then_some(p.nivel),
+        fertilidad: match p.sitio {
+            asentamiento::pueblos::Sitio::Punto { fertilidad, .. } => Some(fertilidad / 1000),
+            asentamiento::pueblos::Sitio::Nodo(_) => None,
+        },
+        almacen_por_recurso: if p.es_aldea() {
+            p.recursos(&e.reglas.economia.datos).into_iter().map(|r| (r.nombre().to_owned(), existencia(&p.almacen, r, 0))).collect()
+        } else {
+            Default::default()
+        },
+        rebano_especie: p.rebano.as_ref().map(|r| r.especie.clone()),
+        rebano_cabezas: p.rebano.as_ref().map(|r| r.cabezas),
     }
 }
 
@@ -787,25 +799,32 @@ fn requerido(costo: &[(Recurso, Mil)]) -> pb::Cantidades {
     cantidades(costo.iter().copied())
 }
 
-/// La obra de un pueblo que aún no está activo. DUDA: una vez que arranca (`EnObra`) el núcleo ya no guarda lo pedido y lo entregado: salen vacíos y queda `termina_en_ms`.
-pub fn obra_de_pueblo(n: &Nucleo, madre: u64, p: &Pueblo) -> pb::ObraDeMapa {
-    let (req, ent, termina) = match &p.estado {
+/// La obra de un pueblo que aún no está activo, o la subida de nivel de una aldea agrícola activa (`None`: activo y sin subida). DUDA: una vez que arranca
+/// (`EnObra`) el núcleo ya no guarda lo pedido y lo entregado: salen vacíos y queda `termina_en_ms`.
+pub fn obra_de_pueblo(n: &Nucleo, madre: u64, p: &Pueblo) -> Option<pb::ObraDeMapa> {
+    let (estado, tipo, destino) = match (&p.estado, &p.mejora) {
+        (EstadoPueblo::Activo, Some(m)) => (m, pb::TipoObra::ObraMejoraAldea, Some(ids::pueblo(p.id))),
+        (EstadoPueblo::Activo, None) => return None,
+        (e, _) => (e, if p.es_aldea() { pb::TipoObra::ObraAldea } else { pb::TipoObra::ObraPueblo }, None),
+    };
+    let (req, ent, termina) = match estado {
         EstadoPueblo::Pendiente { requerido: r, entregado } => (r.clone(), entregado.clone(), None),
         EstadoPueblo::EnObra { completa_en } => (Vec::new(), Vec::new(), Some(*completa_en)),
         EstadoPueblo::Activo => (Vec::new(), Vec::new(), None),
     };
-    pb::ObraDeMapa {
+    Some(pb::ObraDeMapa {
         id: ids::obra(p.id),
         version: n.version_de(Clase::Pueblo, p.id),
         asentamiento_madre_id: ids::asentamiento(madre),
-        tipo: pb::TipoObra::ObraPueblo as i32,
+        tipo: tipo as i32,
         posicion: n.posicion_de_pueblo(p.id).map(punto),
-        nodo_id: Some(ids::nodo(p.nodo)),
+        nodo_id: p.nodo().map(ids::nodo),
+        destino_id: destino,
         requerido: Some(requerido(&req)),
         entregado: Some(requerido(&ent)),
         termina_en_ms: termina,
         ..Default::default()
-    }
+    })
 }
 
 /// La avanzada que ya es un puesto (operativa o en ruinas). La primera obra, la mejora y la reparación van aparte, en [`obra_de_avanzada`].
@@ -1005,9 +1024,15 @@ pub fn proyectar(n: &Nucleo, quien: Espectador, clase: Clase, id: u64) -> Proyec
         }
         Clase::Pueblo => {
             let (pueblo_id, obra_id) = (ids::pueblo(id), ids::obra(id));
-            let encontrado = n.pueblo(id);
-            let existe = encontrado.map(|(madre, p)| if p.activo() { (T::Pueblo, pueblo_id.clone(), Cuerpo::Pueblo(pueblo(n, madre, p))) } else { (T::ObraDeMapa, obra_id.clone(), Cuerpo::Obra(obra_de_pueblo(n, madre, p))) });
-            Proyeccion { posibles: vec![(T::Pueblo, pueblo_id), (T::ObraDeMapa, obra_id)], existen: existe.into_iter().collect() }
+            let mut existen = Vec::new();
+            if let Some((madre, p)) = n.pueblo(id) {
+                if p.activo() {
+                    existen.push((T::Pueblo, pueblo_id.clone(), Cuerpo::Pueblo(pueblo(n, madre, p))));
+                }
+                // La obra del pueblo mientras no está activo; la de la subida de nivel de una aldea activa, junto al pueblo.
+                existen.extend(obra_de_pueblo(n, madre, p).map(|o| (T::ObraDeMapa, obra_id.clone(), Cuerpo::Obra(o))));
+            }
+            Proyeccion { posibles: vec![(T::Pueblo, pueblo_id), (T::ObraDeMapa, obra_id)], existen }
         }
         Clase::Avanzada => {
             let (av_id, obra_id) = (ids::avanzada(id), ids::obra(id));

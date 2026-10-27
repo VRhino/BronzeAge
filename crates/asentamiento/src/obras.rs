@@ -23,6 +23,8 @@ pub enum ErrorObra {
     NivelInsuficiente,
     /// Los minerales y toda Cantera después de la primera solo se explotan con un pueblo extractor (Doc 4.2.2).
     SoloPorPueblo,
+    /// El Corral solo existe en las aldeas agrícolas (§14.2).
+    SoloEnAldea,
     TopeTransformacion,
     GranFundicion,
     ColaLlena,
@@ -211,6 +213,9 @@ impl Asentamiento {
         let c = &r.construccion;
         if tipo.es_de_pueblo() && (tipo != Tipo::Cantera || self.edificios.en_cualquier_estado(Tipo::Cantera) > 0) {
             return Err(ErrorObra::SoloPorPueblo);
+        }
+        if tipo.solo_en_aldea() {
+            return Err(ErrorObra::SoloEnAldea);
         }
         if def.tecnologia.as_deref().is_some_and(|t| !(x.tiene_tecnologia)(t)) {
             return Err(ErrorObra::TecnologiaFaltante);

@@ -340,8 +340,8 @@ message Pueblo {
   string id = 1;
   uint64 version = 2;
   string asentamiento_madre_id = 3;
-  string nodo_id = 4;
-  string tipo_extractor = 5;             // id de catálogo (cantera, mina, minaCobre...)
+  string nodo_id = 4;                    // vacío en una aldea agrícola (está en un punto, sin nodo)
+  string tipo_extractor = 5;             // id de catálogo (cantera, mina, minaCobre...) o `aldeaAgricola`
   Punto posicion = 6;
   Existencia almacen_local = 7;          // cantidad como ritmo (extracción); capacidad 500
   optional string carro_acarreo_id = 8;  // caravana de tipo acarreo; ausente = hay que reponerlo
@@ -352,6 +352,15 @@ message Pueblo {
   // almacén local sin avanzar `version`, así que esta dice de qué minuto es. Solo `ASENTAMIENTO` lo refresca por minuto (en `FACCION` el
   // almacén local llega con el último cambio discreto del pueblo).
   uint64 version_interior = 12;
+  // Aldea agrícola (Economia_Construccion §14.2): su nivel (1 a 3; ausente en un extractor), la fertilidad del punto (milésimas: 1000 = 1,0) y su almacén
+  // local por recurso (trigo y ganado, que comparten la capacidad de `almacen_local`). `almacen_local` lleva el trigo.
+  optional uint32 nivel_aldea = 13;
+  optional sint64 fertilidad = 14;
+  map<string, Existencia> almacen_por_recurso = 15;
+  // Su rebaño (Economia_Construccion §14.3, la cría): la especie (id de `ESPECIES`, «vacuno») y las cabezas en milésimas (crece continuo). Ausentes en un
+  // extractor y en una aldea que aún no se ha completado. El tope y el pie de cría salen de `ESPECIES` por los corrales de su nivel.
+  optional string rebano_especie = 16;
+  optional sint64 rebano_cabezas = 17;
 }
 
 enum EstadoAvanzada {
@@ -384,6 +393,8 @@ enum TipoObra {
   OBRA_AVANZADA = 2;
   OBRA_MEJORA_AVANZADA = 3;
   OBRA_REPARACION = 4;
+  OBRA_ALDEA = 5;                        // la aldea agrícola, pendiente de materiales o levantándose
+  OBRA_MEJORA_ALDEA = 6;                 // la subida de nivel de una aldea activa (destino_id: la aldea)
 }
 
 // Obra de mapa «pendiente de materiales»: se ve en el mapa pero no se puede atacar; ocupa cupo desde que se marca.
@@ -393,7 +404,7 @@ message ObraDeMapa {
   string asentamiento_madre_id = 3;
   TipoObra tipo = 4;
   Punto posicion = 5;
-  optional string nodo_id = 6;           // pueblos
+  optional string nodo_id = 6;           // pueblos extractores (la aldea agrícola no tiene nodo)
   optional string destino_id = 7;        // mejora o reparación de una avanzada
   Cantidades requerido = 8;
   Cantidades entregado = 9;

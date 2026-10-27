@@ -23,6 +23,8 @@ pub struct Requisito {
     /// Nivel mínimo del recinto de muralla (2 = de piedra), con integridad completa.
     pub recinto_nivel_minimo: Option<u32>,
     pub nivel_interno_minimo: BTreeMap<Tipo, u8>,
+    /// Aldeas agrícolas activas que pide (`aldeasAgricolas`; el nivel 2 pide una).
+    pub aldeas: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -46,6 +48,8 @@ pub struct ReglasNivel {
 pub enum Falta {
     Poblacion,
     Edificios,
+    /// Falta la aldea agrícola activa que pide el nivel.
+    Aldea,
 }
 
 impl ReglasNivel {
@@ -65,6 +69,7 @@ impl ReglasNivel {
                         .as_object()
                         .map(|o| o.iter().filter_map(|(k, x)| Some((Tipo::desde_nombre(k)?, x.as_f64()? as u8))).collect())
                         .unwrap_or_default(),
+                    aldeas: v["aldeasAgricolas"].as_f64().unwrap_or(0.0) as u32,
                 };
                 (n, r)
             })
@@ -88,8 +93,8 @@ impl ReglasNivel {
     }
 
     /// `evaluarGatesDeNivel`: lo que falta para el nivel objetivo (vacío = se cumple). `None` si ese nivel no tiene requisito.
-    /// `recinto_nivel` es el nivel del mejor recinto completo (0 si no hay).
-    pub fn gates(&self, objetivo: u32, edificios: &[Edificio], pesants: i64, artesanos: i64, recinto_nivel: u32) -> Option<Vec<Falta>> {
+    /// `recinto_nivel` es el nivel del mejor recinto completo (0 si no hay); `aldeas`, las aldeas agrícolas activas de la plaza.
+    pub fn gates(&self, objetivo: u32, edificios: &[Edificio], pesants: i64, artesanos: i64, recinto_nivel: u32, aldeas: u32) -> Option<Vec<Falta>> {
         let req = self.requisitos.get(&objetivo)?;
         let mut faltas = vec![];
         if pesants < req.pesants || artesanos < req.artesanos {
@@ -99,6 +104,9 @@ impl ReglasNivel {
         let cumple_recinto = req.recinto_nivel_minimo.map_or(true, |m| recinto_nivel >= m);
         if construidos < req.edificios_minimo.unwrap_or(req.edificios.len()) || !cumple_recinto {
             faltas.push(Falta::Edificios);
+        }
+        if aldeas < req.aldeas {
+            faltas.push(Falta::Aldea);
         }
         Some(faltas)
     }
@@ -145,25 +153,27 @@ mod pruebas {
     }
 
     #[test]
-    fn el_nivel_2_pide_200_pesants_y_tres_de_los_siete_tipos_de_extraccion() {
+    fn el_nivel_2_pide_200_pesants_dos_de_cantera_lenera_y_granja_y_una_aldea_agricola() {
         let r = Reglas::cargar().nivel;
-        let dos = activos(&[(Tipo::Cantera, 1), (Tipo::Lenera, 1)]);
-        assert_eq!(r.gates(2, &dos, 200, 0, 0), Some(vec![Falta::Edificios]));
-        let tres = activos(&[(Tipo::Cantera, 1), (Tipo::Lenera, 1), (Tipo::Granja, 1), (Tipo::Granja, 1)]);
-        assert_eq!(r.gates(2, &tres, 200, 0, 0), Some(vec![]), "dos Granjas cuentan como un solo tipo");
-        assert_eq!(r.gates(2, &tres, 199, 0, 0), Some(vec![Falta::Poblacion]));
-        assert_eq!(r.gates(9, &tres, 0, 0, 0), None);
+        let uno = activos(&[(Tipo::Cantera, 1), (Tipo::Corral, 1), (Tipo::Mina, 1)]);
+        assert_eq!(r.gates(2, &uno, 200, 0, 0, 1), Some(vec![Falta::Edificios]), "ni el Corral ni las minas cuentan ya");
+        let dos = activos(&[(Tipo::Cantera, 1), (Tipo::Granja, 1), (Tipo::Granja, 1)]);
+        assert_eq!(r.gates(2, &dos, 200, 0, 0, 1), Some(vec![]), "dos Granjas cuentan como un solo tipo");
+        assert_eq!(r.gates(2, &dos, 200, 0, 0, 0), Some(vec![Falta::Aldea]));
+        assert_eq!(r.gates(2, &dos, 199, 0, 0, 1), Some(vec![Falta::Poblacion]));
+        assert_eq!(r.gates(9, &dos, 0, 0, 0, 0), None);
+        assert_eq!(r.requisitos[&3].aldeas, 0, "solo el nivel 2 pide la aldea");
     }
 
     #[test]
     fn el_nivel_4_pide_un_recinto_de_piedra_y_el_5_el_palacio_a_nivel_3() {
         let r = Reglas::cargar().nivel;
         let e = activos(&[(Tipo::SalaConsejo, 1)]);
-        assert_eq!(r.gates(4, &e, 1000, 800, 1), Some(vec![Falta::Edificios]), "la empalizada (nivel 1) no basta");
-        assert_eq!(r.gates(4, &e, 1000, 800, 2), Some(vec![]));
+        assert_eq!(r.gates(4, &e, 1000, 800, 1, 0), Some(vec![Falta::Edificios]), "la empalizada (nivel 1) no basta");
+        assert_eq!(r.gates(4, &e, 1000, 800, 2, 0), Some(vec![]));
         let p = activos(&[(Tipo::Palacio, 2)]);
-        assert_eq!(r.gates(5, &p, 2000, 1600, 0), Some(vec![Falta::Edificios]));
-        assert_eq!(r.gates(5, &activos(&[(Tipo::Palacio, 3)]), 2000, 1600, 0), Some(vec![]));
+        assert_eq!(r.gates(5, &p, 2000, 1600, 0, 0), Some(vec![Falta::Edificios]));
+        assert_eq!(r.gates(5, &activos(&[(Tipo::Palacio, 3)]), 2000, 1600, 0, 0), Some(vec![]));
     }
 
     #[test]

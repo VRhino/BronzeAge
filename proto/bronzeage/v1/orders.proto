@@ -669,6 +669,19 @@ message OrdenRepartirPuntos {
   Atributos atributos = 1;
 }
 
+// La aldea agrícola (Economia_Construccion §14.2): marcarla en un punto de la zona de la plaza madre y subirla de nivel. Los materiales se entregan
+// con `OrdenEntregarMateriales`, como en cualquier pueblo.
+message OrdenMarcarAldea {
+  string asentamiento_id = 1;
+  string heroe_id = 2;
+  Punto punto = 3;
+}
+
+message OrdenMejorarAldea {
+  string heroe_id = 1;
+  string pueblo_id = 2;
+}
+
 message OrdenReponerCarroDeAcarreo {
   string heroe_id = 1;
   string pueblo_id = 2;
@@ -1071,5 +1084,7 @@ message Orden {
     OrdenDeAdministracion administracion = 154;
     OrdenMarchaForzada marcha_forzada = 155;
     OrdenReclamarRecompensa reclamar_recompensa = 156;
+    OrdenMarcarAldea marcar_aldea = 157;
+    OrdenMejorarAldea mejorar_aldea = 158;
   }
 }

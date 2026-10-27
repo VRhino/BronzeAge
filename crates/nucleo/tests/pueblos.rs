@@ -252,7 +252,7 @@ fn una_obra_de_mapa_se_marca_ocupa_cupo_y_no_pasa_por_la_cola_ni_cuesta_nada_a_l
 
     let id = e.marcar();
     let (madre, p) = e.n.pueblo(id).unwrap();
-    assert_eq!((madre, p.tipo, p.nodo, p.carro), (plaza, Tipo::MinaCobre, cobre, None));
+    assert_eq!((madre, p.tipo, p.nodo(), p.carro), (plaza, Tipo::MinaCobre, Some(cobre), None));
     let EstadoPueblo::Pendiente { requerido, entregado } = &p.estado else { panic!("pendiente de materiales") };
     assert_eq!(requerido, &vec![(Madera, 100_000), (Oro, 12_000)], "su extractor (30) + 50 + el carro (20) y el buey (12 de oro)");
     assert!(entregado.iter().all(|&(_, n)| n == 0));
@@ -265,8 +265,10 @@ fn una_obra_de_mapa_se_marca_ocupa_cupo_y_no_pasa_por_la_cola_ni_cuesta_nada_a_l
     // Un nodo ocupado, uno que no existe, uno de ganado y uno fuera de la zona se rechazan.
     assert_eq!(e.rechazada("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: cobre }), rechazos::PUEBLO_NODO_OCUPADO);
     assert_eq!(e.rechazada("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: u32::MAX }), rechazos::PUEBLO_NODO_DESCONOCIDO);
-    let ganado = (0..e.mapa.nodos.len()).find(|&i| e.mapa.nodos[i].tipo == Tipo::Corral).unwrap() as u32;
-    assert_eq!(e.rechazada("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: ganado }), rechazos::PUEBLO_NODO_NO_EXTRAIBLE);
+    // Los mundos de antes de las aldeas agrícolas (2026-10-27) aún traen nodos de ganado: no admiten pueblo.
+    if let Some(ganado) = (0..e.mapa.nodos.len()).find(|&i| e.mapa.nodos[i].tipo == Tipo::Corral) {
+        assert_eq!(e.rechazada("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: ganado as u32 }), rechazos::PUEBLO_NODO_NO_EXTRAIBLE);
+    }
     let lejos = (0..e.mapa.nodos.len()).find(|&i| e.mapa.nodos[i].tipo == Tipo::MinaEstano && !e.n.en_zona(plaza, e.mapa.nodos[i].pos)).unwrap() as u32;
     assert_eq!(e.rechazada("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: lejos }), rechazos::PUEBLO_FUERA_DE_LA_ZONA);
 }
@@ -305,11 +307,12 @@ fn exige_madre_de_nivel_2_y_respeta_el_cupo_que_libera_destruirlo_a_mano() {
     let mut e = montar(m, 7, 2);
     let plaza = e.plaza;
     let primero = e.marcar();
-    // Dos pueblos en el nivel 2: el segundo, de lo que ofrezca el panel; el tercero se rechaza aunque haya candidatos.
+    // Tres pueblos en el nivel 2, la aldea agrícola incluida: el segundo, de lo que ofrezca el panel; con la aldea, el cuarto se rechaza aunque haya candidatos.
     let candidatos = e.n.candidatos_de_pueblo(plaza);
     assert!(candidatos.len() >= 2, "la zona de nivel 2 ofrece nodos para otros dos pueblos: {candidatos:?}");
     assert!(candidatos.iter().all(|c| c.1 != Tipo::MinaHierro), "el hierro pide una tecnología que la Facción no tiene: no es candidato");
     let segundo = e.ok("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: candidatos[0].0 }).creadas[0];
+    comun::levantar_aldea(&mut e.n, "ana", plaza).expect("la aldea ocupa el tercer hueco");
     assert_eq!(e.rechazada("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: candidatos[1].0 }), rechazos::PUEBLO_SIN_CUPO);
     // Destruirlo a mano (aunque esté pendiente) libera el cupo y el nodo, y no devuelve nada.
     assert_eq!(e.rechazada("beto", Comando::DestruirPueblo { pueblo: primero }), rechazos::NO_AUTORIZADO);
@@ -318,7 +321,7 @@ fn exige_madre_de_nivel_2_y_respeta_el_cupo_que_libera_destruirlo_a_mano() {
     assert_eq!(e.rechazada("ana", Comando::DestruirPueblo { pueblo: primero }), rechazos::PUEBLO_DESCONOCIDO);
     assert_eq!(hechos(&e.n, "pueblo.destruido").len(), 1);
     e.ok("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: candidatos[1].0 });
-    assert_eq!(e.n.pueblos_de(plaza).len(), 2);
+    assert_eq!(e.n.pueblos_de(plaza).len(), 3);
 }
 
 #[test]
@@ -456,7 +459,7 @@ fn el_pueblo_extrae_contra_su_almacen_y_el_carro_sale_lleno_vuelca_en_la_madre_y
         e.n.avanzar_hasta(t);
         assert!(e.pueblo(id).almacen.cantidad(Cobre) <= 500_000);
     }
-    assert_eq!(e.pueblo(id).nodo, cobre);
+    assert_eq!(e.pueblo(id).nodo(), Some(cobre));
     let sale = hechos(&e.n, "acarreo.sale");
     let (sale_en, carga) = (sale[0].0, dato(&sale[0], "carga"));
     assert_eq!(carga, 500_000, "solo sale con el carro lleno");
@@ -525,7 +528,7 @@ fn con_el_nodo_agotado_el_pueblo_espera_a_que_se_regenere_y_no_se_muda() {
     // ...y vuelve a extraer cuando se regenera.
     e.n.avanzar_hasta(desde + minutos_en_agotar * MIN + 12 * MIN);
     assert!(e.pueblo(id).almacen.cantidad(Cobre) > inicial, "regeneró y siguió");
-    assert_eq!(e.pueblo(id).nodo, cobre);
+    assert_eq!(e.pueblo(id).nodo(), Some(cobre));
 }
 
 /// Pierde el carro del pueblo una y otra vez (cada reposición automática cuesta 20 de madera a la madre, que no produce) hasta que la madre ya no
@@ -871,7 +874,7 @@ fn una_foto_a_mitad_de_obra_y_otra_con_el_carro_en_camino_recuperan_el_mismo_mun
         let n = Nucleo::con_persistencia(con(ajustes.clone()), dir.path(), Default::default()).unwrap();
         assert!(n.recuperado());
         assert_eq!(n.hash_estado(), a_mitad, "{nombre}: foto + registro reconstruyen el mismo mundo");
-        let cobre = n.pueblo(id).unwrap().1.nodo;
+        let cobre = n.pueblo(id).unwrap().1.nodo().unwrap();
         let mut e = Escenario { n, plaza, cobre, mapa: Mapa::de(&m.0), cuenta };
         e.avanzar(20 * HORA - ahora);
         assert_eq!(e.n.hash_estado(), referencia.0, "{nombre}: el mundo recuperado sigue igual que el que no se interrumpió");
@@ -1202,7 +1205,7 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
     e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN46");
+    assert_eq!(&bytes[..5], b"BAN47");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
@@ -1217,7 +1220,7 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     let n = Nucleo::con_persistencia(con(ajustes), dir.path(), Default::default()).unwrap();
     assert!(n.recuperado());
     assert_eq!(n.hash_estado(), hash, "foto + registro reconstruyen el mismo mundo, con el héroe dentro del pueblo");
-    let cobre = n.pueblo(pueblo).unwrap().1.nodo;
+    let cobre = n.pueblo(pueblo).unwrap().1.nodo().unwrap();
     let mut e = Escenario { n, plaza, cobre, mapa: Mapa::de(&m.0), cuenta };
     assert_eq!(e.ubicacion(h), Ubicacion::Pueblo(pueblo));
     e.ok("neu", Comando::SalirDePueblo { pueblo, heroe: h });
@@ -1306,3 +1309,82 @@ fn sin_proteccion(n: &mut Nucleo, plaza: u64) {
     }
 }
 
+
+// ───────────────────────────── 8. La aldea agrícola y su rebaño (mecánicas 50 y 51, 2026-10-27) ─────────────────────────────
+
+impl Escenario {
+    /// Una columna de Ana en la puerta del pueblo con lo que le falta a su obra (o a su mejora), que lo entrega.
+    fn entregar_lo_que_falta(&mut self, pueblo: u64) {
+        let sitio = self.n.posicion_de_pueblo(pueblo).unwrap();
+        let col = self.columna("ana", 1, sitio);
+        for (recurso, cantidad) in self.pueblo(pueblo).falta() {
+            self.ok("admin", Comando::DarSuministro { ejercito: col, recurso, cantidad });
+        }
+        self.ok("ana", Comando::EntregarMateriales { ejercito: col, pueblo });
+    }
+}
+
+#[test]
+fn la_aldea_se_marca_en_tierra_fertil_nace_con_su_rebano_y_su_carro_lleva_trigo_y_ganado_a_la_madre() {
+    let m = con_mundo!();
+    let ajustes = Ajustes { foto_cada: 0, latido_ms: 0, ..Ajustes::default() };
+    let dir = tempfile::tempdir().unwrap();
+    let n = Nucleo::con_persistencia(Arranque { ajustes: ajustes.clone(), ..arranque(m, 7) }, dir.path(), Default::default()).unwrap();
+    let mut e = montar_con(n, m, 2);
+    let plaza = e.plaza;
+    let centro = e.n.estado().asentamientos[&plaza].posicion;
+    // Junto a la plaza, fuera de la zona, o en tierra pobre (este sitio es de bosque): no.
+    assert_eq!(e.rechazada("ana", Comando::MarcarAldea { asentamiento: plaza, punto: Punto::new(centro.x + 1_000, centro.y) }), rechazos::PUEBLO_DEMASIADO_CERCA);
+    assert_eq!(e.rechazada("ana", Comando::MarcarAldea { asentamiento: plaza, punto: Punto::new(centro.x + 400_000, centro.y) }), rechazos::PUEBLO_FUERA_DE_LA_ZONA);
+    let pobre = (0..24).flat_map(|k| (0..24).map(move |g| (3_500 + k * 500, g))).any(|(d, g)| {
+        let a = ((g * 15) as f64).to_radians();
+        let punto = Punto::new(centro.x + (d as f64 * a.cos()) as i64, centro.y + (d as f64 * a.sin()) as i64);
+        let r = e.ord("ana", Comando::MarcarAldea { asentamiento: plaza, punto });
+        matches!(r.resultado, Resultado::Rechazada { codigo, .. } if codigo == rechazos::PUEBLO_FERTILIDAD_INSUFICIENTE)
+    });
+    assert!(pobre, "alrededor de una plaza de bosque hay tierra demasiado pobre");
+    assert!(e.n.pueblos_de(plaza).is_empty(), "los rechazos no dejan rastro");
+
+    let id = comun::levantar_aldea(&mut e.n, "ana", plaza).expect("hay tierra fértil en la zona");
+    // (Con persistencia, la crónica no se lee desde el principio: se miran los estados.)
+    let p = e.pueblo(id);
+    assert!(p.es_aldea() && p.nodo().is_none() && p.rebano.is_none());
+    let EstadoPueblo::EnObra { completa_en } = p.estado else { panic!("con todo entregado, en obra") };
+    e.n.avanzar_hasta(completa_en + MIN);
+    let p = e.pueblo(id);
+    assert!(p.activo());
+    assert_eq!(p.rebano.as_ref().map(|r| (r.especie.as_str(), r.cabezas / 1_000)), Some(("vacuno", 20)), "nace con el pie de cría de su corral");
+    assert!(e.n.economia(plaza).unwrap().aldeas_activas() == 1);
+
+    // Su carro sale con trigo y, cuando el rebaño pasa del pie de cría, también con ganado; los dos entran en el almacén de la madre.
+    let limite = e.n.ahora() + 12 * HORA;
+    let trae = |e: &Escenario, r: Recurso| e.n.economia(plaza).unwrap().ingresos_acarreo.iter().any(|i| i.recurso == r);
+    while !(trae(&e, Trigo) && trae(&e, Livestock)) {
+        e.avanzar(10 * MIN);
+        assert!(e.n.ahora() < limite, "el carro debería haber traído trigo y ganado: {:?}", e.n.economia(plaza).unwrap().ingresos_acarreo);
+    }
+
+    // Sube de nivel con otra obra de mapa: sigue produciendo mientras espera los materiales.
+    e.ok("ana", Comando::MejorarAldea { pueblo: id });
+    assert!(matches!(e.pueblo(id).mejora, Some(EstadoPueblo::Pendiente { .. })));
+    assert_eq!(e.rechazada("ana", Comando::MejorarAldea { pueblo: id }), rechazos::PUEBLO_MEJORA_EN_CURSO);
+    assert!(e.pueblo(id).activo());
+    e.entregar_lo_que_falta(id);
+    let Some(EstadoPueblo::EnObra { completa_en }) = e.pueblo(id).mejora.clone() else { panic!("la mejora, en obra") };
+
+    // Una foto con la mejora en obra y el rebaño criando recupera el mismo mundo.
+    e.n.foto_ahora();
+    e.avanzar(10 * MIN);
+    let (hash, cuenta, ahora) = (e.n.hash_estado(), e.cuenta, e.n.ahora());
+    e.n.apagar().unwrap();
+    let n = Nucleo::con_persistencia(Arranque { ajustes, ..arranque(m, 7) }, dir.path(), Default::default()).unwrap();
+    assert!(n.recuperado());
+    assert_eq!(n.hash_estado(), hash, "foto + registro reconstruyen la aldea, su mejora y su rebaño");
+    let mut e = Escenario { n, plaza, cobre: e.cobre, mapa: e.mapa.clone(), cuenta };
+    assert_eq!(e.n.ahora(), ahora);
+    e.n.avanzar_hasta(completa_en);
+    assert_eq!(e.pueblo(id).nivel, 2);
+    assert_eq!(e.pueblo(id).mejora, None);
+    assert_eq!(e.n.pueblo(id).map(|(madre, _)| madre), Some(plaza));
+    e.n.apagar().unwrap();
+}

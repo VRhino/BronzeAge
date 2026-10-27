@@ -147,6 +147,8 @@ pub struct ReglasPueblos {
     /// Mineros de la guarnición de serie y lo que tarda en volver cada uno, gratis (ms).
     pub mineros: i64,
     pub cada_minero: i64,
+    /// Granjeros de la guarnición de serie de una aldea agrícola (se reponen al mismo ritmo).
+    pub granjeros: i64,
 }
 
 /// El metal del equipo de cada tropa convertido en chatarra por soldado muerto (Doc 4.2.1): para cada tropa, `(recurso de chatarra,
@@ -236,7 +238,7 @@ impl Reglas {
         let (ch, mv, oc) = (bloque(COMBATE, "CHATARRA"), bloque(militar::datos::MOVIMIENTO, "MOVIMIENTO"), bloque(MURALLAS, "OCUPACION"));
         let (ba, bd) = (bloque(BATALLA_UNITY, "BATALLA"), bloque_de(MUNDO, "CAMPAMENTOS_BANDIDOS").unwrap_or_else(|e| panic!("{e}")));
         let economia = asentamiento::Reglas::cargar();
-        let pueblos = asentamiento::pueblos::ReglasPueblos::de(&asentamiento::datos::bloque("PUEBLOS_EXTRACTORES"));
+        let pueblos = asentamiento::pueblos::ReglasPueblos::de(&asentamiento::datos::bloque("PUEBLOS_EXTRACTORES"), &asentamiento::datos::bloque("ESPECIES"));
         let minutos = |v: &Value, k: &str| entero(v, k) * MS_POR_MINUTO;
         let carreteros = (Tropa::desde_nombre(ba["tropaCarreteros"]["tropaId"].as_str().expect("tropaCarreteros.tropaId")).expect("tropa de carreteros"), entero(&ba, "tropaCarreteros.unidades"));
         Reglas {
@@ -303,7 +305,7 @@ impl Reglas {
                 radio_ataque_caravana: mil(num(&bd, "radioAtaqueCaravana")),
                 respawn: minutos(&bd, "respawnMinutos"),
             },
-            pueblos: ReglasPueblos { mineros: pueblos.mineros as i64, cada_minero: pueblos.minutos_por_minero * MS_POR_MINUTO },
+            pueblos: ReglasPueblos { mineros: pueblos.mineros as i64, cada_minero: pueblos.minutos_por_minero * MS_POR_MINUTO, granjeros: pueblos.aldea.granjeros as i64 },
             avanzada: ReglasAvanzada {
                 invulnerabilidad: minutos(&av, "invulnerabilidadMinutos"),
                 cupo_guarnicion: ["atalaya", "fuerte", "ciudadela"].map(|e| entero(&av, &format!("cupoGuarnicion.{e}"))),
@@ -371,8 +373,8 @@ mod pruebas {
     }
 
     #[test]
-    fn los_mineros_del_pueblo() {
-        assert_eq!(r().pueblos, ReglasPueblos { mineros: 30, cada_minero: 12 * MS_POR_MINUTO });
+    fn los_mineros_del_pueblo_y_los_granjeros_de_la_aldea() {
+        assert_eq!(r().pueblos, ReglasPueblos { mineros: 30, cada_minero: 12 * MS_POR_MINUTO, granjeros: 30 });
     }
 
     #[test]

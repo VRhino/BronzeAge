@@ -126,7 +126,7 @@ impl Nucleo {
         let t = &self.estado.reglas.economia.datos.tamanos;
         let nodos = self.geografia.as_ref().map_or(&[][..], |g| &g.mapa.nodos[..]);
         let avanzadas = asentamientos.values().flat_map(|a| a.economia.avanzadas.iter()).chain(combate.huerfanas.values()).map(|v| (v.posicion, t.avanzada));
-        let pueblos = asentamientos.values().flat_map(|a| a.economia.pueblos.iter()).filter_map(|p| nodos.get(p.nodo as usize)).map(|n| (n.pos, t.pueblo));
+        let pueblos = asentamientos.values().flat_map(|a| a.economia.pueblos.iter()).filter_map(|p| crate::economia::posicion_de_pueblo(nodos, p)).map(|pos| (pos, t.pueblo));
         let mercenarios = self.geografia.iter().flat_map(|g| g.mapa.campamentos.iter().map(|&c| (c, t.campamento_mercenarios)));
         avanzadas.chain(pueblos).chain(mercenarios).chain(combate.bandidos.values().map(|b| (b.posicion, t.campamento_bandidos))).collect()
     }

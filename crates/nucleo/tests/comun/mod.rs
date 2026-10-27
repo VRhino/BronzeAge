@@ -157,6 +157,7 @@ pub fn mandaba(n: &Nucleo, actor: &str, c: &Comando) -> bool {
         | Comando::ColocarOrdenMercado { asentamiento, .. }
         | Comando::CrearCaravana { asentamiento }
         | Comando::MarcarPueblo { asentamiento, .. }
+        | Comando::MarcarAldea { asentamiento, .. }
         | Comando::FijarPuerta { asentamiento, .. }
         | Comando::VetarJugador { asentamiento, .. }
         | Comando::AsignarCargoLocal { asentamiento, .. }
@@ -172,7 +173,7 @@ pub fn mandaba(n: &Nucleo, actor: &str, c: &Comando) -> bool {
         | Comando::MoverCargaAparcada { caravana, .. }
         | Comando::EnviarCaravanaAlOrigen { caravana } => origen(*caravana),
         Comando::MoverCarro { de, .. } => origen(*de),
-        Comando::DestruirPueblo { pueblo } | Comando::ReponerCarro { pueblo } => n.pueblo(*pueblo).and_then(|(m, _)| plaza(m)),
+        Comando::DestruirPueblo { pueblo } | Comando::ReponerCarro { pueblo } | Comando::MejorarAldea { pueblo } => n.pueblo(*pueblo).and_then(|(m, _)| plaza(m)),
         Comando::MejorarAvanzada { avanzada, .. }
         | Comando::RepararAvanzada { avanzada, .. }
         | Comando::DestruirAvanzada { avanzada, .. }
@@ -254,4 +255,24 @@ pub fn como_dueno(p: Peticion) -> Peticion {
     } else {
         p
     }
+}
+
+/// Andamiaje de las mecánicas 50 y 51: marca la aldea agrícola de la plaza en el sitio que propone el panel (`sitio_de_aldea`), lleva una columna de
+/// `cuenta` con todo el material y lo entrega. La obra queda en marcha; devuelve el pueblo.
+pub fn levantar_aldea(n: &mut Nucleo, cuenta: &str, plaza: u64) -> Option<u64> {
+    let faccion = n.estado().asentamientos[&plaza].faccion;
+    let punto = n.sitio_de_aldea(plaza)?;
+    let t = n.ahora();
+    let r = n.aplicar_en(t, Peticion::nueva("admin", &format!("aldea-{plaza}"), Comando::MarcarAldea { asentamiento: plaza, punto }).de_admin());
+    assert!(r.aceptada(), "el sitio del panel se acepta: {r:?}");
+    let pueblo = r.creadas[0];
+    let sitio = n.posicion_de_pueblo(pueblo)?;
+    let col = n.crear_ejercito(t, cuenta, faccion, sitio, 500, 100_000).ok()?;
+    for (recurso, cantidad) in n.pueblo(pueblo)?.1.falta() {
+        let r = n.aplicar_en(t, Peticion::nueva("admin", &format!("aldea-sum-{pueblo}-{recurso:?}"), Comando::DarSuministro { ejercito: col, recurso, cantidad }).de_admin());
+        assert!(r.aceptada(), "{r:?}");
+    }
+    let r = n.aplicar_en(t, Peticion::nueva("admin", &format!("aldea-ent-{pueblo}"), Comando::EntregarMateriales { ejercito: col, pueblo }).de_admin());
+    assert!(r.aceptada(), "{r:?}");
+    Some(pueblo)
 }

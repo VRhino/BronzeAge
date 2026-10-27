@@ -8,7 +8,7 @@ use asentamiento::datos::{Reglas, UNO};
 use asentamiento::edificio::{Edificios, Fuente};
 use asentamiento::produccion::Fuentes;
 use asentamiento::recurso::{Recurso, TODOS};
-use base::{Instante, Mil, MS_POR_MINUTO};
+use base::{Instante, Mil, Punto, MS_POR_MINUTO};
 use std::collections::HashMap;
 
 /// El mundo de pruebas: nodos con stock que se regeneran a los 10 minutos de agotarse y parcelas de bosque.
@@ -109,6 +109,15 @@ fn correr(dias: i64, semilla_hambre: bool) -> (Asentamiento, Vec<(i64, Evento)>)
             recaudacion_extra: UNO,
         };
         let mut ev = a.avanzar_hasta(t, &mut x);
+        // El jugador levanta la aldea agrícola (el gate del nivel 2 la pide) en cuanto la plaza puede pagarla: aquí los materiales salen del
+        // almacén y llegan a la obra al instante (sin columna ni carro, que son del núcleo).
+        let carro = vec![(Recurso::Madera, 20_000), (Recurso::Oro, 12_000)];
+        let coste = Asentamiento::costo_de_aldea(&reglas, &carro);
+        if a.pueblos.is_empty() && a.almacen.tiene(&coste) && a.iniciar_aldea(&reglas, 1, Punto::new(5_000, 0), UNO, &carro, &mut ev).is_ok() {
+            a.almacen.pagar(&coste);
+            let requerido = a.pueblos[0].falta();
+            a.entregar_a_pueblo(t, &reglas, 1, &requerido, &mut ev).expect("todo entregado");
+        }
         // Un bot pide la subida en cuanto puede.
         if a.ascenso.is_none() && minuto % 60 == 0 {
             let _ = a.solicitar_ascenso(t, &reglas, &x, false, &mut ev);

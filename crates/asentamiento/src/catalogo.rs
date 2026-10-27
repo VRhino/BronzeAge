@@ -42,6 +42,11 @@ impl Tipo {
         matches!(self, Tipo::Cantera | Tipo::Mina | Tipo::MinaCobre | Tipo::MinaEstano | Tipo::MinaHierro)
     }
 
+    /// El Corral solo existe en las aldeas agrícolas (Economia_Construccion §14.2): la ciudad no lo construye.
+    pub fn solo_en_aldea(self) -> bool {
+        self == Tipo::Corral
+    }
+
     /// Edificios que piden mano de obra de pesants (`trabajadoresRequeridosTotal`, §5.1).
     pub fn usa_pesants(self) -> bool {
         self.es_extractor() || matches!(self, Tipo::Granja | Tipo::Lenera)

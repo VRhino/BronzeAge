@@ -636,7 +636,7 @@ impl Sim<'_> {
 
     // ───────────────────────────── Pueblos y misiones de columna ─────────────────────────────
 
-    /// Marca un pueblo extractor (de nivel 2 en adelante) y manda a la columna a comprar los materiales al campamento más cercano.
+    /// Marca la aldea agrícola y, de nivel 2 en adelante, un pueblo extractor, y manda a la columna a comprar los materiales al campamento más cercano.
     fn pueblo(&mut self, t: Instante, id: u64) {
         let Some(p) = self.pjs.get(&id) else { return };
         if p.mision.is_some() {
@@ -651,11 +651,23 @@ impl Sim<'_> {
             }
             return;
         }
-        if nivel < 2 || self.n.pueblos_de(id).len() >= PUEBLOS_OBJETIVO {
-            return;
-        }
-        let Some(&(nodo, _)) = self.n.candidatos_de_pueblo(id).iter().find(|(_, tipo)| *tipo == Tipo::Cantera) else { return };
-        let r = self.orden(t, &gobernador(id), "MarcarPueblo", Comando::MarcarPueblo { asentamiento: id, nodo });
+        // Primero la aldea agrícola (desde el nivel 1; la pide el nivel 2), en el sitio que propone el panel; sin sitio, se reintenta otro día.
+        let r = if !self.n.pueblos_de(id).iter().any(|p| p.es_aldea()) {
+            if t < p.proxima_obra {
+                return;
+            }
+            let Some(punto) = self.n.sitio_de_aldea(id) else {
+                self.pjs.get_mut(&id).expect("existe").proxima_obra = t + 24 * HORA;
+                return;
+            };
+            self.orden(t, &gobernador(id), "MarcarAldea", Comando::MarcarAldea { asentamiento: id, punto })
+        } else {
+            if nivel < 2 || self.n.pueblos_de(id).len() >= PUEBLOS_OBJETIVO + 1 {
+                return;
+            }
+            let Some(&(nodo, _)) = self.n.candidatos_de_pueblo(id).iter().find(|(_, tipo)| *tipo == Tipo::Cantera) else { return };
+            self.orden(t, &gobernador(id), "MarcarPueblo", Comando::MarcarPueblo { asentamiento: id, nodo })
+        };
         let Some(&pueblo) = r.creadas.first().filter(|_| r.aceptada()) else { return };
         self.pjs.get_mut(&id).expect("existe").obra_pendiente = Some(pueblo);
         self.empezar(t, id, Mision { tipo: Clase::Pueblo, pueblo: Some(pueblo) });

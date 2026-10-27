@@ -542,8 +542,8 @@ impl<'n> Mirada<'n> {
         let n = self.n;
         let (pid, madre_id) = (p.id, ids::asentamiento(madre));
         if p.activo() {
-            let tipo = p.tipo.nombre().to_owned();
-            let nodo = ids::nodo(p.nodo);
+            let tipo = p.nombre_de_tipo().to_owned();
+            let nodo = p.nodo().map(ids::nodo).unwrap_or_default();
             return vec![visible(pb::TipoEntidad::Pueblo, ids::pueblo(pid), Sello(version, 0), move || {
                 Some(Cuerpo::Pueblo(pb::Pueblo {
                     id: ids::pueblo(pid),
@@ -557,9 +557,10 @@ impl<'n> Mirada<'n> {
                 }))
             })];
         }
-        let nodo = Some(ids::nodo(p.nodo));
+        let nodo = p.nodo().map(ids::nodo);
+        let tipo = if p.es_aldea() { pb::TipoObra::ObraAldea } else { pb::TipoObra::ObraPueblo };
         vec![visible(pb::TipoEntidad::ObraDeMapa, ids::obra(pid), Sello(version, 0), move || {
-            Some(Cuerpo::Obra(pb::ObraDeMapa { id: ids::obra(pid), version, asentamiento_madre_id: madre_id.clone(), tipo: pb::TipoObra::ObraPueblo as i32, posicion: Some(punto(pos)), nodo_id: nodo.clone(), ..Default::default() }))
+            Some(Cuerpo::Obra(pb::ObraDeMapa { id: ids::obra(pid), version, asentamiento_madre_id: madre_id.clone(), tipo: tipo as i32, posicion: Some(punto(pos)), nodo_id: nodo.clone(), ..Default::default() }))
         })]
     }
 

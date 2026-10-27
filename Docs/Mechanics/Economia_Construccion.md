@@ -183,7 +183,7 @@ pesants → el excedente; artesanos → `artesanos − trabajadoresTransformacio
 |---|---|---|
 | Granja | `produccionTrigoDeGranja(nivelInterno) × fertilidadZona × ratioManoObra × factorProduccionTrigo` | `produccionTrigoDeGranja` = `niveles[nivel].produccionBaseTrigo` (120/180/240/360; el doble de las del TypeScript, 60/90/120/180, por decisión del autor el 2026-10-27 al entrar la fertilidad real de la zona) |
 | Leñera | `produccionBaseMadera × bosque.densidad × ratioManoObra` | no usa fertilidad ni tecnología; si el bosque no existe, no produce |
-| Cantera, Mina (oro), Mina de cobre / estaño / hierro, Corral | `mapa.extraer(fuenteId, produccionBase × ratioManoObra × factorTecnologia)` | rinde piedra, oro, cobre, estaño, hierro, livestock. Solo si el nodo tiene stock |
+| Cantera, Mina (oro), Mina de cobre / estaño / hierro, Corral (el Corral, solo en la aldea agrícola desde el 2026-10-27, §14.0, que no usa esta fórmula) | `mapa.extraer(fuenteId, produccionBase × ratioManoObra × factorTecnologia)` | rinde piedra, oro, cobre, estaño, hierro, livestock. Solo si el nodo tiene stock |
 
 - **`fertilidadZona`** (`mejorFertilidadEnZona`): la mayor `mapa.fertilidadEn` de una lista de candidatos = la posición del asentamiento + `SITIO.muestrasFertilidad` (40) puntos `i = 0..39` en
   `(pos.x + cos(2π·i/40)·r, pos.y + sin(2π·i/40)·r)` con `r = ((i mod 5)/5) · radioPotencial`, quedándose con los que caen dentro del polígono de zona (o con todos si el polígono está vacío). Todas las Granjas
@@ -300,7 +300,7 @@ Cada candidato recibe `score = base de su banda + urgencia(0–100, recortada) +
 |---|---|---|---|
 | 1 | **Granja** | `(granjas activas = 0 ∨ enDeficitProyectado)` ∧ ¬`hayMejoraGranjaDisponible` ∧ `granjasPendientes < límite` ∧ `puedePagar` ∧ hay sitio | supervivencia + (`granjas activas = 0` ? 100 : `deficitRatio × 100`) |
 | 2 | **Leñera** | leñeras **activas** `< EXTRACCION_MAXIMOS.porTipo` ∧ ¬`proyectoEnCurso` ∧ `puedePagar` ∧ hay bosque con hueco en la zona (`bosqueParaLenera`) ∧ hay sitio local | supervivencia + (0 activas → 100; `madera < reserva.madera` → 90; si no 30) |
-| 3 | **Extractores**: cantera, corral, minaCobre, mina, minaEstano, minaHierro (en este orden) | `necesitaNuevoExtractor` ∧ ¬`proyectoEnCurso` ∧ `puedePagar` ∧ hay nodo libre y, si es interno (corral), sitio local | extractorBase + (alguna fuente viva ? 40 : 100) + `min(ticksSinCupo × bonusPorMinutoStarved, bonusMaximo)` |
+| 3 | **Extractores**: cantera, corral, minaCobre, mina, minaEstano, minaHierro (en este orden). **En Rust solo la primera Cantera** (los minerales y las demás Canteras son de pueblo desde la fase 3C, y el Corral solo existe en la aldea agrícola desde el 2026-10-27, §14) | `necesitaNuevoExtractor` ∧ ¬`proyectoEnCurso` ∧ `puedePagar` ∧ hay nodo libre y, si es interno (corral), sitio local | extractorBase + (alguna fuente viva ? 40 : 100) + `min(ticksSinCupo × bonusPorMinutoStarved, bonusMaximo)` |
 | 4 | **Vivienda** | (`capacidad de pesants = 0` ∨ `ocupaciónMáx ≥ umbralViviendaOcupada`) ∧ ¬pendiente ∧ ¬`alcanzoTopeDeViviendas` ∧ `puedePagar` | crecimiento + `ocupaciónMáx × 100` |
 | 5 | **Granero** | trigo `cantidad/capacidad ≥ umbralAlmacenAmpliacion` ∧ no hay granero activo ∧ ¬pendiente ∧ `puedePagar` | crecimiento + `ocupaciónTrigo × 100` |
 | 6 | **Almacén** | mayor ocupación de cualquier recurso con capacidad > 0 `≥ umbralAlmacenAmpliacion` ∧ ¬pendiente ∧ ¬`alcanzoTopeDeAlmacenes` ∧ `puedePagar` | crecimiento + `ocupaciónMáx × 100` |
@@ -524,7 +524,10 @@ poblacion = pesants ≥ req.pesants ∧ artesanos ≥ req.artesanos           (l
 construidos = nº de tipos de req.edificios con algún edificio ACTIVO cuyo nivelInterno ≥ req.nivelInternoMinimo[tipo] (por defecto 1)
 cumpleRecinto = req.recintoCompletoNivelMinimo indefinido ∨ algún recinto con nivel ≥ ese mínimo e integridad ≥ 1      ; una mejora o una ampliación en obra no lo quita: cuenta el anillo en pie con su nivel de antes (Murallas.md §9.3)
 edificios = construidos ≥ (req.edificiosMinimo ?? req.edificios.length) ∧ cumpleRecinto
+aldea = aldeas agrícolas ACTIVAS de la plaza ≥ req.aldeasAgricolas (por defecto 0)
 ```
+
+**Implementado en Rust (2026-10-27, mecánica 50):** el nivel 2 pide **200 pesants + 2 de {Cantera, Leñera, Granja} + una aldea agrícola activa** (`aldeasAgricolas: 1` en `NIVEL_ASENTAMIENTO`); las minas y el Corral salen de su lista. Es el primer gate que mira un pueblo: `ReglasNivel::gates` recibe las aldeas activas (`Asentamiento::aldeas_activas`) y devuelve `Falta::Aldea`; `bloqueos_de_ascenso` da `Bloqueo::FaltaAldea` y `SolicitarAscenso` rechaza con `ascenso.falta_aldea`. Una aldea pendiente, en obra o destruida no cuenta; la que sube de nivel sí (sigue activa).
 
 Devuelve `null` si el nivel no tiene requisito. `calcularNivelAsentamiento` encadena los gates desde `nivel` y dice hasta dónde se cumplirían (la usan los bots para decidir si piden la subida; **no sube nada**).
 
@@ -1830,13 +1833,10 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
       "edificios": [
         "cantera",
         "lenera",
-        "granja",
-        "mina",
-        "minaCobre",
-        "minaEstano",
-        "corral"
+        "granja"
       ],
-      "edificiosMinimo": 3
+      "edificiosMinimo": 2,
+      "aldeasAgricolas": 1
     },
     "3": {
       "pesants": 500,
@@ -2110,8 +2110,8 @@ Ninguna abierta (las encontradas al documentar se resolvieron el 2026-10-11; ver
 
 > **Implementado en Rust (2026-10-19, fase 3C).** Reglas puras en `crates/asentamiento/src/pueblos.rs` (el pueblo y su obra, el cupo, los costes y la extracción contra el almacén local) y el bloque `PUEBLOS_EXTRACTORES` de más abajo (**entra en la huella de las reglas de las fotos**); integración en `crates/nucleo/src/nucleo/pueblos.rs` (órdenes, carro de acarreo, candidatos), `economia.rs` (el mapa indexa ahora también los nodos de mineral) y `urbanismo.rs` (la planta). Formato de foto **`BAN7`** con los pueblos y **`BAN8`** (2026-10-19, ventana del acarreo; `BAN7` se rechaza): cada plaza guarda sus pueblos y la ventana en `codec_economia`. Pruebas: `crates/nucleo/tests/pueblos.rs` y los módulos `pueblos` y `acarreo`.
 > - **Un pueblo no es un edificio de la ciudad.** Vive en `Asentamiento.pueblos` de su madre (por id ascendente; su id es de mundo, del mismo contador que ejércitos y plazas), no en `edificios`: no pasa por la cola, no ocupa cuadrilla, no tiene pieza en la ciudad y no agranda ni la ciudad ni la zona. Activo, cuenta como **un edificio activo más** en el mantenimiento de la madre y sus trabajadores (los del extractor del catálogo) entran en la demanda de pesants de `ratioManoObra`; mientras está pendiente o en obra no cuenta para nada. No cuenta en los gates de nivel (ninguno pide un mineral a partir del nivel 3).
-> - **Restricción de extracción.** `AnadirEdificio` rechaza con `obra.solo_por_pueblo` los minerales y toda Cantera después de la primera (la primera, en cualquier estado, sigue siendo directa). La auto-construcción ya solo proponía la primera Cantera y el Corral, y `Mapa::proponer` devuelve «sin sitio» a las minas: no cambia el ritmo de la ciudad, y el informe de `batch poblacion` sale igual. Los pueblos no entran en `EXTRACCION_MAXIMOS` ni en el reemplazo automático.
-> - **Obra de mapa** (órdenes 45-48, con la autorización provisional de las demás órdenes de plaza: administración o propietario de una columna de la Facción de la madre). `MarcarPueblo { asentamiento, nodo }` exige un nodo de piedra o mineral **libre, dentro de la zona real** de la madre **y con ruta por tierra hasta ella** (el A\* del mapa sin la red de caminos; `pueblo.sin_ruta` si no la hay), madre de nivel operativo ≥ 2, cupo (2 / 3 / 4 / 5 por nivel, contando pendientes y en obra) y la tecnología del extractor; deja la obra «pendiente de materiales» (`pueblo.marcado`), reclama el nodo y **no cobra nada al almacén**. `EntregarMateriales { ejercito, pueblo }` lleva a la obra, con la columna **a `radioPuerta` (2 u)** de su nodo y de la misma Facción, y la da cualquier héroe de la columna que sea **ciudadano** de esa Facción, sea o no su Líder (Doc 4.2.2; paridad, 2026-10-27), lo que falta de lo que cargan su carro (`suministro`) y sus caravanas adjuntas (primero el carro, luego las caravanas por id), recurso a recurso; con todo entregado arranca la obra (`pueblo.obra_iniciada`, la duración del extractor del catálogo: Cantera 4 h, cobre y hierro 6 h, oro y estaño 8 h) y el primer paso de minuto de la plaza con `t >= completaEn` la termina (precisión de un minuto, sin evento propio). `DestruirPueblo { pueblo }` cancela la obra o destruye el pueblo: libera cupo y nodo y **no devuelve nada** (ni lo entregado ni lo almacenado); el carro se pierde con su carga. `ReponerCarro { pueblo }` compra en la madre un carro nuevo (carro + buey) solo si el pueblo activo no tiene ninguno; sin la orden, la madre lo repone sola en su paso de minuto en cuanto puede pagarlo (2026-10-27; `Comercio_Caravanas.md`, el carro de acarreo). `Nucleo::candidatos_de_pueblo(plaza)` es el panel: los nodos de la zona sin pueblo cuyo extractor puede levantar la Facción.
+> - **Restricción de extracción.** `AnadirEdificio` rechaza con `obra.solo_por_pueblo` los minerales y toda Cantera después de la primera (la primera, en cualquier estado, sigue siendo directa). La auto-construcción ya solo proponía la primera Cantera y el Corral (desde el 2026-10-27, solo la primera Cantera: el Corral es de la aldea agrícola y `AnadirEdificio` lo rechaza con `obra.solo_en_aldea`), y `Mapa::proponer` devuelve «sin sitio» a las minas: no cambia el ritmo de la ciudad, y el informe de `batch poblacion` sale igual. Los pueblos no entran en `EXTRACCION_MAXIMOS` ni en el reemplazo automático.
+> - **Obra de mapa** (órdenes 45-48, con la autorización provisional de las demás órdenes de plaza: administración o propietario de una columna de la Facción de la madre). `MarcarPueblo { asentamiento, nodo }` exige un nodo de piedra o mineral **libre, dentro de la zona real** de la madre **y con ruta por tierra hasta ella** (el A\* del mapa sin la red de caminos; `pueblo.sin_ruta` si no la hay), madre de nivel operativo ≥ 2, cupo (**1 / 3 / 4 / 5 / 6** por nivel desde el 2026-10-27, contando pendientes y en obra y la aldea agrícola) y la tecnología del extractor; deja la obra «pendiente de materiales» (`pueblo.marcado`), reclama el nodo y **no cobra nada al almacén**. `EntregarMateriales { ejercito, pueblo }` lleva a la obra, con la columna **a `radioPuerta` (2 u)** de su nodo y de la misma Facción, y la da cualquier héroe de la columna que sea **ciudadano** de esa Facción, sea o no su Líder (Doc 4.2.2; paridad, 2026-10-27), lo que falta de lo que cargan su carro (`suministro`) y sus caravanas adjuntas (primero el carro, luego las caravanas por id), recurso a recurso; con todo entregado arranca la obra (`pueblo.obra_iniciada`, la duración del extractor del catálogo: Cantera 4 h, cobre y hierro 6 h, oro y estaño 8 h) y el primer paso de minuto de la plaza con `t >= completaEn` la termina (precisión de un minuto, sin evento propio). `DestruirPueblo { pueblo }` cancela la obra o destruye el pueblo: libera cupo y nodo y **no devuelve nada** (ni lo entregado ni lo almacenado); el carro se pierde con su carga. `ReponerCarro { pueblo }` compra en la madre un carro nuevo (carro + buey) solo si el pueblo activo no tiene ninguno; sin la orden, la madre lo repone sola en su paso de minuto en cuanto puede pagarlo (2026-10-27; `Comercio_Caravanas.md`, el carro de acarreo). `Nucleo::candidatos_de_pueblo(plaza)` es el panel: los nodos de la zona sin pueblo cuyo extractor puede levantar la Facción.
 > - **Coste.** `PUEBLOS_EXTRACTORES.costeAdicional` (50 madera) + el coste del extractor del catálogo + el carro con su buey de la flota (`comercio::acarreo::coste_reposicion`: 20 madera y 12 oro): una mina de cobre son **100 madera y 12 oro**, como dice el ejemplo de arriba.
 > - **Extracción.** Un minuto de extracción del pueblo activo es `produccionBase × ratioManoObra × factorTecnología` contra el almacén local (500 por recurso: `capacidadAlmacenLocal`, que debe ser al menos la capacidad del carro). Con el almacén lleno para y avisa una sola vez (`pueblo.almacen_lleno`); con el nodo agotado espera a la regeneración (10 min) sin mudarse. Va dentro del paso de minuto de la plaza: no hay evento por pueblo, tampoco por el ocioso.
 > - **Solvencia del ascenso (2026-10-19, decidido por el autor).** Lo que llega por acarreo cuenta como la **media por minuto de lo que ingresó en el almacén de la madre en las últimas 24 h**, no como la producción nominal. `Asentamiento.ingresos_acarreo` guarda la ventana como cubos de una hora por recurso (`IngresoAcarreo { recurso, hora, cantidad }`, a lo sumo 24 por recurso): el carro, al llegar (`acarreo_llega`), anota en su hora **lo que cupo** (lo que se pierde por almacén lleno no cuenta) y descarta los cubos que salieron de la ventana. Es una acumulación en la llegada: ningún evento por pueblo ocioso y el paso de minuto no cambia. La solvencia suma los cubos con `hora ∈ (ahora − 24, ahora]` (la hora en curso y las 23 anteriores: entre 23 y 24 horas de historia) y divide entre 1.440 minutos, en enteros con división truncada (siempre por debajo: conservador). Un pueblo recién levantado no pesa del todo hasta que lleva un día entregando. `bloqueos_de_ascenso` recibe ahora el instante de la pregunta. Sin bloque de parámetros nuevo: **la huella de las reglas no cambia**; sí cambia el formato de foto (`BAN8`).
@@ -2121,10 +2121,10 @@ Ninguna abierta (las encontradas al documentar se resolvieron el 2026-10-11; ver
 > - **Desde 5E (2026-10-25):** marcar, destruir y reponer el carro de un pueblo son del panel de la plaza madre: su Gobernador o su Maestro de Obras, residente y dentro (Proyecciones §5.1); las órdenes de la economía de la plaza, del cargo de §5.2.5 (las obras, el Gobernador o el Maestro de Obras; la reserva, el Tesorero; el ascenso, el Gobernador; activar una política, el titular del cargo que nombra, que ya no se da por ocupado).
 > - **Provisional (DUDA en el código y filas de paridad en `Docs/Mecanicas a desarrollar.md`).** Los cargos y los ciudadanos de la Facción no existen: manda `manda_en` (administración, propietario de una columna o cuenta de un héroe ciudadano de la Facción) y entrega la cuenta de un héroe ciudadano de la Facción de la obra (paridad, 2026-10-27; antes, el propietario de una columna). Desde la fase 4B-1 las tecnologías de la Facción (requisitos de edificios, recetas y pueblos) las da la administración (`FijarTecnologias`) y la ración de la guarnición de los residentes entra en el `Exterior` de la plaza. La guarnición de 30 mineros (el dato está en el bloque) y el saqueo son del sistema militar. Las avanzadas (§5.17) son la fase 4F (§14.1). Un pueblo completado no agranda la zona de la madre. La planta es un espacio interno: el 0,2 de mapa es lo que ocupa en el mundo, no su radio interno.
 
-**La extracción mineral sale de la ciudad.** Los minerales (cobre, estaño, hierro, oro) y toda Cantera **después de la primera** solo se explotan con un **pueblo extractor**; Granja, Leñera y Corral siguen dentro. La **primera Cantera** sigue siendo directa (sin piedra no hay obra de ascenso al nivel 2). En nivel 1 ya no hay minas; el oro de esa etapa sale de la recaudación por población.
+**La extracción mineral sale de la ciudad.** Los minerales (cobre, estaño, hierro, oro) y toda Cantera **después de la primera** solo se explotan con un **pueblo extractor**; Granja y Leñera siguen dentro, y el Corral solo existe en la **aldea agrícola** (§14.0). La **primera Cantera** sigue siendo directa (sin piedra no hay obra de ascenso al nivel 2). En nivel 1 ya no hay minas; el oro de esa etapa sale de la recaudación por población.
 
 - **Qué es**: el extractor de mapa (`ambito: 'mapa'`) sobre su nodo, **más un almacén local (500, placeholder), un carro con buey (Comercio §12) y una guarnición de serie de 30 mineros** (IA, sin dueño, fuera de cupo; se repone gratis **de uno en uno, un minero cada `mineros.minutosPorMinero` (12) minutos desde la primera baja**: 30 en 6 h; decisión del autor, 2026-10-23). No es un asentamiento: sin zona, nivel, cargos ni medidor; cuenta como **edificio activo de su plaza madre**, que paga su mantenimiento.
-- **Requisitos**: madre de **nivel 2 o más**, el nodo dentro de su zona y **con ruta por tierra hasta la madre** (decisión del autor, 2026-10-23: un pueblo sin ella no podría acarrear nunca, así que no se funda; rechazo `pueblo.sin_ruta`). **Cupo** por nivel de la madre: 2 / 3 / 4 / 5 pueblos.
+- **Requisitos**: madre de **nivel 2 o más**, el nodo dentro de su zona y **con ruta por tierra hasta la madre** (decisión del autor, 2026-10-23: un pueblo sin ella no podría acarrear nunca, así que no se funda; rechazo `pueblo.sin_ruta`). **Cupo** por nivel de la madre: 1 / 3 / 4 / 5 / 6 pueblos (niveles 1 a 5; el del nivel 1 es para la aldea agrícola, que es el único pueblo que admite una madre de nivel 1).
 - **Trabajadores**: pesants de la madre; el pueblo no tiene población propia ni crece.
 - **Extracción**: **ritmo** `produccionBase × ratioManoObra × factorTecnología` contra el almacén local; con el almacén lleno, la extracción para (evento «almacén lleno»). Con el nodo agotado espera a la regeneración (`REGENERACION_NODOS`) sin mudarse; los pueblos **no** entran en el reemplazo automático ni en `EXTRACCION_MAXIMOS`.
 - **Destruirlo a mano** libera el cupo y no recupera nada. Tamaño: como mucho **0,2 de mapa**.
@@ -2135,15 +2135,38 @@ Ninguna abierta (las encontradas al documentar se resolvieron el 2026-10-11; ver
 
 **Mineros**: tropa nueva del Centro Urbano (leva, escalón 1, 30 unidades, velocidad 30, 1 de piedra por soldado, sin oro); entran en la tropa prestada del campamento.
 
+### 14.0 La aldea agrícola y la cría (mecánicas 50 y 51)
+
+> **Implementado en Rust (2026-10-27).** Reglas puras en `crates/asentamiento/src/pueblos.rs` (`Sitio`, `ReglasAldea`, `Especie`, `Rebano`, `iniciar_aldea`, `mejorar_aldea`, la cría `criar` y `saquear_rebano`), `nivel.rs` (el gate) y los bloques `PUEBLOS_EXTRACTORES.aldea` y `ESPECIES` (**entran en la huella de las reglas: hace falta partida nueva**); integración en `crates/nucleo/src/nucleo/pueblos.rs` (órdenes, panel `Nucleo::sitio_de_aldea`, carro de dos recursos, saqueo del rebaño). Foto **`BAN47`** (los pueblos guardan sitio, nivel, mejora y rebaño; `BAN40`–`BAN46` se siguen leyendo, con sus pueblos como extractores de nivel 1). Pruebas: los módulos `pueblos` y `nivel` de `asentamiento`, `crates/nucleo/tests/pueblos.rs` (la aldea de punta a punta, con foto) y `asentamientos.rs` (la plaza sube al nivel 2 con su aldea).
+
+- **Qué es.** Un pueblo más de la plaza madre (cuenta en el cupo, en su mantenimiento y en la mano de obra, se destruye y se conquista igual), con tipo de catálogo `Granja` y nombre `aldeaAgricola`. Lleva **granjas y los únicos corrales del juego** por niveles fijos (`aldea.niveles`: 1 → 2 granjas y 1 corral; 2 → 4 y 2; 3 → 6 y 3) y acarrea **trigo y ganado** a la madre con el carro de siempre.
+- **Dónde.** En un **punto** de la zona real de la madre, sin nodo (`Pueblo.sitio` es `Nodo(n)` o `Punto { pos, fertilidad }`): tierra firme, fertilidad del artefacto en el punto ≥ `fertilidadMinima` (0,3), a `separacionMinima` (3 u) de toda plaza y todo pueblo de cualquier Facción y con ruta por tierra hasta la madre. Desde el **nivel 1** de la madre (`nivelMadreMinimo` es por tipo: `{extractor: 2, aldea: 1}`). Una plaza puede tener varias aldeas si el cupo se lo permite (en el nivel 1 solo cabe una).
+- **Coste y obra.** Como cualquier obra de mapa: su nivel 1 (`coste`, 30 madera) + `costeAdicional` (50 madera) + el carro con su buey (20 madera, 12 oro) = **100 madera y 12 oro** (`Asentamiento::costo_de_aldea`), llevados en una columna y entregados con `EntregarMateriales`; obra de 4 h.
+- **Subir de nivel** (`MejorarAldea { pueblo }`, aldea activa sin mejora en curso y con nivel siguiente): deja una mejora «pendiente de materiales» con el coste del nivel siguiente (2: 60 madera y 20 piedra; 3: 120 y 40), que se entrega igual que una obra; entregada, obra de 2 h. **La aldea sigue produciendo mientras tanto** con su nivel de antes; al acabar sube (`aldea.subio`) y crecen granjas, corrales y el tope del rebaño.
+- **Producción.** Por minuto, el trigo es `granjas × produccionBaseTrigo(Granja, nivel 1) × fertilidad del punto × ratioManoObra × factorProduccionTrigo` (la fertilidad del punto, no la de la zona de la madre). Trabajan 4 pesants por granja y 4 por corral de la madre. **El almacén local es uno para los dos recursos** (500 entre trigo y ganado): el trigo entra primero y el ganado con el hueco que queda.
+- **Cría (mecánica 51).** Al completarse la aldea nace su **rebaño** con el pie de cría de sus corrales (`ESPECIES.<especie>.pieDeCriaPorCorral × corrales`; `especieInicial` vacuno: 20 cabezas). Cada minuto crece `cabezas × crecimientoPorHora / 60 × ratioManoObra × factorTecnologia(ganado)` hasta el tope (`topePorCorral × corrales`), en milésimas de cabeza (crece continuo, sin azar). Las **cabezas enteras por encima del pie de cría** se sacrifican mientras quepan en el almacén local y dan los `productos` de su especie (vacuno: 60 de ganado, `livestock`, por cabeza). Solo hay vacuno; la especie va en el rebaño para cuando haya caballos y bueyes.
+- **El carro** sale cuando el almacén local suma 500 entre los dos recursos y se lleva los dos (trigo primero); al llegar, cada recurso entra en el almacén de la madre y en la ventana de la solvencia por su cuenta.
+- **Guarnición**: 30 **granjeros** de serie (`aldea.granjeros.escuadra`) en vez de mineros, con la misma reposición. **Saqueo**: quien gana en la aldea se lleva además la parte `saqueoRebano` (0,5) de sus cabezas enteras, hasta lo que quepa en sus carros, convertida en ganado.
+- **Ganado del mundo.** Los nodos de ganado desaparecen del mundo (el artefacto regenerado el 2026-10-27 no los trae): el ganado sale solo de los rebaños. `MarcarPueblo` sobre un nodo de ganado de un mundo viejo sigue dando `pueblo.nodo_no_extraible`.
+- **Tecnología.** El hito «Corral activo» de `cria_caballar` y el capítulo «obra de corral» de su épica miran ahora la aldea: cuenta como Corral activo de la plaza mientras tenga una aldea activa, y completarla anota el hecho de la obra de corral.
+- **Panel.** `Nucleo::sitio_de_aldea(plaza)` propone el punto más fértil de la zona (anillos de 0,5 u y 24 rumbos desde la separación mínima) donde `MarcarAldea` se aceptaría ahora; lo usa el batch.
+- **Órdenes** (de plaza: Gobernador o Maestro de Obras de la madre, como `MarcarPueblo`): `MarcarAldea { asentamiento, punto }` (crea el pueblo) y `MejorarAldea { pueblo }`. **Hechos**: `aldea.marcada` (pueblo, x, y), `aldea.mejora_marcada` (pueblo, nivel) y `aldea.subio` (pueblo, nivel); la obra y la entrega usan los de siempre (`pueblo.materiales_entregados`, `pueblo.obra_iniciada`, `pueblo.completado`). **Rechazos nuevos**: `pueblo.fertilidad_insuficiente`, `pueblo.demasiado_cerca`, `pueblo.no_es_aldea`, `pueblo.nivel_maximo`, `pueblo.mejora_en_curso`, `ascenso.falta_aldea` y `obra.solo_en_aldea`.
+- **Placeholders** (los decidió el estudio al implementar; los cambia el autor): fertilidad mínima 0,3, separación 3 u, costes y obras de los niveles, el rebaño (tope 40 y pie 20 por corral, 15 % por hora, 60 de ganado por cabeza) y el saqueo de la mitad.
+- **Batch.** El jugador de `batch poblacion` levanta la aldea en cuanto el almacén paga su obra (materiales al instante, fertilidad 1 al este de la plaza) y el de `batch comercio` la marca en el sitio del panel y lleva los materiales con su columna.
+
 <!-- parametros:PUEBLOS_EXTRACTORES -->
 ```json
 {
-  "nivelMadreMinimo": 2,
+  "nivelMadreMinimo": {
+    "extractor": 2,
+    "aldea": 1
+  },
   "cupoPorNivel": {
-    "2": 2,
-    "3": 3,
-    "4": 4,
-    "5": 5
+    "1": 1,
+    "2": 3,
+    "3": 4,
+    "4": 5,
+    "5": 6
   },
   "capacidadAlmacenLocal": 500,
   "costeAdicional": {
@@ -2153,6 +2176,58 @@ Ninguna abierta (las encontradas al documentar se resolvieron el 2026-10-11; ver
   "mineros": {
     "escuadra": 30,
     "minutosPorMinero": 12
+  },
+  "aldea": {
+    "fertilidadMinima": 0.3,
+    "separacionMinima": 3,
+    "granjeros": {
+      "escuadra": 30
+    },
+    "niveles": {
+      "1": {
+        "granjas": 2,
+        "corrales": 1,
+        "coste": {
+          "madera": 30
+        },
+        "obraMinutos": 240
+      },
+      "2": {
+        "granjas": 4,
+        "corrales": 2,
+        "coste": {
+          "madera": 60,
+          "piedra": 20
+        },
+        "obraMinutos": 120
+      },
+      "3": {
+        "granjas": 6,
+        "corrales": 3,
+        "coste": {
+          "madera": 120,
+          "piedra": 40
+        },
+        "obraMinutos": 120
+      }
+    },
+    "especieInicial": "vacuno",
+    "saqueoRebano": 0.5
+  }
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:ESPECIES -->
+```json
+{
+  "vacuno": {
+    "topePorCorral": 40,
+    "pieDeCriaPorCorral": 20,
+    "crecimientoPorHora": 0.15,
+    "productos": {
+      "livestock": 60
+    }
   }
 }
 ```
@@ -2266,7 +2341,7 @@ Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; cont
 <!-- eventos -->
 ```json
 [
-  "acarreo.carro_repuesto", "acarreo.llega", "acarreo.sale", "acarreo.vuelve", "asentamiento.ascenso_iniciado", "asentamiento.nivel", "asentamiento.nivel_subio",
+  "acarreo.carro_repuesto", "aldea.marcada", "aldea.mejora_marcada", "aldea.subio", "acarreo.llega", "acarreo.sale", "acarreo.vuelve", "asentamiento.ascenso_iniciado", "asentamiento.nivel", "asentamiento.nivel_subio",
   "asentamiento.renombrado", "asentamiento.ruinas", "avanzada.adoptada", "avanzada.completada", "avanzada.deposito", "avanzada.guarnecida", "avanzada.guarnicion_retirada",
   "avanzada.materiales_entregados", "avanzada.obra_cancelada", "avanzada.obra_iniciada", "avanzada.obra_marcada", "avanzada.reabastecimiento", "avanzada.sin_dueno",
   "avanzada.traspasada", "avanzada.tropa_elegida", "construccion.auto_alternada", "construccion.cola_reordenada", "construccion.desencolada",

@@ -68,6 +68,11 @@ impl Geografia {
         self.mundo.campamentos().iter().filter_map(|c| c.posicion.as_ref().map(|p| (Punto::new(p.x, p.y), c.origen))).collect()
     }
 
+    /// La fertilidad del artefacto en `p`, en ppm (el raster es u8: 255 = 1,0); `None` fuera del mapa. La que manda en las granjas de una aldea agrícola.
+    pub(super) fn fertilidad_en(&self, p: Punto) -> Option<i64> {
+        self.mundo.fertilidad_en(p.x, p.y).map(|f| f as i64 * asentamiento::datos::UNO / 255)
+    }
+
     /// ¿Lo pisa una ruta? Lo que el A\* de las rutas da por transitable (la cima también, aunque cara).
     pub(super) fn transitable(&self, p: Punto) -> bool {
         self.mundo.transitable_en(p.x, p.y)

@@ -79,7 +79,7 @@ impl Nucleo {
         for a in e.asentamientos.values() {
             // Cualquier cambio de lo que ve quien está dentro marca la plaza o su interior (`huella_de_plaza`). Tampoco se mira el almacén de un pueblo ni su marca `lleno`: los cambia el paso de minuto, que no marca nada (va por la secuencia interior de la plaza).
             m.insert((Clase::Asentamiento, a.id), self.huella_de_plaza(a));
-            m.extend(a.economia.pueblos.iter().map(|p| ((Clase::Pueblo, p.id), huella(&(a.id, p.tipo, p.nodo, &p.estado, p.carro, e.combate.guarniciones.get(&p.id))))));
+            m.extend(a.economia.pueblos.iter().map(|p| ((Clase::Pueblo, p.id), huella(&(a.id, p.tipo, p.sitio, p.nivel, &p.estado, &p.mejora, &p.rebano, p.carro, e.combate.guarniciones.get(&p.id))))));
             m.extend(a.economia.avanzadas.iter().map(|v| ((Clase::Avanzada, v.id), huella(&(a.id, v, e.combate.avanzadas.get(&v.id))))));
         }
         m.extend(e.combate.huerfanas.iter().map(|(&id, v)| ((Clase::Avanzada, id), huella(&(v, e.combate.avanzadas.get(&id))))));

@@ -7,7 +7,7 @@ use asentamiento::datos::{Reglas, UNO};
 use asentamiento::edificio::{Edificio, Edificios, Estado, Fuente};
 use asentamiento::obras::ErrorObra;
 use asentamiento::produccion::Fuentes;
-use asentamiento::pueblos::{EstadoPueblo, Pueblo};
+use asentamiento::pueblos::{EstadoPueblo, Pueblo, Sitio};
 use asentamiento::recurso::Recurso;
 use asentamiento::Almacen;
 use base::{Mil, MS_POR_MINUTO};
@@ -248,7 +248,7 @@ fn los_minerales_y_la_segunda_cantera_solo_van_por_pueblo() {
 
 /// Un pueblo activo de ese tipo sobre el nodo 1, sin pasar por la obra.
 fn pueblo_activo(r: &Reglas, tipo: Tipo, carro: Option<u64>) -> Pueblo {
-    Pueblo { id: 7, tipo, nodo: 1, estado: EstadoPueblo::Activo, almacen: Almacen::nuevo(r.pueblos.capacidad_almacen), carro, lleno: false }
+    Pueblo { id: 7, tipo, sitio: Sitio::Nodo(1), nivel: 1, mejora: None, rebano: None, estado: EstadoPueblo::Activo, almacen: Almacen::nuevo(r.pueblos.capacidad_almacen), carro, lleno: false }
 }
 
 #[test]

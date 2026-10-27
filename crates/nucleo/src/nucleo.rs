@@ -1239,7 +1239,12 @@ impl Nucleo {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },
-            Comando::MarcarPueblo { .. } | Comando::EntregarMateriales { .. } | Comando::DestruirPueblo { .. } | Comando::ReponerCarro { .. } => match self.ejecutar_pueblos(t, p) {
+            Comando::MarcarPueblo { .. }
+            | Comando::EntregarMateriales { .. }
+            | Comando::DestruirPueblo { .. }
+            | Comando::ReponerCarro { .. }
+            | Comando::MarcarAldea { .. }
+            | Comando::MejorarAldea { .. } => match self.ejecutar_pueblos(t, p) {
                 Ok(Some(creada)) => creadas.push(creada),
                 Ok(None) => {}
                 Err(r) => return r,

@@ -123,6 +123,9 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
     21 * crate::estado_comercio::ETIQUETA | plaza
 }
 
+/// BAN47: BAN46 con las aldeas agrícolas (mecánica 50, 2026-10-27): cada pueblo guarda su sitio (nodo o punto con su fertilidad), su nivel y su subida en curso
+/// (`codec_economia`). BAN46 a BAN40 se siguen admitiendo: sus pueblos son extractores sobre un nodo, de nivel 1.
+///
 /// BAN46: BAN45 con las misiones de cada dueño (`Estado::misiones`, al final; mecánica 49, 2026-10-27). BAN45 a BAN40 se siguen admitiendo: cada plaza y cada Facción arrancan sus misiones
 /// al cargar, mirando sus contadores de estado (Misiones §8).
 ///
@@ -258,7 +261,7 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN46";
+const MAGIA: &[u8; 5] = b"BAN47";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -1324,19 +1327,20 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN46`): los cuatro primeros dicen la familia («BAN4» son los formatos 40 a 49, y se admiten del 40 al 46; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
+        // La cabecera es de 5 bytes (`BAN47`): los cuatro primeros dicen la familia («BAN4» son los formatos 40 a 49, y se admiten del 40 al 47; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
         // 20 a 29 y 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
-        let (mut con_eligieron, mut con_rutas_acarreo, mut con_nombres, mut con_precios, mut con_forzadas, mut con_misiones) = (true, true, true, true, true, true);
+        let (mut con_eligieron, mut con_rutas_acarreo, mut con_nombres, mut con_precios, mut con_forzadas, mut con_misiones, mut con_aldeas) = (true, true, true, true, true, true, true);
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'6' => {}
-                b'5' => con_misiones = false,
-                b'4' => (con_forzadas, con_misiones) = (false, false),
-                b'3' => (con_precios, con_forzadas, con_misiones) = (false, false, false),
-                b'2' => (con_nombres, con_precios, con_forzadas, con_misiones) = (false, false, false, false),
-                b'1' => (con_rutas_acarreo, con_nombres, con_precios, con_forzadas, con_misiones) = (false, false, false, false, false),
-                b'0' => (con_eligieron, con_rutas_acarreo, con_nombres, con_precios, con_forzadas, con_misiones) = (false, false, false, false, false, false),
+                b'7' => {}
+                b'6' => con_aldeas = false,
+                b'5' => (con_misiones, con_aldeas) = (false, false),
+                b'4' => (con_forzadas, con_misiones, con_aldeas) = (false, false, false),
+                b'3' => (con_precios, con_forzadas, con_misiones, con_aldeas) = (false, false, false, false),
+                b'2' => (con_nombres, con_precios, con_forzadas, con_misiones, con_aldeas) = (false, false, false, false, false),
+                b'1' => (con_rutas_acarreo, con_nombres, con_precios, con_forzadas, con_misiones, con_aldeas) = (false, false, false, false, false, false),
+                b'0' => (con_eligieron, con_rutas_acarreo, con_nombres, con_precios, con_forzadas, con_misiones, con_aldeas) = (false, false, false, false, false, false, false),
                 _ => return Err(ErrorFormato("no es un estado del núcleo")),
             }
         } else if magia == *b"BAN3" {
@@ -1432,7 +1436,7 @@ impl Estado {
                 parcelas.insert(p);
             }
             let version = r.u64()?;
-            let economia = codec_economia::leer(&mut r)?;
+            let economia = codec_economia::leer(&mut r, con_aldeas)?;
             let urbe = Urbe::desde_ciudad(codec_ciudad::leer(&mut r, asentamiento::recintos::proyeccion(&economia.recintos))?);
             let (protegida_hasta, ocupada_hasta) = (r.opt_i64()?, r.opt_i64()?);
             let cerrada_a = r.opt_u64()?.map(|b| politica::Grupos::desde_bits(b as u8));
@@ -1453,8 +1457,8 @@ impl Estado {
                     s.nodos_reclamados.insert(n, id);
                 }
             }
-            for p in &economia.pueblos {
-                s.nodos_reclamados.insert(p.nodo, id);
+            for n in economia.pueblos.iter().filter_map(|p| p.nodo()) {
+                s.nodos_reclamados.insert(n, id);
             }
             s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe, protegida_hasta, ocupada_hasta, puerta, cargos, nombre, capital_de, de_la_faccion_desde, resto_tributo, permite_reabastecer_aliados, fundadores });
         }

@@ -212,9 +212,9 @@ impl Nucleo {
 
     /// Una plaza y sus pueblos y avanzadas, con lo que se ve de cada uno.
     fn sitios_con_datos(&self, a: &crate::estado::Asentamiento) -> Vec<(Sitio, DatosSitio)> {
-        let nodos = self.geografia.as_ref().map(|g| &g.mapa.nodos);
+        let nodos = self.geografia.as_ref().map_or(&[][..], |g| &g.mapa.nodos[..]);
         let mut v = vec![(Sitio::Plaza(a.id), datos_de_plaza(a))];
-        v.extend(a.economia.pueblos.iter().filter_map(|p| Some((Sitio::Pueblo(p.id), datos_de_pueblo(a.faccion, nodos?.get(p.nodo as usize)?.pos, p)))));
+        v.extend(a.economia.pueblos.iter().filter_map(|p| Some((Sitio::Pueblo(p.id), datos_de_pueblo(a.faccion, crate::economia::posicion_de_pueblo(nodos, p)?, p)))));
         v.extend(a.economia.avanzadas.iter().map(|x| (Sitio::Avanzada(x.id), datos_de_avanzada(a.faccion, x))));
         v
     }

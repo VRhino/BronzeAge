@@ -31,13 +31,16 @@ pub const ANILLO_CAMPAMENTO: (i64, i64) = (30_000, 120_000);
 /// El recinto que compromete el jugador: la empalizada (nivel 1), en cuanto el nivel operativo de la plaza lo permite (Murallas §4, gate de nivel 2), como el bot
 /// del TypeScript (`bots/cerebro/gobierno.ts:197`). La mejora a piedra pide el nivel 3, al que este batch no llega.
 pub const NIVEL_RECINTO: u8 = 1;
+/// Id del único pueblo de cada plaza de este batch: su aldea agrícola.
+const ID_ALDEA: u64 = 1;
 
 fn clase(b: &Bloqueo) -> usize {
     match b {
         Bloqueo::NivelMaximo => 0,
         Bloqueo::AscensoEnCurso => 1,
         Bloqueo::FaltaPoblacion => 2,
-        Bloqueo::FaltanEdificios => 3,
+        // La aldea agrícola que pide el nivel 2 cuenta con los edificios que faltan.
+        Bloqueo::FaltanEdificios | Bloqueo::FaltaAldea => 3,
         Bloqueo::SinCupoDeFaccion => 4,
         Bloqueo::RecursosInsuficientes => 5,
         Bloqueo::Insolvente(_) => 6,
@@ -47,10 +50,10 @@ fn clase(b: &Bloqueo) -> usize {
 /// Lo que se mide de cada plaza mientras vive.
 #[derive(Clone, Debug, Default)]
 pub struct Registro {
-    /// Minuto de mundo en que se completó la primera Leñera, Cantera y Corral.
+    /// Minuto de mundo en que se completó la primera Leñera, la primera Cantera y la aldea agrícola.
     pub primera_lenera: Option<i64>,
     pub primera_cantera: Option<i64>,
-    pub primera_corral: Option<i64>,
+    pub primera_aldea: Option<i64>,
     pub nivel2: Option<i64>,
     pub nivel3: Option<i64>,
     pub ascenso_pedido: Option<i64>,
@@ -277,6 +280,19 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
     let mut ev = a.avanzar_hasta(t, &mut x);
     reg.pasos += 1;
 
+    // La aldea agrícola (mecánica 50; el nivel 2 la pide): el jugador la levanta en cuanto la plaza puede pagarla. Aquí los materiales salen del almacén y
+    // llegan a la obra al instante (sin columna ni carro, que son del núcleo); la aldea va al este de la plaza, con la fertilidad de la plaza (la de este batch, 1).
+    if minuto % CADA_MIN_ASCENSO == 0 && !a.pueblos.iter().any(|p| p.es_aldea()) {
+        let carro = comercio::acarreo::coste_reposicion(&re.comercio.flota);
+        let coste = Asentamiento::costo_de_aldea(reglas, &carro);
+        let sitio = Punto::new(pos.x + reglas.pueblos.aldea.separacion_minima + 500, pos.y);
+        if a.almacen.tiene(&coste) && a.iniciar_aldea(reglas, ID_ALDEA, sitio, UNO, &carro, &mut ev).is_ok() {
+            a.almacen.pagar(&coste);
+            let requerido = a.pueblo(ID_ALDEA).expect("recién marcada").falta();
+            a.entregar_a_pueblo(t, reglas, ID_ALDEA, &requerido, &mut ev).expect("todo entregado");
+        }
+    }
+
     // La política del jugador: cada hora, si nada lo bloquea, pide la subida. Cada plaza es de una Facción distinta de nivel 1 (cupo ocupado 0: sin cupo solo si el cupo es 0).
     if minuto % CADA_MIN_ASCENSO == 0 && a.ascenso.is_none() {
         let sin_cupo = politica::nivel::cupo_nivel(&reglas_politica().nivel, 1, a.nivel + 1) == Some(0);
@@ -303,7 +319,7 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
         match e {
             Evento::EdificioCompletado { tipo: Tipo::Lenera, .. } => drop(reg.primera_lenera.get_or_insert(minuto)),
             Evento::EdificioCompletado { tipo: Tipo::Cantera, .. } => drop(reg.primera_cantera.get_or_insert(minuto)),
-            Evento::EdificioCompletado { tipo: Tipo::Corral, .. } => drop(reg.primera_corral.get_or_insert(minuto)),
+            Evento::PuebloCompletado { id: ID_ALDEA } => drop(reg.primera_aldea.get_or_insert(minuto)),
             Evento::EdificioGratuito { tipo, .. } if urb.clase(tipo).is_some_and(|c| c.rol == Rol::AnclaSaturacion) => drop(reg.primera_ancla.get_or_insert(minuto)),
             Evento::RecintoCompletado { .. } => {
                 reg.recinto_completado.get_or_insert(minuto);

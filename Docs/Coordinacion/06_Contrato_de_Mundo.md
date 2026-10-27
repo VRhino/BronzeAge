@@ -28,7 +28,7 @@ Está en **unidades estratégicas** (2.667 × 2.000, en milésimas). El factor 1
 | `rios` | vectorial | cauces, vados |
 | `bosques` | vectorial (`ZonaBosque`) | masas explotables con id y área (pocos grandes, muchos medianos y pequeños) |
 | `parcelas` | vectorial (`ParcelaBosque`) | **cupos de explotación** de cada masa: puntos fijos separados `2·rp`, con su densidad. Una Leñera (que se construye en la ciudad) ocupa una parcela dentro de la zona de su asentamiento |
-| `nodos` | vectorial (`NodoRecurso`) | yacimientos y ganado con cantidad inicial y anillo; estaño y oro por gradiente |
+| `nodos` | vectorial (`NodoRecurso`) | yacimientos con cantidad inicial y anillo; estaño y oro por gradiente. Sin ganado desde el 2026-10-27: sale de los rebaños de las aldeas agrícolas |
 | `vetas` | vectorial (`Veta`) | distritos mineros de estaño (y oro), con su campamento de bandidos y su alijo lejano |
 | `campamentos` | vectorial | campamentos de mercenarios: centros de los focos, a 600 unos de otros |
 | `bandidos_iniciales`, `alijos` | vectorial | colocados por el generador, no por el motor |

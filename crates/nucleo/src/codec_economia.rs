@@ -8,8 +8,9 @@
 //! bool · extractor_minutos_sin_cupo{n u64 · n × (tipo u8, i64)} · completados_pendientes u32 · destruido bool · ultimo_minuto i64 · tendencia{almacén 29 × i64 · población 3 × i64}` (BAN22: la tendencia «+N/min» del último paso de minuto).
 //! Un edificio: `id u32 · tipo u8 · estado u8 · completa_en opt_i64 · prioridad i64 · nivel_interno u8 · mejora{bool, nivel u8,
 //! completa_en i64} · danado bool · fuente{u8: 0 ninguna, 1 nodo, 2 parcela; u32} · pausado_por_almacen bool`.
-//! Un pueblo: `id u64 · tipo u8 · nodo u32 · estado{u8: 0 pendiente → requerido y entregado, cada uno n u64 · n × (recurso u8, i64);
-//! 1 en obra → completa_en i64; 2 activo} · almacén{29 × (cantidad i64, capacidad i64, resto i64)} · carro opt_u64 · lleno bool`.
+//! Un pueblo: `id u64 · tipo u8 · sitio{u8: 0 nodo → u32; 1 punto → punto, fertilidad i64} · nivel u32 · estado{u8: 0 pendiente → requerido y entregado, cada uno
+//! n u64 · n × (recurso u8, i64); 1 en obra → completa_en i64; 2 activo} · mejora{opt: estado} · rebaño{opt: especie texto, cabezas i64} · almacén{29 × (cantidad i64, capacidad i64, resto i64)} · carro opt_u64 ·
+//! lleno bool` (BAN47, la aldea agrícola; antes `id · tipo · nodo u32 · estado · almacén · carro · lleno`, siempre sobre un nodo y de nivel 1).
 //! Una avanzada: `id u64 · posición punto · etapa u8 (0 atalaya, 1 fuerte, 2 ciudadela) · estado{u8: 0 en construcción, 1 operativa, 2 en ruinas → invulnerable_hasta opt_i64} ·
 //! obra{opt: tipo u8 (0 construir, 1 mejorar, 2 reparar) · requerido y entregado, cada uno n u64 · n × (recurso u8, i64) · completa_en opt_i64} · almacén{29 × (cantidad i64, capacidad i64, resto i64)}`.
 //! Un recinto: `id u32 · nivel u8 · celdas{n u64 · n × (col i32, row i32, clase u8: 0 muro, 1 puerta, 2 torre)} · avance i32 · mejora{opt: nivel u8, avance i32} ·
@@ -23,7 +24,7 @@ use asentamiento::catalogo::{Tipo, TIPOS};
 use asentamiento::edificio::{Edificio, Estado, Fuente, Mejora};
 use asentamiento::mantenimiento::Medidor;
 use asentamiento::politicas::Activa;
-use asentamiento::pueblos::{EstadoPueblo, IngresoAcarreo, Pueblo};
+use asentamiento::pueblos::{EstadoPueblo, IngresoAcarreo, Pueblo, Rebano, Sitio};
 use asentamiento::recintos::{Mejora as MejoraDeRecinto, Recinto};
 use asentamiento::recurso::TODOS;
 use asentamiento::{Almacen, Cargo, Costo, Politicas, Poblacion, Recurso};
@@ -141,6 +142,30 @@ pub(crate) fn leer_avanzada(r: &mut Lector) -> Result<Avanzada, ErrorFormato> {
         None
     };
     Ok(Avanzada { id, posicion, etapa, estado, obra, almacen: leer_almacen(r)? })
+}
+
+fn escribir_estado_pueblo(w: &mut Escritor, e: &EstadoPueblo) {
+    match e {
+        EstadoPueblo::Pendiente { requerido, entregado } => {
+            w.u8(0);
+            escribir_costo(w, requerido);
+            escribir_costo(w, entregado);
+        }
+        EstadoPueblo::EnObra { completa_en } => {
+            w.u8(1);
+            w.i64(*completa_en);
+        }
+        EstadoPueblo::Activo => w.u8(2),
+    }
+}
+
+fn leer_estado_pueblo(r: &mut Lector) -> Result<EstadoPueblo, ErrorFormato> {
+    Ok(match r.u8()? {
+        0 => EstadoPueblo::Pendiente { requerido: leer_costo(r)?, entregado: leer_costo(r)? },
+        1 => EstadoPueblo::EnObra { completa_en: r.i64()? },
+        2 => EstadoPueblo::Activo,
+        _ => return Err(ErrorFormato("estado de pueblo desconocido")),
+    })
 }
 
 fn escribir_costo(w: &mut Escritor, c: &Costo) {
@@ -311,21 +336,30 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
         w.bool(*pausado_por_almacen);
     }
     w.u64(pueblos.len() as u64);
-    for Pueblo { id, tipo, nodo, estado, almacen, carro, lleno } in pueblos {
+    for Pueblo { id, tipo, sitio, nivel, estado, mejora, rebano, almacen, carro, lleno } in pueblos {
         w.u64(*id);
         w.u8(tipo_a_u8(*tipo));
-        w.u32(*nodo);
-        match estado {
-            EstadoPueblo::Pendiente { requerido, entregado } => {
+        match sitio {
+            Sitio::Nodo(n) => {
                 w.u8(0);
-                escribir_costo(w, requerido);
-                escribir_costo(w, entregado);
+                w.u32(*n);
             }
-            EstadoPueblo::EnObra { completa_en } => {
+            Sitio::Punto { pos, fertilidad } => {
                 w.u8(1);
-                w.i64(*completa_en);
+                w.punto(*pos);
+                w.i64(*fertilidad);
             }
-            EstadoPueblo::Activo => w.u8(2),
+        }
+        w.u32(*nivel);
+        escribir_estado_pueblo(w, estado);
+        w.bool(mejora.is_some());
+        if let Some(m) = mejora {
+            escribir_estado_pueblo(w, m);
+        }
+        w.bool(rebano.is_some());
+        if let Some(Rebano { especie, cabezas }) = rebano {
+            w.texto(especie);
+            w.i64(*cabezas);
         }
         escribir_almacen(w, almacen);
         w.opt_u64(*carro);
@@ -368,7 +402,8 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
     tendencia.poblacion.iter().for_each(|&x| w.i64(x));
 }
 
-pub(crate) fn leer(r: &mut Lector) -> Result<Asentamiento, ErrorFormato> {
+/// `con_aldeas`: la foto trae los pueblos con su sitio, su nivel y su subida (desde BAN47); antes, todos sobre un nodo y de nivel 1.
+pub(crate) fn leer(r: &mut Lector, con_aldeas: bool) -> Result<Asentamiento, ErrorFormato> {
     let (fundado_en, nivel) = (r.i64()?, r.u32()?);
     let medidor = Medidor { valor: r.i64()?, racha: r.u32()?, nivel_actual: r.u32()? };
     let (pesants, artesanos, nobleza) = (r.i64()?, r.i64()?, r.i64()?);
@@ -401,14 +436,21 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Asentamiento, ErrorFormato> {
     }
     let mut pueblos = Vec::new();
     for _ in 0..r.cuenta()? {
-        let (id, tipo, nodo) = (r.u64()?, tipo_de_u8(r.u8()?)?, r.u32()?);
-        let estado = match r.u8()? {
-            0 => EstadoPueblo::Pendiente { requerido: leer_costo(r)?, entregado: leer_costo(r)? },
-            1 => EstadoPueblo::EnObra { completa_en: r.i64()? },
-            2 => EstadoPueblo::Activo,
-            _ => return Err(ErrorFormato("estado de pueblo desconocido")),
+        let (id, tipo) = (r.u64()?, tipo_de_u8(r.u8()?)?);
+        let (sitio, nivel, estado, mejora, rebano) = if con_aldeas {
+            let sitio = match r.u8()? {
+                0 => Sitio::Nodo(r.u32()?),
+                1 => Sitio::Punto { pos: r.punto()?, fertilidad: r.i64()? },
+                _ => return Err(ErrorFormato("sitio de pueblo desconocido")),
+            };
+            let (nivel, estado) = (r.u32()?, leer_estado_pueblo(r)?);
+            let mejora = if r.bool()? { Some(leer_estado_pueblo(r)?) } else { None };
+            let rebano = if r.bool()? { Some(Rebano { especie: r.texto()?, cabezas: r.i64()? }) } else { None };
+            (sitio, nivel, estado, mejora, rebano)
+        } else {
+            (Sitio::Nodo(r.u32()?), 1, leer_estado_pueblo(r)?, None, None)
         };
-        pueblos.push(Pueblo { id, tipo, nodo, estado, almacen: leer_almacen(r)?, carro: r.opt_u64()?, lleno: r.bool()? });
+        pueblos.push(Pueblo { id, tipo, sitio, nivel, estado, mejora, rebano, almacen: leer_almacen(r)?, carro: r.opt_u64()?, lleno: r.bool()? });
     }
     let mut avanzadas = Vec::new();
     for _ in 0..r.cuenta()? {

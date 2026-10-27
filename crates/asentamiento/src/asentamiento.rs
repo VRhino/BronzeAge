@@ -160,6 +160,12 @@ pub enum Evento {
     PuebloLleno { id: u64 },
     /// El pueblo (o su obra) se destruyó a mano.
     PuebloDestruido { id: u64 },
+    /// Se marcó la obra de una aldea agrícola en un punto (queda pendiente de materiales).
+    AldeaMarcada { id: u64, pos: Punto },
+    /// Se marcó la subida de una aldea a `nivel` (otra obra de mapa pendiente de materiales).
+    AldeaMejoraMarcada { id: u64, nivel: u32 },
+    /// Acabó la obra de la subida: la aldea ya es de `nivel`.
+    AldeaSubio { id: u64, nivel: u32 },
     /// Se marcó la obra de una avanzada (levantar la atalaya, mejorarla o repararla): queda pendiente de materiales.
     AvanzadaObraMarcada { id: u64, tipo: TipoObra, posicion: Punto },
     /// Se entregaron materiales a la obra de una avanzada (`cantidad` en total).
@@ -385,7 +391,7 @@ impl Asentamiento {
 
         // 1. Construcción. Lo que acaba ya acabó en su instante (`cumplir_fines`); aquí arrancan las obras que esperaban (las que la
         //    auto-construcción comprometió en el minuto anterior, las reconstrucciones) y se reintentan las mejoras que esperaban hueco.
-        self.completar_pueblos(t, &mut ev);
+        self.completar_pueblos(t, r, &mut ev);
         self.terminar_mejoras(t, r, x, &mut ev);
         self.arrancar_obras(t, r, &mut ev);
 

@@ -2,7 +2,7 @@
 
 ## 3.1 Oro
 - NO es moneda acuñada: es METAL PRECIOSO EN BRUTO PESADO (sistema tipo siclo/shekel).
-- ORIGEN: mina de oro en el mapa, mismo patrón que cantera/mina de cobre (nodo que se agota y se regenera tras un cooldown corto (3 min el ganado, 10 min el resto) — ver Doc 4.2); comisiones de comercio (3.5); y **recaudación en el asentamiento según población y clase** (Doc 4.1).
+- ORIGEN: mina de oro en el mapa, mismo patrón que cantera/mina de cobre (nodo que se agota y se regenera tras un cooldown corto (10 min) — ver Doc 4.2); comisiones de comercio (3.5); y **recaudación en el asentamiento según población y clase** (Doc 4.1).
 - USO: medio de pago en Mercado (3.3) y en comisiones (3.5); **coste de reclutamiento** salvo la milicia inicial (Doc 5.8); **compra de animales de arrastre para caravanas**, buey incluido (3.13.2); Maravilla (Doc 4.2.1); **compra de tecnología a Aedas** (Doc 6); **miradas e informes** de la taberna; y **mercado de mercenarios** (3.3b), donde el oro cobrado se destruye. Los sueldos no existen.
 - **El oro obliga a elegir** (`typescript-final:Consideraciones/Economia_Del_Oro_Definicion.md`): es la única moneda que convierte entre ambiciones (ejército / flota comercial / información), y no se puede ir a por todas a la vez. La recaudación por población es la FUENTE que lo hace pagable sin mina; el reclutamiento en oro y los animales en oro son los SUMIDEROS; y la política "Presión Fiscal" (Tesorero, Doc 4.4) cambia más oro por menos crecimiento.
 - ENTRE JUGADORES: recurso más de trueque, sin restricción especial.

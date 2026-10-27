@@ -33,6 +33,7 @@ pub(crate) fn valor_de_estado(e: &crate::estado::Estado, d: Dueno, contador: &st
                 "nivel" => u64::from(a.nivel()),
                 "artesanos" => u64::from(a.economia.poblacion.artesanos > 0),
                 "nobles" => u64::from(a.economia.poblacion.nobleza > 0),
+                "aldeas" => u64::from(a.economia.aldeas_activas()),
                 _ => 0,
             }
         }
@@ -131,7 +132,10 @@ impl Nucleo {
         let mut mirar = false;
         for s in sucesos {
             match s {
+                // La aldea agrícola cuenta en `aldeas` (de estado), no en `pueblos`, que son los extractores.
+                EventoEco::PuebloCompletado { id: p } if self.pueblo(*p).is_some_and(|(_, x)| x.es_aldea()) => mirar = true,
                 EventoEco::PuebloCompletado { .. } => self.avance(t, d, "pueblos", 1),
+                EventoEco::PuebloDestruido { .. } => mirar = true,
                 EventoEco::RecintoCompletado { .. } => self.avance(t, d, "recintos", 1),
                 EventoEco::AvanzadaCompletada { .. } => self.avance(t, d, "avanzadas", 1),
                 EventoEco::EdificioCompletado { .. } | EventoEco::MejoraCompletada { .. } | EventoEco::NivelSubio { .. } | EventoEco::PrimerosArtesanos | EventoEco::PrimerosNobles => mirar = true,

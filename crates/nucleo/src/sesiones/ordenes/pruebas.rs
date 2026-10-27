@@ -288,6 +288,8 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         (orden!(MarcarPueblo, OrdenMarcarPueblo, asentamiento_id: s("as-3"), heroe_id: h.clone(), nodo_id: s("nodo-12")), Comando::MarcarPueblo { asentamiento: 3, nodo: 12 }),
         (orden!(DestruirPueblo, OrdenDestruirPueblo, heroe_id: h.clone(), pueblo_id: pueblo()), Comando::DestruirPueblo { pueblo: 4 }),
         (orden!(ReponerCarroDeAcarreo, OrdenReponerCarroDeAcarreo, heroe_id: h.clone(), pueblo_id: pueblo()), Comando::ReponerCarro { pueblo: 4 }),
+        (orden!(MarcarAldea, OrdenMarcarAldea, asentamiento_id: s("as-3"), heroe_id: h.clone(), punto: pb_punto(1_000, 2_000)), Comando::MarcarAldea { asentamiento: 3, punto: Punto::new(1_000, 2_000) }),
+        (orden!(MejorarAldea, OrdenMejorarAldea, heroe_id: h.clone(), pueblo_id: pueblo()), Comando::MejorarAldea { pueblo: 4 }),
         (orden!(EntrarEnPueblo, OrdenEntrarEnPueblo, pueblo_id: pueblo(), heroe_id: h.clone()), Comando::EntrarEnPueblo { pueblo: 4, heroe: 7 }),
         (orden!(SalirDePueblo, OrdenSalirDePueblo, pueblo_id: pueblo(), heroe_id: h.clone()), Comando::SalirDePueblo { pueblo: 4, heroe: 7 }),
         (orden!(VaciarCarro, OrdenVaciarCarro, heroe_id: h.clone()), Comando::VaciarCarro { heroe: 7 }),
@@ -617,7 +619,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let de_administracion: BTreeSet<String> = ordenes_de_administracion().iter().map(|(_, c)| nombre(c)).collect();
     let del_servidor_de_batalla: BTreeSet<String> = ["RegistrarAsignacion", "ConfirmarInicio", "RegistrarTokens", "RegistrarSalida", "AplicarResultado"].map(String::from).into();
     let todos = variantes_de_comando();
-    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (172, 148, 19, 5));
+    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (174, 150, 19, 5));
     let clasificados: Vec<&String> = del_jugador.iter().chain(&de_administracion).chain(&del_servidor_de_batalla).collect();
     assert_eq!(clasificados.len(), todos.len(), "una variante en dos orígenes");
     let sin_clasificar: Vec<&String> = todos.iter().filter(|v| !clasificados.contains(v)).collect();
@@ -629,7 +631,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let tabla: BTreeSet<String> = tabla.map(|c| nombre(&c)).collect();
     let proto = include_str!("../../../../../proto/bronzeage/v1/orders.proto");
     let en_el_contrato = proto.lines().skip_while(|l| !l.contains("oneof cuerpo {")).skip(1).take_while(|l| l.trim() != "}").map(str::trim).filter(|l| !l.starts_with("//") && l.ends_with(';')).count();
-    assert_eq!((tabla.len(), en_el_contrato), (147, 147), "una orden del contrato sin mapear ni clasificar como no disponible");
+    assert_eq!((tabla.len(), en_el_contrato), (149, 149), "una orden del contrato sin mapear ni clasificar como no disponible");
 }
 
 /// El nombre de una orden en el contrato (el campo del `oneof`): la variante de `Cuerpo` en serpiente (`MarcharA` → `marchar_a`).
@@ -708,5 +710,5 @@ fn la_matriz_de_autorizacion_del_documento_es_la_del_codigo() {
     let faltan: Vec<String> = codigo.difference(&documento).map(fila).collect();
     let sobran: Vec<String> = documento.difference(&codigo).map(fila).collect();
     assert!(faltan.is_empty() && sobran.is_empty(), "la matriz del documento no es la del código.\nFaltan o no coinciden (como las dice el código):\n{}\nSobran (como las dice el documento):\n{}", faltan.join("\n"), sobran.join("\n"));
-    assert_eq!(codigo.len(), 148 + 19 + 5, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
+    assert_eq!(codigo.len(), 150 + 19 + 5, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
 }

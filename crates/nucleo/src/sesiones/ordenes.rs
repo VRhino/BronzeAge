@@ -650,6 +650,8 @@ impl Ctx<'_> {
             Cuerpo::MarcarPueblo(o) => Comando::MarcarPueblo { asentamiento: self.plaza(&o.asentamiento_id)?, nodo: self.nodo(&o.nodo_id)? },
             Cuerpo::DestruirPueblo(o) => Comando::DestruirPueblo { pueblo: self.pueblo(&o.pueblo_id)? },
             Cuerpo::ReponerCarroDeAcarreo(o) => Comando::ReponerCarro { pueblo: self.pueblo(&o.pueblo_id)? },
+            Cuerpo::MarcarAldea(o) => Comando::MarcarAldea { asentamiento: self.plaza(&o.asentamiento_id)?, punto: self.punto(o.punto.as_ref())? },
+            Cuerpo::MejorarAldea(o) => Comando::MejorarAldea { pueblo: self.pueblo(&o.pueblo_id)? },
             Cuerpo::EntrarEnPueblo(o) => Comando::EntrarEnPueblo { pueblo: self.pueblo(&o.pueblo_id)?, heroe: self.heroe(&o.heroe_id)? },
             Cuerpo::SalirDePueblo(o) => Comando::SalirDePueblo { pueblo: self.pueblo(&o.pueblo_id)?, heroe: self.heroe(&o.heroe_id)? },
             Cuerpo::VaciarCarro(o) => Comando::VaciarCarro { heroe: self.heroe(&o.heroe_id)? },

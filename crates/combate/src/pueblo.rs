@@ -13,10 +13,16 @@ use base::{Instante, Mil, Rng};
 use militar::escuadra::Escuadra;
 use militar::{total, Carga, EscuadraId, Tropa};
 
-/// La guarnición de serie de un pueblo: los mineros, sin dueño. Con 30 mineros de poder base 1 (leva) vale 30 y se reparten entre varias
-/// batallas con la misma identidad (la escuadra persiste a 0 y se repone).
-pub fn guarnicion_de_serie(r: &Reglas, id: EscuadraId, ahora: Instante) -> Escuadra {
-    Escuadra::nueva(&r.militar, id, SIN_DUENO, Tropa::Mineros, r.pueblos.mineros, None, ahora)
+/// La guarnición de serie de un pueblo: los mineros (o, en una aldea agrícola, los granjeros), sin dueño. Con 30 de poder base 1 (leva) vale 30
+/// y se reparten entre varias batallas con la misma identidad (la escuadra persiste a 0 y se repone).
+pub fn guarnicion_de_serie(r: &Reglas, id: EscuadraId, aldea: bool, ahora: Instante) -> Escuadra {
+    let (tropa, n) = if aldea { (Tropa::Granjeros, r.pueblos.granjeros) } else { (Tropa::Mineros, r.pueblos.mineros) };
+    Escuadra::nueva(&r.militar, id, SIN_DUENO, tropa, n, None, ahora)
+}
+
+/// Los soldados de la guarnición de serie completa a la que pertenece `guarnicion` (mineros o granjeros).
+pub fn completa(r: &Reglas, guarnicion: &Escuadra) -> i64 {
+    if guarnicion.tropa == Tropa::Granjeros { r.pueblos.granjeros } else { r.pueblos.mineros }
 }
 
 /// Cuándo vuelve el siguiente minero de una guarnición mermada (desde la baja o desde el minero anterior).
@@ -26,8 +32,9 @@ pub fn reposicion_en(r: &Reglas, desde: Instante) -> Instante {
 
 /// Vuelve un minero a la guarnición de serie, con su identidad (la experiencia y el nivel que ganó se conservan). `true` si ya está completa.
 pub fn reponer(r: &Reglas, guarnicion: &mut Escuadra) -> bool {
-    guarnicion.cantidad = (guarnicion.cantidad + 1).min(r.pueblos.mineros);
-    guarnicion.cantidad >= r.pueblos.mineros
+    let tope = completa(r, guarnicion);
+    guarnicion.cantidad = (guarnicion.cantidad + 1).min(tope);
+    guarnicion.cantidad >= tope
 }
 
 /// El combate de un saqueo: `resolverCombate` con la **ventaja del defensor del aguante** (×1,25) como multiplicador del defensor, que se suma a la
@@ -83,16 +90,22 @@ mod pruebas {
     #[test]
     fn los_30_mineros_son_una_escuadra_sin_dueno_de_poder_30() {
         let r = r();
-        let g = guarnicion_de_serie(r, 5, 0);
+        let g = guarnicion_de_serie(r, 5, false, 0);
         assert_eq!((g.tropa, g.cantidad, g.heroe, g.prestada, g.plaza_origen), (Tropa::Mineros, 30, SIN_DUENO, None, None));
         assert_eq!(g.poder(&r.militar), 30_300, "30 mineros de poder 1, con el +1 % del nivel 1");
+    }
+
+    #[test]
+    fn la_aldea_agricola_trae_30_granjeros_de_serie() {
+        let g = guarnicion_de_serie(r(), 5, true, 0);
+        assert_eq!((g.tropa, g.cantidad, g.heroe), (Tropa::Granjeros, 30, SIN_DUENO));
     }
 
     #[test]
     fn la_reposicion_gratuita_es_un_minero_cada_12_minutos_y_30_en_seis_horas() {
         let r = r();
         assert_eq!(reposicion_en(r, 10), 10 + 12 * MS_POR_MINUTO);
-        let mut g = guarnicion_de_serie(r, 5, 0);
+        let mut g = guarnicion_de_serie(r, 5, false, 0);
         g.cantidad = 0;
         g.experiencia = 7_000;
         let (mut t, mut citas) = (0, 0);
@@ -142,7 +155,7 @@ mod pruebas {
     #[test]
     fn el_defensor_tiene_la_ventaja_del_aguante_ademas_de_la_suya() {
         let r = r();
-        let mut g = [guarnicion_de_serie(r, 1, 0)];
+        let mut g = [guarnicion_de_serie(r, 1, false, 0)];
         let mut a = [escuadra(2, 7, Tropa::LancerosMimbre)];
         let inf = resolver_saqueo(r, Bando { escuadras: &mut a, heroes: &[7] }, Bando { escuadras: &mut g, heroes: &[] }, &mut Rng::nuevo(4)).unwrap();
         let mut rng = Rng::nuevo(4);
@@ -157,10 +170,10 @@ mod pruebas {
         let r = r();
         let (mut solo, mut ejercito) = (0, 0);
         for semilla in 0..300 {
-            let mut g = [guarnicion_de_serie(r, 1, 0)];
+            let mut g = [guarnicion_de_serie(r, 1, false, 0)];
             let i = resolver_saqueo(r, Bando { escuadras: &mut [], heroes: &[7] }, Bando { escuadras: &mut g, heroes: &[] }, &mut Rng::nuevo(semilla)).unwrap();
             solo += (i.ganador == Lado::Atacante) as u32;
-            let mut g = [guarnicion_de_serie(r, 1, 0)];
+            let mut g = [guarnicion_de_serie(r, 1, false, 0)];
             let mut a = [escuadra(2, 7, Tropa::ArquerosCompuesto), escuadra(3, 7, Tropa::ArquerosCompuesto)];
             let i = resolver_saqueo(r, Bando { escuadras: &mut a, heroes: &[7] }, Bando { escuadras: &mut g, heroes: &[] }, &mut Rng::nuevo(semilla)).unwrap();
             ejercito += (i.ganador == Lado::Atacante) as u32;

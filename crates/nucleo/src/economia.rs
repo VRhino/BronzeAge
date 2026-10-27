@@ -76,6 +76,14 @@ pub struct NodoMapa {
     pub inicial: Mil,
 }
 
+/// Dónde está un pueblo en el mapa: la posición de su nodo (un extractor) o su punto (una aldea agrícola). `None` si el nodo no está en `nodos`.
+pub fn posicion_de_pueblo(nodos: &[NodoMapa], p: &asentamiento::pueblos::Pueblo) -> Option<Punto> {
+    match p.sitio {
+        asentamiento::pueblos::Sitio::Nodo(n) => nodos.get(n as usize).map(|x| x.pos),
+        asentamiento::pueblos::Sitio::Punto { pos, .. } => Some(pos),
+    }
+}
+
 /// Lo que la economía necesita del artefacto, inmutable.
 pub struct Mapa {
     /// Piedra, ganado y minerales en una sola lista: `Fuente::Nodo(i)` indexa aquí.

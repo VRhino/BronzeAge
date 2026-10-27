@@ -148,7 +148,12 @@ fn una_plaza_vive_sola_construye_crece_y_sube_al_nivel_2() {
     let id = fundar_en(&mut n, fundada, "a", 1, p);
     for hora in 2..=12 * 24 {
         hora_de_jugador(&mut n, id, hora);
+        if hora == 24 {
+            // El nivel 2 pide una aldea agrícola activa (mecánica 50): el jugador la levanta el primer día.
+            comun::levantar_aldea(&mut n, "ana", id).expect("hay sitio fértil para la aldea");
+        }
     }
+    assert_eq!(n.pueblos_de(id).iter().filter(|p| p.es_aldea() && p.activo()).count(), 1, "la aldea está en pie");
     let eco = n.economia(id).expect("la plaza sigue viva");
     let completados = eventos(&n, "construccion.edificio_completado");
     let de_tipo = |t: Tipo| completados.iter().filter(|(_, _, d)| d.contains(&("tipo", tipo_idx(t)))).count();
@@ -1002,7 +1007,7 @@ fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash_y_el_formato_anterior_se
     let reglas = Reglas::default();
     let base = estado_con_una_plaza();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN46");
+    assert_eq!(&bytes[..5], b"BAN47");
     let viejo = [b"BAN13".as_slice(), &bytes[5..]].concat();
     let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN13 no debe admitirse") };
     assert!(e.to_string().contains("BAN13") && e.to_string().contains("población"), "{e}");

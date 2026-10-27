@@ -762,6 +762,8 @@ entrada acepta todo. Tras sortear todas las posiciones de **un tipo**, cada una 
 Total: **628** nodos. `id = "{tipo}-{nodos.length}-{round x}-{round y}"`, donde `nodos.length` es el índice **dentro de esa llamada** (por eso hierro empieza en 0 y el estaño extra repite índices del estaño raro; la unicidad la dan las coordenadas) y, para el ganado,
 `"livestock-{i}-{round x}-{round y}"`. El orden del array `nodos` (el de la tabla) es **observable**: la fachada lo usa para desempatar.
 
+> **En la reconstrucción (2026-10-27, mecánicas 50 y 51): el mundo ya no tiene nodos de ganado.** El ganado sale de los rebaños de las aldeas agrícolas ([`Economia_Construccion.md`](Economia_Construccion.md) §14.0). El generador regional (`generador/scripts/generar-mundo.ts`) sigue colocando la ganadería de `recursos.ts` y la **descarta** antes de escribir el artefacto, así que piedra, cobre y hierro caen en los mismos sitios que antes (versión del generador `regional-17-costas-1+estrategico-2`; semilla 42: hash `8394a9f7…`, 6.289 recursos). `REGENERACION_NODOS.livestock` se queda en el bloque pero ya no tiene a qué aplicarse. La tabla de arriba es la del TypeScript.
+
 ## 10. La fachada `Mapa` (`world/mapa.ts`)
 
 La única vía por la que el motor consulta el mundo. Se construye por comando sobre una **copia** del `EstadoMapa`; quien la crea decide si adopta `estadoActual()` o la descarta. Los índices derivados del mundo (nodos por id, celdas, bosques por celda, orden de generación) se cachean por `MapaGenerado`.

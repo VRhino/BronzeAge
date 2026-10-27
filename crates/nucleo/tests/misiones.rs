@@ -153,9 +153,9 @@ fn el_heroe_cumple_su_cadena_en_origen_y_reclama_el_oro_una_vez() {
     assert_eq!(h3.previa.as_deref(), Some("H1"));
     assert_eq!(h3.recompensa.as_ref().unwrap().por_id.get("oro"), Some(&(10 * UNIDAD)));
     assert_eq!(vistas[1].condiciones[0].avance, 0, "el préstamo de antes no cuenta para H2");
-    // La foto lleva las misiones (BAN46) y se lee igual.
+    // La foto lleva las misiones (desde BAN46) y se lee igual.
     let bytes = x.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN46");
+    assert_eq!(&bytes[..5], b"BAN47");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &x.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.misiones, x.n.estado().misiones);
     assert_eq!(vuelta.serializar(), bytes);
@@ -212,7 +212,8 @@ fn la_plaza_cumple_por_estado_al_completar_el_edificio_y_la_cadena_sigue_en_el_m
     let a4 = interior.misiones.iter().find(|v| v.id == "A4").unwrap();
     assert_eq!(a4.estado, contrato::v1::EstadoMision::MisionReclamada as i32);
     assert_eq!(a4.recompensa.as_ref().unwrap().por_id.get("piedra"), Some(&(300 * UNIDAD)));
-    assert!(interior.misiones.iter().all(|v| v.id != "A1"), "la deshabilitada no viaja");
+    let a1 = interior.misiones.iter().find(|v| v.id == "A1").expect("la A1 viaja");
+    assert_eq!(a1.estado, contrato::v1::EstadoMision::MisionActiva as i32, "activa mientras la plaza no tenga aldea agrícola");
     assert!(nucleo::proyeccion::propios::faccion_publica(&x.n, x.n.estado().asentamientos[&a].faccion).misiones.is_empty());
     // Una foto anterior a las misiones arranca la plaza mirando su estado, sin hecho.
     let r = &x.n.estado().reglas.economia.misiones;

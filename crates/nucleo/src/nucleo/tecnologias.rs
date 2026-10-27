@@ -53,7 +53,9 @@ impl<'a> VistaDeFaccion<'a> {
 
 impl VistaFaccion for VistaDeFaccion<'_> {
     fn edificio_activo(&self, tipo: Tipo, nivel: u8) -> bool {
-        self.n.plazas_de(self.faccion).any(|a| a.economia.edificios.hay_activo_con_nivel(tipo, nivel))
+        // El Corral solo existe en las aldeas agrícolas (§14.2): cuenta una aldea activa (todas tienen corrales).
+        let corral = |a: &Asentamiento| tipo == Tipo::Corral && a.economia.aldeas_activas() > 0;
+        self.n.plazas_de(self.faccion).any(|a| a.economia.edificios.hay_activo_con_nivel(tipo, nivel) || corral(a))
     }
 
     fn recurso_en_capital(&self, r: Recurso) -> bool {

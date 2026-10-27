@@ -8,7 +8,7 @@ Las misiones guían al jugador al principio del juego para que descubra las mec�
 
 ## 2. Modelo
 
-- **Catálogo** (`MISIONES`, §6): cada misión tiene un id, su dueño (`heroe`, `asentamiento` o `faccion`), sus **condiciones** (uno o varios contadores con su umbral; se cumplen todos a la vez), su recompensa y, si es de una cadena, la misión **previa**. Una misión con `"habilitada": false` existe en el catálogo pero no se activa nunca (la A1 espera a la aldea agrícola, mecánica 50).
+- **Catálogo** (`MISIONES`, §6): cada misión tiene un id, su dueño (`heroe`, `asentamiento` o `faccion`), sus **condiciones** (uno o varios contadores con su umbral; se cumplen todos a la vez), su recompensa y, si es de una cadena, la misión **previa**. Una misión con `"habilitada": false` existe en el catálogo pero no se activa nunca.
 - **Activa**: habilitada, no cumplida y con su previa cumplida (o sin previa). Todo dueño empieza con las primeras de cada cadena activas, también en una partida que ya estaba en marcha.
 - **Estado por dueño** (`Estado::misiones`): los contadores que necesita alguna misión **activa** (solo se cuenta mientras hay una activa que los use; un contador que ya no usa ninguna misión sin cumplir se borra), las cumplidas y las reclamadas. Un dueño sin entrada es un dueño nuevo: todo a 0 y nada cumplido.
 - **Cumplir** es fijo: una misión cumplida no se pierde aunque el estado cambie después. Al cumplirse sale el hecho `mision.cumplida` y se activan las que la tenían de previa; si ya cumplen, se cumplen en el mismo instante.
@@ -40,7 +40,7 @@ Cada avance se suma **en origen**, en el sitio que produce el hecho y al ocurrir
 | `recintos` | asentamiento | completa un recinto de la muralla |
 | `avanzadas` | asentamiento | completa una avanzada (su madre) |
 | `asedios` | asentamiento | resiste un asedio en combate |
-| `aldeas` | asentamiento | (sin uso hasta la mecánica 50) |
+| `aldeas` | asentamiento | **estado**: las aldeas agrícolas activas |
 | `capital` | Facción | **estado**: 1 si tiene capital |
 | `cargos` | Facción | asigna un Embajador o un cargo local en una de sus plazas |
 | `fundaciones` | Facción | funda una plaza |
@@ -101,7 +101,7 @@ Detalle en `Docs/Coordinacion/05_Contrato_de_Sesion.md`. Los títulos y textos d
     { "id": "H13", "condiciones": { "atributos": 1 }, "oro": 10 }
   ],
   "asentamiento": [
-    { "id": "A1", "habilitada": false, "condiciones": { "aldeas": 1 }, "recursos": { "trigo": 300 } },
+    { "id": "A1", "condiciones": { "aldeas": 1 }, "recursos": { "trigo": 300 } },
     { "id": "A2", "condiciones": { "mercado": 1 }, "recursos": { "madera": 200 } },
     { "id": "A3", "condiciones": { "barracon": 1 }, "recursos": { "madera": 200, "piedra": 100 } },
     { "id": "A4", "previa": "A2", "condiciones": { "nivel": 2 }, "recursos": { "piedra": 300 } },

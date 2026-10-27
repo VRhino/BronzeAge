@@ -36,11 +36,16 @@ fn rechazo_de_pueblo(e: ErrorPueblo) -> (&'static str, &'static str) {
     match e {
         ErrorPueblo::TipoNoPueblo => (PUEBLO_NODO_NO_EXTRAIBLE, "ese nodo no se explota con un pueblo extractor"),
         ErrorPueblo::TecnologiaFaltante => (PUEBLO_TECNOLOGIA_FALTANTE, "la Facción no tiene la tecnología que pide el extractor"),
-        ErrorPueblo::NivelInsuficiente => (PUEBLO_NIVEL_INSUFICIENTE, "la plaza madre debe ser de nivel 2 o más"),
+        ErrorPueblo::NivelInsuficiente => (PUEBLO_NIVEL_INSUFICIENTE, "la plaza madre no tiene el nivel que pide ese pueblo"),
         ErrorPueblo::SinCupo => (PUEBLO_SIN_CUPO, "la plaza madre ya tiene todos los pueblos que su nivel permite"),
         ErrorPueblo::NoExiste => (PUEBLO_DESCONOCIDO, "no existe ese pueblo"),
         ErrorPueblo::NoEstaPendiente => (PUEBLO_NO_ESTA_PENDIENTE, "la obra no está pendiente de materiales"),
         ErrorPueblo::NadaQueEntregar => (PUEBLO_NADA_QUE_ENTREGAR, "la columna no lleva nada que la obra necesite"),
+        ErrorPueblo::FertilidadInsuficiente => (PUEBLO_FERTILIDAD_INSUFICIENTE, "la tierra de ese punto no es bastante fértil para una aldea agrícola"),
+        ErrorPueblo::NoEsAldea => (PUEBLO_NO_ES_ALDEA, "solo las aldeas agrícolas suben de nivel"),
+        ErrorPueblo::NivelMaximo => (PUEBLO_NIVEL_MAXIMO, "la aldea ya está en su último nivel"),
+        ErrorPueblo::MejoraEnCurso => (PUEBLO_MEJORA_EN_CURSO, "la aldea ya tiene una subida de nivel en marcha"),
+        ErrorPueblo::NoEstaActivo => (PUEBLO_NO_ESTA_ACTIVO, "el pueblo aún no está levantado"),
     }
 }
 
@@ -60,7 +65,7 @@ impl Nucleo {
     /// Dónde está un pueblo (la posición de su nodo en el mapa).
     pub fn posicion_de_pueblo(&self, id: u64) -> Option<Punto> {
         let (_, p) = self.pueblo(id)?;
-        self.geografia.as_ref()?.mapa.nodos.get(p.nodo as usize).map(|n| n.pos)
+        crate::economia::posicion_de_pueblo(&self.geografia.as_ref()?.mapa.nodos, p)
     }
 
     /// Los nodos que el panel de la plaza madre ofrece para un pueblo (§14): los de piedra y minerales dentro de su zona real, sin pueblo ni
@@ -76,10 +81,52 @@ impl Nucleo {
         nodos.into_iter().filter(libre).map(|n| (n, geo.mapa.nodos[n as usize].tipo)).filter(|&(_, t)| alcanzable(t)).collect()
     }
 
+    /// Lo que `MarcarAldea` mira de un punto antes de la ruta: tierra firme, en la zona real de la plaza y a `separacionMinima` de toda plaza y todo
+    /// pueblo, de cualquier Facción. Devuelve la fertilidad del punto (ppm); el mínimo lo mira la regla (`iniciar_aldea`).
+    fn sitio_de_aldea_sin_ruta(&self, plaza: u64, pos: Punto) -> Result<i64, (&'static str, String)> {
+        let geo = self.geografia.as_ref().ok_or((rechazos::SIN_MUNDO, "el núcleo no tiene mundo cargado".into()))?;
+        let Some(fertilidad) = geo.fertilidad_en(pos).filter(|_| geo.es_tierra_firme(pos)) else { return Err((rechazos::PUEBLO_FUERA_DE_LA_ZONA, "ese punto no es tierra firme".into())) };
+        if !self.en_zona(plaza, pos) {
+            return Err((rechazos::PUEBLO_FUERA_DE_LA_ZONA, format!("el punto cae fuera de la zona de as-{plaza}")));
+        }
+        let separacion = self.estado.reglas.economia.datos.pueblos.aldea.separacion_minima;
+        let nodos = &geo.mapa.nodos;
+        let cerca = self.estado.asentamientos.values().any(|a| {
+            a.posicion.dist(pos) < separacion || a.economia.pueblos.iter().filter_map(|x| crate::economia::posicion_de_pueblo(nodos, x)).any(|q| q.dist(pos) < separacion)
+        });
+        if cerca {
+            return Err((rechazos::PUEBLO_DEMASIADO_CERCA, "el punto está demasiado cerca de otro pueblo o de una plaza".into()));
+        }
+        Ok(fertilidad)
+    }
+
+    /// El panel de la aldea agrícola: el punto más fértil de la zona de la plaza donde `MarcarAldea` se aceptaría ahora, muestreado en anillos de
+    /// 0,5 u y 24 rumbos desde la separación mínima hasta el radio de la zona. `None` si no hay ninguno (o no hay mundo).
+    pub fn sitio_de_aldea(&mut self, plaza: u64) -> Option<Punto> {
+        let a = self.estado.asentamientos.get(&plaza)?;
+        let (centro, radio) = (a.posicion, a.radio);
+        let (separacion, minima) = { let r = &self.estado.reglas.economia.datos.pueblos.aldea; (r.separacion_minima, r.fertilidad_minima) };
+        let mut sitios: Vec<(i64, Punto)> = (0..)
+            .map(|k| separacion + 500 + k * 500)
+            .take_while(|&d| d <= radio)
+            .flat_map(|d| (0..24).map(move |g| (d, g)))
+            .filter_map(|(d, g)| {
+                let ang = ((g * 15) as f64).to_radians();
+                let p = Punto::new(centro.x + (d as f64 * ang.cos()) as i64, centro.y + (d as f64 * ang.sin()) as i64);
+                self.sitio_de_aldea_sin_ruta(plaza, p).ok().filter(|&f| f >= minima).map(|f| (f, p))
+            })
+            .collect();
+        // El más fértil primero (a igualdad, el más cercano); la ruta, un A*, solo se busca para los que se prueban.
+        sitios.sort_by_key(|&(f, _)| std::cmp::Reverse(f));
+        sitios.into_iter().map(|(_, p)| p).find(|&p| self.camino_sin_red(p, centro).is_some())
+    }
+
     /// La planta del pueblo (presentación pura, T / Campamentos_Mercenarios §7): una función del id del pueblo, que no se guarda.
     pub fn planta_de_pueblo(&self, id: u64) -> Option<crate::urbanismo::VistaCiudad> {
         let (_, p) = self.pueblo(id)?;
-        Some(crate::urbanismo::planta_de_pueblo(&self.estado.reglas.economia, self.semilla, id, p.tipo))
+        let r = &self.estado.reglas.economia;
+        let aldea = p.es_aldea().then(|| r.datos.pueblos.aldea.niveles.get(&p.nivel).map_or((1, 1), |n| (n.granjas, n.corrales)));
+        Some(crate::urbanismo::planta_de_pueblo(r, self.semilla, id, p.tipo, aldea))
     }
 
     // ───────────────────────────── Órdenes ─────────────────────────────
@@ -127,6 +174,32 @@ impl Nucleo {
                 self.anotar_sucesos(*asentamiento, t, &ev);
                 Ok(Some(id))
             }
+            Comando::MarcarAldea { asentamiento, punto } => {
+                self.plaza_o_rechazo(*asentamiento)?;
+                self.autorizar_en_plaza(p, *asentamiento, None)?;
+                let pos = *punto;
+                let fertilidad = self.sitio_de_aldea_sin_ruta(*asentamiento, pos).map_err(|(c, m)| rechazo(c, m))?;
+                let madre = self.estado.asentamientos[asentamiento].posicion;
+                if self.camino_sin_red(pos, madre).is_none() {
+                    return Err(rechazo(rechazos::PUEBLO_SIN_RUTA, format!("el punto no tiene ruta por tierra hasta as-{asentamiento}")));
+                }
+                let carro = acarreo::coste_reposicion(&self.estado.reglas.economia.comercio.flota);
+                let id = self.estado.siguiente_id;
+                let mut ev = vec![];
+                let eco = &mut self.estado.asentamientos.get_mut(asentamiento).expect("existe").economia;
+                eco.iniciar_aldea(&datos, id, pos, fertilidad, &carro, &mut ev).map_err(de_pueblo)?;
+                self.estado.siguiente_id += 1;
+                self.anotar_sucesos(*asentamiento, t, &ev);
+                Ok(Some(id))
+            }
+            Comando::MejorarAldea { pueblo } => {
+                let (plaza, _) = self.pueblo(*pueblo).ok_or_else(|| de_pueblo(ErrorPueblo::NoExiste))?;
+                self.autorizar_en_plaza(p, plaza, None)?;
+                let mut ev = vec![];
+                self.estado.asentamientos.get_mut(&plaza).expect("existe").economia.mejorar_aldea(&datos, *pueblo, &mut ev).map_err(de_pueblo)?;
+                self.anotar_sucesos(plaza, t, &ev);
+                Ok(None)
+            }
             Comando::EntregarMateriales { ejercito, pueblo } => {
                 let e = self.estado.ejercitos.get(ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(*ejercito)))?;
                 if !self.manda_columna(p, e, false) {
@@ -164,7 +237,9 @@ impl Nucleo {
                     self.vaciar_lugar(t, Ubicacion::Pueblo(*pueblo), puerta, plaza, MOTIVO_DESTRUIDO);
                 }
                 let destruido = self.estado.asentamientos.get_mut(&plaza).expect("existe").economia.quitar_pueblo(*pueblo, &mut ev).expect("existe");
-                self.estado.nodos_reclamados.remove(&destruido.nodo);
+                if let Some(n) = destruido.nodo() {
+                    self.estado.nodos_reclamados.remove(&n);
+                }
                 self.olvidar_ruta_de_acarreo(*pueblo);
                 if let Some(carro) = destruido.carro {
                     self.perder_caravana(t, carro);
@@ -234,6 +309,26 @@ impl Nucleo {
                 }
             }
         }
+    }
+
+    /// El saqueo ganado de una aldea agrícola se lleva también la parte `saqueoRebano` de su rebaño (§14.3), sacrificada, en los carros del atacante y
+    /// hasta donde quepa (las cabezas que no caben se quedan en la aldea). Devuelve lo llevado. Nada en un extractor.
+    pub(super) fn saquear_rebano(&mut self, madre: u64, pueblo: u64, carros: &mut [combate::botin::CarroDeColumna]) -> Mercancia {
+        let libre: Mil = carros.iter().map(|c| (c.capacidad - total(&c.carga)).max(0)).sum();
+        let Estado { asentamientos, reglas, .. } = &mut self.estado;
+        let Some(a) = asentamientos.get_mut(&madre) else { return Mercancia::new() };
+        let cabe = |productos: &Costo| {
+            let por_cabeza: Mil = productos.iter().map(|&(_, n)| n).sum();
+            if por_cabeza > 0 { libre / por_cabeza } else { 0 }
+        };
+        let (cabezas, botin) = a.economia.saquear_rebano(&reglas.economia.datos, pueblo, cabe);
+        if cabezas == 0 {
+            return Mercancia::new();
+        }
+        self.tr.tocar(Clase::Pueblo, pueblo);
+        let botin: Mercancia = botin.into_iter().collect();
+        combate::botin::repartir_botin(carros, &botin);
+        botin
     }
 
     // ───────────────────────────── El carro ─────────────────────────────
@@ -310,21 +405,25 @@ impl Nucleo {
         let Some(pu) = a.economia.pueblo(pueblo) else { return };
         let Some(carro) = pu.carro else { return };
         let flota = self.estado.reglas.economia.comercio.flota.clone();
-        let recurso = pu.recurso(&self.estado.reglas.economia.datos);
+        let datos = &self.estado.reglas.economia.datos;
         let Some(c) = self.estado.comercio.caravana(carro) else { return };
-        if !acarreo::debe_salir(c, &flota, pu.almacen.cantidad(recurso)) {
+        if !acarreo::debe_salir(c, &flota, pu.existencias(datos)) {
             return;
         }
+        // Lo que se lleva: la capacidad entera, de su recurso o, en la aldea, del trigo y el ganado que tenga (por ese orden).
+        let carga: Mercancia = pu.carga_del_carro(datos, acarreo::capacidad(&flota)).into_iter().collect();
         let (pos_madre, faccion) = (a.posicion, a.faccion);
         let Some(pos_pueblo) = self.posicion_de_pueblo(pueblo) else { return };
         let Some(tz) = self.ruta_de_acarreo(plaza, pueblo, pos_pueblo, pos_madre, faccion, t) else { return };
-        let cantidad = acarreo::capacidad(&flota);
-        self.estado.asentamientos.get_mut(&plaza).and_then(|a| a.economia.pueblos.iter_mut().find(|p| p.id == pueblo)).expect("existe").almacen.quitar(recurso, cantidad);
+        let cantidad = total(&carga);
+        let local = &mut self.estado.asentamientos.get_mut(&plaza).and_then(|a| a.economia.pueblos.iter_mut().find(|p| p.id == pueblo)).expect("existe").almacen;
+        for (&r, &n) in &carga {
+            local.quitar(r, n);
+        }
         self.tr.tocar(Clase::Pueblo, pueblo);
         let i = self.estado.comercio.posicion_caravana(carro).expect("existe");
         let plan = self.plan_de(&self.estado.comercio.flota[i], &tz.puntos, &tz.costes, t);
         let peajes = peajes_de_paradas(&tz.paradas, longitud_ruta(&tz.puntos));
-        let carga: Mercancia = [(recurso, cantidad)].into_iter().collect();
         let puntos = tz.puntos.clone();
         acarreo::salir(&mut self.estado.comercio.flota[i], id32(plaza), carga, tz.puntos, tz.costes, peajes, plan.clone()).expect("el carro está en casa");
         self.instalar_plan(carro, plan);

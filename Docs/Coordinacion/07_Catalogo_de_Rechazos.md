@@ -47,6 +47,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `obra.tope_viviendas` | `OBRA_TOPE_VIVIENDAS` | — |
 | `obra.nivel_insuficiente` | `OBRA_NIVEL_INSUFICIENTE` | — |
 | `obra.solo_por_pueblo` | `OBRA_SOLO_POR_PUEBLO` | — |
+| `obra.solo_en_aldea` | `OBRA_SOLO_EN_ALDEA` | El Corral solo existe en las aldeas agrícolas (§14.2). |
 | `obra.tope_transformacion` | `OBRA_TOPE_TRANSFORMACION` | — |
 | `obra.gran_fundicion` | `OBRA_GRAN_FUNDICION` | — |
 | `obra.cola_llena` | `OBRA_COLA_LLENA` | — |
@@ -65,6 +66,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `ascenso.en_curso` | `ASCENSO_EN_CURSO` | — |
 | `ascenso.falta_poblacion` | `ASCENSO_FALTA_POBLACION` | — |
 | `ascenso.faltan_edificios` | `ASCENSO_FALTAN_EDIFICIOS` | — |
+| `ascenso.falta_aldea` | `ASCENSO_FALTA_ALDEA` | — |
 | `ascenso.sin_cupo_de_faccion` | `ASCENSO_SIN_CUPO_DE_FACCION` | — |
 | `ascenso.recursos_insuficientes` | `ASCENSO_RECURSOS_INSUFICIENTES` | — |
 | `ascenso.insolvente` | `ASCENSO_INSOLVENTE` | — |
@@ -159,7 +161,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 |---|---|---|
 | `pueblo.desconocido` | `PUEBLO_DESCONOCIDO` | — |
 | `pueblo.nodo_desconocido` | `PUEBLO_NODO_DESCONOCIDO` | — |
-| `pueblo.nodo_no_extraible` | `PUEBLO_NODO_NO_EXTRAIBLE` | El nodo es de ganado (el Corral es de la ciudad) o el tipo no va por pueblo. |
+| `pueblo.nodo_no_extraible` | `PUEBLO_NODO_NO_EXTRAIBLE` | El nodo es de ganado (el ganado sale de los corrales de las aldeas agrícolas) o el tipo no va por pueblo. |
 | `pueblo.nodo_ocupado` | `PUEBLO_NODO_OCUPADO` | — |
 | `pueblo.fuera_de_la_zona` | `PUEBLO_FUERA_DE_LA_ZONA` | — |
 | `pueblo.sin_ruta` | `PUEBLO_SIN_RUTA` | El nodo no tiene ruta por tierra hasta la plaza madre: su carro no podría acarrear. |
@@ -172,6 +174,11 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `pueblo.fuera_de_la_puerta` | `PUEBLO_FUERA_DE_LA_PUERTA` | — |
 | `pueblo.no_esta_activo` | `PUEBLO_NO_ESTA_ACTIVO` | — |
 | `pueblo.ya_tiene_carro` | `PUEBLO_YA_TIENE_CARRO` | — |
+| `pueblo.fertilidad_insuficiente` | `PUEBLO_FERTILIDAD_INSUFICIENTE` | Aldea agrícola (§14.2): el punto no llega a la fertilidad mínima. |
+| `pueblo.demasiado_cerca` | `PUEBLO_DEMASIADO_CERCA` | Aldea agrícola: el punto está demasiado cerca de otro pueblo. |
+| `pueblo.no_es_aldea` | `PUEBLO_NO_ES_ALDEA` | Solo las aldeas agrícolas suben de nivel. |
+| `pueblo.nivel_maximo` | `PUEBLO_NIVEL_MAXIMO` | — |
+| `pueblo.mejora_en_curso` | `PUEBLO_MEJORA_EN_CURSO` | — |
 
 ### Avanzadas (`ErrorAvanzada` y lo que el núcleo comprueba sobre el mapa, la columna y la guarnición; fase 4F)
 

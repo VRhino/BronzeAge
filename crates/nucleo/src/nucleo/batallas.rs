@@ -1163,6 +1163,7 @@ impl Nucleo {
                     let mut carros: Vec<CarroDeColumna> = columnas.iter().map(|&c| CarroDeColumna { carga: self.estado.ejercitos[&c].columna.carga.clone(), capacidad: self.capacidad_de_carga(c).unwrap_or(0) }).collect();
                     let almacen = &mut self.estado.asentamientos.get_mut(&madre).expect("existe").economia.pueblos.iter_mut().find(|p| p.id == pueblo).expect("existe").almacen;
                     combate::pueblo::saquear(&cr, almacen, &mut carros);
+                    self.saquear_rebano(madre, pueblo, &mut carros);
                     for (&c, carro) in columnas.iter().zip(carros) {
                         self.estado.ejercitos.get_mut(&c).expect("existe").columna.carga = carro.carga;
                         self.tr.tocar(Clase::Ejercito, c);

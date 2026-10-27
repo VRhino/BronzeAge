@@ -880,7 +880,7 @@ mod pruebas {
         let r = reglas();
         let mut sala = Edificio::nuevo(0, Tipo::SalaConsejo, EstadoEdificio::Activo);
         sala.nivel_interno = 1;
-        let gate = |rs: &[Recinto]| r.nivel.gates(4, &[sala.clone()], 1_000, 800, nivel_del_mejor_completo(rs)).unwrap();
+        let gate = |rs: &[Recinto]| r.nivel.gates(4, &[sala.clone()], 1_000, 800, nivel_del_mejor_completo(rs), 0).unwrap();
         assert_eq!(gate(&[]), vec![Falta::Edificios]);
         assert_eq!(gate(&[recinto(1, 1, anillo(20, &[0], 0), 19, true)]), vec![Falta::Edificios], "la empalizada no basta");
         let mut piedra = recinto(1, 2, anillo(20, &[0], 0), 19, true);

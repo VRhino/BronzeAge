@@ -199,6 +199,11 @@ pub enum Comando {
     DestruirPueblo { pueblo: u64 },
     /// Compra en la plaza madre un carro de acarreo nuevo (carro + buey) para un pueblo que se quedó sin él.
     ReponerCarro { pueblo: u64 },
+    /// Marca la obra de una aldea agrícola en un punto de la zona de la plaza madre (§14.2): queda «pendiente de materiales» y ocupa cupo.
+    /// `creadas` lleva el id del pueblo.
+    MarcarAldea { asentamiento: u64, punto: Punto },
+    /// Marca la subida de nivel de una aldea agrícola activa: otra obra de mapa pendiente de materiales, que se entregan con `EntregarMateriales`.
+    MejorarAldea { pueblo: u64 },
     // ── Héroes y tropa (Heroe_Y_Tropa, Campamentos_Mercenarios §5-§6). Las da la cuenta del héroe o la administración; la cuenta solo manda en
     //    los suyos. Un héroe fuera del mundo solo puede conectarse. ──
     /// Crea el héroe de una cuenta dentro de un campamento de mercenarios, donde reside. `creadas` lleva su id. El controlador `Bot` solo lo
@@ -704,6 +709,8 @@ impl Comando {
             | Comando::MarcarPueblo { .. }
             | Comando::DestruirPueblo { .. }
             | Comando::ReponerCarro { .. }
+            | Comando::MarcarAldea { .. }
+            | Comando::MejorarAldea { .. }
             | Comando::MejorarAvanzada { .. }
             | Comando::RepararAvanzada { .. }
             | Comando::DestruirAvanzada { .. }
@@ -760,7 +767,7 @@ impl Comando {
             Comando::ProponerTrueque { .. } => Acuerdo,
             Comando::ColocarOrdenMercado { .. } => OrdenMercado,
             Comando::CrearCaravana { .. } | Comando::ComprarCaravanaDeRefundacion { .. } | Comando::LanzarCaravanaFundacion { .. } => Caravana,
-            Comando::MarcarPueblo { .. } => Pueblo,
+            Comando::MarcarPueblo { .. } | Comando::MarcarAldea { .. } => Pueblo,
             Comando::ColocarAvanzada { .. } => Avanzada,
             Comando::CrearHeroe { .. } => Heroe,
             Comando::ReclutarTropa { .. } | Comando::ReclutarEnCampamento { .. } | Comando::PedirPrestamo { .. } | Comando::DarEscuadra { .. } => Escuadra,
@@ -838,7 +845,7 @@ impl Comando {
                 i.ejercitos.push(*ejercito);
                 i.pueblos.push(*pueblo);
             }
-            Comando::DestruirPueblo { pueblo } | Comando::ReponerCarro { pueblo } => i.pueblos.push(*pueblo),
+            Comando::DestruirPueblo { pueblo } | Comando::ReponerCarro { pueblo } | Comando::MejorarAldea { pueblo } => i.pueblos.push(*pueblo),
             Comando::EntrarEnPueblo { pueblo, heroe } | Comando::SalirDePueblo { pueblo, heroe } => {
                 i.heroes.push(*heroe);
                 i.pueblos.push(*pueblo);
@@ -935,7 +942,8 @@ impl Comando {
             | Comando::ColocarOrdenMercado { asentamiento, .. }
             | Comando::CrearCaravana { asentamiento }
             | Comando::DarRecursos { asentamiento, .. }
-            | Comando::MarcarPueblo { asentamiento, .. } => i.asentamientos.push(*asentamiento),
+            | Comando::MarcarPueblo { asentamiento, .. }
+            | Comando::MarcarAldea { asentamiento, .. } => i.asentamientos.push(*asentamiento),
             Comando::ReclutarTropa { asentamiento, heroe, .. }
             | Comando::EntrarEnAsentamiento { asentamiento, heroe }
             | Comando::SalirDeAsentamiento { asentamiento, heroe }
@@ -1891,6 +1899,15 @@ impl Peticion {
                 w.u64(*heroe);
                 w.u32(*alijo);
             }
+            Comando::MarcarAldea { asentamiento, punto } => {
+                w.u8(183);
+                w.u64(*asentamiento);
+                w.punto(*punto);
+            }
+            Comando::MejorarAldea { pueblo } => {
+                w.u8(184);
+                w.u64(*pueblo);
+            }
             Comando::ReclamarRecompensa { heroe, dueno, mision } => {
                 w.u8(182);
                 w.u64(*heroe);
@@ -2398,6 +2415,8 @@ impl Peticion {
             180 => Comando::CrearHeroe { cuenta: r.texto()?, campamento: r.u32()?, controlador: controlador_de_u8(r.u8()?)?, nombre: Some(r.texto()?) },
             181 => Comando::MarchaForzada { ejercito: r.u64()?, activa: r.bool()? },
             182 => Comando::ReclamarRecompensa { heroe: r.u64()?, dueno: crate::misiones::leer_dueno(&mut r)?, mision: r.texto()? },
+            183 => Comando::MarcarAldea { asentamiento: r.u64()?, punto: r.punto()? },
+            184 => Comando::MejorarAldea { pueblo: r.u64()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -2445,6 +2464,8 @@ pub mod rechazos {
     pub const OBRA_TOPE_VIVIENDAS: &str = "obra.tope_viviendas";
     pub const OBRA_NIVEL_INSUFICIENTE: &str = "obra.nivel_insuficiente";
     pub const OBRA_SOLO_POR_PUEBLO: &str = "obra.solo_por_pueblo";
+    /// El Corral solo existe en las aldeas agrícolas (§14.2).
+    pub const OBRA_SOLO_EN_ALDEA: &str = "obra.solo_en_aldea";
     pub const OBRA_TOPE_TRANSFORMACION: &str = "obra.tope_transformacion";
     pub const OBRA_GRAN_FUNDICION: &str = "obra.gran_fundicion";
     pub const OBRA_COLA_LLENA: &str = "obra.cola_llena";
@@ -2459,6 +2480,7 @@ pub mod rechazos {
     pub const ASCENSO_EN_CURSO: &str = "ascenso.en_curso";
     pub const ASCENSO_FALTA_POBLACION: &str = "ascenso.falta_poblacion";
     pub const ASCENSO_FALTAN_EDIFICIOS: &str = "ascenso.faltan_edificios";
+    pub const ASCENSO_FALTA_ALDEA: &str = "ascenso.falta_aldea";
     pub const ASCENSO_SIN_CUPO_DE_FACCION: &str = "ascenso.sin_cupo_de_faccion";
     pub const ASCENSO_RECURSOS_INSUFICIENTES: &str = "ascenso.recursos_insuficientes";
     pub const ASCENSO_INSOLVENTE: &str = "ascenso.insolvente";
@@ -2531,7 +2553,7 @@ pub mod rechazos {
     // Pueblos extractores y obras de mapa (`ErrorPueblo` y lo que el núcleo comprueba sobre el mapa).
     pub const PUEBLO_DESCONOCIDO: &str = "pueblo.desconocido";
     pub const PUEBLO_NODO_DESCONOCIDO: &str = "pueblo.nodo_desconocido";
-    /// El nodo es de ganado (el Corral es de la ciudad) o el tipo no va por pueblo.
+    /// El nodo es de ganado (el ganado sale de los corrales de las aldeas agrícolas) o el tipo no va por pueblo.
     pub const PUEBLO_NODO_NO_EXTRAIBLE: &str = "pueblo.nodo_no_extraible";
     pub const PUEBLO_NODO_OCUPADO: &str = "pueblo.nodo_ocupado";
     pub const PUEBLO_FUERA_DE_LA_ZONA: &str = "pueblo.fuera_de_la_zona";
@@ -2546,6 +2568,14 @@ pub mod rechazos {
     pub const PUEBLO_FUERA_DE_LA_PUERTA: &str = "pueblo.fuera_de_la_puerta";
     pub const PUEBLO_NO_ESTA_ACTIVO: &str = "pueblo.no_esta_activo";
     pub const PUEBLO_YA_TIENE_CARRO: &str = "pueblo.ya_tiene_carro";
+    /// Aldea agrícola (§14.2): el punto no llega a la fertilidad mínima.
+    pub const PUEBLO_FERTILIDAD_INSUFICIENTE: &str = "pueblo.fertilidad_insuficiente";
+    /// Aldea agrícola: el punto está demasiado cerca de otro pueblo.
+    pub const PUEBLO_DEMASIADO_CERCA: &str = "pueblo.demasiado_cerca";
+    /// Solo las aldeas agrícolas suben de nivel.
+    pub const PUEBLO_NO_ES_ALDEA: &str = "pueblo.no_es_aldea";
+    pub const PUEBLO_NIVEL_MAXIMO: &str = "pueblo.nivel_maximo";
+    pub const PUEBLO_MEJORA_EN_CURSO: &str = "pueblo.mejora_en_curso";
     // Avanzadas (`ErrorAvanzada` y lo que el núcleo comprueba sobre el mapa, la columna y la guarnición; fase 4F).
     pub const AVANZADA_DESCONOCIDA: &str = "avanzada.desconocida";
     pub const AVANZADA_NIVEL_INSUFICIENTE: &str = "avanzada.nivel_insuficiente";
@@ -3209,6 +3239,8 @@ mod pruebas {
             Comando::EntregarMateriales { ejercito: 2, pueblo: 9 },
             Comando::DestruirPueblo { pueblo: 9 },
             Comando::ReponerCarro { pueblo: 9 },
+            Comando::MarcarAldea { asentamiento: 3, punto: Punto::new(1_500, -2_000) },
+            Comando::MejorarAldea { pueblo: 9 },
         ];
         for c in comandos {
             let p = Peticion { actor: "ana".into(), admin: true, peticion_id: "y".into(), version_esperada: None, comando: c };

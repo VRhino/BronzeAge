@@ -50,7 +50,10 @@ const aCeldaTransitable = (p: Point): Point => {
 const vadosPorRio = colocarVados(r.rios);
 const bloqueoRios = bloquearRios({ ancho, alto }, r.rios, [...vadosPorRio.values()].flat(), lado);
 const e = medir('campamentos, metales y parcelas', () => generarMundoEstrategico(r));
+// Desde el 2026-10-27 el mundo no tiene nodos de ganado: el ganado sale de los rebaños de las aldeas agrícolas (mecánicas 50 y 51).
+// Se siguen colocando y se descartan después, para que la piedra caiga en los mismos sitios que antes.
 const recursos = medir('recursos', () => [...metalesARecursos(e.nodos), ...generarRecursosNoMetalicos(r, e.campamentos, e.nodos.map(n => n.posicion))]
+  .filter(x => x.tipo !== 'ganaderia')
   .map(x => ({ ...x, posicion: aCeldaTransitable(x.posicion) })));
 for (const c of e.campamentos) c.posicion = aCeldaTransitable(c.posicion);
 const apto = (p: Point) => evaluarTerreno(r.elevacion, p) !== 'agua' && esTransitable(r.elevacion, p) && r.conexion.tieneAcceso(p);
@@ -67,7 +70,7 @@ console.log(`grafo: ${est.nodos} nodos, ${est.aristas} aristas (${est.aristasVad
   `fuera de la mayor: campamentos ${fuera(e.campamentos.map(c => c.posicion))}/${e.campamentos.length}, recursos ${fuera(recursos.map(x => x.posicion))}/${recursos.length}, vados ${[...vadosPorRio.values()].flat().length}`);
 
 const mundo: MundoGenerado = {
-  seed, ancho, alto, generador: 'regional-17-costas-1+estrategico-1',
+  seed, ancho, alto, generador: 'regional-17-costas-1+estrategico-2',
   campamentos: e.campamentos, recursos, vetas: e.vetas, masas: e.masas, parcelas: e.parcelas, bandidos, alijos, rios, grafo,
   muestras: {
     altura: p => evaluarElevacion(r.elevacion, p),
