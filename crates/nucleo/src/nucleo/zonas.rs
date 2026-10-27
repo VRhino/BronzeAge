@@ -15,6 +15,11 @@ use mundo::Mundo;
 use std::collections::BTreeSet;
 use territorio::{Disco, DistanciasDeFundacion, Motivo, SinParcela, Terreno, Viabilidad};
 
+/// Muestras de la fertilidad de una zona (`SITIO.muestrasFertilidad`).
+pub(super) const MUESTRAS_FERTILIDAD: usize = 40;
+/// Coseno y seno de `i/40·2π` en ppm: las direcciones de las muestras, en enteros para que el paso sea determinista en cualquier máquina.
+const DIRECCIONES_FERTILIDAD: [(i64, i64); MUESTRAS_FERTILIDAD] = [(1000000, 0), (987688, 156434), (951057, 309017), (891007, 453990), (809017, 587785), (707107, 707107), (587785, 809017), (453990, 891007), (309017, 951057), (156434, 987688), (0, 1000000), (-156434, 987688), (-309017, 951057), (-453990, 891007), (-587785, 809017), (-707107, 707107), (-809017, 587785), (-891007, 453990), (-951057, 309017), (-987688, 156434), (-1000000, 0), (-987688, -156434), (-951057, -309017), (-891007, -453990), (-809017, -587785), (-707107, -707107), (-587785, -809017), (-453990, -891007), (-309017, -951057), (-156434, -987688), (0, -1000000), (156434, -987688), (309017, -951057), (453990, -891007), (587785, -809017), (707107, -707107), (809017, -587785), (891007, -453990), (951057, -309017), (987688, -156434)];
+
 /// Lo que el núcleo necesita del artefacto de mundo, ya preparado: no es estado de la partida.
 pub(crate) struct Geografia {
     mundo: Arc<Mundo>,
@@ -32,6 +37,20 @@ impl Geografia {
     /// Ancho y alto del mapa, en milésimas.
     pub(super) fn tamano(&self) -> (i64, i64) {
         self.mundo.tamano()
+    }
+
+    /// `fertilidadZona` (`mejorFertilidadEnZona`, Economia_Construccion §5): la mayor fertilidad del artefacto entre la posición de la plaza y las [`MUESTRAS_FERTILIDAD`] muestras
+    /// `i` a ángulo `i/40·2π` y distancia `(i mód 5)/5 · radio` que caen en su zona real (`yo` recortado por `vecinos`), en ppm (el raster es u8: 255 = 1,0). Las muestras fuera
+    /// del mapa no cuentan.
+    pub(super) fn fertilidad_de_zona(&self, yo: &Disco, vecinos: &[Disco]) -> i64 {
+        let en = |p: Punto| self.mundo.fertilidad_en(p.x, p.y);
+        let muestras = DIRECCIONES_FERTILIDAD.iter().enumerate().filter_map(|(i, &(c, s))| {
+            let r = yo.radio as i128 * (i % 5) as i128 / 5;
+            let p = Punto::new(yo.centro.x + (r * c as i128 / 1_000_000) as i64, yo.centro.y + (r * s as i128 / 1_000_000) as i64);
+            territorio::en_zona(p, yo, vecinos).then(|| en(p)).flatten()
+        });
+        let mejor = en(yo.centro).into_iter().chain(muestras).max().unwrap_or(0);
+        mejor as i64 * asentamiento::datos::UNO / 255
     }
 
     /// Las masas de bosque del artefacto, en su orden (el índice es el que guarda un campamento de bandidos).
@@ -117,6 +136,22 @@ impl Nucleo {
     /// Radio de la zona de una plaza ahora, en milésimas.
     pub fn radio_zona(&self, id: u64) -> Option<Mil> {
         self.estado.asentamientos.get(&id).map(|a| a.radio)
+    }
+
+    /// `fertilidadZona` de la plaza (ppm): la mejor fertilidad del artefacto en su zona real, recortada por las vecinas en contacto como sus sitios (Economia_Construccion §5).
+    /// `None` sin plaza o sin mundo.
+    pub fn fertilidad_de_zona(&self, id: u64) -> Option<i64> {
+        let (geo, a) = (self.geografia.as_ref()?, self.estado.asentamientos.get(&id)?);
+        let disco = |o: &Asentamiento| Disco { centro: o.posicion, radio: o.radio, faccion: o.faccion };
+        let vecinos: Vec<Disco> = self
+            .estado
+            .contactos
+            .iter()
+            .filter_map(|&(x, y)| if x == id { Some(y) } else { (y == id).then_some(x) })
+            .filter_map(|o| self.estado.asentamientos.get(&o))
+            .map(disco)
+            .collect();
+        Some(geo.fertilidad_de_zona(&disco(a), &vecinos))
     }
 
     /// ¿Cae `p` en la zona real de la plaza (disco recortado por las fronteras con otras Facciones)?

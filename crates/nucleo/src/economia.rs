@@ -250,6 +250,10 @@ pub(crate) struct FuentesMundo<'a> {
     /// Lo que salió de los nodos y lo que fabricaron las recetas, en milésimas, por contador de los logros (`tecnologia::Contador::indice`, 6B): se cuenta **en origen**, en plazas y
     /// pueblos (D17), y quien avanza la plaza lo suma al estado de tecnología.
     pub contado: [Mil; 24],
+    /// Los nodos que se agotaron en este paso y los que volvieron a su cantidad inicial (la regeneración se aplica al volver a extraer, pasado su cooldown), en orden: los hechos
+    /// `construccion.yacimiento_agotado` y `mapa.yacimiento_regenerado`.
+    pub agotados: Vec<u32>,
+    pub regenerados: Vec<u32>,
 }
 
 impl Fuentes for FuentesMundo<'_> {
@@ -259,7 +263,16 @@ impl Fuentes for FuentesMundo<'_> {
 
     fn extraer(&mut self, nodo: u32, pedido: Mil) -> Mil {
         let Some(n) = self.mapa.nodos.get(nodo as usize) else { return 0 };
-        let salido = self.nodos.entry(nodo).or_insert_with(|| StockNodo::nuevo(n.inicial)).extraer(n.inicial, regeneracion_ms(n.tipo), self.ahora, pedido).0;
+        let stock = self.nodos.entry(nodo).or_insert_with(|| StockNodo::nuevo(n.inicial));
+        let vacio = stock.stock == 0;
+        let (salido, agotado) = stock.extraer(n.inicial, regeneracion_ms(n.tipo), self.ahora, pedido);
+        // Un nodo vacío del que vuelve a salir algo se regeneró en esta misma extracción.
+        if vacio && salido > 0 {
+            self.regenerados.push(nodo);
+        }
+        if agotado {
+            self.agotados.push(nodo);
+        }
         if let Some(c) = self.catalogo.tipo(n.tipo).produccion.and_then(|(r, _)| tecnologia::contador::de_extraccion(r)) {
             self.contado[c.indice()] += salido;
         }
@@ -351,5 +364,28 @@ impl Sitios for SitiosPlaza<'_> {
 
     fn reclasificar_torres(&mut self, celdas: &mut [trazado::CeldaMuro], nivel: u8, p: &trazado::ParametrosMuralla) {
         self.urbe.reclasificar_torres(celdas, nivel, p);
+    }
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+
+    #[test]
+    fn la_extraccion_anota_el_nodo_que_se_agota_y_el_que_se_regenera() {
+        let mapa = Mapa::nuevo(vec![NodoMapa { pos: Punto::new(0, 0), tipo: Tipo::Cantera, inicial: 10_000 }], vec![], vec![], vec![], 100_000, 100_000);
+        let catalogo = asentamiento::Reglas::cargar().catalogo;
+        let mut nodos = BTreeMap::new();
+        let mut paso = |ahora: Instante, pedido: Mil| {
+            let mut f = FuentesMundo { mapa: &mapa, nodos: &mut nodos, ahora, catalogo: &catalogo, contado: [0; 24], agotados: vec![], regenerados: vec![] };
+            let salido = f.extraer(0, pedido);
+            (salido, f.agotados, f.regenerados)
+        };
+        assert_eq!(paso(0, 6_000), (6_000, vec![], vec![]));
+        assert_eq!(paso(MS_POR_MINUTO, 6_000), (4_000, vec![0], vec![]), "se agota con lo que quedaba");
+        assert_eq!(paso(2 * MS_POR_MINUTO, 6_000), (0, vec![], vec![]), "vacío durante su cooldown: nada que anotar");
+        let vuelve = MS_POR_MINUTO + regeneracion_ms(Tipo::Cantera);
+        assert_eq!(paso(vuelve, 6_000), (6_000, vec![], vec![0]), "pasado el cooldown vuelve entero y se anota");
+        assert_eq!(paso(vuelve + MS_POR_MINUTO, 10_000), (4_000, vec![0], vec![]));
     }
 }

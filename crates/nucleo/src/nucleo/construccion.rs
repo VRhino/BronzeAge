@@ -43,8 +43,6 @@ use std::cell::OnceCell;
 use territorio::Disco;
 
 // ── Lo que el Exterior de la economía todavía no tiene (cada uno lo dará su sistema) ──
-// placeholder: lo dará la fertilidad de la zona del mundo (`fertilidadZona`).
-const FERTILIDAD: i64 = UNO;
 // Sin ocupación, la recaudación va entera (la ocupación la recorta). La ración de la guarnición es la de los residentes (`heroes`).
 const FACTOR_EXTRA: i64 = UNO;
 
@@ -217,6 +215,8 @@ impl Nucleo {
         let (es_capital, distancia_capital, faccion_tiene_gran_fundicion) = self.exterior_de_capital(id, nivel_faccion);
         let orden_era = self.orden_era();
         let residentes = self.residentes_en(id);
+        // La mejor fertilidad de su zona real: la comparten todas sus Granjas.
+        let fertilidad = self.fertilidad_de_zona(id)?;
         let mut a = self.estado.asentamientos.remove(&id)?;
         let (nivel_antes, nobleza_antes, alcanzado_antes) = (a.nivel_actual(), a.economia.poblacion.nobleza > 0, a.nivel());
         let (r, contado) = {
@@ -227,7 +227,7 @@ impl Nucleo {
             // El `bonusProduccion` de las adoptadas (6C: `canteria` ×1,5 la piedra), en plazas y pueblos, aplicado al ritmo antes del resto oculto.
             let factor_tecnologia = |rec: Recurso| tecnologia::adopcion::factor_produccion(rt, adoptadas, rec);
             let extra = factores_extra(rt, a.ocupada_hasta.map(|_| reglas.economia.combate.ocupacion.factor_crecimiento), residentes);
-            let mut fuentes = FuentesMundo { mapa: &geo.mapa, nodos: yacimientos, ahora: t, catalogo: &reglas.economia.datos.catalogo, contado: [0; 24] };
+            let mut fuentes = FuentesMundo { mapa: &geo.mapa, nodos: yacimientos, ahora: t, catalogo: &reglas.economia.datos.catalogo, contado: [0; 24], agotados: vec![], regenerados: vec![] };
             let mut sitios = SitiosPlaza {
                 mapa: &geo.mapa,
                 cuota_pct: reglas.territorio.cuota_parcelas_pct,
@@ -246,7 +246,7 @@ impl Nucleo {
                 reglas: &reglas.economia.datos,
                 fuentes: &mut fuentes,
                 sitios: &mut sitios,
-                fertilidad: FERTILIDAD,
+                fertilidad,
                 tiene_tecnologia: &tiene_tecnologia,
                 factor_tecnologia: &factor_tecnologia,
                 nivel_faccion,
@@ -263,8 +263,10 @@ impl Nucleo {
                 recaudacion_extra: if a.ocupada_hasta.is_some() { reglas.economia.combate.ocupacion.factor_recaudacion } else { FACTOR_EXTRA },
             };
             let r = f(&mut a.economia, &mut x);
-            (r, fuentes.contado)
+            (r, (fuentes.contado, fuentes.agotados, fuentes.regenerados))
         };
+        let (contado, agotados, regenerados) = contado;
+        self.anotar_yacimientos(&a, t, &agotados, &regenerados);
         let (nivel_ahora, nobleza_ahora, faccion, alcanzado_ahora) = (a.nivel_actual(), a.economia.poblacion.nobleza > 0, a.faccion, a.nivel());
         self.estado.asentamientos.insert(id, a);
         self.contar_alcanzado(Some(alcanzado_antes), Some(alcanzado_ahora));
@@ -280,6 +282,33 @@ impl Nucleo {
             self.mirar_recurso_en_capital(faccion);
         }
         Some(r)
+    }
+
+    /// Los hechos de los yacimientos que tocó el paso de la plaza `a`: `construccion.yacimiento_agotado` con el edificio (o el pueblo) que lo explota, y `mapa.yacimiento_regenerado`
+    /// (Economia_Construccion §5, Generacion_Del_Mundo §10.1). Los oye la Facción de la plaza.
+    fn anotar_yacimientos(&mut self, a: &crate::estado::Asentamiento, t: Instante, agotados: &[u32], regenerados: &[u32]) {
+        let Some(geo) = self.geografia.as_ref() else { return };
+        let catalogo = &self.estado.reglas.economia.datos.catalogo;
+        let recurso = |nodo: u32| geo.mapa.nodos.get(nodo as usize).and_then(|n| catalogo.tipo(n.tipo).produccion).map_or(-1, |(r, _)| recurso_a_u8(r) as i64);
+        let mut hechos = Vec::new();
+        for &nodo in regenerados {
+            hechos.push(("mapa.yacimiento_regenerado", vec![("nodo", nodo as i64), ("recurso", recurso(nodo))]));
+        }
+        for &nodo in agotados {
+            let mut datos = vec![("nodo", nodo as i64), ("recurso", recurso(nodo))];
+            if let Some(e) = a.economia.edificios.iter().find(|e| e.fuente == Some(Fuente::Nodo(nodo))) {
+                datos.extend([("edificio", e.id as i64), ("tipo", tipo_a_u8(e.tipo) as i64)]);
+            } else if let Some(p) = a.economia.pueblos.iter().find(|p| p.nodo == nodo) {
+                datos.extend([("pueblo", p.id as i64), ("tipo", tipo_a_u8(p.tipo) as i64)]);
+            }
+            hechos.push(("construccion.yacimiento_agotado", datos));
+        }
+        for (codigo, datos) in hechos {
+            self.tr.emitir(&self.estado, EventoNucleo { codigo: codigo.into(), en: t, ejercitos: vec![], asentamientos: vec![a.id], punto: Some(a.posicion), datos, ..Default::default() });
+        }
+        if !(agotados.is_empty() && regenerados.is_empty()) {
+            self.tr.tocar(Clase::Asentamiento, a.id);
+        }
     }
 
     /// El paso de un minuto de la plaza `id` en `t` (el evento `Carga::Minuto`).

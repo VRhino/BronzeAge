@@ -673,13 +673,14 @@ async fn tras_un_reinicio_quien_conserva_una_version_de_antes_reanuda_por_deltas
     let dir = tempfile::tempdir().unwrap();
     let ajustes = Ajustes { foto_cada: 0, latido_ms: 0, ..Ajustes::default() };
     let x = escenario(m, 4, ajustes.clone(), Some(dir.path()));
-    let a = x.a;
+    let (a, heroe_de_ana) = (x.a, x.ana);
     let mut t = x.n.ahora();
     let w = arrancar_con(x.n).await;
     let mut cuenta = Cuenta::new();
     let mut admin = Jugador::nuevo(&w, "admin", TipoCliente::ClienteAdminWeb, None, &mut cuenta).await;
     let mut ana = Jugador::nuevo(&w, "ana", TipoCliente::ClienteUnity, None, &mut cuenta).await;
-    // Lo que ana conserva a mitad; después el mundo sigue (una orden suya, recursos, la relación de su Facción, pasos de minuto) y se para.
+    // Lo que ana conserva a mitad; después el mundo sigue (una orden suya, recursos de la plaza y de su almacén personal, la relación de su Facción, pasos de minuto) y se para. El almacén
+    // personal es lo que mueve su `HEROE` seguro: con la fertilidad real de la zona (paridad P8) la plaza pasa hambre y su tropa deserta antes, y en el tramo ya no le cambia nada más.
     let mut c = ana.c.take().unwrap();
     ana.almacen.aplicar_todo(&pendiente(&mut c).await);
     ana.c = Some(c);
@@ -687,6 +688,8 @@ async fn tras_un_reinicio_quien_conserva_una_version_de_antes_reanuda_por_deltas
     let aceptada = |r: &pb::ResultadoOrden| assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32, "{r:?}");
     aceptada(&ana.dar("auto", orden::Cuerpo::AlternarAutoConstruccion(pb::OrdenAlternarAutoConstruccion { asentamiento_id: ids::asentamiento(a), pausada: false }), &mut cuenta).await);
     aceptada(&admin.dar("dar", admin_dar_recursos(a, "trigo", 9_000.0), &mut cuenta).await);
+    let personal = [("heroe_id", texto(&ids::heroe(heroe_de_ana))), ("recurso", texto("oro")), ("cantidad", Value { kind: Some(Kind::NumberValue(9_000.0)) })];
+    aceptada(&admin.dar("personal", de_admin("dar_almacen_personal", &personal), &mut cuenta).await);
     aceptada(&admin.dar("rel", de_admin("fijar_relacion", &[("faccion_a_id", texto(&ids::faccion(1))), ("faccion_b_id", texto(&ids::faccion(2))), ("relacion", texto("alianza"))]), &mut cuenta).await);
     t += 3 * MS_POR_MINUTO;
     aceptada(&admin.dar("reloj", reloj_hasta(t), &mut cuenta).await);

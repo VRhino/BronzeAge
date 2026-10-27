@@ -780,6 +780,8 @@ extraer(id, n): si el nodo no existe o n ≤ 0 → 0 ; disponible = stock(id) ; 
 1. Sin entrada en `regeneraEn`: se agenda `instante + cooldown` (`livestock` = `REGENERACION_NODOS.livestock.cooldownMinutos`; **todo lo demás**, también la piedra, = `.metales`). El cooldown cuenta desde el tick en que se **detecta** el agotamiento, no desde que ocurrió. Esto también cura partidas viejas.
 2. Con entrada y `instante ≥ regeneraEn`: se borran `extraido[id]` y `regeneraEn[id]` (stock completo) y se emite `mapa.yacimiento_regenerado { nodoId, recurso }`.
 
+> **En Rust** (paridad P8, 2026-10-27) no hay evento ni barrido: el nodo guarda desde cuándo está vacío y vuelve a su cantidad inicial en la primera extracción pasado el cooldown, que es cuando se emite `mapa.yacimiento_regenerado { nodo, recurso }` (Economia_Construccion §5).
+
 ### 10.2 Consultas espaciales
 
 - Índice de celdas de **100×100**: los nodos se apuntan en la celda de su posición; los bosques, en **todas** las celdas que toca su caja (`floor((cx − r)/100) … floor((cx + r)/100)`, igual en y).
@@ -1262,7 +1264,7 @@ No hay divergencias abiertas. Resueltas el 2026-10-12 al escribir este documento
 
 ## Catálogo de eventos
 
-Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. De estos, aún no se emiten 1 (`mapa.yacimiento_regenerado`).
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. Todos se emiten: `mapa.yacimiento_regenerado` desde la paridad P8 (2026-10-27), en el paso de la plaza que vuelve a extraer del nodo (Economia_Construccion §5).
 
 <!-- eventos -->
 ```json

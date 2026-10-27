@@ -177,6 +177,35 @@ fn la_zona_solo_crece_con_edificios_hasta_el_techo_de_su_nivel() {
     assert_eq!(codigo(&n.aplicar_en(t, admin("n9", Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 9 }))), rechazos::NIVEL_INVALIDO);
 }
 
+/// `mejorFertilidadEnZona` recalculada aquí en coma flotante, como el TypeScript: la posición y 40 muestras a `(i mód 5)/5` del radio (sin vecinas, todas en la zona).
+fn mejor_fertilidad(m: &Mundo, p: Punto, radio: i64) -> i64 {
+    let en = |q: Punto| m.fertilidad_en(q.x, q.y);
+    let muestras = (0..40).map(|i| {
+        let (a, r) = (i as f64 / 40.0 * std::f64::consts::TAU, radio as f64 * (i % 5) as f64 / 5.0);
+        Punto::new(p.x + (r * a.cos()) as i64, p.y + (r * a.sin()) as i64)
+    });
+    en(p).into_iter().chain(muestras.filter_map(en)).max().unwrap() as i64 * 1_000_000 / 255
+}
+
+#[test]
+fn las_granjas_rinden_con_la_mejor_fertilidad_de_la_zona() {
+    let m = con_mundo!();
+    let mut n = nuevo(m);
+    let p = sitio(&n, &m.0, 1, 60_000, 0, 1, false);
+    let id = fundar_en(&mut n, 0, "a", 1, p);
+    // La mejor de la posición y sus 40 muestras, no la del centro ni un 1,0 fijo; y cambia con el radio, que lleva las muestras más lejos.
+    let f = n.fertilidad_de_zona(id).unwrap();
+    assert_eq!(f, mejor_fertilidad(&m.0, p, 6_000));
+    assert!(f >= m.0.fertilidad_en(p.x, p.y).unwrap() as i64 * 1_000_000 / 255);
+    assert!((0..=1_000_000).contains(&f));
+    assert!(n.aplicar_en(0, admin("n3", Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 3 })).aceptada());
+    edificios(&mut n, MIN, id, 20);
+    let r = n.radio_zona(id).unwrap();
+    assert!(r > 6_000);
+    assert_eq!(n.fertilidad_de_zona(id).unwrap(), mejor_fertilidad(&m.0, p, r));
+    assert_eq!(n.fertilidad_de_zona(id + 1_000), None, "sin plaza no hay fertilidad");
+}
+
 /// Dos plazas de distinta Facción a `d` (en un anillo del mismo campamento, buscando un par fundable).
 fn par(n: &mut Nucleo, m: &Mundo, d: i64, f: (u32, u32), t: i64) -> (u64, u64, Punto, Punto) {
     let pa = sitio(n, m, 2, 70_000, 0, f.0, false);
