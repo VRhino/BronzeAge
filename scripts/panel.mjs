@@ -213,7 +213,7 @@ th{color:var(--sub);font-weight:500;font-size:12px}td .fila{gap:6px}td button{pa
 <details open data-seccion="mundo"><summary>Mundo</summary>
 <div class="card"><div class="form"><label>Semilla<input id="m-semilla" type="number" min="0" value="42"></label><button id="m-generar">Generar mundo (unos 15 min)</button>
 <span class="est" id="m-estado"></span></div>
-<table style="margin-top:12px"><thead><tr><th>Artefacto</th><th>Creado</th></tr></thead><tbody id="m-lista"></tbody></table><div class="msg" id="m-msg"></div></div></details>
+<table style="margin-top:12px"><thead><tr><th>Artefacto</th><th>Creado</th><th>Partidas</th><th></th></tr></thead><tbody id="m-lista"></tbody></table><div class="msg" id="m-msg"></div></div></details>
 </section>
 <section class="vista" id="v-servicios">
 <details open data-seccion="backend"><summary>Servicios<span class="cuenta"></span></summary><div class="grid" id="backend"></div></details>
@@ -283,8 +283,14 @@ async function pintarPartidas(){
   if(antes)sel.value=antes;
   document.getElementById('n-crear').disabled=!m.artefactos.length;
   const ml=document.getElementById('m-lista');ml.textContent='';
-  for(const a of m.artefactos){const tr=document.createElement('tr');celda(tr,a.archivo);celda(tr,fecha(a.creado_ms));ml.append(tr)}
-  if(!m.artefactos.length){const tr=document.createElement('tr');celda(tr,'No hay ningún artefacto de mundo: genera uno.').colSpan=2;ml.append(tr)}
+  for(const [i,a] of m.artefactos.entries()){const tr=document.createElement('tr');celda(tr,a.archivo);celda(tr,fecha(a.creado_ms));
+    const usan=d.partidas.filter(p=>p.mundo===a.archivo||(!p.mundo&&i===0)).map(p=>p.nombre);celda(tr,usan.join(', ')||'ninguna');
+    const acc=celda(tr,'');acc.innerHTML='<div class="fila"></div>';
+    const b=boton(acc,'Borrar',()=>{if(confirm('¿Borrar el mundo '+a.hash.slice(0,12)+'…? No se puede deshacer: habría que generarlo otra vez (unos 15 min).'))
+      api('DELETE','/api/mundo/'+encodeURIComponent(a.archivo),null,'m-msg')},'peligro');
+    if(usan.length||m.generando){b.disabled=true;b.title=m.generando?'se está generando un mundo':'lo usa'+(usan.length>1?'n las partidas ':' la partida ')+usan.join(', ')+(usan.length>1?': bórralas antes':': bórrala antes')}
+    ml.append(tr)}
+  if(!m.artefactos.length){const tr=document.createElement('tr');celda(tr,'No hay ningún artefacto de mundo: genera uno.').colSpan=4;ml.append(tr)}
   document.getElementById('m-generar').disabled=m.generando;
   document.getElementById('m-estado').textContent=m.generando?'generando con la semilla '+m.semilla+'…':m.ultima?('último: semilla '+m.ultima.semilla+(m.ultima.codigo===0?', bien':', falló (código '+m.ultima.codigo+'; mira su log en Servicios)')):'';
 }
@@ -427,9 +433,20 @@ async function apiPartidas(metodo, partes, cuerpo) {
   return [404, { error: 'no_encontrado', mensaje: 'acción desconocida' }];
 }
 
-// La regeneración del mundo: GET dice si está en marcha y cómo acabó la última; POST { semilla } la lanza.
-async function apiMundo(metodo, cuerpo) {
+// La regeneración del mundo: GET dice si está en marcha y cómo acabó la última; POST { semilla } la lanza; DELETE /api/mundo/<archivo> borra un artefacto.
+async function apiMundo(metodo, cuerpo, archivo) {
   const tarea = configurations.find((c) => c.name === 'generar-mundo');
+  if (archivo) {
+    if (metodo !== 'DELETE') return [405, { error: 'metodo_no_permitido' }];
+    const a = artefactos().find((x) => x.archivo === archivo || x.hash === archivo);
+    if (!a) return [404, { error: 'no_encontrado', mensaje: 'no hay ese artefacto de mundo' }];
+    if (procesos['generar-mundo']?.hijo) return [409, { error: 'ya_generando', mensaje: 'se está generando un mundo: espera a que acabe' }];
+    // No se borra el mundo de una partida: el de las que lo fijaron al crearlas y, si es el más nuevo, el de las que usan «el último».
+    const usan = nombresDePartida().map(infoPartida).filter((p) => p.mundo === a.archivo || (!p.mundo && artefactos()[0]?.archivo === a.archivo)).map((p) => p.nombre);
+    if (usan.length) return [409, { error: 'mundo_en_uso', mensaje: `lo usa${usan.length > 1 ? 'n las partidas' : ' la partida'} ${usan.join(', ')}: ${usan.length > 1 ? 'bórralas' : 'bórrala'} antes`, partidas: usan }];
+    rmSync(path.join(MUNDOS, a.archivo), { force: true });
+    return [200, { borrado: a.archivo, artefactos: artefactos() }];
+  }
   if (metodo === 'GET') return [200, { generando: !!procesos['generar-mundo']?.hijo, semilla: mundo.semilla, ultima: mundo.ultima, artefactos: artefactos() }];
   if (metodo !== 'POST') return [405, { error: 'metodo_no_permitido' }];
   if (procesos['generar-mundo']?.hijo) return [409, { error: 'ya_generando', mensaje: 'ya se está generando un mundo' }];
@@ -451,7 +468,7 @@ http.createServer(async (req, res) => {
   if (partes[1] === 'partidas' || partes[1] === 'mundo') {
     const cuerpo = await leerCuerpo(req);
     if (cuerpo === undefined) return json(400, { error: 'datos_invalidos', mensaje: 'el cuerpo es JSON' });
-    try { return json(...(partes[1] === 'mundo' ? await apiMundo(req.method, cuerpo) : await apiPartidas(req.method, partes.slice(1), cuerpo))); }
+    try { return json(...(partes[1] === 'mundo' ? await apiMundo(req.method, cuerpo, partes[2]) : await apiPartidas(req.method, partes.slice(1), cuerpo))); }
     catch (e) { return json(500, { error: 'interno', mensaje: String(e?.message ?? e) }); }
   }
   const [, accion, nombre, valor] = partes;

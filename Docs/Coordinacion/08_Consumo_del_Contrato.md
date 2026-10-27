@@ -152,5 +152,6 @@ El núcleo atiende el respaldo entre dos órdenes y no hace nada más mientras c
 | `POST /api/partidas/<nombre>/restaurar` | `{ respaldo: <id> }`: para el servidor si sirve esa partida, guarda lo de ahora como el respaldo `antes-de-restaurar-<ms>`, copia el respaldo encima y vuelve a arrancar |
 | `GET /api/mundo` | `{ generando, semilla, ultima: { semilla, codigo, fin_ms, artefacto }, artefactos }`: el admin lo consulta para saber cuándo terminó (código 0: bien) |
 | `POST /api/mundo` | `{ semilla }`: lanza la tarea «generar-mundo» con esa semilla (unos 15 min); `202`, o `409 ya_generando` |
+| `DELETE /api/mundo/<archivo>` | Borra ese artefacto de mundo (el `archivo` o el `hash` de `artefactos`). `409 mundo_en_uso` (con `partidas`) si lo usa alguna partida: las que lo fijaron al crearse y, si es el más nuevo, las que usan «el último»; `409 ya_generando` mientras se genera uno. En el panel: botón «Borrar» en la lista de la sección Mundo |
 
 Las que arrancan el servidor contestan también `{ arrancado, aviso }`: si no pudo arrancar, `aviso` dice por qué (falta el artefacto de mundo, por ejemplo).
