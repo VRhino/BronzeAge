@@ -290,9 +290,7 @@ impl Nucleo {
             return Err(rechazo(rechazos::COLUMNA_SOLO_EL_LIDER, "solo el Líder decide a quién persigue la columna"));
         }
         let Some(objetivo) = objetivo else {
-            if e.persiguiendo.is_none() {
-                return Err(Respuesta::sin_cambios(v));
-            }
+            // Como en el TypeScript, se acepta y avisa aunque no persiguiera a nadie (paridad P3).
             self.fijar_persecucion(id, None);
             self.evento_de_columna("columna.persecucion_abandonada", t, id, vec![], vec![("heroe", heroe as i64)]);
             return Ok(vec![]);

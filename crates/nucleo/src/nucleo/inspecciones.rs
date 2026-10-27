@@ -52,12 +52,34 @@ impl Nucleo {
                 let heroes = Self::participantes_de(o);
                 (o.posicion_en(t), x == id, Contenido::Columna { faccion: o.columna.faccion, heroes, escuadras }, ("columna.observada", Some(x), vec![]))
             }
+            // La Caravana de Fundación se mira como una caravana más (paridad P3): la que vuelve sola o la que va en una columna en el mapa; parada en su origen, a cubierto.
+            Objetivo::Caravana(x) if self.estado.fundacion.caravanas.contains_key(&x) => {
+                use crate::estado_fundacion::{Origen, Situacion};
+                let k = &self.estado.fundacion.caravanas[&x];
+                let donde = match k.situacion {
+                    Situacion::Retornando(_) => k.posicion_en(t),
+                    Situacion::Adjunta(c) => match self.estado.ejercitos.get(&c) {
+                        Some(o) if self.columna_en_el_mapa(o) => o.posicion_en(t),
+                        _ => return Err(a_cubierto()),
+                    },
+                    Situacion::Disponible => return Err(a_cubierto()),
+                };
+                let mut recursos: Vec<asentamiento::Recurso> = k.contenido.iter().filter(|(_, &n)| n > 0).map(|(&r, _)| r).collect();
+                recursos.sort_by_key(|r| r.nombre());
+                let plazas = match k.origen {
+                    Origen::Plaza(a) if self.estado.asentamientos.contains_key(&a) => vec![a],
+                    _ => vec![],
+                };
+                (donde, false, Contenido::Caravana { escoltada: matches!(k.situacion, Situacion::Adjunta(_)), recursos }, ("caravana.observada", None, plazas))
+            }
             Objetivo::Caravana(x) => {
                 let k = self.estado.comercio.caravana(x).ok_or_else(|| rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(x)))?;
                 if !matches!(k.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando | EstadoCaravana::Adjunta) {
                     return Err(a_cubierto());
                 }
-                let recursos = k.contenido.iter().filter(|(_, &n)| n > 0).map(|(&r, _)| r).collect();
+                let mut recursos: Vec<asentamiento::Recurso> = k.contenido.iter().filter(|(_, &n)| n > 0).map(|(&r, _)| r).collect();
+                // Por su nombre, como el TypeScript (`Object.keys(contenido).sort()`; paridad P3).
+                recursos.sort_by_key(|r| r.nombre());
                 let donde = self.posicion_de_caravana(x, t).unwrap_or(k.posicion);
                 (donde, false, Contenido::Caravana { escoltada: k.estado == EstadoCaravana::Adjunta || !k.escolta.is_empty(), recursos }, ("caravana.observada", None, vec![k.origen as u64]))
             }

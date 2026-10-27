@@ -285,17 +285,18 @@ fn el_perseguidor_rehace_su_plan_cada_vez_que_la_presa_cambia_el_suyo_y_al_llega
     assert_eq!(n.persiguiendo(p), Some(Objetivo::Ejercito(q)));
     n.avanzar_hasta(30 * MIN);
     assert_eq!(hechos(&n, "columna.presa_alcanzada").len(), 1);
-    // `marcharA` suelta la presa sin avisar, y `dejarDePerseguir` avisa; sin presa no cambia nada.
+    // `marcharA` suelta la presa sin avisar, y `dejarDePerseguir` avisa, también sin presa (como el TypeScript, paridad P3).
     let (mut n, p, q) = cazador_y_presa();
     n.aplicar_en(0, marchar("beto", "m1", q, c(39, 2)));
-    assert_eq!(dejar(&mut n, 0, "ana", "d0", p).resultado, Resultado::SinCambios);
+    assert!(dejar(&mut n, 0, "ana", "d0", p).aceptada());
+    assert_eq!(hechos(&n, "columna.persecucion_abandonada").len(), 1, "sin presa también avisa");
     perseguir(&mut n, 0, "ana", "p", p, Objetivo::Ejercito(q));
     assert_eq!(codigo(&dejar(&mut n, 0, "beto", "d1", p)), rechazos::NO_AUTORIZADO);
     assert!(dejar(&mut n, 1_000, "ana", "d2", p).aceptada());
-    assert_eq!((n.persiguiendo(p), hechos(&n, "columna.persecucion_abandonada").len()), (None, 1));
+    assert_eq!((n.persiguiendo(p), hechos(&n, "columna.persecucion_abandonada").len()), (None, 2));
     perseguir(&mut n, 2_000, "ana", "p3", p, Objetivo::Ejercito(q));
     assert!(n.aplicar_en(3_000, marchar("ana", "m", p, c(0, 4))).aceptada());
-    assert_eq!((n.persiguiendo(p), hechos(&n, "columna.persecucion_abandonada").len()), (None, 1), "marcharA suelta sin evento");
+    assert_eq!((n.persiguiendo(p), hechos(&n, "columna.persecucion_abandonada").len()), (None, 2), "marcharA suelta sin evento");
     perseguir(&mut n, 4_000, "ana", "p4", p, Objetivo::Ejercito(q));
     assert!(n.aplicar_en(5_000, Peticion::nueva("ana", "e", Comando::Estacionar { ejercito: p })).aceptada());
     assert_eq!(n.persiguiendo(p), None, "una columna parada no persigue");

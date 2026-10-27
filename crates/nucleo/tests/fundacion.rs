@@ -860,6 +860,63 @@ fn p2_una_columna_personal_persigue_a_la_que_vuelve_sola_pero_no_a_la_adjunta() 
     assert_eq!(e.n.persiguiendo(cz), None);
 }
 
+// ───────────────────────────── 4d. Paridad con el TypeScript (P3, 2026-10-27) ─────────────────────────────
+
+#[test]
+fn p3_la_caravana_de_fundacion_se_inspecciona_y_el_informe_lista_sus_recursos_por_nombre() {
+    use militar::inspeccion::{Contenido, Objetivo};
+    let m = con_mundo!();
+    let (mut e, _a, _ana, k) = volviendo_desde(m, 40_000);
+    let t = e.n.ahora();
+    let donde = e.caravana(k).unwrap().posicion_en(t);
+    let (_, zed) = enemigo(&mut e, donde);
+    e.ok("zed", Comando::Inspeccionar { heroe: zed, objetivo: Objetivo::Caravana(k) });
+    let informe = e.n.informes_de_inspeccion(zed).last().copied().cloned().expect("un informe");
+    let Contenido::Caravana { escoltada, recursos } = informe.contenido else { panic!("{informe:?}") };
+    assert!(!escoltada, "vuelve sola");
+    let nombres: Vec<&str> = recursos.iter().map(|r| r.nombre()).collect();
+    let mut ordenados = nombres.clone();
+    ordenados.sort();
+    assert_eq!(nombres, ordenados, "por nombre, como el TypeScript");
+    assert_eq!(recursos.len(), e.caravana(k).unwrap().contenido.values().filter(|&&n| n > 0).count());
+    assert_eq!(hechos(&e.n, "caravana.observada").len(), 1);
+}
+
+#[test]
+fn p3_una_columna_dentro_de_un_lugar_ni_ve_ni_se_ve_en_el_muestreo() {
+    use nucleo::espacial::GeneradorVision;
+    let m = con_mundo!();
+    let mut a0 = arranque(m);
+    a0.ajustes.muestreo_ms = 250;
+    let mut e = Esc { n: Nucleo::nuevo(a0), cuenta: 0 };
+    e.n.agregar_generador(Box::new(GeneradorVision::nuevo()));
+    let ConPlaza { mut e, a, ana } = con_plaza_en(m, e);
+    let pos = e.n.estado().asentamientos[&a].posicion;
+    // La columna de la colonia (la que fundó) se aleja: así solo cuenta la de ana.
+    let lejos = en_tierra(&m.0, pos, -70_000, 0);
+    let otras: Vec<u64> = e.n.estado().ejercitos.keys().copied().collect();
+    for c in otras {
+        e.ok("admin", Comando::MarcharA { ejercito: c, destino: lejos });
+    }
+    e.avanzar(6 * HORA);
+    // Ana entra en su plaza con su ejército y la Caravana de Fundación: la columna queda dentro, fuera del mapa.
+    let k = e.ok("ana", Comando::LanzarCaravanaFundacion { heroe: ana, asentamiento: a }).creadas[0];
+    let ej = movilizar(&mut e, "ana", ana, a);
+    e.ok("ana", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
+    e.ok("ana", Comando::Guarnecer { asentamiento: a, heroe: ana });
+    assert!(e.n.ejercito(ej).is_some() && !e.n.en_el_mapa(ej));
+    let contacto = |e: &Esc, ve: i64, vista: i64| hechos(&e.n, "vision.contacto").iter().any(|h| dato(h, "faccionQueVe") == ve && dato(h, "faccionVista") == vista);
+    let (_, _zed) = enemigo(&mut e, Punto::new(pos.x + 2_000, pos.y));
+    e.avanzar(60_000);
+    assert!(!contacto(&e, 2, 1), "la columna de dentro no se ve");
+    assert!(!contacto(&e, 1, 2), "ni ve");
+    // Otra columna de la Facción a la puerta, en el mapa: se ven.
+    let beto = residente(&mut e, "beto", 1, a);
+    movilizar(&mut e, "beto", beto, a);
+    e.avanzar(60_000);
+    assert!(contacto(&e, 2, 1) && contacto(&e, 1, 2), "a la puerta, sí");
+}
+
 // ───────────────────────────── 5. Por el WebSocket real ─────────────────────────────
 
 fn entidades(deltas: &[pb::Delta]) -> Vec<pb::entidad::Cuerpo> {

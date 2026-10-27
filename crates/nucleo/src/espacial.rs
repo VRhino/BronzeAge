@@ -49,6 +49,11 @@ impl GeneradorDeEventos for GeneradorVision {
         let estado = cx.estado();
         let (mut ojos, mut moviles) = (Vec::new(), Vec::new());
         for e in estado.ejercitos.values() {
+            // Una columna que entró con todo en un lugar está fuera del mapa: ni ve ni se la ve (Niebla_De_Guerra §3; paridad P3, como el TypeScript).
+            let en_el_mapa = e.columna.participantes.iter().any(|p| estado.militar.heroes.get(&p.heroe).is_some_and(|h| h.heroe.presencia.ubicacion == militar::presencia::Ubicacion::Columna(e.id)));
+            if !en_el_mapa {
+                continue;
+            }
             let donde = if e.marchando() { Donde::Plan(&e.plan) } else { Donde::Fijo(e.posicion) };
             // Una columna con soldados en pie ve 30; un héroe solo, o con la tropa aniquilada, 15 (Niebla_De_Guerra §3).
             let participantes: Vec<u64> = e.columna.participantes.iter().map(|p| p.heroe).collect();
