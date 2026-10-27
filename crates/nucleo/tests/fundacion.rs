@@ -171,7 +171,7 @@ fn con_plaza_en(m: &M, mut e: Esc) -> ConPlaza {
 /// Un ejército de `h` (residente y dentro de `a`), movilizado con una milicia: queda a la puerta.
 fn movilizar(e: &mut Esc, cuenta: &str, h: u64, a: u64) -> u64 {
     let esc = e.ok("admin", Comando::DarEscuadra { heroe: h, tropa: Tropa::MiliciaLanceros, cantidad: 10 }).creadas[0];
-    e.ok(cuenta, Comando::MovilizarEjercito { asentamiento: a, heroe: h, escuadras: vec![esc], carga: vec![], politica: Politica::Aceptar }).creadas[0]
+    e.ok(cuenta, Comando::MovilizarEjercito { asentamiento: a, heroe: h, escuadras: vec![esc], carga: vec![], politica: Politica::Aceptar, caravana_fundacion: None }).creadas[0]
 }
 
 // ───────────────────────────── 1. El coste ─────────────────────────────
@@ -281,10 +281,7 @@ fn su_titular_la_engancha_a_un_ejercito_a_la_puerta_y_funda_con_ella_donde_llega
     let m = con_mundo!();
     let ConPlaza { mut e, a, ana } = con_plaza_sin_acoso(m);
     let k = e.ok("ana", Comando::LanzarCaravanaFundacion { heroe: ana, asentamiento: a }).creadas[0];
-    // Una columna personal no lleva caravanas; un ejército sin su titular, tampoco.
-    let beto = residente(&mut e, "beto", 1, a);
-    let suyo = movilizar(&mut e, "beto", beto, a);
-    assert_eq!(e.no("beto", Comando::AdjuntarCaravana { caravana: k, ejercito: suyo }), rechazos::FUNDACION_NO_TITULAR);
+    // Una columna personal no lleva caravanas.
     let col = e.ok("ana", Comando::SalirAlMundo { asentamiento: a, heroe: ana, escuadras: vec![], carga: vec![] }).creadas[0];
     assert_eq!(e.no("ana", Comando::AdjuntarCaravana { caravana: k, ejercito: col }), rechazos::COLUMNA_PERSONAL_SIN_CARAVANAS);
     e.ok("ana", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: ana });
@@ -305,8 +302,47 @@ fn su_titular_la_engancha_a_un_ejercito_a_la_puerta_y_funda_con_ella_donde_llega
     assert_eq!(e.no("ana", Comando::Fundar { ejercito: ej }), rechazos::SIN_CARAVANA);
 }
 
+/// Decisión del autor del 2026-10-27: la caravana espera dentro de su origen y se la lleva al salir cualquier ejército de su Facción que salga de allí (`caravana_fundacion` de
+/// `MovilizarEjercito`, `SalirDelCampamento` y `PartirConvocatoria`); si su titular no va en él, lo pasa a ser quien sale o el Líder que parte.
 #[test]
-fn sin_su_titular_vuelve_sola_otro_de_su_faccion_la_reclama_y_al_llegar_se_desarma() {
+fn la_que_espera_dentro_se_la_lleva_al_salir_cualquier_ejercito_de_su_faccion_y_se_ve_detras() {
+    let m = con_mundo!();
+    let ConPlaza { mut e, a, ana } = con_plaza(m);
+    let k = e.ok("ana", Comando::LanzarCaravanaFundacion { heroe: ana, asentamiento: a }).creadas[0];
+    let beto = residente(&mut e, "beto", 1, a);
+    let esc = e.ok("admin", Comando::DarEscuadra { heroe: beto, tropa: Tropa::MiliciaLanceros, cantidad: 10 }).creadas[0];
+    let sale = |caravana| Comando::MovilizarEjercito { asentamiento: a, heroe: beto, escuadras: vec![esc], carga: vec![], politica: Politica::Aceptar, caravana_fundacion: Some(caravana) };
+    // Una que no existe, una de otra Facción o una que no espera dentro: el rechazo no deja salir a nadie.
+    assert_eq!(e.no("beto", sale(9_999)), rechazos::CARAVANA_DESCONOCIDA);
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: beto, faccion: Some(2) });
+    assert_eq!(e.no("beto", sale(k)), rechazos::CARAVANA_FACCION_AJENA);
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: beto, faccion: Some(1) });
+    // Sale con ella: beto pasa a ser su titular (ana no va) y el ejército la lleva detrás, también para quien lo avista.
+    let ej = e.ok("beto", sale(k)).creadas[0];
+    let c = e.caravana(k).unwrap().clone();
+    assert_eq!((c.situacion, c.titular, c.caduca_en), (SituacionFundacion::Adjunta(ej), beto, None));
+    assert_eq!(hechos(&e.n, "ejercito.caravana_adjuntada").len(), 1);
+    assert_eq!(nucleo::proyeccion::propios::ejercito(&e.n, e.n.ejercito(ej).unwrap()).caravana_fundacion_id, Some(format!("car-{k}")));
+    // Ya no espera dentro: otro que salga no se la lleva.
+    let carla = residente(&mut e, "carla", 1, a);
+    let suya = e.ok("admin", Comando::DarEscuadra { heroe: carla, tropa: Tropa::MiliciaLanceros, cantidad: 10 }).creadas[0];
+    let otra = Comando::MovilizarEjercito { asentamiento: a, heroe: carla, escuadras: vec![suya], carga: vec![], politica: Politica::Aceptar, caravana_fundacion: Some(k) };
+    assert_eq!(e.no("carla", otra), rechazos::FUNDACION_NO_ESTA_AQUI);
+    // Una convocatoria también: su Líder la lleva al partir.
+    e.ok("admin", Comando::FijarNivelFaccion { faccion: 1, nivel: 3 });
+    e.avanzar(60 * MS_POR_MINUTO);
+    for r in [Madera, Piedra, Trigo, Oro] {
+        e.dar(a, r, 300_000);
+    }
+    let k2 = e.ok("ana", Comando::LanzarCaravanaFundacion { heroe: ana, asentamiento: a }).creadas[0];
+    e.ok("carla", Comando::ConvocarEjercito { heroe: carla, escuadras: vec![suya], carga: vec![], politica: Politica::Aceptar });
+    let base = e.ok("carla", Comando::PartirConvocatoria { heroe: carla, caravana_fundacion: Some(k2) }).creadas[0];
+    let c2 = e.caravana(k2).unwrap();
+    assert_eq!((c2.situacion.clone(), c2.titular), (SituacionFundacion::Adjunta(base), carla));
+}
+
+#[test]
+fn sin_su_titular_vuelve_sola_otro_de_su_faccion_la_reclama_y_al_llegar_espera_dentro_hasta_caducar() {
     let m = con_mundo!();
     let ConPlaza { mut e, a, ana } = con_plaza(m);
     let k = e.ok("ana", Comando::LanzarCaravanaFundacion { heroe: ana, asentamiento: a }).creadas[0];
@@ -363,7 +399,13 @@ fn sin_su_titular_vuelve_sola_otro_de_su_faccion_la_reclama_y_al_llegar_se_desar
     e.n.avanzar_hasta(llega - 1);
     assert!(e.caravana(k).is_some());
     e.n.avanzar_hasta(llega);
-    assert!(e.caravana(k).is_none(), "llega y se desarma");
+    // Llega y entra otra vez en su plaza (decisión del autor del 2026-10-27): espera dentro, suelta, y vuelve a caducar a las 48 h.
+    let c = e.caravana(k).expect("llega y espera dentro").clone();
+    assert_eq!((c.situacion, c.caduca_en), (SituacionFundacion::Disponible, Some(llega + 48 * HORA)));
+    assert_eq!(hechos(&e.n, "fundacion.caravana_de_vuelta").len(), 1);
+    assert_eq!(e.plazos(), 1, "solo su caducidad");
+    e.n.avanzar_hasta(llega + 48 * HORA);
+    assert!(e.caravana(k).is_none(), "caduca y se desarma");
     let h = hechos(&e.n, "fundacion.caravana_devuelta");
     let devuelto = dato(&h[0], "devuelto");
     assert_eq!((h.len(), dato(&h[0], "caravana") as u64), (1, k));
@@ -514,7 +556,7 @@ fn dejar_la_faccion_pierde_lo_aportado_al_devolver_la_caravana_y_lejos_del_campa
     let h = hechos(&e.n, "expansion.caravana_desarmada");
     assert_eq!(dato(&h[0], "devuelto"), 112_000);
     // Lejos del campamento no se aporta.
-    let col = e.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: ana, escuadras: vec![], carga: vec![], politica: Politica::Rechazar }).creadas[0];
+    let col = e.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: ana, escuadras: vec![], carga: vec![], politica: Politica::Rechazar, caravana_fundacion: None }).creadas[0];
     e.llevar("ana", col, en_tierra(&m.0, campamento(&m.0, 0), 30_000, 0));
     assert_eq!(e.no("ana", Comando::RetirarDeRefundacion { heroe: ana, recurso: Madera, cantidad: 1_000, lado: LadoDelFondo::Carro }), rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA);
 }
@@ -531,7 +573,7 @@ fn una_faccion_sin_plazas_refunda_con_el_oro_de_los_bandidos_del_anillo() {
     let bandidos = e.n.campamentos_de_bandidos().find(|b| b.origen == nucleo::OrigenBandidos::Anillo(0)).cloned().expect("el anillo del campamento 0 tiene bandidos");
 
     // Ana sale como ejército, recibe tropa a bordo y destruye el campamento de bandidos: el oro va a su carro.
-    let ej = e.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: ana, escuadras: vec![], carga: vec![], politica: Politica::Aceptar }).creadas[0];
+    let ej = e.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: ana, escuadras: vec![], carga: vec![], politica: Politica::Aceptar, caravana_fundacion: None }).creadas[0];
     for t in [Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce, Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto] {
         let n = militar::Reglas::cargar().tropas.tropa(t).unidades;
         e.ok("admin", Comando::DarEscuadra { heroe: ana, tropa: t, cantidad: n });
@@ -638,7 +680,7 @@ fn decision_5gb4_la_de_un_campamento_se_suelta_dentro_del_campamento() {
         e.ok("ana", Comando::AportarARefundacion { heroe: ana, recurso: r, cantidad: n, lado: LadoDelFondo::Almacen });
     }
     let k = e.ok("ana", Comando::ComprarCaravanaDeRefundacion { heroe: ana }).creadas[0];
-    let ej = e.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: ana, escuadras: vec![], carga: vec![], politica: Politica::Aceptar }).creadas[0];
+    let ej = e.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: ana, escuadras: vec![], carga: vec![], politica: Politica::Aceptar, caravana_fundacion: None }).creadas[0];
     e.ok("ana", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
     assert_eq!(e.no("ana", Comando::SoltarCaravana { ejercito: ej, caravana: k, heroe: ana }), rechazos::CARAVANA_SOLTAR_SOLO_DENTRO);
     e.ok("ana", Comando::EntrarEnCampamento { campamento: 0, heroe: ana });
@@ -712,9 +754,8 @@ fn decision_5gb5_en_la_zona_de_su_duenio_aguanta_y_sigue_volviendo_con_el_treint
     // Llega con lo que le queda y lo devuelve a su plaza.
     let SituacionFundacion::Retornando(plan) = &c.situacion else { unreachable!() };
     e.n.avanzar_hasta(plan.fin().unwrap());
-    assert!(e.caravana(k).is_none());
-    let d = hechos(&e.n, "fundacion.caravana_devuelta");
-    assert!(dato(&d[0], "devuelto") <= c.contenido.values().sum::<i64>());
+    let dentro = e.caravana(k).expect("entra en su plaza").clone();
+    assert_eq!((dentro.situacion, dentro.contenido), (SituacionFundacion::Disponible, c.contenido.clone()), "espera dentro con lo que le queda");
 }
 
 #[test]

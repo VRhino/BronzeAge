@@ -248,11 +248,13 @@ pub enum Comando {
     //    su Líder o, donde se dice, cualquiera de sus participantes. Sale y entra el héroe con su columna: `creadas` lleva el id de la columna que nace. ──
     /// Sale a lo suyo desde su residencia (una plaza): columna personal quieta en la puerta, con las escuadras y la carga que elige (puede salir sin tropa).
     SalirAlMundo { asentamiento: u64, heroe: u64, escuadras: Vec<u64>, carga: Vec<(Recurso, Mil)> },
-    /// Sale como ejército desde su residencia (al menos una escuadra), con la política de unión que fija y no cambia.
-    MovilizarEjercito { asentamiento: u64, heroe: u64, escuadras: Vec<u64>, carga: Vec<(Recurso, Mil)>, politica: Politica },
+    /// Sale como ejército desde su residencia (al menos una escuadra), con la política de unión que fija y no cambia. `caravana_fundacion`: una Caravana de Fundación de su Facción que
+    /// espera dentro de la plaza y se lleva al salir (Fundacion_Y_Refundacion §6.1); el héroe pasa a ser su titular.
+    MovilizarEjercito { asentamiento: u64, heroe: u64, escuadras: Vec<u64>, carga: Vec<(Recurso, Mil)>, politica: Politica, caravana_fundacion: Option<u64> },
     /// Sale de un campamento de mercenarios: el residente elige tropa y carga de su almacén personal (y recibe la ración gratis) y se lleva el carro que
-    /// trajo; el visitante sale con todo lo que entró (su columna). Con política distinta de `Rechazar` sale como ejército.
-    SalirDelCampamento { campamento: u32, heroe: u64, escuadras: Vec<u64>, carga: Vec<(Recurso, Mil)>, politica: Politica },
+    /// trajo; el visitante sale con todo lo que entró (su columna). Con política distinta de `Rechazar` sale como ejército y puede llevarse una Caravana de Fundación de su Facción que espera
+    /// en el campamento (`caravana_fundacion`, como en `MovilizarEjercito`).
+    SalirDelCampamento { campamento: u32, heroe: u64, escuadras: Vec<u64>, carga: Vec<(Recurso, Mil)>, politica: Politica, caravana_fundacion: Option<u64> },
     /// Entra en una plaza, a cuya puerta está, con todo lo suyo (tropa, carro, víveres y caravanas adjuntas): si la plaza le abre su puerta según su relación (la
     /// misma Facción y los residentes, siempre). En su residencia la tropa vuelve al campamento y el carro se queda con él; de visita todo queda en su columna, dentro.
     EntrarEnAsentamiento { asentamiento: u64, heroe: u64 },
@@ -287,7 +289,7 @@ pub enum Comando {
     SepararseDeConvocatoria { heroe: u64 },
     CancelarConvocatoria { heroe: u64 },
     /// El Líder parte con los que siguen dentro: todo o nada. `creadas` lleva el ejército.
-    PartirConvocatoria { heroe: u64 },
+    PartirConvocatoria { heroe: u64, caravana_fundacion: Option<u64> },
     // ── Encuentros, persecución e inspección (Movimiento_Ejercitos §7 y §12, fase 4C). ──
     /// El Líder de la columna sale en persecución de otra columna o de una caravana que **ve** (a ≤ el alcance de vista de su columna). `Objetivo::Asentamiento`
     /// no se persigue.
@@ -993,7 +995,7 @@ impl Comando {
             | Comando::CambiarSeleccionDeConvocatoria { heroe, .. }
             | Comando::SepararseDeConvocatoria { heroe }
             | Comando::CancelarConvocatoria { heroe }
-            | Comando::PartirConvocatoria { heroe }
+            | Comando::PartirConvocatoria { heroe, .. }
             | Comando::DejarDePerseguir { heroe }
             | Comando::DarEscuadra { heroe, .. }
             | Comando::FijarControlador { heroe, .. }
@@ -1593,21 +1595,23 @@ impl Peticion {
                 lista_u64(&mut w, escuadras);
                 lineas(&mut w, carga);
             }
-            Comando::MovilizarEjercito { asentamiento, heroe, escuadras, carga, politica } => {
+            Comando::MovilizarEjercito { asentamiento, heroe, escuadras, carga, politica, caravana_fundacion } => {
                 w.u8(70);
                 w.u64(*asentamiento);
                 w.u64(*heroe);
                 lista_u64(&mut w, escuadras);
                 lineas(&mut w, carga);
                 w.u8(politica_a_u8(*politica));
+                w.opt_u64(*caravana_fundacion);
             }
-            Comando::SalirDelCampamento { campamento, heroe, escuadras, carga, politica } => {
+            Comando::SalirDelCampamento { campamento, heroe, escuadras, carga, politica, caravana_fundacion } => {
                 w.u8(71);
                 w.u32(*campamento);
                 w.u64(*heroe);
                 lista_u64(&mut w, escuadras);
                 lineas(&mut w, carga);
                 w.u8(politica_a_u8(*politica));
+                w.opt_u64(*caravana_fundacion);
             }
             Comando::EntrarEnAsentamiento { asentamiento, heroe } => {
                 w.u8(72);
@@ -1707,9 +1711,10 @@ impl Peticion {
                 w.u8(89);
                 w.u64(*heroe);
             }
-            Comando::PartirConvocatoria { heroe } => {
+            Comando::PartirConvocatoria { heroe, caravana_fundacion } => {
                 w.u8(90);
                 w.u64(*heroe);
+                w.opt_u64(*caravana_fundacion);
             }
             Comando::Perseguir { heroe, objetivo } => {
                 w.u8(91);
@@ -2268,8 +2273,8 @@ impl Peticion {
             67 => Comando::ColocarHeroe { heroe: r.u64()?, ubicacion: ubicacion_leer(&mut r)? },
             68 => Comando::HerirHeroe { heroe: r.u64()? },
             69 => Comando::SalirAlMundo { asentamiento: r.u64()?, heroe: r.u64()?, escuadras: leer_lista_u64(&mut r)?, carga: leer_lineas(&mut r)? },
-            70 => Comando::MovilizarEjercito { asentamiento: r.u64()?, heroe: r.u64()?, escuadras: leer_lista_u64(&mut r)?, carga: leer_lineas(&mut r)?, politica: politica_de_u8(r.u8()?)? },
-            71 => Comando::SalirDelCampamento { campamento: r.u32()?, heroe: r.u64()?, escuadras: leer_lista_u64(&mut r)?, carga: leer_lineas(&mut r)?, politica: politica_de_u8(r.u8()?)? },
+            70 => Comando::MovilizarEjercito { asentamiento: r.u64()?, heroe: r.u64()?, escuadras: leer_lista_u64(&mut r)?, carga: leer_lineas(&mut r)?, politica: politica_de_u8(r.u8()?)?, caravana_fundacion: r.opt_u64()? },
+            71 => Comando::SalirDelCampamento { campamento: r.u32()?, heroe: r.u64()?, escuadras: leer_lista_u64(&mut r)?, carga: leer_lineas(&mut r)?, politica: politica_de_u8(r.u8()?)?, caravana_fundacion: r.opt_u64()? },
             72 => Comando::EntrarEnAsentamiento { asentamiento: r.u64()?, heroe: r.u64()? },
             73 => Comando::SalirDeAsentamiento { asentamiento: r.u64()?, heroe: r.u64()? },
             74 => Comando::Guarnecer { asentamiento: r.u64()?, heroe: r.u64()? },
@@ -2288,7 +2293,7 @@ impl Peticion {
             87 => Comando::CambiarSeleccionDeConvocatoria { heroe: r.u64()?, escuadras: leer_lista_u64(&mut r)?, carga: leer_lineas(&mut r)? },
             88 => Comando::SepararseDeConvocatoria { heroe: r.u64()? },
             89 => Comando::CancelarConvocatoria { heroe: r.u64()? },
-            90 => Comando::PartirConvocatoria { heroe: r.u64()? },
+            90 => Comando::PartirConvocatoria { heroe: r.u64()?, caravana_fundacion: r.opt_u64()? },
             91 => Comando::Perseguir { heroe: r.u64()?, objetivo: objetivo_leer(&mut r)? },
             92 => Comando::DejarDePerseguir { heroe: r.u64()? },
             93 => Comando::Inspeccionar { heroe: r.u64()?, objetivo: objetivo_leer(&mut r)? },
@@ -2934,8 +2939,10 @@ pub mod rechazos {
     pub const FUNDACION_NO_CIUDADANO: &str = "fundacion.no_ciudadano";
     /// La plaza de origen no está a nivel 2 (el operativo, no el alcanzado).
     pub const FUNDACION_NIVEL_INSUFICIENTE: &str = "fundacion.nivel_insuficiente";
-    /// Solo su titular desarma o engancha la Caravana de Fundación (y tiene que ir en la columna que la engancha).
+    /// Solo su titular desarma la Caravana de Fundación.
     pub const FUNDACION_NO_TITULAR: &str = "fundacion.no_titular";
+    /// La Caravana de Fundación que se quiere llevar al salir no espera dentro del lugar del que se sale.
+    pub const FUNDACION_NO_ESTA_AQUI: &str = "fundacion.no_esta_aqui";
     /// Refundar desde un campamento es de una Facción sin ninguna plaza.
     pub const REFUNDACION_CON_PLAZAS: &str = "refundacion.con_plazas";
     /// La Facción ya tiene una Caravana de Fundación.
@@ -3315,8 +3322,8 @@ mod pruebas {
             Comando::ColocarHeroe { heroe: 2, ubicacion: Ubicacion::Avanzada(7) },
             Comando::HerirHeroe { heroe: 2 },
             Comando::SalirAlMundo { asentamiento: 3, heroe: 2, escuadras: vec![5, 6], carga: vec![(Recurso::Madera, 1_000)] },
-            Comando::MovilizarEjercito { asentamiento: 3, heroe: 2, escuadras: vec![5], carga: vec![], politica: Politica::Preguntar },
-            Comando::SalirDelCampamento { campamento: 4, heroe: 2, escuadras: vec![], carga: vec![(Recurso::Oro, 9)], politica: Politica::Aceptar },
+            Comando::MovilizarEjercito { asentamiento: 3, heroe: 2, escuadras: vec![5], carga: vec![], politica: Politica::Preguntar, caravana_fundacion: Some(8) },
+            Comando::SalirDelCampamento { campamento: 4, heroe: 2, escuadras: vec![], carga: vec![(Recurso::Oro, 9)], politica: Politica::Aceptar, caravana_fundacion: None },
             Comando::EntrarEnAsentamiento { asentamiento: 3, heroe: 2 },
             Comando::SalirDeAsentamiento { asentamiento: 3, heroe: 2 },
             Comando::Guarnecer { asentamiento: 3, heroe: 2 },
@@ -3336,7 +3343,7 @@ mod pruebas {
             Comando::CambiarSeleccionDeConvocatoria { heroe: 2, escuadras: vec![], carga: vec![] },
             Comando::SepararseDeConvocatoria { heroe: 2 },
             Comando::CancelarConvocatoria { heroe: 2 },
-            Comando::PartirConvocatoria { heroe: 2 },
+            Comando::PartirConvocatoria { heroe: 2, caravana_fundacion: Some(3) },
             Comando::Perseguir { heroe: 2, objetivo: Objetivo::Ejercito(9) },
             Comando::Perseguir { heroe: 2, objetivo: Objetivo::Caravana(4) },
             Comando::DejarDePerseguir { heroe: 2 },

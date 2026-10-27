@@ -558,7 +558,8 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `fundacion.no_resides` | `FUNDACION_NO_RESIDES` | Lanzar una Caravana de Fundación sin residir en la plaza o sin estar dentro de ella (Proyecciones §5.2.4). |
 | `fundacion.no_ciudadano` | `FUNDACION_NO_CIUDADANO` | El titular no es ciudadano de la Facción de la plaza de origen. |
 | `fundacion.nivel_insuficiente` | `FUNDACION_NIVEL_INSUFICIENTE` | La plaza de origen no está a nivel 2 (el operativo, no el alcanzado). |
-| `fundacion.no_titular` | `FUNDACION_NO_TITULAR` | Solo su titular desarma o engancha la Caravana de Fundación (y tiene que ir en la columna que la engancha). |
+| `fundacion.no_titular` | `FUNDACION_NO_TITULAR` | Solo su titular desarma la Caravana de Fundación. |
+| `fundacion.no_esta_aqui` | `FUNDACION_NO_ESTA_AQUI` | La Caravana de Fundación que se quiere llevar al salir no espera dentro del lugar del que se sale. |
 | `refundacion.con_plazas` | `REFUNDACION_CON_PLAZAS` | Refundar desde un campamento es de una Facción sin ninguna plaza. |
 | `refundacion.ya_tiene_caravana` | `REFUNDACION_YA_TIENE_CARAVANA` | La Facción ya tiene una Caravana de Fundación. |
 | `refundacion.fondo_corto` | `REFUNDACION_FONDO_CORTO` | El fondo de la Facción en el campamento no cubre el coste de la caravana (el mensaje dice cuánto falta; `detalle.faltan`, por recurso en milésimas). |

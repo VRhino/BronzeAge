@@ -294,15 +294,37 @@ impl Nucleo {
             (SucesoFundacion::Llega, Situacion::Retornando(plan)) => plan.fin().is_none_or(|x| x <= t),
             _ => false,
         };
-        if vence {
-            if let Situacion::Retornando(plan) = &c.situacion {
-                let fin = plan.vertices.last().map(|v| v.p);
-                if let Some(p) = fin {
-                    self.estado.fundacion.caravanas.get_mut(&id).expect("existe").posicion = p;
-                }
-            }
-            self.devolver_fundacion(id, t, "fundacion.caravana_devuelta");
+        if !vence {
+            return;
         }
+        let origen = c.origen;
+        if let Situacion::Retornando(plan) = &c.situacion {
+            let fin = plan.vertices.last().map(|v| v.p);
+            if let Some(p) = fin {
+                self.estado.fundacion.caravanas.get_mut(&id).expect("existe").posicion = p;
+            }
+            // La que vuelve sola entra otra vez en su origen y espera dentro (decisión del autor del 2026-10-27), con su caducidad de nuevo; sin origen en pie, se pierde.
+            if let Some(puerta) = self.puerta_de_origen(origen) {
+                return self.entrar_en_su_origen(id, t, puerta);
+            }
+        }
+        self.devolver_fundacion(id, t, "fundacion.caravana_devuelta");
+    }
+
+    /// La que vuelve sola llega a su origen: deja el mapa y espera dentro, suelta, y vuelve a caducar a las 48 h. Hecho `fundacion.caravana_de_vuelta`.
+    fn entrar_en_su_origen(&mut self, id: u64, t: Instante, puerta: Punto) {
+        self.apartar(entidad_fundacion(id));
+        let caduca_en = t + self.estado.reglas.economia.datos.caducidad_caravana;
+        let c = self.estado.fundacion.caravanas.get_mut(&id).expect("existe");
+        (c.situacion, c.posicion, c.caduca_en) = (Situacion::Disponible, puerta, Some(caduca_en));
+        let c = c.clone();
+        self.programar_fundacion(id, caduca_en, SucesoFundacion::Caduca);
+        self.tr.tocar(Clase::Caravana, id);
+        let plazas = match c.origen {
+            Origen::Plaza(a) => vec![a],
+            _ => vec![],
+        };
+        self.hecho_de_fundacion(t, "fundacion.caravana_de_vuelta", &c, plazas, vec![]);
     }
 
     // ───────────────────────────── Engancharla y reclamarla ─────────────────────────────
@@ -328,21 +350,55 @@ impl Nucleo {
         if e.columna.faccion != c.faccion {
             return Err(rechazo(rechazos::CARAVANA_FACCION_AJENA, "la caravana es de otra Facción"));
         }
-        if !e.columna.participa(c.titular) {
-            return Err(rechazo(rechazos::FUNDACION_NO_TITULAR, "la Caravana de Fundación la lleva su titular: tiene que ir en el ejército"));
-        }
         if !p.admin && e.posicion_en(t).dist(c.posicion) > self.radio_puerta() {
             return Err(rechazo(rechazos::CARAVANA_FUERA_DE_LA_PUERTA, "el ejército no está a la puerta de donde está la caravana"));
         }
+        // La lleva cualquier ejército de su Facción (decisión del autor del 2026-10-27): su titular sigue siéndolo si va en él; si no, lo pasa a ser el Líder que la engancha.
+        let lider = if e.columna.participa(c.titular) { c.titular } else { e.columna.lider };
         self.estado.generaciones.subir(entidad_fundacion(caravana));
         let antes = self.velocidad_antes(ejercito);
         let c = self.estado.fundacion.caravanas.get_mut(&caravana).expect("existe");
-        (c.situacion, c.caduca_en) = (Situacion::Adjunta(ejercito), None);
+        (c.titular, c.situacion, c.caduca_en) = (lider, Situacion::Adjunta(ejercito), None);
         self.recomponer_por_fundacion(ejercito, t, antes);
         self.tr.tocar(Clase::Caravana, caravana);
         self.tr.tocar(Clase::Ejercito, ejercito);
         self.evento("ejercito.caravana_adjuntada", t, ejercito, None, vec![("caravana", caravana as i64)]);
         Ok(None)
+    }
+
+    /// La Caravana de Fundación que un ejército quiere llevarse al salir de `lugar` (Fundacion_Y_Refundacion §6.1): de su Facción (`faccion`, la del héroe que sale o del Líder que parte) y
+    /// esperando dentro de ese lugar. Se mira antes de salir, para que el rechazo no deje rastro.
+    pub(super) fn validar_fundacion_al_salir(&self, caravana: u64, lugar: militar::convocatoria::Lugar, faccion: Option<u32>) -> Result<(), Respuesta> {
+        let v = self.estado.version;
+        let rechazo = |c: &'static str, m: &str| Respuesta::rechazo(c, m, v);
+        let c = self.estado.fundacion.caravanas.get(&caravana).ok_or_else(|| rechazo(rechazos::CARAVANA_DESCONOCIDA, "no hay esa Caravana de Fundación"))?;
+        if c.faccion.is_none() || c.faccion != faccion {
+            return Err(rechazo(rechazos::CARAVANA_FACCION_AJENA, "la caravana es de otra Facción"));
+        }
+        let aqui = match (c.origen, lugar) {
+            (Origen::Plaza(a), militar::convocatoria::Lugar::Asentamiento(x)) => a == u64::from(x),
+            (Origen::Campamento(k), militar::convocatoria::Lugar::Campamento(x)) => k == x,
+            _ => false,
+        };
+        if c.situacion != Situacion::Disponible || !aqui {
+            return Err(rechazo(rechazos::FUNDACION_NO_ESTA_AQUI, "esa Caravana de Fundación no espera dentro de este lugar"));
+        }
+        Ok(())
+    }
+
+    /// El ejército `ejercito`, que acaba de salir, se lleva la Caravana de Fundación ya validada. Su titular sigue siéndolo si va en él; si no, lo pasa a ser `lider` (el que sale o el Líder
+    /// que parte). Deja de caducar.
+    pub(super) fn llevar_fundacion_al_salir(&mut self, t: Instante, caravana: u64, ejercito: u64, lider: u64) {
+        let actual = self.estado.fundacion.caravanas[&caravana].titular;
+        let titular = if self.estado.ejercitos.get(&ejercito).is_some_and(|e| e.columna.participa(actual)) { actual } else { lider };
+        self.estado.generaciones.subir(entidad_fundacion(caravana));
+        let antes = self.velocidad_antes(ejercito);
+        let c = self.estado.fundacion.caravanas.get_mut(&caravana).expect("validada");
+        (c.titular, c.situacion, c.caduca_en) = (titular, Situacion::Adjunta(ejercito), None);
+        self.recomponer_por_fundacion(ejercito, t, antes);
+        self.tr.tocar(Clase::Caravana, caravana);
+        self.tr.tocar(Clase::Ejercito, ejercito);
+        self.evento("ejercito.caravana_adjuntada", t, ejercito, None, vec![("caravana", caravana as i64), ("heroe", titular as i64)]);
     }
 
     /// `reclamarCaravana` (Movimiento_Ejercitos §9): en mundo abierto, un héroe de su Facción, a bordo de su columna y a `radioEncuentro` o menos de la Caravana de Fundación que vuelve sola,

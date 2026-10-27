@@ -629,7 +629,7 @@ impl Sim<'_> {
         }
         let Some(puerta) = self.n.puerta_de_campamento(b.campamento) else { return };
         let Some(alijo) = self.alijo_cercano(k, puerta) else { return self.cita_buscador(t + DIA, k) };
-        let r = self.segura(t, &b.cuenta, "SalirDelCampamento", Comando::SalirDelCampamento { campamento: b.campamento, heroe, escuadras: vec![], carga: vec![], politica: Politica::Rechazar });
+        let r = self.segura(t, &b.cuenta, "SalirDelCampamento", Comando::SalirDelCampamento { campamento: b.campamento, heroe, escuadras: vec![], carga: vec![], politica: Politica::Rechazar, caravana_fundacion: None });
         let Some(&c) = r.creadas.first().filter(|_| r.aceptada()) else { return self.cita_buscador(t + DESCANSO_BUSCADOR_H * HORA, k) };
         self.t_().buscadores[k].en_salida = 0;
         self.buscador_ir(t, k, c, Some(alijo));

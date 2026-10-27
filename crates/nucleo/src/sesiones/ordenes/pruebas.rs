@@ -143,12 +143,12 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
             Comando::SalirAlMundo { asentamiento: 3, heroe: 7, escuadras: vec![1, 2], carga: madera() },
         ),
         (
-            orden!(MovilizarEjercito, OrdenMovilizarEjercito, asentamiento_id: s("as-3"), heroe_id: h.clone(), escuadron_ids: esc.clone(), politica_de_union: Some(s("preguntar")), carga: carga(&[("madera", 5_000)])),
-            Comando::MovilizarEjercito { asentamiento: 3, heroe: 7, escuadras: vec![1, 2], carga: madera(), politica: Politica::Preguntar },
+            orden!(MovilizarEjercito, OrdenMovilizarEjercito, asentamiento_id: s("as-3"), heroe_id: h.clone(), escuadron_ids: esc.clone(), politica_de_union: Some(s("preguntar")), carga: carga(&[("madera", 5_000)]), caravana_fundacion_id: Some(s("car-8"))),
+            Comando::MovilizarEjercito { asentamiento: 3, heroe: 7, escuadras: vec![1, 2], carga: madera(), politica: Politica::Preguntar, caravana_fundacion: Some(8) },
         ),
         (
             orden!(SalirDelCampamento, OrdenSalirDelCampamento, campamento_id: s("camp-4"), heroe_id: h.clone(), escuadron_ids: esc.clone(), carga: carga(&[("madera", 5_000)])),
-            Comando::SalirDelCampamento { campamento: 4, heroe: 7, escuadras: vec![1, 2], carga: madera(), politica: Politica::Rechazar },
+            Comando::SalirDelCampamento { campamento: 4, heroe: 7, escuadras: vec![1, 2], carga: madera(), politica: Politica::Rechazar, caravana_fundacion: None },
         ),
         (orden!(EntrarEnAsentamiento, OrdenEntrarEnAsentamiento, asentamiento_id: s("as-3"), heroe_id: h.clone()), Comando::EntrarEnAsentamiento { asentamiento: 3, heroe: 7 }),
         (orden!(SalirDeAsentamiento, OrdenSalirDeAsentamiento, asentamiento_id: s("as-3"), heroe_id: h.clone()), Comando::SalirDeAsentamiento { asentamiento: 3, heroe: 7 }),
@@ -187,7 +187,7 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         ),
         (orden!(SepararseDeConvocatoria, OrdenSepararseDeConvocatoria, heroe_id: h.clone()), Comando::SepararseDeConvocatoria { heroe: 7 }),
         (orden!(CancelarConvocatoria, OrdenCancelarConvocatoria, heroe_id: h.clone()), Comando::CancelarConvocatoria { heroe: 7 }),
-        (orden!(PartirConvocatoria, OrdenPartirConvocatoria, heroe_id: h.clone()), Comando::PartirConvocatoria { heroe: 7 }),
+        (orden!(PartirConvocatoria, OrdenPartirConvocatoria, heroe_id: h.clone(), caravana_fundacion_id: Some(s("car-3"))), Comando::PartirConvocatoria { heroe: 7, caravana_fundacion: Some(3) }),
         // ── Encuentros, combate y batalla ──
         (
             orden!(Perseguir, OrdenPerseguir, heroe_id: h.clone(), objetivo: Some(pb::orden_perseguir::Objetivo { tipo: Some(pb::orden_perseguir::objetivo::Tipo::CaravanaId(s("car-2"))) })),

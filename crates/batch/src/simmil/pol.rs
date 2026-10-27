@@ -794,7 +794,7 @@ impl Sim<'_> {
     /// Un héroe que reside en una plaza y está en un campamento (se mudó desde él): sale y vuelve a casa.
     pub(super) fn pol_salir_del_campamento(&mut self, t: Instante, i: usize, campamento: u32) {
         let heroe = self.bots[i].heroe;
-        let r = self.suya(t, i, "SalirDelCampamento", Comando::SalirDelCampamento { campamento, heroe, escuadras: vec![], carga: vec![], politica: Politica::Rechazar });
+        let r = self.suya(t, i, "SalirDelCampamento", Comando::SalirDelCampamento { campamento, heroe, escuadras: vec![], carga: vec![], politica: Politica::Rechazar, caravana_fundacion: None });
         if let Some(&c) = r.creadas.first().filter(|_| r.aceptada()) {
             self.volver(t, i, c);
         }
@@ -965,7 +965,7 @@ impl Sim<'_> {
     fn pol_partir_a_fundar(&mut self, t: Instante, faccion: u32, k: u32, caravana: u64, titular: u64) {
         let cuenta = self.cuenta_de(titular);
         let escuadras: Vec<u64> = self.n.heroe(titular).map(|h| h.heroe.escuadras.iter().filter(|s| s.contenedor == Contenedor::Campamento && !s.en_guarnicion && s.cantidad > 0).map(|s| s.id).collect()).unwrap_or_default();
-        let r = self.orden(t, &cuenta, "SalirDelCampamento", Comando::SalirDelCampamento { campamento: k, heroe: titular, escuadras, carga: vec![], politica: Politica::Aceptar });
+        let r = self.orden(t, &cuenta, "SalirDelCampamento", Comando::SalirDelCampamento { campamento: k, heroe: titular, escuadras, carga: vec![], politica: Politica::Aceptar, caravana_fundacion: None });
         let Some(&columna) = r.creadas.first().filter(|_| r.aceptada()) else { return };
         self.orden(t, &cuenta, "RepostarEnCampamento", Comando::RepostarEnCampamento { heroe: titular, campamento: k });
         if !self.segura(t, &cuenta, "AdjuntarCaravana", Comando::AdjuntarCaravana { caravana, ejercito: columna }).aceptada() {
@@ -1001,7 +1001,7 @@ impl Sim<'_> {
         let Some((bandidos, sitio)) = objetivo else { return };
         let cuenta = self.cuenta_de(titular);
         let escuadras: Vec<u64> = self.n.heroe(titular).map(|h| h.heroe.escuadras.iter().filter(|s| s.contenedor == Contenedor::Campamento && !s.en_guarnicion && s.cantidad > 0).map(|s| s.id).collect()).unwrap_or_default();
-        let r = self.orden(t, &cuenta, "SalirACazar", Comando::SalirDelCampamento { campamento: k, heroe: titular, escuadras, carga: vec![], politica: Politica::Aceptar });
+        let r = self.orden(t, &cuenta, "SalirACazar", Comando::SalirDelCampamento { campamento: k, heroe: titular, escuadras, carga: vec![], politica: Politica::Aceptar, caravana_fundacion: None });
         let Some(&columna) = r.creadas.first().filter(|_| r.aceptada()) else { return };
         let p = self.p();
         p.tareas.push(Tarea { faccion, titular, columna, caravana: 0, intentos: 0, viva: true, caza: Some(bandidos), campamento: k, fase: 0 });

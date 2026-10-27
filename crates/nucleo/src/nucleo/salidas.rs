@@ -358,6 +358,34 @@ impl Nucleo {
         Ok(if ya_estaba.is_some() { vec![] } else { vec![columna] })
     }
 
+    /// `salir_de_residencia` llevándose, si se pide, la Caravana de Fundación que espera dentro (Fundacion_Y_Refundacion §6.1): solo sale como ejército, y se mira antes de salir.
+    #[allow(clippy::too_many_arguments)]
+    fn salir_con_fundacion(
+        &mut self,
+        t: Instante,
+        p: &Peticion,
+        heroe: u64,
+        lugar: Lugar,
+        escuadras: &[u64],
+        carga: &[(Recurso, Mil)],
+        movilizar: bool,
+        politica: Politica,
+        caravana: Option<u64>,
+    ) -> Result<Vec<u64>, Respuesta> {
+        let Some(caravana) = caravana else { return self.salir_de_residencia(t, p, heroe, lugar, escuadras, carga, movilizar, politica) };
+        self.autorizar_heroe(p, heroe, false)?;
+        if !movilizar && politica == Politica::Rechazar {
+            let v = self.estado.version;
+            return Err(Respuesta::rechazo(rechazos::COLUMNA_PERSONAL_SIN_CARAVANAS, "solo un ejército lleva la Caravana de Fundación: sal como ejército", v));
+        }
+        self.validar_fundacion_al_salir(caravana, lugar, self.heroe(heroe).and_then(|h| h.faccion))?;
+        let creadas = self.salir_de_residencia(t, p, heroe, lugar, escuadras, carga, movilizar, politica)?;
+        if let Some(columna) = self.heroe(heroe).and_then(|h| h.columna) {
+            self.llevar_fundacion_al_salir(t, caravana, columna, heroe);
+        }
+        Ok(creadas)
+    }
+
     /// Un héroe que va en una convocatoria no sale por su cuenta (`sinConvocatoria`, Presencia §9.5).
     pub(super) fn sin_convocatoria(&self, heroe: u64) -> Result<(), Respuesta> {
         match self.estado.militar.convocatoria_de(heroe) {
@@ -475,12 +503,14 @@ impl Nucleo {
                 self.recordar_interior(t, *heroe, *asentamiento);
                 Ok(creadas)
             }
-            Comando::MovilizarEjercito { asentamiento, heroe, escuadras, carga, politica } => {
-                let creadas = self.salir_de_residencia(t, p, *heroe, Lugar::Asentamiento(*asentamiento as u32), escuadras, carga, true, *politica)?;
+            Comando::MovilizarEjercito { asentamiento, heroe, escuadras, carga, politica, caravana_fundacion } => {
+                let creadas = self.salir_con_fundacion(t, p, *heroe, Lugar::Asentamiento(*asentamiento as u32), escuadras, carga, true, *politica, *caravana_fundacion)?;
                 self.recordar_interior(t, *heroe, *asentamiento);
                 Ok(creadas)
             }
-            Comando::SalirDelCampamento { campamento, heroe, escuadras, carga, politica } => self.salir_de_residencia(t, p, *heroe, Lugar::Campamento(*campamento), escuadras, carga, false, *politica),
+            Comando::SalirDelCampamento { campamento, heroe, escuadras, carga, politica, caravana_fundacion } => {
+                self.salir_con_fundacion(t, p, *heroe, Lugar::Campamento(*campamento), escuadras, carga, false, *politica, *caravana_fundacion)
+            }
             Comando::EntrarEnAsentamiento { asentamiento, heroe } => {
                 let plaza = self.plaza_o_rechazo(*asentamiento)?.posicion;
                 self.autorizar_heroe(p, *heroe, false)?;

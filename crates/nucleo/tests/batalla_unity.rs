@@ -796,7 +796,7 @@ async fn la_caravana_de_fundacion_que_vuelve_sola_se_intercepta_en_una_batalla_d
     let k = e.ok("ana", Comando::LanzarCaravanaFundacion { heroe: ana, asentamiento: a }).creadas[0];
     let costo = e.n.costo_caravana_fundacion();
     // Ana va con su caravana en el ejército de luis, lejos de la plaza, y se separa: la caravana vuelve sola.
-    let ej = e.ok("luis", Comando::MovilizarEjercito { asentamiento: a, heroe: luis, escuadras: vec![esc_luis], carga: vec![], politica: militar::columna::Politica::Aceptar }).creadas[0];
+    let ej = e.ok("luis", Comando::MovilizarEjercito { asentamiento: a, heroe: luis, escuadras: vec![esc_luis], carga: vec![], politica: militar::columna::Politica::Aceptar, caravana_fundacion: None }).creadas[0];
     e.ok("ana", Comando::UnirseAEjercito { asentamiento: a, heroe: ana, ejercito: ej, escuadras: vec![esc_ana], carga: vec![] });
     e.ok("luis", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
     let pos = e.pos(a);

@@ -678,6 +678,9 @@ message Ejercito {
   // Marcha forzada (Movimiento_Ejercitos §marcha forzada): la columna va más deprisa y gasta más víveres mientras marcha. Solo en lo propio;
   // lo ajeno siempre la lleva a false (las otras Facciones no la ven).
   bool marcha_forzada = 24;
+  // La Caravana de Fundación (`car-N`) que lleva enganchada (Fundacion_Y_Refundacion §6.1), en lo propio y en lo ajeno avistado: el cliente la pinta pegada detrás. Las comerciales van en
+  // `caravanas_adjuntas_ids`.
+  optional string caravana_fundacion_id = 25;
 }
 
 enum EstadoCaravana {

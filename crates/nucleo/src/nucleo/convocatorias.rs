@@ -188,16 +188,21 @@ impl Nucleo {
                 self.hecho_de_convocatoria(t, "convocatoria.cancelada", (c.faccion, c.lugar), vec![("convocatoria", c.id as i64), ("lider", *heroe as i64), ("avisados", avisados.len() as i64)]);
                 Ok(vec![])
             }
-            Comando::PartirConvocatoria { heroe } => self.partir_convocatoria(t, p, *heroe),
+            Comando::PartirConvocatoria { heroe, caravana_fundacion } => self.partir_convocatoria(t, p, *heroe, *caravana_fundacion),
             _ => unreachable!("solo se llama con órdenes de convocatoria"),
         }
     }
 
     /// `partirConvocatoria` (§9.4): todo o nada.
-    fn partir_convocatoria(&mut self, t: Instante, p: &Peticion, heroe: u64) -> Result<Vec<u64>, Respuesta> {
+    fn partir_convocatoria(&mut self, t: Instante, p: &Peticion, heroe: u64, caravana: Option<u64>) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         self.autorizar_heroe(p, heroe, false)?;
         let c = self.convocatoria_del_heroe(heroe)?.clone();
+        // La Caravana de Fundación que espera dentro del lugar se la lleva el ejército al partir, con su Líder de titular (Fundacion_Y_Refundacion §6.1). Solo parte el Líder: si no lo es,
+        // el rechazo de `partir` va primero.
+        if let Some(k) = caravana.filter(|_| heroe == c.lider) {
+            self.validar_fundacion_al_salir(k, c.lugar, Some(c.faccion))?;
+        }
         let dentro: Vec<u64> = c.integrantes.iter().map(|i| i.heroe).filter(|&h| self.heroe(h).is_some_and(|hn| !hn.heroe.presencia.fuera && lugar_de(hn.heroe.presencia.ubicacion) == Some(c.lugar))).collect();
         let (mut planes, mut reservas) = (Vec::new(), Reservas::default());
         let resultado = c.partir(heroe, &|h| dentro.contains(&h), &mut |i| {
@@ -228,6 +233,9 @@ impl Nucleo {
                     self.estado.generaciones.subir(entidad_peticion_de_convocatoria(x.heroe));
                 });
                 self.evento_de_columna("convocatoria.partio", t, base, Self::plazas_del_lugar(c.lugar), vec![("convocatoria", c.id as i64), ("heroes", planes.len() as i64)]);
+                if let Some(k) = caravana {
+                    self.llevar_fundacion_al_salir(t, k, base, c.lider);
+                }
                 Ok(vec![base])
             }
         }

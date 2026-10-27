@@ -225,7 +225,7 @@ fn la_economia_el_comercio_y_las_convocatorias_dejan_sus_entidades_en_el_registr
     assert_eq!(conv.tipo_creadas, Some(TipoCreado::Convocatoria));
     x.ok("carla", Comando::UnirseAConvocatoria { heroe: h2, convocatoria: conv.creadas[0], escuadras: vec![], carga: vec![] });
     assert!(tocado_en(&x.n, x.n.version(), Clase::Convocatoria, conv.creadas[0]));
-    let parte = x.ok("beto", Comando::PartirConvocatoria { heroe: h1 });
+    let parte = x.ok("beto", Comando::PartirConvocatoria { heroe: h1, caravana_fundacion: None });
     assert_eq!(parte.tipo_creadas, Some(TipoCreado::Ejercito));
     assert!(tocado_en(&x.n, x.n.version(), Clase::Convocatoria, conv.creadas[0]), "la convocatoria que parte desaparece: queda tocada para retirarla");
     assert!(x.n.estado().militar.convocatorias.is_empty());

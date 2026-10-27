@@ -423,7 +423,7 @@ fn escenario(m: &M) -> Esc {
     x.hugo = x.ok("hugo", Comando::CrearHeroe { cuenta: "hugo".into(), campamento: 1, controlador: Controlador::Humano, nombre: None }).creadas[0];
     let hugo = x.hugo;
     x.ok("admin", Comando::FijarFaccionDeHeroe { heroe: hugo, faccion: Some(3) });
-    let col = x.ok("hugo", Comando::SalirDelCampamento { campamento: 1, heroe: hugo, escuadras: vec![], carga: vec![], politica: militar::columna::Politica::Rechazar }).creadas[0];
+    let col = x.ok("hugo", Comando::SalirDelCampamento { campamento: 1, heroe: hugo, escuadras: vec![], carga: vec![], politica: militar::columna::Politica::Rechazar, caravana_fundacion: None }).creadas[0];
     let sitio = sitio_rico(&x.n, &m.0, 1, 3);
     x.ok("hugo", Comando::MarcharA { ejercito: col, destino: sitio });
     let llega = x.n.ejercito(col).unwrap().plan.fin().unwrap();

@@ -408,6 +408,7 @@ impl Ctx<'_> {
                     escuadras: self.escuadras(&o.escuadron_ids)?,
                     carga: self.cantidades(o.carga.as_ref())?,
                     politica: self.politica_o_rechazar(o.politica_de_union.as_deref())?,
+                    caravana_fundacion: o.caravana_fundacion_id.as_deref().map(|c| self.caravana(c)).transpose()?,
                 }
             }
             Cuerpo::SalirDelCampamento(o) => {
@@ -420,6 +421,7 @@ impl Ctx<'_> {
                     escuadras: self.escuadras(&o.escuadron_ids)?,
                     carga: self.cantidades(o.carga.as_ref())?,
                     politica: self.politica_o_rechazar(o.politica_de_union.as_deref())?,
+                    caravana_fundacion: o.caravana_fundacion_id.as_deref().map(|c| self.caravana(c)).transpose()?,
                 }
             }
             Cuerpo::EntrarEnAsentamiento(o) => Comando::EntrarEnAsentamiento { asentamiento: self.plaza(&o.asentamiento_id)?, heroe: self.heroe(&o.heroe_id)? },
@@ -465,7 +467,7 @@ impl Ctx<'_> {
             Cuerpo::CambiarSeleccionDeConvocatoria(o) => Comando::CambiarSeleccionDeConvocatoria { heroe: self.heroe(&o.heroe_id)?, escuadras: self.escuadras(&o.escuadron_ids)?, carga: self.cantidades(o.carga.as_ref())? },
             Cuerpo::SepararseDeConvocatoria(o) => Comando::SepararseDeConvocatoria { heroe: self.heroe(&o.heroe_id)? },
             Cuerpo::CancelarConvocatoria(o) => Comando::CancelarConvocatoria { heroe: self.heroe(&o.heroe_id)? },
-            Cuerpo::PartirConvocatoria(o) => Comando::PartirConvocatoria { heroe: self.heroe(&o.heroe_id)? },
+            Cuerpo::PartirConvocatoria(o) => Comando::PartirConvocatoria { heroe: self.heroe(&o.heroe_id)?, caravana_fundacion: o.caravana_fundacion_id.as_deref().map(|c| self.caravana(c)).transpose()? },
 
             // ── Encuentros, combate y batalla ──
             Cuerpo::Perseguir(o) => {

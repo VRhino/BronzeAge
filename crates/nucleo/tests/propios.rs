@@ -537,7 +537,7 @@ async fn una_convocatoria_llega_a_su_faccion_con_las_peticiones_redactadas_y_la_
     aceptada(&dar_todo(&mut ana, "c3", responder).await.1);
     pendiente(&mut dora).await;
     pendiente(&mut beto).await;
-    let partir = orden::Cuerpo::PartirConvocatoria(pb::OrdenPartirConvocatoria { heroe_id: h_ana.clone() });
+    let partir = orden::Cuerpo::PartirConvocatoria(pb::OrdenPartirConvocatoria { heroe_id: h_ana.clone(), caravana_fundacion_id: None });
     let (previos, r) = dar_todo(&mut ana, "c4", partir).await;
     aceptada(&r);
     let columna = r.creadas.iter().find(|c| c.entidad == TipoEntidad::Ejercito as i32).expect("la columna que sale").id.clone();
@@ -618,7 +618,7 @@ async fn una_caravana_es_del_heroe_mientras_la_escolta_o_va_en_su_columna_y_de_l
     pendiente(&mut beto).await;
 
     // Sale como ejército (solo un ejército lleva caravanas), engancha la caravana y la aparca en la plaza: del héroe mientras va adjunta, de la Facción en cada estado.
-    let salir = orden::Cuerpo::MovilizarEjercito(pb::OrdenMovilizarEjercito { asentamiento_id: as_a.clone(), heroe_id: h_ana.clone(), escuadron_ids: vec![escuadra.clone()], objetivo: None, politica_de_union: Some("aceptar".into()), carga: None });
+    let salir = orden::Cuerpo::MovilizarEjercito(pb::OrdenMovilizarEjercito { asentamiento_id: as_a.clone(), heroe_id: h_ana.clone(), escuadron_ids: vec![escuadra.clone()], objetivo: None, politica_de_union: Some("aceptar".into()), carga: None, caravana_fundacion_id: None });
     let (previos, r) = dar_todo(&mut ana, "k3", salir).await;
     aceptada(&r);
     let columna = r.creadas[0].id.clone();

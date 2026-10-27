@@ -1044,7 +1044,7 @@ fn una_personal_no_lleva_caravanas_el_ejercito_que_guarnece_entra_con_ellas_y_sa
     e.ok("ana", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: h });
     // Un ejército sí. Al guarnecer entra con todo (Entrar con todo, 2026-10-22): la caravana ya no se queda aparcada en la plaza; sigue enganchada y la columna del
     // Líder, un ejército mientras la lleve, se queda dentro (sin tropa: la milicia vuelve a su campamento).
-    let movilizar = Comando::MovilizarEjercito { asentamiento: a, heroe: h, escuadras: vec![milicia], carga: vec![], politica: militar::columna::Politica::Aceptar };
+    let movilizar = Comando::MovilizarEjercito { asentamiento: a, heroe: h, escuadras: vec![milicia], carga: vec![], politica: militar::columna::Politica::Aceptar, caravana_fundacion: None };
     let ej = e.ok("ana", movilizar.clone()).creadas[0];
     e.ok("ana", adjuntar(ej));
     assert_eq!(e.n.estado().ejercitos[&ej].caravanas_adjuntas, vec![c]);

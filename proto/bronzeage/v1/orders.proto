@@ -524,6 +524,8 @@ message OrdenMovilizarEjercito {
   optional Objetivo objetivo = 4;
   optional string politica_de_union = 5;  // rechazar | aceptar | preguntar
   optional Cantidades carga = 6;
+  // Una Caravana de Fundación (`car-N`) de su Facción que espera dentro de la plaza: el ejército se la lleva al salir y el héroe pasa a ser su titular.
+  optional string caravana_fundacion_id = 7;
 }
 
 message OrdenOrdenarEscuadras {
@@ -537,6 +539,8 @@ message OrdenOrganizarEjercito {
 
 message OrdenPartirConvocatoria {
   string heroe_id = 1;
+  // Una Caravana de Fundación (`car-N`) de la Facción que espera dentro del lugar: el ejército se la lleva al partir y su Líder pasa a ser su titular.
+  optional string caravana_fundacion_id = 2;
 }
 
 message OrdenPasarAViveres {
@@ -786,6 +790,8 @@ message OrdenSalirDelCampamento {
   Cantidades carga = 4;
   optional string politica_de_union = 5;  // rechazar | aceptar | preguntar
   optional Objetivo objetivo = 6;
+  // Solo saliendo como ejército: una Caravana de Fundación (`car-N`) de su Facción que espera en el campamento; se la lleva y pasa a ser su titular.
+  optional string caravana_fundacion_id = 7;
 }
 
 message OrdenSepararseDeConvocatoria {

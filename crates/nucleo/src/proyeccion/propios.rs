@@ -330,6 +330,7 @@ pub fn ejercito(n: &Nucleo, e: &Ejercito) -> pb::Ejercito {
     x.en_batalla = e.en_batalla;
     // La marcha forzada solo la ve su dueño: `ejercito_base` (lo que también va a lo ajeno) la deja en false.
     x.marcha_forzada = e.columna.forzada;
+    x.caravana_fundacion_id = n.estado().fundacion.de_columna(e.id).map(ids::caravana);
     x.batalla_id = e.en_batalla.then(|| n.batallas().find(|b| b.activa(n.ahora()) && b.bloqueo.ejercitos.contains(&e.id)).map(|b| n.uuid_de_batalla(b.id))).flatten();
     x.dentro_de = n.heroe(e.columna.lider).and_then(|h| match h.heroe.presencia.ubicacion {
         Ubicacion::Asentamiento(a) => Some(ids::asentamiento(u64::from(a))),

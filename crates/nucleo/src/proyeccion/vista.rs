@@ -484,6 +484,8 @@ impl<'n> Mirada<'n> {
             posicion: Some(punto(x.posicion_en(self.t))),
             plan: (!tramo.is_empty()).then(|| plan(&Plan::nuevo(x.plan.generacion, tramo))),
             te_sigue: x.persiguiendo.is_some_and(|presa| self.propias.contains(&presa)),
+            // La Caravana de Fundación enganchada se ve detrás del ejército (decisión del autor del 2026-10-27).
+            caravana_fundacion_id: self.n.estado().fundacion.de_columna(x.id).map(ids::caravana),
             ..Default::default()
         }
     }

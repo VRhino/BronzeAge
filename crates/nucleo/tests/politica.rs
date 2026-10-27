@@ -193,7 +193,7 @@ fn la_columna_de_quien_va_solo_toma_la_faccion_y_en_un_ejercito_no_se_deja() {
     let mut e = E::nuevo(m);
     let ana = e.heroe("ana");
     // Sale del campamento sola y sin bandera; al crear la Facción, su columna la toma.
-    let col = e.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: ana, escuadras: vec![], carga: vec![], politica: militar::columna::Politica::Rechazar }).creadas[0];
+    let col = e.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: ana, escuadras: vec![], carga: vec![], politica: militar::columna::Politica::Rechazar, caravana_fundacion: None }).creadas[0];
     assert_eq!(e.n.ejercito(col).unwrap().columna.faccion, None);
     let f = e.crear("ana", ana, "Micenas");
     assert_eq!(e.n.ejercito(col).unwrap().columna.faccion, Some(f));

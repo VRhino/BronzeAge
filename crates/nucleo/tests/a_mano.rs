@@ -149,7 +149,7 @@ fn el_almacen_personal_se_llena_y_se_vacia_con_el_carro_dentro_o_a_la_puerta_de_
     assert_eq!((e.personal(ana, Piedra), con_el(&e, Piedra)), (600_000, 0));
     assert_eq!(hechos(&e.n, "heroe.almacen_personal").len(), 4);
     // Sale con el carro que trajo (15 de madera) más lo que carga del almacén.
-    let col = e.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: ana, escuadras: vec![], carga: vec![(Madera, 185_000)], politica: Politica::Aceptar }).creadas[0];
+    let col = e.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: ana, escuadras: vec![], carga: vec![(Madera, 185_000)], politica: Politica::Aceptar, caravana_fundacion: None }).creadas[0];
     let madera = |e: &Esc| e.personal(ana, Madera) + e.carro(col, Madera);
     assert_eq!((e.personal(ana, Madera), e.carro(col, Madera), madera(&e)), (100_000, 200_000, 300_000));
 
@@ -183,7 +183,7 @@ fn el_almacen_personal_se_llena_y_se_vacia_con_el_carro_dentro_o_a_la_puerta_de_
     // Solo el Líder (el carro es común): beto se une en campo y no puede.
     let beto = e.heroe("beto", 0);
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: beto, faccion: Some(1) });
-    e.ok("beto", Comando::SalirDelCampamento { campamento: 0, heroe: beto, escuadras: vec![], carga: vec![], politica: Politica::Rechazar });
+    e.ok("beto", Comando::SalirDelCampamento { campamento: 0, heroe: beto, escuadras: vec![], carga: vec![], politica: Politica::Rechazar, caravana_fundacion: None });
     e.ok("beto", Comando::UnirseEnCampo { heroe: beto, ejercito: col });
     assert_eq!(e.n.heroe(beto).unwrap().heroe.presencia.ubicacion, Ubicacion::Columna(col));
     assert_eq!(e.no("beto", Comando::GuardarEnAlmacenPersonal { heroe: beto, recurso: Madera, cantidad: 1_000 }), rechazos::COLUMNA_SOLO_EL_LIDER);
@@ -251,7 +251,7 @@ fn con_caravana(m: &M) -> ConCaravana {
     e.ok("admin", Comando::FijarResidencia { heroe: ana, residencia: Some(Residencia::Asentamiento(a as u32)) });
     e.ok("admin", Comando::ColocarHeroe { heroe: ana, ubicacion: Ubicacion::Asentamiento(a as u32) });
     let milicia = e.ok("ana", Comando::ReclutarTropa { asentamiento: a, heroe: ana, tropa: Tropa::MiliciaLanceros }).creadas[0];
-    let ej = e.ok("ana", Comando::MovilizarEjercito { asentamiento: a, heroe: ana, escuadras: vec![milicia], carga: vec![], politica: Politica::Aceptar }).creadas[0];
+    let ej = e.ok("ana", Comando::MovilizarEjercito { asentamiento: a, heroe: ana, escuadras: vec![milicia], carga: vec![], politica: Politica::Aceptar, caravana_fundacion: None }).creadas[0];
     ConCaravana { e, a, c, ana, ej, k }
 }
 
@@ -407,7 +407,7 @@ async fn por_la_sesion_el_almacen_personal_se_guarda_y_se_saca_y_el_heroe_lo_ve_
     let mut e = Esc::nuevo(m);
     let ana = e.heroe("ana", 0);
     e.ok("admin", Comando::DarAlmacenPersonal { heroe: ana, recurso: Madera, cantidad: 100_000 });
-    e.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: ana, escuadras: vec![], carga: vec![(Madera, 80_000)], politica: Politica::Rechazar });
+    e.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: ana, escuadras: vec![], carga: vec![(Madera, 80_000)], politica: Politica::Rechazar, caravana_fundacion: None });
     let w = arrancar_con(e.n).await;
     let (mut c, f) = w.entrar("ana", TipoCliente::ClienteUnity).await;
     let h = heroes(f.entidades.into_iter().map(Some));

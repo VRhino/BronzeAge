@@ -1101,7 +1101,7 @@ impl Sim<'_> {
     fn partir(&mut self, t: Instante, i: usize, conv: u64) {
         let heroe = self.bots[i].heroe;
         self.bots[i].convocatoria = None;
-        let r = self.suya(t, i, "PartirConvocatoria", Comando::PartirConvocatoria { heroe });
+        let r = self.suya(t, i, "PartirConvocatoria", Comando::PartirConvocatoria { heroe, caravana_fundacion: None });
         if let Some(&c) = r.creadas.first().filter(|_| r.aceptada()) {
             self.al_salir(t, i, c);
         } else if self.n.convocatoria(conv).is_some() {
@@ -1126,7 +1126,7 @@ impl Sim<'_> {
             }
             return;
         }
-        let r = self.con_gasto(t, i, p, "MovilizarEjercito", Comando::MovilizarEjercito { asentamiento: p, heroe, escuadras, carga, politica: Politica::Aceptar });
+        let r = self.con_gasto(t, i, p, "MovilizarEjercito", Comando::MovilizarEjercito { asentamiento: p, heroe, escuadras, carga, politica: Politica::Aceptar, caravana_fundacion: None });
         let Some(&c) = r.creadas.first().filter(|_| r.aceptada()) else { return };
         // Los compañeros libres se suman en la puerta: el Intendente desde la plaza, el Cazador saliendo y uniéndose en campo.
         for j in self.de_plaza.get(&self.bots[i].plaza).cloned().unwrap_or_default() {
@@ -1217,7 +1217,7 @@ impl Sim<'_> {
         self.bots[i].adjunta = !self.bots[i].adjunta;
         let escuadras = self.del_campamento(i);
         if self.bots[i].adjunta && !escuadras.is_empty() {
-            let r = self.con_gasto(t, i, p, "MovilizarEjercito", Comando::MovilizarEjercito { asentamiento: p, heroe, escuadras, carga: vec![], politica: Politica::Rechazar });
+            let r = self.con_gasto(t, i, p, "MovilizarEjercito", Comando::MovilizarEjercito { asentamiento: p, heroe, escuadras, carga: vec![], politica: Politica::Rechazar, caravana_fundacion: None });
             let Some(&c) = r.creadas.first().filter(|_| r.aceptada()) else { return };
             self.suya(t, i, "AdjuntarCaravana", Comando::AdjuntarCaravana { caravana, ejercito: c });
             let destino = self.n.estado().asentamientos[&hermana].posicion;

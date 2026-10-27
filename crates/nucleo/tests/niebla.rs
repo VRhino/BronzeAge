@@ -262,7 +262,7 @@ fn sin_bandera_lo_explorado_es_del_heroe_y_pasa_a_su_faccion_cuando_entra_en_una
     let m = con_mundo!();
     let mut e = Esc { n: nucleo(m), peticiones: 0 };
     let h = e.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
-    let col = e.ok("eva", Comando::SalirDelCampamento { campamento: 0, heroe: h, escuadras: vec![], carga: vec![], politica: militar::columna::Politica::Rechazar }).creadas[0];
+    let col = e.ok("eva", Comando::SalirDelCampamento { campamento: 0, heroe: h, escuadras: vec![], carga: vec![], politica: militar::columna::Politica::Rechazar, caravana_fundacion: None }).creadas[0];
     assert_eq!(e.n.ejercito(col).unwrap().columna.faccion, None, "un héroe sin Facción anda sin bandera");
     let p = e.n.ejercito(col).unwrap().posicion;
     let plan = e.marchar("eva", col, en_tierra(&m.0, p, 40 * U, 10 * U));
@@ -405,7 +405,7 @@ fn partida(m: &M, sesiones: bool, trozos: i64) -> Nucleo {
     e.plaza("gus", 2, sitio);
     let col = e.columna("ana", 1, en_tierra(&m.0, sitio, -60 * U, 10 * U));
     let h = e.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
-    let sola = e.ok("eva", Comando::SalirDelCampamento { campamento: 0, heroe: h, escuadras: vec![], carga: vec![], politica: militar::columna::Politica::Rechazar }).creadas[0];
+    let sola = e.ok("eva", Comando::SalirDelCampamento { campamento: 0, heroe: h, escuadras: vec![], carga: vec![], politica: militar::columna::Politica::Rechazar, caravana_fundacion: None }).creadas[0];
     let p = e.n.ejercito(sola).unwrap().posicion;
     for (k, destino) in [(0, en_tierra(&m.0, sitio, 70 * U, 10 * U)), (1, en_tierra(&m.0, sitio, 0, -40 * U)), (2, en_tierra(&m.0, sitio, -60 * U, 0))].into_iter() {
         e.marchar("ana", col, destino);

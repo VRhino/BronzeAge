@@ -119,7 +119,7 @@ fn el_heroe_cumple_su_cadena_en_origen_y_reclama_el_oro_una_vez() {
     let escuadras = x.ok("ana", Comando::PedirPrestamo { heroe: h, tropas: vec![Tropa::Granjeros] }).creadas;
     assert!(x.cumplidas(d).is_empty());
     assert_eq!(x.n.misiones_de(d), None, "sin misión activa que lo use, el préstamo no deja contador");
-    let col = x.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: h, escuadras, carga: vec![], politica: Politica::Rechazar }).creadas[0];
+    let col = x.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: h, escuadras, carga: vec![], politica: Politica::Rechazar, caravana_fundacion: None }).creadas[0];
     assert_eq!(x.cumplidas(d), ["H1"], "salir cumple H1");
     // Marchar y llegar cumple H3.
     let c0 = campamento(&m.0, 0);

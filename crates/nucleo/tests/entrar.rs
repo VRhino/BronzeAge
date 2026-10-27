@@ -192,7 +192,7 @@ impl Escenario {
     }
     /// La columna sale del campamento 0 con lo dado y marcha hasta la puerta de la plaza.
     fn viaja_a_la_plaza(&mut self, cuenta: &str, h: u64, escuadras: &[u64], carga: &[(Recurso, i64)], politica: Politica) -> u64 {
-        let col = self.ok(cuenta, Comando::SalirDelCampamento { campamento: 0, heroe: h, escuadras: escuadras.to_vec(), carga: carga.to_vec(), politica }).creadas[0];
+        let col = self.ok(cuenta, Comando::SalirDelCampamento { campamento: 0, heroe: h, escuadras: escuadras.to_vec(), carga: carga.to_vec(), politica, caravana_fundacion: None }).creadas[0];
         self.llega(cuenta, col);
         col
     }
@@ -291,9 +291,9 @@ fn quien_entra_solo_sale_solo_y_el_rechazo_de_la_columna_aparcada_ya_no_existe()
     // Lo mismo en un campamento donde no reside: sale solo; y a quien no trajo nada no se le deja sacar tropa que no tiene aquí (su campamento está en su residencia).
     let z = e.ciudadano("zed", Some(1));
     e.ok("admin", Comando::FijarResidencia { heroe: z, residencia: None });
-    assert_eq!(e.rechazada("zed", Comando::SalirDelCampamento { campamento: 0, heroe: z, escuadras: vec![5], carga: vec![], politica: Politica::Rechazar }), rechazos::SALIDA_SOLO_DE_TU_RESIDENCIA);
-    assert_eq!(e.rechazada("zed", Comando::SalirDelCampamento { campamento: 0, heroe: z, escuadras: vec![], carga: vec![(Oro, 1)], politica: Politica::Rechazar }), rechazos::SALIDA_SOLO_DE_TU_RESIDENCIA);
-    let cz = e.ok("zed", Comando::SalirDelCampamento { campamento: 0, heroe: z, escuadras: vec![], carga: vec![], politica: Politica::Rechazar }).creadas[0];
+    assert_eq!(e.rechazada("zed", Comando::SalirDelCampamento { campamento: 0, heroe: z, escuadras: vec![5], carga: vec![], politica: Politica::Rechazar, caravana_fundacion: None }), rechazos::SALIDA_SOLO_DE_TU_RESIDENCIA);
+    assert_eq!(e.rechazada("zed", Comando::SalirDelCampamento { campamento: 0, heroe: z, escuadras: vec![], carga: vec![(Oro, 1)], politica: Politica::Rechazar, caravana_fundacion: None }), rechazos::SALIDA_SOLO_DE_TU_RESIDENCIA);
+    let cz = e.ok("zed", Comando::SalirDelCampamento { campamento: 0, heroe: z, escuadras: vec![], carga: vec![], politica: Politica::Rechazar, caravana_fundacion: None }).creadas[0];
     assert!(e.n.en_el_mapa(cz));
 }
 
@@ -330,7 +330,7 @@ fn las_caravanas_de_otro_origen_entran_y_salen_con_el_ejercito_en_una_plaza_y_en
 
     // Un residente: su ejército sale de A llevando una caravana de C (otra plaza, de su misma Facción).
     let k = e.caravana(c);
-    let mov = Comando::MovilizarEjercito { asentamiento: a, heroe: ana, escuadras: vec![milicia], carga: vec![], politica: Politica::Aceptar };
+    let mov = Comando::MovilizarEjercito { asentamiento: a, heroe: ana, escuadras: vec![milicia], carga: vec![], politica: Politica::Aceptar, caravana_fundacion: None };
     let ej = e.ok("ana", mov.clone()).creadas[0];
     e.ok("admin", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
     e.ok("admin", Comando::DarSuministro { ejercito: ej, recurso: Madera, cantidad: 30_000 });
@@ -355,13 +355,13 @@ fn las_caravanas_de_otro_origen_entran_y_salen_con_el_ejercito_en_una_plaza_y_en
     e.avanzar(11 * MIN); // el cooldown de creación de caravanas de C es de 10 minutos
     let k2 = e.caravana(c);
     let (b, ids) = e.con_prestamo("beto", 1);
-    let eb = e.ok("beto", Comando::SalirDelCampamento { campamento: 0, heroe: b, escuadras: ids.clone(), carga: vec![], politica: Politica::Aceptar }).creadas[0];
+    let eb = e.ok("beto", Comando::SalirDelCampamento { campamento: 0, heroe: b, escuadras: ids.clone(), carga: vec![], politica: Politica::Aceptar, caravana_fundacion: None }).creadas[0];
     e.ok("admin", Comando::AdjuntarCaravana { caravana: k2, ejercito: eb });
     // Entra en su campamento con ella enganchada (antes se rechazaba): la columna sigue dentro para llevarla y vuelve a salir con todo.
     e.ok("beto", Comando::EntrarEnCampamento { campamento: 0, heroe: b });
     assert_eq!((e.estado_de(k2), e.ejercito(eb).caravanas_adjuntas.clone(), e.n.heroe(b).unwrap().heroe.presencia.ubicacion), (EstadoCaravana::Adjunta, vec![k2], Ubicacion::Mercenarios(0)));
     assert_eq!(ids.iter().map(|&s| e.escuadra(b, s).contenedor).collect::<Vec<_>>(), vec![Contenedor::Campamento; 2]);
-    let r = e.ok("beto", Comando::SalirDelCampamento { campamento: 0, heroe: b, escuadras: ids.clone(), carga: vec![], politica: Politica::Aceptar });
+    let r = e.ok("beto", Comando::SalirDelCampamento { campamento: 0, heroe: b, escuadras: ids.clone(), carga: vec![], politica: Politica::Aceptar, caravana_fundacion: None });
     assert!(r.creadas.is_empty() && e.ejercito(eb).caravanas_adjuntas == vec![k2], "retoma la misma columna con su caravana");
     e.llega("beto", eb);
     e.ok("beto", Comando::Guarnecer { asentamiento: a, heroe: b });
@@ -437,7 +437,7 @@ fn una_convocatoria_parte_con_el_carro_del_residente_y_con_la_columna_entera_del
     // «ana» convoca con su milicia y «beto», de visita, se une sin elegir nada (sale con lo que trajo).
     let conv = e.ok("ana", Comando::ConvocarEjercito { heroe: ana, escuadras: vec![milicia], carga: vec![], politica: Politica::Aceptar }).creadas[0];
     e.ok("beto", Comando::UnirseAConvocatoria { heroe: b, convocatoria: conv, escuadras: vec![], carga: vec![] });
-    let ejercito = e.ok("ana", Comando::PartirConvocatoria { heroe: ana }).creadas[0];
+    let ejercito = e.ok("ana", Comando::PartirConvocatoria { heroe: ana, caravana_fundacion: None }).creadas[0];
     let c = &e.ejercito(ejercito).columna;
     assert_eq!(c.participantes.iter().map(|p| p.heroe).collect::<Vec<_>>(), vec![ana, b]);
     assert_eq!((c.carga.get(&Madera).copied(), c.carga.get(&Oro).copied()), (Some(40_000), Some(20_000)), "el carro del residente y el del visitante, juntos");
@@ -637,7 +637,7 @@ fn guion(e: &mut Escenario, avanzar: &dyn Fn(&mut Escenario, Instante)) {
     e.ok_en(base, "admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 40_000 });
     let (b, ids) = e.prestamo_en(base, "beto", 1);
     e.ok_en(base, "admin", Comando::DarAlmacenPersonal { heroe: b, recurso: Oro, cantidad: 30_000 });
-    let cb = e.ok_en(base, "beto", Comando::SalirDelCampamento { campamento: 0, heroe: b, escuadras: ids, carga: vec![(Oro, 20_000)], politica: Politica::Rechazar }).creadas[0];
+    let cb = e.ok_en(base, "beto", Comando::SalirDelCampamento { campamento: 0, heroe: b, escuadras: ids, carga: vec![(Oro, 20_000)], politica: Politica::Rechazar, caravana_fundacion: None }).creadas[0];
     let destino = e.plaza();
     e.ok_en(base, "beto", Comando::MarcharA { ejercito: cb, destino });
     let fin = e.ejercito(cb).plan.fin().unwrap();
@@ -949,7 +949,7 @@ fn al_aparcar_la_caravana_lo_que_la_columna_ya_no_puede_llevar_se_queda_en_ella(
     e.ok("admin", Comando::AnadirEdificio { asentamiento: c, tipo: Tipo::Mercado });
     e.avanzar(9 * HORA);
     let k = e.caravana(c);
-    let ej = e.ok("ana", Comando::MovilizarEjercito { asentamiento: a, heroe: ana, escuadras: vec![milicia], carga: vec![], politica: Politica::Aceptar }).creadas[0];
+    let ej = e.ok("ana", Comando::MovilizarEjercito { asentamiento: a, heroe: ana, escuadras: vec![milicia], carga: vec![], politica: Politica::Aceptar, caravana_fundacion: None }).creadas[0];
     e.ok("admin", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
     let un_carro = mr().logistica.capacidad_carro;
     assert!(e.n.capacidad_de_carga(ej).unwrap() > un_carro, "la caravana suma sus carros a la capacidad de la columna");
@@ -981,11 +981,11 @@ fn quien_conserva_su_columna_de_caravanas_no_se_suma_desde_la_plaza_a_otro_ejerc
     e.ok("admin", Comando::AnadirEdificio { asentamiento: c, tipo: Tipo::Mercado });
     e.avanzar(9 * HORA);
     let k = e.caravana(c);
-    let suya = e.ok("ana", Comando::MovilizarEjercito { asentamiento: a, heroe: ana, escuadras: vec![milicia], carga: vec![], politica: Politica::Aceptar }).creadas[0];
+    let suya = e.ok("ana", Comando::MovilizarEjercito { asentamiento: a, heroe: ana, escuadras: vec![milicia], carga: vec![], politica: Politica::Aceptar, caravana_fundacion: None }).creadas[0];
     e.ok("admin", Comando::AdjuntarCaravana { caravana: k, ejercito: suya });
     e.ok("ana", Comando::Guarnecer { asentamiento: a, heroe: ana });
     assert_eq!(e.ejercito(suya).columna.tipo, TipoColumna::Ejercito, "la columna que conserva para la caravana sigue siendo un ejército");
-    let de_bea = e.ok("bea", Comando::MovilizarEjercito { asentamiento: a, heroe: bea, escuadras: vec![otra], carga: vec![], politica: Politica::Aceptar }).creadas[0];
+    let de_bea = e.ok("bea", Comando::MovilizarEjercito { asentamiento: a, heroe: bea, escuadras: vec![otra], carga: vec![], politica: Politica::Aceptar, caravana_fundacion: None }).creadas[0];
     let antes = (e.n.version(), e.n.hash_estado());
     let unirse = Comando::UnirseAEjercito { asentamiento: a, heroe: ana, ejercito: de_bea, escuadras: vec![milicia], carga: vec![] };
     assert_eq!(e.rechazada("ana", unirse), rechazos::COLUMNA_SOLO_UNA_PERSONAL);
@@ -1006,7 +1006,7 @@ fn un_residente_que_conservaba_su_columna_para_las_caravanas_y_defiende_sale_con
     e.ok("admin", Comando::AnadirEdificio { asentamiento: c, tipo: Tipo::Mercado });
     e.avanzar(9 * HORA);
     let k = e.caravana(c);
-    let ej = e.ok("ana", Comando::MovilizarEjercito { asentamiento: a, heroe: ana, escuadras: vec![milicia], carga: vec![], politica: Politica::Aceptar }).creadas[0];
+    let ej = e.ok("ana", Comando::MovilizarEjercito { asentamiento: a, heroe: ana, escuadras: vec![milicia], carga: vec![], politica: Politica::Aceptar, caravana_fundacion: None }).creadas[0];
     e.ok("admin", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
     e.ok("admin", Comando::DarSuministro { ejercito: ej, recurso: Madera, cantidad: 30_000 });
     e.ok("ana", Comando::Guarnecer { asentamiento: a, heroe: ana });

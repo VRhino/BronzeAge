@@ -94,6 +94,18 @@ La restricción de la puerta existe para que desarmar no sea mover el coste de u
 
 > **Implementado en Rust (2026-10-24, 5G-b):** `DesarmarCaravanaFundacion { heroe, caravana }` (**157**): `caravana.desconocida`, `fundacion.no_titular`, `caravana.no_disponible` (enganchada o volviendo). La suelta está siempre parada en su origen, así que la puerta no se mira aparte; como en el TypeScript, el titular no tiene que estar allí. Devuelve como §7.1 y emite `expansion.caravana_desarmada { caravana, heroe, faccion, devuelto }` (con `campamento` si es de uno).
 
+### 6.1 Espera dentro y se la lleva el ejército que sale (decisión del autor del 2026-10-27)
+
+> **Implementado en Rust el 2026-10-27.** Sustituye a lo de este documento que diga que la suelta está «en la puerta» o que solo la engancha su titular.
+
+- **Espera dentro.** La caravana suelta (`Disponible`, `CARAVANA_DISPONIBLE` en el contrato) está **dentro** de su origen, la plaza o el campamento donde se lanzó o se compró, ligada a su Facción. No está en el mapa: no se ve en la `VISTA`, no se ataca ni se persigue. La ve su Facción en `FACCION` (con `origen_asentamiento_id` / `origen_campamento_id`).
+- **Se la lleva el ejército que sale.** Cualquier ciudadano de su Facción que salga de ese lugar **como ejército** puede llevársela: campo `caravana_fundacion` de `MovilizarEjercito` y `SalirDelCampamento` (este, solo con política de unión: una columna personal no lleva caravanas, `columna.personal_sin_caravanas`) y de `PartirConvocatoria` (la lleva el ejército de la convocatoria). En el contrato es `caravana_fundacion_id` (`car-N`) de `movilizar_ejercito`, `salir_del_campamento` y `partir_convocatoria`.
+  - Rechazos, antes de salir y sin rastro: `caravana.desconocida`; `caravana.faccion_ajena` (no es de la Facción del que sale o de la convocatoria); `fundacion.no_esta_aqui` (no espera dentro de ese lugar: es de otro, va enganchada o vuelve sola).
+  - Hecho `ejercito.caravana_adjuntada { caravana, heroe }`. Deja de caducar y el ejército marcha a su velocidad (§7).
+- **Titular.** El titular sigue siéndolo si va en el ejército que se la lleva; si no, lo pasa a ser quien sale (o el Líder que parte con la convocatoria). Lo mismo con `adjuntarCaravana` a la puerta: la engancha el Líder de cualquier ejército de su Facción y, si el titular no va en él, el Líder pasa a ser su titular (ya no se rechaza con `fundacion.no_titular`). Desarmarla (§6) sigue siendo de su titular.
+- **Al volver sola, entra.** La que vuelve sola (§7) y llega a su origen **entra otra vez dentro** y espera, suelta, con la caducidad de 48 h de nuevo (hecho `fundacion.caravana_de_vuelta`); ya no se desarma al llegar. Si al llegar su origen ya no existe, se pierde como antes. La que caduca dentro se desarma y devuelve (§7.1).
+- **En el mapa, detrás del ejército.** El `Ejercito` que la lleva trae `caravana_fundacion_id`, en lo propio y en lo ajeno avistado, para que el cliente la pinte pegada detrás.
+
 ## 7. El tiempo (`avanzarCaravanasDeFundacion`)
 
 Sin ninguna caravana con titular, no hace nada. Para cada caravana con `titularId` (las demás pasan igual):
@@ -208,7 +220,7 @@ El bloque `CAP_FUNDACION_POR_NIVEL` vive en [`Diplomacia_Facciones.md`](Diplomac
 - **Devolver a una plaza llena pierde el exceso**: `agregarRecurso` topa por capacidad.
 - **Quien deja la Facción pierde su aporte**: `devolverAportes` y `fondoDeFaccion` solo cuentan ciudadanos.
 - **Gastar por orden de ciudadanía, no por quién aportó primero**: el fondo se consume de los ciudadanos en el orden de `faccion.ciudadanosIds`, hasta cubrir cada recurso.
-- **El titular es único y no se cambia comprándola de nuevo**: solo otro ciudadano que la reclama por el camino (mientras vuelve sola) se convierte en titular.
+- **El titular es único y no se cambia comprándola de nuevo**: cambia cuando otro ciudadano la reclama por el camino (mientras vuelve sola) o cuando se la lleva un ejército en el que no va su titular (§6.1).
 - **Aparcada ≠ caducando** (la del TypeScript, que aparcaba al guarnecer; hoy se aparca solo a mano): la caravana que una columna deja aparcada empieza a caducar cuando el evento de aparcado la registra (entonces pasa a `disponible` con `caducaEn = ahora + 48 h`), no desde que se aparcó; hasta entonces no tiene `caducaEn`.
 - **Sin camino de vuelta, se pierde**: no hay teletransporte; una isla o un enclave sin ruta pierde lo que costó la caravana.
 - **La plaza fundada no se mira como zona de nadie**: el punto no puede caer en la zona de **ninguna** plaza existente, ni la de la propia Facción.
@@ -225,7 +237,7 @@ Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; cont
 <!-- eventos -->
 ```json
 [
-  "expansion.caravana_desarmada", "expansion.caravana_lanzada", "fundacion.asentamiento_fundado", "fundacion.caravana_devuelta", "fundacion.caravana_perdida",
+  "expansion.caravana_desarmada", "expansion.caravana_lanzada", "fundacion.asentamiento_fundado", "fundacion.caravana_de_vuelta", "fundacion.caravana_devuelta", "fundacion.caravana_perdida",
   "fundacion.caravana_vuelve", "mercenarios.caravana_refundacion", "mercenarios.fondo_refundacion"
 ]
 ```
