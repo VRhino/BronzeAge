@@ -98,6 +98,7 @@ impl Nucleo {
                 let cr = self.estado.reglas.economia.combate.clone();
                 let en = reaparece_en(&cr, t);
                 self.estado.combate.reaparecen.insert(plaza, en);
+                self.tr.tocar(Clase::Asentamiento, plaza);
                 self.programar_bandidos_de_plaza(plaza, en);
             }
             OrigenBandidos::Anillo(c) => {
@@ -220,7 +221,9 @@ impl Nucleo {
         let Some((bosque, centro)) = self.bosque_libre_mas_cercano(a.posicion) else { return };
         let cr = self.estado.reglas.economia.combate.clone();
         let nivel = nivel_al_azar(&cr, &mut self.estado.rng);
-        self.estado.combate.reaparecen.remove(&plaza);
+        if self.estado.combate.reaparecen.remove(&plaza).is_some() {
+            self.tr.tocar(Clase::Asentamiento, plaza);
+        }
         let id = self.poner_bandidos(centro, nivel, OrigenBandidos::Plaza(plaza), Some(bosque), t);
         self.aparecio(id, t, vec![plaza]);
         // Quizá quedaba otro bosque para la siguiente que espera (una ruina pudo dejar válidos varios).
@@ -251,6 +254,7 @@ impl Nucleo {
         let id = self.poner_bandidos(punto, nivel, OrigenBandidos::Anillo(c), None, t);
         let siguiente = proxima_aparicion_en_el_anillo(&cr, t);
         self.estado.combate.anillos.insert(c, siguiente);
+        self.tr.tocar(Clase::Campamento, u64::from(c));
         self.programar_anillo(c, siguiente);
         self.aparecio(id, t, vec![]);
     }

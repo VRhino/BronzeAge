@@ -95,6 +95,8 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
                 nivel_interno: Some(u32::from(b.nivel_interno)),
                 mejora: b.mejora.map(|m| pb::MejoraEnCurso { nivel_objetivo: u32::from(m.nivel_objetivo), completa_en_ms: m.completa_en }),
                 rotado: pieza.is_some_and(|x| x.rotado),
+                semilla_saturada: pieza.is_some_and(|x| x.semilla_saturada),
+                ancla_llena: pieza.is_some_and(|x| x.ancla_llena),
                 prioridad: (b.estado == EstadoEdificio::EnCola).then(|| u32::try_from(b.prioridad.max(0)).unwrap_or(u32::MAX)),
                 pausado_por_almacen_lleno: b.pausado_por_almacen,
                 danado: b.danado,
@@ -113,6 +115,7 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
             celdas: celdas(&r.celdas),
             avance: r.levantadas() as u32,
             mejorando_a: r.mejora.map(|m| u32::from(m.nivel)),
+            mejoradas: r.mejora.map(|m| (m.avance + 1).max(0) as u32),
             siguiente_celda_en_ms: r.siguiente_celda_en,
             comprometido_en_ms: r.comprometido_en,
             completado_en_ms: r.completado_en,
@@ -150,6 +153,7 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
     p.ascenso = eco.ascenso.map(|x| pb::AscensoEnCurso { nivel_objetivo: x.nivel_objetivo, iniciado_en_ms: x.iniciado_en, completa_en_ms: x.completa_en });
     p.ocupacion_hasta_ms = a.ocupada_hasta;
     p.protegida_hasta_ms = a.protegida_hasta;
+    p.bandidos_reaparecen_en_ms = e.combate.reaparecen.get(&id).copied();
     p.auto_construccion_pausada = eco.auto_pausada;
     p.recetas_pausadas = eco.recetas_pausadas.iter().map(|r| r.nombre().to_owned()).collect();
     p.reserva_manual = Some(cantidades(TODOS.iter().copied().zip(eco.reserva_manual).filter(|&(_, v)| v != 0)));
@@ -191,14 +195,41 @@ pub fn campamento(n: &Nucleo, c: u32) -> Option<pb::CampamentoMercenarios> {
     let prestamos = n.heroes().flat_map(|h| h.heroe.escuadras.iter()).filter(|s| s.prestada == Some(c)).map(|s| ids::escuadra(s.id));
     // Los que están dentro ahora: residentes y visitantes.
     let dentro = |h: &crate::estado_militar::HeroeNucleo| h.heroe.presencia.ubicacion == Ubicacion::Mercenarios(c);
+    let planta = n.planta_de_campamento(c)?;
+    let pieza = |x: &crate::urbanismo::PiezaVista| pb::Edificio {
+        id: format!("{}-{}", ids::campamento(c), x.id),
+        tipo: x.tipo.nombre().to_owned(),
+        posicion: Some(punto(x.centro)),
+        estado: pb::EstadoEdificio::EdificioActivo as i32,
+        ambito: pb::AmbitoEdificio::Asentamiento as i32,
+        rotado: x.rotado,
+        ancho: x.rect.ancho.max(0) as u32,
+        alto: x.rect.alto.max(0) as u32,
+        ..Default::default()
+    };
     Some(pb::CampamentoMercenarios {
+        planta: planta.vista.piezas.iter().map(pieza).collect(),
+        trazado: Some(pb::TrazadoUrbano {
+            layout_version: trazado::LAYOUT_VERSION,
+            unidades_por_celda: trazado::CELDA_UL as u32,
+            radio_ul: planta.vista.radio_ul,
+            calles: planta.vista.calles.iter().map(rect).collect(),
+            caminos: planta.vista.caminos.iter().map(rect).collect(),
+        }),
+        empalizada: planta.muro.iter().map(rect).collect(),
+        empalizada_puerta: planta.puerta.iter().map(rect).collect(),
         id: ids::campamento(c),
         version: n.version_de(Clase::Campamento, u64::from(c)),
         posicion: Some(punto(puerta)),
         origen,
-        edificios: std::iter::once(militar).chain(std::iter::repeat_n("vivienda".to_owned(), mr.mercenarios.viviendas)).collect(),
+        // Los fijos y el militar, en el orden del TypeScript (`[...edificiosFijos, militar]`: taberna, las viviendas y el mercado; paridad P7).
+        edificios: std::iter::once("taberna".to_owned())
+            .chain(std::iter::repeat_n("vivienda".to_owned(), mr.mercenarios.viviendas))
+            .chain(["mercado".to_owned(), militar])
+            .collect(),
         residentes_ids: n.heroes().filter(|h| residente(h)).map(|h| ids::heroe(h.heroe.id)).collect(),
         eligieron_como_inicial: n.eligieron_como_inicial(c),
+        bandidos_en_ms: e.combate.anillos.get(&c).copied(),
         poblacion: Some(pb::Ritmo {
             valor_en_t0: reclutas.poblacion,
             t0_ms: reclutas.en,

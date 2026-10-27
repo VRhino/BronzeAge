@@ -214,6 +214,14 @@ fn el_heroe_nace_en_un_campamento_con_su_progresion_inicial_y_cada_rechazo_tiene
     assert_eq!(e.n.eligieron_como_inicial(2), 2);
     let elegir: Vec<(u32, usize, u32)> = e.n.campamentos_para_elegir().into_iter().filter(|c| c.0 <= 2).map(|(c, _, _, residentes, eligieron)| (c, residentes, eligieron)).collect();
     assert_eq!(elegir, vec![(0, 1, 0), (1, 1, 1), (2, 1, 2)]);
+    // El campamento en el contrato (paridad P7): los edificios en el orden del TypeScript, cuántos lo eligieron, el plazo de los bandidos de su anillo y su planta.
+    let camp = nucleo::proyeccion::interior::campamento(&e.n, 2).expect("el campamento 2");
+    assert_eq!((camp.edificios.first().map(String::as_str), camp.edificios.len(), camp.edificios[camp.edificios.len() - 2].as_str()), (Some("taberna"), 13, "mercado"));
+    assert_eq!((camp.eligieron_como_inicial, camp.bandidos_en_ms), (2, e.n.estado().combate.anillos.get(&2).copied()));
+    assert_eq!(camp.planta.first().map(|x| (x.id.as_str(), x.tipo.as_str())), Some(("camp-2-0", "taberna")));
+    assert_eq!(camp.planta.iter().filter(|x| x.tipo == "vivienda").count(), 10);
+    assert!(camp.trazado.is_some_and(|t| !t.calles.is_empty()) && camp.empalizada_puerta.len() == 1 && !camp.empalizada.is_empty());
+    assert_eq!(camp.planta, nucleo::proyeccion::interior::campamento(&e.n, 2).unwrap().planta, "la planta no cambia: es del campamento");
 }
 
 // ───────────────────────────── 2. Reclutar en una plaza ─────────────────────────────

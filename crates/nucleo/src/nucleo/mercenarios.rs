@@ -115,6 +115,13 @@ impl Nucleo {
         g.campamentos_del_artefacto().into_iter().zip(0u32..).map(|((puerta, origen), c)| (c, puerta, origen, residentes(c), self.eligieron_como_inicial(c))).collect()
     }
 
+    /// La planta del campamento (Campamentos_Mercenarios §7): presentación pura, derivada de la semilla de la partida y de su índice; no se guarda.
+    pub fn planta_de_campamento(&self, campamento: u32) -> Option<crate::urbanismo::PlantaCampamento> {
+        let militar = self.edificio_militar(campamento)?;
+        let viviendas = self.estado.reglas.economia.militar.mercenarios.viviendas;
+        Some(crate::urbanismo::planta_de_campamento(&self.estado.reglas.economia, self.semilla, campamento, militar, viviendas))
+    }
+
     /// Cuántos héroes eligieron el campamento `c` para nacer (`eligieronComoInicial`): solo crece.
     pub fn eligieron_como_inicial(&self, campamento: u32) -> u32 {
         self.estado.militar.eligieron.get(&campamento).copied().unwrap_or(0)

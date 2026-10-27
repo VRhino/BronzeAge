@@ -185,6 +185,8 @@ message Recinto {
   optional int64 siguiente_celda_en_ms = 6;
   int64 comprometido_en_ms = 7;
   optional int64 completado_en_ms = 8;
+  // Con una mejora en curso (`mejorando_a`), cuántas celdas, en el orden de `celdas`, ya son del nivel nuevo (paridad P7: el `avance` de la mejora del TypeScript).
+  optional uint32 mejoradas = 9;
 }
 
 message Cargos {
@@ -772,6 +774,13 @@ message CampamentoMercenarios {
   repeated string prestamos_ids = 16;    // las escuadras (`esc-N`) que este campamento tiene prestadas, estén donde estén
   repeated string tropas_ofrecidas = 17; // las tropas que se pueden reclutar (su edificio militar, su nivel y las tecnologías desbloqueadas)
   Cantidades cupo_diario = 18;           // el tope diario por bien con cupo (lo comprado hoy de cada héroe está en `Heroe.cupo_campamento`)
+  // La planta (paridad P7, `layoutCampamento`): presentación pura, siempre la misma para el mismo campamento. Las piezas van como los `Edificio` de una plaza
+  // (`id` = `camp-N-K`, `tipo`: taberna, mercado, puestoMercado, el militar, vivienda o un ancla como plazaDeArmas; `posicion`, `ancho` y `alto` en unidades
+  // locales; `rotado`); el trazado y la empalizada (decorativa: dentro no hay combate), también en unidades locales.
+  repeated Edificio planta = 19;
+  TrazadoUrbano trazado = 20;
+  repeated RectLocal empalizada = 21;
+  repeated RectLocal empalizada_puerta = 22;
 }
 
 // ───────────────────────────── Comercio ─────────────────────────────
@@ -840,6 +849,14 @@ message RedCaminos {
   // El escalón de cada arista (4H T7), en el mismo orden que `aristas`: 0 sendero, 1 camino, 2 calzada (`escalonDePeso`, Comercio_Caravanas). En `VISTA`, `rutas` lleva
   // solo las de la propia Facción.
   repeated uint32 escalones = 4;
+  // La red como se pinta (paridad P7, `tramosDeRed`): las mismas aristas fundidas en polilíneas, cada una de un solo escalón; un nodo de cruce corta el tramo.
+  repeated TramoDeRed tramos = 5;
+}
+
+message TramoDeRed {
+  string id = 1;                         // `tramo-N`, por orden: solo vale dentro de esta entidad
+  uint32 escalon = 2;                    // 0 sendero, 1 camino, 2 calzada
+  repeated Punto puntos = 3;
 }
 
 // ───────────────────────────── Tecnología, Aedas, intel ─────────────────────────────

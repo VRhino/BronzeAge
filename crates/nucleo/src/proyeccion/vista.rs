@@ -414,9 +414,15 @@ impl<'n> Mirada<'n> {
                 let huella = n.rutas_vigentes().fold(0u64, |h, r| h.rotate_left(7) ^ (u64::from(r.origen) << 32 | u64::from(r.destino)) ^ if propia(r) { r.ultimo_lanzamiento as u64 } else { 0 });
                 v.push(visible(pb::TipoEntidad::RedCaminos, "red".into(), Sello(huella, aristas.len() as i64), move || {
                     let (pesos, reglas) = (n.pesos_de_red(), &e.reglas.economia.comercio.red);
-                    let escalones = aristas.iter().map(|a| u32::from(escalon_de_peso(reglas, pesos.get(*a).copied().unwrap_or(0)))).collect();
+                    let con_escalon: Vec<(Arista, u8)> = aristas.iter().map(|a| (**a, escalon_de_peso(reglas, pesos.get(*a).copied().unwrap_or(0)))).collect();
+                    let escalones = con_escalon.iter().map(|&(_, e)| u32::from(e)).collect();
+                    let tramos = comercio::red_caminos::tramos_de_red(&con_escalon)
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, t)| pb::TramoDeRed { id: format!("tramo-{i}"), escalon: u32::from(t.escalon), puntos: t.puntos.into_iter().map(|(x, y)| pb::Punto { x: x * 1_000, y: y * 1_000 }).collect() })
+                        .collect();
                     let rutas = n.rutas_vigentes().filter(|r| propia(r)).map(ruta_comercial).collect();
-                    Some(Cuerpo::RedCaminos(pb::RedCaminos { version: 0, aristas: aristas.iter().map(|a| id_de_arista(a)).collect(), rutas, escalones }))
+                    Some(Cuerpo::RedCaminos(pb::RedCaminos { version: 0, aristas: aristas.iter().map(|a| id_de_arista(a)).collect(), rutas, escalones, tramos }))
                 }));
             }
         }

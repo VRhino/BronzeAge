@@ -463,6 +463,9 @@ pub struct PiezaVista {
     /// Centro del rectángulo, en milésimas de unidad local.
     pub centro: Punto,
     pub rotado: bool,
+    /// Los latches del trazado (`anclaLlena`, `semillaSaturada`): permanentes; el cliente los recibe en su `Edificio` (paridad P7).
+    pub ancla_llena: bool,
+    pub semilla_saturada: bool,
 }
 
 /// Un recinto de muralla como lo dibuja un cliente (Murallas §9.1, Trazado_Urbano §10): las celdas **en pie** fusionadas por clase en rectángulos y las que aún están por
@@ -529,6 +532,8 @@ impl Urbe {
                 rect: RectLocal { x: p.rect.col * CELDA_UL, y: p.rect.row * CELDA_UL, ancho: p.rect.ancho * CELDA_UL, alto: p.rect.alto * CELDA_UL },
                 centro: p.posicion(),
                 rotado: p.rotado,
+                ancla_llena: p.ancla_llena,
+                semilla_saturada: p.semilla_saturada,
             })
             .collect();
         VistaCiudad { radio_ul, piezas, calles: self.ciudad.calles_rectangulos(), caminos: self.ciudad.caminos_rectangulos(), murallas: vista_de_recintos(recintos) }
@@ -584,10 +589,109 @@ pub fn planta_de_pueblo(reglas: &crate::ReglasEconomia, semilla_nucleo: u64, id_
     (RADIO_MINIMO_DE_PUEBLO_UL..=tope).step_by(base.crecimiento_por_edificio_ul as usize).find_map(trazar).expect("las piezas de un pueblo caben en una ciudad de nivel 5")
 }
 
+// ───────────────────────────── La planta de un campamento de mercenarios ─────────────────────────────
+
+/// Radio de la planta de un campamento, en unidades locales (`MERCENARIOS.layout.radioLocal`).
+const RADIO_DE_CAMPAMENTO_UL: i32 = 60;
+/// Nivel del Mercado de un campamento para sus puestos (`MERCENARIOS.layout.nivelMercado`).
+const NIVEL_MERCADO_DE_CAMPAMENTO: u8 = 1;
+
+/// La planta de un campamento de mercenarios con su empalizada (decorativa: dentro no hay combate), en unidades locales.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlantaCampamento {
+    pub vista: VistaCiudad,
+    pub muro: Vec<RectLocal>,
+    pub puerta: Vec<RectLocal>,
+}
+
+/// `layoutCampamento` (Campamentos_Mercenarios §7, paridad P7): el trazado de asentamientos **una sola vez**, con la taberna de ancla en el origen (la
+/// huella del Centro Urbano), y después el Mercado con sus puestos, el edificio militar y las viviendas, cada uno con su ancla de saturación si hace falta
+/// (sin el gate de nivel: el campamento no tiene). Función pura de la semilla del núcleo y del índice del campamento: no se guarda. Los ids de las piezas son
+/// sus posiciones en la planta (la taberna es la 0). La empalizada es un anillo de celdas a una celda de margen de todas las huellas y calles, con la puerta
+/// de dos celdas en el centro del lado sur.
+pub fn planta_de_campamento(reglas: &crate::ReglasEconomia, semilla_nucleo: u64, campamento: u32, militar: Tipo, viviendas: usize) -> PlantaCampamento {
+    let urb = &reglas.urbanismo;
+    let semilla = trazado::hash(semilla_nucleo, "campamento", &[i64::from(campamento)]);
+    let perfil = Perfil::por_tradicion(semilla);
+    let params = Parametros { radio_inicial_ul: RADIO_DE_CAMPAMENTO_UL, ..urb.parametros(&reglas.datos) };
+    let mut ciudad = Ciudad::vacia(semilla, params);
+    let mut ids = 0u32;
+    let taberna = Pedido { id: 0, tipo: tipo_a_u16(Tipo::Taberna), categoria: Categoria::Residencial, rol: Rol::Centro, huella: urb.huella(Tipo::CentroUrbano, 1), permitir_rotacion: false, perfil, radio_ul: RADIO_DE_CAMPAMENTO_UL };
+    ciudad.colocar(&taberna, Colocacion { rect: Rect::desde_centro(Punto::new(0, 0), taberna.huella), rotado: false }).expect("la planta vacía admite su taberna");
+    ids += 1;
+    let colocar = |ciudad: &mut Ciudad, tipo: Tipo, nivel_interno: u8, ids: &mut u32| {
+        let Some(c) = urb.clase(tipo) else { return };
+        let pedido = |id| Pedido { id, tipo: tipo_a_u16(tipo), categoria: c.categoria, rol: c.rol, huella: urb.huella(tipo, nivel_interno), permitir_rotacion: c.rota, perfil, radio_ul: RADIO_DE_CAMPAMENTO_UL };
+        if c.rol == Rol::Normal && c.categoria.tiene_barrio() {
+            if let Ancla::Creada(_) = ciudad.asegurar_ancla_para(&pedido(*ids), *ids, u8::MAX, &urb.opciones_ancla(c.categoria)) {
+                *ids += 1;
+            }
+        }
+        if ciudad.colocar_siguiente(&pedido(*ids)).is_some() {
+            *ids += 1;
+        }
+    };
+    colocar(&mut ciudad, Tipo::Mercado, 1, &mut ids);
+    for &forma in urb.puestos(NIVEL_MERCADO_DE_CAMPAMENTO) {
+        colocar(&mut ciudad, Tipo::PuestoMercado, forma, &mut ids);
+    }
+    colocar(&mut ciudad, militar, 1, &mut ids);
+    for _ in 0..viviendas {
+        colocar(&mut ciudad, Tipo::Vivienda, 1, &mut ids);
+    }
+    let mut vista = Urbe::desde_ciudad(ciudad).vista(RADIO_DE_CAMPAMENTO_UL, &[]);
+    vista.radio_ul = vista.radio_ul.max(radio_que_ocupan(&vista.piezas));
+    let (muro, puerta) = empalizada_alrededor(vista.piezas.iter().map(|p| &p.rect).chain(&vista.calles));
+    PlantaCampamento { vista, muro, puerta }
+}
+
+/// `empalizadaAlrededor`: el anillo de celdas que rodea las huellas a una celda de margen, con la puerta de dos celdas en el centro del lado sur (`y` hacia abajo).
+fn empalizada_alrededor<'a>(huellas: impl Iterator<Item = &'a RectLocal>) -> (Vec<RectLocal>, Vec<RectLocal>) {
+    let t = CELDA_UL;
+    let mut caja: Option<(i32, i32, i32, i32)> = None;
+    for h in huellas {
+        let (a, b, c, d) = (h.x.div_euclid(t), (h.x + h.ancho + t - 1).div_euclid(t), h.y.div_euclid(t), (h.y + h.alto + t - 1).div_euclid(t));
+        caja = Some(caja.map_or((a, b, c, d), |(x0, x1, y0, y1)| (x0.min(a), x1.max(b), y0.min(c), y1.max(d))));
+    }
+    let Some((x0, x1, y0, y1)) = caja else { return (vec![], vec![]) };
+    let (min_col, max_col, min_row, max_row) = (x0 - 2, x1 + 1, y0 - 2, y1 + 1);
+    let centro = (min_col + max_col).div_euclid(2);
+    let (mut muro, mut puerta) = (vec![], vec![]);
+    for col in min_col..=max_col {
+        for row in min_row..=max_row {
+            if col != min_col && col != max_col && row != min_row && row != max_row {
+                continue;
+            }
+            let celda = trazado::Celda { col, row };
+            if row == max_row && (col == centro || col == centro + 1) { puerta.push(celda) } else { muro.push(celda) }
+        }
+    }
+    (fusionar_celdas(&muro), fusionar_celdas(&puerta))
+}
+
 #[cfg(test)]
 mod pruebas {
     use super::*;
     use crate::ReglasEconomia;
+
+    #[test]
+    fn la_planta_de_un_campamento_sale_de_su_indice_con_la_taberna_de_ancla_y_su_empalizada() {
+        let r = ReglasEconomia::default();
+        let a = planta_de_campamento(&r, 42, 3, Tipo::Barracon, 10);
+        assert_eq!(a, planta_de_campamento(&r, 42, 3, Tipo::Barracon, 10), "función pura");
+        assert_ne!(a.vista, planta_de_campamento(&r, 42, 4, Tipo::Barracon, 10).vista, "cada campamento tiene la suya");
+        assert_eq!((a.vista.piezas[0].id, a.vista.piezas[0].tipo), (0, Tipo::Taberna), "la taberna es el ancla, en el origen");
+        let de = |t: Tipo| a.vista.piezas.iter().filter(|p| p.tipo == t).count();
+        assert_eq!((de(Tipo::Mercado), de(Tipo::PuestoMercado), de(Tipo::Barracon), de(Tipo::Vivienda)), (1, 5, 1, 10), "el Mercado con sus 5 puestos, el militar y las 10 viviendas");
+        assert!(!a.vista.calles.is_empty());
+        // La puerta, dos celdas al sur; el muro rodea todo lo demás.
+        assert_eq!(a.puerta.iter().map(|x| x.ancho * x.alto).sum::<i32>(), 2 * CELDA_UL * CELDA_UL);
+        let sur = a.muro.iter().chain(&a.puerta).map(|x| x.y).max().unwrap();
+        assert!(a.puerta.iter().all(|x| x.y == sur));
+        for p in &a.vista.piezas {
+            assert!(a.muro.iter().any(|m| m.x < p.rect.x) && a.muro.iter().any(|m| m.y < p.rect.y), "{:?} queda dentro de la empalizada", p.rect);
+        }
+    }
 
     #[test]
     fn las_huellas_salen_del_documento() {

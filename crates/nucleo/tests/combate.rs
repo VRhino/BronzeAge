@@ -1204,12 +1204,15 @@ fn toda_plaza_tiene_su_campamento_en_el_bosque_libre_mas_cercano_y_destruido_rea
     assert!(e.atacar("gus", atacante.1, ObjetivoAtaque::Campamento(ca.id), false).aceptada());
     assert!(suyo(&e, a).is_none());
     assert_eq!(e.n.estado().combate.reaparecen[&a], t + 6 * HORA);
+    let reaparece = |n: &Nucleo| nucleo::proyeccion::interior::asentamiento(n, a).unwrap().bandidos_reaparecen_en_ms;
+    assert_eq!(reaparece(&e.n), Some(t + 6 * HORA), "el plazo viaja en la plaza (paridad P7)");
     assert_eq!(de_combate_pendientes(&e.n), vec![(t + 6 * HORA, nucleo::SucesoCombate::BandidosDeLaPlaza)]);
     e.n.avanzar_hasta(t + 6 * HORA - 1);
     assert!(suyo(&e, a).is_none());
     e.n.avanzar_hasta(t + 6 * HORA);
     let nuevo = suyo(&e, a).expect("reaparece junto a su plaza");
     assert!(nuevo.id != ca.id && e.n.estado().combate.reaparecen.get(&a).is_none());
+    assert_eq!(reaparece(&e.n), None);
     assert_eq!(hechos(&e.n, "bandidos.campamento_aparece").iter().filter(|h| h.2 == vec![a]).map(|h| h.0).collect::<Vec<_>>(), vec![0, t + 6 * HORA]);
     assert!(de_combate_pendientes(&e.n).is_empty());
 }

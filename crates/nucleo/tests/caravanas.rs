@@ -463,6 +463,9 @@ fn una_ciudad_ajena_en_el_camino_cobra_el_peaje_a_la_ida_y_no_al_regreso() {
     let plan = lanzada.plan.as_ref().unwrap();
     let cruce = comercio::viaje::instante_de_progreso(plan, lanzada.peajes[0].progreso).unwrap();
     assert!(cruce > t && cruce < plan.fin().unwrap());
+    // El contrato lleva el peaje pendiente con el instante del cruce (paridad P7), y deja de llevarlo una vez cobrado.
+    let peajes = |e: &Escenario| nucleo::proyeccion::propios::caravana(&e.n, e.caravana_de(car)).peajes.iter().map(|p| (p.asentamiento_id.clone(), p.en_ms)).collect::<Vec<_>>();
+    assert_eq!(peajes(&e), vec![(format!("as-{c}"), cruce)]);
     e.avanzar_hasta(cruce - 1);
     assert!(hechos(&e.n, "comercio.peaje_paso").is_empty());
     assert_eq!(e.caravana_de(car).contenido[&Cobre], 100_000);
@@ -471,6 +474,7 @@ fn una_ciudad_ajena_en_el_camino_cobra_el_peaje_a_la_ida_y_no_al_regreso() {
     assert_eq!((peaje.len(), peaje[0].0, peaje[0].1.clone(), dato(&peaje[0], "ciudad"), dato(&peaje[0], "cobre")), (1, cruce, vec![c], c as i64, 2_000), "el 2 % de lo que lleva");
     assert_eq!(cantidad(&e.n, c, Cobre) - cobre_c0, 2_000, "el peaje es de la ciudad cruzada");
     assert_eq!((e.caravana_de(car).contenido[&Cobre], e.caravana_de(car).peajes.len()), (98_000, 0));
+    assert!(peajes(&e).is_empty());
     // El destino recibe lo que queda y el regreso, vacío, no paga nada.
     let cobre_b0 = cantidad(&e.n, b, Cobre);
     let fin = fin_del_plan(&e, car);
@@ -519,6 +523,10 @@ fn la_vista_lleva_la_red_con_el_escalon_de_cada_arista_y_las_rutas_propias() {
     let r = &red.rutas[0];
     assert_eq!((r.id.clone(), r.origen_id.clone(), r.destino_id.clone(), r.ultimo_lanzamiento_ms), (format!("ruta-{a}-{b}"), format!("as-{a}"), format!("as-{b}"), t));
     assert!(red.aristas.iter().all(|x| r.aristas.contains(x)), "las aristas que se ven son de la ruta");
+    // Y fundida en tramos (paridad P7, `tramosDeRed`): una sola ruta de un solo escalón es una polilínea por trozo visible, con todas sus aristas.
+    assert!(!red.tramos.is_empty() && red.tramos.iter().all(|x| x.escalon == sendero && x.puntos.len() >= 2));
+    assert_eq!(red.tramos.iter().map(|x| x.puntos.len() - 1).sum::<usize>(), red.aristas.len(), "cada arista en un tramo, una vez");
+    assert_eq!(red.tramos[0].id, "tramo-0");
 }
 
 // ───────────────────────────── 3. Preparar, cancelar e invalidar ─────────────────────────────

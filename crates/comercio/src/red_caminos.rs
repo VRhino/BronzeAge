@@ -167,10 +167,66 @@ pub fn escalon_de_peso(r: &ReglasRed, peso: u32) -> u8 {
     }
 }
 
+/// Un tramo de la red tal como se pinta: una cadena de aristas contiguas del mismo escalón, fundida en una polilínea (en unidades enteras).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Tramo {
+    pub escalon: u8,
+    pub puntos: Vec<(i64, i64)>,
+}
+
+/// `tramosDeRed(red, visible)`: funde las aristas dadas (con su escalón, ya filtradas por lo visible) en polilíneas. Dos aristas se encadenan solo si son
+/// del mismo escalón y el nodo que comparten es de paso (exactamente dos aristas de ese escalón). Determinista: sigue el orden de `aristas`, y cada
+/// tramo va del extremo que alcanza el primero de la arista que lo empieza al que alcanza el segundo.
+pub fn tramos_de_red(aristas: &[(Arista, u8)]) -> Vec<Tramo> {
+    let mut por_nodo: BTreeMap<((i64, i64), u8), Vec<Arista>> = BTreeMap::new();
+    for &(a, e) in aristas {
+        for p in [a.0, a.1] {
+            por_nodo.entry((p, e)).or_default().push(a);
+        }
+    }
+    let mut usadas: BTreeSet<Arista> = BTreeSet::new();
+    // Avanza desde `p` mientras el nodo sea de paso.
+    let extender = |mut p: (i64, i64), e: u8, puntos: &mut Vec<(i64, i64)>, usadas: &mut BTreeSet<Arista>| loop {
+        let vecinas = por_nodo.get(&(p, e)).map_or(&[][..], Vec::as_slice);
+        let Some(&s) = (vecinas.len() == 2).then(|| vecinas.iter().find(|a| !usadas.contains(*a))).flatten() else { return };
+        usadas.insert(s);
+        p = if s.0 == p { s.1 } else { s.0 };
+        puntos.push(p);
+    };
+    let mut tramos = Vec::new();
+    for &(a, e) in aristas {
+        if !usadas.insert(a) {
+            continue;
+        }
+        let (mut hacia_a, mut hacia_b) = (vec![a.0], vec![a.1]);
+        extender(a.1, e, &mut hacia_b, &mut usadas);
+        extender(a.0, e, &mut hacia_a, &mut usadas);
+        hacia_a.reverse();
+        hacia_a.extend(hacia_b);
+        tramos.push(Tramo { escalon: e, puntos: hacia_a });
+    }
+    tramos
+}
+
 #[cfg(test)]
 mod pruebas {
     use super::*;
     use crate::datos::Reglas;
+
+    #[test]
+    fn los_tramos_funden_las_aristas_contiguas_del_mismo_escalon() {
+        let (a, b, c, d, x) = ((0, 0), (1, 0), (2, 0), (3, 0), (2, 5));
+        // a-b-c-d en sendero; c-x es calzada: c sigue siendo de paso para el sendero (dos aristas de su escalón).
+        let tramos = tramos_de_red(&[((b, c), 0), ((a, b), 0), ((c, x), 2), ((c, d), 0)]);
+        assert_eq!(tramos, vec![Tramo { escalon: 0, puntos: vec![a, b, c, d] }, Tramo { escalon: 2, puntos: vec![c, x] }]);
+        // Un cruce de tres del mismo escalón corta: tres tramos que salen de c.
+        let tramos = tramos_de_red(&[((b, c), 0), ((c, d), 0), ((c, x), 0)]);
+        assert_eq!(tramos.iter().map(|t| t.puntos.clone()).collect::<Vec<_>>(), vec![vec![b, c], vec![c, d], vec![c, x]]);
+        // Un ciclo sale entero, una vez.
+        let tramos = tramos_de_red(&[((a, b), 1), ((b, x), 1), ((a, x), 1)]);
+        assert_eq!(tramos, vec![Tramo { escalon: 1, puntos: vec![a, b, x, a] }]);
+        assert!(tramos_de_red(&[]).is_empty());
+    }
 
     const MIN: i64 = 60_000;
 

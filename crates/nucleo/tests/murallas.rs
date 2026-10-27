@@ -482,6 +482,9 @@ fn mejorar_no_quita_multiplicador_ni_cupo_ni_requisito_y_cobra_la_diferencia() {
     intacto(&e);
     e.hasta(t1 + 10 * 30 * MIN);
     assert_eq!(e.recintos()[0].mejora.map(|m| m.avance), Some(10));
+    // El contrato dice cuántas celdas son ya del nivel nuevo (paridad P7): las once primeras.
+    let r0 = nucleo::proyeccion::interior::asentamiento(&e.n, a).unwrap().recintos.remove(0);
+    assert_eq!((r0.mejorando_a, r0.mejoradas), (Some(2), Some(11)));
     intacto(&e);
     assert_eq!(e.rechazada("ana", Comando::MejorarRecinto { asentamiento: a, cargo: Cargo::MaestroObras, recinto: 1 }), rechazos::MURALLAS_YA_MEJORANDO);
     // Todos los anillos están completos, así que comprometer otro pasa a pedir el arrabal.

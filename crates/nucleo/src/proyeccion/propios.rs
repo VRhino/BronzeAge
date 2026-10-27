@@ -6,7 +6,7 @@
 //! Qué ámbito recibe qué lo decide [`super::audiencia`]; aquí solo se dice **qué es** cada cosa en el contrato. Las entidades viajan completas (`reemplaza = true`, decisión 2).
 //!
 //! DUDA: el contrato trae más de lo que el núcleo guarda; hasta que existan sus sistemas, esos campos van a su valor por defecto: nombre, clase, género y avatar del héroe
-//! (decisión 4: «Héroe N», clase `default`), inventario y equipo (Conquest, CQ-004), peajes y titular de una caravana, y el almacén de una avanzada
+//! (decisión 4: «Héroe N», clase `default`), inventario y equipo (Conquest, CQ-004), el titular de una caravana, y el almacén de una avanzada
 //! (el contrato trae una sola `Existencia` y el núcleo un almacén de 29 recursos).
 
 use super::{audiencia, batalla, ids, plan, punto, ritmo};
@@ -277,7 +277,9 @@ pub fn ejercito(n: &Nucleo, e: &Ejercito) -> pb::Ejercito {
     x.persiguiendo = e.persiguiendo.map(|presa| {
         let es_caravana = crate::estado_comercio::es_entidad_caravana(presa);
         let id = if es_caravana { ids::caravana(crate::estado_comercio::id_de_entidad(presa)) } else { ids::ejercito(presa) };
-        pb::Persecucion { presa_es_caravana: es_caravana, presa_id: id, destino: None }
+        // El destino es el punto de intercepción: el final del plan del perseguidor (sin plan, ya espera en él; paridad P7).
+        let destino = e.plan.vertices.last().map_or_else(|| e.posicion_en(n.ahora()), |v| v.p);
+        pb::Persecucion { presa_es_caravana: es_caravana, presa_id: id, destino: Some(punto(destino)) }
     });
     x.en_batalla = e.en_batalla;
     x.batalla_id = e.en_batalla.then(|| n.batallas().find(|b| b.activa(n.ahora()) && b.bloqueo.ejercitos.contains(&e.id)).map(|b| n.uuid_de_batalla(b.id))).flatten();
@@ -375,6 +377,15 @@ pub fn caravana(n: &Nucleo, c: &Caravana) -> pb::Caravana {
         prepara_hasta_ms: c.prepara_hasta,
         pueblo_id: pueblo,
         escoltada: c.estado == EstadoCaravana::Adjunta || !c.escolta.is_empty(),
+        // Los peajes que le quedan a la ida, con el instante en que su plan cruza cada zona (paridad P7); se cobran solo en tránsito.
+        peajes: match (&c.plan, c.estado) {
+            (Some(p), EstadoCaravana::EnTransito) => c
+                .peajes
+                .iter()
+                .filter_map(|x| Some(pb::Peaje { asentamiento_id: ids::asentamiento(u64::from(x.ciudad)), en_ms: comercio::viaje::instante_de_progreso(p, x.progreso)? }))
+                .collect(),
+            _ => vec![],
+        },
         ..Default::default()
     }
 }

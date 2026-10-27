@@ -243,6 +243,10 @@ fn perseguir_empieza_con_la_presa_a_la_vista_la_alcanza_en_un_instante_exacto_y_
     assert_eq!(n.persiguiendo(p), Some(Objetivo::Ejercito(q)));
     assert_eq!(n.perseguidores_de(Objetivo::Ejercito(q)), vec![p]);
     assert!(n.ejercito(p).unwrap().marchando(), "sale en marcha hacia la intercepción");
+    // El contrato dice adónde va: el punto de intercepción, el final de su plan (paridad P7).
+    let x = nucleo::proyeccion::propios::ejercito(&n, n.ejercito(p).unwrap()).persiguiendo.expect("persigue");
+    let fin = n.ejercito(p).unwrap().plan.vertices.last().unwrap().p;
+    assert_eq!((x.presa_id, x.presa_es_caravana, x.destino.map(|d| (d.x, d.y))), (format!("ej-{q}"), false, Some((fin.x, fin.y))));
     let iniciada = hechos(&n, "columna.persecucion_iniciada");
     assert_eq!((iniciada.len(), iniciada[0].1.clone(), dato(&iniciada[0], "presa")), (1, vec![p], q as i64));
     assert!(iniciada[0].3.iter().all(|(k, _)| *k != "caravana"), "la presa es una columna");
