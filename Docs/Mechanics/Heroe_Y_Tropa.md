@@ -322,7 +322,7 @@ El oro y el equipo salen del **almacén de la plaza** (no del almacén personal 
 
 ## 12. Parámetros
 
-Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19): las velocidades de las tropas son las calibradas (×1,5 sobre las del motor TypeScript: montada 42, ligera 30, media 24, pesada 18) y el catálogo incluye a los **Mineros** (27 tropas). Los números de balance de combate y de ración de `MILITAR` están en [`Combate.md`](Combate.md) §12.
+Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19): las velocidades de las tropas son las calibradas (×1,5 sobre las del motor TypeScript: montada 42 (84 desde el 2026-10-27, decisión del autor: la caballería va al doble), ligera 30, media 24, pesada 18) y el catálogo incluye a los **Mineros** (27 tropas). Los números de balance de combate y de ración de `MILITAR` están en [`Combate.md`](Combate.md) §12.
 
 <!-- parametros:LIDERAZGO -->
 ```json
@@ -622,7 +622,7 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     },
     "caballos": 1,
     "poderBase": 3,
-    "velocidad": 42,
+    "velocidad": 84,
     "escalon": 2,
     "unidadesPorDefecto": 20
   },
@@ -653,7 +653,7 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     },
     "caballos": 1,
     "poderBase": 5,
-    "velocidad": 42,
+    "velocidad": 84,
     "escalon": 2,
     "unidadesPorDefecto": 20
   },
@@ -743,7 +743,7 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     },
     "caballos": 1,
     "poderBase": 8,
-    "velocidad": 42,
+    "velocidad": 84,
     "escalon": 3,
     "unidadesPorDefecto": 18
   },
@@ -774,7 +774,7 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     },
     "caballos": 1,
     "poderBase": 10,
-    "velocidad": 42,
+    "velocidad": 84,
     "escalon": 3,
     "unidadesPorDefecto": 18
   },

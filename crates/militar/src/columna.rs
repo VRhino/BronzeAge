@@ -573,11 +573,11 @@ mod pruebas {
     #[test]
     fn sin_tropa_ni_caravana_va_a_la_velocidad_del_viajero_y_sin_nadie_no_se_mueve() {
         let r = r();
-        assert_eq!(velocidad(&r, [], [], 1), 33_000, "más rápido que cualquier tropa porque no arrastra impedimenta");
-        assert!(33_000 < r.tropas.tropa(Tropa::ExploradoresCaballo).velocidad && 33_000 > r.tropas.tropa(Tropa::Arqueros).velocidad);
+        assert_eq!(velocidad(&r, [], [], 1), 66_000, "más rápido que toda tropa de a pie porque no arrastra impedimenta (doblado el 2026-10-27)");
+        assert!(66_000 < r.tropas.tropa(Tropa::ExploradoresCaballo).velocidad && 66_000 > r.tropas.tropa(Tropa::Arqueros).velocidad);
         assert_eq!(velocidad(&r, [], [], 0), 0);
         let vacia = Escuadra { cantidad: 0, ..Escuadra::nueva(&r, 1, 1, Tropa::Arqueros, 1, None, 0) };
-        assert_eq!(velocidad(&r, [&vacia], [], 1), 33_000, "perder todos los soldados no basta: los héroes viajan a pie");
+        assert_eq!(velocidad(&r, [&vacia], [], 1), 66_000, "perder todos los soldados no basta: los héroes viajan a pie");
     }
 
     #[test]

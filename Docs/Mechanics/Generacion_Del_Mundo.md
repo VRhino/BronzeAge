@@ -869,7 +869,7 @@ Evento `alijo.abierto { heroeId, alijoId, oro }`.
 (bosque sin campamento ya encima — por `bosqueId` de **cualquier** campamento existente, incluidos los que se acaban de crear este tick — y con el **centro fuera de todo polígono de zona**; empate de distancia → el primero). Sin bosque, nada (y no gasta tirada). Si lo hay:
 `{ id: "campamento-{asentamiento.id}", posicion: centro del bosque, bosqueId, asentamientoId, nivel }` (**una tirada** de nivel) y evento `bandidos.campamento_aparece`. Al destruirse, `agendarReaparicionBandidos` fija `asentamiento.bandidosReaparecenEn = instante + respawnMinutos`.
 
-**B. En el anillo de cada campamento de mercenarios, según la demanda.** Para cada uno en orden: salta si `instante < bandidosEn`. `tocan = clamp(ceil(residentesSinPlaza / residentesPorBandido), minimo, maximo)`, donde `residentesSinPlaza` cuenta a los residentes cuya Facción **no tiene asentamientos** o que no tienen Facción.
+**B. En el anillo de cada campamento de mercenarios, según la demanda.** Para cada uno en orden: salta si `instante < bandidosEn`. `tocan = clamp(ceil(residentesSinPlaza / residentesPorBandido), minimo, maximo)` en el TypeScript; **en Rust, desde el 2026-10-27 (decisión del autor: más bandidos y más cerca de los campamentos), `tocan = clamp(residentesSinPlaza × bandidosPorResidente, minimo, maximo)` = 2 por residente, de 4 a 12, en un anillo de 12 a 25 u (antes 1 por cada 2 residentes, de 1 a 6, a 30-50 u)**; donde `residentesSinPlaza` cuenta a los residentes cuya Facción **no tiene asentamientos** o que no tienen Facción.
 Si ya hay `≥ tocan` campamentos suyos (`campamentoMercenariosId`), nada. Si no, `puntoDelAnillo`: hasta 20 intentos con `angulo = r·2π` y `radio = radioMin + r·(radioMax − radioMin)` (dos tiradas por intento), válido si está dentro del mapa, es transitable, no es agua, **no** cae en ninguna zona de influencia y no está en la
 protección de ningún campamento de mercenarios. Sin punto: no se hace nada (ni se agenda), de modo que **se reintenta en el siguiente evento de aparición** y gasta tiradas cada vez. Con punto: `{ id: "bandidos-{merc.id}-{instante}", bosqueId: "", campamentoMercenariosId, nivel }` (una tirada de nivel) y
 `bandidosEn = instante + reaparicionMinutos`.
@@ -1190,11 +1190,11 @@ Todos los de `worldgen/config.ts` están **congelados** (no se editan en calient
     "soloExperienciaDesde": 14
   },
   "anillo": {
-    "radioMin": 30,
-    "radioMax": 50,
-    "residentesPorBandido": 2,
-    "minimo": 1,
-    "maximo": 6,
+    "radioMin": 12,
+    "radioMax": 25,
+    "bandidosPorResidente": 2,
+    "minimo": 4,
+    "maximo": 12,
     "reaparicionMinutos": 10
   },
   "radioAtaqueCaravana": 7,

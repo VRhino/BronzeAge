@@ -281,8 +281,8 @@ Cada uno lo emite el comando que lo nombra, en la misma transición. «Plaza» e
 
 | Parámetro | Motor TypeScript | Vigente (en el bloque) |
 |---|---|---|
-| `MOVIMIENTO.velocidadJugador` | 22 | **33** |
-| Velocidades de tropa (`TROPAS_RECLUTABLES`, [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md)) | 28 / 20 / 16 / 12 | **42 / 30 / 24 / 18** |
+| `MOVIMIENTO.velocidadJugador` | 22 | **66** (33 hasta el 2026-10-27: el autor dobló el héroe solo y la caballería) |
+| Velocidades de tropa (`TROPAS_RECLUTABLES`, [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md)) | 28 / 20 / 16 / 12 | **84 / 30 / 24 / 18** (la caballería, 42 hasta el 2026-10-27; los carros de guerra siguen a 30) |
 | `MOVIMIENTO.radioPuerta` | 10 | **2** |
 | `MOVIMIENTO.radioInspeccion` | 40 | **8** |
 | `LOGISTICA.radioEncuentro` | 15 | **3** |
@@ -350,7 +350,7 @@ Cada uno lo emite el comando que lo nombra, en la misma transición. «Plaza» e
 <!-- parametros:MOVIMIENTO -->
 ```json
 {
-  "velocidadJugador": 33,
+  "velocidadJugador": 66,
   "consumoPorParticipante": 0.5,
   "radioPuerta": 2,
   "vidaPeticionUnionSegundos": 10,

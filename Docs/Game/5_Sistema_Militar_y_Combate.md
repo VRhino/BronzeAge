@@ -146,11 +146,11 @@ Leñadores, granjeros y mineros son muy malos en combate y muy desorganizados: e
 
 | Nivel | Tropa | Tecnología (Era) | Costo (por soldado) | Escalón | poderBase | Unidades | Velocidad | Asent. |
 |---|---|---|---|---|---|---|---|---|
-| 1 | Exploradores a caballo | `cria_caballar` (I) | 1 Arma de Cobre + 1 caballo | 2 | 3 | 20 | 42 | 2 |
-| 1 | Jinetes asirios | `equitacion_militar` (II) | 1 Arma de Hierro + 1 caballo | 2 | 5 | 20 | 42 | 2 |
+| 1 | Exploradores a caballo | `cria_caballar` (I) | 1 Arma de Cobre + 1 caballo | 2 | 3 | 20 | 84 | 2 |
+| 1 | Jinetes asirios | `equitacion_militar` (II) | 1 Arma de Hierro + 1 caballo | 2 | 5 | 20 | 84 | 2 |
 | 2 | Carros de guerra | `carros_guerra` (I) | 1 Carro de Guerra + 2 caballos + 1 Arma de Bronce | 4 | 13 | 15 | 30 | 3 |
-| 2 | Jinetes escitas | `caballeria_organizada` (III) | 1 Arma de Bronce + 1 Armadura Básica + 1 caballo | 3 | 8 | 18 | 42 | 2 |
-| 2 | Caballería asiria | `caballeria_organizada` (III) | 1 Arma de Hierro + 1 Armadura de Bronce + 1 caballo | 3 | 10 | 18 | 42 | 3 |
+| 2 | Jinetes escitas | `caballeria_organizada` (III) | 1 Arma de Bronce + 1 Armadura Básica + 1 caballo | 3 | 8 | 18 | 84 | 2 |
+| 2 | Caballería asiria | `caballeria_organizada` (III) | 1 Arma de Hierro + 1 Armadura de Bronce + 1 caballo | 3 | 10 | 18 | 84 | 3 |
 
 Los exploradores a caballo son caballería de exploración, floja en combate. Una tropa puede depender de una tecnología y su arma de otra (los escaramuzadores esperan al Arma de Cobre de `metalurgia_cobre`, los jinetes asirios al Arma de Hierro de `forja_hierro_temprana`): es el patrón normal de las cuatro puertas.
 
@@ -368,7 +368,7 @@ Si el asedio **resiste**, el ejército se queda acampado fuera con sus escuadron
 
 | Clase | Tropas | Velocidad |
 |---|---|---|
-| **Montada** | Exploradores a caballo, Jinetes asirios, Jinetes escitas, Caballería asiria | **42** |
+| **Montada** | Exploradores a caballo, Jinetes asirios, Jinetes escitas, Caballería asiria | **84** (42 hasta el 2026-10-27: el autor dobló la caballería y el héroe solo, que va a 66) |
 | **Ligera** | Milicia de lanceros, Leñadores, Granjeros, Honderos, Lanceros con escudo de mimbre, Escaramuzadores con jabalina, Peltastas, Honderos rodios, Carros de guerra | **30** |
 | **Media** | Espadachines de cobre, Espadachines de bronce, Hacheros ligeros, Arqueros, Guerreros filisteos, Shardana, Hoplitas ciudadanos, Arqueros escitas | **24** |
 | **Pesada** | Hacheros armados, Lanceros pesados micénicos, Arqueros con arco compuesto, Hequetai, Espartiatas | **18** |

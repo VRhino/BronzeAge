@@ -1849,7 +1849,8 @@ fn si_la_caravana_resiste_en_unity_conserva_sus_carros_su_escolta_sus_supervivie
 #[test]
 fn si_unity_da_por_perdidos_todos_los_carros_la_caravana_desaparece() {
     let m = con_mundo!();
-    let mut e = montar(m, 7);
+    // Semilla 10: en ella los bandidos de la partida no acosan a la caravana antes del escenario.
+    let mut e = montar(m, 10);
     let (a, b) = (e.a, e.b);
     let ca = e.caravana("ana", a, 1);
     let t0 = e.lanzar(ca);
@@ -1992,7 +1993,8 @@ fn los_bandidos_que_acosan_una_caravana_adjunta_a_una_columna_con_heroes_la_jueg
 fn los_bandidos_que_acosan_una_caravana_sin_heroes_la_resuelven_con_numeros_aunque_haya_servidores_de_batalla() {
     let m = con_mundo!();
     // Suelta, con una escolta de tropa cedida pero sin héroe a bordo.
-    let mut e = montar(m, 7);
+    // Semilla 10: en ella los bandidos de la partida no acosan a la caravana antes del escenario.
+    let mut e = montar(m, 10);
     let a = e.a;
     let ca = e.caravana("ana", a, 2);
     let carla = e.heroe_en(&m.0, "carla", 1, a);

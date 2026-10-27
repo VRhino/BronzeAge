@@ -159,7 +159,7 @@ mod pruebas {
         let c = catalogo();
         let de = |t| c.tropa(t).velocidad;
         for t in [Tropa::ExploradoresCaballo, Tropa::JinetesAsirios, Tropa::JinetesEscitas, Tropa::CaballeriaAsiria] {
-            assert_eq!(de(t), 42_000, "montada: {}", t.nombre());
+            assert_eq!(de(t), 84_000, "montada (doblada el 2026-10-27): {}", t.nombre());
         }
         for t in [
             Tropa::MiliciaLanceros,

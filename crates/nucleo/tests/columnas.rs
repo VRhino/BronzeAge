@@ -318,7 +318,7 @@ fn salir_sin_tropa_es_legitimo_y_la_escuadra_en_la_guarnicion_no_sale() {
     assert_eq!(e.rechazada("ana", salir(&[lenadores])), rechazos::ESCUADRA_EN_LA_GUARNICION);
     let col = e.ok("ana", salir(&[])).creadas[0];
     // Un héroe solo: el viajero, más rápido que cualquier tropa, y ve a 15.
-    assert_eq!(e.n.velocidad_de_ejercito(col), Some(33_000 / 60));
+    assert_eq!(e.n.velocidad_de_ejercito(col), Some(66_000 / 60));
     assert_eq!(e.n.alcance_de_vista(col), Some(15_000));
     assert_eq!(e.n.consumo_de_columna(col), Some(racion::racion_columna(&mr(), 0, 1, Marcha::Estacionada)));
     assert_eq!(e.escuadra(h, milicia).contenedor, Contenedor::Campamento, "lo que no se llevó se queda en el campamento");

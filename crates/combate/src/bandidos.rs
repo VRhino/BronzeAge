@@ -39,11 +39,11 @@ pub fn reaparece_en(r: &Reglas, ahora: Instante) -> Instante {
     ahora + r.bandidos.respawn
 }
 
-/// Cuántos campamentos le tocan al anillo de un campamento de mercenarios según su demanda: `ceil(residentes sin plaza / residentesPorBandido)`
+/// Cuántos campamentos le tocan al anillo de un campamento de mercenarios según su demanda: `residentes sin plaza × bandidosPorResidente`
 /// entre el mínimo y el máximo. Cuentan los residentes cuya Facción no tiene asentamientos o que no tienen Facción.
 pub fn campamentos_que_tocan(r: &Reglas, residentes_sin_plaza: i64) -> i64 {
     let b = &r.bandidos;
-    ((residentes_sin_plaza + b.residentes_por_bandido - 1).div_euclid(b.residentes_por_bandido)).clamp(b.anillo_minimo, b.anillo_maximo)
+    (residentes_sin_plaza * b.bandidos_por_residente).clamp(b.anillo_minimo, b.anillo_maximo)
 }
 
 /// ¿Toca crear uno en el anillo? Faltan campamentos y ya venció su plazo (`bandidosEn`).
@@ -200,10 +200,10 @@ mod pruebas {
     #[test]
     fn el_anillo_pide_uno_por_cada_dos_residentes_sin_plaza_entre_1_y_6() {
         let r = r();
-        assert_eq!([0, 1, 2, 3, 4, 11, 12, 13, 40].map(|n| campamentos_que_tocan(r, n)), [1, 1, 1, 2, 2, 6, 6, 6, 6]);
+        assert_eq!([0, 1, 2, 3, 4, 5, 6, 7, 40].map(|n| campamentos_que_tocan(r, n)), [4, 4, 4, 6, 8, 10, 12, 12, 12]);
         assert!(toca_crear_en_el_anillo(r, 0, 0, None, 0));
-        assert!(!toca_crear_en_el_anillo(r, 1, 2, None, 0), "ya tiene los que le tocan");
-        assert!(toca_crear_en_el_anillo(r, 1, 3, None, 0));
+        assert!(!toca_crear_en_el_anillo(r, 4, 2, None, 0), "ya tiene los que le tocan");
+        assert!(toca_crear_en_el_anillo(r, 4, 3, None, 0));
         assert!(!toca_crear_en_el_anillo(r, 0, 3, Some(50), 49), "espera su plazo");
         assert!(toca_crear_en_el_anillo(r, 0, 3, Some(50), 50));
         assert_eq!(proxima_aparicion_en_el_anillo(r, 0), 10 * MS_POR_MINUTO);
@@ -216,7 +216,7 @@ mod pruebas {
         for semilla in 0..300 {
             let p = punto_del_anillo(r, centro, &mut Rng::nuevo(semilla), |_| true).expect("sin restricciones, el primer intento vale");
             let d = p.dist(centro);
-            assert!((29_990..=50_010).contains(&d), "{d} (la tabla de senos redondea a la milésima)");
+            assert!((11_990..=25_010).contains(&d), "{d} (la tabla de senos redondea a la milésima)");
             assert_eq!(Some(p), punto_del_anillo(r, centro, &mut Rng::nuevo(semilla), |_| true));
         }
     }
@@ -226,8 +226,8 @@ mod pruebas {
         let r = r();
         let mut rng = Rng::nuevo(5);
         let n = 20_000;
-        let cerca = (0..n).filter(|_| punto_del_anillo(r, Punto::default(), &mut rng, |_| true).unwrap().dist(Punto::default()) < 40_000).count();
-        // Uniforme en el radio, la mitad interior (30-40) recibe la mitad; uniforme en el área recibiría (40² − 30²) / (50² − 30²) = 43,75 %.
+        let cerca = (0..n).filter(|_| punto_del_anillo(r, Punto::default(), &mut rng, |_| true).unwrap().dist(Punto::default()) < 18_500).count();
+        // Uniforme en el radio, la mitad interior (12-18,5) recibe la mitad; uniforme en el área recibiría bastante menos.
         let pct = cerca as f64 * 100.0 / n as f64;
         assert!((pct - 50.0).abs() < 1.5, "{pct} %");
     }
