@@ -425,6 +425,58 @@ fn marchar_come_un_cuarto_de_racion_la_velocidad_es_la_de_la_tropa_mas_lenta_y_a
     assert!(!e.ejercito(col).marchando());
 }
 
+#[test]
+fn la_marcha_forzada_va_un_cincuenta_por_ciento_mas_deprisa_come_el_doble_solo_marchando_y_va_en_la_foto() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let (h, ids) = e.con_prestamo("ana", 0);
+    let col = e.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: h, escuadras: ids, carga: vec![], politica: Politica::Rechazar }).creadas[0];
+    let normal = e.n.velocidad_de_ejercito(col).unwrap();
+    let forzada = |activa| Comando::MarchaForzada { ejercito: col, activa };
+    assert_eq!(e.rechazada("beto", forzada(true)), rechazos::NO_AUTORIZADO, "solo su Líder la pone");
+    assert_eq!(e.rechazada("ana", Comando::MarchaForzada { ejercito: 999_999, activa: true }), rechazos::EJERCITO_DESCONOCIDO);
+    assert_eq!(e.ord("ana", forzada(false)).resultado, Resultado::SinCambios, "quitarla sin tenerla no cambia nada");
+    // Parada, con la marcha forzada puesta: va más deprisa cuando ande, pero come lo de siempre.
+    let v = e.ejercito(col).version;
+    e.ok("ana", forzada(true));
+    assert!(e.ejercito(col).columna.forzada);
+    assert!(e.ejercito(col).version > v, "la columna cambia de versión");
+    assert_eq!(e.ord("ana", forzada(true)).resultado, Resultado::SinCambios, "ponerla dos veces no cambia nada");
+    let factor = mr().movimiento.factor_velocidad_forzada;
+    assert_eq!(factor, 1_500_000, "factorVelocidadMarchaForzada es 1,5");
+    assert_eq!(mr().movimiento.factor_consumo_forzada, 2_000_000, "factorConsumoMarchaForzada es 2");
+    assert_eq!(e.n.velocidad_de_ejercito(col), Some(normal * 60 * factor / 1_000_000 / 60));
+    assert_eq!(e.n.consumo_de_columna(col), Some(racion::racion_columna(&mr(), 60, 1, Marcha::Estacionada)), "parada come lo de siempre");
+    assert!(nucleo::proyeccion::propios::ejercito(&e.n, e.ejercito(col)).marcha_forzada, "su dueño la ve");
+    // Marchando come el doble.
+    let destino = e.plaza();
+    e.ok("ana", Comando::MarcharA { ejercito: col, destino });
+    assert_eq!(e.n.consumo_de_columna(col), Some(racion::racion_columna(&mr(), 60, 1, Marcha::Marchando) * 2));
+    assert_eq!(e.n.consumo_de_columna(col), Some(racion::racion_columna_forzada(&mr(), 60, 1, Marcha::Marchando, true)));
+    // Quitarla a mitad de camino retrasa la llegada y vuelve a la ración normal; ponerla otra vez la adelanta.
+    e.avanzar(30_000);
+    let fin_forzada = e.ejercito(col).plan.fin().unwrap();
+    e.ok("ana", forzada(false));
+    let fin_normal = e.ejercito(col).plan.fin().unwrap();
+    assert!(fin_normal > fin_forzada, "sin forzar llega más tarde: {fin_normal} vs {fin_forzada}");
+    assert_eq!(e.n.consumo_de_columna(col), Some(racion::racion_columna(&mr(), 60, 1, Marcha::Marchando)));
+    assert!(!nucleo::proyeccion::propios::ejercito(&e.n, e.ejercito(col)).marcha_forzada);
+    e.ok("ana", forzada(true));
+    assert!(e.ejercito(col).plan.fin().unwrap() < fin_normal);
+    // Va en la foto.
+    let bytes = e.n.estado().serializar();
+    assert_eq!(&bytes[..5], b"BAN45");
+    let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
+    assert!(vuelta.ejercitos[&col].columna.forzada, "la marcha forzada va en la foto");
+    assert_eq!(vuelta.serializar(), bytes);
+    // Al llegar acampa con la marcha forzada puesta y come lo de siempre.
+    let fin = e.ejercito(col).plan.fin().unwrap();
+    e.n.avanzar_hasta(fin);
+    assert!(!e.ejercito(col).marchando());
+    assert!(e.ejercito(col).columna.forzada, "sigue puesta hasta que se quita");
+    assert_eq!(e.n.consumo_de_columna(col), Some(racion::racion_columna(&mr(), 60, 1, Marcha::Estacionada)));
+}
+
 // ───────────────────────────── 3. Entrar en un lugar ─────────────────────────────
 
 #[test]

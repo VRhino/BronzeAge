@@ -103,6 +103,9 @@ pub struct Columna {
     pub carga: Carga,
     /// Los víveres del ejército (en una columna personal, los del héroe). Es lo que se come.
     pub viveres: Ritmo,
+    /// En marcha forzada (`marchaForzada`, 2026-10-27): va `MOVIMIENTO.factorVelocidadMarchaForzada` veces más rápida y, mientras marcha, come
+    /// `MOVIMIENTO.factorConsumoMarchaForzada` veces más. Se queda puesta hasta que su Líder la quita.
+    pub forzada: bool,
 }
 
 /// La velocidad de una columna: la de su escuadra con soldados más lenta o la de su caravana adjunta más lenta; sin ninguna de las dos, la de
@@ -152,6 +155,7 @@ impl Columna {
             escuadras,
             carga,
             viveres: racion::viveres(r, 1, viveres, ahora),
+            forzada: false,
         };
         c.reanclar_consumo(r, ahora, soldados_de);
         c
@@ -177,7 +181,7 @@ impl Columna {
 
     /// Anota el consumo de víveres según lo que hay ahora dentro: soldados, héroes y si marcha o está acampada.
     pub fn reanclar_consumo(&mut self, r: &Reglas, ahora: Instante, soldados_de: Soldados) {
-        let consumo = racion::racion_columna(r, soldados_de(&self.escuadras), self.participantes.len(), self.estado);
+        let consumo = racion::racion_columna_forzada(r, soldados_de(&self.escuadras), self.participantes.len(), self.estado, self.forzada);
         racion::anotar_consumo(&mut self.viveres, ahora, consumo);
     }
 
@@ -397,6 +401,7 @@ impl Columna {
             escuadras: suyas.to_vec(),
             carga,
             viveres: racion::viveres(r, 1, parte, ahora),
+            forzada: false,
         };
         nueva.reanclar_consumo(r, ahora, soldados_de);
         Ok(nueva)

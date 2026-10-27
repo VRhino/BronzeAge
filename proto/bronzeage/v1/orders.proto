@@ -394,6 +394,12 @@ message OrdenEstacionarEjercito {
   string ejercito_id = 1;
 }
 
+// Activa o quita la marcha forzada de una columna: se queda puesta hasta que se quita.
+message OrdenMarchaForzada {
+  string ejercito_id = 1;
+  bool activa = 2;
+}
+
 message OrdenFijarPuerta {
   string asentamiento_id = 1;
   string heroe_id = 2;
@@ -1051,5 +1057,6 @@ message Orden {
     OrdenEntrarEnAvanzada entrar_en_avanzada = 152;
     OrdenSalirDeAvanzada salir_de_avanzada = 153;
     OrdenDeAdministracion administracion = 154;
+    OrdenMarchaForzada marcha_forzada = 155;
   }
 }

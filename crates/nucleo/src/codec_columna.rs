@@ -48,7 +48,7 @@ pub(crate) fn ritmo_leer(r: &mut Lector) -> Result<Ritmo, ErrorFormato> {
 
 pub(crate) fn escribir(w: &mut Escritor, e: &Ejercito) {
     let Ejercito { id, columna, posicion, plan, velocidad_fija, caravanas_adjuntas, persiguiendo, en_batalla, plan_en_pausa, version } = e;
-    let Columna { id: _, faccion, tipo, lider, politica, estado, participantes, peticiones, formacion_expira_en, escuadras, carga, viveres } = columna;
+    let Columna { id: _, faccion, tipo, lider, politica, estado, participantes, peticiones, formacion_expira_en, escuadras, carga, viveres, forzada: _ } = columna;
     w.u64(*id);
     w.opt_u64(faccion.map(u64::from));
     w.u8(match tipo {
@@ -144,7 +144,7 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Ejercito, ErrorFormato> {
     for _ in 0..r.u32()? {
         caravanas_adjuntas.push(r.u64()?);
     }
-    let columna = Columna { id, faccion, tipo, lider, politica, estado, participantes, peticiones, formacion_expira_en, escuadras, carga, viveres };
+    let columna = Columna { id, faccion, tipo, lider, politica, estado, participantes, peticiones, formacion_expira_en, escuadras, carga, viveres, forzada: false };
     let (persiguiendo, en_batalla) = (r.opt_u64()?, r.bool()?);
     let plan_en_pausa = if r.bool()? { Some(PlanEnPausa { desde: r.i64()?, velocidad: r.i64()?, plan: plan_leer(r)? }) } else { None };
     Ok(Ejercito { id, columna, posicion, plan, velocidad_fija, caravanas_adjuntas, persiguiendo, en_batalla, plan_en_pausa, version: r.u64()? })

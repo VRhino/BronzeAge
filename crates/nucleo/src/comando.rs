@@ -87,6 +87,8 @@ pub enum Comando {
     MarcharA { ejercito: u64, destino: Punto },
     /// Cancela la marcha: la columna se queda donde está.
     Estacionar { ejercito: u64 },
+    /// Pone o quita la marcha forzada de la columna (Movimiento_Ejercitos §2.3): sigue puesta hasta que se quita.
+    MarchaForzada { ejercito: u64, activa: bool },
     /// Solo administración.
     Reloj(AccionReloj),
     /// Nivel de una Facción (fija su cap de fundación). Solo administración; lo sustituirá la experiencia de Facción.
@@ -725,6 +727,7 @@ impl Comando {
             Comando::EmpezarEpica { .. } | Comando::AbandonarEpica { .. } => DirigeAedas,
             Comando::MarcharA { .. }
             | Comando::Estacionar { .. }
+            | Comando::MarchaForzada { .. }
             | Comando::Fundar { .. }
             | Comando::ComerciarEnPlaza { .. }
             | Comando::AdjuntarCaravana { .. }
@@ -818,7 +821,7 @@ impl Comando {
                     ObjetivoAtaque::Asentamiento(_) => {}
                 }
             }
-            Comando::MarcharA { ejercito, .. } | Comando::Estacionar { ejercito } | Comando::DarCaravanaFundacion { ejercito } | Comando::Fundar { ejercito } | Comando::DarSuministro { ejercito, .. } => i.ejercitos.push(*ejercito),
+            Comando::MarcharA { ejercito, .. } | Comando::Estacionar { ejercito } | Comando::MarchaForzada { ejercito, .. } | Comando::DarCaravanaFundacion { ejercito } | Comando::Fundar { ejercito } | Comando::DarSuministro { ejercito, .. } => i.ejercitos.push(*ejercito),
             Comando::ComerciarEnPlaza { ejercito, .. } => i.ejercitos.push(*ejercito),
             Comando::EntregarDeCaravana { ejercito, caravana, .. } | Comando::AdjuntarCaravana { caravana, ejercito } => {
                 i.ejercitos.push(*ejercito);
@@ -1209,6 +1212,11 @@ impl Peticion {
             Comando::Estacionar { ejercito } => {
                 w.u8(3);
                 w.u64(*ejercito);
+            }
+            Comando::MarchaForzada { ejercito, activa } => {
+                w.u8(181);
+                w.u64(*ejercito);
+                w.bool(*activa);
             }
             Comando::Reloj(a) => {
                 w.u8(4);
@@ -2371,6 +2379,7 @@ impl Peticion {
             178 => Comando::AbandonarEpica { heroe: r.u64()?, asentamiento: r.u64()?, aeda: r.u32()? },
             179 => Comando::PrepararCaravana { caravana: r.u64()?, destino: r.u64()?, carga: leer_lineas(&mut r)?, salir_en: r.opt_i64()?, escolta: Some((r.u64()?, leer_lista_u64(&mut r)?)) },
             180 => Comando::CrearHeroe { cuenta: r.texto()?, campamento: r.u32()?, controlador: controlador_de_u8(r.u8()?)?, nombre: Some(r.texto()?) },
+            181 => Comando::MarchaForzada { ejercito: r.u64()?, activa: r.bool()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -3252,6 +3261,7 @@ mod pruebas {
             Comando::DarAlmacenPersonal { heroe: 2, recurso: Recurso::Oro, cantidad: 9 },
             Comando::CrearHeroe { cuenta: "ana".into(), campamento: 4, controlador: Controlador::Bot, nombre: None },
             Comando::CrearHeroe { cuenta: "ana".into(), campamento: 4, controlador: Controlador::Humano, nombre: Some("Arkanthos".into()) },
+            Comando::MarchaForzada { ejercito: 7, activa: true },
             Comando::ReclutarTropa { asentamiento: 3, heroe: 2, tropa: Tropa::Espartiatas },
             Comando::ReclutarEnCampamento { heroe: 2, tropa: Tropa::LancerosMimbre, pagar_con: PagarCon::Carro },
             Comando::ReclutarEnCampamento { heroe: 2, tropa: Tropa::MiliciaLanceros, pagar_con: PagarCon::AlmacenPersonal },

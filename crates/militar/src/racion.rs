@@ -33,6 +33,20 @@ pub fn racion_guarnicion(r: &Reglas, soldados: i64) -> Mil {
 /// Trigo por minuto de una columna: `(soldados × ración + participantes × consumoPorParticipante) × factor`, con el factor de marcha
 /// (¼) y, acampada, además el de estacionamiento (÷10); apartada por una batalla, nada. Los héroes comen aunque no lleven tropa: un viajero no viaja gratis.
 pub fn racion_columna(r: &Reglas, soldados: i64, participantes: usize, estado: Estado) -> Mil {
+    racion_columna_forzada(r, soldados, participantes, estado, false)
+}
+
+/// Como [`racion_columna`], con la marcha forzada: marchando, `MOVIMIENTO.factorConsumoMarchaForzada` veces más; parada, lo de siempre.
+pub fn racion_columna_forzada(r: &Reglas, soldados: i64, participantes: usize, estado: Estado, forzada: bool) -> Mil {
+    let racion = racion_normal(r, soldados, participantes, estado);
+    if forzada && estado == Estado::Marchando {
+        por(racion, r.movimiento.factor_consumo_forzada)
+    } else {
+        racion
+    }
+}
+
+fn racion_normal(r: &Reglas, soldados: i64, participantes: usize, estado: Estado) -> Mil {
     let base = soldados * r.militar.racion_por_soldado + participantes as i64 * r.movimiento.consumo_por_participante;
     let factor = match estado {
         Estado::Marchando => r.logistica.factor_marcha,

@@ -540,7 +540,7 @@ impl Nucleo {
     // ───────────────────────────── Velocidad y capacidad ─────────────────────────────
 
     /// La velocidad de la columna en `t`, en milésimas por segundo (§4.1): la fija de una columna de administración o la derivada de su composición;
-    /// las caravanas adjuntas (también la de Fundación) entran en el mínimo de las dos.
+    /// las caravanas adjuntas (también la de Fundación) entran en el mínimo de las dos; la marcha forzada lo multiplica todo.
     pub(super) fn velocidad_de_columna(&self, e: &Ejercito) -> Mil {
         let flota = &self.estado.reglas.economia.comercio.flota;
         let mut caravanas: Vec<Mil> = e.caravanas_adjuntas.iter().filter_map(|&c| self.estado.comercio.caravana(c)).map(|c| c.velocidad(flota)).filter(|&v| v > 0).collect();
@@ -552,6 +552,8 @@ impl Nucleo {
             Some(v) => caravanas.into_iter().chain(std::iter::once(v * 60)).min().unwrap_or(0),
             None => columna::velocidad(&self.estado.reglas.economia.militar, self.escuadras_en(e), caravanas, e.columna.participantes.len()),
         };
+        // Marcha forzada (§2.3): la columna entera, caravanas adjuntas incluidas, va `factorVelocidadMarchaForzada` veces más deprisa.
+        let por_minuto = if e.columna.forzada { por_minuto * self.estado.reglas.economia.militar.movimiento.factor_velocidad_forzada / 1_000_000 } else { por_minuto };
         por_minuto / 60
     }
 

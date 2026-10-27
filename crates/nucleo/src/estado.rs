@@ -123,6 +123,8 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
     21 * crate::estado_comercio::ETIQUETA | plaza
 }
 
+/// BAN45: BAN44 con las columnas en marcha forzada (la lista de sus ids, al final del estado; `Columna::forzada`; 2026-10-27). BAN44 a BAN40 se siguen admitiendo: ninguna columna va forzada.
+///
 /// BAN44: BAN43 con la tabla de precios de mercado vigente y su plazo (`Estado::precios`, `Estado::precios_en` y `Estado::precios_rearmar`, al final; `Carga::Precios` en la cola; 2026-10-27). BAN43 a BAN40 se
 /// siguen admitiendo: empiezan sin tabla y la primera se calcula al armar el plazo.
 ///
@@ -253,7 +255,7 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN44";
+const MAGIA: &[u8; 5] = b"BAN45";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -1214,6 +1216,11 @@ impl Estado {
                 }
             }
         }
+        let forzadas: Vec<u64> = self.ejercitos.values().filter(|e| e.columna.forzada).map(|e| e.id).collect();
+        w.u64(forzadas.len() as u64);
+        for id in forzadas {
+            w.u64(id);
+        }
 
         let gens = self.generaciones.volcar();
         w.u64(gens.len() as u64);
@@ -1307,17 +1314,18 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN44`): los cuatro primeros dicen la familia («BAN4» son los formatos 40 a 49, y se admiten del 40 al 44; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
+        // La cabecera es de 5 bytes (`BAN45`): los cuatro primeros dicen la familia («BAN4» son los formatos 40 a 49, y se admiten del 40 al 45; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
         // 20 a 29 y 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
-        let (mut con_eligieron, mut con_rutas_acarreo, mut con_nombres, mut con_precios) = (true, true, true, true);
+        let (mut con_eligieron, mut con_rutas_acarreo, mut con_nombres, mut con_precios, mut con_forzadas) = (true, true, true, true, true);
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'4' => {}
-                b'3' => con_precios = false,
-                b'2' => (con_nombres, con_precios) = (false, false),
-                b'1' => (con_rutas_acarreo, con_nombres, con_precios) = (false, false, false),
-                b'0' => (con_eligieron, con_rutas_acarreo, con_nombres, con_precios) = (false, false, false, false),
+                b'5' => {}
+                b'4' => con_forzadas = false,
+                b'3' => (con_precios, con_forzadas) = (false, false),
+                b'2' => (con_nombres, con_precios, con_forzadas) = (false, false, false),
+                b'1' => (con_rutas_acarreo, con_nombres, con_precios, con_forzadas) = (false, false, false, false),
+                b'0' => (con_eligieron, con_rutas_acarreo, con_nombres, con_precios, con_forzadas) = (false, false, false, false, false),
                 _ => return Err(ErrorFormato("no es un estado del núcleo")),
             }
         } else if magia == *b"BAN3" {
@@ -1472,6 +1480,12 @@ impl Estado {
                 }
                 _ => return Err(ErrorFormato("tabla de precios mal formada")),
             };
+        }
+        if con_forzadas {
+            for _ in 0..r.cuenta()? {
+                let id = r.u64()?;
+                s.ejercitos.get_mut(&id).ok_or(ErrorFormato("marcha forzada de una columna que no está"))?.columna.forzada = true;
+            }
         }
 
         let mut gens = Vec::new();

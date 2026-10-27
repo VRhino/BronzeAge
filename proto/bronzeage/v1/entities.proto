@@ -644,6 +644,9 @@ message Ejercito {
   // columna, de cualquier Facción y aunque su plaza no se vea, o vacío en tierra de nadie; nunca qué plaza. Solo en `VISTA` y solo de las columnas propias; ausente en los demás
   // ámbitos y en lo ajeno. Se renueva en el muestreo de la vista cuando la columna cruza una frontera.
   optional string territorio_faccion_id = 23;
+  // Marcha forzada (Movimiento_Ejercitos §marcha forzada): la columna va más deprisa y gasta más víveres mientras marcha. Solo en lo propio;
+  // lo ajeno siempre la lleva a false (las otras Facciones no la ven).
+  bool marcha_forzada = 24;
 }
 
 enum EstadoCaravana {

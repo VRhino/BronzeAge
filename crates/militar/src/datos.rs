@@ -111,6 +111,10 @@ pub struct ReglasMovimiento {
     pub vida_peticion_union: i64,
     /// A cuánto se inspecciona una columna, una caravana o una plaza ajena (`MOVIMIENTO.radioInspeccion`).
     pub radio_inspeccion: Mil,
+    /// Cuánto más rápido va una columna en marcha forzada (ppm; `MOVIMIENTO.factorVelocidadMarchaForzada`, 2026-10-27).
+    pub factor_velocidad_forzada: i64,
+    /// Cuánto más come una columna en marcha forzada mientras marcha (ppm; `MOVIMIENTO.factorConsumoMarchaForzada`).
+    pub factor_consumo_forzada: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -260,6 +264,8 @@ impl Reglas {
                 radio_puerta: mil(num(&mv, "radioPuerta")),
                 vida_peticion_union: entero(&mv, "vidaPeticionUnionSegundos") * 1000,
                 radio_inspeccion: mil(num(&mv, "radioInspeccion")),
+                factor_velocidad_forzada: ppm(num(&mv, "factorVelocidadMarchaForzada")),
+                factor_consumo_forzada: ppm(num(&mv, "factorConsumoMarchaForzada")),
             },
             formacion: ReglasFormacion { minimo: entero(&fm, "minimo") as usize, plazo: entero(&fm, "plazoMinutos") * MS_POR_MINUTO },
             vision: ReglasVision { ejercito: mil(num(&vs, "ejercito")), jugador_solo: mil(num(&vs, "jugadorSolo")), tamano_celda: mil(num(&bloque(NIEBLA, "EXPLORACION"), "tamanoCelda")) },

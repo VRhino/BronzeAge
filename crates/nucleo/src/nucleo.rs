@@ -976,6 +976,24 @@ impl Nucleo {
                 self.detener(id, t);
                 self.evento("ejercito.estacionado", t, id, Some(punto), vec![]);
             }
+            Comando::MarchaForzada { ejercito, activa } => {
+                let Some(e) = self.estado.ejercitos.get(ejercito) else {
+                    return Respuesta::rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(*ejercito), v);
+                };
+                if let Err(r) = self.autorizar_movimiento(p, e) {
+                    return r;
+                }
+                if e.columna.forzada == *activa {
+                    return sin_cambios();
+                }
+                // Cambian la velocidad y la ración: se reanclan el consumo y, si marcha, el plan (llegada, persecuciones, encuentros y umbrales de hambre).
+                let (id, antes) = (e.id, self.velocidad_de_columna(e));
+                if let Some(e) = self.estado.ejercitos.get_mut(&id) {
+                    e.columna.forzada = *activa;
+                }
+                self.tr.tocar(Clase::Ejercito, id);
+                self.recomponer_columna(id, t, antes);
+            }
             Comando::FijarNivelFaccion { .. }
             | Comando::DarCaravanaFundacion { .. }
             | Comando::Fundar { .. }

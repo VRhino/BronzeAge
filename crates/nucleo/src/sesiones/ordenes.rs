@@ -373,6 +373,7 @@ impl Ctx<'_> {
                 Comando::MarcharA { ejercito: self.columna(heroe)?, destino }
             }
             Cuerpo::EstacionarEjercito(o) => Comando::Estacionar { ejercito: self.ejercito(&o.ejercito_id)? },
+            Cuerpo::MarchaForzada(o) => Comando::MarchaForzada { ejercito: self.ejercito(&o.ejercito_id)?, activa: o.activa },
             Cuerpo::ControlarReloj(c) => Comando::Reloj(match (c.accion.as_str(), c.factor_milesimas, c.hasta_ms) {
                 ("pausar", ..) => AccionReloj::Pausar,
                 ("reanudar", ..) => AccionReloj::Reanudar,
