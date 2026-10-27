@@ -334,11 +334,13 @@ impl Nucleo {
         }
         for s in &sucesos {
             match s {
-                EventoEco::PuebloCompletado { id: pueblo } => self.dar_carro_a_pueblo(id, *pueblo),
+                EventoEco::PuebloCompletado { id: pueblo } => self.dar_carro_a_pueblo(id, *pueblo, t),
                 EventoEco::PuebloLleno { id: pueblo } => self.salir_acarreo(id, *pueblo, t),
                 _ => {}
             }
         }
+        // Los pueblos sin carro lo reponen en cuanto la madre puede pagarlo (2026-10-27).
+        self.reponer_carros(id, t);
         // La guarnición come después de la población (Reloj_Y_Eventos §2), la ración de este mismo paso.
         self.alimentar_guarnicion(id, t, racion);
         // El tributo de la vasalla, al final de su paso, tras comer su guarnición, para que la plaza atienda antes lo suyo (Q3; regla por decisión del autor, 2026-10-25, 5D-3).
@@ -462,6 +464,7 @@ impl Nucleo {
         for p in &a.economia.pueblos {
             self.estado.nodos_reclamados.remove(&p.nodo);
             self.tr.tocar(Clase::Pueblo, p.id);
+            self.olvidar_ruta_de_acarreo(p.id);
         }
         // Quien estaba dentro de sus pueblos o avanzadas sale al mapa con lo suyo, a la puerta de cada uno.
         let nodos = self.geografia.as_ref().map_or(&[][..], |g| &g.mapa.nodos[..]);

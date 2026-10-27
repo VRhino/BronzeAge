@@ -37,7 +37,7 @@
 //! # Lo que comprueba
 //! Cada `Atacar` aceptado pasa por [`auditmil`] (bajas, experiencia, heridos, conservación, carros, botín, héroe solo, cascadas de la conquista); cada media hora,
 //! los invariantes militares de [`ViolacionesMilitares`] (experiencia, hambre, heridos, batallas, reposiciones, ruinas) y cada 6 horas los del comercio y la
-//! economía (`auditoria`). Con `foto`, a mitad de la corrida el núcleo se reconstruye desde su foto `BAN41` y se sigue con el reconstruido.
+//! economía (`auditoria`). Con `foto`, a mitad de la corrida el núcleo se reconstruye desde su foto `BAN42` y se sigue con el reconstruido.
 
 use crate::auditmil::{self, Antes, ViolacionesCombate};
 use crate::auditoria::{auditar_cola, auditar_contenedores, Violaciones};
@@ -220,7 +220,7 @@ pub struct ViolacionesMilitares {
     pub reposicion: u64,
     /// Una plaza en ruinas de la que queda flota, residentes o quien esté dentro.
     pub ruina: u64,
-    /// El hash tras la foto (`BAN41`) ida y vuelta no es el de antes.
+    /// El hash tras la foto (`BAN42`) ida y vuelta no es el de antes.
     pub foto: u64,
 }
 
@@ -720,7 +720,7 @@ impl Sim<'_> {
         }
     }
 
-    /// La foto `BAN41` ida y vuelta: se serializa el núcleo, se escribe como foto en un directorio de persistencia, se reconstruye desde él y se sigue con el
+    /// La foto `BAN42` ida y vuelta: se serializa el núcleo, se escribe como foto en un directorio de persistencia, se reconstruye desde él y se sigue con el
     /// reconstruido (que escribe su registro en ese directorio hasta el final). El hash ha de ser el mismo.
     fn ida_y_vuelta(&mut self) {
         self.leer();

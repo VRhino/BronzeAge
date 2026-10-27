@@ -6,7 +6,7 @@
 //! reputación{n u64 · n × (facción u32, valor i64, t0 i64, alianzas u32)} · última caravana{n u64 · n × (plaza u64, instante i64)} ·
 //! red{aristas{n u64 · n × (x0,y0,x1,y1 i64)} · rutas{n u64 · n × (origen u32, destino u32, facción u32, aristas{n u64 · n × arista}, último
 //! lanzamiento i64)}} · reparto{n u64 · n × (plaza u64, instante i64)} · mercenarios{contadores{carga} · repone{carga} (BAN27) · repone_en i64 · stock{n u64 · n ×
-//! (campamento u32, carga)} · pulso opt_i64}`. El carro (`suministro`) y las caravanas adjuntas de cada columna viajan con la columna
+//! (campamento u32, carga)} · pulso opt_i64} · rutas de acarreo{n u64 · n × (pueblo u64, facción u32, puntos{n u64 · n × punto}, costes{n u64 · n × i64}, paradas{n u64 · n × (ciudad u32, distancia i64)})} (BAN42)`. El carro (`suministro`) y las caravanas adjuntas de cada columna viajan con la columna
 //! (`estado`); la residencia, el almacén personal y el cupo diario de cada comprador, con su héroe (`codec_militar`).
 //! Un acuerdo: `id u64 · a u32 · b u32 · líneas_a{n u64 · n × (recurso u8, total i64, entregada i64)} · líneas_b · creado_en i64 ·
 //! aceptado_en opt_i64 · expira_en i64 · estado u8`. Una orden: `id u64 · plaza u32 · tipo u8 · recurso u8 · cantidad i64 · cumplida i64 ·
@@ -18,7 +18,7 @@
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::codec_economia::{recurso_a_u8, recurso_de_u8};
-use crate::estado_comercio::{EstadoComercio, EstadoMercenarios};
+use crate::estado_comercio::{EstadoComercio, EstadoMercenarios, RutaAcarreo, Trazado};
 use base::{Plan, Vertice};
 use comercio::caravana::{Animal, Caravana, Carro, Escuadra, EstadoCaravana, TipoCaravana, TipoCarro};
 use comercio::mercenarios::{MercadoMercenario, StockCampamento};
@@ -493,7 +493,7 @@ fn mercenarios_leer(r: &mut Lector) -> Result<EstadoMercenarios, ErrorFormato> {
 }
 
 pub(crate) fn escribir(w: &mut Escritor, c: &EstadoComercio) {
-    let EstadoComercio { acuerdos, libro, flota, reputacion, ultima_caravana, red, reparto, mercenarios, siguiente_acuerdo, siguiente_orden, siguiente_caravana } = c;
+    let EstadoComercio { acuerdos, libro, flota, reputacion, ultima_caravana, red, reparto, mercenarios, rutas_acarreo, siguiente_acuerdo, siguiente_orden, siguiente_caravana } = c;
     w.u64(*siguiente_acuerdo);
     w.u64(*siguiente_orden);
     w.u64(*siguiente_caravana);
@@ -526,9 +526,24 @@ pub(crate) fn escribir(w: &mut Escritor, c: &EstadoComercio) {
         w.i64(t);
     }
     mercenarios_escribir(w, mercenarios);
+    w.u64(rutas_acarreo.len() as u64);
+    for (&pueblo, RutaAcarreo { faccion, trazado: Trazado { puntos, costes, paradas } }) in rutas_acarreo {
+        w.u64(pueblo);
+        w.u32(*faccion);
+        w.u64(puntos.len() as u64);
+        puntos.iter().for_each(|&p| w.punto(p));
+        w.u64(costes.len() as u64);
+        costes.iter().for_each(|&c| w.i64(c));
+        w.u64(paradas.len() as u64);
+        for &(ciudad, d) in paradas {
+            w.u32(ciudad);
+            w.i64(d);
+        }
+    }
 }
 
-pub(crate) fn leer(r: &mut Lector, reglas: &Reglas) -> Result<EstadoComercio, ErrorFormato> {
+/// `con_rutas_acarreo`: la foto trae las rutas guardadas de los carros de acarreo (desde BAN42); en una BAN41 o BAN40 empiezan vacías y cada carro traza la suya en su próxima salida.
+pub(crate) fn leer(r: &mut Lector, reglas: &Reglas, con_rutas_acarreo: bool) -> Result<EstadoComercio, ErrorFormato> {
     let mut c = EstadoComercio { siguiente_acuerdo: r.u64()?, siguiente_orden: r.u64()?, siguiente_caravana: r.u64()?, ..EstadoComercio::default() };
     for _ in 0..r.cuenta()? {
         c.acuerdos.push(acuerdo_leer(r)?);
@@ -554,5 +569,21 @@ pub(crate) fn leer(r: &mut Lector, reglas: &Reglas) -> Result<EstadoComercio, Er
         c.reparto.insert(r.u64()?, r.i64()?);
     }
     c.mercenarios = mercenarios_leer(r)?;
+    if con_rutas_acarreo {
+        for _ in 0..r.cuenta()? {
+            let (pueblo, faccion) = (r.u64()?, r.u32()?);
+            let mut t = Trazado { puntos: vec![], costes: vec![], paradas: vec![] };
+            for _ in 0..r.cuenta()? {
+                t.puntos.push(r.punto()?);
+            }
+            for _ in 0..r.cuenta()? {
+                t.costes.push(r.i64()?);
+            }
+            for _ in 0..r.cuenta()? {
+                t.paradas.push((r.u32()?, r.i64()?));
+            }
+            c.rutas_acarreo.insert(pueblo, RutaAcarreo { faccion, trazado: t });
+        }
+    }
     Ok(c)
 }

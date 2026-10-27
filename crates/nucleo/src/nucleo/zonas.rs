@@ -68,6 +68,11 @@ impl Geografia {
         self.mundo.campamentos().iter().filter_map(|c| c.posicion.as_ref().map(|p| (Punto::new(p.x, p.y), c.origen))).collect()
     }
 
+    /// ¿Lo pisa una ruta? Lo que el A\* de las rutas da por transitable (la cima también, aunque cara).
+    pub(super) fn transitable(&self, p: Punto) -> bool {
+        self.mundo.transitable_en(p.x, p.y)
+    }
+
     /// ¿Se puede pisar `p`? Tierra firme dentro del mapa y transitable (ni agua ni cima ni río sin vado).
     pub(super) fn es_tierra_firme(&self, p: Punto) -> bool {
         self.terreno(p) == Terreno::Firme

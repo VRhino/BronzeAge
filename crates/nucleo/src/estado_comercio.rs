@@ -3,7 +3,7 @@
 //! (`codec_comercio`). Las reglas puras viven en el crate `comercio`; aquí solo está lo que el núcleo guarda y las claves con las que sus
 //! eventos se invalidan en la cola.
 
-use base::Instante;
+use base::{Instante, Mil, Punto};
 use comercio::caravana::{Caravana, TipoCaravana};
 use comercio::mercenarios::{MercadoMercenario, StockCampamento};
 use comercio::orden_mercado::LibroOrdenes;
@@ -58,6 +58,22 @@ pub fn es_entidad_caravana(entidad: u64) -> bool {
 /// El mercado de los campamentos de mercenarios (Comercio_Caravanas §9, §2.5). Los campamentos son los del artefacto de mundo (por su índice);
 /// solo se guarda el stock de los que ya se tocaron: el que falta tiene el inicial. La residencia, el almacén personal y el cupo diario de cada
 /// comprador son de su héroe (`estado_militar`).
+/// Una ruta comercial trazada (§7.2): la polilínea, el coste de cada tramo y las ciudades ajenas por las que pasa con la distancia
+/// recorrida hasta cada una.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Trazado {
+    pub puntos: Vec<Punto>,
+    pub costes: Vec<i64>,
+    pub paradas: Vec<(u32, Mil)>,
+}
+
+/// La ruta guardada del carro de acarreo de un pueblo: el trazado pueblo → madre y la Facción de la madre al trazarla (sus peajes dependen de ella).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RutaAcarreo {
+    pub faccion: u32,
+    pub trazado: Trazado,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EstadoMercenarios {
     /// Lo comerciado entre Facciones desde la última reposición y cuándo toca la siguiente (global).
@@ -92,6 +108,9 @@ pub struct EstadoComercio {
     pub reparto: BTreeMap<u64, Instante>,
     /// El mercado de mercenarios.
     pub mercenarios: EstadoMercenarios,
+    /// La ruta guardada de cada pueblo extractor hasta su madre (por id de pueblo): se traza una vez al levantarse el pueblo y solo se rehace si deja
+    /// de valer ([`RutaAcarreo::vale`]). Desde BAN42.
+    pub rutas_acarreo: BTreeMap<u64, RutaAcarreo>,
     pub siguiente_acuerdo: AcuerdoId,
     pub siguiente_orden: OrdenId,
     pub siguiente_caravana: CaravanaId,
@@ -108,6 +127,7 @@ impl Default for EstadoComercio {
             red: RedCaminos::default(),
             reparto: BTreeMap::new(),
             mercenarios: EstadoMercenarios::default(),
+            rutas_acarreo: BTreeMap::new(),
             siguiente_acuerdo: 1,
             siguiente_orden: 1,
             siguiente_caravana: 1,

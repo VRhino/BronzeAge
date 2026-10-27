@@ -528,6 +528,18 @@ fn con_el_nodo_agotado_el_pueblo_espera_a_que_se_regenere_y_no_se_muda() {
     assert_eq!(e.pueblo(id).nodo, cobre);
 }
 
+/// Pierde el carro del pueblo una y otra vez (cada reposición automática cuesta 20 de madera a la madre, que no produce) hasta que la madre ya no
+/// puede pagar otro: el pueblo queda sin carro.
+fn perder_el_carro_hasta_que_no_se_repone(e: &mut Escenario, pueblo: u64) {
+    for _ in 0..10 {
+        let Some(carro) = e.pueblo(pueblo).carro else { return };
+        let t = e.n.ahora();
+        assert!(e.n.aplicar_perdida_de_carros(t, carro, &[0]).unwrap().destruida);
+        e.avanzar(MIN);
+    }
+    panic!("la madre no deja de reponer el carro");
+}
+
 #[test]
 fn sin_carro_el_pueblo_acumula_hasta_llenar_el_almacen_y_para_hasta_que_se_repone() {
     let m = con_mundo!();
@@ -539,16 +551,7 @@ fn sin_carro_el_pueblo_acumula_hasta_llenar_el_almacen_y_para_hasta_que_se_repon
     let t = e.n.ahora();
     assert!(e.n.aplicar_perdida_de_carros(t, carro, &[0]).unwrap().destruida);
     assert!(e.n.caravana(carro).is_none() && e.pueblo(id).carro.is_none());
-    // Sin carro no sale nada: acumula, se llena una sola vez y la extracción para (el nodo no se gasta de más).
-    e.avanzar(8 * HORA);
-    assert_eq!(e.pueblo(id).almacen.cantidad(Cobre), 500_000);
-    assert!(e.pueblo(id).lleno);
-    assert_eq!((hechos(&e.n, "pueblo.almacen_lleno").len(), hechos(&e.n, "acarreo.sale").len()), (1, 0));
-    let stock_nodo = e.n.estado().yacimientos.get(&cobre).map(|s| s.stock);
-    e.avanzar(30 * MIN);
-    assert_eq!(e.n.estado().yacimientos.get(&cobre).map(|s| s.stock), stock_nodo, "lleno, no gasta el yacimiento");
-
-    // Reponer cuesta el carro y el buey (20 de madera y 12 de oro) de la madre, solo si el pueblo no tiene ninguno y solo a quien manda.
+    // Reponer a mano cuesta el carro y el buey (20 de madera y 12 de oro) de la madre, solo si el pueblo no tiene ninguno y solo a quien manda.
     assert_eq!(e.rechazada("beto", Comando::ReponerCarro { pueblo: id }), rechazos::NO_AUTORIZADO);
     let (madera, oro) = (e.almacen(Madera), e.almacen(Oro));
     e.ok("ana", Comando::ReponerCarro { pueblo: id });
@@ -556,9 +559,30 @@ fn sin_carro_el_pueblo_acumula_hasta_llenar_el_almacen_y_para_hasta_que_se_repon
     let nuevo = e.pueblo(id).carro.expect("tiene carro otra vez");
     assert_ne!(nuevo, carro);
     assert_eq!(e.rechazada("ana", Comando::ReponerCarro { pueblo: id }), rechazos::PUEBLO_YA_TIENE_CARRO);
-    // El almacén ya estaba lleno: el carro nuevo sale al instante con él.
-    assert_eq!(e.n.caravana(nuevo).unwrap().estado, EstadoCaravana::EnTransito);
-    assert_eq!((e.pueblo(id).almacen.cantidad(Cobre), e.n.caravana(nuevo).unwrap().contenido[&Cobre]), (0, 500_000));
+    // Sin la orden, la madre lo repone sola en su siguiente paso de minuto, mientras pueda pagarlo (2026-10-27).
+    let t = e.n.ahora();
+    e.n.aplicar_perdida_de_carros(t, nuevo, &[0]).unwrap();
+    e.avanzar(MIN);
+    let solo = e.pueblo(id).carro.expect("repuesto solo");
+    assert_eq!((e.almacen(Madera), hechos(&e.n, "acarreo.carro_repuesto").len()), (madera - 40_000, 2));
+    assert_ne!(solo, nuevo);
+    // Con 10 de madera ya no puede: sin carro no sale nada, acumula, se llena una sola vez y la extracción para (el nodo no se gasta de más).
+    perder_el_carro_hasta_que_no_se_repone(&mut e, id);
+    assert!(e.almacen(Madera) < 20_000);
+    e.avanzar(8 * HORA);
+    assert!(e.pueblo(id).carro.is_none());
+    assert_eq!(e.pueblo(id).almacen.cantidad(Cobre), 500_000);
+    assert!(e.pueblo(id).lleno);
+    assert_eq!((hechos(&e.n, "pueblo.almacen_lleno").len(), hechos(&e.n, "acarreo.sale").len()), (1, 0));
+    let stock_nodo = e.n.estado().yacimientos.get(&cobre).map(|s| s.stock);
+    e.avanzar(30 * MIN);
+    assert_eq!(e.n.estado().yacimientos.get(&cobre).map(|s| s.stock), stock_nodo, "lleno, no gasta el yacimiento");
+    // En cuanto tiene la madera, lo repone en el siguiente paso de minuto y el carro sale al instante con el almacén lleno.
+    e.dar(Madera, 20_000);
+    e.avanzar(MIN);
+    let ultimo = e.pueblo(id).carro.expect("repuesto en cuanto pudo");
+    assert_eq!(e.n.caravana(ultimo).unwrap().estado, EstadoCaravana::EnTransito);
+    assert_eq!((e.pueblo(id).almacen.cantidad(Cobre), e.n.caravana(ultimo).unwrap().contenido[&Cobre]), (0, 500_000));
     // Un pueblo aún sin levantar no tiene carro que reponer.
     let otro = e.n.candidatos_de_pueblo(plaza).into_iter().find(|c| c.1 == Tipo::Cantera).unwrap().0;
     let pendiente = e.ok("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: otro }).creadas[0];
@@ -580,9 +604,7 @@ fn el_pueblo_paga_mantenimiento_a_la_madre_y_no_deja_eventos_recurrentes_por_pue
     e.n.avanzar_hasta(completa_en + MIN);
     assert!(e.n.economia(plaza).unwrap().coste_mantenimiento(&datos, 0)[0].1 > sin_pueblos[0].1, "activo, cuenta como un edificio más de la madre");
     // Sin carro y con el almacén lleno el pueblo no programa nada: solo quedan el paso de minuto de la plaza y lo que ya había.
-    let carro = e.pueblo(id).carro.unwrap();
-    let t = e.n.ahora();
-    e.n.aplicar_perdida_de_carros(t, carro, &[0]).unwrap();
+    perder_el_carro_hasta_que_no_se_repone(&mut e, id);
     e.avanzar(8 * HORA);
     assert!(e.pueblo(id).lleno);
     assert_eq!(e.n.eventos_en_cola(), en_cola_base, "ni el pueblo ocioso ni el carro ausente tienen eventos propios");
@@ -616,6 +638,74 @@ fn hasta_que_el_carro_vaya_cargado(e: &mut Escenario, pueblo: u64) -> u64 {
         assert!(e.n.ahora() < limite, "el carro debería haber salido");
     }
     carro
+}
+
+#[test]
+fn la_ruta_del_carro_se_traza_una_vez_al_levantarse_entra_en_la_red_y_se_olvida_con_el_pueblo() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let plaza = e.plaza;
+    let id = e.pueblo_levantado();
+    // Al levantarse se traza y se guarda, y entra en la red de caminos como una ruta madre → pueblo (2026-10-27).
+    let guardada = e.n.estado().comercio.rutas_acarreo.get(&id).expect("ruta guardada al levantarse").clone();
+    assert_eq!(guardada.faccion, 1);
+    assert_eq!((guardada.trazado.puntos.first(), guardada.trazado.puntos.last()), (e.n.posicion_de_pueblo(id).as_ref(), Some(&e.n.estado().asentamientos[&plaza].posicion)));
+    assert!(e.n.rutas_vigentes().any(|r| (u64::from(r.origen), u64::from(r.destino)) == (plaza, id)));
+    let aristas = e.n.red_de_caminos().aristas().count();
+    assert!(aristas > 0);
+    // Cada viaje va por la ruta guardada, sin trazarla otra vez, y renueva la ruta en la red.
+    let carro = hasta_que_el_carro_vaya_cargado(&mut e, id);
+    assert_eq!(e.n.caravana(carro).unwrap().ruta, guardada.trazado.puntos);
+    let lanzada = e.n.red_de_caminos().ruta(plaza as u32, id as u32).unwrap().ultimo_lanzamiento;
+    assert_eq!(lanzada, e.n.ahora());
+    assert_eq!(e.n.estado().comercio.rutas_acarreo[&id], guardada);
+    // La foto la guarda.
+    let bytes = e.n.estado().serializar();
+    let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
+    assert_eq!(vuelta.comercio.rutas_acarreo, e.n.estado().comercio.rutas_acarreo);
+    // Destruido el pueblo, su ruta se olvida y sale de la red (las aristas, que ya son camino, se quedan).
+    e.ok("ana", Comando::DestruirPueblo { pueblo: id });
+    assert!(e.n.estado().comercio.rutas_acarreo.is_empty());
+    assert!(!e.n.rutas_vigentes().any(|r| u64::from(r.destino) == id));
+    assert_eq!(e.n.red_de_caminos().aristas().count(), aristas);
+}
+
+#[test]
+fn un_residente_de_la_madre_cede_a_mano_escolta_al_carro_de_acarreo_y_viaja_con_el() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let plaza = e.plaza;
+    // El cupo de escolta de la madre es el de su Mercado (como en cualquier caravana suya): sin Mercado, ninguno.
+    e.dar(Madera, 350_000);
+    e.ok("ana", Comando::AnadirEdificio { asentamiento: plaza, tipo: Tipo::Mercado });
+    e.avanzar(9 * HORA);
+    let id = e.pueblo_levantado();
+    let carro = e.pueblo(id).carro.unwrap();
+    // Carla reside en la madre y está dentro: cede una escuadra de su campamento al carro parado en el pueblo. No hay escolta automática.
+    assert!(e.n.caravana(carro).unwrap().escolta.is_empty());
+    let carla = e.ok("carla", Comando::CrearHeroe { cuenta: "carla".into(), campamento: 0, controlador: Controlador::Humano }).creadas[0];
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: carla, faccion: Some(1) });
+    e.ok("admin", Comando::FijarResidencia { heroe: carla, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
+    e.ok("admin", Comando::ColocarHeroe { heroe: carla, ubicacion: Ubicacion::Asentamiento(plaza as u32) });
+    let tropa = militar::catalogo::Tropa::MiliciaLanceros;
+    let escuadra = e.ok("admin", Comando::DarEscuadra { heroe: carla, tropa, cantidad: 25 }).creadas[0];
+    e.ok("carla", Comando::AsignarEscolta { caravana: carro, heroe: carla, escuadras: vec![escuadra] });
+    assert_eq!(e.n.caravana(carro).unwrap().escolta.iter().map(|x| x.id).collect::<Vec<_>>(), vec![escuadra]);
+    assert_eq!(hechos(&e.n, "comercio.caravana_escolta_cedida").len(), 1);
+    // Sale lleno con su escolta, vuelca en la madre y vuelve con ella.
+    hasta_que_el_carro_vaya_cargado(&mut e, id);
+    assert_eq!(e.n.caravana(carro).unwrap().escolta.len(), 1);
+    let limite = e.n.ahora() + 2 * HORA;
+    while hechos(&e.n, "acarreo.vuelve").is_empty() {
+        e.avanzar(MIN);
+        assert!(e.n.ahora() < limite, "el carro debería haber vuelto");
+    }
+    assert_eq!(e.n.caravana(carro).unwrap().escolta.iter().map(|x| x.id).collect::<Vec<_>>(), vec![escuadra], "la escolta sigue con el carro al viaje siguiente");
+    assert_eq!(e.n.heroe(carla).unwrap().heroe.escuadra(escuadra).unwrap().contenedor, militar::escuadra::Contenedor::Escolta(carro));
+    // Con el carro en casa (su pueblo), Carla se la quita y vuelve a su campamento.
+    e.ok("carla", Comando::QuitarEscolta { caravana: carro, heroe: carla, escuadras: None });
+    assert!(e.n.caravana(carro).unwrap().escolta.is_empty());
+    assert_eq!(e.n.heroe(carla).unwrap().heroe.escuadra(escuadra).unwrap().contenedor, militar::escuadra::Contenedor::Campamento);
 }
 
 #[test]
@@ -670,7 +760,7 @@ fn la_conquista_de_la_madre_deja_los_pueblos_con_la_plaza_y_el_carro_en_camino_s
         (e, id)
     };
     // El asedio cae al acabar su convocatoria de 30 s y el viaje del carro es más corto: una primera pasada dice cuándo sale, y en la segunda (el mismo mundo) el asedio se
-    // abre 20 s antes.
+    // abre 28 s antes (la ruta del carro va por la red de caminos, que la acelera).
     let sale = {
         let (mut e, id) = montar_sin_proteccion();
         hasta_que_el_carro_vaya_cargado(&mut e, id);
@@ -678,7 +768,7 @@ fn la_conquista_de_la_madre_deja_los_pueblos_con_la_plaza_y_el_carro_en_camino_s
     };
     let (mut e, id) = montar_sin_proteccion();
     let plaza = e.plaza;
-    e.n.avanzar_hasta(sale - 20_000);
+    e.n.avanzar_hasta(sale - 28_000);
     // La conquista de verdad: el ejército de Beto (F2) asedia la madre, que no tiene quien la defienda, y cae sin combate.
     let p = e.n.estado().asentamientos[&plaza].posicion;
     let beto = e.columna("beto", 2, Punto::new(p.x + 2_000, p.y));
@@ -699,7 +789,7 @@ fn la_conquista_de_la_madre_deja_los_pueblos_con_la_plaza_y_el_carro_en_camino_s
 
 // ───────────────────────────── 5. Determinismo y recuperación ─────────────────────────────
 
-/// Un guion con pueblos: marca, entrega, se levanta, pierde el carro (el primero de la flota), lo repone y marca otro pueblo. Las órdenes
+/// Un guion con pueblos: marca, entrega, se levanta, pierde el carro (el primero de la flota), la madre lo repone sola en su paso de minuto y marca otro pueblo. Las órdenes
 /// llevan su instante: `avanzar` solo decide cómo se mueve el reloj entre ellas.
 fn guion(e: &mut Escenario, avanzar: &dyn Fn(&mut Escenario, Instante)) {
     let plaza = e.plaza;
@@ -712,7 +802,6 @@ fn guion(e: &mut Escenario, avanzar: &dyn Fn(&mut Escenario, Instante)) {
     // `car-2`: el 1 es la Caravana de Fundación con que la administración fundó la plaza (5G-b: toma su id del contador de las caravanas).
     e.n.aplicar_perdida_de_carros(8 * HORA, 2, &[0]).expect("el carro del pueblo");
     avanzar(e, 12 * HORA);
-    e.ok_en(12 * HORA, "ana", Comando::ReponerCarro { pueblo: id });
     e.ok_en(12 * HORA, "ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: otro });
     avanzar(e, 20 * HORA);
 }
@@ -1113,7 +1202,7 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
     e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN41");
+    assert_eq!(&bytes[..5], b"BAN42");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
@@ -1216,3 +1305,4 @@ fn sin_proteccion(n: &mut Nucleo, plaza: u64) {
         n.avanzar_hasta(t);
     }
 }
+

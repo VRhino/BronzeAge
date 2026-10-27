@@ -48,13 +48,11 @@ use territorio::Disco;
 /// Rutas memorizadas como máximo; al pasarse se vacía la memoria entera.
 const MAX_CAMINOS_EN_MEMORIA: usize = 4096;
 
-/// Una ruta comercial trazada (§7.2): la polilínea, el coste de cada tramo y las ciudades ajenas por las que pasa con la distancia
-/// recorrida hasta cada una.
-#[derive(Clone, Debug)]
-pub(super) struct Trazado {
-    pub puntos: Vec<Punto>,
-    pub costes: Vec<i64>,
-    pub paradas: Vec<(u32, Mil)>,
+pub(super) use crate::estado_comercio::Trazado;
+
+/// ¿Sigue existiendo el extremo `id` de una ruta de la red? Una plaza, o un pueblo extractor con su ruta de acarreo guardada (la del carro, pueblo → madre).
+fn extremo_de_ruta(plazas: &BTreeMap<u64, crate::estado::Asentamiento>, acarreo: &BTreeMap<u64, crate::estado_comercio::RutaAcarreo>, id: u32) -> bool {
+    plazas.contains_key(&u64::from(id)) || acarreo.contains_key(&u64::from(id))
 }
 
 /// Memoria del viaje (no es estado): rutas ya calculadas y la atracción de la red mientras sigue valiendo.
@@ -99,8 +97,8 @@ impl Nucleo {
     /// La red tal como la verían las rutas de ahora: sin las caducadas (poda perezosa, sin tocar el estado).
     fn red_vigente(&self) -> RedCaminos {
         let mut red = self.estado.comercio.red.clone();
-        let asentamientos = &self.estado.asentamientos;
-        red.podar(&self.estado.reglas.economia.comercio.red, self.estado.ahora, &|id| asentamientos.contains_key(&(id as u64)));
+        let (asentamientos, acarreo) = (&self.estado.asentamientos, &self.estado.comercio.rutas_acarreo);
+        red.podar(&self.estado.reglas.economia.comercio.red, self.estado.ahora, &|id| extremo_de_ruta(asentamientos, acarreo, id));
         red
     }
 
@@ -111,8 +109,8 @@ impl Nucleo {
 
     /// Las rutas comerciales vigentes (sin las caducadas ni las de una plaza que ya no existe), sin tocar el estado.
     pub fn rutas_vigentes(&self) -> impl Iterator<Item = &comercio::red_caminos::RutaComercial> {
-        let (r, ahora, plazas) = (&self.estado.reglas.economia.comercio.red, self.estado.ahora, &self.estado.asentamientos);
-        self.estado.comercio.red.rutas().filter(move |x| x.vigente(r, ahora, &|id| plazas.contains_key(&u64::from(id))))
+        let (r, ahora, plazas, acarreo) = (&self.estado.reglas.economia.comercio.red, self.estado.ahora, &self.estado.asentamientos, &self.estado.comercio.rutas_acarreo);
+        self.estado.comercio.red.rutas().filter(move |x| x.vigente(r, ahora, &|id| extremo_de_ruta(plazas, acarreo, id)))
     }
 
     /// `caminoCompartidoAbierto` (§7.4): ¿hay una arista fuera de toda zona que pisen ≥ 10 rutas de ≥ 3 Facciones? (la consulta del logro
@@ -143,8 +141,9 @@ impl Nucleo {
     /// en una orden o un evento aceptados (una orden rechazada no deja rastro): las rutas para el trazado leen la red ya podada sin tocarla.
     fn podar_red(&mut self, t: Instante) {
         let Estado { comercio, asentamientos, reglas, .. } = &mut self.estado;
-        let existe = |id: u32| asentamientos.contains_key(&(id as u64));
-        if comercio.red.podar(&reglas.economia.comercio.red, t, &existe) {
+        let crate::estado_comercio::EstadoComercio { red, rutas_acarreo, .. } = comercio;
+        let existe = |id: u32| extremo_de_ruta(asentamientos, rutas_acarreo, id);
+        if red.podar(&reglas.economia.comercio.red, t, &existe) {
             self.cache.version_red += 1;
         }
     }
@@ -163,7 +162,8 @@ impl Nucleo {
         let mut valida_hasta = Instante::MAX;
         for r in self.estado.comercio.red.rutas() {
             let vence = r.ultimo_lanzamiento + caducidad;
-            if t >= vence || !asentamientos.contains_key(&(r.origen as u64)) || !asentamientos.contains_key(&(r.destino as u64)) {
+            let acarreo = &self.estado.comercio.rutas_acarreo;
+            if t >= vence || !extremo_de_ruta(asentamientos, acarreo, r.origen) || !extremo_de_ruta(asentamientos, acarreo, r.destino) {
                 continue;
             }
             valida_hasta = valida_hasta.min(vence);
@@ -472,7 +472,9 @@ impl Nucleo {
                 }
                 self.acarreo_llega(t, id, destino as u64, &contenido);
             }
-            Llegada::Casa { .. } if acarreo => {
+            Llegada::Casa { escolta, .. } if acarreo => {
+                // La casa del carro es su pueblo: la escolta que le cedieron sigue con él al viaje siguiente, hasta que se la quiten (2026-10-27).
+                self.estado.comercio.flota[i].escolta = escolta;
                 self.retirar_plan(id);
                 self.acarreo_en_casa(t, origen, id);
             }

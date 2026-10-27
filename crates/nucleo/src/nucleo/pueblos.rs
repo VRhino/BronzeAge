@@ -10,10 +10,10 @@
 //! 2. **Extracción**: dentro del paso de minuto de la plaza (ver `asentamiento::pueblos`); no hay evento por pueblo. Cuando el almacén local se
 //!    llena (`pueblo.almacen_lleno`) el carro sale si está en casa.
 //! 3. **Acarreo**: el carro sale lleno por su ruta fija pueblo → madre (el mismo trazado, plan, peajes y llegada de las caravanas
-//!    comerciales; la red de caminos acelera sus tramos pero no registra la ruta), vuelca en el almacén de la madre (y anota lo que cupo en la ventana de 24 h de la solvencia del ascenso) y vuelve vacío; si al volver
+//!    comerciales; la ruta se traza una vez al levantarse el pueblo, se guarda y entra en la red de caminos), vuelca en el almacén de la madre (y anota lo que cupo en la ventana de 24 h de la solvencia del ascenso) y vuelve vacío; si al volver
 //!    el almacén está lleno otra vez, sale de nuevo.
-//! 4. **Sin carro**: si el carro se pierde (batalla, destrucción del pueblo), el pueblo acumula hasta llenar su almacén y la extracción para
-//!    hasta que `ReponerCarro` compre otro en la madre.
+//! 4. **Sin carro**: si el carro se pierde (batalla, destrucción del pueblo), la madre lo repone sola en cuanto puede pagarlo; mientras, el pueblo acumula hasta llenar su almacén y la extracción para
+//!    (`ReponerCarro` lo compra en el instante).
 //!
 //! # Lo provisional
 //! Marcar, destruir y reponer el carro son obras de mapa del panel de la plaza madre (Doc 4.2.2): las da el Gobernador o el Maestro de Obras de la madre, residente y dentro (5E). La
@@ -26,6 +26,7 @@ use asentamiento::pueblos::{ErrorPueblo, Pueblo};
 use asentamiento::Costo;
 use super::dentro::MOTIVO_DESTRUIDO;
 use comercio::acarreo;
+use super::viaje::Trazado;
 use comercio::viaje::{longitud_ruta, peajes_de_paradas};
 use comercio::{total, Carga as Mercancia};
 use militar::presencia::Ubicacion;
@@ -162,6 +163,7 @@ impl Nucleo {
                 }
                 let destruido = self.estado.asentamientos.get_mut(&plaza).expect("existe").economia.quitar_pueblo(*pueblo, &mut ev).expect("existe");
                 self.estado.nodos_reclamados.remove(&destruido.nodo);
+                self.olvidar_ruta_de_acarreo(*pueblo);
                 if let Some(carro) = destruido.carro {
                     self.perder_caravana(t, carro);
                 }
@@ -177,20 +179,10 @@ impl Nucleo {
                 if pu.carro.is_some() {
                     return Err(rechazo(rechazos::PUEBLO_YA_TIENE_CARRO, "el pueblo ya tiene carro: solo se repone si no tiene ninguno".into()));
                 }
-                let (id, posicion) = (self.estado.comercio.siguiente_caravana, self.posicion_de_pueblo(*pueblo).expect("sobre un nodo"));
-                let flota = &self.estado.reglas.economia.comercio.flota;
-                let almacen = &mut self.estado.asentamientos.get_mut(&plaza).expect("existe").economia.almacen;
-                let carro = acarreo::reponer(flota, almacen, id, id32(plaza), posicion).map_err(|e| {
+                self.reponer_carro(plaza, *pueblo, t).map_err(|e| {
                     let (c, m) = flota::rechazo_de_caravana(e);
                     rechazo(c, m.into())
                 })?;
-                self.estado.comercio.siguiente_caravana += 1;
-                self.estado.comercio.flota.push(carro);
-                self.tr.tocar(Clase::Caravana, id);
-                self.tr.tocar(Clase::Asentamiento, plaza);
-                self.enlazar_carro(plaza, *pueblo, id);
-                self.emitir_propio(t, "acarreo.carro_repuesto", vec![plaza], vec![("pueblo", *pueblo as i64), ("caravana", id as i64)]);
-                self.salir_acarreo(plaza, *pueblo, t);
                 Ok(None)
             }
             _ => unreachable!("solo se llama con órdenes de pueblos"),
@@ -253,13 +245,49 @@ impl Nucleo {
     }
 
     /// El pueblo acaba de levantarse: nace su carro (el coste ya iba en la obra), parado en el pueblo.
-    pub(super) fn dar_carro_a_pueblo(&mut self, plaza: u64, pueblo: u64) {
+    pub(super) fn dar_carro_a_pueblo(&mut self, plaza: u64, pueblo: u64, t: Instante) {
         let Some(posicion) = self.posicion_de_pueblo(pueblo) else { return };
+        // La ruta pueblo → madre se traza una sola vez, al levantarse, y entra en la red de caminos.
+        if let Some(a) = self.estado.asentamientos.get(&plaza) {
+            let (pos_madre, faccion) = (a.posicion, a.faccion);
+            self.ruta_de_acarreo(plaza, pueblo, posicion, pos_madre, faccion, t);
+        }
         let id = self.estado.comercio.siguiente_caravana;
         self.estado.comercio.siguiente_caravana += 1;
         self.estado.comercio.flota.push(acarreo::nuevo_carro(id, id32(plaza), posicion));
         self.tr.tocar(Clase::Caravana, id);
         self.enlazar_carro(plaza, pueblo, id);
+    }
+
+    /// Compra en la madre un carro nuevo (carro + buey) para el pueblo, que no tiene ninguno, y lo deja en él; sale en el acto si el almacén está lleno.
+    fn reponer_carro(&mut self, plaza: u64, pueblo: u64, t: Instante) -> Result<(), comercio::caravana::ErrorCaravana> {
+        let (id, posicion) = (self.estado.comercio.siguiente_caravana, self.posicion_de_pueblo(pueblo).expect("sobre un nodo"));
+        let flota = &self.estado.reglas.economia.comercio.flota;
+        let almacen = &mut self.estado.asentamientos.get_mut(&plaza).expect("existe").economia.almacen;
+        let carro = acarreo::reponer(flota, almacen, id, id32(plaza), posicion)?;
+        self.estado.comercio.siguiente_caravana += 1;
+        self.estado.comercio.flota.push(carro);
+        self.tr.tocar(Clase::Caravana, id);
+        self.tr.tocar(Clase::Asentamiento, plaza);
+        self.enlazar_carro(plaza, pueblo, id);
+        self.emitir_propio(t, "acarreo.carro_repuesto", vec![plaza], vec![("pueblo", pueblo as i64), ("caravana", id as i64)]);
+        self.salir_acarreo(plaza, pueblo, t);
+        Ok(())
+    }
+
+    /// La reposición automática (decisión del autor del 2026-10-27): en cada paso de minuto de la madre, cada pueblo activo sin carro compra uno en
+    /// cuanto la madre puede pagarlo. Mientras haya una batalla sobre el pueblo o sobre la madre, espera.
+    pub(super) fn reponer_carros(&mut self, plaza: u64, t: Instante) {
+        let Some(a) = self.estado.asentamientos.get(&plaza) else { return };
+        let sin_carro: Vec<u64> = a.economia.pueblos.iter().filter(|p| p.activo() && p.carro.is_none()).map(|p| p.id).collect();
+        if sin_carro.is_empty() || self.batalla_sobre(Ubicacion::Asentamiento(id32(plaza))).is_some() {
+            return;
+        }
+        for pueblo in sin_carro {
+            if self.batalla_sobre(Ubicacion::Pueblo(pueblo)).is_none() {
+                let _ = self.reponer_carro(plaza, pueblo, t);
+            }
+        }
     }
 
     /// El carro `carro` de la plaza `plaza` desapareció (destruido, perdido en una batalla...): su pueblo se queda sin él.
@@ -287,7 +315,7 @@ impl Nucleo {
         }
         let (pos_madre, faccion) = (a.posicion, a.faccion);
         let Some(pos_pueblo) = self.posicion_de_pueblo(pueblo) else { return };
-        let Some(tz) = self.trazar_ruta(pueblo, plaza, pos_pueblo, pos_madre, faccion, t) else { return };
+        let Some(tz) = self.ruta_de_acarreo(plaza, pueblo, pos_pueblo, pos_madre, faccion, t) else { return };
         let cantidad = acarreo::capacidad(&flota);
         self.estado.asentamientos.get_mut(&plaza).and_then(|a| a.economia.pueblos.iter_mut().find(|p| p.id == pueblo)).expect("existe").almacen.quitar(recurso, cantidad);
         self.tr.tocar(Clase::Pueblo, pueblo);
@@ -295,10 +323,37 @@ impl Nucleo {
         let plan = self.plan_de(&self.estado.comercio.flota[i], &tz.puntos, &tz.costes, t);
         let peajes = peajes_de_paradas(&tz.paradas, longitud_ruta(&tz.puntos));
         let carga: Mercancia = [(recurso, cantidad)].into_iter().collect();
+        let puntos = tz.puntos.clone();
         acarreo::salir(&mut self.estado.comercio.flota[i], id32(plaza), carga, tz.puntos, tz.costes, peajes, plan.clone()).expect("el carro está en casa");
         self.instalar_plan(carro, plan);
+        // Cada salida renueva la ruta en la red de caminos (como el lanzamiento de una ruta comercial: no caduca mientras el carro la recorre).
+        self.registrar_ruta_en_red(plaza, pueblo, &puntos, t, &[carro]);
         self.tr.tocar(Clase::Asentamiento, plaza);
         self.emitir_propio(t, "acarreo.sale", vec![plaza], vec![("pueblo", pueblo as i64), ("caravana", carro as i64), ("carga", cantidad)]);
+    }
+
+    /// La ruta del carro del pueblo hasta su madre: la guardada si sigue valiendo y, si no (no la hay, la madre cambió de Facción, una ciudad de
+    /// sus peajes ya no existe o un punto dejó de ser transitable), una nueva, que se guarda y se añade a la red de caminos.
+    pub(super) fn ruta_de_acarreo(&mut self, plaza: u64, pueblo: u64, pos_pueblo: Punto, pos_madre: Punto, faccion: u32, t: Instante) -> Option<Trazado> {
+        if let Some(r) = self.estado.comercio.rutas_acarreo.get(&pueblo) {
+            let vale = r.faccion == faccion
+                && r.trazado.paradas.iter().all(|&(c, _)| self.estado.asentamientos.contains_key(&u64::from(c)))
+                && self.geografia.as_ref().is_none_or(|g| r.trazado.puntos.iter().all(|&p| g.transitable(p)));
+            if vale {
+                return Some(r.trazado.clone());
+            }
+        }
+        let tz = self.trazar_ruta(pueblo, plaza, pos_pueblo, pos_madre, faccion, t)?;
+        self.estado.comercio.rutas_acarreo.insert(pueblo, crate::estado_comercio::RutaAcarreo { faccion, trazado: tz.clone() });
+        self.registrar_ruta_en_red(plaza, pueblo, &tz.puntos, t, &[]);
+        Some(tz)
+    }
+
+    /// El pueblo `pueblo` desaparece (destruido o con su madre en ruinas): su ruta guardada, también.
+    pub(super) fn olvidar_ruta_de_acarreo(&mut self, pueblo: u64) {
+        if self.estado.comercio.rutas_acarreo.remove(&pueblo).is_some() {
+            self.invalidar_red();
+        }
     }
 
     /// El carro llegó a la madre: vuelca lo que trae en su almacén (topado: lo que no cabe se pierde, ni cuenta para el ascenso) y vuelve vacío (su plan ya es el de la vuelta).
