@@ -146,7 +146,17 @@ struct ConPlaza {
 }
 
 fn con_plaza(m: &M) -> ConPlaza {
-    let mut e = Esc::nuevo(m);
+    con_plaza_en(m, Esc::nuevo(m))
+}
+
+/// Como [`con_plaza`], sin bandidos que acosen caravanas (desde P2 también acosan a la columna que lleva la de Fundación): para las pruebas de viajes largos.
+fn con_plaza_sin_acoso(m: &M) -> ConPlaza {
+    let mut a = arranque(m);
+    std::sync::Arc::make_mut(&mut a.reglas.economia.combate).bandidos.radio_ataque_caravana = 0;
+    con_plaza_en(m, Esc { n: Nucleo::nuevo(a), cuenta: 0 })
+}
+
+fn con_plaza_en(m: &M, mut e: Esc) -> ConPlaza {
     let p = sitio_rico(&e.n, &m.0, 0, 1);
     let a = fundar(&mut e, "dueno", 1, p);
     let ana = residente(&mut e, "ana", 1, a);
@@ -269,7 +279,7 @@ fn una_plaza_de_nivel_1_no_lanza_y_la_caravana_suelta_caduca_a_las_48_horas_y_de
 #[test]
 fn su_titular_la_engancha_a_un_ejercito_a_la_puerta_y_funda_con_ella_donde_llega() {
     let m = con_mundo!();
-    let ConPlaza { mut e, a, ana } = con_plaza(m);
+    let ConPlaza { mut e, a, ana } = con_plaza_sin_acoso(m);
     let k = e.ok("ana", Comando::LanzarCaravanaFundacion { heroe: ana, asentamiento: a }).creadas[0];
     // Una columna personal no lleva caravanas; un ejército sin su titular, tampoco.
     let beto = residente(&mut e, "beto", 1, a);
@@ -752,6 +762,102 @@ fn decision_5gb11_la_caravana_suelta_en_una_plaza_conquistada_se_destruye_con_el
     assert_eq!((h.len(), dato(&h[0], "plaza") as u64), (1, a));
     assert!(hechos(&e.n, "fundacion.caravana_devuelta").is_empty(), "lo que costó se pierde");
     assert_eq!(e.plazos(), 0);
+}
+
+// ───────────────────────────── 4c. Paridad con el TypeScript (P2, 2026-10-27) ─────────────────────────────
+
+/// La velocidad de la Caravana de Fundación (`CARAVANA_CATALOGO.construccion.velocidad`), por segundo.
+fn velocidad_de_fundacion(e: &Esc) -> i64 {
+    e.n.estado().reglas.economia.comercio.flota.construccion.velocidad / 60
+}
+
+#[test]
+fn p2_la_columna_que_lleva_la_caravana_de_fundacion_marcha_a_su_paso_y_lo_recupera_al_perderla() {
+    let m = con_mundo!();
+    let ConPlaza { mut e, a, ana } = con_plaza(m);
+    let k = e.ok("ana", Comando::LanzarCaravanaFundacion { heroe: ana, asentamiento: a }).creadas[0];
+    let ej = movilizar(&mut e, "ana", ana, a);
+    let sola = e.n.velocidad_de_ejercito(ej).unwrap();
+    let vf = velocidad_de_fundacion(&e);
+    assert!(vf < sola, "la de fundación es más lenta que la milicia: {vf} / {sola}");
+    e.ok("ana", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
+    assert_eq!(e.n.velocidad_de_ejercito(ej), Some(vf), "va al paso de la caravana");
+    // En marcha, el plan ya va a ese paso; si la caravana se pierde (bandidos), la columna recompone su marcha.
+    let pos = e.n.estado().asentamientos[&a].posicion;
+    e.ok("ana", Comando::MarcharA { ejercito: ej, destino: en_tierra(&m.0, pos, 60_000, 0) });
+    let plan = e.n.ejercito(ej).unwrap().plan.clone();
+    let (t0, fin) = (plan.inicio().unwrap(), plan.fin().unwrap());
+    let donde = plan.posicion_en(t0 + (fin - t0) * 7 / 10).unwrap();
+    e.ok("admin", Comando::ColocarBandidos { posicion: donde, nivel: 3 });
+    e.n.avanzar_hasta(fin);
+    let interceptada = hechos(&e.n, "bandidos.caravana_interceptada").into_iter().filter(|d| dato(d, "caravana") as u64 == k).count();
+    let escapa = hechos(&e.n, "bandidos.caravana_escapa").into_iter().filter(|d| dato(d, "caravana") as u64 == k).count();
+    assert_eq!(interceptada + escapa, 1, "los bandidos acosan a la columna por la caravana que lleva");
+    if interceptada == 1 {
+        assert!(e.caravana(k).is_none(), "se la llevan entera");
+        assert_eq!(e.n.velocidad_de_ejercito(ej), Some(sola), "sin ella, la columna vuelve a su paso");
+        assert_eq!(hechos(&e.n, "fundacion.caravana_perdida").len(), 1);
+    } else {
+        assert_eq!(e.caravana(k).unwrap().situacion, SituacionFundacion::Adjunta(ej));
+    }
+}
+
+#[test]
+fn p2_la_que_vuelve_sola_la_acosan_los_bandidos_y_se_la_llevan_entera() {
+    let m = con_mundo!();
+    let (mut e, _a, _ana, k) = volviendo_desde(m, 40_000);
+    let SituacionFundacion::Retornando(plan) = e.caravana(k).unwrap().situacion.clone() else { unreachable!() };
+    let (t0, fin) = (plan.inicio().unwrap(), plan.fin().unwrap());
+    let donde = plan.posicion_en(t0 + (fin - t0) / 10).unwrap();
+    // Nivel 3 contra los carreteros: gana siempre el bandido.
+    e.ok("admin", Comando::ColocarBandidos { posicion: donde, nivel: 3 });
+    e.n.avanzar_hasta(fin);
+    let h = hechos(&e.n, "bandidos.caravana_interceptada");
+    assert_eq!((h.len(), dato(&h[0], "caravana") as u64), (1, k), "{h:?}");
+    assert!(e.caravana(k).is_none(), "se pierde con todo lo que costó");
+    let perdida = hechos(&e.n, "fundacion.caravana_perdida");
+    assert_eq!((perdida.len(), dato(&perdida[0], "interceptada")), (1, 1));
+    assert!(hechos(&e.n, "fundacion.caravana_devuelta").is_empty());
+    assert_eq!(e.plazos(), 0);
+}
+
+#[test]
+fn p2_una_columna_personal_persigue_a_la_que_vuelve_sola_pero_no_a_la_adjunta() {
+    use militar::inspeccion::Objetivo;
+    let m = con_mundo!();
+    let ConPlaza { mut e, a, ana } = con_plaza(m);
+    let pos = e.n.estado().asentamientos[&a].posicion;
+    // Zed, de otra Facción, sale de su plaza con su columna personal y espera a 45 u al este de la de ana.
+    let sitio = sitio_rico(&e.n, &m.0, 2, 1);
+    let b = fundar(&mut e, "zedd", 2, sitio);
+    let zed = residente(&mut e, "zed", 2, b);
+    let cz = e.ok("zed", Comando::SalirAlMundo { asentamiento: b, heroe: zed, escuadras: vec![], carga: vec![] }).creadas[0];
+    e.llevar("zed", cz, en_tierra(&m.0, pos, 45_000, 0));
+    // Ana lanza su caravana (el almacén se repone de lo que gastó la plaza mientras zed caminaba), beto la lleva a 40 u con ana dentro, y ana se separa: vuelve sola.
+    for r in [Madera, Piedra, Trigo, Oro] {
+        e.dar(a, r, 300_000);
+    }
+    let k = e.ok("ana", Comando::LanzarCaravanaFundacion { heroe: ana, asentamiento: a }).creadas[0];
+    let beto = residente(&mut e, "beto", 1, a);
+    let ej = movilizar(&mut e, "beto", beto, a);
+    let suya = e.ok("admin", Comando::DarEscuadra { heroe: ana, tropa: Tropa::MiliciaLanceros, cantidad: 10 }).creadas[0];
+    e.ok("ana", Comando::UnirseAEjercito { asentamiento: a, heroe: ana, ejercito: ej, escuadras: vec![suya], carga: vec![] });
+    e.ok("beto", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
+    e.llevar("beto", ej, en_tierra(&m.0, pos, 40_000, 0));
+    assert_eq!(e.no("zed", Comando::Perseguir { heroe: zed, objetivo: Objetivo::Caravana(k) }), rechazos::PERSECUCION_CARAVANA_ADJUNTA, "adjunta, se persigue a su columna");
+    e.ok("ana", Comando::SepararseDelEjercito { heroe: ana });
+    assert!(matches!(e.caravana(k).unwrap().situacion, SituacionFundacion::Retornando(_)));
+    e.ok("zed", Comando::Perseguir { heroe: zed, objetivo: Objetivo::Caravana(k) });
+    assert_eq!(e.n.persiguiendo(cz), Some(Objetivo::Caravana(k)));
+    assert_eq!(e.n.perseguidores_de(Objetivo::Caravana(k)), vec![cz]);
+    let iniciada = hechos(&e.n, "columna.persecucion_iniciada");
+    assert_eq!(dato(iniciada.last().unwrap(), "caravana") as u64, k);
+    // La alcanza antes de que llegue a su plaza.
+    let SituacionFundacion::Retornando(plan) = e.caravana(k).unwrap().situacion.clone() else { unreachable!() };
+    e.n.avanzar_hasta(plan.fin().unwrap());
+    let alcanzada = hechos(&e.n, "columna.presa_alcanzada");
+    assert!(alcanzada.iter().any(|d| dato(d, "caravana") as u64 == k), "{alcanzada:?}");
+    assert_eq!(e.n.persiguiendo(cz), None);
 }
 
 // ───────────────────────────── 5. Por el WebSocket real ─────────────────────────────

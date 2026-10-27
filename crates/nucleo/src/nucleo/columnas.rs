@@ -534,10 +534,14 @@ impl Nucleo {
     // ───────────────────────────── Velocidad y capacidad ─────────────────────────────
 
     /// La velocidad de la columna en `t`, en milésimas por segundo (§4.1): la fija de una columna de administración o la derivada de su composición;
-    /// las caravanas adjuntas entran en el mínimo de las dos.
+    /// las caravanas adjuntas (también la de Fundación) entran en el mínimo de las dos.
     pub(super) fn velocidad_de_columna(&self, e: &Ejercito) -> Mil {
         let flota = &self.estado.reglas.economia.comercio.flota;
-        let caravanas: Vec<Mil> = e.caravanas_adjuntas.iter().filter_map(|&c| self.estado.comercio.caravana(c)).map(|c| c.velocidad(flota)).filter(|&v| v > 0).collect();
+        let mut caravanas: Vec<Mil> = e.caravanas_adjuntas.iter().filter_map(|&c| self.estado.comercio.caravana(c)).map(|c| c.velocidad(flota)).filter(|&v| v > 0).collect();
+        // La Caravana de Fundación que lleva marcha a `CARAVANA_CATALOGO.construccion.velocidad` (paridad con el TypeScript, P2).
+        if self.estado.fundacion.de_columna(e.id).is_some() {
+            caravanas.push(flota.construccion.velocidad);
+        }
         let por_minuto = match e.velocidad_fija {
             Some(v) => caravanas.into_iter().chain(std::iter::once(v * 60)).min().unwrap_or(0),
             None => columna::velocidad(&self.estado.reglas.economia.militar, self.escuadras_en(e), caravanas, e.columna.participantes.len()),

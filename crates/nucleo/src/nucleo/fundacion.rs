@@ -181,6 +181,18 @@ impl Nucleo {
         }
     }
 
+    /// La velocidad de `ejercito` antes de que cambie la Caravana de Fundación que lleva (la columna marcha a su velocidad).
+    pub(super) fn velocidad_antes(&self, ejercito: u64) -> Option<Mil> {
+        self.estado.ejercitos.get(&ejercito).map(|e| self.velocidad_de_columna(e))
+    }
+
+    /// Tras enganchar o soltar una Caravana de Fundación, la columna recompone su marcha a la velocidad nueva.
+    pub(super) fn recomponer_por_fundacion(&mut self, ejercito: u64, t: Instante, antes: Option<Mil>) {
+        if let Some(antes) = antes.filter(|_| self.estado.ejercitos.contains_key(&ejercito)) {
+            self.recomponer_columna(ejercito, t, antes);
+        }
+    }
+
     /// La caravana se queda sin su titular (§7): vuelve sola a su origen desde donde está, a `CARAVANA_CATALOGO.construccion.velocidad`. Ya en su puerta, llega en el acto y se desarma;
     /// sin origen o sin camino por tierra, se pierde.
     fn volver_sola(&mut self, id: u64, t: Instante) {
@@ -189,8 +201,17 @@ impl Nucleo {
             Situacion::Adjunta(e) => self.estado.ejercitos.get(&e).map_or(c.posicion, |e| e.posicion_en(t)),
             _ => c.posicion_en(t),
         };
+        let llevaba = match c.situacion {
+            Situacion::Adjunta(e) => Some((e, self.velocidad_antes(e))),
+            _ => None,
+        };
         let origen = c.origen;
-        self.estado.fundacion.caravanas.get_mut(&id).expect("existe").posicion = desde;
+        let c = self.estado.fundacion.caravanas.get_mut(&id).expect("existe");
+        // Deja la columna ya: lo que sigue (perderse, llegar o volver) no la lleva.
+        (c.posicion, c.situacion) = (desde, if llevaba.is_some() { Situacion::Disponible } else { c.situacion.clone() });
+        if let Some((e, antes)) = llevaba {
+            self.recomponer_por_fundacion(e, t, antes);
+        }
         let Some(hasta) = self.puerta_de_origen(origen) else {
             let c = self.quitar_fundacion(id).expect("existe");
             return self.hecho_de_fundacion(t, "fundacion.caravana_perdida", &c, vec![], vec![]);
@@ -311,8 +332,10 @@ impl Nucleo {
             return Err(rechazo(rechazos::CARAVANA_FUERA_DE_LA_PUERTA, "el ejército no está a la puerta de donde está la caravana"));
         }
         self.estado.generaciones.subir(entidad_fundacion(caravana));
+        let antes = self.velocidad_antes(ejercito);
         let c = self.estado.fundacion.caravanas.get_mut(&caravana).expect("existe");
         (c.situacion, c.caduca_en) = (Situacion::Adjunta(ejercito), None);
+        self.recomponer_por_fundacion(ejercito, t, antes);
         self.tr.tocar(Clase::Caravana, caravana);
         self.tr.tocar(Clase::Ejercito, ejercito);
         self.evento("ejercito.caravana_adjuntada", t, ejercito, None, vec![("caravana", caravana as i64)]);
@@ -342,12 +365,14 @@ impl Nucleo {
         let personal = e.columna.tipo == TipoColumna::Personal;
         self.estado.generaciones.subir(entidad_fundacion(caravana));
         self.apartar(entidad_fundacion(caravana));
+        let antes = self.velocidad_antes(columna);
         let c = self.estado.fundacion.caravanas.get_mut(&caravana).expect("existe");
         (c.titular, c.situacion, c.posicion) = (heroe, Situacion::Adjunta(columna), alli);
         if personal {
             let e = &mut self.estado.ejercitos.get_mut(&columna).expect("existe").columna;
             (e.tipo, e.politica) = (TipoColumna::Ejercito, politica);
         }
+        self.recomponer_por_fundacion(columna, t, antes);
         self.tr.tocar(Clase::Caravana, caravana);
         self.tr.tocar(Clase::Ejercito, columna);
         self.evento("ejercito.caravana_adjuntada", t, columna, Some(alli), vec![("caravana", caravana as i64), ("heroe", heroe as i64), ("reclamada", 1)]);
@@ -374,8 +399,10 @@ impl Nucleo {
         };
         let puerta = self.puerta_de_origen(c.origen).expect("está dentro de su origen");
         let caduca_en = t + self.estado.reglas.economia.datos.caducidad_caravana;
+        let antes = self.velocidad_antes(ejercito);
         let c = self.estado.fundacion.caravanas.get_mut(&caravana).expect("existe");
         (c.situacion, c.posicion, c.caduca_en) = (Situacion::Disponible, puerta, Some(caduca_en));
+        self.recomponer_por_fundacion(ejercito, t, antes);
         self.estado.generaciones.subir(entidad_fundacion(caravana));
         self.programar_fundacion(caravana, caduca_en, SucesoFundacion::Caduca);
         self.tr.tocar(Clase::Caravana, caravana);

@@ -20,6 +20,12 @@
 
 use super::*;
 use crate::estado_comercio::{entidad_caravana, es_entidad_caravana, id_de_entidad};
+use crate::estado_fundacion::{entidad_fundacion, es_entidad_fundacion, Situacion as SituacionFundacion};
+
+/// ¿Es la presa una caravana, comercial o de fundación? (las dos se nombran `Objetivo::Caravana` y comparten el contador de ids).
+fn es_presa_caravana(presa: u64) -> bool {
+    es_entidad_caravana(presa) || es_entidad_fundacion(presa)
+}
 use crate::estado::SucesoMilitar;
 use ::encuentros::{interceptar, PRIORIDAD_ENCUENTROS};
 use militar::inspeccion::Objetivo;
@@ -74,13 +80,14 @@ impl Nucleo {
     /// A quién persigue la columna, si persigue a alguien.
     pub fn persiguiendo(&self, columna: u64) -> Option<Objetivo> {
         let presa = self.estado.ejercitos.get(&columna)?.persiguiendo?;
-        Some(if es_entidad_caravana(presa) { Objetivo::Caravana(id_de_entidad(presa)) } else { Objetivo::Ejercito(presa) })
+        Some(if es_presa_caravana(presa) { Objetivo::Caravana(id_de_entidad(presa)) } else { Objetivo::Ejercito(presa) })
     }
 
     /// Las columnas que persiguen a este objetivo (una columna o una caravana), por id.
     pub fn perseguidores_de(&self, objetivo: Objetivo) -> Vec<u64> {
         let entidad = match objetivo {
             Objetivo::Ejercito(id) => id,
+            Objetivo::Caravana(id) if self.estado.fundacion.caravanas.contains_key(&id) => entidad_fundacion(id),
             Objetivo::Caravana(id) => entidad_caravana(id),
             Objetivo::Asentamiento(_) => return vec![],
         };
@@ -113,7 +120,7 @@ impl Nucleo {
     pub(super) fn terminar_persecucion(&mut self, perseguidor: u64, fin: Fin, t: Instante) {
         let Some(presa) = self.estado.ejercitos.get(&perseguidor).and_then(|e| e.persiguiendo) else { return };
         self.fijar_persecucion(perseguidor, None);
-        let caravana = es_entidad_caravana(presa);
+        let caravana = es_presa_caravana(presa);
         let mut columnas = vec![perseguidor];
         columnas.extend(Some(presa).filter(|p| !caravana && self.estado.ejercitos.contains_key(p)));
         let punto = self.estado.ejercitos[&perseguidor].posicion_en(t);
@@ -298,6 +305,15 @@ impl Nucleo {
                 let o = self.estado.ejercitos.get(&x).ok_or_else(|| Respuesta::rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(x), v))?;
                 (x, self.presa_de(e.columna.faccion, x, t).expect("existe"), self.columna_en_el_mapa(o), o.posicion_en(t))
             }
+            // La Caravana de Fundación se persigue como una caravana más mientras vuelve sola (paridad con el TypeScript, P2); adjunta, se persigue a su columna.
+            Objetivo::Caravana(x) if self.estado.fundacion.caravanas.contains_key(&x) => {
+                let k = &self.estado.fundacion.caravanas[&x];
+                if matches!(k.situacion, SituacionFundacion::Adjunta(_)) {
+                    return Err(rechazo(rechazos::PERSECUCION_CARAVANA_ADJUNTA, "una caravana adjunta es parte de un ejército: se persigue al ejército"));
+                }
+                let entidad = entidad_fundacion(x);
+                (entidad, self.presa_de(e.columna.faccion, entidad, t).expect("existe"), matches!(k.situacion, SituacionFundacion::Retornando(_)), k.posicion_en(t))
+            }
             Objetivo::Caravana(x) => {
                 let k = self.estado.comercio.caravana(x).ok_or_else(|| Respuesta::rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(x), v))?;
                 let entidad = entidad_caravana(x);
@@ -320,7 +336,7 @@ impl Nucleo {
 
         // Ya está al alcance: la persecución empieza y termina en el mismo instante, sin moverse.
         // La presa es una columna (`presa`) o una caravana (`caravana`).
-        let datos = vec![("heroe", heroe as i64), if es_entidad_caravana(presa) { ("caravana", id_de_entidad(presa) as i64) } else { ("presa", presa as i64) }];
+        let datos = vec![("heroe", heroe as i64), if es_presa_caravana(presa) { ("caravana", id_de_entidad(presa) as i64) } else { ("presa", presa as i64) }];
         if persecucion::alcanzada(&self.estado.reglas.economia.militar, &info, distancia) {
             self.fijar_persecucion(id, Some(presa));
             self.evento_de_columna("columna.persecucion_iniciada", t, id, vec![], datos);

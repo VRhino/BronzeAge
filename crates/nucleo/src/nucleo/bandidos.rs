@@ -33,6 +33,7 @@ use super::*;
 use crate::estado::{SucesoCombate, PRIO_BANDIDOS};
 use crate::estado_combate::{entidad_anillo, entidad_bandidos, es_entidad_bandidos, CampamentoBandidos, OrigenBandidos};
 use crate::estado_comercio::es_entidad_caravana;
+use crate::estado_fundacion::{es_entidad_fundacion, Origen as OrigenFundacion, Situacion as SituacionFundacion};
 use ::encuentros::{plan_quieto, Entradas};
 use combate::bandidos::{aparece_junto_a_plaza, campamentos_que_tocan, nivel_al_azar, proxima_aparicion_en_el_anillo, punto_del_anillo, puede_acosar, reaparece_en, resolver_acoso};
 use combate::caravana::{Defensa, Zona};
@@ -276,11 +277,12 @@ impl Nucleo {
         }
     }
 
-    /// ¿Atrae a los bandidos? Una caravana que viaja suelta y una columna que lleva caravanas adjuntas.
+    /// ¿Atrae a los bandidos? Una caravana que viaja suelta (también la de Fundación que vuelve sola) y una columna que lleva caravanas adjuntas o una de Fundación.
     pub(super) fn atrae_bandidos(&self, entidad: u64) -> bool {
         match self.cosa(entidad) {
             Some(Cosa::Caravana(k)) => matches!(k.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando),
-            Some(Cosa::Columna(e)) => !e.caravanas_adjuntas.is_empty(),
+            Some(Cosa::Fundacion(k)) => matches!(k.situacion, SituacionFundacion::Retornando(_)),
+            Some(Cosa::Columna(e)) => !e.caravanas_adjuntas.is_empty() || self.estado.fundacion.de_columna(e.id).is_some(),
             _ => false,
         }
     }
@@ -298,6 +300,8 @@ impl Nucleo {
         if es_entidad_caravana(presa) {
             let idk = crate::estado_comercio::id_de_entidad(presa);
             self.acosar(idc, idk, None, t);
+        } else if es_entidad_fundacion(presa) {
+            self.acosar_fundacion(idc, crate::estado_comercio::id_de_entidad(presa), None, t);
         } else if self.estado.ejercitos.get(&presa).is_some_and(|e| self.columna_en_el_mapa(e) && !self.acoso_ya_jugado(idc, e.id)) {
             self.acosar_columna(idc, presa, t);
         }
@@ -322,6 +326,44 @@ impl Nucleo {
         }
         for idk in self.estado.ejercitos[&columna].caravanas_adjuntas.clone() {
             self.acosar(idc, idk, Some(columna), t);
+        }
+        if let Some(x) = self.estado.fundacion.de_columna(columna) {
+            self.acosar_fundacion(idc, x, Some(columna), t);
+        }
+    }
+
+    /// El campamento `idc` acosa con una tirada con números a la Caravana de Fundación `x` (paridad con el TypeScript, P2): la que vuelve sola se defiende con los carreteros
+    /// (`defensaBaseCaravana`: no lleva escolta) y la que va adjunta a la columna `ejercito`, con el poder de esa columna. Si gana el bandido se la llevan entera, como en una disputa
+    /// ([`Nucleo::caer_fundacion`]). Va siempre con números: la batalla de acoso de Unity solo se juega las caravanas comerciales.
+    fn acosar_fundacion(&mut self, idc: u64, x: u64, ejercito: Option<u64>, t: Instante) {
+        let (Some(b), Some(k)) = (self.estado.combate.bandidos.get(&idc), self.estado.fundacion.caravanas.get(&x)) else { return };
+        let (nivel, origen) = (b.nivel, k.origen);
+        let (estado, donde) = match (ejercito, &k.situacion) {
+            (Some(c), SituacionFundacion::Adjunta(e)) if *e == c => (EstadoCaravana::Adjunta, self.estado.ejercitos[&c].posicion_en(t)),
+            (None, SituacionFundacion::Retornando(_)) => (EstadoCaravana::Retornando, k.posicion_en(t)),
+            _ => return,
+        };
+        if !self.es_presa_de_bandidos(estado, donde) {
+            return;
+        }
+        let cr = self.estado.reglas.economia.combate.clone();
+        let de_la_columna: Vec<Escuadra> = ejercito.map(|c| self.escuadras_de_columna(c).into_iter().cloned().collect()).unwrap_or_default();
+        let defensa = if ejercito.is_some() { Defensa::Ejercito(&de_la_columna) } else { Defensa::Base };
+        let acoso = resolver_acoso(&cr, nivel, defensa, &mut self.estado.rng);
+        let plazas = match origen {
+            OrigenFundacion::Plaza(a) if self.estado.asentamientos.contains_key(&a) => vec![a],
+            _ => vec![],
+        };
+        let datos = vec![("campamento", idc as i64), ("caravana", x as i64), ("poderBandido", acoso.poder_bandido), ("defensa", acoso.defensa), ("bajasEscolta", 0)];
+        self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed(if acoso.gana_el_bandido { "bandidos.caravana_interceptada" } else { "bandidos.caravana_escapa" }), en: t, ejercitos: ejercito.into_iter().collect(), asentamientos: plazas, punto: Some(donde), datos, ..Default::default() });
+        if acoso.gana_el_bandido {
+            self.contar(t, tecnologia::contador::Delta::uno(tecnologia::Contador::CaravanasDestruidasOCapturadas));
+            let antes = ejercito.and_then(|c| self.velocidad_antes(c));
+            self.caer_fundacion(t, x, combate::caravana::Modalidad::Disputa);
+            // La columna que la llevaba ya no va a su paso.
+            if let Some(c) = ejercito {
+                self.recomponer_por_fundacion(c, t, antes);
+            }
         }
     }
 
