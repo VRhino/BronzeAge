@@ -378,14 +378,14 @@ la Era de cada tecnología propia (decide lo que cuesta adoptarla o comprarla); 
 <!-- parametros:MERCENARIOS -->
 ```json
 {
-  "separacion": 900,
-  "margenBorde": 150,
+  "separacion": 600,
+  "margenBorde": 60,
   "intentosColocacion": 2000,
   "salSemilla": 1835364963,
   "racion": {
     "cadaMinutos": 30
   },
-  "radioExclusionFundar": 100,
+  "radioExclusionFundar": 20,
   "radioProteccion": 10,
   "origenes": 3,
   "edificiosFijos": [

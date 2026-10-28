@@ -200,10 +200,10 @@ mod pruebas {
     #[test]
     fn el_anillo_pide_uno_por_cada_dos_residentes_sin_plaza_entre_1_y_6() {
         let r = r();
-        assert_eq!([0, 1, 2, 3, 4, 5, 6, 7, 40].map(|n| campamentos_que_tocan(r, n)), [4, 4, 4, 6, 8, 10, 12, 12, 12]);
+        assert_eq!([0, 1, 2, 3, 4, 5, 6, 7, 40].map(|n| campamentos_que_tocan(r, n)), [8, 8, 8, 12, 16, 20, 24, 24, 24]);
         assert!(toca_crear_en_el_anillo(r, 0, 0, None, 0));
-        assert!(!toca_crear_en_el_anillo(r, 4, 2, None, 0), "ya tiene los que le tocan");
-        assert!(toca_crear_en_el_anillo(r, 4, 3, None, 0));
+        assert!(!toca_crear_en_el_anillo(r, 8, 2, None, 0), "ya tiene los que le tocan");
+        assert!(toca_crear_en_el_anillo(r, 8, 3, None, 0));
         assert!(!toca_crear_en_el_anillo(r, 0, 3, Some(50), 49), "espera su plazo");
         assert!(toca_crear_en_el_anillo(r, 0, 3, Some(50), 50));
         assert_eq!(proxima_aparicion_en_el_anillo(r, 0), 10 * MS_POR_MINUTO);

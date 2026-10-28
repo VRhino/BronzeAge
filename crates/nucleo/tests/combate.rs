@@ -746,7 +746,8 @@ fn una_plaza_recien_fundada_nace_protegida_un_dia_y_luego_se_la_puede_asediar() 
 #[test]
 fn un_asedio_que_pierde_hiere_a_todo_el_ejercito_y_la_chatarra_se_queda_en_la_plaza() {
     let m = con_mundo!();
-    let mut s = asedio(m, 7, &[Tropa::ArquerosCompuesto], &[Tropa::EspadachinesBronce]);
+    // Semilla 10: con el mundo sin bandidos fijos junto a los campamentos (2026-10-28), en la 7 la tirada daba la plaza por perdida.
+    let mut s = asedio(m, 10, &[Tropa::ArquerosCompuesto], &[Tropa::EspadachinesBronce]);
     let (b, beto, ana) = (s.e.b, s.beto, s.ana);
     // Un segundo héroe en el ejército de ana: también queda herido, hayan entrado en la batalla o no.
     let segundo = {
@@ -1158,11 +1159,11 @@ fn la_partida_nace_con_los_campamentos_de_las_vetas_y_uno_en_el_anillo_de_cada_c
     }
     // Cada cita se renueva a los 10 minutos para mirar si aún falta alguno, y se detiene cuando no falta ninguno.
     assert!(de_combate_pendientes(&n).iter().all(|&(t, s)| t == 10 * MIN && s == nucleo::SucesoCombate::BandidosDelAnillo));
-    // El cuarto aparece a los 30 minutos; la cita de los 40 ve que ya no falta ninguno y se detiene.
-    n.avanzar_hasta(41 * MIN);
+    // El octavo aparece a los 70 minutos; la cita de los 80 ve que ya no falta ninguno y se detiene.
+    n.avanzar_hasta(81 * MIN);
     for c in 0..m.0.campamentos().len() {
         let suyos = del_anillo(&n, c);
-        assert_eq!(suyos.len(), 4, "sin residentes sin plaza, el mínimo es cuatro (campamento {c})");
+        assert_eq!(suyos.len(), 8, "sin residentes sin plaza, el mínimo es ocho (campamento {c})");
         for b in &suyos {
             let d = b.posicion.dist(campamento(&m.0, c));
             assert!((12_000..=25_000).contains(&d), "{d}");
@@ -1170,13 +1171,13 @@ fn la_partida_nace_con_los_campamentos_de_las_vetas_y_uno_en_el_anillo_de_cada_c
         }
     }
     assert!(de_combate_pendientes(&n).is_empty(), "satisfechos los anillos, no queda nada pendiente: nada recurre por cosa ociosa");
-    assert_eq!(n.campamentos_de_bandidos().count(), del_mundo.len() + 4 * m.0.campamentos().len());
+    assert_eq!(n.campamentos_de_bandidos().count(), del_mundo.len() + 8 * m.0.campamentos().len());
     // Misma semilla, mismos campamentos.
     let mut otro = Nucleo::nuevo(arranque(m, 11));
-    otro.avanzar_hasta(41 * MIN);
+    otro.avanzar_hasta(81 * MIN);
     assert_eq!(otro.hash_estado(), n.hash_estado());
     let mut distinto = Nucleo::nuevo(arranque(m, 12));
-    distinto.avanzar_hasta(41 * MIN);
+    distinto.avanzar_hasta(81 * MIN);
     assert_ne!(distinto.hash_estado(), n.hash_estado(), "otra semilla, otros niveles y otros puntos");
 }
 
@@ -1229,11 +1230,11 @@ fn toda_plaza_tiene_su_campamento_en_el_bosque_libre_mas_cercano_y_destruido_rea
 fn la_cita_del_anillo_se_rehace_cuando_llega_o_se_va_un_residente() {
     let m = con_mundo!();
     let mut n = Nucleo::nuevo(arranque(m, 11));
-    n.avanzar_hasta(41 * MIN);
+    n.avanzar_hasta(81 * MIN);
     assert!(de_combate_pendientes(&n).is_empty(), "satisfechos los anillos, sin citas");
     let del_anillo = |n: &Nucleo| n.campamentos_de_bandidos().filter(|b| b.origen == nucleo::OrigenBandidos::Anillo(0)).count();
-    assert_eq!(del_anillo(&n), 4);
-    // Llegan tres residentes sin Facción al campamento 0: le tocan 3 × 2 = 6 y la cita vuelve en ese instante (su plazo ya venció).
+    assert_eq!(del_anillo(&n), 8);
+    // Llegan tres residentes sin Facción al campamento 0: le tocan 3 × 4 = 12 y la cita vuelve en ese instante (su plazo ya venció).
     let t = n.ahora();
     let heroes: Vec<u64> = (0..3)
         .map(|i| {
@@ -1243,17 +1244,17 @@ fn la_cita_del_anillo_se_rehace_cuando_llega_o_se_va_un_residente() {
         })
         .collect();
     assert_eq!(de_combate_pendientes(&n), vec![(t, nucleo::SucesoCombate::BandidosDelAnillo)], "una sola cita, aunque llegaran tres");
-    // Se van antes de que venza: la demanda vuelve a 4 y la cita muere.
+    // Se van antes de que venza: la demanda vuelve a 8 y la cita muere.
     for (i, &h) in heroes.iter().enumerate() {
         assert!(n.aplicar_en(t, admin(&format!("fuera{i}"), Comando::FijarResidencia { heroe: h, residencia: None })).aceptada());
     }
     assert!(de_combate_pendientes(&n).is_empty(), "con la demanda cubierta no queda cita");
-    // Vuelven: el anillo gana sus dos campamentos que faltan, uno cada 10 minutos, en el sitio que permita el sorteo.
+    // Vuelven: el anillo gana los cuatro campamentos que faltan, uno cada 10 minutos, en el sitio que permita el sorteo.
     for (i, &h) in heroes.iter().enumerate() {
         assert!(n.aplicar_en(t, admin(&format!("vuelta{i}"), Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Campamento(0)) })).aceptada());
     }
     n.avanzar_hasta(t + HORA);
-    assert_eq!(del_anillo(&n), 6, "el residente que llega adelanta la cita");
+    assert_eq!(del_anillo(&n), 12, "el residente que llega adelanta la cita");
 }
 
 /// Cal-5 (decisión del autor del 2026-10-24): el oro de los bandidos del anillo de un campamento de mercenarios solo lo cobra un héroe **sin plaza** (reside en un

@@ -8,7 +8,7 @@
 //!   En el bosque no reclamado más cercano a ella, sin campamento encima y con el centro a ≥ 10 u del borde de toda zona (`MARGEN_DE_ZONA`). Sin bosque que
 //!   valga no gasta tirada y espera: cuando un bosque queda libre o válido (se va un campamento de bandidos que lo ocupaba o una plaza cae en ruinas y su zona
 //!   desaparece), las plazas que esperan el suyo lo vuelven a buscar en ese instante, por orden de id (el TypeScript volvía a mirar cada tick).
-//! - **En el anillo de cada campamento de mercenarios** (`SucesoCombate::BandidosDelAnillo`): `clamp(residentes sin plaza × 2, 4, 12)` campamentos, uno cada
+//! - **En el anillo de cada campamento de mercenarios** (`SucesoCombate::BandidosDelAnillo`): `clamp(residentes sin plaza × 4, 8, 24)` campamentos, uno cada
 //!   `reaparicionMinutos` mientras falten. La cita arranca con el mundo, se renueva al crear uno o al destruirse uno del anillo, se **rehace al cambiar la demanda**
 //!   (llega o se va un residente del campamento, o una Facción se queda sin plazas; [`Nucleo::reprogramar_anillo`]) y se detiene cuando no falta ninguno (el
 //!   TypeScript miraba la demanda cada tick). Sin sitio válido tras `INTENTOS_ANILLO` intentos (dos tiradas cada uno) reintenta a los `reaparicionMinutos`.

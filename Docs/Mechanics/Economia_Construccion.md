@@ -1725,17 +1725,17 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
 <!-- parametros:ZONA_INFLUENCIA -->
 ```json
 {
-  "radioInicial": 30,
-  "crecimientoPorEdificioCompletado": 5,
+  "radioInicial": 6,
+  "crecimientoPorEdificioCompletado": 1,
   "radioMaximoPorNivel": {
-    "1": 60,
-    "2": 90,
-    "3": 120,
-    "4": 150,
-    "5": 180
+    "1": 10,
+    "2": 15,
+    "3": 20,
+    "4": 25,
+    "5": 30
   },
   "segmentosPoligono": 48,
-  "pasoFusionContorno": 5
+  "pasoFusionContorno": 1
 }
 ```
 <!-- /parametros -->
@@ -2316,7 +2316,7 @@ Las etapas son las tres de Doc 5.17 (atalaya → fuerte → ciudadela) y `obras`
 
 > **Implementado en Rust (2026-10-22, decisiones de 4F).** Foto `BAN16` (la cita de fin de la obra de una avanzada es `SucesoCombate::FinObraAvanzada`, de la entidad `entidad_obra_de_avanzada`, y las cifras de `AVANZADAS` cambian: `tamano` y `fraccionCiudadDeLaZona` sustituyen a `distanciaMinimaAlAsentamiento`). (1) **Colocación según el canon**: ni sobre la ciudad de la madre ni sobre otro elemento del mapa (`asentamiento::avanzadas::ReglasAvanzadas::comprobar_sitio`; el núcleo junta los centros con `elementos_de_mapa`). El «2 u» de la versión anterior era el radio de la puerta y no una regla de colocación. (2) **Cancelar una mejora o una reparación** (116), con la cita de fin descartada por generación. (3) **Elegir tropa** (`ElegirTropaDeAvanzada`, 111) solo entre lo que la madre puede reclutar: escalón elegible, tecnología de la Facción y edificio activo al nivel que pide la tropa (`avanzada.tropa_sin_edificio`); por defecto la milicia de lanceros del canon en los tres escalones. (4) **Sin duda**: almacén por recurso, botín de todo lo que quepa, reposición de 6 h y repostar con columna personal o ejército. (5) **Defender exige estar dentro** ([`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §11.1).
 
-Los bloques de parámetros de este documento son los del motor TypeScript. Valores vigentes para la reconstrucción (Calibracion_Distancias_Definicion §4.2):
+Los bloques de parámetros de este documento venían del motor TypeScript. Valores vigentes para la reconstrucción (Calibracion_Distancias_Definicion §4.2). **Desde el 2026-10-28** los bloques `ZONA_INFLUENCIA` y `MERCENARIOS` ya llevan la columna «Vigente» (los publica `GET /v1/datos`; el código del motor ya usaba estas cifras):
 
 | Parámetro | Bloque (TypeScript) | Vigente |
 |---|---|---|

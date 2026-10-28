@@ -163,7 +163,7 @@ Distinta: se **conserva** (§8.3). No lleva bonus por distancia ni recargo por r
   "tasaMismaFaccion": 0.03,
   "tasaExterna": 0.08,
   "bonusPorDistanciaMax": 1.5,
-  "distanciaParaBonusMax": 600
+  "distanciaParaBonusMax": 120
 }
 ```
 <!-- /parametros -->
@@ -270,7 +270,7 @@ reparto aunque el Mercado ya no esté. El reparto **no compone** caravanas ni as
   "pesoUrgenciaExpiracion": 0.5,
   "pesoUrgenciaVolumen": 0.3,
   "pesoCercania": 0.2,
-  "distanciaReferencia": 600
+  "distanciaReferencia": 120
 }
 ```
 <!-- /parametros -->
@@ -548,10 +548,10 @@ fuera del mapa) ⇒ `Infinity`. Si no: `coste = (largo / n) × Σ_{k=0..n−1} c
 <!-- parametros:NAVEGACION -->
 ```json
 {
-  "espaciadoMin": 45,
+  "espaciadoMin": 8,
   "nodosPorLado": 160,
   "muestreoMax": 30,
-  "separacionVadosMin": 300,
+  "separacionVadosMin": 100,
   "vadosPorLado": 16,
   "radioPasoCiudadMin": 60,
   "atraccionPorPeso": 0.1,
@@ -948,7 +948,7 @@ Cada pueblo extractor (Economia_Construccion §pueblos) tiene un carro propio: u
 - **Si se destruye**, se compra otro en la plaza madre solo si el pueblo no tiene ninguno, al coste de carro + buey (20 madera + ~12 oro). Mientras no tenga carro, el pueblo acumula hasta llenar el almacén y la extracción para.
 - La **solvencia** de la madre (Doc 4.5) cuenta lo que llega por acarreo como la media de las llegadas en 24 h o como la producción del pueblo.
 
-Valores calibrados (2026-10-12): `COMISION.distanciaParaBonusMax` y `ASIGNACION_CARAVANA.distanciaReferencia` 600 → **120** (los bloques de arriba son los de TypeScript); velocidades ×1,5; `NAVEGACION.espaciadoMin` 45 → **8** y vados cada 100.
+Valores calibrados (2026-10-12): `COMISION.distanciaParaBonusMax` y `ASIGNACION_CARAVANA.distanciaReferencia` 600 → **120** (desde el 2026-10-28 los bloques de arriba ya llevan 120, 8 y 100; antes eran los de TypeScript y el código los sobrescribía); velocidades ×1,5; `NAVEGACION.espaciadoMin` 45 → **8** y vados cada 100.
 
 > **Implementado en Rust (2026-10-20, fase 4D: el combate de las caravanas).** Se retira `cerrar_comercio_por_conquista`: la conquista de una plaza llama al cierre interno con `Motivo::Conquista` (flota y pueblos pasan al conquistador, los trueques se anulan, la caravana aparcada en la plaza se destruye). Una caravana suelta o adjunta que pierde carros lo hace con `aplicar_perdida_de_carros` (la carga se pierde en proporción; si no queda ningún carro desaparece). El asalto A (la caravana resiste sola o con escolta) y el B (columna adjunta) se deciden con `Nucleo::en_zona` en el instante del ataque. Los campamentos de bandidos acosan a las caravanas que pasan a ≤ `radioAtaqueCaravana` (una vez por cruce); la escolta destruida pierde soldados. **Provisional:** una escolta sin soldados cuenta como sin escolta; si queda un solo carro, la carga salvada vuelve al origen.
 >

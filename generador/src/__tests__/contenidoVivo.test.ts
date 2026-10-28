@@ -29,16 +29,9 @@ describe('bandidos y alijos', () => {
       expect(a[0]!.oro).toBe(P.veta.oroAlijo);
     }
   });
-  it('anillo de bandidos de 30 a 50 de cada campamento, fuera de su protección', () => {
-    for (const m of campamentos) {
-      const anillo = bandidos.filter(b => !b.vetaId && anilloEn(campamentos, b.posicion).campamento === m.id);
-      expect(anillo).toHaveLength(P.anillo.inicialesPorCampamento);
-      for (const b of anillo) {
-        expect(est(b.posicion, m.posicion)).toBeGreaterThanOrEqual(P.anillo.radioMin);
-        expect(est(b.posicion, m.posicion)).toBeLessThanOrEqual(P.anillo.radioMax);
-        expect(b.anillo).toBe('foco');
-      }
-    }
+  it('solo hay bandidos de veta: los del anillo de cada campamento los crea el motor', () => {
+    expect(bandidos.every(b => b.vetaId)).toBe(true);
+    expect(bandidos).toHaveLength(vetas.length);
   });
   it('alijos cercanos por banda, con su campamento como el más cercano', () => {
     for (const m of campamentos) {

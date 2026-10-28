@@ -3,8 +3,8 @@
 //! enteros: **ppm** para tasas y factores, **milésimas** (`Mil`) para cantidades y distancias. La reputación va en **ppm de punto**
 //! (0,0005 por minuto no cabe en milésimas).
 //!
-//! **Valores calibrados** (Comercio_Caravanas, final, y Doc 3): los bloques de TypeScript dicen 600 para `distanciaParaBonusMax` y para
-//! `distanciaReferencia`; lo vigente es **120**. Las velocidades de los animales van ×1,5; `NAVEGACION.espaciadoMin` es 8 y los vados
+//! **Valores calibrados** (Comercio_Caravanas, final, y Doc 3): `distanciaParaBonusMax` y `distanciaReferencia` son **120** (600 en
+//! TypeScript; desde el 2026-10-28 el bloque ya lo dice). Las velocidades de los animales van ×1,5; `NAVEGACION.espaciadoMin` es 8 y los vados
 //! cada 100. Se aplican al cargar y las fija un test.
 
 use asentamiento::datos::{bloque_de, mil, por, ppm, texto_de_parametros_de};

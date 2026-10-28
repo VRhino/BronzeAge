@@ -1,5 +1,5 @@
 import type { Point } from './tipos';
-import { createRng, derivarSeed, type RandomFn } from './rng';
+import { createRng, derivarSeed } from './rng';
 import { anilloEn, FACTOR, type Campamento } from './campamentos';
 import type { Veta } from './metales';
 import type { AlijoMundo, BandidosMundo } from './mundoTipos';
@@ -9,8 +9,9 @@ import type { AlijoMundo, BandidosMundo } from './mundoTipos';
  * ESTRATÉGICAS aquí y se convierten con `FACTOR` al usarlas; las posiciones de salida son unidades del generador.
  *
  * - Cada veta: un campamento de bandidos de nivel 2-3 cerca de su centro y un alijo lejano (11 de oro) cerca de ella.
- * - Cada campamento de mercenarios: un anillo de bandidos a 30-50 (contenido para los recién llegados, D42) y alijos
- *   cercanos (3 a 20-40 con 3 de oro, 2 a 40-90 con 5), con ese campamento como el más cercano y fuera de su protección.
+ * - Cada campamento de mercenarios: alijos cercanos (3 a 20-40 con 3 de oro, 2 a 40-90 con 5), con ese campamento como el más
+ *   cercano y fuera de su protección. Sus bandidos no salen de aquí: los crea el motor en su anillo (12-25, según la demanda;
+ *   decisión del autor del 2026-10-28, `CAMPAMENTOS_BANDIDOS.anillo`).
  * - El oro de las bandas es el del motor antiguo (3 / 5 / 11), sin reescalar.
  */
 export const PARAMETROS_CONTENIDO = {
@@ -23,8 +24,6 @@ export const PARAMETROS_CONTENIDO = {
     alijo: [{ min: 10, max: 25 }, { min: 8, max: 30 }],
     oroAlijo: 11,
   },
-  /** SUPOSICIÓN: el canon fija el rango (30-50) y la demanda 1-6, no la cantidad inicial. */
-  anillo: { radioMin: 30, radioMax: 50, inicialesPorCampamento: 3 },
   alijosCercanos: [
     { desde: 20, hasta: 40, cuantos: 3, oro: 3 },
     { desde: 40, hasta: 90, cuantos: 2, oro: 5 },
@@ -50,12 +49,6 @@ export function colocarBandidosYAlijos(
   const bandidos: BandidosMundo[] = [];
   const alijos: AlijoMundo[] = [];
   const cerca = (a: Point, b: Point, estrategicas: number) => dist(a, b) < estrategicas * FACTOR;
-
-  const nivelAlAzar = (r: RandomFn) => {
-    let t = r();
-    for (const n of [1, 2, 3]) { t -= P.pesosNivel[n]!; if (t < 0) return n; }
-    return 1;
-  };
 
   /** Punto en el anillo `[min,max]` (estratégicas) de `c`, o undefined tras `P.intentos` tiradas. */
   const muestrear = (c: Point, min: number, max: number, vale: (p: Point) => boolean): Point | undefined => {
@@ -89,13 +82,7 @@ export function colocarBandidosYAlijos(
     alijos.push({ id: `alijo-${v.id}`, posicion: q, oro: P.veta.oroAlijo, anillo: 'lejana' });
   }
 
-  // 2. Cada campamento de mercenarios: su anillo de bandidos y sus alijos cercanos.
-  for (const m of campamentos) {
-    for (let i = 0; i < P.anillo.inicialesPorCampamento; i++) {
-      const p = primero(m.posicion, [{ min: P.anillo.radioMin, max: P.anillo.radioMax }], bandidoLibre, `el anillo de ${m.id}`);
-      bandidos.push({ id: `bandidos-${m.id}-${i}`, posicion: p, nivel: nivelAlAzar(rng), anillo: anilloEn(campamentos, p).anillo });
-    }
-  }
+  // 2. Cada campamento de mercenarios: sus alijos cercanos (los bandidos de su anillo los crea el motor).
   for (const m of campamentos) {
     let k = 0;
     for (const banda of P.alijosCercanos) for (let i = 0; i < banda.cuantos; i++) {

@@ -368,7 +368,7 @@ mod pruebas {
         assert_eq!((b.radio_ataque_caravana, b.anillo_min, b.anillo_max), (7_000, 12_000, 25_000), "el anillo, a 12-25 u desde el 2026-10-27");
         assert_eq!(b.niveles.clone().map(|n| (n.poder, n.unidades, n.oro_por_heroe, n.peso)), [(20_000, 10, 30_000, 500_000), (60_000, 30, 33_000, 300_000), (120_000, 60, 36_000, 200_000)]);
         assert_eq!((b.ventana, b.completas, b.caida_por_cada, b.solo_experiencia_desde), (24 * 60 * MS_POR_MINUTO, 8, 150_000, 14));
-        assert_eq!((b.bandidos_por_residente, b.anillo_minimo, b.anillo_maximo, b.reaparicion_anillo, b.respawn), (2, 4, 12, 10 * MS_POR_MINUTO, 360 * MS_POR_MINUTO), "2 por residente, de 4 a 12 (2026-10-27); la reaparición de la plaza, 6 h (2026-10-24)");
+        assert_eq!((b.bandidos_por_residente, b.anillo_minimo, b.anillo_maximo, b.reaparicion_anillo, b.respawn), (4, 8, 24, 10 * MS_POR_MINUTO, 360 * MS_POR_MINUTO), "4 por residente, de 8 a 24 (2026-10-28); la reaparición de la plaza, 6 h (2026-10-24)");
         assert_eq!(b.niveles.iter().map(|n| n.peso).sum::<i64>(), UNO, "los pesos suman 1");
     }
 
