@@ -1045,3 +1045,52 @@ fn tras_la_convocatoria(n: &mut Nucleo) {
         n.avanzar_hasta(h);
     }
 }
+
+// ───────────────────────────── El visitante compra y reposta dentro del campamento ─────────────────────────────
+
+#[test]
+fn el_ejercito_de_visita_en_un_campamento_se_desarma_y_su_heroe_compra_y_reposta_dentro_con_el_carro_y_los_viveres_de_su_columna() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    e.avanzar(24 * HORA);
+    let a = e.a;
+    // Un residente de la plaza sale con su ejército (con 100 de oro en el carro) hasta la puerta del campamento 0, donde no reside: allí es un visitante.
+    let (h, milicia) = e.con_milicia("ana");
+    let ej = e.ok("ana", Comando::MovilizarEjercito { asentamiento: a, heroe: h, escuadras: vec![milicia], carga: vec![], politica: Politica::Aceptar, caravana_fundacion: None }).creadas[0];
+    e.ok("admin", Comando::DarSuministro { ejercito: ej, recurso: Oro, cantidad: 100_000 });
+    assert_eq!(e.ejercito(ej).columna.tipo, TipoColumna::Ejercito);
+    let puerta = e.n.puerta_de_campamento(0).unwrap();
+    e.ok("ana", Comando::MarcharA { ejercito: ej, destino: puerta });
+    let fin = e.ejercito(ej).plan.fin().unwrap();
+    e.n.avanzar_hasta(fin);
+    let comprar = |cantidad| Comando::ComprarEnCampamento { heroe: h, campamento: 0, recurso: Cobre, cantidad };
+    // A la puerta ya compra con el oro del carro.
+    e.ok("ana", comprar(5_000));
+    assert_eq!(e.ejercito(ej).columna.carga.get(&Cobre).copied(), Some(5_000));
+
+    // Entra: el ejército se desarma y queda como su columna personal, dentro, con el carro y la tropa.
+    e.ok("ana", Comando::EntrarEnCampamento { campamento: 0, heroe: h });
+    let hn = e.n.heroe(h).unwrap();
+    assert_eq!((hn.columna, hn.heroe.presencia.ubicacion), (Some(ej), Ubicacion::Mercenarios(0)));
+    assert_eq!(e.ejercito(ej).columna.tipo, TipoColumna::Personal);
+    let oro = e.ejercito(ej).columna.carga[&Oro];
+
+    // Dentro compra con el carro de su columna (antes: `heroe.sin_columna`) y lo comprado va a ese carro.
+    e.ok("ana", comprar(2_000));
+    assert_eq!(e.ejercito(ej).columna.carga.get(&Cobre).copied(), Some(7_000));
+    assert!(e.ejercito(ej).columna.carga[&Oro] < oro, "pagó con el oro del carro");
+    assert!(e.n.heroe(h).unwrap().carro.is_empty(), "nada pasa al héroe");
+
+    // Y reposta los víveres de su columna, no los suyos.
+    e.avanzar(2 * HORA);
+    let antes = e.viveres(ej);
+    e.ok("ana", Comando::RepostarEnCampamento { heroe: h, campamento: 0 });
+    let maximo = e.ejercito(ej).columna.viveres.maximo.unwrap();
+    assert!(antes < maximo);
+    assert_eq!(e.viveres(ej), maximo);
+
+    // Sale con todo: la misma columna, con lo comprado.
+    let r = e.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: h, escuadras: vec![], carga: vec![], politica: Politica::Aceptar, caravana_fundacion: None });
+    assert!(r.creadas.is_empty());
+    assert_eq!((e.n.heroe(h).unwrap().heroe.presencia.ubicacion, e.ejercito(ej).columna.carga.get(&Cobre).copied()), (Ubicacion::Columna(ej), Some(7_000)));
+}

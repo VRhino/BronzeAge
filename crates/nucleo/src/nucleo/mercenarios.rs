@@ -294,7 +294,7 @@ impl Nucleo {
                 let stock = self.stock_de_campamento(*campamento).expect("el campamento existe").de(*recurso);
                 let residente = self.campamento_de_residencia(*heroe) == Some(*campamento);
                 let h = self.heroe(*heroe).expect("existe");
-                let columna = self.columna_de(*heroe);
+                let columna = self.columna_que_lleva(*heroe);
                 let compra = if residente {
                     let cupo = h.cupo.restante(&cr.mercenarios, *recurso, t);
                     comprar_residente(*recurso, precio, *cantidad, stock, cupo, de(&h.almacen_personal, Recurso::Oro), cr.mercenarios.capacidad_almacen_personal - total(&h.almacen_personal)).map_err(de_mercenarios)?
@@ -333,7 +333,7 @@ impl Nucleo {
                 if !self.esta_en_el_campamento(*heroe, *campamento, t) {
                     return Err(rechazo(rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA, "el héroe no está en el campamento ni con la columna a su puerta".into()));
                 }
-                let falta = match self.columna_de(*heroe) {
+                let falta = match self.columna_que_lleva(*heroe) {
                     Some(c) => {
                         let e = &self.estado.ejercitos[&c];
                         e.columna.viveres.maximo.unwrap_or(0) - e.columna.viveres.valor_en(t)
@@ -345,7 +345,7 @@ impl Nucleo {
                 }
                 let datos = vec![("campamento", *campamento as i64), ("heroe", *heroe as i64), ("cantidad", falta)];
                 self.avance(t, Dueno::Heroe(*heroe), "repostajes", 1);
-                match self.columna_de(*heroe) {
+                match self.columna_que_lleva(*heroe) {
                     Some(c) => {
                         let e = self.estado.ejercitos.get_mut(&c).expect("existe");
                         racion::llenar(&mut e.columna.viveres, t, falta);

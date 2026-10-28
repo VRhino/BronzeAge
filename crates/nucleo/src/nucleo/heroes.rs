@@ -158,6 +158,19 @@ impl Nucleo {
         }
     }
 
+    /// La columna que el héroe lleva consigo: aquella en la que va o, si está de visita dentro de una plaza o un campamento donde no reside, la que trajo, que
+    /// lo espera dentro con su carro y sus víveres. En su residencia es la de [`Nucleo::columna_de`]: allí el carro y los víveres pasan al héroe.
+    pub(super) fn columna_que_lleva(&self, heroe: u64) -> Option<u64> {
+        let h = &self.heroe(heroe)?.heroe;
+        let de_visita = match h.presencia.ubicacion {
+            Ubicacion::Columna(c) => return Some(c),
+            Ubicacion::Mercenarios(c) => h.residencia != Some(Residencia::Campamento(c)),
+            Ubicacion::Asentamiento(a) => h.residencia != Some(Residencia::Asentamiento(a)),
+            _ => false,
+        };
+        self.estado.ejercito_de_heroe(heroe).filter(|c| de_visita && self.estado.ejercitos.contains_key(c))
+    }
+
     /// Devuelve al campamento las escuadras que dejan de ser escolta de una caravana.
     pub(super) fn devolver_escolta(&mut self, escolta: &[EscuadraCedida]) {
         for EscuadraCedida { id, heroe, .. } in escolta {
