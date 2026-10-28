@@ -257,6 +257,13 @@ async fn un_administrador_cambia_el_codigo_y_respalda_la_partida() {
     assert_eq!(pedir(dir, "DELETE", "/v1/admin/respaldos", Some(&jefa), None).await.0, 405);
     assert_eq!(pedir(dir, "GET", "/v1/admin/nada", Some(&jefa), None).await.0, 404);
 
+    // El catálogo vigente de las misiones recurrentes, en el JSON de `fijar_catalogo_misiones` (el inicial, mientras nadie lo cambie).
+    let (e, c) = pedir(dir, "GET", "/v1/admin/misiones/catalogo", Some(&jefa), None).await;
+    assert_eq!(e, 200, "{c}");
+    assert_eq!(c, nucleo::recurrentes::Catalogo::cargar().a_json());
+    assert_eq!(pedir(dir, "GET", "/v1/admin/misiones/catalogo", Some(&pepe), None).await.0, 403);
+    assert_eq!(pedir(dir, "PUT", "/v1/admin/misiones/catalogo", Some(&jefa), None).await.0, 405);
+
     // Algo después del respaldo, y se restaura: la cuenta nueva desaparece y la partida vuelve a la versión del respaldo.
     assert_eq!(post(dir, "/v1/registro", json!({ "nick": "tardio", "clave": "clave larga" })).await.0, 201);
     s.parar().await;

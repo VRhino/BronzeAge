@@ -300,6 +300,7 @@ fn el_catalogo_se_cambia_en_caliente_y_vale_desde_la_siguiente_renovacion() {
     // Solo la administración, y entero o nada.
     assert_eq!(x.rechazo("ana", fijar(CATALOGO)), rechazos::NO_AUTORIZADO);
     assert_eq!(x.rechazo("admin", fijar("{")), rechazos::MISION_CATALOGO_INVALIDO);
+    assert_eq!(x.rechazo("admin", fijar("{}")), rechazos::MISION_CATALOGO_INVALIDO, "un ámbito sin misiones no entra");
     assert_eq!(x.rechazo("admin", fijar(&CATALOGO.replace("\"I1\"", "\"A1\""))), rechazos::MISION_CATALOGO_INVALIDO, "A1 es una misión única");
     assert_eq!(x.rechazo("admin", fijar(&CATALOGO.replace("\"escuadrones\":1", "\"volar\":1"))), rechazos::MISION_CATALOGO_INVALIDO);
     assert_eq!(x.ord("admin", fijar(CATALOGO)).resultado, Resultado::SinCambios);

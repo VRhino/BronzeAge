@@ -102,6 +102,8 @@ pub enum PeticionAdmin {
     Estado { respuesta: oneshot::Sender<EstadoNucleo> },
     /// Una foto ahora y la copia de la carpeta del núcleo en `destino`, con el núcleo esperando mientras copia (la copia es coherente: foto, registro y crónica).
     Respaldo { destino: PathBuf, respuesta: oneshot::Sender<io::Result<EstadoNucleo>> },
+    /// El catálogo vigente de las misiones recurrentes (mecánica 55), en el JSON que acepta `fijar_catalogo_misiones`.
+    CatalogoMisiones { respuesta: oneshot::Sender<String> },
 }
 
 /// La versión y el instante del núcleo.

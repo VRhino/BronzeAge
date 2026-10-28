@@ -57,7 +57,8 @@ Con `reclamarRecompensa` (el de las únicas, `Misiones.md` §4), con el id de la
 El catálogo de las recurrentes (cuáles hay, sus condiciones, topes, recompensas y textos) es **dato**, no código: el inicial es el bloque `MISIONES_RECURRENTES` de abajo y el vigente vive en el estado (va en la foto). Lo cambia la orden de administración `fijar_catalogo_misiones` (comando 187, parámetro `catalogo`: el JSON entero en texto, con la forma del bloque), sin reiniciar: entra como una petición del registro con su instante, así que una partida se reproduce igual desde el diario.
 
 - Un cambio no toca las misiones que ya están en el tablón (aceptadas o no): vale para las que salen desde la **siguiente renovación** (la diaria saca las diarias con la definición nueva; la semanal, todo).
-- Se valida entero o no entra (`mision.catalogo_invalido`, con el motivo): ids únicos y distintos de los de las misiones únicas, condiciones con los contadores de §7 y umbral > 0, `limiteSemanal` > 0 en las individuales y `cargo` del ámbito.
+- Se valida entero o no entra (`mision.catalogo_invalido`, con el motivo): ids únicos y distintos de los de las misiones únicas, condiciones con los contadores de §7 y umbral > 0, `limiteSemanal` > 0 en las individuales, `cargo` del ámbito y **al menos una misión en cada ámbito** (`asentamiento` y `faccion`; decisión del autor del 2026-10-28: un catálogo que deja vacío un tablón no entra, `{}` tampoco).
+- El catálogo **vigente** se lee con `GET /v1/admin/misiones/catalogo` (solo administradores), en el mismo JSON que acepta la orden; `/v1/datos` trae solo el inicial.
 - Las misiones únicas (H, A, F) siguen en `Misiones.md`, con la huella de las reglas.
 
 ## 7. Contadores

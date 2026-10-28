@@ -156,6 +156,9 @@ impl Actor {
                 let r = self.nucleo.respaldar(&destino).map(|()| EstadoNucleo { version: self.nucleo.version(), instante: self.nucleo.ahora() });
                 let _ = respuesta.send(r);
             }
+            ComandoSesion::Admin(PeticionAdmin::CatalogoMisiones { respuesta }) => {
+                let _ = respuesta.send(self.nucleo.recurrentes().catalogo.a_json().to_string());
+            }
         }
     }
 

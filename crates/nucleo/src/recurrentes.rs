@@ -212,6 +212,12 @@ impl Catalogo {
                 misiones.push(Arc::new(Recurrente::desde(ambito, m)?));
             }
         }
+        // Un ámbito sin misiones dejaría su tablón vacío desde la siguiente renovación (decisión del autor del 2026-10-28: no se admite).
+        for ambito in [Ambito::Asentamiento, Ambito::Faccion] {
+            if !misiones.iter().any(|m| m.ambito == ambito) {
+                return Err(format!("«{}» no tiene ninguna misión: cada ámbito necesita al menos una", ambito.clave()));
+            }
+        }
         let mut ids = BTreeSet::new();
         for m in &misiones {
             if !ids.insert(m.id.as_str()) {
@@ -629,13 +635,18 @@ mod pruebas {
     #[test]
     fn un_catalogo_mal_hecho_no_entra_y_dice_por_que() {
         let mal = |s: &str| Catalogo::desde_texto(s, &["A1"]).unwrap_err();
-        let base = |extra: &str| format!(r#"{{"asentamiento":[{{"id":"X","duracion":"dia","tipo":"individual","limiteSemanal":3,"condiciones":{{"batallas":1}},"titulo":"t","texto":"t","explicacion":"e"{extra}}}]}}"#);
+        let base = |extra: &str| format!(r#"{{"asentamiento":[{{"id":"X","duracion":"dia","tipo":"individual","limiteSemanal":3,"condiciones":{{"batallas":1}},"titulo":"t","texto":"t","explicacion":"e"{extra}}}],"faccion":[{{"id":"Y","duracion":"semana","tipo":"grupal","condiciones":{{"batallas":1}},"titulo":"t","texto":"t","explicacion":"e"}}]}}"#);
         assert!(Catalogo::desde_texto(&base(""), &[]).is_ok());
         assert!(mal(&base(r#","cargo":"rey""#)).contains("cargo"));
         assert!(mal(&base(r#","condiciones":{"volar":1}"#)).contains("volar"));
         assert!(mal(&base(r#","limiteSemanal":0"#)).contains("limiteSemanal"));
         assert!(mal(&base(r#","id":"A1""#)).contains("única"));
         assert!(mal("{").contains("JSON"));
+        // Un ámbito vacío o ausente no entra: dejaría su tablón sin misiones.
+        assert!(mal("{}").contains("asentamiento"));
+        assert!(mal(&base("").replace(r#""faccion":[{"#, r#""faccion":[],"otra":[{"#)).contains("otra"));
+        let sin_faccion: serde_json::Value = serde_json::from_str(&base("")).unwrap();
+        assert!(mal(&serde_json::json!({ "asentamiento": sin_faccion["asentamiento"] }).to_string()).contains("faccion"));
     }
 
     #[test]

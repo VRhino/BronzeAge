@@ -135,6 +135,7 @@ Dos sitios, porque parar y arrancar el proceso no lo puede hacer el propio proce
 | `PUT /v1/admin/registro/codigo` | cuerpo `{ codigo: texto \| null }`; cambia en caliente hasta el próximo reinicio (después vuelve `CODIGO_REGISTRO`) |
 | `POST /v1/admin/respaldos` | foto ahora y copia de `mundo/` y `acceso/` en `<datos>/respaldos/<id>/`; `201 { id, creado_ms, version, instante, mundo_hash, semilla, bytes }` |
 | `GET /v1/admin/respaldos` | `{ respaldos: [...] }`, del más nuevo al más viejo |
+| `GET /v1/admin/misiones/catalogo` | el catálogo **vigente** de las misiones recurrentes `{ asentamiento: [...], faccion: [...] }`, en el JSON que acepta la orden de administración `fijar_catalogo_misiones` (xp y oro en unidades; Misiones_Recurrentes §6) |
 
 El núcleo atiende el respaldo entre dos órdenes y no hace nada más mientras copia, así que la copia es coherente. El histórico de batallas retiradas está en `<datos>/mundo/batallas.jsonl` (un JSON por línea, Batalla_Unity_Ciclo §3.3), así que va en el respaldo.
 

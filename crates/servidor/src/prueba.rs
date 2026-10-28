@@ -197,6 +197,9 @@ impl NucleoFalso {
                     ComandoSesion::Admin(crate::PeticionAdmin::Respaldo { respuesta, .. }) => {
                         let _ = respuesta.send(Err(std::io::Error::other("el núcleo falso no respalda")));
                     }
+                    ComandoSesion::Admin(crate::PeticionAdmin::CatalogoMisiones { respuesta }) => {
+                        let _ = respuesta.send(r#"{"asentamiento":[],"faccion":[]}"#.to_owned());
+                    }
                     ComandoSesion::Cronica { sesion, pedir } => {
                         if let Some(s) = e.sesiones.get(&sesion) {
                             let c = contrato::v1::Cronica { peticion_id: pedir.peticion_id, version: e.version, ..Default::default() };
