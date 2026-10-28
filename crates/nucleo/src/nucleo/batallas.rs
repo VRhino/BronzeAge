@@ -1066,7 +1066,10 @@ impl Nucleo {
             Contexto::Asedio { asentamiento } => {
                 let plaza = asentamiento as u64;
                 match b.ticket.atacante.faccion {
-                    Some(f) if res.ganador == Lado::Atacante && self.estado.asentamientos.get(&plaza).is_some_and(|a| a.faccion == f) => self.avance(t, Dueno::Faccion(f), "conquistas", 1),
+                    Some(f) if res.ganador == Lado::Atacante && self.estado.asentamientos.get(&plaza).is_some_and(|a| a.faccion == f) => {
+                        self.avance(t, Dueno::Faccion(f), "conquistas", 1);
+                        self.mirar_misiones(t, Dueno::Faccion(f));
+                    }
                     _ if res.ganador == Lado::Defensor => self.avance(t, Dueno::Asentamiento(plaza), "asedios", 1),
                     _ => {}
                 }

@@ -2,6 +2,8 @@
 
 > **Implementado en Rust el 2026-10-27** (mecánica 49; diseño acordado con el autor el 2026-10-26 y catálogo aprobado el 2026-10-27). Las recompensas y los umbrales son provisionales: se calibran con los batches y los bots. Código: `crates/nucleo/src/misiones.rs` (catálogo y estado) y `crates/nucleo/src/nucleo/misiones.rs` (de dónde sale cada avance, reclamar y la proyección).
 
+> **Revisión del 2026-10-28 (mecánica 59).** Cada misión tiene además una **explicación** en texto libre ([`Misiones_Textos.md`](Misiones_Textos.md)). F1 se cumple con la capital **efectiva** (la primera plaza de la Facción), no con la designada, que pide Palacio (decisión del autor; ver `capital` en §3). `FijarNivelAsentamiento` (administración) también mira el contador `nivel`. Pruebas: `crates/nucleo/tests/misiones_una_a_una.rs` cumple cada misión del catálogo haciendo lo que dice su texto, con el catálogo sin previas (35 de 36; **H13 no tiene camino hoy**: el héroe no gana puntos de atributo, apuntado en `Docs/Mecanicas a desarrollar.md`, 61), y una guarda exige una prueba por misión; `tests/propios.rs` (`las_misiones_de_la_faccion_y_sus_cumplidas_llegan_a_cada_ciudadano…`) comprueba que las misiones de la Facción, cumplidas incluidas, llegan en `FACCION` a cada ciudadano, sea o no el Rey, y a ninguna otra Facción.
+
 ## 1. Alcance
 
 Las misiones guían al jugador al principio del juego para que descubra las mecánicas, con recompensa. Tienen tres dueños: el **héroe**, el **asentamiento** y la **Facción**. Valen igual para los bots (`12_NPC_Fuera_Del_Motor.md` §2), que las siguen como currículo.
@@ -41,7 +43,7 @@ Cada avance se suma **en origen**, en el sitio que produce el hecho y al ocurrir
 | `avanzadas` | asentamiento | completa una avanzada (su madre) |
 | `asedios` | asentamiento | resiste un asedio en combate |
 | `aldeas` | asentamiento | **estado**: las aldeas agrícolas activas |
-| `capital` | Facción | **estado**: 1 si tiene capital |
+| `capital` | Facción | **estado**: 1 si tiene capital **efectiva** (`Diplomacia_Facciones.md` §3.7: la designada o, sin ella, su plaza más antigua), es decir, en cuanto tiene una plaza; se mira al fundar y al conquistar (decisión del autor del 2026-10-28: antes pedía la capital designada, con Palacio, y F1 cerraba la cadena de Facción durante días) |
 | `cargos` | Facción | asigna un Embajador o un cargo local en una de sus plazas |
 | `fundaciones` | Facción | funda una plaza |
 | `tecnologias` | Facción | adopta una tecnología |

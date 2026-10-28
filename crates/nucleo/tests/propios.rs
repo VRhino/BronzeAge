@@ -450,6 +450,43 @@ async fn la_foto_inicial_de_heroe_y_faccion_lleva_todo_lo_propio_y_nada_de_otra_
     w.parar().await;
 }
 
+/// Las misiones de la Facción (Misiones §5, mecánica 59): cada ciudadano las ve en `FACCION`, también las cumplidas, sea o no el Rey (que es quien las reclama); la otra Facción no.
+/// Desde el 2026-10-28 F1 se cumple con la capital efectiva: las dos Facciones la tienen cumplida desde su primera plaza.
+#[tokio::test]
+async fn las_misiones_de_la_faccion_y_sus_cumplidas_llegan_a_cada_ciudadano_y_a_ninguna_otra_faccion() {
+    let m = con_mundo!();
+    let x = escenario(m);
+    let as_a = ids::asentamiento(x.a);
+    let w = arrancar_con(x.n).await;
+    let (activa, cumplida) = (pb::EstadoMision::MisionActiva as i32, pb::EstadoMision::MisionCumplida as i32);
+    let estado = |f: &pb::Faccion, id: &str| f.misiones.iter().find(|v| v.id == id).map(|v| v.estado);
+    // ana y dora dentro de la plaza, beto en el campamento: ninguno es el Rey (lo es el héroe que fundó la plaza).
+    let mut ciudadanos = vec![];
+    for cuenta in ["ana", "beto", "dora"] {
+        let (c, _, mensajes) = w.conectar(hola_con(cuenta, TipoCliente::ClienteUnity, &[])).await;
+        let f = facciones(&foto_de(&mensajes, "FACCION:f-1").entidades)[0].clone();
+        assert_eq!((estado(&f, "F1"), estado(&f, "F6"), estado(&f, "F7")), (Some(cumplida), Some(activa), Some(activa)), "{cuenta} ve las de F1, las cumplidas también");
+        ciudadanos.push(c);
+    }
+    let (mut gus, _, mensajes) = w.conectar(hola_con("gus", TipoCliente::ClienteUnity, &[])).await;
+    let f2 = foto_de(&mensajes, "FACCION:f-2");
+    assert_eq!(estado(facciones(&f2.entidades)[0], "F1"), Some(cumplida), "gus ve las de su Facción");
+    assert!(facciones(&f2.entidades).iter().all(|f| f.id == "f-2"), "y nada de F1");
+    // ana, Gobernadora de la plaza, activa el Edicto de Cosecha: F6 se cumple y la delta de FACCION:f-1 lo lleva a cada ciudadano conectado (ella también); a gus, nada de F1.
+    let edicto = orden::Cuerpo::ActivarPolitica(pb::OrdenActivarPolitica { asentamiento_id: as_a, cargo: "gobernador".into(), politica_id: "edicto_cosecha".into() });
+    let (previos_ana, r) = dar_todo(&mut ciudadanos[0], "e1", edicto).await;
+    aceptada(&r);
+    let mut previos = BTreeMap::from([("ana", previos_ana)]);
+    for (cuenta, c) in ["ana", "beto", "dora"].into_iter().zip(&mut ciudadanos) {
+        let mut mensajes = previos.remove(cuenta).unwrap_or_default();
+        mensajes.extend(pendiente(c).await);
+        let f = deltas_de(&mensajes, "FACCION:f-1").into_iter().flat_map(|d| facciones(nuevas(d))).last().cloned().unwrap_or_else(|| panic!("{cuenta}: la Facción cambia"));
+        assert_eq!(estado(&f, "F6"), Some(cumplida), "{cuenta} ve F6 cumplida");
+    }
+    assert!(deltas_de(&pendiente(&mut gus).await, "FACCION:f-1").is_empty());
+    w.parar().await;
+}
+
 // ───────────────────────────── 2. Héroe: reclutar y un loadout ─────────────────────────────
 
 #[tokio::test]

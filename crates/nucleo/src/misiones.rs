@@ -324,7 +324,7 @@ mod pruebas {
         assert_eq!(leer(&mut Lector::nuevo(&bytes), &r).unwrap(), e);
     }
 
-    /// El catálogo de textos (`Misiones_Textos.md`, fuera de la huella) está entero: cada misión con su título y su texto, cada contador con su nombre, y nada que no exista.
+    /// El catálogo de textos (`Misiones_Textos.md`, fuera de la huella) está entero: cada misión con su título, su texto y su explicación, cada contador con su nombre, y nada que no exista.
     #[test]
     fn cada_mision_y_cada_contador_tiene_su_texto() {
         let doc = include_str!("../../../Docs/Mechanics/Misiones_Textos.md");
@@ -334,7 +334,9 @@ mod pruebas {
         let contadores = v["contadores"].as_object().expect("contadores");
         for m in &r.misiones {
             let t = &misiones.get(&m.id).unwrap_or_else(|| panic!("{} sin texto", m.id));
-            assert!(t["titulo"].as_str().is_some_and(|x| !x.is_empty()) && t["texto"].as_str().is_some_and(|x| !x.is_empty()), "{}: título y texto", m.id);
+            for campo in ["titulo", "texto", "explicacion"] {
+                assert!(t[campo].as_str().is_some_and(|x| !x.is_empty()), "{}: {campo}", m.id);
+            }
             for (c, _) in &m.condiciones {
                 assert!(contadores.get(c).and_then(Value::as_str).is_some_and(|x| !x.is_empty()), "contador {c} sin nombre");
             }

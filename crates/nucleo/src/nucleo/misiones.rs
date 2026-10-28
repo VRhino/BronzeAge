@@ -37,7 +37,9 @@ pub(crate) fn valor_de_estado(e: &crate::estado::Estado, d: Dueno, contador: &st
                 _ => 0,
             }
         }
-        (Dueno::Faccion(f), "capital") => u64::from(e.politica.facciones.get(f).is_some_and(|f| f.capital_designada_en.is_some())),
+        // La capital efectiva (Diplomacia_Facciones §3.7): la designada o, sin ella, la plaza más antigua de la Facción; la hay en cuanto tiene una plaza (decisión del autor,
+        // 2026-10-28: F1 no espera al Palacio).
+        (Dueno::Faccion(f), "capital") => u64::from(e.asentamientos.values().any(|a| a.faccion == f)),
         _ => 0,
     }
 }

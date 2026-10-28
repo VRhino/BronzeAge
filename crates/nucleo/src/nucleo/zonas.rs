@@ -356,6 +356,8 @@ impl Nucleo {
                 self.contar_alcanzado(Some(alcanzado_antes), Some(*nivel));
                 // El nivel actual decide el cupo de Aedas residentes (6E).
                 self.revisar_residentes(*asentamiento, t);
+                // Y el contador de estado `nivel` de sus misiones (Misiones §3), como cuando sube por su obra.
+                self.mirar_misiones(t, Dueno::Asentamiento(*asentamiento));
                 Ok(None)
             }
             Comando::AgrandarZona { asentamiento } => {
@@ -489,6 +491,7 @@ impl Nucleo {
             self.tr.emitir(&self.estado, EventoNucleo { valores, asentamientos: vec![id], ..EventoNucleo::nuevo("cargo.local_asignado", t, datos) });
         }
         self.avance(t, Dueno::Faccion(faccion), "fundaciones", 1);
+        self.mirar_misiones(t, Dueno::Faccion(faccion));
         self.mirar_misiones(t, Dueno::Asentamiento(id));
         // La derrota se borra al fundar (§8) y la fundación da experiencia salvo la primera plaza de la Facción (§3.5). La capital puede cambiar: la Facción cambia.
         self.estado.politica.facciones.anular_derrota(faccion);
