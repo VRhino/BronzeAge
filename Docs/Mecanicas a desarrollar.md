@@ -22,6 +22,9 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 20 | TECNOLOGÍA | Eras IV y V (pospuestas con el motor nuevo) | Eras I-III en canon y en Rust |
 | 39 | POLÍTICA | Elección del Rey de Facción por voto entre representantes (decidido el 2026-10-17: queda aquí, no implementada) | el Rey se asigna, sin votación |
 | 48 | MILITAR / POLÍTICA | Mercenarios por contrato (diseño cerrado el 2026-10-26; `Docs/Disenos_Por_Implementar/Mercenarios_Por_Contrato.md`) | nada |
+| 54 | POLÍTICA | Participación por plaza (diseño del 2026-10-28; `Docs/Disenos_Por_Implementar/Participacion.md`) | nada |
+| 55 | MISIONES | Misiones recurrentes (diarias y semanales), individuales y grupales, tablón de la plaza y catálogo editable en caliente (diseño del 2026-10-28; `Docs/Disenos_Por_Implementar/Misiones_Recurrentes_Y_Tablon.md`) | misiones únicas (mecánica 49) |
+| 56-59 | VARIAS | Cambios del 2026-10-28 a cosas que ya existen: edificios de arranque y gate del nivel 2, alijos, bosques y metales del mundo, revisión de las misiones de hoy (sección «Cambios del 2026-10-28») | lo de hoy, en `Docs/Mechanics/` |
 | — | PARIDAD | Recortes temporales del motor Rust frente al TypeScript (sección «Paridad con TypeScript») | el motor no está migrado hasta cerrarlos |
 | — | DUDAS | Ninguna sin decisión desde el 2026-10-27 (sección «Dudas abiertas»: las `// DUDA:` que quedan en el código) | — |
 | — | FASE 7 | Todo lo que se dejó para los bots reales y la fase 7 (sección «Para la fase 7») | — |
@@ -58,6 +61,22 @@ Cuatro ideas del autor, estudiadas y decididas en un hilo de solo diseño; sin c
 
 - **48. Mercenarios por contrato**: `Docs/Disenos_Por_Implementar/Mercenarios_Por_Contrato.md`. Bots contratados como miembros de la Facción por Rey, Embajador o Gobernador (este con alcance de su plaza), temporales con trabajo de la tabla y permanentes como ciudadanos con marca. Pendiente: implementar tras los bots de la fase 7 (necesita el runner jugando por el contrato 05), calibrar tarifas, plazos y topes, y la pestaña de control en BronzeAgeClient.
 - **Fuera de alcance**: carne y leche (también del MVP) y las misiones entre humanos van a `Docs/Ideas a diseñar.md` (entradas 52 y 53 de ese archivo).
+
+## 54-55. Participación y misiones recurrentes (diseño del 2026-10-28)
+
+Pedidos por el autor el 2026-10-28 y cerrados con él el mismo día. Cada uno tiene su documento en `Docs/Disenos_Por_Implementar/`:
+
+- **54. Participación**: `Docs/Disenos_Por_Implementar/Participacion.md`. Cada héroe acumula participación en cada plaza (misiones del tablón, defender caravanas, pueblos, aldeas y plazas, ganar batallas), para siempre. La plaza lista a sus residentes con cargo y participación; la Facción, a sus miembros con cargo, residencia y la suma en todas sus plazas.
+- **55. Misiones recurrentes y tablón**: `Docs/Disenos_Por_Implementar/Misiones_Recurrentes_Y_Tablon.md`. Ámbito, recurrencia, duración (1 o 7 días), tipo (individual con límite semanal o grupal a partes iguales) y estado. Renovación a las 00:00 UTC (diarias) y cada 7 días (semanales). Tablón de la plaza: 7 a la vez de un catálogo, que elige el Gobernador para la siguiente renovación; sustituye a las misiones de plaza de hoy. Contenido editable en caliente; el funcionamiento sigue en el motor.
+
+## 56-59. Cambios del 2026-10-28 a cosas que ya existen
+
+Decididos con el autor el 2026-10-28. Al implementarse se documentan en `Docs/Mechanics/` y en el canon, y se borran de aquí.
+
+- **56. Arranque de la plaza**: el **nivel 1** de Vivienda, Leñera y Granja se construye en 10, 2 y 5 minutos (hoy 240, 60 y 120; los demás niveles no cambian). El ascenso al **nivel 2** pide lo de hoy (200 pesants, 2 de {Cantera, Leñera, Granja} y una aldea activa) **y además una Granja a nivel 2** (Leñera y Cantera no tienen niveles y no se les añaden). A calibrar con el batch de población.
+- **57. Alijos**: cada alijo da **una sola cosa, al azar** entre oro (15 / 25 / 55 según sea cercano, medio o lejano), madera, piedra o trigo (5 / 10 / 15). Hoy solo oro (3 / 5 / 11). Cambia el generador y el artefacto de mundo.
+- **58. Bosques y metales del mundo** (generador): menos manchas de bosque muy denso y más claras; claros y huecos dentro de los bosques grandes; no se funda en el corazón del bosque denso, sí en sus orillas y claros. Metales también en las montañas alejadas, que hoy pueden quedarse sin nodos. Antes de cambiar cifras, medir el mundo de la semilla 42 (mapa de montañas, nodos y densidad).
+- **59. Misiones de hoy**: que las de Facción cumplidas sigan a la vista de todos sus miembros; probar una a una que cada misión se cumple haciendo lo que dice su texto; y un **texto libre** más largo por misión, además del título y el qué hacer.
 
 ## Paridad con TypeScript: recortes temporales del motor Rust (2026-10-18)
 
