@@ -1,6 +1,6 @@
-//! Alijos de exploración (Generacion_Del_Mundo §12, D29, D60-D63): escondites de oro que coloca el artefacto del mundo (`mundo::Mundo::alijos`, por
+//! Alijos de exploración (Generacion_Del_Mundo §12, D29, D60-D63): escondites que coloca el artefacto del mundo (`mundo::Mundo::alijos`, por
 //! índice). Son **por héroe**: cada uno abre cada alijo una vez, nadie le quita uno a otro. Solo los ven y los abren los héroes sin Facción o de una
-//! Facción sin asentamientos; su oro sube **al carro** de la columna y lo que no cabe se pierde (decisión técnica 10). Nada programa eventos: ver un
+//! Facción sin asentamientos. Cada uno trae una sola cosa (oro, madera, piedra o trigo, desde el 2026-10-28) y sube **al carro** de la columna y lo que no cabe se pierde (decisión técnica 10). Nada programa eventos: ver un
 //! alijo es una consulta de la vista y abrirlo, una orden.
 
 use base::{entero, Mil, Punto};
@@ -19,10 +19,10 @@ pub enum ErrorAlijo {
     Lejos,
 }
 
-/// Lo que dio un alijo (`alijo.abierto { heroe, alijo, oro, cargado }`): su oro en unidades enteras y lo que cupo en el carro (milésimas).
+/// Lo que dio un alijo (`alijo.abierto { heroe, alijo, recurso, cantidad, cargado }`): lo que traía en unidades enteras y lo que cupo en el carro (milésimas).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Apertura {
-    pub oro: Mil,
+    pub cantidad: Mil,
     pub cargado: Mil,
 }
 
@@ -32,9 +32,9 @@ pub fn a_la_vista<'a>(alijos: &'a [Punto], abiertos: &'a Abiertos, columna: Opti
     alijos.iter().enumerate().filter(move |(i, p)| columna.is_some_and(|c| c.dist2(**p) <= v2) && !abiertos.contains(&(*i as u32))).map(|(i, _)| i as u32)
 }
 
-/// `abrirAlijo` en el instante de la orden, sobre el alijo `indice` del artefacto (posición y oro): `puede_buscar` (sin Facción o de una sin asentamientos), no abierto antes, la columna a `radio` (`radioPuerta`)
-/// del alijo. El oro del artefacto (milésimas) se redondea hacia abajo a unidades enteras y sube al carro hasta `hueco` (lo que cabe); el resto se pierde.
-pub fn abrir(indice: u32, (posicion, oro): (Punto, Mil), abiertos: &mut Abiertos, columna: Option<Punto>, radio: Mil, puede_buscar: bool, hueco: Mil) -> Result<Apertura, ErrorAlijo> {
+/// `abrirAlijo` en el instante de la orden, sobre el alijo `indice` del artefacto (posición y cantidad de lo que trae): `puede_buscar` (sin Facción o de una sin asentamientos), no abierto antes, la columna a `radio` (`radioPuerta`)
+/// del alijo. La cantidad del artefacto (milésimas) se redondea hacia abajo a unidades enteras y sube al carro hasta `hueco` (lo que cabe); el resto se pierde.
+pub fn abrir(indice: u32, (posicion, cantidad): (Punto, Mil), abiertos: &mut Abiertos, columna: Option<Punto>, radio: Mil, puede_buscar: bool, hueco: Mil) -> Result<Apertura, ErrorAlijo> {
     if !puede_buscar {
         return Err(ErrorAlijo::NoPuedesBuscar);
     }
@@ -45,8 +45,8 @@ pub fn abrir(indice: u32, (posicion, oro): (Punto, Mil), abiertos: &mut Abiertos
         return Err(ErrorAlijo::Lejos);
     }
     abiertos.insert(indice);
-    let oro = entero(oro);
-    Ok(Apertura { oro, cargado: oro.min(entero(hueco.max(0))) })
+    let cantidad = entero(cantidad);
+    Ok(Apertura { cantidad, cargado: cantidad.min(entero(hueco.max(0))) })
 }
 
 #[cfg(test)]
@@ -73,12 +73,12 @@ mod pruebas {
     }
 
     #[test]
-    fn se_abre_en_el_sitio_una_vez_por_heroe_y_su_oro_sube_al_carro_lo_que_no_cabe_se_pierde() {
+    fn se_abre_en_el_sitio_una_vez_por_heroe_y_lo_que_trae_sube_al_carro_lo_que_no_cabe_se_pierde() {
         let (sitio, cerca, lejos) = (p(500_000, 500_000), Some(p(500_000, 501_500)), Some(p(600_000, 600_000)));
         let mut abiertos = Abiertos::new();
-        assert_eq!(abrir(0, (sitio, 5_000), &mut abiertos, cerca, PUERTA, true, 100_000), Ok(Apertura { oro: 5_000, cargado: 5_000 }));
+        assert_eq!(abrir(0, (sitio, 5_000), &mut abiertos, cerca, PUERTA, true, 100_000), Ok(Apertura { cantidad: 5_000, cargado: 5_000 }));
         assert_eq!(abiertos, [0].into());
-        assert_eq!(abrir(0, (sitio, 5_000), &mut Abiertos::new(), cerca, PUERTA, true, 3_000), Ok(Apertura { oro: 5_000, cargado: 3_000 }), "solo cabe lo que cabe");
+        assert_eq!(abrir(0, (sitio, 5_000), &mut Abiertos::new(), cerca, PUERTA, true, 3_000), Ok(Apertura { cantidad: 5_000, cargado: 3_000 }), "solo cabe lo que cabe");
         assert_eq!(abrir(0, (sitio, 5_000), &mut abiertos, cerca, PUERTA, true, 100_000), Err(ErrorAlijo::YaAbierto));
         assert_eq!(abrir(0, (sitio, 5_000), &mut Abiertos::new(), lejos, PUERTA, true, 100_000), Err(ErrorAlijo::Lejos));
         assert_eq!(abrir(0, (sitio, 5_000), &mut Abiertos::new(), None, PUERTA, true, 100_000), Err(ErrorAlijo::Lejos));
@@ -86,7 +86,7 @@ mod pruebas {
     }
 
     #[test]
-    fn el_oro_va_en_unidades_enteras_hacia_abajo() {
-        assert_eq!(abrir(3, (p(0, 0), 7_999), &mut Abiertos::new(), Some(p(0, 0)), PUERTA, true, 2_500), Ok(Apertura { oro: 7_000, cargado: 2_000 }));
+    fn lo_que_trae_va_en_unidades_enteras_hacia_abajo() {
+        assert_eq!(abrir(3, (p(0, 0), 7_999), &mut Abiertos::new(), Some(p(0, 0)), PUERTA, true, 2_500), Ok(Apertura { cantidad: 7_000, cargado: 2_000 }));
     }
 }

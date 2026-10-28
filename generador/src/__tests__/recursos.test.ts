@@ -34,7 +34,10 @@ const sintetico: MuestreoRecursos = {
 };
 
 const recursos = repartirRecursosNoMetalicos(42, campamentos, sintetico, { ancho: ANCHO, alto: ALTO });
-const de = (tipo: string, anillo?: string) => recursos.filter(r => r.tipo === tipo && (!anillo || r.anillo === anillo));
+// La capa de la tierra lejana (ids `<tipo>-l<n>`) va aparte: el resto es el mínimo garantizado de antes.
+const esCapaLejana = (r: { id: string }) => /-l\d+$/.test(r.id);
+const base = recursos.filter(r => !esCapaLejana(r)), capa = recursos.filter(esCapaLejana);
+const de = (tipo: string, anillo?: string) => base.filter(r => r.tipo === tipo && (!anillo || r.anillo === anillo));
 
 describe('recursos no metálicos', () => {
   it('totales exactos de partida: piedra 5601, cobre 240, hierro 360, ganadería 400', () => {
@@ -42,8 +45,8 @@ describe('recursos no metálicos', () => {
     expect(de('cobre')).toHaveLength(240);
     expect(de('hierro')).toHaveLength(360);
     expect(de('ganaderia')).toHaveLength(400);
-    expect(recursos).toHaveLength(6601);
-    expect(new Set(recursos.map(r => r.id)).size).toBe(6601);
+    expect(base).toHaveLength(6601);
+    expect(new Set(recursos.map(r => r.id)).size).toBe(recursos.length);
   });
   it('el hierro es 1,5 veces el cobre', () => {
     expect(de('hierro').length).toBe(1.5 * de('cobre').length);
@@ -53,6 +56,15 @@ describe('recursos no metálicos', () => {
     expect([de('cobre', 'foco').length, de('cobre', 'frontera').length, de('cobre', 'lejana').length]).toEqual([48, 192, 0]);
     expect([de('hierro', 'foco').length, de('hierro', 'frontera').length, de('hierro', 'lejana').length]).toEqual([72, 288, 0]);
     expect([de('ganaderia', 'foco').length, de('ganaderia', 'frontera').length, de('ganaderia', 'lejana').length]).toEqual([200, 0, 200]);
+  });
+  it('la capa lejana: solo cobre, hierro y piedra, todo en la tierra lejana, a su fracción de la densidad de la frontera', () => {
+    expect(capa.length).toBeGreaterThan(0);
+    for (const r of capa) {
+      expect(r.anillo).toBe('lejana');
+      expect(Object.keys(P.capaLejana.densidadRelativa)).toContain(r.tipo);
+    }
+    // La piedra a 1/10 y el cobre y el hierro a 1/4 de la frontera: en proporción, menos piedra lejana que frontera.
+    expect(capa.filter(r => r.tipo === 'piedra').length).toBeLessThan(de('piedra', 'frontera').length);
   });
   it('cada recurso está en el anillo que declara', () => {
     for (const r of recursos) expect(anilloEn(campamentos, r.posicion).anillo).toBe(r.anillo);
@@ -88,8 +100,8 @@ describe('recursos no metálicos', () => {
   });
   it('escala por área: un mundo más pequeño tiene proporcionalmente menos', () => {
     const chico = repartirRecursosNoMetalicos(42, campamentos.slice(0, 3), sintetico, { ancho: 16002, alto: 12000 });
-    expect(chico.filter(r => r.tipo === 'piedra')).toHaveLength(1400);
-    expect(chico.filter(r => r.tipo === 'hierro')).toHaveLength(90);
+    expect(chico.filter(r => r.tipo === 'piedra' && !esCapaLejana(r))).toHaveLength(1400);
+    expect(chico.filter(r => r.tipo === 'hierro' && !esCapaLejana(r))).toHaveLength(90);
   });
   it('si un tipo no cabe, lanza error en vez de entregar menos', () => {
     expect(() => repartirRecursosNoMetalicos(42, campamentos, { ...sintetico, geologia: () => 0 }, { ancho: ANCHO, alto: ALTO }, [], { ...P, calidadMinima: 0.9 })).toThrow(/faltan/);
@@ -99,10 +111,10 @@ describe('recursos no metálicos', () => {
 describe('cantidades iniciales', () => {
   it('enteras y dentro del rango de su tipo, también la ganadería', () => {
     for (const r of recursos) {
-      const { min, max } = RANGO_CANTIDAD[r.tipo];
+      const { min, max } = RANGO_CANTIDAD[r.tipo], f = esCapaLejana(r) ? P.capaLejana.factorCantidad : 1;
       expect(Number.isInteger(r.cantidadInicial)).toBe(true);
-      expect(r.cantidadInicial).toBeGreaterThanOrEqual(min);
-      expect(r.cantidadInicial).toBeLessThanOrEqual(max);
+      expect(r.cantidadInicial).toBeGreaterThanOrEqual(Math.round(min * f));
+      expect(r.cantidadInicial).toBeLessThanOrEqual(Math.round(max * f));
     }
   });
   it('recorren el rango y dependen solo de (tipo, id, semilla)', () => {

@@ -797,11 +797,13 @@ message CampamentoBandidos {
 }
 
 // Un alijo de exploración (Generacion_Del_Mundo §12): en el artefacto (`ArtefactoDeMundo.alijos`) y, desde 6G, en `HEROE` los que el héroe tiene a la vista
-// (si puede buscarlos y no los ha abierto: Niebla_De_Guerra §5.4), renovados con el muestreo de la vista. `oro` en milésimas, el del artefacto.
+// (si puede buscarlos y no los ha abierto: Niebla_De_Guerra §5.4), renovados con el muestreo de la vista. Trae una sola cosa: `recurso` (oro, madera, piedra o trigo)
+// y su `cantidad` en milésimas, la del artefacto. Hasta el 2026-10-28 solo traía oro y el campo 3 se llamaba `oro`.
 message Alijo {
   string id = 1;
   Punto posicion = 2;
-  sint64 oro = 3;
+  sint64 cantidad = 3;
+  string recurso = 4;                    // oro | madera | piedra | trigo
 }
 
 message CampamentoMercenarios {

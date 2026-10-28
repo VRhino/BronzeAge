@@ -33,8 +33,10 @@ export interface BandidosMundo {
 export interface AlijoMundo {
   id: string;
   posicion: Point;
-  /** Oro que contiene. */
-  oro: number;
+  /** Lo único que contiene: oro o un recurso de fundar. */
+  recurso: 'oro' | 'madera' | 'piedra' | 'trigo';
+  /** Cuánto, en unidades enteras. */
+  cantidad: number;
   anillo: Anillo;
 }
 

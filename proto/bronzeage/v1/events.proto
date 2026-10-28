@@ -304,10 +304,12 @@ message EpicaCambia {
   optional string motivo = 8;            // al abandonarse: orden | conquista | aparecida | unificada
 }
 
-// El héroe abrió un alijo: su oro (en milésimas, ya en unidades enteras) y lo que cupo en el carro; lo demás se perdió.
+// El héroe abrió un alijo: lo que traía (`recurso` y `cantidad`, en milésimas, ya en unidades enteras) y lo que cupo en el carro; lo demás se perdió.
+// Hasta el 2026-10-28 solo traía oro y el campo 3 se llamaba `oro`.
 message AlijoAbierto {
   string heroe_id = 1;
   string alijo_id = 2;
-  sint64 oro = 3;
+  sint64 cantidad = 3;
   sint64 cargado = 4;
+  string recurso = 5;                    // oro | madera | piedra | trigo
 }

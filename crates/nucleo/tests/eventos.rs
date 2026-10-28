@@ -298,8 +298,8 @@ fn los_hechos_de_la_tecnologia_y_los_aedas_llevan_sus_diez_mensajes_tipados() {
             epica("aeda-r2", "abandonada", Some("as-3"), Some("canteria"), 0, 0, Some("unificada")),
         ),
         (
-            EventoNucleo { heroes: vec![9], ..hecho_con("alijo.abierto", None, vec![("heroe", 9), ("oro", 5_000), ("cargado", 3_000)], vec![("alijo", t("alijo-veta-3"))]) },
-            Tipado::AlijoAbierto(pb::AlijoAbierto { heroe_id: "heroe-9".into(), alijo_id: "alijo-veta-3".into(), oro: 5_000, cargado: 3_000 }),
+            EventoNucleo { heroes: vec![9], ..hecho_con("alijo.abierto", None, vec![("heroe", 9), ("cantidad", 5_000), ("cargado", 3_000)], vec![("alijo", t("alijo-veta-3")), ("recurso", t("piedra"))]) },
+            Tipado::AlijoAbierto(pb::AlijoAbierto { heroe_id: "heroe-9".into(), alijo_id: "alijo-veta-3".into(), cantidad: 5_000, cargado: 3_000, recurso: "piedra".into() }),
         ),
     ];
     let mut mensajes = std::collections::HashSet::new();

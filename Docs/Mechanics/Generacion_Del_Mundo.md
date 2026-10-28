@@ -724,6 +724,8 @@ Para `i = 0 … BOSQUE.cantidad − 1`:
 
 `id = "bosque-{i}"`. Pueden solaparse entre sí y salirse del borde: solo el centro queda dentro del mapa. Un bosque nunca nace en agua, costa, montaña ni cima (salvo el respaldo).
 
+> **En la reconstrucción el bosque es un campo continuo de densidad** (`generador/src/forestacionRegional.ts`, `evaluarForestal`): `densidad = suave(t′) · aptitud`, con `t = (potencial − 0,24) / 0,38` y el potencial de la humedad, las masas, el detalle y las riberas. **Forma de la densidad (decisión del autor del 2026-10-28, `PARAMETROS_FORESTALES`):** por encima de `codo` (0,43, donde la densidad llega a 0,4) la subida se estira (`t′ = codo + (t − codo) / estiramiento`, con `estiramiento` 2,4); por debajo, nada cambia. Y **claros**: un ruido propio (`forestacion-claros-1`, frecuencia 1/220 del generador, unas 18 u; dos octavas), que no mueve la tirada de las masas, multiplica la densidad por `1 − (1 − fondo) · suave((claros − umbral) / ancho)`, con `umbral` 0,66, `ancho` 0,06 y `fondo` 0,35: dentro de un claro, el bosque cerrado baja a 0,35. Y **bosquetes sueltos** (pedidos por el autor el mismo día para que las zonas peladas no queden sin madera): otro ruido propio (`forestacion-bosquetes-1`, frecuencia 1/240, dos octavas) da `bosquete = densidad · suave((bosquetes − umbral) / ancho) · aptitud`, con `densidad` 0,45, `umbral` 0,72 y `ancho` 0,05, y la densidad final es el mayor de los dos: dentro de un bosque no cambian nada. Medido con la semilla 42 sobre la tierra firme: la densidad de 0,7 o más pasa del 24,3 % al 11,6 %; la de 0,15 o más (hay bosque), del 47,5 % al 47,3 %; en las manchas grandes sale un claro cada unos 35 u (antes, uno cada 112); y la tierra a más de 40 u de todo bosque baja del 19,6 % al 3,5 % (a más de 60 u, del 11,7 % al 0,3 %). Que el bosque cambie también mueve los campamentos de mercenarios, que se colocan mirándolo. En el bosque cerrado (0,7 o más) no se funda ([`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md) §5).
+
 ## 9. Yacimientos y ganado (`nodos.ts`, `colocacion.ts`)
 
 ### 9.1 `colocarConEspaciado` (rejection sampling)
@@ -762,7 +764,9 @@ entrada acepta todo. Tras sortear todas las posiciones de **un tipo**, cada una 
 Total: **628** nodos. `id = "{tipo}-{nodos.length}-{round x}-{round y}"`, donde `nodos.length` es el índice **dentro de esa llamada** (por eso hierro empieza en 0 y el estaño extra repite índices del estaño raro; la unicidad la dan las coordenadas) y, para el ganado,
 `"livestock-{i}-{round x}-{round y}"`. El orden del array `nodos` (el de la tabla) es **observable**: la fachada lo usa para desempatar.
 
-> **En la reconstrucción (2026-10-27, mecánicas 50 y 51): el mundo ya no tiene nodos de ganado.** El ganado sale de los rebaños de las aldeas agrícolas ([`Economia_Construccion.md`](Economia_Construccion.md) §14.0). El generador regional (`generador/scripts/generar-mundo.ts`) sigue colocando la ganadería de `recursos.ts` y la **descarta** antes de escribir el artefacto, así que piedra, cobre y hierro caen en los mismos sitios que antes (versión del generador `regional-17-costas-1+estrategico-2`; semilla 42: hash `8394a9f7…`, 6.289 recursos). `REGENERACION_NODOS.livestock` se queda en el bloque pero ya no tiene a qué aplicarse. La tabla de arriba es la del TypeScript.
+> **En la reconstrucción (2026-10-27, mecánicas 50 y 51): el mundo ya no tiene nodos de ganado.** El ganado sale de los rebaños de las aldeas agrícolas ([`Economia_Construccion.md`](Economia_Construccion.md) §14.0). El generador regional (`generador/scripts/generar-mundo.ts`) sigue colocando la ganadería de `recursos.ts` y la **descarta** antes de escribir el artefacto, así que piedra, cobre y hierro caen en los mismos sitios que antes (versión del generador `regional-17-costas-1+estrategico-2`; semilla 42: hash `8394a9f7…`, 6.289 recursos; desde el 2026-10-28, con la capa lejana de abajo y los bosques nuevos, `43ccdaa2…`). `REGENERACION_NODOS.livestock` se queda en el bloque pero ya no tiene a qué aplicarse. La tabla de arriba es la del TypeScript.
+
+> **Capa de la tierra lejana (decisión del autor del 2026-10-28; `generador/src/recursos.ts`, `PARAMETROS_RECURSOS.capaLejana`).** El reparto por anillos del generador regional daba al cobre y al hierro 20 % foco, 80 % frontera y nada lejos, y a la piedra 60 / 40 / 0: medido con la semilla 42, el 87 % de las colinas y montañas está en la tierra lejana y solo tenía 1 cobre, 3 hierro y 17 piedra. Lo del foco y la frontera se queda como estaba (el mínimo garantizado, en los mismos sitios) y, después de colocar todos los tipos, se añade una capa solo en la tierra lejana: por cada tipo, `round(nodos del tipo en la frontera / candidatos de la frontera × densidadRelativa × candidatos lejanos)`, con `densidadRelativa` **cobre 0,25, hierro 0,25 y piedra 0,1**, con las mismas reglas de terreno, calidad y separación que el resto. Sus ids son `<tipo>-l<n>` y su cantidad inicial es la del rango de su tipo × **1,5** (`factorCantidad`). Con la semilla 42 (hash `43ccdaa2…`, 9 campamentos): 139 de cobre, 206 de hierro y 777 de piedra lejanos; las colinas y montañas lejanas a más de 60 u de cualquier metal bajan del 66 % al 34 %.
 
 ## 10. La fachada `Mapa` (`world/mapa.ts`)
 
@@ -847,9 +851,9 @@ Así la banda lejana cae en los huecos entre campamentos, y cada alijo tiene su 
 se carga **en el carro de la columna** con `cargarBotin` (`min(capacidad − lo que ya lleva, oro)`; lo que no cabe **se pierde**). El alijo **no desaparece**: es **por héroe** (cada uno lo abre una vez; nadie se lo quita a otro). Verlo: `alijosALaVista` (columna a `≤ VISION.jugadorSolo`, sin abrir).
 Evento `alijo.abierto { heroeId, alijoId, oro }`.
 
-> **En la reconstrucción los alijos los pone el artefacto** (C6 del plan del sistema 6; `generador/src/contenidoVivo.ts`): uno lejano junto a cada veta de estaño y oro (`alijo-<veta>`, 11 de oro) y, por cada campamento de mercenarios, 3 a 20-40 u con 3 de oro y 2 a 40-90 u con 5 (`alijo-<campamento>-<n>`), con ese campamento como el más cercano; el oro viene en milésimas. El bloque `ALIJOS` de abajo es el del generador del TypeScript (100-200 / 200-300 / 300-450) y no lo lee el servidor. El artefacto real de hoy trae 55.
+> **En la reconstrucción los alijos los pone el artefacto** (C6 del plan del sistema 6; `generador/src/contenidoVivo.ts`): uno lejano junto a cada veta de estaño y oro (`alijo-<veta>`) y, por cada campamento de mercenarios, 3 a 20-40 u y 2 a 40-90 u (`alijo-<campamento>-<n>`), con ese campamento como el más cercano. **Cada alijo trae una sola cosa** (decisión del autor del 2026-10-28; antes, solo oro: 3 / 5 / 11): oro, madera, piedra o trigo, las cuatro con la misma probabilidad, con su propio generador derivado (`contenido-alijos-1`), así que el contenido no mueve las posiciones. Cuánto, por banda (cercano / medio / lejano): oro **15 / 25 / 55**; madera, piedra o trigo **5 / 10 / 15**. En el artefacto, `Alijo.recurso` y `Alijo.cantidad` (milésimas). El bloque `ALIJOS` de abajo dice lo mismo (sus `bandas`, con `oro` y `recurso`, y `contenido`); no lo lee nadie: el generador lleva las mismas cifras en `PARAMETROS_CONTENIDO`. El artefacto real de hoy (semilla 42, `43ccdaa2…`) trae 55: 9 de oro, 14 de madera, 20 de piedra y 12 de trigo.
 >
-> **Implementado en Rust (2026-10-25, sistema 6, tanda 6F).** Las reglas puras están en `tecnologia::alijos` (6A: `a_la_vista`, `abrir`) y el núcleo en `crates/nucleo/src/nucleo/alijos.rs`: los alijos del artefacto con una rejilla de 10 u (la de la economía) en la geografía del núcleo, que no es estado; cada héroe guarda los que abrió por índice del artefacto (`HeroeNucleo::alijos_abiertos`, foto `BAN36`). `AbrirAlijo { heroe, alijo }` (174; contrato `abrir_alijo` con el héroe de la cuenta y el id del artefacto): en este orden, `alijo.desconocido`, `alijo.no_puedes_buscar` (el héroe es de una Facción con alguna plaza), `alijo.ya_abierto` y `alijo.lejos` (su columna no está en el mapa o está a más de `radioPuerta` del alijo; dentro de un lugar no se abre). El oro, **en unidades enteras hacia abajo** (C3b), va al carro de la columna con `cargar_botin_en`: lo que no cabe **se pierde** y el alijo queda abierto igual, también con el carro lleno (decisión 10 del plan); en una columna con varios héroes cada uno abre el suyo y el oro va al carro común. El hecho es `alijo.abierto { heroe, alijo (id del artefacto), oro, cargado }`, solo para el héroe que lo abre (no lo oyen los demás de su columna). «A la vista» es la consulta `Nucleo::alijos_a_la_vista` (columna en el mapa a `VISION.jugadorSolo`, sin abrir, solo si puede buscar); su proyección en `HEROE` es de 6G. Sin tick: nada programa eventos. `Heroe.alijos_abiertos` viaja en `HEROE` y `ADMIN` con los ids del artefacto.
+> **Implementado en Rust (2026-10-25, sistema 6, tanda 6F).** Las reglas puras están en `tecnologia::alijos` (6A: `a_la_vista`, `abrir`) y el núcleo en `crates/nucleo/src/nucleo/alijos.rs`: los alijos del artefacto con una rejilla de 10 u (la de la economía) en la geografía del núcleo, que no es estado; cada héroe guarda los que abrió por índice del artefacto (`HeroeNucleo::alijos_abiertos`, foto `BAN36`). `AbrirAlijo { heroe, alijo }` (174; contrato `abrir_alijo` con el héroe de la cuenta y el id del artefacto): en este orden, `alijo.desconocido`, `alijo.no_puedes_buscar` (el héroe es de una Facción con alguna plaza), `alijo.ya_abierto` y `alijo.lejos` (su columna no está en el mapa o está a más de `radioPuerta` del alijo; dentro de un lugar no se abre). Lo que trae (oro, madera, piedra o trigo; desde el 2026-10-28), **en unidades enteras hacia abajo** (C3b), va al carro de la columna con `cargar_botin_en`: lo que no cabe **se pierde** y el alijo queda abierto igual, también con el carro lleno (decisión 10 del plan); en una columna con varios héroes cada uno abre el suyo y lo que trae va al carro común. El hecho es `alijo.abierto { heroe, alijo (id del artefacto), recurso, cantidad, cargado }` (hasta el 2026-10-28, `oro` en lugar de `recurso` y `cantidad`), solo para el héroe que lo abre (no lo oyen los demás de su columna). «A la vista» es la consulta `Nucleo::alijos_a_la_vista` (columna en el mapa a `VISION.jugadorSolo`, sin abrir, solo si puede buscar); su proyección en `HEROE` es de 6G. Sin tick: nada programa eventos. `Heroe.alijos_abiertos` viaja en `HEROE` y `ADMIN` con los ids del artefacto.
 
 ## 13. Campamentos de bandidos (`engine/bandidos.ts`)
 
@@ -1140,21 +1144,25 @@ Todos los de `worldgen/config.ts` están **congelados** (no se editan en calient
       "desde": 20,
       "hasta": 40,
       "cuantos": 3,
-      "oro": 3
+      "oro": 15,
+      "recurso": 5
     },
     {
       "desde": 40,
       "hasta": 90,
       "cuantos": 2,
-      "oro": 5
+      "oro": 25,
+      "recurso": 10
     },
     {
       "desde": 250,
       "hasta": 300,
       "cuantos": 1,
-      "oro": 11
+      "oro": 55,
+      "recurso": 15
     }
   ],
+  "contenido": ["oro", "madera", "piedra", "trigo"],
   "salSemilla": 1634494826
 }
 ```

@@ -432,7 +432,12 @@ fn rechazos_de_la_compra_sin_rastro() {
 fn la_foto_ban39_lleva_los_aedas_y_su_evento_y_ban38_se_rechaza() {
     let m = con_mundo!();
     let mut e = Escenario::nuevo(m, reglas());
-    e.n.avanzar_hasta(7 * HORA);
+    // Hora a hora hasta que alguno vaya de camino: cuándo sale el primero depende del mundo (con el de 2026-10-28, más tarde que a las 7 h).
+    let mut t = 7 * HORA;
+    while !e.n.aedas().iter().any(|x| x.plan.is_some()) && t < 3 * DIA {
+        e.n.avanzar_hasta(t);
+        t += HORA;
+    }
     assert!(e.n.aedas().iter().any(|x| x.plan.is_some()), "alguno de camino, con su plan");
     let reglas = e.n.estado().reglas.clone();
     let mundo_hash = e.n.estado().mundo_hash.clone();

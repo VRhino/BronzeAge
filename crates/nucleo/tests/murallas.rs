@@ -785,8 +785,9 @@ fn correr(m: &M, escaso: bool, avanzar: &dyn Fn(&mut Nucleo, Instante)) -> (Resu
     avanzar(&mut n, t);
     n.aplicar_en(t, admin("nivel", Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 3 }));
     n.aplicar_en(t, admin("pausa", Comando::AlternarAutoConstruccion { asentamiento: id, pausada: true }));
-    let regalo = if escaso { 800_000 } else { 60_000_000 };
-    for r in [Recurso::Madera, Recurso::Piedra] {
+    // Escaso: la madera justa para que la Leñera no la suba por encima de la reserva antes de la hora 5.
+    for (r, escasa) in [(Recurso::Madera, 700_000), (Recurso::Piedra, 800_000)] {
+        let regalo = if escaso { escasa } else { 60_000_000 };
         n.aplicar_en(t, admin(&format!("dar-{r:?}"), Comando::DarRecursos { asentamiento: id, recurso: r, cantidad: regalo }));
     }
     let horas = if escaso { 22 } else { 40 };

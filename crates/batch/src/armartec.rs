@@ -149,7 +149,7 @@ fn alijos(x: &Entrada, t: &Tec) -> Vec<Metrica> {
         INFO,
         Some(m.alijos_abiertos as f64),
         "Generacion_Del_Mundo §12",
-        &format!("Oro de los alijos {:.0} u, cargado {:.0} u (lo que no cabe se pierde); segundos intentos (rechazados) {}; alijos a los que la columna no llegó {}. Rechazos de `AbrirAlijo`: {}.", m.alijos_oro as f64 / 1000.0, m.alijos_cargado as f64 / 1000.0, m.reintentos, m.alijos_inalcanzables, rechazos(x, "AbrirAlijo")),
+        &format!("Oro de los alijos {:.0} u; cargado de todo lo que traían (oro, madera, piedra o trigo) {:.0} u (lo que no cabe se pierde); segundos intentos (rechazados) {}; alijos a los que la columna no llegó {}. Rechazos de `AbrirAlijo`: {}.", m.alijos_oro as f64 / 1000.0, m.alijos_cargado as f64 / 1000.0, m.reintentos, m.alijos_inalcanzables, rechazos(x, "AbrirAlijo")),
     )]
 }
 

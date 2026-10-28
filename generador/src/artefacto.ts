@@ -194,7 +194,7 @@ function construirMensaje(m: MundoGenerado): ArtefactoDeMundo {
       vetaId: b.vetaId,
       nivel: b.nivel,
     })),
-    alijos: porId(m.alijos).map(a => ({ id: a.id, posicion: punto(a.posicion), oro: BigInt(a.oro) * 1000n })),
+    alijos: porId(m.alijos).map(a => ({ id: a.id, posicion: punto(a.posicion), cantidad: BigInt(a.cantidad) * 1000n, recurso: a.recurso })),
     navegacion: {
       espaciadoMin: Number(mil(m.grafo.espaciado)),
       nodos: [...m.grafo.nodos].sort((a, b) => a.id - b.id).map(n => ({ id: n.id, posicion: punto(n) })),

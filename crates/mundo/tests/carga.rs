@@ -139,7 +139,7 @@ fn base() -> ArtefactoDeMundo {
             .map(|(i, &(x, y))| CampamentoMercenarios { id: format!("c{i}"), posicion: punto(x, y), ..Default::default() })
             .collect(),
         bandidos_iniciales: vec![CampamentoBandidos { id: "bd0".into(), posicion: punto(700_000, 700_000), bosque_id: "b1".into(), ..Default::default() }],
-        alijos: vec![Alijo { id: "al0".into(), posicion: punto(900_000, 700_000), oro: 100 }],
+        alijos: vec![Alijo { id: "al0".into(), posicion: punto(900_000, 700_000), cantidad: 100, recurso: "piedra".into() }],
         navegacion: Some(nav),
         parcelas,
         ..Default::default()
@@ -206,7 +206,7 @@ fn hash_alterado() {
 fn contenido_alterado_sin_resellar() {
     let mut a = base();
     sellar(&mut a);
-    a.alijos[0].oro += 1;
+    a.alijos[0].cantidad += 1;
     assert!(matches!(Mundo::cargar(&a.encode_to_vec(), &opciones()), Err(ErrorMundo::HashDelContenido { .. })));
 }
 
@@ -375,4 +375,15 @@ fn campamentos_de_mercenarios_demasiado_cerca() {
     a.campamentos[1].posicion = punto(CAMPAMENTOS[0].0 + 599_999, CAMPAMENTOS[0].1);
     let op = OpcionesValidacion { separacion_campamentos: 500, ..opciones() };
     assert!(Mundo::cargar(&sellar(&mut a), &op).is_ok());
+}
+
+#[test]
+fn alijo_con_un_recurso_desconocido_o_vacio() {
+    let e = error_de(|a| a.alijos[0].recurso = "cobre".into());
+    assert_eq!(e, ErrorMundo::AlijoInvalido { id: "al0".into(), recurso: "cobre".into(), cantidad: 100 });
+    let e = error_de(|a| a.alijos[0].cantidad = 0);
+    assert_eq!(e, ErrorMundo::AlijoInvalido { id: "al0".into(), recurso: "piedra".into(), cantidad: 0 });
+    for r in ["oro", "madera", "piedra", "trigo"] {
+        assert!(cargar_con(|a| a.alijos[0].recurso = r.into()).is_ok(), "{r}");
+    }
 }

@@ -58,6 +58,7 @@ pub(crate) fn validar(mut a: ArtefactoDeMundo, op: &OpcionesValidacion) -> R<Mun
     ids_unicos(&mundo)?;
     grafo(&mundo)?;
     en_tierra(&mundo)?;
+    alijos(&mundo)?;
     cuotas_de_metales(&mundo)?;
     parcelas(&mundo, op.rp * 2 * MILESIMAS)?;
     campamentos(&mundo, op.separacion_campamentos * MILESIMAS)?;
@@ -159,6 +160,14 @@ fn en_tierra(m: &Mundo) -> R<()> {
         comprobar("alijos", &x.id, &x.posicion)?;
     }
     Ok(())
+}
+
+/// Cada alijo trae una sola cosa (Generacion_Del_Mundo §12): oro o un recurso de fundar, en cantidad positiva.
+fn alijos(m: &Mundo) -> R<()> {
+    match m.alijos().iter().find(|a| !matches!(a.recurso.as_str(), "oro" | "madera" | "piedra" | "trigo") || a.cantidad <= 0) {
+        Some(a) => Err(ErrorMundo::AlijoInvalido { id: a.id.clone(), recurso: a.recurso.clone(), cantidad: a.cantidad }),
+        None => Ok(()),
+    }
 }
 
 /// Reparto por resto mayor (el empate lo gana el anillo que va antes: foco, frontera, lejana).

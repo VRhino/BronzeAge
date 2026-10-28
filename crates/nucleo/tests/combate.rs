@@ -1007,9 +1007,14 @@ fn con_numeros_la_columna_derrotada_pierde_la_mitad_de_los_carros_de_cada_carava
 use asentamiento::pueblos::EstadoPueblo;
 
 /// Un sitio fundable, verde y con mucho bosque, a `r` del punto `c`.
-fn sitio_junto_a(n: &Nucleo, c: Punto, r: i64) -> Option<Punto> {
+/// Con tierra de cultivo en la zona inicial (algo de fertilidad a 6 u o menos): sin ella las Granjas no dan nada y la plaza se queda sin gente.
+fn fertil(m: &Mundo, p: Punto) -> bool {
+    (0..40).map(|i| (i as f64 / 40.0 * std::f64::consts::TAU, 6_000.0 * (i % 5) as f64 / 5.0)).any(|(a, r)| m.fertilidad_en(p.x + (r * a.cos()) as i64, p.y + (r * a.sin()) as i64).is_some_and(|f| f >= 77))
+}
+
+fn sitio_junto_a(n: &Nucleo, m: &Mundo, c: Punto, r: i64) -> Option<Punto> {
     (0..36).map(|g| ((g * 10) as f64).to_radians()).map(|a| Punto::new(c.x + (r as f64 * a.cos()) as i64, c.y + (r as f64 * a.sin()) as i64)).find(|&p| {
-        n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6 && !v.condenada)
+        n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6 && !v.condenada) && fertil(m, p)
     })
 }
 
@@ -1019,7 +1024,7 @@ fn con_pueblo(m: &M, semilla: u64) -> (Esc, u64) {
     let mapa = nucleo::economia::Mapa::de(&m.0);
     let (cobre, sitio) = (0..mapa.nodos.len())
         .filter(|&i| mapa.nodos[i].tipo == Tipo::MinaCobre)
-        .find_map(|i| sitio_junto_a(&n, mapa.nodos[i].pos, 6_000).map(|p| (i as u32, p)))
+        .find_map(|i| sitio_junto_a(&n, &m.0, mapa.nodos[i].pos, 6_000).map(|p| (i as u32, p)))
         .expect("hay un nodo de cobre junto a un sitio rico");
     let a = fundar(&mut n, 0, "m", "ana", 1, sitio);
     let mut e = Esc { n, a, b: 0, cuenta: 0, fijo: None };
@@ -1374,8 +1379,9 @@ fn bandidos_en_la_ruta(e: &mut Esc, caravana: u64, nivel: u8) -> (u64, Instante)
 #[test]
 fn una_caravana_que_cruza_el_radio_de_un_campamento_de_bandidos_es_acosada_en_ese_instante_exacto() {
     let m = con_mundo!();
-    // Nivel 3 (poder 120, 102 como mínimo) contra los carreteros (26): la caravana desaparece con su carga.
-    let mut e = montar(m, 7, true);
+    // Nivel 3 (poder 120, 102 como mínimo) contra los carreteros (26): la caravana desaparece con su carga. Con las plazas lejos: entre vecinas el 40 % del camino puede caer
+    // dentro de una zona, donde no hay acoso.
+    let mut e = montar_lejos(m, 7, true);
     let (a, _) = (e.a, e.b);
     let ca = e.caravana("ana", a, 2);
     e.lanzar(ca);
@@ -1395,7 +1401,7 @@ fn una_caravana_que_cruza_el_radio_de_un_campamento_de_bandidos_es_acosada_en_es
     assert!(e.n.campamento_de_bandidos(b3).is_some(), "el campamento sigue donde estaba");
 
     // Nivel 1 (poder 20, 23 como mucho) contra los mismos carreteros: la caravana escapa y sigue su camino.
-    let mut e = montar(m, 7, true);
+    let mut e = montar_lejos(m, 7, true);
     let ca = e.caravana("ana", a, 2);
     e.lanzar(ca);
     let (b1, llegada) = bandidos_en_la_ruta(&mut e, ca, 1);
@@ -1415,7 +1421,7 @@ fn una_caravana_que_cruza_el_radio_de_un_campamento_de_bandidos_es_acosada_en_es
 fn una_caravana_adjunta_a_un_ejercito_se_defiende_con_el_poder_de_la_columna_que_no_sufre_bajas() {
     let m = con_mundo!();
     for (tropas, cae) in [(&[Tropa::MiliciaLanceros][..], true), (&[Tropa::ArquerosCompuesto][..], false)] {
-        let mut e = montar(m, 7, true);
+        let mut e = montar_lejos(m, 7, true); // lejos, como en la anterior: el acoso es fuera de toda zona
         let (a, b) = (e.a, e.b);
         let ca = e.caravana("ana", a, 1);
         let col = e.ejercito("ana", 1, e.pos(a), tropas);

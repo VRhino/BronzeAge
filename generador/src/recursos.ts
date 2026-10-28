@@ -50,6 +50,15 @@ export const PARAMETROS_RECURSOS = {
   calidadMinima: 0.2,
   /** Penalización por yacimiento del mismo tipo ya colocado en torno al mismo campamento: reparte entre focos. */
   penalizacionPorCampamento: 0.18,
+  /**
+   * Capa de la tierra lejana (decisión del autor del 2026-10-28): el foco y la frontera quedan como arriba (mínimo garantizado) y,
+   * después de todo lo demás, se añaden yacimientos solo en la tierra lejana a esta fracción de la densidad de la frontera (nodos
+   * por candidato), con `factorCantidad` veces la cantidad de un nodo normal. Si no caben todos, se ponen los que caben.
+   */
+  capaLejana: {
+    densidadRelativa: { cobre: 0.25, hierro: 0.25, piedra: 0.1 } as Partial<Record<TipoNoMetalico, number>>,
+    factorCantidad: 1.5,
+  },
 };
 
 /** `RECURSO_CANTIDAD_NODO` y `LIVESTOCK.cantidadPorManada` de typescript-final:src/worldgen/config.ts. */
@@ -163,6 +172,7 @@ export function repartirRecursosNoMetalicos(
   const escala = limites.ancho * limites.alto / p.areaBase;
   // Los más escasos primero: así la piedra, que sobra, no les quita el sitio. La fauna va antes que la piedra desde que esta es ×10
   // (5.601 nodos): con la piedra primero llenaba la rejilla de candidatos del foco y no quedaba sitio para el ganado (0 plazas con ganado a 30 u).
+  const capas: (() => void)[] = [];
   for (const tipo of ['cobre', 'hierro', 'ganaderia', 'piedra'] as TipoNoMetalico[]) {
     const azar = createRng(derivarSeed(seed, `recursos-${tipo}-1`));
     const pool = candidatos.map(c => ({
@@ -174,7 +184,7 @@ export function repartirRecursosNoMetalicos(
     const anillos = (Object.keys(cuotas) as Anillo[]).filter(a => p.reparto[tipo][a] > 0).sort((a, b) => p.reparto[tipo][b] - p.reparto[tipo][a]);
     const porCampamento = new Map<string, number>();
     let n = 0;
-    const colocar = (anillo: Anillo, cuantos: number): number => {
+    const colocar = (anillo: Anillo, cuantos: number, prefijo = '', factor = 1): number => {
       let puestos = 0;
       // Una cola por campamento, de mayor a menor peso: el mejor es la cabeza con más peso tras la penalización.
       const colas = new Map<string, { c: Candidato; peso: number }[]>();
@@ -190,8 +200,8 @@ export function repartirRecursosNoMetalicos(
         }
         if (!mejor) break;
         const c = mejor.cola[mejor.i++]!.c;
-        const id = `${tipo}-${n++}`;
-        recursos.push({ id, tipo, posicion: c.posicion, anillo, cantidadInicial: cantidadInicial(tipo, id, seed) });
+        const id = `${tipo}-${prefijo}${n++}`;
+        recursos.push({ id, tipo, posicion: c.posicion, anillo, cantidadInicial: cantidadInicial(tipo, id, seed, factor) });
         anotar(c.posicion, tipo); porCampamento.set(c.campamento, (porCampamento.get(c.campamento) ?? 0) + 1); puestos++;
       }
       return puestos;
@@ -201,7 +211,16 @@ export function repartirRecursosNoMetalicos(
     // Último recurso: lo que no cupo en sus anillos se coloca en cualquiera (el anillo declarado sigue siendo el real).
     for (const a of [...anillos, ...(['foco', 'frontera', 'lejana'] as Anillo[]).filter(x => !anillos.includes(x))]) { if (falta <= 0) break; falta -= colocar(a, falta); }
     if (falta > 0) throw new Error(`Recursos: faltan ${falta} sitios de ${tipo} (de ${total})`);
+    const relativa = p.capaLejana.densidadRelativa[tipo];
+    if (relativa) {
+      const enFrontera = recursos.filter(r => r.tipo === tipo && r.anillo === 'frontera').length;
+      const cuenta = (a: Anillo) => candidatos.filter(c => c.anillo === a).length;
+      const extra = Math.round(enFrontera / Math.max(1, cuenta('frontera')) * relativa * cuenta('lejana'));
+      // Se coloca al final, con todo lo demás ya puesto: el foco y la frontera no cambian.
+      capas.push(() => { n = 0; colocar('lejana', extra, 'l', p.capaLejana.factorCantidad); });
+    }
   }
+  capas.forEach(c => c());
   return recursos;
 }
 

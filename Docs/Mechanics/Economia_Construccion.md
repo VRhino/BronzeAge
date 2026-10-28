@@ -1717,7 +1717,8 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
   },
   "viviendasIniciales": 3,
   "costoMaderaExtraCaravana": 50,
-  "caducidadCaravanaHoras": 48
+  "caducidadCaravanaHoras": 48,
+  "densidadBosqueMaximaParaFundar": 0.7
 }
 ```
 <!-- /parametros -->

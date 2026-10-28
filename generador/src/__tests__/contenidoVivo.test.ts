@@ -26,7 +26,7 @@ describe('bandidos y alijos', () => {
       expect(est(bs[0]!.posicion, v.centro)).toBeLessThanOrEqual(8);
       expect(est(a[0]!.posicion, v.centro)).toBeLessThanOrEqual(25);
       expect(a[0]!.anillo).toBe('lejana');
-      expect(a[0]!.oro).toBe(P.veta.oroAlijo);
+      expect(a[0]!.cantidad).toBe(a[0]!.recurso === 'oro' ? P.veta.contenido.oro : P.veta.contenido.recurso);
     }
   });
   it('solo hay bandidos de veta: los del anillo de cada campamento los crea el motor', () => {
@@ -35,11 +35,20 @@ describe('bandidos y alijos', () => {
   });
   it('alijos cercanos por banda, con su campamento como el más cercano', () => {
     for (const m of campamentos) {
+      // Los ids siguen el orden de las bandas: `alijo-<campamento>-<n>`.
+      const suyos = alijos.filter(a => a.id.startsWith(`alijo-${m.id}-`)), n = (a: { id: string }) => Number(a.id.slice(`alijo-${m.id}-`.length));
+      let k = 0;
       for (const banda of P.alijosCercanos) {
-        const de = alijos.filter(a => a.oro === banda.oro && anilloEn(campamentos, a.posicion).campamento === m.id && a.id.startsWith(`alijo-${m.id}-`));
+        const de = suyos.filter(a => n(a) >= k && n(a) < k + banda.cuantos);
         expect(de).toHaveLength(banda.cuantos);
-        for (const a of de) { const d = est(a.posicion, m.posicion); expect(d).toBeGreaterThanOrEqual(banda.desde); expect(d).toBeLessThanOrEqual(banda.hasta); }
+        k += banda.cuantos;
+        for (const a of de) {
+          expect(anilloEn(campamentos, a.posicion).campamento).toBe(m.id);
+          const d = est(a.posicion, m.posicion); expect(d).toBeGreaterThanOrEqual(banda.desde); expect(d).toBeLessThanOrEqual(banda.hasta);
+          expect(a.cantidad).toBe(a.recurso === 'oro' ? banda.contenido.oro : banda.contenido.recurso);
+        }
       }
+      expect(suyos).toHaveLength(k);
     }
   });
   it('separaciones mínimas, protección de campamento, límites y ids únicos', () => {
@@ -57,9 +66,14 @@ describe('bandidos y alijos', () => {
   it('el anillo declarado coincide con la distancia al campamento más cercano', () => {
     for (const x of [...bandidos, ...alijos]) expect(x.anillo).toBe(anilloEn(campamentos, x.posicion).anillo);
   });
-  it('oro total coherente con las bandas', () => {
-    const porCampamento = P.alijosCercanos.reduce((s, b) => s + b.cuantos * b.oro, 0);
-    expect(alijos.reduce((s, a) => s + a.oro, 0)).toBe(campamentos.length * porCampamento + vetas.length * P.veta.oroAlijo);
+  it('cada alijo trae una sola cosa: oro, madera, piedra o trigo, y salen las cuatro', () => {
+    for (const a of alijos) expect(P.recursosAlijo).toContain(a.recurso);
+    expect(new Set(alijos.map(a => a.recurso)).size).toBe(P.recursosAlijo.length);
+  });
+  it('el contenido no mueve las posiciones', () => {
+    const otro = colocarBandidosYAlijos(7, limites, campamentos, vetas, todo, { ...P, recursosAlijo: ['oro'] as unknown as typeof P.recursosAlijo });
+    expect(otro.alijos.map(a => a.posicion)).toEqual(alijos.map(a => a.posicion));
+    expect(otro.alijos.every(a => a.recurso === 'oro')).toBe(true);
   });
   it('respeta el terreno apto', () => {
     const sinFranja = (p: { x: number; y: number }) => !(p.x > 14000 && p.x < 15000);

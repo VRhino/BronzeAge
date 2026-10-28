@@ -24,7 +24,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 48 | MILITAR / POLÍTICA | Mercenarios por contrato (diseño cerrado el 2026-10-26; `Docs/Disenos_Por_Implementar/Mercenarios_Por_Contrato.md`) | nada |
 | 54 | POLÍTICA | Participación por plaza (diseño del 2026-10-28; `Docs/Disenos_Por_Implementar/Participacion.md`) | nada |
 | 55 | MISIONES | Misiones recurrentes (diarias y semanales), individuales y grupales, tablón de la plaza y catálogo editable en caliente (diseño del 2026-10-28; `Docs/Disenos_Por_Implementar/Misiones_Recurrentes_Y_Tablon.md`) | misiones únicas (mecánica 49) |
-| 56-59 | VARIAS | Cambios del 2026-10-28 a cosas que ya existen: edificios de arranque y gate del nivel 2, alijos, bosques y metales del mundo, revisión de las misiones de hoy (sección «Cambios del 2026-10-28») | lo de hoy, en `Docs/Mechanics/` |
+| 56, 59, 60 | VARIAS | Cambios del 2026-10-28 a cosas que ya existen: edificios de arranque y gate del nivel 2, revisión de las misiones de hoy, producción y consumo por minuto en la plaza (sección «Cambios del 2026-10-28»; la 57, alijos, y la 58, bosques y metales del mundo, ya están implementadas: `Docs/Mechanics/Generacion_Del_Mundo.md`) | lo de hoy, en `Docs/Mechanics/` |
 | — | PARIDAD | Recortes temporales del motor Rust frente al TypeScript (sección «Paridad con TypeScript») | el motor no está migrado hasta cerrarlos |
 | — | DUDAS | Ninguna sin decisión desde el 2026-10-27 (sección «Dudas abiertas»: las `// DUDA:` que quedan en el código) | — |
 | — | FASE 7 | Todo lo que se dejó para los bots reales y la fase 7 (sección «Para la fase 7») | — |
@@ -69,14 +69,13 @@ Pedidos por el autor el 2026-10-28 y cerrados con él el mismo día. Cada uno ti
 - **54. Participación**: `Docs/Disenos_Por_Implementar/Participacion.md`. Cada héroe acumula participación en cada plaza (misiones del tablón, defender caravanas, pueblos, aldeas y plazas, ganar batallas), para siempre. La plaza lista a sus residentes con cargo y participación; la Facción, a sus miembros con cargo, residencia y la suma en todas sus plazas.
 - **55. Misiones recurrentes y tablón**: `Docs/Disenos_Por_Implementar/Misiones_Recurrentes_Y_Tablon.md`. Ámbito, recurrencia, duración (1 o 7 días), tipo (individual con límite semanal o grupal a partes iguales) y estado. Renovación a las 00:00 UTC (diarias) y cada 7 días (semanales). Tablón de la plaza: 7 a la vez de un catálogo, que elige el Gobernador para la siguiente renovación; sustituye a las misiones de plaza de hoy. Contenido editable en caliente; el funcionamiento sigue en el motor.
 
-## 56-59. Cambios del 2026-10-28 a cosas que ya existen
+## 56, 59 y 60. Cambios del 2026-10-28 a cosas que ya existen
 
 Decididos con el autor el 2026-10-28. Al implementarse se documentan en `Docs/Mechanics/` y en el canon, y se borran de aquí.
 
 - **56. Arranque de la plaza**: el **nivel 1** de Vivienda, Leñera y Granja se construye en 10, 2 y 5 minutos (hoy 240, 60 y 120; los demás niveles no cambian). El ascenso al **nivel 2** pide lo de hoy (200 pesants, 2 de {Cantera, Leñera, Granja} y una aldea activa) **y además una Granja a nivel 2** (Leñera y Cantera no tienen niveles y no se les añaden). A calibrar con el batch de población.
-- **57. Alijos**: cada alijo da **una sola cosa, al azar** entre oro (15 / 25 / 55 según sea cercano, medio o lejano), madera, piedra o trigo (5 / 10 / 15). Hoy solo oro (3 / 5 / 11). Cambia el generador y el artefacto de mundo.
-- **58. Bosques y metales del mundo** (generador): menos manchas de bosque muy denso y más claras; claros y huecos dentro de los bosques grandes; no se funda en el corazón del bosque denso, sí en sus orillas y claros. Metales también en las montañas alejadas, que hoy pueden quedarse sin nodos. Antes de cambiar cifras, medir el mundo de la semilla 42 (mapa de montañas, nodos y densidad).
 - **59. Misiones de hoy**: que las de Facción cumplidas sigan a la vista de todos sus miembros; probar una a una que cada misión se cumple haciendo lo que dice su texto; y un **texto libre** más largo por misión, además del título y el qué hacer.
+- **60. Producción y consumo por minuto en la plaza** (pedido del autor el 2026-10-28, para una próxima tanda): hoy cada recurso del almacén viaja con su tendencia «+N/min», que es solo el **neto** del último paso de minuto (`Tendencia`, diferencia del almacén antes y después). Propuesta de cambio mínimo: el almacén ya separa `producir` y `consumir`; el paso de minuto suma por recurso lo que entra por `producir` y lo que sale por `consumir` (sin foto nueva: es derivado, como la tendencia) y `Existencia` del contrato gana dos campos, `producido_por_minuto` y `consumido_por_minuto`. El neto sigue en `por_minuto`.
 
 ## Paridad con TypeScript: recortes temporales del motor Rust (2026-10-18)
 

@@ -50,6 +50,11 @@ fn campamento(m: &Mundo, i: usize) -> Punto {
     Punto::new(p.x, p.y)
 }
 
+/// Un campamento en suelo fundable, para que el rechazo sea por el campamento y no por el terreno (algunos están en bosque cerrado).
+fn campamento_en_claro(n: &Nucleo, m: &Mundo) -> Punto {
+    (0..m.campamentos().len()).map(|i| campamento(m, i)).find(|&c| n.viabilidad(c, 1).and_then(|v| v.motivo) == Some(territorio::Motivo::CercaDeCampamento)).expect("algún campamento en claro")
+}
+
 /// Primer punto fundable (verde si se pide) en anillos de radio `r`, `r + 10`, … alrededor del campamento `i`.
 fn sitio(n: &Nucleo, m: &Mundo, i: usize, r: i64, grado0: i64, faccion: u32, exigir_verde: bool) -> Punto {
     let c = campamento(m, i);
@@ -112,15 +117,20 @@ fn fundar_y_sus_rechazos() {
     assert_eq!(eventos(&n, "fundacion.asentamiento_fundado"), vec![(MIN, vec![id])]);
     assert_eq!(codigo(&n.aplicar_en(MIN, Peticion::nueva("ana", "f3", Comando::Fundar { ejercito: e }))), rechazos::SIN_CARAVANA);
 
-    // Cerca de una plaza (a 10) y dentro de su zona (encima).
-    for (nombre, q, esperado) in [("cerca", Punto::new(p.x + 10_000, p.y), "fundacion.cerca_de_plaza"), ("encima", p, "fundacion.dentro_de_zona")] {
+    // Cerca de una plaza (a 10, en el primer rumbo con suelo fundable) y dentro de su zona (encima).
+    let cerca = (0..36)
+        .map(|k| (k as f64 * 10.0).to_radians())
+        .map(|a| Punto::new(p.x + (10_000.0 * a.cos()) as i64, p.y + (10_000.0 * a.sin()) as i64))
+        .find(|&q| n.viabilidad(q, 2).and_then(|v| v.motivo) == Some(territorio::Motivo::CercaDePlaza))
+        .expect("algún rumbo con suelo a 10 de la plaza");
+    for (nombre, q, esperado) in [("cerca", cerca, "fundacion.cerca_de_plaza"), ("encima", p, "fundacion.dentro_de_zona")] {
         let e2 = n.crear_ejercito(MIN, "ana", 2, q, 500, 1).unwrap();
         n.aplicar_en(MIN, admin(&format!("c-{nombre}"), Comando::DarCaravanaFundacion { ejercito: e2 }));
         let r = n.aplicar_en(MIN, Peticion::nueva("ana", &format!("f-{nombre}"), Comando::Fundar { ejercito: e2 }));
         assert_eq!(codigo(&r), esperado, "{nombre}");
     }
     // Encima de un campamento: la exclusión de 20.
-    let c0 = campamento(&m.0, 0);
+    let c0 = campamento_en_claro(&n, &m.0);
     let e3 = n.crear_ejercito(MIN, "ana", 3, c0, 500, 1).unwrap();
     n.aplicar_en(MIN, admin("c-campa", Comando::DarCaravanaFundacion { ejercito: e3 }));
     assert_eq!(codigo(&n.aplicar_en(MIN, Peticion::nueva("ana", "f-campa", Comando::Fundar { ejercito: e3 }))), "fundacion.cerca_de_campamento");
@@ -128,6 +138,29 @@ fn fundar_y_sus_rechazos() {
     let e4 = n.crear_ejercito(MIN, "ana", 4, Punto::new(-5_000, 0), 500, 1).unwrap();
     n.aplicar_en(MIN, admin("c-fuera", Comando::DarCaravanaFundacion { ejercito: e4 }));
     assert_eq!(codigo(&n.aplicar_en(MIN, Peticion::nueva("ana", "f-fuera", Comando::Fundar { ejercito: e4 }))), "fundacion.fuera_del_mapa");
+}
+
+/// En bosque cerrado (`FUNDACION.densidadBosqueMaximaParaFundar`, 0,7, o más) no se funda aunque se pueda pisar; en uno más claro, sí (decisión del autor del 2026-10-28).
+#[test]
+fn en_bosque_denso_no_se_funda() {
+    let m = con_mundo!();
+    let mut n = nuevo(m);
+    let (ancho, alto) = m.0.tamano();
+    // Celdas de 4 u, pisables y lejos de todo campamento: una en bosque denso y otra de llano abierto.
+    let lejos = |p: Punto| (0..m.0.campamentos().len()).all(|i| campamento(&m.0, i).dist2(p) > 60_000i128 * 60_000);
+    let buscar = |vale: &dyn Fn(u8) -> bool| {
+        (0..alto / 4_000).flat_map(|f| (0..ancho / 4_000).map(move |c| Punto::new(c * 4_000 + 2_000, f * 4_000 + 2_000)))
+            .find(|p| m.0.transitable_en(p.x, p.y) && n.viabilidad(*p, 1).is_some() && lejos(*p) && m.0.densidad_bosque_en(p.x, p.y).is_some_and(vale))
+            .expect("hay sitio así en el mundo")
+    };
+    let denso = buscar(&|d| d >= 179);
+    let claro = buscar(&|d| d < 178 && d > 100);
+    assert_eq!(n.viabilidad(denso, 1).unwrap().motivo.map(|x| x.codigo()), Some("fundacion.bosque_denso"));
+    let e = n.crear_ejercito(0, "ana", 1, denso, 500, 1).unwrap();
+    n.aplicar_en(0, admin("c-denso", Comando::DarCaravanaFundacion { ejercito: e }));
+    assert_eq!(codigo(&n.aplicar_en(0, Peticion::nueva("ana", "f-denso", Comando::Fundar { ejercito: e }))), "fundacion.bosque_denso");
+    let v = n.viabilidad(claro, 1).unwrap();
+    assert!(v.motivo.is_none_or(|x| x.codigo() != "fundacion.bosque_denso"), "{v:?}");
 }
 
 #[test]
@@ -330,7 +363,7 @@ fn las_parcelas_respetan_zona_cupo_y_exclusividad() {
 fn la_viabilidad_avisa_pero_no_impide() {
     let m = con_mundo!();
     let n = nuevo(m);
-    let c = campamento(&m.0, 0);
+    let c = campamento_en_claro(&n, &m.0);
     let en_campamento = n.viabilidad(c, 1).unwrap();
     assert_eq!(en_campamento.motivo, Some(territorio::Motivo::CercaDeCampamento));
     assert_eq!(en_campamento.color, territorio::Viabilidad::Rojo);

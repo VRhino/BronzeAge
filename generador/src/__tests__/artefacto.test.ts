@@ -34,7 +34,7 @@ function mundoSintetico(): MundoGenerado {
       { id: 'parcela-1', masaId: 'bosque-0', centro: { x: 130, y: 250 }, densidad: 0.38, anillo: 'frontera' },
     ],
     bandidos: [{ id: 'bandidos-0', posicion: { x: 310, y: 210 }, nivel: 2, vetaId: 'veta-0', anillo: 'frontera' }],
-    alijos: [{ id: 'alijo-0', posicion: { x: 450, y: 40 }, oro: 25, anillo: 'lejana' }],
+    alijos: [{ id: 'alijo-0', posicion: { x: 450, y: 40 }, recurso: 'piedra', cantidad: 15, anillo: 'lejana' }],
     rios: [{ id: 'rio-0', puntos: [{ x: 0, y: 120 }, { x: 240, y: 130 }], terminaEnLago: true, navegable: false, vados: [{ x: 120, y: 125 }] }],
     grafo: {
       espaciado: 96,
@@ -149,7 +149,7 @@ describe('artefacto de mundo', () => {
     expect(msg.bandidosIniciales[0]).toMatchObject({ bosqueId: 'bosque-0', campamentoMercenariosId: 'campamento-2', vetaId: 'veta-0', nivel: 2 });
     expect(msg.bosques[0]).toMatchObject({ id: 'bosque-0', densidadMilesimas: 500, radio: 5000n, area: 4_000_000n });
     expect(msg.parcelas.map(p => [p.bosqueId, p.densidadMilesimas, p.anillo])).toEqual([['bosque-0', 620, 'foco'], ['bosque-0', 380, 'frontera']]);
-    expect(msg.alijos[0]).toMatchObject({ oro: 25_000n });
+    expect(msg.alijos[0]).toMatchObject({ recurso: 'piedra', cantidad: 15_000n });
     expect(msg.rios[0]).toMatchObject({ terminaEnLago: true, navegable: false });
     expect(msg.rios[0]!.vados).toHaveLength(1);
     expect(FACTOR).toBe(12);

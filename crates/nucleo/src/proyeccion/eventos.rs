@@ -383,7 +383,7 @@ fn tipado(n: &Nucleo, ev: &EventoNucleo) -> Option<Tipado> {
             capitulos: dato("capitulos").and_then(|c| u32::try_from(c).ok()).unwrap_or(0),
             motivo: texto_de(ev, "motivo"),
         }),
-        ("alijo.abierto", _) => Tipado::AlijoAbierto(pb::AlijoAbierto { heroe_id: heroe("heroe"), alijo_id: texto_de(ev, "alijo")?, oro: dato("oro")?, cargado: dato("cargado")? }),
+        ("alijo.abierto", _) => Tipado::AlijoAbierto(pb::AlijoAbierto { heroe_id: heroe("heroe"), alijo_id: texto_de(ev, "alijo")?, cantidad: dato("cantidad")?, cargado: dato("cargado")?, recurso: texto_de(ev, "recurso")? }),
         _ => return None,
     })
 }

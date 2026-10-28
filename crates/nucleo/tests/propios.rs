@@ -63,14 +63,19 @@ fn campamento(m: &Mundo, i: usize) -> Punto {
     Punto::new(p.x, p.y)
 }
 
-/// Un sitio verde con mucho bosque a 10 u o más del campamento `i`: una plaza que no cae en ruinas por falta de madera.
+/// Algo de tierra fértil (77 o más) a menos de 6 u: sin ella la plaza no crece y no hay a quién reclutar.
+fn fertil(m: &Mundo, p: Punto) -> bool {
+    (0..40).map(|i| (i as f64 / 40.0 * std::f64::consts::TAU, 6_000.0 * (i % 5) as f64 / 5.0)).any(|(a, r)| m.fertilidad_en(p.x + (r * a.cos()) as i64, p.y + (r * a.sin()) as i64).is_some_and(|f| f >= 77))
+}
+
+/// Un sitio verde y fértil con mucho bosque a 10 u o más del campamento `i`: una plaza que no cae en ruinas por falta de madera.
 fn sitio_rico(n: &Nucleo, m: &Mundo, i: usize, faccion: u32) -> Punto {
     let c = campamento(m, i);
     for r in (0..8).map(|k| 50_000 + k * 10_000) {
         for g in 0..360 {
             let a = (g as f64).to_radians();
             let p = Punto::new(c.x + (r as f64 * a.cos()) as i64, c.y + (r as f64 * a.sin()) as i64);
-            if n.viabilidad(p, faccion).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6) {
+            if n.viabilidad(p, faccion).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6) && fertil(m, p) {
                 return p;
             }
         }
@@ -175,6 +180,8 @@ fn escenario_con(m: &M, unity: bool) -> Esc {
             x.dar(plaza, r, 350_000);
         }
         x.ok("admin", Comando::AnadirEdificio { asentamiento: plaza, tipo: Tipo::Mercado });
+        // Una Vivienda más: holgura de población para reclutar sea cual sea lo que la zona pone a producir.
+        x.ok("admin", Comando::AnadirEdificio { asentamiento: plaza, tipo: Tipo::Vivienda });
     }
     let t = x.n.ahora() + 9 * HORA;
     x.n.avanzar_hasta(t);

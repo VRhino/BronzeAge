@@ -101,11 +101,17 @@ fn completa(tropa: Tropa) -> i64 {
 }
 
 /// Un sitio fundable, verde y con mucho bosque, a `r` del punto `c`, con `lejos` libres de la protección de un campamento de mercenarios (donde nadie combate).
-fn sitio_junto_a(n: &Nucleo, c: Punto, r: i64) -> Option<Punto> {
+/// Con tierra de cultivo en la zona inicial (algo de fertilidad a 6 u o menos): sin ella las Granjas no dan nada y la plaza se queda sin gente.
+fn fertil(m: &Mundo, p: Punto) -> bool {
+    (0..40).map(|i| (i as f64 / 40.0 * std::f64::consts::TAU, 6_000.0 * (i % 5) as f64 / 5.0)).any(|(a, r)| m.fertilidad_en(p.x + (r * a.cos()) as i64, p.y + (r * a.sin()) as i64).is_some_and(|f| f >= 77))
+}
+
+fn sitio_junto_a(n: &Nucleo, m: &Mundo, c: Punto, r: i64) -> Option<Punto> {
     (0..36).map(|g| ((g * 10) as f64).to_radians()).map(|a| Punto::new(c.x + (r as f64 * a.cos()) as i64, c.y + (r as f64 * a.sin()) as i64)).find(|&p| {
-        let libre = |q: Punto| !n.en_proteccion_de_campamento(q);
+        // Las avanzadas se levantan a 9 y a 12 u al este: tierra pisable y fuera de la protección de los campamentos.
+        let libre = |q: Punto| !n.en_proteccion_de_campamento(q) && m.transitable_en(q.x, q.y);
         libre(p) && libre(Punto::new(p.x + 12_000, p.y)) && libre(Punto::new(p.x + 9_000, p.y))
-            && n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6 && !v.condenada)
+            && n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6 && !v.condenada) && fertil(m, p)
     })
 }
 
@@ -333,7 +339,7 @@ fn montar(m: &M, semilla: u64, nivel: u32) -> Esc {
 
 fn montar_con(mut n: Nucleo, m: &M, nivel: u32) -> Esc {
     let mapa = Mapa::de(&m.0);
-    let sitio = (0..mapa.nodos.len()).filter(|&i| mapa.nodos[i].tipo == Tipo::MinaCobre).find_map(|i| sitio_junto_a(&n, mapa.nodos[i].pos, 6_000)).expect("hay un sitio rico, lejos de los campamentos");
+    let sitio = (0..mapa.nodos.len()).filter(|&i| mapa.nodos[i].tipo == Tipo::MinaCobre).find_map(|i| sitio_junto_a(&n, &m.0, mapa.nodos[i].pos, 6_000)).expect("hay un sitio rico, lejos de los campamentos");
     let e = n.crear_ejercito(0, "ana", 1, sitio, 500, 100_000).unwrap();
     assert!(n.aplicar_en(0, Peticion::nueva("admin", "c", Comando::DarCaravanaFundacion { ejercito: e }).de_admin()).aceptada());
     let r = n.aplicar_en(0, Peticion::nueva("ana", "f", Comando::Fundar { ejercito: e }));

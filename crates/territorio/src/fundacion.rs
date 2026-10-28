@@ -11,6 +11,8 @@ pub enum Terreno {
     Cima,
     /// Tierra firme que no se puede pisar (río sin vado, pendiente): la plaza quedaría incomunicada.
     NoTransitable,
+    /// Tierra firme y pisable, pero en bosque cerrado (`FUNDACION.densidadBosqueMaximaParaFundar` o más): se cruza, no se funda.
+    BosqueDenso,
     Firme,
 }
 
@@ -21,6 +23,7 @@ pub enum Motivo {
     SobreAgua,
     SobreCima,
     NoTransitable,
+    BosqueDenso,
     DentroDeZona,
     CercaDePlaza,
     CercaDeCampamento,
@@ -33,6 +36,7 @@ impl Motivo {
             Motivo::SobreAgua => "fundacion.sobre_agua",
             Motivo::SobreCima => "fundacion.sobre_cima",
             Motivo::NoTransitable => "fundacion.no_transitable",
+            Motivo::BosqueDenso => "fundacion.bosque_denso",
             Motivo::DentroDeZona => "fundacion.dentro_de_zona",
             Motivo::CercaDePlaza => "fundacion.cerca_de_plaza",
             Motivo::CercaDeCampamento => "fundacion.cerca_de_campamento",
@@ -48,7 +52,7 @@ pub struct DistanciasDeFundacion {
     pub exclusion_campamento: Mil,
 }
 
-/// Valida un punto de fundación, en este orden: mapa, agua, cima, paso, zonas, plazas, campamentos. `plazas` son los discos
+/// Valida un punto de fundación, en este orden: mapa, agua, cima, paso, bosque cerrado, zonas, plazas, campamentos. `plazas` son los discos
 /// vigentes de todas las plazas, de cualquier Facción (también la propia).
 pub fn validar(p: Punto, terreno: Terreno, plazas: &[Disco], campamentos: impl IntoIterator<Item = Punto>, d: &DistanciasDeFundacion) -> Result<(), Motivo> {
     match terreno {
@@ -56,6 +60,7 @@ pub fn validar(p: Punto, terreno: Terreno, plazas: &[Disco], campamentos: impl I
         Terreno::Agua => return Err(Motivo::SobreAgua),
         Terreno::Cima => return Err(Motivo::SobreCima),
         Terreno::NoTransitable => return Err(Motivo::NoTransitable),
+        Terreno::BosqueDenso => return Err(Motivo::BosqueDenso),
         Terreno::Firme => {}
     }
     // Solo hace falta mirar la zona de las plazas cuyo disco contiene el punto; su recorte sí usa a todas.
@@ -102,7 +107,7 @@ mod pruebas {
     #[test]
     fn terreno_y_mapa() {
         let p = Punto::new(500_000, 500_000);
-        for (t, m) in [(Terreno::FueraDelMapa, Motivo::FueraDelMapa), (Terreno::Agua, Motivo::SobreAgua), (Terreno::Cima, Motivo::SobreCima), (Terreno::NoTransitable, Motivo::NoTransitable)] {
+        for (t, m) in [(Terreno::FueraDelMapa, Motivo::FueraDelMapa), (Terreno::Agua, Motivo::SobreAgua), (Terreno::Cima, Motivo::SobreCima), (Terreno::NoTransitable, Motivo::NoTransitable), (Terreno::BosqueDenso, Motivo::BosqueDenso)] {
             assert_eq!(validar(p, t, &[], [], &D), Err(m));
         }
         assert_eq!(validar(p, Terreno::Firme, &[], [], &D), Ok(()));

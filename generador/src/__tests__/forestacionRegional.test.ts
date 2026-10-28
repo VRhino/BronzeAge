@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { crearCampoForestal, evaluarForestal, resumirSectoresForestales } from '../forestacionRegional';
+import { crearCampoForestal, evaluarForestal, PARAMETROS_FORESTALES, resumirSectoresForestales } from '../forestacionRegional';
 import { crearRelieveRegional } from '../regional';
 import { generarCampoElevacion } from '../elevacion';
 import { createRng } from '../rng';
@@ -25,6 +25,33 @@ describe('forestación regional continua y permanente', () => {
     }
     expect(claros).toBeGreaterThan(50); expect(arbolados).toBeGreaterThan(50);
     expect(maxSalto).toBeLessThan(0.03);
+  });
+  it('el estiramiento pasa bosque denso a ligero sin quitar bosque, los claros bajan la densidad donde salen y los bosquetes la suben donde no había', () => {
+    const campo = crearCampoForestal(42, []), P = PARAMETROS_FORESTALES, antes = structuredClone(P);
+    const contar = () => {
+      let denso = 0, arbolado = 0;
+      for (let y = 500; y < 24000; y += 400) for (let x = 500; x < 32000; x += 400) {
+        const d = evaluarForestal(campo, elevacion, { x, y }).densidad;
+        if (d >= 0.7) denso++; if (d >= 0.15) arbolado++;
+      }
+      return { denso, arbolado };
+    };
+    try {
+      Object.assign(P, { codo: 99, claros: { ...P.claros, fondo: 1 } });
+      const sin = contar();
+      Object.assign(P, { codo: antes.codo, claros: { ...P.claros, fondo: 1 } });
+      const estirado = contar();
+      Object.assign(P, structuredClone(antes));
+      const conClaros = contar();
+      expect(estirado.denso).toBeLessThan(sin.denso * 0.7);
+      expect(estirado.arbolado).toBeGreaterThan(sin.arbolado * 0.98);
+      expect(conClaros.denso).toBeLessThan(estirado.denso);
+      // Los bosquetes ponen bosque ligero donde no había, sin tocar el cerrado.
+      Object.assign(P, { bosquetes: { ...P.bosquetes, densidad: 0 } });
+      const sinBosquetes = contar();
+      expect(conClaros.arbolado).toBeGreaterThan(sinBosquetes.arbolado);
+      expect(conClaros.denso).toBe(sinBosquetes.denso);
+    } finally { Object.assign(P, structuredClone(antes)); }
   });
   it('excluye agua y suaviza la vegetación en escarpes; una ribera favorece cobertura', () => {
     const rio = { puntos: [{ x: 1000, y: 0 }, { x: 1000, y: 5000 }] } as RioZona;

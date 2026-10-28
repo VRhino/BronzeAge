@@ -7,7 +7,7 @@ mod comun;
 
 use asentamiento::Recurso::{self, *};
 use base::{Punto, MS_POR_MINUTO};
-use comun::real::{campamento, en_tierra, mundo, sitio_rico, M};
+use comun::real::{campamento, en_tierra, mundo, pisable, sitio_rico, M};
 use comun::sesion::*;
 use contrato::v1::{self as pb, orden, TipoCliente};
 use militar::catalogo::Tropa;
@@ -578,7 +578,7 @@ fn una_faccion_sin_plazas_refunda_con_el_oro_de_los_bandidos_del_anillo() {
         let n = militar::Reglas::cargar().tropas.tropa(t).unidades;
         e.ok("admin", Comando::DarEscuadra { heroe: ana, tropa: t, cantidad: n });
     }
-    e.llevar("ana", ej, en_tierra(&m.0, bandidos.posicion, 2_000, 0));
+    e.llevar("ana", ej, pisable(&m.0, bandidos.posicion, 2_000, 0));
     let oro_carro = |e: &Esc| e.n.ejercito(ej).unwrap().columna.carga.get(&Oro).copied().unwrap_or(0);
     let antes = oro_carro(&e);
     assert!(e.ok("ana", Comando::Atacar { heroe: ana, objetivo: ObjetivoAtaque::Campamento(bandidos.id), declara_guerra: false }).aceptada());

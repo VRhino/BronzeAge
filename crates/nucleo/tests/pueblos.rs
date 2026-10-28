@@ -76,9 +76,14 @@ fn dato(h: &Hecho, clave: &str) -> i64 {
 }
 
 /// Un sitio fundable, verde y con mucho bosque, a `r` del punto `c`: una plaza que no cae en ruinas por falta de madera.
-fn sitio_junto_a(n: &Nucleo, c: Punto, r: i64) -> Option<Punto> {
+/// Con tierra de cultivo en la zona inicial (algo de fertilidad a 6 u o menos): sin ella las Granjas no dan nada y la plaza se queda sin gente.
+fn fertil(m: &Mundo, p: Punto) -> bool {
+    (0..40).map(|i| (i as f64 / 40.0 * std::f64::consts::TAU, 6_000.0 * (i % 5) as f64 / 5.0)).any(|(a, r)| m.fertilidad_en(p.x + (r * a.cos()) as i64, p.y + (r * a.sin()) as i64).is_some_and(|f| f >= 77))
+}
+
+fn sitio_junto_a(n: &Nucleo, m: &Mundo, c: Punto, r: i64) -> Option<Punto> {
     (0..36).map(|g| ((g * 10) as f64).to_radians()).map(|a| Punto::new(c.x + (r as f64 * a.cos()) as i64, c.y + (r as f64 * a.sin()) as i64)).find(|&p| {
-        n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6 && !v.condenada)
+        n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6 && !v.condenada) && fertil(m, p)
     })
 }
 
@@ -173,10 +178,15 @@ fn montar(m: &M, semilla: u64, nivel: u32) -> Escenario {
 }
 
 fn montar_con(n: Nucleo, m: &M, nivel: u32) -> Escenario {
+    montar_donde(n, m, nivel, |_| true)
+}
+
+/// Como [`montar_con`], con una condición más sobre el sitio de la plaza.
+fn montar_donde(n: Nucleo, m: &M, nivel: u32, vale: impl Fn(Punto) -> bool) -> Escenario {
     let mapa = Mapa::de(&m.0);
     let (cobre, sitio) = (0..mapa.nodos.len())
         .filter(|&i| mapa.nodos[i].tipo == Tipo::MinaCobre)
-        .find_map(|i| sitio_junto_a(&n, mapa.nodos[i].pos, 6_000).map(|p| (i as u32, p)))
+        .find_map(|i| sitio_junto_a(&n, &m.0, mapa.nodos[i].pos, 6_000).filter(|&p| vale(p)).map(|p| (i as u32, p)))
         .expect("hay un nodo de cobre junto a un sitio rico");
     montar_en(n, mapa, nivel, cobre, sitio)
 }
@@ -1330,19 +1340,29 @@ fn la_aldea_se_marca_en_tierra_fertil_nace_con_su_rebano_y_su_carro_lleva_trigo_
     let ajustes = Ajustes { foto_cada: 0, latido_ms: 0, ..Ajustes::default() };
     let dir = tempfile::tempdir().unwrap();
     let n = Nucleo::con_persistencia(Arranque { ajustes: ajustes.clone(), ..arranque(m, 7) }, dir.path(), Default::default()).unwrap();
-    let mut e = montar_con(n, m, 2);
+    // Un sitio con tierra pobre en algún punto de su zona de nivel 2 (de 3,5 a 15 u), para probar el rechazo.
+    let pobre_cerca = |c: Punto| (0..24).flat_map(|k| (0..24).map(move |g| (3_500 + k * 500, g))).any(|(d, g)| {
+        let a = ((g * 15) as f64).to_radians();
+        let q = Punto::new(c.x + (d as f64 * a.cos()) as i64, c.y + (d as f64 * a.sin()) as i64);
+        m.0.transitable_en(q.x, q.y) && m.0.fertilidad_en(q.x, q.y).is_some_and(|f| f <= 76)
+    });
+    let mut e = montar_donde(n, m, 2, pobre_cerca);
     let plaza = e.plaza;
     let centro = e.n.estado().asentamientos[&plaza].posicion;
-    // Junto a la plaza, fuera de la zona, o en tierra pobre (este sitio es de bosque): no.
+    // Junto a la plaza, fuera de la zona, o en tierra pobre: no.
     assert_eq!(e.rechazada("ana", Comando::MarcarAldea { asentamiento: plaza, punto: Punto::new(centro.x + 1_000, centro.y) }), rechazos::PUEBLO_DEMASIADO_CERCA);
     assert_eq!(e.rechazada("ana", Comando::MarcarAldea { asentamiento: plaza, punto: Punto::new(centro.x + 400_000, centro.y) }), rechazos::PUEBLO_FUERA_DE_LA_ZONA);
     let pobre = (0..24).flat_map(|k| (0..24).map(move |g| (3_500 + k * 500, g))).any(|(d, g)| {
         let a = ((g * 15) as f64).to_radians();
         let punto = Punto::new(centro.x + (d as f64 * a.cos()) as i64, centro.y + (d as f64 * a.sin()) as i64);
+        // Solo donde el artefacto dice que la tierra es pobre: en uno fértil se marcaría la aldea.
+        if !m.0.transitable_en(punto.x, punto.y) || m.0.fertilidad_en(punto.x, punto.y).is_none_or(|f| f > 76) {
+            return false;
+        }
         let r = e.ord("ana", Comando::MarcarAldea { asentamiento: plaza, punto });
         matches!(r.resultado, Resultado::Rechazada { codigo, .. } if codigo == rechazos::PUEBLO_FERTILIDAD_INSUFICIENTE)
     });
-    assert!(pobre, "alrededor de una plaza de bosque hay tierra demasiado pobre");
+    assert!(pobre, "en la tierra pobre de la zona no se marca la aldea");
     assert!(e.n.pueblos_de(plaza).is_empty(), "los rechazos no dejan rastro");
 
     let id = comun::levantar_aldea(&mut e.n, "ana", plaza).expect("hay tierra fértil en la zona");

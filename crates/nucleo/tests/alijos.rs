@@ -72,8 +72,9 @@ impl Esc {
         let col = self.n.crear_ejercito(t, cuenta, f, p, 500, 100_000).unwrap();
         (col, self.n.ejercito(col).unwrap().columna.lider)
     }
-    fn oro(&self, col: u64) -> Mil {
-        self.n.ejercito(col).unwrap().columna.carga.get(&Oro).copied().unwrap_or(0)
+    /// Cuánto lleva el carro de la columna de ese recurso.
+    fn lleva(&self, col: u64, r: Recurso) -> Mil {
+        self.n.ejercito(col).unwrap().columna.carga.get(&r).copied().unwrap_or(0)
     }
     fn abrir(&mut self, cuenta: &str, heroe: u64, alijo: u32) -> Respuesta {
         self.ord(cuenta, Comando::AbrirAlijo { heroe, alijo })
@@ -102,11 +103,14 @@ fn abiertos(n: &Nucleo) -> Vec<(Vec<(&'static str, i64)>, String)> {
 }
 
 #[test]
-fn se_abre_en_el_sitio_una_vez_por_heroe_y_su_oro_sube_al_carro() {
+fn se_abre_en_el_sitio_una_vez_por_heroe_y_lo_que_trae_sube_al_carro() {
     let m = con_mundo!();
     let (alijo, sitio) = alijo_junto_a(m, 0);
-    let oro = m.0.alijos()[alijo as usize].oro;
+    let oro = m.0.alijos()[alijo as usize].cantidad;
     let mut e = Esc { n: nucleo(m), peticiones: 0 };
+    // Trae una sola cosa (oro, madera, piedra o trigo): la que diga el artefacto.
+    let r = e.n.alijo(alijo).unwrap().recurso;
+    assert_eq!(r.nombre(), m.0.alijos()[alijo as usize].recurso);
     let (col, ana) = e.columna("ana", 1, sitio);
     // Se ve mientras no lo abre y nada lo ha programado.
     assert!(e.n.puede_buscar_alijos(ana));
@@ -114,12 +118,12 @@ fn se_abre_en_el_sitio_una_vez_por_heroe_y_su_oro_sube_al_carro() {
     let cola = e.n.estado().cola.len();
     e.ok("ana", Comando::AbrirAlijo { heroe: ana, alijo });
     assert_eq!(e.n.estado().cola.len(), cola, "abrir un alijo no programa nada: los alijos no tienen tick");
-    assert_eq!(e.oro(col), base::entero(oro), "el oro, en unidades enteras, al carro de la columna");
+    assert_eq!(e.lleva(col, r), base::entero(oro), "lo que trae, en unidades enteras, al carro de la columna");
     assert!(e.n.heroe(ana).unwrap().alijos_abiertos.contains(&alijo));
     assert!(!e.n.alijos_a_la_vista(ana, e.n.ahora()).contains(&alijo), "abierto ya no se ve");
     let hechos = abiertos(&e.n);
     assert_eq!(hechos.len(), 1);
-    assert_eq!(hechos[0].0, vec![("heroe", ana as i64), ("oro", base::entero(oro)), ("cargado", base::entero(oro))]);
+    assert_eq!(hechos[0].0, vec![("heroe", ana as i64), ("cantidad", base::entero(oro)), ("cargado", base::entero(oro))]);
     assert_eq!(hechos[0].1, m.0.alijos()[alijo as usize].id);
     // Solo lo oye quien lo abre, no los demás de su columna (decisión del autor).
     let hecho = e.n.cambios_desde(0).unwrap().flat_map(|c| c.eventos.iter()).find(|x| x.codigo == "alijo.abierto").unwrap().clone();
@@ -128,7 +132,7 @@ fn se_abre_en_el_sitio_una_vez_por_heroe_y_su_oro_sube_al_carro() {
     assert_eq!(e.no("ana", Comando::AbrirAlijo { heroe: ana, alijo }), rechazos::ALIJO_YA_ABIERTO);
     let (col_b, beto) = e.columna("beto", 2, sitio);
     assert!(e.abrir("beto", beto, alijo).aceptada());
-    assert_eq!(e.oro(col_b), base::entero(oro));
+    assert_eq!(e.lleva(col_b, r), base::entero(oro));
 }
 
 #[test]
@@ -157,26 +161,29 @@ fn cada_rechazo_con_su_codigo_y_sin_rastro() {
 fn con_el_carro_casi_lleno_cabe_lo_que_cabe_y_el_resto_se_pierde() {
     let m = con_mundo!();
     let (alijo, sitio) = alijo_junto_a(m, 0);
-    let oro = base::entero(m.0.alijos()[alijo as usize].oro);
-    assert!(oro > U, "el alijo trae más de una unidad de oro");
+    let oro = base::entero(m.0.alijos()[alijo as usize].cantidad);
+    assert!(oro > U, "el alijo trae más de una unidad");
     let mut e = Esc { n: nucleo(m), peticiones: 0 };
+    let r = e.n.alijo(alijo).unwrap().recurso;
+    // El relleno, de algo que el alijo no trae, para que lo cargado se vea solo.
+    let (relleno, relleno_b) = if r == Madera { (Piedra, Trigo) } else if r == Piedra { (Madera, Trigo) } else { (Madera, Piedra) };
     let (col, ana) = e.columna("ana", 1, sitio);
     let capacidad = e.n.capacidad_de_carga(col).unwrap();
     let lleva: Mil = e.n.ejercito(col).unwrap().columna.carga.values().sum();
-    e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: capacidad - lleva - U });
-    let antes = (e.oro(col), e.n.ejercito(col).unwrap().columna.carga.values().sum::<Mil>());
+    e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: relleno, cantidad: capacidad - lleva - U });
+    let antes = (e.lleva(col, r), e.n.ejercito(col).unwrap().columna.carga.values().sum::<Mil>());
     assert_eq!(antes.1, capacidad - U, "queda una unidad libre");
     e.ok("ana", Comando::AbrirAlijo { heroe: ana, alijo });
     // Conservación: entra en el carro exactamente lo cargado; lo demás no va a ninguna parte.
-    assert_eq!(e.oro(col), antes.0 + U);
+    assert_eq!(e.lleva(col, r), antes.0 + U);
     let (datos, _) = abiertos(&e.n).pop().unwrap();
-    assert_eq!(datos, vec![("heroe", ana as i64), ("oro", oro), ("cargado", U)]);
+    assert_eq!(datos, vec![("heroe", ana as i64), ("cantidad", oro), ("cargado", U)]);
     // Con el carro lleno se abre igual (cargado 0) y queda abierto.
     let (col_b, beto) = e.columna("beto", 2, sitio);
     let lleva: Mil = e.n.ejercito(col_b).unwrap().columna.carga.values().sum();
-    e.ok("admin", Comando::DarSuministro { ejercito: col_b, recurso: Piedra, cantidad: e.n.capacidad_de_carga(col_b).unwrap() - lleva });
+    e.ok("admin", Comando::DarSuministro { ejercito: col_b, recurso: relleno_b, cantidad: e.n.capacidad_de_carga(col_b).unwrap() - lleva });
     e.ok("beto", Comando::AbrirAlijo { heroe: beto, alijo });
-    assert_eq!((e.oro(col_b), abiertos(&e.n).pop().unwrap().0[2]), (0, ("cargado", 0)));
+    assert_eq!((e.lleva(col_b, r), abiertos(&e.n).pop().unwrap().0[2]), (0, ("cargado", 0)));
     assert!(e.n.heroe(beto).unwrap().alijos_abiertos.contains(&alijo));
 }
 
@@ -221,7 +228,7 @@ async fn por_la_sesion_se_abre_un_alijo_y_el_heroe_lo_lleva_en_heroe_y_en_admin(
     let (mut c, f) = w.entrar("ana", TipoCliente::ClienteUnity).await;
     // 6G: el alijo a la vista viaja en su `HEROE`, con su sitio y su oro.
     let a_la_vista: Vec<pb::Alijo> = f.entidades.iter().filter_map(|e| if let Some(pb::entidad::Cuerpo::Alijo(a)) = &e.cuerpo { Some(a.clone()) } else { None }).collect();
-    assert!(a_la_vista.iter().any(|a| a.id == id && a.oro == m.0.alijos()[alijo as usize].oro && a.posicion.as_ref().map(|p| (p.x, p.y)) == Some((sitio.x, sitio.y))), "{a_la_vista:?}");
+    assert!(a_la_vista.iter().any(|a| a.id == id && a.cantidad == m.0.alijos()[alijo as usize].cantidad && a.recurso == m.0.alijos()[alijo as usize].recurso && a.posicion.as_ref().map(|p| (p.x, p.y)) == Some((sitio.x, sitio.y))), "{a_la_vista:?}");
     assert!(heroes(f.entidades.into_iter().map(Some))[0].alijos_abiertos.is_empty());
 
     let abrir = |x: &str| orden::Cuerpo::AbrirAlijo(pb::OrdenAbrirAlijo { alijo_id: x.into() });
@@ -232,7 +239,7 @@ async fn por_la_sesion_se_abre_un_alijo_y_el_heroe_lo_lleva_en_heroe_y_en_admin(
     assert_eq!(h.last().unwrap().alijos_abiertos, vec![id.clone()], "el héroe propio con el alijo abierto, por su id del artefacto");
     let hecho = d.iter().flat_map(|d| &d.eventos).find(|x| x.codigo == "alijo.abierto").expect("el hecho llega al héroe");
     let Some(pb::evento_dominio::Tipado::AlijoAbierto(t)) = &hecho.tipado else { panic!("tipado: {hecho:?}") };
-    assert_eq!((t.heroe_id.clone(), t.alijo_id.as_str(), t.oro > 0, t.cargado), (format!("heroe-{ana}"), id.as_str(), true, t.oro));
+    assert_eq!((t.heroe_id.clone(), t.alijo_id.as_str(), t.cantidad > 0, t.cargado), (format!("heroe-{ana}"), id.as_str(), true, t.cantidad));
     // 6G: abierto, deja de estar a la vista: sale de su `HEROE` (en el reparto de la orden, antes del resultado).
     assert!(d.iter().flat_map(|d| &d.cambios).any(|x| x.tipo == pb::TipoCambio::CambioQuita as i32 && x.entidad == pb::TipoEntidad::Alijo as i32 && x.id == id), "{d:?}");
     let (_, r) = dar(&mut c, "a2", abrir(&id)).await;
@@ -252,8 +259,9 @@ async fn por_la_sesion_se_abre_un_alijo_y_el_heroe_lo_lleva_en_heroe_y_en_admin(
     // La administración ve los alijos abiertos de cada héroe.
     let (admin, f) = w.entrar("admin", TipoCliente::ClienteAdminWeb).await;
     let h = heroes(f.entidades.into_iter().map(Some));
-    assert_eq!(h.iter().find(|x| x.id == format!("heroe-{ana}")).unwrap().alijos_abiertos, vec![id]);
+    assert_eq!(h.iter().find(|x| x.id == format!("heroe-{ana}")).unwrap().alijos_abiertos, vec![id.clone()]);
     admin.cerrar().await;
     let n = w.parar().await;
-    assert!(n.ejercito(col).unwrap().columna.carga.get(&Recurso::Oro).copied().unwrap_or(0) > 0);
+    let r = n.alijo(n.alijo_por_id(&id).unwrap()).unwrap().recurso;
+    assert!(n.ejercito(col).unwrap().columna.carga.get(&r).copied().unwrap_or(0) > 0, "lo que trae el alijo, en el carro");
 }

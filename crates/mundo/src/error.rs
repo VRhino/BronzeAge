@@ -51,4 +51,6 @@ pub enum ErrorMundo {
     ParcelasCercanas { a: String, b: String, distancia: i64, minima: i64 },
     #[error("campamentos de mercenarios «{a}» y «{b}» a {distancia} milésimas, mínimo {minima}")]
     CampamentosCercanos { a: String, b: String, distancia: i64, minima: i64 },
+    #[error("alijo «{id}»: trae {cantidad} milésimas de «{recurso}» (oro | madera | piedra | trigo, más de 0)")]
+    AlijoInvalido { id: String, recurso: String, cantidad: i64 },
 }

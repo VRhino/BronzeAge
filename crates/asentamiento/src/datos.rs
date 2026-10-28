@@ -168,6 +168,8 @@ pub struct Reglas {
     pub madera_extra_caravana: Mil,
     /// `FUNDACION.caducidadCaravanaHoras`, en ms: lo que dura suelta una Caravana de Fundación antes de caducar.
     pub caducidad_caravana: i64,
+    /// `FUNDACION.densidadBosqueMaximaParaFundar`, en milésimas: con esa densidad de bosque o más no se funda (decisión del autor del 2026-10-28).
+    pub densidad_bosque_maxima_fundar: Mil,
 }
 
 /// `TAMANOS_MAPA` (Economia_Construccion §14.1, decisión del autor del 2026-10-27): el diámetro, en milésimas de unidad de mapa, del disco que ocupa cada elemento en el mapa del mundo.
@@ -279,6 +281,7 @@ impl Reglas {
             largo_maximo_nombre: b("NOMBRE_ASENTAMIENTO")["largoMaximo"].as_u64().expect("largoMaximo") as usize,
             madera_extra_caravana: mil(num(&fundacion, "costoMaderaExtraCaravana")),
             caducidad_caravana: num(&fundacion, "caducidadCaravanaHoras") as i64 * 3_600_000,
+            densidad_bosque_maxima_fundar: mil(num(&fundacion, "densidadBosqueMaximaParaFundar")),
             poblacion,
             politicas,
             capacidad_inicial: mil(num(&b("ALMACEN"), "capacidadInicialPorRecurso")),

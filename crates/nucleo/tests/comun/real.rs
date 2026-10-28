@@ -42,8 +42,17 @@ pub fn sitio_rico(n: &Nucleo, m: &Mundo, i: usize, faccion: u32) -> Punto {
     panic!("sin sitio rico cerca del campamento {i}");
 }
 
-/// Un punto en tierra junto a `centro + (dx, dy)`.
+/// Un punto en tierra junto a `centro + (dx, dy)`, fuera del bosque cerrado (desde el 2026-10-28 en él no se funda: `fundacion.bosque_denso`).
 pub fn en_tierra(m: &Mundo, centro: Punto, dx: Mil, dy: Mil) -> Punto {
+    cerca_de(centro, dx, dy, |q| m.transitable_en(q.x, q.y) && m.densidad_bosque_en(q.x, q.y).is_some_and(|d| d < 179))
+}
+
+/// Un punto pisable junto a `centro + (dx, dy)`, aunque sea bosque cerrado: para acercarse a algo (un campamento de bandidos puede estar dentro del bosque).
+pub fn pisable(m: &Mundo, centro: Punto, dx: Mil, dy: Mil) -> Punto {
+    cerca_de(centro, dx, dy, |q| m.transitable_en(q.x, q.y))
+}
+
+fn cerca_de(centro: Punto, dx: Mil, dy: Mil, vale: impl Fn(&Punto) -> bool) -> Punto {
     let p = Punto::new(centro.x + dx, centro.y + dy);
     (0..100i64)
         .flat_map(|r| (0..8i64).map(move |k| (r, k)))
@@ -51,7 +60,7 @@ pub fn en_tierra(m: &Mundo, centro: Punto, dx: Mil, dy: Mil) -> Punto {
             let a = (k as f64 * 45.0).to_radians();
             Punto::new(p.x + (r as f64 * 2_000.0 * a.cos()) as i64, p.y + (r as f64 * 2_000.0 * a.sin()) as i64)
         })
-        .find(|q| m.transitable_en(q.x, q.y))
+        .find(|q| vale(q))
         .expect("hay tierra cerca")
 }
 

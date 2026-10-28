@@ -895,9 +895,14 @@ fn al_arruinarse_la_plaza_sus_residentes_pasan_a_la_plaza_hermana_mas_cercana_o_
 // ───────────────────────────── 10. Las tecnologías de la administración y quién manda en la plaza ─────────────────────────────
 
 /// Un sitio fundable, verde y con mucho bosque, a `r` del punto `c`.
-fn sitio_junto_a(n: &Nucleo, c: Punto, r: i64) -> Option<Punto> {
+/// Con tierra de cultivo en la zona inicial (algo de fertilidad a 6 u o menos): sin ella las Granjas no dan nada y la plaza se queda sin gente.
+fn fertil(m: &Mundo, p: Punto) -> bool {
+    (0..40).map(|i| (i as f64 / 40.0 * std::f64::consts::TAU, 6_000.0 * (i % 5) as f64 / 5.0)).any(|(a, r)| m.fertilidad_en(p.x + (r * a.cos()) as i64, p.y + (r * a.sin()) as i64).is_some_and(|f| f >= 77))
+}
+
+fn sitio_junto_a(n: &Nucleo, m: &Mundo, c: Punto, r: i64) -> Option<Punto> {
     (0..36).map(|g| ((g * 10) as f64).to_radians()).map(|a| Punto::new(c.x + (r as f64 * a.cos()) as i64, c.y + (r as f64 * a.sin()) as i64)).find(|&p| {
-        n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6 && !v.condenada)
+        n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6 && !v.condenada) && fertil(m, p)
     })
 }
 
@@ -909,7 +914,7 @@ fn las_tecnologias_de_la_administracion_abren_las_obras_que_las_piden_y_un_heroe
     let mut n = Nucleo::nuevo(arranque(m, 7));
     let (hierro, sitio) = (0..mapa.nodos.len())
         .filter(|&i| mapa.nodos[i].tipo == Tipo::MinaHierro)
-        .find_map(|i| sitio_junto_a(&n, mapa.nodos[i].pos, 6_000).map(|p| (i as u32, p)))
+        .find_map(|i| sitio_junto_a(&n, &m.0, mapa.nodos[i].pos, 6_000).map(|p| (i as u32, p)))
         .expect("hay un nodo de hierro junto a un sitio rico");
     let a = fundar(&mut n, 0, "a", "ana", 1, sitio);
     let mut e = Escenario { n, a, cuenta: 0 };

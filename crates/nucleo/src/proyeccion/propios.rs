@@ -705,9 +705,9 @@ pub fn aeda_itinerante(a: &tecnologia::itinerantes::AedaItinerante) -> pb::AedaI
     }
 }
 
-/// Un alijo del artefacto (6G, los que el héroe tiene a la vista en `HEROE`): su id, dónde está y su oro (milésimas, el del artefacto).
+/// Un alijo del artefacto (6G, los que el héroe tiene a la vista en `HEROE`): su id, dónde está y lo que trae (recurso y milésimas, las del artefacto).
 pub fn alijo(n: &Nucleo, i: u32) -> Option<pb::Alijo> {
-    n.alijo(i).map(|a| pb::Alijo { id: a.id.clone(), posicion: Some(punto(a.posicion)), oro: a.oro })
+    n.alijo(i).map(|a| pb::Alijo { id: a.id.clone(), posicion: Some(punto(a.posicion)), cantidad: a.cantidad, recurso: a.recurso.nombre().into() })
 }
 
 /// Una relación entre dos Facciones (5D): con su dirección (en un vasallaje `a` es la señora; en una guerra, quien la declaró), su tributo, cuándo nació, quién la rompió y quién ofreció la paz.

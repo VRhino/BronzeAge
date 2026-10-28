@@ -50,8 +50,12 @@ macro_rules! con_mundo {
     };
 }
 
+/// Sin acoso de bandidos a las caravanas (como en `propios`): estas pruebas son de entrar y salir, y la ruta de una columna puede cruzar el radio de un campamento según dónde caiga.
 fn arranque(m: &M, semilla: u64) -> Arranque {
-    Arranque { reglas: Reglas::default(), ajustes: Ajustes::default(), semilla, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) }
+    let mut reglas = Reglas::default();
+    let b = &mut Arc::make_mut(&mut reglas.economia.combate).bandidos;
+    (b.radio_ataque_caravana, b.anillo_minimo, b.anillo_maximo) = (0, 0, 0);
+    Arranque { reglas, ajustes: Ajustes::default(), semilla, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) }
 }
 
 fn campamento(m: &Mundo, i: usize) -> Punto {
@@ -60,13 +64,18 @@ fn campamento(m: &Mundo, i: usize) -> Punto {
 }
 
 /// Un sitio verde con mucho bosque a 10 u cerca del campamento `i`: una plaza que no cae en ruinas por falta de madera.
+/// Algo de tierra fértil (77 o más) a menos de 6 u: sin ella la plaza no crece.
+fn fertil(m: &Mundo, p: Punto) -> bool {
+    (0..40).map(|i| (i as f64 / 40.0 * std::f64::consts::TAU, 6_000.0 * (i % 5) as f64 / 5.0)).any(|(a, r)| m.fertilidad_en(p.x + (r * a.cos()) as i64, p.y + (r * a.sin()) as i64).is_some_and(|f| f >= 77))
+}
+
 fn sitio_rico(n: &Nucleo, m: &Mundo, i: usize, faccion: u32) -> Punto {
     let c = campamento(m, i);
     for r in (0..8).map(|k| 50_000 + k * 10_000) {
         for g in 0..360 {
             let a = (g as f64).to_radians();
             let p = Punto::new(c.x + (r as f64 * a.cos()) as i64, c.y + (r as f64 * a.sin()) as i64);
-            if n.viabilidad(p, faccion).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6) {
+            if n.viabilidad(p, faccion).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6) && fertil(m, p) {
                 return p;
             }
         }

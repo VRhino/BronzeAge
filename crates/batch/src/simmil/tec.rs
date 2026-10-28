@@ -263,8 +263,13 @@ impl Sim<'_> {
 
     pub(super) fn tec_arrancar(&mut self, t0: Instante) {
         self.tec_vigilar(t0);
+        // Primero los campamentos que ya ofrecen alguna tropa al empezar (los demás esperan a que su tecnología se desbloquee): que dónde caiga cada edificio militar en el
+        // artefacto no deje a todos los buscadores sin a quién reclutar.
+        let total = self.geo.campamentos.len() as u32;
+        let (con_oferta, sin_oferta): (Vec<u32>, Vec<u32>) = (0..total).partition(|&c| self.n.tropas_del_campamento(c).is_some_and(|v| !v.is_empty()));
+        let orden: Vec<u32> = con_oferta.into_iter().chain(sin_oferta).collect();
         for k in 0..BUSCADORES {
-            let campamento = (k % self.geo.campamentos.len().max(1)) as u32;
+            let campamento = orden.get(k % orden.len().max(1)).copied().unwrap_or(0);
             let cuenta = format!("buscador-{k}");
             let r = self.segura(t0, &cuenta, "CrearHeroe", Comando::CrearHeroe { cuenta: cuenta.clone(), campamento, controlador: Controlador::Humano, nombre: None });
             let Some(&heroe) = r.creadas.first().filter(|_| r.aceptada()) else { continue };
@@ -818,9 +823,12 @@ impl Sim<'_> {
             }
             "alijo.abierto" => {
                 let par = (dato("heroe").unwrap_or(0) as u64, texto("alijo").unwrap_or_default());
-                x.v.alijo += (!x.abiertos.insert(par) || dato("cargado") > dato("oro")) as u64;
+                x.v.alijo += (!x.abiertos.insert(par) || dato("cargado") > dato("cantidad")) as u64;
                 x.m.alijos_abiertos += 1;
-                x.m.alijos_oro += dato("oro").unwrap_or(0);
+                // Desde el 2026-10-28 un alijo trae oro o un recurso de fundar: aquí solo se suma el oro.
+                if texto("recurso").as_deref() == Some("oro") {
+                    x.m.alijos_oro += dato("cantidad").unwrap_or(0);
+                }
                 x.m.alijos_cargado += dato("cargado").unwrap_or(0);
             }
             "tecnologia.adoptada" => x.m.adopciones += 1,

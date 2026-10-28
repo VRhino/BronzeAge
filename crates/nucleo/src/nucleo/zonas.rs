@@ -234,7 +234,13 @@ impl Nucleo {
         let r = &self.estado.reglas.territorio;
         let plazas: Vec<Disco> = self.discos().into_iter().map(|(_, d)| d).collect();
         let dist = DistanciasDeFundacion { separacion_plazas: r.separacion_plazas, exclusion_campamento: r.exclusion_campamento };
-        territorio::validar(p, geo.terreno(p), &plazas, geo.mapa.campamentos.iter().copied(), &dist)
+        // El bosque cerrado se cruza pero no se funda en él: la celda de la raster (0-255) contra el umbral en milésimas.
+        let maxima = self.estado.reglas.economia.datos.densidad_bosque_maxima_fundar;
+        let terreno = match geo.terreno(p) {
+            Terreno::Firme if geo.mundo.densidad_bosque_en(p.x, p.y).is_some_and(|d| d as Mil * 1000 >= maxima * 255) => Terreno::BosqueDenso,
+            t => t,
+        };
+        territorio::validar(p, terreno, &plazas, geo.mapa.campamentos.iter().copied(), &dist)
     }
 
     // ───────────────────────────── Fronteras ─────────────────────────────
