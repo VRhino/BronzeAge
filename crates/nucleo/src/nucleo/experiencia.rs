@@ -34,7 +34,7 @@ pub(super) mod motivo {
     pub const ASCENSO: i64 = 6;
     pub const FUNDACION: i64 = 7;
     pub const BANDIDOS: i64 = 8;
-    /// La recompensa de una misión de Facción (Misiones §4).
+    /// La recompensa de una misión de Facción (Misiones §4) o de una misión recurrente (Misiones_Recurrentes §5).
     pub const MISION: i64 = 9;
 }
 

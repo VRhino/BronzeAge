@@ -187,6 +187,7 @@ impl Nucleo {
                 self.autorizar_heroe(p, *heroe, false)?;
                 let (id, pidio) = (self.siguiente_faccion(), self.pedidas_por(*heroe));
                 self.estado.politica.facciones.crear(&r, id, *heroe, nombre, sigilo.clone(), t).map_err(de_faccion)?;
+                self.asegurar_tablon(t, crate::misiones::Dueno::Faccion(id));
                 self.tr.tocar_todos(Clase::Faccion, pidio);
                 self.tras_cambiar_de_faccion(t, *heroe, None);
                 let nombre = self.estado.politica.facciones.get(id).expect("acaba de nacer").nombre.clone();

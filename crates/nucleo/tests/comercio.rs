@@ -1235,7 +1235,7 @@ fn el_comercio_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
     let rep = reglas.economia.comercio.reputacion.clone();
     let base = estado_con_comercio();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN49");
+    assert_eq!(&bytes[..5], b"BAN50");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.comercio, base.comercio);
@@ -1375,7 +1375,8 @@ fn la_huella_de_las_reglas_incluye_los_bloques_de_comercio_militares_combate_y_p
     let con_politica = con_combate.clone() + &politica::datos::texto_de_parametros();
     let con_misiones = con_politica.clone() + &asentamiento::datos::texto_de_parametros_de(nucleo::misiones::DOC_MISIONES);
     let con_participacion = con_misiones.clone() + &asentamiento::datos::texto_de_parametros_de(nucleo::participacion::DOC_PARTICIPACION);
-    assert_eq!(r.economia.huella(), nucleo::hex(&Sha256::digest(con_participacion).into()));
+    let con_recurrentes = con_participacion + &asentamiento::datos::texto_de_parametros_de(nucleo::recurrentes::DOC_RECURRENTES);
+    assert_eq!(r.economia.huella(), nucleo::hex(&Sha256::digest(con_recurrentes).into()));
     assert_ne!(r.economia.huella(), nucleo::hex(&Sha256::digest(con_misiones.clone()).into()), "los puntos de participación entran en la huella");
     assert_ne!(r.economia.huella(), nucleo::hex(&Sha256::digest(con_politica).into()), "el catálogo de misiones entra en la huella");
     assert_ne!(r.economia.huella(), nucleo::hex(&Sha256::digest(con_combate).into()), "los bloques de la política entran en la huella");

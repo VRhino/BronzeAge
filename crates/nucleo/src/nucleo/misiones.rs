@@ -56,6 +56,10 @@ impl Nucleo {
 
     /// Suma `n` al contador de `d`, si alguna misión activa lo usa, y fija las que se cumplen.
     pub(super) fn avance(&mut self, t: Instante, d: Dueno, contador: &str, n: u64) {
+        // Lo del héroe cuenta también en los tablones de su plaza y su Facción (mecánica 55).
+        if let Dueno::Heroe(h) = d {
+            self.avance_recurrente(t, h, contador, n);
+        }
         let r = self.estado.reglas.economia.misiones.clone();
         let antes = self.estado.misiones.de(d).cloned();
         let cumplidas = self.estado.misiones.sumar(&r, d, contador, n);
@@ -174,6 +178,9 @@ impl Nucleo {
         if !p.admin {
             self.autorizar_heroe(p, heroe, false)?;
         }
+        if self.es_del_tablon(dueno, mision) {
+            return self.reclamar_recurrente(t, p, heroe, dueno, mision);
+        }
         let r = self.estado.reglas.economia.misiones.clone();
         let i = r.buscar(dueno.clase(), mision).ok_or_else(|| rechazo(rechazos::MISION_DESCONOCIDA, format!("{mision} no es una misión de {}", id_de_dueno(dueno))))?;
         let x = self.estado.misiones.de(dueno);
@@ -230,7 +237,7 @@ impl Nucleo {
     }
 
     /// ¿Puede `heroe` reclamar las misiones de `dueno`? Las suyas; las de una plaza, su Gobernador o, sin Gobernador, uno de sus residentes; las de una Facción, su Rey.
-    fn puede_reclamar(&self, heroe: u64, dueno: Dueno) -> bool {
+    pub(super) fn puede_reclamar(&self, heroe: u64, dueno: Dueno) -> bool {
         match dueno {
             Dueno::Heroe(h) => h == heroe,
             Dueno::Asentamiento(a) => match self.estado.asentamientos.get(&a).and_then(|x| x.cargos.titular(asentamiento::Cargo::Gobernador)) {

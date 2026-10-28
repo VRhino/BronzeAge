@@ -155,7 +155,7 @@ fn el_heroe_cumple_su_cadena_en_origen_y_reclama_el_oro_una_vez() {
     assert_eq!(vistas[1].condiciones[0].avance, 0, "el préstamo de antes no cuenta para H2");
     // La foto lleva las misiones (desde BAN46) y se lee igual.
     let bytes = x.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN49");
+    assert_eq!(&bytes[..5], b"BAN50");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &x.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.misiones, x.n.estado().misiones);
     assert_eq!(vuelta.serializar(), bytes);

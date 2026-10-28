@@ -634,4 +634,18 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `mision.no_cumplida` | `MISION_NO_CUMPLIDA` | La misión aún no se ha cumplido. |
 | `mision.ya_reclamada` | `MISION_YA_RECLAMADA` | La recompensa de la misión ya se reclamó. |
 | `mision.almacen_lleno` | `MISION_ALMACEN_LLENO` | Los recursos de la recompensa no caben enteros en el almacén de la plaza: se reclaman cuando haya sitio. |
+
+### Las misiones recurrentes y el tablón (mecánica 55; Misiones_Recurrentes §3, §4 y §6)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `mision.fuera_de_ambito` | `MISION_FUERA_DE_AMBITO` | Aceptar: el héroe no es residente de la plaza ni ciudadano de la Facción del tablón (Misiones_Recurrentes §3). |
+| `mision.no_disponible` | `MISION_NO_DISPONIBLE` | Aceptar: esa misión no está hoy en el tablón. |
+| `mision.grupal` | `MISION_GRUPAL` | Aceptar: la misión es grupal: no se acepta, cuenta lo de todos. |
+| `mision.pide_cargo` | `MISION_PIDE_CARGO` | Aceptar: la misión es del titular de un cargo que el héroe no tiene. |
+| `mision.ya_aceptada` | `MISION_YA_ACEPTADA` | Aceptar: el héroe ya la aceptó en este periodo. |
+| `mision.tope_semanal` | `MISION_TOPE_SEMANAL` | Aceptar: esa misión llegó a su tope de aceptaciones de esta semana en el tablón. |
+| `mision.catalogo_invalido` | `MISION_CATALOGO_INVALIDO` | `fijar_catalogo_misiones`: el catálogo no es válido (el mensaje dice por qué); no entra nada. |
+| `tablon.desconocido` | `TABLON_DESCONOCIDO` | El dueño no tiene tablón: no es una plaza ni una Facción que exista. |
+| `tablon.eleccion_invalida` | `TABLON_ELECCION_INVALIDA` | Elegir: más de 7 misiones en una lista, una repetida o una que no es del catálogo con ese ámbito y esa duración. |
 <!-- /rechazos -->

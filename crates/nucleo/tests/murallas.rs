@@ -695,7 +695,7 @@ fn la_foto_a_mitad_de_obra_conserva_la_cita_y_se_rechaza_la_del_formato_anterior
 
     let reglas = reglas(true, |_| {});
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN49");
+    assert_eq!(&bytes[..5], b"BAN50");
     let vuelta = Estado::deserializar(&bytes, &reglas, &m.0.hash().to_string()).unwrap();
     assert_eq!(vuelta.serializar(), bytes, "ida y vuelta idéntica");
     assert_eq!(vuelta.asentamientos, e.n.estado().asentamientos);

@@ -222,6 +222,79 @@ pub fn misiones(n: &Nucleo, d: crate::misiones::Dueno) -> Vec<pb::Mision> {
         .collect()
 }
 
+/// Una misión recurrente del catálogo en el contrato.
+fn definicion_recurrente(m: &crate::recurrentes::Recurrente) -> pb::DefinicionMisionRecurrente {
+    use crate::recurrentes::{Duracion, Tipo};
+    let (tipo, limite_semanal) = match m.tipo {
+        Tipo::Individual { limite_semanal } => (pb::TipoMision::MisionIndividual, limite_semanal),
+        Tipo::Grupal => (pb::TipoMision::MisionGrupal, 0),
+    };
+    pb::DefinicionMisionRecurrente {
+        id: m.id.clone(),
+        duracion: (if m.duracion == Duracion::Dia { pb::DuracionMision::MisionDiaria } else { pb::DuracionMision::MisionSemanal }) as i32,
+        tipo: tipo as i32,
+        limite_semanal,
+        cargo: m.cargo.clone(),
+        condiciones: m.condiciones.iter().map(|(c, u)| pb::CondicionMision { contador: c.clone(), avance: 0, umbral: *u }).collect(),
+        experiencia: m.xp,
+        participacion: m.participacion,
+        oro: m.oro,
+        titulo: m.titulo.clone(),
+        texto: m.texto.clone(),
+        explicacion: m.explicacion.clone(),
+    }
+}
+
+/// El tablón de misiones recurrentes de una plaza o una Facción (Misiones_Recurrentes §8).
+pub(crate) fn tablon(n: &Nucleo, d: crate::misiones::Dueno) -> Option<pb::Tablon> {
+    use crate::recurrentes::{Ambito, EstadoRecurrentes, Progreso, Situacion};
+    let t = n.tablon_de(d)?;
+    let r = n.recurrentes();
+    let estado = |s: Situacion| {
+        (match s {
+            Situacion::Aceptada => pb::EstadoMisionRecurrente::RecurrenteEnCurso,
+            Situacion::Cumplida => pb::EstadoMisionRecurrente::RecurrenteCumplida,
+            Situacion::Reclamada => pb::EstadoMisionRecurrente::RecurrenteReclamada,
+            Situacion::Caducada => pb::EstadoMisionRecurrente::RecurrenteCaducada,
+        }) as i32
+    };
+    let avance = |def: &crate::recurrentes::Recurrente, lleva: &std::collections::BTreeMap<String, u64>| {
+        def.condiciones.iter().map(|(c, u)| pb::CondicionMision { contador: c.clone(), avance: lleva.get(c).copied().unwrap_or(0).min(*u), umbral: *u }).collect::<Vec<_>>()
+    };
+    let misiones = t
+        .misiones
+        .iter()
+        .map(|m| {
+            let mut x = pb::MisionRecurrente { definicion: Some(definicion_recurrente(&m.def)), desde_ms: m.desde, hasta_ms: m.hasta, ..Default::default() };
+            match &m.progreso {
+                Progreso::Individual(a) => {
+                    x.aceptaciones = a.iter().map(|(&h, ac)| pb::AceptacionMision { heroe_id: ids::heroe(h), estado: estado(ac.situacion), condiciones: avance(&m.def, &ac.contadores) }).collect();
+                    x.aceptadas_semana = t.aceptadas_semana.get(&m.def.id).copied().unwrap_or(0);
+                }
+                Progreso::Grupal { contadores, aportes, situacion } => {
+                    x.estado = estado(*situacion);
+                    x.condiciones = avance(&m.def, contadores);
+                    x.aportes = aportes.iter().map(|(&h, &v)| (ids::heroe(h), v)).collect();
+                }
+            }
+            x
+        })
+        .collect();
+    let ahora = n.estado().ahora;
+    let ambito = Ambito::de(d)?;
+    Some(pb::Tablon {
+        misiones,
+        diarias_ids: t.diarias.clone(),
+        semanales_ids: t.semanales.clone(),
+        con_eleccion: t.elegidas_diarias.is_some() || t.elegidas_semanales.is_some(),
+        elegidas_diarias_ids: t.elegidas_diarias.clone().unwrap_or_default(),
+        elegidas_semanales_ids: t.elegidas_semanales.clone().unwrap_or_default(),
+        renovacion_diaria_ms: EstadoRecurrentes::siguiente_dia(ahora),
+        renovacion_semanal_ms: r.siguiente_semana(ahora),
+        catalogo: r.catalogo.misiones.iter().filter(|m| m.ambito == ambito).map(|m| definicion_recurrente(m)).collect(),
+    })
+}
+
 /// La foto del interior de una plaza que el héroe dejó al salir al mundo (Niebla_De_Guerra §4.5): el almacén como cifras fijas (sin capacidad ni tendencia: es lo que había), la cola con su
 /// estado, su nivel y el fin de cada obra (sin sitio en la ciudad, que es de lo vivo) y la guarnición.
 fn interior_recordado(plaza: u64, x: &PlazaRecordada) -> pb::InteriorRecordado {
@@ -583,6 +656,7 @@ pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
         admite_otras_en_ataques: x.admite_otras_en_ataques,
         misiones: misiones(n, crate::misiones::Dueno::Faccion(f)),
         miembros: n.miembros_de(f).into_iter().map(|m| pb::MiembroFaccion { heroe_id: ids::heroe(m.heroe), residencia_id: m.residencia.map(residencia_id), cargos: m.cargos, participacion: m.participacion }).collect(),
+        tablon: tablon(n, crate::misiones::Dueno::Faccion(f)),
         ..base
     }
 }
@@ -590,7 +664,7 @@ pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
 /// La forma pública de otra Facción (5H, `VISTA`; Proyecciones §6: «facciones: públicas en la ficción»): la Facción sin su experiencia, su capital ni cuándo la designó (dónde está su capital es
 /// de la niebla). Regla (decisión del autor del 2026-10-26): de una Facción ajena se ve **solo el nivel**, sin la experiencia exacta ni la capital (el TypeScript la mandaba entera).
 pub fn faccion_publica(n: &Nucleo, f: u32) -> pb::Faccion {
-    pb::Faccion { experiencia: 0, capital_designada_en_ms: None, capital_id: None, misiones: vec![], miembros: vec![], ..faccion(n, f) }
+    pb::Faccion { experiencia: 0, capital_designada_en_ms: None, capital_id: None, misiones: vec![], miembros: vec![], tablon: None, ..faccion(n, f) }
 }
 
 /// Las tecnologías de la Facción (6G, `Estado::tecnologia`; Proyecciones §6.3: las de un rival no viajan nunca): las aparecidas y las reveladas por su id, las adoptadas con las de arranque

@@ -93,6 +93,14 @@ Una Facción puede someter a otra Facción entera como vasalla, o federarse con 
 - Se gana **defendiendo** (una plaza en un asedio, un pueblo o una aldea en un saqueo, o una caravana comercial frente a quien la asalta o a los bandidos que la acosan; se apunta a esa plaza, a la plaza madre o a la de origen de la caravana) y **ganando cualquier batalla** (se apunta a la plaza donde reside el héroe; quien reside en un campamento no suma por ello). Defender y ganar suman los dos. Sin combate (una plaza que cae sin defensores) no hay nada.
 - La plaza enseña a quien está dentro la participación de cada héroe en ella; la Facción enseña a sus ciudadanos la lista de miembros con su residencia, sus cargos y la suma de su participación en las plazas que son de la Facción hoy.
 - La participación se queda con la plaza aunque el héroe se mude, deje la Facción o la plaza cambie de dueña; una plaza en ruinas se lleva la suya.
+- También se gana con las **misiones del tablón** de la plaza (2.5.2).
+
+### 2.5.2 Tablón de misiones (2026-10-28; `Docs/Mechanics/Misiones_Recurrentes.md`)
+- Cada plaza y cada Facción tienen un **tablón** con misiones que se repiten: **7 diarias** y **7 semanales**. Las diarias vuelven a salir cada día a las 00:00; cuáles salen (diarias y semanales) cambia una vez por semana.
+- El **Gobernador** elige qué sale en el tablón de su plaza y el **Rey** en el de su Facción, de un catálogo; su elección vale desde la siguiente renovación semanal.
+- Las **individuales** las acepta un residente de la plaza (o un ciudadano de la Facción) y cuentan lo que hace desde entonces; cada una tiene un tope de aceptaciones por semana y alguna solo la acepta el titular de un cargo. Las **grupales** cuentan lo que hacen todos.
+- Recompensa: experiencia para la Facción, **participación** en la plaza (en las grupales, a partes iguales entre quienes aportaron) y, en algunas individuales, oro para el héroe. Lo cumplido se puede reclamar aunque haya pasado su día o su semana.
+- Las misiones únicas de cada héroe, plaza y Facción (sus primeros pasos) siguen aparte. El catálogo del tablón lo puede cambiar la administración sin parar el servidor.
 
 ## 2.6 Fusión/anexión voluntaria entre 2 Facciones
 Menú con 2 opciones al ejecutar la acción:

@@ -422,7 +422,7 @@ impl Nucleo {
         self.avance_de_heroes(t, &combatieron, "batallas", 1);
         // La participación (Participacion §2): la batalla ganada, a los del bando ganador.
         let ganadores = if informe.ganador == Lado::Atacante { &participantes_a } else { &participantes_d };
-        self.participacion_de_batalla(&[], &[], ganadores);
+        self.participacion_de_batalla(t, &[], &[], ganadores);
         Ok(())
     }
 
@@ -524,7 +524,7 @@ impl Nucleo {
         if r.gana_atacante {
             self.contar(t, tecnologia::contador::Delta::uno(tecnologia::Contador::CaravanasDestruidasOCapturadas));
         }
-        self.participacion_de_batalla(&[origen], &defensores, if r.gana_atacante { &participantes } else { &defensores });
+        self.participacion_de_batalla(t, &[origen], &defensores, if r.gana_atacante { &participantes } else { &defensores });
         Ok(())
     }
 
@@ -609,7 +609,7 @@ impl Nucleo {
         // Las misiones (Misiones §3): todos combatieron; si cae, lo destruyen ellos y su Facción.
         self.avance_de_heroes(t, &participantes, "batallas", 1);
         if r.destruido {
-            self.participacion_de_batalla(&[], &[], &participantes);
+            self.participacion_de_batalla(t, &[], &[], &participantes);
             self.avance_de_heroes(t, &participantes, "bandidos", 1);
             if let Some(f) = self.estado.ejercitos.get(&id).and_then(|e| e.columna.faccion) {
                 self.avance(t, Dueno::Faccion(f), "bandidos", 1);
@@ -762,7 +762,7 @@ impl Nucleo {
             self.avance_de_heroes(t, &[participantes.clone(), defensa.tropa.heroes.to_vec()].concat(), "batallas", 1);
             // La participación (Participacion §2), antes de la conquista: la defensa a quienes la defendieron y la batalla ganada al bando que gana.
             let ganadores = if conquistada { participantes.clone() } else { defensa.tropa.heroes.to_vec() };
-            self.participacion_de_batalla(&[x], &defensa.tropa.heroes, &ganadores);
+            self.participacion_de_batalla(t, &[x], &defensa.tropa.heroes, &ganadores);
         }
         if conquistada {
             self.avance(t, Dueno::Faccion(yo), "conquistas", 1);
@@ -888,7 +888,7 @@ impl Nucleo {
         // La participación (Participacion §2), solo con combate: la defensa a los de dentro, para la plaza madre, y la batalla ganada al bando que gana.
         if informe.is_some() {
             let ganadores = if gana { participantes.clone() } else { dentro.tropa.heroes.to_vec() };
-            self.participacion_de_batalla(&[madre], &dentro.tropa.heroes, &ganadores);
+            self.participacion_de_batalla(t, &[madre], &dentro.tropa.heroes, &ganadores);
         }
         Ok(())
     }

@@ -397,7 +397,7 @@ impl Nucleo {
             None => Defensa::Base,
         };
         let acoso = resolver_acoso(&cr, nivel, defensa, &mut self.estado.rng);
-        self.participacion_de_batalla(&[origen], &defensores, &[]);
+        self.participacion_de_batalla(t, &[origen], &defensores, &[]);
         self.volcar_escuadras(&escolta);
         let plazas = vec![origen].into_iter().filter(|o| self.estado.asentamientos.contains_key(o)).collect();
         let datos = vec![("campamento", idc as i64), ("caravana", idk as i64), ("poderBandido", acoso.poder_bandido), ("defensa", acoso.defensa), ("bajasEscolta", acoso.bajas_escolta.iter().map(|b| b.antes - b.despues).sum())];

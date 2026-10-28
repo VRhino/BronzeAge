@@ -84,6 +84,7 @@ mod estado_fundacion;
 mod estado_militar;
 pub mod misiones;
 pub mod participacion;
+pub mod recurrentes;
 mod generadores;
 pub mod memoria;
 mod nucleo;

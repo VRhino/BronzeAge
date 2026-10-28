@@ -496,6 +496,8 @@ impl Nucleo {
         self.residentes_tras_la_ruina(id);
         // La participación en la plaza se va con ella (Participacion §3).
         self.estado.participacion.remove(&id);
+        // Y su tablón (Misiones_Recurrentes §2).
+        self.estado.recurrentes.tablones.remove(&crate::misiones::Dueno::Asentamiento(id));
         self.contar_nivel(t, a.faccion, Some(nivel_actual), None);
         self.estado.generaciones.subir(id);
         // La cascada de la ruina, en su orden: los residentes se reubican; después, el comercio (trueques anulados sin penalizar, caravanas perdidas

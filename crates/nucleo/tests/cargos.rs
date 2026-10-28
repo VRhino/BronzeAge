@@ -316,7 +316,7 @@ fn los_cargos_y_la_puerta_viajan_en_la_foto_ban33_y_la_ban32_se_rechaza() {
     e.ok("ana", Comando::VetarJugador { heroe: ana, asentamiento: plaza, vetado: cai, vetar: true });
     assert!(hash0 != hash1 && hash1 != hash2 && hash2 != e.n.hash_estado(), "cada pieza mueve el hash");
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN49");
+    assert_eq!(&bytes[..5], b"BAN50");
     let reglas = e.n.estado().reglas.clone();
     let vuelta = Estado::deserializar(&bytes, &reglas, &e.n.estado().mundo_hash).unwrap();
     let a = &vuelta.asentamientos[&plaza];

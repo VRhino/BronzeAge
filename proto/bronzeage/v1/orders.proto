@@ -406,6 +406,20 @@ message OrdenReclamarRecompensa {
   string mision_id = 2;
 }
 
+// Acepta una misión individual del tablón de una plaza o una Facción (Misiones_Recurrentes §3). `dueno_id`: `as-N` o `f-N`; el héroe es el de la cuenta.
+message OrdenAceptarMision {
+  string dueno_id = 1;
+  string mision_id = 2;
+}
+
+// El Gobernador de la plaza o el Rey de la Facción elige lo que sale en su tablón desde la próxima renovación semanal: hasta 7 diarias y hasta 7 semanales
+// (Misiones_Recurrentes §4). Sustituye la elección anterior entera.
+message OrdenElegirTablon {
+  string dueno_id = 1;
+  repeated string diarias_ids = 2;
+  repeated string semanales_ids = 3;
+}
+
 message OrdenFijarPuerta {
   string asentamiento_id = 1;
   string heroe_id = 2;
@@ -923,6 +937,7 @@ message OrdenSalirDeAvanzada {
 //   fijar_residencia {heroe_id, residencia?}   fijar_tecnologias {faccion_id, tecnologias[]}   fijar_faccion_de_heroe {heroe_id, faccion_id?}
 //   colocar_heroe {heroe_id, ubicacion}   herir_heroe {heroe_id}   fijar_relacion {faccion_a_id, faccion_b_id, relacion?}
 //   colocar_bandidos {posicion{x,y}, nivel}   dar_escuadra {heroe_id, tropa_id, cantidad}   fijar_controlador {heroe_id, controlador}
+//   fijar_catalogo_misiones {catalogo}   (el catálogo de las misiones recurrentes, JSON entero en texto; Misiones_Recurrentes §6)
 // Las formas exactas las fija el núcleo al traducirlas (`Docs/Mechanics/Comandos_Parametros.md`, sección de administración).
 message OrdenDeAdministracion {
   string codigo = 1;
@@ -1086,5 +1101,7 @@ message Orden {
     OrdenReclamarRecompensa reclamar_recompensa = 156;
     OrdenMarcarAldea marcar_aldea = 157;
     OrdenMejorarAldea mejorar_aldea = 158;
+    OrdenAceptarMision aceptar_mision = 159;
+    OrdenElegirTablon elegir_tablon = 160;
   }
 }

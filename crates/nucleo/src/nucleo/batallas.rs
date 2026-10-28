@@ -1061,7 +1061,7 @@ impl Nucleo {
         let acoso = matches!(b.ticket.contexto, Contexto::Caravana { .. }) && self.participantes_del_lado(&b, Lado::Atacante).is_empty();
         let ganadores: Vec<u64> = if acoso { vec![] } else { self.participantes_del_lado(&b, res.ganador).iter().map(|q| q.heroe).filter(|&h| res.por_heroe.iter().any(|x| x.heroe == h && x.participo)).collect() };
         self.consecuencias_de_batalla(t, &b, &res, &efectos);
-        self.participacion_de_batalla(&defendidas, &defendieron, &ganadores);
+        self.participacion_de_batalla(t, &defendidas, &defendieron, &ganadores);
         self.contar(t, logros);
         // Las misiones (Misiones §3): cada héroe que participó libró una batalla; los atacantes que la ganan a un campamento lo destruyen; un asedio se resiste o se conquista.
         let heroes: Vec<u64> = [Lado::Atacante, Lado::Defensor].into_iter().flat_map(|l| self.participantes_del_lado(&b, l)).map(|q| q.heroe).filter(|&h| res.por_heroe.iter().any(|x| x.heroe == h && x.participo)).collect();

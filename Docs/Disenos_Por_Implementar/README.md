@@ -7,5 +7,4 @@ Diseños **cerrados con el autor pero sin implementar**. Aquí viven mientras no
 | Documento | Diseño | Entrada |
 |---|---|---|
 | [`Mercenarios_Por_Contrato.md`](Mercenarios_Por_Contrato.md) | 2026-10-26 | `Mecanicas a desarrollar.md` 48 |
-| [`Misiones_Recurrentes_Y_Tablon.md`](Misiones_Recurrentes_Y_Tablon.md) | 2026-10-28 | `Mecanicas a desarrollar.md` 55 |
 

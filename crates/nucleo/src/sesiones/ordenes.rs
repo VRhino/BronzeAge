@@ -722,6 +722,8 @@ impl Ctx<'_> {
             Cuerpo::AdoptarTecnologia(o) => Comando::AdoptarTecnologia { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, tecnologia: self.tecnologia(&o.tecnologia_id)? },
             Cuerpo::AbrirAlijo(o) => Comando::AbrirAlijo { heroe: self.mi_heroe()?, alijo: self.alijo(&o.alijo_id)? },
             Cuerpo::ReclamarRecompensa(o) => Comando::ReclamarRecompensa { heroe: self.mi_heroe()?, dueno: self.dueno_de_mision(&o.dueno_id)?, mision: o.mision_id.clone() },
+            Cuerpo::AceptarMision(o) => Comando::AceptarMision { heroe: self.mi_heroe()?, dueno: self.dueno_de_mision(&o.dueno_id)?, mision: o.mision_id.clone() },
+            Cuerpo::ElegirTablon(o) => Comando::ElegirTablon { heroe: self.mi_heroe()?, dueno: self.dueno_de_mision(&o.dueno_id)?, diarias: o.diarias_ids.clone(), semanales: o.semanales_ids.clone() },
             Cuerpo::ComprarMirada(o) => Comando::ComprarMirada { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, centro: self.punto(o.centro.as_ref())? },
             Cuerpo::ComprarInformePlaza(o) => {
                 Comando::ComprarInformePlaza { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, asentamiento: self.plaza(&o.asentamiento_id)? }
@@ -873,6 +875,7 @@ impl Ctx<'_> {
                 };
                 Comando::FijarControlador { heroe: heroe()?, controlador }
             }
+            "fijar_catalogo_misiones" => Comando::FijarCatalogoMisiones { catalogo: t("catalogo")?.to_owned() },
             otro => return self.forma(format!("orden de administración desconocida: {otro}")),
         })
     }

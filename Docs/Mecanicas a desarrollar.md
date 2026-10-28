@@ -22,7 +22,6 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 20 | TECNOLOGÍA | Eras IV y V (pospuestas con el motor nuevo) | Eras I-III en canon y en Rust |
 | 39 | POLÍTICA | Elección del Rey de Facción por voto entre representantes (decidido el 2026-10-17: queda aquí, no implementada) | el Rey se asigna, sin votación |
 | 48 | MILITAR / POLÍTICA | Mercenarios por contrato (diseño cerrado el 2026-10-26; `Docs/Disenos_Por_Implementar/Mercenarios_Por_Contrato.md`) | nada |
-| 55 | MISIONES | Misiones recurrentes (diarias y semanales), individuales y grupales, tablón de la plaza y catálogo editable en caliente (diseño del 2026-10-28; `Docs/Disenos_Por_Implementar/Misiones_Recurrentes_Y_Tablon.md`) | misiones únicas (mecánica 49) |
 | 61 | MISIONES | H13 «Forjar al héroe» no tiene camino: el héroe no gana puntos de atributo porque el servidor no sube su nivel (visto al probar las misiones una a una, 2026-10-28). **Parada** hasta que haya Unity para los perks (decisión del autor del 2026-10-28) | la misión existe y se prueba que repartir sin puntos no cuenta |
 | — | PARIDAD | Recortes temporales del motor Rust frente al TypeScript (sección «Paridad con TypeScript») | el motor no está migrado hasta cerrarlos |
 | — | DUDAS | Ninguna sin decisión desde el 2026-10-27 (sección «Dudas abiertas»: las `// DUDA:` que quedan en el código) | — |
@@ -60,12 +59,6 @@ Cuatro ideas del autor, estudiadas y decididas en un hilo de solo diseño; sin c
 
 - **48. Mercenarios por contrato**: `Docs/Disenos_Por_Implementar/Mercenarios_Por_Contrato.md`. Bots contratados como miembros de la Facción por Rey, Embajador o Gobernador (este con alcance de su plaza), temporales con trabajo de la tabla y permanentes como ciudadanos con marca. Pendiente: implementar tras los bots de la fase 7 (necesita el runner jugando por el contrato 05), calibrar tarifas, plazos y topes, y la pestaña de control en BronzeAgeClient.
 - **Fuera de alcance**: carne y leche (también del MVP) y las misiones entre humanos van a `Docs/Ideas a diseñar.md` (entradas 52 y 53 de ese archivo).
-
-## 55. Misiones recurrentes (diseño del 2026-10-28)
-
-Pedido por el autor el 2026-10-28 y cerrado con él el mismo día, con su documento en `Docs/Disenos_Por_Implementar/`:
-
-- **55. Misiones recurrentes y tablón**: `Docs/Disenos_Por_Implementar/Misiones_Recurrentes_Y_Tablon.md`. Ámbito, recurrencia, duración (1 o 7 días), tipo (individual con límite semanal o grupal a partes iguales) y estado. Renovación a las 00:00 UTC (diarias) y cada 7 días (semanales). Tablón de la plaza: 7 a la vez de un catálogo, que elige el Gobernador para la siguiente renovación; sustituye a las misiones de plaza de hoy. Contenido editable en caliente; el funcionamiento sigue en el motor. Trae también el origen de participación que falta (cumplir una misión del tablón; la participación está implementada desde el 2026-10-28, `Docs/Mechanics/Participacion.md`).
 
 ## Paridad con TypeScript: recortes temporales del motor Rust (2026-10-18)
 

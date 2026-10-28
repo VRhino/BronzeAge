@@ -47,6 +47,8 @@ impl Nucleo {
             (edificios, &eco.recintos, &eco.politicas, eco.ascenso, &eco.recetas_pausadas, eco.auto_pausada, eco.reserva_manual),
             (residentes, presentes, guarnicion, flota, aparcadas, pueblos, avanzadas, self.batalla_sobre(militar::presencia::Ubicacion::Asentamiento(a.id as u32)).map(|b| b.id)),
             e.participacion.get(&a.id),
+            // El tablón (mecánica 55) y el catálogo que enseña (cambia entero: basta su puntero).
+            (e.recurrentes.tablones.get(&crate::misiones::Dueno::Asentamiento(a.id)), std::sync::Arc::as_ptr(&e.recurrentes.catalogo)),
         ))
     }
 
@@ -97,7 +99,7 @@ impl Nucleo {
             // Con sus Aedas residentes, sus épicas y las cumplidas (6E).
             let aedas: Vec<_> = e.residentes.aedas.iter().filter(|a| a.faccion == f).collect();
             // Con sus miembros y su participación (mecánica 54).
-            ((Clase::Faccion, f as u64), huella(&(e.politica.facciones.get(f), e.comercio.reputacion.get(&f), e.tecnologia.por_faccion.get(&f), relaciones, self.liga_de(f), aedas, e.residentes.cumplidas.get(&f), self.miembros_de(f))))
+            ((Clase::Faccion, f as u64), huella(&(e.politica.facciones.get(f), e.comercio.reputacion.get(&f), e.tecnologia.por_faccion.get(&f), relaciones, self.liga_de(f), aedas, e.residentes.cumplidas.get(&f), self.miembros_de(f), e.recurrentes.tablones.get(&crate::misiones::Dueno::Faccion(f)), std::sync::Arc::as_ptr(&e.recurrentes.catalogo))))
         }));
         m.extend(e.politica.relaciones.iter().map(|r| ((Clase::Relacion, r.id), huella(r))));
         m.extend(e.politica.titulos.iter().map(|x| ((Clase::Titulo, x.id.indice()), huella(x))));

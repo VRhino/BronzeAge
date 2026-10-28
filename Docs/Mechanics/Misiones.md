@@ -4,6 +4,8 @@
 
 > **Revisión del 2026-10-28 (mecánica 59).** Cada misión tiene además una **explicación** en texto libre ([`Misiones_Textos.md`](Misiones_Textos.md)). F1 se cumple con la capital **efectiva** (la primera plaza de la Facción), no con la designada, que pide Palacio (decisión del autor; ver `capital` en §3). `FijarNivelAsentamiento` (administración) también mira el contador `nivel`. Pruebas: `crates/nucleo/tests/misiones_una_a_una.rs` cumple cada misión del catálogo haciendo lo que dice su texto, con el catálogo sin previas (35 de 36; **H13 no tiene camino hoy**: el héroe no gana puntos de atributo, apuntado en `Docs/Mecanicas a desarrollar.md`, 61), y una guarda exige una prueba por misión. H7 pide **20** de tiro (antes 25: la única tropa de tiro sin artesanos, los honderos, trae 20; decisión del autor del 2026-10-28; cambia la huella de las reglas); `tests/propios.rs` (`las_misiones_de_la_faccion_y_sus_cumplidas_llegan_a_cada_ciudadano…`) comprueba que las misiones de la Facción, cumplidas incluidas, llegan en `FACCION` a cada ciudadano, sea o no el Rey, y a ninguna otra Facción.
 
+> **Misiones recurrentes (mecánica 55, 2026-10-28).** Estas misiones son **únicas**: cada una se cumple una vez. Las que se repiten cada día o cada semana van aparte, en el tablón de cada plaza y cada Facción ([`Misiones_Recurrentes.md`](Misiones_Recurrentes.md)); comparten los contadores del héroe (§3) y la orden `reclamarRecompensa` (§4).
+
 ## 1. Alcance
 
 Las misiones guían al jugador al principio del juego para que descubra las mecánicas, con recompensa. Tienen tres dueños: el **héroe**, el **asentamiento** y la **Facción**. Valen igual para los bots (`12_NPC_Fuera_Del_Motor.md` §2), que las siguen como currículo.

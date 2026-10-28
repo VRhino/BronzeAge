@@ -110,12 +110,13 @@ impl Nucleo {
     // ───────────────────────────── Ayudas ─────────────────────────────
 
     /// Las Facciones que una relación nombra existen como entidad: la administración y la guerra al atacar las crean vacías si hace falta (como `FijarNivelFaccion`, decisión 9).
-    fn asegurar_facciones(&mut self, fs: &[u32]) {
+    fn asegurar_facciones(&mut self, t: Instante, fs: &[u32]) {
         let r = self.estado.reglas.economia.politica.clone();
         for &f in fs {
             if !self.estado.politica.facciones.existe(f) {
                 self.estado.politica.facciones.crear_vacia(&r, f);
                 self.tr.tocar(Clase::Faccion, u64::from(f));
+                self.asegurar_tablon(t, crate::misiones::Dueno::Faccion(f));
             }
         }
     }
@@ -260,7 +261,7 @@ impl Nucleo {
     /// Declara la guerra de toda agresión (`atacar` con `declara_guerra`, §5.4): con el arrastre; contra una aliada, la traición de Q2. `comprobar_agresion` ya miró que no haya un
     /// vasallaje entre las dos ni una guerra; las Facciones que no existan como entidad nacen vacías (las del andamiaje).
     pub(super) fn declarar_guerra(&mut self, t: Instante, atacante: u32, contra: u32) {
-        self.asegurar_facciones(&[atacante, contra]);
+        self.asegurar_facciones(t, &[atacante, contra]);
         let rr = self.estado.reglas.economia.comercio.reputacion.clone();
         let mut ids = self.ids_desde();
         let Politica { facciones, relaciones, .. } = &mut self.estado.politica;
@@ -370,7 +371,7 @@ impl Nucleo {
             self.anotar_ruptura(t, id, None);
         }
         let Some(r) = relacion else { return Ok(vec![]) };
-        self.asegurar_facciones(&[a, b]);
+        self.asegurar_facciones(t, &[a, b]);
         let tipo = match r {
             Relacion::Alianza => TipoRelacion::Alianza,
             Relacion::Vasallaje => TipoRelacion::Vasallaje,

@@ -764,7 +764,7 @@ impl Nucleo {
         // La participación (Participacion §2), solo con combate: la avanzada no da defensa, solo la batalla ganada.
         if en_combate {
             let ganadores = if gana { participantes.clone() } else { dentro.tropa.heroes.to_vec() };
-            self.participacion_de_batalla(&[], &[], &ganadores);
+            self.participacion_de_batalla(t, &[], &[], &ganadores);
         }
         Ok(())
     }

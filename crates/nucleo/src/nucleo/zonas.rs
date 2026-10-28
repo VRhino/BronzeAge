@@ -316,6 +316,7 @@ impl Nucleo {
                 }
                 let r = self.estado.reglas.economia.politica.clone();
                 self.estado.politica.facciones.crear_vacia(&r, *faccion);
+                self.asegurar_tablon(t, Dueno::Faccion(*faccion));
                 self.estado.politica.facciones.fijar_experiencia(*faccion, politica::nivel::experiencia_minima(&r.nivel, *nivel));
                 self.tr.tocar(Clase::Faccion, u64::from(*faccion));
                 self.tr.emitir(&self.estado, EventoNucleo { codigo: "faccion.nivel".into(), en: t, ejercitos: vec![], asentamientos: vec![], punto: None, datos: vec![("faccion", *faccion as i64), ("nivel", *nivel as i64)], ..Default::default() });
@@ -490,6 +491,8 @@ impl Nucleo {
             let (datos, valores) = (vec![("asentamiento", id as i64), ("faccion", i64::from(faccion)), ("heroe", lider as i64)], vec![("cargo", crate::estado::Dato::Texto(asentamiento::Cargo::Gobernador.clave().to_owned()))]);
             self.tr.emitir(&self.estado, EventoNucleo { valores, asentamientos: vec![id], ..EventoNucleo::nuevo("cargo.local_asignado", t, datos) });
         }
+        self.asegurar_tablon(t, Dueno::Asentamiento(id));
+        self.asegurar_tablon(t, Dueno::Faccion(faccion));
         self.avance(t, Dueno::Faccion(faccion), "fundaciones", 1);
         self.mirar_misiones(t, Dueno::Faccion(faccion));
         self.mirar_misiones(t, Dueno::Asentamiento(id));

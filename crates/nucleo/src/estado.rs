@@ -87,6 +87,14 @@ pub fn entidad_precios() -> u64 {
     22 * crate::estado_comercio::ETIQUETA
 }
 
+/// Prioridad de la renovación del tablón de misiones recurrentes (`Carga::Tablon`, Reloj_Y_Eventos §2: con los títulos y los precios, después de todo lo demás del mismo instante).
+pub const PRIO_TABLON: u8 = 10;
+
+/// La entidad de la renovación del tablón: una sola para todo el mundo (etiqueta 23 de `estado_comercio::ETIQUETA`).
+pub fn entidad_tablon() -> u64 {
+    23 * crate::estado_comercio::ETIQUETA
+}
+
 /// Prioridad de la cita del fin del plazo de la Era (`Carga::Era`, Reloj_Y_Eventos §2: con los títulos, después de todo lo demás del mismo instante).
 pub const PRIO_ERA: u8 = 10;
 
@@ -123,6 +131,9 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
     21 * crate::estado_comercio::ETIQUETA | plaza
 }
 
+/// BAN50: BAN49 con las misiones recurrentes (mecánica 55, 2026-10-28; `Estado::recurrentes`, al final: el catálogo vigente, el origen de las semanas, la renovación en la cola y cada
+/// tablón). BAN49 a BAN40 se siguen admitiendo: el catálogo es el inicial, las semanas cuentan desde el día de la foto y cada plaza y cada Facción sacan su tablón al cargar.
+///
 /// BAN49: BAN48 con la participación de cada héroe en cada plaza (mecánica 54, 2026-10-28; `Estado::participacion`, al final). BAN48 a BAN40 se siguen admitiendo: la
 /// participación empieza vacía.
 ///
@@ -267,7 +278,7 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN49";
+const MAGIA: &[u8; 5] = b"BAN50";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -316,6 +327,8 @@ pub struct ReglasEconomia {
     pub misiones: Arc<crate::misiones::Reglas>,
     /// Los puntos de participación (`PARTICIPACION` de Participacion.md, mecánica 54).
     pub participacion: Arc<crate::participacion::Reglas>,
+    /// El catálogo inicial de las misiones recurrentes (`MISIONES_RECURRENTES` de Misiones_Recurrentes.md, mecánica 55); el vigente es `EstadoRecurrentes::catalogo`.
+    pub recurrentes: Arc<crate::recurrentes::Catalogo>,
     huella: String,
 }
 
@@ -329,11 +342,15 @@ impl ReglasEconomia {
             + &combate::datos::texto_de_parametros()
             + &politica::datos::texto_de_parametros()
             + &asentamiento::datos::texto_de_parametros_de(crate::misiones::DOC_MISIONES)
-            + &asentamiento::datos::texto_de_parametros_de(crate::participacion::DOC_PARTICIPACION);
+            + &asentamiento::datos::texto_de_parametros_de(crate::participacion::DOC_PARTICIPACION)
+            + &asentamiento::datos::texto_de_parametros_de(crate::recurrentes::DOC_RECURRENTES);
         let huella = crate::hex(&Sha256::digest(bloques).into());
         let datos = asentamiento::Reglas::cargar();
         let urbanismo = Arc::new(Urbanismo::cargar(&datos));
-        Self { datos: Arc::new(datos), urbanismo, comercio: Arc::new(comercio::Reglas::cargar()), militar: Arc::new(militar::Reglas::cargar()), combate: Arc::new(combate::Reglas::cargar()), politica: Arc::new(politica::Reglas::cargar()), tecnologia: Arc::new(tecnologia::Reglas::cargar()), misiones: Arc::new(crate::misiones::Reglas::cargar()), participacion: Arc::new(crate::participacion::Reglas::cargar()), huella }
+        let misiones = crate::misiones::Reglas::cargar();
+        let unicas: Vec<&str> = misiones.misiones.iter().map(|m| m.id.as_str()).collect();
+        let recurrentes = crate::recurrentes::Catalogo::desde(&crate::recurrentes::Catalogo::cargar().a_json(), &unicas).unwrap_or_else(|e| panic!("bloque MISIONES_RECURRENTES: {e}"));
+        Self { datos: Arc::new(datos), urbanismo, comercio: Arc::new(comercio::Reglas::cargar()), militar: Arc::new(militar::Reglas::cargar()), combate: Arc::new(combate::Reglas::cargar()), politica: Arc::new(politica::Reglas::cargar()), tecnologia: Arc::new(tecnologia::Reglas::cargar()), misiones: Arc::new(misiones), participacion: Arc::new(crate::participacion::Reglas::cargar()), recurrentes: Arc::new(recurrentes), huella }
     }
     /// Identidad de las reglas (sha256 en hexadecimal de los bloques de parámetros de los documentos de Mechanics de los que salen).
     pub fn huella(&self) -> &str {
@@ -545,6 +562,8 @@ pub enum Carga {
     Titulos,
     /// Se recalcula la tabla de precios de mercado (la entidad es `entidad_precios`, una sola para todo el mundo; prioridad [`PRIO_PRECIOS`]).
     Precios,
+    /// Las 00:00 de mundo: se renuevan los tablones de misiones recurrentes (mecánica 55; la entidad es `entidad_tablon`, una sola para todo el mundo; prioridad [`PRIO_TABLON`]).
+    Tablon,
     /// Se mira si empieza la Era siguiente (6B; la entidad es `entidad_era`, una sola para todo el mundo; prioridad [`PRIO_ERA`]): al fin del plazo de la vigente, o en el instante en que empezó
     /// una Era cuyos logros ya estaban todos cumplidos.
     Era,
@@ -1035,6 +1054,8 @@ pub struct Estado {
     pub misiones: crate::misiones::EstadoMisiones,
     /// La participación de cada héroe en cada plaza (mecánica 54, Participacion §2; BAN49).
     pub participacion: crate::participacion::EstadoParticipacion,
+    /// El catálogo vigente de las misiones recurrentes y el tablón de cada plaza y cada Facción (mecánica 55, Misiones_Recurrentes; BAN50).
+    pub recurrentes: crate::recurrentes::EstadoRecurrentes,
     pub generaciones: Generaciones,
     pub cola: Cola<Carga>,
     /// De cada actor, sus últimas `peticion_id` aceptadas en orden de llegada, con la versión que produjeron (a lo sumo `Reglas::limite_idempotencia`).
@@ -1046,6 +1067,7 @@ impl Estado {
         let mut comercio = EstadoComercio::default();
         comercio.mercenarios.mercado = comercio::mercenarios::MercadoMercenario::nuevo(&reglas.economia.comercio.mercenarios, ahora);
         let tecnologia = tecnologia::EstadoTecnologia::nuevo(&reglas.economia.tecnologia, ahora);
+        let recurrentes = crate::recurrentes::EstadoRecurrentes::nuevo(reglas.economia.recurrentes.clone(), ahora);
         Self {
             reglas,
             mundo_hash,
@@ -1079,6 +1101,7 @@ impl Estado {
             precios_rearmar: false,
             misiones: Default::default(),
             participacion: Default::default(),
+            recurrentes,
             generaciones: Generaciones::nuevas(),
             cola: Cola::nueva(),
             vistos: BTreeMap::new(),
@@ -1247,6 +1270,7 @@ impl Estado {
         }
         crate::misiones::escribir(&mut w, &self.misiones);
         crate::participacion::escribir(&mut w, &self.participacion);
+        crate::recurrentes::escribir(&mut w, &self.recurrentes);
 
         let gens = self.generaciones.volcar();
         w.u64(gens.len() as u64);
@@ -1306,6 +1330,7 @@ impl Estado {
                 }),
                 Carga::Titulos => w.u8(15),
                 Carga::Precios => w.u8(23),
+                Carga::Tablon => w.u8(24),
                 Carga::Era => w.u8(16),
                 Carga::Tecnologia(SucesoTecnologia::Conocimiento) => w.u8(17),
                 Carga::Tecnologia(SucesoTecnologia::Campamento) => w.u8(18),
@@ -1340,12 +1365,17 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN49`): los cuatro primeros dicen la familia («BAN4» son los formatos 40 a 49, y se admiten todos; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
+        // La cabecera es de 5 bytes (`BAN50`): los cuatro primeros dicen la familia («BAN5» es el formato 50 y «BAN4» los formatos 40 a 49, y se admiten todos; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
         // 20 a 29 y 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         let (mut con_eligieron, mut con_rutas_acarreo, mut con_nombres, mut con_precios, mut con_forzadas, mut con_misiones, mut con_aldeas) = (true, true, true, true, true, true, true);
-        let (mut con_flujos, mut con_participacion) = (false, false);
+        let (mut con_flujos, mut con_participacion, mut con_recurrentes) = (false, false, false);
         if magia == MAGIA[..4] {
+            match r.u8()? {
+                b'0' => (con_flujos, con_participacion, con_recurrentes) = (true, true, true),
+                _ => return Err(ErrorFormato("no es un estado del núcleo")),
+            }
+        } else if magia == *b"BAN4" {
             match r.u8()? {
                 b'9' => (con_flujos, con_participacion) = (true, true),
                 b'8' => con_flujos = true,
@@ -1526,6 +1556,11 @@ impl Estado {
         if con_participacion {
             s.participacion = crate::participacion::leer(&mut r)?;
         }
+        if con_recurrentes {
+            s.recurrentes = crate::recurrentes::leer(&mut r)?;
+        } else {
+            crate::nucleo::arrancar_tablones(&mut s);
+        }
 
         let mut gens = Vec::new();
         for _ in 0..r.cuenta()? {
@@ -1555,6 +1590,7 @@ impl Estado {
                 14 => Carga::Fundacion(SucesoFundacion::Llega),
                 15 => Carga::Titulos,
                 23 => Carga::Precios,
+                24 => Carga::Tablon,
                 16 => Carga::Era,
                 17 => Carga::Tecnologia(SucesoTecnologia::Conocimiento),
                 18 => Carga::Tecnologia(SucesoTecnologia::Campamento),

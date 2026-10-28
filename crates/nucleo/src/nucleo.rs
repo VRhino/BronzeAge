@@ -87,6 +87,8 @@ mod participacion;
 pub use participacion::Miembro;
 
 pub(crate) use misiones::arrancar_misiones;
+mod recurrentes;
+pub(crate) use recurrentes::arrancar_tablones;
 mod tecnologias;
 mod titulos;
 mod traslado;
@@ -579,15 +581,17 @@ impl Nucleo {
         // Lo que pasa en el mundo arma el plazo de los títulos (`titulos`); el propio plazo no lo rearma.
         // El evento de un Aeda itinerante (6D) no arma nada: su viaje no cambia lo que miran los títulos ni la Era (lo que revela o vende sí, y eso va en una orden u otro evento).
         // El plazo de la tabla de precios no arma nada (solo rehace la tabla), y ni él ni los otros plazos globales (títulos, Era) lo arman a él: con el mundo quieto, nada se rearma.
-        if !matches!(ev.carga, Carga::Titulos | Carga::Aeda | Carga::Precios) {
+        // La renovación del tablón (mecánica 55) tampoco arma nada: es un plazo del reloj, no algo que pase en el mundo.
+        if !matches!(ev.carga, Carga::Titulos | Carga::Aeda | Carga::Precios | Carga::Tablon) {
             self.armar_titulos(t);
         }
-        if !matches!(ev.carga, Carga::Era | Carga::Aeda | Carga::Precios) {
+        if !matches!(ev.carga, Carga::Era | Carga::Aeda | Carga::Precios | Carga::Tablon) {
             self.armar_era(t);
         }
-        if !matches!(ev.carga, Carga::Precios | Carga::Titulos | Carga::Era | Carga::Aeda) {
+        if !matches!(ev.carga, Carga::Precios | Carga::Titulos | Carga::Era | Carga::Aeda | Carga::Tablon) {
             self.armar_precios(t);
         }
+        self.armar_tablon(t);
         if self.ajustes.auditar_cambios {
             self.causa_auditada = format!("el evento {:?} de la entidad {id}", ev.carga);
         }
@@ -606,6 +610,7 @@ impl Nucleo {
             Carga::Fundacion(suceso) => self.suceso_de_fundacion(crate::estado_comercio::id_de_entidad(id), suceso, t),
             Carga::Titulos => self.recalcular_titulos(t),
             Carga::Precios => self.recalcular_precios(t),
+            Carga::Tablon => self.renovar_tablones(t),
             Carga::Era => self.cita_de_era(t),
             Carga::Tecnologia(suceso) => self.cita_de_tecnologia(suceso, t),
             Carga::Aeda => self.aeda_vence(id, t),
@@ -899,6 +904,7 @@ impl Nucleo {
                 self.armar_titulos(t);
                 self.armar_era(t);
                 self.armar_precios(t);
+                self.armar_tablon(t);
                 self.metricas.ordenes_aceptadas += 1;
                 self.estado.recordar(&p.actor, &p.peticion_id, r.version_tras);
                 self.registrar(t, ENTRADA_PETICION, p.codificar());
@@ -1046,6 +1052,21 @@ impl Nucleo {
                     return r;
                 }
             }
+            Comando::AceptarMision { heroe, dueno, mision } => {
+                if let Err(r) = self.aceptar_mision(t, p, *heroe, *dueno, mision) {
+                    return r;
+                }
+            }
+            Comando::ElegirTablon { heroe, dueno, diarias, semanales } => match self.elegir_tablon(p, *heroe, *dueno, diarias, semanales) {
+                Ok(true) => {}
+                Ok(false) => return Respuesta::sin_cambios(self.estado.version),
+                Err(r) => return r,
+            },
+            Comando::FijarCatalogoMisiones { catalogo } => match self.fijar_catalogo_misiones(catalogo) {
+                Ok(true) => {}
+                Ok(false) => return Respuesta::sin_cambios(self.estado.version),
+                Err(r) => return r,
+            },
             Comando::AdoptarTecnologia { .. } => match self.ejecutar_adopcion(t, p) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,

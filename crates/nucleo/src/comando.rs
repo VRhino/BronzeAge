@@ -485,6 +485,13 @@ pub enum Comando {
     AbrirAlijo { heroe: u64, alijo: u32 },
     /// Reclama la recompensa de una misión cumplida de un héroe, una plaza o una Facción (Misiones §4).
     ReclamarRecompensa { heroe: u64, dueno: crate::misiones::Dueno, mision: String },
+    // ── Las misiones recurrentes y el tablón (mecánica 55, Misiones_Recurrentes). Códigos 185 a 187. ──
+    /// El héroe (residente de la plaza o ciudadano de la Facción) acepta la misión individual `mision` del tablón de `dueno` (§3).
+    AceptarMision { heroe: u64, dueno: crate::misiones::Dueno, mision: String },
+    /// El Gobernador de la plaza o el Rey de la Facción elige qué sale en su tablón desde la próxima renovación semanal: hasta 7 diarias y hasta 7 semanales (§4).
+    ElegirTablon { heroe: u64, dueno: crate::misiones::Dueno, diarias: Vec<String>, semanales: Vec<String> },
+    /// Administración: fija el catálogo de las misiones recurrentes (§6), con el JSON entero en texto; vale desde la siguiente renovación.
+    FijarCatalogoMisiones { catalogo: String },
     // ── La tecnología (sistema 6, tanda 6C; Tecnologia_Aedas §4). Código 175. ──
     /// El Rey de `faccion`, presente en su capital efectiva, adopta la tecnología `tecnologia` (índice del catálogo) ya aparecida: la paga el almacén de la capital con la tarifa de su Era,
     /// al instante.
@@ -570,6 +577,10 @@ pub enum Autoriza {
     ParticipanteDeLaColumna,
     /// `reclamarRecompensa`: la cuenta del héroe; la misión de un héroe, si es suya; la de una plaza, su Gobernador (o, sin Gobernador, un residente); la de una Facción, su Rey.
     ReclamaMision,
+    /// `aceptarMision`: la cuenta del héroe, residente de la plaza o ciudadano de la Facción del tablón (lo mira la orden, con el cargo que pida la misión).
+    AceptaMision,
+    /// `elegirTablon`: la cuenta del héroe, Gobernador de la plaza o Rey de la Facción del tablón.
+    EligeTablon,
 }
 
 impl Autoriza {
@@ -610,7 +621,8 @@ impl Comando {
             | Comando::FijarRelacion { .. }
             | Comando::ColocarBandidos { .. }
             | Comando::DarEscuadra { .. }
-            | Comando::FijarControlador { .. } => Administracion,
+            | Comando::FijarControlador { .. }
+            | Comando::FijarCatalogoMisiones { .. } => Administracion,
             Comando::RegistrarAsignacion { .. } | Comando::ConfirmarInicio { .. } | Comando::RegistrarTokens { .. } | Comando::RegistrarSalida { .. } | Comando::AplicarResultado { .. } => ServidorDeBatalla,
             Comando::CrearHeroe { .. } => SuCuenta,
             Comando::Conectarse { .. } | Comando::CancelarConvocatoria { .. } => CuentaDelHeroeAunqueFuera,
@@ -739,6 +751,8 @@ impl Comando {
             Comando::ComprarTecnologiaAeda { .. } => CompraTecnologiaAeda,
             Comando::EmpezarEpica { .. } | Comando::AbandonarEpica { .. } => DirigeAedas,
             Comando::ReclamarRecompensa { .. } => ReclamaMision,
+            Comando::AceptarMision { .. } => AceptaMision,
+            Comando::ElegirTablon { .. } => EligeTablon,
             Comando::MarcharA { .. }
             | Comando::Estacionar { .. }
             | Comando::MarchaForzada { .. }
@@ -986,6 +1000,8 @@ impl Comando {
             | Comando::VaciarCarro { heroe }
             | Comando::AbrirAlijo { heroe, .. }
             | Comando::ReclamarRecompensa { heroe, .. }
+            | Comando::AceptarMision { heroe, .. }
+            | Comando::ElegirTablon { heroe, .. }
             | Comando::GuardarEnAlmacenPersonal { heroe, .. }
             | Comando::SacarDelAlmacenPersonal { heroe, .. }
             | Comando::FijarFaccionDeHeroe { heroe, .. }
@@ -1050,6 +1066,7 @@ impl Comando {
             }
             Comando::CrearEjercito { .. }
             | Comando::Reloj(_)
+            | Comando::FijarCatalogoMisiones { .. }
             | Comando::FijarNivelFaccion { .. }
             | Comando::AceptarTrueque { .. }
             | Comando::RechazarTrueque { .. }
@@ -1914,6 +1931,25 @@ impl Peticion {
                 crate::misiones::escribir_dueno(&mut w, *dueno);
                 w.texto(mision);
             }
+            Comando::AceptarMision { heroe, dueno, mision } => {
+                w.u8(185);
+                w.u64(*heroe);
+                crate::misiones::escribir_dueno(&mut w, *dueno);
+                w.texto(mision);
+            }
+            Comando::ElegirTablon { heroe, dueno, diarias, semanales } => {
+                w.u8(186);
+                w.u64(*heroe);
+                crate::misiones::escribir_dueno(&mut w, *dueno);
+                for l in [diarias, semanales] {
+                    w.u64(l.len() as u64);
+                    l.iter().for_each(|x| w.texto(x));
+                }
+            }
+            Comando::FijarCatalogoMisiones { catalogo } => {
+                w.u8(187);
+                w.texto(catalogo);
+            }
             Comando::AdoptarTecnologia { heroe, faccion, tecnologia } => {
                 w.u8(175);
                 w.u64(*heroe);
@@ -2417,6 +2453,14 @@ impl Peticion {
             182 => Comando::ReclamarRecompensa { heroe: r.u64()?, dueno: crate::misiones::leer_dueno(&mut r)?, mision: r.texto()? },
             183 => Comando::MarcarAldea { asentamiento: r.u64()?, punto: r.punto()? },
             184 => Comando::MejorarAldea { pueblo: r.u64()? },
+            185 => Comando::AceptarMision { heroe: r.u64()?, dueno: crate::misiones::leer_dueno(&mut r)?, mision: r.texto()? },
+            186 => {
+                let (heroe, dueno) = (r.u64()?, crate::misiones::leer_dueno(&mut r)?);
+                let diarias = (0..r.cuenta()?).map(|_| r.texto()).collect::<Result<_, _>>()?;
+                let semanales = (0..r.cuenta()?).map(|_| r.texto()).collect::<Result<_, _>>()?;
+                Comando::ElegirTablon { heroe, dueno, diarias, semanales }
+            }
+            187 => Comando::FijarCatalogoMisiones { catalogo: r.texto()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -3053,6 +3097,25 @@ pub mod rechazos {
     pub const MISION_YA_RECLAMADA: &str = "mision.ya_reclamada";
     /// Los recursos de la recompensa no caben enteros en el almacén de la plaza: se reclaman cuando haya sitio.
     pub const MISION_ALMACEN_LLENO: &str = "mision.almacen_lleno";
+    // Las misiones recurrentes y el tablón (mecánica 55; Misiones_Recurrentes §3, §4 y §6).
+    /// Aceptar: el héroe no es residente de la plaza ni ciudadano de la Facción del tablón (Misiones_Recurrentes §3).
+    pub const MISION_FUERA_DE_AMBITO: &str = "mision.fuera_de_ambito";
+    /// Aceptar: esa misión no está hoy en el tablón.
+    pub const MISION_NO_DISPONIBLE: &str = "mision.no_disponible";
+    /// Aceptar: la misión es grupal: no se acepta, cuenta lo de todos.
+    pub const MISION_GRUPAL: &str = "mision.grupal";
+    /// Aceptar: la misión es del titular de un cargo que el héroe no tiene.
+    pub const MISION_PIDE_CARGO: &str = "mision.pide_cargo";
+    /// Aceptar: el héroe ya la aceptó en este periodo.
+    pub const MISION_YA_ACEPTADA: &str = "mision.ya_aceptada";
+    /// Aceptar: esa misión llegó a su tope de aceptaciones de esta semana en el tablón.
+    pub const MISION_TOPE_SEMANAL: &str = "mision.tope_semanal";
+    /// `fijar_catalogo_misiones`: el catálogo no es válido (el mensaje dice por qué); no entra nada.
+    pub const MISION_CATALOGO_INVALIDO: &str = "mision.catalogo_invalido";
+    /// El dueño no tiene tablón: no es una plaza ni una Facción que exista.
+    pub const TABLON_DESCONOCIDO: &str = "tablon.desconocido";
+    /// Elegir: más de 7 misiones en una lista, una repetida o una que no es del catálogo con ese ámbito y esa duración.
+    pub const TABLON_ELECCION_INVALIDA: &str = "tablon.eleccion_invalida";
 }
 
 /// Lo que un rechazo cuenta además de su código, para que el cliente decida con ello (`RechazoOrden.detalle`).
@@ -3426,6 +3489,9 @@ mod pruebas {
             Comando::AbrirAlijo { heroe: 2, alijo: 7 },
             Comando::ReclamarRecompensa { heroe: 2, dueno: crate::misiones::Dueno::Asentamiento(5), mision: "A2".into() },
             Comando::ReclamarRecompensa { heroe: 2, dueno: crate::misiones::Dueno::Faccion(3), mision: "F1".into() },
+            Comando::AceptarMision { heroe: 2, dueno: crate::misiones::Dueno::Asentamiento(5), mision: "PD1".into() },
+            Comando::ElegirTablon { heroe: 2, dueno: crate::misiones::Dueno::Faccion(3), diarias: vec!["FD1".into(), "FD2".into()], semanales: vec![] },
+            Comando::FijarCatalogoMisiones { catalogo: "{}".into() },
             Comando::AdoptarTecnologia { heroe: 2, faccion: 1, tecnologia: 2 },
             Comando::ComprarTecnologiaAeda { heroe: 2, asentamiento: 5, tecnologia: 2 },
             Comando::EmpezarEpica { heroe: 2, asentamiento: 3, aeda: 4, tecnologia: 5 },

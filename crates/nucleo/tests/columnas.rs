@@ -465,7 +465,7 @@ fn la_marcha_forzada_va_un_cincuenta_por_ciento_mas_deprisa_come_el_doble_solo_m
     assert!(e.ejercito(col).plan.fin().unwrap() < fin_normal);
     // Va en la foto.
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN49");
+    assert_eq!(&bytes[..5], b"BAN50");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert!(vuelta.ejercitos[&col].columna.forzada, "la marcha forzada va en la foto");
     assert_eq!(vuelta.serializar(), bytes);

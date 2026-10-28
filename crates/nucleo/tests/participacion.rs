@@ -142,6 +142,12 @@ fn quien_defiende_una_plaza_que_resiste_suma_la_defensa_y_la_batalla_ganada_y_se
     assert_eq!(x.n.estado().asentamientos[&b].faccion, 2, "la plaza resiste");
     assert_eq!(x.de(b), BTreeMap::from([(beto, 10)]), "defensa (5) y batalla ganada (5), las dos en B, donde reside");
     assert!(x.de(a).is_empty() && !x.n.estado().participacion.values().any(|p| p.contains_key(&ana)));
+    // De paso cuentan `defensas` y `victorias` para el tablón de su Facción (Misiones_Recurrentes §7): FS1 (victorias) y FS2 (defensas), grupales.
+    let aportes = |x: &X, id: &str| match &x.n.tablon_de(nucleo::misiones::Dueno::Faccion(2)).unwrap().misiones.iter().find(|m| m.def.id == id).unwrap().progreso {
+        nucleo::recurrentes::Progreso::Grupal { aportes, .. } => aportes.clone(),
+        otro => panic!("{otro:?}"),
+    };
+    assert_eq!((aportes(&x, "FS1"), aportes(&x, "FS2")), (BTreeMap::from([(beto, 1)]), BTreeMap::from([(beto, 1)])));
 
     // En el interior de la plaza, por id de héroe; en la Facción, cada ciudadano con su residencia, sus cargos y la suma.
     let p = interior::asentamiento(&x.n, b).unwrap();

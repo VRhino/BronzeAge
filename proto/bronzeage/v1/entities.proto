@@ -44,6 +44,8 @@ message Faccion {
   repeated Mision misiones = 17;
   // Sus ciudadanos con su participación (Participacion §3), en orden de ingreso: solo en la Facción propia (`FACCION`) y en `ADMIN`; vacío en la forma pública.
   repeated MiembroFaccion miembros = 18;
+  // Su tablón de misiones recurrentes (Misiones_Recurrentes §8): solo en la Facción propia (`FACCION`) y en `ADMIN`; ausente en la forma pública.
+  optional Tablon tablon = 19;
 }
 
 // Un ciudadano de la Facción (Participacion §3).
@@ -77,6 +79,76 @@ message Mision {
   optional string previa = 4;
   Cantidades recompensa = 5;              // oro (al almacén personal, en las del héroe) o recursos (al almacén de la plaza), en milésimas
   sint64 recompensa_experiencia = 6;      // experiencia de Facción
+}
+
+enum DuracionMision {
+  DURACION_MISION_NO_ESPECIFICADA = 0;
+  MISION_DIARIA = 1;     // se renueva cada día a las 00:00 de mundo
+  MISION_SEMANAL = 2;    // se renueva en la renovación semanal
+}
+
+enum TipoMision {
+  TIPO_MISION_NO_ESPECIFICADO = 0;
+  MISION_INDIVIDUAL = 1;   // la acepta un héroe y cuenta lo suyo desde entonces
+  MISION_GRUPAL = 2;       // no se acepta: cuenta lo de todos los héroes del ámbito
+}
+
+enum EstadoMisionRecurrente {
+  ESTADO_MISION_RECURRENTE_NO_ESPECIFICADO = 0;
+  RECURRENTE_EN_CURSO = 1;   // aceptada (individual) o corriendo (grupal)
+  RECURRENTE_CUMPLIDA = 2;   // cumplida y sin reclamar: `reclamar_recompensa`
+  RECURRENTE_RECLAMADA = 3;
+  RECURRENTE_CADUCADA = 4;   // acabó su periodo sin cumplirse
+}
+
+// Una misión recurrente del catálogo, con sus textos (Misiones_Recurrentes §1 y §6).
+message DefinicionMisionRecurrente {
+  string id = 1;                           // PD1, FS3...
+  DuracionMision duracion = 2;
+  TipoMision tipo = 3;
+  uint32 limite_semanal = 4;               // individual: aceptaciones por semana en el tablón, entre todos (0 en una grupal)
+  optional string cargo = 5;               // solo la acepta su titular: gobernador, tesorero, general, maestroObras, sacerdote; rey, embajador
+  repeated CondicionMision condiciones = 6; // con `avance` 0
+  sint64 experiencia = 7;                  // experiencia de Facción, en milésimas
+  uint64 participacion = 8;                // participación en la plaza: la del héroe (individual) o la que se reparte (grupal)
+  sint64 oro = 9;                          // oro al almacén personal del héroe (individual), en milésimas
+  string titulo = 10;
+  string texto = 11;
+  string explicacion = 12;
+}
+
+// La misión individual de un héroe que la aceptó.
+message AceptacionMision {
+  string heroe_id = 1;
+  EstadoMisionRecurrente estado = 2;
+  repeated CondicionMision condiciones = 3;  // lo que lleva desde que la aceptó
+}
+
+// Una misión en el tablón con su periodo (Misiones_Recurrentes §8). Las vencidas siguen mientras queda algo cumplido por reclamar.
+message MisionRecurrente {
+  DefinicionMisionRecurrente definicion = 1;  // tal como salió (un cambio del catálogo vale desde la siguiente renovación)
+  int64 desde_ms = 2;
+  int64 hasta_ms = 3;
+  // Individual: cada aceptación, en orden de héroe, y cuántas lleva esta misión esta semana en el tablón (para el tope).
+  repeated AceptacionMision aceptaciones = 4;
+  uint32 aceptadas_semana = 5;
+  // Grupal: su estado, lo que llevan entre todos y lo que aportó cada héroe (id de héroe → avance).
+  EstadoMisionRecurrente estado = 6;
+  repeated CondicionMision condiciones = 7;
+  map<string, uint64> aportes = 8;
+}
+
+// El tablón de una plaza o de una Facción (Misiones_Recurrentes §4 y §8).
+message Tablon {
+  repeated MisionRecurrente misiones = 1;
+  repeated string diarias_ids = 2;              // las diarias que salen esta semana
+  repeated string semanales_ids = 3;            // las semanales de esta semana
+  bool con_eleccion = 4;                        // false: sin elección, salen las primeras del catálogo
+  repeated string elegidas_diarias_ids = 5;     // lo elegido para la próxima renovación semanal
+  repeated string elegidas_semanales_ids = 6;
+  int64 renovacion_diaria_ms = 7;               // las próximas 00:00 de mundo
+  int64 renovacion_semanal_ms = 8;              // la próxima renovación semanal
+  repeated DefinicionMisionRecurrente catalogo = 9;  // las del catálogo vigente de su ámbito, en orden, para elegir
 }
 
 // Una Liga (Diplomacia §5.7): la componente conexa de Facciones unidas por relaciones activas de cualquier clase (la guerra incluida). No tiene id propio: viaja en cada Facción miembro.
@@ -327,6 +399,8 @@ message Asentamiento {
   repeated Mision misiones = 44;
   // La participación de cada héroe en la plaza (Participacion §3; id de héroe → puntos), resida o no en ella: interior y `ADMIN`.
   map<string, uint64> participacion = 45;
+  // Su tablón de misiones recurrentes (Misiones_Recurrentes §8): interior y `ADMIN`.
+  optional Tablon tablon = 46;
 }
 
 // Rectángulo en UNIDADES LOCALES del asentamiento (esquina mínima y tamaño). El espacio local está centrado en el Centro Urbano.

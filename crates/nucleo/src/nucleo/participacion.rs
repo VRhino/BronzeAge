@@ -56,7 +56,7 @@ impl Nucleo {
     }
 
     /// Suma `puntos` a cada héroe en la plaza (si sigue en pie) y toca la plaza y su Facción.
-    fn sumar_participacion(&mut self, plaza: u64, heroes: &[u64], puntos: u64) {
+    pub(super) fn sumar_participacion(&mut self, plaza: u64, heroes: &[u64], puntos: u64) {
         let Some(f) = self.estado.asentamientos.get(&plaza).map(|a| a.faccion) else { return };
         if heroes.is_empty() || puntos == 0 {
             return;
@@ -70,8 +70,8 @@ impl Nucleo {
     }
 
     /// Lo que da una batalla con combate (Participacion §2): `defensa` en cada plaza de `defendidas` a cada uno de `defensores`, y `batallaGanada` a cada uno de `ganadores` en la plaza donde
-    /// reside (el que reside en un campamento no suma).
-    pub(super) fn participacion_de_batalla(&mut self, defendidas: &[u64], defensores: &[u64], ganadores: &[u64]) {
+    /// reside (el que reside en un campamento no suma). De paso cuenta `defensas` y `victorias` para las misiones del tablón (Misiones_Recurrentes §7), también al que no tiene residencia.
+    pub(super) fn participacion_de_batalla(&mut self, t: Instante, defendidas: &[u64], defensores: &[u64], ganadores: &[u64]) {
         let r = self.estado.reglas.economia.participacion.clone();
         let mut sin_repetir: Vec<u64> = defensores.to_vec();
         sin_repetir.sort_unstable();
@@ -79,6 +79,13 @@ impl Nucleo {
         let mut plazas = defendidas.to_vec();
         plazas.sort_unstable();
         plazas.dedup();
+        if !plazas.is_empty() {
+            self.avance_de_heroes(t, &sin_repetir, "defensas", 1);
+        }
+        let mut vencedores = ganadores.to_vec();
+        vencedores.sort_unstable();
+        vencedores.dedup();
+        self.avance_de_heroes(t, &vencedores, "victorias", 1);
         for plaza in plazas {
             self.sumar_participacion(plaza, &sin_repetir, r.defensa);
         }

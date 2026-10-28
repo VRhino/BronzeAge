@@ -84,4 +84,5 @@ campos_de_la_plaza!(
     flota_ids,
     misiones,
     participacion,
+    tablon,
 );

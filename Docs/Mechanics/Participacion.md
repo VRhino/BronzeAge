@@ -1,6 +1,6 @@
 # Participación
 
-> **Implementado en Rust el 2026-10-28** (mecánica 54; diseño acordado con el autor el mismo día). Las cifras son el borrador del diseño, a calibrar con los bots. Código: `crates/nucleo/src/participacion.rs` (reglas y foto) y `crates/nucleo/src/nucleo/participacion.rs` (de dónde salen los puntos y la proyección). El origen «misión del tablón» llega con la mecánica 55 (`Docs/Disenos_Por_Implementar/Misiones_Recurrentes_Y_Tablon.md`).
+> **Implementado en Rust el 2026-10-28** (mecánica 54; diseño acordado con el autor el mismo día). Las cifras son el borrador del diseño, a calibrar con los bots. Código: `crates/nucleo/src/participacion.rs` (reglas y foto) y `crates/nucleo/src/nucleo/participacion.rs` (de dónde salen los puntos y la proyección). El origen «misión del tablón» es de la mecánica 55 ([`Misiones_Recurrentes.md`](Misiones_Recurrentes.md), implementada el mismo día).
 
 ## 1. Qué es
 
@@ -16,7 +16,7 @@ La participación **se acumula para siempre**: no caduca ni se reinicia. Se suma
 | Defender un pueblo o una aldea en un saqueo con combate | la plaza madre | cada héroe que lo defendía dentro y combatió | `defensa` |
 | Defender una caravana comercial: de un ejército que la asalta (su escolta cedida, con números; el bando defensor, en Unity) o de los bandidos que la acosan (su escolta cedida o, si va adjunta, los héroes de la columna que la lleva) | la plaza de origen de la caravana | cada héroe que la defendió | `defensa` |
 | Ganar una batalla de cualquier tipo: entre columnas, asedio, saqueo de pueblo, ataque a una avanzada, asalto a una caravana, campamento de bandidos destruido (con números o en Unity) | la plaza donde reside el héroe | cada héroe del bando ganador que combatió | `batallaGanada` |
-| Cumplir una misión del tablón (mecánica 55, aún no) | esa plaza | — | — |
+| Reclamar una misión del tablón de la plaza (mecánica 55, Misiones_Recurrentes §5) | esa plaza | la individual, quien la cumplió; la grupal, a partes iguales entre quienes aportaron | la `participacion` de la misión |
 
 - Un héroe sin residencia en una plaza (residente de un campamento) no suma por la batalla ganada: no tiene a qué plaza apuntarlo.
 - **Defender y ganar suman los dos** (decisión de implementación del 2026-10-28): quien defiende su plaza y gana se lleva `defensa` en esa plaza y `batallaGanada` en la suya.
