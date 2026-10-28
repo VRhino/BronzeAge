@@ -210,6 +210,10 @@ impl Nucleo {
             }
         }
         self.tr.tocar(Clase::Heroe, heroe);
+        // Su residencia viaja en los miembros de su Facción (Participacion §3).
+        if let Some(f) = self.heroe(heroe).and_then(|h| h.faccion) {
+            self.tr.tocar(Clase::Faccion, u64::from(f));
+        }
         self.estado.militar.mudar(heroe, nueva);
         // Q4: quien deja de residir en una plaza deja sus cargos en ella.
         if let Some(Residencia::Asentamiento(a)) = antes.filter(|&r| Some(r) != nueva) {

@@ -2,7 +2,7 @@
 
 > **Implementado en Rust el 2026-10-27** (mecánica 49; diseño acordado con el autor el 2026-10-26 y catálogo aprobado el 2026-10-27). Las recompensas y los umbrales son provisionales: se calibran con los batches y los bots. Código: `crates/nucleo/src/misiones.rs` (catálogo y estado) y `crates/nucleo/src/nucleo/misiones.rs` (de dónde sale cada avance, reclamar y la proyección).
 
-> **Revisión del 2026-10-28 (mecánica 59).** Cada misión tiene además una **explicación** en texto libre ([`Misiones_Textos.md`](Misiones_Textos.md)). F1 se cumple con la capital **efectiva** (la primera plaza de la Facción), no con la designada, que pide Palacio (decisión del autor; ver `capital` en §3). `FijarNivelAsentamiento` (administración) también mira el contador `nivel`. Pruebas: `crates/nucleo/tests/misiones_una_a_una.rs` cumple cada misión del catálogo haciendo lo que dice su texto, con el catálogo sin previas (35 de 36; **H13 no tiene camino hoy**: el héroe no gana puntos de atributo, apuntado en `Docs/Mecanicas a desarrollar.md`, 61), y una guarda exige una prueba por misión; `tests/propios.rs` (`las_misiones_de_la_faccion_y_sus_cumplidas_llegan_a_cada_ciudadano…`) comprueba que las misiones de la Facción, cumplidas incluidas, llegan en `FACCION` a cada ciudadano, sea o no el Rey, y a ninguna otra Facción.
+> **Revisión del 2026-10-28 (mecánica 59).** Cada misión tiene además una **explicación** en texto libre ([`Misiones_Textos.md`](Misiones_Textos.md)). F1 se cumple con la capital **efectiva** (la primera plaza de la Facción), no con la designada, que pide Palacio (decisión del autor; ver `capital` en §3). `FijarNivelAsentamiento` (administración) también mira el contador `nivel`. Pruebas: `crates/nucleo/tests/misiones_una_a_una.rs` cumple cada misión del catálogo haciendo lo que dice su texto, con el catálogo sin previas (35 de 36; **H13 no tiene camino hoy**: el héroe no gana puntos de atributo, apuntado en `Docs/Mecanicas a desarrollar.md`, 61), y una guarda exige una prueba por misión. H7 pide **20** de tiro (antes 25: la única tropa de tiro sin artesanos, los honderos, trae 20; decisión del autor del 2026-10-28; cambia la huella de las reglas); `tests/propios.rs` (`las_misiones_de_la_faccion_y_sus_cumplidas_llegan_a_cada_ciudadano…`) comprueba que las misiones de la Facción, cumplidas incluidas, llegan en `FACCION` a cada ciudadano, sea o no el Rey, y a ninguna otra Facción.
 
 ## 1. Alcance
 
@@ -94,7 +94,7 @@ Detalle en `Docs/Coordinacion/05_Contrato_de_Sesion.md`. Los títulos y textos d
     { "id": "H4", "previa": "H3", "condiciones": { "repostajes": 1 }, "oro": 10 },
     { "id": "H5", "previa": "H1", "condiciones": { "ciudadania": 1 }, "oro": 20 },
     { "id": "H6", "previa": "H5", "condiciones": { "escuadrones": 1 }, "oro": 20 },
-    { "id": "H7", "previa": "H6", "condiciones": { "infanteria": 50, "tiro": 25, "caballeria": 10 }, "oro": 50 },
+    { "id": "H7", "previa": "H6", "condiciones": { "infanteria": 50, "tiro": 20, "caballeria": 10 }, "oro": 50 },
     { "id": "H8", "previa": "H5", "condiciones": { "uniones": 1 }, "oro": 20 },
     { "id": "H9", "previa": "H6", "condiciones": { "batallas": 1 }, "oro": 30 },
     { "id": "H10", "previa": "H9", "condiciones": { "bandidos": 1 }, "oro": 50 },

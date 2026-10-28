@@ -46,6 +46,7 @@ impl Nucleo {
             (a.faccion, a.radio, vecinas, a.nivel(), a.nivel_actual(), a.protegida_hasta, a.ocupada_hasta, &a.puerta, a.cargos, &a.fundadores, a.permite_reabastecer_aliados, e.comercio.ultima_caravana.get(&a.id)),
             (edificios, &eco.recintos, &eco.politicas, eco.ascenso, &eco.recetas_pausadas, eco.auto_pausada, eco.reserva_manual),
             (residentes, presentes, guarnicion, flota, aparcadas, pueblos, avanzadas, self.batalla_sobre(militar::presencia::Ubicacion::Asentamiento(a.id as u32)).map(|b| b.id)),
+            e.participacion.get(&a.id),
         ))
     }
 
@@ -77,9 +78,9 @@ impl Nucleo {
         m.extend(e.comercio.acuerdos.iter().map(|a| ((Clase::Acuerdo, a.id), huella(a))));
         m.extend(e.comercio.libro.ordenes.iter().chain(&e.comercio.libro.historial).map(|o| ((Clase::OrdenMercado, o.id), huella(o))));
         for a in e.asentamientos.values() {
-            // Cualquier cambio de lo que ve quien está dentro marca la plaza o su interior (`huella_de_plaza`). Tampoco se mira el almacén de un pueblo ni su marca `lleno`: los cambia el paso de minuto, que no marca nada (va por la secuencia interior de la plaza).
+            // Cualquier cambio de lo que ve quien está dentro marca la plaza o su interior (`huella_de_plaza`). Tampoco se mira el almacén de un pueblo, su marca `lleno` ni las cabezas de su rebaño: los cambia el paso de minuto, que no marca nada (va por la secuencia interior de la plaza).
             m.insert((Clase::Asentamiento, a.id), self.huella_de_plaza(a));
-            m.extend(a.economia.pueblos.iter().map(|p| ((Clase::Pueblo, p.id), huella(&(a.id, p.tipo, p.sitio, p.nivel, &p.estado, &p.mejora, &p.rebano, p.carro, e.combate.guarniciones.get(&p.id))))));
+            m.extend(a.economia.pueblos.iter().map(|p| ((Clase::Pueblo, p.id), huella(&(a.id, p.tipo, p.sitio, p.nivel, &p.estado, &p.mejora, p.rebano.as_ref().map(|r| &r.especie), p.carro, e.combate.guarniciones.get(&p.id))))));
             m.extend(a.economia.avanzadas.iter().map(|v| ((Clase::Avanzada, v.id), huella(&(a.id, v, e.combate.avanzadas.get(&v.id))))));
         }
         m.extend(e.combate.huerfanas.iter().map(|(&id, v)| ((Clase::Avanzada, id), huella(&(v, e.combate.avanzadas.get(&id))))));
@@ -95,7 +96,8 @@ impl Nucleo {
             let relaciones: Vec<_> = e.politica.relaciones.iter().filter(|r| r.incluye(f)).collect();
             // Con sus Aedas residentes, sus épicas y las cumplidas (6E).
             let aedas: Vec<_> = e.residentes.aedas.iter().filter(|a| a.faccion == f).collect();
-            ((Clase::Faccion, f as u64), huella(&(e.politica.facciones.get(f), e.comercio.reputacion.get(&f), e.tecnologia.por_faccion.get(&f), relaciones, self.liga_de(f), aedas, e.residentes.cumplidas.get(&f))))
+            // Con sus miembros y su participación (mecánica 54).
+            ((Clase::Faccion, f as u64), huella(&(e.politica.facciones.get(f), e.comercio.reputacion.get(&f), e.tecnologia.por_faccion.get(&f), relaciones, self.liga_de(f), aedas, e.residentes.cumplidas.get(&f), self.miembros_de(f))))
         }));
         m.extend(e.politica.relaciones.iter().map(|r| ((Clase::Relacion, r.id), huella(r))));
         m.extend(e.politica.titulos.iter().map(|x| ((Clase::Titulo, x.id.indice()), huella(x))));

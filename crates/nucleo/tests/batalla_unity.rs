@@ -644,6 +644,10 @@ async fn dos_servidores_compiten_por_la_asignacion_y_cada_combatiente_recibe_su_
     let n = w.parar().await;
     let id = n.id_de_batalla(&uuid).unwrap();
     assert!(n.batalla_sobre(Ubicacion::Asentamiento(plaza as u32)).is_none() && n.batalla(id).unwrap().estado == combate::ciclo::EstadoBatalla::Aplicada);
+    // La participación (Participacion §2): beto y carla, residentes de B, la defendieron y ganaron: la defensa y la batalla ganada, las dos en B. Los atacantes pierden: nada.
+    let heroe = |x: &str| ids::parse_heroe(x).unwrap();
+    assert_eq!(n.participacion_en(plaza).cloned().unwrap_or_default(), std::collections::BTreeMap::from([(heroe(&h_beto), 10), (heroe(&h_carla), 10)]));
+    assert_eq!(n.estado().participacion.len(), 1, "{:?}", n.estado().participacion);
     assert!(n.batalla(id).unwrap().ticket.plaza.as_ref().is_some_and(|p| !p.edificios.is_empty() && p.recintos.len() == 1));
     la_foto_vuelve_igual(&n, m);
 }
@@ -973,7 +977,7 @@ async fn quien_no_llega_a_conectarse_reabre_la_batalla_con_un_ticket_nuevo_para_
 /// La foto de un núcleo con un ticket de asedio congelado (plaza, edificios, recintos) y con un informe de inspección de una plaza vuelve igual; la de antes del cambio, no.
 fn la_foto_vuelve_igual(n: &Nucleo, m: &M) {
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN48");
+    assert_eq!(&bytes[..5], b"BAN49");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas(false), &m.0.hash().to_string()).expect("la foto vuelve");
     assert_eq!(vuelta.serializar(), bytes);
     let viejo = [b"BAN20".as_slice(), &bytes[5..]].concat();

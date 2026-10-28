@@ -123,6 +123,9 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
     21 * crate::estado_comercio::ETIQUETA | plaza
 }
 
+/// BAN49: BAN48 con la participación de cada héroe en cada plaza (mecánica 54, 2026-10-28; `Estado::participacion`, al final). BAN48 a BAN40 se siguen admitiendo: la
+/// participación empieza vacía.
+///
 /// BAN48: BAN47 con lo producido y lo consumido de cada recurso en el último paso de minuto, por separado (mecánica 60, 2026-10-28; `Tendencia::producido` y `consumido`, en
 /// `codec_economia`). BAN47 a BAN40 se siguen admitiendo: los dos van a 0 hasta el siguiente paso de minuto de cada plaza.
 ///
@@ -264,7 +267,7 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN48";
+const MAGIA: &[u8; 5] = b"BAN49";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -311,6 +314,8 @@ pub struct ReglasEconomia {
     pub tecnologia: Arc<tecnologia::Reglas>,
     /// El catálogo de misiones (`MISIONES` de Misiones.md, mecánica 49).
     pub misiones: Arc<crate::misiones::Reglas>,
+    /// Los puntos de participación (`PARTICIPACION` de Participacion.md, mecánica 54).
+    pub participacion: Arc<crate::participacion::Reglas>,
     huella: String,
 }
 
@@ -323,11 +328,12 @@ impl ReglasEconomia {
             + &militar::datos::texto_de_parametros()
             + &combate::datos::texto_de_parametros()
             + &politica::datos::texto_de_parametros()
-            + &asentamiento::datos::texto_de_parametros_de(crate::misiones::DOC_MISIONES);
+            + &asentamiento::datos::texto_de_parametros_de(crate::misiones::DOC_MISIONES)
+            + &asentamiento::datos::texto_de_parametros_de(crate::participacion::DOC_PARTICIPACION);
         let huella = crate::hex(&Sha256::digest(bloques).into());
         let datos = asentamiento::Reglas::cargar();
         let urbanismo = Arc::new(Urbanismo::cargar(&datos));
-        Self { datos: Arc::new(datos), urbanismo, comercio: Arc::new(comercio::Reglas::cargar()), militar: Arc::new(militar::Reglas::cargar()), combate: Arc::new(combate::Reglas::cargar()), politica: Arc::new(politica::Reglas::cargar()), tecnologia: Arc::new(tecnologia::Reglas::cargar()), misiones: Arc::new(crate::misiones::Reglas::cargar()), huella }
+        Self { datos: Arc::new(datos), urbanismo, comercio: Arc::new(comercio::Reglas::cargar()), militar: Arc::new(militar::Reglas::cargar()), combate: Arc::new(combate::Reglas::cargar()), politica: Arc::new(politica::Reglas::cargar()), tecnologia: Arc::new(tecnologia::Reglas::cargar()), misiones: Arc::new(crate::misiones::Reglas::cargar()), participacion: Arc::new(crate::participacion::Reglas::cargar()), huella }
     }
     /// Identidad de las reglas (sha256 en hexadecimal de los bloques de parámetros de los documentos de Mechanics de los que salen).
     pub fn huella(&self) -> &str {
@@ -1027,6 +1033,8 @@ pub struct Estado {
     pub precios_rearmar: bool,
     /// Las misiones de cada dueño (mecánica 49, Misiones §2; BAN46).
     pub misiones: crate::misiones::EstadoMisiones,
+    /// La participación de cada héroe en cada plaza (mecánica 54, Participacion §2; BAN49).
+    pub participacion: crate::participacion::EstadoParticipacion,
     pub generaciones: Generaciones,
     pub cola: Cola<Carga>,
     /// De cada actor, sus últimas `peticion_id` aceptadas en orden de llegada, con la versión que produjeron (a lo sumo `Reglas::limite_idempotencia`).
@@ -1070,6 +1078,7 @@ impl Estado {
             precios_en: None,
             precios_rearmar: false,
             misiones: Default::default(),
+            participacion: Default::default(),
             generaciones: Generaciones::nuevas(),
             cola: Cola::nueva(),
             vistos: BTreeMap::new(),
@@ -1237,6 +1246,7 @@ impl Estado {
             w.u64(id);
         }
         crate::misiones::escribir(&mut w, &self.misiones);
+        crate::participacion::escribir(&mut w, &self.participacion);
 
         let gens = self.generaciones.volcar();
         w.u64(gens.len() as u64);
@@ -1330,13 +1340,14 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN48`): los cuatro primeros dicen la familia («BAN4» son los formatos 40 a 49, y se admiten del 40 al 48; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
+        // La cabecera es de 5 bytes (`BAN49`): los cuatro primeros dicen la familia («BAN4» son los formatos 40 a 49, y se admiten todos; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
         // 20 a 29 y 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         let (mut con_eligieron, mut con_rutas_acarreo, mut con_nombres, mut con_precios, mut con_forzadas, mut con_misiones, mut con_aldeas) = (true, true, true, true, true, true, true);
-        let mut con_flujos = false;
+        let (mut con_flujos, mut con_participacion) = (false, false);
         if magia == MAGIA[..4] {
             match r.u8()? {
+                b'9' => (con_flujos, con_participacion) = (true, true),
                 b'8' => con_flujos = true,
                 b'7' => {}
                 b'6' => con_aldeas = false,
@@ -1511,6 +1522,9 @@ impl Estado {
             s.misiones = crate::misiones::leer(&mut r, &s.reglas.economia.misiones)?;
         } else {
             crate::nucleo::arrancar_misiones(&mut s);
+        }
+        if con_participacion {
+            s.participacion = crate::participacion::leer(&mut r)?;
         }
 
         let mut gens = Vec::new();

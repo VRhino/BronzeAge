@@ -725,6 +725,7 @@ impl Nucleo {
             self.guardar_guarnicion_de_avanzada(x, defensa[..n].to_vec(), t);
         }
         let gana = resultado.conquistada();
+        let en_combate = matches!(resultado, Asedio::Combate(_));
         self.defensa_de_vasallo(t, Some(faccion_madre), &dentro.tropa.heroes, !gana);
         let heridos = self.herir_heroes(&heridos_del_asedio(&resultado, &participantes), t);
 
@@ -760,6 +761,11 @@ impl Nucleo {
         self.recomponer_tras_bajas(&columnas, t);
         datos.extend([("heridos", heridos as i64), ("chatarra", total(&chatarra)), ("saqueado", total(&saqueado)), ("carroPerdido", total(&robado))]);
         self.hecho_de_combate(codigo, t, vec![id], vec![madre], punto, datos);
+        // La participación (Participacion §2), solo con combate: la avanzada no da defensa, solo la batalla ganada.
+        if en_combate {
+            let ganadores = if gana { participantes.clone() } else { dentro.tropa.heroes.to_vec() };
+            self.participacion_de_batalla(&[], &[], &ganadores);
+        }
         Ok(())
     }
 

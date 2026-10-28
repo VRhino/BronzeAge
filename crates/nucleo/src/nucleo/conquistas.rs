@@ -85,6 +85,9 @@ impl Nucleo {
             })
             .collect();
 
+        // Los miembros de las dos Facciones (Participacion §3): la participación en la plaza deja de sumar en una y empieza a sumar en la otra, y sus cargos se vacían.
+        self.tr.tocar(Clase::Faccion, u64::from(vieja));
+        self.tr.tocar(Clase::Faccion, u64::from(conquistador));
         // 2. La ciudad cambia de dueño y se saquea; queda protegida y ocupada, con sus dos plazos en la cola.
         let c = {
             let a = self.estado.asentamientos.get_mut(&plaza).expect("existe");

@@ -386,12 +386,18 @@ impl Nucleo {
         let cr = self.estado.reglas.economia.combate.clone();
         let mut escolta: Vec<Escuadra> = k.escolta.iter().filter_map(|c| self.escuadra(c.id).map(|(_, s)| s.clone())).collect();
         let de_la_columna: Vec<Escuadra> = ejercito.map(|c| self.escuadras_de_columna(c).into_iter().cloned().collect()).unwrap_or_default();
+        // La participación (Participacion §2): el acoso no es una batalla; solo da la defensa a quien defiende la caravana (la columna que la lleva o su escolta cedida).
+        let defensores = match ejercito {
+            Some(c) => Self::participantes_de(&self.estado.ejercitos[&c]),
+            None => self.heroes_de_escolta(&escolta),
+        };
         let defensa = match ejercito {
             Some(_) => Defensa::Ejercito(&de_la_columna),
             None if escolta.iter().any(Escuadra::con_soldados) => Defensa::Escolta(&mut escolta),
             None => Defensa::Base,
         };
         let acoso = resolver_acoso(&cr, nivel, defensa, &mut self.estado.rng);
+        self.participacion_de_batalla(&[origen], &defensores, &[]);
         self.volcar_escuadras(&escolta);
         let plazas = vec![origen].into_iter().filter(|o| self.estado.asentamientos.contains_key(o)).collect();
         let datos = vec![("campamento", idc as i64), ("caravana", idk as i64), ("poderBandido", acoso.poder_bandido), ("defensa", acoso.defensa), ("bajasEscolta", acoso.bajas_escolta.iter().map(|b| b.antes - b.despues).sum())];

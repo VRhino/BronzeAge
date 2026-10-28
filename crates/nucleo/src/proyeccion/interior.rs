@@ -158,6 +158,7 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
     p.recetas_pausadas = eco.recetas_pausadas.iter().map(|r| r.nombre().to_owned()).collect();
     p.reserva_manual = Some(cantidades(TODOS.iter().copied().zip(eco.reserva_manual).filter(|&(_, v)| v != 0)));
     p.misiones = super::propios::misiones(n, crate::misiones::Dueno::Asentamiento(id));
+    p.participacion = n.participacion_en(id).map_or_else(Default::default, |m| m.iter().map(|(&h, &puntos)| (ids::heroe(h), puntos)).collect());
     Some(p)
 }
 

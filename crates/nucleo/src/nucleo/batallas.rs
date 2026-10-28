@@ -1050,7 +1050,18 @@ impl Nucleo {
             _ => tecnologia::epicas::ContextoUnity::Otro,
         };
         self.hecho_epico(tecnologia::epicas::Hecho::de_unity(id, contexto, b.ticket.atacante.faccion, b.ticket.defensor.faccion, Some(res.ganador == Lado::Atacante)));
+        // La participación (Participacion §2), con lo defendido mirado antes de las consecuencias (una caravana puede desaparecer, un pueblo cambiar de manos con su madre): la defensa al bando
+        // defensor de una plaza, un pueblo o una caravana, y la batalla ganada a los del bando ganador que participaron. El acoso de los bandidos (sin héroes atacantes) no es una batalla: solo defensa.
+        let defendidas: Vec<u64> = match &b.ticket.contexto {
+            Contexto::Asedio { asentamiento } => vec![u64::from(*asentamiento)],
+            Contexto::SaqueoPueblo { pueblo, .. } => self.pueblo(*pueblo).map(|(madre, _)| madre).into_iter().collect(),
+            Contexto::Caravana { caravanas, .. } => caravanas.iter().filter_map(|k| self.estado.comercio.caravana(k.id)).map(|k| u64::from(k.origen)).collect(),
+            _ => vec![],
+        };
+        let acoso = matches!(b.ticket.contexto, Contexto::Caravana { .. }) && self.participantes_del_lado(&b, Lado::Atacante).is_empty();
+        let ganadores: Vec<u64> = if acoso { vec![] } else { self.participantes_del_lado(&b, res.ganador).iter().map(|q| q.heroe).filter(|&h| res.por_heroe.iter().any(|x| x.heroe == h && x.participo)).collect() };
         self.consecuencias_de_batalla(t, &b, &res, &efectos);
+        self.participacion_de_batalla(&defendidas, &defendieron, &ganadores);
         self.contar(t, logros);
         // Las misiones (Misiones §3): cada héroe que participó libró una batalla; los atacantes que la ganan a un campamento lo destruyen; un asedio se resiste o se conquista.
         let heroes: Vec<u64> = [Lado::Atacante, Lado::Defensor].into_iter().flat_map(|l| self.participantes_del_lado(&b, l)).map(|q| q.heroe).filter(|&h| res.por_heroe.iter().any(|x| x.heroe == h && x.participo)).collect();

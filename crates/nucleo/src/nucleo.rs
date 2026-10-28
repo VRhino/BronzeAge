@@ -83,6 +83,8 @@ mod salidas;
 mod taberna;
 mod logros;
 mod misiones;
+mod participacion;
+pub use participacion::Miembro;
 
 pub(crate) use misiones::arrancar_misiones;
 mod tecnologias;

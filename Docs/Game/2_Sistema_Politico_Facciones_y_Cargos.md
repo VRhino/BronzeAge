@@ -88,6 +88,12 @@ Una Facción puede someter a otra Facción entera como vasalla, o federarse con 
   - Consecuencia buscada: **la delegación importa**. Los cargos locales no son un adorno del que se los quedó primero: son la forma de que la ciudad siga funcionando mientras su gente está fuera.
   - Residencia y presencia son cosas distintas: se reside en un solo asentamiento (arriba), pero se puede estar dentro de cualquiera al que te dejen entrar (Doc 1.10.5). Reclutar un escuadrón **nuevo** exige las dos cosas — es en tu residencia, y estando en ella. **Reponer** fuera de la residencia solo vale para escuadras de tu columna a la puerta de la plaza, y **mover** tropa propia o salir como ejército exige residir y estar presente (Doc 5.8).
 
+### 2.5.1 Participación (2026-10-28; `Docs/Mechanics/Participacion.md`)
+- Cada héroe acumula **participación** en cada plaza: cuánto ha hecho por ella y por su Facción. Es reconocimiento público dentro de la Facción: no se gasta ni da ventajas, y se acumula para siempre.
+- Se gana **defendiendo** (una plaza en un asedio, un pueblo o una aldea en un saqueo, o una caravana comercial frente a quien la asalta o a los bandidos que la acosan; se apunta a esa plaza, a la plaza madre o a la de origen de la caravana) y **ganando cualquier batalla** (se apunta a la plaza donde reside el héroe; quien reside en un campamento no suma por ello). Defender y ganar suman los dos. Sin combate (una plaza que cae sin defensores) no hay nada.
+- La plaza enseña a quien está dentro la participación de cada héroe en ella; la Facción enseña a sus ciudadanos la lista de miembros con su residencia, sus cargos y la suma de su participación en las plazas que son de la Facción hoy.
+- La participación se queda con la plaza aunque el héroe se mude, deje la Facción o la plaza cambie de dueña; una plaza en ruinas se lleva la suya.
+
 ## 2.6 Fusión/anexión voluntaria entre 2 Facciones
 Menú con 2 opciones al ejecutar la acción:
 1. **Anexión** (A absorbe a B): A mantiene nombre/Rey/Embajador sin voto. Todo lo de B pasa a A. Cargos de Facción de B se disuelven; cargos LOCALES de asentamiento de B se mantienen. **Exige la aceptación de B** (decidido e implementado el 2026-10-06):

@@ -83,4 +83,5 @@ campos_de_la_plaza!(
     caravanas_aparcadas_ids,
     flota_ids,
     misiones,
+    participacion,
 );

@@ -92,6 +92,10 @@ impl Nucleo {
         if let Some(plaza) = self.estado.asentamientos.get_mut(&a) {
             if !plaza.cargos.vaciar_de(heroe).is_empty() {
                 self.tr.tocar(Clase::Asentamiento, a);
+                // Los cargos viajan en los miembros de su Facción (Participacion §3).
+                if let Some(f) = self.heroe(heroe).and_then(|h| h.faccion) {
+                    self.tr.tocar(Clase::Faccion, u64::from(f));
+                }
             }
         }
     }
@@ -136,6 +140,8 @@ impl Nucleo {
                     ErrorCargo::PlazaAjena => unreachable!("la Facción es la dueña de la plaza"),
                 })?;
                 self.tr.tocar(Clase::Asentamiento, *asentamiento);
+                // Y en los miembros de la Facción (Participacion §3).
+                self.tr.tocar(Clase::Faccion, u64::from(faccion));
                 let valores = vec![("cargo", Dato::Texto(cargo.clave().to_owned()))];
                 let datos = vec![("asentamiento", *asentamiento as i64), ("faccion", i64::from(faccion)), ("heroe", *designado as i64)];
                 self.tr.emitir(&self.estado, EventoNucleo { valores, asentamientos: vec![*asentamiento], ..EventoNucleo::nuevo("cargo.local_asignado", t, datos) });

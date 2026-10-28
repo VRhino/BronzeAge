@@ -49,7 +49,7 @@ Cada plaza tiene un **tablón** que ven todos sus residentes.
 ## 5. Recompensas
 
 - Las misiones de **Facción** dan experiencia de Facción.
-- Las del **tablón** de una plaza dan experiencia a la Facción y participación al héroe que la cumple ([`Participacion.md`](Participacion.md)).
+- Las del **tablón** de una plaza dan experiencia a la Facción y participación en esa plaza al héroe que la cumple; en una grupal, a partes iguales entre quienes aportaron algo (borrador: individual 10, grupal 20 a repartir). La participación ya está implementada ([`Participacion.md`](../Mechanics/Participacion.md), desde el 2026-10-28) con sus otros orígenes; este es el que falta y se añade con esta mecánica (a su bloque `PARTICIPACION`).
 - Las de **héroe** dan lo que diga su entrada en el catálogo (oro u otra recompensa del catálogo editable, §6).
 
 ## 6. Catálogo editable en caliente

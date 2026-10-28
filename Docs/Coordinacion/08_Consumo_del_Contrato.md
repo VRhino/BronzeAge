@@ -111,6 +111,7 @@ Un reinicio con la misma carpeta y el mismo artefacto sigue la partida donde se 
 | Visión del jugador solo | `documentos.Movimiento_Ejercitos.VISION.jugadorSolo` (el mismo bloque está en `Niebla_De_Guerra.VISION`) |
 | Anillo de bandidos de un campamento (radios, cuántos por residentes, reaparición) y sus niveles | `documentos.Generacion_Del_Mundo.CAMPAMENTOS_BANDIDOS` (`anillo`, `niveles`) |
 | Misiones: catálogo (condiciones, previas, recompensas) y sus textos (título, qué hacer, explicación y nombre de cada contador) | `documentos.Misiones.MISIONES` y `documentos.Misiones_Textos.TEXTOS_MISIONES` (`misiones.<id>.titulo`/`.texto`/`.explicacion`, `contadores.<contador>`) |
+| Participación: los puntos de cada origen (defensa, batalla ganada) | `documentos.Participacion.PARTICIPACION` (`defensa`, `batallaGanada`) |
 | Aldea agrícola: niveles (granjas, corrales, coste y obra), fertilidad mínima, separación, cupo de pueblos por nivel de la madre; especies del rebaño (tope y pie de cría por corral, crecimiento por hora, productos por cabeza) | `documentos.Economia_Construccion.PUEBLOS_EXTRACTORES` (`aldea`, `cupoPorNivel`, `nivelMadreMinimo`) y `documentos.Economia_Construccion.ESPECIES`; el estado de cada aldea va en `Pueblo` (`nivel_aldea`, `fertilidad`, `almacen_por_recurso`, `rebano_especie`, `rebano_cabezas`) |
 | Coste de paso por terreno | ya va en el artefacto (`GrafoNavegacion.aristas[].coste_milesimas`); el factor por terreno, en `documentos.Comercio_Caravanas.COSTE_MOVIMIENTO` |
 

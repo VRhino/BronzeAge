@@ -42,6 +42,16 @@ message Faccion {
   optional LigaDeFaccion liga = 16;
   // Sus misiones (Misiones §5): solo en la Facción propia (`FACCION`) y en `ADMIN`; vacío en la forma pública.
   repeated Mision misiones = 17;
+  // Sus ciudadanos con su participación (Participacion §3), en orden de ingreso: solo en la Facción propia (`FACCION`) y en `ADMIN`; vacío en la forma pública.
+  repeated MiembroFaccion miembros = 18;
+}
+
+// Un ciudadano de la Facción (Participacion §3).
+message MiembroFaccion {
+  string heroe_id = 1;
+  optional string residencia_id = 2;   // la plaza (`as-N`) o el campamento (`camp-N`) donde reside; ausente sin residencia
+  repeated string cargos = 3;          // `rey`, `embajador` y los locales de su plaza de residencia como `gobernador@as-3`
+  uint64 participacion = 4;            // la suma de su participación en las plazas que son de la Facción hoy
 }
 
 enum EstadoMision {
@@ -315,6 +325,8 @@ message Asentamiento {
   uint64 version_interior = 43;
   // Sus misiones (Misiones §5): interior (quien está dentro o la gobierna) y `ADMIN`.
   repeated Mision misiones = 44;
+  // La participación de cada héroe en la plaza (Participacion §3; id de héroe → puntos), resida o no en ella: interior y `ADMIN`.
+  map<string, uint64> participacion = 45;
 }
 
 // Rectángulo en UNIDADES LOCALES del asentamiento (esquina mínima y tamaño). El espacio local está centrado en el Centro Urbano.

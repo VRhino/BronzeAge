@@ -135,10 +135,7 @@ pub fn heroe(n: &Nucleo, h: &HeroeNucleo) -> pb::Heroe {
         Some(Residencia::Asentamiento(a)) => n.cupo_de_guarnicion(u64::from(a)).unwrap_or(0),
         _ => 0,
     };
-    let residencia = h.heroe.residencia.map(|r| match r {
-        Residencia::Asentamiento(a) => ids::asentamiento(u64::from(a)),
-        Residencia::Campamento(c) => ids::campamento(c),
-    });
+    let residencia = h.heroe.residencia.map(residencia_id);
     let con_algo = |c: &Carga| (!c.is_empty()).then(|| carga(c));
     pb::Heroe {
         id: ids::heroe(h.heroe.id),
@@ -179,6 +176,14 @@ pub fn heroe(n: &Nucleo, h: &HeroeNucleo) -> pb::Heroe {
         plazas_recordadas: h.plazas_recordadas.iter().map(|(&plaza, x)| (ids::asentamiento(u64::from(plaza)), interior_recordado(u64::from(plaza), x))).collect(),
         misiones: misiones(n, crate::misiones::Dueno::Heroe(h.heroe.id)),
         ..Default::default()
+    }
+}
+
+/// El id de una residencia: la plaza (`as-N`) o el campamento (`camp-N`).
+fn residencia_id(r: Residencia) -> String {
+    match r {
+        Residencia::Asentamiento(a) => ids::asentamiento(u64::from(a)),
+        Residencia::Campamento(c) => ids::campamento(c),
     }
 }
 
@@ -577,6 +582,7 @@ pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
         }),
         admite_otras_en_ataques: x.admite_otras_en_ataques,
         misiones: misiones(n, crate::misiones::Dueno::Faccion(f)),
+        miembros: n.miembros_de(f).into_iter().map(|m| pb::MiembroFaccion { heroe_id: ids::heroe(m.heroe), residencia_id: m.residencia.map(residencia_id), cargos: m.cargos, participacion: m.participacion }).collect(),
         ..base
     }
 }
@@ -584,7 +590,7 @@ pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
 /// La forma pública de otra Facción (5H, `VISTA`; Proyecciones §6: «facciones: públicas en la ficción»): la Facción sin su experiencia, su capital ni cuándo la designó (dónde está su capital es
 /// de la niebla). Regla (decisión del autor del 2026-10-26): de una Facción ajena se ve **solo el nivel**, sin la experiencia exacta ni la capital (el TypeScript la mandaba entera).
 pub fn faccion_publica(n: &Nucleo, f: u32) -> pb::Faccion {
-    pb::Faccion { experiencia: 0, capital_designada_en_ms: None, capital_id: None, misiones: vec![], ..faccion(n, f) }
+    pb::Faccion { experiencia: 0, capital_designada_en_ms: None, capital_id: None, misiones: vec![], miembros: vec![], ..faccion(n, f) }
 }
 
 /// Las tecnologías de la Facción (6G, `Estado::tecnologia`; Proyecciones §6.3: las de un rival no viajan nunca): las aparecidas y las reveladas por su id, las adoptadas con las de arranque

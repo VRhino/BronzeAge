@@ -208,7 +208,7 @@ fn los_fundadores_viajan_en_la_plaza_dejan_de_serlo_al_mudarse_y_van_en_la_foto_
     // La foto (BAN35, hoy BAN36) los lleva y mueven el hash; BAN34 se rechaza con su motivo.
     let (reglas, hash) = (Reglas::default(), m.0.hash().to_string());
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN48");
+    assert_eq!(&bytes[..5], b"BAN49");
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     assert_eq!((s.asentamientos[&plaza].fundadores.clone(), s.hash()), (vec![gus, ana], e.n.hash_estado()));
     let mut otro = Estado::deserializar(&bytes, &reglas, &hash).unwrap();

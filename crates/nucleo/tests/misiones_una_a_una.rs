@@ -239,19 +239,14 @@ fn h6_reclutar_una_escuadra_nueva() {
 
 #[test]
 fn h7_reclutar_un_ejercito_de_verdad() {
-    // 50 de infantería, 25 de tiro y 10 de caballería reclutados en una plaza con Galería de tiro (nivel 2) y Caballerizas. La única tropa de tiro sin artesanos
-    // (honderos) trae 20: los otros 5 piden una segunda escuadra, de escaramuzadores, que es de artesanos (una Carpintería los trae).
+    // 50 de infantería (milicia y granjeros, del Centro Urbano), 20 de tiro (honderos, de la Galería de tiro) y 10 de caballería (exploradores, de las Caballerizas).
     let m = con_mundo!();
     let mut x = X::nuevo(m);
     let a = x.plaza_quieta(m, 2);
     x.ok("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["hostigamiento_tribal".into(), "cria_caballar".into()] });
-    for t in [Tipo::Carpinteria, Tipo::GaleriaDeTiro, Tipo::Caballerizas] {
+    for t in [Tipo::GaleriaDeTiro, Tipo::Caballerizas] {
         x.levantar(a, t);
     }
-    let galeria = x.n.economia(a).unwrap().edificios.iter().find(|e| e.tipo == Tipo::GaleriaDeTiro).unwrap().id;
-    x.ok("admin", Comando::MejorarEdificio { asentamiento: a, edificio: galeria });
-    let mejorada = x.hasta(HORA, 24 * 5, |x| x.n.economia(a).unwrap().edificios.iter().any(|e| e.tipo == Tipo::GaleriaDeTiro && e.nivel_interno >= 2 && e.activo()));
-    assert!(mejorada, "la Galería sube a nivel 2");
     // Población que no haga falta para producir: la plaza vuelve a construir sola (Viviendas) unos días.
     x.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: a, pausada: false });
     for _ in 0..6 {
@@ -260,7 +255,7 @@ fn h7_reclutar_un_ejercito_de_verdad() {
     }
     let h = x.heroe_en("ana", a);
     x.cumple(Dueno::Heroe(h), "H7", |x| {
-        for tropa in [Tropa::MiliciaLanceros, Tropa::Granjeros, Tropa::Honderos, Tropa::EscaramuzadoresJabalina, Tropa::ExploradoresCaballo] {
+        for tropa in [Tropa::MiliciaLanceros, Tropa::Granjeros, Tropa::Honderos, Tropa::ExploradoresCaballo] {
             let r = x.ord("ana", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa });
             assert!(r.aceptada(), "{tropa:?}: {r:?} con {:?}", x.n.economia(a).unwrap().poblacion);
         }
@@ -351,7 +346,8 @@ fn h12_entregar_materiales_a_una_obra() {
 
 #[test]
 fn h13_repartir_los_puntos_de_atributo() {
-    // Hoy el héroe no gana puntos de atributo (el servidor no sube su nivel: `tests/heroes.rs`), así que H13 no tiene camino en la partida. Lo que sí se prueba: sin
+    // Hoy el héroe no gana puntos de atributo (el servidor no sube su nivel: `tests/heroes.rs`), así que H13 no tiene camino en la partida (parada hasta que haya
+    // Unity para los perks, decisión del autor del 2026-10-28). Lo que sí se prueba: sin
     // puntos, repartir se rechaza y no cuenta.
     let m = con_mundo!();
     let mut x = X::nuevo(m);
