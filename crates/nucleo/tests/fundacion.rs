@@ -388,7 +388,7 @@ fn sin_su_titular_vuelve_sola_otro_de_su_faccion_la_reclama_y_al_llegar_espera_d
     // A mitad de camino, la foto la guarda tal cual.
     let reglas = Reglas::default();
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN47");
+    assert_eq!(&bytes[..5], b"BAN48");
     let s = Estado::deserializar(&bytes, &reglas, m.0.hash()).unwrap();
     assert_eq!((s.fundacion.clone(), s.hash()), (e.n.estado().fundacion.clone(), e.n.hash_estado()));
     let vieja = [b"BAN30".as_slice(), &bytes[5..]].concat();

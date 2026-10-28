@@ -199,6 +199,10 @@ pub enum Evento {
 pub struct Tendencia {
     pub almacen: [Mil; 29],
     pub poblacion: [i64; 3],
+    /// Lo que entró y lo que salió de cada recurso por los flujos del paso, por separado (mecánica 60, 2026-10-28): la Granja y la comida del trigo, por ejemplo, no se
+    /// compensan. `almacen` sigue siendo el neto.
+    pub producido: [Mil; 29],
+    pub consumido: [Mil; 29],
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

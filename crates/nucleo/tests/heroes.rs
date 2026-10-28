@@ -627,6 +627,11 @@ fn el_campamento_de_la_plaza_come_del_almacen_justo_despues_de_la_poblacion_y_si
         assert_eq!(poco.almacen(Trigo) - mucho.almacen(Trigo), k * 55 * 2_000, "la guarnición come 55 soldados × ración por minuto, ni más ni menos ({k} min)");
     }
     assert_eq!(en_cola(&mucho.n), cola, "comer no programa ningún evento: lo hace el paso de minuto que ya existe");
+    // Lo que come la guarnición cuenta en lo consumido del trigo (mecánica 60), y lo producido no cambia.
+    let tendencia = |e: &Escenario| e.n.economia(e.a).unwrap().tendencia;
+    let (tp, tm) = (tendencia(&poco), tendencia(&mucho));
+    let i = Trigo.indice();
+    assert_eq!((tm.consumido[i] - tp.consumido[i], tm.producido[i]), (55 * 2_000, tp.producido[i]));
     assert_eq!(mucho.n.economia(mucho.a).unwrap().poblacion, poco.n.economia(poco.a).unwrap().poblacion, "la población come antes y no nota la ración");
 }
 
@@ -1022,7 +1027,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
     let reglas = Reglas::default();
     let base = estado_con_heroes();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN47");
+    assert_eq!(&bytes[..5], b"BAN48");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.militar, base.militar, "incluido el índice de residentes, que se reconstruye");

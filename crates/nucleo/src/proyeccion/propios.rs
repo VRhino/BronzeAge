@@ -58,9 +58,17 @@ pub(super) fn constante(valor: Mil) -> pb::Ritmo {
     ritmo(base::Ritmo::constante(valor, 0))
 }
 
-/// Lo que hay de un recurso, en escalones (la economía va por minuto): `tendencia` es el neto del último paso de minuto, «+N/min»; un almacén sin tendencia (el de un pueblo) la lleva a 0.
-pub(super) fn existencia(a: &Almacen, r: Recurso, tendencia: Mil) -> pb::Existencia {
-    pb::Existencia { cantidad: Some(pb::Ritmo { en_escalones: true, maximo: Some(a.capacidad(r)), por_minuto: tendencia, ..constante(a.visible(r)) }), capacidad: a.capacidad(r) }
+/// Lo que hay de un recurso, en escalones (la economía va por minuto): con la `tendencia` de una plaza, su neto del último paso de minuto («+N/min») y lo que entró y salió por separado
+/// (mecánica 60); un almacén sin tendencia (el de un pueblo o una avanzada) los lleva a 0.
+pub(super) fn existencia(a: &Almacen, r: Recurso, tendencia: Option<&asentamiento::asentamiento::Tendencia>) -> pb::Existencia {
+    let i = r.indice();
+    let (neto, producido, consumido) = tendencia.map_or((0, 0, 0), |t| (t.almacen[i], t.producido[i], t.consumido[i]));
+    pb::Existencia {
+        cantidad: Some(pb::Ritmo { en_escalones: true, maximo: Some(a.capacidad(r)), por_minuto: neto, ..constante(a.visible(r)) }),
+        capacidad: a.capacidad(r),
+        producido_por_minuto: producido,
+        consumido_por_minuto: consumido,
+    }
 }
 
 /// Las celdas de un anillo de muralla en el contrato (columna, fila y clase).
@@ -214,7 +222,7 @@ pub fn misiones(n: &Nucleo, d: crate::misiones::Dueno) -> Vec<pb::Mision> {
 fn interior_recordado(plaza: u64, x: &PlazaRecordada) -> pb::InteriorRecordado {
     pb::InteriorRecordado {
         visto_en_ms: x.visto_en,
-        almacen: x.almacen.iter().map(|(r, &n)| (r.nombre().to_owned(), pb::Existencia { cantidad: Some(constante(n)), capacidad: 0 })).collect(),
+        almacen: x.almacen.iter().map(|(r, &n)| (r.nombre().to_owned(), pb::Existencia { cantidad: Some(constante(n)), capacidad: 0, ..Default::default() })).collect(),
         cola: x
             .cola
             .iter()
@@ -774,7 +782,7 @@ pub fn pueblo(n: &Nucleo, madre: u64, p: &Pueblo) -> pb::Pueblo {
         nodo_id: p.nodo().map(ids::nodo).unwrap_or_default(),
         tipo_extractor: p.nombre_de_tipo().into(),
         posicion: n.posicion_de_pueblo(p.id).map(punto),
-        almacen_local: Some(existencia(&p.almacen, recurso, 0)),
+        almacen_local: Some(existencia(&p.almacen, recurso, None)),
         carro_acarreo_id: p.carro.map(ids::caravana),
         guarnicion_escuadron_id: guarnicion.map(|g| ids::escuadra(g.escuadra.id)),
         guarnicion_repone_en_ms: guarnicion.and_then(|g| g.repone_en),
@@ -786,7 +794,7 @@ pub fn pueblo(n: &Nucleo, madre: u64, p: &Pueblo) -> pb::Pueblo {
             asentamiento::pueblos::Sitio::Nodo(_) => None,
         },
         almacen_por_recurso: if p.es_aldea() {
-            p.recursos(&e.reglas.economia.datos).into_iter().map(|r| (r.nombre().to_owned(), existencia(&p.almacen, r, 0))).collect()
+            p.recursos(&e.reglas.economia.datos).into_iter().map(|r| (r.nombre().to_owned(), existencia(&p.almacen, r, None))).collect()
         } else {
             Default::default()
         },
@@ -854,7 +862,7 @@ pub fn avanzada(n: &Nucleo, madre: Option<u64>, v: &Avanzada) -> pb::Avanzada {
         almacen_por_recurso: asentamiento::recurso::TODOS
             .iter()
             .filter(|&&r| v.almacen.capacidad(r) > 0)
-            .map(|&r| (r.nombre().to_owned(), existencia(&v.almacen, r, 0)))
+            .map(|&r| (r.nombre().to_owned(), existencia(&v.almacen, r, None)))
             .collect(),
         ..Default::default()
     }

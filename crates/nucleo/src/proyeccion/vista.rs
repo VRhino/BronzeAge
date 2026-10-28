@@ -443,8 +443,8 @@ impl<'n> Mirada<'n> {
         let interior = n.version_interior(a.id)?;
         Some(vec![visible(pb::TipoEntidad::Asentamiento, ids::asentamiento(a.id), Sello(a.version, interior as i64 + 1), move || {
             let Some((_, _, Cuerpo::Asentamiento(ficha))) = propios::proyectar(n, propios::Espectador::Heroe(None), Clase::Asentamiento, a.id).existen.into_iter().next() else { return None };
-            let (eco, tendencia) = (&a.economia, &a.economia.tendencia.almacen);
-            let almacen = asentamiento::recurso::TODOS.iter().map(|&r| (r.nombre().to_owned(), propios::existencia(&eco.almacen, r, tendencia[r.indice()]))).collect();
+            let (eco, tendencia) = (&a.economia, &a.economia.tendencia);
+            let almacen = asentamiento::recurso::TODOS.iter().map(|&r| (r.nombre().to_owned(), propios::existencia(&eco.almacen, r, Some(tendencia)))).collect();
             Some(Cuerpo::Asentamiento(pb::Asentamiento { almacen, ..ficha }))
         })])
     }

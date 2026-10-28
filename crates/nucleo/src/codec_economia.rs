@@ -400,10 +400,12 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
     w.i64(*ultimo_minuto);
     tendencia.almacen.iter().for_each(|&x| w.i64(x));
     tendencia.poblacion.iter().for_each(|&x| w.i64(x));
+    tendencia.producido.iter().chain(&tendencia.consumido).for_each(|&x| w.i64(x));
 }
 
-/// `con_aldeas`: la foto trae los pueblos con su sitio, su nivel y su subida (desde BAN47); antes, todos sobre un nodo y de nivel 1.
-pub(crate) fn leer(r: &mut Lector, con_aldeas: bool) -> Result<Asentamiento, ErrorFormato> {
+/// `con_aldeas`: la foto trae los pueblos con su sitio, su nivel y su subida (desde BAN47); antes, todos sobre un nodo y de nivel 1. `con_flujos`: la tendencia trae lo producido y lo
+/// consumido por separado (desde BAN48); antes, a 0 hasta el siguiente paso de minuto.
+pub(crate) fn leer(r: &mut Lector, con_aldeas: bool, con_flujos: bool) -> Result<Asentamiento, ErrorFormato> {
     let (fundado_en, nivel) = (r.i64()?, r.u32()?);
     let medidor = Medidor { valor: r.i64()?, racha: r.u32()?, nivel_actual: r.u32()? };
     let (pesants, artesanos, nobleza) = (r.i64()?, r.i64()?, r.i64()?);
@@ -509,6 +511,11 @@ pub(crate) fn leer(r: &mut Lector, con_aldeas: bool) -> Result<Asentamiento, Err
             }
             for x in &mut t.poblacion {
                 *x = r.i64()?;
+            }
+            if con_flujos {
+                for x in t.producido.iter_mut().chain(&mut t.consumido) {
+                    *x = r.i64()?;
+                }
             }
             t
         },

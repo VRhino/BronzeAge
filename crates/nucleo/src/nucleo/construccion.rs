@@ -322,11 +322,14 @@ impl Nucleo {
             return;
         }
         self.programar_minuto(id, t + MS_POR_MINUTO);
-        // La tendencia «+N/min» es lo que cambió el almacén y la población en el paso entero (el de la guarnición, que come después, se le suma en `alimentar_guarnicion`).
+        // La tendencia «+N/min» es lo que cambió el almacén y la población en el paso entero (el de la guarnición, que come después, se le suma en `alimentar_guarnicion`), y lo que
+        // entró y salió de cada recurso por separado (mecánica 60).
         let Some((sucesos, racion)) = self.con_exterior(id, t, |eco, x| {
             let antes = Contadores::de(eco);
+            eco.almacen.registrar_flujos();
             let sucesos = eco.avanzar_minuto(t, x);
-            eco.tendencia = Contadores::de(eco).tendencia(&antes);
+            let flujos = eco.almacen.tomar_flujos();
+            eco.tendencia = Tendencia { producido: flujos.producido, consumido: flujos.consumido, ..Contadores::de(eco).tendencia(&antes) };
             (sucesos, x.racion_guarnicion)
         }) else {
             return;

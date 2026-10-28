@@ -1014,7 +1014,7 @@ fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash_y_el_formato_anterior_se
     let reglas = Reglas::default();
     let base = estado_con_una_plaza();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN47");
+    assert_eq!(&bytes[..5], b"BAN48");
     let viejo = [b"BAN13".as_slice(), &bytes[5..]].concat();
     let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN13 no debe admitirse") };
     assert!(e.to_string().contains("BAN13") && e.to_string().contains("población"), "{e}");
@@ -1059,6 +1059,13 @@ fn el_paso_de_minuto_guarda_su_tendencia_y_no_sube_la_version_con_o_sin_sesiones
     assert!((0..29).all(|i| t.almacen[i] == almacen2[i] - almacen[i]) && (0..3).all(|i| t.poblacion[i] == poblacion2[i] - poblacion[i]), "la tendencia es el neto del último paso: {t:?}");
     assert!(t.almacen.iter().any(|&x| x != 0), "algo cambia en un minuto: la granja produce y la población come");
     assert_eq!(n.version(), v0, "sin sesiones el paso de minuto no cierra versión");
+    // Lo producido y lo consumido van por separado (mecánica 60): del trigo, la Granja y la comida; su diferencia es el neto. Sin guarnición, en todos los recursos.
+    let trigo = asentamiento::Recurso::Trigo.indice();
+    assert!(t.producido[trigo] > 0 && t.consumido[trigo] > 0, "la Granja produce trigo y la población lo come: {t:?}");
+    assert!((0..29).all(|i| t.producido[i] - t.consumido[i] == t.almacen[i]), "producido − consumido = neto: {t:?}");
+    let interior = nucleo::proyeccion::interior::asentamiento(&n, id).unwrap();
+    let e = &interior.almacen["trigo"];
+    assert_eq!((e.producido_por_minuto, e.consumido_por_minuto, e.cantidad.as_ref().unwrap().por_minuto), (t.producido[trigo], t.consumido[trigo], t.almacen[trigo]), "el interior los lleva");
 
     // La tendencia viaja en la foto y se rechaza la del formato anterior (que no la traía).
     let bytes = n.estado().serializar();

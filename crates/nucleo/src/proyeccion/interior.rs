@@ -68,7 +68,7 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
         nobleza: Some(ritmo_en_escalones(entera(nobleza), entera(t.poblacion[2]), None)),
         en_recuperacion: eco.poblacion.recuperando,
     });
-    p.almacen = TODOS.iter().map(|&r| (r.nombre().to_owned(), existencia(&eco.almacen, r, t.almacen[r.indice()]))).collect();
+    p.almacen = TODOS.iter().map(|&r| (r.nombre().to_owned(), existencia(&eco.almacen, r, Some(t)))).collect();
     p.medidor_mantenimiento = Some(ritmo_en_escalones(eco.medidor.valor, 0, Some(100_000)));
     p.nutricion = Some(ritmo_en_escalones(eco.poblacion.nutricion, 0, Some(100_000)));
 

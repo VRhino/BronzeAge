@@ -558,6 +558,7 @@ impl Nucleo {
         let consumido = almacen.consumir(Recurso::Trigo, racion); // flujo por minuto: la fracción va al resto oculto
         // Lo que come la guarnición es parte del paso de minuto: cuenta en la tendencia «+N/min» del trigo.
         a.economia.tendencia.almacen[Recurso::Trigo.indice()] -= consumido;
+        a.economia.tendencia.consumido[Recurso::Trigo.indice()] += consumido;
         // La parte de la ración que se pudo dar (ppm): con ella entera la moral sube y con menos baja en proporción a lo que faltó.
         let suministro = consumido * UNO / racion;
         let ids: Vec<u64> = militar.residentes_de(plaza).map(|h| h.heroe.id).collect();

@@ -69,9 +69,16 @@ message Ritmo {
 // Una unidad que se está consumiendo sigue en `valor_en_t0` hasta que su consumo se completa (EE-2), así que lo que se puede mover o vender puede
 // ser una unidad menos que lo que se ve.
 // La capacidad puede no ser entera (sale de factores): lo que cabe es su parte entera.
+//
+// PRODUCIDO Y CONSUMIDO (mecánica 60, 2026-10-28): en el almacén de una plaza, `producido_por_minuto` es lo que entró de ese recurso por los
+// flujos del último paso de minuto (Granjas, Leñeras, extracción, recetas, recaudación) y `consumido_por_minuto` lo que salió (comida de la
+// población y de la guarnición, mantenimiento, insumos de las recetas), por separado y en milésimas. El neto sigue en `cantidad.por_minuto`.
+// No cuentan las entregas, las compras ni las obras (no son flujo por minuto). Fuera del almacén de una plaza (pueblos, avanzadas) van a 0.
 message Existencia {
   Ritmo cantidad = 1;
   sint64 capacidad = 2;
+  sint64 producido_por_minuto = 3;
+  sint64 consumido_por_minuto = 4;
 }
 
 // Cantidades por id de catálogo (carros, cargas, aportes). En milésimas; lo almacenado (cargas de carro y de caravana, almacén personal,

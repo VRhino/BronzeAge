@@ -25,12 +25,22 @@ pub struct Almacen {
     /// Resto oculto de los flujos, en `(−1000, 1000)`; lo exacto (`cantidad + resto`) nunca es negativo ni pasa de la capacidad. Nadie fuera de
     /// aquí lo lee salvo la foto.
     resto: [Mil; 29],
+    /// Lo que entra por [`Almacen::producir`] y sale por [`Almacen::consumir`] mientras se registra ([`Almacen::registrar_flujos`]): el paso de minuto de la plaza lo abre y lo
+    /// cierra ([`Almacen::tomar_flujos`]), así que fuera del paso siempre es `None` y no cuenta en la igualdad ni en la foto.
+    flujos: Option<Box<Flujos>>,
+}
+
+/// Lo producido y lo consumido de cada recurso en un tramo (milésimas), por separado: producción y consumo del mismo recurso no se compensan aquí (mecánica 60).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Flujos {
+    pub producido: [Mil; 29],
+    pub consumido: [Mil; 29],
 }
 
 impl Almacen {
     /// Un almacén vacío con `capacidad` para cada uno de los 29 recursos (`ALMACEN.capacidadInicialPorRecurso`).
     pub fn nuevo(capacidad: Mil) -> Self {
-        Self { cantidad: [0; 29], capacidad: [capacidad; 29], resto: [0; 29] }
+        Self { cantidad: [0; 29], capacidad: [capacidad; 29], resto: [0; 29], flujos: None }
     }
 
     /// Las unidades guardadas, capacidades y restos de los 29 recursos, en orden de [`TODOS`] (para serializar).
@@ -40,7 +50,17 @@ impl Almacen {
 
     /// Inversa de [`Almacen::partes`] (restaurar de una foto). No recorta: se guardó un almacén válido.
     pub fn desde_partes(cantidad: [Mil; 29], capacidad: [Mil; 29], resto: [Mil; 29]) -> Self {
-        Self { cantidad, capacidad, resto }
+        Self { cantidad, capacidad, resto, flujos: None }
+    }
+
+    /// Empieza a registrar lo que entra y sale por los flujos (lo de antes se descarta).
+    pub fn registrar_flujos(&mut self) {
+        self.flujos = Some(Box::default());
+    }
+
+    /// Deja de registrar y devuelve lo registrado desde [`Almacen::registrar_flujos`] (todo a 0 si no se registraba).
+    pub fn tomar_flujos(&mut self) -> Flujos {
+        self.flujos.take().map_or_else(Flujos::default, |f| *f)
     }
 
     /// Unidades enteras que hay de verdad (múltiplo de 1000): lo que se mueve, se comercia, se carga y se paga. Es lo guardado sin la unidad
@@ -111,6 +131,9 @@ impl Almacen {
     pub fn producir(&mut self, r: Recurso, n: Mil) -> Mil {
         let entra = n.max(0).min(self.hueco(r));
         let i = r.indice();
+        if let Some(f) = &mut self.flujos {
+            f.producido[i] += entra;
+        }
         self.resto[i] += entra;
         if self.resto[i] >= UNIDAD {
             let unidades = entero(self.resto[i]);
@@ -125,6 +148,9 @@ impl Almacen {
     pub fn consumir(&mut self, r: Recurso, n: Mil) -> Mil {
         let sale = n.max(0).min(self.disponible(r));
         let i = r.indice();
+        if let Some(f) = &mut self.flujos {
+            f.consumido[i] += sale;
+        }
         self.resto[i] -= sale;
         if self.resto[i] <= -UNIDAD {
             let unidades = entero(-self.resto[i]);
@@ -197,6 +223,24 @@ mod pruebas {
         assert!(a.pagar(&[(Oro, 1_650)]));
         assert_eq!(a.cantidad(Oro), 7_000);
         assert!(!a.tiene(&[(Oro, 7_001)]));
+    }
+
+    #[test]
+    fn mientras_se_registra_lo_producido_y_lo_consumido_se_suman_por_separado_y_solo_lo_que_entro_o_salio() {
+        let mut a = Almacen::nuevo(10_000);
+        a.poner(Trigo, 5_000);
+        a.producir(Trigo, 1_000);
+        assert_eq!(a.tomar_flujos(), Flujos::default(), "sin registrar no se apunta nada");
+        a.registrar_flujos();
+        a.producir(Trigo, 2_500);
+        a.consumir(Trigo, 1_200);
+        a.agregar(Trigo, 1_000);
+        a.producir(Trigo, 9_000); // solo cabe lo que queda hasta la capacidad
+        a.consumir(Madera, 500); // no hay madera: no sale nada
+        let f = a.tomar_flujos();
+        assert_eq!((f.producido[Trigo.indice()], f.consumido[Trigo.indice()], f.consumido[Madera.indice()]), (2_500 + 1_700, 1_200, 0), "producción y consumo no se compensan; lo discreto no cuenta");
+        assert_eq!(a.tomar_flujos(), Flujos::default(), "tomar cierra el registro");
+        assert_eq!(a, { let mut b = a.clone(); b.registrar_flujos(); b.tomar_flujos(); b }, "fuera del registro no cuenta en la igualdad");
     }
 
     #[test]

@@ -19,6 +19,8 @@ Los HÉROES son una categoría SEPARADA de estas 3 clases.
 - Mientras la nutrición se MANTIENE en 0 (hambre sostenida, no solo un bache puntual), cada minuto cuesta una fracción real de población — **5% de pesants+artesanos**, el mismo valor que la deserción de tropas sin moral, y **1% de la Nobleza**, la más resistente. La población es siempre **entera** (decidido el 2026-10-22): el crecimiento y las muertes del minuto se acumulan en un resto oculto y entra o muere una persona cuando ese resto suma 1 (con 10 habitantes al 5 %, muere uno cada dos minutos).
 - Cifras placeholder (`POBLACION.hambre`).
 
+**Lo que entra y lo que sale cada minuto** (mecánica 60, 2026-10-28): el jugador ve, por cada recurso del almacén de su plaza, tres cifras del último minuto: lo **producido** (edificios, pueblos y recaudación), lo **consumido** (comida de la población y de la guarnición, mantenimiento, insumos de los talleres) y el **neto** «+N/min», que es la resta de las dos. Las entradas y salidas sueltas (órdenes, comercio, botín, caravanas) no entran en estas cifras. Detalle en `Docs/Mechanics/Economia_Construccion.md`.
+
 **Recaudación de oro por clase** (`typescript-final:Consideraciones/Economia_Del_Oro_Definicion.md`):
 - Cada minuto, el asentamiento **genera oro según su población y de qué clase es** (`recaudacionOro`) — espejo exacto del consumo de comida, con signo opuesto: `Σ(habitantes_clase × IMPUESTOS.tasa_clase)`, sumado al almacén respetando su capacidad (el sobrante se pierde, igual que la producción de mina).
 - **Nobleza > Artesanos > Pesants** por cabeza (`IMPUESTOS`, placeholder: 0.06 / 0.015 / 0.004 oro/min). Base imponible por riqueza — crecer Nobleza = asentamiento rico; refuerza el valor del Palacio.
