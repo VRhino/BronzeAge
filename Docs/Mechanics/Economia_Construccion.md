@@ -388,7 +388,7 @@ Tipos que mejoran: `EDIFICIOS_CON_NIVELES` (§14.2).
 la Facción tiene `siguiente.requiereTecnologia`; si hay `requiereEdificio`, **algún** edificio activo de ese tipo tiene `nivelInterno ≥ requiereEdificioNivel` (por defecto 1).
 
 **Duración** (`minutosDeMejora`): `max(1, round( (niveles[siguiente].obraMinutos ?? tiempoConstruccionMinutos × MEJORA_EDIFICIO.multiplicadorPorNivel^(siguiente − 1)) × factorTiempoConstruccion ))`.
-O sea, la obra base ×2 para el nivel 2, ×4 para el 3, ×8 para el 4, salvo los `obraMinutos` propios (Taberna, Palacio).
+O sea, la obra base ×2 para el nivel 2, ×4 para el 3, ×8 para el 4, salvo los `obraMinutos` propios (Taberna, Palacio y, desde el 2026-10-28, la Granja: 240, 480 y 960 minutos, los de antes, para que el arranque rápido de su nivel 1 no acorte sus mejoras).
 
 **Cada tick** (`avanzarMejoras`), dos pasos *(en Rust, el primero ocurre en el instante de fin de la mejora y el segundo en el paso de minuto)*:
 
@@ -523,11 +523,14 @@ bandidos se dispersa, sus trueques se cancelan sin penalizar y las caravanas que
 poblacion = pesants ≥ req.pesants ∧ artesanos ≥ req.artesanos           (la nobleza no cuenta; la población es entera desde el 2026-10-22, así que ya no hay que redondear: antes se leía redondeada al entero más cercano)
 construidos = nº de tipos de req.edificios con algún edificio ACTIVO cuyo nivelInterno ≥ req.nivelInternoMinimo[tipo] (por defecto 1)
 cumpleRecinto = req.recintoCompletoNivelMinimo indefinido ∨ algún recinto con nivel ≥ ese mínimo e integridad ≥ 1      ; una mejora o una ampliación en obra no lo quita: cuenta el anillo en pie con su nivel de antes (Murallas.md §9.3)
-edificios = construidos ≥ (req.edificiosMinimo ?? req.edificios.length) ∧ cumpleRecinto
+conNivel = para cada (tipo, n) de req.edificiosConNivel (por defecto vacío): algún edificio ACTIVO de ese tipo con nivelInterno ≥ n
+edificios = construidos ≥ (req.edificiosMinimo ?? req.edificios.length) ∧ cumpleRecinto ∧ conNivel
 aldea = aldeas agrícolas ACTIVAS de la plaza ≥ req.aldeasAgricolas (por defecto 0)
 ```
 
 **Implementado en Rust (2026-10-27, mecánica 50):** el nivel 2 pide **200 pesants + 2 de {Cantera, Leñera, Granja} + una aldea agrícola activa** (`aldeasAgricolas: 1` en `NIVEL_ASENTAMIENTO`); las minas y el Corral salen de su lista. Es el primer gate que mira un pueblo: `ReglasNivel::gates` recibe las aldeas activas (`Asentamiento::aldeas_activas`) y devuelve `Falta::Aldea`; `bloqueos_de_ascenso` da `Bloqueo::FaltaAldea` y `SolicitarAscenso` rechaza con `ascenso.falta_aldea`. Una aldea pendiente, en obra o destruida no cuenta; la que sube de nivel sí (sigue activa).
+
+**Implementado en Rust (2026-10-28, mecánica 56):** el nivel 2 pide **además una Granja a nivel 2** (`edificiosConNivel: {"granja": 2}` en `NIVEL_ASENTAMIENTO`, `Requisito::con_nivel`), aparte de los dos tipos de {Cantera, Leñera, Granja}: con Cantera y Leñera y las Granjas a nivel 1 no se sube. Si falta, es `Falta::Edificios` (`ascenso.faltan_edificios`), como cualquier otro edificio. Leñera y Cantera no tienen niveles. Va con el **arranque rápido** del mismo día: el nivel 1 de Vivienda, Granja y Leñera tarda 10, 5 y 2 minutos (`EDIFICIO_CATALOGO`; antes 240, 120 y 60) y las mejoras de la Granja fijan sus 240 / 480 / 960 minutos de antes (`obraMinutos`). Batch de población (300 plazas, 30 días, semilla 42, mundo `43ccdaa2`), antes → después: 200 pesants a los 2,2 → 0,36 días de mediana; se pide la subida al nivel 2 a los 2,2 → 0,6 días y se alcanza a los 5,2 → 3,6 (la obra del ascenso sigue en 3 días); 314 → 629 pesants y 46 → 72 edificios a los 7 días. Sin recalibrar: pendiente de la decisión del autor.
 
 Devuelve `null` si el nivel no tiene requisito. `calcularNivelAsentamiento` encadena los gates desde `nivel` y dice hasta dónde se cumplirían (la usan los bots para decidir si piden la subida; **no sube nada**).
 
@@ -611,7 +614,7 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
     "costo": {
       "madera": 10
     },
-    "tiempoConstruccionMinutos": 240,
+    "tiempoConstruccionMinutos": 10,
     "capacidadPesants": 15,
     "capacidadArtesanos": 10
   },
@@ -619,7 +622,7 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
     "costo": {
       "madera": 30
     },
-    "tiempoConstruccionMinutos": 120,
+    "tiempoConstruccionMinutos": 5,
     "produccionBaseTrigo": 120,
     "trabajadoresRequeridos": 4,
     "niveles": {
@@ -643,7 +646,8 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
         "costoMejora": {
           "madera": 60,
           "piedra": 20
-        }
+        },
+        "obraMinutos": 240
       },
       "3": {
         "trabajadoresRequeridos": 4,
@@ -656,7 +660,8 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
         "costoMejora": {
           "madera": 120,
           "piedra": 40
-        }
+        },
+        "obraMinutos": 480
       },
       "4": {
         "trabajadoresRequeridos": 4,
@@ -669,7 +674,8 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
         "costoMejora": {
           "madera": 240,
           "piedra": 80
-        }
+        },
+        "obraMinutos": 960
       }
     }
   },
@@ -685,7 +691,7 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
     "costo": {
       "madera": 10
     },
-    "tiempoConstruccionMinutos": 60,
+    "tiempoConstruccionMinutos": 2,
     "produccionBaseMadera": 5,
     "trabajadoresRequeridos": 4
   },
@@ -1837,6 +1843,9 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
         "granja"
       ],
       "edificiosMinimo": 2,
+      "edificiosConNivel": {
+        "granja": 2
+      },
       "aldeasAgricolas": 1
     },
     "3": {

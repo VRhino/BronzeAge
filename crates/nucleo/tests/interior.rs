@@ -611,8 +611,10 @@ async fn una_obra_termina_en_su_instante_con_la_cola_y_la_mejora_y_el_recinto_vi
             assert_eq!(edificio(&ana.plaza, &id).estado, pb::EstadoEdificio::EdificioActivo as i32);
             assert!(edificio(&ana.plaza, &id).completa_en_ms.is_none());
                 } else {
+            // Hecha: sube de nivel; con la cuadrilla libre puede empezar en ese mismo instante la mejora siguiente (la Granja tiene cuatro niveles).
             let g = edificio(&ana.plaza, &granja.id);
-            assert_eq!((g.mejora.is_none(), g.nivel_interno), (true, Some(mejora.nivel_objetivo)));
+            assert_eq!(g.nivel_interno, Some(mejora.nivel_objetivo));
+            assert!(g.mejora.as_ref().map_or(true, |m| m.nivel_objetivo > mejora.nivel_objetivo), "{:?}", g.mejora);
         }
     }
 

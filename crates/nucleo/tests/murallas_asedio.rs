@@ -384,6 +384,8 @@ fn la_conquista_daña_un_30_por_ciento_el_anillo_completo_y_se_repara_sola_a_cos
     assert_eq!(codigo_de(&e.ord("ana", Comando::AbandonarRecinto { asentamiento: b, recinto: 1 })), rechazos::MURALLAS_YA_CERRADO);
     assert_eq!(codigo_de(&e.ord("ana", Comando::MejorarRecinto { asentamiento: b, cargo: Cargo::MaestroObras, recinto: 1 })), rechazos::MURALLAS_INCOMPLETO);
     // Se repara solo, una celda por cita, a costa de la plaza (el nuevo dueño), sin volver a anunciar el cierre.
+    // Se mide justo antes y en la cita: en los 15 minutos de antes las Leñeras producen más de lo que cuesta una celda.
+    e.hasta(t + 30_000 + 15 * MIN - 1);
     let madera = e.n.economia(b).unwrap().almacen.cantidad(Recurso::Madera);
     e.hasta(t + 30_000 + 15 * MIN);
     assert_eq!(e.recintos_de_b()[0].levantadas(), n - perdidas + 2, "la siguiente celda sale en su cita");

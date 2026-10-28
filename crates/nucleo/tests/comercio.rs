@@ -1427,16 +1427,17 @@ fn la_tabla_de_precios_se_rehace_cada_minuto_y_no_en_cada_cambio_del_stock_y_va_
     assert!(e.n.estado().precios.is_some());
     let vigente = e.n.tabla_de_precios().into_owned();
 
-    // Mucha madera en una plaza: el stock del mundo cambia y el precio de ahora con él, pero la tabla no hasta su plazo.
-    e.dar(b, Madera, 300_000);
-    assert_ne!(ahora(&e.n).precio(Madera), vigente.precio(Madera), "la madera dada mueve el precio de ahora");
-    assert_eq!(e.n.tabla_de_precios().precio(Madera), vigente.precio(Madera), "la orden lee la tabla vigente");
+    // Mucho cobre en una plaza: el stock del mundo cambia y el precio de ahora con él, pero la tabla no hasta su plazo. (Cobre, que no tiene nadie: con el arranque rápido
+    // (2026-10-28) los almacenes de madera y piedra ya están llenos y lo dado no cabe.)
+    e.dar(b, Cobre, 300_000);
+    assert_ne!(ahora(&e.n).precio(Cobre), vigente.precio(Cobre), "el cobre dado mueve el precio de ahora");
+    assert_eq!(e.n.tabla_de_precios().precio(Cobre), vigente.precio(Cobre), "la orden lee la tabla vigente");
     assert_eq!(e.n.estado().precios_en, Some(vence), "y no rearma el plazo pendiente");
 
     // Al vencer, la tabla es la del stock de ese instante (va después de todo lo demás del instante); como pasaron cosas mientras estaba pendiente, el plazo se rearma solo a un minuto.
     e.avanzar_hasta(vence);
     assert_eq!(*e.n.tabla_de_precios(), ahora(&e.n));
-    assert_ne!(e.n.tabla_de_precios().precio(Madera), vigente.precio(Madera));
+    assert_ne!(e.n.tabla_de_precios().precio(Cobre), vigente.precio(Cobre));
     assert_eq!((e.n.estado().precios_en, e.n.estado().precios_rearmar), (Some(vence + MIN), false));
 
     // La foto lleva la tabla y su plazo.

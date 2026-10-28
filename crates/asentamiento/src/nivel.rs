@@ -23,6 +23,9 @@ pub struct Requisito {
     /// Nivel mínimo del recinto de muralla (2 = de piedra), con integridad completa.
     pub recinto_nivel_minimo: Option<u32>,
     pub nivel_interno_minimo: BTreeMap<Tipo, u8>,
+    /// Edificios que hacen falta además de los de `edificios`, cada uno activo y con al menos ese nivel interno (`edificiosConNivel`; el nivel 2 pide una Granja a
+    /// nivel 2, decisión del autor del 2026-10-28).
+    pub con_nivel: BTreeMap<Tipo, u8>,
     /// Aldeas agrícolas activas que pide (`aldeasAgricolas`; el nivel 2 pide una).
     pub aldeas: u32,
 }
@@ -55,6 +58,7 @@ pub enum Falta {
 impl ReglasNivel {
     pub fn de(nivel: &Value, ascenso: &Value) -> Self {
         let por_nivel = |v: &Value| -> Vec<(u32, Value)> { v.as_object().expect("objeto por nivel").iter().map(|(k, x)| (k.parse().expect("nivel"), x.clone())).collect() };
+        let niveles = |v: &Value| -> BTreeMap<Tipo, u8> { v.as_object().map(|o| o.iter().filter_map(|(k, x)| Some((Tipo::desde_nombre(k)?, x.as_f64()? as u8))).collect()).unwrap_or_default() };
         let tipos = |v: &Value| -> Vec<Tipo> { v.as_array().map(|a| a.iter().filter_map(|x| Tipo::desde_nombre(x.as_str()?)).collect()).unwrap_or_default() };
         let requisitos = por_nivel(&nivel["requisitos"])
             .into_iter()
@@ -65,10 +69,8 @@ impl ReglasNivel {
                     edificios: tipos(&v["edificios"]),
                     edificios_minimo: v["edificiosMinimo"].as_f64().map(|x| x as usize),
                     recinto_nivel_minimo: v["recintoCompletoNivelMinimo"].as_f64().map(|x| x as u32),
-                    nivel_interno_minimo: v["nivelInternoMinimo"]
-                        .as_object()
-                        .map(|o| o.iter().filter_map(|(k, x)| Some((Tipo::desde_nombre(k)?, x.as_f64()? as u8))).collect())
-                        .unwrap_or_default(),
+                    nivel_interno_minimo: niveles(&v["nivelInternoMinimo"]),
+                    con_nivel: niveles(&v["edificiosConNivel"]),
                     aldeas: v["aldeasAgricolas"].as_f64().unwrap_or(0.0) as u32,
                 };
                 (n, r)
@@ -102,7 +104,8 @@ impl ReglasNivel {
         }
         let construidos = req.edificios.iter().filter(|&&t| edificios.hay_activo_con_nivel(t, req.nivel_interno_minimo.get(&t).copied().unwrap_or(1))).count();
         let cumple_recinto = req.recinto_nivel_minimo.map_or(true, |m| recinto_nivel >= m);
-        if construidos < req.edificios_minimo.unwrap_or(req.edificios.len()) || !cumple_recinto {
+        let cumple_con_nivel = req.con_nivel.iter().all(|(&t, &n)| edificios.hay_activo_con_nivel(t, n));
+        if construidos < req.edificios_minimo.unwrap_or(req.edificios.len()) || !cumple_recinto || !cumple_con_nivel {
             faltas.push(Falta::Edificios);
         }
         if aldeas < req.aldeas {
@@ -153,12 +156,17 @@ mod pruebas {
     }
 
     #[test]
-    fn el_nivel_2_pide_200_pesants_dos_de_cantera_lenera_y_granja_y_una_aldea_agricola() {
+    fn el_nivel_2_pide_200_pesants_dos_de_cantera_lenera_y_granja_una_granja_a_nivel_2_y_una_aldea_agricola() {
         let r = Reglas::cargar().nivel;
         let uno = activos(&[(Tipo::Cantera, 1), (Tipo::Corral, 1), (Tipo::Mina, 1)]);
         assert_eq!(r.gates(2, &uno, 200, 0, 0, 1), Some(vec![Falta::Edificios]), "ni el Corral ni las minas cuentan ya");
-        let dos = activos(&[(Tipo::Cantera, 1), (Tipo::Granja, 1), (Tipo::Granja, 1)]);
+        let dos = activos(&[(Tipo::Cantera, 1), (Tipo::Granja, 1), (Tipo::Granja, 2)]);
         assert_eq!(r.gates(2, &dos, 200, 0, 0, 1), Some(vec![]), "dos Granjas cuentan como un solo tipo");
+        // Además de los dos tipos, una Granja a nivel 2 (2026-10-28): Cantera y Leñera con Granjas a nivel 1 no bastan.
+        let sin_granja_2 = activos(&[(Tipo::Cantera, 1), (Tipo::Lenera, 1), (Tipo::Granja, 1)]);
+        assert_eq!(r.gates(2, &sin_granja_2, 200, 0, 0, 1), Some(vec![Falta::Edificios]));
+        assert_eq!(r.gates(2, &activos(&[(Tipo::Cantera, 1), (Tipo::Lenera, 1)]), 200, 0, 0, 1), Some(vec![Falta::Edificios]));
+        assert_eq!(r.gates(2, &activos(&[(Tipo::Cantera, 1), (Tipo::Lenera, 1), (Tipo::Granja, 2)]), 200, 0, 0, 1), Some(vec![]));
         assert_eq!(r.gates(2, &dos, 200, 0, 0, 0), Some(vec![Falta::Aldea]));
         assert_eq!(r.gates(2, &dos, 199, 0, 0, 1), Some(vec![Falta::Poblacion]));
         assert_eq!(r.gates(9, &dos, 0, 0, 0, 0), None);

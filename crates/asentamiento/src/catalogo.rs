@@ -332,10 +332,12 @@ mod pruebas {
     fn cifras_del_canon_en_el_catalogo() {
         let c = Reglas::cargar().catalogo;
         let vivienda = c.tipo(Tipo::Vivienda);
-        assert_eq!((vivienda.capacidad_pesants, vivienda.capacidad_artesanos, vivienda.tiempo_minutos), (15_000, 10_000, 240));
+        assert_eq!((vivienda.capacidad_pesants, vivienda.capacidad_artesanos, vivienda.tiempo_minutos), (15_000, 10_000, 10));
         assert_eq!(vivienda.costo, vec![(Recurso::Madera, 10_000)]);
         let granja = c.tipo(Tipo::Granja);
-        assert_eq!((granja.trabajadores, granja.tiempo_minutos), (4_000, 120));
+        // El arranque rápido (2026-10-28): Vivienda 10, Granja 5 y Leñera 2 minutos a nivel 1; las mejoras de la Granja fijan sus 240 / 480 / 960 de antes.
+        assert_eq!((granja.trabajadores, granja.tiempo_minutos, c.tipo(Tipo::Lenera).tiempo_minutos), (4_000, 5, 2));
+        assert_eq!(granja.niveles.iter().map(|n| n.obra_minutos).collect::<Vec<_>>(), vec![None, Some(240), Some(480), Some(960)]);
         let trigo: Vec<Mil> = granja.niveles.iter().map(|n| n.produccion_base_trigo).collect();
         assert_eq!(trigo, vec![120_000, 180_000, 240_000, 360_000], "120 / 180 / 240 / 360 por minuto (el doble del TypeScript, 2026-10-27)");
         assert_eq!(c.tipo(Tipo::Almacen).capacidad_por_recurso, 300_000);

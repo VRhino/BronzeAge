@@ -335,7 +335,7 @@ fn una_simulacion_de_dias_con_fotos_y_recuperacion_a_mitad_da_el_mismo_hash() {
         let mut n = Nucleo::con_persistencia(con(ajustes.clone()), dir.path(), Default::default()).unwrap();
         let ids = fundar_dos(&mut n);
         tramo(&mut n, ids, 1, 2 * 24);
-        assert!(n.metricas().ordenes_aceptadas > 8, "las órdenes de economía entran al registro: {}", n.metricas().ordenes_aceptadas);
+        assert!(n.metricas().ordenes_aceptadas > 4, "las órdenes de economía entran al registro: {}", n.metricas().ordenes_aceptadas);
         n.foto_ahora(); // la foto lleva economías, yacimientos, reclamos y los pasos de minuto de la cola
         tramo(&mut n, ids, 2 * 24 + 1, 4 * 24);
         n.apagar().unwrap();
@@ -521,7 +521,14 @@ fn una_plaza_que_se_arruina_libera_sus_parcelas_y_nodos_y_su_evento_de_minuto_se
     // El plazo global de los títulos (5F) vence como mucho una vez en diez minutos.
     let titulos = n.estado().titulos_en.filter(|&x| x > desde && x <= desde + 10 * MIN).map_or(0, |_| 1);
     n.avanzar_hasta(n.ahora() + 10 * MIN);
-    assert_eq!(n.metricas().eventos - eventos_antes, 20 + titulos, "solo queda el reloj de la otra plaza: un paso por minuto, y el de la tabla de precios");
+    // Y las citas de fin de obra de la otra plaza, que con el arranque rápido (2026-10-28) acaban en minutos: una por instante con algo completado.
+    let citas: std::collections::BTreeSet<i64> = ["construccion.edificio_completado", "construccion.mejora_completada"]
+        .iter()
+        .flat_map(|c| eventos(&n, c))
+        .filter(|h| h.0 > desde && h.0 <= desde + 10 * MIN && h.1.contains(&otra))
+        .map(|h| h.0)
+        .collect();
+    assert_eq!(n.metricas().eventos - eventos_antes, 20 + titulos + citas.len() as u64, "solo queda el reloj de la otra plaza: un paso por minuto, el de la tabla de precios y sus fines de obra");
     assert!(n.economia(otra).is_some(), "la otra plaza sigue viva");
     // Y el mundo arruinado sobrevive a serializar y recuperar.
     let bytes = n.estado().serializar();

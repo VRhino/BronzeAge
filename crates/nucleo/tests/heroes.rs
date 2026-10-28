@@ -605,7 +605,8 @@ fn la_guarnicion_respeta_el_cupo_de_sus_edificios_y_se_retira_sin_gastar_lideraz
 #[test]
 fn el_campamento_de_la_plaza_come_del_almacen_justo_despues_de_la_poblacion_y_sin_eventos_nuevos() {
     let m = con_mundo!();
-    // Dos mundos idénticos salvo la ración (2 y 4 de trigo por soldado y minuto): lo que el segundo se come de más es exactamente la diferencia.
+    // Dos mundos idénticos salvo la ración (4 y 6 de trigo por soldado y minuto): lo que el segundo se come de más es exactamente la diferencia. Con 2 de ración la
+    // Granja de la plaza producía más de lo que se comía y su almacén tocaba el techo, que recorta la entrada.
     let hasta = |racion| {
         let mut e = escenario_con_racion(m, 7, racion);
         e.avanzar(24 * HORA);
@@ -616,7 +617,7 @@ fn el_campamento_de_la_plaza_come_del_almacen_justo_despues_de_la_poblacion_y_si
         e.ok("ana", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: Tropa::Lenadores });
         e
     };
-    let (mut poco, mut mucho) = (hasta(2_000), hasta(4_000));
+    let (mut poco, mut mucho) = (hasta(4_000), hasta(6_000));
     assert_eq!(poco.n.soldados_del_campamento(poco.a), 55);
     let (cola, antes) = (en_cola(&mucho.n), poco.almacen(Trigo));
     assert_eq!(antes, mucho.almacen(Trigo), "hasta reclutar son idénticos");
@@ -632,8 +633,9 @@ fn el_campamento_de_la_plaza_come_del_almacen_justo_despues_de_la_poblacion_y_si
 #[test]
 fn sin_trigo_baja_la_moral_y_con_la_moral_a_cero_desertan_los_soldados_hasta_que_vuelve_la_ración() {
     let m = con_mundo!();
-    // Una ración de 4 de trigo por soldado y minuto (220 por minuto con 55 soldados) vacía el almacén en un cuarto de hora.
-    let mut e = escenario_con_racion(m, 7, 4_000);
+    // Una ración de 7 de trigo por soldado y minuto (385 por minuto con 55 soldados) vacía el almacén; con el arranque rápido (2026-10-28) la Granja ya está a nivel 2 y
+    // con 4 de ración cubría casi todo, así que la moral apenas bajaba.
+    let mut e = escenario_con_racion(m, 7, 7_000);
     let a = e.a;
     e.avanzar(24 * HORA);
     e.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: a, pausada: true });
@@ -652,14 +654,14 @@ fn sin_trigo_baja_la_moral_y_con_la_moral_a_cero_desertan_los_soldados_hasta_que
         }
         assert_eq!(cantidad(&e, milicia), 25);
     }
-    // El primer paso sin ración entera solo pierde en proporción a lo que faltó; mientras la ración sea mínima (lo que da la Granja), casi 20 puntos
-    // por minuto. Hasta que la moral llega a cero no deserta nadie.
+    // El primer paso sin ración entera solo pierde en proporción a lo que faltó; mientras la ración sea mínima (lo que da la Granja), entre 10 y 20
+    // puntos por minuto según lo que falte. Hasta que la moral llega a cero no deserta nadie.
     let (t0, m0) = hambre.expect("el almacén se acaba");
     assert!((80_000..100_000).contains(&m0), "una ración incompleta quita menos que una ausente: {m0}");
     let (mut anterior, mut k) = (m0, 0);
     while anterior > 0 {
         k += 1;
-        assert!(k <= 8, "con unos 20 puntos por minuto llega a cero en seis pasos");
+        assert!(k <= 10, "con 10 a 20 puntos por minuto llega a cero en diez pasos como mucho");
         e.n.avanzar_hasta(t0 + k * MIN);
         let m = moral(&e, milicia);
         assert!(m < anterior && anterior - m <= 20_000 && (m == 0 || anterior - m > 10_000), "minuto {k} de hambre: de {anterior} a {m}");

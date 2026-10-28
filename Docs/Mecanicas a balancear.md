@@ -37,6 +37,7 @@ referencias antiguas (§34, §39…) sigan valiendo.
 | — | MURALLAS | Cifras de la empalizada (M2) | **Fase 7** |
 | — | ECONOMÍA | Piezas gratuitas, almacén lleno y recetas sin penalización por distancia (2026-10-11) | batch |
 | — | TERRITORIO | Bosque, metales aislados, cobertura de metales y Facciones sin plaza | batch; la cobertura y las Facciones sin plaza, **Fase 7** |
+| 56 | ECONOMÍA | Arranque rápido de la plaza (Vivienda 10, Granja 5 y Leñera 2 minutos) y gate del nivel 2 con Granja a nivel 2 (2026-10-28): el nivel 2 llega a los 3,6 días de mediana en vez de 5,2 y los 200 pesants a los 0,36 días; decidir si es el ritmo buscado (`Economia_Construccion.md` §11.1) | `batch poblacion` |
 
 ## 20. Tecnología por Eras: calibrar los logros
 
