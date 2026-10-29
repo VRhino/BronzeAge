@@ -1011,6 +1011,12 @@ fn convocar_y_unirse_piden_el_mismo_lugar_la_misma_faccion_y_una_salida_posible_
     assert_eq!(e.rechazada("beto", unirse_a(b, conv, &ia)), rechazos::ESCUADRA_AJENA);
     e.ok("beto", unirse_a(b, conv, &ib));
     assert_eq!(e.n.convocatoria(conv).unwrap().integrantes.iter().map(|i| i.heroe).collect::<Vec<_>>(), vec![a, b]);
+    // Lo que elige cada integrante viaja con la tropa de cada escuadra, en el mismo orden (2026-10-29): así se pintan las escuadras de los demás.
+    let k = e.n.convocatoria(conv).unwrap();
+    let p = nucleo::proyeccion::propios::convocatoria(&e.n, k, nucleo::proyeccion::propios::Espectador::Heroe(Some(a)), 0);
+    let de_beto = p.integrantes[1].seleccion.clone().unwrap();
+    let tropas: Vec<String> = ib.iter().map(|&s| e.escuadra(b, s).tropa.nombre().to_owned()).collect();
+    assert_eq!((de_beto.escuadron_ids.len(), de_beto.tropa_ids), (ib.len(), tropas));
     assert_eq!(e.rechazada("beto", unirse_a(b, conv, &ib)), rechazos::CONVOCATORIA_YA_EN_ELLA);
     assert_eq!(hechos(&e.n, "convocatoria.unido").len(), 1);
     // Cambiar lo elegido, separarse (el Líder no: cancela) y cancelar (solo el Líder).

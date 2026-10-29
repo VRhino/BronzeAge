@@ -528,12 +528,16 @@ pub fn caravana(n: &Nucleo, c: &Caravana) -> pb::Caravana {
     }
 }
 
-fn seleccion(s: &Seleccion) -> pb::SeleccionDeSalida {
-    pb::SeleccionDeSalida { escuadron_ids: s.escuadras.iter().map(|&e| ids::escuadra(e)).collect(), carga: Some(carga(&s.carga)) }
+/// Lo que `heroe` elige llevar: sus escuadras y, en el mismo orden, la tropa de cada una (2026-10-29: con ella el cliente pinta la escuadra de otro héroe con el catálogo de `/v1/datos`; vacía si la
+/// escuadra ya no existe).
+fn seleccion(n: &Nucleo, heroe: u64, s: &Seleccion) -> pb::SeleccionDeSalida {
+    let h = n.heroe(heroe);
+    let tropa = |e: u64| h.and_then(|h| h.heroe.escuadra(e)).map(|x| x.tropa.nombre().to_owned()).unwrap_or_default();
+    pb::SeleccionDeSalida { escuadron_ids: s.escuadras.iter().map(|&e| ids::escuadra(e)).collect(), carga: Some(carga(&s.carga)), tropa_ids: s.escuadras.iter().map(|&e| tropa(e)).collect() }
 }
 
 /// La convocatoria tal como la ve `quien`: su Líder y la administración ven todas las peticiones y cada solicitante la suya.
-pub fn convocatoria(c: &Convocatoria, quien: Espectador, version: u64) -> pb::Convocatoria {
+pub fn convocatoria(n: &Nucleo, c: &Convocatoria, quien: Espectador, version: u64) -> pb::Convocatoria {
     let ve = |heroe: u64| match quien {
         Espectador::Admin => true,
         Espectador::Heroe(v) => v == Some(c.lider) || v == Some(heroe),
@@ -550,12 +554,12 @@ pub fn convocatoria(c: &Convocatoria, quien: Espectador, version: u64) -> pb::Co
         lugar_id,
         lider_id: ids::heroe(c.lider),
         politica_de_union: super::politica(c.politica) as i32,
-        integrantes: c.integrantes.iter().map(|i| pb::IntegranteConvocatoria { heroe_id: ids::heroe(i.heroe), unido_en_ms: i.unido_en, seleccion: Some(seleccion(&i.seleccion)) }).collect(),
+        integrantes: c.integrantes.iter().map(|i| pb::IntegranteConvocatoria { heroe_id: ids::heroe(i.heroe), unido_en_ms: i.unido_en, seleccion: Some(seleccion(n, i.heroe, &i.seleccion)) }).collect(),
         peticiones: c
             .peticiones
             .iter()
             .filter(|p| ve(p.heroe))
-            .map(|p| pb::PeticionConvocatoria { heroe_id: ids::heroe(p.heroe), pedido_en_ms: p.pedido_en, expira_en_ms: p.expira_en, seleccion: Some(seleccion(&p.seleccion)) })
+            .map(|p| pb::PeticionConvocatoria { heroe_id: ids::heroe(p.heroe), pedido_en_ms: p.pedido_en, expira_en_ms: p.expira_en, seleccion: Some(seleccion(n, p.heroe, &p.seleccion)) })
             .collect(),
         creada_en_ms: c.creada_en,
     }
@@ -1111,7 +1115,7 @@ pub fn proyectar(n: &Nucleo, quien: Espectador, clase: Clase, id: u64) -> Proyec
             let cuerpo = e.comercio.caravana(id).map(|c| caravana(n, c)).or_else(|| e.fundacion.caravanas.get(&id).map(|c| caravana_de_fundacion(n, c)));
             un(T::Caravana, ids::caravana(id), cuerpo.map(Cuerpo::Caravana))
         }
-        Clase::Convocatoria => un(T::Convocatoria, ids::convocatoria(id), e.militar.convocatorias.get(&id).map(|c| Cuerpo::Convocatoria(convocatoria(c, quien, n.version_de(Clase::Convocatoria, id))))),
+        Clase::Convocatoria => un(T::Convocatoria, ids::convocatoria(id), e.militar.convocatorias.get(&id).map(|c| Cuerpo::Convocatoria(convocatoria(n, c, quien, n.version_de(Clase::Convocatoria, id))))),
         Clase::Acuerdo => un(T::AcuerdoTrueque, ids::acuerdo(id), e.comercio.acuerdo(id).map(|a| Cuerpo::AcuerdoTrueque(trueque(n, a)))),
         Clase::OrdenMercado => un(
             T::OrdenMercado,

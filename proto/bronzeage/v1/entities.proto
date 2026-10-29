@@ -845,6 +845,9 @@ message Caravana {
 message SeleccionDeSalida {
   repeated string escuadron_ids = 1;
   Cantidades carga = 2;
+  // La tropa de cada escuadrón, en el mismo orden que `escuadron_ids` (2026-10-29): el id del catálogo de `/v1/datos`, para pintar las escuadras de otros
+  // héroes sin conocerlas. Vacío si el escuadrón ya no existe.
+  repeated string tropa_ids = 3;
 }
 
 message IntegranteConvocatoria {
