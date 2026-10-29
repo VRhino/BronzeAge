@@ -637,3 +637,53 @@ fn el_directorio_lleva_todas_las_facciones_a_quien_tiene_faccion_y_solo_vuelve_a
     assert_ne!(sello3, sello2);
     assert!(d.facciones.iter().any(|f| f.id == "f-9" && f.ciudadanos == 1));
 }
+
+#[test]
+fn quien_esta_dentro_de_una_plaza_ajena_ve_su_trazado_y_sus_ordenes_de_mercado_abiertas_y_desde_fuera_no() {
+    let m = con_mundo!();
+    let mut x = escenario(m);
+    let plaza = x.plaza;
+    x.ok("admin", Comando::AnadirEdificio { asentamiento: plaza, tipo: asentamiento::catalogo::Tipo::Mercado });
+    x.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: plaza, pausada: false });
+    let t = x.n.ahora() + 9 * 60 * MS_POR_MINUTO;
+    x.n.avanzar_hasta(t);
+    x.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: plaza, pausada: true });
+    let orden = x.ok("ana", Comando::ColocarOrdenMercado { asentamiento: plaza, venta: true, recurso: asentamiento::Recurso::Madera, cantidad: 10_000, precio: None }).creadas[0];
+    // Eva, de F2, en el campamento 0.
+    let eva = x.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
+    x.ok("admin", Comando::FijarFaccionDeHeroe { heroe: eva, faccion: Some(2) });
+    let (id_plaza, id_orden) = (ids::asentamiento(plaza), ids::orden_de_mercado(orden));
+    let mira = |n: &Nucleo, quien: u64, f: u32| {
+        let m = Mirada::de(n, Perspectiva::Faccion(f));
+        m.contenido(Some(quien), todo(), &BTreeMap::new()).into_iter().filter_map(|v| Some((v.clave.clone(), v.cuerpo()?))).collect::<BTreeMap<_, _>>()
+    };
+    let plaza_de = |e: &BTreeMap<(i32, String), Cuerpo>| match e.get(&(TipoEntidad::Asentamiento as i32, id_plaza.clone())) {
+        Some(Cuerpo::Asentamiento(a)) => Some(a.clone()),
+        _ => None,
+    };
+    let tiene_orden = |e: &BTreeMap<(i32, String), Cuerpo>| e.contains_key(&(TipoEntidad::OrdenMercado as i32, id_orden.clone()));
+
+    // Desde fuera, si la ve, la ve sin trazado ni órdenes.
+    let fuera = mira(&x.n, eva, 2);
+    assert!(plaza_de(&fuera).is_none_or(|a| a.trazado.is_none()));
+    assert!(!tiene_orden(&fuera));
+
+    // Dentro: el trazado (el mismo que en su interior) y la orden abierta; nada más del interior.
+    x.ok("admin", Comando::ColocarHeroe { heroe: eva, ubicacion: Ubicacion::Asentamiento(plaza as u32) });
+    let dentro = mira(&x.n, eva, 2);
+    let a = plaza_de(&dentro).expect("la plaza donde está");
+    let interior = nucleo::proyeccion::interior::asentamiento(&x.n, plaza).unwrap();
+    assert!(a.trazado.is_some());
+    assert_eq!(a.trazado, interior.trazado);
+    assert!(!a.edificios.is_empty());
+    assert!(a.almacen.is_empty() && a.poblacion.is_none() && a.cargos.is_none() && a.presentes_ids.is_empty(), "ni almacén, ni población, ni cargos, ni quién está: {a:?}");
+    let Some(Cuerpo::OrdenMercado(o)) = dentro.get(&(TipoEntidad::OrdenMercado as i32, id_orden.clone())) else { panic!("la orden abierta") };
+    assert_eq!((o.asentamiento_id.as_str(), o.estado), (id_plaza.as_str(), pb::EstadoOrden::OrdenActiva as i32));
+
+    // Cancelada, deja de verse.
+    x.ok("ana", Comando::CancelarOrdenMercado { orden });
+    assert!(!tiene_orden(&mira(&x.n, eva, 2)));
+    // Y al salir vuelve a la de fuera.
+    x.ok("admin", Comando::ColocarHeroe { heroe: eva, ubicacion: Ubicacion::Mercenarios(0) });
+    assert!(plaza_de(&mira(&x.n, eva, 2)).is_none_or(|a| a.trazado.is_none()));
+}

@@ -49,6 +49,18 @@ fn rect(r: &trazado::RectLocal) -> pb::RectLocal {
 }
 
 
+/// El trazado urbano de la plaza (calles, caminos y radio): va en su interior y, en `VISTA`, a quien está dentro de una plaza ajena (2026-10-29). `None` si ya no existe.
+pub(crate) fn trazado_de(n: &Nucleo, id: u64) -> Option<pb::TrazadoUrbano> {
+    let ciudad = n.vista_ciudad(id)?;
+    Some(pb::TrazadoUrbano {
+        layout_version: trazado::LAYOUT_VERSION,
+        unidades_por_celda: trazado::CELDA_UL as u32,
+        radio_ul: ciudad.radio_ul,
+        calles: ciudad.calles.iter().map(rect).collect(),
+        caminos: ciudad.caminos.iter().map(rect).collect(),
+    })
+}
+
 /// La plaza completa para quien está dentro, o `None` si ya no existe.
 pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
     let e = n.estado();
@@ -121,13 +133,7 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
             completado_en_ms: r.completado_en,
         })
         .collect();
-    p.trazado = Some(pb::TrazadoUrbano {
-        layout_version: trazado::LAYOUT_VERSION,
-        unidades_por_celda: trazado::CELDA_UL as u32,
-        radio_ul: ciudad.radio_ul,
-        calles: ciudad.calles.iter().map(rect).collect(),
-        caminos: ciudad.caminos.iter().map(rect).collect(),
-    });
+    p.trazado = trazado_de(n, id);
 
     p.casas_compradas = e.militar.residentes_de(id).map(|h| ids::heroe(h.heroe.id)).collect();
     p.presentes_ids = n.heroes().filter(|h| matches!(h.heroe.presencia.ubicacion, Ubicacion::Asentamiento(x) if u64::from(x) == id)).map(|h| ids::heroe(h.heroe.id)).collect();

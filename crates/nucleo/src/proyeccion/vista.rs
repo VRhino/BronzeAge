@@ -24,6 +24,7 @@ use crate::nucleo::Nucleo;
 use asentamiento::edificio::Estado as EstadoEdificio;
 use base::{Instante, Mil, Plan, Punto, Vertice};
 use comercio::caravana::{Caravana, EstadoCaravana};
+use comercio::orden_mercado::EstadoOrden;
 use comercio::red_caminos::{escalon_de_peso, Arista, RutaComercial};
 use contrato::v1 as pb;
 pub use contrato::niebla::{aplicar_niebla, cambio_de_niebla};
@@ -315,13 +316,27 @@ impl<'n> Mirada<'n> {
 
         // Los sitios: lo propio como en `FACCION`; lo ajeno que se ve, redactado; lo ajeno que no se ve y se recuerda, como ficha.
         let mut vistos: BTreeSet<Sitio> = BTreeSet::new();
+        // La plaza ajena donde está el héroe de la sesión (2026-10-29, pedido del autor): quien está dentro, sea de la Facción que sea, la ve con su trazado para navegarla y ve sus órdenes de
+        // mercado abiertas para tomarlas. Desde fuera, nada de eso. La propia ya va entera en `ASENTAMIENTO`.
+        let dentro_de = match viewer.and_then(|h| n.heroe(h)).map(|h| h.heroe.presencia.ubicacion) {
+            Some(Ubicacion::Asentamiento(a)) => e.asentamientos.get(&u64::from(a)).filter(|a| Some(a.faccion) != self.faccion).map(|a| a.id),
+            _ => None,
+        };
         for a in e.asentamientos.values() {
             let duena = Some(a.faccion) == self.faccion;
-            if rect.contiene(a.posicion) && (duena || self.ve(a.posicion)) {
+            let dentro = dentro_de == Some(a.id);
+            if dentro || (rect.contiene(a.posicion) && (duena || self.ve(a.posicion))) {
                 vistos.insert(Sitio::Plaza(a.id));
                 let id = ids::asentamiento(a.id);
                 if duena {
                     v.extend(self.propia_a_la_puerta(viewer, a).unwrap_or_else(|| self.propias_de(Clase::Asentamiento, a.id, a.version)));
+                } else if dentro {
+                    nombradas.push(a.faccion);
+                    v.push(visible(pb::TipoEntidad::Asentamiento, id, Sello(a.version, 1), move || Some(Cuerpo::Asentamiento(plaza_desde_dentro(n, a.id)))));
+                    let abiertas = e.comercio.libro.ordenes.iter().filter(|o| u64::from(o.asentamiento) == a.id && o.estado == EstadoOrden::Activa);
+                    v.extend(abiertas.map(|o| {
+                        visible(pb::TipoEntidad::OrdenMercado, ids::orden_de_mercado(o.id), Sello(n.version_de(Clase::OrdenMercado, o.id), 0), move || Some(Cuerpo::OrdenMercado(propios::orden_de_mercado(n, o))))
+                    }));
                 } else {
                     nombradas.push(a.faccion);
                     v.push(visible(pb::TipoEntidad::Asentamiento, id, Sello(a.version, 0), move || Some(Cuerpo::Asentamiento(plaza_avistada(n, a.id)))));
@@ -672,6 +687,11 @@ pub fn plaza_avistada(n: &Nucleo, id: u64) -> pb::Asentamiento {
         })
         .collect();
     p
+}
+
+/// La plaza ajena vista desde dentro (2026-10-29): la de fuera ([`plaza_avistada`]) con su trazado urbano. Nada más de su interior (almacén, población, cola, puerta, cargos...).
+pub fn plaza_desde_dentro(n: &Nucleo, id: u64) -> pb::Asentamiento {
+    pb::Asentamiento { trazado: interior::trazado_de(n, id), ..plaza_avistada(n, id) }
 }
 
 /// El héroe ajeno (`HeroePublico`): nombre, clase, nivel, hasta cuándo está herido y las escuadras que lleva en su columna y su Facción. Nada de su campamento, sus puntos, su Liderazgo ni si es humano o bot.
