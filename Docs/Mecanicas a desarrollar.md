@@ -24,6 +24,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 48 | MILITAR / POLÍTICA | Mercenarios por contrato (diseño cerrado el 2026-10-26; `Docs/Disenos_Por_Implementar/Mercenarios_Por_Contrato.md`) | nada |
 | 61 | MISIONES | H13 «Forjar al héroe» no tiene camino: el héroe no gana puntos de atributo porque el servidor no sube su nivel (visto al probar las misiones una a una, 2026-10-28). **Parada** hasta que haya Unity para los perks (decisión del autor del 2026-10-28) | la misión existe y se prueba que repartir sin puntos no cuenta |
 | 62 | MERCENARIOS | El campamento visto desde la puerta (2026-10-28): el héroe con la columna parada a la puerta (≤ `radioPuerta`) recibe el ámbito `CAMPAMENTO` como si estuviera dentro (stock y precios del mercado, reclutas, tropas que ofrece) y se le quita al alejarse; la sesión recalcula ese derecho cuando la columna para o arranca. Pendiente de decidir si desde fuera se recorta la lista de residentes y presentes. El cliente de jugador enseña mercado y reclutar con ese ámbito, dentro o fuera. Aparcada por el autor el 2026-10-28 | las órdenes ya se aceptan a la puerta (`comprarEnCampamento`, `reclutarEnCampamento`, repostar), pero `CAMPAMENTO` solo se abre dentro: desde fuera el jugador no ve qué hay |
+| 63 | POLÍTICA / MAPA | Marcas de Facción en el mapa (pedidas por el autor el 2026-10-29; acotadas abajo) | nada: el cliente de jugador no tiene dónde guardarlas |
 | — | PARIDAD | Recortes temporales del motor Rust frente al TypeScript (sección «Paridad con TypeScript») | el motor no está migrado hasta cerrarlos |
 | — | DUDAS | Ninguna sin decisión desde el 2026-10-27 (sección «Dudas abiertas»: las `// DUDA:` que quedan en el código) | — |
 | — | FASE 7 | Todo lo que se dejó para los bots reales y la fase 7 (sección «Para la fase 7») | — |
@@ -60,6 +61,18 @@ Cuatro ideas del autor, estudiadas y decididas en un hilo de solo diseño; sin c
 
 - **48. Mercenarios por contrato**: `Docs/Disenos_Por_Implementar/Mercenarios_Por_Contrato.md`. Bots contratados como miembros de la Facción por Rey, Embajador o Gobernador (este con alcance de su plaza), temporales con trabajo de la tabla y permanentes como ciudadanos con marca. Pendiente: implementar tras los bots de la fase 7 (necesita el runner jugando por el contrato 05), calibrar tarifas, plazos y topes, y la pestaña de control en BronzeAgeClient.
 - **Fuera de alcance**: carne y leche (también del MVP) y las misiones entre humanos van a `Docs/Ideas a diseñar.md` (entradas 52 y 53 de ese archivo).
+
+## 63. Marcas de Facción en el mapa
+
+Pedida por el autor el 2026-10-29 desde el cliente de jugador. Puntos en el mapa que solo ve la propia Facción: puntos de reunión, de interés, de peligro u objetivos.
+
+- **Quién las pone y las quita:** el Rey, el Embajador, los Generales y los Gobernadores de la Facción.
+- **Tope:** 5 marcas vivas por Facción, entre todos.
+- **Tipos:** reunión, interés, peligro y objetivo. Llevan un texto corto opcional.
+- **Duración:** no caducan; se quitan a mano.
+- **Quién las ve:** todos los ciudadanos de la Facción (ámbito `FACCION`); nadie de fuera.
+- **Pendiente de decidir al implementar:** si cualquiera de esos cargos puede quitar la marca de otro y si el tope cuenta por Facción o por cargo (el autor dijo «un número limitado de marcas (5)»; se lee por Facción).
+- **Toca:** una orden para poner y otra para quitar, la entidad en la proyección de la Facción y el panel y la capa del mapa en BronzeAgeClient.
 
 ## Paridad con TypeScript: recortes temporales del motor Rust (2026-10-18)
 
