@@ -154,6 +154,7 @@ fn contenedor_escribir(w: &mut Escritor, c: &Contenedor) {
         Contenedor::Escolta(k) => (2, *k),
         Contenedor::Fuera => (3, 0),
         Contenedor::Avanzada(a) => (4, *a),
+        Contenedor::Pueblo(x) => (5, *x),
     };
     w.u8(tag);
     w.u64(id);
@@ -167,6 +168,7 @@ fn contenedor_leer(r: &mut Lector) -> Result<Contenedor, ErrorFormato> {
         2 => Contenedor::Escolta(id),
         3 => Contenedor::Fuera,
         4 => Contenedor::Avanzada(id),
+        5 => Contenedor::Pueblo(id),
         _ => return Err(ErrorFormato("contenedor de escuadra desconocido")),
     })
 }

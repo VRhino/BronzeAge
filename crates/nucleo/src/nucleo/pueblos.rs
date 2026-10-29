@@ -194,7 +194,8 @@ impl Nucleo {
             }
             Comando::MejorarAldea { pueblo } => {
                 let (plaza, _) = self.pueblo(*pueblo).ok_or_else(|| de_pueblo(ErrorPueblo::NoExiste))?;
-                self.autorizar_en_plaza(p, plaza, None)?;
+                // El Gobernador o el Maestro de Obras de la madre, dentro de la plaza o dentro de la aldea (§14.0.1, 2026-10-29).
+                self.autorizar_en_plaza_o_en_pueblo(p, plaza, *pueblo, &[politica::Cargo::Gobernador, politica::Cargo::MaestroObras])?;
                 let mut ev = vec![];
                 self.estado.asentamientos.get_mut(&plaza).expect("existe").economia.mejorar_aldea(&datos, *pueblo, &mut ev).map_err(de_pueblo)?;
                 self.anotar_sucesos(plaza, t, &ev);
@@ -236,6 +237,8 @@ impl Nucleo {
                 if let Some(puerta) = self.posicion_de_pueblo(*pueblo) {
                     self.vaciar_lugar(t, Ubicacion::Pueblo(*pueblo), puerta, plaza, MOTIVO_DESTRUIDO);
                 }
+                // Y la guarnición de jugadores vuelve, intacta, al campamento de cada héroe (§14.0.1).
+                self.liberar_guarnicion_de_pueblo(*pueblo, |_| true);
                 let destruido = self.estado.asentamientos.get_mut(&plaza).expect("existe").economia.quitar_pueblo(*pueblo, &mut ev).expect("existe");
                 if let Some(n) = destruido.nodo() {
                     self.estado.nodos_reclamados.remove(&n);

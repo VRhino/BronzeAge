@@ -723,6 +723,10 @@ impl Ctx<'_> {
             Cuerpo::AbrirAlijo(o) => Comando::AbrirAlijo { heroe: self.mi_heroe()?, alijo: self.alijo(&o.alijo_id)? },
             Cuerpo::ReclamarRecompensa(o) => Comando::ReclamarRecompensa { heroe: self.mi_heroe()?, dueno: self.dueno_de_mision(&o.dueno_id)?, mision: o.mision_id.clone() },
             Cuerpo::AceptarMision(o) => Comando::AceptarMision { heroe: self.mi_heroe()?, dueno: self.dueno_de_mision(&o.dueno_id)?, mision: o.mision_id.clone() },
+            Cuerpo::GuarnecerPueblo(o) => Comando::GuarnecerPueblo { heroe: self.mi_heroe()?, pueblo: self.pueblo(&o.pueblo_id)?, escuadras: self.escuadras(&o.escuadron_ids)? },
+            Cuerpo::RetirarDePueblo(o) => Comando::RetirarDePueblo { heroe: self.mi_heroe()?, pueblo: self.pueblo(&o.pueblo_id)?, escuadras: self.escuadras(&o.escuadron_ids)? },
+            Cuerpo::CargarDePueblo(o) => Comando::CargarDePueblo { heroe: self.mi_heroe()?, pueblo: self.pueblo(&o.pueblo_id)?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad },
+            Cuerpo::DejarEnPueblo(o) => Comando::DejarEnPueblo { heroe: self.mi_heroe()?, pueblo: self.pueblo(&o.pueblo_id)?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad },
             Cuerpo::ElegirTablon(o) => Comando::ElegirTablon { heroe: self.mi_heroe()?, dueno: self.dueno_de_mision(&o.dueno_id)?, diarias: o.diarias_ids.clone(), semanales: o.semanales_ids.clone() },
             Cuerpo::ComprarMirada(o) => Comando::ComprarMirada { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, centro: self.punto(o.centro.as_ref())? },
             Cuerpo::ComprarInformePlaza(o) => {

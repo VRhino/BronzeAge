@@ -2164,6 +2164,20 @@ Ninguna abierta (las encontradas al documentar se resolvieron el 2026-10-11; ver
 - **Placeholders** (los decidió el estudio al implementar; los cambia el autor): fertilidad mínima 0,3, separación 3 u, costes y obras de los niveles, el rebaño (tope 40 y pie 20 por corral, 15 % por hora, 60 de ganado por cabeza) y el saqueo de la mitad.
 - **Batch.** El jugador de `batch poblacion` levanta la aldea en cuanto el almacén paga su obra (materiales al instante, fertilidad 1 al este de la plaza) y el de `batch comercio` la marca en el sitio del panel y lleva los materiales con su columna.
 
+### 14.0.1 Dentro del pueblo o de la aldea (2026-10-29)
+
+> **Implementado en Rust (2026-10-29, decisiones del autor del mismo día).** Integración en `crates/nucleo/src/nucleo/pueblos_dentro.rs` (las cuatro órdenes y la guarnición que vuelve), `heroes.rs` (la escolta del carro de acarreo desde dentro), `cargos.rs` y `pueblos.rs` (`MejorarAldea` desde la aldea), `combates.rs` y `batallas.rs` (la guarnición defiende); el contenedor `Contenedor::Pueblo(id)` de `militar` (etiqueta 5 del códec, compatible con las fotos anteriores: **sin formato de foto nuevo**) y el sub-bloque `PUEBLOS_EXTRACTORES.guarnicionJugadores` (**entra en la huella de las reglas**). Pruebas: `crates/nucleo/tests/pueblos.rs` (sección 9) y `combate.rs` (la guarnición de un jugador defiende el pueblo).
+
+Todo se hace con el héroe **dentro** del pueblo o la aldea (`entrarEnPueblo`) y **ciudadano de la Facción de la plaza madre**. Nadie reside en un pueblo: lo que se mueve es la **columna con la que entró**, que lo espera dentro (sus escuadras, su carro). La administración no necesita estar dentro ni ser de la Facción. El corral y el rebaño siguen automáticos.
+
+- **Guarnición de jugadores** (`GuarnecerPueblo { heroe, pueblo, escuadras }` y `RetirarDePueblo`). Además de la de serie (mineros o granjeros), cada héroe deja escuadras **de su columna** en el pueblo, con un cupo **por héroe** en Liderazgo: `guarnicionJugadores.cupo` (30) en el nivel 1 y `porNivel` (15) más por cada nivel de la aldea (un extractor es siempre de nivel 1: 30). Las recoge a la misma columna, sin pasar de su Liderazgo. Comen como su campamento (el de la plaza donde reside su héroe) y **defienden el pueblo** en el saqueo y en la batalla, con o sin su héroe (después de la de serie). Vuelven **intactas al campamento de su héroe** si el pueblo desaparece (destruido a mano o en la ruina de la madre), si el héroe deja la Facción de la madre o si la madre cambia de dueño y él no es de la Facción nueva. Cambiar de residencia no las mueve. Hechos: `pueblo.guarnecido` (pueblo, heroe, escuadras, liderazgo) y `pueblo.guarnicion_retirada` (pueblo, heroe, escuadras).
+- **Escolta del carro de acarreo desde dentro.** `AsignarEscolta` sobre el carro del pueblo, dado dentro, cede escuadras de la columna (no del campamento) con el mismo cupo de escolta de siempre (el del Mercado de la madre), sin tener que residir en ella; `QuitarEscolta` dado dentro las devuelve a la columna, sin pasar de su Liderazgo. El carro ya se repone solo (§14), así que no hay orden para cambiarlo.
+- **Carro de la columna y almacén local** (`CargarDePueblo { heroe, pueblo, recurso, cantidad }` y `DejarEnPueblo`). Se carga lo que haya en el almacén, hasta donde quepa en el carro de la columna. Solo se deja **lo que el pueblo produce** (su recurso; en la aldea, trigo y ganado), hasta la capacidad del almacén (`capacidadAlmacenLocal`, compartida en la aldea). Si al dejar se llena y el carro de acarreo está en casa, **sale**. Hechos: `pueblo.cargado` y `pueblo.dejado` (pueblo, heroe, recurso, cantidad: lo que se movió de verdad).
+- **Mejorar la aldea desde dentro.** `MejorarAldea` la da también, dentro de la aldea, el Gobernador o el Maestro de Obras de la madre (residente en ella), además de desde la plaza.
+- **Rechazos nuevos**: `pueblo.escuadra_fuera_de_tu_columna`, `pueblo.escuadra_no_esta`, `pueblo.recurso_ajeno`, `pueblo.almacen_sin_sitio`, `pueblo.nada_que_cargar` y `pueblo.nada_que_dejar`; se reutilizan `pueblo.faccion_ajena`, `heroe.no_esta_en_el_pueblo`, `guarnicion.supera_el_cupo`, `liderazgo.superado`, `carro.no_cabe` y los de las escuadras.
+- **Contrato.** Órdenes `guarnecer_pueblo` (161), `retirar_de_pueblo` (162), `cargar_de_pueblo` (163) y `dejar_en_pueblo` (164); el `Pueblo` lleva `guarnicion_jugadores_ids` (18) y `cupo_guarnicion_por_heroe` (19), y un `Escuadron` de la guarnición, `contenedor.pueblo_id` (6).
+- **Placeholders**: el cupo (30 y 15 por nivel) lo fijó el autor; lo demás sale de reglas que ya existían.
+
 <!-- parametros:PUEBLOS_EXTRACTORES -->
 ```json
 {
@@ -2186,6 +2200,10 @@ Ninguna abierta (las encontradas al documentar se resolvieron el 2026-10-11; ver
   "mineros": {
     "escuadra": 30,
     "minutosPorMinero": 12
+  },
+  "guarnicionJugadores": {
+    "cupo": 30,
+    "porNivel": 15
   },
   "aldea": {
     "fertilidadMinima": 0.3,
@@ -2360,8 +2378,8 @@ Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; cont
   "construccion.edificio_completado", "construccion.edificio_gratuito", "construccion.encolada", "construccion.mejora_completada", "construccion.mejora_forzada",
   "construccion.mejora_iniciada", "construccion.necesidad_detectada", "construccion.obra_iniciada", "construccion.receta_alternada", "construccion.yacimiento_agotado",
   "faccion.experiencia", "faccion.nivel", "mantenimiento.colapsado", "mantenimiento.deficit", "mantenimiento.recuperado", "parcela.liberada", "parcela.reclamada",
-  "poblacion.hambruna", "poblacion.primeros_artesanos", "poblacion.primeros_nobles", "politica.activada", "politica.expirada", "pueblo.almacen_lleno", "pueblo.completado",
-  "pueblo.destruido", "pueblo.marcado", "pueblo.materiales_entregados", "pueblo.obra_iniciada", "zona.frontera"
+  "poblacion.hambruna", "poblacion.primeros_artesanos", "poblacion.primeros_nobles", "politica.activada", "politica.expirada", "pueblo.almacen_lleno", "pueblo.cargado", "pueblo.completado",
+  "pueblo.dejado", "pueblo.destruido", "pueblo.guarnecido", "pueblo.guarnicion_retirada", "pueblo.marcado", "pueblo.materiales_entregados", "pueblo.obra_iniciada", "zona.frontera"
 ]
 ```
 <!-- /eventos -->

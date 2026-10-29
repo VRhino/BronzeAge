@@ -519,13 +519,15 @@ impl Nucleo {
     pub(super) fn apertura_de_pueblo(&self, t: Instante, heroe: u64, id: u64, pueblo: u64, madre: u64, punto: Punto) -> Apertura {
         let g = &self.estado.combate.guarniciones[&pueblo].escuadra;
         let mineros = Some(g).filter(|s| s.con_soldados()).map(|s| EscuadraEnBatalla { dueno: None, ..escuadra_en_batalla(s, t) });
+        // La guarnición de jugadores (Economia_Construccion §14.0.1): escuadras de ciudadanos de la Facción, sin su héroe (la maneja la IA).
+        let jugadores = self.guarnicion_de_jugadores_de_pueblo(pueblo).into_iter().filter(|s| s.con_soldados()).map(|s| escuadra_en_batalla(s, t));
         let faccion = self.estado.asentamientos[&madre].faccion;
         Apertura {
             contexto: Contexto::SaqueoPueblo { pueblo, punto },
             punto,
             iniciada_por: heroe,
             atacante: self.bando_de_columna(id, t),
-            defensor: BandoDeTicket::nuevo(Some(faccion), vec![], mineros.into_iter().collect()),
+            defensor: BandoDeTicket::nuevo(Some(faccion), vec![], mineros.into_iter().chain(jugadores).collect()),
             bloqueo: Bloqueo { ejercitos: vec![id], pueblo: Some(pueblo), ..Default::default() },
             plaza: None,
         }

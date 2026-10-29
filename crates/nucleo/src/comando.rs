@@ -492,6 +492,15 @@ pub enum Comando {
     ElegirTablon { heroe: u64, dueno: crate::misiones::Dueno, diarias: Vec<String>, semanales: Vec<String> },
     /// Administración: fija el catálogo de las misiones recurrentes (§6), con el JSON entero en texto; vale desde la siguiente renovación.
     FijarCatalogoMisiones { catalogo: String },
+    // ── Dentro de un pueblo o una aldea (Economia_Construccion §14.0.1, decisiones del autor del 2026-10-29). Códigos 188 a 191. ──
+    /// El héroe, dentro del pueblo y ciudadano de la Facción de su madre, deja escuadras de la columna con la que entró en la guarnición del pueblo, dentro de su cupo.
+    GuarnecerPueblo { heroe: u64, pueblo: u64, escuadras: Vec<u64> },
+    /// El héroe, dentro del pueblo, recoge escuadras suyas de la guarnición del pueblo a la columna con la que entró.
+    RetirarDePueblo { heroe: u64, pueblo: u64, escuadras: Vec<u64> },
+    /// El héroe, dentro del pueblo y ciudadano de la Facción de su madre, carga en el carro de su columna `cantidad` de un recurso del almacén local, hasta donde quepa.
+    CargarDePueblo { heroe: u64, pueblo: u64, recurso: Recurso, cantidad: Mil },
+    /// El héroe, dentro del pueblo y ciudadano de la Facción de su madre, deja en el almacén local `cantidad` de un recurso que el pueblo produce, del carro de su columna, hasta donde quepa.
+    DejarEnPueblo { heroe: u64, pueblo: u64, recurso: Recurso, cantidad: Mil },
     // ── La tecnología (sistema 6, tanda 6C; Tecnologia_Aedas §4). Código 175. ──
     /// El Rey de `faccion`, presente en su capital efectiva, adopta la tecnología `tecnologia` (índice del catálogo) ya aparecida: la paga el almacén de la capital con la tarifa de su Era,
     /// al instante.
@@ -691,7 +700,11 @@ impl Comando {
             | Comando::ComprarCaravanaDeRefundacion { .. }
             | Comando::AbrirAlijo { .. }
             | Comando::LanzarCaravanaFundacion { .. }
-            | Comando::DesarmarCaravanaFundacion { .. } => CuentaDelHeroe,
+            | Comando::DesarmarCaravanaFundacion { .. }
+            | Comando::GuarnecerPueblo { .. }
+            | Comando::RetirarDePueblo { .. }
+            | Comando::CargarDePueblo { .. }
+            | Comando::DejarEnPueblo { .. } => CuentaDelHeroe,
             Comando::ResponderSolicitud { .. }
             | Comando::AsignarEmbajador { .. }
             | Comando::DesignarCapital { .. }
@@ -860,7 +873,12 @@ impl Comando {
                 i.pueblos.push(*pueblo);
             }
             Comando::DestruirPueblo { pueblo } | Comando::ReponerCarro { pueblo } | Comando::MejorarAldea { pueblo } => i.pueblos.push(*pueblo),
-            Comando::EntrarEnPueblo { pueblo, heroe } | Comando::SalirDePueblo { pueblo, heroe } => {
+            Comando::EntrarEnPueblo { pueblo, heroe }
+            | Comando::SalirDePueblo { pueblo, heroe }
+            | Comando::GuarnecerPueblo { heroe, pueblo, .. }
+            | Comando::RetirarDePueblo { heroe, pueblo, .. }
+            | Comando::CargarDePueblo { heroe, pueblo, .. }
+            | Comando::DejarEnPueblo { heroe, pueblo, .. } => {
                 i.heroes.push(*heroe);
                 i.pueblos.push(*pueblo);
             }
@@ -1950,6 +1968,19 @@ impl Peticion {
                 w.u8(187);
                 w.texto(catalogo);
             }
+            Comando::GuarnecerPueblo { heroe, pueblo, escuadras } | Comando::RetirarDePueblo { heroe, pueblo, escuadras } => {
+                w.u8(if matches!(self.comando, Comando::GuarnecerPueblo { .. }) { 188 } else { 189 });
+                w.u64(*heroe);
+                w.u64(*pueblo);
+                lista_u64(&mut w, escuadras);
+            }
+            Comando::CargarDePueblo { heroe, pueblo, recurso, cantidad } | Comando::DejarEnPueblo { heroe, pueblo, recurso, cantidad } => {
+                w.u8(if matches!(self.comando, Comando::CargarDePueblo { .. }) { 190 } else { 191 });
+                w.u64(*heroe);
+                w.u64(*pueblo);
+                w.u8(recurso_a_u8(*recurso));
+                w.i64(*cantidad);
+            }
             Comando::AdoptarTecnologia { heroe, faccion, tecnologia } => {
                 w.u8(175);
                 w.u64(*heroe);
@@ -2461,6 +2492,10 @@ impl Peticion {
                 Comando::ElegirTablon { heroe, dueno, diarias, semanales }
             }
             187 => Comando::FijarCatalogoMisiones { catalogo: r.texto()? },
+            188 => Comando::GuarnecerPueblo { heroe: r.u64()?, pueblo: r.u64()?, escuadras: leer_lista_u64(&mut r)? },
+            189 => Comando::RetirarDePueblo { heroe: r.u64()?, pueblo: r.u64()?, escuadras: leer_lista_u64(&mut r)? },
+            190 => Comando::CargarDePueblo { heroe: r.u64()?, pueblo: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
+            191 => Comando::DejarEnPueblo { heroe: r.u64()?, pueblo: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -2620,6 +2655,19 @@ pub mod rechazos {
     pub const PUEBLO_NO_ES_ALDEA: &str = "pueblo.no_es_aldea";
     pub const PUEBLO_NIVEL_MAXIMO: &str = "pueblo.nivel_maximo";
     pub const PUEBLO_MEJORA_EN_CURSO: &str = "pueblo.mejora_en_curso";
+    // Dentro de un pueblo o una aldea (§14.0.1, 2026-10-29).
+    /// La escuadra que se deja en la guarnición del pueblo no va en la columna con la que entró el héroe.
+    pub const PUEBLO_ESCUADRA_FUERA_DE_TU_COLUMNA: &str = "pueblo.escuadra_fuera_de_tu_columna";
+    /// La escuadra que se recoge no está en la guarnición de ese pueblo.
+    pub const PUEBLO_ESCUADRA_NO_ESTA: &str = "pueblo.escuadra_no_esta";
+    /// Lo que se deja en el almacén local no es algo que ese pueblo produzca (la aldea, trigo y ganado; un extractor, su recurso).
+    pub const PUEBLO_RECURSO_AJENO: &str = "pueblo.recurso_ajeno";
+    /// El almacén local del pueblo no tiene sitio.
+    pub const PUEBLO_ALMACEN_SIN_SITIO: &str = "pueblo.almacen_sin_sitio";
+    /// El almacén local no tiene nada de ese recurso que cargar.
+    pub const PUEBLO_NADA_QUE_CARGAR: &str = "pueblo.nada_que_cargar";
+    /// El carro de la columna no lleva nada de ese recurso que dejar.
+    pub const PUEBLO_NADA_QUE_DEJAR: &str = "pueblo.nada_que_dejar";
     // Avanzadas (`ErrorAvanzada` y lo que el núcleo comprueba sobre el mapa, la columna y la guarnición; fase 4F).
     pub const AVANZADA_DESCONOCIDA: &str = "avanzada.desconocida";
     pub const AVANZADA_NIVEL_INSUFICIENTE: &str = "avanzada.nivel_insuficiente";
@@ -3492,6 +3540,10 @@ mod pruebas {
             Comando::AceptarMision { heroe: 2, dueno: crate::misiones::Dueno::Asentamiento(5), mision: "PD1".into() },
             Comando::ElegirTablon { heroe: 2, dueno: crate::misiones::Dueno::Faccion(3), diarias: vec!["FD1".into(), "FD2".into()], semanales: vec![] },
             Comando::FijarCatalogoMisiones { catalogo: "{}".into() },
+            Comando::GuarnecerPueblo { heroe: 2, pueblo: 9, escuadras: vec![4, 5] },
+            Comando::RetirarDePueblo { heroe: 2, pueblo: 9, escuadras: vec![4] },
+            Comando::CargarDePueblo { heroe: 2, pueblo: 9, recurso: Recurso::Trigo, cantidad: 20_000 },
+            Comando::DejarEnPueblo { heroe: 2, pueblo: 9, recurso: Recurso::Livestock, cantidad: 5_000 },
             Comando::AdoptarTecnologia { heroe: 2, faccion: 1, tecnologia: 2 },
             Comando::ComprarTecnologiaAeda { heroe: 2, asentamiento: 5, tecnologia: 2 },
             Comando::EmpezarEpica { heroe: 2, asentamiento: 3, aeda: 4, tecnologia: 5 },

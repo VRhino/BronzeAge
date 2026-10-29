@@ -250,7 +250,7 @@ impl Nucleo {
                         columnas.push(c);
                     }
                 }
-                Contenedor::Campamento | Contenedor::Fuera | Contenedor::Avanzada(_) => {}
+                Contenedor::Campamento | Contenedor::Fuera | Contenedor::Avanzada(_) | Contenedor::Pueblo(_) => {}
             }
         }
         columnas.sort_unstable();

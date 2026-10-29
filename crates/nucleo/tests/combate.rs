@@ -1137,6 +1137,36 @@ fn un_heroe_solo_pierde_contra_los_mineros_y_sin_ellos_el_pueblo_cae_sin_combate
     assert_eq!(hechos(&e.n, "combate.pueblo_saqueado").len(), saqueos + 1);
 }
 
+#[test]
+fn la_guarnicion_que_deja_un_jugador_defiende_el_pueblo_aunque_hayan_caido_los_mineros() {
+    let m = con_mundo!();
+    let (mut e, pueblo) = con_pueblo(m, 9);
+    e.avanzar(HORA);
+    let sitio = e.n.posicion_de_pueblo(pueblo).unwrap();
+    let fuerte = e.ejercito("beto", 2, sitio, &[Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce, Tropa::Hequetai]);
+    for _ in 0..30 {
+        if e.n.estado().combate.guarniciones.get(&pueblo).is_some_and(|g| g.escuadra.cantidad == 0) {
+            break;
+        }
+        assert!(e.atacar("beto", fuerte.1, ObjetivoAtaque::Pueblo(pueblo), true).aceptada());
+    }
+    assert_eq!(e.n.estado().combate.guarniciones[&pueblo].escuadra.cantidad, 0);
+    // Ana entra con una milicia en su columna, la deja de guarnición y sale: el pueblo ya no cae sin combate.
+    let t = e.t();
+    let (_, ana) = columna_en(&mut e.n, t, "ana", 1, sitio);
+    let milicia = e.ok("admin", Comando::DarEscuadra { heroe: ana, tropa: Tropa::MiliciaLanceros, cantidad: 25 }).creadas[0];
+    e.ok("ana", Comando::EntrarEnPueblo { pueblo, heroe: ana });
+    e.ok("ana", Comando::GuarnecerPueblo { heroe: ana, pueblo, escuadras: vec![milicia] });
+    e.ok("ana", Comando::SalirDePueblo { pueblo, heroe: ana });
+    let rng0 = e.n.estado().rng.estado();
+    assert!(e.atacar("beto", fuerte.1, ObjetivoAtaque::Pueblo(pueblo), true).aceptada());
+    assert_ne!(e.n.estado().rng.estado(), rng0, "con defensores hay tirada");
+    let h = hechos(&e.n, "combate.pueblo_saqueado").into_iter().chain(hechos(&e.n, "combate.pueblo_resiste")).max_by_key(|h| h.0).unwrap();
+    assert!(dato(&h, "poderDefensor") > 0, "{h:?}");
+    let s = e.n.heroe(ana).unwrap().heroe.escuadra(milicia).unwrap();
+    assert!(s.cantidad < 25, "la milicia de Ana combatió: {s:?}");
+}
+
 // ───────────────────────────── 7. Bandidos en el espacio ─────────────────────────────
 
 fn de_combate_pendientes(n: &Nucleo) -> Vec<(Instante, nucleo::SucesoCombate)> {

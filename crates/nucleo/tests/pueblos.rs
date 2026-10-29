@@ -1408,3 +1408,216 @@ fn la_aldea_se_marca_en_tierra_fertil_nace_con_su_rebano_y_su_carro_lleva_trigo_
     assert_eq!(e.n.pueblo(id).map(|(madre, _)| madre), Some(plaza));
     e.n.apagar().unwrap();
 }
+
+// ───────────────────────────── 9. Dentro del pueblo: guarnición, almacén local, escolta y mejora (§14.0.1, 2026-10-29) ─────────────────────────────
+
+use militar::catalogo::Tropa;
+use militar::escuadra::Contenedor;
+
+/// Liderazgo de una escuadra de `tropa`.
+fn coste(tropa: Tropa) -> i64 {
+    militar::liderazgo::coste(&militar::Reglas::cargar(), tropa)
+}
+
+impl Escenario {
+    /// Una orden sin el andamiaje de [`Escenario::peticion`]: pasa la autorización real aunque la cuenta tenga héroes de la Facción dueña.
+    fn real(&mut self, actor: &str, c: Comando) -> Respuesta {
+        self.cuenta += 1;
+        let (t, p) = (self.n.ahora(), Peticion::nueva(actor, &format!("o{}", self.cuenta), c));
+        self.n.aplicar_en(t, p)
+    }
+    fn milicia(&mut self, heroe: u64) -> u64 {
+        self.ok("admin", Comando::DarEscuadra { heroe, tropa: Tropa::MiliciaLanceros, cantidad: 25 }).creadas[0]
+    }
+    fn contenedor(&self, heroe: u64, escuadra: u64) -> Contenedor {
+        self.n.heroe(heroe).unwrap().heroe.escuadra(escuadra).unwrap().contenedor
+    }
+    fn en_columna(&self, columna: u64) -> Vec<u64> {
+        self.n.ejercito(columna).unwrap().columna.escuadras.clone()
+    }
+}
+
+#[test]
+fn dentro_un_ciudadano_de_la_faccion_deja_escuadras_de_su_columna_de_guarnicion_con_su_cupo_y_las_recoge() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let pueblo = e.pueblo_levantado();
+    let cupo = e.n.cupo_de_guarnicion_de_pueblo(pueblo).unwrap();
+    assert_eq!(cupo, 30, "un extractor es siempre de nivel 1");
+    let caben = (cupo / coste(Tropa::MiliciaLanceros)) as usize;
+    assert!(caben >= 1);
+    let (c0, h0) = e.visita("ana", 1, pueblo);
+    let escuadras: Vec<u64> = (0..=caben).map(|_| e.milicia(h0)).collect();
+    let (_, neutral) = e.visita("neu", 3, pueblo);
+    let suya = e.milicia(neutral);
+    e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: neutral });
+
+    // Los rechazos, sin rastro.
+    e.avanzar(0);
+    let (v, hash) = (e.n.version(), e.n.hash_estado());
+    let guarnecer = |escuadras: &[u64]| Comando::GuarnecerPueblo { heroe: h0, pueblo, escuadras: escuadras.to_vec() };
+    assert_eq!(e.rechazada("ana", guarnecer(&escuadras[..1])), rechazos::HEROE_NO_ESTA_EN_EL_PUEBLO, "desde fuera, no");
+    assert_eq!(e.rechazada("neu", Comando::GuarnecerPueblo { heroe: neutral, pueblo, escuadras: vec![suya] }), rechazos::PUEBLO_FACCION_AJENA, "solo los ciudadanos de la Facción de la madre");
+    assert_eq!((e.n.version(), e.n.hash_estado()), (v, hash));
+    e.ok("ana", Comando::EntrarEnPueblo { pueblo, heroe: h0 });
+    e.avanzar(0);
+    let (v, hash) = (e.n.version(), e.n.hash_estado());
+    assert_eq!(e.rechazada("ana", guarnecer(&escuadras)), rechazos::GUARNICION_SUPERA_EL_CUPO);
+    assert_eq!(e.rechazada("ana", guarnecer(&[])), rechazos::SALIDA_SIN_ESCUADRAS);
+    assert_eq!(e.rechazada("ana", guarnecer(&[escuadras[0], escuadras[0]])), rechazos::ESCUADRA_REPETIDA);
+    assert_eq!(e.rechazada("ana", guarnecer(&[suya])), rechazos::ESCUADRA_AJENA);
+    assert_eq!(e.rechazada("ana", Comando::RetirarDePueblo { heroe: h0, pueblo, escuadras: vec![escuadras[0]] }), rechazos::PUEBLO_ESCUADRA_NO_ESTA);
+    assert_eq!((e.n.version(), e.n.hash_estado()), (v, hash));
+
+    // Las que caben en su cupo salen de la columna a la guarnición; la que sobra sigue en la columna.
+    e.ok("ana", guarnecer(&escuadras[..caben]));
+    assert!(escuadras[..caben].iter().all(|&s| e.contenedor(h0, s) == Contenedor::Pueblo(pueblo)));
+    assert_eq!(e.en_columna(c0), vec![escuadras[caben]]);
+    assert_eq!(e.n.guarnicion_de_jugadores_de_pueblo(pueblo).len(), caben);
+    let h = &hechos(&e.n, "pueblo.guarnecido")[0];
+    assert_eq!((dato(h, "pueblo"), dato(h, "heroe"), dato(h, "escuadras")), (pueblo as i64, h0 as i64, caben as i64));
+    assert_eq!(e.rechazada("ana", guarnecer(&escuadras[caben..])), rechazos::GUARNICION_SUPERA_EL_CUPO, "el cupo es de todo lo suyo en el pueblo");
+    assert_eq!(e.rechazada("ana", guarnecer(&escuadras[..1])), rechazos::PUEBLO_ESCUADRA_FUERA_DE_TU_COLUMNA);
+
+    // El cupo es por héroe: otro ciudadano deja la suya aunque el de Ana esté lleno.
+    let (_, lia) = e.visita("lia", 1, pueblo);
+    let de_lia = e.milicia(lia);
+    e.ok("lia", Comando::EntrarEnPueblo { pueblo, heroe: lia });
+    e.ok("lia", Comando::GuarnecerPueblo { heroe: lia, pueblo, escuadras: vec![de_lia] });
+    assert_eq!(e.n.guarnicion_de_jugadores_de_pueblo(pueblo).len(), caben + 1);
+
+    // Recoge una a la columna con la que entró; la guarnición se queda aunque su héroe salga.
+    e.ok("ana", Comando::RetirarDePueblo { heroe: h0, pueblo, escuadras: vec![escuadras[0]] });
+    assert_eq!(e.contenedor(h0, escuadras[0]), Contenedor::Ejercito(c0));
+    assert_eq!(e.en_columna(c0), vec![escuadras[caben], escuadras[0]]);
+    assert_eq!(dato(&hechos(&e.n, "pueblo.guarnicion_retirada")[0], "escuadras"), 1);
+    e.ok("ana", Comando::SalirDePueblo { pueblo, heroe: h0 });
+    e.ok("lia", Comando::SalirDePueblo { pueblo, heroe: lia });
+    assert_eq!(e.n.guarnicion_de_jugadores_de_pueblo(pueblo).len(), caben);
+
+    // Si su héroe deja la Facción de la madre, su guarnición vuelve intacta a su campamento; la de los demás se queda.
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: lia, faccion: Some(2) });
+    assert_eq!(e.contenedor(lia, de_lia), Contenedor::Campamento);
+    assert_eq!(e.n.guarnicion_de_jugadores_de_pueblo(pueblo).len(), caben - 1);
+    // Y si el pueblo desaparece, también.
+    e.ok("ana", Comando::DestruirPueblo { pueblo });
+    assert!(escuadras[1..caben].iter().all(|&s| e.contenedor(h0, s) == Contenedor::Campamento));
+    assert!(e.n.heroe(h0).unwrap().heroe.escuadras.iter().all(|s| s.cantidad == 25), "intactas");
+}
+
+#[test]
+fn dentro_se_deja_en_el_almacen_local_solo_lo_que_produce_el_pueblo_y_se_carga_lo_que_haya_hasta_llenar_el_carro() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let pueblo = e.pueblo_levantado();
+    let carro = e.pueblo(pueblo).carro.unwrap();
+    let capacidad = e.n.estado().reglas.economia.datos.pueblos.capacidad_almacen;
+    let (c0, h0) = e.visita("ana", 1, pueblo);
+    e.ok("admin", Comando::DarSuministro { ejercito: c0, recurso: Cobre, cantidad: capacidad });
+    let dejar = |recurso, cantidad| Comando::DejarEnPueblo { heroe: h0, pueblo, recurso, cantidad };
+    let cargar = |recurso, cantidad| Comando::CargarDePueblo { heroe: h0, pueblo, recurso, cantidad };
+    assert_eq!(e.rechazada("ana", dejar(Cobre, 1_000)), rechazos::HEROE_NO_ESTA_EN_EL_PUEBLO);
+    e.ok("ana", Comando::EntrarEnPueblo { pueblo, heroe: h0 });
+    e.avanzar(0);
+    let (v, hash) = (e.n.version(), e.n.hash_estado());
+    assert_eq!(e.rechazada("ana", dejar(Madera, 1_000)), rechazos::PUEBLO_RECURSO_AJENO, "solo se deja lo que produce el pueblo");
+    assert_eq!(e.rechazada("ana", dejar(Cobre, 0)), rechazos::CANTIDAD_NO_POSITIVA);
+    assert_eq!(e.rechazada("ana", cargar(Madera, 1_000)), rechazos::PUEBLO_NADA_QUE_CARGAR);
+    assert_eq!((e.n.version(), e.n.hash_estado()), (v, hash));
+
+    // Con el carro de acarreo en casa, dejar hasta llenar el almacén lo hace salir con todo.
+    let habia = e.pueblo(pueblo).almacen.cantidad(Cobre);
+    assert_eq!(e.n.caravana(carro).unwrap().estado, EstadoCaravana::Disponible, "en casa");
+    e.ok("ana", dejar(Cobre, capacidad));
+    let h = &hechos(&e.n, "pueblo.dejado")[0];
+    assert_eq!((dato(h, "cantidad"), dato(h, "heroe")), (capacidad - habia, h0 as i64));
+    assert_eq!(e.carga(c0).get(&Cobre).copied().unwrap_or(0), habia, "lo que no cupo se queda en el carro");
+    assert_eq!(e.n.caravana(carro).unwrap().estado, EstadoCaravana::EnTransito, "el almacén lleno hace salir el carro");
+    assert_eq!(e.pueblo(pueblo).almacen.cantidad(Cobre), 0);
+
+    // Sin el carro en casa se llena y se queda lleno.
+    let falta = capacidad - habia;
+    e.ok("admin", Comando::DarSuministro { ejercito: c0, recurso: Cobre, cantidad: falta });
+    e.ok("ana", dejar(Cobre, 2 * capacidad));
+    assert_eq!(e.pueblo(pueblo).almacen.cantidad(Cobre), capacidad);
+    assert!(e.carga(c0).is_empty());
+    assert_eq!(e.rechazada("ana", dejar(Cobre, 1_000)), rechazos::PUEBLO_NADA_QUE_DEJAR);
+    e.ok("admin", Comando::DarSuministro { ejercito: c0, recurso: Cobre, cantidad: 1_000 });
+    assert_eq!(e.rechazada("ana", dejar(Cobre, 1_000)), rechazos::PUEBLO_ALMACEN_SIN_SITIO);
+
+    // Se carga lo que haya hasta donde quepa en el carro de la columna.
+    e.ok("ana", cargar(Cobre, 2 * capacidad));
+    assert_eq!(e.carga(c0)[&Cobre], capacidad, "el carro de la columna admite lo mismo que el almacén");
+    assert_eq!(e.pueblo(pueblo).almacen.cantidad(Cobre), 1_000);
+    assert_eq!(dato(&hechos(&e.n, "pueblo.cargado")[0], "cantidad"), capacidad - 1_000);
+    assert_eq!(e.rechazada("ana", cargar(Cobre, 1_000)), rechazos::CARRO_LLENO);
+    // Y sale con ello.
+    e.ok("ana", Comando::SalirDePueblo { pueblo, heroe: h0 });
+    assert_eq!(e.carga(c0)[&Cobre], capacidad);
+}
+
+#[test]
+fn dentro_un_ciudadano_de_la_faccion_escolta_el_carro_de_acarreo_con_escuadras_de_su_columna_y_se_las_lleva_al_quitarla() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let plaza = e.plaza;
+    // El cupo de escolta es el del Mercado de la madre, como desde la plaza.
+    e.dar(Madera, 350_000);
+    e.ok("ana", Comando::AnadirEdificio { asentamiento: plaza, tipo: Tipo::Mercado });
+    e.avanzar(9 * HORA);
+    let pueblo = e.pueblo_levantado();
+    let carro = e.pueblo(pueblo).carro.unwrap();
+    // Carla no reside en la madre: le basta con ser de su Facción y estar dentro con su columna.
+    let (c0, carla) = e.visita("carla", 1, pueblo);
+    let escuadra = e.milicia(carla);
+    let (_, neutral) = e.visita("neu", 3, pueblo);
+    let suya = e.milicia(neutral);
+    e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: neutral });
+    assert_eq!(e.rechazada("neu", Comando::AsignarEscolta { caravana: carro, heroe: neutral, escuadras: vec![suya] }), rechazos::PUEBLO_FACCION_AJENA);
+    e.ok("carla", Comando::EntrarEnPueblo { pueblo, heroe: carla });
+    e.ok("carla", Comando::AsignarEscolta { caravana: carro, heroe: carla, escuadras: vec![escuadra] });
+    assert_eq!(e.n.caravana(carro).unwrap().escolta.iter().map(|x| x.id).collect::<Vec<_>>(), vec![escuadra]);
+    assert_eq!(e.contenedor(carla, escuadra), Contenedor::Escolta(carro));
+    assert!(e.en_columna(c0).is_empty());
+    // Al quitarla desde dentro vuelve a la columna con la que entró, no a un campamento.
+    e.ok("carla", Comando::QuitarEscolta { caravana: carro, heroe: carla, escuadras: None });
+    assert!(e.n.caravana(carro).unwrap().escolta.is_empty());
+    assert_eq!(e.contenedor(carla, escuadra), Contenedor::Ejercito(c0));
+    assert_eq!(e.en_columna(c0), vec![escuadra]);
+}
+
+#[test]
+fn el_gobernador_o_el_maestro_de_obras_de_la_madre_mejora_la_aldea_desde_dentro_y_sube_su_cupo_de_guarnicion() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let plaza = e.plaza;
+    let aldea = comun::levantar_aldea(&mut e.n, "ana", plaza).expect("hay tierra fértil en la zona");
+    let EstadoPueblo::EnObra { completa_en } = e.pueblo(aldea).estado else { panic!("con todo entregado, en obra") };
+    e.n.avanzar_hasta(completa_en + MIN);
+    assert_eq!(e.n.cupo_de_guarnicion_de_pueblo(aldea), Some(30));
+    // Mara reside en la madre y es su Maestra de Obras; fuera de la plaza solo puede mandarlo dentro de la aldea.
+    let (_, mara) = e.visita("mara", 1, aldea);
+    e.ok("admin", Comando::FijarResidencia { heroe: mara, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
+    let mejorar = Comando::MejorarAldea { pueblo: aldea };
+    assert!(!e.real("mara", mejorar.clone()).aceptada(), "sin cargo, no");
+    e.ok("mara", Comando::EntrarEnPueblo { pueblo: aldea, heroe: mara });
+    assert!(!e.real("mara", mejorar.clone()).aceptada(), "dentro y sin cargo, tampoco");
+    e.ok("mara", Comando::SalirDePueblo { pueblo: aldea, heroe: mara });
+    e.ok("admin", Comando::AsignarCargoLocal { heroe: mara, asentamiento: plaza, cargo: asentamiento::Cargo::MaestroObras, designado: mara });
+    assert!(!e.real("mara", mejorar.clone()).aceptada(), "con cargo pero fuera de la plaza y de la aldea, no");
+    e.ok("mara", Comando::EntrarEnPueblo { pueblo: aldea, heroe: mara });
+    let r = e.real("mara", mejorar);
+    assert!(r.aceptada(), "{r:?}");
+    assert!(matches!(e.pueblo(aldea).mejora, Some(EstadoPueblo::Pendiente { .. })));
+    // En la aldea se deja trigo (o ganado), no lo que no produce.
+    let col = e.n.heroe(mara).unwrap().columna.unwrap();
+    e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Trigo, cantidad: 10_000 });
+    assert_eq!(e.rechazada("mara", Comando::DejarEnPueblo { heroe: mara, pueblo: aldea, recurso: Cobre, cantidad: 1_000 }), rechazos::PUEBLO_RECURSO_AJENO);
+    e.ok("mara", Comando::DejarEnPueblo { heroe: mara, pueblo: aldea, recurso: Trigo, cantidad: 10_000 });
+    // Con la mejora hecha, el cupo de guarnición de cada héroe sube 15.
+    e.entregar_lo_que_falta(aldea);
+    let Some(EstadoPueblo::EnObra { completa_en }) = e.pueblo(aldea).mejora.clone() else { panic!("la mejora, en obra") };
+    e.n.avanzar_hasta(completa_en);
+    assert_eq!(e.pueblo(aldea).nivel, 2);
+    assert_eq!(e.n.cupo_de_guarnicion_de_pueblo(aldea), Some(45));
+}

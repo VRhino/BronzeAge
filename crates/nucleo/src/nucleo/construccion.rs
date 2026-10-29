@@ -484,6 +484,7 @@ impl Nucleo {
             }
             self.tr.tocar(Clase::Pueblo, p.id);
             self.olvidar_ruta_de_acarreo(p.id);
+            self.liberar_guarnicion_de_pueblo(p.id, |_| true);
         }
         // Quien estaba dentro de sus pueblos o avanzadas sale al mapa con lo suyo, a la puerta de cada uno.
         let nodos = self.geografia.as_ref().map_or(&[][..], |g| &g.mapa.nodos[..]);

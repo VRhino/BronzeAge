@@ -75,7 +75,7 @@ fn rechazo_de_reclutamiento(e: ErrorReclutamiento) -> (&'static str, String) {
 
 /// ¿Come esta escuadra del almacén de la plaza donde reside su héroe? La del campamento y la que guarnece una avanzada de la plaza.
 fn come_de_la_plaza(e: &militar::escuadra::Escuadra) -> bool {
-    matches!(e.contenedor, Contenedor::Campamento | Contenedor::Avanzada(_))
+    matches!(e.contenedor, Contenedor::Campamento | Contenedor::Avanzada(_) | Contenedor::Pueblo(_))
 }
 
 impl Nucleo {
@@ -166,7 +166,9 @@ impl Nucleo {
             Ubicacion::Columna(c) => return Some(c),
             Ubicacion::Mercenarios(c) => h.residencia != Some(Residencia::Campamento(c)),
             Ubicacion::Asentamiento(a) => h.residencia != Some(Residencia::Asentamiento(a)),
-            _ => false,
+            // En un pueblo o una avanzada no reside nadie: siempre se está de visita.
+            Ubicacion::Pueblo(_) | Ubicacion::Avanzada(_) => true,
+            Ubicacion::Desconectado(_) => false,
         };
         self.estado.ejercito_de_heroe(heroe).filter(|c| de_visita && self.estado.ejercitos.contains_key(c))
     }
@@ -480,9 +482,53 @@ impl Nucleo {
         self.autorizar_heroe(p, heroe, false)?;
         let origen = self.estado.comercio.flota[ci].origen as u64;
         let cupo = self.cupos_de(self.plaza_o_rechazo(origen)?).escolta;
+        // Dentro del pueblo del carro de acarreo, la escolta sale de la columna con la que entró el héroe (§14.0.1).
+        if let Some(pueblo) = self.pueblo_del_carro_donde_esta(heroe, caravana) {
+            return self.escoltar_acarreo_desde_dentro(t, p, ci, caravana, heroe, pueblo, escuadras, cupo, origen);
+        }
         let nuevas = self.seleccionar_escolta(heroe, escuadras, origen).map_err(de_caravana)?;
         self.estado.comercio.flota[ci].asignar_escolta(nuevas.clone(), cupo).map_err(de_caravana)?;
         self.ceder_escolta(t, caravana, heroe, &nuevas, origen);
+        Ok(vec![])
+    }
+
+    /// El pueblo cuyo carro de acarreo es `caravana`, si `heroe` está dentro de él.
+    fn pueblo_del_carro_donde_esta(&self, heroe: u64, caravana: u64) -> Option<u64> {
+        let Ubicacion::Pueblo(x) = self.heroe(heroe)?.heroe.presencia.ubicacion else { return None };
+        (self.pueblo(x)?.1.carro == Some(caravana)).then_some(x)
+    }
+
+    /// `asignarEscolta` dentro del pueblo del carro de acarreo (§14.0.1): un ciudadano de la Facción de la madre cede escuadras de la columna con la que entró, con el cupo de siempre.
+    #[allow(clippy::too_many_arguments)]
+    fn escoltar_acarreo_desde_dentro(&mut self, t: Instante, p: &Peticion, ci: usize, caravana: u64, heroe: u64, pueblo: u64, escuadras: &[u64], cupo: i64, origen: u64) -> Result<Vec<u64>, Respuesta> {
+        let v = self.estado.version;
+        let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
+        let (_, cid) = self.dentro_del_pueblo(p, heroe, pueblo)?;
+        let mr = &self.estado.reglas.economia.militar;
+        let h = &self.heroe(heroe).expect("existe").heroe;
+        let mut nuevas = Vec::new();
+        for &id in escuadras {
+            let s = h.escuadra(id).ok_or_else(|| rechazo(rechazos::ESCUADRA_AJENA, format!("la escuadra {id} no es tuya")))?;
+            if s.contenedor != Contenedor::Ejercito(cid) {
+                return Err(rechazo(rechazos::PUEBLO_ESCUADRA_FUERA_DE_TU_COLUMNA, format!("la escuadra {id} no va en tu columna")));
+            }
+            if s.cantidad <= 0 {
+                return Err(rechazo(rechazos::ESCUADRA_ANIQUILADA, format!("la escuadra {id} está aniquilada")));
+            }
+            if s.reserva_batalla.is_some() {
+                return Err(rechazo(rechazos::ESCUADRA_EN_BATALLA, format!("la escuadra {id} está reservada para una batalla")));
+            }
+            nuevas.push(EscuadraCedida { id, heroe, liderazgo: liderazgo::coste(mr, s.tropa) });
+        }
+        self.estado.comercio.flota[ci].asignar_escolta(nuevas.clone(), cupo).map_err(|e| {
+            let (c, m) = rechazo_de_caravana(e);
+            Respuesta::rechazo(c, m, v)
+        })?;
+        let antes = self.velocidad_de_ejercito(cid).unwrap_or(0);
+        self.estado.ejercitos.get_mut(&cid).expect("existe").columna.escuadras.retain(|s| !escuadras.contains(s));
+        self.ceder_escolta(t, caravana, heroe, &nuevas, origen);
+        self.recomponer_columna(cid, t, antes);
+        self.tr.tocar(Clase::Ejercito, cid);
         Ok(vec![])
     }
 
@@ -521,6 +567,18 @@ impl Nucleo {
         let v = self.estado.version;
         let ci = self.estado.comercio.posicion_caravana(caravana).ok_or_else(|| Respuesta::rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(caravana), v))?;
         self.autorizar_heroe(p, heroe, false)?;
+        // Dentro del pueblo del carro de acarreo vuelven a la columna con la que entró el héroe, sin pasar de su Liderazgo (§14.0.1); si no, a su campamento.
+        let a_la_columna = self.pueblo_del_carro_donde_esta(heroe, caravana).and_then(|_| self.columna_que_lleva(heroe));
+        if a_la_columna.is_some() {
+            let mr = &self.estado.reglas.economia.militar;
+            let h = &self.heroe(heroe).expect("existe").heroe;
+            let suyas: Vec<u64> = self.estado.comercio.flota[ci].escolta.iter().filter(|e| e.heroe == heroe).map(|e| e.id).collect();
+            let vuelven = escuadras.map_or(suyas, <[u64]>::to_vec);
+            let fuera = h.escuadras.iter().filter(|s| s.contenedor != Contenedor::Campamento && s.contenedor != Contenedor::Escolta(caravana) || vuelven.contains(&s.id));
+            if !liderazgo::puede_llevar(mr, h.liderazgo_base, fuera) {
+                return Err(Respuesta::rechazo(rechazos::LIDERAZGO_SUPERADO, "las escuadras pasan del Liderazgo del héroe", v));
+            }
+        }
         let quitadas = self.estado.comercio.flota[ci].quitar_escolta(heroe, escuadras).map_err(|e| {
             let (c, m) = rechazo_de_caravana(e);
             Respuesta::rechazo(c, m, v)
@@ -528,7 +586,17 @@ impl Nucleo {
         if quitadas.is_empty() {
             return Err(Respuesta::sin_cambios(v));
         }
-        self.devolver_escolta(&quitadas);
+        if let Some(cid) = a_la_columna {
+            let ids: Vec<u64> = quitadas.iter().map(|e| e.id).collect();
+            let antes = self.velocidad_de_ejercito(cid).unwrap_or(0);
+            self.estado.ejercitos.get_mut(&cid).expect("existe").columna.escuadras.extend(&ids);
+            self.poner_escuadras_en(&[heroe], &ids, Contenedor::Ejercito(cid), t);
+            self.sincronizar_hambre(cid, t);
+            self.recomponer_columna(cid, t, antes);
+            self.tr.tocar(Clase::Ejercito, cid);
+        } else {
+            self.devolver_escolta(&quitadas);
+        }
         let origen = self.estado.comercio.flota[ci].origen as u64;
         self.emitir_comercio(t, EventoComercio::CaravanaEscoltaRetirada { caravana }, vec![origen], &[("heroe", heroe as i64), ("escuadras", quitadas.len() as i64)]);
         Ok(vec![])

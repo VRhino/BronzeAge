@@ -126,6 +126,7 @@ impl Nucleo {
         self.contactos_nuevos(plaza, t);
         // Sus pueblos y avanzadas pasan al conquistador con el acceso heredado de la plaza, ya reiniciado: salen al mapa con lo suyo solo quienes ya no podrían entrar con él; los demás se quedan dentro.
         self.vaciar_tras_conquista(t, plaza);
+        self.guarnicion_de_pueblos_tras_conquista(plaza);
         // Quien defendió y perdió, sea residente o visitante amigo, pierde la mitad del carro que llevaba (antes de que salga a la calle con él).
         let defensores: Vec<u64> = lucharon.iter().map(|(h, _)| *h).collect();
         let robado = self.pierden_la_mitad_del_carro(&defensores);

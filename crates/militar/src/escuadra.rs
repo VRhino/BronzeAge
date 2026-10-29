@@ -25,6 +25,9 @@ pub enum Contenedor {
     Fuera,
     /// En la guarnición de una avanzada de la plaza donde reside su héroe (Doc 5.17): prestada, come del almacén de la madre y defiende la avanzada.
     Avanzada(AvanzadaId),
+    /// En la guarnición de un pueblo o una aldea (Economia_Construccion §14.0.1): la deja un ciudadano de la Facción de la plaza madre desde dentro, come como su campamento
+    /// y defiende el pueblo en el saqueo.
+    Pueblo(u64),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

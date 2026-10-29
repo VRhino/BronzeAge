@@ -447,6 +447,10 @@ message Pueblo {
   // extractor y en una aldea que aún no se ha completado. El tope y el pie de cría salen de `ESPECIES` por los corrales de su nivel.
   optional string rebano_especie = 16;
   optional sint64 rebano_cabezas = 17;
+  // La guarnición de jugadores (Economia_Construccion §14.0.1): escuadrones dejados con `guarnecer_pueblo` por ciudadanos de la Facción de la madre, y el cupo de
+  // Liderazgo de cada héroe (30 en nivel 1 y 15 más por nivel de la aldea).
+  repeated string guarnicion_jugadores_ids = 18;
+  int64 cupo_guarnicion_por_heroe = 19;
 }
 
 enum EstadoAvanzada {
@@ -673,6 +677,7 @@ message ContenedorEscuadron {
     string caravana_id = 3;              // escolta cedida
     bool fuera = 4;                      // héroe desconectado
     string avanzada_id = 5;              // en la guarnición de una avanzada (`guarnecer_avanzada`), fuera del campamento de su plaza
+    string pueblo_id = 6;                // en la guarnición de un pueblo o una aldea (`guarnecer_pueblo`), fuera del campamento de su plaza
   }
 }
 

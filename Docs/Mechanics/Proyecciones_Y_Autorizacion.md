@@ -271,7 +271,7 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `fijar_puerta` | `FijarPuerta` | el Gobernador, residente y dentro, o el Rey de la Facción | de la plaza; los grupos `neutrales`, `aliados`, `enemigos` y `aedas` (`orden.forma_invalida` si no); sin cambio, `sin_cambios`; no con un pueblo o una avanzada de la plaza en batalla (`batalla.bloqueado`); quien ya no puede entrar sale al mapa (5E). `FijarAcceso` (117) es su alias en el núcleo |
 | `marcar_aldea` | `MarcarAldea` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre (la aldea agrícola, Economia_Construccion §14.0) |
 | `marcar_pueblo` | `MarcarPueblo` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre (el panel de la madre, Doc 4.2.2) |
-| `mejorar_aldea` | `MejorarAldea` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre |
+| `mejorar_aldea` | `MejorarAldea` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre; también dentro de la aldea, residente de la madre y con el cargo (Economia_Construccion §14.0.1, 2026-10-29) |
 | `mejorar_avanzada` | `MejorarAvanzada` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre |
 | `mejorar_edificio_ahora` | `MejorarEdificio` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza |
 | `mejorar_recinto` | `MejorarRecinto` | el titular del cargo de la orden, residente y dentro | de la plaza |
@@ -381,6 +381,10 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `salir_de_asentamiento` | `SalirDeAsentamiento` | la cuenta del héroe | estar dentro |
 | `salir_de_avanzada` | `SalirDeAvanzada` | la cuenta del héroe | estar dentro |
 | `salir_de_pueblo` | `SalirDePueblo` | la cuenta del héroe | estar dentro |
+| `guarnecer_pueblo` | `GuarnecerPueblo` | la cuenta del héroe | dentro del pueblo, ciudadano de la Facción de la madre, escuadrones de la columna con la que entró y dentro de su cupo (Economia_Construccion §14.0.1) |
+| `retirar_de_pueblo` | `RetirarDePueblo` | la cuenta del héroe | dentro del pueblo, ciudadano de la Facción de la madre; a su columna sin pasar de su Liderazgo (§14.0.1) |
+| `cargar_de_pueblo` | `CargarDePueblo` | la cuenta del héroe | dentro del pueblo, ciudadano de la Facción de la madre; del almacén local al carro de su columna (§14.0.1) |
+| `dejar_en_pueblo` | `DejarEnPueblo` | la cuenta del héroe | dentro del pueblo, ciudadano de la Facción de la madre; solo lo que el pueblo produce (§14.0.1) |
 | `salir_del_campamento` | `SalirDelCampamento` | la cuenta del héroe | desde el campamento donde está |
 | `separarse_de_convocatoria` | `SepararseDeConvocatoria` | la cuenta del héroe | integrante |
 | `separarse_del_ejercito` | `SepararseDelEjercito` | la cuenta del héroe | participante |

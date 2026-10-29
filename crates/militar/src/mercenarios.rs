@@ -153,7 +153,7 @@ pub fn reclutar(r: &Reglas, campamento: Campamento, pedido: Pedido, nuevo_id: im
         let aqui = match e.contenedor {
             Contenedor::Campamento => true,
             Contenedor::Ejercito(c) => distancia_de_columna(c).is_some_and(|d| d <= r.movimiento.radio_puerta),
-            Contenedor::Escolta(_) | Contenedor::Fuera | Contenedor::Avanzada(_) => false,
+            Contenedor::Escolta(_) | Contenedor::Fuera | Contenedor::Avanzada(_) | Contenedor::Pueblo(_) => false,
         };
         if !aqui {
             return Err(ErrorMercenarios::YaLaTienesFuera(e.contenedor));
@@ -219,7 +219,7 @@ pub fn reponer_prestamo(r: &Reglas, heroe: &mut Heroe, campamento: CampamentoId,
         let aqui = match e.contenedor {
             Contenedor::Campamento => true,
             Contenedor::Ejercito(c) => distancia_de_columna(c).is_some_and(|d| d <= r.movimiento.radio_puerta),
-            Contenedor::Escolta(_) | Contenedor::Fuera | Contenedor::Avanzada(_) => false,
+            Contenedor::Escolta(_) | Contenedor::Fuera | Contenedor::Avanzada(_) | Contenedor::Pueblo(_) => false,
         };
         let completa = r.tropas.tropa(e.tropa).unidades;
         if aqui && e.cantidad < completa {

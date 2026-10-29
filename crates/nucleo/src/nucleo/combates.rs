@@ -827,6 +827,8 @@ impl Nucleo {
         }
         let dentro = self.defensores_de_dentro(Ubicacion::Pueblo(x), faccion_madre, None, cr.batalla.capacidad_resto, t);
         let mut defensa = vec![self.estado.combate.guarniciones[&x].escuadra.clone()];
+        // La guarnición de jugadores (§14.0.1) defiende con o sin su héroe; la de los héroes de dentro, con ellos.
+        defensa.extend(self.guarnicion_de_jugadores_de_pueblo(x).into_iter().filter(|s| s.con_soldados()).cloned());
         defensa.extend(dentro.tropa.escuadras.iter().cloned());
         let columnas = [self.columnas_de(&atac.escuadras), self.columnas_de(&dentro.tropa.escuadras)].concat();
         let participantes = Self::participantes_de(&self.estado.ejercitos[&id]);

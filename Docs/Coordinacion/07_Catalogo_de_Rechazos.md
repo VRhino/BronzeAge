@@ -180,6 +180,17 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `pueblo.nivel_maximo` | `PUEBLO_NIVEL_MAXIMO` | — |
 | `pueblo.mejora_en_curso` | `PUEBLO_MEJORA_EN_CURSO` | — |
 
+### Dentro de un pueblo o una aldea (§14.0.1, 2026-10-29)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `pueblo.escuadra_fuera_de_tu_columna` | `PUEBLO_ESCUADRA_FUERA_DE_TU_COLUMNA` | La escuadra que se deja en la guarnición del pueblo no va en la columna con la que entró el héroe. |
+| `pueblo.escuadra_no_esta` | `PUEBLO_ESCUADRA_NO_ESTA` | La escuadra que se recoge no está en la guarnición de ese pueblo. |
+| `pueblo.recurso_ajeno` | `PUEBLO_RECURSO_AJENO` | Lo que se deja en el almacén local no es algo que ese pueblo produzca (la aldea, trigo y ganado; un extractor, su recurso). |
+| `pueblo.almacen_sin_sitio` | `PUEBLO_ALMACEN_SIN_SITIO` | El almacén local del pueblo no tiene sitio. |
+| `pueblo.nada_que_cargar` | `PUEBLO_NADA_QUE_CARGAR` | El almacén local no tiene nada de ese recurso que cargar. |
+| `pueblo.nada_que_dejar` | `PUEBLO_NADA_QUE_DEJAR` | El carro de la columna no lleva nada de ese recurso que dejar. |
+
 ### Avanzadas (`ErrorAvanzada` y lo que el núcleo comprueba sobre el mapa, la columna y la guarnición; fase 4F)
 
 | Código | Constante | Qué dice |

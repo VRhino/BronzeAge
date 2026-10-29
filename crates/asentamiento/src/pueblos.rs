@@ -102,10 +102,18 @@ pub struct ReglasPueblos {
     pub mineros: u32,
     /// Minutos que tarda en volver cada minero (o granjero) de esa guarnición, uno a uno, desde la primera baja.
     pub minutos_por_minero: i64,
+    /// Guarnición de jugadores (§14.0.1): cupo de Liderazgo **por héroe** en un pueblo de nivel 1 (un extractor siempre lo es) y lo que suma cada nivel más de la aldea.
+    pub cupo_guarnicion: i64,
+    pub cupo_guarnicion_por_nivel: i64,
     pub aldea: ReglasAldea,
 }
 
 impl ReglasPueblos {
+    /// El cupo de la guarnición de jugadores de un pueblo de nivel `nivel`, por héroe, en puntos de Liderazgo.
+    pub fn cupo_de_guarnicion(&self, nivel: u32) -> i64 {
+        self.cupo_guarnicion + i64::from(nivel.saturating_sub(1)) * self.cupo_guarnicion_por_nivel
+    }
+
     /// `b` es `PUEBLOS_EXTRACTORES`; `especies`, `ESPECIES`.
     pub fn de(b: &Value, especies: &Value) -> Self {
         let num = |v: &Value, k: &str| v.get(k).and_then(Value::as_f64).unwrap_or_else(|| panic!("falta «{k}» en PUEBLOS_EXTRACTORES"));
@@ -149,6 +157,8 @@ impl ReglasPueblos {
             casas_de_la_planta: num(b, "casasDeLaPlanta") as u32,
             mineros: num(&b["mineros"], "escuadra") as u32,
             minutos_por_minero: num(&b["mineros"], "minutosPorMinero") as i64,
+            cupo_guarnicion: num(&b["guarnicionJugadores"], "cupo") as i64,
+            cupo_guarnicion_por_nivel: num(&b["guarnicionJugadores"], "porNivel") as i64,
             aldea,
         }
     }

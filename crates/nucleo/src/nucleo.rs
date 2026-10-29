@@ -78,6 +78,7 @@ mod persecuciones;
 mod pertenencias;
 mod ciudadania;
 mod pueblos;
+mod pueblos_dentro;
 mod residentes;
 mod salidas;
 mod taberna;
@@ -1272,6 +1273,11 @@ impl Nucleo {
                 Ok(None) => {}
                 Err(r) => return r,
             },
+            Comando::GuarnecerPueblo { .. } | Comando::RetirarDePueblo { .. } | Comando::CargarDePueblo { .. } | Comando::DejarEnPueblo { .. } => {
+                if let Err(r) = self.ejecutar_dentro_de_pueblo(t, p) {
+                    return r;
+                }
+            }
             Comando::ColocarAvanzada { .. }
             | Comando::EntregarMaterialesAAvanzada { .. }
             | Comando::MejorarAvanzada { .. }

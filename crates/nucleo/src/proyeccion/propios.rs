@@ -323,6 +323,7 @@ pub fn escuadron(n: &Nucleo, e: &Escuadra) -> pb::Escuadron {
     let contenedor = match e.contenedor {
         Contenedor::Campamento => pb::contenedor_escuadron::Donde::Campamento(true),
         Contenedor::Avanzada(a) => pb::contenedor_escuadron::Donde::AvanzadaId(ids::avanzada(a)),
+        Contenedor::Pueblo(x) => pb::contenedor_escuadron::Donde::PuebloId(ids::pueblo(x)),
         Contenedor::Ejercito(c) => pb::contenedor_escuadron::Donde::EjercitoId(ids::ejercito(c)),
         Contenedor::Escolta(c) => pb::contenedor_escuadron::Donde::CaravanaId(ids::caravana(c)),
         Contenedor::Fuera => pb::contenedor_escuadron::Donde::Fuera(true),
@@ -880,6 +881,8 @@ pub fn pueblo(n: &Nucleo, madre: u64, p: &Pueblo) -> pb::Pueblo {
         },
         rebano_especie: p.rebano.as_ref().map(|r| r.especie.clone()),
         rebano_cabezas: p.rebano.as_ref().map(|r| r.cabezas),
+        guarnicion_jugadores_ids: n.guarnicion_de_jugadores_de_pueblo(p.id).iter().map(|s| ids::escuadra(s.id)).collect(),
+        cupo_guarnicion_por_heroe: e.reglas.economia.datos.pueblos.cupo_de_guarnicion(p.nivel),
     }
 }
 

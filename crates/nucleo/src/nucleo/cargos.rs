@@ -79,6 +79,20 @@ impl Nucleo {
         Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, format!("hace falta residir en as-{origen} y estar dentro de as-{aparcada}, donde está aparcada"), self.estado.version))
     }
 
+    /// Una orden de obra de la plaza `a` dada desde dentro de uno de sus pueblos (`mejorarAldea` desde la aldea, Economia_Construccion §14.0.1): la vale la matriz de siempre (dentro de la
+    /// plaza) o un héroe de la cuenta dentro del pueblo `pueblo` que reside en `a` y es titular de alguno de `cargos`.
+    pub(super) fn autorizar_en_plaza_o_en_pueblo(&self, p: &Peticion, a: u64, pueblo: u64, cargos: &[politica::Cargo]) -> Result<(), Respuesta> {
+        let en_la_plaza = self.autorizar_en_plaza(p, a, None);
+        if en_la_plaza.is_ok() {
+            return en_la_plaza;
+        }
+        let dentro = |yo: u64| self.heroe(yo).is_some_and(|h| h.heroe.presencia.ubicacion == militar::presencia::Ubicacion::Pueblo(pueblo));
+        if self.heroes_en_el_mundo(&p.actor).any(|yo| dentro(yo) && (Actor { yo, politica: &self.estado.politica, vista: self }).cargo_en_el_sitio(a as u32, cargos)) {
+            return Ok(());
+        }
+        en_la_plaza
+    }
+
     /// Los héroes de la cuenta que están en el mundo, por el índice cuenta → héroes.
     fn heroes_en_el_mundo<'a>(&'a self, cuenta: &str) -> impl Iterator<Item = u64> + 'a {
         let ids = self.estado.militar.heroes_de_cuenta(cuenta);

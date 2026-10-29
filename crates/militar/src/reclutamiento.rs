@@ -143,7 +143,7 @@ pub fn reclutar(r: &Reglas, plaza: Plaza, pedido: Pedido, nuevo_id: impl FnOnce(
         let aqui = match e.contenedor {
             Contenedor::Campamento => reside,
             Contenedor::Ejercito(c) => distancia_de_columna(c).is_some_and(|d| d <= r.movimiento.radio_puerta),
-            Contenedor::Escolta(_) | Contenedor::Fuera | Contenedor::Avanzada(_) => false,
+            Contenedor::Escolta(_) | Contenedor::Fuera | Contenedor::Avanzada(_) | Contenedor::Pueblo(_) => false,
         };
         if !aqui {
             return Err(ErrorReclutamiento::YaLaTienesFuera(e.contenedor));

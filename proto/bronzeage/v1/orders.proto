@@ -420,6 +420,34 @@ message OrdenElegirTablon {
   repeated string semanales_ids = 3;
 }
 
+// Dentro de un pueblo o una aldea (Economia_Construccion §14.0.1). Las da el héroe de la cuenta, dentro del pueblo y ciudadano de la Facción de su plaza madre, con la
+// columna con la que entró.
+// Deja escuadrones de su columna en la guarnición del pueblo, dentro de su cupo (`Pueblo.cupo_guarnicion_por_heroe`).
+message OrdenGuarnecerPueblo {
+  string pueblo_id = 1;
+  repeated string escuadron_ids = 2;
+}
+
+// Recoge escuadrones suyos de la guarnición del pueblo a su columna, sin pasar de su Liderazgo.
+message OrdenRetirarDePueblo {
+  string pueblo_id = 1;
+  repeated string escuadron_ids = 2;
+}
+
+// Carga en el carro de su columna `cantidad` (milésimas) de un recurso del almacén local, hasta donde quepa.
+message OrdenCargarDePueblo {
+  string pueblo_id = 1;
+  string recurso = 2;  // id de catálogo
+  sint64 cantidad = 3;
+}
+
+// Deja en el almacén local `cantidad` (milésimas) de un recurso que el pueblo produce (la aldea, trigo y ganado), del carro de su columna, hasta donde quepa.
+message OrdenDejarEnPueblo {
+  string pueblo_id = 1;
+  string recurso = 2;  // id de catálogo
+  sint64 cantidad = 3;
+}
+
 message OrdenFijarPuerta {
   string asentamiento_id = 1;
   string heroe_id = 2;
@@ -1103,5 +1131,9 @@ message Orden {
     OrdenMejorarAldea mejorar_aldea = 158;
     OrdenAceptarMision aceptar_mision = 159;
     OrdenElegirTablon elegir_tablon = 160;
+    OrdenGuarnecerPueblo guarnecer_pueblo = 161;
+    OrdenRetirarDePueblo retirar_de_pueblo = 162;
+    OrdenCargarDePueblo cargar_de_pueblo = 163;
+    OrdenDejarEnPueblo dejar_en_pueblo = 164;
   }
 }
