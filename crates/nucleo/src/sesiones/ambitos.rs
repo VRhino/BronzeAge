@@ -84,6 +84,9 @@ pub(super) struct Sesion {
     pub(super) cobra: Option<Cobra>,
     /// Lo que el cliente de `ADMIN` tiene de lo que no pasa por el registro de cambios (6G). `None`: no se sabe (reanudó por deltas).
     pub(super) admin_visto: Option<AdminVisto>,
+    /// El pueblo en que está dentro el héroe de la sesión, siendo de su Facción, y la secuencia interior de su madre con la que se le mandó por última vez (2026-10-29: el almacén local que el paso de
+    /// minuto refresca le llega por su `FACCION`, [`Mesa::pueblos_al_dia`]). `None`: no está dentro de ninguno o no se sabe.
+    pub(super) pueblo_dentro: Option<(u64, u64)>,
 }
 
 /// Lo que cobra un campamento a quien está dentro, tal como lo tiene el cliente (`interior::lo_que_cobra`).
@@ -130,7 +133,7 @@ pub(super) struct Mapa {
 impl Sesion {
     pub(super) fn nueva(n: &Nucleo, cliente: String, rol: pb::TipoCliente, tx: mpsc::Sender<Difusion>) -> Self {
         let heroe = es_jugador(rol).then(|| heroe_de_cuenta(n, &cliente)).flatten();
-        Sesion { cliente, rol, tx, heroe, abiertos: BTreeMap::new(), vista: None, plazas: BTreeMap::new(), mapa: None, moderador: false, alijos: None, informes: None, cobra: None, admin_visto: None }
+        Sesion { cliente, rol, tx, heroe, abiertos: BTreeMap::new(), vista: None, plazas: BTreeMap::new(), mapa: None, moderador: false, alijos: None, informes: None, cobra: None, admin_visto: None, pueblo_dentro: None }
     }
 
     pub(super) fn es_admin(&self) -> bool {
@@ -721,6 +724,32 @@ impl Mesa {
             let Some(s) = self.sesiones.get_mut(&id) else { continue };
             let cambios = cambios_de_campamento(n, s, c);
             entregar_fuera_del_registro(n, id, s, Ambito::Campamento(c), cambios, envios);
+        }
+    }
+
+    /// Pone al día el almacén local del pueblo en que está dentro el héroe de cada sesión, si es de su Facción (2026-10-29, pedido del autor): el paso de minuto lo refresca sin subir la versión del
+    /// mundo y, por el registro, solo llega a `ASENTAMIENTO` de la madre; aquí llega en su `FACCION`, una vez por paso (cuando avanza la secuencia interior de la madre).
+    pub(super) fn pueblos_al_dia(&mut self, n: &Nucleo, envios: &mut Vec<(SesionId, Difusion)>) {
+        let faccion: Vec<(SesionId, u32)> = self
+            .suscriptores
+            .iter()
+            .filter_map(|(a, ss)| if let Ambito::Faccion(f) = a { Some(ss.iter().map(|&s| (s, *f)).collect::<Vec<_>>()) } else { None })
+            .flatten()
+            .collect();
+        for (id, f) in faccion {
+            let Some(s) = self.sesiones.get_mut(&id) else { continue };
+            let dentro = s.heroe.and_then(|h| n.heroe(h)).and_then(|h| if let Ubicacion::Pueblo(x) = h.heroe.presencia.ubicacion { Some(x) } else { None });
+            let Some((x, madre, p)) = dentro.and_then(|x| n.pueblo(x).map(|(madre, p)| (x, madre, p))).filter(|(_, madre, p)| p.activo() && n.estado().asentamientos.get(madre).is_some_and(|a| a.faccion == f)) else {
+                s.pueblo_dentro = None;
+                continue;
+            };
+            let actual = n.version_interior(madre).unwrap_or(0);
+            if s.pueblo_dentro == Some((x, actual)) {
+                continue;
+            }
+            s.pueblo_dentro = Some((x, actual));
+            let cambios = vec![actualiza(pb::TipoEntidad::Pueblo, crate::proyeccion::ids::pueblo(x), pb::entidad::Cuerpo::Pueblo(propios::pueblo(n, madre, p)))];
+            entregar_fuera_del_registro(n, id, s, Ambito::Faccion(f), cambios, envios);
         }
     }
 

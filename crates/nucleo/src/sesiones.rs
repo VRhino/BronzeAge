@@ -364,6 +364,8 @@ impl Actor {
                 self.mesa.admin_al_dia(&self.nucleo, None, &mut envios);
                 // Y lo que cobra cada campamento a quien está dentro: los precios siguen al stock de las plazas y a la reputación, sin subir la versión.
                 self.mesa.campamentos_al_dia(&self.nucleo, None, &mut envios);
+                // Y el almacén local del pueblo a quien está dentro y es de su Facción (2026-10-29).
+                self.mesa.pueblos_al_dia(&self.nucleo, &mut envios);
             }
             None => {
                 // Se perdió registro (no debería ocurrir en vivo): foto completa de todos los ámbitos a todos.

@@ -526,7 +526,7 @@ async fn el_paso_de_minuto_manda_solo_lo_que_cambia_con_su_mascara_y_la_tendenci
 // ───────────────────────────── 2b. El almacén local de los pueblos con el paso de minuto ─────────────────────────────
 
 /// El pueblo de la plaza viaja con ella: el paso de minuto refresca su almacén local sin subir la versión del mundo, con la secuencia interior de su plaza madre (`Pueblo.version_interior`); la Facción, en
-/// cambio, no lo recibe por minuto (DUDA de T3c: su almacén local llega con el último cambio discreto del pueblo).
+/// cambio, no lo recibe por minuto salvo quien está dentro del pueblo y es de su Facción (2026-10-29: la prueba siguiente).
 #[tokio::test]
 async fn el_almacen_local_del_pueblo_se_refresca_en_el_paso_de_minuto_por_el_interior_de_la_plaza() {
     let m = con_mundo!();
@@ -565,6 +565,54 @@ async fn el_almacen_local_del_pueblo_se_refresca_en_el_paso_de_minuto_por_el_int
     let n = w.parar().await;
     let (_, real) = n.pueblo(pueblo).unwrap();
     assert_eq!(ana.pueblos[&pueblo_id], nucleo::proyeccion::propios::pueblo(&n, plaza, real), "foto + deltas = el pueblo del núcleo");
+}
+
+/// Quien está dentro del pueblo y es de la Facción de su madre recibe el almacén local por minuto en su `FACCION` (2026-10-29, pedido del autor): una vez por paso, con la secuencia interior de la
+/// madre. Un héroe de otra Facción dentro del mismo pueblo, no.
+#[tokio::test]
+async fn quien_esta_dentro_del_pueblo_y_es_de_su_faccion_recibe_el_almacen_local_por_minuto() {
+    let m = con_mundo!();
+    let mut x = aldea_con(m, Opc { pueblo: true, sin_tropa: true, ..Default::default() });
+    let (plaza, pueblo) = (x.plaza, x.pueblo);
+    let pueblo_id = ids::pueblo(pueblo);
+    // La puerta de antes del sistema 5 (los neutrales entran). Lia (F1) y Eno (F3) entran en el pueblo con su columna.
+    x.ok("admin", comun::acceso(plaza, true, true, false));
+    let puerta = x.n.posicion_de_pueblo(pueblo).unwrap();
+    for (cuenta, f) in [("lia", 1), ("eno", 3)] {
+        let t = x.n.ahora();
+        let col = x.n.crear_ejercito(t, cuenta, f, puerta, 500, 100_000).unwrap();
+        let heroe = x.n.ejercito(col).unwrap().columna.lider;
+        x.ok(cuenta, Comando::EntrarEnPueblo { pueblo, heroe });
+    }
+    let paso = proximo_paso(&x.n, plaza);
+    let w = arrancar_con(x.n).await;
+    let (mut admin_c, _) = w.entrar("admin", TipoCliente::ClienteAdminWeb).await;
+    pausar(&mut admin_c).await;
+    let (mut lia_c, _, _) = w.conectar(hola_con("lia", TipoCliente::ClienteUnity, &[])).await;
+    let (mut eno_c, _, _) = w.conectar(hola_con("eno", TipoCliente::ClienteUnity, &[])).await;
+    let pueblos = |ms: &[ms::Cuerpo]| -> Vec<pb::Pueblo> {
+        ms.iter()
+            .filter_map(|m| if let ms::Cuerpo::Delta(d) = m { Some(d) } else { None })
+            .filter(|d| es_de(d, pb::AmbitoTipo::AmbitoFaccion))
+            .flat_map(|d| d.cambios.iter())
+            .filter(|c| c.entidad == pb::TipoEntidad::Pueblo as i32 && c.id == pueblo_id)
+            .filter_map(|c| if let Some(pb::entidad::Cuerpo::Pueblo(p)) = c.datos.as_ref().and_then(|e| e.cuerpo.clone()) { Some(p) } else { None })
+            .collect()
+    };
+    pendiente(&mut lia_c).await;
+    pendiente(&mut eno_c).await;
+    let mut antes = 0;
+    for (i, k) in [paso, paso + MIN, paso + 2 * MIN].into_iter().enumerate() {
+        avanzar_hasta(&mut admin_c, &format!("m{i}"), k).await;
+        let de_lia = pueblos(&pendiente(&mut lia_c).await);
+        assert_eq!(de_lia.len(), 1, "un pueblo por paso en su FACCION (paso {i})");
+        assert!(de_lia[0].version_interior > antes, "con la secuencia de la madre de ese paso");
+        antes = de_lia[0].version_interior;
+        assert!(pueblos(&pendiente(&mut eno_c).await).is_empty(), "a quien no es de la Facción no le llega");
+    }
+    let n = w.parar().await;
+    let (_, real) = n.pueblo(pueblo).unwrap();
+    assert_eq!(antes, nucleo::proyeccion::propios::pueblo(&n, plaza, real).version_interior);
 }
 
 // ───────────────────────────── 3. Obras, mejoras y recintos en su instante ─────────────────────────────

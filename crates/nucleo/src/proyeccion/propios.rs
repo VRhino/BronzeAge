@@ -877,7 +877,7 @@ pub fn propuesta(n: &Nucleo, p: &politica::Propuesta) -> pb::Propuesta {
 
 /// El pueblo extractor activo. Mientras es una obra (pendiente de materiales o levantándose) el cliente lo ve como [`obra_de_pueblo`].
 /// El paso de minuto refresca su almacén local sin avanzar la versión del mundo: `version_interior` es la secuencia de su plaza madre y dice de qué minuto es (en `ASENTAMIENTO` llega con cada
-/// cambio del interior; en `FACCION` solo con el último cambio discreto del pueblo: DUDA, T3c).
+/// cambio del interior; en `FACCION`, con el último cambio discreto del pueblo y, a quien está dentro y es de su Facción, también con cada paso: `Mesa::pueblos_al_dia`, 2026-10-29).
 pub fn pueblo(n: &Nucleo, madre: u64, p: &Pueblo) -> pb::Pueblo {
     let e = n.estado();
     let recurso = p.recurso(&e.reglas.economia.datos);
