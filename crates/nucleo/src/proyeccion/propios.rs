@@ -36,6 +36,8 @@ pub type Proyectada = (pb::TipoEntidad, String, Cuerpo);
 
 /// El id del estado de tecnología del mundo en el contrato (una sola entidad).
 pub const ID_ESTADO_TECNOLOGIA: &str = "tecnologia";
+/// El id de la única entidad `DIRECTORIO_FACCIONES` (en `VISTA`).
+pub const ID_DIRECTORIO_FACCIONES: &str = "facciones";
 
 /// Quién mira: el héroe de una sesión de jugador (`None` sin héroe) o la administración (`ADMIN`), que lo ve todo sin redactar menos lo que es secreto de cada jugador (los tokens de batalla).
 /// Decide lo que de una entidad depende de quién la mira: las peticiones de una convocatoria y lo que se ve de una batalla.
@@ -630,19 +632,9 @@ pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
     };
     let Some(x) = e.politica.facciones.get(f) else { return base };
     let heroes = |v: &[u64]| v.iter().map(|&h| ids::heroe(h)).collect();
-    let s = &x.sigilo;
     pb::Faccion {
         nombre: x.nombre.clone(),
-        sigilo: Some(pb::Sigilo {
-            forma_id: s.forma.clone(),
-            campo_id: s.campo.clone(),
-            emblema_id: s.emblema.clone(),
-            color_primario_id: s.color_primario.clone(),
-            color_secundario_id: s.color_secundario.clone(),
-            color_emblema_id: s.color_emblema.clone(),
-            orla_id: s.orla.clone(),
-            color_orla_id: s.color_orla.clone(),
-        }),
+        sigilo: Some(sigilo(&x.sigilo)),
         rey_id: x.rey.map(ids::heroe),
         embajador_id: x.embajador.map(ids::heroe),
         capital_designada_en_ms: x.capital_designada_en,
@@ -660,6 +652,40 @@ pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
         tablon: tablon(n, crate::misiones::Dueno::Faccion(f)),
         ..base
     }
+}
+
+/// El sigilo de una Facción en el contrato.
+fn sigilo(s: &politica::sigilo::Sigilo) -> pb::Sigilo {
+    pb::Sigilo {
+        forma_id: s.forma.clone(),
+        campo_id: s.campo.clone(),
+        emblema_id: s.emblema.clone(),
+        color_primario_id: s.color_primario.clone(),
+        color_secundario_id: s.color_secundario.clone(),
+        color_emblema_id: s.color_emblema.clone(),
+        orla_id: s.orla.clone(),
+        color_orla_id: s.color_orla.clone(),
+    }
+}
+
+/// El directorio público de las Facciones (2026-10-29, `VISTA`, entidad `DIRECTORIO_FACCIONES` con id [`ID_DIRECTORIO_FACCIONES`]): todas, por id ascendente, cada una con lo justo para
+/// listarla. Lo pidió el autor para que quien ya tiene Facción vea también las que no nombra lo que ve (las de sin contacto, solo así).
+pub fn directorio_facciones(n: &Nucleo) -> pb::DirectorioFacciones {
+    let facciones = n
+        .estado()
+        .politica
+        .facciones
+        .iter()
+        .map(|x| pb::FaccionDelDirectorio {
+            id: ids::faccion(x.id),
+            nombre: x.nombre.clone(),
+            sigilo: Some(sigilo(&x.sigilo)),
+            nivel: n.nivel_de_faccion(x.id),
+            ciudadanos: x.ciudadanos.len() as u32,
+            derrotada: x.derrota.is_some(),
+        })
+        .collect();
+    pb::DirectorioFacciones { facciones }
 }
 
 /// La forma pública de otra Facción (5H, `VISTA`; Proyecciones §6: «facciones: públicas en la ficción»): la Facción sin su experiencia, su capital ni cuándo la designó (dónde está su capital es

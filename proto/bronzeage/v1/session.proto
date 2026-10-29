@@ -203,6 +203,7 @@ message Entidad {
     ZonaFaccion zona_faccion = 29;
     InformeInspeccion informe_inspeccion = 30;
     FichaConocida ficha_conocida = 31;   // VISTA: lo que se recuerda de un sitio ajeno que ya no se ve
+    DirectorioFacciones directorio_facciones = 32;  // VISTA: todas las Facciones, en ligero (id `facciones`)
   }
 }
 

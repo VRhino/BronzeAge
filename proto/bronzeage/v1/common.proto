@@ -141,6 +141,9 @@ enum TipoEntidad {
   // El estado de tecnología del mundo (sistema 6, 6G), una sola entidad con id `tecnologia`: en `HEROE`, su forma pública (la Era, los logros
   // cumplidos sin decir qué abren y los descubrimientos ya cantados); en `ADMIN`, entero, con los contadores en curso.
   ESTADO_TECNOLOGIA = 34;
+  // El directorio público de todas las Facciones (2026-10-29, ámbito `VISTA`), una sola entidad con id `facciones`: de cada una, lo justo para listarla
+  // (nombre, sigilo, nivel, cuántos ciudadanos tiene y si está derrotada). La forma pública completa sigue llegando como `FACCION` de las que nombra lo que se ve.
+  DIRECTORIO_FACCIONES = 35;
 }
 
 // Ámbito de suscripción de una sesión. El servidor suscribe solo lo que corresponde al héroe (jamás lo pide el cliente):

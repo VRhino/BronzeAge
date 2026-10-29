@@ -10,7 +10,7 @@
 //!   el héroe solo con lo público (`HeroePublico`), el Aeda itinerante con su posición, su tramo y su plaza (6G); lo **recordado** (un sitio ajeno que se vio y ya no se ve), como `FichaConocida`. Además: los campamentos de bandidos que se ven, los de
 //!   mercenarios explorados (o donde reside o está), las batallas que se ven o en que está su Facción (como las ve él: `propios::batalla`), la zona de la Facción, los caminos explorados y la
 //!   intel de la taberna: las Miradas de la Facción (abiertas o enfriando su zona) y sus Informes de plaza. Una Mirada abierta, suya o de un aliado, es un ojo prestado: ve, no explora.
-//!   Públicos, sin niebla: las relaciones activas (5D), los títulos (5F) y, de las demás Facciones que nombra lo que se ve, su forma pública (5H).
+//!   Públicos, sin niebla: las relaciones activas (5D), los títulos (5F) y, de las demás Facciones que nombra lo que se ve, su forma pública (5H); de todas, el directorio ligero (2026-10-29).
 //!
 //! El tramo de lo ajeno se recorta a la unión de los discos de los ojos (decisión del autor, 2026-10-23: no al rectángulo de la vista, que enseñaría camino fuera del alcance); una caravana
 //! grande que solo se ve por llamar la atención, a sus 60 u. La columna se retira en el muestreo siguiente a que deje de verse.
@@ -92,8 +92,29 @@ pub struct Mirada<'n> {
     informes: BTreeMap<u64, &'n InformeDePlaza>,
     /// Las demás Facciones (5H), con la clave y el sello de su forma pública: una vez por perspectiva y no por sesión; cada sesión manda las que nombra lo que ve.
     publicas: Vec<(u32, Clave, Sello)>,
+    /// El sello del directorio de las Facciones (2026-10-29): la huella de lo que lleva y cuántas son. Una vez por perspectiva.
+    directorio: Sello,
     /// Los Aedas itinerantes que se ven ahora, con su posición (6G): una vez por perspectiva y no por sesión.
     aedas: Vec<(&'n tecnologia::itinerantes::AedaItinerante, Punto)>,
+}
+
+/// El sello del directorio de las Facciones ([`propios::directorio_facciones`]): la huella de lo que lleva de cada una y cuántas son. No usa la versión de la Facción, que cambia con
+/// cosas que el directorio no lleva (la experiencia, las solicitudes...).
+fn huella_del_directorio(n: &Nucleo) -> Sello {
+    let e = n.estado();
+    let texto = |h: u64, t: &str| t.bytes().fold(mezclar(h, t.len() as u64), |h, b| mezclar(h, u64::from(b)));
+    let mut h = 0xcbf2_9ce4_8422_2325;
+    for x in e.politica.facciones.iter() {
+        h = mezclar(h, u64::from(x.id));
+        let s = &x.sigilo;
+        for t in [&x.nombre, &s.forma, &s.campo, &s.emblema, &s.color_primario, &s.color_secundario, &s.color_emblema, &s.orla, &s.color_orla] {
+            h = texto(h, t);
+        }
+        for y in [u64::from(n.nivel_de_faccion(x.id)), x.ciudadanos.len() as u64, u64::from(x.derrota.is_some())] {
+            h = mezclar(h, y);
+        }
+    }
+    Sello(h, e.politica.facciones.iter().count() as i64)
 }
 
 /// Las Facciones que comparten visión con `f` (alianza o vasallaje, en cualquier dirección: §5.2).
@@ -194,7 +215,8 @@ impl<'n> Mirada<'n> {
         let publicas = e.politica.facciones.iter().map(|f| f.id).filter(|&f| Some(f) != faccion).map(|f| (f, (pb::TipoEntidad::Faccion as i32, ids::faccion(f)), Sello(n.version_de(Clase::Faccion, u64::from(f)), 0))).collect();
         let ve = |p: Punto| ojos.iter().any(|&(c, r)| crate::nucleo::cerca(c, p, r));
         let aedas = e.aedas.iter().map(|a| (a, a.plan.as_ref().and_then(|x| x.posicion_en(t)).unwrap_or(a.posicion))).filter(|&(_, p)| ve(p)).collect();
-        Mirada { n, perspectiva, faccion, t, columnas, ojos, propias, suelo, celdas, niebla, fichas, informes, publicas, aedas }
+        let directorio = huella_del_directorio(n);
+        Mirada { n, perspectiva, faccion, t, columnas, ojos, propias, suelo, celdas, niebla, fichas, informes, publicas, directorio, aedas }
     }
 
     /// ¿Se ve ahora el punto? (alguno de los ojos a `≤` su alcance, no estricto).
@@ -424,6 +446,8 @@ impl<'n> Mirada<'n> {
             let f = *f;
             v.push(Visible { clave: clave.clone(), sello: *sello, cuerpo: Box::new(move || Some(Cuerpo::Faccion(propios::faccion_publica(n, f)))) });
         }
+        // Y el directorio de todas, en ligero (2026-10-29, pedido del autor): con Facción, también las que no nombra lo que ve. Solo vuelve a viajar si cambia lo que lleva.
+        v.push(visible(pb::TipoEntidad::DirectorioFacciones, propios::ID_DIRECTORIO_FACCIONES.into(), self.directorio, move || Some(Cuerpo::DirectorioFacciones(propios::directorio_facciones(n)))));
         // Los títulos de prestigio son públicos (5F): los ve cualquiera, como las relaciones. Uno que desaparece sale de la vista.
         for x in &e.politica.titulos {
             nombradas.push(x.poseedor);

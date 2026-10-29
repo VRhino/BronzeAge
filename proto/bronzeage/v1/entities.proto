@@ -1040,6 +1040,21 @@ message TecnologiaRevelada {
 }
 
 // Estado global de tecnología (Eras I-III; las IV y V se definen con el motor nuevo).
+// El directorio público de las Facciones (2026-10-29, `VISTA`, id `facciones`): todas las que existen, por id ascendente, también la propia. Cambia solo
+// cuando nace o desaparece una Facción o cambia algo de lo que lleva (nombre, sigilo, nivel, número de ciudadanos, derrota).
+message DirectorioFacciones {
+  repeated FaccionDelDirectorio facciones = 1;
+}
+
+message FaccionDelDirectorio {
+  string id = 1;                         // `f-N`
+  string nombre = 2;
+  optional Sigilo sigilo = 3;
+  uint32 nivel = 4;
+  uint32 ciudadanos = 5;                 // cuántos
+  bool derrotada = 6;
+}
+
 message EstadoTecnologia {
   string era = 1;
   int64 era_desde_ms = 2;

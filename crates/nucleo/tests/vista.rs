@@ -600,3 +600,40 @@ fn coste_de_la_vista_con_300_columnas_y_30_facciones() {
     let ronda = medir(3, &|| (1..=30).for_each(|f| drop(Mirada::de(&n, Perspectiva::Faccion(f)).contenido(None, rect, &vacio))));
     println!("Mirada::de (una Facción): {de:.0} µs; contenido con sellos: {sellos:.0} µs ({cuantas} entidades); con cuerpos: {todo_:.0} µs; una ronda de 30 perspectivas: {:.1} ms", ronda / 1000.0);
 }
+
+// ───────────────────────────── El directorio de las Facciones (2026-10-29) ─────────────────────────────
+
+#[test]
+fn el_directorio_lleva_todas_las_facciones_a_quien_tiene_faccion_y_solo_vuelve_a_viajar_si_cambia_lo_que_lleva() {
+    let m = con_mundo!();
+    let mut x = escenario(m);
+    let directorio = |n: &Nucleo| {
+        let m = Mirada::de(n, Perspectiva::Faccion(1));
+        let c = m.contenido(None, todo(), &BTreeMap::new());
+        let d = c.iter().find(|v| v.clave == (TipoEntidad::DirectorioFacciones as i32, "facciones".to_owned())).expect("el directorio va siempre en la vista");
+        let Some(Cuerpo::DirectorioFacciones(cuerpo)) = d.cuerpo() else { panic!("su cuerpo") };
+        let publicas: Vec<String> = c.iter().filter(|v| v.clave.0 == TipoEntidad::Faccion as i32).map(|v| v.clave.1.clone()).collect();
+        (d.sello, cuerpo, publicas)
+    };
+    let todas: Vec<String> = x.n.estado().politica.facciones.iter().map(|f| ids::faccion(f.id)).collect();
+    assert!(todas.len() >= 3, "{todas:?}");
+    let (sello, d, publicas) = directorio(&x.n);
+    assert_eq!(d.facciones.iter().map(|f| f.id.clone()).collect::<Vec<_>>(), todas, "todas, también la propia y las que no nombra lo que ve");
+    assert!(!publicas.contains(&"f-3".to_owned()), "la forma pública completa sigue siendo solo de las que nombra lo que ve: {publicas:?}");
+    let f1 = &d.facciones[0];
+    assert_eq!((f1.ciudadanos, f1.derrotada, f1.sigilo.is_some()), (x.n.estado().politica.facciones.get(1).unwrap().ciudadanos.len() as u32, false, true));
+    // Una solicitud de ingreso cambia la Facción pero no el directorio: no viaja otra vez.
+    let dora = x.dora;
+    x.ok("dora", Comando::SolicitarIngreso { heroe: dora, faccion: 2 });
+    assert_eq!(directorio(&x.n).0, sello);
+    // Su nivel, sí.
+    x.ok("admin", Comando::FijarNivelFaccion { faccion: 2, nivel: 3 });
+    let (sello2, d, _) = directorio(&x.n);
+    assert_ne!(sello2, sello);
+    assert_eq!(d.facciones.iter().find(|f| f.id == "f-2").unwrap().nivel, 3);
+    // Y una Facción nueva.
+    x.ok("admin", Comando::FijarFaccionDeHeroe { heroe: dora, faccion: Some(9) });
+    let (sello3, d, _) = directorio(&x.n);
+    assert_ne!(sello3, sello2);
+    assert!(d.facciones.iter().any(|f| f.id == "f-9" && f.ciudadanos == 1));
+}
