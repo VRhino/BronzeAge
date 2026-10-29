@@ -501,7 +501,7 @@ Una caravana en viaje es un **plan** (vértices con su instante de paso, [`Movim
 2. **Sin `destinoAsentamientoId`** (Fundación, `disponible`, `adjunta`, `aparcada`): se deja pasar; la mueve su propio subsistema.
 3. **Origen inexistente**, o destino inexistente **y** no está `retornando`: la caravana **desaparece** (sin evento) y su escolta se libera al campamento. (Hoy solo ocurre con partidas guardadas antes de
    `ruina.ts`, que cierra el caso al caer la plaza.)
-4. **Plan**: `velocidad = velocidadCaravana × (comercial ? factorVelocidadCaravana(origen) : 1)` (calibrada: buey 24, camello 28, caballo 36); el plan se construye de una vez con las **aristas de la red** (más rápido sobre camino; fórmula en
+4. **Plan**: `velocidad = velocidadCaravana × (comercial ? factorVelocidadCaravana(origen) : 1)` (calibrada: buey 24, camello 28, caballo 36); el plan se construye de una vez con las **aristas de la red** (más rápido sobre camino, salvo el carro de acarreo, §12; fórmula en
    `Movimiento_Ejercitos.md` §4.2). El plan se rehace si cambia la velocidad, se construye un camino en el trayecto o se engancha. `distanciaTotal = max(1, distancia recta entre los dos extremos del viaje)`; solo sirve para el bonus de la comisión.
 5. **Peajes** (solo a la ida, §7.3): un evento en el instante exacto en que el plan cruza cada zona ajena.
 6. Al **evento de llegada** (el último vértice del plan):
@@ -940,6 +940,7 @@ Ninguna abierta. Las del 2026-10-11 se resolvieron: comisión solo entre asentam
 Cada pueblo extractor (Economia_Construccion §pueblos) tiene un carro propio: una caravana de tipo `acarreo` ligada al pueblo.
 
 - **Un carro básico con buey** (500 de capacidad, velocidad **24**) y una **ruta fija** pueblo ↔ plaza madre, calculada una vez como cualquier plan.
+- **Sin la ventaja del camino** (decisión del autor del 2026-10-29): su ruta entra en la red de caminos y la aprovechan las demás caravanas, pero el carro de acarreo va siempre a los costes del terreno (24 u/min), sin `factorCamino`, y no rehace su plan cuando una arista de su trayecto pasa a ser camino. Antes iba al doble, porque su propia ruta lo convertía en camino desde el primer viaje.
 - **Solo sale con el carro lleno**: el evento de salida se programa cuando el almacén local del pueblo alcanza la capacidad del carro (o al reponerse el carro con almacén ya lleno). Vuelca en el almacén de la madre y vuelve vacío.
 - **No cuenta** contra los cupos de caravanas ni de carros del Mercado, ni exige Mercado. No entra en el reparto automático ni en el trueque.
 - **Escolta**: sin héroe, de los residentes de la madre (cupo del Mercado de la madre si lo tiene, 100/200/300; **100** si no) o por ejército (Movimiento §9).

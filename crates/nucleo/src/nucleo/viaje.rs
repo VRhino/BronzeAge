@@ -266,12 +266,14 @@ impl Nucleo {
         puntos.windows(2).zip(costes).map(|(w, &c)| if red.contiene(&clave_arista(w[0], w[1])) { c * factor / UNO } else { c }).collect()
     }
 
-    /// El plan de una caravana sobre una polilínea con sus costes, saliendo en `salida` (`generacion` la pone [`Nucleo::instalar_plan`]).
+    /// El plan de una caravana sobre una polilínea con sus costes, saliendo en `salida` (`generacion` la pone [`Nucleo::instalar_plan`]). El carro de
+    /// acarreo no aprovecha la red de caminos (decisión del autor del 2026-10-29): va siempre a los costes del terreno.
     pub(super) fn plan_de(&self, c: &Caravana, puntos: &[Punto], costes: &[i64], salida: Instante) -> Plan {
         let origen = c.origen as u64;
         let factor = self.estado.asentamientos.get(&origen).map_or(UNO, |a| self.factores_de(a).velocidad);
         let velocidad = c.velocidad_efectiva(&self.estado.reglas.economia.comercio.flota, factor);
-        a_plan_por_minuto(puntos, &self.costes_efectivos(puntos, costes), self.rutas.espaciado(), salida, velocidad, 0)
+        let costes = if c.tipo == TipoCaravana::Acarreo { costes.to_vec() } else { self.costes_efectivos(puntos, costes) };
+        a_plan_por_minuto(puntos, &costes, self.rutas.espaciado(), salida, velocidad, 0)
     }
 
     /// La red de rutas cambió por fuera de un lanzamiento (una plaza desapareció): la atracción memorizada deja de valer.
@@ -293,7 +295,8 @@ impl Nucleo {
         }
     }
 
-    /// Las caravanas en viaje cuyo tramo restante pisa una arista recién abierta rehacen su plan desde su posición (más rápido sobre el camino).
+    /// Las caravanas en viaje cuyo tramo restante pisa una arista recién abierta rehacen su plan desde su posición (más rápido sobre el camino);
+    /// el carro de acarreo no, porque no aprovecha el camino.
     /// Se conservan el pasado del plan y los peajes pendientes (su avance es por distancia, que no cambia).
     fn rehacer_planes_por_camino(&mut self, nuevas: &BTreeSet<Arista>, t: Instante, excepto: &[u64]) {
         let factor = self.estado.reglas.economia.comercio.navegacion.factor_camino;
@@ -302,7 +305,7 @@ impl Nucleo {
             .comercio
             .flota
             .iter()
-            .filter(|c| matches!(c.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando) && !excepto.contains(&c.id))
+            .filter(|c| matches!(c.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando) && c.tipo != TipoCaravana::Acarreo && !excepto.contains(&c.id))
             .filter_map(|c| Some((c.id, replanificar_con_camino(c.plan.as_ref()?, t, nuevas, factor)?)))
             .collect();
         for (id, plan) in rehacer {

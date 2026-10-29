@@ -474,13 +474,15 @@ fn el_pueblo_extrae_contra_su_almacen_y_el_carro_sale_lleno_vuelca_en_la_madre_y
     let (sale_en, carga) = (sale[0].0, dato(&sale[0], "carga"));
     assert_eq!(carga, 500_000, "solo sale con el carro lleno");
     assert_eq!(hechos(&e.n, "pueblo.almacen_lleno")[0].0, sale_en, "sale en el mismo minuto en que se llena");
-    // El viaje es el de una caravana: plan por el mapa real a 24 u/min (el buey) hasta la plaza madre.
+    // El viaje es el de una caravana: plan por el mapa real a 24 u/min (el buey) hasta la plaza madre, sin la ventaja del camino aunque su ruta
+    // ya esté en la red (decisión del autor del 2026-10-29: con ella iba al doble).
     let llega = hechos(&e.n, "acarreo.llega");
     let (llega_en, ingresado, perdido) = (llega[0].0, dato(&llega[0], "carga"), dato(&llega[0], "perdido"));
     let sitio = e.n.posicion_de_pueblo(id).unwrap();
     let camino = m.1.ruta(sitio, e.n.estado().asentamientos[&plaza].posicion, &rutas::Opciones::default()).unwrap();
     let esperado = (camino.coste_total() as i128 * m.1.espaciado() as i128 * 60 / 24_000) as i64;
-    assert!((llega_en - sale_en - esperado).abs() <= MIN, "tarda lo que su ruta a 24 u/min: {} frente a {}", llega_en - sale_en, esperado);
+    assert!(e.n.red_de_caminos().ruta(plaza as u32, id as u32).is_some(), "su ruta está en la red de caminos");
+    assert!((llega_en - sale_en - esperado).abs() < 1_000, "tarda lo que su ruta a 24 u/min: {} frente a {}", llega_en - sale_en, esperado);
     // El almacén de la madre admite 400 de cada recurso: lo que no cabe se pierde.
     assert_eq!((ingresado, perdido), (400_000, 100_000));
     // Lo que el carro vuelca en la madre no se cuenta otra vez: el contador es lo que salió del nodo, en los carros y en el almacén del pueblo.
@@ -773,7 +775,7 @@ fn la_conquista_de_la_madre_deja_los_pueblos_con_la_plaza_y_el_carro_en_camino_s
         (e, id)
     };
     // El asedio cae al acabar su convocatoria de 30 s y el viaje del carro es más corto: una primera pasada dice cuándo sale, y en la segunda (el mismo mundo) el asedio se
-    // abre 28 s antes (la ruta del carro va por la red de caminos, que la acelera).
+    // abre 28 s antes.
     let sale = {
         let (mut e, id) = montar_sin_proteccion();
         hasta_que_el_carro_vaya_cargado(&mut e, id);
