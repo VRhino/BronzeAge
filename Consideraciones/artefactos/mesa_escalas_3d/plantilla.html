@@ -195,7 +195,7 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
             <div class="fila"><label for="encuadre">En pantalla</label><span id="o-encuadre">30 u</span></div>
             <input type="range" id="encuadre" min="8" max="120" step="1" value="30">
           </div>
-          <div class="botones" aria-label="Encuadres del modo mundo"><button type="button" data-encuadre="1">La visión</button><button type="button" data-encuadre="1.5">La visión ×1,5</button></div>
+          <div class="botones" aria-label="Zooms del modo mundo"><button type="button" data-encuadre="30">×1 · 30 u</button><button type="button" data-encuadre="45">×1,5 · 45 u</button></div>
           <div class="deslizador">
             <div class="fila"><label for="apertura">Apertura de la cámara</label><span id="o-apertura">35°</span></div>
             <input type="range" id="apertura" min="15" max="75" step="1" value="35">
@@ -206,7 +206,7 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
           <input type="range" id="inclinacion" min="10" max="90" step="1" value="30">
         </div>
         <div class="fila"><label for="vision">Visión del héroe</label>
-          <select id="vision"><option value="15" selected>15 u, solo</option><option value="30">30 u</option></select>
+          <select id="vision"><option value="15" selected>Solo · 15 u de radio</option><option value="30">Con soldados · 30 u</option></select>
         </div>
         <div class="fila"><label><input type="checkbox" id="ver-vision" checked> Marcar hasta dónde ve</label></div>
         <div class="fila"><label><input type="checkbox" id="niebla-vision" checked> Oscurecer lo que no ve</label></div>
@@ -365,9 +365,10 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
     <ul class="decisiones">
       <li><span class="estado cerrado">Cerrado</span><span>El ancla (cámara, velocidades, zonas, separación), Unity a ×12 y las plazas como maquetas agrandadas.</span></li>
       <li><span class="estado cerrado">Elegido</span><span>Propuesta ×100 con relieve ×2,2, altura ×2, copa 0,4 u, plazas ×1,6, héroes y tropa ×3, y rejilla de 4 u con suavizado (2026-10-30). Con estas escalas se pasa a los siguientes pasos; la mesa se sigue afinando.</span></li>
-      <li><span class="estado cerrado">Cámara</span><span>La cámara de juego gira libre alrededor del héroe y siempre le sigue (2026-10-30). Cuántas u caben en pantalla, la apertura y la inclinación se calibran con la visión del héroe marcada (abajo, «Calibrar»).</span></li>
+      <li><span class="estado cerrado">Cámara</span><span>La cámara de juego gira libre alrededor del héroe y siempre le sigue, con la inclinación libre. Caben en pantalla 30 u (×1) o 45 u (×1,5), el diámetro de visión del héroe solo y 1,5 veces, y la apertura es de 35° (2026-10-30).</span></li>
+      <li><span class="estado cerrado">Visión</span><span>Es una regla del servidor (<span class="dato">VISION</span>): 15 u de radio el héroe solo, 30 u la columna con soldados y 60 u la caravana grande. Los zooms van siempre con la del héroe solo, como en el cliente 2D.</span></li>
       <li><span class="estado cerrado">Cliente</span><span>El mundo 3D se prototipa primero en el cliente de jugador (BronzeAgeClient, three.js) y después se lleva a Unity. En el cliente, el modo mundo pasa directamente a 3D y el modo mapa se queda en 2D, como mapa estratégico (2026-10-30).</span></li>
-      <li><span class="estado abierto">Calibrar</span><span>El encuadre de la cámara inclinada: cuántas u caben en pantalla, la apertura y la inclinación mínima. En 2D la pantalla era lo que el héroe ve; inclinada enseña mucho más suelo hacia el fondo. La mesa marca la visión real del héroe y oscurece lo de fuera para calibrarlo. Después, los tamaños (relieve, copa, plazas, héroes y tropa), elegidos con la pantalla de 15 u.</span></li>
+      <li><span class="estado abierto">Calibrar</span><span>Los tamaños (relieve, copa, plazas, héroes y tropa), elegidos con la pantalla de 15 u, con el encuadre nuevo. Inclinada, la cámara enseña más suelo hacia el fondo de lo que el héroe ve: la mesa marca su visión y oscurece lo de fuera.</span></li>
       <li><span class="estado cerrado">Regla</span><span>Pueblos y avanzadas son partes de la plaza y van siempre dentro de su zona.</span></li>
       <li><span class="estado cerrado">Regla</span><span>Las pendientes del movimiento se miden con la exageración de altura: lo que se ve es lo que se anda.</span></li>
       <li><span class="estado abierto">Abierto</span><span>Ríos y vados del terreno nuevo, y cuántos árboles dibuja el cliente: con copa de 0,4 u, un bosque denso lleva unos 3 árboles por u².</span></li>
@@ -1123,7 +1124,8 @@ lienzo.addEventListener('pointerup', e => {
 });
 lienzo.addEventListener('pointercancel', () => { arrastre = null; pulsado = null; });
 lienzo.addEventListener('wheel', e => { if (estado.vista !== 'juego') return; e.preventDefault(); fijarEncuadre(estado.encuadre * (e.deltaY > 0 ? 1.1 : 1 / 1.1)); }, { passive: false });
-document.querySelectorAll('[data-encuadre]').forEach(b => b.addEventListener('click', () => fijarEncuadre(2 * estado.vision * +b.dataset.encuadre)));
+// los dos zooms decididos (2026-10-30): 30 u y 45 u, el diámetro de visión del héroe solo y 1,5 veces, sea cual sea la visión que se marque
+document.querySelectorAll('[data-encuadre]').forEach(b => b.addEventListener('click', () => fijarEncuadre(+b.dataset.encuadre)));
 $('vision').addEventListener('change', e => { estado.vision = +e.target.value; pintarChipVista(); });
 $('ver-vision').addEventListener('change', e => { estado.verVision = e.target.checked; });
 $('niebla-vision').addEventListener('change', e => { estado.nieblaVision = e.target.checked; });

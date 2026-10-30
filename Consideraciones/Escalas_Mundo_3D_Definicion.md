@@ -62,7 +62,7 @@ medida sobre lo que se ve (§4.3), el 61 % del macizo quedaba cerrado al paso. E
 | Plazas (maquetas) | **×1,6** | Escala de casas, pueblos, avanzadas y campamentos |
 | Héroes y tropa | **×3** (soldado de 4,9 m de Unity) | Mando propio, separado de las plazas como los árboles (decisión del autor). El héroe va a caballo al frente de su columna |
 | Rejilla | **4 u, con suavizado** | Ver §4.3 y §6 |
-| Cámara | **30°**, libre | Gira en cualquier ángulo alrededor del héroe, a distancia fija y siguiéndole siempre. La distancia hace que la visión del héroe llene el lado corto de la pantalla, con un segundo zoom a 1,5 veces (§5) |
+| Cámara | **30 u / 45 u en pantalla, apertura 35°**, inclinación libre | Gira en cualquier ángulo alrededor del héroe, a distancia fija y siguiéndole siempre. En pantalla caben 30 u (×1) o 45 u (×1,5): el diámetro de visión del héroe solo y 1,5 veces (§5) |
 
 Medido sobre la ventana con esos valores (`relieve ×2,2`, `altura ×2`):
 
@@ -130,12 +130,16 @@ El mundo se representará como en la mesa:
 
 - la **cámara de juego**, libre en ángulo pero a distancia fija del héroe y siempre siguiéndole (decisión del autor,
   2026-10-30). Arranca a 30° de inclinación. En la montaña se levanta si la ladera queda por encima de ella.
-  - **Encuadre por la visión** (decisión del autor, 2026-10-30, al repasar el cliente). La distancia hace que el
-    diámetro de visión del héroe llene el lado corto de la pantalla: 30 u con el héroe solo y 60 u con visión de 30 u.
-    Hay un segundo zoom a 1,5 veces, como el modo mundo del cliente en 2D. Antes la distancia daba 15 u de ancho, así que
-    ahora la cámara queda unas 3,5 veces más lejos.
+  - **Encuadre** (valores del autor, 2026-10-30, calibrados en la mesa). La distancia es la que hace caber en la pantalla
+    un círculo alrededor del héroe, con cualquier inclinación: **30 u** de diámetro con el zoom ×1 y **45 u** con el ×1,5.
+    Desde arriba (90°) es el lado corto, como el modo mundo del cliente en 2D. **Apertura de 35°**. **Inclinación libre**,
+    de 10° a 90°.
+  - **La visión es una regla del servidor**, no de la cámara (`Movimiento_Ejercitos.md`, bloque `VISION`): 15 u de radio
+    el héroe solo (30 u de diámetro), 30 u la columna con soldados y 60 u la caravana grande. Los zooms van siempre con
+    la del héroe solo, como en el cliente 2D (`radioDeVision`, que lee `VISION.jugadorSolo`): con soldados se ve más de
+    lo que cabe en pantalla.
   - **Tamaños a revisar.** Relieve, copa, plazas, héroes y tropa se eligieron con la pantalla de 15 u y hay que volver a
-    mirarlos con el encuadre nuevo. La mesa ya lo tiene (zoom y visión en «Vista»);
+    mirarlos con el encuadre nuevo;
 - el terreno con formas a escala de pantalla y la altura exagerada;
 - árboles, plazas, héroes y tropa como maquetas;
 - la columna que va adonde se hace clic.
@@ -228,7 +232,8 @@ funcionar primero ahí, con three.js como en la mesa, ayuda a cerrar la represen
 
 **Orden decidido por el autor (2026-10-30):** primero la cámara y la visión; después, el generador y las reglas de juego.
 
-- **Cámara y visión (en curso).** En 2D la pantalla era lo que el héroe ve: la visión llenaba el lado corto. Con la
+- **Cámara y visión.** Valores decididos el 2026-10-30 (§5): 30 u / 45 u en pantalla, apertura 35° e inclinación
+  libre. Quedan los tamaños. En 2D la pantalla era lo que el héroe ve: la visión llenaba el lado corto. Con la
   cámara inclinada se ve mucho más suelo hacia el fondo; con la visión de 15 u y el encuadre de ahora, a 30° llega a
   51 u por detrás del héroe. La mesa tiene para calibrarlo:
   - «En pantalla»: el círculo alrededor del héroe que cabe en la pantalla con cualquier inclinación;
