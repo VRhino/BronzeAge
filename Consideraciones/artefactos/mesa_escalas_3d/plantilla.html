@@ -66,6 +66,20 @@ p { margin: 0; }
 .etiqueta { position: absolute; transform: translate(-50%, -100%); font: 600 11px/1 var(--f-texto); padding: 3px 6px; border-radius: 4px; background: var(--velo); color: var(--tinta); border: 1px solid var(--linea); white-space: nowrap; pointer-events: none; }
 .etiqueta.menor { font-weight: 400; font-size: 10px; padding: 2px 5px; }
 .aviso-visor { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--tinta-suave); background: var(--cielo); }
+.visor-botones { margin-left: auto; display: flex; gap: 6px; pointer-events: auto; font-family: var(--f-texto); }
+.visor-botones button { background: var(--velo); backdrop-filter: blur(6px); }
+.visor-botones button[aria-pressed="true"] { border-color: var(--bronce); color: var(--bronce); }
+
+/* pantalla completa: la escena ocupa toda la pantalla y los mandos flotan encima, a la derecha, y se pueden ocultar */
+html.con-banco-completo { overflow: hidden; }
+.banco.completa { position: fixed; inset: 0; z-index: 50; display: block; background: var(--cielo);
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+.banco.completa .visor { height: 100%; min-height: 0; border: 0; border-radius: 0; }
+.banco.completa .mandos { position: absolute; z-index: 4; width: 300px; max-width: calc(100% - 20px); overflow-y: auto; overscroll-behavior: contain;
+  top: calc(env(safe-area-inset-top, 0px) + 56px); right: calc(env(safe-area-inset-right, 0px) + 10px); bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+  background: var(--velo); backdrop-filter: blur(8px); }
+.banco.completa.sin-mandos .mandos { display: none; }
+@media (min-width: 640px) { .banco.completa:not(.sin-mandos) .hud-inf { right: 320px; } }
 
 .mandos { background: var(--superficie); border: 1px solid var(--linea); border-radius: 10px; padding: 14px; display: grid; gap: 14px; }
 .grupo { display: grid; gap: 8px; }
@@ -137,6 +151,10 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
         <span class="chip" id="chip-terreno">Generador nuevo · seed 42</span>
         <span class="chip" id="chip-vista">Cámara que sigue al héroe · visión de <b>15 u</b></span>
         <span class="chip alerta" id="chip-aviso" hidden></span>
+        <div class="visor-botones">
+          <button type="button" id="ver-mandos" aria-pressed="true" title="Tecla M" hidden>Ocultar mandos</button>
+          <button type="button" id="completa" aria-pressed="false" title="Esc para salir">Pantalla completa</button>
+        </div>
       </div>
       <div class="hud hud-inf">
         <div class="regla chip" id="regla">
@@ -1032,6 +1050,29 @@ const moverConTeclas = dt => { if (estado.vista !== 'juego' || !teclas.size) ret
 
 // tamaño
 const ajustar = () => { renderer.setSize(visor.clientWidth, visor.clientHeight, false); };
+
+// pantalla completa: la del navegador si la deja; si no (móvil, algunas apps), la escena ocupa toda la ventana de la página
+const banco = document.querySelector('.banco'), botonCompleta = $('completa'), botonMandos = $('ver-mandos');
+const enCompleta = () => banco.classList.contains('completa');
+const pintarBotonMandos = () => { const ocultos = banco.classList.contains('sin-mandos'); botonMandos.textContent = ocultos ? 'Mostrar mandos' : 'Ocultar mandos'; botonMandos.setAttribute('aria-pressed', String(!ocultos)); };
+function ponerCompleta(si) {
+  banco.classList.toggle('completa', si); banco.classList.remove('sin-mandos'); document.documentElement.classList.toggle('con-banco-completo', si);
+  botonCompleta.textContent = si ? 'Salir de pantalla completa' : 'Pantalla completa'; botonCompleta.setAttribute('aria-pressed', String(si));
+  botonMandos.hidden = !si; pintarBotonMandos(); ajustar();
+}
+botonCompleta.addEventListener('click', () => {
+  if (enCompleta()) { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); ponerCompleta(false); return; }
+  ponerCompleta(true);
+  if (banco.requestFullscreen) banco.requestFullscreen().catch(() => {});
+});
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && enCompleta()) ponerCompleta(false); });
+botonMandos.addEventListener('click', () => { banco.classList.toggle('sin-mandos'); pintarBotonMandos(); });
+// Esc sale (si el navegador no lo hizo ya) y M oculta o enseña los mandos, salvo escribiendo en un control
+document.addEventListener('keydown', e => {
+  if (!enCompleta() || e.target.closest?.('input[type="text"], textarea')) return;
+  if (e.key === 'Escape' && !document.fullscreenElement) ponerCompleta(false);
+  else if ((e.key === 'm' || e.key === 'M') && !e.ctrlKey && !e.metaKey && !e.altKey) { banco.classList.toggle('sin-mandos'); pintarBotonMandos(); }
+});
 new ResizeObserver(ajustar).observe(visor); ajustar();
 
 // ---------- arranque ----------
