@@ -1,17 +1,12 @@
 import type { LagoZona, Point, RioZona } from './tipos';
-import type { CampoElevacion, CauceTroncal } from './types';
-import { evaluarElevacion } from './elevacion';
+import { evaluarElevacion, type CampoElevacion, type CauceTroncal } from './elevacion';
 import { generarRiosPorDrenaje } from './drenaje';
 import { createRng, derivarSeed } from './rng';
 import { puntoEnLago } from './aguaRegional';
 
-export interface RioRegional extends RioZona {
-  orden: number; ancho: number; cuenca: string; desembocaEn?: string;
-  longitud: number;
-}
+export interface RioRegional extends RioZona { orden: number }
 interface Vertice { p: Point; siguiente?: string; entradas: string[]; orden: number; fin: RioZona['fin'] }
 const clave = (p: Point) => `${p.x},${p.y}`;
-
 
 /** Suavizado local con retroceso: una esquina inválida no cancela el resto.
  * Conserva extremos/confluencias y comprueba cada segmento modificado cada 25 m. */
@@ -40,8 +35,8 @@ export function suavizarCauceRegional(puntos: Point[], altura: (p: Point) => num
 }
 
 function vallesPrincipales(campo: CampoElevacion): CauceTroncal[] {
-  const { ancho, alto } = campo.regional!.limites;
-  const fase = campo.regional!.fase;
+  const { ancho, alto } = campo.regional.limites;
+  const fase = campo.regional.fase;
   const rutas = [
     [[0.54, 0.995], [0.535, 0.94], [0.56, 0.88], [0.54, 0.82], [0.55, 0.76], [0.53, 0.68]],
     [[0.955, 0.36], [0.90, 0.46], [0.93, 0.55], [0.91, 0.67], [0.94, 0.78], [0.90, 0.87], [0.92, 1]],
@@ -80,7 +75,7 @@ function orilla(lago: LagoZona, campo: CampoElevacion, escala: number, aceptar: 
       let a = Math.max(0, r - 25 * escala), b = r;
       for (let j = 0; j < 10; j++) { const m = (a + b) / 2; if (evaluarElevacion(campo, p(m)) < nivel) a = m; else b = m; }
       const borde = p((a + b) / 2);
-      const { ancho, alto } = campo.regional!.limites;
+      const { ancho, alto } = campo.regional.limites;
       if (!aceptar(borde) || borde.x <= 0 || borde.y <= 0 || borde.x >= ancho || borde.y >= alto) { valido = false; break; }
       puntos.push(borde); radio = Math.max(radio, b);
     }
@@ -92,9 +87,9 @@ function orilla(lago: LagoZona, campo: CampoElevacion, escala: number, aceptar: 
 /** Red dirigida: cada tramo compartido se publica una sola vez. Las confluencias
  * son extremos comunes, con referencias explícitas aguas abajo y orden Strahler. */
 export function generarHidrografiaRegional(seed: number, campo: CampoElevacion, factorLagos = 1) {
-  const limites = campo.regional!.limites, escala = Math.min(limites.ancho, limites.alto) / 24000;
+  const limites = campo.regional.limites, escala = Math.min(limites.ancho, limites.alto) / 24000;
   campo.caucesTroncales = vallesPrincipales(campo);
-  const aceptar = (p: Point) => campo.regional!.barreras.every(b => b.pasos.every(paso => {
+  const aceptar = (p: Point) => campo.regional.barreras.every(b => b.pasos.every(paso => {
     const dx = p.x - paso.centro.x, dy = p.y - paso.centro.y;
     return Math.abs(dx * paso.tangente.x + dy * paso.tangente.y) > 600 * escala
       || Math.abs(-dx * paso.tangente.y + dy * paso.tangente.x) > b.ancho * 2.8 + 300 * escala;
@@ -153,9 +148,8 @@ export function generarHidrografiaRegional(seed: number, campo: CampoElevacion, 
     const troncal = principales.some(r => r.puntos[0] === v.p);
     v.orden = Math.max(troncal ? 2 : 1, !ordenes.length ? 1 : ordenes[0]! + Number(ordenes.length > 1 && ordenes[0] === ordenes[1]));
   }
-  const rios: RioRegional[] = [], inicioTramo = new Map<string, string>();
-  const finales: string[] = [];
-  for (const [id, v] of vertices) {
+  const rios: RioRegional[] = [];
+  for (const v of vertices.values()) {
     if (!v.siguiente || v.entradas.length === 1) continue;
     let actual = v;
     const puntos = [v.p];
@@ -164,15 +158,8 @@ export function generarHidrografiaRegional(seed: number, campo: CampoElevacion, 
       if (actual.entradas.length !== 1) break;
     }
     const ps = suavizarCauceRegional(puntos, p => evaluarElevacion(campo, p));
-    const rioId = `tramo-${rios.length}`;
-    inicioTramo.set(id, rioId); finales.push(clave(actual.p));
-    let terminal = actual;
-    while (terminal.siguiente) terminal = vertices.get(terminal.siguiente)!;
-    rios.push({ id: rioId, puntos: ps, fin: actual.siguiente ? 'limite' : actual.fin,
-      terminaEnLago: !actual.siguiente && actual.fin === 'lago', navegable: false,
-      orden: v.orden, ancho: 8 + v.orden * v.orden * 5, cuenca: `cuenca-${clave(terminal.p)}`,
-      longitud: ps.slice(1).reduce((s, p, i) => s + Math.hypot(p.x - ps[i]!.x, p.y - ps[i]!.y), 0) });
+    rios.push({ id: `tramo-${rios.length}`, puntos: ps, fin: actual.siguiente ? 'limite' : actual.fin,
+      terminaEnLago: !actual.siguiente && actual.fin === 'lago', navegable: false, orden: v.orden });
   }
-  rios.forEach((r, i) => { r.desembocaEn = inicioTramo.get(finales[i]!); });
-  return { rios, lagos, cuencas: [...new Set(rios.map(r => r.cuenca))].length };
+  return { rios, lagos };
 }

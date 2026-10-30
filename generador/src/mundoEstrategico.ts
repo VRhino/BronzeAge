@@ -1,8 +1,7 @@
 import type { Point } from './tipos';
-import type { CampoElevacion } from './types';
-import { evaluarElevacion, evaluarTerreno, gradienteElevacion } from './elevacion';
+import { evaluarElevacion, evaluarTerreno, gradienteElevacion, type CampoElevacion } from './elevacion';
 import { esTransitable } from './costeMovimiento';
-import { evaluarForestal, type CampoForestal } from './forestacionRegional';
+import { densidadForestal, type CampoForestal } from './forestacionRegional';
 import { evaluarSuelo, type CampoSuelos } from './suelosRegional';
 import { evaluarRuido } from './ruido';
 import { createRng, derivarSeed } from './rng';
@@ -10,7 +9,7 @@ import { colocarCampamentos, type Campamento } from './campamentos';
 import { repartirMetales, type Sitio } from './metales';
 import { generarParcelas } from './parcelas';
 
-/** Lo que necesita del relieve regional ya generado (`generarRegionalVisor`). */
+/** Lo que necesita del relieve regional ya generado (`generarRelieve`). */
 export interface Relieve {
   config: { ancho: number; alto: number; seed: number };
   elevacion: CampoElevacion;
@@ -26,7 +25,7 @@ const suave = (x: number) => { const t = clamp(x); return t * t * (3 - 2 * t); }
 export function puntuarCampamento(r: Relieve, p: Point): number {
   if (evaluarTerreno(r.elevacion, p) !== 'llano' || !esTransitable(r.elevacion, p) || !r.conexion.tieneAcceso(p)) return 0;
   const bosque = Math.max(...[[0, 0], [240, 0], [-240, 0], [0, 240], [0, -240]]
-    .map(([dx, dy]) => evaluarForestal(r.forestacion, r.elevacion, { x: p.x + dx!, y: p.y + dy! }).densidad));
+    .map(([dx, dy]) => densidadForestal(r.forestacion, r.elevacion, { x: p.x + dx!, y: p.y + dy! })));
   const fertilidad = evaluarSuelo(r.suelos, r.elevacion, p, bosque).fertilidad;
   return fertilidad >= 0.35 && bosque >= 0.15 ? fertilidad + 0.5 * bosque : 0;
 }
@@ -54,6 +53,6 @@ export function generarMundoEstrategico(r: Relieve) {
   const campamentos: Campamento[] = colocarCampamentos(r.config.seed, r.config, p => puntuarCampamento(r, p));
   const sitios = sitiosDeMetal(r);
   const { nodos, vetas } = repartirMetales(r.config.seed, campamentos, sitios);
-  const { masas, parcelas } = generarParcelas(r.config, p => evaluarForestal(r.forestacion, r.elevacion, p).densidad, campamentos);
+  const { masas, parcelas } = generarParcelas(r.config, p => densidadForestal(r.forestacion, r.elevacion, p), campamentos);
   return { campamentos, nodos, vetas, masas, parcelas, sitios: sitios.length };
 }

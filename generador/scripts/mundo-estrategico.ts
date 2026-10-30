@@ -1,15 +1,15 @@
 // Genera el mundo estratégico (campamentos, anillos, estaño y oro) sobre el relieve regional y lo dibuja en SVG.
 // Uso: npx tsx generador/scripts/mundo-estrategico.ts [seed] [salida.svg]
 import { writeFileSync } from 'node:fs';
-import { generarRegionalVisor } from './visor-worldgen.regional';
+import { generarRelieve } from '../src/relieve';
 import { generarMundoEstrategico } from '../src/mundoEstrategico';
 import { evaluarTerreno } from '../src/elevacion';
-import { anilloEn, ESTRATEGICAS, FACTOR } from '../src/campamentos';
+import { ESTRATEGICAS, FACTOR } from '../src/campamentos';
 
 const seed = Number(process.argv[2] ?? 42), salida = process.argv[3] ?? `mundo-estrategico-${seed}.svg`;
 const ANCHO = 2667 * FACTOR + 0, ALTO = 2000 * FACTOR;
 let t = Date.now();
-const regional = generarRegionalVisor(seed, ANCHO, ALTO);
+const regional = generarRelieve(seed, ANCHO, ALTO);
 console.log(`relieve ${(Date.now() - t) / 1000} s`);
 t = Date.now();
 const mundo = generarMundoEstrategico({ ...regional, conexion: regional.conexion });
@@ -43,4 +43,3 @@ for (const n of mundo.nodos) {
 svg += '</svg>';
 writeFileSync(salida, svg);
 console.log(`escrito ${salida}`);
-void anilloEn;

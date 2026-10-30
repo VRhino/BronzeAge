@@ -1,22 +1,6 @@
-// Ruido fractal para los campos continuos del mundo (elevación, fertilidad).
-//
-// POR QUÉ EXISTE ESTE MÓDULO. Hasta Fase 0.1 los dos campos se construían como suma de octavas de
-// `sin(x·f + φx) · cos(y·f + φy)`. Es un producto de sinusoides ALINEADAS A LOS EJES: matemáticamente
-// continuo y determinista, pero visualmente un enrejado regular en diagonal, que además se repite igual a
-// todas las escalas porque las frecuencias iban en progresión lineal (f, 2f, 3f, 4f) en vez de geométrica.
-// El resultado no se lee como terreno bajo NINGÚN sombreado — se intentó, y subir el contraste solo hacía
-// más evidente el patrón. El problema no era cómo se dibujaba el mapa, sino cómo se generaba.
-//
-// La sustitución es ruido de GRADIENTE (Perlin) sumado en octavas (fBm), que es el estándar para terreno
-// procedural justamente porque no tiene dirección privilegiada: el valor en cada punto sale de interpolar
-// gradientes pseudoaleatorios de una rejilla, no de multiplicar ondas.
-//
-// Se mantienen intactos los contratos de `worldgen/`:
-//  - DETERMINISTA por seed: la tabla de permutación se baraja con el PRNG del mundo.
-//  - DATOS PUROS: `CampoRuido` es tabla + números, serializable y comparable; `evaluarRuido` es pura.
-//  - Definida en TODO el plano, también fuera de los límites del mapa (los muestreos en anillo del motor
-//    pueden salirse del borde), y estrictamente normalizada a 0-1.
-//  - Sin dependencias externas.
+// Ruido fractal de gradiente (Perlin sumado en octavas) para los campos continuos del mundo.
+// Determinista por seed (la tabla de permutación se baraja con el PRNG), datos puros serializables,
+// definido en todo el plano y normalizado a 0-1.
 
 import type { Point } from './tipos';
 import type { RandomFn } from './rng';
@@ -146,8 +130,7 @@ function ruidoGradiente(permutacion: number[], x: number, y: number): number {
  * Valor del campo en un punto, normalizado a 0-1. Función PURA: mismo campo + mismo punto dan siempre el
  * mismo valor. La normalización usa la cota TEÓRICA del ruido (√2/2 por octava), no el rango observado, para
  * que el 0-1 esté garantizado en todo el plano y no dependa de qué zona se haya muestreado — de ahí que en
- * la práctica los valores se concentren alrededor de 0.5 y los umbrales de clasificación (`ELEVACION`,
- * `BIOMA`) estén calibrados contra la distribución real, no repartidos por el rango nominal.
+ * la práctica los valores se concentren alrededor de 0.5.
  */
 export function evaluarRuido(campo: CampoRuido, p: Point): number {
   let valor = 0;
@@ -162,35 +145,5 @@ export function evaluarRuido(campo: CampoRuido, p: Point): number {
   }
 
   const normalizado = valor / (campo.amplitudTotal * S);
-  return Math.min(1, Math.max(0, (normalizado + 1) / 2));
-}
-
-/**
- * Como `evaluarRuido`, pero sumando solo las `octavasMax` primeras octavas (las de frecuencia más gruesa)
- * en vez de las `campo.octavas` completas — la MISMA tabla de permutación/desplazamientos, así que el
- * resultado es una versión de baja frecuencia coherente del mismo campo, no un ruido independiente. Usado
- * por `elevacion.ts` (Fase 0.4.2) para obtener una versión "suave" del relieve sin el detalle fino de las
- * octavas altas — nunca perfectamente plana (a diferencia de cuantizar/aplanar el VALOR), porque las
- * octavas gruesas que sí quedan siguen aportando ondulación y gradiente real.
- *
- * Normaliza con la suma de amplitudes de SOLO esas octavas (no `campo.amplitudTotal`, calculada para el
- * total): usar la del campo completo subestimaría el rango cubierto y sesgaría el resultado hacia 0.5.
- */
-export function evaluarRuidoParcial(campo: CampoRuido, p: Point, octavasMax: number): number {
-  const octavas = Math.min(octavasMax, campo.octavas);
-  let valor = 0;
-  let amplitud = 1;
-  let amplitudTotal = 0;
-  let frecuencia = campo.frecuenciaBase;
-
-  for (let i = 0; i < octavas; i++) {
-    const desplazamiento = campo.desplazamientos[i]!;
-    valor += ruidoGradiente(campo.permutacion, p.x * frecuencia + desplazamiento.dx, p.y * frecuencia + desplazamiento.dy) * amplitud;
-    amplitudTotal += amplitud;
-    frecuencia *= campo.lacunaridad;
-    amplitud *= campo.persistencia;
-  }
-
-  const normalizado = valor / (amplitudTotal * S);
   return Math.min(1, Math.max(0, (normalizado + 1) / 2));
 }

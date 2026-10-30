@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { crearRelieveRegional, evaluarRelieveRegional, areaRegionalEn, distanciaCostaRegional } from '../regional';
-import { evaluarElevacion, evaluarTerreno } from '../elevacion';
-import { generarRegionalVisor } from '../../scripts/visor-worldgen.regional';
+import { crearRelieveRegional, evaluarRelieveRegional, distanciaCostaRegional } from '../regional';
+import { evaluarElevacion, evaluarTerreno, gradienteElevacion } from '../elevacion';
+import { generarRelieve } from '../relieve';
 
 describe('laboratorio regional-4: costa mediterránea', () => {
   it('estrecha la península, abre golfos y conserva detalle en la costa norte', () => {
@@ -20,18 +20,11 @@ describe('laboratorio regional-4: costa mediterránea', () => {
     });
     expect(Math.max(...orillaNorte) - Math.min(...orillaNorte)).toBeGreaterThan(400);
   });
-  it('serializa, reproduce la seed y genera zonas con superficies diferentes', () => {
+  it('serializa y reproduce la seed', () => {
     const grande = crearRelieveRegional(42, { ancho: 32000, alto: 24000 });
     expect(grande.areas).toHaveLength(16);
     expect(crearRelieveRegional(42, grande.limites)).toEqual(grande);
     expect(crearRelieveRegional(7, grande.limites)).not.toEqual(grande);
-    const superficies = grande.areas.map(() => 0);
-    for (let y = 0; y < 80; y++) for (let x = 0; x < 80; x++) {
-      const p = { x: (x + 0.5) * 400, y: (y + 0.5) * 300 };
-      if (evaluarRelieveRegional(grande, p) >= 0.375) superficies[areaRegionalEn(grande, p).id]!++;
-    }
-    expect(Math.min(...superficies)).toBeGreaterThan(0);
-    expect(Math.max(...superficies) / Math.min(...superficies)).toBeGreaterThan(3);
     const copia = JSON.parse(JSON.stringify(grande)) as typeof grande;
     expect(evaluarRelieveRegional(copia, { x: 1300, y: 2400 }))
       .toBe(evaluarRelieveRegional(grande, { x: 1300, y: 2400 }));
@@ -73,18 +66,27 @@ describe('laboratorio regional-4: costa mediterránea', () => {
   });
 
   for (const seed of [1, 7, 42]) it(`seed ${seed}: puertos secos, conexión terrestre medida y drenaje descendente`, () => {
-    const mapa = generarRegionalVisor(seed, 32000, 24000);
+    const mapa = generarRelieve(seed, 32000, 24000);
     expect(mapa.config.ancho).toBe(32000);
     expect(mapa.config.alto).toBe(24000);
     expect(mapa.rios.length).toBeGreaterThan(0);
     expect(mapa.lagos.length).toBeGreaterThan(0);
-    expect(mapa.sectoresForestales.length).toBeGreaterThan(0);
-    expect(mapa.pasos.every((p) => p.transitable)).toBe(true);
-    expect(mapa.conexion.conectadas).toBe(mapa.areas.length);
+    // Medir los corredores previstos: cada puerto debe ser seco y de pendiente transitable.
+    const pasos = mapa.elevacion.regional.barreras.flatMap((b) => b.pasos.map((paso) => {
+      let pendienteMaxima = 0, seco = true;
+      for (let t = -b.ancho * 2.8; t <= b.ancho * 2.8; t += 20) {
+        const p = { x: paso.centro.x - paso.tangente.y * t, y: paso.centro.y + paso.tangente.x * t };
+        const g = gradienteElevacion(mapa.elevacion, p, 2);
+        pendienteMaxima = Math.max(pendienteMaxima, Math.hypot(g.dx, g.dy) * 1000);
+        seco &&= evaluarTerreno(mapa.elevacion, p) !== 'agua';
+      }
+      return { ...paso.centro, pendienteMaxima, transitable: seco && pendienteMaxima <= 0.7 };
+    }));
+    expect(pasos.every((p) => p.transitable)).toBe(true);
+    expect(mapa.conexion.conectadas).toBe(mapa.elevacion.regional.areas.length);
     const sinLagos = { ...mapa.elevacion, lagos: [] };
     for (const rio of mapa.rios) for (let i = 1; i < rio.puntos.length; i++)
       expect(evaluarElevacion(sinLagos, rio.puntos[i]!)).toBeLessThan(evaluarElevacion(sinLagos, rio.puntos[i - 1]!));
-    for (const sector of mapa.sectoresForestales) expect(sector.superficieArbolada).toBeLessThanOrEqual(sector.ancho * sector.alto);
     for (const lago of mapa.lagos) expect(evaluarTerreno(mapa.elevacion, lago.centro)).toBe('agua');
   }, 60000);
 });

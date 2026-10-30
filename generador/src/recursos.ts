@@ -6,7 +6,7 @@ import type { ClaseTerreno, RecursoMundo, TipoRecurso } from './mundoTipos';
 import type { Relieve } from './mundoEstrategico';
 import { evaluarElevacion, evaluarTerreno, gradienteElevacion } from './elevacion';
 import { esTransitable } from './costeMovimiento';
-import { evaluarForestal } from './forestacionRegional';
+import { densidadForestal } from './forestacionRegional';
 import { evaluarSuelo } from './suelosRegional';
 import { evaluarRuido } from './ruido';
 
@@ -61,7 +61,7 @@ export const PARAMETROS_RECURSOS = {
   },
 };
 
-/** `RECURSO_CANTIDAD_NODO` y `LIVESTOCK.cantidadPorManada` de typescript-final:src/worldgen/config.ts. */
+/** Unidades con las que nace cada tipo de yacimiento (rango sorteado). */
 export const RANGO_CANTIDAD: Record<TipoRecurso, { min: number; max: number }> = {
   piedra: { min: 600, max: 1200 },
   cobre: { min: 100, max: 300 },
@@ -111,7 +111,7 @@ export function muestreoDeRelieve(r: Relieve): MuestreoRecursos {
     accesible: p => esTransitable(e, p) && r.conexion.tieneAcceso(p),
     altura: p => evaluarElevacion(e, p),
     geologia: p => evaluarRuido(r.suelos.geologia, p),
-    bosque: p => evaluarForestal(r.forestacion, e, p).densidad,
+    bosque: p => densidadForestal(r.forestacion, e, p),
     suelo: (p, bosque) => { const s = evaluarSuelo(r.suelos, e, p, bosque); return { pastos: s.pastos, estepa: s.tipo === 'estepa' }; },
   };
 }

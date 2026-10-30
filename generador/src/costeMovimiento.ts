@@ -1,34 +1,11 @@
-// Coste de movimiento por terreno (Fase 0.3): multiplicador continuo derivado de `evaluarTerreno`, no un
-// lookup por celda — mismo criterio que el resto de `worldgen/` (ver `Fase_0_1_Definicion.md`: "coste de
-// movimiento como función continua de la pendiente"). 1 = velocidad normal (llano/costa); más alto = más
-// lento. `Mapa.costeEnPunto` (`world/mapa.ts`) es la fachada que el motor/pathfinding consultan de verdad —
-// esta función vive en `worldgen/` porque solo depende de `CampoElevacion`, igual que `evaluarTerreno`.
+// Transitabilidad y coste de movimiento: funciones continuas derivadas de `evaluarTerreno` y la pendiente.
 
 import type { Point } from './tipos';
 import { COSTE_MOVIMIENTO, ESCALA_TERRENO } from './config';
-import { evaluarTerreno, gradienteElevacion } from './elevacion';
-import type { CampoElevacion } from './types';
+import { evaluarTerreno, gradienteElevacion, type CampoElevacion } from './elevacion';
 
-/**
- * ¿Se puede pisar este punto? (a petición del usuario, 2026-09-02: "el agua es un obstáculo").
- *
- * **Esto revierte una decisión explícita de Fase 0.3**, que decía: "Agua/cima no se prohíben duro (romperían
- * el pathfinding en cualquier mundo donde el camino más corto los roce) — se penalizan lo bastante fuerte
- * para que A* los evite salvo que no haya alternativa real". El coste de 15 hacía que el agua fuera cara pero
- * cruzable, y en la traza del Paso 4 se vio a un ejército arrastrándose sobre ella a 1/14 de su velocidad.
- * Ahora es infranqueable de verdad: nadie camina sobre el mar.
- *
- * La advertencia de entonces sigue siendo válida y hay que asumirla: **un destino puede quedar sin ruta**
- * (una isla, una península cortada). `calcularRuta` ya no cae a la línea recta cuando no encuentra camino —
- * devuelve `undefined`, y cada llamador decide qué significa eso (rechazar la movilización, no despachar la
- * caravana...). Cruzar el agua sería peor que no ir.
- *
- * Las cimas suaves pueden cruzarse; una pendiente que supera el máximo físico no.
- *
- * NO cubre los RÍOS, que en este motor no son terreno sino una entidad aparte (`RioZona`, `worldgen/rios.ts`)
- * que el coste de movimiento nunca ha mirado. Que un río corte el paso es parte del rediseño de rutas de
- * caravana (`Docs/Mecanicas a desarrollar.md` §3) y necesita vados o puentes para no fragmentar el mapa.
- */
+/** ¿Se puede pisar este punto? El agua es infranqueable y una pendiente sobre el máximo físico tampoco se cruza.
+ * No cubre los ríos: cortan el paso aparte, con vados (ver `vados.ts`). */
 export function esTransitable(campo: CampoElevacion, p: Point): boolean {
   if (evaluarTerreno(campo, p) === 'agua') return false;
   const { dx, dy } = gradienteElevacion(campo, p, ESCALA_TERRENO.pasoPendiente);
@@ -36,11 +13,8 @@ export function esTransitable(campo: CampoElevacion, p: Point): boolean {
     / ESCALA_TERRENO.metrosHorizontalesPorUnidad <= ESCALA_TERRENO.pendienteMaximaTransitable;
 }
 
-/**
- * Multiplicador de coste de movimiento en un punto (Fase 0.3): cuánto FRENA el terreno que sí se puede
- * pisar. Quién puede pisarlo lo decide `esTransitable` — el coste del agua se queda declarado por coherencia
- * del catálogo, pero ya no debería consultarse para un punto transitable.
- */
+/** Multiplicador de coste de movimiento en un punto: cuánto frena el terreno que sí se puede pisar
+ * (quién puede pisarlo lo decide `esTransitable`). */
 export function costeEnPunto(campo: CampoElevacion, p: Point): number {
   const { dx, dy } = gradienteElevacion(campo, p, ESCALA_TERRENO.pasoPendiente);
   const pendiente = Math.hypot(dx, dy) * ESCALA_TERRENO.metrosVerticalesPorElevacion

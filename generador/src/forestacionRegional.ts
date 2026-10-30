@@ -1,20 +1,14 @@
 import type { Point, RioZona } from './tipos';
-import type { CampoElevacion } from './types';
-import { evaluarElevacion, gradienteElevacion } from './elevacion';
+import { evaluarElevacion, gradienteElevacion, type CampoElevacion } from './elevacion';
 import { humedadRegionalEn } from './regional';
 import { generarCampoRuido, evaluarRuido, type CampoRuido } from './ruido';
 import { createRng, derivarSeed } from './rng';
 import { puntoEnLago } from './aguaRegional';
 
-export type TipoForestal = 'abierto' | 'denso' | 'ribera' | 'montano';
 interface Segmento { a: Point; b: Point }
 export interface CampoForestal {
   masas: CampoRuido; detalle: CampoRuido; claros: CampoRuido; bosquetes: CampoRuido;
   segmentos: Segmento[]; indiceRiberas: Record<string, number[]>;
-}
-export interface SectorForestal {
-  id: string; x: number; y: number; ancho: number; alto: number;
-  superficieArbolada: number; densidadMedia: number; superficieEquivalente: number;
 }
 const suave = (x: number) => { const t = Math.max(0, Math.min(1, x)); return t * t * (3 - 2 * t); };
 const CELDA_RIBERA = 500, ALCANCE_RIBERA = 260;
@@ -31,7 +25,7 @@ export const PARAMETROS_FORESTALES = {
   bosquetes: { frecuencia: 1 / 240, umbral: 0.72, ancho: 0.05, densidad: 0.45 },
 };
 
-/** Campo inmutable, serializable e independiente de la resolución del visor.
+/** Campo inmutable, serializable e independiente de la resolución.
  * La madera es permanente: no hay stock, agotamiento ni recuperación. */
 export function crearCampoForestal(seed: number, rios: readonly RioZona[]): CampoForestal {
   const rng = createRng(derivarSeed(seed, 'forestacion-regional-1'));
@@ -53,13 +47,14 @@ function ruidoPropio(seed: number, sal: string, frecuenciaBase: number): CampoRu
   return generarCampoRuido(createRng(derivarSeed(seed, sal)), { frecuenciaBase, octavas: 2, lacunaridad: 2.13, persistencia: 0.45 });
 }
 
-export function evaluarForestal(campo: CampoForestal, elevacion: CampoElevacion, p: Point,
-  muestra?: { altura: number; pendiente: number; humedad: number }): { densidad: number; tipo: TipoForestal; costeMovimiento: number } {
+/** Densidad forestal [0,1] en `p`. `muestra` evita recalcular altura, pendiente y humedad si ya se tienen. */
+export function densidadForestal(campo: CampoForestal, elevacion: CampoElevacion, p: Point,
+  muestra?: { altura: number; pendiente: number; humedad: number }): number {
   const altura = muestra?.altura ?? evaluarElevacion(elevacion, p);
-  if (altura <= 0.375 || elevacion.lagos?.some(l => puntoEnLago(l, p))) return { densidad: 0, tipo: 'abierto', costeMovimiento: 1 };
+  if (altura <= 0.375 || elevacion.lagos?.some(l => puntoEnLago(l, p))) return 0;
   const g = muestra ? undefined : gradienteElevacion(elevacion, p, 2);
   const pendiente = muestra?.pendiente ?? Math.hypot(g!.dx, g!.dy) * 1000;
-  const humedad = muestra?.humedad ?? humedadRegionalEn(elevacion.regional!, p);
+  const humedad = muestra?.humedad ?? humedadRegionalEn(elevacion.regional, p);
   let distancia = ALCANCE_RIBERA;
   for (const id of campo.indiceRiberas[`${Math.floor(p.x / CELDA_RIBERA)},${Math.floor(p.y / CELDA_RIBERA)}`] ?? []) {
     const { a, b } = campo.segmentos[id]!, dx = b.x - a.x, dy = b.y - a.y;
@@ -75,23 +70,5 @@ export function evaluarForestal(campo: CampoForestal, elevacion: CampoElevacion,
   const { codo, estiramiento, claros, bosquetes } = PARAMETROS_FORESTALES;
   const t = (potencial - 0.24) / 0.38, claro = suave((evaluarRuido(campo.claros, p) - claros.umbral) / claros.ancho);
   const bosquete = bosquetes.densidad * suave((evaluarRuido(campo.bosquetes, p) - bosquetes.umbral) / bosquetes.ancho) * aptitud;
-  const densidad = Math.max(suave(t <= codo ? t : codo + (t - codo) / estiramiento) * aptitud * (1 - (1 - claros.fondo) * claro), bosquete);
-  const tipo: TipoForestal = ribera > 0.3 ? 'ribera' : altura > 0.55 ? 'montano' : humedad > 0.62 ? 'denso' : 'abierto';
-  return { densidad, tipo, costeMovimiento: 1 + 0.8 * densidad * densidad };
-}
-
-/** Sectores sin solapamiento, solo para resumir superficie y potencial permanente.
- * No se dibujan sus bordes ni determinan la forma de las masas. Muestreo fijo de 100 m. */
-export function resumirSectoresForestales(campo: CampoForestal, elevacion: CampoElevacion, ancho: number, alto: number): SectorForestal[] {
-  const sectores: SectorForestal[] = [];
-  for (let y = 0; y < alto; y += 400) for (let x = 0; x < ancho; x += 400) {
-    const sector: SectorForestal = { id: `forestal-${x}-${y}`, x, y, ancho: Math.min(400, ancho - x), alto: Math.min(400, alto - y), superficieArbolada: 0, superficieEquivalente: 0, densidadMedia: 0 };
-    for (let dy = 0; dy < sector.alto; dy += 100) for (let dx = 0; dx < sector.ancho; dx += 100) {
-      const w = Math.min(100, sector.ancho - dx), h = Math.min(100, sector.alto - dy);
-      const { densidad } = evaluarForestal(campo, elevacion, { x: x + dx + w / 2, y: y + dy + h / 2 });
-      if (densidad >= 0.15) { sector.superficieArbolada += w * h; sector.superficieEquivalente += w * h * densidad; }
-    }
-    if (sector.superficieArbolada) { sector.densidadMedia = sector.superficieEquivalente / sector.superficieArbolada; sectores.push(sector); }
-  }
-  return sectores;
+  return Math.max(suave(t <= codo ? t : codo + (t - codo) / estiramiento) * aptitud * (1 - (1 - claros.fondo) * claro), bosquete);
 }

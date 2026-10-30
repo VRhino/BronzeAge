@@ -1,6 +1,6 @@
 // Genera el mundo completo y escribe el artefacto (`mundo-<hash>.bin`) en la carpeta dada.
 // Uso: npx tsx scripts/generar-mundo.ts [seed] [carpeta]    (tarda varios minutos: relieve ~2 min y grafo ~5 min)
-import { generarRegionalVisor } from './visor-worldgen.regional';
+import { generarRelieve } from '../src/relieve';
 import { generarMundoEstrategico } from '../src/mundoEstrategico';
 import { metalesARecursos, generarRecursosNoMetalicos } from '../src/recursos';
 import { colocarBandidosYAlijos } from '../src/contenidoVivo';
@@ -9,7 +9,7 @@ import { bloquearRios, colocarVados, PARAMETROS_VADOS } from '../src/vados';
 import { escribirArtefacto } from '../src/artefacto';
 import { costeEnPunto, esTransitable } from '../src/costeMovimiento';
 import { evaluarElevacion, evaluarTerreno } from '../src/elevacion';
-import { evaluarForestal } from '../src/forestacionRegional';
+import { densidadForestal } from '../src/forestacionRegional';
 import { evaluarSuelo } from '../src/suelosRegional';
 import { humedadRegionalEn } from '../src/regional';
 import { FACTOR } from '../src/campamentos';
@@ -25,7 +25,7 @@ const medir = <T>(nombre: string, f: () => T): T => { const t = Date.now(); cons
 const lado = 4 * FACTOR, nx = Math.ceil(ancho / lado), ny = Math.ceil(alto / lado);
 const celdaT = new Uint8Array(nx * ny).fill(2);
 const centroCelda = (i: number): Point => ({ x: ((i % nx) + 0.5) * lado, y: (Math.floor(i / nx) + 0.5) * lado });
-const r = medir('relieve', () => generarRegionalVisor(seed, ancho, alto));
+const r = medir('relieve', () => generarRelieve(seed, ancho, alto));
 const transitableCelda = (p: Point): boolean => {
   const cx = Math.floor(p.x / lado), cy = Math.floor(p.y / lado);
   if (cx < 0 || cy < 0 || cx >= nx || cy >= ny) return false;
@@ -75,9 +75,9 @@ const mundo: MundoGenerado = {
   muestras: {
     altura: p => evaluarElevacion(r.elevacion, p),
     terreno: p => evaluarTerreno(r.elevacion, p),
-    fertilidad: p => evaluarSuelo(r.suelos, r.elevacion, p, evaluarForestal(r.forestacion, r.elevacion, p).densidad).fertilidad,
-    humedad: p => humedadRegionalEn(r.elevacion.regional!, p),
-    densidadBosque: p => evaluarForestal(r.forestacion, r.elevacion, p).densidad,
+    fertilidad: p => evaluarSuelo(r.suelos, r.elevacion, p, densidadForestal(r.forestacion, r.elevacion, p)).fertilidad,
+    humedad: p => humedadRegionalEn(r.elevacion.regional, p),
+    densidadBosque: p => densidadForestal(r.forestacion, r.elevacion, p),
     transitable: transitableCelda,
   },
 };

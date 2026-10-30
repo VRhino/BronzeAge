@@ -1,10 +1,10 @@
 import type { Point } from './tipos';
-import type { Limites } from './colocacion';
+import type { Limites } from './geometria';
 import { createRng, derivarSeed } from './rng';
 
 export interface AreaRegional {
   id: number; centro: Point; radio: number; altura: number; humedad: number;
-  ondulacion: number; nombre: string; color: string;
+  ondulacion: number; nombre: string;
 }
 export interface PasoRegional { centro: Point; tangente: Point; distancia: number; radio: number }
 interface Tramo { a: Point; b: Point; longitud: number; inicio: number }
@@ -61,17 +61,6 @@ export function distanciaCostaRegional(campo: RelieveRegional, p: Point): number
   return Math.min(tierra, -Math.max(golfoPeninsula, golfoMeridional));
 }
 
-export type TipoCostaRegional = 'roca' | 'playa' | 'marisma' | 'delta';
-
-/** Estilo costero para el visor y para ajustar el perfil de aproximación al mar. */
-export function tipoCostaRegional(campo: RelieveRegional, p: Point): TipoCostaRegional {
-  const x = p.x / campo.limites.ancho, y = p.y / campo.limites.alto;
-  if (x > 0.45 && x < 0.64 && y > 0.705) return 'delta';
-  if (y > 0.745 && (x < 0.35 || x > 0.68)) return 'marisma';
-  if ((x < 0.38 && y < 0.55) || (y < 0.32 && x > 0.38)) return 'roca';
-  return 'playa';
-}
-
 /** Las áreas son influencias solapadas y de tamaños distintos; sus límites no levantan montañas. */
 function pesoArea(campo: RelieveRegional, area: AreaRegional, p: Point): number {
   const escala = Math.min(campo.limites.ancho, campo.limites.alto) / 24000;
@@ -79,15 +68,6 @@ function pesoArea(campo: RelieveRegional, area: AreaRegional, p: Point): number 
   const y = p.y + 290 * escala * Math.sin(p.x / (2200 * escala) - campo.fase);
   const d2 = ((x - area.centro.x) ** 2 + (y - area.centro.y) ** 2) / (area.radio ** 2);
   return 1 / (0.03 + d2 ** 3);
-}
-
-export function areaRegionalEn(campo: RelieveRegional, p: Point): AreaRegional {
-  let area = campo.areas[0]!, mayor = -Infinity;
-  for (const candidata of campo.areas) {
-    const peso = pesoArea(campo, candidata, p);
-    if (peso > mayor) { mayor = peso; area = candidata; }
-  }
-  return area;
 }
 
 export function humedadRegionalEn(campo: RelieveRegional, p: Point): number {
@@ -127,27 +107,27 @@ export function crearRelieveRegional(seed: number, limites: Limites): RelieveReg
   });
   // Disposición amplia mediterránea, sin reproducir ningún país. La seed cambia
   // centros, extensiones, elevaciones, crestas y puertos dentro de esta composición.
-  const patrones: [number, number, number, number, number, number, string, string][] = [
-    [0.12, 0.08, 2500, 0.46, 0.70, 0.013, 'Costa boscosa', '#82a36c'],
-    [0.55, 0.10, 3800, 0.55, 0.42, 0.023, 'Altiplano interior', '#aaa174'],
-    [0.84, 0.12, 4500, 0.58, 0.25, 0.035, 'Tierras altas secas', '#b4a074'],
-    [0.755, 0.51, 2300, 0.445, 0.77, 0.007, 'Corredor levantino', '#91aa74'],
-    [0.53, 0.27, 2900, 0.455, 0.80, 0.009, 'Cuenca fértil', '#97b77a'],
-    [0.89, 0.46, 4400, 0.465, 0.50, 0.006, 'Gran llanura fluvial', '#b6b17a'],
-    [0.95, 0.28, 2100, 0.53, 0.23, 0.019, 'Piedemonte oriental', '#bda37b'],
-    [0.22, 0.25, 2100, 0.49, 0.85, 0.025, 'Colinas boscosas', '#789367'],
-    [0.25, 0.945, 3900, 0.44, 0.55, 0.009, 'Llanura costera meridional', '#afb981'],
-    [0.54, 0.94, 3000, 0.435, 0.79, 0.004, 'Valle meridional', '#a7b976'],
-    [0.91, 0.84, 4200, 0.50, 0.15, 0.010, 'Estepa abierta', '#c2ad7a'],
-    [0.22, 0.425, 1500, 0.46, 0.62, 0.014, 'Península de los golfos', '#98a576'],
-    [0.35, 0.105, 2100, 0.47, 0.68, 0.010, 'Tierras del estrecho', '#98ad74'],
-    [0.755, 0.78, 2500, 0.51, 0.18, 0.013, 'Meseta del istmo', '#c2ad7a'],
-    [0.54, 0.76, 1900, 0.43, 0.88, 0.003, 'Delta interior', '#98b77a'],
-    [0.88, 0.65, 2500, 0.445, 0.65, 0.006, 'Valles orientales', '#aab780'],
+  const patrones: [number, number, number, number, number, number, string][] = [
+    [0.12, 0.08, 2500, 0.46, 0.70, 0.013, 'Costa boscosa'],
+    [0.55, 0.10, 3800, 0.55, 0.42, 0.023, 'Altiplano interior'],
+    [0.84, 0.12, 4500, 0.58, 0.25, 0.035, 'Tierras altas secas'],
+    [0.755, 0.51, 2300, 0.445, 0.77, 0.007, 'Corredor levantino'],
+    [0.53, 0.27, 2900, 0.455, 0.80, 0.009, 'Cuenca fértil'],
+    [0.89, 0.46, 4400, 0.465, 0.50, 0.006, 'Gran llanura fluvial'],
+    [0.95, 0.28, 2100, 0.53, 0.23, 0.019, 'Piedemonte oriental'],
+    [0.22, 0.25, 2100, 0.49, 0.85, 0.025, 'Colinas boscosas'],
+    [0.25, 0.945, 3900, 0.44, 0.55, 0.009, 'Llanura costera meridional'],
+    [0.54, 0.94, 3000, 0.435, 0.79, 0.004, 'Valle meridional'],
+    [0.91, 0.84, 4200, 0.50, 0.15, 0.010, 'Estepa abierta'],
+    [0.22, 0.425, 1500, 0.46, 0.62, 0.014, 'Península de los golfos'],
+    [0.35, 0.105, 2100, 0.47, 0.68, 0.010, 'Tierras del estrecho'],
+    [0.755, 0.78, 2500, 0.51, 0.18, 0.013, 'Meseta del istmo'],
+    [0.54, 0.76, 1900, 0.43, 0.88, 0.003, 'Delta interior'],
+    [0.88, 0.65, 2500, 0.445, 0.65, 0.006, 'Valles orientales'],
   ];
-  const areas = patrones.map(([x, y, radio, altura, humedad, ondulacion, nombre, color], id) => ({
+  const areas = patrones.map(([x, y, radio, altura, humedad, ondulacion, nombre], id) => ({
     id, centro: punto(x, y, 0.025), radio: radio * escala * (0.8 + rng() * 0.4),
-    altura: altura + (rng() - 0.5) * 0.025, humedad, ondulacion, nombre, color,
+    altura: altura + (rng() - 0.5) * 0.025, humedad, ondulacion, nombre,
   }));
   const trazados: [number, number][][] = [
     [[0.20, 0.04], [0.235, 0.14], [0.195, 0.25], [0.235, 0.34], [0.21, 0.44]],

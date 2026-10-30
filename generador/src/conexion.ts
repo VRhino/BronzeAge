@@ -1,11 +1,11 @@
-import type { Point } from '../src/tipos';
-import type { CampoElevacion } from '../src/types';
-import { esTransitable } from '../src/costeMovimiento';
+import type { Point } from './tipos';
+import type { CampoElevacion } from './elevacion';
+import { esTransitable } from './costeMovimiento';
 
-/** Diagnóstico terrestre del relieve final, incluyendo lagos. Comprueba aristas,
- * no solo centros. Las islas secundarias no son objetivos de conectividad. */
-export function comprobarConexionRegional(campo: CampoElevacion) {
-  const regional = campo.regional!;
+/** Conexión terrestre del relieve final, incluyendo lagos: comprueba aristas, no solo centros.
+ * Las islas secundarias no son objetivos de conectividad. */
+export function comprobarConexion(campo: CampoElevacion) {
+  const regional = campo.regional;
   const { ancho, alto } = regional.limites;
   const n = 160, dx = ancho / n, dy = alto / n;
   const punto = (i: number): Point => ({ x: (i % n + 0.5) * dx, y: (Math.floor(i / n) + 0.5) * dy });
@@ -38,8 +38,7 @@ export function comprobarConexionRegional(campo: CampoElevacion) {
       if (libre) { visitado[j] = 1; cola.push(j); }
     }
   }
-  // Reuse the measured mainland component for resource placement; local slope
-  // alone also accepts secondary islands and isolated ledges.
+  // Acceso al continente medido: la pendiente local sola también acepta islas secundarias y repisas aisladas.
   const tieneAcceso = (p: Point): boolean => {
     const x=Math.floor(p.x/dx),y=Math.floor(p.y/dy);
     for(let sy=Math.max(0,y-2);sy<=Math.min(n-1,y+2);sy++)

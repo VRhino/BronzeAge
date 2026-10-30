@@ -1,8 +1,8 @@
 import { describe, expect, it, beforeAll } from 'vitest';
-import { generarRegionalVisor } from '../../scripts/visor-worldgen.regional';
-import { evaluarSuelo, crearSuelosRegional, generarRecursosRegional } from '../suelosRegional';
+import { generarRelieve } from '../relieve';
+import { evaluarSuelo, crearSuelosRegional } from '../suelosRegional';
 import { evaluarElevacion, evaluarTerreno } from '../elevacion';
-import { evaluarForestal } from '../forestacionRegional';
+import { densidadForestal } from '../forestacionRegional';
 import { puntoEnLago } from '../aguaRegional';
 import { suavizarCauceRegional } from '../hidrografiaRegional';
 
@@ -17,27 +17,16 @@ describe('capas regionales 6', () => {
     expect(largo(salida)).toBeLessThan(largo(puntos));
     for (let i = 1; i < salida.length; i++) expect(salida[i]!.y).toBeGreaterThan(salida[i - 1]!.y);
   });
-  let mapa: ReturnType<typeof generarRegionalVisor>;
-  beforeAll(() => { mapa = generarRegionalVisor(42, 32000, 24000); }, 60000);
-  it('une afluentes sin duplicar aristas y conserva una red acíclica', () => {
-    const aristas = new Set<string>(), rios = new Map(mapa.rios.map(r => [r.id, r]));
-    expect(mapa.rios.some(r => r.desembocaEn)).toBe(true);
-    expect(mapa.rios.some(r => r.longitud > 6000)).toBe(true);
+  let mapa: ReturnType<typeof generarRelieve>;
+  beforeAll(() => { mapa = generarRelieve(42, 32000, 24000); }, 60000);
+  it('une afluentes sin duplicar aristas', () => {
+    const aristas = new Set<string>();
     for (const rio of mapa.rios) {
-      expect(rio.ancho).toBeGreaterThan(0);
+      expect(rio.puntos.length).toBeGreaterThanOrEqual(2);
+      expect(rio.orden).toBeGreaterThanOrEqual(1);
       for (let i = 1; i < rio.puntos.length; i++) {
         const clave = JSON.stringify([rio.puntos[i - 1], rio.puntos[i]]);
         expect(aristas.has(clave)).toBe(false); aristas.add(clave);
-      }
-      const visitados = new Set<string>(); let actual = rio;
-      while (actual.desembocaEn) {
-        expect(visitados.has(actual.id)).toBe(false); visitados.add(actual.id);
-        const siguiente = rios.get(actual.desembocaEn)!;
-        expect(siguiente).toBeDefined();
-        expect(actual.puntos.at(-1)).toEqual(siguiente.puntos[0]);
-        expect(siguiente.cuenca).toBe(actual.cuenca);
-        expect(siguiente.orden).toBeGreaterThanOrEqual(actual.orden);
-        actual = siguiente;
       }
     }
   });
@@ -48,38 +37,27 @@ describe('capas regionales 6', () => {
       expect(puntoEnLago(lago, lago.centro)).toBe(true);
       expect(evaluarTerreno(mapa.elevacion, lago.centro)).toBe('agua');
       expect(evaluarElevacion(mapa.elevacion, lago.centro)).toBe(lago.elevacionCentro);
-      expect(evaluarForestal(mapa.forestacion, mapa.elevacion, lago.centro).densidad).toBe(0);
+      expect(densidadForestal(mapa.forestacion, mapa.elevacion, lago.centro)).toBe(0);
       expect(evaluarSuelo(mapa.suelos, mapa.elevacion, lago.centro).fertilidad).toBe(0);
       const distancias = lago.contorno!.map(p => Math.hypot(p.x - lago.centro.x, p.y - lago.centro.y));
       expect(Math.max(...distancias) - Math.min(...distancias)).toBeGreaterThan(10);
     }
   });
-  it('suelos serializables, recursos deterministas y sin candidatos aislados publicados', () => {
+  it('suelos serializables y deterministas', () => {
     expect(crearSuelosRegional(42, mapa.rios)).toEqual(mapa.suelos);
-    const candidatos = generarRecursosRegional(42, mapa.suelos, mapa.elevacion, mapa.forestacion, 4, mapa.conexion.tieneAcceso);
-    expect(candidatos.filter(r => !mapa.estrategia.recursosAislados.includes(r.id))).toEqual(mapa.recursos);
-    expect(new Set(mapa.recursos.map(r => r.id)).size).toBe(mapa.recursos.length);
-    expect(new Set(mapa.recursos.map(r => r.tipo)).size).toBe(5);
-    for (const r of mapa.recursos) {
-      expect(evaluarTerreno(mapa.elevacion, r.posicion)).not.toBe('agua');
-      const bosque = evaluarForestal(mapa.forestacion, mapa.elevacion, r.posicion).densidad;
-      const suelo = evaluarSuelo(mapa.suelos, mapa.elevacion, r.posicion, bosque);
-      expect(evaluarSuelo(JSON.parse(JSON.stringify(mapa.suelos)), mapa.elevacion, r.posicion, bosque)).toEqual(suelo);
+    const copia = JSON.parse(JSON.stringify(mapa.suelos));
+    const tierra: { x: number; y: number }[] = [];
+    for (let y = 400; y < 24000; y += 800) for (let x = 400; x < 32000; x += 800) {
+      const p = { x, y };
+      if (evaluarTerreno(mapa.elevacion, p) !== 'agua') tierra.push(p);
+    }
+    expect(tierra.length).toBeGreaterThanOrEqual(200);
+    for (const p of tierra.slice(0, 200)) {
+      const bosque = densidadForestal(mapa.forestacion, mapa.elevacion, p);
+      const suelo = evaluarSuelo(mapa.suelos, mapa.elevacion, p, bosque);
+      expect(evaluarSuelo(copia, mapa.elevacion, p, bosque)).toEqual(suelo);
       expect(suelo.fertilidad).toBeGreaterThanOrEqual(0); expect(suelo.fertilidad).toBeLessThanOrEqual(1);
       expect(suelo.pastos).toBeGreaterThanOrEqual(0); expect(suelo.pastos).toBeLessThanOrEqual(1);
     }
-    for (const paso of mapa.estrategia.pasos) if (paso.factor !== null) expect(paso.factor).toBeGreaterThanOrEqual(1 - 1e-8);
-    expect(mapa.estrategia.pasos[9]!.recorrido).not.toBeNull();
-  });
-  it('la densidad conserva las cuotas de estaño y las fuentes no metálicas anteriores', () => {
-    const anterior = generarRecursosRegional(42, mapa.suelos, mapa.elevacion, mapa.forestacion, 1, mapa.conexion.tieneAcceso);
-    const actual = generarRecursosRegional(42, mapa.suelos, mapa.elevacion, mapa.forestacion, 4, mapa.conexion.tieneAcceso);
-    expect(actual.filter(r => r.tipo === 'estano')).toHaveLength(56);
-    expect(anterior.filter(r => r.tipo === 'estano')).toHaveLength(56);
-    for (const r of anterior.filter(r=>r.tipo!=='cobre'&&r.tipo!=='estano'&&!r.id.startsWith('piedra-enclave-'))) expect(actual.find(a => a.id === r.id)).toEqual(r);
-    expect(actual.filter(r => r.tipo === 'piedra').length).toBeGreaterThanOrEqual(560);
-    expect(actual.filter(r => r.tipo === 'cobre').length).toBe(240);
-    expect(new Set(actual.map(r => r.id)).size).toBe(actual.length);
-    expect(() => generarRecursosRegional(42, mapa.suelos, mapa.elevacion, mapa.forestacion, 3)).toThrow();
   });
 });

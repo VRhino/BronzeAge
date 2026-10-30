@@ -1,9 +1,7 @@
 import type { LagoZona, Point, RioZona } from './tipos';
-import { RIOS } from './config';
-import { distancia, distanciaASegmento, type Limites } from './colocacion';
-import { evaluarElevacion, evaluarTerreno } from './elevacion';
+import { distancia, distanciaASegmento, type Limites } from './geometria';
+import { evaluarElevacion, evaluarTerreno, type CampoElevacion } from './elevacion';
 import type { RandomFn } from './rng';
-import type { CampoElevacion } from './types';
 
 /** La malla solo decide drenaje; la superficie pública continúa siendo continua. */
 const VECINOS: readonly [number, number][] = [
@@ -63,8 +61,8 @@ function trazar(celdas: Celda[], origen: number, LADO: number): { indices: numbe
 /** Cauces por drenaje D8 y acumulación. Solo se publican cuencas con salida
  * física o lagos con área tributaria suficiente; un mínimo microscópico no es lago. */
 export function generarRiosPorDrenaje(rng: RandomFn, limites: Limites, campo: CampoElevacion,
-  opciones: { lado?: number; cantidad?: number; largoMinimo?: number; radioLago?: number; aceptarLago?: (p: Point) => boolean; permitirAfluentes?: boolean; espacioNacimientos?: number } = {}): { rios: RioZona[]; lagos: LagoZona[] } {
-  const LADO = opciones.lado ?? 80;
+  opciones: { lado: number; cantidad: number; largoMinimo: number; radioLago: number; aceptarLago: (p: Point) => boolean; permitirAfluentes: boolean; espacioNacimientos: number }): { rios: RioZona[]; lagos: LagoZona[] } {
+  const LADO = opciones.lado;
   const celdas = construirMalla(campo, limites, LADO);
   const candidatos = celdas.map((celda, i) => ({ i, celda, desempate: rng() }))
     .filter(({ celda }) => celda.montana && !celda.agua)
@@ -73,10 +71,10 @@ export function generarRiosPorDrenaje(rng: RandomFn, limites: Limites, campo: Ca
   const lagos: LagoZona[] = [];
   const nacimientos: Point[] = [];
   const sumideros = new Set<number>();
-  const minimoLargo = opciones.largoMinimo ?? Math.min(limites.ancho, limites.alto) * 0.16;
+  const minimoLargo = opciones.largoMinimo;
   for (const { i, celda } of candidatos) {
-    if (rios.length >= (opciones.cantidad ?? RIOS.cantidad)) break;
-    if (nacimientos.some((p) => distancia(p, celda.punto) < (opciones.espacioNacimientos ?? RIOS.espacioMinimoEntreNacimientos))) continue;
+    if (rios.length >= opciones.cantidad) break;
+    if (nacimientos.some((p) => distancia(p, celda.punto) < opciones.espacioNacimientos)) continue;
     const traza = trazar(celdas, i, LADO);
     const final = traza.indices[traza.indices.length - 1]!;
     const terminal = celdas[final]!;
@@ -95,7 +93,7 @@ export function generarRiosPorDrenaje(rng: RandomFn, limites: Limites, campo: Ca
       else fin = 'lago';
     }
     if (fin === 'lago' && (terminal.acumulacion < 12 || (!opciones.permitirAfluentes && sumideros.has(final)))) continue;
-    if (fin === 'lago' && opciones.aceptarLago && !opciones.aceptarLago(terminal.punto)) continue;
+    if (fin === 'lago' && !opciones.aceptarLago(terminal.punto)) continue;
     // Una depresión pegada al cauce autorado es tributaria de ese valle, no un
     // lago independiente que deba cortar la lámina del troncal.
     if (fin === 'lago' && campo.caucesTroncales?.some((cauce) =>
@@ -107,15 +105,11 @@ export function generarRiosPorDrenaje(rng: RandomFn, limites: Limites, campo: Ca
     if (fin === 'lago' && !sumideros.has(final)) {
       sumideros.add(final);
       lagos.push({ id: `lago-${rios.length}`, centro: terminal.punto,
-        radio: opciones.radioLago ?? Math.min(limites.ancho, limites.alto) * 0.014,
+        radio: opciones.radioLago,
         elevacionCentro: terminal.altura - 0.005 });
     }
     rios.push({ id: `rio-${rios.length}`, puntos, fin,
       terminaEnLago: fin === 'lago', navegable: false });
   }
-  const desembocan = rios.filter((rio) => rio.fin === 'agua' || rio.fin === 'borde')
-    .sort((a, b) => b.puntos.length - a.puntos.length);
-  const navegables = new Set(desembocan.slice(0, Math.round(desembocan.length * RIOS.proporcionNavegable)).map((r) => r.id));
-  for (const rio of rios) rio.navegable = navegables.has(rio.id);
   return { rios, lagos };
 }

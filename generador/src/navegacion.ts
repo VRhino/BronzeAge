@@ -1,6 +1,6 @@
 import type { Point } from './tipos';
 import { FACTOR } from './campamentos';
-import type { Limites } from './colocacion';
+import type { Limites } from './geometria';
 import type { AristaGrafo, GrafoMundo, NodoGrafo } from './mundoTipos';
 
 /** Espaciado de la retícula: 8 unidades estratégicas (Doc 1, contrato de mundo §2). En unidades del generador. */
