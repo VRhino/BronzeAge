@@ -13,6 +13,8 @@ Lo orquesta `scripts/generar-mundo.ts`.
 Otros scripts:
 - `scripts/mundo-estrategico.ts`: dibuja el mundo estratégico de una seed en SVG.
 - `scripts/ver-artefacto.ts`: dibuja un artefacto leyendo solo el archivo.
+- `scripts/datos-mesa-3d.ts`: saca la ventana de terreno de la mesa de escalas 3D
+  (`Consideraciones/artefactos/mesa_escalas_3d`, ver `Consideraciones/Escalas_Mundo_3D_Definicion.md`).
 
 ## Uso
 

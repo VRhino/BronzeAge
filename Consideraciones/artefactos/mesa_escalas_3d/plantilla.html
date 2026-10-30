@@ -1,0 +1,991 @@
+<title>Mesa de escalas 3D</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Mesa de trabajo: el visor 3D manda; mandos a la derecha (debajo en móvil); la lectura del modelo, en tarjetas, debajo. */
+:root {
+  --fondo: #ECEEE9;
+  --superficie: #F7F8F4;
+  --tinta: #1D2320;
+  --tinta-suave: #59625C;
+  --linea: #C9D0C8;
+  --bronce: #8F531C;
+  --bronce-suave: #E9D8C3;
+  --cielo: #D6DEDF;
+  --velo: rgba(247, 248, 244, .86);
+  --ok: #3E6B3A;
+  --aviso: #8A5A00;
+  --f-titulo: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --f-texto: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --f-dato: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --fondo: #121614; --superficie: #1A1F1C; --tinta: #E5E9E3; --tinta-suave: #9AA39C; --linea: #2F3732;
+    --bronce: #D99A5B; --bronce-suave: #3A2C1E; --cielo: #2B3437; --velo: rgba(26, 31, 28, .86);
+    --ok: #8CC084; --aviso: #E2B45A; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --fondo: #121614; --superficie: #1A1F1C; --tinta: #E5E9E3; --tinta-suave: #9AA39C; --linea: #2F3732;
+  --bronce: #D99A5B; --bronce-suave: #3A2C1E; --cielo: #2B3437; --velo: rgba(26, 31, 28, .86);
+  --ok: #8CC084; --aviso: #E2B45A; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--fondo); color: var(--tinta); font: 16px/1.5 var(--f-texto); }
+.pagina { max-width: 1320px; margin: 0 auto; padding-block: 28px 56px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 28px; }
+h1, h2, h3 { font-family: var(--f-titulo); font-stretch: 82%; text-wrap: balance; margin: 0; letter-spacing: .005em; }
+h1 { font-size: clamp(30px, 4.4vw, 46px); font-weight: 800; line-height: 1.02; }
+h2 { font-size: 24px; font-weight: 700; }
+h3 { font-size: 17px; font-weight: 700; }
+p { margin: 0; }
+.antetitulo { font: 600 12px/1 var(--f-dato); letter-spacing: .12em; text-transform: uppercase; color: var(--bronce); }
+.cabecera { display: grid; gap: 10px; max-width: 72ch; }
+.lead { font-size: 18px; color: var(--tinta-suave); max-width: 66ch; }
+.dato { font-family: var(--f-dato); font-variant-numeric: tabular-nums; font-size: .92em; }
+
+/* banco: visor + mandos */
+.banco { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+@media (max-width: 980px) { .banco { grid-template-columns: minmax(0, 1fr); } }
+.visor { position: relative; height: clamp(380px, 64vh, 720px); border-radius: 10px; overflow: hidden; background: var(--cielo); border: 1px solid var(--linea); }
+@media (max-width: 600px) { .visor { height: 58vh; min-height: 340px; } }
+.visor canvas { display: block; width: 100%; height: 100%; touch-action: none; outline: none; cursor: crosshair; }
+.visor canvas:focus-visible { box-shadow: inset 0 0 0 3px var(--bronce); }
+.hud { position: absolute; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; font: 12px/1.3 var(--f-dato); font-variant-numeric: tabular-nums; }
+.hud-sup { top: 10px; left: 10px; right: 10px; }
+.hud-inf { bottom: 10px; left: 10px; right: 10px; align-items: flex-end; justify-content: space-between; }
+.chip { background: var(--velo); color: var(--tinta); border: 1px solid var(--linea); border-radius: 6px; padding: 5px 8px; }
+.chip b { color: var(--bronce); font-weight: 600; }
+.chip.alerta { border-color: var(--aviso); color: var(--aviso); font-weight: 600; }
+.lecturas { display: grid; gap: 4px; }
+.regla { display: grid; gap: 4px; justify-items: start; }
+.regla-barra { height: 6px; border: 2px solid var(--tinta); border-top: 0; width: 100px; }
+.etiqueta { position: absolute; transform: translate(-50%, -100%); font: 600 11px/1 var(--f-texto); padding: 3px 6px; border-radius: 4px; background: var(--velo); color: var(--tinta); border: 1px solid var(--linea); white-space: nowrap; pointer-events: none; }
+.etiqueta.menor { font-weight: 400; font-size: 10px; padding: 2px 5px; }
+.aviso-visor { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--tinta-suave); background: var(--cielo); }
+
+.mandos { background: var(--superficie); border: 1px solid var(--linea); border-radius: 10px; padding: 14px; display: grid; gap: 14px; }
+.grupo { display: grid; gap: 8px; }
+.grupo + .grupo { border-top: 1px solid var(--linea); padding-top: 12px; }
+.grupo-titulo { font: 600 11px/1 var(--f-dato); letter-spacing: .1em; text-transform: uppercase; color: var(--tinta-suave); }
+.segmentos { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--linea); border-radius: 7px; overflow: hidden; }
+.segmentos input { position: absolute; opacity: 0; pointer-events: none; }
+.segmentos label { text-align: center; padding: 7px 6px; font: 600 13px/1.2 var(--f-texto); cursor: pointer; color: var(--tinta-suave); }
+.segmentos input + label ~ label { border-left: 1px solid var(--linea); }
+.segmentos input:checked + label { background: var(--bronce); color: var(--superficie); }
+.segmentos input:focus-visible + label { outline: 2px solid var(--bronce); outline-offset: -4px; }
+.fila { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; }
+.fila label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.fila select { font: 13px var(--f-texto); background: var(--fondo); color: var(--tinta); border: 1px solid var(--linea); border-radius: 5px; padding: 3px 6px; }
+input[type="checkbox"], input[type="range"] { accent-color: var(--bronce); }
+.deslizador { display: grid; gap: 2px; font-size: 14px; }
+.deslizador .fila span:last-child { font-family: var(--f-dato); font-size: 12px; color: var(--tinta-suave); font-variant-numeric: tabular-nums; }
+.deslizador input { width: 100%; }
+.botones { display: flex; flex-wrap: wrap; gap: 6px; }
+button { font: 600 13px var(--f-texto); color: var(--tinta); background: var(--fondo); border: 1px solid var(--linea); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+button:hover { border-color: var(--bronce); }
+button:focus-visible { outline: 2px solid var(--bronce); outline-offset: 2px; }
+.nota { font-size: 13px; color: var(--tinta-suave); }
+.leyenda { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; font-size: 13px; align-items: center; }
+.muestra { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--linea); }
+.ficha-terreno { font-size: 14px; color: var(--tinta-suave); }
+.ficha-terreno b { color: var(--tinta); font-weight: 600; }
+
+/* lectura */
+.seccion { display: grid; gap: 14px; }
+.seccion > p { max-width: 70ch; color: var(--tinta-suave); }
+.escalas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 860px) { .escalas { grid-template-columns: minmax(0, 1fr); } }
+.escala { background: var(--superficie); border: 1px solid var(--linea); border-radius: 10px; padding: 16px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.escala .marca { font: 600 12px/1 var(--f-dato); letter-spacing: .08em; text-transform: uppercase; }
+.escala .marca.fija { color: var(--ok); }
+.escala .marca.lectura { color: var(--bronce); }
+.escala ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-size: 15px; }
+.regla-terreno { background: var(--bronce-suave); border-radius: 10px; padding: 16px; display: grid; gap: 10px; }
+.tabla-envoltura { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 14px; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--linea); vertical-align: top; }
+th { font: 600 11px/1.2 var(--f-dato); letter-spacing: .08em; text-transform: uppercase; color: var(--tinta-suave); }
+td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mirar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0; margin: 0; }
+@media (max-width: 760px) { .mirar { grid-template-columns: minmax(0, 1fr); } }
+.mirar li { list-style: none; background: var(--superficie); border: 1px solid var(--linea); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.mirar li button { justify-self: start; }
+.decisiones { display: grid; gap: 8px; padding: 0; margin: 0; }
+.decisiones li { list-style: none; display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--linea); }
+.estado { font: 600 11px/1.6 var(--f-dato); letter-spacing: .06em; text-transform: uppercase; }
+.estado.cerrado { color: var(--ok); }
+.estado.abierto { color: var(--aviso); }
+.pie { font-size: 13px; color: var(--tinta-suave); }
+.pie a { color: var(--bronce); }
+</style>
+
+<div class="pagina">
+  <header class="cabecera">
+    <p class="antetitulo">BronzeAge · escalas del mundo</p>
+    <h1>Mesa de escalas 3D</h1>
+    <p class="lead">El mundo visto con la cámara del juego. La cámara, las tropas, las plazas y las zonas van a la medida que ya funciona; el terreno es la propuesta ×100 con los valores que elegiste. Haz clic en el terreno para mandar la columna.</p>
+  </header>
+
+  <section class="banco" aria-label="Escena 3D">
+    <div class="visor" id="visor">
+      <canvas id="lienzo" tabindex="0" aria-label="Escena 3D. Haz clic en el terreno para mandar la columna. En la cámara de juego, arrastra o usa las flechas para moverte."></canvas>
+      <div class="hud hud-sup">
+        <span class="chip" id="chip-terreno">Propuesta ×100</span>
+        <span class="chip" id="chip-vista">Cámara de juego · <b>15 u</b> de ancho</span>
+        <span class="chip alerta" id="chip-aviso" hidden></span>
+      </div>
+      <div class="hud hud-inf">
+        <div class="regla chip" id="regla">
+          <div class="regla-barra" id="regla-barra"></div>
+          <span id="regla-texto">5 u · 60 m en Unity · 6 km en la ficción</span>
+        </div>
+        <div class="lecturas chip" id="lecturas">
+          <span>Desnivel en pantalla: <b id="l-desnivel">—</b></span>
+          <span>Centro: <b id="l-centro">—</b></span>
+          <span>Columna: <b id="l-columna">—</b></span>
+        </div>
+      </div>
+      <div id="capa-etiquetas"></div>
+      <div class="aviso-visor" id="aviso" hidden></div>
+    </div>
+
+    <aside class="mandos" aria-label="Mandos">
+      <div class="grupo">
+        <span class="grupo-titulo">Terreno</span>
+        <div class="segmentos">
+          <input type="radio" name="terreno" id="t-actual" value="actual"><label for="t-actual">Generador actual</label>
+          <input type="radio" name="terreno" id="t-propuesta" value="propuesta" checked><label for="t-propuesta">Propuesta ×100</label>
+        </div>
+        <p class="ficha-terreno" id="ficha-terreno"></p>
+      </div>
+
+      <div class="grupo">
+        <span class="grupo-titulo">Vista</span>
+        <div class="segmentos">
+          <input type="radio" name="vista" id="v-juego" value="juego" checked><label for="v-juego">Cámara de juego</label>
+          <input type="radio" name="vista" id="v-libre" value="libre"><label for="v-libre">Vista libre</label>
+        </div>
+        <div class="deslizador" id="d-inclinacion">
+          <div class="fila"><label for="inclinacion">Inclinación</label><span id="o-inclinacion">50°</span></div>
+          <input type="range" id="inclinacion" min="30" max="80" step="1" value="50">
+        </div>
+        <div class="botones" aria-label="Ir a">
+          <button type="button" data-ir="cordillera">Cordillera</button>
+          <button type="button" data-ir="llano">Llano</button>
+          <button type="button" data-ir="campamento">Campamento</button>
+          <button type="button" data-ir="columna">Columna</button>
+        </div>
+        <div class="fila"><label><input type="checkbox" id="seguir"> Seguir a la columna</label></div>
+      </div>
+
+      <div class="grupo">
+        <span class="grupo-titulo">Movimiento</span>
+        <p class="nota">Clic en el terreno: la columna va hasta ahí por la rejilla, como en el servidor.</p>
+        <div class="fila"><label for="rejilla">Rejilla</label>
+          <select id="rejilla"><option value="8">8 u (actual)</option><option value="4">4 u</option><option value="2" selected>2 u</option></select>
+        </div>
+        <div class="fila"><label><input type="checkbox" id="ver-rejilla" checked> Ver la rejilla</label></div>
+        <div class="fila"><label><input type="checkbox" id="suavizado" checked> Camino suavizado</label></div>
+        <div class="fila"><label><input type="checkbox" id="ver-columna" checked> Columna</label><button type="button" id="pausa">Pausar</button></div>
+      </div>
+
+      <div class="grupo">
+        <span class="grupo-titulo">Plazas</span>
+        <div class="fila"><label for="nivel">Nivel de las plazas</label>
+          <select id="nivel"><option value="0">inicial</option><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select>
+        </div>
+        <p class="nota" id="ficha-nivel"></p>
+        <div class="fila"><label><input type="checkbox" id="ver-plazas" checked> Plazas cada 30 u</label></div>
+        <div class="fila"><label><input type="checkbox" id="ver-zonas" checked> Zonas</label></div>
+        <div class="fila"><label><input type="checkbox" id="ver-arboles" checked> Árboles</label></div>
+      </div>
+
+      <div class="grupo">
+        <span class="grupo-titulo">Tamaños a probar</span>
+        <div class="deslizador">
+          <div class="fila"><label for="relieve">Tamaño del relieve (propuesta)</label><span id="o-relieve">×2,0</span></div>
+          <input type="range" id="relieve" min="0.5" max="4" step="0.1" value="2">
+        </div>
+        <div class="deslizador">
+          <div class="fila"><label for="exag">Altura</label><span id="o-exag">×3,0</span></div>
+          <input type="range" id="exag" min="0.5" max="6" step="0.1" value="3">
+        </div>
+        <div class="deslizador">
+          <div class="fila"><label for="copa">Copa de árbol</label><span id="o-copa">0,4 u · 5 m</span></div>
+          <input type="range" id="copa" min="0.3" max="2" step="0.1" value="0.4">
+        </div>
+        <div class="deslizador">
+          <div class="fila"><label for="maqueta">Maquetas (plazas y tropa)</label><span id="o-maqueta">×1,6</span></div>
+          <input type="range" id="maqueta" min="0.5" max="3" step="0.1" value="1.6">
+        </div>
+        <button type="button" id="restablecer">Volver a los valores elegidos</button>
+      </div>
+
+      <div class="grupo">
+        <span class="grupo-titulo">Leyenda</span>
+        <div class="leyenda">
+          <span class="muestra" style="background:#c9b48f"></span><span>Ciudad: muralla al 10 % del radio de la zona</span>
+          <span class="muestra" style="background:#a8714a"></span><span>Pueblo y avanzada, dentro de la zona</span>
+          <span class="muestra" style="background:#d8cfbd"></span><span>Campamento del generador</span>
+          <span class="muestra" style="background:#c0392b"></span><span>Columna, 30 u/min en llano</span>
+          <span class="muestra" style="background:#e0a050"></span><span>Camino y zonas</span>
+          <span class="muestra" style="background:#2b2f2c"></span><span>Rejilla y nodos</span>
+          <span class="muestra" style="background:#bf3333"></span><span>Nodo bloqueado: agua o más de 35°</span>
+        </div>
+      </div>
+    </aside>
+  </section>
+
+  <section class="seccion" aria-labelledby="t-mirar">
+    <h2 id="t-mirar">Qué hay en la escena</h2>
+    <ol class="mirar">
+      <li>
+        <h3>Tu configuración</h3>
+        <p>Propuesta ×100 con relieve ×2 y altura ×3, copa de árbol de 0,4 u, maquetas ×1,6 y rejilla de 2 u con suavizado. Las cumbres llegan a unos 630 m de Unity (52 u) sobre el llano y una pantalla del macizo tiene unos 160 m de desnivel.</p>
+        <button type="button" data-escena="propuesta,cordillera">Ir al macizo</button>
+      </li>
+      <li>
+        <h3>Plazas, pueblos y avanzadas</h3>
+        <p>Cada plaza es una ciudad con su zona. Sus pueblos y avanzadas son partes de la plaza en el mapa y van siempre dentro de su zona, en la parte que le toca cuando dos zonas se pisan. Cuántos hay depende del nivel: prueba con «Nivel de las plazas».</p>
+        <button type="button" data-escena="plazas">Verlo</button>
+      </li>
+      <li>
+        <h3>Mover la columna</h3>
+        <p>Haz clic en el terreno. La ruta se engancha a los nodos más cercanos, cruza la rejilla con A* y, con el suavizado, se estira en rectas que no cuestan más. La columna va más despacio en colina (×1,8) y en montaña (×3,5); el agua y las laderas de más de 35° no se cruzan, y el río se pasa por los vados.</p>
+        <button type="button" data-escena="columna">Verlo</button>
+      </li>
+      <li>
+        <h3>El generador actual</h3>
+        <p>Para comparar: el llano es una mesa, con menos de 1 m de desnivel por pantalla, y la cordillera es una rampa lisa que dura varias pantallas.</p>
+        <button type="button" data-escena="actual,cordillera">Verlo</button>
+      </li>
+    </ol>
+  </section>
+
+  <section class="seccion" aria-labelledby="t-escalas">
+    <h2 id="t-escalas">Tres escalas y una regla</h2>
+    <p>Lo que se siente bien es el ancla y no se toca. La ficción ×100 da sentido a las distancias. Unity es una maqueta a ×12. El terreno se mide con la ficción, igual que ya se miden las distancias.</p>
+    <div class="escalas">
+      <article class="escala">
+        <span class="marca fija">Fija · se siente bien</span>
+        <h3>El ancla, en u</h3>
+        <ul>
+          <li>Cámara: <span class="dato">15 × 8,4 u</span></li>
+          <li>Tropa ligera: <span class="dato">30 u/min</span>, cruza la pantalla en <span class="dato">30 s</span></li>
+          <li>Zonas: <span class="dato">6 a 30 u</span> de radio</li>
+          <li>Plazas a <span class="dato">30 u</span>: la vecina a 1 min</li>
+          <li>Visión: <span class="dato">15 / 30 u</span></li>
+        </ul>
+      </article>
+      <article class="escala">
+        <span class="marca fija">Adoptada · 2026-10-30</span>
+        <h3>La ficción, ×100</h3>
+        <ul>
+          <li>El mapa de <span class="dato">2.667 × 2.000 u</span> se lee como <span class="dato">3.200 × 2.400 km</span>, el Mediterráneo oriental</li>
+          <li><span class="dato">1 u ≈ 1,2 km</span>; una pantalla ≈ <span class="dato">18 × 10 km</span></li>
+          <li>1 min de juego ≈ <span class="dato">36 km</span>, un día de marcha</li>
+        </ul>
+      </article>
+      <article class="escala">
+        <span class="marca fija">Fija · decidido</span>
+        <h3>Unity, maqueta ×12</h3>
+        <ul>
+          <li><span class="dato">1 u = 12 m</span> en Unity; el mapa mide <span class="dato">32 × 24 km</span></li>
+          <li>Plazas, tropas y árboles son maquetas agrandadas: su tamaño no sale de la ficción</li>
+          <li>Las alturas están en metros de Unity</li>
+        </ul>
+      </article>
+    </div>
+    <div class="regla-terreno">
+      <h3>Regla para el terreno: tamaño en la ficción ÷ 1,2 km = u</h3>
+      <div class="tabla-envoltura">
+        <table>
+          <thead><tr><th>Elemento</th><th>Borrador (×1)</th><th>Elegido (×2)</th><th>En la ficción</th><th>En pantallas</th></tr></thead>
+          <tbody>
+            <tr><td>Loma</td><td class="num">3 – 10 u</td><td class="num">6 – 20 u</td><td class="num">7 – 24 km</td><td class="num">0,4 – 1,3</td></tr>
+            <tr><td>Valle (de ladera a ladera)</td><td class="num">5 – 20 u</td><td class="num">10 – 40 u</td><td class="num">12 – 48 km</td><td class="num">0,7 – 2,7</td></tr>
+            <tr><td>Montaña aislada</td><td class="num">15 – 40 u</td><td class="num">30 – 80 u</td><td class="num">36 – 96 km</td><td class="num">2 – 5</td></tr>
+            <tr><td>Cordillera (ancho)</td><td class="num">30 – 80 u</td><td class="num">60 – 160 u</td><td class="num">72 – 190 km</td><td class="num">4 – 11</td></tr>
+            <tr><td>Bosquete / bosque</td><td class="num">2 – 80 u</td><td class="num">2 – 80 u</td><td class="num">2 – 100 km</td><td class="num">0,1 – 5</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="nota">La altura va exagerada, como en cualquier mapa de campaña: con relieve ×2 y altura ×3 las cumbres quedan a unos 630 m de Unity sobre el llano. Las pendientes que deciden por dónde se anda se miden sin la exageración de «Altura»; con ella, el 61 % del macizo pasaría de 35° y no se podría cruzar.</p>
+    </div>
+  </section>
+
+  <section class="seccion" aria-labelledby="t-decisiones">
+    <h2 id="t-decisiones">Estado</h2>
+    <ul class="decisiones">
+      <li><span class="estado cerrado">Cerrado</span><span>El ancla (cámara, velocidades, zonas, separación), Unity a ×12 y las plazas como maquetas agrandadas.</span></li>
+      <li><span class="estado cerrado">Elegido</span><span>Propuesta ×100 con relieve ×2, altura ×3, copa 0,4 u, maquetas ×1,6 y rejilla de 2 u con suavizado (2026-10-30). Es la representación que irá al cliente de jugador; la mesa se sigue afinando.</span></li>
+      <li><span class="estado cerrado">Regla</span><span>Pueblos y avanzadas son partes de la plaza y van siempre dentro de su zona.</span></li>
+      <li><span class="estado abierto">Abierto</span><span>Las pendientes del movimiento, ¿sin la exageración visual? Así lo hace la mesa.</span></li>
+      <li><span class="estado abierto">Abierto</span><span>Una rejilla de 2 u en todo el mapa son unos 1,3 millones de nodos, 16 veces los de 8 u: hay que medir el artefacto y el servidor. La alternativa es 4 u con suavizado.</span></li>
+      <li><span class="estado abierto">Abierto</span><span>Ríos y vados del terreno nuevo, y cuántos árboles dibuja el cliente: con copa de 0,4 u, un bosque denso lleva unos 3 árboles por u².</span></li>
+    </ul>
+    <p class="pie">Datos: ventana de 320 × 240 u del mundo de la seed 42, entre la cordillera norte y el campamento‑0. En el terreno real, los ríos se dibujan pero no cortan el paso porque faltan sus vados. Página 2D anterior: <a href="https://claude.ai/artifact/GKqGYMohRFTMihKpPkaeGG" target="_blank" rel="noopener">escalas del mundo</a>.</p>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(async () => {
+const D = __DATOS__;
+const FACTOR = 12, PANT_W = 15, PANT_H = 8.4, VEL = .5, BASE_M = 450, FOV = 35, PEND_MAX = .7, TROPA = 2;
+const W = D.w, H = D.h, NX = D.nx, NY = D.ny, PASO = D.paso, BX = D.bx, BY = D.by;
+const ELEGIDOS = { relieve: 2, exag: 3, copa: .4, maqueta: 1.6 };
+// Economia_Construccion: ZONA_INFLUENCIA, cupos de PUEBLOS_EXTRACTORES y AVANZADAS, ciudad = 10 % del radio de la zona
+const NIVELES = [{ radio: 6, pueblos: 0, avanzadas: 0 }, { radio: 10, pueblos: 1, avanzadas: 0 }, { radio: 15, pueblos: 3, avanzadas: 2 }, { radio: 20, pueblos: 4, avanzadas: 3 }, { radio: 25, pueblos: 5, avanzadas: 4 }, { radio: 30, pueblos: 6, avanzadas: 5 }];
+const FRACCION_CIUDAD = .1, SEPARACION_PUEBLOS = 3;
+// generador: COSTE_MOVIMIENTO por clase y factor de pendiente de costeEnPunto
+const COSTE = { llano: 1, colina: 1.8, 'montaña': 3.5, cima: 12 };
+const $ = id => document.getElementById(id);
+const aviso = $('aviso');
+const fallo = msg => { aviso.textContent = msg; aviso.hidden = false; };
+if (!window.THREE) { fallo('No se pudo cargar three.js. Recarga la página.'); return; }
+const reducido = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const fmt = (v, d = 1) => v.toLocaleString('es-ES', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+// ---------- datos ----------
+const bytes = async b64 => { const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0)); const s = new Blob([bin]).stream().pipeThrough(new DecompressionStream('gzip')); return new Uint8Array(await new Response(s).arrayBuffer()); };
+const [altB, aguaB, bosB] = await Promise.all([D.altura, D.agua, D.bosque].map(bytes));
+const real = (() => {
+  const v = new Uint16Array(altB.buffer, altB.byteOffset, altB.byteLength / 2), hm = new Float32Array(v.length);
+  for (let i = 0; i < v.length; i++) hm[i] = v[i] / 65535 * 1000;
+  const bosque = new Float32Array(BX * BY); for (let i = 0; i < bosque.length; i++) bosque[i] = bosB[i] / 255;
+  return { hm, agua: aguaB, bosque, rios: D.rios, anchoRio: .9, vados: [], umbrales: [545, 600, 685] };
+})();
+
+// ---------- ruido (simplex 2D) para la propuesta ----------
+function ruido(semilla) {
+  const perm = [...Array(256).keys()]; let s = semilla >>> 0;
+  const rnd = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+  for (let i = 255; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [perm[i], perm[j]] = [perm[j], perm[i]]; }
+  const p = new Uint8Array(512); for (let i = 0; i < 512; i++) p[i] = perm[i & 255];
+  const GX = [1, -1, 1, -1, 1, -1, 0, 0], GY = [1, 1, -1, -1, 0, 0, 1, -1];
+  const F2 = .5 * (Math.sqrt(3) - 1), G2 = (3 - Math.sqrt(3)) / 6;
+  return (x, y) => {
+    const t0 = (x + y) * F2, i = Math.floor(x + t0), j = Math.floor(y + t0), t = (i + j) * G2;
+    const x0 = x - (i - t), y0 = y - (j - t), i1 = x0 > y0 ? 1 : 0, j1 = 1 - i1;
+    const x1 = x0 - i1 + G2, y1 = y0 - j1 + G2, x2 = x0 - 1 + 2 * G2, y2 = y0 - 1 + 2 * G2, ii = i & 255, jj = j & 255;
+    let n = 0, a;
+    if ((a = .5 - x0 * x0 - y0 * y0) > 0) { const g = p[ii + p[jj]] & 7; a *= a; n += a * a * (GX[g] * x0 + GY[g] * y0); }
+    if ((a = .5 - x1 * x1 - y1 * y1) > 0) { const g = p[ii + i1 + p[jj + j1]] & 7; a *= a; n += a * a * (GX[g] * x1 + GY[g] * y1); }
+    if ((a = .5 - x2 * x2 - y2 * y2) > 0) { const g = p[ii + 1 + p[jj + 1]] & 7; a *= a; n += a * a * (GX[g] * x2 + GY[g] * y2); }
+    return 70 * n;
+  };
+}
+const R1 = ruido(11), R2 = ruido(23), R3 = ruido(37), R4 = ruido(53);
+const fbm = (r, x, y, o) => { let a = 1, f = 1, s = 0, t = 0; for (let k = 0; k < o; k++) { s += a * r(x * f, y * f); t += a; a *= .5; f *= 2.03; } return s / t; };
+const crestas = (r, x, y, o) => { let a = 1, f = 1, s = 0, t = 0, w = 1; for (let k = 0; k < o; k++) { let v = 1 - Math.abs(r(x * f, y * f)); v *= v; v *= w; w = Math.min(1, v * 1.8); s += a * v; t += a; a *= .5; f *= 2.1; } return s / t; };
+const suave = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const distSeg = (px, py, ax, ay, bx, by) => { const dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy; let t = l ? ((px - ax) * dx + (py - ay) * dy) / l : 0; t = Math.max(0, Math.min(1, t)); return Math.hypot(px - ax - t * dx, py - ay - t * dy); };
+
+// Boceto ×100: macizo al norte con crestas de 30-80 u y valles de 5-20 u, piedemonte de colinas, llano con lomas de 3-10 u y un río con vados.
+// S escala tamaño y altura a la vez, para que las laderas no pasen de unos 35°.
+function propuesta(S) {
+  const rio = []; for (let y = -4; y <= H + 4; y += 2) rio.push([100 + .38 * y + 16 * Math.sin(y / 23) + 6 * Math.sin(y / 8.5 + 1), y]);
+  const afl = []; for (let y = 10; y <= 150; y += 2) afl.push([235 - .55 * (y - 10) + 7 * Math.sin(y / 11), y]);
+  const enY = (l, y) => l.find(p => p[1] >= y);
+  const vados = [...[40, 95, 150, 205].map(y => enY(rio, y)), ...[45, 105].map(y => enY(afl, y))];
+  const tramos = []; for (const l of [rio, afl]) for (let k = 1; k < l.length; k++) tramos.push([l[k - 1][0], l[k - 1][1], l[k][0], l[k][1], l === rio ? 1 : .7]);
+  const hm = new Float32Array(NX * NY), agua = new Uint8Array(NX * NY), anchoRio = .9;
+  const alcance = 3 * 10 * S;
+  for (let j = 0; j < NY; j++) {
+    const yf = j * PASO, cerca = tramos.filter(t => Math.min(t[1], t[3]) - alcance <= yf && Math.max(t[1], t[3]) + alcance >= yf);
+    for (let i = 0; i < NX; i++) {
+      const x = i * PASO, y = yf;
+      const yb = y + 20 * R4(x / 85, 3.1);
+      const mac = suave(140, 55, yb), pie = suave(195, 120, yb) * (1 - mac);
+      let h = 468 + 4 * fbm(R1, x / 60, y / 60, 2) + 1.8 * S * fbm(R2, x / (6 * S), y / (6 * S), 3);
+      if (pie > 0) h += pie * 18 * S * Math.max(0, fbm(R3, x / (14 * S), y / (14 * S), 3) * .9 + .35);
+      if (mac > 0) { const c = crestas(R1, x / (42 * S) + 17, y / (42 * S) + 5, 4); h += mac * S * (18 + 95 * c * (.6 + .4 * suave(.2, .8, fbm(R2, x / (70 * S), y / (70 * S), 2) * .5 + .5))); }
+      let d = 1e9, peso = 1; for (const t of cerca) { const dd = distSeg(x, y, t[0], t[1], t[2], t[3]); if (dd < d) { d = dd; peso = t[4]; } }
+      const suelo = 466 + 8 * mac * S;
+      const g = Math.exp(-((d / ((4 + 6 * mac) * S * peso)) ** 2));
+      if (h > suelo) h = suelo + (h - suelo) * (1 - .93 * g);
+      if (d < anchoRio * .5 * peso && !vados.some(v => (x - v[0]) ** 2 + (y - v[1]) ** 2 < 2.25)) agua[j * NX + i] = 1;
+      hm[j * NX + i] = h;
+    }
+  }
+  const bosque = new Float32Array(BX * BY);
+  for (let j = 0; j < BY; j++) for (let i = 0; i < BX; i++) {
+    const x = i + .5, y = j + .5, k = Math.round(y / PASO) * NX + Math.round(x / PASO), h = hm[k];
+    let f = fbm(R3, x / (24 * S) + 40, y / (24 * S), 3) * 1.1 + .22 + .3 * fbm(R2, x / (3.5 * S) + 9, y / (3.5 * S), 2);
+    f *= 1 - suave(530, 570, h);
+    bosque[j * BX + i] = Math.max(0, Math.min(1, f));
+  }
+  return { hm, agua, bosque, rios: [rio, afl], anchoRio, vados, umbrales: [478, 500, 540] };
+}
+
+// ---------- estado ----------
+const estado = { terreno: 'propuesta', vista: 'juego', inclinacion: 50, ...ELEGIDOS, rejilla: 2, verRejilla: true, suavizado: true, columna: true, plazas: true, zonas: true, nivel: 2, arboles: true, seguir: false, pausa: reducido };
+let T = real;
+let objX = D.puntos.llano[0], objY = D.puntos.llano[1];
+
+// ---------- muestreo ----------
+const alturaM = (x, y) => {
+  const fx = Math.min(Math.max(x / PASO, 0), NX - 1.001), fy = Math.min(Math.max(y / PASO, 0), NY - 1.001);
+  const i = fx | 0, j = fy | 0, tx = fx - i, ty = fy - j, k = j * NX + i, h = T.hm;
+  return (h[k] * (1 - tx) + h[k + 1] * tx) * (1 - ty) + (h[k + NX] * (1 - tx) + h[k + NX + 1] * tx) * ty;
+};
+const alturaU = (x, y) => (alturaM(x, y) - BASE_M) / FACTOR * estado.exag;
+const aguaEn = (x, y) => { const i = Math.round(x / PASO), j = Math.round(y / PASO); return i < 0 || j < 0 || i >= NX || j >= NY ? 1 : T.agua[j * NX + i]; };
+const bosqueEn = (x, y) => { const i = Math.floor(x), j = Math.floor(y); return i < 0 || j < 0 || i >= BX || j >= BY ? 0 : T.bosque[j * BX + i]; };
+// pendiente en m/m de Unity, sin la exageración de «Altura»: es la que decide el movimiento
+const pendiente = (x, y) => Math.hypot(alturaM(x + .5, y) - alturaM(x - .5, y), alturaM(x, y + .5) - alturaM(x, y - .5)) / FACTOR;
+const clase = h => { const [a, b, c] = T.umbrales; return h < a ? 'llano' : h < b ? 'colina' : h < c ? 'montaña' : 'cima'; };
+const transitable = (x, y) => x >= 0 && y >= 0 && x <= W && y <= H && !aguaEn(x, y) && pendiente(x, y) <= PEND_MAX;
+const costeEn = (x, y) => COSTE[clase(alturaM(x, y))] * (1 + Math.min(2, pendiente(x, y) * .45));
+const V3 = (x, y, dy = 0) => new THREE.Vector3(x - W / 2, alturaU(x, y) + dy, y - H / 2);
+const hash = (a, b, c = 0) => { let h = Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263) ^ Math.imul(c | 0, 1442695041); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+
+// ---------- three ----------
+const lienzo = $('lienzo'), visor = $('visor');
+let renderer;
+try { renderer = new THREE.WebGLRenderer({ canvas: lienzo, antialias: true }); } catch (e) { fallo('Este navegador no puede mostrar la escena 3D (WebGL desactivado).'); return; }
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const escena = new THREE.Scene();
+const camara = new THREE.PerspectiveCamera(FOV, 1, .05, 3000);
+const controles = new THREE.OrbitControls(camara, lienzo);
+controles.enabled = false; controles.enableDamping = true; controles.maxPolarAngle = Math.PI * .47; controles.minDistance = 4; controles.maxDistance = 900;
+const hemi = new THREE.HemisphereLight(0xdfe9f0, 0x6b5a40, .62); escena.add(hemi);
+const sol = new THREE.DirectionalLight(0xfff0d8, .95); sol.castShadow = true; sol.shadow.mapSize.set(2048, 2048); sol.shadow.bias = -.0004; sol.shadow.normalBias = .03;
+escena.add(sol, sol.target);
+const colorTema = () => new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--cielo').trim() || '#d6dedf');
+const aplicarCielo = () => { const c = colorTema(); escena.background = c; if (escena.fog) escena.fog.color = c; };
+escena.fog = new THREE.Fog(0xd6dedf, 60, 160); aplicarCielo();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', aplicarCielo);
+new MutationObserver(aplicarCielo).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+// terreno
+const geo = new THREE.BufferGeometry();
+const posT = new Float32Array(NX * NY * 3), colT = new Float32Array(NX * NY * 3);
+for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) { const k = (j * NX + i) * 3; posT[k] = i * PASO - W / 2; posT[k + 2] = j * PASO - H / 2; }
+const idx = new Uint32Array((NX - 1) * (NY - 1) * 6); let q = 0;
+for (let j = 0; j < NY - 1; j++) for (let i = 0; i < NX - 1; i++) { const a = j * NX + i, b = a + 1, c = a + NX, d = c + 1; idx[q++] = a; idx[q++] = c; idx[q++] = b; idx[q++] = b; idx[q++] = c; idx[q++] = d; }
+geo.setIndex(new THREE.BufferAttribute(idx, 1));
+geo.setAttribute('position', new THREE.BufferAttribute(posT, 3));
+geo.setAttribute('color', new THREE.BufferAttribute(colT, 3));
+const terreno = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+terreno.receiveShadow = true; escena.add(terreno);
+
+const PAL = { llano: [.72, .69, .47], colina: [.58, .57, .38], montana: [.53, .47, .39], cima: [.76, .74, .70], roca: [.47, .43, .39], agua: [.27, .46, .60], sotobosque: [.36, .44, .25] };
+const mezcla = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+function pintarTerreno() {
+  const hm = T.hm, [u1, u2, u3] = T.umbrales;
+  for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+    const n = j * NX + i, k = n * 3, h = hm[n];
+    posT[k + 1] = (h - BASE_M) / FACTOR * estado.exag;
+    let c = h < u1 ? mezcla(PAL.llano, PAL.colina, suave(u1 - (u2 - u1) * .6, u1, h)) : h < u2 ? mezcla(PAL.colina, PAL.montana, suave(u2 - (u2 - u1) * .3, u2, h)) : h < u3 ? mezcla(PAL.montana, PAL.cima, suave(u3 - (u3 - u2) * .2, u3 + (u3 - u2) * .1, h)) : PAL.cima;
+    const i0 = Math.max(0, i - 1), i1 = Math.min(NX - 1, i + 1), j0 = Math.max(0, j - 1), j1 = Math.min(NY - 1, j + 1);
+    const s = Math.hypot(hm[j * NX + i1] - hm[j * NX + i0], hm[j1 * NX + i] - hm[j0 * NX + i]) / ((i1 - i0 + j1 - j0) / 2 * PASO * FACTOR);
+    c = mezcla(c, PAL.roca, suave(.45, .9, s));
+    c = mezcla(c, PAL.sotobosque, .55 * bosqueEn(i * PASO, j * PASO));
+    if (T.agua[n]) c = PAL.agua;
+    const v = .96 + .08 * hash(i, j);
+    colT[k] = c[0] * v; colT[k + 1] = c[1] * v; colT[k + 2] = c[2] * v;
+  }
+  geo.attributes.position.needsUpdate = true; geo.attributes.color.needsUpdate = true;
+  geo.computeVertexNormals(); geo.computeBoundingSphere();
+}
+
+// utilidades de capas
+const capas = {};
+let COMPARTIDOS = new Set();
+const quitar = nombre => { const o = capas[nombre]; if (!o) return; escena.remove(o); o.traverse(m => { if (m.geometry && !COMPARTIDOS.has(m.geometry)) m.geometry.dispose(); if (m.material) [].concat(m.material).forEach(x => { if (!COMPARTIDOS.has(x)) x.dispose(); }); }); delete capas[nombre]; };
+const poner = (nombre, o) => { quitar(nombre); capas[nombre] = o; escena.add(o); return o; };
+const lineaDrapeada = (pts, paso = .5, dy = .08) => { const out = []; for (let k = 1; k < pts.length; k++) { const [ax, ay] = pts[k - 1], [bx, by] = pts[k], n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / paso)); for (let s = k === 1 ? 0 : 1; s <= n; s++) { const t = s / n; out.push(V3(ax + (bx - ax) * t, ay + (by - ay) * t, dy)); } } return out; };
+const suavizarLinea = (pts, it = 3) => { let p = pts; for (let r = 0; r < it; r++) { const o = [p[0]]; for (let k = 0; k < p.length - 1; k++) { const [ax, ay] = p[k], [bx, by] = p[k + 1]; o.push([.75 * ax + .25 * bx, .75 * ay + .25 * by], [.25 * ax + .75 * bx, .25 * ay + .75 * by]); } o.push(p[p.length - 1]); p = o; } return p; };
+
+// ríos: cinta sobre el terreno; los vados, un paso de grava
+function construirRios() {
+  const g = new THREE.Group();
+  for (const r of T.rios) {
+    const p = suavizarLinea(r, 3), pos = [], ind = [];
+    const den = []; for (let k = 1; k < p.length; k++) { const [ax, ay] = p[k - 1], [bx, by] = p[k], n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / .5)); for (let s = k === 1 ? 0 : 1; s <= n; s++) den.push([ax + (bx - ax) * s / n, ay + (by - ay) * s / n]); }
+    for (let k = 0; k < den.length; k++) {
+      const a = den[Math.max(0, k - 1)], b = den[Math.min(den.length - 1, k + 1)], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1, nx = -dy / l * T.anchoRio / 2, ny = dx / l * T.anchoRio / 2;
+      const [x, y] = den[k], h = Math.min(alturaU(x + nx, y + ny), alturaU(x - nx, y - ny), alturaU(x, y)) + .04;
+      pos.push(x + nx - W / 2, h, y + ny - H / 2, x - nx - W / 2, h, y - ny - H / 2);
+      if (k) { const o = (k - 1) * 2; ind.push(o, o + 1, o + 2, o + 1, o + 3, o + 2); }
+    }
+    const gg = new THREE.BufferGeometry(); gg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); gg.setIndex(ind); gg.computeVertexNormals();
+    g.add(new THREE.Mesh(gg, new THREE.MeshLambertMaterial({ color: 0x4a7fa3, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 })));
+  }
+  const grava = new THREE.MeshLambertMaterial({ color: 0xcdbb94, polygonOffset: true, polygonOffsetFactor: -4 });
+  for (const [x, y] of T.vados) { const m = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, .03, 20), grava); m.position.copy(V3(x, y, .08)); g.add(m); }
+  poner('rios', g);
+}
+
+// árboles: copas instanciadas por trozos de 40 u, para que la cámara descarte los que no ve
+const geoCopa = new THREE.IcosahedronGeometry(.5, 0), geoTronco = new THREE.CylinderGeometry(.06, .08, 1, 5, 1, true);
+{ const p = geoCopa.attributes.position, n = []; for (let k = 0; k < p.count; k++) { const v = new THREE.Vector3().fromBufferAttribute(p, k).normalize(); n.push(v.x, v.y, v.z); } geoCopa.setAttribute('normal', new THREE.Float32BufferAttribute(n, 3)); }
+geoCopa.translate(0, .62, 0); geoTronco.translate(0, .25, 0);
+const MAX_ARBOLES = 140000;
+function construirArboles() {
+  const g = new THREE.Group(); const D_ = estado.copa, lam = .55 / (D_ * D_), trozo = 40, m = new THREE.Matrix4(), q4 = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), p = new THREE.Vector3(), col = new THREE.Color();
+  let total = 0;
+  const claros = elementos.map(el => [el.x, el.y, (el.radio + .4) ** 2]);
+  for (let cy = 0; cy < H; cy += trozo) for (let cx = 0; cx < W; cx += trozo) {
+    const lista = [];
+    for (let j = cy; j < cy + trozo; j++) for (let i = cx; i < cx + trozo; i++) {
+      const d = T.bosque[j * BX + i]; if (d < .2) continue;
+      const l = lam * d, n = Math.floor(l) + (hash(i, j, 7) < l % 1 ? 1 : 0);
+      for (let k = 0; k < n; k++) { const x = i + hash(i, j, 11 + k), y = j + hash(i, j, 29 + k); if (aguaEn(x, y) || pendiente(x, y) > 1.1 || claros.some(c => (x - c[0]) ** 2 + (y - c[1]) ** 2 < c[2])) continue; lista.push(x, y, hash(i, j, 41 + k)); }
+    }
+    let n = Math.min(lista.length / 3, MAX_ARBOLES - total); if (n <= 0) continue;
+    const gc = geoCopa.clone(), gt = geoTronco.clone();
+    const copas = new THREE.InstancedMesh(gc, new THREE.MeshLambertMaterial({ color: 0xffffff }), n), troncos = new THREE.InstancedMesh(gt, new THREE.MeshLambertMaterial({ color: 0x5b4632 }), n);
+    let ymin = 1e9, ymax = -1e9;
+    for (let k = 0; k < n; k++) {
+      const x = lista[k * 3], y = lista[k * 3 + 1], r = lista[k * 3 + 2], esc = D_ * (.75 + .5 * r), h = alturaU(x, y);
+      ymin = Math.min(ymin, h); ymax = Math.max(ymax, h + esc * 1.3);
+      e.set(0, r * 6.28, 0); q4.setFromEuler(e); s.set(esc, esc * (1 + .35 * r), esc); p.set(x - W / 2, h - .03, y - H / 2);
+      m.compose(p, q4, s); copas.setMatrixAt(k, m); troncos.setMatrixAt(k, m);
+      col.setRGB(.25 + .12 * r, .38 + .1 * r, .18 + .05 * r); copas.setColorAt(k, col);
+    }
+    const esfera = new THREE.Sphere(new THREE.Vector3(cx + trozo / 2 - W / 2, (ymin + ymax) / 2, cy + trozo / 2 - H / 2), Math.hypot(trozo / 2, trozo / 2, (ymax - ymin) / 2) + 2);
+    gc.boundingSphere = esfera; gt.boundingSphere = esfera.clone();
+    copas.castShadow = troncos.castShadow = true;
+    g.add(copas, troncos); total += n;
+  }
+  g.visible = estado.arboles;
+  poner('arboles', g);
+}
+
+// ---------- plazas: ciudades en retícula hexagonal a 30 u; sus pueblos y avanzadas, dentro de su zona ----------
+let ciudades = [], elementos = [], columnaA = null, columnaB = null;
+function elegirPlazas() {
+  ciudades = [];
+  for (let f = 0; f < 10; f++) for (let c = 0; c < 12; c++) {
+    const x = 12 + c * 30 + (f % 2) * 15, y = 12 + f * 26;
+    if (x > W - 6 || y > H - 6) continue;
+    if (alturaM(x, y) >= T.umbrales[1] || pendiente(x, y) > .3 || hash(c, f, 3) < .12) continue;
+    let mojado = false; for (let a = 0; a < 8 && !mojado; a++) mojado = !!aguaEn(x + 2 * Math.cos(a * .785), y + 2 * Math.sin(a * .785));
+    if (mojado || aguaEn(x, y)) continue;
+    ciudades.push({ x, y, semilla: f * 31 + c });
+  }
+  const centro = D.puntos.llano;
+  columnaA = ciudades.slice().sort((a, b) => Math.hypot(a.x - centro[0], a.y - centro[1]) - Math.hypot(b.x - centro[0], b.y - centro[1]))[0] || null;
+  const vecinas = columnaA ? ciudades.filter(p => p !== columnaA && Math.abs(Math.hypot(p.x - columnaA.x, p.y - columnaA.y) - 30) < 2) : [];
+  vecinas.sort((a, b) => Math.abs(Math.atan2(a.y - columnaA.y, a.x - columnaA.x) + 1.05) - Math.abs(Math.atan2(b.y - columnaA.y, b.x - columnaA.x) + 1.05));
+  columnaB = vecinas[0] || null;
+  repartirElementos();
+}
+// zona real aproximada: dentro del radio y más cerca de su ciudad que de cualquier otra (dos zonas que se pisan se reparten)
+function repartirElementos() {
+  const N = NIVELES[estado.nivel], R = N.radio, Rc = R * FRACCION_CIUDAD, M = estado.maqueta;
+  elementos = [];
+  const ocupados = [];
+  const enSuZona = (c, x, y) => { const d = Math.hypot(x - c.x, y - c.y); if (d > R - .5) return false; for (const o of ciudades) if (o !== c && Math.hypot(x - o.x, y - o.y) < d) return false; return true; };
+  const libre = (x, y, sep) => ocupados.every(o => Math.hypot(x - o[0], y - o[1]) >= Math.max(sep, o[2]));
+  for (const c of ciudades) { elementos.push({ tipo: 'ciudad', x: c.x, y: c.y, radio: Rc, ciudad: c }); ocupados.push([c.x, c.y, Math.max(SEPARACION_PUEBLOS, Rc + 1)]); }
+  for (const c of ciudades) {
+    const colocar = (tipo, n, rMin, rMax, sep, radioModelo) => {
+      for (let k = 0, intento = 0; k < n && intento < 80; intento++) {
+        const a = hash(c.semilla, intento, tipo === 'pueblo' ? 1 : 2) * 6.283, r = rMin + (rMax - rMin) * Math.sqrt(hash(c.semilla, intento, tipo === 'pueblo' ? 3 : 4));
+        const x = c.x + r * Math.cos(a), y = c.y + r * Math.sin(a);
+        if (!enSuZona(c, x, y) || !transitable(x, y) || pendiente(x, y) > .35 || !libre(x, y, sep)) continue;
+        let mojado = false; for (let b = 0; b < 6 && !mojado; b++) mojado = !!aguaEn(x + radioModelo * Math.cos(b * 1.05), y + radioModelo * Math.sin(b * 1.05));
+        if (mojado) continue;
+        elementos.push({ tipo, x, y, radio: radioModelo, ciudad: c }); ocupados.push([x, y, sep]); k++;
+      }
+    };
+    colocar('pueblo', N.pueblos, Math.max(SEPARACION_PUEBLOS, Rc + 1), R * .9, SEPARACION_PUEBLOS, .55 * M);
+    colocar('avanzada', N.avanzadas, R * .55, R * .95, 1.5, .3 * M);
+  }
+  for (const c of D.campamentos) elementos.push({ tipo: 'campamento', x: c.x, y: c.y, radio: .6 * M, ciudad: null });
+  $('ficha-nivel').textContent = `Zona de ${R} u, ciudad de ${fmt(Rc)} u de radio, ${N.pueblos} ${N.pueblos === 1 ? 'pueblo' : 'pueblos'} y ${N.avanzadas} ${N.avanzadas === 1 ? 'avanzada' : 'avanzadas'} por plaza.`;
+}
+const MAT = {
+  muro: new THREE.MeshLambertMaterial({ color: 0xc9b48f }), adobe: new THREE.MeshLambertMaterial({ color: 0xd2bf9a }),
+  techo: new THREE.MeshLambertMaterial({ color: 0xa8714a }), madera: new THREE.MeshLambertMaterial({ color: 0x8a6440 }),
+  lona: new THREE.MeshLambertMaterial({ color: 0xd8cfbd }), tunica: new THREE.MeshLambertMaterial({ color: 0xc0392b }), bronce: new THREE.MeshLambertMaterial({ color: 0xc08a3e }), piel: new THREE.MeshLambertMaterial({ color: 0xc89a78 }),
+};
+const caja = new THREE.BoxGeometry(1, 1, 1); caja.translate(0, .5, 0);
+const tienda = new THREE.ConeGeometry(.09, .14, 4); tienda.translate(0, .07, 0);
+COMPARTIDOS = new Set([caja, tienda, ...Object.values(MAT)]);
+const NOMBRES = { ciudad: 'Ciudad', pueblo: 'Pueblo', avanzada: 'Avanzada', campamento: 'Campamento' };
+// todas las maquetas en pocas llamadas de dibujo: una malla instanciada por material
+function construirPlazas() {
+  const M = estado.maqueta, piezas = { muro: [], adobe: [], techo: [], madera: [], lona: [] };
+  const casa = (mat, x, y, w, d, h, rot = 0) => piezas[mat].push([x, y, w, d, h, rot]);
+  const anillo = (cx, cy, R, h, grueso, mat, hueco = 7) => { const seg = Math.max(14, Math.round(6.283 * R / .25)); for (let k = 0; k < seg; k++) { if (k === hueco) continue; const a0 = k / seg * 6.283, a1 = (k + 1) / seg * 6.283, x0 = cx + R * Math.cos(a0), y0 = cy + R * Math.sin(a0), x1 = cx + R * Math.cos(a1), y1 = cy + R * Math.sin(a1); casa(mat, (x0 + x1) / 2, (y0 + y1) / 2, Math.hypot(x1 - x0, y1 - y0) + .02, grueso, h, Math.atan2(y1 - y0, x1 - x0)); } };
+  for (const el of elementos) {
+    const sem = Math.round(el.x * 7 + el.y * 13);
+    if (el.tipo === 'ciudad') {
+      const Rc = el.radio;
+      anillo(el.x, el.y, Rc, .14 * M, .05 * M, 'muro');
+      casa('muro', el.x, el.y, .34 * M, .26 * M, .22 * M);
+      const n = Math.max(8, Math.min(160, Math.round(26 * Rc * Rc)));
+      for (let k = 0; k < n; k++) { const a = hash(sem, k, 1) * 6.283, r = .25 * M + (Rc - .3 * M) * Math.sqrt(hash(sem, k, 2)); casa(hash(sem, k, 6) < .3 ? 'techo' : 'adobe', el.x + r * Math.cos(a), el.y + r * Math.sin(a), (.1 + .08 * hash(sem, k, 3)) * M, (.1 + .08 * hash(sem, k, 4)) * M, (.07 + .06 * hash(sem, k, 5)) * M, a); }
+    } else if (el.tipo === 'pueblo') {
+      anillo(el.x, el.y, .55 * M, .06 * M, .03 * M, 'madera');
+      for (let k = 0; k < 8; k++) { const a = hash(sem, k, 1) * 6.283, r = (.12 + .33 * Math.sqrt(hash(sem, k, 2))) * M; casa(hash(sem, k, 6) < .5 ? 'techo' : 'adobe', el.x + r * Math.cos(a), el.y + r * Math.sin(a), (.09 + .05 * hash(sem, k, 3)) * M, (.09 + .05 * hash(sem, k, 4)) * M, (.06 + .04 * hash(sem, k, 5)) * M, a); }
+    } else if (el.tipo === 'avanzada') {
+      anillo(el.x, el.y, .3 * M, .1 * M, .03 * M, 'madera', 3);
+      casa('madera', el.x, el.y, .13 * M, .13 * M, .42 * M); casa('adobe', el.x + .12 * M, el.y + .08 * M, .1 * M, .08 * M, .07 * M);
+    } else {
+      anillo(el.x, el.y, .6 * M, .07 * M, .03 * M, 'madera');
+      for (let k = 0; k < 10; k++) { const a = k / 10 * 6.283 + hash(sem, k, 1) * .4, r = (.25 + .2 * hash(sem, k, 2)) * M; piezas.lona.push([el.x + r * Math.cos(a), el.y + r * Math.sin(a), M, M, M, 0]); }
+      casa('madera', el.x, el.y, .03 * M, .03 * M, .5 * M);
+    }
+  }
+  const g = new THREE.Group(), m = new THREE.Matrix4(), q4 = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), p = new THREE.Vector3();
+  for (const [mat, lista] of Object.entries(piezas)) {
+    if (!lista.length) continue;
+    const malla = new THREE.InstancedMesh(mat === 'lona' ? tienda : caja, MAT[mat], lista.length);
+    lista.forEach(([x, y, w, d, h, rot], k) => { e.set(0, -rot, 0); q4.setFromEuler(e); s.set(w, h, d); p.set(x - W / 2, alturaU(x, y) - .02, y - H / 2); m.compose(p, q4, s); malla.setMatrixAt(k, m); });
+    malla.castShadow = malla.receiveShadow = true; malla.frustumCulled = false; g.add(malla);
+  }
+  // caminos de carro de cada pueblo y avanzada a su ciudad
+  const pista = new THREE.LineBasicMaterial({ color: 0x8a6a45, transparent: true, opacity: .75 });
+  const Rc = NIVELES[estado.nivel].radio * FRACCION_CIUDAD;
+  for (const el of elementos) if (el.ciudad && el.tipo !== 'ciudad') { const c = el.ciudad, a = Math.atan2(el.y - c.y, el.x - c.x); g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(lineaDrapeada([[el.x, el.y], [c.x + Rc * Math.cos(a), c.y + Rc * Math.sin(a)]], .5, .05)), pista)); }
+  g.visible = estado.plazas; poner('plazas', g);
+  const z = new THREE.Group(), mat = new THREE.LineBasicMaterial({ color: 0xe0a050, transparent: true, opacity: .9 }), R = NIVELES[estado.nivel].radio;
+  // el aro se corta en el borde de la ventana: fuera no hay terreno
+  for (const c of ciudades) { let tramo = []; const cerrar = () => { if (tramo.length > 1) z.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(lineaDrapeada(tramo, .6, .12)), mat)); tramo = []; }; for (let k = 0; k <= 96; k++) { const a = k / 96 * 6.283, x = c.x + R * Math.cos(a), y = c.y + R * Math.sin(a); if (x < 0 || y < 0 || x > W || y > H) cerrar(); else tramo.push([x, y]); } cerrar(); }
+  z.visible = estado.zonas; poner('zonas', z);
+  etiquetasPlazas();
+}
+
+// ---------- rejilla de navegación, anclada a múltiplos del espaciado en coordenadas del mapa (como el grafo) ----------
+const origenRejilla = g => [((g - D.x0 % g) % g), ((g - D.y0 % g) % g)];
+let nav = null;
+function construirNav() {
+  const g = estado.rejilla, [ox, oy] = origenRejilla(g), cols = Math.floor((W - ox) / g) + 1, filas = Math.floor((H - oy) / g) + 1;
+  const bloq = new Uint8Array(cols * filas), coste = new Float32Array(cols * filas);
+  for (let j = 0; j < filas; j++) for (let i = 0; i < cols; i++) { const x = ox + i * g, y = oy + j * g, k = j * cols + i; bloq[k] = transitable(x, y) ? 0 : 1; coste[k] = bloq[k] ? 0 : costeEn(x, y); }
+  nav = { g, ox, oy, cols, filas, bloq, coste, pos: k => [ox + (k % cols) * g, oy + Math.floor(k / cols) * g] };
+}
+function construirRejilla() {
+  const { g, ox, oy, cols, filas, bloq } = nav, pos = [], nodos = [], colN = [];
+  const tramo = (ax, ay, bx, by) => { pos.push(ax - W / 2, alturaU(ax, ay) + .07, ay - H / 2, bx - W / 2, alturaU(bx, by) + .07, by - H / 2); };
+  for (let x = ox; x <= W; x += g) for (let y = 0; y < H; y += .5) tramo(x, y, x, y + .5);
+  for (let y = oy; y <= H; y += g) for (let x = 0; x < W; x += .5) tramo(x, y, x + .5, y);
+  for (let k = 0; k < cols * filas; k++) { const [x, y] = nav.pos(k); nodos.push(x - W / 2, alturaU(x, y) + .1, y - H / 2); colN.push(bloq[k] ? .75 : .12, bloq[k] ? .2 : .14, bloq[k] ? .2 : .13); }
+  const grupo = new THREE.Group();
+  const gl = new THREE.BufferGeometry(); gl.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  grupo.add(new THREE.LineSegments(gl, new THREE.LineBasicMaterial({ color: 0x2b2f2c, transparent: true, opacity: g < 4 ? .2 : .32 })));
+  const gn = new THREE.BufferGeometry(); gn.setAttribute('position', new THREE.Float32BufferAttribute(nodos, 3)); gn.setAttribute('color', new THREE.Float32BufferAttribute(colN, 3));
+  grupo.add(new THREE.Points(gn, new THREE.PointsMaterial({ size: (g < 4 ? 2 : 4) * renderer.getPixelRatio(), sizeAttenuation: false, vertexColors: true })));
+  grupo.visible = estado.verRejilla; poner('rejilla', grupo);
+}
+
+// ---------- rutas (como crates/rutas): enganche a ≤ 4 nodos con tramo recto libre, A* por la rejilla, salida al destino exacto ----------
+const segmentoLibre = (a, b) => { const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / .25)); for (let k = 1; k <= n; k++) if (!transitable(a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n)) return false; return true; };
+const costeSegmento = (a, b) => { const l = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.ceil(l / .5)); let c = 0; for (let k = 0; k < n; k++) { const t = (k + .5) / n; c += costeEn(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t); } return c * l / n; };
+function enganches(p) {
+  const { g, ox, oy, cols, filas, bloq } = nav, ci = Math.round((p[0] - ox) / g), cj = Math.round((p[1] - oy) / g), cand = [];
+  for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) { const i = ci + di, j = cj + dj; if (i < 0 || j < 0 || i >= cols || j >= filas) continue; const k = j * cols + i; if (bloq[k]) continue; const q = nav.pos(k); cand.push([Math.hypot(q[0] - p[0], q[1] - p[1]), k, q]); }
+  cand.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const out = []; for (const c of cand) { if (out.length === 4) break; if (segmentoLibre(p, c[2])) out.push([c[1], c[0]]); }
+  return out;
+}
+function calcularRuta(origen, destino) {
+  if (!transitable(...destino)) return { error: aguaEn(...destino) ? 'Ahí no se puede ir: es agua.' : 'Ahí no se puede ir: la ladera pasa de 35°.' };
+  if (Math.hypot(destino[0] - origen[0], destino[1] - origen[1]) <= nav.g && segmentoLibre(origen, destino)) return { puntos: [origen, destino] };
+  const sal = enganches(origen), lle = new Map(enganches(destino).map(([k, d]) => [k, d]));
+  if (!sal.length || !lle.size) return { error: 'No hay un nodo libre cerca.' };
+  const { g, cols, filas, bloq, coste } = nav, n = cols * filas, gs = new Float64Array(n).fill(Infinity), prev = new Int32Array(n).fill(-1);
+  const heap = [], push = (f, k) => { heap.push([f, k]); let i = heap.length - 1; while (i) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
+  const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } } return top; };
+  const h = k => { const q = nav.pos(k); return Math.hypot(q[0] - destino[0], q[1] - destino[1]); };
+  for (const [k, d] of sal) if (d < gs[k]) { gs[k] = d; push(d + h(k), k); }
+  let mejor = Infinity, fin = -1;
+  const V8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+  while (heap.length) {
+    const [f, k] = pop(); if (f >= mejor) break; if (f > gs[k] + h(k) + 1e-9) continue;
+    if (lle.has(k)) { const t = gs[k] + lle.get(k); if (t < mejor) { mejor = t; fin = k; } }
+    const i = k % cols, j = (k - i) / cols, [x, y] = nav.pos(k);
+    for (const [di, dj] of V8) {
+      const i2 = i + di, j2 = j + dj; if (i2 < 0 || j2 < 0 || i2 >= cols || j2 >= filas) continue;
+      const k2 = j2 * cols + i2; if (bloq[k2]) continue;
+      const mx = x + di * g / 2, my = y + dj * g / 2; if (!transitable(mx, my)) continue;
+      const largo = di && dj ? g * Math.SQRT2 : g, c = gs[k] + largo * (coste[k] + 4 * costeEn(mx, my) + coste[k2]) / 6;
+      if (c < gs[k2]) { gs[k2] = c; prev[k2] = k; push(c + h(k2), k2); }
+    }
+  }
+  if (fin < 0) return { error: 'No hay ruta por tierra hasta ahí.' };
+  const nodos = []; for (let k = fin; k >= 0; k = prev[k]) nodos.push(nav.pos(k));
+  let puntos = [origen, ...nodos.reverse(), destino];
+  if (estado.suavizado) puntos = estirar(puntos);
+  return { puntos };
+}
+// suavizado por coste: se salta vértices solo si la recta está libre y no cuesta más que el tramo que sustituye
+function estirar(p) {
+  const acum = [0]; for (let k = 1; k < p.length; k++) acum.push(acum[k - 1] + costeSegmento(p[k - 1], p[k]));
+  const out = [p[0]]; let i = 0;
+  while (i < p.length - 1) {
+    let elegido = i + 1;
+    for (let j = Math.min(p.length - 1, i + 48); j > i + 1; j--) if (segmentoLibre(p[i], p[j]) && costeSegmento(p[i], p[j]) <= (acum[j] - acum[i]) * 1.0001) { elegido = j; break; }
+    out.push(p[elegido]); i = elegido;
+  }
+  return out;
+}
+
+// ---------- columna: 3 de fondo × 6 filas y abanderado; los de detrás pisan el rastro de la cabeza ----------
+const columna = new THREE.Group(); escena.add(columna);
+const soldados = [];
+(() => {
+  const cuerpo = new THREE.BoxGeometry(.055, .1, .045); cuerpo.translate(0, .05, 0);
+  const cabezaG = new THREE.BoxGeometry(.036, .036, .036); cabezaG.translate(0, .118, 0);
+  const lanza = new THREE.BoxGeometry(.008, .24, .008); lanza.translate(.034, .11, 0);
+  const escudo = new THREE.CylinderGeometry(.032, .032, .008, 10); escudo.rotateZ(Math.PI / 2); escudo.translate(-.034, .06, 0);
+  const bandera = new THREE.BoxGeometry(.004, .07, .1); bandera.translate(.034, .2, -.05);
+  for (let k = 0; k < 19; k++) {
+    const s = new THREE.Group(); s.add(new THREE.Mesh(cuerpo, MAT.tunica), new THREE.Mesh(cabezaG, MAT.piel), new THREE.Mesh(lanza, MAT.madera), new THREE.Mesh(escudo, MAT.bronce));
+    if (k === 0) s.add(new THREE.Mesh(bandera, MAT.bronce));
+    s.traverse(m => { m.castShadow = true; }); columna.add(s); soldados.push(s);
+  }
+})();
+let ruta = null, cabeza = [0, 0], rastro = [];
+function iniciarColumna() {
+  if (!columnaA) { ruta = null; columna.visible = false; return; }
+  const dir = columnaB ? Math.atan2(columnaB.y - columnaA.y, columnaB.x - columnaA.x) : 0;
+  cabeza = [columnaA.x, columnaA.y];
+  rastro = []; for (let k = 12; k >= 0; k--) rastro.push([cabeza[0] - Math.cos(dir) * k * .5, cabeza[1] - Math.sin(dir) * k * .5]);
+  ruta = null;
+  if (columnaB) { const Rb = NIVELES[estado.nivel].radio * FRACCION_CIUDAD; mandar([columnaB.x - Math.cos(dir) * (Rb + .6), columnaB.y - Math.sin(dir) * (Rb + .6)], true); }
+}
+let avisoHasta = 0;
+const avisar = txt => { const c = $('chip-aviso'); c.textContent = txt; c.hidden = false; avisoHasta = performance.now() + 3500; };
+function mandar(destino, callado = false) {
+  const r = calcularRuta([cabeza[0], cabeza[1]], destino);
+  if (r.error) { if (!callado) avisar(r.error); return false; }
+  const p = r.puntos, acum = [0], costeAcum = [0];
+  for (let k = 1; k < p.length; k++) { acum.push(acum[k - 1] + Math.hypot(p[k][0] - p[k - 1][0], p[k][1] - p[k - 1][1])); costeAcum.push(costeAcum[k - 1] + costeSegmento(p[k - 1], p[k])); }
+  ruta = { puntos: p, acum, costeAcum, s: 0, destino };
+  dibujarRuta(); return true;
+}
+function dibujarRuta() {
+  const grupo = new THREE.Group();
+  if (ruta) {
+    grupo.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(lineaDrapeada(ruta.puntos, .25, .14)), new THREE.LineBasicMaterial({ color: 0xe0a050 })));
+    const [bx, by] = ruta.destino, aro = []; for (let k = 0; k <= 40; k++) { const a = k / 40 * 6.283; aro.push([bx + .5 * Math.cos(a), by + .5 * Math.sin(a)]); }
+    grupo.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(lineaDrapeada(aro, .1, .15)), new THREE.LineBasicMaterial({ color: 0xe0a050 })));
+  }
+  grupo.visible = estado.columna; poner('camino', grupo);
+}
+const enRuta = s => { const { puntos: p, acum } = ruta; s = Math.max(0, Math.min(acum[acum.length - 1], s)); let k = 1; while (k < acum.length - 1 && acum[k] < s) k++; const t = (s - acum[k - 1]) / ((acum[k] - acum[k - 1]) || 1); return [p[k - 1][0] + (p[k][0] - p[k - 1][0]) * t, p[k - 1][1] + (p[k][1] - p[k - 1][1]) * t, k, t]; };
+function moverColumna(dt) {
+  columna.visible = estado.columna && !!columnaA;
+  if (!columna.visible) return;
+  if (ruta && !estado.pausa) {
+    const largo = ruta.acum[ruta.acum.length - 1];
+    if (ruta.s < largo) {
+      const c = costeEn(cabeza[0], cabeza[1]);
+      ruta.s = Math.min(largo, ruta.s + VEL * dt / c);
+      const [x, y] = enRuta(ruta.s); cabeza = [x, y];
+      const u = rastro[rastro.length - 1]; if (Math.hypot(x - u[0], y - u[1]) > .04) { rastro.push([x, y]); if (rastro.length > 400) rastro.shift(); }
+    }
+  }
+  const M = estado.maqueta * TROPA;
+  for (let k = 0; k < soldados.length; k++) {
+    const fila = k === 0 ? 0 : Math.floor((k - 1) / 3) + 1, lado = k === 0 ? 0 : ((k - 1) % 3) - 1;
+    let atras = fila * .13 * M, i = rastro.length - 1, x = cabeza[0], y = cabeza[1], ang = 0;
+    while (i > 0) { const a = rastro[i - 1], b = rastro[i], l = Math.hypot(b[0] - a[0], b[1] - a[1]); ang = Math.atan2(b[1] - a[1], b[0] - a[0]); if (l >= atras) { const t = l ? atras / l : 0; x = b[0] + (a[0] - b[0]) * t; y = b[1] + (a[1] - b[1]) * t; break; } atras -= l; x = a[0]; y = a[1]; i--; }
+    const nx = -Math.sin(ang), ny = Math.cos(ang), px = x + nx * lado * .1 * M, py = y + ny * lado * .1 * M;
+    const sd = soldados[k]; sd.position.set(px - W / 2, alturaU(px, py), py - H / 2); sd.rotation.y = -ang + Math.PI / 2; sd.scale.setScalar(M);
+  }
+  let txt = 'parada · haz clic en el terreno';
+  if (ruta) {
+    const largo = ruta.acum[ruta.acum.length - 1];
+    if (ruta.s < largo - 1e-6) {
+      const [, , k, t] = enRuta(ruta.s), hecho = ruta.costeAcum[k - 1] + (ruta.costeAcum[k] - ruta.costeAcum[k - 1]) * t, falta = (ruta.costeAcum[ruta.costeAcum.length - 1] - hecho) / VEL;
+      txt = `${clase(alturaM(cabeza[0], cabeza[1]))} ×${fmt(costeEn(cabeza[0], cabeza[1]))} · faltan ${fmt(falta, 0)} s`;
+    }
+  }
+  $('l-columna').textContent = estado.pausa && ruta ? 'en pausa' : txt;
+}
+
+// huella de la pantalla de juego (para la vista libre)
+function construirHuella() {
+  const x = objX, y = objY, pts = [[x - PANT_W / 2, y - PANT_H / 2], [x + PANT_W / 2, y - PANT_H / 2], [x + PANT_W / 2, y + PANT_H / 2], [x - PANT_W / 2, y + PANT_H / 2], [x - PANT_W / 2, y - PANT_H / 2]];
+  const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(lineaDrapeada(pts, .5, .2)), new THREE.LineBasicMaterial({ color: 0xffffff }));
+  l.visible = estado.vista === 'libre'; poner('huella', l);
+}
+
+// etiquetas HTML de las plazas
+const capaEtq = $('capa-etiquetas'); let etiquetas = [];
+function etiquetasPlazas() {
+  capaEtq.textContent = '';
+  etiquetas = elementos.map(p => { const e = document.createElement('div'); e.className = p.tipo === 'ciudad' || p.tipo === 'campamento' ? 'etiqueta' : 'etiqueta menor'; e.textContent = p.tipo === 'ciudad' ? `Ciudad · nivel ${estado.nivel || 'inicial'}` : NOMBRES[p.tipo]; e.hidden = true; capaEtq.appendChild(e); return { e, p }; });
+}
+const vtmp = new THREE.Vector3();
+function moverEtiquetas() {
+  const w = lienzo.clientWidth, h = lienzo.clientHeight, ver = estado.plazas && estado.vista === 'juego';
+  for (const { e, p } of etiquetas) {
+    if (!ver || Math.abs(p.x - objX) > 22 || Math.abs(p.y - objY) > 22) { e.hidden = true; continue; }
+    vtmp.set(p.x - W / 2, alturaU(p.x, p.y) + (p.tipo === 'ciudad' ? .5 : .6 * estado.maqueta), p.y - H / 2).project(camara);
+    const dentro = vtmp.z < 1 && Math.abs(vtmp.x) < .95 && Math.abs(vtmp.y) < .9;
+    e.hidden = !dentro; if (dentro) { e.style.left = `${(vtmp.x + 1) / 2 * w}px`; e.style.top = `${(1 - vtmp.y) / 2 * h}px`; }
+  }
+}
+
+// ---------- cámara ----------
+const objetivo = new THREE.Vector3();
+function colocarCamara(dt = 0) {
+  const w = lienzo.clientWidth || 1, h = lienzo.clientHeight || 1, aspecto = w / h;
+  camara.aspect = aspecto; camara.updateProjectionMatrix();
+  if (estado.vista === 'juego') {
+    if (estado.seguir && columna.visible) { const k = Math.min(1, dt * 3); objX += (cabeza[0] - objX) * k; objY += (cabeza[1] - objY) * k; }
+    objX = Math.max(PANT_W / 2, Math.min(W - PANT_W / 2, objX)); objY = Math.max(PANT_H / 2, Math.min(H - PANT_H / 2, objY));
+    const d = PANT_W / (2 * aspecto * Math.tan(FOV * Math.PI / 360)), th = estado.inclinacion * Math.PI / 180;
+    objetivo.set(objX - W / 2, alturaU(objX, objY), objY - H / 2);
+    camara.near = d * .05; camara.far = d * 12; camara.updateProjectionMatrix();
+    camara.position.set(objetivo.x, objetivo.y + d * Math.sin(th), objetivo.z + d * Math.cos(th));
+    camara.lookAt(objetivo);
+    escena.fog.near = d * 1.6; escena.fog.far = d * 5.5;
+    $('regla-barra').style.width = `${5 / PANT_W * w}px`; $('regla').hidden = false;
+  } else {
+    if (camara.near !== .5) { camara.near = .5; camara.far = 3000; camara.updateProjectionMatrix(); }
+    controles.update();
+    objX = controles.target.x + W / 2; objY = controles.target.z + H / 2;
+    escena.fog.near = 500; escena.fog.far = 1600; $('regla').hidden = true;
+  }
+  const r = estado.vista === 'juego' ? 26 : 190, c = estado.vista === 'juego' ? objetivo : controles.target;
+  sol.position.set(c.x - 60, c.y + 110, c.z + 45); sol.target.position.copy(c);
+  const sc = sol.shadow.camera; if (sc.right !== r) { sc.left = -r; sc.right = r; sc.top = r; sc.bottom = -r; sc.near = 1; sc.far = 600; sc.updateProjectionMatrix(); }
+}
+function cambiarVista(v) {
+  estado.vista = v; controles.enabled = v === 'libre';
+  if (v === 'libre') { controles.target.set(objX - W / 2, alturaU(objX, objY), objY - H / 2); camara.position.set(controles.target.x - 40, controles.target.y + 130, controles.target.z + 170); controles.update(); }
+  $('chip-vista').innerHTML = v === 'juego' ? 'Cámara de juego · <b>15 u</b> de ancho' : 'Vista libre · el marco blanco es la pantalla de juego';
+  $('d-inclinacion').hidden = v !== 'juego';
+  construirHuella();
+}
+
+// clic en el terreno: el rayo de la cámara avanza hasta tocar el relieve
+const rayo = new THREE.Raycaster(), ndc = new THREE.Vector2();
+function puntoDelTerreno(ev) {
+  const r = lienzo.getBoundingClientRect(); ndc.set((ev.clientX - r.left) / r.width * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+  rayo.setFromCamera(ndc, camara);
+  const o = rayo.ray.origin, d = rayo.ray.direction, en = t => [o.x + d.x * t + W / 2, o.y + d.y * t, o.z + d.z * t + H / 2];
+  let t = 0, antes = 0;
+  for (let k = 0; k < 8000 && t < 5000; k++) {
+    const [x, y, z] = en(t), h = alturaU(x, z);
+    if (y <= h) { let a = antes, b = t; for (let s = 0; s < 24; s++) { const m = (a + b) / 2, [mx, my, mz] = en(m); if (my <= alturaU(mx, mz)) b = m; else a = m; } const [fx, , fz] = en(b); return fx >= 0 && fz >= 0 && fx <= W && fz <= H ? [fx, fz] : null; }
+    antes = t; t += Math.max(.02, (y - h) * .3);
+  }
+  return null;
+}
+
+// lecturas: desnivel dentro del rectángulo de la pantalla
+let ultimaLectura = 0;
+function lecturas(ahora) {
+  if (avisoHasta && ahora > avisoHasta) { $('chip-aviso').hidden = true; avisoHasta = 0; }
+  if (ahora - ultimaLectura < 250) return; ultimaLectura = ahora;
+  let mn = 1e9, mx = -1e9;
+  for (let y = objY - PANT_H / 2; y <= objY + PANT_H / 2; y += .5) for (let x = objX - PANT_W / 2; x <= objX + PANT_W / 2; x += .5) { const h = alturaM(x, y); if (h < mn) mn = h; if (h > mx) mx = h; }
+  const d = (mx - mn) * estado.exag, hc = alturaM(objX, objY);
+  $('l-desnivel').textContent = `${fmt(d, d < 10 ? 1 : 0)} m (${fmt(d / FACTOR)} u)`;
+  const pc = pendiente(objX, objY);
+  $('l-centro').textContent = `${clase(hc)} · pendiente ${fmt(Math.atan(pc) * 180 / Math.PI, 0)}°${pc > PEND_MAX ? ' (no se cruza)' : ''}`;
+  if (estado.vista === 'libre') construirHuella();
+}
+
+// ---------- montaje ----------
+const FICHAS = {
+  actual: 'Ventana real del generador: <b>320 × 240 u</b>, entre la cordillera norte y el campamento‑0. Desnivel en una pantalla: <b>8 m</b> de mediana; en la cordillera, hasta <b>160 m</b> (con altura ×1).',
+  propuesta: 'Boceto con los tamaños de la regla ×100: crestas, valles, colinas y lomas que caben en una o pocas pantallas. «Tamaño del relieve» escala tamaño y altura a la vez; «Altura» exagera solo la vista. No sale del generador.',
+};
+let propuestaCache = null;
+function montarTerreno() {
+  if (estado.terreno === 'propuesta') { if (!propuestaCache || propuestaCache.S !== estado.relieve) propuestaCache = { S: estado.relieve, t: propuesta(estado.relieve) }; T = propuestaCache.t; } else T = real;
+  $('chip-terreno').textContent = estado.terreno === 'actual' ? 'Generador actual · seed 42' : `Propuesta ×100 · relieve ×${fmt(estado.relieve)} · altura ×${fmt(estado.exag)}`;
+  $('ficha-terreno').innerHTML = FICHAS[estado.terreno];
+  pintarTerreno(); elegirPlazas(); construirNav(); montarCapas(); iniciarColumna();
+}
+function montarCapas() { construirRios(); construirPlazas(); construirArboles(); construirRejilla(); dibujarRuta(); construirHuella(); }
+const ocupado = fn => { visor.style.cursor = 'progress'; setTimeout(() => { fn(); visor.style.cursor = ''; }, 16); };
+const rehacerRuta = () => { if (ruta && ruta.s < ruta.acum[ruta.acum.length - 1] - 1e-6) mandar(ruta.destino); };
+
+// ---------- mandos ----------
+document.querySelectorAll('input[name="terreno"]').forEach(r => r.addEventListener('change', () => { estado.terreno = r.value; ocupado(montarTerreno); }));
+document.querySelectorAll('input[name="vista"]').forEach(r => r.addEventListener('change', () => cambiarVista(r.value)));
+const deslizadores = {};
+const deslizador = (id, clave, texto, alSoltar) => { const el = $(id), out = $('o-' + id); const pintar = () => { out.textContent = texto(+el.value); }; el.addEventListener('input', () => { pintar(); if (!alSoltar) estado[clave] = +el.value; }); el.addEventListener('change', () => { estado[clave] = +el.value; if (alSoltar) ocupado(alSoltar); }); pintar(); deslizadores[clave] = { el, pintar }; };
+deslizador('inclinacion', 'inclinacion', v => `${v}°`);
+deslizador('exag', 'exag', v => `×${fmt(v)}`, () => { $('chip-terreno').textContent = estado.terreno === 'actual' ? 'Generador actual · seed 42' : `Propuesta ×100 · relieve ×${fmt(estado.relieve)} · altura ×${fmt(estado.exag)}`; pintarTerreno(); montarCapas(); });
+deslizador('relieve', 'relieve', v => `×${fmt(v)}`, () => { if (estado.terreno === 'propuesta') montarTerreno(); });
+deslizador('copa', 'copa', v => `${fmt(v)} u · ${fmt(v * FACTOR, 0)} m`, construirArboles);
+deslizador('maqueta', 'maqueta', v => `×${fmt(v)}`, () => { repartirElementos(); construirPlazas(); construirArboles(); });
+$('restablecer').addEventListener('click', () => {
+  for (const [k, v] of Object.entries(ELEGIDOS)) { estado[k] = v; deslizadores[k].el.value = v; deslizadores[k].pintar(); }
+  $('rejilla').value = '2'; estado.rejilla = 2; $('suavizado').checked = estado.suavizado = true; $('t-propuesta').checked = true; estado.terreno = 'propuesta';
+  ocupado(montarTerreno);
+});
+$('rejilla').addEventListener('change', e => { estado.rejilla = +e.target.value; ocupado(() => { construirNav(); construirRejilla(); rehacerRuta(); }); });
+$('ver-rejilla').addEventListener('change', e => { estado.verRejilla = e.target.checked; capas.rejilla.visible = e.target.checked; });
+$('suavizado').addEventListener('change', e => { estado.suavizado = e.target.checked; rehacerRuta(); });
+$('ver-columna').addEventListener('change', e => { estado.columna = e.target.checked; capas.camino.visible = e.target.checked; });
+$('ver-plazas').addEventListener('change', e => { estado.plazas = e.target.checked; capas.plazas.visible = e.target.checked; });
+$('ver-zonas').addEventListener('change', e => { estado.zonas = e.target.checked; capas.zonas.visible = e.target.checked; });
+$('nivel').addEventListener('change', e => { estado.nivel = +e.target.value; ocupado(() => { repartirElementos(); construirPlazas(); construirArboles(); }); });
+$('ver-arboles').addEventListener('change', e => { estado.arboles = e.target.checked; capas.arboles.visible = e.target.checked; });
+$('seguir').addEventListener('change', e => { estado.seguir = e.target.checked; });
+const botonPausa = $('pausa'); const pintarPausa = () => { botonPausa.textContent = estado.pausa ? 'Seguir' : 'Pausar'; }; pintarPausa();
+botonPausa.addEventListener('click', () => { estado.pausa = !estado.pausa; pintarPausa(); });
+const ir = destino => {
+  const p = destino === 'columna' ? [cabeza[0], cabeza[1]] : destino === 'salida' ? (columnaA && columnaB ? [columnaA.x + (columnaB.x - columnaA.x) * .12, columnaA.y + (columnaB.y - columnaA.y) * .12] : D.puntos.llano) : D.puntos[destino];
+  objX = p[0]; objY = p[1];
+  if (estado.vista === 'libre') { const t = new THREE.Vector3(objX - W / 2, alturaU(objX, objY), objY - H / 2), dlt = t.clone().sub(controles.target); controles.target.copy(t); camara.position.add(dlt); }
+};
+const noSeguir = () => { estado.seguir = false; $('seguir').checked = false; };
+document.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => { noSeguir(); ir(b.dataset.ir); }));
+document.querySelectorAll('[data-escena]').forEach(b => b.addEventListener('click', () => {
+  const [t, lugar] = b.dataset.escena.split(',');
+  $('v-juego').checked = true; cambiarVista('juego'); noSeguir();
+  if (t === 'plazas') { $('ver-plazas').checked = estado.plazas = true; capas.plazas.visible = true; $('ver-zonas').checked = estado.zonas = true; capas.zonas.visible = true; $('inclinacion').value = 70; estado.inclinacion = 70; deslizadores.inclinacion.pintar(); if (columnaA) { objX = columnaA.x; objY = columnaA.y; } }
+  else if (t === 'columna') { iniciarColumna(); ir('salida'); $('seguir').checked = estado.seguir = true; }
+  else { if (estado.terreno !== t) { $('t-' + t).checked = true; estado.terreno = t; montarTerreno(); } ir(lugar); }
+  visor.scrollIntoView({ behavior: reducido ? 'auto' : 'smooth', block: 'center' });
+}));
+
+// arrastrar mueve la cámara de juego; un clic sin arrastre manda la columna (en las dos vistas)
+let arrastre = null, pulsado = null;
+lienzo.addEventListener('pointerdown', e => { pulsado = { x: e.clientX, y: e.clientY }; if (estado.vista !== 'juego') return; arrastre = { x: e.clientX, y: e.clientY }; lienzo.setPointerCapture(e.pointerId); });
+lienzo.addEventListener('pointermove', e => {
+  if (!arrastre || estado.vista !== 'juego') return;
+  if (pulsado && Math.hypot(e.clientX - pulsado.x, e.clientY - pulsado.y) > 5) noSeguir();
+  const k = PANT_W / lienzo.clientWidth; objX -= (e.clientX - arrastre.x) * k; objY -= (e.clientY - arrastre.y) * k / Math.sin(estado.inclinacion * Math.PI / 180); arrastre = { x: e.clientX, y: e.clientY };
+});
+lienzo.addEventListener('pointerup', e => {
+  arrastre = null;
+  if (!pulsado || Math.hypot(e.clientX - pulsado.x, e.clientY - pulsado.y) > 5) { pulsado = null; return; }
+  pulsado = null;
+  const p = puntoDelTerreno(e); if (!p) return;
+  if (!estado.columna) { $('ver-columna').checked = estado.columna = true; capas.camino.visible = true; }
+  if (mandar(p) && estado.pausa) { estado.pausa = false; pintarPausa(); }
+});
+lienzo.addEventListener('pointercancel', () => { arrastre = null; pulsado = null; });
+const teclas = new Set();
+lienzo.addEventListener('keydown', e => { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd'].includes(e.key)) { teclas.add(e.key); e.preventDefault(); noSeguir(); } });
+lienzo.addEventListener('keyup', e => teclas.delete(e.key)); lienzo.addEventListener('blur', () => teclas.clear());
+const moverConTeclas = dt => { if (estado.vista !== 'juego' || !teclas.size) return; const v = 12 * dt; if (teclas.has('ArrowUp') || teclas.has('w')) objY -= v; if (teclas.has('ArrowDown') || teclas.has('s')) objY += v; if (teclas.has('ArrowLeft') || teclas.has('a')) objX -= v; if (teclas.has('ArrowRight') || teclas.has('d')) objX += v; };
+
+// tamaño
+const ajustar = () => { renderer.setSize(visor.clientWidth, visor.clientHeight, false); };
+new ResizeObserver(ajustar).observe(visor); ajustar();
+
+// ---------- arranque ----------
+montarTerreno(); ir('salida'); cambiarVista('juego');
+let antes = performance.now();
+const bucle = ahora => {
+  const dt = Math.min(.1, (ahora - antes) / 1000); antes = ahora;
+  moverConTeclas(dt); moverColumna(dt); colocarCamara(dt); lecturas(ahora); moverEtiquetas();
+  renderer.render(escena, camara); requestAnimationFrame(bucle);
+};
+requestAnimationFrame(bucle);
+})().catch(e => { const a = document.getElementById('aviso'); a.textContent = 'La escena falló al cargar: ' + e.message; a.hidden = false; console.error(e); });
+</script>
