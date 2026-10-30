@@ -64,17 +64,8 @@ fn campamento(m: &Mundo, i: usize) -> Punto {
 
 /// Un sitio verde con mucho bosque a 10 u (al menos 6 parcelas) cerca del campamento `i`: una plaza que no cae en ruinas por falta de madera.
 fn sitio_rico(n: &Nucleo, m: &Mundo, i: usize, faccion: u32) -> Punto {
-    let c = campamento(m, i);
-    for r in (0..8).map(|k| 50_000 + k * 10_000) {
-        for g in 0..360 {
-            let a = (g as f64).to_radians();
-            let p = Punto::new(c.x + (r as f64 * a.cos()) as i64, c.y + (r as f64 * a.sin()) as i64);
-            if n.viabilidad(p, faccion).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6) {
-                return p;
-            }
-        }
-    }
-    panic!("sin sitio rico cerca del campamento {i}");
+    // El de `comun::real`: con campo abierto al este, por donde se alejan estas pruebas.
+    comun::real::sitio_rico(n, m, i, faccion)
 }
 
 /// Un sitio fundable, verde y con mucho bosque, a `r` del punto `c`, lejos de la protección de un campamento de mercenarios (donde nadie combate).
@@ -204,8 +195,9 @@ async fn un_jugador_nuevo_crea_su_heroe_pide_tropa_sale_del_campamento_y_marcha_
     let columna = creadas(&r)[0].clone();
 
     // `marchar_a` y `estacionar_ejercito`: el plan llega en la `Delta`. `repostar_en_campamento` sin campamento busca el que tiene a la puerta.
-    let otro_campamento = campamento(&m.0, 1);
-    let (deltas, r) = dar(&mut carla, "o9", marchar_a(&heroe.1, otro_campamento)).await;
+    // Una marcha corta: el reloj corre con la pared y una ruta larga (miles de nodos del grafo de 4 u) gasta víveres antes de `o11`.
+    let cerca = comun::real::en_tierra(&m.0, campamento(&m.0, 0), 20_000, 0);
+    let (deltas, r) = dar(&mut carla, "o9", marchar_a(&heroe.1, cerca)).await;
     aceptada(&r);
     assert_eq!(columnas_de(del_heroe(&deltas).last().unwrap())[0].estado, pb::EstadoColumna::ColumnaMarchando as i32);
     let (_, r) = dar(&mut carla, "o10", orden::Cuerpo::EstacionarEjercito(pb::OrdenEstacionarEjercito { ejercito_id: columna.1.clone() })).await;

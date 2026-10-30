@@ -5,7 +5,10 @@ import { crearCampoForestal } from './forestacionRegional';
 import { crearRelieveRegional } from './regional';
 import { generarHidrografiaRegional } from './hidrografiaRegional';
 import { crearSuelosRegional } from './suelosRegional';
-import { comprobarConexion } from './conexion';
+import { comprobarConexion, conexionPorCeldas } from './conexion';
+import { muestrearCeldas } from './celdas';
+import { FACTOR } from './campamentos';
+import { crearDetalleRelieve } from './relieveDetalle';
 
 export function generarRelieve(seed: number, ancho: number, alto: number) {
   const config = { ancho, alto, seed };
@@ -23,9 +26,20 @@ export function generarRelieve(seed: number, ancho: number, alto: number) {
   }
   const { rios, lagos } = hidro;
   elevacion.costas = crearCostasRegional(seed, regional, p => evaluarElevacion(elevacion, p), rios);
-  conexion = comprobarConexion(elevacion);
+  // El detalle va el último: ríos, lagos y costas se trazan sobre el relieve regional y el detalle respeta sus valles.
   const forestacion = crearCampoForestal(seed, rios);
   const suelos = crearSuelosRegional(seed, rios);
-  if (conexion.conectadas !== conexion.zonas) throw new Error(`Seed ${seed}: solo ${conexion.conectadas}/${conexion.zonas} zonas tienen conexión terrestre`);
-  return { config, elevacion, rios, lagos, suelos, forestacion, conexion, factorLagos };
+  // Con el detalle, la conexión se mide en las celdas de 4 u del artefacto (la malla gruesa ya no ve los valles). Si
+  // alguna región queda aislada, se repite con menos detalle, como con los lagos. La rejilla se devuelve para que nadie
+  // vuelva a muestrear los mismos centros.
+  let fuerzaDetalle = 1, celdas, final;
+  for (const fuerza of [1, 0.8, 0.6, 0.4, 0]) {
+    fuerzaDetalle = fuerza;
+    elevacion.detalle = crearDetalleRelieve(seed, rios, regional.barreras, fuerza);
+    celdas = muestrearCeldas({ elevacion, forestacion }, { ancho, alto }, 4 * FACTOR);
+    final = conexionPorCeldas(regional, celdas);
+    if (final.conectadas === final.zonas) break;
+  }
+  if (final!.conectadas !== final!.zonas) throw new Error(`Seed ${seed}: solo ${final!.conectadas}/${final!.zonas} zonas tienen conexión terrestre`);
+  return { config, elevacion, rios, lagos, suelos, forestacion, conexion: final!, factorLagos, fuerzaDetalle, celdas: celdas! };
 }

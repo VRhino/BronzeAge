@@ -6,7 +6,8 @@ Parte del generador regional de Codex (`codex/worldgen-relieve`, `4e6fd44`).
 
 ## Flujo
 
-`src/relieve.ts` (relieve, hidrografía, costas, bosque y suelos) → `src/mundoEstrategico.ts` / `recursos.ts` / `contenidoVivo.ts`
+`src/relieve.ts` (relieve regional, hidrografía, costas, el detalle a escala de pantalla de `relieveDetalle.ts`, bosque,
+suelos, la rejilla de celdas de 4 u y la conexión medida en ella) → `src/mundoEstrategico.ts` / `recursos.ts` / `contenidoVivo.ts`
 (campamentos, metales, parcelas, recursos, bandidos y alijos) → vados y grafo de navegación → `src/artefacto.ts`.
 Lo orquesta `scripts/generar-mundo.ts`.
 

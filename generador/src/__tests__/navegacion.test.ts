@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Point } from '../tipos';
-import { componentes, construirGrafo, estadisticasGrafo, nodoMasCercano } from '../navegacion';
+import { componentes, construirGrafo, ESPACIADO_NAVEGACION, estadisticasGrafo, nodoMasCercano } from '../navegacion';
 
-const E = 96;
+const E = ESPACIADO_NAVEGACION;
 const lim = { ancho: 10 * E, alto: 8 * E };
 const llano = () => 1;
 const todo = () => true;
@@ -84,7 +84,7 @@ describe('construirGrafo', () => {
     expect(construirGrafo(lim, t, c, v)).toEqual(construirGrafo(lim, t, c, v));
   });
 
-  it('rendimiento: un mundo de ~83.000 nodos con transitabilidad sencilla tarda pocos segundos', () => {
+  it('rendimiento: un mundo de ~330.000 nodos con transitabilidad sencilla tarda pocos segundos', () => {
     const mundo = { ancho: 2667 * 12, alto: 2000 * 12 };
     const t0 = Date.now();
     const g = construirGrafo(mundo, p => (p.x * 0.0007) % 1 > 0.02, llano, []);

@@ -162,14 +162,34 @@ funcionar primero ahí, con three.js como en la mesa, ayuda a cerrar la represen
      Los tramos nuevos llevan ese coste en el plan, y las aristas que quedan, el suyo.
    - **Quién suaviza:** las columnas (marchar) y las persecuciones. Las caravanas y los aedas no suavizan, porque van
      por la red de caminos y la red se forma con sus aristas.
-3. **Generador: rehacer el relieve con la receta de §3.1** sobre la geografía regional (macizos, cuencas y costas
-   actuales), con formas de 2 a 80 u dentro de cada macizo, ríos con vados y bosque. Se valida con la mesa: la ventana
-   se saca con `generador/scripts/datos-mesa-3d.ts`.
+3. **Generador: relieve con la receta de §3.1** (hecho, 2026-10-30; `generador/src/relieveDetalle.ts`, detalle en
+   `Docs/Mechanics/Generacion_Del_Mundo.md` §5.1).
+   - **Encima del relieve regional.** El detalle va encima, con ríos, lagos y costas ya hechos: crestas en el macizo
+     (por encima de 550 m), colinas en las tierras altas, lomas en el llano y valles en los ríos. En los pasos de las
+     barreras no hay detalle. Los ríos siguen bajando y la costa no se mueve.
+   - **Conexión.** Se mide en las celdas de 4 u (la malla gruesa de antes ya no veía los valles). Si una semilla quedara
+     partida, el detalle se repite con menos fuerza. Las semillas 1, 7, 42, 99 y 2026 conectan con la fuerza entera.
+   - **Calibración** en la ventana de la mesa (semilla 42), en el macizo:
+     - desnivel por pantalla: 46 m de mediana y 196 m en el percentil 90 (antes 50 y 110; la propuesta elegida, 107 y
+       219);
+     - laderas de más de 35°: el 25 %, cerradas al paso (antes el 13 %; la propuesta, el 43 %).
+
+     Con más relieve las crestas cerraban el paso entre regiones (crestas en las tierras altas, que eran los corredores)
+     y las cumbres se aplastaban contra el tope de 1.000 m del raster. La mesa lo enseña como «Generador nuevo».
 4. **Contrato de mundo: resolución.**
-   - El grafo pasa de 8 u a **4 u**: 334.167 nodos y unos 1,3 M aristas, 4 veces los de hoy (83.834). Hay que medir el
-     tamaño del artefacto, la carga y el A* del servidor.
-   - La altura: hoy los rásteres van a 4 u y la mesa usa 0,5 u. En todo el mapa serían 5.334 × 4.000 = 21 M muestras,
-     43 MB en u16 sin comprimir; hay que decidir qué resolución lleva el artefacto y qué detalle añade el cliente.
+   - **Grafo de 4 u (hecho, 2026-10-30).** Un nodo por celda transitable: 201.434 nodos y 775.346 aristas en la
+     semilla 42, el 99,23 % en la componente mayor, con los 8 campamentos. El coste de una arista es la media de sus dos
+     extremos en la capa `coste`, el mismo dato que usa el suavizado.
+     - Generación: 61 s.
+     - Artefacto: 16 MB (antes 5,6).
+     - Servidor: carga en 0,2 s; 15 ms por ruta (4 ms en lote, en paralelo) y 17 ms suavizada.
+     - Pruebas del servidor: 16 escenarios montados sobre el artefacto real daban por hecha la geografía de antes
+       (una plaza al oeste de su campamento y campo abierto al este, viajes de más de 40 minutos, nodos de cobre
+       grandes). Ahora piden lo que necesitan: `sitio_rico` (`crates/nucleo/tests/comun/real.rs`) exige campo
+       abierto al este, lejos de los campamentos, y los saqueos de pueblo toman el nodo de cobre más rico.
+   - **La altura (pendiente).** Hoy los rásteres van a 4 u y la mesa usa 0,5 u. En todo el mapa serían 5.334 × 4.000 =
+     21 M muestras, 43 MB en u16 sin comprimir. Hay que decidir qué resolución lleva el artefacto y qué detalle añade el
+     cliente. El tope de 1.000 m del raster (`ESCALA_TERRENO.metrosVerticalesPorElevacion`) también limita las cumbres.
 5. **Cliente de jugador (prototipo) y después Unity** (§5):
    - three.js con la cámara de juego;
    - terreno por teselas;
@@ -181,9 +201,11 @@ funcionar primero ahí, con three.js como en la mesa, ayuda a cerrar la represen
 ## 7. Abierto
 
 - **Ríos y vados** del terreno nuevo. Con el terreno real, la mesa dibuja los ríos pero no cortan el paso, porque la
-  ventana no trae sus vados.
+  ventana no trae sus vados. En el mundo, 16 de los 7.360 recursos quedan en bolsas entre ríos sin vado (fuera de la
+  red principal).
+- **Más relieve:** acercarse al 43 % de laderas cerradas de la propuesta pide abrir collados en las crestas o subir el
+  tope vertical de 1.000 m.
 - **Cuántos árboles** dibuja el cliente y con qué detalle.
-- **Tamaño de héroes y tropa** frente a las plazas y los árboles, ahora con su propio mando (×3,2).
 - **Resolución de la altura** en el artefacto (§6.4).
 
 ## 8. Fuente de la mesa
@@ -193,5 +215,8 @@ funcionar primero ahí, con three.js como en la mesa, ayuda a cerrar la represen
 - `Consideraciones/artefactos/mesa_escalas_3d/datos.json`: la ventana de la seed 42 (x0 = 1276, y0 = 340).
 - `Consideraciones/artefactos/mesa_escalas_3d/montar.mjs`: escribe la página entera
   (`node montar.mjs [salida.html]`). La página montada no se versiona.
-- `generador/scripts/datos-mesa-3d.ts`: regenera `datos.json` desde una seed y su artefacto
-  (`npx tsx scripts/datos-mesa-3d.ts 42 mundo-<hash>.bin datos.json [x0 y0]`, unos 25 s).
+- `Consideraciones/artefactos/mesa_escalas_3d/datos-nuevo.json`: la misma ventana con el relieve a escala de pantalla
+  (artefacto `71697908…`).
+- `generador/scripts/datos-mesa-3d.ts`: regenera una ventana desde una seed y su artefacto
+  (`npx tsx scripts/datos-mesa-3d.ts 42 mundo-<hash>.bin datos-nuevo.json [x0 y0]`, unos 50 s). `datos.json`, la
+  ventana de antes, sale del generador anterior al relieve nuevo y ya no se puede regenerar.

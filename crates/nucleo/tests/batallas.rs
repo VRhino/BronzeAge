@@ -2170,8 +2170,11 @@ fn sitio_junto_a(n: &Nucleo, m: &Mundo, c: Punto, r: i64) -> Option<Punto> {
 fn con_pueblo(m: &M) -> (Esc, u64, u64, Punto) {
     let mut n = Nucleo::nuevo(arranque_mundo(m, 7));
     let mapa = nucleo::economia::Mapa::de(&m.0);
-    let (cobre, sitio) = (0..mapa.nodos.len())
-        .filter(|&i| mapa.nodos[i].tipo == Tipo::MinaCobre)
+    // El nodo más rico que tenga un sitio al lado: los de poca reserva se vacían en la primera hora y el pueblo no llega a la mitad de su almacén.
+    let mut ricos: Vec<usize> = (0..mapa.nodos.len()).filter(|&i| mapa.nodos[i].tipo == Tipo::MinaCobre).collect();
+    ricos.sort_by_key(|&i| std::cmp::Reverse(mapa.nodos[i].inicial));
+    let (cobre, sitio) = ricos
+        .into_iter()
         .find_map(|i| sitio_junto_a(&n, &m.0, mapa.nodos[i].pos, 6_000).map(|p| (i as u32, p)))
         .expect("hay un nodo de cobre junto a un sitio rico");
     let madre = fundar(&mut n, 0, "m", "ana", 1, sitio);

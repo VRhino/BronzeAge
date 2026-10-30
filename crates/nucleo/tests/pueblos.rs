@@ -314,7 +314,10 @@ fn exige_madre_de_nivel_2_y_respeta_el_cupo_que_libera_destruirlo_a_mano() {
     let (plaza, cobre) = (uno.plaza, uno.cobre);
     assert_eq!(uno.rechazada("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: cobre }), rechazos::PUEBLO_NIVEL_INSUFICIENTE);
 
-    let mut e = montar(m, 7, 2);
+    // Una plaza con al menos otros dos nodos de pueblo a 12 u (la zona de nivel 2 llega a 15): con el relieve de 2026-10-30 no todos los sitios los tienen.
+    let mapa = Mapa::de(&m.0);
+    let con_nodos = |p: Punto| mapa.nodos.iter().filter(|x| x.tipo.es_de_pueblo() && x.tipo != Tipo::MinaHierro && x.pos.dist(p) <= 12_000).count() >= 3;
+    let mut e = montar_donde(Nucleo::nuevo(arranque(m, 7)), m, 2, con_nodos);
     let plaza = e.plaza;
     let primero = e.marcar();
     // Tres pueblos en el nivel 2, la aldea agrícola incluida: el segundo, de lo que ofrezca el panel; con la aldea, el cuarto se rechaza aunque haya candidatos.

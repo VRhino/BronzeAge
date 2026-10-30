@@ -7,7 +7,6 @@ import { colocarBandidosYAlijos } from '../src/contenidoVivo';
 import { componentes, construirGrafo, estadisticasGrafo, nodoMasCercano } from '../src/navegacion';
 import { bloquearRios, colocarVados, PARAMETROS_VADOS } from '../src/vados';
 import { escribirArtefacto } from '../src/artefacto';
-import { muestrearCeldas } from '../src/celdas';
 import { costeEnPunto, esTransitable } from '../src/costeMovimiento';
 import { evaluarElevacion, evaluarTerreno } from '../src/elevacion';
 import { densidadForestal } from '../src/forestacionRegional';
@@ -47,8 +46,10 @@ const aCeldaTransitable = (p: Point): Point => {
 // Los ríos cortan el paso salvo en los vados: se trazan como barrera en la misma rejilla.
 const vadosPorRio = colocarVados(r.rios);
 const bloqueoRios = bloquearRios({ ancho, alto }, r.rios, [...vadosPorRio.values()].flat(), lado);
-// Parcelas, transitabilidad y artefacto muestrean el relieve en los mismos centros de celda de 48 unidades: se evalúa una sola vez.
-const celdas = medir('rejilla de celdas', () => muestrearCeldas(r, { ancho, alto }, lado));
+// Parcelas, transitabilidad y artefacto muestrean el relieve en los mismos centros de celda de 48 unidades: los evaluó el
+// relieve una sola vez (también mide con ellos la conexión).
+const celdas = r.celdas;
+if (celdas.lado !== lado || celdas.columnas !== nx || celdas.filas !== ny) throw new Error('la rejilla de celdas del relieve no es la del artefacto');
 const densidadEn = (p: Point): number => { const i = celdas.indice(p); return i >= 0 ? celdas.densidad[i]! : densidadForestal(r.forestacion, r.elevacion, p); };
 const e = medir('campamentos, metales y parcelas', () => generarMundoEstrategico(r, densidadEn));
 // Desde el 2026-10-27 el mundo no tiene nodos de ganado: el ganado sale de los rebaños de las aldeas agrícolas (mecánicas 50 y 51).
@@ -61,7 +62,18 @@ const bandidos = colocados.bandidos.map(b => ({ ...b, posicion: aCeldaTransitabl
 const alijos = colocados.alijos.map(a => ({ ...a, posicion: aCeldaTransitable(a.posicion) }));
 
 const rios: RioMundo[] = r.rios.map(rio => ({ id: rio.id, puntos: rio.puntos, terminaEnLago: rio.terminaEnLago, navegable: rio.navegable, vados: vadosPorRio.get(rio.id) ?? [] }));
-const grafo = medir('grafo de navegación', () => construirGrafo({ ancho, alto }, transitableCelda, p => costeEnPunto(r.elevacion, p), rios.flatMap(x => x.vados), { radioVado: PARAMETROS_VADOS.radioHueco }));
+// Coste de movimiento por celda, una sola vez: lo usan el grafo (sus nodos son los centros de las celdas) y la capa `coste`.
+const costeCelda = medir('coste por celda', () => {
+  const c = new Float64Array(nx * ny);
+  for (let i = 0; i < c.length; i++) {
+    const p = { x: ((i % nx) + 0.5) * lado, y: (Math.floor(i / nx) + 0.5) * lado };
+    if (transitableCelda(p)) c[i] = costeEnPunto(r.elevacion, p, celdas.altura[i]);
+  }
+  return c;
+});
+const costeEn = (p: Point): number => { const i = celdas.indice(p); return i >= 0 ? costeCelda[i]! : transitableCelda(p) ? costeEnPunto(r.elevacion, p) : 0; };
+const grafo = medir('grafo de navegación', () => construirGrafo({ ancho, alto }, transitableCelda, costeEn, rios.flatMap(x => x.vados),
+  { radioVado: PARAMETROS_VADOS.radioHueco, espaciado: lado, costePorExtremos: true }));
 
 const comp = componentes(grafo), est = estadisticasGrafo(grafo, comp);
 const fuera = (puntos: Point[]) => puntos.filter(p => { const n = nodoMasCercano(grafo, p); return !n || comp.componenteDe[n.id] !== est.mayor; }).length;
@@ -83,11 +95,7 @@ const mundo: MundoGenerado = {
     humedad: p => { const i = celdas.indice(p); return i >= 0 ? celdas.humedad[i]! : humedadRegionalEn(r.elevacion.regional, p); },
     densidadBosque: densidadEn,
     transitable: transitableCelda,
-    coste: p => {
-      if (!transitableCelda(p)) return 0;
-      const i = celdas.indice(p);
-      return costeEnPunto(r.elevacion, p, i >= 0 ? celdas.altura[i]! : undefined);
-    },
+    coste: costeEn,
   },
 };
 const salida = medir('artefacto', () => escribirArtefacto(mundo, carpeta));

@@ -1,11 +1,14 @@
-// Monta la mesa de escalas 3D: mete datos.json en plantilla.html y escribe la página entera.
+// Monta la mesa de escalas 3D: mete las dos ventanas de datos en plantilla.html y escribe la página entera.
+// `datos.json` es el generador de antes (relieve regional liso) y `datos-nuevo.json`, el del relieve a escala de pantalla.
 // Uso: node montar.mjs [salida.html]   (por defecto, mesa-escalas-3d.html al lado; está en .gitignore)
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const aqui = new URL('.', import.meta.url);
-const plantilla = readFileSync(new URL('plantilla.html', aqui), 'utf8');
-const datos = readFileSync(new URL('datos.json', aqui), 'utf8');
-if (plantilla.split('__DATOS__').length !== 2) throw new Error('plantilla.html tiene que llevar un único __DATOS__');
+const leer = nombre => readFileSync(new URL(nombre, aqui), 'utf8');
+const plantilla = leer('plantilla.html');
+for (const marca of ['__DATOS__', '__DATOS_NUEVO__']) {
+  if (plantilla.split(marca).length !== 2) throw new Error(`plantilla.html tiene que llevar un único ${marca}`);
+}
 const salida = process.argv[2] ?? new URL('mesa-escalas-3d.html', aqui);
-writeFileSync(salida, plantilla.replace('__DATOS__', () => datos));
+writeFileSync(salida, plantilla.replace('__DATOS_NUEVO__', () => leer('datos-nuevo.json')).replace('__DATOS__', () => leer('datos.json')));
 console.log(`escrita ${salida}`);

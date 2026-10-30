@@ -6,5 +6,5 @@ describe('regresiones de conexión continental', () => {
   for (const seed of [99, 2026]) it(`seed ${seed}: las 16 áreas quedan conectadas por tierra`, () => {
     const mapa = generarRelieve(seed, 32000, 24000);
     expect(mapa.conexion.conectadas).toBe(16);
-  }, 60000);
+  }, 180000); // el relieve incluye la rejilla de celdas de 4 u y la conexión medida en ella
 });

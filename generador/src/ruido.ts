@@ -101,9 +101,10 @@ function aporteEsquina(hash: number, dx: number, dy: number): number {
 
 /**
  * Ruido de gradiente 2D en el punto dado. Rango teórico [−√2/2, +√2/2]. Definido para cualquier coordenada,
- * incluidas negativas: `& 255` sobre el entero envuelve la rejilla en ambos sentidos.
+ * incluidas negativas: `& 255` sobre el entero envuelve la rejilla en ambos sentidos. Exportado para los campos que
+ * combinan las octavas a su manera (las crestas de `relieveDetalle`).
  */
-function ruidoGradiente(permutacion: number[], x: number, y: number): number {
+export function ruidoGradiente(permutacion: number[], x: number, y: number): number {
   const xi = Math.floor(x);
   const yi = Math.floor(y);
   const xf = x - xi;

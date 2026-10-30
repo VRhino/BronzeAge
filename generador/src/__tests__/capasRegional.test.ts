@@ -18,7 +18,7 @@ describe('capas regionales 6', () => {
     for (let i = 1; i < salida.length; i++) expect(salida[i]!.y).toBeGreaterThan(salida[i - 1]!.y);
   });
   let mapa: ReturnType<typeof generarRelieve>;
-  beforeAll(() => { mapa = generarRelieve(42, 32000, 24000); }, 60000);
+  beforeAll(() => { mapa = generarRelieve(42, 32000, 24000); }, 180000);
   it('une afluentes sin duplicar aristas', () => {
     const aristas = new Set<string>();
     for (const rio of mapa.rios) {

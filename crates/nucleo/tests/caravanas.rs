@@ -593,7 +593,9 @@ fn la_ruina_del_destino_hace_dar_la_vuelta_a_la_caravana_y_la_del_origen_la_pier
     let ruina = hora_de_la_ruina(m);
     let (mut e, ca, cb) = escenario_ruina(m);
     let (a, b) = (e.a, e.b);
-    e.avanzar_hasta(ruina - 40 * MIN);
+    // Salen 20 minutos antes: el viaje entre las dos plazas dura más del doble (36 minutos con el mundo de 2026-10-30).
+    const ANTES: i64 = 20 * MIN;
+    e.avanzar_hasta(ruina - ANTES);
     for plaza in [a, b] {
         e.dar(plaza, Cobre, 300_000);
     }
@@ -614,7 +616,7 @@ fn la_ruina_del_destino_hace_dar_la_vuelta_a_la_caravana_y_la_del_origen_la_pier
     // En el mismo instante (ruina, prioridad 5, antes que el comercio, 6): la preparando hacia A no llega a salir.
     e.avanzar_hasta(ruina);
     assert!(e.n.economia(a).is_none());
-    assert!(hechos(&e.n, "comercio.caravana_sale").iter().all(|h| h.0 < ruina - 20 * MIN), "nada sale en el instante de la ruina");
+    assert!(hechos(&e.n, "comercio.caravana_sale").iter().all(|h| h.0 < ruina), "nada sale en el instante de la ruina");
     let vuelve = hechos(&e.n, "comercio.caravana_vuelve");
     assert_eq!(vuelve.iter().map(|h| (h.0, dato(h, "caravana"))).collect::<Vec<_>>(), vec![(ruina, cb as i64), (ruina, cb2 as i64)]);
     assert_eq!(e.caravana_de(cb2).estado, EstadoCaravana::Disponible);
@@ -626,9 +628,9 @@ fn la_ruina_del_destino_hace_dar_la_vuelta_a_la_caravana_y_la_del_origen_la_pier
     assert_eq!((vuelta.estado, vuelta.destino, vuelta.contenido[&Cobre], vuelta.origen_acuerdo), (EstadoCaravana::Retornando, Some(a as u32), 50_000, None));
     let plan = vuelta.plan.as_ref().unwrap();
     assert_eq!((plan.vertices.first().unwrap().p, plan.vertices.last().unwrap().p, plan.inicio()), (donde_estaba, pb, Some(ruina)), "parte de la posición real");
-    // Vuelve por donde vino, a la misma velocidad: tarda lo que llevaba andando (salió 38 minutos antes, tras 2 de preparación).
+    // Vuelve por donde vino, a la misma velocidad: tarda lo que llevaba andando (salió 18 minutos antes, tras 2 de preparación).
     let andado = plan.fin().unwrap() - ruina;
-    assert!((andado - 38 * MIN).abs() < 3 * MIN && ruina + (fin_antes - ruina) > plan.fin().unwrap() - 60 * MIN, "regreso de {} min", andado / MIN);
+    assert!((andado - (ANTES - 2 * MIN)).abs() < 3 * MIN && ruina + (fin_antes - ruina) > plan.fin().unwrap() - 60 * MIN, "regreso de {} min", andado / MIN);
     // Llega a casa y vuelca su carga; lo cerrado no vuelve a salir.
     let fin = plan.fin().unwrap();
     e.avanzar_hasta(fin);
@@ -1352,7 +1354,7 @@ fn recuperar_desde_foto_con_una_caravana_a_medio_camino_da_el_mismo_mundo() {
     let sin_parar = {
         let mut e = escenario(m, 9);
         primera_mitad(&mut e);
-        e.avanzar(30 * MIN);
+        e.avanzar(15 * MIN);
         segunda_mitad(&mut e);
         (e.n.hash_estado(), e.n.estado().comercio.clone())
     };
@@ -1361,8 +1363,8 @@ fn recuperar_desde_foto_con_una_caravana_a_medio_camino_da_el_mismo_mundo() {
         let n = Nucleo::con_persistencia(con(ajustes.clone()), dir.path(), Default::default()).unwrap();
         let mut e = montar(n, m, true, 350_000, false);
         primera_mitad(&mut e);
-        e.avanzar(30 * MIN);
-        // A los 41 minutos de viaje las dos van por el camino y la manual espera: la foto las pilla en mitad.
+        e.avanzar(15 * MIN);
+        // A los 26 minutos de viaje (el viaje dura 36) las dos van por el camino y la manual espera: la foto las pilla en mitad.
         let en_ruta = e.n.estado().comercio.flota.iter().filter(|c| c.estado == EstadoCaravana::EnTransito).count();
         assert_eq!(en_ruta, 2);
         assert!(e.n.estado().comercio.flota.iter().any(|c| c.estado == EstadoCaravana::Preparando));

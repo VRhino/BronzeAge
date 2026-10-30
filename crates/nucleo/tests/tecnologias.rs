@@ -374,8 +374,10 @@ fn con_la_canteria_adoptada_las_canteras_de_la_faccion_rinden_un_50_por_ciento_m
         e.contador(Contador::ExtraidoPiedra) * 1_000 + e.restos[Contador::ExtraidoPiedra.indice()]
     };
     let (a0, b0) = (piedra(&sin.n), piedra(&con.n));
-    sin.n.avanzar_hasta(desde + HORA);
-    con.n.avanzar_hasta(desde + HORA);
+    // Tres minutos: tras cinco días de Cantera al nodo de piedra de esta plaza le quedan pocos minutos al ritmo ×1,5 (la Cantera se limita a su stock y se para
+    // hasta que se regenera).
+    sin.n.avanzar_hasta(desde + 3 * MIN);
+    con.n.avanzar_hasta(desde + 3 * MIN);
     let (a, b) = (piedra(&sin.n) - a0, piedra(&con.n) - b0);
     assert!(a > 0, "la Cantera saca piedra");
     assert!((b * 100).abs_diff(a * 150) <= a * 2, "×1,5: sin {a}, con {b}");

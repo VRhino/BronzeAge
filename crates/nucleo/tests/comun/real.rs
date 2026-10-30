@@ -28,18 +28,29 @@ pub fn campamento(m: &Mundo, i: usize) -> Punto {
 }
 
 /// Un sitio verde con mucho bosque a 50 u o más del campamento `i` donde la Facción `faccion` puede fundar ahora: una plaza que no cae en ruinas por falta de madera.
+/// Con campo abierto al este ([`abierto_al_este`]): las pruebas se alejan de la plaza hacia +x.
 pub fn sitio_rico(n: &Nucleo, m: &Mundo, i: usize, faccion: u32) -> Punto {
     let c = campamento(m, i);
     for r in (0..12).map(|k| 50_000 + k * 10_000) {
         for g in 0..360 {
             let a = (g as f64).to_radians();
             let p = Punto::new(c.x + (r as f64 * a.cos()) as i64, c.y + (r as f64 * a.sin()) as i64);
-            if n.viabilidad(p, faccion).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6) {
+            if n.viabilidad(p, faccion).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6) && abierto_al_este(m, p) {
                 return p;
             }
         }
     }
     panic!("sin sitio rico cerca del campamento {i}");
+}
+
+/// ¿Hay tierra fuera del bosque cerrado a 30-80 u al este de `p` (a menos de 4 u de cada punto pedido) y lejos de todo campamento de mercenarios (20 u)? Con el
+/// relieve a escala de pantalla (2026-10-30) muchos sitios tienen al lado una sierra o un bosque cerrado, y [`en_tierra`] devolvería un punto junto a la plaza.
+pub fn abierto_al_este(m: &Mundo, p: Punto) -> bool {
+    let campamentos: Vec<Punto> = (0..m.campamentos().len()).map(|i| campamento(m, i)).collect();
+    [30_000, 40_000, 45_000, 60_000, 80_000].into_iter().all(|d| {
+        let q = en_tierra(m, p, d, 0);
+        q.dist(Punto::new(p.x + d, p.y)) <= 4_000 && campamentos.iter().all(|c| c.dist(q) > 20_000)
+    })
 }
 
 /// Un punto en tierra junto a `centro + (dx, dy)`, fuera del bosque cerrado (desde el 2026-10-28 en él no se funda: `fundacion.bosque_denso`).

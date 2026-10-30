@@ -3,6 +3,7 @@ import { ELEVACION } from './config';
 import { evaluarRelieveRegional, type RelieveRegional } from './regional';
 import { puntoEnLago } from './aguaRegional';
 import { aplicarCostaRegional, type CampoCostero } from './costasRegional';
+import { aplicarDetalle, type DetalleRelieve } from './relieveDetalle';
 
 /** Cauce principal autorado que talla un valle en el relieve. */
 export interface CauceTroncal { puntos: { x: number; y: number }[]; cotas: number[]; radio: number;
@@ -14,6 +15,8 @@ export interface CampoElevacion {
   costas?: CampoCostero;
   lagos?: LagoZona[];
   caucesTroncales?: CauceTroncal[];
+  /** Formas a escala de pantalla encima del relieve regional (se añade al final, con ríos, lagos y costas ya hechos). */
+  detalle?: DetalleRelieve;
 }
 
 /** Curva cúbica de suavizado: 0 en `edge0`, 1 en `edge1`, con derivada nula en ambos extremos. */
@@ -42,6 +45,7 @@ export function evaluarElevacion(campo: CampoElevacion, p: Point): number {
     const d = Math.hypot(p.x - lago.centro.x, p.y - lago.centro.y);
     if (d < lago.radio) e = Math.min(e, e + (lago.elevacionCentro - e) * smoothstep(0, 1, 1 - d / lago.radio));
   }
+  if (campo.detalle) e = aplicarDetalle(campo.detalle, p, e);
   return campo.costas ? aplicarCostaRegional(campo.costas, p, e) : e;
 }
 

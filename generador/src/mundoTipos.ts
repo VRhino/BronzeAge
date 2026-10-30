@@ -43,7 +43,7 @@ export interface AlijoMundo {
 export interface NodoGrafo { id: number; x: number; y: number }
 export interface AristaGrafo { a: number; b: number; costeMilesimas: number; vado: boolean }
 
-/** Grafo de navegación: la ÚNICA autoridad de rutas. `espaciado` en unidades del generador (8 estratégicas = 96). */
+/** Grafo de navegación: la ÚNICA autoridad de rutas. `espaciado` en unidades del generador (4 estratégicas = 48). */
 export interface GrafoMundo { nodos: NodoGrafo[]; aristas: AristaGrafo[]; espaciado: number }
 
 export type ClaseTerreno = 'agua' | 'costa' | 'llano' | 'colina' | 'montana' | 'cima';

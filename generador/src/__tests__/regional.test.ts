@@ -88,5 +88,5 @@ describe('laboratorio regional-4: costa mediterránea', () => {
     for (const rio of mapa.rios) for (let i = 1; i < rio.puntos.length; i++)
       expect(evaluarElevacion(sinLagos, rio.puntos[i]!)).toBeLessThan(evaluarElevacion(sinLagos, rio.puntos[i - 1]!));
     for (const lago of mapa.lagos) expect(evaluarTerreno(mapa.elevacion, lago.centro)).toBe('agua');
-  }, 60000);
+  }, 180000); // el relieve incluye la rejilla de celdas de 4 u y la conexión medida en ella
 });

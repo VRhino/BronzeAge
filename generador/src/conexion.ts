@@ -1,6 +1,8 @@
 import type { Point } from './tipos';
 import type { CampoElevacion } from './elevacion';
 import { esTransitable } from './costeMovimiento';
+import type { RelieveRegional } from './regional';
+import type { CeldasMuestreadas } from './celdas';
 
 /** Conexión terrestre del relieve final, incluyendo lagos: comprueba aristas, no solo centros.
  * Las islas secundarias no son objetivos de conectividad. */
@@ -63,4 +65,53 @@ export function comprobarConexion(campo: CampoElevacion) {
   const conectadas = accesos.filter((a) => a.indice >= 0 && a.distancia <= Math.min(ancho, alto) * 0.025 && visitado[a.indice]).map((a) => a.id);
   return { tieneAcceso, zonas: accesos.length, conectadas: conectadas.length, ids: conectadas,
     pasoMalla: Math.max(dx, dy), pasoArista: 30, superficieConectadaKm2: cola.length * dx * dy / 1e6 };
+}
+
+/**
+ * Conexión terrestre medida sobre la rejilla de celdas del artefacto (la autoridad de transitabilidad): 8 vecinos, la
+ * diagonal solo si las dos ortogonales están libres, como el grafo de navegación. Con el relieve a escala de pantalla los
+ * valles y las crestas son más finos que la malla gruesa de `comprobarConexion`, que ya no ve los pasos entre ellos.
+ * La tierra principal es la mayor componente; una zona está conectada si tiene tierra principal a menos de un 2,5 % del
+ * lado del mapa de su centro (no basta la celda más cercana: puede caer en una bolsa entre crestas).
+ * `tieneAcceso(p)`: la celda de `p` es de la tierra principal.
+ */
+export function conexionPorCeldas(regional: RelieveRegional, celdas: CeldasMuestreadas) {
+  const { columnas, filas, lado, transitable } = celdas, n = columnas * filas, { ancho, alto } = regional.limites;
+  const celdaDe = (p: Point) => { const cx = Math.floor(p.x / lado), cy = Math.floor(p.y / lado); return cx < 0 || cy < 0 || cx >= columnas || cy >= filas ? -1 : cy * columnas + cx; };
+  // Componentes de la tierra transitable; la principal, la mayor (empate: la primera en orden de fila).
+  const componente = new Int32Array(n).fill(-1), cola = new Int32Array(n);
+  let principal = -1, mayor = 0;
+  for (let semilla = 0, c = 0; semilla < n; semilla++) {
+    if (!transitable[semilla] || componente[semilla]! >= 0) continue;
+    let fin = 0;
+    componente[semilla] = c; cola[fin++] = semilla;
+    for (let k = 0; k < fin; k++) {
+      const i = cola[k]!, x = i % columnas, y = (i - x) / columnas;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const x2 = x + dx, y2 = y + dy;
+        if ((!dx && !dy) || x2 < 0 || y2 < 0 || x2 >= columnas || y2 >= filas) continue;
+        const j = y2 * columnas + x2;
+        if (componente[j]! >= 0 || !transitable[j] || (dx && dy && !(transitable[y * columnas + x2] && transitable[y2 * columnas + x]))) continue;
+        componente[j] = c; cola[fin++] = j;
+      }
+    }
+    if (fin > mayor) { mayor = fin; principal = c; }
+    c++;
+  }
+  const enPrincipal = (i: number) => i >= 0 && componente[i] === principal;
+  const maxima = Math.min(ancho, alto) * 0.025, r = Math.ceil(maxima / lado);
+  const accesos = regional.areas.map((area) => {
+    const c = celdaDe(area.centro), cx = c % columnas, cy = Math.floor(c / columnas);
+    let mejor = -1, distancia = Infinity;
+    for (let y = cy - r; y <= cy + r; y++) for (let x = cx - r; x <= cx + r; x++) {
+      if (x < 0 || y < 0 || x >= columnas || y >= filas || !enPrincipal(y * columnas + x)) continue;
+      const d = Math.hypot((x + 0.5) * lado - area.centro.x, (y + 0.5) * lado - area.centro.y);
+      if (d < distancia) { distancia = d; mejor = y * columnas + x; }
+    }
+    return { id: area.id, indice: mejor, distancia };
+  });
+  const tieneAcceso = (p: Point): boolean => enPrincipal(celdaDe(p));
+  const conectadas = accesos.filter((a) => a.indice >= 0 && a.distancia <= maxima).map((a) => a.id);
+  return { tieneAcceso, zonas: accesos.length, conectadas: conectadas.length, ids: conectadas,
+    pasoMalla: lado, pasoArista: lado, superficieConectadaKm2: mayor * lado * lado / 1e6 };
 }

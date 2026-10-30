@@ -33,7 +33,7 @@ Está en **unidades estratégicas** (2.667 × 2.000, en milésimas). El factor 1
 | `vetas` | vectorial (`Veta`) | distritos mineros de estaño (y oro), con su campamento de bandidos y su alijo lejano |
 | `campamentos` | vectorial | campamentos de mercenarios: centros de los focos, a 600 unos de otros |
 | `bandidos_iniciales`, `alijos` | vectorial | colocados por el generador, no por el motor |
-| `navegacion` | grafo | espaciado 8 unidades (~333 nodos por lado), vados cada ~100: **la única autoridad de rutas** |
+| `navegacion` | grafo | espaciado 4 unidades (una arista por celda vecina del raster; desde el 2026-10-30, antes 8), vados cada ~100: **la única autoridad de rutas** |
 
 **Reglas de generación** (las del canon 1.9c; el generador las cumple y el contrato las comprueba al cargar):
 
@@ -73,7 +73,7 @@ Unity carga el mismo fichero y comprueba que el paquete derivado coincide en has
 ## 7. Formato del artefacto (implementado 2026-10-13)
 
 Escritor: `generador/src/artefacto.ts`. Cargador y validador del servidor: `crates/mundo` (`Mundo::cargar`). Un artefacto real (semilla 42) ocupa
-unos 4,7 MB y pasa todas las validaciones; la herramienta `cargo run -p mundo --example validar -- <archivo>` lo comprueba.
+unos 16 MB desde el grafo de 4 u (antes, unos 5,6 MB) y pasa todas las validaciones; la herramienta `cargo run -p mundo --example validar -- <archivo>` lo comprueba.
 
 - **Unidades:** milésimas de unidad estratégica (`round(u · 1000 / 12)` desde las del generador).
 - **Rasters:** celda de 4 unidades estratégicas (667 × 500 en el mundo real), filas de norte a sur, valor del centro de la celda. `altura` u16 LE;
@@ -81,6 +81,7 @@ unos 4,7 MB y pasa todas las validaciones; la herramienta `cargo run -p mundo --
 - **Hash:** sha256 hexadecimal de la serialización Protobuf del artefacto con `manifiesto.hash = ""`. Cada capa lleva el sha256 de sus bytes comprimidos.
 - **Coherencia con el raster:** la transitabilidad es la del raster. Grafo, recursos, campamentos, bandidos y alijos se ajustan al centro de una celda transitable
   antes de escribirse; el campo `anillo` de cada elemento conserva el del punto original.
-- **Rendimiento del generador:** algo más de un minuto por mundo (semilla 42, 2026-10-30: relieve 12 s, rejilla de celdas 23 s, campamentos, metales y parcelas 6 s, recursos 6 s, grafo 14 s, artefacto 15 s, con la capa `coste`; total 77 s); era de unos 15 minutos. El relieve regional se evalúa una sola vez por centro de celda del artefacto y las optimizaciones no cambian ni un bit del resultado (mismos hashes en las semillas 1, 7 y 42). Es una herramienta fuera de línea.
-- **Ríos y vados (2026-10-13):** los ríos cortan el paso salvo en los vados. El trazo del río se marca como barrera en la rejilla de transitabilidad, engrosado una celda a cada lado (así ninguna arista lo cruza entre dos muestras), y cada vado abre un hueco de 100 unidades del generador de radio. Siempre hay al menos un vado por río y luego uno cada 100 estratégicas (`generador/src/vados.ts`). En la semilla 42: 116 vados; el grafo tiene 52.914 nodos, 19 componentes y el 99,92 % en la mayor, con los 9 campamentos dentro de ella.
-- **Pendiente:** hierro en las vetas y vados elegidos por geografía (hoy equiespaciados a lo largo del río).
+- **Rendimiento del generador:** un minuto por mundo (semilla 42, 2026-10-30, con el relieve a escala de pantalla y el grafo de 4 u: relieve 38 s, que incluye la rejilla de celdas y la conexión medida en ella; campamentos, metales y parcelas 4 s; recursos 3 s; coste por celda 9 s; grafo 1 s; artefacto 8 s; total 61 s); era de unos 15 minutos. El relieve regional se evalúa una sola vez por centro de celda del artefacto y las optimizaciones no cambian ni un bit del resultado (mismos hashes en las semillas 1, 7 y 42). Es una herramienta fuera de línea.
+- **Ríos y vados (2026-10-13):** los ríos cortan el paso salvo en los vados. El trazo del río se marca como barrera en la rejilla de transitabilidad, engrosado una celda a cada lado (así ninguna arista lo cruza entre dos muestras), y cada vado abre un hueco de 100 unidades del generador de radio. Siempre hay al menos un vado por río y luego uno cada 100 estratégicas (`generador/src/vados.ts`). En la semilla 42 (2026-10-30, relieve nuevo y grafo de 4 u): 116 vados; el grafo tiene 201.434 nodos, 775.346 aristas y 303 componentes, con el 99,23 % en la mayor y los 8 campamentos dentro de ella (16 de los 7.360 recursos quedan fuera, en bolsas entre ríos sin vado). Antes, con el grafo de 8 u: 52.914 nodos y 19 componentes.
+- **Grafo de 4 u (2026-10-30, decisión del autor con la mesa de escalas 3D):** los nodos son los centros de las celdas transitables del raster y el coste de una arista es la media del de sus dos extremos, que es la capa `coste` (con un espaciado de una celda, el punto medio cae en el borde y no añade nada). Así el A* y el suavizado del servidor miden con lo mismo.
+- **Pendiente:** hierro en las vetas, vados elegidos por geografía (hoy equiespaciados a lo largo del río) y los recursos que quedan en bolsas entre ríos sin vado.
