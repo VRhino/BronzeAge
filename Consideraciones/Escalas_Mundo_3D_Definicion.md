@@ -27,8 +27,8 @@ del generador bajo la cámara del juego, con todo lo que ya funciona a su medida
 
 | Escala | Qué es | Estado |
 |---|---|---|
-| **Ancla, en u** | Cámara 15 × 8,4 u; tropa ligera 30 u/min, que cruza la pantalla en 30 s; zonas de 6 a 30 u; plazas a 30 u; visión 15 / 30 u (`Calibracion_Distancias_Definicion.md` §1-§2) | Fija: se siente bien |
-| **Ficción ×100** | El mapa de 2.667 × 2.000 u se lee como 3.200 × 2.400 km (el Mediterráneo oriental): 1 u ≈ 1,2 km, una pantalla ≈ 18 × 10 km y un minuto de juego ≈ 36 km, un día de marcha | Adoptada el 2026-10-30 («el mapa de 32 × 24 km en realidad es más un ×100») |
+| **Ancla, en u** | Tropa ligera 30 u/min; zonas de 6 a 30 u; plazas a 30 u; visión 15 / 30 u (`Calibracion_Distancias_Definicion.md` §1-§2). La cámara era de 15 × 8,4 u; desde el 2026-10-30 la visión del héroe llena el lado corto de la pantalla (§5) | Fija: se siente bien |
+| **Ficción ×100** | El mapa de 2.667 × 2.000 u se lee como 3.200 × 2.400 km (el Mediterráneo oriental): 1 u ≈ 1,2 km, la visión del héroe solo (30 u) ≈ 36 km y un minuto de juego ≈ 36 km, un día de marcha | Adoptada el 2026-10-30 («el mapa de 32 × 24 km en realidad es más un ×100») |
 | **Unity ×12, maqueta** | 1 u = 12 m de Unity (§2.1 de la calibración). Plazas, tropas y árboles son maquetas agrandadas: su tamaño no sale de la ficción | Fija |
 
 **Regla para el terreno: tamaño en la ficción ÷ 1,2 km = u.** La altura se exagera, como en cualquier mapa de campaña. Con
@@ -62,7 +62,7 @@ medida sobre lo que se ve (§4.3), el 61 % del macizo quedaba cerrado al paso. E
 | Plazas (maquetas) | **×1,6** | Escala de casas, pueblos, avanzadas y campamentos |
 | Héroes y tropa | **×3** (soldado de 4,9 m de Unity) | Mando propio, separado de las plazas como los árboles (decisión del autor). El héroe va a caballo al frente de su columna |
 | Rejilla | **4 u, con suavizado** | Ver §4.3 y §6 |
-| Cámara | **30°**, libre | Gira en cualquier ángulo alrededor del héroe, a distancia fija y siguiéndole siempre (§5) |
+| Cámara | **30°**, libre | Gira en cualquier ángulo alrededor del héroe, a distancia fija y siguiéndole siempre. La distancia hace que la visión del héroe llene el lado corto de la pantalla, con un segundo zoom a 1,5 veces (§5) |
 
 Medido sobre la ventana con esos valores (`relieve ×2,2`, `altura ×2`):
 
@@ -129,8 +129,13 @@ dentro de la zona real de la madre; la avanzada, dentro de la zona y sin pisar s
 El mundo se representará como en la mesa:
 
 - la **cámara de juego**, libre en ángulo pero a distancia fija del héroe y siempre siguiéndole (decisión del autor,
-  2026-10-30). La distancia es la que da 15 u de ancho a la altura del héroe; arranca a 30° de inclinación y no se acerca
-  ni se aleja. En la montaña se levanta si la ladera queda por encima de ella;
+  2026-10-30). Arranca a 30° de inclinación. En la montaña se levanta si la ladera queda por encima de ella.
+  - **Encuadre por la visión** (decisión del autor, 2026-10-30, al repasar el cliente). La distancia hace que el
+    diámetro de visión del héroe llene el lado corto de la pantalla: 30 u con el héroe solo y 60 u con visión de 30 u.
+    Hay un segundo zoom a 1,5 veces, como el modo mundo del cliente en 2D. Antes la distancia daba 15 u de ancho, así que
+    ahora la cámara queda unas 3,5 veces más lejos.
+  - **Tamaños a revisar.** Relieve, copa, plazas, héroes y tropa se eligieron con la pantalla de 15 u y hay que volver a
+    mirarlos con el encuadre nuevo. La mesa ya lo tiene (zoom y visión en «Vista»);
 - el terreno con formas a escala de pantalla y la altura exagerada;
 - árboles, plazas, héroes y tropa como maquetas;
 - la columna que va adonde se hace clic.
@@ -139,6 +144,16 @@ El mundo se representará como en la mesa:
 `Docs/Coordinacion/08_Consumo_del_Contrato.md`) es el prototipo inicial (decisión del autor, 2026-10-30). Hacerlo
 funcionar primero ahí, con three.js como en la mesa, ayuda a cerrar la representación antes de llevarla a Unity.
 `Reconstruccion_Definicion.md` §2.1 lleva una nota con esto.
+
+**En el cliente** (decisiones del autor, 2026-10-30, tras repasar cómo pinta hoy el mundo):
+
+- **El modo mundo pasa directamente a 3D**, sin interruptor 2D/3D. Es la vista pegada al héroe y se rehace con
+  three.js; se publica cuando el 3D pinte todo lo que hoy pinta el 2D.
+- **El modo mapa se queda en 2D** como mapa estratégico: el mundo entero, zoom libre y arrastre, solo para mirar.
+- **No cambian:** el contrato, la proyección, los paneles HTML, el clic que elige qué hay debajo y manda la orden, ni la
+  vista de la plaza. El clic pasa a tocar el relieve con un rayo, como en la mesa.
+- **La niebla** sigue siendo una regla de juego: lo que hoy se pinta bajo ella (caminos, fronteras ajenas, plazas
+  recordadas) se oscurece con ella en 3D, y lo que va encima no.
 
 ## 6. Qué falta para llegar ahí (orden propuesto)
 
