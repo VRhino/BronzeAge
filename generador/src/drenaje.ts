@@ -14,7 +14,7 @@ function construirMalla(campo: CampoElevacion, limites: Limites, LADO: number): 
   for (let y = 0; y < LADO; y++) for (let x = 0; x < LADO; x++) {
     const punto = { x: (x + 0.5) * limites.ancho / LADO, y: (y + 0.5) * limites.alto / LADO };
     const altura = evaluarElevacion(campo, punto);
-    const terreno = evaluarTerreno(campo, punto);
+    const terreno = evaluarTerreno(campo, punto, altura);
     celdas.push({ punto, altura, agua: terreno === 'agua', montana: terreno === 'montana' || terreno === 'cima',
       siguiente: -1, acumulacion: 1 });
   }

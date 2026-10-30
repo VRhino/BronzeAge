@@ -6,8 +6,8 @@ import { evaluarTerreno, gradienteElevacion, type CampoElevacion } from './eleva
 
 /** ¿Se puede pisar este punto? El agua es infranqueable y una pendiente sobre el máximo físico tampoco se cruza.
  * No cubre los ríos: cortan el paso aparte, con vados (ver `vados.ts`). */
-export function esTransitable(campo: CampoElevacion, p: Point): boolean {
-  if (evaluarTerreno(campo, p) === 'agua') return false;
+export function esTransitable(campo: CampoElevacion, p: Point, altura?: number): boolean {
+  if (evaluarTerreno(campo, p, altura) === 'agua') return false;
   const { dx, dy } = gradienteElevacion(campo, p, ESCALA_TERRENO.pasoPendiente);
   return Math.hypot(dx, dy) * ESCALA_TERRENO.metrosVerticalesPorElevacion
     / ESCALA_TERRENO.metrosHorizontalesPorUnidad <= ESCALA_TERRENO.pendienteMaximaTransitable;

@@ -142,7 +142,9 @@ export function generarHidrografiaRegional(seed: number, campo: CampoElevacion, 
     }
   }
   for (const [id, v] of vertices) if (v.siguiente) vertices.get(v.siguiente)!.entradas.push(id);
-  const ordenados = [...vertices.values()].sort((a, b) => evaluarElevacion(campo, b.p) - evaluarElevacion(campo, a.p));
+  // La altura de cada vértice se calcula una vez: el comparador la repetiría en cada comparación.
+  const alturaDe = new Map([...vertices.values()].map(v => [v, evaluarElevacion(campo, v.p)] as const));
+  const ordenados = [...vertices.values()].sort((a, b) => alturaDe.get(b)! - alturaDe.get(a)!);
   for (const v of ordenados) {
     const ordenes = v.entradas.map(id => vertices.get(id)!.orden).sort((a, b) => b - a);
     const troncal = principales.some(r => r.puntos[0] === v.p);

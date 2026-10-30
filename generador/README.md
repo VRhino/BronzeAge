@@ -21,5 +21,5 @@ npm ci
 npm run generar                                  # código de protobuf en src/gen
 npx tsc -p tsconfig.json                         # tipos
 npx vitest run                                   # pruebas
-npx tsx scripts/generar-mundo.ts [seed] [carpeta]   # escribe mundo-<hash>.bin (varios minutos)
+npx tsx scripts/generar-mundo.ts [seed] [carpeta]   # escribe mundo-<hash>.bin (algo más de un minuto)
 ```

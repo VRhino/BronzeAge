@@ -99,4 +99,17 @@ describe('construirGrafo', () => {
     expect(nodoMasCercano(g, { x: E / 2 + 5, y: E / 2 })?.id).toBe(0);
     expect(nodoMasCercano(g, { x: 9 * E, y: 4 * E })).toBeUndefined();
   });
+
+  it('nodoMasCercano indexado devuelve el mismo nodo que la búsqueda lineal (incluidos empates y bordes)', () => {
+    const g = construirGrafo(lim, p => p.x < 7 * E && (p.x + p.y) % 5 !== 0, llano);
+    const lineal = (p: Point) => {
+      let mejor, d2 = g.espaciado * g.espaciado;
+      for (const n of g.nodos) { const d = (n.x - p.x) ** 2 + (n.y - p.y) ** 2; if (d <= d2) { d2 = d; mejor = n; } }
+      return mejor;
+    };
+    for (let y = -E; y <= lim.alto + E; y += 17) for (let x = -E; x <= lim.ancho + E; x += 23) {
+      expect(nodoMasCercano(g, { x, y })).toBe(lineal({ x, y }));
+    }
+    for (let y = 0; y <= lim.alto; y += E / 2) for (let x = 0; x <= lim.ancho; x += E / 2) expect(nodoMasCercano(g, { x, y })).toBe(lineal({ x, y }));
+  });
 });

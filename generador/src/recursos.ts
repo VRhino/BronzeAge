@@ -9,6 +9,8 @@ import { esTransitable } from './costeMovimiento';
 import { densidadForestal } from './forestacionRegional';
 import { evaluarSuelo } from './suelosRegional';
 import { evaluarRuido } from './ruido';
+import { humedadRegionalEn } from './regional';
+import type { MuestraRelieve } from './muestras';
 
 /**
  * Recursos no metálicos (piedra, cobre, hierro, ganadería) repartidos por anillos (Doc 1.9c) y cantidades iniciales de todos
@@ -105,14 +107,30 @@ export interface MuestreoRecursos {
 
 export function muestreoDeRelieve(r: Relieve): MuestreoRecursos {
   const e = r.elevacion;
+  // El bucle de candidatos pide terreno, pendiente, acceso, altura, bosque y suelo del mismo punto seguidos: se guarda el último.
+  // La altura se calcula al entrar en un punto nuevo; pendiente y humedad solo si alguien las pide (el agua no paga el gradiente).
+  let cx = NaN, cy = NaN, altura = 0, pendiente: number | undefined, humedad: number | undefined;
+  const punto = (p: Point) => {
+    if (p.x !== cx || p.y !== cy) { cx = p.x; cy = p.y; altura = evaluarElevacion(e, p); pendiente = undefined; humedad = undefined; }
+  };
+  const pendienteEn = (p: Point): number => {
+    punto(p);
+    if (pendiente === undefined) { const g = gradienteElevacion(e, p, 2); pendiente = Math.hypot(g.dx, g.dy) * 1000; }
+    return pendiente;
+  };
+  const muestraEn = (p: Point): MuestraRelieve => {
+    const pend = pendienteEn(p);
+    humedad ??= humedadRegionalEn(e.regional, p);
+    return { altura, pendiente: pend, humedad };
+  };
   return {
-    terreno: p => evaluarTerreno(e, p),
-    pendiente: p => { const g = gradienteElevacion(e, p, 2); return Math.hypot(g.dx, g.dy) * 1000; },
-    accesible: p => esTransitable(e, p) && r.conexion.tieneAcceso(p),
-    altura: p => evaluarElevacion(e, p),
+    terreno: p => { punto(p); return evaluarTerreno(e, p, altura); },
+    pendiente: pendienteEn,
+    accesible: p => { punto(p); return esTransitable(e, p, altura) && r.conexion.tieneAcceso(p); },
+    altura: p => { punto(p); return altura; },
     geologia: p => evaluarRuido(r.suelos.geologia, p),
-    bosque: p => densidadForestal(r.forestacion, e, p),
-    suelo: (p, bosque) => { const s = evaluarSuelo(r.suelos, e, p, bosque); return { pastos: s.pastos, estepa: s.tipo === 'estepa' }; },
+    bosque: p => densidadForestal(r.forestacion, e, p, muestraEn(p)),
+    suelo: (p, bosque) => { const s = evaluarSuelo(r.suelos, e, p, bosque, muestraEn(p)); return { pastos: s.pastos, estepa: s.tipo === 'estepa' }; },
   };
 }
 
@@ -159,7 +177,10 @@ export function repartirRecursosNoMetalicos(
   // Índice espacial de lo ya colocado (celdas de 250 ≥ cualquier separación).
   const celda = 250, indice = new Map<string, { posicion: Point; tipo: string }[]>();
   const clave = (q: Point) => `${Math.floor(q.x / celda)},${Math.floor(q.y / celda)}`;
-  const anotar = (q: Point, tipo: string) => { const k = clave(q); indice.set(k, [...(indice.get(k) ?? []), { posicion: q, tipo }]); };
+  const anotar = (q: Point, tipo: string) => {
+    const k = clave(q), entrada = { posicion: q, tipo }, enCelda = indice.get(k);
+    if (enCelda) enCelda.push(entrada); else indice.set(k, [entrada]);
+  };
   ocupados.forEach(q => anotar(q, 'otro'));
   const bloqueado = (q: Point, tipo: TipoNoMetalico) => {
     const cx = Math.floor(q.x / celda), cy = Math.floor(q.y / celda);
@@ -188,7 +209,10 @@ export function repartirRecursosNoMetalicos(
       let puestos = 0;
       // Una cola por campamento, de mayor a menor peso: el mejor es la cabeza con más peso tras la penalización.
       const colas = new Map<string, { c: Candidato; peso: number }[]>();
-      for (const e of pool) if (e.c.anillo === anillo) colas.set(e.c.campamento, [...(colas.get(e.c.campamento) ?? []), e]);
+      for (const e of pool) if (e.c.anillo === anillo) {
+        const cola = colas.get(e.c.campamento);
+        if (cola) cola.push(e); else colas.set(e.c.campamento, [e]);
+      }
       const cabezas = [...colas.entries()].map(([camp, cola]) => ({ camp, cola: cola.sort((x, y) => y.peso - x.peso), i: 0 }));
       while (puestos < cuantos) {
         let mejor: (typeof cabezas)[number] | undefined, valor = -Infinity;

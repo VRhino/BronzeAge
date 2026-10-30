@@ -4,6 +4,7 @@ import { humedadRegionalEn } from './regional';
 import { generarCampoRuido, evaluarRuido, type CampoRuido } from './ruido';
 import { createRng, derivarSeed } from './rng';
 import { puntoEnLago } from './aguaRegional';
+import type { MuestraRelieve } from './muestras';
 
 interface Segmento { a: Point; b: Point }
 export interface CampoForestal {
@@ -49,7 +50,7 @@ function ruidoPropio(seed: number, sal: string, frecuenciaBase: number): CampoRu
 
 /** Densidad forestal [0,1] en `p`. `muestra` evita recalcular altura, pendiente y humedad si ya se tienen. */
 export function densidadForestal(campo: CampoForestal, elevacion: CampoElevacion, p: Point,
-  muestra?: { altura: number; pendiente: number; humedad: number }): number {
+  muestra?: MuestraRelieve): number {
   const altura = muestra?.altura ?? evaluarElevacion(elevacion, p);
   if (altura <= 0.375 || elevacion.lagos?.some(l => puntoEnLago(l, p))) return 0;
   const g = muestra ? undefined : gradienteElevacion(elevacion, p, 2);

@@ -56,12 +56,13 @@ export function gradienteElevacion(campo: CampoElevacion, p: Point, paso: number
   return { dx, dy };
 }
 
-/** Clasificación por umbral en bandas de relieve; los lagos son agua. Pura y definida en todo el plano. */
-export function evaluarTerreno(campo: CampoElevacion, p: Point): TerrenoTipo {
+/** Clasificación por umbral en bandas de relieve; los lagos son agua. Pura y definida en todo el plano.
+ * `altura`, si ya se tiene la de `p`, evita recalcularla. */
+export function evaluarTerreno(campo: CampoElevacion, p: Point, altura?: number): TerrenoTipo {
   for (const lago of campo.lagos ?? []) {
     if (puntoEnLago(lago, p)) return 'agua';
   }
-  const e = evaluarElevacion(campo, p);
+  const e = altura ?? evaluarElevacion(campo, p);
   if (e < ELEVACION.umbralAgua) return 'agua';
   if (e < ELEVACION.umbralCosta) return 'costa';
   if (e < ELEVACION.umbralColina) return 'llano';

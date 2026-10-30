@@ -40,16 +40,24 @@ export function comprobarConexion(campo: CampoElevacion) {
   }
   // Acceso al continente medido: la pendiente local sola también acepta islas secundarias y repisas aisladas.
   const tieneAcceso = (p: Point): boolean => {
-    const x=Math.floor(p.x/dx),y=Math.floor(p.y/dy);
-    for(let sy=Math.max(0,y-2);sy<=Math.min(n-1,y+2);sy++)
-      for(let sx=Math.max(0,x-2);sx<=Math.min(n-1,x+2);sx++){
-        const i=sy*n+sx;if(!visitado[i])continue;
-        const q=punto(i),pasos=Math.max(1,Math.ceil(Math.hypot(q.x-p.x,q.y-p.y)/30));
-        let libre=true;
-        for(let k=0;k<=pasos;k++)if(!esTransitable(campo,{
-          x:p.x+(q.x-p.x)*k/pasos,y:p.y+(q.y-p.y)*k/pasos})){libre=false;break;}
-        if(libre)return true;
+    // La muestra k = 0 de cada segmento es siempre `p`: se comprueba una vez y los segmentos empiezan en k = 1.
+    if (!esTransitable(campo, p)) return false;
+    const x = Math.floor(p.x / dx), y = Math.floor(p.y / dy);
+    const vecinas: { i: number; d: number }[] = [];
+    for (let sy = Math.max(0, y - 2); sy <= Math.min(n - 1, y + 2); sy++)
+      for (let sx = Math.max(0, x - 2); sx <= Math.min(n - 1, x + 2); sx++) {
+        const i = sy * n + sx;
+        if (visitado[i]) { const q = punto(i); vecinas.push({ i, d: Math.hypot(q.x - p.x, q.y - p.y) }); }
       }
+    // Basta una celda que sirva: se prueban de la más cercana a la más lejana (desempate por índice) y casi siempre vale la primera.
+    vecinas.sort((a, b) => a.d - b.d || a.i - b.i);
+    for (const { i, d } of vecinas) {
+      const q = punto(i), pasos = Math.max(1, Math.ceil(d / 30));
+      let libre = true;
+      for (let k = 1; k <= pasos; k++) if (!esTransitable(campo, {
+        x: p.x + (q.x - p.x) * k / pasos, y: p.y + (q.y - p.y) * k / pasos })) { libre = false; break; }
+      if (libre) return true;
+    }
     return false;
   };
   const conectadas = accesos.filter((a) => a.indice >= 0 && a.distancia <= Math.min(ancho, alto) * 0.025 && visitado[a.indice]).map((a) => a.id);

@@ -25,6 +25,14 @@ const suave = (x: number) => { const t = Math.max(0, Math.min(1, x)); return t *
 
 /** Positiva en tierra. La península occidental es una banda sinuosa que se estrecha
  * hacia el extremo, con dos bahías que muerden la costa; evita el óvalo de v3. */
+function elipse(x: number, y: number, ancho: number, alto: number, cx: number, cy: number, rx: number, ry: number): number {
+  return (1 - Math.hypot((x - cx) / rx, (y - cy) / ry)) * Math.min(rx * ancho, ry * alto);
+}
+
+function campana(x: number, centro: number, radio: number): number {
+  return Math.exp(-(((x - centro) / radio) ** 2));
+}
+
 export function distanciaCostaRegional(campo: RelieveRegional, p: Point): number {
   const { ancho, alto } = campo.limites, x = p.x / ancho, y = p.y / alto;
   const f = campo.fase;
@@ -34,8 +42,6 @@ export function distanciaCostaRegional(campo: RelieveRegional, p: Point): number
   const este = (x - (0.705 + 0.018 * Math.sin(y * 19 + f) + 0.009 * Math.sin(y * 41)
     + 0.004 * Math.sin(y * 103 - f))) * ancho;
   const sur = (y - (0.79 + 0.018 * Math.sin(x * 14 + f) + 0.005 * Math.sin(x * 45 - f))) * alto;
-  const elipse = (cx: number, cy: number, rx: number, ry: number) =>
-    (1 - Math.hypot((x - cx) / rx, (y - cy) / ry)) * Math.min(rx * ancho, ry * alto);
   const t = Math.max(0, Math.min(1, (y - 0.13) / 0.40));
   const eje = 0.215 + 0.020 * Math.sin(y * 16 + f) + 0.009 * Math.sin(y * 43 - f);
   const anchoPeninsula = 0.079 - 0.029 * t - 0.032 * suave((t - 0.76) / 0.24)
@@ -45,19 +51,18 @@ export function distanciaCostaRegional(campo: RelieveRegional, p: Point): number
   // El saliente septentrional conserva su interior, pero pierde el arco ovalado:
   // cabos desiguales, dos entrantes amplios y ensenadas menores. La deformación
   // se desvanece tierra adentro y no consume RNG de montañas, áreas ni islas.
-  const campana = (centro: number, radio: number) => Math.exp(-(((x - centro) / radio) ** 2));
-  const costaAnatolia = 0.031 * campana(0.405, 0.026) - 0.036 * campana(0.485, 0.035)
-    + 0.029 * campana(0.565, 0.032) - 0.028 * campana(0.65, 0.024)
+  const costaAnatolia = 0.031 * campana(x, 0.405, 0.026) - 0.036 * campana(x, 0.485, 0.035)
+    + 0.029 * campana(x, 0.565, 0.032) - 0.028 * campana(x, 0.65, 0.024)
     + 0.009 * Math.sin(x * 107 + f) + 0.004 * Math.sin(x * 231 - f);
   const desplazamiento = costaAnatolia * suave((y - 0.16) / 0.10);
   const anatolia = (1 - Math.hypot((x - 0.56) / 0.27, (y - 0.22 - desplazamiento) / 0.15))
     * Math.min(0.27 * ancho, 0.15 * alto);
-  const delta = elipse(0.54, 0.79, 0.095, 0.095);
+  const delta = elipse(x, y, ancho, alto, 0.54, 0.79, 0.095, 0.095);
   const tierra = Math.max(norte, este, sur, peninsula, anatolia, delta);
   // Dos golfos profundos en tierra conectada. Sus cabeceras redondeadas no
   // atraviesan la península ni el arco continental.
-  const golfoPeninsula = elipse(0.34, 0.395, 0.115, 0.065);
-  const golfoMeridional = elipse(0.39, 0.755, 0.072, 0.087);
+  const golfoPeninsula = elipse(x, y, ancho, alto, 0.34, 0.395, 0.115, 0.065);
+  const golfoMeridional = elipse(x, y, ancho, alto, 0.39, 0.755, 0.072, 0.087);
   return Math.min(tierra, -Math.max(golfoPeninsula, golfoMeridional));
 }
 
@@ -231,15 +236,22 @@ export function crearRelieveRegional(seed: number, limites: Limites): RelieveReg
   return campo;
 }
 
+/** Un tramo que pesa menos que esto respecto al mayor de su cordillera no cambia la media ponderada en doble precisión. */
+const PESO_DESPRECIABLE = 2 ** -60;
+// Pesos y proyecciones de los tramos de la cordillera en curso (ninguna tiene más de 256).
+const T_TRAMO = new Float64Array(256), D_TRAMO = new Float64Array(256), PESO_TRAMO = new Float64Array(256);
+
 export function evaluarRelieveRegional(campo: RelieveRegional, p: Point): number {
   const escala = Math.min(campo.limites.ancho, campo.limites.alto) / 24000;
   const x = p.x / escala, y = p.y / escala;
   let suma = 0, pesos = 0;
+  const xa = p.x + 330 * escala * Math.sin(p.y / (1800 * escala) + campo.fase);
+  const ya = p.y + 290 * escala * Math.sin(p.x / (2200 * escala) - campo.fase);
+  const ondulacion = Math.sin(x / 1100 + campo.fase) * Math.cos(y / 1430 - campo.fase)
+    + 0.3 * Math.sin((x + y) / 490 + campo.fase);
   for (const area of campo.areas) {
-    const peso = pesoArea(campo, area, p);
+    const peso = 1 / (0.03 + (((xa - area.centro.x) ** 2 + (ya - area.centro.y) ** 2) / (area.radio ** 2)) ** 3);
     const d2 = (p.x - area.centro.x) ** 2 + (p.y - area.centro.y) ** 2;
-    const ondulacion = Math.sin(x / 1100 + campo.fase) * Math.cos(y / 1430 - campo.fase)
-      + 0.3 * Math.sin((x + y) / 490 + campo.fase);
     suma += peso * (area.altura + area.ondulacion * ondulacion
       + Math.min(0.026, d2 / (area.radio * area.radio) * 0.018));
     pesos += peso;
@@ -250,18 +262,27 @@ export function evaluarRelieveRegional(campo: RelieveRegional, p: Point): number
     const margen = b.ancho * 4.5;
     if (p.x < b.caja.minX - margen || p.x > b.caja.maxX + margen
       || p.y < b.caja.minY - margen || p.y > b.caja.maxY + margen) continue;
-    let sumaCresta = 0, pesoCresta = 0;
-    for (const tramo of b.tramos) {
+    let sumaCresta = 0, pesoCresta = 0, pesoMaximo = 0;
+    for (let k = 0; k < b.tramos.length; k++) {
+      const tramo = b.tramos[k]!;
       const dx = tramo.b.x - tramo.a.x, dy = tramo.b.y - tramo.a.y;
       const t = Math.max(0, Math.min(1, ((p.x - tramo.a.x) * dx + (p.y - tramo.a.y) * dy) / (tramo.longitud ** 2)));
       const d = Math.hypot(p.x - tramo.a.x - t * dx, p.y - tramo.a.y - t * dy);
-      const posicion = tramo.inicio + t * tramo.longitud;
       // Mezclar tramos evita saltos de altura en el interior de curvas cerradas.
       // Cresta estrecha, piedemonte amplio: un kernel estrecho a gran distancia
       // cambia demasiado deprisa de tramo en curvas y vuelve a cortar los accesos.
       const anchoMezcla = b.ancho * (0.18 + 0.42 * suave(d / (b.ancho * 1.3)));
       const peso = Math.exp(-(d * d) / (anchoMezcla ** 2)) * tramo.longitud;
-      if (peso === 0) continue;
+      T_TRAMO[k] = t; D_TRAMO[k] = d; PESO_TRAMO[k] = peso;
+      if (peso > pesoMaximo) pesoMaximo = peso;
+    }
+    const corte = pesoMaximo * PESO_DESPRECIABLE;
+    for (let k = 0; k < b.tramos.length; k++) {
+      const peso = PESO_TRAMO[k]!;
+      if (peso === 0 || peso < corte) continue;
+      const tramo = b.tramos[k]!, t = T_TRAMO[k]!, d = D_TRAMO[k]!;
+      const dx = tramo.b.x - tramo.a.x, dy = tramo.b.y - tramo.a.y;
+      const posicion = tramo.inicio + t * tramo.longitud;
       let silla = 1;
       for (const paso of b.pasos) silla = Math.min(silla, suave((Math.abs(posicion - paso.distancia) - 120 * escala) / paso.radio));
       const terminacion = suave(Math.min(posicion, b.longitud - posicion) / (1000 * escala));
@@ -326,6 +347,7 @@ export function evaluarRelieveRegional(campo: RelieveRegional, p: Point): number
       const eje=c.eje??{x:1,y:0};
       const axial=dx*eje.x+dy*eje.y,lateral=-dx*eje.y+dy*eje.x;
       const sesgo=1+(c.sesgo??0)*Math.tanh(lateral/(c.radio*.4));
+      if(Math.hypot(axial/(c.longitud??c.radio),lateral/(c.radio*sesgo))>=1.2201)continue;
       const angulo=Math.atan2(lateral,axial);
       const contorno=1+.14*Math.sin(angulo*3+c.fase)+.08*Math.sin(angulo*5-c.fase);
       const q=Math.hypot(axial/(c.longitud??c.radio),lateral/(c.radio*sesgo))/contorno;
@@ -393,6 +415,10 @@ export function evaluarRelieveRegional(campo: RelieveRegional, p: Point): number
 function ruidoCresta(x: number, fase: number, angular = false): number {
   const i = Math.floor(x), fraccion = x - i;
   const t = angular ? fraccion * 0.85 + suave(fraccion) * 0.15 : suave(fraccion);
-  const hash = (v: number) => { const n = Math.sin(v * 127.1 + fase * 311.7) * 43758.5453; return n - Math.floor(n); };
-  return hash(i) * (1 - t) + hash(i + 1) * t;
+  return hashCresta(i, fase) * (1 - t) + hashCresta(i + 1, fase) * t;
+}
+
+function hashCresta(v: number, fase: number): number {
+  const n = Math.sin(v * 127.1 + fase * 311.7) * 43758.5453;
+  return n - Math.floor(n);
 }

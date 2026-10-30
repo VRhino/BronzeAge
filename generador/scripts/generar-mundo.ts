@@ -1,5 +1,5 @@
 // Genera el mundo completo y escribe el artefacto (`mundo-<hash>.bin`) en la carpeta dada.
-// Uso: npx tsx scripts/generar-mundo.ts [seed] [carpeta]    (tarda varios minutos: relieve ~2 min y grafo ~5 min)
+// Uso: npx tsx scripts/generar-mundo.ts [seed] [carpeta]    (algo más de un minuto)
 import { generarRelieve } from '../src/relieve';
 import { generarMundoEstrategico } from '../src/mundoEstrategico';
 import { metalesARecursos, generarRecursosNoMetalicos } from '../src/recursos';
@@ -7,6 +7,7 @@ import { colocarBandidosYAlijos } from '../src/contenidoVivo';
 import { componentes, construirGrafo, estadisticasGrafo, nodoMasCercano } from '../src/navegacion';
 import { bloquearRios, colocarVados, PARAMETROS_VADOS } from '../src/vados';
 import { escribirArtefacto } from '../src/artefacto';
+import { muestrearCeldas } from '../src/celdas';
 import { costeEnPunto, esTransitable } from '../src/costeMovimiento';
 import { evaluarElevacion, evaluarTerreno } from '../src/elevacion';
 import { densidadForestal } from '../src/forestacionRegional';
@@ -23,15 +24,12 @@ const medir = <T>(nombre: string, f: () => T): T => { const t = Date.now(); cons
 // La transitabilidad del artefacto es el raster de celdas de 4 unidades estratégicas (se muestrea el centro). Todo lo demás
 // —grafo, recursos, campamentos— se comprueba contra esa misma rejilla para que el servidor lo valide sin discrepancias.
 const lado = 4 * FACTOR, nx = Math.ceil(ancho / lado), ny = Math.ceil(alto / lado);
-const celdaT = new Uint8Array(nx * ny).fill(2);
-const centroCelda = (i: number): Point => ({ x: ((i % nx) + 0.5) * lado, y: (Math.floor(i / nx) + 0.5) * lado });
 const r = medir('relieve', () => generarRelieve(seed, ancho, alto));
 const transitableCelda = (p: Point): boolean => {
   const cx = Math.floor(p.x / lado), cy = Math.floor(p.y / lado);
   if (cx < 0 || cy < 0 || cx >= nx || cy >= ny) return false;
   const i = cy * nx + cx;
-  if (celdaT[i] === 2) celdaT[i] = bloqueoRios[i] === 0 && esTransitable(r.elevacion, centroCelda(i)) ? 1 : 0;
-  return celdaT[i] === 1;
+  return bloqueoRios[i] === 0 && celdas.transitable[i] === 1;
 };
 /** Si la celda de `p` no es transitable, lo lleva al centro de la celda transitable más cercana (hasta 6 celdas). */
 const aCeldaTransitable = (p: Point): Point => {
@@ -49,7 +47,10 @@ const aCeldaTransitable = (p: Point): Point => {
 // Los ríos cortan el paso salvo en los vados: se trazan como barrera en la misma rejilla.
 const vadosPorRio = colocarVados(r.rios);
 const bloqueoRios = bloquearRios({ ancho, alto }, r.rios, [...vadosPorRio.values()].flat(), lado);
-const e = medir('campamentos, metales y parcelas', () => generarMundoEstrategico(r));
+// Parcelas, transitabilidad y artefacto muestrean el relieve en los mismos centros de celda de 48 unidades: se evalúa una sola vez.
+const celdas = medir('rejilla de celdas', () => muestrearCeldas(r, { ancho, alto }, lado));
+const densidadEn = (p: Point): number => { const i = celdas.indice(p); return i >= 0 ? celdas.densidad[i]! : densidadForestal(r.forestacion, r.elevacion, p); };
+const e = medir('campamentos, metales y parcelas', () => generarMundoEstrategico(r, densidadEn));
 // Desde el 2026-10-27 el mundo no tiene nodos de ganado: el ganado sale de los rebaños de las aldeas agrícolas (mecánicas 50 y 51).
 // Se siguen colocando y se descartan después, para que la piedra caiga en los mismos sitios que antes.
 const recursos = medir('recursos', () => [...metalesARecursos(e.nodos), ...generarRecursosNoMetalicos(r, e.campamentos, e.nodos.map(n => n.posicion))]
@@ -73,11 +74,16 @@ const mundo: MundoGenerado = {
   seed, ancho, alto, generador: 'regional-17-costas-1+estrategico-2',
   campamentos: e.campamentos, recursos, vetas: e.vetas, masas: e.masas, parcelas: e.parcelas, bandidos, alijos, rios, grafo,
   muestras: {
-    altura: p => evaluarElevacion(r.elevacion, p),
-    terreno: p => evaluarTerreno(r.elevacion, p),
-    fertilidad: p => evaluarSuelo(r.suelos, r.elevacion, p, densidadForestal(r.forestacion, r.elevacion, p)).fertilidad,
-    humedad: p => humedadRegionalEn(r.elevacion.regional, p),
-    densidadBosque: p => densidadForestal(r.forestacion, r.elevacion, p),
+    altura: p => { const i = celdas.indice(p); return i >= 0 ? celdas.altura[i]! : evaluarElevacion(r.elevacion, p); },
+    terreno: p => { const i = celdas.indice(p); return evaluarTerreno(r.elevacion, p, i >= 0 ? celdas.altura[i]! : undefined); },
+    fertilidad: p => {
+      const i = celdas.indice(p);
+      if (i < 0) return evaluarSuelo(r.suelos, r.elevacion, p, densidadForestal(r.forestacion, r.elevacion, p)).fertilidad;
+      return evaluarSuelo(r.suelos, r.elevacion, p, celdas.densidad[i]!,
+        { altura: celdas.altura[i]!, pendiente: celdas.pendiente[i]!, humedad: celdas.humedad[i]! }).fertilidad;
+    },
+    humedad: p => { const i = celdas.indice(p); return i >= 0 ? celdas.humedad[i]! : humedadRegionalEn(r.elevacion.regional, p); },
+    densidadBosque: densidadEn,
     transitable: transitableCelda,
   },
 };

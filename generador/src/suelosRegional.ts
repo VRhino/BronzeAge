@@ -4,6 +4,7 @@ import { humedadRegionalEn } from './regional';
 import type { RioRegional } from './hidrografiaRegional';
 import { generarCampoRuido, evaluarRuido, type CampoRuido } from './ruido';
 import { createRng, derivarSeed } from './rng';
+import type { MuestraRelieve } from './muestras';
 
 export type TipoSuelo = 'aluvial' | 'humedo' | 'seco' | 'pedregoso' | 'estepa' | 'agua';
 export interface CampoSuelos {
@@ -27,10 +28,12 @@ export function crearSuelosRegional(seed: number, rios: RioRegional[]): CampoSue
   return campo;
 }
 
-export function evaluarSuelo(campo: CampoSuelos, elevacion: CampoElevacion, p: Point, bosque = 0) {
-  if (evaluarTerreno(elevacion, p) === 'agua') return { fertilidad: 0, pastos: 0, aluvial: 0, tipo: 'agua' as TipoSuelo };
-  const g = gradienteElevacion(elevacion, p, 2), pendiente = Math.hypot(g.dx, g.dy) * 1000;
-  const humedad = humedadRegionalEn(elevacion.regional, p), h = evaluarElevacion(elevacion, p);
+/** `muestra` (altura, pendiente y humedad de `p`, de `muestrearRelieve`) evita recalcularlas. */
+export function evaluarSuelo(campo: CampoSuelos, elevacion: CampoElevacion, p: Point, bosque = 0, muestra?: MuestraRelieve) {
+  if (evaluarTerreno(elevacion, p, muestra?.altura) === 'agua') return { fertilidad: 0, pastos: 0, aluvial: 0, tipo: 'agua' as TipoSuelo };
+  const g = muestra ? undefined : gradienteElevacion(elevacion, p, 2);
+  const pendiente = muestra?.pendiente ?? Math.hypot(g!.dx, g!.dy) * 1000;
+  const humedad = muestra?.humedad ?? humedadRegionalEn(elevacion.regional, p), h = muestra?.altura ?? evaluarElevacion(elevacion, p);
   let agua = 0;
   for (const id of campo.indice[`${Math.floor(p.x / 1000)},${Math.floor(p.y / 1000)}`] ?? []) {
     const { a, b, alcance } = campo.agua[id]!, dx = b.x - a.x, dy = b.y - a.y;
