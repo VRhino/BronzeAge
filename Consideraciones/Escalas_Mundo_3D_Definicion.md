@@ -1,9 +1,12 @@
 # Escalas del mundo en 3D — definición
 
-> **Estado (2026-10-30): en curso.** El autor eligió en la mesa de escalas 3D los valores de §3 y quiere que el cliente de
-> jugador (`BronzeAgeClient`) represente el mundo así (§5). **La mesa se sigue afinando**: es la referencia visual y
-> este documento se actualiza con cada acuerdo. Nada está aplicado todavía en el generador, el contrato, el servidor ni
-> los clientes.
+> **Estado (2026-10-30, segunda ronda): en curso.** El autor eligió en la mesa de escalas 3D los valores de §3 y decidió:
+> - rejilla de 4 u con suavizado;
+> - pendientes del movimiento medidas con la exageración de altura (§4.3);
+> - el mundo 3D se prototipa primero en el cliente de jugador (`BronzeAgeClient`) y luego se lleva a Unity (§5).
+>
+> **La mesa se sigue afinando**: es la referencia visual, y este documento se actualiza con cada acuerdo. Nada está
+> aplicado todavía en el generador, el contrato, el servidor ni los clientes.
 >
 > Mesa: https://claude.ai/artifact/9PfPuAfEr3nmtuK5jt5Mwg (fuente en `Consideraciones/artefactos/mesa_escalas_3d/`, §8).
 > Página 2D anterior, con el análisis de escalas: https://claude.ai/artifact/GKqGYMohRFTMihKpPkaeGG
@@ -44,27 +47,31 @@ Ventana de 320 × 240 u entre la cordillera norte y el campamento‑0:
 
 ## 3. Valores elegidos por el autor (2026-10-30)
 
+La primera ronda fue relieve ×2, altura ×3, copa 0,4 u, maquetas ×1,6 y rejilla de 2 u con suavizado. Con la pendiente
+medida sobre lo que se ve (§4.3), el 61 % del macizo quedaba cerrado al paso, y el autor ajustó en la segunda ronda:
+
 | Mando de la mesa | Valor | Qué significa |
 |---|---|---|
 | Terreno | **Propuesta ×100** | Boceto procedural con formas a escala de pantalla (receta en §3.1); no sale del generador |
-| Tamaño del relieve | **×2** | Escala tamaño **y** altura a la vez (homotecia: las laderas no cambian). Crestas cada ~84 u, valles de 10-40 u de ladera a ladera, colinas de ~28 u y lomas de 6-20 u |
-| Altura | **×3** | Exageración solo visual de todas las alturas |
+| Tamaño del relieve | **×2,2** | Escala tamaño **y** altura a la vez (homotecia: las laderas no cambian). Crestas cada ~92 u, valles de 11-44 u de ladera a ladera, colinas de ~31 u y lomas de 7-22 u |
+| Altura | **×1,5** | Exageración de todas las alturas. También cuenta para las pendientes del movimiento (§4.3) |
 | Copa de árbol | **0,4 u** (≈ 5 m de Unity) | Árbol como maqueta. Un bosque denso lleva unos 3 árboles por u² (el número de árboles sale de la densidad del bosque y del tamaño de copa) |
-| Maquetas | **×1,6** | Escala de casas, pueblos, avanzadas y campamentos. La tropa va al doble (×3,2 de la figura base) para que se lea junto a los árboles |
-| Rejilla | **2 u, con suavizado** | Ver §4.3 y §7 |
+| Plazas (maquetas) | **×1,6** | Escala de casas, pueblos, avanzadas y campamentos |
+| Héroes y tropa | **×3,2** (soldado de 5,2 m de Unity) | Mando propio, separado de las plazas como los árboles (decisión del autor). El héroe va a caballo al frente de su columna |
+| Rejilla | **4 u, con suavizado** | Ver §4.3 y §6 |
 
-Medido sobre la ventana con esos valores (`relieve ×2`, `altura ×3`):
+Medido sobre la ventana con esos valores (`relieve ×2,2`, `altura ×1,5`):
 
 | | Valor |
 |---|---|
-| Cumbres sobre el llano | hasta ~630 m de Unity (52 u); el 99 % del terreno, por debajo de 460 m |
-| Desnivel en una pantalla del macizo | 160 m de mediana, 313 m en el percentil 90 |
-| Pendiente vista en el macizo | 42° de mediana; el 61 % pasa de 35° |
-| Pendiente sin la exageración (la que decide el paso, §4.3) | el 15 % del macizo pasa de 35° (las crestas) |
+| Cumbres sobre el llano | hasta ~330 m de Unity (27 u); el 99 % del terreno, por debajo de 255 m |
+| Desnivel en una pantalla del macizo | 80 m de mediana, 164 m en el percentil 90 |
+| Pendiente en el macizo | 24° de mediana, 51° en el percentil 90 |
+| Macizo cerrado al paso (más de 35°) | 30 %: las rutas van por los valles y los collados |
 
 ### 3.1 Receta del boceto (para que el generador pueda reproducirlo)
 
-Todo en u y metros de Unity; `S` es «Tamaño del relieve» (2), y los ruidos son simplex 2D con semillas fijas.
+Todo en u y metros de Unity; `S` es «Tamaño del relieve» (2,2), y los ruidos son simplex 2D con semillas fijas.
 
 - **Geografía fija**: un macizo al norte (máscara suave de `y < 55` a `y > 140`, con el borde ondulado), piedemonte de
   colinas entre 120 y 195, y un llano al sur.
@@ -106,19 +113,26 @@ dentro de la zona real de la madre; la avanzada, dentro de la zona y sin pisar s
   3. sale al destino exacto.
 - **Suavizado por coste**: la ruta se salta vértices solo si la recta está libre y **no cuesta más** que el tramo que
   sustituye. Así se quitan los quiebros sin cortar por una montaña cara.
-- **En la mesa, la pendiente que decide el paso se mide sin la exageración de «Altura».** Con la altura ×3, el 61 % del
-  macizo pasaría de 35° y no se podría cruzar. Pendiente de confirmar (§7).
+- **Las pendientes se miden con la exageración de altura** (decisión del autor, 2026-10-30): lo que se ve es lo que se
+  anda, y nadie camina por laderas raras. Vale para el paso (35°), el coste, y dónde caben plazas, pueblos y árboles.
+  Para el generador esto quiere decir que las alturas que escribe son ya las que se ven: no hay un factor visual aparte.
+- La rejilla es de **4 u** con suavizado (decisión del autor, 2026-10-30). Con 2 u la ruta apenas cambia y el grafo
+  cuadruplica.
 - La columna va adonde se hace clic, a 30 u/min en llano, dividida por el coste del terreno que pisa.
 
-## 5. Decisión: llevar esta representación al cliente de jugador
+## 5. Decisión: primero en el cliente de jugador, después en Unity
 
-El autor quiere que el cliente de jugador (`BronzeAgeClient`, TypeScript, frente de la fase 7 en
-`Docs/Coordinacion/08_Consumo_del_Contrato.md`) represente el mundo como la mesa: la cámara de juego de 15 u, el
-terreno con formas a escala de pantalla y la altura exagerada, los árboles y las plazas como maquetas, y la columna que va
-adonde se hace clic. Al ser TypeScript, three.js encaja directamente.
+El mundo se representará como en la mesa:
 
-Hay que conciliar esto con `Reconstruccion_Definicion.md` §2.1, que dejaba a Unity como cliente final y retiraba el
-cliente web de jugador. El documento 08 (2026-10-26), posterior, sí cuenta `BronzeAgeClient` como frente.
+- la cámara de juego de 15 u;
+- el terreno con formas a escala de pantalla y la altura exagerada;
+- árboles, plazas, héroes y tropa como maquetas;
+- la columna que va adonde se hace clic.
+
+**El cliente final sigue siendo Unity.** El cliente de jugador (`BronzeAgeClient`, TypeScript, frente de la fase 7 en
+`Docs/Coordinacion/08_Consumo_del_Contrato.md`) es el prototipo inicial (decisión del autor, 2026-10-30). Hacerlo
+funcionar primero ahí, con three.js como en la mesa, ayuda a cerrar la representación antes de llevarla a Unity.
+`Reconstruccion_Definicion.md` §2.1 lleva una nota con esto.
 
 ## 6. Qué falta para llegar ahí (orden propuesto)
 
@@ -127,11 +141,12 @@ cliente web de jugador. El documento 08 (2026-10-26), posterior, sí cuenta `Bro
 3. **Generador: rehacer el relieve con la receta de §3.1** sobre la geografía regional (macizos, cuencas y costas
    actuales), con formas de 2 a 80 u dentro de cada macizo, ríos con vados y bosque. Se valida con la mesa: la ventana
    se saca con `generador/scripts/datos-mesa-3d.ts`.
-4. **Contrato de mundo: resolución.** Hoy los rásteres van a 4 u y el grafo a 8 u. La mesa usa la altura cada 0,5 u
-   (en todo el mapa serían 5.334 × 4.000 = 21 M muestras, 43 MB en u16 sin comprimir) y una rejilla de 2 u (1,33 M
-   nodos y unos 10 M aristas, 16 veces los nodos de 8 u). Hay que medir el tamaño del artefacto, la carga y el A* del
-   servidor; la alternativa es 4 u con suavizado.
-5. **Cliente**:
+4. **Contrato de mundo: resolución.**
+   - El grafo pasa de 8 u a **4 u**: 334.167 nodos y unos 1,3 M aristas, 4 veces los de hoy (83.834). Hay que medir el
+     tamaño del artefacto, la carga y el A* del servidor.
+   - La altura: hoy los rásteres van a 4 u y la mesa usa 0,5 u. En todo el mapa serían 5.334 × 4.000 = 21 M muestras,
+     43 MB en u16 sin comprimir; hay que decidir qué resolución lleva el artefacto y qué detalle añade el cliente.
+5. **Cliente de jugador (prototipo) y después Unity** (§5):
    - three.js con la cámara de juego;
    - terreno por teselas;
    - árboles instanciados por trozos (la mesa corta en 140.000);
@@ -141,14 +156,11 @@ cliente web de jugador. El documento 08 (2026-10-26), posterior, sí cuenta `Bro
 
 ## 7. Abierto
 
-- **Pendiente de movimiento**: ¿se mide sin la exageración visual, como hace la mesa? Si no, la regla de 35° tiene que
-  cambiar.
-- **Rejilla de 2 u en todo el mapa**, o 4 u con suavizado, según lo que cueste (§6.4).
 - **Ríos y vados** del terreno nuevo. Con el terreno real, la mesa dibuja los ríos pero no cortan el paso, porque la
   ventana no trae sus vados.
 - **Cuántos árboles** dibuja el cliente y con qué detalle.
-- **Tamaño de la tropa** como maqueta frente a las casas (hoy, ×3,2 de la figura base).
-- Conciliar el cliente de jugador entre `Reconstruccion_Definicion.md` §2.1 y el documento 08 (§5).
+- **Tamaño de héroes y tropa** frente a las plazas y los árboles, ahora con su propio mando (×3,2).
+- **Resolución de la altura** en el artefacto (§6.4).
 
 ## 8. Fuente de la mesa
 

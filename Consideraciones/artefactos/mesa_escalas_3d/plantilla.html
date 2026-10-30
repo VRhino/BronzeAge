@@ -186,7 +186,7 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
         <span class="grupo-titulo">Movimiento</span>
         <p class="nota">Clic en el terreno: la columna va hasta ahí por la rejilla, como en el servidor.</p>
         <div class="fila"><label for="rejilla">Rejilla</label>
-          <select id="rejilla"><option value="8">8 u (actual)</option><option value="4">4 u</option><option value="2" selected>2 u</option></select>
+          <select id="rejilla"><option value="8">8 u (actual)</option><option value="4" selected>4 u</option><option value="2">2 u</option></select>
         </div>
         <div class="fila"><label><input type="checkbox" id="ver-rejilla" checked> Ver la rejilla</label></div>
         <div class="fila"><label><input type="checkbox" id="suavizado" checked> Camino suavizado</label></div>
@@ -207,20 +207,24 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
       <div class="grupo">
         <span class="grupo-titulo">Tamaños a probar</span>
         <div class="deslizador">
-          <div class="fila"><label for="relieve">Tamaño del relieve (propuesta)</label><span id="o-relieve">×2,0</span></div>
-          <input type="range" id="relieve" min="0.5" max="4" step="0.1" value="2">
+          <div class="fila"><label for="relieve">Tamaño del relieve (propuesta)</label><span id="o-relieve">×2,2</span></div>
+          <input type="range" id="relieve" min="0.5" max="4" step="0.1" value="2.2">
         </div>
         <div class="deslizador">
-          <div class="fila"><label for="exag">Altura</label><span id="o-exag">×3,0</span></div>
-          <input type="range" id="exag" min="0.5" max="6" step="0.1" value="3">
+          <div class="fila"><label for="exag">Altura</label><span id="o-exag">×1,5</span></div>
+          <input type="range" id="exag" min="0.5" max="6" step="0.1" value="1.5">
         </div>
         <div class="deslizador">
           <div class="fila"><label for="copa">Copa de árbol</label><span id="o-copa">0,4 u · 5 m</span></div>
           <input type="range" id="copa" min="0.3" max="2" step="0.1" value="0.4">
         </div>
         <div class="deslizador">
-          <div class="fila"><label for="maqueta">Maquetas (plazas y tropa)</label><span id="o-maqueta">×1,6</span></div>
+          <div class="fila"><label for="maqueta">Plazas (maquetas)</label><span id="o-maqueta">×1,6</span></div>
           <input type="range" id="maqueta" min="0.5" max="3" step="0.1" value="1.6">
+        </div>
+        <div class="deslizador">
+          <div class="fila"><label for="tropa">Héroes y tropa</label><span id="o-tropa">×3,2 · 5,2 m</span></div>
+          <input type="range" id="tropa" min="1" max="8" step="0.1" value="3.2">
         </div>
         <button type="button" id="restablecer">Volver a los valores elegidos</button>
       </div>
@@ -231,6 +235,7 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
           <span class="muestra" style="background:#c9b48f"></span><span>Ciudad: muralla al 10 % del radio de la zona</span>
           <span class="muestra" style="background:#a8714a"></span><span>Pueblo y avanzada, dentro de la zona</span>
           <span class="muestra" style="background:#d8cfbd"></span><span>Campamento del generador</span>
+          <span class="muestra" style="background:#c08a3e"></span><span>Héroe a caballo, al frente</span>
           <span class="muestra" style="background:#c0392b"></span><span>Columna, 30 u/min en llano</span>
           <span class="muestra" style="background:#e0a050"></span><span>Camino y zonas</span>
           <span class="muestra" style="background:#2b2f2c"></span><span>Rejilla y nodos</span>
@@ -245,7 +250,7 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
     <ol class="mirar">
       <li>
         <h3>Tu configuración</h3>
-        <p>Propuesta ×100 con relieve ×2 y altura ×3, copa de árbol de 0,4 u, maquetas ×1,6 y rejilla de 2 u con suavizado. Las cumbres llegan a unos 630 m de Unity (52 u) sobre el llano y una pantalla del macizo tiene unos 160 m de desnivel.</p>
+        <p>Propuesta ×100 con relieve ×2,2 y altura ×1,5, copa de árbol de 0,4 u, plazas ×1,6, héroes y tropa ×3,2 y rejilla de 4 u con suavizado. Las cumbres llegan a unos 330 m de Unity (27 u) sobre el llano y una pantalla del macizo tiene unos 80 m de desnivel.</p>
         <button type="button" data-escena="propuesta,cordillera">Ir al macizo</button>
       </li>
       <li>
@@ -255,7 +260,7 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
       </li>
       <li>
         <h3>Mover la columna</h3>
-        <p>Haz clic en el terreno. La ruta se engancha a los nodos más cercanos, cruza la rejilla con A* y, con el suavizado, se estira en rectas que no cuestan más. La columna va más despacio en colina (×1,8) y en montaña (×3,5); el agua y las laderas de más de 35° no se cruzan, y el río se pasa por los vados.</p>
+        <p>Haz clic en el terreno. La ruta se engancha a los nodos más cercanos, cruza la rejilla con A* y, con el suavizado, se estira en rectas que no cuestan más. La columna va más despacio en colina (×1,8) y en montaña (×3,5); el agua y las laderas que se ven de más de 35° no se cruzan, y el río se pasa por los vados.</p>
         <button type="button" data-escena="columna">Verlo</button>
       </li>
       <li>
@@ -304,17 +309,17 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
       <h3>Regla para el terreno: tamaño en la ficción ÷ 1,2 km = u</h3>
       <div class="tabla-envoltura">
         <table>
-          <thead><tr><th>Elemento</th><th>Borrador (×1)</th><th>Elegido (×2)</th><th>En la ficción</th><th>En pantallas</th></tr></thead>
+          <thead><tr><th>Elemento</th><th>Borrador (×1)</th><th>Elegido (×2,2)</th><th>En la ficción</th><th>En pantallas</th></tr></thead>
           <tbody>
-            <tr><td>Loma</td><td class="num">3 – 10 u</td><td class="num">6 – 20 u</td><td class="num">7 – 24 km</td><td class="num">0,4 – 1,3</td></tr>
-            <tr><td>Valle (de ladera a ladera)</td><td class="num">5 – 20 u</td><td class="num">10 – 40 u</td><td class="num">12 – 48 km</td><td class="num">0,7 – 2,7</td></tr>
-            <tr><td>Montaña aislada</td><td class="num">15 – 40 u</td><td class="num">30 – 80 u</td><td class="num">36 – 96 km</td><td class="num">2 – 5</td></tr>
-            <tr><td>Cordillera (ancho)</td><td class="num">30 – 80 u</td><td class="num">60 – 160 u</td><td class="num">72 – 190 km</td><td class="num">4 – 11</td></tr>
+            <tr><td>Loma</td><td class="num">3 – 10 u</td><td class="num">7 – 22 u</td><td class="num">8 – 26 km</td><td class="num">0,4 – 1,5</td></tr>
+            <tr><td>Valle (de ladera a ladera)</td><td class="num">5 – 20 u</td><td class="num">11 – 44 u</td><td class="num">13 – 53 km</td><td class="num">0,7 – 2,9</td></tr>
+            <tr><td>Montaña aislada</td><td class="num">15 – 40 u</td><td class="num">33 – 88 u</td><td class="num">40 – 106 km</td><td class="num">2,2 – 5,9</td></tr>
+            <tr><td>Cordillera (ancho)</td><td class="num">30 – 80 u</td><td class="num">66 – 176 u</td><td class="num">79 – 211 km</td><td class="num">4,4 – 11,7</td></tr>
             <tr><td>Bosquete / bosque</td><td class="num">2 – 80 u</td><td class="num">2 – 80 u</td><td class="num">2 – 100 km</td><td class="num">0,1 – 5</td></tr>
           </tbody>
         </table>
       </div>
-      <p class="nota">La altura va exagerada, como en cualquier mapa de campaña: con relieve ×2 y altura ×3 las cumbres quedan a unos 630 m de Unity sobre el llano. Las pendientes que deciden por dónde se anda se miden sin la exageración de «Altura»; con ella, el 61 % del macizo pasaría de 35° y no se podría cruzar.</p>
+      <p class="nota">La altura va exagerada, como en cualquier mapa de campaña: con relieve ×2,2 y altura ×1,5 las cumbres quedan a unos 330 m de Unity sobre el llano. Las pendientes que deciden por dónde se anda se miden tal como se ven, con la exageración: así nadie camina por laderas raras. Con estos valores, el 30 % del macizo pasa de 35° y las rutas buscan los valles.</p>
     </div>
   </section>
 
@@ -322,11 +327,12 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
     <h2 id="t-decisiones">Estado</h2>
     <ul class="decisiones">
       <li><span class="estado cerrado">Cerrado</span><span>El ancla (cámara, velocidades, zonas, separación), Unity a ×12 y las plazas como maquetas agrandadas.</span></li>
-      <li><span class="estado cerrado">Elegido</span><span>Propuesta ×100 con relieve ×2, altura ×3, copa 0,4 u, maquetas ×1,6 y rejilla de 2 u con suavizado (2026-10-30). Es la representación que irá al cliente de jugador; la mesa se sigue afinando.</span></li>
+      <li><span class="estado cerrado">Elegido</span><span>Propuesta ×100 con relieve ×2,2, altura ×1,5, copa 0,4 u, plazas ×1,6, héroes y tropa ×3,2, y rejilla de 4 u con suavizado (2026-10-30). La mesa se sigue afinando.</span></li>
+      <li><span class="estado cerrado">Cliente</span><span>El mundo 3D se prototipa primero en el cliente de jugador (BronzeAgeClient, three.js) y después se lleva a Unity.</span></li>
       <li><span class="estado cerrado">Regla</span><span>Pueblos y avanzadas son partes de la plaza y van siempre dentro de su zona.</span></li>
-      <li><span class="estado abierto">Abierto</span><span>Las pendientes del movimiento, ¿sin la exageración visual? Así lo hace la mesa.</span></li>
-      <li><span class="estado abierto">Abierto</span><span>Una rejilla de 2 u en todo el mapa son unos 1,3 millones de nodos, 16 veces los de 8 u: hay que medir el artefacto y el servidor. La alternativa es 4 u con suavizado.</span></li>
+      <li><span class="estado cerrado">Regla</span><span>Las pendientes del movimiento se miden con la exageración de altura: lo que se ve es lo que se anda.</span></li>
       <li><span class="estado abierto">Abierto</span><span>Ríos y vados del terreno nuevo, y cuántos árboles dibuja el cliente: con copa de 0,4 u, un bosque denso lleva unos 3 árboles por u².</span></li>
+      <li><span class="estado abierto">Abierto</span><span>Tamaño de héroes y tropa frente a las plazas y los árboles: mando «Héroes y tropa».</span></li>
     </ul>
     <p class="pie">Datos: ventana de 320 × 240 u del mundo de la seed 42, entre la cordillera norte y el campamento‑0. En el terreno real, los ríos se dibujan pero no cortan el paso porque faltan sus vados. Página 2D anterior: <a href="https://claude.ai/artifact/GKqGYMohRFTMihKpPkaeGG" target="_blank" rel="noopener">escalas del mundo</a>.</p>
   </section>
@@ -337,9 +343,9 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
 <script>
 (async () => {
 const D = __DATOS__;
-const FACTOR = 12, PANT_W = 15, PANT_H = 8.4, VEL = .5, BASE_M = 450, FOV = 35, PEND_MAX = .7, TROPA = 2;
+const FACTOR = 12, PANT_W = 15, PANT_H = 8.4, VEL = .5, BASE_M = 450, FOV = 35, PEND_MAX = .7, ALTO_SOLDADO = .136;
 const W = D.w, H = D.h, NX = D.nx, NY = D.ny, PASO = D.paso, BX = D.bx, BY = D.by;
-const ELEGIDOS = { relieve: 2, exag: 3, copa: .4, maqueta: 1.6 };
+const ELEGIDOS = { relieve: 2.2, exag: 1.5, copa: .4, maqueta: 1.6, tropa: 3.2 };
 // Economia_Construccion: ZONA_INFLUENCIA, cupos de PUEBLOS_EXTRACTORES y AVANZADAS, ciudad = 10 % del radio de la zona
 const NIVELES = [{ radio: 6, pueblos: 0, avanzadas: 0 }, { radio: 10, pueblos: 1, avanzadas: 0 }, { radio: 15, pueblos: 3, avanzadas: 2 }, { radio: 20, pueblos: 4, avanzadas: 3 }, { radio: 25, pueblos: 5, avanzadas: 4 }, { radio: 30, pueblos: 6, avanzadas: 5 }];
 const FRACCION_CIUDAD = .1, SEPARACION_PUEBLOS = 3;
@@ -425,7 +431,7 @@ function propuesta(S) {
 }
 
 // ---------- estado ----------
-const estado = { terreno: 'propuesta', vista: 'juego', inclinacion: 50, ...ELEGIDOS, rejilla: 2, verRejilla: true, suavizado: true, columna: true, plazas: true, zonas: true, nivel: 2, arboles: true, seguir: false, pausa: reducido };
+const estado = { terreno: 'propuesta', vista: 'juego', inclinacion: 50, ...ELEGIDOS, rejilla: 4, verRejilla: true, suavizado: true, columna: true, plazas: true, zonas: true, nivel: 2, arboles: true, seguir: false, pausa: reducido };
 let T = real;
 let objX = D.puntos.llano[0], objY = D.puntos.llano[1];
 
@@ -438,8 +444,8 @@ const alturaM = (x, y) => {
 const alturaU = (x, y) => (alturaM(x, y) - BASE_M) / FACTOR * estado.exag;
 const aguaEn = (x, y) => { const i = Math.round(x / PASO), j = Math.round(y / PASO); return i < 0 || j < 0 || i >= NX || j >= NY ? 1 : T.agua[j * NX + i]; };
 const bosqueEn = (x, y) => { const i = Math.floor(x), j = Math.floor(y); return i < 0 || j < 0 || i >= BX || j >= BY ? 0 : T.bosque[j * BX + i]; };
-// pendiente en m/m de Unity, sin la exageración de «Altura»: es la que decide el movimiento
-const pendiente = (x, y) => Math.hypot(alturaM(x + .5, y) - alturaM(x - .5, y), alturaM(x, y + .5) - alturaM(x, y - .5)) / FACTOR;
+// pendiente tal como se ve (con la exageración de «Altura»), en m/m de Unity: lo que se ve es lo que se anda
+const pendiente = (x, y) => Math.hypot(alturaM(x + .5, y) - alturaM(x - .5, y), alturaM(x, y + .5) - alturaM(x, y - .5)) / FACTOR * estado.exag;
 const clase = h => { const [a, b, c] = T.umbrales; return h < a ? 'llano' : h < b ? 'colina' : h < c ? 'montaña' : 'cima'; };
 const transitable = (x, y) => x >= 0 && y >= 0 && x <= W && y <= H && !aguaEn(x, y) && pendiente(x, y) <= PEND_MAX;
 const costeEn = (x, y) => COSTE[clase(alturaM(x, y))] * (1 + Math.min(2, pendiente(x, y) * .45));
@@ -733,7 +739,7 @@ function estirar(p) {
   return out;
 }
 
-// ---------- columna: 3 de fondo × 6 filas y abanderado; los de detrás pisan el rastro de la cabeza ----------
+// ---------- columna: héroe a caballo, abanderado y 3 de fondo × 6 filas; los de detrás pisan el rastro de la cabeza ----------
 const columna = new THREE.Group(); escena.add(columna);
 const soldados = [];
 (() => {
@@ -742,6 +748,15 @@ const soldados = [];
   const lanza = new THREE.BoxGeometry(.008, .24, .008); lanza.translate(.034, .11, 0);
   const escudo = new THREE.CylinderGeometry(.032, .032, .008, 10); escudo.rotateZ(Math.PI / 2); escudo.translate(-.034, .06, 0);
   const bandera = new THREE.BoxGeometry(.004, .07, .1); bandera.translate(.034, .2, -.05);
+  const pelaje = new THREE.MeshLambertMaterial({ color: 0x6b4a2e });
+  const lomo = new THREE.BoxGeometry(.05, .055, .16); lomo.translate(0, .085, 0);
+  const cuello = new THREE.BoxGeometry(.035, .07, .04); cuello.rotateX(-.5); cuello.translate(0, .13, .075);
+  const patas = new THREE.BoxGeometry(.04, .06, .12); patas.translate(0, .03, 0);
+  const jinete = new THREE.BoxGeometry(.045, .07, .035); jinete.translate(0, .145, -.01);
+  const yelmo = new THREE.BoxGeometry(.032, .034, .032); yelmo.translate(0, .197, -.01);
+  const penacho = new THREE.BoxGeometry(.008, .03, .05); penacho.translate(0, .225, -.015);
+  const heroe = new THREE.Group(); heroe.add(new THREE.Mesh(lomo, pelaje), new THREE.Mesh(cuello, pelaje), new THREE.Mesh(patas, pelaje), new THREE.Mesh(jinete, MAT.bronce), new THREE.Mesh(yelmo, MAT.bronce), new THREE.Mesh(penacho, MAT.tunica));
+  heroe.traverse(m => { m.castShadow = true; }); columna.add(heroe); soldados.push(heroe);
   for (let k = 0; k < 19; k++) {
     const s = new THREE.Group(); s.add(new THREE.Mesh(cuerpo, MAT.tunica), new THREE.Mesh(cabezaG, MAT.piel), new THREE.Mesh(lanza, MAT.madera), new THREE.Mesh(escudo, MAT.bronce));
     if (k === 0) s.add(new THREE.Mesh(bandera, MAT.bronce));
@@ -789,9 +804,9 @@ function moverColumna(dt) {
       const u = rastro[rastro.length - 1]; if (Math.hypot(x - u[0], y - u[1]) > .04) { rastro.push([x, y]); if (rastro.length > 400) rastro.shift(); }
     }
   }
-  const M = estado.maqueta * TROPA;
+  const M = estado.tropa;
   for (let k = 0; k < soldados.length; k++) {
-    const fila = k === 0 ? 0 : Math.floor((k - 1) / 3) + 1, lado = k === 0 ? 0 : ((k - 1) % 3) - 1;
+    const fila = k < 2 ? k : Math.floor((k - 2) / 3) + 2, lado = k < 2 ? 0 : ((k - 2) % 3) - 1;
     let atras = fila * .13 * M, i = rastro.length - 1, x = cabeza[0], y = cabeza[1], ang = 0;
     while (i > 0) { const a = rastro[i - 1], b = rastro[i], l = Math.hypot(b[0] - a[0], b[1] - a[1]); ang = Math.atan2(b[1] - a[1], b[0] - a[0]); if (l >= atras) { const t = l ? atras / l : 0; x = b[0] + (a[0] - b[0]) * t; y = b[1] + (a[1] - b[1]) * t; break; } atras -= l; x = a[0]; y = a[1]; i--; }
     const nx = -Math.sin(ang), ny = Math.cos(ang), px = x + nx * lado * .1 * M, py = y + ny * lado * .1 * M;
@@ -821,9 +836,11 @@ function etiquetasPlazas() {
   capaEtq.textContent = '';
   etiquetas = elementos.map(p => { const e = document.createElement('div'); e.className = p.tipo === 'ciudad' || p.tipo === 'campamento' ? 'etiqueta' : 'etiqueta menor'; e.textContent = p.tipo === 'ciudad' ? `Ciudad · nivel ${estado.nivel || 'inicial'}` : NOMBRES[p.tipo]; e.hidden = true; capaEtq.appendChild(e); return { e, p }; });
 }
+const etqHeroe = document.createElement('div'); etqHeroe.className = 'etiqueta'; etqHeroe.textContent = 'Héroe'; etqHeroe.hidden = true; $('visor').appendChild(etqHeroe);
 const vtmp = new THREE.Vector3();
 function moverEtiquetas() {
   const w = lienzo.clientWidth, h = lienzo.clientHeight, ver = estado.plazas && estado.vista === 'juego';
+  if (estado.vista === 'juego' && columna.visible) { vtmp.copy(soldados[0].position); vtmp.y += .3 * estado.tropa; vtmp.project(camara); const dentro = vtmp.z < 1 && Math.abs(vtmp.x) < .95 && Math.abs(vtmp.y) < .9; etqHeroe.hidden = !dentro; if (dentro) { etqHeroe.style.left = `${(vtmp.x + 1) / 2 * w}px`; etqHeroe.style.top = `${(1 - vtmp.y) / 2 * h}px`; } } else etqHeroe.hidden = true;
   for (const { e, p } of etiquetas) {
     if (!ver || Math.abs(p.x - objX) > 22 || Math.abs(p.y - objY) > 22) { e.hidden = true; continue; }
     vtmp.set(p.x - W / 2, alturaU(p.x, p.y) + (p.tipo === 'ciudad' ? .5 : .6 * estado.maqueta), p.y - H / 2).project(camara);
@@ -897,7 +914,7 @@ function lecturas(ahora) {
 // ---------- montaje ----------
 const FICHAS = {
   actual: 'Ventana real del generador: <b>320 × 240 u</b>, entre la cordillera norte y el campamento‑0. Desnivel en una pantalla: <b>8 m</b> de mediana; en la cordillera, hasta <b>160 m</b> (con altura ×1).',
-  propuesta: 'Boceto con los tamaños de la regla ×100: crestas, valles, colinas y lomas que caben en una o pocas pantallas. «Tamaño del relieve» escala tamaño y altura a la vez; «Altura» exagera solo la vista. No sale del generador.',
+  propuesta: 'Boceto con los tamaños de la regla ×100: crestas, valles, colinas y lomas que caben en una o pocas pantallas. «Tamaño del relieve» escala tamaño y altura a la vez; «Altura» exagera las alturas, y con ellas las pendientes que deciden el paso. No sale del generador.',
 };
 let propuestaCache = null;
 function montarTerreno() {
@@ -916,13 +933,14 @@ document.querySelectorAll('input[name="vista"]').forEach(r => r.addEventListener
 const deslizadores = {};
 const deslizador = (id, clave, texto, alSoltar) => { const el = $(id), out = $('o-' + id); const pintar = () => { out.textContent = texto(+el.value); }; el.addEventListener('input', () => { pintar(); if (!alSoltar) estado[clave] = +el.value; }); el.addEventListener('change', () => { estado[clave] = +el.value; if (alSoltar) ocupado(alSoltar); }); pintar(); deslizadores[clave] = { el, pintar }; };
 deslizador('inclinacion', 'inclinacion', v => `${v}°`);
-deslizador('exag', 'exag', v => `×${fmt(v)}`, () => { $('chip-terreno').textContent = estado.terreno === 'actual' ? 'Generador actual · seed 42' : `Propuesta ×100 · relieve ×${fmt(estado.relieve)} · altura ×${fmt(estado.exag)}`; pintarTerreno(); montarCapas(); });
+deslizador('exag', 'exag', v => `×${fmt(v)}`, montarTerreno);
 deslizador('relieve', 'relieve', v => `×${fmt(v)}`, () => { if (estado.terreno === 'propuesta') montarTerreno(); });
 deslizador('copa', 'copa', v => `${fmt(v)} u · ${fmt(v * FACTOR, 0)} m`, construirArboles);
 deslizador('maqueta', 'maqueta', v => `×${fmt(v)}`, () => { repartirElementos(); construirPlazas(); construirArboles(); });
+deslizador('tropa', 'tropa', v => `×${fmt(v)} · ${fmt(v * ALTO_SOLDADO * FACTOR)} m`);
 $('restablecer').addEventListener('click', () => {
   for (const [k, v] of Object.entries(ELEGIDOS)) { estado[k] = v; deslizadores[k].el.value = v; deslizadores[k].pintar(); }
-  $('rejilla').value = '2'; estado.rejilla = 2; $('suavizado').checked = estado.suavizado = true; $('t-propuesta').checked = true; estado.terreno = 'propuesta';
+  $('rejilla').value = '4'; estado.rejilla = 4; $('suavizado').checked = estado.suavizado = true; $('t-propuesta').checked = true; estado.terreno = 'propuesta';
   ocupado(montarTerreno);
 });
 $('rejilla').addEventListener('change', e => { estado.rejilla = +e.target.value; ocupado(() => { construirNav(); construirRejilla(); rehacerRuta(); }); });

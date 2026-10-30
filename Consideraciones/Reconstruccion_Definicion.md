@@ -47,6 +47,9 @@ con 8 perfiles. El generador regional de Codex (32.000 × 24.000 Unity) vive apa
 (`BronzeAgeClient`) se retira; queda solo el **admin web**, como herramienta para todo lo que no es 3D (interfaces,
 interacciones, reglas y contrato).
 
+> **2026-10-30:** el cliente final sigue siendo Unity, pero el mundo 3D se prototipa primero en `BronzeAgeClient` con
+> three.js, que es como lo muestra la mesa de escalas 3D. Ver `Escalas_Mundo_3D_Definicion.md` §5.
+
 Es un problema **conjunto**: el servidor manda fotos y progreso por tick, y los clientes reconstruyen la presentación
 sondeando y adivinando. En el web: CHANGELOG 0.29.x, `main.ts` (`ejecutarYRefrescar`, `refrescarDatosJuego`, sondeos de
 3 s). En Unity: `BronzeAgeCampaignConnection` sondea por HTTP cada 2 s y salta de posición en posición
