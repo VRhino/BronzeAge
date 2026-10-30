@@ -1,6 +1,7 @@
-// Genera el mundo completo y escribe el artefacto (`mundo-<hash>.bin`) en la carpeta dada.
-// Uso: npx tsx scripts/generar-mundo.ts [seed] [carpeta]    (algo más de un minuto)
+// Genera el mundo completo y escribe el artefacto (`mundo-<hash>.bin`) y su paquete de relieve (`relieve-<hash>.bin`) en la carpeta dada.
+// Uso: npx tsx scripts/generar-mundo.ts [seed] [carpeta]    (unos dos minutos con 4 hilos)
 import { generarRelieve } from '../src/relieve';
+import { escribirPaqueteRelieve } from '../src/relieveFino';
 import { generarMundoEstrategico } from '../src/mundoEstrategico';
 import { metalesARecursos, generarRecursosNoMetalicos } from '../src/recursos';
 import { colocarBandidosYAlijos } from '../src/contenidoVivo';
@@ -100,3 +101,7 @@ const mundo: MundoGenerado = {
 };
 const salida = medir('artefacto', () => escribirArtefacto(mundo, carpeta));
 console.log(`escrito ${salida.ruta}\nhash ${salida.hash}`);
+// El paquete de relieve de los clientes 3D (altura cada 0,5 u, contrato 06 §8), junto al artefacto y con su hash en el nombre.
+const t0 = Date.now();
+const relieve = await escribirPaqueteRelieve(r.elevacion, ancho / FACTOR, alto / FACTOR, salida.hash, carpeta);
+console.log(`relieve fino: ${((Date.now() - t0) / 1000).toFixed(1)} s\nescrito ${relieve.ruta} (${(relieve.bytes / 1e6).toFixed(1)} MB)\nhash del relieve ${relieve.hash}`);

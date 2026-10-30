@@ -187,9 +187,20 @@ funcionar primero ahí, con three.js como en la mesa, ayuda a cerrar la represen
        (una plaza al oeste de su campamento y campo abierto al este, viajes de más de 40 minutos, nodos de cobre
        grandes). Ahora piden lo que necesitan: `sitio_rico` (`crates/nucleo/tests/comun/real.rs`) exige campo
        abierto al este, lejos de los campamentos, y los saqueos de pueblo toman el nodo de cobre más rico.
-   - **La altura (pendiente).** Hoy los rásteres van a 4 u y la mesa usa 0,5 u. En todo el mapa serían 5.334 × 4.000 =
-     21 M muestras, 43 MB en u16 sin comprimir. Hay que decidir qué resolución lleva el artefacto y qué detalle añade el
-     cliente. El tope de 1.000 m del raster (`ESCALA_TERRENO.metrosVerticalesPorElevacion`) también limita las cumbres.
+   - **La altura (hecho, 2026-10-30): paquete de relieve a 0,5 u** (`06_Contrato_de_Mundo.md` §8).
+     - **Por qué 0,5 u.** Medido en la ventana de la mesa, comparando cada resolución con 0,5 u, en el macizo:
+       - con 4 u las crestas pierden hasta 112 m y el 7 % de las laderas cambia entre transitable y no;
+       - con 2 u, hasta 46 m y el 3,5 %;
+       - con 1 u, hasta 22 m y el 1 %.
+
+       El autor eligió 0,5 u, la de la mesa.
+     - **Por qué del generador y no del cliente.** La otra opción era que el cliente recalculara el relieve con la receta.
+       Se descartó: Unity tendría que mantener la receta copiada en C#, y lo dibujado podría no coincidir del todo con la
+       transitabilidad del servidor.
+     - **El paquete.** Va aparte del artefacto, ligado a su hash, en teselas de 64 u: 8,6 MB en la semilla 42 y 61 s con
+       4 hilos. Viaja una vez por mundo, como el mapa. Las teselas son para la memoria del cliente, no para la red.
+     - **Queda abierto** el tope de 1.000 m del raster (`ESCALA_TERRENO.metrosVerticalesPorElevacion`), que también
+       limita las cumbres.
 5. **Cliente de jugador (prototipo) y después Unity** (§5):
    - three.js con la cámara de juego;
    - terreno por teselas;
@@ -206,7 +217,6 @@ funcionar primero ahí, con three.js como en la mesa, ayuda a cerrar la represen
 - **Más relieve:** acercarse al 43 % de laderas cerradas de la propuesta pide abrir collados en las crestas o subir el
   tope vertical de 1.000 m.
 - **Cuántos árboles** dibuja el cliente y con qué detalle.
-- **Resolución de la altura** en el artefacto (§6.4).
 
 ## 8. Fuente de la mesa
 

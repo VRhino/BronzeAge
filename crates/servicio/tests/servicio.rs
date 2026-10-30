@@ -83,7 +83,7 @@ async fn bienvenida(dir: SocketAddr, token: &str) -> pb::Bienvenida {
 #[tokio::test(flavor = "multi_thread")]
 async fn un_bot_entra_por_el_acceso_real_y_sigue_tras_un_reinicio() {
     let datos = tempfile::tempdir().unwrap();
-    let (s, i) = servicio::arrancar(arranque_sintetico(), None, datos.path(), libre(), acceso()).await.unwrap();
+    let (s, i) = servicio::arrancar(arranque_sintetico(), None, None, datos.path(), libre(), acceso()).await.unwrap();
     assert!(!i.recuperado);
     let dir = s.direccion;
     let token = token_de_bot(dir, "bot-1", true).await;
@@ -121,14 +121,14 @@ async fn un_bot_entra_por_el_acceso_real_y_sigue_tras_un_reinicio() {
     assert!(id.starts_with("p-"), "{id}");
     assert_eq!(n.id_de_partida(), id);
 
-    let (s, i) = servicio::arrancar(arranque_sintetico(), None, datos.path(), libre(), acceso()).await.unwrap();
+    let (s, i) = servicio::arrancar(arranque_sintetico(), None, None, datos.path(), libre(), acceso()).await.unwrap();
     assert!(i.recuperado && i.version == version && i.cuentas == 1, "{i:?}");
     bienvenida(s.direccion, &token).await;
     assert_eq!(s.parar().await.id_de_partida(), id, "el mismo id tras el reinicio");
 
     // Una partida que ya existía sin `partida.id` conserva el de antes (hash del mundo y semilla): el `battleId` de sus batallas no cambia.
     std::fs::remove_file(datos.path().join(servicio::FICHERO_ID_PARTIDA)).unwrap();
-    let (s, _) = servicio::arrancar(arranque_sintetico(), None, datos.path(), libre(), acceso()).await.unwrap();
+    let (s, _) = servicio::arrancar(arranque_sintetico(), None, None, datos.path(), libre(), acceso()).await.unwrap();
     assert_eq!(s.parar().await.id_de_partida(), "hash-de-prueba:42");
     assert_eq!(std::fs::read_to_string(datos.path().join(servicio::FICHERO_ID_PARTIDA)).unwrap(), "hash-de-prueba:42");
 }
@@ -146,7 +146,9 @@ async fn con_el_mundo_real_el_bot_crea_su_heroe_y_lo_conserva() {
     let datos = tempfile::tempdir().unwrap();
     let a = servicio::arranque_de(&f, 42).unwrap();
     let bytes = a.bytes.clone();
-    let (s, _) = servicio::arrancar(a.arranque, Some(a.bytes.clone()), datos.path(), libre(), acceso()).await.unwrap();
+    // El paquete de relieve, si el generador lo dejó al lado (desde el 2026-10-30 lo escribe con el artefacto).
+    let relieve = servicio::relieve_junto_a(&f, &a.arranque).expect("el paquete de relieve que hay al lado vale");
+    let (s, _) = servicio::arrancar(a.arranque, Some(a.bytes.clone()), relieve.clone(), datos.path(), libre(), acceso()).await.unwrap();
     let token = token_de_bot(s.direccion, "bot-1", true).await;
     let mut bot = ClienteDeEjemplo::entrar(s.direccion, hola(&token, TipoCliente::ClienteBot), Almacen::default()).await;
     // La `Bienvenida` dice dónde bajar el artefacto, y el mismo puerto lo sirve tal cual.
@@ -156,6 +158,16 @@ async fn con_el_mundo_real_el_bot_crea_su_heroe_y_lo_conserva() {
     assert_eq!((estado, cuerpo.len()), (200, bytes.len()));
     assert!(cuerpo == *bytes, "el artefacto servido es el del disco");
     assert_eq!(get(s.direccion, "/v1/mundo/otro-hash").await.0, 404);
+    // Y el paquete de relieve, por la ruta que anuncia la `Bienvenida`, con su hash: se baja una vez por mundo, como el artefacto.
+    match &relieve {
+        Some(r) => {
+            assert_eq!((info.url_relieve.clone(), info.hash_relieve.clone()), (format!("/v1/mundo/{}/relieve", info.hash), r.hash.clone()));
+            let (estado, cuerpo) = get(s.direccion, &info.url_relieve).await;
+            assert!(estado == 200 && cuerpo == *r.bytes, "el relieve servido es el del disco");
+        }
+        None => assert!(info.url_relieve.is_empty() && info.hash_relieve.is_empty(), "sin paquete no se anuncia"),
+    }
+    assert_eq!(get(s.direccion, "/v1/mundo/otro-hash/relieve").await.0, 404);
     let camp = bot.bienvenida.campamentos_para_elegir.first().expect("un campamento para nacer").campamento_id.clone();
     let r = bot.aceptada(O::CrearHeroe(pb::OrdenCrearHeroe { display_name: "Bot 1".into(), campamento_id: camp, ..Default::default() })).await;
     let heroe = r.creadas.iter().find(|c| c.entidad == TipoEntidad::Heroe as i32).expect("nació un héroe").id.clone();
@@ -163,7 +175,7 @@ async fn con_el_mundo_real_el_bot_crea_su_heroe_y_lo_conserva() {
     s.parar().await;
 
     let a = servicio::arranque_de(&f, 42).unwrap();
-    let (s, i) = servicio::arrancar(a.arranque, Some(a.bytes), datos.path(), libre(), acceso()).await.unwrap();
+    let (s, i) = servicio::arrancar(a.arranque, Some(a.bytes), None, datos.path(), libre(), acceso()).await.unwrap();
     assert!(i.recuperado);
     let token = token_de_bot(s.direccion, "bot-1", false).await;
     assert_eq!(bienvenida(s.direccion, &token).await.heroe_id.as_deref(), Some(heroe.as_str()));
@@ -209,7 +221,7 @@ async fn pedir(dir: SocketAddr, metodo: &str, ruta: &str, token: Option<&str>, c
 async fn un_administrador_cambia_el_codigo_y_respalda_la_partida() {
     let datos = tempfile::tempdir().unwrap();
     let cfg = || acceso::Config { administradores: vec!["jefa".into()], ..acceso() };
-    let (s, _) = servicio::arrancar(arranque_sintetico(), None, datos.path(), libre(), cfg()).await.unwrap();
+    let (s, _) = servicio::arrancar(arranque_sintetico(), None, None, datos.path(), libre(), cfg()).await.unwrap();
     let dir = s.direccion;
     for nick in ["jefa", "pepe"] {
         assert_eq!(post(dir, "/v1/registro", json!({ "nick": nick, "clave": "clave larga" })).await.0, 201);
@@ -271,7 +283,7 @@ async fn un_administrador_cambia_el_codigo_y_respalda_la_partida() {
         std::fs::remove_dir_all(datos.path().join(sub)).unwrap();
         copiar(&copia.join(sub), &datos.path().join(sub));
     }
-    let (s, i) = servicio::arrancar(arranque_sintetico(), None, datos.path(), libre(), cfg()).await.unwrap();
+    let (s, i) = servicio::arrancar(arranque_sintetico(), None, None, datos.path(), libre(), cfg()).await.unwrap();
     assert!(i.recuperado && i.cuentas == 4, "{i:?}");
     assert!(i.version >= r["version"].as_u64().unwrap(), "{i:?} {r}");
     s.parar().await;

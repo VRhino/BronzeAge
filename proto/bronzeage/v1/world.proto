@@ -138,3 +138,28 @@ message PaqueteUnity {
   uint32 factor = 3;                     // 12
   repeated SectorUnity sectores = 4;
 }
+
+// Paquete de relieve (06 §8, 2026-10-30): la altura fina de todo el mapa para los clientes 3D. Lo escribe el mismo generador que el
+// artefacto, va aparte (el servidor solo lo valida y lo sirve) y se baja una vez por mundo, como el artefacto: el cliente lo guarda
+// por hash. Las muestras van en los vértices de una rejilla de `paso` (x = i · paso, y = j · paso) y valen lo que el raster `altura`.
+message PaqueteRelieve {
+  string hash = 1;                       // sha256 hex de la serialización con hash = ""
+  string hash_artefacto = 2;             // manifiesto.hash del artefacto del que deriva
+  uint32 paso = 3;                       // milésimas de unidad estratégica entre muestras: 500 (0,5 u)
+  uint32 lado_tesela = 4;                // intervalos por lado de tesela: 128 (64 u); cada tesela guarda (lado + 1)² muestras
+                                         // y comparte su última fila y su última columna con la vecina
+  uint32 columnas = 5;                   // muestras del mapa en x: ⌈ancho / paso⌉ + 1 (la primera en x = 0)
+  uint32 filas = 6;                      // muestras en y, fila 0 al norte
+  uint32 teselas_x = 7;                  // ⌈(columnas − 1) / lado_tesela⌉
+  uint32 teselas_y = 8;                  // ⌈(filas − 1) / lado_tesela⌉
+  repeated TeselaRelieve teselas = 9;    // teselas_x · teselas_y, por filas de teselas desde el noroeste. La parte de una tesela
+                                         // que pasa del borde del mapa repite la muestra del borde
+}
+
+message TeselaRelieve {
+  bytes altura = 1;                      // zstd de (lado + 1)² u16 LE en orden de filas (0..65535 como el raster `altura`), cada
+                                         // muestra guardada como su diferencia, módulo 2^16, con la predicción: izquierda + arriba
+                                         // − diagonal; solo la izquierda en la primera fila y solo la de arriba en la primera columna
+  bytes agua = 2;                        // zstd de (lado + 1)² bits de agua (mar y lagos; muestra i → byte i >> 3, bit i & 7,
+                                         // LSB primero); vacío si la tesela no tiene agua
+}

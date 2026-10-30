@@ -25,11 +25,15 @@
 //! (mercenarios y bandidos) y alijos en tierra transitable y fuera del agua; cuotas por anillo de estaño y oro
 //! (5/25/70 % por resto mayor sobre el total presente, según el `anillo` declarado de cada nodo); parcelas con bosque
 //! existente y separadas ≥ 2·rp; campamentos de mercenarios separados ≥ 600 estratégicas.
+//!
+//! El paquete de relieve de los clientes 3D (`PaqueteRelieve`) va aparte: [`validar_relieve`] lo comprueba contra el artefacto.
 
 mod error;
+mod relieve;
 mod validar;
 
 pub use error::ErrorMundo;
+pub use relieve::{validar_relieve, ErrorRelieve};
 
 use contrato::v1::*;
 use prost::Message;

@@ -157,6 +157,8 @@ crece el borde (`1 − fBorde`) para que la pared de costa/montaña del perímet
 >
 > Medido en la ventana de la mesa (semilla 42, 320 × 240 u entre la cordillera norte y el campamento‑0): en el macizo, 46 m de desnivel por pantalla de mediana y 196 m en el percentil 90 (antes 50 y 110), y el 25 % de las laderas por encima de 35° (antes 13 %). Semilla 42 completa: hash `71697908…`, 8 campamentos, 7.360 recursos, grafo de 4 u (ver `06_Contrato_de_Mundo.md` §7).
 
+> **El relieve fino para los clientes 3D** (2026-10-30): el generador evalúa `evaluarElevacion` también cada 0,5 u en todo el mapa y lo escribe aparte, en el paquete de relieve (`relieve-<hash>.bin`, `generador/src/paqueteRelieve.ts`, en 4 hilos). Es la misma función y la misma ejecución que los rasters de 4 u del artefacto, así que no cambia el artefacto (sigue en `71697908…`) ni ninguna regla: solo lo que se dibuja. Formato y descarga en `06_Contrato_de_Mundo.md` §8.
+
 ### 5.2 Terreno (`evaluarTerreno`)
 
 `e < umbralAgua` → `agua`; `< umbralCosta` → `costa`; `< umbralColina` → `llano`; `< umbralMontana` → `colina`; `< umbralCima` → `montana`; si no, `cima` (inhabitable: ni se funda ni se colocan recursos). El agua es obstáculo

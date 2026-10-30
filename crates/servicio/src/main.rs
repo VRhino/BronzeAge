@@ -3,7 +3,7 @@
 //! | Variable | Qué | Por defecto |
 //! |---|---|---|
 //! | `BRONZEAGE_DIRECCION` | dónde escucha (WebSocket y HTTP en el mismo puerto) | `127.0.0.1:7878` |
-//! | `BRONZEAGE_MUNDO` | el artefacto de mundo, o una carpeta con un `mundo-*.bin` | `generador/salida/mundo` |
+//! | `BRONZEAGE_MUNDO` | el artefacto de mundo, o una carpeta con un `mundo-*.bin`; su paquete de relieve (`relieve-<hash>.bin`), si está al lado, también se sirve | `generador/salida/mundo` |
 //! | `BRONZEAGE_DATOS` | la carpeta de datos (`mundo/` y `acceso/`) | `datos` |
 //! | `BRONZEAGE_SEMILLA` | la semilla de la partida (solo cuenta la primera vez) | `42` |
 //! | `CODIGO_REGISTRO` | código de invitación de las cuentas humanas; sin él, registro abierto | — |
@@ -57,14 +57,29 @@ async fn correr() -> Result<(), String> {
     let fichero = servicio::buscar_mundo(&mundo).map_err(|e| {
         let ruta = std::path::absolute(&mundo).unwrap_or(mundo.clone());
         format!(
-            "no encuentro el artefacto de mundo en {} ({e}). Genéralo con «generar-mundo» en el panel o con `node scripts/generar-mundo.mjs` (unos 15 min), o pon \
+            "no encuentro el artefacto de mundo en {} ({e}). Genéralo con «generar-mundo» en el panel o con `node scripts/generar-mundo.mjs` (unos 2 min), o pon \
              BRONZEAGE_MUNDO con la ruta de un mundo-*.bin o de su carpeta",
             ruta.display()
         )
     })?;
     println!("mundo: {}", fichero.display());
     let a = servicio::arranque_de(&fichero, semilla).map_err(|e| format!("artefacto de mundo: {e}"))?;
-    let (s, i) = servicio::arrancar(a.arranque, Some(a.bytes), &datos, direccion, config.clone()).await.map_err(|e| format!("datos en {}: {e}", datos.display()))?;
+    // El paquete de relieve de los clientes 3D: si falta o no vale, el servidor arranca igual y no lo anuncia.
+    let relieve = match servicio::relieve_junto_a(&fichero, &a.arranque) {
+        Ok(Some(r)) => {
+            println!("relieve: {} ({} bytes)", r.hash, r.bytes.len());
+            Some(r)
+        }
+        Ok(None) => {
+            println!("sin paquete de relieve junto al artefacto: los clientes 3D no tendrán la altura fina (se genera con el mundo)");
+            None
+        }
+        Err(e) => {
+            eprintln!("el paquete de relieve no vale y no se sirve: {e}");
+            None
+        }
+    };
+    let (s, i) = servicio::arrancar(a.arranque, Some(a.bytes), relieve, &datos, direccion, config.clone()).await.map_err(|e| format!("datos en {}: {e}", datos.display()))?;
     println!(
         "escuchando en {} (WebSocket del contrato 05 y HTTP de acceso); mundo {}; versión {}, instante {} ms{}; {} cuentas; registro {}; bots {}; {} administradores",
         s.direccion,
