@@ -226,11 +226,14 @@ funcionar primero ahí, con three.js como en la mesa, ayuda a cerrar la represen
        4 hilos. Viaja una vez por mundo, como el mapa. Las teselas son para la memoria del cliente, no para la red.
      - **Queda abierto** el tope de 1.000 m del raster (`ESCALA_TERRENO.metrosVerticalesPorElevacion`), que también
        limita las cumbres.
-5. **Cliente de jugador (prototipo) y después Unity** (§5):
-   - three.js con la cámara de juego;
-   - terreno por teselas;
-   - árboles instanciados por trozos (la mesa corta en 140.000);
-   - maquetas instanciadas por material.
+5. **Cliente de jugador (prototipo) y después Unity** (§5). Plan, valores y fases en `BronzeAgeClient/docs/Mundo_3D.md`
+   (solo sobremesa en el prototipo):
+   - **fase 1, datos (hecha, cliente 0.61.0, 2026-10-30):** contrato con el relieve, descarga una vez por mundo, caché
+     en IndexedDB y teselas abiertas a demanda; el paquete real cuadra con la ventana de la mesa muestra a muestra;
+   - fase 2: se juega en 3D (escena, cámara, terreno, niebla, tu columna, clic para marchar);
+   - fase 3: árboles, ríos, maquetas, zonas, fronteras y caminos;
+   - fase 4: lo ajeno, etiquetas, selección, vista previa de fundación y sitio de aldea;
+   - fase 5: se retira el pintor 2D del modo mundo.
 6. **Metales en zonas montañosas** (pendiente desde el análisis del generador): depende de qué es «montaña» en el relieve
    nuevo.
 
