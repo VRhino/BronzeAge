@@ -261,7 +261,7 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
       <div class="grupo">
         <span class="grupo-titulo">Leyenda</span>
         <div class="leyenda">
-          <span class="muestra" style="background:#c9b48f"></span><span>Ciudad: muralla al 10 % del radio de la zona</span>
+          <span class="muestra" style="background:#c9b48f"></span><span>Ciudad: muralla al 10 % del radio de la zona con «Plazas» a ×1; crece con la maqueta</span>
           <span class="muestra" style="background:#a8714a"></span><span>Pueblo y avanzada, dentro de la zona</span>
           <span class="muestra" style="background:#d8cfbd"></span><span>Campamento del generador</span>
           <span class="muestra" style="background:#c08a3e"></span><span>Héroe a caballo, al frente</span>
@@ -381,6 +381,8 @@ const ELEGIDOS = { relieve: 2.2, exag: 2, copa: .4, maqueta: 1.6, tropa: 3 };
 // Economia_Construccion: ZONA_INFLUENCIA, cupos de PUEBLOS_EXTRACTORES y AVANZADAS, ciudad = 10 % del radio de la zona
 const NIVELES = [{ radio: 6, pueblos: 0, avanzadas: 0 }, { radio: 10, pueblos: 1, avanzadas: 0 }, { radio: 15, pueblos: 3, avanzadas: 2 }, { radio: 20, pueblos: 4, avanzadas: 3 }, { radio: 25, pueblos: 5, avanzadas: 4 }, { radio: 30, pueblos: 6, avanzadas: 5 }];
 const FRACCION_CIUDAD = .1, SEPARACION_PUEBLOS = 3;
+// La ciudad del juego ocupa el 10 % del radio de su zona; su maqueta crece con «Plazas» como los pueblos y las avanzadas (×1 = la del juego)
+const radioCiudad = () => NIVELES[estado.nivel].radio * FRACCION_CIUDAD * estado.maqueta;
 // generador: COSTE_MOVIMIENTO por clase y factor de pendiente de costeEnPunto
 const COSTE = { llano: 1, colina: 1.8, 'montaña': 3.5, cima: 12 };
 const $ = id => document.getElementById(id);
@@ -624,12 +626,12 @@ function elegirPlazas() {
 }
 // zona real aproximada: dentro del radio y más cerca de su ciudad que de cualquier otra (dos zonas que se pisan se reparten)
 function repartirElementos() {
-  const N = NIVELES[estado.nivel], R = N.radio, Rc = R * FRACCION_CIUDAD, M = estado.maqueta;
+  const N = NIVELES[estado.nivel], R = N.radio, Rc = R * FRACCION_CIUDAD, M = estado.maqueta, Rd = Rc * M;
   elementos = [];
   const ocupados = [];
   const enSuZona = (c, x, y) => { const d = Math.hypot(x - c.x, y - c.y); if (d > R - .5) return false; for (const o of ciudades) if (o !== c && Math.hypot(x - o.x, y - o.y) < d) return false; return true; };
   const libre = (x, y, sep) => ocupados.every(o => Math.hypot(x - o[0], y - o[1]) >= Math.max(sep, o[2]));
-  for (const c of ciudades) { elementos.push({ tipo: 'ciudad', x: c.x, y: c.y, radio: Rc, ciudad: c }); ocupados.push([c.x, c.y, Math.max(SEPARACION_PUEBLOS, Rc + 1)]); }
+  for (const c of ciudades) { elementos.push({ tipo: 'ciudad', x: c.x, y: c.y, radio: Rd, ciudad: c }); ocupados.push([c.x, c.y, Math.max(SEPARACION_PUEBLOS, Rd + 1)]); }
   for (const c of ciudades) {
     const colocar = (tipo, n, rMin, rMax, sep, radioModelo) => {
       for (let k = 0, intento = 0; k < n && intento < 80; intento++) {
@@ -641,11 +643,11 @@ function repartirElementos() {
         elementos.push({ tipo, x, y, radio: radioModelo, ciudad: c }); ocupados.push([x, y, sep]); k++;
       }
     };
-    colocar('pueblo', N.pueblos, Math.max(SEPARACION_PUEBLOS, Rc + 1), R * .9, SEPARACION_PUEBLOS, .55 * M);
+    colocar('pueblo', N.pueblos, Math.max(SEPARACION_PUEBLOS, Rd + 1), R * .9, SEPARACION_PUEBLOS, .55 * M);
     colocar('avanzada', N.avanzadas, R * .55, R * .95, 1.5, .3 * M);
   }
   for (const c of T.campamentos) elementos.push({ tipo: 'campamento', x: c.x, y: c.y, radio: .6 * M, ciudad: null });
-  $('ficha-nivel').textContent = `Zona de ${R} u, ciudad de ${fmt(Rc)} u de radio, ${N.pueblos} ${N.pueblos === 1 ? 'pueblo' : 'pueblos'} y ${N.avanzadas} ${N.avanzadas === 1 ? 'avanzada' : 'avanzadas'} por plaza.`;
+  $('ficha-nivel').textContent = `Zona de ${R} u, ciudad de ${fmt(Rc)} u de radio en el juego (${fmt(Rd)} u la maqueta), ${N.pueblos} ${N.pueblos === 1 ? 'pueblo' : 'pueblos'} y ${N.avanzadas} ${N.avanzadas === 1 ? 'avanzada' : 'avanzadas'} por plaza.`;
 }
 const MAT = {
   muro: new THREE.MeshLambertMaterial({ color: 0xc9b48f }), adobe: new THREE.MeshLambertMaterial({ color: 0xd2bf9a }),
@@ -664,10 +666,11 @@ function construirPlazas() {
   for (const el of elementos) {
     const sem = Math.round(el.x * 7 + el.y * 13);
     if (el.tipo === 'ciudad') {
+      // todo crece con la maqueta: la muralla, las casas y el sitio que ocupan; cuántas casas hay lo dice la ciudad del juego
       const Rc = el.radio;
       anillo(el.x, el.y, Rc, .14 * M, .05 * M, 'muro');
       casa('muro', el.x, el.y, .34 * M, .26 * M, .22 * M);
-      const n = Math.max(8, Math.min(160, Math.round(26 * Rc * Rc)));
+      const n = Math.max(8, Math.min(160, Math.round(26 * (Rc / M) ** 2)));
       for (let k = 0; k < n; k++) { const a = hash(sem, k, 1) * 6.283, r = .25 * M + (Rc - .3 * M) * Math.sqrt(hash(sem, k, 2)); casa(hash(sem, k, 6) < .3 ? 'techo' : 'adobe', el.x + r * Math.cos(a), el.y + r * Math.sin(a), (.1 + .08 * hash(sem, k, 3)) * M, (.1 + .08 * hash(sem, k, 4)) * M, (.07 + .06 * hash(sem, k, 5)) * M, a); }
     } else if (el.tipo === 'pueblo') {
       anillo(el.x, el.y, .55 * M, .06 * M, .03 * M, 'madera');
@@ -690,7 +693,7 @@ function construirPlazas() {
   }
   // caminos de carro de cada pueblo y avanzada a su ciudad
   const pista = new THREE.LineBasicMaterial({ color: 0x8a6a45, transparent: true, opacity: .75 });
-  const Rc = NIVELES[estado.nivel].radio * FRACCION_CIUDAD;
+  const Rc = radioCiudad();
   for (const el of elementos) if (el.ciudad && el.tipo !== 'ciudad') { const c = el.ciudad, a = Math.atan2(el.y - c.y, el.x - c.x); g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(lineaDrapeada([[el.x, el.y], [c.x + Rc * Math.cos(a), c.y + Rc * Math.sin(a)]], .5, .05)), pista)); }
   g.visible = estado.plazas; poner('plazas', g);
   const z = new THREE.Group(), mat = new THREE.LineBasicMaterial({ color: 0xe0a050, transparent: true, opacity: .9 }), R = NIVELES[estado.nivel].radio;
@@ -806,7 +809,7 @@ function iniciarColumna() {
   cabeza = [columnaA.x, columnaA.y];
   rastro = []; for (let k = 12; k >= 0; k--) rastro.push([cabeza[0] - Math.cos(dir) * k * .5, cabeza[1] - Math.sin(dir) * k * .5]);
   ruta = null;
-  if (columnaB) { const Rb = NIVELES[estado.nivel].radio * FRACCION_CIUDAD; mandar([columnaB.x - Math.cos(dir) * (Rb + .6), columnaB.y - Math.sin(dir) * (Rb + .6)], true); }
+  if (columnaB) { const Rb = radioCiudad(); mandar([columnaB.x - Math.cos(dir) * (Rb + .6), columnaB.y - Math.sin(dir) * (Rb + .6)], true); }
 }
 let avisoHasta = 0;
 const avisar = txt => { const c = $('chip-aviso'); c.textContent = txt; c.hidden = false; avisoHasta = performance.now() + 3500; };
@@ -1008,7 +1011,7 @@ function llevarHeroe(x, y) {
   ruta = null; dibujarRuta();
 }
 const ir = destino => {
-  if (destino === 'ciudad') { if (columnaA) llevarHeroe(columnaA.x, columnaA.y + NIVELES[estado.nivel].radio * FRACCION_CIUDAD + 1); }
+  if (destino === 'ciudad') { if (columnaA) llevarHeroe(columnaA.x, columnaA.y + radioCiudad() + 1); }
   else if (T.puntos[destino]) llevarHeroe(...T.puntos[destino]);
   objX = cabeza[0]; objY = cabeza[1];
   if (estado.vista === 'libre') { const t = new THREE.Vector3(objX - W / 2, alturaU(objX, objY), objY - H / 2), dlt = t.clone().sub(controles.target); controles.target.copy(t); camara.position.add(dlt); }
