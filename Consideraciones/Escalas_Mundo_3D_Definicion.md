@@ -51,18 +51,21 @@ Ventana de 320 × 240 u entre la cordillera norte y el campamento‑0:
 
 La primera ronda fue relieve ×2, altura ×3, copa 0,4 u, maquetas ×1,6 y rejilla de 2 u con suavizado. Con la pendiente
 medida sobre lo que se ve (§4.3), el 61 % del macizo quedaba cerrado al paso. En la segunda ronda el autor bajó a altura
-×1,5 y tropa ×3,2. En la tercera, la que vale, quedó así:
+×1,5 y tropa ×3,2. La tercera fijó altura ×2, plazas ×1,6, tropa ×3 y copa 0,4 u con la pantalla de 15 u de ancho. La
+cuarta, la que vale, se hizo con la cámara de juego nueva (§5), que sigue a la visión de la columna:
 
 | Mando de la mesa | Valor | Qué significa |
 |---|---|---|
 | Terreno | **Propuesta ×100** | Boceto procedural con formas a escala de pantalla (receta en §3.1); no sale del generador |
 | Tamaño del relieve | **×2,2** | Escala tamaño **y** altura a la vez (homotecia: las laderas no cambian). Crestas cada ~92 u, valles de 11-44 u de ladera a ladera, colinas de ~31 u y lomas de 7-22 u |
 | Altura | **×2** | Exageración de todas las alturas. También cuenta para las pendientes del movimiento (§4.3) |
-| Copa de árbol | **0,4 u** (≈ 5 m de Unity) | Árbol como maqueta. Un bosque denso lleva unos 3 árboles por u² (el número de árboles sale de la densidad del bosque y del tamaño de copa) |
-| Plazas (maquetas) | **×1,6** | Escala de casas, pueblos, avanzadas y campamentos |
-| Héroes y tropa | **×3** (soldado de 4,9 m de Unity) | Mando propio, separado de las plazas como los árboles (decisión del autor). El héroe va a caballo al frente de su columna |
+| Copa de árbol | **0,3 u** (≈ 4 m de Unity) | Árbol como maqueta. Un bosque denso lleva unos 6 árboles por u² (el número de árboles sale de la densidad del bosque y del tamaño de copa): unos 200.000 en la ventana de la mesa; el cliente solo dibuja los que rodean al héroe |
+| Plazas (maquetas) | **×1** | Escala de casas, pueblos, avanzadas y campamentos. Con ×1 la ciudad es la del juego, al 10 % del radio de su zona |
+| Héroes y tropa | **×2** (soldado de 3,3 m de Unity) | Mando propio, separado de las plazas como los árboles (decisión del autor). El héroe va a caballo al frente de su columna |
 | Rejilla | **4 u, con suavizado** | Ver §4.3 y §6 |
-| Cámara | **30 u / 45 u en pantalla, apertura 35°**, inclinación libre | Gira en cualquier ángulo alrededor del héroe, a distancia fija y siguiéndole siempre. En pantalla caben 30 u (×1) o 45 u (×1,5): el diámetro de visión del héroe solo y 1,5 veces (§5) |
+| Cámara | **Apertura 35°**, inclinación libre | Gira en cualquier ángulo alrededor del héroe, a distancia fija y siguiéndole siempre (§5) |
+| En pantalla, héroe solo (visión 15 u) | **15 u** normal, **22 u** alejada | El círculo alrededor del héroe que cabe en la pantalla, con cualquier inclinación (§5) |
+| En pantalla, con soldados (visión 30 u) | **30 u** normal, **45 u** alejada | Ídem |
 
 Medido sobre la ventana con esos valores (`relieve ×2,2`, `altura ×2`):
 
@@ -131,15 +134,18 @@ El mundo se representará como en la mesa:
 - la **cámara de juego**, libre en ángulo pero a distancia fija del héroe y siempre siguiéndole (decisión del autor,
   2026-10-30). Arranca a 30° de inclinación. En la montaña se levanta si la ladera queda por encima de ella.
   - **Encuadre** (valores del autor, 2026-10-30, calibrados en la mesa). La distancia es la que hace caber en la pantalla
-    un círculo alrededor del héroe, con cualquier inclinación: **30 u** de diámetro con el zoom ×1 y **45 u** con el ×1,5.
-    Desde arriba (90°) es el lado corto, como el modo mundo del cliente en 2D. **Apertura de 35°**. **Inclinación libre**,
-    de 10° a 90°.
+    un círculo alrededor del héroe, con cualquier inclinación; desde arriba (90°) es el lado corto, como el modo mundo del
+    cliente en 2D. Su diámetro sigue a la visión de la columna, con dos zooms:
+    - el héroe solo (15 u de radio): **15 u** normal y **22 u** alejada;
+    - con soldados (30 u de radio): **30 u** normal y **45 u** alejada.
+
+    **Apertura de 35°**. **Inclinación libre**, de 10° a 90°.
   - **La visión es una regla del servidor**, no de la cámara (`Movimiento_Ejercitos.md`, bloque `VISION`): 15 u de radio
-    el héroe solo (30 u de diámetro), 30 u la columna con soldados y 60 u la caravana grande. Los zooms van siempre con
-    la del héroe solo, como en el cliente 2D (`radioDeVision`, que lee `VISION.jugadorSolo`): con soldados se ve más de
-    lo que cabe en pantalla.
-  - **Tamaños a revisar.** Relieve, copa, plazas, héroes y tropa se eligieron con la pantalla de 15 u y hay que volver a
-    mirarlos con el encuadre nuevo;
+    el héroe solo, 30 u la columna con soldados y 60 u la caravana grande (su encuadre está abierto).
+  - **Cambio para el cliente.** Hoy el modo mundo en 2D fija el zoom siempre con la visión del héroe solo
+    (`radioDeVision`, que lee `VISION.jugadorSolo`). El 3D tiene que seguir a la visión de la columna: con soldados pasa a
+    30 u y 45 u.
+  - **Tamaños** (cuarta ronda, §3): copa 0,3 u, plazas ×1 y héroes y tropa ×2, con relieve ×2,2 y altura ×2;
 - el terreno con formas a escala de pantalla y la altura exagerada;
 - árboles, plazas, héroes y tropa como maquetas;
 - la columna que va adonde se hace clic.
@@ -232,10 +238,10 @@ funcionar primero ahí, con three.js como en la mesa, ayuda a cerrar la represen
 
 **Orden decidido por el autor (2026-10-30):** primero la cámara y la visión; después, el generador y las reglas de juego.
 
-- **Cámara y visión.** Valores decididos el 2026-10-30 (§5): 30 u / 45 u en pantalla, apertura 35° e inclinación
-  libre. Quedan los tamaños. En 2D la pantalla era lo que el héroe ve: la visión llenaba el lado corto. Con la
-  cámara inclinada se ve mucho más suelo hacia el fondo; con la visión de 15 u y el encuadre de ahora, a 30° llega a
-  51 u por detrás del héroe. La mesa tiene para calibrarlo:
+- **Cámara y visión.** Valores decididos el 2026-10-30 (§3 y §5); queda el encuadre de la caravana grande (60 u). En
+  2D la pantalla era lo que el héroe ve: la visión llenaba el lado corto. Con la
+  cámara inclinada se ve mucho más suelo hacia el fondo; con la visión de 15 u y 15 u en pantalla, a 30° llega a
+  26 u por detrás del héroe (con 30 u en pantalla, a 51 u). La mesa tiene para calibrarlo:
   - «En pantalla»: el círculo alrededor del héroe que cabe en la pantalla con cualquier inclinación;
   - la apertura de la cámara y la inclinación, hasta 90°;
   - la visión real del héroe marcada sobre el terreno y lo de fuera oscurecido, como vista previa de la niebla de
