@@ -109,6 +109,12 @@ para cada tramo:   enCamino = el tramo es una arista de la red de caminos
 - El cálculo es caro y corre **fuera del núcleo** (en paralelo); su resultado entra como un evento más y se escribe en el registro (Reloj_Y_Eventos §8).
 - **Los elementos del mapa no estorban** (decisión del autor del 2026-10-27): plazas, pueblos, avanzadas, campamentos, columnas, caravanas y héroes no ocupan sitio para la ruta; solo el terreno decide. Sus tamaños (`TAMANOS_MAPA`, `Economia_Construccion.md`) son para pintar y para colocar.
 - **Grafo calibrado:** espaciado 8 y ~333 nodos por lado (mapa de 2.667), un vado cada 100 (antes 300), para distinguir plazas a 30.
+- **Suavizado por coste** (2026-10-30, `crates/rutas`; diseño en `Consideraciones/Escalas_Mundo_3D_Definicion.md` §6). La ruta del A\* zigzaguea por la retícula de 8 direcciones. Con la capa `coste` del artefacto (06 §2), las rutas de las **columnas** (`marcharA`, también la de un ejército, y la persecución) se estiran desde el origen. Desde cada vértice saltan al más lejano, hasta `MAX_SALTO` (64), siempre que se cumplan las tres condiciones:
+  - la recta es transitable, muestreada cada media celda como los enganches;
+  - no se salta ninguna arista de vado (los vados se quedan tal cual);
+  - la recta **no cuesta más** que el tramo que sustituye, medidos los dos con la capa (la media de la capa cada media celda × largo / espaciado).
+
+  Los tramos nuevos llevan en el plan ese coste de la capa; las aristas que quedan, el suyo. Todo en enteros: mismo mundo y misma petición, mismo camino. **Las caravanas y los aedas no suavizan**: van por la red de caminos, y la red se forma con sus aristas. Sin la capa `coste` (artefactos viejos), nadie suaviza. Una recta puede rozar por menos de media celda una esquina de lo que no se pisa o de terreno caro (es la resolución del muestreo).
 
 ## 5. Destino, rumbo y estado
 

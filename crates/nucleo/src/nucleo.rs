@@ -859,7 +859,7 @@ impl Nucleo {
             if let Comando::MarcharA { ejercito, destino } = &p.comando {
                 if let (Some(e), true) = (self.estado.ejercitos.get(ejercito), vistos.insert(*ejercito)) {
                     if self.estado.visto(&p.actor, &p.peticion_id).is_none() {
-                        candidatas.push((i, PeticionRuta { origen: e.posicion_en(t), destino: *destino, opciones: Opciones::default() }));
+                        candidatas.push((i, PeticionRuta { origen: e.posicion_en(t), destino: *destino, opciones: Opciones::de_columna() }));
                     }
                 }
             }
@@ -956,7 +956,7 @@ impl Nucleo {
                 let (id, origen, marchando, lider) = (e.id, e.posicion_en(t), e.marchando(), e.columna.lider);
                 let camino = precalculado.unwrap_or_else(|| {
                     self.metricas.rutas_calculadas += 1;
-                    self.rutas.ruta_con(&mut self.escritorio, origen, *destino, &Opciones::default())
+                    self.rutas.ruta_con(&mut self.escritorio, origen, *destino, &Opciones::de_columna())
                 });
                 let Some(camino) = camino else {
                     return Respuesta::rechazo(rechazos::RUTA_IMPOSIBLE, "no hay ruta por tierra hasta el destino", v);

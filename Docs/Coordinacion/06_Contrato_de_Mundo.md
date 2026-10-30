@@ -25,6 +25,7 @@ Está en **unidades estratégicas** (2.667 × 2.000, en milésimas). El factor 1
 | `densidad_bosque` | raster u8 | campo continuo; coste de movimiento por bosque |
 | `anillos` | raster u8 (`Anillo`) | foco (hasta 150), frontera (150-250) y tierra lejana (>250), por distancia al campamento más cercano |
 | `transitable` | raster en bits | lo que se puede pisar; **autoridad única** de transitabilidad |
+| `coste` | raster u16 | coste de movimiento en el centro de la celda, en milésimas (1000 = llano, 0 = no transitable); opcional: sin ella el servidor no suaviza las rutas |
 | `rios` | vectorial | cauces, vados |
 | `bosques` | vectorial (`ZonaBosque`) | masas explotables con id y área (pocos grandes, muchos medianos y pequeños) |
 | `parcelas` | vectorial (`ParcelaBosque`) | **cupos de explotación** de cada masa: puntos fijos separados `2·rp`, con su densidad. Una Leñera (que se construye en la ciudad) ocupa una parcela dentro de la zona de su asentamiento |
@@ -45,7 +46,7 @@ Está en **unidades estratégicas** (2.667 × 2.000, en milésimas). El factor 1
 ## 3. Validaciones al cargar (servidor)
 
 Hash del contenido = `Manifiesto.hash`; cada capa con su sha256; tamaño = 2.667 × 2.000; origen y destino de toda arista del grafo
-transitables; todo nodo, campamento y alijo en tierra transitable; cuotas por anillo exactas; parcelas dentro de su masa y a ≥ 2·`rp` unas de otras; ningún
+transitables; si trae la capa `coste`, mayor que 0 justo en las celdas transitables; todo nodo, campamento y alijo en tierra transitable; cuotas por anillo exactas; parcelas dentro de su masa y a ≥ 2·`rp` unas de otras; ningún
 yacimiento dentro de agua. Un artefacto que no pasa **no se carga**.
 
 ## 4. El paquete de Unity (`PaqueteUnity`)
@@ -76,10 +77,10 @@ unos 4,7 MB y pasa todas las validaciones; la herramienta `cargo run -p mundo --
 
 - **Unidades:** milésimas de unidad estratégica (`round(u · 1000 / 12)` desde las del generador).
 - **Rasters:** celda de 4 unidades estratégicas (667 × 500 en el mundo real), filas de norte a sur, valor del centro de la celda. `altura` u16 LE;
-  `terreno`, `fertilidad`, `humedad`, `densidad_bosque`, `anillos` u8; `transitable` en bits (celda `i` → byte `i>>3`, bit `i&7`, LSB primero). Todos con zstd.
+  `terreno`, `fertilidad`, `humedad`, `densidad_bosque`, `anillos` u8; `transitable` en bits (celda `i` → byte `i>>3`, bit `i&7`, LSB primero); `coste` u16 LE en milésimas (1000 = llano, 0 = no transitable). Todos con zstd.
 - **Hash:** sha256 hexadecimal de la serialización Protobuf del artefacto con `manifiesto.hash = ""`. Cada capa lleva el sha256 de sus bytes comprimidos.
 - **Coherencia con el raster:** la transitabilidad es la del raster. Grafo, recursos, campamentos, bandidos y alijos se ajustan al centro de una celda transitable
   antes de escribirse; el campo `anillo` de cada elemento conserva el del punto original.
-- **Rendimiento del generador:** algo más de un minuto por mundo (semilla 42, 2026-10-30: relieve 12 s, rejilla de celdas 23 s, campamentos, metales y parcelas 6 s, recursos 6 s, grafo 13 s, rasters 6 s); era de unos 15 minutos. El relieve regional se evalúa una sola vez por centro de celda del artefacto y las optimizaciones no cambian ni un bit del resultado (mismos hashes en las semillas 1, 7 y 42). Es una herramienta fuera de línea.
+- **Rendimiento del generador:** algo más de un minuto por mundo (semilla 42, 2026-10-30: relieve 12 s, rejilla de celdas 23 s, campamentos, metales y parcelas 6 s, recursos 6 s, grafo 14 s, artefacto 15 s, con la capa `coste`; total 77 s); era de unos 15 minutos. El relieve regional se evalúa una sola vez por centro de celda del artefacto y las optimizaciones no cambian ni un bit del resultado (mismos hashes en las semillas 1, 7 y 42). Es una herramienta fuera de línea.
 - **Ríos y vados (2026-10-13):** los ríos cortan el paso salvo en los vados. El trazo del río se marca como barrera en la rejilla de transitabilidad, engrosado una celda a cada lado (así ninguna arista lo cruza entre dos muestras), y cada vado abre un hueco de 100 unidades del generador de radio. Siempre hay al menos un vado por río y luego uno cada 100 estratégicas (`generador/src/vados.ts`). En la semilla 42: 116 vados; el grafo tiene 52.914 nodos, 19 componentes y el 99,92 % en la mayor, con los 9 campamentos dentro de ella.
 - **Pendiente:** hierro en las vetas y vados elegidos por geografía (hoy equiespaciados a lo largo del río).

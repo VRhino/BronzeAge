@@ -120,6 +120,8 @@ message ArtefactoDeMundo {
   repeated Alijo alijos = 15;
   GrafoNavegacion navegacion = 16;
   repeated ParcelaBosque parcelas = 17;  // cupos de explotación de los bosques (separados >= 2·rp)
+  Raster coste = 18;                     // u16: coste de movimiento en el centro de la celda, en milésimas (1000 = llano;
+                                         // 0 = no transitable). Opcional: sin él, el servidor no suaviza las rutas
 }
 
 // Paquete de Unity derivado del artefacto: terreno en sectores a escala ×12.

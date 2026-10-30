@@ -15,12 +15,13 @@ export function esTransitable(campo: CampoElevacion, p: Point, altura?: number):
 
 /** Multiplicador de coste de movimiento en un punto: cuánto frena el terreno que sí se puede pisar
  * (quién puede pisarlo lo decide `esTransitable`). */
-export function costeEnPunto(campo: CampoElevacion, p: Point): number {
+/** `altura` opcional: la elevación ya calculada en `p`, para no recalcularla (mismo resultado). */
+export function costeEnPunto(campo: CampoElevacion, p: Point, altura?: number): number {
   const { dx, dy } = gradienteElevacion(campo, p, ESCALA_TERRENO.pasoPendiente);
   const pendiente = Math.hypot(dx, dy) * ESCALA_TERRENO.metrosVerticalesPorElevacion
     / ESCALA_TERRENO.metrosHorizontalesPorUnidad;
   const factorPendiente = 1 + Math.min(2, pendiente * 0.45);
-  switch (evaluarTerreno(campo, p)) {
+  switch (evaluarTerreno(campo, p, altura)) {
     case 'llano':
       return COSTE_MOVIMIENTO.llano * factorPendiente;
     case 'costa':

@@ -15,6 +15,12 @@
 //! origen/destino deben ser transitables; con solo el grafo (`desde_grafo`) no se puede saber qué hay entre medias, así
 //! que se engancha al único nodo más cercano. Si origen y destino están a
 //! menos de un espaciado y el tramo es libre, la ruta es la recta directa.
+//!
+//! # Suavizado (`Opciones::suavizar`)
+//! Con la capa `coste` del mundo, la ruta del A* se estira desde el origen: desde cada vértice salta al más lejano (hasta
+//! [`MAX_SALTO`] vértices) al que se llega en recta libre, sin saltarse una arista de vado y sin que la recta cueste más que
+//! el tramo que sustituye, medidos los dos con la capa. Los tramos nuevos llevan el coste de la capa; los que quedan, el
+//! suyo. Lo piden las columnas (marchar, perseguir); las caravanas no, porque van por la red de caminos.
 
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
@@ -27,6 +33,8 @@ use rayon::prelude::*;
 
 /// Cuántos nodos de enganche se prueban en cada extremo.
 pub const ENGANCHES: usize = 4;
+/// Cuántos vértices puede saltarse de una vez el suavizado (acota el coste de estirar rutas largas).
+pub const MAX_SALTO: usize = 64;
 /// Desplazamiento de la heurística en punto fijo.
 const DESPLAZ: u32 = 20;
 const SIN_PADRE: u32 = u32::MAX;
@@ -88,6 +96,16 @@ pub struct Opciones {
     pub bloqueados: Vec<u32>,
     /// La red de caminos que atrae a la ruta (las caravanas comerciales); `None` o sin pesos = sin atracción.
     pub atraccion: Option<Arc<Atraccion>>,
+    /// Estirar la ruta en rectas que no cuestan más (ver «Suavizado» arriba). Solo hace algo si el mundo trae la capa
+    /// `coste`; sin ella la ruta es la del A* tal cual.
+    pub suavizar: bool,
+}
+
+impl Opciones {
+    /// Las de una columna que marcha o persigue: suavizada y sin más (las caravanas van por la red de caminos y no suavizan).
+    pub fn de_columna() -> Self {
+        Self { suavizar: true, ..Self::default() }
+    }
 }
 
 /// Una petición de un lote.
@@ -209,11 +227,13 @@ pub struct Rutas {
     transitable: Option<Transitable>,
 }
 
-/// Copia a bits de la transitabilidad del mundo (una celda = `TAMANO_CELDA`).
+/// Copia a bits de la transitabilidad del mundo (una celda = `TAMANO_CELDA`) y, si la trae, su capa de coste.
 struct Transitable {
     cols: i64,
     filas: i64,
     bits: Vec<u64>,
+    /// Coste por celda en milésimas (1000 = llano, 0 = no transitable); vacío si el mundo no trae la capa.
+    coste: Vec<u16>,
 }
 
 impl Transitable {
@@ -221,15 +241,67 @@ impl Transitable {
         let (c, f) = m.rejilla();
         let mut bits = vec![0u64; (c * f).div_ceil(64)];
         let t = TAMANO_CELDA as i64;
+        let mut coste = if m.tiene_coste() { vec![0u16; c * f] } else { Vec::new() };
         for fila in 0..f {
             for col in 0..c {
-                if m.transitable_en(col as i64 * t + t / 2, fila as i64 * t + t / 2) {
-                    let i = fila * c + col;
+                let (x, y, i) = (col as i64 * t + t / 2, fila as i64 * t + t / 2, fila * c + col);
+                if m.transitable_en(x, y) {
                     bits[i >> 6] |= 1 << (i & 63);
+                }
+                if !coste.is_empty() {
+                    coste[i] = m.coste_en(x, y).unwrap_or(0);
                 }
             }
         }
-        Self { cols: c as i64, filas: f as i64, bits }
+        Self { cols: c as i64, filas: f as i64, bits, coste }
+    }
+
+    /// Para las pruebas: `coste(col, fila)` por celda, en milésimas; 0 = no transitable.
+    #[cfg(test)]
+    fn de_celdas(cols: i64, filas: i64, coste: impl Fn(i64, i64) -> u16) -> Self {
+        let n = (cols * filas) as usize;
+        let (mut bits, mut c) = (vec![0u64; n.div_ceil(64)], vec![0u16; n]);
+        for i in 0..n {
+            c[i] = coste(i as i64 % cols, i as i64 / cols);
+            if c[i] > 0 {
+                bits[i >> 6] |= 1 << (i & 63);
+            }
+        }
+        Self { cols, filas, bits, coste: c }
+    }
+
+    fn tiene_coste(&self) -> bool {
+        !self.coste.is_empty()
+    }
+
+    /// Coste de la celda de `p` en milésimas; 0 fuera del mundo, en lo que no se pisa o sin capa de coste.
+    fn coste_en(&self, p: Punto) -> u16 {
+        if p.x < 0 || p.y < 0 || self.coste.is_empty() {
+            return 0;
+        }
+        let (c, f) = (p.x / TAMANO_CELDA as i64, p.y / TAMANO_CELDA as i64);
+        if c >= self.cols || f >= self.filas {
+            return 0;
+        }
+        self.coste[(f * self.cols + c) as usize]
+    }
+
+    /// Coste de la recta `a → b` con la capa, en milésimas de espaciado (como `coste_milesimas`): la media de la capa en el
+    /// centro de cada trozo de media celda × largo / espaciado, redondeada al más cercano. `None` si pisa una celda no
+    /// transitable.
+    fn coste_recto(&self, a: Punto, b: Punto, espaciado: i64) -> Option<i64> {
+        let largo = a.dist(b);
+        let n = largo / (TAMANO_CELDA as i64 / 2) + 1;
+        let mut suma: i64 = 0;
+        for k in 0..n {
+            let q = Punto::new(a.x + (b.x - a.x) * (2 * k + 1) / (2 * n), a.y + (b.y - a.y) * (2 * k + 1) / (2 * n));
+            match self.coste_en(q) {
+                0 => return None,
+                c => suma += c as i64,
+            }
+        }
+        let den = n as i128 * espaciado as i128;
+        Some(((suma as i128 * largo as i128 + den / 2) / den) as i64)
     }
     fn en(&self, p: Punto) -> bool {
         if p.x < 0 || p.y < 0 {
@@ -259,6 +331,12 @@ impl Rutas {
     /// Construye desde un mundo cargado: además valida enganches y extremos con su raster de transitabilidad.
     pub fn desde_mundo(m: &Mundo) -> Rutas {
         Self::construir(m.navegacion(), Some(Transitable::de(m)))
+    }
+
+    /// Para las pruebas: el grafo con un terreno sintético de `cols × filas` celdas (`coste` por celda; 0 = no transitable).
+    #[cfg(test)]
+    fn con_terreno(g: &GrafoNavegacion, cols: i64, filas: i64, coste: impl Fn(i64, i64) -> u16) -> Rutas {
+        Self::construir(g, Some(Transitable::de_celdas(cols, filas, coste)))
     }
 
     fn construir(g: &GrafoNavegacion, transitable: Option<Transitable>) -> Rutas {
@@ -493,15 +571,16 @@ impl Rutas {
         let ultimo = final_desde?;
 
         // Reconstrucción hacia atrás: nodos y coste real (sin penalización) de cada arista.
-        let mut rev: Vec<(u32, i64)> = Vec::new(); // (nodo, coste de la arista que llega a él; 0 para el primero)
+        let mut rev: Vec<(u32, i64, bool)> = Vec::new(); // (nodo, coste de la arista que llega a él, ¿es vado?; 0 y no para el primero)
         let mut n = ultimo;
         loop {
             let p = e.padre[n as usize];
             if p == SIN_PADRE {
-                rev.push((n, 0));
+                rev.push((n, 0, false));
                 break;
             }
-            rev.push((n, self.coste[e.padre_arista[n as usize] as usize] as i64));
+            let k = e.padre_arista[n as usize] as usize;
+            rev.push((n, self.coste[k] as i64, self.vado[k]));
             n = p;
         }
         rev.reverse();
@@ -511,25 +590,70 @@ impl Rutas {
 
         let mut puntos = vec![origen];
         let mut costes: Vec<i64> = Vec::new();
+        let mut vados: Vec<bool> = Vec::new(); // ¿el tramo i es una arista de vado? (los de longitud cero son enganches)
         let mut pendiente = 0i64; // coste de tramos de longitud cero, que se pasa al siguiente
         let mut nodos = Vec::with_capacity(rev.len());
-        let mut empujar = |p: Punto, c: i64, puntos: &mut Vec<Punto>| {
+        let mut empujar = |p: Punto, c: i64, v: bool, puntos: &mut Vec<Punto>, vados: &mut Vec<bool>| {
             if puntos.last() == Some(&p) {
                 pendiente += c;
             } else {
                 puntos.push(p);
                 costes.push(c + std::mem::take(&mut pendiente));
+                vados.push(v);
             }
         };
-        for (i, &(nodo, c)) in rev.iter().enumerate() {
+        for (i, &(nodo, c, v)) in rev.iter().enumerate() {
             nodos.push(self.ids[nodo as usize]);
-            empujar(self.pos[nodo as usize], if i == 0 { c_ini } else { c }, &mut puntos);
+            empujar(self.pos[nodo as usize], if i == 0 { c_ini } else { c }, v, &mut puntos, &mut vados);
         }
-        empujar(destino, c_fin, &mut puntos);
+        empujar(destino, c_fin, false, &mut puntos, &mut vados);
         if pendiente != 0 {
             *costes.last_mut().expect("hay al menos un tramo") += pendiente;
         }
-        Some(Camino { puntos, costes, nodos, espaciado: self.espaciado })
+        let mut camino = Camino { puntos, costes, nodos, espaciado: self.espaciado };
+        if opciones.suavizar {
+            if let Some(t) = self.transitable.as_ref().filter(|t| t.tiene_coste()) {
+                self.estirar(t, &mut camino, &vados);
+            }
+        }
+        Some(camino)
+    }
+
+    /// El suavizado por coste (ver «Suavizado» arriba). `vados[i]` dice si el tramo `i` es una arista de vado: esos tramos
+    /// se quedan, y no se salta por encima de ellos.
+    fn estirar(&self, t: &Transitable, camino: &mut Camino, vados: &[bool]) {
+        let p = &camino.puntos;
+        let n = p.len();
+        if n < 3 {
+            return;
+        }
+        // Coste de capa de cada tramo de la ruta del A* (lo que no se puede pisar cuenta como infinito).
+        let tramo: Vec<i64> = (0..n - 1).map(|k| t.coste_recto(p[k], p[k + 1], self.espaciado).unwrap_or(i64::MAX / 4)).collect();
+        let (mut puntos, mut costes) = (vec![p[0]], Vec::with_capacity(n - 1));
+        let mut i = 0;
+        while i + 1 < n {
+            // Se puede aterrizar como mucho en el arranque del primer vado que venga.
+            let tope = (i + MAX_SALTO).min(n - 1).min(vados[i..].iter().position(|&v| v).map_or(usize::MAX, |k| i + k));
+            let mut salto = (i + 1, camino.costes[i]);
+            for j in (i + 2..=tope).rev() {
+                if !t.libre(p[i], p[j]) {
+                    continue;
+                }
+                let sustituye = tramo[i..j].iter().fold(0i64, |s, &c| s.saturating_add(c));
+                if let Some(c) = t.coste_recto(p[i], p[j], self.espaciado).filter(|&c| c <= sustituye) {
+                    salto = (j, c);
+                    break;
+                }
+            }
+            puntos.push(p[salto.0]);
+            costes.push(salto.1);
+            i = salto.0;
+        }
+        if puntos.len() == n {
+            return;
+        }
+        camino.nodos.retain(|id| self.indice_de.get(id).is_some_and(|&k| puntos.contains(&self.pos[k as usize])));
+        (camino.puntos, camino.costes) = (puntos, costes);
     }
 }
 

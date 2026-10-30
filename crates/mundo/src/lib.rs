@@ -10,15 +10,17 @@
 //!   (la celda de un punto `(x, y)` es `(x / 4000, y / 4000)`). Columnas = ⌈ancho / 4000⌉, filas = ⌈alto / 4000⌉.
 //!   `altura` es `u16` LE; `terreno` es `u8` = `ClaseTerreno`; `fertilidad`, `humedad` y `densidad_bosque` son `u8`;
 //!   `anillos` es `u8` = `Anillo`; `transitable` va en bits (celda `i` → byte `i >> 3`, bit `i & 7`, LSB primero).
+//!   `coste` (opcional) es `u16` LE: coste de movimiento en milésimas (1000 = llano), 0 justo en las celdas no transitables.
 //!   Todos con `zstd = true`.
 //! - **Hash**: `manifiesto.hash` = sha256 hex minúsculas de la serialización prost del `ArtefactoDeMundo` con
 //!   `manifiesto.hash = ""`. Cada `CapaDeMundo.sha256` = sha256 hex de los `datos` del raster tal como se guardan
-//!   (comprimidos). `CapaDeMundo.nombre` ∈ {altura, terreno, fertilidad, humedad, densidad_bosque, anillos, transitable};
+//!   (comprimidos). `CapaDeMundo.nombre` ∈ {altura, terreno, fertilidad, humedad, densidad_bosque, anillos, transitable, coste};
 //!   se ignoran otras capas declaradas y el campo `bytes`.
 //!
 //! # Reglas que se comprueban (en este orden)
 //!
-//! hash del contenido; tamaño (si `tamano_esperado`); sha256 y dimensiones/encoding/longitud de cada capa; ids únicos
+//! hash del contenido; tamaño (si `tamano_esperado`); sha256 y dimensiones/encoding/longitud de cada capa; coste mayor que
+//! 0 justo en las celdas transitables (si trae la capa); ids únicos
 //! por colección; aristas del grafo (nodos existentes, origen y destino transitables); nodos de recurso, campamentos
 //! (mercenarios y bandidos) y alijos en tierra transitable y fuera del agua; cuotas por anillo de estaño y oro
 //! (5/25/70 % por resto mayor sobre el total presente, según el `anillo` declarado de cada nodo); parcelas con bosque
@@ -68,6 +70,7 @@ pub struct Mundo {
     densidad_bosque: Vec<u8>,
     anillos: Vec<u8>,
     transitable: Vec<u8>, // bits
+    coste: Vec<u16>,      // vacío si el artefacto no trae la capa
 }
 
 /// sha256 en hex minúsculas.
@@ -119,6 +122,20 @@ impl Mundo {
 
     pub fn densidad_bosque_en(&self, x: i64, y: i64) -> Option<u8> {
         self.celda(x, y).map(|i| self.densidad_bosque[i])
+    }
+
+    /// Coste de movimiento en la celda, en milésimas (1000 = llano; 0 = no transitable). `None` fuera del mundo o si el
+    /// artefacto no trae la capa `coste`.
+    pub fn coste_en(&self, x: i64, y: i64) -> Option<u16> {
+        if self.coste.is_empty() {
+            return None;
+        }
+        self.celda(x, y).map(|i| self.coste[i])
+    }
+
+    /// ¿Trae el artefacto la capa `coste`? Sin ella las rutas no se suavizan.
+    pub fn tiene_coste(&self) -> bool {
+        !self.coste.is_empty()
     }
 
     // ── Acceso de solo lectura ──

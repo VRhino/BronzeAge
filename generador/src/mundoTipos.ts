@@ -56,6 +56,8 @@ export interface MuestrasRelieve {
   humedad(p: Point): number;
   densidadBosque(p: Point): number;
   transitable(p: Point): boolean;
+  /** Multiplicador de coste de movimiento en `p` (1 = llano); 0 si `p` no es transitable. */
+  coste(p: Point): number;
 }
 
 export interface RioMundo { id: string; puntos: Point[]; terminaEnLago: boolean; navegable: boolean; vados: Point[] }

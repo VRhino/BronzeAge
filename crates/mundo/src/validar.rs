@@ -50,9 +50,21 @@ pub(crate) fn validar(mut a: ArtefactoDeMundo, op: &OpcionesValidacion) -> R<Mun
     let densidad_bosque = capa("densidad_bosque", &a.densidad_bosque, u8s)?;
     let anillos = capa("anillos", &a.anillos, u8s)?;
     let transitable = capa("transitable", &a.transitable, (EncodingRaster::EncodingBits, n.div_ceil(8)))?;
-    let altura = altura_bytes.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+    let u16s = |b: Vec<u8>| -> Vec<u16> { b.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect() };
+    let altura = u16s(altura_bytes);
+    // Opcional: sin coste, el servidor no suaviza las rutas. Con él, vale más de 0 justo en las celdas transitables.
+    let coste = match &a.coste {
+        Some(r) => u16s(raster("coste", m, r, dim, (EncodingRaster::EncodingU16Le, 2 * n))?),
+        None => Vec::new(),
+    };
+    for (i, &c) in coste.iter().enumerate() {
+        let pisable = transitable[i >> 3] >> (i & 7) & 1 == 1;
+        if (c > 0) != pisable {
+            return Err(ErrorMundo::CosteIncoherente { celda: (i % columnas, i / columnas), coste: c, transitable: pisable });
+        }
+    }
 
-    let mundo = Mundo { artefacto: a, columnas, filas, altura, terreno, fertilidad, humedad, densidad_bosque, anillos, transitable };
+    let mundo = Mundo { artefacto: a, columnas, filas, altura, terreno, fertilidad, humedad, densidad_bosque, anillos, transitable, coste };
 
     // 4. Vectoriales.
     ids_unicos(&mundo)?;

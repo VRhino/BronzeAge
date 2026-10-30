@@ -48,6 +48,7 @@ function mundoSintetico(): MundoGenerado {
       humedad: () => 0.5,
       densidadBosque: p => (p.x > 240 ? 1 : 0),
       transitable: p => p.x >= 100 && (p.x + p.y) % 3 < 2,
+      coste: p => (p.x >= 100 && (p.x + p.y) % 3 < 2 ? 1 + p.y / 360 : 0),
     },
   };
 }
@@ -86,7 +87,7 @@ describe('artefacto de mundo', () => {
     expect(man.generador).toBe('sintetico-0.1');
     expect(man.factorUnity).toBe(12);
     expect(man.tamano).toMatchObject({ x: 40000n, y: 30000n });
-    const rasters = { altura: msg.altura, terreno: msg.terreno, fertilidad: msg.fertilidad, humedad: msg.humedad, densidad_bosque: msg.densidadBosque, anillos: msg.anillos, transitable: msg.transitable };
+    const rasters = { altura: msg.altura, terreno: msg.terreno, fertilidad: msg.fertilidad, humedad: msg.humedad, densidad_bosque: msg.densidadBosque, anillos: msg.anillos, transitable: msg.transitable, coste: msg.coste };
     expect(man.capas.map(c => c.nombre)).toEqual(Object.keys(rasters));
     for (const c of man.capas) {
       const r = rasters[c.nombre as keyof typeof rasters]!;
@@ -112,6 +113,8 @@ describe('artefacto de mundo', () => {
     }
     expect(msg.transitable!.encoding).toBe(EncodingRaster.ENCODING_BITS);
     expect(largo(msg.transitable!)).toBe(Math.ceil(celdas / 8));
+    expect(msg.coste!.encoding).toBe(EncodingRaster.ENCODING_U16_LE);
+    expect(largo(msg.coste!)).toBe(2 * celdas);
   });
 
   it('rasters: el centro de cada celda, fila 0 al norte, bits LSB primero', () => {
@@ -129,6 +132,20 @@ describe('artefacto de mundo', () => {
       const p = { x: ((k % 10) + 0.5) * 48, y: (Math.floor(k / 10) + 0.5) * 48 };
       expect(((bits[k >> 3]! >> (k & 7)) & 1) === 1).toBe(m.muestras.transitable(p));
     }
+  });
+
+  it('coste: 0 en no transitables, round(coste×1000) en transitables', () => {
+    const msg = fromBinary(ArtefactoDeMundoSchema, construirArtefacto(mundoSintetico()).bytes);
+    const m = mundoSintetico(), datos = zstdDecompressSync(msg.coste!.datos);
+    let ceros = 0, positivos = 0;
+    for (let k = 0; k < 80; k++) {
+      const p = { x: ((k % 10) + 0.5) * 48, y: (Math.floor(k / 10) + 0.5) * 48 };
+      const v = datos[2 * k]! | (datos[2 * k + 1]! << 8);
+      expect(v).toBe(m.muestras.transitable(p) ? Math.round(m.muestras.coste(p) * 1000) : 0);
+      if (v === 0) ceros++; else positivos++;
+    }
+    expect(ceros).toBeGreaterThan(0);
+    expect(positivos).toBeGreaterThan(0);
   });
 
   it('vectoriales: milésimas, ordenación por id y asociaciones', () => {

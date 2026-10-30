@@ -143,7 +143,14 @@ funcionar primero ahí, con three.js como en la mesa, ayuda a cerrar la represen
 ## 6. Qué falta para llegar ahí (orden propuesto)
 
 1. **Seguir afinando la mesa** con lo que quede abierto en §7.
-2. **Suavizado por coste en el servidor** (en curso). No depende del terreno nuevo y quita el zigzag ya.
+2. **Suavizado por coste en el servidor** (hecho, 2026-10-30). No depende del terreno nuevo y quita el zigzag ya.
+   Medido en el mundo de la semilla 42, con 1.000 rutas entre campamentos:
+   - los vértices bajan de 203.483 a 18.291, 11 veces menos;
+   - la marcha cuesta un 2,3 % menos;
+   - cada ruta tarda 3,0 ms en vez de 2,8.
+
+   El artefacto gana la capa `coste` (hash `c6639fa6…`; el resto, idéntico) y la generación pasa de unos 68 s a 77 s.
+   Regla en `Docs/Mechanics/Movimiento_Ejercitos.md` §4.3.
    - **Capa `coste` en el artefacto.** El generador escribe, cada 4 u, el coste del terreno con la misma función que
      cuesta las aristas del grafo (u16 en milésimas, 1000 = llano). Es opcional: sin ella, el servidor no suaviza.
    - **`crates/rutas`.** Después del A*, la ruta se estira desde el origen. Desde cada vértice salta al más lejano

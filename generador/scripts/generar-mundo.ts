@@ -83,6 +83,11 @@ const mundo: MundoGenerado = {
     humedad: p => { const i = celdas.indice(p); return i >= 0 ? celdas.humedad[i]! : humedadRegionalEn(r.elevacion.regional, p); },
     densidadBosque: densidadEn,
     transitable: transitableCelda,
+    coste: p => {
+      if (!transitableCelda(p)) return 0;
+      const i = celdas.indice(p);
+      return costeEnPunto(r.elevacion, p, i >= 0 ? celdas.altura[i]! : undefined);
+    },
   },
 };
 const salida = medir('artefacto', () => escribirArtefacto(mundo, carpeta));
