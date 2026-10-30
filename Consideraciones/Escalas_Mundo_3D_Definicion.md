@@ -226,6 +226,30 @@ funcionar primero ahí, con three.js como en la mesa, ayuda a cerrar la represen
 
 ## 7. Abierto
 
+**Orden decidido por el autor (2026-10-30):** primero la cámara y la visión; después, el generador y las reglas de juego.
+
+- **Cámara y visión (en curso).** En 2D la pantalla era lo que el héroe ve: la visión llenaba el lado corto. Con la
+  cámara inclinada se ve mucho más suelo hacia el fondo; con la visión de 15 u y el encuadre de ahora, a 30° llega a
+  51 u por detrás del héroe. La mesa tiene para calibrarlo:
+  - «En pantalla»: el círculo alrededor del héroe que cabe en la pantalla con cualquier inclinación;
+  - la apertura de la cámara y la inclinación, hasta 90°;
+  - la visión real del héroe marcada sobre el terreno y lo de fuera oscurecido, como vista previa de la niebla de
+    guerra en 3D.
+
+  La niebla no enseña de más (el servidor solo manda lo que el héroe ve y el terreno es público), pero la pantalla se
+  llena de suelo en niebla.
+- **Generador (después de la cámara).** Lo que el autor vio en la mesa, medido en la ventana de la seed 42:
+  - **Bosque:** el generador hace una alfombra continua (el 50 % de la tierra, denso, en una sola mancha que tiene el
+    99 % del bosque denso). Se quiere como la propuesta, en manchas densas y separadas (117 manchas, la mayor con el
+    13 %), y aún menos.
+  - **Llano:** demasiado plano (el 43 % de la tierra por debajo de 5°, frente al 11,5 % de la propuesta). Se quieren
+    colinas en casi toda la tierra baja y llanuras solo en algunas regiones.
+  - **Montaña:** gustan los valles de los ríos del generador. Hay que quitar las agujas sueltas (un punto llega a
+    sobresalir 142 m de lo que tiene a 4 u alrededor) y añadir altiplanos con uno o dos accesos, que hoy no hay.
+- **Reglas de juego (después de la cámara, a fondo).** Se pensaron con un generador más inmaduro y vistas solo en 2D, y
+  hay que revisarlas para un juego más estratégico. Por ejemplo, la clase de terreno sale solo de la altura: un
+  altiplano por encima de 600 m cuesta ×3,5 al andar aunque sea llano, y por encima de 685 m no se puede fundar.
+
 - **Ríos y vados** del terreno nuevo. Con el terreno real, la mesa dibuja los ríos pero no cortan el paso, porque la
   ventana no trae sus vados. En el mundo, 16 de los 7.360 recursos quedan en bolsas entre ríos sin vado (fuera de la
   red principal).

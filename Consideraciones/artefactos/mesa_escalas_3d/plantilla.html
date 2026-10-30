@@ -54,7 +54,7 @@ p { margin: 0; }
 @media (max-width: 600px) { .visor { height: 58vh; min-height: 340px; } }
 .visor canvas { display: block; width: 100%; height: 100%; touch-action: none; outline: none; cursor: crosshair; }
 .visor canvas:focus-visible { box-shadow: inset 0 0 0 3px var(--bronce); }
-.hud { position: absolute; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; font: 12px/1.3 var(--f-dato); font-variant-numeric: tabular-nums; }
+.hud { position: absolute; z-index: 3; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; font: 12px/1.3 var(--f-dato); font-variant-numeric: tabular-nums; }
 .hud-sup { top: 10px; left: 10px; right: 10px; }
 .hud-inf { bottom: 10px; left: 10px; right: 10px; align-items: flex-end; justify-content: space-between; }
 .chip { background: var(--velo); color: var(--tinta); border: 1px solid var(--linea); border-radius: 6px; padding: 5px 8px; }
@@ -141,7 +141,7 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
   <header class="cabecera">
     <p class="antetitulo">BronzeAge · escalas del mundo</p>
     <h1>Mesa de escalas 3D</h1>
-    <p class="lead">El mundo visto con la cámara del juego. La cámara, las tropas, las plazas y las zonas van a la medida que ya funciona; el terreno es la propuesta ×100 con los valores que elegiste. La cámara sigue al héroe con su visión llenando el lado corto de la pantalla, como el modo mundo del cliente: arrastra para girarla, usa la rueda para el segundo zoom y haz clic en el terreno para mandar la columna.</p>
+    <p class="lead">El mundo visto con la cámara del juego. La cámara, las tropas, las plazas y las zonas van a la medida que ya funciona; el terreno es la propuesta ×100 con los valores que elegiste. La cámara sigue al héroe: arrastra para girarla, la rueda acerca y aleja, y haz clic en el terreno para mandar la columna. El círculo claro marca hasta dónde ve el héroe; lo de fuera se oscurece como la niebla de guerra.</p>
   </header>
 
   <section class="banco" aria-label="Escena 3D">
@@ -162,7 +162,8 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
           <span id="regla-texto">10 u · 120 m en Unity · 12 km en la ficción</span>
         </div>
         <div class="lecturas chip" id="lecturas">
-          <span>Desnivel en pantalla: <b id="l-desnivel">—</b></span>
+          <span>En pantalla: <b id="l-pantalla">—</b></span>
+          <span>Desnivel en la visión: <b id="l-desnivel">—</b></span>
           <span>Centro: <b id="l-centro">—</b></span>
           <span>Columna: <b id="l-columna">—</b></span>
         </div>
@@ -188,20 +189,27 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
           <input type="radio" name="vista" id="v-juego" value="juego" checked><label for="v-juego">Cámara de juego</label>
           <input type="radio" name="vista" id="v-libre" value="libre"><label for="v-libre">Vista libre</label>
         </div>
-        <p class="nota" id="nota-camara">La cámara sigue al héroe y su visión llena el lado corto de la pantalla. Arrastra, o usa las flechas, para girarla e inclinarla; la rueda cambia de zoom.</p>
+        <p class="nota" id="nota-camara">«En pantalla» es el círculo alrededor del héroe que cabe en la pantalla, con cualquier inclinación; desde arriba (90°) es el lado corto, como en el 2D. Arrastra, o usa las flechas, para girar e inclinar; la rueda acerca y aleja.</p>
         <div class="grupo" id="d-encuadre">
-          <div class="segmentos">
-            <input type="radio" name="zoom" id="z-1" value="1" checked><label for="z-1">Visión</label>
-            <input type="radio" name="zoom" id="z-15" value="1.5"><label for="z-15">Visión ×1,5</label>
+          <div class="deslizador">
+            <div class="fila"><label for="encuadre">En pantalla</label><span id="o-encuadre">30 u</span></div>
+            <input type="range" id="encuadre" min="8" max="120" step="1" value="30">
           </div>
-          <div class="fila"><label for="vision">Visión del héroe</label>
-            <select id="vision"><option value="15" selected>15 u, solo</option><option value="30">30 u</option></select>
+          <div class="botones" aria-label="Encuadres del modo mundo"><button type="button" data-encuadre="1">La visión</button><button type="button" data-encuadre="1.5">La visión ×1,5</button></div>
+          <div class="deslizador">
+            <div class="fila"><label for="apertura">Apertura de la cámara</label><span id="o-apertura">35°</span></div>
+            <input type="range" id="apertura" min="15" max="75" step="1" value="35">
           </div>
         </div>
         <div class="deslizador" id="d-inclinacion">
           <div class="fila"><label for="inclinacion">Inclinación</label><span id="o-inclinacion">30°</span></div>
-          <input type="range" id="inclinacion" min="10" max="85" step="1" value="30">
+          <input type="range" id="inclinacion" min="10" max="90" step="1" value="30">
         </div>
+        <div class="fila"><label for="vision">Visión del héroe</label>
+          <select id="vision"><option value="15" selected>15 u, solo</option><option value="30">30 u</option></select>
+        </div>
+        <div class="fila"><label><input type="checkbox" id="ver-vision" checked> Marcar hasta dónde ve</label></div>
+        <div class="fila"><label><input type="checkbox" id="niebla-vision" checked> Oscurecer lo que no ve</label></div>
         <p class="nota">Llevar al héroe a:</p>
         <div class="botones" aria-label="Llevar al héroe a">
           <button type="button" data-ir="cordillera">Cordillera</button>
@@ -279,7 +287,7 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
     <ol class="mirar">
       <li>
         <h3>Tu configuración</h3>
-        <p>Propuesta ×100 con relieve ×2,2 y altura ×2, copa de árbol de 0,4 u, plazas ×1,6, héroes y tropa ×3, rejilla de 4 u con suavizado y cámara a 30° que sigue al héroe con su visión llenando el lado corto. Las cumbres llegan a unos 440 m de Unity (36 u) sobre el llano.</p>
+        <p>Propuesta ×100 con relieve ×2,2 y altura ×2, copa de árbol de 0,4 u, plazas ×1,6, héroes y tropa ×3, rejilla de 4 u con suavizado y cámara a 30° que sigue al héroe. Las cumbres llegan a unos 440 m de Unity (36 u) sobre el llano.</p>
         <button type="button" data-escena="propuesta,cordillera">Ir al macizo</button>
       </li>
       <li>
@@ -357,9 +365,9 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
     <ul class="decisiones">
       <li><span class="estado cerrado">Cerrado</span><span>El ancla (cámara, velocidades, zonas, separación), Unity a ×12 y las plazas como maquetas agrandadas.</span></li>
       <li><span class="estado cerrado">Elegido</span><span>Propuesta ×100 con relieve ×2,2, altura ×2, copa 0,4 u, plazas ×1,6, héroes y tropa ×3, y rejilla de 4 u con suavizado (2026-10-30). Con estas escalas se pasa a los siguientes pasos; la mesa se sigue afinando.</span></li>
-      <li><span class="estado cerrado">Cámara</span><span>La cámara de juego gira libre alrededor del héroe y siempre le sigue. Su distancia hace que la visión del héroe llene el lado corto de la pantalla (30 u con el héroe solo), con un segundo zoom a 1,5 veces, como el modo mundo del cliente (2026-10-30; antes, 15 u de ancho). Arranca a 30°.</span></li>
+      <li><span class="estado cerrado">Cámara</span><span>La cámara de juego gira libre alrededor del héroe y siempre le sigue (2026-10-30). Cuántas u caben en pantalla, la apertura y la inclinación se calibran con la visión del héroe marcada (abajo, «Calibrar»).</span></li>
       <li><span class="estado cerrado">Cliente</span><span>El mundo 3D se prototipa primero en el cliente de jugador (BronzeAgeClient, three.js) y después se lleva a Unity. En el cliente, el modo mundo pasa directamente a 3D y el modo mapa se queda en 2D, como mapa estratégico (2026-10-30).</span></li>
-      <li><span class="estado abierto">Revisar</span><span>Los tamaños (relieve, copa, plazas, héroes y tropa) se eligieron con la pantalla de 15 u. Con la visión llenando la pantalla la cámara queda unas 3,5 veces más lejos: hay que volver a mirarlos.</span></li>
+      <li><span class="estado abierto">Calibrar</span><span>El encuadre de la cámara inclinada: cuántas u caben en pantalla, la apertura y la inclinación mínima. En 2D la pantalla era lo que el héroe ve; inclinada enseña mucho más suelo hacia el fondo. La mesa marca la visión real del héroe y oscurece lo de fuera para calibrarlo. Después, los tamaños (relieve, copa, plazas, héroes y tropa), elegidos con la pantalla de 15 u.</span></li>
       <li><span class="estado cerrado">Regla</span><span>Pueblos y avanzadas son partes de la plaza y van siempre dentro de su zona.</span></li>
       <li><span class="estado cerrado">Regla</span><span>Las pendientes del movimiento se miden con la exageración de altura: lo que se ve es lo que se anda.</span></li>
       <li><span class="estado abierto">Abierto</span><span>Ríos y vados del terreno nuevo, y cuántos árboles dibuja el cliente: con copa de 0,4 u, un bosque denso lleva unos 3 árboles por u².</span></li>
@@ -374,8 +382,9 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
 (async () => {
 const D = __DATOS__, DN = __DATOS_NUEVO__;
 const FACTOR = 12, VEL = .5, BASE_M = 450, FOV = 35, PEND_MAX = .7, ALTO_SOLDADO = .136, REGLA_U = 10;
-// Lo que la cámara de juego enseña a la distancia del héroe, en u (lo recalcula `colocarCamara`): la huella y las lecturas lo usan
-let pantalla = { ancho: 53.3, alto: 30 };
+// El suelo que enseña la cámara de juego, medido sobre el plano del héroe (lo recalcula `colocarCamara`): el ancho en la fila del héroe,
+// hasta dónde llega hacia abajo y hacia el fondo de la pantalla, y las cuatro esquinas respecto al héroe (para la huella de la vista libre)
+let pantalla = { ancho: 53.3, cerca: 15, fondo: 15, esquinas: null };
 const W = D.w, H = D.h, NX = D.nx, NY = D.ny, PASO = D.paso, BX = D.bx, BY = D.by;
 const ELEGIDOS = { relieve: 2.2, exag: 2, copa: .4, maqueta: 1.6, tropa: 3 };
 // Economia_Construccion: ZONA_INFLUENCIA, cupos de PUEBLOS_EXTRACTORES y AVANZADAS, ciudad = 10 % del radio de la zona
@@ -467,7 +476,7 @@ function propuesta(S) {
 }
 
 // ---------- estado ----------
-const estado = { terreno: 'nuevo', vista: 'juego', inclinacion: 30, giro: 0, vision: 15, zoom: 1, ...ELEGIDOS, rejilla: 4, verRejilla: true, suavizado: true, columna: true, plazas: true, zonas: true, nivel: 2, arboles: true, pausa: reducido };
+const estado = { terreno: 'nuevo', vista: 'juego', inclinacion: 30, giro: 0, vision: 15, encuadre: 30, apertura: 35, verVision: true, nieblaVision: true, ...ELEGIDOS, rejilla: 4, verRejilla: true, suavizado: true, columna: true, plazas: true, zonas: true, nivel: 2, arboles: true, pausa: reducido };
 let T = real;
 let objX = D.puntos.llano[0], objY = D.puntos.llano[1];
 
@@ -509,6 +518,26 @@ escena.fog = new THREE.Fog(0xd6dedf, 60, 160); aplicarCielo();
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', aplicarCielo);
 new MutationObserver(aplicarCielo).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
+// La visión del héroe en el sombreado: lo que queda fuera de su círculo se oscurece, una vista previa de la niebla de guerra en 3D.
+// Se aplica al suelo, el bosque, los ríos y la rejilla; lo propio (plazas, columna, camino) se ve tal cual, como en el 2D.
+const VISION = { uVision: { value: new THREE.Vector3(0, 0, 15) }, uNiebla: { value: .62 } };
+function conVision(mat) {
+  mat.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, VISION);
+    sh.vertexShader = 'varying vec2 vMundoXZ;\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
+      vec4 bmMundo = vec4(transformed, 1.0);
+      #ifdef USE_INSTANCING
+        bmMundo = instanceMatrix * bmMundo;
+      #endif
+      vMundoXZ = (modelMatrix * bmMundo).xz;`);
+    sh.fragmentShader = 'uniform vec3 uVision; uniform float uNiebla; varying vec2 vMundoXZ;\n' + sh.fragmentShader.replace('#include <fog_fragment>', `float fueraVision = smoothstep(uVision.z - .25, uVision.z + .25, length(vMundoXZ - uVision.xy));
+      gl_FragColor.rgb = mix(gl_FragColor.rgb, gl_FragColor.rgb * .38 + vec3(.04, .045, .05), fueraVision * uNiebla);
+      #include <fog_fragment>`);
+  };
+  mat.customProgramCacheKey = () => 'vision';
+  return mat;
+}
+
 // terreno
 const geo = new THREE.BufferGeometry();
 const posT = new Float32Array(NX * NY * 3), colT = new Float32Array(NX * NY * 3);
@@ -518,7 +547,7 @@ for (let j = 0; j < NY - 1; j++) for (let i = 0; i < NX - 1; i++) { const a = j 
 geo.setIndex(new THREE.BufferAttribute(idx, 1));
 geo.setAttribute('position', new THREE.BufferAttribute(posT, 3));
 geo.setAttribute('color', new THREE.BufferAttribute(colT, 3));
-const terreno = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+const terreno = new THREE.Mesh(geo, conVision(new THREE.MeshLambertMaterial({ vertexColors: true })));
 terreno.receiveShadow = true; escena.add(terreno);
 
 const PAL = { llano: [.72, .69, .47], colina: [.58, .57, .38], montana: [.53, .47, .39], cima: [.76, .74, .70], roca: [.47, .43, .39], agua: [.27, .46, .60], sotobosque: [.36, .44, .25] };
@@ -562,9 +591,9 @@ function construirRios() {
       if (k) { const o = (k - 1) * 2; ind.push(o, o + 1, o + 2, o + 1, o + 3, o + 2); }
     }
     const gg = new THREE.BufferGeometry(); gg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); gg.setIndex(ind); gg.computeVertexNormals();
-    g.add(new THREE.Mesh(gg, new THREE.MeshLambertMaterial({ color: 0x4a7fa3, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 })));
+    g.add(new THREE.Mesh(gg, conVision(new THREE.MeshLambertMaterial({ color: 0x4a7fa3, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 }))));
   }
-  const grava = new THREE.MeshLambertMaterial({ color: 0xcdbb94, polygonOffset: true, polygonOffsetFactor: -4 });
+  const grava = conVision(new THREE.MeshLambertMaterial({ color: 0xcdbb94, polygonOffset: true, polygonOffsetFactor: -4 }));
   for (const [x, y] of T.vados) { const m = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, .03, 20), grava); m.position.copy(V3(x, y, .08)); g.add(m); }
   poner('rios', g);
 }
@@ -587,7 +616,7 @@ function construirArboles() {
     }
     let n = Math.min(lista.length / 3, MAX_ARBOLES - total); if (n <= 0) continue;
     const gc = geoCopa.clone(), gt = geoTronco.clone();
-    const copas = new THREE.InstancedMesh(gc, new THREE.MeshLambertMaterial({ color: 0xffffff }), n), troncos = new THREE.InstancedMesh(gt, new THREE.MeshLambertMaterial({ color: 0x5b4632 }), n);
+    const copas = new THREE.InstancedMesh(gc, conVision(new THREE.MeshLambertMaterial({ color: 0xffffff })), n), troncos = new THREE.InstancedMesh(gt, conVision(new THREE.MeshLambertMaterial({ color: 0x5b4632 })), n);
     let ymin = 1e9, ymax = -1e9;
     for (let k = 0; k < n; k++) {
       const x = lista[k * 3], y = lista[k * 3 + 1], r = lista[k * 3 + 2], esc = D_ * (.75 + .5 * r), h = alturaU(x, y);
@@ -862,9 +891,10 @@ function moverColumna(dt) {
   $('l-columna').textContent = estado.pausa && ruta ? 'en pausa' : txt;
 }
 
-// huella de la pantalla de juego (para la vista libre)
+// huella de la pantalla de juego (para la vista libre): el suelo que enseña la cámara de juego alrededor del héroe
 function construirHuella() {
-  const x = objX, y = objY, a = pantalla.ancho / 2, b = pantalla.alto / 2, pts = [[x - a, y - b], [x + a, y - b], [x + a, y + b], [x - a, y + b], [x - a, y - b]];
+  const [x, y] = cabeza, e = pantalla.esquinas ?? [[-26.7, -15], [26.7, -15], [26.7, 15], [-26.7, 15]];
+  const pts = [...e, e[0]].map(([dx, dy]) => [Math.min(W, Math.max(0, x + dx)), Math.min(H, Math.max(0, y + dy))]);
   const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(lineaDrapeada(pts, .5, .2)), new THREE.LineBasicMaterial({ color: 0xffffff }));
   l.visible = estado.vista === 'libre'; poner('huella', l);
 }
@@ -890,36 +920,80 @@ function moverEtiquetas() {
 
 // ---------- cámara ----------
 const objetivo = new THREE.Vector3();
+// La distancia a la que un círculo de radio `r` alrededor del héroe cabe justo en la pantalla, con la inclinación `th`, la tangente de media
+// apertura `tg` y el aspecto `asp` (se mide sobre el plano del héroe). Desde arriba es la de siempre: el diámetro llena el lado corto.
+function distanciaDeEncuadre(r, th, tg, asp) {
+  const s = Math.sin(th), c = Math.cos(th);
+  const cabe = d => {
+    for (let k = 0; k < 48; k++) {
+      const a = k / 48 * 6.2832, x = r * Math.cos(a), z = r * Math.sin(a), p = d - z * c;
+      if (p <= 0 || Math.abs(z * s / p) > tg || Math.abs(x / p) > tg * asp) return false;
+    }
+    return true;
+  };
+  let lo = r * c + 1e-3, hi = r * 60;
+  for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (cabe(m)) hi = m; else lo = m; }
+  return hi;
+}
+// el punto del suelo (plano del héroe) bajo un punto de la pantalla; si el rayo no lo toca (por encima del horizonte), `null`
+const planoSuelo = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), puntoSuelo = new THREE.Vector3(), rayoSuelo = new THREE.Raycaster(), ndcSuelo = new THREE.Vector2();
+function alSuelo(x, y) {
+  ndcSuelo.set(x, y); rayoSuelo.setFromCamera(ndcSuelo, camara); planoSuelo.constant = -objetivo.y;
+  return rayoSuelo.ray.intersectPlane(planoSuelo, puntoSuelo) ? [puntoSuelo.x + W / 2 - objX, puntoSuelo.z + H / 2 - objY] : null;
+}
+function medirPantalla() {
+  const izq = alSuelo(-1, 0), der = alSuelo(1, 0), arriba = alSuelo(0, 1), abajo = alSuelo(0, -1), largo = p => (p ? Math.hypot(p[0], p[1]) : Infinity);
+  // una esquina por encima del horizonte se corta a 300 u en su rumbo, para poder dibujar la huella
+  const esquinas = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([x, y]) => {
+    const p = alSuelo(x, y); if (p) return p;
+    const d = rayoSuelo.ray.direction, l = Math.hypot(d.x, d.z) || 1; return [d.x / l * 300, d.z / l * 300];
+  });
+  pantalla = { ancho: izq && der ? Math.hypot(der[0] - izq[0], der[1] - izq[1]) : Infinity, cerca: largo(abajo), fondo: largo(arriba), esquinas };
+}
 function colocarCamara(dt = 0) {
   const w = lienzo.clientWidth || 1, h = lienzo.clientHeight || 1, aspecto = w / h;
   camara.aspect = aspecto; camara.updateProjectionMatrix();
   if (estado.vista === 'juego') {
-    // sigue siempre al héroe, a la distancia que hace que su visión llene el lado corto de la pantalla (×1,5 en el segundo zoom), como el
-    // modo mundo del cliente, con el giro y la inclinación que se quieran
+    // sigue siempre al héroe, a la distancia a la que el círculo de «En pantalla» cabe justo en la pantalla, con el giro, la inclinación y
+    // la apertura que se quieran
     objX = cabeza[0]; objY = cabeza[1];
-    const tg = Math.tan(FOV * Math.PI / 360), d = estado.vision * estado.zoom / (tg * Math.min(1, aspecto)), th = estado.inclinacion * Math.PI / 180, ph = estado.giro;
-    pantalla = { alto: 2 * d * tg, ancho: 2 * d * tg * aspecto };
+    const th = Math.min(89.5, estado.inclinacion) * Math.PI / 180, ph = estado.giro, tg = Math.tan(estado.apertura * Math.PI / 360);
+    const d = distanciaDeEncuadre(estado.encuadre / 2, th, tg, aspecto);
     objetivo.set(objX - W / 2, alturaU(objX, objY), objY - H / 2);
-    camara.near = d * .05; camara.far = d * 12; camara.updateProjectionMatrix();
+    camara.fov = estado.apertura; camara.near = d * .05; camara.far = Math.max(400, d * 12); camara.updateProjectionMatrix();
     camara.position.set(objetivo.x + d * Math.cos(th) * Math.sin(ph), objetivo.y + d * Math.sin(th), objetivo.z + d * Math.cos(th) * Math.cos(ph));
     // en la montaña, la ladera puede quedar más alta que la cámara: se levanta por encima del suelo
     { const suelo = alturaU(camara.position.x + W / 2, camara.position.z + H / 2) + 1.5; if (camara.position.y < suelo) camara.position.y = suelo; }
-    camara.lookAt(objetivo);
+    camara.lookAt(objetivo); camara.updateMatrixWorld(); medirPantalla();
     escena.fog.near = d * 1.6; escena.fog.far = d * 5.5;
-    $('regla-barra').style.width = `${REGLA_U / pantalla.ancho * w}px`; $('regla').hidden = false;
+    $('regla-barra').style.width = `${isFinite(pantalla.ancho) ? REGLA_U / pantalla.ancho * w : 0}px`; $('regla').hidden = false;
   } else {
     if (camara.near !== .5) { camara.near = .5; camara.far = 3000; camara.updateProjectionMatrix(); }
     controles.update();
     objX = controles.target.x + W / 2; objY = controles.target.z + H / 2;
     escena.fog.near = 500; escena.fog.far = 1600; $('regla').hidden = true;
   }
-  const r = estado.vista === 'juego' ? Math.max(26, pantalla.ancho * .8) : 190, c = estado.vista === 'juego' ? objetivo : controles.target;
+  VISION.uVision.value.set(cabeza[0] - W / 2, cabeza[1] - H / 2, estado.vision); VISION.uNiebla.value = estado.nieblaVision ? .62 : 0;
+  const alcance = Math.min(150, Math.max(26, pantalla.ancho * .6, Math.min(pantalla.fondo, 150))), r = estado.vista === 'juego' ? alcance : 190, c = estado.vista === 'juego' ? objetivo : controles.target;
   sol.position.set(c.x - 60, c.y + 110, c.z + 45); sol.target.position.copy(c);
   const sc = sol.shadow.camera; if (sc.right !== r) { sc.left = -r; sc.right = r; sc.top = r; sc.bottom = -r; sc.near = 1; sc.far = 600; sc.updateProjectionMatrix(); }
 }
-const pintarChipVista = () => { $('chip-vista').innerHTML = estado.vista === 'juego' ? `Cámara que sigue al héroe · visión de <b>${estado.vision} u</b>${estado.zoom > 1 ? ' ×1,5' : ''}` : 'Vista libre · el marco blanco es la pantalla de juego'; };
-// los dos zooms del modo mundo: la visión llenando el lado corto y 1,5 veces la visión
-function fijarZoom(z) { estado.zoom = z; $(z > 1 ? 'z-15' : 'z-1').checked = true; pintarChipVista(); }
+const pintarChipVista = () => { $('chip-vista').innerHTML = estado.vista === 'juego' ? `Cámara que sigue al héroe · <b>${estado.encuadre} u</b> en pantalla · visión de ${estado.vision} u` : 'Vista libre · el marco blanco es lo que enseña la cámara de juego'; };
+function fijarEncuadre(u) { estado.encuadre = Math.round(Math.max(8, Math.min(120, u))); $('encuadre').value = estado.encuadre; deslizadores.encuadre?.pintar(); pintarChipVista(); }
+
+// el círculo de visión del héroe sobre el terreno (cortado en el borde de la ventana); se rehace cuando el héroe se mueve
+let anilloEn = null;
+function actualizarVision() {
+  const [x, y] = cabeza, R = estado.vision;
+  if (!anilloEn || Math.hypot(x - anilloEn[0], y - anilloEn[1]) > .3 || anilloEn[2] !== R) {
+    anilloEn = [x, y, R];
+    const g = new THREE.Group(), mat = new THREE.LineBasicMaterial({ color: 0xf6ecd2 });
+    let tramo = []; const cerrar = () => { if (tramo.length > 1) g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(lineaDrapeada(tramo, .4, .2)), mat)); tramo = []; };
+    for (let k = 0; k <= 160; k++) { const a = k / 160 * 6.2832, px = x + R * Math.cos(a), py = y + R * Math.sin(a); if (px < 0 || py < 0 || px > W || py > H) cerrar(); else tramo.push([px, py]); }
+    cerrar(); poner('vision', g);
+  }
+  capas.vision.visible = estado.verVision;
+}
 function cambiarVista(v) {
   estado.vista = v; controles.enabled = v === 'libre';
   if (v === 'libre') { controles.target.set(objX - W / 2, alturaU(objX, objY), objY - H / 2); camara.position.set(controles.target.x - 40, controles.target.y + 130, controles.target.z + 170); controles.update(); }
@@ -948,9 +1022,12 @@ let ultimaLectura = 0;
 function lecturas(ahora) {
   if (avisoHasta && ahora > avisoHasta) { $('chip-aviso').hidden = true; avisoHasta = 0; }
   if (ahora - ultimaLectura < 250) return; ultimaLectura = ahora;
+  // el desnivel dentro del círculo de visión del héroe
   let mn = 1e9, mx = -1e9;
-  const pa = pantalla.ancho / 2, pb = pantalla.alto / 2, ps = Math.max(.5, pantalla.ancho / 120);
-  for (let y = objY - pb; y <= objY + pb; y += ps) for (let x = objX - pa; x <= objX + pa; x += ps) { const h = alturaM(x, y); if (h < mn) mn = h; if (h > mx) mx = h; }
+  const R = estado.vision, [hx, hy] = cabeza, ps = Math.max(.5, R / 40);
+  for (let y = hy - R; y <= hy + R; y += ps) for (let x = hx - R; x <= hx + R; x += ps) { if ((x - hx) ** 2 + (y - hy) ** 2 > R * R) continue; const h = alturaM(x, y); if (h < mn) mn = h; if (h > mx) mx = h; }
+  const u = v => (isFinite(v) ? `${fmt(v, 0)} u` : 'el horizonte');
+  $('l-pantalla').textContent = estado.vista === 'juego' ? `${u(pantalla.ancho)} de ancho · ${u(pantalla.fondo)} al fondo · ${u(pantalla.cerca)} abajo` : '—';
   const d = (mx - mn) * exag(), hc = alturaM(objX, objY);
   $('l-desnivel').textContent = `${fmt(d, d < 10 ? 1 : 0)} m (${fmt(d / FACTOR)} u)`;
   const pc = pendiente(objX, objY);
@@ -981,6 +1058,9 @@ document.querySelectorAll('input[name="vista"]').forEach(r => r.addEventListener
 const deslizadores = {};
 const deslizador = (id, clave, texto, alSoltar) => { const el = $(id), out = $('o-' + id); const pintar = () => { out.textContent = texto(+el.value); }; el.addEventListener('input', () => { pintar(); if (!alSoltar) estado[clave] = +el.value; }); el.addEventListener('change', () => { estado[clave] = +el.value; if (alSoltar) ocupado(alSoltar); }); pintar(); deslizadores[clave] = { el, pintar }; };
 deslizador('inclinacion', 'inclinacion', v => `${v}°`);
+deslizador('encuadre', 'encuadre', v => `${v} u`);
+deslizador('apertura', 'apertura', v => `${v}°`);
+$('encuadre').addEventListener('input', pintarChipVista);
 deslizador('exag', 'exag', v => `×${fmt(v)}`, montarTerreno);
 deslizador('relieve', 'relieve', v => `×${fmt(v)}`, () => { if (estado.terreno === 'propuesta') montarTerreno(); });
 deslizador('copa', 'copa', v => `${fmt(v)} u · ${fmt(v * FACTOR, 0)} m`, construirArboles);
@@ -988,7 +1068,7 @@ deslizador('maqueta', 'maqueta', v => `×${fmt(v)}`, () => { repartirElementos()
 deslizador('tropa', 'tropa', v => `×${fmt(v)} · ${fmt(v * ALTO_SOLDADO * FACTOR)} m`);
 $('restablecer').addEventListener('click', () => {
   for (const [k, v] of Object.entries(ELEGIDOS)) { estado[k] = v; deslizadores[k].el.value = v; deslizadores[k].pintar(); }
-  fijarZoom(1); estado.vision = 15; $('vision').value = '15';
+  estado.vision = 15; $('vision').value = '15'; fijarEncuadre(30); estado.apertura = 35; $('apertura').value = 35; deslizadores.apertura.pintar();
   $('rejilla').value = '4'; estado.rejilla = 4; estado.giro = 0; $('t-nuevo').checked = true; estado.terreno = 'nuevo'; estado.inclinacion = 30; $('inclinacion').value = 30; deslizadores.inclinacion.pintar(); $('suavizado').checked = estado.suavizado = true; 
   ocupado(montarTerreno);
 });
@@ -1042,11 +1122,13 @@ lienzo.addEventListener('pointerup', e => {
   if (mandar(p) && estado.pausa) { estado.pausa = false; pintarPausa(); }
 });
 lienzo.addEventListener('pointercancel', () => { arrastre = null; pulsado = null; });
-lienzo.addEventListener('wheel', e => { if (estado.vista !== 'juego') return; e.preventDefault(); fijarZoom(e.deltaY > 0 ? 1.5 : 1); }, { passive: false });
-document.querySelectorAll('input[name="zoom"]').forEach(r => r.addEventListener('change', () => fijarZoom(+r.value)));
+lienzo.addEventListener('wheel', e => { if (estado.vista !== 'juego') return; e.preventDefault(); fijarEncuadre(estado.encuadre * (e.deltaY > 0 ? 1.1 : 1 / 1.1)); }, { passive: false });
+document.querySelectorAll('[data-encuadre]').forEach(b => b.addEventListener('click', () => fijarEncuadre(2 * estado.vision * +b.dataset.encuadre)));
 $('vision').addEventListener('change', e => { estado.vision = +e.target.value; pintarChipVista(); });
+$('ver-vision').addEventListener('change', e => { estado.verVision = e.target.checked; });
+$('niebla-vision').addEventListener('change', e => { estado.nieblaVision = e.target.checked; });
 const teclas = new Set();
-const inclinar = dg => { estado.inclinacion = Math.max(10, Math.min(85, estado.inclinacion + dg)); $('inclinacion').value = Math.round(estado.inclinacion); deslizadores.inclinacion.pintar(); };
+const inclinar = dg => { estado.inclinacion = Math.max(10, Math.min(90, estado.inclinacion + dg)); $('inclinacion').value = Math.round(estado.inclinacion); deslizadores.inclinacion.pintar(); };
 lienzo.addEventListener('keydown', e => { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd'].includes(e.key)) { teclas.add(e.key); e.preventDefault(); } });
 lienzo.addEventListener('keyup', e => teclas.delete(e.key)); lienzo.addEventListener('blur', () => teclas.clear());
 const moverConTeclas = dt => { if (estado.vista !== 'juego' || !teclas.size) return; if (teclas.has('ArrowUp') || teclas.has('w')) inclinar(40 * dt); if (teclas.has('ArrowDown') || teclas.has('s')) inclinar(-40 * dt); if (teclas.has('ArrowLeft') || teclas.has('a')) estado.giro += 1.4 * dt; if (teclas.has('ArrowRight') || teclas.has('d')) estado.giro -= 1.4 * dt; };
@@ -1083,7 +1165,7 @@ montarTerreno(); cambiarVista('juego');
 let antes = performance.now();
 const bucle = ahora => {
   const dt = Math.min(.1, (ahora - antes) / 1000); antes = ahora;
-  moverConTeclas(dt); moverColumna(dt); colocarCamara(dt); lecturas(ahora); moverEtiquetas();
+  moverConTeclas(dt); moverColumna(dt); actualizarVision(); colocarCamara(dt); lecturas(ahora); moverEtiquetas();
   renderer.render(escena, camara); requestAnimationFrame(bucle);
 };
 requestAnimationFrame(bucle);
