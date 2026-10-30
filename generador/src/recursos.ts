@@ -7,39 +7,36 @@ import type { Relieve } from './mundoEstrategico';
 import { evaluarElevacion, evaluarTerreno, gradienteElevacion } from './elevacion';
 import { esTransitable } from './costeMovimiento';
 import { densidadForestal } from './forestacionRegional';
-import { evaluarSuelo } from './suelosRegional';
 import { evaluarRuido } from './ruido';
 import { humedadRegionalEn } from './regional';
 import type { MuestraRelieve } from './muestras';
 
 /**
- * Recursos no metálicos (piedra, cobre, hierro, ganadería) repartidos por anillos (Doc 1.9c) y cantidades iniciales de todos
+ * Recursos no metálicos (piedra, cobre, hierro) repartidos por anillos (Doc 1.9c) y cantidades iniciales de todos
  * los yacimientos. El estaño y el oro viven en `metales.ts`; aquí solo se convierten (`metalesARecursos`).
  * Unidades del generador, salvo los parámetros marcados como estratégicos.
  */
-export type TipoNoMetalico = 'piedra' | 'cobre' | 'hierro' | 'ganaderia';
+export type TipoNoMetalico = 'piedra' | 'cobre' | 'hierro';
 
 export const PARAMETROS_RECURSOS = {
   /**
-   * Totales de partida: los de Codex con densidad 4 (piedra 140·4, cobre 60·4, ganadería 100·4) para su mundo de 32000×24000,
+   * Totales de partida: los de Codex con densidad 4 (piedra 140·4, cobre 60·4) para su mundo de 32000×24000,
    * más el hierro a 1,5 veces el cobre (`HIERRO.factorCantidad` de typescript-final). Se escalan por área.
    */
-  totalBase: { piedra: 5600, cobre: 240, hierro: 360, ganaderia: 400 } as Record<TipoNoMetalico, number>,
+  totalBase: { piedra: 5600, cobre: 240, hierro: 360 } as Record<TipoNoMetalico, number>,
   areaBase: 32000 * 24000,
   /**
    * Reparto por anillo (suma 1 por tipo). El anillo con 0 no recibe ninguno salvo que otro no tenga sitio:
-   *  - piedra: abundante en el foco (60 %), el resto en la frontera; la tierra lejana es de minas y fauna.
+   *  - piedra: abundante en el foco (60 %), el resto en la frontera; la tierra lejana es de minas.
    *  - cobre y hierro: «algo» en el foco (20 %) y el grueso en la frontera (80 %), donde se expande la segunda generación.
-   *  - ganadería: fauna en el foco (50 %) y de estepa en la tierra lejana (50 %); la frontera es de minerales y bosque.
    */
   reparto: {
     piedra: { foco: 0.6, frontera: 0.4, lejana: 0 },
     cobre: { foco: 0.2, frontera: 0.8, lejana: 0 },
     hierro: { foco: 0.2, frontera: 0.8, lejana: 0 },
-    ganaderia: { foco: 0.5, frontera: 0, lejana: 0.5 },
   } as Record<TipoNoMetalico, Record<Anillo, number>>,
   /** Separación mínima (generador) entre yacimientos del mismo tipo (la piedra, más densa, 70) y con cualquier otro. */
-  separacionMismoTipo: { piedra: 70, cobre: 250, hierro: 250, ganaderia: 250 } as Record<TipoNoMetalico, number>,
+  separacionMismoTipo: { piedra: 70, cobre: 250, hierro: 250 } as Record<TipoNoMetalico, number>,
   separacionOtroTipo: 45,
   /** Rejilla de prospección y azar de cada punto (generador), como la «prospección fina» de Codex. */
   pasoPrueba: 150,
@@ -70,7 +67,6 @@ export const RANGO_CANTIDAD: Record<TipoRecurso, { min: number; max: number }> =
   hierro: { min: 100, max: 300 },
   estano: { min: 50, max: 150 },
   oro: { min: 150, max: 400 },
-  ganaderia: { min: 10, max: 40 },
 };
 
 /**
@@ -102,12 +98,11 @@ export interface MuestreoRecursos {
   altura(p: Point): number;
   geologia(p: Point): number;
   bosque(p: Point): number;
-  suelo(p: Point, bosque: number): { pastos: number; estepa: boolean };
 }
 
 export function muestreoDeRelieve(r: Relieve): MuestreoRecursos {
   const e = r.elevacion;
-  // El bucle de candidatos pide terreno, pendiente, acceso, altura, bosque y suelo del mismo punto seguidos: se guarda el último.
+  // El bucle de candidatos pide terreno, pendiente, acceso, altura y bosque del mismo punto seguidos: se guarda el último.
   // La altura se calcula al entrar en un punto nuevo; pendiente y humedad solo si alguien las pide (el agua no paga el gradiente).
   let cx = NaN, cy = NaN, altura = 0, pendiente: number | undefined, humedad: number | undefined;
   const punto = (p: Point) => {
@@ -130,7 +125,6 @@ export function muestreoDeRelieve(r: Relieve): MuestreoRecursos {
     altura: p => { punto(p); return altura; },
     geologia: p => evaluarRuido(r.suelos.geologia, p),
     bosque: p => densidadForestal(r.forestacion, e, p, muestraEn(p)),
-    suelo: (p, bosque) => { const s = evaluarSuelo(r.suelos, e, p, bosque, muestraEn(p)); return { pastos: s.pastos, estepa: s.tipo === 'estepa' }; },
   };
 }
 
@@ -138,19 +132,18 @@ const clamp = (x: number) => Math.max(0, Math.min(1, x));
 const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 
 interface Candidato {
-  posicion: Point; terreno: ClaseTerreno; altura: number; geologia: number; bosque: number; pastos: number; estepa: boolean;
+  posicion: Point; terreno: ClaseTerreno; altura: number; geologia: number; bosque: number;
   anillo: Anillo; campamento: string;
 }
 
 /** Calidad 0..1 de un candidato para un tipo (la de Codex), o 0 si el terreno no vale. */
 function calidad(tipo: TipoNoMetalico, c: Candidato): number {
   if (tipo === 'piedra') return clamp(0.4 + (c.altura - 0.4) * 1.2);
-  if (tipo === 'ganaderia') return c.terreno === 'montana' ? 0 : c.pastos * (c.anillo === 'lejana' && !c.estepa ? 0.4 : 1); // la fauna lejana es de estepa
   return clamp(0.25 + c.geologia * 0.65); // cobre y hierro; el llano pesa menos (`factorLlanoMineral`, abajo)
 }
 
 /**
- * Reparte piedra, cobre, hierro y ganadería. `ocupados` son posiciones ya tomadas por otros yacimientos (los metales) que
+ * Reparte piedra, cobre e hierro. `ocupados` son posiciones ya tomadas por otros yacimientos (los metales) que
  * quedan a `separacionOtroTipo`. Mismo `seed`, mismo reparto. Si un anillo no tiene sitio para su cuota, el resto pasa a los
  * demás anillos del tipo; si tampoco caben, lanza error (los totales son exactos).
  */
@@ -169,9 +162,8 @@ export function repartirRecursosNoMetalicos(
     const posicion = { x: x + (azarPunto() - 0.5) * p.azarPrueba, y: y + (azarPunto() - 0.5) * p.azarPrueba };
     const terreno = m.terreno(posicion);
     if (terreno === 'agua' || terreno === 'cima' || m.pendiente(posicion) > p.pendienteMaxima || !m.accesible(posicion)) continue;
-    const bosque = m.bosque(posicion), suelo = m.suelo(posicion, bosque), a = anilloEn(campamentos, posicion);
-    candidatos.push({ posicion, terreno, altura: m.altura(posicion), geologia: m.geologia(posicion), bosque, pastos: suelo.pastos,
-      estepa: suelo.estepa, anillo: a.anillo, campamento: a.campamento });
+    const bosque = m.bosque(posicion), a = anilloEn(campamentos, posicion);
+    candidatos.push({ posicion, terreno, altura: m.altura(posicion), geologia: m.geologia(posicion), bosque, anillo: a.anillo, campamento: a.campamento });
   }
 
   // Índice espacial de lo ya colocado (celdas de 250 ≥ cualquier separación).
@@ -191,10 +183,9 @@ export function repartirRecursosNoMetalicos(
 
   const recursos: RecursoMundo[] = [];
   const escala = limites.ancho * limites.alto / p.areaBase;
-  // Los más escasos primero: así la piedra, que sobra, no les quita el sitio. La fauna va antes que la piedra desde que esta es ×10
-  // (5.601 nodos): con la piedra primero llenaba la rejilla de candidatos del foco y no quedaba sitio para el ganado (0 plazas con ganado a 30 u).
+  // Los más escasos primero: así la piedra, que sobra, no les quita el sitio.
   const capas: (() => void)[] = [];
-  for (const tipo of ['cobre', 'hierro', 'ganaderia', 'piedra'] as TipoNoMetalico[]) {
+  for (const tipo of ['cobre', 'hierro', 'piedra'] as TipoNoMetalico[]) {
     const azar = createRng(derivarSeed(seed, `recursos-${tipo}-1`));
     const pool = candidatos.map(c => ({
       c, q: calidad(tipo, c), azar: azar(),

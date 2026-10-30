@@ -3,7 +3,7 @@ import { crearRelieveRegional } from '../regional';
 import { evaluarTerreno, evaluarElevacion, type CampoElevacion } from '../elevacion';
 import { esTransitable } from '../costeMovimiento';
 import { crearCampoForestal, densidadForestal } from '../forestacionRegional';
-import { crearSuelosRegional, evaluarSuelo } from '../suelosRegional';
+import { crearSuelosRegional, fertilidadSuelo } from '../suelosRegional';
 import { muestrearRelieve } from '../muestras';
 import { muestrearCeldas } from '../celdas';
 
@@ -21,11 +21,11 @@ describe('muestras de relieve compartidas', () => {
       expect(esTransitable(elevacion, p, altura)).toBe(esTransitable(elevacion, p));
     }
   });
-  it('evaluarSuelo y densidadForestal con muestra dan exactamente lo mismo que sin ella', () => {
+  it('fertilidadSuelo y densidadForestal con muestra dan exactamente lo mismo que sin ella', () => {
     for (const p of puntos) {
       const m = muestrearRelieve(elevacion, p), bosque = densidadForestal(forestacion, elevacion, p);
       expect(densidadForestal(forestacion, elevacion, p, m)).toBe(bosque);
-      expect(evaluarSuelo(suelos, elevacion, p, bosque, m)).toEqual(evaluarSuelo(suelos, elevacion, p, bosque));
+      expect(fertilidadSuelo(suelos, elevacion, p, m)).toBe(fertilidadSuelo(suelos, elevacion, p));
     }
   });
   it('muestrearCeldas coincide con el cálculo directo en el centro de cada celda', () => {

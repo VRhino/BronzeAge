@@ -9,14 +9,14 @@ import type { MasaBosque, ParcelaBosque } from './parcelas';
  * el escritor del artefacto convierte a milésimas de unidad estratégica al serializar: `round(u * 1000 / 12)`.
  */
 
-export type TipoRecurso = 'piedra' | 'cobre' | 'hierro' | 'estano' | 'oro' | 'ganaderia';
+export type TipoRecurso = 'piedra' | 'cobre' | 'hierro' | 'estano' | 'oro';
 
 export interface RecursoMundo {
   id: string;
   tipo: TipoRecurso;
   posicion: Point;
   anillo: Anillo;
-  /** Cantidad inicial del yacimiento, en unidades de juego (enteros). La ganadería es `livestock` en el motor. */
+  /** Cantidad inicial del yacimiento, en unidades de juego (enteros). */
   cantidadInicial: number;
   vetaId?: string;
 }

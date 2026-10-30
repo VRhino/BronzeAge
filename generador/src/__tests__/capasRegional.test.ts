@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeAll } from 'vitest';
 import { generarRelieve } from '../relieve';
-import { evaluarSuelo, crearSuelosRegional } from '../suelosRegional';
+import { fertilidadSuelo, crearSuelosRegional } from '../suelosRegional';
 import { evaluarElevacion, evaluarTerreno } from '../elevacion';
 import { densidadForestal } from '../forestacionRegional';
 import { puntoEnLago } from '../aguaRegional';
@@ -38,7 +38,7 @@ describe('capas regionales 6', () => {
       expect(evaluarTerreno(mapa.elevacion, lago.centro)).toBe('agua');
       expect(evaluarElevacion(mapa.elevacion, lago.centro)).toBe(lago.elevacionCentro);
       expect(densidadForestal(mapa.forestacion, mapa.elevacion, lago.centro)).toBe(0);
-      expect(evaluarSuelo(mapa.suelos, mapa.elevacion, lago.centro).fertilidad).toBe(0);
+      expect(fertilidadSuelo(mapa.suelos, mapa.elevacion, lago.centro)).toBe(0);
       const distancias = lago.contorno!.map(p => Math.hypot(p.x - lago.centro.x, p.y - lago.centro.y));
       expect(Math.max(...distancias) - Math.min(...distancias)).toBeGreaterThan(10);
     }
@@ -53,11 +53,9 @@ describe('capas regionales 6', () => {
     }
     expect(tierra.length).toBeGreaterThanOrEqual(200);
     for (const p of tierra.slice(0, 200)) {
-      const bosque = densidadForestal(mapa.forestacion, mapa.elevacion, p);
-      const suelo = evaluarSuelo(mapa.suelos, mapa.elevacion, p, bosque);
-      expect(evaluarSuelo(copia, mapa.elevacion, p, bosque)).toEqual(suelo);
-      expect(suelo.fertilidad).toBeGreaterThanOrEqual(0); expect(suelo.fertilidad).toBeLessThanOrEqual(1);
-      expect(suelo.pastos).toBeGreaterThanOrEqual(0); expect(suelo.pastos).toBeLessThanOrEqual(1);
+      const fertilidad = fertilidadSuelo(mapa.suelos, mapa.elevacion, p);
+      expect(fertilidadSuelo(copia, mapa.elevacion, p)).toEqual(fertilidad);
+      expect(fertilidad).toBeGreaterThanOrEqual(0); expect(fertilidad).toBeLessThanOrEqual(1);
     }
   });
 });

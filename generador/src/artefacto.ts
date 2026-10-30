@@ -54,14 +54,13 @@ const TERRENO: Record<ClaseTerrenoMundo, ClaseTerrenoPb> = {
 };
 const ANILLO: Record<Anillo, AnilloPb> = { foco: AnilloPb.FOCO, frontera: AnilloPb.FRONTERA, lejana: AnilloPb.LEJANA };
 
-/** Tipo de recurso del motor → (tipo del contrato, rareza). La ganadería es `livestock` en el motor. */
+/** Tipo de recurso del motor → (tipo del contrato, rareza). */
 const RECURSO: Record<TipoRecurso, { tipo: string; rareza: 'comun' | 'intermedio' | 'raro' }> = {
   piedra: { tipo: 'piedra', rareza: 'comun' },
   cobre: { tipo: 'cobre', rareza: 'intermedio' },
   hierro: { tipo: 'hierro', rareza: 'intermedio' },
   estano: { tipo: 'estano', rareza: 'raro' },
   oro: { tipo: 'oro', rareza: 'raro' },
-  ganaderia: { tipo: 'livestock', rareza: 'comun' },
 };
 
 /** Edificios de un campamento de mercenarios (Doc 1.9b): lista fija del contrato. */

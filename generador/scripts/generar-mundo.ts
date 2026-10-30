@@ -11,7 +11,7 @@ import { muestrearCeldas } from '../src/celdas';
 import { costeEnPunto, esTransitable } from '../src/costeMovimiento';
 import { evaluarElevacion, evaluarTerreno } from '../src/elevacion';
 import { densidadForestal } from '../src/forestacionRegional';
-import { evaluarSuelo } from '../src/suelosRegional';
+import { fertilidadSuelo } from '../src/suelosRegional';
 import { humedadRegionalEn } from '../src/regional';
 import { FACTOR } from '../src/campamentos';
 import type { MundoGenerado, RioMundo } from '../src/mundoTipos';
@@ -52,9 +52,7 @@ const celdas = medir('rejilla de celdas', () => muestrearCeldas(r, { ancho, alto
 const densidadEn = (p: Point): number => { const i = celdas.indice(p); return i >= 0 ? celdas.densidad[i]! : densidadForestal(r.forestacion, r.elevacion, p); };
 const e = medir('campamentos, metales y parcelas', () => generarMundoEstrategico(r, densidadEn));
 // Desde el 2026-10-27 el mundo no tiene nodos de ganado: el ganado sale de los rebaños de las aldeas agrícolas (mecánicas 50 y 51).
-// Se siguen colocando y se descartan después, para que la piedra caiga en los mismos sitios que antes.
 const recursos = medir('recursos', () => [...metalesARecursos(e.nodos), ...generarRecursosNoMetalicos(r, e.campamentos, e.nodos.map(n => n.posicion))]
-  .filter(x => x.tipo !== 'ganaderia')
   .map(x => ({ ...x, posicion: aCeldaTransitable(x.posicion) })));
 for (const c of e.campamentos) c.posicion = aCeldaTransitable(c.posicion);
 const apto = (p: Point) => evaluarTerreno(r.elevacion, p) !== 'agua' && esTransitable(r.elevacion, p) && r.conexion.tieneAcceso(p);
@@ -78,9 +76,9 @@ const mundo: MundoGenerado = {
     terreno: p => { const i = celdas.indice(p); return evaluarTerreno(r.elevacion, p, i >= 0 ? celdas.altura[i]! : undefined); },
     fertilidad: p => {
       const i = celdas.indice(p);
-      if (i < 0) return evaluarSuelo(r.suelos, r.elevacion, p, densidadForestal(r.forestacion, r.elevacion, p)).fertilidad;
-      return evaluarSuelo(r.suelos, r.elevacion, p, celdas.densidad[i]!,
-        { altura: celdas.altura[i]!, pendiente: celdas.pendiente[i]!, humedad: celdas.humedad[i]! }).fertilidad;
+      if (i < 0) return fertilidadSuelo(r.suelos, r.elevacion, p);
+      return fertilidadSuelo(r.suelos, r.elevacion, p,
+        { altura: celdas.altura[i]!, pendiente: celdas.pendiente[i]!, humedad: celdas.humedad[i]! });
     },
     humedad: p => { const i = celdas.indice(p); return i >= 0 ? celdas.humedad[i]! : humedadRegionalEn(r.elevacion.regional, p); },
     densidadBosque: densidadEn,

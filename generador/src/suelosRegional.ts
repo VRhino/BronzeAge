@@ -6,7 +6,6 @@ import { generarCampoRuido, evaluarRuido, type CampoRuido } from './ruido';
 import { createRng, derivarSeed } from './rng';
 import type { MuestraRelieve } from './muestras';
 
-export type TipoSuelo = 'aluvial' | 'humedo' | 'seco' | 'pedregoso' | 'estepa' | 'agua';
 export interface CampoSuelos {
   ruido: CampoRuido; geologia: CampoRuido;
   agua: { a: Point; b: Point; alcance: number }[]; indice: Record<string, number[]>;
@@ -29,8 +28,8 @@ export function crearSuelosRegional(seed: number, rios: RioRegional[]): CampoSue
 }
 
 /** `muestra` (altura, pendiente y humedad de `p`, de `muestrearRelieve`) evita recalcularlas. */
-export function evaluarSuelo(campo: CampoSuelos, elevacion: CampoElevacion, p: Point, bosque = 0, muestra?: MuestraRelieve) {
-  if (evaluarTerreno(elevacion, p, muestra?.altura) === 'agua') return { fertilidad: 0, pastos: 0, aluvial: 0, tipo: 'agua' as TipoSuelo };
+export function fertilidadSuelo(campo: CampoSuelos, elevacion: CampoElevacion, p: Point, muestra?: MuestraRelieve): number {
+  if (evaluarTerreno(elevacion, p, muestra?.altura) === 'agua') return 0;
   const g = muestra ? undefined : gradienteElevacion(elevacion, p, 2);
   const pendiente = muestra?.pendiente ?? Math.hypot(g!.dx, g!.dy) * 1000;
   const humedad = muestra?.humedad ?? humedadRegionalEn(elevacion.regional, p), h = muestra?.altura ?? evaluarElevacion(elevacion, p);
@@ -47,8 +46,5 @@ export function evaluarSuelo(campo: CampoSuelos, elevacion: CampoElevacion, p: P
   }
   const llano = 1 - suave((pendiente - 0.025) / 0.24), aluvial = agua * llano;
   const suelo = evaluarRuido(campo.ruido, p);
-  const fertilidad = clamp((0.12 + humedad * 0.55 + (suelo - 0.5) * 0.4 + aluvial * 0.35) * llano * (1 - suave((h - 0.6) / 0.2)));
-  const pastos = clamp((0.2 + humedad * 0.55 + suelo * 0.2) * (1 - suave(pendiente / 0.45)) * (1 - bosque * 0.85));
-  const tipo: TipoSuelo = pendiente > 0.18 || h > 0.63 ? 'pedregoso' : aluvial > 0.4 ? 'aluvial' : humedad > 0.6 ? 'humedo' : humedad < 0.3 ? 'estepa' : 'seco';
-  return { fertilidad, pastos, aluvial, tipo };
+  return clamp((0.12 + humedad * 0.55 + (suelo - 0.5) * 0.4 + aluvial * 0.35) * llano * (1 - suave((h - 0.6) / 0.2)));
 }

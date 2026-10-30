@@ -2,7 +2,7 @@ import type { Point } from './tipos';
 import { evaluarElevacion, evaluarTerreno, gradienteElevacion, type CampoElevacion } from './elevacion';
 import { esTransitable } from './costeMovimiento';
 import { densidadForestal, type CampoForestal } from './forestacionRegional';
-import { evaluarSuelo, type CampoSuelos } from './suelosRegional';
+import { fertilidadSuelo, type CampoSuelos } from './suelosRegional';
 import { evaluarRuido } from './ruido';
 import { createRng, derivarSeed } from './rng';
 import { colocarCampamentos, type Campamento } from './campamentos';
@@ -30,7 +30,7 @@ export function puntuarCampamento(r: Relieve, p: Point): number {
   const muestra = muestrearRelieve(r.elevacion, p);
   const bosque = Math.max(...[[0, 0], [240, 0], [-240, 0], [0, 240], [0, -240]]
     .map(([dx, dy]) => densidadForestal(r.forestacion, r.elevacion, { x: p.x + dx!, y: p.y + dy! }, dx === 0 && dy === 0 ? muestra : undefined)));
-  const fertilidad = evaluarSuelo(r.suelos, r.elevacion, p, bosque, muestra).fertilidad;
+  const fertilidad = fertilidadSuelo(r.suelos, r.elevacion, p, muestra);
   return fertilidad >= 0.35 && bosque >= 0.15 ? fertilidad + 0.5 * bosque : 0;
 }
 

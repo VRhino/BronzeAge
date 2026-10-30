@@ -24,7 +24,7 @@ function mundoSintetico(): MundoGenerado {
     recursos: [
       { id: 'nodo-1', tipo: 'piedra', posicion: { x: 100, y: 100 }, anillo: 'foco', cantidadInicial: 500 },
       { id: 'nodo-2', tipo: 'estano', posicion: { x: 300, y: 200 }, anillo: 'frontera', cantidadInicial: 80, vetaId: 'veta-0' },
-      { id: 'nodo-3', tipo: 'ganaderia', posicion: { x: 50, y: 300 }, anillo: 'lejana', cantidadInicial: 40 },
+      { id: 'nodo-3', tipo: 'hierro', posicion: { x: 50, y: 300 }, anillo: 'lejana', cantidadInicial: 40 },
       { id: 'nodo-4', tipo: 'cobre', posicion: { x: 60, y: 60 }, anillo: 'foco', cantidadInicial: 120 },
     ],
     vetas: [{ id: 'veta-0', centro: { x: 300, y: 200 }, nodosIds: ['nodo-2'], campamentoMasCercano: 'campamento-2' }],
@@ -143,7 +143,7 @@ describe('artefacto de mundo', () => {
     const por = Object.fromEntries(msg.nodos.map(n => [n.id, n]));
     expect(por['nodo-1']).toMatchObject({ tipo: 'piedra', rareza: 'comun', anillo: 'foco', cantidadInicial: 500_000n });
     expect(por['nodo-2']).toMatchObject({ tipo: 'estano', rareza: 'raro' });
-    expect(por['nodo-3']).toMatchObject({ tipo: 'livestock', rareza: 'comun' });
+    expect(por['nodo-3']).toMatchObject({ tipo: 'hierro', rareza: 'intermedio' });
     expect(por['nodo-4']).toMatchObject({ tipo: 'cobre', rareza: 'intermedio' });
     expect(msg.vetas[0]).toMatchObject({ id: 'veta-0', campamentoBandidosId: 'bandidos-0', alijoId: 'alijo-0', nodosIds: ['nodo-2'] });
     expect(msg.bandidosIniciales[0]).toMatchObject({ bosqueId: 'bosque-0', campamentoMercenariosId: 'campamento-2', vetaId: 'veta-0', nivel: 2 });
