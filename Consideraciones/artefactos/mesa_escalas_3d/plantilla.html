@@ -127,15 +127,15 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
   <header class="cabecera">
     <p class="antetitulo">BronzeAge · escalas del mundo</p>
     <h1>Mesa de escalas 3D</h1>
-    <p class="lead">El mundo visto con la cámara del juego. La cámara, las tropas, las plazas y las zonas van a la medida que ya funciona; el terreno es la propuesta ×100 con los valores que elegiste. Haz clic en el terreno para mandar la columna.</p>
+    <p class="lead">El mundo visto con la cámara del juego. La cámara, las tropas, las plazas y las zonas van a la medida que ya funciona; el terreno es la propuesta ×100 con los valores que elegiste. La cámara sigue al héroe: arrastra para girarla y haz clic en el terreno para mandar la columna.</p>
   </header>
 
   <section class="banco" aria-label="Escena 3D">
     <div class="visor" id="visor">
-      <canvas id="lienzo" tabindex="0" aria-label="Escena 3D. Haz clic en el terreno para mandar la columna. En la cámara de juego, arrastra o usa las flechas para moverte."></canvas>
+      <canvas id="lienzo" tabindex="0" aria-label="Escena 3D. Haz clic en el terreno para mandar la columna. En la cámara de juego, arrastra o usa las flechas para girar la cámara alrededor del héroe."></canvas>
       <div class="hud hud-sup">
         <span class="chip" id="chip-terreno">Propuesta ×100</span>
-        <span class="chip" id="chip-vista">Cámara de juego · <b>15 u</b> de ancho</span>
+        <span class="chip" id="chip-vista">Cámara que sigue al héroe · <b>15 u</b> de ancho</span>
         <span class="chip alerta" id="chip-aviso" hidden></span>
       </div>
       <div class="hud hud-inf">
@@ -169,17 +169,18 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
           <input type="radio" name="vista" id="v-juego" value="juego" checked><label for="v-juego">Cámara de juego</label>
           <input type="radio" name="vista" id="v-libre" value="libre"><label for="v-libre">Vista libre</label>
         </div>
+        <p class="nota" id="nota-camara">La cámara sigue al héroe a distancia fija. Arrastra, o usa las flechas, para girarla e inclinarla.</p>
         <div class="deslizador" id="d-inclinacion">
-          <div class="fila"><label for="inclinacion">Inclinación</label><span id="o-inclinacion">50°</span></div>
-          <input type="range" id="inclinacion" min="30" max="80" step="1" value="50">
+          <div class="fila"><label for="inclinacion">Inclinación</label><span id="o-inclinacion">30°</span></div>
+          <input type="range" id="inclinacion" min="10" max="85" step="1" value="30">
         </div>
-        <div class="botones" aria-label="Ir a">
+        <p class="nota">Llevar al héroe a:</p>
+        <div class="botones" aria-label="Llevar al héroe a">
           <button type="button" data-ir="cordillera">Cordillera</button>
           <button type="button" data-ir="llano">Llano</button>
           <button type="button" data-ir="campamento">Campamento</button>
-          <button type="button" data-ir="columna">Columna</button>
+          <button type="button" data-ir="ciudad">Su ciudad</button>
         </div>
-        <div class="fila"><label><input type="checkbox" id="seguir"> Seguir a la columna</label></div>
       </div>
 
       <div class="grupo">
@@ -211,8 +212,8 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
           <input type="range" id="relieve" min="0.5" max="4" step="0.1" value="2.2">
         </div>
         <div class="deslizador">
-          <div class="fila"><label for="exag">Altura</label><span id="o-exag">×1,5</span></div>
-          <input type="range" id="exag" min="0.5" max="6" step="0.1" value="1.5">
+          <div class="fila"><label for="exag">Altura</label><span id="o-exag">×2,0</span></div>
+          <input type="range" id="exag" min="0.5" max="6" step="0.1" value="2">
         </div>
         <div class="deslizador">
           <div class="fila"><label for="copa">Copa de árbol</label><span id="o-copa">0,4 u · 5 m</span></div>
@@ -223,8 +224,8 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
           <input type="range" id="maqueta" min="0.5" max="3" step="0.1" value="1.6">
         </div>
         <div class="deslizador">
-          <div class="fila"><label for="tropa">Héroes y tropa</label><span id="o-tropa">×3,2 · 5,2 m</span></div>
-          <input type="range" id="tropa" min="1" max="8" step="0.1" value="3.2">
+          <div class="fila"><label for="tropa">Héroes y tropa</label><span id="o-tropa">×3,0 · 4,9 m</span></div>
+          <input type="range" id="tropa" min="1" max="8" step="0.1" value="3">
         </div>
         <button type="button" id="restablecer">Volver a los valores elegidos</button>
       </div>
@@ -250,7 +251,7 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
     <ol class="mirar">
       <li>
         <h3>Tu configuración</h3>
-        <p>Propuesta ×100 con relieve ×2,2 y altura ×1,5, copa de árbol de 0,4 u, plazas ×1,6, héroes y tropa ×3,2 y rejilla de 4 u con suavizado. Las cumbres llegan a unos 330 m de Unity (27 u) sobre el llano y una pantalla del macizo tiene unos 80 m de desnivel.</p>
+        <p>Propuesta ×100 con relieve ×2,2 y altura ×2, copa de árbol de 0,4 u, plazas ×1,6, héroes y tropa ×3, rejilla de 4 u con suavizado y cámara a 30° que sigue al héroe. Las cumbres llegan a unos 440 m de Unity (36 u) sobre el llano y una pantalla del macizo tiene unos 110 m de desnivel.</p>
         <button type="button" data-escena="propuesta,cordillera">Ir al macizo</button>
       </li>
       <li>
@@ -319,7 +320,7 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
           </tbody>
         </table>
       </div>
-      <p class="nota">La altura va exagerada, como en cualquier mapa de campaña: con relieve ×2,2 y altura ×1,5 las cumbres quedan a unos 330 m de Unity sobre el llano. Las pendientes que deciden por dónde se anda se miden tal como se ven, con la exageración: así nadie camina por laderas raras. Con estos valores, el 30 % del macizo pasa de 35° y las rutas buscan los valles.</p>
+      <p class="nota">La altura va exagerada, como en cualquier mapa de campaña: con relieve ×2,2 y altura ×2 las cumbres quedan a unos 440 m de Unity sobre el llano. Las pendientes que deciden por dónde se anda se miden tal como se ven, con la exageración: así nadie camina por laderas raras. Con estos valores, el 43 % del macizo pasa de 35° y las rutas buscan valles y collados.</p>
     </div>
   </section>
 
@@ -327,12 +328,12 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
     <h2 id="t-decisiones">Estado</h2>
     <ul class="decisiones">
       <li><span class="estado cerrado">Cerrado</span><span>El ancla (cámara, velocidades, zonas, separación), Unity a ×12 y las plazas como maquetas agrandadas.</span></li>
-      <li><span class="estado cerrado">Elegido</span><span>Propuesta ×100 con relieve ×2,2, altura ×1,5, copa 0,4 u, plazas ×1,6, héroes y tropa ×3,2, y rejilla de 4 u con suavizado (2026-10-30). La mesa se sigue afinando.</span></li>
+      <li><span class="estado cerrado">Elegido</span><span>Propuesta ×100 con relieve ×2,2, altura ×2, copa 0,4 u, plazas ×1,6, héroes y tropa ×3, y rejilla de 4 u con suavizado (2026-10-30). Con estas escalas se pasa a los siguientes pasos; la mesa se sigue afinando.</span></li>
+      <li><span class="estado cerrado">Cámara</span><span>La cámara de juego gira libre alrededor del héroe, a distancia fija (la que da 15 u de ancho) y siempre siguiéndole. Arranca a 30°.</span></li>
       <li><span class="estado cerrado">Cliente</span><span>El mundo 3D se prototipa primero en el cliente de jugador (BronzeAgeClient, three.js) y después se lleva a Unity.</span></li>
       <li><span class="estado cerrado">Regla</span><span>Pueblos y avanzadas son partes de la plaza y van siempre dentro de su zona.</span></li>
       <li><span class="estado cerrado">Regla</span><span>Las pendientes del movimiento se miden con la exageración de altura: lo que se ve es lo que se anda.</span></li>
       <li><span class="estado abierto">Abierto</span><span>Ríos y vados del terreno nuevo, y cuántos árboles dibuja el cliente: con copa de 0,4 u, un bosque denso lleva unos 3 árboles por u².</span></li>
-      <li><span class="estado abierto">Abierto</span><span>Tamaño de héroes y tropa frente a las plazas y los árboles: mando «Héroes y tropa».</span></li>
     </ul>
     <p class="pie">Datos: ventana de 320 × 240 u del mundo de la seed 42, entre la cordillera norte y el campamento‑0. En el terreno real, los ríos se dibujan pero no cortan el paso porque faltan sus vados. Página 2D anterior: <a href="https://claude.ai/artifact/GKqGYMohRFTMihKpPkaeGG" target="_blank" rel="noopener">escalas del mundo</a>.</p>
   </section>
@@ -345,7 +346,7 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
 const D = __DATOS__;
 const FACTOR = 12, PANT_W = 15, PANT_H = 8.4, VEL = .5, BASE_M = 450, FOV = 35, PEND_MAX = .7, ALTO_SOLDADO = .136;
 const W = D.w, H = D.h, NX = D.nx, NY = D.ny, PASO = D.paso, BX = D.bx, BY = D.by;
-const ELEGIDOS = { relieve: 2.2, exag: 1.5, copa: .4, maqueta: 1.6, tropa: 3.2 };
+const ELEGIDOS = { relieve: 2.2, exag: 2, copa: .4, maqueta: 1.6, tropa: 3 };
 // Economia_Construccion: ZONA_INFLUENCIA, cupos de PUEBLOS_EXTRACTORES y AVANZADAS, ciudad = 10 % del radio de la zona
 const NIVELES = [{ radio: 6, pueblos: 0, avanzadas: 0 }, { radio: 10, pueblos: 1, avanzadas: 0 }, { radio: 15, pueblos: 3, avanzadas: 2 }, { radio: 20, pueblos: 4, avanzadas: 3 }, { radio: 25, pueblos: 5, avanzadas: 4 }, { radio: 30, pueblos: 6, avanzadas: 5 }];
 const FRACCION_CIUDAD = .1, SEPARACION_PUEBLOS = 3;
@@ -431,7 +432,7 @@ function propuesta(S) {
 }
 
 // ---------- estado ----------
-const estado = { terreno: 'propuesta', vista: 'juego', inclinacion: 50, ...ELEGIDOS, rejilla: 4, verRejilla: true, suavizado: true, columna: true, plazas: true, zonas: true, nivel: 2, arboles: true, seguir: false, pausa: reducido };
+const estado = { terreno: 'propuesta', vista: 'juego', inclinacion: 30, giro: 0, ...ELEGIDOS, rejilla: 4, verRejilla: true, suavizado: true, columna: true, plazas: true, zonas: true, nivel: 2, arboles: true, pausa: reducido };
 let T = real;
 let objX = D.puntos.llano[0], objY = D.puntos.llano[1];
 
@@ -842,7 +843,7 @@ function moverEtiquetas() {
   const w = lienzo.clientWidth, h = lienzo.clientHeight, ver = estado.plazas && estado.vista === 'juego';
   if (estado.vista === 'juego' && columna.visible) { vtmp.copy(soldados[0].position); vtmp.y += .3 * estado.tropa; vtmp.project(camara); const dentro = vtmp.z < 1 && Math.abs(vtmp.x) < .95 && Math.abs(vtmp.y) < .9; etqHeroe.hidden = !dentro; if (dentro) { etqHeroe.style.left = `${(vtmp.x + 1) / 2 * w}px`; etqHeroe.style.top = `${(1 - vtmp.y) / 2 * h}px`; } } else etqHeroe.hidden = true;
   for (const { e, p } of etiquetas) {
-    if (!ver || Math.abs(p.x - objX) > 22 || Math.abs(p.y - objY) > 22) { e.hidden = true; continue; }
+    if (!ver || Math.abs(p.x - objX) > 45 || Math.abs(p.y - objY) > 45) { e.hidden = true; continue; }
     vtmp.set(p.x - W / 2, alturaU(p.x, p.y) + (p.tipo === 'ciudad' ? .5 : .6 * estado.maqueta), p.y - H / 2).project(camara);
     const dentro = vtmp.z < 1 && Math.abs(vtmp.x) < .95 && Math.abs(vtmp.y) < .9;
     e.hidden = !dentro; if (dentro) { e.style.left = `${(vtmp.x + 1) / 2 * w}px`; e.style.top = `${(1 - vtmp.y) / 2 * h}px`; }
@@ -855,12 +856,14 @@ function colocarCamara(dt = 0) {
   const w = lienzo.clientWidth || 1, h = lienzo.clientHeight || 1, aspecto = w / h;
   camara.aspect = aspecto; camara.updateProjectionMatrix();
   if (estado.vista === 'juego') {
-    if (estado.seguir && columna.visible) { const k = Math.min(1, dt * 3); objX += (cabeza[0] - objX) * k; objY += (cabeza[1] - objY) * k; }
-    objX = Math.max(PANT_W / 2, Math.min(W - PANT_W / 2, objX)); objY = Math.max(PANT_H / 2, Math.min(H - PANT_H / 2, objY));
-    const d = PANT_W / (2 * aspecto * Math.tan(FOV * Math.PI / 360)), th = estado.inclinacion * Math.PI / 180;
+    // sigue siempre al héroe, a la distancia que da 15 u de ancho en él, con el giro y la inclinación que se quieran
+    objX = cabeza[0]; objY = cabeza[1];
+    const d = PANT_W / (2 * aspecto * Math.tan(FOV * Math.PI / 360)), th = estado.inclinacion * Math.PI / 180, ph = estado.giro;
     objetivo.set(objX - W / 2, alturaU(objX, objY), objY - H / 2);
     camara.near = d * .05; camara.far = d * 12; camara.updateProjectionMatrix();
-    camara.position.set(objetivo.x, objetivo.y + d * Math.sin(th), objetivo.z + d * Math.cos(th));
+    camara.position.set(objetivo.x + d * Math.cos(th) * Math.sin(ph), objetivo.y + d * Math.sin(th), objetivo.z + d * Math.cos(th) * Math.cos(ph));
+    // en la montaña, la ladera puede quedar más alta que la cámara: se levanta por encima del suelo
+    { const suelo = alturaU(camara.position.x + W / 2, camara.position.z + H / 2) + 1.5; if (camara.position.y < suelo) camara.position.y = suelo; }
     camara.lookAt(objetivo);
     escena.fog.near = d * 1.6; escena.fog.far = d * 5.5;
     $('regla-barra').style.width = `${5 / PANT_W * w}px`; $('regla').hidden = false;
@@ -877,8 +880,8 @@ function colocarCamara(dt = 0) {
 function cambiarVista(v) {
   estado.vista = v; controles.enabled = v === 'libre';
   if (v === 'libre') { controles.target.set(objX - W / 2, alturaU(objX, objY), objY - H / 2); camara.position.set(controles.target.x - 40, controles.target.y + 130, controles.target.z + 170); controles.update(); }
-  $('chip-vista').innerHTML = v === 'juego' ? 'Cámara de juego · <b>15 u</b> de ancho' : 'Vista libre · el marco blanco es la pantalla de juego';
-  $('d-inclinacion').hidden = v !== 'juego';
+  $('chip-vista').innerHTML = v === 'juego' ? 'Cámara que sigue al héroe · <b>15 u</b> de ancho' : 'Vista libre · el marco blanco es la pantalla de juego';
+  $('d-inclinacion').hidden = $('nota-camara').hidden = v !== 'juego';
   construirHuella();
 }
 
@@ -940,7 +943,7 @@ deslizador('maqueta', 'maqueta', v => `×${fmt(v)}`, () => { repartirElementos()
 deslizador('tropa', 'tropa', v => `×${fmt(v)} · ${fmt(v * ALTO_SOLDADO * FACTOR)} m`);
 $('restablecer').addEventListener('click', () => {
   for (const [k, v] of Object.entries(ELEGIDOS)) { estado[k] = v; deslizadores[k].el.value = v; deslizadores[k].pintar(); }
-  $('rejilla').value = '4'; estado.rejilla = 4; $('suavizado').checked = estado.suavizado = true; $('t-propuesta').checked = true; estado.terreno = 'propuesta';
+  $('rejilla').value = '4'; estado.rejilla = 4; estado.giro = 0; estado.inclinacion = 30; $('inclinacion').value = 30; deslizadores.inclinacion.pintar(); $('suavizado').checked = estado.suavizado = true; $('t-propuesta').checked = true; estado.terreno = 'propuesta';
   ocupado(montarTerreno);
 });
 $('rejilla').addEventListener('change', e => { estado.rejilla = +e.target.value; ocupado(() => { construirNav(); construirRejilla(); rehacerRuta(); }); });
@@ -951,32 +954,38 @@ $('ver-plazas').addEventListener('change', e => { estado.plazas = e.target.check
 $('ver-zonas').addEventListener('change', e => { estado.zonas = e.target.checked; capas.zonas.visible = e.target.checked; });
 $('nivel').addEventListener('change', e => { estado.nivel = +e.target.value; ocupado(() => { repartirElementos(); construirPlazas(); construirArboles(); }); });
 $('ver-arboles').addEventListener('change', e => { estado.arboles = e.target.checked; capas.arboles.visible = e.target.checked; });
-$('seguir').addEventListener('change', e => { estado.seguir = e.target.checked; });
 const botonPausa = $('pausa'); const pintarPausa = () => { botonPausa.textContent = estado.pausa ? 'Seguir' : 'Pausar'; }; pintarPausa();
 botonPausa.addEventListener('click', () => { estado.pausa = !estado.pausa; pintarPausa(); });
+// llevar al héroe a un sitio sin marchar hasta allí (para probar lugares): el punto transitable más cercano
+function llevarHeroe(x, y) {
+  let p = null;
+  for (let r = 0; r <= 24 && !p; r += .5) for (let k = 0, n = r ? Math.ceil(r * 4) : 1; k < n && !p; k++) { const a = k / n * 6.283, qx = x + r * Math.cos(a), qy = y + r * Math.sin(a); if (transitable(qx, qy)) p = [qx, qy]; }
+  if (!p) return;
+  cabeza = p; rastro = []; for (let k = 12; k >= 0; k--) rastro.push([p[0], p[1] + k * .5]);
+  ruta = null; dibujarRuta();
+}
 const ir = destino => {
-  const p = destino === 'columna' ? [cabeza[0], cabeza[1]] : destino === 'salida' ? (columnaA && columnaB ? [columnaA.x + (columnaB.x - columnaA.x) * .12, columnaA.y + (columnaB.y - columnaA.y) * .12] : D.puntos.llano) : D.puntos[destino];
-  objX = p[0]; objY = p[1];
+  if (destino === 'ciudad') { if (columnaA) llevarHeroe(columnaA.x, columnaA.y + NIVELES[estado.nivel].radio * FRACCION_CIUDAD + 1); }
+  else if (D.puntos[destino]) llevarHeroe(...D.puntos[destino]);
+  objX = cabeza[0]; objY = cabeza[1];
   if (estado.vista === 'libre') { const t = new THREE.Vector3(objX - W / 2, alturaU(objX, objY), objY - H / 2), dlt = t.clone().sub(controles.target); controles.target.copy(t); camara.position.add(dlt); }
 };
-const noSeguir = () => { estado.seguir = false; $('seguir').checked = false; };
-document.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => { noSeguir(); ir(b.dataset.ir); }));
+document.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => ir(b.dataset.ir)));
 document.querySelectorAll('[data-escena]').forEach(b => b.addEventListener('click', () => {
   const [t, lugar] = b.dataset.escena.split(',');
-  $('v-juego').checked = true; cambiarVista('juego'); noSeguir();
-  if (t === 'plazas') { $('ver-plazas').checked = estado.plazas = true; capas.plazas.visible = true; $('ver-zonas').checked = estado.zonas = true; capas.zonas.visible = true; $('inclinacion').value = 70; estado.inclinacion = 70; deslizadores.inclinacion.pintar(); if (columnaA) { objX = columnaA.x; objY = columnaA.y; } }
-  else if (t === 'columna') { iniciarColumna(); ir('salida'); $('seguir').checked = estado.seguir = true; }
+  $('v-juego').checked = true; cambiarVista('juego');
+  if (t === 'plazas') { $('ver-plazas').checked = estado.plazas = true; capas.plazas.visible = true; $('ver-zonas').checked = estado.zonas = true; capas.zonas.visible = true; $('inclinacion').value = 60; estado.inclinacion = 60; deslizadores.inclinacion.pintar(); ir('ciudad'); }
+  else if (t === 'columna') iniciarColumna();
   else { if (estado.terreno !== t) { $('t-' + t).checked = true; estado.terreno = t; montarTerreno(); } ir(lugar); }
   visor.scrollIntoView({ behavior: reducido ? 'auto' : 'smooth', block: 'center' });
 }));
 
-// arrastrar mueve la cámara de juego; un clic sin arrastre manda la columna (en las dos vistas)
+// arrastrar gira la cámara de juego alrededor del héroe; un clic sin arrastre manda la columna (en las dos vistas)
 let arrastre = null, pulsado = null;
 lienzo.addEventListener('pointerdown', e => { pulsado = { x: e.clientX, y: e.clientY }; if (estado.vista !== 'juego') return; arrastre = { x: e.clientX, y: e.clientY }; lienzo.setPointerCapture(e.pointerId); });
 lienzo.addEventListener('pointermove', e => {
   if (!arrastre || estado.vista !== 'juego') return;
-  if (pulsado && Math.hypot(e.clientX - pulsado.x, e.clientY - pulsado.y) > 5) noSeguir();
-  const k = PANT_W / lienzo.clientWidth; objX -= (e.clientX - arrastre.x) * k; objY -= (e.clientY - arrastre.y) * k / Math.sin(estado.inclinacion * Math.PI / 180); arrastre = { x: e.clientX, y: e.clientY };
+  estado.giro -= (e.clientX - arrastre.x) * .006; inclinar((e.clientY - arrastre.y) * .25); arrastre = { x: e.clientX, y: e.clientY };
 });
 lienzo.addEventListener('pointerup', e => {
   arrastre = null;
@@ -988,16 +997,17 @@ lienzo.addEventListener('pointerup', e => {
 });
 lienzo.addEventListener('pointercancel', () => { arrastre = null; pulsado = null; });
 const teclas = new Set();
-lienzo.addEventListener('keydown', e => { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd'].includes(e.key)) { teclas.add(e.key); e.preventDefault(); noSeguir(); } });
+const inclinar = dg => { estado.inclinacion = Math.max(10, Math.min(85, estado.inclinacion + dg)); $('inclinacion').value = Math.round(estado.inclinacion); deslizadores.inclinacion.pintar(); };
+lienzo.addEventListener('keydown', e => { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd'].includes(e.key)) { teclas.add(e.key); e.preventDefault(); } });
 lienzo.addEventListener('keyup', e => teclas.delete(e.key)); lienzo.addEventListener('blur', () => teclas.clear());
-const moverConTeclas = dt => { if (estado.vista !== 'juego' || !teclas.size) return; const v = 12 * dt; if (teclas.has('ArrowUp') || teclas.has('w')) objY -= v; if (teclas.has('ArrowDown') || teclas.has('s')) objY += v; if (teclas.has('ArrowLeft') || teclas.has('a')) objX -= v; if (teclas.has('ArrowRight') || teclas.has('d')) objX += v; };
+const moverConTeclas = dt => { if (estado.vista !== 'juego' || !teclas.size) return; if (teclas.has('ArrowUp') || teclas.has('w')) inclinar(40 * dt); if (teclas.has('ArrowDown') || teclas.has('s')) inclinar(-40 * dt); if (teclas.has('ArrowLeft') || teclas.has('a')) estado.giro += 1.4 * dt; if (teclas.has('ArrowRight') || teclas.has('d')) estado.giro -= 1.4 * dt; };
 
 // tamaño
 const ajustar = () => { renderer.setSize(visor.clientWidth, visor.clientHeight, false); };
 new ResizeObserver(ajustar).observe(visor); ajustar();
 
 // ---------- arranque ----------
-montarTerreno(); ir('salida'); cambiarVista('juego');
+montarTerreno(); cambiarVista('juego');
 let antes = performance.now();
 const bucle = ahora => {
   const dt = Math.min(.1, (ahora - antes) / 1000); antes = ahora;

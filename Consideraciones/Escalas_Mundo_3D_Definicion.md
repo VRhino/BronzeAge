@@ -1,8 +1,10 @@
 # Escalas del mundo en 3D — definición
 
-> **Estado (2026-10-30, segunda ronda): en curso.** El autor eligió en la mesa de escalas 3D los valores de §3 y decidió:
+> **Estado (2026-10-30, tercera ronda): escalas cerradas, se pasa a los siguientes pasos (§6).** El autor eligió en la
+> mesa de escalas 3D los valores de §3 y decidió:
 > - rejilla de 4 u con suavizado;
 > - pendientes del movimiento medidas con la exageración de altura (§4.3);
+> - la cámara de juego (§5);
 > - el mundo 3D se prototipa primero en el cliente de jugador (`BronzeAgeClient`) y luego se lleva a Unity (§5).
 >
 > **La mesa se sigue afinando**: es la referencia visual, y este documento se actualiza con cada acuerdo. Nada está
@@ -48,26 +50,28 @@ Ventana de 320 × 240 u entre la cordillera norte y el campamento‑0:
 ## 3. Valores elegidos por el autor (2026-10-30)
 
 La primera ronda fue relieve ×2, altura ×3, copa 0,4 u, maquetas ×1,6 y rejilla de 2 u con suavizado. Con la pendiente
-medida sobre lo que se ve (§4.3), el 61 % del macizo quedaba cerrado al paso, y el autor ajustó en la segunda ronda:
+medida sobre lo que se ve (§4.3), el 61 % del macizo quedaba cerrado al paso. En la segunda ronda el autor bajó a altura
+×1,5 y tropa ×3,2. En la tercera, la que vale, quedó así:
 
 | Mando de la mesa | Valor | Qué significa |
 |---|---|---|
 | Terreno | **Propuesta ×100** | Boceto procedural con formas a escala de pantalla (receta en §3.1); no sale del generador |
 | Tamaño del relieve | **×2,2** | Escala tamaño **y** altura a la vez (homotecia: las laderas no cambian). Crestas cada ~92 u, valles de 11-44 u de ladera a ladera, colinas de ~31 u y lomas de 7-22 u |
-| Altura | **×1,5** | Exageración de todas las alturas. También cuenta para las pendientes del movimiento (§4.3) |
+| Altura | **×2** | Exageración de todas las alturas. También cuenta para las pendientes del movimiento (§4.3) |
 | Copa de árbol | **0,4 u** (≈ 5 m de Unity) | Árbol como maqueta. Un bosque denso lleva unos 3 árboles por u² (el número de árboles sale de la densidad del bosque y del tamaño de copa) |
 | Plazas (maquetas) | **×1,6** | Escala de casas, pueblos, avanzadas y campamentos |
-| Héroes y tropa | **×3,2** (soldado de 5,2 m de Unity) | Mando propio, separado de las plazas como los árboles (decisión del autor). El héroe va a caballo al frente de su columna |
+| Héroes y tropa | **×3** (soldado de 4,9 m de Unity) | Mando propio, separado de las plazas como los árboles (decisión del autor). El héroe va a caballo al frente de su columna |
 | Rejilla | **4 u, con suavizado** | Ver §4.3 y §6 |
+| Cámara | **30°**, libre | Gira en cualquier ángulo alrededor del héroe, a distancia fija y siguiéndole siempre (§5) |
 
-Medido sobre la ventana con esos valores (`relieve ×2,2`, `altura ×1,5`):
+Medido sobre la ventana con esos valores (`relieve ×2,2`, `altura ×2`):
 
 | | Valor |
 |---|---|
-| Cumbres sobre el llano | hasta ~330 m de Unity (27 u); el 99 % del terreno, por debajo de 255 m |
-| Desnivel en una pantalla del macizo | 80 m de mediana, 164 m en el percentil 90 |
-| Pendiente en el macizo | 24° de mediana, 51° en el percentil 90 |
-| Macizo cerrado al paso (más de 35°) | 30 %: las rutas van por los valles y los collados |
+| Cumbres sobre el llano | hasta ~440 m de Unity (36 u); el 99 % del terreno, por debajo de 340 m |
+| Desnivel en una pantalla del macizo | 107 m de mediana, 219 m en el percentil 90 |
+| Pendiente en el macizo | 31° de mediana, 59° en el percentil 90 |
+| Macizo cerrado al paso (más de 35°) | 43 %: las rutas van por los valles y los collados |
 
 ### 3.1 Receta del boceto (para que el generador pueda reproducirlo)
 
@@ -124,7 +128,9 @@ dentro de la zona real de la madre; la avanzada, dentro de la zona y sin pisar s
 
 El mundo se representará como en la mesa:
 
-- la cámara de juego de 15 u;
+- la **cámara de juego**, libre en ángulo pero a distancia fija del héroe y siempre siguiéndole (decisión del autor,
+  2026-10-30). La distancia es la que da 15 u de ancho a la altura del héroe; arranca a 30° de inclinación y no se acerca
+  ni se aleja. En la montaña se levanta si la ladera queda por encima de ella;
 - el terreno con formas a escala de pantalla y la altura exagerada;
 - árboles, plazas, héroes y tropa como maquetas;
 - la columna que va adonde se hace clic.
@@ -137,7 +143,18 @@ funcionar primero ahí, con three.js como en la mesa, ayuda a cerrar la represen
 ## 6. Qué falta para llegar ahí (orden propuesto)
 
 1. **Seguir afinando la mesa** con lo que quede abierto en §7.
-2. **`crates/rutas`: suavizado por coste.** No depende del terreno nuevo y quita el zigzag ya.
+2. **Suavizado por coste en el servidor** (en curso). No depende del terreno nuevo y quita el zigzag ya.
+   - **Capa `coste` en el artefacto.** El generador escribe, cada 4 u, el coste del terreno con la misma función que
+     cuesta las aristas del grafo (u16 en milésimas, 1000 = llano). Es opcional: sin ella, el servidor no suaviza.
+   - **`crates/rutas`.** Después del A*, la ruta se estira desde el origen. Desde cada vértice salta al más lejano
+     posible siempre que se cumplan las tres condiciones:
+     - la recta está libre (`transitable`);
+     - no se salta ninguna arista de vado;
+     - la recta no cuesta más que el tramo que sustituye, medidos los dos con la capa `coste`.
+
+     Los tramos nuevos llevan ese coste en el plan, y las aristas que quedan, el suyo.
+   - **Quién suaviza:** las columnas (marchar) y las persecuciones. Las caravanas y los aedas no suavizan, porque van
+     por la red de caminos y la red se forma con sus aristas.
 3. **Generador: rehacer el relieve con la receta de §3.1** sobre la geografía regional (macizos, cuencas y costas
    actuales), con formas de 2 a 80 u dentro de cada macizo, ríos con vados y bosque. Se valida con la mesa: la ventana
    se saca con `generador/scripts/datos-mesa-3d.ts`.
