@@ -765,7 +765,7 @@ message Ejercito {
   sint64 capacidad_viveres = 12;
   optional int64 formacion_expira_en_ms = 13;
   optional Persecucion persiguiendo = 14;
-  repeated string caravanas_adjuntas_ids = 15;
+  repeated string caravanas_adjuntas_ids = 15;   // también en la columna ajena que se ve (2026-10-31)
   EstadoColumna estado = 16;
   Punto posicion = 17;                   // posición cuando no hay plan; con plan, la de su primer vértice (lo ajeno: donde empieza el tramo visible)
   optional Plan plan = 18;               // lo propio viaja entero; lo ajeno, solo el tramo visible (horizonte corto)
