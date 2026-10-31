@@ -18,12 +18,11 @@
     },
     {
       "name": "generar-mundo",
-      "runtimeExecutable": "npx",
+      "runtimeExecutable": "node",
       "runtimeArgs": [
-        "tsx",
-        "scripts/generar-mundo.ts"
+        "scripts/generar-mundo.mjs"
       ],
-      "cwd": "generador"
+      "cwd": "."
     },
     {
       "name": "bronzeage-bots",
