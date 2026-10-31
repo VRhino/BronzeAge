@@ -179,7 +179,8 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
           <input type="radio" name="terreno" id="t-actual" value="actual"><label for="t-actual">Antes</label>
           <input type="radio" name="terreno" id="t-nuevo" value="nuevo" checked><label for="t-nuevo">Generador nuevo</label>
           <input type="radio" name="terreno" id="t-propuesta" value="propuesta"><label for="t-propuesta">Propuesta</label>
-          <input type="radio" name="terreno" id="t-alpina" value="alpina"><label for="t-alpina">Región alpina</label>
+          <input type="radio" name="terreno" id="t-alpina" value="alpina"><label for="t-alpina">Boceto alpino</label>
+          <input type="radio" name="terreno" id="t-alpinagen" value="alpinagen"><label for="t-alpinagen">Generador: región alpina</label>
         </div>
         <p class="ficha-terreno" id="ficha-terreno"></p>
       </div>
@@ -299,7 +300,7 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
       <li>
         <h3>Región alpina (prueba)</h3>
         <p>Una zona montañosa entera en altura: desde el llano se sube poco a poco, y arriba hay altiplanos a varias alturas, separados por montaña y unidos por pasos. La columna empieza en el altiplano central, con plazas fundadas arriba. Aquí solo frena la pendiente.</p>
-        <div class="botones"><button type="button" data-escena="alpina,inicio">Altiplano central</button><button type="button" data-escena="alpina,altiplano">Altiplano alto</button><button type="button" data-escena="alpina,entrada">Valle de entrada</button></div>
+        <div class="botones"><button type="button" data-escena="alpinagen,llano">En el generador</button><button type="button" data-escena="alpina,inicio">Altiplano central</button><button type="button" data-escena="alpina,altiplano">Altiplano alto</button><button type="button" data-escena="alpina,entrada">Valle de entrada</button></div>
       </li>
       <li>
         <h3>Plazas, pueblos y avanzadas</h3>
@@ -392,7 +393,7 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
 <script>
 (async () => {
-const D = __DATOS__, DN = __DATOS_NUEVO__;
+const D = __DATOS__, DN = __DATOS_NUEVO__, DA = __DATOS_ALPINA__;
 const FACTOR = 12, VEL = .5, BASE_M = 450, FOV = 35, PEND_MAX = .7, ALTO_SOLDADO = .136, REGLA_U = 10;
 // El suelo que enseña la cámara de juego, medido sobre el plano del héroe (lo recalcula `colocarCamara`): el ancho en la fila del héroe,
 // hasta dónde llega hacia abajo y hacia el fondo de la pantalla, y las cuatro esquinas respecto al héroe (para la huella de la vista libre)
@@ -426,7 +427,9 @@ const ventana = async V => {
   const bosque = new Float32Array(BX * BY); for (let i = 0; i < bosque.length; i++) bosque[i] = bosB[i] / 255;
   return { hm, agua: aguaB, bosque, rios: V.rios, anchoRio: .9, vados: [], umbrales: [545, 600, 685], campamentos: V.campamentos, puntos: V.puntos };
 };
-const [real, nuevo] = await Promise.all([ventana(D), ventana(DN)]);
+const [real, nuevo, alpinaGen] = await Promise.all([ventana(D), ventana(DN), ventana(DA)]);
+// La región alpina del generador se juega con las reglas de prueba: solo frena la pendiente y se funda donde la pendiente deja.
+alpinaGen.soloPendiente = true;
 
 // ---------- ruido (simplex 2D) para la propuesta ----------
 function ruido(semilla) {
@@ -1129,14 +1132,15 @@ function lecturas(ahora) {
 const FICHAS = {
   actual: 'El generador de antes, en la misma ventana: <b>320 × 240 u</b> entre la cordillera norte y el campamento‑0. El llano es una mesa y la cordillera, una rampa lisa: en el macizo, <b>50 m</b> de desnivel por pantalla (mediana) y el <b>13 %</b> de laderas de más de 35°.',
   nuevo: 'El generador con el relieve nuevo (seed 42), misma ventana y alturas tal cual: crestas cada ~92 u, valles hundidos en los ríos, colinas y lomas, sobre la geografía regional. En el macizo, <b>46 m</b> de desnivel por pantalla de mediana y <b>196 m</b> en el percentil 90, y el <b>25 %</b> de laderas de más de 35°. Las tierras altas llevan colinas y los pasos quedan limpios para no cortar regiones.',
+  alpinagen: 'El generador con la <b>región alpina</b> en las Tierras altas secas (seed 42), alturas tal cual: una cadena de valles en altura con altiplanos a varias alturas, unidos por pasos, y la subida desde fuera en el borde. Regla de prueba: <b>solo frena la pendiente</b> y se funda en cualquier sitio llano, también arriba.',
   alpina: 'Prueba del 2026-10-31. Desde el llano del sur el terreno va subiendo hasta una <b>región alta</b>: una cadena de valles en altura con <b>seis altiplanos</b> entre 515 y 618 m, cerrados por montaña y unidos por <b>pasos</b> con su collado. Dos valles con río suben desde el llano. Regla de prueba: <b>solo frena la pendiente</b> (la altura no cuesta) y se funda en cualquier sitio llano, también arriba. No sale del generador.',
   propuesta: 'Boceto con los tamaños de la regla ×100: crestas, valles, colinas y lomas que caben en una o pocas pantallas. «Tamaño del relieve» escala tamaño y altura a la vez; «Altura» exagera las alturas, y con ellas las pendientes que deciden el paso. No sale del generador.',
 };
 let propuestaCache = null, alpinaCache = null;
 function montarTerreno() {
   if (estado.terreno === 'alpina') { if (!alpinaCache || alpinaCache.S !== estado.relieve) alpinaCache = { S: estado.relieve, t: alpina(estado.relieve) }; T = alpinaCache.t; }
-  else if (estado.terreno === 'propuesta') { if (!propuestaCache || propuestaCache.S !== estado.relieve) propuestaCache = { S: estado.relieve, t: propuesta(estado.relieve) }; T = propuestaCache.t; } else T = estado.terreno === 'nuevo' ? nuevo : real;
-  $('chip-terreno').textContent = estado.terreno === 'actual' ? 'Generador de antes · seed 42' : estado.terreno === 'nuevo' ? 'Generador nuevo · seed 42' : estado.terreno === 'alpina' ? `Región alpina · relieve ×${fmt(estado.relieve)} · altura ×${fmt(estado.exag)}` : `Propuesta ×100 · relieve ×${fmt(estado.relieve)} · altura ×${fmt(estado.exag)}`;
+  else if (estado.terreno === 'propuesta') { if (!propuestaCache || propuestaCache.S !== estado.relieve) propuestaCache = { S: estado.relieve, t: propuesta(estado.relieve) }; T = propuestaCache.t; } else T = estado.terreno === 'nuevo' ? nuevo : estado.terreno === 'alpinagen' ? alpinaGen : real;
+  $('chip-terreno').textContent = estado.terreno === 'actual' ? 'Generador de antes · seed 42' : estado.terreno === 'nuevo' ? 'Generador nuevo · seed 42' : estado.terreno === 'alpinagen' ? 'Generador · región alpina · seed 42' : estado.terreno === 'alpina' ? `Región alpina · relieve ×${fmt(estado.relieve)} · altura ×${fmt(estado.exag)}` : `Propuesta ×100 · relieve ×${fmt(estado.relieve)} · altura ×${fmt(estado.exag)}`;
   $('ficha-terreno').innerHTML = FICHAS[estado.terreno];
   pintarTerreno(); elegirPlazas(); construirNav(); montarCapas(); iniciarColumna();
 }

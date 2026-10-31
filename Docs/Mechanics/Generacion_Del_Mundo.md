@@ -159,6 +159,17 @@ crece el borde (`1 − fBorde`) para que la pared de costa/montaña del perímet
 
 > **El relieve fino para los clientes 3D** (2026-10-30): el generador evalúa `evaluarElevacion` también cada 0,5 u en todo el mapa y lo escribe aparte, en el paquete de relieve (`relieve-<hash>.bin`, `generador/src/paqueteRelieve.ts`, en 4 hilos). Es la misma función y la misma ejecución que los rasters de 4 u del artefacto, así que no cambia el artefacto (sigue en `71697908…`) ni ninguna regla: solo lo que se dibuja. Formato y descarga en `06_Contrato_de_Mundo.md` §8.
 
+> **Región alpina (2026-10-31; `generador/src/regionAlpina.ts`, `REGION_ALPINA`).** El autor pidió una región entera hecha montaña habitable, como Suiza: desde fuera se va subiendo y dentro hay una cadena de valles en altura, con altiplanos a varias alturas unidos por pasos. Es la región **Tierras altas secas** (noreste; unas 380 u de radio en la semilla 42). Va al final de `aplicarDetalle`, encima de todo lo demás:
+> - **Peso de la región:** 1 hasta el 80 % del radio y 0 al 112 %, con el borde bamboleado (±8 %, onda de 160 u). En el anillo, el terreno alpino se mezcla con el de fuera: esa es la subida.
+> - **Montaña:** un suelo de 0,60 en el borde del núcleo a 0,65 en el centro, más crestas («ridged», onda de 80 u) de hasta 0,24, afiladas con ^1,6 para que las vaguadas sean anchas.
+> - **Altiplanos:** el primero en el centro de la región (allí busca la conexión su acceso) y el resto por muestreo de disco, a 82 u como mínimo entre centros y a 25 u de los lagos. Elipses de 22 a 40 u de radio mayor, suelo entre 0,58 y 0,76 (más alto hacia el centro), lomas de ±6 m y un borde corto.
+> - **Pasos:** el árbol de longitud mínima entre altiplanos, así que todos quedan unidos, y un paso más hacia el vecino más cercano sin paso si está a menos de 1,45 separaciones (con probabilidad 0,6). Cada paso es una curva con meandros, con fondo de 2,5 u a cada lado, laderas de 11 u y un collado de 0,012 a 0,035 sobre la recta entre los dos suelos.
+> - **Valles de entrada:** hasta 4, desde los altiplanos de fuera hacia fuera de la región, separados en ángulo y acabando en tierra. Su fondo baja del suelo del altiplano al terreno de fuera a la vez que la región se apaga, y corta lo que haya en la subida.
+> - **Ríos y lagos:** siguen donde estaban. Su valle (semiancho de 9 u, 30 u alrededor de los lagos) manda donde queda más bajo. Si el terreno alpino queda por debajo de un río, el cauce conserva su cota en 1,5 u, para que el río siga bajando.
+> - Los pasos de las barreras regionales que caen dentro dejan de contar: allí se pasa por los pasos propios de la región. La conexión se sigue midiendo como siempre.
+>
+> Medido en la semilla 42: 25 altiplanos y 36 sendas (2 de entrada). Queda cerrado por pendiente el 33 % del núcleo y el 28 % de toda la región, frente al 52 % del macizo de la cordillera norte por encima de 600 m. Hash `5aec9d8f…`. Las reglas de juego no cambian: la clase de terreno sigue saliendo de la altura, así que buena parte de los altiplanos es «montaña» o «cima».
+
 ### 5.2 Terreno (`evaluarTerreno`)
 
 `e < umbralAgua` → `agua`; `< umbralCosta` → `costa`; `< umbralColina` → `llano`; `< umbralMontana` → `colina`; `< umbralCima` → `montana`; si no, `cima` (inhabitable: ni se funda ni se colocan recursos). El agua es obstáculo

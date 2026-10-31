@@ -7,6 +7,7 @@ import type { BarreraRegional } from './regional';
 import { FACTOR } from './campamentos';
 import { createRng, derivarSeed } from './rng';
 import { evaluarRuido, generarCampoRuido, ruidoGradiente, type CampoRuido } from './ruido';
+import { aplicarAlpina, type RegionAlpina } from './regionAlpina';
 
 export const RELIEVE_DETALLE = {
   revision: 'detalle-1',
@@ -65,11 +66,14 @@ export interface DetalleRelieve {
   pasos: number[];
   /** Fuerza del detalle (1 = la receta): baja si con ella alguna región se queda sin conexión por tierra. */
   fuerza: number;
+  /** La región alpina (`regionAlpina.ts`), que va encima de todo lo demás. */
+  alpina?: RegionAlpina;
 }
 
 const suave = (t: number) => { const x = Math.min(1, Math.max(0, t)); return x * x * (3 - 2 * x); };
 
-export function crearDetalleRelieve(seed: number, rios: readonly RioZona[], barreras: readonly BarreraRegional[] = [], fuerza = 1): DetalleRelieve {
+export function crearDetalleRelieve(seed: number, rios: readonly RioZona[], barreras: readonly BarreraRegional[] = [], fuerza = 1,
+  alpina?: RegionAlpina): DetalleRelieve {
   const C = RELIEVE_DETALLE, rng = createRng(derivarSeed(seed, 'relieve-detalle-1'));
   const onda = (u: number) => 1 / (u * C.escala * FACTOR);
   const crestas = generarCampoRuido(rng, { octavas: 4, frecuenciaBase: onda(C.ondaCrestas), lacunaridad: 2.1, persistencia: 0.5 });
@@ -85,7 +89,7 @@ export function crearDetalleRelieve(seed: number, rios: readonly RioZona[], barr
       for (let x = Math.floor(Math.min(a.x, b.x) / C.celdaRios); x <= Math.floor(Math.max(a.x, b.x) / C.celdaRios); x++) (indice[`${x},${y}`] ??= []).push(k);
   }
   const pasos = barreras.flatMap(b => b.pasos.flatMap(p => [p.centro.x, p.centro.y, p.tangente.x, p.tangente.y, p.radio, b.ancho]));
-  return { revision: C.revision, crestas, modulacion, colinas, lomas, tramos, indice, pasos, fuerza };
+  return { revision: C.revision, crestas, modulacion, colinas, lomas, tramos, indice, pasos, fuerza, ...(alpina ? { alpina } : {}) };
 }
 
 /** Cuánto de `p` es corredor de paso (0-1): 1 en el collado y el valle de aproximación del relieve regional, y una
@@ -149,5 +153,6 @@ export function aplicarDetalle(d: DetalleRelieve, p: Point, base: number): numbe
   }
   if (pie > 0) e += d.fuerza * C.alturaColinas * pie * Math.max(0, (evaluarRuido(d.colinas, p) - 0.5) * 1.8 + 0.35) * seco;
   if (llano > 0) e += d.fuerza * C.alturaLomas * (evaluarRuido(d.lomas, p) - 0.5) * 2 * llano * seco;
+  if (d.alpina) e = aplicarAlpina(d.alpina, p, e);
   return e > C.techo ? C.techo + (1 - C.techo) * Math.tanh((e - C.techo) / (1 - C.techo)) : e;
 }

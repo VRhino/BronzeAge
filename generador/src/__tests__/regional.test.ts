@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { crearRelieveRegional, evaluarRelieveRegional, distanciaCostaRegional } from '../regional';
 import { evaluarElevacion, evaluarTerreno, gradienteElevacion } from '../elevacion';
 import { generarRelieve } from '../relieve';
+import { pesoAlpino } from '../regionAlpina';
 
 describe('laboratorio regional-4: costa mediterránea', () => {
   it('estrecha la península, abre golfos y conserva detalle en la costa norte', () => {
@@ -71,8 +72,10 @@ describe('laboratorio regional-4: costa mediterránea', () => {
     expect(mapa.config.alto).toBe(24000);
     expect(mapa.rios.length).toBeGreaterThan(0);
     expect(mapa.lagos.length).toBeGreaterThan(0);
-    // Medir los corredores previstos: cada puerto debe ser seco y de pendiente transitable.
-    const pasos = mapa.elevacion.regional.barreras.flatMap((b) => b.pasos.map((paso) => {
+    // Medir los corredores previstos: cada puerto debe ser seco y de pendiente transitable. Los que caen en la región
+    // alpina no cuentan: allí la montaña es otra y se pasa por sus pasos propios (los mide la conexión de abajo).
+    const alpina = mapa.elevacion.detalle?.alpina;
+    const pasos = mapa.elevacion.regional.barreras.flatMap((b) => b.pasos.filter((paso) => !alpina || pesoAlpino(alpina, paso.centro) === 0).map((paso) => {
       let pendienteMaxima = 0, seco = true;
       for (let t = -b.ancho * 2.8; t <= b.ancho * 2.8; t += 20) {
         const p = { x: paso.centro.x - paso.tangente.y * t, y: paso.centro.y + paso.tangente.x * t };

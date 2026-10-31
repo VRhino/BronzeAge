@@ -290,6 +290,8 @@ funcionar primero ahí, con three.js como en la mesa, ayuda a cerrar la represen
   (`node montar.mjs [salida.html]`). La página montada no se versiona.
 - `Consideraciones/artefactos/mesa_escalas_3d/datos-nuevo.json`: la misma ventana con el relieve a escala de pantalla
   (artefacto `71697908…`).
+- `Consideraciones/artefactos/mesa_escalas_3d/datos-alpina.json`: ventana de la región alpina del generador (x0 = 2078,
+  y0 = 108, artefacto `5aec9d8f…`; ver `Docs/Mechanics/Generacion_Del_Mundo.md` §5.1).
 - `generador/scripts/datos-mesa-3d.ts`: regenera una ventana desde una seed y su artefacto
   (`npx tsx scripts/datos-mesa-3d.ts 42 mundo-<hash>.bin datos-nuevo.json [x0 y0]`, unos 50 s). `datos.json`, la
   ventana de antes, sale del generador anterior al relieve nuevo y ya no se puede regenerar.
