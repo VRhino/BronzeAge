@@ -60,7 +60,7 @@ describe('recursos no metálicos', () => {
       expect(r.anillo).toBe('lejana');
       expect(Object.keys(P.capaLejana.densidadRelativa)).toContain(r.tipo);
     }
-    // La piedra a 1/10 y el cobre y el hierro a 1/4 de la frontera: en proporción, menos piedra lejana que frontera.
+    // La piedra a 1/10 y el cobre y el hierro a la densidad de la frontera: en proporción, menos piedra lejana que frontera.
     expect(capa.filter(r => r.tipo === 'piedra').length).toBeLessThan(de('piedra', 'frontera').length);
   });
   it('cada recurso está en el anillo que declara', () => {

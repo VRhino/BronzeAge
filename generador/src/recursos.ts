@@ -53,9 +53,11 @@ export const PARAMETROS_RECURSOS = {
    * Capa de la tierra lejana (decisión del autor del 2026-10-28): el foco y la frontera quedan como arriba (mínimo garantizado) y,
    * después de todo lo demás, se añaden yacimientos solo en la tierra lejana a esta fracción de la densidad de la frontera (nodos
    * por candidato), con `factorCantidad` veces la cantidad de un nodo normal. Si no caben todos, se ponen los que caben.
+   * El 2026-10-31 el autor subió el cobre y el hierro de 1/4 a la misma densidad que la frontera: la tierra lejana quedaba pelada
+   * de metal.
    */
   capaLejana: {
-    densidadRelativa: { cobre: 0.25, hierro: 0.25, piedra: 0.1 } as Partial<Record<TipoNoMetalico, number>>,
+    densidadRelativa: { cobre: 1, hierro: 1, piedra: 0.1 } as Partial<Record<TipoNoMetalico, number>>,
     factorCantidad: 1.5,
     /**
      * Reparto (2026-10-31): la capa se reparte por zonas cuadradas de `zona` u estratégicas, cada una en proporción a sus
