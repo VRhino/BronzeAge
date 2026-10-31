@@ -493,8 +493,7 @@ impl Nucleo {
                 self.devolver_escolta(&escolta);
                 self.perder_caravana(t, id);
             }
-            // Costura: la parada de un encargo la atiende el ciclo del encargo (T6).
-            Llegada::Parada { .. } => {}
+            Llegada::Parada { punta } => self.llegada_a_parada(t, id, punta),
         }
     }
 

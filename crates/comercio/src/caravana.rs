@@ -122,9 +122,9 @@ pub enum Llegada {
     /// `Retornando`: llegada a casa. Hay que volcar `contenido` (solo si vino de `enviarCaravanaAlOrigen`) en el origen; la caravana
     /// queda `Disponible` y limpia, y la escolta vuelve al campamento.
     Casa { contenido: Carga, escolta: Vec<Escuadra> },
-    /// Una caravana con encargo llegó a una de sus puntas (rutas de caravanas §4): `plaza` es el origen o `encargo.destino`, y `punta` cuál de las dos. La
+    /// Una caravana con encargo llegó a una de sus puntas (rutas de caravanas §4): `punta` es cuál de las dos, el origen o `encargo.destino`. La
     /// caravana queda `Esperando` en ella, sin plan, ruta, costes ni peajes; no se toca la carga, la escolta ni el destino. El núcleo atiende la parada.
-    Parada { plaza: AsentamientoId, punta: Punta },
+    Parada { punta: Punta },
     /// `EnTransito` de acarreo: hay que **volcar** `contenido` en el almacén de la plaza madre (`destino`), sin comisión ni trueque. La
     /// caravana ya queda `Retornando`, vacía y con la ruta invertida.
     Acarreo { destino: AsentamientoId, contenido: Carga },
@@ -751,18 +751,15 @@ impl Caravana {
         if let Some(punta) = self.encargo.as_ref().map(|e| e.punta) {
             self.pasar(EstadoCaravana::Esperando)?;
             let e = self.encargo.as_mut().expect("comprobado arriba");
-            let plaza = if punta == Punta::Origen {
+            if punta == Punta::Origen {
                 e.vueltas += 1;
-                self.origen
-            } else {
-                e.destino
-            };
+            }
             self.posicion = aqui;
             self.ruta.clear();
             self.costes.clear();
             self.peajes.clear();
             self.plan = None;
-            return Ok(Llegada::Parada { plaza, punta });
+            return Ok(Llegada::Parada { punta });
         }
         if self.estado == EstadoCaravana::Retornando {
             let contenido = std::mem::take(&mut self.contenido);
@@ -1710,7 +1707,7 @@ mod pruebas {
         assert_eq!((c.ruta.len(), c.costes.clone(), c.peajes.len(), c.plan.is_some()), (3, vec![1, 2], 1, true));
         // Llega al destino: espera allí, sin viaje, y no suma vuelta.
         let fin = c.llegada_en().unwrap();
-        assert_eq!(c.llegar(fin), Ok(Llegada::Parada { plaza: 20, punta: Punta::Destino }));
+        assert_eq!(c.llegar(fin), Ok(Llegada::Parada { punta: Punta::Destino }));
         let e = c.encargo.as_ref().unwrap();
         assert_eq!((c.estado, e.punta, e.vueltas, c.destino), (Esperando, Punta::Destino, 0, Some(20)));
         assert_eq!(c.posicion, Punto::new(60_000, 80_000));
@@ -1720,7 +1717,7 @@ mod pruebas {
         let e = c.encargo.as_ref().unwrap();
         assert_eq!((c.estado, e.punta, e.fase, e.fin_paso, c.destino), (Retornando, Punta::Origen, Fase::Descarga, None, Some(20)));
         let fin = c.llegada_en().unwrap();
-        assert_eq!(c.llegar(fin), Ok(Llegada::Parada { plaza: 10, punta: Punta::Origen }));
+        assert_eq!(c.llegar(fin), Ok(Llegada::Parada { punta: Punta::Origen }));
         let e = c.encargo.as_ref().unwrap();
         assert_eq!((c.estado, e.punta, e.vueltas, c.destino), (Esperando, Punta::Origen, 1, Some(20)));
         // La llegada no toca ni la carga ni la escolta.

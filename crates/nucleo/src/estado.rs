@@ -782,17 +782,21 @@ pub enum SucesoComercio {
     PulsoReparto,
     /// Reposición de los mercados de mercenarios (la entidad es el mercado, único); solo se programa si algo cambió.
     ReponeMercenarios,
+    /// Acaba el paso en curso de una caravana `Esperando` con encargo (la entidad es la caravana): la hora de salida de un envío, la descarga o la carga.
+    FinPasoEncargo,
+    /// Pulso de un minuto de una caravana con encargo que espera existencias en su parada (la entidad es la caravana); se repite mientras falte algo.
+    PulsoEncargo,
 }
 
 impl SucesoComercio {
-    /// Posición dentro de la prioridad 6: 0 = llegadas y peajes, 1 = fin de preparación, 2 = caducidades, 3 = reparto y reposición. Un evento
+    /// Posición dentro de la prioridad 6: 0 = llegadas y peajes, 1 = fin de preparación y de paso de un encargo, 2 = caducidades, 3 = reparto, reposición y pulso de un encargo. Un evento
     /// de rango `r` deja pasar `r` veces a los eventos del mismo instante que ya estaban en la cola antes de ejecutarse.
     pub fn rango(self) -> u8 {
         match self {
             SucesoComercio::LlegadaCaravana | SucesoComercio::PeajeCaravana => 0,
-            SucesoComercio::FinPreparacion => 1,
+            SucesoComercio::FinPreparacion | SucesoComercio::FinPasoEncargo => 1,
             SucesoComercio::CaducaTrueque | SucesoComercio::CaducaOrden => 2,
-            SucesoComercio::PulsoReparto | SucesoComercio::ReponeMercenarios => 3,
+            SucesoComercio::PulsoReparto | SucesoComercio::ReponeMercenarios | SucesoComercio::PulsoEncargo => 3,
         }
     }
     pub(crate) fn a_u8(self) -> u8 {
@@ -804,6 +808,8 @@ impl SucesoComercio {
             SucesoComercio::PeajeCaravana => 4,
             SucesoComercio::PulsoReparto => 5,
             SucesoComercio::ReponeMercenarios => 6,
+            SucesoComercio::FinPasoEncargo => 7,
+            SucesoComercio::PulsoEncargo => 8,
         }
     }
     pub(crate) fn de_u8(i: u8) -> Option<Self> {
@@ -815,6 +821,8 @@ impl SucesoComercio {
             4 => Some(SucesoComercio::PeajeCaravana),
             5 => Some(SucesoComercio::PulsoReparto),
             6 => Some(SucesoComercio::ReponeMercenarios),
+            7 => Some(SucesoComercio::FinPasoEncargo),
+            8 => Some(SucesoComercio::PulsoEncargo),
             _ => None,
         }
     }

@@ -66,7 +66,7 @@ impl Nucleo {
 
     /// La caravana, su posición en la flota y la plaza de su origen, con la orden autorizada (Proyecciones §5.2.3-§5.2.4): quien reside en el origen y está dentro (`resideEnOrigen`) o, con la
     /// caravana aparcada, quien reside en el origen y está dentro de la plaza donde está aparcada (`puedeOperarAparcada`).
-    fn caravana_de_orden(&self, p: &Peticion, id: u64) -> Result<(usize, u64), Respuesta> {
+    pub(super) fn caravana_de_orden(&self, p: &Peticion, id: u64) -> Result<(usize, u64), Respuesta> {
         let v = self.estado.version;
         let i = self.estado.comercio.posicion_caravana(id).ok_or_else(|| Respuesta::rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(id), v))?;
         let origen = self.estado.comercio.flota[i].origen as u64;

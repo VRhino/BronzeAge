@@ -824,6 +824,9 @@ Un id inexistente se deja pasar a propósito para que el comando devuelva el err
 | `comercio.caravana_sale`, `peaje_paso`, `caravana_llega` (esta lleva `comision` —la acuñada, topada por el oro que cabe en el destino—, `recargo`, `carga`, `perdido` y `valor`, el de lo que llevaba a precio vigente, sobre el que se calcula la comisión) | tick | `caravana_llega`: hecho `caravana` de las épicas (origen = plaza que cuenta; `comercial` con ≥ `AEDAS.epica.cargaMinimaCaravana` de carga) |
 | `comercio.entrega_escoltada` | `entregarDeCaravana` | narración |
 | `comercio.caravana_perdida`, `comercio.caravana_vuelve` | ruina (§10) y presencia (`Movimiento_Ejercitos.md`) | narración |
+| `comercio.encargo_dado` `{ caravana, destino, modo }` (0 ruta, 1 envío) | `encargarCaravana` (§5.8) | narración |
+| `comercio.caravana_espera` `{ caravana, plaza, <recurso> }`, `comercio.caravana_carga` `{ caravana, plaza, <recurso>, carros, finPaso }`, `comercio.caravana_descarga` `{ caravana, plaza, <recurso>, tirado, aBordo, carros, finPaso, comision }` | ciclo del encargo (§5.8): `espera` al empezar a esperar existencias (`<recurso>` es lo que falta), `carga` solo si toma algo (lo tomado), `descarga` en cada llegada a una plaza propia (lo que entra; `finPaso` 0 si no hay espera; `comision` 0 en una ruta) | narración |
+| `comercio.encargo_terminado` `{ caravana, motivo, volcado, perdido }` | ciclo del encargo (§5.8): `motivo` 0 cumplido, 1 cancelado, 2 destino perdido | narración |
 | `mercado.orden_colocada`, `mercado.orden_expirada` | comando / tick | narración |
 | `mercado.comercio_en_plaza` | comando | mercado de mercenarios (`entreFacciones`) |
 | `mercenarios.comprado` | `comprarEnCampamento` | narración |
@@ -987,11 +990,12 @@ Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; cont
 <!-- eventos -->
 ```json
 [
-  "comercio.caravana_animal_comprado", "comercio.caravana_cancelada", "comercio.caravana_carro_agregado", "comercio.caravana_carro_movido", "comercio.caravana_construida",
-  "comercio.caravana_en_batalla", "comercio.caravana_en_casa", "comercio.caravana_enviada_al_origen", "comercio.caravana_escolta_cedida",
-  "comercio.caravana_escolta_retirada", "comercio.caravana_llega", "comercio.caravana_perdida", "comercio.caravana_preparando", "comercio.caravana_reserva",
-  "comercio.caravana_sale", "comercio.caravana_sale_de_batalla", "comercio.caravana_vuelve", "comercio.carga_caravana_aparcada", "comercio.carros_perdidos",
-  "comercio.entrega_escoltada", "comercio.flota_traspasada", "comercio.peaje_paso", "comercio.trueque_aceptado", "comercio.trueque_cancelado", "comercio.trueque_cumplido",
+  "comercio.caravana_animal_comprado", "comercio.caravana_cancelada", "comercio.caravana_carga", "comercio.caravana_carro_agregado", "comercio.caravana_carro_movido",
+  "comercio.caravana_construida", "comercio.caravana_descarga", "comercio.caravana_en_batalla", "comercio.caravana_en_casa", "comercio.caravana_enviada_al_origen",
+  "comercio.caravana_escolta_cedida", "comercio.caravana_escolta_retirada", "comercio.caravana_espera", "comercio.caravana_llega", "comercio.caravana_perdida",
+  "comercio.caravana_preparando", "comercio.caravana_reserva", "comercio.caravana_sale", "comercio.caravana_sale_de_batalla", "comercio.caravana_vuelve",
+  "comercio.carga_caravana_aparcada", "comercio.carros_perdidos", "comercio.encargo_dado", "comercio.encargo_terminado", "comercio.entrega_escoltada",
+  "comercio.flota_traspasada", "comercio.peaje_paso", "comercio.trueque_aceptado", "comercio.trueque_cancelado", "comercio.trueque_cumplido",
   "comercio.trueque_expirado", "comercio.trueque_propuesto", "comercio.trueque_rechazado", "mercado.comercio_en_plaza", "mercado.orden_cancelada",
   "mercado.orden_colocada", "mercado.orden_expirada", "mercenarios.comprado", "mercenarios.repuesto", "reputacion.cambio", "reputacion.umbral_bajo"
 ]

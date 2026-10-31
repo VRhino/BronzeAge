@@ -1,9 +1,21 @@
 //! Los eventos del comercio (Comercio_Caravanas §12). El crate no emite nada por sí mismo: el núcleo construye el [`Evento`] que
 //! corresponde a cada transición y lo traduce a su registro de cambios con [`Evento::codigo`].
 
+use crate::encargo::Modo;
 use crate::tipos::{AcuerdoId, AsentamientoId, CaravanaId, Carga, HeroeId, OrdenId};
 use asentamiento::Recurso;
-use base::Mil;
+use base::{Instante, Mil};
+
+/// Por qué acaba el encargo de una caravana (rutas de caravanas §7, hecho `encargo_terminado`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MotivoEncargo {
+    /// El envío volvió al origen y dejó lo que traía.
+    Cumplido,
+    /// Se canceló y la caravana ya está de vuelta en el origen.
+    Cancelado,
+    /// El destino dejó de ser de la Facción del origen, desapareció o ya no hay ruta hasta él.
+    DestinoPerdido,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Evento {
@@ -38,6 +50,16 @@ pub enum Evento {
     // --- Ruina, conquista y presencia ---
     CaravanaPerdida { caravana: CaravanaId },
     CaravanaVuelve { caravana: CaravanaId },
+    // --- Encargos (rutas de caravanas §7) ---
+    EncargoDado { caravana: CaravanaId, destino: AsentamientoId, modo: Modo },
+    /// Espera existencias en `plaza`: `falta` es lo que falta de cada recurso.
+    CaravanaEspera { caravana: CaravanaId, plaza: AsentamientoId, falta: Carga },
+    /// Carga `tomado` en `plaza` y sale al cabo de `carros × tiempoCarga` (`fin_paso`).
+    CaravanaCarga { caravana: CaravanaId, plaza: AsentamientoId, tomado: Carga, carros: u32, fin_paso: Instante },
+    /// Descarga en `plaza`: `entra` es lo que pasa al almacén; `fin_paso` es 0 si no hay espera.
+    CaravanaDescarga { caravana: CaravanaId, plaza: AsentamientoId, entra: Carga, tirado: Mil, a_bordo: Mil, carros: u32, fin_paso: Instante, comision: Mil },
+    /// `volcado` es lo que entró en el almacén del origen y `perdido` lo que no cupo.
+    EncargoTerminado { caravana: CaravanaId, motivo: MotivoEncargo, volcado: Mil, perdido: Mil },
     // --- Mercado de una plaza ---
     OrdenColocada { orden: OrdenId },
     OrdenExpirada { orden: OrdenId },
@@ -76,6 +98,11 @@ impl Evento {
             Evento::EntregaEscoltada { .. } => "comercio.entrega_escoltada",
             Evento::CaravanaPerdida { .. } => "comercio.caravana_perdida",
             Evento::CaravanaVuelve { .. } => "comercio.caravana_vuelve",
+            Evento::EncargoDado { .. } => "comercio.encargo_dado",
+            Evento::CaravanaEspera { .. } => "comercio.caravana_espera",
+            Evento::CaravanaCarga { .. } => "comercio.caravana_carga",
+            Evento::CaravanaDescarga { .. } => "comercio.caravana_descarga",
+            Evento::EncargoTerminado { .. } => "comercio.encargo_terminado",
             Evento::OrdenColocada { .. } => "mercado.orden_colocada",
             Evento::OrdenExpirada { .. } => "mercado.orden_expirada",
             Evento::ComercioEnPlaza { .. } => "mercado.comercio_en_plaza",
@@ -112,11 +139,16 @@ mod pruebas {
             Evento::CaravanaEnviadaAlOrigen { caravana: 1 },
             Evento::CaravanaAnimalComprado { caravana: 1 },
             Evento::CaravanaSale { caravana: 1 },
-            Evento::PeajePaso { caravana: 1, ciudad: 2, cobrado: c },
+            Evento::PeajePaso { caravana: 1, ciudad: 2, cobrado: c.clone() },
             Evento::CaravanaLlega { caravana: 1, destino: 2, comision: 0, recargo: 0 },
             Evento::EntregaEscoltada { acuerdo: 1, caravana: 1 },
             Evento::CaravanaPerdida { caravana: 1 },
             Evento::CaravanaVuelve { caravana: 1 },
+            Evento::EncargoDado { caravana: 1, destino: 2, modo: Modo::Ruta },
+            Evento::CaravanaEspera { caravana: 1, plaza: 2, falta: c.clone() },
+            Evento::CaravanaCarga { caravana: 1, plaza: 2, tomado: c.clone(), carros: 1, fin_paso: 0 },
+            Evento::CaravanaDescarga { caravana: 1, plaza: 2, entra: c.clone(), tirado: 0, a_bordo: 0, carros: 1, fin_paso: 0, comision: 0 },
+            Evento::EncargoTerminado { caravana: 1, motivo: MotivoEncargo::Cumplido, volcado: 0, perdido: 0 },
             Evento::OrdenColocada { orden: 1 },
             Evento::OrdenExpirada { orden: 1 },
             Evento::ComercioEnPlaza { orden: 1, cantidad: 1, entre_facciones: false },
@@ -128,8 +160,8 @@ mod pruebas {
     #[test]
     fn cada_evento_sale_con_su_codigo_y_sin_repetirse() {
         let codigos: Vec<_> = todos().iter().map(Evento::codigo).collect();
-        assert_eq!(codigos.len(), 28);
-        assert_eq!(codigos.iter().collect::<BTreeSet<_>>().len(), 28, "ningún código se repite");
+        assert_eq!(codigos.len(), 33);
+        assert_eq!(codigos.iter().collect::<BTreeSet<_>>().len(), 33, "ningún código se repite");
         assert!(codigos.iter().all(|c| c.starts_with("comercio.") || c.starts_with("mercado.") || c.starts_with("mercenarios.")));
     }
 

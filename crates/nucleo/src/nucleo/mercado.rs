@@ -33,8 +33,9 @@ use crate::estado_comercio::{entidad_orden, entidad_reputacion, entidad_trueque,
 use asentamiento::catalogo::Tipo;
 use asentamiento::Recurso;
 use cola::Clave;
+use comercio::encargo::Modo;
 use comercio::entrega::{entregar, DatosEntrega, ResultadoEntrega};
-use comercio::evento::Evento as EventoComercio;
+use comercio::evento::{Evento as EventoComercio, MotivoEncargo};
 use comercio::flota::{cupos, Cupos, FactoresPolitica};
 use comercio::mostrador::{comerciar, Carro, ContextoMostrador, ErrorMostrador};
 use comercio::orden_mercado::{ErrorOrden, EstadoOrden, OrdenMercado, TipoOrden};
@@ -127,6 +128,37 @@ fn datos_de(ev: &EventoComercio) -> Vec<(&'static str, i64)> {
             d.extend(cobrado.iter().map(|(r, n)| (r.nombre(), *n)));
             d
         }
+        EncargoDado { caravana, destino, modo } => vec![("caravana", *caravana as i64), ("destino", *destino as i64), ("modo", match modo {
+            Modo::Ruta => 0,
+            Modo::Envio => 1,
+        })],
+        CaravanaEspera { caravana, plaza, falta } => {
+            let mut d = vec![("caravana", *caravana as i64), ("plaza", *plaza as i64)];
+            d.extend(falta.iter().map(|(r, n)| (r.nombre(), *n)));
+            d
+        }
+        CaravanaCarga { caravana, plaza, tomado, carros, fin_paso } => {
+            let mut d = vec![("caravana", *caravana as i64), ("plaza", *plaza as i64)];
+            d.extend(tomado.iter().map(|(r, n)| (r.nombre(), *n)));
+            d.extend([("carros", *carros as i64), ("finPaso", *fin_paso)]);
+            d
+        }
+        CaravanaDescarga { caravana, plaza, entra, tirado, a_bordo, carros, fin_paso, comision } => {
+            let mut d = vec![("caravana", *caravana as i64), ("plaza", *plaza as i64)];
+            d.extend(entra.iter().map(|(r, n)| (r.nombre(), *n)));
+            d.extend([("tirado", *tirado), ("aBordo", *a_bordo), ("carros", *carros as i64), ("finPaso", *fin_paso), ("comision", *comision)]);
+            d
+        }
+        EncargoTerminado { caravana, motivo, volcado, perdido } => vec![
+            ("caravana", *caravana as i64),
+            ("motivo", match motivo {
+                MotivoEncargo::Cumplido => 0,
+                MotivoEncargo::Cancelado => 1,
+                MotivoEncargo::DestinoPerdido => 2,
+            }),
+            ("volcado", *volcado),
+            ("perdido", *perdido),
+        ],
         CaravanaLlega { caravana, destino, comision, recargo } => vec![("caravana", *caravana as i64), ("destino", *destino as i64), ("comision", *comision), ("recargo", *recargo)],
         EntregaEscoltada { acuerdo, caravana } => vec![("acuerdo", *acuerdo as i64), ("caravana", *caravana as i64)],
         OrdenColocada { orden } | OrdenExpirada { orden } => vec![("orden", *orden as i64)],
@@ -321,6 +353,8 @@ impl Nucleo {
             SucesoComercio::LlegadaCaravana => self.llegada_de_caravana(id, t),
             SucesoComercio::PeajeCaravana => self.peaje_de_caravana(id, t),
             SucesoComercio::PulsoReparto => self.pulso_de_reparto(id, t),
+            SucesoComercio::FinPasoEncargo => self.fin_de_paso_de_encargo(id, t),
+            SucesoComercio::PulsoEncargo => self.pulso_de_encargo(id, t),
             SucesoComercio::ReponeMercenarios => self.repone_mercenarios(t),
         }
     }

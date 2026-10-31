@@ -90,7 +90,7 @@ pub fn auditar_contenedores(n: &Nucleo) -> Violaciones {
 /// camino tiene el suyo, cada plaza tiene exactamente un minuto y todo lo que está en curso en ella tiene su cita de fin.
 pub fn auditar_cola(n: &Nucleo) -> Violaciones {
     let (e, mut v) = (n.estado(), Violaciones::default());
-    let mut por_suceso: [BTreeSet<u64>; 5] = Default::default();
+    let mut por_suceso: [BTreeSet<u64>; 7] = Default::default();
     let mut minutos: Vec<u64> = Vec::new();
     let (mut fines, mut caducan): (BTreeSet<(u64, i64)>, BTreeSet<(u64, i64)>) = Default::default();
     for ev in e.cola.volcar().iter().filter(|ev| e.generaciones.es_vigente(ev.clave)) {
@@ -104,16 +104,21 @@ pub fn auditar_cola(n: &Nucleo) -> Violaciones {
             Carga::Comercio { suceso: SucesoComercio::FinPreparacion, .. } => drop(por_suceso[2].insert(id)),
             Carga::Comercio { suceso: SucesoComercio::CaducaTrueque, .. } => drop(por_suceso[3].insert(id)),
             Carga::Comercio { suceso: SucesoComercio::PulsoReparto, .. } => drop(por_suceso[4].insert(id)),
+            Carga::Comercio { suceso: SucesoComercio::FinPasoEncargo, .. } => drop(por_suceso[5].insert(id)),
+            Carga::Comercio { suceso: SucesoComercio::PulsoEncargo, .. } => drop(por_suceso[6].insert(id)),
             _ => {}
         }
     }
-    let [llegadas, peajes, preparaciones, caducidades, pulsos] = &por_suceso;
+    let [llegadas, peajes, preparaciones, caducidades, pulsos, fines_de_paso, pulsos_de_encargo] = &por_suceso;
     let en_camino = |s: EstadoCaravana| matches!(s, EstadoCaravana::EnTransito | EstadoCaravana::Retornando);
     for c in e.comercio.flota.iter().filter(|c| matches!(c.tipo, TipoCaravana::Comercial | TipoCaravana::Acarreo) && en_camino(c.estado)) {
         v.sin_plan += (!c.plan.as_ref().is_some_and(|p| p.vertices.len() >= 2) || !llegadas.contains(&c.id)) as u64;
     }
     v.cola += llegadas.iter().filter(|&&id| !e.comercio.caravana(id).is_some_and(|c| en_camino(c.estado))).count() as u64;
-    v.cola += peajes.iter().filter(|&&id| !e.comercio.caravana(id).is_some_and(|c| c.estado == EstadoCaravana::EnTransito && c.proximo_peaje().is_some())).count() as u64;
+    v.cola += peajes.iter().filter(|&&id| !e.comercio.caravana(id).is_some_and(|c| c.proximo_peaje().is_some())).count() as u64;
+    let esperando_con_encargo = |id: &u64| e.comercio.caravana(*id).is_some_and(|c| c.estado == EstadoCaravana::Esperando && c.encargo.is_some());
+    v.cola += fines_de_paso.iter().chain(pulsos_de_encargo).filter(|id| !esperando_con_encargo(id)).count() as u64;
+    v.sin_plan += e.comercio.flota.iter().filter(|c| c.estado == EstadoCaravana::Esperando && !fines_de_paso.contains(&c.id) && !pulsos_de_encargo.contains(&c.id)).count() as u64;
     v.cola += preparaciones.iter().filter(|&&id| !e.comercio.caravana(id).is_some_and(|c| c.estado == EstadoCaravana::Preparando)).count() as u64;
     v.cola += caducidades.iter().filter(|&&id| !e.comercio.acuerdo(id).is_some_and(|a| matches!(a.estado, EstadoTrueque::Propuesto | EstadoTrueque::Activo))).count() as u64;
     for &plaza in pulsos {
