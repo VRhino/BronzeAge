@@ -15,6 +15,8 @@ pub enum MotivoEncargo {
     Cancelado,
     /// El destino dejó de ser de la Facción del origen, desapareció o ya no hay ruta hasta él.
     DestinoPerdido,
+    /// La caravana con encargo se destruyó (ruina, batalla, bandidos, pérdida de todos los carros…); lo que llevaba a bordo se perdió.
+    Destruida,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

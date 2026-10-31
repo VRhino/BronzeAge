@@ -791,6 +791,11 @@ En el instante del evento de ruina (antes de cualquier evento de comercio del mi
     - en camino ⇒ `retornando` con plan `calcularRuta(posición actual → origen)` (**sin atracción**) y `destino = R`, con su carga (la vuelca en el origen al llegar); sin camino por tierra, o sin
       origen, se pierde.
     - **aparcada en `R`** ⇒ **se destruye** con sus carros, animales y carga, sin captura (decidido el 2026-10-13, Doc 3.13.7; **también en la conquista**, decidido el 2026-10-19).
+  - **Con encargo** (rutas de caravanas §4):
+    - **`esperando` en `R` como destino de su ruta** ⇒ **se destruye** con todo, como la aparcada (en la ruina y en la conquista).
+    - **`en_transito` hacia `R`** ⇒ regresa como cualquier otra que iba hacia ella, con la punta del encargo en el origen y el encargo `cancelado`. Al llegar al origen vuelca lo que lleva, devuelve la escolta y el encargo termina: con motivo `destino_perdido` (2) si el destino ya no es de la Facción del origen o no existe (la ruina, o la conquista de una ruta), y con `cancelado` (1) si sigue vigente (el envío a una plaza que cambió de dueño). Un destino perdido gana a un encargo cancelado.
+    - **Salía de `R`** ⇒ como las demás: en la ruina se pierde; en la conquista, si **espera dentro** de `R` cuenta como una caravana en casa: pasa con la flota al conquistador y su encargo termina allí (`cancelado`, 1), con lo de a bordo vuelto al almacén de la plaza y la escolta en el campamento. Las demás de la flota traspasada siguen su encargo.
+    - Toda caravana con encargo que se destruye (esta cascada, batalla, bandidos, pérdida de todos los carros o vuelta sin ruta) emite además `comercio.encargo_terminado` con motivo `destruida` (3), `volcado` 0 y `perdido` lo que llevaba a bordo.
   - Las demás siguen como estaban.
 
 La red de caminos se poda sola al faltar un extremo (§7.4).
@@ -826,7 +831,7 @@ Un id inexistente se deja pasar a propósito para que el comando devuelva el err
 | `comercio.caravana_perdida`, `comercio.caravana_vuelve` | ruina (§10) y presencia (`Movimiento_Ejercitos.md`) | narración |
 | `comercio.encargo_dado` `{ caravana, destino, modo }` (0 ruta, 1 envío) | `encargarCaravana` (§5.8) | narración |
 | `comercio.caravana_espera` `{ caravana, plaza, <recurso> }`, `comercio.caravana_carga` `{ caravana, plaza, <recurso>, carros, finPaso }`, `comercio.caravana_descarga` `{ caravana, plaza, <recurso>, tirado, aBordo, carros, finPaso, comision }` | ciclo del encargo (§5.8): `espera` al empezar a esperar existencias (`<recurso>` es lo que falta), `carga` solo si toma algo (lo tomado), `descarga` en cada llegada a una plaza propia (lo que entra; `finPaso` 0 si no hay espera; `comision` 0 en una ruta) | narración |
-| `comercio.encargo_terminado` `{ caravana, motivo, volcado, perdido }` | ciclo del encargo (§5.8): `motivo` 0 cumplido, 1 cancelado, 2 destino perdido | narración |
+| `comercio.encargo_terminado` `{ caravana, motivo, volcado, perdido }` | ciclo del encargo (§5.8): `motivo` 0 cumplido, 1 cancelado, 2 destino perdido, 3 destruida (la caravana con encargo se pierde: `volcado` 0, `perdido` lo que llevaba) | narración |
 | `mercado.orden_colocada`, `mercado.orden_expirada` | comando / tick | narración |
 | `mercado.comercio_en_plaza` | comando | mercado de mercenarios (`entreFacciones`) |
 | `mercenarios.comprado` | `comprarEnCampamento` | narración |

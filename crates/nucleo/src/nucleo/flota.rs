@@ -14,7 +14,8 @@ use crate::nucleo::mercado::{id32, nivel_mercado};
 use asentamiento::edificio::Edificios;
 use asentamiento::Recurso;
 use comercio::caravana::{caravanas_comerciales_de, carros_en_uso, mover_carro, Caravana, ContextoCarro, ContextoCrear, ErrorCaravana, EstadoCaravana, Lanzamiento, TipoCaravana};
-use comercio::evento::Evento as EventoComercio;
+use comercio::encargo::Punta;
+use comercio::evento::{Evento as EventoComercio, MotivoEncargo};
 use comercio::ruina::{cerrar_dependientes, Accion, AccionCaravana, Motivo, TruequeCancelado};
 use comercio::trueque::EstadoTrueque;
 use comercio::{total, Carga as Mercancia, Lado};
@@ -448,6 +449,13 @@ impl Nucleo {
                 self.estado.comercio.reparto.remove(&plaza);
             }
             Motivo::Conquista => {
+                // Rutas de caravanas §4: la que espera dentro de su origen conquistado está en casa; su encargo termina allí, ahora del conquistador.
+                for &c in &cierre.flota_traspasada {
+                    let en_casa = self.estado.comercio.caravana(c).is_some_and(|c| c.estado == EstadoCaravana::Esperando && c.encargo.as_ref().is_some_and(|e| e.punta == Punta::Origen));
+                    if en_casa {
+                        self.terminar(t, c, MotivoEncargo::Cancelado);
+                    }
+                }
                 if !cierre.flota_traspasada.is_empty() {
                     self.tr.tocar_todos(Clase::Caravana, cierre.flota_traspasada.iter().map(|&c| c as u64));
                     let n = cierre.flota_traspasada.len() as i64;
@@ -471,6 +479,10 @@ impl Nucleo {
             self.pueblo_sin_carro(origen, id);
         }
         let plazas = if self.estado.asentamientos.contains_key(&origen) { vec![origen] } else { vec![] };
+        if c.encargo.is_some() {
+            // Rutas de caravanas §7: destruida con encargo, el encargo termina con lo que llevaba a bordo perdido.
+            self.emitir_comercio(t, EventoComercio::EncargoTerminado { caravana: id, motivo: MotivoEncargo::Destruida, volcado: 0, perdido: total(&c.contenido) }, plazas.clone(), &[]);
+        }
         self.emitir_comercio(t, EventoComercio::CaravanaPerdida { caravana: id }, plazas, &[("carga", total(&c.contenido))]);
         de_la_columna
     }

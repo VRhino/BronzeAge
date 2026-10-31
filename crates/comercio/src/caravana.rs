@@ -793,9 +793,13 @@ impl Caravana {
 
     /// La plaza `ruina` (destruida o conquistada) era el destino: la caravana en camino regresa a su origen **con su carga** por el plan
     /// `calcularRuta(posición actual → origen)` (sin atracción de la red) que construye el núcleo; `destino = ruina` y, al llegar, vuelca
-    /// el contenido en el origen (§10).
+    /// el contenido en el origen (§10). Con encargo (rutas de caravanas §4), la punta pasa a `Origen` y el encargo queda `cancelado`: al llegar
+    /// da la parada del origen, donde el encargo termina.
     pub fn regresar_a_origen(&mut self, ruina: AsentamientoId, plan: Plan) -> Result<(), ErrorCaravana> {
         self.pasar(EstadoCaravana::Retornando)?;
+        if let Some(e) = self.encargo.as_mut() {
+            (e.punta, e.cancelado) = (Punta::Origen, true);
+        }
         self.destino = Some(ruina);
         self.origen_acuerdo = None;
         self.peajes.clear();
@@ -1744,6 +1748,23 @@ mod pruebas {
         assert_eq!((carga[&Recurso::Madera], escolta.len()), (5_000, 1));
         assert_eq!((c.estado, c.encargo.is_none(), c.destino, c.contenido.is_empty(), c.escolta.is_empty()), (Disponible, true, None, true, true));
         assert_eq!(buey().terminar_encargo(), Err(ErrorCaravana::EstadoInvalido));
+    }
+
+    #[test]
+    fn regresar_a_origen_con_encargo_pone_la_punta_en_el_origen_lo_cancela_y_al_llegar_da_la_parada_del_origen() {
+        let r = r();
+        let mut c = con_encargo();
+        c.contenido.insert(Recurso::Madera, 5_000);
+        sale(&mut c, &r, vec![]);
+        assert_eq!(c.estado, EnTransito);
+        let plan = plan_de(&c, &r, 0);
+        c.regresar_a_origen(20, plan).unwrap();
+        let e = c.encargo.as_ref().unwrap();
+        assert_eq!((c.estado, e.punta, e.cancelado, c.destino), (Retornando, Punta::Origen, true, Some(20)));
+        assert_eq!(c.contenido[&Recurso::Madera], 5_000, "con su carga");
+        assert_eq!(c.llegar(c.llegada_en().unwrap()), Ok(Llegada::Parada { punta: Punta::Origen }));
+        assert_eq!(c.estado, Esperando);
+        assert!(c.terminar_encargo().is_ok(), "el encargo termina en el origen");
     }
 
     #[test]

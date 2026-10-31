@@ -191,10 +191,11 @@ impl Nucleo {
         let (cancelado, propio) = (e.cancelado, self.destino_propio(c));
         let vigente = self.destino_vigente(c);
         if punta == Punta::Origen {
-            if cancelado {
-                self.terminar(t, id, MotivoEncargo::Cancelado);
-            } else if !vigente {
+            // Un destino perdido gana a un encargo cancelado (rutas de caravanas §4, «Destino de una ruta»).
+            if !vigente {
                 self.terminar(t, id, MotivoEncargo::DestinoPerdido);
+            } else if cancelado {
+                self.terminar(t, id, MotivoEncargo::Cancelado);
             } else {
                 self.descargar(t, id);
             }
@@ -340,7 +341,7 @@ impl Nucleo {
 
     /// Paso 7 · Terminar: la caravana queda `Disponible` en el origen sin encargo; su carga se vuelca en el almacén del origen (lo que no cabe se pierde), la escolta vuelve al campamento
     /// y la caravana libre puede servir a un trueque.
-    fn terminar(&mut self, t: Instante, id: u64, motivo: MotivoEncargo) {
+    pub(super) fn terminar(&mut self, t: Instante, id: u64, motivo: MotivoEncargo) {
         self.invalidar_comercio(entidad_caravana(id));
         let Some(i) = self.estado.comercio.posicion_caravana(id) else { return };
         let origen = u64::from(self.estado.comercio.flota[i].origen);
