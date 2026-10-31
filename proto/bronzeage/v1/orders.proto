@@ -99,7 +99,7 @@ message OrdenAportarARefundacion {
 
 message OrdenAsignarCargoLocal {
   string asentamiento_id = 1;
-  string cargo = 2;  // gobernador | tesorero | general | maestroObras | sacerdote
+  string cargo = 2;  // gobernador | tesorero | general | maestroObras | sacerdote | maestroCaravanas
   string heroe_id = 3;
 }
 

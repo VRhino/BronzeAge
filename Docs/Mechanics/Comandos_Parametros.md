@@ -31,7 +31,7 @@ es la lista de mensajes de orden que hay que cubrir.
 | `dejarFaccion` | — |
 | `asignarRey` | `faccionId`: string<br>`heroeId`: string |
 | `asignarEmbajador` | `faccionId`: string<br>`heroeId`: string |
-| `asignarCargoLocal` | `asentamientoId`: string<br>`cargo`: "gobernador"|"tesorero"|"general"|"maestroObras"|"sacerdote"<br>`heroeId`: string |
+| `asignarCargoLocal` | `asentamientoId`: string<br>`cargo`: "gobernador"|"tesorero"|"general"|"maestroObras"|"sacerdote"|"maestroCaravanas"<br>`heroeId`: string |
 | `aportarARefundacion` | `recurso`: "madera"|"piedra"|"trigo"|"cobre"|"estano"|"oro"|"livestock"|"lingoteCobre"|"lingoteEstano"|"lingoteBronce"|"cuero"|"cueroCurtido"|"cueroCalidad"|"armaMadera"|"armaCobre"|"armaBronce"|"armaBronceCalidad"|"armaduraBasica"|"armaduraIntermedia"|"armaduraBronce"|"hierro"|"lingoteHierro"|"armaHierro"|"armaHierroCalidad"|"armaduraBronceCalidad"|"carroGuerra"|"chatarraCobre"|"chatarraBronce"|"chatarraHierro"<br>`cantidad`: number<br>`lado`: "almacen"|"carro" |
 | `retirarDeRefundacion` | `recurso`: "madera"|"piedra"|"trigo"|"cobre"|"estano"|"oro"|"livestock"|"lingoteCobre"|"lingoteEstano"|"lingoteBronce"|"cuero"|"cueroCurtido"|"cueroCalidad"|"armaMadera"|"armaCobre"|"armaBronce"|"armaBronceCalidad"|"armaduraBasica"|"armaduraIntermedia"|"armaduraBronce"|"hierro"|"lingoteHierro"|"armaHierro"|"armaHierroCalidad"|"armaduraBronceCalidad"|"carroGuerra"|"chatarraCobre"|"chatarraBronce"|"chatarraHierro"<br>`cantidad`: number<br>`lado`: "almacen"|"carro" |
 | `comprarCaravanaDeRefundacion` | — |

@@ -24,6 +24,7 @@
 - **General**: mando militar del asentamiento — sus políticas son de reclutamiento y guarnición (Leva Forzosa, Levas de guarnición), sin función de mando conjunto en combate, y NO es un gate de reclutamiento: reclutar es beneficio de RESIDENCIA (2.5), así que cualquier héroe residente recluta y repone SUS escuadrones sin necesidad de que exista un General asignado.
 - **Maestro de Obras**: gestiona prioridades de auto-construcción, bonus a tiempos de construcción. Puede reordenar, añadir y quitar proyectos de la cola — nunca elegir su ubicación (ver Doc 4.2).
 - **Sacerdote**: políticas de Racionamiento (menos consumo de comida) y Culto a la Fertilidad (acelera el crecimiento de Nobleza, no es requisito), y dirige las épicas de los Aedas junto al Rey y al Gobernador.
+- **Maestro de Caravanas**: da, cambia y cancela los encargos de las caravanas de su plaza (el Tesorero y el Gobernador también pueden). Sin políticas propias.
 
 ### Reglas generales de cargos
 - Un jugador PUEDE ejercer varios cargos a la vez.

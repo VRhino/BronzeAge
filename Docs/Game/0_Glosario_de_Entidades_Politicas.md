@@ -85,7 +85,7 @@ La despensa general de un asentamiento es su **almacén** (`Asentamiento.almacen
 El **Granero** es un edificio que amplía solo la capacidad de **trigo**, mucho más que un Almacén (Doc 4.2.1). No confundir con el **rol** de especialización de un asentamiento que se dedica a producir trigo, que también se llama granero, junto a Aserradero, Cuenca Minera, Dehesa y Ciudad (`typescript-final:Consideraciones/Fase_0_5_Definicion_Especializacion_y_Cupos.md` §4): uno es un edificio; el otro, la vocación de un asentamiento entero.
 
 ## Asentamiento
-Unidad territorial con zona de influencia, edificios (auto-construidos), población NPC (Pesants/Artesanos/Nobleza), y cargos LOCALES (Gobernador, Tesorero, General, Maestro de Obras, Sacerdote). Pertenece a 1 y SOLO 1 Facción. Una Facción puede tener muchos asentamientos.
+Unidad territorial con zona de influencia, edificios (auto-construidos), población NPC (Pesants/Artesanos/Nobleza), y cargos LOCALES (Gobernador, Tesorero, General, Maestro de Obras, Sacerdote, Maestro de Caravanas). Pertenece a 1 y SOLO 1 Facción. Una Facción puede tener muchos asentamientos.
 
 ## Nivel de asentamiento / Obra de ascenso
 El nivel de un asentamiento (1 a 5) **no sube solo**. Cuando cumple los requisitos del nivel siguiente, su **Gobernador** puede pedir la subida: paga del almacén del asentamiento el coste de una **obra de ascenso**, y el nivel sube cuando la obra termina. Solo se puede pedir con cupo de la Facción libre y si el asentamiento es solvente en el nivel nuevo; si lo conquistan a mitad de obra, la obra se pierde (Doc 4.5). Distinto del nivel de Facción (sube por experiencia) y del nivel interno de un edificio.
@@ -119,6 +119,7 @@ Título dinámico de PRESTIGIO (no cargo mecánico nuevo) otorgado al Rey de la 
 - **General:** mando militar del asentamiento.
 - **Maestro de Obras:** gestiona prioridades de auto-construcción, bonus de tiempos de construcción.
 - **Sacerdote:** acelerador de aparición de nobleza + bonificación de felicidad.
+- **Maestro de Caravanas:** da, cambia y cancela los encargos de las caravanas de su plaza (sin políticas propias).
 
 ## Población NPC: Pesants / Artesanos / Nobleza
 Las 3 clases de población NPC de un asentamiento (distintas de los Héroes).

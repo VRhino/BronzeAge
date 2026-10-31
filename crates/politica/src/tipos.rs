@@ -1,4 +1,4 @@
-//! Tipos comunes de la política: identificadores, los cinco cargos locales y los grupos de la puerta.
+//! Tipos comunes de la política: identificadores, los seis cargos locales y los grupos de la puerta.
 
 pub type FaccionId = u32;
 pub type HeroeId = u64;
@@ -8,15 +8,15 @@ pub type CampamentoId = u32;
 pub type RelacionId = u64;
 pub type PropuestaId = u64;
 
-/// Los cargos locales (Doc 2.2) son los de la economía (`asentamiento::Cargo`): el Gobernador designa a los otros cuatro; al Gobernador lo designa el Rey.
+/// Los cargos locales (Doc 2.2) son los de la economía (`asentamiento::Cargo`): el Gobernador designa a los otros cinco; al Gobernador lo designa el Rey.
 pub use asentamiento::Cargo;
 
-/// Los cinco cargos, en el orden del enum.
-pub const CARGOS: [Cargo; 5] = [Cargo::Gobernador, Cargo::Tesorero, Cargo::General, Cargo::MaestroObras, Cargo::Sacerdote];
+/// Los seis cargos, en el orden del enum.
+pub const CARGOS: [Cargo; 6] = [Cargo::Gobernador, Cargo::Tesorero, Cargo::General, Cargo::MaestroObras, Cargo::Sacerdote, Cargo::MaestroCaravanas];
 
 /// Los titulares de los cargos locales de una plaza (`Asentamiento.cargos`). Un héroe puede ocupar varios.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Cargos([Option<HeroeId>; 5]);
+pub struct Cargos([Option<HeroeId>; 6]);
 
 impl Cargos {
     pub fn titular(&self, c: Cargo) -> Option<HeroeId> {

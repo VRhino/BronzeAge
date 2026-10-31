@@ -1,5 +1,5 @@
 //! Cargos locales de una plaza (Diplomacia_Facciones §3.4, Doc 2.2). El designado es ciudadano de la Facción dueña y, por la decisión **Q4** del autor
-//! (2026-10-24), **reside en la plaza**; el cargo se vacía al dejar de residir (`Cargos::vaciar_de`). Al Gobernador lo designa el Rey; los otros cuatro, el
+//! (2026-10-24), **reside en la plaza**; el cargo se vacía al dejar de residir (`Cargos::vaciar_de`). Al Gobernador lo designa el Rey; los otros cinco, el
 //! Gobernador vigente (lo exige la autorización), y solo si ya hay Gobernador.
 
 use crate::faccion::Faccion;

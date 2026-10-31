@@ -88,7 +88,7 @@ Campos de `Asentamiento` que usa este documento:
 | `autoConstruccionPausada?`, `recetasPausadas?` (recursos), `reservaManual?` (por recurso, 0–`reservaManualMaxima`) | Controles del jugador. |
 | `extractoresTicksSinCupo?` | Contador anti-inanición por tipo de extractor (§6.2). |
 | `ocupacionHasta?`, `protegidaHasta?` | Ventanas tras una conquista o una fundación. |
-| `cargos` | `gobernadorId, tesoreroId, generalId, maestroObrasId, sacerdoteId`. |
+| `cargos` | `gobernadorId, tesoreroId, generalId, maestroObrasId, sacerdoteId, maestroCaravanasId`. |
 
 ## 3. Fundación (`fundarAsentamiento`)
 

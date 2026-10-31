@@ -90,14 +90,14 @@ se iba **o** si es el nuevo Rey. Además, si reside en una plaza, **deja la resi
 
 - **Rey** (`asignarRey`): el designado ha de ser ciudadano. La primera asignación (sin Rey) la puede hacer cualquier ciudadano; con Rey, solo él traspasa el cargo. No hay votación.
 - **Embajador** (`asignarEmbajador`): lo designa el Rey, que debe existir; el designado es ciudadano (puede ser el propio Rey).
-- **Cargos locales** (`asignarCargoLocal`): el designado es ciudadano de la Facción dueña. El **Gobernador** lo designa **el Rey** (no exige que esté presente). Los otros cuatro (`tesorero`, `general`,
-  `maestroObras`, `sacerdote`) los designa el **Gobernador vigente**, residente y **presente** en la plaza, y solo si ya hay Gobernador. Un héroe puede ocupar varios cargos. **El designado ha de residir en la plaza** (decisión **Q4** del autor, 2026-10-24: un cargo que no puede ejercerse ni se vacía
+- **Cargos locales** (`asignarCargoLocal`): el designado es ciudadano de la Facción dueña. El **Gobernador** lo designa **el Rey** (no exige que esté presente). Los otros cinco (`tesorero`, `general`,
+  `maestroObras`, `sacerdote`, `maestroCaravanas`: este da, cambia y cancela los encargos de las caravanas de su plaza y no tiene huecos de políticas) los designa el **Gobernador vigente**, residente y **presente** en la plaza, y solo si ya hay Gobernador. Un héroe puede ocupar varios cargos. **El designado ha de residir en la plaza** (decisión **Q4** del autor, 2026-10-24: un cargo que no puede ejercerse ni se vacía
   nunca sería un hueco; el TypeScript no lo miraba). El cargo se vacía al dejar de residir.
 - **`admitirOtrasFacciones`:** el Rey fija `admiteOtrasEnAtaques`.
 - Un cargo local se vacía al dejar el héroe su residencia en esa plaza (§4.2); un cargo de Facción, al irse el héroe de la Facción.
 
 > **Implementado en Rust (2026-10-25, 5E):** `AsignarCargoLocal { heroe, asentamiento, cargo, designado }` (158, `asignar_cargo_local`; `nucleo/cargos.rs`) con `politica::cargos::asignar_cargo_local`:
-> el Gobernador lo designa el Rey de la Facción dueña sin estar presente; los otros cuatro, el Gobernador residente y dentro, y solo con Gobernador (`cargo.sin_gobernador`); el designado es ciudadano de la
+> el Gobernador lo designa el Rey de la Facción dueña sin estar presente; los otros cinco, el Gobernador residente y dentro, y solo con Gobernador (`cargo.sin_gobernador`); el designado es ciudadano de la
 > Facción dueña (`cargo.no_ciudadano`) y reside en la plaza (`cargo.no_reside`, Q4); ya titular, `sin_cambios`; sustituye al anterior. Hecho `cargo.local_asignado` (`heroe`, `asentamiento`, `faccion` y el
 > `cargo` como texto). Los cargos viven en la plaza (`Asentamiento::cargos`, foto **`BAN33`**) y se vacían al dejar de residir (toda mudanza pasa por `mudar_de_residencia`: las tres órdenes de residencia, dejar
 > la Facción, la reubicación por ruina, el desalojo y `FijarResidencia`), al dejar de ser de la Facción dueña aunque no se mude (`FijarFaccionDeHeroe`) y en la conquista (todos). **Quien funda una

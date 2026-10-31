@@ -212,7 +212,7 @@ message FaccionesUnidas {
 // Un cargo que cambia de titular: los locales de una plaza (también el Gobernador de oficio al fundar, 5E-3) y el Rey y el Embajador de la Facción.
 message CargoAsignado {
   string heroe_id = 1;
-  string cargo = 2;                      // gobernador | tesorero | general | maestroObras | sacerdote | rey | embajador
+  string cargo = 2;                      // gobernador | tesorero | general | maestroObras | sacerdote | maestroCaravanas | rey | embajador
   string faccion_id = 3;
   optional string asentamiento_id = 4;   // solo los locales
 }

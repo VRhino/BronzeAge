@@ -8,7 +8,7 @@
 //! cuenta de un jugador tiene uno; la de un escenario de la administración, varios héroes de campo. Un héroe fuera del mundo no cuenta.
 //!
 //! # Los cargos
-//! Al Gobernador lo designa el Rey de la Facción dueña; a los otros cuatro, el Gobernador. El designado es ciudadano de la Facción dueña y **reside en la plaza** (Q4); el cargo se vacía al
+//! Al Gobernador lo designa el Rey de la Facción dueña; a los otros cinco, el Gobernador. El designado es ciudadano de la Facción dueña y **reside en la plaza** (Q4); el cargo se vacía al
 //! dejar de residir (cualquier mudanza pasa por `mudar_de_residencia`), al perder la ciudadanía de la Facción dueña y en la conquista. Quien funda la plaza (el Líder de la columna, si es uno de
 //! los fundadores) es su Gobernador de oficio (5E-3, `zonas::fundar`); el Rey puede cambiarlo.
 //!

@@ -107,7 +107,7 @@ message DefinicionMisionRecurrente {
   DuracionMision duracion = 2;
   TipoMision tipo = 3;
   uint32 limite_semanal = 4;               // individual: aceptaciones por semana en el tablón, entre todos (0 en una grupal)
-  optional string cargo = 5;               // solo la acepta su titular: gobernador, tesorero, general, maestroObras, sacerdote; rey, embajador
+  optional string cargo = 5;               // solo la acepta su titular: gobernador, tesorero, general, maestroObras, sacerdote, maestroCaravanas; rey, embajador
   repeated CondicionMision condiciones = 6; // con `avance` 0
   sint64 experiencia = 7;                  // experiencia de Facción, en milésimas
   uint64 participacion = 8;                // participación en la plaza: la del héroe (individual) o la que se reparte (grupal)
@@ -310,7 +310,7 @@ message Cargos {
 message PoliticaActiva {
   string id = 1;
   string politica_id = 2;
-  string cargo = 3;                      // gobernador | tesorero | general | maestroObras | sacerdote
+  string cargo = 3;                      // gobernador | tesorero | general | maestroObras | sacerdote | maestroCaravanas
   int64 activada_en_ms = 4;
   int64 expira_en_ms = 5;
 }

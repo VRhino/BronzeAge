@@ -708,6 +708,7 @@ fn quien(a: crate::comando::Autoriza) -> &'static str {
         Cargo([asentamiento::Cargo::Tesorero]) => "el Tesorero de la plaza, residente y dentro",
         Cargo([asentamiento::Cargo::Gobernador, asentamiento::Cargo::MaestroObras]) => "el Gobernador o el Maestro de Obras de la plaza, residente y dentro",
         Cargo([asentamiento::Cargo::Gobernador, asentamiento::Cargo::Tesorero]) => "el Gobernador o el Tesorero de la plaza, residente y dentro",
+        Cargo([asentamiento::Cargo::Gobernador, asentamiento::Cargo::Tesorero, asentamiento::Cargo::MaestroCaravanas]) => "el Gobernador, el Tesorero o el Maestro de Caravanas de la plaza, residente y dentro",
         Cargo(otros) => unreachable!("sin texto para los cargos {otros:?}"),
         CargoDeLaOrden => "el titular del cargo de la orden, residente y dentro",
         ResidenteDentro => "un residente de la plaza, dentro",

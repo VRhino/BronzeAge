@@ -458,7 +458,7 @@ pub enum Comando {
     /// El titular desarma su Caravana de Fundación suelta, parada en su origen, y devuelve lo que costó (a la plaza, o al fondo a nombre de cada aportante).
     DesarmarCaravanaFundacion { heroe: u64, caravana: u64 },
     // ── Política: los cargos locales y la puerta (sistema 5, tanda 5E; Diplomacia_Facciones §3.4 y §4.3, Proyecciones §5.2). Códigos del 158 al 160 (5F tomó del 168 al 173 y dejó este hueco). ──
-    /// Hace a `designado` titular de `cargo` en la plaza (sustituye al anterior). Al Gobernador lo designa el Rey de la Facción dueña, sin estar presente; a los otros cuatro, el Gobernador,
+    /// Hace a `designado` titular de `cargo` en la plaza (sustituye al anterior). Al Gobernador lo designa el Rey de la Facción dueña, sin estar presente; a los otros cinco, el Gobernador,
     /// residente y dentro, y solo si ya hay Gobernador. El designado es ciudadano de la Facción dueña y reside en la plaza (Q4).
     AsignarCargoLocal { heroe: u64, asentamiento: u64, cargo: Cargo, designado: u64 },
     /// Cierra la puerta de la plaza a esos grupos y la abre a los demás (Q1): el Gobernador, residente y dentro, o el Rey de la Facción dueña, sin estar presente. Quien está dentro de la
@@ -622,6 +622,7 @@ const GOBERNADOR: &[Cargo] = &[Cargo::Gobernador];
 const TESORERO: &[Cargo] = &[Cargo::Tesorero];
 const GOBERNADOR_O_MAESTRO: &[Cargo] = &[Cargo::Gobernador, Cargo::MaestroObras];
 const GOBERNADOR_O_TESORERO: &[Cargo] = &[Cargo::Gobernador, Cargo::Tesorero];
+const GOBERNADOR_TESORERO_O_MAESTRO_CARAVANAS: &[Cargo] = &[Cargo::Gobernador, Cargo::Tesorero, Cargo::MaestroCaravanas];
 
 impl Comando {
     /// Quién puede dar la orden ([`Autoriza`]). Cada variante se nombra a propósito (sin `_`): una orden nueva no compila hasta decidirlo.
@@ -767,10 +768,8 @@ impl Comando {
             | Comando::RechazarTrueque { .. }
             | Comando::ColocarOrdenMercado { .. }
             | Comando::CancelarOrdenMercado { .. }
-            | Comando::AlternarReabastecerAliados { .. }
-            | Comando::EncargarCaravana { .. }
-            | Comando::CambiarEncargo { .. }
-            | Comando::CancelarEncargo { .. } => Cargo(GOBERNADOR_O_TESORERO),
+            | Comando::AlternarReabastecerAliados { .. } => Cargo(GOBERNADOR_O_TESORERO),
+            Comando::EncargarCaravana { .. } | Comando::CambiarEncargo { .. } | Comando::CancelarEncargo { .. } => Cargo(GOBERNADOR_TESORERO_O_MAESTRO_CARAVANAS),
             Comando::CrearCaravana { .. }
             | Comando::AnadirCarro { .. }
             | Comando::AnadirAnimal { .. }
