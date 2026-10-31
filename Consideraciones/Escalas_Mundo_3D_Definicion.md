@@ -241,6 +241,9 @@ funcionar primero ahí, con three.js como en la mesa, ayuda a cerrar la represen
 
 **Orden decidido por el autor (2026-10-30):** primero la cámara y la visión; después, el generador y las reglas de juego.
 
+> **2026-10-31:** el cliente 3D está hecho (BronzeAgeClient 0.65.0, en `main`). Lo que queda de esta sección, junto con la revisión
+> de las reglas, está reunido en `Docs/Mecanicas a desarrollar.md` §63.
+
 - **Cámara y visión.** Valores decididos el 2026-10-30 (§3 y §5); queda el encuadre de la caravana grande (60 u). En
   2D la pantalla era lo que el héroe ve: la visión llenaba el lado corto. Con la
   cámara inclinada se ve mucho más suelo hacia el fondo; con la visión de 15 u y 15 u en pantalla, a 30° llega a

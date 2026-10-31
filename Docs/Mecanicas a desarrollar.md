@@ -24,6 +24,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 48 | MILITAR / POLÍTICA | Mercenarios por contrato (diseño cerrado el 2026-10-26; `Docs/Disenos_Por_Implementar/Mercenarios_Por_Contrato.md`) | nada |
 | 61 | MISIONES | H13 «Forjar al héroe» no tiene camino: el héroe no gana puntos de atributo porque el servidor no sube su nivel (visto al probar las misiones una a una, 2026-10-28). **Parada** hasta que haya Unity para los perks (decisión del autor del 2026-10-28) | la misión existe y se prueba que repartir sin puntos no cuenta |
 | 62 | MERCENARIOS | El campamento visto desde la puerta (2026-10-28): el héroe con la columna parada a la puerta (≤ `radioPuerta`) recibe el ámbito `CAMPAMENTO` como si estuviera dentro (stock y precios del mercado, reclutas, tropas que ofrece) y se le quita al alejarse; la sesión recalcula ese derecho cuando la columna para o arranca. Pendiente de decidir si desde fuera se recorta la lista de residentes y presentes. El cliente de jugador enseña mercado y reclutar con ese ámbito, dentro o fuera. Aparcada por el autor el 2026-10-28 | las órdenes ya se aceptan a la puerta (`comprarEnCampamento`, `reclutarEnCampamento`, repostar), pero `CAMPAMENTO` solo se abre dentro: desde fuera el jugador no ve qué hay |
+| 63 | MUNDO / REGLAS | El mundo en 3D, lo que queda (2026-10-31): generador v2 (bosque, llanos, montañas, altiplanos, metales), revisión a fondo de las reglas del terreno para la vista 3D, el encuadre de la caravana grande y los cabos sueltos del cliente 3D. Sección «63» | cliente 3D en `main` (BronzeAgeClient 0.65.0); generador y reglas sin tocar |
 | — | PARIDAD | Recortes temporales del motor Rust frente al TypeScript (sección «Paridad con TypeScript») | el motor no está migrado hasta cerrarlos |
 | — | DUDAS | Ninguna sin decisión desde el 2026-10-27 (sección «Dudas abiertas»: las `// DUDA:` que quedan en el código) | — |
 | — | FASE 7 | Todo lo que se dejó para los bots reales y la fase 7 (sección «Para la fase 7») | — |
@@ -150,3 +151,69 @@ Todo lo que se ha ido dejando «para la fase 7» (bots en Rust y admin web, `Con
 | `src/server/informeDeCarga.ts` (+ `scripts/informe-carga.ts`) | Informe puro de una prueba de carga: agrega muestras y auditoría, compara bytes/min por cliente con el sondeo y dice qué mejora de rendimiento pide cada umbral (`UMBRALES`) | `GET /v1/telemetria/informe` (o el cálculo en el admin web a partir de las muestras) |
 
 Todo, solo para cuentas de administrador (`Authorization: sesion <token>` de un nick de `ADMINISTRADORES`), y fuera del camino caliente del núcleo (bots y cargas de 500 jugadores, ver «Rendimiento con 500 bots» arriba). Las rutas y formatos son una propuesta, sin decidir: se cierran con el frente admin web cuando el autor dé la orden.
+
+## 63. El mundo en 3D: generador, reglas y lo que queda (2026-10-31)
+
+**Estado.** El modo mundo del cliente de jugador es 3D desde BronzeAgeClient 0.65.0 (`docs/Mundo_3D.md` del cliente). Las escalas y la
+cámara se decidieron con la mesa de escalas 3D (`Consideraciones/Escalas_Mundo_3D_Definicion.md`, §3, §5 y §7). El autor fijó el orden el
+2026-10-30: **primero la cámara y la visión (hecho), después el generador y las reglas de juego**. Esta sección reúne lo que quedó para
+entonces; nada de esto tiene código todavía.
+
+### 63.1 Generador v2: el relieve, el bosque y los recursos
+
+Lo que el autor vio en la mesa (ventana de la seed 42, mundo `71697908`) y lo que pidió:
+
+- **Bosque.** Hoy es una alfombra continua: el 50 % de la tierra, denso, en una sola mancha que tiene el 99 % del bosque denso. Se quiere
+  como el boceto de la mesa: manchas densas y separadas (117 manchas en la ventana, la mayor con el 13 %), y aún menos bosque. En 3D se
+  nota más, porque cada árbol se dibuja (copa de 0,3 u).
+- **Llano.** Demasiado plano: el 43 % de la tierra baja por debajo de 5°, frente al 11,5 % del boceto. Se quieren colinas suaves en casi
+  toda la tierra baja y llanuras de verdad solo en algunas regiones.
+- **Montaña.** Gustan los valles que abren los ríos. Hay que quitar las agujas sueltas (un punto llega a sobresalir 142 m de lo que tiene
+  a 4 u alrededor), que en 3D se leen como pinchos verticales.
+- **Altiplanos.** El boceto los tiene y gustan; el generador no hace ninguno. Mesetas altas con uno o dos accesos, que sirvan de posición
+  defensiva (ver 63.2: hoy las reglas los castigarían).
+- **Más relieve.** Acercarse al 43 % de laderas cerradas del boceto pide abrir collados en las crestas o subir el tope vertical de
+  1.000 m del raster (`ESCALA_TERRENO.metrosVerticalesPorElevacion`), que también limita las cumbres. Hoy, en la cordillera se ve un borde
+  recto con dientes que viene del generador.
+- **Metales en zonas montañosas** (pendiente desde el análisis del generador). Depende de qué sea «montaña» en el relieve nuevo y de la
+  revisión de 63.2.
+- **Ríos y vados.** En el mundo, 16 de los 7.360 recursos quedan en bolsas entre ríos sin vado, fuera de la red principal.
+- **Receta de partida.** La del boceto está en la ficha de escalas (§3.1): macizo, piedemonte de colinas, llano con lomas, valles
+  gaussianos alrededor de los ríos y bosque por manchas.
+- Cada cambio rehace el artefacto y su paquete de relieve: hay que volver a pasar las pruebas del núcleo que dependen de la geografía,
+  como se hizo con el mundo `71697908`.
+
+### 63.2 Revisión de las reglas del terreno (a fondo)
+
+Decisión del autor (2026-10-30): las reglas del terreno se pensaron con un generador más inmaduro y vistas solo en 2D; hay que
+modificarlas para llegar a modos de juego más interesantes y estratégicos. Puntos ya señalados:
+
+- **La clase de terreno sale solo de la altura** (umbrales: agua 375 m, costa 420, colina 545, montaña 600, cima 685). Un altiplano llano por
+  encima de 600 m cuesta ×3,5 al andar (`COSTE_MOVIMIENTO` de montaña), y por encima de 685 m no se puede fundar. Habría que contar también
+  la pendiente, o separar «alto» de «abrupto».
+- **Fundar en alto.** Hoy no se puede fundar en las cimas ni compensa hacerlo en la montaña; con altiplanos, una plaza en alto podría ser
+  una elección defensiva con su coste (accesos, abastecimiento).
+- **Pendientes.** El coste por pendiente es `1 + min(2; 0,45·pendiente)` y no se pasa de 0,7 (35°, `pendienteMaximaTransitable`). Se
+  miden con la exageración de altura (decisión del 2026-10-30): lo que se ve es lo que se anda. Revisar con el relieve nuevo.
+- **Bosque y tránsito.** Con bosques en manchas (63.1), revisar qué aportan al juego: cobertura, coste de paso y escondite de bandidos.
+- **Rutas del servidor.** Visto al probar el cliente 3D (2026-10-31): desde `camp-0`, un destino en tierra firme a 3 u al oeste y 5 al sur
+  se rechaza con «no hay ruta por tierra hasta el destino», mientras al este y al sureste sí hay ruta. El punto que manda el cliente es el
+  correcto. Hay que mirar si es la rejilla de navegación o la geografía del mundo nuevo.
+
+### 63.3 Cámara y visión: lo que quedó abierto
+
+- **Encuadre de la caravana grande** (visión 60 u, `VISION.caravanaGrande`). Las demás están decididas: héroe solo 15 u (en pantalla
+  15 / 22), con soldados 30 u (30 / 45). El cliente usa hoy, para cualquier otro radio, el radio y 1,5 veces.
+- Con la cámara inclinada se ve suelo más allá de la visión. La niebla no enseña de más (el servidor solo manda lo que se ve y el terreno
+  es público), pero la pantalla se llena de suelo en niebla; se valorará al revisar las reglas de visión.
+
+### 63.4 Cliente 3D: cabos sueltos
+
+Decisiones provisionales tomadas al construirlo, para revisar (detalle en `BronzeAgeClient/docs/Mundo_3D.md`):
+
+- Las columnas ajenas solo enseñan a sus héroes: su tropa no viaja en la proyección. Si se quiere verla, tiene que mandarla el servidor
+  (redactada).
+- Caminos (0,2 / 0,35 / 0,55 u) y fronteras van más anchos que en la realidad para que se lean; la zona propia va sin relleno.
+- Solo hay árboles en lo explorado.
+- Sin medir en una tarjeta gráfica de verdad: la escena va de 0,43 a 0,88 millones de triángulos según el encuadre.
+- Móvil y Unity: el prototipo es solo de sobremesa; el paso a Unity (CQ) usa los mismos valores y el mismo paquete de relieve.
