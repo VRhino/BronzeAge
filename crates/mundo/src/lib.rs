@@ -116,6 +116,20 @@ impl Mundo {
         self.celda(x, y).map(|i| self.altura[i])
     }
 
+    /// Pendiente en `p` en milésimas (m/m × 1000), por diferencias centradas entre las celdas vecinas del raster de altura
+    /// (u16, 0..65535 = 0..1.000 m; una unidad de mapa son 12 m). Donde falta un vecino (borde del mapa) se usa la celda
+    /// misma. `None` fuera del mundo.
+    pub fn pendiente_en(&self, x: i64, y: i64) -> Option<i64> {
+        let h = |x: i64, y: i64| self.altura_en(x, y).map(|a| a as i128);
+        let c = h(x, y)?;
+        let t = TAMANO_CELDA as i64;
+        let (dx, dy) = (h(x + t, y).unwrap_or(c) - h(x - t, y).unwrap_or(c), h(x, y + t).unwrap_or(c) - h(x, y - t).unwrap_or(c));
+        // pendiente = |Δaltura| / 65535 · 1000 m / (2 celdas · 4 u · 12 m), en milésimas.
+        let num = (dx * dx + dy * dy) * 1_000_000 * 1_000_000;
+        let den = (65_535i128 * 2 * (TAMANO_CELDA as i128 / 1000) * 12).pow(2);
+        Some((num / den).isqrt() as i64)
+    }
+
     pub fn fertilidad_en(&self, x: i64, y: i64) -> Option<u8> {
         self.celda(x, y).map(|i| self.fertilidad[i])
     }

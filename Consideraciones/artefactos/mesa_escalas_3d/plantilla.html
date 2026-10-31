@@ -299,7 +299,7 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
       </li>
       <li>
         <h3>Región alpina (prueba)</h3>
-        <p>Una zona montañosa entera en altura: desde el llano se sube poco a poco, y arriba hay altiplanos a varias alturas, separados por montaña y unidos por pasos. La columna empieza en el altiplano central, con plazas fundadas arriba. Aquí solo frena la pendiente.</p>
+        <p>Una zona montañosa entera en altura: desde el llano se sube poco a poco, y arriba hay altiplanos a varias alturas, separados por montaña y unidos por pasos. La columna empieza en el altiplano central, con plazas fundadas arriba. Solo frena la pendiente, como en todo el mapa.</p>
         <div class="botones"><button type="button" data-escena="alpinagen,llano">En el generador</button><button type="button" data-escena="alpina,inicio">Altiplano central</button><button type="button" data-escena="alpina,altiplano">Altiplano alto</button><button type="button" data-escena="alpina,entrada">Valle de entrada</button></div>
       </li>
       <li>
@@ -309,7 +309,7 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
       </li>
       <li>
         <h3>Mover la columna</h3>
-        <p>Haz clic en el terreno. La ruta se engancha a los nodos más cercanos, cruza la rejilla con A* y, con el suavizado, se estira en rectas que no cuestan más. La columna va más despacio en colina (×1,8) y en montaña (×3,5); el agua y las laderas que se ven de más de 35° no se cruzan, y el río se pasa por los vados.</p>
+        <p>Haz clic en el terreno. La ruta se engancha a los nodos más cercanos, cruza la rejilla con A* y, con el suavizado, se estira en rectas que no cuestan más. La columna va más despacio cuanto más empinado es el terreno (de ×1 en llano a ×3,5 a 35°), sea cual sea la altura; el agua y las laderas que se ven de más de 35° no se cruzan, y el río se pasa por los vados.</p>
         <button type="button" data-escena="columna">Verlo</button>
       </li>
       <li>
@@ -409,7 +409,8 @@ const FRACCION_CIUDAD = .1, SEPARACION_PUEBLOS = 3;
 // La ciudad del juego ocupa el 10 % del radio de su zona; su maqueta crece con «Plazas» como los pueblos y las avanzadas (×1 = la del juego)
 const radioCiudad = () => NIVELES[estado.nivel].radio * FRACCION_CIUDAD * estado.maqueta;
 // generador: COSTE_MOVIMIENTO por clase y factor de pendiente de costeEnPunto
-const COSTE = { llano: 1, colina: 1.8, 'montaña': 3.5, cima: 12 };
+// generador: COSTE_MOVIMIENTO desde el 2026-10-31, solo frena la pendiente (la altura no)
+const COSTE_PENDIENTE = { por: 3.6, tope: 2.5 };
 const $ = id => document.getElementById(id);
 const aviso = $('aviso');
 const fallo = msg => { aviso.textContent = msg; aviso.hidden = false; };
@@ -428,8 +429,6 @@ const ventana = async V => {
   return { hm, agua: aguaB, bosque, rios: V.rios, anchoRio: .9, vados: [], umbrales: [545, 600, 685], campamentos: V.campamentos, puntos: V.puntos };
 };
 const [real, nuevo, alpinaGen] = await Promise.all([ventana(D), ventana(DN), ventana(DA)]);
-// La región alpina del generador se juega con las reglas de prueba: solo frena la pendiente y se funda donde la pendiente deja.
-alpinaGen.soloPendiente = true;
 
 // ---------- ruido (simplex 2D) para la propuesta ----------
 function ruido(semilla) {
@@ -495,7 +494,7 @@ function propuesta(S) {
 
 // Región alpina (prueba del 2026-10-31): desde el llano del sur se sube poco a poco a una región alta, una cadena de valles
 // en altura con altiplanos a varias alturas, cerrados por montaña y unidos entre sí por pasos. Dos valles suben desde el llano.
-// Regla de prueba: el movimiento solo lo frena la pendiente (no la altura) y se funda donde la pendiente lo deje.
+// Las reglas del juego desde el 2026-10-31: el movimiento solo lo frena la pendiente (no la altura) y se funda donde la pendiente lo deje.
 const ALTIPLANOS = [
   { n: 'Altiplano bajo', x: 72, y: 104, rx: 24, ry: 15, a: .35, piso: 515 },
   { n: 'Altiplano central', x: 158, y: 78, rx: 30, ry: 17, a: -.2, piso: 548 },
@@ -562,7 +561,7 @@ function alpina(S) {
     bosque[j * BX + i] = Math.max(0, Math.min(1, f));
   }
   const p0 = sendas[PASOS.length].p[0], p1 = sendas[PASOS.length + 1].p[0];
-  return { hm, agua, bosque, rios, anchoRio, vados, umbrales: [500, 560, 665], soloPendiente: true, campamentos: [],
+  return { hm, agua, bosque, rios, anchoRio, vados, umbrales: [500, 560, 665], campamentos: [],
     puntos: { inicio: [A[1].x, A[1].y], llano: [160, 225], cordillera: [158, 50], campamento: [p0[0], p0[1] - 4], altiplano: [A[4].x, A[4].y], entrada: [p1[0], p1[1] - 4] } };
 }
 
@@ -586,8 +585,7 @@ const bosqueEn = (x, y) => { const i = Math.floor(x), j = Math.floor(y); return 
 const pendiente = (x, y) => Math.hypot(alturaM(x + .5, y) - alturaM(x - .5, y), alturaM(x, y + .5) - alturaM(x, y - .5)) / FACTOR * exag();
 const clase = h => { const [a, b, c] = T.umbrales; return h < a ? 'llano' : h < b ? 'colina' : h < c ? 'montaña' : 'cima'; };
 const transitable = (x, y) => x >= 0 && y >= 0 && x <= W && y <= H && !aguaEn(x, y) && pendiente(x, y) <= PEND_MAX;
-// en la región alpina se prueba la regla nueva: solo frena la pendiente (misma curva, sin multiplicador por altura)
-const costeEn = (x, y) => (T.soloPendiente ? 1 : COSTE[clase(alturaM(x, y))]) * (1 + Math.min(2, pendiente(x, y) * .45));
+const costeEn = (x, y) => 1 + Math.min(COSTE_PENDIENTE.tope, COSTE_PENDIENTE.por * pendiente(x, y));
 const V3 = (x, y, dy = 0) => new THREE.Vector3(x - W / 2, alturaU(x, y) + dy, y - H / 2);
 const hash = (a, b, c = 0) => { let h = Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263) ^ Math.imul(c | 0, 1442695041); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 
@@ -733,7 +731,7 @@ function elegirPlazas() {
   for (let f = 0; f < 10; f++) for (let c = 0; c < 12; c++) {
     const x = 12 + c * 30 + (f % 2) * 15, y = 12 + f * 26;
     if (x > W - 6 || y > H - 6) continue;
-    if ((!T.soloPendiente && alturaM(x, y) >= T.umbrales[1]) || pendiente(x, y) > .3 || hash(c, f, 3) < .12) continue;
+    if (pendiente(x, y) > .3 || hash(c, f, 3) < .12) continue;
     let mojado = false; for (let a = 0; a < 8 && !mojado; a++) mojado = !!aguaEn(x + 2 * Math.cos(a * .785), y + 2 * Math.sin(a * .785));
     if (mojado || aguaEn(x, y)) continue;
     ciudades.push({ x, y, semilla: f * 31 + c });
@@ -1132,8 +1130,8 @@ function lecturas(ahora) {
 const FICHAS = {
   actual: 'El generador de antes, en la misma ventana: <b>320 × 240 u</b> entre la cordillera norte y el campamento‑0. El llano es una mesa y la cordillera, una rampa lisa: en el macizo, <b>50 m</b> de desnivel por pantalla (mediana) y el <b>13 %</b> de laderas de más de 35°.',
   nuevo: 'El generador con el relieve nuevo (seed 42), misma ventana y alturas tal cual: crestas cada ~92 u, valles hundidos en los ríos, colinas y lomas, sobre la geografía regional. En el macizo, <b>46 m</b> de desnivel por pantalla de mediana y <b>196 m</b> en el percentil 90, y el <b>25 %</b> de laderas de más de 35°. Las tierras altas llevan colinas y los pasos quedan limpios para no cortar regiones.',
-  alpinagen: 'El generador con la <b>región alpina</b> en las Tierras altas secas (seed 42), alturas tal cual: una cadena de valles en altura con altiplanos a varias alturas, unidos por pasos, y la subida desde fuera en el borde. Regla de prueba: <b>solo frena la pendiente</b> y se funda en cualquier sitio llano, también arriba.',
-  alpina: 'Prueba del 2026-10-31. Desde el llano del sur el terreno va subiendo hasta una <b>región alta</b>: una cadena de valles en altura con <b>seis altiplanos</b> entre 515 y 618 m, cerrados por montaña y unidos por <b>pasos</b> con su collado. Dos valles con río suben desde el llano. Regla de prueba: <b>solo frena la pendiente</b> (la altura no cuesta) y se funda en cualquier sitio llano, también arriba. No sale del generador.',
+  alpinagen: 'El generador con la <b>región alpina</b> en las Tierras altas secas (seed 42), alturas tal cual: una cadena de valles en altura con altiplanos a varias alturas, unidos por pasos, y la subida desde fuera en el borde. Como en el juego desde el 2026-10-31: <b>solo frena la pendiente</b> y se funda en cualquier sitio llano (hasta 0,3 de pendiente), también arriba.',
+  alpina: 'Prueba del 2026-10-31. Desde el llano del sur el terreno va subiendo hasta una <b>región alta</b>: una cadena de valles en altura con <b>seis altiplanos</b> entre 515 y 618 m, cerrados por montaña y unidos por <b>pasos</b> con su collado. Dos valles con río suben desde el llano. Como en el juego desde el 2026-10-31: <b>solo frena la pendiente</b> (la altura no cuesta) y se funda en cualquier sitio llano, también arriba. No sale del generador.',
   propuesta: 'Boceto con los tamaños de la regla ×100: crestas, valles, colinas y lomas que caben en una o pocas pantallas. «Tamaño del relieve» escala tamaño y altura a la vez; «Altura» exagera las alturas, y con ellas las pendientes que deciden el paso. No sale del generador.',
 };
 let propuestaCache = null, alpinaCache = null;

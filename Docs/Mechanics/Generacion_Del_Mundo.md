@@ -168,12 +168,14 @@ crece el borde (`1 − fBorde`) para que la pared de costa/montaña del perímet
 > - **Ríos y lagos:** siguen donde estaban. Su valle (semiancho de 9 u, 30 u alrededor de los lagos) manda donde queda más bajo. Si el terreno alpino queda por debajo de un río, el cauce conserva su cota en 1,5 u, para que el río siga bajando.
 > - Los pasos de las barreras regionales que caen dentro dejan de contar: allí se pasa por los pasos propios de la región. La conexión se sigue midiendo como siempre.
 >
-> Medido en la semilla 42: 25 altiplanos y 36 sendas (2 de entrada). Queda cerrado por pendiente el 33 % del núcleo y el 28 % de toda la región, frente al 52 % del macizo de la cordillera norte por encima de 600 m. Hash `5aec9d8f…`. Las reglas de juego no cambian: la clase de terreno sigue saliendo de la altura, así que buena parte de los altiplanos es «montaña» o «cima».
+> Medido en la semilla 42: 25 altiplanos y 36 sendas (2 de entrada). Queda cerrado por pendiente el 33 % del núcleo y el 28 % de toda la región, frente al 52 % del macizo de la cordillera norte por encima de 600 m. Con las reglas del mismo día (solo frena la pendiente, §5.4, y se funda según la pendiente, §5.2), los altiplanos se andan como el llano y se pueden fundar aunque sean «montaña» o «cima». Semilla 42 con todo: hash `b93e8c18…`, 199.494 nodos en el grafo (el 99,08 % en la componente mayor, con los 8 campamentos).
 
 ### 5.2 Terreno (`evaluarTerreno`)
 
 `e < umbralAgua` → `agua`; `< umbralCosta` → `costa`; `< umbralColina` → `llano`; `< umbralMontana` → `colina`; `< umbralCima` → `montana`; si no, `cima` (inhabitable: ni se funda ni se colocan recursos). El agua es obstáculo
 (`esTransitable(p) = terreno ≠ agua`, Doc 1.0b); la cima es transitable pero cara.
+
+> **Desde el 2026-10-31 (decisión del autor, con la región alpina): la altura ya no decide ni el paso ni dónde se funda.** La clase sigue saliendo de la altura y se usa para pintar, para los metales (colina o montaña), el drenaje y los recursos (ni en agua ni en cima), pero no frena (§5.4) ni impide fundar: en la cima se funda si la pendiente lo deja (`FUNDACION.pendienteMaximaParaFundar`, `Fundacion_Y_Refundacion.md`). Transitable es lo que no es agua y no pasa de 35° (`ESCALA_TERRENO.pendienteMaximaTransitable`).
 
 ### 5.3 Fertilidad y bioma
 
@@ -189,6 +191,8 @@ crece el borde (`1 − fBorde`) para que la pared de costa/montaña del perímet
 densidad = max{ b.densidad : b cubre la celda de p (índice de 100×100) ∧ distancia(b.centro, p) < b.radio }   (0 si ninguno)
 coste(p) = costeTerreno(p) · (1 + COSTE_MOVIMIENTO.bosquePorDensidad · densidad)
 ```
+
+> **En la reconstrucción (2026-10-31, decisión del autor): solo frena la pendiente** (`generador/src/costeMovimiento.ts`, `COSTE_MOVIMIENTO` de `generador/src/config.ts`). En tierra, `coste = 1 + min(2,5; 3,6 · pendiente)`, con la pendiente en m/m medida con un paso de 1 u: llano 1; 10° (0,18) 1,63; 20° (0,36) 2,3; 35° (0,7, la máxima transitable) 3,5, lo que antes costaba una montaña llana. La clase de terreno no entra (antes multiplicaba: colina 1,8, montaña 3,5, cima 12) y el bosque tampoco, como ya pasaba. Es la capa `coste` del artefacto y el coste de las aristas del grafo, así que el motor no cambia. Semilla 42: ver §5.1 (región alpina).
 
 ## 6. Regiones (`regiones.ts`)
 

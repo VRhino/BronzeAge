@@ -73,12 +73,12 @@ impl Geografia {
         self.mundo.fertilidad_en(p.x, p.y).map(|f| f as i64 * asentamiento::datos::UNO / 255)
     }
 
-    /// ¿Lo pisa una ruta? Lo que el A\* de las rutas da por transitable (la cima también, aunque cara).
+    /// ¿Lo pisa una ruta? Lo que el A\* de las rutas da por transitable.
     pub(super) fn transitable(&self, p: Punto) -> bool {
         self.mundo.transitable_en(p.x, p.y)
     }
 
-    /// ¿Se puede pisar `p`? Tierra firme dentro del mapa y transitable (ni agua ni cima ni río sin vado).
+    /// ¿Se puede pisar `p`? Tierra firme dentro del mapa y transitable (ni agua ni río sin vado ni ladera de más de 35°).
     pub(super) fn es_tierra_firme(&self, p: Punto) -> bool {
         self.terreno(p) == Terreno::Firme
     }
@@ -88,7 +88,6 @@ impl Geografia {
         match self.mundo.terreno_en(p.x, p.y) {
             None => Terreno::FueraDelMapa,
             Some(C::TerrenoAgua) => Terreno::Agua,
-            Some(C::TerrenoCima) => Terreno::Cima,
             Some(_) if !self.mundo.transitable_en(p.x, p.y) => Terreno::NoTransitable,
             Some(_) => Terreno::Firme,
         }
@@ -234,9 +233,12 @@ impl Nucleo {
         let r = &self.estado.reglas.territorio;
         let plazas: Vec<Disco> = self.discos().into_iter().map(|(_, d)| d).collect();
         let dist = DistanciasDeFundacion { separacion_plazas: r.separacion_plazas, exclusion_campamento: r.exclusion_campamento };
-        // El bosque cerrado se cruza pero no se funda en él: la celda de la raster (0-255) contra el umbral en milésimas.
-        let maxima = self.estado.reglas.economia.datos.densidad_bosque_maxima_fundar;
+        // La ladera empinada y el bosque cerrado se cruzan pero no se funda en ellos: la pendiente del raster de altura contra su
+        // máximo, y la celda de bosque (0-255) contra el umbral, en milésimas.
+        let datos = &self.estado.reglas.economia.datos;
+        let (maxima, pendiente) = (datos.densidad_bosque_maxima_fundar, datos.pendiente_maxima_fundar);
         let terreno = match geo.terreno(p) {
+            Terreno::Firme if geo.mundo.pendiente_en(p.x, p.y).is_some_and(|q| q > pendiente) => Terreno::Empinado,
             Terreno::Firme if geo.mundo.densidad_bosque_en(p.x, p.y).is_some_and(|d| d as Mil * 1000 >= maxima * 255) => Terreno::BosqueDenso,
             t => t,
         };

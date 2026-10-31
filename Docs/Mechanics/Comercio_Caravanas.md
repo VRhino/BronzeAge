@@ -560,14 +560,13 @@ fuera del mapa) ⇒ `Infinity`. Si no: `coste = (largo / n) × Σ_{k=0..n−1} c
 ```
 <!-- /parametros -->
 
+> **Desde el 2026-10-31 (decisión del autor):** el coste del terreno lo pone solo la pendiente, `1 + min(topePendiente; porPendiente · pendiente)` (`Generacion_Del_Mundo.md` §5.4); ya no hay coste por clase de terreno (antes llano 1, costa 1,1, colina 1,8, montaña 3,5, cima 12).
+
 <!-- parametros:COSTE_MOVIMIENTO -->
 ```json
 {
-  "llano": 1,
-  "costa": 1.1,
-  "colina": 1.8,
-  "montana": 3.5,
-  "cima": 12,
+  "porPendiente": 3.6,
+  "topePendiente": 2.5,
   "agua": 15,
   "factorCamino": 0.5,
   "bosquePorDensidad": 2

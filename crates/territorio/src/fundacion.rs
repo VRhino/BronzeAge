@@ -8,7 +8,8 @@ use base::{Mil, Punto};
 pub enum Terreno {
     FueraDelMapa,
     Agua,
-    Cima,
+    /// Tierra firme con más pendiente de la que deja fundar (`FUNDACION.pendienteMaximaParaFundar`): se pisa, no se funda.
+    Empinado,
     /// Tierra firme que no se puede pisar (río sin vado, pendiente): la plaza quedaría incomunicada.
     NoTransitable,
     /// Tierra firme y pisable, pero en bosque cerrado (`FUNDACION.densidadBosqueMaximaParaFundar` o más): se cruza, no se funda.
@@ -21,8 +22,8 @@ pub enum Terreno {
 pub enum Motivo {
     FueraDelMapa,
     SobreAgua,
-    SobreCima,
     NoTransitable,
+    Empinado,
     BosqueDenso,
     DentroDeZona,
     CercaDePlaza,
@@ -34,7 +35,7 @@ impl Motivo {
         match self {
             Motivo::FueraDelMapa => "fundacion.fuera_del_mapa",
             Motivo::SobreAgua => "fundacion.sobre_agua",
-            Motivo::SobreCima => "fundacion.sobre_cima",
+            Motivo::Empinado => "fundacion.pendiente",
             Motivo::NoTransitable => "fundacion.no_transitable",
             Motivo::BosqueDenso => "fundacion.bosque_denso",
             Motivo::DentroDeZona => "fundacion.dentro_de_zona",
@@ -52,14 +53,14 @@ pub struct DistanciasDeFundacion {
     pub exclusion_campamento: Mil,
 }
 
-/// Valida un punto de fundación, en este orden: mapa, agua, cima, paso, bosque cerrado, zonas, plazas, campamentos. `plazas` son los discos
+/// Valida un punto de fundación, en este orden: mapa, agua, paso, pendiente, bosque cerrado, zonas, plazas, campamentos. `plazas` son los discos
 /// vigentes de todas las plazas, de cualquier Facción (también la propia).
 pub fn validar(p: Punto, terreno: Terreno, plazas: &[Disco], campamentos: impl IntoIterator<Item = Punto>, d: &DistanciasDeFundacion) -> Result<(), Motivo> {
     match terreno {
         Terreno::FueraDelMapa => return Err(Motivo::FueraDelMapa),
         Terreno::Agua => return Err(Motivo::SobreAgua),
-        Terreno::Cima => return Err(Motivo::SobreCima),
         Terreno::NoTransitable => return Err(Motivo::NoTransitable),
+        Terreno::Empinado => return Err(Motivo::Empinado),
         Terreno::BosqueDenso => return Err(Motivo::BosqueDenso),
         Terreno::Firme => {}
     }
@@ -107,7 +108,7 @@ mod pruebas {
     #[test]
     fn terreno_y_mapa() {
         let p = Punto::new(500_000, 500_000);
-        for (t, m) in [(Terreno::FueraDelMapa, Motivo::FueraDelMapa), (Terreno::Agua, Motivo::SobreAgua), (Terreno::Cima, Motivo::SobreCima), (Terreno::NoTransitable, Motivo::NoTransitable), (Terreno::BosqueDenso, Motivo::BosqueDenso)] {
+        for (t, m) in [(Terreno::FueraDelMapa, Motivo::FueraDelMapa), (Terreno::Agua, Motivo::SobreAgua), (Terreno::Empinado, Motivo::Empinado), (Terreno::NoTransitable, Motivo::NoTransitable), (Terreno::BosqueDenso, Motivo::BosqueDenso)] {
             assert_eq!(validar(p, t, &[], [], &D), Err(m));
         }
         assert_eq!(validar(p, Terreno::Firme, &[], [], &D), Ok(()));
