@@ -390,6 +390,84 @@ fn reclamar_solo_vale_para_la_caravana_de_fundacion_que_vuelve_sola() {
 
 // ───────────────────────────── 3. Por el WebSocket real ─────────────────────────────
 
+// ───────────────────────────── El carro frente al almacén de una plaza (2026-10-29) ─────────────────────────────
+
+#[test]
+fn dentro_de_una_plaza_el_ciudadano_carga_su_carro_del_almacen_y_su_faccion_y_las_aliadas_dejan_en_el() {
+    let m = con_mundo!();
+    let ConCaravana { mut e, a, c, ana, ej, .. } = con_caravana(m);
+    let cargar = |heroe, plaza, recurso, cantidad| Comando::CargarDePlaza { heroe, asentamiento: plaza, recurso, cantidad };
+    let dejar = |heroe, plaza, recurso, cantidad| Comando::DejarEnPlaza { heroe, asentamiento: plaza, recurso, cantidad };
+    // A la puerta no: hay que estar dentro.
+    assert_eq!(e.no("ana", cargar(ana, a, Madera, 10_000)), rechazos::HEROE_NO_ESTA_EN_LA_PLAZA);
+
+    // De visita en C (de su Facción, no reside): carga en el carro de la columna con la que entró, en unidades enteras, y lo deja de vuelta.
+    let pc = e.n.estado().asentamientos[&c].posicion;
+    e.llevar("ana", ej, pc);
+    e.ok("ana", Comando::Guarnecer { asentamiento: c, heroe: ana });
+    e.dar(c, Madera, 40_000);
+    let (almacen, carro) = (e.almacen(c, Madera), e.carro(ej, Madera));
+    e.ok("ana", cargar(ana, c, Madera, 25_500));
+    assert_eq!((e.almacen(c, Madera), e.carro(ej, Madera)), (almacen - 25_000, carro + 25_000), "unidades enteras: nada se crea ni se pierde");
+    let h = hechos(&e.n, "almacen.cargado_en_carro");
+    assert_eq!((dato(&h[0].0, "plaza") as u64, dato(&h[0].0, "heroe") as u64, dato(&h[0].0, "cantidad")), (c, ana, 25_000));
+    e.ok("ana", dejar(ana, c, Madera, 5_000));
+    assert_eq!((e.almacen(c, Madera), e.carro(ej, Madera)), (almacen - 20_000, carro + 20_000));
+    assert_eq!(e.no("ana", dejar(ana, c, Oro, 1_000)), rechazos::CARRO_NO_LLEVA);
+    assert_eq!(e.no("ana", cargar(ana, c, Cobre, 1_000)), rechazos::ALMACEN_SIN_EXISTENCIAS);
+    assert_eq!(e.no("ana", cargar(ana, c, Madera, 0)), rechazos::CANTIDAD_NO_POSITIVA);
+
+    // Cerrado por el Gobernador (aquí, la administración): la ciudadana ya no saca; dejar sigue valiendo.
+    e.ok("admin", Comando::CerrarAlmacenACiudadanos { asentamiento: c, cerrado: true });
+    assert!(e.n.estado().asentamientos[&c].almacen_cerrado_a_ciudadanos);
+    assert_eq!(e.no("ana", cargar(ana, c, Madera, 1_000)), rechazos::ALMACEN_CERRADO);
+    e.ok("ana", dejar(ana, c, Madera, 1_000));
+    let r = e.ord("admin", Comando::CerrarAlmacenACiudadanos { asentamiento: c, cerrado: true });
+    assert_eq!(r.resultado, Resultado::SinCambios);
+
+    // Gus, de F2, dentro de C: no saca; deja solo si F2 es aliada.
+    let t = e.n.ahora();
+    let gus_col = e.n.crear_ejercito(t, "gus", 2, en_tierra(&m.0, pc, 1_000, 0), 500, 100_000).unwrap();
+    let gus = e.n.ejercito(gus_col).unwrap().columna.lider;
+    e.ok("admin", Comando::DarSuministro { ejercito: gus_col, recurso: Oro, cantidad: 8_000 });
+    e.ok("admin", comun::acceso(c, true, true, false));
+    e.llevar("gus", gus_col, pc);
+    e.ok("gus", Comando::Guarnecer { asentamiento: c, heroe: gus });
+    assert_eq!(e.no("gus", cargar(gus, c, Madera, 1_000)), rechazos::ALMACEN_SOLO_CIUDADANOS);
+    assert_eq!(e.no("gus", dejar(gus, c, Oro, 3_000)), rechazos::ALMACEN_NI_FACCION_NI_ALIADA);
+    e.ok("admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(nucleo::Relacion::Alianza) });
+    let oro = e.almacen(c, Oro);
+    e.ok("gus", dejar(gus, c, Oro, 3_000));
+    assert_eq!((e.almacen(c, Oro), e.carro(gus_col, Oro)), (oro + 3_000, 5_000));
+
+}
+
+#[test]
+fn en_su_residencia_el_carro_que_trajo_carga_del_almacen_sin_bajar_el_trigo_de_su_reserva_y_su_gobernador_saca_aunque_este_cerrado() {
+    let m = con_mundo!();
+    let ConCaravana { mut e, a, ana, ej, .. } = con_caravana(m);
+    e.ok("ana", Comando::Guarnecer { asentamiento: a, heroe: ana });
+    assert!(e.n.ejercito(ej).is_none(), "sin caravanas, la columna se deshace y el carro va con ella");
+    e.dar(a, Madera, 20_000);
+    let madera = e.almacen(a, Madera);
+    e.ok("ana", Comando::CargarDePlaza { heroe: ana, asentamiento: a, recurso: Madera, cantidad: 15_000 });
+    assert_eq!((e.almacen(a, Madera), e.n.heroe(ana).unwrap().carro.get(&Madera).copied()), (madera - 15_000, Some(15_000)));
+    // Con el almacén cerrado a los ciudadanos, su Gobernador sigue sacando.
+    comun::gobierna(&mut e.n, a, ana);
+    e.ok("admin", Comando::CerrarAlmacenACiudadanos { asentamiento: a, cerrado: true });
+    e.ok("ana", Comando::CargarDePlaza { heroe: ana, asentamiento: a, recurso: Madera, cantidad: 1_000 });
+    e.ok("ana", Comando::DejarEnPlaza { heroe: ana, asentamiento: a, recurso: Madera, cantidad: 1_000 });
+    // Vuelve a dejarlo.
+    e.ok("ana", Comando::DejarEnPlaza { heroe: ana, asentamiento: a, recurso: Madera, cantidad: 15_000 });
+    assert_eq!(e.almacen(a, Madera), madera);
+    assert!(e.n.heroe(ana).unwrap().carro.get(&Madera).is_none());
+    // El trigo: como mucho lo que sobra de su reserva.
+    let trigo = e.almacen(a, Trigo);
+    let r = e.ord("ana", Comando::CargarDePlaza { heroe: ana, asentamiento: a, recurso: Trigo, cantidad: trigo + 1_000_000 });
+    let quedan = e.almacen(a, Trigo);
+    assert!(quedan > 0 || !r.aceptada(), "nunca se lleva todo el trigo: quedan {quedan} de {trigo} ({r:?})");
+}
+
 fn heroes(entidades: impl IntoIterator<Item = Option<pb::Entidad>>) -> Vec<pb::Heroe> {
     entidades.into_iter().flatten().filter_map(|e| if let Some(pb::entidad::Cuerpo::Heroe(h)) = e.cuerpo { Some(h) } else { None }).collect()
 }

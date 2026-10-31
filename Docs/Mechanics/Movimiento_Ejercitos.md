@@ -184,6 +184,14 @@ ritmo de consumo (por minuto) = Σ(cantidad de soldados) × MILITAR.racionPorSol
 > - **Capacidad (5G-a-4):** `Nucleo::capacidad_de_carga` suma solo el hueco libre de cada adjunta; la leen el botín, `DarSuministro`, las compras, aparcar y `cargarCaravana`.
 > - Pruebas: `crates/nucleo/tests/a_mano.rs` (cada orden, cada rechazo, la conservación, una adjunta llena que no da espacio y dos por el WebSocket real).
 
+### 9.1 El carro frente al almacén de una plaza, desde dentro
+
+> **Implementado en Rust (2026-10-29, pedido del autor).** Con el héroe **dentro** de una plaza, su carro y el almacén de la plaza se pasan recursos por recurso y cantidad, en unidades enteras y hasta donde quepa. El carro es el de la columna con la que entró de visita o, en su residencia, el que trajo (el de la columna que conserva para sus caravanas, si la conserva), como con el almacén personal; quien está de visita sin columna no tiene carro (`heroe.sin_columna`).
+> - **`cargarDePlaza { heroeId, asentamientoId, recurso, cantidad }`** (orden `cargar_de_plaza`, comando 192): del almacén al carro. Lo puede cualquier **ciudadano de la Facción dueña**, resida o no (`almacen.solo_ciudadanos`); el trigo, sin bajar de la reserva de la plaza (la misma que al salir). Si el Gobernador lo cerró, solo él (`almacen.cerrado`). Sin existencias de sobra, `almacen.sin_existencias`; con el carro lleno, `carro.no_cabe`. Hecho `almacen.cargado_en_carro { plaza, heroe, recurso, cantidad }`.
+> - **`dejarEnPlaza { heroeId, asentamientoId, recurso, cantidad }`** (orden `dejar_en_plaza`, comando 193): del carro al almacén. Lo pueden los héroes de su Facción y de una **aliada o vasalla** (alianza o vasallaje, sin mirar `permiteReabastecerAliados`; `almacen.ni_faccion_ni_aliada`). Sin lo pedido en el carro, `carro.no_lleva`; sin sitio en el almacén, `almacen.sin_sitio`. Hecho `almacen.dejado_del_carro`, con los mismos datos.
+> - **`cerrarAlmacenACiudadanos { asentamientoId, cerrado }`** (orden `cerrar_almacen_a_ciudadanos`, comando 194): el **Gobernador** (titular, residente y dentro) cierra o abre a los ciudadanos el sacar del almacén al carro; no toca repostar, cargar caravanas ni la carga al salir. Viaja en el interior de la plaza (`Asentamiento.almacen_cerrado_a_ciudadanos`), va en la foto desde BAN51 y la conquista lo abre. Hecho `almacen.cierre_a_ciudadanos { plaza, cerrado }`.
+> - Pruebas: `crates/nucleo/tests/a_mano.rs` (de visita y en la residencia, el cierre y su Gobernador, la aliada que deja y el trigo con su reserva).
+
 ## 10. Juntar y separar
 
 ### 10.1 Unirse en tu plaza (`unirseAEjercito`)
@@ -401,6 +409,7 @@ Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; cont
 <!-- eventos -->
 ```json
 [
+  "almacen.cargado_en_carro", "almacen.cierre_a_ciudadanos", "almacen.dejado_del_carro",
   "asentamiento.encuentro", "asentamiento.observado", "avanzada.encuentro", "caravana.encuentro", "caravana.observada", "columna.formacion_completada",
   "columna.formacion_disuelta", "columna.formacion_iniciada", "columna.liderazgo_cedido", "columna.observada", "columna.persecucion_abandonada",
   "columna.persecucion_iniciada", "columna.peticion_caducada", "columna.presa_a_cubierto", "columna.presa_alcanzada", "columna.presa_perdida", "columna.separacion",

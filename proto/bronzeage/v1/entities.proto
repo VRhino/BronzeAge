@@ -401,6 +401,8 @@ message Asentamiento {
   map<string, uint64> participacion = 45;
   // Su tablón de misiones recurrentes (Misiones_Recurrentes §8): interior y `ADMIN`.
   optional Tablon tablon = 46;
+  // Si el Gobernador cerró a los ciudadanos el sacar del almacén al carro (`cargar_de_plaza`, 2026-10-29): interior y `ADMIN`.
+  bool almacen_cerrado_a_ciudadanos = 47;
 }
 
 // Rectángulo en UNIDADES LOCALES del asentamiento (esquina mínima y tamaño). El espacio local está centrado en el Centro Urbano.

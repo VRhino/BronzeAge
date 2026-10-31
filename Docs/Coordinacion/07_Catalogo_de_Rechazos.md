@@ -397,6 +397,10 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `almacen_personal.lleno` | `ALMACEN_PERSONAL_LLENO` | — |
 | `almacen_personal.fuera_de_tu_residencia` | `ALMACEN_PERSONAL_FUERA_DE_TU_RESIDENCIA` | Guardar o sacar del almacén personal sin la columna a la puerta de la propia residencia, donde vive el almacén (5G-a). |
 | `carro.no_lleva` | `CARRO_NO_LLEVA` | Guardar en el almacén personal un recurso que el carro de la columna no lleva (5G-a). |
+| `almacen.solo_ciudadanos` | `ALMACEN_SOLO_CIUDADANOS` | Sacar del almacén de una plaza al carro es de los ciudadanos de su Facción (2026-10-29). |
+| `almacen.cerrado` | `ALMACEN_CERRADO` | El Gobernador cerró a los ciudadanos el sacar del almacén al carro (2026-10-29). |
+| `almacen.ni_faccion_ni_aliada` | `ALMACEN_NI_FACCION_NI_ALIADA` | Dejar en el almacén de una plaza es de su Facción y de las aliadas o vasallas (2026-10-29). |
+| `almacen.sin_sitio` | `ALMACEN_SIN_SITIO` | El almacén de la plaza no tiene sitio para ese recurso (2026-10-29). |
 | `caravana.no_reclamable` | `CARAVANA_NO_RECLAMABLE` | Reclamar una caravana que no es la Caravana de Fundación que vuelve sola a su origen (5G-a): solo esa se reclama en mundo abierto. |
 | `caravana.soltar_solo_dentro` | `CARAVANA_SOLTAR_SOLO_DENTRO` | Soltar o aparcar una caravana con la columna fuera de una plaza (a la puerta o en mundo abierto): solo se deja dentro, donde la columna entró con todo (5G-a, decisión 5G-a-5). |
 | `repostar.plaza_cerrada` | `REPOSTAR_PLAZA_CERRADA` | — |

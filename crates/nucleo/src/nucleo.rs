@@ -1038,7 +1038,14 @@ impl Nucleo {
                 Ok(None) => {}
                 Err(r) => return r,
             },
-            Comando::GuardarEnAlmacenPersonal { .. } | Comando::SacarDelAlmacenPersonal { .. } | Comando::CargarCaravana { .. } | Comando::ReclamarCaravana { .. } | Comando::SoltarCaravana { .. } => {
+            Comando::GuardarEnAlmacenPersonal { .. }
+            | Comando::SacarDelAlmacenPersonal { .. }
+            | Comando::CargarCaravana { .. }
+            | Comando::ReclamarCaravana { .. }
+            | Comando::SoltarCaravana { .. }
+            | Comando::CargarDePlaza { .. }
+            | Comando::DejarEnPlaza { .. }
+            | Comando::CerrarAlmacenACiudadanos { .. } => {
                 match self.ejecutar_a_mano(t, p) {
                     Ok(ids) => creadas.extend(ids),
                     Err(r) => return r,

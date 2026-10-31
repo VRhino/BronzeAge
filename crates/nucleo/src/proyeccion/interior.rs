@@ -145,6 +145,7 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
     p.fundadores_ids = a.fundadores.iter().map(|&h| ids::heroe(h)).collect();
     // Si abre su almacén a los aliados (5D) y cuándo creó su última caravana (el cooldown de crearlas, compartido con la Caravana de Fundación), desde 5H.
     p.permite_reabastecer_aliados = a.permite_reabastecer_aliados;
+    p.almacen_cerrado_a_ciudadanos = a.almacen_cerrado_a_ciudadanos;
     p.ultima_caravana_creada_en_ms = e.comercio.ultima_caravana.get(&id).copied();
     p.caravanas_aparcadas_ids = e.comercio.flota.iter().filter(|c| c.estado == comercio::caravana::EstadoCaravana::Aparcada && c.anfitriona.is_some_and(|x| u64::from(x) == id)).map(|c| ids::caravana(c.id)).collect();
     p.flota_ids = e.comercio.flota.iter().filter(|c| u64::from(c.origen) == id).map(|c| ids::caravana(c.id)).collect();

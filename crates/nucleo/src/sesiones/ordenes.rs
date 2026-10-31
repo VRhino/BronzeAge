@@ -727,6 +727,9 @@ impl Ctx<'_> {
             Cuerpo::RetirarDePueblo(o) => Comando::RetirarDePueblo { heroe: self.mi_heroe()?, pueblo: self.pueblo(&o.pueblo_id)?, escuadras: self.escuadras(&o.escuadron_ids)? },
             Cuerpo::CargarDePueblo(o) => Comando::CargarDePueblo { heroe: self.mi_heroe()?, pueblo: self.pueblo(&o.pueblo_id)?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad },
             Cuerpo::DejarEnPueblo(o) => Comando::DejarEnPueblo { heroe: self.mi_heroe()?, pueblo: self.pueblo(&o.pueblo_id)?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad },
+            Cuerpo::CargarDePlaza(o) => Comando::CargarDePlaza { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad },
+            Cuerpo::DejarEnPlaza(o) => Comando::DejarEnPlaza { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad },
+            Cuerpo::CerrarAlmacenACiudadanos(o) => Comando::CerrarAlmacenACiudadanos { asentamiento: self.plaza(&o.asentamiento_id)?, cerrado: o.cerrado },
             Cuerpo::ElegirTablon(o) => Comando::ElegirTablon { heroe: self.mi_heroe()?, dueno: self.dueno_de_mision(&o.dueno_id)?, diarias: o.diarias_ids.clone(), semanales: o.semanales_ids.clone() },
             Cuerpo::ComprarMirada(o) => Comando::ComprarMirada { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, centro: self.punto(o.centro.as_ref())? },
             Cuerpo::ComprarInformePlaza(o) => {

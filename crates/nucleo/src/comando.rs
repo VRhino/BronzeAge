@@ -501,6 +501,14 @@ pub enum Comando {
     CargarDePueblo { heroe: u64, pueblo: u64, recurso: Recurso, cantidad: Mil },
     /// El héroe, dentro del pueblo y ciudadano de la Facción de su madre, deja en el almacén local `cantidad` de un recurso que el pueblo produce, del carro de su columna, hasta donde quepa.
     DejarEnPueblo { heroe: u64, pueblo: u64, recurso: Recurso, cantidad: Mil },
+    // ── El carro frente al almacén de una plaza, desde dentro (pedido del autor del 2026-10-29; Movimiento_Ejercitos §9). Códigos 192 a 194. ──
+    /// El héroe, dentro de la plaza y ciudadano de su Facción (resida o no), carga en su carro `cantidad` de un recurso del almacén, hasta donde quepa y sin bajar el trigo de su reserva.
+    /// Si el Gobernador lo cerró, solo él.
+    CargarDePlaza { heroe: u64, asentamiento: u64, recurso: Recurso, cantidad: Mil },
+    /// El héroe, dentro de la plaza y de su Facción o de una aliada o vasalla, deja en el almacén `cantidad` de un recurso de su carro, hasta donde quepa.
+    DejarEnPlaza { heroe: u64, asentamiento: u64, recurso: Recurso, cantidad: Mil },
+    /// El Gobernador cierra (o abre) a los ciudadanos el sacar del almacén de la plaza al carro (`CargarDePlaza`). No toca repostar, las caravanas ni la salida.
+    CerrarAlmacenACiudadanos { asentamiento: u64, cerrado: bool },
     // ── La tecnología (sistema 6, tanda 6C; Tecnologia_Aedas §4). Código 175. ──
     /// El Rey de `faccion`, presente en su capital efectiva, adopta la tecnología `tecnologia` (índice del catálogo) ya aparecida: la paga el almacén de la capital con la tarifa de su Era,
     /// al instante.
@@ -704,7 +712,9 @@ impl Comando {
             | Comando::GuarnecerPueblo { .. }
             | Comando::RetirarDePueblo { .. }
             | Comando::CargarDePueblo { .. }
-            | Comando::DejarEnPueblo { .. } => CuentaDelHeroe,
+            | Comando::DejarEnPueblo { .. }
+            | Comando::CargarDePlaza { .. }
+            | Comando::DejarEnPlaza { .. } => CuentaDelHeroe,
             Comando::ResponderSolicitud { .. }
             | Comando::AsignarEmbajador { .. }
             | Comando::DesignarCapital { .. }
@@ -741,7 +751,7 @@ impl Comando {
             | Comando::DestruirAvanzada { .. }
             | Comando::CancelarObraDeAvanzada { .. } => Cargo(GOBERNADOR_O_MAESTRO),
             Comando::ActivarPolitica { .. } | Comando::ComprometerRecinto { .. } | Comando::MejorarRecinto { .. } => CargoDeLaOrden,
-            Comando::SolicitarAscenso { .. } | Comando::AbandonarRecinto { .. } | Comando::ElegirTropaDeAvanzada { .. } | Comando::VetarJugador { .. } => Cargo(GOBERNADOR),
+            Comando::SolicitarAscenso { .. } | Comando::AbandonarRecinto { .. } | Comando::ElegirTropaDeAvanzada { .. } | Comando::VetarJugador { .. } | Comando::CerrarAlmacenACiudadanos { .. } => Cargo(GOBERNADOR),
             Comando::CalibrarReserva { .. } => Cargo(TESORERO),
             Comando::ProponerTrueque { .. }
             | Comando::AceptarTrueque { .. }
@@ -881,6 +891,10 @@ impl Comando {
             | Comando::DejarEnPueblo { heroe, pueblo, .. } => {
                 i.heroes.push(*heroe);
                 i.pueblos.push(*pueblo);
+            }
+            Comando::CargarDePlaza { heroe, asentamiento, .. } | Comando::DejarEnPlaza { heroe, asentamiento, .. } => {
+                i.heroes.push(*heroe);
+                i.asentamientos.push(*asentamiento);
             }
             Comando::EntregarMaterialesAAvanzada { ejercito, avanzada } | Comando::DepositarEnAvanzada { ejercito, avanzada, .. } => {
                 i.ejercitos.push(*ejercito);
@@ -1072,7 +1086,7 @@ impl Comando {
             // Una épica no es una orden sobre la batalla: solo el héroe que la dirige lleva el candado.
             | Comando::EmpezarEpica { heroe, .. }
             | Comando::AbandonarEpica { heroe, .. } => i.heroes.push(*heroe),
-            Comando::AlternarReabastecerAliados { asentamiento, .. } => i.asentamientos.push(*asentamiento),
+            Comando::AlternarReabastecerAliados { asentamiento, .. } | Comando::CerrarAlmacenACiudadanos { asentamiento, .. } => i.asentamientos.push(*asentamiento),
             // La puerta y los cargos de una plaza en batalla no se tocan: echar a quien combate dentro, o cambiar quién la gobierna, sería una orden sobre la batalla.
             Comando::AsignarCargoLocal { heroe, asentamiento, designado, .. } => {
                 i.heroes.extend([*heroe, *designado]);
@@ -1981,6 +1995,18 @@ impl Peticion {
                 w.u8(recurso_a_u8(*recurso));
                 w.i64(*cantidad);
             }
+            Comando::CargarDePlaza { heroe, asentamiento, recurso, cantidad } | Comando::DejarEnPlaza { heroe, asentamiento, recurso, cantidad } => {
+                w.u8(if matches!(self.comando, Comando::CargarDePlaza { .. }) { 192 } else { 193 });
+                w.u64(*heroe);
+                w.u64(*asentamiento);
+                w.u8(recurso_a_u8(*recurso));
+                w.i64(*cantidad);
+            }
+            Comando::CerrarAlmacenACiudadanos { asentamiento, cerrado } => {
+                w.u8(194);
+                w.u64(*asentamiento);
+                w.bool(*cerrado);
+            }
             Comando::AdoptarTecnologia { heroe, faccion, tecnologia } => {
                 w.u8(175);
                 w.u64(*heroe);
@@ -2496,6 +2522,9 @@ impl Peticion {
             189 => Comando::RetirarDePueblo { heroe: r.u64()?, pueblo: r.u64()?, escuadras: leer_lista_u64(&mut r)? },
             190 => Comando::CargarDePueblo { heroe: r.u64()?, pueblo: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
             191 => Comando::DejarEnPueblo { heroe: r.u64()?, pueblo: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
+            192 => Comando::CargarDePlaza { heroe: r.u64()?, asentamiento: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
+            193 => Comando::DejarEnPlaza { heroe: r.u64()?, asentamiento: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
+            194 => Comando::CerrarAlmacenACiudadanos { asentamiento: r.u64()?, cerrado: r.bool()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -2851,6 +2880,14 @@ pub mod rechazos {
     pub const ALMACEN_PERSONAL_FUERA_DE_TU_RESIDENCIA: &str = "almacen_personal.fuera_de_tu_residencia";
     /// Guardar en el almacén personal un recurso que el carro de la columna no lleva (5G-a).
     pub const CARRO_NO_LLEVA: &str = "carro.no_lleva";
+    /// Sacar del almacén de una plaza al carro es de los ciudadanos de su Facción (2026-10-29).
+    pub const ALMACEN_SOLO_CIUDADANOS: &str = "almacen.solo_ciudadanos";
+    /// El Gobernador cerró a los ciudadanos el sacar del almacén al carro (2026-10-29).
+    pub const ALMACEN_CERRADO: &str = "almacen.cerrado";
+    /// Dejar en el almacén de una plaza es de su Facción y de las aliadas o vasallas (2026-10-29).
+    pub const ALMACEN_NI_FACCION_NI_ALIADA: &str = "almacen.ni_faccion_ni_aliada";
+    /// El almacén de la plaza no tiene sitio para ese recurso (2026-10-29).
+    pub const ALMACEN_SIN_SITIO: &str = "almacen.sin_sitio";
     /// Reclamar una caravana que no es la Caravana de Fundación que vuelve sola a su origen (5G-a): solo esa se reclama en mundo abierto.
     pub const CARAVANA_NO_RECLAMABLE: &str = "caravana.no_reclamable";
     /// Soltar o aparcar una caravana con la columna fuera de una plaza (a la puerta o en mundo abierto): solo se deja dentro, donde la columna entró con todo (5G-a, decisión 5G-a-5).
@@ -3544,6 +3581,9 @@ mod pruebas {
             Comando::RetirarDePueblo { heroe: 2, pueblo: 9, escuadras: vec![4] },
             Comando::CargarDePueblo { heroe: 2, pueblo: 9, recurso: Recurso::Trigo, cantidad: 20_000 },
             Comando::DejarEnPueblo { heroe: 2, pueblo: 9, recurso: Recurso::Livestock, cantidad: 5_000 },
+            Comando::CargarDePlaza { heroe: 2, asentamiento: 5, recurso: Recurso::Madera, cantidad: 20_000 },
+            Comando::DejarEnPlaza { heroe: 2, asentamiento: 5, recurso: Recurso::Oro, cantidad: 3_000 },
+            Comando::CerrarAlmacenACiudadanos { asentamiento: 5, cerrado: true },
             Comando::AdoptarTecnologia { heroe: 2, faccion: 1, tecnologia: 2 },
             Comando::ComprarTecnologiaAeda { heroe: 2, asentamiento: 5, tecnologia: 2 },
             Comando::EmpezarEpica { heroe: 2, asentamiento: 3, aeda: 4, tecnologia: 5 },

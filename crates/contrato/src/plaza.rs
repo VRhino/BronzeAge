@@ -85,4 +85,5 @@ campos_de_la_plaza!(
     misiones,
     participacion,
     tablon,
+    almacen_cerrado_a_ciudadanos,
 );

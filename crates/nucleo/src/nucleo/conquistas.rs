@@ -97,9 +97,9 @@ impl Nucleo {
             // Y sin fundadores (5H, 5B-9; `combate.ts` dejaba `heroesFundadoresIds` vacío): los que residían salen con el desalojo.
             a.fundadores.clear();
             // Es del conquistador desde ahora: para la capital efectiva cuenta este instante, no su fundación (5C-1). Lo que decidía su dueño de antes se olvida: el resto de su tributo
-            // y la apertura de su almacén a los aliados (5D), como el acceso.
+            // y la apertura de su almacén a los aliados (5D) y su cierre a los ciudadanos (2026-10-29), como el acceso.
             a.de_la_faccion_desde = t;
-            (a.resto_tributo, a.permite_reabastecer_aliados) = (0, false);
+            (a.resto_tributo, a.permite_reabastecer_aliados, a.almacen_cerrado_a_ciudadanos) = (0, false, false);
             // La marca de capital sobrevive al cambio de dueño y deja de valer (Diplomacia_Facciones §3.7).
             let c = aplicar_conquista(&cr, &datos, &mut a.economia, t);
             (a.protegida_hasta, a.ocupada_hasta) = (Some(c.protegida_hasta), Some(c.ocupacion_hasta));

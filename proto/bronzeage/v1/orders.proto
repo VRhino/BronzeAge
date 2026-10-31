@@ -448,6 +448,27 @@ message OrdenDejarEnPueblo {
   sint64 cantidad = 3;
 }
 
+// Dentro de la plaza y ciudadano de su Facción (resida o no): carga en su carro `cantidad` (milésimas, se usan unidades enteras) de un recurso del almacén, hasta donde quepa y sin bajar el trigo
+// de su reserva. Si el Gobernador lo cerró (`Asentamiento.almacen_cerrado_a_ciudadanos`), solo él (2026-10-29).
+message OrdenCargarDePlaza {
+  string asentamiento_id = 1;
+  string recurso = 2;  // id de catálogo
+  sint64 cantidad = 3;
+}
+
+// Dentro de la plaza y de su Facción o de una aliada o vasalla: deja en el almacén `cantidad` (milésimas, se usan unidades enteras) de un recurso de su carro, hasta donde quepa (2026-10-29).
+message OrdenDejarEnPlaza {
+  string asentamiento_id = 1;
+  string recurso = 2;  // id de catálogo
+  sint64 cantidad = 3;
+}
+
+// El Gobernador cierra (o abre) a los ciudadanos el sacar del almacén de la plaza al carro (`cargar_de_plaza`) (2026-10-29).
+message OrdenCerrarAlmacenACiudadanos {
+  string asentamiento_id = 1;
+  bool cerrado = 2;
+}
+
 message OrdenFijarPuerta {
   string asentamiento_id = 1;
   string heroe_id = 2;
@@ -1135,5 +1156,8 @@ message Orden {
     OrdenRetirarDePueblo retirar_de_pueblo = 162;
     OrdenCargarDePueblo cargar_de_pueblo = 163;
     OrdenDejarEnPueblo dejar_en_pueblo = 164;
+    OrdenCargarDePlaza cargar_de_plaza = 165;
+    OrdenDejarEnPlaza dejar_en_plaza = 166;
+    OrdenCerrarAlmacenACiudadanos cerrar_almacen_a_ciudadanos = 167;
   }
 }

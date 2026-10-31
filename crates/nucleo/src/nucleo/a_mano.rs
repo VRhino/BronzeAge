@@ -7,6 +7,9 @@
 //! - **`cargarCaravana`** carga en una caravana adjunta del almacén de una plaza de su Facción a cuya puerta está la columna, sin reserva (como el reparto automático), hasta el hueco
 //!   que le queda de verdad: ni la caravana ni la columna pasan de su límite (5G-a-4).
 //! - **`soltarCaravana`** es aparcar en la plaza dentro de la cual está la columna (entró con todo); fuera, a la puerta o en mundo abierto, se rechaza (5G-a-5).
+//! - **`cargarDePlaza`** y **`dejarEnPlaza`** (2026-10-29, pedido del autor) mueven entre el carro del héroe y el almacén de la plaza **dentro de la cual está**: sacar es de los ciudadanos
+//!   de su Facción, residan o no (sin bajar el trigo de su reserva), salvo que el Gobernador lo cierre (`cerrarAlmacenACiudadanos`; entonces solo él); meter es de su Facción y de las
+//!   aliadas o vasallas, hasta lo que quepa. El carro es el de la columna con la que entró o, en su residencia, el que trajo (como el almacén personal).
 //! - **`reclamarCaravana`** vale solo para la Caravana de Fundación que vuelve sola (su caso de éxito está en `nucleo/fundacion.rs`, 5G-b); una comercial se rechaza con
 //!   `caravana.no_reclamable`.
 
@@ -39,6 +42,9 @@ impl Nucleo {
             Comando::CargarCaravana { ejercito, caravana, asentamiento, recurso, cantidad } => self.cargar_caravana(t, p, *ejercito, *caravana, *asentamiento, *recurso, *cantidad),
             Comando::ReclamarCaravana { heroe, caravana, politica } => self.reclamar_caravana(t, p, *heroe, *caravana, *politica),
             Comando::SoltarCaravana { ejercito, caravana, heroe } => self.soltar_caravana(t, p, *ejercito, *caravana, *heroe),
+            Comando::CargarDePlaza { heroe, asentamiento, recurso, cantidad } => self.mover_almacen_de_plaza(t, p, *heroe, *asentamiento, *recurso, *cantidad, true),
+            Comando::DejarEnPlaza { heroe, asentamiento, recurso, cantidad } => self.mover_almacen_de_plaza(t, p, *heroe, *asentamiento, *recurso, *cantidad, false),
+            Comando::CerrarAlmacenACiudadanos { asentamiento, cerrado } => self.cerrar_almacen_a_ciudadanos(t, p, *asentamiento, *cerrado),
             _ => unreachable!("solo se llama con las órdenes del almacén personal y de las caravanas a mano"),
         }
     }
@@ -116,6 +122,126 @@ impl Nucleo {
         let datos = vec![("heroe", heroe as i64), ("recurso", recurso_a_u8(recurso) as i64), ("cantidad", movido)];
         let sentido = Dato::Texto(if guarda { "guarda" } else { "saca" }.into());
         self.tr.emitir(&self.estado, EventoNucleo { valores: vec![("sentido", sentido)], ..EventoNucleo::nuevo("heroe.almacen_personal", t, datos) });
+        Ok(vec![])
+    }
+
+    /// El carro del héroe dentro de la plaza `plaza`: la columna con la que entró de visita o, en su residencia, la que conserva o el carro que trajo. Devuelve dónde va (`None` = con el
+    /// héroe) y lo que admite.
+    fn carro_dentro_de_plaza(&self, heroe: u64, plaza: u64) -> Result<(Option<u64>, Mil), Respuesta> {
+        if let Some(c) = self.columna_que_lleva(heroe) {
+            return Ok((Some(c), self.capacidad_de_carga(c).unwrap_or(0)));
+        }
+        let hn = self.heroe(heroe).expect("existe");
+        if hn.heroe.residencia != Some(Residencia::Asentamiento(plaza as u32)) {
+            return Err(Respuesta::rechazo(rechazos::HEROE_SIN_COLUMNA, "no trajiste carro a esta plaza", self.estado.version));
+        }
+        Ok(match hn.columna.filter(|c| self.estado.ejercitos.contains_key(c)) {
+            Some(c) => (Some(c), self.capacidad_de_carga(c).unwrap_or(0)),
+            None => (None, CAPACIDAD_CARRO),
+        })
+    }
+
+    /// `cargarDePlaza` (`saca`) y `dejarEnPlaza`: del almacén de la plaza al carro, o del carro al almacén, con el héroe dentro. Unidades enteras, hasta lo que quepa.
+    #[allow(clippy::too_many_arguments)]
+    fn mover_almacen_de_plaza(&mut self, t: Instante, p: &Peticion, heroe: u64, plaza: u64, recurso: Recurso, cantidad: Mil, saca: bool) -> Result<Vec<u64>, Respuesta> {
+        let v = self.estado.version;
+        let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
+        self.autorizar_heroe(p, heroe, false)?;
+        let a = self.plaza_o_rechazo(plaza)?;
+        let (duena, cerrado, gobernador) = (a.faccion, a.almacen_cerrado_a_ciudadanos, a.cargos.titular(asentamiento::Cargo::Gobernador));
+        let hn = self.heroe(heroe).expect("existe");
+        if !p.admin {
+            if hn.heroe.presencia.ubicacion != Ubicacion::Asentamiento(plaza as u32) {
+                return Err(rechazo(rechazos::HEROE_NO_ESTA_EN_LA_PLAZA, format!("el héroe no está dentro de {}", ids::asentamiento(plaza))));
+            }
+            if saca {
+                if hn.faccion != Some(duena) {
+                    return Err(rechazo(rechazos::ALMACEN_SOLO_CIUDADANOS, "solo los ciudadanos de su Facción sacan del almacén de la plaza".into()));
+                }
+                if cerrado && gobernador != Some(heroe) {
+                    return Err(rechazo(rechazos::ALMACEN_CERRADO, "el Gobernador ha cerrado el almacén de la plaza a los ciudadanos".into()));
+                }
+            } else {
+                let aliada = hn.faccion.is_some_and(|f| matches!(self.estado.relacion(f, duena), Some(crate::estado_militar::Relacion::Alianza | crate::estado_militar::Relacion::Vasallaje)));
+                if hn.faccion != Some(duena) && !aliada {
+                    return Err(rechazo(rechazos::ALMACEN_NI_FACCION_NI_ALIADA, "solo su Facción y las aliadas o vasallas dejan en el almacén de la plaza".into()));
+                }
+            }
+        }
+        let (columna, capacidad) = self.carro_dentro_de_plaza(heroe, plaza)?;
+        let pedido = entero(cantidad);
+        if pedido <= 0 {
+            return Err(rechazo(rechazos::CANTIDAD_NO_POSITIVA, "hay que mover al menos una unidad".into()));
+        }
+        let carga = columna.map_or(&self.heroe(heroe).expect("existe").carro, |c| &self.estado.ejercitos[&c].columna.carga);
+        let (lleva, libre_carro) = (de(carga, recurso), (capacidad - total(carga)).max(0));
+        let movido = if saca {
+            // El trigo, sin bajar de la reserva de la plaza (la de la salida: lo que come su población y su campamento).
+            let reserva = if recurso == Recurso::Trigo {
+                let mr = self.estado.reglas.economia.militar.clone();
+                let consumo = self.con_exterior(plaza, t, |eco, x| eco.resumen_de_reclutamiento(x.reglas, x).consumo_poblacion).unwrap_or(0);
+                militar::reclutamiento::reserva_de_trigo(&mr, consumo, self.soldados_del_campamento(plaza))
+            } else {
+                0
+            };
+            let de_sobra = (self.estado.asentamientos[&plaza].economia.almacen.cantidad(recurso) - reserva).max(0);
+            let movido = entero(pedido.min(de_sobra).min(libre_carro));
+            if movido <= 0 {
+                return Err(if de_sobra < UNIDAD {
+                    rechazo(rechazos::ALMACEN_SIN_EXISTENCIAS, format!("el almacén de la plaza no tiene {} de sobra", recurso.nombre()))
+                } else {
+                    rechazo(rechazos::CARRO_LLENO, "el carro está lleno".into())
+                });
+            }
+            movido
+        } else {
+            let sitio = self.estado.asentamientos[&plaza].economia.almacen.espacio(recurso).max(0);
+            let movido = entero(pedido.min(lleva).min(sitio));
+            if movido <= 0 {
+                return Err(if lleva < UNIDAD {
+                    rechazo(rechazos::CARRO_NO_LLEVA, format!("el carro no lleva {}", recurso.nombre()))
+                } else {
+                    rechazo(rechazos::ALMACEN_SIN_SITIO, format!("el almacén de la plaza no tiene sitio para {}", recurso.nombre()))
+                });
+            }
+            movido
+        };
+        let almacen = &mut self.estado.asentamientos.get_mut(&plaza).expect("existe").economia.almacen;
+        if saca {
+            almacen.quitar(recurso, movido);
+        } else {
+            almacen.agregar(recurso, movido);
+        }
+        let carro = match columna {
+            Some(c) => &mut self.estado.ejercitos.get_mut(&c).expect("existe").columna.carga,
+            None => &mut self.estado.militar.heroes.get_mut(&heroe).expect("existe").carro,
+        };
+        if saca {
+            sumar(carro, recurso, movido);
+        } else {
+            quitar(carro, recurso, movido);
+        }
+        self.tr.tocar(Clase::Asentamiento, plaza);
+        self.tr.tocar(Clase::Heroe, heroe);
+        if let Some(c) = columna {
+            self.tr.tocar(Clase::Ejercito, c);
+        }
+        let codigo = if saca { "almacen.cargado_en_carro" } else { "almacen.dejado_del_carro" };
+        self.emitir_propio(t, codigo, vec![plaza], vec![("plaza", plaza as i64), ("heroe", heroe as i64), ("recurso", recurso_a_u8(recurso) as i64), ("cantidad", movido)]);
+        Ok(vec![])
+    }
+
+    /// `cerrarAlmacenACiudadanos`: el Gobernador cierra (o abre) a los ciudadanos el sacar del almacén de la plaza al carro.
+    fn cerrar_almacen_a_ciudadanos(&mut self, t: Instante, p: &Peticion, plaza: u64, cerrado: bool) -> Result<Vec<u64>, Respuesta> {
+        self.plaza_o_rechazo(plaza)?;
+        self.autorizar_en_plaza(p, plaza, None)?;
+        let a = self.estado.asentamientos.get_mut(&plaza).expect("existe");
+        if a.almacen_cerrado_a_ciudadanos == cerrado {
+            return Err(Respuesta::sin_cambios(self.estado.version));
+        }
+        a.almacen_cerrado_a_ciudadanos = cerrado;
+        self.tr.tocar(Clase::Asentamiento, plaza);
+        self.emitir_propio(t, "almacen.cierre_a_ciudadanos", vec![plaza], vec![("plaza", plaza as i64), ("cerrado", cerrado as i64)]);
         Ok(vec![])
     }
 

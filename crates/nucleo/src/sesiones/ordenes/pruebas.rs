@@ -362,6 +362,9 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         (orden!(RebelionVasallo, OrdenRebelionVasallo, relacion_id: s("rel-41")), Comando::RebelionVasallo { heroe: 7, relacion: 41 }),
         (orden!(AdmitirOtrasFacciones, OrdenAdmitirOtrasFacciones, faccion_id: s("f-1"), admitir: true), Comando::AdmitirOtrasFacciones { heroe: 7, faccion: 1, admitir: true }),
         (orden!(AlternarReabastecerAliados, OrdenAlternarReabastecerAliados, asentamiento_id: s("as-3"), permitido: true), Comando::AlternarReabastecerAliados { asentamiento: 3, permitido: true }),
+        (orden!(CerrarAlmacenACiudadanos, OrdenCerrarAlmacenACiudadanos, asentamiento_id: s("as-3"), cerrado: true), Comando::CerrarAlmacenACiudadanos { asentamiento: 3, cerrado: true }),
+        (orden!(CargarDePlaza, OrdenCargarDePlaza, asentamiento_id: s("as-3"), recurso: s("madera"), cantidad: 20_000), Comando::CargarDePlaza { heroe: 7, asentamiento: 3, recurso: Recurso::Madera, cantidad: 20_000 }),
+        (orden!(DejarEnPlaza, OrdenDejarEnPlaza, asentamiento_id: s("as-3"), recurso: s("oro"), cantidad: 3_000), Comando::DejarEnPlaza { heroe: 7, asentamiento: 3, recurso: Recurso::Oro, cantidad: 3_000 }),
         (
             orden!(AportarARefundacion, OrdenAportarARefundacion, recurso: s("oro"), cantidad: 40_000, lado: s("carro")),
             Comando::AportarARefundacion { heroe: 7, recurso: Oro, cantidad: 40_000, lado: crate::comando::LadoDelFondo::Carro },
@@ -631,7 +634,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let de_administracion: BTreeSet<String> = ordenes_de_administracion().iter().map(|(_, c)| nombre(c)).collect();
     let del_servidor_de_batalla: BTreeSet<String> = ["RegistrarAsignacion", "ConfirmarInicio", "RegistrarTokens", "RegistrarSalida", "AplicarResultado"].map(String::from).into();
     let todos = variantes_de_comando();
-    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (181, 156, 20, 5));
+    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (184, 159, 20, 5));
     let clasificados: Vec<&String> = del_jugador.iter().chain(&de_administracion).chain(&del_servidor_de_batalla).collect();
     assert_eq!(clasificados.len(), todos.len(), "una variante en dos orígenes");
     let sin_clasificar: Vec<&String> = todos.iter().filter(|v| !clasificados.contains(v)).collect();
@@ -643,7 +646,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let tabla: BTreeSet<String> = tabla.map(|c| nombre(&c)).collect();
     let proto = include_str!("../../../../../proto/bronzeage/v1/orders.proto");
     let en_el_contrato = proto.lines().skip_while(|l| !l.contains("oneof cuerpo {")).skip(1).take_while(|l| l.trim() != "}").map(str::trim).filter(|l| !l.starts_with("//") && l.ends_with(';')).count();
-    assert_eq!((tabla.len(), en_el_contrato), (155, 155), "una orden del contrato sin mapear ni clasificar como no disponible");
+    assert_eq!((tabla.len(), en_el_contrato), (158, 158), "una orden del contrato sin mapear ni clasificar como no disponible");
 }
 
 /// El nombre de una orden en el contrato (el campo del `oneof`): la variante de `Cuerpo` en serpiente (`MarcharA` → `marchar_a`).
@@ -724,5 +727,5 @@ fn la_matriz_de_autorizacion_del_documento_es_la_del_codigo() {
     let faltan: Vec<String> = codigo.difference(&documento).map(fila).collect();
     let sobran: Vec<String> = documento.difference(&codigo).map(fila).collect();
     assert!(faltan.is_empty() && sobran.is_empty(), "la matriz del documento no es la del código.\nFaltan o no coinciden (como las dice el código):\n{}\nSobran (como las dice el documento):\n{}", faltan.join("\n"), sobran.join("\n"));
-    assert_eq!(codigo.len(), 156 + 20 + 5, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
+    assert_eq!(codigo.len(), 159 + 20 + 5, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
 }

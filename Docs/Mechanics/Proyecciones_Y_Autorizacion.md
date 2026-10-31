@@ -385,6 +385,9 @@ Las **145 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `retirar_de_pueblo` | `RetirarDePueblo` | la cuenta del héroe | dentro del pueblo, ciudadano de la Facción de la madre; a su columna sin pasar de su Liderazgo (§14.0.1) |
 | `cargar_de_pueblo` | `CargarDePueblo` | la cuenta del héroe | dentro del pueblo, ciudadano de la Facción de la madre; del almacén local al carro de su columna (§14.0.1) |
 | `dejar_en_pueblo` | `DejarEnPueblo` | la cuenta del héroe | dentro del pueblo, ciudadano de la Facción de la madre; solo lo que el pueblo produce (§14.0.1) |
+| `cargar_de_plaza` | `CargarDePlaza` | la cuenta del héroe | dentro de la plaza, ciudadano de su Facción (resida o no); si el Gobernador lo cerró, solo él (Movimiento_Ejercitos §9.1) |
+| `dejar_en_plaza` | `DejarEnPlaza` | la cuenta del héroe | dentro de la plaza, de su Facción o de una aliada o vasalla (Movimiento_Ejercitos §9.1) |
+| `cerrar_almacen_a_ciudadanos` | `CerrarAlmacenACiudadanos` | el Gobernador de la plaza, residente y dentro |
 | `salir_del_campamento` | `SalirDelCampamento` | la cuenta del héroe | desde el campamento donde está |
 | `separarse_de_convocatoria` | `SepararseDeConvocatoria` | la cuenta del héroe | integrante |
 | `separarse_del_ejercito` | `SepararseDelEjercito` | la cuenta del héroe | participante |

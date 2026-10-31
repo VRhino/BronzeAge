@@ -131,6 +131,9 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
     21 * crate::estado_comercio::ETIQUETA | plaza
 }
 
+/// BAN51: BAN50 con el cierre del almacén a los ciudadanos de cada plaza (`Asentamiento::almacen_cerrado_a_ciudadanos`, detrás de `permite_reabastecer_aliados`; 2026-10-29). BAN50 a BAN40
+/// se siguen admitiendo: ninguna plaza lo tiene cerrado.
+///
 /// BAN50: BAN49 con las misiones recurrentes (mecánica 55, 2026-10-28; `Estado::recurrentes`, al final: el catálogo vigente, el origen de las semanas, la renovación en la cola y cada
 /// tablón). BAN49 a BAN40 se siguen admitiendo: el catálogo es el inicial, las semanas cuentan desde el día de la foto y cada plaza y cada Facción sacan su tablón al cargar.
 ///
@@ -278,7 +281,7 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN50";
+const MAGIA: &[u8; 5] = b"BAN51";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -505,6 +508,8 @@ pub struct Asentamiento {
     pub resto_tributo: i64,
     /// `permiteReabastecerAliados` (5D, Movimiento_Ejercitos §8): abre su almacén a las columnas aliadas (alianza o vasallaje) para repostar y cargar caravanas.
     pub permite_reabastecer_aliados: bool,
+    /// El Gobernador cerró a los ciudadanos el sacar de su almacén al carro (`cargarDePlaza`, 2026-10-29; BAN51). Solo él sigue pudiendo.
+    pub almacen_cerrado_a_ciudadanos: bool,
     /// `heroesFundadoresIds` (5H, 5B-9): quienes la fundaron y siguen residiendo en ella, en su orden (el Líder primero). Quien se muda deja de serlo y la conquista la deja sin ninguno, como en
     /// el TypeScript; el traslado de una Facción no los toca (la plaza se va con ellos).
     pub fundadores: Vec<u64>,
@@ -1223,6 +1228,7 @@ impl Estado {
             w.i64(a.de_la_faccion_desde);
             w.i64(a.resto_tributo);
             w.bool(a.permite_reabastecer_aliados);
+            w.bool(a.almacen_cerrado_a_ciudadanos);
             w.u64(a.fundadores.len() as u64);
             a.fundadores.iter().for_each(|&h| w.u64(h));
         }
@@ -1365,13 +1371,14 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN50`): los cuatro primeros dicen la familia («BAN5» es el formato 50 y «BAN4» los formatos 40 a 49, y se admiten todos; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
+        // La cabecera es de 5 bytes (`BAN51`): los cuatro primeros dicen la familia («BAN5» es el formato 50 y «BAN4» los formatos 40 a 49, y se admiten todos; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
         // 20 a 29 y 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         let (mut con_eligieron, mut con_rutas_acarreo, mut con_nombres, mut con_precios, mut con_forzadas, mut con_misiones, mut con_aldeas) = (true, true, true, true, true, true, true);
-        let (mut con_flujos, mut con_participacion, mut con_recurrentes) = (false, false, false);
+        let (mut con_flujos, mut con_participacion, mut con_recurrentes, mut con_almacen_cerrado) = (false, false, false, false);
         if magia == MAGIA[..4] {
             match r.u8()? {
+                b'1' => (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado) = (true, true, true, true),
                 b'0' => (con_flujos, con_participacion, con_recurrentes) = (true, true, true),
                 _ => return Err(ErrorFormato("no es un estado del núcleo")),
             }
@@ -1497,6 +1504,7 @@ impl Estado {
             }
             let (nombre, capital_de, de_la_faccion_desde) = (r.texto()?, r.opt_u64()?.map(|f| f as u32), r.i64()?);
             let (resto_tributo, permite_reabastecer_aliados) = (r.i64()?, r.bool()?);
+            let almacen_cerrado_a_ciudadanos = if con_almacen_cerrado { r.bool()? } else { false };
             let fundadores = (0..r.cuenta()?).map(|_| r.u64()).collect::<Result<Vec<_>, _>>()?;
             for e in &economia.edificios {
                 if let Some(asentamiento::edificio::Fuente::Nodo(n)) = e.fuente {
@@ -1506,7 +1514,7 @@ impl Estado {
             for n in economia.pueblos.iter().filter_map(|p| p.nodo()) {
                 s.nodos_reclamados.insert(n, id);
             }
-            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe, protegida_hasta, ocupada_hasta, puerta, cargos, nombre, capital_de, de_la_faccion_desde, resto_tributo, permite_reabastecer_aliados, fundadores });
+            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe, protegida_hasta, ocupada_hasta, puerta, cargos, nombre, capital_de, de_la_faccion_desde, resto_tributo, permite_reabastecer_aliados, almacen_cerrado_a_ciudadanos, fundadores });
         }
         for _ in 0..r.cuenta()? {
             let nodo = r.u32()?;
