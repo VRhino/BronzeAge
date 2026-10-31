@@ -476,6 +476,7 @@ pub fn caravana(n: &Nucleo, c: &Caravana) -> pb::Caravana {
         EstadoCaravana::Aparcada => pb::EstadoCaravana::CaravanaAparcada,
         EstadoCaravana::EnTransito | EstadoCaravana::EnBatalla => pb::EstadoCaravana::CaravanaEnTransito,
         EstadoCaravana::Retornando => pb::EstadoCaravana::CaravanaRetornando,
+        EstadoCaravana::Esperando => pb::EstadoCaravana::CaravanaEsperando,
     };
     let tipo = match c.tipo {
         TipoCaravana::Comercial => pb::TipoCaravana::CaravanaComercial,

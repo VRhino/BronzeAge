@@ -493,6 +493,20 @@ Una caravana `aparcada` (dejada en una plaza de su Facción al entrar un ejérci
 - **Volver** (`enviarCaravanaAlOrigen`): **vacía** ⇒ pasa a `disponible` **al instante** en su origen (sin viaje). **Con carga** ⇒ `retornando` con `destinoAsentamientoId = la anfitriona`, ruta
   `calcularRuta(anfitriona → origen)` **sin atracción de la red ni peajes**; al llegar vuelca el contenido en el almacén del origen (topado) y queda `disponible`. Sin ruta por tierra ⇒ error.
 
+### 5.8 Encargos: rutas y envíos automáticos
+
+> **En implementación (2026-10-31, entrada 64 de `Mecanicas a desarrollar.md`).** El diseño está en `Docs/Disenos_Por_Implementar/Rutas_De_Caravanas.md` y pasa aquí entero al cerrar la
+> implementación. Los tiempos de carga y descarga son minutos por carro que mueve algo en cada parada (placeholders por calibrar, decididos por el autor el 2026-10-31).
+
+<!-- parametros:ENCARGO -->
+```json
+{
+  "tiempoCargaMinutosPorCarro": 2,
+  "tiempoDescargaMinutosPorCarro": 2
+}
+```
+<!-- /parametros -->
+
 ## 6. El viaje (el plan de la caravana)
 
 Una caravana en viaje es un **plan** (vértices con su instante de paso, [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §4.2) y se mueve por eventos, no por barrido:

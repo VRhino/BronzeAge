@@ -304,6 +304,7 @@ message Cargos {
   optional string general_id = 3;
   optional string maestro_obras_id = 4;
   optional string sacerdote_id = 5;
+  optional string maestro_caravanas_id = 6;  // da, cambia y cancela los encargos de las caravanas de la plaza (2026-10-31)
 }
 
 message PoliticaActiva {
@@ -795,6 +796,7 @@ enum EstadoCaravana {
   CARAVANA_APARCADA = 4;                 // si cae la plaza anfitriona, se destruye
   CARAVANA_EN_TRANSITO = 5;
   CARAVANA_RETORNANDO = 6;
+  CARAVANA_ESPERANDO = 7;                // con encargo, dentro de una plaza (propia o ajena): no se ve ni se ataca
 }
 
 enum TipoCaravana {
@@ -842,6 +844,22 @@ message Caravana {
   // La caravana ajena vista en la `VISTA` (4H T3d, `CaravanaAvistada`): solo `id`, `version`, `faccion_id`, `posicion`, el tramo visible del plan, `escoltada` y los
   // recursos que lleva, por nombre, sin cantidades y ordenados (`contenido` va vacío).
   repeated string recursos_avistados = 24;
+  // Solo en la proyección propia (2026-10-31): el encargo de transporte que tiene, si tiene.
+  optional Encargo encargo = 25;
+}
+
+// El encargo de una caravana (rutas de caravanas automáticas, 2026-10-31).
+message Encargo {
+  string modo = 1;  // ruta | envio
+  string destino_asentamiento_id = 2;
+  optional int64 salir_en_ms = 3;
+  ParadaEncargo parada_origen = 4;
+  ParadaEncargo parada_destino = 5;
+  uint32 vueltas = 6;  // idas y vueltas hechas
+  string parada_actual = 7;  // origen | destino: donde espera, o hacia donde va
+  string fase = 8;  // espera | descarga | carga; solo cuenta con la caravana CARAVANA_ESPERANDO
+  optional int64 fin_paso_ms = 9;  // cuándo acaba la descarga o la carga en curso
+  bool cancelado = 10;  // cancelado en ruta: acaba el tramo sin comerciar, vuelve y deja todo en el origen
 }
 
 message SeleccionDeSalida {

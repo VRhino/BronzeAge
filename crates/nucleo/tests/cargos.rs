@@ -177,7 +177,7 @@ fn al_gobernador_lo_nombra_el_rey_sin_estar_presente_y_a_los_demas_el_gobernador
     let contrato::v1::entidad::Cuerpo::Asentamiento(ficha) = ficha else { panic!("la ficha de la plaza") };
     let cargos = ficha.cargos.expect("la ficha lleva los cargos");
     assert_eq!((cargos.gobernador_id, cargos.tesorero_id, cargos.maestro_obras_id, cargos.sacerdote_id, cargos.general_id), (Some(ids::heroe(bea)), Some(ids::heroe(bea)), Some(ids::heroe(eli)), Some(ids::heroe(ana)), None));
-    assert_eq!(interior::asentamiento(&e.n, e.plaza).and_then(|p| p.cargos), Some(contrato::v1::Cargos { gobernador_id: Some(ids::heroe(bea)), tesorero_id: Some(ids::heroe(bea)), maestro_obras_id: Some(ids::heroe(eli)), sacerdote_id: Some(ids::heroe(ana)), general_id: None }));
+    assert_eq!(interior::asentamiento(&e.n, e.plaza).and_then(|p| p.cargos), Some(contrato::v1::Cargos { gobernador_id: Some(ids::heroe(bea)), tesorero_id: Some(ids::heroe(bea)), maestro_obras_id: Some(ids::heroe(eli)), sacerdote_id: Some(ids::heroe(ana)), general_id: None, maestro_caravanas_id: None }));
 }
 
 #[test]
@@ -316,7 +316,7 @@ fn los_cargos_y_la_puerta_viajan_en_la_foto_ban33_y_la_ban32_se_rechaza() {
     e.ok("ana", Comando::VetarJugador { heroe: ana, asentamiento: plaza, vetado: cai, vetar: true });
     assert!(hash0 != hash1 && hash1 != hash2 && hash2 != e.n.hash_estado(), "cada pieza mueve el hash");
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN51");
+    assert_eq!(&bytes[..5], b"BAN52");
     let reglas = e.n.estado().reglas.clone();
     let vuelta = Estado::deserializar(&bytes, &reglas, &e.n.estado().mundo_hash).unwrap();
     let a = &vuelta.asentamientos[&plaza];

@@ -41,7 +41,7 @@ fn grupo_de_puerta(g: politica::Grupo) -> pb::GrupoPuerta {
 pub(crate) fn cargos(c: &politica::Cargos) -> pb::Cargos {
     use asentamiento::Cargo::*;
     let t = |x| c.titular(x).map(ids::heroe);
-    pb::Cargos { gobernador_id: t(Gobernador), tesorero_id: t(Tesorero), general_id: t(General), maestro_obras_id: t(MaestroObras), sacerdote_id: t(Sacerdote) }
+    pb::Cargos { gobernador_id: t(Gobernador), tesorero_id: t(Tesorero), general_id: t(General), maestro_obras_id: t(MaestroObras), sacerdote_id: t(Sacerdote), maestro_caravanas_id: None }
 }
 
 fn rect(r: &trazado::RectLocal) -> pb::RectLocal {

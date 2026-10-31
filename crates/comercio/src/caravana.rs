@@ -5,9 +5,11 @@
 //!
 //! Estados: `Disponible` (parada en su origen, sin asignar) · `Preparando` (lanzada a mano, esperando en el origen) · `EnTransito` (hacia
 //! el destino) · `Retornando` (de vuelta) · `Aparcada` (dejada en una plaza de su Facción) · `Adjunta` (enganchada a un ejército) ·
-//! `EnBatalla` (la resuelve el sistema militar: aquí solo se guarda el estado previo y se aplica el resultado).
+//! `EnBatalla` (la resuelve el sistema militar: aquí solo se guarda el estado previo y se aplica el resultado) · `Esperando` (con encargo, dentro
+//! de una de sus dos plazas: esperando su hora o sus existencias, descargando o cargando).
 
 use crate::datos::{DefAnimal, DefCarro, ReglasFlota};
+use crate::encargo::Encargo;
 use crate::reparto::Candidata;
 use crate::tipos::{total, AcuerdoId, AsentamientoId, CaravanaId, Carga, EscuadraId, HeroeId, Lado};
 use crate::viaje::{instante_de_progreso, invertir_plan, invertir_ruta, progreso_en, CobroPeaje, Peaje};
@@ -55,6 +57,8 @@ pub enum EstadoCaravana {
     Aparcada,
     Adjunta,
     EnBatalla,
+    /// Con encargo, dentro de su origen o de su destino: no se ve en el mapa ni se ataca (rutas de caravanas §4).
+    Esperando,
 }
 
 /// Una escuadra cedida como escolta: su id, el héroe que la cedió (la retira solo él) y su coste de Liderazgo por escalón.
@@ -169,6 +173,8 @@ pub struct Caravana {
     pub pausada_desde: Option<Instante>,
     /// Nacida en un campamento: no cuenta para `carrosEnUso`.
     pub de_campamento: bool,
+    /// El encargo de transporte que tiene (rutas de caravanas automáticas): mientras lo tiene, el reparto del trueque no la usa.
+    pub encargo: Option<Encargo>,
 }
 
 impl ReglasFlota {
@@ -307,6 +313,7 @@ impl Caravana {
             antes_de_batalla: None,
             pausada_desde: None,
             de_campamento: false,
+            encargo: None,
         }
     }
 

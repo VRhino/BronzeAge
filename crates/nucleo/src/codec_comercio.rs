@@ -14,13 +14,17 @@
 //! tipo u8 · origen u32 · destino opt_u64 · contenido{carga} · carros{n u64 · n × (tipo u8, animal u8: 255 ninguno)} · estado u8 ·
 //! posición · ruta{n u64 · n × punto} · costes{n u64 · n × i64} · plan{bool · generación u32 · n u32 · n × (punto, instante i64)} · peajes{n u64 · n × (ciudad u32,
 //! progreso i64)} · origen_acuerdo{bool · id u64 · lado u8} · prepara_hasta opt_i64 · escolta{n u64 · n × (id u64, héroe u64, liderazgo
-//! i64)} · reservada_manual bool · anfitriona opt_u64 · antes_de_batalla u8 (255 ninguno) · pausada_desde opt_i64 · de_campamento bool`.
+//! i64)} · reservada_manual bool · anfitriona opt_u64 · antes_de_batalla u8 (255 ninguno) · pausada_desde opt_i64 · de_campamento bool · encargo{bool · modo u8 ·
+//! destino u32 · salir_en opt_i64 · parada del origen · parada del destino · vueltas u32 · punta u8 · fase u8 · fin_paso opt_i64 · cancelado bool} (BAN52)`.
+//! Una parada: `recoger{n u64 · n × (recurso u8, cantidad i64, precio_max opt_i64)} · esperar_existencias bool · dejar{n u64 · n × (recurso u8, tope opt_i64,
+//! precio_min opt_i64)} · desechar_sobrante bool`.
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::codec_economia::{recurso_a_u8, recurso_de_u8};
 use crate::estado_comercio::{EstadoComercio, EstadoMercenarios, RutaAcarreo, Trazado};
 use base::{Plan, Vertice};
 use comercio::caravana::{Animal, Caravana, Carro, Escuadra, EstadoCaravana, TipoCaravana, TipoCarro};
+use comercio::encargo::{Encargo, Fase, LineaDejar, LineaRecoger, Modo, Parada, Punta};
 use comercio::mercenarios::{MercadoMercenario, StockCampamento};
 use comercio::orden_mercado::{EstadoOrden, LibroOrdenes, OrdenMercado, TipoOrden};
 use comercio::red_caminos::{Arista, RedCaminos, RutaComercial};
@@ -161,6 +165,7 @@ fn estado_caravana_a_u8(e: EstadoCaravana) -> u8 {
         EstadoCaravana::Aparcada => 4,
         EstadoCaravana::Adjunta => 5,
         EstadoCaravana::EnBatalla => 6,
+        EstadoCaravana::Esperando => 7,
     }
 }
 
@@ -173,6 +178,7 @@ fn estado_caravana_de_u8(i: u8) -> Result<EstadoCaravana, ErrorFormato> {
         4 => EstadoCaravana::Aparcada,
         5 => EstadoCaravana::Adjunta,
         6 => EstadoCaravana::EnBatalla,
+        7 => EstadoCaravana::Esperando,
         _ => return Err(ErrorFormato("estado de caravana desconocido")),
     })
 }
@@ -290,6 +296,7 @@ fn caravana_escribir(w: &mut Escritor, c: &Caravana) {
         antes_de_batalla,
         pausada_desde,
         de_campamento,
+        encargo,
     } = c;
     w.u64(*id);
     w.u8(tipo_caravana_a_u8(*tipo));
@@ -344,13 +351,107 @@ fn caravana_escribir(w: &mut Escritor, c: &Caravana) {
     w.u8(antes_de_batalla.map_or(NINGUNO, estado_caravana_a_u8));
     w.opt_i64(*pausada_desde);
     w.bool(*de_campamento);
+    match encargo {
+        Some(e) => {
+            w.bool(true);
+            encargo_escribir(w, e);
+        }
+        None => w.bool(false),
+    }
+}
+
+pub(crate) fn modo_a_u8(m: Modo) -> u8 {
+    match m {
+        Modo::Ruta => 0,
+        Modo::Envio => 1,
+    }
+}
+
+pub(crate) fn modo_de_u8(i: u8) -> Result<Modo, ErrorFormato> {
+    match i {
+        0 => Ok(Modo::Ruta),
+        1 => Ok(Modo::Envio),
+        _ => Err(ErrorFormato("modo de encargo desconocido")),
+    }
+}
+
+fn encargo_escribir(w: &mut Escritor, e: &Encargo) {
+    let Encargo { modo, destino, salir_en, en_origen, en_destino, vueltas, punta, fase, fin_paso, cancelado } = e;
+    w.u8(modo_a_u8(*modo));
+    w.u32(*destino);
+    w.opt_i64(*salir_en);
+    parada_escribir(w, en_origen);
+    parada_escribir(w, en_destino);
+    w.u32(*vueltas);
+    w.u8(match punta {
+        Punta::Origen => 0,
+        Punta::Destino => 1,
+    });
+    w.u8(match fase {
+        Fase::Espera => 0,
+        Fase::Descarga => 1,
+        Fase::Carga => 2,
+    });
+    w.opt_i64(*fin_paso);
+    w.bool(*cancelado);
+}
+
+pub(crate) fn parada_escribir(w: &mut Escritor, p: &Parada) {
+    let Parada { recoger, esperar_existencias, dejar, desechar_sobrante } = p;
+    w.u64(recoger.len() as u64);
+    for LineaRecoger { recurso, cantidad, precio_max } in recoger {
+        w.u8(recurso_a_u8(*recurso));
+        w.i64(*cantidad);
+        w.opt_i64(*precio_max);
+    }
+    w.bool(*esperar_existencias);
+    w.u64(dejar.len() as u64);
+    for LineaDejar { recurso, tope, precio_min } in dejar {
+        w.u8(recurso_a_u8(*recurso));
+        w.opt_i64(*tope);
+        w.opt_i64(*precio_min);
+    }
+    w.bool(*desechar_sobrante);
+}
+
+fn encargo_leer(r: &mut Lector) -> Result<Encargo, ErrorFormato> {
+    let modo = modo_de_u8(r.u8()?)?;
+    let (destino, salir_en) = (r.u32()?, r.opt_i64()?);
+    let (en_origen, en_destino) = (parada_leer(r)?, parada_leer(r)?);
+    let vueltas = r.u32()?;
+    let punta = match r.u8()? {
+        0 => Punta::Origen,
+        1 => Punta::Destino,
+        _ => return Err(ErrorFormato("punta de encargo desconocida")),
+    };
+    let fase = match r.u8()? {
+        0 => Fase::Espera,
+        1 => Fase::Descarga,
+        2 => Fase::Carga,
+        _ => return Err(ErrorFormato("fase de encargo desconocida")),
+    };
+    Ok(Encargo { modo, destino, salir_en, en_origen, en_destino, vueltas, punta, fase, fin_paso: r.opt_i64()?, cancelado: r.bool()? })
+}
+
+pub(crate) fn parada_leer(r: &mut Lector) -> Result<Parada, ErrorFormato> {
+    let mut recoger = Vec::new();
+    for _ in 0..r.cuenta()? {
+        recoger.push(LineaRecoger { recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()?, precio_max: r.opt_i64()? });
+    }
+    let esperar_existencias = r.bool()?;
+    let mut dejar = Vec::new();
+    for _ in 0..r.cuenta()? {
+        dejar.push(LineaDejar { recurso: recurso_de_u8(r.u8()?)?, tope: r.opt_i64()?, precio_min: r.opt_i64()? });
+    }
+    Ok(Parada { recoger, esperar_existencias, dejar, desechar_sobrante: r.bool()? })
 }
 
 fn id32(v: u64) -> Result<u32, ErrorFormato> {
     u32::try_from(v).map_err(|_| ErrorFormato("id de asentamiento fuera de rango"))
 }
 
-fn caravana_leer(r: &mut Lector) -> Result<Caravana, ErrorFormato> {
+/// `con_encargos`: la foto trae el encargo de cada caravana (desde BAN52); en una anterior ninguna tiene.
+fn caravana_leer(r: &mut Lector, con_encargos: bool) -> Result<Caravana, ErrorFormato> {
     let (id, tipo, origen) = (r.u64()?, tipo_caravana_de_u8(r.u8()?)?, r.u32()?);
     let destino = r.opt_u64()?.map(id32).transpose()?;
     let contenido = carga_leer(r)?;
@@ -399,6 +500,8 @@ fn caravana_leer(r: &mut Lector) -> Result<Caravana, ErrorFormato> {
         NINGUNO => None,
         i => Some(estado_caravana_de_u8(i)?),
     };
+    let (pausada_desde, de_campamento) = (r.opt_i64()?, r.bool()?);
+    let encargo = if con_encargos && r.bool()? { Some(encargo_leer(r)?) } else { None };
     Ok(Caravana {
         id,
         tipo,
@@ -418,8 +521,9 @@ fn caravana_leer(r: &mut Lector) -> Result<Caravana, ErrorFormato> {
         reservada_manual,
         anfitriona,
         antes_de_batalla,
-        pausada_desde: r.opt_i64()?,
-        de_campamento: r.bool()?,
+        pausada_desde,
+        de_campamento,
+        encargo,
     })
 }
 
@@ -543,7 +647,8 @@ pub(crate) fn escribir(w: &mut Escritor, c: &EstadoComercio) {
 }
 
 /// `con_rutas_acarreo`: la foto trae las rutas guardadas de los carros de acarreo (desde BAN42); en una BAN41 o BAN40 empiezan vacías y cada carro traza la suya en su próxima salida.
-pub(crate) fn leer(r: &mut Lector, reglas: &Reglas, con_rutas_acarreo: bool) -> Result<EstadoComercio, ErrorFormato> {
+/// `con_encargos`: las caravanas traen su encargo (desde BAN52).
+pub(crate) fn leer(r: &mut Lector, reglas: &Reglas, con_rutas_acarreo: bool, con_encargos: bool) -> Result<EstadoComercio, ErrorFormato> {
     let mut c = EstadoComercio { siguiente_acuerdo: r.u64()?, siguiente_orden: r.u64()?, siguiente_caravana: r.u64()?, ..EstadoComercio::default() };
     for _ in 0..r.cuenta()? {
         c.acuerdos.push(acuerdo_leer(r)?);
@@ -555,7 +660,7 @@ pub(crate) fn leer(r: &mut Lector, reglas: &Reglas, con_rutas_acarreo: bool) -> 
         c.libro.historial.push(orden_leer(r)?);
     }
     for _ in 0..r.cuenta()? {
-        c.flota.push(caravana_leer(r)?);
+        c.flota.push(caravana_leer(r, con_encargos)?);
     }
     for _ in 0..r.cuenta()? {
         let (faccion, valor, t0, alianzas) = (r.u32()?, r.i64()?, r.i64()?, r.u32()?);

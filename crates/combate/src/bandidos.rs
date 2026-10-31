@@ -76,10 +76,10 @@ pub fn punto_del_anillo(r: &Reglas, centro: Punto, rng: &mut Rng, mut valido: im
     None
 }
 
-/// ¿Puede el campamento acosar a esta caravana? No si está parada en una plaza (`disponible`, `preparando`, `aparcada`), ni si está dentro de
+/// ¿Puede el campamento acosar a esta caravana? No si está parada en una plaza (`disponible`, `preparando`, `aparcada`, `esperando`), ni si está dentro de
 /// cualquier zona de influencia, ni en la protección de un campamento de mercenarios, ni más lejos que `radioAtaqueCaravana`.
 pub fn puede_acosar(r: &Reglas, estado: EstadoCaravana, distancia: Mil, en_zona: bool, en_proteccion_de_campamento: bool) -> bool {
-    !matches!(estado, EstadoCaravana::Disponible | EstadoCaravana::Preparando | EstadoCaravana::Aparcada)
+    !matches!(estado, EstadoCaravana::Disponible | EstadoCaravana::Preparando | EstadoCaravana::Aparcada | EstadoCaravana::Esperando)
         && !en_zona
         && !en_proteccion_de_campamento
         && distancia <= r.bandidos.radio_ataque_caravana
@@ -253,7 +253,7 @@ mod pruebas {
         assert!(!ok(EstadoCaravana::EnTransito, 7_001, false, false));
         assert!(!ok(EstadoCaravana::EnTransito, 1, true, false), "dentro de una zona (de quien sea)");
         assert!(!ok(EstadoCaravana::EnTransito, 1, false, true), "protección de un campamento de mercenarios");
-        for parada in [EstadoCaravana::Disponible, EstadoCaravana::Preparando, EstadoCaravana::Aparcada] {
+        for parada in [EstadoCaravana::Disponible, EstadoCaravana::Preparando, EstadoCaravana::Aparcada, EstadoCaravana::Esperando] {
             assert!(!ok(parada, 1, false, false));
         }
     }

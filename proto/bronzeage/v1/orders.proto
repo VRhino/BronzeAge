@@ -634,6 +634,34 @@ message OrdenPrepararCaravana {
   optional sint64 salir_en = 6;
 }
 
+// El Maestro de Caravanas, el Tesorero o el Gobernador del origen de la caravana, residente y dentro, le da un encargo de transporte (2026-10-31): una ruta
+// permanente (`ruta`) entre dos plazas de su Facción, o un envío programado (`envio`) de una ida y vuelta a cualquier plaza. La caravana tiene que estar
+// `disponible` y con algún carro con animal; los carros y la escolta son los que ya tenga.
+message OrdenEncargarCaravana {
+  string caravana_id = 1;
+  string destino_asentamiento_id = 2;
+  string modo = 3;  // ruta | envio
+  optional sint64 salir_en_ms = 4;  // solo el envío: hora de mundo, hasta `maxProgramacionDias` vista; sin ella sale ya
+  ParadaEncargo parada_origen = 5;
+  ParadaEncargo parada_destino = 6;
+}
+
+// Cambia el encargo de una caravana (los mismos que pueden darlo). Vale para todo paso que aún no ha empezado; el destino solo cambia con la caravana
+// esperando en su origen. El modo no cambia.
+message OrdenCambiarEncargo {
+  string caravana_id = 1;
+  string destino_asentamiento_id = 2;
+  optional sint64 salir_en_ms = 3;
+  ParadaEncargo parada_origen = 4;
+  ParadaEncargo parada_destino = 5;
+}
+
+// Cancela el encargo de una caravana (los mismos que pueden darlo). Esperando en su origen, queda `disponible` allí y lo que llevara vuelve al almacén; si no,
+// acaba el tramo en curso sin comerciar, vuelve y deja todo en el origen.
+message OrdenCancelarEncargo {
+  string caravana_id = 1;
+}
+
 message OrdenProponerAnexion {
   string faccion_a_id = 1;
   string faccion_b_id = 2;
@@ -1159,5 +1187,8 @@ message Orden {
     OrdenCargarDePlaza cargar_de_plaza = 165;
     OrdenDejarEnPlaza dejar_en_plaza = 166;
     OrdenCerrarAlmacenACiudadanos cerrar_almacen_a_ciudadanos = 167;
+    OrdenEncargarCaravana encargar_caravana = 168;
+    OrdenCambiarEncargo cambiar_encargo = 169;
+    OrdenCancelarEncargo cancelar_encargo = 170;
   }
 }
