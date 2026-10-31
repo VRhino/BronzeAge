@@ -148,7 +148,7 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
     <div class="visor" id="visor">
       <canvas id="lienzo" tabindex="0" aria-label="Escena 3D. Haz clic en el terreno para mandar la columna. En la cámara de juego, arrastra o usa las flechas para girar la cámara alrededor del héroe."></canvas>
       <div class="hud hud-sup">
-        <span class="chip" id="chip-terreno">Generador nuevo · seed 42</span>
+        <span class="chip" id="chip-terreno">Generador · costa · seed 42</span>
         <span class="chip" id="chip-vista">Cámara que sigue al héroe · visión de <b>15 u</b></span>
         <span class="chip alerta" id="chip-aviso" hidden></span>
         <div class="visor-botones">
@@ -176,11 +176,11 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
       <div class="grupo">
         <span class="grupo-titulo">Terreno</span>
         <div class="segmentos">
-          <input type="radio" name="terreno" id="t-actual" value="actual"><label for="t-actual">Antes</label>
-          <input type="radio" name="terreno" id="t-nuevo" value="nuevo" checked><label for="t-nuevo">Generador nuevo</label>
           <input type="radio" name="terreno" id="t-propuesta" value="propuesta"><label for="t-propuesta">Propuesta</label>
           <input type="radio" name="terreno" id="t-alpina" value="alpina"><label for="t-alpina">Boceto alpino</label>
           <input type="radio" name="terreno" id="t-alpinagen" value="alpinagen"><label for="t-alpinagen">Generador: región alpina</label>
+          <input type="radio" name="terreno" id="t-costagen" value="costagen" checked><label for="t-costagen">Generador: costa</label>
+          <input type="radio" name="terreno" id="t-costa" value="costa"><label for="t-costa">Boceto de costa</label>
         </div>
         <p class="ficha-terreno" id="ficha-terreno"></p>
       </div>
@@ -303,6 +303,11 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
         <div class="botones"><button type="button" data-escena="alpinagen,llano">En el generador</button><button type="button" data-escena="alpina,inicio">Altiplano central</button><button type="button" data-escena="alpina,altiplano">Altiplano alto</button><button type="button" data-escena="alpina,entrada">Valle de entrada</button></div>
       </li>
       <li>
+        <h3>Costas (prueba)</h3>
+        <p>Una costa del generador frente a un boceto con formaciones: acantilados con calas, un cabo con farallones, una bahía con playa y dunas, un estuario y costa rocosa con islotes. El mar es un plano a 375 m.</p>
+        <div class="botones"><button type="button" data-escena="costagen,acantilado">En el generador</button><button type="button" data-escena="costa,cala">Cala</button><button type="button" data-escena="costa,cabo">Cabo</button><button type="button" data-escena="costa,playa">Playa</button><button type="button" data-escena="costa,estuario">Estuario</button><button type="button" data-escena="costa,rocas">Costa rocosa</button></div>
+      </li>
+      <li>
         <h3>Plazas, pueblos y avanzadas</h3>
         <p>Cada plaza es una ciudad con su zona. Sus pueblos y avanzadas son partes de la plaza en el mapa y van siempre dentro de su zona, en la parte que le toca cuando dos zonas se pisan. Cuántos hay depende del nivel: prueba con «Nivel de las plazas».</p>
         <button type="button" data-escena="plazas">Verlo</button>
@@ -311,11 +316,6 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
         <h3>Mover la columna</h3>
         <p>Haz clic en el terreno. La ruta se engancha a los nodos más cercanos, cruza la rejilla con A* y, con el suavizado, se estira en rectas que no cuestan más. La columna va más despacio cuanto más empinado es el terreno (de ×1 en llano a ×3,5 a 35°), sea cual sea la altura; el agua y las laderas que se ven de más de 35° no se cruzan, y el río se pasa por los vados.</p>
         <button type="button" data-escena="columna">Verlo</button>
-      </li>
-      <li>
-        <h3>El generador, antes y ahora</h3>
-        <p>Antes, el llano era una mesa y la cordillera una rampa lisa que duraba varias pantallas. Ahora la cordillera tiene crestas, valles en los ríos y collados en los pasos, con la receta de la propuesta sobre la geografía real.</p>
-        <div class="botones"><button type="button" data-escena="actual,cordillera">Antes</button><button type="button" data-escena="nuevo,cordillera">Ahora</button></div>
       </li>
     </ol>
   </section>
@@ -385,7 +385,7 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
       <li><span class="estado cerrado">Regla</span><span>Las pendientes del movimiento se miden con la exageración de altura: lo que se ve es lo que se anda.</span></li>
       <li><span class="estado abierto">Abierto</span><span>Ríos y vados del terreno nuevo, y cuántos árboles dibuja el cliente: con copa de 0,4 u, un bosque denso lleva unos 3 árboles por u².</span></li>
     </ul>
-    <p class="pie">Datos: ventana de 320 × 240 u del mundo de la seed 42, entre la cordillera norte y el campamento‑0. En el terreno real, los ríos se dibujan pero no cortan el paso porque faltan sus vados. Página 2D anterior: <a href="https://claude.ai/artifact/GKqGYMohRFTMihKpPkaeGG" target="_blank" rel="noopener">escalas del mundo</a>.</p>
+    <p class="pie">Datos: ventanas de 320 × 240 u del mundo de la seed 42, una en la región alpina y otra en la costa de la península del oeste. En el terreno del generador, los ríos se dibujan pero no cortan el paso porque faltan sus vados. Página 2D anterior: <a href="https://claude.ai/artifact/GKqGYMohRFTMihKpPkaeGG" target="_blank" rel="noopener">escalas del mundo</a>.</p>
   </section>
 </div>
 
@@ -393,12 +393,12 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
 <script>
 (async () => {
-const D = __DATOS__, DN = __DATOS_NUEVO__, DA = __DATOS_ALPINA__;
+const DA = __DATOS_ALPINA__, DC = __DATOS_COSTA__;
 const FACTOR = 12, VEL = .5, BASE_M = 450, FOV = 35, PEND_MAX = .7, ALTO_SOLDADO = .136, REGLA_U = 10;
 // El suelo que enseña la cámara de juego, medido sobre el plano del héroe (lo recalcula `colocarCamara`): el ancho en la fila del héroe,
 // hasta dónde llega hacia abajo y hacia el fondo de la pantalla, y las cuatro esquinas respecto al héroe (para la huella de la vista libre)
 let pantalla = { ancho: 53.3, cerca: 15, fondo: 15, esquinas: null };
-const W = D.w, H = D.h, NX = D.nx, NY = D.ny, PASO = D.paso, BX = D.bx, BY = D.by;
+const W = DC.w, H = DC.h, NX = DC.nx, NY = DC.ny, PASO = DC.paso, BX = DC.bx, BY = DC.by;
 // valores del autor (2026-10-30, cuarta ronda, con la cámara de juego nueva)
 const ELEGIDOS = { relieve: 2.2, exag: 2, copa: .3, maqueta: 1, tropa: 2 };
 // lo que cabe en pantalla según la visión de la columna (VISION del servidor: 15 u de radio el héroe solo, 30 u con soldados): [normal, alejado]
@@ -420,15 +420,19 @@ const fmt = (v, d = 1) => v.toLocaleString('es-ES', { minimumFractionDigits: d, 
 
 // ---------- datos ----------
 const bytes = async b64 => { const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0)); const s = new Blob([bin]).stream().pipeThrough(new DecompressionStream('gzip')); return new Uint8Array(await new Response(s).arrayBuffer()); };
-// Ventanas reales del generador: la de antes y la del relieve nuevo (mismo sitio, alturas tal cual, sin exagerar).
+// Ventanas reales del generador (alturas tal cual, sin exagerar): la región alpina y una costa.
 const ventana = async V => {
   const [altB, aguaB, bosB] = await Promise.all([V.altura, V.agua, V.bosque].map(bytes));
   const v = new Uint16Array(altB.buffer, altB.byteOffset, altB.byteLength / 2), hm = new Float32Array(v.length);
   for (let i = 0; i < v.length; i++) hm[i] = v[i] / 65535 * 1000;
   const bosque = new Float32Array(BX * BY); for (let i = 0; i < bosque.length; i++) bosque[i] = bosB[i] / 255;
-  return { hm, agua: aguaB, bosque, rios: V.rios, anchoRio: .9, vados: [], umbrales: [545, 600, 685], campamentos: V.campamentos, puntos: V.puntos };
+  return { hm, agua: aguaB, bosque, rios: V.rios, anchoRio: .9, vados: [], umbrales: [545, 600, 685], campamentos: V.campamentos, puntos: V.puntos, x0: V.x0, y0: V.y0 };
 };
-const [real, nuevo, alpinaGen] = await Promise.all([ventana(D), ventana(DN), ventana(DA)]);
+const [alpinaGen, costaGen] = await Promise.all([ventana(DA), ventana(DC)]);
+// La costa del generador lleva el mar como plano a 375 m y pinta de arena la tierra baja y llana junto al agua (lo que haría de playa).
+{ const t = costaGen, n = NX * NY, suave = (a, b, x) => { const u = Math.min(1, Math.max(0, (x - a) / (b - a))); return u * u * (3 - 2 * u); }; t.mar = 375; t.arena = new Float32Array(n);
+  for (let j = 1; j < NY - 1; j++) for (let i = 1; i < NX - 1; i++) { const k = j * NX + i, h = t.hm[k]; if (t.agua[k] || h >= t.mar + 6) continue;
+    const s = Math.hypot(t.hm[k + 1] - t.hm[k - 1], t.hm[k + NX] - t.hm[k - NX]) / (2 * PASO * FACTOR); t.arena[k] = (1 - suave(t.mar + 2, t.mar + 6, h)) * (1 - suave(.2, .4, s)); } }
 
 // ---------- ruido (simplex 2D) para la propuesta ----------
 function ruido(semilla) {
@@ -489,7 +493,8 @@ function propuesta(S) {
     f *= 1 - suave(530, 570, h);
     bosque[j * BX + i] = Math.max(0, Math.min(1, f));
   }
-  return { hm, agua, bosque, rios: [rio, afl], anchoRio, vados, umbrales: [478, 500, 540], campamentos: D.campamentos, puntos: D.puntos };
+  return { hm, agua, bosque, rios: [rio, afl], anchoRio, vados, umbrales: [478, 500, 540], campamentos: [{ id: 'campamento-0', x: 160.02, y: 233.02 }],
+    puntos: { cordillera: [183.5, 66], llano: [101.5, 214], campamento: [160.02, 227.02] } };
 }
 
 // Región alpina (prueba del 2026-10-31): desde el llano del sur se sube poco a poco a una región alta, una cadena de valles
@@ -565,10 +570,99 @@ function alpina(S) {
     puntos: { inicio: [A[1].x, A[1].y], llano: [160, 225], cordillera: [158, 50], campamento: [p0[0], p0[1] - 4], altiplano: [A[4].x, A[4].y], entrada: [p1[0], p1[1] - 4] } };
 }
 
+// Boceto de costa (prueba del 2026-10-31): tierra al norte y mar al sur, con formaciones de costa a escala de pantalla.
+// De oeste a este: acantilados con calas, un cabo con farallones, una bahía con playa llana, dunas y un estuario, y costa
+// rocosa baja con islotes. Alturas tal cual (sin «Altura»); el mar es un plano a 375 m.
+const MAR = 375;
+const CALAS = [{ x: 28, rx: 7, ry: 10 }, { x: 60, rx: 9, ry: 12 }, { x: 90, rx: 6, ry: 9 }, { x: 272, rx: 7, ry: 8 }];
+const FARALLONES = [[116, 207, 2.2], [126, 213, 1.6], [109, 214, 1.3], [131, 205, 1.1]];
+const ISLOTES = [[292, 198, 7, 9], [258, 207, 3, 5]];
+function costa() {
+  const yc = x => 150 + 46 * Math.exp(-(((x - 122) / 13) ** 2)) - 40 * Math.exp(-(((x - 192) / 36) ** 2)) + 7 * fbm(R2, x / 34 + 5, 3.3, 2);
+  const pAcant = x => 1 - suave(138, 152, x), pRoca = x => suave(236, 250, x), pPlaya = x => 1 - pAcant(x) - pRoca(x);
+  for (const c of CALAS) c.y = yc(c.x) - c.ry * .45;
+  // río: baja del norte a la bahía con meandros y se abre en estuario
+  const fondoBahia = yc(196), rio = []; for (let k = 0; k <= 40; k++) { const t = k / 40, y = -4 + (fondoBahia + 3) * t; rio.push([205 + 9 * Math.sin(t * 5.2) * (1 - t * .6) - 9 * t, y]); }
+  const tramos = []; for (let k = 1; k < rio.length; k++) tramos.push([...rio[k - 1], ...rio[k]]);
+  const vados = [rio[12], rio[26]];
+  const distRio = (x, y) => { let d = 1e9, t = 0; for (let k = 0; k < tramos.length; k++) { const s = tramos[k]; if (Math.abs(s[1] - y) > 12 && Math.abs(s[3] - y) > 12) continue; const dd = distSeg(x, y, ...s); if (dd < d) { d = dd; t = (k + .5) / tramos.length; } } return [d, t]; };
+  // 1) tierra o mar en cada vértice
+  const N = NX * NY, s = new Float32Array(N), tierra = new Uint8Array(N);
+  for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+    const x = i * PASO, y = j * PASO, ac = pAcant(x), ro = pRoca(x);
+    // la roca y el acantilado son quebrados; la playa, lisa
+    let v = yc(x) - y + (ac + ro) * (5 * fbm(R3, x / 9, y / 9, 2) + 2 * fbm(R4, x / 3.5, y / 3.5, 2)) + pPlaya(x) * 1.5 * fbm(R1, x / 20, y / 20, 2);
+    for (const c of CALAS) { const e = Math.hypot((x - c.x) / c.rx, (y - c.y) / c.ry); v = Math.min(v, 6 * (e - 1)); }
+    for (const [fx, fy, r] of FARALLONES) v = Math.max(v, 4 * (1 - Math.hypot(x - fx, y - fy) / r));
+    for (const [ix, iy, rx, ry] of ISLOTES) v = Math.max(v, 5 * (1 - Math.hypot((x - ix) / rx, (y - iy) / ry) * (1 + .25 * fbm(R2, x / 4, y / 4, 2))));
+    // el estuario: el río se ensancha en los últimos 25 u
+    const [dr, tr] = distRio(x, y); if (tr > .75) v = Math.min(v, 3 * (dr - (.5 + 3.5 * suave(.75, 1, tr))));
+    s[j * NX + i] = v; tierra[j * NX + i] = v > 0 ? 1 : 0;
+  }
+  // 2) distancia a la orilla (chaflán de dos pasadas), en u, por los dos lados
+  const dist = lado => { const d = new Float32Array(N).fill(1e9), a = PASO, b = PASO * Math.SQRT2;
+    for (let k = 0; k < N; k++) if (tierra[k] !== lado) d[k] = 0;
+    for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) { const k = j * NX + i; if (!d[k]) continue; let m = d[k]; if (i > 0) m = Math.min(m, d[k - 1] + a); if (j > 0) { m = Math.min(m, d[k - NX] + a); if (i > 0) m = Math.min(m, d[k - NX - 1] + b); if (i < NX - 1) m = Math.min(m, d[k - NX + 1] + b); } d[k] = m; }
+    for (let j = NY - 1; j >= 0; j--) for (let i = NX - 1; i >= 0; i--) { const k = j * NX + i; if (!d[k]) continue; let m = d[k]; if (i < NX - 1) m = Math.min(m, d[k + 1] + a); if (j < NY - 1) { m = Math.min(m, d[k + NX] + a); if (i < NX - 1) m = Math.min(m, d[k + NX + 1] + b); if (i > 0) m = Math.min(m, d[k + NX - 1] + b); } d[k] = m; }
+    return d; };
+  const dT = dist(1), dM = dist(0);
+  // 3) alturas
+  const hm = new Float32Array(N), agua = new Uint8Array(N), arena = new Float32Array(N), roca = new Float32Array(N);
+  for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+    const k = j * NX + i, x = i * PASO, y = j * PASO;
+    let ac = pAcant(x), ro = pRoca(x), pl = pPlaya(x);
+    // al fondo de cada cala, una playita y, detrás, el barranco que baja a ella; los lados siguen siendo acantilado
+    for (const c of CALAS) { const t = (c.y - y) / c.ry, q = (1 - suave(.55, 1.05, Math.abs(x - c.x) / c.rx)) * suave(-.3, .2, t) * (1 - suave(1.2, 3.2, t)); pl += q * (ac + ro); ac *= 1 - q; ro *= 1 - q; }
+    const sum = ac + ro + pl; ac /= sum; ro /= sum; pl /= sum;
+    // el interior: una llanura costera que sube despacio, con lomas
+    const interior = MAR + 14 + .1 * Math.max(0, yc(x) - y) + 9 * fbm(R1, x / 30 + 3, y / 30, 3) + 2 * fbm(R4, x / 7, y / 7, 2);
+    const [dr, tr] = distRio(x, y);
+    // cerca de la orilla, la distancia sale del campo continuo (s) y no de la rejilla: así la línea del agua no sale en escalera
+    if (tierra[k]) {
+      const d = Math.min(dT[k], Math.max(.02, s[k]));
+      const hP = d < 8 ? 1.6 * d / 8 : d < 16 ? 1.6 + (3.5 + 2 * fbm(R3, x / 5, y / 5, 2)) * Math.sin(Math.PI * (d - 8) / 8) ** 2 : 1.6 + .25 * (d - 16);
+      const alto = 38 + 16 * fbm(R2, x / 25, 7.7, 2), hA = alto * suave(0, 2.4, d) ** .7 + .15 * d;
+      // la costa rocosa sube de golpe desde el agua (sin rampa) y es quebrada, pero nunca baja del mar
+      const bajo = 7 + 5 * fbm(R4, x / 12, 1.9, 2), hR = bajo * (1 - (1 - Math.min(1, d / 3)) ** 2) + 1.6 * (.5 + .5 * fbm(R3, x / 2.5, y / 2.5, 2)) * Math.min(1, d) + .2 * d;
+      let h = MAR + ac * hA + ro * hR + pl * hP;
+      // farallones e islotes: columnas y peñas, sin llanura detrás
+      const enFarallon = FARALLONES.some(([fx, fy, r]) => Math.hypot(x - fx, y - fy) < r + 1);
+      if (enFarallon) h = MAR + 30 * suave(0, .9, d);
+      else if (ISLOTES.some(([ix, iy, rx]) => Math.hypot(x - ix, y - iy) < rx * 1.6)) h = MAR + Math.max(.4, hR - .2 * d);
+      else h += Math.max(0, interior - h) * suave(16, 55, d);
+      // valle del río: baja hacia el cauce, y el cauce baja hacia el estuario
+      const lecho = MAR + .5 + 14 * (1 - tr) ** 1.3, g = Math.exp(-((dr / 7) ** 2));
+      if (h > lecho) h = lecho + (h - lecho) * (1 - .9 * g);
+      hm[k] = h;
+      arena[k] = pl * (1 - suave(13, 17, d)) * (1 - g);
+      // la roca desnuda en la orilla de la costa rocosa, el pie del acantilado y los farallones
+      roca[k] = enFarallon ? .9 : Math.min(1, ro + .6 * ac) * (1 - suave(1.5, 4.5, d));
+      if (dr < .45 + (tr > .75 ? 3.5 * suave(.75, 1, tr) : 0) && !vados.some(v => Math.hypot(x - v[0], y - v[1]) < 1.5)) agua[k] = 1;
+    } else {
+      // fondo del mar: plataforma suave en la playa, escalón bajo el acantilado
+      const d = Math.min(dM[k], Math.max(.02, -s[k])), a = Math.min(1, d / .5);
+      const hondo = pl * Math.min(22, .6 * a + .4 * d) + ac * Math.min(40, d < 2 ? 1.5 * a : 5 + 3 * d) + ro * Math.min(28, 1.5 * a + 1.3 * d);
+      hm[k] = MAR - hondo; agua[k] = 1;
+    }
+  }
+  // bosque: en el interior, lejos de la orilla y fuera de las dunas
+  const bosque = new Float32Array(BX * BY);
+  for (let j = 0; j < BY; j++) for (let i = 0; i < BX; i++) {
+    const x = i + .5, y = j + .5, k = Math.round(y / PASO) * NX + Math.round(x / PASO);
+    if (!tierra[k] || agua[k]) continue;
+    const f = fbm(R3, x / 20 + 40, y / 20, 3) * 1.1 + .05 + .3 * fbm(R2, x / 3.5 + 9, y / 3.5, 2);
+    bosque[j * BX + i] = Math.max(0, Math.min(1, f * suave(14, 26, dT[k])));
+  }
+  return { hm, agua, arena, roca, mar: MAR, bosque, rios: [rio], anchoRio: .9, vados, umbrales: [MAR + 110, MAR + 160, MAR + 240], campamentos: [],
+    // el héroe junto a la orilla: la cámara, detrás (al sur), queda sobre el mar y mira a tierra; en la cala, al revés (tercer valor: giro),
+    // desde tierra mirando al mar, para ver la playita entre las paredes
+    puntos: { inicio: [184, yc(184) - 24], llano: [160, 40], playa: [186, yc(186) - 3], cala: [60, CALAS[1].y - CALAS[1].ry - 4, Math.PI], cabo: [122, yc(122) - 4], estuario: [rio[36][0] - 5, rio[36][1]], rocas: [282, yc(282) - 3] } };
+}
+
 // ---------- estado ----------
-const estado = { terreno: 'nuevo', vista: 'juego', inclinacion: 30, giro: 0, vision: 15, zoom: 'normal', encuadre: 15, apertura: 35, verVision: true, nieblaVision: true, ...ELEGIDOS, rejilla: 4, verRejilla: true, suavizado: true, columna: true, plazas: true, zonas: true, nivel: 2, arboles: true, pausa: reducido };
-let T = real;
-let objX = D.puntos.llano[0], objY = D.puntos.llano[1];
+const estado = { terreno: 'costagen', vista: 'juego', inclinacion: 30, giro: 0, vision: 15, zoom: 'normal', encuadre: 15, apertura: 35, verVision: true, nieblaVision: true, ...ELEGIDOS, rejilla: 4, verRejilla: true, suavizado: true, columna: true, plazas: true, zonas: true, nivel: 2, arboles: true, pausa: reducido };
+let T = costaGen;
+let objX = DC.puntos.inicio[0], objY = DC.puntos.inicio[1];
 
 // ---------- muestreo ----------
 const alturaM = (x, y) => {
@@ -640,7 +734,7 @@ geo.setAttribute('color', new THREE.BufferAttribute(colT, 3));
 const terreno = new THREE.Mesh(geo, conVision(new THREE.MeshLambertMaterial({ vertexColors: true })));
 terreno.receiveShadow = true; escena.add(terreno);
 
-const PAL = { llano: [.72, .69, .47], colina: [.58, .57, .38], montana: [.53, .47, .39], cima: [.76, .74, .70], roca: [.47, .43, .39], agua: [.27, .46, .60], sotobosque: [.36, .44, .25] };
+const PAL = { llano: [.72, .69, .47], colina: [.58, .57, .38], montana: [.53, .47, .39], cima: [.76, .74, .70], roca: [.47, .43, .39], agua: [.27, .46, .60], sotobosque: [.36, .44, .25], arena: [.86, .80, .62], fondo: [.16, .26, .30] };
 const mezcla = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 function pintarTerreno() {
   const hm = T.hm, [u1, u2, u3] = T.umbrales;
@@ -652,7 +746,10 @@ function pintarTerreno() {
     const s = Math.hypot(hm[j * NX + i1] - hm[j * NX + i0], hm[j1 * NX + i] - hm[j0 * NX + i]) / ((i1 - i0 + j1 - j0) / 2 * PASO * FACTOR);
     c = mezcla(c, PAL.roca, suave(.45, .9, s));
     c = mezcla(c, PAL.sotobosque, .55 * bosqueEn(i * PASO, j * PASO));
-    if (T.agua[n]) c = PAL.agua;
+    if (T.arena) c = mezcla(c, PAL.arena, T.arena[n]);
+    if (T.roca) c = mezcla(c, PAL.roca, T.roca[n]);
+    if (T.mar !== undefined && h < T.mar) c = mezcla(PAL.arena, PAL.fondo, suave(0, 24, T.mar - h));
+    else if (T.agua[n]) c = PAL.agua;
     const v = .96 + .08 * hash(i, j);
     colT[k] = c[0] * v; colT[k + 1] = c[1] * v; colT[k + 2] = c[2] * v;
   }
@@ -823,7 +920,7 @@ function construirPlazas() {
 }
 
 // ---------- rejilla de navegación, anclada a múltiplos del espaciado en coordenadas del mapa (como el grafo) ----------
-const origenRejilla = g => [((g - D.x0 % g) % g), ((g - D.y0 % g) % g)];
+const origenRejilla = g => [((g - (T.x0 ?? 0) % g) % g), ((g - (T.y0 ?? 0) % g) % g)];
 let nav = null;
 function construirNav() {
   const g = estado.rejilla, [ox, oy] = origenRejilla(g), cols = Math.floor((W - ox) / g) + 1, filas = Math.floor((H - oy) / g) + 1;
@@ -1128,21 +1225,28 @@ function lecturas(ahora) {
 
 // ---------- montaje ----------
 const FICHAS = {
-  actual: 'El generador de antes, en la misma ventana: <b>320 × 240 u</b> entre la cordillera norte y el campamento‑0. El llano es una mesa y la cordillera, una rampa lisa: en el macizo, <b>50 m</b> de desnivel por pantalla (mediana) y el <b>13 %</b> de laderas de más de 35°.',
-  nuevo: 'El generador con el relieve nuevo (seed 42), misma ventana y alturas tal cual: crestas cada ~92 u, valles hundidos en los ríos, colinas y lomas, sobre la geografía regional. En el macizo, <b>46 m</b> de desnivel por pantalla de mediana y <b>196 m</b> en el percentil 90, y el <b>25 %</b> de laderas de más de 35°. Las tierras altas llevan colinas y los pasos quedan limpios para no cortar regiones.',
   alpinagen: 'El generador con la <b>región alpina</b> en las Tierras altas secas (seed 42), alturas tal cual: una cadena de valles en altura con altiplanos a varias alturas, unidos por pasos, y la subida desde fuera en el borde. Como en el juego desde el 2026-10-31: <b>solo frena la pendiente</b> y se funda en cualquier sitio llano (hasta 0,3 de pendiente), también arriba.',
   alpina: 'Prueba del 2026-10-31. Desde el llano del sur el terreno va subiendo hasta una <b>región alta</b>: una cadena de valles en altura con <b>seis altiplanos</b> entre 515 y 618 m, cerrados por montaña y unidos por <b>pasos</b> con su collado. Dos valles con río suben desde el llano. Como en el juego desde el 2026-10-31: <b>solo frena la pendiente</b> (la altura no cuesta) y se funda en cualquier sitio llano, también arriba. No sale del generador.',
+  costagen: 'El generador en una costa de la seed 42 (la península del oeste), alturas tal cual, con el mar como plano a 375 m. La orilla es una <b>curva lisa</b> que viene del relieve regional, con detalle cada 8 u: aquí es acantilado (37 %), roca (27 %) y playa (36 %), pero no hay calas, cabos pequeños ni farallones, y la playa es una <b>rampa</b> que sube unos 4 m por u (en arena, la tierra baja y llana junto al agua).',
+  costa: 'Prueba del 2026-10-31. Una costa con formaciones, de oeste a este: <b>acantilados</b> de 30 a 55 m con tres <b>calas</b> (bocas de 12 a 16 u y una playita al fondo), un <b>cabo</b> con farallones, una <b>bahía</b> con playa llana (1,6 m en las primeras 8 u) y dunas detrás, un <b>estuario</b> donde llega el río, y costa <b>rocosa</b> baja con islotes y otra cala. El mar es un plano a 375 m; el fondo baja despacio frente a la playa y de golpe bajo el acantilado. Alturas tal cual. No sale del generador.',
   propuesta: 'Boceto con los tamaños de la regla ×100: crestas, valles, colinas y lomas que caben en una o pocas pantallas. «Tamaño del relieve» escala tamaño y altura a la vez; «Altura» exagera las alturas, y con ellas las pendientes que deciden el paso. No sale del generador.',
 };
-let propuestaCache = null, alpinaCache = null;
+let propuestaCache = null, alpinaCache = null, costaCache = null;
 function montarTerreno() {
   if (estado.terreno === 'alpina') { if (!alpinaCache || alpinaCache.S !== estado.relieve) alpinaCache = { S: estado.relieve, t: alpina(estado.relieve) }; T = alpinaCache.t; }
-  else if (estado.terreno === 'propuesta') { if (!propuestaCache || propuestaCache.S !== estado.relieve) propuestaCache = { S: estado.relieve, t: propuesta(estado.relieve) }; T = propuestaCache.t; } else T = estado.terreno === 'nuevo' ? nuevo : estado.terreno === 'alpinagen' ? alpinaGen : real;
-  $('chip-terreno').textContent = estado.terreno === 'actual' ? 'Generador de antes · seed 42' : estado.terreno === 'nuevo' ? 'Generador nuevo · seed 42' : estado.terreno === 'alpinagen' ? 'Generador · región alpina · seed 42' : estado.terreno === 'alpina' ? `Región alpina · relieve ×${fmt(estado.relieve)} · altura ×${fmt(estado.exag)}` : `Propuesta ×100 · relieve ×${fmt(estado.relieve)} · altura ×${fmt(estado.exag)}`;
+  else if (estado.terreno === 'costa') { costaCache ??= costa(); T = costaCache; }
+  else if (estado.terreno === 'propuesta') { if (!propuestaCache || propuestaCache.S !== estado.relieve) propuestaCache = { S: estado.relieve, t: propuesta(estado.relieve) }; T = propuestaCache.t; } else T = estado.terreno === 'alpinagen' ? alpinaGen : costaGen;
+  $('chip-terreno').textContent = estado.terreno === 'alpinagen' ? 'Generador · región alpina · seed 42' : estado.terreno === 'costagen' ? 'Generador · costa · seed 42' : estado.terreno === 'costa' ? 'Boceto de costa · alturas tal cual' : estado.terreno === 'alpina' ? `Región alpina · relieve ×${fmt(estado.relieve)} · altura ×${fmt(estado.exag)}` : `Propuesta ×100 · relieve ×${fmt(estado.relieve)} · altura ×${fmt(estado.exag)}`;
   $('ficha-terreno').innerHTML = FICHAS[estado.terreno];
   pintarTerreno(); elegirPlazas(); construirNav(); montarCapas(); iniciarColumna();
 }
-function montarCapas() { construirRios(); construirPlazas(); construirArboles(); construirRejilla(); dibujarRuta(); construirHuella(); }
+function montarCapas() { construirMar(); construirRios(); construirPlazas(); construirArboles(); construirRejilla(); dibujarRuta(); construirHuella(); }
+// el mar: un plano a su nivel, algo transparente para ver el fondo cerca de la orilla
+function construirMar() {
+  if (T.mar === undefined) { quitar('mar'); return; }
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(W, H), conVision(new THREE.MeshLambertMaterial({ color: 0x3f7aa3, transparent: true, opacity: .78, depthWrite: false })));
+  m.rotation.x = -Math.PI / 2; m.position.y = (T.mar - BASE_M) / FACTOR * exag(); m.renderOrder = 2; poner('mar', m);
+}
 const ocupado = fn => { visor.style.cursor = 'progress'; setTimeout(() => { fn(); visor.style.cursor = ''; }, 16); };
 const rehacerRuta = () => { if (ruta && ruta.s < ruta.acum[ruta.acum.length - 1] - 1e-6) mandar(ruta.destino); };
 
@@ -1163,7 +1267,7 @@ deslizador('tropa', 'tropa', v => `×${fmt(v)} · ${fmt(v * ALTO_SOLDADO * FACTO
 $('restablecer').addEventListener('click', () => {
   for (const [k, v] of Object.entries(ELEGIDOS)) { estado[k] = v; deslizadores[k].el.value = v; deslizadores[k].pintar(); }
   estado.vision = 15; $('vision').value = '15'; fijarZoom('normal'); estado.apertura = 35; $('apertura').value = 35; deslizadores.apertura.pintar();
-  $('rejilla').value = '4'; estado.rejilla = 4; estado.giro = 0; $('t-nuevo').checked = true; estado.terreno = 'nuevo'; estado.inclinacion = 30; $('inclinacion').value = 30; deslizadores.inclinacion.pintar(); $('suavizado').checked = estado.suavizado = true; 
+  $('rejilla').value = '4'; estado.rejilla = 4; estado.giro = 0; $('t-costagen').checked = true; estado.terreno = 'costagen'; estado.inclinacion = 30; $('inclinacion').value = 30; deslizadores.inclinacion.pintar(); $('suavizado').checked = estado.suavizado = true; 
   ocupado(montarTerreno);
 });
 $('rejilla').addEventListener('change', e => { estado.rejilla = +e.target.value; ocupado(() => { construirNav(); construirRejilla(); rehacerRuta(); }); });
@@ -1186,7 +1290,7 @@ function llevarHeroe(x, y) {
 }
 const ir = destino => {
   if (destino === 'ciudad') { if (columnaA) llevarHeroe(columnaA.x, columnaA.y + radioCiudad() + 1); }
-  else if (T.puntos[destino]) llevarHeroe(...T.puntos[destino]);
+  else if (T.puntos[destino]) { const [px, py, giro = 0] = T.puntos[destino]; llevarHeroe(px, py); estado.giro = giro; }
   objX = cabeza[0]; objY = cabeza[1];
   if (estado.vista === 'libre') { const t = new THREE.Vector3(objX - W / 2, alturaU(objX, objY), objY - H / 2), dlt = t.clone().sub(controles.target); controles.target.copy(t); camara.position.add(dlt); }
 };

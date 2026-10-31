@@ -41,7 +41,10 @@ export const PARAMETROS_RECURSOS = {
   /** Rejilla de prospección y azar de cada punto (generador), como la «prospección fina» de Codex. */
   pasoPrueba: 150,
   azarPrueba: 75,
-  /** Pendiente máxima (×1000, la de Codex) en un yacimiento. */
+  /**
+   * Pendiente máxima (×1000, la de Codex) en un yacimiento de piedra. El cobre y el hierro (decisión del autor del 2026-10-31) solo
+   * piden un sitio que se pueda pisar: una mina va en la ladera, hasta la pendiente máxima transitable.
+   */
   pendienteMaxima: 0.35,
   /** El cobre y el hierro (mismo terreno: colina, montaña o cima) caben en el llano solo si no hay colinas: su peso queda por debajo del de cualquier colina. */
   factorLlanoMineral: 0.1,
@@ -145,7 +148,7 @@ const MONTANOSO = new Set<ClaseTerreno>(['colina', 'montana', 'cima']);
 const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 
 interface Candidato {
-  posicion: Point; terreno: ClaseTerreno; altura: number; geologia: number; bosque: number;
+  posicion: Point; terreno: ClaseTerreno; pendiente: number; altura: number; geologia: number; bosque: number;
   anillo: Anillo; campamento: string;
 }
 
@@ -168,16 +171,16 @@ export function repartirRecursosNoMetalicos(
   ocupados: readonly Point[] = [],
   p = PARAMETROS_RECURSOS,
 ): RecursoMundo[] {
-  // Candidatos: una rejilla con azar, sin agua ni pendientes fuertes ni sitios sin acceso. Las cimas llanas valen (2026-10-31:
-  // la altura ya no cuenta en el terreno, solo la pendiente).
+  // Candidatos: una rejilla con azar, sin agua ni sitios sin acceso. Las cimas valen (2026-10-31: la altura ya no cuenta en el
+  // terreno, solo la pendiente). La pendiente se guarda: la piedra no pasa de `pendienteMaxima` y los metales llegan hasta donde se pisa.
   const azarPunto = createRng(derivarSeed(seed, 'recursos-candidatos-1'));
   const candidatos: Candidato[] = [];
   for (let y = p.pasoPrueba / 2; y < limites.alto; y += p.pasoPrueba) for (let x = p.pasoPrueba / 2; x < limites.ancho; x += p.pasoPrueba) {
     const posicion = { x: x + (azarPunto() - 0.5) * p.azarPrueba, y: y + (azarPunto() - 0.5) * p.azarPrueba };
     const terreno = m.terreno(posicion);
-    if (terreno === 'agua' || m.pendiente(posicion) > p.pendienteMaxima || !m.accesible(posicion)) continue;
-    const bosque = m.bosque(posicion), a = anilloEn(campamentos, posicion);
-    candidatos.push({ posicion, terreno, altura: m.altura(posicion), geologia: m.geologia(posicion), bosque, anillo: a.anillo, campamento: a.campamento });
+    if (terreno === 'agua' || !m.accesible(posicion)) continue;
+    const pendiente = m.pendiente(posicion), bosque = m.bosque(posicion), a = anilloEn(campamentos, posicion);
+    candidatos.push({ posicion, terreno, pendiente, altura: m.altura(posicion), geologia: m.geologia(posicion), bosque, anillo: a.anillo, campamento: a.campamento });
   }
 
   // Índice espacial de lo ya colocado (celdas de 250 ≥ cualquier separación).
@@ -203,7 +206,7 @@ export function repartirRecursosNoMetalicos(
     const azar = createRng(derivarSeed(seed, `recursos-${tipo}-1`)), mineral = tipo === 'cobre' || tipo === 'hierro';
     const pool = candidatos.map(c => ({
       c, q: calidad(tipo, c), azar: azar(),
-    })).filter(e => e.q > p.calidadMinima)
+    })).filter(e => e.q > p.calidadMinima && (mineral || e.c.pendiente <= p.pendienteMaxima))
       .map(e => ({ c: e.c, peso: e.q * (0.4 + e.azar * 0.6) * (tipo === 'piedra' && e.c.bosque >= 0.15 ? 2 : 1)
         * (mineral && !MONTANOSO.has(e.c.terreno) ? p.factorLlanoMineral : 1) }));
     const total = Math.round(p.totalBase[tipo] * escala), cuotas = cuotasPorAnillo(total, p.reparto[tipo]);
@@ -272,7 +275,7 @@ export function repartirRecursosNoMetalicos(
     if (relativa) {
       const pesoTerreno = (c: Candidato) => (mineral ? p.capaLejana.pesoTerrenoMineral[c.terreno] : 1);
       const enFrontera = recursos.filter(r => r.tipo === tipo && r.anillo === 'frontera').length;
-      const cuenta = (a: Anillo) => candidatos.filter(c => c.anillo === a).length;
+      const cuenta = (a: Anillo) => pool.filter(e => e.c.anillo === a).length;
       const extra = Math.round(enFrontera / Math.max(1, cuenta('frontera')) * relativa * cuenta('lejana'));
       // Se coloca al final, con todo lo demás ya puesto: el foco y la frontera no cambian.
       capas.push(() => { n = 0; colocarPorZonas(extra, pesoTerreno); });

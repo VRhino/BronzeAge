@@ -66,13 +66,14 @@ describe('recursos no metálicos', () => {
   it('cada recurso está en el anillo que declara', () => {
     for (const r of recursos) expect(anilloEn(campamentos, r.posicion).anillo).toBe(r.anillo);
   });
-  it('ninguno en agua, pendiente fuerte ni sitio sin acceso; las cimas llanas valen', () => {
+  it('ninguno en agua ni sin acceso; las cimas valen; la piedra no pasa de la pendiente máxima y los metales van también en ladera', () => {
     for (const r of recursos) {
       expect(terreno(r.posicion)).not.toBe('agua');
-      expect(sintetico.pendiente(r.posicion)).toBeLessThanOrEqual(P.pendienteMaxima);
       expect(sintetico.accesible(r.posicion)).toBe(true);
+      if (r.tipo === 'piedra') expect(sintetico.pendiente(r.posicion)).toBeLessThanOrEqual(P.pendienteMaxima);
     }
     expect(recursos.some(r => terreno(r.posicion) === 'cima')).toBe(true);
+    expect(recursos.some(r => (r.tipo === 'cobre' || r.tipo === 'hierro') && sintetico.pendiente(r.posicion) > P.pendienteMaxima)).toBe(true);
   });
   it('el cobre y el hierro prefieren colina, montaña o cima (el llano es el último recurso)', () => {
     const minerales = [...de('cobre'), ...de('hierro')];
