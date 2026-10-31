@@ -37,7 +37,7 @@ use comercio::encargo::Modo;
 use comercio::entrega::{entregar, DatosEntrega, ResultadoEntrega};
 use comercio::evento::{Evento as EventoComercio, MotivoEncargo};
 use comercio::flota::{cupos, Cupos, FactoresPolitica};
-use comercio::mostrador::{comerciar, Carro, ContextoMostrador, ErrorMostrador};
+use comercio::mostrador::{comerciar, Carro, ContextoMostrador, ErrorMostrador, Trato};
 use comercio::orden_mercado::{ErrorOrden, EstadoOrden, OrdenMercado, TipoOrden};
 use comercio::precio::{ContextoComision, TablaPrecios};
 use comercio::reputacion::Suceso;
@@ -263,7 +263,7 @@ impl Nucleo {
     }
 
     /// Los ids de todas las órdenes del libro, en pie o en el historial.
-    fn ordenes_del_libro(&self) -> std::collections::BTreeSet<u64> {
+    pub(super) fn ordenes_del_libro(&self) -> std::collections::BTreeSet<u64> {
         let libro = &self.estado.comercio.libro;
         libro.ordenes.iter().chain(&libro.historial).map(|o| o.id).collect()
     }
@@ -529,7 +529,6 @@ impl Nucleo {
             misma_faccion: faccion_columna == plaza.faccion,
             factor_comision_externa: factor,
         };
-        let faccion_plaza = plaza.faccion;
         let antes = self.ordenes_del_libro();
         let capacidad = self.capacidad_de_carga(ejercito).unwrap_or(CAPACIDAD_CARRO);
         let Estado { comercio, asentamientos, ejercitos, .. } = &mut self.estado;
@@ -555,21 +554,44 @@ impl Nucleo {
         *sum.entry(recurso).or_insert(0) += s.delta_carro_recurso;
         sum.retain(|_, n| *n > 0);
         self.tr.tocar(Clase::Ejercito, ejercito);
-        if s.cumplida {
-            comercio.libro.archivar_cerradas(&cr.mercado);
-            self.estado.generaciones.subir(entidad_orden(orden));
-        }
-        self.anotar_ordenes_cambiadas(&antes, &[orden]);
-        self.tr.tocar(Clase::Asentamiento, plaza_id);
-        let entre_facciones = faccion_columna != faccion_plaza;
-        self.registrar_comercio_de_mercenarios(entre_facciones, &[(recurso, s.cantidad)].into_iter().collect());
-        self.emitir_comercio(
-            t,
-            EventoComercio::ComercioEnPlaza { orden, cantidad: s.cantidad, entre_facciones },
-            vec![plaza_id],
-            &[("ejercito", ejercito as i64), ("valor", s.valor), ("comision", s.comision), ("oroMovido", s.oro_movido)],
-        );
+        self.tras_servir(t, plaza_id, &antes, ("ejercito", ejercito), faccion_columna, &[Trato { orden, servido: s }]);
         Ok(None)
+    }
+
+    /// Lo servido por recurso: la suma de la `cantidad` de cada trato, según el recurso de su orden.
+    pub(super) fn por_recurso(&self, tratos: &[Trato]) -> Mercancia {
+        let mut servido = Mercancia::new();
+        for tr in tratos {
+            if let Some(o) = self.estado.comercio.libro.buscar(tr.orden) {
+                *servido.entry(o.recurso).or_insert(0) += tr.servido.cantidad;
+            }
+        }
+        servido
+    }
+
+    /// Lo que pasa tras servir órdenes de la plaza `plaza_id` (§8.3) a `quien` (`(clave, id)` del hecho: `ejercito` del mostrador o `caravana` de un encargo), de la Facción `faccion`;
+    /// `antes` son las órdenes del libro de antes de servir. Archiva las cumplidas y sube la generación de su entidad, anota las órdenes cambiadas, toca la plaza, registra lo comerciado
+    /// entre Facciones para los mercenarios (§9.3) y emite `mercado.comercio_en_plaza` por orden servida. `tratos` no está vacío.
+    pub(super) fn tras_servir(&mut self, t: Instante, plaza_id: u64, antes: &std::collections::BTreeSet<u64>, quien: (&'static str, u64), faccion: u32, tratos: &[Trato]) {
+        let servido = self.por_recurso(tratos);
+        let cumplidas: Vec<u64> = tratos.iter().filter(|x| x.servido.cumplida).map(|x| x.orden).collect();
+        if !cumplidas.is_empty() {
+            let cr = self.estado.reglas.economia.comercio.clone();
+            self.estado.comercio.libro.archivar_cerradas(&cr.mercado);
+            for &orden in &cumplidas {
+                self.estado.generaciones.subir(entidad_orden(orden));
+            }
+        }
+        let ordenes: Vec<u64> = tratos.iter().map(|x| x.orden).collect();
+        self.anotar_ordenes_cambiadas(antes, &ordenes);
+        self.tr.tocar(Clase::Asentamiento, plaza_id);
+        let entre_facciones = self.estado.asentamientos.get(&plaza_id).is_some_and(|p| p.faccion != faccion);
+        self.registrar_comercio_de_mercenarios(entre_facciones, &servido);
+        for x in tratos {
+            let s = x.servido;
+            let hecho = EventoComercio::ComercioEnPlaza { orden: x.orden, cantidad: s.cantidad, entre_facciones };
+            self.emitir_comercio(t, hecho, vec![plaza_id], &[(quien.0, quien.1 as i64), ("valor", s.valor), ("comision", s.comision), ("oroMovido", s.oro_movido)]);
+        }
     }
 
     // ───────────────────────────── La tabla de precios ─────────────────────────────
