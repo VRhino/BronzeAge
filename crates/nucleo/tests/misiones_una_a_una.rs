@@ -326,6 +326,32 @@ fn h11_abrir_un_alijo() {
     });
 }
 
+/// Los alijos y los bandidos cuentan para todos los del ejército, no solo para quien manda u abre (decisión del autor, 2026-10-31): «beto» va en la columna de «ana».
+#[test]
+fn alijos_y_bandidos_cuentan_para_todo_el_ejercito() {
+    let m = con_mundo!();
+    let mut x = X::nuevo(m);
+    let puerta = campamento(&m.0, 0);
+    let (alijo, sitio) = m.0.alijos().iter().enumerate().map(|(i, a)| (i as u32, Punto::new(a.posicion.unwrap().x, a.posicion.unwrap().y))).min_by_key(|(_, p)| p.dist2(puerta)).expect("hay alijos");
+    let (col, ana) = x.columna("ana", 1, sitio, 100_000);
+    let beto = x.heroe("beto", 0);
+    x.ok("admin", Comando::FijarFaccionDeHeroe { heroe: beto, faccion: Some(1) });
+    x.ok("admin", Comando::ColocarHeroe { heroe: beto, ubicacion: Ubicacion::Columna(col) });
+    x.cumple(Dueno::Heroe(beto), "H11", |x| {
+        x.ok("ana", Comando::AbrirAlijo { heroe: ana, alijo });
+    });
+
+    let (b, ana) = bandidos_y_arqueros(&mut x, m, "ana", 1, descampado(m, 1));
+    let col = x.n.estado().ejercito_de_heroe(ana).unwrap();
+    let beto = x.heroe("carla", 0);
+    x.ok("admin", Comando::FijarFaccionDeHeroe { heroe: beto, faccion: Some(1) });
+    x.ok("admin", Comando::ColocarHeroe { heroe: beto, ubicacion: Ubicacion::Columna(col) });
+    x.cumple(Dueno::Heroe(beto), "H10", |x| {
+        x.ok("ana", Comando::Atacar { heroe: ana, objetivo: ObjetivoAtaque::Campamento(b), declara_guerra: false });
+        assert!(x.n.campamento_de_bandidos(b).is_none(), "el campamento cae");
+    });
+}
+
 #[test]
 fn h12_entregar_materiales_a_una_obra() {
     let m = con_mundo!();
@@ -531,7 +557,7 @@ fn asediar(x: &mut X, m: &M, b: u64, ataque: &[Tropa], defensa: &[Tropa]) {
         x.ok("admin", Comando::GuardarLoadout { heroe: h, loadout: Some(loadout), nombre: "Default".into(), escuadras: ids, perks: vec![], activo: Some(true) });
     }
     let pb = x.posicion(b);
-    let (_, ana) = x.columna("ana", 1, Punto::new(pb.x + 2_000, pb.y), 350_000);
+    let (_, ana) = x.columna("ana", 1, Punto::new(pb.x + 1_000, pb.y), 350_000);
     for &t in ataque {
         x.ok("admin", Comando::DarEscuadra { heroe: ana, tropa: t, cantidad: unidades(t) });
     }

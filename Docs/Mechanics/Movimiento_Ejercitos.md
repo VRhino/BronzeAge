@@ -331,7 +331,7 @@ Cada uno lo emite el comando que lo nombra, en la misma transición. «Plaza» e
   "factorConsumoEstacionado": 0.1,
   "umbralNarrarReposte": 0.5,
   "factorRepostajeEnZona": 1.25,
-  "radioEncuentro": 3
+  "radioEncuentro": 1
 }
 ```
 <!-- /parametros -->
@@ -402,6 +402,10 @@ Con el motor TypeScript (a rehacer en Rust): `regresando`, `origenAsentamientoId
 > **Implementado en Rust (2026-10-20, fase 4D: atacar).** `Atacar { heroe, objetivo, declara_guerra }` (95) con seis objetivos (`Ejercito`, `Caravana`, `Campamento`, `Asentamiento`, `Pueblo`, `Avanzada`): el héroe sano de la columna ataca lo que tiene a su alcance (el encuentro de 4C o el radio de ataque) y el combate se resuelve al instante con `combate::resolver_*`; el encuentro hostil que una orden pide pasa a combate numérico. Las consecuencias (heridos, mitad del carro del derrotado, botín, chatarra, experiencia de escuadra, deserción) se aplican a las columnas reales; la escolta de una caravana derrotada pierde soldados. Sin Unity (4E) se pierden los últimos carros. Rechazos nuevos `combate.*` y `heroe.herido`. **Recortes:** atacar a un aliado se rechaza, la guerra se declara por pareja de Facciones sin arrastrar aliados y sustituye al vasallaje (anotado en las filas de paridad); el asedio no reúne varias columnas (sin convocatoria).
 
 > **Implementado en Rust (2026-10-23, 4H T4: el informe de inspección en el contrato).** Foto `BAN21`. El informe de una plaza ajena guarda también sus recintos de muralla con alguna celda levantada (nivel, anillo entero y celdas levantadas) y los tres informes (columna, caravana, plaza) llegan al ámbito `HEROE` de quien inspeccionó como `InformeInspeccion` (`insp-<héroe>-<objetivo>`, hasta su `expira_en_ms`; el cliente lo descarta al caducar). Ver el contrato 05 §9.
+
+## Decisiones del autor del 2026-10-31
+
+- **`radioEncuentro` baja de 3 u a 1 u** para todo lo que lo usa: los encuentros (columnas, caravanas y plazas ajenas que chocan), la distancia para atacar, la de unirse en campo, la persecución y la distancia de la batalla para unirse a ella. Con las escalas del mundo 3D, 3 u era demasiado lejos.
 
 ## Decisiones del autor del 2026-10-27 (paridad con TypeScript)
 

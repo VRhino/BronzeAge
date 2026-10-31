@@ -308,11 +308,16 @@ fn un_nodo_sin_ruta_por_tierra_hasta_la_madre_no_admite_pueblo() {
 }
 
 #[test]
-fn exige_madre_de_nivel_2_y_respeta_el_cupo_que_libera_destruirlo_a_mano() {
+fn vale_desde_el_nivel_1_y_respeta_el_cupo_que_libera_destruirlo_a_mano() {
     let m = con_mundo!();
+    // Desde el 2026-10-31 un extractor se funda ya con la madre de nivel 1 (antes pedía el 2), y ocupa el único hueco de ese nivel.
     let mut uno = montar(m, 7, 1);
     let (plaza, cobre) = (uno.plaza, uno.cobre);
-    assert_eq!(uno.rechazada("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: cobre }), rechazos::PUEBLO_NIVEL_INSUFICIENTE);
+    uno.ok("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: cobre });
+    let punto = uno.n.sitio_de_aldea(plaza);
+    if let Some(punto) = punto {
+        assert_eq!(uno.rechazada("ana", Comando::MarcarAldea { asentamiento: plaza, punto }), rechazos::PUEBLO_SIN_CUPO, "en el nivel 1 cabe uno: aldea o extractor");
+    }
 
     // Una plaza con al menos otros dos nodos de pueblo a 12 u (la zona de nivel 2 llega a 15): con el relieve de 2026-10-30 no todos los sitios los tienen.
     let mapa = Mapa::de(&m.0);
@@ -789,7 +794,7 @@ fn la_conquista_de_la_madre_deja_los_pueblos_con_la_plaza_y_el_carro_en_camino_s
     e.n.avanzar_hasta(sale - 28_000);
     // La conquista de verdad: el ejército de Beto (F2) asedia la madre, que no tiene quien la defienda, y cae sin combate.
     let p = e.n.estado().asentamientos[&plaza].posicion;
-    let beto = e.columna("beto", 2, Punto::new(p.x + 2_000, p.y));
+    let beto = e.columna("beto", 2, Punto::new(p.x + 1_000, p.y));
     let heroe = e.n.ejercito(beto).unwrap().columna.lider;
     let arqueros = militar::catalogo::Tropa::ArquerosCompuesto;
     e.ok("admin", Comando::DarEscuadra { heroe, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });
@@ -1079,7 +1084,7 @@ fn si_la_madre_cae_en_ruinas_salen_todos_de_su_pueblo_y_si_es_conquistada_solo_l
         visitas.push((col, h));
     }
     let p = e.n.estado().asentamientos[&plaza].posicion;
-    let beto = e.columna("beto", 2, Punto::new(p.x + 2_000, p.y));
+    let beto = e.columna("beto", 2, Punto::new(p.x + 1_000, p.y));
     let heroe = e.n.ejercito(beto).unwrap().columna.lider;
     let arqueros = militar::catalogo::Tropa::ArquerosCompuesto;
     e.ok("admin", Comando::DarEscuadra { heroe, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });
@@ -1115,7 +1120,7 @@ fn al_conquistar_la_madre_su_acceso_vuelve_al_de_por_defecto_y_el_pueblo_lo_here
     e.ok("alia", Comando::EntrarEnPueblo { pueblo, heroe: h });
     assert_eq!(e.ubicacion(h), Ubicacion::Pueblo(pueblo));
     let p = e.n.estado().asentamientos[&plaza].posicion;
-    let beto = e.columna("beto", 2, Punto::new(p.x + 2_000, p.y));
+    let beto = e.columna("beto", 2, Punto::new(p.x + 1_000, p.y));
     let heroe = e.n.ejercito(beto).unwrap().columna.lider;
     let arqueros = militar::catalogo::Tropa::ArquerosCompuesto;
     e.ok("admin", Comando::DarEscuadra { heroe, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });
@@ -1144,7 +1149,7 @@ fn al_conquistar_la_madre_con_el_acceso_por_defecto_salen_del_pueblo_los_enemigo
     e.ok("alia", Comando::EntrarEnPueblo { pueblo, heroe: h });
     assert_eq!(e.ubicacion(h), Ubicacion::Pueblo(pueblo));
     let p = e.n.estado().asentamientos[&plaza].posicion;
-    let beto = e.columna("beto", 2, Punto::new(p.x + 2_000, p.y));
+    let beto = e.columna("beto", 2, Punto::new(p.x + 1_000, p.y));
     let heroe = e.n.ejercito(beto).unwrap().columna.lider;
     let arqueros = militar::catalogo::Tropa::ArquerosCompuesto;
     e.ok("admin", Comando::DarEscuadra { heroe, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });

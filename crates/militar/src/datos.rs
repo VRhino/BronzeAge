@@ -365,7 +365,7 @@ mod pruebas {
         assert_eq!(r.reclutamiento.oro_por_escalon, [1_000, 2_000, 4_000, 7_000, 11_000]);
         assert_eq!((r.reclutamiento.oro_por_caballo, r.reclutamiento.horizonte_comida), (5_000, 8));
         // Calibración de distancias (Movimiento_Ejercitos §14): los bloques ya traen lo vigente.
-        assert_eq!((r.logistica.capacidad_carro, r.logistica.capacidad_viveres, r.logistica.radio_encuentro), (500_000, 350_000, 3_000));
+        assert_eq!((r.logistica.capacidad_carro, r.logistica.capacidad_viveres, r.logistica.radio_encuentro), (500_000, 350_000, 1_000));
         assert_eq!((r.logistica.umbral_narrar_reposte, r.logistica.factor_repostaje_en_zona), (500_000, 1_250_000));
         assert_eq!((r.logistica.factor_marcha, r.logistica.factor_estacionado), (250_000, 100_000));
         assert_eq!((r.movimiento.velocidad_jugador, r.movimiento.consumo_por_participante, r.movimiento.radio_puerta), (66_000, 500, 2_000));

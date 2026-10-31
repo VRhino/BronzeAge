@@ -533,7 +533,7 @@ fn la_conquista_pasa_los_residentes_a_la_conquistadora_y_pierden_la_epica() {
     e.ok("ana", e.empezar(1, "canteria"));
     // Un ejército de la Facción 2 asedia la plaza (con números: sin servidores de batalla).
     let (t, p) = (e.n.ahora(), e.n.estado().asentamientos[&plaza].posicion);
-    let col = e.n.crear_ejercito(t, "beto", 2, base::Punto::new(p.x + 2_000, p.y), 500, 350_000).unwrap();
+    let col = e.n.crear_ejercito(t, "beto", 2, base::Punto::new(p.x + 1_000, p.y), 500, 350_000).unwrap();
     let h = e.n.ejercito(col).unwrap().columna.lider;
     for tropa in [militar::catalogo::Tropa::EspadachinesBronce, militar::catalogo::Tropa::ArquerosCompuesto] {
         let cantidad = militar::Reglas::cargar().tropas.tropa(tropa).unidades;

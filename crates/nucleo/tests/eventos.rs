@@ -59,7 +59,7 @@ fn textos(v: &Value) -> Vec<String> {
 #[test]
 fn al_declarar_la_guerra_atacando_la_oyen_los_dos_bandos_y_la_cronica_todos() {
     let mut n = comun::nucleo(40, 5);
-    let (ana, beto) = (columna(&mut n, "ana", 1, c(10, 2)), columna(&mut n, "beto", 2, Punto::new(c(10, 2).x + 2_000, c(10, 2).y)));
+    let (ana, beto) = (columna(&mut n, "ana", 1, c(10, 2)), columna(&mut n, "beto", 2, Punto::new(c(10, 2).x + 1_000, c(10, 2).y)));
     let gus = columna(&mut n, "gus", 3, c(30, 2));
     dar(&mut n, "d1", ana.1, Tropa::ArquerosCompuesto);
     let r = n.aplicar_en(MIN, Peticion::nueva("ana", "a1", Comando::Atacar { heroe: ana.1, objetivo: ObjetivoAtaque::Ejercito(beto.0), declara_guerra: true }));
@@ -99,7 +99,7 @@ fn la_batalla_abierta_se_tipa_con_el_contexto_de_su_ticket_y_la_oyen_los_dos_ban
     let mut a = comun::arranque(comun::reticula(40, 5));
     a.reglas.batallas_en_unity = true;
     let mut n = Nucleo::nuevo(a);
-    let (ana, beto) = (columna(&mut n, "ana", 1, c(10, 2)), columna(&mut n, "beto", 2, Punto::new(c(10, 2).x + 2_000, c(10, 2).y)));
+    let (ana, beto) = (columna(&mut n, "ana", 1, c(10, 2)), columna(&mut n, "beto", 2, Punto::new(c(10, 2).x + 1_000, c(10, 2).y)));
     dar(&mut n, "d1", ana.1, Tropa::EspadachinesBronce);
     dar(&mut n, "d2", beto.1, Tropa::MiliciaLanceros);
     assert!(n.aplicar_en(n.ahora(), admin("humano", Comando::FijarControlador { heroe: ana.1, controlador: Controlador::Humano })).aceptada());

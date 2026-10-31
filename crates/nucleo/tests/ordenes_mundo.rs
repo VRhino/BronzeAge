@@ -436,7 +436,7 @@ async fn quien_esta_dentro_de_una_plaza_asediada_se_une_a_la_batalla_de_unity_po
     let loadout = p.n.heroe(beto).unwrap().heroe.loadouts[0].id;
     p.ok("admin", Comando::GuardarLoadout { heroe: beto, loadout: Some(loadout), nombre: "Default".into(), escuadras: vec![defensa], perks: vec![], activo: Some(true) });
     let puerta = p.n.estado().asentamientos[&b].posicion;
-    let (_, ana) = p.columna("ana", 1, Punto::new(puerta.x + 2_000, puerta.y));
+    let (_, ana) = p.columna("ana", 1, Punto::new(puerta.x + 1_000, puerta.y));
     for t in [Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto] {
         p.ok("admin", Comando::DarEscuadra { heroe: ana, tropa: t, cantidad: cantidad(t) });
     }

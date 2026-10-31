@@ -98,7 +98,7 @@ impl Esc {
 
     /// Una columna de campo de `cuenta`/`faccion` a 2 u de la plaza B, con una escuadra de milicia.
     fn columna_junto_a_b(&mut self, m: &M, cuenta: &str, faccion: u32, dy: Mil) -> u64 {
-        let p = en_tierra(&m.0, self.n.estado().asentamientos[&self.b].posicion, 2 * U, dy);
+        let p = en_tierra(&m.0, self.n.estado().asentamientos[&self.b].posicion, U / 2, dy);
         let t = self.n.ahora();
         let col = self.n.crear_ejercito(t, cuenta, faccion, p, 500, 350_000).unwrap();
         let h = self.n.ejercito(col).unwrap().columna.lider;

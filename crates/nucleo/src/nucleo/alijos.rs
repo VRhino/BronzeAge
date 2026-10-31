@@ -119,7 +119,9 @@ impl Nucleo {
         let valores = vec![("alijo", Dato::Texto(id)), ("recurso", Dato::Texto(recurso.nombre().into()))];
         // Solo lo oye quien lo abre (decisión del autor), no los demás de la columna aunque lo que trae vaya al carro común.
         self.tr.emitir(&self.estado, EventoNucleo { heroes: vec![heroe], valores, ..EventoNucleo::nuevo("alijo.abierto", t, datos) });
-        self.avance(t, Dueno::Heroe(heroe), "alijos", 1);
+        // La misión cuenta para todos los de la columna, no solo para quien lo abre (decisión del autor, 2026-10-31).
+        let todos = self.estado.ejercitos.get(&columna).map(Self::participantes_de).unwrap_or_else(|| vec![heroe]);
+        self.avance_de_heroes(t, &todos, "alijos", 1);
         Ok(vec![])
     }
 }

@@ -183,7 +183,7 @@ fn atacar_sin_guerra_confirma_con_el_arrastre_y_a_un_aliado_es_una_traicion_que_
     let mut e = tres();
     let ra = e.rey(1);
     // beto viene junto a ana; F2 es señora de F3.
-    let beto_cerca = e.columna("beto", 2, Punto::new(c(10, 2).x + 2_000, c(10, 2).y));
+    let beto_cerca = e.columna("beto", 2, Punto::new(c(10, 2).x + 1_000, c(10, 2).y));
     e.ok("admin", Comando::FijarRelacion { a: 2, b: 3, relacion: Some(Relacion::Vasallaje) });
     e.ok("admin", Comando::DarEscuadra { heroe: ra, tropa: Tropa::ArquerosCompuesto, cantidad: militar::Reglas::cargar().tropas.tropa(Tropa::ArquerosCompuesto).unidades });
     let alianza = e.alianza("ana", 1, "beto", 2);
@@ -325,7 +325,7 @@ fn la_vasalla_paga_su_tributo_en_su_paso_de_minuto_en_enteros_y_lo_que_no_cabe_e
 fn conquistar(e: &mut E, plaza: u64, cuenta: &str, f: u32) {
     let p = e.n.estado().asentamientos[&plaza].posicion;
     e.avanzar_hasta_que_se_pueda(plaza);
-    let (_, h) = e.columna(cuenta, f, Punto::new(p.x + 2_000, p.y));
+    let (_, h) = e.columna(cuenta, f, Punto::new(p.x + 1_000, p.y));
     let arqueros = Tropa::ArquerosCompuesto;
     e.ok("admin", Comando::DarEscuadra { heroe: h, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });
     e.ok(cuenta, Comando::Atacar { heroe: h, objetivo: ObjetivoAtaque::Asentamiento(plaza), declara_guerra: true });

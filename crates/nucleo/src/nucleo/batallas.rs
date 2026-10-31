@@ -1070,7 +1070,15 @@ impl Nucleo {
         self.avance_de_heroes(t, &heroes, "batallas", 1);
         match b.ticket.contexto {
             Contexto::CampamentoBandidos { .. } if res.ganador == Lado::Atacante => {
-                let atacantes: Vec<u64> = self.participantes_del_lado(&b, Lado::Atacante).iter().map(|q| q.heroe).collect();
+                // Cuenta para todos los que van en el ejército, no solo para los que llevó el ticket (decisión del autor, 2026-10-31): también el herido o el que va sin tropa.
+                let mut atacantes: Vec<u64> = self.participantes_del_lado(&b, Lado::Atacante).iter().map(|q| q.heroe).collect();
+                for c in &b.bloqueo.ejercitos {
+                    for h in self.estado.ejercitos.get(c).map(Self::participantes_de).unwrap_or_default() {
+                        if !b.salio(h) && !atacantes.contains(&h) {
+                            atacantes.push(h);
+                        }
+                    }
+                }
                 self.avance_de_heroes(t, &atacantes, "bandidos", 1);
                 if let Some(f) = b.ticket.atacante.faccion {
                     self.avance(t, Dueno::Faccion(f), "bandidos", 1);

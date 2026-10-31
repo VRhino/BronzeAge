@@ -348,7 +348,7 @@ fn no_se_acepta_con_una_batalla_abierta_y_quien_ya_no_puede_estar_dentro_sale() 
     let (r1, r2) = (e.rey(1), e.rey(2));
     let p = e.ok("ana", Comando::ProponerAnexion { heroe: r1, absorbente: 1, absorbida: 2 }).creadas[0];
     e.avanzar_hasta_que_se_pueda(b);
-    let (_, h4) = e.columna("hugo", 4, Punto::new(pb.x + 2_000, pb.y));
+    let (_, h4) = e.columna("hugo", 4, Punto::new(pb.x + 1_000, pb.y));
     let arqueros = militar::catalogo::Tropa::ArquerosCompuesto;
     e.ok("admin", Comando::DarEscuadra { heroe: h4, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });
     e.ok("hugo", Comando::Atacar { heroe: h4, objetivo: ObjetivoAtaque::Asentamiento(b), declara_guerra: true });
@@ -383,7 +383,7 @@ fn no_se_acepta_si_un_heroe_de_las_dos_combate_incorporado_en_una_batalla_ajena(
     let (r1, r2) = (e.rey(1), e.rey(2));
     let p = e.ok("ana", Comando::ProponerAnexion { heroe: r1, absorbente: 1, absorbida: 2 }).creadas[0];
     e.avanzar_hasta_que_se_pueda(c);
-    let (_, h4) = e.columna("hugo", 4, Punto::new(pc.x + 2_000, pc.y));
+    let (_, h4) = e.columna("hugo", 4, Punto::new(pc.x + 1_000, pc.y));
     let arqueros = militar::catalogo::Tropa::ArquerosCompuesto;
     e.ok("admin", Comando::DarEscuadra { heroe: h4, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });
     e.ok("hugo", Comando::Atacar { heroe: h4, objetivo: ObjetivoAtaque::Asentamiento(c), declara_guerra: true });

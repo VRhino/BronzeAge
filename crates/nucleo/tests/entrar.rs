@@ -829,7 +829,7 @@ impl Escenario {
     /// Un ejército de «gus» (Facción 2) a 2 u de la puerta de la plaza `a`, con esas tropas: (columna, héroe).
     fn atacante(&mut self, tropas: &[Tropa]) -> (u64, u64) {
         let (t, p) = (self.n.ahora(), self.plaza());
-        let col = self.n.crear_ejercito(t, "gus", 2, Punto::new(p.x + 2_000, p.y), 500, 100_000).unwrap();
+        let col = self.n.crear_ejercito(t, "gus", 2, Punto::new(p.x + 1_000, p.y), 500, 100_000).unwrap();
         let h = self.ejercito(col).columna.lider;
         for &tropa in tropas {
             self.ok("admin", Comando::DarEscuadra { heroe: h, tropa, cantidad: mr().tropas.tropa(tropa).unidades });

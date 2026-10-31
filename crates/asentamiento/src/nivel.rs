@@ -26,8 +26,9 @@ pub struct Requisito {
     /// Edificios que hacen falta además de los de `edificios`, cada uno activo y con al menos ese nivel interno (`edificiosConNivel`; el nivel 2 pide una Granja a
     /// nivel 2, decisión del autor del 2026-10-28).
     pub con_nivel: BTreeMap<Tipo, u8>,
-    /// Aldeas agrícolas activas que pide (`aldeasAgricolas`; el nivel 2 pide una).
-    pub aldeas: u32,
+    /// Pueblos activos que pide, aldea agrícola o pueblo extractor (`pueblosActivos`; el nivel 2 pide uno, decisión del autor del 2026-10-31: antes una aldea agrícola, y una
+    /// plaza sin tierra fértil pero con minas no podía subir).
+    pub pueblos: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -51,8 +52,8 @@ pub struct ReglasNivel {
 pub enum Falta {
     Poblacion,
     Edificios,
-    /// Falta la aldea agrícola activa que pide el nivel.
-    Aldea,
+    /// Falta el pueblo activo (aldea agrícola o extractor) que pide el nivel.
+    Pueblo,
 }
 
 impl ReglasNivel {
@@ -71,7 +72,7 @@ impl ReglasNivel {
                     recinto_nivel_minimo: v["recintoCompletoNivelMinimo"].as_f64().map(|x| x as u32),
                     nivel_interno_minimo: niveles(&v["nivelInternoMinimo"]),
                     con_nivel: niveles(&v["edificiosConNivel"]),
-                    aldeas: v["aldeasAgricolas"].as_f64().unwrap_or(0.0) as u32,
+                    pueblos: v["pueblosActivos"].as_f64().unwrap_or(0.0) as u32,
                 };
                 (n, r)
             })
@@ -95,8 +96,8 @@ impl ReglasNivel {
     }
 
     /// `evaluarGatesDeNivel`: lo que falta para el nivel objetivo (vacío = se cumple). `None` si ese nivel no tiene requisito.
-    /// `recinto_nivel` es el nivel del mejor recinto completo (0 si no hay); `aldeas`, las aldeas agrícolas activas de la plaza.
-    pub fn gates(&self, objetivo: u32, edificios: &[Edificio], pesants: i64, artesanos: i64, recinto_nivel: u32, aldeas: u32) -> Option<Vec<Falta>> {
+    /// `recinto_nivel` es el nivel del mejor recinto completo (0 si no hay); `pueblos`, los pueblos activos de la plaza (aldeas agrícolas y extractores).
+    pub fn gates(&self, objetivo: u32, edificios: &[Edificio], pesants: i64, artesanos: i64, recinto_nivel: u32, pueblos: u32) -> Option<Vec<Falta>> {
         let req = self.requisitos.get(&objetivo)?;
         let mut faltas = vec![];
         if pesants < req.pesants || artesanos < req.artesanos {
@@ -108,8 +109,8 @@ impl ReglasNivel {
         if construidos < req.edificios_minimo.unwrap_or(req.edificios.len()) || !cumple_recinto || !cumple_con_nivel {
             faltas.push(Falta::Edificios);
         }
-        if aldeas < req.aldeas {
-            faltas.push(Falta::Aldea);
+        if pueblos < req.pueblos {
+            faltas.push(Falta::Pueblo);
         }
         Some(faltas)
     }
@@ -156,7 +157,7 @@ mod pruebas {
     }
 
     #[test]
-    fn el_nivel_2_pide_200_pesants_dos_de_cantera_lenera_y_granja_una_granja_a_nivel_2_y_una_aldea_agricola() {
+    fn el_nivel_2_pide_200_pesants_dos_de_cantera_lenera_y_granja_una_granja_a_nivel_2_y_un_pueblo_activo() {
         let r = Reglas::cargar().nivel;
         let uno = activos(&[(Tipo::Cantera, 1), (Tipo::Corral, 1), (Tipo::Mina, 1)]);
         assert_eq!(r.gates(2, &uno, 200, 0, 0, 1), Some(vec![Falta::Edificios]), "ni el Corral ni las minas cuentan ya");
@@ -167,10 +168,10 @@ mod pruebas {
         assert_eq!(r.gates(2, &sin_granja_2, 200, 0, 0, 1), Some(vec![Falta::Edificios]));
         assert_eq!(r.gates(2, &activos(&[(Tipo::Cantera, 1), (Tipo::Lenera, 1)]), 200, 0, 0, 1), Some(vec![Falta::Edificios]));
         assert_eq!(r.gates(2, &activos(&[(Tipo::Cantera, 1), (Tipo::Lenera, 1), (Tipo::Granja, 2)]), 200, 0, 0, 1), Some(vec![]));
-        assert_eq!(r.gates(2, &dos, 200, 0, 0, 0), Some(vec![Falta::Aldea]));
+        assert_eq!(r.gates(2, &dos, 200, 0, 0, 0), Some(vec![Falta::Pueblo]));
         assert_eq!(r.gates(2, &dos, 199, 0, 0, 1), Some(vec![Falta::Poblacion]));
         assert_eq!(r.gates(9, &dos, 0, 0, 0, 0), None);
-        assert_eq!(r.requisitos[&3].aldeas, 0, "solo el nivel 2 pide la aldea");
+        assert_eq!(r.requisitos[&3].pueblos, 0, "solo el nivel 2 pide el pueblo");
     }
 
     #[test]

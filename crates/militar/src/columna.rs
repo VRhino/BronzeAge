@@ -597,7 +597,7 @@ mod pruebas {
         let r = r();
         let mut e = ejercito(7, &[1], 200_000, Politica::Aceptar);
         let otra = personal(8, 8, &[2, 3], 300_000);
-        assert_eq!(e.unir_en_campo(&r, otra, 3_000, 5 * MIN, &soldados(TROPA)), Ok(false));
+        assert_eq!(e.unir_en_campo(&r, otra, 1_000, 5 * MIN, &soldados(TROPA)), Ok(false));
         assert_eq!(e.participantes, vec![Participante { heroe: 7, unido_en: 0 }, Participante { heroe: 8, unido_en: 5 * MIN }]);
         assert_eq!(e.escuadras, vec![1, 2, 3]);
         assert_eq!(e.carga[&Recurso::Trigo], 60_000, "la columna que se une no traía carga");
@@ -616,8 +616,8 @@ mod pruebas {
         assert_eq!(rechaza.unir_en_campo(&r, otra(), 0, 0, &soldados(TROPA)), Err(ErrorColumna::NoAdmite));
         let mut e = ejercito(7, &[1], 0, Politica::Aceptar);
         assert_eq!(e.validar_union_en_campo(&r, &e.clone(), 0), Err(ErrorColumna::YaVasEnEsaColumna));
-        assert_eq!(e.unir_en_campo(&r, otra(), 3_001, 0, &soldados(TROPA)), Err(ErrorColumna::Lejos), "a más de 3");
-        assert!(e.validar_union_en_campo(&r, &otra(), 3_000).is_ok(), "justo a 3 sí");
+        assert_eq!(e.unir_en_campo(&r, otra(), 1_001, 0, &soldados(TROPA)), Err(ErrorColumna::Lejos), "a más de 1");
+        assert!(e.validar_union_en_campo(&r, &otra(), 1_000).is_ok(), "justo a 1 sí");
         let mut ajena = otra();
         ajena.faccion = Some(2);
         assert_eq!(e.validar_union_en_campo(&r, &ajena, 0), Err(ErrorColumna::OtraFaccion), "ni siquiera un aliado");

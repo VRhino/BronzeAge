@@ -382,7 +382,7 @@ impl Asentamiento {
         r.pueblos.cupo_por_nivel.range(..=self.nivel_actual()).next_back().map_or(0, |(_, &c)| c)
     }
 
-    /// Aldeas agrícolas activas de la plaza (el gate del nivel 2 pide una; la misión A1 las cuenta).
+    /// Aldeas agrícolas activas de la plaza (la misión A1 las cuenta).
     pub fn aldeas_activas(&self) -> u32 {
         self.pueblos.iter().filter(|p| p.es_aldea() && p.activo()).count() as u32
     }
@@ -397,7 +397,8 @@ impl Asentamiento {
         sumar(&[&r.pueblos.aldea.nivel(1).coste, &r.pueblos.coste_adicional, carro])
     }
 
-    /// Pueblos activos: cuentan como un edificio activo más al pagar el mantenimiento de la madre.
+    /// Pueblos activos (aldeas agrícolas y extractores): cuentan como un edificio activo más al pagar el mantenimiento de la madre, y el gate del nivel 2 pide uno
+    /// (decisión del autor del 2026-10-31).
     pub(crate) fn pueblos_activos(&self) -> usize {
         self.pueblos.iter().filter(|p| p.activo()).count()
     }
@@ -655,7 +656,7 @@ mod pruebas {
     #[test]
     fn las_cifras_salen_del_documento() {
         let r = Reglas::cargar().pueblos;
-        assert_eq!((r.nivel_madre_minimo, r.capacidad_almacen, r.mineros, r.minutos_por_minero, r.casas_de_la_planta), (2, 500_000, 30, 12, 6));
+        assert_eq!((r.nivel_madre_minimo, r.capacidad_almacen, r.mineros, r.minutos_por_minero, r.casas_de_la_planta), (1, 500_000, 30, 12, 6));
         assert_eq!(r.cupo_por_nivel.values().copied().collect::<Vec<_>>(), vec![1, 3, 4, 5, 6]);
         assert_eq!(r.coste_adicional, vec![(Recurso::Madera, 50_000)]);
         let a = &r.aldea;
@@ -672,11 +673,13 @@ mod pruebas {
     }
 
     #[test]
-    fn exige_madre_de_nivel_2_cupo_y_un_extractor_de_pueblo() {
+    fn exige_madre_de_nivel_1_cupo_y_un_extractor_de_pueblo() {
         let r = Reglas::cargar();
+        // Desde el 2026-10-31 un extractor se funda ya en el nivel 1 (antes pedía el 2); el cupo del nivel 1 es uno, aldea o extractor.
         let mut a = Asentamiento::fundar(&r, 0, &[], 3);
-        assert_eq!(marcar(&mut a, &r, 1, Tipo::MinaCobre), Err(ErrorPueblo::NivelInsuficiente));
-        assert_eq!(a.cupo_de_pueblos(&r), 1, "en el nivel 1 cabe un pueblo: la aldea agrícola");
+        assert_eq!(a.cupo_de_pueblos(&r), 1, "en el nivel 1 cabe un pueblo: la aldea agrícola o un extractor");
+        assert_eq!(marcar(&mut a, &r, 1, Tipo::MinaCobre), Ok(()));
+        assert_eq!(marcar(&mut a, &r, 2, Tipo::Cantera), Err(ErrorPueblo::SinCupo));
         let mut a = madre(&r);
         assert_eq!(marcar(&mut a, &r, 1, Tipo::Corral), Err(ErrorPueblo::TipoNoPueblo));
         assert_eq!(marcar(&mut a, &r, 1, Tipo::Granja), Err(ErrorPueblo::TipoNoPueblo));
@@ -875,10 +878,10 @@ mod pruebas {
         a.mejorar_aldea(&r, 1, &mut ev).unwrap();
         assert_eq!(ev, vec![Evento::AldeaMejoraMarcada { id: 1, nivel: 2 }]);
         assert_eq!(a.mejorar_aldea(&r, 1, &mut ev), Err(ErrorPueblo::MejoraEnCurso));
-        assert_eq!(a.pueblo(1).unwrap().falta(), vec![(Recurso::Madera, 60_000), (Recurso::Piedra, 20_000)]);
+        assert_eq!(a.pueblo(1).unwrap().falta(), vec![(Recurso::Madera, 180_000), (Recurso::Piedra, 60_000)]);
         assert!(a.pueblo(1).unwrap().activo(), "sigue activa mientras espera los materiales");
         let t = 1_000 * MS_POR_MINUTO;
-        a.entregar_a_pueblo(t, &r, 1, &[(Recurso::Madera, 60_000), (Recurso::Piedra, 20_000)], &mut ev).unwrap();
+        a.entregar_a_pueblo(t, &r, 1, &[(Recurso::Madera, 180_000), (Recurso::Piedra, 60_000)], &mut ev).unwrap();
         assert_eq!(a.pueblo(1).unwrap().mejora, Some(EstadoPueblo::EnObra { completa_en: t + 120 * MS_POR_MINUTO }));
         a.completar_pueblos(t + 119 * MS_POR_MINUTO, &r, &mut ev);
         assert_eq!(a.pueblo(1).unwrap().nivel, 1);

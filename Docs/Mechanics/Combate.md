@@ -276,7 +276,7 @@ Si tras caer la plaza la Facción perdedora **no conserva ningún asentamiento**
 ```
 <!-- /parametros -->
 
-Los bloques de este documento son los vigentes (2026-10-19). `radioEncuentro` (3) está en `LOGISTICA` ([`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md)), `radioProteccion` (10) en `MERCENARIOS`, `BATALLA.capacidad.asedio` (15) en [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) y el radio de ataque de los bandidos (`radioAtaqueCaravana`) en `CAMPAMENTOS_BANDIDOS` de [`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md). La `ventajaDefensor` del aguante (B) es `COMBATE_NUMERICO.ventajaAguante` (×1,25, placeholder).
+Los bloques de este documento son los vigentes (2026-10-19). `radioEncuentro` (1 desde el 2026-10-31, antes 3) está en `LOGISTICA` ([`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md)), `radioProteccion` (10) en `MERCENARIOS`, `BATALLA.capacidad.asedio` (15) en [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) y el radio de ataque de los bandidos (`radioAtaqueCaravana`) en `CAMPAMENTOS_BANDIDOS` de [`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md). La `ventajaDefensor` del aguante (B) es `COMBATE_NUMERICO.ventajaAguante` (×1,25, placeholder).
 
 <!-- parametros:COMBATE_NUMERICO -->
 ```json

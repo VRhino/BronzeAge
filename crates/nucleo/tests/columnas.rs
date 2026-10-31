@@ -957,7 +957,7 @@ fn una_columna_personal_de_la_faccion_reposta_sola_en_la_zona_de_lo_que_sobra_y_
     let destino = comun::real::en_tierra(&m.0, centro, 150_000, 0);
     e.ok("beto", Comando::MarcharA { ejercito: fuera, destino });
     // Un ejército de la Facción en la zona no reposta solo (lo hace con la orden), aunque lleve poco.
-    let ejercito = e.n.crear_ejercito(e.n.ahora(), "carla", 1, Punto::new(centro.x + 2_000, centro.y), 500, 50_000).unwrap();
+    let ejercito = e.n.crear_ejercito(e.n.ahora(), "carla", 1, Punto::new(centro.x + 1_000, centro.y), 500, 50_000).unwrap();
     assert_eq!(e.ejercito(ejercito).columna.tipo, TipoColumna::Ejercito);
     let tope = e.ejercito(quieta).columna.viveres.maximo.unwrap();
     e.avanzar(10 * HORA);
