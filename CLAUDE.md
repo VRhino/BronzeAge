@@ -10,6 +10,10 @@ Todo `git commit` y `git push` lo hace un **subagente con el modelo Haiku 5.5** 
 - El subagente no usa `--force`, no reescribe historia y no sube a una rama distinta de la designada.
 - Al terminar, el agente principal comprueba el resultado con `git status` y `git log`, y avisa al autor si algo no quedó subido.
 
+## Versiones de los crates
+
+Cada crate lleva su propia versión en su `Cargo.toml` y la sube cuando cambia (decidido por el autor el 2026-10-31; hasta entonces todos estaban en 0.1.0). Mientras sean 0.x: cambio de reglas, de contrato o de comportamiento → sube el segundo número (0.2.0 → 0.3.0); arreglo sin cambio de comportamiento → el tercero (0.2.0 → 0.2.1). Solo pruebas o comentarios no suben nada. Un cambio del `proto/` sube `contrato`. Se sube en el mismo commit que el cambio, una vez por tanda aunque haya varios commits. El servidor dice al arrancar su versión y la del núcleo.
+
 ## Fuente de verdad de las reglas
 
 Si el canon (`Docs/Game/`) y `Docs/Mechanics/` se contradicen, gana `Mechanics` y se corrige el canon (ver `Docs/Mechanics/README.md`).

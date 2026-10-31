@@ -991,6 +991,19 @@ fn una_caravana_adjunta_viaja_con_la_columna_a_su_paso_y_entrega_a_la_puerta_del
     e.ok("ana", adjuntar(col));
     assert_eq!(e.caravana_de(c).estado, EstadoCaravana::Adjunta);
     assert_eq!(e.n.estado().ejercitos[&col].caravanas_adjuntas, vec![c]);
+    // La Facción de beto, que la ve, sabe qué caravanas lleva la columna (decisión del autor del 2026-10-31) y recibe la caravana avistada para dibujarla detrás.
+    {
+        use contrato::v1::{entidad::Cuerpo, TipoEntidad};
+        use nucleo::proyeccion::{ids, vista::{Mirada, Perspectiva}};
+        let mirada = Mirada::de(&e.n, Perspectiva::Faccion(2));
+        let todo = vision::Rect { min: Punto::new(0, 0), max: Punto::new(2_667_000, 2_000_000) };
+        let contenido = mirada.contenido(None, todo, &std::collections::BTreeMap::new());
+        let cuerpo = |tipo: TipoEntidad, id: String| contenido.iter().find(|v| v.clave == (tipo as i32, id.clone())).and_then(|v| v.cuerpo());
+        let Some(Cuerpo::Ejercito(av)) = cuerpo(TipoEntidad::Ejercito, ids::ejercito(col)) else { panic!("beto ve la columna de ana") };
+        assert!(av.escuadron_ids.is_empty() && av.suministro.is_none(), "sigue redactada: {av:?}");
+        assert_eq!(av.caravanas_adjuntas_ids, vec![ids::caravana(c)]);
+        assert!(matches!(cuerpo(TipoEntidad::Caravana, ids::caravana(c)), Some(Cuerpo::Caravana(k)) if k.escoltada), "y la caravana, avistada");
+    }
     assert_eq!(e.rechazada("ana", adjuntar(sola)), rechazos::CARAVANA_ESTADO_INVALIDO, "ya va enganchada");
     // Aparcarla en la plaza, cargarla contra su almacén y volver a engancharla.
     assert_eq!(e.rechazada("ana", Comando::AparcarCaravana { caravana: c, asentamiento: a }), rechazos::CARAVANA_SOLTAR_SOLO_DENTRO, "a la puerta se está fuera (5G-a-5)");
