@@ -34,6 +34,7 @@ async fn parar_por_la_entrada() {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    println!("bronzeage-servidor {} (núcleo {})", env!("CARGO_PKG_VERSION"), nucleo::VERSION);
     match correr().await {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {

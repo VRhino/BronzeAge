@@ -46,7 +46,7 @@ dependencies = [
 
 [[package]]
 name = "asentamiento"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base",
  "serde_json",
@@ -65,7 +65,7 @@ checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
 name = "batch"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "asentamiento",
  "base",
@@ -189,7 +189,7 @@ checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
 
 [[package]]
 name = "contrato"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "prost",
  "prost-build",
@@ -516,7 +516,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "militar"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "asentamiento",
  "base",
@@ -555,7 +555,7 @@ dependencies = [
 
 [[package]]
 name = "nucleo"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "asentamiento",
  "base",
@@ -935,7 +935,7 @@ dependencies = [
 
 [[package]]
 name = "servicio"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "acceso",
  "asentamiento",
