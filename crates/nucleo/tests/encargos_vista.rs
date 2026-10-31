@@ -4,10 +4,12 @@
 mod comun;
 
 use asentamiento::catalogo::Tipo;
+use asentamiento::datos::UNO;
 use asentamiento::Recurso::{self, *};
 use base::{Instante, Punto, MS_POR_MINUTO};
 use comercio::caravana::{Animal, EstadoCaravana, TipoCarro};
-use comercio::encargo::{LineaDejar, LineaRecoger, Modo, Parada};
+use comercio::encargo::{Fase, LineaDejar, LineaRecoger, Modo, Parada};
+use comercio::orden_mercado::EstadoOrden;
 use comun::real::{fundar, sitio_rico, M};
 use contrato::v1::{self as pb, entidad::Cuerpo, TipoEntidad};
 use nucleo::proyeccion::ambito::Ambito;
@@ -18,6 +20,7 @@ use nucleo::{Ajustes, Arranque, Clase, Comando, Nucleo, Peticion, Reglas, Result
 use std::collections::BTreeMap;
 use vision::Rect;
 
+const PUNTO: i64 = UNO;
 const MIN: i64 = MS_POR_MINUTO;
 const HORA: i64 = 60 * MIN;
 
@@ -296,4 +299,74 @@ fn una_caravana_esperando_no_sale_en_el_mapa_de_nadie_y_en_transito_si_pero_su_f
     // Llega al destino y vuelve a no salir.
     e.viajar(car);
     assert!(!vista_de(&e.n, 1).contains_key(&clave));
+}
+
+// ───────────────────────────── Las órdenes de una plaza ajena ─────────────────────────────
+
+/// Una plaza de la Facción 2 con su Mercado activo y su oro, para comerciar con sus órdenes (rutas de caravanas §6).
+fn ajena_con_mercado(e: &mut Escenario, m: &M) -> u64 {
+    let c = con_ajena(e, m);
+    e.admin(Comando::FijarNivelFaccion { faccion: 2, nivel: 2 });
+    e.admin(Comando::AlternarAutoConstruccion { asentamiento: c, pausada: true });
+    e.dar(c, Madera, 350_000);
+    e.admin(Comando::AnadirEdificio { asentamiento: c, tipo: Tipo::Mercado });
+    e.avanzar(9 * HORA);
+    assert!(e.n.economia(c).unwrap().edificios.iter().any(|x| x.tipo == Tipo::Mercado && x.activo()), "el Mercado de as-{c} debería estar activo");
+    e.dar(c, Oro, 400_000);
+    c
+}
+
+/// Coloca en la plaza `plaza` (de la Facción 2) una orden de venta o de compra de `cantidad` del recurso a `precio` por unidad.
+fn orden(e: &mut Escenario, plaza: u64, venta: bool, recurso: Recurso, cantidad: i64, precio: i64) -> u64 {
+    e.admin(Comando::ColocarOrdenMercado { asentamiento: plaza, venta, recurso, cantidad, precio: Some(precio) }).creadas[0]
+}
+
+/// Los ids de las órdenes de mercado que la Facción `f` tiene en su vista con el rectángulo `rect`.
+fn ordenes_en_vista(n: &Nucleo, f: u32, rect: Rect) -> Vec<String> {
+    let mirada = Mirada::de(n, Perspectiva::Faccion(f));
+    let v = mirada.contenido(None, rect, &BTreeMap::new());
+    v.into_iter().filter(|x| x.clave.0 == TipoEntidad::OrdenMercado as i32).map(|x| x.clave.1).collect()
+}
+
+#[test]
+fn un_envio_que_espera_en_una_plaza_ajena_hace_llegar_a_su_faccion_las_ordenes_activas_de_esa_plaza_hasta_que_se_va() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let a = e.a;
+    let c = ajena_con_mercado(&mut e, m);
+    e.dar(a, Cobre, 100_000);
+    // La plaza compra el cobre que trae la caravana (se cumple) y vende madera (queda activa mientras la caravana espera).
+    let compra_cobre = orden(&mut e, c, false, Cobre, 100_000, PUNTO / 2);
+    let venta_madera = ids::orden_de_mercado(orden(&mut e, c, true, Madera, 100_000, PUNTO));
+    let car = e.caravana(a);
+    let en_destino = Parada { dejar: vec![LineaDejar { recurso: Cobre, tope: None, precio_min: Some(PUNTO / 2) }], ..Parada::default() };
+    // Un rectángulo que no cubre la plaza: la regla no depende de él.
+    let lejos = Rect { min: Punto::new(0, 0), max: Punto::new(1, 1) };
+    assert!(!lejos.contiene(pos(&e.n, c)));
+
+    e.admin(encargar(car, c, Modo::Envio, None, parada(&[(Cobre, 100_000)], &[]), en_destino));
+    let t = e.n.ahora() + e.tiempo_carga();
+    e.n.avanzar_hasta(t);
+    assert_eq!(e.estado(car), EstadoCaravana::EnTransito);
+    for f in [1, 3] {
+        assert!(ordenes_en_vista(&e.n, f, todo()).is_empty(), "antes de llegar, la Facción {f} no recibe las órdenes");
+    }
+
+    // Llega y espera dentro mientras descarga: vende a la orden de compra y su Facción recibe las activas, con cualquier rectángulo.
+    e.viajar(car);
+    assert_eq!(e.n.caravana(car).unwrap().encargo.as_ref().map(|x| x.fase), Some(Fase::Descarga));
+    assert!(e.n.libro_ordenes().buscar(compra_cobre).is_some_and(|o| o.estado == EstadoOrden::Cumplida), "vendió a la orden de compra");
+    for rect in [todo(), lejos] {
+        let propias = ordenes_en_vista(&e.n, 1, rect);
+        assert_eq!(propias, vec![venta_madera.clone()], "solo las activas de la plaza ajena");
+    }
+    assert!(ordenes_en_vista(&e.n, 3, todo()).is_empty(), "una Facción sin nada dentro no las recibe");
+
+    // Sale de vuelta: dejan de llegar.
+    let fin = e.n.caravana(car).unwrap().encargo.as_ref().and_then(|x| x.fin_paso).expect("descarga en curso");
+    e.n.avanzar_hasta(fin);
+    assert_eq!(e.estado(car), EstadoCaravana::Retornando);
+    for f in [1, 3] {
+        assert!(ordenes_en_vista(&e.n, f, todo()).is_empty() && ordenes_en_vista(&e.n, f, lejos).is_empty(), "al irse la caravana, la Facción {f} no las recibe");
+    }
 }
