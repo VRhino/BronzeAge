@@ -24,7 +24,7 @@ for (const m of a.campamentos) {
   svg += `<circle cx="${c.x}" cy="${c.y}" r="250" fill="none" stroke="#c07000" stroke-width="2" stroke-dasharray="8 6"/><circle cx="${c.x}" cy="${c.y}" r="150" fill="rgba(60,140,60,.12)" stroke="#2a7a2a" stroke-width="2.5"/><rect x="${c.x - 7}" y="${c.y - 7}" width="14" height="14" fill="#222"/>`;
 }
 for (const v of a.vetas) { const c = P(v.centro); svg += `<circle cx="${c.x}" cy="${c.y}" r="30" fill="rgba(120,0,160,.10)" stroke="#7a00a0" stroke-width="1.5"/>`; }
-const fill: Record<string, string> = { estano: '#1f5fbf', oro: '#e0a800', cobre: '#c8602a', hierro: '#555', piedra: '#999', livestock: '#e8e8e8' };
+const fill: Record<string, string> = { estano: '#1f5fbf', oro: '#e0a800', cobre: '#c8602a', hierro: '#555', piedra: '#999' };
 for (const n of a.nodos) { const c = P(n.posicion); svg += `<circle cx="${c.x}" cy="${c.y}" r="${n.tipo === 'estano' || n.tipo === 'oro' ? 5 : 3}" fill="${fill[n.tipo] ?? '#000'}" stroke="#fff" stroke-width=".8"/>`; }
 for (const b of a.bandidosIniciales) { const c = P(b.posicion); svg += `<path d="M${c.x - 5} ${c.y - 5}L${c.x + 5} ${c.y + 5}M${c.x + 5} ${c.y - 5}L${c.x - 5} ${c.y + 5}" stroke="#b00020" stroke-width="2.5"/>`; }
 for (const al of a.alijos) { const c = P(al.posicion); svg += `<path d="M${c.x} ${c.y - 6}L${c.x + 6} ${c.y}L${c.x} ${c.y + 6}L${c.x - 6} ${c.y}Z" fill="#fff" stroke="#e0a800" stroke-width="2"/>`; }

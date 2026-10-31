@@ -204,9 +204,9 @@ Entidad **neutral** del mundo abierto, con miniatura en el mapa. No es de ningun
 
 | Anillo | Distancia | Qué hay |
 |---|---|---|
-| **Foco** | hasta 150 | Tierra fértil: bosques medianos y pequeños densos, piedra, fauna, algo de cobre y hierro. **Estaño y oro, muy poco**: una muestra en el borde del foco, de un tercio de la cantidad normal, para que se sepa que existen. |
+| **Foco** | hasta 150 | Tierra fértil: bosques medianos y pequeños densos, piedra, algo de cobre y hierro. **Estaño y oro, muy poco**: una muestra en el borde del foco, de un tercio de la cantidad normal, para que se sepa que existen. |
 | **Frontera** | 150-250 | Bosques grandes compartidos, cobre, hierro, piedra, y **más estaño y oro** (aislados). Es donde se expande la segunda generación de plazas. |
-| **Tierra lejana** | más de 250 | **Distritos mineros**: la mayoría del estaño y del oro, en vetas en colina o montaña, guardadas por bandidos. **Cobre, hierro y piedra sueltos**, más escasos que en la frontera pero más ricos. Alijos lejanos y fauna de estepa. |
+| **Tierra lejana** | más de 250 | **Distritos mineros**: la mayoría del estaño y del oro, en vetas en colina o montaña, guardadas por bandidos. **Cobre, hierro y piedra sueltos**, más escasos que en la frontera pero más ricos. Alijos lejanos. |
 
 Un foco de 150 son unos 5 minutos a pie. La capacidad del foco es geométrica, no una cuota: a separación 30 caben del orden de 45 plazas una vez descontados pendiente, bosque, agua y recortes de frontera. La tierra firme es el 66 % del rectángulo y la mitad o más queda a más de 250 de todo campamento.
 

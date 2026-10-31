@@ -279,6 +279,36 @@ fn mundo_real_mide_rutas_entre_campamentos() {
         let plan = c.a_plan(0, 500, 1);
         eprintln!("ruta más larga: {} vértices, coste {} → {:.1} min a 500 mil/s", c.puntos.len(), c.coste_total(), plan.fin().unwrap() as f64 / 60_000.0);
     }
+
+    // Suavizado (columnas), con las mismas peticiones; solo si el artefacto trae la capa `coste`.
+    if !m.tiene_coste() {
+        eprintln!("el artefacto no trae la capa coste: sin suavizado");
+        return;
+    }
+    let suaves: Vec<Peticion> = peticiones.iter().map(|p| Peticion { opciones: Opciones::de_columna(), ..p.clone() }).collect();
+    let t = T::now();
+    let sua: Vec<_> = suaves.iter().map(|p| r.ruta_con(&mut e, p.origen, p.destino, &p.opciones)).collect();
+    let dur = t.elapsed();
+    let (mut v0, mut v1, mut c0, mut c1) = (0usize, 0usize, 0i64, 0i64);
+    for (a, b) in sec.iter().zip(&sua) {
+        if let (Some(a), Some(b)) = (a, b) {
+            (v0, v1, c0, c1) = (v0 + a.puntos.len(), v1 + b.puntos.len(), c0 + a.coste_total(), c1 + b.coste_total());
+        }
+    }
+    eprintln!("suavizado: {:.3} ms/ruta, vértices {v0} → {v1}, coste {c0} → {c1} ({:+.2} %)", dur.as_secs_f64(), 100.0 * (c1 - c0) as f64 / c0.max(1) as f64);
+    assert_eq!(sua.iter().flatten().count(), ok, "suavizar no quita rutas");
+    // Las rectas nuevas están libres; lo que no lo esté tiene que ser una arista del A* que se quedó (los vados, por ejemplo).
+    let tr = r.transitable.as_ref().unwrap();
+    let mut no_libres_del_astar = 0;
+    for (a, b) in sec.iter().zip(&sua) {
+        if let (Some(a), Some(b)) = (a, b) {
+            no_libres_del_astar += a.puntos.windows(2).filter(|w| !tr.libre(w[0], w[1])).count();
+            for w in b.puntos.windows(2) {
+                assert!(tr.libre(w[0], w[1]) || a.puntos.windows(2).any(|v| v == w), "recta nueva que pisa lo que no se puede: {w:?}");
+            }
+        }
+    }
+    eprintln!("tramos del A* que no pasan `libre` (vados y diagonales que rozan): {no_libres_del_astar}");
 }
 
 // ───────────────────────────── Red de caminos: atracción y plan por minuto (caravanas) ─────────────────────────────
@@ -330,4 +360,91 @@ fn el_plan_por_minuto_reparte_el_tiempo_por_el_coste_de_cada_tramo() {
     // Es lo mismo que el plan por segundo a la velocidad equivalente (24 u/min = 400 milésimas/s).
     let cam = Camino { puntos: puntos.to_vec(), costes: vec![1_000, 1_000], nodos: vec![], espaciado: ESP };
     assert_eq!(a_plan_por_minuto(&puntos, &cam.costes, ESP, 5_000, 24_000, 3), cam.a_plan(5_000, 400, 3));
+}
+
+// ── Suavizado por coste ──
+
+/// Retícula `w × h` sobre un terreno con coste por celda de la retícula (0 = no se pisa: sin nodo). Las aristas cuestan la
+/// media de sus dos extremos (× √2 en diagonal) y la capa de coste del mundo es la misma, a celdas de 4 (dos por lado).
+fn con_terreno(w: i64, h: i64, coste: impl Fn(i64, i64) -> u16 + Copy, vado: impl Fn((i64, i64), (i64, i64)) -> bool) -> Rutas {
+    let mut g = reticula(w, h, |x, y| coste(x, y) > 0, vado);
+    for a in &mut g.aristas {
+        let (pa, pb) = ((a.a as i64 % w, a.a as i64 / w), (a.b as i64 % w, a.b as i64 / w));
+        let media = (coste(pa.0, pa.1) as u32 + coste(pb.0, pb.1) as u32) / 2;
+        a.coste_milesimas = a.coste_milesimas * media / 1000;
+    }
+    Rutas::con_terreno(&g, 2 * w, 2 * h, |cx, cy| coste(cx / 2, cy / 2))
+}
+
+fn suave() -> Opciones {
+    Opciones { suavizar: true, ..Default::default() }
+}
+
+#[test]
+fn suavizar_en_llano_deja_la_recta_y_cuesta_menos() {
+    let r = con_terreno(12, 12, |_, _| 1000, |_, _| false);
+    let (o, d) = (c(1, 1), c(9, 4));
+    let a = r.ruta(o, d, &Opciones::default()).unwrap();
+    let s = r.ruta(o, d, &suave()).unwrap();
+    assert!(a.puntos.len() > 2, "el A* va por la retícula");
+    assert_eq!(s.puntos, vec![o, d]);
+    assert_eq!(s.coste_total(), (o.dist(d) * 1000 + ESP / 2) / ESP, "la recta en llano: su largo en espaciados");
+    assert!(s.coste_total() < a.coste_total());
+    assert!(s.nodos.is_empty());
+    assert!(s.a_plan(0, 1_000, 0).vertices.windows(2).all(|w| w[0].en < w[1].en));
+}
+
+#[test]
+fn sin_capa_de_coste_o_sin_pedirlo_no_se_suaviza() {
+    let (o, d) = (c(1, 1), c(9, 4));
+    let solo_grafo = abierta(12, 12);
+    assert_eq!(solo_grafo.ruta(o, d, &suave()), solo_grafo.ruta(o, d, &Opciones::default()));
+    let r = con_terreno(12, 12, |_, _| 1000, |_, _| false);
+    assert!(r.ruta(o, d, &Opciones::default()).unwrap().puntos.len() > 2, "con capa pero sin pedirlo, la ruta del A*");
+}
+
+#[test]
+fn el_suavizado_no_atraviesa_lo_que_no_se_pisa() {
+    // Muro en x = 5 con hueco en y = 8.
+    let r = con_terreno(12, 12, |x, y| if x == 5 && y != 8 { 0 } else { 1000 }, |_, _| false);
+    let a = r.ruta(c(1, 1), c(9, 1), &Opciones::default()).unwrap();
+    let s = r.ruta(c(1, 1), c(9, 1), &suave()).unwrap();
+    let t = r.transitable.as_ref().unwrap();
+    assert!(s.puntos.windows(2).all(|w| t.libre(w[0], w[1])));
+    assert!(s.puntos.len() < a.puntos.len());
+    assert!(s.puntos.iter().any(|p| p.y / ESP >= 7), "baja hasta el hueco");
+    assert!(s.coste_total() < a.coste_total());
+}
+
+#[test]
+fn el_suavizado_no_corta_por_el_terreno_caro() {
+    // Montaña que se pisa pero cuesta como una cima (×12): x 5-8, y 0-6. El A* la rodea por abajo y la recta no la pisa.
+    let caro = |x: i64, y: i64| (5..=8).contains(&x) && y <= 6;
+    let r = con_terreno(14, 12, |x, y| if caro(x, y) { 12_000 } else { 1000 }, |_, _| false);
+    let (o, d) = (c(1, 2), c(12, 2));
+    let a = r.ruta(o, d, &Opciones::default()).unwrap();
+    let s = r.ruta(o, d, &suave()).unwrap();
+    assert!(a.puntos.iter().all(|p| !caro(p.x / ESP, p.y / ESP)), "el A* rodea");
+    assert!(s.puntos.len() < a.puntos.len(), "y el suavizado estira");
+    // Las rectas se muestrean cada media celda (2 u), como `libre`: pueden rozar una esquina por menos de eso, no entrar.
+    let dentro = |q: Punto| (5 * ESP + 2_000..9 * ESP - 2_000).contains(&q.x) && q.y < 7 * ESP - 2_000;
+    for w in s.puntos.windows(2) {
+        let n = w[0].dist(w[1]) / 500 + 1;
+        for k in 0..=n {
+            let q = Punto::new(w[0].x + (w[1].x - w[0].x) * k / n, w[0].y + (w[1].y - w[0].y) * k / n);
+            assert!(!dentro(q), "la recta entra en la montaña en {q:?}");
+        }
+    }
+    assert!(s.coste_total() <= a.coste_total());
+}
+
+#[test]
+fn el_suavizado_conserva_los_vados() {
+    // Río en y = 5 (no se pisa) salvo el vado de x = 6; las aristas que tocan (6, 5) son de vado.
+    let r = con_terreno(12, 12, |x, y| if y == 5 && x != 6 { 0 } else { 1000 }, |a, b| a == (6, 5) || b == (6, 5));
+    let (o, d) = (c(1, 1), c(11, 10));
+    let s = r.ruta(o, d, &suave()).unwrap();
+    let i = s.puntos.iter().position(|&p| p == c(6, 5)).expect("cruza por el vado");
+    assert_eq!((s.puntos[i - 1], s.puntos[i + 1]), (c(6, 4), c(6, 6)), "los dos tramos del vado se quedan");
+    assert!(s.puntos.len() < r.ruta(o, d, &Opciones::default()).unwrap().puntos.len());
 }

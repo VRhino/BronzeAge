@@ -42,8 +42,8 @@ function avisoMundo(c) {
   if (!partidaActual()) return 'no hay partida activa: crea una o activa una de la lista (POST /api/partidas o /api/partidas/<nombre>/activar)';
   const ruta = path.resolve(RAIZ, envPartida().BRONZEAGE_MUNDO ?? c.env?.BRONZEAGE_MUNDO ?? process.env.BRONZEAGE_MUNDO ?? 'generador/salida/mundo');
   if (ruta.endsWith('.bin') ? existsSync(ruta) : existsSync(ruta) && readdirSync(ruta).some((f) => /^mundo-.*\.bin$/.test(f))) return null;
-  if (procesos['generar-mundo']?.hijo) return 'generando el artefacto de mundo… (unos 15 min)';
-  return `falta el artefacto de mundo en ${ruta}: arranca «generar-mundo» (unos 15 min) o pon BRONZEAGE_MUNDO con la ruta de un mundo-*.bin`;
+  if (procesos['generar-mundo']?.hijo) return 'generando el artefacto de mundo… (unos 2 min)';
+  return `falta el artefacto de mundo en ${ruta}: arranca «generar-mundo» (unos 2 min) o pon BRONZEAGE_MUNDO con la ruta de un mundo-*.bin`;
 }
 
 // ───────────────────────────── Partidas ─────────────────────────────
@@ -211,7 +211,7 @@ th{color:var(--sub);font-weight:500;font-size:12px}td .fila{gap:6px}td button{pa
 <label style="flex-direction:row;align-items:center"><input id="n-activar" type="checkbox" checked style="width:auto"> activarla y arrancar el servidor</label>
 <button id="n-crear">Crear</button></div><div class="msg" id="n-msg"></div></div></details>
 <details open data-seccion="mundo"><summary>Mundo</summary>
-<div class="card"><div class="form"><label>Semilla<input id="m-semilla" type="number" min="0" value="42"></label><button id="m-generar">Generar mundo (unos 15 min)</button>
+<div class="card"><div class="form"><label>Semilla<input id="m-semilla" type="number" min="0" value="42"></label><button id="m-generar">Generar mundo (unos 2 min)</button>
 <span class="est" id="m-estado"></span></div>
 <table style="margin-top:12px"><thead><tr><th>Artefacto</th><th>Creado</th><th>Partidas</th><th></th></tr></thead><tbody id="m-lista"></tbody></table><div class="msg" id="m-msg"></div></div></details>
 </section>
@@ -286,7 +286,7 @@ async function pintarPartidas(){
   for(const [i,a] of m.artefactos.entries()){const tr=document.createElement('tr');celda(tr,a.archivo);celda(tr,fecha(a.creado_ms));
     const usan=d.partidas.filter(p=>p.mundo===a.archivo||(!p.mundo&&i===0)).map(p=>p.nombre);celda(tr,usan.join(', ')||'ninguna');
     const acc=celda(tr,'');acc.innerHTML='<div class="fila"></div>';
-    const b=boton(acc,'Borrar',()=>{if(confirm('¿Borrar el mundo '+a.hash.slice(0,12)+'…? No se puede deshacer: habría que generarlo otra vez (unos 15 min).'))
+    const b=boton(acc,'Borrar',()=>{if(confirm('¿Borrar el mundo '+a.hash.slice(0,12)+'…? No se puede deshacer: habría que generarlo otra vez (unos 2 min).'))
       api('DELETE','/api/mundo/'+encodeURIComponent(a.archivo),null,'m-msg')},'peligro');
     if(usan.length||m.generando){b.disabled=true;b.title=m.generando?'se está generando un mundo':'lo usa'+(usan.length>1?'n las partidas ':' la partida ')+usan.join(', ')+(usan.length>1?': bórralas antes':': bórrala antes')}
     ml.append(tr)}
@@ -445,6 +445,7 @@ async function apiMundo(metodo, cuerpo, archivo) {
     const usan = nombresDePartida().map(infoPartida).filter((p) => p.mundo === a.archivo || (!p.mundo && artefactos()[0]?.archivo === a.archivo)).map((p) => p.nombre);
     if (usan.length) return [409, { error: 'mundo_en_uso', mensaje: `lo usa${usan.length > 1 ? 'n las partidas' : ' la partida'} ${usan.join(', ')}: ${usan.length > 1 ? 'bórralas' : 'bórrala'} antes`, partidas: usan }];
     rmSync(path.join(MUNDOS, a.archivo), { force: true });
+    rmSync(path.join(MUNDOS, `relieve-${a.hash}.bin`), { force: true }); // su paquete de relieve, si lo tiene
     return [200, { borrado: a.archivo, artefactos: artefactos() }];
   }
   if (metodo === 'GET') return [200, { generando: !!procesos['generar-mundo']?.hijo, semilla: mundo.semilla, ultima: mundo.ultima, artefactos: artefactos() }];

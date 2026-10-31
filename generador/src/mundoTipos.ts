@@ -9,14 +9,14 @@ import type { MasaBosque, ParcelaBosque } from './parcelas';
  * el escritor del artefacto convierte a milésimas de unidad estratégica al serializar: `round(u * 1000 / 12)`.
  */
 
-export type TipoRecurso = 'piedra' | 'cobre' | 'hierro' | 'estano' | 'oro' | 'ganaderia';
+export type TipoRecurso = 'piedra' | 'cobre' | 'hierro' | 'estano' | 'oro';
 
 export interface RecursoMundo {
   id: string;
   tipo: TipoRecurso;
   posicion: Point;
   anillo: Anillo;
-  /** Cantidad inicial del yacimiento, en unidades de juego (enteros). La ganadería es `livestock` en el motor. */
+  /** Cantidad inicial del yacimiento, en unidades de juego (enteros). */
   cantidadInicial: number;
   vetaId?: string;
 }
@@ -43,7 +43,7 @@ export interface AlijoMundo {
 export interface NodoGrafo { id: number; x: number; y: number }
 export interface AristaGrafo { a: number; b: number; costeMilesimas: number; vado: boolean }
 
-/** Grafo de navegación: la ÚNICA autoridad de rutas. `espaciado` en unidades del generador (8 estratégicas = 96). */
+/** Grafo de navegación: la ÚNICA autoridad de rutas. `espaciado` en unidades del generador (4 estratégicas = 48). */
 export interface GrafoMundo { nodos: NodoGrafo[]; aristas: AristaGrafo[]; espaciado: number }
 
 export type ClaseTerreno = 'agua' | 'costa' | 'llano' | 'colina' | 'montana' | 'cima';
@@ -56,6 +56,8 @@ export interface MuestrasRelieve {
   humedad(p: Point): number;
   densidadBosque(p: Point): number;
   transitable(p: Point): boolean;
+  /** Multiplicador de coste de movimiento en `p` (1 = llano); 0 si `p` no es transitable. */
+  coste(p: Point): number;
 }
 
 export interface RioMundo { id: string; puntos: Point[]; terminaEnLago: boolean; navegable: boolean; vados: Point[] }

@@ -58,17 +58,8 @@ fn nucleo(m: &M) -> Nucleo {
 
 /// Un sitio verde y rico a unas decenas de unidades del campamento `i`.
 fn sitio_rico(n: &Nucleo, m: &Mundo, i: usize, faccion: u32) -> Punto {
-    let c = m.campamentos()[i].posicion.unwrap();
-    for r in (0..8).map(|k| 50_000 + k * 10_000) {
-        for g in 0..360 {
-            let a = (g as f64).to_radians();
-            let p = Punto::new(c.x + (r as f64 * a.cos()) as i64, c.y + (r as f64 * a.sin()) as i64);
-            if n.viabilidad(p, faccion).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6) {
-                return p;
-            }
-        }
-    }
-    panic!("sin sitio rico cerca del campamento {i}");
+    // El de `comun::real`: con campo abierto al este, por donde se alejan estas pruebas.
+    comun::real::sitio_rico(n, m, i, faccion)
 }
 
 /// Un punto en tierra junto a `centro + (dx, dy)` (busca en espiral, de 2 en 2 unidades).

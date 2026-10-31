@@ -53,17 +53,8 @@ macro_rules! con_mundo {
 }
 
 fn sitio_rico(n: &Nucleo, m: &Mundo, i: usize, faccion: u32) -> Punto {
-    let c = m.campamentos()[i].posicion.unwrap();
-    for r in (0..8).map(|k| 50_000 + k * 10_000) {
-        for g in 0..360 {
-            let a = (g as f64).to_radians();
-            let p = Punto::new(c.x + (r as f64 * a.cos()) as i64, c.y + (r as f64 * a.sin()) as i64);
-            if n.viabilidad(p, faccion).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6) {
-                return p;
-            }
-        }
-    }
-    panic!("sin sitio rico cerca del campamento {i}");
+    // El de `comun::real`: con campo abierto al este, por donde se alejan estas pruebas.
+    comun::real::sitio_rico(n, m, i, faccion)
 }
 
 /// Un punto en tierra junto a `centro + (dx, dy)`.
@@ -361,7 +352,12 @@ async fn con_el_reloj_en_marcha_el_muestreo_renueva_el_tramo_ajeno_sin_ninguna_o
     // Gus ya dentro de la zona de F1, a punto de cruzarla despacio de oeste a este.
     let destino = en_tierra(&m.0, centro, radio + 40 * U, 0);
     x.ok("gus", Comando::MarcharA { ejercito: gus_col, destino });
-    let entra = x.n.ejercito(gus_col).unwrap().plan.vertices.iter().find(|v| (v.p.x - centro.x).abs() < radio - 3 * U).map(|v| v.en).expect("cruza la zona");
+    // El instante en que entra en la zona, recorriendo el plan (con la ruta suavizada, el cruce puede ser una sola recta).
+    let plan = &x.n.ejercito(gus_col).unwrap().plan;
+    let entra = (plan.inicio().unwrap()..=plan.fin().unwrap())
+        .step_by(1_000)
+        .find(|&t| plan.posicion_en(t).is_some_and(|p| (p.x - centro.x).abs() < radio - 3 * U))
+        .expect("cruza la zona");
     x.n.avanzar_hasta(entra);
     let ej = ids::ejercito(gus_col);
     let w = arrancar_con(x.n).await;

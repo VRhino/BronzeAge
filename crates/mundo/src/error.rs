@@ -29,6 +29,8 @@ pub enum ErrorMundo {
     RasterDescompresion { capa: &'static str, detalle: String },
     #[error("raster «{capa}»: {obtenido} bytes en vez de {esperado}")]
     RasterLongitud { capa: &'static str, esperado: usize, obtenido: usize },
+    #[error("raster «coste»: la celda {celda:?} (columna, fila) vale {coste} y {transitable}es transitable", transitable = if *transitable { "" } else { "no " })]
+    CosteIncoherente { celda: (usize, usize), coste: u16, transitable: bool },
     #[error("id repetido en {coleccion}: «{id}»")]
     IdRepetido { coleccion: &'static str, id: String },
     #[error("{coleccion} «{id}» sin posición")]

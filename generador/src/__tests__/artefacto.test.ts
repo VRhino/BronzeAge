@@ -24,7 +24,7 @@ function mundoSintetico(): MundoGenerado {
     recursos: [
       { id: 'nodo-1', tipo: 'piedra', posicion: { x: 100, y: 100 }, anillo: 'foco', cantidadInicial: 500 },
       { id: 'nodo-2', tipo: 'estano', posicion: { x: 300, y: 200 }, anillo: 'frontera', cantidadInicial: 80, vetaId: 'veta-0' },
-      { id: 'nodo-3', tipo: 'ganaderia', posicion: { x: 50, y: 300 }, anillo: 'lejana', cantidadInicial: 40 },
+      { id: 'nodo-3', tipo: 'hierro', posicion: { x: 50, y: 300 }, anillo: 'lejana', cantidadInicial: 40 },
       { id: 'nodo-4', tipo: 'cobre', posicion: { x: 60, y: 60 }, anillo: 'foco', cantidadInicial: 120 },
     ],
     vetas: [{ id: 'veta-0', centro: { x: 300, y: 200 }, nodosIds: ['nodo-2'], campamentoMasCercano: 'campamento-2' }],
@@ -48,6 +48,7 @@ function mundoSintetico(): MundoGenerado {
       humedad: () => 0.5,
       densidadBosque: p => (p.x > 240 ? 1 : 0),
       transitable: p => p.x >= 100 && (p.x + p.y) % 3 < 2,
+      coste: p => (p.x >= 100 && (p.x + p.y) % 3 < 2 ? 1 + p.y / 360 : 0),
     },
   };
 }
@@ -86,7 +87,7 @@ describe('artefacto de mundo', () => {
     expect(man.generador).toBe('sintetico-0.1');
     expect(man.factorUnity).toBe(12);
     expect(man.tamano).toMatchObject({ x: 40000n, y: 30000n });
-    const rasters = { altura: msg.altura, terreno: msg.terreno, fertilidad: msg.fertilidad, humedad: msg.humedad, densidad_bosque: msg.densidadBosque, anillos: msg.anillos, transitable: msg.transitable };
+    const rasters = { altura: msg.altura, terreno: msg.terreno, fertilidad: msg.fertilidad, humedad: msg.humedad, densidad_bosque: msg.densidadBosque, anillos: msg.anillos, transitable: msg.transitable, coste: msg.coste };
     expect(man.capas.map(c => c.nombre)).toEqual(Object.keys(rasters));
     for (const c of man.capas) {
       const r = rasters[c.nombre as keyof typeof rasters]!;
@@ -112,6 +113,8 @@ describe('artefacto de mundo', () => {
     }
     expect(msg.transitable!.encoding).toBe(EncodingRaster.ENCODING_BITS);
     expect(largo(msg.transitable!)).toBe(Math.ceil(celdas / 8));
+    expect(msg.coste!.encoding).toBe(EncodingRaster.ENCODING_U16_LE);
+    expect(largo(msg.coste!)).toBe(2 * celdas);
   });
 
   it('rasters: el centro de cada celda, fila 0 al norte, bits LSB primero', () => {
@@ -131,6 +134,20 @@ describe('artefacto de mundo', () => {
     }
   });
 
+  it('coste: 0 en no transitables, round(coste×1000) en transitables', () => {
+    const msg = fromBinary(ArtefactoDeMundoSchema, construirArtefacto(mundoSintetico()).bytes);
+    const m = mundoSintetico(), datos = zstdDecompressSync(msg.coste!.datos);
+    let ceros = 0, positivos = 0;
+    for (let k = 0; k < 80; k++) {
+      const p = { x: ((k % 10) + 0.5) * 48, y: (Math.floor(k / 10) + 0.5) * 48 };
+      const v = datos[2 * k]! | (datos[2 * k + 1]! << 8);
+      expect(v).toBe(m.muestras.transitable(p) ? Math.round(m.muestras.coste(p) * 1000) : 0);
+      if (v === 0) ceros++; else positivos++;
+    }
+    expect(ceros).toBeGreaterThan(0);
+    expect(positivos).toBeGreaterThan(0);
+  });
+
   it('vectoriales: milésimas, ordenación por id y asociaciones', () => {
     const msg = fromBinary(ArtefactoDeMundoSchema, construirArtefacto(mundoSintetico()).bytes);
     expect(mil(12)).toBe(1000n);
@@ -143,7 +160,7 @@ describe('artefacto de mundo', () => {
     const por = Object.fromEntries(msg.nodos.map(n => [n.id, n]));
     expect(por['nodo-1']).toMatchObject({ tipo: 'piedra', rareza: 'comun', anillo: 'foco', cantidadInicial: 500_000n });
     expect(por['nodo-2']).toMatchObject({ tipo: 'estano', rareza: 'raro' });
-    expect(por['nodo-3']).toMatchObject({ tipo: 'livestock', rareza: 'comun' });
+    expect(por['nodo-3']).toMatchObject({ tipo: 'hierro', rareza: 'intermedio' });
     expect(por['nodo-4']).toMatchObject({ tipo: 'cobre', rareza: 'intermedio' });
     expect(msg.vetas[0]).toMatchObject({ id: 'veta-0', campamentoBandidosId: 'bandidos-0', alijoId: 'alijo-0', nodosIds: ['nodo-2'] });
     expect(msg.bandidosIniciales[0]).toMatchObject({ bosqueId: 'bosque-0', campamentoMercenariosId: 'campamento-2', vetaId: 'veta-0', nivel: 2 });

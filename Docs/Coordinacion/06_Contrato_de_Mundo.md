@@ -1,4 +1,4 @@
-# Contrato de mundo: artefacto y paquete de Unity
+# Contrato de mundo: artefacto, paquete de relieve y paquete de Unity
 
 > **Estado (2026-10-13): diseño cerrado de la fase 2, sin código.** Esquema: [`proto/bronzeage/v1/world.proto`](../../proto/bronzeage/v1/world.proto).
 > Resuelve P2 y P6 de [`Reconstruccion_Definicion.md`](../../Consideraciones/Reconstruccion_Definicion.md): hay un solo generador, el regional,
@@ -25,6 +25,7 @@ Está en **unidades estratégicas** (2.667 × 2.000, en milésimas). El factor 1
 | `densidad_bosque` | raster u8 | campo continuo; coste de movimiento por bosque |
 | `anillos` | raster u8 (`Anillo`) | foco (hasta 150), frontera (150-250) y tierra lejana (>250), por distancia al campamento más cercano |
 | `transitable` | raster en bits | lo que se puede pisar; **autoridad única** de transitabilidad |
+| `coste` | raster u16 | coste de movimiento en el centro de la celda, en milésimas (1000 = llano, 0 = no transitable); opcional: sin ella el servidor no suaviza las rutas |
 | `rios` | vectorial | cauces, vados |
 | `bosques` | vectorial (`ZonaBosque`) | masas explotables con id y área (pocos grandes, muchos medianos y pequeños) |
 | `parcelas` | vectorial (`ParcelaBosque`) | **cupos de explotación** de cada masa: puntos fijos separados `2·rp`, con su densidad. Una Leñera (que se construye en la ciudad) ocupa una parcela dentro de la zona de su asentamiento |
@@ -32,7 +33,7 @@ Está en **unidades estratégicas** (2.667 × 2.000, en milésimas). El factor 1
 | `vetas` | vectorial (`Veta`) | distritos mineros de estaño (y oro), con su campamento de bandidos y su alijo lejano |
 | `campamentos` | vectorial | campamentos de mercenarios: centros de los focos, a 600 unos de otros |
 | `bandidos_iniciales`, `alijos` | vectorial | colocados por el generador, no por el motor |
-| `navegacion` | grafo | espaciado 8 unidades (~333 nodos por lado), vados cada ~100: **la única autoridad de rutas** |
+| `navegacion` | grafo | espaciado 4 unidades (una arista por celda vecina del raster; desde el 2026-10-30, antes 8), vados cada ~100: **la única autoridad de rutas** |
 
 **Reglas de generación** (las del canon 1.9c; el generador las cumple y el contrato las comprueba al cargar):
 
@@ -45,7 +46,7 @@ Está en **unidades estratégicas** (2.667 × 2.000, en milésimas). El factor 1
 ## 3. Validaciones al cargar (servidor)
 
 Hash del contenido = `Manifiesto.hash`; cada capa con su sha256; tamaño = 2.667 × 2.000; origen y destino de toda arista del grafo
-transitables; todo nodo, campamento y alijo en tierra transitable; cuotas por anillo exactas; parcelas dentro de su masa y a ≥ 2·`rp` unas de otras; ningún
+transitables; si trae la capa `coste`, mayor que 0 justo en las celdas transitables; todo nodo, campamento y alijo en tierra transitable; cuotas por anillo exactas; parcelas dentro de su masa y a ≥ 2·`rp` unas de otras; ningún
 yacimiento dentro de agua. Un artefacto que no pasa **no se carga**.
 
 ## 4. El paquete de Unity (`PaqueteUnity`)
@@ -55,6 +56,7 @@ yacimiento dentro de agua. Un artefacto que no pasa **no se carga**.
 - Unity **no calcula rutas** (U1): pinta los planes que manda el servidor sobre ese terreno. La navegación local de Unity no decide
   ninguna ruta del mundo.
 - El terreno de una batalla sale del artefacto (`BattleMapReference.mapa_id` = hash, `centro`).
+- La altura del terreno sale del paquete de relieve (§8), el mismo que usa el cliente de jugador.
 
 ## 5. Qué cambia respecto a BA-003 y BA-005
 
@@ -72,14 +74,41 @@ Unity carga el mismo fichero y comprueba que el paquete derivado coincide en has
 ## 7. Formato del artefacto (implementado 2026-10-13)
 
 Escritor: `generador/src/artefacto.ts`. Cargador y validador del servidor: `crates/mundo` (`Mundo::cargar`). Un artefacto real (semilla 42) ocupa
-unos 4,7 MB y pasa todas las validaciones; la herramienta `cargo run -p mundo --example validar -- <archivo>` lo comprueba.
+unos 16 MB desde el grafo de 4 u (antes, unos 5,6 MB) y pasa todas las validaciones; la herramienta `cargo run -p mundo --example validar -- <archivo>` lo comprueba.
 
 - **Unidades:** milésimas de unidad estratégica (`round(u · 1000 / 12)` desde las del generador).
 - **Rasters:** celda de 4 unidades estratégicas (667 × 500 en el mundo real), filas de norte a sur, valor del centro de la celda. `altura` u16 LE;
-  `terreno`, `fertilidad`, `humedad`, `densidad_bosque`, `anillos` u8; `transitable` en bits (celda `i` → byte `i>>3`, bit `i&7`, LSB primero). Todos con zstd.
+  `terreno`, `fertilidad`, `humedad`, `densidad_bosque`, `anillos` u8; `transitable` en bits (celda `i` → byte `i>>3`, bit `i&7`, LSB primero); `coste` u16 LE en milésimas (1000 = llano, 0 = no transitable). Todos con zstd.
 - **Hash:** sha256 hexadecimal de la serialización Protobuf del artefacto con `manifiesto.hash = ""`. Cada capa lleva el sha256 de sus bytes comprimidos.
 - **Coherencia con el raster:** la transitabilidad es la del raster. Grafo, recursos, campamentos, bandidos y alijos se ajustan al centro de una celda transitable
   antes de escribirse; el campo `anillo` de cada elemento conserva el del punto original.
-- **Rendimiento del generador:** unos 12 minutos por mundo (relieve 2,5 min, metales y parcelas 2 min, recursos 2 min, grafo 2 min, rasters 3,5 min); es una herramienta fuera de línea.
-- **Ríos y vados (2026-10-13):** los ríos cortan el paso salvo en los vados. El trazo del río se marca como barrera en la rejilla de transitabilidad, engrosado una celda a cada lado (así ninguna arista lo cruza entre dos muestras), y cada vado abre un hueco de 100 unidades del generador de radio. Siempre hay al menos un vado por río y luego uno cada 100 estratégicas (`generador/src/vados.ts`). En la semilla 42: 116 vados; el grafo tiene 52.914 nodos, 19 componentes y el 99,92 % en la mayor, con los 9 campamentos dentro de ella.
-- **Pendiente:** hierro en las vetas y vados elegidos por geografía (hoy equiespaciados a lo largo del río).
+- **Rendimiento del generador:** un minuto por mundo (semilla 42, 2026-10-30, con el relieve a escala de pantalla y el grafo de 4 u: relieve 38 s, que incluye la rejilla de celdas y la conexión medida en ella; campamentos, metales y parcelas 4 s; recursos 3 s; coste por celda 9 s; grafo 1 s; artefacto 8 s; total 61 s); era de unos 15 minutos. El relieve regional se evalúa una sola vez por centro de celda del artefacto y las optimizaciones no cambian ni un bit del resultado (mismos hashes en las semillas 1, 7 y 42). Es una herramienta fuera de línea.
+- **Ríos y vados (2026-10-13):** los ríos cortan el paso salvo en los vados. El trazo del río se marca como barrera en la rejilla de transitabilidad, engrosado una celda a cada lado (así ninguna arista lo cruza entre dos muestras), y cada vado abre un hueco de 100 unidades del generador de radio. Siempre hay al menos un vado por río y luego uno cada 100 estratégicas (`generador/src/vados.ts`). En la semilla 42 (2026-10-30, relieve nuevo y grafo de 4 u): 116 vados; el grafo tiene 201.434 nodos, 775.346 aristas y 303 componentes, con el 99,23 % en la mayor y los 8 campamentos dentro de ella (16 de los 7.360 recursos quedan fuera, en bolsas entre ríos sin vado). Antes, con el grafo de 8 u: 52.914 nodos y 19 componentes.
+- **Grafo de 4 u (2026-10-30, decisión del autor con la mesa de escalas 3D):** los nodos son los centros de las celdas transitables del raster y el coste de una arista es la media del de sus dos extremos, que es la capa `coste` (con un espaciado de una celda, el punto medio cae en el borde y no añade nada). Así el A* y el suavizado del servidor miden con lo mismo.
+- **Pendiente:** hierro en las vetas, vados elegidos por geografía (hoy equiespaciados a lo largo del río) y los recursos que quedan en bolsas entre ríos sin vado.
+
+## 8. El paquete de relieve (`PaqueteRelieve`, 2026-10-30)
+
+Los rasters del artefacto van cada 4 u, y el relieve que se eligió con la mesa de escalas 3D tiene formas de pocas unidades: con 4 u
+las crestas pierden hasta 112 m y las lomas desaparecen. Los clientes 3D dibujan el terreno con este paquete, que lleva la altura cada
+**0,5 u**, la de la mesa. Lo decidió el autor el 2026-10-30, frente a que el cliente recalculara el relieve con la receta del generador:
+así hay una sola fuente (también para Unity) y lo que se ve sale de la misma ejecución que la transitabilidad del servidor.
+
+- **Qué lleva:** la altura en los vértices de una rejilla de 0,5 u de todo el mapa (5.335 × 4.001 muestras), con el mismo valor que el
+  raster `altura` (u16, 0..65535), y un bit de agua por muestra (mar y lagos). Los ríos no van: son los del artefacto.
+- **Teselas de 64 u** (42 × 32): cada una guarda 129 × 129 muestras y comparte su última fila y su última columna con la vecina, así
+  que se monta sin mirar a las de al lado. Lo que pasa del borde del mapa repite la muestra del borde. Cada tesela va comprimida por
+  separado, para que el cliente abra solo las que rodean al héroe.
+- **Compresión:** cada altura se guarda como su diferencia, módulo 2^16, con la predicción izquierda + arriba − diagonal (solo la izquierda
+  en la primera fila y solo la de arriba en la primera columna) y la tesela va con zstd. El agua, en bits con zstd, y vacía si la tesela no
+  tiene agua. La semilla 42 ocupa **8,6 MB**.
+- **Hash:** sha256 de la serialización con `hash = ""`, como el artefacto. `hash_artefacto` es el del artefacto del que sale.
+- **Dónde va:** aparte del artefacto, en `relieve-<hash del artefacto>.bin` junto a él. El servidor no lo usa: al arrancar lo valida
+  (`mundo::validar_relieve`: hash, que sea del artefacto vigente, dimensiones del mapa y que cada tesela descomprima a su tamaño) y lo
+  sirve tal cual en `GET /v1/mundo/<hash>/relieve`. Si falta o no vale, arranca igual y no lo anuncia.
+- **Cuántas veces viaja:** una por mundo, como el artefacto. La `Bienvenida` lo anuncia en `InfoMundo.url_relieve` y `hash_relieve`
+  (contrato 05); el cliente lo guarda por hash (en el navegador, en IndexedDB) y, si ya tiene ese hash, no lo baja. Las teselas son para
+  la memoria del cliente, no para la red: con el fichero en disco, solo descomprime y sube a la GPU las cercanas.
+- **Generación:** `generador/src/paqueteRelieve.ts` (formato) y `relieveFino.ts` (los hilos: cada hilo pide la siguiente tesela; el
+  resultado no depende del reparto). `scripts/generar-mundo.ts` lo escribe tras el artefacto: 61 s con 4 hilos en la semilla 42. La
+  ventana de la mesa sale idéntica, muestra a muestra.

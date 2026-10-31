@@ -5,6 +5,7 @@
 //! partida donde se quedó: el reloj de mundo continúa desde el último instante guardado y los tokens vigentes siguen valiendo.
 //!
 //! El mismo puerto sirve el artefacto de mundo por hash (`GET /v1/mundo/<hash>`, contrato 06) y la `Bienvenida` lo anuncia en `InfoMundo.url_artefacto` (ruta relativa al servidor).
+//! Si junto al artefacto está su paquete de relieve (`relieve-<hash>.bin`, 06 §8), lo sirve en `GET /v1/mundo/<hash>/relieve` y lo anuncia en `InfoMundo.url_relieve` y `hash_relieve`.
 //! Las rutas de administración (`/v1/admin/...`, solo administradores) están en [`admin`].
 //! Y el archivo común de datos de juego ([`datos`]): `GET /v1/datos/<versión>` (y `GET /v1/datos`, el vigente), anunciado en `InfoMundo.version_datos_de_juego` y `url_datos_de_juego`.
 
@@ -21,7 +22,7 @@ use std::{
 };
 
 use acceso::Acceso;
-use mundo::{Mundo, OpcionesValidacion};
+use mundo::{validar_relieve, ErrorRelieve, Mundo, OpcionesValidacion};
 use nucleo::{sesiones, Ajustes, Arranque, Nucleo, Reglas};
 use rutas::Rutas;
 use servidor::{servir_con_http, ComandoSesion, Config, Http, PeticionHttp, RelojCompartido, RespuestaHttp, Servidor};
@@ -43,6 +44,8 @@ pub fn buscar_mundo(ruta: &Path) -> io::Result<PathBuf> {
 
 /// La ruta del artefacto de mundo, sin el hash.
 pub const RUTA_MUNDO: &str = "/v1/mundo/";
+/// Lo que va tras el hash del artefacto en la ruta de su paquete de relieve.
+pub const SUFIJO_RELIEVE: &str = "/relieve";
 /// La ruta del archivo de datos de juego (sin versión: el vigente).
 pub const RUTA_DATOS: &str = "/v1/datos";
 
@@ -69,11 +72,28 @@ pub fn arranque_de(ruta: &Path, semilla: u64) -> io::Result<Artefacto> {
     Ok(Artefacto { bytes: Arc::new(bytes), arranque })
 }
 
-/// El HTTP del puerto: el artefacto de mundo por hash y, lo demás, el servicio de acceso.
+/// El paquete de relieve validado: su hash y los bytes, para servirlos tal cual.
+#[derive(Clone)]
+pub struct Relieve {
+    pub hash: String,
+    pub bytes: Arc<Vec<u8>>,
+}
+
+/// El paquete de relieve que está junto al artefacto `ruta` (`relieve-<hash>.bin`, en la misma carpeta), validado contra el mundo del arranque.
+/// `Ok(None)` si no está: el servidor arranca igual y los clientes 3D se quedan sin la altura fina.
+pub fn relieve_junto_a(ruta: &Path, arranque: &Arranque) -> Result<Option<Relieve>, ErrorRelieve> {
+    let Some(m) = arranque.mundo.as_ref() else { return Ok(None) };
+    let Ok(bytes) = std::fs::read(ruta.with_file_name(format!("relieve-{}.bin", m.hash()))) else { return Ok(None) };
+    let hash = validar_relieve(&bytes, m.hash(), m.tamano())?;
+    Ok(Some(Relieve { hash, bytes: Arc::new(bytes) }))
+}
+
+/// El HTTP del puerto: el artefacto de mundo y su paquete de relieve por hash y, lo demás, el servicio de acceso.
 struct RutasHttp {
     acceso: Acceso,
     admin: admin::Admin,
     mundo: Option<(String, Arc<Vec<u8>>)>,
+    relieve: Option<Relieve>,
     datos: datos::DatosDeJuego,
 }
 
@@ -91,10 +111,19 @@ impl Http for RutasHttp {
         if p.ruta.starts_with(admin::RUTA_ADMIN) {
             return Box::pin(self.admin.atender(p));
         }
-        if let Some(hash) = p.ruta.strip_prefix(RUTA_MUNDO) {
-            let r = match (&self.mundo, p.metodo.as_str()) {
-                (Some((h, bytes)), "GET") if h == hash => RespuestaHttp { estado: 200, tipo: "application/octet-stream", cuerpo: bytes.as_ref().clone() },
-                (_, "GET") => RespuestaHttp::texto(404, "no hay artefacto con ese hash"),
+        if let Some(resto) = p.ruta.strip_prefix(RUTA_MUNDO) {
+            let (hash, relieve) = match resto.strip_suffix(SUFIJO_RELIEVE) {
+                Some(h) => (h, true),
+                None => (resto, false),
+            };
+            let vigente = self.mundo.as_ref().filter(|(h, _)| h == hash);
+            let r = match (vigente, relieve, p.metodo.as_str()) {
+                (Some((_, bytes)), false, "GET") => RespuestaHttp { estado: 200, tipo: "application/octet-stream", cuerpo: bytes.as_ref().clone() },
+                (Some(_), true, "GET") => match &self.relieve {
+                    Some(r) => RespuestaHttp { estado: 200, tipo: "application/octet-stream", cuerpo: r.bytes.as_ref().clone() },
+                    None => RespuestaHttp::texto(404, "este mundo no tiene paquete de relieve"),
+                },
+                (None, _, "GET") => RespuestaHttp::texto(404, "no hay artefacto con ese hash"),
                 _ => RespuestaHttp::texto(405, "método no permitido"),
             };
             return Box::pin(async move { r });
@@ -146,8 +175,16 @@ fn id_de_partida(datos: &Path, recuperada: bool, anterior: &str) -> io::Result<S
     Ok(id)
 }
 
-/// Abre los datos de `datos` (o los crea), lanza el núcleo y escucha en `direccion` (puerto 0: uno libre). Con `artefacto`, el puerto lo sirve por su hash.
-pub async fn arrancar(arranque: Arranque, artefacto: Option<Arc<Vec<u8>>>, datos: &Path, direccion: SocketAddr, acceso: acceso::Config) -> io::Result<(Servicio, Informe)> {
+/// Abre los datos de `datos` (o los crea), lanza el núcleo y escucha en `direccion` (puerto 0: uno libre). Con `artefacto`, el puerto lo sirve por su hash, y con `relieve`
+/// (solo junto al artefacto), también su paquete de relieve.
+pub async fn arrancar(
+    arranque: Arranque,
+    artefacto: Option<Arc<Vec<u8>>>,
+    relieve: Option<Relieve>,
+    datos: &Path,
+    direccion: SocketAddr,
+    acceso: acceso::Config,
+) -> io::Result<(Servicio, Informe)> {
     let datos_de_juego = datos::datos_de_juego(&arranque.reglas);
     let semilla = arranque.semilla;
     let dir_mundo = datos.join("mundo");
@@ -162,14 +199,16 @@ pub async fn arrancar(arranque: Arranque, artefacto: Option<Arc<Vec<u8>>>, datos
     n.conectar_nombres(nombres.clone());
     let actor = sesiones::lanzar(n, reloj.clone(), rx);
     let mundo = artefacto.map(|b| (informe.mundo_hash.clone(), b));
+    let relieve = relieve.filter(|_| mundo.is_some());
     let config = Config {
         url_artefacto: mundo.is_some().then(|| RUTA_MUNDO.to_owned()),
+        relieve: relieve.as_ref().map(|r| (r.hash.clone(), format!("{RUTA_MUNDO}{}{SUFIJO_RELIEVE}", informe.mundo_hash))),
         datos_de_juego: Some((datos_de_juego.version.clone(), format!("{RUTA_DATOS}/{}", datos_de_juego.version))),
         nombres,
         ..Config::default()
     };
     let admin = admin::Admin { acceso: acceso.clone(), nucleo: tx.clone(), carpeta: datos.to_owned(), mundo_hash: informe.mundo_hash.clone(), semilla, id_partida };
-    let http = Arc::new(RutasHttp { acceso: acceso.clone(), admin, mundo, datos: datos_de_juego });
+    let http = Arc::new(RutasHttp { acceso: acceso.clone(), admin, mundo, relieve, datos: datos_de_juego });
     let listener = tokio::net::TcpListener::bind(direccion).await?;
     let srv = servir_con_http(listener, tx.clone(), acceso.clone(), http, reloj, config).await;
     Ok((Servicio { direccion: srv.direccion, acceso, srv, tx, actor }, informe))

@@ -30,7 +30,6 @@ const sintetico: MuestreoRecursos = {
   altura,
   geologia: p => 0.5 + 0.4 * Math.sin(p.x / 2300 + p.y / 3700),
   bosque: p => (Math.sin(p.x / 1700) > 0 ? 0.4 : 0),
-  suelo: p => ({ pastos: 0.6 + 0.3 * Math.cos(p.y / 1900), estepa: Math.sin(p.x / 4100 + 1) > 0 }),
 };
 
 const recursos = repartirRecursosNoMetalicos(42, campamentos, sintetico, { ancho: ANCHO, alto: ALTO });
@@ -40,12 +39,11 @@ const base = recursos.filter(r => !esCapaLejana(r)), capa = recursos.filter(esCa
 const de = (tipo: string, anillo?: string) => base.filter(r => r.tipo === tipo && (!anillo || r.anillo === anillo));
 
 describe('recursos no metálicos', () => {
-  it('totales exactos de partida: piedra 5601, cobre 240, hierro 360, ganadería 400', () => {
+  it('totales exactos de partida: piedra 5601, cobre 240, hierro 360', () => {
     expect(de('piedra')).toHaveLength(5601);
     expect(de('cobre')).toHaveLength(240);
     expect(de('hierro')).toHaveLength(360);
-    expect(de('ganaderia')).toHaveLength(400);
-    expect(base).toHaveLength(6601);
+    expect(base).toHaveLength(6201);
     expect(new Set(recursos.map(r => r.id)).size).toBe(recursos.length);
   });
   it('el hierro es 1,5 veces el cobre', () => {
@@ -55,7 +53,6 @@ describe('recursos no metálicos', () => {
     expect([de('piedra', 'foco').length, de('piedra', 'frontera').length, de('piedra', 'lejana').length]).toEqual([3361, 2240, 0]);
     expect([de('cobre', 'foco').length, de('cobre', 'frontera').length, de('cobre', 'lejana').length]).toEqual([48, 192, 0]);
     expect([de('hierro', 'foco').length, de('hierro', 'frontera').length, de('hierro', 'lejana').length]).toEqual([72, 288, 0]);
-    expect([de('ganaderia', 'foco').length, de('ganaderia', 'frontera').length, de('ganaderia', 'lejana').length]).toEqual([200, 0, 200]);
   });
   it('la capa lejana: solo cobre, hierro y piedra, todo en la tierra lejana, a su fracción de la densidad de la frontera', () => {
     expect(capa.length).toBeGreaterThan(0);
@@ -74,7 +71,6 @@ describe('recursos no metálicos', () => {
       expect(['agua', 'cima']).not.toContain(terreno(r.posicion));
       expect(sintetico.pendiente(r.posicion)).toBeLessThanOrEqual(P.pendienteMaxima);
       expect(sintetico.accesible(r.posicion)).toBe(true);
-      if (r.tipo === 'ganaderia') expect(terreno(r.posicion)).not.toBe('montana');
     }
   });
   it('el cobre y el hierro prefieren colina o montaña (el llano es el último recurso)', () => {
@@ -109,7 +105,7 @@ describe('recursos no metálicos', () => {
 });
 
 describe('cantidades iniciales', () => {
-  it('enteras y dentro del rango de su tipo, también la ganadería', () => {
+  it('enteras y dentro del rango de su tipo', () => {
     for (const r of recursos) {
       const { min, max } = RANGO_CANTIDAD[r.tipo], f = esCapaLejana(r) ? P.capaLejana.factorCantidad : 1;
       expect(Number.isInteger(r.cantidadInicial)).toBe(true);
@@ -122,7 +118,6 @@ describe('cantidades iniciales', () => {
     expect(Math.min(...piedras)).toBeLessThan(700);
     expect(Math.max(...piedras)).toBeGreaterThan(1100);
     expect(cantidadInicial('oro', 'oro-lejos-3', 7)).toBe(cantidadInicial('oro', 'oro-lejos-3', 7));
-    expect(RANGO_CANTIDAD.ganaderia).toEqual({ min: 10, max: 40 });
   });
 });
 

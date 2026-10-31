@@ -454,19 +454,10 @@ fn campamento_mas_cercano(m: &Mundo, p: Punto) -> u32 {
     (0..m.campamentos().len()).min_by_key(|&i| campamento(m, i).dist2(p)).unwrap() as u32
 }
 
-/// Un sitio verde con mucho bosque a 10 u del campamento `i`: una plaza que no cae en ruinas por falta de madera.
+/// Un sitio verde con mucho bosque junto al campamento `i`, con campo abierto al este ([`comun::real::sitio_rico`]): una plaza que no cae en ruinas por falta de
+/// madera y de la que se sale sin cruzar el anillo de bandidos del campamento.
 fn sitio_rico(n: &Nucleo, m: &Mundo, i: usize, faccion: u32) -> Punto {
-    let c = campamento(m, i);
-    for r in (0..8).map(|k| 50_000 + k * 10_000) {
-        for g in 0..360 {
-            let a = (g as f64).to_radians();
-            let p = Punto::new(c.x + (r as f64 * a.cos()) as i64, c.y + (r as f64 * a.sin()) as i64);
-            if n.viabilidad(p, faccion).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6) {
-                return p;
-            }
-        }
-    }
-    panic!("sin sitio rico cerca del campamento {i}");
+    comun::real::sitio_rico(n, m, i, faccion)
 }
 
 fn fundar(n: &mut Nucleo, t: Instante, nombre: &str, dueno: &str, faccion: u32, p: Punto) -> u64 {
@@ -1022,8 +1013,11 @@ fn sitio_junto_a(n: &Nucleo, m: &Mundo, c: Punto, r: i64) -> Option<Punto> {
 fn con_pueblo(m: &M, semilla: u64) -> (Esc, u64) {
     let mut n = Nucleo::nuevo(arranque(m, semilla));
     let mapa = nucleo::economia::Mapa::de(&m.0);
-    let (cobre, sitio) = (0..mapa.nodos.len())
-        .filter(|&i| mapa.nodos[i].tipo == Tipo::MinaCobre)
+    // El nodo más rico que tenga un sitio al lado: los de poca reserva se vacían en la primera hora y el pueblo no llega a la mitad de su almacén.
+    let mut ricos: Vec<usize> = (0..mapa.nodos.len()).filter(|&i| mapa.nodos[i].tipo == Tipo::MinaCobre).collect();
+    ricos.sort_by_key(|&i| std::cmp::Reverse(mapa.nodos[i].inicial));
+    let (cobre, sitio) = ricos
+        .into_iter()
         .find_map(|i| sitio_junto_a(&n, &m.0, mapa.nodos[i].pos, 6_000).map(|p| (i as u32, p)))
         .expect("hay un nodo de cobre junto a un sitio rico");
     let a = fundar(&mut n, 0, "m", "ana", 1, sitio);

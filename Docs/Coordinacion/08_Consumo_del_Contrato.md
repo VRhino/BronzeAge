@@ -78,14 +78,14 @@ CODIGO_REGISTRO_BOTS=<código de bots> ADMINISTRADORES=victor cargo run --releas
 | Variable | Qué | Por defecto |
 |---|---|---|
 | `BRONZEAGE_DIRECCION` | dónde escucha | `127.0.0.1:7878` |
-| `BRONZEAGE_MUNDO` | el artefacto de mundo, o una carpeta con un `mundo-*.bin` | `generador/salida/mundo` |
+| `BRONZEAGE_MUNDO` | el artefacto de mundo, o una carpeta con un `mundo-*.bin`; su paquete de relieve (`relieve-<hash>.bin`), si está al lado, también se sirve | `generador/salida/mundo` |
 | `BRONZEAGE_DATOS` | la carpeta de datos: `mundo/` (registro, fotos y crónica) y `acceso/` (cuentas y sesiones) | `datos` (ignorada por git) |
 | `BRONZEAGE_SEMILLA` | la semilla de la partida (solo cuenta al crearla) | `42` |
 | `CODIGO_REGISTRO` | código de invitación de las cuentas humanas; sin él, registro abierto | — |
 | `CODIGO_REGISTRO_BOTS` | código que marca la cuenta como bot; sin él, no se pueden crear bots | — |
 | `ADMINISTRADORES` | nicks de los administradores globales, separados por comas | — |
 
-El artefacto de mundo no está en git (`generador/salida/` se ignora): en un checkout nuevo se genera una vez con `node scripts/generar-mundo.mjs [semilla]` o con la tarea «generar-mundo» del panel (unos 15 minutos; instala las dependencias del generador si faltan). Sin él, el servidor no arranca y lo dice, y el panel deja apagado su botón.
+El artefacto de mundo no está en git (`generador/salida/` se ignora): en un checkout nuevo se genera una vez con `node scripts/generar-mundo.mjs [semilla]` o con la tarea «generar-mundo» del panel (unos dos minutos con 4 hilos; instala las dependencias del generador si faltan). Escribe el artefacto y, al lado, su paquete de relieve (`relieve-<hash>.bin`, 06 §8). Sin él, el servidor no arranca y lo dice, y el panel deja apagado su botón.
 
 Un reinicio con la misma carpeta y el mismo artefacto sigue la partida donde se quedó, y los tokens vigentes siguen valiendo. Ctrl+C para el proceso con su foto. Sin servidores de batalla: toda batalla se resuelve con números.
 
@@ -94,7 +94,7 @@ Un reinicio con la misma carpeta y el mismo artefacto sigue la partida donde se 
 1. `POST /v1/registro` con `{"nick", "clave", "codigo"}`. Respuesta `201 {"cuenta_id", "nick", "bot"}`. El nick se recorta y pasa a minúsculas. Con el código de bots, la cuenta es de bot. Errores (cuerpo `{"error", "mensaje"}`): `400 datos_invalidos`, `403 codigo_incorrecto`, `409 nick_repetido`.
 2. `POST /v1/sesiones` con `{"nick", "clave"}`. Respuesta `200 {"token", "cuenta_id", "nick", "bot", "expira_ms"}`, con `expira_ms` en ms de época (12 h, `ACCESO.duracionSesionMs`). Cada login da un token nuevo; `401 credenciales_invalidas` si no coincide.
 3. El WebSocket en `ws://<dirección>/` con `Hola.token = <token>` y el `Hola.cliente` que toque: una cuenta de bot solo abre `CLIENTE_BOT`, una humana `CLIENTE_UNITY` y un administrador también `CLIENTE_ADMIN_WEB`. Otro tipo da `ErrorSesion{rol_no_permitido}`; un token caducado o ajeno, `token_invalido`.
-4. El mapa: `Bienvenida.mundo.url_artefacto` es `/v1/mundo/<hash>`, una ruta relativa al servidor. `GET` en esa ruta devuelve el artefacto de mundo tal cual (`application/octet-stream`, contrato 06); con `Hola.mundo_hash_conocido` igual al vigente no hace falta bajarlo otra vez.
+4. El mapa: `Bienvenida.mundo.url_artefacto` es `/v1/mundo/<hash>`, una ruta relativa al servidor. `GET` en esa ruta devuelve el artefacto de mundo tal cual (`application/octet-stream`, contrato 06); con `Hola.mundo_hash_conocido` igual al vigente no hace falta bajarlo otra vez. Los clientes 3D bajan además el relieve fino: `Bienvenida.mundo.url_relieve` es `/v1/mundo/<hash>/relieve` y `hash_relieve`, su hash (`PaqueteRelieve`, 06 §8, unos 9 MB). Se baja una vez por mundo y se guarda por hash: si el que hay en disco tiene ese `hash_relieve`, no se baja otra vez. Si el servidor no tiene el paquete, las dos van vacías. Los bots y el admin web no lo necesitan.
 5. Las cifras de las reglas: `Bienvenida.mundo.url_datos_de_juego` es `/v1/datos/<versión>` (la versión, en `version_datos_de_juego`, es el SHA-256 del archivo; `GET /v1/datos` da el vigente). Es un JSON con `documentos` (cada bloque `<!-- parametros:NOMBRE -->` de `Docs/Mechanics`, ya parseado, por documento y nombre: `documentos.Fundacion_Y_Refundacion.FUNDACION`, por ejemplo), `reglas` (lo que no sale de un bloque: el territorio en milésimas de unidad, el aviso de víveres, la idempotencia y si las batallas van a Unity), `derivados` (lo que el núcleo calcula de varios bloques: `costo_caravana_fundacion` y `costo_refundacion`, por recurso en milésimas) y `huella_reglas`. Son las mismas cifras con las que juega el núcleo: un cliente no las copia a mano. Dónde está lo que más se usa, en la tabla de abajo.
 6. Opcional: `GET /v1/sesiones/actual` con `Authorization: sesion <token>` dice de quién es y cuándo caduca. `GET /salud` responde `ok`.
 
@@ -155,7 +155,7 @@ El núcleo atiende el respaldo entre dos órdenes y no hace nada más mientras c
 | `POST /api/partidas/<nombre>/respaldar` | `{ nota? }`: copia `mundo/` y `acceso/` en `respaldos/panel-<ms>/`. Si es la activa y está en marcha, para el servidor (con su foto), copia y lo vuelve a arrancar. `201` |
 | `POST /api/partidas/<nombre>/restaurar` | `{ respaldo: <id> }`: para el servidor si sirve esa partida, guarda lo de ahora como el respaldo `antes-de-restaurar-<ms>`, copia el respaldo encima y vuelve a arrancar |
 | `GET /api/mundo` | `{ generando, semilla, ultima: { semilla, codigo, fin_ms, artefacto }, artefactos }`: el admin lo consulta para saber cuándo terminó (código 0: bien) |
-| `POST /api/mundo` | `{ semilla }`: lanza la tarea «generar-mundo» con esa semilla (unos 15 min); `202`, o `409 ya_generando` |
+| `POST /api/mundo` | `{ semilla }`: lanza la tarea «generar-mundo» con esa semilla (unos 2 min); `202`, o `409 ya_generando` |
 | `DELETE /api/mundo/<archivo>` | Borra ese artefacto de mundo (el `archivo` o el `hash` de `artefactos`). `409 mundo_en_uso` (con `partidas`) si lo usa alguna partida: las que lo fijaron al crearse y, si es el más nuevo, las que usan «el último»; `409 ya_generando` mientras se genera uno. En el panel: botón «Borrar» en la lista de la sección Mundo |
 
 Las que arrancan el servidor contestan también `{ arrancado, aviso }`: si no pudo arrancar, `aviso` dice por qué (falta el artefacto de mundo, por ejemplo).

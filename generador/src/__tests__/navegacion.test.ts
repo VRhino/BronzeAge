@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Point } from '../tipos';
-import { componentes, construirGrafo, estadisticasGrafo, nodoMasCercano } from '../navegacion';
+import { componentes, construirGrafo, ESPACIADO_NAVEGACION, estadisticasGrafo, nodoMasCercano } from '../navegacion';
 
-const E = 96;
+const E = ESPACIADO_NAVEGACION;
 const lim = { ancho: 10 * E, alto: 8 * E };
 const llano = () => 1;
 const todo = () => true;
@@ -84,7 +84,7 @@ describe('construirGrafo', () => {
     expect(construirGrafo(lim, t, c, v)).toEqual(construirGrafo(lim, t, c, v));
   });
 
-  it('rendimiento: un mundo de ~83.000 nodos con transitabilidad sencilla tarda pocos segundos', () => {
+  it('rendimiento: un mundo de ~330.000 nodos con transitabilidad sencilla tarda pocos segundos', () => {
     const mundo = { ancho: 2667 * 12, alto: 2000 * 12 };
     const t0 = Date.now();
     const g = construirGrafo(mundo, p => (p.x * 0.0007) % 1 > 0.02, llano, []);
@@ -98,5 +98,18 @@ describe('construirGrafo', () => {
     const g = construirGrafo(lim, p => p.x < 3 * E, llano);
     expect(nodoMasCercano(g, { x: E / 2 + 5, y: E / 2 })?.id).toBe(0);
     expect(nodoMasCercano(g, { x: 9 * E, y: 4 * E })).toBeUndefined();
+  });
+
+  it('nodoMasCercano indexado devuelve el mismo nodo que la búsqueda lineal (incluidos empates y bordes)', () => {
+    const g = construirGrafo(lim, p => p.x < 7 * E && (p.x + p.y) % 5 !== 0, llano);
+    const lineal = (p: Point) => {
+      let mejor, d2 = g.espaciado * g.espaciado;
+      for (const n of g.nodos) { const d = (n.x - p.x) ** 2 + (n.y - p.y) ** 2; if (d <= d2) { d2 = d; mejor = n; } }
+      return mejor;
+    };
+    for (let y = -E; y <= lim.alto + E; y += 17) for (let x = -E; x <= lim.ancho + E; x += 23) {
+      expect(nodoMasCercano(g, { x, y })).toBe(lineal({ x, y }));
+    }
+    for (let y = 0; y <= lim.alto; y += E / 2) for (let x = 0; x <= lim.ancho; x += E / 2) expect(nodoMasCercano(g, { x, y })).toBe(lineal({ x, y }));
   });
 });

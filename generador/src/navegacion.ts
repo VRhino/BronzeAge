@@ -1,15 +1,18 @@
 import type { Point } from './tipos';
 import { FACTOR } from './campamentos';
-import type { Limites } from './colocacion';
+import type { Limites } from './geometria';
 import type { AristaGrafo, GrafoMundo, NodoGrafo } from './mundoTipos';
 
 /** Espaciado de la retícula: 8 unidades estratégicas (Doc 1, contrato de mundo §2). En unidades del generador. */
-export const ESPACIADO_NAVEGACION = 8 * FACTOR;
+export const ESPACIADO_NAVEGACION = 4 * FACTOR;
 /** Separación máxima entre muestras al comprobar un segmento (unidades del generador). */
 const PASO_MUESTREO = 30;
 
 export interface OpcionesGrafo {
   espaciado?: number;
+  /** Coste de la arista como la media de sus dos extremos, sin muestrear el punto medio (con el espaciado de una celda,
+   * el punto medio cae en el borde entre dos celdas y no añade información). */
+  costePorExtremos?: boolean;
   /** Distancia máxima de un vado al segmento de una arista para marcarla como vado. Por defecto, medio espaciado. */
   radioVado?: number;
 }
@@ -26,11 +29,11 @@ function distanciaASegmento(p: Point, a: Point, b: Point): number {
 /**
  * Grafo de navegación (`GrafoMundo`): la única autoridad de rutas.
  *
- * - Nodos: retícula de `espaciado` (por defecto 96 = 8 estratégicas) con el primer nodo a medio espaciado del borde, sobre
+ * - Nodos: retícula de `espaciado` (por defecto 48 = 4 estratégicas) con el primer nodo a medio espaciado del borde, sobre
  *   los puntos donde `transitable` es cierto. Ids consecutivos desde 0 en orden fila-mayor (y, luego x): estables.
  * - Aristas: vecinos en 8 direcciones, solo si TODO el segmento es transitable (muestreo cada <= 30 unidades).
  * - `costeMilesimas` = coste medio de movimiento a lo largo del segmento (1000 = llano; `coste` se evalúa en los dos nodos y en el
- *   punto medio, y se integra por Simpson) multiplicado por la longitud relativa: las diagonales cuestan √2 (1414 en llano). Así la suma de costes de
+ *   punto medio, y se integra por Simpson; con `costePorExtremos`, la media de los dos nodos) multiplicado por la longitud relativa: las diagonales cuestan √2 (1414 en llano). Así la suma de costes de
  *   una ruta es proporcional a su tiempo real de marcha (el coste de una arista = velocidad inversa × distancia en
  *   unidades de espaciado) y A* no prefiere zigzaguear en diagonal.
  * - `vado`: la arista pasa a menos de `radioVado` de algún punto de `vados`. La transitabilidad la decide solo
@@ -96,8 +99,8 @@ export function construirGrafo(
       for (let i = 1; i < tramos && libre; i++) libre = transitable({ x: pa.x + (pb.x - pa.x) * i / tramos, y: pa.y + (pb.y - pa.y) * i / tramos });
       if (!libre) continue;
       // Coste medio por Simpson (extremos en caché + 1 muestra en el punto medio): exacto hasta tercer grado.
-      const medio = coste({ x: (pa.x + pb.x) / 2, y: (pa.y + pb.y) / 2 });
-      const medioCoste = (costeNodo[a]! + 4 * medio + costeNodo[b]!) / 6;
+      const medioCoste = opciones.costePorExtremos ? (costeNodo[a]! + costeNodo[b]!) / 2
+        : (costeNodo[a]! + 4 * coste({ x: (pa.x + pb.x) / 2, y: (pa.y + pb.y) / 2 }) + costeNodo[b]!) / 6;
       const costeMilesimas = Math.max(1, Math.round(1000 * medioCoste * (largo / espaciado)));
       aristas.push({ a, b, costeMilesimas, vado: esVado(pa, pb) });
     }
@@ -156,9 +159,29 @@ export function estadisticasGrafo(grafo: GrafoMundo, comp: Componentes = compone
   };
 }
 
-/** Nodo de la retícula más cercano a `p` (o undefined si no hay ninguno a menos de un espaciado). Búsqueda lineal: solo para mediciones. */
+/** Índice por celda de `espaciado` (clave numérica → posiciones en `grafo.nodos`, en orden), uno por grafo. */
+const indicesDeNodos = new WeakMap<GrafoMundo, Map<number, number[]>>();
+const claveCelda = (cx: number, cy: number) => cy * 1048576 + cx;
+
+/** Nodo de la retícula más cercano a `p` (o undefined si no hay ninguno a menos de un espaciado).
+ * Mira solo las celdas vecinas (a ±2 por si el redondeo de la división mueve un nodo del borde; un nodo a un espaciado o menos cae en ±1) y recorre los candidatos en el orden
+ * de `grafo.nodos` con la misma comparación `<=` que la búsqueda lineal, así que devuelve exactamente el mismo nodo. */
 export function nodoMasCercano(grafo: GrafoMundo, p: Point): NodoGrafo | undefined {
+  let indice = indicesDeNodos.get(grafo);
+  if (!indice) {
+    indice = new Map();
+    grafo.nodos.forEach((n, k) => {
+      const c = claveCelda(Math.floor(n.x / grafo.espaciado), Math.floor(n.y / grafo.espaciado));
+      const lista = indice!.get(c);
+      if (lista) lista.push(k); else indice!.set(c, [k]);
+    });
+    indicesDeNodos.set(grafo, indice);
+  }
+  const cx = Math.floor(p.x / grafo.espaciado), cy = Math.floor(p.y / grafo.espaciado);
+  const candidatos: number[] = [];
+  for (let y = cy - 2; y <= cy + 2; y++) for (let x = cx - 2; x <= cx + 2; x++) candidatos.push(...indice.get(claveCelda(x, y)) ?? []);
+  candidatos.sort((a, b) => a - b);
   let mejor: NodoGrafo | undefined, d2 = grafo.espaciado * grafo.espaciado;
-  for (const n of grafo.nodos) { const d = (n.x - p.x) ** 2 + (n.y - p.y) ** 2; if (d <= d2) { d2 = d; mejor = n; } }
+  for (const k of candidatos) { const n = grafo.nodos[k]!, d = (n.x - p.x) ** 2 + (n.y - p.y) ** 2; if (d <= d2) { d2 = d; mejor = n; } }
   return mejor;
 }

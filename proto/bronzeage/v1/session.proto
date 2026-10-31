@@ -141,6 +141,9 @@ message InfoMundo {
   uint32 version_catalogo_tropas = 6;
   string version_datos_de_juego = 7;     // archivo común de datos de juego
   string url_datos_de_juego = 8;         // dónde descargarlo (por versión); en el servidor Rust, `/v1/datos/<versión>`, relativa al servidor (fase 7)
+  string url_relieve = 9;                // dónde descargar el paquete de relieve (PaqueteRelieve, 06 §8); en el servidor Rust,
+                                         // `/v1/mundo/<hash>/relieve`, relativa al servidor. Vacía si el servidor no lo tiene
+  string hash_relieve = 10;              // su hash: con él en disco no hace falta bajarlo otra vez (una vez por mundo, como el artefacto)
 }
 
 message Bienvenida {

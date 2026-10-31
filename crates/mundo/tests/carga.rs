@@ -40,7 +40,7 @@ fn raster(encoding: EncodingRaster, crudo: &[u8]) -> Raster {
 fn sellar(a: &mut ArtefactoDeMundo) -> Vec<u8> {
     let capas = [
         ("altura", &a.altura), ("terreno", &a.terreno), ("fertilidad", &a.fertilidad), ("humedad", &a.humedad),
-        ("densidad_bosque", &a.densidad_bosque), ("anillos", &a.anillos), ("transitable", &a.transitable),
+        ("densidad_bosque", &a.densidad_bosque), ("anillos", &a.anillos), ("transitable", &a.transitable), ("coste", &a.coste),
     ];
     let declaradas = capas
         .iter()
@@ -181,6 +181,39 @@ fn el_mundo_valido_carga_y_responde_consultas() {
     assert_eq!(m.altura_en(8000, 0), Some(2)); // celda 2 de la fila 0
     assert_eq!((m.nodos().len(), m.parcelas().len(), m.campamentos().len(), m.alijos().len()), (31, 9, 2, 1));
     assert_eq!(m.navegacion().aristas.len(), 2);
+}
+
+/// Capa `coste` coherente con `transitable`: 1000 + la columna módulo 7 en las celdas transitables, 0 en las demás.
+fn con_coste(a: &mut ArtefactoDeMundo) {
+    let t = zstd::bulk::decompress(&a.transitable.as_ref().unwrap().datos, (COLS * FILAS).div_ceil(8)).unwrap();
+    let coste: Vec<u8> = (0..COLS * FILAS)
+        .flat_map(|i| (if t[i >> 3] >> (i & 7) & 1 == 1 { 1000 + (i % COLS % 7) as u16 } else { 0 }).to_le_bytes())
+        .collect();
+    a.coste = Some(raster(EncodingRaster::EncodingU16Le, &coste));
+}
+
+#[test]
+fn la_capa_coste_es_opcional_y_se_consulta() {
+    let sin = cargar_con(|_| {}).unwrap();
+    assert!(!sin.tiene_coste());
+    assert_eq!(sin.coste_en(TIERRA.0, TIERRA.1), None);
+    let con = cargar_con(con_coste).unwrap();
+    assert!(con.tiene_coste());
+    assert_eq!(con.coste_en(TIERRA.0, TIERRA.1), Some(1000 + (TIERRA.0 / 4000 % 7) as u16));
+    assert_eq!(con.coste_en(LAGO.0 + 10, LAGO.2 + 10), Some(0));
+    assert_eq!(con.coste_en(-1, 0), None);
+}
+
+#[test]
+fn coste_incoherente_con_la_transitabilidad() {
+    let e = error_de(|a| {
+        con_coste(a);
+        // La primera celda (transitable) a 0.
+        let mut c = zstd::bulk::decompress(&a.coste.as_ref().unwrap().datos, 2 * COLS * FILAS).unwrap();
+        (c[0], c[1]) = (0, 0);
+        a.coste = Some(raster(EncodingRaster::EncodingU16Le, &c));
+    });
+    assert_eq!(e, ErrorMundo::CosteIncoherente { celda: (0, 0), coste: 0, transitable: true });
 }
 
 #[test]

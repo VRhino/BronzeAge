@@ -101,7 +101,8 @@ export function generarParcelas(
       const parcela: ParcelaBosque = { id: `parcela-${parcelas.length}`, masaId, centro: p, densidad: dens[i]!, anillo: a };
       propias.push(parcela); parcelas.push(parcela);
       const k = `${Math.floor(p.x / sep)},${Math.floor(p.y / sep)}`;
-      hash.set(k, [...(hash.get(k) ?? []), parcela]);
+      const enCelda = hash.get(k);
+      if (enCelda) enCelda.push(parcela); else hash.set(k, [parcela]);
     }
     if (!propias.length) continue; // pegada a otra masa y sin sitio propio
     const area = c.length * lado ** 2; // unidades del generador²
