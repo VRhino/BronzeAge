@@ -34,7 +34,7 @@ export function puntuarCampamento(r: Relieve, p: Point): number {
   return fertilidad >= 0.35 && bosque >= 0.15 ? fertilidad + 0.5 * bosque : 0;
 }
 
-/** Sitios aptos para metal: colina o montaña, transitables y con acceso. La geología solo pesa en la preferencia. */
+/** Sitios aptos para metal: colina, montaña o cima llana (2026-10-31), transitables y con acceso. La geología solo pesa en la preferencia. */
 export function sitiosDeMetal(r: Relieve, paso = 120): Sitio[] {
   const rng = createRng(derivarSeed(r.config.seed, 'sitios-metal-1'));
   const sitios: Sitio[] = [];
@@ -42,7 +42,7 @@ export function sitiosDeMetal(r: Relieve, paso = 120): Sitio[] {
     const p = { x: x + (rng() - 0.5) * paso * 0.7, y: y + (rng() - 0.5) * paso * 0.7 };
     const altura = evaluarElevacion(r.elevacion, p);
     const terreno = evaluarTerreno(r.elevacion, p, altura);
-    if (terreno !== 'colina' && terreno !== 'montana') continue;
+    if (terreno !== 'colina' && terreno !== 'montana' && terreno !== 'cima') continue;
     const g = gradienteElevacion(r.elevacion, p, 2);
     if (Math.hypot(g.dx, g.dy) * 1000 > 0.35 || !esTransitable(r.elevacion, p, altura) || !r.conexion.tieneAcceso(p)) continue;
     const geologia = evaluarRuido(r.suelos.geologia, p);
