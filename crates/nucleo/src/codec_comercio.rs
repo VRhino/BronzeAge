@@ -692,3 +692,96 @@ pub(crate) fn leer(r: &mut Lector, reglas: &Reglas, con_rutas_acarreo: bool, con
     }
     Ok(c)
 }
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+    use asentamiento::Recurso;
+    use base::Punto;
+
+    /// Un estado de comercio con una sola caravana.
+    fn estado_con(c: Caravana) -> EstadoComercio {
+        EstadoComercio { flota: vec![c], ..EstadoComercio::default() }
+    }
+
+    fn bytes_de(c: &EstadoComercio) -> Vec<u8> {
+        let mut w = Escritor::default();
+        escribir(&mut w, c);
+        w.0
+    }
+
+    /// Un envío a medio ciclo con todos los campos del encargo en uso: hora de salida, las dos paradas con líneas de recoger y de dejar (con y sin tope, con y sin precio) y los dos
+    /// interruptores, una vuelta hecha, esperando en el destino mientras carga, con su fin de paso y cancelado.
+    fn encargo_completo() -> Encargo {
+        let linea_recoger = |recurso, cantidad, precio_max| LineaRecoger { recurso, cantidad, precio_max };
+        let linea_dejar = |recurso, tope, precio_min| LineaDejar { recurso, tope, precio_min };
+        Encargo {
+            modo: Modo::Envio,
+            destino: 7,
+            salir_en: Some(90_000),
+            en_origen: Parada {
+                recoger: vec![linea_recoger(Recurso::Cobre, 50_000, None), linea_recoger(Recurso::Estano, 20_000, Some(3_000_000))],
+                esperar_existencias: true,
+                dejar: vec![linea_dejar(Recurso::Madera, None, None), linea_dejar(Recurso::Cobre, Some(10_000), Some(1_000_000))],
+                desechar_sobrante: false,
+            },
+            en_destino: Parada {
+                recoger: vec![linea_recoger(Recurso::Estano, 5_000, Some(2_000_000))],
+                esperar_existencias: false,
+                dejar: vec![linea_dejar(Recurso::Estano, Some(1_000), None), linea_dejar(Recurso::Cobre, None, Some(500_000))],
+                desechar_sobrante: true,
+            },
+            vueltas: 1,
+            punta: Punta::Destino,
+            fase: Fase::Carga,
+            fin_paso: Some(123_456),
+            cancelado: true,
+        }
+    }
+
+    fn caravana(encargo: Option<Encargo>) -> Caravana {
+        Caravana { encargo, ..Caravana::nueva(3, 1, Punto::new(10, 20)) }
+    }
+
+    #[test]
+    fn un_encargo_completo_da_ida_y_vuelta_campo_a_campo() {
+        let original = estado_con(caravana(Some(encargo_completo())));
+        let bytes = bytes_de(&original);
+        let mut r = Lector::nuevo(&bytes);
+        let leido = leer(&mut r, &comercio::Reglas::cargar(), true, true).unwrap();
+        r.fin().unwrap();
+        let (esperado, e) = (encargo_completo(), leido.flota[0].encargo.as_ref().expect("la caravana conserva el encargo"));
+        assert_eq!((e.modo, e.destino, e.salir_en), (esperado.modo, esperado.destino, esperado.salir_en));
+        assert_eq!((&e.en_origen, &e.en_destino), (&esperado.en_origen, &esperado.en_destino));
+        assert_eq!((e.vueltas, e.punta, e.fase, e.fin_paso, e.cancelado), (1, Punta::Destino, Fase::Carga, Some(123_456), true));
+        assert_eq!(leido.flota[0], original.flota[0]);
+        assert_eq!(bytes_de(&leido), bytes, "guardarla de nuevo da los mismos bytes");
+    }
+
+    #[test]
+    fn una_caravana_sin_encargo_da_ida_y_vuelta_sin_encargo() {
+        let original = estado_con(caravana(None));
+        let bytes = bytes_de(&original);
+        let leido = leer(&mut Lector::nuevo(&bytes), &comercio::Reglas::cargar(), true, true).unwrap();
+        assert_eq!(leido.flota[0].encargo, None);
+        assert_eq!(leido.flota[0], original.flota[0]);
+    }
+
+    #[test]
+    fn una_foto_ban51_se_lee_con_las_caravanas_sin_encargo() {
+        // Una foto BAN51 es la BAN52 sin la marca de encargo con que acaba cada caravana.
+        let original = estado_con(caravana(None));
+        let bytes = bytes_de(&original);
+        let mut w = Escritor::default();
+        caravana_escribir(&mut w, &original.flota[0]);
+        let inicio = bytes.windows(w.0.len()).position(|x| x == w.0).expect("la caravana está en el estado");
+        let marca = inicio + w.0.len() - 1;
+        assert_eq!(bytes[marca], 0, "la marca de «sin encargo» es el último byte de la caravana");
+        let vieja = [&bytes[..marca], &bytes[marca + 1..]].concat();
+        let mut r = Lector::nuevo(&vieja);
+        let leido = leer(&mut r, &comercio::Reglas::cargar(), true, false).unwrap();
+        r.fin().unwrap();
+        assert_eq!(leido.flota[0], original.flota[0]);
+        assert_eq!(bytes_de(&leido), bytes, "al guardarla de nuevo es la BAN52 de siempre");
+    }
+}
