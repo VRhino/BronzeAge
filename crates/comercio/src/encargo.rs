@@ -4,9 +4,9 @@
 //!
 //! Aquí están los datos del encargo y su validación; la caravana lo guarda en [`crate::caravana::Caravana::encargo`] y el núcleo programa sus pasos.
 
-use crate::tipos::AsentamientoId;
-use asentamiento::Recurso;
-use base::{Instante, Mil, UNIDAD};
+use crate::tipos::{de, sumar, total, AsentamientoId, Carga};
+use asentamiento::{Almacen, Recurso};
+use base::{entero, Instante, Mil, UNIDAD};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Modo {
@@ -160,6 +160,63 @@ fn con_precios(p: &Parada) -> bool {
     p.recoger.iter().map(|l| l.precio_max).chain(p.dejar.iter().map(|l| l.precio_min)).all(|x| x.is_some_and(|x| x > 0))
 }
 
+/// Lo que una descarga en plaza propia mete en el almacén y lo que tira.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Reparto {
+    pub entra: Carga,
+    pub tirado: Carga,
+}
+
+/// Qué entra al almacén al dejar (rutas de caravanas §4, fila «Entrega»; `Comercio_Caravanas.md` §5.8). Por línea, en su orden: se quiere dejar el `tope` (o todo lo que lleva
+/// si no hay) sin pasar de lo que lleva; entra lo que cabe en el almacén, en unidades enteras; el resto se tira con `desechar` y, si no, sigue a bordo. No muta nada.
+pub fn repartir_descarga(a_bordo: &Carga, dejar: &[LineaDejar], desechar: bool, almacen: &Almacen) -> Reparto {
+    let mut reparto = Reparto::default();
+    for l in dejar {
+        let lleva = de(a_bordo, l.recurso);
+        let quiere = entero(l.tope.map_or(lleva, |t| t.min(lleva)));
+        let entra = entero(quiere.min(almacen.espacio(l.recurso)));
+        sumar(&mut reparto.entra, l.recurso, entra);
+        if desechar {
+            sumar(&mut reparto.tirado, l.recurso, quiere - entra);
+        }
+    }
+    reparto
+}
+
+/// Qué se toma del almacén al recoger (rutas de caravanas §4, fila «Carga»; `Comercio_Caravanas.md` §5.8). Se pide la parte entera de cada cantidad. Con `esperar` y
+/// algo que falta, `Err` con lo que falta de cada línea y no se toma nada. Si no, por línea, en su orden, se toma lo pedido, topado por lo que hay y por el hueco de la caravana
+/// (`capacidad` menos lo que lleva y lo ya tomado). No muta nada.
+pub fn a_recoger(a_bordo: &Carga, recoger: &[LineaRecoger], esperar: bool, capacidad: Mil, almacen: &Almacen) -> Result<Carga, Carga> {
+    if esperar {
+        let mut falta = Carga::new();
+        for l in recoger {
+            sumar(&mut falta, l.recurso, entero(l.cantidad) - almacen.cantidad(l.recurso));
+        }
+        if !falta.is_empty() {
+            return Err(falta);
+        }
+    }
+    let mut hueco = (capacidad - total(a_bordo)).max(0);
+    let mut toma = Carga::new();
+    for l in recoger {
+        let n = entero(entero(l.cantidad).min(almacen.cantidad(l.recurso)).min(hueco));
+        sumar(&mut toma, l.recurso, n);
+        hueco -= n;
+    }
+    Ok(toma)
+}
+
+/// Carros que cuentan para el tiempo de un paso (rutas de caravanas §4; `Comercio_Caravanas.md` §5.8): los que harían falta para mover `movido`, entre 1 y los carros con
+/// animal; 0 si no se mueve nada o la capacidad es nula.
+pub fn carros_del_paso(movido: Mil, capacidad: Mil, carros_con_animal: usize) -> u32 {
+    if movido <= 0 || capacidad <= 0 {
+        return 0;
+    }
+    let carros = carros_con_animal as i128;
+    let necesarios = (movido as i128 * carros + capacidad as i128 - 1) / capacidad as i128;
+    necesarios.clamp(1, carros) as u32
+}
+
 #[cfg(test)]
 mod pruebas {
     use super::*;
@@ -265,5 +322,119 @@ mod pruebas {
         let pasado = parada(vec![recoger(Recurso::Madera, 300_000, None), recoger(Recurso::Piedra, 201_000, None)], vec![]);
         assert_eq!(ruta(pasado.clone(), Parada::default()).validar(&c), Err(ErrorEncargo::SuperaCapacidad));
         assert_eq!(ruta(Parada::default(), pasado).validar(&c), Err(ErrorEncargo::SuperaCapacidad));
+    }
+
+    fn carga(l: &[(Recurso, Mil)]) -> Carga {
+        l.iter().copied().collect()
+    }
+
+    fn almacen(capacidad: Mil, l: &[(Recurso, Mil)]) -> Almacen {
+        let mut a = Almacen::nuevo(capacidad);
+        for &(r, n) in l {
+            a.poner(r, n);
+        }
+        a
+    }
+
+    #[test]
+    fn dejar_con_tope_deja_el_tope_y_sin_tope_todo_lo_que_lleva() {
+        let a_bordo = carga(&[(Recurso::Madera, 80_000), (Recurso::Piedra, 30_000)]);
+        let lineas = [dejar(Recurso::Madera, Some(50_000), None), dejar(Recurso::Piedra, None, None)];
+        let r = repartir_descarga(&a_bordo, &lineas, false, &almacen(1_000_000, &[]));
+        assert_eq!(r, Reparto { entra: carga(&[(Recurso::Madera, 50_000), (Recurso::Piedra, 30_000)]), tirado: Carga::new() });
+    }
+
+    #[test]
+    fn dejar_un_tope_mayor_que_lo_que_lleva_deja_solo_lo_que_lleva() {
+        let a_bordo = carga(&[(Recurso::Madera, 20_000)]);
+        let r = repartir_descarga(&a_bordo, &[dejar(Recurso::Madera, Some(50_000), None)], true, &almacen(1_000_000, &[]));
+        assert_eq!(r, Reparto { entra: carga(&[(Recurso::Madera, 20_000)]), tirado: Carga::new() });
+    }
+
+    #[test]
+    fn lo_que_no_cabe_se_tira_con_desechar_y_se_queda_a_bordo_sin_el() {
+        let a_bordo = carga(&[(Recurso::Madera, 80_000)]);
+        let lleno = almacen(100_000, &[(Recurso::Madera, 70_000)]);
+        let lineas = [dejar(Recurso::Madera, None, None)];
+        let con = repartir_descarga(&a_bordo, &lineas, true, &lleno);
+        assert_eq!(con, Reparto { entra: carga(&[(Recurso::Madera, 30_000)]), tirado: carga(&[(Recurso::Madera, 50_000)]) });
+        let sin = repartir_descarga(&a_bordo, &lineas, false, &lleno);
+        assert_eq!(sin, Reparto { entra: carga(&[(Recurso::Madera, 30_000)]), tirado: Carga::new() });
+    }
+
+    #[test]
+    fn dejar_un_recurso_que_no_lleva_no_hace_nada() {
+        let a_bordo = carga(&[(Recurso::Madera, 10_000)]);
+        let r = repartir_descarga(&a_bordo, &[dejar(Recurso::Piedra, None, None), dejar(Recurso::Trigo, Some(5_000), None)], true, &almacen(1_000_000, &[]));
+        assert_eq!(r, Reparto::default());
+    }
+
+    #[test]
+    fn dejar_en_un_almacen_sin_espacio_no_mete_nada() {
+        let a_bordo = carga(&[(Recurso::Madera, 10_000)]);
+        let r = repartir_descarga(&a_bordo, &[dejar(Recurso::Madera, None, None)], false, &almacen(50_000, &[(Recurso::Madera, 50_000)]));
+        assert_eq!(r, Reparto::default());
+    }
+
+    #[test]
+    fn recoger_con_todo_toma_lo_pedido() {
+        let alm = almacen(1_000_000, &[(Recurso::Madera, 300_000), (Recurso::Piedra, 300_000)]);
+        let lineas = [recoger(Recurso::Madera, 100_000, None), recoger(Recurso::Piedra, 50_000, None)];
+        assert_eq!(a_recoger(&Carga::new(), &lineas, false, 500_000, &alm), Ok(carga(&[(Recurso::Madera, 100_000), (Recurso::Piedra, 50_000)])));
+        assert_eq!(a_recoger(&Carga::new(), &lineas, true, 500_000, &alm), Ok(carga(&[(Recurso::Madera, 100_000), (Recurso::Piedra, 50_000)])));
+    }
+
+    #[test]
+    fn recoger_con_el_almacen_corto_sin_esperar_toma_lo_que_hay() {
+        let alm = almacen(1_000_000, &[(Recurso::Madera, 30_000)]);
+        let lineas = [recoger(Recurso::Madera, 100_000, None), recoger(Recurso::Piedra, 50_000, None)];
+        assert_eq!(a_recoger(&Carga::new(), &lineas, false, 500_000, &alm), Ok(carga(&[(Recurso::Madera, 30_000)])));
+    }
+
+    #[test]
+    fn recoger_con_el_almacen_corto_esperando_da_lo_que_falta_y_no_toma_nada() {
+        let alm = almacen(1_000_000, &[(Recurso::Madera, 30_000), (Recurso::Trigo, 90_000)]);
+        let lineas = [recoger(Recurso::Madera, 100_000, None), recoger(Recurso::Piedra, 50_000, None), recoger(Recurso::Trigo, 90_000, None)];
+        assert_eq!(a_recoger(&Carga::new(), &lineas, true, 500_000, &alm), Err(carga(&[(Recurso::Madera, 70_000), (Recurso::Piedra, 50_000)])));
+    }
+
+    #[test]
+    fn recoger_se_topa_por_el_hueco_con_carga_previa_a_bordo() {
+        let alm = almacen(1_000_000, &[(Recurso::Madera, 300_000), (Recurso::Piedra, 300_000)]);
+        let a_bordo = carga(&[(Recurso::Trigo, 120_000)]);
+        let lineas = [recoger(Recurso::Madera, 100_000, None), recoger(Recurso::Piedra, 100_000, None)];
+        assert_eq!(a_recoger(&a_bordo, &lineas, false, 200_000, &alm), Ok(carga(&[(Recurso::Madera, 80_000)])));
+    }
+
+    #[test]
+    fn recoger_con_la_caravana_llena_no_toma_nada() {
+        let alm = almacen(1_000_000, &[(Recurso::Madera, 300_000)]);
+        let a_bordo = carga(&[(Recurso::Trigo, 250_000)]);
+        assert_eq!(a_recoger(&a_bordo, &[recoger(Recurso::Madera, 100_000, None)], false, 200_000, &alm), Ok(Carga::new()));
+    }
+
+    #[test]
+    fn recoger_y_dejar_trabajan_en_unidades_enteras() {
+        let alm = almacen(1_000_000, &[(Recurso::Madera, 30_900), (Recurso::Piedra, 50_000)]);
+        let lineas = [recoger(Recurso::Madera, 100_000, None), recoger(Recurso::Piedra, 20_700, None)];
+        assert_eq!(a_recoger(&Carga::new(), &lineas, false, 500_000, &alm), Ok(carga(&[(Recurso::Madera, 30_000), (Recurso::Piedra, 20_000)])));
+        let a_bordo = carga(&[(Recurso::Madera, 10_900)]);
+        let r = repartir_descarga(&a_bordo, &[dejar(Recurso::Madera, None, None)], true, &almacen(1_000_000, &[]));
+        assert_eq!(r.entra, carga(&[(Recurso::Madera, 10_000)]));
+    }
+
+    #[test]
+    fn los_carros_del_paso_son_cero_si_no_se_mueve_nada() {
+        assert_eq!(carros_del_paso(0, 500_000, 4), 0);
+        assert_eq!(carros_del_paso(-1_000, 500_000, 4), 0);
+        assert_eq!(carros_del_paso(100_000, 0, 4), 0);
+    }
+
+    #[test]
+    fn los_carros_del_paso_se_redondean_hacia_arriba_y_se_topan() {
+        assert_eq!(carros_del_paso(1_000, 400_000, 4), 1, "poco: un carro");
+        assert_eq!(carros_del_paso(200_000, 400_000, 4), 2, "la mitad");
+        assert_eq!(carros_del_paso(400_000, 400_000, 4), 4, "todo");
+        assert_eq!(carros_del_paso(900_000, 400_000, 4), 4, "más que la capacidad: topado a los carros");
     }
 }
