@@ -169,7 +169,7 @@ impl Esc {
     fn ejercito(&mut self, cuenta: &str, faccion: u32, tropas: &[Tropa], controlador: Controlador) -> (u64, u64) {
         let p = self.pos(self.b);
         let t = self.n.ahora();
-        let col = self.n.crear_ejercito(t, cuenta, faccion, Punto::new(p.x + 2_000, p.y), 500, 350_000).unwrap();
+        let col = self.n.crear_ejercito(t, cuenta, faccion, Punto::new(p.x + 1_000, p.y), 500, 350_000).unwrap();
         let h = self.n.ejercito(col).unwrap().columna.lider;
         for &tropa in tropas {
             self.ok("admin", Comando::DarEscuadra { heroe: h, tropa, cantidad: completa(tropa) });

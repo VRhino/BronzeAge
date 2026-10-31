@@ -54,7 +54,7 @@ fn tocado_en(n: &Nucleo, v: u64, clase: Clase, id: u64) -> bool {
 fn un_combate_con_hambre_y_heridas_no_cambia_nada_sin_dejarlo_en_el_registro() {
     let mut n = auditado();
     let ana = columna(&mut n, "ana", 1, c(10, 2), 350_000);
-    let beto = columna(&mut n, "beto", 2, Punto::new(c(10, 2).x + 2_000, c(10, 2).y), 3_000);
+    let beto = columna(&mut n, "beto", 2, Punto::new(c(10, 2).x + 1_000, c(10, 2).y), 3_000);
     let gus = columna(&mut n, "gus", 3, c(30, 2), 100);
     let fuerte = dar(&mut n, "d1", ana.1, Tropa::EspadachinesBronce);
     let debil = dar(&mut n, "d2", beto.1, Tropa::MiliciaLanceros);

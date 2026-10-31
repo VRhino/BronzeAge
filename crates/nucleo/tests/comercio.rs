@@ -1012,7 +1012,7 @@ fn la_conquista_pasa_la_flota_anula_los_trueques_devuelve_las_caravanas_y_destru
     // La conquista de verdad: el ejército de Gus (F2) asedia la plaza A, que no tiene a nadie que la defienda, y cae sin combate (Combate §6).
     let ahora = e.n.ahora();
     let p = e.n.estado().asentamientos[&a].posicion;
-    let gus = e.n.crear_ejercito(ahora, "gus", 2, Punto::new(p.x + 2_000, p.y), 500, 100_000).unwrap();
+    let gus = e.n.crear_ejercito(ahora, "gus", 2, Punto::new(p.x + 1_000, p.y), 500, 100_000).unwrap();
     let heroe_gus = e.n.ejercito(gus).unwrap().columna.lider;
     let arqueros = militar::catalogo::Tropa::ArquerosCompuesto;
     e.ok("admin", Comando::DarEscuadra { heroe: heroe_gus, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });

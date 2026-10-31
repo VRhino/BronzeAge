@@ -33,7 +33,8 @@
       ],
       "cwd": "../BronceAgeBotsBrain",
       "env": {
-        "CODIGO_REGISTRO_BOTS": "dev-bots"
+        "CODIGO_REGISTRO_BOTS": "dev-bots",
+        "BOTS_TOKEN": "dev-bots-control"
       },
       "port": 4000
     },

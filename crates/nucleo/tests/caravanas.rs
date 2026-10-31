@@ -721,7 +721,7 @@ fn la_conquista_pasa_la_flota_hace_volver_a_las_que_iban_y_destruye_la_aparcada(
     let donde = e.n.posicion_de_caravana(cb, ahora + 30_000).unwrap();
     // La conquista de verdad: el ejército de Gus (F2) asedia la plaza A, que no tiene a nadie que la defienda, y cae sin combate.
     let p = pos(&e.n, a);
-    let gus = e.n.crear_ejercito(ahora, "gus", 2, Punto::new(p.x + 2_000, p.y), 500, 100_000).unwrap();
+    let gus = e.n.crear_ejercito(ahora, "gus", 2, Punto::new(p.x + 1_000, p.y), 500, 100_000).unwrap();
     let heroe_gus = e.n.ejercito(gus).unwrap().columna.lider;
     let arqueros = militar::catalogo::Tropa::ArquerosCompuesto;
     e.ok("admin", Comando::DarEscuadra { heroe: heroe_gus, tropa: arqueros, cantidad: militar::Reglas::cargar().tropas.tropa(arqueros).unidades });
@@ -991,6 +991,19 @@ fn una_caravana_adjunta_viaja_con_la_columna_a_su_paso_y_entrega_a_la_puerta_del
     e.ok("ana", adjuntar(col));
     assert_eq!(e.caravana_de(c).estado, EstadoCaravana::Adjunta);
     assert_eq!(e.n.estado().ejercitos[&col].caravanas_adjuntas, vec![c]);
+    // La Facción de beto, que la ve, sabe qué caravanas lleva la columna (decisión del autor del 2026-10-31) y recibe la caravana avistada para dibujarla detrás.
+    {
+        use contrato::v1::{entidad::Cuerpo, TipoEntidad};
+        use nucleo::proyeccion::{ids, vista::{Mirada, Perspectiva}};
+        let mirada = Mirada::de(&e.n, Perspectiva::Faccion(2));
+        let todo = vision::Rect { min: Punto::new(0, 0), max: Punto::new(2_667_000, 2_000_000) };
+        let contenido = mirada.contenido(None, todo, &std::collections::BTreeMap::new());
+        let cuerpo = |tipo: TipoEntidad, id: String| contenido.iter().find(|v| v.clave == (tipo as i32, id.clone())).and_then(|v| v.cuerpo());
+        let Some(Cuerpo::Ejercito(av)) = cuerpo(TipoEntidad::Ejercito, ids::ejercito(col)) else { panic!("beto ve la columna de ana") };
+        assert!(av.escuadron_ids.is_empty() && av.suministro.is_none(), "sigue redactada: {av:?}");
+        assert_eq!(av.caravanas_adjuntas_ids, vec![ids::caravana(c)]);
+        assert!(matches!(cuerpo(TipoEntidad::Caravana, ids::caravana(c)), Some(Cuerpo::Caravana(k)) if k.escoltada), "y la caravana, avistada");
+    }
     assert_eq!(e.rechazada("ana", adjuntar(sola)), rechazos::CARAVANA_ESTADO_INVALIDO, "ya va enganchada");
     // Aparcarla en la plaza, cargarla contra su almacén y volver a engancharla.
     assert_eq!(e.rechazada("ana", Comando::AparcarCaravana { caravana: c, asentamiento: a }), rechazos::CARAVANA_SOLTAR_SOLO_DENTRO, "a la puerta se está fuera (5G-a-5)");
@@ -1137,7 +1150,7 @@ fn dos_caravanas_que_se_cruzan_dejan_su_encuentro_y_una_en_batalla_no_cambia_mie
     let t0 = e.n.ahora();
     e.ok("ana", Comando::PrepararCaravana { caravana: ca, destino: b, carga: vec![(Cobre, 10_000)], salir_en: None, escolta: None });
     e.ok("beto", Comando::PrepararCaravana { caravana: cb, destino: a, carga: vec![(Cobre, 10_000)], salir_en: None, escolta: None });
-    // Van una contra otra por el mismo camino: se encuentran en el instante exacto en que se acercan a 3 unidades (un evento, no un sondeo).
+    // Van una contra otra por el mismo camino: se encuentran en el instante exacto en que se acercan a 1 unidad (`radioEncuentro`) (un evento, no un sondeo).
     let (fin_a, fin_b) = (fin_del_plan(&e, ca), fin_del_plan(&e, cb));
     let (plan_a, plan_b) = (e.caravana_de(ca).plan.clone().unwrap(), e.caravana_de(cb).plan.clone().unwrap());
     e.avanzar_hasta(fin_b.min(fin_a));
@@ -1148,8 +1161,8 @@ fn dos_caravanas_que_se_cruzan_dejan_su_encuentro_y_una_en_batalla_no_cambia_mie
     assert!(t_enc > t0 && t_enc < fin_a.min(fin_b));
     assert!(ids == [ca as i64, cb as i64] || ids == [cb as i64, ca as i64], "{ids:?}");
     let separacion = |t| plan_a.posicion_en(t).unwrap().dist(plan_b.posicion_en(t).unwrap());
-    assert!(separacion(t_enc) <= 3_000 + 50, "en el instante del encuentro están a ≤ 3 unidades ({} milésimas)", separacion(t_enc));
-    assert!(separacion(t_enc - 1_000) > 2_900, "un segundo antes aún no");
+    assert!(separacion(t_enc) <= 1_000 + 50, "en el instante del encuentro están a ≤ 1 unidad ({} milésimas)", separacion(t_enc));
+    assert!(separacion(t_enc - 1_000) > 900, "un segundo antes aún no");
     // La batalla la decide el sistema militar: la caravana queda apartada, sin plan que cambie ni llegada, y vuelve donde estaba.
     let ahora = e.n.ahora();
     let fin_ca = fin_del_plan(&e, ca);

@@ -99,7 +99,7 @@ struct Choque {
 fn choque() -> Choque {
     let mut n = nucleo(40, 5);
     let ana = columna(&mut n, "ana", 1, c(10, 2));
-    let beto = columna(&mut n, "beto", 2, Punto::new(c(10, 2).x + 2_000, c(10, 2).y));
+    let beto = columna(&mut n, "beto", 2, Punto::new(c(10, 2).x + 1_000, c(10, 2).y));
     let fuerte = vec![dar(&mut n, "d1", ana.1, Tropa::EspadachinesBronce, completa(Tropa::EspadachinesBronce)), dar(&mut n, "d2", ana.1, Tropa::ArquerosCompuesto, completa(Tropa::ArquerosCompuesto))];
     let debil = dar(&mut n, "d3", beto.1, Tropa::MiliciaLanceros, completa(Tropa::MiliciaLanceros));
     en_guerra(&mut n, 1, 2);
@@ -213,7 +213,7 @@ fn las_ordenes_que_no_valen_se_rechazan_sin_rastro_y_en_su_orden() {
 #[test]
 fn declarar_la_guerra_al_atacar_la_deja_en_guerra_pero_solo_si_la_orden_vale() {
     let mut n = nucleo(40, 5);
-    let (ana, beto) = (columna(&mut n, "ana", 1, c(10, 2)), columna(&mut n, "beto", 2, Punto::new(c(10, 2).x + 2_000, c(10, 2).y)));
+    let (ana, beto) = (columna(&mut n, "ana", 1, c(10, 2)), columna(&mut n, "beto", 2, Punto::new(c(10, 2).x + 1_000, c(10, 2).y)));
     dar(&mut n, "d1", ana.1, Tropa::ArquerosCompuesto, completa(Tropa::ArquerosCompuesto));
     assert_eq!(n.relacion(1, 2), None);
     // Una orden que falla por otra cosa no declara nada.
@@ -548,7 +548,7 @@ impl Esc {
     /// Un ejército de administración de `cuenta`/`faccion` a 2 u de `p`, con las tropas dadas.
     fn ejercito(&mut self, cuenta: &str, faccion: u32, p: Punto, tropas: &[Tropa]) -> (u64, u64) {
         let t = self.t();
-        let (col, h) = columna_en(&mut self.n, t, cuenta, faccion, Punto::new(p.x + 2_000, p.y));
+        let (col, h) = columna_en(&mut self.n, t, cuenta, faccion, Punto::new(p.x + 1_000, p.y));
         for &t in tropas {
             self.ok("admin", Comando::DarEscuadra { heroe: h, tropa: t, cantidad: completa(t) });
         }
@@ -1365,7 +1365,7 @@ fn nadie_inicia_un_combate_junto_a_un_campamento_de_mercenarios() {
     let mut e = montar(m, 7, false);
     let c0 = campamento(&m.0, 0);
     let ana = e.ejercito("gus", 1, c0, &[Tropa::EspadachinesBronce]);
-    let beto = e.ejercito("hugo", 2, Punto::new(c0.x + 3_000, c0.y), &[Tropa::MiliciaLanceros]);
+    let beto = e.ejercito("hugo", 2, Punto::new(c0.x + 1_000, c0.y), &[Tropa::MiliciaLanceros]);
     e.ok("admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Guerra) });
     assert!(e.n.en_proteccion_de_campamento(c0));
     assert_eq!(codigo(&e.atacar("gus", ana.1, ObjetivoAtaque::Ejercito(beto.0), false)), rechazos::COMBATE_PROTECCION_DE_CAMPAMENTO, "ni desde allí");

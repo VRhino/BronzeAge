@@ -33,8 +33,8 @@ Cada avance se suma **en origen**, en el sitio que produce el hecho y al ocurrir
 | `infanteria`, `tiro`, `caballeria` | héroe | soldados reclutados según el edificio de su tropa: Centro Urbano y Barracón; Galería de tiro; Caballerizas |
 | `uniones` | héroe | se une a una convocatoria o a un ejército en campo o desde la plaza |
 | `batallas` | héroe | combate en una batalla (con números o de Unity): cada héroe que combatió |
-| `bandidos` | héroe y Facción | destruye un campamento de bandidos: cada héroe atacante y su Facción |
-| `alijos` | héroe | abre un alijo |
+| `bandidos` | héroe y Facción | destruye un campamento de bandidos: cada héroe del ejército atacante (también el herido o el que va sin tropa; decisión del 2026-10-31) y su Facción |
+| `alijos` | héroe | abre un alijo: cuenta para todos los héroes de la columna de quien lo abre (decisión del 2026-10-31) |
 | `entregas` | héroe | entrega materiales a la obra de un pueblo o de una avanzada |
 | `atributos` | héroe | reparte puntos de atributo |
 | `mercado`, `barracon` | asentamiento | **estado**: 1 si tiene ese edificio activo |

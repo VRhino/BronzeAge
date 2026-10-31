@@ -982,7 +982,7 @@ fn atacar_una_avanzada_se_rechaza_sin_rastro_y_en_su_orden() {
     let pos = e.sitio();
     let (pendiente, col, heroe) = e.colocar_en(pos);
     let (_, beto) = e.ejercito_fuerte(pos);
-    let (_, sin_tropa) = e.columna("beto", 2, Punto::new(pos.x + 1_500, pos.y));
+    let (_, sin_tropa) = e.columna("beto", 2, Punto::new(pos.x + 500, pos.y));
     let (_, lejos_h) = e.atacante(Punto::new(pos.x + 20_000, pos.y), &[Tropa::MiliciaLanceros]);
     let atacar = |heroe: u64, id: u64, guerra: bool| Comando::Atacar { heroe, objetivo: ObjetivoAtaque::Avanzada(id), declara_guerra: guerra };
     assert_eq!(e.rechazada("beto", atacar(beto, 9_999, false)), rechazos::COMBATE_AVANZADA_NO_EXISTE);
@@ -1141,7 +1141,7 @@ fn con_un_humano_el_ataque_abre_una_batalla_de_unity_sin_convocatoria_con_capaci
     assert_eq!(e.rechazada("!ana", Comando::DestruirAvanzada { heroe: ana, avanzada: av }), rechazos::BATALLA_BLOQUEADO);
     assert_eq!(e.rechazada("!ana", Comando::ElegirTropaDeAvanzada { heroe: ana, avanzada: av, tropa: Tropa::MiliciaLanceros }), rechazos::BATALLA_BLOQUEADO);
     assert_eq!(e.rechazada("ana", Comando::RepostarEnAvanzada { heroe: ana, avanzada: av }), rechazos::BATALLA_BLOQUEADO);
-    let (_, otro) = e.atacante(Punto::new(pos.x + 2_000, pos.y), &[Tropa::MiliciaLanceros]);
+    let (_, otro) = e.atacante(Punto::new(pos.x + 1_000, pos.y), &[Tropa::MiliciaLanceros]);
     assert_eq!(e.rechazada("beto", Comando::Atacar { heroe: otro, objetivo: ObjetivoAtaque::Avanzada(av), declara_guerra: false }), rechazos::BATALLA_BLOQUEADO);
     // Una columna amiga a su puerta, en el mapa, no defiende: hay que estar dentro (haber entrado con `EntrarEnAvanzada`).
     let r = e.ord("ana", Comando::UnirseABatalla { heroe: ana, batalla: id, lado: None });
@@ -1394,7 +1394,7 @@ fn si_la_madre_cae_en_ruinas_la_atalaya_y_el_fuerte_desaparecen_y_la_ciudadela_q
     e.guerra();
     assert_eq!(e.rechazada("beto", Comando::Atacar { heroe: beto, objetivo: ObjetivoAtaque::Avanzada(ciudadela), declara_guerra: false }), rechazos::COMBATE_AVANZADA_SIN_DUENO);
     // Pero se recuerdan como se vieron (Niebla_De_Guerra §4.1, decisión del autor del 2026-10-24): F2 pasa junto a ellas y su ficha dice ciudadela, de nadie, en ruinas.
-    e.ok("beto", Comando::MarcharA { ejercito: col_beto, destino: Punto::new(pos.x + 3_000, pos.y) });
+    e.ok("beto", Comando::MarcharA { ejercito: col_beto, destino: Punto::new(pos.x + 500, pos.y) });
     let ficha = e.n.estado().memoria.fichas[&2][&nucleo::memoria::Sitio::Avanzada(ciudadela)];
     assert_eq!((ficha.datos.faccion, ficha.datos.nivel, ficha.datos.estado), (0, 3, nucleo::memoria::EstadoSitio::EnRuinas));
     // Quien tenga después esa zona la repara: una plaza nueva de Ana en el sitio de la antigua, de nivel 3, la adopta con su cupo.
@@ -1968,7 +1968,7 @@ fn por_unity_de_oficio_solo_defiende_la_guarnicion_los_amigos_de_dentro_se_unen_
         e.ok(cuenta, Comando::EntrarEnAvanzada { avanzada: av, heroe: h });
     }
     let (cb, beto) = e.ejercito_fuerte(pos);
-    let (_, refuerzo) = e.atacante(Punto::new(pos.x + 1_500, pos.y), &[Tropa::MiliciaLanceros]);
+    let (_, refuerzo) = e.atacante(Punto::new(pos.x + 500, pos.y), &[Tropa::MiliciaLanceros]);
     e.guerra();
     humano(&mut e, beto);
     humano(&mut e, ana);

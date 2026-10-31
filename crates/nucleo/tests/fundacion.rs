@@ -578,7 +578,7 @@ fn una_faccion_sin_plazas_refunda_con_el_oro_de_los_bandidos_del_anillo() {
         let n = militar::Reglas::cargar().tropas.tropa(t).unidades;
         e.ok("admin", Comando::DarEscuadra { heroe: ana, tropa: t, cantidad: n });
     }
-    e.llevar("ana", ej, pisable(&m.0, bandidos.posicion, 2_000, 0));
+    e.llevar("ana", ej, pisable(&m.0, bandidos.posicion, 500, 0));
     let oro_carro = |e: &Esc| e.n.ejercito(ej).unwrap().columna.carga.get(&Oro).copied().unwrap_or(0);
     let antes = oro_carro(&e);
     assert!(e.ok("ana", Comando::Atacar { heroe: ana, objetivo: ObjetivoAtaque::Campamento(bandidos.id), declara_guerra: false }).aceptada());
@@ -791,7 +791,7 @@ fn decision_5gb11_la_caravana_suelta_en_una_plaza_conquistada_se_destruye_con_el
     e.avanzar(25 * HORA);
     assert!(e.caravana(k).is_some());
     let pos = e.n.estado().asentamientos[&a].posicion;
-    let (_, zed) = enemigo(&mut e, Punto::new(pos.x + 2_000, pos.y));
+    let (_, zed) = enemigo(&mut e, Punto::new(pos.x + 1_000, pos.y));
     e.ok("zed", Comando::Atacar { heroe: zed, objetivo: ObjetivoAtaque::Asentamiento(a), declara_guerra: true });
     let fin = e.n.batallas_activas().filter_map(|b| b.convocatoria_hasta).max();
     if let Some(h) = fin {
@@ -947,7 +947,7 @@ fn p3_una_columna_dentro_de_un_lugar_ni_ve_ni_se_ve_en_el_muestreo() {
     e.ok("ana", Comando::Guarnecer { asentamiento: a, heroe: ana });
     assert!(e.n.ejercito(ej).is_some() && !e.n.en_el_mapa(ej));
     let contacto = |e: &Esc, ve: i64, vista: i64| hechos(&e.n, "vision.contacto").iter().any(|h| dato(h, "faccionQueVe") == ve && dato(h, "faccionVista") == vista);
-    let (_, _zed) = enemigo(&mut e, Punto::new(pos.x + 2_000, pos.y));
+    let (_, _zed) = enemigo(&mut e, Punto::new(pos.x + 1_000, pos.y));
     e.avanzar(60_000);
     assert!(!contacto(&e, 2, 1), "la columna de dentro no se ve");
     assert!(!contacto(&e, 1, 2), "ni ve");

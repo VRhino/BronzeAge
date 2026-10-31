@@ -170,7 +170,7 @@ fn choque() -> Choque {
 
 fn choque_en(mut n: Nucleo) -> Choque {
     let ana = columna(&mut n, "ana", 1, c(10, 2));
-    let beto = columna(&mut n, "beto", 2, Punto::new(c(10, 2).x + 2_000, c(10, 2).y));
+    let beto = columna(&mut n, "beto", 2, Punto::new(c(10, 2).x + 1_000, c(10, 2).y));
     let fuerte = vec![dar(&mut n, "d1", ana.1, Tropa::EspadachinesBronce), dar(&mut n, "d2", ana.1, Tropa::ArquerosCompuesto)];
     let debil = dar(&mut n, "d3", beto.1, Tropa::MiliciaLanceros);
     humano(&mut n, ana.1);
@@ -259,7 +259,7 @@ fn bot_contra_bot_abre_batalla_en_unity_y_sin_servidores_de_batalla_se_resuelve_
     assert!(!x.n.ejercito(ana.0).unwrap().en_batalla, "al aplicar el resultado la columna vuelve al mundo");
     // Sin servidores de batalla (el interruptor es una regla de la partida) se resuelve con números, con o sin humanos.
     let mut n = comun::nucleo(40, 5);
-    let (ana, beto) = (columna(&mut n, "ana", 1, c(10, 2)), columna(&mut n, "beto", 2, Punto::new(c(10, 2).x + 2_000, c(10, 2).y)));
+    let (ana, beto) = (columna(&mut n, "ana", 1, c(10, 2)), columna(&mut n, "beto", 2, Punto::new(c(10, 2).x + 1_000, c(10, 2).y)));
     dar(&mut n, "d1", ana.1, Tropa::EspadachinesBronce);
     dar(&mut n, "d2", beto.1, Tropa::MiliciaLanceros);
     humano(&mut n, ana.1);
@@ -777,7 +777,7 @@ fn contra_un_campamento_de_bandidos_se_juega_un_evento_pve_cualquiera_se_une_com
     assert_eq!(hechos(&x.n, "evento_pve.abierta").len(), 1);
     assert!(hechos(&x.n, "batalla.abierta").is_empty(), "contra bandidos el prefijo es evento_pve.");
     // Mientras dura, ni el campamento se ataca otra vez ni se simula.
-    let otra = columna(&mut x.n, "gus", 3, Punto::new(c(10, 2).x, c(10, 2).y + 1_000));
+    let otra = columna(&mut x.n, "gus", 3, Punto::new(c(10, 2).x + 500, c(10, 2).y + 500));
     dar(&mut x.n, "dg", otra.1, Tropa::EspadachinesBronce);
     humano(&mut x.n, otra.1);
     assert_eq!(codigo(&atacar(&mut x.n, 11 * MIN, "gus", "x1", otra.1, ObjetivoAtaque::Campamento(x.campamento), false)), rechazos::BATALLA_BLOQUEADO);
@@ -815,7 +815,7 @@ fn contra_un_campamento_de_bandidos_se_juega_un_evento_pve_cualquiera_se_une_com
     // Llena el bando (5 héroes por bando): el sexto no entra.
     let mut mas = vec![];
     for k in 0..4 {
-        let col = columna(&mut x.n, &format!("c{k}"), 3, Punto::new(c(10, 2).x, c(10, 2).y + 1_000));
+        let col = columna(&mut x.n, &format!("c{k}"), 3, Punto::new(c(10, 2).x + 500, c(10, 2).y + 500));
         dar(&mut x.n, &format!("dc{k}"), col.1, Tropa::MiliciaLanceros);
         mas.push(col);
     }
@@ -856,7 +856,7 @@ fn contra_un_campamento_de_bandidos_se_juega_un_evento_pve_cualquiera_se_une_com
 #[test]
 fn en_una_batalla_campal_nadie_de_fuera_se_une_y_la_persecucion_pide_bando() {
     let (mut x, id) = batalla_abierta();
-    let otra = columna(&mut x.n, "gus", 3, Punto::new(c(10, 2).x, c(10, 2).y + 1_000));
+    let otra = columna(&mut x.n, "gus", 3, Punto::new(c(10, 2).x + 500, c(10, 2).y + 500));
     dar(&mut x.n, "dg", otra.1, Tropa::EspadachinesBronce);
     x.n.avanzar_hasta(11 * MIN);
     let antes = rastro(&x.n);
@@ -894,7 +894,7 @@ fn una_cerrada_se_conserva_una_hora_para_repetir_su_resultado_y_luego_sale_del_e
 /// La batalla del campo a mitad de partida: asignada con su token, en curso, con una incorporación... no; con una salida y un resultado pendiente.
 fn a_mitad() -> (Nucleo, u64) {
     let mut x = contra_bandidos();
-    let otra = columna(&mut x.n, "gus", 3, Punto::new(c(10, 2).x, c(10, 2).y + 1_000));
+    let otra = columna(&mut x.n, "gus", 3, Punto::new(c(10, 2).x + 500, c(10, 2).y + 500));
     dar(&mut x.n, "dg", otra.1, Tropa::EspadachinesBronce);
     assert!(x.n.aplicar_en(11 * MIN, Peticion::nueva("gus", "u", Comando::UnirseABatalla { heroe: otra.1, batalla: x.id, lado: None })).aceptada());
     en_curso(&mut x.n, x.id, 12 * MIN, &[x.ana.1]);
@@ -1263,7 +1263,7 @@ impl Esc {
     }
     /// Un ejército de administración de `cuenta`/`faccion` a 2 u de `p`, con las tropas dadas y su héroe humano.
     fn ejercito(&mut self, cuenta: &str, faccion: u32, p: Punto, tropas: &[Tropa]) -> (u64, u64) {
-        let (col, h) = columna(&mut self.n, cuenta, faccion, Punto::new(p.x + 2_000, p.y));
+        let (col, h) = columna(&mut self.n, cuenta, faccion, Punto::new(p.x + 1_000, p.y));
         for &t in tropas {
             self.ok("admin", Comando::DarEscuadra { heroe: h, tropa: t, cantidad: completa(t) });
         }

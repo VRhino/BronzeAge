@@ -30,8 +30,8 @@ fn dos_columnas_que_se_cruzan_producen_un_solo_encuentro_exacto() {
     let e = encuentros(&n, 0);
     assert_eq!(e.len(), 1, "un único encuentro por par: {e:?}");
     assert_eq!(e[0].1, vec![a.min(b), a.max(b)]);
-    // Separadas 39·8000 = 312.000; se acercan a 1.000 milésimas/s entre las dos: llegan a 3.000 de distancia a los 309 s.
-    assert_eq!(e[0].0, 309_000, "instante exacto, sin sondeo");
+    // Separadas 39·8000 = 312.000; se acercan a 1.000 milésimas/s entre las dos: llegan a 1.000 de distancia (`radioEncuentro`) a los 311 s.
+    assert_eq!(e[0].0, 311_000, "instante exacto, sin sondeo");
 }
 
 #[test]

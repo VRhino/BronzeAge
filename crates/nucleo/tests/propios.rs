@@ -916,7 +916,7 @@ async fn la_plaza_conquistada_y_lo_que_depende_de_ella_pasan_de_una_faccion_a_la
     // gus tiene a la puerta de A un ejército de campo con soldados (y A no tiene quien la defienda: ni ana ni dora tienen escuadras).
     let puerta = x.n.estado().asentamientos[&a].posicion;
     let t = x.n.ahora();
-    let columna = x.n.crear_ejercito(t, "gus", 2, Punto::new(puerta.x + 2_000, puerta.y), 500, 100_000).unwrap();
+    let columna = x.n.crear_ejercito(t, "gus", 2, Punto::new(puerta.x + 1_000, puerta.y), 500, 100_000).unwrap();
     let atacante = x.n.ejercito(columna).unwrap().columna.lider;
     let completa = militar::Reglas::cargar().tropas.tropa(Tropa::EspadachinesBronce).unidades;
     x.ok("admin", Comando::DarEscuadra { heroe: atacante, tropa: Tropa::EspadachinesBronce, cantidad: completa });
@@ -1070,7 +1070,7 @@ async fn la_batalla_de_unity_llega_a_sus_combatientes_en_su_ambito_y_resumida_a_
     let puerta = x.n.estado().asentamientos[&x.a].posicion;
     let sitio = Punto::new(puerta.x + 25_000, puerta.y + 25_000);
     let t = x.n.ahora();
-    let (c_ana, c_gus) = (x.n.crear_ejercito(t, "ana", 1, sitio, 500, 350_000).unwrap(), x.n.crear_ejercito(t, "gus", 2, Punto::new(sitio.x + 2_000, sitio.y), 500, 350_000).unwrap());
+    let (c_ana, c_gus) = (x.n.crear_ejercito(t, "ana", 1, sitio, 500, 350_000).unwrap(), x.n.crear_ejercito(t, "gus", 2, Punto::new(sitio.x + 1_000, sitio.y), 500, 350_000).unwrap());
     let (h_ana_campo, h_gus_campo) = (x.n.ejercito(c_ana).unwrap().columna.lider, x.n.ejercito(c_gus).unwrap().columna.lider);
     let completa = militar::Reglas::cargar().tropas.tropa(Tropa::EspadachinesBronce).unidades;
     for h in [h_ana_campo, h_gus_campo] {

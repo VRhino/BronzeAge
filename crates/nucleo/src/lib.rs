@@ -65,6 +65,9 @@
 //!   (144 órdenes del jugador, que dan 146 comandos, y la de administración, con 19; ninguna se rechaza ya con `orden.no_disponible`; de los 170 comandos, los 5 restantes son del canal del
 //!   servidor de batalla; `Docs/Mechanics/Comandos_Parametros.md`).
 
+/// La versión del núcleo (la de su `Cargo.toml`): sube con cada cambio del crate (regla del autor, 2026-10-31); el servidor la dice al arrancar.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 mod codec;
 mod codec_batallas;
 mod codec_ciudad;

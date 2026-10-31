@@ -166,7 +166,7 @@ impl Esc {
     /// Un ejército de administración de `cuenta`/`faccion` a 2 u de `p`, con las tropas dadas: devuelve (columna, héroe).
     fn ejercito(&mut self, cuenta: &str, faccion: u32, p: Punto, tropas: &[Tropa]) -> (u64, u64) {
         let t = self.n.ahora();
-        let col = self.n.crear_ejercito(t, cuenta, faccion, Punto::new(p.x + 2_000, p.y), 500, 350_000).unwrap();
+        let col = self.n.crear_ejercito(t, cuenta, faccion, Punto::new(p.x + 1_000, p.y), 500, 350_000).unwrap();
         let h = self.n.ejercito(col).unwrap().columna.lider;
         for &tropa in tropas {
             self.ok("admin", Comando::DarEscuadra { heroe: h, tropa, cantidad: completa(tropa) });
@@ -620,7 +620,7 @@ fn guion(m: &M, avanzar: &dyn Fn(&mut Nucleo, Instante)) -> Nucleo {
     ord(&mut n, "admin", "r-beto", Comando::FijarResidencia { heroe: beto, residencia: Some(Residencia::Asentamiento(ib as u32)) });
     ord(&mut n, "admin", "c-beto", Comando::ColocarHeroe { heroe: beto, ubicacion: Ubicacion::Asentamiento(ib as u32) });
     let p = n.estado().asentamientos[&ib].posicion;
-    let col = n.crear_ejercito(ataque, "ana", 1, Punto::new(p.x + 2_000, p.y), 500, 350_000).unwrap();
+    let col = n.crear_ejercito(ataque, "ana", 1, Punto::new(p.x + 1_000, p.y), 500, 350_000).unwrap();
     let lider = n.ejercito(col).unwrap().columna.lider;
     for tropa in ATAQUE {
         ord(&mut n, "admin", &format!("e-{tropa:?}"), Comando::DarEscuadra { heroe: lider, tropa, cantidad: completa(tropa) });

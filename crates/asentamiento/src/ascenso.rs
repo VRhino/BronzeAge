@@ -18,8 +18,8 @@ pub enum Bloqueo {
     AscensoEnCurso,
     FaltaPoblacion,
     FaltanEdificios,
-    /// Falta la aldea agrícola activa que pide el nivel (el 2).
-    FaltaAldea,
+    /// Falta el pueblo activo (aldea agrícola o extractor) que pide el nivel (el 2).
+    FaltaPueblo,
     SinCupoDeFaccion,
     RecursosInsuficientes,
     /// Lo que se produce y recauda por minuto no cubre el mantenimiento del nivel nuevo: los recursos que faltan.
@@ -71,11 +71,11 @@ impl Asentamiento {
             b.push(Bloqueo::AscensoEnCurso);
         }
         let (pesants, artesanos, _) = self.poblacion.enteros();
-        for f in r.nivel.gates(objetivo, &self.edificios, pesants, artesanos, recintos::nivel_del_mejor_completo(&self.recintos), self.aldeas_activas()).unwrap_or_default() {
+        for f in r.nivel.gates(objetivo, &self.edificios, pesants, artesanos, recintos::nivel_del_mejor_completo(&self.recintos), self.pueblos_activos() as u32).unwrap_or_default() {
             b.push(match f {
                 Falta::Poblacion => Bloqueo::FaltaPoblacion,
                 Falta::Edificios => Bloqueo::FaltanEdificios,
-                Falta::Aldea => Bloqueo::FaltaAldea,
+                Falta::Pueblo => Bloqueo::FaltaPueblo,
             });
         }
         if sin_cupo_de_faccion {

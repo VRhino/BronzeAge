@@ -107,7 +107,7 @@ fn rechazo_de_bloqueo(b: &Bloqueo) -> (&'static str, String) {
         Bloqueo::AscensoEnCurso => (ASCENSO_EN_CURSO, "ya hay un ascenso en curso".into()),
         Bloqueo::FaltaPoblacion => (ASCENSO_FALTA_POBLACION, "falta población".into()),
         Bloqueo::FaltanEdificios => (ASCENSO_FALTAN_EDIFICIOS, "faltan edificios".into()),
-        Bloqueo::FaltaAldea => (ASCENSO_FALTA_ALDEA, "falta una aldea agrícola activa".into()),
+        Bloqueo::FaltaPueblo => (ASCENSO_FALTA_ALDEA, "falta un pueblo activo: una aldea agrícola o un pueblo extractor".into()),
         Bloqueo::SinCupoDeFaccion => (ASCENSO_SIN_CUPO_DE_FACCION, "la Facción no tiene cupo para ese nivel".into()),
         Bloqueo::RecursosInsuficientes => (ASCENSO_RECURSOS_INSUFICIENTES, "faltan recursos para la obra de ascenso".into()),
         Bloqueo::Insolvente(r) => (ASCENSO_INSOLVENTE, format!("no cubriría el mantenimiento del nivel nuevo: {}", r.iter().map(|r| r.nombre()).collect::<Vec<_>>().join(", "))),

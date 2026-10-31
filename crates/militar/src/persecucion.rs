@@ -160,10 +160,10 @@ mod pruebas {
     }
 
     #[test]
-    fn se_alcanza_a_tres_si_la_presa_es_enemiga_y_perseguible() {
+    fn se_alcanza_a_uno_si_la_presa_es_enemiga_y_perseguible() {
         let r = Reglas::cargar();
-        assert!(alcanzada(&r, &ELLA, 3_000));
-        assert!(!alcanzada(&r, &ELLA, 3_001));
+        assert!(alcanzada(&r, &ELLA, 1_000));
+        assert!(!alcanzada(&r, &ELLA, 1_001));
         assert!(alcanzada(&r, &CARAVANA, 0));
         assert!(!alcanzada(&r, &Presa::Caravana { adjunta: true, propia_o_aliada: false }, 0));
         assert!(!alcanzada(&r, &Presa::Columna { tipo: TipoColumna::Personal, hay_heroe_sano: false, propia_o_aliada: false }, 0), "una columna de heridos es intocable");

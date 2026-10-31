@@ -40,7 +40,7 @@ fn clase(b: &Bloqueo) -> usize {
         Bloqueo::AscensoEnCurso => 1,
         Bloqueo::FaltaPoblacion => 2,
         // La aldea agrícola que pide el nivel 2 cuenta con los edificios que faltan.
-        Bloqueo::FaltanEdificios | Bloqueo::FaltaAldea => 3,
+        Bloqueo::FaltanEdificios | Bloqueo::FaltaPueblo => 3,
         Bloqueo::SinCupoDeFaccion => 4,
         Bloqueo::RecursosInsuficientes => 5,
         Bloqueo::Insolvente(_) => 6,

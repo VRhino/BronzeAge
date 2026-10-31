@@ -236,7 +236,7 @@ async fn los_mensajes_del_servidor_de_batalla_llegan_por_su_sesion_y_el_nucleo_l
     use nucleo::{Comando, ObjetivoAtaque, Peticion, Relacion};
     // Una batalla abierta a los 10 minutos: ana (humana) ataca a beto (bot).
     let mut n = nucleo_con_batallas();
-    let (ana, beto) = (n.crear_ejercito(0, "ana", 1, c(10, 10), 4_000, 350_000).unwrap(), n.crear_ejercito(0, "beto", 2, base::Punto::new(c(10, 10).x + 2_000, c(10, 10).y), 4_000, 350_000).unwrap());
+    let (ana, beto) = (n.crear_ejercito(0, "ana", 1, c(10, 10), 4_000, 350_000).unwrap(), n.crear_ejercito(0, "beto", 2, base::Punto::new(c(10, 10).x + 1_000, c(10, 10).y), 4_000, 350_000).unwrap());
     let (h_ana, h_beto) = (n.ejercito(ana).unwrap().columna.lider, n.ejercito(beto).unwrap().columna.lider);
     for (h, t) in [(h_ana, Tropa::EspadachinesBronce), (h_beto, Tropa::MiliciaLanceros)] {
         let cantidad = militar::Reglas::cargar().tropas.tropa(t).unidades;

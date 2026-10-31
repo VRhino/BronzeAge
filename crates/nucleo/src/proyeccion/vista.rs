@@ -509,7 +509,7 @@ impl<'n> Mirada<'n> {
     }
 
     /// La columna ajena (`EjercitoAvistado`): quién es, de quién, de qué tipo, quiénes van (los rombos), si está en formación, dónde está y el tramo visible de su plan; `te_sigue` si persigue a una
-    /// columna propia. Ni composición, ni carro, ni víveres, ni Líder, ni destino.
+    /// columna propia, y las caravanas que lleva adjuntas. Ni carro, ni víveres, ni Líder, ni destino; lo que lleva cada héroe (tipo de tropa y cantidad) va en su `HeroePublico`.
     fn ejercito_avistado(&self, x: &Ejercito) -> pb::Ejercito {
         let tramo = tramo_visible(&x.plan, self.t, radios::HORIZONTE_MS, &self.ojos);
         pb::Ejercito {
@@ -525,6 +525,8 @@ impl<'n> Mirada<'n> {
             te_sigue: x.persiguiendo.is_some_and(|presa| self.propias.contains(&presa)),
             // La Caravana de Fundación enganchada se ve detrás del ejército (decisión del autor del 2026-10-27).
             caravana_fundacion_id: self.n.estado().fundacion.de_columna(x.id).map(ids::caravana),
+            // Las caravanas que lleva adjuntas (decisión del autor del 2026-10-31): sus ids, para dibujarlas detrás; cada una viaja aparte como caravana avistada.
+            caravanas_adjuntas_ids: x.caravanas_adjuntas.iter().map(|c| ids::caravana(*c)).collect(),
             ..Default::default()
         }
     }

@@ -67,7 +67,7 @@ async fn la_administracion_monta_un_mundo_por_el_contrato_y_los_jugadores_lo_jue
     let f = foto(&mut ana).await;
     assert_eq!((f.ambito.unwrap().id.as_str(), columnas(&f.entidades).iter().map(|e| e.id.as_str()).collect::<Vec<_>>()), ("heroe-2", vec!["ej-1"]), "la dueña recibe su columna");
     assert_eq!(foto(&mut ana).await.ambito.unwrap().id, "f-1");
-    let (_, r) = dar(&mut admin_c, "m2", crear("beto", "f-2", Punto::new(c(10, 10).x + 2_000, c(10, 10).y))).await;
+    let (_, r) = dar(&mut admin_c, "m2", crear("beto", "f-2", Punto::new(c(10, 10).x + 1_000, c(10, 10).y))).await;
     assert_eq!(creadas(&r), [(TipoEntidad::Ejercito, "ej-3")]);
     assert_eq!(columnas(&foto(&mut beto).await.entidades).iter().map(|e| e.id.as_str()).collect::<Vec<_>>(), ["ej-3"]);
     assert_eq!(foto(&mut beto).await.ambito.unwrap().id, "f-2");

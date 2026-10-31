@@ -120,7 +120,7 @@ fn defensor(x: &mut X, b: u64, defensa: &[Tropa]) -> u64 {
 /// «ana» asedia B con números desde 2 u y se resuelve al acabar la convocatoria. Devuelve su héroe.
 fn asediar(x: &mut X, b: u64, ataque: &[Tropa], reside_en: Option<u64>) -> u64 {
     let pb = x.posicion(b);
-    let (_, ana) = x.columna("ana", 1, Punto::new(pb.x + 2_000, pb.y), ataque);
+    let (_, ana) = x.columna("ana", 1, Punto::new(pb.x + 1_000, pb.y), ataque);
     if let Some(a) = reside_en {
         x.residir(ana, a);
     }
@@ -219,7 +219,7 @@ fn la_columna_que_gana_un_combate_suma_la_batalla_ganada_y_la_que_pierde_nada() 
     let (a, b) = dos_plazas(&mut x, m);
     let donde = pisable(&m.0, campamento(&m.0, 0), 40_000, 30_000);
     let (_, ana) = x.columna("ana", 1, donde, &[Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto]);
-    let (beto_col, beto) = x.columna("beto", 2, Punto::new(donde.x + 2_000, donde.y), &[Tropa::MiliciaLanceros]);
+    let (beto_col, beto) = x.columna("beto", 2, Punto::new(donde.x + 1_000, donde.y), &[Tropa::MiliciaLanceros]);
     x.residir(ana, a);
     x.residir(beto, b);
     x.ok("ana", Comando::Atacar { heroe: ana, objetivo: ObjetivoAtaque::Ejercito(beto_col), declara_guerra: true });

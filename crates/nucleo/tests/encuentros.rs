@@ -101,7 +101,7 @@ fn una_columna_acampada_tambien_se_encuentra_y_una_sola_vez() {
     n.avanzar_hasta(30 * MIN);
     let e: Vec<_> = hechos(&n, "ejercito.encuentro").into_iter().filter(|h| h.1.contains(&quieta) && h.1.contains(&a)).collect();
     assert_eq!(e.len(), 1, "{e:?}");
-    assert_eq!(e[0].0, (c(20, 2).x - c(0, 2).x - 3_000) * 2, "instante exacto: 2 ms por milésima a 500 mil/s");
+    assert_eq!(e[0].0, (c(20, 2).x - c(0, 2).x - 1_000) * 2, "instante exacto: 2 ms por milésima a 500 mil/s");
     // Un cambio de ritmo de la quieta (le llega carga) ni repite el encuentro ni lo pierde.
     let antes = hechos(&n, "ejercito.encuentro").len();
     assert!(n.aplicar_en(n.ahora(), admin("pv", Comando::DarSuministro { ejercito: quieta, recurso: Recurso::Trigo, cantidad: 1_000 })).aceptada());
@@ -253,15 +253,15 @@ fn perseguir_empieza_con_la_presa_a_la_vista_la_alcanza_en_un_instante_exacto_y_
     // Misma orden otra vez: sin cambios.
     assert_eq!(perseguir(&mut n, 0, "ana", "p2", p, Objetivo::Ejercito(q)).resultado, Resultado::SinCambios);
 
-    // Ella va a 1 u/s y él a 0,5: la ventaja de 8 unidades baja a 3 en 10 s, y justo antes todavía la persigue.
-    n.avanzar_hasta(9_999);
+    // Ella va a 1 u/s y él a 0,5: la ventaja de 8 unidades baja a 1 (`radioEncuentro`) en 14 s, y justo antes todavía la persigue.
+    n.avanzar_hasta(13_999);
     assert_eq!(n.persiguiendo(p), Some(Objetivo::Ejercito(q)));
-    n.avanzar_hasta(10_000);
+    n.avanzar_hasta(14_000);
     let alcance = hechos(&n, "columna.presa_alcanzada");
     assert_eq!(alcance.len(), 1, "{alcance:?}");
     let t = alcance[0].0;
-    assert_eq!((t, alcance[0].1.clone()), (10_000, vec![p, q]), "lo oyen las dos columnas");
-    assert!(distancia_en(&n, p, q, t) <= 3_000 + 1 && distancia_en(&n, p, q, t - 1) > 3_000 - 2, "a ≤ radioEncuentro exacto: {}", distancia_en(&n, p, q, t));
+    assert_eq!((t, alcance[0].1.clone()), (14_000, vec![p, q]), "lo oyen las dos columnas");
+    assert!(distancia_en(&n, p, q, t) <= 1_000 + 1 && distancia_en(&n, p, q, t - 1) > 1_000 - 2, "a ≤ radioEncuentro exacto: {}", distancia_en(&n, p, q, t));
     assert_eq!(n.persiguiendo(p), None, "alcanzar termina la persecución");
     assert!(n.perseguidores_de(Objetivo::Ejercito(q)).is_empty());
     // El encuentro hostil también deja su hecho (el mismo instante), pero ningún combate.
