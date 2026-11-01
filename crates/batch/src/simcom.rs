@@ -108,7 +108,7 @@ pub struct Muestra {
     pub aristas: usize,
     pub rutas: usize,
     /// Caravanas comerciales por estado, en el orden de `ESTADOS`.
-    pub caravanas: [u32; 6],
+    pub caravanas: [u32; ESTADOS.len()],
     pub plazas_vivas: usize,
     pub con_mercado: usize,
     pub con_flota: usize,
@@ -118,13 +118,14 @@ pub struct Muestra {
 
 pub const LLENADO: [Recurso; 5] = [Recurso::Madera, Recurso::Piedra, Recurso::Trigo, Recurso::Livestock, Recurso::Oro];
 
-pub const ESTADOS: [(EstadoCaravana, &str); 6] = [
+pub const ESTADOS: [(EstadoCaravana, &str); 7] = [
     (EstadoCaravana::Disponible, "disponible"),
     (EstadoCaravana::Preparando, "preparando"),
     (EstadoCaravana::EnTransito, "en tránsito"),
     (EstadoCaravana::Retornando, "retornando"),
     (EstadoCaravana::Aparcada, "aparcada"),
     (EstadoCaravana::Adjunta, "adjunta"),
+    (EstadoCaravana::Esperando, "esperando"),
 ];
 
 pub struct Corrida {
@@ -809,7 +810,7 @@ impl Sim<'_> {
 
     fn muestrear(&mut self, dia: i64) {
         let e = self.n.estado();
-        let mut caravanas = [0u32; 6];
+        let mut caravanas = [0u32; ESTADOS.len()];
         for c in e.comercio.flota.iter().filter(|c| c.tipo == comercio::caravana::TipoCaravana::Comercial) {
             if let Some(i) = ESTADOS.iter().position(|(s, _)| *s == c.estado) {
                 caravanas[i] += 1;

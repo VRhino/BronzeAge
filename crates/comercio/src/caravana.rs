@@ -5,9 +5,11 @@
 //!
 //! Estados: `Disponible` (parada en su origen, sin asignar) · `Preparando` (lanzada a mano, esperando en el origen) · `EnTransito` (hacia
 //! el destino) · `Retornando` (de vuelta) · `Aparcada` (dejada en una plaza de su Facción) · `Adjunta` (enganchada a un ejército) ·
-//! `EnBatalla` (la resuelve el sistema militar: aquí solo se guarda el estado previo y se aplica el resultado).
+//! `EnBatalla` (la resuelve el sistema militar: aquí solo se guarda el estado previo y se aplica el resultado) · `Esperando` (con encargo, dentro
+//! de una de sus dos plazas: esperando su hora o sus existencias, descargando o cargando).
 
 use crate::datos::{DefAnimal, DefCarro, ReglasFlota};
+use crate::encargo::{Encargo, Fase, Punta};
 use crate::reparto::Candidata;
 use crate::tipos::{total, AcuerdoId, AsentamientoId, CaravanaId, Carga, EscuadraId, HeroeId, Lado};
 use crate::viaje::{instante_de_progreso, invertir_plan, invertir_ruta, progreso_en, CobroPeaje, Peaje};
@@ -55,6 +57,8 @@ pub enum EstadoCaravana {
     Aparcada,
     Adjunta,
     EnBatalla,
+    /// Con encargo, dentro de su origen o de su destino: no se ve en el mapa ni se ataca (Comercio_Caravanas §5.8.4).
+    Esperando,
 }
 
 /// Una escuadra cedida como escolta: su id, el héroe que la cedió (la retira solo él) y su coste de Liderazgo por escalón.
@@ -118,6 +122,9 @@ pub enum Llegada {
     /// `Retornando`: llegada a casa. Hay que volcar `contenido` (solo si vino de `enviarCaravanaAlOrigen`) en el origen; la caravana
     /// queda `Disponible` y limpia, y la escolta vuelve al campamento.
     Casa { contenido: Carga, escolta: Vec<Escuadra> },
+    /// Una caravana con encargo llegó a una de sus puntas (Comercio_Caravanas §5.8.4): `punta` es cuál de las dos, el origen o `encargo.destino`. La
+    /// caravana queda `Esperando` en ella, sin plan, ruta, costes ni peajes; no se toca la carga, la escolta ni el destino. El núcleo atiende la parada.
+    Parada { punta: Punta },
     /// `EnTransito` de acarreo: hay que **volcar** `contenido` en el almacén de la plaza madre (`destino`), sin comisión ni trueque. La
     /// caravana ya queda `Retornando`, vacía y con la ruta invertida.
     Acarreo { destino: AsentamientoId, contenido: Carga },
@@ -169,6 +176,8 @@ pub struct Caravana {
     pub pausada_desde: Option<Instante>,
     /// Nacida en un campamento: no cuenta para `carrosEnUso`.
     pub de_campamento: bool,
+    /// El encargo de transporte que tiene (rutas de caravanas automáticas): mientras lo tiene, el reparto del trueque no la usa.
+    pub encargo: Option<Encargo>,
 }
 
 impl ReglasFlota {
@@ -187,16 +196,18 @@ impl ReglasFlota {
     }
 }
 
-/// ¿Existe la transición `desde → hasta` en la máquina de estados? `EnBatalla` solo se entra desde un estado en el mapa y solo se sale
+/// ¿Existe la transición `desde → hasta` en la máquina de estados? `Esperando` (Comercio_Caravanas §5.8.4) se entra desde `Disponible` al dar el encargo
+/// y desde `EnTransito` o `Retornando` al llegar a una punta, y de ella se sale a `EnTransito`, `Retornando` o `Disponible`. `EnBatalla` solo se entra desde un estado en el mapa y solo se sale
 /// a lo que se estaba haciendo (`EnTransito`, `Retornando` o `Adjunta`).
 pub fn transicion_valida(desde: EstadoCaravana, hasta: EstadoCaravana) -> bool {
     use EstadoCaravana::*;
     matches!(
         (desde, hasta),
-        (Disponible, Preparando | EnTransito | Adjunta)
+        (Disponible, Preparando | EnTransito | Adjunta | Esperando)
             | (Preparando, EnTransito | Disponible)
-            | (EnTransito, Retornando | EnBatalla)
-            | (Retornando, Disponible | EnBatalla)
+            | (EnTransito, Retornando | EnBatalla | Esperando)
+            | (Retornando, Disponible | EnBatalla | Esperando)
+            | (Esperando, EnTransito | Retornando | Disponible)
             | (Adjunta, Aparcada | Retornando | EnBatalla)
             | (Aparcada, Adjunta | Disponible | Retornando)
             | (EnBatalla, EnTransito | Retornando | Adjunta)
@@ -307,6 +318,7 @@ impl Caravana {
             antes_de_batalla: None,
             pausada_desde: None,
             de_campamento: false,
+            encargo: None,
         }
     }
 
@@ -396,12 +408,14 @@ impl Caravana {
         Ok(())
     }
 
-    /// La escolta cedida solo se asigna o retira con la caravana parada en su origen; la comercial y el carro de acarreo la admiten.
+    /// La escolta cedida solo se asigna o retira con la caravana parada en su origen (`Disponible`, o `Esperando` en el origen con encargo); la
+    /// comercial y el carro de acarreo la admiten.
     fn exigir_disponible_escoltable(&self) -> Result<(), ErrorCaravana> {
         if !matches!(self.tipo, TipoCaravana::Comercial | TipoCaravana::Acarreo) {
             return Err(ErrorCaravana::NoEsComercial);
         }
-        if self.estado != EstadoCaravana::Disponible {
+        let esperando_en_origen = self.estado == EstadoCaravana::Esperando && self.encargo.as_ref().is_some_and(|e| e.punta == Punta::Origen);
+        if self.estado != EstadoCaravana::Disponible && !esperando_en_origen {
             return Err(ErrorCaravana::NoDisponible);
         }
         Ok(())
@@ -446,7 +460,7 @@ impl Caravana {
 
     // ---------- Escolta cedida (§5.5) ----------
 
-    /// `asignarEscolta`: caravana comercial `disponible`, ≥ 1 escuadra, sin repetidos y dentro del cupo de Liderazgo de la caravana.
+    /// `asignarEscolta`: caravana comercial `disponible` (o `Esperando` en el origen con encargo, Comercio_Caravanas §5.5), ≥ 1 escuadra, sin repetidos y dentro del cupo de Liderazgo de la caravana.
     pub fn asignar_escolta(&mut self, nuevas: Vec<Escuadra>, cupo: i64) -> Result<(), ErrorCaravana> {
         self.exigir_disponible_escoltable()?;
         if nuevas.is_empty() || nuevas.iter().enumerate().any(|(i, e)| nuevas[..i].iter().any(|x| x.id == e.id) || self.escolta.iter().any(|x| x.id == e.id)) {
@@ -459,7 +473,7 @@ impl Caravana {
         Ok(())
     }
 
-    /// `quitarEscolta`: solo con la caravana `disponible`; cada héroe retira únicamente las suyas (por defecto, todas las suyas). Devuelve
+    /// `quitarEscolta`: solo con la caravana `disponible` (o `Esperando` en el origen con encargo, Comercio_Caravanas §5.5); cada héroe retira únicamente las suyas (por defecto, todas las suyas). Devuelve
     /// las que vuelven al campamento.
     pub fn quitar_escolta(&mut self, heroe: HeroeId, ids: Option<&[EscuadraId]>) -> Result<Vec<Escuadra>, ErrorCaravana> {
         self.exigir_disponible_escoltable()?;
@@ -543,6 +557,53 @@ impl Caravana {
         Ok(std::mem::take(&mut self.escolta))
     }
 
+    /// Comercio_Caravanas §5.8.3 y §5.8.4: una comercial `Disponible` con al menos un carro con animal recibe el encargo y queda `Esperando` en el origen. No toca
+    /// la carga, la escolta ni la posición.
+    pub fn dar_encargo(&mut self, e: Encargo) -> Result<(), ErrorCaravana> {
+        self.exigir_disponible_comercial()?;
+        if self.carros_con_traccion().next().is_none() {
+            return Err(ErrorCaravana::SinCapacidad);
+        }
+        self.pasar(EstadoCaravana::Esperando)?;
+        self.encargo = Some(e);
+        Ok(())
+    }
+
+    /// Comercio_Caravanas §5.8.4: una `Esperando` con encargo sale hacia la otra punta. Desde el origen pasa a `EnTransito` (`punta = Destino`); desde el destino
+    /// a `Retornando` (`punta = Origen`). Pone el destino del encargo, la posición en el primer punto de la ruta, la ruta, los costes, los peajes y el plan, y
+    /// el encargo queda en `Fase::Descarga` (lo primero que hará al llegar) y sin `fin_paso`. No toca la carga ni la escolta.
+    pub fn salir_de_parada(&mut self, ruta: Vec<Punto>, costes: Vec<i64>, peajes: Vec<Peaje>, plan: Plan) -> Result<(), ErrorCaravana> {
+        let (nuevo, punta) = match (self.estado, self.encargo.as_ref().map(|e| e.punta)) {
+            (EstadoCaravana::Esperando, Some(Punta::Origen)) => (EstadoCaravana::EnTransito, Punta::Destino),
+            (EstadoCaravana::Esperando, Some(Punta::Destino)) => (EstadoCaravana::Retornando, Punta::Origen),
+            _ => return Err(ErrorCaravana::EstadoInvalido),
+        };
+        self.pasar(nuevo)?;
+        let e = self.encargo.as_mut().expect("comprobado arriba");
+        e.punta = punta;
+        e.fase = Fase::Descarga;
+        e.fin_paso = None;
+        self.destino = Some(e.destino);
+        self.posicion = ruta.first().copied().unwrap_or(self.posicion);
+        self.ruta = ruta;
+        self.costes = costes;
+        self.peajes = peajes;
+        self.plan = Some(plan);
+        Ok(())
+    }
+
+    /// Comercio_Caravanas §5.8.7: acaba el encargo de una `Esperando` en el origen. Queda `Disponible`, sin encargo y limpia; devuelve la carga que llevaba y la
+    /// escolta para que el núcleo las devuelva al almacén y al campamento.
+    pub fn terminar_encargo(&mut self) -> Result<(Carga, Vec<Escuadra>), ErrorCaravana> {
+        if self.estado != EstadoCaravana::Esperando || !self.encargo.as_ref().is_some_and(|e| e.punta == Punta::Origen) {
+            return Err(ErrorCaravana::EstadoInvalido);
+        }
+        self.pasar(EstadoCaravana::Disponible)?;
+        self.encargo = None;
+        self.limpiar_viaje();
+        Ok((std::mem::take(&mut self.contenido), std::mem::take(&mut self.escolta)))
+    }
+
     fn limpiar_viaje(&mut self) {
         self.destino = None;
         self.origen_acuerdo = None;
@@ -615,20 +676,25 @@ impl Caravana {
         matches!(self.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando).then(|| self.plan.as_ref().and_then(Plan::fin)).flatten()
     }
 
-    /// Instante del próximo peaje por cruzar (solo a la ida).
+    /// Los peajes se cruzan a la ida y, con encargo, también a la vuelta (va cargada, Comercio_Caravanas §5.8.6).
+    fn cruza_peajes(&self) -> bool {
+        self.estado == EstadoCaravana::EnTransito || (self.estado == EstadoCaravana::Retornando && self.encargo.is_some())
+    }
+
+    /// Instante del próximo peaje por cruzar (solo a la ida; con encargo, también a la vuelta).
     pub fn proximo_peaje(&self) -> Option<Instante> {
-        if self.estado != EstadoCaravana::EnTransito {
+        if !self.cruza_peajes() {
             return None;
         }
         let plan = self.plan.as_ref()?;
         self.peajes.first().and_then(|p| instante_de_progreso(plan, p.progreso))
     }
 
-    /// Cobra los peajes alcanzados en `ahora` (§7.3, solo a la ida): para cada uno, `PEAJE_PASO.tasa` del contenido **de ese momento**
+    /// Cobra los peajes alcanzados en `ahora` (§7.3, solo a la ida; con encargo, también a la vuelta): para cada uno, `PEAJE_PASO.tasa` del contenido **de ese momento**
     /// (ya reducido por los anteriores), solo lo que sea `> 0`; se resta del contenido y se devuelve para que el núcleo lo sume al
     /// almacén de la ciudad (topado). Los peajes alcanzados se descartan se haya cobrado o no. La caravana sigue de largo.
     pub fn cobrar_peajes(&mut self, ahora: Instante, tasa: i64) -> Vec<CobroPeaje> {
-        if self.estado != EstadoCaravana::EnTransito {
+        if !self.cruza_peajes() {
             return Vec::new();
         }
         let Some(plan) = &self.plan else { return Vec::new() };
@@ -665,6 +731,8 @@ impl Caravana {
 
     /// El evento de llegada (el último vértice del plan), en `ahora >= fin del plan`.
     ///
+    /// - Con encargo (`EnTransito` o `Retornando`) ⇒ [`Llegada::Parada`]: queda `Esperando` en el último punto del plan, sin plan, ruta, costes ni
+    ///   peajes; al llegar al origen suma una `vuelta`. No toca la carga, la escolta ni el destino.
     /// - `EnTransito` comercial ⇒ [`Llegada::Entrega`]: la caravana pasa a `Retornando`, vacía, `progreso 0` en el destino, con la
     ///   **misma ruta invertida** y sin marcas de trueque.
     /// - `Retornando` ⇒ [`Llegada::Casa`]: queda `Disponible`, limpia, en la posición de su origen.
@@ -680,6 +748,19 @@ impl Caravana {
             return Err(ErrorCaravana::NoHaLlegado);
         }
         let aqui = plan.vertices.last().map(|v| v.p).unwrap_or(self.posicion);
+        if let Some(punta) = self.encargo.as_ref().map(|e| e.punta) {
+            self.pasar(EstadoCaravana::Esperando)?;
+            let e = self.encargo.as_mut().expect("comprobado arriba");
+            if punta == Punta::Origen {
+                e.vueltas += 1;
+            }
+            self.posicion = aqui;
+            self.ruta.clear();
+            self.costes.clear();
+            self.peajes.clear();
+            self.plan = None;
+            return Ok(Llegada::Parada { punta });
+        }
         if self.estado == EstadoCaravana::Retornando {
             let contenido = std::mem::take(&mut self.contenido);
             let escolta = std::mem::take(&mut self.escolta);
@@ -712,9 +793,13 @@ impl Caravana {
 
     /// La plaza `ruina` (destruida o conquistada) era el destino: la caravana en camino regresa a su origen **con su carga** por el plan
     /// `calcularRuta(posición actual → origen)` (sin atracción de la red) que construye el núcleo; `destino = ruina` y, al llegar, vuelca
-    /// el contenido en el origen (§10).
+    /// el contenido en el origen (§10). Con encargo (Comercio_Caravanas §10), la punta pasa a `Origen` y el encargo queda `cancelado`: al llegar
+    /// da la parada del origen, donde el encargo termina.
     pub fn regresar_a_origen(&mut self, ruina: AsentamientoId, plan: Plan) -> Result<(), ErrorCaravana> {
         self.pasar(EstadoCaravana::Retornando)?;
+        if let Some(e) = self.encargo.as_mut() {
+            (e.punta, e.cancelado) = (Punta::Origen, true);
+        }
         self.destino = Some(ruina);
         self.origen_acuerdo = None;
         self.peajes.clear();
@@ -922,6 +1007,7 @@ pub fn candidatas_de_reparto(caravanas: &[Caravana], r: &ReglasFlota, origen: As
 mod pruebas {
     use super::*;
     use crate::datos::Reglas;
+    use crate::encargo::{Modo, Parada};
     use crate::viaje::{peajes_de_paradas, plan_uniforme};
     use EstadoCaravana::*;
 
@@ -1552,11 +1638,176 @@ mod pruebas {
 
     // ---- la máquina de estados ----
 
+    fn con_encargo() -> Caravana {
+        let mut c = buey();
+        c.dar_encargo(Encargo::nuevo(Modo::Ruta, 20, None, Parada::default(), Parada::default())).unwrap();
+        c
+    }
+
+    fn plan_de(c: &Caravana, r: &ReglasFlota, desde: Instante) -> Plan {
+        plan_uniforme(&ruta(), desde, c.velocidad(r), 1).unwrap()
+    }
+
+    fn sale(c: &mut Caravana, r: &ReglasFlota, peajes: Vec<Peaje>) {
+        let plan = plan_de(c, r, 0);
+        c.salir_de_parada(ruta(), vec![1, 2], peajes, plan).unwrap();
+    }
+
+    #[test]
+    fn las_transiciones_del_encargo_son_validas_y_solo_esas() {
+        for (d, h) in [(Disponible, Esperando), (Esperando, EnTransito), (Esperando, Retornando), (Esperando, Disponible), (EnTransito, Esperando), (Retornando, Esperando)] {
+            assert!(transicion_valida(d, h), "{d:?} -> {h:?}");
+        }
+        for (d, h) in [(Preparando, Esperando), (Aparcada, Esperando), (Adjunta, Esperando), (EnBatalla, Esperando), (Esperando, Preparando), (Esperando, EnBatalla), (Esperando, Aparcada), (Esperando, Adjunta)] {
+            assert!(!transicion_valida(d, h), "{d:?} -> {h:?}");
+        }
+    }
+
+    #[test]
+    fn dar_encargo_exige_comercial_disponible_y_con_animal_y_no_toca_nada_mas() {
+        let e = || Encargo::nuevo(Modo::Ruta, 20, None, Parada::default(), Parada::default());
+        let mut a = buey();
+        a.tipo = TipoCaravana::Construccion;
+        assert_eq!(a.dar_encargo(e()), Err(ErrorCaravana::NoEsComercial));
+        let mut b = Caravana { estado: EnTransito, ..buey() };
+        assert_eq!(b.dar_encargo(e()), Err(ErrorCaravana::NoDisponible));
+        let mut c = con(&[(TipoCarro::Basico, None)]);
+        assert_eq!(c.dar_encargo(e()), Err(ErrorCaravana::SinCapacidad));
+        assert!(c.encargo.is_none() && c.estado == Disponible);
+        let mut d = buey();
+        d.contenido.insert(Recurso::Madera, 5_000);
+        d.escolta.push(esc(1, 1, 10));
+        d.dar_encargo(e()).unwrap();
+        assert_eq!((d.estado, d.posicion, d.contenido.len(), d.escolta.len()), (Esperando, Punto::new(0, 0), 1, 1));
+        assert_eq!(d.encargo, Some(e()));
+    }
+
+    #[test]
+    fn salir_de_parada_exige_esperando_con_encargo() {
+        let r = r();
+        let plan = plan_de(&buey(), &r, 0);
+        let mut sin_encargo = Caravana { estado: Esperando, ..buey() };
+        assert_eq!(sin_encargo.salir_de_parada(ruta(), vec![], vec![], plan.clone()), Err(ErrorCaravana::EstadoInvalido));
+        let mut disponible = buey();
+        assert_eq!(disponible.salir_de_parada(ruta(), vec![], vec![], plan.clone()), Err(ErrorCaravana::EstadoInvalido));
+        assert_eq!(disponible.estado, Disponible);
+        let mut c = con_encargo();
+        c.estado = EnTransito;
+        assert_eq!(c.salir_de_parada(ruta(), vec![], vec![], plan), Err(ErrorCaravana::EstadoInvalido));
+    }
+
+    #[test]
+    fn el_encargo_va_del_origen_al_destino_y_vuelve_con_su_punta_fase_destino_y_vueltas() {
+        let r = r();
+        let mut c = con_encargo();
+        c.contenido.insert(Recurso::Madera, 5_000);
+        c.escolta.push(esc(1, 1, 10));
+        c.encargo.as_mut().unwrap().fase = Fase::Carga;
+        c.encargo.as_mut().unwrap().fin_paso = Some(99);
+        assert_eq!((c.encargo.as_ref().unwrap().punta, c.destino), (Punta::Origen, None));
+        sale(&mut c, &r, vec![Peaje { ciudad: 7, progreso: 1 }]);
+        let e = c.encargo.as_ref().unwrap();
+        assert_eq!((c.estado, e.punta, e.fase, e.fin_paso, c.destino, e.vueltas), (EnTransito, Punta::Destino, Fase::Descarga, None, Some(20), 0));
+        assert_eq!((c.ruta.len(), c.costes.clone(), c.peajes.len(), c.plan.is_some()), (3, vec![1, 2], 1, true));
+        // Llega al destino: espera allí, sin viaje, y no suma vuelta.
+        let fin = c.llegada_en().unwrap();
+        assert_eq!(c.llegar(fin), Ok(Llegada::Parada { punta: Punta::Destino }));
+        let e = c.encargo.as_ref().unwrap();
+        assert_eq!((c.estado, e.punta, e.vueltas, c.destino), (Esperando, Punta::Destino, 0, Some(20)));
+        assert_eq!(c.posicion, Punto::new(60_000, 80_000));
+        assert!(c.plan.is_none() && c.ruta.is_empty() && c.costes.is_empty() && c.peajes.is_empty());
+        // Vuelve.
+        sale(&mut c, &r, vec![]);
+        let e = c.encargo.as_ref().unwrap();
+        assert_eq!((c.estado, e.punta, e.fase, e.fin_paso, c.destino), (Retornando, Punta::Origen, Fase::Descarga, None, Some(20)));
+        let fin = c.llegada_en().unwrap();
+        assert_eq!(c.llegar(fin), Ok(Llegada::Parada { punta: Punta::Origen }));
+        let e = c.encargo.as_ref().unwrap();
+        assert_eq!((c.estado, e.punta, e.vueltas, c.destino), (Esperando, Punta::Origen, 1, Some(20)));
+        // La llegada no toca ni la carga ni la escolta.
+        assert_eq!((c.contenido[&Recurso::Madera], c.escolta.len()), (5_000, 1));
+    }
+
+    #[test]
+    fn terminar_encargo_solo_en_el_origen_y_devuelve_carga_y_escolta() {
+        let r = r();
+        let mut c = con_encargo();
+        c.contenido.insert(Recurso::Madera, 5_000);
+        c.escolta.push(esc(1, 1, 10));
+        sale(&mut c, &r, vec![]);
+        assert_eq!(c.terminar_encargo(), Err(ErrorCaravana::EstadoInvalido), "en viaje");
+        c.llegar(c.llegada_en().unwrap()).unwrap();
+        assert_eq!(c.terminar_encargo(), Err(ErrorCaravana::EstadoInvalido), "esperando en el destino");
+        assert_eq!(c.estado, Esperando);
+        sale(&mut c, &r, vec![]);
+        let antes = c.clone();
+        assert_eq!(c.terminar_encargo(), Err(ErrorCaravana::EstadoInvalido), "en el viaje de vuelta");
+        assert_eq!((c.estado, c.contenido.clone(), c.escolta.clone(), c.destino, c.encargo.clone()), (antes.estado, antes.contenido, antes.escolta, antes.destino, antes.encargo));
+        c.llegar(c.llegada_en().unwrap()).unwrap();
+        let (carga, escolta) = c.terminar_encargo().unwrap();
+        assert_eq!((carga[&Recurso::Madera], escolta.len()), (5_000, 1));
+        assert_eq!((c.estado, c.encargo.is_none(), c.destino, c.contenido.is_empty(), c.escolta.is_empty()), (Disponible, true, None, true, true));
+        assert_eq!(buey().terminar_encargo(), Err(ErrorCaravana::EstadoInvalido));
+    }
+
+    #[test]
+    fn regresar_a_origen_con_encargo_pone_la_punta_en_el_origen_lo_cancela_y_al_llegar_da_la_parada_del_origen() {
+        let r = r();
+        let mut c = con_encargo();
+        c.contenido.insert(Recurso::Madera, 5_000);
+        sale(&mut c, &r, vec![]);
+        assert_eq!(c.estado, EnTransito);
+        let plan = plan_de(&c, &r, 0);
+        c.regresar_a_origen(20, plan).unwrap();
+        let e = c.encargo.as_ref().unwrap();
+        assert_eq!((c.estado, e.punta, e.cancelado, c.destino), (Retornando, Punta::Origen, true, Some(20)));
+        assert_eq!(c.contenido[&Recurso::Madera], 5_000, "con su carga");
+        assert_eq!(c.llegar(c.llegada_en().unwrap()), Ok(Llegada::Parada { punta: Punta::Origen }));
+        assert_eq!(c.estado, Esperando);
+        assert!(c.terminar_encargo().is_ok(), "el encargo termina en el origen");
+    }
+
+    #[test]
+    fn la_escolta_se_asigna_y_se_quita_esperando_en_el_origen_y_no_en_el_destino() {
+        let r = r();
+        let mut c = con_encargo();
+        c.asignar_escolta(vec![esc(1, 7, 10)], 100).unwrap();
+        assert_eq!(c.quitar_escolta(7, None).unwrap().len(), 1);
+        c.asignar_escolta(vec![esc(2, 7, 10)], 100).unwrap();
+        sale(&mut c, &r, vec![]);
+        assert_eq!(c.asignar_escolta(vec![esc(3, 7, 10)], 100), Err(ErrorCaravana::NoDisponible), "en viaje");
+        c.llegar(c.llegada_en().unwrap()).unwrap();
+        assert_eq!(c.asignar_escolta(vec![esc(3, 7, 10)], 100), Err(ErrorCaravana::NoDisponible), "esperando en el destino");
+        assert_eq!(c.quitar_escolta(7, None), Err(ErrorCaravana::NoDisponible));
+        assert_eq!(c.escolta.len(), 1);
+    }
+
+    #[test]
+    fn con_encargo_los_peajes_se_cobran_tambien_a_la_vuelta_y_sin_encargo_no() {
+        let r = r();
+        let tasa = Reglas::cargar().peaje;
+        let mut c = con_encargo();
+        c.contenido.insert(Recurso::Madera, 200_000);
+        sale(&mut c, &r, vec![]);
+        c.llegar(c.llegada_en().unwrap()).unwrap();
+        sale(&mut c, &r, vec![Peaje { ciudad: 7, progreso: 100_000 }]);
+        assert_eq!(c.estado, Retornando);
+        let t = c.proximo_peaje().unwrap();
+        let cobros = c.cobrar_peajes(t, tasa);
+        assert_eq!((cobros.len(), cobros[0].cobrado[&Recurso::Madera]), (1, 4_000));
+        // Sin encargo, la vuelta no paga.
+        let mut s = en_marcha(&r, &[(Recurso::Madera, 200_000)], vec![]);
+        s.llegar(s.llegada_en().unwrap()).unwrap();
+        s.peajes = vec![Peaje { ciudad: 7, progreso: 100_000 }];
+        assert_eq!(s.estado, Retornando);
+        assert!(s.proximo_peaje().is_none() && s.cobrar_peajes(s.llegada_en().unwrap(), tasa).is_empty());
+    }
+
     #[test]
     fn la_tabla_de_transiciones_es_la_del_documento() {
-        let todos = [Disponible, Preparando, EnTransito, Retornando, Aparcada, Adjunta, EnBatalla];
+        let todos = [Disponible, Preparando, EnTransito, Retornando, Aparcada, Adjunta, EnBatalla, Esperando];
         let validas: Vec<_> = todos.iter().flat_map(|&d| todos.iter().filter(move |&&h| transicion_valida(d, h)).map(move |&h| (d, h))).collect();
-        assert_eq!(validas.len(), 18);
+        assert_eq!(validas.len(), 24);
         // El ciclo completo del documento.
         for (d, h) in [(Disponible, Preparando), (Preparando, EnTransito), (EnTransito, Retornando), (Retornando, Disponible)] {
             assert!(transicion_valida(d, h));

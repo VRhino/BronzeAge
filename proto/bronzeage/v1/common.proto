@@ -87,6 +87,30 @@ message Cantidades {
   map<string, sint64> por_id = 1;
 }
 
+// Una parada del encargo de una caravana (rutas de caravanas automáticas, 2026-10-31): qué recoge y qué deja en una punta; primero deja y luego
+// recoge. En una plaza ajena, dejar es venderle a sus órdenes de compra y recoger es comprar a sus órdenes de venta;
+// allí cada línea lleva su precio (en la unidad de `OrdenMercado.precio_unitario`) y en una plaza propia no lleva ninguno.
+message ParadaEncargo {
+  repeated LineaRecoger recoger = 1;
+  // Con `true`, la caravana no carga hasta que el almacén tiene todo lo pedido (sin plazo); con `false`, sale con lo que haya.
+  bool esperar_existencias = 2;
+  repeated LineaDejar dejar = 3;
+  // Con `true`, lo que no cabe en el almacén se tira; con `false`, se queda a bordo. En una plaza ajena no cuenta: lo que no se vende vuelve a bordo.
+  bool desechar_sobrante = 4;
+}
+
+message LineaRecoger {
+  string recurso = 1;  // id de catálogo
+  sint64 cantidad = 2;  // milésimas (unidades enteras)
+  optional sint64 precio_max = 3;  // solo en una plaza ajena: compra a las órdenes de venta con precio ≤ este
+}
+
+message LineaDejar {
+  string recurso = 1;  // id de catálogo
+  optional sint64 tope = 2;  // milésimas; sin tope deja todo lo que lleve de ese recurso
+  optional sint64 precio_min = 3;  // solo en una plaza ajena: vende a las órdenes de compra con precio ≥ este
+}
+
 message Sigilo {
   string forma_id = 1;
   string campo_id = 2;

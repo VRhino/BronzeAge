@@ -493,6 +493,7 @@ impl Nucleo {
                 self.devolver_escolta(&escolta);
                 self.perder_caravana(t, id);
             }
+            Llegada::Parada { punta } => self.llegada_a_parada(t, id, punta),
         }
     }
 

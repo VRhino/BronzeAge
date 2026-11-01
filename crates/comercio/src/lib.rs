@@ -7,11 +7,12 @@
 //! Módulos, en orden de dependencia: `datos` (cifras de los bloques), `precio` (§3), `reputacion` (§4.6), `trueque` (§4), `reparto`
 //! (§4.3), `orden_mercado` (§8.1-8.2) y `mostrador` (§8.3), `viaje` (§6: planes y peajes), `caravana` (§5-§6: la entidad y su máquina
 //! de estados), `flota` (§5.1: cupos y políticas), `entrega` (§4.4), `red_caminos` (§7.4), `mercenarios` (§9), `ruina` (§10, ruina y
-//! conquista), `acarreo` (carro de acarreo, Doc 3.13.8) y `evento` (§12).
+//! conquista), `acarreo` (carro de acarreo, Doc 3.13.8), `encargo` (§5.8: rutas y envíos automáticos) y `evento` (§12).
 
 pub mod acarreo;
 pub mod caravana;
 pub mod datos;
+pub mod encargo;
 pub mod entrega;
 pub mod evento;
 pub mod flota;

@@ -4,7 +4,7 @@
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::estado::Clase;
 use crate::codec_economia::{cargo_a_u8, cargo_de_u8, recurso_a_u8, recurso_de_u8, tipo_a_u8, tipo_de_u8};
-use crate::codec_comercio::{animal_a_u8, animal_de_u8, tipo_carro_a_u8, tipo_carro_de_u8};
+use crate::codec_comercio::{animal_a_u8, animal_de_u8, modo_a_u8, modo_de_u8, parada_escribir, parada_leer, tipo_carro_a_u8, tipo_carro_de_u8};
 use crate::codec_batallas::{asignacion_escribir, asignacion_leer, resultado_escribir, resultado_leer, salida_escribir, salida_leer, tokens_escribir, tokens_leer};
 use crate::codec_columna::{politica_a_u8, politica_de_u8};
 use crate::codec_politica::{sigilo_escribir, sigilo_leer};
@@ -17,6 +17,7 @@ use combate::ciclo::{Asignacion, SalidaBatalla, Token};
 use combate::resolucion::Lado;
 use combate::resultado::Resultado as ResultadoDeBatalla;
 use comercio::caravana::{Animal, TipoCarro};
+use comercio::encargo::{Modo, Parada};
 use militar::catalogo::Tropa;
 use militar::columna::Politica;
 use militar::heroe::{Controlador, Residencia};
@@ -457,7 +458,7 @@ pub enum Comando {
     /// El titular desarma su Caravana de Fundación suelta, parada en su origen, y devuelve lo que costó (a la plaza, o al fondo a nombre de cada aportante).
     DesarmarCaravanaFundacion { heroe: u64, caravana: u64 },
     // ── Política: los cargos locales y la puerta (sistema 5, tanda 5E; Diplomacia_Facciones §3.4 y §4.3, Proyecciones §5.2). Códigos del 158 al 160 (5F tomó del 168 al 173 y dejó este hueco). ──
-    /// Hace a `designado` titular de `cargo` en la plaza (sustituye al anterior). Al Gobernador lo designa el Rey de la Facción dueña, sin estar presente; a los otros cuatro, el Gobernador,
+    /// Hace a `designado` titular de `cargo` en la plaza (sustituye al anterior). Al Gobernador lo designa el Rey de la Facción dueña, sin estar presente; a los otros cinco, el Gobernador,
     /// residente y dentro, y solo si ya hay Gobernador. El designado es ciudadano de la Facción dueña y reside en la plaza (Q4).
     AsignarCargoLocal { heroe: u64, asentamiento: u64, cargo: Cargo, designado: u64 },
     /// Cierra la puerta de la plaza a esos grupos y la abre a los demás (Q1): el Gobernador, residente y dentro, o el Rey de la Facción dueña, sin estar presente. Quien está dentro de la
@@ -509,6 +510,14 @@ pub enum Comando {
     DejarEnPlaza { heroe: u64, asentamiento: u64, recurso: Recurso, cantidad: Mil },
     /// El Gobernador cierra (o abre) a los ciudadanos el sacar del almacén de la plaza al carro (`CargarDePlaza`). No toca repostar, las caravanas ni la salida.
     CerrarAlmacenACiudadanos { asentamiento: u64, cerrado: bool },
+    // ── Los encargos de las caravanas: rutas y envíos automáticos (2026-10-31; Comercio_Caravanas §5.8). Códigos 195 a 197. ──
+    /// El Maestro de Caravanas, el Tesorero o el Gobernador del origen de la caravana, residente y dentro, le da un encargo de transporte: una ruta entre dos plazas de su Facción o un
+    /// envío de una ida y vuelta a cualquier plaza, con lo que deja y recoge en cada punta.
+    EncargarCaravana { caravana: u64, destino: u64, modo: Modo, salir_en: Option<Instante>, en_origen: Parada, en_destino: Parada },
+    /// Cambia el encargo de la caravana (el modo no cambia): vale para todo paso que aún no ha empezado; el destino solo cambia con la caravana esperando en su origen.
+    CambiarEncargo { caravana: u64, destino: u64, salir_en: Option<Instante>, en_origen: Parada, en_destino: Parada },
+    /// Cancela el encargo de la caravana.
+    CancelarEncargo { caravana: u64 },
     // ── La tecnología (sistema 6, tanda 6C; Tecnologia_Aedas §4). Código 175. ──
     /// El Rey de `faccion`, presente en su capital efectiva, adopta la tecnología `tecnologia` (índice del catálogo) ya aparecida: la paga el almacén de la capital con la tarifa de su Era,
     /// al instante.
@@ -613,6 +622,7 @@ const GOBERNADOR: &[Cargo] = &[Cargo::Gobernador];
 const TESORERO: &[Cargo] = &[Cargo::Tesorero];
 const GOBERNADOR_O_MAESTRO: &[Cargo] = &[Cargo::Gobernador, Cargo::MaestroObras];
 const GOBERNADOR_O_TESORERO: &[Cargo] = &[Cargo::Gobernador, Cargo::Tesorero];
+const GOBERNADOR_TESORERO_O_MAESTRO_CARAVANAS: &[Cargo] = &[Cargo::Gobernador, Cargo::Tesorero, Cargo::MaestroCaravanas];
 
 impl Comando {
     /// Quién puede dar la orden ([`Autoriza`]). Cada variante se nombra a propósito (sin `_`): una orden nueva no compila hasta decidirlo.
@@ -759,6 +769,7 @@ impl Comando {
             | Comando::ColocarOrdenMercado { .. }
             | Comando::CancelarOrdenMercado { .. }
             | Comando::AlternarReabastecerAliados { .. } => Cargo(GOBERNADOR_O_TESORERO),
+            Comando::EncargarCaravana { .. } | Comando::CambiarEncargo { .. } | Comando::CancelarEncargo { .. } => Cargo(GOBERNADOR_TESORERO_O_MAESTRO_CARAVANAS),
             Comando::CrearCaravana { .. }
             | Comando::AnadirCarro { .. }
             | Comando::AnadirAnimal { .. }
@@ -967,6 +978,11 @@ impl Comando {
                     i.heroes.push(*heroe);
                 }
             }
+            Comando::EncargarCaravana { caravana, destino, .. } | Comando::CambiarEncargo { caravana, destino, .. } => {
+                i.caravanas.push(*caravana);
+                i.asentamientos.push(*destino);
+            }
+            Comando::CancelarEncargo { caravana } => i.caravanas.push(*caravana),
             Comando::MoverCarro { de, a, .. } => i.caravanas.extend([*de, *a]),
             Comando::ProponerTrueque { a, b, .. } => i.asentamientos.extend([*a, *b]),
             Comando::FijarNivelAsentamiento { asentamiento, .. }
@@ -2007,6 +2023,27 @@ impl Peticion {
                 w.u64(*asentamiento);
                 w.bool(*cerrado);
             }
+            Comando::EncargarCaravana { caravana, destino, modo, salir_en, en_origen, en_destino } => {
+                w.u8(195);
+                w.u64(*caravana);
+                w.u64(*destino);
+                w.u8(modo_a_u8(*modo));
+                w.opt_i64(*salir_en);
+                parada_escribir(&mut w, en_origen);
+                parada_escribir(&mut w, en_destino);
+            }
+            Comando::CambiarEncargo { caravana, destino, salir_en, en_origen, en_destino } => {
+                w.u8(196);
+                w.u64(*caravana);
+                w.u64(*destino);
+                w.opt_i64(*salir_en);
+                parada_escribir(&mut w, en_origen);
+                parada_escribir(&mut w, en_destino);
+            }
+            Comando::CancelarEncargo { caravana } => {
+                w.u8(197);
+                w.u64(*caravana);
+            }
             Comando::AdoptarTecnologia { heroe, faccion, tecnologia } => {
                 w.u8(175);
                 w.u64(*heroe);
@@ -2525,6 +2562,9 @@ impl Peticion {
             192 => Comando::CargarDePlaza { heroe: r.u64()?, asentamiento: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
             193 => Comando::DejarEnPlaza { heroe: r.u64()?, asentamiento: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
             194 => Comando::CerrarAlmacenACiudadanos { asentamiento: r.u64()?, cerrado: r.bool()? },
+            195 => Comando::EncargarCaravana { caravana: r.u64()?, destino: r.u64()?, modo: modo_de_u8(r.u8()?)?, salir_en: r.opt_i64()?, en_origen: parada_leer(&mut r)?, en_destino: parada_leer(&mut r)? },
+            196 => Comando::CambiarEncargo { caravana: r.u64()?, destino: r.u64()?, salir_en: r.opt_i64()?, en_origen: parada_leer(&mut r)?, en_destino: parada_leer(&mut r)? },
+            197 => Comando::CancelarEncargo { caravana: r.u64()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -2653,6 +2693,21 @@ pub mod rechazos {
     pub const CARAVANA_FACCION_AJENA: &str = "caravana.faccion_ajena";
     pub const CARAVANA_PLAZA_AJENA: &str = "caravana.plaza_ajena";
     pub const CARAVANA_NO_ESTA_ADJUNTA: &str = "caravana.no_esta_adjunta";
+    // Encargos de las caravanas (`ErrorEncargo` y lo que comprueba el núcleo; rutas de caravanas automáticas, 2026-10-31).
+    /// El destino del encargo es el origen de la caravana.
+    pub const ENCARGO_MISMO_ORIGEN: &str = "encargo.mismo_origen";
+    /// Una ruta permanente a una plaza que no es de la Facción del origen (a una ajena solo va un envío).
+    pub const ENCARGO_DESTINO_AJENO: &str = "encargo.destino_ajeno";
+    /// Una línea con cantidad o tope de menos de una unidad, un recurso repetido en la misma lista, precio en una plaza propia u oro en una ajena.
+    pub const ENCARGO_LINEA_INVALIDA: &str = "encargo.linea_invalida";
+    /// Una línea en una plaza ajena sin precio máximo (al recoger) o mínimo (al dejar), o con un precio que no es positivo.
+    pub const ENCARGO_FALTA_PRECIO: &str = "encargo.falta_precio";
+    /// Lo que se recoge en una parada pasa de la capacidad de la caravana.
+    pub const ENCARGO_SUPERA_CAPACIDAD: &str = "encargo.supera_capacidad";
+    /// La caravana ya tiene un encargo: se cambia o se cancela.
+    pub const ENCARGO_YA_TIENE: &str = "encargo.ya_tiene";
+    /// La caravana no tiene encargo.
+    pub const ENCARGO_NO_TIENE: &str = "encargo.no_tiene";
     // Entrega manual (§4.5).
     pub const ENTREGA_INVALIDA: &str = "entrega.invalida";
     pub const ENTREGA_NO_DEBE: &str = "entrega.no_debe";
@@ -3319,6 +3374,7 @@ mod pruebas {
     use super::*;
     use combate::ciclo::{EscuadraDeSalida, Instancia, MotivoSalida};
     use combate::resultado::{Botin, ObjetoBotin, Razon, ResultadoEscuadra, ResultadoHeroe};
+    use comercio::encargo::{LineaDejar, LineaRecoger};
 
     /// 5E-12 (retirado en 5H): el 117 era el alias `FijarAcceso`; una petición vieja con él ya no se lee.
     #[test]
@@ -3584,6 +3640,22 @@ mod pruebas {
             Comando::CargarDePlaza { heroe: 2, asentamiento: 5, recurso: Recurso::Madera, cantidad: 20_000 },
             Comando::DejarEnPlaza { heroe: 2, asentamiento: 5, recurso: Recurso::Oro, cantidad: 3_000 },
             Comando::CerrarAlmacenACiudadanos { asentamiento: 5, cerrado: true },
+            Comando::EncargarCaravana {
+                caravana: 4,
+                destino: 6,
+                modo: Modo::Envio,
+                salir_en: Some(90_000),
+                en_origen: Parada { recoger: vec![LineaRecoger { recurso: Recurso::Oro, cantidad: 50_000, precio_max: None }], esperar_existencias: true, dejar: vec![], desechar_sobrante: false },
+                en_destino: Parada {
+                    recoger: vec![LineaRecoger { recurso: Recurso::Trigo, cantidad: 100_000, precio_max: Some(2_000_000) }],
+                    esperar_existencias: false,
+                    dejar: vec![LineaDejar { recurso: Recurso::Madera, tope: Some(30_000), precio_min: Some(1_500_000) }, LineaDejar { recurso: Recurso::Cobre, tope: None, precio_min: Some(4_000_000) }],
+                    desechar_sobrante: true,
+                },
+            },
+            Comando::EncargarCaravana { caravana: 4, destino: 6, modo: Modo::Ruta, salir_en: None, en_origen: Parada::default(), en_destino: Parada::default() },
+            Comando::CambiarEncargo { caravana: 4, destino: 7, salir_en: None, en_origen: Parada { dejar: vec![LineaDejar { recurso: Recurso::Piedra, tope: None, precio_min: None }], ..Parada::default() }, en_destino: Parada::default() },
+            Comando::CancelarEncargo { caravana: 4 },
             Comando::AdoptarTecnologia { heroe: 2, faccion: 1, tecnologia: 2 },
             Comando::ComprarTecnologiaAeda { heroe: 2, asentamiento: 5, tecnologia: 2 },
             Comando::EmpezarEpica { heroe: 2, asentamiento: 3, aeda: 4, tecnologia: 5 },

@@ -131,6 +131,9 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
     21 * crate::estado_comercio::ETIQUETA | plaza
 }
 
+/// BAN52: BAN51 con el encargo de cada caravana (`Caravana::encargo`, rutas de caravanas automáticas, 2026-10-31; `codec_comercio`) y un sexto cargo local por plaza (el
+/// Maestro de Caravanas, tras los cinco de antes). BAN51 a BAN40 se siguen admitiendo: ninguna caravana tiene encargo y ninguna plaza Maestro de Caravanas.
+///
 /// BAN51: BAN50 con el cierre del almacén a los ciudadanos de cada plaza (`Asentamiento::almacen_cerrado_a_ciudadanos`, detrás de `permite_reabastecer_aliados`; 2026-10-29). BAN50 a BAN40
 /// se siguen admitiendo: ninguna plaza lo tiene cerrado.
 ///
@@ -281,7 +284,7 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN51";
+const MAGIA: &[u8; 5] = b"BAN52";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -779,17 +782,21 @@ pub enum SucesoComercio {
     PulsoReparto,
     /// Reposición de los mercados de mercenarios (la entidad es el mercado, único); solo se programa si algo cambió.
     ReponeMercenarios,
+    /// Acaba el paso en curso de una caravana `Esperando` con encargo (la entidad es la caravana): la hora de salida de un envío, la descarga o la carga.
+    FinPasoEncargo,
+    /// Pulso de un minuto de una caravana con encargo que espera existencias en su parada (la entidad es la caravana); se repite mientras falte algo.
+    PulsoEncargo,
 }
 
 impl SucesoComercio {
-    /// Posición dentro de la prioridad 6: 0 = llegadas y peajes, 1 = fin de preparación, 2 = caducidades, 3 = reparto y reposición. Un evento
+    /// Posición dentro de la prioridad 6: 0 = llegadas y peajes, 1 = fin de preparación y de paso de un encargo, 2 = caducidades, 3 = reparto, reposición y pulso de un encargo. Un evento
     /// de rango `r` deja pasar `r` veces a los eventos del mismo instante que ya estaban en la cola antes de ejecutarse.
     pub fn rango(self) -> u8 {
         match self {
             SucesoComercio::LlegadaCaravana | SucesoComercio::PeajeCaravana => 0,
-            SucesoComercio::FinPreparacion => 1,
+            SucesoComercio::FinPreparacion | SucesoComercio::FinPasoEncargo => 1,
             SucesoComercio::CaducaTrueque | SucesoComercio::CaducaOrden => 2,
-            SucesoComercio::PulsoReparto | SucesoComercio::ReponeMercenarios => 3,
+            SucesoComercio::PulsoReparto | SucesoComercio::ReponeMercenarios | SucesoComercio::PulsoEncargo => 3,
         }
     }
     pub(crate) fn a_u8(self) -> u8 {
@@ -801,6 +808,8 @@ impl SucesoComercio {
             SucesoComercio::PeajeCaravana => 4,
             SucesoComercio::PulsoReparto => 5,
             SucesoComercio::ReponeMercenarios => 6,
+            SucesoComercio::FinPasoEncargo => 7,
+            SucesoComercio::PulsoEncargo => 8,
         }
     }
     pub(crate) fn de_u8(i: u8) -> Option<Self> {
@@ -812,6 +821,8 @@ impl SucesoComercio {
             4 => Some(SucesoComercio::PeajeCaravana),
             5 => Some(SucesoComercio::PulsoReparto),
             6 => Some(SucesoComercio::ReponeMercenarios),
+            7 => Some(SucesoComercio::FinPasoEncargo),
+            8 => Some(SucesoComercio::PulsoEncargo),
             _ => None,
         }
     }
@@ -1371,13 +1382,14 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN51`): los cuatro primeros dicen la familia («BAN5» es el formato 50 y «BAN4» los formatos 40 a 49, y se admiten todos; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
+        // La cabecera es de 5 bytes (`BAN52`): los cuatro primeros dicen la familia («BAN5» es el formato 50 y «BAN4» los formatos 40 a 49, y se admiten todos; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
         // 20 a 29 y 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         let (mut con_eligieron, mut con_rutas_acarreo, mut con_nombres, mut con_precios, mut con_forzadas, mut con_misiones, mut con_aldeas) = (true, true, true, true, true, true, true);
-        let (mut con_flujos, mut con_participacion, mut con_recurrentes, mut con_almacen_cerrado) = (false, false, false, false);
+        let (mut con_flujos, mut con_participacion, mut con_recurrentes, mut con_almacen_cerrado, mut con_encargos) = (false, false, false, false, false);
         if magia == MAGIA[..4] {
             match r.u8()? {
+                b'2' => (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos) = (true, true, true, true, true),
                 b'1' => (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado) = (true, true, true, true),
                 b'0' => (con_flujos, con_participacion, con_recurrentes) = (true, true, true),
                 _ => return Err(ErrorFormato("no es un estado del núcleo")),
@@ -1499,7 +1511,8 @@ impl Estado {
             }
             let puerta = Puerta { cerrada_a, vetados };
             let mut cargos = Cargos::default();
-            for c in politica::CARGOS {
+            // Hasta BAN51 había cinco cargos locales; el sexto (Maestro de Caravanas) llega vacío.
+            for c in politica::CARGOS.into_iter().take(if con_encargos { politica::CARGOS.len() } else { 5 }) {
                 cargos.fijar(c, r.opt_u64()?);
             }
             let (nombre, capital_de, de_la_faccion_desde) = (r.texto()?, r.opt_u64()?.map(|f| f as u32), r.i64()?);
@@ -1523,7 +1536,7 @@ impl Estado {
         for _ in 0..r.cuenta()? {
             s.contactos.insert((r.u64()?, r.u64()?));
         }
-        s.comercio = codec_comercio::leer(&mut r, &s.reglas.economia.comercio, con_rutas_acarreo)?;
+        s.comercio = codec_comercio::leer(&mut r, &s.reglas.economia.comercio, con_rutas_acarreo, con_encargos)?;
         s.militar = codec_militar::leer(&mut r, con_eligieron, con_nombres)?;
         s.combate = codec_combate::leer(&mut r)?;
         s.batallas = codec_batallas::leer(&mut r)?;

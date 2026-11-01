@@ -26,7 +26,7 @@ pub const CONTADORES: &[&str] = &[
     "salidas", "prestamos", "llegadas", "repostajes", "escuadrones", "infanteria", "tiro", "caballeria", "uniones", "batallas", "bandidos", "alijos", "entregas", "defensas", "victorias",
 ];
 /// Los cargos que puede pedir una recurrente de plaza (las claves de `asentamiento::Cargo`) y una de Facción.
-pub const CARGOS_DE_PLAZA: &[&str] = &["gobernador", "tesorero", "general", "maestroObras", "sacerdote"];
+pub const CARGOS_DE_PLAZA: &[&str] = &["gobernador", "tesorero", "general", "maestroObras", "sacerdote", "maestroCaravanas"];
 pub const CARGOS_DE_FACCION: &[&str] = &["rey", "embajador"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

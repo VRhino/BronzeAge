@@ -19,6 +19,7 @@ use asentamiento::{Almacen, Recurso};
 use base::Mil;
 use combate::ciclo::{Batalla, EstadoBatalla};
 use comercio::caravana::{Animal, Caravana, EstadoCaravana, TipoCaravana, TipoCarro};
+use comercio::encargo::{Encargo, Fase, Modo, Parada, Punta};
 use comercio::orden_mercado::{EstadoOrden, OrdenMercado, TipoOrden};
 use comercio::trueque::{AcuerdoTrueque, EstadoTrueque, Linea};
 use contrato::v1 as pb;
@@ -476,6 +477,7 @@ pub fn caravana(n: &Nucleo, c: &Caravana) -> pb::Caravana {
         EstadoCaravana::Aparcada => pb::EstadoCaravana::CaravanaAparcada,
         EstadoCaravana::EnTransito | EstadoCaravana::EnBatalla => pb::EstadoCaravana::CaravanaEnTransito,
         EstadoCaravana::Retornando => pb::EstadoCaravana::CaravanaRetornando,
+        EstadoCaravana::Esperando => pb::EstadoCaravana::CaravanaEsperando,
     };
     let tipo = match c.tipo {
         TipoCaravana::Comercial => pb::TipoCaravana::CaravanaComercial,
@@ -514,6 +516,7 @@ pub fn caravana(n: &Nucleo, c: &Caravana) -> pb::Caravana {
         reservada_manual: c.reservada_manual,
         prepara_hasta_ms: c.prepara_hasta,
         pueblo_id: pueblo,
+        encargo: c.encargo.as_ref().map(encargo),
         escoltada: c.estado == EstadoCaravana::Adjunta || !c.escolta.is_empty(),
         // Los peajes que le quedan a la ida, con el instante en que su plan cruza cada zona (paridad P7); se cobran solo en tránsito.
         peajes: match (&c.plan, c.estado) {
@@ -525,6 +528,41 @@ pub fn caravana(n: &Nucleo, c: &Caravana) -> pb::Caravana {
             _ => vec![],
         },
         ..Default::default()
+    }
+}
+
+/// El encargo de la caravana propia (Comercio_Caravanas §5.8.9), campo a campo; los textos son los que lee `sesiones/ordenes.rs` (`modo`: `ruta | envio`) y los recursos van con su id de catálogo.
+fn encargo(e: &Encargo) -> pb::Encargo {
+    let parada = |p: &Parada| pb::ParadaEncargo {
+        recoger: p.recoger.iter().map(|l| pb::LineaRecoger { recurso: l.recurso.nombre().to_owned(), cantidad: l.cantidad, precio_max: l.precio_max }).collect(),
+        esperar_existencias: p.esperar_existencias,
+        dejar: p.dejar.iter().map(|l| pb::LineaDejar { recurso: l.recurso.nombre().to_owned(), tope: l.tope, precio_min: l.precio_min }).collect(),
+        desechar_sobrante: p.desechar_sobrante,
+    };
+    pb::Encargo {
+        modo: match e.modo {
+            Modo::Ruta => "ruta",
+            Modo::Envio => "envio",
+        }
+        .to_owned(),
+        destino_asentamiento_id: ids::asentamiento(u64::from(e.destino)),
+        salir_en_ms: e.salir_en,
+        parada_origen: Some(parada(&e.en_origen)),
+        parada_destino: Some(parada(&e.en_destino)),
+        vueltas: e.vueltas,
+        parada_actual: match e.punta {
+            Punta::Origen => "origen",
+            Punta::Destino => "destino",
+        }
+        .to_owned(),
+        fase: match e.fase {
+            Fase::Espera => "espera",
+            Fase::Descarga => "descarga",
+            Fase::Carga => "carga",
+        }
+        .to_owned(),
+        fin_paso_ms: e.fin_paso,
+        cancelado: e.cancelado,
     }
 }
 

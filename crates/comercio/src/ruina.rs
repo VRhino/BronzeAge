@@ -6,11 +6,15 @@
 //!   se pierden; las que **iban hacia `R`** vuelven (la `preparando` a `disponible` con su carga; la `en_transito` regresa por un plan nuevo
 //!   o se pierde si no hay camino por tierra ni origen); la **aparcada en `R`** se destruye con todo, sin captura. Las `construccion` siguen su
 //!   propio camino; las `adjunta` también, salvo las que **salían de `R`**, que se pierden con su plaza y su carga (P7, 2026-10-25).
+//! - **Caravanas con encargo** (Comercio_Caravanas §10): la `esperando` en `R` como destino de su ruta se destruye con todo, como la aparcada; la
+//!   `en_transito` hacia `R` regresa como cualquier otra que iba hacia ella y su encargo termina al llegar a casa. La que sale de `R` sigue la
+//!   suerte de las demás de su origen (se pierde en la ruina; en la conquista pasa con la flota).
 //! - **Conquista de `R`** (decidida el 2026-10-18): la **flota** pasa al conquistador con su zona (no se pierde ninguna), los trueques con la
 //!   plaza se anulan igual que en la ruina y las caravanas que iban hacia ella **regresan con su carga**. La **aparcada en `R`** se destruye
 //!   igual que en la ruina (decidido el 2026-10-19: el tren de suministros es objetivo, Doc 3.13.7 y 5.13.2).
 
 use crate::caravana::{Caravana, EstadoCaravana, Escuadra, TipoCaravana};
+use crate::encargo::Punta;
 use crate::tipos::{AcuerdoId, AsentamientoId, CaravanaId};
 use crate::trueque::AcuerdoTrueque;
 
@@ -33,7 +37,8 @@ pub enum Accion {
     /// En camino hacia la plaza: regresa con su carga por `calcularRuta(posición → origen)` sin atracción: el núcleo construye el plan y
     /// llama a [`Caravana::regresar_a_origen`].
     Regresa,
-    /// Aparcada en la plaza que cae (en ruinas o conquistada): se destruye con carros, animales y carga, sin captura.
+    /// Aparcada, o `Esperando` con encargo como destino, en la plaza que cae (en ruinas o conquistada): se destruye con carros, animales y
+    /// carga, sin captura.
     Destruye,
 }
 
@@ -107,6 +112,8 @@ pub fn cerrar_dependientes(
                 accion(if origen_existe(c.origen) && hay_camino_a_origen(c) { Accion::Regresa } else { Accion::Pierde });
             }
             (EstadoCaravana::Aparcada, _) if c.anfitriona == Some(plaza) => accion(Accion::Destruye),
+            // Esperando en el destino de su encargo (Comercio_Caravanas §10): está dentro de la plaza que cae.
+            (EstadoCaravana::Esperando, _) if c.encargo.as_ref().is_some_and(|e| e.punta == Punta::Destino && e.destino == plaza) => accion(Accion::Destruye),
             _ => {} // las demás siguen como estaban
         }
     }
@@ -118,6 +125,7 @@ mod pruebas {
     use super::*;
     use crate::caravana::{Animal, Carro, TipoCarro};
     use crate::datos::Reglas;
+    use crate::encargo::{Encargo, Modo, Parada};
     use crate::tipos::Lado;
     use crate::trueque::EstadoTrueque;
     use asentamiento::Recurso;
@@ -206,6 +214,38 @@ mod pruebas {
             assert_eq!(accion_de(&c, 1), Some(Accion::Destruye), "{motivo:?}");
             assert_eq!(accion_de(&c, 2), None, "la aparcada en otra plaza no se toca");
         }
+    }
+
+    fn con_encargo(mut c: Caravana, destino: u32, punta: Punta) -> Caravana {
+        let mut e = Encargo::nuevo(Modo::Ruta, destino, None, Parada::default(), Parada::default());
+        e.punta = punta;
+        c.encargo = Some(e);
+        c
+    }
+
+    #[test]
+    fn la_esperando_en_el_destino_que_cae_se_destruye_en_la_ruina_y_en_la_conquista() {
+        let cs = vec![
+            con_encargo(car(1, 6, EstadoCaravana::Esperando, Some(5)), 5, Punta::Destino),   // espera en R, el destino de su ruta
+            con_encargo(car(2, 6, EstadoCaravana::Esperando, Some(5)), 5, Punta::Origen),    // espera en su origen
+            con_encargo(car(3, 6, EstadoCaravana::Esperando, Some(9)), 9, Punta::Destino),   // espera en otro destino
+            con_encargo(car(4, 5, EstadoCaravana::Esperando, Some(9)), 9, Punta::Origen),    // espera en R, su origen
+        ];
+        let ruina = cerrar(Motivo::Ruina, 5, &mut [], &cs);
+        assert_eq!((accion_de(&ruina, 1), accion_de(&ruina, 2), accion_de(&ruina, 3), accion_de(&ruina, 4)), (Some(Accion::Destruye), None, None, Some(Accion::Pierde)));
+        let conquista = cerrar(Motivo::Conquista, 5, &mut [], &cs);
+        assert_eq!((accion_de(&conquista, 1), accion_de(&conquista, 2), accion_de(&conquista, 3), accion_de(&conquista, 4)), (Some(Accion::Destruye), None, None, None));
+        assert_eq!(conquista.flota_traspasada, vec![4], "la que espera en su origen pasa con la flota");
+    }
+
+    #[test]
+    fn la_en_transito_con_encargo_hacia_la_plaza_que_cae_regresa() {
+        let cs = vec![con_encargo(car(1, 6, EstadoCaravana::EnTransito, Some(5)), 5, Punta::Destino)];
+        for motivo in [Motivo::Ruina, Motivo::Conquista] {
+            assert_eq!(accion_de(&cerrar(motivo, 5, &mut [], &cs), 1), Some(Accion::Regresa), "{motivo:?}");
+        }
+        let sin_camino = cerrar_dependientes(Motivo::Ruina, 5, &mut [], &cs, &|_| true, &|_| false);
+        assert_eq!(accion_de(&sin_camino, 1), Some(Accion::Pierde), "sin camino de vuelta se pierde");
     }
 
     #[test]

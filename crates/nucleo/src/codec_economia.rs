@@ -53,6 +53,7 @@ pub(crate) fn cargo_a_u8(c: Cargo) -> u8 {
         Cargo::General => 2,
         Cargo::MaestroObras => 3,
         Cargo::Sacerdote => 4,
+        Cargo::MaestroCaravanas => 5,
     }
 }
 
@@ -63,6 +64,7 @@ pub(crate) fn cargo_de_u8(i: u8) -> Result<Cargo, ErrorFormato> {
         2 => Cargo::General,
         3 => Cargo::MaestroObras,
         4 => Cargo::Sacerdote,
+        5 => Cargo::MaestroCaravanas,
         _ => return Err(ErrorFormato("cargo desconocido")),
     })
 }

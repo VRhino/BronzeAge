@@ -160,6 +160,13 @@ pub struct ReglasFlota {
     pub carros_caravana_grande: usize,
 }
 
+/// `ENCARGO` (§5.8): lo que tarda cada parada de una caravana con encargo, por carro que mueve algo, en milisegundos.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReglasEncargo {
+    pub tiempo_carga: i64,
+    pub tiempo_descarga: i64,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReglasRed {
     pub caducidad: i64,
@@ -233,6 +240,7 @@ pub struct Reglas {
     pub trueque: ReglasTrueque,
     pub asignacion: ReglasAsignacion,
     pub flota: ReglasFlota,
+    pub encargo: ReglasEncargo,
     /// `PEAJE_PASO.tasa`.
     pub peaje: i64,
     pub red: ReglasRed,
@@ -302,6 +310,11 @@ impl Reglas {
             contrabando: categoria("contrabando"),
             carros_caravana_grande: num(&vision, "caravanaGrande.carros") as usize,
         };
+        let en = b("ENCARGO");
+        let encargo = ReglasEncargo {
+            tiempo_carga: num(&en, "tiempoCargaMinutosPorCarro") as i64 * MS_POR_MINUTO,
+            tiempo_descarga: num(&en, "tiempoDescargaMinutosPorCarro") as i64 * MS_POR_MINUTO,
+        };
         let rc = b("RED_CAMINOS");
         let red = ReglasRed {
             caducidad: num(&rc, "caducidadMinutos") as i64 * MS_POR_MINUTO,
@@ -365,6 +378,7 @@ impl Reglas {
             trueque,
             asignacion,
             flota,
+            encargo,
             peaje: ppm(num(&b("PEAJE_PASO"), "tasa")),
             red,
             mercado,
@@ -403,6 +417,7 @@ mod pruebas {
         assert_eq!((r.flota.cooldown_creacion, r.flota.k_preparacion_por_carro, r.flota.max_programacion), (10 * 60_000, 2 * 60_000, 3 * 24 * 60 * 60_000));
         assert_eq!(r.flota.liderazgo_por_nivel_mercado, vec![100, 200, 300]);
         assert_eq!(r.flota.carros_caravana_grande, 3);
+        assert_eq!((r.encargo.tiempo_carga, r.encargo.tiempo_descarga), (2 * 60_000, 2 * 60_000));
         assert_eq!((r.flota.militar.velocidad, r.flota.construccion.capacidad), (12_000, 150_000));
         // Peaje, red, mercado.
         assert_eq!(r.peaje, 20_000);

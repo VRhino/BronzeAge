@@ -253,6 +253,7 @@ Dos edificios lo amplían, y no compiten: el **Almacén** sube la capacidad de T
   - Maestro de Obras: 1 slot, pool de auto-construcción/edificios.
   - General: 1 slot, pool de defensa/reclutamiento/fabricación de armas y armaduras.
   - Sacerdote: 1 slot, pool de felicidad/cultura/población.
+  - Maestro de Caravanas: sin slots ni políticas propias (da, cambia y cancela los encargos de las caravanas de su plaza, Doc 3.13.9).
   - TOTAL con todos los cargos ocupados: 7 políticas simultáneas en la base, hasta 11 con el Gobernador a 5 slots y la Sala del Consejo — incentiva mecánicamente la colaboración multijugador.
 - Reglas: duración determinada, renovable indefinidamente, NO cancelable antes de tiempo (hay que esperar a que termine para renovar o cambiar).
 - **"Edicto de Cosecha"** (Gobernador): multiplica ×1.5 la producción de trigo de todas las Granjas activas del asentamiento. No afecta a madera ni piedra. Ver 4.2.1 (Granja).

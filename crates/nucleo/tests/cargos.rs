@@ -177,7 +177,7 @@ fn al_gobernador_lo_nombra_el_rey_sin_estar_presente_y_a_los_demas_el_gobernador
     let contrato::v1::entidad::Cuerpo::Asentamiento(ficha) = ficha else { panic!("la ficha de la plaza") };
     let cargos = ficha.cargos.expect("la ficha lleva los cargos");
     assert_eq!((cargos.gobernador_id, cargos.tesorero_id, cargos.maestro_obras_id, cargos.sacerdote_id, cargos.general_id), (Some(ids::heroe(bea)), Some(ids::heroe(bea)), Some(ids::heroe(eli)), Some(ids::heroe(ana)), None));
-    assert_eq!(interior::asentamiento(&e.n, e.plaza).and_then(|p| p.cargos), Some(contrato::v1::Cargos { gobernador_id: Some(ids::heroe(bea)), tesorero_id: Some(ids::heroe(bea)), maestro_obras_id: Some(ids::heroe(eli)), sacerdote_id: Some(ids::heroe(ana)), general_id: None }));
+    assert_eq!(interior::asentamiento(&e.n, e.plaza).and_then(|p| p.cargos), Some(contrato::v1::Cargos { gobernador_id: Some(ids::heroe(bea)), tesorero_id: Some(ids::heroe(bea)), maestro_obras_id: Some(ids::heroe(eli)), sacerdote_id: Some(ids::heroe(ana)), general_id: None, maestro_caravanas_id: None }));
 }
 
 #[test]
@@ -316,7 +316,7 @@ fn los_cargos_y_la_puerta_viajan_en_la_foto_ban33_y_la_ban32_se_rechaza() {
     e.ok("ana", Comando::VetarJugador { heroe: ana, asentamiento: plaza, vetado: cai, vetar: true });
     assert!(hash0 != hash1 && hash1 != hash2 && hash2 != e.n.hash_estado(), "cada pieza mueve el hash");
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN51");
+    assert_eq!(&bytes[..5], b"BAN52");
     let reglas = e.n.estado().reglas.clone();
     let vuelta = Estado::deserializar(&bytes, &reglas, &e.n.estado().mundo_hash).unwrap();
     let a = &vuelta.asentamientos[&plaza];
@@ -325,4 +325,77 @@ fn los_cargos_y_la_puerta_viajan_en_la_foto_ban33_y_la_ban32_se_rechaza() {
     let vieja = [b"BAN33".as_slice(), &bytes[5..]].concat();
     let error = Estado::deserializar(&vieja, &reglas, &e.n.estado().mundo_hash).err().expect("BAN33 se rechaza");
     assert!(error.0.contains("BAN33") && error.0.contains("cargos"), "{}", error.0);
+}
+
+#[test]
+fn el_maestro_de_caravanas_lo_nombra_el_gobernador_y_no_tiene_huecos_de_politicas() {
+    let m = con_mundo!();
+    let mut e = E::nuevo(m);
+    let (rey, ana, bea, eli) = (e.rey, e.ana, e.bea, e.eli);
+    assert!(e.asignar("rey", rey, Cargo::Gobernador, ana).aceptada());
+    assert!(e.asignar("ana", ana, Cargo::Tesorero, bea).aceptada());
+    assert_eq!(codigo(&e.asignar("bea", bea, Cargo::MaestroCaravanas, eli)), rechazos::NO_AUTORIZADO, "el Tesorero no designa");
+    assert_eq!(codigo(&e.asignar("rey", rey, Cargo::MaestroCaravanas, eli)), rechazos::NO_AUTORIZADO, "el Rey no designa a los otros cinco");
+    assert!(e.asignar("ana", ana, Cargo::MaestroCaravanas, eli).aceptada());
+    assert_eq!(e.titular(Cargo::MaestroCaravanas), Some(eli));
+    // Sin huecos de políticas: ninguna política de ningún pool es suya.
+    let plaza = e.plaza;
+    for politica in ["via_rapida", "racionamiento"] {
+        assert_eq!(e.no("eli", Comando::ActivarPolitica { asentamiento: plaza, politica: politica.into(), cargo: Cargo::MaestroCaravanas }), rechazos::POLITICA_FUERA_DE_POOL);
+    }
+}
+
+#[test]
+fn el_maestro_de_caravanas_se_vacia_al_dejar_de_residir() {
+    let m = con_mundo!();
+    let mut e = E::nuevo(m);
+    let (rey, ana, eli) = (e.rey, e.ana, e.eli);
+    assert!(e.asignar("rey", rey, Cargo::Gobernador, ana).aceptada());
+    assert!(e.asignar("ana", ana, Cargo::MaestroCaravanas, eli).aceptada());
+    e.ok("eli", Comando::DejarResidencia { heroe: eli });
+    assert_eq!(e.titular(Cargo::MaestroCaravanas), None);
+}
+
+#[test]
+fn el_maestro_de_caravanas_va_en_la_proyeccion_de_los_cargos() {
+    let m = con_mundo!();
+    let mut e = E::nuevo(m);
+    let (rey, ana, eli) = (e.rey, e.ana, e.eli);
+    assert!(e.asignar("rey", rey, Cargo::Gobernador, ana).aceptada());
+    assert!(e.asignar("ana", ana, Cargo::MaestroCaravanas, eli).aceptada());
+    use nucleo::proyeccion::{ids, interior};
+    let cargos = interior::asentamiento(&e.n, e.plaza).and_then(|p| p.cargos).expect("el interior lleva los cargos");
+    assert_eq!((cargos.maestro_caravanas_id, cargos.gobernador_id), (Some(ids::heroe(eli)), Some(ids::heroe(ana))));
+}
+
+#[test]
+fn el_maestro_de_caravanas_viaja_en_la_foto_y_una_foto_ban51_llega_con_el_sexto_cargo_vacio() {
+    let m = con_mundo!();
+    let mut e = E::nuevo(m);
+    let (rey, ana, bea, eli, plaza) = (e.rey, e.ana, e.bea, e.eli, e.plaza);
+    assert!(e.asignar("rey", rey, Cargo::Gobernador, ana).aceptada());
+    assert!(e.asignar("ana", ana, Cargo::Tesorero, bea).aceptada());
+    let bytes = e.n.estado().serializar();
+    let reglas = e.n.estado().reglas.clone();
+    let hash = e.n.estado().mundo_hash.clone();
+    // Sin Maestro: los seis cargos de la plaza son ana, bea y cuatro vacíos, y el sexto es el último byte de la tanda.
+    let tanda = |titulares: [Option<u64>; 6]| titulares.iter().flat_map(|t| [t.is_some() as u8].into_iter().chain(t.unwrap_or(0).to_le_bytes())).collect::<Vec<u8>>();
+    let sin_maestro = tanda([Some(ana), Some(bea), None, None, None, None]);
+    let donde = |bytes: &[u8], tanda: &[u8]| bytes.windows(tanda.len()).position(|w| w == tanda).expect("los cargos de la plaza están en la foto");
+    // Una foto BAN51 es la BAN52 sin el sexto cargo de cada plaza (no hay caravanas con encargo).
+    let mut vieja = b"BAN51".to_vec();
+    let inicio = donde(&bytes, &sin_maestro);
+    vieja.extend_from_slice(&bytes[5..inicio + 5 * 9]);
+    vieja.extend_from_slice(&bytes[inicio + 6 * 9..]);
+    let leida = Estado::deserializar(&vieja, &reglas, &hash).unwrap();
+    assert_eq!(leida.asentamientos[&plaza].cargos.titular(Cargo::MaestroCaravanas), None);
+    assert_eq!(leida.asentamientos[&plaza].cargos.titular(Cargo::Tesorero), Some(bea));
+    assert_eq!(leida.serializar(), bytes, "al guardarla de nuevo es la BAN52 de siempre");
+
+    // La BAN52 guarda y lee al Maestro de Caravanas.
+    assert!(e.asignar("ana", ana, Cargo::MaestroCaravanas, eli).aceptada());
+    let bytes = e.n.estado().serializar();
+    let vuelta = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
+    assert_eq!(vuelta.asentamientos[&plaza].cargos.titular(Cargo::MaestroCaravanas), Some(eli));
+    assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes, e.n.hash_estado()));
 }
