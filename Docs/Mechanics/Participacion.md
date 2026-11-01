@@ -2,6 +2,8 @@
 
 > **Implementado en Rust el 2026-10-28** (mecánica 54; diseño acordado con el autor el mismo día). Las cifras son el borrador del diseño, a calibrar con los bots. Código: `crates/nucleo/src/participacion.rs` (reglas y foto) y `crates/nucleo/src/nucleo/participacion.rs` (de dónde salen los puntos y la proyección). El origen «misión del tablón» es de la mecánica 55 ([`Misiones_Recurrentes.md`](Misiones_Recurrentes.md), implementada el mismo día).
 
+> **Mercenarios por contrato (2026-11-01, en Rust; [`Mercenarios_Por_Contrato.md`](Mercenarios_Por_Contrato.md) §11).** Un mercenario contratado (marcado) **no gana Participación**, venga de donde venga, y no cuenta en el reparto de una misión grupal: su parte es de los demás. Sus hechos sí cuentan para las misiones.
+
 ## 1. Qué es
 
 Cada héroe acumula **participación** en cada plaza: un número que dice cuánto ha hecho por esa plaza y por su Facción. Sirve para que los jugadores sepan quién ha contribuido más al crecimiento de la plaza y de la Facción. No se gasta ni da ventajas: es reconocimiento público dentro de la Facción.

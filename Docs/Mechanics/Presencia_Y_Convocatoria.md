@@ -1,5 +1,7 @@
 # Presencia y convocatoria
 
+> **Mercenarios por contrato (2026-11-01, en Rust; [`Mercenarios_Por_Contrato.md`](Mercenarios_Por_Contrato.md) §6 y §7).** Un mercenario contratado (marcado) solo se une a una convocatoria o un ejército con la orden `unirse` de ese mismo (`mercenario.sin_orden`), y solo convoca con una orden `atacar` vigente; a la **convocatoria de un mercenario** solo se unen mercenarios de su Facción con esa orden (`mercenario.convocatoria_de_mercenarios`). Al partir una convocatoria, los contratos y las órdenes que la nombraban pasan al ejército que nace. No recibe el mando (`CederLiderazgo` a un marcado: `mercenario.marcado`) y la **sucesión automática del Líder** prefiere a un conectado sin marca, luego a cualquiera sin marca, luego a un conectado y por último a cualquiera. Cuando acaba su contrato se separa de su convocatoria (si la lidera, se cancela) y de su ejército donde esté, cediendo antes el mando si es su Líder.
+
 ## 1. Alcance y fuentes
 
 Cubre **dónde está un héroe** (los cuatro sitios posibles y cómo pasa de uno a otro), los comandos de **presencia** —salir al mundo, entrar y salir de una plaza o de un campamento, guarnecer, marchar, conectarse y desconectarse, fijar la puerta y vetar— y la **convocatoria**: un ejército en preparación *dentro* de una plaza o un campamento, antes de salir.

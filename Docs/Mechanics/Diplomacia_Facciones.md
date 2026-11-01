@@ -1,5 +1,7 @@
 # Diplomacia y Facciones
 
+> **Mercenarios por contrato (2026-11-01, en Rust; [`Mercenarios_Por_Contrato.md`](Mercenarios_Por_Contrato.md) §2 y §11).** La ciudadanía puede llevar una **marca**, `temporal` o `permanente` (`politica::Marca`, en `Faccion::marcas`): la del bot contratado como mercenario. Un marcado nunca es Rey (la sucesión y el caso «Facción sin nadie» lo saltan), no recibe la Embajada ni ningún cargo local y no deja la Facción por su cuenta: `DejarFaccion`, el trono, la Embajada y los cargos le dan `mercenario.marcado`. Sale cuando acaba su contrato. El directorio de Facciones cuenta solo a los ciudadanos **sin** marca (`sin_marca`), y si se va el último sin marca todos los contratos caen y queda el caso de siempre de «Facción sin nadie». Un bot ofrecido en el tablón de un campamento no crea Facción ni pide ingreso (`faccion.mercenario_ofrecido`). **Vetos** (§4.3): la excepción a «a un residente no se le veta» es el permanente: vetarlo en la plaza donde reside le quita esa residencia y lo devuelve a su campamento base sin perder el contrato.
+
 ## 1. Alcance y fuentes
 
 Cubre la **Facción como entidad** (crearla, entrar, salir, cargos, nivel, reputación, sigilo, capital), la **residencia** del héroe, la **puerta** de una plaza (quién entra), las **relaciones
@@ -391,7 +393,7 @@ color de la orla.
 1. **Un residente entra siempre.** 2. Un **vetado** no entra. 3. Si no, entra si el grupo no está en `puertaCerradaA` (por defecto, `PUERTA.cerradaAPorDefecto`: neutrales y enemigos); la propia Facción nunca se bloquea.
 `fijarPuerta(plaza, cerradaA[])` sustituye el conjunto de grupos cerrados (`neutrales`, `aliados`, `enemigos`, `aedas`; sin repetidos) y no caduca; lo hace el **Gobernador** residente y presente **o el Rey de la
 Facción dueña** (no tiene que estar presente), y manda el último. `vetarJugador(plaza, vetado, vetar)`: añade o quita de `vetadosIds` (ordenado); solo el Gobernador residente y presente; **a un residente no se le
-veta**. El grupo `aedas` lo usa `Tecnologia_Aedas.md`.
+veta** (salvo a un mercenario permanente, que vuelve a su campamento base: `Mercenarios_Por_Contrato.md` §11). El grupo `aedas` lo usa `Tecnologia_Aedas.md`.
 
 `cruzarLaPuerta` (entrar): solo en columna personal, a ≤ `MOVIMIENTO.radioPuerta` y con `puedeEntrarEn`; en la propia residencia la columna se disuelve (tropa al campamento; el carro se queda con el héroe, desde el
 2026-10-22), en otra entra con todo y queda dentro. Detalle en `Movimiento_Ejercitos.md`.

@@ -2,6 +2,8 @@
 
 > **Implementado en Rust el 2026-10-28** (mecánica 55; diseño acordado con el autor el mismo día). Amplía las misiones únicas ([`Misiones.md`](Misiones.md)), que siguen igual: A1-A11 se quedan como misiones únicas de plaza y el tablón va **además** de ellas (decisión de implementación del 2026-10-28). Las cifras del catálogo inicial son un borrador a calibrar con los bots. Código: `crates/nucleo/src/recurrentes.rs` (catálogo, estado y foto) y `crates/nucleo/src/nucleo/recurrentes.rs` (renovar, aceptar, contar, cumplir, reclamar y elegir).
 
+> **Mercenarios por contrato (2026-11-01, en Rust; [`Mercenarios_Por_Contrato.md`](Mercenarios_Por_Contrato.md) §11).** Un mercenario contratado (marcado) no acepta misiones del tablón de la Facción ni de una plaza (`mercenario.prohibido`) y no avanza las individuales; sus hechos cuentan para las grupales de su Facción, de la plaza donde reside y de la plaza de su contrato si es de una plaza, sin contar dos veces la misma. Al reclamar, no está entre los que aportaron (no cobra Participación).
+
 ## 1. Qué es
 
 Una misión **recurrente** se repite: dura un día o una semana y, al acabar su periodo, sale otra igual. Viven en el **tablón** de su dueño:

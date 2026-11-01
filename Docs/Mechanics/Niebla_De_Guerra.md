@@ -32,6 +32,8 @@ así que la proyección es una frontera de seguridad, no una capa de presentaci�
 
 > **Implementado en Rust (2026-10-20, fase 4C).** Los **informes de inspección** son del héroe (`Nucleo::informes_de_inspeccion`): uno por objetivo, `INSPECCION.informeMinutos` = 10 minutos, renovables al volver a mirar (`militar::inspeccion`); falta proyectarlos al cliente. La visión muestreada ya da a cada columna su alcance según la tropa en pie: 30 con soldados, 15 sin ellos (§3). Las plazas siguen sin ser ojos; las avanzadas operativas sí lo son desde la fase 4F (ver abajo).
 
+> **Mercenarios por contrato (2026-11-01, en Rust; [`Mercenarios_Por_Contrato.md`](Mercenarios_Por_Contrato.md) §10).** Excepción a la transferencia de §4.3: al firmar, la memoria personal del mercenario **no** pasa a la Facción ni se borra, y sigue creciendo con sus ojos (`Andante.marcados`); sus ojos alimentan también la memoria de la Facción mientras dura el contrato. Al irse no se lleva la de la Facción. Su `VISTA` es la personal (`Perspectiva::Heroe`).
+
 ## 1. Idea
 
 **Ver algo es conocerlo.** Hay un solo mecanismo —lo que alcanzan tus ojos queda grabado— y de él salen los tres estados que ve el jugador:

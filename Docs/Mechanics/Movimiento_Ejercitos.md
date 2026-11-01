@@ -1,5 +1,7 @@
 # Movimiento de ejércitos y columnas
 
+> **Mercenarios por contrato (2026-11-01, en Rust; [`Mercenarios_Por_Contrato.md`](Mercenarios_Por_Contrato.md) §6.6).** La sucesión automática del Líder (`sucesor_automatico`) deja a los mercenarios contratados para el final: prefiere a un conectado sin marca, luego a cualquiera sin marca, luego a un conectado y por último a cualquiera. Ceder el liderazgo a un marcado se rechaza (`mercenario.marcado`). Un marcado solo se une a un ejército con la orden `unirse` de ese mismo y solo adjunta una caravana con `guardar` de ella (`mercenario.sin_orden`).
+
 ## 1. Alcance y fuentes
 
 Cubre cómo se **mueve, come, se junta y se separa** una columna en el mapa: salir, marchar, perseguir, repostar, formar ejércitos, enganchar caravanas y entrar en plazas y campamentos. El **combate** que ocurre cuando dos columnas, una caravana, un campamento o una plaza se encuentran está en [`Combate.md`](Combate.md); aquí solo se dice dónde empieza.

@@ -21,7 +21,6 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 |---|---|---|---|
 | 20 | TECNOLOGÍA | Eras IV y V (pospuestas con el motor nuevo) | Eras I-III en canon y en Rust |
 | 39 | POLÍTICA | Elección del Rey de Facción por voto entre representantes (decidido el 2026-10-17: queda aquí, no implementada) | el Rey se asigna, sin votación |
-| 48 | MILITAR / POLÍTICA | Mercenarios por contrato (diseño cerrado el 2026-10-26; `Docs/Disenos_Por_Implementar/Mercenarios_Por_Contrato.md`) | nada |
 | 61 | MISIONES | H13 «Forjar al héroe» no tiene camino: el héroe no gana puntos de atributo porque el servidor no sube su nivel (visto al probar las misiones una a una, 2026-10-28). **Parada** hasta que haya Unity para los perks (decisión del autor del 2026-10-28) | la misión existe y se prueba que repartir sin puntos no cuenta |
 | 62 | MERCENARIOS | El campamento visto desde la puerta (2026-10-28): el héroe con la columna parada a la puerta (≤ `radioPuerta`) recibe el ámbito `CAMPAMENTO` como si estuviera dentro (stock y precios del mercado, reclutas, tropas que ofrece) y se le quita al alejarse; la sesión recalcula ese derecho cuando la columna para o arranca. Pendiente de decidir si desde fuera se recorta la lista de residentes y presentes. El cliente de jugador enseña mercado y reclutar con ese ámbito, dentro o fuera. Aparcada por el autor el 2026-10-28 | las órdenes ya se aceptan a la puerta (`comprarEnCampamento`, `reclutarEnCampamento`, repostar), pero `CAMPAMENTO` solo se abre dentro: desde fuera el jugador no ve qué hay |
 | 63 | MUNDO / REGLAS | El mundo en 3D, lo que queda (2026-10-31): generador v2 (bosque, llanos, montañas, altiplanos, metales), revisión a fondo de las reglas del terreno para la vista 3D, el encuadre de la caravana grande y los cabos sueltos del cliente 3D. Sección «63» | cliente 3D en `main` (BronzeAgeClient 0.65.0); generador y reglas sin tocar |
@@ -53,16 +52,6 @@ diseño).
 ## 39. Elección del Rey por voto
 
 Decidido el 2026-10-17: la elección del Rey por voto entre representantes (antes ligada a la Liga por alianza) **no existe hoy** y queda como mecánica pendiente. Hoy el Rey de una Facción lo asigna el anterior (el primero es quien la crea; la sucesión sigue el orden de ingreso). La Liga no tiene Rey ni cargos (Doc 2.2, `Diplomacia_Facciones.md` §3.4 y §5.7).
-
-## 48-51. Mercenarios, misiones, aldea agrícola y cría (diseño cerrado el 2026-10-26)
-
-> 49 (misiones) se implementó el 2026-10-27 y 50 y 51 (aldea agrícola y cría) el mismo día: están en `Docs/Mechanics/Misiones.md` y `Economia_Construccion.md` §14.0. Queda la 48.
-
-Cuatro ideas del autor, estudiadas y decididas en un hilo de solo diseño; sin código ni tandas todavía (las tandas se crean cuando el autor lo pida). Cada una tiene su documento de `Docs/Disenos_Por_Implementar/` con lo decidido, lo propuesto y lo que toca; este apunte es el pendiente:
-
-- **48. Mercenarios por contrato**: `Docs/Disenos_Por_Implementar/Mercenarios_Por_Contrato.md` (versión visual en el `.html` de al lado). Revisado contra el motor y cerrado el 2026-11-01: el mercenario es un bot que se ofrece en su campamento y que solo contratan Facciones humanas; entra como ciudadano con marca `temporal` o `permanente`; contratan Rey, Embajador y los cargos de la plaza (General incluido); cuatro órdenes tipadas que dan permisos (`guardar`, `ir_a`, `atacar`, `unirse`) con rango entre cargos; ve una FACCION reducida; y progresa por renombre, valoración del contratante, cinco rangos (leva propia en el 1, escuadra de premio, licencia de reclutar y tarifa; el Liderazgo no cambia) y medallas en su ficha. Plan en siete tandas (M1-M7). Al implementarlo: canon nuevo solo de bots mercenarios (`Docs/Game/7_Bots_Mercenarios.md`) y documento propio en Mechanics. Pendiente: implementar tras los bots de la fase 7 (necesita el runner jugando por el contrato 05), calibrar las cifras y la pestaña de control en BronzeAgeClient.
-  - **En implementación desde el 2026-11-01** (orden del autor; nada llega a main hasta el cierre). `Docs/Mechanics/Mercenarios_Por_Contrato.md` ya tiene sus parámetros y su catálogo de hechos. Paridad pendiente, hechos del catálogo que el núcleo aún no emite (se quitan de aquí según se emitan): `mercenarios.valorado`.
-- **Fuera de alcance**: carne y leche (también del MVP) y las misiones entre humanos van a `Docs/Ideas a diseñar.md` (entradas 52 y 53 de ese archivo).
 
 ## Paridad con TypeScript: recortes temporales del motor Rust (2026-10-18)
 

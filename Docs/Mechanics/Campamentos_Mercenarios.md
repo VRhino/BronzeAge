@@ -2,6 +2,8 @@
 
 > **Reescrito el 2026-10-13** para el mundo reactivo: sin tick, la retirada de la tropa prestada ocurre al cambiar la residencia (Doc 5.15.2b: la tropa prestada vuelve sin viaje al campamento de su héroe). Los campamentos están a 600 unos de otros (Doc 1.9c). El «cómo funcionaba» está en `typescript-final:Docs/Mechanics/Campamentos_Mercenarios.md`.
 
+> **Mercenarios por contrato (2026-11-01, en Rust; [`Mercenarios_Por_Contrato.md`](Mercenarios_Por_Contrato.md) §3 y §8.3).** Un bot sin Facción que reside en el campamento y está dentro se **ofrece en su tablón** (`ofrecerse_como_mercenario`), que va en el ámbito `CAMPAMENTO` con la ficha de cada ofrecido, su tropa y su tarifa; allí lo contrata en persona un cargo de una Facción humana, pagando con el carro (el oro entra en el almacén personal del mercenario hasta llenarlo). Al reclutar, `ReclutarEnCampamento` ofrece además a quien tiene ficha de mercenario las tropas de su **licencia** (las de su edificio militar hasta el escalón de su rango, en cuanto alguien descubrió su tecnología, sin las 72 h) y la **reposición de su leva propia** (lanceros de milicia, granjeros, mineros y leñadores, que el campamento no recluta) si ya tiene esa escuadra. La **escuadra de premio** de rango se reclama en el campamento base (`reclamar_premio_de_rango`).
+
 ## 1. Alcance y fuentes
 
 Un campamento de mercenarios es un **enclave neutral** del mundo abierto: sin Facción, sin zona de influencia, que no crece ni desaparece y al que se puede entrar, residir, comprar, reclutar y refundar. Su mecánica está repartida en varios documentos; este es el **índice** de todas

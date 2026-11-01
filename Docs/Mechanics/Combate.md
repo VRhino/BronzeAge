@@ -1,5 +1,7 @@
 # Combate con números: encuentros, asedio y conquista
 
+> **Mercenarios por contrato (2026-11-01, en Rust; [`Mercenarios_Por_Contrato.md`](Mercenarios_Por_Contrato.md) §6).** Un mercenario contratado (marcado) solo `Atacar`, `Perseguir` y `UnirseABatalla` con la orden que lo permite (`mercenario.sin_orden`): con `atacar` de ese objetivo, en el bando que lo ataca; con `guardar` del objetivo, en el bando que lo defiende. Nunca declara la guerra (`mercenario.prohibido`). Cada camino que resuelve una batalla avisa al contrato (`tras_batalla`): cumple el `atacar` de quien atacó ese objetivo, gane o pierda, y da el renombre y las medallas de §8.2 y §9 de ese documento. Si el contrato de quien combate acaba, el fin se aplaza hasta que acaba su batalla.
+
 ## 1. Alcance y fuentes
 
 Cubre cómo se **resuelve** un choque cuando el servidor lo calcula con números (sin Unity): columna contra columna, columna contra caravana, columna contra campamento de bandidos, ejército contra plaza (asedio), y lo que pasa cuando una plaza **cae** (conquista, saqueo, desalojo). El movimiento previo (llegar, perseguir, alcanzar a 3) está en [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md).

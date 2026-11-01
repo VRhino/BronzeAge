@@ -16,6 +16,9 @@ Es el dueño de sus escuadrones: **los escuadrones son del Héroe, no del asenta
 ## Héroe bot
 Héroe que maneja un programa en vez de una persona (2026-10-04, D52-D58). Nace como cualquiera, dentro de un campamento de mercenarios (Doc 1.9b), y juega por los mismos comandos que un humano; ninguna Facción nace asentada ni es «NPC» (Doc 1.3, 5.15.6). En batalla lo maneja la IA de Conquest.
 
+## Mercenario contratado
+Héroe bot que un cargo de una Facción humana contrata en el tablón de un campamento de mercenarios (Doc 7). Es **ciudadano con marca** (temporal o permanente) de esa Facción mientras dura el contrato: nunca Rey ni cargo, no deja la Facción por su cuenta y solo ataca o se une a un ejército con la orden que se lo permite.
+
 ## Columna personal
 Un Héroe solo, moviéndose por el mapa. Nace cuando sale de su residencia por su cuenta (Doc 1.10), lleve tropas o no. Es la misma ENTIDAD que un Ejército en el motor, pero **no es un Ejército** a efectos de reglas: elige destino libremente y lo rectifica cuando quiera, no puede llevar caravanas adjuntas, y nadie puede unirse a ella: dos viajeros que se cruzan no forman un ejército por sí solos, aunque tres o más sí pueden organizar uno en campo (Doc 5.12.1, 5.14.4).
 
