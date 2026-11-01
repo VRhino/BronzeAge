@@ -236,10 +236,10 @@ fn de_b_a_a(e: &mut Escenario, car: u64, modo: Modo, en_destino: Parada) {
 #[test]
 fn la_plaza_destino_cae_en_ruinas_con_la_caravana_esperando_dentro_y_se_destruye_con_todo() {
     let m = con_mundo!();
-    let (mut e, ruina, ca, car) = antes_de_la_ruina(m, 2 * HORA);
+    let (mut e, ruina, ca, car) = antes_de_la_ruina(m, 3 * HORA);
     let (a, b) = (e.a, e.b);
     assert!(cantidad(&e.n, a, Estano) < 1_000, "A no tiene el estaño que la caravana espera");
-    // Llega a A, deja su cobre y espera allí un estaño que no hay (el viaje dura menos de una hora).
+    // Llega a A, deja su cobre y espera allí un estaño que no hay (el viaje dura menos de dos horas).
     de_b_a_a(&mut e, car, Modo::Ruta, Parada { dejar: dejar(&[Cobre]).dejar, ..recoger(&[(Estano, 10_000)], true) });
     let (h, escuadra) = e.escoltar("carla", b, car);
     e.avanzar_hasta(ruina - 30 * MIN);
@@ -337,8 +337,8 @@ fn la_plaza_origen_es_conquistada_con_la_caravana_esperando_dentro_pasa_al_conqu
     let m = con_mundo!();
     let mut e = escenario(m, false);
     let (a, b) = (e.a, e.b);
-    e.avanzar_hasta(e.n.protegida_hasta(a).unwrap());
     // Da una vuelta: carga en A todo el cobre que hay, lo lleva a B y vuelve con él; en A espera (más cobre del que queda) con su carga a bordo.
+    // La vuelta se da mientras A está protegida: sin Leñera, a A se le acaba la madera unas horas después de que deja de estarlo.
     e.dar(a, Cobre, 50_000);
     let cobre = cantidad(&e.n, a, Cobre);
     assert_eq!(cobre, 50_000, "todo el cobre de A cabe en un viaje");
@@ -353,6 +353,8 @@ fn la_plaza_origen_es_conquistada_con_la_caravana_esperando_dentro_pasa_al_conqu
     assert_eq!((e.k(car).estado, e.encargo(car).punta, e.a_bordo(car, Cobre)), (EstadoCaravana::Esperando, Punta::Origen, cobre), "espera en A con su cobre a bordo");
     let (almacen, escolta) = (cantidad(&e.n, a, Cobre), e.k(car).escolta.len());
     assert_eq!((almacen < cobre, escolta, e.contenedor(h, escuadra)), (true, 1, Contenedor::Escolta(car)));
+    e.avanzar_hasta(e.n.ahora().max(e.n.protegida_hasta(a).unwrap()));
+    assert_eq!((e.k(car).estado, e.a_bordo(car, Cobre), cantidad(&e.n, a, Cobre)), (EstadoCaravana::Esperando, cobre, almacen), "sigue esperando, igual");
 
     let conquista = e.conquistar(a);
     let k = e.k(car);

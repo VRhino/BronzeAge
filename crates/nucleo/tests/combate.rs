@@ -1005,7 +1005,7 @@ fn fertil(m: &Mundo, p: Punto) -> bool {
 
 fn sitio_junto_a(n: &Nucleo, m: &Mundo, c: Punto, r: i64) -> Option<Punto> {
     (0..36).map(|g| ((g * 10) as f64).to_radians()).map(|a| Punto::new(c.x + (r as f64 * a.cos()) as i64, c.y + (r as f64 * a.sin()) as i64)).find(|&p| {
-        n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6 && !v.condenada) && fertil(m, p)
+        n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 3 && !v.condenada) && fertil(m, p)
     })
 }
 
@@ -1223,8 +1223,10 @@ fn toda_plaza_tiene_su_campamento_en_el_bosque_libre_mas_cercano_y_destruido_rea
         let bosque = &m.0.bosques()[c.bosque.unwrap() as usize];
         let centro = Punto::new(bosque.centro.as_ref().unwrap().x, bosque.centro.as_ref().unwrap().y);
         assert_eq!(c.posicion, centro);
+        // El margen se mide al aparecer, contra la zona de entonces; la zona crece después (una unidad por edificio, hasta su techo). Así que, como poco, contra el radio inicial.
+        let inicial = e.n.estado().reglas.territorio.radio_inicial;
         for q in e.n.estado().asentamientos.values() {
-            assert!(q.posicion.dist(centro) >= q.radio + 10_000, "el campamento de as-{p} está a ≥ 10 u de la zona de as-{}", q.id);
+            assert!(q.posicion.dist(centro) >= inicial + 10_000, "el campamento de as-{p} está a ≥ 10 u de la zona inicial de as-{}", q.id);
         }
         assert!(!e.n.en_zona(a, c.posicion) && !e.n.en_zona(b, c.posicion));
     }

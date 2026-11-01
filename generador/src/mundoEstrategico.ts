@@ -1,5 +1,5 @@
 import type { Point } from './tipos';
-import { evaluarElevacion, evaluarTerreno, gradienteElevacion, type CampoElevacion } from './elevacion';
+import { evaluarElevacion, evaluarTerreno, type CampoElevacion } from './elevacion';
 import { esTransitable } from './costeMovimiento';
 import { densidadForestal, type CampoForestal } from './forestacionRegional';
 import { fertilidadSuelo, type CampoSuelos } from './suelosRegional';
@@ -9,6 +9,7 @@ import { colocarCampamentos, type Campamento } from './campamentos';
 import { repartirMetales, type Sitio } from './metales';
 import { generarParcelas } from './parcelas';
 import { muestrearRelieve } from './muestras';
+import { regionEn } from './regional';
 
 /** Lo que necesita del relieve regional ya generado (`generarRelieve`). */
 export interface Relieve {
@@ -34,7 +35,8 @@ export function puntuarCampamento(r: Relieve, p: Point): number {
   return fertilidad >= 0.35 && bosque >= 0.15 ? fertilidad + 0.5 * bosque : 0;
 }
 
-/** Sitios aptos para metal: colina o montaña, transitables y con acceso. La geología solo pesa en la preferencia. */
+/** Sitios aptos para metal: colina, montaña o cima (2026-10-31), transitables y con acceso; la ladera vale hasta la pendiente máxima
+ * transitable (2026-10-31, decisión del autor). La geología solo pesa en la preferencia. */
 export function sitiosDeMetal(r: Relieve, paso = 120): Sitio[] {
   const rng = createRng(derivarSeed(r.config.seed, 'sitios-metal-1'));
   const sitios: Sitio[] = [];
@@ -42,11 +44,10 @@ export function sitiosDeMetal(r: Relieve, paso = 120): Sitio[] {
     const p = { x: x + (rng() - 0.5) * paso * 0.7, y: y + (rng() - 0.5) * paso * 0.7 };
     const altura = evaluarElevacion(r.elevacion, p);
     const terreno = evaluarTerreno(r.elevacion, p, altura);
-    if (terreno !== 'colina' && terreno !== 'montana') continue;
-    const g = gradienteElevacion(r.elevacion, p, 2);
-    if (Math.hypot(g.dx, g.dy) * 1000 > 0.35 || !esTransitable(r.elevacion, p, altura) || !r.conexion.tieneAcceso(p)) continue;
+    if (terreno !== 'colina' && terreno !== 'montana' && terreno !== 'cima') continue;
+    if (!esTransitable(r.elevacion, p, altura) || !r.conexion.tieneAcceso(p)) continue;
     const geologia = evaluarRuido(r.suelos.geologia, p);
-    sitios.push({ posicion: p, calidad: {
+    sitios.push({ posicion: p, region: regionEn(r.elevacion.regional, p), calidad: {
       estano: (1 - suave((geologia - 0.37) / 0.12)) * suave((altura - 0.48) / 0.08),
       oro: suave((geologia - 0.54) / 0.14) * suave((altura - 0.50) / 0.08),
     } });

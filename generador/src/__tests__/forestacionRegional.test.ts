@@ -21,7 +21,9 @@ describe('forestación regional continua y permanente', () => {
       maxSalto = Math.max(maxSalto, Math.abs(f - densidadForestal(campo, elevacion, { x: x + 1, y })));
     }
     expect(claros).toBeGreaterThan(50); expect(arbolados).toBeGreaterThan(50);
-    expect(maxSalto).toBeLessThan(0.03);
+    // Continuo: con las manchas de ~26 u (2026-10-31) el borde más brusco sube unas 0,04 por cada 1/12 de u; un corte daría saltos
+    // de décimas.
+    expect(maxSalto).toBeLessThan(0.05);
   });
   it('el estiramiento pasa bosque denso a ligero sin quitar bosque, los claros bajan la densidad donde salen y los bosquetes la suben donde no había', () => {
     const campo = crearCampoForestal(42, []), P = PARAMETROS_FORESTALES, antes = structuredClone(P);

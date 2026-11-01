@@ -158,7 +158,12 @@ Todo, solo para cuentas de administrador (`Authorization: sesion <token>` de un 
 **Estado.** El modo mundo del cliente de jugador es 3D desde BronzeAgeClient 0.65.0 (`docs/Mundo_3D.md` del cliente). Las escalas y la
 cámara se decidieron con la mesa de escalas 3D (`Consideraciones/Escalas_Mundo_3D_Definicion.md`, §3, §5 y §7). El autor fijó el orden el
 2026-10-30: **primero la cámara y la visión (hecho), después el generador y las reglas de juego**. Esta sección reúne lo que quedó para
-entonces; nada de esto tiene código todavía.
+entonces.
+
+**Hecho después (en el generador y las reglas, ver `Docs/Mechanics/Generacion_Del_Mundo.md`):** el 2026-10-31, la región alpina con
+altiplanos y pasos (§5.1), las reglas del terreno por pendiente (§5.2 y §5.4; 63.2), el bosque en manchas (§8) y los metales en la montaña
+lejana (§9); el 2026-11-01, las costas con acantilados, calas, farallones y estuarios (§5.1) y el estaño repartido en varias sierras (§9).
+Semilla 42: mundo `e5c637d4…`. Lo demás de 63.1 y 63.2 sigue abierto.
 
 ### 63.1 Generador v2: el relieve, el bosque y los recursos
 

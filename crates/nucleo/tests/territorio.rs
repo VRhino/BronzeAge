@@ -239,14 +239,14 @@ fn las_granjas_rinden_con_la_mejor_fertilidad_de_la_zona() {
     assert_eq!(n.fertilidad_de_zona(id + 1_000), None, "sin plaza no hay fertilidad");
 }
 
-/// Dos plazas de distinta Facción a `d` (en un anillo del mismo campamento, buscando un par fundable).
+/// Dos plazas de distinta Facción a `d` (en un anillo del mismo campamento, buscando un par fundable en el que la segunda tenga bosque en su zona y no caiga en ruinas).
 fn par(n: &mut Nucleo, m: &Mundo, d: i64, f: (u32, u32), t: i64) -> (u64, u64, Punto, Punto) {
     let pa = sitio(n, m, 2, 70_000, 0, f.0, false);
     let a = fundar_en(n, t, "pa", f.0, pa);
     for g in 0..360 {
         let r = (g as f64).to_radians();
         let pb = Punto::new(pa.x + (d as f64 * r.cos()) as i64, pa.y + (d as f64 * r.sin()) as i64);
-        if n.viabilidad(pb, f.1).is_some_and(|v| v.motivo.is_none()) {
+        if n.viabilidad(pb, f.1).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && !v.condenada) {
             let b = fundar_en(n, t, "pb", f.1, pb);
             return (a, b, pa, pb);
         }

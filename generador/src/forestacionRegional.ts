@@ -17,9 +17,19 @@ const CELDA_RIBERA = 500, ALCANCE_RIBERA = 260;
 /** Forma de la densidad (2026-10-28). Por encima de `codo` la subida hacia el bosque cerrado se estira
  * (`estiramiento`): la mitad del bosque denso pasa a ligero sin que cambie dónde hay bosque. Los `claros`
  * son un ruido propio (no altera las masas) que, donde supera `umbral`, baja la densidad hasta `fondo`
- * de lo que había: claros fundables dentro de las masas grandes, uno cada ~30 u. */
+ * de lo que había: claros fundables dentro de las masas grandes, uno cada ~30 u.
+ *
+ * Dónde hay bosque (2026-10-31, como la propuesta de la mesa 3D): manchas densas y separadas por todo el mapa.
+ * Las `masas` son un ruido de ~26 u, que con este ruido da manchas del tamaño de las de la propuesta (su 24·S, S = 2,2,
+ * es de otro ruido, de manchas más pequeñas), y el `detalle`, uno de ~7,7 u (3,5·S) que rompe los bordes. La humedad
+ * del área ya no decide si hay bosque, solo cuánto: la estepa queda en torno al 15 % de la tierra con bosque y lo más
+ * húmedo en torno al 33 %. Antes las masas eran de ~360 u y la humedad pesaba 0,62: regiones enteras cubiertas y otras
+ * peladas. Pesos en unidades del potencial; `ancho` es lo que va de nada a lleno. */
 export const PARAMETROS_FORESTALES = {
   codo: 0.43, estiramiento: 2.4,
+  masas: { frecuencia: 1 / 312, octavas: 3 },
+  detalle: { frecuencia: 1 / 92, octavas: 2 },
+  pesos: { masas: 3, detalle: 0.81, humedad: 0.3, ribera: 0.25, base: -0.13, ancho: 0.38 },
   claros: { frecuencia: 1 / 220, umbral: 0.66, ancho: 0.06, fondo: 0.35 },
   /** Bosquetes sueltos (2026-10-28): otro ruido propio cuyos picos ponen manchas pequeñas de bosque ligero (hasta `densidad`) en toda
    * la tierra apta, para que las zonas peladas tengan algo de madera. Dentro de un bosque no cambian nada: vale el mayor de los dos. */
@@ -32,7 +42,8 @@ export function crearCampoForestal(seed: number, rios: readonly RioZona[]): Camp
   const rng = createRng(derivarSeed(seed, 'forestacion-regional-1'));
   const ruido = (frecuenciaBase: number, octavas: number) => generarCampoRuido(rng,
     { frecuenciaBase, octavas, lacunaridad: 2.13, persistencia: 0.52 });
-  const campo: CampoForestal = { masas: ruido(1 / 4300, 3), detalle: ruido(1 / 720, 3), claros: ruidoPropio(seed, 'forestacion-claros-1', PARAMETROS_FORESTALES.claros.frecuencia), bosquetes: ruidoPropio(seed, 'forestacion-bosquetes-1', PARAMETROS_FORESTALES.bosquetes.frecuencia), segmentos: [], indiceRiberas: {} };
+  const { masas, detalle } = PARAMETROS_FORESTALES;
+  const campo: CampoForestal = { masas: ruido(masas.frecuencia, masas.octavas), detalle: ruido(detalle.frecuencia, detalle.octavas), claros: ruidoPropio(seed, 'forestacion-claros-1', PARAMETROS_FORESTALES.claros.frecuencia), bosquetes: ruidoPropio(seed, 'forestacion-bosquetes-1', PARAMETROS_FORESTALES.bosquetes.frecuencia), segmentos: [], indiceRiberas: {} };
   for (const rio of rios) for (let i = 1; i < rio.puntos.length; i++) {
     const a = rio.puntos[i - 1]!, b = rio.puntos[i]!, id = campo.segmentos.length;
     campo.segmentos.push({ a, b });
@@ -64,12 +75,13 @@ export function densidadForestal(campo: CampoForestal, elevacion: CampoElevacion
   }
   const ribera = 1 - suave(distancia / ALCANCE_RIBERA);
   const masa = evaluarRuido(campo.masas, p), detalle = evaluarRuido(campo.detalle, p);
-  // El ruido amplio organiza las masas; el pequeño abre claros y deshace bordes.
-  const potencial = humedad * 0.62 + (masa - 0.5) * 1.65 + (detalle - 0.5) * 0.65 + ribera * 0.38;
+  const { codo, estiramiento, claros, bosquetes, pesos } = PARAMETROS_FORESTALES;
+  // Las masas ponen las manchas, el detalle deshace sus bordes y la humedad sube o baja cuánto bosque hay.
+  const potencial = (masa - 0.5) * pesos.masas + (detalle - 0.5) * pesos.detalle + (humedad - 0.5) * pesos.humedad
+    + ribera * pesos.ribera + pesos.base;
   const aptitud = suave((altura - 0.375) / 0.055) * (1 - suave((altura - 0.68) / 0.20))
     * (1 - suave((pendiente - 0.18) / 0.48));
-  const { codo, estiramiento, claros, bosquetes } = PARAMETROS_FORESTALES;
-  const t = (potencial - 0.24) / 0.38, claro = suave((evaluarRuido(campo.claros, p) - claros.umbral) / claros.ancho);
+  const t = potencial / pesos.ancho, claro = suave((evaluarRuido(campo.claros, p) - claros.umbral) / claros.ancho);
   const bosquete = bosquetes.densidad * suave((evaluarRuido(campo.bosquetes, p) - bosquetes.umbral) / bosquetes.ancho) * aptitud;
   return Math.max(suave(t <= codo ? t : codo + (t - codo) / estiramiento) * aptitud * (1 - (1 - claros.fondo) * claro), bosquete);
 }

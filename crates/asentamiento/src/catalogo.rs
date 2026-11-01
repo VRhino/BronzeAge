@@ -345,7 +345,7 @@ mod pruebas {
         assert_eq!(fundicion.nivel(3).unwrap().requiere_edificio, None);
         assert_eq!(c.tipo(Tipo::Armeria).nivel(2).unwrap().requiere_edificio, Some((Tipo::Fundicion, 2)));
         assert_eq!(c.tipo(Tipo::Cantera).produccion, Some((Recurso::Piedra, 10_000)));
-        assert_eq!(c.tipo(Tipo::Lenera).produccion, Some((Recurso::Madera, 5_000)));
+        assert_eq!(c.tipo(Tipo::Lenera).produccion, Some((Recurso::Madera, 8_000)));
         assert_eq!(c.tipo(Tipo::Mercado).nivel(3).unwrap().cupo_carros, 18);
         assert!(c.tipo(Tipo::CentroUrbano).costo.is_empty());
     }

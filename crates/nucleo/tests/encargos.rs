@@ -758,7 +758,8 @@ fn cambiar_un_envio_que_espera_sin_hora_empieza_ya_la_carga() {
     assert_eq!((e.situacion(car).2, e.a_bordo(car, Cobre), e.encargo(car).salir_en), (Fase::Carga, 50_000, None));
     e.avanzar(e.tiempo_carga());
     assert_eq!(e.k(car).estado, EstadoCaravana::EnTransito);
-    e.avanzar(2 * HORA);
+    // Pasa la hora vieja y le da tiempo a ir y volver (unas tres horas entre las dos plazas del mundo de la semilla 42).
+    e.avanzar(5 * HORA);
     assert_eq!(hechos(&e.n, "comercio.caravana_carga").len(), 1, "la hora vieja no la hace cargar otra vez");
     assert_eq!((e.k(car).estado, hechos(&e.n, "comercio.encargo_terminado").len()), (EstadoCaravana::Disponible, 1));
 }

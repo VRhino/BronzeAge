@@ -281,7 +281,9 @@ async fn la_columna_ajena_entra_en_la_vista_redactada_con_un_tramo_que_se_renuev
     assert!(de_ana.get(TipoEntidad::Asentamiento, &as_).is_some() && de_ana.get(TipoEntidad::ZonaFaccion, "f-1").is_some());
     assert!(de_ana.get(TipoEntidad::Ejercito, &ej).is_none(), "la columna de F2 está fuera de la vista de F1");
     let niebla = de_ana.niebla.clone().expect("la foto de la vista trae la niebla");
-    assert!(mascara(&niebla, false).explorado_en(centro) && mascara(&niebla, true).explorado_en(Punto::new(centro.x + radio - 1_000, centro.y)));
+    // La niebla va por celdas (de `tamano_celda`): cerca del borde del disco, una celda cuenta si su centro cae dentro, así que se mira una celda hacia dentro.
+    let celda = i64::from(niebla.tamano_celda);
+    assert!(mascara(&niebla, false).explorado_en(centro) && mascara(&niebla, true).explorado_en(Punto::new(centro.x + radio - celda, centro.y)));
     assert!(!mascara(&niebla, true).explorado_en(Punto::new(centro.x - radio - 12 * U, centro.y)), "donde está gus no se ve");
     gus_c.enviar(rect(Punto::new(0, 0), Punto::new(2_667_000, 2_000_000))).await;
     let mut de_gus = Cliente::default();

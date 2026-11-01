@@ -59,7 +59,7 @@ Los HÉROES son una categoría SEPARADA de estas 3 clases.
 - **Los talleres respetan la misma reserva que la auto-construcción**: una receta no consume un recurso por debajo de la reserva mínima de construcción de arriba (mantenimiento y comida) más la reserva manual del Tesorero. Si no le llega, produce menos o no produce; el mantenimiento nunca se queda sin pagar por lo que gasta un taller.
 - **Parar recetas** (control del jugador, `Asentamiento.recetasPausadas`): el Gobernador o el Maestro de Obras pueden parar o reanudar una receta concreta, por el recurso que produce, en todos los talleres de la plaza — por ejemplo, dejar de hacer armas de madera para guardar la madera.
 - **Pausa de auto-construcción** (control del jugador, `Asentamiento.autoConstruccionPausada`): Gobernador/Maestro de Obras pueden pausar/reanudar la DETECCIÓN de nuevas necesidades desde el panel del asentamiento — mientras está pausada, no se evalúan ni comprometen proyectos nuevos, pero lo ya pagado (`en_cola`/`en_construccion`) sigue avanzando con normalidad. No afecta a la adición manual de edificios, que sigue disponible durante la pausa.
-- **Parcelas de bosque en lugar de capacidad por bosque** (2026-10-13, Doc 1.9c): la Leñera se construye en la ciudad y explota una **parcela** del bosque, un punto fijo del mapa con su densidad. Solo puede tomar una parcela libre cuyo centro caiga **dentro de la zona de influencia** del asentamiento, y un asentamiento no ocupa más del `X %` (50 %, mínimo 1) de las parcelas de una masa. No hay contador por bosque: el que llega primero solo reclama lo que su zona cubre. La producción usa la densidad de la parcela; los bosques no se agotan.
+- **Parcelas de bosque en lugar de capacidad por bosque** (2026-10-13, Doc 1.9c): la Leñera se construye en la ciudad y explota una **parcela** del bosque, un punto fijo del mapa con su densidad. Solo puede tomar una parcela libre cuyo centro caiga **dentro de la zona de influencia** del asentamiento, y un asentamiento no ocupa más del `X %` (50 %, mínimo 1) de las parcelas de una masa. No hay contador por bosque: el que llega primero solo reclama lo que su zona cubre. La producción usa la densidad de la parcela; los bosques no se agotan. **Cuántas parcelas hacen falta** (decidido el 2026-11-01): una plaza sobrevive con 1, va bien con 2, va sobrada con 3 y sobradísima con 4, que es todo su espacio inicial y debe ser raro. Por eso la Leñera produce 8 de madera base (antes 5): el bosque en manchas reparte las parcelas por todo el mapa en vez de juntarlas.
 
 ## 4.2.2 Pueblos extractores y obras de mapa (decidido el 2026-10-11)
 
@@ -115,7 +115,7 @@ Algunos edificios, niveles internos y recetas piden además una **tecnología ad
 | Edificio | Recurso | Coste | Trabajadores | Tiempo | Producción base |
 |---|---|---|---|---|---|
 | Cantera | Piedra | 20 madera | 4 | 4 h | 10 piedra |
-| Leñera | Madera | 10 madera | 4 | 1 h | 5 madera |
+| Leñera | Madera | 10 madera | 4 | 1 h | 8 madera (5 hasta el 2026-11-01) |
 | Granja | Trigo | 30 madera | 4 | 2 h | **60 trigo** (nivel 1) |
 | Corral | Livestock (ganado vacuno) | 30 madera | 4 | 4 h | 3 livestock (solo en la aldea agrícola desde el 2026-10-27: allí el ganado sale de la cría, 4.2.2) |
 | Mina de oro | Oro | 40 madera | 6 | 8 h | 4 oro |

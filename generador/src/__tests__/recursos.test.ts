@@ -60,22 +60,43 @@ describe('recursos no metálicos', () => {
       expect(r.anillo).toBe('lejana');
       expect(Object.keys(P.capaLejana.densidadRelativa)).toContain(r.tipo);
     }
-    // La piedra a 1/10 y el cobre y el hierro a 1/4 de la frontera: en proporción, menos piedra lejana que frontera.
+    // La piedra a 1/10 y el cobre y el hierro a la densidad de la frontera: en proporción, menos piedra lejana que frontera.
     expect(capa.filter(r => r.tipo === 'piedra').length).toBeLessThan(de('piedra', 'frontera').length);
   });
   it('cada recurso está en el anillo que declara', () => {
     for (const r of recursos) expect(anilloEn(campamentos, r.posicion).anillo).toBe(r.anillo);
   });
-  it('ninguno en agua, cima, pendiente fuerte ni sitio sin acceso; el cobre y el hierro, en colina o montaña', () => {
+  it('ninguno en agua ni sin acceso; las cimas valen; la piedra no pasa de la pendiente máxima y los metales van también en ladera', () => {
     for (const r of recursos) {
-      expect(['agua', 'cima']).not.toContain(terreno(r.posicion));
-      expect(sintetico.pendiente(r.posicion)).toBeLessThanOrEqual(P.pendienteMaxima);
+      expect(terreno(r.posicion)).not.toBe('agua');
       expect(sintetico.accesible(r.posicion)).toBe(true);
+      if (r.tipo === 'piedra') expect(sintetico.pendiente(r.posicion)).toBeLessThanOrEqual(P.pendienteMaxima);
     }
+    expect(recursos.some(r => terreno(r.posicion) === 'cima')).toBe(true);
+    expect(recursos.some(r => (r.tipo === 'cobre' || r.tipo === 'hierro') && sintetico.pendiente(r.posicion) > P.pendienteMaxima)).toBe(true);
   });
-  it('el cobre y el hierro prefieren colina o montaña (el llano es el último recurso)', () => {
+  it('el cobre y el hierro prefieren colina, montaña o cima (el llano es el último recurso)', () => {
     const minerales = [...de('cobre'), ...de('hierro')];
-    expect(minerales.filter(r => ['colina', 'montana'].includes(terreno(r.posicion))).length / minerales.length).toBeGreaterThan(0.9);
+    expect(minerales.filter(r => ['colina', 'montana', 'cima'].includes(terreno(r.posicion))).length / minerales.length).toBeGreaterThan(0.9);
+  });
+  it('la capa lejana del cobre y el hierro se reparte por zonas según el terreno: más en la montaña, casi nada en el llano', () => {
+    // Tierra lejana apta, muestreada cada 6 u, por terreno y por zona de `capaLejana.zona` u.
+    const lado = P.capaLejana.zona * FACTOR, porTerreno: Record<string, number> = {}, porZona = new Map<string, number>();
+    const zonaDe = (q: Point) => `${Math.floor(q.x / lado)},${Math.floor(q.y / lado)}`;
+    for (let y = 36; y < ALTO; y += 72) for (let x = 36; x < ANCHO; x += 72) {
+      const q = { x, y }, t = terreno(q);
+      if (t === 'agua' || sintetico.pendiente(q) > P.pendienteMaxima || !sintetico.accesible(q) || anilloEn(campamentos, q).anillo !== 'lejana') continue;
+      porTerreno[t] = (porTerreno[t] ?? 0) + 1;
+      porZona.set(zonaDe(q), (porZona.get(zonaDe(q)) ?? 0) + P.capaLejana.pesoTerrenoMineral[t]);
+    }
+    const minerales = capa.filter(r => r.tipo === 'cobre' || r.tipo === 'hierro');
+    const en = (ts: string[]) => minerales.filter(r => ts.includes(terreno(r.posicion))).length;
+    const densidad = (ts: string[]) => en(ts) / ts.reduce((s, t) => s + (porTerreno[t] ?? 0), 0);
+    expect(densidad(['montana', 'cima'])).toBeGreaterThan(1.5 * densidad(['colina']));
+    expect(en(['llano', 'costa']) / minerales.length).toBeLessThan(0.1);
+    // Las zonas con más peso de terreno reciben algo: ninguna del cuarto más pesado se queda vacía.
+    const pesos = [...porZona.entries()].sort((a, b) => b[1] - a[1]), cuarto = pesos.slice(0, Math.ceil(pesos.length / 4));
+    for (const [z] of cuarto) expect(minerales.some(r => zonaDe(r.posicion) === z)).toBe(true);
   });
   it('separaciones mínimas: mismo tipo (piedra 70, resto 250) y 45 entre tipos distintos', () => {
     let infracciones = 0;
