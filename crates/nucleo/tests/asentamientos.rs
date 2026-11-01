@@ -148,16 +148,20 @@ fn una_plaza_vive_sola_construye_crece_y_sube_al_nivel_2() {
     let id = fundar_en(&mut n, fundada, "a", 1, p);
     for hora in 2..=12 * 24 {
         hora_de_jugador(&mut n, id, hora);
+        if hora == 2 {
+            // La piedra del mantenimiento del nivel 2 sale de un pueblo de cantera (2026-11-01): el jugador lo levanta enseguida.
+            comun::levantar_cantera(&mut n, "ana", id).expect("hay piedra en la zona");
+        }
         if hora == 24 {
-            // El nivel 2 pide una aldea agrícola activa (mecánica 50): el jugador la levanta el primer día.
+            // El nivel 2 pide un pueblo activo; el jugador levanta además la aldea agrícola el primer día (en el nivel 1 caben dos).
             comun::levantar_aldea(&mut n, "ana", id).expect("hay sitio fértil para la aldea");
         }
     }
-    assert_eq!(n.pueblos_de(id).iter().filter(|p| p.es_aldea() && p.activo()).count(), 1, "la aldea está en pie");
+    assert_eq!(n.pueblos_de(id).iter().filter(|p| p.activo()).count(), 2, "la cantera y la aldea están en pie");
     let eco = n.economia(id).expect("la plaza sigue viva");
     let completados = eventos(&n, "construccion.edificio_completado");
     let de_tipo = |t: Tipo| completados.iter().filter(|(_, _, d)| d.contains(&("tipo", tipo_idx(t)))).count();
-    assert!(de_tipo(Tipo::Lenera) >= 1 && de_tipo(Tipo::Cantera) >= 1, "construye su Leñera y su Cantera sola: {completados:?}");
+    assert!(de_tipo(Tipo::Lenera) >= 1 && de_tipo(Tipo::Cantera) == 0, "construye su Leñera sola, y ninguna Cantera: {completados:?}");
     assert!(eventos(&n, "asentamiento.nivel_subio").iter().any(|(_, _, d)| d.contains(&("nivel", 2))), "sube al nivel 2 pidiéndolo");
     assert_eq!((eco.nivel, eco.nivel_actual()), (2, 2));
     assert!(eco.poblacion.pesants > 20, "la población crece: {}", eco.poblacion.pesants);
@@ -397,12 +401,8 @@ fn las_ordenes_de_economia_y_sus_rechazos() {
     assert_eq!(codigo(&orden(&mut n, "u1", Comando::MejorarEdificio { asentamiento: id, edificio: 9_999 })), rechazos::EDIFICIO_DESCONOCIDO);
     assert_eq!(codigo(&orden(&mut n, "u2", Comando::MejorarEdificio { asentamiento: id, edificio: g })), rechazos::OBRA_NO_MEJORABLE, "aún no está activo");
 
-    // Un Corral/Cantera toma un nodo; al quitarlo de la cola lo devuelve; la Leñera, una parcela.
-    let r3 = orden(&mut n, "c1", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Cantera });
-    assert!(r3.aceptada(), "{r3:?}");
-    assert_eq!(n.estado().nodos_reclamados.len(), 1);
-    assert!(orden(&mut n, "c2", Comando::QuitarDeCola { asentamiento: id, edificio: r3.creadas[0] as u32 }).aceptada());
-    assert!(n.estado().nodos_reclamados.is_empty(), "quitar de la cola libera el nodo");
+    // La Cantera tampoco va ya en la ciudad (2026-11-01); la Leñera toma una parcela y al quitarla de la cola la devuelve.
+    assert_eq!(codigo(&orden(&mut n, "c1", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Cantera })), rechazos::OBRA_SOLO_POR_PUEBLO);
     let r4 = orden(&mut n, "l1", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Lenera });
     assert!(r4.aceptada(), "{r4:?}");
     assert_eq!(n.estado().asentamientos[&id].parcelas.len(), 1);
@@ -450,7 +450,15 @@ fn la_cola_se_reordena_intercambiando_prioridades() {
     let mut n = nuevo(m);
     let p = sitio(&n, &m.0, 0, 50_000, 0, 1, true);
     let id = fundar_en(&mut n, 0, "a", 1, p);
-    n.avanzar_hasta(MIN); // el primer paso compromete la Leñera y la Cantera (auto-construcción) y quedan en cola
+    // Dos Viviendas a mano ocupan las dos cuadrillas; el primer paso compromete la Leñera (auto-construcción) y una Granja a mano
+    // queda en cola detrás de ella, con otra prioridad (la Cantera, que antes hacía de segunda, ya no se construye en la plaza: 2026-11-01).
+    assert!(n.aplicar_en(0, admin("madera", Comando::DarRecursos { asentamiento: id, recurso: Recurso::Madera, cantidad: 300_000 })).aceptada());
+    for k in 0..2 {
+        assert!(n.aplicar_en(0, ana(&format!("viv{k}"), Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Vivienda })).aceptada());
+    }
+    n.avanzar_hasta(MIN);
+    let r = n.aplicar_en(MIN, ana("granja", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Granja }));
+    assert!(r.aceptada(), "{r:?}");
     let cola = |n: &Nucleo| {
         let mut v: Vec<(i64, u32)> = n.economia(id).unwrap().edificios.iter().filter(|e| e.estado == asentamiento::edificio::Estado::EnCola).map(|e| (e.prioridad, e.id)).collect();
         v.sort_by_key(|&(p, _)| std::cmp::Reverse(p));
@@ -477,12 +485,13 @@ fn una_plaza_que_se_arruina_libera_sus_parcelas_y_nodos_y_su_evento_de_minuto_se
     let id = fundar_en(&mut n, 0, "a", 1, p);
     let pb = sitio_rico(&n, &m.0, 3, 2);
     let otra = fundar_en(&mut n, 0, "b", 2, pb);
-    // Sin Leñera no hay madera para el mantenimiento: la auto-construcción pausada, una parcela por la vía de administración y una
-    // Cantera a mano (toma un nodo). Los dos yacimientos quedan reclamados por la plaza condenada.
+    // Sin Leñera no hay madera para el mantenimiento: la auto-construcción pausada, una parcela por la vía de administración y un
+    // pueblo de cantera marcado (toma un nodo). Los dos yacimientos quedan reclamados por la plaza condenada.
     assert!(n.aplicar_en(0, admin("pausa", Comando::AlternarAutoConstruccion { asentamiento: id, pausada: true })).aceptada());
     let parcela = n.aplicar_en(0, admin("parcela", Comando::ReclamarParcela { asentamiento: id }));
     assert!(parcela.aceptada(), "{parcela:?}");
-    assert!(n.aplicar_en(0, ana("cantera", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Cantera })).aceptada());
+    let nodo = n.candidatos_de_pueblo(id).into_iter().find(|c| c.1 == Tipo::Cantera).expect("hay piedra en la zona").0;
+    assert!(n.aplicar_en(0, ana("cantera", Comando::MarcarPueblo { asentamiento: id, nodo })).aceptada());
     assert_eq!((n.estado().parcelas_ocupadas.len(), n.estado().nodos_reclamados.len()), (1, 1));
     let gen_antes = n.estado().generaciones.actual(id);
     let descartados_antes = n.eventos_descartados();
@@ -581,7 +590,6 @@ fn la_economia_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
         e.politicas = asentamiento::Politicas::desde_activas(vec![Activa { id: "racionamiento".into(), cargo: Cargo::Sacerdote, expira_en: 777 }]);
         e.ascenso = Some(Ascenso { nivel_objetivo: 2, iniciado_en: 5, completa_en: 6 });
         e.recetas_pausadas = vec![Recurso::Cuero, Recurso::ArmaBronce];
-        e.extractor_minutos_sin_cupo = vec![(Tipo::Corral, 3)];
         e.reserva_manual[3] = 42;
         (e.poblacion.restos, e.poblacion.recuperando) = ([250, -400, 999], true);
         e.recintos = vec![anillo(|_| {}), anillo(|r| (r.id, r.nivel, r.avance, r.mejora, r.completado_en) = (2, 2, 1, None, None))];
@@ -634,7 +642,6 @@ fn la_economia_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
         ("auto_pausada", eco(|e| e.auto_pausada = true)),
         ("reserva_manual", eco(|e| e.reserva_manual[7] = 1)),
         ("ocupado", eco(|e| e.ocupado = true)),
-        ("extractor_minutos_sin_cupo", eco(|e| e.extractor_minutos_sin_cupo.push((Tipo::Cantera, 1)))),
         ("completados_pendientes", eco(|e| e.completados_pendientes += 1)),
         ("destruido", eco(|e| e.destruido = true)),
         ("ultimo_minuto", eco(|e| e.ultimo_minuto += 1)),
@@ -1014,7 +1021,7 @@ fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash_y_el_formato_anterior_se
     let reglas = Reglas::default();
     let base = estado_con_una_plaza();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN51");
+    assert_eq!(&bytes[..5], b"BAN53");
     let viejo = [b"BAN13".as_slice(), &bytes[5..]].concat();
     let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN13 no debe admitirse") };
     assert!(e.to_string().contains("BAN13") && e.to_string().contains("población"), "{e}");

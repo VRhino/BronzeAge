@@ -36,8 +36,8 @@ impl Tipo {
         matches!(self, Tipo::Cantera | Tipo::Mina | Tipo::MinaCobre | Tipo::MinaEstano | Tipo::MinaHierro | Tipo::Corral)
     }
 
-    /// Los extractores que solo se explotan con un pueblo extractor (Doc 4.2.2): los minerales y la Cantera. La primera Cantera de una
-    /// plaza es la excepción (directa); el Corral, la Leñera y la Granja nunca van por pueblo.
+    /// Los extractores que solo se explotan con un pueblo extractor (Doc 4.2.2): los minerales y la Cantera (también la primera, desde
+    /// el 2026-11-01: el pueblo extractor se funda desde el nivel 1). El Corral, la Leñera y la Granja nunca van por pueblo.
     pub fn es_de_pueblo(self) -> bool {
         matches!(self, Tipo::Cantera | Tipo::Mina | Tipo::MinaCobre | Tipo::MinaEstano | Tipo::MinaHierro)
     }
@@ -136,7 +136,6 @@ pub struct Necesidades {
 #[derive(Clone, Debug)]
 pub struct Bandas {
     pub supervivencia: i64,
-    pub extractor_base: i64,
     pub crecimiento: i64,
     pub manual: i64,
     pub transformacion: i64,
@@ -146,8 +145,6 @@ pub struct Bandas {
 pub struct ReglasConstruccion {
     pub necesidades: Necesidades,
     pub bandas: Bandas,
-    pub extractor_bonus_por_minuto: i64,
-    pub extractor_bonus_maximo: i64,
     pub extraccion_maxima_por_tipo: u32,
     pub multiplicador_mejora_por_nivel: i64,
     pub unicos: Vec<Tipo>,
@@ -274,7 +271,7 @@ fn lista_tipos(v: &Value) -> Vec<Tipo> {
 
 impl ReglasConstruccion {
     pub fn de(b: &dyn Fn(&str) -> Value) -> Self {
-        let (n, s, e, r) = (b("NECESIDADES"), b("SCORE_BANDAS"), b("EXTRACTOR_DESEMPATE"), b("RESERVA_CONSTRUCCION"));
+        let (n, s, r) = (b("NECESIDADES"), b("SCORE_BANDAS"), b("RESERVA_CONSTRUCCION"));
         let g = |v: &Value, k: &str| f(v, k).unwrap_or_else(|| panic!("falta «{k}»"));
         ReglasConstruccion {
             necesidades: Necesidades {
@@ -290,13 +287,10 @@ impl ReglasConstruccion {
             },
             bandas: Bandas {
                 supervivencia: g(&s, "supervivencia") as i64,
-                extractor_base: g(&s, "extractorBase") as i64,
                 crecimiento: g(&s, "crecimiento") as i64,
                 manual: g(&s, "manual") as i64,
                 transformacion: g(&s, "transformacion") as i64,
             },
-            extractor_bonus_por_minuto: g(&e, "bonusPorMinutoStarved") as i64,
-            extractor_bonus_maximo: g(&e, "bonusMaximo") as i64,
             extraccion_maxima_por_tipo: g(&b("EXTRACCION_MAXIMOS"), "porTipo") as u32,
             multiplicador_mejora_por_nivel: g(&b("MEJORA_EDIFICIO"), "multiplicadorPorNivel") as i64,
             unicos: lista_tipos(&b("EDIFICIOS_UNICOS")),

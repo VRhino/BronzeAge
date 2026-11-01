@@ -41,7 +41,7 @@ Hay un solo reloj, el **de mundo** (`Reloj_Y_Eventos.md` §1: milisegundos desde
 
 - **Catálogo** (§6): las recurrentes posibles de cada ámbito, en orden. Por defecto salen las 7 primeras diarias y las 7 primeras semanales de su ámbito.
 - **Elegir** (`elegirTablon`): el Gobernador (en la plaza) o el Rey (en la Facción) elige hasta 7 diarias y hasta 7 semanales para la **próxima renovación semanal**, y puede cambiar su elección durante la semana. Lo que está en el tablón no cambia hasta entonces. La elección se queda para las semanas siguientes hasta que se cambie; una misión elegida que ya no esté en el catálogo no sale.
-- **Cargo**: una misión con `cargo` solo la acepta su titular: en la plaza, `gobernador`, `tesorero`, `general`, `maestroObras` o `sacerdote`; en la Facción, `rey` o `embajador`.
+- **Cargo**: una misión con `cargo` solo la acepta su titular: en la plaza, `gobernador`, `tesorero`, `general`, `maestroObras`, `sacerdote` o `maestroCaravanas`; en la Facción, `rey` o `embajador`.
 
 ## 5. Reclamar y recompensas
 

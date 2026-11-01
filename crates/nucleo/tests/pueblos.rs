@@ -310,13 +310,15 @@ fn un_nodo_sin_ruta_por_tierra_hasta_la_madre_no_admite_pueblo() {
 #[test]
 fn vale_desde_el_nivel_1_y_respeta_el_cupo_que_libera_destruirlo_a_mano() {
     let m = con_mundo!();
-    // Desde el 2026-10-31 un extractor se funda ya con la madre de nivel 1 (antes pedía el 2), y ocupa el único hueco de ese nivel.
+    // Desde el 2026-10-31 un extractor se funda ya con la madre de nivel 1 (antes pedía el 2); desde el 2026-11-01 el nivel 1 tiene dos huecos.
     let mut uno = montar(m, 7, 1);
     let (plaza, cobre) = (uno.plaza, uno.cobre);
     uno.ok("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: cobre });
-    let punto = uno.n.sitio_de_aldea(plaza);
-    if let Some(punto) = punto {
-        assert_eq!(uno.rechazada("ana", Comando::MarcarAldea { asentamiento: plaza, punto }), rechazos::PUEBLO_SIN_CUPO, "en el nivel 1 cabe uno: aldea o extractor");
+    if let Some(punto) = uno.n.sitio_de_aldea(plaza) {
+        uno.ok("ana", Comando::MarcarAldea { asentamiento: plaza, punto });
+        if let Some(punto) = uno.n.sitio_de_aldea(plaza) {
+            assert_eq!(uno.rechazada("ana", Comando::MarcarAldea { asentamiento: plaza, punto }), rechazos::PUEBLO_SIN_CUPO, "en el nivel 1 caben dos pueblos");
+        }
     }
 
     // Una plaza con al menos otros dos nodos de pueblo a 12 u (la zona de nivel 2 llega a 15): con el relieve de 2026-10-30 no todos los sitios los tienen.
@@ -343,16 +345,15 @@ fn vale_desde_el_nivel_1_y_respeta_el_cupo_que_libera_destruirlo_a_mano() {
 }
 
 #[test]
-fn los_minerales_y_la_segunda_cantera_ya_no_se_construyen_dentro_de_la_ciudad() {
+fn los_minerales_y_la_cantera_ya_no_se_construyen_dentro_de_la_ciudad() {
     let m = con_mundo!();
     let mut e = montar(m, 7, 2);
     let plaza = e.plaza;
     e.dar(Madera, 300_000);
-    for tipo in [Tipo::MinaCobre, Tipo::MinaEstano, Tipo::Mina] {
+    // Desde el 2026-11-01, tampoco la primera Cantera: la piedra sale de un pueblo extractor, que se funda desde el nivel 1.
+    for tipo in [Tipo::Cantera, Tipo::MinaCobre, Tipo::MinaEstano, Tipo::Mina] {
         assert_eq!(e.rechazada("ana", Comando::AnadirEdificio { asentamiento: plaza, tipo }), rechazos::OBRA_SOLO_POR_PUEBLO, "{tipo:?}");
     }
-    e.ok("ana", Comando::AnadirEdificio { asentamiento: plaza, tipo: Tipo::Cantera });
-    assert_eq!(e.rechazada("ana", Comando::AnadirEdificio { asentamiento: plaza, tipo: Tipo::Cantera }), rechazos::OBRA_SOLO_POR_PUEBLO, "la primera es directa; las demás, por pueblo");
 }
 
 // ───────────────────────────── 2. Los materiales y la obra ─────────────────────────────
@@ -496,9 +497,9 @@ fn el_pueblo_extrae_contra_su_almacen_y_el_carro_sale_lleno_vuelca_en_la_madre_y
     // Lo que el carro vuelca en la madre no se cuenta otra vez: el contador es lo que salió del nodo, en los carros y en el almacén del pueblo.
     let salido: i64 = hechos(&e.n, "acarreo.sale").iter().map(|h| dato(h, "carga")).sum::<i64>() + e.pueblo(id).almacen.cantidad(Cobre);
     assert_eq!(extraido(&e) as i64 * 1_000, salido);
-    // La ventana de la solvencia guarda lo que cupo, no lo que traía el carro, en la hora de la llegada.
+    // La ventana de la solvencia guarda lo que traía el carro, también lo que no cupo (2026-11-01), en la hora de la llegada.
     let eco = e.n.economia(plaza).unwrap();
-    assert_eq!(eco.ingresos_acarreo, vec![IngresoAcarreo { recurso: Cobre, hora: llega_en / HORA, cantidad: 400_000 }]);
+    assert_eq!(eco.ingresos_acarreo, vec![IngresoAcarreo { recurso: Cobre, hora: llega_en / HORA, cantidad: 500_000 }]);
     let vuelve = hechos(&e.n, "acarreo.vuelve");
     assert_eq!((dato(&vuelve[0], "caravana"), vuelve[0].0 - llega_en), (carro as i64, llega_en - sale_en), "vuelve vacío por la misma ruta, en el mismo tiempo");
     let c = e.n.caravana(carro).unwrap();
@@ -509,7 +510,7 @@ fn el_pueblo_extrae_contra_su_almacen_y_el_carro_sale_lleno_vuelca_en_la_madre_y
 }
 
 #[test]
-fn con_el_almacen_de_la_madre_lleno_el_acarreo_no_ingresa_nada_ni_cuenta_para_la_solvencia() {
+fn con_el_almacen_de_la_madre_lleno_el_acarreo_se_pierde_pero_cuenta_para_la_solvencia() {
     let m = con_mundo!();
     let mut e = montar(m, 7, 2);
     let plaza = e.plaza;
@@ -525,7 +526,9 @@ fn con_el_almacen_de_la_madre_lleno_el_acarreo_no_ingresa_nada_ni_cuenta_para_la
     }
     let llega = &hechos(&e.n, "acarreo.llega")[0];
     assert_eq!((dato(llega, "carga"), dato(llega, "perdido")), (0, 500_000), "todo se pierde contra un almacén lleno");
-    assert!(e.n.economia(plaza).unwrap().ingresos_acarreo.is_empty(), "y no cuenta como ingreso: la plaza no se hace solvente con un pueblo que se pierde");
+    // Lo que trae el carro cuenta para la solvencia aunque no quepa (decisión del autor del 2026-11-01; antes, solo lo que cupo).
+    let traido: i64 = e.n.economia(plaza).unwrap().ingresos_acarreo.iter().map(|i| i.cantidad).sum();
+    assert_eq!(traido, 500_000, "la plaza con el almacén lleno sigue siendo solvente con su pueblo");
     assert!(e.pueblo(id).carro.is_some());
 }
 
@@ -1225,7 +1228,7 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
     e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN51");
+    assert_eq!(&bytes[..5], b"BAN53");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
@@ -1342,6 +1345,32 @@ impl Escenario {
         }
         self.ok("ana", Comando::EntregarMateriales { ejercito: col, pueblo });
     }
+}
+
+#[test]
+fn las_aldeas_van_por_anillos_las_del_cupo_del_nivel_1_hasta_10_u_y_la_siguiente_en_el_anillo_que_suma_el_nivel_2() {
+    let m = con_mundo!();
+    // Decisión del autor del 2026-10-31: la aldea número k va en el anillo que añade a la zona el primer nivel cuyo cupo llega a k, para que no se levanten
+    // todas juntas. Con el cupo 2 / 3 / 4 / 5 / 6 y los techos 10 / 15 / 20 / 25 / 30 u, las dos primeras hasta 10 u y la tercera de 10 a 15 u.
+    let mut e = montar(m, 7, 2);
+    let plaza = e.plaza;
+    let centro = e.n.estado().asentamientos[&plaza].posicion;
+    let mut puestas = vec![];
+    for k in 1..=2 {
+        let punto = e.n.sitio_de_aldea(plaza).expect("hay tierra fértil a 10 u o menos");
+        assert!(centro.dist(punto) <= 10_000, "la aldea {k} va a 10 u o menos: {}", centro.dist(punto));
+        e.ok("ana", Comando::MarcarAldea { asentamiento: plaza, punto });
+        puestas.push(punto);
+    }
+    // La tercera ya no cabe en el primer anillo: el anillo se mira antes que la cercanía a las otras aldeas, y el rechazo no deja rastro.
+    let rastro = e.n.hash_estado();
+    assert_eq!(e.rechazada("ana", Comando::MarcarAldea { asentamiento: plaza, punto: puestas[0] }), rechazos::PUEBLO_FUERA_DE_SU_ANILLO);
+    assert_eq!(e.n.hash_estado(), rastro);
+    let punto = e.n.sitio_de_aldea(plaza).expect("hay tierra fértil de 10 a 15 u");
+    let d = centro.dist(punto);
+    assert!(d > 10_000 && d <= 15_000, "el panel propone el anillo del nivel 2: {d}");
+    e.ok("ana", Comando::MarcarAldea { asentamiento: plaza, punto });
+    assert_eq!(e.n.pueblos_de(plaza).iter().filter(|p| p.es_aldea()).count(), 3);
 }
 
 #[test]

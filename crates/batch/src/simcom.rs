@@ -108,7 +108,7 @@ pub struct Muestra {
     pub aristas: usize,
     pub rutas: usize,
     /// Caravanas comerciales por estado, en el orden de `ESTADOS`.
-    pub caravanas: [u32; 6],
+    pub caravanas: [u32; ESTADOS.len()],
     pub plazas_vivas: usize,
     pub con_mercado: usize,
     pub con_flota: usize,
@@ -118,13 +118,14 @@ pub struct Muestra {
 
 pub const LLENADO: [Recurso; 5] = [Recurso::Madera, Recurso::Piedra, Recurso::Trigo, Recurso::Livestock, Recurso::Oro];
 
-pub const ESTADOS: [(EstadoCaravana, &str); 6] = [
+pub const ESTADOS: [(EstadoCaravana, &str); 7] = [
     (EstadoCaravana::Disponible, "disponible"),
     (EstadoCaravana::Preparando, "preparando"),
     (EstadoCaravana::EnTransito, "en tránsito"),
     (EstadoCaravana::Retornando, "retornando"),
     (EstadoCaravana::Aparcada, "aparcada"),
     (EstadoCaravana::Adjunta, "adjunta"),
+    (EstadoCaravana::Esperando, "esperando"),
 ];
 
 pub struct Corrida {
@@ -636,14 +637,14 @@ impl Sim<'_> {
 
     // ───────────────────────────── Pueblos y misiones de columna ─────────────────────────────
 
-    /// Marca la aldea agrícola y, de nivel 2 en adelante, un pueblo extractor, y manda a la columna a comprar los materiales al campamento más cercano.
+    /// Marca la aldea agrícola y luego sus canteras (desde el nivel 1, en lo que deje el cupo de su nivel: la piedra del nivel 2 ya no sale de la ciudad), y manda a la columna a comprar los materiales al campamento más cercano.
     fn pueblo(&mut self, t: Instante, id: u64) {
         let Some(p) = self.pjs.get(&id) else { return };
         if p.mision.is_some() {
             return;
         }
         let a = &self.n.estado().asentamientos[&id];
-        let nivel = a.economia.nivel_actual();
+        let cupo = a.economia.cupo_de_pueblos(&self.n.estado().reglas.economia.datos);
         if let Some(pueblo) = p.obra_pendiente {
             // Una obra a medias (el campamento no tenía todos los materiales): otro viaje cuando se reponga.
             if t >= p.proxima_obra {
@@ -662,7 +663,7 @@ impl Sim<'_> {
             };
             self.orden(t, &gobernador(id), "MarcarAldea", Comando::MarcarAldea { asentamiento: id, punto })
         } else {
-            if nivel < 2 || self.n.pueblos_de(id).len() >= PUEBLOS_OBJETIVO + 1 {
+            if self.n.pueblos_de(id).len() >= (PUEBLOS_OBJETIVO + 1).min(cupo as usize) {
                 return;
             }
             let Some(&(nodo, _)) = self.n.candidatos_de_pueblo(id).iter().find(|(_, tipo)| *tipo == Tipo::Cantera) else { return };
@@ -809,7 +810,7 @@ impl Sim<'_> {
 
     fn muestrear(&mut self, dia: i64) {
         let e = self.n.estado();
-        let mut caravanas = [0u32; 6];
+        let mut caravanas = [0u32; ESTADOS.len()];
         for c in e.comercio.flota.iter().filter(|c| c.tipo == comercio::caravana::TipoCaravana::Comercial) {
             if let Some(i) = ESTADOS.iter().position(|(s, _)| *s == c.estado) {
                 caravanas[i] += 1;

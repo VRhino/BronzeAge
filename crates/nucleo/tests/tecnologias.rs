@@ -9,7 +9,6 @@
 mod comun;
 
 use asentamiento::catalogo::Tipo;
-use asentamiento::edificio::Edificios;
 use asentamiento::Recurso;
 use base::{Instante, MS_POR_MINUTO};
 use comun::real::{self, M};
@@ -45,7 +44,7 @@ fn reglas(tec: impl FnOnce(&mut tecnologia::Reglas)) -> Reglas {
     r
 }
 
-/// Con almacenes de 100.000 por recurso: ni la piedra de la plaza llena el suyo (y la Cantera no para) ni falta sitio para la tarifa.
+/// Con almacenes de 100.000 por recurso: ni la piedra de la plaza llena el suyo ni falta sitio para la tarifa.
 fn con_almacen_grande(mut r: Reglas) -> Reglas {
     std::sync::Arc::make_mut(&mut r.economia.datos).capacidad_inicial = 100_000_000;
     r
@@ -120,13 +119,16 @@ impl Escenario {
     }
 
     fn cantera_activa(&self) -> bool {
-        self.n.economia(self.plaza).unwrap().edificios.activos(Tipo::Cantera) > 0
+        self.n.pueblos_de(self.plaza).iter().any(|p| p.tipo == Tipo::Cantera && p.activo())
     }
 
-    /// Avanza hora a hora hasta que la plaza tiene su Cantera activa (la levanta la auto-construcción).
+    /// Levanta el pueblo de cantera de la plaza (si no lo tiene ya: la Cantera ya no es un edificio de la ciudad) y avanza hora a hora hasta que está activo.
     fn hasta_la_cantera(&mut self, tope: Instante) {
+        if !self.n.pueblos_de(self.plaza).iter().any(|p| p.tipo == Tipo::Cantera) {
+            comun::levantar_cantera(&mut self.n, "ana", self.plaza).expect("hay una cantera en el panel");
+        }
         while !self.cantera_activa() {
-            assert!(self.n.ahora() < tope, "la plaza no levantó su Cantera a tiempo");
+            assert!(self.n.ahora() < tope, "el pueblo de cantera no acabó su obra a tiempo");
             let t = self.n.ahora() + HORA;
             self.n.avanzar_hasta(t);
         }
@@ -182,13 +184,13 @@ fn un_logro_sin_hito_no_hace_aparecer_nada_el_edificio_que_lo_cumple_si_en_su_ve
     assert_eq!(c.len(), 2);
     assert!(c.iter().all(|h| h.publico && h.dato("umbral") == Some(1) && texto(h, "contador").as_deref() == Some("plazasEnNivel.2") && texto(h, "tecnologia").is_none()));
 
-    // La Cantera completada es el disparador: la cantería aparece en la misma versión, atribuida a la capital y como primera del mundo; el bronce no (su Era no ha empezado).
+    // El pueblo de cantera completado es el disparador: la cantería aparece en la misma versión, atribuida a la capital y como primera del mundo; el bronce no (su Era no ha empezado).
     e.hasta_la_cantera(3 * DIA);
     let aparece = hechos(&e.n, "tecnologia.aparece");
     assert_eq!(aparece.len(), 1);
     let a = &aparece[0];
     assert_eq!((texto(a, "tecnologia").as_deref(), a.dato("faccion"), a.dato("primera"), a.asentamientos.clone(), a.publico), (Some("canteria"), Some(1), Some(1), vec![plaza], false));
-    let completada = e.n.cambios_desde(0).unwrap().find(|c| c.eventos.iter().any(|h| h.codigo == "construccion.edificio_completado" && h.dato("tipo") == Some(Tipo::Cantera as u8 as i64))).unwrap().version;
+    let completada = e.n.cambios_desde(0).unwrap().find(|c| c.eventos.iter().any(|h| h.codigo == "pueblo.completado")).unwrap().version;
     assert_eq!(version_de(&e.n, "tecnologia.aparece", "canteria"), completada, "en la versión de la obra que la cumple");
     assert!(e.aparecida(1, "canteria") && !e.n.tiene_tecnologia(1, "canteria"), "aparecida, no adoptada");
     assert!(!e.aparecida(1, "bronce_calidad_militar"), "una tecnología de una Era cerrada no aparece aunque su logro y su hito se cumplan");
@@ -235,7 +237,7 @@ fn el_recurso_en_la_capital_lo_mira_el_paso_de_minuto_de_la_capital() {
 
 // ───────────────────────────── 2. Las citas de un descubrimiento ─────────────────────────────
 
-/// La cantería aparecida a la Facción 1 (su logro de nivel 2 y la Cantera de la plaza), con su descubridora.
+/// La cantería aparecida a la Facción 1 (su logro de nivel 2 y el pueblo de cantera de la plaza), con su descubridora.
 fn con_canteria(m: &M) -> (Escenario, Instante) {
     con_canteria_y(m, |_| {})
 }
@@ -374,12 +376,11 @@ fn con_la_canteria_adoptada_las_canteras_de_la_faccion_rinden_un_50_por_ciento_m
         e.contador(Contador::ExtraidoPiedra) * 1_000 + e.restos[Contador::ExtraidoPiedra.indice()]
     };
     let (a0, b0) = (piedra(&sin.n), piedra(&con.n));
-    // Tres minutos: tras cinco días de Cantera al nodo de piedra de esta plaza le quedan pocos minutos al ritmo ×1,5 (la Cantera se limita a su stock y se para
-    // hasta que se regenera).
+    // Tres minutos desde la obra acabada del pueblo de cantera: el pueblo saca piedra a su almacén y la cantería le aplica su ×1,5.
     sin.n.avanzar_hasta(desde + 3 * MIN);
     con.n.avanzar_hasta(desde + 3 * MIN);
     let (a, b) = (piedra(&sin.n) - a0, piedra(&con.n) - b0);
-    assert!(a > 0, "la Cantera saca piedra");
+    assert!(a > 0, "el pueblo de cantera saca piedra");
     assert!((b * 100).abs_diff(a * 150) <= a * 2, "×1,5: sin {a}, con {b}");
 }
 
@@ -392,7 +393,7 @@ fn la_foto_ban38_lleva_las_citas_de_cada_descubrimiento_y_ban37_se_rechaza() {
     let reglas = e.n.estado().reglas.clone();
     let mundo_hash = e.n.estado().mundo_hash.clone();
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN51");
+    assert_eq!(&bytes[..5], b"BAN53");
     let vuelta = Estado::deserializar(&bytes, &reglas, &mundo_hash).unwrap();
     assert_eq!(vuelta.serializar(), bytes);
     assert_eq!(vuelta.hash(), e.n.estado().hash());
@@ -408,6 +409,7 @@ fn guion(m: &M, n: Nucleo, avanzar: &dyn Fn(&mut Nucleo, Instante)) -> Nucleo {
     let mut e = Escenario::en(n, m);
     let plaza = e.plaza;
     e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: plaza, nivel: 2 });
+    comun::levantar_cantera(&mut e.n, "ana", plaza).expect("hay una cantera en el panel");
     e.ok("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["escudos_ligeros".into()] });
     e.ok("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec![] });
     avanzar(&mut e.n, 4 * DIA);

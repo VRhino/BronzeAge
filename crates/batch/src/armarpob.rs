@@ -168,7 +168,7 @@ fn colocacion(x: &Entrada) -> Vec<Metrica> {
         metrica("densidad_n1_ruinas", "Densidad total de bosque a 10 u de las plazas que caen en ruinas (mediana)", "madera/min", INFO, mediana(&v.iter().filter(|p| p.reg.ruinas.is_some()).map(|p| p.densidad_n1 as f64 / 1e6 * 5.0).collect::<Vec<_>>()).or(Some(0.0)), "Economia_Construccion §5.2 (Leñera 5 × densidad)", "Madera por minuto que daría el bosque a 10 u si se explotase entero (5 × la suma de densidades de sus parcelas), medido al fundar. Para comparar con el mantenimiento de madera (~1,65 al día 1, ~2,5 con 40 edificios). 0 si ninguna plaza cae."),
         metrica("densidad_n1_resto", "Densidad total de bosque a 10 u de las plazas que no caen (mediana)", "madera/min", INFO, mediana(&v.iter().filter(|p| p.reg.ruinas.is_none()).map(|p| p.densidad_n1 as f64 / 1e6 * 5.0).collect::<Vec<_>>()).or(Some(0.0)), "Economia_Construccion §5.2 (Leñera 5 × densidad)", "Lo mismo para las plazas que sobreviven."),
         metrica("sin_bosque_n1_pct", "Plazas sin ninguna parcela de bosque en el disco de 10 u", "%", max(10.0), pct(v.iter().filter(|p| p.parcelas_n1 == 0).count(), v.len()), "Doc 1.2 / D2 de bosque (sin bosque no hay Leñera)", "Parcelas del artefacto a 10 u o menos de la plaza (techo de la zona en el nivel 1) al fundar, antes de cualquier competencia."),
-        metrica("sin_piedra_n1_pct", "Plazas sin ningún nodo de piedra en el disco de 10 u", "%", max(15.0), pct(v.iter().filter(|p| p.piedra_n1 == 0).count(), v.len()), "Doc 1.2 (sin piedra no hay Cantera ni nivel 2)", "Nodos de piedra a 10 u o menos de la plaza al fundar, antes de cualquier competencia."),
+        metrica("sin_piedra_n1_pct", "Plazas sin ningún nodo de piedra en el disco de 10 u", "%", max(15.0), pct(v.iter().filter(|p| p.piedra_n1 == 0).count(), v.len()), "Doc 1.2 (sin piedra no hay pueblo de cantera ni nivel 2)", "Nodos de piedra a 10 u o menos de la plaza al fundar, antes de cualquier competencia."),
     ]
 }
 
@@ -219,7 +219,7 @@ fn salud(x: &Entrada) -> Vec<Metrica> {
     ]
 }
 
-/// 5 y 7: Leñera, Cantera y edificios.
+/// 5 y 7: Leñera, pueblo de cantera y edificios.
 fn construccion(x: &Entrada) -> Vec<Metrica> {
     let c = x.corrida;
     let v = &c.villas;
@@ -249,11 +249,11 @@ fn construccion(x: &Entrada) -> Vec<Metrica> {
     };
     vec![
         metrica("primera_lenera_horas", "Hora mediana de la primera Leñera terminada", "h", INFO, mediana_censurada(&len, 60.0, horas), "Economia_Construccion §6.2 (auto-construcción)", "Desde la fundación. Las plazas que nunca la terminan cuentan como el tope de la simulación."),
-        metrica("primera_cantera_horas", "Hora mediana de la primera Cantera terminada", "h", INFO, mediana_censurada(&can, 60.0, horas), "Economia_Construccion §6.2", "Desde la fundación. Las que nunca la terminan cuentan como el tope."),
+        metrica("primera_cantera_horas", "Hora mediana del pueblo de cantera terminado", "h", INFO, mediana_censurada(&can, 60.0, horas), "Economia_Construccion §14", "Desde la fundación. Las que nunca lo terminan cuentan como el tope."),
         metrica("sin_lenera_pct", "Plazas que nunca terminan una Leñera", "%", max(10.0), sin(&|p| p.reg.primera_lenera.is_none()), "Doc 1.9c / D2 de bosque (sin parcela no hay Leñera)", &format!("Sin ninguna Leñera completada al final. De ellas, {} no tenían ni una parcela de bosque en el disco de 10 u (techo de zona del nivel 1) al fundar: sin bosque estructural; el resto lo perdió contra otras plazas o por la cuota de la masa.", fmt(pct(v.iter().filter(|p| p.reg.primera_lenera.is_none() && p.parcelas_n1 == 0).count(), v.iter().filter(|p| p.reg.primera_lenera.is_none()).count()))),),
-        metrica("sin_cantera_pct", "Plazas que nunca terminan una Cantera", "%", max(10.0), sin(&|p| p.reg.primera_cantera.is_none()), "Doc 1.2 (sin piedra no hay Cantera ni nivel 2)", &format!("Sin ninguna Cantera completada al final. De ellas, {} no tenían ni un nodo de piedra en el disco de 10 u al fundar; el resto lo perdió contra otras plazas.", fmt(pct(v.iter().filter(|p| p.reg.primera_cantera.is_none() && p.piedra_n1 == 0).count(), v.iter().filter(|p| p.reg.primera_cantera.is_none()).count()))),),
+        metrica("sin_cantera_pct", "Plazas que nunca terminan su pueblo de cantera", "%", max(10.0), sin(&|p| p.reg.primera_cantera.is_none()), "Doc 1.2 (sin piedra no hay pueblo de cantera ni nivel 2)", &format!("Sin pueblo de cantera completado al final. De ellas, {} no tenían ni un nodo de piedra en el disco de 10 u al fundar; el resto lo perdió contra otras plazas.", fmt(pct(v.iter().filter(|p| p.reg.primera_cantera.is_none() && p.piedra_n1 == 0).count(), v.iter().filter(|p| p.reg.primera_cantera.is_none()).count()))),),
         metrica("sin_sitio_lenera_pct", "Plazas a las que se negó sitio para su primera Leñera", "%", INFO, afectadas(0), "Doc 1.9c", &format!("Plazas en que `proponer(Lenera)` devolvió `None` mientras no tenían ninguna (sin parcela libre en el disco o cupo de la masa agotado). Total de consultas denegadas (también con alguna ya hecha): {} (se repiten cada minuto mientras la plaza quiere una Leñera).", totales(0))),
-        metrica("sin_sitio_cantera_pct", "Plazas a las que se negó sitio para su primera Cantera", "%", INFO, afectadas(1), "Doc 1.2", &format!("Plazas en que `proponer(Cantera)` devolvió `None` mientras no tenían ninguna (sin nodo de piedra libre en el disco). Consultas denegadas en total: {}.", totales(1))),
+        metrica("sin_sitio_cantera_pct", "Plazas a las que se negó sitio para su pueblo de cantera", "%", INFO, afectadas(1), "Doc 1.2", &format!("Plazas en que el jugador no halló ningún nodo de piedra libre en su zona mientras no tenían pueblo de cantera. Consultas denegadas en total: {}.", totales(1))),
         metrica("aldea_pct", "Plazas que terminan su aldea agrícola", "%", INFO, pct(v.iter().filter(|p| p.reg.primera_aldea.is_some()).count(), v.len()), "Economia_Construccion §14.2 (la aldea agrícola; el nivel 2 la pide)", "Plazas con la aldea agrícola en pie al final. El jugador la levanta en cuanto el almacén paga su obra y su carro, con los materiales entregados al instante."),
         metrica("primera_aldea_horas", "Hora mediana en que se completa la aldea agrícola", "h", INFO, mediana_censurada(&ald, 60.0, horas), "Economia_Construccion §14.2", "Desde la fundación. Las que nunca la terminan cuentan como el tope."),
         metrica("viviendas_fin", &format!("Viviendas por plaza a los {dias} días (mediana)"), "viviendas", INFO, med(&|p| *p.reg.viviendas_dia.last().unwrap_or(&0) as f64), "Economia_Construccion §6.5 (topes por nivel)", "Viviendas activas."),
@@ -381,7 +381,7 @@ fn ciudad(x: &Entrada) -> Vec<Metrica> {
 
     // Piezas y anclas.
     let med = |f: &dyn Fn(&Villa) -> f64| mediana(&v.iter().map(f).collect::<Vec<_>>());
-    metricas.push(metrica("piezas_a", &format!("Piezas en la ciudad a los {dia_a} días (mediana)"), "piezas", INFO, med(&|p| p.reg.piezas_a as f64), "Trazado_Urbano §2 (modelo de datos)", "Edificios con huella en la rejilla: los de la economía menos Cantera y minas (que solo ocupan su yacimiento) más las anclas y los puestos del Mercado."));
+    metricas.push(metrica("piezas_a", &format!("Piezas en la ciudad a los {dia_a} días (mediana)"), "piezas", INFO, med(&|p| p.reg.piezas_a as f64), "Trazado_Urbano §2 (modelo de datos)", "Edificios con huella en la rejilla: los de la economía (la Cantera y las minas van por pueblo extractor, fuera de la ciudad) más las anclas y los puestos del Mercado."));
     metricas.push(metrica("piezas_fin", &format!("Piezas en la ciudad a los {dias} días (mediana)"), "piezas", INFO, med(&|p| p.reg.piezas_fin as f64), "Trazado_Urbano §2 (modelo de datos)", "Lo mismo al final de la simulación."));
     let n_anclas = |p: &Villa, t: Tipo| p.urbe.ciudad().piezas().iter().filter(|q| TIPOS[q.tipo as usize] == t).count() as f64;
     let es_ancla = |t: Tipo| x.urb.clase(t).is_some_and(|k| k.rol == Rol::AnclaSaturacion);
@@ -575,7 +575,7 @@ fn grafico_sin_sitio(x: &Entrada) -> Grafico {
         tipo: TipoGrafico::Barras,
         eje_x: "extractor ligado a un yacimiento".into(),
         eje_y: "plazas".into(),
-        series: vec![serie("Leñera sin parcela", k(0)), serie("Cantera sin piedra", k(1)), serie("Corral sin ganado", k(2))],
+        series: vec![serie("Leñera sin parcela", k(0)), serie("Pueblo de cantera sin nodo", k(1)), serie("Corral sin ganado", k(2))],
     }
 }
 

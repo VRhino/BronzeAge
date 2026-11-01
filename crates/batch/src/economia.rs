@@ -98,7 +98,9 @@ impl Reclamos {
     }
 }
 
-/// Cuántas veces un `proponer` devolvió `None` por falta de sitio, por extractor ligado a un yacimiento (0 Leñera, 1 Cantera, 2 Corral).
+/// Cuántas veces se negó sitio a un extractor ligado a un yacimiento (0 Leñera, 1 pueblo de cantera, 2 Corral): la Leñera y el Corral, un `proponer` que
+/// devolvió `None`; el pueblo de cantera (desde el 2026-11-01 la Cantera ya no es un edificio de la ciudad), el jugador de [`crate::simpob`] sin nodo de
+/// piedra libre en su zona cuando lo quiso levantar.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SinSitio {
     /// Consultas denegadas mientras la plaza no tenía ningún extractor de ese tipo: la plaza se queda sin él por falta de sitio.
@@ -110,7 +112,7 @@ pub struct SinSitio {
 }
 
 impl SinSitio {
-    fn denegar(&mut self, k: usize) {
+    pub(crate) fn denegar(&mut self, k: usize) {
         self.total[k] += 1;
         self.sin_ninguno[k] += !self.tiene[k] as u64;
     }
@@ -131,8 +133,8 @@ pub struct SinSitioCiudad {
 }
 
 /// El `Sitios` de una plaza: disco de zona sin recorte por vecinas (simplificación) y su ciudad real, la del núcleo. Lenera → parcela de
-/// bosque con la cuota por masa; Cantera → el nodo de piedra libre más cercano; Corral → el de ganado; minas → ninguno (van por pueblo
-/// extractor); y todo lo que tiene huella en la rejilla, además, solo si **cabe en la ciudad** (anclas, puestos y mudanza de la Granja
+/// bosque con la cuota por masa; Corral → el nodo de ganado libre más cercano; Cantera y minas → ninguno (van por pueblo extractor);
+/// y todo lo que tiene huella en la rejilla, además, solo si **cabe en la ciudad** (anclas, puestos y mudanza de la Granja
 /// incluidos: es el mismo adaptador que [`nucleo::economia`] usa en las plazas del núcleo, sin recorte de zona por vecinas).
 pub struct SitiosVilla<'a> {
     pub mapa: &'a Mapa,
@@ -165,7 +167,6 @@ impl Sitios for SitiosVilla<'_> {
         let Some(fuente) = propuesta else {
             match tipo {
                 Tipo::Lenera => self.sin_sitio.denegar(0),
-                Tipo::Cantera => self.sin_sitio.denegar(1),
                 Tipo::Corral => self.sin_sitio.denegar(2),
                 _ => {}
             }
@@ -192,9 +193,9 @@ impl Sitios for SitiosVilla<'_> {
                 self.parcelas.insert(p);
                 self.sin_sitio.tiene[0] = true;
             }
-            (Tipo::Cantera | Tipo::Corral, Some(Fuente::Nodo(n))) => {
+            (Tipo::Corral, Some(Fuente::Nodo(n))) => {
                 self.reclamos.nodo[n as usize] = Some(self.villa);
-                self.sin_sitio.tiene[(tipo == Tipo::Corral) as usize + 1] = true;
+                self.sin_sitio.tiene[2] = true;
             }
             _ => {}
         }
@@ -244,9 +245,9 @@ mod pruebas {
         Parcela { bosque, centro: Punto::new(x * 1000, 0), densidad: 500 }
     }
 
-    /// Piedra a 5 y 8 u, ganado a 5 u; una masa de 2 parcelas (3 y 4 u) y otra de 4 (50..53 u, lejos).
+    /// Piedra a 5 y 8 u, ganado a 5 y 8 u; una masa de 2 parcelas (3 y 4 u) y otra de 4 (50..53 u, lejos).
     fn mapa() -> Arc<Mapa> {
-        let nodos = vec![nodo(5, Tipo::Cantera), nodo(8, Tipo::Cantera), nodo(5, Tipo::Corral)];
+        let nodos = vec![nodo(5, Tipo::Cantera), nodo(8, Tipo::Cantera), nodo(5, Tipo::Corral), nodo(8, Tipo::Corral)];
         let parcelas = vec![parcela(3, 0), parcela(4, 0), parcela(50, 1), parcela(51, 1), parcela(52, 1), parcela(53, 1)];
         Mapa::nuevo(nodos, parcelas, vec![2, 4], vec![], 100_000, 100_000)
     }
@@ -305,15 +306,17 @@ mod pruebas {
         let (mut rec, mut propias, mut otras) = (Reclamos::nuevo(&m), BTreeSet::new(), BTreeSet::new());
         let (mut ss1, mut ss2) = (SinSitio::default(), SinSitio::default());
         let (mut p1, mut p2) = (Plaza::nueva(), Plaza::nueva());
-        let p = sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss1, &mut p1).proponer(Tipo::Cantera, &U, &mut 100, &mut vec![]);
-        assert_eq!(p, Some(Some(Fuente::Nodo(0))), "la más cercana");
-        sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss1, &mut p1).tomar(0, Tipo::Cantera, Some(Fuente::Nodo(0)), &U, &mut 1);
-        // Otra plaza con el mismo disco recibe la segunda, y luego ninguna.
+        // La Cantera ya no se construye en la ciudad (2026-11-01): solo por pueblo extractor.
+        assert_eq!(sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss1, &mut p1).proponer(Tipo::Cantera, &U, &mut 100, &mut vec![]), None);
+        let p = sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss1, &mut p1).proponer(Tipo::Corral, &U, &mut 100, &mut vec![]);
+        assert_eq!(p, Some(Some(Fuente::Nodo(2))), "el más cercano");
+        sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss1, &mut p1).tomar(1_000, Tipo::Corral, Some(Fuente::Nodo(2)), &U, &mut 1);
+        // Otra plaza con el mismo disco recibe el segundo, y luego ninguno.
         let mut s2 = sitios(&m, &mut rec, 1, 10_000, &mut otras, &mut ss2, &mut p2);
-        assert_eq!(s2.proponer(Tipo::Cantera, &U, &mut 100, &mut vec![]), Some(Some(Fuente::Nodo(1))));
-        s2.tomar(0, Tipo::Cantera, Some(Fuente::Nodo(1)), &U, &mut 1);
-        assert_eq!(s2.proponer(Tipo::Cantera, &U, &mut 100, &mut vec![]), None);
-        assert_eq!((ss2.sin_ninguno[1], ss2.total[1]), (0, 1), "ya tenía una: la denegación no cuenta como «sin ninguno»");
+        assert_eq!(s2.proponer(Tipo::Corral, &U, &mut 100, &mut vec![]), Some(Some(Fuente::Nodo(3))));
+        s2.tomar(1_000, Tipo::Corral, Some(Fuente::Nodo(3)), &U, &mut 1);
+        assert_eq!(s2.proponer(Tipo::Corral, &U, &mut 100, &mut vec![]), None);
+        assert_eq!((ss2.sin_ninguno[2], ss2.total[2]), (0, 1), "ya tenía uno: la denegación no cuenta como «sin ninguno»");
     }
 
     #[test]

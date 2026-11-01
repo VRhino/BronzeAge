@@ -1,6 +1,6 @@
 //! Un asentamiento fundado vive varios días de mundo, minuto a minuto, con un mundo de pruebas (un bosque, un nodo de piedra y
-//! uno de ganado). Se vigilan los invariantes de Economia_Construccion §15 y que la economía arranque sola: Leñera, Cantera,
-//! Viviendas, crecimiento y la subida al nivel 2.
+//! uno de ganado). Se vigilan los invariantes de Economia_Construccion §15 y que la economía arranque sola: Leñera, Viviendas,
+//! crecimiento y, con el pueblo de cantera y la aldea agrícola que levanta el jugador, la subida al nivel 2.
 
 use asentamiento::asentamiento::{Ascenso, Asentamiento, Evento, Exterior, Gratuito, Sitios, Urbano};
 use asentamiento::catalogo::Tipo;
@@ -44,10 +44,9 @@ impl Fuentes for Mundo {
     }
 }
 
-/// Un bosque con 6 parcelas, un nodo de piedra y uno de ganado; todo lo demás cabe siempre.
+/// Un bosque con 6 parcelas y un nodo de ganado (el de piedra, el 1, es del pueblo de cantera); todo lo demás cabe siempre.
 struct Terreno {
     parcelas_libres: Vec<u32>,
-    cantera_libre: bool,
     corral_libre: bool,
 }
 
@@ -55,16 +54,14 @@ impl Sitios for Terreno {
     fn proponer(&mut self, tipo: Tipo, _: &Urbano, _: &mut u32, _: &mut Vec<Gratuito>) -> Option<Option<Fuente>> {
         match tipo {
             Tipo::Lenera => self.parcelas_libres.first().map(|&p| Some(Fuente::Parcela(p))),
-            Tipo::Cantera => self.cantera_libre.then_some(Some(Fuente::Nodo(1))),
             Tipo::Corral => self.corral_libre.then_some(Some(Fuente::Nodo(2))),
-            Tipo::Mina | Tipo::MinaCobre | Tipo::MinaEstano | Tipo::MinaHierro => None,
+            Tipo::Cantera | Tipo::Mina | Tipo::MinaCobre | Tipo::MinaEstano | Tipo::MinaHierro => None,
             _ => Some(None),
         }
     }
     fn tomar(&mut self, _: u32, tipo: Tipo, fuente: Option<Fuente>, _: &Urbano, _: &mut u32) -> Option<Vec<Gratuito>> {
         match (tipo, fuente) {
             (Tipo::Lenera, Some(Fuente::Parcela(p))) => self.parcelas_libres.retain(|&x| x != p),
-            (Tipo::Cantera, _) => self.cantera_libre = false,
             (Tipo::Corral, _) => self.corral_libre = false,
             _ => {}
         }
@@ -82,7 +79,7 @@ fn correr(dias: i64, semilla_hambre: bool) -> (Asentamiento, Vec<(i64, Evento)>)
         a.auto_pausada = true;
     }
     let mut mundo = Mundo { stock: HashMap::from([(1, (1_000_000, 1_000_000)), (2, (30_000, 30_000))]), vacio_desde: HashMap::new(), ahora: 0 };
-    let mut terreno = Terreno { parcelas_libres: (0..6).collect(), cantera_libre: true, corral_libre: true };
+    let mut terreno = Terreno { parcelas_libres: (0..6).collect(), corral_libre: true };
     let sin_tecnologia = |_: &str| false;
     let sin_bonus = |_: Recurso| UNO;
     let mut eventos = vec![];
@@ -109,14 +106,25 @@ fn correr(dias: i64, semilla_hambre: bool) -> (Asentamiento, Vec<(i64, Evento)>)
             recaudacion_extra: UNO,
         };
         let mut ev = a.avanzar_hasta(t, &mut x);
-        // El jugador levanta la aldea agrícola (el gate del nivel 2 la pide) en cuanto la plaza puede pagarla: aquí los materiales salen del
-        // almacén y llegan a la obra al instante (sin columna ni carro, que son del núcleo).
+        // El jugador levanta primero el pueblo de cantera (la piedra del mantenimiento del nivel 2 ya no sale de la plaza) y luego la aldea
+        // agrícola, cada uno en cuanto la plaza puede pagarlo: aquí los materiales salen del almacén y llegan a la obra al instante, y el acarreo
+        // vuelca lo extraído en la plaza cada minuto (sin columna ni carro, que son del núcleo).
         let carro = vec![(Recurso::Madera, 20_000), (Recurso::Oro, 12_000)];
-        let coste = Asentamiento::costo_de_aldea(&reglas, &carro);
-        if a.pueblos.is_empty() && a.almacen.tiene(&coste) && a.iniciar_aldea(&reglas, 1, Punto::new(5_000, 0), UNO, &carro, &mut ev).is_ok() {
-            a.almacen.pagar(&coste);
+        let (cantera, aldea) = (Asentamiento::costo_de_pueblo(&reglas, Tipo::Cantera, &carro), Asentamiento::costo_de_aldea(&reglas, &carro));
+        if a.pueblos.is_empty() && a.almacen.tiene(&cantera) && a.iniciar_pueblo(&reglas, &sin_tecnologia, 1, Tipo::Cantera, 1, &carro, &mut ev).is_ok() {
+            a.almacen.pagar(&cantera);
             let requerido = a.pueblos[0].falta();
             a.entregar_a_pueblo(t, &reglas, 1, &requerido, &mut ev).expect("todo entregado");
+        }
+        if a.pueblos.len() == 1 && a.almacen.tiene(&aldea) && a.iniciar_aldea(&reglas, 2, Punto::new(5_000, 0), UNO, &carro, &mut ev).is_ok() {
+            a.almacen.pagar(&aldea);
+            let requerido = a.pueblos[1].falta();
+            a.entregar_a_pueblo(t, &reglas, 2, &requerido, &mut ev).expect("todo entregado");
+        }
+        if let Some(p) = a.pueblos.iter_mut().find(|p| p.tipo == Tipo::Cantera) {
+            let sacado = p.almacen.quitar(Recurso::Piedra, p.almacen.cantidad(Recurso::Piedra));
+            a.almacen.agregar(Recurso::Piedra, sacado);
+            a.registrar_acarreo(t, Recurso::Piedra, sacado);
         }
         // Un bot pide la subida en cuanto puede.
         if a.ascenso.is_none() && minuto % 60 == 0 {
@@ -149,12 +157,12 @@ fn la_economia_arranca_sola_y_sube_al_nivel_2_sin_romper_ningun_invariante() {
     let (a, ev) = correr(10, false);
     assert!(!a.destruido, "no cae en ruinas");
     let leñera = primer(&ev, |e| matches!(e, Evento::EdificioCompletado { tipo: Tipo::Lenera, .. }));
-    let cantera = primer(&ev, |e| matches!(e, Evento::EdificioCompletado { tipo: Tipo::Cantera, .. }));
+    let cantera = primer(&ev, |e| matches!(e, Evento::PuebloCompletado { id: 1 }));
     let ascenso = primer(&ev, |e| matches!(e, Evento::AscensoIniciado { objetivo: 2, .. }));
     let nivel2 = primer(&ev, |e| matches!(e, Evento::NivelSubio { nivel: 2 }));
     println!("Leñera {leñera:?} · Cantera {cantera:?} · ascenso pedido {ascenso:?} · nivel 2 {nivel2:?} (minutos)");
     println!("pesants {} · viviendas {} · edificios {}", a.poblacion.pesants, a.edificios.en_cualquier_estado(Tipo::Vivienda), a.edificios.len());
-    assert!(leñera.is_some() && cantera.is_some(), "construye su Leñera y su Cantera solo");
+    assert!(leñera.is_some() && cantera.is_some(), "construye su Leñera solo y el pueblo de cantera se levanta");
     assert!(nivel2.is_some_and(|m| m < 10 * 1440), "sube al nivel 2 dentro de los 10 días");
     assert_eq!(a.nivel, 2);
     let _: Option<Ascenso> = a.ascenso;
@@ -178,7 +186,7 @@ fn sin_trigo_ni_granja_la_gente_muere_y_la_nutricion_llega_a_cero() {
 
 /// Un minuto de una plaza en un mundo sin yacimientos ni sitios (solo importa la comida y el hambre).
 fn paso_de_hambre(a: &mut Asentamiento, reglas: &Reglas, minuto: i64) -> Vec<Evento> {
-    let (mut mundo, mut terreno) = (Mundo { stock: HashMap::new(), vacio_desde: HashMap::new(), ahora: 0 }, Terreno { parcelas_libres: vec![], cantera_libre: false, corral_libre: false });
+    let (mut mundo, mut terreno) = (Mundo { stock: HashMap::new(), vacio_desde: HashMap::new(), ahora: 0 }, Terreno { parcelas_libres: vec![], corral_libre: false });
     let (sin_tecnologia, sin_bonus) = (|_: &str| false, |_: Recurso| UNO);
     let mut x = Exterior {
         reglas,
@@ -273,7 +281,7 @@ fn el_paso_de_minuto_le_dice_al_mundo_lo_que_fabrican_las_recetas_de_bronce() {
         a.almacen.poner(insumo, 300_000);
     }
     let mut taller = Taller::default();
-    let mut terreno = Terreno { parcelas_libres: vec![], cantera_libre: false, corral_libre: false };
+    let mut terreno = Terreno { parcelas_libres: vec![], corral_libre: false };
     let (con_todo, sin_bonus) = (|_: &str| true, |_: Recurso| UNO);
     let mut x = Exterior {
         reglas: &reglas,

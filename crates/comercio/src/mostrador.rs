@@ -6,11 +6,15 @@
 //! servida se redondea hacia abajo y el coste hacia arriba, de modo que ni la plaza ni el carro pagan más de lo que tienen. La comisión
 //! no se acuña: la paga quien toma la orden y se la queda la plaza (comprando se paga de más, vendiendo se cobra de menos); no lleva
 //! bonus por distancia ni recargo por reputación.
+//!
+//! La caravana con encargo usa las mismas cuentas en una plaza ajena: [`vender`] y [`comprar`] sirven sus líneas a las órdenes de la plaza con
+//! `servir`, en vez de tocar el almacén (Comercio_Caravanas §5.8.8).
 
 use crate::datos::Reglas;
 use crate::orden_mercado::{EstadoOrden, OrdenMercado, TipoOrden};
 use crate::precio::tasa;
-use crate::tipos::AsentamientoId;
+use crate::encargo::{LineaDejar, LineaRecoger};
+use crate::tipos::{de, total, AsentamientoId, Carga, OrdenId};
 use asentamiento::datos::{por, UNO};
 use asentamiento::{Almacen, Recurso};
 use base::{entero, entero_arriba, Instante, Mil, UNIDAD};
@@ -116,6 +120,12 @@ pub fn comerciar(
     if !c.mercado_activo {
         return Err(ErrorMostrador::SinMercado);
     }
+    servir(r, orden, plaza, carro, pedida, c.misma_faccion, c.factor_comision_externa)
+}
+
+/// Sirve `orden` desde `plaza` contra `carro`: comprueba `pedida > 0`, precio > 0 y que el recurso no sea el oro, y aplica la aritmética a la plaza y a la
+/// orden. Es lo que comparten el mostrador en persona y la caravana con encargo (Comercio_Caravanas §8.3).
+fn servir(r: &Reglas, orden: &mut OrdenMercado, plaza: &mut Almacen, carro: &Carro, pedida: Mil, misma_faccion: bool, factor_comision_externa: i64) -> Result<Servido, ErrorMostrador> {
     if pedida <= 0 {
         return Err(ErrorMostrador::CantidadNoPositiva);
     }
@@ -125,7 +135,7 @@ pub fn comerciar(
     if orden.recurso == Recurso::Oro {
         return Err(ErrorMostrador::RecursoOro);
     }
-    let tasa = tasa(&r.comision, c.misma_faccion, c.factor_comision_externa);
+    let tasa = tasa(&r.comision, misma_faccion, factor_comision_externa);
     let vende = orden.tipo == TipoOrden::Venta;
     let precio_neto = if vende { por(orden.precio_unitario, UNO + tasa) } else { por(orden.precio_unitario, UNO - tasa) };
     if precio_neto <= 0 {
@@ -174,6 +184,110 @@ pub fn comerciar(
     }
     let (delta_carro_recurso, delta_carro_oro) = if vende { (q, -oro_movido) } else { (-q, oro_movido) };
     Ok(Servido { cantidad: q, valor, comision, oro_movido, delta_carro_recurso, delta_carro_oro, cumplida })
+}
+
+/// La plaza ajena donde comercia una caravana con encargo.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ContextoParada {
+    pub plaza_id: AsentamientoId,
+    pub ahora: Instante,
+    /// `factorComisionExterna` de las políticas de la plaza (ppm; `UNO` si no hay).
+    pub factor_comision_externa: i64,
+}
+
+/// Una orden servida a la caravana.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Trato {
+    pub orden: OrdenId,
+    pub servido: Servido,
+}
+
+/// Lo que una línea del encargo pide a las órdenes de la plaza.
+struct Pedido {
+    recurso: Recurso,
+    /// Tipo de las órdenes que se toman: las de compra al vender la caravana, las de venta al comprar.
+    tipo: TipoOrden,
+    /// Precio mínimo (órdenes de compra) o máximo (órdenes de venta) que acepta la caravana.
+    limite: i64,
+    /// Lo que le falta a la línea.
+    falta: Mil,
+}
+
+/// Suma `delta` al recurso de la carga y quita la entrada si queda a 0.
+fn aplicar(a_bordo: &mut Carga, recurso: Recurso, delta: Mil) {
+    let n = de(a_bordo, recurso) + delta;
+    if n > 0 {
+        a_bordo.insert(recurso, n);
+    } else {
+        a_bordo.remove(&recurso);
+    }
+}
+
+/// Sirve una línea a las órdenes activas de la plaza, sin caducar y del recurso, que cumplan el precio límite: la que mejor trata a la caravana primero
+/// y, a igual precio, por id ascendente. Una orden que `servir` rechaza se salta. Se detiene al no faltar nada o al no quedar órdenes.
+fn atender(r: &Reglas, ordenes: &mut [OrdenMercado], plaza: &mut Almacen, a_bordo: &mut Carga, capacidad: Mil, c: &ContextoParada, p: Pedido) -> Vec<Trato> {
+    let mut tratos = Vec::new();
+    if p.recurso == Recurso::Oro {
+        return tratos;
+    }
+    // Las de compra se ordenan de mayor a menor precio y las de venta de menor a mayor: con el signo, ambas son «menor clave primero».
+    let signo = match p.tipo {
+        TipoOrden::Compra => -1,
+        TipoOrden::Venta => 1,
+    };
+    let mut elegidas: Vec<usize> = (0..ordenes.len())
+        .filter(|&i| {
+            let o = &ordenes[i];
+            o.asentamiento == c.plaza_id
+                && o.estado == EstadoOrden::Activa
+                && c.ahora < o.expira_en
+                && o.tipo == p.tipo
+                && o.recurso == p.recurso
+                && signo * o.precio_unitario <= signo * p.limite
+        })
+        .collect();
+    elegidas.sort_by_key(|&i| (signo * ordenes[i].precio_unitario, ordenes[i].id));
+    let mut falta = p.falta;
+    for i in elegidas {
+        if falta <= 0 {
+            break;
+        }
+        let carro = Carro { oro: de(a_bordo, Recurso::Oro), recurso: de(a_bordo, p.recurso), espacio: (capacidad - total(a_bordo)).max(0) };
+        let Ok(servido) = servir(r, &mut ordenes[i], plaza, &carro, falta, false, c.factor_comision_externa) else { continue };
+        aplicar(a_bordo, Recurso::Oro, servido.delta_carro_oro);
+        aplicar(a_bordo, p.recurso, servido.delta_carro_recurso);
+        falta -= servido.cantidad;
+        tratos.push(Trato { orden: ordenes[i].id, servido });
+    }
+    tratos
+}
+
+/// La caravana con encargo vende en una plaza ajena (Comercio_Caravanas §5.8.8 y §8.3). Línea a línea, en el orden de `lineas`, toma las
+/// órdenes de **compra** de la plaza con `precio_unitario >= precio_min`, de la que mejor paga a la que peor (a igual precio, por id ascendente), y vende
+/// como mucho `min(tope, lo que lleva)` del recurso (sin tope, todo lo que lleva). `ordenes` es el libro entero: solo cuentan las de `c.plaza_id`,
+/// activas y sin caducar. Una línea sin precio mínimo o de oro no comercia. Cada orden se sirve con las cuentas del mostrador como una columna de
+/// otra facción; el oro y la mercancía se aplican a `a_bordo` y a `plaza`, así que el oro se conserva. `capacidad` es la carga máxima de la caravana.
+pub fn vender(r: &Reglas, lineas: &[LineaDejar], ordenes: &mut [OrdenMercado], plaza: &mut Almacen, a_bordo: &mut Carga, capacidad: Mil, c: &ContextoParada) -> Vec<Trato> {
+    let mut tratos = Vec::new();
+    for l in lineas {
+        let Some(limite) = l.precio_min else { continue };
+        let lleva = de(a_bordo, l.recurso);
+        let falta = l.tope.map_or(lleva, |t| t.min(lleva));
+        tratos.extend(atender(r, ordenes, plaza, a_bordo, capacidad, c, Pedido { recurso: l.recurso, tipo: TipoOrden::Compra, limite, falta }));
+    }
+    tratos
+}
+
+/// La caravana con encargo compra en una plaza ajena (Comercio_Caravanas §5.8.8 y §8.3). Línea a línea, en el orden de `lineas`, toma las
+/// órdenes de **venta** de la plaza con `precio_unitario <= precio_max`, de la más barata a la más cara (a igual precio, por id ascendente), y compra
+/// como mucho la `cantidad` de la línea. Mismas reglas que [`vender`] para el libro, las líneas sin precio o de oro, el mostrador y la conservación del oro.
+pub fn comprar(r: &Reglas, lineas: &[LineaRecoger], ordenes: &mut [OrdenMercado], plaza: &mut Almacen, a_bordo: &mut Carga, capacidad: Mil, c: &ContextoParada) -> Vec<Trato> {
+    let mut tratos = Vec::new();
+    for l in lineas {
+        let Some(limite) = l.precio_max else { continue };
+        tratos.extend(atender(r, ordenes, plaza, a_bordo, capacidad, c, Pedido { recurso: l.recurso, tipo: TipoOrden::Venta, limite, falta: l.cantidad }));
+    }
+    tratos
 }
 
 #[cfg(test)]
@@ -383,5 +497,201 @@ mod pruebas {
             comerciar(&r, &mut o, PLAZA, &mut plaza, &carro(0, 55_555, 12_345), 99_999, &ctx()).unwrap()
         };
         assert_eq!(hacer(), hacer());
+    }
+
+    const MADERA: Recurso = Recurso::Madera;
+
+    fn ctx_parada() -> ContextoParada {
+        ContextoParada { plaza_id: PLAZA, ahora: 10, factor_comision_externa: UNO }
+    }
+
+    /// Una orden del libro con id propio, en la plaza de las pruebas.
+    fn en_libro(id: OrdenId, tipo: TipoOrden, cantidad: Mil, precio: i64) -> OrdenMercado {
+        OrdenMercado { id, ..orden(tipo, cantidad, precio) }
+    }
+
+    fn a_bordo(cosas: &[(Recurso, Mil)]) -> Carga {
+        cosas.iter().copied().collect()
+    }
+
+    fn dejar(recurso: Recurso, tope: Option<Mil>, precio_min: Option<i64>) -> LineaDejar {
+        LineaDejar { recurso, tope, precio_min }
+    }
+
+    fn recoger(recurso: Recurso, cantidad: Mil, precio_max: Option<i64>) -> LineaRecoger {
+        LineaRecoger { recurso, cantidad, precio_max }
+    }
+
+    fn cantidades(tratos: &[Trato]) -> Vec<(OrdenId, Mil)> {
+        tratos.iter().map(|t| (t.orden, t.servido.cantidad)).collect()
+    }
+
+    #[test]
+    fn vender_toma_primero_la_orden_que_mejor_paga_y_empata_por_id() {
+        let r = reglas();
+        let mut libro = vec![en_libro(2, TipoOrden::Compra, 10_000, 2_000_000), en_libro(1, TipoOrden::Compra, 10_000, 2_000_000), en_libro(3, TipoOrden::Compra, 10_000, 3_000_000)];
+        let mut plaza = almacen(0, 1_000_000);
+        let mut bordo = a_bordo(&[(MADERA, 25_000)]);
+        let tratos = vender(&r, &[dejar(MADERA, None, Some(1_000_000))], &mut libro, &mut plaza, &mut bordo, 1_000_000, &ctx_parada());
+        assert_eq!(cantidades(&tratos), [(3, 10_000), (1, 10_000), (2, 5_000)], "sin tope vende todo lo que lleva");
+        assert_eq!(de(&bordo, MADERA), 0);
+        assert!(!bordo.contains_key(&MADERA), "la entrada a 0 se quita");
+    }
+
+    #[test]
+    fn comprar_toma_primero_la_orden_mas_barata_y_empata_por_id() {
+        let r = reglas();
+        let mut libro = vec![en_libro(2, TipoOrden::Venta, 10_000, 2_000_000), en_libro(1, TipoOrden::Venta, 10_000, 2_000_000), en_libro(3, TipoOrden::Venta, 10_000, 1_000_000)];
+        let mut plaza = almacen(100_000, 0);
+        let mut bordo = a_bordo(&[(Recurso::Oro, 1_000_000)]);
+        let tratos = comprar(&r, &[recoger(MADERA, 25_000, Some(5_000_000))], &mut libro, &mut plaza, &mut bordo, 1_000_000, &ctx_parada());
+        assert_eq!(cantidades(&tratos), [(3, 10_000), (1, 10_000), (2, 5_000)]);
+        assert_eq!(de(&bordo, MADERA), 25_000);
+    }
+
+    #[test]
+    fn el_precio_minimo_al_vender_excluye_las_ordenes_que_pagan_menos() {
+        let r = reglas();
+        let mut libro = vec![en_libro(1, TipoOrden::Compra, 10_000, 1_000_000), en_libro(2, TipoOrden::Compra, 10_000, 2_000_000), en_libro(3, TipoOrden::Compra, 10_000, 3_000_000)];
+        let mut plaza = almacen(0, 1_000_000);
+        let mut bordo = a_bordo(&[(MADERA, 30_000)]);
+        let tratos = vender(&r, &[dejar(MADERA, None, Some(2_000_000))], &mut libro, &mut plaza, &mut bordo, 1_000_000, &ctx_parada());
+        assert_eq!(cantidades(&tratos), [(3, 10_000), (2, 10_000)], "el precio mínimo es inclusivo");
+        assert_eq!(de(&bordo, MADERA), 10_000);
+        assert_eq!(libro[0].cantidad_cumplida, 0);
+    }
+
+    #[test]
+    fn el_precio_maximo_al_comprar_excluye_las_ordenes_que_cuestan_mas() {
+        let r = reglas();
+        let mut libro = vec![en_libro(1, TipoOrden::Venta, 10_000, 1_000_000), en_libro(2, TipoOrden::Venta, 10_000, 2_000_000), en_libro(3, TipoOrden::Venta, 10_000, 3_000_000)];
+        let mut plaza = almacen(100_000, 0);
+        let mut bordo = a_bordo(&[(Recurso::Oro, 1_000_000)]);
+        let tratos = comprar(&r, &[recoger(MADERA, 30_000, Some(2_000_000))], &mut libro, &mut plaza, &mut bordo, 1_000_000, &ctx_parada());
+        assert_eq!(cantidades(&tratos), [(1, 10_000), (2, 10_000)], "el precio máximo es inclusivo");
+        assert_eq!(libro[2].cantidad_cumplida, 0);
+    }
+
+    #[test]
+    fn vender_respeta_el_tope_de_la_linea_y_lo_que_lleva() {
+        let r = reglas();
+        let mut libro = vec![en_libro(1, TipoOrden::Compra, 100_000, 2_000_000)];
+        let mut plaza = almacen(0, 1_000_000);
+        let mut bordo = a_bordo(&[(MADERA, 10_000)]);
+        let tratos = vender(&r, &[dejar(MADERA, Some(4_000), Some(1_000_000))], &mut libro, &mut plaza, &mut bordo, 1_000_000, &ctx_parada());
+        assert_eq!(cantidades(&tratos), [(1, 4_000)]);
+        assert_eq!(de(&bordo, MADERA), 6_000);
+        // Un tope mayor que lo que lleva no hace vender más.
+        let tratos = vender(&r, &[dejar(MADERA, Some(50_000), Some(1_000_000))], &mut libro, &mut plaza, &mut bordo, 1_000_000, &ctx_parada());
+        assert_eq!(cantidades(&tratos), [(1, 6_000)]);
+    }
+
+    #[test]
+    fn comprar_respeta_la_cantidad_de_la_linea() {
+        let r = reglas();
+        let mut libro = vec![en_libro(1, TipoOrden::Venta, 100_000, 1_000_000)];
+        let mut plaza = almacen(100_000, 0);
+        let mut bordo = a_bordo(&[(Recurso::Oro, 1_000_000)]);
+        let tratos = comprar(&r, &[recoger(MADERA, 6_000, Some(2_000_000))], &mut libro, &mut plaza, &mut bordo, 1_000_000, &ctx_parada());
+        assert_eq!(cantidades(&tratos), [(1, 6_000)]);
+        assert_eq!(de(&bordo, MADERA), 6_000);
+    }
+
+    #[test]
+    fn comprar_se_queda_en_lo_que_alcanza_el_oro_de_a_bordo() {
+        let r = reglas();
+        let mut libro = vec![en_libro(1, TipoOrden::Venta, 100_000, 1_000_000)];
+        let mut plaza = almacen(100_000, 0);
+        // Externa: 1,08 por unidad. 5 de oro dan 4,6 unidades, que en enteras son 4 (cuestan 4,32 → 5 de oro).
+        let mut bordo = a_bordo(&[(Recurso::Oro, 5_000)]);
+        let tratos = comprar(&r, &[recoger(MADERA, 100_000, Some(2_000_000))], &mut libro, &mut plaza, &mut bordo, 1_000_000, &ctx_parada());
+        assert_eq!(cantidades(&tratos), [(1, 4_000)]);
+        assert_eq!((de(&bordo, Recurso::Oro), de(&bordo, MADERA)), (0, 4_000));
+        assert!(!bordo.contains_key(&Recurso::Oro));
+    }
+
+    #[test]
+    fn vender_se_queda_en_lo_que_cabe_en_la_caravana() {
+        let r = reglas();
+        let mut libro = vec![en_libro(1, TipoOrden::Compra, 100_000, 3_000_000)];
+        let mut plaza = almacen(0, 1_000_000);
+        // Lleva 10 y la capacidad es 14: quedan 4 de hueco. El oro cobrado ocupa más que la mercancía vendida (2,76 por unidad: crece 1,76):
+        // 2 unidades dan 6 de oro (crece 4); 3 darían 9 (crece 6).
+        let mut bordo = a_bordo(&[(MADERA, 10_000)]);
+        let tratos = vender(&r, &[dejar(MADERA, None, Some(1_000_000))], &mut libro, &mut plaza, &mut bordo, 14_000, &ctx_parada());
+        assert_eq!(cantidades(&tratos), [(1, 2_000)]);
+        assert!(total(&bordo) <= 14_000);
+    }
+
+    #[test]
+    fn comprar_se_queda_en_lo_que_cabe_en_la_caravana() {
+        let r = reglas();
+        let mut libro = vec![en_libro(1, TipoOrden::Venta, 100_000, 500_000)];
+        let mut plaza = almacen(100_000, 0);
+        // Lleva 10 de oro y la capacidad es 12: quedan 2 de hueco. A 0,54 por unidad la carga crece 0,46 por unidad comprada: 4 unidades (crece 1).
+        let mut bordo = a_bordo(&[(Recurso::Oro, 10_000)]);
+        let tratos = comprar(&r, &[recoger(MADERA, 100_000, Some(1_000_000))], &mut libro, &mut plaza, &mut bordo, 12_000, &ctx_parada());
+        assert_eq!(cantidades(&tratos), [(1, 4_000)]);
+        assert!(total(&bordo) <= 12_000);
+    }
+
+    #[test]
+    fn una_orden_se_cumple_a_medias_y_la_otra_entera() {
+        let r = reglas();
+        let mut libro = vec![en_libro(1, TipoOrden::Compra, 10_000, 3_000_000), en_libro(2, TipoOrden::Compra, 10_000, 2_000_000)];
+        let mut plaza = almacen(0, 1_000_000);
+        let mut bordo = a_bordo(&[(MADERA, 15_000)]);
+        let tratos = vender(&r, &[dejar(MADERA, None, Some(1_000_000))], &mut libro, &mut plaza, &mut bordo, 1_000_000, &ctx_parada());
+        assert_eq!(cantidades(&tratos), [(1, 10_000), (2, 5_000)]);
+        assert!(tratos[0].servido.cumplida && !tratos[1].servido.cumplida);
+        assert_eq!((libro[0].estado, libro[0].cantidad_cumplida), (EstadoOrden::Cumplida, 10_000));
+        assert_eq!((libro[1].estado, libro[1].cantidad_cumplida), (EstadoOrden::Activa, 5_000));
+    }
+
+    #[test]
+    fn las_ordenes_de_otra_plaza_caducadas_o_no_activas_no_cuentan() {
+        let r = reglas();
+        let valida = en_libro(1, TipoOrden::Compra, 100_000, 2_000_000);
+        let mut otra_plaza = en_libro(2, TipoOrden::Compra, 100_000, 9_000_000);
+        otra_plaza.asentamiento = PLAZA + 1;
+        let mut caducada = en_libro(3, TipoOrden::Compra, 100_000, 9_000_000);
+        caducada.expira_en = 10;
+        let mut cumplida = en_libro(4, TipoOrden::Compra, 100_000, 9_000_000);
+        cumplida.estado = EstadoOrden::Cumplida;
+        let mut libro = vec![otra_plaza, caducada, cumplida, valida];
+        let mut plaza = almacen(0, 1_000_000);
+        let mut bordo = a_bordo(&[(MADERA, 10_000)]);
+        let tratos = vender(&r, &[dejar(MADERA, None, Some(1_000_000))], &mut libro, &mut plaza, &mut bordo, 1_000_000, &ctx_parada());
+        assert_eq!(cantidades(&tratos), [(1, 10_000)]);
+        assert!(libro[..3].iter().all(|o| o.cantidad_cumplida == 0));
+    }
+
+    #[test]
+    fn una_linea_sin_precio_o_de_oro_no_comercia() {
+        let r = reglas();
+        let mut libro = vec![en_libro(1, TipoOrden::Compra, 100_000, 2_000_000), en_libro(2, TipoOrden::Venta, 100_000, 2_000_000)];
+        let mut plaza = almacen(100_000, 1_000_000);
+        let mut bordo = a_bordo(&[(MADERA, 10_000), (Recurso::Oro, 100_000)]);
+        let antes = (bordo.clone(), plaza.clone());
+        let vendido = vender(&r, &[dejar(MADERA, None, None), dejar(Recurso::Oro, None, Some(1))], &mut libro, &mut plaza, &mut bordo, 1_000_000, &ctx_parada());
+        let comprado = comprar(&r, &[recoger(MADERA, 10_000, None), recoger(Recurso::Oro, 10_000, Some(5_000_000))], &mut libro, &mut plaza, &mut bordo, 1_000_000, &ctx_parada());
+        assert!(vendido.is_empty() && comprado.is_empty());
+        assert_eq!((bordo, plaza), antes);
+        assert!(libro.iter().all(|o| o.cantidad_cumplida == 0));
+    }
+
+    #[test]
+    fn vender_y_comprar_conservan_el_oro_total() {
+        let r = reglas();
+        let mut libro = vec![en_libro(1, TipoOrden::Compra, 100_000, 1_700_000), en_libro(2, TipoOrden::Venta, 100_000, 1_300_000)];
+        let mut plaza = almacen(50_000, 300_000);
+        let mut bordo = a_bordo(&[(MADERA, 33_333), (Recurso::Oro, 77_777)]);
+        let total_antes = plaza.cantidad(Recurso::Oro) + de(&bordo, Recurso::Oro);
+        let vendido = vender(&r, &[dejar(MADERA, Some(20_000), Some(1_000_000))], &mut libro, &mut plaza, &mut bordo, 1_000_000, &ctx_parada());
+        assert!(!vendido.is_empty());
+        assert_eq!(plaza.cantidad(Recurso::Oro) + de(&bordo, Recurso::Oro), total_antes, "tras vender");
+        let comprado = comprar(&r, &[recoger(MADERA, 30_000, Some(2_000_000))], &mut libro, &mut plaza, &mut bordo, 1_000_000, &ctx_parada());
+        assert!(!comprado.is_empty());
+        assert_eq!(plaza.cantidad(Recurso::Oro) + de(&bordo, Recurso::Oro), total_antes, "tras comprar");
     }
 }

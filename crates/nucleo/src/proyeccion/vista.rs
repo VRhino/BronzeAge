@@ -24,6 +24,7 @@ use crate::nucleo::Nucleo;
 use asentamiento::edificio::Estado as EstadoEdificio;
 use base::{Instante, Mil, Plan, Punto, Vertice};
 use comercio::caravana::{Caravana, EstadoCaravana};
+use comercio::encargo::Punta;
 use comercio::orden_mercado::EstadoOrden;
 use comercio::red_caminos::{escalon_de_peso, Arista, RutaComercial};
 use contrato::v1 as pb;
@@ -265,10 +266,24 @@ impl<'n> Mirada<'n> {
             heroes.extend(x.columna.participantes.iter().map(|q| q.heroe));
         }
 
-        // Caravanas que no están en casa ni en una batalla: las propias (de una plaza de la Facción o con destino en ella), enteras; las ajenas, si se ven o si una grande llama la atención.
+        // Caravanas que no están en casa, dentro de una plaza ni en una batalla: las propias (de una plaza de la Facción o con destino en ella), enteras; las ajenas, si se ven o si una grande
+        // llama la atención. Una `Esperando` está dentro de su plaza y no sale (Comercio_Caravanas §5.8.4); si es de la Facción y espera en el destino de una plaza ajena, esa plaza le lleva sus
+        // órdenes de mercado (Comercio_Caravanas §5.8.8, «Qué se ve»).
         let flota = &e.reglas.economia.comercio.flota;
         let de_la_faccion = |plaza: Option<u32>| plaza.and_then(|p| e.asentamientos.get(&u64::from(p))).is_some_and(|a| Some(a.faccion) == self.faccion);
-        for c in e.comercio.flota.iter().filter(|c| !matches!(c.estado, EstadoCaravana::Disponible | EstadoCaravana::EnBatalla)) {
+        let mut con_caravana_dentro: BTreeSet<u64> = BTreeSet::new();
+        for c in e.comercio.flota.iter().filter(|c| c.estado != EstadoCaravana::Disponible) {
+            if c.estado == EstadoCaravana::Esperando {
+                if let Some(destino) = c.encargo.as_ref().filter(|x| x.punta == Punta::Destino).map(|x| x.destino) {
+                    if de_la_faccion(Some(c.origen)) && !de_la_faccion(Some(destino)) {
+                        con_caravana_dentro.insert(u64::from(destino));
+                    }
+                }
+                continue;
+            }
+            if c.estado == EstadoCaravana::EnBatalla {
+                continue;
+            }
             let Some(p) = n.posicion_de_caravana(c.id, t) else { continue };
             if !rect.contiene(p) {
                 continue;
@@ -333,14 +348,14 @@ impl<'n> Mirada<'n> {
                 } else if dentro {
                     nombradas.push(a.faccion);
                     v.push(visible(pb::TipoEntidad::Asentamiento, id, Sello(a.version, 1), move || Some(Cuerpo::Asentamiento(plaza_desde_dentro(n, a.id)))));
-                    let abiertas = e.comercio.libro.ordenes.iter().filter(|o| u64::from(o.asentamiento) == a.id && o.estado == EstadoOrden::Activa);
-                    v.extend(abiertas.map(|o| {
-                        visible(pb::TipoEntidad::OrdenMercado, ids::orden_de_mercado(o.id), Sello(n.version_de(Clase::OrdenMercado, o.id), 0), move || Some(Cuerpo::OrdenMercado(propios::orden_de_mercado(n, o))))
-                    }));
                 } else {
                     nombradas.push(a.faccion);
                     v.push(visible(pb::TipoEntidad::Asentamiento, id, Sello(a.version, 0), move || Some(Cuerpo::Asentamiento(plaza_avistada(n, a.id)))));
                 }
+            }
+            // Las órdenes de una plaza ajena llegan con el héroe dentro o con una caravana de la Facción esperando en ella, estén o no en el rectángulo; una sola vez aunque se den las dos.
+            if !duena && (dentro || con_caravana_dentro.contains(&a.id)) {
+                v.extend(self.ordenes_activas(a.id));
             }
             for p in &a.economia.pueblos {
                 let Some(pos) = n.posicion_de_pueblo(p.id) else { continue };
@@ -469,6 +484,14 @@ impl<'n> Mirada<'n> {
             v.push(visible(pb::TipoEntidad::Titulo, x.id.clave().into(), Sello(n.version_de(Clase::Titulo, x.id.indice()), 0), move || Some(Cuerpo::Titulo(propios::titulo(n, x)))));
         }
         v
+    }
+
+    /// Las órdenes de mercado activas de la plaza ajena `plaza` (2026-10-29: quien está dentro; Comercio_Caravanas §5.8.8: la Facción con una caravana esperando en ella), para tomarlas.
+    fn ordenes_activas(&self, plaza: u64) -> impl Iterator<Item = Visible<'n>> {
+        let n = self.n;
+        n.estado().comercio.libro.ordenes.iter().filter(move |o| u64::from(o.asentamiento) == plaza && o.estado == EstadoOrden::Activa).map(move |o| {
+            visible(pb::TipoEntidad::OrdenMercado, ids::orden_de_mercado(o.id), Sello(n.version_de(Clase::OrdenMercado, o.id), 0), move || Some(Cuerpo::OrdenMercado(propios::orden_de_mercado(n, o))))
+        })
     }
 
     /// Una plaza propia a cuya puerta está la columna del héroe de la sesión: su ficha con el almacén (Niebla_De_Guerra §5.4, la parte del almacén de `detalleDeAvistados`). Su secuencia interior

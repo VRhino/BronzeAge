@@ -181,8 +181,8 @@ impl Mapa {
     }
 
     /// Dónde puede ir un edificio de esa plaza (el contrato de `Sitios::proponer`, sin tomar nada):
-    /// Leñera → parcela de bosque libre en la zona, con la cuota por masa; Cantera → el nodo de piedra libre más cercano en la zona; Corral →
-    /// el de ganado; minas → `None` (van por pueblo extractor, Doc 4.2.2); el resto, `Some(None)`: este método solo conoce los yacimientos, y que
+    /// Leñera → parcela de bosque libre en la zona, con la cuota por masa; Corral → el nodo de ganado libre más cercano en la zona; Cantera y
+    /// minas → `None` (van por pueblo extractor, Doc 4.2.2); el resto, `Some(None)`: este método solo conoce los yacimientos, y que
     /// el edificio **quepa en la ciudad** lo decide el trazado urbano ([`crate::urbanismo::Urbe`]) en las plazas del núcleo; el batch de
     /// población no lo usa y deja que siempre quepa. `en_zona` recorta el disco `(centro, radio)` por las fronteras con otras Facciones.
     #[allow(clippy::too_many_arguments)]
@@ -199,10 +199,9 @@ impl Mapa {
     ) -> Option<Option<Fuente>> {
         match tipo {
             Tipo::Lenera => self.parcela(centro, radio, propias, cuota_pct, parcela_libre, en_zona).ok().map(|p| Some(Fuente::Parcela(p))),
-            Tipo::Cantera => self.mas_cercano(self.piedra_en(centro, radio), centro, nodo_libre, en_zona).map(|n| Some(Fuente::Nodo(n))),
             Tipo::Corral => self.mas_cercano(self.ganado_en(centro, radio), centro, nodo_libre, en_zona).map(|n| Some(Fuente::Nodo(n))),
             // Van por pueblo extractor (Doc 4.2.2), no por la ciudad.
-            Tipo::Mina | Tipo::MinaCobre | Tipo::MinaEstano | Tipo::MinaHierro => None,
+            Tipo::Cantera | Tipo::Mina | Tipo::MinaCobre | Tipo::MinaEstano | Tipo::MinaHierro => None,
             // Sin yacimiento: el sitio lo decide la ciudad de la plaza, no el mapa.
             _ => Some(None),
         }

@@ -270,7 +270,7 @@ fn salir_al_mundo_deja_al_heroe_la_foto_del_interior_de_su_plaza() {
     e.con_barracon();
     e.ok("ana", Comando::AsignarGuarnicion { heroe: h, escuadra: lenadores });
     e.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: a, pausada: true });
-    let vivienda = e.ok("ana", Comando::AnadirEdificio { asentamiento: a, tipo: asentamiento::catalogo::Tipo::Vivienda }).creadas[0] as u32;
+    let granja = e.ok("ana", Comando::AnadirEdificio { asentamiento: a, tipo: asentamiento::catalogo::Tipo::Granja }).creadas[0] as u32;
     let (t, madera) = (e.n.ahora(), e.almacen(Madera));
     e.ok("ana", Comando::SalirAlMundo { asentamiento: a, heroe: h, escuadras: vec![milicia], carga: vec![(Madera, 40_000)] });
     let recuerdo = e.n.heroe(h).unwrap().plazas_recordadas[&(a as u32)].clone();
@@ -278,12 +278,12 @@ fn salir_al_mundo_deja_al_heroe_la_foto_del_interior_de_su_plaza() {
     // Lo que deja atrás, sin la carga que se lleva, tal como se ve (con la unidad que se está consumiendo, EE-2).
     assert_eq!(e.almacen(Madera), madera - 40_000);
     assert_eq!(recuerdo.almacen[&Madera], e.n.economia(a).unwrap().almacen.visible(Madera));
-    assert!(recuerdo.cola.iter().any(|b| b.id == vivienda && b.completa_en.is_none()), "la vivienda en cola");
+    assert!(recuerdo.cola.iter().any(|b| b.id == granja && b.completa_en.is_none()), "la granja en cola");
     assert!(e.n.economia(a).unwrap().edificios.iter().filter(|b| b.activo()).all(|b| recuerdo.cola.iter().all(|x| x.id != b.id)), "lo activo no se recuerda: viaja vivo en la ficha");
     let p = nucleo::proyeccion::propios::heroe(&e.n, e.n.heroe(h).unwrap());
     let pr = &p.plazas_recordadas[&format!("as-{a}")];
     assert_eq!((pr.visto_en_ms, pr.almacen["madera"].cantidad.as_ref().unwrap().valor_en_t0, pr.guarnicion_escuadrones_ids.clone()), (t, recuerdo.almacen[&Madera], vec![format!("esc-{lenadores}")]));
-    assert!(pr.cola.iter().any(|b| b.id == format!("ed-{a}-{vivienda}") && b.estado == contrato::v1::EstadoEdificio::EdificioEnCola as i32));
+    assert!(pr.cola.iter().any(|b| b.id == format!("ed-{a}-{granja}") && b.estado == contrato::v1::EstadoEdificio::EdificioEnCola as i32));
     // Fuera, la plaza sigue viviendo y la foto no cambia; la foto del estado la conserva.
     e.dar(a, Madera, 7_000);
     assert_eq!(e.n.heroe(h).unwrap().plazas_recordadas[&(a as u32)], recuerdo);
@@ -465,7 +465,7 @@ fn la_marcha_forzada_va_un_cincuenta_por_ciento_mas_deprisa_come_el_doble_solo_m
     assert!(e.ejercito(col).plan.fin().unwrap() < fin_normal);
     // Va en la foto.
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN51");
+    assert_eq!(&bytes[..5], b"BAN53");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert!(vuelta.ejercitos[&col].columna.forzada, "la marcha forzada va en la foto");
     assert_eq!(vuelta.serializar(), bytes);

@@ -25,7 +25,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 61 | MISIONES | H13 «Forjar al héroe» no tiene camino: el héroe no gana puntos de atributo porque el servidor no sube su nivel (visto al probar las misiones una a una, 2026-10-28). **Parada** hasta que haya Unity para los perks (decisión del autor del 2026-10-28) | la misión existe y se prueba que repartir sin puntos no cuenta |
 | 62 | MERCENARIOS | El campamento visto desde la puerta (2026-10-28): el héroe con la columna parada a la puerta (≤ `radioPuerta`) recibe el ámbito `CAMPAMENTO` como si estuviera dentro (stock y precios del mercado, reclutas, tropas que ofrece) y se le quita al alejarse; la sesión recalcula ese derecho cuando la columna para o arranca. Pendiente de decidir si desde fuera se recorta la lista de residentes y presentes. El cliente de jugador enseña mercado y reclutar con ese ámbito, dentro o fuera. Aparcada por el autor el 2026-10-28 | las órdenes ya se aceptan a la puerta (`comprarEnCampamento`, `reclutarEnCampamento`, repostar), pero `CAMPAMENTO` solo se abre dentro: desde fuera el jugador no ve qué hay |
 | 63 | MUNDO / REGLAS | El mundo en 3D, lo que queda (2026-10-31): generador v2 (bosque, llanos, montañas, altiplanos, metales), revisión a fondo de las reglas del terreno para la vista 3D, el encuadre de la caravana grande y los cabos sueltos del cliente 3D. Sección «63» | cliente 3D en `main` (BronzeAgeClient 0.65.0); generador y reglas sin tocar |
-| 64 | COMERCIO | Rutas de caravanas automáticas (diseño cerrado el 2026-10-31; `Docs/Disenos_Por_Implementar/Rutas_De_Caravanas.md`): encargo de la caravana con ruta permanente o envío programado, Maestro de Caravanas, tiempos de carga y descarga y comercio con órdenes en plaza ajena. Sección «64» | nada |
+| 65 | INTEL / BOTS | Informes de taberna por niveles (diseño del 2026-10-31; `Docs/Disenos_Por_Implementar/Informes_De_Taberna.md`): el Informe de plaza se separa en Población, Guarnición, Tecnologías, Trazado y Rutas según la taberna del comprador, y Cuentas, Agravios, Corte y Planes, solo contra Facciones de bots, los vende el motor y los responde el servicio de bots | un solo `comprar_informe_plaza` |
 | — | PARIDAD | Recortes temporales del motor Rust frente al TypeScript (sección «Paridad con TypeScript») | el motor no está migrado hasta cerrarlos |
 | — | DUDAS | Ninguna sin decisión desde el 2026-10-27 (sección «Dudas abiertas»: las `// DUDA:` que quedan en el código) | — |
 | — | FASE 7 | Todo lo que se dejó para los bots reales y la fase 7 (sección «Para la fase 7») | — |
@@ -219,6 +219,13 @@ Decisiones provisionales tomadas al construirlo, para revisar (detalle en `Bronz
 - Sin medir en una tarjeta gráfica de verdad: la escena va de 0,43 a 0,88 millones de triángulos según el encuadre.
 - Móvil y Unity: el prototipo es solo de sobremesa; el paso a Unity (CQ) usa los mismos valores y el mismo paquete de relieve.
 
-## 64. Rutas de caravanas automáticas (diseño cerrado el 2026-10-31)
+## 65. Informes de taberna por niveles (diseño del 2026-10-31)
 
-Diseño en `Docs/Disenos_Por_Implementar/Rutas_De_Caravanas.md`. Una caravana comercial de la flota recibe un encargo con dos paradas: ruta permanente entre dos plazas propias o envío programado de una ida y vuelta (también a una plaza ajena, donde vende y compra contra las órdenes de su mercado). Cargo nuevo, el Maestro de Caravanas (el Tesorero y el Gobernador también pueden siempre). Tiempos de carga y descarga por carro en cada parada. Pendiente: implementarlo cuando el autor lo pida, calibrar `tiempoCarga` y `tiempoDescarga`, y avisar al cliente del contrato nuevo.
+Diseño: `Docs/Disenos_Por_Implementar/Informes_De_Taberna.md`. Nace del libro de agravios de los bots, que vive entero en el servicio de bots: el motor no guarda relaciones ni rasgos de bots.
+
+Lo que toca al motor:
+
+- Orden `comprar_informe` con tipo y objetivo, que sustituye a `comprar_informe_plaza`.
+- Catálogo de tipos en `INTEL`, con nivel de taberna, precio y enfriamiento.
+- Informes de plaza separados por tipo, con residentes como cantidad, tecnologías y rutas.
+- Recibo firmado en los informes de bots, y aviso al objetivo con el tipo de informe.

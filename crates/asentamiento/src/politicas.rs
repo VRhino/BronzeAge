@@ -11,6 +11,7 @@ pub enum Cargo {
     General,
     MaestroObras,
     Sacerdote,
+    MaestroCaravanas,
 }
 
 impl Cargo {
@@ -22,12 +23,13 @@ impl Cargo {
             Cargo::General => "general",
             Cargo::MaestroObras => "maestroObras",
             Cargo::Sacerdote => "sacerdote",
+            Cargo::MaestroCaravanas => "maestroCaravanas",
         }
     }
 
     /// El cargo de una clave de los datos (`"maestroObras"`): la inversa de [`Cargo::clave`].
     pub fn desde_clave(clave: &str) -> Option<Cargo> {
-        [Cargo::Gobernador, Cargo::Tesorero, Cargo::General, Cargo::MaestroObras, Cargo::Sacerdote].into_iter().find(|c| c.clave() == clave)
+        [Cargo::Gobernador, Cargo::Tesorero, Cargo::General, Cargo::MaestroObras, Cargo::Sacerdote, Cargo::MaestroCaravanas].into_iter().find(|c| c.clave() == clave)
     }
 }
 
@@ -64,7 +66,7 @@ pub struct Politicas {
 
 /// Slots de un cargo: el Gobernador `min(máximo, base + nivel_faccion / n) + (Sala del Consejo ? 1 : 0)`; el resto, `base`.
 pub fn slots_disponibles(r: &ReglasPoliticas, a: &Activador) -> u32 {
-    let s = &r.slots[a.cargo.clave()];
+    let Some(s) = r.slots.get(a.cargo.clave()) else { return 0 };
     if a.cargo != Cargo::Gobernador {
         return s.base;
     }
@@ -151,6 +153,13 @@ mod pruebas {
         assert_eq!(g(30, true), 6, "la Sala del Consejo suma uno aunque ya esté en el máximo");
         assert_eq!(slots_disponibles(&r, &ctx(Cargo::Sacerdote)), 1);
         assert_eq!(slots_disponibles(&r, &ctx(Cargo::Tesorero)), 2);
+    }
+
+    #[test]
+    fn un_cargo_sin_entrada_en_slots_por_cargo_no_tiene_huecos_y_no_entra_en_panico() {
+        let r = Reglas::cargar().politicas;
+        assert!(!r.slots.contains_key(Cargo::MaestroCaravanas.clave()));
+        assert_eq!(slots_disponibles(&r, &ctx(Cargo::MaestroCaravanas)), 0);
     }
 
     #[test]

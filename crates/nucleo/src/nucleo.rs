@@ -63,6 +63,7 @@ mod convocatorias;
 mod cronica;
 mod dentro;
 mod diplomacia;
+mod encargos;
 mod espacio;
 mod experiencia;
 mod exploracion;
@@ -1120,6 +1121,11 @@ impl Nucleo {
                 Ok(None) => {}
                 Err(r) => return r,
             },
+            Comando::EncargarCaravana { .. } | Comando::CambiarEncargo { .. } | Comando::CancelarEncargo { .. } => {
+                if let Err(r) = self.ejecutar_encargos(t, p) {
+                    return r;
+                }
+            }
             Comando::ComprarEnCampamento { .. }
             | Comando::RepostarEnCampamento { .. }
             | Comando::FijarResidencia { .. }

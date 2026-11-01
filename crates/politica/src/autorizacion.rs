@@ -121,7 +121,7 @@ impl<V: Vista> Actor<'_, V> {
         }
     }
 
-    /// `asignarCargoLocal`: el Gobernador lo designa el Rey de la plaza (sin presencia); los otros cuatro, el Gobernador residente y presente.
+    /// `asignarCargoLocal`: el Gobernador lo designa el Rey de la plaza (sin presencia); los otros cinco, el Gobernador residente y presente.
     pub fn asigna_cargo_local(&self, a: AsentamientoId, c: Cargo) -> bool {
         if c == Cargo::Gobernador {
             self.rey_de_la_plaza(a)

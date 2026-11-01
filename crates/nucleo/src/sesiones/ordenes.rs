@@ -20,6 +20,7 @@ use asentamiento::{Cargo, Recurso, Tipo};
 use base::{Mil, Punto};
 use combate::resolucion::Lado;
 use comercio::caravana::{Animal, TipoCarro};
+use comercio::encargo::{LineaDejar, LineaRecoger, Modo, Parada};
 use contrato::v1 as pb;
 use militar::catalogo::Tropa;
 use militar::columna::Politica;
@@ -290,6 +291,26 @@ impl Ctx<'_> {
             "defensor" => Ok(Lado::Defensor),
             _ => self.forma(format!("lado desconocido: {s}")),
         }
+    }
+
+    /// `modo` de `encargar_caravana`: `ruta | envio`.
+    fn modo_de_encargo(&self, s: &str) -> R<Modo> {
+        match s {
+            "ruta" => Ok(Modo::Ruta),
+            "envio" => Ok(Modo::Envio),
+            _ => self.forma(format!("modo de encargo desconocido: {s}")),
+        }
+    }
+
+    /// Lo que hace la caravana en una punta del encargo; sin parada, no recoge ni deja nada.
+    fn parada(&self, p: Option<&pb::ParadaEncargo>) -> R<Parada> {
+        let Some(p) = p else { return Ok(Parada::default()) };
+        Ok(Parada {
+            recoger: p.recoger.iter().map(|l| Ok(LineaRecoger { recurso: self.recurso(&l.recurso)?, cantidad: l.cantidad, precio_max: l.precio_max })).collect::<R<_>>()?,
+            esperar_existencias: p.esperar_existencias,
+            dejar: p.dejar.iter().map(|l| Ok(LineaDejar { recurso: self.recurso(&l.recurso)?, tope: l.tope, precio_min: l.precio_min })).collect::<R<_>>()?,
+            desechar_sobrante: p.desechar_sobrante,
+        })
     }
 
     fn cantidades(&self, c: Option<&pb::Cantidades>) -> R<Vec<(Recurso, Mil)>> {
@@ -645,6 +666,22 @@ impl Ctx<'_> {
             Cuerpo::EntregarDeCaravana(o) => Comando::EntregarDeCaravana { ejercito: self.ejercito(&o.ejercito_id)?, caravana: self.caravana(&o.caravana_id)?, acuerdo: self.acuerdo(&o.acuerdo_id)? },
             Cuerpo::AdjuntarCaravana(o) => Comando::AdjuntarCaravana { caravana: self.caravana(&o.caravana_id)?, ejercito: self.ejercito(&o.ejercito_id)? },
             Cuerpo::AparcarCaravana(o) => Comando::AparcarCaravana { caravana: self.caravana(&o.caravana_id)?, asentamiento: self.plaza(&o.asentamiento_id)? },
+            Cuerpo::EncargarCaravana(o) => Comando::EncargarCaravana {
+                caravana: self.caravana(&o.caravana_id)?,
+                destino: self.plaza(&o.destino_asentamiento_id)?,
+                modo: self.modo_de_encargo(&o.modo)?,
+                salir_en: o.salir_en_ms,
+                en_origen: self.parada(o.parada_origen.as_ref())?,
+                en_destino: self.parada(o.parada_destino.as_ref())?,
+            },
+            Cuerpo::CambiarEncargo(o) => Comando::CambiarEncargo {
+                caravana: self.caravana(&o.caravana_id)?,
+                destino: self.plaza(&o.destino_asentamiento_id)?,
+                salir_en: o.salir_en_ms,
+                en_origen: self.parada(o.parada_origen.as_ref())?,
+                en_destino: self.parada(o.parada_destino.as_ref())?,
+            },
+            Cuerpo::CancelarEncargo(o) => Comando::CancelarEncargo { caravana: self.caravana(&o.caravana_id)? },
 
             // ── Pueblos extractores ──
             Cuerpo::MarcarPueblo(o) => Comando::MarcarPueblo { asentamiento: self.plaza(&o.asentamiento_id)?, nodo: self.nodo(&o.nodo_id)? },

@@ -5,7 +5,7 @@
 //! población{pesants, artesanos, nobleza: i64 (habitantes enteros) · restos 3 × i64 (milésimas de habitante, uno por clase) · nutrición i64 · recuperando bool} · almacén{29 × (cantidad i64, capacidad i64, resto i64)} · políticas{n u64 ·
 //! n × (id texto, cargo u8, expira_en i64)} · edificios{n u64 · n × edificio} · pueblos{n u64 · n × pueblo} · avanzadas{n u64 · n × avanzada} · recintos{n u64 · n × recinto} · ingresos_acarreo{n u64 · n × (recurso u8, hora i64, cantidad i64)} · siguiente_edificio u32 · ascenso{opt: nivel_objetivo u32,
 //! iniciado_en i64, completa_en i64} · recetas_pausadas{n u64 · n × recurso u8} · auto_pausada bool · reserva_manual 29 × i64 · ocupado
-//! bool · extractor_minutos_sin_cupo{n u64 · n × (tipo u8, i64)} · completados_pendientes u32 · destruido bool · ultimo_minuto i64 · tendencia{almacén 29 × i64 · población 3 × i64}` (BAN22: la tendencia «+N/min» del último paso de minuto).
+//! bool · completados_pendientes u32 · destruido bool · ultimo_minuto i64 · tendencia{almacén 29 × i64 · población 3 × i64}` (BAN22: la tendencia «+N/min» del último paso de minuto).
 //! Un edificio: `id u32 · tipo u8 · estado u8 · completa_en opt_i64 · prioridad i64 · nivel_interno u8 · mejora{bool, nivel u8,
 //! completa_en i64} · danado bool · fuente{u8: 0 ninguna, 1 nodo, 2 parcela; u32} · pausado_por_almacen bool`.
 //! Un pueblo: `id u64 · tipo u8 · sitio{u8: 0 nodo → u32; 1 punto → punto, fertilidad i64} · nivel u32 · estado{u8: 0 pendiente → requerido y entregado, cada uno
@@ -53,6 +53,7 @@ pub(crate) fn cargo_a_u8(c: Cargo) -> u8 {
         Cargo::General => 2,
         Cargo::MaestroObras => 3,
         Cargo::Sacerdote => 4,
+        Cargo::MaestroCaravanas => 5,
     }
 }
 
@@ -63,6 +64,7 @@ pub(crate) fn cargo_de_u8(i: u8) -> Result<Cargo, ErrorFormato> {
         2 => Cargo::General,
         3 => Cargo::MaestroObras,
         4 => Cargo::Sacerdote,
+        5 => Cargo::MaestroCaravanas,
         _ => return Err(ErrorFormato("cargo desconocido")),
     })
 }
@@ -280,7 +282,6 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
         auto_pausada,
         reserva_manual,
         ocupado,
-        extractor_minutos_sin_cupo,
         completados_pendientes,
         destruido,
         ultimo_minuto,
@@ -390,11 +391,6 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
     w.bool(*auto_pausada);
     reserva_manual.iter().for_each(|&x| w.i64(x));
     w.bool(*ocupado);
-    w.u64(extractor_minutos_sin_cupo.len() as u64);
-    for &(t, n) in extractor_minutos_sin_cupo {
-        w.u8(tipo_a_u8(t));
-        w.i64(n);
-    }
     w.u32(*completados_pendientes);
     w.bool(*destruido);
     w.i64(*ultimo_minuto);
@@ -404,8 +400,9 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
 }
 
 /// `con_aldeas`: la foto trae los pueblos con su sitio, su nivel y su subida (desde BAN47); antes, todos sobre un nodo y de nivel 1. `con_flujos`: la tendencia trae lo producido y lo
-/// consumido por separado (desde BAN48); antes, a 0 hasta el siguiente paso de minuto.
-pub(crate) fn leer(r: &mut Lector, con_aldeas: bool, con_flujos: bool) -> Result<Asentamiento, ErrorFormato> {
+/// consumido por separado (desde BAN48); antes, a 0 hasta el siguiente paso de minuto. `con_desempate`: la foto trae los minutos sin cupo de
+/// cada extractor que proponía la cola automática (hasta BAN52); desde BAN53 la cola ya no propone extractores y se leen para descartarlos.
+pub(crate) fn leer(r: &mut Lector, con_aldeas: bool, con_flujos: bool, con_desempate: bool) -> Result<Asentamiento, ErrorFormato> {
     let (fundado_en, nivel) = (r.i64()?, r.u32()?);
     let medidor = Medidor { valor: r.i64()?, racha: r.u32()?, nivel_actual: r.u32()? };
     let (pesants, artesanos, nobleza) = (r.i64()?, r.i64()?, r.i64()?);
@@ -478,9 +475,10 @@ pub(crate) fn leer(r: &mut Lector, con_aldeas: bool, con_flujos: bool) -> Result
         *x = r.i64()?;
     }
     let ocupado = r.bool()?;
-    let mut extractor_minutos_sin_cupo = Vec::new();
-    for _ in 0..r.cuenta()? {
-        extractor_minutos_sin_cupo.push((tipo_de_u8(r.u8()?)?, r.i64()?));
+    if con_desempate {
+        for _ in 0..r.cuenta()? {
+            (tipo_de_u8(r.u8()?)?, r.i64()?);
+        }
     }
     Ok(Asentamiento {
         fundado_en,
@@ -500,7 +498,6 @@ pub(crate) fn leer(r: &mut Lector, con_aldeas: bool, con_flujos: bool) -> Result
         auto_pausada,
         reserva_manual,
         ocupado,
-        extractor_minutos_sin_cupo,
         completados_pendientes: r.u32()?,
         destruido: r.bool()?,
         ultimo_minuto: r.i64()?,
@@ -520,4 +517,39 @@ pub(crate) fn leer(r: &mut Lector, con_aldeas: bool, con_flujos: bool) -> Result
             t
         },
     })
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+
+    fn bytes_de(a: &Asentamiento) -> Vec<u8> {
+        let mut w = Escritor::default();
+        escribir(&mut w, a);
+        w.0
+    }
+
+    #[test]
+    fn una_foto_ban52_se_lee_descartando_los_minutos_sin_cupo_de_los_extractores() {
+        let r = asentamiento::Reglas::cargar();
+        let a = Asentamiento::fundar(&r, 0, &[], 3);
+        let bytes = bytes_de(&a);
+        // Hasta BAN52, justo antes de `completados_pendientes` iba la lista de minutos sin cupo: el primer byte que cambia al tocar ese campo.
+        let mut otra = a.clone();
+        otra.completados_pendientes += 1;
+        let donde = bytes.iter().zip(bytes_de(&otra)).position(|(x, y)| *x != y).expect("el campo está en la foto");
+        let mut vieja = bytes[..donde].to_vec();
+        let mut w = Escritor::default();
+        w.u64(1);
+        w.u8(tipo_a_u8(Tipo::Cantera));
+        w.i64(7);
+        vieja.extend_from_slice(&w.0);
+        vieja.extend_from_slice(&bytes[donde..]);
+        let mut lector = Lector::nuevo(&vieja);
+        let leida = leer(&mut lector, true, true, true).unwrap();
+        lector.fin().unwrap();
+        assert_eq!(bytes_de(&leida), bytes, "al guardarla de nuevo es la BAN53, sin la lista");
+        let mut lector = Lector::nuevo(&bytes);
+        assert_eq!(bytes_de(&leer(&mut lector, true, true, false).unwrap()), bytes);
+    }
 }

@@ -284,6 +284,31 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         (orden!(EntregarDeCaravana, OrdenEntregarDeCaravana, ejercito_id: s("ej-3"), caravana_id: s("car-2"), acuerdo_id: s("acu-8")), Comando::EntregarDeCaravana { ejercito: 3, caravana: 2, acuerdo: 8 }),
         (orden!(AdjuntarCaravana, OrdenAdjuntarCaravana, ejercito_id: s("ej-3"), caravana_id: s("car-2"), heroe_id: h.clone()), Comando::AdjuntarCaravana { caravana: 2, ejercito: 3 }),
         (orden!(AparcarCaravana, OrdenAparcarCaravana, caravana_id: s("car-2"), asentamiento_id: s("as-3")), Comando::AparcarCaravana { caravana: 2, asentamiento: 3 }),
+        // ── Encargos de caravana (§5.8) ──
+        (
+            orden!(
+                EncargarCaravana,
+                OrdenEncargarCaravana,
+                caravana_id: s("car-2"),
+                destino_asentamiento_id: s("as-4"),
+                modo: s("ruta"),
+                parada_origen: Some(pb::ParadaEncargo { recoger: vec![pb::LineaRecoger { recurso: s("madera"), cantidad: 30_000, precio_max: None }], esperar_existencias: true, ..Default::default() }),
+                parada_destino: Some(pb::ParadaEncargo { dejar: vec![pb::LineaDejar { recurso: s("madera"), tope: Some(50_000), precio_min: None }], desechar_sobrante: true, ..Default::default() })
+            ),
+            Comando::EncargarCaravana {
+                caravana: 2,
+                destino: 4,
+                modo: Modo::Ruta,
+                salir_en: None,
+                en_origen: Parada { recoger: vec![LineaRecoger { recurso: Madera, cantidad: 30_000, precio_max: None }], esperar_existencias: true, ..Parada::default() },
+                en_destino: Parada { dejar: vec![LineaDejar { recurso: Madera, tope: Some(50_000), precio_min: None }], desechar_sobrante: true, ..Parada::default() },
+            },
+        ),
+        (
+            orden!(CambiarEncargo, OrdenCambiarEncargo, caravana_id: s("car-2"), destino_asentamiento_id: s("as-5"), salir_en_ms: Some(90_000)),
+            Comando::CambiarEncargo { caravana: 2, destino: 5, salir_en: Some(90_000), en_origen: Parada::default(), en_destino: Parada::default() },
+        ),
+        (orden!(CancelarEncargo, OrdenCancelarEncargo, caravana_id: s("car-2")), Comando::CancelarEncargo { caravana: 2 }),
         // ── Pueblos extractores ──
         (orden!(MarcarPueblo, OrdenMarcarPueblo, asentamiento_id: s("as-3"), heroe_id: h.clone(), nodo_id: s("nodo-12")), Comando::MarcarPueblo { asentamiento: 3, nodo: 12 }),
         (orden!(DestruirPueblo, OrdenDestruirPueblo, heroe_id: h.clone(), pueblo_id: pueblo()), Comando::DestruirPueblo { pueblo: 4 }),
@@ -594,6 +619,11 @@ fn un_id_sin_la_forma_de_su_entidad_o_un_valor_fuera_de_su_catalogo_se_rechazan_
         (orden!(ComprarAnimalCaravana, OrdenComprarAnimalCaravana, caravana_id: s("car-2"), carro_indice: 0, tipo_animal: s("dragon")), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(MoverEnCola, OrdenMoverEnCola, asentamiento_id: s("as-3"), edificio_id: s("ed-3-1"), direccion: s("al lado")), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(MoverCargaCaravanaAparcada, OrdenMoverCargaCaravanaAparcada, caravana_id: s("car-2"), recurso: s("madera"), sentido: s("tirar")), rechazos::ORDEN_FORMA_INVALIDA),
+        (orden!(EncargarCaravana, OrdenEncargarCaravana, caravana_id: s("car-2"), destino_asentamiento_id: s("as-4"), modo: s("circular")), rechazos::ORDEN_FORMA_INVALIDA),
+        (
+            orden!(CambiarEncargo, OrdenCambiarEncargo, caravana_id: s("car-2"), destino_asentamiento_id: s("as-4"), parada_destino: Some(pb::ParadaEncargo { dejar: vec![pb::LineaDejar { recurso: s("mithril"), ..Default::default() }], ..Default::default() })),
+            rechazos::ORDEN_FORMA_INVALIDA,
+        ),
         (orden!(FijarPuerta, OrdenFijarPuerta, asentamiento_id: s("as-3"), heroe_id: h(), cerrada_a: v(&["vecinos"])), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(AsignarCargoLocal, OrdenAsignarCargoLocal, asentamiento_id: s("as-3"), cargo: s("rey"), heroe_id: h()), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(UnirseABatalla, OrdenUnirseABatalla, heroe_id: h(), battle_id: s("uuid-9"), lado: Some(s("espectador"))), rechazos::ORDEN_FORMA_INVALIDA),
@@ -634,7 +664,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let de_administracion: BTreeSet<String> = ordenes_de_administracion().iter().map(|(_, c)| nombre(c)).collect();
     let del_servidor_de_batalla: BTreeSet<String> = ["RegistrarAsignacion", "ConfirmarInicio", "RegistrarTokens", "RegistrarSalida", "AplicarResultado"].map(String::from).into();
     let todos = variantes_de_comando();
-    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (184, 159, 20, 5));
+    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (187, 162, 20, 5));
     let clasificados: Vec<&String> = del_jugador.iter().chain(&de_administracion).chain(&del_servidor_de_batalla).collect();
     assert_eq!(clasificados.len(), todos.len(), "una variante en dos orígenes");
     let sin_clasificar: Vec<&String> = todos.iter().filter(|v| !clasificados.contains(v)).collect();
@@ -646,7 +676,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let tabla: BTreeSet<String> = tabla.map(|c| nombre(&c)).collect();
     let proto = include_str!("../../../../../proto/bronzeage/v1/orders.proto");
     let en_el_contrato = proto.lines().skip_while(|l| !l.contains("oneof cuerpo {")).skip(1).take_while(|l| l.trim() != "}").map(str::trim).filter(|l| !l.starts_with("//") && l.ends_with(';')).count();
-    assert_eq!((tabla.len(), en_el_contrato), (158, 158), "una orden del contrato sin mapear ni clasificar como no disponible");
+    assert_eq!((tabla.len(), en_el_contrato), (161, 161), "una orden del contrato sin mapear ni clasificar como no disponible");
 }
 
 /// El nombre de una orden en el contrato (el campo del `oneof`): la variante de `Cuerpo` en serpiente (`MarcharA` → `marchar_a`).
@@ -678,6 +708,7 @@ fn quien(a: crate::comando::Autoriza) -> &'static str {
         Cargo([asentamiento::Cargo::Tesorero]) => "el Tesorero de la plaza, residente y dentro",
         Cargo([asentamiento::Cargo::Gobernador, asentamiento::Cargo::MaestroObras]) => "el Gobernador o el Maestro de Obras de la plaza, residente y dentro",
         Cargo([asentamiento::Cargo::Gobernador, asentamiento::Cargo::Tesorero]) => "el Gobernador o el Tesorero de la plaza, residente y dentro",
+        Cargo([asentamiento::Cargo::Gobernador, asentamiento::Cargo::Tesorero, asentamiento::Cargo::MaestroCaravanas]) => "el Gobernador, el Tesorero o el Maestro de Caravanas de la plaza, residente y dentro",
         Cargo(otros) => unreachable!("sin texto para los cargos {otros:?}"),
         CargoDeLaOrden => "el titular del cargo de la orden, residente y dentro",
         ResidenteDentro => "un residente de la plaza, dentro",
@@ -727,5 +758,5 @@ fn la_matriz_de_autorizacion_del_documento_es_la_del_codigo() {
     let faltan: Vec<String> = codigo.difference(&documento).map(fila).collect();
     let sobran: Vec<String> = documento.difference(&codigo).map(fila).collect();
     assert!(faltan.is_empty() && sobran.is_empty(), "la matriz del documento no es la del código.\nFaltan o no coinciden (como las dice el código):\n{}\nSobran (como las dice el documento):\n{}", faltan.join("\n"), sobran.join("\n"));
-    assert_eq!(codigo.len(), 159 + 20 + 5, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
+    assert_eq!(codigo.len(), 162 + 20 + 5, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
 }

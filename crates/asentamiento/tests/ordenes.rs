@@ -195,7 +195,7 @@ fn el_ascenso_informa_todos_los_bloqueos_a_la_vez() {
     let x = exterior!(&r, s, w);
     let b = a.bloqueos_de_ascenso(0, &r, &x, false);
     assert!(b.contains(&Bloqueo::FaltaPoblacion) && b.contains(&Bloqueo::FaltanEdificios) && b.contains(&Bloqueo::RecursosInsuficientes), "{b:?}");
-    assert!(b.iter().any(|x| matches!(x, Bloqueo::Insolvente(_))), "sin Cantera no hay ingreso de piedra para el nivel 2");
+    assert!(b.iter().any(|x| matches!(x, Bloqueo::Insolvente(_))), "sin pueblo de cantera no hay ingreso de piedra para el nivel 2");
     // Sin cupo de Facción: con el cupo del nivel 2 ocupado.
     assert!(a.bloqueos_de_ascenso(0, &r, &x, true).contains(&Bloqueo::SinCupoDeFaccion));
     // El techo provisional detiene en el nivel 4.
@@ -215,35 +215,20 @@ fn pausar_la_auto_construccion_y_las_recetas_es_idempotente() {
     assert_eq!(a.reserva_manual[Recurso::Madera.indice()], 999_000, "tope de la reserva manual");
 }
 
-/// Una plaza con un nodo de piedra libre: la Cantera tiene sitio, las minas no.
-struct ConCantera;
-impl Sitios for ConCantera {
-    fn proponer(&mut self, tipo: Tipo, _: &Urbano, _: &mut u32, _: &mut Vec<Gratuito>) -> Option<Option<Fuente>> {
-        (tipo == Tipo::Cantera).then_some(Some(Fuente::Nodo(0)))
-    }
-    fn tomar(&mut self, _: u32, _: Tipo, _: Option<Fuente>, _: &Urbano, _: &mut u32) -> Option<Vec<Gratuito>> {
-        Some(vec![])
-    }
-}
-
 #[test]
-fn los_minerales_y_la_segunda_cantera_solo_van_por_pueblo() {
+fn los_minerales_y_la_cantera_solo_van_por_pueblo() {
     let r = Reglas::cargar();
-    let (mut a, mut s, mut w) = (rico(&r), ConCantera, SinMundo);
+    let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
     ocupar_cuadrillas(&mut a, &r);
     a.medidor.nivel_actual = 2;
     a.nivel = 2;
     let mut x = exterior!(&r, s, w);
-    for t in [Tipo::Mina, Tipo::MinaCobre, Tipo::MinaEstano, Tipo::MinaHierro] {
+    // Desde el 2026-11-01 tampoco la primera Cantera se construye en la plaza: el pueblo extractor se funda desde el nivel 1.
+    for t in [Tipo::Cantera, Tipo::Mina, Tipo::MinaCobre, Tipo::MinaEstano, Tipo::MinaHierro] {
         assert_eq!(a.anadir_manual(0, &r, &mut x, t, &mut vec![]), Err(ErrorObra::SoloPorPueblo), "{t:?}");
     }
-    // La primera Cantera es directa; la segunda ya no (en cualquier estado cuenta la primera).
-    let id = a.anadir_manual(0, &r, &mut x, Tipo::Cantera, &mut vec![]).unwrap();
-    assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::Cantera, &mut vec![]), Err(ErrorObra::SoloPorPueblo));
     // El Corral y la Leñera siguen dentro de la ciudad: no son de pueblo.
     assert!(!Tipo::Corral.es_de_pueblo() && !Tipo::Lenera.es_de_pueblo());
-    a.quitar_de_cola(&r, id).unwrap();
-    assert!(a.anadir_manual(0, &r, &mut x, Tipo::Cantera, &mut vec![]).is_ok(), "si la primera se retira, vuelve a haber primera");
 }
 
 /// Un pueblo activo de ese tipo sobre el nodo 1, sin pasar por la obra.

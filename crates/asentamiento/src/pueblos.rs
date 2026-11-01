@@ -588,8 +588,9 @@ impl Asentamiento {
         (cabezas, esp.productos.iter().map(|&(x, n)| (x, n * cabezas)).collect())
     }
 
-    /// Anota lo que un carro de acarreo acaba de ingresar de verdad en el almacén de la plaza (lo que cupo, no lo que traía). Suma en la hora
-    /// de `t` y descarta lo que ya salió de la ventana, así el vector no pasa de 24 horas por recurso.
+    /// Anota lo que un carro de acarreo acaba de traer a la plaza, quepa o no en su almacén (decisión del autor del 2026-11-01: con la Cantera
+    /// fuera de la ciudad, una plaza con la piedra llena no puede quedarse sin solvencia; hasta entonces, solo lo que cupo). Suma en la hora de `t`
+    /// y descarta lo que ya salió de la ventana, así el vector no pasa de 24 horas por recurso.
     pub fn registrar_acarreo(&mut self, t: Instante, recurso: Recurso, ingresado: Mil) {
         if ingresado <= 0 {
             return;
@@ -602,8 +603,8 @@ impl Asentamiento {
         }
     }
 
-    /// Lo que el acarreo ingresa por minuto en el almacén de la plaza, de media en la ventana de las últimas 24 h (`t` es la hora de la
-    /// pregunta): es lo que cuenta como acarreo en la solvencia del ascenso (Doc 4.5). Con el almacén lleno no ingresa nada y no cuenta nada.
+    /// Lo que el acarreo trae por minuto a la plaza, de media en la ventana de las últimas 24 h (`t` es la hora de la pregunta): es lo que
+    /// cuenta como acarreo en la solvencia del ascenso (Doc 4.5). Desde el 2026-11-01 cuenta también lo que no cupo en el almacén.
     pub(crate) fn acarreo_por_minuto(&self, t: Instante, recurso: Recurso) -> Mil {
         let hora = hora_de(t);
         let total: Mil = self.ingresos_acarreo.iter().filter(|i| i.recurso == recurso && i.hora > hora - HORAS_VENTANA && i.hora <= hora).map(|i| i.cantidad).sum();
@@ -657,7 +658,7 @@ mod pruebas {
     fn las_cifras_salen_del_documento() {
         let r = Reglas::cargar().pueblos;
         assert_eq!((r.nivel_madre_minimo, r.capacidad_almacen, r.mineros, r.minutos_por_minero, r.casas_de_la_planta), (1, 500_000, 30, 12, 6));
-        assert_eq!(r.cupo_por_nivel.values().copied().collect::<Vec<_>>(), vec![1, 3, 4, 5, 6]);
+        assert_eq!(r.cupo_por_nivel.values().copied().collect::<Vec<_>>(), vec![2, 3, 4, 5, 6]);
         assert_eq!(r.coste_adicional, vec![(Recurso::Madera, 50_000)]);
         let a = &r.aldea;
         assert_eq!((a.nivel_madre_minimo, a.fertilidad_minima, a.separacion_minima, a.granjeros, a.nivel_maximo()), (1, 300_000, 3_000, 30, 3));
@@ -675,11 +676,12 @@ mod pruebas {
     #[test]
     fn exige_madre_de_nivel_1_cupo_y_un_extractor_de_pueblo() {
         let r = Reglas::cargar();
-        // Desde el 2026-10-31 un extractor se funda ya en el nivel 1 (antes pedía el 2); el cupo del nivel 1 es uno, aldea o extractor.
+        // Desde el 2026-10-31 un extractor se funda ya en el nivel 1 (antes pedía el 2); desde el 2026-11-01 el cupo del nivel 1 es dos (antes
+        // uno), para que quepan la Cantera, que ya no se construye en la plaza, y la aldea agrícola.
         let mut a = Asentamiento::fundar(&r, 0, &[], 3);
-        assert_eq!(a.cupo_de_pueblos(&r), 1, "en el nivel 1 cabe un pueblo: la aldea agrícola o un extractor");
-        assert_eq!(marcar(&mut a, &r, 1, Tipo::MinaCobre), Ok(()));
-        assert_eq!(marcar(&mut a, &r, 2, Tipo::Cantera), Err(ErrorPueblo::SinCupo));
+        assert_eq!(a.cupo_de_pueblos(&r), 2, "en el nivel 1 caben dos pueblos");
+        assert_eq!((marcar(&mut a, &r, 1, Tipo::MinaCobre), marcar(&mut a, &r, 2, Tipo::Cantera)), (Ok(()), Ok(())));
+        assert_eq!(marcar(&mut a, &r, 3, Tipo::Cantera), Err(ErrorPueblo::SinCupo));
         let mut a = madre(&r);
         assert_eq!(marcar(&mut a, &r, 1, Tipo::Corral), Err(ErrorPueblo::TipoNoPueblo));
         assert_eq!(marcar(&mut a, &r, 1, Tipo::Granja), Err(ErrorPueblo::TipoNoPueblo));
@@ -827,7 +829,8 @@ mod pruebas {
         assert!(p.es_aldea() && p.nodo().is_none() && p.nivel == 1 && p.mejora.is_none());
         // Nivel 1 (30) + 50 + el carro (20 de madera y 12 de oro): lo mismo que una mina de cobre.
         assert_eq!(p.falta(), vec![(Recurso::Madera, 100_000), (Recurso::Oro, 12_000)]);
-        assert_eq!(a.iniciar_aldea(&r, 2, Punto::new(9_000, 0), UNO, &carro(), &mut ev), Err(ErrorPueblo::SinCupo), "en el nivel 1, un solo pueblo");
+        a.iniciar_aldea(&r, 2, Punto::new(9_000, 0), UNO, &carro(), &mut ev).unwrap();
+        assert_eq!(a.iniciar_aldea(&r, 3, Punto::new(0, 9_000), UNO, &carro(), &mut ev), Err(ErrorPueblo::SinCupo), "en el nivel 1, dos pueblos");
         assert_eq!(a.aldeas_activas(), 0, "pendiente no cuenta");
     }
 
