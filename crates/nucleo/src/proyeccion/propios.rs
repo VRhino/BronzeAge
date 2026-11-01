@@ -8,7 +8,7 @@
 //! DUDA: el contrato trae más de lo que el núcleo guarda; hasta que existan sus sistemas, esos campos van a su valor por defecto: nombre, clase, género y avatar del héroe
 //! (decisión 4: «Héroe N», clase `default`), inventario y equipo (Conquest, CQ-004) y el titular de una caravana. (El almacén de una avanzada va por recurso desde el 2026-10-27.)
 
-use super::{audiencia, batalla, ids, plan, punto, ritmo};
+use super::{audiencia, batalla, ids, mercenarios, plan, punto, ritmo};
 use crate::estado::{Clase, Ejercito};
 use crate::estado_militar::{HeroeNucleo, PlazaRecordada};
 use politica::relaciones::{RelacionPolitica, TipoRelacion};
@@ -178,7 +178,8 @@ pub fn heroe(n: &Nucleo, h: &HeroeNucleo) -> pb::Heroe {
         solicitudes_faccion_ids: e.politica.facciones.iter().filter(|f| f.solicitudes.contains(&h.heroe.id)).map(|f| ids::faccion(f.id)).collect(),
         plazas_recordadas: h.plazas_recordadas.iter().map(|(&plaza, x)| (ids::asentamiento(u64::from(plaza)), interior_recordado(u64::from(plaza), x))).collect(),
         misiones: misiones(n, crate::misiones::Dueno::Heroe(h.heroe.id)),
-        ..Default::default()
+        // Su contrato, su ficha entera y su marca, si es mercenario (Mercenarios_Por_Contrato §10).
+        ..mercenarios::del_heroe(n, h.heroe.id, true)
     }
 }
 
@@ -690,9 +691,10 @@ pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
         }),
         admite_otras_en_ataques: x.admite_otras_en_ataques,
         misiones: misiones(n, crate::misiones::Dueno::Faccion(f)),
-        miembros: n.miembros_de(f).into_iter().map(|m| pb::MiembroFaccion { heroe_id: ids::heroe(m.heroe), residencia_id: m.residencia.map(residencia_id), cargos: m.cargos, participacion: m.participacion, marca: None }).collect(),
+        miembros: n.miembros_de(f).into_iter().map(|m| pb::MiembroFaccion { heroe_id: ids::heroe(m.heroe), residencia_id: m.residencia.map(residencia_id), cargos: m.cargos, participacion: m.participacion, marca: x.marcas.get(&m.heroe).map(|&marca| mercenarios::marca(marca).to_owned()) }).collect(),
         tablon: tablon(n, crate::misiones::Dueno::Faccion(f)),
         es_bot: n.es_faccion_de_bots(f),
+        contratos: mercenarios::contratos_de(e, f),
         ..base
     }
 }
@@ -724,7 +726,8 @@ pub fn directorio_facciones(n: &Nucleo) -> pb::DirectorioFacciones {
             nombre: x.nombre.clone(),
             sigilo: Some(sigilo(&x.sigilo)),
             nivel: n.nivel_de_faccion(x.id),
-            ciudadanos: x.ciudadanos.len() as u32,
+            // Los mercenarios con contrato no cuentan (Mercenarios_Por_Contrato §10).
+            ciudadanos: x.sin_marca().count() as u32,
             derrotada: x.derrota.is_some(),
             es_bot: n.es_faccion_de_bots(x.id),
         })
@@ -735,7 +738,7 @@ pub fn directorio_facciones(n: &Nucleo) -> pb::DirectorioFacciones {
 /// La forma pública de otra Facción (5H, `VISTA`; Proyecciones §6: «facciones: públicas en la ficción»): la Facción sin su experiencia, su capital ni cuándo la designó (dónde está su capital es
 /// de la niebla). Regla (decisión del autor del 2026-10-26): de una Facción ajena se ve **solo el nivel**, sin la experiencia exacta ni la capital (el TypeScript la mandaba entera).
 pub fn faccion_publica(n: &Nucleo, f: u32) -> pb::Faccion {
-    pb::Faccion { experiencia: 0, capital_designada_en_ms: None, capital_id: None, misiones: vec![], miembros: vec![], tablon: None, ..faccion(n, f) }
+    pb::Faccion { experiencia: 0, capital_designada_en_ms: None, capital_id: None, misiones: vec![], miembros: vec![], tablon: None, contratos: vec![], ..faccion(n, f) }
 }
 
 /// Las tecnologías de la Facción (6G, `Estado::tecnologia`; Proyecciones §6.3: las de un rival no viajan nunca): las aparecidas y las reveladas por su id, las adoptadas con las de arranque
@@ -1167,11 +1170,15 @@ pub fn proyectar(n: &Nucleo, quien: Espectador, clase: Clase, id: u64) -> Proyec
         Clase::Propuesta => un(T::Propuesta, ids::propuesta(id), e.politica.propuestas.get(id).map(|p| Cuerpo::Propuesta(propuesta(n, p)))),
         Clase::Faccion => {
             let f = id as u32;
+            // Un mercenario con contrato no tiene su `FACCION`: su `HEROE` le lleva la Facción en su forma pública, sin sus tecnologías (Mercenarios_Por_Contrato §10, duda 3 del plan).
+            let marcado = matches!(quien, Espectador::Heroe(Some(h)) if e.politica.facciones.get(f).is_some_and(|x| x.marcas.contains_key(&h)));
             // La que desapareció en una anexión o una fusión (5F) ya no existe: sale con `QUITA`.
-            let existen = if audiencia::existe_faccion(e, f) {
-                vec![(T::Faccion, ids::faccion(f), Cuerpo::Faccion(faccion(n, f))), (T::TecnologiaFaccion, ids::faccion(f), Cuerpo::Tecnologias(tecnologias(n, f)))]
-            } else {
+            let existen = if !audiencia::existe_faccion(e, f) {
                 Vec::new()
+            } else if marcado {
+                vec![(T::Faccion, ids::faccion(f), Cuerpo::Faccion(faccion_publica(n, f)))]
+            } else {
+                vec![(T::Faccion, ids::faccion(f), Cuerpo::Faccion(faccion(n, f))), (T::TecnologiaFaccion, ids::faccion(f), Cuerpo::Tecnologias(tecnologias(n, f)))]
             };
             Proyeccion { posibles: vec![(T::Faccion, ids::faccion(f)), (T::TecnologiaFaccion, ids::faccion(f))], existen }
         }

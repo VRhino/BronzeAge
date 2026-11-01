@@ -16,7 +16,7 @@
 //! grande que solo se ve por llamar la atención, a sus 60 u. La columna se retira en el muestreo siguiente a que deje de verse.
 
 use super::propios::{self, Proyectada};
-use super::{ficha_de_asentamiento, ids, interior, plan, punto};
+use super::{ficha_de_asentamiento, ids, interior, mercenarios, plan, punto};
 use crate::estado::{Clase, Ejercito};
 
 use crate::memoria::{DatosSitio, EstadoSitio, Ficha, InformeDePlaza, Mirada as MiradaIntel, OrigenIntel, Sitio};
@@ -29,7 +29,7 @@ use comercio::orden_mercado::EstadoOrden;
 use comercio::red_caminos::{escalon_de_peso, Arista, RutaComercial};
 use contrato::v1 as pb;
 pub use contrato::niebla::{aplicar_niebla, cambio_de_niebla};
-use militar::escuadra::Contenedor;
+use militar::escuadra::{Contenedor, Escuadra};
 use militar::presencia::Ubicacion;
 use pb::entidad::Cuerpo;
 use std::collections::{BTreeMap, BTreeSet};
@@ -112,7 +112,7 @@ fn huella_del_directorio(n: &Nucleo) -> Sello {
         for t in [&x.nombre, &s.forma, &s.campo, &s.emblema, &s.color_primario, &s.color_secundario, &s.color_emblema, &s.orla, &s.color_orla] {
             h = texto(h, t);
         }
-        for y in [u64::from(n.nivel_de_faccion(x.id)), x.ciudadanos.len() as u64, u64::from(x.derrota.is_some()), u64::from(n.es_faccion_de_bots(x.id))] {
+        for y in [u64::from(n.nivel_de_faccion(x.id)), x.sin_marca().count() as u64, u64::from(x.derrota.is_some()), u64::from(n.es_faccion_de_bots(x.id))] {
             h = mezclar(h, y);
         }
     }
@@ -719,10 +719,16 @@ pub fn plaza_desde_dentro(n: &Nucleo, id: u64) -> pb::Asentamiento {
     pb::Asentamiento { trazado: interior::trazado_de(n, id), ..plaza_avistada(n, id) }
 }
 
+/// Una escuadra tal como la ve quien no es su dueño (`EscuadraQueLleva`): su tropa, cuántos soldados quedan y su nivel.
+pub(super) fn escuadra_que_lleva(n: &Nucleo, s: &Escuadra) -> pb::EscuadraQueLleva {
+    let tropas = &n.estado().reglas.economia.militar.tropas;
+    pb::EscuadraQueLleva { tropa_id: tropas.tropa(s.tropa).nombre.clone(), cantidad: u32::try_from(s.cantidad.max(0)).unwrap_or(u32::MAX), nivel: u32::from(s.nivel) }
+}
+
 /// El héroe ajeno (`HeroePublico`): nombre, clase, nivel, hasta cuándo está herido y las escuadras que lleva en su columna y su Facción. Nada de su campamento, sus puntos, su Liderazgo ni si es humano o bot.
+/// Si es mercenario, además su marca y su ficha pública: rango, renombre y grado de cada medalla, nunca su historial ni su contrato (Mercenarios_Por_Contrato §10).
 pub fn heroe_publico(n: &Nucleo, id: u64) -> pb::Heroe {
     let h = n.heroe(id).expect("el héroe existe");
-    let tropas = &n.estado().reglas.economia.militar.tropas;
     pb::Heroe {
         id: ids::heroe(id),
         version: h.heroe.escuadras.iter().map(|s| n.version_de(Clase::Escuadra, s.id)).fold(n.version_de(Clase::Heroe, id), u64::max),
@@ -733,14 +739,8 @@ pub fn heroe_publico(n: &Nucleo, id: u64) -> pb::Heroe {
         herido_hasta_ms: h.heroe.herido_hasta,
         // Su ciudadanía es pública (decisión del autor del 2026-10-27): la dice su Facción en `ciudadanos_ids` y así se sabe también de un héroe que se ve sin columna.
         faccion_id: h.faccion.map(ids::faccion),
-        escuadras_que_lleva: h
-            .heroe
-            .escuadras
-            .iter()
-            .filter(|s| matches!(s.contenedor, Contenedor::Ejercito(_)))
-            .map(|s| pb::EscuadraQueLleva { tropa_id: tropas.tropa(s.tropa).nombre.clone(), cantidad: u32::try_from(s.cantidad.max(0)).unwrap_or(u32::MAX), nivel: u32::from(s.nivel) })
-            .collect(),
-        ..Default::default()
+        escuadras_que_lleva: h.heroe.escuadras.iter().filter(|s| matches!(s.contenedor, Contenedor::Ejercito(_))).map(|s| escuadra_que_lleva(n, s)).collect(),
+        ..mercenarios::del_heroe(n, id, false)
     }
 }
 

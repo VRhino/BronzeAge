@@ -19,7 +19,31 @@ mod tropa;
 
 pub(in crate::nucleo) use mando::Desenlace;
 
+/// La entidad que nombra `o`, si es una (un punto no lo es): la que se mira para saber si la transición que se cierra tocó lo que nombra una orden, y la que se toca cuando un contrato o
+/// una orden empiezan o dejan de nombrarla ([`Nucleo::tocar_objetivo`]).
+fn entidad_de(o: &Objetivo) -> Option<(Clase, u64)> {
+    Some(match *o {
+        Objetivo::Plaza(id) => (Clase::Asentamiento, id),
+        Objetivo::Pueblo(id) => (Clase::Pueblo, id),
+        Objetivo::Avanzada(id) => (Clase::Avanzada, id),
+        Objetivo::Caravana(id) => (Clase::Caravana, id),
+        Objetivo::Bandidos(id) => (Clase::Bandidos, id),
+        Objetivo::Ejercito(id) => (Clase::Ejercito, id),
+        Objetivo::Convocatoria(id) => (Clase::Convocatoria, id),
+        Objetivo::Faccion(id) => (Clase::Faccion, u64::from(id)),
+        Objetivo::Punto(_) => return None,
+    })
+}
+
 impl Nucleo {
+    /// Toca lo que nombra `o`: lo de su Facción que nombran el contrato o la orden de un mercenario le llega por su `HEROE` (`proyeccion::audiencia`), así que cuando empiezan o dejan de
+    /// nombrarlo hay que dárselo o quitárselo aunque no haya cambiado.
+    fn tocar_objetivo(&mut self, o: &Objetivo) {
+        if let Some((clase, id)) = entidad_de(o) {
+            self.tr.tocar(clase, id);
+        }
+    }
+
     /// Despacha los nueve comandos de los contratos, cada uno a la función de su parte.
     pub(super) fn ejecutar_contratos(&mut self, t: Instante, p: &Peticion) -> Result<Vec<u64>, Respuesta> {
         match &p.comando {

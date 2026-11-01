@@ -21,6 +21,7 @@ use crate::memoria::{DatosSitio, EstadoSitio, Ficha, Memoria, Sitio, Vigia};
 use asentamiento::avanzadas::{Avanzada, Estado as EstadoAvanzada};
 use base::Vertice;
 use militar::columna;
+use politica::Facciones;
 use std::collections::BTreeSet;
 use vision::{recorrido, ultima_vez};
 
@@ -29,6 +30,8 @@ use vision::{recorrido, ultima_vez};
 struct Andante {
     faccion: Option<u32>,
     heroes: Vec<u64>,
+    /// Los participantes que son mercenarios con contrato: lo que ven también es de su memoria personal (§10 de Mercenarios_Por_Contrato).
+    marcados: Vec<u64>,
     plan: Plan,
     quieto: Punto,
     caja: (Punto, Punto),
@@ -123,9 +126,10 @@ impl Ojos {
     }
 }
 
-fn andante(e: &Ejercito) -> Andante {
+fn andante(e: &Ejercito, facciones: &Facciones) -> Andante {
     let puntos: Vec<Vertice> = e.plan.vertices.iter().copied().chain(std::iter::once(Vertice { p: e.posicion, en: 0 })).collect();
-    Andante { faccion: e.columna.faccion, heroes: e.columna.participantes.iter().map(|p| p.heroe).collect(), plan: e.plan.clone(), quieto: e.posicion, caja: caja(&puntos, 0) }
+    let heroes: Vec<u64> = e.columna.participantes.iter().map(|p| p.heroe).collect();
+    Andante { faccion: e.columna.faccion, marcados: heroes.iter().copied().filter(|&h| facciones.marca_de(h).is_some()).collect(), heroes, plan: e.plan.clone(), quieto: e.posicion, caja: caja(&puntos, 0) }
 }
 
 /// ¿Está `p` en la caja agrandada por `radio`?
@@ -269,7 +273,7 @@ impl Nucleo {
             return;
         }
         let mut ojos = Ojos {
-            columnas: self.estado.ejercitos.values().map(|e| (e.id, andante(e))).collect(),
+            columnas: self.estado.ejercitos.values().map(|e| (e.id, andante(e, &self.estado.politica.facciones))).collect(),
             fijos: BTreeMap::new(),
             sitios: BTreeMap::new(),
             hijos: self.estado.asentamientos.keys().map(|&a| (a, self.hijos_de(a))).collect(),
@@ -392,6 +396,10 @@ impl Nucleo {
                     }
                 }
             }
+            // Los ojos de un mercenario con contrato alimentan a la Facción que le paga y también son suyos: su memoria personal crece igual (Mercenarios_Por_Contrato §10).
+            for &h in &ojo.marcados {
+                mem.personal.entry(h).or_insert_with(vacia).barrer(&r, v.radio);
+            }
         }
 
         // 3. El ojo fijo que cambia (nace, crece, cambia de dueño o cae) vio hasta ahora todo lo de su disco de antes; el de ahora explora su disco.
@@ -441,7 +449,7 @@ impl Nucleo {
             match self.estado.ejercitos.get(&id) {
                 Some(e) => {
                     mem.vigias.insert(id, Vigia { desde: t, radio: self.radio_de_vista(e) });
-                    viejos.columnas.insert(id, andante(e));
+                    viejos.columnas.insert(id, andante(e, &self.estado.politica.facciones));
                 }
                 None => {
                     mem.vigias.remove(&id);
@@ -450,15 +458,16 @@ impl Nucleo {
             }
         }
 
-        // 6. Un héroe que entra en una Facción le da lo que exploró sin bandera (§4.3); el que ya no existe se lo lleva.
+        // 6. Un héroe que entra en una Facción le da lo que exploró sin bandera (§4.3); el que ya no existe se lo lleva. Un mercenario con contrato no: su memoria personal queda suya (excepción
+        // de Mercenarios_Por_Contrato §10) y, al irse, tampoco se lleva la de la Facción.
         for &h in tocados.de(Clase::Heroe) {
             match self.estado.militar.heroes.get(&h).map(|x| x.faccion) {
-                Some(Some(f)) => {
+                Some(Some(f)) if self.estado.politica.facciones.marca_de(h).is_none() => {
                     if let Some(p) = mem.personal.remove(&h) {
                         mem.exploracion.entry(f).or_insert_with(vacia).fundir(&p);
                     }
                 }
-                Some(None) => {}
+                Some(_) => {}
                 None => {
                     mem.personal.remove(&h);
                 }

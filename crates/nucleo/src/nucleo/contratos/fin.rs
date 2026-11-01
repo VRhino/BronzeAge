@@ -97,6 +97,7 @@ impl Nucleo {
             return;
         }
         let c = self.estado.contratos.contratos.remove(&mercenario).expect("quien acaba tiene contrato");
+        c.orden.iter().map(|o| o.objetivo).chain([c.objetivo]).for_each(|o| self.tocar_objetivo(&o));
         self.separar_de_su_columna(t, mercenario);
         // Sale de la Facción en el mismo instante. Si ya no es ciudadano marcado de ella (la administración, una anexión o una fusión) no hay de qué sacarlo, pero su copia en el héroe sí
         // se pone al día: el traslado de una Facción no la toca en los marcados.

@@ -3,6 +3,7 @@
 //! - [`ambito`]: los ámbitos de la sesión. [`ids`]: los ids de las entidades.
 //! - [`interior`]: la plaza y el campamento de mercenarios vistos desde dentro (los ámbitos `ASENTAMIENTO` y `CAMPAMENTO`), con la máscara de campos de los cambios parciales de la plaza.
 //! - [`propios`]: las entidades de los ámbitos `HEROE` y `FACCION` (y la `Batalla` y el informe de inspección). [`audiencia`]: a qué ámbito pertenece cada entidad del registro de cambios. [`batalla`]: el ticket, las incorporaciones y el resultado de una batalla de Unity.
+//! - [`mercenarios`]: los contratos, la ficha y el tablón de los mercenarios por contrato (el contrato, la ficha y la marca del `Heroe`, los contratos de la `Faccion` y el tablón del campamento).
 //! - [`eventos`]: los hechos del núcleo como `EventoDominio`, con su payload y, en los quince que mueven la interfaz, su mensaje tipado.
 
 use crate::comando::{Detalle, TipoCreado};
@@ -16,6 +17,7 @@ pub mod batalla;
 pub mod eventos;
 pub mod ids;
 pub mod interior;
+pub mod mercenarios;
 pub mod propios;
 pub mod vista;
 

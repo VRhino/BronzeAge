@@ -26,8 +26,10 @@ pub struct Plazo {
 }
 
 /// Un rango (§8.3), en orden: el índice + 1 es su número.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Rango {
+    /// Su id (`a_sueldo`, `lanza`...), el que lleva el contrato 05.
+    pub id: String,
     /// Renombre con el que se alcanza.
     pub renombre: u32,
     /// Escalón máximo de su licencia de reclutar (0: sin licencia).
@@ -162,7 +164,10 @@ impl Datos {
         }
         let rangos = lista(&c, "rangos")?
             .iter()
-            .map(|r| Ok(Rango { renombre: entero(r, "renombre")?, escalon: u8::try_from(entero(r, "escalon")?).map_err(|_| "escalón fuera de rango")?, tarifa_pct: entero(r, "tarifaPct")? }))
+            .map(|r| {
+                let escalon = u8::try_from(entero(r, "escalon")?).map_err(|_| "escalón fuera de rango")?;
+                Ok(Rango { id: texto(r, "id")?.to_owned(), renombre: entero(r, "renombre")?, escalon, tarifa_pct: entero(r, "tarifaPct")? })
+            })
             .collect::<Result<Vec<_>, String>>()?;
         if rangos.first().is_none_or(|r| r.renombre != 0) || !creciente(&rangos.iter().map(|r| r.renombre).collect::<Vec<_>>()) {
             return Err("los rangos han de ir en orden de renombre creciente, el primero con 0".into());
@@ -287,7 +292,7 @@ mod pruebas {
         assert_eq!(d.radio_defensa, 20_000);
         assert_eq!(d.plazo_orden, 24 * MS_POR_HORA);
         assert_eq!(d.rangos.len(), 5);
-        assert_eq!((d.rangos[2].renombre, d.rangos[2].escalon, d.rangos[2].tarifa_pct), (300, 3, 150));
+        assert_eq!((d.rangos[2].id.as_str(), d.rangos[2].renombre, d.rangos[2].escalon, d.rangos[2].tarifa_pct), ("capitan", 300, 3, 150));
         assert_eq!(d.leva_propia, [Tropa::MiliciaLanceros, Tropa::Granjeros, Tropa::Mineros, Tropa::Lenadores]);
         assert_eq!(d.renombre.atacar.plaza, 30);
         assert_eq!(d.renombre.grado_medalla, [10, 30, 80]);

@@ -2,7 +2,7 @@
 //! hay que contárselo sin recorrer todas las sesiones.
 //!
 //! - **Autorización** ([`derechos`]): el servidor suscribe, el cliente nunca elige (salvo el interés del mapa, `VISTA`). El héroe propio (`HEROE`) y la Facción propia (`FACCION`) los
-//!   tiene quien tenga héroe y Facción; la plaza (`ASENTAMIENTO`) y el campamento (`CAMPAMENTO`), mientras el héroe está dentro y, en la plaza, es ciudadano de su Facción (dentro de
+//!   tiene quien tenga héroe y Facción, salvo un mercenario con contrato (marcado), que no recibe `FACCION` y cuya `VISTA` es la personal (Mercenarios_Por_Contrato §10); la plaza (`ASENTAMIENTO`) y el campamento (`CAMPAMENTO`), mientras el héroe está dentro y, en la plaza, es ciudadano de su Facción (dentro de
 //!   una plaza ajena no se ve ningún interior); `VISTA`, quien tiene Facción y ha fijado su rectángulo; `ADMIN`, solo una sesión de administración. Un servidor de batalla no tiene
 //!   ninguno. Los derechos se calculan del estado: cuando cambian (el héroe sale de la plaza, cambia de Facción...) la sesión recibe `Revocado` o la `Foto` del ámbito nuevo.
 //! - **Versión por ámbito**: cada sesión guarda la última versión que el cliente tiene de cada ámbito abierto. Una `Delta` va de esa versión a la del mundo y solo existe si algo del ámbito
@@ -181,10 +181,13 @@ pub(super) fn derechos(n: &Nucleo, s: &Sesion) -> BTreeSet<Ambito> {
     }
     let Some(h) = s.heroe.and_then(|h| n.heroe(h)) else { return BTreeSet::new() };
     let mut d = BTreeSet::from([Ambito::Heroe(h.heroe.id)]);
-    d.extend(h.faccion.map(Ambito::Faccion));
+    // Un mercenario con contrato es ciudadano de quien le paga, pero no recibe su `FACCION` (su contrato, su orden y lo que necesita de su objetivo le llegan por su `HEROE`) ni mira por su vista
+    // (duda 3 del plan de los mercenarios, Mercenarios_Por_Contrato §10).
+    let faccion = h.faccion.filter(|_| n.estado().politica.facciones.marca_de(h.heroe.id).is_none());
+    d.extend(faccion.map(Ambito::Faccion));
     // La vista es de su Facción o, sin bandera, la suya (su niebla personal).
     if s.vista.is_some() {
-        d.insert(Ambito::Vista(h.faccion.map_or(Perspectiva::Heroe(h.heroe.id), Perspectiva::Faccion)));
+        d.insert(Ambito::Vista(faccion.map_or(Perspectiva::Heroe(h.heroe.id), Perspectiva::Faccion)));
     }
     match h.heroe.presencia.ubicacion {
         Ubicacion::Asentamiento(a) if n.estado().asentamientos.get(&u64::from(a)).is_some_and(|p| Some(p.faccion) == h.faccion) => {

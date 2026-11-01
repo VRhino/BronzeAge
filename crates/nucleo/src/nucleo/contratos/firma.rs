@@ -241,6 +241,7 @@ impl Nucleo {
         if let Some(vence) = contrato.orden.and_then(|o| o.vence) {
             self.citar_contrato(mercenario, SucesoContrato::VenceOrden, vence);
         }
+        contrato.orden.iter().map(|o| o.objetivo).chain([objetivo]).for_each(|o| self.tocar_objetivo(&o));
         self.estado.contratos.contratos.insert(mercenario, contrato);
         self.estado.contratos.fichas.get_mut(&mercenario).expect("la ficha nace con el primer ofrecimiento").historial.firmados += 1;
         let datos = vec![

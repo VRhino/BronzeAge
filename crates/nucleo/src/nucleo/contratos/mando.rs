@@ -78,21 +78,6 @@ fn rechazo_de_orden(e: ErrorOrden) -> (&'static str, &'static str) {
     }
 }
 
-/// La entidad que cambia cuando cambia lo que nombra `o`, para saber si la transición que se cierra lo tocó. Un punto no es una entidad.
-fn entidad_de(o: &Objetivo) -> Option<(Clase, u64)> {
-    Some(match *o {
-        Objetivo::Plaza(id) => (Clase::Asentamiento, id),
-        Objetivo::Pueblo(id) => (Clase::Pueblo, id),
-        Objetivo::Avanzada(id) => (Clase::Avanzada, id),
-        Objetivo::Caravana(id) => (Clase::Caravana, id),
-        Objetivo::Bandidos(id) => (Clase::Bandidos, id),
-        Objetivo::Ejercito(id) => (Clase::Ejercito, id),
-        Objetivo::Convocatoria(id) => (Clase::Convocatoria, id),
-        Objetivo::Faccion(id) => (Clase::Faccion, u64::from(id)),
-        Objetivo::Punto(_) => return None,
-    })
-}
-
 impl Nucleo {
     // ───────────────────────────── Consultas ─────────────────────────────
 
@@ -153,18 +138,19 @@ impl Nucleo {
 
     // ───────────────────────────── Ayudas ─────────────────────────────
 
-    /// Deja `orden` como la vigente de `mercenario` (o ninguna) con su plazo en la cola, y toca lo que lee la proyección: su héroe y su Facción. Una `unirse` nace con `unido` si el
+    /// Deja `orden` como la vigente de `mercenario` (o ninguna) con su plazo en la cola, y toca lo que lee la proyección: su héroe, su Facción y lo que nombran la orden que deja y la nueva. Una `unirse` nace con `unido` si el
     /// mercenario ya va dentro de lo que acompaña. La cita que quedó vieja se ignora al vencer porque su instante ya no es el guardado.
     fn fijar_orden(&mut self, mercenario: u64, orden: Option<Orden>) {
         let orden = orden.map(|o| Orden { unido: o.unido || (o.tipo == TipoOrden::Unirse && self.va_dentro_de(mercenario, &o.objetivo)), ..o });
         let c = self.estado.contratos.contratos.get_mut(&mercenario).expect("quien recibe o pierde una orden tiene contrato");
-        c.orden = orden;
+        let anterior = std::mem::replace(&mut c.orden, orden);
         let faccion = c.faccion;
         if let Some(vence) = orden.and_then(|o| o.vence) {
             self.citar_contrato(mercenario, SucesoContrato::VenceOrden, vence);
         }
         self.tr.tocar(Clase::Heroe, mercenario);
         self.tr.tocar(Clase::Faccion, u64::from(faccion));
+        anterior.into_iter().chain(orden).for_each(|o| self.tocar_objetivo(&o.objetivo));
     }
 
     /// Un hecho sobre la orden `o` de `mercenario`: lo oyen él y quien la dio.
@@ -313,6 +299,9 @@ impl Nucleo {
             if cambia {
                 cambiados.push((c.mercenario, c.faccion));
             }
+        }
+        if !cambiados.is_empty() {
+            self.tocar_objetivo(&ahora);
         }
         for (mercenario, faccion) in cambiados {
             self.tr.tocar(Clase::Heroe, mercenario);

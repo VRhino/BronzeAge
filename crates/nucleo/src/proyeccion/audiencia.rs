@@ -10,13 +10,18 @@
 //! | `Asentamiento`, `Avanzada`, `OrdenMercado`, `Convocatoria` | `FACCION` del dueño (de la plaza madre, de la plaza o de la Facción de la convocatoria) |
 //! | `Pueblo` | `FACCION` del dueño y `ASENTAMIENTO` de su plaza madre (con su almacén local, que el paso de minuto refresca por la secuencia interior de la plaza, `Mesa::repartir_interior`, no por este registro; y en el `FACCION` de quien está dentro del pueblo y es de su Facción, `Mesa::pueblos_al_dia`, 2026-10-29) |
 //! | `Acuerdo` | `FACCION` de las dos plazas |
-//! | `Faccion` | `FACCION` de la propia |
+//! | `Faccion` | `FACCION` de la propia y `HEROE` de sus mercenarios con contrato (reducida: [`super::propios::faccion_publica`]) |
 //! | `Relacion` | `FACCION` de las dos Facciones, mientras exista |
 //! | `Propuesta` | `FACCION` de las dos Facciones de su par, mientras esté en el almacén (5H) |
 //! | `Residente` | `FACCION` de la dueña de su plaza (6G: los rivales no ven los suyos) |
 //!
 //! `Tecnologia` (la forma pública del estado de tecnología del mundo, 6G) es de todos: no tiene pertenencia, la sesión la manda a cada `HEROE` cuando la versión la toca (`Mesa::repartir`), como
 //! un hecho público.
+//!
+//! **Mercenarios por contrato** (duda 3 del plan): un marcado no tiene `FACCION`, así que lo que necesita de su contrato le llega por su `HEROE`. Además de lo de la tabla, `Ejercito`, `Caravana`,
+//! `Asentamiento`, `Pueblo`, `Avanzada` y `Convocatoria` van al `HEROE` de los marcados de la Facción dueña cuyo contrato u orden vigente los tiene por objetivo (`mercenarios_con_objetivo`).
+//! Solo objetivos de la propia Facción (defender, escoltar, acompañar, el `guardar` y el `unirse`): de lo enemigo que ataca el mercenario ve lo que alcanzan sus ojos, no el interior de la plaza,
+//! el carro ni la composición del rival.
 //!
 //! La convocatoria va a la Facción entera y no a `HEROE` (solo puede unirse quien es de la Facción: Presencia_Y_Convocatoria §9.6). Una entidad puede estar en dos ámbitos a la vez (una caravana
 //! adjunta a tu columna, en `HEROE` y en `FACCION`) y `QUITA` significa «ya no es de este ámbito».
@@ -27,6 +32,7 @@
 use super::ambito::Ambito;
 use crate::estado::{Clase, Estado};
 use crate::estado_militar::HeroeNucleo;
+use ::mercenarios::Objetivo;
 use std::collections::BTreeSet;
 
 /// Las clases cuyas entidades viajan a un ámbito de jugador, en el orden en que se proyectan.
@@ -70,6 +76,13 @@ fn faccion_de_plaza(e: &Estado, plaza: u64) -> Option<Ambito> {
     e.asentamientos.get(&plaza).map(|a| Ambito::Faccion(a.faccion))
 }
 
+/// Los `HEROE` de los mercenarios de la Facción `faccion` cuyo contrato o cuya orden vigente tiene por objetivo `o`. No recorre los contratos del mundo: busca solo entre los marcados de la Facción dueña
+/// del objetivo, que ya lleva su política (`Faccion::marcas`), y no gasta nada en la que no tiene ninguno.
+fn mercenarios_con_objetivo(e: &Estado, faccion: u32, o: Objetivo) -> Vec<Ambito> {
+    let marcados = e.politica.facciones.get(faccion).into_iter().flat_map(|f| f.marcas.keys().copied());
+    heroes_de(e, marcados.filter(|m| e.contratos.contratos.get(m).is_some_and(|c| c.objetivo == o || c.orden.is_some_and(|x| x.objetivo == o))))
+}
+
 /// Los ámbitos a los que pertenece la entidad `(clase, id)` ahora, ordenados y sin repetir. Vacío si ya no existe. `Escuadra` no se pregunta por su id (no se sabe de quién es sin
 /// buscarla): su ámbito es el de su dueño, `de(Heroe, dueño)`.
 pub fn de(e: &Estado, clase: Clase, id: u64) -> Vec<Ambito> {
@@ -78,6 +91,7 @@ pub fn de(e: &Estado, clase: Clase, id: u64) -> Vec<Ambito> {
         Clase::Ejercito => {
             if let Some(x) = e.ejercitos.get(&id) {
                 v = heroes_de(e, x.columna.participantes.iter().map(|p| p.heroe));
+                v.extend(x.columna.faccion.into_iter().flat_map(|f| mercenarios_con_objetivo(e, f, Objetivo::Ejercito(id))));
             }
         }
         // El héroe de la sesión, y los de campo de su cuenta con él (paridad, 2026-10-27: antes un héroe de campo no tenía `Heroe`).
@@ -87,7 +101,11 @@ pub fn de(e: &Estado, clase: Clase, id: u64) -> Vec<Ambito> {
             if let Some(c) = e.comercio.caravana(id) {
                 let en_columna = e.ejercitos.values().find(|x| x.caravanas_adjuntas.contains(&id)).into_iter().flat_map(|x| x.columna.participantes.iter().map(|p| p.heroe));
                 v = heroes_de(e, en_columna.chain(c.escolta.iter().map(|s| s.heroe)));
-                v.extend(faccion_de_plaza(e, u64::from(c.origen)));
+                let duena = faccion_de_plaza(e, u64::from(c.origen));
+                v.extend(duena);
+                if let Some(Ambito::Faccion(f)) = duena {
+                    v.extend(mercenarios_con_objetivo(e, f, Objetivo::Caravana(id)));
+                }
             } else if let Some(c) = e.fundacion.caravanas.get(&id) {
                 // La Caravana de Fundación (5G-b): su Facción, su titular y quienes van en la columna que la lleva.
                 let en_columna = match c.situacion {
@@ -105,17 +123,37 @@ pub fn de(e: &Estado, clase: Clase, id: u64) -> Vec<Ambito> {
                 v.extend(b.ticket.atacante.faccion.into_iter().chain(b.ticket.defensor.faccion).chain(combatientes).map(Ambito::Faccion));
             }
         }
-        Clase::Asentamiento => v.extend(faccion_de_plaza(e, id)),
+        Clase::Asentamiento => {
+            v.extend(faccion_de_plaza(e, id));
+            v.extend(e.asentamientos.get(&id).into_iter().flat_map(|a| mercenarios_con_objetivo(e, a.faccion, Objetivo::Plaza(id))));
+        }
         Clase::Pueblo => {
             if let Some(a) = e.asentamientos.values().find(|a| a.economia.pueblo(id).is_some()) {
                 v.extend([Ambito::Faccion(a.faccion), Ambito::Asentamiento(a.id)]);
+                v.extend(mercenarios_con_objetivo(e, a.faccion, Objetivo::Pueblo(id)));
             }
         }
-        Clase::Avanzada => v.extend(e.asentamientos.values().find(|a| a.economia.avanzada(id).is_some()).map(|a| Ambito::Faccion(a.faccion))),
+        Clase::Avanzada => {
+            if let Some(a) = e.asentamientos.values().find(|a| a.economia.avanzada(id).is_some()) {
+                v.push(Ambito::Faccion(a.faccion));
+                v.extend(mercenarios_con_objetivo(e, a.faccion, Objetivo::Avanzada(id)));
+            }
+        }
         Clase::OrdenMercado => v.extend(e.comercio.libro.ordenes.iter().chain(&e.comercio.libro.historial).find(|o| o.id == id).and_then(|o| faccion_de_plaza(e, u64::from(o.asentamiento)))),
-        Clase::Convocatoria => v.extend(e.militar.convocatorias.get(&id).map(|c| Ambito::Faccion(c.faccion))),
+        Clase::Convocatoria => {
+            if let Some(c) = e.militar.convocatorias.get(&id) {
+                v.push(Ambito::Faccion(c.faccion));
+                v.extend(mercenarios_con_objetivo(e, c.faccion, Objetivo::Convocatoria(id)));
+            }
+        }
         Clase::Acuerdo => v.extend(e.comercio.acuerdo(id).into_iter().flat_map(|a| [a.a, a.b]).filter_map(|p| faccion_de_plaza(e, u64::from(p)))),
-        Clase::Faccion => v.extend(existe_faccion(e, id as u32).then_some(Ambito::Faccion(id as u32))),
+        Clase::Faccion => {
+            if existe_faccion(e, id as u32) {
+                v.push(Ambito::Faccion(id as u32));
+                // Sus mercenarios no tienen su `FACCION`: reciben la Facción reducida por su `HEROE` (`propios::proyectar`).
+                v.extend(heroes_de(e, e.politica.facciones.get(id as u32).into_iter().flat_map(|f| f.marcas.keys().copied())));
+            }
+        }
         Clase::Relacion => v.extend(e.politica.relaciones.get(id).into_iter().flat_map(|r| [Ambito::Faccion(r.a), Ambito::Faccion(r.b)])),
         Clase::Propuesta => v.extend(e.politica.propuestas.get(id).into_iter().flat_map(|p| {
             let (a, b) = p.clase.par();
