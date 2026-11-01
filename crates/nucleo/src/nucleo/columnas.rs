@@ -23,6 +23,7 @@ use super::*;
 use crate::estado::{PlanEnPausa, SucesoMilitar, PRIO_LLEGADA, PRIO_SALIDA, PRIO_UMBRAL};
 use super::viaje::pausar_plan;
 use crate::estado_militar::{entidad_formacion, entidad_peticion_de_union};
+use ::mercenarios::Objetivo;
 use comercio::caravana::TipoCaravana;
 use militar::columna::{self, Columna, ErrorColumna, TipoColumna};
 use militar::convocatoria::Lugar;
@@ -291,7 +292,9 @@ impl Nucleo {
     /// (o se pierden si no hay camino por tierra). No hay tropa que devolver: las escuadras son de sus héroes.
     pub(super) fn disolver_columna(&mut self, t: Instante, id: u64) {
         let Some(e) = self.estado.ejercitos.get(&id) else { return };
-        let (posicion, adjuntas) = (e.posicion_en(t), e.caravanas_adjuntas.clone());
+        let (posicion, adjuntas, participantes) = (e.posicion_en(t), e.caravanas_adjuntas.clone(), Self::participantes_de(e));
+        // Quien acompañaba al ejército y siguió con él hasta el final cuenta una Campaña (Mercenarios_Por_Contrato §9).
+        self.campana(t, &participantes, Objetivo::Ejercito(id));
         self.baja_de_columna(id);
         for c in adjuntas {
             let Some(caravana) = self.estado.comercio.caravana(c) else { continue };

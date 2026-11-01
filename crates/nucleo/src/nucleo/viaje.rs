@@ -34,6 +34,7 @@ use crate::nucleo::mercado::id32;
 use asentamiento::datos::UNO;
 use base::{Vertice, MS_POR_MINUTO};
 use comercio::caravana::{candidatas_de_reparto, Caravana, EstadoCaravana, Llegada, PerdidaCarros, TipoCaravana};
+use comercio::encargo::Punta;
 use comercio::evento::Evento as EventoComercio;
 use comercio::red_caminos::{Arista, RedCaminos};
 use comercio::reparto::{asignar_origen, lados_pendientes, EntornoReparto, LadoPendiente};
@@ -448,6 +449,10 @@ impl Nucleo {
         let origen = self.estado.comercio.flota[i].origen as u64;
         let Ok(llegada) = self.estado.comercio.flota[i].llegar(t) else { return };
         self.tr.tocar(Clase::Caravana, id);
+        // Llegar a su destino cuenta para quienes la escoltan (Mercenarios_Por_Contrato §8.2 y §9): la entrega, el acarreo o la parada del encargo en su destino. Volver a casa, no.
+        if matches!(llegada, Llegada::Entrega { .. } | Llegada::Acarreo { .. } | Llegada::Parada { punta: Punta::Destino }) {
+            self.escolta_llega(t, id);
+        }
         match llegada {
             Llegada::Entrega { destino, contenido, origen_acuerdo } => {
                 // El regreso: la misma ruta invertida, con una generación nueva.

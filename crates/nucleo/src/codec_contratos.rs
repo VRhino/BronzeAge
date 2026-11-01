@@ -3,7 +3,7 @@
 //!
 //! Formato (little endian, el de `codec`): `ofertas{n u64 · n × (héroe u64 · campamento u32 · desde i64)} · contratos{n u64 · n × contrato} · fichas{n u64 · n × (héroe u64 ·
 //! ficha)} · esperas{n u64 · n × (mercenario u64 · Facción u32 · hasta i64)} · terminados{n u64 · n × (mercenario u64 · Facción u32 · firmado_por u64 · renombre u32 ·
-//! valorable_hasta i64 · valorado bool)}`.
+//! palabra bool · valorable_hasta i64 · valorado bool)}`.
 //!
 //! Un contrato: `mercenario u64 · Facción u32 · ámbito{u8: 0 Facción, 1 plaza · u64} · trabajo u8 (su posición en Trabajo::TODOS) · objetivo · plazo{bool · u8} ·
 //! firmado_por u64 · puesto · firmado_en i64 · vence opt_i64 · campamento_base u32 · orden{bool · orden} · fin_aplazado{u8: 0 ninguno, 1 plazo, 2 despido, 3 plaza perdida,
@@ -41,11 +41,12 @@ pub(crate) fn escribir(w: &mut Escritor, e: &EstadoContratos) {
         w.i64(hasta);
     }
     w.u64(terminados.len() as u64);
-    for (&(m, f), &Terminado { firmado_por, renombre, valorable_hasta, valorado }) in terminados {
+    for (&(m, f), &Terminado { firmado_por, renombre, palabra, valorable_hasta, valorado }) in terminados {
         w.u64(m);
         w.u32(f);
         w.u64(firmado_por);
         w.u32(renombre);
+        w.bool(palabra);
         w.i64(valorable_hasta);
         w.bool(valorado);
     }
@@ -62,7 +63,7 @@ pub(crate) fn leer(r: &mut Lector) -> Result<EstadoContratos, ErrorFormato> {
     let fichas = (0..r.cuenta()?).map(|_| Ok((r.u64()?, ficha_leer(r)?))).collect::<Result<_, ErrorFormato>>()?;
     let esperas = (0..r.cuenta()?).map(|_| Ok(((r.u64()?, r.u32()?), r.i64()?))).collect::<Result<_, ErrorFormato>>()?;
     let terminados = (0..r.cuenta()?)
-        .map(|_| Ok(((r.u64()?, r.u32()?), Terminado { firmado_por: r.u64()?, renombre: r.u32()?, valorable_hasta: r.i64()?, valorado: r.bool()? })))
+        .map(|_| Ok(((r.u64()?, r.u32()?), Terminado { firmado_por: r.u64()?, renombre: r.u32()?, palabra: r.bool()?, valorable_hasta: r.i64()?, valorado: r.bool()? })))
         .collect::<Result<_, ErrorFormato>>()?;
     Ok(EstadoContratos { ofertas, contratos, fichas, esperas, terminados })
 }
@@ -356,7 +357,9 @@ mod pruebas {
         ficha.leva_recibida = true;
         e.fichas.insert(8, ficha);
         e.esperas.insert((8, 2), 7_000);
-        e.terminados.insert((8, 2), Terminado { firmado_por: 5, renombre: 10, valorable_hasta: 8_000, valorado: true });
+        // Con y sin Palabra cumplida: cada valor de `palabra` y de `valorado` da la vuelta.
+        e.terminados.insert((8, 2), Terminado { firmado_por: 5, renombre: 10, palabra: true, valorable_hasta: 8_000, valorado: false });
+        e.terminados.insert((9, 2), Terminado { firmado_por: 5, renombre: 0, palabra: false, valorable_hasta: 9_000, valorado: true });
         let mut w = Escritor::default();
         escribir(&mut w, &e);
         let mut r = Lector::nuevo(&w.0);

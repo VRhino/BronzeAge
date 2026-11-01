@@ -275,8 +275,10 @@ pub struct Oferta {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Terminado {
     pub firmado_por: u64,
-    /// Lo que se apuntó al acabar (0 con despido).
+    /// Lo que se apuntó al acabar (0 con despido, y en el permanente, que apunta al ganarlo).
     pub renombre: u32,
+    /// Ese contrato contó Palabra cumplida (acabó por su plazo): una mala valoración se la quita.
+    pub palabra: bool,
     pub valorable_hasta: Instante,
     pub valorado: bool,
 }

@@ -111,7 +111,8 @@ impl Nucleo {
         }
         // Y quien está dentro de una plaza, un pueblo o una avanzada que ya no le admite sale al mapa solo, con su carro (5B-1).
         self.echar_si_ya_no_entra(t, mercenario, MOTIVO_PUERTA_CERRADA);
-        self.apuntar_fin(t, &c, fin);
+        let apuntado = self.apuntar_al_acabar(t, &c, fin);
+        self.apuntar_fin(t, &c, fin, apuntado);
     }
 
     /// El fin que el mundo le ha puesto ya a `c`, si alguno: el aplazado cuya batalla acabó o, si no tiene, el primero de los que se dan ahora. De más grave a menos: el mercenario ya no es
@@ -147,10 +148,12 @@ impl Nucleo {
         }
     }
 
-    /// Se separa de su convocatoria y de su ejército o formación, con lo suyo y donde esté (§7). Una columna personal o un ejército de uno solo no tienen de qué separarse.
+    /// Se separa de su convocatoria y de su ejército o formación, con lo suyo y donde esté (§7). Una columna personal o un ejército de uno solo no tienen de qué separarse. Un mercenario
+    /// con una orden `atacar` puede convocar (guardas): si la lidera, que no puede separarse, la cancela.
     fn separar_de_su_columna(&mut self, t: Instante, mercenario: u64) {
-        if self.estado.militar.convocatoria_de(mercenario).is_some() {
-            self.separar_de_convocatoria(t, mercenario).expect("un marcado no convoca: no es el Líder de ninguna convocatoria y puede separarse");
+        if let Some(lider) = self.estado.militar.convocatoria_de(mercenario).map(|c| c.lider) {
+            let resultado = if lider == mercenario { self.cancelar_convocatoria(t, mercenario) } else { self.separar_de_convocatoria(t, mercenario) };
+            resultado.expect("el Líder de una convocatoria la cancela y quien va en ella se separa: ninguno falla");
         }
         let Ok((id, e)) = self.columna_a_bordo(mercenario) else { return };
         let c = &e.columna;
@@ -165,9 +168,9 @@ impl Nucleo {
         self.separar_del_ejercito(t, mercenario).expect("va en un ejército con más gente y ya no es su Líder");
     }
 
-    /// Lo que deja el contrato acabado: la cuenta de la ficha, la espera de recontrato si fue un despido, lo que queda por valorar y el hecho `mercenarios.terminado`, que oyen la Facción y
-    /// el mercenario. `esperas` y `terminados` se podan de vencidos al insertar, no al leer.
-    fn apuntar_fin(&mut self, t: Instante, c: &Contrato, fin: Fin) {
+    /// Lo que deja el contrato acabado: la cuenta de la ficha, la espera de recontrato si fue un despido, lo que queda por valorar (con lo que se `apuntó` al acabar, que es lo que una
+    /// valoración cambia) y el hecho `mercenarios.terminado`, que oyen la Facción y el mercenario. `esperas` y `terminados` se podan de vencidos al insertar, no al leer.
+    fn apuntar_fin(&mut self, t: Instante, c: &Contrato, fin: Fin, (renombre, palabra): (u32, bool)) {
         let d = &self.estado.reglas.economia.contratos;
         let (espera, valoracion) = (d.espera_recontrato, d.valoracion);
         let estado = &mut self.estado.contratos;
@@ -180,7 +183,7 @@ impl Nucleo {
             ficha.historial.terminados += 1;
         }
         estado.terminados.retain(|_, x| x.valorable_hasta > t);
-        estado.terminados.insert((c.mercenario, c.faccion), Terminado { firmado_por: c.firmado_por, renombre: c.renombre, valorable_hasta: t + valoracion, valorado: false });
+        estado.terminados.insert((c.mercenario, c.faccion), Terminado { firmado_por: c.firmado_por, renombre, palabra, valorable_hasta: t + valoracion, valorado: false });
         self.tr.tocar(Clase::Heroe, c.mercenario);
         let datos = vec![("faccion", i64::from(c.faccion)), ("mercenario", c.mercenario as i64), ("trabajo", i64::from(trabajo_a_u8(c.trabajo)))];
         let valores = vec![("motivo", Dato::Texto(motivo(fin).into()))];

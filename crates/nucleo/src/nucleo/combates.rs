@@ -425,7 +425,7 @@ impl Nucleo {
         // La participación (Participacion §2): la batalla ganada, a los del bando ganador.
         let ganadores = if informe.ganador == Lado::Atacante { &participantes_a } else { &participantes_d };
         self.participacion_de_batalla(t, &[], &[], ganadores);
-        self.tras_batalla(t, &Desenlace { atacados: &[Objetivo::Ejercito(x)], atacantes: &participantes_a });
+        self.tras_batalla(t, &Desenlace { atacados: &[Objetivo::Ejercito(x)], atacantes: &participantes_a, defensores: &participantes_d, gana_atacante: informe.ganador == Lado::Atacante, nivel_bandidos: None });
         Ok(())
     }
 
@@ -528,7 +528,7 @@ impl Nucleo {
             self.contar(t, tecnologia::contador::Delta::uno(tecnologia::Contador::CaravanasDestruidasOCapturadas));
         }
         self.participacion_de_batalla(t, &[origen], &defensores, if r.gana_atacante { &participantes } else { &defensores });
-        self.tras_batalla(t, &Desenlace { atacados: &[Objetivo::Caravana(x)], atacantes: &participantes });
+        self.tras_batalla(t, &Desenlace { atacados: &[Objetivo::Caravana(x)], atacantes: &participantes, defensores: &defensores, gana_atacante: r.gana_atacante, nivel_bandidos: None });
         Ok(())
     }
 
@@ -619,7 +619,7 @@ impl Nucleo {
                 self.avance(t, Dueno::Faccion(f), "bandidos", 1);
             }
         }
-        self.tras_batalla(t, &Desenlace { atacados: &[Objetivo::Bandidos(x)], atacantes: &participantes });
+        self.tras_batalla(t, &Desenlace { atacados: &[Objetivo::Bandidos(x)], atacantes: &participantes, defensores: &[], gana_atacante: r.destruido, nivel_bandidos: Some(nivel) });
         Ok(())
     }
 
@@ -769,7 +769,7 @@ impl Nucleo {
             let ganadores = if conquistada { participantes.clone() } else { defensa.tropa.heroes.to_vec() };
             self.participacion_de_batalla(t, &[x], &defensa.tropa.heroes, &ganadores);
         }
-        self.tras_batalla(t, &Desenlace { atacados: &[Objetivo::Plaza(x)], atacantes: &participantes });
+        self.tras_batalla(t, &Desenlace { atacados: &[Objetivo::Plaza(x)], atacantes: &participantes, defensores: &defensa.tropa.heroes, gana_atacante: conquistada, nivel_bandidos: None });
         if conquistada {
             self.avance(t, Dueno::Faccion(yo), "conquistas", 1);
             self.mirar_misiones(t, Dueno::Faccion(yo));
@@ -898,7 +898,7 @@ impl Nucleo {
             let ganadores = if gana { participantes.clone() } else { dentro.tropa.heroes.to_vec() };
             self.participacion_de_batalla(t, &[madre], &dentro.tropa.heroes, &ganadores);
         }
-        self.tras_batalla(t, &Desenlace { atacados: &[Objetivo::Pueblo(x)], atacantes: &participantes });
+        self.tras_batalla(t, &Desenlace { atacados: &[Objetivo::Pueblo(x)], atacantes: &participantes, defensores: &dentro.tropa.heroes, gana_atacante: gana, nivel_bandidos: None });
         Ok(())
     }
 

@@ -71,6 +71,12 @@ pub fn extra_por_buena(d: &Datos, apuntado: u32) -> u32 {
     apuntado * d.buena_pct.saturating_sub(100) / 100
 }
 
+/// Lo que quita una mala valoración del renombre de la ficha: lo apuntado del contrato menos lo que `malaPct` deja valer, redondeado hacia abajo (§8.2, duda 2). Con `malaPct` 0, todo lo
+/// apuntado. Nunca suma.
+pub fn quita_por_mala(d: &Datos, apuntado: u32) -> u32 {
+    apuntado * 100u32.saturating_sub(d.mala_pct) / 100
+}
+
 #[cfg(test)]
 mod pruebas {
     use super::*;
@@ -233,5 +239,17 @@ mod pruebas {
         // Una «buena» nunca resta, ni siquiera con un porcentaje por debajo del 100 %.
         let d = Datos { buena_pct: 80, ..Datos::cargar() };
         assert_eq!(extra_por_buena(&d, 100), 0);
+    }
+
+    #[test]
+    fn la_mala_valoracion_quita_lo_que_el_contrato_deja_de_valer_redondeando_hacia_abajo() {
+        let con = |mala_pct| Datos { mala_pct, ..Datos::cargar() };
+        assert_eq!(quita_por_mala(&con(0), 25), 25, "con malaPct 0 se pierde todo lo apuntado");
+        assert_eq!(quita_por_mala(&con(40), 25), 15);
+        assert_eq!(quita_por_mala(&con(30), 25), 17, "25 × 70 % = 17,5 hacia abajo");
+        assert_eq!(quita_por_mala(&con(100), 25), 0);
+        // Una «mala» nunca suma, ni siquiera con un porcentaje por encima del 100 %.
+        assert_eq!(quita_por_mala(&con(150), 25), 0);
+        assert_eq!(quita_por_mala(&con(0), 0), 0);
     }
 }

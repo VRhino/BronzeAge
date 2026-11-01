@@ -44,7 +44,7 @@ impl Nucleo {
     }
 
     /// La orden vigente de `heroe`, si es un mercenario contratado y tiene una.
-    fn orden_de(&self, heroe: u64) -> Option<&Orden> {
+    pub(super) fn orden_de(&self, heroe: u64) -> Option<&Orden> {
         self.estado.contratos.contratos.get(&heroe)?.orden.as_ref()
     }
 

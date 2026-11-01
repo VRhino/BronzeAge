@@ -244,6 +244,9 @@ impl Nucleo {
         contrato.orden.iter().map(|o| o.objetivo).chain([objetivo]).for_each(|o| self.tocar_objetivo(&o));
         self.estado.contratos.contratos.insert(mercenario, contrato);
         self.estado.contratos.fichas.get_mut(&mercenario).expect("la ficha nace con el primer ofrecimiento").historial.firmados += 1;
+        if trabajo == Trabajo::Permanente {
+            self.citar_leal(mercenario, t);
+        }
         let datos = vec![
             ("faccion", i64::from(faccion)),
             ("mercenario", mercenario as i64),

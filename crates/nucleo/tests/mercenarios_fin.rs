@@ -191,7 +191,7 @@ fn al_vencer_el_plazo_el_temporal_sale_de_la_faccion_y_sigue_en_su_campamento() 
     assert_eq!((f.historial.firmados, f.historial.terminados, f.historial.despidos), (1, 1, 0));
     assert!(e.n.estado().contratos.esperas.is_empty());
     let valoracion = e.n.estado().reglas.economia.contratos.valoracion;
-    assert_eq!(e.n.estado().contratos.terminados[&(bot, 1)], Terminado { firmado_por: gob, renombre: c.renombre, valorable_hasta: vence + valoracion, valorado: false });
+    assert_eq!(e.n.estado().contratos.terminados[&(bot, 1)], Terminado { firmado_por: gob, renombre: c.renombre, palabra: true, valorable_hasta: vence + valoracion, valorado: false });
     // El hecho llega a la Facción y al mercenario, con su motivo.
     let hechos = mc::hechos(&e.n, "mercenarios.terminado");
     assert_eq!(hechos.len(), 1);
@@ -234,7 +234,6 @@ fn despedir_acaba_el_contrato_sin_devolver_oro_y_no_se_recontrata_hasta_que_pasa
     let mut e = E::nuevo(m);
     let (bot, rey, plaza) = (e.bot("bot-1"), e.rey, e.plaza);
     assert!(e.contratar(rey, bot, Trabajo::Defender, Objetivo::Plaza(plaza), Some(7)).aceptada());
-    let c = mc::contrato(&e.n, bot).unwrap();
     let (paga, carro) = (mc::oro_personal(&e.n, bot), mc::oro_del_carro(&e.n, rey));
 
     let r = e.despedir(rey, bot);
@@ -245,11 +244,11 @@ fn despedir_acaba_el_contrato_sin_devolver_oro_y_no_se_recontrata_hasta_que_pasa
     assert_eq!((h.heroe.residencia, h.heroe.presencia.ubicacion), (Some(Residencia::Campamento(0)), Ubicacion::Mercenarios(0)));
     let f = &e.n.estado().contratos.fichas[&bot];
     assert_eq!((f.historial.firmados, f.historial.terminados, f.historial.despidos), (1, 0, 1));
-    // La espera de recontrato corre desde el despido, solo con esa Facción, y el contrato queda por valorar sin renombre propio.
+    // La espera de recontrato corre desde el despido, solo con esa Facción, y el contrato queda por valorar con lo que apuntó el despido: nada.
     let d = &e.n.estado().reglas.economia.contratos;
     let (espera, valoracion) = (d.espera_recontrato, d.valoracion);
     assert_eq!(e.n.estado().contratos.esperas.iter().map(|(&k, &v)| (k, v)).collect::<Vec<_>>(), vec![((bot, 1), t + espera)]);
-    assert_eq!(e.n.estado().contratos.terminados[&(bot, 1)], Terminado { firmado_por: rey, renombre: c.renombre, valorable_hasta: t + valoracion, valorado: false });
+    assert_eq!(e.n.estado().contratos.terminados[&(bot, 1)], Terminado { firmado_por: rey, renombre: 0, palabra: false, valorable_hasta: t + valoracion, valorado: false });
     let h = mc::hechos(&e.n, "mercenarios.terminado");
     assert_eq!((h.len(), h[0].en, h[0].heroes.clone(), h[0].facciones.clone(), motivo(&h[0])), (1, t, vec![bot], vec![1], "despido"));
     assert_eq!((mc::oro_personal(&e.n, bot), mc::oro_del_carro(&e.n, rey)), (paga, carro), "no se devuelve nada");

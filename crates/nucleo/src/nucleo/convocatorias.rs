@@ -19,6 +19,7 @@ use super::*;
 use crate::estado::{SucesoMilitar, PRIO_LLEGADA};
 use crate::estado_militar::entidad_peticion_de_convocatoria;
 use crate::nucleo::salidas::{Destino, Reservas};
+use ::mercenarios::Objetivo;
 use asentamiento::Recurso;
 use militar::columna::TipoColumna;
 use militar::convocatoria::{lugar_de, Aspirante, Convocatoria, ErrorConvocatoria, ErrorPartir, Lugar, Seleccion, Union};
@@ -83,6 +84,22 @@ impl Nucleo {
         self.estado.militar.convocatorias.insert(id, c);
         self.tr.tocar(Clase::Convocatoria, id);
         self.hecho_de_convocatoria(t, "convocatoria.separado", del, vec![("convocatoria", id as i64), ("heroe", heroe as i64)]);
+        Ok(())
+    }
+
+    /// `cancelarConvocatoria`: el Líder cancela su convocatoria, y nadie pierde nada. Lo hace la orden y lo hace el fin del contrato de un mercenario que la lidera (Mercenarios_Por_Contrato §7).
+    /// Quien la acompañaba y seguía dentro cuenta una Campaña (§9).
+    pub(super) fn cancelar_convocatoria(&mut self, t: Instante, heroe: u64) -> Result<(), Respuesta> {
+        let c = self.convocatoria_del_heroe(heroe)?.clone();
+        let avisados = c.cancelar(heroe).map_err(|e| respuesta_de(self.estado.version, e))?;
+        let integrantes: Vec<u64> = c.integrantes.iter().map(|i| i.heroe).collect();
+        self.campana(t, &integrantes, Objetivo::Convocatoria(c.id));
+        self.estado.militar.convocatorias.remove(&c.id);
+        self.tr.tocar(Clase::Convocatoria, c.id);
+        c.peticiones.iter().for_each(|x| {
+            self.estado.generaciones.subir(entidad_peticion_de_convocatoria(x.heroe));
+        });
+        self.hecho_de_convocatoria(t, "convocatoria.cancelada", (c.faccion, c.lugar), vec![("convocatoria", c.id as i64), ("lider", heroe as i64), ("avisados", avisados.len() as i64)]);
         Ok(())
     }
 
@@ -184,15 +201,7 @@ impl Nucleo {
             }
             Comando::CancelarConvocatoria { heroe } => {
                 self.autorizar_heroe(p, *heroe, true)?;
-                let c = self.convocatoria_del_heroe(*heroe)?.clone();
-                let avisados = c.cancelar(*heroe).map_err(de_convocatoria)?;
-                self.estado.militar.convocatorias.remove(&c.id);
-                self.tr.tocar(Clase::Convocatoria, c.id);
-                c.peticiones.iter().for_each(|x| {
-                    self.estado.generaciones.subir(entidad_peticion_de_convocatoria(x.heroe));
-                });
-                self.hecho_de_convocatoria(t, "convocatoria.cancelada", (c.faccion, c.lugar), vec![("convocatoria", c.id as i64), ("lider", *heroe as i64), ("avisados", avisados.len() as i64)]);
-                Ok(vec![])
+                self.cancelar_convocatoria(t, *heroe).map(|()| vec![])
             }
             Comando::PartirConvocatoria { heroe, caravana_fundacion } => self.partir_convocatoria(t, p, *heroe, *caravana_fundacion),
             _ => unreachable!("solo se llama con órdenes de convocatoria"),

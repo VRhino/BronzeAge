@@ -29,10 +29,17 @@ use std::collections::BTreeSet;
 /// Cuántos mercenarios lleva como mucho una misma orden (decisión 23 del plan).
 const MAXIMO_POR_ORDEN: usize = 16;
 
-/// Lo que una batalla resuelta dice a las órdenes de mando (decisión 19 del plan): todo lo que se atacó en ella (en campo abierto, cada columna defensora) y quiénes lo atacaron.
+/// Lo que una batalla resuelta dice a los mercenarios (decisión 19 del plan): a las órdenes de mando, todo lo que se atacó en ella (en campo abierto, cada columna defensora) y quiénes lo
+/// atacaron; al renombre, además, quiénes lo defendían, quién ganó y, contra unos bandidos, su nivel.
 pub(in crate::nucleo) struct Desenlace<'a> {
     pub atacados: &'a [Objetivo],
     pub atacantes: &'a [u64],
+    /// Los héroes del bando que defendía lo atacado. Contra unos bandidos, ninguno.
+    pub defensores: &'a [u64],
+    /// ¿Ganó el bando atacante? El renombre de atacar solo llega si gana (decisión del autor del 2026-11-01), y el de defender solo si no.
+    pub gana_atacante: bool,
+    /// El nivel de los bandidos atacados, si lo eran: da el renombre de destruirlos.
+    pub nivel_bandidos: Option<u8>,
 }
 
 /// Por qué caduca una orden (hecho `mercenarios.orden_caducada`).
@@ -256,8 +263,10 @@ impl Nucleo {
 
     // ───────────────────────────── El ciclo de la orden ─────────────────────────────
 
-    /// Tras resolverse una batalla (decisión 19 del plan): cada mercenario que atacó alguno de los objetivos de su orden `atacar` la cumple, gane o pierda. Un ataque es una sola vez (decisión 6).
+    /// Tras resolverse una batalla (decisión 19 del plan): el renombre que da ([`Nucleo::renombre_de_batalla`], antes de cerrar las órdenes, que son lo que lo explica) y, para cada mercenario
+    /// que atacó alguno de los objetivos de su orden `atacar`, cumplirla, gane o pierda. Un ataque es una sola vez (decisión 6).
     pub(in crate::nucleo) fn tras_batalla(&mut self, t: Instante, d: &Desenlace) {
+        self.renombre_de_batalla(t, d);
         for &h in d.atacantes {
             let cumple = self.estado.contratos.contratos.get(&h).and_then(|c| c.orden).is_some_and(|o| o.tipo == TipoOrden::Atacar && d.atacados.contains(&o.objetivo));
             if cumple {

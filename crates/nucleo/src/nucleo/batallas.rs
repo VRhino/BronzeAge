@@ -1080,13 +1080,18 @@ impl Nucleo {
             _ => vec![],
         };
         let atacados = self.objetivos_atacados(&b);
+        // El nivel de unos bandidos, antes de que la victoria los destruya: da el renombre de atacarlos (Mercenarios_Por_Contrato §8.2).
+        let nivel_bandidos = match b.ticket.contexto {
+            Contexto::CampamentoBandidos { campamento, .. } => self.estado.combate.bandidos.get(&u64::from(campamento)).map(|c| c.nivel),
+            _ => None,
+        };
         let acoso = matches!(b.ticket.contexto, Contexto::Caravana { .. }) && self.participantes_del_lado(&b, Lado::Atacante).is_empty();
         let ganadores: Vec<u64> = if acoso { vec![] } else { self.participantes_del_lado(&b, res.ganador).iter().map(|q| q.heroe).filter(|&h| res.por_heroe.iter().any(|x| x.heroe == h && x.participo)).collect() };
         self.consecuencias_de_batalla(t, &b, &res, &efectos);
         self.participacion_de_batalla(t, &defendidas, &defendieron, &ganadores);
-        // El ataque de una vez de los mercenarios (Mercenarios_Por_Contrato §6.3): lo cumplen los atacantes que participaron, gane quien gane.
+        // El ataque de una vez de los mercenarios (Mercenarios_Por_Contrato §6.3): lo cumplen los atacantes que participaron, gane quien gane; su renombre, quien ganó.
         let atacantes: Vec<u64> = self.participantes_del_lado(&b, Lado::Atacante).iter().map(|q| q.heroe).filter(|&h| res.por_heroe.iter().any(|x| x.heroe == h && x.participo)).collect();
-        self.tras_batalla(t, &Desenlace { atacados: &atacados, atacantes: &atacantes });
+        self.tras_batalla(t, &Desenlace { atacados: &atacados, atacantes: &atacantes, defensores: &defendieron, gana_atacante: res.ganador == Lado::Atacante, nivel_bandidos });
         self.contar(t, logros);
         // Las misiones (Misiones §3): cada héroe que participó libró una batalla; los atacantes que la ganan a un campamento lo destruyen; un asedio se resiste o se conquista.
         let heroes: Vec<u64> = [Lado::Atacante, Lado::Defensor].into_iter().flat_map(|l| self.participantes_del_lado(&b, l)).map(|q| q.heroe).filter(|&h| res.por_heroe.iter().any(|x| x.heroe == h && x.participo)).collect();

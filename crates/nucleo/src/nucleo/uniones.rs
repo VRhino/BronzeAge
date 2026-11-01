@@ -10,6 +10,7 @@ use super::*;
 use crate::estado_militar::{entidad_formacion, entidad_peticion_de_union};
 use crate::estado::{SucesoMilitar, PRIO_LLEGADA};
 use crate::nucleo::salidas::Destino;
+use ::mercenarios::Objetivo;
 use asentamiento::datos::UNO;
 use asentamiento::Recurso;
 use militar::columna::{ErrorColumna, Politica, TipoColumna};
@@ -93,6 +94,8 @@ impl Nucleo {
             self.alta_de_columna(t, e);
             self.heroe_mut(heroe).heroe.presencia.ubicacion = Ubicacion::Columna(*ids.iter().find(|&&n| self.estado.ejercitos[&n].columna.lider == heroe).expect("recién creada"));
         }
+        // Deshacer un ejército es desarmarlo (Movimiento_Ejercitos §11): quien lo acompañó hasta aquí con su orden `unirse` cuenta una Campaña (Mercenarios_Por_Contrato §9).
+        self.campana(t, &heroes, Objetivo::Ejercito(id));
         self.estado.generaciones.subir(entidad_formacion(id));
         self.recomponer_columna(id, t, antes);
         ids

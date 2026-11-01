@@ -768,7 +768,7 @@ impl Nucleo {
             let ganadores = if gana { participantes.clone() } else { dentro.tropa.heroes.to_vec() };
             self.participacion_de_batalla(t, &[], &[], &ganadores);
         }
-        self.tras_batalla(t, &Desenlace { atacados: &[Objetivo::Avanzada(x)], atacantes: &participantes });
+        self.tras_batalla(t, &Desenlace { atacados: &[Objetivo::Avanzada(x)], atacantes: &participantes, defensores: &dentro.tropa.heroes, gana_atacante: gana, nivel_bandidos: None });
         Ok(())
     }
 

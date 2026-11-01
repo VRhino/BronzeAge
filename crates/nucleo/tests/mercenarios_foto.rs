@@ -37,7 +37,7 @@ fn los_contratos_y_las_marcas_dan_la_vuelta_por_la_foto() {
     ficha.contadores.insert(Medalla::Leal, 7);
     s.contratos.fichas.insert(20, ficha);
     s.contratos.esperas.insert((22, 1), 9_000);
-    s.contratos.terminados.insert((22, 1), Terminado { firmado_por: 10, renombre: 25, valorable_hasta: 9_000, valorado: false });
+    s.contratos.terminados.insert((22, 1), Terminado { firmado_por: 10, renombre: 25, palabra: true, valorable_hasta: 9_000, valorado: false });
 
     let bytes = s.serializar();
     assert_eq!(&bytes[..5], b"BAN54");

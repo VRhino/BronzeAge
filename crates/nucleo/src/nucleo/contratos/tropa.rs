@@ -14,7 +14,7 @@ impl Nucleo {
     // ───────────────────────────── Ayudas ─────────────────────────────
 
     /// La ficha de `heroe`, que se va a cambiar: la ven él y el tablón donde esté ofrecido. Nace con el primer ofrecimiento, y nadie gana renombre ni reclama nada sin haberse ofrecido.
-    fn ficha_mut(&mut self, heroe: u64) -> &mut Ficha {
+    pub(super) fn ficha_mut(&mut self, heroe: u64) -> &mut Ficha {
         self.tr.tocar(Clase::Heroe, heroe);
         if let Some(oferta) = self.estado.contratos.ofertas.get(&heroe) {
             self.tr.tocar(Clase::Campamento, u64::from(oferta.campamento));
@@ -23,7 +23,6 @@ impl Nucleo {
     }
 
     /// Suma renombre a la ficha de `heroe` (§8.3). Por cada rango nuevo la ficha suma su escuadra de premio y se cuenta `mercenarios.rango_subido`.
-    #[cfg_attr(not(test), expect(dead_code, reason = "las llama T9"))]
     pub(super) fn apuntar_renombre(&mut self, t: Instante, heroe: u64, n: u32) {
         let d = self.estado.reglas.economia.contratos.clone();
         for rango in self.ficha_mut(heroe).sumar_renombre(&d, n) {
@@ -32,7 +31,6 @@ impl Nucleo {
     }
 
     /// Cuenta `n` para la medalla `m` de `heroe` (§9). Si cruza un umbral, se cuenta `mercenarios.medalla` y se apunta el renombre de ese grado (§8.2).
-    #[cfg_attr(not(test), expect(dead_code, reason = "las llama T9"))]
     pub(super) fn apuntar_medalla(&mut self, t: Instante, heroe: u64, m: Medalla, n: u32) {
         let d = self.estado.reglas.economia.contratos.clone();
         let Some(grado) = self.ficha_mut(heroe).contar(&d, m, n) else { return };
