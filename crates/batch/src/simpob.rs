@@ -180,12 +180,13 @@ pub struct Corrida {
     pub dia_foto: u32,
 }
 
-fn terreno(m: &Mundo, p: Punto) -> Terreno {
+/// Lo mismo que mira el núcleo al fundar, salvo el bosque cerrado: `pendiente` es `FUNDACION.pendienteMaximaParaFundar` en milésimas.
+fn terreno(m: &Mundo, p: Punto, pendiente: Mil) -> Terreno {
     match m.terreno_en(p.x, p.y) {
         None => Terreno::FueraDelMapa,
         Some(c) if c as i32 == 1 => Terreno::Agua,
-        Some(c) if c as i32 == 6 => Terreno::Cima,
         Some(_) if !m.transitable_en(p.x, p.y) => Terreno::NoTransitable,
+        Some(_) if m.pendiente_en(p.x, p.y).is_some_and(|q| q > pendiente) => Terreno::Empinado,
         Some(_) => Terreno::Firme,
     }
 }
@@ -196,7 +197,7 @@ fn madera_potencial(mapa: &Mapa, p: Punto) -> Mil {
 }
 
 /// Reparte las plazas entre los campamentos por igual y elige el sitio de cada una (ver la cabecera del módulo).
-fn colocar(mundo: &Mundo, mapa: &Mapa, plazas: u32, semilla: u64) -> (Vec<(Punto, bool)>, u32) {
+fn colocar(mundo: &Mundo, mapa: &Mapa, plazas: u32, semilla: u64, pendiente: Mil) -> (Vec<(Punto, bool)>, u32) {
     let mut rng = Rng::derivado(semilla, "poblacion");
     let r = &mapa.reglas;
     let dist = DistanciasDeFundacion { separacion_plazas: r.separacion_plazas, exclusion_campamento: r.exclusion_campamento };
@@ -210,7 +211,7 @@ fn colocar(mundo: &Mundo, mapa: &Mapa, plazas: u32, semilla: u64) -> (Vec<(Punto
                 let radio = (ANILLO_CAMPAMENTO.0 + rng.por_debajo((ANILLO_CAMPAMENTO.1 - ANILLO_CAMPAMENTO.0) as u64) as i64) as f64;
                 let ang = (rng.por_debajo(360_000) as f64 / 1000.0).to_radians();
                 let p = Punto::new(centro.x + (radio * ang.cos()) as i64, centro.y + (radio * ang.sin()) as i64);
-                if territorio::validar(p, terreno(mundo, p), &discos, mapa.campamentos.iter().copied(), &dist).is_err() {
+                if territorio::validar(p, terreno(mundo, p, pendiente), &discos, mapa.campamentos.iter().copied(), &dist).is_err() {
                     continue;
                 }
                 // No se funda a ciegas (decidido el 2026-10-18): sin madera potencial suficiente a 10 u (`MADERA_MINIMA_POTENCIAL`) la plaza cae en ruinas.
@@ -456,7 +457,7 @@ fn comprobar_ciudades(villas: &[Villa], re: &ReglasEconomia, out: &mut Violacion
 pub fn simular(mundo: &Mundo, mapa: &Arc<Mapa>, plazas: u32, dias: u32, semilla: u64, murallas: bool) -> Corrida {
     let re = ReglasEconomia::default();
     let reglas = &*re.datos;
-    let (puntos, sin_colocar) = colocar(mundo, mapa, plazas, semilla);
+    let (puntos, sin_colocar) = colocar(mundo, mapa, plazas, semilla, reglas.pendiente_maxima_fundar);
     let dia_foto = dias.min(7);
     let mut villas: Vec<Villa> = puntos
         .into_iter()

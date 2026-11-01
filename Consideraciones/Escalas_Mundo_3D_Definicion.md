@@ -273,6 +273,13 @@ funcionar primero ahí, con three.js como en la mesa, ayuda a cerrar la represen
 - **Más relieve:** acercarse al 43 % de laderas cerradas de la propuesta pide abrir collados en las crestas o subir el
   tope vertical de 1.000 m.
 - **Cuántos árboles** dibuja el cliente y con qué detalle.
+- **Región alpina (prueba en la mesa, 2026-10-31).** El autor pidió ver una zona montañosa entera en altura: desde el llano
+  se va subiendo, y arriba hay una cadena de valles con altiplanos a varias alturas, cerrados por montaña y unidos por pasos.
+  La mesa la enseña como terreno «Región alpina» (boceto, no sale del generador): seis altiplanos entre 515 y 618 m, siete
+  pasos con collado y dos valles con río que suben desde el llano. En la ventana, todos los altiplanos quedan unidos solo por
+  los pasos (sin ellos se aíslan), y el 57 % de la región queda cerrado por pendiente. Ahí se prueban dos reglas: el
+  movimiento solo lo frena la pendiente (sin multiplicador por altura) y se funda donde la pendiente lo deja, también arriba.
+  Se descartaron la montaña suelta y los ríos sin vado (los vados son necesarios).
 
 ## 8. Fuente de la mesa
 
@@ -283,6 +290,8 @@ funcionar primero ahí, con three.js como en la mesa, ayuda a cerrar la represen
   (`node montar.mjs [salida.html]`). La página montada no se versiona.
 - `Consideraciones/artefactos/mesa_escalas_3d/datos-nuevo.json`: la misma ventana con el relieve a escala de pantalla
   (artefacto `71697908…`).
+- `Consideraciones/artefactos/mesa_escalas_3d/datos-alpina.json`: ventana de la región alpina del generador (x0 = 2078,
+  y0 = 108, artefacto `5aec9d8f…`, mismas alturas que `b93e8c18…`; ver `Docs/Mechanics/Generacion_Del_Mundo.md` §5.1).
 - `generador/scripts/datos-mesa-3d.ts`: regenera una ventana desde una seed y su artefacto
   (`npx tsx scripts/datos-mesa-3d.ts 42 mundo-<hash>.bin datos-nuevo.json [x0 y0]`, unos 50 s). `datos.json`, la
   ventana de antes, sale del generador anterior al relieve nuevo y ya no se puede regenerar.

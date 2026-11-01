@@ -98,6 +98,7 @@ para cada tramo:   enCamino = el tramo es una arista de la red de caminos
 ```
 - El coste se evalúa **a lo largo del tramo**, no en un punto al inicio de un paso: el plan no tiene la aproximación del tick.
 - Llano = 1, y sube con colinas, montañas y bosque (`1 + bosquePorDensidad × densidad`) (`COSTE_MOVIMIENTO`, `worldgen/config.ts`). Sobre la red de caminos el coste se multiplica por `factorCamino`.
+  *En Rust (decisión del autor, 2026-10-31):* el coste es la capa `coste` del artefacto, y desde el 2026-10-31 **solo la pendiente** lo sube: `1 + min(2,5; 3,6 · pendiente)` (llano 1, 35° 3,5). Ni la altura ni el bosque frenan. Detalle en `Generacion_Del_Mundo.md` §5.4.
 - `posicion(t)` interpola dentro del tramo. Un plan de un solo punto o vacío no se mueve.
 - **El plan se rehace** por un hecho: la orden cambia, muere la tropa que fijaba la velocidad mínima, se engancha o suelta una caravana, se construye un camino en el trayecto, empieza o acaba una batalla. El plan nuevo **empieza donde está la columna en ese instante**.
 - **Eventos que programa:** llegada, fin de víveres, deserción por moral (§6.3), encuentros (Combate §2).

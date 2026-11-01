@@ -2201,7 +2201,6 @@ fn con_pueblo(m: &M) -> (Esc, u64, u64, Punto) {
 fn el_saqueo_de_un_pueblo_en_unity_se_lleva_lo_que_hay_sobre_la_mitad_y_la_guarnicion_se_repone_a_las_6_horas() {
     let m = con_mundo!();
     let (mut e, madre, pueblo, sitio) = con_pueblo(m);
-    let guardado = e.n.pueblo(pueblo).unwrap().1.almacen.cantidad(Cobre);
     let saqueador = e.ejercito("beto", 2, sitio, &[Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce]);
     let t = e.n.ahora();
     assert!(e.atacar("beto", saqueador.1, ObjetivoAtaque::Pueblo(pueblo), true).aceptada());
@@ -2217,6 +2216,9 @@ fn el_saqueo_de_un_pueblo_en_unity_se_lleva_lo_que_hay_sobre_la_mitad_y_la_guarn
     assert_eq!(codigo(&e.atacar("gus", otro.1, ObjetivoAtaque::Pueblo(pueblo), true)), rechazos::BATALLA_BLOQUEADO);
     en_curso(&mut e.n, id, t + MIN, &[saqueador.1]);
     let res = resultado(&e.n, id, Lado::Atacante, 10);
+    // Lo guardado al llegar el resultado: el pueblo sigue extrayendo mientras se juega (lo que saca en esos minutos depende del nodo).
+    e.n.avanzar_hasta(t + 2 * MIN);
+    let guardado = e.n.pueblo(pueblo).unwrap().1.almacen.cantidad(Cobre);
     assert!(aplicar(&mut e.n, t + 2 * MIN, "res", id, res).aceptada());
     // Se lleva lo que está por encima de la mitad; la guarnición de serie queda en 20 y vuelve un minero cada 12 minutos.
     assert_eq!(e.carga(saqueador.0, Cobre), guardado - 250_000, "lo saqueado");

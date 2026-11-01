@@ -13,26 +13,13 @@ export function esTransitable(campo: CampoElevacion, p: Point, altura?: number):
     / ESCALA_TERRENO.metrosHorizontalesPorUnidad <= ESCALA_TERRENO.pendienteMaximaTransitable;
 }
 
-/** Multiplicador de coste de movimiento en un punto: cuánto frena el terreno que sí se puede pisar
- * (quién puede pisarlo lo decide `esTransitable`). */
-/** `altura` opcional: la elevación ya calculada en `p`, para no recalcularla (mismo resultado). */
+/** Multiplicador de coste de movimiento en un punto: cuánto frena el terreno que sí se puede pisar (quién puede pisarlo lo
+ * decide `esTransitable`). Solo cuenta la pendiente (decisión del autor, 2026-10-31): la altura no frena.
+ * `altura` opcional: la elevación ya calculada en `p`, para no recalcularla (mismo resultado). */
 export function costeEnPunto(campo: CampoElevacion, p: Point, altura?: number): number {
+  if (evaluarTerreno(campo, p, altura) === 'agua') return COSTE_MOVIMIENTO.agua;
   const { dx, dy } = gradienteElevacion(campo, p, ESCALA_TERRENO.pasoPendiente);
   const pendiente = Math.hypot(dx, dy) * ESCALA_TERRENO.metrosVerticalesPorElevacion
     / ESCALA_TERRENO.metrosHorizontalesPorUnidad;
-  const factorPendiente = 1 + Math.min(2, pendiente * 0.45);
-  switch (evaluarTerreno(campo, p, altura)) {
-    case 'llano':
-      return COSTE_MOVIMIENTO.llano * factorPendiente;
-    case 'costa':
-      return COSTE_MOVIMIENTO.costa * factorPendiente;
-    case 'colina':
-      return COSTE_MOVIMIENTO.colina * factorPendiente;
-    case 'montana':
-      return COSTE_MOVIMIENTO.montana * factorPendiente;
-    case 'cima':
-      return COSTE_MOVIMIENTO.cima * factorPendiente;
-    case 'agua':
-      return COSTE_MOVIMIENTO.agua;
-  }
+  return 1 + Math.min(COSTE_MOVIMIENTO.topePendiente, COSTE_MOVIMIENTO.porPendiente * pendiente);
 }

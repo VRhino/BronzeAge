@@ -9,6 +9,7 @@ import { comprobarConexion, conexionPorCeldas } from './conexion';
 import { muestrearCeldas } from './celdas';
 import { FACTOR } from './campamentos';
 import { crearDetalleRelieve } from './relieveDetalle';
+import { crearRegionAlpina } from './regionAlpina';
 
 export function generarRelieve(seed: number, ancho: number, alto: number) {
   const config = { ancho, alto, seed };
@@ -32,10 +33,11 @@ export function generarRelieve(seed: number, ancho: number, alto: number) {
   // Con el detalle, la conexión se mide en las celdas de 4 u del artefacto (la malla gruesa ya no ve los valles). Si
   // alguna región queda aislada, se repite con menos detalle, como con los lagos. La rejilla se devuelve para que nadie
   // vuelva a muestrear los mismos centros.
+  const alpina = crearRegionAlpina(seed, regional, rios, lagos);
   let fuerzaDetalle = 1, celdas, final;
   for (const fuerza of [1, 0.8, 0.6, 0.4, 0]) {
     fuerzaDetalle = fuerza;
-    elevacion.detalle = crearDetalleRelieve(seed, rios, regional.barreras, fuerza);
+    elevacion.detalle = crearDetalleRelieve(seed, rios, regional.barreras, fuerza, alpina);
     celdas = muestrearCeldas({ elevacion, forestacion }, { ancho, alto }, 4 * FACTOR);
     final = conexionPorCeldas(regional, celdas);
     if (final.conectadas === final.zonas) break;

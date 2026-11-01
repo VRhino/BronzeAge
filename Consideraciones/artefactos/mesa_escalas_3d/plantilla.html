@@ -179,6 +179,8 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
           <input type="radio" name="terreno" id="t-actual" value="actual"><label for="t-actual">Antes</label>
           <input type="radio" name="terreno" id="t-nuevo" value="nuevo" checked><label for="t-nuevo">Generador nuevo</label>
           <input type="radio" name="terreno" id="t-propuesta" value="propuesta"><label for="t-propuesta">Propuesta</label>
+          <input type="radio" name="terreno" id="t-alpina" value="alpina"><label for="t-alpina">Boceto alpino</label>
+          <input type="radio" name="terreno" id="t-alpinagen" value="alpinagen"><label for="t-alpinagen">Generador: región alpina</label>
         </div>
         <p class="ficha-terreno" id="ficha-terreno"></p>
       </div>
@@ -219,6 +221,8 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
           <button type="button" data-ir="llano">Llano</button>
           <button type="button" data-ir="campamento">Campamento</button>
           <button type="button" data-ir="ciudad">Su ciudad</button>
+          <button type="button" data-ir="altiplano">Altiplano alto (región alpina)</button>
+          <button type="button" data-ir="entrada">Valle de entrada (región alpina)</button>
         </div>
       </div>
 
@@ -294,13 +298,18 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
         <button type="button" data-escena="propuesta,cordillera">Ir al macizo</button>
       </li>
       <li>
+        <h3>Región alpina (prueba)</h3>
+        <p>Una zona montañosa entera en altura: desde el llano se sube poco a poco, y arriba hay altiplanos a varias alturas, separados por montaña y unidos por pasos. La columna empieza en el altiplano central, con plazas fundadas arriba. Solo frena la pendiente, como en todo el mapa.</p>
+        <div class="botones"><button type="button" data-escena="alpinagen,llano">En el generador</button><button type="button" data-escena="alpina,inicio">Altiplano central</button><button type="button" data-escena="alpina,altiplano">Altiplano alto</button><button type="button" data-escena="alpina,entrada">Valle de entrada</button></div>
+      </li>
+      <li>
         <h3>Plazas, pueblos y avanzadas</h3>
         <p>Cada plaza es una ciudad con su zona. Sus pueblos y avanzadas son partes de la plaza en el mapa y van siempre dentro de su zona, en la parte que le toca cuando dos zonas se pisan. Cuántos hay depende del nivel: prueba con «Nivel de las plazas».</p>
         <button type="button" data-escena="plazas">Verlo</button>
       </li>
       <li>
         <h3>Mover la columna</h3>
-        <p>Haz clic en el terreno. La ruta se engancha a los nodos más cercanos, cruza la rejilla con A* y, con el suavizado, se estira en rectas que no cuestan más. La columna va más despacio en colina (×1,8) y en montaña (×3,5); el agua y las laderas que se ven de más de 35° no se cruzan, y el río se pasa por los vados.</p>
+        <p>Haz clic en el terreno. La ruta se engancha a los nodos más cercanos, cruza la rejilla con A* y, con el suavizado, se estira en rectas que no cuestan más. La columna va más despacio cuanto más empinado es el terreno (de ×1 en llano a ×3,5 a 35°), sea cual sea la altura; el agua y las laderas que se ven de más de 35° no se cruzan, y el río se pasa por los vados.</p>
         <button type="button" data-escena="columna">Verlo</button>
       </li>
       <li>
@@ -384,7 +393,7 @@ td.num { font-family: var(--f-dato); font-variant-numeric: tabular-nums; white-s
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
 <script>
 (async () => {
-const D = __DATOS__, DN = __DATOS_NUEVO__;
+const D = __DATOS__, DN = __DATOS_NUEVO__, DA = __DATOS_ALPINA__;
 const FACTOR = 12, VEL = .5, BASE_M = 450, FOV = 35, PEND_MAX = .7, ALTO_SOLDADO = .136, REGLA_U = 10;
 // El suelo que enseña la cámara de juego, medido sobre el plano del héroe (lo recalcula `colocarCamara`): el ancho en la fila del héroe,
 // hasta dónde llega hacia abajo y hacia el fondo de la pantalla, y las cuatro esquinas respecto al héroe (para la huella de la vista libre)
@@ -400,7 +409,8 @@ const FRACCION_CIUDAD = .1, SEPARACION_PUEBLOS = 3;
 // La ciudad del juego ocupa el 10 % del radio de su zona; su maqueta crece con «Plazas» como los pueblos y las avanzadas (×1 = la del juego)
 const radioCiudad = () => NIVELES[estado.nivel].radio * FRACCION_CIUDAD * estado.maqueta;
 // generador: COSTE_MOVIMIENTO por clase y factor de pendiente de costeEnPunto
-const COSTE = { llano: 1, colina: 1.8, 'montaña': 3.5, cima: 12 };
+// generador: COSTE_MOVIMIENTO desde el 2026-10-31, solo frena la pendiente (la altura no)
+const COSTE_PENDIENTE = { por: 3.6, tope: 2.5 };
 const $ = id => document.getElementById(id);
 const aviso = $('aviso');
 const fallo = msg => { aviso.textContent = msg; aviso.hidden = false; };
@@ -418,7 +428,7 @@ const ventana = async V => {
   const bosque = new Float32Array(BX * BY); for (let i = 0; i < bosque.length; i++) bosque[i] = bosB[i] / 255;
   return { hm, agua: aguaB, bosque, rios: V.rios, anchoRio: .9, vados: [], umbrales: [545, 600, 685], campamentos: V.campamentos, puntos: V.puntos };
 };
-const [real, nuevo] = await Promise.all([ventana(D), ventana(DN)]);
+const [real, nuevo, alpinaGen] = await Promise.all([ventana(D), ventana(DN), ventana(DA)]);
 
 // ---------- ruido (simplex 2D) para la propuesta ----------
 function ruido(semilla) {
@@ -482,6 +492,79 @@ function propuesta(S) {
   return { hm, agua, bosque, rios: [rio, afl], anchoRio, vados, umbrales: [478, 500, 540], campamentos: D.campamentos, puntos: D.puntos };
 }
 
+// Región alpina (prueba del 2026-10-31): desde el llano del sur se sube poco a poco a una región alta, una cadena de valles
+// en altura con altiplanos a varias alturas, cerrados por montaña y unidos entre sí por pasos. Dos valles suben desde el llano.
+// Las reglas del juego desde el 2026-10-31: el movimiento solo lo frena la pendiente (no la altura) y se funda donde la pendiente lo deje.
+const ALTIPLANOS = [
+  { n: 'Altiplano bajo', x: 72, y: 104, rx: 24, ry: 15, a: .35, piso: 515 },
+  { n: 'Altiplano central', x: 158, y: 78, rx: 30, ry: 17, a: -.2, piso: 548 },
+  { n: 'Altiplano del este', x: 252, y: 108, rx: 23, ry: 14, a: .5, piso: 528 },
+  { n: 'Altiplano alto', x: 92, y: 34, rx: 22, ry: 13, a: .1, piso: 590 },
+  { n: 'Altiplano de la cumbre', x: 222, y: 30, rx: 27, ry: 14, a: -.25, piso: 618 },
+  { n: 'Altiplano colgado', x: 293, y: 46, rx: 15, ry: 11, a: 0, piso: 572 },
+];
+function alpina(S) {
+  const A = ALTIPLANOS;
+  // pasos entre altiplanos [desde, hasta, desvío lateral del punto medio, altura del collado en m] y valles de entrada desde el llano
+  const PASOS = [[0, 1, 10, 14], [1, 2, -12, 18], [0, 3, -8, 22], [1, 4, 9, 20], [3, 4, -6, 16], [2, 5, 7, 12], [4, 5, -5, 14]];
+  // curva con meandros: una bezier con un vaivén lateral que se apaga en los extremos
+  let semillaSenda = 0;
+  const bezier = (a, m, b, n = 48) => { const o = [], fase = 37 * ++semillaSenda; for (let k = 0; k <= n; k++) { const t = k / n, u = 1 - t; o.push([u * u * a[0] + 2 * u * t * m[0] + t * t * b[0], u * u * a[1] + 2 * u * t * m[1] + t * t * b[1]]); }
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]), amp = Math.min(6, L * .05);
+    return o.map(([x, y], k) => { const t = k / n, q = o[Math.min(n, k + 1)], r = o[Math.max(0, k - 1)], dx = q[0] - r[0], dy = q[1] - r[1], l = Math.hypot(dx, dy) || 1, w = amp * Math.sin(Math.PI * t) * R4(fase + t * L / 40, fase) * 1.6; return [x - dy / l * w, y + dx / l * w]; }); };
+  const sendas = [];
+  for (const [i, j, desvio, col] of PASOS) {
+    const a = A[i], b = A[j], mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, l = Math.hypot(b.x - a.x, b.y - a.y);
+    const m = [mx - (b.y - a.y) / l * desvio, my + (b.x - a.x) / l * desvio];
+    sendas.push({ p: bezier([a.x, a.y], m, [b.x, b.y]), perfil: t => a.piso + (b.piso - a.piso) * t + col * Math.sin(Math.PI * t) ** 2, ancho: .6 * S, ladera: 5 * S });
+  }
+  // valles de entrada: del llano (470 m) al altiplano, subiendo sin collado
+  const entradas = [[A[0], [40, 236], [48, 168]], [A[2], [262, 236], [276, 175]]];
+  for (const [b, pie, m] of entradas) sendas.push({ p: bezier(pie, m, [b.x, b.y]), perfil: t => 469 + (b.piso - 469) * suave(0, 1, t) ** .8, ancho: 1.4 * S, ladera: 6 * S, entrada: true });
+  for (const s of sendas) { s.acum = [0]; for (let k = 1; k < s.p.length; k++) s.acum.push(s.acum[k - 1] + Math.hypot(s.p[k][0] - s.p[k - 1][0], s.p[k][1] - s.p[k - 1][1])); s.L = s.acum[s.acum.length - 1]; }
+  // ríos: bajan de los altiplanos bajo y del este por los valles de entrada y salen por el sur
+  const rios = entradas.map((_, k) => { const s = sendas[PASOS.length + k]; return [...s.p.slice().reverse(), [s.p[0][0] + (k ? 6 : -5), H + 4]]; });
+  const tramos = []; for (const r of rios) for (let k = 1; k < r.length; k++) tramos.push([r[k - 1][0], r[k - 1][1], r[k][0], r[k][1]]);
+  const vados = []; for (const r of rios) { let acc = 0; for (let k = 1; k < r.length; k++) { acc += Math.hypot(r[k][0] - r[k - 1][0], r[k][1] - r[k - 1][1]); if (acc > 26) { vados.push(r[k]); acc = 0; } } }
+  const hm = new Float32Array(NX * NY), agua = new Uint8Array(NX * NY), anchoRio = .9;
+  for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+    const x = i * PASO, y = j * PASO, yb = y + 14 * R4(x / 70, 7.3);
+    // la región sube desde el sur: base de 468 m en el llano, 505 m al pie de la montaña y 525 m al fondo
+    const region = suave(222, 120, yb), mont = suave(178, 122, yb);
+    let h = 468 + 37 * region + 20 * suave(120, 10, yb) + 4 * fbm(R1, x / 60, y / 60, 2) + 1.8 * S * fbm(R2, x / (6 * S), y / (6 * S), 3);
+    h += (1 - mont) * region * 14 * S * Math.max(0, fbm(R3, x / (14 * S), y / (14 * S), 3) * .9 + .3);
+    if (mont > 0) { const c = crestas(R1, x / (30 * S) + 31, y / (30 * S) + 9, 4); h += mont * S * (26 + 82 * c * (.65 + .35 * suave(.2, .8, fbm(R2, x / (60 * S), y / (60 * S), 2) * .5 + .5))); }
+    // pasos y valles: un fondo que sigue su perfil, con las laderas de la montaña a los lados
+    for (const s of sendas) {
+      let d = 1e9, t = 0;
+      for (let k = 1; k < s.p.length; k++) { const [ax, ay] = s.p[k - 1], [bx, by] = s.p[k]; if (Math.abs(ax - x) > 30 && Math.abs(bx - x) > 30) continue; const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy, u = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l2)), dd = Math.hypot(x - ax - u * dx, y - ay - u * dy); if (dd < d) { d = dd; t = (s.acum[k - 1] + u * Math.sqrt(l2)) / s.L; } }
+      if (d > s.ancho + s.ladera) continue;
+      // fondo plano de `ancho` u a cada lado y una ladera de `ladera` u hasta la montaña
+      const g = Math.pow(1 - suave(s.ancho, s.ancho + s.ladera, d), 1.6), fondo = s.perfil(t) + .5 * S * fbm(R3, x / 6, y / 6, 2);
+      if (h > fondo || s.entrada) h = h + (fondo - h) * g; else h = h + (fondo - h) * g * .6;
+    }
+    // altiplanos: suelo casi llano con lomas suaves y un borde corto, que deja la ladera de la montaña fuera
+    for (const a of A) {
+      const ca = Math.cos(a.a), sa = Math.sin(a.a), dx = x - a.x, dy = y - a.y, u = (dx * ca + dy * sa) / a.rx, v = (-dx * sa + dy * ca) / a.ry;
+      const e = Math.hypot(u, v) * (1 + .22 * fbm(R2, x / 16 + a.x, y / 16, 2)); if (e > 1.3) continue;
+      const w = 1 - suave(.78, 1.04, e), suelo = a.piso + 1.4 * S * fbm(R4, x / (5 * S), y / (5 * S), 2) + 2.5 * e * e;
+      h = h + (suelo - h) * w;
+    }
+    for (const tr of tramos) { if (Math.abs(tr[1] - y) > 6 && Math.abs(tr[3] - y) > 6) continue; if (distSeg(x, y, ...tr) < anchoRio * .5 && !vados.some(v => (x - v[0]) ** 2 + (y - v[1]) ** 2 < 2.25)) { agua[j * NX + i] = 1; break; } }
+    hm[j * NX + i] = h;
+  }
+  const bosque = new Float32Array(BX * BY);
+  for (let j = 0; j < BY; j++) for (let i = 0; i < BX; i++) {
+    const x = i + .5, y = j + .5, k = Math.round(y / PASO) * NX + Math.round(x / PASO), h = hm[k];
+    let f = fbm(R3, x / (20 * S) + 40, y / (20 * S), 3) * 1.1 + .1 + .3 * fbm(R2, x / (3.5 * S) + 9, y / (3.5 * S), 2);
+    f *= 1 - suave(585, 625, h);
+    bosque[j * BX + i] = Math.max(0, Math.min(1, f));
+  }
+  const p0 = sendas[PASOS.length].p[0], p1 = sendas[PASOS.length + 1].p[0];
+  return { hm, agua, bosque, rios, anchoRio, vados, umbrales: [500, 560, 665], campamentos: [],
+    puntos: { inicio: [A[1].x, A[1].y], llano: [160, 225], cordillera: [158, 50], campamento: [p0[0], p0[1] - 4], altiplano: [A[4].x, A[4].y], entrada: [p1[0], p1[1] - 4] } };
+}
+
 // ---------- estado ----------
 const estado = { terreno: 'nuevo', vista: 'juego', inclinacion: 30, giro: 0, vision: 15, zoom: 'normal', encuadre: 15, apertura: 35, verVision: true, nieblaVision: true, ...ELEGIDOS, rejilla: 4, verRejilla: true, suavizado: true, columna: true, plazas: true, zonas: true, nivel: 2, arboles: true, pausa: reducido };
 let T = real;
@@ -494,7 +577,7 @@ const alturaM = (x, y) => {
   return (h[k] * (1 - tx) + h[k + 1] * tx) * (1 - ty) + (h[k + NX] * (1 - tx) + h[k + NX + 1] * tx) * ty;
 };
 // «Altura» solo exagera la propuesta: las ventanas del generador van con sus alturas tal cual
-const exag = () => estado.terreno === 'propuesta' ? estado.exag : 1;
+const exag = () => estado.terreno === 'propuesta' || estado.terreno === 'alpina' ? estado.exag : 1;
 const alturaU = (x, y) => (alturaM(x, y) - BASE_M) / FACTOR * exag();
 const aguaEn = (x, y) => { const i = Math.round(x / PASO), j = Math.round(y / PASO); return i < 0 || j < 0 || i >= NX || j >= NY ? 1 : T.agua[j * NX + i]; };
 const bosqueEn = (x, y) => { const i = Math.floor(x), j = Math.floor(y); return i < 0 || j < 0 || i >= BX || j >= BY ? 0 : T.bosque[j * BX + i]; };
@@ -502,7 +585,7 @@ const bosqueEn = (x, y) => { const i = Math.floor(x), j = Math.floor(y); return 
 const pendiente = (x, y) => Math.hypot(alturaM(x + .5, y) - alturaM(x - .5, y), alturaM(x, y + .5) - alturaM(x, y - .5)) / FACTOR * exag();
 const clase = h => { const [a, b, c] = T.umbrales; return h < a ? 'llano' : h < b ? 'colina' : h < c ? 'montaña' : 'cima'; };
 const transitable = (x, y) => x >= 0 && y >= 0 && x <= W && y <= H && !aguaEn(x, y) && pendiente(x, y) <= PEND_MAX;
-const costeEn = (x, y) => COSTE[clase(alturaM(x, y))] * (1 + Math.min(2, pendiente(x, y) * .45));
+const costeEn = (x, y) => 1 + Math.min(COSTE_PENDIENTE.tope, COSTE_PENDIENTE.por * pendiente(x, y));
 const V3 = (x, y, dy = 0) => new THREE.Vector3(x - W / 2, alturaU(x, y) + dy, y - H / 2);
 const hash = (a, b, c = 0) => { let h = Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263) ^ Math.imul(c | 0, 1442695041); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 
@@ -648,12 +731,12 @@ function elegirPlazas() {
   for (let f = 0; f < 10; f++) for (let c = 0; c < 12; c++) {
     const x = 12 + c * 30 + (f % 2) * 15, y = 12 + f * 26;
     if (x > W - 6 || y > H - 6) continue;
-    if (alturaM(x, y) >= T.umbrales[1] || pendiente(x, y) > .3 || hash(c, f, 3) < .12) continue;
+    if (pendiente(x, y) > .3 || hash(c, f, 3) < .12) continue;
     let mojado = false; for (let a = 0; a < 8 && !mojado; a++) mojado = !!aguaEn(x + 2 * Math.cos(a * .785), y + 2 * Math.sin(a * .785));
     if (mojado || aguaEn(x, y)) continue;
     ciudades.push({ x, y, semilla: f * 31 + c });
   }
-  const centro = T.puntos.llano;
+  const centro = T.puntos.inicio || T.puntos.llano;
   columnaA = ciudades.slice().sort((a, b) => Math.hypot(a.x - centro[0], a.y - centro[1]) - Math.hypot(b.x - centro[0], b.y - centro[1]))[0] || null;
   const vecinas = columnaA ? ciudades.filter(p => p !== columnaA && Math.abs(Math.hypot(p.x - columnaA.x, p.y - columnaA.y) - 30) < 2) : [];
   vecinas.sort((a, b) => Math.abs(Math.atan2(a.y - columnaA.y, a.x - columnaA.x) + 1.05) - Math.abs(Math.atan2(b.y - columnaA.y, b.x - columnaA.x) + 1.05));
@@ -1047,12 +1130,15 @@ function lecturas(ahora) {
 const FICHAS = {
   actual: 'El generador de antes, en la misma ventana: <b>320 × 240 u</b> entre la cordillera norte y el campamento‑0. El llano es una mesa y la cordillera, una rampa lisa: en el macizo, <b>50 m</b> de desnivel por pantalla (mediana) y el <b>13 %</b> de laderas de más de 35°.',
   nuevo: 'El generador con el relieve nuevo (seed 42), misma ventana y alturas tal cual: crestas cada ~92 u, valles hundidos en los ríos, colinas y lomas, sobre la geografía regional. En el macizo, <b>46 m</b> de desnivel por pantalla de mediana y <b>196 m</b> en el percentil 90, y el <b>25 %</b> de laderas de más de 35°. Las tierras altas llevan colinas y los pasos quedan limpios para no cortar regiones.',
+  alpinagen: 'El generador con la <b>región alpina</b> en las Tierras altas secas (seed 42), alturas tal cual: una cadena de valles en altura con altiplanos a varias alturas, unidos por pasos, y la subida desde fuera en el borde. Como en el juego desde el 2026-10-31: <b>solo frena la pendiente</b> y se funda en cualquier sitio llano (hasta 0,3 de pendiente), también arriba.',
+  alpina: 'Prueba del 2026-10-31. Desde el llano del sur el terreno va subiendo hasta una <b>región alta</b>: una cadena de valles en altura con <b>seis altiplanos</b> entre 515 y 618 m, cerrados por montaña y unidos por <b>pasos</b> con su collado. Dos valles con río suben desde el llano. Como en el juego desde el 2026-10-31: <b>solo frena la pendiente</b> (la altura no cuesta) y se funda en cualquier sitio llano, también arriba. No sale del generador.',
   propuesta: 'Boceto con los tamaños de la regla ×100: crestas, valles, colinas y lomas que caben en una o pocas pantallas. «Tamaño del relieve» escala tamaño y altura a la vez; «Altura» exagera las alturas, y con ellas las pendientes que deciden el paso. No sale del generador.',
 };
-let propuestaCache = null;
+let propuestaCache = null, alpinaCache = null;
 function montarTerreno() {
-  if (estado.terreno === 'propuesta') { if (!propuestaCache || propuestaCache.S !== estado.relieve) propuestaCache = { S: estado.relieve, t: propuesta(estado.relieve) }; T = propuestaCache.t; } else T = estado.terreno === 'nuevo' ? nuevo : real;
-  $('chip-terreno').textContent = estado.terreno === 'actual' ? 'Generador de antes · seed 42' : estado.terreno === 'nuevo' ? 'Generador nuevo · seed 42' : `Propuesta ×100 · relieve ×${fmt(estado.relieve)} · altura ×${fmt(estado.exag)}`;
+  if (estado.terreno === 'alpina') { if (!alpinaCache || alpinaCache.S !== estado.relieve) alpinaCache = { S: estado.relieve, t: alpina(estado.relieve) }; T = alpinaCache.t; }
+  else if (estado.terreno === 'propuesta') { if (!propuestaCache || propuestaCache.S !== estado.relieve) propuestaCache = { S: estado.relieve, t: propuesta(estado.relieve) }; T = propuestaCache.t; } else T = estado.terreno === 'nuevo' ? nuevo : estado.terreno === 'alpinagen' ? alpinaGen : real;
+  $('chip-terreno').textContent = estado.terreno === 'actual' ? 'Generador de antes · seed 42' : estado.terreno === 'nuevo' ? 'Generador nuevo · seed 42' : estado.terreno === 'alpinagen' ? 'Generador · región alpina · seed 42' : estado.terreno === 'alpina' ? `Región alpina · relieve ×${fmt(estado.relieve)} · altura ×${fmt(estado.exag)}` : `Propuesta ×100 · relieve ×${fmt(estado.relieve)} · altura ×${fmt(estado.exag)}`;
   $('ficha-terreno').innerHTML = FICHAS[estado.terreno];
   pintarTerreno(); elegirPlazas(); construirNav(); montarCapas(); iniciarColumna();
 }
@@ -1070,7 +1156,7 @@ deslizador('encuadre', 'encuadre', v => `${v} u`);
 deslizador('apertura', 'apertura', v => `${v}°`);
 $('encuadre').addEventListener('input', pintarChipVista);
 deslizador('exag', 'exag', v => `×${fmt(v)}`, montarTerreno);
-deslizador('relieve', 'relieve', v => `×${fmt(v)}`, () => { if (estado.terreno === 'propuesta') montarTerreno(); });
+deslizador('relieve', 'relieve', v => `×${fmt(v)}`, () => { if (estado.terreno === 'propuesta' || estado.terreno === 'alpina') montarTerreno(); });
 deslizador('copa', 'copa', v => `${fmt(v)} u · ${fmt(v * FACTOR, 0)} m`, construirArboles);
 deslizador('maqueta', 'maqueta', v => `×${fmt(v)}`, () => { repartirElementos(); construirPlazas(); construirArboles(); });
 deslizador('tropa', 'tropa', v => `×${fmt(v)} · ${fmt(v * ALTO_SOLDADO * FACTOR)} m`);

@@ -46,7 +46,7 @@ dependencies = [
 
 [[package]]
 name = "asentamiento"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "base",
  "serde_json",
@@ -65,7 +65,7 @@ checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
 name = "batch"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "asentamiento",
  "base",
@@ -544,7 +544,7 @@ checksum = "1d87ecb2933e8aeadb3e3a02b828fed80a7528047e68b4f424523a0981a3a084"
 
 [[package]]
 name = "mundo"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "contrato",
  "prost",
@@ -555,7 +555,7 @@ dependencies = [
 
 [[package]]
 name = "nucleo"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "asentamiento",
  "base",
@@ -1071,7 +1071,7 @@ dependencies = [
 
 [[package]]
 name = "territorio"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base",
 ]

@@ -25,12 +25,11 @@ export const ESCALA_TERRENO = congelar({
   pasoPendiente: 12,
 });
 
-/** Multiplicador de coste de movimiento por terreno (1 = sin penalización). */
+/** Multiplicador de coste de movimiento (1 = llano sin pendiente). Desde el 2026-10-31 (decisión del autor) frena solo la
+ * pendiente, no la altura: `1 + min(topePendiente, porPendiente · pendiente)`, con la pendiente en m/m. Con 35° (0,7, la
+ * máxima transitable) vale 3,5, lo que antes costaba la montaña llana. El agua no se pisa; su valor es el de siempre. */
 export const COSTE_MOVIMIENTO = congelar({
-  llano: 1,
-  costa: 1.1,
-  colina: 1.8,
-  montana: 3.5,
-  cima: 12,
+  porPendiente: 3.6,
+  topePendiente: 2.5,
   agua: 15,
 });
