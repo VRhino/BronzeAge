@@ -45,7 +45,6 @@ impl Nucleo {
 
     /// Pone en la cola un plazo del contrato de `mercenario` para el instante `en` (decisión 17 del plan). No sube generaciones: la cita que quede vieja (un contrato
     /// prorrogado, una orden sustituida, un contrato acabado) se ignora al vencer porque su instante ya no es el guardado.
-    #[expect(dead_code, reason = "lo llaman la firma (T1), el mando (T5) y la medalla Leal (T9)")]
     pub(super) fn citar_contrato(&mut self, mercenario: u64, suceso: SucesoContrato, en: Instante) {
         let clave = self.estado.generaciones.clave(entidad_contrato(mercenario));
         self.estado.cola.programar(en, PRIO_CONTRATO, clave, Carga::Contrato(suceso));

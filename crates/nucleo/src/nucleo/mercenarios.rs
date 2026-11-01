@@ -191,7 +191,7 @@ impl Nucleo {
     }
 
     /// El campamento donde reside el héroe, si reside en uno.
-    fn campamento_de_residencia(&self, heroe: u64) -> Option<u32> {
+    pub(super) fn campamento_de_residencia(&self, heroe: u64) -> Option<u32> {
         match self.heroe(heroe)?.heroe.residencia {
             Some(Residencia::Campamento(c)) => Some(c),
             _ => None,
@@ -210,6 +210,8 @@ impl Nucleo {
             }
         }
         self.tr.tocar(Clase::Heroe, heroe);
+        // Una oferta del tablón es del campamento donde se reside (Mercenarios_Por_Contrato §3): al mudarse se retira sola.
+        self.quitar_oferta(t, heroe);
         // Su residencia viaja en los miembros de su Facción (Participacion §3).
         if let Some(f) = self.heroe(heroe).and_then(|h| h.faccion) {
             self.tr.tocar(Clase::Faccion, u64::from(f));

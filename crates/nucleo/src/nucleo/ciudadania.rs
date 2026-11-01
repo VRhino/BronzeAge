@@ -174,7 +174,7 @@ impl Nucleo {
 
     /// Si el héroe es un bot para la ciudadanía: controlador bot y no sintético. El héroe de campo de `CrearEjercito` (andamiaje de administración, con controlador bot desde siempre)
     /// no cuenta: no es de ninguna cuenta de bot.
-    fn es_bot(&self, heroe: u64) -> bool {
+    pub(super) fn es_bot(&self, heroe: u64) -> bool {
         self.heroe(heroe).is_some_and(|h| h.heroe.controlador == Controlador::Bot && !h.sintetico)
     }
 
