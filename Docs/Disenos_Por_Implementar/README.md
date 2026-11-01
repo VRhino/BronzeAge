@@ -6,6 +6,6 @@ Diseños **cerrados con el autor pero sin implementar**. Aquí viven mientras no
 
 | Documento | Diseño | Entrada |
 |---|---|---|
-| [`Mercenarios_Por_Contrato.md`](Mercenarios_Por_Contrato.md) | 2026-10-26 | `Mecanicas a desarrollar.md` 48 |
+| [`Mercenarios_Por_Contrato.md`](Mercenarios_Por_Contrato.md) (y su versión visual [`Mercenarios_Por_Contrato.html`](Mercenarios_Por_Contrato.html)) | 2026-10-26, revisado y cerrado el 2026-11-01 | `Mecanicas a desarrollar.md` 48 |
 | [`Informes_De_Taberna.md`](Informes_De_Taberna.md) | 2026-10-31 | `Mecanicas a desarrollar.md` 65 |
 
