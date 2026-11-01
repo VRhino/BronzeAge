@@ -380,9 +380,21 @@ impl Nucleo {
 
     // ───────────────────────────── Salir del mundo y volver (Reloj_Y_Eventos §7) ─────────────────────────────
 
+    /// Quién manda `columna` cuando `saliente` se va o se desconecta: el participante más antiguo, y el conectado antes que el que ya se está yendo. Un mercenario contratado (marcado)
+    /// manda el último, así que van por orden: el conectado sin marca, cualquiera sin marca, el conectado y por fin cualquiera (Mercenarios_Por_Contrato, decisión 14).
+    pub(super) fn sucesor_automatico(&self, columna: &Columna, saliente: u64) -> Option<u64> {
+        let conectado = |h: u64| self.heroe(h).is_some_and(|x| !x.heroe.presencia.fuera && x.heroe.presencia.desconecta_en.is_none());
+        let libre = |h: u64| !self.es_marcado(h);
+        columna
+            .sucesor(saliente, &|h| conectado(h) && libre(h))
+            .or_else(|| columna.sucesor(saliente, &libre))
+            .or_else(|| columna.sucesor(saliente, &conectado))
+            .or_else(|| columna.sucesor(saliente, &|_| true))
+    }
+
     /// El héroe sale del mundo. Dentro de una plaza o de un campamento no se mueve nada (solo pierde el control). Con su columna en el mapa se lleva
     /// sus escuadras (`fuera`), su parte del carro y sus víveres, y reaparecerá en su punto: si la columna es un ejército con más gente se separa con lo
-    /// suyo y el mando pasa al más antiguo de los conectados; si iba solo, la columna deja de existir y sus caravanas adjuntas vuelven solas a su origen.
+    /// suyo y el mando pasa a quien dice [`Nucleo::sucesor_automatico`]; si iba solo, la columna deja de existir y sus caravanas adjuntas vuelven solas a su origen.
     pub(super) fn sale_del_mundo(&mut self, id: u64, t: Instante) {
         let mr = self.estado.reglas.economia.militar.clone();
         let residencia = self.heroe(id).and_then(|h| match h.heroe.residencia {
@@ -398,9 +410,7 @@ impl Nucleo {
         let (posicion, suyas, antes) = (e.posicion_en(t), self.escuadras_de_heroe_en(id, c), self.velocidad_de_columna(e));
         let solo = e.columna.participantes.len() <= 1;
         let (carro, viveres) = if !solo {
-            // El mando pasa al conectado de más antigüedad antes de irse; si no hay ninguno conectado, al de más antigüedad.
-            let conectado = |h: u64| self.heroe(h).is_some_and(|x| !x.heroe.presencia.fuera && x.heroe.presencia.desconecta_en.is_none());
-            let sucesor = e.columna.sucesor(id, &conectado).or_else(|| e.columna.sucesor(id, &|_| true));
+            let sucesor = self.sucesor_automatico(&e.columna, id);
             let Estado { ejercitos, militar, .. } = &mut self.estado;
             let e = ejercitos.get_mut(&c).expect("existe");
             let lider_antes = e.columna.lider;

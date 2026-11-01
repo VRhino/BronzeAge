@@ -18,7 +18,7 @@ use militar::catalogo::Tropa;
 use militar::columna::Politica;
 use militar::heroe::{Controlador, Residencia};
 use militar::presencia::Ubicacion;
-use nucleo::{rechazos, Comando, Dato, EventoNucleo, Nucleo, ObjetivoAtaque, Peticion, Reglas, Relacion};
+use nucleo::{rechazos, Comando, Dato, EventoNucleo, Nucleo, ObjetivoAtaque, Peticion, Relacion};
 use politica::Marca;
 
 const MIN: Instante = MS_POR_MINUTO;
@@ -324,7 +324,7 @@ fn despedir_pide_un_contrato_de_su_faccion_y_un_cargo_que_podria_firmarlo_hoy() 
 #[test]
 fn despedir_a_quien_combate_se_acepta_y_el_contrato_acaba_al_cerrarse_su_batalla() {
     let m = con_mundo!();
-    let mut e = E::sobre(m, mc::nucleo_con(m, Reglas { batallas_en_unity: true, ..Reglas::default() }));
+    let mut e = E::sobre(m, mc::nucleo_con(m, |r| r.batallas_en_unity = true));
     let (bot, rey, plaza) = (e.bot("bot-1"), e.rey, e.plaza);
     mc::ok(&mut e.n, "admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Guerra) });
     assert!(e.contratar(rey, bot, Trabajo::Defender, Objetivo::Plaza(plaza), Some(7)).aceptada());

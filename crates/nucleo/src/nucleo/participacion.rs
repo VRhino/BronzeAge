@@ -55,14 +55,16 @@ impl Nucleo {
             .collect()
     }
 
-    /// Suma `puntos` a cada héroe en la plaza (si sigue en pie) y toca la plaza y su Facción.
+    /// Suma `puntos` a cada héroe en la plaza (si sigue en pie) y toca la plaza y su Facción. Un mercenario contratado (marcado) no gana Participación, venga de donde venga: sus hechos
+    /// cuentan para las misiones, pero no para el reparto de la plaza (Mercenarios_Por_Contrato §11).
     pub(super) fn sumar_participacion(&mut self, plaza: u64, heroes: &[u64], puntos: u64) {
         let Some(f) = self.estado.asentamientos.get(&plaza).map(|a| a.faccion) else { return };
+        let heroes: Vec<u64> = heroes.iter().copied().filter(|&h| !self.es_marcado(h)).collect();
         if heroes.is_empty() || puntos == 0 {
             return;
         }
         let de_la_plaza = self.estado.participacion.entry(plaza).or_default();
-        for &h in heroes {
+        for &h in &heroes {
             *de_la_plaza.entry(h).or_insert(0) += puntos;
         }
         self.tr.tocar(Clase::Asentamiento, plaza);

@@ -15,13 +15,15 @@ pub const ORO: Mil = 500_000;
 
 /// El núcleo de las pruebas de mercenarios sobre el mundo real: sin anillo de bandidos en los campamentos (ni caravanas atacadas) para que nadie estorbe en la puerta.
 pub fn nucleo(m: &M) -> Nucleo {
-    nucleo_con(m, Reglas::default())
+    nucleo_con(m, |_| {})
 }
 
-/// Como [`nucleo`], con las reglas que pida la prueba (servidores de batalla, por ejemplo).
-pub fn nucleo_con(m: &M, mut reglas: Reglas) -> Nucleo {
+/// Como [`nucleo`], con las reglas que `ajustar` cambie: un catálogo de misiones recurrentes propio, las batallas en Unity...
+pub fn nucleo_con(m: &M, ajustar: impl FnOnce(&mut Reglas)) -> Nucleo {
+    let mut reglas = Reglas::default();
     let b = &mut std::sync::Arc::make_mut(&mut reglas.economia.combate).bandidos;
     (b.radio_ataque_caravana, b.anillo_minimo, b.anillo_maximo) = (0, 0, 0);
+    ajustar(&mut reglas);
     Nucleo::nuevo(Arranque { reglas, ajustes: Ajustes::default(), semilla: 48, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) })
 }
 

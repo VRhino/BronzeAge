@@ -518,8 +518,8 @@ impl Nucleo {
         Ok(vec![])
     }
 
-    /// `guarnecerAvanzada`: el héroe residente de la madre, con su columna a la puerta, deja escuadras suyas de la columna en la guarnición de jugadores de la avanzada,
-    /// dentro de su cupo (14 / 45 / 90 puntos de Liderazgo). Comen del trigo de la madre; la columna recalcula lo que come y su velocidad.
+    /// `guarnecerAvanzada`: el héroe residente de la madre —o el mercenario con la orden `guardar` de esa avanzada, que no necesita residir (Mercenarios_Por_Contrato §6.1)—, con su columna
+    /// a la puerta, deja escuadras suyas de la columna en la guarnición de jugadores de la avanzada, dentro de su cupo (14 / 45 / 90 puntos de Liderazgo). Comen del trigo de la madre; la columna recalcula lo que come y su velocidad.
     fn guarnecer_avanzada(&mut self, t: Instante, p: &Peticion, heroe: u64, avanzada: u64, escuadras: &[u64]) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
@@ -534,8 +534,8 @@ impl Nucleo {
             return Err(rechazo(rechazos::AVANZADA_NO_OPERATIVA, "solo se guarnece una avanzada operativa".into()));
         }
         let h = &self.heroe(heroe).expect("existe").heroe;
-        if h.residencia != Some(Residencia::Asentamiento(madre as u32)) {
-            return Err(rechazo(rechazos::AVANZADA_NO_RESIDES, "solo los héroes residentes de la plaza madre guarnecen sus avanzadas".into()));
+        if h.residencia != Some(Residencia::Asentamiento(madre as u32)) && !self.guarda_la_avanzada(heroe, avanzada) {
+            return Err(rechazo(rechazos::AVANZADA_NO_RESIDES, "solo los héroes residentes de la plaza madre, o un mercenario con la orden de guardarla, guarnecen sus avanzadas".into()));
         }
         if escuadras.is_empty() {
             return Err(rechazo(rechazos::SALIDA_SIN_ESCUADRAS, "hay que dejar al menos una escuadra".into()));

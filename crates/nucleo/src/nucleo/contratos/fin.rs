@@ -156,10 +156,9 @@ impl Nucleo {
         if c.participantes.len() < 2 || (c.tipo != TipoColumna::Ejercito && !c.es_formacion()) {
             return;
         }
-        // El Líder no se separa: cede antes el mando al más antiguo sin marca; si solo quedan marcados, al más antiguo (decisión 14 del plan).
+        // El Líder no se separa: cede antes el mando con la sucesión automática, que deja a los marcados para el final (decisión 14 del plan).
         if c.lider == mercenario {
-            let sin_marca = |h: u64| self.estado.politica.facciones.marca_de(h).is_none();
-            let sucesor = c.sucesor(mercenario, &sin_marca).or_else(|| c.sucesor(mercenario, &|_| true)).expect("queda otro participante");
+            let sucesor = self.sucesor_automatico(c, mercenario).expect("queda otro participante");
             self.ceder_el_mando(t, id, mercenario, sucesor).expect("el sucesor va en la columna y no es el Líder");
         }
         self.separar_del_ejercito(t, mercenario).expect("va en un ejército con más gente y ya no es su Líder");

@@ -105,13 +105,20 @@ impl Nucleo {
     // ───────────────────────────── Avanzar ─────────────────────────────
 
     /// Lo que hizo el héroe `h` (un contador del héroe o de la participación, §7), en el tablón de la plaza donde reside y en el de su Facción: a sus individuales aceptadas y a las grupales.
+    /// Un mercenario contratado (marcado) no avanza las individuales y cuenta para las grupales de su Facción, de la plaza donde reside y de la plaza de su contrato, si es de ámbito
+    /// plaza, sin contar dos veces la misma (Mercenarios_Por_Contrato §11, decisión 15).
     pub(super) fn avance_recurrente(&mut self, t: Instante, h: u64, contador: &str, n: u64) {
         if n == 0 || !CONTADORES.contains(&contador) || self.estado.recurrentes.tablones.is_empty() {
             return;
         }
+        let contrato = self.estado.contratos.contratos.get(&h);
+        let (marcado, de_su_plaza) = (contrato.is_some(), contrato.and_then(|c| if let ::mercenarios::Ambito::Plaza(a) = c.ambito { Some(Dueno::Asentamiento(a)) } else { None }));
         let mut duenos = Vec::new();
         if let Some(Residencia::Asentamiento(a)) = self.heroe(h).and_then(|x| x.heroe.residencia) {
             duenos.push(Dueno::Asentamiento(u64::from(a)));
+        }
+        if let Some(d) = de_su_plaza.filter(|d| !duenos.contains(d)) {
+            duenos.push(d);
         }
         if let Some(f) = self.estado.politica.facciones.faccion_de(h) {
             duenos.push(Dueno::Faccion(f));
@@ -119,7 +126,7 @@ impl Nucleo {
         for d in duenos {
             let Some(tablon) = self.estado.recurrentes.tablones.get_mut(&d) else { continue };
             let (mut cambio, mut cumplidas) = (false, Vec::new());
-            for m in tablon.misiones.iter_mut().filter(|m| m.vigente(t) && m.def.condiciones.iter().any(|(c, _)| c == contador)) {
+            for m in tablon.misiones.iter_mut().filter(|m| m.vigente(t) && !(marcado && m.def.es_individual()) && m.def.condiciones.iter().any(|(c, _)| c == contador)) {
                 let antes = m.progreso.clone();
                 if m.sumar(h, contador, n) {
                     cumplidas.push((m.def.id.clone(), m.def.es_individual()));
@@ -334,8 +341,9 @@ impl Nucleo {
                 datos.push(("participacion", def.participacion as i64));
             }
         } else if let (Dueno::Asentamiento(a), true) = (dueno, def.participacion > 0) {
+            // Un mercenario contratado (marcado) aporta a la misión, pero no cobra Participación ni cuenta en el reparto: su parte es de los demás.
             let aportaron: Vec<u64> = match &self.estado.recurrentes.tablones[&dueno].misiones[i].progreso {
-                Progreso::Grupal { aportes, .. } => aportes.iter().filter(|(_, &n)| n > 0).map(|(&h, _)| h).collect(),
+                Progreso::Grupal { aportes, .. } => aportes.iter().filter(|(&h, &n)| n > 0 && !self.es_marcado(h)).map(|(&h, _)| h).collect(),
                 Progreso::Individual(_) => unreachable!("grupal"),
             };
             let parte = def.participacion / (aportaron.len() as u64).max(1);

@@ -900,7 +900,7 @@ impl Nucleo {
     /// Las condiciones de §7 para que `heroe` se una a `b`, en su orden: sano, sin estar ya en una batalla, a su alcance (con su columna si está fuera; dentro de lo que se disputa no hace falta
     /// ni columna ni distancia), con su columna libre y con un bando que le toque. Devuelve el bando, dónde está respecto de lo que se disputa y su columna. No toca nada, así que también sirve para
     /// saber qué podría hacer ([`Nucleo::lado_para_unirse`]).
-    fn elegibilidad(&self, t: Instante, heroe: u64, b: &Batalla, pedido: Option<Lado>) -> Result<(Lado, Donde, Option<u64>), Respuesta> {
+    pub(super) fn elegibilidad(&self, t: Instante, heroe: u64, b: &Batalla, pedido: Option<Lado>) -> Result<(Lado, Donde, Option<u64>), Respuesta> {
         let v = self.estado.version;
         let invalida = |m: &str| Respuesta::rechazo(rechazos::BATALLA_INVALIDA, m, v);
         let hn = self.heroe(heroe).ok_or_else(|| Respuesta::rechazo(rechazos::HEROE_DESCONOCIDO, ids::heroe(heroe), v))?;
