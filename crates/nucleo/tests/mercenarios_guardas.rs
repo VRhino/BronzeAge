@@ -557,9 +557,9 @@ fn la_politica_no_da_a_un_marcado_trono_embajada_ni_cargo_ni_le_deja_irse_y_la_s
 /// campamento o de la plaza.
 const CATALOGO: &str = r#"{
   "asentamiento": [
-    {"id":"I1","duracion":"dia","tipo":"individual","limiteSemanal":3,"condiciones":{"salidas":1},"xp":1,"titulo":"t","texto":"t","explicacion":"e"},
-    {"id":"G1","duracion":"dia","tipo":"grupal","condiciones":{"salidas":9},"xp":1,"titulo":"t","texto":"t","explicacion":"e"},
-    {"id":"G2","duracion":"dia","tipo":"grupal","condiciones":{"salidas":2},"xp":1,"participacion":20,"titulo":"t","texto":"t","explicacion":"e"}
+    {"id":"I1","duracion":"dia","tipo":"individual","limiteSemanal":3,"condiciones":{"salidas":1},"participacion":1,"recompensas":[{"tipo":"xp","cantidad":1}],"titulo":"t","texto":"t","explicacion":"e"},
+    {"id":"G1","duracion":"dia","tipo":"grupal","condiciones":{"salidas":9},"participacion":1,"recompensas":[{"tipo":"xp","cantidad":1}],"titulo":"t","texto":"t","explicacion":"e"},
+    {"id":"G2","duracion":"dia","tipo":"grupal","condiciones":{"salidas":2},"participacion":20,"recompensas":[{"tipo":"xp","cantidad":1}],"titulo":"t","texto":"t","explicacion":"e"}
   ],
   "faccion": [
     {"id":"FG","duracion":"semana","tipo":"grupal","condiciones":{"salidas":9},"xp":1,"titulo":"t","texto":"t","explicacion":"e"}
@@ -578,7 +578,7 @@ fn aportes(n: &Nucleo, d: Dueno, id: &str) -> BTreeMap<u64, u64> {
 #[test]
 fn un_marcado_no_avanza_las_misiones_individuales_y_cuenta_en_las_grupales_de_su_faccion_y_de_la_plaza_de_su_contrato_o_su_residencia_sin_repetir() {
     let m = con_mundo!();
-    let mut e = E::con(m, mc::nucleo_con(m, |r| r.economia.recurrentes = Arc::new(Catalogo::desde_texto(CATALOGO, &[]).unwrap())));
+    let mut e = E::con(m, mc::nucleo_con(m, |r| r.economia.recurrentes = Arc::new(Catalogo::desde_texto(CATALOGO, &[], &r.economia.militar.tropas).unwrap())));
     let (plaza, rey) = (e.plaza, e.rey);
     let (pa, f1) = (Dueno::Asentamiento(plaza), Dueno::Faccion(1));
     // Quien firma por la plaza es su Gobernador: el contrato es de la plaza, no de la Facción.
@@ -650,7 +650,7 @@ fn un_marcado_no_gana_participacion_pero_sus_victorias_cuentan_para_las_misiones
 #[test]
 fn al_reclamar_una_grupal_la_participacion_se_reparte_solo_entre_quienes_la_ganan() {
     let m = con_mundo!();
-    let mut e = E::con(m, mc::nucleo_con(m, |r| r.economia.recurrentes = Arc::new(Catalogo::desde_texto(CATALOGO, &[]).unwrap())));
+    let mut e = E::con(m, mc::nucleo_con(m, |r| r.economia.recurrentes = Arc::new(Catalogo::desde_texto(CATALOGO, &[], &r.economia.militar.tropas).unwrap())));
     let (plaza, rey) = (e.plaza, e.rey);
     let pa = Dueno::Asentamiento(plaza);
     // Un ciudadano y un mercenario, los dos residentes de la plaza, salen una vez cada uno: aportan a la grupal G2, que pide dos salidas.

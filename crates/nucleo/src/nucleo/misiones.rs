@@ -6,7 +6,7 @@
 
 use super::*;
 use crate::estado::Dato;
-use crate::misiones::{Dueno, Recompensa};
+use crate::misiones::Dueno;
 use asentamiento::catalogo::Tipo;
 use asentamiento::asentamiento::Evento as EventoEco;
 use asentamiento::Recurso;
@@ -193,47 +193,7 @@ impl Nucleo {
         if !p.admin && !self.puede_reclamar(heroe, dueno) {
             return Err(rechazo(rechazos::NO_AUTORIZADO, format!("no puedes reclamar las misiones de {}", id_de_dueno(dueno))));
         }
-        let datos = match (&r.misiones[i as usize].recompensa, dueno) {
-            (&Recompensa::Oro(oro), Dueno::Heroe(h)) => {
-                let hn = self.heroe(h).expect("autorizado");
-                if hn.heroe.residencia.is_none() {
-                    return Err(rechazo(rechazos::HEROE_SIN_RESIDENCIA, "sin residencia no hay almacén personal donde dejar el oro".into()));
-                }
-                let lleva: Mil = hn.almacen_personal.values().sum();
-                if lleva + oro > self.estado.reglas.economia.comercio.mercenarios.capacidad_almacen_personal {
-                    return Err(rechazo(rechazos::ALMACEN_PERSONAL_LLENO, "el oro no cabe en tu almacén personal".into()));
-                }
-                *self.heroe_mut(h).almacen_personal.entry(Recurso::Oro).or_insert(0) += oro;
-                vec![("oro", oro)]
-            }
-            (Recompensa::Recursos(lista), Dueno::Asentamiento(a)) => {
-                let plaza = self.estado.asentamientos.get_mut(&a).ok_or_else(|| rechazo(rechazos::ASENTAMIENTO_DESCONOCIDO, ids::asentamiento(a)))?;
-                if lista.iter().any(|&(rec, n)| plaza.economia.almacen.espacio(rec) < n) {
-                    return Err(rechazo(rechazos::MISION_ALMACEN_LLENO, "la recompensa no cabe en el almacén de la plaza".into()));
-                }
-                for &(rec, n) in lista {
-                    plaza.economia.almacen.agregar(rec, n);
-                }
-                self.tr.tocar(Clase::Asentamiento, a);
-                vec![]
-            }
-            (&Recompensa::Experiencia(xp), Dueno::Faccion(f)) => {
-                self.dar_experiencia(t, f, xp, super::experiencia::motivo::MISION);
-                vec![("xp", xp)]
-            }
-            _ => unreachable!("cada clase de dueño tiene su recompensa (Reglas::desde)"),
-        };
-        self.estado.misiones.duenos.entry(dueno).or_default().reclamadas.insert(i);
-        self.tocar_dueno(dueno);
-        let valores = vec![("mision", Dato::Texto(mision.to_owned())), ("dueno", Dato::Texto(id_de_dueno(dueno)))];
-        let base = EventoNucleo { valores, heroes: vec![heroe], ..EventoNucleo::nuevo("mision.reclamada", t, datos) };
-        let evento = match dueno {
-            Dueno::Heroe(_) => base,
-            Dueno::Asentamiento(a) => EventoNucleo { asentamientos: vec![a], punto: self.estado.asentamientos.get(&a).map(|x| x.posicion), ..base },
-            Dueno::Faccion(f) => EventoNucleo { facciones: vec![f], ..base },
-        };
-        self.tr.emitir(&self.estado, evento);
-        Ok(())
+        todo!("T1: armar el Cobro de la cadena, repartir y emitir mision.reclamada (plan de recompensas de misión, §2.2)")
     }
 
     /// ¿Puede `heroe` reclamar las misiones de `dueno`? Las suyas; las de una plaza, su Gobernador o, sin Gobernador, uno de sus residentes; las de una Facción, su Rey.

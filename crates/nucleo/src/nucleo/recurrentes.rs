@@ -273,7 +273,7 @@ impl Nucleo {
     pub(super) fn fijar_catalogo_misiones(&mut self, texto: &str) -> Result<bool, Respuesta> {
         let v = self.estado.version;
         let unicas: Vec<&str> = self.estado.reglas.economia.misiones.misiones.iter().map(|m| m.id.as_str()).collect();
-        let nuevo = Catalogo::desde_texto(texto, &unicas).map_err(|e| Respuesta::rechazo(rechazos::MISION_CATALOGO_INVALIDO, e, v))?;
+        let nuevo = Catalogo::desde_texto(texto, &unicas, &self.estado.reglas.economia.militar.tropas).map_err(|e| Respuesta::rechazo(rechazos::MISION_CATALOGO_INVALIDO, e, v))?;
         if *self.estado.recurrentes.catalogo == nuevo {
             return Ok(false);
         }
@@ -315,55 +315,6 @@ impl Nucleo {
         if !individual && !p.admin && !self.puede_reclamar(heroe, dueno) {
             return Err(rechazo(rechazos::NO_AUTORIZADO, format!("no puedes reclamar las misiones de {}", id_de_dueno(dueno))));
         }
-        let def = tablon.misiones[i].def.clone();
-        let faccion = match dueno {
-            Dueno::Asentamiento(a) => self.estado.asentamientos.get(&a).map(|x| x.faccion),
-            Dueno::Faccion(f) => Some(f),
-            Dueno::Heroe(_) => None,
-        };
-        let mut datos = Vec::new();
-        if individual {
-            if def.oro > 0 {
-                let hn = self.heroe(heroe).expect("aceptó");
-                if hn.heroe.residencia.is_none() {
-                    return Err(rechazo(rechazos::HEROE_SIN_RESIDENCIA, "sin residencia no hay almacén personal donde dejar el oro".into()));
-                }
-                let lleva: Mil = hn.almacen_personal.values().sum();
-                if lleva + def.oro > self.estado.reglas.economia.comercio.mercenarios.capacidad_almacen_personal {
-                    return Err(rechazo(rechazos::ALMACEN_PERSONAL_LLENO, "el oro no cabe en tu almacén personal".into()));
-                }
-                *self.heroe_mut(heroe).almacen_personal.entry(Recurso::Oro).or_insert(0) += def.oro;
-                self.tr.tocar(Clase::Heroe, heroe);
-                datos.push(("oro", def.oro));
-            }
-            if let (Dueno::Asentamiento(a), true) = (dueno, def.participacion > 0) {
-                self.sumar_participacion(a, &[heroe], def.participacion);
-                datos.push(("participacion", def.participacion as i64));
-            }
-        } else if let (Dueno::Asentamiento(a), true) = (dueno, def.participacion > 0) {
-            // Un mercenario contratado (marcado) aporta a la misión, pero no cobra Participación ni cuenta en el reparto: su parte es de los demás.
-            let aportaron: Vec<u64> = match &self.estado.recurrentes.tablones[&dueno].misiones[i].progreso {
-                Progreso::Grupal { aportes, .. } => aportes.iter().filter(|(&h, &n)| n > 0 && !self.es_marcado(h)).map(|(&h, _)| h).collect(),
-                Progreso::Individual(_) => unreachable!("grupal"),
-            };
-            let parte = def.participacion / (aportaron.len() as u64).max(1);
-            self.sumar_participacion(a, &aportaron, parte);
-            datos.push(("participacion", parte as i64));
-        }
-        if let (Some(f), true) = (faccion, def.xp > 0) {
-            self.dar_experiencia(t, f, def.xp, super::experiencia::motivo::MISION);
-            datos.push(("xp", def.xp));
-        }
-        let tablon = self.estado.recurrentes.tablones.get_mut(&dueno).expect("mirado");
-        match &mut tablon.misiones[i].progreso {
-            Progreso::Individual(a) => a.get_mut(&heroe).expect("cumplida").situacion = Situacion::Reclamada,
-            Progreso::Grupal { situacion, .. } => *situacion = Situacion::Reclamada,
-        }
-        tablon.misiones.retain(|m| m.hasta > t || m.por_reclamar());
-        self.tocar_dueno(dueno);
-        let valores = vec![("mision", Dato::Texto(mision.to_owned())), ("dueno", Dato::Texto(id_de_dueno(dueno)))];
-        let evento = EventoNucleo { valores, heroes: vec![heroe], ..EventoNucleo::nuevo("mision.reclamada", t, datos) };
-        self.tr.emitir(&self.estado, self.hecho_de_tablon(dueno, evento));
-        Ok(())
+        todo!("T1: armar el Cobro de la recurrente, repartir, marcarla reclamada y emitir mision.reclamada (plan de recompensas de misión, §2.2)")
     }
 }

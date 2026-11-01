@@ -10,6 +10,7 @@ use militar::heroe::{Controlador, Residencia};
 use militar::presencia::Ubicacion;
 use nucleo::misiones::Dueno;
 use nucleo::proyeccion::{ids, interior, propios};
+use nucleo::recompensas::Fija;
 use nucleo::recurrentes::{Catalogo, Progreso, Situacion, DIA};
 use nucleo::{rechazos, Ajustes, Arranque, Comando, Nucleo, Peticion, Reglas, Respuesta, Resultado};
 use std::collections::BTreeMap;
@@ -32,9 +33,9 @@ macro_rules! con_mundo {
 /// Un catálogo pequeño para mirar cada regla: I1 individual diaria con tope 1 y oro, G1 grupal diaria, C1 semanal del Tesorero y FG grupal semanal de la Facción.
 const CATALOGO: &str = r#"{
   "asentamiento": [
-    {"id":"I1","duracion":"dia","tipo":"individual","limiteSemanal":1,"condiciones":{"escuadrones":1},"xp":2,"participacion":10,"oro":5,"titulo":"t","texto":"t","explicacion":"e"},
-    {"id":"G1","duracion":"dia","tipo":"grupal","condiciones":{"escuadrones":2},"xp":4,"participacion":21,"titulo":"t","texto":"t","explicacion":"e"},
-    {"id":"C1","duracion":"semana","tipo":"individual","limiteSemanal":3,"cargo":"tesorero","condiciones":{"batallas":1},"xp":1,"titulo":"t","texto":"t","explicacion":"e"}
+    {"id":"I1","duracion":"dia","tipo":"individual","limiteSemanal":1,"condiciones":{"escuadrones":1},"participacion":10,"recompensas":[{"tipo":"xp","cantidad":2},{"tipo":"oro","cantidad":5}],"titulo":"t","texto":"t","explicacion":"e"},
+    {"id":"G1","duracion":"dia","tipo":"grupal","condiciones":{"escuadrones":2},"participacion":21,"recompensas":[{"tipo":"xp","cantidad":4}],"titulo":"t","texto":"t","explicacion":"e"},
+    {"id":"C1","duracion":"semana","tipo":"individual","limiteSemanal":3,"cargo":"tesorero","condiciones":{"batallas":1},"participacion":1,"recompensas":[{"tipo":"xp","cantidad":1}],"titulo":"t","texto":"t","explicacion":"e"}
   ],
   "faccion": [
     {"id":"FG","duracion":"semana","tipo":"grupal","condiciones":{"escuadrones":2},"xp":7,"titulo":"t","texto":"t","explicacion":"e"}
@@ -45,7 +46,7 @@ const CATALOGO: &str = r#"{
 fn reglas(catalogo: Option<&str>) -> Reglas {
     let mut r = Reglas::default();
     if let Some(c) = catalogo {
-        r.economia.recurrentes = Arc::new(Catalogo::desde_texto(c, &[]).unwrap());
+        r.economia.recurrentes = Arc::new(Catalogo::desde_texto(c, &[], &r.economia.militar.tropas).unwrap());
     }
     let b = &mut Arc::make_mut(&mut r.economia.combate).bandidos;
     (b.radio_ataque_caravana, b.anillo_minimo, b.anillo_maximo) = (0, 0, 0);
@@ -304,15 +305,15 @@ fn el_catalogo_se_cambia_en_caliente_y_vale_desde_la_siguiente_renovacion() {
     assert_eq!(x.rechazo("admin", fijar(&CATALOGO.replace("\"I1\"", "\"A1\""))), rechazos::MISION_CATALOGO_INVALIDO, "A1 es una misión única");
     assert_eq!(x.rechazo("admin", fijar(&CATALOGO.replace("\"escuadrones\":1", "\"volar\":1"))), rechazos::MISION_CATALOGO_INVALIDO);
     assert_eq!(x.ord("admin", fijar(CATALOGO)).resultado, Resultado::SinCambios);
-    // I1 da ahora 9 de experiencia: la de hoy sigue con 2; la de mañana sale con 9.
-    let nuevo = CATALOGO.replace("\"xp\":2", "\"xp\":9");
+    // I1 da ahora 9 de participación: la de hoy sigue con 10; la de mañana sale con 9.
+    let nuevo = CATALOGO.replace("\"participacion\":10", "\"participacion\":9");
     x.ok("admin", fijar(&nuevo));
-    assert_eq!(x.mision(pa, "I1").def.xp, 2 * UNIDAD);
-    assert_eq!(x.n.recurrentes().catalogo.buscar("I1").unwrap().xp, 9 * UNIDAD);
+    assert_eq!(x.mision(pa, "I1").def.recompensa.fija, Some(Fija::Participacion(10)));
+    assert_eq!(x.n.recurrentes().catalogo.buscar("I1").unwrap().recompensa.fija, Some(Fija::Participacion(9)));
     x.hasta(DIA + 1);
-    assert_eq!(x.mision(pa, "I1").def.xp, 9 * UNIDAD);
+    assert_eq!(x.mision(pa, "I1").def.recompensa.fija, Some(Fija::Participacion(9)));
     // Una que se quita del catálogo deja de salir en la siguiente renovación.
-    let sin_g1 = Catalogo::desde_texto(&nuevo, &[]).unwrap();
+    let sin_g1 = Catalogo::desde_texto(&nuevo, &[], &x.n.estado().reglas.economia.militar.tropas).unwrap();
     let mut v = sin_g1.a_json();
     v["asentamiento"].as_array_mut().unwrap().retain(|m| m["id"] != "G1");
     x.ok("admin", fijar(&v.to_string()));

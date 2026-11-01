@@ -3399,8 +3399,10 @@ pub mod rechazos {
     pub const MISION_NO_CUMPLIDA: &str = "mision.no_cumplida";
     /// La recompensa de la misión ya se reclamó.
     pub const MISION_YA_RECLAMADA: &str = "mision.ya_reclamada";
-    /// Los recursos de la recompensa no caben enteros en el almacén de la plaza: se reclaman cuando haya sitio.
+    /// Los recursos o el oro de la recompensa no caben enteros en el almacén de la plaza o de la capital: se reclaman cuando haya sitio.
     pub const MISION_ALMACEN_LLENO: &str = "mision.almacen_lleno";
+    /// La recompensa lleva recursos u oro para una Facción que no tiene plazas: no hay capital donde dejarlos.
+    pub const MISION_SIN_CAPITAL: &str = "mision.sin_capital";
     // Las misiones recurrentes y el tablón (mecánica 55; Misiones_Recurrentes §3, §4 y §6).
     /// Aceptar: el héroe no es residente de la plaza ni ciudadano de la Facción del tablón (Misiones_Recurrentes §3).
     pub const MISION_FUERA_DE_AMBITO: &str = "mision.fuera_de_ambito";

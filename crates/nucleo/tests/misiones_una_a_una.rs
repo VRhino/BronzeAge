@@ -764,6 +764,6 @@ const PROBADAS: &[&str] = &[
 
 #[test]
 fn cada_mision_del_catalogo_tiene_su_prueba() {
-    let ids: Vec<String> = nucleo::misiones::Reglas::cargar().misiones.into_iter().map(|m| m.id).collect();
+    let ids: Vec<String> = nucleo::misiones::Reglas::default().misiones.into_iter().map(|m| m.id).collect();
     assert_eq!(ids, PROBADAS);
 }

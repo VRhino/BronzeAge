@@ -193,7 +193,7 @@ fn residencia_id(r: Residencia) -> String {
 
 /// Las misiones de un dueño (Misiones §5), en el orden del catálogo: las activas con su avance, las cumplidas y las reclamadas. Las que esperan a su previa y las deshabilitadas no viajan.
 pub fn misiones(n: &Nucleo, d: crate::misiones::Dueno) -> Vec<pb::Mision> {
-    use crate::misiones::{DeDueno, Recompensa};
+    use crate::misiones::DeDueno;
     let r = &n.estado().reglas.economia.misiones;
     let vacio = DeDueno::default();
     let x = n.misiones_de(d).unwrap_or(&vacio);
@@ -209,18 +209,13 @@ pub fn misiones(n: &Nucleo, d: crate::misiones::Dueno) -> Vec<pb::Mision> {
                 return None;
             };
             let hecha = estado != pb::EstadoMision::MisionActiva;
-            let (recompensa, recompensa_experiencia) = match &m.recompensa {
-                &Recompensa::Oro(oro) => (cantidades([(Recurso::Oro, oro)]), 0),
-                Recompensa::Recursos(lista) => (cantidades(lista.iter().copied()), 0),
-                &Recompensa::Experiencia(xp) => (pb::Cantidades::default(), xp),
-            };
+            // T2 (plan de recompensas de misión): la fija y la lista.
             Some(pb::Mision {
                 id: m.id.clone(),
                 estado: estado as i32,
                 condiciones: m.condiciones.iter().map(|(c, u)| pb::CondicionMision { contador: c.clone(), avance: if hecha { *u } else { x.contador(c).min(*u) }, umbral: *u }).collect(),
                 previa: m.previa.map(|p| r.misiones[p as usize].id.clone()),
-                recompensa: Some(recompensa),
-                recompensa_experiencia,
+                ..Default::default()
             })
         })
         .collect()
@@ -240,12 +235,11 @@ fn definicion_recurrente(m: &crate::recurrentes::Recurrente) -> pb::DefinicionMi
         limite_semanal,
         cargo: m.cargo.clone(),
         condiciones: m.condiciones.iter().map(|(c, u)| pb::CondicionMision { contador: c.clone(), avance: 0, umbral: *u }).collect(),
-        experiencia: m.xp,
-        participacion: m.participacion,
-        oro: m.oro,
+        // T2 (plan de recompensas de misión): la fija y la lista.
         titulo: m.titulo.clone(),
         texto: m.texto.clone(),
         explicacion: m.explicacion.clone(),
+        ..Default::default()
     }
 }
 

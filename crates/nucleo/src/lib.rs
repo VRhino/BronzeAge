@@ -88,6 +88,7 @@ mod estado_fundacion;
 mod estado_militar;
 pub mod misiones;
 pub mod participacion;
+pub mod recompensas;
 pub mod recurrentes;
 mod generadores;
 pub mod memoria;

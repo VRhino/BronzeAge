@@ -688,7 +688,8 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `mision.desconocida` | `MISION_DESCONOCIDA` | No hay misión con ese id para esa clase de dueño (`duenoId` de un héroe, una plaza o una Facción). |
 | `mision.no_cumplida` | `MISION_NO_CUMPLIDA` | La misión aún no se ha cumplido. |
 | `mision.ya_reclamada` | `MISION_YA_RECLAMADA` | La recompensa de la misión ya se reclamó. |
-| `mision.almacen_lleno` | `MISION_ALMACEN_LLENO` | Los recursos de la recompensa no caben enteros en el almacén de la plaza: se reclaman cuando haya sitio. |
+| `mision.almacen_lleno` | `MISION_ALMACEN_LLENO` | Los recursos o el oro de la recompensa no caben enteros en el almacén de la plaza o de la capital: se reclaman cuando haya sitio. |
+| `mision.sin_capital` | `MISION_SIN_CAPITAL` | La recompensa lleva recursos u oro para una Facción que no tiene plazas: no hay capital donde dejarlos. |
 
 ### Las misiones recurrentes y el tablón (mecánica 55; Misiones_Recurrentes §3, §4 y §6)
 

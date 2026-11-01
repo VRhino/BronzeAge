@@ -151,7 +151,7 @@ fn el_heroe_cumple_su_cadena_en_origen_y_reclama_el_oro_una_vez() {
     let h3 = &vistas[2];
     assert_eq!((h3.condiciones[0].contador.as_str(), h3.condiciones[0].avance, h3.condiciones[0].umbral), ("llegadas", 1, 1));
     assert_eq!(h3.previa.as_deref(), Some("H1"));
-    assert_eq!(h3.recompensa.as_ref().unwrap().por_id.get("oro"), Some(&(10 * UNIDAD)));
+    assert_eq!(h3.recompensas, [pb::RecompensaMision { tipo: "oro".into(), clave: String::new(), cantidad: 10 * UNIDAD }]);
     assert_eq!(vistas[1].condiciones[0].avance, 0, "el préstamo de antes no cuenta para H2");
     // La foto lleva las misiones (desde BAN46) y se lee igual.
     let bytes = x.n.estado().serializar();
@@ -211,7 +211,7 @@ fn la_plaza_cumple_por_estado_al_completar_el_edificio_y_la_cadena_sigue_en_el_m
     let interior = nucleo::proyeccion::interior::asentamiento(&x.n, a).unwrap();
     let a4 = interior.misiones.iter().find(|v| v.id == "A4").unwrap();
     assert_eq!(a4.estado, contrato::v1::EstadoMision::MisionReclamada as i32);
-    assert_eq!(a4.recompensa.as_ref().unwrap().por_id.get("piedra"), Some(&(300 * UNIDAD)));
+    assert_eq!((a4.participacion, a4.recompensas.as_slice()), (10, [contrato::v1::RecompensaMision { tipo: "recurso".into(), clave: "piedra".into(), cantidad: 300 * UNIDAD }].as_slice()));
     let a1 = interior.misiones.iter().find(|v| v.id == "A1").expect("la A1 viaja");
     assert_eq!(a1.estado, contrato::v1::EstadoMision::MisionActiva as i32, "activa mientras la plaza no tenga aldea agrícola");
     assert!(nucleo::proyeccion::propios::faccion_publica(&x.n, x.n.estado().asentamientos[&a].faccion).misiones.is_empty());

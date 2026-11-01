@@ -5,8 +5,8 @@
 //! dueño es una etiqueta u8 (0 héroe, 1 plaza, 2 Facción) y su id u64. Las misiones van por índice del catálogo (el orden del bloque, que fija la huella de las reglas).
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
-use asentamiento::Recurso;
-use base::{Mil, UNIDAD};
+use crate::recompensas::Recompensa;
+use militar::catalogo::Catalogo;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -41,16 +41,6 @@ pub enum ClaseDueno {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Recompensa {
-    /// Oro al almacén personal del héroe, en milésimas.
-    Oro(Mil),
-    /// Recursos al almacén de la plaza, en milésimas.
-    Recursos(Vec<(Recurso, Mil)>),
-    /// Experiencia de Facción, en milésimas.
-    Experiencia(Mil),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Mision {
     pub id: String,
     pub clase: ClaseDueno,
@@ -70,12 +60,13 @@ pub struct Reglas {
 }
 
 impl Reglas {
-    pub fn cargar() -> Self {
+    pub fn cargar(tropas: &Catalogo) -> Self {
         let v = asentamiento::datos::bloque_de(DOC_MISIONES, "MISIONES").unwrap_or_else(|e| panic!("{e}"));
-        Self::desde(&v).unwrap_or_else(|e| panic!("bloque MISIONES: {e}"))
+        Self::desde(&v, tropas).unwrap_or_else(|e| panic!("bloque MISIONES: {e}"))
     }
 
-    pub fn desde(v: &Value) -> Result<Self, String> {
+    /// Lee y valida el catálogo; `tropas` es el de las tropas que puede dar una recompensa.
+    pub fn desde(v: &Value, tropas: &Catalogo) -> Result<Self, String> {
         let mut misiones = Vec::new();
         let mut previas = Vec::new();
         for (clave, clase) in [("heroe", ClaseDueno::Heroe), ("asentamiento", ClaseDueno::Asentamiento), ("faccion", ClaseDueno::Faccion)] {
@@ -88,19 +79,8 @@ impl Reglas {
                     .iter()
                     .map(|(k, n)| n.as_u64().filter(|&n| n > 0).map(|n| (k.clone(), n)).ok_or_else(|| format!("{id}: umbral de «{k}»")))
                     .collect::<Result<_, _>>()?;
-                let mil = |x: &Value| x.as_f64().map(|f| (f * UNIDAD as f64).round() as Mil).filter(|&n| n > 0);
-                let recompensa = match clase {
-                    ClaseDueno::Heroe => Recompensa::Oro(m.get("oro").and_then(mil).ok_or_else(|| format!("{id}: sin oro"))?),
-                    ClaseDueno::Asentamiento => Recompensa::Recursos(
-                        m.get("recursos")
-                            .and_then(Value::as_object)
-                            .ok_or_else(|| format!("{id}: sin recursos"))?
-                            .iter()
-                            .map(|(r, n)| Ok((Recurso::desde_nombre(r).ok_or_else(|| format!("{id}: recurso «{r}»"))?, mil(n).ok_or_else(|| format!("{id}: cantidad de «{r}»"))?)))
-                            .collect::<Result<_, String>>()?,
-                    ),
-                    ClaseDueno::Faccion => Recompensa::Experiencia(m.get("xp").and_then(mil).ok_or_else(|| format!("{id}: sin xp"))?),
-                };
+                // Una cadena de héroe es una misión personal: solo ella puede dar tropa.
+                let recompensa = Recompensa::leer(m, clase, clase == ClaseDueno::Heroe, tropas)?;
                 previas.push(m.get("previa").and_then(Value::as_str).map(str::to_owned));
                 let habilitada = m.get("habilitada").and_then(Value::as_bool).unwrap_or(true);
                 misiones.push(Mision { id, clase, previa: None, habilitada, condiciones, recompensa });
@@ -135,7 +115,7 @@ impl Reglas {
 impl Default for Reglas {
     fn default() -> Self {
         static R: std::sync::OnceLock<Reglas> = std::sync::OnceLock::new();
-        R.get_or_init(Reglas::cargar).clone()
+        R.get_or_init(|| Reglas::cargar(&militar::Reglas::cargar().tropas)).clone()
     }
 }
 
@@ -290,22 +270,33 @@ pub(crate) fn leer(r: &mut Lector, reglas: &Reglas) -> Result<EstadoMisiones, Er
 #[cfg(test)]
 mod pruebas {
     use super::*;
+    use crate::recompensas::{Elemento, Fija};
+    use base::UNIDAD;
+
+    fn cargar() -> Reglas {
+        Reglas::cargar(&militar::Reglas::cargar().tropas)
+    }
 
     #[test]
     fn el_catalogo_del_documento_se_lee_entero_con_sus_cadenas() {
-        let r = Reglas::cargar();
+        let r = cargar();
         assert_eq!(r.de(ClaseDueno::Heroe).count(), 13);
         assert_eq!(r.de(ClaseDueno::Asentamiento).count(), 11);
         assert_eq!(r.de(ClaseDueno::Faccion).count(), 12);
         let f4 = r.buscar(ClaseDueno::Faccion, "F4").unwrap();
         assert_eq!(r.misiones[f4 as usize].previa, r.buscar(ClaseDueno::Faccion, "F3"));
         assert!(r.misiones[r.buscar(ClaseDueno::Asentamiento, "A1").unwrap() as usize].habilitada, "la A1 se activa con la aldea agrícola");
-        assert_eq!(r.misiones[r.buscar(ClaseDueno::Heroe, "H1").unwrap() as usize].recompensa, Recompensa::Oro(10 * UNIDAD));
+        let h1 = &r.misiones[r.buscar(ClaseDueno::Heroe, "H1").unwrap() as usize].recompensa;
+        assert_eq!(*h1, Recompensa { fija: None, lista: vec![Elemento::Oro(10 * UNIDAD)] });
+        let a4 = &r.misiones[r.buscar(ClaseDueno::Asentamiento, "A4").unwrap() as usize].recompensa;
+        assert_eq!(a4.fija, Some(Fija::Participacion(10)), "las cadenas de plaza empiezan con 10 de participación");
+        let f1 = &r.misiones[r.buscar(ClaseDueno::Faccion, "F1").unwrap() as usize].recompensa;
+        assert_eq!(*f1, Recompensa { fija: Some(Fija::Experiencia(10 * UNIDAD)), lista: vec![] });
     }
 
     #[test]
     fn una_cadena_comparte_su_contador_y_lo_que_no_esta_activo_no_cuenta() {
-        let r = Reglas::cargar();
+        let r = cargar();
         let mut e = EstadoMisiones::default();
         let f = Dueno::Faccion(1);
         let id = |s| r.buscar(ClaseDueno::Faccion, s).unwrap();
@@ -329,7 +320,7 @@ mod pruebas {
     fn cada_mision_y_cada_contador_tiene_su_texto() {
         let doc = include_str!("../../../Docs/Mechanics/Misiones_Textos.md");
         let v = asentamiento::datos::bloque_de(doc, "TEXTOS_MISIONES").unwrap_or_else(|e| panic!("{e}"));
-        let r = Reglas::cargar();
+        let r = cargar();
         let misiones = v["misiones"].as_object().expect("misiones");
         let contadores = v["contadores"].as_object().expect("contadores");
         for m in &r.misiones {

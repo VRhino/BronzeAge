@@ -159,8 +159,17 @@ message Mision {
   EstadoMision estado = 2;
   repeated CondicionMision condiciones = 3;
   optional string previa = 4;
-  Cantidades recompensa = 5;              // oro (al almacén personal, en las del héroe) o recursos (al almacén de la plaza), en milésimas
-  sint64 recompensa_experiencia = 6;      // experiencia de Facción
+  reserved 5;                             // antes `recompensa` (oro o recursos): desde las recompensas flexibles (2026-11-01) van en `recompensas`
+  sint64 recompensa_experiencia = 6;      // la recompensa fija de una de Facción: experiencia, en milésimas
+  uint64 participacion = 7;               // la recompensa fija de una de plaza: participación de quien la reclama
+  repeated RecompensaMision recompensas = 8;  // la lista libre (Misiones §4)
+}
+
+// Un elemento de la lista libre de una recompensa de misión (Misiones §4, Misiones_Recurrentes §5).
+message RecompensaMision {
+  string tipo = 1;      // recurso, oro, xp, tropa
+  string clave = 2;     // el recurso o la tropa (ids de los datos); vacío en oro y xp
+  sint64 cantidad = 3;  // milésimas (recurso, oro, xp) o soldados (tropa)
 }
 
 enum DuracionMision {
@@ -191,12 +200,13 @@ message DefinicionMisionRecurrente {
   uint32 limite_semanal = 4;               // individual: aceptaciones por semana en el tablón, entre todos (0 en una grupal)
   optional string cargo = 5;               // solo la acepta su titular: gobernador, tesorero, general, maestroObras, sacerdote, maestroCaravanas; rey, embajador
   repeated CondicionMision condiciones = 6; // con `avance` 0
-  sint64 experiencia = 7;                  // experiencia de Facción, en milésimas
-  uint64 participacion = 8;                // participación en la plaza: la del héroe (individual) o la que se reparte (grupal)
-  sint64 oro = 9;                          // oro al almacén personal del héroe (individual), en milésimas
+  sint64 experiencia = 7;                  // la recompensa fija de una de Facción: experiencia, en milésimas
+  uint64 participacion = 8;                // la recompensa fija de una de plaza: la del héroe (individual) o la que se reparte (grupal)
+  reserved 9;                              // antes `oro`: desde las recompensas flexibles (2026-11-01) va en `recompensas`
   string titulo = 10;
   string texto = 11;
   string explicacion = 12;
+  repeated RecompensaMision recompensas = 13;  // la lista libre
 }
 
 // La misión individual de un héroe que la aceptó.

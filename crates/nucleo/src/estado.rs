@@ -371,10 +371,12 @@ impl ReglasEconomia {
         let huella = crate::hex(&Sha256::digest(bloques).into());
         let datos = asentamiento::Reglas::cargar();
         let urbanismo = Arc::new(Urbanismo::cargar(&datos));
-        let misiones = crate::misiones::Reglas::cargar();
+        let militar = militar::Reglas::cargar();
+        let misiones = crate::misiones::Reglas::cargar(&militar.tropas);
         let unicas: Vec<&str> = misiones.misiones.iter().map(|m| m.id.as_str()).collect();
-        let recurrentes = crate::recurrentes::Catalogo::desde(&crate::recurrentes::Catalogo::cargar().a_json(), &unicas).unwrap_or_else(|e| panic!("bloque MISIONES_RECURRENTES: {e}"));
-        Self { datos: Arc::new(datos), urbanismo, comercio: Arc::new(comercio::Reglas::cargar()), militar: Arc::new(militar::Reglas::cargar()), combate: Arc::new(combate::Reglas::cargar()), politica: Arc::new(politica::Reglas::cargar()), tecnologia: Arc::new(tecnologia::Reglas::cargar()), misiones: Arc::new(misiones), participacion: Arc::new(crate::participacion::Reglas::cargar()), recurrentes: Arc::new(recurrentes), contratos: Arc::new(mercenarios::Datos::cargar()), huella }
+        let recurrentes = crate::recurrentes::Catalogo::desde(&crate::recurrentes::Catalogo::cargar(&militar.tropas).a_json(), &unicas, &militar.tropas)
+            .unwrap_or_else(|e| panic!("bloque MISIONES_RECURRENTES: {e}"));
+        Self { datos: Arc::new(datos), urbanismo, comercio: Arc::new(comercio::Reglas::cargar()), militar: Arc::new(militar), combate: Arc::new(combate::Reglas::cargar()), politica: Arc::new(politica::Reglas::cargar()), tecnologia: Arc::new(tecnologia::Reglas::cargar()), misiones: Arc::new(misiones), participacion: Arc::new(crate::participacion::Reglas::cargar()), recurrentes: Arc::new(recurrentes), contratos: Arc::new(mercenarios::Datos::cargar()), huella }
     }
     /// Identidad de las reglas (sha256 en hexadecimal de los bloques de parámetros de los documentos de Mechanics de los que salen).
     pub fn huella(&self) -> &str {
@@ -1625,7 +1627,7 @@ impl Estado {
             s.participacion = crate::participacion::leer(&mut r)?;
         }
         if con_recurrentes {
-            s.recurrentes = crate::recurrentes::leer(&mut r)?;
+            s.recurrentes = crate::recurrentes::leer(&mut r, &s.reglas.economia.militar.tropas)?;
         } else {
             crate::nucleo::arrancar_tablones(&mut s);
         }
