@@ -1,4 +1,4 @@
-//! Los encargos de caravana: rutas y envíos automáticos entre plazas (Comercio_Caravanas §5.8; `Rutas_De_Caravanas.md` §3 y §4). Sobre el artefacto de mundo real
+//! Los encargos de caravana: rutas y envíos automáticos entre plazas (Comercio_Caravanas §5.8). Sobre el artefacto de mundo real
 //! (`generador/salida/mundo/mundo-*.bin`); las pruebas se omiten si no está. Cada prueba mide una regla: el ciclo (llega, deja, recoge y sale), los tiempos por carro, la espera de
 //! existencias, el sobrante, los peajes, cancelar y cambiar, el envío a una plaza ajena (sin Mercado, y comerciando con sus órdenes), los rechazos, quién da el encargo, la rejilla y la foto.
 
@@ -239,7 +239,7 @@ fn plaza_en_el_camino(e: &mut Escenario, m: &M) -> u64 {
     fundar(&mut e.n, "carlos", 3, p)
 }
 
-/// Una plaza de la Facción 2 con su Mercado activo y su oro, para comerciar con sus órdenes (rutas de caravanas §6).
+/// Una plaza de la Facción 2 con su Mercado activo y su oro, para comerciar con sus órdenes (Comercio_Caravanas §5.8.8).
 fn ajena_con_mercado(e: &mut Escenario, m: &M) -> u64 {
     let c = con_ajena(e, m);
     e.admin(Comando::FijarNivelFaccion { faccion: 2, nivel: 2 });

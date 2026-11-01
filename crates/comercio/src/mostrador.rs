@@ -8,7 +8,7 @@
 //! bonus por distancia ni recargo por reputación.
 //!
 //! La caravana con encargo usa las mismas cuentas en una plaza ajena: [`vender`] y [`comprar`] sirven sus líneas a las órdenes de la plaza con
-//! `servir`, en vez de tocar el almacén (rutas de caravanas §6; Comercio_Caravanas §5.8).
+//! `servir`, en vez de tocar el almacén (Comercio_Caravanas §5.8.8).
 
 use crate::datos::Reglas;
 use crate::orden_mercado::{EstadoOrden, OrdenMercado, TipoOrden};
@@ -262,7 +262,7 @@ fn atender(r: &Reglas, ordenes: &mut [OrdenMercado], plaza: &mut Almacen, a_bord
     tratos
 }
 
-/// La caravana con encargo vende en una plaza ajena (rutas de caravanas §6; Comercio_Caravanas §8.3). Línea a línea, en el orden de `lineas`, toma las
+/// La caravana con encargo vende en una plaza ajena (Comercio_Caravanas §5.8.8 y §8.3). Línea a línea, en el orden de `lineas`, toma las
 /// órdenes de **compra** de la plaza con `precio_unitario >= precio_min`, de la que mejor paga a la que peor (a igual precio, por id ascendente), y vende
 /// como mucho `min(tope, lo que lleva)` del recurso (sin tope, todo lo que lleva). `ordenes` es el libro entero: solo cuentan las de `c.plaza_id`,
 /// activas y sin caducar. Una línea sin precio mínimo o de oro no comercia. Cada orden se sirve con las cuentas del mostrador como una columna de
@@ -278,7 +278,7 @@ pub fn vender(r: &Reglas, lineas: &[LineaDejar], ordenes: &mut [OrdenMercado], p
     tratos
 }
 
-/// La caravana con encargo compra en una plaza ajena (rutas de caravanas §6; Comercio_Caravanas §8.3). Línea a línea, en el orden de `lineas`, toma las
+/// La caravana con encargo compra en una plaza ajena (Comercio_Caravanas §5.8.8 y §8.3). Línea a línea, en el orden de `lineas`, toma las
 /// órdenes de **venta** de la plaza con `precio_unitario <= precio_max`, de la más barata a la más cara (a igual precio, por id ascendente), y compra
 /// como mucho la `cantidad` de la línea. Mismas reglas que [`vender`] para el libro, las líneas sin precio o de oro, el mostrador y la conservación del oro.
 pub fn comprar(r: &Reglas, lineas: &[LineaRecoger], ordenes: &mut [OrdenMercado], plaza: &mut Almacen, a_bordo: &mut Carga, capacidad: Mil, c: &ContextoParada) -> Vec<Trato> {

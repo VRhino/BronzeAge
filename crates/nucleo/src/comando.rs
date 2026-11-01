@@ -2700,7 +2700,7 @@ pub mod rechazos {
     pub const ENCARGO_DESTINO_AJENO: &str = "encargo.destino_ajeno";
     /// Una línea con cantidad o tope de menos de una unidad, un recurso repetido en la misma lista, precio en una plaza propia u oro en una ajena.
     pub const ENCARGO_LINEA_INVALIDA: &str = "encargo.linea_invalida";
-    /// Una línea en una plaza ajena sin precio máximo (al recoger) o mínimo (al dejar).
+    /// Una línea en una plaza ajena sin precio máximo (al recoger) o mínimo (al dejar), o con un precio que no es positivo.
     pub const ENCARGO_FALTA_PRECIO: &str = "encargo.falta_precio";
     /// Lo que se recoge en una parada pasa de la capacidad de la caravana.
     pub const ENCARGO_SUPERA_CAPACIDAD: &str = "encargo.supera_capacidad";

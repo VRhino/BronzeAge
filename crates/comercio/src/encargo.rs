@@ -115,7 +115,7 @@ impl Encargo {
         Self { modo, destino, salir_en, en_origen, en_destino, vueltas: 0, punta: Punta::Origen, fase: Fase::Espera, fin_paso: None, cancelado: false }
     }
 
-    /// Valida el encargo (rutas de caravanas §2 y §7), en el orden de [`ErrorEncargo`]. El origen es siempre propio: sus líneas no llevan precio.
+    /// Valida el encargo (Comercio_Caravanas §5.8.2 y §5.8.3), en el orden de [`ErrorEncargo`]. El origen es siempre propio: sus líneas no llevan precio.
     pub fn validar(&self, c: &ContextoEncargo) -> Result<(), ErrorEncargo> {
         if self.destino == c.origen {
             return Err(ErrorEncargo::MismoOrigen);
@@ -167,7 +167,7 @@ pub struct Reparto {
     pub tirado: Carga,
 }
 
-/// Qué entra al almacén al dejar (rutas de caravanas §4, fila «Entrega»; `Comercio_Caravanas.md` §5.8). Por línea, en su orden: se quiere dejar el `tope` (o todo lo que lleva
+/// Qué entra al almacén al dejar (`Comercio_Caravanas.md` §5.8.5). Por línea, en su orden: se quiere dejar el `tope` (o todo lo que lleva
 /// si no hay) sin pasar de lo que lleva; entra lo que cabe en el almacén, en unidades enteras; el resto se tira con `desechar` y, si no, sigue a bordo. No muta nada.
 pub fn repartir_descarga(a_bordo: &Carga, dejar: &[LineaDejar], desechar: bool, almacen: &Almacen) -> Reparto {
     let mut reparto = Reparto::default();
@@ -183,7 +183,7 @@ pub fn repartir_descarga(a_bordo: &Carga, dejar: &[LineaDejar], desechar: bool, 
     reparto
 }
 
-/// Qué se toma del almacén al recoger (rutas de caravanas §4, fila «Carga»; `Comercio_Caravanas.md` §5.8). Se pide la parte entera de cada cantidad. Con `esperar` y
+/// Qué se toma del almacén al recoger (`Comercio_Caravanas.md` §5.8.5). Se pide la parte entera de cada cantidad. Con `esperar` y
 /// algo que falta, `Err` con lo que falta de cada línea y no se toma nada. Si no, por línea, en su orden, se toma lo pedido, topado por lo que hay y por el hueco de la caravana
 /// (`capacidad` menos lo que lleva y lo ya tomado). No muta nada.
 pub fn a_recoger(a_bordo: &Carga, recoger: &[LineaRecoger], esperar: bool, capacidad: Mil, almacen: &Almacen) -> Result<Carga, Carga> {
@@ -206,7 +206,7 @@ pub fn a_recoger(a_bordo: &Carga, recoger: &[LineaRecoger], esperar: bool, capac
     Ok(toma)
 }
 
-/// Carros que cuentan para el tiempo de un paso (rutas de caravanas §4; `Comercio_Caravanas.md` §5.8): los que harían falta para mover `movido`, entre 1 y los carros con
+/// Carros que cuentan para el tiempo de un paso (`Comercio_Caravanas.md` §5.8.5): los que harían falta para mover `movido`, entre 1 y los carros con
 /// animal; 0 si no se mueve nada o la capacidad es nula.
 pub fn carros_del_paso(movido: Mil, capacidad: Mil, carros_con_animal: usize) -> u32 {
     if movido <= 0 || capacidad <= 0 {

@@ -6,7 +6,7 @@ use crate::tipos::{AcuerdoId, AsentamientoId, CaravanaId, Carga, HeroeId, OrdenI
 use asentamiento::Recurso;
 use base::{Instante, Mil};
 
-/// Por qué acaba el encargo de una caravana (rutas de caravanas §7, hecho `encargo_terminado`).
+/// Por qué acaba el encargo de una caravana (Comercio_Caravanas §5.8.7 y §12, hecho `encargo_terminado`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MotivoEncargo {
     /// El envío volvió al origen y dejó lo que traía.
@@ -52,7 +52,7 @@ pub enum Evento {
     // --- Ruina, conquista y presencia ---
     CaravanaPerdida { caravana: CaravanaId },
     CaravanaVuelve { caravana: CaravanaId },
-    // --- Encargos (rutas de caravanas §7) ---
+    // --- Encargos (Comercio_Caravanas §12) ---
     EncargoDado { caravana: CaravanaId, destino: AsentamientoId, modo: Modo },
     /// Espera existencias en `plaza`: `falta` es lo que falta de cada recurso.
     CaravanaEspera { caravana: CaravanaId, plaza: AsentamientoId, falta: Carga },

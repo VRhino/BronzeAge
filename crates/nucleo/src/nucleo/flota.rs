@@ -449,7 +449,7 @@ impl Nucleo {
                 self.estado.comercio.reparto.remove(&plaza);
             }
             Motivo::Conquista => {
-                // Rutas de caravanas §4: la que espera dentro de su origen conquistado está en casa; su encargo termina allí, ahora del conquistador.
+                // Comercio_Caravanas §10: la que espera dentro de su origen conquistado está en casa; su encargo termina allí, ahora del conquistador.
                 for &c in &cierre.flota_traspasada {
                     let en_casa = self.estado.comercio.caravana(c).is_some_and(|c| c.estado == EstadoCaravana::Esperando && c.encargo.as_ref().is_some_and(|e| e.punta == Punta::Origen));
                     if en_casa {
@@ -480,7 +480,7 @@ impl Nucleo {
         }
         let plazas = if self.estado.asentamientos.contains_key(&origen) { vec![origen] } else { vec![] };
         if c.encargo.is_some() {
-            // Rutas de caravanas §7: destruida con encargo, el encargo termina con lo que llevaba a bordo perdido.
+            // Comercio_Caravanas §10: destruida con encargo, el encargo termina con lo que llevaba a bordo perdido.
             self.emitir_comercio(t, EventoComercio::EncargoTerminado { caravana: id, motivo: MotivoEncargo::Destruida, volcado: 0, perdido: total(&c.contenido) }, plazas.clone(), &[]);
         }
         self.emitir_comercio(t, EventoComercio::CaravanaPerdida { caravana: id }, plazas, &[("carga", total(&c.contenido))]);

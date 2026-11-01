@@ -1,4 +1,4 @@
-//! Los encargos de caravana en el núcleo (Comercio_Caravanas §5.8; `Rutas_De_Caravanas.md` §3 y §4): rutas y envíos automáticos entre una plaza propia y otra plaza.
+//! Los encargos de caravana en el núcleo (Comercio_Caravanas §5.8): rutas y envíos automáticos entre una plaza propia y otra plaza.
 //!
 //! # Las órdenes
 //! `EncargarCaravana`, `CambiarEncargo` y `CancelarEncargo` validan todo sobre una copia antes de tocar nada. Un encargo no guarda su ruta: se traza al salir de cada punta.
@@ -10,7 +10,7 @@
 //! `comercio::encargo`; aquí se leen, se aplican, se programan y se emiten.
 //!
 //! # El comercio en plaza ajena
-//! Un envío a una plaza de otra Facción con Mercado activo comercia con las órdenes de esa plaza (rutas de caravanas §6): la descarga es vender y la carga, comprar, con los mismos pasos
+//! Un envío a una plaza de otra Facción con Mercado activo comercia con las órdenes de esa plaza (Comercio_Caravanas §5.8.8): la descarga es vender y la carga, comprar, con los mismos pasos
 //! y tiempos que en una plaza propia. Sin Mercado activo da la vuelta con lo que lleva. Si es propia o ajena, y si tiene Mercado, se mira al empezar cada paso y no se guarda.
 
 use super::*;
@@ -27,7 +27,7 @@ use comercio::mostrador::{comprar, vender, ContextoParada};
 use comercio::viaje::{longitud_ruta, peajes_de_paradas};
 use comercio::{total, Carga as Mercancia};
 
-/// El código y el mensaje de rechazo de un [`ErrorEncargo`] (rutas de caravanas §7): la hora de salida inválida es la misma de lanzar a mano.
+/// El código y el mensaje de rechazo de un [`ErrorEncargo`] (Comercio_Caravanas §5.8.3): la hora de salida inválida es la misma de lanzar a mano.
 fn rechazo_de_encargo(e: ErrorEncargo) -> (&'static str, &'static str) {
     use rechazos::*;
     match e {
@@ -68,7 +68,7 @@ impl Nucleo {
         }
     }
 
-    /// Rutas de caravanas §2 y §7: valida `nuevo` como encargo de la caravana `i` (de la plaza `origen`) y lo compara con las dos plazas.
+    /// Comercio_Caravanas §5.8.2 y §5.8.3: valida `nuevo` como encargo de la caravana `i` (de la plaza `origen`) y lo compara con las dos plazas.
     fn validar_encargo(&self, nuevo: &Encargo, i: usize, origen: u64, t: Instante) -> Result<(), Respuesta> {
         let (o, d) = (&self.estado.asentamientos[&origen], &self.estado.asentamientos[&u64::from(nuevo.destino)]);
         let contexto = ContextoEncargo {
@@ -84,7 +84,7 @@ impl Nucleo {
         })
     }
 
-    /// `EncargarCaravana` (rutas de caravanas §2 y §4): la caravana comercial `disponible` queda `Esperando` en su origen con el encargo; con hora de salida espera a ella, y sin
+    /// `EncargarCaravana` (Comercio_Caravanas §5.8.3 y §5.8.4): la caravana comercial `disponible` queda `Esperando` en su origen con el encargo; con hora de salida espera a ella, y sin
     /// hora empieza ya a cargar.
     fn encargar(&mut self, t: Instante, p: &Peticion, caravana: u64, nuevo: Encargo) -> Result<(), Respuesta> {
         let v = self.estado.version;
@@ -111,7 +111,7 @@ impl Nucleo {
         Ok(())
     }
 
-    /// `CambiarEncargo` (rutas de caravanas §4 y §7): sustituye el destino y las paradas y conserva `vueltas`, `punta`, `fase`, `fin_paso` y `cancelado`, así que el paso en curso sigue
+    /// `CambiarEncargo` (Comercio_Caravanas §5.8.7): sustituye el destino y las paradas y conserva `vueltas`, `punta`, `fase`, `fin_paso` y `cancelado`, así que el paso en curso sigue
     /// y lo nuevo vale desde el siguiente. El destino solo cambia con la caravana `Esperando` en el origen; la hora de salida solo cuenta mientras el envío espera a ella.
     fn cambiar_encargo(&mut self, t: Instante, p: &Peticion, caravana: u64, destino: u64, salir_en: Option<Instante>, paradas: [Parada; 2]) -> Result<(), Respuesta> {
         let v = self.estado.version;
@@ -152,7 +152,7 @@ impl Nucleo {
         Ok(())
     }
 
-    /// `CancelarEncargo` (rutas de caravanas §4, fila «Cancelar»): esperando en el origen termina ya; esperando en el destino sale ya de vuelta sin dejar ni recoger más; en ruta marca
+    /// `CancelarEncargo` (Comercio_Caravanas §5.8.7): esperando en el origen termina ya; esperando en el destino sale ya de vuelta sin dejar ni recoger más; en ruta marca
     /// el encargo como cancelado y la caravana acaba el tramo, no comercia en el destino y termina al llegar al origen.
     fn cancelar_encargo(&mut self, t: Instante, p: &Peticion, caravana: u64) -> Result<(), Respuesta> {
         let v = self.estado.version;
@@ -180,7 +180,7 @@ impl Nucleo {
 
     // ───────────────────────────── El ciclo ─────────────────────────────
 
-    /// «El destino sigue vigente» (rutas de caravanas §3): existe y, en una ruta, es de la Facción del origen.
+    /// «El destino sigue vigente» (Comercio_Caravanas §5.8.4): existe y, en una ruta, es de la Facción del origen.
     fn destino_vigente(&self, c: &Caravana) -> bool {
         let Some(e) = c.encargo.as_ref() else { return false };
         self.destino_propio(c).is_some_and(|propio| propio || e.modo == Modo::Envio)
@@ -192,7 +192,7 @@ impl Nucleo {
         Some(self.estado.asentamientos.get(&u64::from(c.origen)).is_some_and(|o| o.faccion == destino.faccion))
     }
 
-    /// Paso 1 · Llegada (rutas de caravanas §3): la caravana acaba de quedar `Esperando` en una punta, con los peajes ya cobrados.
+    /// Paso 1 · Llegada (Comercio_Caravanas §5.8.4): la caravana acaba de quedar `Esperando` en una punta, con los peajes ya cobrados.
     pub(super) fn llegada_a_parada(&mut self, t: Instante, id: u64, punta: Punta) {
         self.retirar_plan(id);
         let Some(c) = self.estado.comercio.caravana(id) else { return };
@@ -200,7 +200,7 @@ impl Nucleo {
         let cancelado = e.cancelado;
         let vigente = self.destino_vigente(c);
         if punta == Punta::Origen {
-            // Un destino perdido gana a un encargo cancelado (rutas de caravanas §4, «Destino de una ruta»).
+            // Un destino perdido gana a un encargo cancelado (Comercio_Caravanas §5.8.7, «Fin del encargo»).
             if !vigente {
                 self.terminar(t, id, MotivoEncargo::DestinoPerdido);
             } else if cancelado {
@@ -248,7 +248,7 @@ impl Nucleo {
         self.cerrar_descarga(t, id, reparto.entra, total(&reparto.tirado), carros, comision);
     }
 
-    /// Rutas de caravanas §6 · Descarga en una plaza ajena: sin Mercado activo la caravana sale ya con lo que lleva; con él, vende y tarda `tiempoDescarga` por carro de lo vendido. No tira nada.
+    /// Comercio_Caravanas §5.8.8 · Descarga en una plaza ajena: sin Mercado activo la caravana sale ya con lo que lleva; con él, vende y tarda `tiempoDescarga` por carro de lo vendido. No tira nada.
     fn vender_en_ajena(&mut self, t: Instante, id: u64, i: usize, plaza: u64) {
         let Some(vendido) = self.comerciar_caravana(t, i, plaza, true) else { return self.salir(t, id) };
         let c = &self.estado.comercio.flota[i];
@@ -325,7 +325,7 @@ impl Nucleo {
         self.cerrar_carga(t, id, toma, carros);
     }
 
-    /// Rutas de caravanas §6 · Carga en una plaza ajena: sin Mercado activo la caravana sale sin comprar; con él, compra lo que haya y tarda
+    /// Comercio_Caravanas §5.8.8 · Carga en una plaza ajena: sin Mercado activo la caravana sale sin comprar; con él, compra lo que haya y tarda
     /// `tiempoCarga` por carro de lo comprado.
     fn comprar_en_ajena(&mut self, t: Instante, id: u64, i: usize, plaza: u64) {
         let Some(comprado) = self.comerciar_caravana(t, i, plaza, false) else { return self.salir(t, id) };
@@ -350,7 +350,7 @@ impl Nucleo {
         self.programar_comercio(fin_paso, entidad_caravana(id), SucesoComercio::FinPasoEncargo);
     }
 
-    /// Rutas de caravanas §6 · La caravana `i` comercia en la plaza ajena `plaza` con las órdenes de su mercado: vende con las líneas de `dejar` de la parada de destino o compra con las de
+    /// Comercio_Caravanas §5.8.8 · La caravana `i` comercia en la plaza ajena `plaza` con las órdenes de su mercado: vende con las líneas de `dejar` de la parada de destino o compra con las de
     /// `recoger` ([`vender`], [`comprar`]). `None` si la plaza no tiene Mercado activo o ya no existe ella o el origen: no se comercia. Si no, lo servido por recurso (vacío si nada casó).
     fn comerciar_caravana(&mut self, t: Instante, i: usize, plaza: u64, vende: bool) -> Option<Mercancia> {
         let c = &self.estado.comercio.flota[i];

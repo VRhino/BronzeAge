@@ -267,8 +267,8 @@ impl<'n> Mirada<'n> {
         }
 
         // Caravanas que no están en casa, dentro de una plaza ni en una batalla: las propias (de una plaza de la Facción o con destino en ella), enteras; las ajenas, si se ven o si una grande
-        // llama la atención. Una `Esperando` está dentro de su plaza y no sale (Rutas_De_Caravanas §4); si es de la Facción y espera en el destino de una plaza ajena, esa plaza le lleva sus
-        // órdenes de mercado (§6, «Qué se ve»).
+        // llama la atención. Una `Esperando` está dentro de su plaza y no sale (Comercio_Caravanas §5.8.4); si es de la Facción y espera en el destino de una plaza ajena, esa plaza le lleva sus
+        // órdenes de mercado (Comercio_Caravanas §5.8.8, «Qué se ve»).
         let flota = &e.reglas.economia.comercio.flota;
         let de_la_faccion = |plaza: Option<u32>| plaza.and_then(|p| e.asentamientos.get(&u64::from(p))).is_some_and(|a| Some(a.faccion) == self.faccion);
         let mut con_caravana_dentro: BTreeSet<u64> = BTreeSet::new();
@@ -486,7 +486,7 @@ impl<'n> Mirada<'n> {
         v
     }
 
-    /// Las órdenes de mercado activas de la plaza ajena `plaza` (2026-10-29: quien está dentro; Rutas_De_Caravanas §6: la Facción con una caravana esperando en ella), para tomarlas.
+    /// Las órdenes de mercado activas de la plaza ajena `plaza` (2026-10-29: quien está dentro; Comercio_Caravanas §5.8.8: la Facción con una caravana esperando en ella), para tomarlas.
     fn ordenes_activas(&self, plaza: u64) -> impl Iterator<Item = Visible<'n>> {
         let n = self.n;
         n.estado().comercio.libro.ordenes.iter().filter(move |o| u64::from(o.asentamiento) == plaza && o.estado == EstadoOrden::Activa).map(move |o| {

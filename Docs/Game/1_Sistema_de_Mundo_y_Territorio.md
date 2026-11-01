@@ -106,7 +106,7 @@ Los caminos no se construyen: **los hace el uso**. Diseño y decisiones en `type
 - **Ejércitos: terreno sí, red no.** Marchan más rápido sobre un camino, pero no lo crean ni le suman peso, y no pagan peaje. Las caravanas de fundación tampoco cuentan como ruta.
 
 **Paso por ciudades** (Doc 3.6, 3.10):
-- Si el trazado de una caravana comercial cruza la zona de influencia de un asentamiento **ajeno** (de otra Facción), se fuerza el paso por esa ciudad y la caravana deja allí un **peaje en especie del 2 % de cada recurso que lleve**, sin pararse. Varias ciudades en el camino: se pasa por todas, en orden. A la vuelta va vacía y no paga. Una ciudad propia no fuerza nada.
+- Si el trazado de una caravana comercial cruza la zona de influencia de un asentamiento **ajeno** (de otra Facción), se fuerza el paso por esa ciudad y la caravana deja allí un **peaje en especie del 2 % de cada recurso que lleve**, sin pararse. Varias ciudades en el camino: se pasa por todas, en orden. A la vuelta va vacía y no paga, salvo la caravana con un encargo (rutas y envíos, Doc 3.13.9), que vuelve cargada y paga el peaje en cada tramo con carga. Una ciudad propia no fuerza nada.
 - **Sin inmunidad**: ninguna zona protege del todo a una caravana frente a una columna; la zona solo decide el tipo de combate (A o B, Doc 3.10). Los bandidos sí siguen sin actuar dentro de ninguna zona.
 
 **Logro de `logistica_campana`** (Doc 6, Era IV; BA-006 D30): existe un tramo **fuera de toda zona de influencia** recorrido por al menos **10 rutas de 3 Facciones distintas**.

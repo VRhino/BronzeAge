@@ -153,7 +153,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `encargo.mismo_origen` | `ENCARGO_MISMO_ORIGEN` | El destino del encargo es el origen de la caravana. |
 | `encargo.destino_ajeno` | `ENCARGO_DESTINO_AJENO` | Una ruta permanente a una plaza que no es de la Facción del origen (a una ajena solo va un envío). |
 | `encargo.linea_invalida` | `ENCARGO_LINEA_INVALIDA` | Una línea con cantidad o tope de menos de una unidad, un recurso repetido en la misma lista, precio en una plaza propia u oro en una ajena. |
-| `encargo.falta_precio` | `ENCARGO_FALTA_PRECIO` | Una línea en una plaza ajena sin precio máximo (al recoger) o mínimo (al dejar). |
+| `encargo.falta_precio` | `ENCARGO_FALTA_PRECIO` | Una línea en una plaza ajena sin precio máximo (al recoger) o mínimo (al dejar), o con un precio que no es positivo. |
 | `encargo.supera_capacidad` | `ENCARGO_SUPERA_CAPACIDAD` | Lo que se recoge en una parada pasa de la capacidad de la caravana. |
 | `encargo.ya_tiene` | `ENCARGO_YA_TIENE` | La caravana ya tiene un encargo: se cambia o se cancela. |
 | `encargo.no_tiene` | `ENCARGO_NO_TIENE` | La caravana no tiene encargo. |

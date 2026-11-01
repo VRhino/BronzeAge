@@ -1,4 +1,4 @@
-//! La proyección del encargo de una caravana (rutas de caravanas §4, §6 y §7; `Proyecciones_Y_Autorizacion.md`): lo que lleva la caravana propia y qué caravanas salen en el mapa. Sobre el
+//! La proyección del encargo de una caravana (Comercio_Caravanas §5.8.4, §5.8.8 y §5.8.9; `Proyecciones_Y_Autorizacion.md`): lo que lleva la caravana propia y qué caravanas salen en el mapa. Sobre el
 //! artefacto de mundo real (`generador/salida/mundo/mundo-*.bin`); las pruebas se omiten si no está.
 
 mod comun;

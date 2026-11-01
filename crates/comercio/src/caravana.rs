@@ -57,7 +57,7 @@ pub enum EstadoCaravana {
     Aparcada,
     Adjunta,
     EnBatalla,
-    /// Con encargo, dentro de su origen o de su destino: no se ve en el mapa ni se ataca (rutas de caravanas §4).
+    /// Con encargo, dentro de su origen o de su destino: no se ve en el mapa ni se ataca (Comercio_Caravanas §5.8.4).
     Esperando,
 }
 
@@ -122,7 +122,7 @@ pub enum Llegada {
     /// `Retornando`: llegada a casa. Hay que volcar `contenido` (solo si vino de `enviarCaravanaAlOrigen`) en el origen; la caravana
     /// queda `Disponible` y limpia, y la escolta vuelve al campamento.
     Casa { contenido: Carga, escolta: Vec<Escuadra> },
-    /// Una caravana con encargo llegó a una de sus puntas (rutas de caravanas §4): `punta` es cuál de las dos, el origen o `encargo.destino`. La
+    /// Una caravana con encargo llegó a una de sus puntas (Comercio_Caravanas §5.8.4): `punta` es cuál de las dos, el origen o `encargo.destino`. La
     /// caravana queda `Esperando` en ella, sin plan, ruta, costes ni peajes; no se toca la carga, la escolta ni el destino. El núcleo atiende la parada.
     Parada { punta: Punta },
     /// `EnTransito` de acarreo: hay que **volcar** `contenido` en el almacén de la plaza madre (`destino`), sin comisión ni trueque. La
@@ -196,7 +196,7 @@ impl ReglasFlota {
     }
 }
 
-/// ¿Existe la transición `desde → hasta` en la máquina de estados? `Esperando` (rutas de caravanas §4) se entra desde `Disponible` al dar el encargo
+/// ¿Existe la transición `desde → hasta` en la máquina de estados? `Esperando` (Comercio_Caravanas §5.8.4) se entra desde `Disponible` al dar el encargo
 /// y desde `EnTransito` o `Retornando` al llegar a una punta, y de ella se sale a `EnTransito`, `Retornando` o `Disponible`. `EnBatalla` solo se entra desde un estado en el mapa y solo se sale
 /// a lo que se estaba haciendo (`EnTransito`, `Retornando` o `Adjunta`).
 pub fn transicion_valida(desde: EstadoCaravana, hasta: EstadoCaravana) -> bool {
@@ -460,7 +460,7 @@ impl Caravana {
 
     // ---------- Escolta cedida (§5.5) ----------
 
-    /// `asignarEscolta`: caravana comercial `disponible` (o `Esperando` en el origen con encargo, rutas de caravanas §4), ≥ 1 escuadra, sin repetidos y dentro del cupo de Liderazgo de la caravana.
+    /// `asignarEscolta`: caravana comercial `disponible` (o `Esperando` en el origen con encargo, Comercio_Caravanas §5.5), ≥ 1 escuadra, sin repetidos y dentro del cupo de Liderazgo de la caravana.
     pub fn asignar_escolta(&mut self, nuevas: Vec<Escuadra>, cupo: i64) -> Result<(), ErrorCaravana> {
         self.exigir_disponible_escoltable()?;
         if nuevas.is_empty() || nuevas.iter().enumerate().any(|(i, e)| nuevas[..i].iter().any(|x| x.id == e.id) || self.escolta.iter().any(|x| x.id == e.id)) {
@@ -473,7 +473,7 @@ impl Caravana {
         Ok(())
     }
 
-    /// `quitarEscolta`: solo con la caravana `disponible` (o `Esperando` en el origen con encargo, rutas de caravanas §4); cada héroe retira únicamente las suyas (por defecto, todas las suyas). Devuelve
+    /// `quitarEscolta`: solo con la caravana `disponible` (o `Esperando` en el origen con encargo, Comercio_Caravanas §5.5); cada héroe retira únicamente las suyas (por defecto, todas las suyas). Devuelve
     /// las que vuelven al campamento.
     pub fn quitar_escolta(&mut self, heroe: HeroeId, ids: Option<&[EscuadraId]>) -> Result<Vec<Escuadra>, ErrorCaravana> {
         self.exigir_disponible_escoltable()?;
@@ -557,7 +557,7 @@ impl Caravana {
         Ok(std::mem::take(&mut self.escolta))
     }
 
-    /// Rutas de caravanas §2 y §4: una comercial `Disponible` con al menos un carro con animal recibe el encargo y queda `Esperando` en el origen. No toca
+    /// Comercio_Caravanas §5.8.3 y §5.8.4: una comercial `Disponible` con al menos un carro con animal recibe el encargo y queda `Esperando` en el origen. No toca
     /// la carga, la escolta ni la posición.
     pub fn dar_encargo(&mut self, e: Encargo) -> Result<(), ErrorCaravana> {
         self.exigir_disponible_comercial()?;
@@ -569,7 +569,7 @@ impl Caravana {
         Ok(())
     }
 
-    /// Rutas de caravanas §4: una `Esperando` con encargo sale hacia la otra punta. Desde el origen pasa a `EnTransito` (`punta = Destino`); desde el destino
+    /// Comercio_Caravanas §5.8.4: una `Esperando` con encargo sale hacia la otra punta. Desde el origen pasa a `EnTransito` (`punta = Destino`); desde el destino
     /// a `Retornando` (`punta = Origen`). Pone el destino del encargo, la posición en el primer punto de la ruta, la ruta, los costes, los peajes y el plan, y
     /// el encargo queda en `Fase::Descarga` (lo primero que hará al llegar) y sin `fin_paso`. No toca la carga ni la escolta.
     pub fn salir_de_parada(&mut self, ruta: Vec<Punto>, costes: Vec<i64>, peajes: Vec<Peaje>, plan: Plan) -> Result<(), ErrorCaravana> {
@@ -592,7 +592,7 @@ impl Caravana {
         Ok(())
     }
 
-    /// Rutas de caravanas §4: acaba el encargo de una `Esperando` en el origen. Queda `Disponible`, sin encargo y limpia; devuelve la carga que llevaba y la
+    /// Comercio_Caravanas §5.8.7: acaba el encargo de una `Esperando` en el origen. Queda `Disponible`, sin encargo y limpia; devuelve la carga que llevaba y la
     /// escolta para que el núcleo las devuelva al almacén y al campamento.
     pub fn terminar_encargo(&mut self) -> Result<(Carga, Vec<Escuadra>), ErrorCaravana> {
         if self.estado != EstadoCaravana::Esperando || !self.encargo.as_ref().is_some_and(|e| e.punta == Punta::Origen) {
@@ -676,7 +676,7 @@ impl Caravana {
         matches!(self.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando).then(|| self.plan.as_ref().and_then(Plan::fin)).flatten()
     }
 
-    /// Los peajes se cruzan a la ida y, con encargo, también a la vuelta (va cargada, rutas de caravanas §4).
+    /// Los peajes se cruzan a la ida y, con encargo, también a la vuelta (va cargada, Comercio_Caravanas §5.8.6).
     fn cruza_peajes(&self) -> bool {
         self.estado == EstadoCaravana::EnTransito || (self.estado == EstadoCaravana::Retornando && self.encargo.is_some())
     }
@@ -793,7 +793,7 @@ impl Caravana {
 
     /// La plaza `ruina` (destruida o conquistada) era el destino: la caravana en camino regresa a su origen **con su carga** por el plan
     /// `calcularRuta(posición actual → origen)` (sin atracción de la red) que construye el núcleo; `destino = ruina` y, al llegar, vuelca
-    /// el contenido en el origen (§10). Con encargo (rutas de caravanas §4), la punta pasa a `Origen` y el encargo queda `cancelado`: al llegar
+    /// el contenido en el origen (§10). Con encargo (Comercio_Caravanas §10), la punta pasa a `Origen` y el encargo queda `cancelado`: al llegar
     /// da la parada del origen, donde el encargo termina.
     pub fn regresar_a_origen(&mut self, ruina: AsentamientoId, plan: Plan) -> Result<(), ErrorCaravana> {
         self.pasar(EstadoCaravana::Retornando)?;

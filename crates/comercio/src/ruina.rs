@@ -6,7 +6,7 @@
 //!   se pierden; las que **iban hacia `R`** vuelven (la `preparando` a `disponible` con su carga; la `en_transito` regresa por un plan nuevo
 //!   o se pierde si no hay camino por tierra ni origen); la **aparcada en `R`** se destruye con todo, sin captura. Las `construccion` siguen su
 //!   propio camino; las `adjunta` también, salvo las que **salían de `R`**, que se pierden con su plaza y su carga (P7, 2026-10-25).
-//! - **Caravanas con encargo** (rutas de caravanas §4): la `esperando` en `R` como destino de su ruta se destruye con todo, como la aparcada; la
+//! - **Caravanas con encargo** (Comercio_Caravanas §10): la `esperando` en `R` como destino de su ruta se destruye con todo, como la aparcada; la
 //!   `en_transito` hacia `R` regresa como cualquier otra que iba hacia ella y su encargo termina al llegar a casa. La que sale de `R` sigue la
 //!   suerte de las demás de su origen (se pierde en la ruina; en la conquista pasa con la flota).
 //! - **Conquista de `R`** (decidida el 2026-10-18): la **flota** pasa al conquistador con su zona (no se pierde ninguna), los trueques con la
@@ -112,7 +112,7 @@ pub fn cerrar_dependientes(
                 accion(if origen_existe(c.origen) && hay_camino_a_origen(c) { Accion::Regresa } else { Accion::Pierde });
             }
             (EstadoCaravana::Aparcada, _) if c.anfitriona == Some(plaza) => accion(Accion::Destruye),
-            // Esperando en el destino de su encargo (rutas de caravanas §4): está dentro de la plaza que cae.
+            // Esperando en el destino de su encargo (Comercio_Caravanas §10): está dentro de la plaza que cae.
             (EstadoCaravana::Esperando, _) if c.encargo.as_ref().is_some_and(|e| e.punta == Punta::Destino && e.destino == plaza) => accion(Accion::Destruye),
             _ => {} // las demás siguen como estaban
         }

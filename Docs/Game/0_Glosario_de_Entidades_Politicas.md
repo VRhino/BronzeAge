@@ -119,7 +119,7 @@ Título dinámico de PRESTIGIO (no cargo mecánico nuevo) otorgado al Rey de la 
 - **General:** mando militar del asentamiento.
 - **Maestro de Obras:** gestiona prioridades de auto-construcción, bonus de tiempos de construcción.
 - **Sacerdote:** acelerador de aparición de nobleza + bonificación de felicidad.
-- **Maestro de Caravanas:** da, cambia y cancela los encargos de las caravanas de su plaza (sin políticas propias).
+- **Maestro de Caravanas:** da, cambia y cancela los encargos de las caravanas de su plaza (el Tesorero y el Gobernador también pueden; sin políticas propias).
 
 ## Población NPC: Pesants / Artesanos / Nobleza
 Las 3 clases de población NPC de un asentamiento (distintas de los Héroes).

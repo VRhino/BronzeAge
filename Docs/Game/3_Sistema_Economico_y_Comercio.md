@@ -19,7 +19,7 @@
   - **Contesta siempre un jugador** —humano o bot, con el cargo que toca (2026-10-04, D52)—: no hay plazas NPC que contesten solas.
 - **Cada envío sale en una caravana propia**: exige tener una caravana PROPIA **'disponible'** en el asentamiento origen (ver 3.12). `asignarCaravanasATrueque` la asigna automáticamente al envío pendiente; si no hay ninguna disponible, el envío espera hasta que quede libre una caravana (la asignación se reevalúa en ese momento). Para entregar a mano en un trueque, se engancha la caravana a un ejército y se entrega al llegar (Doc 5.13.3); el lanzamiento manual de 3.13.3 no se vincula a trueques.
 - Cuando hay menos caravanas disponibles que envíos pendientes en un mismo asentamiento (varios acuerdos compitiendo a la vez), se prioriza por un SCORE ponderado (ver 3.12: urgencia por expiración del acuerdo, urgencia por volumen pendiente, cercanía del destino) — no por orden de llegada.
-- La caravana viaja de verdad por el mapa, sobre una RUTA calculada por pathfinding (rodea terreno costoso, ver Doc 1.6/3.6), con la velocidad modulada por el coste del terreno que cruza en cada momento — y entrega al llegar. Al entregar, la caravana pasa a `retornando` y vuelve a estar 'disponible' al llegar al origen (3.13.3): es un activo persistente y con coste (3.12), no un objeto de un solo uso.
+- La caravana viaja de verdad por el mapa, sobre una RUTA calculada por pathfinding (rodea terreno costoso, ver Doc 1.6/3.6), con la velocidad modulada por el coste del terreno que cruza en cada momento — y entrega al llegar. Al entregar, la caravana pasa a `retornando` y vuelve a estar 'disponible' al llegar al origen (3.13.3): es un activo persistente y con coste (3.12), no un objeto de un solo uso. (La que lleva un encargo, 3.13.9, no vuelve necesariamente vacía.)
 - Cumplir o incumplir un trueque ajusta el score de reputación de Facción (Doc 2.7) **solo entre Facciones distintas**: un trueque entre plazas de la misma Facción no mueve la reputación (decidido el 2026-10-11).
 
 ## 3.3 Órdenes de mercado (comercio abierto)
@@ -32,7 +32,8 @@
   - **Manda el Líder de la columna**: el carro es común (Doc 5.13.2), y sin esa condición cualquiera que se uniera en campo podría gastarse el oro de todos.
   - **Sirve lo que puede** en vez de fallar cuando se pide de más —el tope sale a la vez de la orden, del almacén de la plaza, de su oro, del carro y de lo que se lleve encima—, pero **falla si no puede servir nada**.
   - **Las órdenes CADUCAN** (`MERCADO.plazoOrdenMinutos`, 200 minutos): sin emparejamiento automático nada las cerraría nunca, y una plaza acumularía ofertas eternas a precios viejos.
-  - **Visibilidad**: el escaparate de una plaza ajena se ve **al estar en su puerta**, y solo lo que sigue en pie. Un mercado enseña sus ofertas a quien está dentro; una lista global dejaría leer los precios del mundo entero sin moverse.
+  - **Una caravana con un envío programado (3.13.9) también toma las órdenes de una plaza ajena** sin héroe ni columna: vende a las órdenes de compra y compra a las de venta, con estas mismas cuentas.
+  - **Visibilidad**: el escaparate de una plaza ajena se ve **al estar en su puerta** (o con una caravana propia dentro, 3.13.9), y solo lo que sigue en pie. Un mercado enseña sus ofertas a quien está dentro; una lista global dejaría leer los precios del mundo entero sin moverse.
 
 ### 3.3b El mercado de un campamento de mercenarios (2026-10-02, Doc 1.9b)
 Un vendedor **neutral** que solo **vende**, con stock limitado: los bienes con precio de referencia (hoy, los recursos en bruto) a **+30 %** sobre ese precio. **El oro que cobra se destruye** (sumidero). El héroe residente compra directo (`comprarEnCampamento`), pagando del oro de su almacén personal y recibiendo en él; sirve lo que puede (stock, oro, sitio) y falla si no puede servir nada. **Se repone con el pulso de la economía real**: cada trueque cerrado entre Facciones **distintas** (los dos lados) y cada venta o compra en el mostrador de una plaza ajena suma lo intercambiado a un **contador global por bien**; cada **3 horas** cada campamento recibe el **3 %** de esos contadores, con tope de **300 por bien**, y los contadores vuelven a cero. El comercio de una Facción consigo misma no cuenta (en la Era II medida eran 2 910 de 2 919 trueques). Un bien que nadie comercia no se repone. Nace con 100 de cada bien en venta. **Salvo madera, piedra y trigo** (2026-10-04, D41): tienen **pila propia** (300, 60 y 300), con la que nacen y a la que vuelven en cada reposición sin depender del comercio; **cupo por héroe y día** en madera (60) y piedra (10). **Cualquier héroe que no resida** compra **desde la puerta cualquiera de los bienes en venta** —cobre, estaño y las demás materias primas, **menos el trigo**: el trigo se reposta **gratis y para todos, solo a víveres y nunca al carro** (D44, 2026-10-11)— **al mismo precio, pagando con el oro de su carro y llevándoselo al carro** de su columna, sin cupo diario (2026-10-11); compite por el mismo stock que el residente. **Solo los héroes interactúan con el campamento, yendo en persona**: una plaza no encarga compras. Para llevar lo comprado a casa, el héroe sale con su carro (o con una caravana enganchada a su columna, 3.7).
@@ -44,7 +45,7 @@ Un vendedor **neutral** que solo **vende**, con stock limitado: los bienes con p
 
 ## 3.5 Comisiones de comercio
 - Comisión del 3% dentro de la misma Facción vs. 8% externa, aplicada tanto en trueque como en mercado, modulable por política ("Aranceles Proteccionistas" y "Comercio Abierto" del Tesorero, "Arterias Comerciales" del Maestro de Obras; se multiplican y solo tocan la comisión externa). Corregido el 2026-10-18 al contrastar con Mechanics.
-- **En un trueque o una entrega de caravana el comercio genera el oro de la comisión** (se acuña en el destino), **pero solo entre dos asentamientos distintos**: llevarse la carga al propio origen no rinde nada (2026-10-11).
+- **En un trueque o una entrega de caravana el comercio genera el oro de la comisión** (se acuña en el destino), **pero solo entre dos asentamientos distintos**: llevarse la carga al propio origen no rinde nada (2026-10-11). **Una ruta permanente no cobra comisión** y un envío programado la cobra solo por lo que deja en el destino, si es otra plaza propia (3.13.9).
 - **Reputación baja = recargo de su bolsillo** (2026-10-11): si la Facción de origen, distinta de la del destino, tiene reputación en el umbral bajo, paga además el 50 % extra de la comisión, sacado del oro de su almacén de origen y entregado al destino.
 - **Todo en unidades enteras** (2026-10-24, C3b; ver Doc 4.3): lo que se pacta, se carga, se entrega, se cobra de peaje o se acuña de comisión va en unidades enteras **redondeando hacia abajo** (una comisión de 11,25 acuña 11). Lo que se paga por un lote (el oro del mostrador, una compra en el campamento) se redondea hacia arriba. **El peaje cobra como mínimo una unidad** a toda caravana con carga (el 2 % de 40 cobra 1), **pero nunca deja la carga en cero**: una caravana de una sola unidad pasa sin pagar. **Cada comercio entre Facciones repone como mínimo una unidad** de ese bien en los campamentos de mercenarios. Una línea de un trueque solo se cumple **entregada entera** (se retira la regla de 2026-10-19 que saldaba una línea a la que faltaba menos de una unidad).
 - **En el mostrador (3.3), la paga quien toma la orden y se la queda la plaza donde ocurre**: comprando se paga de más, vendiendo se cobra de menos. El oro **se conserva**: la comisión sale de quien comercia, no se acuña. En un trueque, la comisión la cobra el destino al recibir cada entrega (`comisionDeEntrega`).
@@ -107,7 +108,7 @@ Requiere tecnología de barcos + puertos. Fase 0 es 100% terrestre (eje naval po
 
 **Mercado (edificio, Doc 4.2.1)**: adición MANUAL de Gobernador/Maestro de Obras (ver Doc 4.2), no auto-construcción. Gatea DOS cosas: colocar órdenes de mercado (3.3) y crear caravanas propias (más abajo). Sus niveles internos administran el cupo de flota (2/4/6), el de **carros de toda la flota** (3/9/18, 3.13.2) y el de escolta por caravana (100/200/300 pts de Liderazgo, 3.13.4) — ver catálogo completo en Doc 4.2.1.
 
-**Flota de caravanas propias**: activo persistente, no efímero. Se crea como un casco vacío y gratis (`crearCaravana`, 3.13.2) que cuenta contra `cupoCaravanas` (nivel de Mercado + política "Ampliación de Flota", +1 aditivo) hasta que se pierda: capturada en combate (3.10), destruida o por la ruina de su plaza, también si va adjunta a un ejército: se pierde con su plaza y con su carga (decidido el 2026-10-25; Comercio_Caravanas §5.2 y §10). **No se puede desmantelar voluntariamente.** Se reutiliza, no se reconstruye en cada viaje: su ciclo de estados está en 3.13.3.
+**Flota de caravanas propias**: activo persistente, no efímero. Se crea como un casco vacío y gratis (`crearCaravana`, 3.13.2) que cuenta contra `cupoCaravanas` (nivel de Mercado + política "Ampliación de Flota", +1 aditivo) hasta que se pierda: capturada en combate (3.10), destruida o por la ruina de su plaza, también si va adjunta a un ejército: se pierde con su plaza y con su carga (decidido el 2026-10-25; Comercio_Caravanas §5.2 y §10). **No se puede desmantelar voluntariamente.** Se reutiliza, no se reconstruye en cada viaje: su ciclo de estados está en 3.13.3, y puede además trabajar sola en rutas y envíos programados (3.13.9).
 
 **Cooldown de creación**: tras crear una caravana desde un asentamiento —comercial o de Fundación (Doc 1.8), COMPARTIDO entre las dos— hay que esperar `CARAVANA_COOLDOWN` (10 minutos, parametrizable) antes de poder crear otra desde el mismo asentamiento. Evita que se spamee la creación cuando una caravana recién salida es destruida (bandidos, Doc 1.9; combate de caravanas, 3.10) y el cupo y los recursos vuelven a estar disponibles de inmediato. Es regla del MOTOR, así que gatea igual la creación de un jugador que la de la gobernanza NPC.
 
@@ -198,7 +199,7 @@ las grandes tardan. La carga se **reserva del almacén ya** (se descuenta al pre
   automático o la entrega con ejército (3.2).
 
 Ciclo completo: `disponible → preparando → en_transito → retornando → disponible`. Al volver desanda su ruta:
-una caravana nunca se teletransporta.
+una caravana nunca se teletransporta. (La caravana con un encargo, 3.13.9, no desanda: traza una ruta nueva en cada salida.)
 
 ### 3.13.4 Escolta sin héroe
 
@@ -208,7 +209,7 @@ Distinta de la escolta por ejército (Doc 5.13.3), que exige a un héroe marchan
   lanzarla** (`prepararCaravana` con `escoltaEscuadronIds`). No necesita estar presente ni acompañar el viaje;
   lo que viaja son sus escuadrones (`Caravana.escoltaIds`).
 - **Siguen con la caravana hasta que termina el viaje o es destruida** — cesión **por viaje**, no enganche
-  permanente. Al terminar vuelven al campamento de su héroe. Si la caravana es destruida o capturada, por el
+  permanente. Al terminar vuelven al campamento de su héroe. Con una ruta o un envío (3.13.9) el "viaje" es el encargo entero: viajan en todas las vueltas y vuelven al terminar el encargo. Si la caravana es destruida o capturada, por el
   motivo que sea, quedan a 0 unidades y vuelven igualmente al campamento de su héroe (Doc 5.15.4).
 - Mientras están cedidos no están en el campamento, así que tampoco pueden estar en guarnición. **No gastan el
   Liderazgo del héroe que las presta**: el Liderazgo de un héroe solo lo afecta lo que él carga consigo (mundo
@@ -222,7 +223,7 @@ Distinta de la escolta por ejército (Doc 5.13.3), que exige a un héroe marchan
   lo comparten todos los residentes que ceden a ella. Lo limitan además, para cada escuadra: ser del héroe, estar en su campamento (no en la
   guarnición, ni de columna, ni ya cedida a otra caravana) y tener gente. El Liderazgo del que presta no interviene. La proyección del
   jugador da `caravanas[].escoltaLiderazgo { usado, cupo }`.
-- **Ceder por adelantado** (2026-10-08): `asignarEscolta` cede escuadrones a una caravana **parada en su origen** (`disponible`) sin
+- **Ceder por adelantado** (2026-10-08): `asignarEscolta` cede escuadrones a una caravana **parada en su origen** (`disponible`, o esperando en él con un encargo, 3.13.9) sin
   lanzarla, y `quitarEscolta` retira las propias mientras siga parada. El reparto automático (3.13.5) la manda **ya escoltada**, y la escolta
   vuelve a su campamento al acabar el viaje como siempre. Lanzarla a mano con más escuadras suma lo ya cedido al cupo. Nadie cede ni retira a
   nombre de otro y hay que residir en el origen.
@@ -233,7 +234,7 @@ Distinta de la escolta por ejército (Doc 5.13.3), que exige a un héroe marchan
 
 ### 3.13.5 Reparto automático vs preparación manual
 
-- `asignarCaravanasATrueque` (3.2) reparte para trueque las caravanas **no reservadas**.
+- `asignarCaravanasATrueque` (3.2) reparte para trueque las caravanas **no reservadas** y libres: una caravana con un encargo (3.13.9) no entra en el reparto hasta que lo termina.
 - Una caravana con `reservadaManual = true` sale del pool automático **sea cual sea su tamaño**. Una de 1
   carro se puede reservar; una de 5 puede seguir en automático. La señal es explícita, no se infiere de la
   composición.
@@ -273,3 +274,24 @@ Cada pueblo extractor (4.2.2) tiene un carro propio, una caravana de tipo `acarr
 - **Se puede escoltar**: con escolta sin héroe de los residentes de la madre (cupo del Mercado de la madre si lo tiene, 100/200/300; **100** si no) o con escolta por ejército (5.13.3).
 - **Casi siempre lucha en B**, porque viaja dentro de la zona del dueño; si una frontera recorta la zona y la ruta sale de ella, ese tramo es A.
 - **Si se destruye**, se compra otro en la plaza madre, solo si el pueblo no tiene ninguno, al coste de carro más buey (20 madera + ~12 oro). Mientras no tenga carro, el pueblo acumula hasta llenar su almacén.
+
+### 3.13.9 Rutas y envíos de caravana (2026-10-31)
+
+Una caravana comercial de la flota puede recibir un **encargo**: un transporte con dos paradas, su plaza de origen y un destino, y en cada una se fija qué deja y qué recoge. Mientras lo cumple va y viene sola, con la escolta que ya tuviera cedida, sin héroe ni columna. Hay dos tipos:
+
+- **Ruta permanente:** va y viene entre dos plazas de la misma Facción sin parar, hasta que se cancela, el destino deja de ser de la Facción o la destruyen. Nunca va a una plaza de otra Facción, tampoco aliada.
+- **Envío programado:** una sola ida y vuelta, ya o a la hora elegida (hasta 3 días de mundo por delante). Al volver deja lo que traiga y queda libre. Puede ir a cualquier plaza con camino por tierra; en una de otra Facción vende y compra con las órdenes de su mercado.
+
+Las reglas:
+
+- **Quién lo da:** el Gobernador, el Tesorero o el Maestro de Caravanas de la plaza de origen, residentes y dentro; los mismos lo cambian y lo cancelan. La caravana ha de estar disponible y con algún carro con animal. Los carros, los animales y la escolta son los que ya tiene; no gasta cupo nuevo ni hay más tope de rutas que el cupo de caravanas.
+- **Qué hace en cada parada:** primero deja y luego recoge. Al dejar elige recurso y, si quiere, un tope (sin tope, deja todo lo que lleve de ese recurso); lo que no cabe en el almacén se tira o se queda a bordo, según lo elegido. Al recoger elige recurso y cantidad, sin pasar de la capacidad de la caravana, y puede esperar a que el almacén tenga todo lo pedido (sin plazo; se ve qué falta y se cancela a mano) o salir con lo que haya.
+- **Cuánto tarda:** cargar y descargar cuestan un tiempo por cada carro que mueve algo (placeholder, 2 minutos por carro). Una parada que no mueve nada no tarda. El envío programado empieza a cargar a su hora y sale al acabar la carga.
+- **Dentro de la plaza** (esperando su hora o las existencias, o mientras carga y descarga) la caravana no se ve en el mapa ni se ataca: la protege la plaza. Solo es vulnerable en el camino, como cualquier caravana comercial; si pierde carros sigue con los que le queden y, sin carros, desaparece y el encargo con ella.
+- **Comisión:** la ruta no cobra ninguna, porque si no ir y venir entre dos plazas propias acuñaría oro sin fin. El envío cobra la de una entrega (3.5) por lo que deja en el destino, si es otra plaza propia. En una plaza ajena no hay entrega sino comercio: paga la tasa del mercado y no se acuña nada.
+- **Peajes:** se pagan en cada tramo que cruza una zona ajena (Doc 1.6), a la ida y a la vuelta, sobre lo que lleve en ese momento: la vuelta cargada paga; la vacía no tiene nada que pagar.
+- **Escolta:** viaja en todas las vueltas y vuelve al campamento al terminar el encargo, o antes si la caravana se pierde.
+- **Cancelar:** si la caravana espera en el origen, queda libre al instante; si espera en el destino, sale ya de vuelta; si va de camino, acaba el tramo, vuelve sin comerciar y deja todo en el origen. **Cambiar:** el destino solo se cambia con la caravana esperando en su origen; lo demás vale para los pasos que aún no han empezado.
+- **Fin del encargo:** la caravana queda disponible en el origen, vuelca allí todo lo de a bordo (lo que no cabe en el almacén se pierde) y su escolta vuelve al campamento. Si el destino de una ruta deja de ser de la Facción (se arruina o lo conquistan), la caravana en camino da la vuelta y el encargo termina al llegar a casa.
+- **Si cae una plaza:** la caravana que espera dentro del destino se destruye con su carga, como la aparcada (3.13.7); si se arruina su origen, se pierde, esté donde esté, como el resto de su flota (3.12); si conquistan el origen con la caravana esperando dentro, pasa con la flota al conquistador, el encargo termina y su carga vuelve al almacén.
+- **En una plaza ajena:** dejar es vender a las órdenes de compra de la plaza con un precio mínimo, y recoger es comprar a sus órdenes de venta con un precio máximo. Primero vende y luego compra, así que lo cobrado paga la compra del mismo viaje; el oro con que comprar se recoge en el origen. No espera órdenes ni tira ni regala nada: lo que no se vende vuelve a bordo. Si la plaza no tiene Mercado activo, no comercia. Mientras la caravana está dentro, su Facción ve las órdenes activas de esa plaza (3.3).

@@ -1,4 +1,4 @@
-//! Las plazas que caen y las caravanas destruidas con encargo (Comercio_Caravanas §10 y §12; `Rutas_De_Caravanas.md` §4): qué pasa con una caravana de ruta o de envío cuando
+//! Las plazas que caen y las caravanas destruidas con encargo (Comercio_Caravanas §10 y §12): qué pasa con una caravana de ruta o de envío cuando
 //! una de sus dos plazas cae en ruinas o es conquistada, y cuando la caravana se destruye. Sobre el artefacto de mundo real (`generador/salida/mundo/mundo-*.bin`); las pruebas
 //! se omiten si no está.
 

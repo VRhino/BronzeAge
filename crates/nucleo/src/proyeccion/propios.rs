@@ -531,7 +531,7 @@ pub fn caravana(n: &Nucleo, c: &Caravana) -> pb::Caravana {
     }
 }
 
-/// El encargo de la caravana propia (rutas de caravanas §7), campo a campo; los textos son los que lee `sesiones/ordenes.rs` (`modo`: `ruta | envio`) y los recursos van con su id de catálogo.
+/// El encargo de la caravana propia (Comercio_Caravanas §5.8.9), campo a campo; los textos son los que lee `sesiones/ordenes.rs` (`modo`: `ruta | envio`) y los recursos van con su id de catálogo.
 fn encargo(e: &Encargo) -> pb::Encargo {
     let parada = |p: &Parada| pb::ParadaEncargo {
         recoger: p.recoger.iter().map(|l| pb::LineaRecoger { recurso: l.recurso.nombre().to_owned(), cantidad: l.cantidad, precio_max: l.precio_max }).collect(),
