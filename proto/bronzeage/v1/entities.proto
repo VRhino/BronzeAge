@@ -46,6 +46,8 @@ message Faccion {
   repeated MiembroFaccion miembros = 18;
   // Su tablón de misiones recurrentes (Misiones_Recurrentes §8): solo en la Facción propia (`FACCION`) y en `ADMIN`; ausente en la forma pública.
   optional Tablon tablon = 19;
+  // Si es una Facción de bots: su Rey es un héroe bot (2026-11-01). Público. Sin Rey, falso. Un jugador no entra en una de bots ni un bot en una que no lo es.
+  bool es_bot = 20;
 }
 
 // Un ciudadano de la Facción (Participacion §3).
@@ -1064,7 +1066,7 @@ message TecnologiaRevelada {
 
 // Estado global de tecnología (Eras I-III; las IV y V se definen con el motor nuevo).
 // El directorio público de las Facciones (2026-10-29, `VISTA`, id `facciones`): todas las que existen, por id ascendente, también la propia. Cambia solo
-// cuando nace o desaparece una Facción o cambia algo de lo que lleva (nombre, sigilo, nivel, número de ciudadanos, derrota).
+// cuando nace o desaparece una Facción o cambia algo de lo que lleva (nombre, sigilo, nivel, número de ciudadanos, derrota, si es de bots).
 message DirectorioFacciones {
   repeated FaccionDelDirectorio facciones = 1;
 }
@@ -1076,6 +1078,7 @@ message FaccionDelDirectorio {
   uint32 nivel = 4;
   uint32 ciudadanos = 5;                 // cuántos
   bool derrotada = 6;
+  bool es_bot = 7;                       // su Rey es un bot (2026-11-01), como `Faccion.es_bot`
 }
 
 message EstadoTecnologia {

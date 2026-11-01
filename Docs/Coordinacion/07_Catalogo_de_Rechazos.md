@@ -535,6 +535,8 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `faccion.en_ejercito` | `FACCION_EN_EJERCITO` | Dejar la Facción yendo en un ejército (aunque sea solo) o en uno en preparación (Q7): primero se separa. |
 | `faccion.no_ciudadano` | `FACCION_NO_CIUDADANO` | El designado para Rey o Embajador no es ciudadano de la Facción. |
 | `faccion.sin_rey` | `FACCION_SIN_REY` | Nombrar Embajador en una Facción sin Rey. |
+| `faccion.de_bots` | `FACCION_DE_BOTS` | Un héroe humano pide entrar (o se acepta su solicitud) en una Facción de bots, la que tiene un Rey bot (2026-11-01). |
+| `faccion.no_es_de_bots` | `FACCION_NO_ES_DE_BOTS` | Un héroe bot pide entrar (o se acepta su solicitud) en una Facción cuyo Rey no es bot (2026-11-01). |
 | `residencia.cooldown` | `RESIDENCIA_COOLDOWN` | Cambió de residencia hace menos de `CIUDADANIA.cooldownCambioResidenciaDias`. |
 | `residencia.plaza_ajena` | `RESIDENCIA_PLAZA_AJENA` | Solo se reside en una plaza de la propia Facción. |
 | `residencia.ya_reside` | `RESIDENCIA_YA_RESIDE` | — |

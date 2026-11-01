@@ -692,6 +692,7 @@ pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
         misiones: misiones(n, crate::misiones::Dueno::Faccion(f)),
         miembros: n.miembros_de(f).into_iter().map(|m| pb::MiembroFaccion { heroe_id: ids::heroe(m.heroe), residencia_id: m.residencia.map(residencia_id), cargos: m.cargos, participacion: m.participacion }).collect(),
         tablon: tablon(n, crate::misiones::Dueno::Faccion(f)),
+        es_bot: n.es_faccion_de_bots(f),
         ..base
     }
 }
@@ -725,6 +726,7 @@ pub fn directorio_facciones(n: &Nucleo) -> pb::DirectorioFacciones {
             nivel: n.nivel_de_faccion(x.id),
             ciudadanos: x.ciudadanos.len() as u32,
             derrotada: x.derrota.is_some(),
+            es_bot: n.es_faccion_de_bots(x.id),
         })
         .collect();
     pb::DirectorioFacciones { facciones }

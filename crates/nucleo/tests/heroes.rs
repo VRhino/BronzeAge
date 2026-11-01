@@ -182,7 +182,7 @@ fn el_heroe_nace_en_un_campamento_con_su_progresion_inicial_y_cada_rechazo_tiene
     e.avanzar(HORA);
     let (v0, id0) = (e.n.version(), e.n.estado().siguiente_id);
     assert_eq!(e.rechazada("ana", crear("beto", 0, Controlador::Humano)), rechazos::NO_AUTORIZADO, "nadie crea el héroe de otro");
-    assert_eq!(e.rechazada("ana", crear("ana", 0, Controlador::Bot)), rechazos::NO_AUTORIZADO, "el controlador «bot» solo lo pone la administración");
+    // El controlador lo pone la sesión según la cuenta (una de bot crea su héroe bot; 2026-11-01): el núcleo ya no lo rechaza, y el cliente no puede elegirlo.
     assert_eq!(e.rechazada("ana", crear("ana", 9_999, Controlador::Humano)), rechazos::HEROE_CAMPAMENTO_DESCONOCIDO);
     assert_eq!((e.n.version(), e.n.estado().siguiente_id), (v0, id0), "un rechazo no deja rastro: ni versión ni ids");
 

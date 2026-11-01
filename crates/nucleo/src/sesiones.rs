@@ -396,12 +396,12 @@ impl Actor {
 
     fn orden(&mut self, sesion: SesionId, orden: pb::Orden) {
         let Some(s) = self.mesa.get(sesion) else { return };
-        let (cliente, admin, moderador, tx) = (s.cliente.clone(), s.es_admin(), s.moderador, s.tx.clone());
+        let (cliente, admin, moderador, tx, bot) = (s.cliente.clone(), s.es_admin(), s.moderador, s.tx.clone(), s.rol == pb::TipoCliente::ClienteBot);
         let id = orden.peticion_id.clone();
         // El moderador ve la partida (el ámbito `ADMIN`) y no da órdenes (Proyecciones §2.2, 5E).
         let traducida = match moderador {
             true => Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, "el moderador ve la partida y no da órdenes", self.nucleo.version())),
-            false => ordenes::traducir(&self.nucleo, &orden, &cliente, admin),
+            false => ordenes::traducir(&self.nucleo, &orden, &cliente, admin, bot),
         };
         let respuesta = match traducida {
             Ok(p) => {

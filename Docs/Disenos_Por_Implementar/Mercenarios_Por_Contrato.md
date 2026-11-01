@@ -8,6 +8,8 @@ Un héroe **bot** que reside en un campamento de mercenarios se ofrece, y un hé
 
 Descartado: alquilar escuadras sin héroe; que un humano se ofrezca como mercenario; el mercenario como héroe personal de otro.
 
+> **Bots libres y bots mercenarios (decisión del autor del 2026-11-01).** Hay dos clases de bot: los **libres** crean Facciones, fundan y juegan como hasta ahora, y los **mercenarios** no crean Facciones: viven en el bucle de los mercenarios, se ofrecen en su campamento base y los contratan las Facciones **humanas**; **las Facciones de bots no los contratan**. La distinción es del cerebro (BotsBrain), **no del motor**: el motor solo sabe si un héroe es bot o humano. Al implementar esta entrada, contratar se rechaza si la Facción del contratante es de bots (su Rey es bot, `Nucleo::es_faccion_de_bots`), y el ingreso del permanente entra por el contrato, no por `SolicitarIngreso`, que a un bot solo le deja entrar en Facciones de bots (Diplomacia_Facciones §3.2). Desde el 2026-11-01 el héroe de una cuenta de bot ya nace con `controlador = bot` en el motor (antes nacía humano y esta comprobación no habría servido).
+
 ## 2. Quién ofrece y quién contrata
 
 | Rol | Puede |

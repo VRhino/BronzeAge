@@ -29,7 +29,7 @@ use comercio::evento::Evento as EventoComercio;
 use militar::catalogo::Tropa;
 use militar::escuadra::Contenedor;
 use militar::guarnicion;
-use militar::heroe::{Atributos, Controlador, DatosLoadout, ErrorHeroe, Heroe, Residencia};
+use militar::heroe::{Atributos, DatosLoadout, ErrorHeroe, Heroe, Residencia};
 use militar::liderazgo;
 use militar::presencia::{Conexion, Salida, Ubicacion};
 use militar::racion;
@@ -200,8 +200,9 @@ impl Nucleo {
         };
         match &p.comando {
             Comando::CrearHeroe { cuenta, campamento, controlador, nombre } => {
-                if !p.admin && (cuenta != &p.actor || *controlador == Controlador::Bot) {
-                    return Err(rechazo(rechazos::NO_AUTORIZADO, "solo la administración crea héroes ajenos o bots".into()));
+                // El controlador no lo elige el cliente: lo pone la sesión según la cuenta (una de bot abre `CLIENTE_BOT` y su héroe nace bot; Proyecciones §4, 2026-11-01).
+                if !p.admin && cuenta != &p.actor {
+                    return Err(rechazo(rechazos::NO_AUTORIZADO, "solo la administración crea héroes ajenos".into()));
                 }
                 if self.estado.militar.heroe_de_cuenta(cuenta).is_some() {
                     return Err(rechazo(rechazos::HEROE_YA_EXISTE, format!("{cuenta} ya tiene su héroe")));
