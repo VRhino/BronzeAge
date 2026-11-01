@@ -104,6 +104,41 @@ impl Nucleo {
         self.evento_de_columna("columna.formacion_disuelta", t, id, vec![], vec![("columnas", sueltas.len() as i64 + 1)]);
     }
 
+    /// `separarseDelEjercito`: `heroe` sale de su ejército con lo suyo y nace como columna personal quieta donde estaba; devuelve su id. Lo comprueba todo antes de tocar nada. Lo hace la orden
+    /// y lo hace el fin del contrato de un mercenario (Mercenarios_Por_Contrato §7).
+    pub(super) fn separar_del_ejercito(&mut self, t: Instante, heroe: u64) -> Result<u64, Respuesta> {
+        let (v, mr) = (self.estado.version, self.estado.reglas.economia.militar.clone());
+        let (id, e) = self.columna_a_bordo(heroe)?;
+        let nuevo = self.estado.siguiente_id;
+        let suyas = self.escuadras_de_heroe_en(heroe, id);
+        let posicion = e.posicion_en(t);
+        let heroes = Self::participantes_de(e);
+        let mut copia = e.columna.clone();
+        let militar = &self.estado.militar;
+        let nueva = copia.separarse(&mr, heroe, &suyas, nuevo, t, &|ids| militar.soldados_de(&heroes, ids)).map_err(|e| {
+            let (codigo, mensaje) = columnas::rechazo_de_columna(e);
+            Respuesta::rechazo(codigo, mensaje, v)
+        })?;
+        // Lo comprobado se hace de verdad: el ejército se queda con lo que quedó y el que se va nace donde estaba.
+        let antes = self.velocidad_de_ejercito(id).unwrap_or(0);
+        self.estado.siguiente_id += 1;
+        self.estado.ejercitos.get_mut(&id).expect("existe").columna = copia;
+        let e = self.columna_suelta(nueva, posicion);
+        self.alta_de_columna(t, e);
+        self.ubicar_en_columna(heroe, nuevo);
+        self.recomponer_columna(id, t, antes);
+        self.evento_de_columna("columna.separacion", t, id, vec![], vec![("heroe", heroe as i64), ("columna", nuevo as i64)]);
+        Ok(nuevo)
+    }
+
+    /// `cederLiderazgo`: el Líder `anterior` de la columna `id` pasa el mando a `sucesor`. Lo hace la orden y lo hace el fin del contrato de un mercenario que lidera un ejército.
+    pub(super) fn ceder_el_mando(&mut self, t: Instante, id: u64, anterior: u64, sucesor: u64) -> Result<(), ErrorColumna> {
+        self.estado.ejercitos.get_mut(&id).expect("existe").columna.ceder_liderazgo(anterior, sucesor)?;
+        self.tr.tocar(Clase::Ejercito, id);
+        self.evento_de_columna("columna.liderazgo_cedido", t, id, vec![], vec![("anterior", anterior as i64), ("sucesor", sucesor as i64)]);
+        Ok(())
+    }
+
     // ───────────────────────────── Las órdenes ─────────────────────────────
 
     /// Las órdenes de juntar, separar, formar y repostar. `Ok(ids)` = cambió algo y creó esos ids; rechazos y «sin cambios» salen como `Err` sin haber
@@ -196,32 +231,12 @@ impl Nucleo {
             }
             Comando::SepararseDelEjercito { heroe } => {
                 self.autorizar_heroe(p, *heroe, false)?;
-                let (id, e) = self.columna_a_bordo(*heroe)?;
-                let nuevo = self.estado.siguiente_id;
-                let suyas = self.escuadras_de_heroe_en(*heroe, id);
-                let posicion = e.posicion_en(t);
-                let mut heroes = Self::participantes_de(e);
-                let mut copia = e.columna.clone();
-                let militar = &self.estado.militar;
-                let nueva = copia.separarse(&mr, *heroe, &suyas, nuevo, t, &|ids| militar.soldados_de(&heroes, ids)).map_err(de_columna)?;
-                heroes.retain(|h| h != heroe);
-                // Lo comprobado se hace de verdad: el ejército se queda con lo que quedó y el que se va nace donde estaba.
-                let antes = self.velocidad_de_ejercito(id).unwrap_or(0);
-                self.estado.siguiente_id += 1;
-                self.estado.ejercitos.get_mut(&id).expect("existe").columna = copia;
-                let e = self.columna_suelta(nueva, posicion);
-                self.alta_de_columna(t, e);
-                self.ubicar_en_columna(*heroe, nuevo);
-                self.recomponer_columna(id, t, antes);
-                self.evento_de_columna("columna.separacion", t, id, vec![], vec![("heroe", *heroe as i64), ("columna", nuevo as i64)]);
-                Ok(vec![nuevo])
+                self.separar_del_ejercito(t, *heroe).map(|nuevo| vec![nuevo])
             }
             Comando::CederLiderazgo { heroe, sucesor } => {
                 self.autorizar_heroe(p, *heroe, false)?;
                 let (id, _) = self.columna_a_bordo(*heroe)?;
-                self.estado.ejercitos.get_mut(&id).expect("existe").columna.ceder_liderazgo(*heroe, *sucesor).map_err(de_columna)?;
-                self.tr.tocar(Clase::Ejercito, id);
-                self.evento_de_columna("columna.liderazgo_cedido", t, id, vec![], vec![("anterior", *heroe as i64), ("sucesor", *sucesor as i64)]);
+                self.ceder_el_mando(t, id, *heroe, *sucesor).map_err(de_columna)?;
                 Ok(vec![])
             }
             Comando::OrganizarEjercito { heroe, politica } => {

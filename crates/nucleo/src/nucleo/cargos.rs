@@ -175,11 +175,16 @@ impl Nucleo {
                 if *vetar && !p.admin && self.sitios_en_batalla(*asentamiento) {
                     return Err(rechazo(rechazos::BATALLA_BLOQUEADO, "un pueblo o una avanzada de la plaza está en una batalla: la puerta no se toca hasta que acabe".into()));
                 }
+                // A un residente no se le veta, salvo a un permanente: para él el veto es perder esa residencia y volver a su campamento base con el contrato (mercenarios §11).
+                let base = self.base_del_permanente(*vetado).filter(|_| *vetar && residente);
                 let plaza = self.estado.asentamientos.get_mut(asentamiento).expect("existe");
-                match plaza.puerta.vetar(*vetado, *vetar, residente) {
+                match plaza.puerta.vetar(*vetado, *vetar, residente && base.is_none()) {
                     Err(ErrorPuerta::Residente) => return Err(rechazo(rechazos::PUERTA_RESIDENTE, format!("{} reside en as-{asentamiento}: a un residente no se le veta", ids::heroe(*vetado)))),
                     Ok(false) => return Err(Respuesta::sin_cambios(v)),
                     Ok(true) => {}
+                }
+                if let Some(base) = base {
+                    self.mudar_de_residencia(*vetado, Some(Residencia::Campamento(base)));
                 }
                 self.tr.tocar(Clase::Asentamiento, *asentamiento);
                 if *vetar {

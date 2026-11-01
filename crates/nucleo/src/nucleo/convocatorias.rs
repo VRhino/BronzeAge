@@ -74,6 +74,18 @@ impl Nucleo {
         self.estado.militar.convocatoria_de(heroe).ok_or_else(|| Respuesta::rechazo(rechazos::CONVOCATORIA_NO_ESTAS, "no vas en ninguna convocatoria", self.estado.version))
     }
 
+    /// `separarseDeConvocatoria`: el integrante se va mientras se prepara (el Líder cancela, no se separa). Lo hace la orden y lo hace el fin del contrato de un mercenario
+    /// (Mercenarios_Por_Contrato §7).
+    pub(super) fn separar_de_convocatoria(&mut self, t: Instante, heroe: u64) -> Result<(), Respuesta> {
+        let mut c = self.convocatoria_del_heroe(heroe)?.clone();
+        c.separarse(heroe).map_err(|e| respuesta_de(self.estado.version, e))?;
+        let (id, del) = (c.id, (c.faccion, c.lugar));
+        self.estado.militar.convocatorias.insert(id, c);
+        self.tr.tocar(Clase::Convocatoria, id);
+        self.hecho_de_convocatoria(t, "convocatoria.separado", del, vec![("convocatoria", id as i64), ("heroe", heroe as i64)]);
+        Ok(())
+    }
+
     /// Simula que el héroe saldría de su lugar con esta selección. No toca nada.
     fn comprobar_seleccion(&mut self, t: Instante, heroe: u64, lugar: Lugar, seleccion: &Seleccion) -> Result<(), Respuesta> {
         self.validar_salida(t, heroe, lugar, &seleccion.escuadras, &Self::lineas_de(&seleccion.carga), false, &mut Reservas::default()).map(|_| ())
@@ -168,13 +180,7 @@ impl Nucleo {
             }
             Comando::SepararseDeConvocatoria { heroe } => {
                 self.autorizar_heroe(p, *heroe, false)?;
-                let mut c = self.convocatoria_del_heroe(*heroe)?.clone();
-                c.separarse(*heroe).map_err(de_convocatoria)?;
-                let (id, del) = (c.id, (c.faccion, c.lugar));
-                self.estado.militar.convocatorias.insert(id, c);
-                self.tr.tocar(Clase::Convocatoria, id);
-                self.hecho_de_convocatoria(t, "convocatoria.separado", del, vec![("convocatoria", id as i64), ("heroe", *heroe as i64)]);
-                Ok(vec![])
+                self.separar_de_convocatoria(t, *heroe).map(|()| vec![])
             }
             Comando::CancelarConvocatoria { heroe } => {
                 self.autorizar_heroe(p, *heroe, true)?;
