@@ -259,6 +259,26 @@ pub fn como_dueno(p: Peticion) -> Peticion {
 
 /// Andamiaje de las mecánicas 50 y 51: marca la aldea agrícola de la plaza en el sitio que propone el panel (`sitio_de_aldea`), lleva una columna de
 /// `cuenta` con todo el material y lo entrega. La obra queda en marcha; devuelve el pueblo.
+/// Marca un pueblo de cantera en el primer nodo de piedra que ofrece el panel de la plaza y le entrega los materiales con una columna de `cuenta`
+/// (desde el 2026-11-01 la Cantera ya no se construye en la plaza: la piedra sale de un pueblo extractor). Devuelve el pueblo, ya en obra.
+pub fn levantar_cantera(n: &mut Nucleo, cuenta: &str, plaza: u64) -> Option<u64> {
+    let faccion = n.estado().asentamientos[&plaza].faccion;
+    let nodo = n.candidatos_de_pueblo(plaza).into_iter().find(|c| c.1 == asentamiento::catalogo::Tipo::Cantera)?.0;
+    let t = n.ahora();
+    let r = n.aplicar_en(t, Peticion::nueva("admin", &format!("cantera-{plaza}"), Comando::MarcarPueblo { asentamiento: plaza, nodo }).de_admin());
+    assert!(r.aceptada(), "el nodo del panel se acepta: {r:?}");
+    let pueblo = r.creadas[0];
+    let sitio = n.posicion_de_pueblo(pueblo)?;
+    let col = n.crear_ejercito(t, cuenta, faccion, sitio, 500, 100_000).ok()?;
+    for (recurso, cantidad) in n.pueblo(pueblo)?.1.falta() {
+        let r = n.aplicar_en(t, Peticion::nueva("admin", &format!("cantera-sum-{pueblo}-{recurso:?}"), Comando::DarSuministro { ejercito: col, recurso, cantidad }).de_admin());
+        assert!(r.aceptada(), "{r:?}");
+    }
+    let r = n.aplicar_en(t, Peticion::nueva("admin", &format!("cantera-ent-{pueblo}"), Comando::EntregarMateriales { ejercito: col, pueblo }).de_admin());
+    assert!(r.aceptada(), "{r:?}");
+    Some(pueblo)
+}
+
 pub fn levantar_aldea(n: &mut Nucleo, cuenta: &str, plaza: u64) -> Option<u64> {
     let faccion = n.estado().asentamientos[&plaza].faccion;
     let punto = n.sitio_de_aldea(plaza)?;

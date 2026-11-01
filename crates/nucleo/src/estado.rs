@@ -131,6 +131,9 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
     21 * crate::estado_comercio::ETIQUETA | plaza
 }
 
+/// BAN53: BAN52 sin los minutos sin cupo de los extractores de la cola automática (`Asentamiento::extractor_minutos_sin_cupo`; desde el 2026-11-01 la
+/// cola no propone ningún extractor: la Cantera es de pueblo extractor). BAN52 a BAN40 se siguen admitiendo: se leen y se descartan.
+///
 /// BAN52: BAN51 con el encargo de cada caravana (`Caravana::encargo`, rutas de caravanas automáticas, 2026-10-31; `codec_comercio`) y un sexto cargo local por plaza (el
 /// Maestro de Caravanas, tras los cinco de antes). BAN51 a BAN40 se siguen admitiendo: ninguna caravana tiene encargo y ninguna plaza Maestro de Caravanas.
 ///
@@ -284,7 +287,7 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN52";
+const MAGIA: &[u8; 5] = b"BAN53";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -1382,13 +1385,16 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN52`): los cuatro primeros dicen la familia («BAN5» es el formato 50 y «BAN4» los formatos 40 a 49, y se admiten todos; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
+        // La cabecera es de 5 bytes (`BAN53`): los cuatro primeros dicen la familia («BAN5» es el formato 50 y «BAN4» los formatos 40 a 49, y se admiten todos; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
         // 20 a 29 y 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         let (mut con_eligieron, mut con_rutas_acarreo, mut con_nombres, mut con_precios, mut con_forzadas, mut con_misiones, mut con_aldeas) = (true, true, true, true, true, true, true);
         let (mut con_flujos, mut con_participacion, mut con_recurrentes, mut con_almacen_cerrado, mut con_encargos) = (false, false, false, false, false);
+        // Hasta BAN52 cada plaza trae los minutos sin cupo de sus extractores; desde BAN53, no.
+        let mut con_desempate = true;
         if magia == MAGIA[..4] {
             match r.u8()? {
+                b'3' => (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos, con_desempate) = (true, true, true, true, true, false),
                 b'2' => (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos) = (true, true, true, true, true),
                 b'1' => (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado) = (true, true, true, true),
                 b'0' => (con_flujos, con_participacion, con_recurrentes) = (true, true, true),
@@ -1501,7 +1507,7 @@ impl Estado {
                 parcelas.insert(p);
             }
             let version = r.u64()?;
-            let economia = codec_economia::leer(&mut r, con_aldeas, con_flujos)?;
+            let economia = codec_economia::leer(&mut r, con_aldeas, con_flujos, con_desempate)?;
             let urbe = Urbe::desde_ciudad(codec_ciudad::leer(&mut r, asentamiento::recintos::proyeccion(&economia.recintos))?);
             let (protegida_hasta, ocupada_hasta) = (r.opt_i64()?, r.opt_i64()?);
             let cerrada_a = r.opt_u64()?.map(|b| politica::Grupos::desde_bits(b as u8));

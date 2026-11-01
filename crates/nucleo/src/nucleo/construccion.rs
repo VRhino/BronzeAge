@@ -87,7 +87,7 @@ fn rechazo_de_obra(e: ErrorObra) -> (&'static str, &'static str) {
         ErrorObra::TopeViviendas => (OBRA_TOPE_VIVIENDAS, "se alcanzó el máximo de Viviendas del nivel"),
         ErrorObra::NivelInsuficiente => (OBRA_NIVEL_INSUFICIENTE, "el nivel de la plaza no alcanza para ese edificio"),
         ErrorObra::SoloEnAldea => (OBRA_SOLO_EN_ALDEA, "el Corral solo se levanta en una aldea agrícola"),
-        ErrorObra::SoloPorPueblo => (OBRA_SOLO_POR_PUEBLO, "los minerales y toda Cantera tras la primera solo se explotan con un pueblo extractor"),
+        ErrorObra::SoloPorPueblo => (OBRA_SOLO_POR_PUEBLO, "los minerales y la Cantera solo se explotan con un pueblo extractor"),
         ErrorObra::TopeTransformacion => (OBRA_TOPE_TRANSFORMACION, "se alcanzó el máximo de talleres de ese tipo del nivel"),
         ErrorObra::GranFundicion => (OBRA_GRAN_FUNDICION, "la Gran Fundición pide nivel de Facción, ser la capital y que no haya otra"),
         ErrorObra::ColaLlena => (OBRA_COLA_LLENA, "la cola de obras está llena"),
@@ -421,10 +421,11 @@ impl Nucleo {
         self.tr.tocar(Clase::Asentamiento, id);
         self.misiones_de_sucesos(id, t, sucesos);
         // Un edificio que se completa o se mejora y un ascenso son disparadores de la aparición de su Facción (6C, `edificio` y `capitalEnNivel`).
-        let aldeas: Vec<u64> = self.estado.asentamientos.get(&id).map(|a| a.economia.pueblos.iter().filter(|p| p.es_aldea()).map(|p| p.id).collect()).unwrap_or_default();
-        let es_aldea = |p: u64| aldeas.contains(&p);
-        let aldea_completada = sucesos.iter().any(|s| matches!(*s, EventoEco::PuebloCompletado { id: p } if es_aldea(p)));
-        if aldea_completada || sucesos.iter().any(|s| matches!(s, EventoEco::EdificioCompletado { .. } | EventoEco::MejoraCompletada { .. } | EventoEco::NivelSubio { .. })) {
+        // Un pueblo cuenta como la obra de su extractor (Cantera o mina, desde el 2026-11-01) y una aldea agrícola, como la de sus corrales.
+        let obra_de_pueblo: Vec<(u64, Tipo)> = self.estado.asentamientos.get(&id).map(|a| a.economia.pueblos.iter().map(|p| (p.id, if p.es_aldea() { Tipo::Corral } else { p.tipo })).collect()).unwrap_or_default();
+        let tipo_de_pueblo = |p: u64| obra_de_pueblo.iter().find(|&&(x, _)| x == p).map(|&(_, t)| t);
+        let pueblo_completado = sucesos.iter().any(|s| matches!(*s, EventoEco::PuebloCompletado { .. }));
+        if pueblo_completado || sucesos.iter().any(|s| matches!(s, EventoEco::EdificioCompletado { .. } | EventoEco::MejoraCompletada { .. } | EventoEco::NivelSubio { .. })) {
             self.mirar_aparicion(faccion);
         }
         // Los hechos de épica de la plaza (6E, TA §7.2): la obra (con el tipo del edificio) y el ascenso. Un Palacio completado puede abrir el cupo de residentes.
@@ -440,8 +441,8 @@ impl Nucleo {
                     tipo.map(|tipo| tecnologia::epicas::Hecho::obra(id as u32, faccion, e, tipo, Some(nivel)))
                 }
                 EventoEco::NivelSubio { nivel } => Some(tecnologia::epicas::Hecho::ascenso(id as u32, faccion, nivel.min(u8::MAX as u32) as u8)),
-                // La aldea agrícola levanta los corrales de la Facción: es la «obra de corral» de las épicas (con su id de pueblo, apartado de los de edificio).
-                EventoEco::PuebloCompletado { id: p } if es_aldea(p) => Some(tecnologia::epicas::Hecho::obra(id as u32, faccion, 0x8000_0000 | p as u32, Tipo::Corral, None)),
+                // El pueblo es la obra de su extractor y la aldea agrícola, la «obra de corral» (con su id de pueblo, apartado de los de edificio).
+                EventoEco::PuebloCompletado { id: p } => tipo_de_pueblo(p).map(|tipo| tecnologia::epicas::Hecho::obra(id as u32, faccion, 0x8000_0000 | p as u32, tipo, None)),
                 _ => None,
             };
             self.hecho_epico(hecho);

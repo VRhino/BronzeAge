@@ -637,14 +637,14 @@ impl Sim<'_> {
 
     // ───────────────────────────── Pueblos y misiones de columna ─────────────────────────────
 
-    /// Marca la aldea agrícola y, de nivel 2 en adelante, un pueblo extractor, y manda a la columna a comprar los materiales al campamento más cercano.
+    /// Marca la aldea agrícola y luego sus canteras (desde el nivel 1, en lo que deje el cupo de su nivel: la piedra del nivel 2 ya no sale de la ciudad), y manda a la columna a comprar los materiales al campamento más cercano.
     fn pueblo(&mut self, t: Instante, id: u64) {
         let Some(p) = self.pjs.get(&id) else { return };
         if p.mision.is_some() {
             return;
         }
         let a = &self.n.estado().asentamientos[&id];
-        let nivel = a.economia.nivel_actual();
+        let cupo = a.economia.cupo_de_pueblos(&self.n.estado().reglas.economia.datos);
         if let Some(pueblo) = p.obra_pendiente {
             // Una obra a medias (el campamento no tenía todos los materiales): otro viaje cuando se reponga.
             if t >= p.proxima_obra {
@@ -663,7 +663,7 @@ impl Sim<'_> {
             };
             self.orden(t, &gobernador(id), "MarcarAldea", Comando::MarcarAldea { asentamiento: id, punto })
         } else {
-            if nivel < 2 || self.n.pueblos_de(id).len() >= PUEBLOS_OBJETIVO + 1 {
+            if self.n.pueblos_de(id).len() >= (PUEBLOS_OBJETIVO + 1).min(cupo as usize) {
                 return;
             }
             let Some(&(nodo, _)) = self.n.candidatos_de_pueblo(id).iter().find(|(_, tipo)| *tipo == Tipo::Cantera) else { return };

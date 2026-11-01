@@ -316,7 +316,7 @@ fn los_cargos_y_la_puerta_viajan_en_la_foto_ban33_y_la_ban32_se_rechaza() {
     e.ok("ana", Comando::VetarJugador { heroe: ana, asentamiento: plaza, vetado: cai, vetar: true });
     assert!(hash0 != hash1 && hash1 != hash2 && hash2 != e.n.hash_estado(), "cada pieza mueve el hash");
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN52");
+    assert_eq!(&bytes[..5], b"BAN53");
     let reglas = e.n.estado().reglas.clone();
     let vuelta = Estado::deserializar(&bytes, &reglas, &e.n.estado().mundo_hash).unwrap();
     let a = &vuelta.asentamientos[&plaza];
@@ -369,7 +369,7 @@ fn el_maestro_de_caravanas_va_en_la_proyeccion_de_los_cargos() {
 }
 
 #[test]
-fn el_maestro_de_caravanas_viaja_en_la_foto_y_una_foto_ban51_llega_con_el_sexto_cargo_vacio() {
+fn el_maestro_de_caravanas_viaja_en_la_foto_y_una_foto_ban51_llega_con_el_sexto_cargo_vacio_y_sin_los_minutos_sin_cupo() {
     let m = con_mundo!();
     let mut e = E::nuevo(m);
     let (rey, ana, bea, eli, plaza) = (e.rey, e.ana, e.bea, e.eli, e.plaza);
@@ -382,17 +382,28 @@ fn el_maestro_de_caravanas_viaja_en_la_foto_y_una_foto_ban51_llega_con_el_sexto_
     let tanda = |titulares: [Option<u64>; 6]| titulares.iter().flat_map(|t| [t.is_some() as u8].into_iter().chain(t.unwrap_or(0).to_le_bytes())).collect::<Vec<u8>>();
     let sin_maestro = tanda([Some(ana), Some(bea), None, None, None, None]);
     let donde = |bytes: &[u8], tanda: &[u8]| bytes.windows(tanda.len()).position(|w| w == tanda).expect("los cargos de la plaza están en la foto");
-    // Una foto BAN51 es la BAN52 sin el sexto cargo de cada plaza (no hay caravanas con encargo).
-    let mut vieja = b"BAN51".to_vec();
+    // Una foto BAN51 es la BAN53 sin el sexto cargo de cada plaza (no hay caravanas con encargo) y con la lista, vacía, de los minutos sin cupo
+    // de los extractores de cada plaza, justo antes de `completados_pendientes` (el primer byte que cambia al tocarlo; BAN53 ya no la trae).
     let inicio = donde(&bytes, &sin_maestro);
-    vieja.extend_from_slice(&bytes[5..inicio + 5 * 9]);
-    vieja.extend_from_slice(&bytes[inicio + 6 * 9..]);
+    let mut cortes: Vec<(usize, usize, Vec<u8>)> = vec![(inicio + 5 * 9, 9, vec![])];
+    for id in e.n.estado().asentamientos.keys() {
+        let mut otra = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
+        otra.asentamientos.get_mut(id).unwrap().economia.completados_pendientes += 1;
+        let d = bytes.iter().zip(otra.serializar()).position(|(x, y)| *x != y).expect("el campo está en la foto");
+        cortes.push((d, 0, 0u64.to_le_bytes().to_vec()));
+    }
+    cortes.sort_by_key(|c| std::cmp::Reverse(c.0));
+    let mut vieja = bytes.clone();
+    for (desde, quita, pone) in cortes {
+        vieja.splice(desde..desde + quita, pone);
+    }
+    vieja[..5].copy_from_slice(b"BAN51");
     let leida = Estado::deserializar(&vieja, &reglas, &hash).unwrap();
     assert_eq!(leida.asentamientos[&plaza].cargos.titular(Cargo::MaestroCaravanas), None);
     assert_eq!(leida.asentamientos[&plaza].cargos.titular(Cargo::Tesorero), Some(bea));
-    assert_eq!(leida.serializar(), bytes, "al guardarla de nuevo es la BAN52 de siempre");
+    assert_eq!(leida.serializar(), bytes, "al guardarla de nuevo es la BAN53 de siempre");
 
-    // La BAN52 guarda y lee al Maestro de Caravanas.
+    // La BAN53 guarda y lee al Maestro de Caravanas.
     assert!(e.asignar("ana", ana, Cargo::MaestroCaravanas, eli).aceptada());
     let bytes = e.n.estado().serializar();
     let vuelta = Estado::deserializar(&bytes, &reglas, &hash).unwrap();

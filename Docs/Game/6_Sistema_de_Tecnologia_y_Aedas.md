@@ -127,7 +127,7 @@ extractores): hoy solo `canteria`, que se pensó para la piedra del nivel 3 (Doc
 | `arqueria_palacial` | arqueros | X batallas libradas | Galería de tiro activa |
 | `cria_caballar` | Caballerizas; exploradores a caballo | X animales comprados (caravanas incluidas) | Corral activo (el de una aldea agrícola, 4.2.2) |
 | `carros_guerra` | Carro de Guerra (Carpintería 2); carros de guerra | X batallas a campo abierto (Qadesh) | `cria_caballar` + Caballerizas 2 + Carpintería 2 |
-| `canteria` | las Canteras de la Facción sacan **1,5×** la piedra (en todos sus asentamientos) | X de piedra extraída en el mundo | Cantera activa |
+| `canteria` | las Canteras de la Facción sacan **1,5×** la piedra (en todos sus asentamientos) | X de piedra extraída en el mundo | Cantera activa (un pueblo de cantera, desde el 2026-11-01) |
 
 **Era II — Crisis y adaptación**
 

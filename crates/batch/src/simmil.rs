@@ -1048,7 +1048,8 @@ impl Sim<'_> {
             self.flota(t, i, p);
         }
         let cantera = self.n.candidatos_de_pueblo(p).iter().find(|(_, tipo)| *tipo == Tipo::Cantera).map(|&(nodo, _)| nodo);
-        if let Some(nodo) = cantera.filter(|_| nivel >= 2 && pueblos == 0) {
+        // Su pueblo de cantera desde el nivel 1: la piedra del nivel 2 ya no sale de la ciudad (2026-11-01).
+        if let Some(nodo) = cantera.filter(|_| pueblos == 0) {
             self.suya(t, i, "MarcarPueblo", Comando::MarcarPueblo { asentamiento: p, nodo });
         }
         if nivel >= 2 && recintos == 0 {

@@ -233,8 +233,6 @@ pub struct Asentamiento {
     pub reserva_manual: [Mil; 29],
     /// Tras una conquista el mantenimiento se suspende.
     pub ocupado: bool,
-    /// Minutos seguidos que un extractor propuesto no pudo comprometerse (desempate por urgencia).
-    pub extractor_minutos_sin_cupo: Vec<(Tipo, i64)>,
     /// Edificios completados desde la última lectura: el núcleo agranda la zona uno por cada uno.
     pub completados_pendientes: u32,
     pub destruido: bool,
@@ -275,7 +273,6 @@ impl Asentamiento {
             auto_pausada: false,
             reserva_manual: [0; 29],
             ocupado: false,
-            extractor_minutos_sin_cupo: vec![],
             completados_pendientes: 0,
             destruido: false,
             ultimo_minuto: fundado_en,

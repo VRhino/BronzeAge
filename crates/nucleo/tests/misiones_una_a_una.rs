@@ -408,7 +408,7 @@ fn a2_a3_un_mercado_y_un_barracon_activos() {
 
 #[test]
 fn a4_subir_la_plaza_a_nivel_2_pidiendolo() {
-    // Como `tests/asentamientos.rs`: la plaza vive sola, el jugador pide el ascenso cada hora y levanta su aldea agrícola el primer día.
+    // Como `tests/asentamientos.rs`: la plaza vive sola, el jugador pide el ascenso cada hora, levanta su pueblo de cantera a la segunda hora (la piedra del nivel 2 ya no sale de la ciudad) y su aldea agrícola el primer día.
     let m = con_mundo!();
     let mut x = X::nuevo(m);
     let a = x.plaza(m, "ana", 1, 0);
@@ -416,6 +416,9 @@ fn a4_subir_la_plaza_a_nivel_2_pidiendolo() {
     x.cumple(d, "A4", |x| {
         for hora in 1..=12 * 24 {
             x.avanzar(HORA);
+            if hora == 2 {
+                comun::levantar_cantera(&mut x.n, "ana", a).expect("hay una cantera en el panel");
+            }
             if hora == 24 {
                 comun::levantar_aldea(&mut x.n, "ana", a).expect("hay sitio fértil para la aldea");
             }
@@ -635,6 +638,8 @@ fn f5_adoptar_una_tecnologia() {
     let a = x.plaza(m, "ana", 1, 0);
     let rey = x.rey("ana");
     x.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: a, nivel: 2 });
+    // La cantería aparece con una cantera activa, que ya solo es un pueblo extractor.
+    comun::levantar_cantera(&mut x.n, "ana", a).expect("hay una cantera en el panel");
     let canteria = x.n.estado().reglas.economia.tecnologia.buscar("canteria").unwrap();
     let aparecida = |x: &X| x.n.tecnologia().de(&x.n.estado().reglas.economia.tecnologia, 1).aparecidas.contiene(canteria);
     assert!(x.hasta(HORA, 24 * 5, aparecida), "aparece la cantería");

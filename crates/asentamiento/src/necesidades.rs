@@ -2,9 +2,9 @@
 //! le falta (comida, madera, Viviendas, almacén, talleres). Cada candidato recibe un score = base de su banda + urgencia, y se
 //! compromete (se paga y se encola) en orden de score mientras haya cupo y fondos. Nunca elige dónde: eso es del trazado.
 //!
-//! Cambios de la reconstrucción respecto a TypeScript, ya decididos: los minerales y toda Cantera salvo la primera van por pueblo
-//! extractor (Doc 4.2.2), así que la cola automática solo propone la primera Cantera (el Corral es de las aldeas agrícolas, §14.2); un candidato que no se
-//! compromete no deja rastro.
+//! Cambios de la reconstrucción respecto a TypeScript, ya decididos: los minerales y la Cantera van por pueblo extractor (Doc 4.2.2; la
+//! primera Cantera también desde el 2026-11-01) y el Corral es de las aldeas agrícolas (§14.2), así que la cola automática no propone
+//! ningún extractor; un candidato que no se compromete no deja rastro.
 
 use crate::asentamiento::{Asentamiento, Evento, Exterior};
 use crate::catalogo::Tipo;
@@ -65,7 +65,6 @@ impl Asentamiento {
         let c = &r.construccion;
         let n = &c.necesidades;
         let mut candidatos: Vec<Candidato> = vec![];
-        let mut propuestos_extractor: Vec<Tipo> = vec![];
         // Lo que se comprometa en esta pasada se confirma al final; preguntar solo cambia la ciudad si el trazado crea un ancla (Trazado_Urbano §7.1).
         let u = self.urbano(r);
 
@@ -108,16 +107,7 @@ impl Asentamiento {
             }
         }
 
-        // 3. Extractores internos: la primera Cantera (sin piedra no hay ascenso al nivel 2). El Corral es de las aldeas agrícolas.
-        let tipo = Tipo::Cantera;
-        if self.edificios.en_cualquier_estado(tipo) == 0 && !self.pendiente(tipo) && self.puede_pagar(r, x, tipo, reserva) {
-            if let Some(fuente) = self.proponer(x, tipo, &u, ev) {
-                let sin_cupo = self.extractor_minutos_sin_cupo.iter().find(|(t, _)| *t == tipo).map_or(0, |p| p.1);
-                let urgencia = 100 + (sin_cupo * c.extractor_bonus_por_minuto).min(c.extractor_bonus_maximo);
-                candidatos.push(Candidato { tipo, score: c.bandas.extractor_base + urgencia, fuente });
-                propuestos_extractor.push(tipo);
-            }
-        }
+        // 3. Extractores: ninguno. La Cantera y las minas son de pueblo extractor y el Corral, de las aldeas agrícolas (2026-11-01).
 
         // 4. Vivienda: cuando la ocupación llega al umbral (o no hay cupo de pesants) y no se alcanzó el tope del nivel.
         let ocup = |hab: Mil, cap: Mil| if cap <= 0 { UNO } else { razon(hab, cap) };
@@ -210,15 +200,6 @@ impl Asentamiento {
             ev.push(Evento::NecesidadDetectada { id, tipo: cand.tipo, prioridad: cand.score });
             comprometidos.push(cand.tipo);
             cupo -= 1;
-        }
-        for tipo in propuestos_extractor {
-            let entrada = self.extractor_minutos_sin_cupo.iter_mut().find(|(t, _)| *t == tipo);
-            let comprometido = comprometidos.contains(&tipo);
-            match entrada {
-                Some(p) => p.1 = if comprometido { 0 } else { p.1 + 1 },
-                None if !comprometido => self.extractor_minutos_sin_cupo.push((tipo, 1)),
-                None => {}
-            }
         }
     }
 }

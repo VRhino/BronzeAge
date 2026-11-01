@@ -157,17 +157,16 @@ mod pruebas {
     }
 
     #[test]
-    fn el_nivel_2_pide_200_pesants_dos_de_cantera_lenera_y_granja_una_granja_a_nivel_2_y_un_pueblo_activo() {
+    fn el_nivel_2_pide_200_pesants_una_lenera_una_granja_a_nivel_2_y_un_pueblo_activo() {
         let r = Reglas::cargar().nivel;
-        let uno = activos(&[(Tipo::Cantera, 1), (Tipo::Corral, 1), (Tipo::Mina, 1)]);
-        assert_eq!(r.gates(2, &uno, 200, 0, 0, 1), Some(vec![Falta::Edificios]), "ni el Corral ni las minas cuentan ya");
-        let dos = activos(&[(Tipo::Cantera, 1), (Tipo::Granja, 1), (Tipo::Granja, 2)]);
-        assert_eq!(r.gates(2, &dos, 200, 0, 0, 1), Some(vec![]), "dos Granjas cuentan como un solo tipo");
-        // Además de los dos tipos, una Granja a nivel 2 (2026-10-28): Cantera y Leñera con Granjas a nivel 1 no bastan.
-        let sin_granja_2 = activos(&[(Tipo::Cantera, 1), (Tipo::Lenera, 1), (Tipo::Granja, 1)]);
-        assert_eq!(r.gates(2, &sin_granja_2, 200, 0, 0, 1), Some(vec![Falta::Edificios]));
-        assert_eq!(r.gates(2, &activos(&[(Tipo::Cantera, 1), (Tipo::Lenera, 1)]), 200, 0, 0, 1), Some(vec![Falta::Edificios]));
-        assert_eq!(r.gates(2, &activos(&[(Tipo::Cantera, 1), (Tipo::Lenera, 1), (Tipo::Granja, 2)]), 200, 0, 0, 1), Some(vec![]));
+        // Desde el 2026-11-01 la Cantera es de pueblo extractor: ni ella, ni el Corral ni las minas cuentan.
+        let uno = activos(&[(Tipo::Cantera, 1), (Tipo::Corral, 1), (Tipo::Mina, 1), (Tipo::Granja, 2)]);
+        assert_eq!(r.gates(2, &uno, 200, 0, 0, 1), Some(vec![Falta::Edificios]), "sin Leñera no se sube");
+        let dos = activos(&[(Tipo::Lenera, 1), (Tipo::Granja, 1), (Tipo::Granja, 2)]);
+        assert_eq!(r.gates(2, &dos, 200, 0, 0, 1), Some(vec![]));
+        // La Granja ha de estar a nivel 2 (2026-10-28): Leñera y Granjas a nivel 1 no bastan.
+        assert_eq!(r.gates(2, &activos(&[(Tipo::Lenera, 1), (Tipo::Granja, 1)]), 200, 0, 0, 1), Some(vec![Falta::Edificios]));
+        assert_eq!(r.gates(2, &activos(&[(Tipo::Granja, 2)]), 200, 0, 0, 1), Some(vec![Falta::Edificios]), "sin Leñera no se sube");
         assert_eq!(r.gates(2, &dos, 200, 0, 0, 0), Some(vec![Falta::Pueblo]));
         assert_eq!(r.gates(2, &dos, 199, 0, 0, 1), Some(vec![Falta::Poblacion]));
         assert_eq!(r.gates(9, &dos, 0, 0, 0, 0), None);

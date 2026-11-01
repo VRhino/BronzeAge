@@ -188,6 +188,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `pueblo.ya_tiene_carro` | `PUEBLO_YA_TIENE_CARRO` | — |
 | `pueblo.fertilidad_insuficiente` | `PUEBLO_FERTILIDAD_INSUFICIENTE` | Aldea agrícola (§14.2): el punto no llega a la fertilidad mínima. |
 | `pueblo.demasiado_cerca` | `PUEBLO_DEMASIADO_CERCA` | Aldea agrícola: el punto está demasiado cerca de otro pueblo. |
+| `pueblo.fuera_de_su_anillo` | `PUEBLO_FUERA_DE_SU_ANILLO` | Aldea agrícola: el punto no cae en el anillo de la zona que toca a la siguiente aldea de la plaza (2026-11-01). |
 | `pueblo.no_es_aldea` | `PUEBLO_NO_ES_ALDEA` | Solo las aldeas agrícolas suben de nivel. |
 | `pueblo.nivel_maximo` | `PUEBLO_NIVEL_MAXIMO` | — |
 | `pueblo.mejora_en_curso` | `PUEBLO_MEJORA_EN_CURSO` | — |

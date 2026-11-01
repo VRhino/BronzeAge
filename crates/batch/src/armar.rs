@@ -201,7 +201,7 @@ fn fundaciones(x: &Entrada) -> Vec<Metrica> {
 fn recursos_en_la_zona(x: &Entrada, plazas: &[Plaza]) -> Vec<Metrica> {
     let (sin_piedra, sin_bosque) = md::sin_recursos_en_zona_maxima(&x.corrida.nucleo, plazas, x.geo);
     vec![
-        metrica("sin_piedra", "Plazas sin ninguna piedra en su zona máxima", "%", max(15.0), pct(sin_piedra, plazas.len()), "Doc 1.2 (sin piedra no hay Cantera ni nivel 2)", "Plazas sin ningún nodo de piedra a menos que el techo de su nivel actual (disco, sin recortes)."),
+        metrica("sin_piedra", "Plazas sin ninguna piedra en su zona máxima", "%", max(15.0), pct(sin_piedra, plazas.len()), "Doc 1.2 (sin piedra no hay pueblo de cantera ni nivel 2)", "Plazas sin ningún nodo de piedra a menos que el techo de su nivel actual (disco, sin recortes)."),
         metrica("sin_bosque", "Plazas sin ninguna parcela de bosque en su zona máxima", "%", max(10.0), pct(sin_bosque, plazas.len()), "Doc 1.2 (sin bosque no hay Leñera)", "Plazas sin el centro de ninguna parcela a menos que el techo de su nivel actual (disco, sin recortes)."),
     ]
 }

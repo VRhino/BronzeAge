@@ -31,15 +31,16 @@ pub const ANILLO_CAMPAMENTO: (i64, i64) = (30_000, 120_000);
 /// El recinto que compromete el jugador: la empalizada (nivel 1), en cuanto el nivel operativo de la plaza lo permite (Murallas §4, gate de nivel 2), como el bot
 /// del TypeScript (`bots/cerebro/gobierno.ts:197`). La mejora a piedra pide el nivel 3, al que este batch no llega.
 pub const NIVEL_RECINTO: u8 = 1;
-/// Id del único pueblo de cada plaza de este batch: su aldea agrícola.
+/// Ids de los dos pueblos de cada plaza de este batch: su aldea agrícola y su pueblo de cantera (los dos huecos del nivel 1).
 const ID_ALDEA: u64 = 1;
+const ID_CANTERA: u64 = 2;
 
 fn clase(b: &Bloqueo) -> usize {
     match b {
         Bloqueo::NivelMaximo => 0,
         Bloqueo::AscensoEnCurso => 1,
         Bloqueo::FaltaPoblacion => 2,
-        // La aldea agrícola que pide el nivel 2 cuenta con los edificios que faltan.
+        // El pueblo activo que pide el nivel 2 cuenta con los edificios que faltan.
         Bloqueo::FaltanEdificios | Bloqueo::FaltaPueblo => 3,
         Bloqueo::SinCupoDeFaccion => 4,
         Bloqueo::RecursosInsuficientes => 5,
@@ -50,7 +51,7 @@ fn clase(b: &Bloqueo) -> usize {
 /// Lo que se mide de cada plaza mientras vive.
 #[derive(Clone, Debug, Default)]
 pub struct Registro {
-    /// Minuto de mundo en que se completó la primera Leñera, la primera Cantera y la aldea agrícola.
+    /// Minuto de mundo en que se completó la primera Leñera, el pueblo de cantera y la aldea agrícola.
     pub primera_lenera: Option<i64>,
     pub primera_cantera: Option<i64>,
     pub primera_aldea: Option<i64>,
@@ -316,10 +317,37 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
     }
     drop(x);
 
+    // El pueblo de cantera (desde el 2026-11-01 la Cantera solo se explota por pueblo extractor, y de él sale la piedra del mantenimiento del nivel 2): el jugador lo
+    // levanta en el nodo de piedra libre más cercano de su zona en cuanto la plaza puede pagarlo. Como en la aldea, los materiales llegan a la obra al instante, y el
+    // acarreo vuelca cada minuto en la plaza lo que el pueblo sacó (sin carro, que es del núcleo); cuenta para la solvencia aunque no quepa.
+    if minuto % CADA_MIN_ASCENSO == 0 && !a.pueblos.iter().any(|p| p.tipo == Tipo::Cantera) {
+        let reclamos = &*sitios.reclamos;
+        let libre = mapa.piedra_en(*pos, *radio).into_iter().filter(|&n| reclamos.nodo[n as usize].is_none()).min_by_key(|&n| (mapa.nodos[n as usize].pos.dist(*pos), n));
+        match libre {
+            None => sitios.sin_sitio.denegar(1),
+            Some(nodo) => {
+                let carro = comercio::acarreo::coste_reposicion(&re.comercio.flota);
+                let coste = Asentamiento::costo_de_pueblo(reglas, Tipo::Cantera, &carro);
+                if a.almacen.tiene(&coste) && a.iniciar_pueblo(reglas, &sin_tecnologia, ID_CANTERA, Tipo::Cantera, nodo, &carro, &mut ev).is_ok() {
+                    a.almacen.pagar(&coste);
+                    sitios.reclamos.nodo[nodo as usize] = Some(indice);
+                    sitios.sin_sitio.tiene[1] = true;
+                    let requerido = a.pueblo(ID_CANTERA).expect("recién marcado").falta();
+                    a.entregar_a_pueblo(t, reglas, ID_CANTERA, &requerido, &mut ev).expect("todo entregado");
+                }
+            }
+        }
+    }
+    if let Some(p) = a.pueblos.iter_mut().find(|p| p.tipo == Tipo::Cantera) {
+        let sacado = p.almacen.quitar(Recurso::Piedra, p.almacen.cantidad(Recurso::Piedra));
+        a.almacen.agregar(Recurso::Piedra, sacado);
+        a.registrar_acarreo(t, Recurso::Piedra, sacado);
+    }
+
     for e in ev {
         match e {
             Evento::EdificioCompletado { tipo: Tipo::Lenera, .. } => drop(reg.primera_lenera.get_or_insert(minuto)),
-            Evento::EdificioCompletado { tipo: Tipo::Cantera, .. } => drop(reg.primera_cantera.get_or_insert(minuto)),
+            Evento::PuebloCompletado { id: ID_CANTERA } => drop(reg.primera_cantera.get_or_insert(minuto)),
             Evento::PuebloCompletado { id: ID_ALDEA } => drop(reg.primera_aldea.get_or_insert(minuto)),
             Evento::EdificioGratuito { tipo, .. } if urb.clase(tipo).is_some_and(|c| c.rol == Rol::AnclaSaturacion) => drop(reg.primera_ancla.get_or_insert(minuto)),
             Evento::RecintoCompletado { .. } => {
@@ -393,6 +421,10 @@ fn sincronizar_recintos(a: &Asentamiento, urbe: &mut Urbe) {
 fn comprobar_fuentes(villas: &[Villa], reclamos: &Reclamos, viol: &mut Violaciones) {
     let mut vistas = HashSet::new();
     for v in villas {
+        // El nodo del pueblo de cantera, como el de un edificio.
+        for n in v.a.pueblos.iter().filter_map(|p| p.nodo()) {
+            viol.duplicados += !vistas.insert((1u8, n)) as u64;
+        }
         for e in &v.a.edificios {
             if let Some(f) = e.fuente {
                 if !vistas.insert(match f {

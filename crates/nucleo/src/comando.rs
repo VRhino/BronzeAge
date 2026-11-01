@@ -2735,6 +2735,8 @@ pub mod rechazos {
     pub const PUEBLO_FERTILIDAD_INSUFICIENTE: &str = "pueblo.fertilidad_insuficiente";
     /// Aldea agrícola: el punto está demasiado cerca de otro pueblo.
     pub const PUEBLO_DEMASIADO_CERCA: &str = "pueblo.demasiado_cerca";
+    /// Aldea agrícola: el punto no cae en el anillo de la zona que toca a la siguiente aldea de la plaza (2026-11-01).
+    pub const PUEBLO_FUERA_DE_SU_ANILLO: &str = "pueblo.fuera_de_su_anillo";
     /// Solo las aldeas agrícolas suben de nivel.
     pub const PUEBLO_NO_ES_ALDEA: &str = "pueblo.no_es_aldea";
     pub const PUEBLO_NIVEL_MAXIMO: &str = "pueblo.nivel_maximo";

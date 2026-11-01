@@ -81,13 +81,34 @@ impl Nucleo {
         nodos.into_iter().filter(libre).map(|n| (n, geo.mapa.nodos[n as usize].tipo)).filter(|&(_, t)| alcanzable(t)).collect()
     }
 
-    /// Lo que `MarcarAldea` mira de un punto antes de la ruta: tierra firme, en la zona real de la plaza y a `separacionMinima` de toda plaza y todo
-    /// pueblo, de cualquier Facción. Devuelve la fertilidad del punto (ppm); el mínimo lo mira la regla (`iniciar_aldea`).
+    /// El anillo de la zona de la plaza donde va su siguiente aldea agrícola (decisión del autor del 2026-11-01, para que no se levanten todas
+    /// juntas): la aldea número k va en el anillo que añade a la zona el primer nivel cuyo cupo de pueblos llega a k (`cupoPorNivel` 2 / 3 / 4 / 5 / 6,
+    /// techos del radio 10 / 15 / 20 / 25 / 30). Las dos primeras, hasta 10 u; la tercera, de 10 a 15 u; la cuarta, de 15 a 20 u, y así. Cuentan las
+    /// aldeas que tiene la plaza en cualquier estado; los pueblos extractores no, que van donde está su nodo. `(desde, hasta]`, en milésimas.
+    pub(crate) fn anillo_de_aldea(&self, plaza: u64) -> Option<(Mil, Mil)> {
+        let a = self.estado.asentamientos.get(&plaza)?;
+        let k = a.economia.pueblos.iter().filter(|p| p.es_aldea()).count() as u32 + 1;
+        let cupo = &self.estado.reglas.economia.datos.pueblos.cupo_por_nivel;
+        let techos = &self.estado.reglas.territorio.techos;
+        let nivel = cupo.iter().find(|&(_, &c)| c >= k).map_or(techos.len() as u32, |(&n, _)| n).clamp(1, techos.len() as u32) as usize;
+        Some((if nivel == 1 { 0 } else { techos[nivel - 2] }, techos[nivel - 1]))
+    }
+
+    /// Lo que `MarcarAldea` mira de un punto antes de la ruta: tierra firme, en la zona real de la plaza, en el anillo de su siguiente aldea
+    /// ([`Self::anillo_de_aldea`]) y a `separacionMinima` de toda plaza y todo pueblo, de cualquier Facción. Devuelve la fertilidad del punto
+    /// (ppm); el mínimo lo mira la regla (`iniciar_aldea`).
     fn sitio_de_aldea_sin_ruta(&self, plaza: u64, pos: Punto) -> Result<i64, (&'static str, String)> {
         let geo = self.geografia.as_ref().ok_or((rechazos::SIN_MUNDO, "el núcleo no tiene mundo cargado".into()))?;
         let Some(fertilidad) = geo.fertilidad_en(pos).filter(|_| geo.es_tierra_firme(pos)) else { return Err((rechazos::PUEBLO_FUERA_DE_LA_ZONA, "ese punto no es tierra firme".into())) };
         if !self.en_zona(plaza, pos) {
             return Err((rechazos::PUEBLO_FUERA_DE_LA_ZONA, format!("el punto cae fuera de la zona de as-{plaza}")));
+        }
+        if let Some((desde, hasta)) = self.anillo_de_aldea(plaza) {
+            let d = self.estado.asentamientos[&plaza].posicion.dist(pos);
+            if d <= desde || d > hasta {
+                let u = |x: Mil| (x as f64 / 1000.0).to_string().replace('.', ",");
+                return Err((rechazos::PUEBLO_FUERA_DE_SU_ANILLO, format!("la siguiente aldea de as-{plaza} va a más de {} u y hasta {} u de la plaza; el punto está a {} u", u(desde), u(hasta), u(d))));
+            }
         }
         let separacion = self.estado.reglas.economia.datos.pueblos.aldea.separacion_minima;
         let nodos = &geo.mapa.nodos;
@@ -101,7 +122,8 @@ impl Nucleo {
     }
 
     /// El panel de la aldea agrícola: el punto más fértil de la zona de la plaza donde `MarcarAldea` se aceptaría ahora, muestreado en anillos de
-    /// 0,5 u y 24 rumbos desde la separación mínima hasta el radio de la zona. `None` si no hay ninguno (o no hay mundo).
+    /// 0,5 u y 24 rumbos desde la separación mínima hasta el radio de la zona (solo valen los del anillo de su siguiente aldea). `None` si no hay
+    /// ninguno (o no hay mundo).
     pub fn sitio_de_aldea(&mut self, plaza: u64) -> Option<Punto> {
         let a = self.estado.asentamientos.get(&plaza)?;
         let (centro, radio) = (a.posicion, a.radio);
@@ -460,13 +482,14 @@ impl Nucleo {
         }
     }
 
-    /// El carro llegó a la madre: vuelca lo que trae en su almacén (topado: lo que no cabe se pierde, ni cuenta para el ascenso) y vuelve vacío (su plan ya es el de la vuelta).
+    /// El carro llegó a la madre: vuelca lo que trae en su almacén (topado: lo que no cabe se pierde) y vuelve vacío (su plan ya es el de la vuelta).
+    /// Para la solvencia del ascenso cuenta todo lo que trae, quepa o no (decisión del autor del 2026-11-01).
     pub(super) fn acarreo_llega(&mut self, t: Instante, carro: u64, madre: u64, contenido: &Mercancia) {
         let Some(plaza) = self.estado.asentamientos.get_mut(&madre) else { return drop(self.perder_caravana(t, carro)) };
         let mut ingresado: Mil = 0;
         for (&r, &n) in contenido {
             let entra = plaza.economia.almacen.agregar(r, n);
-            plaza.economia.registrar_acarreo(t, r, entra);
+            plaza.economia.registrar_acarreo(t, r, n);
             ingresado += entra;
         }
         self.tr.tocar(Clase::Asentamiento, madre);
