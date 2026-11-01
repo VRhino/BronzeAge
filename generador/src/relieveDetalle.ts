@@ -94,11 +94,11 @@ export function crearDetalleRelieve(seed: number, rios: readonly RioZona[], barr
 
 /** Cuánto de `p` es corredor de paso (0-1): 1 en el collado y el valle de aproximación del relieve regional, y una
  * transición de `bordePaso` alrededor. */
-function enPaso(d: DetalleRelieve, p: Point): number {
+export function enPaso(pasos: readonly number[], p: Point): number {
   const b = RELIEVE_DETALLE.bordePaso;
   let v = 0;
-  for (let i = 0; i < d.pasos.length; i += 6) {
-    const dx = p.x - d.pasos[i]!, dy = p.y - d.pasos[i + 1]!, tx = d.pasos[i + 2]!, ty = d.pasos[i + 3]!, radio = d.pasos[i + 4]!, ancho = d.pasos[i + 5]!;
+  for (let i = 0; i < pasos.length; i += 6) {
+    const dx = p.x - pasos[i]!, dy = p.y - pasos[i + 1]!, tx = pasos[i + 2]!, ty = pasos[i + 3]!, radio = pasos[i + 4]!, ancho = pasos[i + 5]!;
     const transversal = Math.abs(-dx * ty + dy * tx), longitudinal = Math.abs(dx * tx + dy * ty);
     const largo = 1 - suave((longitudinal - (radio * 0.42 + transversal * 0.24)) / (b * radio));
     const anchura = 1 - suave((transversal - ancho * 2.8) / (b * ancho * 2.8));
@@ -140,7 +140,7 @@ function valle(d: DetalleRelieve, p: Point, macizo: number): number {
 export function aplicarDetalle(d: DetalleRelieve, p: Point, base: number): number {
   const C = RELIEVE_DETALLE;
   if (base < C.orilla) return base;
-  const abierto = 1 - enPaso(d, p);
+  const abierto = 1 - enPaso(d.pasos, p);
   const macizo = suave((base - C.suelo) / C.transicion) * abierto, pie = suave((base - 0.47) / 0.04) * (1 - macizo) * abierto;
   const llano = suave((base - C.orilla) / 0.03) * (1 - macizo) * abierto;
   const seco = macizo > 0 || pie > 0 || llano > 0 ? 1 - C.hondoValle * valle(d, p, macizo) : 1;

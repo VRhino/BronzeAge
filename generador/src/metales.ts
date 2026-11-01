@@ -22,10 +22,17 @@ export const PARAMETROS_METALES = {
   tamanoVeta: { min: 3, max: 6 },
   /** Distancia mínima entre centros de vetas (estratégicas). */
   entreVetas: 60,
+  /**
+   * Como mucho estas vetas por región (decisión del autor del 2026-11-01, «vetas en varias sierras»): sin tope, todas caían en la
+   * sierra lejana mayor (con la semilla 42, las 10 en las tres regiones altas del norte). Si con el tope no caben todas, las que
+   * faltan se ponen sin él.
+   */
+  maxVetasPorRegion: 2,
 };
 
-/** Un sitio apto para un yacimiento (terreno y accesos ya comprobados por quien lo genera) con la calidad de cada metal, 0..1. */
-export interface Sitio { posicion: Point; calidad: Record<Metal, number> }
+/** Un sitio apto para un yacimiento (terreno y accesos ya comprobados por quien lo genera) con la calidad de cada metal, 0..1,
+ * y la región en la que cae (para el tope de vetas por región; sin región no hay tope). */
+export interface Sitio { posicion: Point; calidad: Record<Metal, number>; region?: number }
 
 export interface NodoMetal {
   id: string;
@@ -109,10 +116,12 @@ export function repartirMetales(
   // Centros de veta: donde más sitios aptos de estaño hay alrededor, separados entre sí.
   const centros = lejanos.map(c => ({ c, n: lejanos.filter(o => dist(o.s.posicion, c.s.posicion) <= radioMax).length * (0.6 + 0.4 * c.azar) }))
     .sort((a, b) => b.n - a.n);
-  const elegidos: Point[] = [];
-  for (const { c } of centros) {
+  const elegidos: Point[] = [], porRegion = new Map<number, number>();
+  for (const conTope of [true, false]) for (const { c } of centros) {
     if (elegidos.length === numVetas) break;
     if (elegidos.some(e => dist(e, c.s.posicion) < p.entreVetas * FACTOR)) continue;
+    const region = c.s.region;
+    if (conTope && region !== undefined && (porRegion.get(region) ?? 0) >= p.maxVetasPorRegion) continue;
     const i = elegidos.length, necesita = tamanos[i]! + orosEnVeta[i]!;
     const cerca = lejanos.filter(o => dist(o.s.posicion, c.s.posicion) <= radioMax);
     const id = `veta-${i}`, propios: NodoMetal[] = [];
@@ -126,6 +135,7 @@ export function repartirMetales(
     }
     if (propios.length < necesita) continue; // no cabe: otro centro
     elegidos.push(c.s.posicion);
+    if (region !== undefined) porRegion.set(region, (porRegion.get(region) ?? 0) + 1);
     for (const n of propios) { n.id = nuevoId(n.tipo, id); nodos.push(n); }
     oroEnVetas += orosEnVeta[i]!;
     vetas.push({ id, centro: c.s.posicion, nodosIds: propios.map(n => n.id), campamentoMasCercano: c.campamento });

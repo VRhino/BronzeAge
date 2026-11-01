@@ -292,7 +292,13 @@ funcionar primero ahí, con three.js como en la mesa, ayuda a cerrar la represen
     playita al fondo y el barranco detrás, una bahía de playa con dunas, un río que se abre en estuario, una costa
     rocosa baja y quebrada (de 7 a 12 m, que sube de golpe desde el agua) y dos islotes. El fondo del mar es somero
     frente a la playa y cae hondo bajo el acantilado.
-  Falta el visto bueno del autor para llevar algo de esto al generador.
+  El 2026-11-01 el autor lo aprobó («si el generador crea este tipo de costas a lo largo del mapa, perfecto») y el
+  generador lo hace por todo el mapa (`generador/src/costasRegional.ts`, revisión `costas-2`): el tipo se alterna a lo
+  largo de la costa (un 30 % de acantilado, un 25 % de roca y el resto playa, según un ruido, si la costa es cabo o
+  bahía y lo alta que es la tierra de detrás), la orilla tiene cabos, ensenadas y bordes quebrados, hay calas con su
+  playita y su barranco, farallones al pie de los cabos de acantilado y estuarios en los ríos que llegan al mar; la
+  playa es una franja llana con dunas y la ladera de dentro se aparta. La ventana «Generador: costa» de la mesa enseña
+  ya esa costa (semilla 42: mundo `e5c637d4…`, versión del generador `regional-18-costas-2+estrategico-3`; ver §8).
 
 ## 8. Fuente de la mesa
 
@@ -304,7 +310,8 @@ funcionar primero ahí, con three.js como en la mesa, ayuda a cerrar la represen
 - `Consideraciones/artefactos/mesa_escalas_3d/datos-alpina.json`: ventana de la región alpina del generador (x0 = 2078,
   y0 = 108, mundo `fb259758…`; ver `Docs/Mechanics/Generacion_Del_Mundo.md` §5.1).
 - `Consideraciones/artefactos/mesa_escalas_3d/datos-costa.json`: ventana de costa del generador (x0 = 400, y0 = 840,
-  mundo `6701f4ae…`), con puntos en el acantilado, la roca y la playa.
+  mundo `e5c637d4…`, con las costas nuevas), con puntos en una cala, los farallones, el acantilado, la roca y la playa (el tercer número
+  de cada punto, si lo hay, es el giro de la cámara).
 - `generador/scripts/datos-mesa-3d.ts`: regenera una ventana desde una seed y su artefacto
   (`npx tsx scripts/datos-mesa-3d.ts 42 mundo-<hash>.bin datos-costa.json [x0 y0]`, unos 50 s).
 - Las ventanas «Antes» (`datos.json`, del generador anterior al relieve nuevo) y «Generador nuevo» (`datos-nuevo.json`)

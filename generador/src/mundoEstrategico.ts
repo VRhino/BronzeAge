@@ -9,6 +9,7 @@ import { colocarCampamentos, type Campamento } from './campamentos';
 import { repartirMetales, type Sitio } from './metales';
 import { generarParcelas } from './parcelas';
 import { muestrearRelieve } from './muestras';
+import { regionEn } from './regional';
 
 /** Lo que necesita del relieve regional ya generado (`generarRelieve`). */
 export interface Relieve {
@@ -46,7 +47,7 @@ export function sitiosDeMetal(r: Relieve, paso = 120): Sitio[] {
     if (terreno !== 'colina' && terreno !== 'montana' && terreno !== 'cima') continue;
     if (!esTransitable(r.elevacion, p, altura) || !r.conexion.tieneAcceso(p)) continue;
     const geologia = evaluarRuido(r.suelos.geologia, p);
-    sitios.push({ posicion: p, calidad: {
+    sitios.push({ posicion: p, region: regionEn(r.elevacion.regional, p), calidad: {
       estano: (1 - suave((geologia - 0.37) / 0.12)) * suave((altura - 0.48) / 0.08),
       oro: suave((geologia - 0.54) / 0.14) * suave((altura - 0.50) / 0.08),
     } });

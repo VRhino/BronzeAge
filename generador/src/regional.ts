@@ -75,6 +75,13 @@ function pesoArea(campo: RelieveRegional, area: AreaRegional, p: Point): number 
   return 1 / (0.03 + d2 ** 3);
 }
 
+/** La región (el área de `campo.areas`) que más pesa en `p`: su `id`. Las regiones son las del análisis de metales por región. */
+export function regionEn(campo: RelieveRegional, p: Point): number {
+  let mejor = 0, maximo = -1;
+  for (const area of campo.areas) { const peso = pesoArea(campo, area, p); if (peso > maximo) { maximo = peso; mejor = area.id; } }
+  return mejor;
+}
+
 export function humedadRegionalEn(campo: RelieveRegional, p: Point): number {
   let suma = 0, pesos = 0;
   for (const area of campo.areas) {
