@@ -182,8 +182,10 @@ pesants → el excedente; artesanos → `artesanos − trabajadoresTransformacio
 | Edificio | Producción por tick | Notas |
 |---|---|---|
 | Granja | `produccionTrigoDeGranja(nivelInterno) × fertilidadZona × ratioManoObra × factorProduccionTrigo` | `produccionTrigoDeGranja` = `niveles[nivel].produccionBaseTrigo` (120/180/240/360; el doble de las del TypeScript, 60/90/120/180, por decisión del autor el 2026-10-27 al entrar la fertilidad real de la zona) |
-| Leñera | `produccionBaseMadera × bosque.densidad × ratioManoObra` | no usa fertilidad ni tecnología; si el bosque no existe, no produce |
+| Leñera | `produccionBaseMadera × bosque.densidad × ratioManoObra` | no usa fertilidad ni tecnología; si el bosque no existe, no produce. `produccionBaseMadera` = **8** desde el 2026-11-01 (antes 5; nota de abajo) |
 | Cantera, Mina (oro), Mina de cobre / estaño / hierro, Corral (en Rust, todos fuera de la ciudad: la Cantera y las minas solo en un pueblo extractor, §14, la Cantera desde el 2026-11-01; el Corral, solo en la aldea agrícola desde el 2026-10-27, §14.0, que no usa esta fórmula) | `mapa.extraer(fuenteId, produccionBase × ratioManoObra × factorTecnologia)` | rinde piedra, oro, cobre, estaño, hierro, livestock. Solo si el nodo tiene stock |
+
+> **Una parcela produce más (decisión del autor del 2026-11-01).** Con el bosque en manchas del generador (`Generacion_Del_Mundo.md` §8) hay parcelas por todo el mapa, pero menos juntas: junto a los campamentos, una plaza nueva tiene ahora 2 parcelas libres en la zona de su techo del nivel 1 (10 u), donde antes lo normal eran 4. El autor no quiere más parcelas juntas: las 4 parcelas son todo el espacio inicial de una plaza, así que tenerlas debe ser raro. Una plaza debe **sobrevivir con 1 parcela, ir bien con 2, ir sobrada con 3 y sobradísima con 4**. Por eso sube lo que da cada parcela: `produccionBaseMadera` de la Leñera pasa de 5 a **8**. Con la densidad mediana de una parcela (0,63, igual que antes), una Leñera con toda su mano de obra da unos 5 de madera por minuto, el doble del mantenimiento de madera de una plaza con 40 edificios (~2,5); dos dan unos 10, lo que daba la madera potencial mediana de una plaza nueva antes del cambio (9,9). El umbral de plaza condenada (`MADERA_MINIMA_POTENCIAL`, 3 por minuto) no cambia; como se mide con la producción de la Leñera (`produccionBaseMadera × Σ densidades`), basta con una parcela de densidad 0,375. Medido con la semilla 42 (mundo `e5c637d4…`) en los sitios verdes a 50-160 u de cada campamento: la mediana de madera potencial pasa de unos 6.400 milésimas (con 5) a unos 10.200 (con 8).
 
 - **`fertilidadZona`** (`mejorFertilidadEnZona`): la mayor `mapa.fertilidadEn` de una lista de candidatos = la posición del asentamiento + `SITIO.muestrasFertilidad` (40) puntos `i = 0..39` en
   `(pos.x + cos(2π·i/40)·r, pos.y + sin(2π·i/40)·r)` con `r = ((i mod 5)/5) · radioPotencial`, quedándose con los que caen dentro del polígono de zona (o con todos si el polígono está vacío). Todas las Granjas
@@ -696,7 +698,7 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
       "madera": 10
     },
     "tiempoConstruccionMinutos": 2,
-    "produccionBaseMadera": 5,
+    "produccionBaseMadera": 8,
     "trabajadoresRequeridos": 4
   },
   "almacen": {

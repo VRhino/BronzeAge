@@ -9,7 +9,8 @@
 //!   ciudad de la plaza, [`crate::urbanismo`]).
 
 /// Madera por minuto mínima que debe poder dar el bosque a 10 u de una plaza para que no caiga en ruinas (decidido el 2026-10-18; la
-/// cifra es un placeholder a calibrar: el mantenimiento pide ~1,65 al día 1 y ~2,5 con 40 edificios). Se mide como `5 × Σ densidades`.
+/// cifra es un placeholder a calibrar: el mantenimiento pide ~1,65 al día 1 y ~2,5 con 40 edificios). Se mide como `produccionBaseMadera × Σ densidades`
+/// (8 desde el 2026-11-01; antes 5).
 pub const MADERA_MINIMA_POTENCIAL: Mil = 3_000;
 
 use asentamiento::asentamiento::{Gratuito, Sitios, Urbano};

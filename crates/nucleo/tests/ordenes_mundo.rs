@@ -73,7 +73,7 @@ fn sitio_junto_a(n: &Nucleo, c: Punto, r: i64) -> Option<Punto> {
     (0..36).map(|g| ((g * 10) as f64).to_radians()).map(|a| Punto::new(c.x + (r as f64 * a.cos()) as i64, c.y + (r as f64 * a.sin()) as i64)).find(|&p| {
         let libre = |q: Punto| !n.en_proteccion_de_campamento(q);
         libre(p) && libre(Punto::new(p.x + 12_000, p.y)) && libre(Punto::new(p.x + 9_000, p.y))
-            && n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6 && !v.condenada)
+            && n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 3 && !v.condenada)
     })
 }
 

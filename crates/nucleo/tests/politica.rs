@@ -548,7 +548,7 @@ fn la_capital_es_la_mas_antigua_hasta_que_el_rey_designa_otra_con_palacio_y_solo
 }
 
 /// La distancia a la capital sube el mantenimiento (Economia_Construccion §10.1, 5C): una segunda plaza de la Facción a más de 1.000 u de la capital paga más madera que sin ese factor
-/// (escala infinita). Con la escala de 300 u (P1, 2026-10-25) la plaza a 1.345 u (×5,5) sigue en pie; con la de 80 u de antes (×17,8) caía en ruinas en un día.
+/// (escala infinita). Con la escala de 300 u (P1, 2026-10-25) la plaza a 1.215 u (×5, mundo `e5c637d4…`) con 4 parcelas sigue en pie; con la de 80 u de antes caía en ruinas.
 #[test]
 fn la_distancia_a_la_capital_sube_el_mantenimiento_de_la_plaza_lejana() {
     let m = con_mundo!();
@@ -561,7 +561,9 @@ fn la_distancia_a_la_capital_sube_el_mantenimiento_de_la_plaza_lejana() {
         }
         let a = e.plaza(m, 0, "fundador");
         e.ok("admin", Comando::FijarNivelFaccion { faccion: 1, nivel: 2 });
-        let b = e.plaza(m, 2, "fundadora");
+        // Con 3 parcelas (sobrada), a 1.215 u de la capital (×5) cae en ruinas en dos días; con 4 (todo su espacio), aguanta.
+        let pb = comun::real::sitio_con_parcelas(&e.n, &m.0, 2, 1, 4);
+        let b = fundar(&mut e.n, "fundadora", 1, pb);
         let d = e.n.estado().asentamientos[&a].posicion.dist(e.n.estado().asentamientos[&b].posicion);
         assert!(d > 1_000_000, "a {d} milésimas");
         e.avanzar(2 * DIA);

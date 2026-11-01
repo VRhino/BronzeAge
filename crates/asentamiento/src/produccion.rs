@@ -289,7 +289,7 @@ mod pruebas {
         e[1].fuente = Some(Fuente::Parcela(99));
         let m = mano_de_obra(&cat, &e, 8, 0, 0);
         extraer_y_cultivar(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &mut w);
-        assert_eq!(a.cantidad(Recurso::Madera), 4_000, "5 × 0,8 de la primera; la segunda no tiene parcela");
+        assert_eq!(a.cantidad(Recurso::Madera), 6_000, "8 × 0,8 = 6,4 de la primera (entran 6 unidades y 0,4 queda de resto); la segunda no tiene parcela");
     }
 
     #[test]

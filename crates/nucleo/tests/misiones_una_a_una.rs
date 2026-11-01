@@ -279,12 +279,18 @@ fn h8_unirse_a_un_ejercito() {
 }
 
 /// Un campamento de bandidos de nivel 1 junto a una columna de `cuenta` con una escuadra completa de arqueros; devuelve (campamento, héroe).
+/// Si junto a `donde` no se pueden poner bandidos (cae en la zona de una plaza), se apartan hacia el este, de 12 en 12 u, y la columna con ellos.
 fn bandidos_y_arqueros(x: &mut X, m: &M, cuenta: &str, faccion: u32, donde: Punto) -> (u64, u64) {
-    let (_, h) = x.columna(cuenta, faccion, donde, 350_000);
+    let (b, cerca) = (0..12)
+        .find_map(|j| {
+            let cerca = pisable(&m.0, donde, 1_000 + j * 12_000, 0);
+            let r = x.ord("admin", Comando::ColocarBandidos { posicion: cerca, nivel: 1 });
+            r.aceptada().then(|| (r.creadas[0], cerca))
+        })
+        .expect("hay sitio para los bandidos");
+    let (_, h) = x.columna(cuenta, faccion, pisable(&m.0, cerca, -1_000, 0), 350_000);
     let unidades = militar::Reglas::cargar().tropas.tropa(Tropa::ArquerosCompuesto).unidades;
     x.ok("admin", Comando::DarEscuadra { heroe: h, tropa: Tropa::ArquerosCompuesto, cantidad: unidades });
-    let cerca = pisable(&m.0, donde, 1_000, 0);
-    let b = x.ok("admin", Comando::ColocarBandidos { posicion: cerca, nivel: 1 }).creadas[0];
     (b, h)
 }
 

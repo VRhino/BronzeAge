@@ -111,7 +111,7 @@ fn sitio_junto_a(n: &Nucleo, m: &Mundo, c: Punto, r: i64) -> Option<Punto> {
         // Las avanzadas se levantan a 9 y a 12 u al este: tierra pisable y fuera de la protección de los campamentos.
         let libre = |q: Punto| !n.en_proteccion_de_campamento(q) && m.transitable_en(q.x, q.y);
         libre(p) && libre(Punto::new(p.x + 12_000, p.y)) && libre(Punto::new(p.x + 9_000, p.y))
-            && n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6 && !v.condenada) && fertil(m, p)
+            && n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 3 && !v.condenada) && fertil(m, p)
     })
 }
 

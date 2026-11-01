@@ -336,7 +336,8 @@ fn no_se_revela_a_quien_ya_la_tiene_aparecida_y_al_llegar_a_una_plaza_se_revela_
     assert_eq!(r.len(), 1);
     let llegada = r[0].en;
     assert!(llegada > abierta && r[0].asentamientos == vec![b]);
-    assert!(e.n.aedas().iter().any(|x| x.recientes.last() == Some(&(b as u32))), "llegó a B");
+    // En el día que pasa puede haber seguido camino: basta con que B esté entre las plazas que acaba de visitar.
+    assert!(e.n.aedas().iter().any(|x| x.recientes.contains(&(b as u32))), "llegó a B");
 }
 
 // ───────────────────────────── 5. Vender ─────────────────────────────

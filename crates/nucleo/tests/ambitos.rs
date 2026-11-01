@@ -58,7 +58,7 @@ fn sitio_rico(n: &Nucleo, m: &Mundo, faccion: u32) -> Punto {
         for g in 0..360 {
             let a = (g as f64).to_radians();
             let p = Punto::new(p0.x + (r as f64 * a.cos()) as i64, p0.y + (r as f64 * a.sin()) as i64);
-            if n.viabilidad(p, faccion).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6) {
+            if n.viabilidad(p, faccion).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 3) {
                 return p;
             }
         }

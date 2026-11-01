@@ -195,12 +195,18 @@ fn destruir_un_campamento_de_bandidos_suma_la_batalla_ganada_solo_a_quien_reside
     let mut x = X::nuevo(m);
     let (a, _) = dos_plazas(&mut x, m);
     let destruir = |x: &mut X, k: i64, reside: bool| {
-        let donde = pisable(&m.0, campamento(&m.0, 0), 40_000 + k * 8_000, 30_000);
+        // Los bandidos no se ponen en la zona de una plaza: si caen en una, se apartan hacia el este, de 12 en 12 u, y la columna con ellos.
+        let (b, donde) = (0..12)
+            .find_map(|j| {
+                let cerca = pisable(&m.0, campamento(&m.0, 0), 41_000 + k * 8_000 + j * 12_000, 30_000);
+                let r = x.ord("admin", Comando::ColocarBandidos { posicion: cerca, nivel: 1 });
+                r.aceptada().then(|| (r.creadas[0], pisable(&m.0, cerca, -1_000, 0)))
+            })
+            .expect("hay sitio para los bandidos");
         let (_, h) = x.columna("ana", 1, donde, &[Tropa::ArquerosCompuesto]);
         if reside {
             x.residir(h, a);
         }
-        let b = x.ok("admin", Comando::ColocarBandidos { posicion: pisable(&m.0, donde, 1_000, 0), nivel: 1 }).creadas[0];
         x.ok("ana", Comando::Atacar { heroe: h, objetivo: ObjetivoAtaque::Campamento(b), declara_guerra: false });
         assert!(x.n.campamento_de_bandidos(b).is_none(), "el campamento cae");
         h

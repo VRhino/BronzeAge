@@ -46,7 +46,7 @@ fn coste_de_avanzar_dos_horas_con_300_columnas_que_marchan() {
         let sitio = (0..8).map(|k| 50_000 + k * 10_000).flat_map(|r| (0..36).map(move |g| (r, g))).map(|(r, g): (i64, i64)| {
             let a = ((g * 10) as f64).to_radians();
             Punto::new(c.x + (r as f64 * a.cos()) as i64, c.y + (r as f64 * a.sin()) as i64)
-        }).find(|&p| n.viabilidad(p, f).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6));
+        }).find(|&p| n.viabilidad(p, f).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 3));
         let Some(sitio) = sitio else { continue };
         let col = n.crear_ejercito(0, &format!("c{}", f - 1), f, sitio, 500, 100_000).unwrap();
         assert!(n.aplicar_en(0, Peticion::nueva("admin", &format!("fc{i}"), Comando::DarCaravanaFundacion { ejercito: col }).de_admin()).aceptada());

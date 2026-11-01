@@ -28,14 +28,21 @@ pub fn campamento(m: &Mundo, i: usize) -> Punto {
 }
 
 /// Un sitio verde con mucho bosque a 50 u o más del campamento `i` donde la Facción `faccion` puede fundar ahora: una plaza que no cae en ruinas por falta de madera.
-/// Con campo abierto al este ([`abierto_al_este`]): las pruebas se alejan de la plaza hacia +x.
+/// Con campo abierto al este ([`abierto_al_este`]): las pruebas se alejan de la plaza hacia +x. «Mucho bosque» son 3 parcelas en la zona del techo: con el bosque en
+/// manchas (2026-11-01) una plaza sobrevive con 1, va bien con 2 y va sobrada con 3; 4, todo su espacio, es raro.
 pub fn sitio_rico(n: &Nucleo, m: &Mundo, i: usize, faccion: u32) -> Punto {
+    sitio_con_parcelas(n, m, i, faccion, 3)
+}
+
+/// Como [`sitio_rico`], con al menos `parcelas` parcelas libres en la zona del techo del nivel 1.
+#[allow(dead_code)]
+pub fn sitio_con_parcelas(n: &Nucleo, m: &Mundo, i: usize, faccion: u32, parcelas: usize) -> Punto {
     let c = campamento(m, i);
     for r in (0..12).map(|k| 50_000 + k * 10_000) {
         for g in 0..360 {
             let a = (g as f64).to_radians();
             let p = Punto::new(c.x + (r as f64 * a.cos()) as i64, c.y + (r as f64 * a.sin()) as i64);
-            if n.viabilidad(p, faccion).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 6) && abierto_al_este(m, p) {
+            if n.viabilidad(p, faccion).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= parcelas) && abierto_al_este(m, p) {
                 return p;
             }
         }
