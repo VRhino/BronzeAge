@@ -29,12 +29,14 @@
 //! —suelta, con escolta de tropa cedida o sin ella, o adjunta a una columna sin héroes sanos— se resuelve **siempre con números**, haya servidores o no. Un campamento no vuelve a
 //! acosar a la misma columna mientras se conserve su batalla ([`Nucleo::acoso_ya_jugado`]).
 
+use super::contratos::Desenlace;
 use super::*;
 use crate::estado::{SucesoCombate, PRIO_BANDIDOS};
 use crate::estado_combate::{entidad_anillo, entidad_bandidos, es_entidad_bandidos, CampamentoBandidos, OrigenBandidos};
 use crate::estado_comercio::es_entidad_caravana;
 use crate::estado_fundacion::{es_entidad_fundacion, Origen as OrigenFundacion, Situacion as SituacionFundacion};
 use ::encuentros::{plan_quieto, Entradas};
+use ::mercenarios::Objetivo;
 use combate::bandidos::{aparece_junto_a_plaza, campamentos_que_tocan, nivel_al_azar, proxima_aparicion_en_el_anillo, punto_del_anillo, puede_acosar, reaparece_en, resolver_acoso};
 use combate::caravana::{Defensa, Zona};
 use militar::escuadra::Escuadra;
@@ -398,6 +400,7 @@ impl Nucleo {
         };
         let acoso = resolver_acoso(&cr, nivel, defensa, &mut self.estado.rng);
         self.participacion_de_batalla(t, &[origen], &defensores, &[]);
+        self.tras_batalla(t, &Desenlace { atacados: &[Objetivo::Caravana(idk)], atacantes: &[] });
         self.volcar_escuadras(&escolta);
         let plazas = vec![origen].into_iter().filter(|o| self.estado.asentamientos.contains_key(o)).collect();
         let datos = vec![("campamento", idc as i64), ("caravana", idk as i64), ("poderBandido", acoso.poder_bandido), ("defensa", acoso.defensa), ("bajasEscolta", acoso.bajas_escolta.iter().map(|b| b.antes - b.despues).sum())];

@@ -88,7 +88,7 @@ pub fn duracion(dias: u8) -> Instante {
     Instante::from(dias) * 24 * 60 * MS_POR_MINUTO
 }
 
-/// La orden inicial del contrato `c` (§6.3, §6.4): la que dice su fila de `TRABAJOS_MERCENARIOS` sobre su objetivo, dada por quien lo firmó en `t`. La del permanente es `guardar`
+/// La orden inicial del contrato `c` (§6.3, §6.4): la que dice su fila de `TRABAJOS_MERCENARIOS` sobre su objetivo, dada por quien lo firmó en `t`, sin puesto: no tiene rango. La del permanente es `guardar`
 /// de la plaza donde reside (`residencia`), no de su objetivo, y sin plaza no tiene ninguna. `contra` es la Facción dueña del objetivo en `t`, que solo guarda un `atacar`;
 /// `ir_a` y `atacar` caducan a las `plazoOrdenHoras` (decisión 6 del plan).
 pub fn orden_inicial(d: &Datos, c: &Contrato, residencia: Option<u64>, contra: Option<u32>, t: Instante) -> Option<Orden> {
@@ -98,7 +98,7 @@ pub fn orden_inicial(d: &Datos, c: &Contrato, residencia: Option<u64>, contra: O
         tipo,
         objetivo,
         dada_por: c.firmado_por,
-        puesto: c.puesto_firma,
+        puesto: None,
         dada_en: t,
         vence: matches!(tipo, TipoOrden::IrA | TipoOrden::Atacar).then_some(t + d.plazo_orden),
         contra: contra.filter(|_| tipo == TipoOrden::Atacar),
@@ -321,10 +321,10 @@ mod pruebas {
     }
 
     #[test]
-    fn la_orden_inicial_de_cada_trabajo_sale_de_la_tabla_y_la_da_quien_firmo() {
+    fn la_orden_inicial_de_cada_trabajo_sale_de_la_tabla_la_da_quien_firmo_y_no_tiene_rango() {
         let d = datos();
         let t = 5_000;
-        let dada = |tipo, objetivo| Orden { tipo, objetivo, dada_por: 2, puesto: Puesto::Gobernador(4), dada_en: t, vence: None, contra: None, unido: false };
+        let dada = |tipo, objetivo| Orden { tipo, objetivo, dada_por: 2, puesto: None, dada_en: t, vence: None, contra: None, unido: false };
         let inicial = |trabajo, objetivo| orden_inicial(&d, &contrato(trabajo, objetivo), None, Some(2), t);
         assert_eq!(inicial(Trabajo::Defender, Objetivo::Pueblo(30)), Some(dada(TipoOrden::Guardar, Objetivo::Pueblo(30))), "guardar el objetivo; la dueña no se guarda");
         assert_eq!(inicial(Trabajo::Escoltar, Objetivo::Caravana(8)), Some(dada(TipoOrden::Guardar, Objetivo::Caravana(8))));

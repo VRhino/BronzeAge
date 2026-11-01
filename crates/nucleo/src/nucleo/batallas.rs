@@ -36,11 +36,13 @@
 //! de §8.5) antes de tocar nada.
 
 use super::combates::{de_su_columna, loadout_en_el_campamento};
+use super::contratos::Desenlace;
 use super::*;
 use crate::comando::Implicados;
 use crate::estado::{Dato, SucesoBatalla, PRIO_BATALLA, PRIO_SALIDA, SIN_BANDERA};
 use crate::estado_batallas::entidad_batalla;
 use crate::estado_militar::Relacion;
+use ::mercenarios::Objetivo;
 use combate::botin::{repartir_botin, CarroDeColumna};
 use combate::caravana::Modalidad;
 use combate::ciclo::{bloqueos_de, uuid_de_batalla, Asignacion, BandoDeTicket, Batalla, Bloqueo, Bloqueos, CaravanaEnBatalla, Contexto, EdificioCongelado, Efecto, EscuadraEnBatalla, ErrorBatalla, Participante, PlazaCongelada, RecintoCongelado, SalidaBatalla, Ticket, Token};
@@ -688,6 +690,19 @@ impl Nucleo {
         self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed(codigo), en: t, ejercitos, asentamientos: plazas, punto: Some(b.punto), datos, valores, heroes, ..Default::default() });
     }
 
+    /// Lo que ataca el bando atacante de `b` (Mercenarios_Por_Contrato §6.3): la plaza asediada, cada columna que defiende en campo abierto, las caravanas en juego, el campamento de
+    /// bandidos, el pueblo o la avanzada.
+    fn objetivos_atacados(&self, b: &Batalla) -> Vec<Objetivo> {
+        match &b.ticket.contexto {
+            Contexto::Asedio { asentamiento } => vec![Objetivo::Plaza(u64::from(*asentamiento))],
+            Contexto::CampoAbierto { .. } => self.columnas_del_bando(b, Lado::Defensor).into_iter().map(Objetivo::Ejercito).collect(),
+            Contexto::Caravana { caravanas, .. } => caravanas.iter().map(|k| Objetivo::Caravana(k.id)).collect(),
+            Contexto::CampamentoBandidos { campamento, .. } => vec![Objetivo::Bandidos(u64::from(*campamento))],
+            Contexto::SaqueoPueblo { pueblo, .. } => vec![Objetivo::Pueblo(*pueblo)],
+            Contexto::Avanzada { avanzada, .. } => vec![Objetivo::Avanzada(*avanzada)],
+        }
+    }
+
     /// Las columnas de un bando que siguen en la batalla, en el orden del bloqueo: la primera es la que abrió o recibió el combate.
     fn columnas_del_bando(&self, b: &Batalla, lado: Lado) -> Vec<u64> {
         b.bloqueo.ejercitos.iter().copied().filter(|c| self.estado.ejercitos.get(c).is_some_and(|e| e.columna.participantes.iter().any(|p| b.lado_de(p.heroe) == Some(lado)))).collect()
@@ -1064,10 +1079,14 @@ impl Nucleo {
             Contexto::Caravana { caravanas, .. } => caravanas.iter().filter_map(|k| self.estado.comercio.caravana(k.id)).map(|k| u64::from(k.origen)).collect(),
             _ => vec![],
         };
+        let atacados = self.objetivos_atacados(&b);
         let acoso = matches!(b.ticket.contexto, Contexto::Caravana { .. }) && self.participantes_del_lado(&b, Lado::Atacante).is_empty();
         let ganadores: Vec<u64> = if acoso { vec![] } else { self.participantes_del_lado(&b, res.ganador).iter().map(|q| q.heroe).filter(|&h| res.por_heroe.iter().any(|x| x.heroe == h && x.participo)).collect() };
         self.consecuencias_de_batalla(t, &b, &res, &efectos);
         self.participacion_de_batalla(t, &defendidas, &defendieron, &ganadores);
+        // El ataque de una vez de los mercenarios (Mercenarios_Por_Contrato §6.3): lo cumplen los atacantes que participaron, gane quien gane.
+        let atacantes: Vec<u64> = self.participantes_del_lado(&b, Lado::Atacante).iter().map(|q| q.heroe).filter(|&h| res.por_heroe.iter().any(|x| x.heroe == h && x.participo)).collect();
+        self.tras_batalla(t, &Desenlace { atacados: &atacados, atacantes: &atacantes });
         self.contar(t, logros);
         // Las misiones (Misiones §3): cada héroe que participó libró una batalla; los atacantes que la ganan a un campamento lo destruyen; un asedio se resiste o se conquista.
         let heroes: Vec<u64> = [Lado::Atacante, Lado::Defensor].into_iter().flat_map(|l| self.participantes_del_lado(&b, l)).map(|q| q.heroe).filter(|&h| res.por_heroe.iter().any(|x| x.heroe == h && x.participo)).collect();

@@ -143,7 +143,8 @@ pub struct Orden {
     pub tipo: TipoOrden,
     pub objetivo: Objetivo,
     pub dada_por: u64,
-    pub puesto: Puesto,
+    /// El cargo con el que se dio. `None` es la orden inicial del contrato, que no tiene rango: la sustituye cualquier cargo que alcance al mercenario (`dada_por` sigue siendo quien firmó).
+    pub puesto: Option<Puesto>,
     pub dada_en: Instante,
     /// `ir_a` y `atacar`: caducan al llegar este instante (`plazoOrdenHoras`).
     pub vence: Option<Instante>,

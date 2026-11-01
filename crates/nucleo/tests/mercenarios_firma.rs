@@ -189,7 +189,7 @@ fn el_gobernador_contrata_la_defensa_de_su_plaza_y_paga_con_el_oro_de_su_carro()
     assert_eq!((c.firmado_por, c.puesto_firma, c.firmado_en), (gob, Puesto::Gobernador(plaza), t));
     assert_eq!((c.vence, c.campamento_base, c.fin_aplazado, c.renombre), (Some(t + duracion(3)), 0, None, 25));
     let o = c.orden.expect("nace con orden");
-    assert_eq!((o.tipo, o.objetivo, o.dada_por, o.puesto, o.dada_en), (TipoOrden::Guardar, Objetivo::Plaza(plaza), gob, Puesto::Gobernador(plaza), t));
+    assert_eq!((o.tipo, o.objetivo, o.dada_por, o.puesto, o.dada_en), (TipoOrden::Guardar, Objetivo::Plaza(plaza), gob, None, t));
     assert_eq!((o.vence, o.contra, o.unido), (None, None, false));
     assert_eq!(e.n.estado().contratos.fichas[&bot].historial.firmados, 1);
     // El hecho llega al mercenario y a la Facción.
@@ -220,7 +220,7 @@ fn el_rey_contrata_un_permanente_que_pasa_a_residir_en_la_plaza_y_su_orden_es_gu
     assert_eq!((c.ambito, c.trabajo, c.objetivo, c.plazo, c.vence), (Ambito::Faccion, Trabajo::Permanente, Objetivo::Faccion(1), None, None));
     assert_eq!((c.firmado_por, c.puesto_firma, c.firmado_en, c.renombre), (rey, Puesto::Rey, t, 0));
     let o = c.orden.unwrap();
-    assert_eq!((o.tipo, o.objetivo, o.dada_por, o.puesto, o.vence), (TipoOrden::Guardar, Objetivo::Plaza(plaza), rey, Puesto::Rey, None));
+    assert_eq!((o.tipo, o.objetivo, o.dada_por, o.puesto, o.vence), (TipoOrden::Guardar, Objetivo::Plaza(plaza), rey, None, None));
     // Un permanente no se prorroga.
     assert_eq!(mc::rechazo(&mut e.n, "rey", Comando::ProrrogarContrato { heroe: rey, mercenario: bot, plazo: 3 }), rechazos::MERCENARIO_TIPO_DE_CONTRATO);
 }

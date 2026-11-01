@@ -35,12 +35,14 @@
 //! el edificio, la elección sigue.
 
 use super::combates::{caidos, DefensoresDeDentro};
+use super::contratos::Desenlace;
 use super::dentro::{MOTIVO_DESTRUIDO, MOTIVO_RUINA};
 use super::*;
 use crate::estado::{SucesoCombate, PRIO_ASENTAMIENTO, PRIO_UMBRAL};
 use crate::estado_combate::{entidad_avanzada, entidad_obra_de_avanzada};
 use crate::estado_comercio::id_de_entidad;
 use ::encuentros::plan_quieto;
+use ::mercenarios::Objetivo;
 use asentamiento::asentamiento::Evento as EventoEco;
 use asentamiento::avanzadas::{Avanzada, ErrorAvanzada, Estado as EstadoAvanzada, Etapa};
 use asentamiento::Recurso;
@@ -766,6 +768,7 @@ impl Nucleo {
             let ganadores = if gana { participantes.clone() } else { dentro.tropa.heroes.to_vec() };
             self.participacion_de_batalla(t, &[], &[], &ganadores);
         }
+        self.tras_batalla(t, &Desenlace { atacados: &[Objetivo::Avanzada(x)], atacantes: &participantes });
         Ok(())
     }
 

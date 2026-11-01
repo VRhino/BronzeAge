@@ -79,10 +79,11 @@ pub fn admite(d: &Datos, c: &Contrato, tipo: TipoOrden, objetivo: &Objetivo, dis
     }
 }
 
-/// Una orden nueva sustituye a la vigente si su puesto tiene igual o más rango que el de quien dio la vigente (§6.5). Sin orden vigente, siempre.
-/// General y Gobernador tienen el mismo rango: manda la última. Si no la sustituye, el núcleo rechaza con `mercenario.orden_de_mas_rango`.
+/// Una orden nueva sustituye a la vigente si su puesto tiene igual o más rango que el de quien dio la vigente (§6.5). Sin orden vigente, siempre, y la inicial del contrato (sin puesto)
+/// no tiene rango: la sustituye cualquier cargo que alcance al mercenario. General y Gobernador tienen el mismo rango: manda la última.
+/// Si no la sustituye, el núcleo rechaza con `mercenario.orden_de_mas_rango`.
 pub fn sustituye(vigente: Option<&Orden>, puesto: Puesto) -> bool {
-    vigente.is_none_or(|o| puesto.rango() >= o.puesto.rango())
+    vigente.and_then(|o| o.puesto).is_none_or(|dada| puesto.rango() >= dada.rango())
 }
 
 #[cfg(test)]
@@ -160,7 +161,12 @@ mod pruebas {
     }
 
     fn orden_de(puesto: Puesto) -> Orden {
-        Orden { tipo: TipoOrden::IrA, objetivo: punto(), dada_por: YO, puesto, dada_en: 0, vence: None, contra: None, unido: false }
+        Orden { tipo: TipoOrden::IrA, objetivo: punto(), dada_por: YO, puesto: Some(puesto), dada_en: 0, vence: None, contra: None, unido: false }
+    }
+
+    /// La orden inicial de un contrato: la firmó `YO`, pero no lleva puesto.
+    fn inicial() -> Orden {
+        Orden { puesto: None, ..orden_de(Puesto::Rey) }
     }
 
     #[test]
@@ -388,6 +394,16 @@ mod pruebas {
         assert!(!sustituye(vigente(Puesto::Embajador).as_ref(), Puesto::General(P)));
         assert!(!sustituye(vigente(Puesto::General(P)).as_ref(), Puesto::MaestroCaravanas(P)));
         assert!(!sustituye(vigente(Puesto::Gobernador(P)).as_ref(), Puesto::MaestroCaravanas(P)));
+    }
+
+    #[test]
+    fn la_orden_inicial_no_tiene_rango_y_la_sustituye_cualquier_cargo() {
+        let inicial = inicial();
+        for puesto in [Puesto::Rey, Puesto::Embajador, Puesto::General(P), Puesto::Gobernador(P), Puesto::MaestroCaravanas(P)] {
+            assert!(sustituye(Some(&inicial), puesto), "{puesto:?}");
+        }
+        // El Maestro de Caravanas sustituye una inicial, y no una del Gobernador.
+        assert!(!sustituye(Some(&orden_de(Puesto::Gobernador(P))), Puesto::MaestroCaravanas(P)));
     }
 
     #[test]

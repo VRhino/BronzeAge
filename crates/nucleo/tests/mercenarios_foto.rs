@@ -13,7 +13,7 @@ fn los_contratos_y_las_marcas_dan_la_vuelta_por_la_foto() {
     s.politica.facciones.otorgar_marcado(1, 20, Marca::Permanente).unwrap();
     s.politica.facciones.otorgar_marcado(1, 21, Marca::Temporal).unwrap();
     s.contratos.ofertas.insert(30, Oferta { campamento: 2, desde: 5 });
-    let orden = Orden { tipo: TipoOrden::Guardar, objetivo: Objetivo::Plaza(4), dada_por: 10, puesto: Puesto::Rey, dada_en: 100, vence: None, contra: None, unido: false };
+    let orden = Orden { tipo: TipoOrden::Guardar, objetivo: Objetivo::Plaza(4), dada_por: 10, puesto: Some(Puesto::Rey), dada_en: 100, vence: None, contra: None, unido: false };
     s.contratos.contratos.insert(
         20,
         Contrato {

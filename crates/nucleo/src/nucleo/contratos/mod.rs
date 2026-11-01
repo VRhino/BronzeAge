@@ -17,6 +17,8 @@ mod mando;
 mod renombre;
 mod tropa;
 
+pub(in crate::nucleo) use mando::Desenlace;
+
 impl Nucleo {
     /// Despacha los nueve comandos de los contratos, cada uno a la función de su parte.
     pub(super) fn ejecutar_contratos(&mut self, t: Instante, p: &Peticion) -> Result<Vec<u64>, Respuesta> {

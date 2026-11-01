@@ -87,7 +87,7 @@ message OrdenMercenario {
   string tipo = 1;                       // guardar | ir_a | atacar | unirse
   ObjetivoMercenario objetivo = 2;
   string dada_por_id = 3;
-  string puesto = 4;                     // como `Contrato.puesto_firma`
+  optional string puesto = 4;            // como `Contrato.puesto_firma`; sin él, la orden inicial del contrato, que no tiene rango
   int64 dada_en_ms = 5;
   optional int64 vence_en_ms = 6;        // ir_a y atacar
   optional string contra_faccion_id = 7; // atacar: la dueña del objetivo al darla

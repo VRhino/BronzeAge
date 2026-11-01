@@ -8,7 +8,8 @@
 //! Un contrato: `mercenario u64 · Facción u32 · ámbito{u8: 0 Facción, 1 plaza · u64} · trabajo u8 (su posición en Trabajo::TODOS) · objetivo · plazo{bool · u8} ·
 //! firmado_por u64 · puesto · firmado_en i64 · vence opt_i64 · campamento_base u32 · orden{bool · orden} · fin_aplazado{u8: 0 ninguno, 1 plazo, 2 despido, 3 plaza perdida,
 //! 4 sin ciudadanos, 5 Facción perdida} · renombre u32`.
-//! Una orden: `tipo u8 (0 guardar, 1 ir_a, 2 atacar, 3 unirse) · objetivo · dada_por u64 · puesto · dada_en i64 · vence opt_i64 · contra opt_u64 · unido bool`.
+//! Una orden: `tipo u8 (0 guardar, 1 ir_a, 2 atacar, 3 unirse) · objetivo · dada_por u64 · puesto{bool · puesto: sin él, la orden inicial del contrato} · dada_en i64 · vence opt_i64 ·
+//! contra opt_u64 · unido bool`.
 //! Un objetivo: `u8 (0 plaza, 1 pueblo, 2 avanzada, 3 caravana, 4 bandidos, 5 ejército, 6 convocatoria: · u64; 7 Facción · u32; 8 punto · punto)`.
 //! Un puesto: `u8 (0 Rey, 1 Embajador; 2 General, 3 Gobernador, 4 Maestro de Caravanas: · plaza u64)`.
 //! Una ficha: `renombre u32 · rango u8 · premios u8 · contadores{n u64 · n × (medalla u8 · u32)} · grados{n u64 · n × (medalla u8 · u8)} · historial{firmados, terminados,
@@ -139,7 +140,10 @@ fn orden_escribir(w: &mut Escritor, o: &Orden) {
     w.u8(tipo_orden_a_u8(*tipo));
     objetivo_escribir(w, objetivo);
     w.u64(*dada_por);
-    puesto_escribir(w, puesto);
+    w.bool(puesto.is_some());
+    if let Some(p) = puesto {
+        puesto_escribir(w, p);
+    }
     w.i64(*dada_en);
     w.opt_i64(*vence);
     w.opt_u64(contra.map(u64::from));
@@ -151,7 +155,7 @@ fn orden_leer(r: &mut Lector) -> Result<Orden, ErrorFormato> {
         tipo: tipo_orden_de_u8(r.u8()?)?,
         objetivo: objetivo_leer(r)?,
         dada_por: r.u64()?,
-        puesto: puesto_leer(r)?,
+        puesto: if r.bool()? { Some(puesto_leer(r)?) } else { None },
         dada_en: r.i64()?,
         vence: r.opt_i64()?,
         contra: r.opt_u64()?.map(|x| u32::try_from(x).map_err(|_| ErrorFormato("id de Facción fuera de rango"))).transpose()?,
@@ -300,7 +304,7 @@ mod pruebas {
             tipo: TipoOrden::Atacar,
             objetivo: Objetivo::Pueblo(40),
             dada_por: 2,
-            puesto: Puesto::General(11),
+            puesto: Some(Puesto::General(11)),
             dada_en: 500,
             vence: Some(900),
             contra: Some(4),
@@ -322,7 +326,7 @@ mod pruebas {
             fin_aplazado: Some(Fin::Despido),
             renombre: 25,
         };
-        let ir_a = Orden { tipo: TipoOrden::IrA, objetivo: Objetivo::Punto(Punto { x: 1_500, y: -2_000 }), vence: None, contra: None, unido: true, puesto: Puesto::Rey, ..orden };
+        let ir_a = Orden { tipo: TipoOrden::IrA, objetivo: Objetivo::Punto(Punto { x: 1_500, y: -2_000 }), vence: None, contra: None, unido: true, puesto: Some(Puesto::Rey), ..orden };
         let permanente = Contrato {
             mercenario: 9,
             ambito: Ambito::Faccion,
@@ -335,6 +339,12 @@ mod pruebas {
             fin_aplazado: None,
             ..temporal.clone()
         };
+        // Una orden de cada clase: la de cada puesto y la inicial del contrato, sin puesto.
+        let puestos = [Some(Puesto::Rey), Some(Puesto::Embajador), Some(Puesto::General(11)), Some(Puesto::Gobernador(12)), Some(Puesto::MaestroCaravanas(13)), None];
+        for (i, puesto) in puestos.into_iter().enumerate() {
+            let mercenario = 20 + i as u64;
+            e.contratos.insert(mercenario, Contrato { mercenario, orden: Some(Orden { puesto, ..orden }), ..temporal.clone() });
+        }
         e.contratos.insert(8, temporal);
         e.contratos.insert(9, permanente);
         let mut ficha = Ficha::nueva();

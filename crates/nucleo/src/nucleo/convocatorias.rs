@@ -235,6 +235,7 @@ impl Nucleo {
                 }
                 self.estado.militar.convocatorias.remove(&c.id);
                 self.tr.tocar(Clase::Convocatoria, c.id);
+                self.convocatoria_parte(c.id, base);
                 c.peticiones.iter().for_each(|x| {
                     self.estado.generaciones.subir(entidad_peticion_de_convocatoria(x.heroe));
                 });
