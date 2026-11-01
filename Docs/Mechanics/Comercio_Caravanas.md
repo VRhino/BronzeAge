@@ -886,8 +886,8 @@ En Rust, estas mismas cuentas (`servir`) las usa también una **caravana con enc
 
 ### 8.4 Qué se ve
 
-La proyección del jugador incluye: los `acuerdos` donde **alguno de los dos lados es propio**; las `ordenes` **propias** (todas, también las cumplidas) más, de una plaza **ajena en cuya puerta tiene una
-columna**, solo las **`activa`** (también las de la plaza ajena donde una caravana suya está `esperando` en su destino, §5.8.8); el `historialOrdenes` propio; y los `caminos` por **explorado** (`Niebla_De_Guerra.md`). Las caravanas ajenas y su visibilidad están en `Niebla_De_Guerra.md`.
+La proyección del jugador incluye: los `acuerdos` donde **alguno de los dos lados es propio**; las `ordenes` **propias** (todas, también las cumplidas) más, de una plaza **ajena en la que está el héroe
+de la sesión** (dentro, 2026-10-29), solo las **`activa`** (también las de la plaza ajena donde una caravana suya está `esperando` en su destino, §5.8.8); el `historialOrdenes` propio; y los `caminos` por **explorado** (`Niebla_De_Guerra.md`). Las caravanas ajenas y su visibilidad están en `Niebla_De_Guerra.md`.
 
 <!-- parametros:MERCADO -->
 ```json

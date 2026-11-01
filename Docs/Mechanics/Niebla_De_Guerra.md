@@ -182,7 +182,7 @@ Unir lo grabado con lo que se ve ahora **no es redundante**: entre un comando y 
 | **Batallas activas** | el héroe combate en ella **o** `seVeAhora(batalla.punto)` | `batallaVisible`: id, estado, contexto, punto, bandos (Facción, nº de héroes, capacidad), `ladoPropio` | – |
 | **Héroes ajenos** | van en una columna propia o avistada, o están dentro de la plaza en que estás | solo su parte pública (`HeroePublico`: nombre, clase, nivel, herido, escuadras que lleva, equipo) | – |
 | **Territorio bajo tus columnas** | siempre, por cada columna propia | `territorioPorEjercito[ejercitoId] = faccionId` de la zona (de **todas** las Facciones) que contiene la columna; nunca qué plaza | – |
-| **Mercados** | de las plazas propias, todo; de una plaza ajena en cuya puerta estás, o en la que una caravana de tu Facción está `esperando` en su destino (rutas de caravanas §6), solo las órdenes `activa`; en ambos casos con cualquier rectángulo de vista | órdenes | – |
+| **Mercados** | de las plazas propias, todo; de una plaza ajena en la que está el héroe (dentro), o en la que una caravana de tu Facción está `esperando` en su destino (Comercio_Caravanas §5.8.8), solo las órdenes `activa`; en ambos casos con cualquier rectángulo de vista | órdenes | – |
 | **Informes de inspección** | los del héroe no caducados (`INSPECCION.informeMinutos`) | tal cual | – |
 | **Informes de plaza** | los de la memoria de su Facción | tal cual (con `conocidoEn`) | memoria |
 

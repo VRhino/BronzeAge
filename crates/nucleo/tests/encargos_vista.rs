@@ -303,7 +303,7 @@ fn una_caravana_esperando_no_sale_en_el_mapa_de_nadie_y_en_transito_si_pero_su_f
 
 // ───────────────────────────── Las órdenes de una plaza ajena ─────────────────────────────
 
-/// Una plaza de la Facción 2 con su Mercado activo y su oro, para comerciar con sus órdenes (rutas de caravanas §6).
+/// Una plaza de la Facción 2 con su Mercado activo y su oro, para comerciar con sus órdenes (Comercio_Caravanas §5.8.8).
 fn ajena_con_mercado(e: &mut Escenario, m: &M) -> u64 {
     let c = con_ajena(e, m);
     e.admin(Comando::FijarNivelFaccion { faccion: 2, nivel: 2 });
