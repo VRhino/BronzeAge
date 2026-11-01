@@ -867,6 +867,10 @@ impl Nucleo {
             return Err(sin_cambios(v));
         }
         self.heroe_mut(heroe).heroe.controlador = controlador;
+        // Si es el Rey, cambia si su Facción es de bots (`es_bot` de la Facción).
+        if let Some(f) = self.heroe(heroe).and_then(|h| h.faccion) {
+            self.tr.tocar(Clase::Faccion, u64::from(f));
+        }
         Ok(vec![])
     }
 

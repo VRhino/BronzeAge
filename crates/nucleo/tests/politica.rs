@@ -401,6 +401,35 @@ fn la_faccion_se_proyecta_con_su_nombre_sigilo_rey_embajador_y_ciudadanos_en_ord
     assert_eq!((pb.embajador_id, pb.ciudadanos_ids, pb.derrotada_por, pb.version), (Some(ids::heroe(bea)), vec![ids::heroe(ana), ids::heroe(bea)], None, e.n.version()));
 }
 
+#[test]
+fn bots_con_bots_y_jugadores_con_jugadores_la_faccion_es_de_bots_si_su_rey_lo_es() {
+    // Decisión del autor del 2026-11-01: una Facción es de bots si su Rey es un héroe bot; un jugador no entra en ella ni un bot en una que no lo es, ni pidiéndolo ni aceptándolo.
+    let m = con_mundo!();
+    let mut e = E::nuevo(m);
+    let bot = |e: &mut E, cuenta: &str| e.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Bot, nombre: None }).creadas[0];
+    let (rey_bot, otro_bot, ana, bea) = (bot(&mut e, "b1"), bot(&mut e, "b2"), e.heroe("ana"), e.heroe("bea"));
+    let (de_bots, de_jugadores) = (e.crear("b1", rey_bot, "Hatti"), e.crear("ana", ana, "Micenas"));
+    assert!(e.n.es_faccion_de_bots(de_bots) && !e.n.es_faccion_de_bots(de_jugadores));
+    let pb = |e: &E, f: u32| (propios::faccion(&e.n, f).es_bot, propios::directorio_facciones(&e.n).facciones.iter().find(|x| x.id == ids::faccion(f)).unwrap().es_bot);
+    assert_eq!((pb(&e, de_bots), pb(&e, de_jugadores)), ((true, true), (false, false)), "en la Facción y en el directorio");
+    let rastro = e.n.hash_estado();
+    assert_eq!(e.no("bea", Comando::SolicitarIngreso { heroe: bea, faccion: de_bots }), rechazos::FACCION_DE_BOTS);
+    assert_eq!(e.no("b2", Comando::SolicitarIngreso { heroe: otro_bot, faccion: de_jugadores }), rechazos::FACCION_NO_ES_DE_BOTS);
+    assert_eq!(e.n.hash_estado(), rastro, "los rechazos no dejan rastro");
+    e.ok("b2", Comando::SolicitarIngreso { heroe: otro_bot, faccion: de_bots });
+    e.ok("b1", Comando::ResponderSolicitud { heroe: rey_bot, faccion: de_bots, solicitante: otro_bot, aceptar: true });
+    e.ok("bea", Comando::SolicitarIngreso { heroe: bea, faccion: de_jugadores });
+    // Una solicitud que ya estaba hecha no se acepta si el Rey cambió de clase entre medias (la administración, `FijarControlador`), aunque sí se puede denegar.
+    e.ok("admin", Comando::FijarControlador { heroe: ana, controlador: Controlador::Bot });
+    assert_eq!(pb(&e, de_jugadores), (true, true), "con su Rey bot, la Facción pasa a ser de bots");
+    assert_eq!(e.no("ana", Comando::ResponderSolicitud { heroe: ana, faccion: de_jugadores, solicitante: bea, aceptar: true }), rechazos::FACCION_DE_BOTS);
+    e.ok("ana", Comando::ResponderSolicitud { heroe: ana, faccion: de_jugadores, solicitante: bea, aceptar: false });
+    // Sin Rey no es de bots.
+    let sola = e.crear("bea", bea, "Troya");
+    e.ok("bea", Comando::DejarFaccion { heroe: bea });
+    assert!(!e.n.es_faccion_de_bots(sola));
+}
+
 /// Un guion con todas las órdenes de 5B; `paso` avanza el reloj entre unas y otras.
 fn guion(m: &M, paso: &dyn Fn(&mut E, Instante)) -> E {
     let mut e = E::nuevo(m);

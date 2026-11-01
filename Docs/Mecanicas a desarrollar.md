@@ -60,7 +60,7 @@ Decidido el 2026-10-17: la elección del Rey por voto entre representantes (ante
 
 Cuatro ideas del autor, estudiadas y decididas en un hilo de solo diseño; sin código ni tandas todavía (las tandas se crean cuando el autor lo pida). Cada una tiene su documento de `Docs/Disenos_Por_Implementar/` con lo decidido, lo propuesto y lo que toca; este apunte es el pendiente:
 
-- **48. Mercenarios por contrato**: `Docs/Disenos_Por_Implementar/Mercenarios_Por_Contrato.md`. Bots contratados como miembros de la Facción por Rey, Embajador o Gobernador (este con alcance de su plaza), temporales con trabajo de la tabla y permanentes como ciudadanos con marca. Pendiente: implementar tras los bots de la fase 7 (necesita el runner jugando por el contrato 05), calibrar tarifas, plazos y topes, y la pestaña de control en BronzeAgeClient.
+- **48. Mercenarios por contrato**: `Docs/Disenos_Por_Implementar/Mercenarios_Por_Contrato.md`. Bots contratados como miembros de la Facción por Rey, Embajador o Gobernador (este con alcance de su plaza), temporales con trabajo de la tabla y permanentes como ciudadanos con marca. Desde el 2026-11-01: solo los bots «mercenarios» (distinción del cerebro, no del motor) se ofrecen, y solo los contratan Facciones humanas. Pendiente: implementar tras los bots de la fase 7 (necesita el runner jugando por el contrato 05), calibrar tarifas, plazos y topes, y la pestaña de control en BronzeAgeClient.
 - **Fuera de alcance**: carne y leche (también del MVP) y las misiones entre humanos van a `Docs/Ideas a diseñar.md` (entradas 52 y 53 de ese archivo).
 
 ## Paridad con TypeScript: recortes temporales del motor Rust (2026-10-18)

@@ -3085,6 +3085,10 @@ pub mod rechazos {
     pub const FACCION_NO_CIUDADANO: &str = "faccion.no_ciudadano";
     /// Nombrar Embajador en una Facción sin Rey.
     pub const FACCION_SIN_REY: &str = "faccion.sin_rey";
+    /// Un héroe humano pide entrar (o se acepta su solicitud) en una Facción de bots, la que tiene un Rey bot (2026-11-01).
+    pub const FACCION_DE_BOTS: &str = "faccion.de_bots";
+    /// Un héroe bot pide entrar (o se acepta su solicitud) en una Facción cuyo Rey no es bot (2026-11-01).
+    pub const FACCION_NO_ES_DE_BOTS: &str = "faccion.no_es_de_bots";
     /// Cambió de residencia hace menos de `CIUDADANIA.cooldownCambioResidenciaDias`.
     pub const RESIDENCIA_COOLDOWN: &str = "residencia.cooldown";
     /// Solo se reside en una plaza de la propia Facción.

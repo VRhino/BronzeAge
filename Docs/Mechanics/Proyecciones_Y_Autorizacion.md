@@ -137,6 +137,8 @@ POST /jugador/partidas/:g/comandos   |   POST /admin/partidas/:g/comandos       
  3. el ACTOR se arma desde la sesión, nunca desde el cuerpo:
       /jugador: { rol: 'jugador', heroeId: <su héroe o null> }
                 si tipo == crearHeroe y la cuenta es de bot → params.controlador = 'bot' (lo decide la cuenta, no el cliente)
+                (en Rust desde el 2026-11-01: `ordenes::traducir` recibe si la sesión es CLIENTE_BOT y crea el héroe bot; antes todo héroe del contrato nacía humano.
+                 `CrearHeroe` ya no rechaza el controlador bot de quien no es administración: el núcleo confía en la sesión, y el cliente no puede elegirlo)
       /admin:   { rol: rolEnPartida(actor), heroeId: <su héroe, si tiene membresía de jugador> }
  4. verificarAutorizacion(tipo, params, estado, actor)                              403 { error: 'no autorizado (<motivo>)' }  (§4)
  5. runner.ejecutar(tipo, params, actorId, idempotencyKey)

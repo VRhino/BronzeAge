@@ -23,7 +23,7 @@ use super::*;
 use crate::estado::Dato;
 use militar::columna::TipoColumna;
 use militar::convocatoria::Lugar;
-use militar::heroe::Residencia;
+use militar::heroe::{Controlador, Residencia};
 use militar::presencia::Ubicacion;
 use politica::autorizacion::{Actor, Vista};
 use politica::faccion::ErrorFaccion;
@@ -166,6 +166,29 @@ impl Nucleo {
         Ok(())
     }
 
+    /// Si la Facción es de bots (decisión del autor del 2026-11-01): la que tiene un Rey bot ([`Self::es_bot`]). Sin Rey (o si no existe), no lo es.
+    pub fn es_faccion_de_bots(&self, f: u32) -> bool {
+        self.estado.politica.facciones.get(f).and_then(|x| x.rey).is_some_and(|r| self.es_bot(r))
+    }
+
+    /// Si el héroe es un bot para la ciudadanía: controlador bot y no sintético. El héroe de campo de `CrearEjercito` (andamiaje de administración, con controlador bot desde siempre)
+    /// no cuenta: no es de ninguna cuenta de bot.
+    fn es_bot(&self, heroe: u64) -> bool {
+        self.heroe(heroe).is_some_and(|h| h.heroe.controlador == Controlador::Bot && !h.sintetico)
+    }
+
+    /// Bots con bots y humanos con humanos (2026-11-01): un héroe humano no entra en una Facción de bots ni uno bot en una cuyo Rey no es bot. Lo miran pedir el ingreso y aceptarlo;
+    /// la administración (`FijarFaccionDeHeroe`) no.
+    fn misma_clase_que_la_faccion(&self, heroe: u64, f: u32) -> Result<(), Respuesta> {
+        let v = self.estado.version;
+        let bot = self.es_bot(heroe);
+        match (bot, self.es_faccion_de_bots(f)) {
+            (false, true) => Err(Respuesta::rechazo(rechazos::FACCION_DE_BOTS, format!("{} es una Facción de bots: no admite jugadores", ids::faccion(f)), v)),
+            (true, false) => Err(Respuesta::rechazo(rechazos::FACCION_NO_ES_DE_BOTS, format!("el Rey de {} no es un bot: un bot solo entra en Facciones de bots", ids::faccion(f)), v)),
+            _ => Ok(()),
+        }
+    }
+
     // ───────────────────────────── Órdenes ─────────────────────────────
 
     /// Las órdenes de la Facción, la ciudadanía y la residencia, y la ciudadanía de la administración. `Ok(ids)` = cambió algo y creó esos ids (la Facción nueva); los rechazos y «sin cambios»
@@ -200,6 +223,8 @@ impl Nucleo {
             }
             Comando::SolicitarIngreso { heroe, faccion } => {
                 self.autorizar_heroe(p, *heroe, false)?;
+                existe(self, *faccion)?;
+                self.misma_clase_que_la_faccion(*heroe, *faccion)?;
                 let en_ejercito = self.en_ejercito(*heroe);
                 if !self.estado.politica.facciones.solicitar(*faccion, *heroe, en_ejercito).map_err(de_faccion)? {
                     return Err(sin_cambios());
@@ -213,6 +238,9 @@ impl Nucleo {
                 existe(self, *faccion)?;
                 if !(Actor { yo: *heroe, politica: &self.estado.politica, vista: self }).responde_solicitudes(*faccion) {
                     return Err(rechazo(rechazos::NO_AUTORIZADO, "solo el Rey de la Facción responde a las solicitudes".into()));
+                }
+                if *aceptar {
+                    self.misma_clase_que_la_faccion(*solicitante, *faccion)?;
                 }
                 let (pidio, en_ejercito) = (self.pedidas_por(*solicitante), self.en_ejercito(*solicitante));
                 self.estado.politica.facciones.responder(*faccion, *solicitante, *aceptar, en_ejercito).map_err(de_faccion)?;

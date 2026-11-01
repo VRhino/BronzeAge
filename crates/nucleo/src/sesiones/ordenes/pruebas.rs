@@ -72,7 +72,7 @@ fn en(cuerpo: Cuerpo) -> pb::Orden {
 }
 
 fn traduce(cuerpo: Cuerpo, admin: bool) -> Result<Comando, &'static str> {
-    match traducir(&Mundo, &en(cuerpo), "ana", admin) {
+    match traducir(&Mundo, &en(cuerpo), "ana", admin, false) {
         Ok(p) => Ok(p.comando),
         Err(r) => match r.resultado {
             crate::comando::Resultado::Rechazada { codigo, .. } => Err(codigo),
@@ -492,11 +492,22 @@ fn ordenes_de_administracion() -> Vec<(Cuerpo, Comando)> {
 #[test]
 fn cada_orden_del_jugador_se_traduce_a_su_comando_con_los_datos_de_la_peticion() {
     for (cuerpo, esperado) in ordenes_traducidas() {
-        let p = traducir(&Mundo, &en(cuerpo.clone()), "ana", false).unwrap_or_else(|r| panic!("{cuerpo:?}: {r:?}"));
+        let p = traducir(&Mundo, &en(cuerpo.clone()), "ana", false, false).unwrap_or_else(|r| panic!("{cuerpo:?}: {r:?}"));
         assert_eq!(p.comando, esperado, "{cuerpo:?}");
         assert_eq!((p.actor.as_str(), p.admin, p.peticion_id.as_str(), p.version_esperada), ("ana", false, "p1", Some(4)));
     }
-    assert!(traducir(&Mundo, &en(orden!(Fundar, OrdenFundar)), "ana", true).unwrap().admin, "la sesión de administración lo pone en la petición");
+    assert!(traducir(&Mundo, &en(orden!(Fundar, OrdenFundar)), "ana", true, false).unwrap().admin, "la sesión de administración lo pone en la petición");
+}
+
+#[test]
+fn el_heroe_de_una_sesion_de_bot_nace_bot_y_el_de_un_jugador_humano() {
+    // Lo decide la cuenta (la sesión `CLIENTE_BOT`), no el cliente: la orden no lleva controlador (Proyecciones §4, 2026-11-01).
+    let crear = || orden!(CrearHeroe, OrdenCrearHeroe, display_name: s("Aquiles"), campamento_id: s("camp-4"));
+    let controlador = |bot| match traducir(&Mundo, &en(crear()), "ana", false, bot).unwrap().comando {
+        Comando::CrearHeroe { controlador, .. } => controlador,
+        otro => panic!("{otro:?}"),
+    };
+    assert_eq!((controlador(true), controlador(false)), (Controlador::Bot, Controlador::Humano));
 }
 
 #[test]
@@ -509,7 +520,7 @@ fn las_ordenes_sin_comando_en_el_nucleo_se_rechazan_con_un_codigo_estable() {
     }
     // Una orden vacía tampoco se descarta.
     let vacia = pb::Orden { peticion_id: "p".into(), ..Default::default() };
-    assert_eq!(codigo_de(traducir(&Mundo, &vacia, "ana", false)), rechazos::ORDEN_NO_SOPORTADA);
+    assert_eq!(codigo_de(traducir(&Mundo, &vacia, "ana", false, false)), rechazos::ORDEN_NO_SOPORTADA);
 }
 
 #[test]
@@ -563,7 +574,7 @@ fn lo_que_la_orden_deja_implicito_se_resuelve_preguntando_al_mundo() {
     assert_eq!(traduce(orden!(ComprarEnCampamento, OrdenComprarEnCampamento, recurso: s("trigo"), cantidad: 1_000), false), Ok(Comando::ComprarEnCampamento { heroe: 7, campamento: 4, recurso: Trigo, cantidad: 1_000 }));
     // Una cuenta sin héroe no tiene a quién dar las órdenes que no lo nombran.
     for cuerpo in [orden!(Fundar, OrdenFundar), orden!(ReponerPrestamo, OrdenReponerPrestamo), orden!(CancelarBatalla, OrdenCancelarBatalla, battle_id: s("uuid-9")), orden!(RepostarEnCampamento, OrdenRepostarEnCampamento)] {
-        assert_eq!(codigo_de(traducir(&Mundo, &en(cuerpo), "beto", false)), rechazos::HEROE_DESCONOCIDO);
+        assert_eq!(codigo_de(traducir(&Mundo, &en(cuerpo), "beto", false, false)), rechazos::HEROE_DESCONOCIDO);
     }
     // La batalla se nombra por su UUID.
     assert_eq!(traduce(orden!(CancelarBatalla, OrdenCancelarBatalla, battle_id: s("uuid-1")), false), Err(rechazos::BATALLA_NO_EXISTE));
@@ -639,7 +650,7 @@ fn un_id_sin_la_forma_de_su_entidad_o_un_valor_fuera_de_su_catalogo_se_rechazan_
         assert_eq!(traduce(cuerpo.clone(), false), Err(codigo), "{cuerpo:?}");
     }
     // Todo rechazo de la traducción lleva la versión del mundo.
-    let r = traducir(&Mundo, &en(orden!(EstacionarEjercito, OrdenEstacionarEjercito, ejercito_id: s("x"))), "ana", false).unwrap_err();
+    let r = traducir(&Mundo, &en(orden!(EstacionarEjercito, OrdenEstacionarEjercito, ejercito_id: s("x"))), "ana", false, false).unwrap_err();
     assert_eq!(r.version_tras, 5);
 }
 

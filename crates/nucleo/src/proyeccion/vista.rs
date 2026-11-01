@@ -112,7 +112,7 @@ fn huella_del_directorio(n: &Nucleo) -> Sello {
         for t in [&x.nombre, &s.forma, &s.campo, &s.emblema, &s.color_primario, &s.color_secundario, &s.color_emblema, &s.orla, &s.color_orla] {
             h = texto(h, t);
         }
-        for y in [u64::from(n.nivel_de_faccion(x.id)), x.ciudadanos.len() as u64, u64::from(x.derrota.is_some())] {
+        for y in [u64::from(n.nivel_de_faccion(x.id)), x.ciudadanos.len() as u64, u64::from(x.derrota.is_some()), u64::from(n.es_faccion_de_bots(x.id))] {
             h = mezclar(h, y);
         }
     }
