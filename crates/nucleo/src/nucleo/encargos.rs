@@ -46,6 +46,12 @@ fn plaza_de_parada(c: &Caravana) -> Option<u64> {
     Some(u64::from(if e.punta == Punta::Origen { c.origen } else { e.destino }))
 }
 
+/// Quién oye un paso del encargo en `plaza` (Comercio_Caravanas §12): la plaza de la parada y, si es otra, el origen de la caravana, que así sabe lo que hace fuera.
+fn oyentes_de_parada(c: &Caravana, plaza: u64) -> Vec<u64> {
+    let origen = u64::from(c.origen);
+    if plaza == origen { vec![plaza] } else { vec![plaza, origen] }
+}
+
 /// El rechazo de un [`ErrorCaravana`] sobre una copia de la caravana.
 fn rechazo_en_caravana(e: ErrorCaravana, version: u64) -> Respuesta {
     let (codigo, mensaje) = rechazo_de_caravana(e);
@@ -262,13 +268,13 @@ impl Nucleo {
         let Some(plaza) = plaza_de_parada(&self.estado.comercio.flota[i]) else { return };
         let fin_paso = (carros > 0).then(|| t + self.estado.reglas.economia.comercio.encargo.tiempo_descarga * i64::from(carros));
         let c = &mut self.estado.comercio.flota[i];
-        let a_bordo = total(&c.contenido);
+        let (a_bordo, oyentes) = (total(&c.contenido), oyentes_de_parada(c, plaza));
         let e = c.encargo.as_mut().expect("plaza_de_parada comprobó el encargo");
         (e.fase, e.fin_paso) = (Fase::Descarga, fin_paso);
         self.tr.tocar(Clase::Caravana, id);
         self.tr.tocar(Clase::Asentamiento, plaza);
         let hecho = EventoComercio::CaravanaDescarga { caravana: id, plaza: id32(plaza), entra, tirado, a_bordo, carros, fin_paso: fin_paso.unwrap_or(0), comision };
-        self.emitir_comercio(t, hecho, vec![plaza], &[]);
+        self.emitir_comercio(t, hecho, oyentes, &[]);
         match fin_paso {
             Some(fin) => self.programar_comercio(fin, entidad_caravana(id), SucesoComercio::FinPasoEncargo),
             None => self.acabar_descarga(t, id),
@@ -311,7 +317,8 @@ impl Nucleo {
                 self.tr.tocar(Clase::Caravana, id);
                 self.programar_comercio(t + MS_POR_MINUTO, entidad_caravana(id), SucesoComercio::PulsoEncargo);
                 if !en_pulso {
-                    self.emitir_comercio(t, EventoComercio::CaravanaEspera { caravana: id, plaza: id32(plaza), falta }, vec![plaza], &[]);
+                    let oyentes = oyentes_de_parada(&self.estado.comercio.flota[i], plaza);
+                    self.emitir_comercio(t, EventoComercio::CaravanaEspera { caravana: id, plaza: id32(plaza), falta }, oyentes, &[]);
                 }
                 return;
             }
@@ -346,7 +353,8 @@ impl Nucleo {
         let fin_paso = t + self.estado.reglas.economia.comercio.encargo.tiempo_carga * i64::from(carros);
         let e = self.estado.comercio.flota[i].encargo.as_mut().expect("plaza_de_parada comprobó el encargo");
         (e.fase, e.fin_paso) = (Fase::Carga, Some(fin_paso));
-        self.emitir_comercio(t, EventoComercio::CaravanaCarga { caravana: id, plaza: id32(plaza), tomado, carros, fin_paso }, vec![plaza], &[]);
+        let oyentes = oyentes_de_parada(&self.estado.comercio.flota[i], plaza);
+        self.emitir_comercio(t, EventoComercio::CaravanaCarga { caravana: id, plaza: id32(plaza), tomado, carros, fin_paso }, oyentes, &[]);
         self.programar_comercio(fin_paso, entidad_caravana(id), SucesoComercio::FinPasoEncargo);
     }
 

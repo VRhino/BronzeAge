@@ -324,7 +324,7 @@ fn una_ruta_entre_dos_plazas_propias_da_varias_vueltas_sin_comision() {
     assert_eq!(e.situacion(car), (EstadoCaravana::Esperando, Punta::Destino, Fase::Descarga));
     assert_eq!((e.encargo(car).fin_paso, e.a_bordo(car, Cobre), cantidad(&e.n, b, Cobre) - cobre_b), (Some(llegada + descarga), 0, 100_000));
     let h = &hechos(&e.n, "comercio.caravana_descarga")[0];
-    assert_eq!((h.0, h.1.clone(), dato(h, "cobre"), dato(h, "tirado"), dato(h, "aBordo"), dato(h, "carros"), dato(h, "finPaso"), dato(h, "comision")), (llegada, vec![b], 100_000, 0, 0, 1, llegada + descarga, 0));
+    assert_eq!((h.0, h.1.clone(), dato(h, "cobre"), dato(h, "tirado"), dato(h, "aBordo"), dato(h, "carros"), dato(h, "finPaso"), dato(h, "comision")), (llegada, vec![b, a], 100_000, 0, 0, 1, llegada + descarga, 0));
     e.avanzar_hasta(llegada + descarga);
     assert_eq!((e.situacion(car).2, e.a_bordo(car, Estano), cantidad(&e.n, b, Estano)), (Fase::Carga, 50_000, estano_b - 50_000));
     e.avanzar_hasta(llegada + descarga + carga);
@@ -386,7 +386,7 @@ fn un_envio_programado_a_otra_plaza_propia_espera_su_hora_deja_con_comision_vuel
     e.avanzar_hasta(llegada - 1);
     let (esperada, oro_b) = (comision_esperada(&e.n, a, b, &[(Cobre, 50_000)]), cantidad(&e.n, b, Oro));
     e.avanzar_hasta(llegada);
-    let h = hechos(&e.n, "comercio.caravana_descarga").into_iter().find(|h| h.1 == vec![b]).expect("descarga en el destino");
+    let h = hechos(&e.n, "comercio.caravana_descarga").into_iter().find(|h| h.1 == vec![b, a]).expect("descarga en el destino");
     let comision = dato(&h, "comision");
     assert!(comision > 0 && comision <= esperada && esperada - comision < 1_000, "comisión {comision} contra {esperada}: se acuña en unidades enteras, hacia abajo");
     assert_eq!(cantidad(&e.n, b, Cobre) - cobre_b, 50_000);
@@ -482,11 +482,11 @@ fn dos_carros_que_mueven_algo_tardan_el_doble_que_uno_y_una_parada_sin_nada_que_
     e.avanzar_hasta(t0 + 2 * carga);
     // La descarga de los 600 también ocupa los dos carros; luego no recoge nada y sale en el mismo instante en que acaba.
     let llegada = e.viajar(car);
-    let h = hechos(&e.n, "comercio.caravana_descarga").into_iter().find(|h| h.1 == vec![b]).unwrap();
+    let h = hechos(&e.n, "comercio.caravana_descarga").into_iter().find(|h| h.1 == vec![b, a]).unwrap();
     assert_eq!((dato(&h, "carros"), dato(&h, "finPaso"), e.encargo(car).fin_paso), (2, llegada + 2 * descarga, Some(llegada + 2 * descarga)));
     e.avanzar_hasta(llegada + 2 * descarga);
     assert_eq!((e.k(car).estado, e.k(car).contenido.is_empty()), (EstadoCaravana::Retornando, true), "recoger nada no tarda");
-    assert!(hechos(&e.n, "comercio.caravana_carga").iter().all(|h| h.1 != vec![b]));
+    assert!(hechos(&e.n, "comercio.caravana_carga").iter().all(|h| h.1 != vec![b, a]));
     // En el origen no deja nada: ni espera ni descarga; pasa derecho a cargar lo que quedaba (50 de cada recurso, un carro).
     let vuelta = e.viajar(car);
     let h = hechos(&e.n, "comercio.caravana_descarga").into_iter().find(|h| h.1 == vec![a]).unwrap();
@@ -515,7 +515,7 @@ fn desechar_sobrante_con_el_almacen_lleno_tira_y_sin_desechar_se_queda_a_bordo()
         e.avanzar(e.tiempo_carga());
         e.viajar(car);
         // Entran 30 (lo que cabe); el resto de 70 se tira o sigue a bordo.
-        let h = hechos(&e.n, "comercio.caravana_descarga").into_iter().find(|h| h.1 == vec![b]).unwrap();
+        let h = hechos(&e.n, "comercio.caravana_descarga").into_iter().find(|h| h.1 == vec![b, a]).unwrap();
         assert_eq!((dato(&h, "cobre"), cantidad(&e.n, b, Cobre) - cobre_b), (30_000, 30_000));
         if desechar {
             assert_eq!((dato(&h, "tirado"), dato(&h, "aBordo"), e.a_bordo(car, Cobre)), (70_000, 0, 0));
@@ -608,7 +608,7 @@ fn cancelar_en_ruta_llega_sin_dejar_ni_recoger_vuelve_y_termina_en_el_origen() {
     let llegada = e.fin_del_plan(car);
     e.avanzar_hasta(llegada);
     assert_eq!((e.k(car).estado, e.a_bordo(car, Cobre), cantidad(&e.n, b, Cobre), cantidad(&e.n, b, Estano)), (EstadoCaravana::Retornando, 100_000, cobre_b, estano_b));
-    assert!(hechos(&e.n, "comercio.caravana_descarga").is_empty() && hechos(&e.n, "comercio.caravana_carga").iter().all(|h| h.1 != vec![b]));
+    assert!(hechos(&e.n, "comercio.caravana_descarga").is_empty() && hechos(&e.n, "comercio.caravana_carga").iter().all(|h| h.1 != vec![b, a]));
     // Y al llegar al origen termina, y su carga vuelve al almacén.
     let vuelta = e.fin_del_plan(car);
     e.avanzar_hasta(vuelta);
@@ -812,7 +812,7 @@ fn un_envio_a_una_plaza_ajena_con_mercado_vende_a_sus_ordenes_de_compra_y_con_lo
     let llegada = enviar_y_llegar(&mut e, car, c, en_origen, en_destino);
 
     // Vende: la plaza recibe la mercancía y paga su oro, y los dos carros tardan lo suyo.
-    let d = hechos(&e.n, "comercio.caravana_descarga").into_iter().find(|h| h.1 == vec![c]).expect("descarga en la plaza ajena");
+    let d = hechos(&e.n, "comercio.caravana_descarga").into_iter().find(|h| h.1 == vec![c, a]).expect("descarga en la plaza ajena");
     assert_eq!((d.0, dato(&d, "cobre"), dato(&d, "estano"), dato(&d, "tirado"), dato(&d, "comision"), dato(&d, "carros")), (llegada, 300_000, 300_000, 0, 0, 2));
     assert_eq!((dato(&d, "finPaso"), e.encargo(car).fin_paso), (llegada + 2 * e.tiempo_descarga(), Some(llegada + 2 * e.tiempo_descarga())));
     assert_eq!((cantidad(&e.n, c, Cobre), cantidad(&e.n, c, Estano)), (300_000, 300_000));
@@ -824,7 +824,7 @@ fn un_envio_a_una_plaza_ajena_con_mercado_vende_a_sus_ordenes_de_compra_y_con_lo
     // Compra con lo cobrado, sin esperar existencias: un carro de madera.
     let fin_descarga = llegada + 2 * e.tiempo_descarga();
     e.avanzar_hasta(fin_descarga);
-    let k = hechos(&e.n, "comercio.caravana_carga").into_iter().find(|h| h.1 == vec![c]).expect("carga en la plaza ajena");
+    let k = hechos(&e.n, "comercio.caravana_carga").into_iter().find(|h| h.1 == vec![c, a]).expect("carga en la plaza ajena");
     assert_eq!((k.0, dato(&k, "madera"), dato(&k, "carros"), dato(&k, "finPaso")), (fin_descarga, 100_000, 1, fin_descarga + e.tiempo_carga()));
     assert_eq!((e.situacion(car).2, e.encargo(car).fin_paso), (Fase::Carga, Some(fin_descarga + e.tiempo_carga())));
     assert_eq!((e.a_bordo(car, Madera), madera_c - cantidad(&e.n, c, Madera)), (100_000, 100_000));
@@ -902,10 +902,10 @@ fn en_una_plaza_ajena_sin_ordenes_que_casen_no_comercia_vuelve_con_lo_que_lleva_
     e.avanzar_hasta(e.encargo(car).fin_paso.expect("carga en el origen"));
     let llegada = e.fin_del_plan(car);
     e.avanzar_hasta(llegada);
-    let d = hechos(&e.n, "comercio.caravana_descarga").into_iter().find(|h| h.1 == vec![c]).expect("descarga en la plaza ajena");
+    let d = hechos(&e.n, "comercio.caravana_descarga").into_iter().find(|h| h.1 == vec![c, a]).expect("descarga en la plaza ajena");
     assert_eq!((d.0, dato(&d, "carros"), dato(&d, "tirado"), dato(&d, "aBordo"), e.a_bordo(car, Cobre)), (llegada, 0, 0, 100_000, 100_000));
     assert_eq!((e.k(car).estado, e.k(car).contenido.len()), (EstadoCaravana::Retornando, 1), "sale en el acto: no compra nada y no hay carga");
-    assert!(hechos(&e.n, "comercio.caravana_carga").iter().all(|h| h.1 != vec![c]) && hechos(&e.n, "mercado.comercio_en_plaza").is_empty());
+    assert!(hechos(&e.n, "comercio.caravana_carga").iter().all(|h| h.1 != vec![c, a]) && hechos(&e.n, "mercado.comercio_en_plaza").is_empty());
     e.viajar_y_terminar(car);
     assert_eq!(mundo_de(&e.n, Cobre), cobre, "no se tiró nada");
     assert_eq!(e.k(car).estado, EstadoCaravana::Disponible);
