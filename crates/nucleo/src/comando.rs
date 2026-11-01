@@ -2972,6 +2972,8 @@ pub mod rechazos {
     pub const MERCENARIO_LISTA_INVALIDA: &str = "mercenario.lista_invalida";
     /// Algo que un marcado no hace nunca (declarar la guerra, aceptar misiones del tablón de la Facción o de la plaza).
     pub const MERCENARIO_PROHIBIDO: &str = "mercenario.prohibido";
+    /// A la convocatoria de un mercenario solo se unen mercenarios de su Facción con la orden de unirse a ella, nunca un ciudadano sin marca.
+    pub const MERCENARIO_CONVOCATORIA_DE_MERCENARIOS: &str = "mercenario.convocatoria_de_mercenarios";
     /// El héroe es un mercenario con marca: no deja la Facción por su cuenta ni recibe cargos, trono ni mando.
     pub const MERCENARIO_MARCADO: &str = "mercenario.marcado";
     /// No hay contrato terminado de ese mercenario con la Facción que se pueda valorar: no lo hubo, ya se valoró o pasó el plazo.

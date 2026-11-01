@@ -302,6 +302,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `mercenario.orden_de_mas_rango` | `MERCENARIO_ORDEN_DE_MAS_RANGO` | Ya tiene una orden de un cargo de más rango que el de quien ordena. |
 | `mercenario.lista_invalida` | `MERCENARIO_LISTA_INVALIDA` | La lista de mercenarios de una orden está vacía, pasa de 16 o repite alguno. |
 | `mercenario.prohibido` | `MERCENARIO_PROHIBIDO` | Algo que un marcado no hace nunca (declarar la guerra, aceptar misiones del tablón de la Facción o de la plaza). |
+| `mercenario.convocatoria_de_mercenarios` | `MERCENARIO_CONVOCATORIA_DE_MERCENARIOS` | A la convocatoria de un mercenario solo se unen mercenarios de su Facción con la orden de unirse a ella, nunca un ciudadano sin marca. |
 | `mercenario.marcado` | `MERCENARIO_MARCADO` | El héroe es un mercenario con marca: no deja la Facción por su cuenta ni recibe cargos, trono ni mando. |
 | `mercenario.sin_valoracion` | `MERCENARIO_SIN_VALORACION` | No hay contrato terminado de ese mercenario con la Facción que se pueda valorar: no lo hubo, ya se valoró o pasó el plazo. |
 | `mercenario.sin_premio` | `MERCENARIO_SIN_PREMIO` | No le queda ninguna escuadra de premio de rango por reclamar. |

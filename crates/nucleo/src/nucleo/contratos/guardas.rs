@@ -2,9 +2,9 @@
 //! plan). Tarea T4 del plan.
 //!
 //! [`Nucleo::rechazo_por_contrato`] es a los contratos lo que `rechazo_por_batalla` a las batallas: un `match` exhaustivo sobre [`Comando`], sin `_`, para que toda orden nueva obligue a
-//! decidir si un mercenario puede darla. Un marcado, que es un ciudadano más de la Facción que le paga, solo pierde lo que el diseño le quita: crear Facción, declarar la guerra, convocar,
-//! fundar y aceptar las misiones del tablón (nunca), y atacar, perseguir, unirse a un ejército, a una convocatoria o a una batalla, escoltar y guarnecer una avanzada (solo con la orden
-//! que se lo permite). Lo que no es una orden, o no cabe antes del despacho, vive en su sitio: la avanzada que se guarnece sin residir en su madre
+//! decidir si un mercenario puede darla. Un marcado, que es un ciudadano más de la Facción que le paga, solo pierde lo que el diseño le quita: crear Facción, declarar la guerra, fundar y
+//! aceptar las misiones del tablón (nunca), convocar (solo con una orden `atacar`, y a su convocatoria solo se unen mercenarios), y atacar, perseguir, unirse a un ejército, a una
+//! convocatoria o a una batalla, escoltar y guarnecer una avanzada (solo con la orden que se lo permite). Lo que no es una orden, o no cabe antes del despacho, vive en su sitio: la avanzada que se guarnece sin residir en su madre
 //! ([`Nucleo::guarda_la_avanzada`], que llama `avanzadas.rs`), la sucesión automática del Líder (`columnas.rs`) y la Participación (`participacion.rs`), que preguntan
 //! [`Nucleo::es_marcado`], y las misiones recurrentes (`recurrentes.rs`), que miran el contrato.
 
@@ -100,6 +100,20 @@ impl Nucleo {
         Respuesta::rechazo(rechazos::MERCENARIO_SIN_ORDEN, "un mercenario contratado solo hace eso con la orden que se lo permite", self.estado.version)
     }
 
+    /// Un marcado solo convoca con una orden `atacar` vigente, para formar el ejército con el que cumplirla (decisión del autor del 2026-11-01): una columna personal no asedia ni
+    /// ataca ejércitos ni pueblos. A su convocatoria solo se unen mercenarios ([`Nucleo::de_mercenarios`]).
+    fn convoca_para_atacar(&self, heroe: u64) -> Option<Respuesta> {
+        let contrato = self.estado.contratos.contratos.get(&heroe)?;
+        let atacar = contrato.orden.as_ref().is_some_and(|o| o.tipo == TipoOrden::Atacar);
+        (!atacar).then(|| Respuesta::rechazo(rechazos::MERCENARIO_SIN_ORDEN, "un mercenario contratado solo convoca con una orden atacar, para cumplirla", self.estado.version))
+    }
+
+    /// Un ciudadano sin marca no se une a la convocatoria de un mercenario: un bot no manda a quien no es mercenario (`mercenario.convocatoria_de_mercenarios`).
+    fn de_mercenarios(&self, convocatoria: u64) -> Option<Respuesta> {
+        let lider = self.convocatoria(convocatoria)?.lider;
+        self.es_marcado(lider).then(|| Respuesta::rechazo(rechazos::MERCENARIO_CONVOCATORIA_DE_MERCENARIOS, "a la convocatoria de un mercenario solo se unen mercenarios con la orden de unirse a ella", self.estado.version))
+    }
+
     /// `UnirseABatalla` de un marcado (decisión 12): con `guardar(x)` solo en el bando que defiende `x`, y con `atacar(x)` solo en el que lo ataca. El bando que le tocaría lo dice
     /// [`Nucleo::elegibilidad`]; si no le toca ninguno, o la batalla no existe, lo rechaza la orden misma.
     fn pide_orden_en_batalla(&self, t: Instante, heroe: u64, batalla: u64, pedido: Option<Lado>) -> Option<Respuesta> {
@@ -124,13 +138,14 @@ impl Nucleo {
             Comando::CrearFaccion { heroe, .. } | Comando::SolicitarIngreso { heroe, .. } => self.sin_faccion_propia(*heroe),
             Comando::Fundar { ejercito } => self.sin_faccion_propia(self.ejercito(*ejercito)?.columna.lider),
             Comando::DeclararGuerra { heroe, .. } => self.prohibido_al_marcado(*heroe, "un mercenario contratado no declara la guerra"),
-            Comando::ConvocarEjercito { heroe, .. } => self.prohibido_al_marcado(*heroe, "un mercenario contratado no convoca ejércitos"),
+            Comando::ConvocarEjercito { heroe, .. } => self.convoca_para_atacar(*heroe),
             Comando::AceptarMision { heroe, dueno: Dueno::Faccion(_) | Dueno::Asentamiento(_), .. } => self.prohibido_al_marcado(*heroe, "un mercenario contratado no acepta las misiones del tablón de la Facción ni de la plaza"),
             Comando::Atacar { heroe, declara_guerra: true, .. } => self.prohibido_al_marcado(*heroe, "un mercenario contratado no declara la guerra: solo ataca con la guerra ya declarada"),
             Comando::Atacar { heroe, objetivo, declara_guerra: false } => self.pide_orden(*heroe, TipoOrden::Atacar, objetivo_de_ataque(*objetivo)),
             Comando::Perseguir { heroe, objetivo } => self.pide_orden(*heroe, TipoOrden::Atacar, objetivo_de_persecucion(*objetivo)),
             Comando::UnirseAEjercito { heroe, ejercito, .. } | Comando::UnirseEnCampo { heroe, ejercito } => self.pide_orden(*heroe, TipoOrden::Unirse, Objetivo::Ejercito(*ejercito)),
-            Comando::UnirseAConvocatoria { heroe, convocatoria, .. } => self.pide_orden(*heroe, TipoOrden::Unirse, Objetivo::Convocatoria(*convocatoria)),
+            Comando::UnirseAConvocatoria { heroe, convocatoria, .. } if self.es_marcado(*heroe) => self.pide_orden(*heroe, TipoOrden::Unirse, Objetivo::Convocatoria(*convocatoria)),
+            Comando::UnirseAConvocatoria { convocatoria, .. } => self.de_mercenarios(*convocatoria),
             Comando::UnirseABatalla { heroe, batalla, lado } => self.pide_orden_en_batalla(t, *heroe, *batalla, *lado),
             Comando::AdjuntarCaravana { caravana, ejercito } => self.pide_orden(self.ejercito(*ejercito)?.columna.lider, TipoOrden::Guardar, Objetivo::Caravana(*caravana)),
             Comando::AsignarEscolta { caravana, heroe, .. } => self.pide_orden(*heroe, TipoOrden::Guardar, Objetivo::Caravana(*caravana)),

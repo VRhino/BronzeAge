@@ -209,7 +209,7 @@ fn un_ofrecido_no_crea_faccion_ni_pide_ingreso_ni_funda_y_al_retirar_la_oferta_v
 }
 
 #[test]
-fn un_marcado_no_crea_faccion_ni_la_pide_ni_funda_ni_declara_la_guerra_ni_convoca_ni_acepta_misiones_del_tablon() {
+fn un_marcado_no_crea_faccion_ni_la_pide_ni_funda_ni_declara_la_guerra_ni_acepta_misiones_del_tablon() {
     let m = con_mundo!();
     let mut e = E::nuevo(m);
     let (plaza, rey) = (e.plaza, e.rey);
@@ -219,7 +219,6 @@ fn un_marcado_no_crea_faccion_ni_la_pide_ni_funda_ni_declara_la_guerra_ni_convoc
         Comando::CrearFaccion { heroe: bot, nombre: "Libres".into(), sigilo: None },
         Comando::SolicitarIngreso { heroe: bot, faccion: 2 },
         Comando::DeclararGuerra { heroe: bot, a: 1, b: 2 },
-        Comando::ConvocarEjercito { heroe: bot, escuadras: vec![], carga: vec![], politica: Politica::Aceptar },
         Comando::AceptarMision { heroe: bot, dueno: Dueno::Faccion(1), mision: "FG".into() },
         Comando::AceptarMision { heroe: bot, dueno: Dueno::Asentamiento(plaza), mision: "G1".into() },
     ] {
@@ -238,6 +237,28 @@ fn un_marcado_no_crea_faccion_ni_la_pide_ni_funda_ni_declara_la_guerra_ni_convoc
     // Y quien no es un mercenario hace lo mismo sin trabas: el Rey declara la guerra.
     mc::ok(&mut e.n, "rey", Comando::DeclararGuerra { heroe: rey, a: 1, b: 2 });
     assert_eq!(e.n.estado().relacion(1, 2), Some(Relacion::Guerra));
+}
+
+#[test]
+fn un_marcado_solo_convoca_con_una_orden_atacar_y_a_su_convocatoria_solo_se_unen_mercenarios() {
+    let m = con_mundo!();
+    let mut e = E::nuevo(m);
+    let (plaza, ajena) = (e.plaza, e.ajena);
+    let convocar = |heroe| Comando::ConvocarEjercito { heroe, escuadras: vec![], carga: vec![], politica: Politica::Aceptar };
+    // Sin una orden atacar, no convoca.
+    let defensor = e.contratado("bot-1", Trabajo::Defender, Objetivo::Plaza(plaza));
+    assert_eq!(mc::rechazo(&mut e.n, "bot-1", convocar(defensor)), rechazos::MERCENARIO_SIN_ORDEN);
+    // Con ella, sí: forma el ejército con el que cumplirla.
+    mc::ok(&mut e.n, "admin", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Guerra) });
+    let atacante = e.contratado("bot-2", Trabajo::Atacar, Objetivo::Plaza(ajena));
+    let c = mc::ok(&mut e.n, "bot-2", convocar(atacante)).creadas[0];
+    let unirse = |heroe| Comando::UnirseAConvocatoria { heroe, convocatoria: c, escuadras: vec![], carga: vec![] };
+    // Un ciudadano sin marca no se une a ella; un mercenario con la orden de unirse a ella, sí.
+    let carla = e.ciudadano("carla");
+    assert_eq!(mc::rechazo(&mut e.n, "carla", unirse(carla)), rechazos::MERCENARIO_CONVOCATORIA_DE_MERCENARIOS);
+    let companero = e.contratado("bot-3", Trabajo::Acompanar, Objetivo::Convocatoria(c));
+    mc::ok(&mut e.n, "bot-3", unirse(companero));
+    assert!(e.n.convocatoria(c).unwrap().integrantes.iter().any(|i| i.heroe == companero));
 }
 
 #[test]
