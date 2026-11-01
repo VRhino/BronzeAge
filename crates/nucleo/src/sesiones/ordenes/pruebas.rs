@@ -97,6 +97,7 @@ use asentamiento::Recurso::{Madera, Oro, Piedra, Trigo};
 
 /// Una fila por orden del jugador que el núcleo tiene (y una más por cada orden que da dos comandos según la obra o el lugar): la orden del contrato y el comando que debe salir.
 fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
+    use pb::objetivo_mercenario::Tipo as Mercenario;
     use pb::orden_atacar::objetivo::Tipo as Ataca;
     use pb::orden_marchar_a::objetivo::Tipo as Marcha;
     let (h, esc) = (s("heroe-7"), v(&["esc-1", "esc-2"]));
@@ -390,6 +391,26 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         (orden!(CerrarAlmacenACiudadanos, OrdenCerrarAlmacenACiudadanos, asentamiento_id: s("as-3"), cerrado: true), Comando::CerrarAlmacenACiudadanos { asentamiento: 3, cerrado: true }),
         (orden!(CargarDePlaza, OrdenCargarDePlaza, asentamiento_id: s("as-3"), recurso: s("madera"), cantidad: 20_000), Comando::CargarDePlaza { heroe: 7, asentamiento: 3, recurso: Recurso::Madera, cantidad: 20_000 }),
         (orden!(DejarEnPlaza, OrdenDejarEnPlaza, asentamiento_id: s("as-3"), recurso: s("oro"), cantidad: 3_000), Comando::DejarEnPlaza { heroe: 7, asentamiento: 3, recurso: Recurso::Oro, cantidad: 3_000 }),
+        // ── Mercenarios por contrato (entrada 48) ──
+        (orden!(OfrecerseComoMercenario, OrdenOfrecerseComoMercenario), Comando::OfrecerseComoMercenario { heroe: 7 }),
+        (orden!(RetirarOferta, OrdenRetirarOferta), Comando::RetirarOferta { heroe: 7 }),
+        (
+            orden!(ContratarMercenario, OrdenContratarMercenario, mercenario_id: s("heroe-9"), trabajo: s("defender"), objetivo: Some(pb::ObjetivoMercenario { tipo: Some(Mercenario::PuebloId(s("pueblo-4"))) }), plazo_dias: Some(3)),
+            Comando::ContratarMercenario { heroe: 7, mercenario: 9, trabajo: Trabajo::Defender, objetivo: ObjetivoMercenario::Pueblo(4), plazo: Some(3), residencia: None },
+        ),
+        (
+            orden!(ContratarMercenario, OrdenContratarMercenario, mercenario_id: s("heroe-9"), trabajo: s("permanente"), objetivo: Some(pb::ObjetivoMercenario { tipo: Some(Mercenario::FaccionId(s("f-2"))) }), residencia_asentamiento_id: Some(s("as-3"))),
+            Comando::ContratarMercenario { heroe: 7, mercenario: 9, trabajo: Trabajo::Permanente, objetivo: ObjetivoMercenario::Faccion(2), plazo: None, residencia: Some(3) },
+        ),
+        (orden!(ProrrogarContrato, OrdenProrrogarContrato, mercenario_id: s("heroe-9"), plazo_dias: 7), Comando::ProrrogarContrato { heroe: 7, mercenario: 9, plazo: 7 }),
+        (
+            orden!(OrdenarMercenario, OrdenOrdenarMercenario, mercenario_ids: v(&["heroe-9", "heroe-10"]), tipo: s("ir_a"), objetivo: Some(pb::ObjetivoMercenario { tipo: Some(Mercenario::Punto(pb::Punto { x: 1_500, y: -2_000 })) })),
+            Comando::OrdenarMercenario { heroe: 7, mercenarios: vec![9, 10], tipo: TipoOrden::IrA, objetivo: ObjetivoMercenario::Punto(Punto::new(1_500, -2_000)) },
+        ),
+        (orden!(MudarMercenario, OrdenMudarMercenario, mercenario_id: s("heroe-9"), asentamiento_id: s("as-4")), Comando::MudarMercenario { heroe: 7, mercenario: 9, plaza: 4 }),
+        (orden!(DespedirMercenario, OrdenDespedirMercenario, mercenario_id: s("heroe-9")), Comando::DespedirMercenario { heroe: 7, mercenario: 9 }),
+        (orden!(ValorarMercenario, OrdenValorarMercenario, mercenario_id: s("heroe-9"), buena: true), Comando::ValorarMercenario { heroe: 7, mercenario: 9, buena: true }),
+        (orden!(ReclamarPremioDeRango, OrdenReclamarPremioDeRango, tropa_id: s("arqueros")), Comando::ReclamarPremioDeRango { heroe: 7, tropa: Tropa::Arqueros }),
         (
             orden!(AportarARefundacion, OrdenAportarARefundacion, recurso: s("oro"), cantidad: 40_000, lado: s("carro")),
             Comando::AportarARefundacion { heroe: 7, recurso: Oro, cantidad: 40_000, lado: crate::comando::LadoDelFondo::Carro },
@@ -599,6 +620,7 @@ fn lo_que_la_orden_deja_implicito_se_resuelve_preguntando_al_mundo() {
 
 #[test]
 fn un_id_sin_la_forma_de_su_entidad_o_un_valor_fuera_de_su_catalogo_se_rechazan_con_su_codigo() {
+    use pb::objetivo_mercenario::Tipo as Mercenario;
     use pb::orden_atacar::objetivo::Tipo as Ataca;
     let h = || s("heroe-7");
     let casos: Vec<(Cuerpo, &str)> = vec![
@@ -645,6 +667,13 @@ fn un_id_sin_la_forma_de_su_entidad_o_un_valor_fuera_de_su_catalogo_se_rechazan_
         (orden!(ComprarMirada, OrdenComprarMirada, centro: Some(pb::Punto { x: 1, y: 2 })), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(ComprarMirada, OrdenComprarMirada, origen: Some(pb::orden_comprar_mirada::Origen { tipo: s("muelle"), id: s("as-3") }), centro: Some(pb::Punto { x: 1, y: 2 })), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(ComprarInformePlaza, OrdenComprarInformePlaza, origen: Some(pb::orden_comprar_informe_plaza::Origen { tipo: s("campamento"), id: s("as-3") }), asentamiento_id: s("as-8")), rechazos::CAMPAMENTO_DESCONOCIDO),
+        (orden!(ContratarMercenario, OrdenContratarMercenario, mercenario_id: s("heroe-9"), trabajo: s("saquear"), objetivo: Some(pb::ObjetivoMercenario { tipo: Some(Mercenario::FaccionId(s("f-2"))) })), rechazos::ORDEN_FORMA_INVALIDA),
+        (orden!(ContratarMercenario, OrdenContratarMercenario, mercenario_id: s("heroe-9"), trabajo: s("atacar")), rechazos::ORDEN_FORMA_INVALIDA),
+        (orden!(ContratarMercenario, OrdenContratarMercenario, mercenario_id: s("heroe-9"), trabajo: s("atacar"), objetivo: Some(pb::ObjetivoMercenario { tipo: Some(Mercenario::CampamentoId(s("camp-1"))) })), rechazos::CAMPAMENTO_DE_BANDIDOS_DESCONOCIDO),
+        (orden!(ProrrogarContrato, OrdenProrrogarContrato, mercenario_id: s("heroe-9"), plazo_dias: 300), rechazos::ORDEN_FORMA_INVALIDA),
+        (orden!(OrdenarMercenario, OrdenOrdenarMercenario, mercenario_ids: v(&["heroe-9"]), tipo: s("huir"), objetivo: Some(pb::ObjetivoMercenario { tipo: Some(Mercenario::AsentamientoId(s("as-3"))) })), rechazos::ORDEN_FORMA_INVALIDA),
+        (orden!(OrdenarMercenario, OrdenOrdenarMercenario, mercenario_ids: v(&["heroe-9", "esc-2"]), tipo: s("guardar"), objetivo: Some(pb::ObjetivoMercenario { tipo: Some(Mercenario::AsentamientoId(s("as-3"))) })), rechazos::HEROE_DESCONOCIDO),
+        (orden!(ReclamarPremioDeRango, OrdenReclamarPremioDeRango, tropa_id: s("dragones")), rechazos::ORDEN_FORMA_INVALIDA),
     ];
     for (cuerpo, codigo) in casos {
         assert_eq!(traduce(cuerpo.clone(), false), Err(codigo), "{cuerpo:?}");
@@ -675,7 +704,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let de_administracion: BTreeSet<String> = ordenes_de_administracion().iter().map(|(_, c)| nombre(c)).collect();
     let del_servidor_de_batalla: BTreeSet<String> = ["RegistrarAsignacion", "ConfirmarInicio", "RegistrarTokens", "RegistrarSalida", "AplicarResultado"].map(String::from).into();
     let todos = variantes_de_comando();
-    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (187, 162, 20, 5));
+    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (196, 171, 20, 5));
     let clasificados: Vec<&String> = del_jugador.iter().chain(&de_administracion).chain(&del_servidor_de_batalla).collect();
     assert_eq!(clasificados.len(), todos.len(), "una variante en dos orígenes");
     let sin_clasificar: Vec<&String> = todos.iter().filter(|v| !clasificados.contains(v)).collect();
@@ -687,7 +716,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let tabla: BTreeSet<String> = tabla.map(|c| nombre(&c)).collect();
     let proto = include_str!("../../../../../proto/bronzeage/v1/orders.proto");
     let en_el_contrato = proto.lines().skip_while(|l| !l.contains("oneof cuerpo {")).skip(1).take_while(|l| l.trim() != "}").map(str::trim).filter(|l| !l.starts_with("//") && l.ends_with(';')).count();
-    assert_eq!((tabla.len(), en_el_contrato), (161, 161), "una orden del contrato sin mapear ni clasificar como no disponible");
+    assert_eq!((tabla.len(), en_el_contrato), (170, 170), "una orden del contrato sin mapear ni clasificar como no disponible");
 }
 
 /// El nombre de una orden en el contrato (el campo del `oneof`): la variante de `Cuerpo` en serpiente (`MarcharA` → `marchar_a`).
@@ -769,5 +798,5 @@ fn la_matriz_de_autorizacion_del_documento_es_la_del_codigo() {
     let faltan: Vec<String> = codigo.difference(&documento).map(fila).collect();
     let sobran: Vec<String> = documento.difference(&codigo).map(fila).collect();
     assert!(faltan.is_empty() && sobran.is_empty(), "la matriz del documento no es la del código.\nFaltan o no coinciden (como las dice el código):\n{}\nSobran (como las dice el documento):\n{}", faltan.join("\n"), sobran.join("\n"));
-    assert_eq!(codigo.len(), 162 + 20 + 5, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
+    assert_eq!(codigo.len(), 171 + 20 + 5, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
 }

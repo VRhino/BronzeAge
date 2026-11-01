@@ -19,6 +19,14 @@ pub enum Derrota {
     Colapso,
 }
 
+/// La marca de un ciudadano que es un mercenario contratado (entrada 48, diseño de Mercenarios por contrato §2): es ciudadano de quien le paga, pero nunca Rey ni Embajador ni
+/// cargo local, no deja la Facción por su cuenta y la sucesión lo salta.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Marca {
+    Temporal,
+    Permanente,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Faccion {
     pub id: FaccionId,
@@ -37,6 +45,8 @@ pub struct Faccion {
     pub solicitudes: Vec<HeroeId>,
     pub derrota: Option<Derrota>,
     pub admite_otras_en_ataques: bool,
+    /// Los ciudadanos marcados (mercenarios contratados); los demás no tienen entrada.
+    pub marcas: BTreeMap<HeroeId, Marca>,
 }
 
 impl Faccion {
@@ -46,6 +56,11 @@ impl Faccion {
 
     pub fn es_ciudadano(&self, h: HeroeId) -> bool {
         self.ciudadanos.contains(&h)
+    }
+
+    /// Los ciudadanos sin marca, en orden de ingreso.
+    pub fn sin_marca(&self) -> impl Iterator<Item = HeroeId> + '_ {
+        self.ciudadanos.iter().copied().filter(|h| !self.marcas.contains_key(h))
     }
 }
 
@@ -72,6 +87,8 @@ pub enum ErrorFaccion {
     NoCiudadano,
     /// La Facción no tiene Rey (para designar Embajador).
     SinRey,
+    /// Es un mercenario contratado (marcado): no deja la Facción por su cuenta ni puede ser Rey ni Embajador.
+    Marcado,
 }
 
 /// Lo que cambió al salir un héroe de su Facción.
@@ -180,6 +197,7 @@ impl Facciones {
                 solicitudes: vec![],
                 derrota: None,
                 admite_otras_en_ataques: false,
+                marcas: BTreeMap::new(),
             },
         );
         self.de_heroe.insert(actor, id);
@@ -205,6 +223,7 @@ impl Facciones {
             solicitudes: vec![],
             derrota: None,
             admite_otras_en_ataques: false,
+            marcas: BTreeMap::new(),
         };
         self.por_id.entry(id).or_insert(f)
     }
@@ -264,17 +283,37 @@ impl Facciones {
         Ok(())
     }
 
+    /// La ciudadanía de un mercenario que firma un contrato (diseño §2): como [`Facciones::otorgar`], con su marca, y **nunca** le da el trono aunque la Facción no tenga Rey.
+    pub fn otorgar_marcado(&mut self, faccion: FaccionId, h: HeroeId, marca: Marca) -> Result<(), ErrorFaccion> {
+        if self.de_heroe.contains_key(&h) {
+            return Err(ErrorFaccion::YaPertenece);
+        }
+        let f = self.por_id.get_mut(&faccion).ok_or(ErrorFaccion::NoExiste)?;
+        f.ciudadanos.push(h);
+        f.marcas.insert(h, marca);
+        self.de_heroe.insert(h, faccion);
+        self.sin_solicitudes_de(h);
+        Ok(())
+    }
+
+    /// La marca de `h`, si es un ciudadano marcado.
+    pub fn marca_de(&self, h: HeroeId) -> Option<Marca> {
+        self.por_id.get(self.de_heroe.get(&h)?)?.marcas.get(&h).copied()
+    }
+
     fn sin_solicitudes_de(&mut self, h: HeroeId) {
         self.por_id.values_mut().for_each(|f| f.solicitudes.retain(|&x| x != h));
     }
 
-    /// `quitarCiudadania` (§3.3) con la **sucesión**: si se va el Rey, el trono pasa al primero de los que quedan (orden de ingreso); el Embajador se vacía si
+    /// `quitarCiudadania` (§3.3) con la **sucesión**: si se va el Rey, el trono pasa al primero sin marca de los que quedan (orden de ingreso); el Embajador se vacía si
     /// era el que se iba o si es el nuevo Rey. No estampa el cooldown (la administración y el traslado lo usan así); la orden de jugador es [`Facciones::dejar`].
     pub fn quitar(&mut self, h: HeroeId) -> Option<Salida> {
         let id = self.de_heroe.remove(&h)?;
         let f = self.por_id.get_mut(&id).expect("índice coherente");
         f.ciudadanos.retain(|&x| x != h);
-        let sucesion = (f.rey == Some(h)).then(|| f.ciudadanos.first().copied());
+        f.marcas.remove(&h);
+        // Entrada 48: el trono pasa al primero **sin marca**; si solo quedan marcados, la Facción se queda sin Rey.
+        let sucesion = (f.rey == Some(h)).then(|| f.sin_marca().next());
         if let Some(nuevo) = sucesion {
             f.rey = nuevo;
         }
@@ -286,11 +325,14 @@ impl Facciones {
     }
 
     /// `dejarFaccion` (§3.3): solo la propia. Q7 (y 5A-4, 2026-10-24): se rechaza **siempre** que vaya en un ejército, aunque sea de un solo héroe, y en una
-    /// convocatoria con otros héroes (`en_ejercito`: lo sabe el núcleo). Estampa `salidasFaccionPorHeroe` (el cooldown de creación). Dejar la residencia, los
+    /// convocatoria con otros héroes (`en_ejercito`: lo sabe el núcleo). Un marcado no la deja: sale cuando acaba su contrato (entrada 48). Estampa `salidasFaccionPorHeroe` (el cooldown de creación). Dejar la residencia, los
     /// cargos locales y la guarnición, y pasar al campamento más cercano (decisión 10), es del núcleo.
     pub fn dejar(&mut self, h: HeroeId, ahora: Instante, en_ejercito: bool) -> Result<Salida, ErrorFaccion> {
         if !self.de_heroe.contains_key(&h) {
             return Err(ErrorFaccion::NoPertenece);
+        }
+        if self.marca_de(h).is_some() {
+            return Err(ErrorFaccion::Marcado);
         }
         if en_ejercito {
             return Err(ErrorFaccion::EnEjercito);
@@ -300,18 +342,21 @@ impl Facciones {
         Ok(salida)
     }
 
-    /// `asignarRey` (§3.4): el designado ha de ser ciudadano. Con Rey, es un traspaso: el antiguo sigue de ciudadano y el Embajador no se toca. Quién puede
+    /// `asignarRey` (§3.4): el designado ha de ser ciudadano y sin marca. Con Rey, es un traspaso: el antiguo sigue de ciudadano y el Embajador no se toca. Quién puede
     /// hacerlo (cualquier ciudadano sin Rey; con Rey, solo él) es de la autorización.
     pub fn asignar_rey(&mut self, faccion: FaccionId, h: HeroeId) -> Result<(), ErrorFaccion> {
         let f = self.por_id.get_mut(&faccion).ok_or(ErrorFaccion::NoExiste)?;
         if !f.es_ciudadano(h) {
             return Err(ErrorFaccion::NoCiudadano);
         }
+        if f.marcas.contains_key(&h) {
+            return Err(ErrorFaccion::Marcado);
+        }
         f.rey = Some(h);
         Ok(())
     }
 
-    /// `asignarEmbajador` (§3.4): la Facción tiene Rey y el designado es ciudadano (puede ser el propio Rey).
+    /// `asignarEmbajador` (§3.4): la Facción tiene Rey y el designado es ciudadano sin marca (puede ser el propio Rey).
     pub fn asignar_embajador(&mut self, faccion: FaccionId, h: HeroeId) -> Result<(), ErrorFaccion> {
         let f = self.por_id.get_mut(&faccion).ok_or(ErrorFaccion::NoExiste)?;
         if f.rey.is_none() {
@@ -319,6 +364,9 @@ impl Facciones {
         }
         if !f.es_ciudadano(h) {
             return Err(ErrorFaccion::NoCiudadano);
+        }
+        if f.marcas.contains_key(&h) {
+            return Err(ErrorFaccion::Marcado);
         }
         f.embajador = Some(h);
         Ok(())
@@ -410,6 +458,46 @@ pub(crate) mod pruebas {
         for &h in mas {
             fs.otorgar(id, h).unwrap();
         }
+    }
+
+    #[test]
+    fn un_marcado_es_ciudadano_pero_nunca_rey_ni_embajador_y_no_deja_la_faccion() {
+        let mut fs = Facciones::default();
+        con_faccion(&mut fs, 1, "Micenas", 10, &[11]);
+        fs.otorgar_marcado(1, 20, Marca::Permanente).unwrap();
+        assert_eq!((fs.faccion_de(20), fs.marca_de(20), fs.marca_de(11)), (Some(1), Some(Marca::Permanente), None));
+        assert_eq!(fs.get(1).unwrap().sin_marca().collect::<Vec<_>>(), [10, 11], "en orden de ingreso, sin el marcado");
+        assert_eq!(fs.otorgar_marcado(1, 20, Marca::Temporal), Err(ErrorFaccion::YaPertenece));
+        assert_eq!(fs.asignar_rey(1, 20), Err(ErrorFaccion::Marcado));
+        assert_eq!(fs.asignar_embajador(1, 20), Err(ErrorFaccion::Marcado));
+        assert_eq!(fs.dejar(20, 5, false), Err(ErrorFaccion::Marcado));
+        // `quitar` (lo que usa el fin del contrato) sí lo saca, y con él su marca.
+        assert!(fs.quitar(20).is_some());
+        assert_eq!((fs.faccion_de(20), fs.marca_de(20)), (None, None));
+        assert!(fs.get(1).unwrap().marcas.is_empty());
+    }
+
+    #[test]
+    fn la_sucesion_salta_a_los_marcados_y_sin_ninguno_sin_marca_la_faccion_queda_sin_rey() {
+        let mut fs = Facciones::default();
+        con_faccion(&mut fs, 1, "Micenas", 10, &[]);
+        fs.otorgar_marcado(1, 20, Marca::Temporal).unwrap();
+        fs.otorgar(1, 11).unwrap();
+        let s = fs.dejar(10, 0, false).unwrap();
+        assert_eq!(s.sucesion, Some(Some(11)), "el marcado entró antes, pero no hereda");
+        let s = fs.dejar(11, 0, false).unwrap();
+        assert_eq!(s.sucesion, Some(None), "solo queda el marcado: sin Rey");
+        assert_eq!(fs.get(1).unwrap().rey, None);
+    }
+
+    #[test]
+    fn la_ciudadania_marcada_no_da_el_trono_de_una_faccion_sin_rey() {
+        let mut fs = Facciones::default();
+        fs.crear_vacia(&r(), 3);
+        fs.otorgar_marcado(3, 20, Marca::Permanente).unwrap();
+        assert_eq!(fs.get(3).unwrap().rey, None);
+        fs.otorgar(3, 11).unwrap();
+        assert_eq!(fs.get(3).unwrap().rey, Some(11));
     }
 
     #[test]

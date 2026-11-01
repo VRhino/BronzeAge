@@ -15,15 +15,20 @@ pub enum ErrorCargo {
     NoReside,
     /// Para designar Tesorero, General, Maestro de Obras o Sacerdote hace falta Gobernador.
     SinGobernador,
+    /// El designado es un mercenario contratado (marcado): no tiene cargos (entrada 48).
+    Marcado,
 }
 
-/// `asignarCargoLocal`. `dueña` es la Facción de la plaza (`faccion_de_la_plaza` la comprueba); `reside` dice si `h` reside en ella.
+/// `asignarCargoLocal`. `dueña` es la Facción de la plaza (`faccion_de_la_plaza` la comprueba); `reside` dice si `h` reside en ella. Un marcado no tiene cargos.
 pub fn asignar_cargo_local(cargos: &mut Cargos, faccion_de_la_plaza: FaccionId, dueña: &Faccion, cargo: Cargo, h: HeroeId, reside: bool) -> Result<(), ErrorCargo> {
     if faccion_de_la_plaza != dueña.id {
         return Err(ErrorCargo::PlazaAjena);
     }
     if !dueña.es_ciudadano(h) {
         return Err(ErrorCargo::NoCiudadano);
+    }
+    if dueña.marcas.contains_key(&h) {
+        return Err(ErrorCargo::Marcado);
     }
     if !reside {
         return Err(ErrorCargo::NoReside);
@@ -54,6 +59,14 @@ mod pruebas {
         let mut c = Cargos::default();
         assert_eq!(asignar_cargo_local(&mut c, 1, fs.get(1).unwrap(), Cargo::Gobernador, 99, true), Err(ErrorCargo::NoCiudadano));
         assert_eq!(asignar_cargo_local(&mut c, 2, fs.get(1).unwrap(), Cargo::Gobernador, 10, true), Err(ErrorCargo::PlazaAjena));
+    }
+
+    #[test]
+    fn un_marcado_no_tiene_cargos() {
+        let mut fs = micenas();
+        fs.otorgar_marcado(1, 20, crate::faccion::Marca::Permanente).unwrap();
+        let mut c = Cargos::default();
+        assert_eq!(asignar_cargo_local(&mut c, 1, fs.get(1).unwrap(), Cargo::Gobernador, 20, true), Err(ErrorCargo::Marcado));
     }
 
     #[test]

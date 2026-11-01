@@ -111,6 +111,22 @@ message LineaDejar {
   optional sint64 precio_min = 3;  // solo en una plaza ajena: vende a las órdenes de compra con precio ≥ este
 }
 
+// A qué apunta un contrato o una orden de mercenario (Mercenarios_Por_Contrato §4 y §6; 2026-11-01). Lo comparten las órdenes y las entidades. `caravana_id` vale también
+// para el carro de acarreo de un pueblo, un encargo o una ruta: en el motor todo eso es una caravana. `campamento_id` es un campamento de bandidos. `punto`, solo para `ir_a`.
+message ObjetivoMercenario {
+  oneof tipo {
+    string asentamiento_id = 1;
+    string pueblo_id = 2;
+    string avanzada_id = 3;
+    string caravana_id = 4;
+    string campamento_id = 5;
+    string ejercito_id = 6;
+    string convocatoria_id = 7;
+    string faccion_id = 8;
+    Punto punto = 9;
+  }
+}
+
 message Sigilo {
   string forma_id = 1;
   string campo_id = 2;

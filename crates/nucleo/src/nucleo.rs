@@ -58,6 +58,7 @@ mod cargos;
 mod columnas;
 mod combates;
 mod conquistas;
+mod contratos;
 mod construccion;
 mod convocatorias;
 mod cronica;
@@ -617,6 +618,7 @@ impl Nucleo {
             Carga::Tecnologia(suceso) => self.cita_de_tecnologia(suceso, t),
             Carga::Aeda => self.aeda_vence(id, t),
             Carga::Residentes => self.cita_de_residentes(id, t),
+            Carga::Contrato(suceso) => self.suceso_de_contrato(crate::estado_comercio::id_de_entidad(id), suceso, t),
             Carga::Encuentro { otra, otra_generacion } => self.encuentro_vence(id, otra, otra_generacion, t),
             Carga::Externa { generador, tipo, a, b } => {
                 let mut gens = std::mem::take(&mut self.generadores);
@@ -651,6 +653,8 @@ impl Nucleo {
         self.revelaciones(t);
         // La Caravana de Fundación que se ha quedado sin su titular (Fundacion_Y_Refundacion §7) vuelve sola a su origen: lo mira lo que la transición tocó.
         self.vigilar_fundaciones(t);
+        // Lo que la transición cambió en el mundo puede cumplir o anular la orden de un mercenario o acabar su contrato (Mercenarios_Por_Contrato §6.3 y §7).
+        self.vigilar_contratos(t);
         // Quien entra, sale, se muda o aparca marca el interior de su plaza (solo con sesiones).
         self.marcar_interiores();
         // Una relación que nace o acaba cambia la Liga de todas las Facciones de la de sus dos extremos (5H: viaja en cada Facción).
@@ -929,6 +933,9 @@ impl Nucleo {
         if let Some(r) = self.rechazo_por_batalla(t, p) {
             return r;
         }
+        if let Some(r) = self.rechazo_por_contrato(t, p) {
+            return r;
+        }
         match &p.comando {
             Comando::CrearEjercito { cuenta, faccion, posicion, velocidad, viveres } => {
                 // Andamiaje de administración: una columna con un héroe «de campo» (sin residencia ni loadout) de la cuenta dada, a la que obedece.
@@ -1133,6 +1140,18 @@ impl Nucleo {
             | Comando::ReclutarEnCampamento { .. }
             | Comando::PedirPrestamo { .. }
             | Comando::ReponerPrestamo { .. } => match self.ejecutar_mercenarios(t, p) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::OfrecerseComoMercenario { .. }
+            | Comando::RetirarOferta { .. }
+            | Comando::ContratarMercenario { .. }
+            | Comando::ProrrogarContrato { .. }
+            | Comando::OrdenarMercenario { .. }
+            | Comando::MudarMercenario { .. }
+            | Comando::DespedirMercenario { .. }
+            | Comando::ValorarMercenario { .. }
+            | Comando::ReclamarPremioDeRango { .. } => match self.ejecutar_contratos(t, p) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },

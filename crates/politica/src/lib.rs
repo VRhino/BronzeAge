@@ -32,7 +32,7 @@ pub mod traslado;
 pub mod tributo;
 
 pub use datos::Reglas;
-pub use faccion::{Faccion, Facciones};
+pub use faccion::{Faccion, Facciones, Marca};
 pub use propuestas::{Propuesta, Propuestas};
 pub use relaciones::{RelacionPolitica, Relaciones};
 pub use tipos::*;

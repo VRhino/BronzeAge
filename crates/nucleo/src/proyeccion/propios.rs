@@ -690,7 +690,7 @@ pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
         }),
         admite_otras_en_ataques: x.admite_otras_en_ataques,
         misiones: misiones(n, crate::misiones::Dueno::Faccion(f)),
-        miembros: n.miembros_de(f).into_iter().map(|m| pb::MiembroFaccion { heroe_id: ids::heroe(m.heroe), residencia_id: m.residencia.map(residencia_id), cargos: m.cargos, participacion: m.participacion }).collect(),
+        miembros: n.miembros_de(f).into_iter().map(|m| pb::MiembroFaccion { heroe_id: ids::heroe(m.heroe), residencia_id: m.residencia.map(residencia_id), cargos: m.cargos, participacion: m.participacion, marca: None }).collect(),
         tablon: tablon(n, crate::misiones::Dueno::Faccion(f)),
         es_bot: n.es_faccion_de_bots(f),
         ..base

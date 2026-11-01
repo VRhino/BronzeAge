@@ -7,6 +7,7 @@ use crate::codec_economia::{cargo_a_u8, cargo_de_u8, recurso_a_u8, recurso_de_u8
 use crate::codec_comercio::{animal_a_u8, animal_de_u8, modo_a_u8, modo_de_u8, parada_escribir, parada_leer, tipo_carro_a_u8, tipo_carro_de_u8};
 use crate::codec_batallas::{asignacion_escribir, asignacion_leer, resultado_escribir, resultado_leer, salida_escribir, salida_leer, tokens_escribir, tokens_leer};
 use crate::codec_columna::{politica_a_u8, politica_de_u8};
+use crate::codec_contratos;
 use crate::codec_politica::{sigilo_escribir, sigilo_leer};
 use crate::codec_militar::{controlador_a_u8, controlador_de_u8, objetivo_escribir, objetivo_leer, relacion_a_u8, relacion_de_u8, residencia_escribir, residencia_leer, tropa_a_u8, tropa_de_u8, ubicacion_escribir, ubicacion_leer};
 use crate::estado_militar::Relacion;
@@ -23,6 +24,7 @@ use militar::columna::Politica;
 use militar::heroe::{Controlador, Residencia};
 use militar::inspeccion::Objetivo;
 use militar::presencia::Ubicacion;
+use mercenarios::{Objetivo as ObjetivoMercenario, TipoOrden, Trabajo};
 use politica::sigilo::Sigilo;
 use politica::Grupos;
 
@@ -532,6 +534,26 @@ pub enum Comando {
     EmpezarEpica { heroe: u64, asentamiento: u64, aeda: u32, tecnologia: u8 },
     /// El Aeda residente `aeda-r<aeda>` de la plaza abandona la épica que canta y pierde lo avanzado.
     AbandonarEpica { heroe: u64, asentamiento: u64, aeda: u32 },
+    // ── Mercenarios por contrato (entrada 48, Mercenarios_Por_Contrato). Códigos 198 a 206. ──
+    /// El héroe bot, sin Facción, residente y dentro de su campamento, se pone en el tablón del campamento como mercenario (§3).
+    OfrecerseComoMercenario { heroe: u64 },
+    /// El héroe quita su oferta del tablón.
+    RetirarOferta { heroe: u64 },
+    /// El Rey, el Embajador o un cargo local, en el campamento del mercenario y con el oro en el carro, lo contrata para `trabajo` sobre `objetivo`: temporal con `plazo` días, o
+    /// permanente (sin plazo) residiendo en la plaza `residencia` (§3 a §5).
+    ContratarMercenario { heroe: u64, mercenario: u64, trabajo: Trabajo, objetivo: ObjetivoMercenario, plazo: Option<u8>, residencia: Option<u64> },
+    /// Quien podría firmarlo hoy alarga `plazo` días el contrato temporal del mercenario, en persona y pagándolo (§6.2).
+    ProrrogarContrato { heroe: u64, mercenario: u64, plazo: u8 },
+    /// Un cargo de la Facción da la misma orden a entre 1 y 16 mercenarios con contrato (§6.1, decisión 23 del plan).
+    OrdenarMercenario { heroe: u64, mercenarios: Vec<u64>, tipo: TipoOrden, objetivo: ObjetivoMercenario },
+    /// El Rey o el Embajador cambian a un permanente a otra plaza de la Facción, sin cooldown (§6.2).
+    MudarMercenario { heroe: u64, mercenario: u64, plaza: u64 },
+    /// Quien podría firmar el contrato lo acaba antes de tiempo (§6.2, §7).
+    DespedirMercenario { heroe: u64, mercenario: u64 },
+    /// Quien firmó un contrato ya acabado, o el Rey, lo valora bien o mal mientras dura el plazo de valoración (§8.2).
+    ValorarMercenario { heroe: u64, mercenario: u64, buena: bool },
+    /// El mercenario reclama en su campamento base una escuadra de premio de rango de `tropa` (§8.3).
+    ReclamarPremioDeRango { heroe: u64, tropa: Tropa },
 }
 
 /// El prefijo del actor de los mensajes del servidor de batalla: `batalla-servidor:<id>` (§8).
@@ -724,7 +746,16 @@ impl Comando {
             | Comando::CargarDePueblo { .. }
             | Comando::DejarEnPueblo { .. }
             | Comando::CargarDePlaza { .. }
-            | Comando::DejarEnPlaza { .. } => CuentaDelHeroe,
+            | Comando::DejarEnPlaza { .. }
+            | Comando::OfrecerseComoMercenario { .. }
+            | Comando::RetirarOferta { .. }
+            | Comando::ContratarMercenario { .. }
+            | Comando::ProrrogarContrato { .. }
+            | Comando::OrdenarMercenario { .. }
+            | Comando::MudarMercenario { .. }
+            | Comando::DespedirMercenario { .. }
+            | Comando::ValorarMercenario { .. }
+            | Comando::ReclamarPremioDeRango { .. } => CuentaDelHeroe,
             Comando::ResponderSolicitud { .. }
             | Comando::AsignarEmbajador { .. }
             | Comando::DesignarCapital { .. }
@@ -832,8 +863,8 @@ impl Comando {
     }
 
     /// ¿Lleva el candado de batalla? Todos los comandos salvo los que actúan sobre la propia batalla y conectarse y desconectarse (cerrar el cliente en plena
-    /// batalla tiene que anotarse, y volver a conectarse anular esa petición, §5.1), y los mensajes del servidor de batalla, que no pasan por el registro de
-    /// comandos de jugador.
+    /// batalla tiene que anotarse, y volver a conectarse anular esa petición, §5.1), los mensajes del servidor de batalla, que no pasan por el registro de
+    /// comandos de jugador, y ordenar, despedir y valorar a un mercenario (Mercenarios_Por_Contrato §7: despedir a quien combate se acepta y el fin se aplaza).
     pub(crate) fn lleva_candado(&self) -> bool {
         !matches!(
             self,
@@ -841,6 +872,9 @@ impl Comando {
                 | Comando::CancelarBatalla { .. }
                 | Comando::Conectarse { .. }
                 | Comando::Desconectarse { .. }
+                | Comando::OrdenarMercenario { .. }
+                | Comando::DespedirMercenario { .. }
+                | Comando::ValorarMercenario { .. }
                 | Comando::RegistrarAsignacion { .. }
                 | Comando::ConfirmarInicio { .. }
                 | Comando::RegistrarTokens { .. }
@@ -1103,6 +1137,20 @@ impl Comando {
             | Comando::EmpezarEpica { heroe, .. }
             | Comando::AbandonarEpica { heroe, .. } => i.heroes.push(*heroe),
             Comando::AlternarReabastecerAliados { asentamiento, .. } | Comando::CerrarAlmacenACiudadanos { asentamiento, .. } => i.asentamientos.push(*asentamiento),
+            Comando::OfrecerseComoMercenario { heroe } | Comando::RetirarOferta { heroe } | Comando::ReclamarPremioDeRango { heroe, .. } => i.heroes.push(*heroe),
+            Comando::ProrrogarContrato { heroe, mercenario, .. } | Comando::DespedirMercenario { heroe, mercenario } | Comando::ValorarMercenario { heroe, mercenario, .. } => i.heroes.extend([*heroe, *mercenario]),
+            Comando::ContratarMercenario { heroe, mercenario, residencia, .. } => {
+                i.heroes.extend([*heroe, *mercenario]);
+                i.asentamientos.extend(*residencia);
+            }
+            Comando::MudarMercenario { heroe, mercenario, plaza } => {
+                i.heroes.extend([*heroe, *mercenario]);
+                i.asentamientos.push(*plaza);
+            }
+            Comando::OrdenarMercenario { heroe, mercenarios, .. } => {
+                i.heroes.push(*heroe);
+                i.heroes.extend(mercenarios);
+            }
             // La puerta y los cargos de una plaza en batalla no se tocan: echar a quien combate dentro, o cambiar quién la gobierna, sería una orden sobre la batalla.
             Comando::AsignarCargoLocal { heroe, asentamiento, designado, .. } => {
                 i.heroes.extend([*heroe, *designado]);
@@ -2044,6 +2092,54 @@ impl Peticion {
                 w.u8(197);
                 w.u64(*caravana);
             }
+            Comando::OfrecerseComoMercenario { heroe } | Comando::RetirarOferta { heroe } => {
+                w.u8(if matches!(self.comando, Comando::OfrecerseComoMercenario { .. }) { 198 } else { 199 });
+                w.u64(*heroe);
+            }
+            Comando::ContratarMercenario { heroe, mercenario, trabajo, objetivo, plazo, residencia } => {
+                w.u8(200);
+                w.u64(*heroe);
+                w.u64(*mercenario);
+                w.u8(codec_contratos::trabajo_a_u8(*trabajo));
+                codec_contratos::objetivo_escribir(&mut w, objetivo);
+                w.opt_u64(plazo.map(u64::from));
+                w.opt_u64(*residencia);
+            }
+            Comando::ProrrogarContrato { heroe, mercenario, plazo } => {
+                w.u8(201);
+                w.u64(*heroe);
+                w.u64(*mercenario);
+                w.u8(*plazo);
+            }
+            Comando::OrdenarMercenario { heroe, mercenarios, tipo, objetivo } => {
+                w.u8(202);
+                w.u64(*heroe);
+                lista_u64(&mut w, mercenarios);
+                w.u8(codec_contratos::tipo_orden_a_u8(*tipo));
+                codec_contratos::objetivo_escribir(&mut w, objetivo);
+            }
+            Comando::MudarMercenario { heroe, mercenario, plaza } => {
+                w.u8(203);
+                w.u64(*heroe);
+                w.u64(*mercenario);
+                w.u64(*plaza);
+            }
+            Comando::DespedirMercenario { heroe, mercenario } => {
+                w.u8(204);
+                w.u64(*heroe);
+                w.u64(*mercenario);
+            }
+            Comando::ValorarMercenario { heroe, mercenario, buena } => {
+                w.u8(205);
+                w.u64(*heroe);
+                w.u64(*mercenario);
+                w.bool(*buena);
+            }
+            Comando::ReclamarPremioDeRango { heroe, tropa } => {
+                w.u8(206);
+                w.u64(*heroe);
+                w.u8(tropa_a_u8(*tropa));
+            }
             Comando::AdoptarTecnologia { heroe, faccion, tecnologia } => {
                 w.u8(175);
                 w.u64(*heroe);
@@ -2565,6 +2661,22 @@ impl Peticion {
             195 => Comando::EncargarCaravana { caravana: r.u64()?, destino: r.u64()?, modo: modo_de_u8(r.u8()?)?, salir_en: r.opt_i64()?, en_origen: parada_leer(&mut r)?, en_destino: parada_leer(&mut r)? },
             196 => Comando::CambiarEncargo { caravana: r.u64()?, destino: r.u64()?, salir_en: r.opt_i64()?, en_origen: parada_leer(&mut r)?, en_destino: parada_leer(&mut r)? },
             197 => Comando::CancelarEncargo { caravana: r.u64()? },
+            198 => Comando::OfrecerseComoMercenario { heroe: r.u64()? },
+            199 => Comando::RetirarOferta { heroe: r.u64()? },
+            200 => Comando::ContratarMercenario {
+                heroe: r.u64()?,
+                mercenario: r.u64()?,
+                trabajo: codec_contratos::trabajo_de_u8(r.u8()?)?,
+                objetivo: codec_contratos::objetivo_leer(&mut r)?,
+                plazo: r.opt_u64()?.map(|d| u8::try_from(d).map_err(|_| ErrorFormato("plazo de contrato fuera de rango"))).transpose()?,
+                residencia: r.opt_u64()?,
+            },
+            201 => Comando::ProrrogarContrato { heroe: r.u64()?, mercenario: r.u64()?, plazo: r.u8()? },
+            202 => Comando::OrdenarMercenario { heroe: r.u64()?, mercenarios: leer_lista_u64(&mut r)?, tipo: codec_contratos::tipo_orden_de_u8(r.u8()?)?, objetivo: codec_contratos::objetivo_leer(&mut r)? },
+            203 => Comando::MudarMercenario { heroe: r.u64()?, mercenario: r.u64()?, plaza: r.u64()? },
+            204 => Comando::DespedirMercenario { heroe: r.u64()?, mercenario: r.u64()? },
+            205 => Comando::ValorarMercenario { heroe: r.u64()?, mercenario: r.u64()?, buena: r.bool()? },
+            206 => Comando::ReclamarPremioDeRango { heroe: r.u64()?, tropa: tropa_de_u8(r.u8()?)? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -2831,6 +2943,43 @@ pub mod rechazos {
     pub const MERCENARIOS_PRESTAMO_REPETIDA: &str = "mercenarios.prestamo_repetida";
     pub const MERCENARIOS_YA_PRESTADA: &str = "mercenarios.ya_prestada";
     pub const MERCENARIOS_NADA_QUE_REPONER: &str = "mercenarios.nada_que_reponer";
+    // Mercenarios por contrato (entrada 48, Mercenarios_Por_Contrato).
+    /// Solo un héroe de bot se ofrece como mercenario.
+    pub const MERCENARIO_SOLO_BOTS: &str = "mercenario.solo_bots";
+    /// El héroe no está en el tablón de ningún campamento.
+    pub const MERCENARIO_NO_OFRECIDO: &str = "mercenario.no_ofrecido";
+    /// Una Facción de bots no contrata mercenarios.
+    pub const MERCENARIO_FACCION_DE_BOTS: &str = "mercenario.faccion_de_bots";
+    /// El objetivo no es de una clase que admite el trabajo o la orden, no existe o no vale para él; o la residencia del permanente no es una plaza de la Facción.
+    pub const MERCENARIO_OBJETIVO_INVALIDO: &str = "mercenario.objetivo_invalido";
+    /// Un temporal sin uno de los plazos de la tabla, o un permanente con plazo.
+    pub const MERCENARIO_PLAZO_INVALIDO: &str = "mercenario.plazo_invalido";
+    /// Ningún cargo de quien firma, ordena o valora le alcanza para ese contrato, esa orden o esa valoración.
+    pub const MERCENARIO_SIN_ALCANCE: &str = "mercenario.sin_alcance";
+    /// La Facción lo despidió hace menos de `esperaRecontratoHoras`.
+    pub const MERCENARIO_RECONTRATO_EN_ESPERA: &str = "mercenario.recontrato_en_espera";
+    /// No tiene contrato vigente con la Facción de quien lo pide.
+    pub const MERCENARIO_SIN_CONTRATO: &str = "mercenario.sin_contrato";
+    /// Lo pedido no vale para su tipo de contrato (prorrogar un permanente, mudar a un temporal).
+    pub const MERCENARIO_TIPO_DE_CONTRATO: &str = "mercenario.tipo_de_contrato";
+    /// Un marcado intenta algo que solo hace con una orden que se lo permita.
+    pub const MERCENARIO_SIN_ORDEN: &str = "mercenario.sin_orden";
+    /// La orden no es de las que admite su trabajo, o su objetivo cae fuera del contrato.
+    pub const MERCENARIO_ORDEN_FUERA_DE_CONTRATO: &str = "mercenario.orden_fuera_de_contrato";
+    /// Ya tiene una orden de un cargo de más rango que el de quien ordena.
+    pub const MERCENARIO_ORDEN_DE_MAS_RANGO: &str = "mercenario.orden_de_mas_rango";
+    /// La lista de mercenarios de una orden está vacía, pasa de 16 o repite alguno.
+    pub const MERCENARIO_LISTA_INVALIDA: &str = "mercenario.lista_invalida";
+    /// Algo que un marcado no hace nunca (declarar la guerra, aceptar misiones del tablón de la Facción o de la plaza).
+    pub const MERCENARIO_PROHIBIDO: &str = "mercenario.prohibido";
+    /// El héroe es un mercenario con marca: no deja la Facción por su cuenta ni recibe cargos, trono ni mando.
+    pub const MERCENARIO_MARCADO: &str = "mercenario.marcado";
+    /// No hay contrato terminado de ese mercenario con la Facción que se pueda valorar: no lo hubo, ya se valoró o pasó el plazo.
+    pub const MERCENARIO_SIN_VALORACION: &str = "mercenario.sin_valoracion";
+    /// No le queda ninguna escuadra de premio de rango por reclamar.
+    pub const MERCENARIO_SIN_PREMIO: &str = "mercenario.sin_premio";
+    /// La tropa está por encima del escalón que permite su rango, o no es de su leva propia ni la recluta su campamento.
+    pub const MERCENARIO_FUERA_DE_LICENCIA: &str = "mercenario.fuera_de_licencia";
     // Reclutar en una plaza (`ErrorReclutamiento`), en el orden en que se comprueban.
     pub const RECLUTAMIENTO_NO_PUEDES: &str = "reclutamiento.no_puedes";
     pub const RECLUTAMIENTO_SIN_TECNOLOGIA: &str = "reclutamiento.sin_tecnologia";
@@ -3089,6 +3238,8 @@ pub mod rechazos {
     pub const FACCION_DE_BOTS: &str = "faccion.de_bots";
     /// Un héroe bot pide entrar (o se acepta su solicitud) en una Facción cuyo Rey no es bot (2026-11-01).
     pub const FACCION_NO_ES_DE_BOTS: &str = "faccion.no_es_de_bots";
+    /// Pide entrar en una Facción (o crearla) quien está en el tablón de un campamento como mercenario: primero retira su oferta.
+    pub const FACCION_MERCENARIO_OFRECIDO: &str = "faccion.mercenario_ofrecido";
     /// Cambió de residencia hace menos de `CIUDADANIA.cooldownCambioResidenciaDias`.
     pub const RESIDENCIA_COOLDOWN: &str = "residencia.cooldown";
     /// Solo se reside en una plaza de la propia Facción.
@@ -3666,6 +3817,17 @@ mod pruebas {
             Comando::ComprarTecnologiaAeda { heroe: 2, asentamiento: 5, tecnologia: 2 },
             Comando::EmpezarEpica { heroe: 2, asentamiento: 3, aeda: 4, tecnologia: 5 },
             Comando::AbandonarEpica { heroe: 2, asentamiento: 3, aeda: 4 },
+            Comando::OfrecerseComoMercenario { heroe: 2 },
+            Comando::RetirarOferta { heroe: 2 },
+            Comando::ContratarMercenario { heroe: 2, mercenario: 8, trabajo: Trabajo::Atacar, objetivo: ObjetivoMercenario::Bandidos(3), plazo: Some(3), residencia: None },
+            Comando::ContratarMercenario { heroe: 2, mercenario: 8, trabajo: Trabajo::Permanente, objetivo: ObjetivoMercenario::Faccion(1), plazo: None, residencia: Some(5) },
+            Comando::ProrrogarContrato { heroe: 2, mercenario: 8, plazo: 7 },
+            Comando::OrdenarMercenario { heroe: 2, mercenarios: vec![8, 9], tipo: TipoOrden::IrA, objetivo: ObjetivoMercenario::Punto(Punto::new(-5, 9_000)) },
+            Comando::OrdenarMercenario { heroe: 2, mercenarios: vec![8], tipo: TipoOrden::Unirse, objetivo: ObjetivoMercenario::Convocatoria(12) },
+            Comando::MudarMercenario { heroe: 2, mercenario: 8, plaza: 6 },
+            Comando::DespedirMercenario { heroe: 2, mercenario: 8 },
+            Comando::ValorarMercenario { heroe: 2, mercenario: 8, buena: false },
+            Comando::ReclamarPremioDeRango { heroe: 8, tropa: Tropa::Arqueros },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Ejercito(9), declara_guerra: false },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Caravana(4), declara_guerra: true },
             Comando::Atacar { heroe: 2, objetivo: ObjetivoAtaque::Campamento(1), declara_guerra: false },

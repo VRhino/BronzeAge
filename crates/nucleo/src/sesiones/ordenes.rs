@@ -27,6 +27,7 @@ use militar::columna::Politica;
 use militar::heroe::{Controlador, Residencia};
 use militar::inspeccion::Objetivo;
 use militar::presencia::Ubicacion;
+use mercenarios::{Objetivo as ObjetivoMercenario, TipoOrden, Trabajo};
 use pb::orden::Cuerpo;
 use prost_types::{value::Kind, Struct};
 
@@ -325,6 +326,38 @@ impl Ctx<'_> {
 
     fn punto(&self, p: Option<&pb::Punto>) -> R<Punto> {
         p.map_or_else(|| self.forma("falta la posición"), |p| Ok(Punto::new(p.x, p.y)))
+    }
+
+    /// `trabajo` de `contratar_mercenario`: `defender | escoltar | atacar | acompanar | permanente`.
+    fn trabajo(&self, s: &str) -> R<Trabajo> {
+        Trabajo::TODOS.into_iter().find(|t| t.id() == s).map_or_else(|| self.forma(format!("trabajo de mercenario desconocido: {s}")), Ok)
+    }
+
+    /// `tipo` de `ordenar_mercenario`: `guardar | ir_a | atacar | unirse`.
+    fn tipo_de_orden(&self, s: &str) -> R<TipoOrden> {
+        TipoOrden::desde_id(s).map_or_else(|| self.forma(format!("orden de mercenario desconocida: {s}")), Ok)
+    }
+
+    /// Los días de un plazo de contrato: que quepan en un byte; que sea uno de la tabla lo mira el núcleo (`mercenario.plazo_invalido`).
+    fn dias(&self, n: u32) -> R<u8> {
+        u8::try_from(n).map_or_else(|_| self.forma(format!("plazo fuera de rango: {n} días")), Ok)
+    }
+
+    /// El objetivo de un contrato o de una orden de mercenario (`ObjetivoMercenario`).
+    fn objetivo_mercenario(&self, o: Option<&pb::ObjetivoMercenario>) -> R<ObjetivoMercenario> {
+        use pb::objetivo_mercenario::Tipo;
+        Ok(match o.and_then(|x| x.tipo.as_ref()) {
+            Some(Tipo::AsentamientoId(s)) => ObjetivoMercenario::Plaza(self.plaza(s)?),
+            Some(Tipo::PuebloId(s)) => ObjetivoMercenario::Pueblo(self.pueblo(s)?),
+            Some(Tipo::AvanzadaId(s)) => ObjetivoMercenario::Avanzada(self.avanzada(s)?),
+            Some(Tipo::CaravanaId(s)) => ObjetivoMercenario::Caravana(self.caravana(s)?),
+            Some(Tipo::CampamentoId(s)) => ObjetivoMercenario::Bandidos(self.bandidos(s)?),
+            Some(Tipo::EjercitoId(s)) => ObjetivoMercenario::Ejercito(self.ejercito(s)?),
+            Some(Tipo::ConvocatoriaId(s)) => ObjetivoMercenario::Convocatoria(self.convocatoria(s)?),
+            Some(Tipo::FaccionId(s)) => ObjetivoMercenario::Faccion(self.faccion(s)?),
+            Some(Tipo::Punto(p)) => ObjetivoMercenario::Punto(Punto::new(p.x, p.y)),
+            None => return self.forma("la orden no trae objetivo"),
+        })
     }
 
     /// La taberna de una compra de intel: `{tipo: asentamiento | campamento, id}`.
@@ -769,6 +802,29 @@ impl Ctx<'_> {
             Cuerpo::CargarDePlaza(o) => Comando::CargarDePlaza { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad },
             Cuerpo::DejarEnPlaza(o) => Comando::DejarEnPlaza { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad },
             Cuerpo::CerrarAlmacenACiudadanos(o) => Comando::CerrarAlmacenACiudadanos { asentamiento: self.plaza(&o.asentamiento_id)?, cerrado: o.cerrado },
+
+            // ── Mercenarios por contrato (entrada 48) ──
+            Cuerpo::OfrecerseComoMercenario(_) => Comando::OfrecerseComoMercenario { heroe: self.mi_heroe()? },
+            Cuerpo::RetirarOferta(_) => Comando::RetirarOferta { heroe: self.mi_heroe()? },
+            Cuerpo::ContratarMercenario(o) => Comando::ContratarMercenario {
+                heroe: self.mi_heroe()?,
+                mercenario: self.heroe(&o.mercenario_id)?,
+                trabajo: self.trabajo(&o.trabajo)?,
+                objetivo: self.objetivo_mercenario(o.objetivo.as_ref())?,
+                plazo: o.plazo_dias.map(|n| self.dias(n)).transpose()?,
+                residencia: o.residencia_asentamiento_id.as_deref().map(|s| self.plaza(s)).transpose()?,
+            },
+            Cuerpo::ProrrogarContrato(o) => Comando::ProrrogarContrato { heroe: self.mi_heroe()?, mercenario: self.heroe(&o.mercenario_id)?, plazo: self.dias(o.plazo_dias)? },
+            Cuerpo::OrdenarMercenario(o) => Comando::OrdenarMercenario {
+                heroe: self.mi_heroe()?,
+                mercenarios: o.mercenario_ids.iter().map(|s| self.heroe(s)).collect::<R<_>>()?,
+                tipo: self.tipo_de_orden(&o.tipo)?,
+                objetivo: self.objetivo_mercenario(o.objetivo.as_ref())?,
+            },
+            Cuerpo::MudarMercenario(o) => Comando::MudarMercenario { heroe: self.mi_heroe()?, mercenario: self.heroe(&o.mercenario_id)?, plaza: self.plaza(&o.asentamiento_id)? },
+            Cuerpo::DespedirMercenario(o) => Comando::DespedirMercenario { heroe: self.mi_heroe()?, mercenario: self.heroe(&o.mercenario_id)? },
+            Cuerpo::ValorarMercenario(o) => Comando::ValorarMercenario { heroe: self.mi_heroe()?, mercenario: self.heroe(&o.mercenario_id)?, buena: o.buena },
+            Cuerpo::ReclamarPremioDeRango(o) => Comando::ReclamarPremioDeRango { heroe: self.mi_heroe()?, tropa: self.tropa(&o.tropa_id)? },
             Cuerpo::ElegirTablon(o) => Comando::ElegirTablon { heroe: self.mi_heroe()?, dueno: self.dueno_de_mision(&o.dueno_id)?, diarias: o.diarias_ids.clone(), semanales: o.semanales_ids.clone() },
             Cuerpo::ComprarMirada(o) => Comando::ComprarMirada { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, centro: self.punto(o.centro.as_ref())? },
             Cuerpo::ComprarInformePlaza(o) => {

@@ -662,6 +662,62 @@ message OrdenCancelarEncargo {
   string caravana_id = 1;
 }
 
+// ── Mercenarios por contrato (entrada 48, Mercenarios_Por_Contrato; 2026-11-01). Quien da la orden es siempre el héroe de la cuenta. ──
+
+// Un héroe bot, sin Facción, residente y dentro de su campamento, se pone en el tablón del campamento como mercenario (§3). Un humano recibe `mercenario.solo_bots`.
+message OrdenOfrecerseComoMercenario {}
+
+// Quita su oferta del tablón. Cambiar de residencia también la quita.
+message OrdenRetirarOferta {}
+
+// El Rey, el Embajador o un cargo local (el de más rango que tenga y que alcance: no se elige), en el campamento del mercenario, dentro o con su columna a `radioPuerta`, y con el
+// oro en el carro, lo contrata (§3 a §5). `trabajo`: defender | escoltar | atacar | acompanar | permanente. Temporal con `plazo_dias` (1 | 3 | 7); permanente sin plazo y con
+// `residencia_asentamiento_id`, una plaza de la Facción donde pasa a residir.
+message OrdenContratarMercenario {
+  string mercenario_id = 1;
+  string trabajo = 2;
+  ObjetivoMercenario objetivo = 3;
+  optional uint32 plazo_dias = 4;
+  optional string residencia_asentamiento_id = 5;
+}
+
+// Quien podría firmarlo hoy alarga el contrato temporal `plazo_dias` (1 | 3 | 7) pagando la tarifa de ese plazo, en persona: en el campamento del mercenario o con su columna a
+// `radioPuerta` de la de él (§6.2).
+message OrdenProrrogarContrato {
+  string mercenario_id = 1;
+  uint32 plazo_dias = 2;
+}
+
+// Da la misma orden a entre 1 y 16 mercenarios con contrato con su Facción (§6.1). `tipo`: guardar | ir_a | atacar | unirse. Si uno no la admite, no entra ninguna y el rechazo
+// lo nombra.
+message OrdenOrdenarMercenario {
+  repeated string mercenario_ids = 1;
+  string tipo = 2;
+  ObjetivoMercenario objetivo = 3;
+}
+
+// El Rey o el Embajador cambian a un permanente a otra plaza de la Facción, sin cooldown (§6.2).
+message OrdenMudarMercenario {
+  string mercenario_id = 1;
+  string asentamiento_id = 2;
+}
+
+// Quien podría firmar el contrato lo acaba antes de tiempo (§6.2 y §7). Si combate, el fin espera a que acabe su batalla.
+message OrdenDespedirMercenario {
+  string mercenario_id = 1;
+}
+
+// Quien firmó un contrato ya acabado, o el Rey, lo valora mientras dura el plazo de valoración (§8.2).
+message OrdenValorarMercenario {
+  string mercenario_id = 1;
+  bool buena = 2;
+}
+
+// El mercenario reclama en su campamento base una escuadra de premio de rango de una tropa de su licencia (§8.3).
+message OrdenReclamarPremioDeRango {
+  string tropa_id = 1;
+}
+
 message OrdenProponerAnexion {
   string faccion_a_id = 1;
   string faccion_b_id = 2;
@@ -1190,5 +1246,14 @@ message Orden {
     OrdenEncargarCaravana encargar_caravana = 168;
     OrdenCambiarEncargo cambiar_encargo = 169;
     OrdenCancelarEncargo cancelar_encargo = 170;
+    OrdenOfrecerseComoMercenario ofrecerse_como_mercenario = 171;
+    OrdenRetirarOferta retirar_oferta = 172;
+    OrdenContratarMercenario contratar_mercenario = 173;
+    OrdenProrrogarContrato prorrogar_contrato = 174;
+    OrdenOrdenarMercenario ordenar_mercenario = 175;
+    OrdenMudarMercenario mudar_mercenario = 176;
+    OrdenDespedirMercenario despedir_mercenario = 177;
+    OrdenValorarMercenario valorar_mercenario = 178;
+    OrdenReclamarPremioDeRango reclamar_premio_de_rango = 179;
   }
 }

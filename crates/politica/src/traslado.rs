@@ -18,7 +18,7 @@ pub enum Cambio {
     Rota { relacion: RelacionId },
     /// Las propuestas que nombraban al origen se descartan.
     Descartada { propuesta: PropuestaId },
-    /// Los ciudadanos del origen se suman al final de los del destino, sin repetir.
+    /// Los ciudadanos sin marca del origen se suman al final de los del destino, sin repetir.
     Ciudadanos { nuevos: Vec<HeroeId> },
     /// `derrotadaPor` que apuntaba al origen apunta al destino.
     Derrota { faccion: FaccionId },
@@ -43,8 +43,9 @@ pub fn planificar(p: &Politica, origen: FaccionId, destino: FaccionId) -> Plan {
     }
     cambios.extend(p.propuestas.iter().filter(|x| x.clase.nombra(origen)).map(|x| Cambio::Descartada { propuesta: x.id }));
     if let (Some(o), Some(d)) = (p.facciones.get(origen), p.facciones.get(destino)) {
-        // Con el índice de ciudadanía (O(log n) por héroe): un traslado de miles de ciudadanos no los compara uno a uno.
-        let nuevos: Vec<_> = o.ciudadanos.iter().copied().filter(|&h| p.facciones.faccion_de(h) != Some(d.id)).collect();
+        // Con el índice de ciudadanía (O(log n) por héroe): un traslado de miles de ciudadanos no los compara uno a uno. Los marcados no pasan: su contrato era con el origen y
+        // pierden la ciudadanía con él (entrada 48; el núcleo acaba sus contratos).
+        let nuevos: Vec<_> = o.sin_marca().filter(|&h| p.facciones.faccion_de(h) != Some(d.id)).collect();
         if !nuevos.is_empty() {
             cambios.push(Cambio::Ciudadanos { nuevos });
         }
@@ -110,6 +111,7 @@ pub fn fusionar(p: &mut Politica, r: &Reglas, id: FaccionId, union: &Union) -> O
         solicitudes: vec![],
         derrota: None,
         admite_otras_en_ataques: false,
+        marcas: Default::default(),
     };
     debug_assert!(c.nivel(r) >= fa.nivel(r).max(fb.nivel(r)));
     p.facciones.insertar(c);
@@ -187,6 +189,16 @@ mod pruebas {
         assert_eq!((m.facciones.faccion_de(20), m.facciones.get(1).unwrap().rey), (Some(1), Some(10)), "A conserva su Rey");
         assert_eq!(m.facciones.get(7).unwrap().derrota, Some(Derrota::Por(1)));
         assert!(m.propuestas.get(30).is_none() && m.propuestas.get(31).is_some(), "lo que otros ofrecen al destino sigue");
+    }
+
+    #[test]
+    fn los_marcados_del_origen_no_pasan_al_destino_y_pierden_la_ciudadania() {
+        let mut m = mundo(2);
+        m.facciones.otorgar_marcado(2, 25, crate::faccion::Marca::Permanente).unwrap();
+        let plan = anexionar(&mut m, 1, 2);
+        assert!(plan.cambios.contains(&Cambio::Ciudadanos { nuevos: vec![20] }));
+        assert_eq!((m.facciones.faccion_de(25), m.facciones.marca_de(25)), (None, None));
+        assert_eq!(m.facciones.get(1).unwrap().ciudadanos, vec![10, 20]);
     }
 
     #[test]

@@ -152,6 +152,7 @@ impl Nucleo {
                     ErrorCargo::NoReside => rechazo(rechazos::CARGO_NO_RESIDE, format!("{} no reside en as-{asentamiento}: solo se designa a quien reside", ids::heroe(*designado))),
                     ErrorCargo::SinGobernador => rechazo(rechazos::CARGO_SIN_GOBERNADOR, "la plaza no tiene Gobernador: primero lo nombra el Rey".into()),
                     ErrorCargo::PlazaAjena => unreachable!("la Facción es la dueña de la plaza"),
+                    ErrorCargo::Marcado => rechazo(rechazos::MERCENARIO_MARCADO, format!("{} es un mercenario con contrato: no recibe cargos", ids::heroe(*designado))),
                 })?;
                 self.tr.tocar(Clase::Asentamiento, *asentamiento);
                 // Y en los miembros de la Facción (Participacion §3).

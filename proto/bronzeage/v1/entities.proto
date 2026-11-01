@@ -48,6 +48,9 @@ message Faccion {
   optional Tablon tablon = 19;
   // Si es una Facción de bots: su Rey es un héroe bot (2026-11-01). Público. Sin Rey, falso. Un jugador no entra en una de bots ni un bot en una que no lo es.
   bool es_bot = 20;
+  // Sus contratos de mercenarios vigentes (Mercenarios_Por_Contrato §10): solo en la Facción propia (`FACCION`, que un mercenario con marca no recibe) y en `ADMIN`; vacío en la forma
+  // pública.
+  repeated Contrato contratos = 21;
 }
 
 // Un ciudadano de la Facción (Participacion §3).
@@ -56,6 +59,83 @@ message MiembroFaccion {
   optional string residencia_id = 2;   // la plaza (`as-N`) o el campamento (`camp-N`) donde reside; ausente sin residencia
   repeated string cargos = 3;          // `rey`, `embajador` y los locales de su plaza de residencia como `gobernador@as-3`
   uint64 participacion = 4;            // la suma de su participación en las plazas que son de la Facción hoy
+  optional string marca = 5;           // mercenario con contrato (Mercenarios_Por_Contrato §2): temporal | permanente; ausente en un ciudadano sin marca
+}
+
+// ───────────────────────────── Mercenarios por contrato (Mercenarios_Por_Contrato, 2026-11-01) ─────────────────────────────
+
+// Un contrato vigente: en `Faccion.contratos` (los de la Facción) y en el `Heroe.contrato` del propio mercenario.
+message Contrato {
+  string mercenario_id = 1;
+  string faccion_id = 2;
+  optional string asentamiento_id = 3;   // de la plaza que lo firmó con un cargo local; ausente si es de la Facción (lo firmó el Rey o el Embajador)
+  string trabajo = 4;                    // defender | escoltar | atacar | acompanar | permanente
+  ObjetivoMercenario objetivo = 5;
+  optional uint32 plazo_dias = 6;        // ausente en el permanente
+  string firmado_por_id = 7;
+  string puesto_firma = 8;               // rey | embajador | general@as-N | gobernador@as-N | maestroCaravanas@as-N
+  int64 firmado_en_ms = 9;
+  optional int64 vence_en_ms = 10;       // fin del temporal (se alarga al prorrogar); ausente en el permanente
+  string campamento_base_id = 11;        // el campamento de la firma, adonde vuelve el permanente al acabar
+  optional OrdenMercenario orden = 12;   // ausente: espera donde está hasta otra orden
+  optional string fin_aplazado = 13;     // plazo | despido | plaza_perdida | sin_ciudadanos | faccion_perdida: espera a que acabe su batalla
+  uint32 renombre = 14;                  // ganado con este contrato y aún sin apuntar (el temporal lo apunta al acabar)
+}
+
+// La orden vigente de un mercenario (§6.3).
+message OrdenMercenario {
+  string tipo = 1;                       // guardar | ir_a | atacar | unirse
+  ObjetivoMercenario objetivo = 2;
+  string dada_por_id = 3;
+  string puesto = 4;                     // como `Contrato.puesto_firma`
+  int64 dada_en_ms = 5;
+  optional int64 vence_en_ms = 6;        // ir_a y atacar
+  optional string contra_faccion_id = 7; // atacar: la dueña del objetivo al darla
+  bool unido = 8;                        // unirse: ya estuvo dentro de ese ejército o convocatoria
+}
+
+// Una medalla de un mercenario (§9). En la ficha pública, solo `id` y `grado`.
+message MedallaMercenario {
+  string id = 1;
+  uint32 grado = 2;                      // 0 sin medalla, 1 bronce, 2 plata, 3 oro
+  uint32 cuenta = 3;
+  optional uint32 siguiente_umbral = 4;  // ausente en el oro
+}
+
+// Lo que se cuenta de los contratos de un mercenario, sin nombres (§10).
+message HistorialMercenario {
+  uint32 firmados = 1;
+  uint32 terminados = 2;
+  uint32 despidos = 3;
+  uint32 buenas = 4;
+  uint32 malas = 5;
+}
+
+// La progresión de un mercenario (§8 y §9). Entera en su `HEROE` y en el tablón; en el héroe público, solo `rango`, `rango_id`, `renombre` y el grado de cada medalla.
+message FichaMercenario {
+  uint32 rango = 1;                      // 1 a 5; el más alto alcanzado
+  string rango_id = 2;                   // a_sueldo | lanza | capitan | veterano | senor_de_la_guerra
+  uint32 renombre = 3;
+  optional uint32 renombre_siguiente_rango = 4;
+  repeated MedallaMercenario medallas = 5;
+  optional HistorialMercenario historial = 6;
+  uint32 premios = 7;                    // escuadras de premio de rango sin reclamar
+}
+
+// Lo que cobra hoy un mercenario por un plazo, o por el permanente (`plazo_dias` ausente), en milésimas de oro (§3, duda 1 del plan).
+message TarifaMercenario {
+  optional uint32 plazo_dias = 1;
+  sint64 oro = 2;
+}
+
+// Un mercenario en el tablón de su campamento (`CampamentoMercenarios.tablon`, solo en `CAMPAMENTO`).
+message OfertaMercenario {
+  string heroe_id = 1;
+  int64 desde_ms = 2;
+  FichaMercenario ficha = 3;
+  repeated EscuadraQueLleva tropa = 4;
+  optional int64 herido_hasta_ms = 5;
+  repeated TarifaMercenario tarifas = 6;
 }
 
 enum EstadoMision {
@@ -656,6 +736,11 @@ message Heroe {
   repeated string solicitudes_faccion_ids = 38;
   // Sus misiones (Misiones §5): solo en el héroe propio (`HEROE`) y en `ADMIN`.
   repeated Mision misiones = 39;
+  // Mercenarios por contrato (Mercenarios_Por_Contrato §10): su contrato vigente, solo en su propio `HEROE` (y en `ADMIN`); su ficha, entera en su `HEROE` y reducida en el héroe
+  // público; y `contratado`, público: temporal | permanente si tiene contrato. Un héroe que nunca se ofreció no lleva nada de esto.
+  optional Contrato contrato = 40;
+  optional FichaMercenario ficha_mercenario = 41;
+  optional string contratado = 42;
 }
 
 // Una escuadra que un héroe ajeno lleva en su columna, tal como se ve (`HeroePublico.escuadrasQueLleva`).
@@ -955,6 +1040,8 @@ message CampamentoMercenarios {
   map<string, sint64> precios_mercado = 23;
   // Solo para el residente: las tropas del edificio militar del campamento, con su precio para él y si están desbloqueadas.
   repeated TropaDeCampamento reclutables = 24;
+  // Los mercenarios ofrecidos en este campamento (Mercenarios_Por_Contrato §3), solo en `CAMPAMENTO`.
+  repeated OfertaMercenario tablon = 25;
 }
 
 // Una tropa del edificio militar de un campamento tal como la recluta su residente (`reclutar_en_campamento`, 2026-10-27).

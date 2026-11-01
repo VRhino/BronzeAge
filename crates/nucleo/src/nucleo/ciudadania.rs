@@ -61,6 +61,7 @@ fn rechazo_de_faccion(e: ErrorFaccion) -> (&'static str, String) {
         ErrorFaccion::EnEjercito => (FACCION_EN_EJERCITO, "va en un ejército o en un ejército en preparación: primero se separa (y si es el Líder, cede antes el mando)".into()),
         ErrorFaccion::NoCiudadano => (FACCION_NO_CIUDADANO, "el designado no es ciudadano de la Facción".into()),
         ErrorFaccion::SinRey => (FACCION_SIN_REY, "la Facción no tiene Rey".into()),
+        ErrorFaccion::Marcado => (MERCENARIO_MARCADO, "es un mercenario con contrato: ni deja la Facción por su cuenta ni recibe el trono ni la embajada".into()),
     }
 }
 

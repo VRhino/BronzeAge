@@ -7,7 +7,8 @@
 //!
 //! Una facción: `id u32 · nombre texto · sigilo{forma, campo, emblema, color_primario, color_secundario, color_emblema, orla, color_orla: 8 × texto} · rey opt_u64 ·
 //! embajador opt_u64 · capital_designada_en opt_i64 · experiencia i64 · ciudadanos{n u64 · n × u64} (en orden de ingreso) · solicitudes{n u64 · n × u64} ·
-//! derrota{u8: 0 ninguna, 1 por una Facción (· u32), 2 colapso} · admite_otras_en_ataques bool`.
+//! derrota{u8: 0 ninguna, 1 por una Facción (· u32), 2 colapso} · admite_otras_en_ataques bool · marcas{n u64 · n × (héroe u64 · marca u8: 0 temporal, 1 permanente)}` (las
+//! marcas, desde BAN54: los mercenarios por contrato).
 //! Una relación: `id u64 · tipo u8 (0 vasallaje, 1 alianza, 2 guerra) · a u32 · b u32 · tributo · creada_en i64 · estado u8 (0 activa, 1 rota) · rota_por opt_u64 ·
 //! rota_en opt_i64 · paz_propuesta_por opt_u64`, con un tributo `hay bool · recurso u8 · cantidad_por_minuto i64`.
 //! Una propuesta: `id u64 · clase{u8: 0 relación (pacto u8: 0 alianza, 1 vasallaje · a u32 · b u32 · tributo), 1 anexión (absorbente u32 · absorbida u32), 2 fusión (a u32 · b u32 ·
@@ -15,7 +16,7 @@
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::codec_economia::{recurso_a_u8, recurso_de_u8};
-use politica::faccion::{Derrota, Faccion, Facciones};
+use politica::faccion::{Derrota, Faccion, Facciones, Marca};
 use politica::propuestas::{Clase, Pacto, Propuesta, Propuestas};
 use politica::relaciones::{EstadoRelacion, RelacionPolitica, Relaciones, TipoRelacion, Tributo};
 use politica::sigilo::Sigilo;
@@ -54,7 +55,7 @@ pub(crate) fn sigilo_leer(r: &mut Lector) -> Result<Sigilo, ErrorFormato> {
 }
 
 fn faccion_escribir(w: &mut Escritor, f: &Faccion) {
-    let Faccion { id, nombre, sigilo, rey, embajador, capital_designada_en, experiencia, ciudadanos, solicitudes, derrota, admite_otras_en_ataques } = f;
+    let Faccion { id, nombre, sigilo, rey, embajador, capital_designada_en, experiencia, ciudadanos, solicitudes, derrota, admite_otras_en_ataques, marcas } = f;
     w.u32(*id);
     w.texto(nombre);
     sigilo_escribir(w, sigilo);
@@ -73,9 +74,18 @@ fn faccion_escribir(w: &mut Escritor, f: &Faccion) {
         Some(Derrota::Colapso) => w.u8(2),
     }
     w.bool(*admite_otras_en_ataques);
+    w.u64(marcas.len() as u64);
+    for (&h, m) in marcas {
+        w.u64(h);
+        w.u8(match m {
+            Marca::Temporal => 0,
+            Marca::Permanente => 1,
+        });
+    }
 }
 
-fn faccion_leer(r: &mut Lector) -> Result<Faccion, ErrorFormato> {
+/// `con_marcas`: la foto es de BAN54 o posterior; las de antes no traen marcas (no había mercenarios por contrato).
+fn faccion_leer(r: &mut Lector, con_marcas: bool) -> Result<Faccion, ErrorFormato> {
     Ok(Faccion {
         id: r.u32()?,
         nombre: r.texto()?,
@@ -93,7 +103,22 @@ fn faccion_leer(r: &mut Lector) -> Result<Faccion, ErrorFormato> {
             _ => return Err(ErrorFormato("derrota de una Facción desconocida")),
         },
         admite_otras_en_ataques: r.bool()?,
+        marcas: if con_marcas { marcas_leer(r)? } else { Default::default() },
     })
+}
+
+fn marcas_leer(r: &mut Lector) -> Result<std::collections::BTreeMap<u64, Marca>, ErrorFormato> {
+    (0..r.cuenta()?)
+        .map(|_| {
+            let h = r.u64()?;
+            let m = match r.u8()? {
+                0 => Marca::Temporal,
+                1 => Marca::Permanente,
+                _ => return Err(ErrorFormato("marca de ciudadanía desconocida")),
+            };
+            Ok((h, m))
+        })
+        .collect()
 }
 
 fn tributo_escribir(w: &mut Escritor, t: &Option<Tributo>) {
@@ -228,8 +253,8 @@ pub(crate) fn escribir(w: &mut Escritor, p: &Politica) {
     w.u32(*mayor_desaparecida);
 }
 
-pub(crate) fn leer(r: &mut Lector) -> Result<Politica, ErrorFormato> {
-    let facciones: Vec<Faccion> = (0..r.cuenta()?).map(|_| faccion_leer(r)).collect::<Result<_, _>>()?;
+pub(crate) fn leer(r: &mut Lector, con_marcas: bool) -> Result<Politica, ErrorFormato> {
+    let facciones: Vec<Faccion> = (0..r.cuenta()?).map(|_| faccion_leer(r, con_marcas)).collect::<Result<_, _>>()?;
     let salidas = (0..r.cuenta()?).map(|_| Ok((r.u64()?, r.i64()?))).collect::<Result<_, ErrorFormato>>()?;
     let relaciones: Vec<RelacionPolitica> = (0..r.cuenta()?).map(|_| relacion_leer(r)).collect::<Result<_, _>>()?;
     let propuestas: Vec<Propuesta> = (0..r.cuenta()?).map(|_| propuesta_leer(r)).collect::<Result<_, _>>()?;
@@ -251,6 +276,8 @@ mod pruebas {
         fs.crear(&reglas, 1, 10, "Micenas", None, 5).unwrap();
         fs.otorgar(1, 11).unwrap();
         fs.asignar_embajador(1, 11).unwrap();
+        fs.otorgar_marcado(1, 12, Marca::Temporal).unwrap();
+        fs.otorgar_marcado(1, 13, Marca::Permanente).unwrap();
         fs.crear(&reglas, 2, 20, "Troya", None, 5).unwrap();
         fs.solicitar(2, 30, false).unwrap();
         fs.registrar_derrota(2, Some(1));
@@ -273,7 +300,7 @@ mod pruebas {
         let mut w = Escritor::default();
         escribir(&mut w, &p);
         let mut r = Lector::nuevo(&w.0);
-        assert_eq!(leer(&mut r).unwrap(), p);
+        assert_eq!(leer(&mut r, true).unwrap(), p);
         r.fin().unwrap();
     }
 }

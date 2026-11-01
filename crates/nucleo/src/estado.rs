@@ -131,6 +131,18 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
     21 * crate::estado_comercio::ETIQUETA | plaza
 }
 
+/// Prioridad de los plazos de los contratos de mercenarios (`Carga::Contrato`): la fila de la diplomacia (Reloj_Y_Eventos §2), con la reputación.
+pub const PRIO_CONTRATO: u8 = 9;
+
+/// La entidad de los plazos del contrato de un mercenario (etiqueta 24 de `estado_comercio::ETIQUETA`): una por héroe para sus tres clases de cita. Nunca sube de generación: cada cita
+/// mira al vencer si su instante sigue siendo el del contrato y, si no, no hace nada.
+pub fn entidad_contrato(mercenario: u64) -> u64 {
+    (24 * crate::estado_comercio::ETIQUETA) | mercenario
+}
+
+/// BAN54: BAN53 con los mercenarios por contrato (entrada 48): las marcas de ciudadanía de cada Facción (`politica::Faccion::marcas`, en el códec de la política) y
+/// `Estado::contratos` al final, tras las misiones recurrentes. BAN53 a BAN40 se siguen admitiendo: no hay ofertas, contratos ni marcas.
+///
 /// BAN53: BAN52 sin los minutos sin cupo de los extractores de la cola automática (`Asentamiento::extractor_minutos_sin_cupo`; desde el 2026-11-01 la
 /// cola no propone ningún extractor: la Cantera es de pueblo extractor). BAN52 a BAN40 se siguen admitiendo: se leen y se descartan.
 ///
@@ -287,7 +299,7 @@ pub fn entidad_residentes(plaza: u64) -> u64 {
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN53";
+const MAGIA: &[u8; 5] = b"BAN54";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -338,6 +350,8 @@ pub struct ReglasEconomia {
     pub participacion: Arc<crate::participacion::Reglas>,
     /// El catálogo inicial de las misiones recurrentes (`MISIONES_RECURRENTES` de Misiones_Recurrentes.md, mecánica 55); el vigente es `EstadoRecurrentes::catalogo`.
     pub recurrentes: Arc<crate::recurrentes::Catalogo>,
+    /// Los contratos de mercenarios: plazos, tarifas, renombre, rangos, trabajos y medallas (Mercenarios_Por_Contrato, entrada 48).
+    pub contratos: Arc<mercenarios::Datos>,
     huella: String,
 }
 
@@ -352,14 +366,15 @@ impl ReglasEconomia {
             + &politica::datos::texto_de_parametros()
             + &asentamiento::datos::texto_de_parametros_de(crate::misiones::DOC_MISIONES)
             + &asentamiento::datos::texto_de_parametros_de(crate::participacion::DOC_PARTICIPACION)
-            + &asentamiento::datos::texto_de_parametros_de(crate::recurrentes::DOC_RECURRENTES);
+            + &asentamiento::datos::texto_de_parametros_de(crate::recurrentes::DOC_RECURRENTES)
+            + &mercenarios::datos::texto_de_parametros();
         let huella = crate::hex(&Sha256::digest(bloques).into());
         let datos = asentamiento::Reglas::cargar();
         let urbanismo = Arc::new(Urbanismo::cargar(&datos));
         let misiones = crate::misiones::Reglas::cargar();
         let unicas: Vec<&str> = misiones.misiones.iter().map(|m| m.id.as_str()).collect();
         let recurrentes = crate::recurrentes::Catalogo::desde(&crate::recurrentes::Catalogo::cargar().a_json(), &unicas).unwrap_or_else(|e| panic!("bloque MISIONES_RECURRENTES: {e}"));
-        Self { datos: Arc::new(datos), urbanismo, comercio: Arc::new(comercio::Reglas::cargar()), militar: Arc::new(militar::Reglas::cargar()), combate: Arc::new(combate::Reglas::cargar()), politica: Arc::new(politica::Reglas::cargar()), tecnologia: Arc::new(tecnologia::Reglas::cargar()), misiones: Arc::new(misiones), participacion: Arc::new(crate::participacion::Reglas::cargar()), recurrentes: Arc::new(recurrentes), huella }
+        Self { datos: Arc::new(datos), urbanismo, comercio: Arc::new(comercio::Reglas::cargar()), militar: Arc::new(militar::Reglas::cargar()), combate: Arc::new(combate::Reglas::cargar()), politica: Arc::new(politica::Reglas::cargar()), tecnologia: Arc::new(tecnologia::Reglas::cargar()), misiones: Arc::new(misiones), participacion: Arc::new(crate::participacion::Reglas::cargar()), recurrentes: Arc::new(recurrentes), contratos: Arc::new(mercenarios::Datos::cargar()), huella }
     }
     /// Identidad de las reglas (sha256 en hexadecimal de los bloques de parámetros de los documentos de Mechanics de los que salen).
     pub fn huella(&self) -> &str {
@@ -584,6 +599,19 @@ pub enum Carga {
     Aeda,
     /// Se mira si llega un Aeda residente a una plaza que espera con cupo libre (6E; la entidad es `entidad_residentes`; prioridad [`PRIO_RESIDENTES`]).
     Residentes,
+    /// Un plazo del contrato de un mercenario (la entidad es `entidad_contrato`; prioridad [`PRIO_CONTRATO`]).
+    Contrato(SucesoContrato),
+}
+
+/// Qué plazo del contrato de un mercenario vence (Mercenarios_Por_Contrato; decisión 17 del plan). Cada uno comprueba al vencer que su instante sigue siendo el guardado.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SucesoContrato {
+    /// El plazo de un temporal (`Contrato::vence`).
+    Vence,
+    /// El plazo de su orden `ir_a` o `atacar` (`Orden::vence`).
+    VenceOrden,
+    /// Un umbral de la medalla Leal de un permanente, contado desde su firma.
+    Leal,
 }
 
 /// Qué cita de una tecnología descubierta vence (Tecnologia_Aedas §5 y §6.1). Se programan las dos al registrarse su descubridora (`primeros`), por cualquier vía, y cada una vence una vez.
@@ -1075,6 +1103,8 @@ pub struct Estado {
     pub participacion: crate::participacion::EstadoParticipacion,
     /// El catálogo vigente de las misiones recurrentes y el tablón de cada plaza y cada Facción (mecánica 55, Misiones_Recurrentes; BAN50).
     pub recurrentes: crate::recurrentes::EstadoRecurrentes,
+    /// Las ofertas del tablón, los contratos, las fichas de progresión, las esperas tras un despido y lo que aún se puede valorar (Mercenarios_Por_Contrato; BAN54).
+    pub contratos: mercenarios::EstadoContratos,
     pub generaciones: Generaciones,
     pub cola: Cola<Carga>,
     /// De cada actor, sus últimas `peticion_id` aceptadas en orden de llegada, con la versión que produjeron (a lo sumo `Reglas::limite_idempotencia`).
@@ -1121,6 +1151,7 @@ impl Estado {
             misiones: Default::default(),
             participacion: Default::default(),
             recurrentes,
+            contratos: Default::default(),
             generaciones: Generaciones::nuevas(),
             cola: Cola::nueva(),
             vistos: BTreeMap::new(),
@@ -1291,6 +1322,7 @@ impl Estado {
         crate::misiones::escribir(&mut w, &self.misiones);
         crate::participacion::escribir(&mut w, &self.participacion);
         crate::recurrentes::escribir(&mut w, &self.recurrentes);
+        crate::codec_contratos::escribir(&mut w, &self.contratos);
 
         let gens = self.generaciones.volcar();
         w.u64(gens.len() as u64);
@@ -1356,6 +1388,14 @@ impl Estado {
                 Carga::Tecnologia(SucesoTecnologia::Campamento) => w.u8(18),
                 Carga::Aeda => w.u8(19),
                 Carga::Residentes => w.u8(22),
+                Carga::Contrato(c) => {
+                    w.u8(25);
+                    w.u8(match c {
+                        SucesoContrato::Vence => 0,
+                        SucesoContrato::VenceOrden => 1,
+                        SucesoContrato::Leal => 2,
+                    });
+                }
                 Carga::Externa { generador, tipo, a, b } => {
                     w.u8(2);
                     w.u16(*generador);
@@ -1385,15 +1425,16 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN53`): los cuatro primeros dicen la familia («BAN5» es el formato 50 y «BAN4» los formatos 40 a 49, y se admiten todos; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
+        // La cabecera es de 5 bytes (`BAN54`): los cuatro primeros dicen la familia («BAN5» es el formato 50 y «BAN4» los formatos 40 a 49, y se admiten todos; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
         // 20 a 29 y 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         let (mut con_eligieron, mut con_rutas_acarreo, mut con_nombres, mut con_precios, mut con_forzadas, mut con_misiones, mut con_aldeas) = (true, true, true, true, true, true, true);
-        let (mut con_flujos, mut con_participacion, mut con_recurrentes, mut con_almacen_cerrado, mut con_encargos) = (false, false, false, false, false);
+        let (mut con_flujos, mut con_participacion, mut con_recurrentes, mut con_almacen_cerrado, mut con_encargos, mut con_contratos) = (false, false, false, false, false, false);
         // Hasta BAN52 cada plaza trae los minutos sin cupo de sus extractores; desde BAN53, no.
         let mut con_desempate = true;
         if magia == MAGIA[..4] {
             match r.u8()? {
+                b'4' => (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos, con_desempate, con_contratos) = (true, true, true, true, true, false, true),
                 b'3' => (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos, con_desempate) = (true, true, true, true, true, false),
                 b'2' => (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos) = (true, true, true, true, true),
                 b'1' => (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado) = (true, true, true, true),
@@ -1547,7 +1588,7 @@ impl Estado {
         s.combate = codec_combate::leer(&mut r)?;
         s.batallas = codec_batallas::leer(&mut r)?;
         s.memoria = memoria::leer(&mut r)?;
-        s.politica = codec_politica::leer(&mut r)?;
+        s.politica = codec_politica::leer(&mut r, con_contratos)?;
         s.fundacion = estado_fundacion::leer(&mut r)?;
         s.titulos_en = r.opt_i64()?;
         s.tecnologia = codec_tecnologia::leer(&mut r)?;
@@ -1588,6 +1629,9 @@ impl Estado {
         } else {
             crate::nucleo::arrancar_tablones(&mut s);
         }
+        if con_contratos {
+            s.contratos = crate::codec_contratos::leer(&mut r)?;
+        }
 
         let mut gens = Vec::new();
         for _ in 0..r.cuenta()? {
@@ -1623,6 +1667,12 @@ impl Estado {
                 18 => Carga::Tecnologia(SucesoTecnologia::Campamento),
                 19 => Carga::Aeda,
                 22 => Carga::Residentes,
+                25 => Carga::Contrato(match r.u8()? {
+                    0 => SucesoContrato::Vence,
+                    1 => SucesoContrato::VenceOrden,
+                    2 => SucesoContrato::Leal,
+                    _ => return Err(ErrorFormato("plazo de contrato desconocido")),
+                }),
                 2 => Carga::Externa { generador: r.u16()?, tipo: r.u16()?, a: r.u64()?, b: r.u64()? },
                 _ => return Err(ErrorFormato("tipo de carga desconocido")),
             };

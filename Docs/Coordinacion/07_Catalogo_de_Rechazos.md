@@ -284,6 +284,29 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `mercenarios.ya_prestada` | `MERCENARIOS_YA_PRESTADA` | — |
 | `mercenarios.nada_que_reponer` | `MERCENARIOS_NADA_QUE_REPONER` | — |
 
+### Mercenarios por contrato (entrada 48, Mercenarios_Por_Contrato)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `mercenario.solo_bots` | `MERCENARIO_SOLO_BOTS` | Solo un héroe de bot se ofrece como mercenario. |
+| `mercenario.no_ofrecido` | `MERCENARIO_NO_OFRECIDO` | El héroe no está en el tablón de ningún campamento. |
+| `mercenario.faccion_de_bots` | `MERCENARIO_FACCION_DE_BOTS` | Una Facción de bots no contrata mercenarios. |
+| `mercenario.objetivo_invalido` | `MERCENARIO_OBJETIVO_INVALIDO` | El objetivo no es de una clase que admite el trabajo o la orden, no existe o no vale para él; o la residencia del permanente no es una plaza de la Facción. |
+| `mercenario.plazo_invalido` | `MERCENARIO_PLAZO_INVALIDO` | Un temporal sin uno de los plazos de la tabla, o un permanente con plazo. |
+| `mercenario.sin_alcance` | `MERCENARIO_SIN_ALCANCE` | Ningún cargo de quien firma, ordena o valora le alcanza para ese contrato, esa orden o esa valoración. |
+| `mercenario.recontrato_en_espera` | `MERCENARIO_RECONTRATO_EN_ESPERA` | La Facción lo despidió hace menos de `esperaRecontratoHoras`. |
+| `mercenario.sin_contrato` | `MERCENARIO_SIN_CONTRATO` | No tiene contrato vigente con la Facción de quien lo pide. |
+| `mercenario.tipo_de_contrato` | `MERCENARIO_TIPO_DE_CONTRATO` | Lo pedido no vale para su tipo de contrato (prorrogar un permanente, mudar a un temporal). |
+| `mercenario.sin_orden` | `MERCENARIO_SIN_ORDEN` | Un marcado intenta algo que solo hace con una orden que se lo permita. |
+| `mercenario.orden_fuera_de_contrato` | `MERCENARIO_ORDEN_FUERA_DE_CONTRATO` | La orden no es de las que admite su trabajo, o su objetivo cae fuera del contrato. |
+| `mercenario.orden_de_mas_rango` | `MERCENARIO_ORDEN_DE_MAS_RANGO` | Ya tiene una orden de un cargo de más rango que el de quien ordena. |
+| `mercenario.lista_invalida` | `MERCENARIO_LISTA_INVALIDA` | La lista de mercenarios de una orden está vacía, pasa de 16 o repite alguno. |
+| `mercenario.prohibido` | `MERCENARIO_PROHIBIDO` | Algo que un marcado no hace nunca (declarar la guerra, aceptar misiones del tablón de la Facción o de la plaza). |
+| `mercenario.marcado` | `MERCENARIO_MARCADO` | El héroe es un mercenario con marca: no deja la Facción por su cuenta ni recibe cargos, trono ni mando. |
+| `mercenario.sin_valoracion` | `MERCENARIO_SIN_VALORACION` | No hay contrato terminado de ese mercenario con la Facción que se pueda valorar: no lo hubo, ya se valoró o pasó el plazo. |
+| `mercenario.sin_premio` | `MERCENARIO_SIN_PREMIO` | No le queda ninguna escuadra de premio de rango por reclamar. |
+| `mercenario.fuera_de_licencia` | `MERCENARIO_FUERA_DE_LICENCIA` | La tropa está por encima del escalón que permite su rango, o no es de su leva propia ni la recluta su campamento. |
+
 ### Reclutar en una plaza (`ErrorReclutamiento`), en el orden en que se comprueban
 
 | Código | Constante | Qué dice |
@@ -537,6 +560,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `faccion.sin_rey` | `FACCION_SIN_REY` | Nombrar Embajador en una Facción sin Rey. |
 | `faccion.de_bots` | `FACCION_DE_BOTS` | Un héroe humano pide entrar (o se acepta su solicitud) en una Facción de bots, la que tiene un Rey bot (2026-11-01). |
 | `faccion.no_es_de_bots` | `FACCION_NO_ES_DE_BOTS` | Un héroe bot pide entrar (o se acepta su solicitud) en una Facción cuyo Rey no es bot (2026-11-01). |
+| `faccion.mercenario_ofrecido` | `FACCION_MERCENARIO_OFRECIDO` | Pide entrar en una Facción (o crearla) quien está en el tablón de un campamento como mercenario: primero retira su oferta. |
 | `residencia.cooldown` | `RESIDENCIA_COOLDOWN` | Cambió de residencia hace menos de `CIUDADANIA.cooldownCambioResidenciaDias`. |
 | `residencia.plaza_ajena` | `RESIDENCIA_PLAZA_AJENA` | Solo se reside en una plaza de la propia Facción. |
 | `residencia.ya_reside` | `RESIDENCIA_YA_RESIDE` | — |

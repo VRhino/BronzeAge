@@ -316,7 +316,7 @@ fn los_cargos_y_la_puerta_viajan_en_la_foto_ban33_y_la_ban32_se_rechaza() {
     e.ok("ana", Comando::VetarJugador { heroe: ana, asentamiento: plaza, vetado: cai, vetar: true });
     assert!(hash0 != hash1 && hash1 != hash2 && hash2 != e.n.hash_estado(), "cada pieza mueve el hash");
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN53");
+    assert_eq!(&bytes[..5], b"BAN54");
     let reglas = e.n.estado().reglas.clone();
     let vuelta = Estado::deserializar(&bytes, &reglas, &e.n.estado().mundo_hash).unwrap();
     let a = &vuelta.asentamientos[&plaza];
@@ -382,16 +382,25 @@ fn el_maestro_de_caravanas_viaja_en_la_foto_y_una_foto_ban51_llega_con_el_sexto_
     let tanda = |titulares: [Option<u64>; 6]| titulares.iter().flat_map(|t| [t.is_some() as u8].into_iter().chain(t.unwrap_or(0).to_le_bytes())).collect::<Vec<u8>>();
     let sin_maestro = tanda([Some(ana), Some(bea), None, None, None, None]);
     let donde = |bytes: &[u8], tanda: &[u8]| bytes.windows(tanda.len()).position(|w| w == tanda).expect("los cargos de la plaza están en la foto");
-    // Una foto BAN51 es la BAN53 sin el sexto cargo de cada plaza (no hay caravanas con encargo) y con la lista, vacía, de los minutos sin cupo
-    // de los extractores de cada plaza, justo antes de `completados_pendientes` (el primer byte que cambia al tocarlo; BAN53 ya no la trae).
+    // Una foto BAN51 es la BAN54 sin el sexto cargo de cada plaza (no hay caravanas con encargo), con la lista, vacía, de los minutos sin cupo
+    // de los extractores de cada plaza, justo antes de `completados_pendientes` (el primer byte que cambia al tocarlo; BAN53 ya no la trae), y sin lo
+    // de BAN54: la cuenta, vacía, de las marcas de cada Facción, tras `admite_otras_en_ataques`, y los contratos, vacíos (cinco cuentas a 0).
     let inicio = donde(&bytes, &sin_maestro);
     let mut cortes: Vec<(usize, usize, Vec<u8>)> = vec![(inicio + 5 * 9, 9, vec![])];
+    let primera_diferencia = |otra: Estado| bytes.iter().zip(otra.serializar()).position(|(x, y)| *x != y).expect("el campo está en la foto");
     for id in e.n.estado().asentamientos.keys() {
         let mut otra = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
         otra.asentamientos.get_mut(id).unwrap().economia.completados_pendientes += 1;
-        let d = bytes.iter().zip(otra.serializar()).position(|(x, y)| *x != y).expect("el campo está en la foto");
-        cortes.push((d, 0, 0u64.to_le_bytes().to_vec()));
+        cortes.push((primera_diferencia(otra), 0, 0u64.to_le_bytes().to_vec()));
     }
+    for f in e.n.estado().politica.facciones.iter() {
+        let mut otra = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
+        otra.politica.facciones.admitir_otras(f.id, !f.admite_otras_en_ataques).unwrap();
+        cortes.push((primera_diferencia(otra) + 1, 8, vec![]));
+    }
+    let mut otra = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
+    otra.contratos.ofertas.insert(1, mercenarios::Oferta { campamento: 0, desde: 0 });
+    cortes.push((primera_diferencia(otra), 5 * 8, vec![]));
     cortes.sort_by_key(|c| std::cmp::Reverse(c.0));
     let mut vieja = bytes.clone();
     for (desde, quita, pone) in cortes {
@@ -401,9 +410,9 @@ fn el_maestro_de_caravanas_viaja_en_la_foto_y_una_foto_ban51_llega_con_el_sexto_
     let leida = Estado::deserializar(&vieja, &reglas, &hash).unwrap();
     assert_eq!(leida.asentamientos[&plaza].cargos.titular(Cargo::MaestroCaravanas), None);
     assert_eq!(leida.asentamientos[&plaza].cargos.titular(Cargo::Tesorero), Some(bea));
-    assert_eq!(leida.serializar(), bytes, "al guardarla de nuevo es la BAN53 de siempre");
+    assert_eq!(leida.serializar(), bytes, "al guardarla de nuevo es la BAN54 de siempre");
 
-    // La BAN53 guarda y lee al Maestro de Caravanas.
+    // La BAN54 guarda y lee al Maestro de Caravanas.
     assert!(e.asignar("ana", ana, Cargo::MaestroCaravanas, eli).aceptada());
     let bytes = e.n.estado().serializar();
     let vuelta = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
