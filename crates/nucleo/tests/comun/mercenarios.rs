@@ -7,24 +7,55 @@ use base::Mil;
 use mercenarios::{Contrato, Objetivo, Trabajo};
 use militar::columna::Politica;
 use militar::heroe::{Controlador, Residencia};
-use nucleo::{Ajustes, Arranque, Comando, EventoNucleo, Nucleo, Peticion, Reglas, Respuesta, Resultado};
+use nucleo::{Ajustes, Arranque, Comando, Estado, EventoNucleo, Nucleo, Peticion, Reglas, Respuesta, Resultado};
+use persistencia::{Almacen, Config, Foto, Sincronia};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use tempfile::TempDir;
 
 /// El oro con el que sale un firmante de su campamento si la prueba no dice otra cosa: 500 de oro.
 pub const ORO: Mil = 500_000;
 
-/// El núcleo de las pruebas de mercenarios sobre el mundo real: sin anillo de bandidos en los campamentos (ni caravanas atacadas) para que nadie estorbe en la puerta.
+/// El núcleo de las pruebas de mercenarios sobre el mundo real: sin anillo de bandidos en los campamentos (ni caravanas atacadas) para que nadie estorbe en la puerta, y sin leva propia
+/// (`levaPropia` vacío) para que un bot recién ofrecido no tenga tropa y su tarifa sea la de su nivel solo. La leva propia, con [`nucleo_con_leva`].
 pub fn nucleo(m: &M) -> Nucleo {
     nucleo_con(m, |_| {})
 }
 
 /// Como [`nucleo`], con las reglas que `ajustar` cambie: un catálogo de misiones recurrentes propio, las batallas en Unity...
 pub fn nucleo_con(m: &M, ajustar: impl FnOnce(&mut Reglas)) -> Nucleo {
-    let mut reglas = Reglas::default();
-    let b = &mut std::sync::Arc::make_mut(&mut reglas.economia.combate).bandidos;
-    (b.radio_ataque_caravana, b.anillo_minimo, b.anillo_maximo) = (0, 0, 0);
+    let mut reglas = reglas_sin_estorbos();
+    Arc::make_mut(&mut reglas.economia.contratos).leva_propia.clear();
     ajustar(&mut reglas);
-    Nucleo::nuevo(Arranque { reglas, ajustes: Ajustes::default(), semilla: 48, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) })
+    Nucleo::nuevo(arranque(m, reglas))
+}
+
+/// Como [`nucleo`], con la leva propia de las reglas: un bot que se ofrece por primera vez recibe sus cuatro escuadras (y su tarifa las cuenta).
+pub fn nucleo_con_leva(m: &M) -> Nucleo {
+    Nucleo::nuevo(arranque(m, reglas_sin_estorbos()))
+}
+
+fn reglas_sin_estorbos() -> Reglas {
+    let mut reglas = Reglas::default();
+    let b = &mut Arc::make_mut(&mut reglas.economia.combate).bandidos;
+    (b.radio_ataque_caravana, b.anillo_minimo, b.anillo_maximo) = (0, 0, 0);
+    reglas
+}
+
+fn arranque(m: &M, reglas: Reglas) -> Arranque {
+    Arranque { reglas, ajustes: Ajustes::default(), semilla: 48, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) }
+}
+
+/// Un núcleo con el estado de `n` tras `retocar`, que cambia lo que ningún comando da todavía (una ficha con rango y premios, una escuadra herida). Pasa por la foto, como un reinicio del
+/// servidor, y escribe en un directorio temporal que vive lo que viva el `TempDir` devuelto.
+pub fn retocado(m: &M, n: &Nucleo, retocar: impl FnOnce(&mut Estado)) -> (Nucleo, TempDir) {
+    let reglas = n.estado().reglas.clone();
+    let mut estado = Estado::deserializar(&n.estado().serializar(), &reglas, n.mundo_hash()).expect("la foto del estado se lee");
+    retocar(&mut estado);
+    let dir = tempfile::tempdir().expect("directorio temporal");
+    let config = Config { sincronia: Sincronia::Nunca, ..Config::default() };
+    Almacen::abrir(dir.path(), config).expect("almacén nuevo").fotos().guardar(&Foto::nueva(0, n.ahora(), estado.serializar())).expect("foto escrita");
+    (Nucleo::con_persistencia(arranque(m, reglas), dir.path(), config).expect("el núcleo se recupera de la foto"), dir)
 }
 
 /// Da la orden `c` como `actor` (la cuenta del héroe, o `"admin"` para la administración) en el instante de ahora, con un id de petición que no se repite en todo el binario de pruebas.
@@ -133,7 +164,8 @@ pub fn oro_personal(n: &Nucleo, heroe: u64) -> Mil {
     n.heroe(heroe).expect("el héroe existe").almacen_personal.get(&Recurso::Oro).copied().unwrap_or(0)
 }
 
-/// Los hechos de ese código que ha dado el núcleo desde el principio, en orden.
+/// Los hechos de ese código que ha dado el núcleo desde el principio (en uno recuperado de una foto, [`retocado`], desde la foto), en orden.
 pub fn hechos(n: &Nucleo, codigo: &str) -> Vec<EventoNucleo> {
-    n.cambios_desde(0).expect("el registro de cambios llega al principio").flat_map(|c| c.eventos.iter()).filter(|e| e.codigo == codigo).cloned().collect()
+    let desde = (0..=n.version()).find(|&v| n.cambios_desde(v).is_some()).expect("el registro de cambios llega a la versión de ahora");
+    n.cambios_desde(desde).unwrap().flat_map(|c| c.eventos.iter()).filter(|e| e.codigo == codigo).cloned().collect()
 }

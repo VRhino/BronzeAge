@@ -131,7 +131,7 @@ impl Nucleo {
 
     // ───────────────────────────── Órdenes ─────────────────────────────
 
-    /// `ofrecerse_como_mercenario` (§3): un bot sin Facción, residente de un campamento y dentro de él, se pone en su tablón. La primera vez nace su ficha.
+    /// `ofrecerse_como_mercenario` (§3): un bot sin Facción, residente de un campamento y dentro de él, se pone en su tablón. La primera vez nace su ficha y recibe su leva propia (§8.3): devuelve sus escuadras nuevas.
     pub(super) fn ofrecerse_como_mercenario(&mut self, t: Instante, p: &Peticion, heroe: u64) -> Result<Vec<u64>, Respuesta> {
         use rechazos::*;
         self.autorizar_heroe(p, heroe, false)?;
@@ -156,7 +156,7 @@ impl Nucleo {
         self.tr.tocar(Clase::Heroe, heroe);
         self.tr.tocar(Clase::Campamento, u64::from(campamento));
         self.emitir_nombrando(t, "mercenarios.ofrecido", vec![], vec![heroe], vec![("heroe", heroe as i64), ("campamento", i64::from(campamento))]);
-        Ok(vec![])
+        Ok(self.dar_leva_propia(t, heroe))
     }
 
     /// `retirar_oferta`: el héroe se quita del tablón.

@@ -18,6 +18,10 @@
 //! # Las tecnologías del campamento
 //! Las de Tecnologia_Aedas §5 (6C): las de arranque; las demás, desde que alguien la desbloqueó (`primeros`) y pasaron 72 h (su cita de campamento) o en cuanto la tiene adoptada
 //! al menos la mitad de las Facciones vivas. No se guardan: se miran al reclutar y al proyectar.
+//!
+//! # El mercenario por contrato
+//! Quien tiene ficha de mercenario (Mercenarios_Por_Contrato §8.3) recluta además las tropas de su licencia en cuanto alguien descubrió su tecnología, y repone
+//! pagando las escuadras de su leva propia aunque el campamento no tenga Centro Urbano. Lo mira `tropas_que_ofrece_a` al reclutar.
 
 use super::*;
 use crate::estado::SucesoComercio;
@@ -167,6 +171,36 @@ impl Nucleo {
     fn tecnologia_del_campamento(&self) -> impl Fn(&str) -> bool + '_ {
         let libres = self.tecnologias_de_los_campamentos();
         move |tecnologia| crate::estado::adopta(&self.estado.reglas.economia.tecnologia, libres, tecnologia)
+    }
+
+    /// ¿La ha descubierto alguien, o es de arranque? Lo que abre la licencia de reclutar de un mercenario sin esperar las 72 h ni a la mitad de las Facciones (Mercenarios_Por_Contrato §8.3).
+    fn tecnologia_descubierta(&self) -> impl Fn(&str) -> bool + '_ {
+        let r = &self.estado.reglas.economia.tecnologia;
+        move |tecnologia| r.buscar(tecnologia).is_some_and(|t| r.def(t).de_arranque || self.estado.tecnologia.campamento_libre_en(r, t).is_some())
+    }
+
+    /// Las tropas de la licencia de reclutar de `heroe` en `campamento` (Mercenarios_Por_Contrato §8.3): las de su edificio militar, a su nivel, hasta el escalón de su licencia y con la
+    /// tecnología descubierta por cualquier Facción. No salta Eras ni cambia de edificio. Vacío sin ficha o sin licencia.
+    pub(in crate::nucleo) fn tropas_de_licencia(&self, heroe: u64, campamento: u32) -> Vec<Tropa> {
+        let escalon = self.estado.contratos.fichas.get(&heroe).map_or(0, |f| f.licencia(&self.estado.reglas.economia.contratos));
+        if escalon == 0 {
+            return Vec::new();
+        }
+        let edificio = self.edificio_militar(campamento).expect("el campamento existe");
+        let mr = &self.estado.reglas.economia.militar;
+        leva::tropas_del_campamento(mr, &[edificio], &self.tecnologia_descubierta()).into_iter().filter(|&t| mr.tropas.tropa(t).escalon <= escalon).collect()
+    }
+
+    /// Las tropas que `campamento` ofrece a `heroe` al reclutar: las de [`Nucleo::tropas_del_campamento`] y, si es un mercenario, las de su licencia ([`Nucleo::tropas_de_licencia`]) y las de su
+    /// leva propia que ya tiene, para reponerlas pagando (el campamento no tiene Centro Urbano, donde se recluta la leva).
+    fn tropas_que_ofrece_a(&self, heroe: u64, campamento: u32) -> Vec<Tropa> {
+        let mut ofrece = self.tropas_del_campamento(campamento).expect("el campamento existe");
+        let leva_propia = self.estado.contratos.fichas.get(&heroe).is_some_and(|f| f.leva_recibida);
+        let h = &self.heroe(heroe).expect("existe").heroe;
+        let propias = self.estado.reglas.economia.contratos.leva_propia.iter().copied().filter(|&t| leva_propia && h.escuadra_de(t).is_some());
+        let mas: Vec<Tropa> = self.tropas_de_licencia(heroe, campamento).into_iter().chain(propias).filter(|t| !ofrece.contains(t)).collect();
+        ofrece.extend(mas);
+        ofrece
     }
 
     /// ¿Está el héroe en el campamento? Dentro, o con su columna a la puerta.
@@ -407,7 +441,7 @@ impl Nucleo {
                     (PagarCon::Carro, None) => return Err(rechazo(rechazos::HEROE_SIN_COLUMNA, "para pagar con el carro el héroe debe ir en una columna".into())),
                 };
                 let (factor_reputacion, sin_asentamientos) = self.condiciones_de_recluta(*heroe, t);
-                let ofrece = self.tropas_del_campamento(campamento).expect("el campamento existe");
+                let ofrece = self.tropas_que_ofrece_a(*heroe, campamento);
                 let mut reclutas = self.reclutas_de(campamento);
                 let puerta = self.puerta_de_campamento(campamento).expect("existe");
                 let Estado { militar, ejercitos, siguiente_id, .. } = &mut self.estado;

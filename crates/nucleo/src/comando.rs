@@ -849,7 +849,12 @@ impl Comando {
             Comando::MarcarPueblo { .. } | Comando::MarcarAldea { .. } => Pueblo,
             Comando::ColocarAvanzada { .. } => Avanzada,
             Comando::CrearHeroe { .. } => Heroe,
-            Comando::ReclutarTropa { .. } | Comando::ReclutarEnCampamento { .. } | Comando::PedirPrestamo { .. } | Comando::DarEscuadra { .. } => Escuadra,
+            Comando::ReclutarTropa { .. }
+            | Comando::ReclutarEnCampamento { .. }
+            | Comando::PedirPrestamo { .. }
+            | Comando::DarEscuadra { .. }
+            | Comando::OfrecerseComoMercenario { .. }
+            | Comando::ReclamarPremioDeRango { .. } => Escuadra,
             Comando::GuardarLoadout { .. } => Loadout,
             Comando::UnirseABatalla { batalla, .. } => Incorporacion { batalla: *batalla },
             Comando::ConvocarEjercito { .. } => Convocatoria,
