@@ -4,12 +4,12 @@
 //! Cada avance se suma **en origen**, en el sitio que produce el hecho ([`Nucleo::avance`]); los contadores de estado (`crate::misiones::DE_ESTADO`) se leen con [`Nucleo::mirar_misiones`] cuando
 //! ocurre lo que puede cambiarlos y cuando una misión que los usa se activa.
 
+use super::recompensas::{Cobro, Destino};
 use super::*;
 use crate::estado::Dato;
 use crate::misiones::Dueno;
 use asentamiento::catalogo::Tipo;
 use asentamiento::asentamiento::Evento as EventoEco;
-use asentamiento::Recurso;
 use militar::heroe::Residencia;
 
 /// El id de un dueño en el contrato: `heroe-N`, `as-N` o `faccion-N`.
@@ -193,7 +193,25 @@ impl Nucleo {
         if !p.admin && !self.puede_reclamar(heroe, dueno) {
             return Err(rechazo(rechazos::NO_AUTORIZADO, format!("no puedes reclamar las misiones de {}", id_de_dueno(dueno))));
         }
-        todo!("T1: armar el Cobro de la cadena, repartir y emitir mision.reclamada (plan de recompensas de misión, §2.2)")
+        let cobro = match dueno {
+            Dueno::Heroe(h) => Cobro { destino: Destino::Heroe(h), faccion: self.heroe(h).and_then(|x| x.faccion), participacion: None },
+            // La administración reclama con héroe 0: no existe y la participación no es de nadie.
+            Dueno::Asentamiento(a) => Cobro { destino: Destino::Plaza(a), faccion: self.estado.asentamientos.get(&a).map(|x| x.faccion), participacion: Some((a, Some(heroe).filter(|&h| self.heroe(h).is_some()).into_iter().collect())) },
+            Dueno::Faccion(f) => Cobro { destino: Destino::Capital(f), faccion: Some(f), participacion: None },
+        };
+        let dado = self.repartir(t, &r.misiones[i as usize].recompensa, cobro)?;
+        self.estado.misiones.duenos.entry(dueno).or_default().reclamadas.insert(i);
+        self.tocar_dueno(dueno);
+        let mut valores = vec![("mision", Dato::Texto(mision.to_owned())), ("dueno", Dato::Texto(id_de_dueno(dueno)))];
+        valores.extend(dado.valores);
+        let base = EventoNucleo { valores, heroes: vec![heroe], ..EventoNucleo::nuevo("mision.reclamada", t, dado.datos) };
+        let evento = match dueno {
+            Dueno::Heroe(_) => base,
+            Dueno::Asentamiento(a) => EventoNucleo { asentamientos: vec![a], punto: self.estado.asentamientos.get(&a).map(|x| x.posicion), ..base },
+            Dueno::Faccion(f) => EventoNucleo { facciones: vec![f], ..base },
+        };
+        self.tr.emitir(&self.estado, evento);
+        Ok(())
     }
 
     /// ¿Puede `heroe` reclamar las misiones de `dueno`? Las suyas; las de una plaza, su Gobernador o, sin Gobernador, uno de sus residentes; las de una Facción, su Rey.

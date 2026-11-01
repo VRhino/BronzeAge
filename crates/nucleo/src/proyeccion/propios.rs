@@ -13,6 +13,7 @@ use crate::estado::{Clase, Ejercito};
 use crate::estado_militar::{HeroeNucleo, PlazaRecordada};
 use politica::relaciones::{RelacionPolitica, TipoRelacion};
 use crate::nucleo::{Nucleo, TokenDeJugador};
+use crate::recompensas::{Elemento, Fija, Recompensa};
 use asentamiento::avanzadas::{Avanzada, Estado as EstadoAvanzada, TipoObra};
 use asentamiento::pueblos::{EstadoPueblo, Pueblo};
 use asentamiento::{Almacen, Recurso};
@@ -191,6 +192,24 @@ fn residencia_id(r: Residencia) -> String {
     }
 }
 
+/// Un elemento de la lista de recompensas de una misión en el contrato (Misiones §5): su `tipo`, su `clave` (el recurso o la tropa) y su cantidad, en milésimas o en soldados.
+fn recompensa_mision(e: Elemento) -> pb::RecompensaMision {
+    let (tipo, clave) = e.clave();
+    let cantidad = match e {
+        Elemento::Recurso(_, n) | Elemento::Oro(n) | Elemento::Experiencia(n) | Elemento::Tropa(_, n) => n,
+    };
+    pb::RecompensaMision { tipo: tipo.into(), clave: clave.into(), cantidad }
+}
+
+/// La recompensa fija de una misión en el contrato: su participación (una de plaza) y su experiencia (una de Facción); la que no toca va a 0.
+fn fija(r: &Recompensa) -> (u64, i64) {
+    match r.fija {
+        None => (0, 0),
+        Some(Fija::Participacion(p)) => (p, 0),
+        Some(Fija::Experiencia(x)) => (0, x),
+    }
+}
+
 /// Las misiones de un dueño (Misiones §5), en el orden del catálogo: las activas con su avance, las cumplidas y las reclamadas. Las que esperan a su previa y las deshabilitadas no viajan.
 pub fn misiones(n: &Nucleo, d: crate::misiones::Dueno) -> Vec<pb::Mision> {
     use crate::misiones::DeDueno;
@@ -209,13 +228,15 @@ pub fn misiones(n: &Nucleo, d: crate::misiones::Dueno) -> Vec<pb::Mision> {
                 return None;
             };
             let hecha = estado != pb::EstadoMision::MisionActiva;
-            // T2 (plan de recompensas de misión): la fija y la lista.
+            let (participacion, recompensa_experiencia) = fija(&m.recompensa);
             Some(pb::Mision {
                 id: m.id.clone(),
                 estado: estado as i32,
                 condiciones: m.condiciones.iter().map(|(c, u)| pb::CondicionMision { contador: c.clone(), avance: if hecha { *u } else { x.contador(c).min(*u) }, umbral: *u }).collect(),
                 previa: m.previa.map(|p| r.misiones[p as usize].id.clone()),
-                ..Default::default()
+                recompensa_experiencia,
+                participacion,
+                recompensas: m.recompensa.lista.iter().copied().map(recompensa_mision).collect(),
             })
         })
         .collect()
@@ -228,6 +249,7 @@ fn definicion_recurrente(m: &crate::recurrentes::Recurrente) -> pb::DefinicionMi
         Tipo::Individual { limite_semanal } => (pb::TipoMision::MisionIndividual, limite_semanal),
         Tipo::Grupal => (pb::TipoMision::MisionGrupal, 0),
     };
+    let (participacion, experiencia) = fija(&m.recompensa);
     pb::DefinicionMisionRecurrente {
         id: m.id.clone(),
         duracion: (if m.duracion == Duracion::Dia { pb::DuracionMision::MisionDiaria } else { pb::DuracionMision::MisionSemanal }) as i32,
@@ -235,11 +257,12 @@ fn definicion_recurrente(m: &crate::recurrentes::Recurrente) -> pb::DefinicionMi
         limite_semanal,
         cargo: m.cargo.clone(),
         condiciones: m.condiciones.iter().map(|(c, u)| pb::CondicionMision { contador: c.clone(), avance: 0, umbral: *u }).collect(),
-        // T2 (plan de recompensas de misión): la fija y la lista.
+        participacion,
+        experiencia,
+        recompensas: m.recompensa.lista.iter().copied().map(recompensa_mision).collect(),
         titulo: m.titulo.clone(),
         texto: m.texto.clone(),
         explicacion: m.explicacion.clone(),
-        ..Default::default()
     }
 }
 

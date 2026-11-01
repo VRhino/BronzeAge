@@ -25,8 +25,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 62 | MERCENARIOS | El campamento visto desde la puerta (2026-10-28): el héroe con la columna parada a la puerta (≤ `radioPuerta`) recibe el ámbito `CAMPAMENTO` como si estuviera dentro (stock y precios del mercado, reclutas, tropas que ofrece) y se le quita al alejarse; la sesión recalcula ese derecho cuando la columna para o arranca. Pendiente de decidir si desde fuera se recorta la lista de residentes y presentes. El cliente de jugador enseña mercado y reclutar con ese ámbito, dentro o fuera. Aparcada por el autor el 2026-10-28 | las órdenes ya se aceptan a la puerta (`comprarEnCampamento`, `reclutarEnCampamento`, repostar), pero `CAMPAMENTO` solo se abre dentro: desde fuera el jugador no ve qué hay |
 | 63 | MUNDO / REGLAS | El mundo en 3D, lo que queda (2026-10-31): generador v2 (bosque, llanos, montañas, altiplanos, metales), revisión a fondo de las reglas del terreno para la vista 3D, el encuadre de la caravana grande y los cabos sueltos del cliente 3D. Sección «63» | cliente 3D en `main` (BronzeAgeClient 0.65.0); generador y reglas sin tocar |
 | 65 | INTEL / BOTS | Informes de taberna por niveles (diseño del 2026-10-31; `Docs/Disenos_Por_Implementar/Informes_De_Taberna.md`): el Informe de plaza se separa en Población, Guarnición, Tecnologías, Trazado y Rutas según la taberna del comprador, y Cuentas, Agravios, Corte y Planes, solo contra Facciones de bots, los vende el motor y los responde el servicio de bots | un solo `comprar_informe_plaza` |
-| 66 | MISIONES | Recompensas de misión flexibles (diseño del 2026-11-01; `Docs/Disenos_Por_Implementar/Recompensas_De_Mision.md`): una recompensa fija por tipo de misión más una lista libre de recursos, oro, XP y tropas, igual en cadenas y recurrentes | cadenas con un solo tipo por dueño; recurrentes con tres campos fijos |
-| 67 | MISIONES | Objetos como recompensa de misión (2026-11-01): un tipo `objeto` en la lista de la entrada 66. Parada hasta que haya catálogo de objetos e inventario real | nada |
+| 67 | MISIONES | Objetos como recompensa de misión (2026-11-01): un tipo `objeto` en la lista libre de recompensas de las misiones (Misiones §4.1). Parada hasta que haya catálogo de objetos e inventario real | nada |
 | 68 | MERCENARIOS | Huecos de los mercenarios por contrato tras implementarlos (2026-11-01): visión del objetivo enemigo, oro del anillo para el temporal, sucesión en `militar`, auditoría, bienvenida, orden `atacar` inicial y objetos de los rangos 4 y 5. Sección «68» | entrada 48 en `main` (7aa44b9), `Docs/Mechanics/Mercenarios_Por_Contrato.md` |
 | — | PARIDAD | Recortes temporales del motor Rust frente al TypeScript (sección «Paridad con TypeScript») | el motor no está migrado hasta cerrarlos |
 | — | DUDAS | Ninguna sin decisión desde el 2026-10-27 (sección «Dudas abiertas»: las `// DUDA:` que quedan en el código) | — |
@@ -228,23 +227,9 @@ Lo que toca al motor:
 - Informes de plaza separados por tipo, con residentes como cantidad, tecnologías y rutas.
 - Recibo firmado en los informes de bots, y aviso al objetivo con el tipo de informe.
 
-## 66. Recompensas de misión flexibles (diseño del 2026-11-01)
-
-Diseño: `Docs/Disenos_Por_Implementar/Recompensas_De_Mision.md`. Nace de la mesa de trabajo de misiones del admin web, que puede cambiar el valor de cada recompensa pero no dar otra cosa.
-
-Lo que toca al motor:
-
-- Recompensa fija por tipo de misión (plaza: participación; Facción: XP; héroe: ninguna) y lista libre `recompensas` con `recurso`, `oro`, `xp` y `tropa`.
-- Las tropas solo en misiones personales: una misión colectiva que las lleve se rechaza.
-- Un solo reparto al reclamar para cadenas y recurrentes, todo o nada.
-- Las cadenas de plaza pasan a dar participación: A1-A11 empiezan con 10.
-- Bloques `MISIONES` y `MISIONES_RECURRENTES` con la forma nueva. Cambian la huella y la foto.
-
-Lo que toca al resto: el admin web edita la lista y exporta los bloques nuevos, el cliente de jugador la enseña y el servicio de bots la valora al elegir misión.
-
 ## 67. Objetos como recompensa de misión
 
-**Parada** hasta que existan el catálogo de objetos y el inventario real (hoy `Heroe.inventario` está en el contrato, pero el motor no lo guarda; ver la fila «Contrato (4H)» de la paridad y CQ-004). Cuando existan, `objeto` se añade como un tipo más de la lista de la entrada 66, con `objeto` y `cantidad`. Decisión del autor del 2026-11-01: queda aquí, fuera de ese diseño.
+**Parada** hasta que existan el catálogo de objetos y el inventario real (hoy `Heroe.inventario` está en el contrato, pero el motor no lo guarda; ver la fila «Contrato (4H)» de la paridad y CQ-004). Cuando existan, `objeto` se añade como un tipo más de la lista libre `recompensas` de las misiones (`Docs/Mechanics/Misiones.md` §4.1), con `objeto` y `cantidad`. Decisión del autor del 2026-11-01: queda aquí, fuera de las recompensas flexibles.
 
 ## 68. Mercenarios por contrato: huecos tras implementarlos (2026-11-01)
 

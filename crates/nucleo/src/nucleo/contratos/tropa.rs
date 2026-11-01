@@ -39,25 +39,28 @@ impl Nucleo {
         self.apuntar_renombre(t, heroe, d.renombre.grado_medalla[usize::from(grado) - 1]);
     }
 
-    /// Deja a `heroe` con una escuadra completa y suya de `tropa`: repone la que ya tiene, donde esté (una escuadra por tropa en toda la partida, Campamentos_Mercenarios §5.3), o le da una
-    /// nueva en su campamento. Devuelve su id y si es nueva. No usa `dar_escuadra`, que mete la nueva en la columna del héroe sin mirar el Liderazgo: el premio se reclama también con la
-    /// columna a la puerta, y unirla a ella es cosa suya, con su Liderazgo.
-    fn completar_escuadra(&mut self, t: Instante, heroe: u64, tropa: Tropa) -> (u64, bool) {
+    /// Suma `soldados` a la escuadra de `tropa` de `heroe`, sin pasar de los que lleva una completa: se la suma donde esté (una escuadra por tropa en toda la partida,
+    /// Campamentos_Mercenarios §5.3) o, si no tiene, nace una nueva en su campamento (sin plaza de origen). Lo que sobra se pierde. Devuelve su id, si es nueva y cuántos soldados se
+    /// sumaron de verdad. No usa `dar_escuadra`, que mete la nueva en la columna del héroe sin mirar el Liderazgo: el premio y la recompensa se reclaman también con la columna a la
+    /// puerta, y unirla a ella es cosa suya, con su Liderazgo.
+    pub(in crate::nucleo) fn sumar_soldados(&mut self, t: Instante, heroe: u64, tropa: Tropa, soldados: i64) -> (u64, bool, i64) {
         let mr = self.estado.reglas.economia.militar.clone();
         let completa = mr.tropas.tropa(tropa).unidades;
-        let Some((id, contenedor)) = self.heroe(heroe).expect("el mercenario existe").heroe.escuadra_de(tropa).map(|e| (e.id, e.contenedor)) else {
+        let Some((id, contenedor, cantidad)) = self.heroe(heroe).expect("el héroe existe").heroe.escuadra_de(tropa).map(|e| (e.id, e.contenedor, e.cantidad)) else {
             let id = self.nuevo_id();
-            self.heroe_mut(heroe).heroe.escuadras.push(Escuadra::nueva(&mr, id, heroe, tropa, completa, None, t));
-            return (id, true);
+            let sumados = soldados.min(completa);
+            self.heroe_mut(heroe).heroe.escuadras.push(Escuadra::nueva(&mr, id, heroe, tropa, sumados, None, t));
+            return (id, true, sumados);
         };
         let columna = if let Contenedor::Ejercito(c) = contenedor { Some(c) } else { None };
         let velocidad_antes = columna.and_then(|c| self.velocidad_de_ejercito(c)).unwrap_or(0);
-        self.heroe_mut(heroe).heroe.escuadra_mut(id).expect("la acabamos de leer").cantidad = completa;
-        // La tropa repuesta que va en una columna come más y marcha distinto.
+        let sumados = soldados.min(completa - cantidad);
+        self.heroe_mut(heroe).heroe.escuadra_mut(id).expect("la acabamos de leer").cantidad += sumados;
+        // La tropa sumada que va en una columna come más y marcha distinto.
         if let Some(c) = columna {
             self.recomponer_columna(c, t, velocidad_antes);
         }
-        (id, false)
+        (id, false, sumados)
     }
 
     // ───────────────────────────── Órdenes ─────────────────────────────
@@ -70,7 +73,8 @@ impl Nucleo {
         if std::mem::replace(&mut ficha.leva_recibida, true) {
             return Vec::new();
         }
-        let nuevas: Vec<u64> = d.leva_propia.iter().map(|&tropa| self.completar_escuadra(t, heroe, tropa)).filter_map(|(id, nueva)| nueva.then_some(id)).collect();
+        let mr = self.estado.reglas.economia.militar.clone();
+        let nuevas: Vec<u64> = d.leva_propia.iter().map(|&tropa| self.sumar_soldados(t, heroe, tropa, mr.tropas.tropa(tropa).unidades)).filter_map(|(id, nueva, _)| nueva.then_some(id)).collect();
         self.emitir_nombrando(t, "mercenarios.leva_recibida", vec![], vec![heroe], vec![("heroe", heroe as i64), ("escuadras", nuevas.len() as i64)]);
         nuevas
     }
@@ -99,7 +103,7 @@ impl Nucleo {
             return Err(rechazo(MERCENARIOS_AL_TOPE, "esa escuadra ya está completa: el premio no le añadiría nada"));
         }
 
-        let (escuadra, nueva) = self.completar_escuadra(t, heroe, tropa);
+        let (escuadra, nueva, _) = self.sumar_soldados(t, heroe, tropa, completa);
         self.ficha_mut(heroe).premios -= 1;
         let datos = vec![("heroe", heroe as i64), ("campamento", i64::from(campamento)), ("tropa", i64::from(tropa_a_u8(tropa))), ("escuadra", escuadra as i64), ("nueva", i64::from(nueva))];
         self.emitir_nombrando(t, "mercenarios.premio_reclamado", vec![], vec![heroe], datos);

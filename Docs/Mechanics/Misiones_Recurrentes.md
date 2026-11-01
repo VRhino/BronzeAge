@@ -21,7 +21,7 @@ Cada tablón tiene **7 huecos de diarias y 7 de semanales** (decisión del autor
 | Estado | disponible, aceptada, cumplida, reclamada, caducada |
 | Quién la acepta | cualquiera del ámbito o solo el titular de un `cargo` |
 | Texto | `titulo`, `texto` (qué hacer) y `explicacion` (texto libre) |
-| Recompensa | `xp` (experiencia de Facción), `participacion` (solo en plaza) y `oro` (solo individuales, al almacén personal) |
+| Recompensa | Una fija según el ámbito (`participacion` en plaza, `xp` en Facción) y la lista libre `recompensas` (`Misiones.md` §4.1) |
 
 ## 2. Reloj
 
@@ -49,9 +49,11 @@ Hay un solo reloj, el **de mundo** (`Reloj_Y_Eventos.md` §1: milisegundos desde
 
 Con `reclamarRecompensa` (el de las únicas, `Misiones.md` §4), con el id de la recurrente y el dueño del tablón (`as-N` o `f-N`).
 
-- **Individual**: la reclama el héroe que la cumplió. Recibe la `participacion` en la plaza (Participacion §2) y el `oro` en su almacén personal (`almacen_personal.lleno` si no cabe; `heroe.sin_residencia` sin residencia); la Facción dueña del tablón (la de la plaza, o la Facción) recibe la `xp`.
-- **Grupal**: la reclama el Gobernador de la plaza (o, sin Gobernador, un residente) o el Rey de la Facción. La `xp` va a la Facción; la `participacion`, **a partes iguales** entre los héroes que aportaron algo, en la plaza (la división entera; el resto se pierde).
-- **Rechazos**: `mision.desconocida`, `mision.no_cumplida`, `mision.ya_reclamada`, `no_autorizado`.
+La recompensa es la de las misiones únicas: una **fija** que marca el ámbito (`participacion` en la plaza, `xp` en la Facción) y la **lista libre** `recompensas`. Qué elementos admite, adónde va cada cosa, el todo o nada y los rechazos de almacén, capital y residencia están en `Misiones.md` §4.1 a §4.3. Lo propio del tablón:
+
+- **Individual**: la reclama el héroe que la cumplió y es una misión **personal**: los recursos y el oro van a su almacén personal, la tropa a su campamento y la experiencia, a la Facción del héroe en una de plaza (la de la lista) y a la Facción del tablón en una de Facción (su fija). En la plaza, la `participacion` fija es suya, apuntada a esa plaza (Participacion §2). Es la única que puede dar `tropa`.
+- **Grupal**: la reclama el Gobernador de la plaza (o, sin Gobernador, un residente) o el Rey de la Facción, y es **colectiva**: los recursos y el oro van al almacén de la plaza o al de la capital efectiva de la Facción, y la experiencia a la Facción del tablón (la de la plaza, o la propia). La `participacion` fija se reparte **a partes iguales** entre los héroes que aportaron algo, en la plaza (división entera: el resto se pierde; sin los mercenarios contratados). No da tropa.
+- **Rechazos**: `mision.desconocida`, `mision.no_cumplida`, `mision.ya_reclamada`, `no_autorizado` y los de dar la recompensa (`heroe.sin_residencia`, `almacen_personal.lleno`, `mision.almacen_lleno` y `mision.sin_capital`; `Misiones.md` §4.3).
 - Las cumplidas sin reclamar **se pueden seguir reclamando** después de su periodo: su misión se queda en el tablón como vencida hasta que se reclama todo lo cumplido.
 
 ## 6. Catálogo editable en caliente
@@ -59,7 +61,7 @@ Con `reclamarRecompensa` (el de las únicas, `Misiones.md` §4), con el id de la
 El catálogo de las recurrentes (cuáles hay, sus condiciones, topes, recompensas y textos) es **dato**, no código: el inicial es el bloque `MISIONES_RECURRENTES` de abajo y el vigente vive en el estado (va en la foto). Lo cambia la orden de administración `fijar_catalogo_misiones` (comando 187, parámetro `catalogo`: el JSON entero en texto, con la forma del bloque), sin reiniciar: entra como una petición del registro con su instante, así que una partida se reproduce igual desde el diario.
 
 - Un cambio no toca las misiones que ya están en el tablón (aceptadas o no): vale para las que salen desde la **siguiente renovación** (la diaria saca las diarias con la definición nueva; la semanal, todo).
-- Se valida entero o no entra (`mision.catalogo_invalido`, con el motivo): ids únicos y distintos de los de las misiones únicas, condiciones con los contadores de §7 y umbral > 0, `limiteSemanal` > 0 en las individuales, `cargo` del ámbito y **al menos una misión en cada ámbito** (`asentamiento` y `faccion`; decisión del autor del 2026-10-28: un catálogo que deja vacío un tablón no entra, `{}` tampoco).
+- Se valida entero o no entra (`mision.catalogo_invalido`, con el motivo): ids únicos y distintos de los de las misiones únicas, condiciones con los contadores de §7 y umbral > 0, `limiteSemanal` > 0 en las individuales, `cargo` del ámbito, la recompensa con las reglas de `Misiones.md` §6 (la fija de su ámbito mayor que 0, la lista sin repetidos y `tropa` solo en una individual; las claves de antes, `oro` fuera de la lista y `xp` en una de plaza, no valen) y **al menos una misión en cada ámbito** (`asentamiento` y `faccion`; decisión del autor del 2026-10-28: un catálogo que deja vacío un tablón no entra, `{}` tampoco).
 - El catálogo **vigente** se lee con `GET /v1/admin/misiones/catalogo` (solo administradores), en el mismo JSON que acepta la orden; `/v1/datos` trae solo el inicial.
 - Las misiones únicas (H, A, F) siguen en `Misiones.md`, con la huella de las reglas.
 
@@ -69,13 +71,13 @@ Son los del héroe de `Misiones.md` §3, sumados en origen: `salidas`, `prestamo
 
 ## 8. Proyección
 
-`Asentamiento.tablon` (interior y `ADMIN`) y `Faccion.tablon` (la propia y `ADMIN`; la forma pública no lo lleva), mensaje `Tablon`: las misiones del tablón con su periodo (`desde_ms`, `hasta_ms`), las vencidas por reclamar, las ids de lo que sale esta semana y de lo elegido, cuándo son las dos renovaciones y el catálogo de su ámbito para elegir. Cada misión lleva su definición entera (textos incluidos); una individual, las aceptadas de esta semana y cada aceptación con su héroe, su estado y su avance; una grupal, su estado, su avance y lo que aportó cada héroe. Detalle en `Docs/Coordinacion/05_Contrato_de_Sesion.md`.
+`Asentamiento.tablon` (interior y `ADMIN`) y `Faccion.tablon` (la propia y `ADMIN`; la forma pública no lo lleva), mensaje `Tablon`: las misiones del tablón con su periodo (`desde_ms`, `hasta_ms`), las vencidas por reclamar, las ids de lo que sale esta semana y de lo elegido, cuándo son las dos renovaciones y el catálogo de su ámbito para elegir. Cada misión lleva su definición entera (textos incluidos, la fija en `participacion` o `experiencia` y la lista en `recompensas`, como en `Misiones.md` §5); una individual, las aceptadas de esta semana y cada aceptación con su héroe, su estado y su avance; una grupal, su estado, su avance y lo que aportó cada héroe. Detalle en `Docs/Coordinacion/05_Contrato_de_Sesion.md`.
 
 ### 8.1 Hechos
 
 - `mision.aceptada { mision, dueno, heroe }`: al héroe y al dueño.
 - `mision.cumplida { mision, dueno }` (el de las únicas), con el héroe en una individual.
-- `mision.reclamada`, como en las únicas.
+- `mision.reclamada`, como en las únicas (`Misiones.md` §5.1: lleva lo que se dio).
 - `tablon.renovado { semanal }`: a cada plaza y Facción con tablón.
 
 <!-- eventos -->
@@ -86,9 +88,11 @@ Son los del héroe de `Misiones.md` §3, sumados en origen: `salidas`, `prestamo
 
 ## 9. Foto
 
-Desde **BAN50**, al final del estado: el catálogo vigente (su JSON), el origen de las semanas, la renovación pendiente y cada tablón (lo que sale, lo elegido, las aceptadas de la semana y cada misión con su definición, su periodo y su avance). Las fotos BAN40 a BAN49 se leen con el catálogo inicial y sacan los tablones al cargar.
+Desde **BAN50**, al final del estado: el catálogo vigente (su JSON), el origen de las semanas, la renovación pendiente y cada tablón (lo que sale, lo elegido, las aceptadas de la semana y cada misión con su definición, su periodo y su avance). Las fotos BAN40 a BAN49 se leen con el catálogo inicial y sacan los tablones al cargar. Las recompensas flexibles (2026-11-01) cambian la forma del catálogo y la huella de las reglas: la foto sigue en BAN54, pero una foto anterior no carga y hace falta partida nueva.
 
 ## 10. Catálogo inicial
+
+Cada misión lleva su recompensa fija según el ámbito (`participacion` en `asentamiento`, `xp` en `faccion`) y, si da algo más, la lista `recompensas` con la forma de `Misiones.md` §4.1 (en una de plaza, la `xp` va en la lista; en una de Facción, el `oro`). Las cantidades van en unidades y son un borrador a calibrar.
 
 <!-- parametros:MISIONES_RECURRENTES -->
 ```json

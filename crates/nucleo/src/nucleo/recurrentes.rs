@@ -5,11 +5,11 @@
 //! avance se suma **en origen**, con el de las misiones únicas del héroe ([`Nucleo::avance`]): va al tablón de la plaza donde reside y al de su Facción.
 
 use super::misiones::id_de_dueno;
+use super::recompensas::{Cobro, Destino};
 use super::*;
 use crate::estado::{entidad_tablon, Dato, PRIO_TABLON};
 use crate::misiones::Dueno;
 use crate::recurrentes::{Aceptacion, Ambito, Catalogo, Duracion, EnTablon, EstadoRecurrentes, Progreso, Situacion, Tablon, Tipo, CONTADORES, DIA, HUECOS};
-use asentamiento::Recurso;
 use militar::heroe::Residencia;
 use std::sync::Arc;
 
@@ -293,8 +293,9 @@ impl Nucleo {
         self.estado.recurrentes.tablones.get(&dueno).is_some_and(|t| t.misiones.iter().any(|m| m.def.id == mision))
     }
 
-    /// `reclamarRecompensa` de una recurrente (§5): la individual, el héroe que la cumplió (participación, oro y la `xp` a la Facción); la grupal, el Gobernador (o un residente) o el Rey
-    /// (la `xp` a la Facción y la participación a partes iguales entre los que aportaron). Se reclama la más antigua cumplida; la vencida sin nada más por reclamar se va del tablón.
+    /// `reclamarRecompensa` de una recurrente (§5): la individual, el héroe que la cumplió (recursos, oro y tropa a él; la participación, si es de plaza); la grupal, el Gobernador (o un
+    /// residente) o el Rey (a la plaza o a la capital de la Facción; la participación, a partes iguales entre los que aportaron). La `xp` va a la Facción del tablón, salvo en la individual de una plaza,
+    /// que va a la del héroe. Reparte todo o nada ([`Nucleo::repartir`]). Se reclama la más antigua cumplida; la vencida sin nada más por reclamar se va del tablón.
     pub(super) fn reclamar_recurrente(&mut self, t: Instante, p: &Peticion, heroe: u64, dueno: Dueno, mision: &str) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
@@ -315,6 +316,29 @@ impl Nucleo {
         if !individual && !p.admin && !self.puede_reclamar(heroe, dueno) {
             return Err(rechazo(rechazos::NO_AUTORIZADO, format!("no puedes reclamar las misiones de {}", id_de_dueno(dueno))));
         }
-        todo!("T1: armar el Cobro de la recurrente, repartir, marcarla reclamada y emitir mision.reclamada (plan de recompensas de misión, §2.2)")
+        let def = tablon.misiones[i].def.clone();
+        let cobro = match (dueno, &tablon.misiones[i].progreso) {
+            (Dueno::Asentamiento(a), Progreso::Individual(_)) => Cobro { destino: Destino::Heroe(heroe), faccion: self.heroe(heroe).and_then(|x| x.faccion), participacion: Some((a, vec![heroe])) },
+            (Dueno::Faccion(f), Progreso::Individual(_)) => Cobro { destino: Destino::Heroe(heroe), faccion: Some(f), participacion: None },
+            (Dueno::Asentamiento(a), Progreso::Grupal { aportes, .. }) => {
+                let aportaron = aportes.iter().filter(|&(_, &n)| n > 0).map(|(&h, _)| h).collect();
+                Cobro { destino: Destino::Plaza(a), faccion: self.estado.asentamientos.get(&a).map(|x| x.faccion), participacion: Some((a, aportaron)) }
+            }
+            (Dueno::Faccion(f), Progreso::Grupal { .. }) => Cobro { destino: Destino::Capital(f), faccion: Some(f), participacion: None },
+            (Dueno::Heroe(_), _) => unreachable!("un tablón es de una plaza o de una Facción"),
+        };
+        let dado = self.repartir(t, &def.recompensa, cobro)?;
+        let tablon = self.estado.recurrentes.tablones.get_mut(&dueno).expect("mirado");
+        match &mut tablon.misiones[i].progreso {
+            Progreso::Individual(a) => a.get_mut(&heroe).expect("cumplida").situacion = Situacion::Reclamada,
+            Progreso::Grupal { situacion, .. } => *situacion = Situacion::Reclamada,
+        }
+        tablon.misiones.retain(|m| m.hasta > t || m.por_reclamar());
+        self.tocar_dueno(dueno);
+        let mut valores = vec![("mision", Dato::Texto(mision.to_owned())), ("dueno", Dato::Texto(id_de_dueno(dueno)))];
+        valores.extend(dado.valores);
+        let evento = EventoNucleo { valores, heroes: vec![heroe], ..EventoNucleo::nuevo("mision.reclamada", t, dado.datos) };
+        self.tr.emitir(&self.estado, self.hecho_de_tablon(dueno, evento));
+        Ok(())
     }
 }

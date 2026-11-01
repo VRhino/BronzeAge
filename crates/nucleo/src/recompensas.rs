@@ -1,4 +1,4 @@
-//! Las recompensas de las misiones, únicas y recurrentes (entrada 66, `Docs/Mechanics/Misiones.md` §4 y `Misiones_Recurrentes.md` §5): una **fija**, que marca el tipo de
+//! Las recompensas de las misiones, únicas y recurrentes (mecánica 66, `Docs/Mechanics/Misiones.md` §4 y `Misiones_Recurrentes.md` §5): una **fija**, que marca el tipo de
 //! misión, y una **lista libre**. Aquí está lo puro: leerlas del JSON de un catálogo, validarlas y escribirlas de vuelta. Darlas al reclamar es de `nucleo::recompensas`.
 
 use crate::misiones::ClaseDueno;
@@ -57,7 +57,7 @@ pub struct Recompensa {
 
 impl Recompensa {
     /// Lee la fija de su clase (`participacion` en una de plaza, `xp` en una de Facción) y la lista `recompensas` de la misión `m`, y lo valida todo: la fija es mayor que 0,
-    /// una de héroe lleva alguna recompensa, cada elemento tiene un `tipo` conocido y una cantidad mayor que 0, la lista no repite nada ni la fija, solo una misión
+    /// una de héroe lleva alguna recompensa, cada elemento tiene un `tipo` conocido y una cantidad mayor que 0 (entera en los recursos y el oro), la lista no repite nada ni la fija, solo una misión
     /// `personal` (individual o cadena de héroe) da tropa y una tropa no pide más soldados de los que lleva su escuadra.
     pub fn leer(m: &Value, clase: ClaseDueno, personal: bool, tropas: &Catalogo) -> Result<Recompensa, String> {
         let id = m.get("id").and_then(Value::as_str).unwrap_or("?");
@@ -123,6 +123,8 @@ fn elemento(id: &str, e: &Value, tropas: &Catalogo) -> Result<Elemento, String> 
     let texto = |k: &str| e.get(k).and_then(Value::as_str).ok_or_else(|| format!("{id}: un elemento de «recompensas» sin «{k}»"));
     let cantidad = e.get("cantidad").ok_or_else(|| format!("{id}: un elemento de «recompensas» sin «cantidad»"))?;
     let mil = || milesimas(cantidad).ok_or_else(|| format!("{id}: la «cantidad» de cada recompensa es mayor que 0"));
+    // Los almacenes solo guardan unidades enteras (Economia_Construccion, C3b): una fracción de recurso o de oro se perdería al darla.
+    let entera = || mil().and_then(|n| if n % UNIDAD == 0 { Ok(n) } else { Err(format!("{id}: los recursos y el oro van en unidades enteras")) });
     Ok(match texto("tipo")? {
         "recurso" => {
             let nombre = texto("recurso")?;
@@ -130,9 +132,9 @@ fn elemento(id: &str, e: &Value, tropas: &Catalogo) -> Result<Elemento, String> 
             if r == Recurso::Oro {
                 return Err(format!("{id}: el oro va con «tipo»: «oro», no como recurso"));
             }
-            Elemento::Recurso(r, mil()?)
+            Elemento::Recurso(r, entera()?)
         }
-        "oro" => Elemento::Oro(mil()?),
+        "oro" => Elemento::Oro(entera()?),
         "xp" => Elemento::Experiencia(mil()?),
         "tropa" => {
             let nombre = texto("tropa")?;
@@ -224,6 +226,8 @@ mod pruebas {
         assert!(mal(json!({ "id": "X", "xp": 5, "recompensas": [{ "tipo": "xp", "cantidad": 1 }] }), ClaseDueno::Faccion, false).contains("ya es la recompensa fija"));
         assert!(mal(con(json!([{ "tipo": "joya", "cantidad": 1 }])), ClaseDueno::Asentamiento, false).contains("«joya» no existe"));
         assert!(mal(con(json!([{ "tipo": "oro", "cantidad": 0 }])), ClaseDueno::Asentamiento, false).contains("mayor que 0"));
+        assert!(mal(con(json!([{ "tipo": "oro", "cantidad": 1.5 }])), ClaseDueno::Asentamiento, false).contains("unidades enteras"));
+        assert!(mal(con(json!([{ "tipo": "recurso", "recurso": "madera", "cantidad": 0.5 }])), ClaseDueno::Asentamiento, false).contains("unidades enteras"));
         assert!(mal(con(json!([{ "tipo": "recurso", "recurso": "nada", "cantidad": 1 }])), ClaseDueno::Asentamiento, false).contains("«nada» no existe"));
         assert!(mal(con(json!([{ "tipo": "recurso", "recurso": "oro", "cantidad": 1 }])), ClaseDueno::Asentamiento, false).contains("«tipo»: «oro»"));
         assert!(mal(con(json!([{ "tipo": "oro", "cantidad": 1 }, { "tipo": "oro", "cantidad": 2 }])), ClaseDueno::Asentamiento, false).contains("repite «oro»"));
