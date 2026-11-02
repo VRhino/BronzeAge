@@ -555,7 +555,7 @@ fn una_foto_con_el_acceso_cambiado_se_recupera_y_la_anterior_se_rechaza() {
     e.avanzar(HORA);
     e.ok("admin", comun::acceso(e.a, false, true, true));
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN54");
+    assert_eq!(&bytes[..5], b"BAN55");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.asentamientos[&e.a].puerta.cerrada_a, Some(politica::Grupos::de([politica::Grupo::Aliados])));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
@@ -1063,7 +1063,7 @@ fn el_ejercito_de_visita_en_un_campamento_se_desarma_y_su_heroe_compra_y_reposta
     e.ok("ana", Comando::MarcharA { ejercito: ej, destino: puerta });
     let fin = e.ejercito(ej).plan.fin().unwrap();
     e.n.avanzar_hasta(fin);
-    let comprar = |cantidad| Comando::ComprarEnCampamento { heroe: h, campamento: 0, recurso: Cobre, cantidad };
+    let comprar = |cantidad| Comando::ComprarEnCampamento { heroe: h, campamento: 0, recurso: Cobre, cantidad, pagar_con: None };
     // A la puerta ya compra con el oro del carro.
     e.ok("ana", comprar(5_000));
     assert_eq!(e.ejercito(ej).columna.carga.get(&Cobre).copied(), Some(5_000));

@@ -8,7 +8,7 @@
 //! llega a casa) hace que su plaza reevalúe el reparto a los trueques activos (`Nucleo::reparto_de_plaza`).
 
 use super::*;
-use crate::estado::SucesoComercio;
+use crate::estado::{Dato, SucesoComercio};
 use crate::estado_comercio::{entidad_caravana, entidad_trueque};
 use crate::nucleo::mercado::{id32, nivel_mercado};
 use asentamiento::edificio::Edificios;
@@ -169,6 +169,23 @@ impl Nucleo {
                 if !*reservada {
                     self.reparto_de_plaza(origen, t);
                 }
+                Ok(None)
+            }
+            Comando::RenombrarCaravana { caravana, nombre } => {
+                let (i, origen) = self.caravana_de_orden(p, *caravana)?;
+                // Como el nombre de una plaza: recortado y como mucho `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres, pero sin mirar si otra caravana se llama igual.
+                let limpio = nombre.trim().to_owned();
+                if self.estado.comercio.flota[i].nombre == limpio {
+                    return Err(sin_cambios());
+                }
+                let largo = self.estado.reglas.economia.datos.largo_maximo_nombre;
+                if limpio.chars().count() > largo {
+                    return Err(rechazo(rechazos::CARAVANA_NOMBRE_LARGO, format!("el nombre de una caravana tiene como mucho {largo} caracteres")));
+                }
+                self.estado.comercio.flota[i].nombre = limpio.clone();
+                let punto = self.estado.asentamientos.get(&origen).map(|a| a.posicion);
+                let datos = vec![("caravana", *caravana as i64)];
+                self.tr.emitir(&self.estado, EventoNucleo { asentamientos: vec![origen], punto, valores: vec![("nombre", Dato::Texto(limpio))], ..EventoNucleo::nuevo("comercio.caravana_renombrada", t, datos) });
                 Ok(None)
             }
             Comando::PrepararCaravana { caravana, destino, carga, salir_en, escolta } => self.preparar_caravana(t, p, *caravana, *destino, carga, *salir_en, escolta.as_ref()),

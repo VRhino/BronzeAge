@@ -1,6 +1,6 @@
 [package]
 name = "nucleo"
-version = "0.10.0"
+version = "0.11.0"
 edition = "2021"
 description = "Núcleo de un solo hilo: aplica órdenes y eventos en (instante, prioridad, secuencia); modo acelerado y en vivo; persistencia por registro y fotos; sesiones del contrato 05 (fase 5)"
 

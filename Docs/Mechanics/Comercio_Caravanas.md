@@ -98,6 +98,7 @@ Una caravana es un contenedor de **carros** (cada uno con a lo sumo un animal) y
 | `preparaHasta` | Solo en `preparando`: el instante en que sale. |
 | `escoltaIds[]` | Escuadrones cedidos (viven en su héroe con `contenedor: {tipo: 'escolta', caravanaId}`). |
 | `reservadaManual` | `true` ⇒ fuera del reparto automático, sea cual sea su tamaño. |
+| `nombre` | Solo en Rust (2026-11-02): el que le pone quien reside en su origen (`renombrarCaravana`, §5.2); vacío = sin nombre. No cambia nada del juego: es para reconocerla. |
 | `encargo` | Solo en Rust: el encargo de transporte que tiene (`Option<Encargo>`, §5.8.2): modo, destino, hora de salida, las dos paradas, `vueltas`, `punta`, `fase`, `fin_paso` y `cancelado`. Mientras lo tiene, la caravana no está `disponible` y el reparto del trueque no la usa (§4.3). |
 
 `Asentamiento.ultimaCaravanaCreadaEn` guarda el instante de la última caravana creada desde él (comercial **o** de Fundación: el cooldown es compartido).
@@ -335,6 +336,8 @@ carros entre caravanas propias no lo toca.
 Condiciones, en este orden: **Mercado activo**; `puedeCrearCaravana` (han pasado `CARAVANA_COOLDOWN.cooldownMinutos` desde `ultimaCaravanaCreadaEn`; sin marca previa, sí); cupo de caravanas no alcanzado.
 Resultado: un casco **vacío y gratis** `{carros: [], contenido: {}, estado: disponible, reservadaManual: false, posicionActual: la del asentamiento}` y `ultimaCaravanaCreadaEn = ahora`. No hay comando para
 desmantelarla: solo se pierde por captura, destrucción o ruina. `construirCaravanaComercial` (NPC de laboratorio, no un comando) encadena crear + 1 carro básico + 1 buey.
+
+**Ponerle nombre** (Rust, pedido del autor del 2026-11-02): `renombrarCaravana { caravanaId, nombre }` (comando 209). La da quien reside en el **origen** de la caravana y está dentro (como el resto de la flota, `ResidenteDentro`), esté la caravana donde esté. El nombre se recorta; vacío la deja sin nombre; como mucho `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres (`caravana.nombre_largo`) y, a diferencia del de las plazas, no tiene que ser único. El mismo nombre que ya tiene es «sin cambios». Emite `comercio.caravana_renombrada` `{ caravana, nombre }`; el nombre sale en `Caravana.nombre` del contrato y viaja en la foto (desde BAN55).
 
 ### 5.3 Carros y animales
 
@@ -911,6 +914,10 @@ El héroe tiene que estar **en el campamento** (dentro, o con su columna en la p
 - **Reside en él** ⇒ compra cualquier bien en venta; lo comprado va a su **almacén personal**; con **cupo diario** por héroe en `cupoDiario` (madera y piedra; el día es `floor(instante / 86 400 000)`).
 - **No reside** ⇒ compra **cualquier bien en venta desde la puerta, salvo el trigo** (cobre, estaño, madera… decidido el 2026-10-11; el trigo se reposta gratis a víveres con `repostarEnCampamento` y nunca va al carro: pedirlo es un error), al mismo precio, **pagando con el oro de su carro** y llevándoselo **al carro de su
   columna** (hace falta la columna); **sin cupo diario**, pero compite por el mismo stock. No toca su almacén personal.
+- **Con qué paga: `pagar_con`** (Rust, pedido del autor del 2026-11-02: el mercado del campamento ve también lo que hay en el carro). `almacenPersonal` o `carro`; sin él, el almacén personal si reside en el campamento y el carro si no (lo de arriba).
+  - `almacenPersonal` sin residir en el campamento ⇒ `almacen_personal.fuera_de_tu_residencia` (el almacén personal está donde se reside).
+  - `carro`: dentro del campamento es el carro que lleva aquí (`a_mano::carro_dentro`, como en una plaza, Movimiento_Ejercitos §9.1): la columna con la que entró o, si reside aquí, la columna que guardó o el carro del héroe (`CAPACIDAD_CARRO`); sin ninguno, `heroe.sin_columna`. A la puerta, su columna (sin ella, `heroe.sin_columna`). El oro sale del carro y lo comprado entra en él, con su hueco.
+  - El residente que paga con el carro **sigue con su cupo diario** y no puede llevarse trigo al carro (`mercenarios.trigo_no_va_al_carro`); el que no reside compra como arriba.
 
 **Residente:**
 
@@ -997,7 +1004,7 @@ La red de caminos se poda sola al faltar un extremo (§7.4).
 | `aceptarTrueque`, `rechazarTrueque` | Tesorero o Gobernador del asentamiento B, residente y dentro |
 | `colocarOrdenMercado` | Tesorero o Gobernador del asentamiento, residente y dentro |
 | `crearCaravana` | residente del asentamiento (las caravanas siguen abiertas a cualquier residente) |
-| `agregarCarroCaravana`, `comprarAnimalCaravana`, `reservarCaravana`, `cancelarCaravana`, `moverCarroCaravana` | residente del **origen** de la caravana |
+| `agregarCarroCaravana`, `comprarAnimalCaravana`, `reservarCaravana`, `cancelarCaravana`, `moverCarroCaravana`, `renombrarCaravana` (Rust) | residente del **origen** de la caravana |
 | `prepararCaravana`, `asignarEscolta`, `quitarEscolta` | el actor es el `heroeId` del comando **y** reside en el origen |
 | `encargarCaravana`, `cambiarEncargo`, `cancelarEncargo` | Rust, sin equivalente en TypeScript: el Gobernador, el Tesorero o el Maestro de Caravanas del **origen** de la caravana, residente y dentro (§5.8.3) |
 | `moverCargaCaravanaAparcada`, `enviarCaravanaAlOrigen` | el actor es el `heroeId`; residente del **origen** de la caravana y **presente** en la plaza que la hospeda |
@@ -1014,7 +1021,7 @@ Un id inexistente se deja pasar a propósito para que el comando devuelva el err
 | `comercio.trueque_cumplido` | entrega (§4.4) | mercado de mercenarios (`entreFacciones`); xp y reputación se aplican en el mismo sitio |
 | `comercio.trueque_expirado` | reparto (§4.3) | narración |
 | `comercio.trueque_cancelado` | ruina (§10) | narración |
-| `comercio.caravana_construida`, `_carro_agregado`, `_carro_movido`, `_reserva`, `_preparando`, `_cancelada`, `_escolta_cedida`, `_escolta_retirada`, `carga_caravana_aparcada`, `caravana_enviada_al_origen` | comandos | narración |
+| `comercio.caravana_construida`, `_carro_agregado`, `_carro_movido`, `_reserva`, `_renombrada`, `_preparando`, `_cancelada`, `_escolta_cedida`, `_escolta_retirada`, `carga_caravana_aparcada`, `caravana_enviada_al_origen` | comandos | narración |
 | `comercio.caravana_animal_comprado` | `comprarAnimalCaravana` | contador de logros `animales.comprados` (`Tecnologia_Aedas.md`) |
 | `comercio.caravana_sale`, `peaje_paso`, `caravana_llega` (esta lleva `comision` —la acuñada, topada por el oro que cabe en el destino—, `recargo`, `carga`, `perdido` y `valor`, el de lo que llevaba a precio vigente, sobre el que se calcula la comisión) | tick | `caravana_llega`: hecho `caravana` de las épicas (origen = plaza que cuenta; `comercial` con ≥ `AEDAS.epica.cargaMinimaCaravana` de carga) |
 | `comercio.entrega_escoltada` | `entregarDeCaravana` | narración |
@@ -1206,7 +1213,7 @@ Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; cont
   "comercio.caravana_animal_comprado", "comercio.caravana_cancelada", "comercio.caravana_carga", "comercio.caravana_carro_agregado", "comercio.caravana_carro_movido",
   "comercio.caravana_construida", "comercio.caravana_descarga", "comercio.caravana_en_batalla", "comercio.caravana_en_casa", "comercio.caravana_enviada_al_origen",
   "comercio.caravana_escolta_cedida", "comercio.caravana_escolta_retirada", "comercio.caravana_espera", "comercio.caravana_llega", "comercio.caravana_perdida",
-  "comercio.caravana_preparando", "comercio.caravana_reserva", "comercio.caravana_sale", "comercio.caravana_sale_de_batalla", "comercio.caravana_vuelve",
+  "comercio.caravana_preparando", "comercio.caravana_renombrada", "comercio.caravana_reserva", "comercio.caravana_sale", "comercio.caravana_sale_de_batalla", "comercio.caravana_vuelve",
   "comercio.carga_caravana_aparcada", "comercio.carros_perdidos", "comercio.encargo_dado", "comercio.encargo_terminado", "comercio.entrega_escoltada",
   "comercio.flota_traspasada", "comercio.peaje_paso", "comercio.trueque_aceptado", "comercio.trueque_cancelado", "comercio.trueque_cumplido",
   "comercio.trueque_expirado", "comercio.trueque_propuesto", "comercio.trueque_rechazado", "mercado.comercio_en_plaza", "mercado.orden_cancelada",

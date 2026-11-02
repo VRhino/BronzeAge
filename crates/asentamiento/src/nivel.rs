@@ -151,8 +151,9 @@ mod pruebas {
         assert_eq!((r.requisitos[&2].pesants, r.requisitos[&3].artesanos, r.requisitos[&4].recinto_nivel_minimo), (200, 400, Some(2)));
         assert_eq!((r.techo(1), r.techo(3), r.techo(5)), (300_000, 6_000_000, 20_000_000));
         let a2 = &r.ascenso[&2];
-        assert_eq!((a2.obra_minutos, a2.costo.clone()), (4320, vec![(Recurso::Madera, 600_000), (Recurso::Oro, 150_000), (Recurso::Piedra, 400_000)]));
-        assert_eq!(r.ascenso[&3].obra_minutos, 10_080);
+        // 10 minutos cada subida mientras duren las pruebas (2026-11-02, decisión del autor; antes 4.320, 10.080, 20.160 y 30.240).
+        assert_eq!((a2.obra_minutos, a2.costo.clone()), (10, vec![(Recurso::Madera, 600_000), (Recurso::Oro, 150_000), (Recurso::Piedra, 400_000)]));
+        assert_eq!([3, 4, 5].map(|n| r.ascenso[&n].obra_minutos), [10, 10, 10]);
         assert_eq!(r.nivel_techo_provisional, 4);
     }
 

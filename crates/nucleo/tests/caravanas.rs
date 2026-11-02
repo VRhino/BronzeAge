@@ -883,7 +883,7 @@ fn el_mercado_de_mercenarios_vende_reposta_y_se_repone_solo_si_algo_cambio() {
     let ana = e.heroe_en_columna("ana", 1, col);
     let lejana = e.heroe_en_columna("lejana", 1, lejos);
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Oro, cantidad: 300_000 });
-    let comprar = |heroe, campamento, recurso, cantidad| Comando::ComprarEnCampamento { heroe, campamento, recurso, cantidad };
+    let comprar = |heroe, campamento, recurso, cantidad| Comando::ComprarEnCampamento { heroe, campamento, recurso, cantidad, pagar_con: None };
     // Rechazos, cada uno con su código.
     assert_eq!(e.rechazada("ana", comprar(ana, 9_999, Cobre, 10_000)), rechazos::CAMPAMENTO_DESCONOCIDO);
     assert_eq!(e.rechazada("lejana", comprar(lejana, 0, Cobre, 10_000)), rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA);
@@ -1304,7 +1304,7 @@ fn guion(e: &mut Escenario, m: &M, avanzar: &dyn Fn(&mut Escenario, Instante)) {
     let c3 = e.caravana("ana", a, 2, true);
     e.trueque(&[(Cobre, 60_000)], &[(Estano, 30_000)]);
     avanzar(e, base + 20 * MIN);
-    e.ok_en(base + 20 * MIN, "ana", Comando::ComprarEnCampamento { heroe: ana, campamento: 0, recurso: Cobre, cantidad: 5_000 });
+    e.ok_en(base + 20 * MIN, "ana", Comando::ComprarEnCampamento { heroe: ana, campamento: 0, recurso: Cobre, cantidad: 5_000, pagar_con: None });
     e.ok_en(base + 20 * MIN, "ana", Comando::PrepararCaravana { caravana: c3, destino: b, carga: vec![(Cobre, 20_000)], salir_en: Some(base + HORA), escolta: None });
     avanzar(e, base + 30 * MIN);
     e.ok_en(base + 30 * MIN, "ana", Comando::CancelarCaravana { caravana: c3 });

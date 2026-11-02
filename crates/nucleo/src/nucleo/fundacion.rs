@@ -694,7 +694,8 @@ impl Nucleo {
         Ok((campamento, faccion))
     }
 
-    /// `aportarARefundacion` (`aporta`) y `retirarDeRefundacion` (§9.1): con el almacén personal (residiendo en ese campamento) o con el carro de la columna a la puerta (siendo su Líder).
+    /// `aportarARefundacion` (`aporta`) y `retirarDeRefundacion` (§9.1): con el almacén personal (residiendo en ese campamento) o con el carro: dentro del campamento, el que lleva
+    /// (2026-11-02, pedido del autor: la columna con la que entró o, en su residencia, la que conserva o el que trajo); con la columna a la puerta, el de ella, siendo su Líder.
     /// Aportar mueve `min(pedido, lo que hay)`; retirar, `min(pedido, lo aportado, el hueco)`. Solo aporta una Facción sin plazas; retirar lo propio se puede siempre que se siga siendo
     /// ciudadano.
     #[allow(clippy::too_many_arguments)]
@@ -710,45 +711,46 @@ impl Nucleo {
         if pedido <= 0 {
             return Err(rechazo(rechazos::CANTIDAD_NO_POSITIVA, "hay que mover al menos una unidad".into()));
         }
-        let hn = self.heroe(heroe).expect("existe");
-        // `columna`: la del carro (`None` = el almacén personal).
-        let columna = match lado {
+        // `carro`: `None` = el almacén personal; si no, el carro (su columna, o `None` si va con el héroe) y lo que admite.
+        let carro = match lado {
             LadoDelFondo::Almacen => {
-                if hn.heroe.residencia != Some(Residencia::Campamento(campamento)) {
+                if self.heroe(heroe).expect("existe").heroe.residencia != Some(Residencia::Campamento(campamento)) {
                     return Err(rechazo(rechazos::REFUNDACION_NO_RESIDES, "el almacén personal está en el campamento donde se reside: aquí, con el carro".into()));
                 }
                 None
             }
             LadoDelFondo::Carro => {
-                let c = self.columna_de(heroe).ok_or_else(|| rechazo(rechazos::HEROE_SIN_COLUMNA, "hace falta tu columna a la puerta del campamento".into()))?;
-                if self.estado.ejercitos[&c].columna.lider != heroe {
+                let (columna, capacidad, a_la_puerta) = self.carro_en_campamento(heroe, campamento)?;
+                if a_la_puerta && columna.is_some_and(|c| self.estado.ejercitos[&c].columna.lider != heroe) {
                     return Err(rechazo(rechazos::COLUMNA_SOLO_EL_LIDER, "solo el Líder de la columna mueve lo de su carro".into()));
                 }
-                Some(c)
+                Some((columna, capacidad))
             }
         };
-        let carga = columna.map_or(&hn.almacen_personal, |c| &self.estado.ejercitos[&c].columna.carga);
+        let hn = self.heroe(heroe).expect("existe");
+        let carga = match carro {
+            None => &hn.almacen_personal,
+            Some((Some(c), _)) => &self.estado.ejercitos[&c].columna.carga,
+            Some((None, _)) => &hn.carro,
+        };
         let aportado = self.estado.fundacion.fondos.get(&campamento).and_then(|f| f.get(&heroe)).map_or(0, |m| de(m, recurso));
         let movido = if aporta {
             let hay = de(carga, recurso);
             let movido = entero(pedido.min(hay));
             if movido <= 0 {
-                return Err(match columna {
+                return Err(match carro {
                     None => rechazo(rechazos::ALMACEN_SIN_EXISTENCIAS, format!("no hay {} en tu almacén personal", recurso.nombre())),
                     Some(_) => rechazo(rechazos::CARRO_NO_LLEVA, format!("el carro no lleva {}", recurso.nombre())),
                 });
             }
             movido
         } else {
-            let sitio = match columna {
-                None => self.estado.reglas.economia.comercio.mercenarios.capacidad_almacen_personal - total(carga),
-                Some(c) => self.capacidad_de_carga(c).unwrap_or(0) - total(carga),
-            };
-            let movido = entero(pedido.min(aportado).min(sitio.max(0)));
+            let capacidad = carro.map_or(self.estado.reglas.economia.comercio.mercenarios.capacidad_almacen_personal, |(_, c)| c);
+            let movido = entero(pedido.min(aportado).min((capacidad - total(carga)).max(0)));
             if movido <= 0 {
                 return Err(if aportado < UNIDAD {
                     rechazo(rechazos::REFUNDACION_SIN_APORTE, format!("no has aportado {} a este fondo", recurso.nombre()))
-                } else if columna.is_none() {
+                } else if carro.is_none() {
                     rechazo(rechazos::ALMACEN_PERSONAL_LLENO, "tu almacén personal está lleno".into())
                 } else {
                     rechazo(rechazos::CARRO_LLENO, "el carro está lleno".into())
@@ -767,9 +769,11 @@ impl Nucleo {
         if fondo.is_empty() {
             self.estado.fundacion.fondos.remove(&campamento);
         }
-        let carga = match columna {
-            Some(c) => &mut self.estado.ejercitos.get_mut(&c).expect("existe").columna.carga,
-            None => &mut self.estado.militar.heroes.get_mut(&heroe).expect("existe").almacen_personal,
+        let hn = self.estado.militar.heroes.get_mut(&heroe).expect("existe");
+        let carga = match carro {
+            None => &mut hn.almacen_personal,
+            Some((Some(c), _)) => &mut self.estado.ejercitos.get_mut(&c).expect("existe").columna.carga,
+            Some((None, _)) => &mut hn.carro,
         };
         if aporta {
             quitar(carga, recurso, movido);
@@ -778,7 +782,7 @@ impl Nucleo {
         }
         self.tr.tocar(Clase::Heroe, heroe);
         self.tr.tocar(Clase::Campamento, u64::from(campamento));
-        if let Some(c) = columna {
+        if let Some((Some(c), _)) = carro {
             self.tr.tocar(Clase::Ejercito, c);
         }
         let datos = vec![("campamento", i64::from(campamento)), ("heroe", heroe as i64), ("faccion", i64::from(faccion)), ("recurso", recurso_a_u8(recurso) as i64), ("cantidad", movido)];

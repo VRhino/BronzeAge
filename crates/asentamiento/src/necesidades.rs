@@ -4,13 +4,12 @@
 //!
 //! Cambios de la reconstrucción respecto a TypeScript, ya decididos: los minerales y la Cantera van por pueblo extractor (Doc 4.2.2; la
 //! primera Cantera también desde el 2026-11-01) y el Corral es de las aldeas agrícolas (§14.2), así que la cola automática no propone
-//! ningún extractor; un candidato que no se compromete no deja rastro.
+//! ningún extractor; tampoco una Granja (2026-11-02: la ciudad solo tiene la de la fundación); un candidato que no se compromete no deja rastro.
 
 use crate::asentamiento::{Asentamiento, Evento, Exterior};
 use crate::catalogo::Tipo;
-use crate::datos::{por, razon, Reglas, UNO};
+use crate::datos::{razon, Reglas, UNO};
 use crate::edificio::{Edificio, Edificios, Estado, Fuente};
-use crate::produccion::{self, Mano};
 use base::{Instante, Mil};
 
 struct Candidato {
@@ -46,52 +45,18 @@ impl Asentamiento {
         crate::recurso::TODOS.iter().filter(|&&r| self.almacen.capacidad(r) > 0).map(|&r| razon(self.almacen.cantidad(r), self.almacen.capacidad(r))).max().unwrap_or(0)
     }
 
-    /// `hayMejoraGranjaDisponible`: queda una cuadrilla libre tras reservar la de construir y alguna Granja puede pagar ya su
-    /// siguiente mejora. Entonces se prefiere mejorar a construir otra (mejorar no diluye la mano de obra).
-    fn hay_mejora_granja_disponible(&self, r: &Reglas, x: &Exterior, reserva: &[Mil; 29]) -> bool {
-        if self.edificios.cuadrillas_ocupadas() + 1 >= r.construccion.necesidades.maximo_en_construccion_simultanea {
-            return false;
-        }
-        self.edificios.iter().any(|e| {
-            e.tipo == Tipo::Granja && self.elegible_para_mejora(r, e, x) && {
-                let costo = r.catalogo.tipo(Tipo::Granja).nivel(e.nivel_interno + 1).map(|n| n.costo_mejora.clone()).unwrap_or_default();
-                self.puede_iniciar(r, Tipo::Granja, &costo, reserva)
-            }
-        })
-    }
-
-    pub(crate) fn evaluar_necesidades(&mut self, _t: Instante, x: &mut Exterior, mano: &Mano, reserva: &[Mil; 29], ev: &mut Vec<Evento>) {
+    pub(crate) fn evaluar_necesidades(&mut self, _t: Instante, x: &mut Exterior, reserva: &[Mil; 29], ev: &mut Vec<Evento>) {
         let r = x.reglas;
         let c = &r.construccion;
         let n = &c.necesidades;
         let mut candidatos: Vec<Candidato> = vec![];
         // Lo que se comprometa en esta pasada se confirma al final; preguntar solo cambia la ciudad si el trazado crea un ancla (Trazado_Urbano §7.1).
         let u = self.urbano(r);
+        let (cap_p, cap_a, _) = self.capacidades(r);
+        let (hab_p, hab_a) = (self.poblacion.pesants * 1000, self.poblacion.artesanos * 1000);
 
-        // Déficit de trigo: real y proyectado (con la población que cabe en las Viviendas construidas o en camino).
-        let (cap_p, cap_a, cap_n) = self.capacidades(r);
-        let pop = &self.poblacion;
-        let entorno = (cap_p, cap_a, cap_n);
-        let consumo_hab = |hab: Mil| por(hab, r.poblacion.consumo_por_habitante);
-        let factor_consumo = self.politicas.factor(&r.politicas, "factorConsumoComida");
-        let (hab_p, hab_a, hab_n) = (pop.pesants * 1000, pop.artesanos * 1000, pop.nobleza * 1000);
-        let consumo_actual = por(consumo_hab(pop.total() * 1000), factor_consumo) + x.racion_guarnicion;
-        let objetivo = hab_p.max(entorno.0) + hab_a.max(entorno.1) + hab_n.max(entorno.2);
-        let consumo_objetivo = por(consumo_hab(objetivo), factor_consumo) + x.racion_guarnicion;
-        let produccion = produccion::produccion_trigo_por_minuto(&r.catalogo, &self.edificios, mano, x.fertilidad, self.politicas.factor(&r.politicas, "factorProduccionTrigo"));
-        let en_deficit = produccion < consumo_actual;
-        let en_deficit_proyectado = produccion < consumo_objetivo;
-
-        // 1. Granja.
-        let activas = self.edificios.activos(Tipo::Granja);
-        let pendientes = self.edificios.iter().filter(|e| e.tipo == Tipo::Granja && !e.activo()).count() as u32;
-        let limite = if en_deficit { n.maximo_granjas_pendientes_en_deficit } else { 1 };
-        if (activas == 0 || en_deficit_proyectado) && pendientes < limite && !self.hay_mejora_granja_disponible(r, x, reserva) && self.puede_pagar(r, x, Tipo::Granja, reserva) {
-            if let Some(fuente) = self.proponer(x, Tipo::Granja, &u, ev) {
-                let urgencia = if activas == 0 { 100 } else { (razon(consumo_objetivo - produccion, consumo_objetivo.max(1)) / 10_000).clamp(0, 100) };
-                candidatos.push(Candidato { tipo: Tipo::Granja, score: c.bandas.supervivencia + urgencia, fuente });
-            }
-        }
+        // 1. Granja: ninguna (2026-11-02, decisión del autor). La ciudad tiene solo la de la fundación, que se mejora como cualquier edificio; el trigo de más, de las aldeas
+        //    agrícolas.
 
         // 2. Leñera.
         if (self.edificios.activos(Tipo::Lenera) as u32) < c.extraccion_maxima_por_tipo && !self.pendiente(Tipo::Lenera) && self.puede_pagar(r, x, Tipo::Lenera, reserva) {

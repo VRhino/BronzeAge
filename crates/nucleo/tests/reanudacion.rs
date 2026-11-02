@@ -456,7 +456,7 @@ async fn caso(m: &'static M, semilla: u64) -> Cuenta {
             }
             10 => {
                 let cuerpo = match rng.por_debajo(3) {
-                    0 => orden::Cuerpo::ComprarEnCampamento(pb::OrdenComprarEnCampamento { recurso: "trigo".into(), cantidad: 1_000 + rng.por_debajo(20_000) as i64, campamento_id: None }),
+                    0 => orden::Cuerpo::ComprarEnCampamento(pb::OrdenComprarEnCampamento { recurso: "trigo".into(), cantidad: 1_000 + rng.por_debajo(20_000) as i64, campamento_id: None, pagar_con: None }),
                     1 => orden::Cuerpo::SalirDelCampamento(pb::OrdenSalirDelCampamento { campamento_id: ids::campamento(camp), heroe_id: ids::heroe(dora), ..Default::default() }),
                     _ => orden::Cuerpo::EntrarEnCampamento(pb::OrdenEntrarEnCampamento { campamento_id: ids::campamento(camp), heroe_id: ids::heroe(dora) }),
                 };

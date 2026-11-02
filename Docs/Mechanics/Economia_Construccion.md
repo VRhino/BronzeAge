@@ -300,7 +300,7 @@ Cada candidato recibe `score = base de su banda + urgencia(0–100, recortada) +
 
 | # | Candidato | Condición | Score |
 |---|---|---|---|
-| 1 | **Granja** | `(granjas activas = 0 ∨ enDeficitProyectado)` ∧ ¬`hayMejoraGranjaDisponible` ∧ `granjasPendientes < límite` ∧ `puedePagar` ∧ hay sitio | supervivencia + (`granjas activas = 0` ? 100 : `deficitRatio × 100`) |
+| 1 | **Granja**. **En Rust, ninguna desde el 2026-11-02** (decisión del autor, para darle sentido a la aldea agrícola): la ciudad tiene solo la Granja de la fundación, que se mejora como cualquier edificio (§7), y el trigo de más sale de las aldeas (§14.0). En el TypeScript: | `(granjas activas = 0 ∨ enDeficitProyectado)` ∧ ¬`hayMejoraGranjaDisponible` ∧ `granjasPendientes < límite` ∧ `puedePagar` ∧ hay sitio | supervivencia + (`granjas activas = 0` ? 100 : `deficitRatio × 100`) |
 | 2 | **Leñera** | leñeras **activas** `< EXTRACCION_MAXIMOS.porTipo` ∧ ¬`proyectoEnCurso` ∧ `puedePagar` ∧ hay bosque con hueco en la zona (`bosqueParaLenera`) ∧ hay sitio local | supervivencia + (0 activas → 100; `madera < reserva.madera` → 90; si no 30) |
 | 3 | **Extractores**: cantera, corral, minaCobre, mina, minaEstano, minaHierro (en este orden). **En Rust, ninguno desde el 2026-11-01**: los minerales y la Cantera, también la primera, solo se explotan con un pueblo extractor (§14; los minerales y las demás Canteras desde la fase 3C), y el Corral solo existe en la aldea agrícola desde el 2026-10-27 | `necesitaNuevoExtractor` ∧ ¬`proyectoEnCurso` ∧ `puedePagar` ∧ hay nodo libre y, si es interno (corral), sitio local | extractorBase + (alguna fuente viva ? 40 : 100) + `min(ticksSinCupo × bonusPorMinutoStarved, bonusMaximo)` |
 | 4 | **Vivienda** | (`capacidad de pesants = 0` ∨ `ocupaciónMáx ≥ umbralViviendaOcupada`) ∧ ¬pendiente ∧ ¬`alcanzoTopeDeViviendas` ∧ `puedePagar` | crecimiento + `ocupaciónMáx × 100` |
@@ -311,7 +311,7 @@ Cada candidato recibe `score = base de su banda + urgencia(0–100, recortada) +
 
 Definiciones auxiliares:
 
-- **Déficit de trigo**: `produccionActual = Σ por granja activa de produccionTrigoDeGranja(nivel) × fertilidadZona × ratioManoObra × factorProduccionTrigo`;
+- **Déficit de trigo** (solo el TypeScript: en Rust no hay candidato Granja desde el 2026-11-02 y con él se fueron `maximoGranjasPendientesEnDeficit` y `hayMejoraGranjaDisponible`): `produccionActual = Σ por granja activa de produccionTrigoDeGranja(nivel) × fertilidadZona × ratioManoObra × factorProduccionTrigo`;
   `consumoActual = consumoComidaPoblacion + ración de la guarnición`; `enDeficitTrigo = produccionActual < consumoActual`.
   El **objetivo proyectado** usa una población `max(real, capacidad de Vivienda)` por clase: `enDeficitProyectado = produccionActual < consumoObjetivo`; `deficitRatio = (consumoObjetivo − produccionActual)/consumoObjetivo`.
 - **`granjasPendientes`** = granjas con estado ≠ activo; **`límite`** = `maximoGranjasPendientesEnDeficit` (3) si `enDeficitTrigo`, si no 1.
@@ -358,7 +358,7 @@ La pide un residente presente con el cargo `gobernador` o `maestroObras` (el mot
 de Mercado. Validaciones, en orden:
 
 1. Hay alguien en ese cargo. 2. La Facción tiene la tecnología del tipo. 3. Si el tipo pide una Era (`ordenEraMinimo`, hoy solo la Maravilla: la V), el servidor la ha alcanzado (`ERAS[era].orden`). 3b. No es `centroUrbano` ni `puestoMercado`. 3c (Rust). No es un extractor de pueblo (Cantera ni minas: `obra.solo_por_pueblo`, la Cantera también la primera desde el 2026-11-01) ni el Corral (`obra.solo_en_aldea`).
-4. Tipos **únicos** (`EDIFICIOS_UNICOS`, §14.2): ya hay uno (de cualquier estado).
+4. Tipos **únicos** (`EDIFICIOS_UNICOS`, §14.2): ya hay uno (de cualquier estado). **La Granja es única desde el 2026-11-02** (decisión del autor): la de la fundación es la única de la ciudad y otra se rechaza con `obra.unico`; se mejora como siempre.
 5. Tope de Almacenes; tope de Viviendas. 6. `nivelActual ≥ requisitoNivelAsentamientoConstruccion` del tipo. 7. Tope de transformación.
 8. **Gran Fundición**: nivel de Facción ≥ `nivelFaccionMinimo` (6), el asentamiento es la **capital**, y la Facción no tiene ya otra (ninguno de sus asentamientos).
 9. `en_cola < maximoEnCola`. 10. `asegurarAnclaPara` y búsqueda de sitio (si no hay: «No hay sitio disponible dentro de la zona de influencia»).
@@ -553,6 +553,7 @@ Solo el **Gobernador** (residente y presente). Bloqueos posibles, **todos a la v
   más, para el oro, `recaudacionOro`— debe ser ≥ ese coste. Es bruto a propósito: no descuenta lo que gasten recetas o tropas. Lo que llega por **acarreo** (§14, pueblos extractores) cuenta como la **media por minuto de lo que ingresó de verdad
   en la plaza en las últimas 24 h** (decidido por el autor el 2026-10-19; antes, la producción nominal de los pueblos con carro). **Desde el 2026-11-01 cuenta todo lo que llega, quepa o no** en el almacén (decisión del autor): antes contaba solo lo que entraba, y una plaza con el almacén de piedra lleno se quedaba insolvente para el nivel 2 aunque su cantera trajese de sobra.
 - Si todo va bien: cobra el coste entero del almacén y fija `ascenso = { nivelObjetivo, iniciadoEn, completaEn: instante + obraMinutos }` (evento `asentamiento.ascenso_iniciado`).
+- **Duración de prueba (decisión del autor del 2026-11-02):** mientras se hacen pruebas, `obraMinutos` es **10** para todos los niveles objetivo (antes 4.320, 10.080, 20.160 y 30.240: 3 días, 1, 2 y 3 semanas). Se vuelve a las de antes cuando acaben las pruebas.
 
 ### 11.3 Durante la obra
 
@@ -1524,7 +1525,6 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
 ```json
 {
   "umbralViviendaOcupada": 0.85,
-  "maximoGranjasPendientesEnDeficit": 3,
   "umbralAlmacenAmpliacion": 0.9,
   "maximoAlmacenesPorNivel": {
     "1": 4,
@@ -1657,6 +1657,7 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
 <!-- parametros:EDIFICIOS_UNICOS -->
 ```json
 [
+  "granja",
   "granero",
   "barracon",
   "galeriaDeTiro",
@@ -1894,7 +1895,7 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
         "piedra": 400,
         "oro": 150
       },
-      "obraMinutos": 4320
+      "obraMinutos": 10
     },
     "3": {
       "costo": {
@@ -1903,7 +1904,7 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
         "oro": 400,
         "lingoteBronce": 100
       },
-      "obraMinutos": 10080
+      "obraMinutos": 10
     },
     "4": {
       "costo": {
@@ -1912,7 +1913,7 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
         "oro": 1000,
         "lingoteBronce": 150
       },
-      "obraMinutos": 20160
+      "obraMinutos": 10
     },
     "5": {
       "costo": {
@@ -1920,7 +1921,7 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
         "piedra": 5000,
         "oro": 2500
       },
-      "obraMinutos": 30240
+      "obraMinutos": 10
     }
   },
   "nivelTechoProvisional": 4

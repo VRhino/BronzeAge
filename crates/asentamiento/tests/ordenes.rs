@@ -94,9 +94,9 @@ fn la_cola_manual_paga_al_encolar_respeta_los_topes_y_se_reembolsa_entera_al_qui
     assert_eq!(a.quitar_de_cola(&r, id), Err(ErrorObra::NoExiste));
     // Cola de cuatro: la quinta se rechaza.
     for _ in 0..4 {
-        a.anadir_manual(0, &r, &mut x, Tipo::Granja, &mut vec![]).unwrap();
+        a.anadir_manual(0, &r, &mut x, Tipo::Vivienda, &mut vec![]).unwrap();
     }
-    assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::Granja, &mut vec![]), Err(ErrorObra::ColaLlena));
+    assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::Vivienda, &mut vec![]), Err(ErrorObra::ColaLlena));
 }
 
 #[test]
@@ -108,6 +108,8 @@ fn los_tipos_unicos_y_los_topes_de_nivel_se_hacen_cumplir() {
     let mut x = exterior!(&r, s, w);
     a.anadir_manual(0, &r, &mut x, Tipo::Taberna, &mut vec![]).unwrap();
     assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::Taberna, &mut vec![]), Err(ErrorObra::Unico));
+    // La Granja es única (2026-11-02): la de la fundación es la de la ciudad.
+    assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::Granja, &mut vec![]), Err(ErrorObra::Unico));
     assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::GranFundicion, &mut vec![]), Err(ErrorObra::NivelInsuficiente), "pide capital de nivel 4");
     // Tres Fundiciones en el nivel 2; la cuarta choca con el tope de transformación.
     for _ in 0..3 {
@@ -123,7 +125,7 @@ fn mover_en_cola_intercambia_prioridades_con_el_vecino() {
     let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
     ocupar_cuadrillas(&mut a, &r);
     let mut x = exterior!(&r, s, w);
-    let ids: Vec<u32> = (0..3).map(|_| a.anadir_manual(0, &r, &mut x, Tipo::Granja, &mut vec![]).unwrap()).collect();
+    let ids: Vec<u32> = (0..3).map(|_| a.anadir_manual(0, &r, &mut x, Tipo::Vivienda, &mut vec![]).unwrap()).collect();
     for (k, &id) in ids.iter().enumerate() {
         a.edificios.iter_mut().find(|e| e.id == id).unwrap().prioridad = 900 - k as i64; // orden: 0, 1, 2
     }

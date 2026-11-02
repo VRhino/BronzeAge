@@ -931,7 +931,7 @@ impl Sim<'_> {
                         let tiene = |s: &Self, r: Recurso| s.n.heroe(h).and_then(|x| x.almacen_personal.get(&r).copied()).unwrap_or(0) / base::UNIDAD * base::UNIDAD;
                         // Lo que no tiene lo compra en el mercado del campamento con su oro.
                         if tiene(self, r) < falta && r != Recurso::Oro && tiene(self, Recurso::Oro) > 0 {
-                            self.orden(t, &cuenta, "ComprarEnCampamento", Comando::ComprarEnCampamento { heroe: h, campamento: k, recurso: r, cantidad: falta - tiene(self, r) });
+                            self.orden(t, &cuenta, "ComprarEnCampamento", Comando::ComprarEnCampamento { heroe: h, campamento: k, recurso: r, cantidad: falta - tiene(self, r), pagar_con: None });
                         }
                         let pon = falta.min(tiene(self, r));
                         if pon > 0 {

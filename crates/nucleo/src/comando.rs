@@ -154,6 +154,9 @@ pub enum Comando {
     MoverCarro { de: u64, a: u64, carro: u32 },
     /// Pone o quita `reservadaManual` (fuera del reparto automático).
     ReservarCaravana { caravana: u64, reservada: bool },
+    /// Le cambia el nombre a una caravana comercial (`renombrarCaravana`, 2026-11-02, pedido del autor): recortado; vacío, se queda sin nombre (se muestra su id); como mucho los
+    /// caracteres del nombre de una plaza y sin mirar si otra se llama igual.
+    RenombrarCaravana { caravana: u64, nombre: String },
     /// Lanza a mano una caravana: reserva la carga del almacén y queda `preparando` (o sale ya, con un solo carro y sin `salir_en`).
     /// `escolta`: el héroe que cede y sus escuadras, cedidas en el mismo lanzamiento como con `AsignarEscolta` (paridad P5, `escoltaEscuadronIds`).
     PrepararCaravana { caravana: u64, destino: u64, carga: Vec<(Recurso, Mil)>, salir_en: Option<Instante>, escolta: Option<(u64, Vec<u64>)> },
@@ -179,9 +182,10 @@ pub enum Comando {
     AparcarCaravana { caravana: u64, asentamiento: u64 },
     // ── Mercado de los campamentos de mercenarios (Comercio_Caravanas §9). `campamento` es el índice del artefacto de mundo; el héroe debe estar
     //    dentro del campamento o con su columna a la puerta. ──
-    /// Compra `cantidad` (se sirven unidades enteras) de un bien. Un héroe residente paga de su almacén personal y compra con cupo diario; uno
-    /// visitante paga con el oro del carro de su columna, lleva la compra al carro y no compra trigo.
-    ComprarEnCampamento { heroe: u64, campamento: u32, recurso: Recurso, cantidad: Mil },
+    /// Compra `cantidad` (se sirven unidades enteras) de un bien. Un héroe residente compra con cupo diario y, por defecto, paga de su almacén personal y
+    /// guarda allí la compra; uno visitante paga con el oro del carro que lleva, lleva la compra al carro y no compra trigo. `pagar_con` (2026-11-02) elige el
+    /// lado: con `Carro`, también el residente paga con el carro que lleva y lo lleva a él (sin trigo, que no va al carro); `None` = el de siempre.
+    ComprarEnCampamento { heroe: u64, campamento: u32, recurso: Recurso, cantidad: Mil, pagar_con: Option<PagarCon> },
     /// Llena los víveres del héroe (los de su columna, si va en una), gratis y sin gastar el stock del mercado.
     RepostarEnCampamento { heroe: u64, campamento: u32 },
     // ── Andamiaje de administración, provisional hasta el sistema político (residencia, ciudadanía y almacén personal) y el de columnas. ──
@@ -451,9 +455,10 @@ pub enum Comando {
     AlternarReabastecerAliados { asentamiento: u64, permitido: bool },
     // ── Refundación y Caravana de Fundación (sistema 5, tanda 5G-b; Fundacion_Y_Refundacion §4, §6 y §9). Las da la cuenta del héroe. Los códigos empiezan en el 153: del 143 al 152
     //    quedan para 5C. Todo en unidades enteras (C3b). ──
-    /// Aporta al fondo de refundación de su Facción (sin plazas) en el campamento donde está: de su almacén personal (residiendo allí) o del carro de su columna a la puerta (siendo su Líder).
+    /// Aporta al fondo de refundación de su Facción (sin plazas) en el campamento donde está: de su almacén personal (residiendo allí) o del carro: dentro, el que lleva (2026-11-02);
+    /// con su columna a la puerta, el de ella (siendo su Líder).
     AportarARefundacion { heroe: u64, recurso: Recurso, cantidad: Mil, lado: LadoDelFondo },
-    /// Retira lo que aportó al fondo del campamento donde está, a su almacén personal (residiendo allí) o al carro de su columna, hasta donde quepa.
+    /// Retira lo que aportó al fondo del campamento donde está, a su almacén personal (residiendo allí) o al carro (el mismo que al aportar), hasta donde quepa.
     RetirarDeRefundacion { heroe: u64, recurso: Recurso, cantidad: Mil, lado: LadoDelFondo },
     /// Compra la Caravana de Fundación con el fondo de su Facción (sin plazas ni otra caravana) en el campamento donde está: nace parada en él, con el héroe de titular. `creadas` lleva su id.
     ComprarCaravanaDeRefundacion { heroe: u64 },
@@ -810,6 +815,7 @@ impl Comando {
             | Comando::AnadirAnimal { .. }
             | Comando::MoverCarro { .. }
             | Comando::ReservarCaravana { .. }
+            | Comando::RenombrarCaravana { .. }
             | Comando::PrepararCaravana { .. }
             | Comando::CancelarCaravana { .. } => ResidenteDentro,
             Comando::MoverCargaAparcada { .. } | Comando::EnviarCaravanaAlOrigen { .. } => OperaAparcada,
@@ -1012,6 +1018,7 @@ impl Comando {
             Comando::AnadirCarro { caravana, .. }
             | Comando::AnadirAnimal { caravana, .. }
             | Comando::ReservarCaravana { caravana, .. }
+            | Comando::RenombrarCaravana { caravana, .. }
             | Comando::CancelarCaravana { caravana }
             | Comando::MoverCargaAparcada { caravana, .. }
             | Comando::EnviarCaravanaAlOrigen { caravana } => i.caravanas.push(*caravana),
@@ -1228,19 +1235,28 @@ impl Comando {
     }
 }
 
-/// De dónde sale el oro al reclutar en un campamento de mercenarios.
+/// De dónde sale el oro al reclutar o comprar en un campamento de mercenarios.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PagarCon {
     AlmacenPersonal,
-    /// Del carro de la columna del héroe, a la puerta del campamento.
+    /// Del carro: al reclutar, el de la columna del héroe, a la puerta del campamento; al comprar, también el que lleva dentro (2026-11-02).
     Carro,
 }
 
-/// De dónde sale o adónde va lo del fondo de refundación (Fundacion_Y_Refundacion §9.1, D39): el almacén personal (en el campamento donde se reside) o el carro de la columna.
+/// De dónde sale o adónde va lo del fondo de refundación (Fundacion_Y_Refundacion §9.1, D39): el almacén personal (en el campamento donde se reside) o el carro (el que lleva dentro, o el
+/// de su columna a la puerta).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LadoDelFondo {
     Almacen,
     Carro,
+}
+
+fn pagar_con_de_u8(i: u8) -> Result<PagarCon, ErrorFormato> {
+    match i {
+        0 => Ok(PagarCon::AlmacenPersonal),
+        1 => Ok(PagarCon::Carro),
+        _ => Err(ErrorFormato("forma de pago desconocida")),
+    }
 }
 
 fn lado_a_u8(l: LadoDelFondo) -> u8 {
@@ -1566,12 +1582,16 @@ impl Peticion {
                 w.u64(*caravana);
                 w.u64(*asentamiento);
             }
-            Comando::ComprarEnCampamento { heroe, campamento, recurso, cantidad } => {
-                w.u8(41);
+            Comando::ComprarEnCampamento { heroe, campamento, recurso, cantidad, pagar_con } => {
+                // Sin lado, el código de siempre (41); con lado, el 208 (2026-11-02), que lo añade al final.
+                w.u8(if pagar_con.is_some() { 208 } else { 41 });
                 w.u64(*heroe);
                 w.u32(*campamento);
                 w.u8(recurso_a_u8(*recurso));
                 w.i64(*cantidad);
+                if let Some(pagar_con) = pagar_con {
+                    w.u8(*pagar_con as u8);
+                }
             }
             Comando::RepostarEnCampamento { heroe, campamento } => {
                 w.u8(42);
@@ -1703,6 +1723,11 @@ impl Peticion {
             Comando::CerrarSesion { heroe } => {
                 w.u8(207);
                 w.u64(*heroe);
+            }
+            Comando::RenombrarCaravana { caravana, nombre } => {
+                w.u8(209);
+                w.u64(*caravana);
+                w.texto(nombre);
             }
             Comando::FijarTecnologias { faccion, tecnologias } => {
                 w.u8(65);
@@ -2475,7 +2500,7 @@ impl Peticion {
             38 => Comando::DarSuministro { ejercito: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
             39 => Comando::AdjuntarCaravana { caravana: r.u64()?, ejercito: r.u64()? },
             40 => Comando::AparcarCaravana { caravana: r.u64()?, asentamiento: r.u64()? },
-            41 => Comando::ComprarEnCampamento { heroe: r.u64()?, campamento: r.u32()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
+            41 => Comando::ComprarEnCampamento { heroe: r.u64()?, campamento: r.u32()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()?, pagar_con: None },
             42 => Comando::RepostarEnCampamento { heroe: r.u64()?, campamento: r.u32()? },
             43 => Comando::FijarResidencia { heroe: r.u64()?, residencia: residencia_leer(&mut r)? },
             44 => Comando::DarAlmacenPersonal { heroe: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
@@ -2485,15 +2510,7 @@ impl Peticion {
             48 => Comando::ReponerCarro { pueblo: r.u64()? },
             49 => Comando::CrearHeroe { cuenta: r.texto()?, campamento: r.u32()?, controlador: controlador_de_u8(r.u8()?)?, nombre: None },
             50 => Comando::ReclutarTropa { asentamiento: r.u64()?, heroe: r.u64()?, tropa: tropa_de_u8(r.u8()?)? },
-            51 => Comando::ReclutarEnCampamento {
-                heroe: r.u64()?,
-                tropa: tropa_de_u8(r.u8()?)?,
-                pagar_con: match r.u8()? {
-                    0 => PagarCon::AlmacenPersonal,
-                    1 => PagarCon::Carro,
-                    _ => return Err(ErrorFormato("forma de pago desconocida")),
-                },
-            },
+            51 => Comando::ReclutarEnCampamento { heroe: r.u64()?, tropa: tropa_de_u8(r.u8()?)?, pagar_con: pagar_con_de_u8(r.u8()?)? },
             52 => Comando::PedirPrestamo { heroe: r.u64()?, tropas: (0..r.cuenta()?).map(|_| tropa_de_u8(r.u8()?)).collect::<Result<_, _>>()? },
             53 => Comando::ReponerPrestamo { heroe: r.u64()? },
             54 => Comando::GuardarLoadout {
@@ -2693,6 +2710,8 @@ impl Peticion {
             205 => Comando::ValorarMercenario { heroe: r.u64()?, mercenario: r.u64()?, buena: r.bool()? },
             206 => Comando::ReclamarPremioDeRango { heroe: r.u64()?, tropa: tropa_de_u8(r.u8()?)? },
             207 => Comando::CerrarSesion { heroe: r.u64()? },
+            208 => Comando::ComprarEnCampamento { heroe: r.u64()?, campamento: r.u32()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()?, pagar_con: Some(pagar_con_de_u8(r.u8()?)?) },
+            209 => Comando::RenombrarCaravana { caravana: r.u64()?, nombre: r.texto()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -3281,6 +3300,9 @@ pub mod rechazos {
     pub const ASENTAMIENTO_NOMBRE_LARGO: &str = "asentamiento.nombre_largo";
     /// Otra plaza viva ya se llama así (sin mirar tildes ni mayúsculas).
     pub const ASENTAMIENTO_NOMBRE_DUPLICADO: &str = "asentamiento.nombre_duplicado";
+    // El nombre de una caravana (pedido del autor del 2026-11-02).
+    /// El nombre recortado de la caravana pasa de `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres (el mismo tope que el de las plazas; no tiene que ser único).
+    pub const CARAVANA_NOMBRE_LARGO: &str = "caravana.nombre_largo";
     // Las relaciones entre Facciones (sistema 5, tanda 5D; `ErrorDiplomacia` y `ErrorPropuesta` del crate `politica`).
     /// Ya hay una relación activa entre las dos (de cualquier clase, la guerra incluida): para cambiarla hay que romperla antes (o firmar la paz).
     pub const DIPLOMACIA_YA_HAY_RELACION: &str = "diplomacia.ya_hay_relacion";
@@ -3614,7 +3636,8 @@ mod pruebas {
             Comando::DarSuministro { ejercito: 2, recurso: Recurso::Oro, cantidad: 1_000 },
             Comando::AdjuntarCaravana { caravana: 1, ejercito: 2 },
             Comando::AparcarCaravana { caravana: 1, asentamiento: 3 },
-            Comando::ComprarEnCampamento { heroe: 2, campamento: 7, recurso: Recurso::Cobre, cantidad: 5_000 },
+            Comando::ComprarEnCampamento { heroe: 2, campamento: 7, recurso: Recurso::Cobre, cantidad: 5_000, pagar_con: None },
+            Comando::ComprarEnCampamento { heroe: 2, campamento: 7, recurso: Recurso::Madera, cantidad: 3_000, pagar_con: Some(PagarCon::Carro) },
             Comando::RepostarEnCampamento { heroe: 2, campamento: 7 },
             Comando::MarcarPueblo { asentamiento: 3, nodo: 70_001 },
             Comando::EntregarMateriales { ejercito: 2, pueblo: 9 },
@@ -3725,6 +3748,7 @@ mod pruebas {
             Comando::Desconectarse { heroe: 2 },
             Comando::Conectarse { heroe: 2 },
             Comando::CerrarSesion { heroe: 2 },
+            Comando::RenombrarCaravana { caravana: 4, nombre: "La de Tirinto".into() },
             Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["arco_compuesto".into(), "leva_comunal".into()] },
             Comando::FijarFaccionDeHeroe { heroe: 2, faccion: Some(3) },
             Comando::FijarFaccionDeHeroe { heroe: 2, faccion: None },

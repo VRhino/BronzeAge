@@ -29,12 +29,16 @@ pub fn nivel_al_azar(r: &Reglas, rng: &mut Rng) -> u8 {
     1
 }
 
-/// Un campamento por plaza, siempre: aparece uno cuando no tiene y ha vencido su plazo de reaparición (una plaza sin plazo lo recibe ya).
-pub fn aparece_junto_a_plaza(tiene_campamento: bool, reaparece_en: Option<Instante>, ahora: Instante) -> bool {
-    !tiene_campamento && reaparece_en.is_none_or(|t| ahora >= t)
+/// Hasta `porPlaza` campamentos por plaza, que llegan **de golpe** (2026-11-02, decisión del autor: 10 cada 2 horas): cuántos aparecen ahora junto a una plaza que tiene
+/// `tiene` y cuya oleada vence en `oleada_en` (una plaza sin oleada pendiente recibe ya los que le falten).
+pub fn faltan_junto_a_plaza(r: &Reglas, tiene: i64, oleada_en: Option<Instante>, ahora: Instante) -> i64 {
+    if oleada_en.is_some_and(|t| ahora < t) {
+        return 0;
+    }
+    (r.bandidos.por_plaza - tiene).max(0)
 }
 
-/// Destruido el campamento de una plaza, ese es el instante en que vuelve el suyo.
+/// Destruido un campamento de una plaza sin oleada pendiente, ese es el instante en que llega la siguiente, que repone todos los que falten entonces.
 pub fn reaparece_en(r: &Reglas, ahora: Instante) -> Instante {
     ahora + r.bandidos.respawn
 }
@@ -189,12 +193,13 @@ mod pruebas {
     }
 
     #[test]
-    fn una_plaza_recibe_su_campamento_cuando_no_tiene_y_vencio_el_plazo() {
-        assert!(aparece_junto_a_plaza(false, None, 0));
-        assert!(!aparece_junto_a_plaza(true, None, 0));
-        assert!(!aparece_junto_a_plaza(false, Some(100), 99));
-        assert!(aparece_junto_a_plaza(false, Some(100), 100), "justo al cumplirse el plazo");
-        assert_eq!(reaparece_en(r(), 5 * MS_POR_MINUTO), 365 * MS_POR_MINUTO, "6 h después");
+    fn una_plaza_recibe_de_golpe_los_que_le_faltan_hasta_diez_cuando_vence_su_oleada() {
+        assert_eq!(faltan_junto_a_plaza(r(), 0, None, 0), 10, "sin oleada pendiente, los diez ya");
+        assert_eq!(faltan_junto_a_plaza(r(), 7, None, 0), 3);
+        assert_eq!(faltan_junto_a_plaza(r(), 10, None, 0), 0, "con los diez no llega ninguno");
+        assert_eq!(faltan_junto_a_plaza(r(), 4, Some(100), 99), 0, "antes de la oleada, nada");
+        assert_eq!(faltan_junto_a_plaza(r(), 4, Some(100), 100), 6, "justo al cumplirse el plazo, todos los que faltan");
+        assert_eq!(reaparece_en(r(), 5 * MS_POR_MINUTO), 125 * MS_POR_MINUTO, "2 h después");
     }
 
     #[test]

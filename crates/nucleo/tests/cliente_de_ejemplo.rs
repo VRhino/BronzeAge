@@ -106,7 +106,7 @@ async fn un_cliente_que_solo_habla_el_contrato_nace_comercia_explora_funda_const
     // 2. Comercia: compra madera en el mercado de su campamento con el oro de su almacén personal.
     adm.aceptada(admin("dar_almacen_personal", vec![("heroe_id", texto(&heroe)), ("recurso", texto("oro")), ("cantidad", numero(50_000))])).await;
     ana.al_dia().await;
-    ana.aceptada(O::ComprarEnCampamento(pb::OrdenComprarEnCampamento { recurso: "madera".into(), cantidad: 5_000, campamento_id: None })).await;
+    ana.aceptada(O::ComprarEnCampamento(pb::OrdenComprarEnCampamento { recurso: "madera".into(), cantidad: 5_000, campamento_id: None, pagar_con: None })).await;
     let Some(Cuerpo::Heroe(h)) = entidad(&ana.almacen, &format!("HEROE:{heroe}"), TipoEntidad::Heroe, &heroe) else { panic!("su héroe") };
     assert!(h.almacen_personal.as_ref().unwrap().por_id.get("madera").is_some_and(|&x| x > 0), "la madera comprada, en su almacén personal: {:?}", h.almacen_personal);
 

@@ -542,13 +542,14 @@ async fn cada_hecho_llega_una_sola_vez_a_quien_lo_oye_y_por_su_ambito() {
         assert!(quien == "hugo" || de("p6", quien, "fundacion.asentamiento_fundado").is_empty(), "{quien}");
     }
     assert_eq!(de("p6", "admin", "cronica.entrada"), ["ADMIN:"]);
-    // Una sola vez cada hecho a cada sesión; la administración, todos; gus, solo lo de F2 y lo público.
-    let suyos = |quien: &str| todos.iter().filter(|(_, q, _)| *q == quien).flat_map(|(_, _, m)| hechos_de(m).into_iter().map(|e| (e.version, e.codigo.clone()))).collect::<Vec<_>>();
+    // Una sola vez cada hecho a cada sesión; la administración, todos; gus, solo lo de F2 y lo público. Un hecho es su versión, su código y lo que lleva (los diez campamentos de bandidos de
+    // una plaza nueva aparecen en la misma versión, 2026-11-02).
+    let suyos = |quien: &str| todos.iter().filter(|(_, q, _)| *q == quien).flat_map(|(_, _, m)| hechos_de(m).into_iter().map(|e| (e.version, e.codigo.clone(), format!("{:?}", e.payload)))).collect::<Vec<_>>();
     for quien in ["ana", "beto", "gus", "hugo", "admin"] {
         let (todos_suyos, distintos) = (suyos(quien), suyos(quien).into_iter().collect::<std::collections::BTreeSet<_>>());
         assert_eq!(distintos.len(), todos_suyos.len(), "{quien} oyó algo dos veces: {todos_suyos:?}");
     }
-    let codigos = |quien: &str| suyos(quien).into_iter().map(|(_, c)| c).collect::<std::collections::BTreeSet<_>>();
+    let codigos = |quien: &str| suyos(quien).into_iter().map(|(_, c, _)| c).collect::<std::collections::BTreeSet<_>>();
     assert!(["ana", "beto", "gus", "hugo"].iter().all(|q| codigos(q).is_subset(&codigos("admin"))), "la administración lo oye todo");
     assert_eq!(codigos("gus"), ["cronica.entrada".to_owned(), "diplomacia.relacion_aceptada".to_owned()].into_iter().collect());
     w.parar().await;

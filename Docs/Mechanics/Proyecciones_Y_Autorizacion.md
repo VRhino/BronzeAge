@@ -304,6 +304,7 @@ Las **161 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `mover_carro_caravana` | `MoverCarro` | un residente de la plaza, dentro | del origen de la caravana de la que sale |
 | `preparar_caravana` | `PrepararCaravana` | un residente de la plaza, dentro | del origen de la caravana |
 | `reservar_caravana` | `ReservarCaravana` | un residente de la plaza, dentro | del origen de la caravana |
+| `renombrar_caravana` | `RenombrarCaravana` | un residente de la plaza, dentro | del origen de la caravana; el nombre se recorta y vacío la deja sin nombre; como mucho 32 caracteres (`caravana.nombre_largo`), sin mirar si otra se llama igual (2026-11-02) |
 
 **La columna**
 
@@ -330,7 +331,7 @@ Las **161 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 
 | Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
 |---|---|---|---|
-| `aportar_a_refundacion` | `AportarARefundacion` | la cuenta del héroe | en un campamento (dentro o con su columna a la puerta, `campamento.fuera_de_la_puerta`), ciudadano (`faccion.no_pertenece`) de una Facción sin plazas (`refundacion.con_plazas`); del almacén personal residiendo allí (`refundacion.no_resides`) o del carro siendo el Líder de su columna (`columna.solo_el_lider`) (5G-b) |
+| `aportar_a_refundacion` | `AportarARefundacion` | la cuenta del héroe | en un campamento (dentro o con su columna a la puerta, `campamento.fuera_de_la_puerta`), ciudadano (`faccion.no_pertenece`) de una Facción sin plazas (`refundacion.con_plazas`); del almacén personal residiendo allí (`refundacion.no_resides`) o del carro: dentro, el que lleva (2026-11-02; `heroe.sin_columna` si no trajo ninguno); a la puerta, el de su columna siendo su Líder (`columna.solo_el_lider`) (5G-b) |
 | `asignar_escolta` | `AsignarEscolta` | la cuenta del héroe | escuadras suyas en el campamento del origen de la caravana; cupo de escolta |
 | `asignar_guarnicion` | `AsignarGuarnicion` | la cuenta del héroe | residente de la plaza y cupo de guarnición |
 | `atacar` | `Atacar` | la cuenta del héroe | en guerra o con `declara_guerra` (`guerra.confirmar`); a la puerta del objetivo |
@@ -342,7 +343,7 @@ Las **161 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `ceder_liderazgo` | `CederLiderazgo` | la cuenta del héroe | el Líder |
 | `colocar_avanzada` | `ColocarAvanzada` | el Gobernador o el Maestro de Obras de la madre, residente, con su columna en el sitio | la columna del héroe a la puerta (`radioPuerta`) del sitio, no dentro de la plaza (5E-1, decisión del autor del 2026-10-25: el panel de la madre es de esos dos cargos y «la coloca el héroe en el sitio», Doc 4.2.2) |
 | `comprar_caravana_de_refundacion` | `ComprarCaravanaDeRefundacion` | la cuenta del héroe | en un campamento, ciudadano de una Facción sin plazas (`refundacion.con_plazas`) ni otra Caravana de Fundación (`refundacion.ya_tiene_caravana`); el fondo de su Facción cubre el coste (`refundacion.fondo_corto`) (5G-b) |
-| `comprar_en_campamento` | `ComprarEnCampamento` | la cuenta del héroe | dentro del campamento o a su puerta; cupo diario |
+| `comprar_en_campamento` | `ComprarEnCampamento` | la cuenta del héroe | dentro del campamento o a su puerta; cupo diario; `pagar_con` (2026-11-02): el almacén personal solo residiendo allí (`almacen_personal.fuera_de_tu_residencia`), o el carro que lleva |
 | `comprar_informe_plaza` | `ComprarInformePlaza` | la cuenta del héroe; en una plaza, dentro y Rey, Embajador o Gobernador | como `comprar_mirada`; conocer la plaza |
 | `comprar_mirada` | `ComprarMirada` | la cuenta del héroe; en una plaza, dentro y Rey, Embajador o Gobernador | ciudadano, dentro de una plaza de su Facción con Taberna (el Rey, el Embajador o el Gobernador, `compraIntel`, 5E) o en un campamento |
 | `comprar_tecnologia_aeda` | `ComprarTecnologiaAeda` | la cuenta del héroe, dentro de la plaza y Rey o Gobernador | la plaza existe (`asentamiento.desconocido`); un Aeda itinerante parado en ella (`aedas.no_hay_aeda`); la tecnología del catálogo (`tecnologia.desconocida`), de una Era vendible (`aedas.era_no_vendible`), que el Aeda conoce (`aedas.no_la_conoce`), no aparecida a la Facción dueña (`aedas.ya_aparecida`) y el oro del precio en el almacén de la plaza (`aedas.sin_oro`) (6D) |

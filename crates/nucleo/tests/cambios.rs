@@ -149,12 +149,15 @@ struct Mundial {
 }
 
 impl Mundial {
-    fn ok(&mut self, actor: &str, c: Comando) -> nucleo::Respuesta {
+    fn ord(&mut self, actor: &str, c: Comando) -> nucleo::Respuesta {
         self.cuenta += 1;
-        let p = Peticion::nueva(actor, &format!("o{}", self.cuenta), c.clone());
+        let p = Peticion::nueva(actor, &format!("o{}", self.cuenta), c);
         // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
         let (t, p) = (self.n.ahora(), if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) { p.de_admin() } else { p });
-        let r = self.n.aplicar_en(t, p);
+        self.n.aplicar_en(t, p)
+    }
+    fn ok(&mut self, actor: &str, c: Comando) -> nucleo::Respuesta {
+        let r = self.ord(actor, c.clone());
         assert!(r.aceptada(), "{c:?}: {r:?}");
         r
     }
@@ -218,7 +221,9 @@ fn la_economia_el_comercio_y_las_convocatorias_dejan_sus_entidades_en_el_registr
     x.ok("ana", Comando::CancelarOrdenMercado { orden: orden.creadas[0] });
     assert!(tocado_en(&x.n, x.n.version(), Clase::OrdenMercado, orden.creadas[0]));
     // El edificio encolado se anuncia con su plaza.
-    let e = x.ok("ana", Comando::AnadirEdificio { asentamiento: a, tipo: asentamiento::catalogo::Tipo::Granja });
+    // Una Vivienda del nivel 2 (desde el 2026-11-02 ya no vale la Granja, que es una sola, y a las 34 horas la plaza tiene ya todo lo que admite su nivel 1).
+    x.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: a, nivel: 2 });
+    let e = x.ok("ana", Comando::AnadirEdificio { asentamiento: a, tipo: asentamiento::catalogo::Tipo::Vivienda });
     assert_eq!(e.tipo_creadas, Some(TipoCreado::Edificio { plaza: a }));
     // Una convocatoria con dos héroes dentro de la plaza: se convoca, uno se une, parten y su ejército nace tocado.
     let conv = x.ok("beto", Comando::ConvocarEjercito { heroe: h1, escuadras: vec![], carga: vec![], politica: militar::columna::Politica::Aceptar });

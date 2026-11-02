@@ -421,7 +421,13 @@ impl Ctx<'_> {
             Cuerpo::ComprarEnCampamento(o) => {
                 let heroe = self.mi_heroe()?;
                 let campamento = self.campamento_o_el_del(heroe, o.campamento_id.as_deref())?;
-                Comando::ComprarEnCampamento { heroe, campamento, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad }
+                let pagar_con = match o.pagar_con.as_deref() {
+                    None => None,
+                    Some("almacenPersonal") => Some(PagarCon::AlmacenPersonal),
+                    Some("carro") => Some(PagarCon::Carro),
+                    Some(otro) => return self.forma(format!("forma de pago desconocida: {otro}")),
+                };
+                Comando::ComprarEnCampamento { heroe, campamento, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad, pagar_con }
             }
             Cuerpo::RepostarEnCampamento(o) => {
                 let heroe = self.mi_heroe()?;
@@ -684,6 +690,7 @@ impl Ctx<'_> {
                 Comando::MoverCarro { de: self.caravana(&o.desde_caravana_id)?, a: self.caravana(&o.hacia_caravana_id)?, carro: self.entero_u32(o.carro_indice, "índice de carro")? }
             }
             Cuerpo::ReservarCaravana(o) => Comando::ReservarCaravana { caravana: self.caravana(&o.caravana_id)?, reservada: o.reservada },
+            Cuerpo::RenombrarCaravana(o) => Comando::RenombrarCaravana { caravana: self.caravana(&o.caravana_id)?, nombre: o.nombre.clone() },
             Cuerpo::PrepararCaravana(o) => {
                 // La escolta puede cederse en el mismo lanzamiento (como `asignar_escolta`, con `heroe_id` como quien cede); sin escuadras, no hay escolta nueva.
                 let escolta = if o.escolta_escuadron_ids.is_empty() { None } else { Some((self.heroe(&o.heroe_id)?, self.escuadras(&o.escolta_escuadron_ids)?)) };

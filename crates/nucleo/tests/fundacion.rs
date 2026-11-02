@@ -390,7 +390,7 @@ fn sin_su_titular_vuelve_sola_otro_de_su_faccion_la_reclama_y_al_llegar_espera_d
     // A mitad de camino, la foto la guarda tal cual.
     let reglas = Reglas::default();
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN54");
+    assert_eq!(&bytes[..5], b"BAN55");
     let s = Estado::deserializar(&bytes, &reglas, m.0.hash()).unwrap();
     assert_eq!((s.fundacion.clone(), s.hash()), (e.n.estado().fundacion.clone(), e.n.hash_estado()));
     let vieja = [b"BAN30".as_slice(), &bytes[5..]].concat();
@@ -460,9 +460,9 @@ fn el_fondo_se_aporta_y_se_retira_con_el_almacen_o_el_carro_y_la_caravana_de_ref
     let retirar = |heroe, recurso, cantidad, lado| Comando::RetirarDeRefundacion { heroe, recurso, cantidad, lado };
     use LadoDelFondo::{Almacen as Alm, Carro};
 
-    // Rechazos: sin nada en el almacén, sin columna para el carro, menos de una unidad, sin Facción, y residiendo en otro campamento.
+    // Rechazos: sin nada en el almacén, sin nada en el carro (dentro del campamento donde reside, el suyo: 2026-11-02), menos de una unidad, sin Facción, y residiendo en otro campamento.
     assert_eq!(e.no("ana", aportar(ana, Oro, 10_000, Alm)), rechazos::ALMACEN_SIN_EXISTENCIAS);
-    assert_eq!(e.no("ana", aportar(ana, Oro, 10_000, Carro)), rechazos::HEROE_SIN_COLUMNA);
+    assert_eq!(e.no("ana", aportar(ana, Oro, 10_000, Carro)), rechazos::CARRO_NO_LLEVA);
     assert_eq!(e.no("ana", aportar(ana, Oro, 999, Alm)), rechazos::CANTIDAD_NO_POSITIVA);
     let zed = e.heroe("zed", 0);
     assert_eq!(e.no("zed", aportar(zed, Oro, 10_000, Alm)), rechazos::FACCION_NO_PERTENECE);

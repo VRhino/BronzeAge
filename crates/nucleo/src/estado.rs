@@ -140,6 +140,9 @@ pub fn entidad_contrato(mercenario: u64) -> u64 {
     (24 * crate::estado_comercio::ETIQUETA) | mercenario
 }
 
+/// BAN55: BAN54 con el nombre de cada caravana comercial (`Caravana::nombre`, `renombrarCaravana`, 2026-11-02; al final de cada caravana, en `codec_comercio`). BAN54 a BAN40 se
+/// siguen admitiendo: ninguna caravana tiene nombre.
+///
 /// BAN54: BAN53 con los mercenarios por contrato (entrada 48): las marcas de ciudadanía de cada Facción (`politica::Faccion::marcas`, en el códec de la política) y
 /// `Estado::contratos` al final, tras las misiones recurrentes. BAN53 a BAN40 se siguen admitiendo: no hay ofertas, contratos ni marcas.
 ///
@@ -299,7 +302,7 @@ pub fn entidad_contrato(mercenario: u64) -> u64 {
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-const MAGIA: &[u8; 5] = b"BAN54";
+const MAGIA: &[u8; 5] = b"BAN55";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -1427,15 +1430,20 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN54`): los cuatro primeros dicen la familia («BAN5» es el formato 50 y «BAN4» los formatos 40 a 49, y se admiten todos; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
+        // La cabecera es de 5 bytes (`BAN55`): los cuatro primeros dicen la familia («BAN5» es el formato 50 y «BAN4» los formatos 40 a 49, y se admiten todos; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
         // 20 a 29 y 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         let (mut con_eligieron, mut con_rutas_acarreo, mut con_nombres, mut con_precios, mut con_forzadas, mut con_misiones, mut con_aldeas) = (true, true, true, true, true, true, true);
         let (mut con_flujos, mut con_participacion, mut con_recurrentes, mut con_almacen_cerrado, mut con_encargos, mut con_contratos) = (false, false, false, false, false, false);
+        let mut con_nombres_de_caravana = false;
         // Hasta BAN52 cada plaza trae los minutos sin cupo de sus extractores; desde BAN53, no.
         let mut con_desempate = true;
         if magia == MAGIA[..4] {
             match r.u8()? {
+                b'5' => {
+                    (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos, con_desempate, con_contratos) = (true, true, true, true, true, false, true);
+                    con_nombres_de_caravana = true;
+                }
                 b'4' => (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos, con_desempate, con_contratos) = (true, true, true, true, true, false, true),
                 b'3' => (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos, con_desempate) = (true, true, true, true, true, false),
                 b'2' => (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos) = (true, true, true, true, true),
@@ -1585,7 +1593,7 @@ impl Estado {
         for _ in 0..r.cuenta()? {
             s.contactos.insert((r.u64()?, r.u64()?));
         }
-        s.comercio = codec_comercio::leer(&mut r, &s.reglas.economia.comercio, con_rutas_acarreo, con_encargos)?;
+        s.comercio = codec_comercio::leer(&mut r, &s.reglas.economia.comercio, con_rutas_acarreo, con_encargos, con_nombres_de_caravana)?;
         s.militar = codec_militar::leer(&mut r, con_eligieron, con_nombres)?;
         s.combate = codec_combate::leer(&mut r)?;
         s.batallas = codec_batallas::leer(&mut r)?;

@@ -450,14 +450,14 @@ fn la_cola_se_reordena_intercambiando_prioridades() {
     let mut n = nuevo(m);
     let p = sitio(&n, &m.0, 0, 50_000, 0, 1, true);
     let id = fundar_en(&mut n, 0, "a", 1, p);
-    // Dos Viviendas a mano ocupan las dos cuadrillas; el primer paso compromete la Leñera (auto-construcción) y una Granja a mano
-    // queda en cola detrás de ella, con otra prioridad (la Cantera, que antes hacía de segunda, ya no se construye en la plaza: 2026-11-01).
+    // Dos Viviendas a mano ocupan las dos cuadrillas; el primer paso compromete la Leñera (auto-construcción) y una tercera Vivienda a mano
+    // queda en cola detrás de ella, con otra prioridad (la Cantera, que antes hacía de segunda, ya no se construye en la plaza: 2026-11-01; ni otra Granja, 2026-11-02).
     assert!(n.aplicar_en(0, admin("madera", Comando::DarRecursos { asentamiento: id, recurso: Recurso::Madera, cantidad: 300_000 })).aceptada());
     for k in 0..2 {
         assert!(n.aplicar_en(0, ana(&format!("viv{k}"), Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Vivienda })).aceptada());
     }
     n.avanzar_hasta(MIN);
-    let r = n.aplicar_en(MIN, ana("granja", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Granja }));
+    let r = n.aplicar_en(MIN, ana("viv2", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Vivienda }));
     assert!(r.aceptada(), "{r:?}");
     let cola = |n: &Nucleo| {
         let mut v: Vec<(i64, u32)> = n.economia(id).unwrap().edificios.iter().filter(|e| e.estado == asentamiento::edificio::Estado::EnCola).map(|e| (e.prioridad, e.id)).collect();
@@ -511,7 +511,9 @@ fn una_plaza_que_se_arruina_libera_sus_parcelas_y_nodos_y_su_evento_de_minuto_se
     let de = |codigo: &str| hechos.iter().filter(|e| e.codigo == codigo).copied().collect::<Vec<_>>();
     assert_eq!(de("asentamiento.ruinas")[0].facciones, vec![1]);
     let disperso = de("bandidos.campamento_disperso");
-    assert!(disperso.len() == 1 && disperso[0].facciones == vec![1] && disperso[0].dato("asentamientoArruinado") == Some(id as i64), "su campamento de bandidos se dispersa: {disperso:?}");
+    // Sus diez campamentos de bandidos (`porPlaza`, 2026-11-02) se dispersan con ella.
+    let por_plaza = n.estado().reglas.economia.combate.bandidos.por_plaza as usize;
+    assert!(disperso.len() == por_plaza && disperso.iter().all(|d| d.facciones == vec![1] && d.dato("asentamientoArruinado") == Some(id as i64)), "sus campamentos de bandidos se dispersan: {disperso:?}");
     let derrota = de("faccion.derrotada");
     assert!(derrota.len() == 1 && derrota[0].facciones == vec![1], "{derrota:?}");
     assert_eq!(n.faccion(1).unwrap().derrota, Some(politica::faccion::Derrota::Colapso), "derrotada sin que nadie la derrotara (5C)");
@@ -1022,7 +1024,7 @@ fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash_y_el_formato_anterior_se
     let reglas = Reglas::default();
     let base = estado_con_una_plaza();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN54");
+    assert_eq!(&bytes[..5], b"BAN55");
     let viejo = [b"BAN13".as_slice(), &bytes[5..]].concat();
     let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN13 no debe admitirse") };
     assert!(e.to_string().contains("BAN13") && e.to_string().contains("población"), "{e}");
