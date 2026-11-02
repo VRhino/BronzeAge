@@ -32,8 +32,14 @@ const SERVICIOS = {
   // Una tarea que termina sola: sin puerto. La semilla la elige POST /api/mundo.
   'generar-mundo': { tipo: 'tarea', con: () => ({ args: [String(mundo.semilla)] }) },
   'bronzeage-bots': { tipo: 'backend', con: (p, P) => ({ env: { BOTS_PUERTO: p, BOTS_SERVIDOR: `http://localhost:${P['bronzeage-servidor']}` } }) },
+  // Los bots mercenarios (2026-11-02): el mismo ejecutable de bots en un segundo proceso, con `BOTS_POBLACION=mercenarios` (en .claude/launch.json),
+  // su propio puerto de control y el mismo servidor, token y código de registro que los libres. Los dos comparten carpeta y `target` de cargo:
+  // si cambia el código de los bots, conviene parar los dos antes de arrancar (en Windows un ejecutable en marcha no se puede reemplazar).
+  'bronzeage-bots-mercenarios': { tipo: 'backend', con: (p, P) => ({ env: { BOTS_PUERTO: p, BOTS_SERVIDOR: `http://localhost:${P['bronzeage-servidor']}` } }) },
+  // El admin lee el control de los libres de `BOTS_URL` y el de los mercenarios de `MERCS_URL` (sin ella, ws://localhost:4001/control).
   'bronzeage-admin': { tipo: 'cliente', con: (p, P) => ({ args: VITE(p), env: {
-    BACKEND_URL: `http://localhost:${P['bronzeage-servidor']}`, BOTS_URL: `ws://localhost:${P['bronzeage-bots']}/control`, PANEL_URL: `http://localhost:${PUERTO}` } }) },
+    BACKEND_URL: `http://localhost:${P['bronzeage-servidor']}`, BOTS_URL: `ws://localhost:${P['bronzeage-bots']}/control`,
+    MERCS_URL: `ws://localhost:${P['bronzeage-bots-mercenarios']}/control`, PANEL_URL: `http://localhost:${PUERTO}` } }) },
   'bronzeage-cliente-jugador': { tipo: 'cliente', con: (p, P) => ({ args: VITE(p), env: { BACKEND_URL: `http://localhost:${P['bronzeage-servidor']}` } }) },
 };
 

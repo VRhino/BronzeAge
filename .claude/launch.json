@@ -39,6 +39,21 @@
       "port": 4000
     },
     {
+      "name": "bronzeage-bots-mercenarios",
+      "runtimeExecutable": "cargo",
+      "runtimeArgs": [
+        "run",
+        "--release"
+      ],
+      "cwd": "../BronceAgeBotsBrain",
+      "env": {
+        "CODIGO_REGISTRO_BOTS": "dev-bots",
+        "BOTS_TOKEN": "dev-bots-control",
+        "BOTS_POBLACION": "mercenarios"
+      },
+      "port": 4001
+    },
+    {
       "name": "bronzeage-admin",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
