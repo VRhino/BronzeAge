@@ -337,6 +337,11 @@ impl<'n> Mirada<'n> {
             Some(Ubicacion::Asentamiento(a)) => e.asentamientos.get(&u64::from(a)).filter(|a| Some(a.faccion) != self.faccion).map(|a| a.id),
             _ => None,
         };
+        // El pueblo donde está (2026-11-02, para la vista 3D del cliente): va siempre, aunque no se vea ni caiga en el rectángulo, con su planta; sea de su Facción o ajeno.
+        let en_pueblo = match viewer.and_then(|h| n.heroe(h)).map(|h| h.heroe.presencia.ubicacion) {
+            Some(Ubicacion::Pueblo(p)) => Some(p),
+            _ => None,
+        };
         for a in e.asentamientos.values() {
             let duena = Some(a.faccion) == self.faccion;
             let dentro = dentro_de == Some(a.id);
@@ -360,11 +365,20 @@ impl<'n> Mirada<'n> {
             }
             for p in &a.economia.pueblos {
                 let Some(pos) = n.posicion_de_pueblo(p.id) else { continue };
-                if rect.contiene(pos) && (duena || self.ve(pos)) {
+                let dentro = en_pueblo == Some(p.id) && p.activo();
+                if dentro || (rect.contiene(pos) && (duena || self.ve(pos))) {
                     vistos.insert(Sitio::Pueblo(p.id));
                     let version = n.version_de(Clase::Pueblo, p.id);
                     nombradas.push(a.faccion);
-                    v.extend(if duena { self.propias_de(Clase::Pueblo, p.id, version) } else { self.pueblo_avistado(a.id, p, pos, version) });
+                    let mut suyos = if duena { self.propias_de(Clase::Pueblo, p.id, version) } else { self.pueblo_avistado(a.id, p, pos, version) };
+                    if dentro {
+                        // La misma copia con la planta, con otro sello: llega al entrar y se va al salir.
+                        let (madre, pid) = (a.id, p.id);
+                        let clave = (pb::TipoEntidad::Pueblo as i32, ids::pueblo(pid));
+                        suyos.retain(|x| x.clave != clave);
+                        suyos.push(visible(pb::TipoEntidad::Pueblo, ids::pueblo(pid), Sello(version, 1), move || pueblo_desde_dentro(n, madre, pid, duena)));
+                    }
+                    v.extend(suyos);
                 }
             }
             for x in &a.economia.avanzadas {
@@ -738,6 +752,34 @@ pub fn plaza_desde_dentro(n: &Nucleo, id: u64) -> pb::Asentamiento {
     }
     p.recintos = interior::recintos(id, eco).into_iter().map(|r| pb::Recinto { siguiente_celda_en_ms: None, ..r }).collect();
     p
+}
+
+/// El pueblo donde está el héroe de la sesión (2026-11-02, pedido del hilo de la vista 3D): lo de fuera —entero si es de su Facción (`propios::pueblo`), avistado si no— más su planta
+/// (`Nucleo::planta_de_pueblo`), su trazado y el nivel alcanzado de su plaza madre. `None` si ya no está activo.
+pub fn pueblo_desde_dentro(n: &Nucleo, madre: u64, pid: u64, de_su_faccion: bool) -> Option<Cuerpo> {
+    let (_, p) = n.pueblo(pid).filter(|(_, p)| p.activo())?;
+    let base = if de_su_faccion {
+        propios::pueblo(n, madre, p)
+    } else {
+        pb::Pueblo {
+            id: ids::pueblo(pid),
+            version: n.version_de(Clase::Pueblo, pid),
+            asentamiento_madre_id: ids::asentamiento(madre),
+            nodo_id: p.nodo().map(ids::nodo).unwrap_or_default(),
+            tipo_extractor: p.nombre_de_tipo().to_owned(),
+            posicion: n.posicion_de_pueblo(pid).map(punto),
+            batalla_id: propios::batalla_sobre(n, Ubicacion::Pueblo(pid)),
+            ..Default::default()
+        }
+    };
+    let planta = n.planta_de_pueblo(pid)?;
+    let lugar = ids::pueblo(pid);
+    Some(Cuerpo::Pueblo(pb::Pueblo {
+        planta: planta.piezas.iter().map(|x| interior::pieza_de_planta(&lugar, x)).collect(),
+        trazado: Some(interior::trazado_de_vista(&planta)),
+        nivel_madre: n.estado().asentamientos.get(&madre).map(|a| a.nivel()),
+        ..base
+    }))
 }
 
 /// Una escuadra tal como la ve quien no es su dueño (`EscuadraQueLleva`): su tropa, cuántos soldados quedan y su nivel.
