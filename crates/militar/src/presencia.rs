@@ -80,6 +80,24 @@ impl Presencia {
         }
     }
 
+    /// `cerrarSesion`, la salida voluntaria (decisión del autor del 2026-11-02): quien cierra sesión desde el cliente no espera `retardoDesconexion` ni se
+    /// aplaza aunque le persigan. Fuera de batalla sale ya (`Salida::Sale`: aplicarla es del núcleo, con [`Presencia::salir_del_mundo`]); combatiendo, la
+    /// salida queda anotada en `ahora` y sale en cuanto acaba la batalla (`Salida::EsperaAlFinDeLaBatalla`). `None` si ya está fuera, o si ya esperaba al fin
+    /// de la batalla con una salida vencida.
+    pub fn cerrar_sesion(&mut self, ahora: Instante, combate: bool) -> Option<Salida> {
+        if self.fuera {
+            return None;
+        }
+        if !combate {
+            return Some(Salida::Sale);
+        }
+        if self.desconecta_en.is_some_and(|s| s <= ahora) {
+            return None;
+        }
+        self.desconecta_en = Some(ahora);
+        Some(Salida::EsperaAlFinDeLaBatalla)
+    }
+
     /// Qué hace el evento de salida cuando vence, o `None` si ya no hay nada que hacer (se conectó antes, o ya está fuera).
     pub fn al_vencer_la_salida(&self, r: &Reglas, ahora: Instante, combate: bool, perseguido: bool) -> Option<Salida> {
         let sale_en = self.desconecta_en.filter(|_| !self.fuera)?;
@@ -151,6 +169,25 @@ mod pruebas {
         // El evento se reprograma a ese instante y, al vencer, ya sale aunque le persigan (la petición original sigue anotada).
         assert_eq!(p.desconecta_en, Some(160_000));
         assert_eq!(p.al_vencer_la_salida(&r, 310_000, false, true), Some(Salida::Sale));
+    }
+
+    #[test]
+    fn cerrar_sesion_sale_ya_y_en_batalla_queda_anotada_para_el_fin_de_la_batalla() {
+        let r = Reglas::cargar();
+        // Fuera de batalla sale ya, aunque hubiera pedido antes la salida con retardo (y aunque le persigan: no se le pregunta).
+        let mut p = en_la_columna();
+        p.desconectarse(&r, 0);
+        assert_eq!(p.cerrar_sesion(10_000, false), Some(Salida::Sale));
+        p.salir_del_mundo(Punto::default());
+        assert_eq!(p.cerrar_sesion(11_000, false), None, "fuera no sale otra vez");
+        // En batalla, la salida queda en el instante de la orden: al acabar la batalla el evento la encuentra vencida y sale.
+        let mut b = en_la_columna();
+        b.desconectarse(&r, 0);
+        assert_eq!(b.cerrar_sesion(20_000, true), Some(Salida::EsperaAlFinDeLaBatalla));
+        assert_eq!(b.desconecta_en, Some(20_000), "adelanta la de 2:30 que tenía pedida");
+        assert_eq!(b.cerrar_sesion(30_000, true), None, "pedirla otra vez no cambia nada");
+        assert_eq!(b.al_vencer_la_salida(&r, 60_000, true, false), Some(Salida::EsperaAlFinDeLaBatalla));
+        assert_eq!(b.al_vencer_la_salida(&r, 90_000, false, false), Some(Salida::Sale));
     }
 
     #[test]

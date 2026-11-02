@@ -90,9 +90,21 @@ pub enum ComandoSesion {
     /// `PedirCronica`: una página de la crónica. El núcleo la contesta con `Difusion::Cronica` (cuenta como pendiente, como una orden) sin leerla en su hilo.
     Cronica { sesion: SesionId, pedir: PedirCronica },
     /// La sesión terminó (cliente, red, expulsión o error). Llega siempre tras un `Conecta`, aceptado o no: el núcleo ignora ids que no conoce.
-    Desconecta { sesion: SesionId },
+    /// `fin` dice por qué: solo un cierre es la caída del jugador (Proyecciones §7.1).
+    Desconecta { sesion: SesionId, fin: FinDeSesion },
     /// Del servicio, no de una sesión: lo que pide la administración del proceso (las rutas `/v1/admin/...`, fase 7).
     Admin(PeticionAdmin),
+}
+
+/// Por qué terminó una sesión ([`ComandoSesion::Desconecta`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FinDeSesion {
+    /// El cliente cerró, se cortó la red o hubo un error: para un jugador, la caída.
+    Cierre,
+    /// Otra sesión del mismo cliente tomó el relevo (su `Conecta` llega justo después).
+    Reemplazada,
+    /// El servidor se detiene (un despliegue): no saca a nadie del mundo.
+    Apagado,
 }
 
 /// Lo que la administración del proceso pide al núcleo. Va por el mismo canal que las órdenes, así que se atiende entre dos órdenes.

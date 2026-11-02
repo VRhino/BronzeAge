@@ -1168,6 +1168,7 @@ impl Nucleo {
             | Comando::AsignarEscolta { .. }
             | Comando::QuitarEscolta { .. }
             | Comando::Desconectarse { .. }
+            | Comando::CerrarSesion { .. }
             | Comando::Conectarse { .. }
             | Comando::FijarTecnologias { .. }
             | Comando::ColocarHeroe { .. }

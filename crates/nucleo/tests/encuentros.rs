@@ -165,6 +165,59 @@ fn quien_pide_salir_del_mundo_perseguido_o_en_batalla_no_sale_hasta_que_toca() {
     n.avanzar_hasta(10 * MIN);
     assert!(fuera(&n, hq));
 }
+
+#[test]
+fn cerrar_sesion_saca_del_mundo_ya_aunque_le_persigan_y_en_batalla_al_acabarla() {
+    let fuera = |n: &Nucleo, h: u64| n.heroe(h).unwrap().heroe.presencia.fuera;
+    let cerrar = |n: &mut Nucleo, t: Instante, id: &str, h: u64| n.aplicar_en(t, Peticion::nueva("beto", id, Comando::CerrarSesion { heroe: h }));
+    // Sin nadie detrás: sale en el instante de la orden, sin los 2 min 30 s, y reaparecerá donde estaba su columna.
+    let (mut n, _, q) = cazador_y_presa();
+    let hq = heroe(&n, q);
+    let donde = n.ejercito(q).unwrap().posicion;
+    assert!(cerrar(&mut n, 1_000, "x", hq).aceptada());
+    assert!(fuera(&n, hq) && n.ejercito(q).is_none(), "iba sola: su columna se disuelve");
+    assert_eq!(n.heroe(hq).unwrap().heroe.presencia.ubicacion, militar::presencia::Ubicacion::Desconectado(donde));
+    assert_eq!(hechos(&n, "heroe.sale_del_mundo")[0].0, 1_000);
+    assert_eq!(codigo(&cerrar(&mut n, 2_000, "x2", hq)), rechazos::HEROE_FUERA_DEL_MUNDO);
+
+    // Perseguido también sale ya (decisión del autor del 2026-11-02): cerrar sesión no espera ni se aplaza.
+    let mut n = nucleo(40, 5);
+    let p = n.crear_ejercito(0, "ana", 1, c(0, 2), 500, 3_500_000).unwrap();
+    let q = n.crear_ejercito(0, "beto", 2, c(1, 2), 500, 3_500_000).unwrap();
+    let hq = heroe(&n, q);
+    n.aplicar_en(0, marchar("beto", "m", q, c(39, 2)));
+    assert!(perseguir(&mut n, 0, "ana", "p", p, Objetivo::Ejercito(q)).aceptada());
+    assert!(cerrar(&mut n, 10_000, "x", hq).aceptada());
+    assert!(fuera(&n, hq));
+    assert_eq!(hechos(&n, "columna.presa_a_cubierto").len(), 1);
+
+    // En batalla queda anotada para su fin, sin retardo: sale en cuanto acaba.
+    let (mut n, _, q) = cazador_y_presa();
+    let hq = heroe(&n, q);
+    assert!(n.columna_entra_en_batalla(1_000, q));
+    assert!(cerrar(&mut n, 5_000, "x", hq).aceptada(), "no lleva el candado de batalla");
+    assert_eq!(n.heroe(hq).unwrap().heroe.presencia.desconecta_en, Some(5_000));
+    assert_eq!(n.aplicar_en(6_000, Peticion::nueva("beto", "x2", Comando::CerrarSesion { heroe: hq })).resultado, Resultado::SinCambios);
+    n.avanzar_hasta(10 * MIN);
+    assert!(!fuera(&n, hq), "combatiendo no sale");
+    assert!(n.columna_sale_de_batalla(10 * MIN, q));
+    n.avanzar_hasta(10 * MIN);
+    assert!(fuera(&n, hq));
+    assert_eq!(hechos(&n, "heroe.sale_del_mundo")[0].0, 10 * MIN);
+
+    // Con una caída pendiente, cerrar sesión la sustituye: el evento de la caída vieja no le saca antes de tiempo si vuelve y se cae otra vez.
+    let (mut n, _, q) = cazador_y_presa();
+    let hq = heroe(&n, q);
+    assert!(n.aplicar_en(0, Peticion::nueva("beto", "d1", Comando::Desconectarse { heroe: hq })).aceptada());
+    assert!(cerrar(&mut n, 10_000, "x", hq).aceptada());
+    assert!(fuera(&n, hq));
+    assert!(n.aplicar_en(20_000, Peticion::nueva("beto", "c1", Comando::Conectarse { heroe: hq })).aceptada());
+    assert!(n.aplicar_en(30_000, Peticion::nueva("beto", "d2", Comando::Desconectarse { heroe: hq })).aceptada());
+    n.avanzar_hasta(150_000);
+    assert!(!fuera(&n, hq), "la caída vieja (a 150 s) ya no vale");
+    n.avanzar_hasta(180_000);
+    assert!(fuera(&n, hq));
+}
 #[test]
 fn un_herido_y_una_columna_en_batalla_no_tienen_encuentros() {
     let correr = |herir: bool, batalla: bool| {

@@ -352,6 +352,7 @@ Las **161 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `dejar_de_perseguir` | `DejarDePerseguir` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) |
 | `desarmar_caravana_fundacion` | `DesarmarCaravanaFundacion` | la cuenta del héroe | su titular (`fundacion.no_titular`), con la caravana suelta en su origen (`caravana.no_disponible`) (5G-b) |
 | `desconectarse` | `Desconectarse` | la cuenta del héroe | — |
+| `cerrar_sesion` | `CerrarSesion` | la cuenta del héroe | — (sin candado de batalla: combatiendo, sale al acabar la batalla) |
 | `entrar_en_asentamiento` | `EntrarEnAsentamiento` | la cuenta del héroe | su columna a la puerta (`radioPuerta`); el acceso de la plaza (`acceso.cerrado`) |
 | `entrar_en_avanzada` | `EntrarEnAvanzada` | la cuenta del héroe | como `entrar_en_pueblo` |
 | `entrar_en_campamento` | `EntrarEnCampamento` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) si no va solo; su columna a la puerta (`radioPuerta`) |
@@ -529,7 +530,7 @@ Condición: `yo` (`params.heroeId == héroe del actor`). La geometría y el rest
 
 | Comando | Documento |
 |---|---|
-| `conectarse` (el único permitido con el héroe fuera del mundo), `desconectarse`, `salirDeAsentamiento`, `entrarEnAsentamiento`, `entrarEnCampamento`, `salirDelCampamento`, `guarnecer`, `marcharA`, `residirEnCampamento`, `dejarResidencia` | [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md), [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) |
+| `conectarse` (el único permitido con el héroe fuera del mundo), `desconectarse`, `cerrarSesion`, `salirDeAsentamiento`, `entrarEnAsentamiento`, `entrarEnCampamento`, `salirDelCampamento`, `guarnecer`, `marcharA`, `residirEnCampamento`, `dejarResidencia` | [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md), [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) |
 | `convocarEjercito`, `unirseAConvocatoria`, `responderPeticionDeConvocatoria`, `cambiarSeleccionDeConvocatoria`, `separarseDeConvocatoria`, `cancelarConvocatoria`, `partirConvocatoria` | [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md) §9 |
 | `unirseEnCampo`, `responderPeticionDeUnion`, `separarseDelEjercito`, `cederLiderazgo`, `organizarEjercito`, `cancelarFormacion` | [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) |
 | `inspeccionar`, `perseguir`, `dejarDePerseguir` | [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md), [`Niebla_De_Guerra.md`](Niebla_De_Guerra.md) |
@@ -741,6 +742,10 @@ Mensajes del cliente: `{ accion: 'suscribir' | 'desuscribir' | 'resincronizar', 
 ### 7.1 Presencia por la conexión
 
 Abrir el socket de jugador ejecuta `conectarse` para su héroe (si lo tiene); cerrar **el último** socket del jugador (varias pestañas cuentan) ejecuta `desconectarse`. Lo hace el servidor con el id del héroe como actor (no pasa por la matriz). Un fallo al anotarlo se registra y no tumba el socket: la presencia se corrige en la siguiente conexión. Apagar el servidor (un despliegue) **no** desconecta a nadie. Qué hacen ambos comandos: [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md) §7.
+
+Cerrar el socket es la **caída** (salida a los 2:30). Quien cierra sesión a propósito desde el cliente manda antes la orden `cerrar_sesion` y sale del mundo al instante (decisión del autor del 2026-11-02); el socket que se cierra después ya no cambia nada.
+
+> **Implementado en Rust (2026-11-02).** Hasta ahora el servidor de Rust no hacía nada de esto: cerrar el cliente no sacaba a nadie del mundo y volver no lo conectaba. Ahora el actor de sesiones (`nucleo::sesiones`, `Actor::presencia`) lo aplica a las sesiones `CLIENTE_UNITY`: al abrir la sesión, antes de su foto, `Conectarse` del héroe de verdad de la cuenta (`Nucleo::heroe_de_cuenta`: un héroe de campo de la administración no cuenta), y al cerrarse la última sesión de esa cuenta, `Desconectarse`. La orden va con la cuenta como actor y un id `presencia:conecta:vN` o `presencia:desconecta:vN` (la versión de antes, que una aceptada siempre sube); un rechazo (sin héroe, ya conectado, ya fuera) no deja rastro. Solo un cierre es la caída: el servidor dice por qué terminó cada sesión (`ComandoSesion::Desconecta { sesion, fin }`, con `servidor::FinDeSesion` `Cierre`, `Reemplazada` o `Apagado`), y ni la sesión que otra del mismo cliente sustituye (abrir el juego en otro sitio) ni apagar el servidor desconectan a nadie. **Un bot (`CLIENTE_BOT`) lleva su presencia con sus propias órdenes** (`conectarse`, `desconectarse`, `cerrar_sesion`): su socket no la toca. Prueba en `crates/nucleo/tests/ambitos.rs` (`el_socket_de_unity_lleva_la_presencia_de_su_heroe_y_cerrar_sesion_le_saca_ya`).
 
 ### 7.2 Canales de eventos (el *hub*)
 

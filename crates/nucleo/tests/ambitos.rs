@@ -359,12 +359,13 @@ async fn al_perder_un_derecho_llega_revocado_y_al_ganar_otro_su_foto_con_las_ord
 
 #[tokio::test]
 async fn al_reconectar_cada_ambito_se_reanuda_sin_novedad_con_deltas_o_con_foto() {
+    // Ana entra como bot: su socket no lleva la presencia (Proyecciones §7.1), así que cerrarlo y volver no toca su héroe.
     let m = con_mundo!();
     let x = aldea(m, Ajustes::default(), true);
     let (plaza, as_, h_ana, ana_id) = (x.plaza, ids::asentamiento(x.plaza), ids::heroe(x.ana), x.ana);
     let w = arrancar_con(x.n).await;
     let (mut admin_c, _) = w.entrar("admin", TipoCliente::ClienteAdminWeb).await;
-    let (ana, b, _) = w.conectar(hola_con("ana", TipoCliente::ClienteUnity, &[])).await;
+    let (ana, b, _) = w.conectar(hola_con("ana", TipoCliente::ClienteBot, &[])).await;
     let (k_heroe, k_faccion, k_plaza) = (format!("HEROE:{h_ana}"), "FACCION:f-1".to_owned(), format!("ASENTAMIENTO:{as_}"));
     let v = b.ambitos[0].version_actual;
     assert!(b.ambitos.iter().all(|a| a.version_actual == v));
@@ -373,7 +374,7 @@ async fn al_reconectar_cada_ambito_se_reanuda_sin_novedad_con_deltas_o_con_foto(
     assert!(b.ambitos[..2].iter().all(|a| a.version_interior_actual == 0), "solo ASENTAMIENTO lleva secuencia interior");
     ana.cerrar().await;
     let conoce = |v: u64| {
-        let mut h = hola_con("ana", TipoCliente::ClienteUnity, &[(&k_heroe, v), (&k_faccion, v), (&k_plaza, v)]);
+        let mut h = hola_con("ana", TipoCliente::ClienteBot, &[(&k_heroe, v), (&k_faccion, v), (&k_plaza, v)]);
         h.versiones_interiores_conocidas.insert(k_plaza.clone(), vi);
         h
     };
@@ -418,17 +419,54 @@ async fn al_reconectar_cada_ambito_se_reanuda_sin_novedad_con_deltas_o_con_foto(
 }
 
 #[tokio::test]
+async fn el_socket_de_unity_lleva_la_presencia_de_su_heroe_y_cerrar_sesion_le_saca_ya() {
+    let m = con_mundo!();
+    let x = aldea(m, Ajustes::default(), true);
+    let (beto, dora) = (x.beto, x.dora);
+    let w = arrancar_con(x.n).await;
+    let (mut admin_c, _) = w.entrar("admin", TipoCliente::ClienteAdminWeb).await;
+    let suyo = |d: &pb::Delta, codigo: &str| d.eventos.iter().find(|e| e.codigo == codigo).is_some_and(|e| e.heroes_ids.contains(&ids::heroe(beto)));
+    // Cerrar el socket de Unity es la caída (Proyecciones §7.1): la salida queda a los 2:30. Volver a abrirlo la cancela, y la foto ya llega sin ella.
+    let (c, _) = w.entrar("beto", TipoCliente::ClienteUnity).await;
+    c.cerrar().await;
+    assert!(suyo(&esperar_hecho(&mut admin_c, "heroe.se_desconecta").await, "heroe.se_desconecta"));
+    let (mut c, f) = w.entrar("beto", TipoCliente::ClienteUnity).await;
+    let heroe = f.entidades.iter().find_map(|e| match &e.cuerpo {
+        Some(pb::entidad::Cuerpo::Heroe(h)) => Some(h.clone()),
+        _ => None,
+    });
+    assert_eq!(heroe.expect("su héroe").desconecta_en_ms, None, "volver a abrirlo cancela la caída");
+    // Cerrar sesión le saca ya; el socket que se cierra después no cambia nada, y al volver a abrirlo vuelve al mundo.
+    let (_, r) = dar(&mut c, "x1", orden::Cuerpo::CerrarSesion(pb::OrdenCerrarSesion { heroe_id: ids::heroe(beto) })).await;
+    assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
+    assert!(suyo(&esperar_hecho(&mut admin_c, "heroe.sale_del_mundo").await, "heroe.sale_del_mundo"));
+    c.cerrar().await;
+    let (_c, _) = w.entrar("beto", TipoCliente::ClienteUnity).await;
+    assert!(suyo(&esperar_hecho(&mut admin_c, "heroe.vuelve_al_mundo").await, "heroe.vuelve_al_mundo"));
+    // Abrirlo en otro sitio sustituye a la sesión vieja sin caída.
+    let (_c2, _) = w.entrar("beto", TipoCliente::ClienteUnity).await;
+    // Un bot lleva su presencia con sus propias órdenes: su socket no la toca.
+    let (b, _) = w.entrar("dora", TipoCliente::ClienteBot).await;
+    b.cerrar().await;
+    let n = w.parar().await;
+    let p = n.heroe(beto).unwrap().heroe.presencia;
+    assert!(!p.fuera && p.desconecta_en.is_none(), "ni la sesión sustituida ni apagar el servidor le desconectan");
+    assert_eq!(n.heroe(dora).unwrap().heroe.presencia.desconecta_en, None);
+}
+
+#[tokio::test]
 async fn sin_registro_que_alcance_la_version_del_cliente_la_reanudacion_es_con_foto() {
+    // Ana entra como bot: su socket no lleva la presencia (Proyecciones §7.1), así que cerrarlo y volver no toca su héroe.
     let m = con_mundo!();
     // El registro solo conserva las dos últimas versiones.
     let x = aldea(m, Ajustes { retencion_cambios: 2, ..Ajustes::default() }, true);
     let (plaza, as_, h_ana) = (x.plaza, ids::asentamiento(x.plaza), ids::heroe(x.ana));
     let w = arrancar_con(x.n).await;
     let (mut admin_c, _) = w.entrar("admin", TipoCliente::ClienteAdminWeb).await;
-    let (ana, b, _) = w.conectar(hola_con("ana", TipoCliente::ClienteUnity, &[])).await;
+    let (ana, b, _) = w.conectar(hola_con("ana", TipoCliente::ClienteBot, &[])).await;
     let v = b.ambitos[0].version_actual;
     ana.cerrar().await;
-    let conoce = |v: u64| hola_con("ana", TipoCliente::ClienteUnity, &[(&format!("HEROE:{h_ana}"), v), (&format!("ASENTAMIENTO:{as_}"), v)]);
+    let conoce = |v: u64| hola_con("ana", TipoCliente::ClienteBot, &[(&format!("HEROE:{h_ana}"), v), (&format!("ASENTAMIENTO:{as_}"), v)]);
 
     // Con una sola versión por delante el registro todavía la alcanza: la plaza se reanuda por deltas.
     let (_, r) = dar(&mut admin_c, "r1", dar_madera(plaza, 1_000)).await;

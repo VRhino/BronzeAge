@@ -490,6 +490,24 @@ fn un_heroe_herido_lo_esta_dos_minutos_y_se_lee_al_mirar_sin_ningun_evento() {
 }
 
 #[test]
+fn cerrar_sesion_dentro_de_un_lugar_sale_ya_sin_mover_nada_y_conectarse_devuelve_el_control() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let h = e.heroe("ana", 0);
+    let (t, donde, cola) = (e.n.ahora(), e.n.heroe(h).unwrap().heroe.presencia.ubicacion, en_cola(&e.n));
+    e.ok("ana", Comando::CerrarSesion { heroe: h });
+    let p = e.n.heroe(h).unwrap().heroe.presencia;
+    assert_eq!((p.fuera, p.desconecta_en, p.ubicacion), (true, None, donde), "sale ya y sigue donde estaba");
+    assert_eq!(en_cola(&e.n), cola, "no programa ninguna salida");
+    let sale = hechos(&e.n, "heroe.sale_del_mundo");
+    assert_eq!((sale.len(), sale[0].0), (1, t));
+    assert_eq!(e.rechazada("ana", Comando::CerrarSesion { heroe: h }), rechazos::HEROE_FUERA_DEL_MUNDO);
+    assert_eq!(e.rechazada("ana", Comando::Desconectarse { heroe: h }), rechazos::HEROE_FUERA_DEL_MUNDO, "el socket que se cierra después no cambia nada");
+    e.ok("ana", Comando::Conectarse { heroe: h });
+    assert_eq!(e.n.heroe(h).unwrap().heroe.presencia.ubicacion, donde);
+}
+
+#[test]
 fn desconectarse_programa_la_salida_a_dos_minutos_y_medio_y_conectarse_la_cancela_o_vuelve() {
     let m = con_mundo!();
     let mut e = escenario(m, 7);
