@@ -408,7 +408,7 @@ impl Asentamiento {
         }
         self.iniciar_mejoras_automaticas(t, r, x, &reserva_auto, &mut ev);
         if !self.auto_pausada {
-            self.evaluar_necesidades(t, x, &mano, &reserva_auto, &mut ev);
+            self.evaluar_necesidades(t, x, &reserva_auto, &mut ev);
         }
         // La obra de los recintos, con la misma reserva: reintenta la celda que esperaba materiales (las que tienen cita las levanta `cumplir_fines`).
         if self.recintos.iter().any(|r| r.vence(t)) {

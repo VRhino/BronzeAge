@@ -213,6 +213,18 @@ impl Nucleo {
         }
     }
 
+    /// El carro del héroe en el campamento `campamento` (2026-11-02): dentro, el que lleva ([`Nucleo::carro_dentro`]: la columna con la que entró o, en su residencia, la que
+    /// conserva o el que trajo); con su columna a la puerta, el de ella. Devuelve dónde va (`None` = con el héroe), lo que admite y si está a la puerta (allí el carro es de la columna y
+    /// el fondo pide a su Líder).
+    pub(super) fn carro_en_campamento(&self, heroe: u64, campamento: u32) -> Result<(Option<u64>, Mil, bool), Respuesta> {
+        if self.heroe(heroe).is_some_and(|h| h.heroe.presencia.ubicacion == Ubicacion::Mercenarios(campamento)) {
+            let (columna, capacidad) = self.carro_dentro(heroe, Residencia::Campamento(campamento))?;
+            return Ok((columna, capacidad, false));
+        }
+        let columna = self.columna_de(heroe).ok_or_else(|| Respuesta::rechazo(rechazos::HEROE_SIN_COLUMNA, "hace falta tu columna a la puerta del campamento", self.estado.version))?;
+        Ok((Some(columna), self.capacidad_de_carga(columna).unwrap_or(0), true))
+    }
+
     /// El campamento donde está el héroe cuando la orden no lo dice (`comprar_en_campamento` y `repostar_en_campamento` sin `campamento_id`): aquel en el que está dentro
     /// o, si va en su columna, el más cercano a cuya puerta está. `None` si no está en ninguno.
     pub fn campamento_del_heroe(&self, heroe: u64) -> Option<u32> {
@@ -319,7 +331,7 @@ impl Nucleo {
         let cr = self.estado.reglas.economia.comercio.clone();
         let mr = self.estado.reglas.economia.militar.clone();
         match &p.comando {
-            Comando::ComprarEnCampamento { heroe, campamento, recurso, cantidad } => {
+            Comando::ComprarEnCampamento { heroe, campamento, recurso, cantidad, pagar_con } => {
                 self.autorizar_heroe(p, *heroe, false)?;
                 self.puerta_de_campamento(*campamento).ok_or_else(|| rechazo(rechazos::CAMPAMENTO_DESCONOCIDO, ids::campamento(*campamento)))?;
                 if !self.esta_en_el_campamento(*heroe, *campamento, t) {
@@ -329,24 +341,43 @@ impl Nucleo {
                 let precio = precio_unitario(&cr.mercenarios, referencia);
                 let stock = self.stock_de_campamento(*campamento).expect("el campamento existe").de(*recurso);
                 let residente = self.campamento_de_residencia(*heroe) == Some(*campamento);
-                let h = self.heroe(*heroe).expect("existe");
-                let columna = self.columna_que_lleva(*heroe);
-                let compra = if residente {
-                    let cupo = h.cupo.restante(&cr.mercenarios, *recurso, t);
-                    comprar_residente(*recurso, precio, *cantidad, stock, cupo, de(&h.almacen_personal, Recurso::Oro), cr.mercenarios.capacidad_almacen_personal - total(&h.almacen_personal)).map_err(de_mercenarios)?
-                } else {
-                    let columna = columna.ok_or_else(|| rechazo(rechazos::HEROE_SIN_COLUMNA, "el visitante paga con el carro de su columna: el héroe no va en ninguna".into()))?;
-                    let carro = &self.estado.ejercitos[&columna].columna.carga;
-                    let libre = self.capacidad_de_carga(columna).unwrap_or(0) - total(carro);
-                    comprar_visitante(*recurso, precio, *cantidad, stock, de(carro, Recurso::Oro), libre).map_err(de_mercenarios)?
+                // `carro`: `None` = el almacén personal (el del residente, por defecto); si no, el carro que lleva aquí (el del visitante, por defecto).
+                let carro = match pagar_con.unwrap_or(if residente { PagarCon::AlmacenPersonal } else { PagarCon::Carro }) {
+                    PagarCon::AlmacenPersonal if !residente => {
+                        return Err(rechazo(rechazos::ALMACEN_PERSONAL_FUERA_DE_TU_RESIDENCIA, "el almacén personal está en el campamento donde se reside: aquí, con el carro".into()))
+                    }
+                    PagarCon::AlmacenPersonal => None,
+                    PagarCon::Carro => Some(self.carro_en_campamento(*heroe, *campamento)?),
                 };
-                // El oro cobrado se destruye (sumidero); la compra va al almacén personal (residente) o al carro (visitante).
-                let carga = if residente {
-                    &mut self.estado.militar.heroes.get_mut(heroe).expect("existe").almacen_personal
-                } else {
-                    let columna = columna.expect("el visitante va en una columna");
+                let h = self.heroe(*heroe).expect("existe");
+                let cupo = h.cupo.restante(&cr.mercenarios, *recurso, t);
+                let compra = match carro {
+                    None => comprar_residente(*recurso, precio, *cantidad, stock, cupo, de(&h.almacen_personal, Recurso::Oro), cr.mercenarios.capacidad_almacen_personal - total(&h.almacen_personal)),
+                    Some((columna, capacidad, _)) => {
+                        let carga = columna.map_or(&h.carro, |c| &self.estado.ejercitos[&c].columna.carga);
+                        let libre = capacidad - total(carga);
+                        if !residente {
+                            comprar_visitante(*recurso, precio, *cantidad, stock, de(carga, Recurso::Oro), libre)
+                        } else if *recurso == Recurso::Trigo {
+                            Err(ErrorMercenarios::TrigoNoVaAlCarro)
+                        } else {
+                            // El residente que paga con el carro sigue con su cupo diario (2026-11-02).
+                            comprar_residente(*recurso, precio, *cantidad, stock, cupo, de(carga, Recurso::Oro), libre)
+                        }
+                    }
+                }
+                .map_err(de_mercenarios)?;
+                // El oro cobrado se destruye (sumidero); la compra va adonde salió el oro: el almacén personal o el carro.
+                self.tr.tocar(Clase::Heroe, *heroe);
+                if let Some((Some(columna), _, _)) = carro {
                     self.tr.tocar(Clase::Ejercito, columna);
-                    &mut self.estado.ejercitos.get_mut(&columna).expect("existe").columna.carga
+                }
+                let Estado { militar, ejercitos, .. } = &mut self.estado;
+                let hn = militar.heroes.get_mut(heroe).expect("existe");
+                let carga = match carro {
+                    None => &mut hn.almacen_personal,
+                    Some((None, _, _)) => &mut hn.carro,
+                    Some((Some(columna), _, _)) => &mut ejercitos.get_mut(&columna).expect("existe").columna.carga,
                 };
                 *carga.entry(Recurso::Oro).or_insert(0) -= compra.oro_cobrado;
                 *carga.entry(*recurso).or_insert(0) += compra.cantidad;

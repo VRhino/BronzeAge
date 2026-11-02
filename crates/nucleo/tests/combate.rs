@@ -360,7 +360,7 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.guarniciones.insert(9, GuarnicionDePueblo { escuadra: combate::pueblo::guarnicion_de_serie(&mc(), 12, false, 0), repone_en: Some(7_000) });
     base.combate.destruidos.insert(6, vec![100, 200]);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN54");
+    assert_eq!(&bytes[..5], b"BAN55");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -1210,50 +1210,69 @@ fn la_partida_nace_con_los_campamentos_de_las_vetas_y_uno_en_el_anillo_de_cada_c
     assert_ne!(distinto.hash_estado(), n.hash_estado(), "otra semilla, otros niveles y otros puntos");
 }
 
+/// Diez de golpe cada dos horas (decisión del autor del 2026-11-02; antes uno por plaza, que reaparecía a las 6 h).
 #[test]
-fn toda_plaza_tiene_su_campamento_en_el_bosque_libre_mas_cercano_y_destruido_reaparece_a_las_6_horas() {
+fn toda_plaza_tiene_diez_campamentos_en_bosques_libres_y_su_oleada_a_las_2_horas_repone_de_golpe_los_que_faltan() {
     let m = con_mundo!();
     let mut e = montar(m, 7, false);
     e.sin_proteccion();
     let (a, b) = (e.a, e.b);
-    let suyo = |e: &Esc, plaza: u64| e.n.campamentos_de_bandidos().find(|c| c.origen == nucleo::OrigenBandidos::Plaza(plaza)).cloned();
-    let (ca, cb) = (suyo(&e, a).expect("la plaza A tiene su campamento"), suyo(&e, b).expect("la plaza B tiene el suyo"));
-    assert_ne!(ca.bosque, cb.bosque, "un campamento por bosque");
-    for (p, c) in [(a, &ca), (b, &cb)] {
+    let por_plaza = e.n.estado().reglas.economia.combate.bandidos.por_plaza as usize;
+    assert_eq!(por_plaza, 10);
+    let suyos = |e: &Esc, plaza: u64| e.n.campamentos_de_bandidos().filter(|c| c.origen == nucleo::OrigenBandidos::Plaza(plaza)).cloned().collect::<Vec<_>>();
+    let (ca, cb) = (suyos(&e, a), suyos(&e, b));
+    assert_eq!((ca.len(), cb.len()), (por_plaza, por_plaza), "las dos plazas tienen los diez al fundarse");
+    let bosques: std::collections::BTreeSet<u32> = ca.iter().chain(&cb).map(|c| c.bosque.expect("en un bosque")).collect();
+    assert_eq!(bosques.len(), 2 * por_plaza, "un campamento por bosque");
+    let inicial = e.n.estado().reglas.territorio.radio_inicial;
+    for (p, c) in ca.iter().map(|c| (a, c)).chain(cb.iter().map(|c| (b, c))) {
         let bosque = &m.0.bosques()[c.bosque.unwrap() as usize];
         let centro = Punto::new(bosque.centro.as_ref().unwrap().x, bosque.centro.as_ref().unwrap().y);
         assert_eq!(c.posicion, centro);
         // El margen se mide al aparecer, contra la zona de entonces; la zona crece después (una unidad por edificio, hasta su techo). Así que, como poco, contra el radio inicial.
-        let inicial = e.n.estado().reglas.territorio.radio_inicial;
         for q in e.n.estado().asentamientos.values() {
             assert!(q.posicion.dist(centro) >= inicial + 10_000, "el campamento de as-{p} está a ≥ 10 u de la zona inicial de as-{}", q.id);
         }
         assert!(!e.n.en_zona(a, c.posicion) && !e.n.en_zona(b, c.posicion));
     }
+    let pa = e.n.estado().asentamientos[&a].posicion;
+    let lejos = ca.iter().map(|c| c.posicion.dist(pa)).max().unwrap();
+    println!("el más lejano de los diez de as-{a} está a {} u de la plaza", lejos / 1_000);
     let apariciones = hechos(&e.n, "bandidos.campamento_aparece");
-    assert!(apariciones.iter().any(|h| h.2 == vec![a] && dato(h, "campamento") == ca.id as i64 && dato(h, "nivel") == ca.nivel as i64));
+    assert_eq!(apariciones.iter().filter(|h| h.2 == vec![a]).count(), por_plaza);
+    assert!(ca.iter().all(|c| apariciones.iter().any(|h| h.2 == vec![a] && dato(h, "campamento") == c.id as i64 && dato(h, "nivel") == c.nivel as i64)));
     assert!(de_combate_pendientes(&e.n).is_empty(), "plazas y anillos satisfechos: no queda ninguna cita pendiente");
-    let (cola0, ahora0) = (e.n.eventos_en_cola(), e.n.ahora());
+    let cola0 = e.n.eventos_en_cola();
     e.avanzar(10 * HORA);
     assert!(e.n.eventos_en_cola() <= cola0 + 2, "los campamentos quietos no programan nada ({cola0} → {})", e.n.eventos_en_cola());
-    let _ = ahora0;
 
-    // Destruido (por quien sea), le reaparece uno al cabo de 6 horas, exactos, y no antes.
-    let atacante = e.ejercito("gus", 3, ca.posicion, &[Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce]);
+    // Destruido uno (por quien sea), la oleada llega a las 2 horas exactas, y no antes.
+    let tropas = [Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce];
+    let atacante = e.ejercito("gus", 3, ca[0].posicion, &tropas);
     let t = e.n.ahora();
-    assert!(e.atacar("gus", atacante.1, ObjetivoAtaque::Campamento(ca.id), false).aceptada());
-    assert!(suyo(&e, a).is_none());
-    assert_eq!(e.n.estado().combate.reaparecen[&a], t + 6 * HORA);
+    assert!(e.atacar("gus", atacante.1, ObjetivoAtaque::Campamento(ca[0].id), false).aceptada());
+    assert_eq!(suyos(&e, a).len(), por_plaza - 1);
+    assert_eq!(e.n.estado().combate.reaparecen[&a], t + 2 * HORA);
     let reaparece = |n: &Nucleo| nucleo::proyeccion::interior::asentamiento(n, a).unwrap().bandidos_reaparecen_en_ms;
-    assert_eq!(reaparece(&e.n), Some(t + 6 * HORA), "el plazo viaja en la plaza (paridad P7)");
-    assert_eq!(de_combate_pendientes(&e.n), vec![(t + 6 * HORA, nucleo::SucesoCombate::BandidosDeLaPlaza)]);
-    e.n.avanzar_hasta(t + 6 * HORA - 1);
-    assert!(suyo(&e, a).is_none());
-    e.n.avanzar_hasta(t + 6 * HORA);
-    let nuevo = suyo(&e, a).expect("reaparece junto a su plaza");
-    assert!(nuevo.id != ca.id && e.n.estado().combate.reaparecen.get(&a).is_none());
+    assert_eq!(reaparece(&e.n), Some(t + 2 * HORA), "el plazo viaja en la plaza (paridad P7)");
+    assert_eq!(de_combate_pendientes(&e.n), vec![(t + 2 * HORA, nucleo::SucesoCombate::BandidosDeLaPlaza)]);
+    // Otro que cae antes de que llegue no la retrasa ni programa otra: la misma oleada repone los dos.
+    e.n.avanzar_hasta(t + HORA);
+    let otro = e.ejercito("hugo", 4, ca[1].posicion, &tropas);
+    assert!(e.atacar("hugo", otro.1, ObjetivoAtaque::Campamento(ca[1].id), false).aceptada());
+    assert_eq!(suyos(&e, a).len(), por_plaza - 2);
+    assert_eq!(e.n.estado().combate.reaparecen[&a], t + 2 * HORA);
+    assert_eq!(de_combate_pendientes(&e.n), vec![(t + 2 * HORA, nucleo::SucesoCombate::BandidosDeLaPlaza)]);
+    e.n.avanzar_hasta(t + 2 * HORA - 1);
+    assert_eq!(suyos(&e, a).len(), por_plaza - 2);
+    e.n.avanzar_hasta(t + 2 * HORA);
+    let ahora = suyos(&e, a);
+    assert_eq!(ahora.len(), por_plaza, "llegan de golpe los dos que faltaban");
+    assert!(ahora.iter().all(|c| c.id != ca[0].id && c.id != ca[1].id));
+    assert!(e.n.estado().combate.reaparecen.get(&a).is_none());
     assert_eq!(reaparece(&e.n), None);
-    assert_eq!(hechos(&e.n, "bandidos.campamento_aparece").iter().filter(|h| h.2 == vec![a]).map(|h| h.0).collect::<Vec<_>>(), vec![0, t + 6 * HORA]);
+    let tiempos: Vec<i64> = hechos(&e.n, "bandidos.campamento_aparece").iter().filter(|h| h.2 == vec![a]).map(|h| h.0).collect();
+    assert_eq!((tiempos.iter().filter(|&&x| x == 0).count(), tiempos.iter().filter(|&&x| x == t + 2 * HORA).count(), tiempos.len()), (por_plaza, 2, por_plaza + 2));
     assert!(de_combate_pendientes(&e.n).is_empty());
 }
 
@@ -1324,10 +1343,11 @@ fn el_oro_de_los_bandidos_del_anillo_solo_lo_cobra_un_heroe_sin_plaza() {
 fn una_plaza_sin_bosque_libre_recibe_su_campamento_en_cuanto_se_libera_uno() {
     let m = con_mundo!();
     let mut n = Nucleo::nuevo(arranque(m, 7));
-    // Plazas hasta agotar los bosques: la última que llega se queda esperando el suyo, sin cita.
+    let por_plaza = n.estado().reglas.economia.combate.bandidos.por_plaza as usize;
+    // Plazas hasta agotar los bosques: la primera a la que le faltan se queda esperando los suyos, sin cita.
     let (ancho, alto) = m.0.tamano();
-    let suyo = |n: &Nucleo, plaza: u64| n.campamentos_de_bandidos().find(|c| c.origen == nucleo::OrigenBandidos::Plaza(plaza)).cloned();
-    let esperan = |n: &Nucleo| n.estado().asentamientos.keys().copied().filter(|&p| suyo(n, p).is_none()).collect::<Vec<_>>();
+    let cuantos = |n: &Nucleo, plaza: u64| n.campamentos_de_bandidos().filter(|c| c.origen == nucleo::OrigenBandidos::Plaza(plaza)).count();
+    let esperan = |n: &Nucleo| n.estado().asentamientos.keys().copied().filter(|&p| cuantos(n, p) < por_plaza).collect::<Vec<_>>();
     let mut faccion = 0;
     'poblar: for y in (31_000..alto).step_by(31_000) {
         for x in (31_000..ancho).step_by(31_000) {
@@ -1342,10 +1362,12 @@ fn una_plaza_sin_bosque_libre_recibe_su_campamento_en_cuanto_se_libera_uno() {
         }
     }
     let espera = esperan(&n)[0];
+    let tenia = cuantos(&n, espera);
     assert!(!de_combate_pendientes(&n).iter().any(|&(_, s)| s == nucleo::SucesoCombate::BandidosDeLaPlaza), "sin bosque que valga no se reintenta por tiempo");
-    // Se destruye un campamento cuyo bosque sigue fuera de toda zona: queda libre y la que esperaba lo recibe en ese instante.
+    // Se destruye un campamento de otra plaza cuyo bosque sigue fuera de toda zona: queda libre y la que esperaba lo recibe en ese instante (la dueña del destruido espera su
+    // oleada, a las 2 h).
     let valido = |n: &Nucleo, c: &nucleo::CampamentoBandidos| n.estado().asentamientos.values().all(|a| a.posicion.dist(c.posicion) >= a.radio + 10_000) && !n.en_proteccion_de_campamento(c.posicion);
-    let libre = n.campamentos_de_bandidos().find(|c| matches!(c.origen, nucleo::OrigenBandidos::Plaza(_)) && valido(&n, c)).cloned().expect("un campamento de plaza con su bosque válido");
+    let libre = n.campamentos_de_bandidos().find(|c| matches!(c.origen, nucleo::OrigenBandidos::Plaza(p) if p != espera) && valido(&n, c)).cloned().expect("un campamento de plaza con su bosque válido");
     let (a, b) = (*n.estado().asentamientos.keys().next().unwrap(), espera);
     let mut e = Esc { n, a, b, cuenta: 0, fijo: None };
     // La puerta de antes del sistema 5 (abierta también a los neutrales, que por defecto ya no entran: Q1, 5E): en estas pruebas los neutrales entran.
@@ -1356,9 +1378,11 @@ fn una_plaza_sin_bosque_libre_recibe_su_campamento_en_cuanto_se_libera_uno() {
     let t = e.n.ahora();
     assert!(e.atacar("gus", atacante.1, ObjetivoAtaque::Campamento(libre.id), false).aceptada());
     e.n.avanzar_hasta(t + 1);
-    let nuevo = suyo(&e.n, espera).expect("la plaza que esperaba recibe el bosque que quedó libre");
+    assert_eq!(cuantos(&e.n, espera), tenia + 1, "la plaza que esperaba recibe el bosque que quedó libre");
+    let nuevo = e.n.campamentos_de_bandidos().filter(|c| c.origen == nucleo::OrigenBandidos::Plaza(espera)).max_by_key(|c| c.id).cloned().unwrap();
     assert_eq!((nuevo.bosque, nuevo.posicion), (libre.bosque, libre.posicion));
-    assert_eq!(hechos(&e.n, "bandidos.campamento_aparece").iter().filter(|h| h.2 == vec![espera]).map(|h| h.0).collect::<Vec<_>>(), vec![t]);
+    // Todo pasa en el instante 0: los que tenía y el nuevo, cada uno con su aparición.
+    assert_eq!(hechos(&e.n, "bandidos.campamento_aparece").iter().filter(|h| h.2 == vec![espera] && h.0 == t).count(), tenia + 1);
 }
 
 #[test]

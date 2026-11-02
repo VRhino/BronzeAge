@@ -129,7 +129,8 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         (orden!(Desconectarse, OrdenDesconectarse, heroe_id: h.clone()), Comando::Desconectarse { heroe: 7 }),
         (orden!(Conectarse, OrdenConectarse, heroe_id: h.clone()), Comando::Conectarse { heroe: 7 }),
         (orden!(CerrarSesion, OrdenCerrarSesion, heroe_id: h.clone()), Comando::CerrarSesion { heroe: 7 }),
-        (orden!(ComprarEnCampamento, OrdenComprarEnCampamento, recurso: s("trigo"), cantidad: 3_000, campamento_id: Some(s("camp-9"))), Comando::ComprarEnCampamento { heroe: 7, campamento: 9, recurso: Trigo, cantidad: 3_000 }),
+        (orden!(ComprarEnCampamento, OrdenComprarEnCampamento, recurso: s("trigo"), cantidad: 3_000, campamento_id: Some(s("camp-9"))), Comando::ComprarEnCampamento { heroe: 7, campamento: 9, recurso: Trigo, cantidad: 3_000, pagar_con: None }),
+        (orden!(ComprarEnCampamento, OrdenComprarEnCampamento, recurso: s("madera"), cantidad: 2_000, pagar_con: Some(s("carro"))), Comando::ComprarEnCampamento { heroe: 7, campamento: 4, recurso: Madera, cantidad: 2_000, pagar_con: Some(PagarCon::Carro) }),
         (orden!(RepostarEnCampamento, OrdenRepostarEnCampamento, campamento_id: Some(s("camp-9"))), Comando::RepostarEnCampamento { heroe: 7, campamento: 9 }),
         // ── Columnas y convocatorias ──
         (
@@ -273,6 +274,7 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         (orden!(ComprarAnimalCaravana, OrdenComprarAnimalCaravana, caravana_id: s("car-2"), carro_indice: 1, tipo_animal: s("camello")), Comando::AnadirAnimal { caravana: 2, carro: 1, animal: Animal::Camello }),
         (orden!(MoverCarroCaravana, OrdenMoverCarroCaravana, desde_caravana_id: s("car-2"), hacia_caravana_id: s("car-3"), carro_indice: 1), Comando::MoverCarro { de: 2, a: 3, carro: 1 }),
         (orden!(ReservarCaravana, OrdenReservarCaravana, caravana_id: s("car-2"), reservada: true), Comando::ReservarCaravana { caravana: 2, reservada: true }),
+        (orden!(RenombrarCaravana, OrdenRenombrarCaravana, caravana_id: s("car-2"), nombre: s(" La de Tirinto ")), Comando::RenombrarCaravana { caravana: 2, nombre: " La de Tirinto ".into() }),
         (
             orden!(PrepararCaravana, OrdenPrepararCaravana, caravana_id: s("car-2"), heroe_id: h.clone(), destino_asentamiento_id: s("as-4"), carga: carga(&[("madera", 5_000)]), salir_en: Some(9_000)),
             Comando::PrepararCaravana { caravana: 2, destino: 4, carga: madera(), salir_en: Some(9_000), escolta: None },
@@ -593,7 +595,7 @@ fn lo_que_la_orden_deja_implicito_se_resuelve_preguntando_al_mundo() {
     assert_eq!(traduce(orden!(EntregarEnObra, OrdenEntregarEnObra, heroe_id: h(), obra_id: s("pueblo-5")), false), Err(rechazos::OBRA_DE_MAPA_DESCONOCIDA));
     // Sin campamento, el campamento donde está el héroe de la cuenta.
     assert_eq!(traduce(orden!(RepostarEnCampamento, OrdenRepostarEnCampamento), false), Ok(Comando::RepostarEnCampamento { heroe: 7, campamento: 4 }));
-    assert_eq!(traduce(orden!(ComprarEnCampamento, OrdenComprarEnCampamento, recurso: s("trigo"), cantidad: 1_000), false), Ok(Comando::ComprarEnCampamento { heroe: 7, campamento: 4, recurso: Trigo, cantidad: 1_000 }));
+    assert_eq!(traduce(orden!(ComprarEnCampamento, OrdenComprarEnCampamento, recurso: s("trigo"), cantidad: 1_000), false), Ok(Comando::ComprarEnCampamento { heroe: 7, campamento: 4, recurso: Trigo, cantidad: 1_000, pagar_con: None }));
     // Una cuenta sin héroe no tiene a quién dar las órdenes que no lo nombran.
     for cuerpo in [orden!(Fundar, OrdenFundar), orden!(ReponerPrestamo, OrdenReponerPrestamo), orden!(CancelarBatalla, OrdenCancelarBatalla, battle_id: s("uuid-9")), orden!(RepostarEnCampamento, OrdenRepostarEnCampamento)] {
         assert_eq!(codigo_de(traducir(&Mundo, &en(cuerpo), "beto", false, false)), rechazos::HEROE_DESCONOCIDO);
@@ -705,7 +707,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let de_administracion: BTreeSet<String> = ordenes_de_administracion().iter().map(|(_, c)| nombre(c)).collect();
     let del_servidor_de_batalla: BTreeSet<String> = ["RegistrarAsignacion", "ConfirmarInicio", "RegistrarTokens", "RegistrarSalida", "AplicarResultado"].map(String::from).into();
     let todos = variantes_de_comando();
-    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (197, 172, 20, 5));
+    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (198, 173, 20, 5));
     let clasificados: Vec<&String> = del_jugador.iter().chain(&de_administracion).chain(&del_servidor_de_batalla).collect();
     assert_eq!(clasificados.len(), todos.len(), "una variante en dos orígenes");
     let sin_clasificar: Vec<&String> = todos.iter().filter(|v| !clasificados.contains(v)).collect();
@@ -717,7 +719,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let tabla: BTreeSet<String> = tabla.map(|c| nombre(&c)).collect();
     let proto = include_str!("../../../../../proto/bronzeage/v1/orders.proto");
     let en_el_contrato = proto.lines().skip_while(|l| !l.contains("oneof cuerpo {")).skip(1).take_while(|l| l.trim() != "}").map(str::trim).filter(|l| !l.starts_with("//") && l.ends_with(';')).count();
-    assert_eq!((tabla.len(), en_el_contrato), (171, 171), "una orden del contrato sin mapear ni clasificar como no disponible");
+    assert_eq!((tabla.len(), en_el_contrato), (172, 172), "una orden del contrato sin mapear ni clasificar como no disponible");
 }
 
 /// El nombre de una orden en el contrato (el campo del `oneof`): la variante de `Cuerpo` en serpiente (`MarcharA` → `marchar_a`).
@@ -799,5 +801,5 @@ fn la_matriz_de_autorizacion_del_documento_es_la_del_codigo() {
     let faltan: Vec<String> = codigo.difference(&documento).map(fila).collect();
     let sobran: Vec<String> = documento.difference(&codigo).map(fila).collect();
     assert!(faltan.is_empty() && sobran.is_empty(), "la matriz del documento no es la del código.\nFaltan o no coinciden (como las dice el código):\n{}\nSobran (como las dice el documento):\n{}", faltan.join("\n"), sobran.join("\n"));
-    assert_eq!(codigo.len(), 172 + 20 + 5, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
+    assert_eq!(codigo.len(), 173 + 20 + 5, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
 }

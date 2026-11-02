@@ -535,6 +535,7 @@ pub fn caravana(n: &Nucleo, c: &Caravana) -> pb::Caravana {
         prepara_hasta_ms: c.prepara_hasta,
         pueblo_id: pueblo,
         encargo: c.encargo.as_ref().map(encargo),
+        nombre: Some(c.nombre.clone()).filter(|x| !x.is_empty()),
         escoltada: c.estado == EstadoCaravana::Adjunta || !c.escolta.is_empty(),
         // Los peajes que le quedan a la ida, con el instante en que su plan cruza cada zona (paridad P7); se cobran solo en tránsito.
         peajes: match (&c.plan, c.estado) {

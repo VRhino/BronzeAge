@@ -15,7 +15,7 @@
 //! posición · ruta{n u64 · n × punto} · costes{n u64 · n × i64} · plan{bool · generación u32 · n u32 · n × (punto, instante i64)} · peajes{n u64 · n × (ciudad u32,
 //! progreso i64)} · origen_acuerdo{bool · id u64 · lado u8} · prepara_hasta opt_i64 · escolta{n u64 · n × (id u64, héroe u64, liderazgo
 //! i64)} · reservada_manual bool · anfitriona opt_u64 · antes_de_batalla u8 (255 ninguno) · pausada_desde opt_i64 · de_campamento bool · encargo{bool · modo u8 ·
-//! destino u32 · salir_en opt_i64 · parada del origen · parada del destino · vueltas u32 · punta u8 · fase u8 · fin_paso opt_i64 · cancelado bool} (BAN52)`.
+//! destino u32 · salir_en opt_i64 · parada del origen · parada del destino · vueltas u32 · punta u8 · fase u8 · fin_paso opt_i64 · cancelado bool} (BAN52) · nombre texto (BAN55)`.
 //! Una parada: `recoger{n u64 · n × (recurso u8, cantidad i64, precio_max opt_i64)} · esperar_existencias bool · dejar{n u64 · n × (recurso u8, tope opt_i64,
 //! precio_min opt_i64)} · desechar_sobrante bool`.
 
@@ -297,6 +297,7 @@ fn caravana_escribir(w: &mut Escritor, c: &Caravana) {
         pausada_desde,
         de_campamento,
         encargo,
+        nombre,
     } = c;
     w.u64(*id);
     w.u8(tipo_caravana_a_u8(*tipo));
@@ -358,6 +359,7 @@ fn caravana_escribir(w: &mut Escritor, c: &Caravana) {
         }
         None => w.bool(false),
     }
+    w.texto(nombre);
 }
 
 pub(crate) fn modo_a_u8(m: Modo) -> u8 {
@@ -450,8 +452,9 @@ fn id32(v: u64) -> Result<u32, ErrorFormato> {
     u32::try_from(v).map_err(|_| ErrorFormato("id de asentamiento fuera de rango"))
 }
 
-/// `con_encargos`: la foto trae el encargo de cada caravana (desde BAN52); en una anterior ninguna tiene.
-fn caravana_leer(r: &mut Lector, con_encargos: bool) -> Result<Caravana, ErrorFormato> {
+/// `con_encargos`: la foto trae el encargo de cada caravana (desde BAN52); en una anterior ninguna tiene. `con_nombres`: trae su nombre (desde BAN55); en una anterior
+/// ninguna lo tiene.
+fn caravana_leer(r: &mut Lector, con_encargos: bool, con_nombres: bool) -> Result<Caravana, ErrorFormato> {
     let (id, tipo, origen) = (r.u64()?, tipo_caravana_de_u8(r.u8()?)?, r.u32()?);
     let destino = r.opt_u64()?.map(id32).transpose()?;
     let contenido = carga_leer(r)?;
@@ -502,6 +505,7 @@ fn caravana_leer(r: &mut Lector, con_encargos: bool) -> Result<Caravana, ErrorFo
     };
     let (pausada_desde, de_campamento) = (r.opt_i64()?, r.bool()?);
     let encargo = if con_encargos && r.bool()? { Some(encargo_leer(r)?) } else { None };
+    let nombre = if con_nombres { r.texto()? } else { String::new() };
     Ok(Caravana {
         id,
         tipo,
@@ -524,6 +528,7 @@ fn caravana_leer(r: &mut Lector, con_encargos: bool) -> Result<Caravana, ErrorFo
         pausada_desde,
         de_campamento,
         encargo,
+        nombre,
     })
 }
 
@@ -647,8 +652,8 @@ pub(crate) fn escribir(w: &mut Escritor, c: &EstadoComercio) {
 }
 
 /// `con_rutas_acarreo`: la foto trae las rutas guardadas de los carros de acarreo (desde BAN42); en una BAN41 o BAN40 empiezan vacías y cada carro traza la suya en su próxima salida.
-/// `con_encargos`: las caravanas traen su encargo (desde BAN52).
-pub(crate) fn leer(r: &mut Lector, reglas: &Reglas, con_rutas_acarreo: bool, con_encargos: bool) -> Result<EstadoComercio, ErrorFormato> {
+/// `con_encargos`: las caravanas traen su encargo (desde BAN52); `con_nombres`, su nombre (desde BAN55).
+pub(crate) fn leer(r: &mut Lector, reglas: &Reglas, con_rutas_acarreo: bool, con_encargos: bool, con_nombres: bool) -> Result<EstadoComercio, ErrorFormato> {
     let mut c = EstadoComercio { siguiente_acuerdo: r.u64()?, siguiente_orden: r.u64()?, siguiente_caravana: r.u64()?, ..EstadoComercio::default() };
     for _ in 0..r.cuenta()? {
         c.acuerdos.push(acuerdo_leer(r)?);
@@ -660,7 +665,7 @@ pub(crate) fn leer(r: &mut Lector, reglas: &Reglas, con_rutas_acarreo: bool, con
         c.libro.historial.push(orden_leer(r)?);
     }
     for _ in 0..r.cuenta()? {
-        c.flota.push(caravana_leer(r, con_encargos)?);
+        c.flota.push(caravana_leer(r, con_encargos, con_nombres)?);
     }
     for _ in 0..r.cuenta()? {
         let (faccion, valor, t0, alianzas) = (r.u32()?, r.i64()?, r.i64()?, r.u32()?);
@@ -745,15 +750,16 @@ mod pruebas {
 
     #[test]
     fn un_encargo_completo_da_ida_y_vuelta_campo_a_campo() {
-        let original = estado_con(caravana(Some(encargo_completo())));
+        let original = estado_con(Caravana { nombre: "La de Tirinto".into(), ..caravana(Some(encargo_completo())) });
         let bytes = bytes_de(&original);
         let mut r = Lector::nuevo(&bytes);
-        let leido = leer(&mut r, &comercio::Reglas::cargar(), true, true).unwrap();
+        let leido = leer(&mut r, &comercio::Reglas::cargar(), true, true, true).unwrap();
         r.fin().unwrap();
         let (esperado, e) = (encargo_completo(), leido.flota[0].encargo.as_ref().expect("la caravana conserva el encargo"));
         assert_eq!((e.modo, e.destino, e.salir_en), (esperado.modo, esperado.destino, esperado.salir_en));
         assert_eq!((&e.en_origen, &e.en_destino), (&esperado.en_origen, &esperado.en_destino));
         assert_eq!((e.vueltas, e.punta, e.fase, e.fin_paso, e.cancelado), (1, Punta::Destino, Fase::Carga, Some(123_456), true));
+        assert_eq!(leido.flota[0].nombre, "La de Tirinto");
         assert_eq!(leido.flota[0], original.flota[0]);
         assert_eq!(bytes_de(&leido), bytes, "guardarla de nuevo da los mismos bytes");
     }
@@ -762,26 +768,40 @@ mod pruebas {
     fn una_caravana_sin_encargo_da_ida_y_vuelta_sin_encargo() {
         let original = estado_con(caravana(None));
         let bytes = bytes_de(&original);
-        let leido = leer(&mut Lector::nuevo(&bytes), &comercio::Reglas::cargar(), true, true).unwrap();
+        let leido = leer(&mut Lector::nuevo(&bytes), &comercio::Reglas::cargar(), true, true, true).unwrap();
         assert_eq!(leido.flota[0].encargo, None);
+        assert_eq!(leido.flota[0], original.flota[0]);
+    }
+
+    /// Los bytes de la foto de `original` (una caravana sin encargo ni nombre) sin los `quitar` últimos bytes de su caravana.
+    fn sin_la_cola_de_la_caravana(original: &EstadoComercio, quitar: usize) -> Vec<u8> {
+        let bytes = bytes_de(original);
+        let mut w = Escritor::default();
+        caravana_escribir(&mut w, &original.flota[0]);
+        let fin = bytes.windows(w.0.len()).position(|x| x == w.0).expect("la caravana está en el estado") + w.0.len();
+        [&bytes[..fin - quitar], &bytes[fin..]].concat()
+    }
+
+    #[test]
+    fn una_foto_ban54_se_lee_con_las_caravanas_sin_nombre() {
+        // Una foto BAN54 es la BAN55 sin el nombre con que acaba cada caravana (vacío: sus 4 bytes de largo).
+        let original = estado_con(caravana(None));
+        let vieja = sin_la_cola_de_la_caravana(&original, 4);
+        let mut r = Lector::nuevo(&vieja);
+        let leido = leer(&mut r, &comercio::Reglas::cargar(), true, true, false).unwrap();
+        r.fin().unwrap();
         assert_eq!(leido.flota[0], original.flota[0]);
     }
 
     #[test]
     fn una_foto_ban51_se_lee_con_las_caravanas_sin_encargo() {
-        // Una foto BAN51 es la BAN52 sin la marca de encargo con que acaba cada caravana.
+        // Una foto BAN51 es la BAN54 sin la marca de encargo con que acaba cada caravana (un byte a cero).
         let original = estado_con(caravana(None));
-        let bytes = bytes_de(&original);
-        let mut w = Escritor::default();
-        caravana_escribir(&mut w, &original.flota[0]);
-        let inicio = bytes.windows(w.0.len()).position(|x| x == w.0).expect("la caravana está en el estado");
-        let marca = inicio + w.0.len() - 1;
-        assert_eq!(bytes[marca], 0, "la marca de «sin encargo» es el último byte de la caravana");
-        let vieja = [&bytes[..marca], &bytes[marca + 1..]].concat();
+        let vieja = sin_la_cola_de_la_caravana(&original, 5);
         let mut r = Lector::nuevo(&vieja);
-        let leido = leer(&mut r, &comercio::Reglas::cargar(), true, false).unwrap();
+        let leido = leer(&mut r, &comercio::Reglas::cargar(), true, false, false).unwrap();
         r.fin().unwrap();
         assert_eq!(leido.flota[0], original.flota[0]);
-        assert_eq!(bytes_de(&leido), bytes, "al guardarla de nuevo es la BAN52 de siempre");
+        assert_eq!(bytes_de(&leido), bytes_de(&original), "al guardarla de nuevo es la foto de hoy");
     }
 }

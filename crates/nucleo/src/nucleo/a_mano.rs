@@ -125,15 +125,15 @@ impl Nucleo {
         Ok(vec![])
     }
 
-    /// El carro del héroe dentro de la plaza `plaza`: la columna con la que entró de visita o, en su residencia, la que conserva o el carro que trajo. Devuelve dónde va (`None` = con el
-    /// héroe) y lo que admite.
-    fn carro_dentro_de_plaza(&self, heroe: u64, plaza: u64) -> Result<(Option<u64>, Mil), Respuesta> {
+    /// El carro del héroe dentro del lugar `aqui` (una plaza o un campamento): la columna con la que entró de visita o, en su residencia, la que conserva o el carro que trajo.
+    /// Devuelve dónde va (`None` = con el héroe) y lo que admite.
+    pub(super) fn carro_dentro(&self, heroe: u64, aqui: Residencia) -> Result<(Option<u64>, Mil), Respuesta> {
         if let Some(c) = self.columna_que_lleva(heroe) {
             return Ok((Some(c), self.capacidad_de_carga(c).unwrap_or(0)));
         }
         let hn = self.heroe(heroe).expect("existe");
-        if hn.heroe.residencia != Some(Residencia::Asentamiento(plaza as u32)) {
-            return Err(Respuesta::rechazo(rechazos::HEROE_SIN_COLUMNA, "no trajiste carro a esta plaza", self.estado.version));
+        if hn.heroe.residencia != Some(aqui) {
+            return Err(Respuesta::rechazo(rechazos::HEROE_SIN_COLUMNA, "no trajiste carro aquí", self.estado.version));
         }
         Ok(match hn.columna.filter(|c| self.estado.ejercitos.contains_key(c)) {
             Some(c) => (Some(c), self.capacidad_de_carga(c).unwrap_or(0)),
@@ -168,7 +168,7 @@ impl Nucleo {
                 }
             }
         }
-        let (columna, capacidad) = self.carro_dentro_de_plaza(heroe, plaza)?;
+        let (columna, capacidad) = self.carro_dentro(heroe, Residencia::Asentamiento(plaza as u32))?;
         let pedido = entero(cantidad);
         if pedido <= 0 {
             return Err(rechazo(rechazos::CANTIDAD_NO_POSITIVA, "hay que mover al menos una unidad".into()));

@@ -927,6 +927,8 @@ Evento `alijo.abierto { heroeId, alijoId, oro }`.
 (bosque sin campamento ya encima — por `bosqueId` de **cualquier** campamento existente, incluidos los que se acaban de crear este tick — y con el **centro fuera de todo polígono de zona**; empate de distancia → el primero). Sin bosque, nada (y no gasta tirada). Si lo hay:
 `{ id: "campamento-{asentamiento.id}", posicion: centro del bosque, bosqueId, asentamientoId, nivel }` (**una tirada** de nivel) y evento `bandidos.campamento_aparece`. Al destruirse, `agendarReaparicionBandidos` fija `asentamiento.bandidosReaparecenEn = instante + respawnMinutos`.
 
+> **En Rust, desde el 2026-11-02 (decisión del autor: «10 de golpe cada 2 horas»): hasta `porPlaza` (10) por plaza, de golpe.** Al fundarse, la plaza recibe los diez a la vez, cada uno en el bosque no reclamado más cercano que quede (con su tirada de nivel y su `bandidos.campamento_aparece`). Al destruirse uno, si la plaza no tiene ya una oleada pendiente, se programa a `respawnMinutos` (**120**, 2 h); al vencer, repone **de golpe** todos los que falten entonces, aunque hayan caído varios entretanto (los que caen con la oleada pendiente los repone la misma). Sin bosque que valga, la plaza se queda con los que tenga y espera, sin gastar tirada, a que uno quede libre o válido. Antes: uno por plaza, y a las 6 h. Prueba: `combate::bandidos::una_plaza_recibe_de_golpe_los_que_le_faltan_hasta_diez_cuando_vence_su_oleada`.
+
 **B. En el anillo de cada campamento de mercenarios, según la demanda.** Para cada uno en orden: salta si `instante < bandidosEn`. `tocan = clamp(ceil(residentesSinPlaza / residentesPorBandido), minimo, maximo)` en el TypeScript; **en Rust, desde el 2026-10-27 (decisión del autor: más bandidos y más cerca de los campamentos), `tocan = clamp(residentesSinPlaza × bandidosPorResidente, minimo, maximo)` = 4 por residente, de 8 a 24 (desde el 2026-10-28; el 2026-10-27, 2 por residente, de 4 a 12), en un anillo de 12 a 25 u (antes 1 por cada 2 residentes, de 1 a 6, a 30-50 u)**. Desde el 2026-10-28 el generador ya no pone bandidos fijos alrededor de los campamentos de mercenarios (ponía 3 a 30-50 u): todos los del anillo los crea el motor; donde `residentesSinPlaza` cuenta a los residentes cuya Facción **no tiene asentamientos** o que no tienen Facción.
 Si ya hay `≥ tocan` campamentos suyos (`campamentoMercenariosId`), nada. Si no, `puntoDelAnillo`: hasta 20 intentos con `angulo = r·2π` y `radio = radioMin + r·(radioMax − radioMin)` (dos tiradas por intento), válido si está dentro del mapa, es transitable, no es agua, **no** cae en ninguna zona de influencia y no está en la
 protección de ningún campamento de mercenarios. Sin punto: no se hace nada (ni se agenda), de modo que **se reintenta en el siguiente evento de aparición** y gasta tiradas cada vez. Con punto: `{ id: "bandidos-{merc.id}-{instante}", bosqueId: "", campamentoMercenariosId, nivel }` (una tirada de nivel) y
@@ -1260,7 +1262,8 @@ Todos los de `worldgen/config.ts` están **congelados** (no se editan en calient
     "reaparicionMinutos": 10
   },
   "radioAtaqueCaravana": 7,
-  "respawnMinutos": 360
+  "porPlaza": 10,
+  "respawnMinutos": 120
 }
 ```
 <!-- /parametros -->
@@ -1268,6 +1271,8 @@ Todos los de `worldgen/config.ts` están **congelados** (no se editan en calient
 > **2026-10-19 (fase 4A-2):** este bloque lleva ya los valores **calibrados** de `Calibracion_Distancias_Definicion` §4.3 (anillo de los campamentos de mercenarios 30-50 en vez de 150-250; `radioAtaqueCaravana` 7 en vez de 40), que el motor TypeScript no tenía; el crate `combate` lo lee tal cual.
 >
 > **2026-10-24 (calibración del sistema 4, M4):** `respawnMinutos` pasa de 60 a **360** (6 h): el campamento de bandidos de una plaza reaparece seis horas después de destruirse (decisión del autor tras el batch militar: con 60 min, 2.247 campamentos destruidos en 30 días). El anillo (`anillo.reaparicionMinutos`) no cambia.
+>
+> **2026-11-02 (decisión del autor):** `porPlaza` **10** (antes uno por plaza, sin parámetro) y `respawnMinutos` de 360 a **120** (2 h): la oleada repone de golpe los que falten a la plaza (§13 A).
 
 ## 15. Invariantes
 

@@ -16,7 +16,7 @@ use militar::catalogo::Tropa;
 use militar::columna::Politica;
 use militar::heroe::{Controlador, Residencia};
 use militar::presencia::Ubicacion;
-use nucleo::{rechazos, Ajustes, Arranque, Comando, Dato, Nucleo, Peticion, Reglas, Resultado, Respuesta};
+use nucleo::{rechazos, Ajustes, Arranque, Comando, Dato, Estado, LadoDelFondo, Nucleo, PagarCon, Peticion, Reglas, Resultado, Respuesta};
 
 const HORA: i64 = 60 * MS_POR_MINUTO;
 
@@ -217,6 +217,49 @@ fn si_reside_en_una_plaza_su_almacen_personal_esta_a_la_puerta_de_esa_plaza() {
     assert_eq!(e.no("ana", Comando::SacarDelAlmacenPersonal { heroe: ana, recurso: Madera, cantidad: 1_000 }), rechazos::ALMACEN_PERSONAL_FUERA_DE_TU_RESIDENCIA);
 }
 
+#[test]
+fn dentro_del_campamento_el_fondo_y_el_mercado_ven_el_carro_que_lleva_el_heroe() {
+    // 2026-11-02 (pedido del autor): dentro del campamento, aportar al fondo y comprar en su mercado pueden ir con el carro, no solo con el almacén personal.
+    let m = con_mundo!();
+    let mut e = Esc::nuevo(m);
+    let ana = e.heroe("ana", 0);
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: ana, faccion: Some(1) });
+    e.ok("admin", Comando::DarAlmacenPersonal { heroe: ana, recurso: Madera, cantidad: 100_000 });
+    e.ok("admin", Comando::DarAlmacenPersonal { heroe: ana, recurso: Oro, cantidad: 200_000 });
+    e.ok("ana", Comando::SacarDelAlmacenPersonal { heroe: ana, recurso: Madera, cantidad: 30_000 });
+    e.ok("ana", Comando::SacarDelAlmacenPersonal { heroe: ana, recurso: Oro, cantidad: 100_000 });
+    let con_el = |e: &Esc, r| e.n.heroe(ana).unwrap().carro.get(&r).copied().unwrap_or(0);
+    let fondo = |e: &Esc, r| e.n.estado().fundacion.fondos.get(&0).and_then(|f| f.get(&ana)).and_then(|m| m.get(&r)).copied().unwrap_or(0);
+    assert_eq!((con_el(&e, Madera), con_el(&e, Oro), e.personal(ana, Madera)), (30_000, 100_000, 70_000));
+
+    // El fondo: del carro que lleva dentro (antes pedía la columna a la puerta) y de vuelta a él.
+    e.ok("ana", Comando::AportarARefundacion { heroe: ana, recurso: Madera, cantidad: 20_000, lado: LadoDelFondo::Carro });
+    assert_eq!((con_el(&e, Madera), fondo(&e, Madera), e.personal(ana, Madera)), (10_000, 20_000, 70_000));
+    e.ok("ana", Comando::RetirarDeRefundacion { heroe: ana, recurso: Madera, cantidad: 5_000, lado: LadoDelFondo::Carro });
+    assert_eq!((con_el(&e, Madera), fondo(&e, Madera)), (15_000, 15_000));
+    assert_eq!(e.no("ana", Comando::AportarARefundacion { heroe: ana, recurso: Estano, cantidad: 1_000, lado: LadoDelFondo::Carro }), rechazos::CARRO_NO_LLEVA);
+
+    // El mercado: con `pagar_con: Carro` paga con el oro del carro y la compra va al carro; el almacén personal no se toca.
+    let personal_antes = e.n.heroe(ana).unwrap().almacen_personal.clone();
+    let oro = con_el(&e, Oro);
+    e.ok("ana", Comando::ComprarEnCampamento { heroe: ana, campamento: 0, recurso: Cobre, cantidad: 5_000, pagar_con: Some(PagarCon::Carro) });
+    assert_eq!(con_el(&e, Cobre), 5_000);
+    assert!(con_el(&e, Oro) < oro, "pagó con el oro del carro");
+    assert_eq!(e.n.heroe(ana).unwrap().almacen_personal, personal_antes);
+    // El residente que paga con el carro sigue con su cupo diario y no compra trigo para el carro.
+    assert_eq!(e.no("ana", Comando::ComprarEnCampamento { heroe: ana, campamento: 0, recurso: Trigo, cantidad: 1_000, pagar_con: Some(PagarCon::Carro) }), rechazos::MERCENARIOS_TRIGO_NO_VA_AL_CARRO);
+    // Sin lado, el residente sigue pagando con su almacén personal.
+    let carro_antes = e.n.heroe(ana).unwrap().carro.clone();
+    e.ok("ana", Comando::ComprarEnCampamento { heroe: ana, campamento: 0, recurso: Cobre, cantidad: 2_000, pagar_con: None });
+    assert_eq!((e.personal(ana, Cobre), &e.n.heroe(ana).unwrap().carro), (2_000, &carro_antes));
+
+    // Sin residir aquí no hay almacén personal ni carro que trajera: dentro y sin columna, nada que pagar.
+    e.ok("admin", Comando::FijarResidencia { heroe: ana, residencia: None });
+    assert_eq!(e.no("ana", Comando::ComprarEnCampamento { heroe: ana, campamento: 0, recurso: Cobre, cantidad: 1_000, pagar_con: Some(PagarCon::AlmacenPersonal) }), rechazos::ALMACEN_PERSONAL_FUERA_DE_TU_RESIDENCIA);
+    assert_eq!(e.no("ana", Comando::ComprarEnCampamento { heroe: ana, campamento: 0, recurso: Cobre, cantidad: 1_000, pagar_con: None }), rechazos::HEROE_SIN_COLUMNA);
+    assert_eq!(e.no("ana", Comando::AportarARefundacion { heroe: ana, recurso: Madera, cantidad: 1_000, lado: LadoDelFondo::Carro }), rechazos::HEROE_SIN_COLUMNA);
+}
+
 // ───────────────────────────── 2. Cargar, soltar y reclamar caravanas ─────────────────────────────
 
 /// Una plaza de la Facción 1 con Mercado activo, «ana» residente con una milicia y su ejército a la puerta con una caravana de la plaza enganchada; y otra plaza de la Facción 1 lejos.
@@ -386,6 +429,42 @@ fn reclamar_solo_vale_para_la_caravana_de_fundacion_que_vuelve_sola() {
     assert_eq!(e.no("beto", reclamar(ana, k)), rechazos::NO_AUTORIZADO);
     let beto = e.heroe("beto", 0);
     assert_eq!(e.no("beto", reclamar(beto, k)), rechazos::HEROE_SIN_COLUMNA, "dentro de un campamento no se reclama nada");
+}
+
+#[test]
+fn renombrar_una_caravana_recorta_el_nombre_lo_proyecta_y_viaja_en_la_foto() {
+    // 2026-11-02 (pedido del autor): el nombre es presentación; como el de una plaza, pero sin mirar si otra se llama igual.
+    let m = con_mundo!();
+    let ConCaravana { mut e, a, k, .. } = con_caravana(m);
+    let nombre = |e: &Esc| e.n.caravana(k).unwrap().nombre.clone();
+    let proyectado = |e: &Esc| nucleo::proyeccion::propios::caravana(&e.n, e.n.caravana(k).unwrap()).nombre;
+    assert_eq!((nombre(&e), proyectado(&e)), (String::new(), None), "sin nombre se muestra su id");
+    // Lo da quien reside en el origen y está dentro: ana, que salió con su columna, no; beto, residente y dentro, sí.
+    assert_eq!(e.no("ana", Comando::RenombrarCaravana { caravana: k, nombre: "Fuera".into() }), rechazos::NO_AUTORIZADO);
+    let beto = e.heroe("beto", 0);
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: beto, faccion: Some(1) });
+    e.ok("admin", Comando::FijarResidencia { heroe: beto, residencia: Some(Residencia::Asentamiento(a as u32)) });
+    e.ok("admin", Comando::ColocarHeroe { heroe: beto, ubicacion: Ubicacion::Asentamiento(a as u32) });
+    e.ok("beto", Comando::RenombrarCaravana { caravana: k, nombre: "  La de Tirinto  ".into() });
+    assert_eq!((nombre(&e), proyectado(&e)), ("La de Tirinto".to_owned(), Some("La de Tirinto".to_owned())));
+    let r = e.ord("beto", Comando::RenombrarCaravana { caravana: k, nombre: "La de Tirinto".into() });
+    assert_eq!(r.resultado, Resultado::SinCambios);
+    let renombrada: Vec<_> = e.n.cambios_desde(0).unwrap().flat_map(|c| c.eventos.iter()).filter(|x| x.codigo == "comercio.caravana_renombrada").cloned().collect();
+    assert_eq!(renombrada.len(), 1);
+    assert_eq!((dato(&renombrada[0].datos, "caravana") as u64, renombrada[0].valores.clone()), (k, vec![("nombre", Dato::Texto("La de Tirinto".into()))]));
+    // Como mucho 32 caracteres (no bytes).
+    assert_eq!(e.no("beto", Comando::RenombrarCaravana { caravana: k, nombre: "x".repeat(33) }), rechazos::CARAVANA_NOMBRE_LARGO);
+    e.ok("beto", Comando::RenombrarCaravana { caravana: k, nombre: "á".repeat(32) });
+    // Viaja en la foto (BAN55).
+    let (reglas, hash) = (Reglas::default(), m.0.hash().to_string());
+    let bytes = e.n.estado().serializar();
+    assert_eq!(&bytes[..5], b"BAN55");
+    let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
+    assert_eq!(s.comercio.flota.iter().find(|c| c.id == k).unwrap().nombre, "á".repeat(32));
+    // Vacío: se queda sin nombre.
+    e.ok("beto", Comando::RenombrarCaravana { caravana: k, nombre: "   ".into() });
+    assert_eq!((nombre(&e), proyectado(&e)), (String::new(), None));
+    assert_eq!(e.no("beto", Comando::RenombrarCaravana { caravana: 9_999, nombre: "Otra".into() }), rechazos::CARAVANA_DESCONOCIDA);
 }
 
 // ───────────────────────────── 3. Por el WebSocket real ─────────────────────────────

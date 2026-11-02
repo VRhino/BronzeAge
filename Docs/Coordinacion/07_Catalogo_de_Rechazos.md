@@ -584,6 +584,12 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `asentamiento.nombre_largo` | `ASENTAMIENTO_NOMBRE_LARGO` | El nombre recortado pasa de `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres. |
 | `asentamiento.nombre_duplicado` | `ASENTAMIENTO_NOMBRE_DUPLICADO` | Otra plaza viva ya se llama así (sin mirar tildes ni mayúsculas). |
 
+### El nombre de una caravana (pedido del autor del 2026-11-02)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `caravana.nombre_largo` | `CARAVANA_NOMBRE_LARGO` | El nombre recortado de la caravana pasa de `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres (el mismo tope que el de las plazas; no tiene que ser único). |
+
 ### Las relaciones entre Facciones (sistema 5, tanda 5D; `ErrorDiplomacia` y `ErrorPropuesta` del crate `politica`)
 
 | Código | Constante | Qué dice |

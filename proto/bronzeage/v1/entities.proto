@@ -943,6 +943,8 @@ message Caravana {
   repeated string recursos_avistados = 24;
   // Solo en la proyección propia (2026-10-31): el encargo de transporte que tiene, si tiene.
   optional Encargo encargo = 25;
+  // Solo en la proyección propia (2026-11-02, `renombrar_caravana`): su nombre; sin él, la caravana no tiene nombre y se muestra su id.
+  optional string nombre = 26;
 }
 
 // El encargo de una caravana (rutas de caravanas automáticas, 2026-10-31).

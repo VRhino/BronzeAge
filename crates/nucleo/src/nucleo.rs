@@ -1118,6 +1118,7 @@ impl Nucleo {
             | Comando::AnadirAnimal { .. }
             | Comando::MoverCarro { .. }
             | Comando::ReservarCaravana { .. }
+            | Comando::RenombrarCaravana { .. }
             | Comando::PrepararCaravana { .. }
             | Comando::CancelarCaravana { .. }
             | Comando::MoverCargaAparcada { .. }

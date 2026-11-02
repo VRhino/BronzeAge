@@ -123,7 +123,6 @@ impl TipoEdificio {
 #[derive(Clone, Debug)]
 pub struct Necesidades {
     pub umbral_vivienda_ocupada: i64,
-    pub maximo_granjas_pendientes_en_deficit: u32,
     pub umbral_almacen_ampliacion: i64,
     pub maximo_almacenes_por_nivel: BTreeMap<u32, u32>,
     pub maximo_en_cola: usize,
@@ -276,7 +275,6 @@ impl ReglasConstruccion {
         ReglasConstruccion {
             necesidades: Necesidades {
                 umbral_vivienda_ocupada: ppm(g(&n, "umbralViviendaOcupada")),
-                maximo_granjas_pendientes_en_deficit: g(&n, "maximoGranjasPendientesEnDeficit") as u32,
                 umbral_almacen_ampliacion: ppm(g(&n, "umbralAlmacenAmpliacion")),
                 maximo_almacenes_por_nivel: mapa_niveles(&n["maximoAlmacenesPorNivel"]),
                 maximo_en_cola: g(&n, "maximoEnCola") as usize,

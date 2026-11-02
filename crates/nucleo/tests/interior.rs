@@ -878,7 +878,7 @@ async fn el_campamento_desde_dentro_trae_reclutas_stock_y_gente_y_una_compra_una
 
     // Una compra de beto: el stock baja en lo comprado, para beto y para el visitante que está dentro; el cupo y el almacén personal van en su héroe.
     let antes = c.mercado.as_ref().unwrap().por_id["madera"];
-    let (previos, r) = dar_todo(&mut beto, "c1", orden::Cuerpo::ComprarEnCampamento(pb::OrdenComprarEnCampamento { recurso: s("madera"), cantidad: 10_000, campamento_id: None })).await;
+    let (previos, r) = dar_todo(&mut beto, "c1", orden::Cuerpo::ComprarEnCampamento(pb::OrdenComprarEnCampamento { recurso: s("madera"), cantidad: 10_000, campamento_id: None, pagar_con: None })).await;
     aceptada(&r);
     c = campamento_de(&previos).expect("la delta del campamento antes del resultado");
     assert_eq!(c.mercado.as_ref().unwrap().por_id["madera"], antes - 10_000);
@@ -989,7 +989,7 @@ async fn al_reconectar_la_plaza_y_el_campamento_se_reanudan_por_deltas_aunque_el
     // El campamento: lo que cambia mientras beto no está llega al volver como una delta del campamento entero.
     beto.cerrar().await;
     let (mut gus, _, _) = w.conectar(hola_con("gus", TipoCliente::ClienteUnity, &[])).await;
-    let (_, r) = dar(&mut gus, "c1", orden::Cuerpo::ComprarEnCampamento(pb::OrdenComprarEnCampamento { recurso: s("madera"), cantidad: 10_000, campamento_id: None })).await;
+    let (_, r) = dar(&mut gus, "c1", orden::Cuerpo::ComprarEnCampamento(pb::OrdenComprarEnCampamento { recurso: s("madera"), cantidad: 10_000, campamento_id: None, pagar_con: None })).await;
     aceptada(&r);
     let k_camp = format!("CAMPAMENTO:{camp}");
     let (_, b, mensajes) = w.conectar(hola_con("beto", TipoCliente::ClienteUnity, &[(&k_camp, v_camp)])).await;

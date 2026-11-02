@@ -154,7 +154,7 @@ pub fn recetas(cat: &Catalogo, edificios: &mut [Edificio], almacen: &mut Almacen
     hecho
 }
 
-/// Trigo por minuto que producen ahora las Granjas activas (para el déficit de la auto-construcción).
+/// Trigo por minuto que producen ahora las Granjas activas.
 pub fn produccion_trigo_por_minuto(cat: &Catalogo, edificios: &[Edificio], mano: &Mano, fertilidad: i64, factor_trigo: i64) -> Mil {
     edificios
         .iter()

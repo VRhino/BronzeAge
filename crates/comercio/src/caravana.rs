@@ -178,6 +178,8 @@ pub struct Caravana {
     pub de_campamento: bool,
     /// El encargo de transporte que tiene (rutas de caravanas automáticas): mientras lo tiene, el reparto del trueque no la usa.
     pub encargo: Option<Encargo>,
+    /// Su nombre (`renombrarCaravana`, 2026-11-02); vacío = sin nombre (se muestra su id). Es presentación: no cambia nada del juego.
+    pub nombre: String,
 }
 
 impl ReglasFlota {
@@ -319,6 +321,7 @@ impl Caravana {
             pausada_desde: None,
             de_campamento: false,
             encargo: None,
+            nombre: String::new(),
         }
     }
 

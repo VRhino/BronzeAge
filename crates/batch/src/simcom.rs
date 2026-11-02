@@ -762,7 +762,7 @@ impl Sim<'_> {
                     Clase::Minerales => vec![(Recurso::Cobre, 15_000), (Recurso::Estano, 8_000)],
                 };
                 for (recurso, cantidad) in compras {
-                    self.orden(t, &cuenta, "ComprarEnCampamento", Comando::ComprarEnCampamento { heroe, campamento: camp, recurso, cantidad });
+                    self.orden(t, &cuenta, "ComprarEnCampamento", Comando::ComprarEnCampamento { heroe, campamento: camp, recurso, cantidad, pagar_con: None });
                 }
                 match tipo {
                     Clase::Pueblo => {

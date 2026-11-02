@@ -94,7 +94,7 @@ message OrdenAnadirEdificioManualmente {
 message OrdenAportarARefundacion {
   string recurso = 1;  // id de catálogo
   sint64 cantidad = 2;
-  string lado = 3;  // almacen | carro
+  string lado = 3;  // almacen | carro (dentro del campamento, el carro que lleva; con la columna a la puerta, el de ella, siendo su Líder)
 }
 
 message OrdenAsignarCargoLocal {
@@ -229,6 +229,9 @@ message OrdenComprarEnCampamento {
   string recurso = 1;  // id de catálogo
   sint64 cantidad = 2;
   optional string campamento_id = 3;
+  // almacenPersonal | carro (2026-11-02). Sin él, el residente paga con su almacén personal y el visitante con el carro que lleva. Con carro, también el residente
+  // paga con el oro del carro (el de su columna, o dentro el que lleva) y la compra va a él; el trigo no va al carro.
+  optional string pagar_con = 4;
 }
 
 message OrdenComprarInformePlaza {
@@ -862,6 +865,13 @@ message OrdenReservarCaravana {
   bool reservada = 2;
 }
 
+// Le cambia el nombre a una caravana comercial (2026-11-02): quien reside en su origen y está dentro. Se recorta; vacío, se queda sin nombre (se muestra su id). Como mucho
+// `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres (`caravana.nombre_largo`); dos caravanas pueden llamarse igual.
+message OrdenRenombrarCaravana {
+  string caravana_id = 1;
+  string nombre = 2;
+}
+
 message OrdenResidirEnCampamento {
   string heroe_id = 1;
   string campamento_id = 2;
@@ -1265,5 +1275,6 @@ message Orden {
     OrdenValorarMercenario valorar_mercenario = 178;
     OrdenReclamarPremioDeRango reclamar_premio_de_rango = 179;
     OrdenCerrarSesion cerrar_sesion = 180;
+    OrdenRenombrarCaravana renombrar_caravana = 181;
   }
 }

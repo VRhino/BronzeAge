@@ -4,10 +4,11 @@
 //! # Cuándo aparecen
 //! Todo es un evento de prioridad 7 (`PRIO_BANDIDOS`: los bandidos ven a las columnas tal como estaban antes de moverse), uno por cosa que espera y ninguno por
 //! cosa ociosa:
-//! - **Uno por plaza, siempre** (`SucesoCombate::BandidosDeLaPlaza`): al fundarla, y al vencer el plazo de reaparición (`respawnMinutos`) del que se destruyó.
-//!   En el bosque no reclamado más cercano a ella, sin campamento encima y con el centro a ≥ 10 u del borde de toda zona (`MARGEN_DE_ZONA`). Sin bosque que
-//!   valga no gasta tirada y espera: cuando un bosque queda libre o válido (se va un campamento de bandidos que lo ocupaba o una plaza cae en ruinas y su zona
-//!   desaparece), las plazas que esperan el suyo lo vuelven a buscar en ese instante, por orden de id (el TypeScript volvía a mirar cada tick).
+//! - **Hasta `porPlaza` (10) por plaza, de golpe** (`SucesoCombate::BandidosDeLaPlaza`; 2026-11-02, decisión del autor: antes uno y a las 6 h): al fundarla llegan
+//!   todos, y al destruirse uno sin oleada pendiente se programa la siguiente a `respawnMinutos` (2 h), que repone de golpe los que falten entonces. Cada uno en el
+//!   bosque no reclamado más cercano a ella, sin campamento encima y con el centro a ≥ 10 u del borde de toda zona (`MARGEN_DE_ZONA`), con su tirada de nivel. Sin
+//!   bosque que valga no gasta tirada y espera: cuando un bosque queda libre o válido (se va un campamento de bandidos que lo ocupaba o una plaza cae en ruinas y su
+//!   zona desaparece), las plazas que esperan los suyos los vuelven a buscar en ese instante, por orden de id (el TypeScript volvía a mirar cada tick).
 //! - **En el anillo de cada campamento de mercenarios** (`SucesoCombate::BandidosDelAnillo`): `clamp(residentes sin plaza × 4, 8, 24)` campamentos, uno cada
 //!   `reaparicionMinutos` mientras falten. La cita arranca con el mundo, se renueva al crear uno o al destruirse uno del anillo, se **rehace al cambiar la demanda**
 //!   (llega o se va un residente del campamento, o una Facción se queda sin plazas; [`Nucleo::reprogramar_anillo`]) y se detiene cuando no falta ninguno (el
@@ -37,7 +38,7 @@ use crate::estado_comercio::es_entidad_caravana;
 use crate::estado_fundacion::{es_entidad_fundacion, Origen as OrigenFundacion, Situacion as SituacionFundacion};
 use ::encuentros::{plan_quieto, Entradas};
 use ::mercenarios::Objetivo;
-use combate::bandidos::{aparece_junto_a_plaza, campamentos_que_tocan, nivel_al_azar, proxima_aparicion_en_el_anillo, punto_del_anillo, puede_acosar, reaparece_en, resolver_acoso};
+use combate::bandidos::{campamentos_que_tocan, faltan_junto_a_plaza, nivel_al_azar, proxima_aparicion_en_el_anillo, punto_del_anillo, puede_acosar, reaparece_en, resolver_acoso};
 use combate::caravana::{Defensa, Zona};
 use militar::escuadra::Escuadra;
 use std::collections::BTreeSet;
@@ -96,13 +97,14 @@ impl Nucleo {
         self.estado.generaciones.subir(entidad);
         self.espacio.rejilla.quitar(entidad);
         match b.origen {
-            OrigenBandidos::Plaza(plaza) => {
-                let cr = self.estado.reglas.economia.combate.clone();
-                let en = reaparece_en(&cr, t);
+            // La oleada que repone: la primera baja la programa; las que caigan antes de que llegue las repone la misma.
+            OrigenBandidos::Plaza(plaza) if !self.estado.combate.reaparecen.contains_key(&plaza) => {
+                let en = reaparece_en(&self.estado.reglas.economia.combate, t);
                 self.estado.combate.reaparecen.insert(plaza, en);
                 self.tr.tocar(Clase::Asentamiento, plaza);
                 self.programar_bandidos_de_plaza(plaza, en);
             }
+            OrigenBandidos::Plaza(_) => {}
             OrigenBandidos::Anillo(c) => {
                 let desde = self.estado.combate.anillos.get(&c).copied().unwrap_or(t).max(t);
                 self.programar_anillo(c, desde);
@@ -192,12 +194,16 @@ impl Nucleo {
         existentes < campamentos_que_tocan(&self.estado.reglas.economia.combate, self.residentes_sin_plaza(c))
     }
 
-    /// Un bosque pudo quedar libre o válido: la primera plaza (por id) que esperaba el suyo —sin campamento y con su plazo vencido o sin plazo— lo vuelve a buscar
-    /// en este instante. Si lo encuentra, su aparición llama otra vez aquí y busca la siguiente; la que no encuentra nada sigue esperando, sin gastar tirada.
+    /// Los campamentos que tiene ahora la plaza.
+    fn bandidos_de(&self, plaza: u64) -> i64 {
+        self.estado.combate.bandidos.values().filter(|b| b.origen == OrigenBandidos::Plaza(plaza)).count() as i64
+    }
+
+    /// Un bosque pudo quedar libre o válido: la primera plaza (por id) que esperaba los suyos —le faltan y su oleada venció o no tiene— los vuelve a buscar en este
+    /// instante. Si los pone todos, su aparición llama otra vez aquí y busca la siguiente; la que no encuentra bosque sigue esperando, sin gastar tirada.
     fn plazas_sin_bosque_buscan(&mut self, t: Instante) {
-        let con_campamento: BTreeSet<u64> = self.estado.combate.bandidos.values().filter_map(|b| if let OrigenBandidos::Plaza(p) = b.origen { Some(p) } else { None }).collect();
-        let reaparecen = &self.estado.combate.reaparecen;
-        let primera = self.estado.asentamientos.keys().copied().find(|p| !con_campamento.contains(p) && aparece_junto_a_plaza(false, reaparecen.get(p).copied(), t));
+        let cr = &self.estado.reglas.economia.combate;
+        let primera = self.estado.asentamientos.keys().copied().find(|&p| faltan_junto_a_plaza(cr, self.bandidos_de(p), self.estado.combate.reaparecen.get(&p).copied(), t) > 0);
         if let Some(plaza) = primera {
             self.programar_bandidos_de_plaza(plaza, t);
         }
@@ -213,22 +219,25 @@ impl Nucleo {
         candidatos.into_iter().find(|&(_, i, centro)| !ocupados.contains(&i) && !self.estado.asentamientos.values().any(|a| a.posicion.dist(centro) < a.radio + MARGEN_DE_ZONA)).map(|(_, i, c)| (i, c))
     }
 
-    /// Vence la cita de aparición del campamento de la plaza.
+    /// Vence la cita de la oleada de la plaza: llegan de golpe los que le falten, cada uno en el bosque libre más cercano que quede.
     pub(super) fn bandidos_de_la_plaza(&mut self, plaza: u64, t: Instante) {
-        let Some(a) = self.estado.asentamientos.get(&plaza) else { return };
-        let (tiene, reaparece) = (self.estado.combate.bandidos.values().any(|b| b.origen == OrigenBandidos::Plaza(plaza)), self.estado.combate.reaparecen.get(&plaza).copied());
-        if !aparece_junto_a_plaza(tiene, reaparece, t) {
+        let Some(posicion) = self.estado.asentamientos.get(&plaza).map(|a| a.posicion) else { return };
+        let cr = self.estado.reglas.economia.combate.clone();
+        let faltan = faltan_junto_a_plaza(&cr, self.bandidos_de(plaza), self.estado.combate.reaparecen.get(&plaza).copied(), t);
+        if faltan == 0 {
             return;
         }
-        let Some((bosque, centro)) = self.bosque_libre_mas_cercano(a.posicion) else { return };
-        let cr = self.estado.reglas.economia.combate.clone();
-        let nivel = nivel_al_azar(&cr, &mut self.estado.rng);
         if self.estado.combate.reaparecen.remove(&plaza).is_some() {
             self.tr.tocar(Clase::Asentamiento, plaza);
         }
-        let id = self.poner_bandidos(centro, nivel, OrigenBandidos::Plaza(plaza), Some(bosque), t);
-        self.aparecio(id, t, vec![plaza]);
-        // Quizá quedaba otro bosque para la siguiente que espera (una ruina pudo dejar válidos varios).
+        for _ in 0..faltan {
+            // Sin bosque que valga se queda esperando con los que tenga (sin oleada pendiente): ya no queda bosque para ninguna otra.
+            let Some((bosque, centro)) = self.bosque_libre_mas_cercano(posicion) else { return };
+            let nivel = nivel_al_azar(&cr, &mut self.estado.rng);
+            let id = self.poner_bandidos(centro, nivel, OrigenBandidos::Plaza(plaza), Some(bosque), t);
+            self.aparecio(id, t, vec![plaza]);
+        }
+        // Quizá quedaba bosque para la siguiente que espera (una ruina pudo dejar válidos varios).
         self.plazas_sin_bosque_buscan(t);
     }
 

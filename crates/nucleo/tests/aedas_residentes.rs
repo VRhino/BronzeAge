@@ -322,11 +322,11 @@ fn las_obras_de_la_plaza_avanzan_la_epica_y_el_ultimo_capitulo_la_hace_aparecer_
     let canteria = e.tec("canteria");
     e.ok("ana", e.empezar(1, "canteria"));
     // Una obra que no es la del capítulo (pide un Almacén) no cuenta.
-    let granjas = e.activos(Tipo::Granja);
-    e.anadir(Tipo::Granja);
+    let viviendas = e.activos(Tipo::Vivienda);
+    e.anadir(Tipo::Vivienda);
     let plaza = e.plaza;
-    e.hasta(DIA, "la Granja", |n| n.economia(plaza).unwrap().edificios.activos(Tipo::Granja) > granjas);
-    assert_eq!(e.n.residentes().aedas[0].epica.as_ref().map(|x| (x.capitulo, x.hechos)), Some((0, 0)), "la Granja no es la obra del capítulo");
+    e.hasta(DIA, "la Vivienda", |n| n.economia(plaza).unwrap().edificios.activos(Tipo::Vivienda) > viviendas);
+    assert_eq!(e.n.residentes().aedas[0].epica.as_ref().map(|x| (x.capitulo, x.hechos)), Some((0, 0)), "la Vivienda no es la obra del capítulo");
     // El Almacén cierra el primer capítulo (`aedas.epica_capitulo`).
     let antes = e.activos(Tipo::Almacen);
     e.anadir(Tipo::Almacen);
@@ -342,7 +342,7 @@ fn las_obras_de_la_plaza_avanzan_la_epica_y_el_ultimo_capitulo_la_hace_aparecer_
     e.n.avanzar_hasta(ep.ultimo_hecho_en.unwrap() + enfriamiento);
     let r = e.n.estado().reglas.economia.tecnologia.clone();
     assert!(!e.n.tecnologia().de(&r, 1).aparecidas.contiene(canteria));
-    e.anadir(Tipo::Granja);
+    e.anadir(Tipo::Vivienda);
     e.hasta(DIA, "la épica", |n| n.residentes().cumplidas_de(1) == 1);
     let f = e.n.tecnologia().de(&r, 1);
     assert!(f.aparecidas.contiene(canteria) && !f.adoptadas.contiene(canteria), "aparece sin hito, sin adoptar");
@@ -382,7 +382,7 @@ fn las_obras_de_la_plaza_avanzan_la_epica_y_el_ultimo_capitulo_la_hace_aparecer_
 fn ida_y_vuelta(e: &Escenario) {
     let (reglas, mundo_hash) = (e.n.estado().reglas.clone(), e.n.estado().mundo_hash.clone());
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN54");
+    assert_eq!(&bytes[..5], b"BAN55");
     let vuelta = Estado::deserializar(&bytes, &reglas, &mundo_hash).unwrap();
     assert_eq!(vuelta.serializar(), bytes);
     assert_eq!(vuelta.hash(), e.n.estado().hash());

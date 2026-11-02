@@ -123,7 +123,9 @@ pub struct ReglasBandidos {
     pub reaparicion_anillo: i64,
     /// A cuánto de su campamento acosan a una caravana.
     pub radio_ataque_caravana: Mil,
-    /// Tras destruir el campamento de una plaza, cuánto tarda en volver (ms).
+    /// Cuántos campamentos tiene como mucho cada plaza (`porPlaza`, 2026-11-02).
+    pub por_plaza: i64,
+    /// Tras destruirse un campamento de una plaza sin oleada pendiente, cuánto tarda la oleada que repone los que falten (ms).
     pub respawn: i64,
 }
 
@@ -303,6 +305,7 @@ impl Reglas {
                 anillo_maximo: entero(&bd, "anillo.maximo"),
                 reaparicion_anillo: minutos(&bd, "anillo.reaparicionMinutos"),
                 radio_ataque_caravana: mil(num(&bd, "radioAtaqueCaravana")),
+                por_plaza: entero(&bd, "porPlaza"),
                 respawn: minutos(&bd, "respawnMinutos"),
             },
             pueblos: ReglasPueblos { mineros: pueblos.mineros as i64, cada_minero: pueblos.minutos_por_minero * MS_POR_MINUTO, granjeros: pueblos.aldea.granjeros as i64 },
@@ -368,7 +371,8 @@ mod pruebas {
         assert_eq!((b.radio_ataque_caravana, b.anillo_min, b.anillo_max), (7_000, 12_000, 25_000), "el anillo, a 12-25 u desde el 2026-10-27");
         assert_eq!(b.niveles.clone().map(|n| (n.poder, n.unidades, n.oro_por_heroe, n.peso)), [(20_000, 10, 30_000, 500_000), (60_000, 30, 33_000, 300_000), (120_000, 60, 36_000, 200_000)]);
         assert_eq!((b.ventana, b.completas, b.caida_por_cada, b.solo_experiencia_desde), (24 * 60 * MS_POR_MINUTO, 8, 150_000, 14));
-        assert_eq!((b.bandidos_por_residente, b.anillo_minimo, b.anillo_maximo, b.reaparicion_anillo, b.respawn), (4, 8, 24, 10 * MS_POR_MINUTO, 360 * MS_POR_MINUTO), "4 por residente, de 8 a 24 (2026-10-28); la reaparición de la plaza, 6 h (2026-10-24)");
+        assert_eq!((b.bandidos_por_residente, b.anillo_minimo, b.anillo_maximo, b.reaparicion_anillo), (4, 8, 24, 10 * MS_POR_MINUTO), "4 por residente, de 8 a 24 (2026-10-28)");
+        assert_eq!((b.por_plaza, b.respawn), (10, 120 * MS_POR_MINUTO), "10 por plaza, de golpe cada 2 h (2026-11-02)");
         assert_eq!(b.niveles.iter().map(|n| n.peso).sum::<i64>(), UNO, "los pesos suman 1");
     }
 
