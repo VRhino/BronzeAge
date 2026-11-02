@@ -974,6 +974,10 @@ pub fn pueblo(n: &Nucleo, madre: u64, p: &Pueblo) -> pb::Pueblo {
         rebano_cabezas: p.rebano.as_ref().map(|r| r.cabezas),
         guarnicion_jugadores_ids: n.guarnicion_de_jugadores_de_pueblo(p.id).iter().map(|s| ids::escuadra(s.id)).collect(),
         cupo_guarnicion_por_heroe: e.reglas.economia.datos.pueblos.cupo_de_guarnicion(p.nivel),
+        // La planta solo va a quien está dentro, por su `VISTA` (`vista::pueblo_desde_dentro`).
+        planta: Vec::new(),
+        trazado: None,
+        nivel_madre: None,
     }
 }
 

@@ -51,14 +51,33 @@ fn rect(r: &trazado::RectLocal) -> pb::RectLocal {
 
 /// El trazado urbano de la plaza (calles, caminos y radio): va en su interior y, en `VISTA`, a quien está dentro de una plaza ajena (2026-10-29). `None` si ya no existe.
 pub(crate) fn trazado_de(n: &Nucleo, id: u64) -> Option<pb::TrazadoUrbano> {
-    let ciudad = n.vista_ciudad(id)?;
-    Some(pb::TrazadoUrbano {
+    Some(trazado_de_vista(&n.vista_ciudad(id)?))
+}
+
+/// El trazado de una vista de ciudad (la de una plaza, o la planta de un campamento o de un pueblo).
+pub(crate) fn trazado_de_vista(v: &crate::urbanismo::VistaCiudad) -> pb::TrazadoUrbano {
+    pb::TrazadoUrbano {
         layout_version: trazado::LAYOUT_VERSION,
         unidades_por_celda: trazado::CELDA_UL as u32,
-        radio_ul: ciudad.radio_ul,
-        calles: ciudad.calles.iter().map(rect).collect(),
-        caminos: ciudad.caminos.iter().map(rect).collect(),
-    })
+        radio_ul: v.radio_ul,
+        calles: v.calles.iter().map(rect).collect(),
+        caminos: v.caminos.iter().map(rect).collect(),
+    }
+}
+
+/// Una pieza de la planta de un campamento o de un pueblo (presentación pura): su id es el del lugar con el de la pieza (`camp-N-K`, `pueblo-N-K`).
+pub(crate) fn pieza_de_planta(lugar: &str, x: &crate::urbanismo::PiezaVista) -> pb::Edificio {
+    pb::Edificio {
+        id: format!("{lugar}-{}", x.id),
+        tipo: x.tipo.nombre().to_owned(),
+        posicion: Some(punto(x.centro)),
+        estado: pb::EstadoEdificio::EdificioActivo as i32,
+        ambito: pb::AmbitoEdificio::Asentamiento as i32,
+        rotado: x.rotado,
+        ancho: x.rect.ancho.max(0) as u32,
+        alto: x.rect.alto.max(0) as u32,
+        ..Default::default()
+    }
 }
 
 /// La plaza completa para quien está dentro, o `None` si ya no existe.
@@ -206,26 +225,10 @@ pub fn campamento(n: &Nucleo, c: u32) -> Option<pb::CampamentoMercenarios> {
     // Los que están dentro ahora: residentes y visitantes.
     let dentro = |h: &crate::estado_militar::HeroeNucleo| h.heroe.presencia.ubicacion == Ubicacion::Mercenarios(c);
     let planta = n.planta_de_campamento(c)?;
-    let pieza = |x: &crate::urbanismo::PiezaVista| pb::Edificio {
-        id: format!("{}-{}", ids::campamento(c), x.id),
-        tipo: x.tipo.nombre().to_owned(),
-        posicion: Some(punto(x.centro)),
-        estado: pb::EstadoEdificio::EdificioActivo as i32,
-        ambito: pb::AmbitoEdificio::Asentamiento as i32,
-        rotado: x.rotado,
-        ancho: x.rect.ancho.max(0) as u32,
-        alto: x.rect.alto.max(0) as u32,
-        ..Default::default()
-    };
+    let lugar = ids::campamento(c);
     Some(pb::CampamentoMercenarios {
-        planta: planta.vista.piezas.iter().map(pieza).collect(),
-        trazado: Some(pb::TrazadoUrbano {
-            layout_version: trazado::LAYOUT_VERSION,
-            unidades_por_celda: trazado::CELDA_UL as u32,
-            radio_ul: planta.vista.radio_ul,
-            calles: planta.vista.calles.iter().map(rect).collect(),
-            caminos: planta.vista.caminos.iter().map(rect).collect(),
-        }),
+        planta: planta.vista.piezas.iter().map(|x| pieza_de_planta(&lugar, x)).collect(),
+        trazado: Some(trazado_de_vista(&planta.vista)),
         empalizada: planta.muro.iter().map(rect).collect(),
         empalizada_puerta: planta.puerta.iter().map(rect).collect(),
         id: ids::campamento(c),

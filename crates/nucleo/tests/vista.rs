@@ -685,3 +685,67 @@ fn quien_esta_dentro_de_una_plaza_ajena_ve_su_trazado_y_sus_ordenes_de_mercado_a
     x.ok("admin", Comando::ColocarHeroe { heroe: eva, ubicacion: Ubicacion::Mercenarios(0) });
     assert!(plaza_de(&mira(&x.n, eva, 2)).is_none_or(|a| a.trazado.is_none()));
 }
+
+// ───────────────────────────── El pueblo desde dentro (2026-11-02) ─────────────────────────────
+
+#[test]
+fn quien_esta_dentro_de_un_pueblo_ve_su_planta_sea_de_su_faccion_o_ajeno_y_al_salir_no() {
+    let m = con_mundo!();
+    let mut x = escenario(m);
+    let plaza = x.plaza;
+    let pueblo = comun::levantar_cantera(&mut x.n, "fundador", plaza).expect("hay piedra en la zona");
+    let mut t = x.n.ahora();
+    while !x.n.pueblo(pueblo).is_some_and(|(_, p)| p.activo()) {
+        t += 60 * MS_POR_MINUTO;
+        assert!(t < 30 * 24 * 60 * MS_POR_MINUTO, "el pueblo debería estar en pie");
+        x.n.avanzar_hasta(t);
+    }
+    // Pía, de F1, y Eva, de F2, llegan con su columna a la puerta del pueblo; la madre abre a los neutrales.
+    x.ok("admin", comun::acceso(plaza, true, true, false));
+    let sitio = x.n.posicion_de_pueblo(pueblo).unwrap();
+    let t = x.n.ahora();
+    let col_pia = x.n.crear_ejercito(t, "pia", 1, Punto::new(sitio.x + U, sitio.y), 500, 100_000).unwrap();
+    let col_eva = x.n.crear_ejercito(t, "eva", 2, Punto::new(sitio.x, sitio.y + U), 500, 100_000).unwrap();
+    let (pia, eva) = (x.n.estado().ejercitos[&col_pia].columna.lider, x.n.estado().ejercitos[&col_eva].columna.lider);
+    let id_pueblo = ids::pueblo(pueblo);
+    let mira = |n: &Nucleo, quien: u64, f: u32| {
+        let m = Mirada::de(n, Perspectiva::Faccion(f));
+        m.contenido(Some(quien), todo(), &BTreeMap::new()).into_iter().filter_map(|v| Some((v.clave.clone(), (v.sello, v.cuerpo()?)))).collect::<BTreeMap<_, _>>()
+    };
+    let pueblo_de = |e: &BTreeMap<(i32, String), (vista::Sello, Cuerpo)>| match e.get(&(TipoEntidad::Pueblo as i32, id_pueblo.clone())) {
+        Some((s, Cuerpo::Pueblo(p))) => Some((*s, p.clone())),
+        _ => None,
+    };
+    let sin_planta = |p: &pb::Pueblo| p.planta.is_empty() && p.trazado.is_none() && p.nivel_madre.is_none();
+
+    // Desde fuera (a la puerta), el pueblo de su Facción como en `FACCION`, sin planta.
+    let (sello_fuera, fuera) = pueblo_de(&mira(&x.n, pia, 1)).expect("su pueblo, que se ve");
+    assert!(sin_planta(&fuera) && fuera.almacen_local.is_some());
+
+    // Dentro de su pueblo: lo de su Facción, entero, con la planta, el trazado y el nivel de la madre; otro sello.
+    x.ok("pia", Comando::EntrarEnPueblo { pueblo, heroe: pia });
+    let (sello_dentro, p) = pueblo_de(&mira(&x.n, pia, 1)).expect("el pueblo donde está");
+    assert_ne!(sello_dentro, sello_fuera, "la copia con planta llega al entrar");
+    let vista_planta = x.n.planta_de_pueblo(pueblo).unwrap();
+    assert!(!p.planta.is_empty() && p.planta.len() == vista_planta.piezas.len());
+    assert!(p.planta.iter().all(|e| e.id.starts_with(&format!("{id_pueblo}-")) && e.ancho > 0 && e.alto > 0 && e.posicion.is_some()), "{:?}", p.planta);
+    assert!(p.planta.iter().any(|e| e.tipo == "cantera"), "el ancla es la cantera: {:?}", p.planta.iter().map(|e| &e.tipo).collect::<Vec<_>>());
+    let tr = p.trazado.clone().expect("el trazado de la planta");
+    assert_eq!((tr.radio_ul, tr.calles.len()), (vista_planta.radio_ul, vista_planta.calles.len()));
+    assert_eq!(p.nivel_madre, Some(3));
+    assert!(p.almacen_local.is_some(), "de su Facción, entero");
+
+    // Eva, de F2, dentro del mismo pueblo: lo ajeno, sin almacén ni carro ni guarnición, con la misma planta.
+    x.ok("eva", Comando::EntrarEnPueblo { pueblo, heroe: eva });
+    let (_, q) = pueblo_de(&mira(&x.n, eva, 2)).expect("el pueblo ajeno donde está");
+    assert_eq!((&q.planta, &q.trazado, q.nivel_madre), (&p.planta, &p.trazado, p.nivel_madre));
+    assert!(q.almacen_local.is_none() && q.carro_acarreo_id.is_none() && q.guarnicion_escuadron_id.is_none(), "{q:?}");
+
+    // Al salir, vuelve sin planta.
+    x.ok("pia", Comando::SalirDePueblo { pueblo, heroe: pia });
+    let (sello, despues) = pueblo_de(&mira(&x.n, pia, 1)).expect("su pueblo");
+    assert!(sin_planta(&despues));
+    assert_eq!(sello.1, 0);
+    x.ok("eva", Comando::SalirDePueblo { pueblo, heroe: eva });
+    assert!(pueblo_de(&mira(&x.n, eva, 2)).is_none_or(|(_, p)| sin_planta(&p)));
+}

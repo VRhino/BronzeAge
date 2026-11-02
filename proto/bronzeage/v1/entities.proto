@@ -546,6 +546,14 @@ message Pueblo {
   // Liderazgo de cada héroe (30 en nivel 1 y 15 más por nivel de la aldea).
   repeated string guarnicion_jugadores_ids = 18;
   int64 cupo_guarnicion_por_heroe = 19;
+  // La planta (2026-11-02, para la vista 3D del cliente): solo en la `VISTA` de quien está dentro de este pueblo, sea de su Facción o no; para los demás, vacíos.
+  // Presentación pura (`urbanismo::planta_de_pueblo`): siempre la misma para el mismo pueblo y nivel. Las piezas van como las del campamento: `id` = `pueblo-N-K`;
+  // `tipo` = el del ancla (cantera, mina, minaCobre…; la granja en una aldea), vivienda, almacen, corral o granja; `posicion` = el centro, y `ancho` y `alto`, en
+  // unidades locales; `rotado`.
+  repeated Edificio planta = 20;
+  optional TrazadoUrbano trazado = 21;   // layout_version, unidades_por_celda, radio_ul, calles y caminos de la planta
+  // El nivel alcanzado de su plaza madre, solo con la planta (el cliente pinta las casas con ese estilo, hasta el 3).
+  optional uint32 nivel_madre = 22;
 }
 
 enum EstadoAvanzada {
