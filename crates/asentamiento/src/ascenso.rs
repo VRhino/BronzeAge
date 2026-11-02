@@ -4,6 +4,7 @@
 
 use crate::asentamiento::{Ascenso, Asentamiento, Evento, Exterior};
 use crate::catalogo::Tipo;
+use crate::edificio::Fuente;
 use crate::datos::{por, Reglas};
 use crate::mantenimiento;
 use crate::nivel::Falta;
@@ -40,6 +41,14 @@ impl Asentamiento {
                 (Tipo::Granja, _) if recurso == Recurso::Trigo => {
                     let base = def.nivel(e.nivel_interno).map_or(0, |n| n.produccion_base_trigo);
                     total += por(por(por(base, x.fertilidad), mano.pesants), self.politicas.factor(&r.politicas, "factorProduccionTrigo"));
+                }
+                // La Leñera, como al producir: su base por la densidad de su parcela, sin factor de tecnología.
+                (Tipo::Lenera, Some((rec, base))) if rec == recurso => {
+                    let densidad = match e.fuente {
+                        Some(Fuente::Parcela(p)) => x.fuentes.densidad_parcela(p),
+                        _ => 0,
+                    };
+                    total += por(por(base, densidad), mano.pesants);
                 }
                 (t, Some((rec, base))) if t.usa_pesants() && t != Tipo::Granja && rec == recurso => {
                     total += por(por(base, mano.pesants), (x.factor_tecnologia)(rec));
@@ -125,5 +134,73 @@ impl Asentamiento {
         self.nivel = a.nivel_objetivo;
         self.ascenso = None;
         ev.push(Evento::NivelSubio { nivel: a.nivel_objetivo });
+    }
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+    use crate::asentamiento::{Gratuito, Sitios, Urbano};
+    use crate::datos::UNO;
+    use crate::edificio::{Edificio, Estado};
+    use crate::produccion::Fuentes;
+
+    struct Parcela(i64);
+    impl Fuentes for Parcela {
+        fn densidad_parcela(&self, _: u32) -> i64 {
+            self.0
+        }
+        fn extraer(&mut self, _: u32, _: Mil) -> Mil {
+            0
+        }
+    }
+
+    struct SinSitios;
+    impl Sitios for SinSitios {
+        fn proponer(&mut self, _: Tipo, _: &Urbano, _: &mut u32, _: &mut Vec<Gratuito>) -> Option<Option<Fuente>> {
+            None
+        }
+        fn tomar(&mut self, _: u32, _: Tipo, _: Option<Fuente>, _: &Urbano, _: &mut u32) -> Option<Vec<Gratuito>> {
+            None
+        }
+    }
+
+    fn madera_por_minuto(r: &Reglas, a: &Asentamiento, densidad: i64, factor_tecnologia: i64) -> Mil {
+        let (mut f, mut s) = (Parcela(densidad), SinSitios);
+        let tec = move |_| factor_tecnologia;
+        let x = Exterior {
+            reglas: r,
+            fuentes: &mut f,
+            sitios: &mut s,
+            fertilidad: UNO,
+            tiene_tecnologia: &|_| false,
+            factor_tecnologia: &tec,
+            nivel_faccion: 1,
+            orden_era: 1,
+            es_capital: true,
+            faccion_tiene_gran_fundicion: false,
+            ciudadanos: 1,
+            distancia_capital: 0,
+            racion_guarnicion: 0,
+            felicidad_extra: UNO,
+            nobleza_extra: UNO,
+            recaudacion_extra: UNO,
+        };
+        a.ingreso_bruto(0, r, &x, Recurso::Madera)
+    }
+
+    #[test]
+    fn la_solvencia_cuenta_la_lenera_por_la_densidad_de_su_parcela_y_sin_tecnologia() {
+        let r = Reglas::cargar();
+        let mut a = Asentamiento::fundar(&r, 0, &[], r.viviendas_iniciales);
+        a.edificios.retain(|e| e.tipo != Tipo::Lenera);
+        let mut l = Edificio::nuevo(900, Tipo::Lenera, Estado::Activo);
+        l.fuente = Some(Fuente::Parcela(1));
+        a.edificios.push(l);
+        let plena = madera_por_minuto(&r, &a, UNO, UNO);
+        assert!(plena > 0);
+        assert_eq!(madera_por_minuto(&r, &a, 500_000, UNO), plena / 2, "media densidad, media madera, como al producir");
+        assert_eq!(madera_por_minuto(&r, &a, 500_000, 2 * UNO), plena / 2, "la tecnología no multiplica la Leñera");
+        assert_eq!(madera_por_minuto(&r, &a, 0, UNO), 0, "sin parcela no cuenta");
     }
 }

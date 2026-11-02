@@ -65,6 +65,8 @@ pub struct Receta {
     pub produccion_base: Mil,
     pub consume_por_unidad: Costo,
     pub tecnologia: Option<String>,
+    /// `requiereEdificio` de la receta: algún edificio activo de ese tipo con al menos ese nivel interno (§5.3).
+    pub requiere_edificio: Option<(Tipo, u8)>,
 }
 
 /// Un nivel interno (el 1 es el edificio recién construido) con lo que cambia al mejorar.
@@ -191,6 +193,16 @@ fn receta(v: &Value) -> Receta {
         produccion_base: mil(f(v, "produccionBase").expect("produccionBase")),
         consume_por_unidad: costo(v.get("consumePorUnidad")),
         tecnologia: texto(v, "requiereTecnologia"),
+        requiere_edificio: requiere_edificio(v),
+    }
+}
+
+/// `requiereEdificio` en sus dos formas del catálogo: `{tipo, nivel}` (recetas) o el nombre con `requiereEdificioNivel` aparte (niveles; 1 por defecto).
+fn requiere_edificio(v: &Value) -> Option<(Tipo, u8)> {
+    let tipo = |t: &str| Tipo::desde_nombre(t).unwrap_or_else(|| panic!("tipo «{t}»"));
+    match v.get("requiereEdificio")? {
+        Value::String(t) => Some((tipo(t), f(v, "requiereEdificioNivel").unwrap_or(1.0) as u8)),
+        o => Some((tipo(o["tipo"].as_str().expect("requiereEdificio.tipo")), f(o, "nivel").unwrap_or(1.0) as u8)),
     }
 }
 
@@ -201,7 +213,7 @@ fn nivel_interno(v: &Value) -> NivelInterno {
         requisito_nivel_asentamiento: f(v, "requisitoNivelAsentamiento").unwrap_or(0.0) as u32,
         costo_mejora: costo(v.get("costoMejora")),
         tecnologia: texto(v, "requiereTecnologia"),
-        requiere_edificio: texto(v, "requiereEdificio").map(|t| (Tipo::desde_nombre(&t).unwrap_or_else(|| panic!("tipo «{t}»")), f(v, "requiereEdificioNivel").unwrap_or(1.0) as u8)),
+        requiere_edificio: requiere_edificio(v),
         obra_minutos: f(v, "obraMinutos").map(|x| x as i64),
         capacidad_nobles: mil(f(v, "capacidadNobles").unwrap_or(0.0)),
         capacidad_trigo: mil(f(v, "capacidadTrigo").unwrap_or(0.0)),
