@@ -514,7 +514,7 @@ Distintas, las dos existen y **no hay entre ellas ninguna relación activa de ni
 ### 5.3 Alianza y vasallaje: propuesta y respuesta
 - **Proponer** (`proponerRelacionPendiente`): `exigirRelacionPosible` + no hay otra propuesta vigente del par. Condiciones de `exigirRelacionPosible`: par válido; las dos tienen **Rey**; **vasallaje:** ninguna de las
   dos es ya vasalla de una tercera (basta con que lo sea cualquiera de las dos); **alianza:** `puedeProponerAlianza(A)` (reputación de A ≥ `REPUTACION.umbralBajoParaEmbajador`; la de B no se mira). Crea la propuesta
-  (`expiraEn = ahora + RELACION_PROPUESTA.caducidadDias` días); en vasallaje lleva `tributo {recurso (por defecto trigo), cantidadPorMinuto (por defecto 0)}`; sin validar la cantidad.
+  (`expiraEn = ahora + RELACION_PROPUESTA.caducidadDias` días); en vasallaje lleva `tributo {recurso (por defecto trigo), cantidadPorMinuto (por defecto 0)}`. Se rechaza con `diplomacia.tributo_invalido` un tributo negativo y una alianza que lleve tributo.
   La lista se **poda de caducadas al añadir**: no hay barrido en el tick.
 - **Responder:** debe estar vigente (si no existe o caducó, se rechaza con su código). **Rechazar:** la quita. **Aceptar:** vuelve a mirar `exigirRelacionPosible` y que **ninguna de las dos tenga una batalla
   abierta**; entonces nace la relación (`activa`, `creadoEn = ahora`) y se quita la propuesta.

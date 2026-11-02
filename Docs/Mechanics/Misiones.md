@@ -59,7 +59,7 @@ Cada avance se suma **en origen**, en el sitio que produce el hecho y al ocurrir
 
 ## 4. Reclamar
 
-`reclamarRecompensa` (`heroeId`, `duenoId`, `misionId`), código 182. `duenoId` es el del dueño: `heroe-N`, `as-N` o `faccion-N`.
+`reclamarRecompensa` (`heroeId`, `duenoId`, `misionId`), código 182. `duenoId` es el del dueño: `heroe-N`, `as-N` o `f-N` (la Facción; `faccion-N` se rechaza con `orden.forma_invalida`).
 
 - **Quién**: la cuenta del héroe que nombra la orden; la misión del héroe, si es ese héroe; la de una plaza, si es su Gobernador o, si la plaza no tiene Gobernador, uno de sus residentes; la de una Facción, si es su Rey. La administración, siempre.
 - **Rechazos**: `mision.desconocida` (el id no está en el catálogo, o no es de ese tipo de dueño), `mision.no_cumplida`, `mision.ya_reclamada`, `no_autorizado`; y los de dar la recompensa, que no dejan rastro (más abajo): `heroe.sin_residencia`, `almacen_personal.lleno`, `mision.almacen_lleno` y `mision.sin_capital`. Sale el hecho `mision.reclamada` (§5.1).

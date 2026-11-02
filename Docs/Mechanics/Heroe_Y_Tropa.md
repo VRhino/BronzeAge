@@ -40,7 +40,7 @@ se **recluta** en una plaza (la cadena de condiciones y el coste), cómo se cons
 > - **Tropa prestada y reclutas de campamento** (`mercenarios.rs`, véase [`Campamentos_Mercenarios.md`](Campamentos_Mercenarios.md)). `FijarResidencia` (y la reubicación de una ruina) suelta la guarnición y retira la tropa prestada de otro campamento de donde esté, también de una escolta.
 > - **Herido (§9):** `HerirHeroe` (administración, hasta el combate) pone `heridoHasta`; `Nucleo::heroe_herido` lo lee al mirar y no hay evento al curarse.
 > - **Presencia:** `Desconectarse` y `Conectarse` (véase [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md) §7).
-> - **Ruina de la plaza donde se reside:** sus residentes pasan a la plaza de su Facción más cercana a la ruina (si queda alguna) y, si no, al campamento de mercenarios más cercano; los héroes que estaban dentro quedan en ese campamento (`heroe.reubicado`); sueltan la guarnición. Ocurre antes de la cascada de comercio (Reloj_Y_Eventos §3.2).
+> - **Ruina de la plaza donde se reside:** sus residentes pasan a la plaza de su Facción más cercana a la ruina (si queda alguna) y, si no, al campamento de mercenarios más cercano; los héroes que estaban dentro salen al mapa en el sitio de la plaza, con su columna si la tenían o con una nueva (`heroe.reubicado`; las ruinas no se habitan, `nucleo/heroes.rs`, `reubicar_residentes`); sueltan la guarnición. Ocurre antes de la cascada de comercio (Reloj_Y_Eventos §3.2).
 >
 > | Código | Orden | Rechazos propios (además de `no_autorizado`, `heroe.desconocido` y `heroe.fuera_del_mundo`) |
 > |---|---|---|

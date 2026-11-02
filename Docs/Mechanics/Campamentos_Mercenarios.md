@@ -108,7 +108,7 @@ Todas lanzan `MercenariosInvalidoError`:
 Efecto: si la escuadra existe, `cantidad +=` (moral, nivel y experiencia no cambian); si no, nace `escuadron-{campamento.id}-{n}` en `contenedor: campamento` con la progresión inicial y `moral 100`.
 **Se une a la columna**: si es nueva y su Líder tiene una columna a la puerta y la escuadra **cabe en su Liderazgo** contando lo que ya lleva fuera del campamento (`puedeLlevar(héroe, [fuera + nueva])`), nace directamente en esa columna (`contenedor: ejercito`, y se añade a `escuadronIds`) para no obligarle a entrar y volver a salir. Una escuadra que se repone no se mueve.
 `poblacion = actual − cantidad`, `poblacionEn = ahora`. Evento `mercenarios.reclutado { campamentoId, heroeId, tropaId, cantidad, oro, seUne }`. Resultado `{ cantidad, oro, seUne }`.
-A diferencia de reclutar en una plaza, **no cuenta contadores de tecnología** y **no exige reserva de trigo ni población de plaza**.
+Como en una plaza, **suma los contadores de tecnología** `reclutados.*` (Tecnologia_Aedas §2.1); a diferencia de la plaza, **no exige reserva de trigo ni población de plaza**.
 
 ## 6. La tropa prestada
 
