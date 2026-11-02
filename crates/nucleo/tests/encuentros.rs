@@ -676,8 +676,8 @@ fn una_plaza_ajena_es_una_cosa_fija_del_espacio_y_una_columna_hostil_que_llega_d
     let bandidos = n.campamentos_de_bandidos().count();
     assert_eq!(n.cosas_en_el_espacio(), bandidos);
     let plaza = fundar(&mut n, 0, "ana", 1, p);
-    // La columna que fundó sigue en el mapa; la plaza se suma al espacio.
-    assert_eq!(n.cosas_en_el_espacio(), bandidos + 2);
+    // La columna que fundó entra en la plaza (Fundacion_Y_Refundacion §5.5): solo la plaza se suma al espacio.
+    assert_eq!(n.cosas_en_el_espacio(), bandidos + 1);
     // Una de la propia Facción pasa por la puerta sin dejar nada; una hostil, sí.
     let amiga = columna_cerca_de(&mut n, p, 1, "gus");
     let hostil = columna_cerca_de(&mut n, p, 2, "beto");
@@ -704,7 +704,9 @@ fn inspeccionar_una_plaza_ajena_guarda_su_defensa_y_avisa_a_la_plaza() {
     let ho = heroe(&n, obs);
     let informes = n.informes_de_inspeccion(ho);
     assert_eq!(informes.len(), 1);
-    assert_eq!(informes[0].contenido, Contenido::Plaza { faccion: 1, heroes: vec![], guarnicion: vec![], recintos: vec![] });
+    // Dentro está quien la fundó (su columna entró al fundarla).
+    let fundador: Vec<u64> = n.estado().militar.residentes_de(plaza).map(|h| h.heroe.id).collect();
+    assert_eq!(informes[0].contenido, Contenido::Plaza { faccion: 1, heroes: fundador, guarnicion: vec![], recintos: vec![] });
     let aviso = hechos(&n, "asentamiento.observado");
     assert_eq!((aviso.len(), aviso[0].2.clone()), (1, vec![plaza]));
 }

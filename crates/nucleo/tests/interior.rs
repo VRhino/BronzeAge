@@ -171,6 +171,7 @@ fn aldea_con(m: &M, Opc { dir, pueblo, sin_tropa }: Opc) -> Aldea {
     x.ok("admin", Comando::DarCaravanaFundacion { ejercito: columna });
     x.plaza = x.ok("fundador", Comando::Fundar { ejercito: columna }).creadas[0];
     let plaza = x.plaza;
+    comun::fundador_sale(&mut x.n, plaza);
     x.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: plaza, pausada: true });
     x.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: plaza, nivel: 2 });
     for _ in 0..14 {

@@ -318,6 +318,8 @@ fn lo_ajeno_se_ve_redactado_y_el_tramo_ajeno_se_renueva_solo_cuando_le_quedan_me
     let sitio = sitio_rico(&e.n, &m.0, 0, 1);
     let plaza = e.plaza("ana", 1, sitio);
     let radio = e.n.estado().asentamientos[&plaza].radio;
+    // Una columna de F1 a la puerta (la que funda entra en la plaza): sus ojos alargan lo que se ve de la que pasa.
+    e.columna("ana", 1, sitio);
     // Una columna de F2 cruza la zona de F1 de punta a punta: la plaza la ve mientras está en su disco.
     let col = e.columna("gus", 2, en_tierra(&m.0, sitio, -radio + 2 * U, 0));
     let h_gus = e.n.ejercito(col).unwrap().columna.lider;

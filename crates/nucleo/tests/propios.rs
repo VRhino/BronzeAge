@@ -167,8 +167,9 @@ fn escenario_con(m: &M, unity: bool) -> Esc {
         let t = x.n.ahora();
         let columna = x.n.crear_ejercito(t, cuenta, faccion, sitio, 500, 100_000).unwrap();
         x.ok("admin", Comando::DarCaravanaFundacion { ejercito: columna });
+        let fundador = x.n.ejercito(columna).unwrap().columna.lider;
         let plaza = x.ok(cuenta, Comando::Fundar { ejercito: columna }).creadas[0];
-        let fundador = x.n.ejercito(columna).map_or(0, |e| e.columna.lider);
+        comun::fundador_sale(&mut x.n, plaza);
         if faccion == 1 {
             (x.a, x.fundadores[0]) = (plaza, fundador);
         } else {

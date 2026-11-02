@@ -30,7 +30,7 @@ Tres consecuencias:
 2. **No se puede fundar sobre agua**: el asentamiento quedaría incomunicado para siempre. El agua es terreno inhabitable. La altura no lo es (decidido el 2026-10-31): se funda donde la pendiente lo deja (hasta 0,3, unos 17°), también en la cima.
 3. **Lo que frena es la pendiente, no la altura** (decidido el 2026-10-31): moverse cuesta `1 + min(2,5; 3,6 · pendiente)`, de 1 en el llano a 3,5 en la ladera más empinada que se anda (35°); más empinado no se pasa. Una cima llana se anda como el llano.
 
-**Los RÍOS son una entidad aparte, no terreno**: se cruzan solo por un vado o por una ciudad ribereña (1.6).
+**Los RÍOS son una entidad aparte, no terreno**: se cruzan solo por un vado (1.6). Los pasos por una ciudad ribereña están diseñados y sin implementar (`Docs/Disenos_Por_Implementar/Pasos_De_Rio_Por_Ciudad.md`).
 
 El comercio por mar está fuera de alcance (Doc 3.11): sin barcos, dos costas enfrentadas no comercian.
 
@@ -269,9 +269,9 @@ De ahí salen consecuencias sin necesidad de más reglas: tu tropa come de **tus
 
 **Cerrar la puerta o vetar expulsa** (2026-10-22; el veto, 2026-10-24): si el dueño cierra la puerta a un grupo o veta a un jugador, quienes ya están dentro y ya no podrían entrar salen al mapa **al instante y con todo lo suyo** —en la plaza y en sus pueblos y avanzadas—. La misma Facción y los residentes no se expulsan nunca.
 
-### 1.10.4 Dentro de una plaza ajena solo se ve la capa pública
+### 1.10.4 Dentro de una plaza ajena se ve lo que ven los ojos
 
-La ficha pública (edificios `activo`, zona), el mostrador de órdenes activas y, desde el 2026-10-29, su **trazado urbano** (las calles y dónde está cada edificio). **Nunca** el interior: ni almacén exacto, guarnición, colas de construcción ni cargos.
+Quien está dentro ve lo que vería paseando por ella: la ficha pública (zona), el mostrador de órdenes activas, su **trazado urbano** (las calles y dónde está cada edificio, desde el 2026-10-29) y, desde el 2026-11-02, **todos sus edificios en pie y en obra** (con su obra, su mejora en curso y su daño) y **sus murallas** (el anillo, lo levantado y la mejora). **Nunca** lo que no está a la vista: ni almacén, guarnición, colas de construcción (lo encargado que aún no está en el suelo), cargos ni políticas.
 
 Entrar es reconocimiento legítimo —ves si la ciudad es grande, rica y está amurallada— y por eso cerrar la puerta sigue siendo una defensa real sin que abrirla sea suicida.
 

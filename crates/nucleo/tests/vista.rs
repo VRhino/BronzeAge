@@ -685,3 +685,49 @@ fn quien_esta_dentro_de_una_plaza_ajena_ve_su_trazado_y_sus_ordenes_de_mercado_a
     x.ok("admin", Comando::ColocarHeroe { heroe: eva, ubicacion: Ubicacion::Mercenarios(0) });
     assert!(plaza_de(&mira(&x.n, eva, 2)).is_none_or(|a| a.trazado.is_none()));
 }
+
+#[test]
+fn quien_esta_dentro_de_una_plaza_ajena_ve_su_muralla_y_sus_obras_pero_no_su_cola() {
+    let m = con_mundo!();
+    let mut x = escenario(m);
+    let plaza = x.plaza;
+    for r in [asentamiento::Recurso::Madera, asentamiento::Recurso::Piedra, asentamiento::Recurso::Oro] {
+        x.ok("admin", Comando::DarRecursos { asentamiento: plaza, recurso: r, cantidad: 5_000_000 });
+    }
+    x.ok("ana", Comando::ComprometerRecinto { asentamiento: plaza, cargo: asentamiento::Cargo::Gobernador, nivel: 1 });
+    x.ok("admin", Comando::AnadirEdificio { asentamiento: plaza, tipo: asentamiento::catalogo::Tipo::Mercado });
+    x.ok("admin", Comando::AnadirEdificio { asentamiento: plaza, tipo: asentamiento::catalogo::Tipo::Taberna });
+    x.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: plaza, pausada: false });
+    let t = x.n.ahora() + 2 * MS_POR_MINUTO;
+    x.n.avanzar_hasta(t);
+    let eva = x.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
+    x.ok("admin", Comando::FijarFaccionDeHeroe { heroe: eva, faccion: Some(2) });
+    x.ok("admin", Comando::ColocarHeroe { heroe: eva, ubicacion: Ubicacion::Asentamiento(plaza as u32) });
+    let mirada = Mirada::de(&x.n, Perspectiva::Faccion(2));
+    let v = mirada.contenido(Some(eva), todo(), &BTreeMap::new());
+    let a = v
+        .iter()
+        .find(|e| e.clave == (TipoEntidad::Asentamiento as i32, ids::asentamiento(plaza)))
+        .and_then(|e| match e.cuerpo() {
+            Some(Cuerpo::Asentamiento(a)) => Some(a),
+            _ => None,
+        })
+        .expect("la plaza donde está");
+    let interior = nucleo::proyeccion::interior::asentamiento(&x.n, plaza).unwrap();
+    let estado = |e: pb::EstadoEdificio| e as i32;
+    assert!(interior.edificios.iter().any(|b| b.estado == estado(pb::EstadoEdificio::EdificioEnConstruccion)), "hay una obra en curso: {:?}", interior.edificios);
+    assert!(interior.edificios.iter().any(|b| b.estado == estado(pb::EstadoEdificio::EdificioEnCola)), "y algo en la cola: {:?}", interior.edificios);
+    // Ve los edificios en pie y en obra tal como son en el interior, sin lo que no se ve (la cola, lo parado, de dónde sale).
+    let visibles: Vec<pb::Edificio> = interior
+        .edificios
+        .iter()
+        .filter(|b| b.estado != estado(pb::EstadoEdificio::EdificioEnCola) || b.danado)
+        .map(|b| pb::Edificio { fuente_id: None, prioridad: None, pausado_por_almacen_lleno: false, semilla_saturada: false, ancla_llena: false, ..b.clone() })
+        .collect();
+    assert_eq!(a.edificios, visibles);
+    // Y la muralla comprometida, celda a celda, con lo que ya está en pie.
+    assert!(!interior.recintos.is_empty());
+    assert_eq!(a.recintos, interior.recintos.iter().map(|r| pb::Recinto { siguiente_celda_en_ms: None, ..r.clone() }).collect::<Vec<_>>());
+    // Nada más del interior.
+    assert!(a.almacen.is_empty() && a.poblacion.is_none() && a.cargos.is_none() && a.presentes_ids.is_empty() && a.politicas_activas.is_empty());
+}

@@ -733,11 +733,10 @@ VECINOS (col,fila) = [1,0] [−1,0] [0,1] [0,−1] [1,1] [−1,−1] [1,−1] [�
 **Coste de una arista** (`evaluarTramo(a, b)`): `n = max(1, ceil(largo / paso))`; si **alguno** de los `n + 1` puntos equiespaciados (extremos incluidos) no es transitable (`mapa.esTransitable`: agua,
 fuera del mapa) ⇒ `Infinity`. Si no: `coste = (largo / n) × Σ_{k=0..n−1} costeEnPunto(punto en (k+0,5)/n)`. Las 4 aristas de cada nodo (una de cada pareja) se calculan y se copian a su opuesta.
 
-**Ríos**: una arista que corta un cauce **fuera de un vado** queda en `crucesRio` con el punto del cruce y solo se puede usar si ese punto está a `≤ radioPasoCiudad` de la posición de algún asentamiento
-(`pasosRio` = todos los asentamientos del mundo). Hay vado en la distancia `s` desde el nacimiento si `s ≤ separacionVados / 2` (arroyo) o `|s − round(s / separacionVados) × separacionVados| ≤ espaciado`.
-`separacionVados = max(separacionVadosMin, ladoMayor / vadosPorLado)`; `radioPasoCiudad = max(radioPasoCiudadMin, 1,5 × espaciado)`.
+**Ríos**: solo se cruzan por los **vados** (D7); el paso por una ciudad ribereña está en `Docs/Disenos_Por_Implementar/Pasos_De_Rio_Por_Ciudad.md`, sin implementar. Hay vado en la distancia `s` desde el nacimiento si `s ≤ separacionVados / 2` (arroyo) o `|s − round(s / separacionVados) × separacionVados| ≤ espaciado`.
+`separacionVados = max(separacionVadosMin, ladoMayor / vadosPorLado)`. (`radioPasoCiudadMin` sigue en el bloque y no lo usa nadie.)
 
-**`calcularRuta(mapa, origen, destino, {pesos?, pasosRio?})`** → polilínea `[origen, …nodos, destino]` o **`undefined`**:
+**`calcularRuta(mapa, origen, destino, {pesos?})`** → polilínea `[origen, …nodos, destino]` o **`undefined`**:
 
 1. Origen y destino deben ser transitables.
 2. Si `distancia(origen, destino) < espaciado`: tramo directo (`[origen, destino]`) si su coste es finito y su cruce de río está permitido; si no `undefined`.
@@ -782,7 +781,7 @@ fuera del mapa) ⇒ `Infinity`. Si no: `coste = (largo / n) × Σ_{k=0..n−1} c
 Se usa en **todo** lanzamiento de una comercial (reparto y manual) y en cada salida de una con encargo (§5.8.6), de ida y de vuelta.
 
 ```
-opciones = { pesos: pesosDeRed(red), pasosRio: posiciones de todos los asentamientos }
+opciones = { pesos: pesosDeRed(red) }                ; los ríos, solo por los vados
 pendientes = zonas de influencia de asentamientos  b  con  b ≠ origen,  b ≠ destino,  b.faccionId ≠ origen.faccionId     ; "ajenas" incluye aliadas y vasallas
 ruta = [origen] ; paradas = [] ; actual = origen
 bucle:

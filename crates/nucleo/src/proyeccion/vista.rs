@@ -347,7 +347,8 @@ impl<'n> Mirada<'n> {
                     v.extend(self.propia_a_la_puerta(viewer, a).unwrap_or_else(|| self.propias_de(Clase::Asentamiento, a.id, a.version)));
                 } else if dentro {
                     nombradas.push(a.faccion);
-                    v.push(visible(pb::TipoEntidad::Asentamiento, id, Sello(a.version, 1), move || Some(Cuerpo::Asentamiento(plaza_desde_dentro(n, a.id)))));
+                    // Su sello sigue también al interior: una obra o una celda de muralla que avanza se ve desde dentro.
+                    v.push(visible(pb::TipoEntidad::Asentamiento, id, Sello(n.version_de(Clase::Asentamiento, a.id), 1), move || Some(Cuerpo::Asentamiento(plaza_desde_dentro(n, a.id)))));
                 } else {
                     nombradas.push(a.faccion);
                     v.push(visible(pb::TipoEntidad::Asentamiento, id, Sello(a.version, 0), move || Some(Cuerpo::Asentamiento(plaza_avistada(n, a.id)))));
@@ -714,9 +715,29 @@ pub fn plaza_avistada(n: &Nucleo, id: u64) -> pb::Asentamiento {
     p
 }
 
-/// La plaza ajena vista desde dentro (2026-10-29): la de fuera ([`plaza_avistada`]) con su trazado urbano. Nada más de su interior (almacén, población, cola, puerta, cargos...).
+/// La plaza ajena vista desde dentro (2026-10-29; ampliada el 2026-11-02, decisión del autor: quien está dentro ve todo lo que vería con sus ojos al moverse por ella): la de fuera
+/// ([`plaza_avistada`]) con su trazado urbano, sus edificios en pie y en obra (con la obra y la mejora en curso y el daño; no los de la cola, que aún no están en el suelo) y sus recintos de
+/// muralla (lo levantado y lo comprometido, celda a celda). Nada más de su interior: ni la cola, ni lo parado por almacén lleno, ni de qué fuente sale cada uno, ni el almacén, la población, la
+/// puerta, los cargos o quién está dentro.
+/// Lo que está en el suelo: en pie, en obra, o en la cola pero dañado (la ruina que deja una conquista, `combate::conquista::aplicar_conquista`). Lo encargado
+/// que aún no se ha empezado no se ve.
+pub(crate) fn se_ve_desde_dentro(b: &asentamiento::edificio::Edificio) -> bool {
+    b.estado != EstadoEdificio::EnCola || b.danado
+}
+
 pub fn plaza_desde_dentro(n: &Nucleo, id: u64) -> pb::Asentamiento {
-    pb::Asentamiento { trazado: interior::trazado_de(n, id), ..plaza_avistada(n, id) }
+    let mut p = pb::Asentamiento { trazado: interior::trazado_de(n, id), ..plaza_avistada(n, id) };
+    let eco = &n.estado().asentamientos[&id].economia;
+    if let Some(ciudad) = n.vista_ciudad(id) {
+        p.edificios = eco
+            .edificios
+            .iter()
+            .filter(|b| se_ve_desde_dentro(b))
+            .map(|b| pb::Edificio { fuente_id: None, prioridad: None, pausado_por_almacen_lleno: false, semilla_saturada: false, ancla_llena: false, ..interior::edificio(id, b, &ciudad) })
+            .collect();
+    }
+    p.recintos = interior::recintos(id, eco).into_iter().map(|r| pb::Recinto { siguiente_celda_en_ms: None, ..r }).collect();
+    p
 }
 
 /// Una escuadra tal como la ve quien no es su dueño (`EscuadraQueLleva`): su tropa, cuántos soldados quedan y su nivel.
@@ -947,5 +968,21 @@ pub fn de_admin(n: &Nucleo, (tipo, id): &ClaveAdmin) -> Option<Cuerpo> {
         pb::TipoEntidad::ZonaFaccion => Some(Cuerpo::ZonaFaccion(zona_faccion(n, ids::parse_faccion(id)?))),
         pb::TipoEntidad::RedCaminos => Some(Cuerpo::RedCaminos(red_caminos(n, &e.comercio.red.aristas().collect::<Vec<_>>(), |_| true))),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod pruebas_desde_dentro {
+    use super::*;
+    use asentamiento::catalogo::Tipo;
+    use asentamiento::edificio::Edificio;
+
+    #[test]
+    fn desde_dentro_se_ve_lo_que_esta_en_el_suelo_y_la_ruina_pero_no_la_cola() {
+        let con = |estado, danado| Edificio { danado, ..Edificio::nuevo(1, Tipo::Mercado, estado) };
+        assert!(se_ve_desde_dentro(&con(EstadoEdificio::Activo, false)));
+        assert!(se_ve_desde_dentro(&con(EstadoEdificio::EnConstruccion, false)));
+        assert!(se_ve_desde_dentro(&con(EstadoEdificio::EnCola, true)), "la ruina de una conquista sigue en pie");
+        assert!(!se_ve_desde_dentro(&con(EstadoEdificio::EnCola, false)), "lo encargado y sin empezar no se ve");
     }
 }

@@ -525,7 +525,8 @@ fn una_plaza_que_se_arruina_libera_sus_parcelas_y_nodos_y_su_evento_de_minuto_se
     // El paso de minuto ya programado se invalidó (generación nueva) y sale descartado de la cola; la otra plaza sigue viva.
     assert!(n.estado().generaciones.actual(id) > gen_antes);
     n.avanzar_hasta(n.ahora() + 2 * MIN);
-    assert_eq!(n.eventos_descartados(), descartados_antes + 1, "el Minuto siguiente de la plaza arruinada se descartó");
+    // Entre lo descartado está ese Minuto, con otras citas que la ruina deja sin objeto (desde que el fundador entra al fundar, hay más gente dentro).
+    assert!(n.eventos_descartados() > descartados_antes, "el Minuto siguiente de la plaza arruinada se descartó");
     let (eventos_antes, desde) = (n.metricas().eventos, n.ahora());
     // El plazo global de los títulos (5F) vence como mucho una vez en diez minutos.
     let titulos = n.estado().titulos_en.filter(|&x| x > desde && x <= desde + 10 * MIN).map_or(0, |_| 1);

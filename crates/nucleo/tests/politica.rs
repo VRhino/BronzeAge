@@ -519,6 +519,7 @@ fn la_capital_es_la_mas_antigua_hasta_que_el_rey_designa_otra_con_palacio_y_solo
     // La administración fija el nivel poniendo la experiencia en el umbral (decisión 9).
     e.ok("admin", Comando::FijarNivelFaccion { faccion: 1, nivel: 2 });
     assert_eq!((e.faccion(1).experiencia, e.n.nivel_de_faccion(1)), (100_000, 2));
+    let otro = e.n.ejercito(col).unwrap().columna.lider;
     let b = e.ok("fundadora", Comando::Fundar { ejercito: col }).creadas[0];
     assert_eq!(e.faccion(1).experiencia, 120_000, "la segunda plaza da 20");
     let fundacion = e.hechos("faccion.experiencia").into_iter().find(|h| dato(h, "motivo") == 7).expect("experiencia de fundación");
@@ -529,7 +530,6 @@ fn la_capital_es_la_mas_antigua_hasta_que_el_rey_designa_otra_con_palacio_y_solo
     assert_eq!(propios::faccion(&e.n, 1).capital_id, Some(ids::asentamiento(a)));
     let rey = e.faccion(1).rey.unwrap();
     let cuenta_rey = e.n.heroe(rey).unwrap().cuenta.clone();
-    let otro = e.n.ejercito(col).unwrap().columna.lider;
     // Solo el Rey; una plaza propia con Palacio activo que no sea ya la capital.
     assert_eq!(e.no("fundadora", Comando::DesignarCapital { heroe: otro, faccion: 1, asentamiento: b }), rechazos::NO_AUTORIZADO);
     assert_eq!(e.no(&cuenta_rey, Comando::DesignarCapital { heroe: rey, faccion: 1, asentamiento: b }), rechazos::CAPITAL_SIN_PALACIO);

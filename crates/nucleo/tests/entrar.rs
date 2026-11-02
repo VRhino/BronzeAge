@@ -400,7 +400,7 @@ fn el_residente_no_vacia_el_carro_al_entrar_el_carro_ocupa_su_capacidad_y_vaciar
     assert_eq!((hn.carro.get(&Madera).copied(), hn.columna, hn.almacen_personal.is_empty()), (Some(40_000), None, true), "el carro entra con él y el almacén personal no lo recibe");
     assert_eq!(e.almacen(Madera), madera_en_la_plaza, "el almacén de la plaza tampoco");
     assert!(e.n.ejercito(col).is_none());
-    assert_eq!(dato(&hechos(&e.n, "jugador.entra_en_asentamiento")[0], "carro"), 40_000);
+    assert_eq!(dato(hechos(&e.n, "jugador.entra_en_asentamiento").iter().rfind(|x| dato(x, "heroe") == h as i64).unwrap(), "carro"), 40_000);
 
     // El carro nunca lleva más de su capacidad (500 000): lo que ya trae cuenta al volver a salir.
     assert_eq!(e.rechazada("ana", sacar(vec![(Madera, 461_000)])), rechazos::CARRO_LLENO);

@@ -412,6 +412,7 @@ fn escenario(m: &M) -> Esc {
         let col = x.n.crear_ejercito(x.n.ahora(), cuenta, faccion, sitio, 500, 100_000).unwrap();
         x.ok("admin", Comando::DarCaravanaFundacion { ejercito: col });
         let plaza = x.ok(cuenta, Comando::Fundar { ejercito: col }).creadas[0];
+        comun::fundador_sale(&mut x.n, plaza);
         x.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: plaza, pausada: true });
         plazas.push(plaza);
     }

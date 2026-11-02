@@ -7,4 +7,5 @@ Diseños **cerrados con el autor pero sin implementar**. Aquí viven mientras no
 | Documento | Diseño | Entrada |
 |---|---|---|
 | [`Informes_De_Taberna.md`](Informes_De_Taberna.md) | 2026-10-31 | `Mecanicas a desarrollar.md` 65 |
+| [`Pasos_De_Rio_Por_Ciudad.md`](Pasos_De_Rio_Por_Ciudad.md) | heredado del TypeScript; sacado del canon el 2026-11-02 | `Mecanicas a desarrollar.md` 69 |
 

@@ -78,7 +78,7 @@ Residir es otra cosa (ciudadanía, Doc 2.5); un héroe de campaña sigue residie
 | `columna` → `mercenarios` | `entrarEnCampamento` | En el propio, se deshace (el carro con él); en otro, la columna entra entera. |
 | `mercenarios` → `columna` | `salirDelCampamento` | Residente: elige tropa y carga y se lleva el carro; visitante: sale con todo lo que entró. |
 | `columna` (ejército) → `asentamiento` | `guarnecer` | El ejército se desarma en la puerta y cada héroe entra. |
-| `columna` → `asentamiento` | `fundar` | La columna se deshace en la plaza que funda. |
+| `columna` → `asentamiento` | `fundar` | La columna entra en la plaza que funda (desde el 2026-11-02): los fundadores, en su residencia, como con `entrarEnAsentamiento` (un ejército se desarma antes, como al `guarnecer`). |
 | cualquiera → `desconectado` / de vuelta | `desconectarse` + tick, o `cerrarSesion` en el acto / `conectarse` | Ver §7. |
 
 No hay una salida de la residencia que no sea `salirAlMundo` (o `movilizarEjercito`, o `salirDelCampamento`): ahí se tiene el roster entero y el almacén, y hay algo que elegir.
@@ -144,7 +144,7 @@ Fija o rectifica el destino de la columna **del que va en ella**, tantas veces c
 - Un **ejército** lo dirige solo su Líder.
 - Una formación (ejército aún por formar) no se mueve.
 - El héroe debe tener `ubicacion = columna` (dentro de una plaza hay que salir antes).
-- Destino `ObjetivoEjercito` (un asentamiento o un punto) → `calcularRuta` con los asentamientos como pasos de río; sin ruta por tierra, error. El agua no se cruza.
+- Destino `ObjetivoEjercito` (un asentamiento o un punto) → `calcularRuta` (los ríos, solo por los vados); sin ruta por tierra, error. El agua no se cruza.
 - Efecto: `estado = marchando`, `objetivo`, un **plan nuevo calculado desde la posición real en ese instante** ([`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §4.2: vértices con su instante de paso) y se **abandona la persecución** (marchar a un punto y perseguir a la vez no existe). El plan anterior queda invalidado (sube la generación).
 - `rectifica = (la columna ya estaba marchando)`. Evento `jugador.marcha_fijada { ejercitoId, heroeId, objetivo, rectifica }`.
 

@@ -159,7 +159,7 @@ Como en Conquest (`HeroDataService.CreateNewHero`), pero **sin equipo inicial** 
 
 - **Nivel:** el servidor **no lo sube nunca** (no hay curva hasta que Conquest la publique, CQ-001; decidido 2026-09-15). Por tanto `puntosDeAtributoSinGastar` y `puntosDePerkSinGastar` nacen en 0 y **ningún camino los aumenta**: `repartirPuntos` solo puede gastar lo que traiga un snapshot cargado a mano.
 - **XP:** una batalla de Unity la suma tal cual (`experienciaHaciaSiguienteNivel += xpGanada` del héroe) y, por cada escuadra, `conExperiencia(e, xpGanada)` y `cantidad = supervivientesAlCierre`.
-- **Botín de Unity:** cada objeto va a una casilla libre del inventario (`BATALLA.casillasInventario`), como `tipo: 'visual'` y `precio: 0` (sin catálogo de objetos, CQ-004); las monedas se suman a `monedasHeroe`.
+- **Botín de Unity:** las monedas se suman a `monedasHeroe`. Los objetos se validan (que quepan en `BATALLA.casillasInventario` y que cada instancia sea nueva, [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §7) pero **se pierden**: el héroe aún no tiene inventario (**deuda**, CQ-004; anotada en la fila «Militar y combate (4A-1)» de `Docs/Mecanicas a desarrollar.md`).
 - **Equipar:** no existe el comando; el equipamiento solo cambia por la vía de Conquest.
 
 ### 4.4 Eventos del héroe

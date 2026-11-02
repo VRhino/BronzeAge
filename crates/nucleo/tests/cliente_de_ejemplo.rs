@@ -128,14 +128,13 @@ async fn un_cliente_que_solo_habla_el_contrato_nace_comercia_explora_funda_const
     llegar(&mut adm, &mut ana, &heroe, &col).await;
     assert!(explorado(&ana.almacen, "VISTA:f-1") > antes, "lo andado se explora");
 
-    // 5. Funda (el fundador pasa a residir en la plaza) y entra: se abre el interior de su plaza.
+    // 5. Funda (el fundador pasa a residir en la plaza y su columna entra en ella): se abre el interior de su plaza.
     let r = ana.aceptada(O::Fundar(pb::OrdenFundar {})).await;
     let plaza = creada(&r, TipoEntidad::Asentamiento);
     for (recurso, cantidad) in [("madera", 300_000), ("piedra", 100_000), ("oro", 100_000), ("trigo", 200_000)] {
         adm.aceptada(admin("dar_recursos", vec![("asentamiento_id", texto(&plaza)), ("recurso", texto(recurso)), ("cantidad", numero(cantidad))])).await;
     }
     ana.al_dia().await;
-    ana.aceptada(O::EntrarEnAsentamiento(pb::OrdenEntrarEnAsentamiento { asentamiento_id: plaza.clone(), heroe_id: heroe.clone() })).await;
     let interior = format!("ASENTAMIENTO:{plaza}");
     assert!(ana.almacen.ambitos.contains_key(&interior), "dentro de su plaza, su interior");
 

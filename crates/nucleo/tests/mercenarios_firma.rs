@@ -338,9 +338,8 @@ fn el_general_defiende_su_plaza_y_ataca_a_un_enemigo_en_guerra_pero_no_firma_un_
     let m = con_mundo!();
     let mut e = E::nuevo(m);
     let (bot, otro, plaza, ajena) = (e.bot("bot-1"), e.bot("bot-2"), e.plaza, e.ajena);
-    // El Gobernador de oficio (quien fundó) entra en su plaza con su ejército y nombra General a un residente.
+    // El Gobernador de oficio (quien fundó) ya está dentro de su plaza (entró al fundarla) y nombra General a un residente.
     let fundador = e.n.faccion(1).unwrap().ciudadanos.iter().copied().find(|&h| h != e.rey).expect("el fundador");
-    mc::ok(&mut e.n, "fundador", Comando::Guarnecer { asentamiento: plaza, heroe: fundador });
     let general = e.ciudadano("gen");
     mc::con_cargo(&mut e.n, "fundador", fundador, plaza, Cargo::General, general);
 
