@@ -417,6 +417,7 @@ impl Ctx<'_> {
             }
             Cuerpo::Desconectarse(o) => Comando::Desconectarse { heroe: self.heroe(&o.heroe_id)? },
             Cuerpo::Conectarse(o) => Comando::Conectarse { heroe: self.heroe(&o.heroe_id)? },
+            Cuerpo::CerrarSesion(o) => Comando::CerrarSesion { heroe: self.heroe(&o.heroe_id)? },
             Cuerpo::ComprarEnCampamento(o) => {
                 let heroe = self.mi_heroe()?;
                 let campamento = self.campamento_o_el_del(heroe, o.campamento_id.as_deref())?;

@@ -238,10 +238,13 @@ pub enum Comando {
     AsignarEscolta { caravana: u64, heroe: u64, escuadras: Vec<u64> },
     /// Retira la escolta que cedió el héroe (todas sus cedidas si `escuadras` es `None`).
     QuitarEscolta { caravana: u64, heroe: u64, escuadras: Option<Vec<u64>> },
-    /// Pide salir del mundo: el evento de salida vence a `retardoDesconexionMs`. Solo dentro de una plaza o de un campamento.
+    /// Pide salir del mundo: el evento de salida vence a `retardoDesconexionMs` (la caída del cliente; la manda el servidor al cerrarse el socket del jugador).
     Desconectarse { heroe: u64 },
     /// Cancela la salida pendiente o vuelve al mundo.
     Conectarse { heroe: u64 },
+    /// Sale del mundo ya: quien cierra sesión desde el cliente no espera `retardoDesconexionMs` ni se aplaza aunque le persigan; en batalla, sale al acabarla
+    /// (decisión del autor del 2026-11-02).
+    CerrarSesion { heroe: u64 },
     // ── Andamiaje de administración, provisional hasta que existan los sistemas que lo sustituyen. ──
     /// Da a la Facción esas tecnologías (sustituye a las que tenía), además de las de arranque. Solo administración; lo sustituirá el sistema 6.
     FijarTecnologias { faccion: u32, tecnologias: Vec<String> },
@@ -689,6 +692,7 @@ impl Comando {
             | Comando::AsignarEscolta { .. }
             | Comando::QuitarEscolta { .. }
             | Comando::Desconectarse { .. }
+            | Comando::CerrarSesion { .. }
             | Comando::ComprarEnCampamento { .. }
             | Comando::RepostarEnCampamento { .. }
             | Comando::SalirAlMundo { .. }
@@ -867,8 +871,8 @@ impl Comando {
         })
     }
 
-    /// ¿Lleva el candado de batalla? Todos los comandos salvo los que actúan sobre la propia batalla y conectarse y desconectarse (cerrar el cliente en plena
-    /// batalla tiene que anotarse, y volver a conectarse anular esa petición, §5.1), los mensajes del servidor de batalla, que no pasan por el registro de
+    /// ¿Lleva el candado de batalla? Todos los comandos salvo los que actúan sobre la propia batalla, conectarse, desconectarse y cerrar sesión (cerrar el cliente en
+    /// plena batalla tiene que anotarse, y volver a conectarse anular esa petición, §5.1), los mensajes del servidor de batalla, que no pasan por el registro de
     /// comandos de jugador, y ordenar, despedir y valorar a un mercenario (Mercenarios_Por_Contrato §7: despedir a quien combate se acepta y el fin se aplaza).
     pub(crate) fn lleva_candado(&self) -> bool {
         !matches!(
@@ -877,6 +881,7 @@ impl Comando {
                 | Comando::CancelarBatalla { .. }
                 | Comando::Conectarse { .. }
                 | Comando::Desconectarse { .. }
+                | Comando::CerrarSesion { .. }
                 | Comando::OrdenarMercenario { .. }
                 | Comando::DespedirMercenario { .. }
                 | Comando::ValorarMercenario { .. }
@@ -1083,6 +1088,7 @@ impl Comando {
             | Comando::RetirarGuarnicion { heroe, .. }
             | Comando::PasarAViveres { heroe, .. }
             | Comando::Desconectarse { heroe }
+            | Comando::CerrarSesion { heroe }
             | Comando::Conectarse { heroe }
             | Comando::VaciarCarro { heroe }
             | Comando::AbrirAlijo { heroe, .. }
@@ -1692,6 +1698,10 @@ impl Peticion {
             }
             Comando::Conectarse { heroe } => {
                 w.u8(64);
+                w.u64(*heroe);
+            }
+            Comando::CerrarSesion { heroe } => {
+                w.u8(207);
                 w.u64(*heroe);
             }
             Comando::FijarTecnologias { faccion, tecnologias } => {
@@ -2682,6 +2692,7 @@ impl Peticion {
             204 => Comando::DespedirMercenario { heroe: r.u64()?, mercenario: r.u64()? },
             205 => Comando::ValorarMercenario { heroe: r.u64()?, mercenario: r.u64()?, buena: r.bool()? },
             206 => Comando::ReclamarPremioDeRango { heroe: r.u64()?, tropa: tropa_de_u8(r.u8()?)? },
+            207 => Comando::CerrarSesion { heroe: r.u64()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -3713,6 +3724,7 @@ mod pruebas {
             Comando::QuitarEscolta { caravana: 1, heroe: 2, escuadras: Some(vec![5]) },
             Comando::Desconectarse { heroe: 2 },
             Comando::Conectarse { heroe: 2 },
+            Comando::CerrarSesion { heroe: 2 },
             Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["arco_compuesto".into(), "leva_comunal".into()] },
             Comando::FijarFaccionDeHeroe { heroe: 2, faccion: Some(3) },
             Comando::FijarFaccionDeHeroe { heroe: 2, faccion: None },

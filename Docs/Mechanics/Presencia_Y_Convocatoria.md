@@ -79,7 +79,7 @@ Residir es otra cosa (ciudadanía, Doc 2.5); un héroe de campaña sigue residie
 | `mercenarios` → `columna` | `salirDelCampamento` | Residente: elige tropa y carga y se lleva el carro; visitante: sale con todo lo que entró. |
 | `columna` (ejército) → `asentamiento` | `guarnecer` | El ejército se desarma en la puerta y cada héroe entra. |
 | `columna` → `asentamiento` | `fundar` | La columna se deshace en la plaza que funda. |
-| cualquiera → `desconectado` / de vuelta | `desconectarse` + tick / `conectarse` | Ver §7. |
+| cualquiera → `desconectado` / de vuelta | `desconectarse` + tick, o `cerrarSesion` en el acto / `conectarse` | Ver §7. |
 
 No hay una salida de la residencia que no sea `salirAlMundo` (o `movilizarEjercito`, o `salirDelCampamento`): ahí se tiene el roster entero y el almacén, y hay algo que elegir.
 
@@ -156,9 +156,12 @@ Fija o rectifica el destino de la columna **del que va en ella**, tantas veces c
 - **`conectarse { heroeId }`**:
   - Si **no estaba `fuera`**: si tenía `desconectaEn`, lo **cancela** (sin eventos); si no, nada.
   - Si estaba `fuera`: `volverAlMundo`. Dentro de una plaza o un campamento solo recupera el control. Si salió con su columna, **reaparece en su punto** con una columna personal nueva (`ejercito-{ids.siguiente()}`): `tipo personal`, `estacionado`, `politicaDeUnion rechazar`, `liderId` él, `suministro` = su carro de `fuera`, `escuadronIds` = sus escuadras `contenedor: fuera` (que vuelven a `ejercito`), `faccionId` la de su ciudadanía (o `''`), `origenAsentamientoId` su residencia (o `''`). Evento `jugador.vuelve_al_mundo` atribuido a su residencia.
+- **`cerrarSesion { heroeId }`** (decisión del autor del 2026-11-02): la salida **voluntaria**, la que manda el cliente cuando el jugador cierra sesión. Sale del mundo **en el acto**, sin los 2:30 de `desconectarse` y **aunque le persigan** (no hay aplazamiento). Lo que se lleva, quién manda después y dónde reaparece es lo mismo que en la salida de `desconectarse` (en una plaza o un campamento solo pierde el control; con su columna en el mapa se separa con lo suyo y reaparece en su punto). Si combate, la salida queda anotada en el instante de la orden y sale **en cuanto acaba la batalla**. Si tenía una caída pendiente, la sustituye. Ya fuera, se rechaza (`heroe.fuera_del_mundo`). Los 2:30 y el aplazamiento quedan para la **caída** (el socket que se cierra sin esta orden, Proyecciones_Y_Autorizacion §7.1).
 - **En plena batalla de Unity** los dos comandos **no llevan el candado** de batalla: `desconectarse` se anota (`desconectaEn`) pero el evento de salida no se aplica mientras el héroe combate —sale en cuanto acaba la batalla—, y `conectarse` la anula ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §5.1).
 - **Fuera del mundo no se da ninguna orden**: la autorización rechaza todo menos `conectarse` con el motivo `fuera_del_mundo`.
-- Quién lo aplica y cuándo: el evento programado ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §7). Lo pide el cliente al cerrarse, o el runner de bots al acabar su sesión.
+- Quién lo aplica y cuándo: el evento programado ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §7). La caída la pide el servidor al cerrarse el socket del jugador (Proyecciones_Y_Autorizacion §7.1); el cliente que cierra sesión manda `cerrarSesion`; un bot, sus propias órdenes.
+
+> **Implementado en Rust (2026-11-02), cerrar sesión.** `Comando::CerrarSesion { heroe }` (207; orden del contrato `cerrar_sesion`, 180, contrato 0.7.0), con la regla pura `militar::presencia::Presencia::cerrar_sesion`: fuera de batalla devuelve `Salida::Sale` y el núcleo aplica `sale_del_mundo` en el instante de la orden (hecho `heroe.sale_del_mundo`); combatiendo (`Nucleo::combate_al_salir`: su columna en batalla o él dentro de una plaza asediada), anota `desconectaEn = ahora`, programa la salida en ese instante (que espera) y emite `heroe.se_desconecta` con `saleEn = ahora`: el fin de la batalla la reintenta como siempre y sale. Al acabar una batalla nadie persigue a la columna (entrar en batalla suelta a sus perseguidores), así que no se aplaza. Una caída pendiente que sustituye deja de valer (sube la generación del héroe). No lleva el candado de batalla. Pruebas en `crates/militar/src/presencia.rs`, `crates/nucleo/tests/encuentros.rs` (`cerrar_sesion_saca_del_mundo_ya_aunque_le_persigan_y_en_batalla_al_acabarla`) y `crates/nucleo/tests/heroes.rs`.
 
 ## 8. Fijar la puerta y vetar
 

@@ -164,6 +164,8 @@ Una columna o una caravana que participa en una batalla activa (`convocando`, `a
 
 `desconectarse` programa la salida a `ahora + PRESENCIA.retardoDesconexionMs` (2 min 30 s). Al vencer el evento sale del mundo quien cumple **todo**: no combate, no está `fuera` y, si lo persiguen, han pasado ya `PRESENCIA.topeAplazamientoMs` (5 min) desde que lo pidió. Quien huye desconectándose no gana nada. `salirDelMundo` y `volverAlMundo` conservan sus reglas (Presencia_Y_Convocatoria §7): en plaza o campamento no se mueve nada; en la columna sale con sus escuadras y su carro; en un ejército se separa con lo suyo y el mando pasa al más antiguo conectado. Las caravanas adjuntas sin titular vuelven solas a su origen.
 
+`cerrarSesion` (la salida voluntaria del cliente, 2026-11-02) no espera el retardo ni el aplazamiento: sale en el instante de la orden. Si combate, programa la salida en ese mismo instante, que espera al fin de la batalla como cualquier otra.
+
 ## 8. El generador aleatorio
 
 - **Una sola secuencia de la partida**, consumida en el orden de la cola (que es total y determinista). Cualquier cambio de orden cambia la partida a partir de ahí, así que el orden de la cola es parte de las reglas.

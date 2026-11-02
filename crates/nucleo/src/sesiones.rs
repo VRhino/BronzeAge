@@ -42,7 +42,7 @@ use militar::heroe::Monedas;
 use contrato::v1 as pb;
 use pb::orden::Cuerpo;
 use sha2::{Digest, Sha256};
-use servidor::{ComandoSesion, Difusion, EstadoNucleo, PeticionAdmin, RelojCompartido, SesionId};
+use servidor::{ComandoSesion, Difusion, EstadoNucleo, FinDeSesion, PeticionAdmin, RelojCompartido, SesionId};
 use std::collections::BTreeMap;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
@@ -69,6 +69,8 @@ struct Actor {
     entregada: u64,
     /// El instante de mundo del próximo muestreo de las vistas.
     proxima_vista: base::Instante,
+    /// Las sesiones de jugador de Unity abiertas, con su cuenta: las que conectan y desconectan a su héroe (Proyecciones §7.1).
+    presentes: BTreeMap<SesionId, String>,
 }
 
 /// El primer instante de muestreo de las vistas después de `t`.
@@ -82,7 +84,7 @@ pub fn lanzar(mut nucleo: Nucleo, reloj: RelojCompartido, rx: mpsc::Receiver<Com
     nucleo.conectar_reloj(reloj.clone());
     nucleo.seguir_pertenencias();
     let (entregada, proxima_vista) = (nucleo.version(), siguiente_muestreo(nucleo.ahora()));
-    let actor = Actor { nucleo, reloj, mesa: Mesa::default(), publicadas: BTreeMap::new(), entregada, proxima_vista };
+    let actor = Actor { nucleo, reloj, mesa: Mesa::default(), publicadas: BTreeMap::new(), entregada, proxima_vista, presentes: BTreeMap::new() };
     tokio::spawn(actor.correr(rx))
 }
 
@@ -146,8 +148,15 @@ impl Actor {
                     let _ = tx.try_send(Difusion::Cronica(c));
                 }));
             }
-            ComandoSesion::Desconecta { sesion } => {
+            ComandoSesion::Desconecta { sesion, fin } => {
                 self.mesa.quitar(sesion);
+                // Cerrar el último socket de la cuenta es la caída; la sesión que otra del mismo cliente sustituye no lo es (su `Conecta` llega justo después), ni
+                // apagar el servidor.
+                if let Some(cuenta) = self.presentes.remove(&sesion) {
+                    if fin == FinDeSesion::Cierre && !self.presentes.values().any(|c| *c == cuenta) {
+                        self.presencia(&cuenta, false);
+                    }
+                }
             }
             ComandoSesion::Admin(PeticionAdmin::Estado { respuesta }) => {
                 let _ = respuesta.send(EstadoNucleo { version: self.nucleo.version(), instante: self.nucleo.ahora() });
@@ -190,6 +199,11 @@ impl Actor {
         self.avanzar();
         if let Some(vieja) = self.mesa.de_cliente(&cliente) {
             self.mesa.quitar(vieja);
+        }
+        // El jugador que abre su socket entra en el mundo antes de su foto: cancela la salida que tuviera pendiente o vuelve con su columna (Proyecciones §7.1).
+        if rol == pb::TipoCliente::ClienteUnity {
+            self.presentes.insert(sesion, cliente.clone());
+            self.presencia(&cliente, true);
         }
         let v = self.nucleo.version();
         let servidor_de_batalla = (rol == pb::TipoCliente::ClienteServidorBatalla).then(|| cliente.clone());
@@ -284,6 +298,19 @@ impl Actor {
         };
         if respuesta.send(Ok(bienvenida)).is_err() || mensajes.into_iter().any(|m| !depositar(&tx, m)) {
             self.mesa.quitar(sesion);
+        }
+    }
+
+    /// Presencia por la conexión (Proyecciones §7.1): abrir el socket del jugador de Unity conecta a su héroe y cerrar el último lo desconecta, con la salida a los
+    /// 2:30 de la caída (quien cierra sesión a propósito manda antes `cerrarSesion` y sale ya). La orden la da el servidor en nombre de la cuenta y no pasa por la
+    /// sesión: un rechazo (sin héroe, ya conectado, ya fuera) no deja rastro. Un bot lleva su presencia con sus propias órdenes. El id de la petición lleva la
+    /// versión de antes, que una aceptada siempre sube: no se repite.
+    fn presencia(&mut self, cuenta: &str, conecta: bool) {
+        let Some(heroe) = self.nucleo.heroe_de_cuenta(cuenta).map(|h| h.heroe.id) else { return };
+        let (comando, que) = if conecta { (Comando::Conectarse { heroe }, "conecta") } else { (Comando::Desconectarse { heroe }, "desconecta") };
+        let id = format!("presencia:{que}:v{}", self.nucleo.version());
+        if self.nucleo.aplicar(Peticion::nueva(cuenta, &id, comando)).aceptada() {
+            self.distribuir(None);
         }
     }
 

@@ -984,6 +984,7 @@ fn colocar(heroe: u64, sitio: &str) -> orden::Cuerpo {
 
 #[tokio::test]
 async fn el_heroe_y_la_faccion_se_reanudan_por_deltas_aunque_el_heroe_cambiara_y_con_las_bajas_de_lo_que_desaparecio() {
+    // Ana entra como bot: su socket no lleva la presencia (Proyecciones §7.1), así que cerrarlo y volver no toca su héroe.
     let m = con_mundo!();
     let mut x = escenario(m);
     let (as_a, h_ana, ana_id) = (ids::asentamiento(x.a), ids::heroe(x.ana), x.ana);
@@ -991,7 +992,7 @@ async fn el_heroe_y_la_faccion_se_reanudan_por_deltas_aunque_el_heroe_cambiara_y
     let rel12 = ids::relacion(x.n.relacion_activa(1, 2).unwrap().id);
     let w = arrancar_con(x.n).await;
     let (mut admin_c, _) = w.entrar("admin", TipoCliente::ClienteAdminWeb).await;
-    let (ana, b, mensajes) = w.conectar(hola_con("ana", TipoCliente::ClienteUnity, &[])).await;
+    let (ana, b, mensajes) = w.conectar(hola_con("ana", TipoCliente::ClienteBot, &[])).await;
     let (k_heroe, k_faccion, k_plaza) = (format!("HEROE:{h_ana}"), "FACCION:f-1".to_owned(), format!("ASENTAMIENTO:{as_a}"));
     let v = b.ambitos[0].version_actual;
     let (mut heroe, mut faccion) = (Cliente::desde(foto_de(&mensajes, &k_heroe)), Cliente::desde(foto_de(&mensajes, &k_faccion)));
@@ -1010,7 +1011,7 @@ async fn el_heroe_y_la_faccion_se_reanudan_por_deltas_aunque_el_heroe_cambiara_y
     aceptada(&dar_todo(&mut admin_c, "a4", colocar(ana_id, &as_a)).await.1);
 
     // Al volver, los tres siguen por deltas: el héroe cambió, pero el registro dice a qué ámbito pertenecía cada cosa en cada versión y qué cambió en la plaza.
-    let (_, b, mensajes) = w.conectar(hola_con("ana", TipoCliente::ClienteUnity, &[(&k_heroe, v), (&k_faccion, v), (&k_plaza, v)])).await;
+    let (_, b, mensajes) = w.conectar(hola_con("ana", TipoCliente::ClienteBot, &[(&k_heroe, v), (&k_faccion, v), (&k_plaza, v)])).await;
     let decisiones: Vec<i32> = b.ambitos.iter().map(|a| a.decision).collect();
     assert_eq!(decisiones, [D::ReanudaConDeltas as i32; 3]);
     assert_eq!(etiquetas(&mensajes), [format!("delta {k_heroe}"), format!("delta {k_faccion}"), format!("delta {k_plaza}")]);
@@ -1022,13 +1023,13 @@ async fn el_heroe_y_la_faccion_se_reanudan_por_deltas_aunque_el_heroe_cambiara_y
     faccion.aplicar(d_faccion);
 
     // Lo que reconstruyó con los deltas es lo que hay.
-    let (_, _, nuevos) = w.conectar(hola_con("ana", TipoCliente::ClienteUnity, &[])).await;
+    let (_, _, nuevos) = w.conectar(hola_con("ana", TipoCliente::ClienteBot, &[])).await;
     let (h_final, f_final) = (Cliente::desde(foto_de(&nuevos, &k_heroe)), Cliente::desde(foto_de(&nuevos, &k_faccion)));
     assert!(heroe.entidades == h_final.entidades, "HEROE: foto + deltas = foto final: {}", heroe.diferencias(&h_final));
     assert!(faccion.entidades == f_final.entidades, "FACCION: foto + deltas = foto final: {}", faccion.diferencias(&f_final));
 
     // Una versión de antes de que arrancaran las sesiones (el registro de entonces no dice a qué ámbito iba cada cosa, como el que se repite al recuperar): foto, aunque el registro la alcance.
-    let (_, b, _) = w.conectar(hola_con("ana", TipoCliente::ClienteUnity, &[(&k_heroe, 1), (&k_faccion, 1)])).await;
+    let (_, b, _) = w.conectar(hola_con("ana", TipoCliente::ClienteBot, &[(&k_heroe, 1), (&k_faccion, 1)])).await;
     assert_eq!(b.ambitos.iter().map(|a| a.decision).collect::<Vec<_>>()[..2], [D::ReanudaConFoto as i32; 2]);
     w.parar().await;
 }

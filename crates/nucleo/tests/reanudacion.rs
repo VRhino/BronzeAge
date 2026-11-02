@@ -8,6 +8,9 @@
 //!
 //! El reloj de mundo está **parado** y solo anda cuando la administración lo avanza, así que lo que llega a cada sesión depende solo de las órdenes; lo que ya iba hacia una sesión se recoge con
 //! una orden rechazada (sale después de todo lo anterior).
+//!
+//! Los jugadores entran como **`CLIENTE_BOT`**: su socket no lleva la presencia del héroe (Proyecciones §7.1), así que cerrarlo y volver no cambia el mundo. Con un cliente de Unity, cerrar es la
+//! caída del héroe y volver la cancela: dos cambios de su héroe en medio de lo que se comprueba aquí (esa presencia se prueba en `ambitos.rs`).
 
 mod comun;
 
@@ -390,9 +393,9 @@ async fn caso(m: &'static M, semilla: u64) -> Cuenta {
     let mut cuenta = Cuenta::new();
     let mut admin = Jugador::nuevo(&w, "admin", TipoCliente::ClienteAdminWeb, None, &mut cuenta).await;
     let mut jugadores = vec![
-        Jugador::nuevo(&w, "ana", TipoCliente::ClienteUnity, Some(alrededor(pos_a, 150 * U)), &mut cuenta).await,
-        Jugador::nuevo(&w, "beto", TipoCliente::ClienteUnity, None, &mut cuenta).await,
-        Jugador::nuevo(&w, "dora", TipoCliente::ClienteUnity, Some(todo), &mut cuenta).await,
+        Jugador::nuevo(&w, "ana", TipoCliente::ClienteBot, Some(alrededor(pos_a, 150 * U)), &mut cuenta).await,
+        Jugador::nuevo(&w, "beto", TipoCliente::ClienteBot, None, &mut cuenta).await,
+        Jugador::nuevo(&w, "dora", TipoCliente::ClienteBot, Some(todo), &mut cuenta).await,
         Jugador::nuevo(&w, "nora", TipoCliente::ClienteBot, Some(alrededor(pos_b, 150 * U)), &mut cuenta).await,
         Jugador::nuevo(&w, "fede", TipoCliente::ClienteBot, None, &mut cuenta).await,
     ];
@@ -527,7 +530,7 @@ async fn un_hecho_llega_una_vez_aunque_el_ambito_que_lo_oye_se_acabe_de_abrir_y_
     let w = arrancar_con(x.n).await;
     let mut cuenta = Cuenta::new();
     let mut admin = Jugador::nuevo(&w, "admin", TipoCliente::ClienteAdminWeb, None, &mut cuenta).await;
-    let mut j = Jugador::nuevo(&w, "ana", TipoCliente::ClienteUnity, None, &mut cuenta).await;
+    let mut j = Jugador::nuevo(&w, "ana", TipoCliente::ClienteBot, None, &mut cuenta).await;
     let aceptada = |r: &pb::ResultadoOrden| assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32, "{r:?}");
     let heroe = format!("HEROE:{}", ids::heroe(ana));
     // Sale al mundo y vuelve a entrar: entrar abre `ASENTAMIENTO` con su `Foto` en el mismo reparto que el hecho de la entrada, que le llega por `HEROE`.
@@ -551,13 +554,13 @@ async fn un_hecho_llega_una_vez_aunque_el_ambito_que_lo_oye_se_acabe_de_abrir_y_
     let mut mezcla = j.almacen.clone();
     mezcla.ambitos.insert(faccion.clone(), j.anterior.ambitos[&faccion].clone());
     assert!(mezcla.ambitos[&faccion].version < v_auto, "el caso exige que FACCION vuelva de antes del hecho");
-    let (c, al_dia, mensajes, _) = conectar(&w, "ana", TipoCliente::ClienteUnity, None, &mezcla).await;
+    let (c, al_dia, mensajes, _) = conectar(&w, "ana", TipoCliente::ClienteBot, None, &mezcla).await;
     let hechos = |mensajes: &[ms::Cuerpo]| mensajes.iter().filter_map(|m| if let ms::Cuerpo::Delta(d) = m { Some(d) } else { None }).flat_map(|d| d.eventos.iter().map(|e| e.codigo.clone())).collect::<Vec<_>>();
     assert_eq!(hechos(&mensajes), Vec::<String>::new(), "al reanudar no se repite ningún hecho de antes de la mayor versión que declara");
     assert_eq!(al_dia.contenido(), j.almacen.contenido());
     c.cerrar().await;
     // Quien reanuda con lo de antes de todo (un cliente que lo perdió) sí recibe cada hecho, una vez.
-    let (c, _, mensajes, _) = conectar(&w, "ana", TipoCliente::ClienteUnity, None, &j.anterior).await;
+    let (c, _, mensajes, _) = conectar(&w, "ana", TipoCliente::ClienteBot, None, &j.anterior).await;
     let todos = hechos(&mensajes);
     for codigo in ["jugador.sale_al_mundo", "jugador.entra_en_asentamiento", "construccion.auto_alternada"] {
         assert_eq!(todos.iter().filter(|c| *c == codigo).count(), 1, "{codigo} una vez: {todos:?}");
@@ -579,7 +582,7 @@ async fn el_registro_reanuda_por_deltas_hasta_la_version_mas_vieja_que_retiene_y
     let w = arrancar_con(x.n).await;
     let mut cuenta = Cuenta::new();
     let mut admin = Jugador::nuevo(&w, "admin", TipoCliente::ClienteAdminWeb, None, &mut cuenta).await;
-    let mut ana = Jugador::nuevo(&w, "ana", TipoCliente::ClienteUnity, None, &mut cuenta).await;
+    let mut ana = Jugador::nuevo(&w, "ana", TipoCliente::ClienteBot, None, &mut cuenta).await;
     // Cada `dar_recursos` cierra una versión, que el cliente de administración recibe (y ana, en su plaza).
     let mut copias = vec![(admin.almacen.clone(), ana.almacen.clone())];
     for i in 0..9 {
@@ -596,7 +599,7 @@ async fn el_registro_reanuda_por_deltas_hasta_la_version_mas_vieja_que_retiene_y
         j.c.take().unwrap().cerrar().await;
     }
     let (_, nueva_admin, _, _) = conectar(&w, "admin", TipoCliente::ClienteAdminWeb, None, &Almacen::default()).await;
-    let (_, nueva_ana, _, _) = conectar(&w, "ana", TipoCliente::ClienteUnity, None, &Almacen::default()).await;
+    let (_, nueva_ana, _, _) = conectar(&w, "ana", TipoCliente::ClienteBot, None, &Almacen::default()).await;
     // Con 9 versiones nuevas y 8 retenidas, la copia de hace 8 aún se reanuda por deltas y la de hace 9 ya no.
     let decision = |b: &pb::Bienvenida, ambito: &str| b.ambitos.iter().find(|x| clave_de_ambito(&x.ambito) == ambito).map(|x| x.decision).expect("el ámbito vuelve");
     let plaza = format!("ASENTAMIENTO:{}", ids::asentamiento(a));
@@ -607,7 +610,7 @@ async fn el_registro_reanuda_por_deltas_hasta_la_version_mas_vieja_que_retiene_y
         almacen.aplicar_todo(&mensajes);
         assert_eq!(almacen.contenido(), nueva_admin.contenido(), "la administración reanuda desde la copia {i} y no queda como la foto nueva");
         c.cerrar().await;
-        let (c, b, mensajes) = w.conectar(copias[i].1.hola("ok:ana", TipoCliente::ClienteUnity)).await;
+        let (c, b, mensajes) = w.conectar(copias[i].1.hola("ok:ana", TipoCliente::ClienteBot)).await;
         assert_eq!(decision(&b, &plaza), esperada as i32, "la plaza de ana desde la versión {}", copias[i].1.ambitos[&plaza].version);
         let mut almacen = copias[i].1.clone();
         almacen.aplicar_todo(&mensajes);
@@ -626,7 +629,7 @@ async fn version_esperada_obsoleta_se_rechaza_y_una_orden_repetida_no_se_aplica_
     let a = x.a;
     let w = arrancar_con(x.n).await;
     let mut cuenta = Cuenta::new();
-    let mut ana = Jugador::nuevo(&w, "ana", TipoCliente::ClienteUnity, None, &mut cuenta).await;
+    let mut ana = Jugador::nuevo(&w, "ana", TipoCliente::ClienteBot, None, &mut cuenta).await;
     let auto = |pausada| orden::Cuerpo::AlternarAutoConstruccion(pb::OrdenAlternarAutoConstruccion { asentamiento_id: ids::asentamiento(a), pausada });
     let con_version = |id: &str, version: u64, cuerpo| mc::Cuerpo::Orden(pb::Orden { peticion_id: id.into(), version_esperada: Some(version), cuerpo: Some(cuerpo) });
     let hoy = ana.almacen.ambitos.values().map(|x| x.version).max().unwrap();
@@ -653,7 +656,7 @@ async fn version_esperada_obsoleta_se_rechaza_y_una_orden_repetida_no_se_aplica_
     assert_eq!((r.resultado, r.version_tras, previos.len()), (pb::Resultado::OrdenDuplicada as i32, v, 0), "{r:?}");
     // Tras reconectar, desde una sesión nueva: también duplicada, y la plaza sigue como la dejó la primera.
     ana.c.take().unwrap().cerrar().await;
-    let (mut c, al_dia, mensajes, _) = conectar(&w, "ana", TipoCliente::ClienteUnity, None, &ana.almacen).await;
+    let (mut c, al_dia, mensajes, _) = conectar(&w, "ana", TipoCliente::ClienteBot, None, &ana.almacen).await;
     assert!(mensajes.is_empty(), "reanuda sin novedad: {mensajes:?}");
     let (previos, r) = dar_todo(&mut c, "al_dia", auto(true)).await;
     assert_eq!((r.resultado, r.version_tras, previos.len()), (pb::Resultado::OrdenDuplicada as i32, v, 0), "{r:?}");
@@ -678,7 +681,7 @@ async fn tras_un_reinicio_quien_conserva_una_version_de_antes_reanuda_por_deltas
     let w = arrancar_con(x.n).await;
     let mut cuenta = Cuenta::new();
     let mut admin = Jugador::nuevo(&w, "admin", TipoCliente::ClienteAdminWeb, None, &mut cuenta).await;
-    let mut ana = Jugador::nuevo(&w, "ana", TipoCliente::ClienteUnity, None, &mut cuenta).await;
+    let mut ana = Jugador::nuevo(&w, "ana", TipoCliente::ClienteBot, None, &mut cuenta).await;
     // Lo que ana conserva a mitad; después el mundo sigue (una orden suya, recursos de la plaza y de su almacén personal, la relación de su Facción, pasos de minuto) y se para. El almacén
     // personal es lo que mueve su `HEROE` seguro: con la fertilidad real de la zona (paridad P8) la plaza pasa hambre y su tropa deserta antes, y en el tramo ya no le cambia nada más.
     let mut c = ana.c.take().unwrap();
@@ -705,9 +708,9 @@ async fn tras_un_reinicio_quien_conserva_una_version_de_antes_reanuda_por_deltas
     assert!(recuperado.recuperado());
     assert_eq!((recuperado.version(), recuperado.hash_estado()), (version, hash), "el mismo mundo");
     let w = arrancar_con(recuperado).await;
-    let (c, nueva, _, _) = conectar(&w, "ana", TipoCliente::ClienteUnity, None, &Almacen::default()).await;
+    let (c, nueva, _, _) = conectar(&w, "ana", TipoCliente::ClienteBot, None, &Almacen::default()).await;
     c.cerrar().await;
-    let (c, reanudada, _, b) = conectar(&w, "ana", TipoCliente::ClienteUnity, None, &de_antes).await;
+    let (c, reanudada, _, b) = conectar(&w, "ana", TipoCliente::ClienteBot, None, &de_antes).await;
     let decisiones: Vec<(String, i32)> = b.ambitos.iter().map(|x| (clave_de_ambito(&x.ambito), x.decision)).collect();
     assert!(decisiones.iter().all(|(_, d)| *d == pb::DecisionReanudacion::ReanudaConDeltas as i32), "todo por deltas tras el reinicio: {decisiones:?}");
     assert_eq!(reanudada.contenido(), nueva.contenido(), "reanudar tras el reinicio deja lo mismo que una foto nueva");

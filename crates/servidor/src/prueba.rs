@@ -206,7 +206,7 @@ impl NucleoFalso {
                             let _ = s.difusion.try_send(Difusion::Cronica(c));
                         }
                     }
-                    ComandoSesion::Desconecta { sesion } => {
+                    ComandoSesion::Desconecta { sesion, .. } => {
                         e.sesiones.remove(&sesion);
                     }
                 }

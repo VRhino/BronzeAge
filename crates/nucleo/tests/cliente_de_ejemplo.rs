@@ -225,19 +225,19 @@ async fn un_cliente_que_solo_habla_el_contrato_nace_comercia_explora_funda_const
     assert!(ana.almacen.ambitos[&batalla].entidades.values().any(|c| matches!(c, Cuerpo::Batalla(_))));
     assert!(ana.almacen.hechos.iter().any(|(_, e)| e.codigo == "evento_pve.abierta" && matches!(e.tipado, Some(pb::evento_dominio::Tipado::BatallaAbierta(_)))), "con su hecho tipado");
 
-    // 10. Lo acumulado es lo que daría una conexión nueva; y quien reanuda con lo que conserva queda igual y no recibe ni un hecho más.
+    // 10. Lo acumulado es lo que daría una conexión nueva; y quien reanuda con lo que conserva queda igual y no recibe ni un hecho más. Cada sesión nueva sustituye a la
+    // anterior sin cerrarla antes: cerrar el socket de Unity es la caída del héroe (Proyecciones §7.1), que cambiaría lo que hay. Las sustituidas se guardan hasta el final.
+    let mut sustituidas = Vec::new();
     for (cliente, token, tipo) in [(ana, "ok:ana", TipoCliente::ClienteUnity), (beto, "ok:beto", TipoCliente::ClienteUnity), (gus, "ok:gus", TipoCliente::ClienteUnity), (adm, "ok:adm", TipoCliente::ClienteAdminWeb)] {
         let mut cliente = cliente;
         cliente.al_dia().await;
         let (acumulado, conserva) = (cliente.almacen.contenido(), cliente.almacen.clone());
         let con_vista = conserva.ambitos.keys().any(|k| k.starts_with("VISTA:"));
-        cliente.sesion.cerrar().await;
         let mut nueva = ClienteDeEjemplo::entrar(dir, hola(token, tipo), Almacen::default()).await;
         if con_vista {
             nueva.mirar(min, max).await;
         }
         assert_eq!(nueva.almacen.contenido(), acumulado, "{token}: foto + deltas = foto nueva");
-        nueva.sesion.cerrar().await;
         let hechos = conserva.hechos.len();
         let mut reanuda = ClienteDeEjemplo::entrar(dir, conserva.hola(token, tipo), conserva).await;
         if con_vista {
@@ -245,7 +245,7 @@ async fn un_cliente_que_solo_habla_el_contrato_nace_comercia_explora_funda_const
         }
         assert_eq!(reanuda.almacen.contenido(), acumulado, "{token}: reanudar no cambia nada");
         assert_eq!(reanuda.almacen.hechos.len(), hechos, "{token}: ni repite un hecho");
-        reanuda.sesion.cerrar().await;
+        sustituidas.push((cliente, nueva, reanuda));
     }
     w.parar().await;
 }

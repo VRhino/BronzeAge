@@ -219,6 +219,7 @@ impl Nucleo {
             | Comando::PasarAViveres { .. }
             | Comando::QuitarEscolta { .. }
             | Comando::Desconectarse { .. }
+            | Comando::CerrarSesion { .. }
             | Comando::Conectarse { .. }
             | Comando::FijarTecnologias { .. }
             | Comando::FijarFaccionDeHeroe { .. }

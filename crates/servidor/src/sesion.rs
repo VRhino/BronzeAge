@@ -31,7 +31,7 @@ use tokio_tungstenite::{
 
 use crate::http::{self, Http, Inicio, Rebobinado, SinHttp};
 use crate::nucleo::{
-    codigos, Autenticador, ComandoSesion, Config, Difusion, ErrorAcceso, RelojCompartido, SesionId,
+    codigos, Autenticador, ComandoSesion, Config, Difusion, ErrorAcceso, FinDeSesion, RelojCompartido, SesionId,
 };
 
 /// `Hola.version_protocolo` que habla este servidor.
@@ -260,7 +260,16 @@ async fn sesion<A: Autenticador>(ctx: Arc<Ctx<A>>, tcp: TcpStream) {
 
     em.cerrar().await;
     if limpieza.conectada {
-        let _ = ctx.nucleo.send(ComandoSesion::Desconecta { sesion: id }).await;
+        // Solo un cierre es la caída (Proyecciones §7.1): la sesión nueva que sustituye a esta ya se anotó en el registro, y apagar el servidor no desconecta a nadie.
+        let reemplazada = limpieza.cliente_id.as_ref().is_some_and(|c| ctx.registro.lock().unwrap_or_else(|e| e.into_inner()).get(c).is_some_and(|v| v.id != id));
+        let fin = if *ctx.parada.borrow() {
+            FinDeSesion::Apagado
+        } else if reemplazada {
+            FinDeSesion::Reemplazada
+        } else {
+            FinDeSesion::Cierre
+        };
+        let _ = ctx.nucleo.send(ComandoSesion::Desconecta { sesion: id, fin }).await;
     }
     if let Some(c) = limpieza.cliente_id {
         let mut reg = ctx.registro.lock().unwrap_or_else(|e| e.into_inner());

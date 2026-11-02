@@ -1,5 +1,5 @@
 //! Los héroes y su tropa dentro del núcleo (Heroe_Y_Tropa, Presencia_Y_Convocatoria §7, Reloj_Y_Eventos §7, fase 4B-1): crear al héroe, reclutar
-//! en una plaza, loadouts, orden de las escuadras, puntos, guarnición con su ración, escolta de caravanas, conectarse y desconectarse, y el
+//! en una plaza, loadouts, orden de las escuadras, puntos, guarnición con su ración, escolta de caravanas, conectarse, desconectarse y cerrar sesión, y el
 //! andamiaje de administración que sustituye al sistema político hasta que llegue (Facción, tecnologías, colocar y herir). Las
 //! reglas puras son el crate `militar`; aquí están el estado, el reloj, la autorización provisional y el traslado a eventos y versiones. Reclutar
 //! en un campamento, la tropa prestada y la residencia están en [`mercenarios`](super::mercenarios).
@@ -317,6 +317,26 @@ impl Nucleo {
                 self.emitir_propio(t, "heroe.se_desconecta", vec![], vec![("heroe", *heroe as i64), ("saleEn", sale_en)]);
                 Ok(vec![])
             }
+            Comando::CerrarSesion { heroe } => {
+                self.autorizar_heroe(p, *heroe, false)?;
+                let combate = self.combate_al_salir(*heroe);
+                let pendiente = self.heroe(*heroe).is_some_and(|h| h.heroe.presencia.desconecta_en.is_some());
+                let salida = self.heroe_mut(*heroe).heroe.presencia.cerrar_sesion(t, combate);
+                let Some(salida) = salida else { return Err(sin_cambios()) };
+                // La salida con retardo que tuviera pedida deja de valer: si vuelve y se desconecta otra vez, su evento viejo no debe sacarlo antes de tiempo.
+                if pendiente {
+                    self.estado.generaciones.subir(*heroe);
+                }
+                if salida == Salida::Sale {
+                    self.sale_del_mundo(*heroe, t);
+                } else {
+                    // Combate: sale al acabar la batalla (la reintenta `columna_sale_de_batalla`, o el fin de la batalla si defiende dentro de una plaza).
+                    let clave = self.estado.generaciones.clave(*heroe);
+                    self.estado.cola.programar(t, PRIO_SALIDA, clave, Carga::SalidaDelMundo);
+                    self.emitir_propio(t, "heroe.se_desconecta", vec![], vec![("heroe", *heroe as i64), ("saleEn", t)]);
+                }
+                Ok(vec![])
+            }
             Comando::Conectarse { heroe } => {
                 self.autorizar_heroe(p, *heroe, true)?;
                 match self.heroe_mut(*heroe).heroe.presencia.conectarse() {
@@ -611,13 +631,17 @@ impl Nucleo {
 
     // ───────────────────────────── Eventos ─────────────────────────────
 
+    /// Si el héroe combate y su salida del mundo tiene que esperar al fin de la batalla: su columna está en batalla o, sin columna, combate dentro de una plaza asediada.
+    fn combate_al_salir(&self, id: u64) -> bool {
+        self.columna_de(id).is_some_and(|c| self.estado.ejercitos.get(&c).is_some_and(|e| e.en_batalla)) || self.heroe_en_batalla(id)
+    }
+
     /// Vence la salida del mundo de un héroe que se desconectó (Reloj_Y_Eventos §7). Si combate (su columna o él mismo) espera al fin de la batalla (la reintenta
     /// `columna_sale_de_batalla`); si la persiguen, se aplaza hasta el tope: quien huye desconectándose no gana nada.
     pub(super) fn salida_del_mundo(&mut self, id: u64, t: Instante) {
         let mr = self.estado.reglas.economia.militar.clone();
-        let (combate, perseguido) = self.columna_de(id).map_or((false, false), |c| (self.estado.ejercitos.get(&c).is_some_and(|e| e.en_batalla), self.espacio.perseguidores.contains_key(&c)));
-        // Quien combate dentro de una plaza asediada tampoco sale (no va en ninguna columna).
-        let combate = combate || self.heroe_en_batalla(id);
+        let combate = self.combate_al_salir(id);
+        let perseguido = self.columna_de(id).is_some_and(|c| self.espacio.perseguidores.contains_key(&c));
         let Some(h) = self.estado.militar.heroes.get_mut(&id) else { return };
         self.tr.tocar(Clase::Heroe, id);
         match h.heroe.presencia.al_vencer_la_salida(&mr, t, combate, perseguido) {
