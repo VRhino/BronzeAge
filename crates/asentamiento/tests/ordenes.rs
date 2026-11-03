@@ -244,7 +244,7 @@ fn lo_que_llega_por_acarreo_cuenta_en_la_solvencia_del_ascenso_y_el_pueblo_paga_
     let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
     let insolvente = |a: &Asentamiento, s: &mut SitiosLibres, w: &mut SinMundo| {
         let x = exterior!(&r, *s, *w);
-        a.bloqueos_de_ascenso(0, &r, &x, false).into_iter().find_map(|b| if let Bloqueo::Insolvente(v) = b { Some(v) } else { None }).unwrap_or_default()
+        a.bloqueos_de_ascenso(0, &r, &x, false).into_iter().find_map(|b| if let Bloqueo::Insolvente(v) = b { Some(v.into_iter().map(|f| f.recurso).collect::<Vec<_>>()) } else { None }).unwrap_or_default()
     };
     // Al subir al nivel 2 se paga también piedra: sin ingreso de piedra no hay solvencia.
     assert!(insolvente(&a, &mut s, &mut w).contains(&Recurso::Piedra));

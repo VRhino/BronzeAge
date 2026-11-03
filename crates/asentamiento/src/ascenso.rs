@@ -22,8 +22,18 @@ pub enum Bloqueo {
     FaltaPueblo,
     SinCupoDeFaccion,
     RecursosInsuficientes,
-    /// Lo que se produce y recauda por minuto no cubre el mantenimiento del nivel nuevo: los recursos que faltan.
-    Insolvente(Vec<Recurso>),
+    /// Lo que se produce y recauda por minuto no cubre el mantenimiento del nivel nuevo: los recursos que faltan, con lo que llega y lo que pide.
+    Insolvente(Vec<Insolvencia>),
+}
+
+/// Un recurso del mantenimiento del nivel nuevo que lo que llega por minuto no cubre (en milésimas por minuto).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Insolvencia {
+    pub recurso: Recurso,
+    /// El ingreso bruto por minuto, con el acarreo de media desde que llega.
+    pub llega: Mil,
+    /// El mantenimiento por minuto en el nivel nuevo.
+    pub pide: Mil,
 }
 
 impl Asentamiento {
@@ -86,11 +96,11 @@ impl Asentamiento {
                 b.push(Bloqueo::RecursosInsuficientes);
             }
         }
-        let faltan: Vec<Recurso> = self
+        let faltan: Vec<Insolvencia> = self
             .mantenimiento_en(r, x, objetivo)
             .iter()
-            .filter(|&&(rec, coste)| self.ingreso_bruto(t, r, x, rec) < coste)
-            .map(|&(rec, _)| rec)
+            .map(|&(recurso, pide)| Insolvencia { recurso, llega: self.ingreso_bruto(t, r, x, recurso), pide })
+            .filter(|f| f.llega < f.pide)
             .collect();
         if !faltan.is_empty() {
             b.push(Bloqueo::Insolvente(faltan));

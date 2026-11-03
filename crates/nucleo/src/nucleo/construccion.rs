@@ -110,8 +110,21 @@ fn rechazo_de_bloqueo(b: &Bloqueo) -> (&'static str, String) {
         Bloqueo::FaltaPueblo => (ASCENSO_FALTA_ALDEA, "falta un pueblo activo: una aldea agrícola o un pueblo extractor".into()),
         Bloqueo::SinCupoDeFaccion => (ASCENSO_SIN_CUPO_DE_FACCION, "la Facción no tiene cupo para ese nivel".into()),
         Bloqueo::RecursosInsuficientes => (ASCENSO_RECURSOS_INSUFICIENTES, "faltan recursos para la obra de ascenso".into()),
-        Bloqueo::Insolvente(r) => (ASCENSO_INSOLVENTE, format!("no cubriría el mantenimiento del nivel nuevo: {}", r.iter().map(|r| r.nombre()).collect::<Vec<_>>().join(", "))),
+        Bloqueo::Insolvente(r) => (
+            ASCENSO_INSOLVENTE,
+            format!(
+                "no cubriría el mantenimiento del nivel nuevo: {}",
+                r.iter().map(|f| format!("{} (llegan {} por minuto y pide {})", f.recurso.nombre(), por_minuto(f.llega, false), por_minuto(f.pide, true))).collect::<Vec<_>>().join(", ")
+            ),
+        ),
     }
+}
+
+/// Una cifra por minuto en milésimas, con un decimal y coma: lo que llega, redondeado hacia abajo, y lo que se pide, hacia arriba, para que el
+/// mensaje nunca enseñe como suficiente lo que no lo es.
+fn por_minuto(mil: Mil, arriba: bool) -> String {
+    let decimas = if arriba { (mil.max(0) + 99) / 100 } else { mil.max(0) / 100 };
+    format!("{},{}", decimas / 10, decimas % 10)
 }
 
 fn rechazo_de_politica(e: ErrorPolitica) -> (&'static str, &'static str) {

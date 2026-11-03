@@ -421,6 +421,8 @@ fn las_ordenes_de_economia_y_sus_rechazos() {
     assert_eq!(codigo(&r), rechazos::ASCENSO_FALTA_POBLACION);
     let Resultado::Rechazada { mensaje, .. } = &r.resultado else { unreachable!() };
     assert!(mensaje.contains("faltan edificios") && mensaje.contains("faltan recursos"), "{mensaje}");
+    // La solvencia dice cuánto llega y cuánto pide por minuto (2026-11-03): sin Leñera activa ni pueblo de cantera no llega madera ni piedra.
+    assert!(mensaje.contains("no cubriría el mantenimiento del nivel nuevo: madera (llegan 0,0 por minuto y pide 1,7), piedra (llegan 0,0 por minuto y pide 3,3)"), "{mensaje}");
 
     // Políticas.
     let pol = |i: &str, pol: &str, cargo| ana(i, Comando::ActivarPolitica { asentamiento: id, politica: pol.into(), cargo });

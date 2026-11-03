@@ -603,12 +603,20 @@ impl Asentamiento {
         }
     }
 
-    /// Lo que el acarreo trae por minuto a la plaza, de media en la ventana de las últimas 24 h (`t` es la hora de la pregunta): es lo que
-    /// cuenta como acarreo en la solvencia del ascenso (Doc 4.5). Desde el 2026-11-01 cuenta también lo que no cupo en el almacén.
+    /// Lo que el acarreo trae por minuto a la plaza, de media desde que llega (`t` es la hora de la pregunta): es lo que cuenta como acarreo en la
+    /// solvencia del ascenso (Doc 4.5). Suma lo que trajo en la ventana de las últimas 24 h, quepa o no en el almacén (desde el 2026-11-01), y lo
+    /// divide entre los minutos que van desde el principio de la hora de su primera llegada en la ventana, más una hora (lo que tardó el primer
+    /// carro en llenarse y viajar), con 24 h como mucho (decisión del autor del 2026-11-03: hasta entonces, siempre entre 1.440 minutos, y una
+    /// cantera nueva no contaba entera hasta llevar un día entregando). Una que lleva un día entregando cuenta como antes.
     pub(crate) fn acarreo_por_minuto(&self, t: Instante, recurso: Recurso) -> Mil {
         let hora = hora_de(t);
-        let total: Mil = self.ingresos_acarreo.iter().filter(|i| i.recurso == recurso && i.hora > hora - HORAS_VENTANA && i.hora <= hora).map(|i| i.cantidad).sum();
-        total / (HORAS_VENTANA * 60)
+        let mut cubos = self.ingresos_acarreo.iter().filter(|i| i.recurso == recurso && i.hora > hora - HORAS_VENTANA && i.hora <= hora).peekable();
+        if cubos.peek().is_none() {
+            return 0;
+        }
+        let (total, primera) = cubos.fold((0, hora), |(total, primera), i| (total + i.cantidad, primera.min(i.hora)));
+        let minutos = ((t - primera * 60 * MS_POR_MINUTO) / MS_POR_MINUTO + 60).min(HORAS_VENTANA * 60);
+        total / minutos
     }
 }
 
@@ -778,24 +786,26 @@ mod pruebas {
     }
 
     #[test]
-    fn el_acarreo_cuenta_en_la_solvencia_lo_que_ingresa_de_media_en_24_horas() {
+    fn el_acarreo_cuenta_en_la_solvencia_lo_que_llega_de_media_desde_que_llega_hasta_24_horas() {
         let r = Reglas::cargar();
         let mut a = con_pueblo_activo(&r);
         const H: Instante = 60 * MS_POR_MINUTO;
         assert_eq!(a.acarreo_por_minuto(0, Recurso::Cobre), 0, "sin llegadas no cuenta nada, tenga o no carro");
         a.pueblos[0].carro = Some(9);
         assert_eq!(a.acarreo_por_minuto(0, Recurso::Cobre), 0, "la producción nominal ya no cuenta");
-        // 144 u en 3 llegadas (dos en la misma hora): 144 / 1440 min = 0,1 por minuto; otro recurso, aparte; una llegada sin sitio no suma.
+        // 144 u en 3 llegadas (dos en la misma hora); otro recurso, aparte; una llegada sin sitio no suma.
         a.registrar_acarreo(2 * H, Recurso::Cobre, 48_000);
         a.registrar_acarreo(2 * H + 30 * MS_POR_MINUTO, Recurso::Cobre, 48_000);
         a.registrar_acarreo(10 * H, Recurso::Cobre, 48_000);
         a.registrar_acarreo(10 * H, Recurso::Piedra, 1_440_000);
         a.registrar_acarreo(10 * H, Recurso::Cobre, 0);
         assert_eq!(a.ingresos_acarreo.len(), 3, "dos cubos de cobre (horas 2 y 10) y uno de piedra");
-        assert_eq!((a.acarreo_por_minuto(10 * H, Recurso::Cobre), a.acarreo_por_minuto(10 * H, Recurso::Piedra)), (100, 1_000));
-        // La ventana: en la hora 25 sigue el cubo de la hora 2 (23 horas atrás); en la 26 ya salió.
-        assert_eq!(a.acarreo_por_minuto(25 * H, Recurso::Cobre), 100);
-        assert_eq!(a.acarreo_por_minuto(26 * H, Recurso::Cobre), 33, "queda el cubo de la hora 10: 48 u / 1440 min");
+        // Media desde que llega (2026-11-03): el cobre, desde la hora 2 más una, 9 horas: 144 u / 540 min; la piedra, recién llegada, entre una hora.
+        assert_eq!((a.acarreo_por_minuto(10 * H, Recurso::Cobre), a.acarreo_por_minuto(10 * H, Recurso::Piedra)), (266, 24_000));
+        assert_eq!(a.acarreo_por_minuto(10 * H + 30 * MS_POR_MINUTO, Recurso::Piedra), 16_000, "media hora después, entre 90 minutos");
+        // A partir de un día de historia, entre 1.440 minutos, como antes: en la hora 25 sigue el cubo de la hora 2 (23 horas atrás); en la 26 ya salió.
+        assert_eq!(a.acarreo_por_minuto(25 * H, Recurso::Cobre), 100, "144 u / 1440 min");
+        assert_eq!(a.acarreo_por_minuto(26 * H, Recurso::Cobre), 47, "queda el cubo de la hora 10: 48 u / 1020 min, desde la hora 10 más una");
         assert_eq!(a.acarreo_por_minuto(34 * H, Recurso::Cobre), 0, "y a las 24 horas de la última llegada, nada");
     }
 
