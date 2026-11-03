@@ -234,10 +234,14 @@ pub fn reponer_prestamo(r: &Reglas, heroe: &mut Heroe, campamento: CampamentoId,
 }
 
 /// La retirada de la tropa prestada: toda escuadra prestada por un campamento donde su héroe ya no reside se retira **de donde esté** (de la
-/// columna, de una escolta, de la guarnición). Devuelve las retiradas para que quien llama las quite de las listas de ids y lo narre.
+/// columna, de una escolta, de la guarnición) y de sus loadouts (2026-11-03: si no, el loadout guardaba una escuadra que ya no es suya y volver a
+/// guardarlo se rechazaba con `escuadra.ajena`). Devuelve las retiradas para que quien llama las quite de las listas de ids y lo narre.
 pub fn retirar_prestamos_ajenos(heroe: &mut Heroe, reside_en: &dyn Fn(CampamentoId) -> bool) -> Vec<Escuadra> {
     let (ajenas, propias): (Vec<_>, Vec<_>) = std::mem::take(&mut heroe.escuadras).into_iter().partition(|e| e.prestada.is_some_and(|c| !reside_en(c)));
     heroe.escuadras = propias;
+    for l in &mut heroe.loadouts {
+        l.escuadras.retain(|id| !ajenas.iter().any(|e| e.id == *id));
+    }
     ajenas
 }
 
@@ -532,5 +536,17 @@ mod pruebas {
         let retiradas = retirar_prestamos_ajenos(&mut h, &|_| false);
         assert_eq!(retiradas.iter().map(|e| (e.id, e.contenedor)).collect::<Vec<_>>(), vec![(101, Contenedor::Campamento), (102, Contenedor::Escolta(5))]);
         assert_eq!(h.escuadras.iter().map(|e| e.id).collect::<Vec<_>>(), vec![9]);
+    }
+
+    #[test]
+    fn la_prestada_que_se_retira_sale_tambien_de_los_loadouts() {
+        let r = r();
+        let mut h = heroe();
+        pedir_prestamo(&r, &mut h, 3, &[Tropa::Granjeros, Tropa::Lenadores], &mut ids(), 0).unwrap();
+        h.escuadras.push(Escuadra::nueva(&r, 9, 1, Tropa::Arqueros, 18, Some(2), 0));
+        h.loadouts[0].escuadras = vec![101, 9, 102];
+        h.loadouts.push(crate::heroe::Loadout { id: 7, nombre: "Prestadas".into(), escuadras: vec![102], perks: vec![], activo: false });
+        retirar_prestamos_ajenos(&mut h, &|_| false);
+        assert_eq!(h.loadouts.iter().map(|l| (l.id, l.escuadras.clone())).collect::<Vec<_>>(), vec![(h.loadouts[0].id, vec![9]), (7, vec![])], "queda la propia, en su orden; el loadout no se borra");
     }
 }

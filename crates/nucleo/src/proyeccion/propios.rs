@@ -129,7 +129,8 @@ pub fn heroe(n: &Nucleo, h: &HeroeNucleo) -> pb::Heroe {
         .map(|l| pb::Loadout {
             id: ids::loadout(l.id),
             display_name: l.nombre.clone(),
-            squad_ids: l.escuadras.iter().map(|&s| ids::escuadra(s)).collect(),
+            // Solo las escuadras que aún son suyas: una partida de antes del 2026-11-03 pudo guardar en el loadout una prestada que ya se retiró.
+            squad_ids: l.escuadras.iter().filter(|&&s| h.heroe.escuadra(s).is_some()).map(|&s| ids::escuadra(s)).collect(),
             perks_seleccionados: l.perks.clone(),
             activo: l.activo,
             liderazgo_total: u32::try_from(h.heroe.liderazgo_de_loadout(r, l)).unwrap_or(0),

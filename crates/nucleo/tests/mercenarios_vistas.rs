@@ -637,3 +637,22 @@ async fn quien_se_ofrece_se_pone_en_el_tablon_de_quien_mira_desde_dentro() {
     assert!(el_tablon(&actualizado(&visto, &camp)).is_empty());
     w.parar().await;
 }
+
+#[test]
+fn el_loadout_de_una_partida_vieja_no_sirve_la_prestada_que_ya_se_retiro_y_se_vuelve_a_guardar() {
+    let m = con_mundo!();
+    let mut n = mc::nucleo(m);
+    let h = mc::heroe_en(&mut n, "ana", 0, Controlador::Humano);
+    let propia = mc::ok(&mut n, "admin", Comando::DarEscuadra { heroe: h, tropa: Tropa::MiliciaLanceros, cantidad: 10 }).creadas[0];
+    // Antes del 2026-11-03 la prestada retirada al mudarse se quedaba en el loadout: aquí, la 99 999, que ya no es suya.
+    let (mut n, _dir) = mc::retocado(m, &n, |e| e.militar.heroes.get_mut(&h).expect("existe").heroe.loadouts[0].escuadras = vec![99_999, propia]);
+    let (id, nombre) = {
+        let hn = n.heroe(h).expect("existe");
+        let l = &propios::heroe(&n, hn).loadouts[0];
+        assert_eq!(l.squad_ids, vec![ids::escuadra(propia)], "la VISTA solo sirve las escuadras que aún son suyas");
+        (hn.heroe.loadouts[0].id, l.display_name.clone())
+    };
+    // El cliente reenvía lo que ve, y se guarda.
+    mc::ok(&mut n, "ana", Comando::GuardarLoadout { heroe: h, loadout: Some(id), nombre, escuadras: vec![propia], perks: vec![], activo: None });
+    assert_eq!(n.heroe(h).unwrap().heroe.loadouts[0].escuadras, vec![propia]);
+}

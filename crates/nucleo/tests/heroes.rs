@@ -1200,6 +1200,7 @@ fn mismas_ordenes_dan_el_mismo_hash_normal_acelerado_y_a_trozos() {
     let beto = normal.heroe_de_cuenta("beto").unwrap();
     assert_eq!(ana.heroe.escuadras.len(), 1);
     assert_eq!((beto.heroe.escuadras.len(), beto.heroe.residencia), (0, Some(Residencia::Campamento(1))), "la prestada se retiró al mudarse");
+    assert!(beto.heroe.loadouts.iter().all(|l| l.escuadras.is_empty()), "y salió de su loadout, que se puede volver a guardar");
     assert!(!hechos(&normal, "heroe.sale_del_mundo").is_empty() || !hechos(&normal, "heroe.vuelve_al_mundo").is_empty());
     // El hash se mueve con el estado militar: el mismo mundo sin el guion da otro.
     let mut sin_guion = escenario(m, 3);

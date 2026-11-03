@@ -203,7 +203,7 @@ Con los números de hoy (7/14/22/32/45): 1 élite + 1 pesada + 1 veterana = 99; 
 
 Resultado: `id = anterior.id` o `loadout-{ids.siguiente()}`; `activo = datos.activo ?? anterior.activo ?? false`. **Marcarlo activo desactiva los demás.** Uno nuevo se **añade al final**. El comando devuelve `{ loadoutId, liderazgoTotal }` (el Liderazgo que suma, derivado). No emite eventos.
 
-Es una comodidad: **no hay tope de loadouts** y **la misma escuadra puede estar en varios** (solo uno está activo a la vez, así que no compiten); **no mira dónde están las escuadras** (pueden estar en un ejército o heridas…); eso se comprueba al salir con ellas. `borrarLoadout` quita el loadout (rechaza si no existe) y **no garantiza que quede uno activo**: sin loadout activo, el héroe defiende con ninguna escuadra de su loadout (Combate §3.2 usa `loadouts.find(activo)?.squadIds ?? []`).
+Es una comodidad: **no hay tope de loadouts** y **la misma escuadra puede estar en varios** (solo uno está activo a la vez, así que no compiten); **no mira dónde están las escuadras** (pueden estar en un ejército o heridas…); eso se comprueba al salir con ellas. Una escuadra que deja de ser suya sale de sus loadouts: la prestada que se retira al dejar de residir en su campamento (Campamentos_Mercenarios §6) desde el 2026-11-03; la `VISTA` (`Heroe.loadouts[].squad_ids`) sirve solo las que aún son suyas, también en una partida de antes de ese día, de modo que el loadout se puede volver a guardar tal como se ve. `borrarLoadout` quita el loadout (rechaza si no existe) y **no garantiza que quede uno activo**: sin loadout activo, el héroe defiende con ninguna escuadra de su loadout (Combate §3.2 usa `loadouts.find(activo)?.squadIds ?? []`).
 
 ## 7. Guarnición
 
