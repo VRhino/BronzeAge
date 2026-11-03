@@ -547,11 +547,12 @@ pub enum Comando {
     OfrecerseComoMercenario { heroe: u64 },
     /// El héroe quita su oferta del tablón.
     RetirarOferta { heroe: u64 },
-    /// El Rey, el Embajador o un cargo local, en el campamento del mercenario y con el oro en el carro, lo contrata para `trabajo` sobre `objetivo`: temporal con `plazo` días, o
-    /// permanente (sin plazo) residiendo en la plaza `residencia` (§3 a §5).
-    ContratarMercenario { heroe: u64, mercenario: u64, trabajo: Trabajo, objetivo: ObjetivoMercenario, plazo: Option<u8>, residencia: Option<u64> },
-    /// Quien podría firmarlo hoy alarga `plazo` días el contrato temporal del mercenario, en persona y pagándolo (§6.2).
-    ProrrogarContrato { heroe: u64, mercenario: u64, plazo: u8 },
+    /// El Rey, el Embajador o un cargo local, en el campamento del mercenario, lo contrata para `trabajo` sobre `objetivo`: temporal con `plazo` días, o permanente (sin plazo)
+    /// residiendo en la plaza `residencia` (§3 a §5). Paga con `pagar_con` (2026-11-03; código 210): el almacén personal, en el campamento donde reside, o el carro que lleva. Sin él, el
+    /// carro de la columna que lleva y, dentro del campamento donde reside sin columna, el almacén personal.
+    ContratarMercenario { heroe: u64, mercenario: u64, trabajo: Trabajo, objetivo: ObjetivoMercenario, plazo: Option<u8>, residencia: Option<u64>, pagar_con: Option<PagarCon> },
+    /// Quien podría firmarlo hoy alarga `plazo` días el contrato temporal del mercenario, en persona y pagándolo como al contratar (§6.2; `pagar_con` desde el 2026-11-03, código 211).
+    ProrrogarContrato { heroe: u64, mercenario: u64, plazo: u8, pagar_con: Option<PagarCon> },
     /// Un cargo de la Facción da la misma orden a entre 1 y 16 mercenarios con contrato (§6.1, decisión 23 del plan).
     OrdenarMercenario { heroe: u64, mercenarios: Vec<u64>, tipo: TipoOrden, objetivo: ObjetivoMercenario },
     /// El Rey o el Embajador cambian a un permanente a otra plaza de la Facción, sin cooldown (§6.2).
@@ -1239,7 +1240,8 @@ impl Comando {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PagarCon {
     AlmacenPersonal,
-    /// Del carro: al reclutar, el de la columna del héroe, a la puerta del campamento; al comprar, también el que lleva dentro (2026-11-02).
+    /// Del carro: al reclutar, el de la columna del héroe, a la puerta del campamento; al comprar y al pagar un contrato de mercenario, también el que lleva dentro (2026-11-02 y
+    /// 2026-11-03).
     Carro,
 }
 
@@ -2136,20 +2138,27 @@ impl Peticion {
                 w.u8(if matches!(self.comando, Comando::OfrecerseComoMercenario { .. }) { 198 } else { 199 });
                 w.u64(*heroe);
             }
-            Comando::ContratarMercenario { heroe, mercenario, trabajo, objetivo, plazo, residencia } => {
-                w.u8(200);
+            Comando::ContratarMercenario { heroe, mercenario, trabajo, objetivo, plazo, residencia, pagar_con } => {
+                // Sin `pagar_con`, el 200 de siempre; con él (2026-11-03), el 210, que lo lleva al final.
+                w.u8(if pagar_con.is_some() { 210 } else { 200 });
                 w.u64(*heroe);
                 w.u64(*mercenario);
                 w.u8(codec_contratos::trabajo_a_u8(*trabajo));
                 codec_contratos::objetivo_escribir(&mut w, objetivo);
                 w.opt_u64(plazo.map(u64::from));
                 w.opt_u64(*residencia);
+                if let Some(pagar_con) = pagar_con {
+                    w.u8(*pagar_con as u8);
+                }
             }
-            Comando::ProrrogarContrato { heroe, mercenario, plazo } => {
-                w.u8(201);
+            Comando::ProrrogarContrato { heroe, mercenario, plazo, pagar_con } => {
+                w.u8(if pagar_con.is_some() { 211 } else { 201 });
                 w.u64(*heroe);
                 w.u64(*mercenario);
                 w.u8(*plazo);
+                if let Some(pagar_con) = pagar_con {
+                    w.u8(*pagar_con as u8);
+                }
             }
             Comando::OrdenarMercenario { heroe, mercenarios, tipo, objetivo } => {
                 w.u8(202);
@@ -2453,7 +2462,8 @@ impl Peticion {
     pub(crate) fn decodificar(bytes: &[u8]) -> Result<Peticion, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
         let (actor, admin, peticion_id, version_esperada) = (r.texto()?, r.bool()?, r.texto()?, r.opt_u64()?);
-        let comando = match r.u8()? {
+        let codigo = r.u8()?;
+        let comando = match codigo {
             1 => Comando::CrearEjercito { cuenta: r.texto()?, faccion: r.u32()?, posicion: r.punto()?, velocidad: r.i64()?, viveres: r.i64()? },
             2 => Comando::MarcharA { ejercito: r.u64()?, destino: r.punto()? },
             3 => Comando::Estacionar { ejercito: r.u64()? },
@@ -2695,15 +2705,17 @@ impl Peticion {
             197 => Comando::CancelarEncargo { caravana: r.u64()? },
             198 => Comando::OfrecerseComoMercenario { heroe: r.u64()? },
             199 => Comando::RetirarOferta { heroe: r.u64()? },
-            200 => Comando::ContratarMercenario {
+            200 | 210 => Comando::ContratarMercenario {
                 heroe: r.u64()?,
                 mercenario: r.u64()?,
                 trabajo: codec_contratos::trabajo_de_u8(r.u8()?)?,
                 objetivo: codec_contratos::objetivo_leer(&mut r)?,
                 plazo: r.opt_u64()?.map(|d| u8::try_from(d).map_err(|_| ErrorFormato("plazo de contrato fuera de rango"))).transpose()?,
                 residencia: r.opt_u64()?,
+                pagar_con: if codigo == 210 { Some(pagar_con_de_u8(r.u8()?)?) } else { None },
             },
-            201 => Comando::ProrrogarContrato { heroe: r.u64()?, mercenario: r.u64()?, plazo: r.u8()? },
+            201 => Comando::ProrrogarContrato { heroe: r.u64()?, mercenario: r.u64()?, plazo: r.u8()?, pagar_con: None },
+            211 => Comando::ProrrogarContrato { heroe: r.u64()?, mercenario: r.u64()?, plazo: r.u8()?, pagar_con: Some(pagar_con_de_u8(r.u8()?)?) },
             202 => Comando::OrdenarMercenario { heroe: r.u64()?, mercenarios: leer_lista_u64(&mut r)?, tipo: codec_contratos::tipo_orden_de_u8(r.u8()?)?, objetivo: codec_contratos::objetivo_leer(&mut r)? },
             203 => Comando::MudarMercenario { heroe: r.u64()?, mercenario: r.u64()?, plaza: r.u64()? },
             204 => Comando::DespedirMercenario { heroe: r.u64()?, mercenario: r.u64()? },
@@ -3119,7 +3131,8 @@ pub mod rechazos {
     pub const HEROE_NO_ESTA_EN_LA_AVANZADA: &str = "heroe.no_esta_en_la_avanzada";
     pub const VACIAR_SOLO_EN_TU_RESIDENCIA: &str = "carro.vaciar_solo_en_tu_residencia";
     pub const ALMACEN_PERSONAL_LLENO: &str = "almacen_personal.lleno";
-    /// Guardar o sacar del almacén personal sin la columna a la puerta de la propia residencia, donde vive el almacén (5G-a).
+    /// Guardar o sacar del almacén personal sin la columna a la puerta de la propia residencia, donde vive el almacén (5G-a); pagar con él (`pagar_con` = `almacenPersonal`) una
+    /// compra del mercado de un campamento, una firma o una prórroga de un mercenario fuera del campamento donde se reside (2026-11-02 y 2026-11-03).
     pub const ALMACEN_PERSONAL_FUERA_DE_TU_RESIDENCIA: &str = "almacen_personal.fuera_de_tu_residencia";
     /// Guardar en el almacén personal un recurso que el carro de la columna no lleva (5G-a).
     pub const CARRO_NO_LLEVA: &str = "carro.no_lleva";
@@ -3864,9 +3877,12 @@ mod pruebas {
             Comando::AbandonarEpica { heroe: 2, asentamiento: 3, aeda: 4 },
             Comando::OfrecerseComoMercenario { heroe: 2 },
             Comando::RetirarOferta { heroe: 2 },
-            Comando::ContratarMercenario { heroe: 2, mercenario: 8, trabajo: Trabajo::Atacar, objetivo: ObjetivoMercenario::Bandidos(3), plazo: Some(3), residencia: None },
-            Comando::ContratarMercenario { heroe: 2, mercenario: 8, trabajo: Trabajo::Permanente, objetivo: ObjetivoMercenario::Faccion(1), plazo: None, residencia: Some(5) },
-            Comando::ProrrogarContrato { heroe: 2, mercenario: 8, plazo: 7 },
+            Comando::ContratarMercenario { heroe: 2, mercenario: 8, trabajo: Trabajo::Atacar, objetivo: ObjetivoMercenario::Bandidos(3), plazo: Some(3), residencia: None, pagar_con: None },
+            Comando::ContratarMercenario { heroe: 2, mercenario: 8, trabajo: Trabajo::Permanente, objetivo: ObjetivoMercenario::Faccion(1), plazo: None, residencia: Some(5), pagar_con: None },
+            Comando::ContratarMercenario { heroe: 2, mercenario: 8, trabajo: Trabajo::Defender, objetivo: ObjetivoMercenario::Pueblo(4), plazo: Some(1), residencia: None, pagar_con: Some(PagarCon::AlmacenPersonal) },
+            Comando::ContratarMercenario { heroe: 2, mercenario: 8, trabajo: Trabajo::Permanente, objetivo: ObjetivoMercenario::Faccion(1), plazo: None, residencia: Some(5), pagar_con: Some(PagarCon::Carro) },
+            Comando::ProrrogarContrato { heroe: 2, mercenario: 8, plazo: 7, pagar_con: None },
+            Comando::ProrrogarContrato { heroe: 2, mercenario: 8, plazo: 3, pagar_con: Some(PagarCon::AlmacenPersonal) },
             Comando::OrdenarMercenario { heroe: 2, mercenarios: vec![8, 9], tipo: TipoOrden::IrA, objetivo: ObjetivoMercenario::Punto(Punto::new(-5, 9_000)) },
             Comando::OrdenarMercenario { heroe: 2, mercenarios: vec![8], tipo: TipoOrden::Unirse, objetivo: ObjetivoMercenario::Convocatoria(12) },
             Comando::MudarMercenario { heroe: 2, mercenario: 8, plaza: 6 },

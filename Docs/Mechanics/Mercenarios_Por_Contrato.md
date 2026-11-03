@@ -61,13 +61,14 @@ su Facción) o bandidos u objetivo de una Facción en guerra (atacar).
 
 1. El firmante tiene Facción (`mercenario.sin_alcance`) y no es de bots (`mercenario.faccion_de_bots`).
 2. El mercenario está en un tablón (`mercenario.no_ofrecido`) y no tiene Facción (`faccion.ya_pertenece`).
-3. **En persona**: el firmante está en ese campamento, dentro o con su columna a `radioPuerta` (`campamento.fuera_de_la_puerta`), y va en una columna, porque se paga con el oro de su
-   carro (`heroe.sin_columna`). No hace falta estar dentro de ninguna plaza.
+3. **En persona**: el firmante está en ese campamento, dentro o con su columna a `radioPuerta` (`campamento.fuera_de_la_puerta`), y tiene allí con qué pagar (§5.1): el almacén
+   personal solo en el campamento donde reside (`almacen_personal.fuera_de_tu_residencia`) y el carro, el que lleva allí (`heroe.sin_columna` si no trae ninguno). No hace falta estar
+   dentro de ninguna plaza.
 4. No hay espera de recontrato de esa Facción con él (`mercenario.recontrato_en_espera`, `esperaRecontratoHoras` tras un despido).
 5. El plazo es uno de la tabla en el temporal y ninguno en el permanente (`mercenario.plazo_invalido`); el permanente lleva una plaza de residencia de la Facción y el temporal ninguna
    (`mercenario.objetivo_invalido`).
 6. El objetivo existe y vale para el trabajo (`mercenario.objetivo_invalido`), y algún cargo del firmante alcanza (`mercenario.sin_alcance`).
-7. El carro lleva la tarifa (`mercenarios.sin_oro`).
+7. Lo que paga (el carro o el almacén personal) tiene la tarifa (`mercenarios.sin_oro`).
 
 ## 4. Los trabajos
 
@@ -101,7 +102,13 @@ Valor del mercenario = `oroPorNivelHeroe` × su nivel + lo que costaría hoy rec
 `Campamentos_Mercenarios.md` §5.2, sin recargo de reputación ni descuento). **Tarifa** = ⌈valor × `tarifaPct` del plazo (o `permanentePct`) × `tarifaPct` del rango⌉, en oro
 entero. La calcula el motor; el bot no fija precio. El tablón la muestra para cada plazo y para el permanente con el valor de ese momento.
 
-El oro sale del carro del firmante y entra en el **almacén personal del mercenario** hasta llenarlo (`capacidadAlmacenPersonal`); lo que no cabe desaparece. Nunca bloquea una firma
+**De dónde sale el oro** (orden con `pagar_con` = `almacenPersonal` | `carro`, opcional; desde el 2026-11-03 también desde dentro del campamento donde reside, como en su mercado):
+
+- Sin `pagar_con`: el carro de la columna que lleva si va en una (a la puerta, o dentro de un campamento de visita) y, si no (dentro del campamento donde reside), su almacén personal.
+- `almacenPersonal`: solo en el campamento donde reside, dentro o con su columna a la puerta (`almacen_personal.fuera_de_tu_residencia` en otro).
+- `carro`: el que lleva allí: el de su columna a la puerta o dentro; en el campamento donde reside sin columna, el que trajo al entrar (y si no trajo oro, `mercenarios.sin_oro`).
+
+El oro entra en el **almacén personal del mercenario** hasta llenarlo (`capacidadAlmacenPersonal`); lo que no cabe desaparece. Nunca bloquea una firma
 y nunca se devuelve. El temporal lo gasta como residente de su campamento (reclutar y reponer, víveres, compras); el permanente, de visita con el carro de su columna o cuando vuelve a
 un campamento.
 
@@ -138,8 +145,9 @@ distancia y sin cooldown. Si guardaba la plaza vieja, su `guardar` pasa a la nue
 **Despedir** (`despedir_mercenario`): acaba el contrato (§7). Lo hace quien podría firmarlo hoy, a distancia.
 
 **Prorrogar** (`prorrogar_contrato`). Alarga un **temporal** (`mercenario.tipo_de_contrato`) vigente de la Facción y sin fin aplazado (`mercenario.sin_contrato`) otro plazo de la tabla, sin cortes. Lo hace quien podría
-firmarlo hoy, **en persona**: en el campamento base del mercenario o con su columna a `radioPuerta` de la de él (`campamento.fuera_de_la_puerta`), pagando con su carro la tarifa de
-ese plazo con el rango de hoy. El renombre de ese plazo se suma al del contrato. Hecho `mercenarios.prorrogado` a la Facción y al mercenario.
+firmarlo hoy, **en persona**: en el campamento base del mercenario o con su columna a `radioPuerta` de la de él (`campamento.fuera_de_la_puerta`), pagando la tarifa de ese plazo
+con el rango de hoy. En el campamento base paga como al contratar (§5.1, `pagar_con`); junto a la columna del mercenario, con el carro de la suya (`heroe.sin_columna` si no va en
+una; `almacen_personal.fuera_de_tu_residencia` si pide el almacén personal). El renombre de ese plazo se suma al del contrato. Hecho `mercenarios.prorrogado` a la Facción y al mercenario.
 
 ### 6.3 El ciclo de una orden
 
@@ -370,8 +378,8 @@ Los plazos van en la cola (`Carga::Contrato`): el vencimiento del contrato (`Ven
 |---|---|---|
 | 171 `ofrecerse_como_mercenario` | 198 `OfrecerseComoMercenario` | el bot |
 | 172 `retirar_oferta` | 199 `RetirarOferta` | el bot |
-| 173 `contratar_mercenario` | 200 `ContratarMercenario` (mercenario, trabajo, objetivo, plazo, residencia) | el cargo que firma |
-| 174 `prorrogar_contrato` | 201 `ProrrogarContrato` (mercenario, plazo) | quien podría firmarlo |
+| 173 `contratar_mercenario` | 200 `ContratarMercenario` (mercenario, trabajo, objetivo, plazo, residencia); 210 si lleva `pagar_con` | el cargo que firma |
+| 174 `prorrogar_contrato` | 201 `ProrrogarContrato` (mercenario, plazo); 211 si lleva `pagar_con` | quien podría firmarlo |
 | 175 `ordenar_mercenario` | 202 `OrdenarMercenario` (mercenarios, tipo, objetivo) | el cargo que alcanza |
 | 176 `mudar_mercenario` | 203 `MudarMercenario` (mercenario, plaza) | Rey o Embajador |
 | 177 `despedir_mercenario` | 204 `DespedirMercenario` (mercenario) | quien podría firmarlo |

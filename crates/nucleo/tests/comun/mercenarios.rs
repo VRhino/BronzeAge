@@ -134,13 +134,13 @@ pub fn con_cargo(n: &mut Nucleo, cuenta: &str, quien: u64, plaza: u64, cargo: Ca
 /// La orden de contratar de `heroe` (que la da su cuenta): devuelve la respuesta tal cual, para comprobar el código o la aceptación.
 pub fn contratar(n: &mut Nucleo, heroe: u64, mercenario: u64, trabajo: Trabajo, objetivo: Objetivo, plazo: Option<u8>, residencia: Option<u64>) -> Respuesta {
     let cuenta = n.heroe(heroe).expect("el firmante existe").cuenta.clone();
-    dar(n, &cuenta, Comando::ContratarMercenario { heroe, mercenario, trabajo, objetivo, plazo, residencia })
+    dar(n, &cuenta, Comando::ContratarMercenario { heroe, mercenario, trabajo, objetivo, plazo, residencia, pagar_con: None })
 }
 
 /// Como [`contratar`], pero exige que se rechace sin dejar rastro y devuelve el código.
 pub fn contratar_rechazado(n: &mut Nucleo, heroe: u64, mercenario: u64, trabajo: Trabajo, objetivo: Objetivo, plazo: Option<u8>, residencia: Option<u64>) -> &'static str {
     let cuenta = n.heroe(heroe).expect("el firmante existe").cuenta.clone();
-    rechazo(n, &cuenta, Comando::ContratarMercenario { heroe, mercenario, trabajo, objetivo, plazo, residencia })
+    rechazo(n, &cuenta, Comando::ContratarMercenario { heroe, mercenario, trabajo, objetivo, plazo, residencia, pagar_con: None })
 }
 
 /// El contrato vigente del mercenario, si lo tiene.

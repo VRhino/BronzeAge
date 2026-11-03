@@ -49,8 +49,10 @@ impl Nucleo {
         match &p.comando {
             Comando::OfrecerseComoMercenario { heroe } => self.ofrecerse_como_mercenario(t, p, *heroe),
             Comando::RetirarOferta { heroe } => self.retirar_oferta(t, p, *heroe),
-            Comando::ContratarMercenario { heroe, mercenario, trabajo, objetivo, plazo, residencia } => self.contratar_mercenario(t, p, *heroe, *mercenario, *trabajo, *objetivo, *plazo, *residencia),
-            Comando::ProrrogarContrato { heroe, mercenario, plazo } => self.prorrogar_contrato(t, p, *heroe, *mercenario, *plazo),
+            Comando::ContratarMercenario { heroe, mercenario, trabajo, objetivo, plazo, residencia, pagar_con } => {
+                self.contratar_mercenario(t, p, *heroe, *mercenario, *trabajo, *objetivo, *plazo, *residencia, *pagar_con)
+            }
+            Comando::ProrrogarContrato { heroe, mercenario, plazo, pagar_con } => self.prorrogar_contrato(t, p, *heroe, *mercenario, *plazo, *pagar_con),
             Comando::OrdenarMercenario { heroe, mercenarios, tipo, objetivo } => self.ordenar_mercenario(t, p, *heroe, mercenarios, *tipo, *objetivo),
             Comando::MudarMercenario { heroe, mercenario, plaza } => self.mudar_mercenario(t, p, *heroe, *mercenario, *plaza),
             Comando::DespedirMercenario { heroe, mercenario } => self.despedir_mercenario(t, p, *heroe, *mercenario),

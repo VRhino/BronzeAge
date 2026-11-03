@@ -144,6 +144,15 @@ impl Ctx<'_> {
     fn heroe(&self, s: &str) -> R<u64> {
         self.id(ids::parse_heroe, rechazos::HEROE_DESCONOCIDO, s)
     }
+    /// `pagar_con` de una orden que lo admite sin él (`almacenPersonal` | `carro`); otro valor, `orden.forma_invalida`.
+    fn pagar_con(&self, s: Option<&str>) -> R<Option<PagarCon>> {
+        match s {
+            None => Ok(None),
+            Some("almacenPersonal") => Ok(Some(PagarCon::AlmacenPersonal)),
+            Some("carro") => Ok(Some(PagarCon::Carro)),
+            Some(otro) => self.forma(format!("forma de pago desconocida: {otro}")),
+        }
+    }
     fn ejercito(&self, s: &str) -> R<u64> {
         self.id(ids::parse_ejercito, rechazos::EJERCITO_DESCONOCIDO, s)
     }
@@ -421,12 +430,7 @@ impl Ctx<'_> {
             Cuerpo::ComprarEnCampamento(o) => {
                 let heroe = self.mi_heroe()?;
                 let campamento = self.campamento_o_el_del(heroe, o.campamento_id.as_deref())?;
-                let pagar_con = match o.pagar_con.as_deref() {
-                    None => None,
-                    Some("almacenPersonal") => Some(PagarCon::AlmacenPersonal),
-                    Some("carro") => Some(PagarCon::Carro),
-                    Some(otro) => return self.forma(format!("forma de pago desconocida: {otro}")),
-                };
+                let pagar_con = self.pagar_con(o.pagar_con.as_deref())?;
                 Comando::ComprarEnCampamento { heroe, campamento, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad, pagar_con }
             }
             Cuerpo::RepostarEnCampamento(o) => {
@@ -821,8 +825,14 @@ impl Ctx<'_> {
                 objetivo: self.objetivo_mercenario(o.objetivo.as_ref())?,
                 plazo: o.plazo_dias.map(|n| self.dias(n)).transpose()?,
                 residencia: o.residencia_asentamiento_id.as_deref().map(|s| self.plaza(s)).transpose()?,
+                pagar_con: self.pagar_con(o.pagar_con.as_deref())?,
             },
-            Cuerpo::ProrrogarContrato(o) => Comando::ProrrogarContrato { heroe: self.mi_heroe()?, mercenario: self.heroe(&o.mercenario_id)?, plazo: self.dias(o.plazo_dias)? },
+            Cuerpo::ProrrogarContrato(o) => Comando::ProrrogarContrato {
+                heroe: self.mi_heroe()?,
+                mercenario: self.heroe(&o.mercenario_id)?,
+                plazo: self.dias(o.plazo_dias)?,
+                pagar_con: self.pagar_con(o.pagar_con.as_deref())?,
+            },
             Cuerpo::OrdenarMercenario(o) => Comando::OrdenarMercenario {
                 heroe: self.mi_heroe()?,
                 mercenarios: o.mercenario_ids.iter().map(|s| self.heroe(s)).collect::<R<_>>()?,

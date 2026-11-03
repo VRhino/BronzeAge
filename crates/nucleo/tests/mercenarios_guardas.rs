@@ -311,7 +311,7 @@ fn unirse_a_un_ejercito_o_a_una_convocatoria_pide_la_orden_unirse_de_ese_y_de_ni
 
     // Un permanente que guarda su plaza no se une a un ejército desde ella.
     let perm = mc::bot_ofrecido(&mut e.n, "bot-2", 0);
-    mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: perm, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza) });
+    mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: perm, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza), pagar_con: None });
     let unirse = Comando::UnirseAEjercito { asentamiento: plaza, heroe: perm, ejercito: ej2, escuadras: vec![], carga: vec![] };
     assert_eq!(mc::rechazo(&mut e.n, "bot-2", unirse), sin_orden);
 
@@ -437,7 +437,7 @@ fn guarnecer_una_avanzada_pide_guardarla_y_quien_la_guarda_no_necesita_residir_e
     // Un mercenario de la plaza que la guarda, uno que reside en ella pero guarda otra cosa y un ciudadano suyo que no reside: todos a la puerta de la avanzada con una milicia.
     let guarda = e.contratado("bot-a", Trabajo::Defender, Objetivo::Avanzada(avanzada));
     let residente = mc::bot_ofrecido(&mut e.n, "bot-b", 0);
-    mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: residente, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza) });
+    mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: residente, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza), pagar_con: None });
     let visitante = e.ciudadano("carla");
     let mut milicias = vec![];
     for (cuenta, heroe) in [("bot-a", guarda), ("bot-b", residente), ("carla", visitante)] {
@@ -506,7 +506,7 @@ fn un_marcado_no_recluta_en_una_plaza_con_el_almacen_cerrado_a_ciudadanos_y_un_c
     e.hasta(e.n.ahora() + 48 * 60 * MS_POR_MINUTO);
     // Un permanente de la plaza y un ciudadano suyo, los dos residentes y dentro.
     let bot = mc::bot_ofrecido(&mut e.n, "bot-1", 0);
-    mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: bot, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza) });
+    mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: bot, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza), pagar_con: None });
     let carla = e.ciudadano("carla");
     mc::ok(&mut e.n, "admin", Comando::FijarResidencia { heroe: carla, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
     for heroe in [bot, carla] {
@@ -530,7 +530,7 @@ fn la_politica_no_da_a_un_marcado_trono_embajada_ni_cargo_ni_le_deja_irse_y_la_s
     let fundador = e.n.faccion(1).unwrap().ciudadanos[1];
     mc::ok(&mut e.n, "admin", Comando::FijarFaccionDeHeroe { heroe: fundador, faccion: None });
     let bot = mc::bot_ofrecido(&mut e.n, "bot-1", 0);
-    mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: bot, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza) });
+    mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: bot, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza), pagar_con: None });
     let carla = e.ciudadano("carla");
     assert_eq!(e.n.faccion(1).unwrap().ciudadanos, vec![rey, bot, carla]);
 

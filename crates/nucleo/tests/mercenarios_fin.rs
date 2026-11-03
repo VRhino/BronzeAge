@@ -214,7 +214,7 @@ fn una_prorroga_deja_vieja_la_cita_del_plazo_anterior() {
     let (bot, rey, plaza) = (e.bot("bot-1"), e.rey, e.plaza);
     assert!(e.contratar(rey, bot, Trabajo::Defender, Objetivo::Plaza(plaza), Some(1)).aceptada());
     let primero = mc::contrato(&e.n, bot).unwrap().vence.unwrap();
-    mc::ok(&mut e.n, "rey", Comando::ProrrogarContrato { heroe: rey, mercenario: bot, plazo: 1 });
+    mc::ok(&mut e.n, "rey", Comando::ProrrogarContrato { heroe: rey, mercenario: bot, plazo: 1, pagar_con: None });
     let segundo = primero + duracion(1);
     assert_eq!(mc::contrato(&e.n, bot).unwrap().vence, Some(segundo));
 
@@ -375,7 +375,7 @@ fn si_cae_la_plaza_que_firmo_el_contrato_acaba_y_el_permanente_vuelve_a_su_campa
     let (de_plaza, permanente, del_rey, gob) = (e.bot("bot-1"), e.bot("bot-2"), e.bot("bot-3"), e.gobernador("gob"));
     assert!(e.contratar(gob, de_plaza, Trabajo::Defender, Objetivo::Plaza(plaza), Some(7)).aceptada());
     assert!(e.contratar(rey, del_rey, Trabajo::Defender, Objetivo::Plaza(plaza), Some(7)).aceptada());
-    mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: permanente, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza) });
+    mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: permanente, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza), pagar_con: None });
     assert_eq!(e.n.heroe(permanente).unwrap().heroe.residencia, Some(Residencia::Asentamiento(plaza as u32)));
     assert_ne!(campamento_mas_cercano(m, e.n.estado().asentamientos[&plaza].posicion), 0, "la plaza queda más cerca de otro campamento que el base del permanente");
 
@@ -447,7 +447,7 @@ fn el_permanente_despedido_vuelve_a_su_campamento_base_sin_cooldown() {
     let mut e = E::nuevo(m);
     let (bot, rey, plaza) = (e.bot("bot-1"), e.rey, e.plaza);
     assert_ne!(campamento_mas_cercano(m, e.n.estado().asentamientos[&plaza].posicion), 0, "la plaza queda más cerca de otro campamento que el base del permanente");
-    mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: bot, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza) });
+    mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: bot, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza), pagar_con: None });
     assert_eq!(e.n.heroe(bot).unwrap().heroe.residencia, Some(Residencia::Asentamiento(plaza as u32)));
 
     assert!(e.despedir(rey, bot).aceptada());
@@ -464,7 +464,7 @@ fn el_permanente_que_deja_de_residir_en_una_plaza_de_su_faccion_vuelve_a_su_camp
     let m = con_mundo!();
     let mut e = E::nuevo(m);
     let (bot, rey, plaza) = (e.bot("bot-1"), e.rey, e.plaza);
-    mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: bot, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza) });
+    mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: bot, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza), pagar_con: None });
 
     // La administración lo muda a otro campamento: sin plaza de su Facción donde residir, vuelve al suyo.
     mc::ok(&mut e.n, "admin", Comando::FijarResidencia { heroe: bot, residencia: Some(Residencia::Campamento(3)) });
@@ -503,7 +503,7 @@ fn la_plaza_veta_a_un_permanente_residente_y_este_vuelve_a_su_campamento_con_el_
     let gobernador = e.n.faccion(1).unwrap().ciudadanos.iter().copied().find(|&h| h != rey).expect("el fundador");
     mc::ok(&mut e.n, "fundador", Comando::Guarnecer { asentamiento: plaza, heroe: gobernador });
     let (bot, ciudadano) = (e.bot("bot-1"), e.ciudadano("ana"));
-    mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: bot, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza) });
+    mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: bot, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza), pagar_con: None });
     mc::ok(&mut e.n, "admin", Comando::ColocarHeroe { heroe: bot, ubicacion: Ubicacion::Asentamiento(plaza as u32) });
     mc::ok(&mut e.n, "admin", Comando::FijarResidencia { heroe: ciudadano, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
     let vetar = |vetado| Comando::VetarJugador { heroe: gobernador, asentamiento: plaza, vetado, vetar: true };
@@ -655,7 +655,7 @@ fn una_anexion_acaba_los_contratos_de_la_faccion_absorbida_y_no_los_de_la_que_ab
     let (rey, plaza, ajena, rey3) = (e.rey, e.plaza, e.ajena, e.rey_de_la_3());
     let (temporal, permanente, de_la_3) = (e.bot("bot-1"), e.bot("bot-2"), e.bot("bot-3"));
     assert!(e.contratar(rey, temporal, Trabajo::Defender, Objetivo::Plaza(plaza), Some(7)).aceptada());
-    mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: permanente, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza) });
+    mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: permanente, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza), pagar_con: None });
     assert!(e.contratar(rey3, de_la_3, Trabajo::Atacar, Objetivo::Plaza(ajena), Some(7)).aceptada());
 
     // La Facción 3 absorbe a la 1: los marcados de la 1 no se trasladan (la anexión solo mueve ciudadanos sin marca).
@@ -684,7 +684,7 @@ fn una_fusion_acaba_los_contratos_de_las_dos_facciones() {
     let (rey, plaza, ajena, rey3) = (e.rey, e.plaza, e.ajena, e.rey_de_la_3());
     let (de_la_1, permanente, de_la_3) = (e.bot("bot-1"), e.bot("bot-2"), e.bot("bot-3"));
     assert!(e.contratar(rey, de_la_1, Trabajo::Defender, Objetivo::Plaza(plaza), Some(7)).aceptada());
-    mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: permanente, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza) });
+    mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: permanente, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza), pagar_con: None });
     assert!(e.contratar(rey3, de_la_3, Trabajo::Atacar, Objetivo::Plaza(ajena), Some(7)).aceptada());
 
     let propuesta = mc::ok(&mut e.n, "rey", Comando::ProponerFusion { heroe: rey, a: 1, b: 3, nombre: "Argos".into(), rey }).creadas[0];
@@ -706,7 +706,7 @@ fn quien_esta_dentro_de_una_plaza_que_ya_no_le_admite_al_acabar_su_contrato_sale
     let m = con_mundo!();
     let mut e = E::nuevo(m);
     let (bot, rey, plaza) = (e.bot("bot-1"), e.rey, e.plaza);
-    mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: bot, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza) });
+    mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: bot, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza), pagar_con: None });
     // Entra en su plaza, donde reside: mientras sea de la Facción, está en su casa.
     mc::ok(&mut e.n, "admin", Comando::ColocarHeroe { heroe: bot, ubicacion: Ubicacion::Asentamiento(plaza as u32) });
     assert_eq!(e.n.heroe(bot).unwrap().heroe.presencia.ubicacion, Ubicacion::Asentamiento(plaza as u32));

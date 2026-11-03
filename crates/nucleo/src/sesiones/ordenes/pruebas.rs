@@ -399,13 +399,18 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         (orden!(RetirarOferta, OrdenRetirarOferta), Comando::RetirarOferta { heroe: 7 }),
         (
             orden!(ContratarMercenario, OrdenContratarMercenario, mercenario_id: s("heroe-9"), trabajo: s("defender"), objetivo: Some(pb::ObjetivoMercenario { tipo: Some(Mercenario::PuebloId(s("pueblo-4"))) }), plazo_dias: Some(3)),
-            Comando::ContratarMercenario { heroe: 7, mercenario: 9, trabajo: Trabajo::Defender, objetivo: ObjetivoMercenario::Pueblo(4), plazo: Some(3), residencia: None },
+            Comando::ContratarMercenario { heroe: 7, mercenario: 9, trabajo: Trabajo::Defender, objetivo: ObjetivoMercenario::Pueblo(4), plazo: Some(3), residencia: None, pagar_con: None },
         ),
         (
             orden!(ContratarMercenario, OrdenContratarMercenario, mercenario_id: s("heroe-9"), trabajo: s("permanente"), objetivo: Some(pb::ObjetivoMercenario { tipo: Some(Mercenario::FaccionId(s("f-2"))) }), residencia_asentamiento_id: Some(s("as-3"))),
-            Comando::ContratarMercenario { heroe: 7, mercenario: 9, trabajo: Trabajo::Permanente, objetivo: ObjetivoMercenario::Faccion(2), plazo: None, residencia: Some(3) },
+            Comando::ContratarMercenario { heroe: 7, mercenario: 9, trabajo: Trabajo::Permanente, objetivo: ObjetivoMercenario::Faccion(2), plazo: None, residencia: Some(3), pagar_con: None },
         ),
-        (orden!(ProrrogarContrato, OrdenProrrogarContrato, mercenario_id: s("heroe-9"), plazo_dias: 7), Comando::ProrrogarContrato { heroe: 7, mercenario: 9, plazo: 7 }),
+        (orden!(ProrrogarContrato, OrdenProrrogarContrato, mercenario_id: s("heroe-9"), plazo_dias: 7), Comando::ProrrogarContrato { heroe: 7, mercenario: 9, plazo: 7, pagar_con: None }),
+        (
+            orden!(ContratarMercenario, OrdenContratarMercenario, mercenario_id: s("heroe-9"), trabajo: s("defender"), objetivo: Some(pb::ObjetivoMercenario { tipo: Some(Mercenario::PuebloId(s("pueblo-4"))) }), plazo_dias: Some(1), pagar_con: Some(s("almacenPersonal"))),
+            Comando::ContratarMercenario { heroe: 7, mercenario: 9, trabajo: Trabajo::Defender, objetivo: ObjetivoMercenario::Pueblo(4), plazo: Some(1), residencia: None, pagar_con: Some(PagarCon::AlmacenPersonal) },
+        ),
+        (orden!(ProrrogarContrato, OrdenProrrogarContrato, mercenario_id: s("heroe-9"), plazo_dias: 3, pagar_con: Some(s("carro"))), Comando::ProrrogarContrato { heroe: 7, mercenario: 9, plazo: 3, pagar_con: Some(PagarCon::Carro) }),
         (
             orden!(OrdenarMercenario, OrdenOrdenarMercenario, mercenario_ids: v(&["heroe-9", "heroe-10"]), tipo: s("ir_a"), objetivo: Some(pb::ObjetivoMercenario { tipo: Some(Mercenario::Punto(pb::Punto { x: 1_500, y: -2_000 })) })),
             Comando::OrdenarMercenario { heroe: 7, mercenarios: vec![9, 10], tipo: TipoOrden::IrA, objetivo: ObjetivoMercenario::Punto(Punto::new(1_500, -2_000)) },
@@ -674,6 +679,8 @@ fn un_id_sin_la_forma_de_su_entidad_o_un_valor_fuera_de_su_catalogo_se_rechazan_
         (orden!(ContratarMercenario, OrdenContratarMercenario, mercenario_id: s("heroe-9"), trabajo: s("atacar")), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(ContratarMercenario, OrdenContratarMercenario, mercenario_id: s("heroe-9"), trabajo: s("atacar"), objetivo: Some(pb::ObjetivoMercenario { tipo: Some(Mercenario::CampamentoId(s("camp-1"))) })), rechazos::CAMPAMENTO_DE_BANDIDOS_DESCONOCIDO),
         (orden!(ProrrogarContrato, OrdenProrrogarContrato, mercenario_id: s("heroe-9"), plazo_dias: 300), rechazos::ORDEN_FORMA_INVALIDA),
+        (orden!(ProrrogarContrato, OrdenProrrogarContrato, mercenario_id: s("heroe-9"), plazo_dias: 3, pagar_con: Some(s("trueque"))), rechazos::ORDEN_FORMA_INVALIDA),
+        (orden!(ContratarMercenario, OrdenContratarMercenario, mercenario_id: s("heroe-9"), trabajo: s("defender"), objetivo: Some(pb::ObjetivoMercenario { tipo: Some(Mercenario::PuebloId(s("pueblo-4"))) }), pagar_con: Some(s("tesoro"))), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(OrdenarMercenario, OrdenOrdenarMercenario, mercenario_ids: v(&["heroe-9"]), tipo: s("huir"), objetivo: Some(pb::ObjetivoMercenario { tipo: Some(Mercenario::AsentamientoId(s("as-3"))) })), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(OrdenarMercenario, OrdenOrdenarMercenario, mercenario_ids: v(&["heroe-9", "esc-2"]), tipo: s("guardar"), objetivo: Some(pb::ObjetivoMercenario { tipo: Some(Mercenario::AsentamientoId(s("as-3"))) })), rechazos::HEROE_DESCONOCIDO),
         (orden!(ReclamarPremioDeRango, OrdenReclamarPremioDeRango, tropa_id: s("dragones")), rechazos::ORDEN_FORMA_INVALIDA),

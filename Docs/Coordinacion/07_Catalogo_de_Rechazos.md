@@ -432,7 +432,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `heroe.no_esta_en_la_avanzada` | `HEROE_NO_ESTA_EN_LA_AVANZADA` | — |
 | `carro.vaciar_solo_en_tu_residencia` | `VACIAR_SOLO_EN_TU_RESIDENCIA` | — |
 | `almacen_personal.lleno` | `ALMACEN_PERSONAL_LLENO` | — |
-| `almacen_personal.fuera_de_tu_residencia` | `ALMACEN_PERSONAL_FUERA_DE_TU_RESIDENCIA` | Guardar o sacar del almacén personal sin la columna a la puerta de la propia residencia, donde vive el almacén (5G-a). |
+| `almacen_personal.fuera_de_tu_residencia` | `ALMACEN_PERSONAL_FUERA_DE_TU_RESIDENCIA` | Guardar o sacar del almacén personal sin la columna a la puerta de la propia residencia, donde vive el almacén (5G-a); pagar con él (`pagar_con` = `almacenPersonal`) una compra del mercado de un campamento, una firma o una prórroga de un mercenario fuera del campamento donde se reside (2026-11-02 y 2026-11-03). |
 | `carro.no_lleva` | `CARRO_NO_LLEVA` | Guardar en el almacén personal un recurso que el carro de la columna no lleva (5G-a). |
 | `almacen.solo_ciudadanos` | `ALMACEN_SOLO_CIUDADANOS` | Sacar del almacén de una plaza al carro es de los ciudadanos de su Facción (2026-10-29). |
 | `almacen.cerrado` | `ALMACEN_CERRADO` | El Gobernador cerró a los ciudadanos el sacar del almacén al carro (2026-10-29). |

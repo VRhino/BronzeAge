@@ -541,6 +541,7 @@ async fn al_firmar_el_mercenario_recibe_su_contrato_por_su_heroe_y_la_faccion_el
         objetivo: plaza(plaza_id),
         plazo_dias: Some(3),
         residencia_asentamiento_id: None,
+        pagar_con: None,
     });
     let (previos, r) = dar_todo(&mut rey, "firma", firma).await;
     assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32, "{r:?}");
@@ -588,6 +589,7 @@ async fn la_plaza_que_defiende_le_llega_en_cuanto_firma_y_sale_de_su_heroe_al_ac
         objetivo: plaza(plaza_id),
         plazo_dias: Some(3),
         residencia_asentamiento_id: None,
+        pagar_con: None,
     });
     assert_eq!(dar_todo(&mut rey, "firma", firma).await.1.resultado, pb::Resultado::OrdenAceptada as i32);
     assert!(actualizado(&pendiente(&mut marcado).await, &suyo).iter().any(es_la_plaza), "la plaza que defiende, en cuanto firma");

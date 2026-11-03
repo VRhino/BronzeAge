@@ -27,7 +27,8 @@ Facción que le paga. La marca le pone límites:
 
 ## 7.3 Ofrecerse y contratar
 
-El bot se ofrece **dentro de su campamento**, sin Facción. Se le contrata **en persona**: quien firma va con su columna al campamento y paga con el oro de su carro. La **tarifa** la fija
+El bot se ofrece **dentro de su campamento**, sin Facción. Se le contrata **en persona**, en su campamento: quien firma llega con su columna y paga con el oro de su carro o, si reside en ese
+campamento, también desde dentro, con su almacén personal o con el carro que tiene allí (como en el mercado del campamento). La **tarifa** la fija
 el juego por el nivel del héroe y lo que vale su tropa, multiplicada por el plazo y por su rango; el permanente es caro a propósito. El oro va al almacén personal del mercenario hasta
 llenarlo (lo que no cabe se pierde) y nunca se devuelve.
 
