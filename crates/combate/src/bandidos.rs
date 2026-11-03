@@ -55,6 +55,16 @@ pub fn toca_crear_en_el_anillo(r: &Reglas, existentes: i64, residentes_sin_plaza
     bandidos_en.is_none_or(|t| ahora >= t) && existentes < campamentos_que_tocan(r, residentes_sin_plaza)
 }
 
+/// Cuántos crear ahora en el anillo (2026-11-03, decisión del autor: «siempre haya como mínimo 5, hasta un máximo de 10»): por debajo del mínimo, **de golpe**
+/// los que falten hasta él (así nace la partida con el mínimo en cada anillo); por encima, uno, mientras falten según la demanda.
+pub fn cuantos_crear_en_el_anillo(r: &Reglas, existentes: i64, residentes_sin_plaza: i64) -> i64 {
+    if existentes < r.bandidos.anillo_minimo {
+        r.bandidos.anillo_minimo - existentes
+    } else {
+        i64::from(existentes < campamentos_que_tocan(r, residentes_sin_plaza))
+    }
+}
+
 /// Tras crear uno en el anillo, cuándo puede aparecer el siguiente.
 pub fn proxima_aparicion_en_el_anillo(r: &Reglas, ahora: Instante) -> Instante {
     ahora + r.bandidos.reaparicion_anillo
@@ -203,15 +213,25 @@ mod pruebas {
     }
 
     #[test]
-    fn el_anillo_pide_uno_por_cada_dos_residentes_sin_plaza_entre_1_y_6() {
+    fn el_anillo_pide_cuatro_por_residente_sin_plaza_entre_5_y_10() {
         let r = r();
-        assert_eq!([0, 1, 2, 3, 4, 5, 6, 7, 40].map(|n| campamentos_que_tocan(r, n)), [8, 8, 8, 12, 16, 20, 24, 24, 24]);
+        assert_eq!([0, 1, 2, 3, 4, 40].map(|n| campamentos_que_tocan(r, n)), [5, 5, 8, 10, 10, 10]);
         assert!(toca_crear_en_el_anillo(r, 0, 0, None, 0));
-        assert!(!toca_crear_en_el_anillo(r, 8, 2, None, 0), "ya tiene los que le tocan");
-        assert!(toca_crear_en_el_anillo(r, 8, 3, None, 0));
+        assert!(!toca_crear_en_el_anillo(r, 5, 1, None, 0), "ya tiene los que le tocan");
+        assert!(toca_crear_en_el_anillo(r, 5, 2, None, 0));
         assert!(!toca_crear_en_el_anillo(r, 0, 3, Some(50), 49), "espera su plazo");
         assert!(toca_crear_en_el_anillo(r, 0, 3, Some(50), 50));
         assert_eq!(proxima_aparicion_en_el_anillo(r, 0), 10 * MS_POR_MINUTO);
+    }
+
+    #[test]
+    fn por_debajo_del_minimo_llegan_de_golpe_y_por_encima_de_uno_en_uno() {
+        let r = r();
+        assert_eq!(cuantos_crear_en_el_anillo(r, 0, 0), 5, "la partida nace con el mínimo");
+        assert_eq!(cuantos_crear_en_el_anillo(r, 3, 0), 2, "cayeron dos: vuelven a la vez");
+        assert_eq!(cuantos_crear_en_el_anillo(r, 5, 0), 0, "sin demanda, el mínimo basta");
+        assert_eq!(cuantos_crear_en_el_anillo(r, 5, 3), 1, "con demanda, uno cada vez hasta 10");
+        assert_eq!(cuantos_crear_en_el_anillo(r, 10, 40), 0, "nunca más de 10");
     }
 
     #[test]

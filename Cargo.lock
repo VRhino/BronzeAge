@@ -162,7 +162,7 @@ dependencies = [
 
 [[package]]
 name = "combate"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "asentamiento",
  "base",
@@ -565,7 +565,7 @@ dependencies = [
 
 [[package]]
 name = "nucleo"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "asentamiento",
  "base",

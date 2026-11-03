@@ -9,7 +9,8 @@
 //!   bosque no reclamado más cercano a ella, sin campamento encima y con el centro a ≥ 10 u del borde de toda zona (`MARGEN_DE_ZONA`), con su tirada de nivel. Sin
 //!   bosque que valga no gasta tirada y espera: cuando un bosque queda libre o válido (se va un campamento de bandidos que lo ocupaba o una plaza cae en ruinas y su
 //!   zona desaparece), las plazas que esperan los suyos los vuelven a buscar en ese instante, por orden de id (el TypeScript volvía a mirar cada tick).
-//! - **En el anillo de cada campamento de mercenarios** (`SucesoCombate::BandidosDelAnillo`): `clamp(residentes sin plaza × 4, 8, 24)` campamentos, uno cada
+//! - **En el anillo de cada campamento de mercenarios** (`SucesoCombate::BandidosDelAnillo`): `clamp(residentes sin plaza × 4, 5, 10)` campamentos. Por debajo
+//!   del mínimo (5) llegan **de golpe** los que falten hasta él (la partida nace con 5 en cada anillo; 2026-11-03, decisión del autor); por encima, uno cada
 //!   `reaparicionMinutos` mientras falten. La cita arranca con el mundo, se renueva al crear uno o al destruirse uno del anillo, se **rehace al cambiar la demanda**
 //!   (llega o se va un residente del campamento, o una Facción se queda sin plazas; [`Nucleo::reprogramar_anillo`]) y se detiene cuando no falta ninguno (el
 //!   TypeScript miraba la demanda cada tick). Sin sitio válido tras `INTENTOS_ANILLO` intentos (dos tiradas cada uno) reintenta a los `reaparicionMinutos`.
@@ -38,7 +39,7 @@ use crate::estado_comercio::es_entidad_caravana;
 use crate::estado_fundacion::{es_entidad_fundacion, Origen as OrigenFundacion, Situacion as SituacionFundacion};
 use ::encuentros::{plan_quieto, Entradas};
 use ::mercenarios::Objetivo;
-use combate::bandidos::{campamentos_que_tocan, faltan_junto_a_plaza, nivel_al_azar, proxima_aparicion_en_el_anillo, punto_del_anillo, puede_acosar, reaparece_en, resolver_acoso};
+use combate::bandidos::{campamentos_que_tocan, cuantos_crear_en_el_anillo, faltan_junto_a_plaza, nivel_al_azar, proxima_aparicion_en_el_anillo, punto_del_anillo, puede_acosar, reaparece_en, resolver_acoso};
 use combate::caravana::{Defensa, Zona};
 use militar::escuadra::Escuadra;
 use std::collections::BTreeSet;
@@ -188,10 +189,14 @@ impl Nucleo {
         ganado
     }
 
+    /// Los campamentos que tiene ahora el anillo de `c`.
+    fn en_el_anillo(&self, c: u32) -> i64 {
+        self.estado.combate.bandidos.values().filter(|b| b.origen == OrigenBandidos::Anillo(c)).count() as i64
+    }
+
     /// ¿Le faltan campamentos al anillo de `c` con la demanda de ahora?
     fn faltan_en_el_anillo(&self, c: u32) -> bool {
-        let existentes = self.estado.combate.bandidos.values().filter(|b| b.origen == OrigenBandidos::Anillo(c)).count() as i64;
-        existentes < campamentos_que_tocan(&self.estado.reglas.economia.combate, self.residentes_sin_plaza(c))
+        self.en_el_anillo(c) < campamentos_que_tocan(&self.estado.reglas.economia.combate, self.residentes_sin_plaza(c))
     }
 
     /// Los campamentos que tiene ahora la plaza.
@@ -247,27 +252,33 @@ impl Nucleo {
         if self.estado.combate.anillos.get(&c).is_some_and(|&desde| t < desde) {
             return;
         }
-        if !self.faltan_en_el_anillo(c) {
+        let cr = self.estado.reglas.economia.combate.clone();
+        // Por debajo del mínimo llegan de golpe los que falten hasta él; por encima, uno cada `reaparicionMinutos` mientras pida la demanda.
+        let cuantos = cuantos_crear_en_el_anillo(&cr, self.en_el_anillo(c), self.residentes_sin_plaza(c));
+        if cuantos == 0 {
             return;
         }
-        let cr = self.estado.reglas.economia.combate.clone();
         let valido = |s: &Self, p: Punto| s.geografia.as_ref().is_some_and(|g| g.es_tierra_firme(p)) && s.zona_en(p, None) == Zona::Ninguna && !s.en_proteccion_de_campamento(p);
-        // El sorteo del punto presta el generador de la partida: se saca del estado mientras se mira el mapa y se devuelve con lo que gastó.
-        let mut rng = std::mem::replace(&mut self.estado.rng, base::Rng::nuevo(0));
-        let punto = punto_del_anillo(&cr, centro, &mut rng, |p| valido(self, p));
-        self.estado.rng = rng;
-        let Some(punto) = punto else {
+        let mut creados = vec![];
+        for _ in 0..cuantos {
+            // El sorteo del punto presta el generador de la partida: se saca del estado mientras se mira el mapa y se devuelve con lo que gastó.
+            let mut rng = std::mem::replace(&mut self.estado.rng, base::Rng::nuevo(0));
+            let punto = punto_del_anillo(&cr, centro, &mut rng, |p| valido(self, p));
+            self.estado.rng = rng;
             // Sin sitio: las tiradas de los intentos se gastaron igual (el TypeScript también las gastaba) y se reintenta más tarde.
-            self.programar_anillo(c, proxima_aparicion_en_el_anillo(&cr, t));
-            return;
-        };
-        let nivel = nivel_al_azar(&cr, &mut self.estado.rng);
-        let id = self.poner_bandidos(punto, nivel, OrigenBandidos::Anillo(c), None, t);
+            let Some(punto) = punto else { break };
+            let nivel = nivel_al_azar(&cr, &mut self.estado.rng);
+            creados.push(self.poner_bandidos(punto, nivel, OrigenBandidos::Anillo(c), None, t));
+        }
         let siguiente = proxima_aparicion_en_el_anillo(&cr, t);
-        self.estado.combate.anillos.insert(c, siguiente);
-        self.tr.tocar(Clase::Campamento, u64::from(c));
+        if !creados.is_empty() {
+            self.estado.combate.anillos.insert(c, siguiente);
+            self.tr.tocar(Clase::Campamento, u64::from(c));
+        }
         self.programar_anillo(c, siguiente);
-        self.aparecio(id, t, vec![]);
+        for id in creados {
+            self.aparecio(id, t, vec![]);
+        }
     }
 
     fn aparecio(&mut self, id: u64, t: Instante, plazas: Vec<u64>) {
