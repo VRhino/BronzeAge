@@ -693,6 +693,23 @@ fn la_flota_crece_hasta_los_cupos_del_mercado_y_cada_rechazo_tiene_su_codigo() {
     assert_eq!(hechos(&e.n, "comercio.caravana_reserva").len(), 1);
 }
 
+#[test]
+fn el_albergue_de_caravanas_pide_un_mercado_y_suma_caravanas_y_carros_a_los_suyos() {
+    let m = con_mundo!();
+    // Sin Mercado no se levanta (su nivel 1 pide un Mercado activo).
+    let mut sin = escenario(m, 7, false);
+    let a0 = sin.a;
+    assert_eq!(sin.rechazada("admin", Comando::AnadirEdificio { asentamiento: a0, tipo: Tipo::AlbergueCaravanas }), rechazos::OBRA_FALTA_EDIFICIO);
+    // Con Mercado de nivel 1: +3 caravanas y +5 carros en cuanto termina la obra (4 h), y es único.
+    let mut e = escenario(m, 7, true);
+    let a = e.a;
+    e.ok("admin", Comando::AnadirEdificio { asentamiento: a, tipo: Tipo::AlbergueCaravanas });
+    assert_eq!(e.rechazada("admin", Comando::AnadirEdificio { asentamiento: a, tipo: Tipo::AlbergueCaravanas }), rechazos::OBRA_UNICO);
+    assert_eq!(e.n.cupos_de_flota(a).map(|c| (c.caravanas, c.carros)), Some((2, 3)), "en obra todavía no da nada");
+    e.avanzar(5 * HORA);
+    assert_eq!(e.n.cupos_de_flota(a).map(|c| (c.caravanas, c.carros, c.escolta)), Some((2 + 3, 3 + 5, 100)), "Mercado de nivel 1 y Albergue de nivel 1");
+}
+
 // ───────────────────────────── 5. Preparar y cancelar ─────────────────────────────
 
 #[test]

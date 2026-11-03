@@ -96,7 +96,7 @@ Los caminos no se construyen: **los hace el uso**. Diseño y decisiones en `type
 
 **El terreno por el que se viaja** (caravanas, ejércitos y fundación, con el mismo pathfinding):
 - **El agua no se cruza** (1.0b).
-- **Los ríos tampoco, salvo por un vado.** El tramo alto, cerca del nacimiento, es arroyo y se cruza por cualquier sitio; aguas abajo hay un vado cada ~100 u en el mapa de 2.667 (un vado cada 300 son 10 minutos de rodeo). Una ciudad a orillas del río es también paso: el río se cruza por la ciudad. Los vados salen de la geometría del río, no del azar.
+- **Los ríos tampoco, salvo por un vado.** El tramo alto, cerca del nacimiento, es arroyo y se cruza por cualquier sitio; aguas abajo hay un vado cada ~100 u en el mapa de 2.667 (un vado cada 300 son 10 minutos de rodeo). Una ciudad a orillas del río es también paso: el río se cruza por la ciudad. Los vados salen de la geometría del río, no del azar. **Se llega hasta la orilla** (2026-11-03, decisión del autor): lo que no se pisa es solo el cauce, una franja de unas 4 u (8 u donde el río va en diagonal); antes se cerraban unas 12 u alrededor de un río dibujado de 1,5 u.
 - **El bosque no frena** en el mundo regional: el coste de moverse es solo el de la pendiente (1.0b). En el bosque cerrado no se funda. (En el TypeScript el bosque multiplicaba el coste por `1 + 2 × densidad`.)
 
 **Los caminos.**

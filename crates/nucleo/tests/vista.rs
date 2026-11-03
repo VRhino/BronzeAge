@@ -102,7 +102,7 @@ fn escenario(m: &M) -> Esc {
     (b.radio_ataque_caravana, b.anillo_minimo, b.anillo_maximo) = (0, 0, 0);
     let n = Nucleo::nuevo(Arranque { reglas, ajustes: Ajustes::default(), semilla: 7, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) });
     let mut x = Esc { n, plaza: 0, centro: Punto::new(0, 0), radio: 0, ana: 0, gus: 0, nora: 0, dora: 0, peticiones: 0 };
-    x.centro = sitio_rico(&x.n, &m.0, 0, 1);
+    x.centro = sitio_rico(&x.n, &m.0, 1, 1);
     let col = x.n.crear_ejercito(0, "fundador", 1, x.centro, 500, 100_000).unwrap();
     x.ok("admin", Comando::DarCaravanaFundacion { ejercito: col });
     x.plaza = x.ok("fundador", Comando::Fundar { ejercito: col }).creadas[0];

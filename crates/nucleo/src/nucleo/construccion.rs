@@ -86,6 +86,7 @@ fn rechazo_de_obra(e: ErrorObra) -> (&'static str, &'static str) {
         ErrorObra::TopeAlmacenes => (OBRA_TOPE_ALMACENES, "se alcanzó el máximo de Almacenes del nivel"),
         ErrorObra::TopeViviendas => (OBRA_TOPE_VIVIENDAS, "se alcanzó el máximo de Viviendas del nivel"),
         ErrorObra::NivelInsuficiente => (OBRA_NIVEL_INSUFICIENTE, "el nivel de la plaza no alcanza para ese edificio"),
+        ErrorObra::FaltaEdificio => (OBRA_FALTA_EDIFICIO, "falta el edificio que pide (el Albergue de caravanas, un Mercado)"),
         ErrorObra::SoloEnAldea => (OBRA_SOLO_EN_ALDEA, "el Corral solo se levanta en una aldea agrícola"),
         ErrorObra::SoloPorPueblo => (OBRA_SOLO_POR_PUEBLO, "los minerales y la Cantera solo se explotan con un pueblo extractor"),
         ErrorObra::TopeTransformacion => (OBRA_TOPE_TRANSFORMACION, "se alcanzó el máximo de talleres de ese tipo del nivel"),
@@ -342,7 +343,7 @@ impl Nucleo {
             eco.almacen.registrar_flujos();
             let sucesos = eco.avanzar_minuto(t, x);
             let flujos = eco.almacen.tomar_flujos();
-            eco.tendencia = Tendencia { producido: flujos.producido, consumido: flujos.consumido, ..Contadores::de(eco).tendencia(&antes) };
+            eco.tendencia = Tendencia { producido: flujos.producido, consumido: flujos.consumido, produccion: flujos.produccion, ..Contadores::de(eco).tendencia(&antes) };
             (sucesos, x.racion_guarnicion)
         }) else {
             return;

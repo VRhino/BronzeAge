@@ -46,6 +46,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `obra.tope_almacenes` | `OBRA_TOPE_ALMACENES` | — |
 | `obra.tope_viviendas` | `OBRA_TOPE_VIVIENDAS` | — |
 | `obra.nivel_insuficiente` | `OBRA_NIVEL_INSUFICIENTE` | — |
+| `obra.falta_edificio` | `OBRA_FALTA_EDIFICIO` | Falta el edificio que pide para construirse, activo y con su nivel: el Albergue de caravanas pide un Mercado (2026-11-03). |
 | `obra.solo_por_pueblo` | `OBRA_SOLO_POR_PUEBLO` | — |
 | `obra.solo_en_aldea` | `OBRA_SOLO_EN_ALDEA` | El Corral solo existe en las aldeas agrícolas (§14.2). |
 | `obra.tope_transformacion` | `OBRA_TOPE_TRANSFORMACION` | — |

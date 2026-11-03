@@ -8,7 +8,7 @@ import { FACTOR } from './campamentos';
 export const PARAMETROS_VADOS = {
   /** Separación entre vados a lo largo de un río (estratégicas); siempre hay al menos uno por río. */
   separacion: 100,
-  /** Radio del hueco que abre un vado (unidades del generador): el cauce engrosado mide ~3 celdas, el hueco las atraviesa. */
+  /** Radio del hueco que abre un vado (unidades del generador): el cauce mide una celda (dos donde va en diagonal), el hueco lo atraviesa de sobra. */
   radioHueco: 100,
 };
 
@@ -40,9 +40,27 @@ export function colocarVados(rios: readonly RioLinea[], separacion = PARAMETROS_
   return salida;
 }
 
+/** Las celdas de lado `lado` que pisa el segmento `a`-`b`, en orden y conectadas por un lado (nunca solo por una esquina). */
+export function recorrerEn4(a: Point, b: Point, lado: number, marca: (cx: number, cy: number) => void): void {
+  let cx = Math.floor(a.x / lado), cy = Math.floor(a.y / lado);
+  const fx = Math.floor(b.x / lado), fy = Math.floor(b.y / lado);
+  const dx = b.x - a.x, dy = b.y - a.y, sx = Math.sign(dx), sy = Math.sign(dy);
+  // Fracción del segmento hasta el siguiente borde vertical y horizontal, y lo que se avanza por celda.
+  let tx = sx === 0 ? Infinity : ((sx > 0 ? cx + 1 : cx) * lado - a.x) / dx;
+  let ty = sy === 0 ? Infinity : ((sy > 0 ? cy + 1 : cy) * lado - a.y) / dy;
+  const px = sx === 0 ? Infinity : lado / Math.abs(dx), py = sy === 0 ? Infinity : lado / Math.abs(dy);
+  marca(cx, cy);
+  for (let n = Math.abs(fx - cx) + Math.abs(fy - cy); n > 0; n--) {
+    if (tx < ty) { cx += sx; tx += px; }
+    else if (ty < tx) { cy += sy; ty += py; }
+    else { marca(cx + sx, cy); cx += sx; cy += sy; tx += px; ty += py; n--; } // justo por la esquina: también la de al lado
+    marca(cx, cy);
+  }
+}
+
 /**
- * Máscara de celdas bloqueadas por los ríos (1 = bloqueada), en la rejilla de `lado` unidades del generador: el trazo del río
- * engrosado una celda a cada lado (así ninguna arista del grafo lo cruza entre dos muestras) y con un hueco en cada vado.
+ * Máscara de celdas bloqueadas por los ríos (1 = bloqueada), en la rejilla de `lado` unidades del generador: las celdas que pisa el
+ * trazo del río, conectadas por un lado ([`recorrerEn4`]: así ninguna arista del grafo lo cruza en diagonal), con un hueco en cada vado.
  */
 export function bloquearRios(
   limites: { ancho: number; alto: number },
@@ -52,20 +70,14 @@ export function bloquearRios(
   radioHueco = PARAMETROS_VADOS.radioHueco,
 ): Uint8Array {
   const nx = Math.ceil(limites.ancho / lado), ny = Math.ceil(limites.alto / lado);
-  const traza = new Uint8Array(nx * ny);
-  const marca = (p: Point) => {
-    const cx = Math.floor(p.x / lado), cy = Math.floor(p.y / lado);
-    if (cx >= 0 && cy >= 0 && cx < nx && cy < ny) traza[cy * nx + cx] = 1;
-  };
-  for (const rio of rios) for (let i = 1; i < rio.puntos.length; i++) {
-    const a = rio.puntos[i - 1]!, b = rio.puntos[i]!, n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / (lado / 4)));
-    for (let k = 0; k <= n; k++) marca({ x: a.x + (b.x - a.x) * k / n, y: a.y + (b.y - a.y) * k / n });
-  }
+  // El cauce de una celda (decisión del autor del 2026-11-03): solo las celdas que pisa el río, recorridas en 4 vecinas (al pasar de una
+  // celda a la diagonal se marca también una de las dos de al lado), así que una arista diagonal del grafo nunca cruza entre dos esquinas libres.
+  // Hasta entonces se engrosaba una celda más a cada lado y la franja prohibida medía unas 12 u frente a un río dibujado de 1,5 u.
   const bloqueo = new Uint8Array(nx * ny);
-  for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
-    const i = y * nx + x;
-    if (traza[i] || (x > 0 && traza[i - 1]) || (x < nx - 1 && traza[i + 1]) || (y > 0 && traza[i - nx]) || (y < ny - 1 && traza[i + nx])) bloqueo[i] = 1;
-  }
+  const marca = (cx: number, cy: number) => {
+    if (cx >= 0 && cy >= 0 && cx < nx && cy < ny) bloqueo[cy * nx + cx] = 1;
+  };
+  for (const rio of rios) for (let i = 1; i < rio.puntos.length; i++) recorrerEn4(rio.puntos[i - 1]!, rio.puntos[i]!, lado, marca);
   for (const v of vados) {
     const r = Math.ceil(radioHueco / lado) + 1, cx = Math.floor(v.x / lado), cy = Math.floor(v.y / lado);
     for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {

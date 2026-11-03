@@ -2770,6 +2770,8 @@ pub mod rechazos {
     pub const OBRA_TOPE_ALMACENES: &str = "obra.tope_almacenes";
     pub const OBRA_TOPE_VIVIENDAS: &str = "obra.tope_viviendas";
     pub const OBRA_NIVEL_INSUFICIENTE: &str = "obra.nivel_insuficiente";
+    /// Falta el edificio que pide para construirse, activo y con su nivel: el Albergue de caravanas pide un Mercado (2026-11-03).
+    pub const OBRA_FALTA_EDIFICIO: &str = "obra.falta_edificio";
     pub const OBRA_SOLO_POR_PUEBLO: &str = "obra.solo_por_pueblo";
     /// El Corral solo existe en las aldeas agrícolas (§14.2).
     pub const OBRA_SOLO_EN_ALDEA: &str = "obra.solo_en_aldea";

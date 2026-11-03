@@ -21,6 +21,8 @@ pub enum ErrorObra {
     TopeAlmacenes,
     TopeViviendas,
     NivelInsuficiente,
+    /// Falta el edificio que pide su nivel 1 (`requiereEdificio`), activo y con su nivel: el Albergue de caravanas, un Mercado (2026-11-03).
+    FaltaEdificio,
     /// Los minerales y la Cantera solo se explotan con un pueblo extractor (Doc 4.2.2).
     SoloPorPueblo,
     /// El Corral solo existe en las aldeas agrícolas (§14.2).
@@ -237,6 +239,9 @@ impl Asentamiento {
         }
         if self.nivel_actual() < def.nivel_construccion {
             return Err(ErrorObra::NivelInsuficiente);
+        }
+        if def.nivel(1).and_then(|n| n.requiere_edificio).is_some_and(|(t, n)| !self.edificios.hay_activo_con_nivel(t, n)) {
+            return Err(ErrorObra::FaltaEdificio);
         }
         if self.tope_transformacion(r, tipo) {
             return Err(ErrorObra::TopeTransformacion);

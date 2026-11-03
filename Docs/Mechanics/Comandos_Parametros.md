@@ -47,7 +47,7 @@ es la lista de mensajes de orden que hay que cubrir.
 | `dejarResidencia` | `heroeId`: string |
 | `cambiarResidencia` | `destinoId`: string<br>`heroeId`: string |
 | `activarPolitica` | `asentamientoId`: string<br>`cargo`: "gobernador"|"tesorero"|"general"|"maestroObras"|"sacerdote"<br>`politicaId`: string |
-| `anadirEdificioManualmente` | `asentamientoId`: string<br>`cargo`: "gobernador"|"maestroObras"<br>`tipo`: "centroUrbano"|"vivienda"|"granja"|"cantera"|"lenera"|"almacen"|"granero"|"mina"|"minaCobre"|"minaEstano"|"fundicion"|"granFundicion"|"corral"|"armeria"|"curtiduria"|"carpinteria"|"palacio"|"barracon"|"galeriaDeTiro"|"caballerizas"|"minaHierro"|"salaConsejo"|"taberna"|"mercado"|"puestoMercado"|"maravilla"|"plaza"|"plazaDeArmas"|"patioDeGremios"|"pozo"|"parque" |
+| `anadirEdificioManualmente` | `asentamientoId`: string<br>`cargo`: "gobernador"|"maestroObras"<br>`tipo`: "centroUrbano"|"vivienda"|"granja"|"cantera"|"lenera"|"almacen"|"granero"|"mina"|"minaCobre"|"minaEstano"|"fundicion"|"granFundicion"|"corral"|"armeria"|"curtiduria"|"carpinteria"|"palacio"|"barracon"|"galeriaDeTiro"|"caballerizas"|"minaHierro"|"salaConsejo"|"taberna"|"mercado"|"puestoMercado"|"maravilla"|"plaza"|"plazaDeArmas"|"patioDeGremios"|"pozo"|"parque"|"albergueCaravanas" |
 | `quitarDeCola` | `asentamientoId`: string<br>`cargo`: "gobernador"|"maestroObras"<br>`edificioId`: string |
 | `moverEnCola` | `asentamientoId`: string<br>`cargo`: "gobernador"|"maestroObras"<br>`edificioId`: string<br>`direccion`: "arriba"|"abajo" |
 | `mejorarEdificioAhora` | `asentamientoId`: string<br>`cargo`: "gobernador"|"maestroObras"<br>`edificioId`: string |

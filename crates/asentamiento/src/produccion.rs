@@ -103,6 +103,7 @@ pub fn extraer_y_cultivar(cat: &Catalogo, edificios: &mut [Edificio], almacen: &
                 let deseado = por(por(base, mano.pesants), (ctx.factor_tecnologia)(recurso));
                 let pedido = deseado.min(almacen.hueco(recurso));
                 e.pausado_por_almacen = pedido < deseado;
+                almacen.apuntar_produccion(recurso, deseado - pedido);
                 let salido = if pedido > 0 { fuentes.extraer(nodo, pedido) } else { 0 };
                 sumar(recurso, almacen.producir(recurso, salido));
             }
@@ -250,12 +251,18 @@ mod pruebas {
         let mut e = vec![cantera];
         let m = mano_de_obra(&cat, &e, 10, 0, 0);
         a.poner(Recurso::Piedra, 395_000);
+        a.registrar_flujos();
         extraer_y_cultivar(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &mut w);
         assert_eq!(a.cantidad(Recurso::Piedra), 400_000);
         assert_eq!(w.stock[&7], 95_000, "solo se gastan los 5 que cabían, no los 10 que sacaría");
         assert!(e[0].pausado_por_almacen);
+        let f = a.tomar_flujos();
+        assert_eq!((f.producido[Recurso::Piedra.indice()], f.produccion[Recurso::Piedra.indice()]), (5_000, 10_000), "entran 5; la cantera rinde 10 (lo demás se pierde)");
+        a.registrar_flujos();
         extraer_y_cultivar(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &mut w);
         assert_eq!(w.stock[&7], 95_000, "lleno del todo: no extrae nada");
+        let f = a.tomar_flujos();
+        assert_eq!((f.producido[Recurso::Piedra.indice()], f.produccion[Recurso::Piedra.indice()]), (0, 10_000), "lleno del todo la producción sigue siendo la de la cantera");
         a.quitar(Recurso::Piedra, 400_000);
         extraer_y_cultivar(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &mut w);
         assert!(!e[0].pausado_por_almacen);

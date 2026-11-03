@@ -130,6 +130,10 @@ El **orden del array `edificios` es significativo**: es el orden de construcció
     "ancho": 3,
     "alto": 2
   },
+  "albergueCaravanas": {
+    "ancho": 2,
+    "alto": 3
+  },
   "palacio": {
     "ancho": 4,
     "alto": 4
@@ -331,9 +335,9 @@ El **perfil** efectivo es `TRAZADO.perfilForzado ?? perfil de la política activ
 2. **Genéricos** (`palacio`, `almacen`, `granero`, `lenera`, `taberna`, `salaConsejo`) → §6.4.
 3. Sin categoría (`CATEGORIA_POR_TIPO[tipo]` ausente) → **lista vacía**.
 4. **Ancla primaria de su categoría** (`mercado`) → nace por el árbol de anclas (§7.2): un único sitio, el de `crearAnclaNueva`.
-5. **Satélites** (vivienda, fundición, curtiduría, armería, gran fundición, maravilla, barracón, galería de tiro, caballerizas, carpintería, puestos de mercado) → §6.5.
+5. **Satélites** (vivienda, fundición, curtiduría, armería, gran fundición, maravilla, barracón, galería de tiro, caballerizas, carpintería, puestos de mercado, Albergue de caravanas) → §6.5.
 
-`CATEGORIA_POR_TIPO`: `residencial` (vivienda) · `industria` (fundición, curtiduría, armería, gran fundición, maravilla) · `militar` (barracón, galería de tiro, caballerizas, carpintería) · `mercado` (mercado,
+`CATEGORIA_POR_TIPO`: `residencial` (vivienda) · `industria` (fundición, curtiduría, armería, gran fundición, maravilla) · `militar` (barracón, galería de tiro, caballerizas, carpintería) · `mercado` (mercado, albergueCaravanas,
 puestoMercado) · `almacenaje` (almacén, granero, leñera, corral).
 
 ### 6.2 El barrido de candidatos (`candidatosLibres`)

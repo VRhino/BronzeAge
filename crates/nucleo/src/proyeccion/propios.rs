@@ -66,12 +66,14 @@ pub(super) fn constante(valor: Mil) -> pb::Ritmo {
 /// (mecánica 60); un almacén sin tendencia (el de un pueblo o una avanzada) los lleva a 0.
 pub(super) fn existencia(a: &Almacen, r: Recurso, tendencia: Option<&asentamiento::asentamiento::Tendencia>) -> pb::Existencia {
     let i = r.indice();
-    let (neto, producido, consumido) = tendencia.map_or((0, 0, 0), |t| (t.almacen[i], t.producido[i], t.consumido[i]));
+    let (neto, producido, consumido, produccion) = tendencia.map_or((0, 0, 0, 0), |t| (t.almacen[i], t.producido[i], t.consumido[i], t.produccion[i]));
     pb::Existencia {
         cantidad: Some(pb::Ritmo { en_escalones: true, maximo: Some(a.capacidad(r)), por_minuto: neto, ..constante(a.visible(r)) }),
         capacidad: a.capacidad(r),
         producido_por_minuto: producido,
         consumido_por_minuto: consumido,
+        // Tras recuperar de una foto `produccion` llega a 0 hasta el siguiente paso: entonces vale lo que entró.
+        produccion_por_minuto: produccion.max(producido),
     }
 }
 

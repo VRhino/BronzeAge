@@ -359,7 +359,7 @@ de Mercado. Validaciones, en orden:
 
 1. Hay alguien en ese cargo. 2. La Facción tiene la tecnología del tipo. 3. Si el tipo pide una Era (`ordenEraMinimo`, hoy solo la Maravilla: la V), el servidor la ha alcanzado (`ERAS[era].orden`). 3b. No es `centroUrbano` ni `puestoMercado`. 3c (Rust). No es un extractor de pueblo (Cantera ni minas: `obra.solo_por_pueblo`, la Cantera también la primera desde el 2026-11-01) ni el Corral (`obra.solo_en_aldea`).
 4. Tipos **únicos** (`EDIFICIOS_UNICOS`, §14.2): ya hay uno (de cualquier estado). **La Granja es única desde el 2026-11-02** (decisión del autor): la de la fundación es la única de la ciudad y otra se rechaza con `obra.unico`; se mejora como siempre.
-5. Tope de Almacenes; tope de Viviendas. 6. `nivelActual ≥ requisitoNivelAsentamientoConstruccion` del tipo. 7. Tope de transformación.
+5. Tope de Almacenes; tope de Viviendas. 6. `nivelActual ≥ requisitoNivelAsentamientoConstruccion` del tipo. 6b (2026-11-03). Si el nivel 1 del tipo trae `requiereEdificio` (hoy solo el Albergue de caravanas: un Mercado), hay un edificio activo de ese tipo con `nivelInterno ≥ requiereEdificioNivel`; si no, `obra.falta_edificio`. 7. Tope de transformación.
 8. **Gran Fundición**: nivel de Facción ≥ `nivelFaccionMinimo` (6), el asentamiento es la **capital**, y la Facción no tiene ya otra (ninguno de sus asentamientos).
 9. `en_cola < maximoEnCola`. 10. `asegurarAnclaPara` y búsqueda de sitio (si no hay: «No hay sitio disponible dentro de la zona de influencia»).
 11. `puedeIniciarConstruccion` con la reserva dinámica (sin la manual).
@@ -1478,6 +1478,47 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
       }
     }
   },
+  "albergueCaravanas": {
+    "costo": {
+      "madera": 80
+    },
+    "tiempoConstruccionMinutos": 240,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 0,
+        "recetas": [],
+        "requiereEdificio": "mercado",
+        "cupoCaravanas": 3,
+        "cupoCarros": 5
+      },
+      "2": {
+        "requisitoNivelAsentamiento": 2,
+        "costoMejora": {
+          "madera": 120,
+          "piedra": 80
+        },
+        "requiereEdificio": "mercado",
+        "requiereEdificioNivel": 2,
+        "trabajadoresRequeridos": 0,
+        "recetas": [],
+        "cupoCaravanas": 6,
+        "cupoCarros": 10
+      },
+      "3": {
+        "requisitoNivelAsentamiento": 3,
+        "costoMejora": {
+          "madera": 300,
+          "piedra": 150
+        },
+        "requiereEdificio": "mercado",
+        "requiereEdificioNivel": 3,
+        "trabajadoresRequeridos": 0,
+        "recetas": [],
+        "cupoCaravanas": 12,
+        "cupoCarros": 22
+      }
+    }
+  },
   "puestoMercado": {
     "costo": {},
     "tiempoConstruccionMinutos": 0
@@ -1666,6 +1707,7 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
   "salaConsejo",
   "taberna",
   "mercado",
+  "albergueCaravanas",
   "granFundicion",
   "maravilla"
 ]
@@ -1684,6 +1726,7 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
   "caballerizas",
   "palacio",
   "mercado",
+  "albergueCaravanas",
   "granja",
   "granero",
   "taberna"
@@ -2361,6 +2404,8 @@ Los bloques de parámetros de este documento venían del motor TypeScript. Valor
 > **Implementado en Rust (2026-10-23, fase 4H T3c), el interior de la plaza por la sesión.** El almacén y la población se proyectan **en escalones** (sin interpolar): `Existencia.cantidad` con `en_escalones = true`, su tendencia «+N/min» en `por_minuto` y la población entera por clase (`Poblacion`, con la marca de recuperación del hambre). La tendencia es el **neto real del último paso de minuto** de la plaza —producción, recaudación, consumo, mantenimiento y lo que come la guarnición, no el gasto de las órdenes— y se guarda por plaza (`asentamiento::asentamiento::Tendencia` (campo `tendencia` de la economía de la plaza), foto `BAN22`; 29 recursos y 3 clases). Lo escribe `minuto_de_plaza` al cerrar el paso (la diferencia entre el estado antes y después de todo el paso) y ese paso **no marca nada ni sube la versión del mundo**, con sesiones o sin ellas (decisión del autor, 2026-10-23): lo que cambia dentro de la plaza (almacén, población, medidor, nutrición, edificios parados, tendencia y almacén local de sus pueblos) lleva su propia secuencia por plaza, `Nucleo::version_interior` = `(ultimo_minuto − fundado_en) / 60 s`, que viaja en `Asentamiento.version_interior` y sirve a la reanudación de `ASENTAMIENTO`; el contador `version` y el hash del mundo son los mismos con y sin sesiones. Los gastos de órdenes, el fin de obra y el fin de mejora, ascenso o política (en su instante) marcan la plaza como siempre y llegan en su milisegundo.
 >
 > **Producción y consumo por minuto (2026-10-28, mecánica 60).** Además del neto, cada `Existencia` del interior lleva `producido_por_minuto` (lo que entró por los flujos del paso: producción de edificios y pueblos, recaudación) y `consumido_por_minuto` (lo que salió: comida de la población, insumos de los talleres, mantenimiento y lo que come la guarnición de la plaza). Se cumple siempre `producido_por_minuto − consumido_por_minuto = por_minuto`. El almacén los suma mientras dura el paso (`Almacen::registrar_flujos` / `tomar_flujos`, solo lo que de verdad entró o salió, con el tope y la falta aplicados); las entradas y salidas sueltas (órdenes, comercio, botín, caravanas) no cuentan. Se guardan en la `Tendencia` de la plaza, en la foto **`BAN48`** (las `BAN40`–`BAN47` se siguen leyendo con los dos valores a 0 hasta el primer paso de minuto), para que tras una recuperación el panel muestre lo mismo. Pueblos y avanzadas los mandan a 0. Pruebas: `almacen.rs` (unitaria), `crates/nucleo/tests/asentamientos.rs` (`el_paso_de_minuto_guarda_su_tendencia…`, la igualdad en los 29 recursos y la proyección) y `heroes.rs` (lo que come la guarnición suma al consumo del trigo).
+>
+> **Producción quepa o no (2026-11-03, pedido del autor).** Con el almacén lleno, `producido_por_minuto` bajaba a lo que dejaba sitio el consumo y el panel parecía decir que la plaza no producía o que perdía. Ahora cada `Existencia` lleva también `produccion_por_minuto` (campo 5, contrato 0.11.0): lo que **rindieron** los flujos de entrada del paso, quepa o no (`Flujos::produccion`: `Almacen::producir` apunta lo pedido y no solo lo que entró; el extractor que con el almacén lleno no saca del yacimiento lo que no cabe lo suma con `Almacen::apuntar_produccion`). Lo que no cabe se pierde, como antes; el yacimiento no se gasta por ello. Las recetas de los talleres cuentan lo que fabrican (con el almacén lleno paran y no gastan insumos). Sin almacén lleno vale lo mismo que `producido_por_minuto`. El neto real (`por_minuto`) y la igualdad de arriba no cambian. Va en la `Tendencia` de la plaza pero **no en la foto**: tras recuperar llega a 0 y la proyección envía `producido_por_minuto` hasta el siguiente paso de minuto. Prueba: `produccion.rs` (`con_el_almacen_lleno_se_pausa…`: entran 5, la Cantera rinde 10; lleno del todo, 0 y 10).
 
 ## Catálogo de eventos
 

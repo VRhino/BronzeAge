@@ -1077,12 +1077,15 @@ fn el_paso_de_minuto_guarda_su_tendencia_y_no_sube_la_version_con_o_sin_sesiones
     let interior = nucleo::proyeccion::interior::asentamiento(&n, id).unwrap();
     let e = &interior.almacen["trigo"];
     assert_eq!((e.producido_por_minuto, e.consumido_por_minuto, e.cantidad.as_ref().unwrap().por_minuto), (t.producido[trigo], t.consumido[trigo], t.almacen[trigo]), "el interior los lleva");
+    assert!((0..29).all(|i| t.produccion[i] >= t.producido[i]), "la producción cuenta lo que entró y lo que no cupo: {t:?}");
+    assert_eq!(e.produccion_por_minuto, t.produccion[trigo], "el interior la lleva");
 
     // La tendencia viaja en la foto y se rechaza la del formato anterior (que no la traía).
     let bytes = n.estado().serializar();
     let reglas = Reglas::default();
     let vuelta = Estado::deserializar(&bytes, &reglas, &m.0.hash().to_string()).expect("la foto vuelve");
-    assert_eq!(vuelta.asentamientos[&id].economia.tendencia, t);
+    assert_eq!(vuelta.asentamientos[&id].economia.tendencia.produccion, [0; 29], "la producción quepa o no, no viaja en la foto");
+    assert_eq!(vuelta.asentamientos[&id].economia.tendencia, t, "y no cuenta en la igualdad");
     assert_eq!(vuelta.serializar(), bytes);
     let viejo = [b"BAN21".as_slice(), &bytes[5..]].concat();
     let Err(e) = Estado::deserializar(&viejo, &reglas, &m.0.hash().to_string()) else { panic!("BAN21 no debe admitirse") };

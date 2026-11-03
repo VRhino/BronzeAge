@@ -736,7 +736,7 @@ fn decision_5gb5_la_que_vuelve_sola_esta_en_el_mapa_se_ve_y_fuera_de_su_zona_se_
 #[test]
 fn decision_5gb5_en_la_zona_de_su_duenio_aguanta_y_sigue_volviendo_con_el_treinta_por_ciento() {
     let m = con_mundo!();
-    let (mut e, a, _ana, k) = volviendo_desde(m, 4_000);
+    let (mut e, a, _ana, k) = volviendo_desde(m, -4_000);
     let t = e.n.ahora();
     let donde = e.caravana(k).unwrap().posicion_en(t);
     assert!(e.n.en_zona(a, donde), "a 4 de su plaza, dentro de su zona");

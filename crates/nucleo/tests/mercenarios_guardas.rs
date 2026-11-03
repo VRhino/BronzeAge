@@ -120,7 +120,8 @@ impl E {
         mc::ok(&mut self.n, "admin", Comando::AnadirEdificio { asentamiento: plaza, tipo: Tipo::Mercado });
         self.n.avanzar_hasta(self.n.ahora() + 9 * 60 * MS_POR_MINUTO);
         mc::ok(&mut self.n, "admin", Comando::DarRecursos { asentamiento: plaza, recurso: Recurso::Cobre, cantidad: 100_000 * cuantas as i64 });
-        mc::ok(&mut self.n, "admin", Comando::DarRecursos { asentamiento: plaza, recurso: Recurso::Madera, cantidad: 100_000 * cuantas as i64 });
+        // Hasta llenar el almacén: si las Leñeras ya lo llenaron, no entra nada y no pasa nada.
+        mc::dar(&mut self.n, "admin", Comando::DarRecursos { asentamiento: plaza, recurso: Recurso::Madera, cantidad: 100_000 * cuantas as i64 });
         (0..cuantas)
             .map(|_| {
                 // El cooldown de creación es de diez minutos por plaza.

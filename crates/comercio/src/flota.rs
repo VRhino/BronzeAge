@@ -51,13 +51,16 @@ impl Cupos {
     pub const NINGUNO: Cupos = Cupos { caravanas: 0, carros: 0, escolta: 0 };
 }
 
-/// Los cupos de un asentamiento: `nivel_mercado` es el nivel interno del Mercado **activo** (`None` = sin Mercado ⇒ todo 0).
-pub fn cupos(catalogo: &Catalogo, flota: &ReglasFlota, nivel_mercado: Option<u8>, f: &FactoresPolitica) -> Cupos {
+/// Los cupos de un asentamiento: `nivel_mercado` es el nivel interno del Mercado **activo** (`None` = sin Mercado ⇒ todo 0) y `nivel_albergue` el
+/// del Albergue de caravanas activo, que suma sus `cupoCaravanas` y `cupoCarros` a los del Mercado (2026-11-03; sin Mercado no da nada).
+pub fn cupos(catalogo: &Catalogo, flota: &ReglasFlota, nivel_mercado: Option<u8>, nivel_albergue: Option<u8>, f: &FactoresPolitica) -> Cupos {
     let Some(n) = nivel_mercado else { return Cupos::NINGUNO };
     let Some(nivel) = catalogo.tipo(Tipo::Mercado).nivel(n) else { return Cupos::NINGUNO };
+    let albergue = nivel_albergue.and_then(|k| catalogo.tipo(Tipo::AlbergueCaravanas).nivel(k));
+    let (caravanas, carros) = albergue.map_or((0, 0), |c| (c.cupo_caravanas, c.cupo_carros));
     Cupos {
-        caravanas: (nivel.cupo_caravanas as i64 + f.cupo_caravana_extra).max(0) as u32,
-        carros: nivel.cupo_carros,
+        caravanas: (nivel.cupo_caravanas as i64 + caravanas as i64 + f.cupo_caravana_extra).max(0) as u32,
+        carros: nivel.cupo_carros + carros,
         escolta: escolta_de_nivel(flota, n),
     }
 }
@@ -87,12 +90,23 @@ mod pruebas {
     fn los_cupos_del_mercado_por_nivel_interno() {
         let a = asentamiento::Reglas::cargar();
         let f = Reglas::cargar().flota;
-        let c = |n| cupos(&a.catalogo, &f, n, &FactoresPolitica::NINGUNO);
+        let c = |n| cupos(&a.catalogo, &f, n, None, &FactoresPolitica::NINGUNO);
         assert_eq!(c(Some(1)), Cupos { caravanas: 2, carros: 3, escolta: 100 });
         assert_eq!(c(Some(2)), Cupos { caravanas: 4, carros: 9, escolta: 200 });
         assert_eq!(c(Some(3)), Cupos { caravanas: 6, carros: 18, escolta: 300 });
         assert_eq!(c(None), Cupos::NINGUNO, "sin Mercado activo todo vale 0");
         assert_eq!(c(Some(9)), Cupos::NINGUNO, "un nivel inexistente no da nada");
+    }
+
+    #[test]
+    fn el_albergue_de_caravanas_suma_sus_cupos_a_los_del_mercado_y_sin_mercado_no_da_nada() {
+        let a = asentamiento::Reglas::cargar();
+        let f = Reglas::cargar().flota;
+        let c = |m, k| cupos(&a.catalogo, &f, m, k, &FactoresPolitica::NINGUNO);
+        assert_eq!(c(Some(1), Some(1)), Cupos { caravanas: 2 + 3, carros: 3 + 5, escolta: 100 });
+        assert_eq!(c(Some(2), Some(2)), Cupos { caravanas: 4 + 6, carros: 9 + 10, escolta: 200 });
+        assert_eq!(c(Some(3), Some(3)), Cupos { caravanas: 6 + 12, carros: 18 + 22, escolta: 300 });
+        assert_eq!(c(None, Some(1)), Cupos::NINGUNO, "sin Mercado activo el Albergue no da nada");
     }
 
     #[test]
@@ -103,8 +117,8 @@ mod pruebas {
         p.activar(&a.politicas, "cupo_caravana_extra", &activador(Cargo::Tesorero), 0).unwrap();
         let fac = FactoresPolitica::de(&p, &a.politicas);
         assert_eq!(fac.cupo_caravana_extra, 1);
-        assert_eq!(cupos(&a.catalogo, &f, Some(1), &fac).caravanas, 3);
-        assert_eq!(cupos(&a.catalogo, &f, None, &fac), Cupos::NINGUNO);
+        assert_eq!(cupos(&a.catalogo, &f, Some(1), None, &fac).caravanas, 3);
+        assert_eq!(cupos(&a.catalogo, &f, None, None, &fac), Cupos::NINGUNO);
     }
 
     #[test]

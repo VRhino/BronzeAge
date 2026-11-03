@@ -109,7 +109,7 @@ impl Urbanismo {
             Tipo::Fundicion | Tipo::Curtiduria | Tipo::Armeria | Tipo::GranFundicion | Tipo::Maravilla => (Industria, Rol::Normal, true),
             Tipo::Barracon | Tipo::GaleriaDeTiro | Tipo::Caballerizas | Tipo::Carpinteria => (Militar, Rol::Normal, true),
             Tipo::Mercado => (Mercado, Rol::AnclaPrimaria, true),
-            Tipo::PuestoMercado => (Mercado, Rol::Normal, true),
+            Tipo::PuestoMercado | Tipo::AlbergueCaravanas => (Mercado, Rol::Normal, true),
             Tipo::Plaza | Tipo::Pozo | Tipo::Parque => (Residencial, Rol::AnclaSaturacion, true),
             Tipo::PlazaDeArmas => (Militar, Rol::AnclaSaturacion, true),
             Tipo::PatioDeGremios => (Industria, Rol::AnclaSaturacion, true),

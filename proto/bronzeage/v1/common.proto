@@ -74,11 +74,17 @@ message Ritmo {
 // flujos del último paso de minuto (Granjas, Leñeras, extracción, recetas, recaudación) y `consumido_por_minuto` lo que salió (comida de la
 // población y de la guarnición, mantenimiento, insumos de las recetas), por separado y en milésimas. El neto sigue en `cantidad.por_minuto`.
 // No cuentan las entregas, las compras ni las obras (no son flujo por minuto). Fuera del almacén de una plaza (pueblos, avanzadas) van a 0.
+//
+// PRODUCCIÓN (2026-11-03): `produccion_por_minuto` es lo que rindieron de verdad esos flujos en el último paso, **quepa o no**: con el almacén
+// lleno, `producido_por_minuto` baja a lo que entró (lo que dejó el consumo) y esto sigue diciendo lo que dan los edificios (lo que no cabe se
+// pierde). Sin almacén lleno es igual a `producido_por_minuto`. Es la cifra para enseñar «produce / consume»; el neto real sigue en
+// `cantidad.por_minuto`. Tras recuperar el servidor de una foto vale lo mismo que `producido_por_minuto` hasta el siguiente paso de minuto.
 message Existencia {
   Ritmo cantidad = 1;
   sint64 capacidad = 2;
   sint64 producido_por_minuto = 3;
   sint64 consumido_por_minuto = 4;
+  sint64 produccion_por_minuto = 5;
 }
 
 // Cantidades por id de catálogo (carros, cargas, aportes). En milésimas; lo almacenado (cargas de carro y de caravana, almacén personal,

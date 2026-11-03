@@ -324,9 +324,11 @@ array si no hay nada que quitar.
 
 | Cupo | Valor | Se mide |
 |---|---|---|
-| `cupoCaravanas` | `niveles[nivelInterno].cupoCaravanas` del Mercado **+** `cupoCaravanaExtra` de las políticas (suma; "Ampliación de Flota" +1) | al **crear**: caravanas `comercial` con `origenAsentamientoId == este` en **cualquier estado** |
-| `cupoCarros` | `niveles[nivelInterno].cupoCarros` | al **fabricar** un carro: `carrosEnUso(asentamiento)` = Σ carros de las comerciales de ese origen (sin las nacidas en un campamento) |
+| `cupoCaravanas` | `niveles[nivelInterno].cupoCaravanas` del Mercado **+** el del **Albergue de caravanas** activo (si lo hay) **+** `cupoCaravanaExtra` de las políticas (suma; "Ampliación de Flota" +1) | al **crear**: caravanas `comercial` con `origenAsentamientoId == este` en **cualquier estado** |
+| `cupoCarros` | `niveles[nivelInterno].cupoCarros` del Mercado **+** el del Albergue de caravanas activo | al **fabricar** un carro: `carrosEnUso(asentamiento)` = Σ carros de las comerciales de ese origen (sin las nacidas en un campamento) |
 | `cupoEscolta` | `CARAVANA_ESCOLTA.liderazgoPorNivelMercado[nivelInterno − 1]` | **por caravana**, en puntos de Liderazgo |
+
+> **Albergue de caravanas (decisión del autor del 2026-11-03).** Edificio único de la categoría `mercado` (huella 2×3, junto al Mercado), de adición manual, que **suma** a los cupos del Mercado: **+3 caravanas y +5 carros** en su nivel 1, **+6 y +10** en el 2 y **+12 y +22** en el 3 (`cupoCaravanas` y `cupoCarros` de su nivel en el catálogo de `Economia_Construccion.md`). Se levanta con un Mercado activo (`requiereEdificio` de su nivel 1; si no, `obra.falta_edificio`) y su nivel 2 pide Mercado de nivel 2 y plaza de nivel 2, y su nivel 3, Mercado de nivel 3 y plaza de nivel 3. Sin Mercado activo no da nada (como el Mercado, sus cupos valen 0 sin él); en obra o dañado, tampoco. Coste provisional: 80 de madera y 4 h; mejoras 120 de madera y 80 de piedra, y 300 de madera y 150 de piedra. Lo pidió el autor para que las caravanas que llevan los materiales a pueblos y aldeas no se coman el cupo del nivel 1 y queden caravanas para trueques (`crates/comercio/src/flota.rs`, `cupos`).
 
 (Los valores de cada nivel están en el bloque `EDIFICIO_CATALOGO`, edificio `mercado`, de `Economia_Construccion.md`.) El cupo de carros es de la **flota entera** del asentamiento, repartido como se quiera; mover
 carros entre caravanas propias no lo toca.

@@ -195,7 +195,7 @@ pub enum Evento {
 /// La tendencia «+N/min» de una plaza (4H T3c, decisión 3 del autor): el neto **real** del último paso de minuto —producción, consumo, recaudación, mantenimiento y lo que come la guarnición; no el gasto
 /// de las órdenes—, por recurso del almacén (milésimas) y por clase de la población (personas enteras: pesants, artesanos, nobleza). Vale 0 hasta el primer paso. Lo escribe quien lleva el reloj de la plaza
 /// (el núcleo, que cierra el paso entero); el crate no lo toca, así que el batch no paga nada por ella.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Tendencia {
     pub almacen: [Mil; 29],
     pub poblacion: [i64; 3],
@@ -203,7 +203,19 @@ pub struct Tendencia {
     /// compensan. `almacen` sigue siendo el neto.
     pub producido: [Mil; 29],
     pub consumido: [Mil; 29],
+    /// Lo que rindieron los flujos de entrada, quepa o no (2026-11-03; [`crate::almacen::Flujos::produccion`]): con el almacén lleno, más que `producido`. No viaja en la
+    /// foto: tras recuperar vale 0 hasta el siguiente paso (la proyección enseña entonces `producido`), y por eso no cuenta en la igualdad (como los flujos del
+    /// almacén).
+    pub produccion: [Mil; 29],
 }
+
+impl PartialEq for Tendencia {
+    fn eq(&self, o: &Self) -> bool {
+        (self.almacen, self.poblacion, self.producido, self.consumido) == (o.almacen, o.poblacion, o.producido, o.consumido)
+    }
+}
+
+impl Eq for Tendencia {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Asentamiento {

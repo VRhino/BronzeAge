@@ -230,7 +230,8 @@ impl Nucleo {
 
     pub(super) fn cupos_de(&self, a: &Asentamiento) -> Cupos {
         let e = &self.estado.reglas.economia;
-        cupos(&e.datos.catalogo, &e.comercio.flota, nivel_mercado(a), &self.factores_de(a))
+        let albergue = a.economia.edificios.iter().find(|e| e.tipo == Tipo::AlbergueCaravanas && e.activo()).map(|e| e.nivel_interno);
+        cupos(&e.datos.catalogo, &e.comercio.flota, nivel_mercado(a), albergue, &self.factores_de(a))
     }
 
     /// Emite un hecho de comercio con el código del documento (§12) y sus datos; `extra` añade cifras que la variante no lleva.

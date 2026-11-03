@@ -957,10 +957,15 @@ fn el_oro_se_conserva_lo_que_paga_la_plaza_es_lo_que_cobra_la_caravana_y_la_comi
     assert!(comision > 0 && (valor - comision - movido).abs() < 1_000 * ventas.len() as i64, "valor {valor}, comisión {comision}, movido {movido}");
     assert_eq!((oro_c - cantidad(&e.n, c, Oro), e.a_bordo(car, Oro)), (movido, movido));
     assert_eq!(mundo_de(&e.n, Oro), oro_mundo, "no se acuña oro al vender");
-    // La compra paga con ese oro y el mundo sigue igual.
+    // La compra paga con ese oro y el mundo sigue igual. En los minutos de la descarga las plazas siguen recaudando (unas décimas de oro por minuto), así que
+    // cada una puede completar una unidad: es lo único que entra.
+    let (bordo, oro_c) = (e.a_bordo(car, Oro), cantidad(&e.n, c, Oro));
     e.avanzar_hasta(llegada + e.tiempo_descarga());
     assert!(e.a_bordo(car, Oro) < movido && e.a_bordo(car, Madera) == 50_000);
-    assert_eq!(mundo_de(&e.n, Oro), oro_mundo, "ni al comprar");
+    let (pagado, cobrado) = (bordo - e.a_bordo(car, Oro), cantidad(&e.n, c, Oro) - oro_c);
+    assert!(cobrado == pagado || cobrado == pagado + 1_000, "lo que paga la caravana lo cobra la plaza (más, a lo sumo, una unidad de su recaudación): {pagado} {cobrado}");
+    let plazas = e.n.estado().asentamientos.len() as i64;
+    assert!((0..=1_000 * plazas).contains(&(mundo_de(&e.n, Oro) - oro_mundo)), "ni al comprar se acuña: solo entra la recaudación");
 }
 
 // ───────────────────────────── 9. Rechazos y autorización ─────────────────────────────

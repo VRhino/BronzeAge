@@ -35,6 +35,10 @@ pub struct Almacen {
 pub struct Flujos {
     pub producido: [Mil; 29],
     pub consumido: [Mil; 29],
+    /// Lo que produjeron los flujos de entrada **quepa o no** (2026-11-03): con el almacén lleno, `producido` solo cuenta lo que entró y esto lo que
+    /// rinden de verdad los edificios ([`Almacen::producir`] apunta lo pedido; el extractor que no pide por falta de hueco lo suma con
+    /// [`Almacen::apuntar_produccion`]).
+    pub produccion: [Mil; 29],
 }
 
 impl Almacen {
@@ -133,6 +137,7 @@ impl Almacen {
         let i = r.indice();
         if let Some(f) = &mut self.flujos {
             f.producido[i] += entra;
+            f.produccion[i] += n.max(0);
         }
         self.resto[i] += entra;
         if self.resto[i] >= UNIDAD {
@@ -141,6 +146,14 @@ impl Almacen {
             self.resto[i] -= unidades;
         }
         entra
+    }
+
+    /// Apunta en la producción del registro `n` milésimas que un flujo de entrada rindió pero ni siquiera pidió al almacén porque no cabían
+    /// (el extractor con el almacén lleno no saca del yacimiento lo que no cabe). No toca el almacén.
+    pub fn apuntar_produccion(&mut self, r: Recurso, n: Mil) {
+        if let Some(f) = &mut self.flujos {
+            f.produccion[r.indice()] += n.max(0);
+        }
     }
 
     /// Flujo de salida de un minuto (comida, mantenimiento, insumos de una receta): `n` milésimas, hasta lo exacto que haya, salen del resto y
@@ -239,6 +252,7 @@ mod pruebas {
         a.consumir(Madera, 500); // no hay madera: no sale nada
         let f = a.tomar_flujos();
         assert_eq!((f.producido[Trigo.indice()], f.consumido[Trigo.indice()], f.consumido[Madera.indice()]), (2_500 + 1_700, 1_200, 0), "producción y consumo no se compensan; lo discreto no cuenta");
+        assert_eq!(f.produccion[Trigo.indice()], 2_500 + 9_000, "la producción cuenta lo que rindió el flujo, quepa o no");
         assert_eq!(a.tomar_flujos(), Flujos::default(), "tomar cierra el registro");
         assert_eq!(a, { let mut b = a.clone(); b.registrar_flujos(); b.tomar_flujos(); b }, "fuera del registro no cuenta en la igualdad");
     }

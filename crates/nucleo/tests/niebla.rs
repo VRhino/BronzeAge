@@ -202,7 +202,7 @@ fn la_columna_graba_lo_que_barrio_su_plan_al_tocarla_y_hasta_entonces_la_vista_l
 fn la_ficha_de_una_plaza_ajena_es_lo_ultimo_que_se_vio_de_ella_y_cuando_y_nunca_lo_que_cambio_despues() {
     let m = con_mundo!();
     let mut e = Esc { n: nucleo(m), peticiones: 0 };
-    let sitio = sitio_rico(&e.n, &m.0, 0, 2);
+    let sitio = sitio_rico(&e.n, &m.0, 1, 2);
     let plaza = e.plaza("gus", 2, sitio);
     let nivel_antes = e.n.estado().asentamientos[&plaza].nivel();
     // Una columna de F1 (un héroe solo: ve 15) pasa a unas 10 u de la plaza de F2 y se aleja.
@@ -392,7 +392,7 @@ fn partida(m: &M, sesiones: bool, trozos: i64) -> Nucleo {
     if sesiones {
         e.n.seguir_pertenencias();
     }
-    let sitio = sitio_rico(&e.n, &m.0, 0, 2);
+    let sitio = sitio_rico(&e.n, &m.0, 1, 2);
     e.plaza("gus", 2, sitio);
     let col = e.columna("ana", 1, en_tierra(&m.0, sitio, -60 * U, 10 * U));
     let h = e.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
@@ -446,7 +446,7 @@ fn recuperar_la_foto_y_el_registro_reproduce_la_memoria_aunque_las_columnas_ande
     let dir = tempfile::tempdir().unwrap();
     let arranque = || Arranque { reglas: reglas(), ajustes: Ajustes { foto_cada: 3, ..Ajustes::default() }, semilla: 7, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) };
     let n = Nucleo::con_persistencia(arranque(), dir.path(), Default::default()).unwrap();
-    let sitio = sitio_rico(&n, &m.0, 0, 2);
+    let sitio = sitio_rico(&n, &m.0, 1, 2);
     let mut e = Esc { n, peticiones: 0 };
     e.plaza("gus", 2, sitio);
     let col = e.columna("ana", 1, en_tierra(&m.0, sitio, -60 * U, 10 * U));
