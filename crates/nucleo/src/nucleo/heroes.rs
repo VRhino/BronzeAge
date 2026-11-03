@@ -24,7 +24,7 @@ use crate::estado_militar::HeroeNucleo;
 use crate::nucleo::flota::rechazo_de_caravana;
 use asentamiento::datos::UNO;
 use asentamiento::Recurso;
-use comercio::caravana::{CandidataEscolta, Escuadra as EscuadraCedida};
+use comercio::caravana::{CandidataEscolta, Escuadra as EscuadraCedida, TipoCaravana};
 use comercio::evento::Evento as EventoComercio;
 use militar::catalogo::Tropa;
 use militar::escuadra::Contenedor;
@@ -502,7 +502,13 @@ impl Nucleo {
         let ci = self.estado.comercio.posicion_caravana(caravana).ok_or_else(|| Respuesta::rechazo(rechazos::CARAVANA_DESCONOCIDA, ids::caravana(caravana), v))?;
         self.autorizar_heroe(p, heroe, false)?;
         let origen = self.estado.comercio.flota[ci].origen as u64;
-        let cupo = self.cupos_de(self.plaza_o_rechazo(origen)?).escolta;
+        let madre = self.plaza_o_rechazo(origen)?;
+        // El carro de acarreo tiene su propio cupo: el del Mercado de la madre si lo tiene y 100 si no (Doc 3.13.8).
+        let cupo = if self.estado.comercio.flota[ci].tipo == TipoCaravana::Acarreo {
+            comercio::flota::cupo_escolta_de_acarreo(&self.estado.reglas.economia.comercio.flota, super::mercado::nivel_mercado(madre))
+        } else {
+            self.cupos_de(madre).escolta
+        };
         // Dentro del pueblo del carro de acarreo, la escolta sale de la columna con la que entró el héroe (§14.0.1).
         if let Some(pueblo) = self.pueblo_del_carro_donde_esta(heroe, caravana) {
             return self.escoltar_acarreo_desde_dentro(t, p, ci, caravana, heroe, pueblo, escuadras, cupo, origen);

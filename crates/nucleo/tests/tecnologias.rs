@@ -327,9 +327,10 @@ fn el_rey_en_la_capital_adopta_la_aparecida_y_la_paga_el_almacen_de_la_capital()
     // La tarifa de la Era I pasa a 1.000 de oro: más de lo que la plaza ha recaudado en estos días.
     let (mut e, _) = con_canteria_y(m, |r| r.eras[0].tarifa = vec![(Recurso::Oro, 1_000_000)]);
     let (plaza, rey) = (e.plaza, e.rey);
-    // El Rey está en su columna, a la puerta: fuera de la capital.
+    // El Rey entró en la capital al fundarla; sale a la puerta, en su columna: fuera de la capital.
+    e.ok("ana", Comando::SalirAlMundo { asentamiento: plaza, heroe: rey, escuadras: vec![], carga: vec![] });
     assert_eq!(e.rechazo("ana", e.adoptar("canteria")), rechazos::TECNOLOGIA_REY_FUERA_DE_LA_CAPITAL);
-    e.ok("ana", Comando::Guarnecer { asentamiento: plaza, heroe: rey });
+    e.ok("ana", Comando::EntrarEnAsentamiento { asentamiento: plaza, heroe: rey });
     // Sin la tarifa de su Era en el almacén de la capital, no; y no se cobra nada.
     let almacen = |e: &Escenario, r: Recurso| e.n.economia(plaza).unwrap().almacen.cantidad(r);
     let (oro, madera) = (almacen(&e, Recurso::Oro), almacen(&e, Recurso::Madera));

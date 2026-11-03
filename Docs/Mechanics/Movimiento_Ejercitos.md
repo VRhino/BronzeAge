@@ -107,7 +107,7 @@ para cada tramo:   enCamino = el tramo es una arista de la red de caminos
 
 ### 4.3 La ruta (`calcularRuta`, A\* sobre el grafo de navegación)
 - Origen y destino deben ser transitables (no agua) o no hay ruta; ningún llamador sigue sin ruta (una recta cruzaría el agua).
-- Los **ríos** se cruzan por un vado o por una ciudad ribereña: `pasosRio` = posiciones de asentamientos, que cuentan como paso a menos de `NAVEGACION.radioPasoCiudadMin` (10).
+- Los **ríos** se cruzan solo por un vado (el grafo del artefacto solo tiene aristas de vado). Los pasos por una ciudad ribereña están en `Docs/Disenos_Por_Implementar/Pasos_De_Rio_Por_Ciudad.md`, sin implementar.
 - Si origen y destino están a menos de un espaciado del grafo, tramo directo si es válido; si no, se «engancha» a los nodos de alrededor y corre A\* con 8 vecinos y heurística admisible.
 - El cálculo es caro y corre **fuera del núcleo** (en paralelo); su resultado entra como un evento más y se escribe en el registro (Reloj_Y_Eventos §8).
 - **Los elementos del mapa no estorban** (decisión del autor del 2026-10-27): plazas, pueblos, avanzadas, campamentos, columnas, caravanas y héroes no ocupan sitio para la ruta; solo el terreno decide. Sus tamaños (`TAMANOS_MAPA`, `Economia_Construccion.md`) son para pintar y para colocar.

@@ -649,7 +649,9 @@ fn f5_adoptar_una_tecnologia() {
     let canteria = x.n.estado().reglas.economia.tecnologia.buscar("canteria").unwrap();
     let aparecida = |x: &X| x.n.tecnologia().de(&x.n.estado().reglas.economia.tecnologia, 1).aparecidas.contiene(canteria);
     assert!(x.hasta(HORA, 24 * 5, aparecida), "aparece la cantería");
-    x.ok("ana", Comando::Guarnecer { asentamiento: a, heroe: rey });
+    if x.n.heroe(rey).unwrap().columna.is_some() {
+        x.ok("ana", Comando::Guarnecer { asentamiento: a, heroe: rey });
+    }
     x.llenar(a);
     x.cumple(Dueno::Faccion(1), "F5", |x| {
         x.ok("ana", Comando::AdoptarTecnologia { heroe: rey, faccion: 1, tecnologia: canteria });
@@ -748,7 +750,9 @@ fn f12_empezar_una_epica() {
     let rey = x.rey("ana");
     x.levantar(a, Tipo::Almacen);
     x.levantar(a, Tipo::Palacio);
-    x.ok("admin", Comando::Guarnecer { asentamiento: a, heroe: rey });
+    if x.n.heroe(rey).unwrap().columna.is_some() {
+        x.ok("admin", Comando::Guarnecer { asentamiento: a, heroe: rey });
+    }
     assert!(x.hasta(HORA, 24 * 3, |x| !x.n.residentes().aedas.is_empty()), "llega el primer Aeda");
     let canteria = x.n.estado().reglas.economia.tecnologia.buscar("canteria").unwrap();
     x.cumple(Dueno::Faccion(1), "F12", |x| {

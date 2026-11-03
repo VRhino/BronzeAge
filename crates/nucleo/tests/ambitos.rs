@@ -117,6 +117,7 @@ fn aldea(m: &M, ajustes: Ajustes, provisiones: bool) -> Aldea {
     let columna = x.n.crear_ejercito(0, "fundador", 1, sitio, 500, 100_000).unwrap();
     x.ok("admin", Comando::DarCaravanaFundacion { ejercito: columna });
     x.plaza = x.ok("fundador", Comando::Fundar { ejercito: columna }).creadas[0];
+    comun::fundador_sale(&mut x.n, x.plaza);
     x.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: x.plaza, pausada: true });
     for r in [Madera, Piedra, Oro, Trigo].into_iter().filter(|_| provisiones) {
         x.ok("admin", Comando::DarRecursos { asentamiento: x.plaza, recurso: r, cantidad: 300_000 });

@@ -1333,13 +1333,15 @@ fn si_la_madre_es_conquistada_sus_avanzadas_pasan_con_ella_y_su_guarnicion_y_ele
     let centro = e.centro;
     let (_, beto) = e.atacante(Punto::new(centro.x + 1_000, centro.y), &[Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto]);
     let cosas = e.n.cosas_en_el_espacio();
+    // Los que están dentro (el héroe de la avanzada y quien fundó la plaza, que entró al fundarla) salen al mapa, cada uno con su columna.
+    let dentro = e.n.estado().militar.heroes.values().filter(|h| h.heroe.presencia.ubicacion == Ubicacion::Asentamiento(plaza as u32)).count();
     e.ok("beto", Comando::Atacar { heroe: beto, objetivo: ObjetivoAtaque::Asentamiento(plaza), declara_guerra: true });
     tras_la_convocatoria(&mut e.n);
     assert_eq!(e.n.estado().asentamientos[&plaza].faccion, 2);
     // La avanzada es de la plaza: pasa con ella, con su obra, su almacén y su sitio en el espacio.
     let (madre, a) = e.n.avanzada(av).unwrap();
     assert_eq!((madre, a.etapa, a.estado), (Some(plaza), Etapa::Fuerte, EstadoAvanzada::Operativa));
-    assert_eq!(e.n.cosas_en_el_espacio(), cosas + 1, "la avanzada sigue en el espacio; la columna nueva es la del héroe que se desaloja de la plaza");
+    assert_eq!(e.n.cosas_en_el_espacio(), cosas + dentro, "la avanzada sigue en el espacio; las columnas nuevas son las de los héroes que se desalojan de la plaza");
     let h = &hechos(&e.n, "avanzada.traspasada")[0];
     assert_eq!((dato(h, "avanzada"), dato(h, "faccion"), h.2.clone()), (av as i64, 2, vec![plaza]));
     // La guarnición de los antiguos residentes se va a 0 al campamento y la elección del Gobernador derrotado se borra.

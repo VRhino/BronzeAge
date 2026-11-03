@@ -106,7 +106,7 @@ Algunos edificios, niveles internos y recetas piden además una **tecnología ad
 | 3 (mejora) | nivel 4 | 400 | 2.500 madera + 2.500 piedra + 800 oro | 1 semana |
 
 **Vivienda** — auto-construcción. CUPO DIVIDIDO POR CLASE: cada Vivienda aporta cupos SEPARADOS, no un pool compartido — 15 espacios para Pesants + 10 espacios para Artesanos por unidad (escala linealmente: 2 Viviendas = 30+20, etc.). La Nobleza no usa Vivienda (cupo propio en el Palacio).
-- Coste: 10 madera. Obra: 4 horas.
+- Coste: 10 madera. Obra: 10 minutos (arranque rápido, 2026-10-28).
 - **Tope por nivel de asentamiento** (`maximoViviendasPorNivel`): el máximo útil de Viviendas en un nivel se deriva de la población (pesants Y artesanos, se toma el mayor de los dos cupos) que exige alcanzar el SIGUIENTE nivel — construir más de las que ese cupo necesita no sirve para nada hasta subir de nivel. **Se permiten 2 Viviendas de margen** sobre lo que exige el nivel siguiente (decidido el 2026-10-18): con el cupo justo la población, que crece de forma logística, se acerca al cupo sin tocarlo y no llegaría al requisito (40 Viviendas = 400 artesanos para un requisito de 400). Cifras en `typescript-final:Consideraciones/Fase_0_6_Definicion_Expansion_Niveles_Asentamiento.md` §7.
 
 ### Extracción de recursos
@@ -114,8 +114,8 @@ Algunos edificios, niveles internos y recetas piden además una **tecnología ad
 | Edificio | Recurso | Coste | Trabajadores | Tiempo | Producción base |
 |---|---|---|---|---|---|
 | Cantera | Piedra | 20 madera | 4 | 4 h | 10 piedra |
-| Leñera | Madera | 10 madera | 4 | 1 h | 8 madera (5 hasta el 2026-11-01) |
-| Granja | Trigo | 30 madera | 4 | 2 h | **60 trigo** (nivel 1) |
+| Leñera | Madera | 10 madera | 4 | 2 min | 8 madera (5 hasta el 2026-11-01) |
+| Granja | Trigo | 30 madera | 4 | 5 min | **120 trigo** (nivel 1) |
 | Corral | Livestock (ganado vacuno) | 30 madera | 4 | 4 h | 3 livestock (solo en la aldea agrícola desde el 2026-10-27: allí el ganado sale de la cría, 4.2.2) |
 | Mina de oro | Oro | 40 madera | 6 | 8 h | 4 oro |
 | Mina de cobre | Cobre | 30 madera | 8 | 6 h | 5 cobre |
@@ -124,7 +124,7 @@ Algunos edificios, niveles internos y recetas piden además una **tecnología ad
 
 Los extractores de nivel 1 se pagan solo con madera: son justo lo que hay que construir para subir a nivel 2 (4.5). La tecnología `canteria` (Doc 6.6) multiplica por 1,5 lo que sacan las Canteras de la Facción. Cantera y minas ligan a un nodo finito (Doc 1.4) y solo se levantan como pueblo extractor (4.2.2); el Corral, solo en la aldea agrícola.
 
-**Granja: cuatro niveles internos**, que suben el rinde sin pedir más trabajadores: **60 / 90 / 120 / 180** trigo por minuto. Mejoras: 60 madera + 20 piedra, 120+40, 240+80, sin requisito de nivel de asentamiento. Un asentamiento de nivel 1 a tope de población (300 habitantes) come 30 trigo por minuto, así que una sola Granja de nivel 1 lo sostiene con margen para alimentar tropa.
+**Granja: cuatro niveles internos**, que suben el rinde sin pedir más trabajadores: **120 / 180 / 240 / 360** trigo por minuto (mejoras de 4, 8 y 16 h). Mejoras: 60 madera + 20 piedra, 120+40, 240+80, sin requisito de nivel de asentamiento. Un asentamiento de nivel 1 a tope de población (300 habitantes) come 30 trigo por minuto, así que una sola Granja de nivel 1 lo sostiene con margen para alimentar tropa.
 
 ### Especiales
 

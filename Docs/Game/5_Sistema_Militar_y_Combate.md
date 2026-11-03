@@ -183,6 +183,8 @@ Consolidar una plaza —reclutar escuadrones nuevos ahí, asignar guarnición, e
 Bloquear la puerta de un asentamiento a neutrales, aliados o enemigos (Doc 2.8), sin coste. No confundir con la reubicación al perder la casa por conquista (5.15.5).
 
 ## 5.10 Dónde se resuelve el combate
+**Hoy Unity está apagado (decisión del autor, 2026-11-02): todo combate se resuelve con números.** Lo que sigue describe cómo funcionará cuando se encienda.
+
 Con servidores de batalla, **toda batalla se juega como una partida real en Unity** (5.15), también bot contra bot: el bot entra en la partida y Unity la resuelve como pueda (si gana a la guarnición, es cosa de Unity; BronzeAge nunca la resuelve con números en ese caso). Sin servidor de Unity, todas se resuelven con números (5.2.5, 5.15.6). En los dos casos la batalla nace en el mapa de BronzeAge: los ejércitos se mueven por el mundo (5.12), y el combate empieza donde se encuentran. La abre quien decide atacar (5.12.3): a una columna, a una caravana, a un campamento de bandidos o a una plaza. Qué queda bloqueado mientras se juega y quién puede unirse, en 5.15.1.
 
 ## 5.11 Liderazgo
@@ -283,9 +285,9 @@ Una columna se acerca a algo y el juego le ofrece lo que puede hacer con ello; e
 
 | Sobre qué | Qué se le ofrece |
 |---|---|
-| Ejército ajeno (a un ejército) o Columna personal ajena (a una Columna personal) | **Inspeccionar** · **Perseguir** · **Atacar** a 3. Entre un ejército y una Columna personal solo se puede **Inspeccionar** |
+| Ejército ajeno (a un ejército) o Columna personal ajena (a una Columna personal) | **Inspeccionar** · **Perseguir** · **Atacar** a 1. Entre un ejército y una Columna personal solo se puede **Inspeccionar** |
 | Caravana ajena o neutral, no adjunta | **Inspeccionar** · **Interceptar**. Una caravana adjunta a un ejército es parte de él: solo otro ejército la ataca |
-| Asentamiento | En su puerta (2): **Entrar** · **Consultar** · **Comerciar** (Doc 3.3). Si es de otra Facción: desde 8, **Inspeccionar** su defensa; a distancia de ataque (3), **Atacar**, que es asediarla (5.12.4) y **solo lo hace un ejército**; una Columna personal puede **Unirse** a un asedio ya abierto (5.15.1) |
+| Asentamiento | En su puerta (2): **Entrar** · **Consultar** · **Comerciar** (Doc 3.3). Si es de otra Facción: desde 8, **Inspeccionar** su defensa; a distancia de ataque (1), **Atacar**, que es asediarla (5.12.4) y **solo lo hace un ejército**; una Columna personal puede **Unirse** a un asedio ya abierto (5.15.1) |
 | Campamento de bandidos | **Atacar**, un ejército o una Columna personal (evento PvE, 5.15.1) |
 | Batalla en curso | **Unirse** al bando que te corresponda, mientras quede sitio (5.15.1) |
 
@@ -299,7 +301,7 @@ Cada distancia significa una cosa distinta, y las tres juntas son el corazón de
 |---|---|---|
 | **30 / 15** (columna con tropas / jugador solo) | Ves que hay algo y de quién es | Nadie |
 | **8 — inspección** | Ver la composición: qué tropas, de quién. De una caravana, si lleva escolta y **qué** recursos carga, nunca cuántos. De una plaza ajena, **su defensa**: la guarnición (qué tropa y cuánta) y los héroes que hay dentro; su almacén no | **El inspeccionado recibe aviso** (de una plaza, su Facción) |
-| **3 — encuentro** | Se cierra una persecución y se ofrece atacar | Los dos |
+| **1 — encuentro** | Se cierra una persecución y se ofrece atacar | Los dos |
 
 **El anillo de inspección es lo que convierte el reconocimiento en un juego de dos.** Mirar cuesta ser visto mirando; y el que mira puede huir, porque va más rápido que una columna entera y porque no ha tenido que meterse hasta los 3. De lejos, un ejército ajeno sigue siendo lo que siempre fue: una bandera y unos estandartes, sin composición ni poder (5.12.7).
 
@@ -307,7 +309,7 @@ Cada distancia significa una cosa distinta, y las tres juntas son el corazón de
 
 Perseguir fija un objetivo **móvil** en vez de un punto: el servidor conoce el plan de la presa y recalcula el de quien persigue **cuando la presa cambia de plan** (un evento, no un sondeo; ya no hay umbral de recalculo). **Solo se persigue lo que se ve desde la propia columna**: la persecución solo se puede iniciar con la presa dentro del alcance de vista (30 con soldados, 15 sin ellos) y **si la presa sale de él, la persecución se cancela** (decidido el 2026-10-19). Un ejército solo persigue a otro ejército; una Columna personal, a otra Columna personal o a una caravana (no adjunta). **El motor lo exige** (2026-10-09): no se persigue a los tuyos ni a un aliado, ni a una caravana adjunta a un ejército, y **decide a quién persigue la columna su Líder**. Para inspeccionar no hace falta perseguir — basta con verlo. Una persecución termina de seis formas:
 
-- se llega a **3**, y ahí se ofrece atacar (quien persigue a un solitario abre una **persecución**; un ejército a otro, una **batalla campal**, 5.15.1);
+- se llega a **1**, y ahí se ofrece atacar (quien persigue a un solitario abre una **persecución**; un ejército a otro, una **batalla campal**, 5.15.1);
 - el perseguidor **cambia de destino**;
 - el objetivo queda **herido** por haber sido derrotado (5.16.4);
 - o no llega a empezar, porque todos los héroes del objetivo ya estaban heridos;
@@ -344,7 +346,7 @@ Un ejército puede además quedarse **estacionado** en un punto indefinidamente 
 
 Un asentamiento lo defienden **los héroes que están dentro cuando lo atacan** (**solo defiende lo que está dentro**, ver abajo), cada uno con las escuadras de su loadout activo (5.16.5) que tenga en el campamento, que ya caben en su Liderazgo, y **su guarnición**, que maneja la IA del juego (5.15). Los escuadrones que se quedaron en el campamento sin estar en guarnición no defienden. **Un asentamiento sin defensores presentes ni guarnición se asedia igual, sin defensores.** Esta es la tensión central de la mecánica: atacar cuesta dejar la casa descubierta, salvo lo que se deje en guarnición.
 
-**Llegar no es asediar.** Un ejército que llega **acampa delante**. Asediar es una decisión consciente: a distancia de ataque (3) de una plaza de otra Facción, entre lo que se ofrece al interactuar con ella aparece **Atacar**, y pulsarlo empieza la batalla (5.12.3; decisión del usuario, 2026-09-15).
+**Llegar no es asediar.** Un ejército que llega **acampa delante**. Asediar es una decisión consciente: a distancia de ataque (1) de una plaza de otra Facción, entre lo que se ofrece al interactuar con ella aparece **Atacar**, y pulsarlo empieza la batalla (5.12.3; decisión del usuario, 2026-09-15).
 
 Eso permite **plantarse frente a una ciudad enemiga sin atacarla.** Bloquear, sitiar sin asaltar, esperar refuerzos o negociar con el ejército a la vista son jugadas legítimas.
 
@@ -554,7 +556,7 @@ Cada héroe lleva tres cosas distintas, y no se mezclan:
   - **Con las mismas dos reglas que llenarlos al salir**: hasta donde quepa, y sin bajar nunca de la reserva de comida de la plaza que lo da.
   - **Abrir el almacén a un aliado cuesta stock real**, y por eso es una decisión suya y no un derecho del que pasa. Quien manda o custodia el tesoro de esa plaza (Gobernador o Tesorero) la toma, y puede cerrarla cuando quiera. Cerrar no es retroactivo: lo repuesto está repuesto.
 - **El carro no se carga en movimiento; los víveres sí.** El carro solo se llena parado en un lugar: dentro de un asentamiento o de un campamento de mercenarios, o en su puerta para las acciones que se hacen desde ella (comprar, recoger tropas, cargar o entregar con una caravana adjunta, 5.13.3). Un héroe con su columna puede ir a otra plaza o a un campamento, comprar allí, llenar el carro e irse. En marcha solo se reponen los víveres, y solo una columna personal.
-- **Al entrar en la plaza donde reside** (5.14.6): lo que lleva el carro **pasa al almacén** de esa plaza; los víveres siguen con el héroe. **El carro NO se descarga en ruta ni en otro asentamiento** — si pudiera, el ejército sería un transporte de mercancías gratuito que dejaría sin sentido a las caravanas. Para mover carga está el punto siguiente.
+- **Al entrar en la plaza donde reside** (5.14.6): el carro **se queda con el héroe** y los víveres también; vaciarlo es una acción **manual** (`vaciarCarro`), que pasa la carga a su **almacén personal** hasta donde quepa y deja en el carro lo que no cabe (decidido el 2026-10-22; antes pasaba sola al almacén de la plaza). **El carro NO se descarga en ruta ni en otro asentamiento** — si pudiera, el ejército sería un transporte de mercancías gratuito que dejaría sin sentido a las caravanas. Para mover carga está el punto siguiente.
 
 ### 5.13.1 El radio operativo es la constante de diseño
 
@@ -723,7 +725,7 @@ Esto sustituye la regla del 2026-09-14 de guarnecer solo si todos los del ejérc
 
 ## 5.15 Batallas con héroes: quién combate, guarnición y campamento
 
-Las batallas se juegan como partidas reales en Unity. Los datos que se intercambian con Unity están en `typescript-final:Docs/Coordinacion/01_Modelo_de_datos_compartido.md`.
+Las batallas se juegan como partidas reales en Unity cuando hay servidor de batalla (hoy apagado, 5.10). Los datos que se intercambian con Unity están en `typescript-final:Docs/Coordinacion/01_Modelo_de_datos_compartido.md`.
 
 ### 5.15.1 Una escuadra combate con su héroe
 
@@ -740,7 +742,7 @@ Una partida dura como mucho **30 minutos en un asedio** y **15 en el resto**. Si
 - **En un asedio, el asentamiento.** Nadie entra, y dentro no se dan órdenes (construir, reclutar, guarnición, residencia, mercado, caravanas); solo sale, al mapa y con todo lo suyo, quien está dentro y no se ha unido a la defensa (2026-10-22). Su economía sigue produciendo. Un ejército que llega a una plaza asediada espera a la puerta.
 - **En mundo abierto** (contra una columna, una caravana o un campamento de bandidos), las columnas y la caravana que combaten se quedan quietas y sin órdenes, y nadie más puede atacarlas ni perseguirlas. En el mapa se ve la batalla en su punto, bajo la niebla de guerra, en lugar de ellas.
 - **Los héroes que combaten** no pueden hacer nada más hasta que acaba. Quien la inició puede cancelarla antes de que empiece la partida, sin que nadie pierda nada.
-- **Unirse.** Mientras no haya terminado, un héroe sano puede unirse con su columna si está a distancia de ataque (3) del punto de la batalla o de la plaza asediada, ya no está en otra batalla y el bando que le corresponde (5.15.1b) no está lleno. Si está lleno, no entra: la cola de arriba es solo para los que ya estaban al empezar. Sus escuadras quedan bloqueadas como las demás: mientras dura la batalla no se reponen ni entran o salen de la guarnición (los loadouts no se ven afectados: la misma escuadra puede estar en varios).
+- **Unirse.** Mientras no haya terminado, un héroe sano puede unirse con su columna si está a distancia de ataque (1) del punto de la batalla o de la plaza asediada, ya no está en otra batalla y el bando que le corresponde (5.15.1b) no está lleno. Si está lleno, no entra: la cola de arriba es solo para los que ya estaban al empezar. Sus escuadras quedan bloqueadas como las demás: mientras dura la batalla no se reponen ni entran o salen de la guarnición (los loadouts no se ven afectados: la misma escuadra puede estar en varios).
 - **Salir.** Quien Unity saca de la partida (muere sin reaparición, abandona, se desconecta) vuelve al mundo: sus escuadras y su columna quedan libres, y queda herido si Unity lo da por derrotado (5.16.4). Quien no llega a conectarse antes de empezar sale sin castigo.
 
 ### 5.15.1b Tipos de batalla y quién puede unirse

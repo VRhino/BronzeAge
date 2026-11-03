@@ -299,7 +299,9 @@ fn su_titular_la_engancha_a_un_ejercito_a_la_puerta_y_funda_con_ella_donde_llega
     assert_eq!(e.n.heroe(ana).unwrap().heroe.residencia, Some(Residencia::Asentamiento(nueva as u32)));
     let h = hechos(&e.n, "fundacion.asentamiento_fundado");
     assert_eq!(dato(h.last().unwrap(), "caravana") as u64, k);
-    assert_eq!(e.no("ana", Comando::Fundar { ejercito: ej }), rechazos::SIN_CARAVANA);
+    // Su columna entró en la plaza al fundarla: ana está dentro y no queda columna con la que fundar otra vez.
+    assert_eq!(e.n.heroe(ana).unwrap().heroe.presencia.ubicacion, Ubicacion::Asentamiento(nueva as u32));
+    assert_eq!(e.no("ana", Comando::Fundar { ejercito: ej }), rechazos::EJERCITO_DESCONOCIDO);
 }
 
 /// Decisión del autor del 2026-10-27: la caravana espera dentro de su origen y se la lleva al salir cualquier ejército de su Facción que salga de allí (`caravana_fundacion` de

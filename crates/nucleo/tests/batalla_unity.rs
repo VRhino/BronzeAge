@@ -879,7 +879,8 @@ async fn el_informe_de_inspeccion_de_una_columna_una_caravana_y_una_plaza_con_su
     assert_eq!((plaza.id.as_str(), plaza.objetivo_id.as_str(), plaza.heroe_id.as_str(), plaza.expira_en_ms - plaza.visto_en_ms), (format!("insp-{}-{}", ana.1, ids::asentamiento(b)).as_str(), ids::asentamiento(b).as_str(), h_ana.as_str(), 10 * MIN));
     assert_eq!(plaza.donde.as_ref().map(|p| (p.x, p.y)), Some((pos_b.x, pos_b.y)));
     let Some(pb::informe_inspeccion::Contenido::Plaza(p)) = plaza.contenido.clone() else { panic!("la defensa de una plaza") };
-    assert_eq!((p.faccion_id.as_str(), p.heroes_ids.is_empty(), p.guarnicion.is_empty(), p.recintos.len()), ("f-2", true, true, 1));
+    // Dentro está solo quien la fundó (su columna entró al fundarla).
+    assert_eq!((p.faccion_id.as_str(), p.heroes_ids.len(), p.guarnicion.is_empty(), p.recintos.len()), ("f-2", 1, true, 1));
     let anillo = &recintos[0];
     assert_eq!((p.recintos[0].nivel, p.recintos[0].avance as usize, p.recintos[0].celdas.len()), (1, anillo.levantadas(), anillo.celdas.len()));
     assert!(p.recintos[0].celdas.iter().any(|c| c.clase == pb::ClaseCelda::CeldaPuerta as i32));

@@ -80,6 +80,57 @@ pub(crate) fn pieza_de_planta(lugar: &str, x: &crate::urbanismo::PiezaVista) -> 
     }
 }
 
+/// Un edificio de la plaza `id` como lo ve quien está dentro de ella, con su huella en la ciudad: en `ASENTAMIENTO` va tal cual; la plaza ajena vista desde dentro (`vista::plaza_desde_dentro`)
+/// le quita lo que no se ve.
+pub(crate) fn edificio(id: u64, b: &asentamiento::edificio::Edificio, ciudad: &crate::urbanismo::VistaCiudad) -> pb::Edificio {
+    let pieza = ciudad.piezas.iter().find(|x| x.id == b.id);
+    pb::Edificio {
+        id: ids::edificio(id, b.id),
+        tipo: b.tipo.nombre().to_owned(),
+        posicion: pieza.map(|x| punto(x.centro)),
+        estado: match b.estado {
+            EstadoEdificio::EnCola => pb::EstadoEdificio::EdificioEnCola,
+            EstadoEdificio::EnConstruccion => pb::EstadoEdificio::EdificioEnConstruccion,
+            EstadoEdificio::Activo => pb::EstadoEdificio::EdificioActivo,
+        } as i32,
+        completa_en_ms: b.completa_en.filter(|_| b.estado == EstadoEdificio::EnConstruccion),
+        ambito: pb::AmbitoEdificio::Asentamiento as i32,
+        fuente_id: b.fuente.map(|f| match f {
+            Fuente::Nodo(x) => ids::nodo(x),
+            Fuente::Parcela(x) => ids::parcela(x),
+        }),
+        nivel_interno: Some(u32::from(b.nivel_interno)),
+        mejora: b.mejora.map(|m| pb::MejoraEnCurso { nivel_objetivo: u32::from(m.nivel_objetivo), completa_en_ms: m.completa_en }),
+        rotado: pieza.is_some_and(|x| x.rotado),
+        semilla_saturada: pieza.is_some_and(|x| x.semilla_saturada),
+        ancla_llena: pieza.is_some_and(|x| x.ancla_llena),
+        prioridad: (b.estado == EstadoEdificio::EnCola).then(|| u32::try_from(b.prioridad.max(0)).unwrap_or(u32::MAX)),
+        pausado_por_almacen_lleno: b.pausado_por_almacen,
+        danado: b.danado,
+        ancho: pieza.map_or(0, |x| x.rect.ancho.max(0) as u32),
+        alto: pieza.map_or(0, |x| x.rect.alto.max(0) as u32),
+        ..Default::default()
+    }
+}
+
+/// Los recintos de muralla de la plaza `id`: sus celdas en el orden del anillo con las que están en pie (`avance`), su nivel y la mejora en curso.
+pub(crate) fn recintos(id: u64, eco: &asentamiento::asentamiento::Asentamiento) -> Vec<pb::Recinto> {
+    eco.recintos
+        .iter()
+        .map(|r| pb::Recinto {
+            id: ids::recinto(id, r.id),
+            nivel: u32::from(r.nivel),
+            celdas: celdas(&r.celdas),
+            avance: r.levantadas() as u32,
+            mejorando_a: r.mejora.map(|m| u32::from(m.nivel)),
+            mejoradas: r.mejora.map(|m| (m.avance + 1).max(0) as u32),
+            siguiente_celda_en_ms: r.siguiente_celda_en,
+            comprometido_en_ms: r.comprometido_en,
+            completado_en_ms: r.completado_en,
+        })
+        .collect()
+}
+
 /// La plaza completa para quien está dentro, o `None` si ya no existe.
 pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
     let e = n.estado();
@@ -103,55 +154,8 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
     p.medidor_mantenimiento = Some(ritmo_en_escalones(eco.medidor.valor, 0, Some(100_000)));
     p.nutricion = Some(ritmo_en_escalones(eco.poblacion.nutricion, 0, Some(100_000)));
 
-    p.edificios = eco
-        .edificios
-        .iter()
-        .map(|b| {
-            let pieza = ciudad.piezas.iter().find(|x| x.id == b.id);
-            pb::Edificio {
-                id: ids::edificio(id, b.id),
-                tipo: b.tipo.nombre().to_owned(),
-                posicion: pieza.map(|x| punto(x.centro)),
-                estado: match b.estado {
-                    EstadoEdificio::EnCola => pb::EstadoEdificio::EdificioEnCola,
-                    EstadoEdificio::EnConstruccion => pb::EstadoEdificio::EdificioEnConstruccion,
-                    EstadoEdificio::Activo => pb::EstadoEdificio::EdificioActivo,
-                } as i32,
-                completa_en_ms: b.completa_en.filter(|_| b.estado == EstadoEdificio::EnConstruccion),
-                ambito: pb::AmbitoEdificio::Asentamiento as i32,
-                fuente_id: b.fuente.map(|f| match f {
-                    Fuente::Nodo(x) => ids::nodo(x),
-                    Fuente::Parcela(x) => ids::parcela(x),
-                }),
-                nivel_interno: Some(u32::from(b.nivel_interno)),
-                mejora: b.mejora.map(|m| pb::MejoraEnCurso { nivel_objetivo: u32::from(m.nivel_objetivo), completa_en_ms: m.completa_en }),
-                rotado: pieza.is_some_and(|x| x.rotado),
-                semilla_saturada: pieza.is_some_and(|x| x.semilla_saturada),
-                ancla_llena: pieza.is_some_and(|x| x.ancla_llena),
-                prioridad: (b.estado == EstadoEdificio::EnCola).then(|| u32::try_from(b.prioridad.max(0)).unwrap_or(u32::MAX)),
-                pausado_por_almacen_lleno: b.pausado_por_almacen,
-                danado: b.danado,
-                ancho: pieza.map_or(0, |x| x.rect.ancho.max(0) as u32),
-                alto: pieza.map_or(0, |x| x.rect.alto.max(0) as u32),
-                ..Default::default()
-            }
-        })
-        .collect();
-    p.recintos = eco
-        .recintos
-        .iter()
-        .map(|r| pb::Recinto {
-            id: ids::recinto(id, r.id),
-            nivel: u32::from(r.nivel),
-            celdas: celdas(&r.celdas),
-            avance: r.levantadas() as u32,
-            mejorando_a: r.mejora.map(|m| u32::from(m.nivel)),
-            mejoradas: r.mejora.map(|m| (m.avance + 1).max(0) as u32),
-            siguiente_celda_en_ms: r.siguiente_celda_en,
-            comprometido_en_ms: r.comprometido_en,
-            completado_en_ms: r.completado_en,
-        })
-        .collect();
+    p.edificios = eco.edificios.iter().map(|b| edificio(id, b, &ciudad)).collect();
+    p.recintos = recintos(id, eco);
     p.trazado = trazado_de(n, id);
 
     p.casas_compradas = e.militar.residentes_de(id).map(|h| ids::heroe(h.heroe.id)).collect();

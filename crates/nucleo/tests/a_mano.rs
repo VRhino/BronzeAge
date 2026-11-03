@@ -439,6 +439,8 @@ fn renombrar_una_caravana_recorta_el_nombre_lo_proyecta_y_viaja_en_la_foto() {
     let nombre = |e: &Esc| e.n.caravana(k).unwrap().nombre.clone();
     let proyectado = |e: &Esc| nucleo::proyeccion::propios::caravana(&e.n, e.n.caravana(k).unwrap()).nombre;
     assert_eq!((nombre(&e), proyectado(&e)), (String::new(), None), "sin nombre se muestra su id");
+    // El fundador de la cuenta «ana» entró al fundar: fuera, para que la cuenta solo tenga a la ana que salió con su columna.
+    comun::fundador_sale(&mut e.n, a);
     // Lo da quien reside en el origen y está dentro: ana, que salió con su columna, no; beto, residente y dentro, sí.
     assert_eq!(e.no("ana", Comando::RenombrarCaravana { caravana: k, nombre: "Fuera".into() }), rechazos::NO_AUTORIZADO);
     let beto = e.heroe("beto", 0);

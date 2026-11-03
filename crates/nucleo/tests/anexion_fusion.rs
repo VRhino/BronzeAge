@@ -337,6 +337,8 @@ fn no_se_acepta_con_una_batalla_abierta_y_quien_ya_no_puede_estar_dentro_sale() 
     let m = con_mundo!();
     // F3 (gus), aliada de F2 y en guerra con F1, está dentro de la plaza B. F2 se deja anexionar por F1: gus está dentro de una plaza de su enemiga y sale al mapa.
     let (mut e, _a, b) = dos_plazas(m);
+    // El Rey de F2 fundó B y entró al fundarla: fuera, para que el asedio no le encierre en la batalla.
+    comun::fundador_sale(&mut e.n, b);
     let pb = e.n.estado().asentamientos[&b].posicion;
     let (_, gus) = e.columna("gus", 3, pb);
     e.relacion("beto", 2, "gus", 3, false);

@@ -297,3 +297,19 @@ pub fn levantar_aldea(n: &mut Nucleo, cuenta: &str, plaza: u64) -> Option<u64> {
     assert!(r.aceptada(), "{r:?}");
     Some(pueblo)
 }
+
+/// Desde que la columna que funda entra en la plaza (Fundacion_Y_Refundacion §5.5, 2026-11-02), su Líder queda dentro como Gobernador de oficio. Los escenarios que fundan con una
+/// columna de andamiaje y dan el gobierno a otro residente lo llevan al último campamento
+/// de mercenarios (fuera de la plaza, sin columna que coma de ella); sigue siendo Gobernador, pero no está dentro.
+#[allow(dead_code)]
+pub fn fundador_sale(n: &mut Nucleo, plaza: u64) {
+    let dentro = militar::presencia::Ubicacion::Asentamiento(plaza as u32);
+    // El último campamento de mercenarios: lejos de los que usan las pruebas (0-3).
+    let ultimo = n.campamentos_para_elegir().iter().map(|c| c.0).max().expect("hay campamentos");
+    let presentes: Vec<u64> = n.estado().militar.residentes_de(plaza).map(|h| h.heroe.id).filter(|&h| n.heroe(h).is_some_and(|x| x.heroe.presencia.ubicacion == dentro)).collect();
+    for heroe in presentes {
+        let t = n.ahora();
+        let r = n.aplicar_en(t, Peticion::nueva("admin", &format!("fundador-sale-{plaza}-{heroe}"), Comando::ColocarHeroe { heroe, ubicacion: militar::presencia::Ubicacion::Mercenarios(ultimo) }).de_admin());
+        assert!(r.aceptada(), "el fundador {heroe} sale de as-{plaza}: {r:?}");
+    }
+}

@@ -405,7 +405,7 @@ message OrdenMarchaForzada {
   bool activa = 2;
 }
 
-// Reclama la recompensa de una misión cumplida (Misiones §4). `dueno_id`: `heroe-N`, `as-N` o `faccion-N`; el héroe es el de la cuenta.
+// Reclama la recompensa de una misión cumplida (Misiones §4). `dueno_id`: `heroe-N`, `as-N` o `f-N`; el héroe es el de la cuenta.
 message OrdenReclamarRecompensa {
   string dueno_id = 1;
   string mision_id = 2;
