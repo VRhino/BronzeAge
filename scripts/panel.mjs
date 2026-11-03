@@ -31,11 +31,13 @@ const SERVICIOS = {
   'bronzeage-servidor': { tipo: 'backend', parar: 'parar\n', aviso: avisoMundo, con: (p) => ({ env: { BRONZEAGE_DIRECCION: `127.0.0.1:${p}`, ...envPartida() } }) },
   // Una tarea que termina sola: sin puerto. La semilla la elige POST /api/mundo.
   'generar-mundo': { tipo: 'tarea', con: () => ({ args: [String(mundo.semilla)] }) },
-  'bronzeage-bots': { tipo: 'backend', con: (p, P) => ({ env: { BOTS_PUERTO: p, BOTS_SERVIDOR: `http://localhost:${P['bronzeage-servidor']}` } }) },
+  // `BOTS_REGISTROS` (2026-11-03, aviso de los bots): la ruta absoluta de `partidas/`. Los bots guardan sus registros dentro de cada partida
+  // (`partidas/<nombre>/bots.json` y `mercs.json`), así que borrar la partida los borra con ella; `servicio-bots.json` y `servicio-mercs.json` van en esa carpeta.
+  'bronzeage-bots': { tipo: 'backend', con: (p, P) => ({ env: { BOTS_PUERTO: p, BOTS_SERVIDOR: `http://localhost:${P['bronzeage-servidor']}`, BOTS_REGISTROS: PARTIDAS } }) },
   // Los bots mercenarios (2026-11-02): el mismo ejecutable de bots en un segundo proceso, con `BOTS_POBLACION=mercenarios` (en .claude/launch.json),
   // su propio puerto de control y el mismo servidor, token y código de registro que los libres. Los dos comparten carpeta y `target` de cargo:
   // si cambia el código de los bots, conviene parar los dos antes de arrancar (en Windows un ejecutable en marcha no se puede reemplazar).
-  'bronzeage-bots-mercenarios': { tipo: 'backend', con: (p, P) => ({ env: { BOTS_PUERTO: p, BOTS_SERVIDOR: `http://localhost:${P['bronzeage-servidor']}` } }) },
+  'bronzeage-bots-mercenarios': { tipo: 'backend', con: (p, P) => ({ env: { BOTS_PUERTO: p, BOTS_SERVIDOR: `http://localhost:${P['bronzeage-servidor']}`, BOTS_REGISTROS: PARTIDAS } }) },
   // El admin lee el control de los libres de `BOTS_URL` y el de los mercenarios de `MERCS_URL` (sin ella, ws://localhost:4001/control).
   'bronzeage-admin': { tipo: 'cliente', con: (p, P) => ({ args: VITE(p), env: {
     BACKEND_URL: `http://localhost:${P['bronzeage-servidor']}`, BOTS_URL: `ws://localhost:${P['bronzeage-bots']}/control`,
