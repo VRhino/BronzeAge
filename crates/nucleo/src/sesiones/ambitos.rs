@@ -87,6 +87,9 @@ pub(super) struct Sesion {
     /// El pueblo en que está dentro el héroe de la sesión, siendo de su Facción, y la secuencia interior de su madre con la que se le mandó por última vez (2026-10-29: el almacén local que el paso de
     /// minuto refresca le llega por su `FACCION`, [`Mesa::pueblos_al_dia`]). `None`: no está dentro de ninguno o no se sabe.
     pub(super) pueblo_dentro: Option<(u64, u64)>,
+    /// De cada plaza de su Facción, la secuencia interior con la que su `FACCION` la tiene (2026-11-04: lo de [`propios::plaza_propia`] que cambia el paso de minuto, [`Mesa::propias_al_dia`]).
+    /// Una que no está se da por recibida entera (en la foto o por el registro) con la secuencia de hoy.
+    pub(super) propias: BTreeMap<u64, u64>,
 }
 
 /// Lo que cobra un campamento a quien está dentro, tal como lo tiene el cliente (`interior::lo_que_cobra`).
@@ -133,7 +136,7 @@ pub(super) struct Mapa {
 impl Sesion {
     pub(super) fn nueva(n: &Nucleo, cliente: String, rol: pb::TipoCliente, tx: mpsc::Sender<Difusion>) -> Self {
         let heroe = es_jugador(rol).then(|| heroe_de_cuenta(n, &cliente)).flatten();
-        Sesion { cliente, rol, tx, heroe, abiertos: BTreeMap::new(), vista: None, plazas: BTreeMap::new(), mapa: None, moderador: false, alijos: None, informes: None, cobra: None, admin_visto: None, pueblo_dentro: None }
+        Sesion { cliente, rol, tx, heroe, abiertos: BTreeMap::new(), vista: None, plazas: BTreeMap::new(), mapa: None, moderador: false, alijos: None, informes: None, cobra: None, admin_visto: None, pueblo_dentro: None, propias: BTreeMap::new() }
     }
 
     pub(super) fn es_admin(&self) -> bool {
@@ -432,6 +435,7 @@ impl Mesa {
                 Ambito::Asentamiento(p) => drop(s.plazas.remove(&p)),
                 Ambito::Admin => s.plazas.clear(),
                 Ambito::Vista(_) => s.mapa = None,
+                Ambito::Faccion(_) => s.propias.clear(),
                 _ => {}
             }
             self.baja(a, id);
@@ -756,6 +760,33 @@ impl Mesa {
         }
     }
 
+    /// Pone al día en el `FACCION` de cada sesión lo que el paso de minuto cambia de las plazas de su Facción (2026-11-04, pedido del autor: el almacén y lo demás de [`propios::plaza_propia`]): de
+    /// cada plaza cuya secuencia interior avanzó desde la que el cliente tiene, un cambio parcial con la máscara [`propios::CAMPOS_DE_PLAZA_PROPIA`]. La plaza se proyecta una vez por paso para
+    /// todas las sesiones de la Facción.
+    // ponytail: con muchas plazas por Facción y muchos miembros conectados, mandar solo los campos que cambiaron recordando la plaza (como `Sesion::plazas`).
+    pub(super) fn propias_al_dia(&mut self, n: &Nucleo, envios: &mut Vec<(SesionId, Difusion)>) {
+        let faccion: Vec<(SesionId, u32)> = self
+            .suscriptores
+            .iter()
+            .filter_map(|(a, ss)| if let Ambito::Faccion(f) = a { Some(ss.iter().map(|&s| (s, *f)).collect::<Vec<_>>()) } else { None })
+            .flatten()
+            .collect();
+        let mut proyectadas: BTreeMap<u64, Option<pb::Asentamiento>> = BTreeMap::new();
+        for (id, f) in faccion {
+            let Some(s) = self.sesiones.get_mut(&id) else { continue };
+            let cambios = cambios_de_propias(n, s, f, &mut proyectadas, false);
+            entregar_fuera_del_registro(n, id, s, Ambito::Faccion(f), cambios, envios);
+        }
+    }
+
+    /// Al reanudar `FACCION:f-N`, las plazas de su Facción cuyo interior avanzó desde la secuencia con que el cliente dice tenerlas (`conocidas`: `PROPIA:as-N` en
+    /// `Hola.versiones_interiores_conocidas`, 2026-11-04; sin ella, 0): su cambio parcial con lo de [`propios::plaza_propia`]. Deja anotada la secuencia de hoy de todas.
+    pub(super) fn propias_al_reanudar(&mut self, n: &Nucleo, id: SesionId, f: u32, conocidas: &BTreeMap<u64, u64>) -> Vec<pb::Cambio> {
+        let Some(s) = self.sesiones.get_mut(&id) else { return Vec::new() };
+        s.propias = conocidas.clone();
+        cambios_de_propias(n, s, f, &mut BTreeMap::new(), true)
+    }
+
     /// Pone al día los alijos que tiene a la vista el `HEROE` de cada sesión (6G; de `solo`, si se da), en una `Delta` del ámbito de la versión que tiene el cliente a la de ahora. Va con el muestreo
     /// de la vista (y tras cada reparto, como ella): la columna anda sin que nada del mundo cambie.
     pub(super) fn reconciliar_alijos(&mut self, n: &Nucleo, solo: Option<SesionId>, envios: &mut Vec<(SesionId, Difusion)>) {
@@ -882,6 +913,46 @@ fn cambios_de_admin(n: &Nucleo, s: &mut Sesion) -> Vec<pb::Cambio> {
     s.admin_visto = Some(AdminVisto::de(n));
     cambios
 }
+
+/// De las plazas de la Facción `f`, el cambio parcial con lo de [`propios::plaza_propia`] que cambia el paso de minuto (máscara [`propios::CAMPOS_DE_PLAZA_PROPIA`]) de las que avanzaron su secuencia
+/// interior desde la que tiene el cliente (`todas`: de todas, al reanudar), dejando anotada la de hoy. `proyectadas` guarda cada plaza proyectada para las demás sesiones del mismo paso.
+fn cambios_de_propias(n: &Nucleo, s: &mut Sesion, f: u32, proyectadas: &mut BTreeMap<u64, Option<pb::Asentamiento>>, todas: bool) -> Vec<pb::Cambio> {
+    if !propios::de_su_faccion(n, s.espectador(), f) {
+        s.propias.clear();
+        return Vec::new();
+    }
+    let campos: Vec<String> = ["version"].into_iter().chain(propios::CAMPOS_DE_PLAZA_PROPIA).map(str::to_owned).collect();
+    let suyas: Vec<u64> = n.estado().asentamientos.values().filter(|a| a.faccion == f).map(|a| a.id).collect();
+    s.propias.retain(|p, _| suyas.contains(p));
+    let mut cambios = Vec::new();
+    for p in suyas {
+        let Some(actual) = n.version_interior(p) else { continue };
+        // La que no se recuerda acaba de llegar entera (la foto o el registro): se anota con la secuencia de hoy y se manda desde el paso siguiente. Al reanudar (`todas`), la que no se recuerda
+        // se tiene con la secuencia 0.
+        match s.propias.insert(p, actual) {
+            None if !todas => continue,
+            Some(antes) if antes == actual => continue,
+            _ => {}
+        }
+        let espectador = s.espectador();
+        let datos = proyectadas.entry(p).or_insert_with(|| match propios::proyectar(n, espectador, Clase::Asentamiento, p).existen.into_iter().next() {
+            Some((_, _, pb::entidad::Cuerpo::Asentamiento(x))) => Some(x),
+            _ => None,
+        });
+        let Some(datos) = datos.clone() else { continue };
+        cambios.push(pb::Cambio {
+            tipo: pb::TipoCambio::CambioActualiza as i32,
+            entidad: pb::TipoEntidad::Asentamiento as i32,
+            id: crate::proyeccion::ids::asentamiento(p),
+            datos: Some(pb::Entidad { cuerpo: Some(pb::entidad::Cuerpo::Asentamiento(datos)) }),
+            reemplaza: false,
+            campos: campos.clone(),
+            ..Default::default()
+        });
+    }
+    cambios
+}
+
 
 /// Manda lo que no pasa por el registro en una `Delta` del ámbito, de la versión que tiene el cliente a la de ahora (puede ser la misma), y el ámbito queda en la de ahora.
 fn entregar_fuera_del_registro(n: &Nucleo, id: SesionId, s: &mut Sesion, a: Ambito, cambios: Vec<pb::Cambio>, envios: &mut Vec<(SesionId, Difusion)>) {

@@ -156,6 +156,7 @@ fn datos_de(ev: &EventoComercio) -> Vec<(&'static str, i64)> {
                 MotivoEncargo::Cancelado => 1,
                 MotivoEncargo::DestinoPerdido => 2,
                 MotivoEncargo::Destruida => 3,
+                MotivoEncargo::Detenido => 4,
             }),
             ("volcado", *volcado),
             ("perdido", *perdido),

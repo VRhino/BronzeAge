@@ -586,6 +586,8 @@ fn encargo(e: &Encargo) -> pb::Encargo {
         .to_owned(),
         fin_paso_ms: e.fin_paso,
         cancelado: e.cancelado,
+        inicio_paso_ms: e.inicio_paso.filter(|_| e.fin_paso.is_some()),
+        detener: e.detener,
     }
 }
 
@@ -1159,6 +1161,54 @@ pub struct Proyeccion {
     pub posibles: Vec<(pb::TipoEntidad, String)>,
 }
 
+/// ¿Es `quien` un héroe de la Facción `f` (y no un mercenario con contrato marcado por ella)? A él le llega su plaza con lo de [`plaza_propia`].
+pub(crate) fn de_su_faccion(n: &Nucleo, quien: Espectador, f: u32) -> bool {
+    let Espectador::Heroe(Some(h)) = quien else { return false };
+    let marcado = n.estado().politica.facciones.get(f).is_some_and(|x| x.marcas.contains_key(&h));
+    !marcado && n.heroe(h).is_some_and(|x| x.faccion == Some(f))
+}
+
+/// Los campos de la plaza propia vista desde fuera que van más allá de la ficha (pedido del autor del 2026-11-04: «desde fuera se debería poder ver el contenido del almacén a quienes sean de
+/// la misma Facción» y más datos para la ventana de Facción). Son los que cambia el paso de minuto: [`crate::sesiones`] los renueva en `FACCION` con esta máscara cuando avanza la secuencia interior.
+pub const CAMPOS_DE_PLAZA_PROPIA: [&str; 13] = [
+    "version_interior",
+    "racha_mantenimiento_sano",
+    "poblacion",
+    "almacen",
+    "medidor_mantenimiento",
+    "nutricion",
+    "edificios",
+    "ascenso",
+    "casas_compradas",
+    "guarnicion_ids",
+    "guarnicion",
+    "cupo_guarnicion",
+    "auto_construccion_pausada",
+];
+
+/// La plaza propia vista desde fuera por un héroe de su Facción: la `ficha` (con cargos y fundadores) más su secuencia interior, la población, el almacén con su tendencia, el medidor de
+/// mantenimiento, la nutrición, los edificios (estado, nivel, obra y mejora), el ascenso, quiénes residen, la guarnición con el dueño de cada tropa y su cupo, y si la auto-construcción
+/// está apagada: [`CAMPOS_DE_PLAZA_PROPIA`], tal como los da el interior. Sin el trazado, los recintos, quién está dentro, las aparcadas ni las misiones: eso sigue siendo de dentro.
+pub fn plaza_propia(n: &Nucleo, id: u64, ficha: pb::Asentamiento) -> pb::Asentamiento {
+    let Some(i) = super::interior::asentamiento(n, id) else { return ficha };
+    pb::Asentamiento {
+        version_interior: i.version_interior,
+        racha_mantenimiento_sano: i.racha_mantenimiento_sano,
+        poblacion: i.poblacion,
+        almacen: i.almacen,
+        medidor_mantenimiento: i.medidor_mantenimiento,
+        nutricion: i.nutricion,
+        edificios: i.edificios,
+        ascenso: i.ascenso,
+        casas_compradas: i.casas_compradas,
+        guarnicion_ids: i.guarnicion_ids,
+        guarnicion: i.guarnicion,
+        cupo_guarnicion: i.cupo_guarnicion,
+        auto_construccion_pausada: i.auto_construccion_pausada,
+        ..ficha
+    }
+}
+
 /// Proyecta la entidad `(clase, id)` para `quien` (el héroe de la sesión, que decide qué peticiones y qué bando ve, o la administración). `Interior` no es una entidad: es la plaza (`interior`).
 pub fn proyectar(n: &Nucleo, quien: Espectador, clase: Clase, id: u64) -> Proyeccion {
     use pb::TipoEntidad as T;
@@ -1166,11 +1216,14 @@ pub fn proyectar(n: &Nucleo, quien: Espectador, clase: Clase, id: u64) -> Proyec
     let un = |tipo: T, id: String, cuerpo: Option<Cuerpo>| Proyeccion { posibles: vec![(tipo, id.clone())], existen: cuerpo.into_iter().map(|c| (tipo, id.clone(), c)).collect() };
     match clase {
         Clase::Ejercito => un(T::Ejercito, ids::ejercito(id), e.ejercitos.get(&id).map(|x| Cuerpo::Ejercito(ejercito(n, x)))),
-        // Desde fuera, de una plaza propia viajan además sus cargos (Doc 1.10.1; 5E) y sus fundadores (5H).
+        // Desde fuera, de una plaza propia viajan además sus cargos (Doc 1.10.1; 5E) y sus fundadores (5H); al héroe de su Facción, también lo de dentro de [`plaza_propia`] (2026-11-04).
         Clase::Asentamiento => un(
             T::Asentamiento,
             ids::asentamiento(id),
-            e.asentamientos.get(&id).map(|a| Cuerpo::Asentamiento(pb::Asentamiento { cargos: Some(super::interior::cargos(&a.cargos)), fundadores_ids: a.fundadores.iter().map(|&h| ids::heroe(h)).collect(), ..super::ficha_de_asentamiento(a, &n.poligono_zona(a.id), batalla_sobre(n, Ubicacion::Asentamiento(a.id as u32))) })),
+            e.asentamientos.get(&id).map(|a| {
+                let ficha = pb::Asentamiento { cargos: Some(super::interior::cargos(&a.cargos)), fundadores_ids: a.fundadores.iter().map(|&h| ids::heroe(h)).collect(), ..super::ficha_de_asentamiento(a, &n.poligono_zona(a.id), batalla_sobre(n, Ubicacion::Asentamiento(a.id as u32))) };
+                Cuerpo::Asentamiento(if de_su_faccion(n, quien, a.faccion) { plaza_propia(n, a.id, ficha) } else { ficha })
+            }),
         ),
         Clase::Heroe => {
             // El héroe y sus informes de inspección vigentes (los vencidos los quita la sesión al reconciliar).

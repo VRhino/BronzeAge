@@ -186,7 +186,7 @@ fn la_proyeccion_propia_lleva_el_encargo_con_sus_textos_y_cambia_de_parada_y_fas
         x.parada_destino,
         Some(pb::ParadaEncargo { recoger: vec![texto_recoger("estano", 50_000, None)], esperar_existencias: true, dejar: vec![texto_dejar("cobre", None, None)], desechar_sobrante: false })
     );
-    assert_eq!((x.parada_actual.as_str(), x.fase.as_str(), x.fin_paso_ms), ("origen", "carga", Some(t0 + carga)));
+    assert_eq!((x.parada_actual.as_str(), x.fase.as_str(), x.inicio_paso_ms, x.fin_paso_ms, x.detener), ("origen", "carga", Some(t0), Some(t0 + carga), false));
 
     // Sale hacia el destino.
     e.n.avanzar_hasta(t0 + carga);
@@ -196,10 +196,10 @@ fn la_proyeccion_propia_lleva_el_encargo_con_sus_textos_y_cambia_de_parada_y_fas
     // Llega: descarga en el destino.
     let llegada = e.viajar(car);
     let x = e.proyectada(car).encargo.unwrap();
-    assert_eq!((x.parada_actual.as_str(), x.fase.as_str(), x.fin_paso_ms), ("destino", "descarga", Some(llegada + descarga)));
+    assert_eq!((x.parada_actual.as_str(), x.fase.as_str(), x.inicio_paso_ms, x.fin_paso_ms), ("destino", "descarga", Some(llegada), Some(llegada + descarga)));
     e.n.avanzar_hasta(llegada + descarga);
     let x = e.proyectada(car).encargo.unwrap();
-    assert_eq!((x.parada_actual.as_str(), x.fase.as_str(), x.fin_paso_ms), ("destino", "carga", Some(llegada + descarga + carga)));
+    assert_eq!((x.parada_actual.as_str(), x.fase.as_str(), x.inicio_paso_ms, x.fin_paso_ms), ("destino", "carga", Some(llegada + descarga), Some(llegada + descarga + carga)));
 
     // Vuelve al origen: suma una vuelta y descarga allí.
     e.n.avanzar_hasta(llegada + descarga + carga);
@@ -233,7 +233,7 @@ fn un_envio_programado_a_una_plaza_ajena_lleva_su_hora_sus_precios_y_la_fase_de_
     e.admin(encargar(car, c, Modo::Envio, Some(salida), parada(&[(Cobre, 50_000)], &[Cobre]), en_c));
     let x = e.proyectada(car).encargo.expect("el envío");
     assert_eq!((x.modo.as_str(), x.destino_asentamiento_id.as_str(), x.salir_en_ms), ("envio", ids::asentamiento(c).as_str(), Some(salida)));
-    assert_eq!((x.parada_actual.as_str(), x.fase.as_str(), x.fin_paso_ms), ("origen", "espera", None), "espera su hora");
+    assert_eq!((x.parada_actual.as_str(), x.fase.as_str(), x.inicio_paso_ms, x.fin_paso_ms), ("origen", "espera", None, None), "espera su hora");
     assert_eq!(
         x.parada_destino,
         Some(pb::ParadaEncargo {

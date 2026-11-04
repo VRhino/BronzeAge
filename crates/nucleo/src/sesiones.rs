@@ -253,14 +253,31 @@ impl Actor {
                     self.mesa.recordar_foto(&self.nucleo, sesion, a);
                     (pb::DecisionReanudacion::ReanudaConFoto, Some(Difusion::Foto(f)))
                 }
-                (Some(&k), cubo) => match cubo.and_then(|cubo| delta(&self.nucleo, s, a, k, v, cubo).delta) {
+                (Some(&k), cubo) => match (cubo.and_then(|cubo| delta(&self.nucleo, s, a, k, v, cubo).delta), a) {
                     // Lo que no pasa por el registro (6G: los alijos de `HEROE`; en `ADMIN`, la tecnología con sus contadores y los Aedas itinerantes) va entero en la misma `Delta`.
-                    Some(mut d) => {
+                    (Some(mut d), _) => {
                         d.cambios.extend(self.mesa.fuera_del_registro(&self.nucleo, sesion, a));
+                        // Y en `FACCION`, lo que el paso de minuto cambió de sus plazas desde la secuencia que el cliente declara (2026-11-04); la plaza que la `Delta` ya trae entera, no.
+                        if let Ambito::Faccion(f) = a {
+                            let enteras: std::collections::BTreeSet<(i32, String)> = d.cambios.iter().filter(|c| c.reemplaza).map(|c| (c.entidad, c.id.clone())).collect();
+                            let propias = self.mesa.propias_al_reanudar(&self.nucleo, sesion, f, &propias_conocidas(&hola));
+                            d.cambios.extend(propias.into_iter().filter(|c| !enteras.contains(&(c.entidad, c.id.clone()))));
+                        }
                         (pb::DecisionReanudacion::ReanudaConDeltas, Some(Difusion::Delta(d)))
                     }
+                    // El mundo no se movió pero el interior de sus plazas sí: en `FACCION`, una `Delta` de la versión que tiene a la misma con su cambio parcial (2026-11-04).
+                    (None, Ambito::Faccion(f)) => {
+                        let propias = self.mesa.propias_al_reanudar(&self.nucleo, sesion, f, &propias_conocidas(&hola));
+                        if propias.is_empty() {
+                            self.mesa.recordar_foto(&self.nucleo, sesion, a);
+                            (pb::DecisionReanudacion::ReanudaSinNovedad, None)
+                        } else {
+                            let d = pb::Delta { ambito: Some(a.a_contrato(&|b| self.nucleo.uuid_de_batalla(b))), desde: k, hasta: v, cambios: propias, eventos: Vec::new(), niebla: None };
+                            (pb::DecisionReanudacion::ReanudaConDeltas, Some(Difusion::Delta(d)))
+                        }
+                    }
                     // Lo tocado no cambió nada que el cliente vea (la ficha de la plaza sin cambios): nada que mandar. Sin novedad, el mundo no se movió: lo de fuera del registro se da por sabido.
-                    None => {
+                    (None, _) => {
                         self.mesa.recordar_foto(&self.nucleo, sesion, a);
                         (pb::DecisionReanudacion::ReanudaSinNovedad, None)
                     }
@@ -393,6 +410,8 @@ impl Actor {
                 self.mesa.campamentos_al_dia(&self.nucleo, None, &mut envios);
                 // Y el almacén local del pueblo a quien está dentro y es de su Facción (2026-10-29).
                 self.mesa.pueblos_al_dia(&self.nucleo, &mut envios);
+                // Y lo que el paso de minuto cambia de las plazas de su Facción, a cada `FACCION` (2026-11-04).
+                self.mesa.propias_al_dia(&self.nucleo, &mut envios);
             }
             None => {
                 // Se perdió registro (no debería ocurrir en vivo): foto completa de todos los ámbitos a todos.
@@ -665,4 +684,9 @@ pub fn resultado_orden(peticion_id: &str, r: &Respuesta, uuid_de_batalla: &dyn F
         creadas: r.tipo_creadas.map_or_else(Vec::new, |tipo| r.creadas.iter().filter_map(|&id| referencia_creada(tipo, id, uuid_de_batalla)).collect()),
         datos: None,
     }
+}
+
+/// La secuencia interior con que el cliente que reanuda tiene cada plaza de su Facción en `FACCION` (2026-11-04): `PROPIA:as-N` en `Hola.versiones_interiores_conocidas`.
+fn propias_conocidas(hola: &pb::Hola) -> std::collections::BTreeMap<u64, u64> {
+    hola.versiones_interiores_conocidas.iter().filter_map(|(k, &v)| Some((crate::proyeccion::ids::parse_asentamiento(k.strip_prefix("PROPIA:")?)?, v))).collect()
 }

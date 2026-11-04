@@ -1130,7 +1130,7 @@ impl Nucleo {
                 Ok(None) => {}
                 Err(r) => return r,
             },
-            Comando::EncargarCaravana { .. } | Comando::CambiarEncargo { .. } | Comando::CancelarEncargo { .. } => {
+            Comando::EncargarCaravana { .. } | Comando::CambiarEncargo { .. } | Comando::CancelarEncargo { .. } | Comando::DetenerEncargo { .. } => {
                 if let Err(r) = self.ejecutar_encargos(t, p) {
                     return r;
                 }

@@ -15,6 +15,8 @@ pub enum MotivoEncargo {
     Cancelado,
     /// El destino dejó de ser de la Facción del origen, desapareció o ya no hay ruta hasta él.
     DestinoPerdido,
+    /// La ruta se detuvo (2026-11-04, `detenerEncargo`) y la caravana ya está de vuelta en el origen, con la ida y vuelta acabada.
+    Detenido,
     /// La caravana con encargo se destruyó (ruina, batalla, bandidos, pérdida de todos los carros…); lo que llevaba a bordo se perdió.
     Destruida,
 }

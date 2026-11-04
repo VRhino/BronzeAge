@@ -615,6 +615,64 @@ async fn quien_esta_dentro_del_pueblo_y_es_de_su_faccion_recibe_el_almacen_local
     assert_eq!(antes, nucleo::proyeccion::propios::pueblo(&n, plaza, real).version_interior);
 }
 
+/// Desde fuera, a quien es de la Facción de la plaza le llega en su `FACCION` el almacén y lo demás de dentro que la ventana de Facción necesita (2026-11-04, pedido del autor): en la foto y,
+/// en cada paso, un cambio parcial con la máscara de la plaza propia y la secuencia interior de ese paso. A quien es de otra Facción, no.
+#[tokio::test]
+async fn desde_fuera_quien_es_de_su_faccion_ve_el_almacen_y_lo_de_dentro_de_su_plaza_y_se_le_renueva_por_minuto() {
+    let m = con_mundo!();
+    let mut x = aldea_con(m, Opc { pueblo: true, sin_tropa: true, ..Default::default() });
+    let plaza = x.plaza;
+    let as_ = ids::asentamiento(plaza);
+    // Lia (F1, la de la plaza) y Eno (F3), con su columna a la puerta del pueblo: fuera de la plaza.
+    let puerta = x.n.posicion_de_pueblo(x.pueblo).unwrap();
+    for (cuenta, f) in [("lia", 1), ("eno", 3)] {
+        let t = x.n.ahora();
+        x.n.crear_ejercito(t, cuenta, f, puerta, 500, 100_000).unwrap();
+    }
+    assert_eq!(x.n.estado().asentamientos[&plaza].faccion, 1);
+    let paso = proximo_paso(&x.n, plaza);
+    let w = arrancar_con(x.n).await;
+    let (mut admin_c, _) = w.entrar("admin", TipoCliente::ClienteAdminWeb).await;
+    pausar(&mut admin_c).await;
+    let (mut lia_c, _, fotos) = w.conectar(hola_con("lia", TipoCliente::ClienteUnity, &[])).await;
+    let (mut eno_c, _, _) = w.conectar(hola_con("eno", TipoCliente::ClienteUnity, &[])).await;
+    let de_la_plaza = |ms: &[ms::Cuerpo]| -> Vec<(pb::Asentamiento, Vec<String>)> {
+        ms.iter()
+            .filter_map(|m| if let ms::Cuerpo::Delta(d) = m { Some(d) } else { None })
+            .filter(|d| es_de(d, pb::AmbitoTipo::AmbitoFaccion))
+            .flat_map(|d| d.cambios.iter())
+            .filter(|c| c.entidad == pb::TipoEntidad::Asentamiento as i32 && c.id == as_)
+            .filter_map(|c| if let Some(pb::entidad::Cuerpo::Asentamiento(p)) = c.datos.as_ref().and_then(|e| e.cuerpo.clone()) { Some((p, c.campos.clone())) } else { None })
+            .collect()
+    };
+    let foto = fotos
+        .iter()
+        .filter_map(|m| if let ms::Cuerpo::Foto(f) = m { Some(f) } else { None })
+        .find(|f| f.ambito.as_ref().is_some_and(|a| a.tipo == pb::AmbitoTipo::AmbitoFaccion as i32))
+        .expect("la foto de su FACCION");
+    let en_la_foto = foto.entidades.iter().find_map(|e| if let Some(pb::entidad::Cuerpo::Asentamiento(p)) = &e.cuerpo { (p.id == as_).then(|| p.clone()) } else { None }).expect("su plaza en la foto");
+    assert!(!en_la_foto.almacen.is_empty() && en_la_foto.poblacion.is_some() && !en_la_foto.edificios.is_empty(), "la foto lleva el almacén, la población y los edificios");
+    assert!(en_la_foto.trazado.is_none() && en_la_foto.presentes_ids.is_empty(), "y no el trazado ni quién está dentro");
+    pendiente(&mut lia_c).await;
+    pendiente(&mut eno_c).await;
+    let mascara: Vec<String> = ["version"].into_iter().chain(nucleo::proyeccion::propios::CAMPOS_DE_PLAZA_PROPIA).map(str::to_owned).collect();
+    let mut antes = en_la_foto.version_interior;
+    for (i, k) in [paso, paso + MIN].into_iter().enumerate() {
+        avanzar_hasta(&mut admin_c, &format!("m{i}"), k).await;
+        let de_lia = de_la_plaza(&pendiente(&mut lia_c).await);
+        let (p, campos) = de_lia.iter().find(|(_, c)| *c == mascara).unwrap_or_else(|| panic!("el paso {i} le llega con la máscara de la plaza propia: {:?}", de_lia.iter().map(|x| &x.1).collect::<Vec<_>>()));
+        assert!(p.version_interior > antes, "con la secuencia interior de ese paso");
+        assert!(!p.almacen.is_empty() && campos.contains(&"almacen".to_owned()));
+        antes = p.version_interior;
+        assert!(de_la_plaza(&pendiente(&mut eno_c).await).is_empty(), "a quien no es de la Facción no le llega");
+    }
+    let n = w.parar().await;
+    let dentro = interior::asentamiento(&n, plaza).unwrap();
+    assert_eq!(antes, dentro.version_interior);
+    let propia = nucleo::proyeccion::propios::plaza_propia(&n, plaza, pb::Asentamiento::default());
+    assert_eq!((propia.almacen, propia.edificios, propia.guarnicion), (dentro.almacen, dentro.edificios, dentro.guarnicion), "lo que se ve desde fuera es lo de dentro");
+}
+
 // ───────────────────────────── 3. Obras, mejoras y recintos en su instante ─────────────────────────────
 
 #[tokio::test]
@@ -796,15 +854,17 @@ async fn la_politica_la_guarnicion_el_visitante_y_el_acceso_que_expulsa_viajan_a
     assert!(!ana.plaza.presentes_ids.contains(&h_gus), "la puerta cerrada lo expulsó");
     assert!(!deltas.is_empty());
 
-    // Nada de esto llegó a quien no está dentro: gus (de otra Facción) y beto (de la Facción, pero en el campamento) no recibieron un solo mensaje del ámbito de la plaza; en la Facción solo viaja la ficha.
-    for c in [&mut gus, &mut beto] {
+    // Nada de esto llegó a quien no está dentro: gus (de otra Facción) y beto (de la Facción, pero en el campamento) no recibieron un solo mensaje del ámbito de la plaza; en la Facción viaja la ficha
+    // con lo de la plaza propia (desde el 2026-11-04, el almacén y los edificios sí), nunca quién está dentro ni el trazado.
+    for (c, de_la_faccion) in [(&mut gus, false), (&mut beto, true)] {
         for m in pendiente(c).await {
             match m {
                 ms::Cuerpo::Delta(d) => {
                     assert!(!es_de(&d, pb::AmbitoTipo::AmbitoAsentamiento), "una delta de la plaza llegó a quien no está dentro");
                     for cambio in &d.cambios {
                         if let Some(pb::entidad::Cuerpo::Asentamiento(a)) = cambio.datos.as_ref().and_then(|e| e.cuerpo.as_ref()) {
-                            assert!(a.almacen.is_empty() && a.edificios.is_empty() && a.presentes_ids.is_empty() && a.trazado.is_none(), "solo la ficha, nunca el interior");
+                            assert!(a.presentes_ids.is_empty() && a.trazado.is_none() && a.puerta_cerrada_a.is_empty(), "nunca lo que es solo de dentro");
+                            assert!(de_la_faccion || (a.almacen.is_empty() && a.edificios.is_empty()), "a otra Facción, solo la ficha");
                         }
                     }
                 }

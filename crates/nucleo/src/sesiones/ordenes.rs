@@ -729,6 +729,7 @@ impl Ctx<'_> {
                 en_destino: self.parada(o.parada_destino.as_ref())?,
             },
             Cuerpo::CancelarEncargo(o) => Comando::CancelarEncargo { caravana: self.caravana(&o.caravana_id)? },
+            Cuerpo::DetenerEncargo(o) => Comando::DetenerEncargo { caravana: self.caravana(&o.caravana_id)? },
 
             // ── Pueblos extractores ──
             Cuerpo::MarcarPueblo(o) => Comando::MarcarPueblo { asentamiento: self.plaza(&o.asentamiento_id)?, nodo: self.nodo(&o.nodo_id)? },

@@ -201,6 +201,15 @@ impl Nucleo {
             Comando::MoverCargaAparcada { caravana, recurso, cantidad, cargar } => {
                 let (i, origen) = self.caravana_de_orden(p, *caravana)?;
                 let c = &self.estado.comercio.flota[i];
+                // En casa (disponible, o esperando en su origen con encargo) se descarga en el almacén del origen (2026-11-04, pedido del autor), también con ruta.
+                if !*cargar && c.en_casa() {
+                    let almacen = &mut self.estado.asentamientos.get_mut(&origen).expect("caravana_de_orden lo comprobó").economia.almacen;
+                    let n = self.estado.comercio.flota[i].descargar_en_casa(almacen, *recurso, *cantidad).map_err(de_caravana)?;
+                    self.tr.tocar(Clase::Caravana, *caravana);
+                    self.tr.tocar(Clase::Asentamiento, origen);
+                    self.emitir_comercio(t, EventoComercio::CargaCaravanaAparcada { caravana: *caravana }, vec![origen], &[("cantidad", n), ("cargar", 0)]);
+                    return Ok(None);
+                }
                 if c.estado != EstadoCaravana::Aparcada {
                     return Err(de_caravana(ErrorCaravana::NoAparcada));
                 }

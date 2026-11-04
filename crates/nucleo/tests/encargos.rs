@@ -645,6 +645,97 @@ fn cancelar_esperando_en_el_destino_sale_ya_de_vuelta_sin_dejar_ni_recoger_mas()
     assert_eq!((fin.len(), dato(&fin[0], "motivo"), dato(&fin[0], "volcado")), (1, 1, 100_000));
 }
 
+/// «Detener ruta» (pedido del autor del 2026-11-04): de camino, la caravana acaba esa ida y vuelta comerciando como siempre (deja y recoge en el destino y deja en el origen) y, al descargar en
+/// el origen, se queda sin encargo. Cada paso lleva su inicio y su fin, para la barra de tiempo del cliente.
+#[test]
+fn detener_una_ruta_de_camino_acaba_la_ida_y_vuelta_comerciando_y_termina_al_descargar_en_el_origen() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let (a, b) = (e.a, e.b);
+    e.dar(a, Cobre, 300_000);
+    e.dar(b, Estano, 300_000);
+    let car = e.caravana(a, 1);
+    let (cobre_b, estano_a) = (cantidad(&e.n, b, Cobre), cantidad(&e.n, a, Estano));
+    let (carga, descarga, t0) = (e.tiempo_carga(), e.tiempo_descarga(), e.n.ahora());
+    e.admin(encargar(car, b, Modo::Ruta, None, parada(&[(Cobre, 100_000)], &[Estano]), parada(&[(Estano, 50_000)], &[Cobre])));
+    assert_eq!((e.encargo(car).inicio_paso, e.encargo(car).fin_paso), (Some(t0), Some(t0 + carga)), "la carga en el origen, de su inicio a su fin");
+    e.avanzar(carga);
+    let mitad = e.n.ahora() + (e.fin_del_plan(car) - e.n.ahora()) / 2;
+    e.avanzar_hasta(mitad);
+    e.admin(Comando::DetenerEncargo { caravana: car });
+    assert_eq!((e.k(car).estado, e.encargo(car).detener, e.encargo(car).cancelado), (EstadoCaravana::EnTransito, true, false), "sigue su camino");
+    let (hash, r) = (e.n.hash_estado(), e.ord("admin", Comando::DetenerEncargo { caravana: car }));
+    assert_eq!((r.resultado, e.n.hash_estado()), (Resultado::SinCambios, hash), "detener lo ya detenido no cambia nada");
+
+    // En el destino comercia como siempre: deja el cobre y recoge el estaño.
+    let llegada = e.viajar(car);
+    assert_eq!((e.situacion(car).2, e.encargo(car).inicio_paso, e.encargo(car).fin_paso), (Fase::Descarga, Some(llegada), Some(llegada + descarga)));
+    e.avanzar_hasta(llegada + descarga);
+    assert_eq!((e.situacion(car).2, e.encargo(car).inicio_paso, e.encargo(car).fin_paso), (Fase::Carga, Some(llegada + descarga), Some(llegada + descarga + carga)));
+    e.avanzar_hasta(llegada + descarga + carga);
+    assert_eq!((cantidad(&e.n, b, Cobre) - cobre_b, e.a_bordo(car, Estano)), (100_000, 50_000));
+
+    // De vuelta deja el estaño en el origen y, al acabar la descarga, termina en vez de volver a cargar.
+    let vuelta = e.viajar(car);
+    assert_eq!((e.situacion(car).2, e.encargo(car).inicio_paso), (Fase::Descarga, Some(vuelta)));
+    e.avanzar_hasta(vuelta + descarga);
+    let k = e.k(car);
+    assert_eq!((k.estado, k.encargo.is_none(), cantidad(&e.n, a, Estano) - estano_a), (EstadoCaravana::Disponible, true, 50_000));
+    let fin = hechos(&e.n, "comercio.encargo_terminado");
+    assert_eq!((fin.len(), fin[0].0, dato(&fin[0], "motivo")), (1, vuelta + descarga, 4));
+    e.avanzar(HORA);
+    assert_eq!(e.k(car).estado, EstadoCaravana::Disponible, "no vuelve a salir");
+}
+
+/// Detener una ruta que espera en su origen la termina ya, como al cancelar; un envío ya acaba solo al volver.
+#[test]
+fn detener_esperando_en_el_origen_termina_ya_y_un_envio_no_cambia() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let (a, b) = (e.a, e.b);
+    e.dar(a, Cobre, 200_000);
+    let car = e.caravana(a, 1);
+    let cobre = cantidad(&e.n, a, Cobre);
+    e.admin(encargar(car, b, Modo::Ruta, None, parada(&[(Cobre, 100_000)], &[]), Parada::default()));
+    e.admin(Comando::DetenerEncargo { caravana: car });
+    let k = e.k(car);
+    assert_eq!((k.estado, k.encargo.is_none(), cantidad(&e.n, a, Cobre)), (EstadoCaravana::Disponible, true, cobre));
+    assert_eq!(dato(&hechos(&e.n, "comercio.encargo_terminado")[0], "motivo"), 4);
+    assert_eq!(e.rechazada("admin", Comando::DetenerEncargo { caravana: car }), rechazos::ENCARGO_NO_TIENE);
+    e.admin(encargar(car, b, Modo::Envio, None, parada(&[(Cobre, 100_000)], &[]), Parada::default()));
+    let (hash, r) = (e.n.hash_estado(), e.ord("admin", Comando::DetenerEncargo { caravana: car }));
+    assert_eq!((r.resultado, e.n.hash_estado()), (Resultado::SinCambios, hash), "un envío no se detiene: ya acaba solo");
+}
+
+/// Una caravana en casa (esperando en su origen con encargo, o `disponible`) se descarga a mano en el almacén de su plaza, todo o una parte y solo lo que cabe (pedido del autor del 2026-11-04,
+/// también con ruta). De camino no: `caravana.no_aparcada`. Cargar a mano sigue siendo solo de la aparcada.
+#[test]
+fn una_caravana_en_casa_se_descarga_a_mano_en_su_almacen_aunque_tenga_ruta() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let (a, b) = (e.a, e.b);
+    e.dar(a, Cobre, 200_000);
+    let car = e.caravana(a, 1);
+    e.admin(encargar(car, b, Modo::Ruta, None, parada(&[(Cobre, 100_000)], &[]), Parada::default()));
+    assert_eq!((e.situacion(car), e.a_bordo(car, Cobre)), ((EstadoCaravana::Esperando, Punta::Origen, Fase::Carga), 100_000));
+    let cobre = cantidad(&e.n, a, Cobre);
+    let descargar = |n: i64| Comando::MoverCargaAparcada { caravana: car, recurso: Cobre, cantidad: n, cargar: false };
+    e.admin(descargar(40_000));
+    assert_eq!((e.a_bordo(car, Cobre), cantidad(&e.n, a, Cobre)), (60_000, cobre + 40_000), "una parte");
+    assert_eq!(e.encargo(car).fase, Fase::Carga, "el encargo sigue");
+    assert_eq!(e.rechazada("admin", Comando::MoverCargaAparcada { caravana: car, recurso: Cobre, cantidad: 10_000, cargar: true }), rechazos::CARAVANA_NO_APARCADA);
+    assert_eq!(e.rechazada("admin", Comando::MoverCargaAparcada { caravana: car, recurso: Estano, cantidad: 10_000, cargar: false }), rechazos::CARAVANA_NADA_QUE_MOVER);
+    e.admin(descargar(1_000_000));
+    assert_eq!((e.a_bordo(car, Cobre), cantidad(&e.n, a, Cobre)), (0, cobre + 100_000), "todo lo que lleva");
+    // De camino no se descarga.
+    e.dar(a, Cobre, 100_000);
+    e.admin(Comando::CancelarEncargo { caravana: car });
+    e.admin(encargar(car, b, Modo::Ruta, None, parada(&[(Cobre, 100_000)], &[]), Parada::default()));
+    e.avanzar(e.tiempo_carga());
+    assert_eq!(e.k(car).estado, EstadoCaravana::EnTransito);
+    assert_eq!(e.rechazada("admin", descargar(10_000)), rechazos::CARAVANA_NO_APARCADA);
+}
+
 // ───────────────────────────── 7. Cambiar ─────────────────────────────
 
 #[test]

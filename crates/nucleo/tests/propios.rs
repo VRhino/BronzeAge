@@ -345,8 +345,15 @@ impl Cliente {
             if c.tipo == pb::TipoCambio::CambioQuita as i32 {
                 self.entidades.remove(&(c.entidad, c.id.clone()));
             } else {
+                let datos = c.datos.as_ref().expect("un ACTUALIZA trae la entidad");
+                // La plaza propia en `FACCION` se renueva en cada paso de minuto con un cambio parcial (2026-11-04, `propios::CAMPOS_DE_PLAZA_PROPIA`); lo demás viaja completo.
+                if let (false, Some(Cuerpo::Asentamiento(parte))) = (c.reemplaza, datos.cuerpo.as_ref()) {
+                    let tenida = self.entidades.get_mut(&(c.entidad, c.id.clone())).and_then(|e| if let Some(Cuerpo::Asentamiento(a)) = e.cuerpo.as_mut() { Some(a) } else { None });
+                    contrato::plaza::aplicar(tenida.expect("el cambio parcial es de una plaza que ya tiene"), parte, &c.campos);
+                    continue;
+                }
                 assert!(c.reemplaza, "las entidades de estos ámbitos viajan completas");
-                self.poner(c.datos.as_ref().expect("un ACTUALIZA trae la entidad"));
+                self.poner(datos);
             }
         }
     }
@@ -415,7 +422,9 @@ async fn la_foto_inicial_de_heroe_y_faccion_lleva_todo_lo_propio_y_nada_de_otra_
     assert_eq!(asentamientos(&f1.entidades).iter().map(|p| p.id.clone()).collect::<Vec<_>>(), [as_a.clone()], "su plaza en resumen: la de F2 no es suya");
     let ficha = asentamientos(&f1.entidades)[0];
     assert_eq!((ficha.faccion_id.as_str(), ficha.nivel, ficha.zona.is_empty()), ("f-1", 1, false));
-    assert!(ficha.almacen.is_empty() && ficha.edificios.is_empty(), "el interior es del ámbito de la plaza");
+    // Desde el 2026-11-04 la plaza propia lleva desde fuera el almacén y los edificios; el trazado y quién está dentro siguen siendo del ámbito de la plaza.
+    assert!(!ficha.almacen.is_empty() && !ficha.edificios.is_empty(), "lo de la plaza propia desde fuera");
+    assert!(ficha.trazado.is_none() && ficha.presentes_ids.is_empty(), "el interior es del ámbito de la plaza");
     let t = tecnologias(&f1.entidades);
     assert!(t.len() == 1 && t[0].adoptadas.contains(&"arco_compuesto".to_owned()) && t[0].adoptadas.len() > 1, "las de arranque y las que dio la administración");
     let r = relaciones(&f1.entidades);

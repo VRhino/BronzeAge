@@ -123,7 +123,7 @@ impl Almacen {
     }
 
     /// El `Hola` de quien reanuda con lo que conserva: la versión de cada ámbito (salvo `VISTA`, que no se reanuda) y la secuencia interior de cada plaza que tiene con su interior (la de su
-    /// `ASENTAMIENTO` o, en `ADMIN`, todas), con la clave `ASENTAMIENTO:as-N`.
+    /// `ASENTAMIENTO` o, en `ADMIN`, todas), con la clave `ASENTAMIENTO:as-N`, y la de cada plaza de su `FACCION`, con la clave `PROPIA:as-N` (2026-11-04).
     pub fn hola(&self, token: &str, tipo: TipoCliente) -> pb::Hola {
         let mut h = pb::Hola { version_protocolo: 1, cliente: tipo as i32, version_cliente: "prueba".into(), token: token.into(), partida_id: "p1".into(), ..Default::default() };
         for (k, a) in self.ambitos.iter().filter(|(k, _)| !k.starts_with("VISTA:")) {
@@ -132,6 +132,14 @@ impl Almacen {
                 for c in a.entidades.values() {
                     if let Cuerpo::Asentamiento(p) = c {
                         h.versiones_interiores_conocidas.insert(format!("ASENTAMIENTO:{}", p.id), p.version_interior);
+                    }
+                }
+            }
+            // Las plazas de su Facción en `FACCION` llevan desde fuera lo que cambia el paso de minuto (2026-11-04): su secuencia, con la clave `PROPIA:as-N`.
+            if k.starts_with("FACCION:") {
+                for c in a.entidades.values() {
+                    if let Cuerpo::Asentamiento(p) = c {
+                        h.versiones_interiores_conocidas.insert(format!("PROPIA:{}", p.id), p.version_interior);
                     }
                 }
             }

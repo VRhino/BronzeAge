@@ -585,7 +585,7 @@ impl Caravana {
         let e = self.encargo.as_mut().expect("comprobado arriba");
         e.punta = punta;
         e.fase = Fase::Descarga;
-        e.fin_paso = None;
+        (e.fin_paso, e.inicio_paso) = (None, None);
         self.destino = Some(e.destino);
         self.posicion = ruta.first().copied().unwrap_or(self.posicion);
         self.ruta = ruta;
@@ -855,6 +855,28 @@ impl Caravana {
         if self.estado != EstadoCaravana::Aparcada {
             return Err(ErrorCaravana::NoAparcada);
         }
+        self.descargar_en(almacen, recurso, pedido)
+    }
+
+    /// ¿Está la caravana en su origen, para descargarla en su almacén (2026-11-04)? `Disponible`, o `Esperando` en el origen con encargo (una ruta o un envío entre dos pasos).
+    pub fn en_casa(&self) -> bool {
+        match self.estado {
+            EstadoCaravana::Disponible => true,
+            EstadoCaravana::Esperando => self.encargo.as_ref().is_some_and(|e| e.punta == Punta::Origen),
+            _ => false,
+        }
+    }
+
+    /// Descargar en el almacén de su origen la caravana que está en casa ([`Caravana::en_casa`]; pedido del autor del 2026-11-04, también con ruta): como la aparcada, `min(pedido, lo que lleva,
+    /// hueco del almacén de ese recurso)`. Fuera de casa, [`ErrorCaravana::NoAparcada`].
+    pub fn descargar_en_casa(&mut self, almacen: &mut Almacen, recurso: Recurso, pedido: Mil) -> Result<Mil, ErrorCaravana> {
+        if !self.en_casa() {
+            return Err(ErrorCaravana::NoAparcada);
+        }
+        self.descargar_en(almacen, recurso, pedido)
+    }
+
+    fn descargar_en(&mut self, almacen: &mut Almacen, recurso: Recurso, pedido: Mil) -> Result<Mil, ErrorCaravana> {
         let lleva = self.contenido.get(&recurso).copied().unwrap_or(0);
         let n = entero(pedido.min(lleva).min(almacen.espacio(recurso)));
         if n <= 0 {

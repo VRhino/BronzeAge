@@ -427,7 +427,9 @@ fn una_mejora_en_curso_no_recibe_dano_y_la_sigue_el_nuevo_dueno() {
     assert_eq!((rec.avance, rec.nivel, rec.mejora, rec.siguiente_celda_en), (antes.avance, 1, antes.mejora, antes.siguiente_celda_en), "ni una celda perdida ni la cita tocada");
     assert!(e.n.ciudad(b).unwrap().recintos()[0].completo);
     e.las_citas_cuadran(); // la cita de la celda de la mejora sigue en la cola
-    // La mejora la termina el nuevo dueño con la obra normal.
+    // La mejora la termina el nuevo dueño con la obra normal. La conquista enciende su auto-construcción: se apaga, que con los talleres de prueba de 5 minutos (2026-11-04) levantaría
+    // decenas en unas horas y se comería la piedra de la muralla.
+    e.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: b, pausada: true });
     e.terminar(0);
     assert_eq!(e.recintos_de_b()[0].nivel, 2);
 }

@@ -1,7 +1,7 @@
 //! Los encargos de caravana en el núcleo (Comercio_Caravanas §5.8): rutas y envíos automáticos entre una plaza propia y otra plaza.
 //!
 //! # Las órdenes
-//! `EncargarCaravana`, `CambiarEncargo` y `CancelarEncargo` validan todo sobre una copia antes de tocar nada. Un encargo no guarda su ruta: se traza al salir de cada punta.
+//! `EncargarCaravana`, `CambiarEncargo`, `CancelarEncargo` y `DetenerEncargo` validan todo sobre una copia antes de tocar nada. Un encargo no guarda su ruta: se traza al salir de cada punta.
 //!
 //! # El ciclo
 //! En cada punta la caravana llega, deja, recoge y sale. Cada paso con espera (la hora de salida de un envío, la descarga y la carga) es un
@@ -70,6 +70,7 @@ impl Nucleo {
                 self.cambiar_encargo(t, p, *caravana, *destino, *salir_en, [en_origen.clone(), en_destino.clone()])
             }
             Comando::CancelarEncargo { caravana } => self.cancelar_encargo(t, p, *caravana),
+            Comando::DetenerEncargo { caravana } => self.detener_encargo(t, p, *caravana),
             _ => unreachable!("solo se llama con órdenes de encargo"),
         }
     }
@@ -184,6 +185,28 @@ impl Nucleo {
         Ok(())
     }
 
+    /// `DetenerEncargo` (pedido del autor del 2026-11-04, «detener ruta»): esperando en el origen termina ya, como al cancelar; si no, marca la ruta como detenida y la caravana acaba la ida y
+    /// vuelta en curso comerciando como siempre y termina al descargar en el origen ([`Nucleo::acabar_descarga`]). Un envío ya acaba solo al volver, y una ruta cancelada o ya detenida no
+    /// cambia: «sin cambios».
+    fn detener_encargo(&mut self, t: Instante, p: &Peticion, caravana: u64) -> Result<(), Respuesta> {
+        let v = self.estado.version;
+        let (i, _) = self.caravana_de_orden(p, caravana)?;
+        let c = &self.estado.comercio.flota[i];
+        let Some(e) = c.encargo.as_ref() else {
+            return Err(Respuesta::rechazo(rechazos::ENCARGO_NO_TIENE, "la caravana no tiene encargo", v));
+        };
+        if e.modo == Modo::Envio || e.cancelado || e.detener {
+            return Err(Respuesta::sin_cambios(v));
+        }
+        if c.estado == EstadoCaravana::Esperando && e.punta == Punta::Origen {
+            self.terminar(t, caravana, MotivoEncargo::Detenido);
+            return Ok(());
+        }
+        self.estado.comercio.flota[i].encargo.as_mut().expect("comprobado arriba").detener = true;
+        self.tr.tocar(Clase::Caravana, caravana);
+        Ok(())
+    }
+
     // ───────────────────────────── El ciclo ─────────────────────────────
 
     /// «El destino sigue vigente» (Comercio_Caravanas §5.8.4): existe y, en una ruta, es de la Facción del origen.
@@ -270,7 +293,7 @@ impl Nucleo {
         let c = &mut self.estado.comercio.flota[i];
         let (a_bordo, oyentes) = (total(&c.contenido), oyentes_de_parada(c, plaza));
         let e = c.encargo.as_mut().expect("plaza_de_parada comprobó el encargo");
-        (e.fase, e.fin_paso) = (Fase::Descarga, fin_paso);
+        (e.fase, e.fin_paso, e.inicio_paso) = (Fase::Descarga, fin_paso, fin_paso.map(|_| t));
         self.tr.tocar(Clase::Caravana, id);
         self.tr.tocar(Clase::Asentamiento, plaza);
         let hecho = EventoComercio::CaravanaDescarga { caravana: id, plaza: id32(plaza), entra, tirado, a_bordo, carros, fin_paso: fin_paso.unwrap_or(0), comision };
@@ -281,11 +304,13 @@ impl Nucleo {
         }
     }
 
-    /// Acaba la descarga: en el origen de un envío el encargo está cumplido; en los demás casos sigue la carga.
+    /// Acaba la descarga: en el origen de un envío el encargo está cumplido, y en el de una ruta detenida termina (2026-11-04); en los demás casos sigue la carga.
     fn acabar_descarga(&mut self, t: Instante, id: u64) {
         let Some(e) = self.estado.comercio.caravana(id).and_then(|c| c.encargo.as_ref()) else { return };
         if e.modo == Modo::Envio && e.punta == Punta::Origen {
             self.terminar(t, id, MotivoEncargo::Cumplido);
+        } else if e.detener && e.punta == Punta::Origen {
+            self.terminar(t, id, MotivoEncargo::Detenido);
         } else {
             self.cargar(t, id, false);
         }
@@ -313,7 +338,7 @@ impl Nucleo {
             Ok(toma) => toma,
             Err(falta) => {
                 let e = self.estado.comercio.flota[i].encargo.as_mut().expect("comprobado arriba");
-                (e.fase, e.fin_paso) = (Fase::Espera, None);
+                (e.fase, e.fin_paso, e.inicio_paso) = (Fase::Espera, None, None);
                 self.tr.tocar(Clase::Caravana, id);
                 self.programar_comercio(t + MS_POR_MINUTO, entidad_caravana(id), SucesoComercio::PulsoEncargo);
                 if !en_pulso {
@@ -352,7 +377,7 @@ impl Nucleo {
         self.tr.tocar(Clase::Asentamiento, plaza);
         let fin_paso = t + self.estado.reglas.economia.comercio.encargo.tiempo_carga * i64::from(carros);
         let e = self.estado.comercio.flota[i].encargo.as_mut().expect("plaza_de_parada comprobó el encargo");
-        (e.fase, e.fin_paso) = (Fase::Carga, Some(fin_paso));
+        (e.fase, e.fin_paso, e.inicio_paso) = (Fase::Carga, Some(fin_paso), Some(t));
         let oyentes = oyentes_de_parada(&self.estado.comercio.flota[i], plaza);
         self.emitir_comercio(t, EventoComercio::CaravanaCarga { caravana: id, plaza: id32(plaza), tomado, carros, fin_paso }, oyentes, &[]);
         self.programar_comercio(fin_paso, entidad_caravana(id), SucesoComercio::FinPasoEncargo);

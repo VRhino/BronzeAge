@@ -392,6 +392,8 @@ la Facción tiene `siguiente.requiereTecnologia`; si hay `requiereEdificio`, **a
 **Duración** (`minutosDeMejora`): `max(1, round( (niveles[siguiente].obraMinutos ?? tiempoConstruccionMinutos × MEJORA_EDIFICIO.multiplicadorPorNivel^(siguiente − 1)) × factorTiempoConstruccion ))`.
 O sea, la obra base ×2 para el nivel 2, ×4 para el 3, ×8 para el 4, salvo los `obraMinutos` propios (Taberna, Palacio y, desde el 2026-10-28, la Granja: 240, 480 y 960 minutos, los de antes, para que el arranque rápido de su nivel 1 no acorte sus mejoras).
 
+**Talleres de fabricación de prueba (decisión del autor del 2026-11-04).** Mientras se hacen pruebas, la Fundición, la Curtiduría, la Armería, la Carpintería y la Gran Fundición levantan su nivel 1 en **5 minutos** (`tiempoConstruccionMinutos`; antes 720, y 2.880 la Gran Fundición), y como no tienen `obraMinutos` sus mejoras bajan en proporción: 10 minutos el nivel 2 y 20 el 3 (antes 1.440 y 2.880). Los cuarteles (Barracón, Galería de tiro, Caballerizas) no cambian. Se vuelve a las de antes cuando acaben las pruebas.
+
 **Cada tick** (`avanzarMejoras`), dos pasos *(en Rust, el primero ocurre en el instante de fin de la mejora y el segundo en el paso de minuto)*:
 
 1. **Terminar**: para cada edificio con `mejora` y `instante ≥ completaEn` → `aplicarMejoraTerminada`: si la huella cambia de tamaño (hoy solo la Granja: 2×2, 2×3, 4×3, 6×6) se muda a un hueco con `reubicarPorTamano`;
@@ -799,7 +801,7 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
       "piedra": 100,
       "oro": 50
     },
-    "tiempoConstruccionMinutos": 2880,
+    "tiempoConstruccionMinutos": 5,
     "nivelFaccionMinimo": 6,
     "requisitoNivelAsentamientoConstruccion": 4,
     "niveles": {
@@ -836,7 +838,7 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
       "madera": 80,
       "piedra": 40
     },
-    "tiempoConstruccionMinutos": 720,
+    "tiempoConstruccionMinutos": 5,
     "requisitoNivelAsentamientoConstruccion": 2,
     "niveles": {
       "1": {
@@ -945,7 +947,7 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
       "madera": 80,
       "piedra": 30
     },
-    "tiempoConstruccionMinutos": 720,
+    "tiempoConstruccionMinutos": 5,
     "requisitoNivelAsentamientoConstruccion": 2,
     "niveles": {
       "1": {
@@ -1023,7 +1025,7 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
       "madera": 80,
       "piedra": 30
     },
-    "tiempoConstruccionMinutos": 720,
+    "tiempoConstruccionMinutos": 5,
     "requisitoNivelAsentamientoConstruccion": 2,
     "niveles": {
       "1": {
@@ -1223,7 +1225,7 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
       "madera": 60,
       "piedra": 20
     },
-    "tiempoConstruccionMinutos": 720,
+    "tiempoConstruccionMinutos": 5,
     "requisitoNivelAsentamientoConstruccion": 2,
     "niveles": {
       "1": {

@@ -503,6 +503,8 @@ Una caravana `aparcada` (dejada en una plaza de su Facción al entrar un ejérci
 - **Volver** (`enviarCaravanaAlOrigen`): **vacía** ⇒ pasa a `disponible` **al instante** en su origen (sin viaje). **Con carga** ⇒ `retornando` con `destinoAsentamientoId = la anfitriona`, ruta
   `calcularRuta(anfitriona → origen)` **sin atracción de la red ni peajes**; al llegar vuelca el contenido en el almacén del origen (topado) y queda `disponible`. Sin ruta por tierra ⇒ error.
 
+**Descargar en casa** (pedido del autor del 2026-11-04, Rust). `moverCargaCaravanaAparcada` con `descargar` vale también para una caravana comercial **en casa**: `disponible`, o `esperando` en su origen con encargo (una ruta o un envío entre dos pasos, también mientras carga o descarga). Descarga en el almacén de **su origen**, con la misma cuenta: `min(pedido, lo que lleva, hueco del almacén de ese recurso)`, así que entra solo lo que el almacén admite y cabe; todo es pedir lo que lleva de cada recurso. La da quien reside en el origen y está dentro. El encargo sigue como estaba. Emite el mismo `comercio.carga_caravana_aparcada` (`cargar` 0) a la plaza. Cargar a mano sigue siendo solo de la aparcada; de camino o en el destino, `caravana.no_aparcada`. Prueba: `una_caravana_en_casa_se_descarga_a_mano_en_su_almacen_aunque_tenga_ruta` (`tests/encargos.rs`).
+
 ### 5.8 Encargos: rutas y envíos automáticos
 
 > **Implementado en Rust (2026-10-31).** Reglas puras en `crates/comercio/src/{encargo,caravana,mostrador,ruina,evento}.rs` (el modelo y `validar`, lo que entra y sale del almacén, `carros_del_paso`, la máquina de estados, las cuentas de la plaza ajena y las caídas); el ciclo, en `crates/nucleo/src/nucleo/encargos.rs` (la conquista y la pérdida de la caravana, en `flota.rs`; los datos de los hechos y `tras_servir`, en `mercado.rs`); lo que se ve, en `crates/nucleo/src/proyeccion/{propios,vista}.rs`; la foto, **`BAN52`** (`codec_comercio.rs`; las fotos `BAN51` a `BAN40` se siguen leyendo, sin encargos). Contrato: órdenes 168-170 y comandos 195-197. Pruebas: `crates/nucleo/tests/{encargos,encargos_caidas,encargos_vista}.rs` y los `mod pruebas` de `crates/comercio`. **Las caídas están en §10 y los hechos en §12**; los permisos y la proyección, en [`Proyecciones_Y_Autorizacion.md`](Proyecciones_Y_Autorizacion.md). Este apartado no los repite.
@@ -652,6 +654,17 @@ Cada descarga y cada carga tarda un tiempo **por carro del paso**: `fin_paso = a
 | En ruta, a la vuelta | Marca `cancelado`: al llegar al origen el encargo termina, sin descargar ni cargar |
 | Ya cancelada | `sin_cambios` |
 
+**Detener la ruta** (`DetenerEncargo`, pedido del autor del 2026-11-04): el botón «detener ruta». A diferencia de cancelar, **acaba la ida y vuelta en curso comerciando como siempre**.
+
+| La caravana está… | Efecto |
+|---|---|
+| `esperando` en el origen | El encargo termina ya (`detenido`): lo de a bordo vuelve al almacén del origen y queda `disponible`, como al cancelar |
+| En ruta, o `esperando` en el destino | Marca `detener`: deja y recoge en el destino como siempre, vuelve, **deja en el origen** lo de su parada y, al acabar esa descarga, el encargo termina (`detenido`) en vez de volver a cargar |
+| Un envío | `sin_cambios`: ya acaba solo al volver |
+| Ya cancelada o ya detenida | `sin_cambios` |
+
+`CambiarEncargo` conserva `detener`. Pruebas: `detener_una_ruta_de_camino_acaba_la_ida_y_vuelta_comerciando_y_termina_al_descargar_en_el_origen` y `detener_esperando_en_el_origen_termina_ya_y_un_envio_no_cambia` (`tests/encargos.rs`).
+
 **Cambiar** (`CambiarEncargo`) sustituye el destino y las paradas; **el modo no cambia**. Se valida como al encargar y no emite hecho.
 
 | Qué | Regla |
@@ -659,7 +672,7 @@ Cada descarga y cada carga tarda un tiempo **por carro del paso**: `fin_paso = a
 | El destino | Solo cambia con la caravana `esperando` en su origen (si no, `caravana.no_disponible`); se vuelve a comprobar la ruta por tierra |
 | Las paradas | Valen para los pasos que no han empezado: el paso en curso sigue como estaba, y una espera de existencias usa la parada nueva en su próximo pulso |
 | La hora de salida | Solo cuenta mientras un envío espera su hora (sin vueltas, en `fase espera`, con la hora por llegar): la cambia y reprograma el comienzo de la carga; sin hora, empieza a cargar ya. En cualquier otro momento se ignora |
-| Lo que conserva | `vueltas`, `punta`, `fase`, `fin_paso` y `cancelado` |
+| Lo que conserva | `vueltas`, `punta`, `fase`, `inicio_paso`, `fin_paso`, `cancelado` y `detener` |
 | Si no cambia nada | `sin_cambios` |
 
 **Fin del encargo** (`comercio.encargo_terminado`, motivos en §12). Al terminar, la caravana queda `disponible` en el origen sin encargo; **se vuelca todo lo de a bordo en el almacén del origen**, topado por su capacidad (lo que no cabe se pierde y sale en `perdido`); la escolta vuelve al campamento; y la caravana libre puede servir a un trueque (§4.3).
@@ -670,6 +683,7 @@ Cada descarga y cada carga tarda un tiempo **por carro del paso**: `fin_paso = a
 | `cancelado` (1) | Se canceló y la caravana ya está en el origen; o el origen fue conquistado con ella esperando dentro (§10) |
 | `destino_perdido` (2) | Al llegar al origen, antes de cargar o al salir de él, el destino ya no sigue vigente (no existe, ya no es de la Facción en una ruta) o no hay ruta hasta él. **Un destino perdido gana a un encargo cancelado** |
 | `destruida` (3) | La caravana se pierde con encargo (§10): no pasa por el origen y no vuelca nada |
+| `detenido` (4) | Se detuvo la ruta (2026-11-04): esperando en el origen al detenerla, o al acabar de dejar en el origen tras la ida y vuelta en curso |
 
 #### 5.8.8 El comercio en una plaza ajena
 
@@ -687,14 +701,15 @@ Es el caso de un **envío** cuyo destino es de otra Facción (también aliada o 
 
 #### 5.8.9 El contrato
 
-Tres órdenes, un cargo, un estado y un campo nuevos. Los permisos y el detalle de lo que se ve están en `Proyecciones_Y_Autorizacion.md` (§5.1 y §10); los códigos de rechazo, en el catálogo (§5.8.3).
+Cuatro órdenes (la cuarta, `detener_encargo`, desde el 2026-11-04), un cargo, un estado y un campo nuevos. Los permisos y el detalle de lo que se ve están en `Proyecciones_Y_Autorizacion.md` (§5.1 y §10); los códigos de rechazo, en el catálogo (§5.8.3).
 
 | Pieza | Forma |
 |---|---|
 | `encargar_caravana` (orden 168 → `EncargarCaravana`, comando 195) | `caravana_id`, `destino_asentamiento_id`, `modo` (`ruta` o `envio`, si no `orden.forma_invalida`), `salir_en_ms?`, `parada_origen`, `parada_destino`. Cada parada: `recoger[{recurso, cantidad, precio_max?}]`, `esperar_existencias`, `dejar[{recurso, tope?, precio_min?}]`, `desechar_sobrante`. Sin parada no recoge ni deja nada; un recurso desconocido, `orden.forma_invalida` |
 | `cambiar_encargo` (169 → `CambiarEncargo`, 196) | Los mismos campos menos `modo` |
 | `cancelar_encargo` (170 → `CancelarEncargo`, 197) | `caravana_id` |
-| `Caravana.encargo` | El encargo tal cual, con `vueltas`, `parada_actual` (`origen` o `destino`), `fase` (`espera`, `descarga` o `carga`), `fin_paso_ms` y `cancelado`; solo en la proyección propia |
+| `detener_encargo` (182 → `DetenerEncargo`, 212; 2026-11-04) | `caravana_id` |
+| `Caravana.encargo` | El encargo tal cual, con `vueltas`, `parada_actual` (`origen` o `destino`), `fase` (`espera`, `descarga` o `carga`), `inicio_paso_ms` y `fin_paso_ms` (el paso de descarga o carga en curso, de su inicio a su fin: la barra de tiempo del cliente; `inicio_paso_ms` desde el 2026-11-04; los dos ausentes en `espera`), `cancelado` y `detener` (2026-11-04); solo en la proyección propia |
 | `EstadoCaravana.CARAVANA_ESPERANDO` | Dentro de una plaza con encargo |
 | `Cargos.maestro_caravanas_id` | Titular del Maestro de Caravanas; `asignar_cargo_local` acepta `maestroCaravanas` |
 | Hechos | `comercio.encargo_dado`, `comercio.caravana_espera`, `comercio.caravana_carga`, `comercio.caravana_descarga` y `comercio.encargo_terminado` (§12) |
@@ -1010,7 +1025,7 @@ La red de caminos se poda sola al faltar un extremo (§7.4).
 | `crearCaravana` | residente del asentamiento (las caravanas siguen abiertas a cualquier residente) |
 | `agregarCarroCaravana`, `comprarAnimalCaravana`, `reservarCaravana`, `cancelarCaravana`, `moverCarroCaravana`, `renombrarCaravana` (Rust) | residente del **origen** de la caravana |
 | `prepararCaravana`, `asignarEscolta`, `quitarEscolta` | el actor es el `heroeId` del comando **y** reside en el origen (desde el 2026-11-04, `asignarEscolta` y `quitarEscolta` también de visita dentro del origen siendo de su Facción, §5.5) |
-| `encargarCaravana`, `cambiarEncargo`, `cancelarEncargo` | Rust, sin equivalente en TypeScript: el Gobernador, el Tesorero o el Maestro de Caravanas del **origen** de la caravana, residente y dentro (§5.8.3) |
+| `encargarCaravana`, `cambiarEncargo`, `cancelarEncargo`, `detenerEncargo` | Rust, sin equivalente en TypeScript: el Gobernador, el Tesorero o el Maestro de Caravanas del **origen** de la caravana, residente y dentro (§5.8.3) |
 | `moverCargaCaravanaAparcada`, `enviarCaravanaAlOrigen` | el actor es el `heroeId`; residente del **origen** de la caravana y **presente** en la plaza que la hospeda |
 | `comerciarEnPlaza` | el actor es el `heroeId`; el motor exige columna propia en la puerta |
 | `comprarEnCampamento`, `repostarEnCampamento` | cualquier héroe; el motor exige estar en el campamento |
@@ -1032,7 +1047,7 @@ Un id inexistente se deja pasar a propósito para que el comando devuelva el err
 | `comercio.caravana_perdida`, `comercio.caravana_vuelve` | ruina (§10) y presencia (`Movimiento_Ejercitos.md`); `caravana_perdida` lleva `carga` y, si la caravana tenía encargo, la acompaña `comercio.encargo_terminado` con motivo 3 | narración |
 | `comercio.encargo_dado` `{ caravana, destino, modo }` (0 ruta, 1 envío) | `encargarCaravana` (§5.8.3) | narración |
 | `comercio.caravana_espera` `{ caravana, plaza, <recurso> }`, `comercio.caravana_carga` `{ caravana, plaza, <recurso>, carros, finPaso }`, `comercio.caravana_descarga` `{ caravana, plaza, <recurso>, tirado, aBordo, carros, finPaso, comision }` | ciclo del encargo (§5.8.4 y §5.8.5), oídos en la plaza de la parada y, si es otra, también en el origen de la caravana: `espera` al empezar a esperar existencias (`<recurso>` es lo que falta), `carga` solo si toma algo (lo tomado), `descarga` en cada llegada a una plaza propia (lo que entra; `finPaso` 0 si no hay espera; `comision` 0 en una ruta). En una plaza ajena con Mercado activo (§5.8.8) `descarga` lleva lo **vendido** por recurso en lugar de lo que entra, con `tirado` 0 y `comision` 0 (la comisión se queda en el precio), y `carga` lo **comprado** por recurso, solo si compra algo | narración |
-| `comercio.encargo_terminado` `{ caravana, motivo, volcado, perdido }` | ciclo del encargo (§5.8.7): `motivo` 0 cumplido, 1 cancelado, 2 destino perdido, 3 destruida; `volcado` es lo que entró en el almacén del origen y `perdido` lo que no cupo. Con motivo 3 (la caravana se pierde, §10) `volcado` es 0 y `perdido` lo que llevaba a bordo al perderse, o 0 si la pierde por quedarse sin carros, que ya perdió la carga con ellos | narración |
+| `comercio.encargo_terminado` `{ caravana, motivo, volcado, perdido }` | ciclo del encargo (§5.8.7): `motivo` 0 cumplido, 1 cancelado, 2 destino perdido, 3 destruida, 4 detenido (2026-11-04); `volcado` es lo que entró en el almacén del origen y `perdido` lo que no cupo. Con motivo 3 (la caravana se pierde, §10) `volcado` es 0 y `perdido` lo que llevaba a bordo al perderse, o 0 si la pierde por quedarse sin carros, que ya perdió la carga con ellos | narración |
 | `mercado.orden_colocada`, `mercado.orden_expirada` | comando / tick | narración |
 | `mercado.comercio_en_plaza` `{ orden, cantidad, entreFacciones, valor, comision, oroMovido, ejercito` o `caravana }` | comando, o una caravana con encargo en una plaza ajena (una por orden servida; §5.8.8) | mercado de mercenarios (`entreFacciones`) |
 | `mercenarios.comprado` | `comprarEnCampamento` | narración |

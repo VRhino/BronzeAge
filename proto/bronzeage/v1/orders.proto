@@ -667,6 +667,12 @@ message OrdenCancelarEncargo {
   string caravana_id = 1;
 }
 
+// Detiene la ruta de una caravana (2026-11-04; los mismos que pueden darla): si va de camino o está en el destino, acaba esa ida y vuelta comerciando como siempre y, al descargar en su origen,
+// se queda `disponible` sin encargo (`Encargo.detener`). Esperando en su origen, termina ya, como al cancelar. Un envío ya acaba solo al volver: `sin cambios`.
+message OrdenDetenerEncargo {
+  string caravana_id = 1;
+}
+
 // ── Mercenarios por contrato (entrada 48, Mercenarios_Por_Contrato; 2026-11-01). Quien da la orden es siempre el héroe de la cuenta. ──
 
 // Un héroe bot, sin Facción, residente y dentro de su campamento, se pone en el tablón del campamento como mercenario (§3). Un humano recibe `mercenario.solo_bots`.
@@ -1282,5 +1288,6 @@ message Orden {
     OrdenReclamarPremioDeRango reclamar_premio_de_rango = 179;
     OrdenCerrarSesion cerrar_sesion = 180;
     OrdenRenombrarCaravana renombrar_caravana = 181;
+    OrdenDetenerEncargo detener_encargo = 182;
   }
 }

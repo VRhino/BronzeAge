@@ -326,6 +326,7 @@ impl Nucleo {
             | Comando::EncargarCaravana { .. }
             | Comando::CambiarEncargo { .. }
             | Comando::CancelarEncargo { .. }
+            | Comando::DetenerEncargo { .. }
             | Comando::AdoptarTecnologia { .. }
             | Comando::ComprarTecnologiaAeda { .. }
             | Comando::EmpezarEpica { .. }

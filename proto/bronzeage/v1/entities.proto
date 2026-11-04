@@ -970,6 +970,8 @@ message Encargo {
   string fase = 8;  // espera | descarga | carga; solo cuenta con la caravana CARAVANA_ESPERANDO
   optional int64 fin_paso_ms = 9;  // cuándo acaba la descarga o la carga en curso
   bool cancelado = 10;  // cancelado en ruta: acaba el tramo sin comerciar, vuelve y deja todo en el origen
+  optional int64 inicio_paso_ms = 11;  // cuándo empezó la descarga o la carga en curso (2026-11-04): con fin_paso_ms, la barra de tiempo del paso
+  bool detener = 12;  // ruta detenida (2026-11-04, OrdenDetenerEncargo): acaba la ida y vuelta en curso y, al descargar en el origen, se queda sin encargo
 }
 
 message SeleccionDeSalida {

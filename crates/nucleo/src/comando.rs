@@ -528,6 +528,9 @@ pub enum Comando {
     CambiarEncargo { caravana: u64, destino: u64, salir_en: Option<Instante>, en_origen: Parada, en_destino: Parada },
     /// Cancela el encargo de la caravana.
     CancelarEncargo { caravana: u64 },
+    /// Detiene la ruta de la caravana (2026-11-04, código 212): acaba la ida y vuelta en curso comerciando como siempre y, al descargar en el origen, se queda sin encargo. Esperando en su
+    /// origen termina ya.
+    DetenerEncargo { caravana: u64 },
     // ── La tecnología (sistema 6, tanda 6C; Tecnologia_Aedas §4). Código 175. ──
     /// El Rey de `faccion`, presente en su capital efectiva, adopta la tecnología `tecnologia` (índice del catálogo) ya aparecida: la paga el almacén de la capital con la tarifa de su Era,
     /// al instante.
@@ -810,7 +813,7 @@ impl Comando {
             | Comando::ColocarOrdenMercado { .. }
             | Comando::CancelarOrdenMercado { .. }
             | Comando::AlternarReabastecerAliados { .. } => Cargo(GOBERNADOR_O_TESORERO),
-            Comando::EncargarCaravana { .. } | Comando::CambiarEncargo { .. } | Comando::CancelarEncargo { .. } => Cargo(GOBERNADOR_TESORERO_O_MAESTRO_CARAVANAS),
+            Comando::EncargarCaravana { .. } | Comando::CambiarEncargo { .. } | Comando::CancelarEncargo { .. } | Comando::DetenerEncargo { .. } => Cargo(GOBERNADOR_TESORERO_O_MAESTRO_CARAVANAS),
             Comando::CrearCaravana { .. }
             | Comando::AnadirCarro { .. }
             | Comando::AnadirAnimal { .. }
@@ -1034,7 +1037,7 @@ impl Comando {
                 i.caravanas.push(*caravana);
                 i.asentamientos.push(*destino);
             }
-            Comando::CancelarEncargo { caravana } => i.caravanas.push(*caravana),
+            Comando::CancelarEncargo { caravana } | Comando::DetenerEncargo { caravana } => i.caravanas.push(*caravana),
             Comando::MoverCarro { de, a, .. } => i.caravanas.extend([*de, *a]),
             Comando::ProponerTrueque { a, b, .. } => i.asentamientos.extend([*a, *b]),
             Comando::FijarNivelAsentamiento { asentamiento, .. }
@@ -2134,6 +2137,10 @@ impl Peticion {
                 w.u8(197);
                 w.u64(*caravana);
             }
+            Comando::DetenerEncargo { caravana } => {
+                w.u8(212);
+                w.u64(*caravana);
+            }
             Comando::OfrecerseComoMercenario { heroe } | Comando::RetirarOferta { heroe } => {
                 w.u8(if matches!(self.comando, Comando::OfrecerseComoMercenario { .. }) { 198 } else { 199 });
                 w.u64(*heroe);
@@ -2703,6 +2710,7 @@ impl Peticion {
             195 => Comando::EncargarCaravana { caravana: r.u64()?, destino: r.u64()?, modo: modo_de_u8(r.u8()?)?, salir_en: r.opt_i64()?, en_origen: parada_leer(&mut r)?, en_destino: parada_leer(&mut r)? },
             196 => Comando::CambiarEncargo { caravana: r.u64()?, destino: r.u64()?, salir_en: r.opt_i64()?, en_origen: parada_leer(&mut r)?, en_destino: parada_leer(&mut r)? },
             197 => Comando::CancelarEncargo { caravana: r.u64()? },
+            212 => Comando::DetenerEncargo { caravana: r.u64()? },
             198 => Comando::OfrecerseComoMercenario { heroe: r.u64()? },
             199 => Comando::RetirarOferta { heroe: r.u64()? },
             200 | 210 => Comando::ContratarMercenario {
@@ -3879,6 +3887,7 @@ mod pruebas {
             Comando::EncargarCaravana { caravana: 4, destino: 6, modo: Modo::Ruta, salir_en: None, en_origen: Parada::default(), en_destino: Parada::default() },
             Comando::CambiarEncargo { caravana: 4, destino: 7, salir_en: None, en_origen: Parada { dejar: vec![LineaDejar { recurso: Recurso::Piedra, tope: None, precio_min: None }], ..Parada::default() }, en_destino: Parada::default() },
             Comando::CancelarEncargo { caravana: 4 },
+            Comando::DetenerEncargo { caravana: 4 },
             Comando::AdoptarTecnologia { heroe: 2, faccion: 1, tecnologia: 2 },
             Comando::ComprarTecnologiaAeda { heroe: 2, asentamiento: 5, tecnologia: 2 },
             Comando::EmpezarEpica { heroe: 2, asentamiento: 3, aeda: 4, tecnologia: 5 },

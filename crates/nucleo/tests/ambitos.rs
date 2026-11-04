@@ -376,6 +376,8 @@ async fn al_reconectar_cada_ambito_se_reanuda_sin_novedad_con_deltas_o_con_foto(
     let conoce = |v: u64| {
         let mut h = hola_con("ana", TipoCliente::ClienteBot, &[(&k_heroe, v), (&k_faccion, v), (&k_plaza, v)]);
         h.versiones_interiores_conocidas.insert(k_plaza.clone(), vi);
+        // La plaza en su `FACCION` (2026-11-04): la misma secuencia, con la clave `PROPIA:as-N`.
+        h.versiones_interiores_conocidas.insert(format!("PROPIA:{as_}"), vi);
         h
     };
     let decisiones = |b: &pb::Bienvenida| b.ambitos.iter().map(|a| a.decision).collect::<Vec<_>>();
