@@ -15,3 +15,13 @@ debug = "line-tables-only"
 
 [profile.dev.package."*"]
 debug = false
+
+# La suite completa (`node scripts/suite.mjs`, 2026-11-04, pedido del autor): optimizada para que las simulaciones largas (batch, trazado) no tarden minutos, pero con las mismas
+# comprobaciones que las pruebas normales (debug_assert y desbordamientos). `cargo test` a secas sigue con el perfil de siempre.
+[profile.suite]
+inherits = "dev"
+opt-level = 2
+debug = false
+debug-assertions = true
+overflow-checks = true
+incremental = false

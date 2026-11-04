@@ -15,5 +15,10 @@ Plan y estado: [`Consideraciones/Reconstruccion_Definicion.md`](Consideraciones/
 | `contratos/` | Ficheros dorados y pruebas entre Rust, C# y TypeScript |
 | `generador/` | Generador de mundo fuera de línea (TypeScript); produce el artefacto de mundo |
 | `Consideraciones/` | Decisiones y planes vigentes |
+| `scripts/` | `suite.mjs` (la suite completa del motor, optimizada y en paralelo), `generar-mundo.mjs`, `panel.mjs` |
+
+La suite completa: `node scripts/suite.mjs` (necesita el artefacto de mundo en `generador/salida/mundo`). Compila con el perfil `suite`
+(optimizado, con las comprobaciones de depuración) y lanza los binarios de prueba a la vez; deja la salida de cada uno en
+`target/suite-registros/`. Para una prueba suelta, `cargo test -p <crate> --test <fichero> <nombre>` como siempre.
 
 Repos hermanos (locales, sin remoto): `BronceAgeBotsBrain` (bots, Rust) y `BronceAgeAdminClient` (admin web).

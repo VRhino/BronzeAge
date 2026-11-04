@@ -574,7 +574,7 @@ Si `instante ≥ completaEn`: `nivel = nivelObjetivo` y, **solo si `nivelActual 
 y `avanzarPoliticas` la borra cuando `instante ≥ expiraEn` (evento `politica.expirada`).
 
 Los factores se **multiplican** entre las políticas activas del asentamiento (`productoFactor`; 1 si no hay ninguna) salvo `cupoCaravanaExtra` y `cupoGuarnicionExtra`, que se **suman**. Los que lee este documento: `factorConsumoComida` (Racionamiento ×0,8),
-`factorCrecimientoNobleza`, `factorTiempoConstruccion` (Vía Rápida ×0,75; afecta a obras **y** mejoras al arrancar), `factorProduccionTrigo` (Edicto de Cosecha ×1,5), `factorRecaudacion` y `factorCrecimientoPoblacion` (Presión Fiscal ×1,6 / ×0,8),
+`factorCrecimientoNobleza`, `factorTiempoConstruccion` (Vía Rápida ×0,01 **DE PRUEBA** desde el 2026-11-04, decisión del autor para agilizar las pruebas: un 99 % menos, con un mínimo de 1 minuto por obra; antes ×0,75, que se restaura al acabar las pruebas; afecta a obras **y** mejoras al arrancar), `factorProduccionTrigo` (Edicto de Cosecha ×1,5), `factorRecaudacion` y `factorCrecimientoPoblacion` (Presión Fiscal ×1,6 / ×0,8),
 `factorTiempoMuralla`, `factorProduccionTalleres`. Los demás (comisiones, caravanas, reclutamiento, guarnición, perfil de trazado) pertenecen a sus sistemas.
 
 ## 13. Comandos
@@ -2033,7 +2033,7 @@ El bloque `CUPO_NIVEL_ASENTAMIENTO` vive en [`Diplomacia_Facciones.md`](Diplomac
     "id": "via_rapida",
     "cargo": "maestroObras",
     "nombre": "Vía Rápida de Construcción",
-    "factorTiempoConstruccion": 0.75
+    "factorTiempoConstruccion": 0.01
   },
   {
     "id": "postura_defensiva",
