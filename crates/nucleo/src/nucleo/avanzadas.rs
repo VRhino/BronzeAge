@@ -5,7 +5,8 @@
 //! héroes y la cola.
 //!
 //! # El ciclo
-//! 1. **Colocar** (`ColocarAvanzada`): un héroe con su columna en el sitio, dentro de la zona de su plaza madre, sin pisar su ciudad (cuyo radio es una décima del de su
+//! 1. **Colocar** (`ColocarAvanzada`): desde dentro de la plaza madre, como la aldea (2026-11-04; antes, un héroe con su columna en el sitio), en tierra firme con ruta por tierra
+//!    hasta la madre, dentro de su zona, sin pisar su ciudad (cuyo radio es una décima del de su
 //!    zona) ni otro elemento del mapa (avanzadas, pueblos, campamentos: cada uno mide 0,2). Deja una obra «pendiente de materiales» que ocupa cupo, no se ve, no ve y no se ataca.
 //! 2. **Entregar** (`EntregarMaterialesAAvanzada`): lo que lleva la columna a la puerta. Con todo entregado arranca la obra y su fin tiene **cita propia**:
 //!    `SucesoCombate::FinObraAvanzada` (prioridad 1, antes del paso de minuto), en su instante exacto y ligada a la avanzada para poder cancelarla. Al acabar la primera obra
@@ -30,7 +31,7 @@
 //!
 //! # Quién manda
 //! Son obras de mapa del panel de la plaza madre (Doc 4.2.2, 5E): mejorar, reparar, destruir y cancelar las da el Gobernador o el Maestro de Obras de la madre, residente y dentro; elegir la
-//! tropa de serie, el Gobernador (Doc 5.17); colocar, el Gobernador o el Maestro de Obras de la madre, residente, con su columna **en el sitio** en vez de dentro («la coloca el héroe en el sitio»; 5E-1, `Autoriza::CargoEnElSitio`). Guarnecer y retirar son de la tropa
+//! tropa de serie, el Gobernador (Doc 5.17); colocar, igual, desde dentro y sin columna (2026-11-04, pedido del autor: como la aldea; antes con su columna en el sitio). Guarnecer y retirar son de la tropa
 //! de cada uno: la cuenta del héroe (guarnece quien reside en la madre). Las elecciones de tropa se comprueban al elegir (tecnología y edificio de la madre) y no se revisan después: si la Facción pierde la tecnología o la madre
 //! el edificio, la elección sigue.
 
@@ -290,14 +291,18 @@ impl Nucleo {
                 let plaza = self.plaza_o_rechazo(*asentamiento)?;
                 let (centro, radio) = (plaza.posicion, plaza.radio);
                 self.autorizar_en_plaza(p, *asentamiento, Some(*heroe))?;
-                let (_, e) = self.columna_a_bordo(*heroe)?;
-                if !p.admin && e.posicion_en(t).dist(*posicion) > self.radio_puerta() {
-                    return Err(rechazo(rechazos::AVANZADA_FUERA_DEL_SITIO, "la columna del héroe no está en el sitio donde se coloca la avanzada".into()));
+                // Desde dentro de la madre, como la aldea (2026-11-04): el sitio, en tierra firme y con ruta por tierra hasta ella, por donde se le llevan los materiales.
+                let geo = self.geografia.as_ref().ok_or_else(|| rechazo(rechazos::SIN_MUNDO, "el núcleo no tiene mundo cargado".into()))?;
+                if !geo.es_tierra_firme(*posicion) {
+                    return Err(rechazo(rechazos::AVANZADA_FUERA_DEL_SITIO, "ese punto no es tierra firme".into()));
                 }
                 if !self.en_zona(*asentamiento, *posicion) {
                     return Err(rechazo(rechazos::AVANZADA_FUERA_DE_LA_ZONA, format!("el sitio cae fuera de la zona de as-{asentamiento}")));
                 }
                 datos.avanzadas.comprobar_sitio(centro, radio, *posicion, self.elementos_de_mapa()).map_err(de_avanzada)?;
+                if self.camino_sin_red(*posicion, centro).is_none() {
+                    return Err(rechazo(rechazos::AVANZADA_SIN_RUTA, format!("el sitio no tiene ruta por tierra hasta as-{asentamiento}")));
+                }
                 let (id, mut ev) = (self.estado.siguiente_id, vec![]);
                 self.estado.asentamientos.get_mut(asentamiento).expect("existe").economia.iniciar_avanzada(&datos, id, *posicion, &mut ev).map_err(de_avanzada)?;
                 self.estado.siguiente_id += 1;

@@ -234,10 +234,11 @@ impl Nucleo {
         let (es_capital, distancia_capital, faccion_tiene_gran_fundicion) = self.exterior_de_capital(id, nivel_faccion);
         let orden_era = self.orden_era();
         let residentes = self.residentes_en(id);
+        let cupo_para_recuperar = self.cupo_para_recuperar(id, nivel_faccion);
         // La mejor fertilidad de su zona real: la comparten todas sus Granjas.
         let fertilidad = self.fertilidad_de_zona(id)?;
         let mut a = self.estado.asentamientos.remove(&id)?;
-        let (nivel_antes, nobleza_antes, alcanzado_antes) = (a.nivel_actual(), a.economia.poblacion.nobleza > 0, a.nivel());
+        let (nivel_antes, nobleza_antes, alcanzado_antes, subida_antes) = (a.nivel_actual(), a.economia.poblacion.nobleza > 0, a.nivel(), a.economia.ascenso.map(|s| s.nivel_objetivo));
         let (r, contado) = {
             let Estado { reglas, asentamientos, parcelas_ocupadas, nodos_reclamados, yacimientos, contactos, tecnologia, .. } = &mut self.estado;
             let rt = &reglas.economia.tecnologia;
@@ -280,6 +281,7 @@ impl Nucleo {
                 felicidad_extra: extra.0,
                 nobleza_extra: extra.1,
                 recaudacion_extra: if a.ocupada_hasta.is_some() { reglas.economia.combate.ocupacion.factor_recaudacion } else { FACTOR_EXTRA },
+                cupo_para_recuperar,
             };
             let r = f(&mut a.economia, &mut x);
             (r, (fuentes.contado, fuentes.agotados, fuentes.regenerados))
@@ -287,6 +289,10 @@ impl Nucleo {
         let (contado, agotados, regenerados) = contado;
         self.anotar_yacimientos(&a, t, &agotados, &regenerados);
         let (nivel_ahora, nobleza_ahora, faccion, alcanzado_ahora) = (a.nivel_actual(), a.economia.poblacion.nobleza > 0, a.faccion, a.nivel());
+        // Una obra de subida que empieza o acaba ocupa o libera cupo de nivel (`Faccion.cupos_de_nivel`); el nivel actual lo toca `contar_nivel`.
+        if subida_antes != a.economia.ascenso.map(|s| s.nivel_objetivo) {
+            self.tr.tocar(Clase::Faccion, u64::from(faccion));
+        }
         self.estado.asentamientos.insert(id, a);
         self.contar_alcanzado(Some(alcanzado_antes), Some(alcanzado_ahora));
         // El cupo de Aedas residentes solo cambia en el paso si la nobleza pasa de 0 a más (o al revés) o cambia el nivel actual (6E; el Palacio, en `anotar_sucesos` y la conquista).
@@ -541,6 +547,27 @@ impl Nucleo {
         self.plazas_de(faccion).filter(|o| o.id != id && (o.nivel_actual() == objetivo || o.economia.ascenso.is_some_and(|s| s.nivel_objetivo == objetivo))).count() as u32
     }
 
+    /// El cap de fundación y los cupos por nivel de la Facción, con lo que gasta y ocupa cada uno (2026-11-04, `Faccion.cap_fundacion` y `Faccion.cupos_de_nivel`).
+    pub fn cupos_de_faccion(&self, faccion: u32) -> CuposDeFaccion {
+        let r = &self.estado.reglas.economia.politica.nivel;
+        let nivel = self.nivel_de_faccion(faccion);
+        CuposDeFaccion {
+            cap: politica::nivel::cap_fundacion(r, nivel),
+            plazas: self.plazas_de(faccion).count() as u32,
+            caravanas: self.fundaciones_de(faccion) as u32,
+            niveles: (2..=5).filter_map(|o| politica::nivel::cupo_nivel(r, nivel, o).map(|c| (o, c, self.cupo_ocupado(u64::MAX, faccion, o)))).collect(),
+        }
+    }
+
+    /// Si la plaza, degradada, puede recuperar el nivel siguiente: su Facción tiene cupo libre en él (2026-11-04, decisión del autor: recuperarse no salta el cupo). Sin degradar,
+    /// sí (no se mira).
+    fn cupo_para_recuperar(&self, id: u64, nivel_faccion: u32) -> bool {
+        let a = &self.estado.asentamientos[&id];
+        let siguiente = a.nivel_actual() + 1;
+        a.nivel_actual() >= a.nivel()
+            || politica::nivel::cupo_nivel(&self.estado.reglas.economia.politica.nivel, nivel_faccion, siguiente).is_none_or(|c| self.cupo_ocupado(id, a.faccion, siguiente) < c)
+    }
+
     /// Libera la parcela o el nodo que tenía tomado un edificio que desaparece de la cola.
     fn liberar_fuente(&mut self, id: u64, fuente: Option<Fuente>) {
         match fuente {
@@ -689,4 +716,15 @@ impl Nucleo {
         self.tr.tocar(Clase::Asentamiento, id);
         Ok(creada)
     }
+}
+
+/// El cap de fundación de una Facción y sus cupos por nivel (ver [`Nucleo::cupos_de_faccion`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CuposDeFaccion {
+    pub cap: u32,
+    /// Lo que gasta el cap: sus plazas de hoy y sus Caravanas de Fundación vivas.
+    pub plazas: u32,
+    pub caravanas: u32,
+    /// `(nivel, cupo, ocupadas)` de los niveles 2 a 5.
+    pub niveles: Vec<(u32, u32, u32)>,
 }

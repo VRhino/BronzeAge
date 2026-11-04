@@ -117,10 +117,10 @@ fn fundar_y_sus_rechazos() {
     assert_eq!(eventos(&n, "fundacion.asentamiento_fundado"), vec![(MIN, vec![id])]);
     assert_eq!(codigo(&n.aplicar_en(MIN, Peticion::nueva("ana", "f3", Comando::Fundar { ejercito: e }))), rechazos::SIN_CARAVANA);
 
-    // Cerca de una plaza (a 10, en el primer rumbo con suelo fundable) y dentro de su zona (encima).
+    // Cerca de una plaza (a 8: fuera de su zona inicial de 6 y a menos de la separación de 10, en el primer rumbo con suelo fundable) y dentro de su zona (encima).
     let cerca = (0..36)
         .map(|k| (k as f64 * 10.0).to_radians())
-        .map(|a| Punto::new(p.x + (10_000.0 * a.cos()) as i64, p.y + (10_000.0 * a.sin()) as i64))
+        .map(|a| Punto::new(p.x + (8_000.0 * a.cos()) as i64, p.y + (8_000.0 * a.sin()) as i64))
         .find(|&q| n.viabilidad(q, 2).and_then(|v| v.motivo) == Some(territorio::Motivo::CercaDePlaza))
         .expect("algún rumbo con suelo a 10 de la plaza");
     for (nombre, q, esperado) in [("cerca", cerca, "fundacion.cerca_de_plaza"), ("encima", p, "fundacion.dentro_de_zona")] {
@@ -406,4 +406,15 @@ fn la_plaza_se_proyecta_al_contrato() {
     assert_eq!((e.id.as_str(), e.faccion_id.as_str(), e.nivel), (format!("as-{id}").as_str(), "f-1", 1));
     assert_eq!(e.radio_potencial, 6_000);
     assert_eq!(e.zona.len(), 48, "sin vecinas, el polígono es el disco entero");
+}
+
+#[test]
+fn las_reglas_del_territorio_salen_de_los_bloques_del_documento() {
+    // 2026-11-04 (decisión del autor): nada del territorio va escrito en el código. `ZONA_INFLUENCIA` y `FUNDACION` de Economia_Construccion, `MERCENARIOS` de Campamentos_Mercenarios.
+    let t = Reglas::default().territorio;
+    assert_eq!((t.radio_inicial, t.crecimiento_por_edificio), (6_000, 1_000));
+    assert_eq!(t.techos, vec![10_000, 15_000, 20_000, 25_000, 30_000]);
+    assert_eq!(t.separacion_plazas, 10_000, "2026-11-04: 10 u, antes 30");
+    assert_eq!(t.exclusion_campamento, 20_000);
+    assert_eq!(t.cuota_parcelas_pct, 50);
 }

@@ -517,6 +517,7 @@ mod pruebas {
             felicidad_extra: UNO,
             nobleza_extra: UNO,
             recaudacion_extra: UNO,
+            cupo_para_recuperar: true,
         }
     }
 

@@ -83,7 +83,7 @@ impl Nucleo {
     }
 
     /// Las Caravanas de Fundación vivas de la Facción (el cupo del cap se reserva al lanzar, §4.6).
-    fn fundaciones_de(&self, faccion: u32) -> usize {
+    pub(super) fn fundaciones_de(&self, faccion: u32) -> usize {
         self.estado.fundacion.caravanas.values().filter(|c| c.faccion == Some(faccion)).count()
     }
 
@@ -127,6 +127,8 @@ impl Nucleo {
         self.estado.fundacion.caravanas.insert(id, CaravanaFundacion { id, faccion: Some(faccion), titular, origen, posicion, contenido, aportes, situacion: Situacion::Disponible, caduca_en: Some(caduca_en) });
         self.programar_fundacion(id, caduca_en, SucesoFundacion::Caduca);
         self.tr.tocar(Clase::Caravana, id);
+        // Gasta cap de fundación: lo dice la Facción (`Faccion.cap_fundacion`).
+        self.tr.tocar(Clase::Faccion, u64::from(faccion));
         id
     }
 
@@ -144,6 +146,7 @@ impl Nucleo {
         self.estado.generaciones.subir(entidad_fundacion(id));
         self.apartar(entidad_fundacion(id));
         self.tr.tocar(Clase::Caravana, id);
+        self.tr.tocar_todos(Clase::Faccion, c.faccion.map(u64::from));
         Some(c)
     }
 
@@ -859,6 +862,7 @@ impl Nucleo {
         self.estado.fundacion.caravanas.insert(id, c);
         self.tr.tocar(Clase::Caravana, id);
         self.tr.tocar(Clase::Ejercito, ejercito);
+        self.tr.tocar_todos(Clase::Faccion, faccion.map(u64::from));
         true
     }
 }

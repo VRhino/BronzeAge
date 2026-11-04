@@ -51,6 +51,26 @@ message Faccion {
   // Sus contratos de mercenarios vigentes (Mercenarios_Por_Contrato §10): solo en la Facción propia (`FACCION`, que un mercenario con marca no recibe) y en `ADMIN`; vacío en la forma
   // pública.
   repeated Contrato contratos = 21;
+  // Su cap de fundación con lo que lo gasta, y sus cupos de plazas por nivel (2 a 5) con las que los ocupan (2026-11-04, para la ventana de Facción): solo en la Facción propia
+  // (`FACCION`, que un mercenario con marca no recibe) y en `ADMIN`; ausente y vacío en la forma pública.
+  optional CapFundacion cap_fundacion = 22;
+  repeated CupoDeNivel cupos_de_nivel = 23;
+}
+
+// El cap de fundación de la Facción (Diplomacia §3.5, `CAP_FUNDACION_POR_NIVEL` por su nivel): lo gastan sus plazas de hoy (fundadas o no) y sus Caravanas de Fundación vivas. Con
+// `plazas + caravanas >= cap` no se lanza ni se compra otra caravana; al fundar se mira `plazas >= cap`.
+message CapFundacion {
+  uint32 cap = 1;
+  uint32 plazas = 2;
+  uint32 caravanas = 3;
+}
+
+// El cupo de plazas de la Facción en un nivel (Diplomacia §3.5, `CUPO_NIVEL_ASENTAMIENTO` por su nivel). Ocupan las plazas con ese nivel operativo y las que tienen la obra de subida
+// hacia él. Con `ocupadas >= cupo` no se pide la subida a ese nivel, ni una plaza degradada recupera ese nivel.
+message CupoDeNivel {
+  uint32 nivel = 1;      // 2 a 5
+  uint32 cupo = 2;
+  uint32 ocupadas = 3;
 }
 
 // Un ciudadano de la Facción (Participacion §3).

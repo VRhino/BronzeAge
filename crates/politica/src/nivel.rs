@@ -1,5 +1,5 @@
 //! Nivel de Facción por experiencia (Diplomacia_Facciones §3.5, Doc 2.2.1). La experiencia es **monótona** y va en milésimas; el nivel es
-//! `1 + umbrales alcanzados`, con tope. El nivel alimenta el cap de fundación (Doc 1.7) y el cupo de plazas en nivel 2 y 3.
+//! `1 + umbrales alcanzados`, con tope. El nivel alimenta el cap de fundación (Doc 1.7) y el cupo de plazas en los niveles 2 a 5.
 
 use crate::datos::ReglasNivel;
 use base::Mil;
@@ -65,13 +65,17 @@ pub fn cap_fundacion(r: &ReglasNivel, nivel: u32) -> u32 {
     por_nivel(&r.cap_fundacion, nivel)
 }
 
-/// `calcularCupoNivel`: cuántas plazas de la Facción pueden estar en el nivel `objetivo` (2 o 3) a la vez; los demás niveles no tienen cupo (`None`).
+/// `calcularCupoNivel`: cuántas plazas de la Facción pueden estar en el nivel `objetivo` (2 a 5) a la vez; el nivel 1 no tiene cupo (`None`). Los niveles 4 y 5, desde el
+/// 2026-11-04 (decisión del autor: como mucho tres plazas en el 4 y una en el 5).
 pub fn cupo_nivel(r: &ReglasNivel, nivel_faccion: u32, objetivo: u32) -> Option<u32> {
-    match objetivo {
-        2 => Some(por_nivel(&r.cupo_nivel2, nivel_faccion)),
-        3 => Some(por_nivel(&r.cupo_nivel3, nivel_faccion)),
-        _ => None,
-    }
+    let curva = match objetivo {
+        2 => &r.cupo_nivel2,
+        3 => &r.cupo_nivel3,
+        4 => &r.cupo_nivel4,
+        5 => &r.cupo_nivel5,
+        _ => return None,
+    };
+    Some(por_nivel(curva, nivel_faccion))
 }
 
 fn por_nivel(curva: &[u32], nivel: u32) -> u32 {
@@ -145,6 +149,11 @@ mod pruebas {
         assert_eq!(cupo_nivel(&r, 1, 2), Some(1));
         assert_eq!(cupo_nivel(&r, 1, 3), Some(0));
         assert_eq!(cupo_nivel(&r, 10, 3), Some(3));
-        assert_eq!(cupo_nivel(&r, 5, 4), None);
+        assert_eq!(cupo_nivel(&r, 5, 4), Some(1));
+        assert_eq!(cupo_nivel(&r, 10, 4), Some(3));
+        assert_eq!(cupo_nivel(&r, 7, 5), Some(0));
+        assert_eq!(cupo_nivel(&r, 10, 5), Some(1));
+        assert_eq!(cupo_nivel(&r, 10, 1), None);
+        assert_eq!(cupo_nivel(&r, 10, 6), None);
     }
 }

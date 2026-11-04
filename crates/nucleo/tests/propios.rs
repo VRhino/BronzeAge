@@ -847,7 +847,7 @@ fn con_pueblo(m: &M) -> (Esc, u64, u64) {
     }
     // 5E: las obras de mapa del panel de la madre las da su Gobernador, dentro de ella.
     comun::gobernador_de_oficio(&mut x.n, "ana", a);
-    // 5E-1: coloca la avanzada el Maestro de Obras de la madre con su columna en el sitio.
+    // 5E-1: el Maestro de Obras de la madre (desde el 2026-11-04 coloca desde dentro; aquí la coloca el Gobernador, que está dentro).
     let lider = x.n.ejercito(col).unwrap().columna.lider;
     comun::coloca_avanzadas(&mut x.n, a, lider);
     let ahora = x.n.ahora();
@@ -880,7 +880,8 @@ async fn los_pueblos_y_las_avanzadas_de_la_faccion_viajan_en_resumen_con_su_obra
     assert!(obras(&foto.entidades).is_empty() && avanzadas(&foto.entidades).is_empty());
 
     // Marcar una avanzada deja una obra de mapa pendiente, que la entrega de materiales va llenando; destruirla la quita (sea cual sea la forma en que el cliente la tuviera).
-    let colocar = orden::Cuerpo::ColocarAvanzada(pb::OrdenColocarAvanzada { asentamiento_id: as_a.clone(), heroe_id: heroe.clone(), posicion: Some(pb::Punto { x: sitio.x, y: sitio.y }) });
+    // Desde el 2026-11-04 se coloca desde dentro de la madre, como la aldea: la da su Gobernador, que está dentro.
+    let colocar = orden::Cuerpo::ColocarAvanzada(pb::OrdenColocarAvanzada { asentamiento_id: as_a.clone(), heroe_id: gobernador.clone(), posicion: Some(pb::Punto { x: sitio.x, y: sitio.y }) });
     let (previos, r) = dar_todo(&mut ana, "v1", colocar).await;
     aceptada(&r);
     let obra = r.creadas[0].id.clone();

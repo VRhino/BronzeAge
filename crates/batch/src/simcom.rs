@@ -286,8 +286,9 @@ pub fn simular(c: &Cargado, geo: &Geo, plazas: u32, dias: u32, semilla: u64, con
     s.arrancar();
     s.correr(paso_normal);
     let balance_minerales = s.balance_minerales();
-    // El cobre se funde y los lingotes se gastan en mejoras (la de la Armería): solo el estaño y el hierro cuadran al milésimo.
-    s.violaciones.conservacion += balance_minerales.iter().filter(|(r, debe, hay)| *r != Recurso::Cobre && debe != hay).count() as u64;
+    // El cobre se funde y los lingotes se gastan en mejoras (la de la Armería). El estaño también se funde (lingote de estaño, Fundición 2 con «aleación de bronce»): con los
+    // talleres de prueba a 5 min (2026-11-04) una Fundición llega a fundirlo en 12 días. Solo el hierro cuadra al milésimo.
+    s.violaciones.conservacion += balance_minerales.iter().filter(|(r, debe, hay)| !matches!(r, Recurso::Cobre | Recurso::Estano) && debe != hay).count() as u64;
     s.violaciones.registro += s.vigia.huecos;
     let f = s.facciones.len() as u32;
     Corrida {

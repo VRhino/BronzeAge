@@ -119,7 +119,8 @@ calcularNivelFaccion = 1 + (cuántos umbrales de NIVEL_FACCION.xpParaNivel han a
 `edificioCompletado` por edificio, `conquista` por plaza conquistada, `ascensoPorNivel` × el nivel alcanzado, `fundacion` por plaza fundada que no sea la primera de la Facción, `truequeCumplido` a cada
 lado de un trueque entre Facciones distintas, y `bandidos` por campamento destruido (no por héroe) dividido por el nivel de la Facción y 0 desde `nivelSinXpBandidos`.
 - **Cap de fundación** (`calcularCapFundacion(nivel)`) = `CAP_FUNDACION_POR_NIVEL[min(10, nivel) − 1]`.
-- **Cupo de asentamientos en nivel 2 o 3** (`calcularCupoNivel(nivel, objetivo)`) = `CUPO_NIVEL_ASENTAMIENTO.maxNivel2|maxNivel3[min(10, nivel) − 1]`. **`maxNivel2` = `[1,1,2,2,3,3,3,4,4,5]`** (decisión del autor del 2026-10-25, calibración del batch político P4: unos dos tercios de las plazas que la Facción puede fundar, `CAP_FUNDACION_POR_NIVEL`; antes `[1,1,1,1,2,2,2,3,3,3]`); `maxNivel3` no cambia.
+- **Cupo de asentamientos en nivel 2 o 3** (`calcularCupoNivel(nivel, objetivo)`) = `CUPO_NIVEL_ASENTAMIENTO.maxNivel2|maxNivel3[min(10, nivel) − 1]`. **`maxNivel2` = `[1,1,2,2,3,3,3,4,4,5]`** (decisión del autor del 2026-10-25, calibración del batch político P4: unos dos tercios de las plazas que la Facción puede fundar, `CAP_FUNDACION_POR_NIVEL`; antes `[1,1,1,1,2,2,2,3,3,3]`); `maxNivel3` no cambia. **Niveles 4 y 5 (decisión del autor del 2026-11-04):** `maxNivel4` = `[0,0,0,0,1,1,2,2,3,3]` y `maxNivel5` = `[0,0,0,0,0,0,0,1,1,1]` (placeholder): como mucho tres plazas en el nivel 4 y una en el 5; antes esos niveles no tenían cupo y subir de 3 a 4 dejaba libre el puesto del 3 sin gastar ninguno. El cupo se mira al pedir la subida (Economia_Construccion §11.2) y al **recuperar** un nivel perdido por el mantenimiento (§10.2): una plaza degradada sube su nivel operativo solo si su Facción tiene cupo libre en el nivel siguiente; sin él se queda donde está, y la racha sana sigue contando (2026-11-04: antes recuperaba sin mirarlo y podía pasar del cupo).
+- **La Facción propia los lleva** (2026-11-04, para su ventana): `Faccion.cap_fundacion` (`cap`, `plazas`, `caravanas`: lo que lo gasta) y `Faccion.cupos_de_nivel` (por nivel 2 a 5: `cupo` y `ocupadas`), solo en `FACCION` y en `ADMIN`. `Nucleo::cupos_de_faccion` los calcula; la Facción se toca cuando cambia el nivel actual de una de sus plazas, empieza o acaba una obra de subida, nace o se quita una Caravana de Fundación suya, o sube su nivel.
 
 > **Implementado en Rust (2026-10-24, 5A, reglas puras):** `crates/politica::nivel`. La experiencia se guarda en **milésimas** (2,5 no cabe en un entero): `xp_de(Hecho)` da la de cada
 > hecho (bandidos: `1000 / nivel`, redondeado hacia abajo), `nivel(experiencia)` cuenta los umbrales alcanzados con tope `nivelMaximo` y `Facciones::aplicar_experiencia` ignora lo ≤ 0 y devuelve el
@@ -472,6 +473,30 @@ veta** (salvo a un mercenario permanente, que vuelve a su campamento base: `Merc
     2,
     2,
     3
+  ],
+  "maxNivel4": [
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    2,
+    2,
+    3,
+    3
+  ],
+  "maxNivel5": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1
   ]
 }
 ```

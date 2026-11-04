@@ -407,11 +407,11 @@ impl Eq for ReglasEconomia {}
 pub struct ReglasTerritorio {
     /// Radio con el que nace la zona de una plaza (`ZONA_INFLUENCIA.radioInicial`: 6).
     pub radio_inicial: Mil,
-    /// Techo del radio por nivel del asentamiento (10 / 15 / 20 / 25 / 30).
+    /// Techo del radio por nivel del asentamiento (`ZONA_INFLUENCIA.radioMaximoPorNivel`: 10 / 15 / 20 / 25 / 30).
     pub techos: Vec<Mil>,
     /// Cuánto agranda la zona cada edificio completado (`crecimientoPorEdificioCompletado`: 1). La zona no crece con el tiempo.
     pub crecimiento_por_edificio: Mil,
-    /// Distancia mínima entre plazas, de centro a centro (30).
+    /// Distancia mínima entre plazas, de centro a centro (`FUNDACION.separacionPlazas`: 30).
     pub separacion_plazas: Mil,
     /// Distancia mínima a un campamento de mercenarios para fundar (`radioExclusionFundar`: 20).
     pub exclusion_campamento: Mil,
@@ -420,14 +420,28 @@ pub struct ReglasTerritorio {
 }
 
 impl Default for ReglasTerritorio {
+    /// Las cifras de los bloques del documento (2026-11-04, decisión del autor: nada de esto va escrito en el código): `ZONA_INFLUENCIA` (radio inicial, crecimiento por edificio,
+    /// techos por nivel y cuota de parcelas) y `FUNDACION.separacionPlazas` de `Economia_Construccion.md`, y `MERCENARIOS.radioExclusionFundar` de `Campamentos_Mercenarios.md`.
     fn default() -> Self {
+        let (zona, fundacion) = (asentamiento::datos::bloque("ZONA_INFLUENCIA"), asentamiento::datos::bloque("FUNDACION"));
+        let mercenarios = militar::datos::bloque(militar::datos::CAMPAMENTOS, "MERCENARIOS");
+        let num = |v: &serde_json::Value, k: &str| v[k].as_f64().unwrap_or_else(|| panic!("falta el número «{k}»"));
+        let u = |v: &serde_json::Value, k: &str| asentamiento::datos::mil(num(v, k));
+        let mut techos: Vec<(u32, Mil)> = zona["radioMaximoPorNivel"]
+            .as_object()
+            .expect("radioMaximoPorNivel")
+            .iter()
+            .map(|(n, r)| (n.parse().expect("nivel"), asentamiento::datos::mil(r.as_f64().expect("radio"))))
+            .collect();
+        techos.sort();
+        assert!(techos.iter().enumerate().all(|(i, &(n, _))| n == i as u32 + 1), "radioMaximoPorNivel va del nivel 1 en adelante, sin huecos");
         Self {
-            radio_inicial: 6_000,
-            techos: vec![10_000, 15_000, 20_000, 25_000, 30_000],
-            crecimiento_por_edificio: 1_000,
-            separacion_plazas: 30_000,
-            exclusion_campamento: 20_000,
-            cuota_parcelas_pct: 50,
+            radio_inicial: u(&zona, "radioInicial"),
+            techos: techos.into_iter().map(|(_, r)| r).collect(),
+            crecimiento_por_edificio: u(&zona, "crecimientoPorEdificioCompletado"),
+            separacion_plazas: u(&fundacion, "separacionPlazas"),
+            exclusion_campamento: u(&mercenarios, "radioExclusionFundar"),
+            cuota_parcelas_pct: num(&zona, "cuotaParcelasPorAsentamiento") as u32,
         }
     }
 }

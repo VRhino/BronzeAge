@@ -96,7 +96,7 @@ Validaciones, en este orden (cada una lanza `FundacionInvalidaError`):
 
 1. Entre 1 y `FUNDACION.maxJugadoresFundacionGrupal` (5) héroes fundadores.
 2. La posición está dentro del mapa.
-3. `posicionLibreParaFundar`: el punto **no cae dentro de la zona real (recortada) de ningún asentamiento existente** (de cualquier Facción, también la propia) y está **a `separacionPlazas` (30) o más de cualquier plaza** (Doc 1.0a: con zonas pequeñas la separación manda).
+3. `posicionLibreParaFundar`: el punto **no cae dentro de la zona real (recortada) de ningún asentamiento existente** (de cualquier Facción, también la propia) y está **a `FUNDACION.separacionPlazas` (10) o más de cualquier plaza** (Doc 1.0a). **Desde el 2026-11-04** (decisión del autor) la separación es **10** (antes 30) y el motor lee las cifras del territorio de los bloques (`ZONA_INFLUENCIA`, `FUNDACION.separacionPlazas`, `MERCENARIOS.radioExclusionFundar`; antes iban escritas en el código, `ReglasTerritorio`). Con 10, junto a una plaza de nivel 1 manda la separación y junto a una más grande manda su zona (hasta 30 de radio): no se funda dentro de ella.
 4. El terreno no es `cima`, ni `agua`, ni una celda **no transitable** del artefacto (río sin vado, pendiente: la plaza quedaría incomunicada). En Rust las tres comprobaciones de terreno van antes que las de zona y distancia.
 5. La Facción existe y no ha llegado al tope de fundación `calcularCapFundacion(nivel de Facción)` (cuenta los asentamientos que ya tiene).
 
@@ -499,7 +499,7 @@ si cubierta ≥ 1: descontar el coste entero         si no: de cada recurso se d
 
 cubierta ≥ 1 (sano):
     racha += 1;  medidor = min(100, medidor + regeneracionSiPagoCompleto)
-    si racha ≥ minutosSanosParaRecuperarNivel ∧ nivelActual < nivel:  nivelActual += 1, racha = 0, evento mantenimiento.recuperado
+    si racha ≥ minutosSanosParaRecuperarNivel ∧ nivelActual < nivel ∧ cupo libre de la Facción en nivelActual + 1:  nivelActual += 1, racha = 0, evento mantenimiento.recuperado
 cubierta < 1 (déficit):
     racha = 0;  medidor = max(0, medidor − degradacionPorDeficitTotal × (1 − cubierta))
     medidor ≤ 0:
@@ -507,6 +507,8 @@ cubierta < 1 (déficit):
         nivelActual = 1 → RUINAS: evento asentamiento.ruinas { faccionId, nombre, razon, faltantes[], fundadoEn, duro }, destruido = true
     si no: evento mantenimiento.deficit (si el medidor bajó)
 ```
+
+**Recuperar mira el cupo de la Facción** (2026-11-04, decisión del autor): una plaza degradada recupera el nivel siguiente solo si su Facción tiene cupo libre en él (`CUPO_NIVEL_ASENTAMIENTO`, §11.2: ocupan las demás plazas con ese nivel operativo o con la obra de subida hacia él). Sin cupo se queda en su nivel y la `racha` sigue contando: recupera en el primer minuto sano con el puesto libre. Lo calcula el núcleo (`Nucleo::cupo_para_recuperar`) y lo pasa en `Exterior.cupo_para_recuperar`; sin degradar no se mira. Así degradar una plaza para que otra suba ya no deja pasar del cupo al recuperarse.
 
 `racha` sigue creciendo sin tope mientras `nivelActual == nivel`. Al recuperar un nivel el medidor también regenera ese tick (la regeneración se aplica antes de subir el nivel) y la racha vuelve a 0.
 
@@ -549,8 +551,8 @@ Devuelve `null` si el nivel no tiene requisito. `calcularNivelAsentamiento` enca
 Solo el **Gobernador** (residente y presente). Bloqueos posibles, **todos a la vez**: `nivel_maximo` (también si `nivelObjetivo > ASCENSO_ASENTAMIENTO.nivelTechoProvisional`), `ascenso_en_curso`, `falta_poblacion`, `faltan_edificios`, `sin_cupo_de_faccion`,
 `recursos_insuficientes` (el coste de `porNivelObjetivo[objetivo]` no está entero en el almacén), `insolvente`.
 
-- **Cupo de la Facción** (`cupoLibreParaNivel`): solo existe para los niveles objetivo 2 y 3. Ocupan plaza los asentamientos de la Facción con `nivelActual == objetivo` **o** con una obra de ascenso hacia ese nivel; hay cupo si
-  `ocupadas < calcularCupoNivel(nivel de Facción, objetivo)` (curva `CUPO_NIVEL_ASENTAMIENTO.maxNivel2/3`, índice = `clamp(nivel de Facción, 1, 10) − 1`). Los niveles 4 y 5 no tienen cupo (siempre libre).
+- **Cupo de la Facción** (`cupoLibreParaNivel`): existe para los niveles objetivo 2 a 5 (el 4 y el 5 desde el 2026-11-04, decisión del autor: como mucho tres plazas en el 4 y una en el 5). Ocupan plaza los asentamientos de la Facción con `nivelActual == objetivo` **o** con una obra de ascenso hacia ese nivel; hay cupo si
+  `ocupadas < calcularCupoNivel(nivel de Facción, objetivo)` (curvas `CUPO_NIVEL_ASENTAMIENTO.maxNivel2/3/4/5` en `Diplomacia_Facciones.md` §3.5, índice = `clamp(nivel de Facción, 1, 10) − 1`). Antes del 2026-11-04 los niveles 4 y 5 no tenían cupo.
 - **Solvencia**: para cada recurso del coste de mantenimiento **en el nivel objetivo** (`calcularCostoMantenimiento` con `nivel = nivelActual = objetivo`), el ingreso bruto por minuto —`Σ produccionPorMinuto` de sus edificios (con topes por stock del nodo y tecnologías)
   más, para el oro, `recaudacionOro`— debe ser ≥ ese coste. Es bruto a propósito: no descuenta lo que gasten recetas o tropas. Lo que llega por **acarreo** (§14, pueblos extractores) cuenta como la **media por minuto de lo que ingresó de verdad
   en la plaza en las últimas 24 h** (decidido por el autor el 2026-10-19; antes, la producción nominal de los pueblos con carro). **Desde el 2026-11-01 cuenta todo lo que llega, quepa o no** en el almacén (decisión del autor): antes contaba solo lo que entraba, y una plaza con el almacén de piedra lleno se quedaba insolvente para el nivel 2 aunque su cantera trajese de sobra. **Desde el 2026-11-03 es la media desde que llega** (decisión del autor): lo llegado en la ventana se divide entre los minutos que van desde el principio de la hora de su primera llegada en la ventana más una hora (lo que tarda el primer carro en llenarse y viajar), con 24 h como mucho; antes, siempre entre 1.440 minutos, y una cantera nueva no contaba entera hasta llevar un día entregando. El rechazo `ascenso.insolvente` dice, por cada recurso que falta, cuánto llega y cuánto pide por minuto (lo que llega, redondeado hacia abajo a la décima; lo que pide, hacia arriba): «no cubriría el mantenimiento del nivel nuevo: piedra (llegan 2,1 por minuto y pide 4,3)».
@@ -1767,7 +1769,8 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
   "costoMaderaExtraCaravana": 50,
   "caducidadCaravanaHoras": 48,
   "densidadBosqueMaximaParaFundar": 0.7,
-  "pendienteMaximaParaFundar": 0.3
+  "pendienteMaximaParaFundar": 0.3,
+  "separacionPlazas": 10
 }
 ```
 <!-- /parametros -->
@@ -1785,7 +1788,8 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
     "5": 30
   },
   "segmentosPoligono": 48,
-  "pasoFusionContorno": 1
+  "pasoFusionContorno": 1,
+  "cuotaParcelasPorAsentamiento": 50
 }
 ```
 <!-- /parametros -->
@@ -2383,7 +2387,7 @@ Las etapas son las tres de Doc 5.17 (atalaya → fuerte → ciudadela) y `obras`
 > - **Almacén y guarnición**: el almacén es **por recurso** (decisión del autor, 2026-10-22: 2.000 por cada recurso en un fuerte, 10.000 en una ciudadela). `DepositarEnAvanzada` (115) y `RepostarEnAvanzada` (114) llenan y vacían el almacén ([`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §8); `GuarnecerAvanzada` (112), `RetirarDeAvanzada` (113) y `ElegirTropaDeAvanzada` (111) manejan la guarnición ([`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md), [`Combate.md`](Combate.md) §7.4).
 > - **Ruinas y la madre**: una avanzada en ruinas no funciona (ni visión, ni guarnición, ni almacén, ni mantenimiento) y sigue ocupando cupo. Si la madre es **conquistada**, las avanzadas pasan con ella (su guarnición de jugadores se va con el desalojo y se reinician la de serie y las elecciones del Gobernador). Si la madre **cae en ruinas**, la atalaya y el fuerte desaparecen (la guarnición de jugadores vuelve intacta a su campamento) y la ciudadela queda como **ruina sin dueño** (`EstadoCombate::huerfanas`, con su almacén), que repara (`RepararAvanzada`) un héroe ciudadano de la Facción que tenga ahora su zona: la ruina pasa a esa plaza si tiene el nivel (3) y el cupo.
 > - **Hechos nuevos** (datos entre paréntesis): `avanzada.obra_marcada` (avanzada, tipo 0 construir / 1 mejorar / 2 reparar, x, y), `avanzada.materiales_entregados` (avanzada, cantidad), `avanzada.obra_iniciada` (avanzada, tipo, completaEn), `avanzada.obra_cancelada` (avanzada, tipo), `avanzada.completada` (avanzada, tipo, etapa), `avanzada.destruida` (avanzada, motivo: 0 a mano, 1 un ataque, 2 la ruina de la madre), `avanzada.sin_dueno`, `avanzada.adoptada`, `avanzada.tropa_elegida`, `avanzada.guarnecida` / `avanzada.guarnicion_retirada`, `avanzada.deposito`, `avanzada.reabastecimiento`, `avanzada.traspasada` (avanzada, faccion), `avanzada.encuentro` (una columna ajena junto a una avanzada que se puede atacar). Rechazos nuevos: `avanzada.*` (desconocida, nivel_insuficiente, sin_cupo, fuera_de_la_zona, dentro_del_asentamiento, fuera_del_sitio, faccion_ajena, fuera_de_la_puerta, no_esta_pendiente, nada_que_entregar, no_mejorable, no_reparable, ya_hay_obra, ciudadela_no_se_destruye, no_operativa, sin_almacen, almacen_lleno, nada_que_depositar, no_resides, escuadra_fuera_de_tu_columna, escuadra_no_esta, tropa_no_elegible, tropa_sin_tecnologia, tropa_sin_edificio, pisa_otro_elemento, nada_que_cancelar) y `combate.avanzada_*`.
-> - **Provisional** (filas de paridad): sin panel (desde 5E las obras de mapa las dan el Gobernador o el Maestro de Obras de la madre; colocar, con su columna en el sitio, 5E-1); no hay planta de avanzada (el tamaño de 0,2 solo sirve para no pisar otros elementos del mapa).
+> - **Provisional** (filas de paridad): sin panel (desde 5E las obras de mapa las dan el Gobernador o el Maestro de Obras de la madre; colocar, desde dentro de la madre como la aldea desde el 2026-11-04: antes con su columna en el sitio, 5E-1); no hay planta de avanzada (el tamaño de 0,2 solo sirve para no pisar otros elementos del mapa).
 
 > **Implementado en Rust (2026-10-22, decisiones de 4F).** Foto `BAN16` (la cita de fin de la obra de una avanzada es `SucesoCombate::FinObraAvanzada`, de la entidad `entidad_obra_de_avanzada`, y las cifras de `AVANZADAS` cambian: `tamano` y `fraccionCiudadDeLaZona` sustituyen a `distanciaMinimaAlAsentamiento`). (1) **Colocación según el canon**: ni sobre la ciudad de la madre ni sobre otro elemento del mapa (`asentamiento::avanzadas::ReglasAvanzadas::comprobar_sitio`; el núcleo junta los centros con `elementos_de_mapa`). El «2 u» de la versión anterior era el radio de la puerta y no una regla de colocación. (2) **Cancelar una mejora o una reparación** (116), con la cita de fin descartada por generación. (3) **Elegir tropa** (`ElegirTropaDeAvanzada`, 111) solo entre lo que la madre puede reclutar: escalón elegible, tecnología de la Facción y edificio activo al nivel que pide la tropa (`avanzada.tropa_sin_edificio`); por defecto la milicia de lanceros del canon en los tres escalones. (4) **Sin duda**: almacén por recurso, botín de todo lo que quepa, reposición de 6 h y repostar con columna personal o ejército. (5) **Defender exige estar dentro** ([`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §11.1).
 
@@ -2394,7 +2398,8 @@ Los bloques de parámetros de este documento venían del motor TypeScript. Valor
 | `ZONA_INFLUENCIA.radioInicial` | 30 | **6** |
 | `ZONA_INFLUENCIA.radioMaximoPorNivel` | 60 / 90 / 120 / 150 / 180 | **10 / 15 / 20 / 25 / 30** |
 | `ZONA_INFLUENCIA.crecimientoPorEdificioCompletado` | 5 | **1** |
-| `ZONA_INFLUENCIA.separacionPlazas` | — | **30** (Doc 1.0a) |
+| `FUNDACION.separacionPlazas` | — | **10** (Doc 1.0a; 30 hasta el 2026-11-04; en el bloque desde ese día) |
+| `ZONA_INFLUENCIA.cuotaParcelasPorAsentamiento` | — | **50** (%; en el bloque desde el 2026-11-04) |
 | `MERCENARIOS.radioExclusionFundar` | 100 | **20** |
 | `ESCALA` / `radioUrbanoDe` | existían | **se borran**: el espacio local y el del mapa son independientes (Doc 1.0a). La ciudad usa su propio `radioCiudad` (30, +5 por edificio, máximos 60-180; `Trazado_Urbano.md`) |
 | `MANTENIMIENTO.escalaDistancia` | 400 | **300**, ya en el bloque desde el 2026-10-26 (80 hasta el 2026-10-25; P1 del batch político) |

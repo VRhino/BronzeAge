@@ -39,7 +39,6 @@ impl Nucleo {
                 otro => unreachable!("{otro:?} no nombra cargo"),
             },
             Autoriza::ResidenteDentro => x.reside(a),
-            Autoriza::CargoEnElSitio(cargos) => x.cargo_en_el_sitio(a, cargos),
             Autoriza::AsignaCargoLocal => match comando {
                 Comando::AsignarCargoLocal { cargo, .. } => x.asigna_cargo_local(a, *cargo),
                 otro => unreachable!("{otro:?} no designa cargos"),
@@ -224,7 +223,6 @@ fn quien_la_da(a: Autoriza) -> &'static str {
     match a {
         Autoriza::Cargo(_) | Autoriza::CargoDeLaOrden => "ser el titular del cargo, residir en la plaza y estar dentro",
         Autoriza::ResidenteDentro => "residir en la plaza y estar dentro",
-        Autoriza::CargoEnElSitio(_) => "ser su Gobernador o su Maestro de Obras, residir en ella y estar con la columna en el sitio",
         Autoriza::AsignaCargoLocal => "al Gobernador lo nombra el Rey; a los demás, el Gobernador, dentro de la plaza",
         Autoriza::FijaPuerta => "ser su Gobernador, dentro de la plaza, o el Rey de su Facción",
         Autoriza::CompraIntel => "estar dentro y ser el Rey, el Embajador o el Gobernador",

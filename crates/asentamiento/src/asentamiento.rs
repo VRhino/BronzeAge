@@ -111,6 +111,9 @@ pub struct Exterior<'a> {
     pub felicidad_extra: i64,
     pub nobleza_extra: i64,
     pub recaudacion_extra: i64,
+    /// Una plaza degradada (operativo bajo el alcanzado) puede recuperar el nivel siguiente: su Facción tiene cupo libre en él (`CUPO_NIVEL_ASENTAMIENTO`, que conoce quien
+    /// conoce la Facción). Sin cupo se queda degradada hasta que lo haya (2026-11-04, decisión del autor). Sin degradar no se mira.
+    pub cupo_para_recuperar: bool,
 }
 
 /// Lo que el reclutamiento de tropa mira de una plaza (ver [`Asentamiento::resumen_de_reclutamiento`]).
@@ -447,7 +450,9 @@ impl Asentamiento {
         let coste = self.coste_mantenimiento(r, x.distancia_capital);
         let vida = (t - self.fundado_en) / MS_POR_MINUTO;
         let antes = self.medidor.valor;
-        match mantenimiento::avanzar_minuto(&r.mantenimiento, &mut self.medidor, self.nivel, &coste, &mut self.almacen, vida, self.ocupado) {
+        // Sin cupo de su Facción en el nivel siguiente, el operativo no se recupera: su techo es el que tiene.
+        let techo = if x.cupo_para_recuperar { self.nivel } else { self.nivel.min(self.medidor.nivel_actual) };
+        match mantenimiento::avanzar_minuto(&r.mantenimiento, &mut self.medidor, techo, &coste, &mut self.almacen, vida, self.ocupado) {
             mantenimiento::Resultado::Deficit if self.medidor.valor < antes => ev.push(Evento::MantenimientoDeficit),
             mantenimiento::Resultado::Colapsado => ev.push(Evento::MantenimientoColapsado { nivel: self.medidor.nivel_actual }),
             mantenimiento::Resultado::Recuperado => ev.push(Evento::MantenimientoRecuperado { nivel: self.medidor.nivel_actual }),

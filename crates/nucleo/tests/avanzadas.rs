@@ -404,6 +404,22 @@ fn colocar_deja_una_obra_pendiente_que_ocupa_cupo_y_no_cuesta_nada_ni_se_ve_ni_e
 }
 
 #[test]
+fn se_coloca_desde_dentro_de_la_madre_como_la_aldea_y_no_con_la_columna_en_el_sitio() {
+    // 2026-11-04 (pedido del autor): colocar una avanzada es como marcar la aldea, desde dentro de la plaza madre (su Gobernador o su Maestro de Obras, residente y dentro), sin columna
+    // en el sitio. Con la matriz real («!ana»): el Maestro de Obras con su columna en el sitio, fuera de la plaza, ya no la coloca; uno dentro de la plaza, sí.
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let (plaza, pos) = (e.plaza, e.sitio());
+    let (_, en_el_sitio) = e.colocador(pos);
+    let colocar = |heroe: u64| Comando::ColocarAvanzada { asentamiento: plaza, heroe, posicion: pos };
+    assert_eq!(e.rechazada("!ana", colocar(en_el_sitio)), rechazos::NO_AUTORIZADO, "con la columna en el sitio y fuera de la plaza, no");
+    let dentro = comun::gobernador_de_oficio(&mut e.n, "ana", plaza);
+    let id = e.ok("!ana", colocar(dentro)).creadas[0];
+    let (madre, av) = e.n.avanzada(id).unwrap();
+    assert_eq!((madre, av.posicion, av.estado), (Some(plaza), pos, EstadoAvanzada::EnConstruccion), "la obra queda pendiente de materiales en el sitio");
+}
+
+#[test]
 fn colocar_se_rechaza_sin_rastro_y_en_su_orden() {
     let m = con_mundo!();
     let mut e = montar(m, 7, 2);
@@ -413,10 +429,11 @@ fn colocar_se_rechaza_sin_rastro_y_en_su_orden() {
     let colocar = |asentamiento: u64, heroe: u64, posicion: Punto| Comando::ColocarAvanzada { asentamiento, heroe, posicion };
     assert_eq!(e.rechazada("ana", colocar(9_999, heroe, pos)), rechazos::ASENTAMIENTO_DESCONOCIDO);
     assert_eq!(e.rechazada("beto", colocar(plaza, beto, pos)), rechazos::NO_AUTORIZADO, "ciudadano de otra Facción");
-    assert_eq!(e.rechazada("ana", colocar(plaza, beto, pos)), rechazos::NO_AUTORIZADO, "el héroe es de otra cuenta");
-    assert_eq!(e.rechazada("ana", colocar(plaza, 9_999, pos)), rechazos::HEROE_DESCONOCIDO);
-    // La columna del héroe tiene que estar en el sitio (a ≤ radioPuerta), la zona manda y el asentamiento no vale.
-    assert_eq!(e.rechazada("ana", colocar(plaza, heroe, Punto::new(pos.x + 5_000, pos.y))), rechazos::AVANZADA_FUERA_DEL_SITIO);
+    // Con la matriz real («!»): desde el 2026-11-04 es una orden de plaza, que el andamiaje daría como administración.
+    assert_eq!(e.rechazada("!ana", colocar(plaza, beto, pos)), rechazos::NO_AUTORIZADO, "el héroe es de otra cuenta");
+    assert_eq!(e.rechazada("!ana", colocar(plaza, 9_999, pos)), rechazos::HEROE_DESCONOCIDO);
+    // La zona manda y el asentamiento no vale. (Desde el 2026-11-04 no hace falta la columna en el sitio: se coloca desde dentro de la madre.)
+    let _ = heroe;
     let lejos = Punto::new(e.centro.x + 25_000, e.centro.y);
     let (_, h2) = e.colocador(lejos);
     assert_eq!(e.rechazada("ana", colocar(plaza, h2, lejos)), rechazos::AVANZADA_FUERA_DE_LA_ZONA, "la zona de nivel 2 llega a 15 u");
@@ -429,11 +446,11 @@ fn colocar_se_rechaza_sin_rastro_y_en_su_orden() {
     let dentro_de_zona = Punto::new(centro.x + 4_000, centro.y);
     let (_, h) = uno.colocador(dentro_de_zona);
     assert_eq!(uno.rechazada("ana", Comando::ColocarAvanzada { asentamiento: p1, heroe: h, posicion: dentro_de_zona }), rechazos::AVANZADA_NIVEL_INSUFICIENTE);
-    // 5E-1: la coloca el Gobernador o el Maestro de Obras de la madre, residente, con su columna en el sitio; un ciudadano sin cargo, o un residente que no es el titular, no.
+    // 5E-1: la coloca el Gobernador o el Maestro de Obras de la madre, residente (y desde el 2026-11-04, dentro); un ciudadano sin cargo, o un residente que no es el titular, no.
     let (_, sin_cargo) = e.columna("ana", 1, pos);
-    assert_eq!(e.rechazada("ana", colocar(plaza, sin_cargo, pos)), rechazos::NO_AUTORIZADO, "un ciudadano de la madre sin cargo ya no la coloca");
+    assert_eq!(e.rechazada("!ana", colocar(plaza, sin_cargo, pos)), rechazos::NO_AUTORIZADO, "un ciudadano de la madre sin cargo ya no la coloca");
     e.residir(sin_cargo);
-    assert_eq!(e.rechazada("ana", colocar(plaza, sin_cargo, pos)), rechazos::NO_AUTORIZADO, "residir no basta: hace falta el cargo");
+    assert_eq!(e.rechazada("!ana", colocar(plaza, sin_cargo, pos)), rechazos::NO_AUTORIZADO, "residir no basta: hace falta el cargo");
     // El cupo: dos en el nivel 2, contando las pendientes.
     e.maestro(heroe);
     e.ok("ana", colocar(plaza, heroe, pos));

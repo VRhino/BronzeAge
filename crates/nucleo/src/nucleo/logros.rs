@@ -109,6 +109,8 @@ impl Nucleo {
         if antes == ahora {
             return;
         }
+        // Cambian el cap y los cupos de nivel que ocupa la Facción (`Faccion.cap_fundacion`, `Faccion.cupos_de_nivel`).
+        self.tr.tocar(Clase::Faccion, u64::from(faccion));
         let indice = &mut self.espacio.plazas_por_nivel;
         if let Some(n) = antes {
             indice[indice_de_nivel(n)] -= 1;

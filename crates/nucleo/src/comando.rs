@@ -618,9 +618,6 @@ pub enum Autoriza {
     ResidenteDentro,
     /// La cuenta de un héroe que reside en el origen de la caravana y está dentro de la plaza donde está aparcada (`puedeOperarAparcada`).
     OperaAparcada,
-    /// La cuenta de un héroe titular de alguno de esos cargos en la plaza madre y residente en ella, con su columna en el sitio (lo mira la orden) en vez de dentro: colocar una avanzada, que «la
-    /// coloca el héroe en el sitio» (Doc 4.2.2; 5E-1, decisión del autor del 2026-10-25: el Gobernador o el Maestro de Obras de la madre).
-    CargoEnElSitio(&'static [Cargo]),
     /// `asignarCargoLocal`: al Gobernador, el Rey de la Facción dueña sin presencia; a los demás, el Gobernador residente y dentro.
     AsignaCargoLocal,
     /// `fijarPuerta`: el Gobernador residente y dentro, o el Rey de la Facción dueña sin presencia.
@@ -800,6 +797,7 @@ impl Comando {
             | Comando::ReponerCarro { .. }
             | Comando::MarcarAldea { .. }
             | Comando::MejorarAldea { .. }
+            | Comando::ColocarAvanzada { .. }
             | Comando::MejorarAvanzada { .. }
             | Comando::RepararAvanzada { .. }
             | Comando::DestruirAvanzada { .. }
@@ -823,7 +821,6 @@ impl Comando {
             | Comando::PrepararCaravana { .. }
             | Comando::CancelarCaravana { .. } => ResidenteDentro,
             Comando::MoverCargaAparcada { .. } | Comando::EnviarCaravanaAlOrigen { .. } => OperaAparcada,
-            Comando::ColocarAvanzada { .. } => CargoEnElSitio(GOBERNADOR_O_MAESTRO),
             Comando::AsignarCargoLocal { .. } => AsignaCargoLocal,
             Comando::FijarPuerta { .. } => FijaPuerta,
             Comando::ComprarMirada { .. } | Comando::ComprarInformePlaza { .. } => CompraIntel,
@@ -2934,8 +2931,10 @@ pub mod rechazos {
     pub const AVANZADA_PISA_OTRO_ELEMENTO: &str = "avanzada.pisa_otro_elemento";
     /// No hay una mejora ni una reparación que cancelar.
     pub const AVANZADA_NADA_QUE_CANCELAR: &str = "avanzada.nada_que_cancelar";
-    /// La columna del héroe no está en el sitio donde se pide colocarla.
+    /// El sitio donde se pide colocarla no es tierra firme (desde el 2026-11-04 se coloca desde dentro de la madre, como la aldea; antes: la columna del héroe no estaba en el sitio).
     pub const AVANZADA_FUERA_DEL_SITIO: &str = "avanzada.fuera_del_sitio";
+    /// Del sitio no hay ruta por tierra hasta la plaza madre: no se le podrían llevar los materiales (2026-11-04).
+    pub const AVANZADA_SIN_RUTA: &str = "avanzada.sin_ruta";
     pub const AVANZADA_FACCION_AJENA: &str = "avanzada.faccion_ajena";
     pub const AVANZADA_FUERA_DE_LA_PUERTA: &str = "avanzada.fuera_de_la_puerta";
     pub const AVANZADA_NO_ESTA_PENDIENTE: &str = "avanzada.no_esta_pendiente";

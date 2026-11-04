@@ -338,7 +338,8 @@ async fn una_avanzada_se_coloca_se_entrega_y_se_destruye_por_el_contrato() {
     let w = arrancar_con(p.n).await;
     let (mut ana, _) = w.entrar("ana", TipoCliente::ClienteUnity).await;
 
-    let (_, r) = dar(&mut ana, "v1", orden::Cuerpo::ColocarAvanzada(pb::OrdenColocarAvanzada { asentamiento_id: as_, heroe_id: h.clone(), posicion: punto_pb(sitio) })).await;
+    // Desde el 2026-11-04 se coloca desde dentro de la madre, como la aldea: la da su Gobernador, que está dentro.
+    let (_, r) = dar(&mut ana, "v1", orden::Cuerpo::ColocarAvanzada(pb::OrdenColocarAvanzada { asentamiento_id: as_, heroe_id: gobernador.clone(), posicion: punto_pb(sitio) })).await;
     aceptada(&r);
     let obra = creadas(&r)[0].clone();
     assert_eq!(obra.0, TipoEntidad::ObraDeMapa);

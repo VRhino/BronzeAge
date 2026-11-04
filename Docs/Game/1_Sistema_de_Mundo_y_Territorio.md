@@ -12,13 +12,13 @@ La jerarquía territorial de la ficción, en unidades de mapa:
 | **Provincia** (zona de influencia) | **6-30**, según nivel | lo que controla un asentamiento |
 | **Reino** | todas las provincias de una Facción | sin número fijo: una Facción podría llegar a todo el mapa |
 
-**Separación entre plazas.** Dos plazas distan **30 o más** de centro a centro: un minuto de camino a velocidad ligera (30). La zona inicial (radio 6) no solapa ninguna otra zona; las zonas grandes se recortan al crecer (fronteras duras, 1.2) y los recursos accesibles se cuentan sobre la zona recortada.
+**Separación entre plazas.** Dos plazas distan **10 o más** de centro a centro (`FUNDACION.separacionPlazas`; 30 hasta el 2026-11-04, decisión del autor), y no se funda **dentro de la zona** de otra plaza, de cualquier Facción: junto a una plaza de nivel 1 manda la separación y junto a una más grande, su zona. Dos zonas iniciales (radio 6) a 10 ya se tocan: las zonas se recortan (fronteras duras, 1.2) y los recursos accesibles se cuentan sobre la zona recortada.
 
 **Cuántas provincias caben.** El mundo mide 2.667×2.000 y es mayoritariamente tierra firme en el mundo regional (en torno a dos tercios, el resto agua). El número de plazas no es una meta de diseño: lo fija la separación mínima, no una cuota.
 
 **Un reino cómodo mide media región** (unas 300 u alrededor de su capital): sale de `MANTENIMIENTO.escalaDistancia` = 300, la distancia a la capital a la que el coste de mantenimiento se duplica (×2; sigue creciendo, sin tope, Doc 4.5: ×3 a 600 u, ×4,3 a 1.000 u). Decidido por el autor el 2026-10-25 con el batch político (antes 80: las Facciones que se unían o se anexionaban perdían en días las plazas lejanas).
 
-**La sensación de distancia.** La calibración es de densidad, no de escala: el mundo mantiene su tamaño y las plazas se juntan. Con la tropa ligera a 30 unidades por minuto (0,5 por segundo en tiempo real), la plaza vecina está a 1 minuto, el radio de una zona de nivel 2 a 30 s y cruzar el mapa de lado lleva 89 minutos (111 en diagonal). Con el zoom de juego (15 de ancho) una pantalla se cruza en unos 30 s.
+**La sensación de distancia.** La calibración es de densidad, no de escala: el mundo mantiene su tamaño y las plazas se juntan. Con la tropa ligera a 30 unidades por minuto (0,5 por segundo en tiempo real), la plaza vecina puede estar a 20 s (la separación mínima de 10), el radio de una zona de nivel 2 a 30 s y cruzar el mapa de lado lleva 89 minutos (111 en diagonal). Con el zoom de juego (15 de ancho) una pantalla se cruza en unos 30 s.
 
 ## 1.0b El agua es un OBSTÁCULO
 
@@ -114,7 +114,7 @@ Los caminos no se construyen: **los hace el uso**. Diseño y decisiones en `type
 **Logro de `logistica_campana`** (Doc 6, Era IV; BA-006 D30): existe un tramo **fuera de toda zona de influencia** recorrido por al menos **10 rutas de 3 Facciones distintas**.
 
 ## 1.7 Cap de fundación de asentamientos por Facción (inspirado en Rise of Nations)
-- Límite DURO de asentamientos que una Facción puede FUNDAR (no aplica a conquista/anexión, que no tiene límite). Fundar por encima del cap se rechaza.
+- Límite DURO para FUNDAR: la Facción no funda, ni lanza o compra una Caravana de Fundación, si sus plazas de hoy (más sus Caravanas de Fundación vivas, al lanzar o comprar) llegan al cap. Cuentan **todas** sus plazas, también las conquistadas o anexionadas: conquistar y anexionar no tienen límite, pero con el cap lleno ya no se funda (aclarado el 2026-11-04; así lo hace el motor).
 - ESCALA con el NIVEL DE FACCIÓN: progresión fácil de 1 a 3, luego se complica progresivamente hasta un MÁXIMO DE 7 en etapa tardía. Curva (`CAP_FUNDACION_POR_NIVEL`, placeholder): `[1, 2, 3, 3, 4, 5, 5, 6, 6, 7]` para niveles de Facción 1 a 10.
 - Complementa (no sustituye) al sistema de Mantenimiento/Coste de Gobernanza (ver Doc 4).
 - Da incentivo mecánico a preferir vasallaje/conquista sobre fundación directa una vez alcanzado el cap.

@@ -277,6 +277,7 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
         felicidad_extra: UNO,
         nobleza_extra: UNO,
         recaudacion_extra: UNO,
+        cupo_para_recuperar: true,
     };
     let (nivel_antes, nutricion_antes) = (a.nivel, a.poblacion.nutricion);
     let mut ev = a.avanzar_hasta(t, &mut x);

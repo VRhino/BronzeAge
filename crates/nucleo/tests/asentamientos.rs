@@ -1149,3 +1149,38 @@ fn el_almacen_va_en_unidades_enteras_y_la_foto_conserva_el_resto_oculto() {
     assert_eq!(n.hash_estado(), sin_parar);
     n.apagar().unwrap();
 }
+
+#[test]
+fn la_faccion_lleva_su_cap_y_sus_cupos_de_nivel_con_lo_ocupado_y_el_nivel_4_tiene_cupo() {
+    // 2026-11-04 (decisión del autor): cupos de nivel 4 y 5 (como mucho tres plazas en el 4 y una en el 5); la Facción propia los lleva con lo ocupado, para su ventana.
+    let m = con_mundo!();
+    let mut n = nuevo(m);
+    assert!(n.aplicar_en(0, admin("niv", Comando::FijarNivelFaccion { faccion: 1, nivel: 5 })).aceptada());
+    let pa = sitio(&n, &m.0, 0, 40_000, 0, 1, false);
+    let a = fundar_en(&mut n, 0, "a", 1, pa);
+    let pb = sitio(&n, &m.0, 0, 40_000, 180, 1, false);
+    let b = fundar_en(&mut n, 0, "b", 1, pb);
+    let c = n.cupos_de_faccion(1);
+    assert_eq!((c.cap, c.plazas, c.caravanas), (4, 2, 0), "Facción de nivel 5: cap 4");
+    assert_eq!(c.niveles, vec![(2, 3, 0), (3, 1, 0), (4, 1, 0), (5, 0, 0)]);
+
+    let v = n.version_de(nucleo::Clase::Faccion, 1);
+    assert!(n.aplicar_en(MIN, admin("na", Comando::FijarNivelAsentamiento { asentamiento: a, nivel: 4 })).aceptada());
+    assert!(n.version_de(nucleo::Clase::Faccion, 1) > v, "un nivel de plaza nuevo toca la Facción");
+    assert!(n.aplicar_en(MIN, admin("nb", Comando::FijarNivelAsentamiento { asentamiento: b, nivel: 3 })).aceptada());
+    assert_eq!(n.cupos_de_faccion(1).niveles, vec![(2, 3, 0), (3, 1, 1), (4, 1, 1), (5, 0, 0)]);
+    // El nivel 4 ya no es libre: con su único puesto ocupado, la subida de B al 4 se rechaza por el cupo (entre otros bloqueos).
+    let r = n.aplicar_en(2 * MIN, ana("sb", Comando::SolicitarAscenso { asentamiento: b }));
+    match &r.resultado {
+        Resultado::Rechazada { mensaje, .. } => assert!(mensaje.contains("la Facción no tiene cupo para ese nivel"), "{mensaje}"),
+        otro => panic!("se esperaba un rechazo: {otro:?}"),
+    }
+
+    // La Facción propia lo proyecta; la forma pública, no.
+    let f = nucleo::proyeccion::propios::faccion(&n, 1);
+    let cap = f.cap_fundacion.expect("cap en la propia");
+    assert_eq!((cap.cap, cap.plazas, cap.caravanas), (4, 2, 0));
+    assert_eq!(f.cupos_de_nivel.iter().map(|x| (x.nivel, x.cupo, x.ocupadas)).collect::<Vec<_>>(), vec![(2, 3, 0), (3, 1, 1), (4, 1, 1), (5, 0, 0)]);
+    let p = nucleo::proyeccion::propios::faccion_publica(&n, 1);
+    assert!(p.cap_fundacion.is_none() && p.cupos_de_nivel.is_empty());
+}

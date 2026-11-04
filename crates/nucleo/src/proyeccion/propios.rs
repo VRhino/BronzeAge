@@ -699,6 +699,7 @@ pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
     };
     let Some(x) = e.politica.facciones.get(f) else { return base };
     let heroes = |v: &[u64]| v.iter().map(|&h| ids::heroe(h)).collect();
+    let cupos = n.cupos_de_faccion(f);
     pb::Faccion {
         nombre: x.nombre.clone(),
         sigilo: Some(sigilo(&x.sigilo)),
@@ -719,6 +720,8 @@ pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
         tablon: tablon(n, crate::misiones::Dueno::Faccion(f)),
         es_bot: n.es_faccion_de_bots(f),
         contratos: mercenarios::contratos_de(e, f),
+        cap_fundacion: Some(pb::CapFundacion { cap: cupos.cap, plazas: cupos.plazas, caravanas: cupos.caravanas }),
+        cupos_de_nivel: cupos.niveles.into_iter().map(|(nivel, cupo, ocupadas)| pb::CupoDeNivel { nivel, cupo, ocupadas }).collect(),
         ..base
     }
 }
@@ -762,7 +765,7 @@ pub fn directorio_facciones(n: &Nucleo) -> pb::DirectorioFacciones {
 /// La forma pública de otra Facción (5H, `VISTA`; Proyecciones §6: «facciones: públicas en la ficción»): la Facción sin su experiencia, su capital ni cuándo la designó (dónde está su capital es
 /// de la niebla). Regla (decisión del autor del 2026-10-26): de una Facción ajena se ve **solo el nivel**, sin la experiencia exacta ni la capital (el TypeScript la mandaba entera).
 pub fn faccion_publica(n: &Nucleo, f: u32) -> pb::Faccion {
-    pb::Faccion { experiencia: 0, capital_designada_en_ms: None, capital_id: None, misiones: vec![], miembros: vec![], tablon: None, contratos: vec![], ..faccion(n, f) }
+    pb::Faccion { experiencia: 0, capital_designada_en_ms: None, capital_id: None, misiones: vec![], miembros: vec![], tablon: None, contratos: vec![], cap_fundacion: None, cupos_de_nivel: vec![], ..faccion(n, f) }
 }
 
 /// Las tecnologías de la Facción (6G, `Estado::tecnologia`; Proyecciones §6.3: las de un rival no viajan nunca): las aparecidas y las reveladas por su id, las adoptadas con las de arranque

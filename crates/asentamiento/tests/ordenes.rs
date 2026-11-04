@@ -71,6 +71,7 @@ macro_rules! exterior {
             felicidad_extra: UNO,
             nobleza_extra: UNO,
             recaudacion_extra: UNO,
+            cupo_para_recuperar: true,
         }
     };
 }
@@ -384,4 +385,24 @@ fn avanzar_hasta_cumple_los_fines_en_su_instante_y_deja_el_paso_en_el_minuto() {
     let ev = a.avanzar_hasta(minuto_del_fin, &mut x);
     assert!(ev.contains(&Evento::EdificioCompletado { id, tipo: Tipo::Vivienda, nivel: 1 }) && a.edificio(id).unwrap().activo());
     assert_eq!(a.ultimo_minuto, minuto_del_fin);
+}
+
+#[test]
+fn una_plaza_degradada_solo_recupera_el_nivel_con_cupo_de_su_faccion() {
+    // 2026-11-04 (decisión del autor): recuperarse no salta el cupo de nivel. Sin cupo, el operativo se queda donde está aunque la racha sana sobre; con cupo, sube en el minuto.
+    let r = Reglas::cargar();
+    let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
+    a.nivel = 2;
+    a.medidor.nivel_actual = 1;
+    a.medidor.racha = r.mantenimiento.minutos_sanos_para_recuperar_nivel + 10;
+    let mut x = exterior!(&r, s, w);
+    x.cupo_para_recuperar = false;
+    let t = 2 * 24 * 60 * MS_POR_MINUTO;
+    let ev = a.avanzar_minuto(t, &mut x);
+    assert_eq!(a.medidor.nivel_actual, 1, "sin cupo no recupera");
+    assert!(!ev.iter().any(|e| matches!(e, Evento::MantenimientoRecuperado { .. })));
+    x.cupo_para_recuperar = true;
+    let ev = a.avanzar_minuto(t + MS_POR_MINUTO, &mut x);
+    assert_eq!(a.medidor.nivel_actual, 2, "con cupo recupera en el minuto: la racha siguió contando");
+    assert!(ev.contains(&Evento::MantenimientoRecuperado { nivel: 2 }));
 }

@@ -112,6 +112,7 @@ fn correr_con(dias: i64, semilla_hambre: bool, apagar_en: Option<i64>) -> (Asent
             felicidad_extra: UNO,
             nobleza_extra: UNO,
             recaudacion_extra: UNO,
+            cupo_para_recuperar: true,
         };
         let mut ev = a.avanzar_hasta(t, &mut x);
         // El jugador levanta primero el pueblo de cantera (la piedra del mantenimiento del nivel 2 ya no sale de la plaza) y luego la aldea
@@ -226,6 +227,7 @@ fn paso_de_hambre(a: &mut Asentamiento, reglas: &Reglas, minuto: i64) -> Vec<Eve
         felicidad_extra: UNO,
         nobleza_extra: UNO,
         recaudacion_extra: UNO,
+        cupo_para_recuperar: true,
     };
     a.avanzar_hasta(minuto * MS_POR_MINUTO, &mut x)
 }
@@ -321,6 +323,7 @@ fn el_paso_de_minuto_le_dice_al_mundo_lo_que_fabrican_las_recetas_de_bronce() {
         felicidad_extra: UNO,
         nobleza_extra: UNO,
         recaudacion_extra: UNO,
+        cupo_para_recuperar: true,
     };
     let antes = a.almacen.disponible(Recurso::ArmaBronce);
     a.avanzar_minuto(MS_POR_MINUTO, &mut x);

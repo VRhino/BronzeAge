@@ -58,9 +58,11 @@ pub struct ReglasNivel {
     pub ratio_combate_digno: i64,
     /// `CAP_FUNDACION_POR_NIVEL`: plazas que la Facción puede fundar en total, por nivel 1..=10.
     pub cap_fundacion: Vec<u32>,
-    /// `CUPO_NIVEL_ASENTAMIENTO.maxNivel2|maxNivel3`, por nivel de Facción 1..=10.
+    /// `CUPO_NIVEL_ASENTAMIENTO.maxNivel2|maxNivel3|maxNivel4|maxNivel5`, por nivel de Facción 1..=10.
     pub cupo_nivel2: Vec<u32>,
     pub cupo_nivel3: Vec<u32>,
+    pub cupo_nivel4: Vec<u32>,
+    pub cupo_nivel5: Vec<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -124,6 +126,8 @@ impl Reglas {
                 cap_fundacion: lista_u32(&bloque("CAP_FUNDACION_POR_NIVEL")),
                 cupo_nivel2: lista_u32(&cupo["maxNivel2"]),
                 cupo_nivel3: lista_u32(&cupo["maxNivel3"]),
+                cupo_nivel4: lista_u32(&cupo["maxNivel4"]),
+                cupo_nivel5: lista_u32(&cupo["maxNivel5"]),
             },
             sigilo: Catalogo::de(&bloque("CATALOGO_SIGILO")),
         }
@@ -159,6 +163,8 @@ mod pruebas {
         assert_eq!(n.cap_fundacion, vec![1, 2, 3, 3, 4, 5, 5, 6, 6, 7]);
         assert_eq!(n.cupo_nivel2, vec![1, 1, 2, 2, 3, 3, 3, 4, 4, 5], "P4: dos tercios de las plazas");
         assert_eq!(n.cupo_nivel3, vec![0, 0, 1, 1, 1, 2, 2, 2, 2, 3]);
+        assert_eq!(n.cupo_nivel4, vec![0, 0, 0, 0, 1, 1, 2, 2, 3, 3], "2026-11-04: como mucho tres plazas en nivel 4");
+        assert_eq!(n.cupo_nivel5, vec![0, 0, 0, 0, 0, 0, 0, 1, 1, 1], "2026-11-04: como mucho una plaza en nivel 5");
     }
 
     #[test]

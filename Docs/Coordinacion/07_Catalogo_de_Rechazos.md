@@ -216,7 +216,8 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `avanzada.dentro_del_asentamiento` | `AVANZADA_DENTRO_DEL_ASENTAMIENTO` | El sitio cae sobre la ciudad de la plaza madre (su radio es una décima del de su zona). |
 | `avanzada.pisa_otro_elemento` | `AVANZADA_PISA_OTRO_ELEMENTO` | El sitio pisa otra avanzada, un pueblo o un campamento (cada elemento del mapa mide 0,2). |
 | `avanzada.nada_que_cancelar` | `AVANZADA_NADA_QUE_CANCELAR` | No hay una mejora ni una reparación que cancelar. |
-| `avanzada.fuera_del_sitio` | `AVANZADA_FUERA_DEL_SITIO` | La columna del héroe no está en el sitio donde se pide colocarla. |
+| `avanzada.fuera_del_sitio` | `AVANZADA_FUERA_DEL_SITIO` | El sitio donde se pide colocarla no es tierra firme (desde el 2026-11-04 se coloca desde dentro de la madre, como la aldea; antes: la columna del héroe no estaba en el sitio). |
+| `avanzada.sin_ruta` | `AVANZADA_SIN_RUTA` | Del sitio no hay ruta por tierra hasta la plaza madre: no se le podrían llevar los materiales (2026-11-04). |
 | `avanzada.faccion_ajena` | `AVANZADA_FACCION_AJENA` | — |
 | `avanzada.fuera_de_la_puerta` | `AVANZADA_FUERA_DE_LA_PUERTA` | — |
 | `avanzada.no_esta_pendiente` | `AVANZADA_NO_ESTA_PENDIENTE` | — |

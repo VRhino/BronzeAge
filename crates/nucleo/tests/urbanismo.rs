@@ -68,6 +68,7 @@ fn con_ciudad<R>(re: &ReglasEconomia, urbe: &mut Urbe, f: impl FnOnce(&mut Exter
         felicidad_extra: UNO,
         nobleza_extra: UNO,
         recaudacion_extra: UNO,
+        cupo_para_recuperar: true,
     };
     f(&mut x)
 }

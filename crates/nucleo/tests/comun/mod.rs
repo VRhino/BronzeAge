@@ -159,6 +159,7 @@ pub fn mandaba(n: &Nucleo, actor: &str, c: &Comando) -> bool {
         | Comando::CrearCaravana { asentamiento }
         | Comando::MarcarPueblo { asentamiento, .. }
         | Comando::MarcarAldea { asentamiento, .. }
+        | Comando::ColocarAvanzada { asentamiento, .. }
         | Comando::FijarPuerta { asentamiento, .. }
         | Comando::VetarJugador { asentamiento, .. }
         | Comando::AsignarCargoLocal { asentamiento, .. }
@@ -206,7 +207,8 @@ pub fn acceso(asentamiento: u64, aliados: bool, neutrales: bool, enemigos: bool)
     Comando::FijarPuerta { heroe: 0, asentamiento, cerrada_a: politica::Grupos::de(cerradas) }
 }
 
-/// Andamiaje de 5E-1: `heroe` puede colocar avanzadas de la plaza (reside en ella y es su Maestro de Obras, lo nombra la administración); su columna tiene que estar en el sitio.
+/// Andamiaje de 5E-1: `heroe` puede colocar avanzadas de la plaza (reside en ella y es su Maestro de Obras, lo nombra la administración); desde el 2026-11-04 tiene que estar dentro de ella,
+/// como para marcar la aldea.
 pub fn coloca_avanzadas(n: &mut Nucleo, plaza: u64, heroe: u64) {
     for (i, c) in [
         Comando::FijarResidencia { heroe, residencia: Some(militar::heroe::Residencia::Asentamiento(plaza as u32)) },
