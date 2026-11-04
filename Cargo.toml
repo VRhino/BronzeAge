@@ -18,10 +18,15 @@ debug = false
 
 # La suite completa (`node scripts/suite.mjs`, 2026-11-04, pedido del autor): optimizada para que las simulaciones largas (batch, trazado) no tarden minutos, pero con las mismas
 # comprobaciones que las pruebas normales (debug_assert y desbordamientos). `cargo test` a secas sigue con el perfil de siempre.
+# Nuestros crates a opt-level 1 y las dependencias a 2: con 2 en todo, recompilar tras tocar el núcleo tardaba 11 min (cada binario de prueba
+# lo vuelve a optimizar); con 1, 2,6 min, y las pruebas corren igual de rápido (~72 s con 4 núcleos).
 [profile.suite]
 inherits = "dev"
-opt-level = 2
+opt-level = 1
 debug = false
 debug-assertions = true
 overflow-checks = true
 incremental = false
+
+[profile.suite.package."*"]
+opt-level = 2
