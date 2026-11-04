@@ -17,3 +17,7 @@ Cada crate lleva su propia versión en su `Cargo.toml` y la sube cuando cambia (
 ## Fuente de verdad de las reglas
 
 Si el canon (`Docs/Game/`) y `Docs/Mechanics/` se contradicen, gana `Mechanics` y se corrige el canon (ver `Docs/Mechanics/README.md`).
+
+## La suite completa
+
+Cuando haga falta pasar la suite completa del motor, se lanza con `node scripts/suite.mjs`, nunca con `cargo test --workspace` a secas (decidido por el autor el 2026-11-04). Compila con el perfil `suite` y lanza los binarios en paralelo: unos 4 min en vez de 22. La salida de cada binario queda en `target/suite-registros/` y el resumen termina en una línea `FIN:`. Para una prueba suelta o un crate, `cargo test -p <crate> ...` como siempre.
