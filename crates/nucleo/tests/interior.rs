@@ -628,10 +628,15 @@ async fn una_obra_termina_en_su_instante_con_la_cola_y_la_mejora_y_el_recinto_vi
     let (mut ana, _) = Dentro::entrar(&w, "ana", None).await;
     let (mut dora, _) = Dentro::entrar(&w, "dora", None).await;
 
-    // La granja de la fundación ya se está mejorando sola (la plaza tiene recursos): la mejora viaja con su fin exacto. Y una vivienda a mano arranca al instante de la orden, con el suyo; la
-    // delta de la plaza lleva solo los edificios (y lo que cambia con ellos).
+    // La granja de la fundación se mejora a mano (con la auto-construcción apagada no arranca sola desde el 2026-11-04): la mejora viaja con su fin exacto. Y una vivienda a mano arranca al
+    // instante de la orden, con el suyo; la delta de la plaza lleva solo los edificios (y lo que cambia con ellos).
     let granja = ana.plaza.edificios.iter().find(|e| e.tipo == "granja").expect("la granja de la fundación").clone();
-    let mejora = granja.mejora.expect("la granja se mejora sola");
+    assert!(granja.mejora.is_none(), "con la auto-construcción apagada la granja no se mejora sola");
+    let (_, r) = ana.dar("o0", orden::Cuerpo::MejorarEdificioAhora(pb::OrdenMejorarEdificioAhora { asentamiento_id: as_.clone(), cargo: s("gobernador"), edificio_id: granja.id.clone() })).await;
+    aceptada(&r);
+    let granja = edificio(&ana.plaza, &granja.id).clone();
+    let mejora = granja.mejora.expect("la granja se mejora a mano");
+    dora.al_dia().await;
     assert_eq!(mejora.nivel_objetivo, granja.nivel_interno.unwrap() + 1);
     let (deltas, r) = ana.dar("o1", orden::Cuerpo::AnadirEdificioManualmente(pb::OrdenAnadirEdificioManualmente { asentamiento_id: as_.clone(), cargo: s("gobernador"), tipo: s("vivienda") })).await;
     aceptada(&r);
@@ -659,10 +664,10 @@ async fn una_obra_termina_en_su_instante_con_la_cola_y_la_mejora_y_el_recinto_vi
             assert_eq!(edificio(&ana.plaza, &id).estado, pb::EstadoEdificio::EdificioActivo as i32);
             assert!(edificio(&ana.plaza, &id).completa_en_ms.is_none());
                 } else {
-            // Hecha: sube de nivel; con la cuadrilla libre puede empezar en ese mismo instante la mejora siguiente (la Granja tiene cuatro niveles).
+            // Hecha: sube de nivel, y con la auto-construcción apagada no empieza sola la siguiente.
             let g = edificio(&ana.plaza, &granja.id);
             assert_eq!(g.nivel_interno, Some(mejora.nivel_objetivo));
-            assert!(g.mejora.as_ref().map_or(true, |m| m.nivel_objetivo > mejora.nivel_objetivo), "{:?}", g.mejora);
+            assert!(g.mejora.is_none(), "{:?}", g.mejora);
         }
     }
 

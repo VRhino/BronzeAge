@@ -966,7 +966,8 @@ fn la_foto_a_mitad_de_obra_conserva_las_citas_y_recuperar_no_cambia_el_mundo() {
     let (id, a_mitad, citas) = {
         let mut n = Nucleo::con_persistencia(con(ajustes.clone()), dir.path(), Default::default()).unwrap();
         let id = arrancar(&mut n);
-        n.avanzar_hasta(30 * MIN + 17);
+        // A mitad de la tercera Vivienda: las dos primeras toman las dos cuadrillas a la vez (con la auto-construcción apagada no hay mejora automática que ocupe una).
+        n.avanzar_hasta(20 * MIN + 17);
         las_citas_cuadran(&n, id);
         let citas = citas_de_la_plaza(&n, id);
         assert!(!citas.0.is_empty() && !citas.1.is_empty(), "obras y política en curso: {citas:?}");

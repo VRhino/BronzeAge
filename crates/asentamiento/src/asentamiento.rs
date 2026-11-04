@@ -418,8 +418,9 @@ impl Asentamiento {
         for (recurso, n) in produccion::recetas(&r.catalogo, &mut self.edificios, &mut self.almacen, &mano, &ctx, &reserva_auto) {
             x.fuentes.fabricado(recurso, n);
         }
-        self.iniciar_mejoras_automaticas(t, r, x, &reserva_auto, &mut ev);
+        // Con la auto-construcción apagada no arranca nada solo: ni necesidades nuevas ni mejoras automáticas (2026-11-04, decisión del autor).
         if !self.auto_pausada {
+            self.iniciar_mejoras_automaticas(t, r, x, &reserva_auto, &mut ev);
             self.evaluar_necesidades(t, x, &reserva_auto, &mut ev);
         }
         // La obra de los recintos, con la misma reserva: reintenta la celda que esperaba materiales (las que tienen cita las levanta `cumplir_fines`).

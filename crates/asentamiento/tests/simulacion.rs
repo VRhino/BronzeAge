@@ -70,6 +70,11 @@ impl Sitios for Terreno {
 }
 
 fn correr(dias: i64, semilla_hambre: bool) -> (Asentamiento, Vec<(i64, Evento)>) {
+    correr_con(dias, semilla_hambre, None)
+}
+
+/// Como [`correr`]; con `apagar_en`, el Gobernador apaga la auto-construcción en ese minuto.
+fn correr_con(dias: i64, semilla_hambre: bool, apagar_en: Option<i64>) -> (Asentamiento, Vec<(i64, Evento)>) {
     let reglas = Reglas::cargar();
     let materiales: Vec<(Recurso, Mil)> = vec![(Recurso::Madera, 50_000), (Recurso::Piedra, 20_000), (Recurso::Trigo, 100_000), (Recurso::Oro, 100_000)];
     let mut a = Asentamiento::fundar(&reglas, 0, &materiales, 3);
@@ -87,6 +92,9 @@ fn correr(dias: i64, semilla_hambre: bool) -> (Asentamiento, Vec<(i64, Evento)>)
     for minuto in 1..=dias * 1440 {
         let t = minuto * MS_POR_MINUTO;
         mundo.ahora = t;
+        if apagar_en == Some(minuto) {
+            assert!(a.alternar_auto_construccion(true));
+        }
         let mut x = Exterior {
             reglas: &reglas,
             fuentes: &mut mundo,
@@ -166,6 +174,19 @@ fn la_economia_arranca_sola_y_sube_al_nivel_2_sin_romper_ningun_invariante() {
     assert!(nivel2.is_some_and(|m| m < 10 * 1440), "sube al nivel 2 dentro de los 10 días");
     assert_eq!(a.nivel, 2);
     let _: Option<Ascenso> = a.ascenso;
+}
+
+/// Pedido del autor del 2026-11-04: con la auto-construcción apagada en la plaza tampoco arrancan las mejoras automáticas (antes la pausa
+/// solo paraba la detección de necesidades y las mejoras seguían lanzándose solas).
+#[test]
+fn con_la_auto_construccion_apagada_no_arranca_ninguna_mejora_automatica() {
+    let mejoras = |ev: &[(i64, Evento)]| ev.iter().filter(|(_, e)| matches!(e, Evento::MejoraIniciada { .. })).map(|(m, _)| *m).collect::<Vec<_>>();
+    let encendida = mejoras(&correr_con(10, false, None).1);
+    println!("mejoras automáticas (minutos): {encendida:?}");
+    let apagar = encendida[0];
+    assert!(encendida.iter().any(|&m| m > apagar), "encendida, la plaza sigue mejorando sola sus edificios");
+    let apagada = mejoras(&correr_con(10, false, Some(apagar)).1);
+    assert!(apagada.iter().all(|&m| m < apagar), "apagada, ninguna mejora automática más: {apagada:?}");
 }
 
 #[test]

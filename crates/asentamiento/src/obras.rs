@@ -351,7 +351,8 @@ impl Asentamiento {
         Ok(())
     }
 
-    /// `alternarAutoConstruccion`: pausa o reanuda solo la detección de necesidades nuevas.
+    /// `alternarAutoConstruccion`: pausa o reanuda la detección de necesidades nuevas y las mejoras automáticas (desde el 2026-11-04).
+    /// Lo ya pagado sigue.
     pub fn alternar_auto_construccion(&mut self, pausada: bool) -> bool {
         std::mem::replace(&mut self.auto_pausada, pausada) != pausada
     }

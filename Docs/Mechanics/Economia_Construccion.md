@@ -589,7 +589,7 @@ Los factores se **multiplican** entre las políticas activas del asentamiento (`
 
 > **Implementado en Rust (2026-10-23, 4H T5).** `AlternarAutoConstruccion` emite `construccion.auto_alternada { pausada }`, `AlternarReceta` `construccion.receta_alternada { recurso, pausada }` (el recurso por su índice) y `MejorarEdificio` (`mejorarEdificioAhora`) `construccion.mejora_forzada { edificio }` antes de su `construccion.mejora_iniciada`; los oyen la Facción de la plaza y quien está dentro. `construccion.yacimiento_agotado` se emite desde la paridad P8 (2026-10-27, §5) y `asentamiento.renombrado` desde 5C.
 
-La pausa de la auto-construcción detiene solo la **detección de necesidades nuevas** (§6.2); lo ya pagado, las mejoras automáticas, las recetas y la obra de recintos siguen.
+La pausa de la auto-construcción detiene la **detección de necesidades nuevas** (§6.2) y las **mejoras automáticas** (desde el 2026-11-04, decisión del autor: antes seguían lanzándose con la pausa puesta); lo ya pagado (obras comprometidas y mejoras en curso), las recetas y la obra de recintos siguen. La mejora a mano (`mejorarEdificioAhora`) sigue disponible.
 
 > **Implementado en Rust (2026-10-24, correcciones de 5C):** `RenombrarAsentamiento` rechaza un nombre de más de `largoMaximo` caracteres (contados como caracteres, no bytes, tras recortar) con `asentamiento.nombre_largo` y uno que ya lleve otra plaza viva (comparado con `politica::nombres::normalizar`, sin tildes ni mayúsculas, como los nombres de la lista) con `asentamiento.nombre_duplicado`. La plaza que se llama así ya no cuenta contra sí misma.
 
