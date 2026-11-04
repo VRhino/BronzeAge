@@ -21,8 +21,10 @@ struct Estancia {
     en_campamento: Option<u32>,
     /// La plaza en la que reside.
     reside: Option<u64>,
-    /// Sus escuadras con soldados en la guarnición de la plaza donde reside (`proyeccion::interior::guarnicion`).
-    guarnicion: Vec<u64>,
+    /// Sus escuadras con soldados en la guarnición de la plaza donde reside o de las plazas de su Facción donde la dejó de visita, con sus soldados (`Asentamiento.guarnicion`).
+    guarnicion: Vec<(u64, i64)>,
+    /// Las plazas donde dejó guarnición de visita (`Contenedor::Plaza`).
+    guarnece: Vec<u64>,
     /// Los campamentos de mercenarios que lo cuentan: donde está dentro, donde reside y los que le prestaron tropa (ordenados, sin repetir).
     campamentos: Vec<u32>,
     /// Sus escuadras prestadas por un campamento: pedir tropa prestada cambia el campamento aunque los campamentos del héroe sigan siendo los mismos.
@@ -34,7 +36,13 @@ fn estancia(h: &HeroeNucleo) -> Estancia {
         Some(Residencia::Asentamiento(a)) => Some(u64::from(a)),
         _ => None,
     };
-    let guarnicion = if reside.is_some() { h.heroe.escuadras.iter().filter(|s| s.contenedor == Contenedor::Campamento && s.en_guarnicion && s.con_soldados()).map(|s| s.id).collect() } else { Vec::new() };
+    // Con sus soldados: la guarnición de la plaza viaja con lo que tiene en pie cada escuadra (`Asentamiento.guarnicion`, 2026-11-04).
+    let de_guarnicion = |s: &&militar::escuadra::Escuadra| s.con_soldados() && (reside.is_some() && s.contenedor == Contenedor::Campamento && s.en_guarnicion || matches!(s.contenedor, Contenedor::Plaza(_)));
+    let guarnicion = h.heroe.escuadras.iter().filter(de_guarnicion).map(|s| (s.id, s.cantidad)).collect();
+    // Las plazas de su Facción donde dejó guarnición de visita.
+    let mut guarnece: Vec<u64> = h.heroe.escuadras.iter().filter_map(|s| if let Contenedor::Plaza(x) = s.contenedor { Some(x) } else { None }).collect();
+    guarnece.sort_unstable();
+    guarnece.dedup();
     let en_campamento = if let Ubicacion::Mercenarios(c) = h.heroe.presencia.ubicacion { Some(c) } else { None };
     let mut campamentos: Vec<u32> = h.heroe.escuadras.iter().filter_map(|s| s.prestada).collect();
     campamentos.extend(en_campamento);
@@ -42,7 +50,7 @@ fn estancia(h: &HeroeNucleo) -> Estancia {
     campamentos.sort_unstable();
     campamentos.dedup();
     let prestadas = h.heroe.escuadras.iter().filter(|s| s.prestada.is_some()).map(|s| s.id).collect();
-    Estancia { dentro: if let Ubicacion::Asentamiento(a) = h.heroe.presencia.ubicacion { Some(u64::from(a)) } else { None }, en_campamento, reside, guarnicion, campamentos, prestadas }
+    Estancia { dentro: if let Ubicacion::Asentamiento(a) = h.heroe.presencia.ubicacion { Some(u64::from(a)) } else { None }, en_campamento, reside, guarnicion, guarnece, campamentos, prestadas }
 }
 
 /// La plaza de la que es una caravana y la que la hospeda mientras está aparcada.
@@ -72,7 +80,7 @@ impl Nucleo {
     pub(super) fn marcar_interiores(&mut self) {
         let Nucleo { estado, interiores, tr, .. } = self;
         let Some(vistos) = interiores else { return };
-        let plazas = |a: &Estancia| [a.dentro, a.reside].into_iter().flatten().collect::<Vec<_>>();
+        let plazas = |a: &Estancia| [a.dentro, a.reside].into_iter().flatten().chain(a.guarnece.iter().copied()).collect::<Vec<_>>();
         // Las escuadras tocadas pertenecen a un héroe que quizá no se tocó: se revisa también.
         let mut heroes: Vec<u64> = tr.tocados.de(Clase::Heroe).to_vec();
         for s in tr.tocados.de(Clase::Escuadra) {

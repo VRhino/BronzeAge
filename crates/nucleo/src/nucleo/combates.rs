@@ -637,7 +637,7 @@ impl Nucleo {
         let (dentro, sana_y_conectada) = (Ubicacion::Asentamiento(plaza as u32), |h: &HeroeNucleo| !h.heroe.esta_herido(t) && !h.heroe.presencia.fuera);
 
         let residentes: Vec<&HeroeNucleo> = self.estado.militar.residentes_de(plaza).collect();
-        let mut escuadras: Vec<Escuadra> = residentes.iter().flat_map(|h| h.heroe.escuadras.iter()).filter(|s| s.contenedor == Contenedor::Campamento && s.en_guarnicion).filter(en_pie).cloned().collect();
+        let mut escuadras: Vec<Escuadra> = self.escuadras_de_guarnicion(plaza).into_iter().filter(en_pie).cloned().collect();
         let candidatos: Vec<Candidato> = residentes.iter().filter(|h| h.heroe.presencia.ubicacion == dentro && sana_y_conectada(h)).map(|h| Candidato::de(cr, &h.heroe, &loadout_en_el_campamento(h))).collect();
         let residentes_que_entran = seleccionar(&candidatos, tope).entran;
         let mut lucharon: Vec<(u64, Vec<u64>)> = vec![];

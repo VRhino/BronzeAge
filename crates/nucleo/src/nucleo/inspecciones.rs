@@ -7,7 +7,6 @@
 //! cuántas celdas hay levantadas (nunca su almacén). El informe dura `INSPECCION.informeMinutos` y se lee con [`Nucleo::informes_de_inspeccion`].
 
 use super::*;
-use militar::escuadra::Contenedor;
 use militar::inspeccion::{self, Avistada, Contenido, ErrorInspeccion, Informe, Objetivo, RecintoAvistado};
 use militar::presencia::Ubicacion;
 
@@ -17,7 +16,7 @@ impl Nucleo {
     pub(super) fn defensa_vista(&self, x: u64) -> Contenido {
         let a = &self.estado.asentamientos[&x];
         let dentro = self.heroes().filter(|h| h.heroe.presencia.ubicacion == Ubicacion::Asentamiento(x as u32)).map(|h| h.heroe.id).collect();
-        let guarnicion = self.estado.militar.residentes_de(x).flat_map(|h| h.heroe.escuadras.iter()).filter(|s| s.contenedor == Contenedor::Campamento && s.en_guarnicion && s.con_soldados());
+        let guarnicion = self.escuadras_de_guarnicion(x).into_iter().filter(|s| s.con_soldados());
         let guarnicion = guarnicion.map(|s| Avistada { tropa: s.tropa, cantidad: s.cantidad, heroe: s.heroe }).collect();
         let recintos = a.economia.recintos.iter().filter(|r| r.levantadas() > 0).map(|r| RecintoAvistado { nivel: r.nivel, celdas: r.celdas.clone(), avance: r.levantadas() as u32 }).collect();
         Contenido::Plaza { faccion: a.faccion, heroes: dentro, guarnicion, recintos }

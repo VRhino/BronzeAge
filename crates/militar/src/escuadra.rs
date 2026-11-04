@@ -28,6 +28,9 @@ pub enum Contenedor {
     /// En la guarnición de un pueblo o una aldea (Economia_Construccion §14.0.1): la deja un ciudadano de la Facción de la plaza madre desde dentro, come como su campamento
     /// y defiende el pueblo en el saqueo.
     Pueblo(u64),
+    /// En la guarnición de una plaza de su Facción donde su héroe **no reside** (2026-11-04, decisión del autor): la deja de visita, desde la columna con la que entró,
+    /// dentro del mismo cupo por héroe que un residente. Come como su campamento (de la plaza donde reside su héroe) y defiende la plaza como su guarnición.
+    Plaza(u64),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

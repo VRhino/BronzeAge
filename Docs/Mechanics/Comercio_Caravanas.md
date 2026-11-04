@@ -433,6 +433,7 @@ caravana **adjunta** (`cargarCaravanaAdjunta`), la de una **aparcada** y `capaci
 - **`asignarEscolta`**: caravana `comercial` y `disponible` en su origen, ≥ 1 escuadrón, sin repetidos; los escuadrones quedan `contenedor: escolta`. **`quitarEscolta`**: solo con la caravana `disponible`;
   cada héroe retira únicamente los suyos (los ids por defecto son todos los suyos cedidos a esa caravana); vuelven al campamento. **Con encargo (Rust, §5.8.6)** las dos valen también con la caravana `esperando` **en su origen** (no en su destino ni en ruta).
 - Los cede cada residente por sí mismo (`heroeId` = el actor). La escolta **no consume ración**.
+- **De visita en el origen** (Rust, 2026-11-04, decisión del autor: «estando de visita en esa plaza debo poder usar estas tropas para escolta de caravanas presentes, pero solo si la plaza es de mi Facción»): un héroe **dentro** del origen de la caravana, que **no reside** en él y es **de la Facción del origen** (la administración no lo necesita), cede escuadras de la **columna con la que entró** (no de un campamento), con el mismo cupo y las mismas comprobaciones que dentro del pueblo de un carro de acarreo (Economia_Construccion §14.0.1): suya, en esa columna (`escuadra.fuera_de_tu_columna`), con soldados y sin reserva de batalla. `quitarEscolta` dado así, de visita en el origen, la devuelve a esa columna sin pasar de su Liderazgo; si la caravana vuelve a casa o se pierde, la escolta va al campamento de su héroe, como la de un residente. Un visitante de otra Facción sigue sin poder ceder escolta (`caravana.escolta_invalida`).
 - Vuelven al campamento: al terminar el regreso (§6.4), al cancelar la preparación, al perderse la caravana por ruina o por presencia (los casos de combate están en `Combate.md`). **Con encargo** la escolta no vuelve en cada vuelta: viaja en todas y vuelve al **terminar el encargo** (§5.8.6, §5.8.7) o al perderse la caravana (§10).
 
 <!-- parametros:CARAVANA_ESCOLTA -->
@@ -1008,7 +1009,7 @@ La red de caminos se poda sola al faltar un extremo (§7.4).
 | `colocarOrdenMercado` | Tesorero o Gobernador del asentamiento, residente y dentro |
 | `crearCaravana` | residente del asentamiento (las caravanas siguen abiertas a cualquier residente) |
 | `agregarCarroCaravana`, `comprarAnimalCaravana`, `reservarCaravana`, `cancelarCaravana`, `moverCarroCaravana`, `renombrarCaravana` (Rust) | residente del **origen** de la caravana |
-| `prepararCaravana`, `asignarEscolta`, `quitarEscolta` | el actor es el `heroeId` del comando **y** reside en el origen |
+| `prepararCaravana`, `asignarEscolta`, `quitarEscolta` | el actor es el `heroeId` del comando **y** reside en el origen (desde el 2026-11-04, `asignarEscolta` y `quitarEscolta` también de visita dentro del origen siendo de su Facción, §5.5) |
 | `encargarCaravana`, `cambiarEncargo`, `cancelarEncargo` | Rust, sin equivalente en TypeScript: el Gobernador, el Tesorero o el Maestro de Caravanas del **origen** de la caravana, residente y dentro (§5.8.3) |
 | `moverCargaCaravanaAparcada`, `enviarCaravanaAlOrigen` | el actor es el `heroeId`; residente del **origen** de la caravana y **presente** en la plaza que la hospeda |
 | `comerciarEnPlaza` | el actor es el `heroeId`; el motor exige columna propia en la puerta |

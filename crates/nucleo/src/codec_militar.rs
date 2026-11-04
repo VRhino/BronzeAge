@@ -19,7 +19,7 @@
 //! Una ubicación: `u8 · payload`: 0 plaza (u32), 1 columna (u64), 2 campamento (u32), 3 desconectado (punto).
 //! Una escuadra: `id u64 · héroe u64 · tropa u8 (índice del catálogo) · origen u8 (0 pesants, 1 artesanos, 2 nobleza) · plaza_origen opt_u64 ·
 //! cantidad i64 · nivel u8 · experiencia i64 · moral{valor i64, t0 i64, por_minuto i64, máximo opt_i64, mínimo opt_i64} · contenedor{u8 · u64:
-//! 0 campamento, 1 columna, 2 escolta de una caravana, 3 fuera} · en_guarnicion bool · reserva_batalla opt_u64 · prestada opt_u64`.
+//! 0 campamento, 1 columna, 2 escolta de una caravana, 3 fuera, 4 avanzada, 5 pueblo, 6 guarnición de una plaza de su Facción donde no reside (2026-11-04)} · en_guarnicion bool · reserva_batalla opt_u64 · prestada opt_u64`.
 //! Un informe de inspección: `objetivo{u8: 0 columna, 1 caravana, 2 plaza · u64} · visto_en i64 · expira_en i64 · donde punto · contenido{u8 · payload}`: 0
 //! columna `facción opt_u64 · héroes{n u64 · n × u64} · escuadras{n u64 · n × avistada}`, 1 caravana `escoltada bool · recursos{n u64 · n × u8}`, 2 plaza
 //! `facción u32 · héroes · guarnición{n u64 · n × avistada} · recintos{n u64 · n × (nivel u8, celdas{n u64 · n × (col i32, fila i32, clase u8)}, avance u32)}` (BAN21), con una avistada `tropa u8 · cantidad i64 · héroe u64`.
@@ -155,6 +155,7 @@ fn contenedor_escribir(w: &mut Escritor, c: &Contenedor) {
         Contenedor::Fuera => (3, 0),
         Contenedor::Avanzada(a) => (4, *a),
         Contenedor::Pueblo(x) => (5, *x),
+        Contenedor::Plaza(x) => (6, *x),
     };
     w.u8(tag);
     w.u64(id);
@@ -169,6 +170,7 @@ fn contenedor_leer(r: &mut Lector) -> Result<Contenedor, ErrorFormato> {
         3 => Contenedor::Fuera,
         4 => Contenedor::Avanzada(id),
         5 => Contenedor::Pueblo(id),
+        6 => Contenedor::Plaza(id),
         _ => return Err(ErrorFormato("contenedor de escuadra desconocido")),
     })
 }

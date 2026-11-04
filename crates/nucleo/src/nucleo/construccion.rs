@@ -501,6 +501,8 @@ impl Nucleo {
             self.olvidar_ruta_de_acarreo(p.id);
             self.liberar_guarnicion_de_pueblo(p.id, |_| true);
         }
+        // Lo que dejaron de visita en la plaza vuelve, intacto, al campamento de cada héroe (2026-11-04).
+        self.liberar_guarnicion_de_visita(id, |_| true);
         // Quien estaba dentro de sus pueblos o avanzadas sale al mapa con lo suyo, a la puerta de cada uno.
         let nodos = self.geografia.as_ref().map_or(&[][..], |g| &g.mapa.nodos[..]);
         let pueblos: Vec<(u64, Punto)> = a.economia.pueblos.iter().filter_map(|p| crate::economia::posicion_de_pueblo(nodos, p).map(|pos| (p.id, pos))).collect();

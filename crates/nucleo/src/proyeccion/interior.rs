@@ -156,7 +156,9 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
 
     p.casas_compradas = e.militar.residentes_de(id).map(|h| ids::heroe(h.heroe.id)).collect();
     p.presentes_ids = n.heroes().filter(|h| matches!(h.heroe.presencia.ubicacion, Ubicacion::Asentamiento(x) if u64::from(x) == id)).map(|h| ids::heroe(h.heroe.id)).collect();
-    p.guarnicion_ids = n.guarnicion_de_plaza(id).into_iter().map(ids::escuadra).collect();
+    let guarnicion: Vec<&militar::escuadra::Escuadra> = n.escuadras_de_guarnicion(id).into_iter().filter(|s| s.con_soldados()).collect();
+    p.guarnicion_ids = guarnicion.iter().map(|s| ids::escuadra(s.id)).collect();
+    p.guarnicion = guarnicion.iter().map(|s| pb::GuarnicionInforme { tropa_id: s.tropa.nombre().to_owned(), cantidad: s.cantidad.max(0) as u32, heroe_id: ids::heroe(s.heroe) }).collect();
     p.cupo_guarnicion = u32::try_from(n.cupo_de_guarnicion(id).unwrap_or(0)).unwrap_or(0);
     p.puerta_cerrada_a = n.puerta_cerrada_a(id).unwrap_or_default().iter().map(|g| grupo_de_puerta(g) as i32).collect();
     p.vetados_ids = a.puerta.vetados.iter().map(|&h| ids::heroe(h)).collect();

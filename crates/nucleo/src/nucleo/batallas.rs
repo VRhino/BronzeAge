@@ -482,8 +482,7 @@ impl Nucleo {
     /// entran de oficio: se unen ellos con `UnirseABatalla`, durante la convocatoria o después (2026-10-22, tercera ronda). Sin nadie más, se juega igual.
     pub(super) fn apertura_de_asedio(&self, t: Instante, heroe: u64, id: u64, plaza: u64) -> Apertura {
         let a = &self.estado.asentamientos[&plaza];
-        let residentes = self.estado.militar.residentes_de(plaza);
-        let guarnicion = residentes.flat_map(|h| h.heroe.escuadras.iter()).filter(|s| s.contenedor == Contenedor::Campamento && s.en_guarnicion && s.con_soldados());
+        let guarnicion = self.escuadras_de_guarnicion(plaza).into_iter().filter(|s| s.con_soldados());
         Apertura {
             contexto: Contexto::Asedio { asentamiento: plaza as u32 },
             punto: a.posicion,

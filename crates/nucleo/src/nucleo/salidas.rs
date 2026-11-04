@@ -554,9 +554,18 @@ impl Nucleo {
         }
     }
 
-    /// Las escuadras de la guarnición de la plaza: las de sus residentes que se quedan dentro con soldados (las que defienden de oficio en un asedio).
+    /// Las escuadras de la guarnición de la plaza: las de sus residentes que se quedan dentro con soldados (las que defienden de oficio en un asedio) y, tras ellas, las
+    /// que dejaron de visita los de su Facción (`Contenedor::Plaza`, 2026-11-04).
     pub(crate) fn guarnicion_de_plaza(&self, plaza: u64) -> Vec<u64> {
-        self.estado.militar.residentes_de(plaza).flat_map(|h| h.heroe.escuadras.iter()).filter(|s| s.contenedor == Contenedor::Campamento && s.en_guarnicion && s.con_soldados()).map(|s| s.id).collect()
+        self.escuadras_de_guarnicion(plaza).into_iter().filter(|s| s.con_soldados()).map(|s| s.id).collect()
+    }
+
+    /// Todas las escuadras de la guarnición de la plaza, con soldados o sin ellos: primero las de sus residentes (en su campamento y marcadas), luego las que dejaron de
+    /// visita los héroes de su Facción que no residen en ella, por id de héroe.
+    pub(crate) fn escuadras_de_guarnicion(&self, plaza: u64) -> Vec<&militar::escuadra::Escuadra> {
+        let residentes = self.estado.militar.residentes_de(plaza).flat_map(|h| h.heroe.escuadras.iter()).filter(|s| s.contenedor == Contenedor::Campamento && s.en_guarnicion);
+        let de_visita = self.heroes().flat_map(|h| h.heroe.escuadras.iter()).filter(|s| s.contenedor == Contenedor::Plaza(plaza));
+        residentes.chain(de_visita).collect()
     }
 
     /// Al salir al mundo desde su plaza el héroe se queda con la foto de lo que veía dentro, ya sin la tropa ni la carga que se lleva (Niebla_De_Guerra §4.5): el almacén, la cola y la

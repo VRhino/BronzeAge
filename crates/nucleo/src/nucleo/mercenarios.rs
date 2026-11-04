@@ -298,7 +298,7 @@ impl Nucleo {
                         columnas.push(c);
                     }
                 }
-                Contenedor::Campamento | Contenedor::Fuera | Contenedor::Avanzada(_) | Contenedor::Pueblo(_) => {}
+                Contenedor::Campamento | Contenedor::Fuera | Contenedor::Avanzada(_) | Contenedor::Pueblo(_) | Contenedor::Plaza(_) => {}
             }
         }
         columnas.sort_unstable();

@@ -37,7 +37,7 @@ impl Nucleo {
         let vecinas: Vec<_> = e.contactos.iter().filter_map(|&(x, y)| if x == a.id { Some(y) } else { (y == a.id).then_some(x) }).filter_map(|o| e.asentamientos.get(&o).map(|o| (o.id, o.radio))).collect();
         let residentes: Vec<u64> = e.militar.residentes_de(a.id).map(|h| h.heroe.id).collect();
         let presentes: Vec<u64> = e.militar.heroes.values().filter(|h| matches!(h.heroe.presencia.ubicacion, militar::presencia::Ubicacion::Asentamiento(x) if u64::from(x) == a.id)).map(|h| h.heroe.id).collect();
-        let guarnicion: Vec<u64> = residentes.iter().filter_map(|h| e.militar.heroes.get(h)).flat_map(|h| &h.heroe.escuadras).filter(|s| s.en_guarnicion && s.con_soldados()).map(|s| s.id).collect();
+        let guarnicion: Vec<u64> = self.guarnicion_de_plaza(a.id);
         let flota: Vec<u64> = e.comercio.flota.iter().filter(|c| u64::from(c.origen) == a.id).map(|c| c.id).collect();
         let aparcadas: Vec<u64> = e.comercio.flota.iter().filter(|c| c.estado == comercio::caravana::EstadoCaravana::Aparcada && c.anfitriona.is_some_and(|x| u64::from(x) == a.id)).map(|c| c.id).collect();
         let pueblos: Vec<_> = eco.pueblos.iter().map(|p| p.id).collect();

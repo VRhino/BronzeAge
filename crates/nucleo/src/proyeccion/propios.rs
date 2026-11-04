@@ -348,6 +348,7 @@ pub fn escuadron(n: &Nucleo, e: &Escuadra) -> pb::Escuadron {
         Contenedor::Campamento => pb::contenedor_escuadron::Donde::Campamento(true),
         Contenedor::Avanzada(a) => pb::contenedor_escuadron::Donde::AvanzadaId(ids::avanzada(a)),
         Contenedor::Pueblo(x) => pb::contenedor_escuadron::Donde::PuebloId(ids::pueblo(x)),
+        Contenedor::Plaza(x) => pb::contenedor_escuadron::Donde::AsentamientoId(ids::asentamiento(x)),
         Contenedor::Ejercito(c) => pb::contenedor_escuadron::Donde::EjercitoId(ids::ejercito(c)),
         Contenedor::Escolta(c) => pb::contenedor_escuadron::Donde::CaravanaId(ids::caravana(c)),
         Contenedor::Fuera => pb::contenedor_escuadron::Donde::Fuera(true),

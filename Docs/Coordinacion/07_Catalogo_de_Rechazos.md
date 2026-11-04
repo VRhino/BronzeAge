@@ -340,6 +340,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `loadout.perk_no_desbloqueado` | `LOADOUT_PERK_NO_DESBLOQUEADO` | — |
 | `escuadra.repetida` | `ESCUADRA_REPETIDA` | — |
 | `escuadra.ajena` | `ESCUADRA_AJENA` | — |
+| `escuadra.fuera_de_tu_columna` | `ESCUADRA_FUERA_DE_TU_COLUMNA` | De visita en una plaza de tu Facción (2026-11-04): la escuadra que dejas en su guarnición o cedes de escolta tiene que ir en la columna con la que entraste. |
 | `escuadra.en_batalla` | `ESCUADRA_EN_BATALLA` | — |
 | `liderazgo.superado` | `LIDERAZGO_SUPERADO` | — |
 | `guarnicion.sin_residencia` | `GUARNICION_SIN_RESIDENCIA` | — |
@@ -347,6 +348,8 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `guarnicion.ya_asignada` | `GUARNICION_YA_ASIGNADA` | — |
 | `guarnicion.supera_el_cupo` | `GUARNICION_SUPERA_EL_CUPO` | — |
 | `guarnicion.no_asignada` | `GUARNICION_NO_ASIGNADA` | — |
+| `guarnicion.faccion_ajena` | `GUARNICION_FACCION_AJENA` | De visita (2026-11-04): solo se guarnece una plaza de tu Facción. |
+| `guarnicion.no_estas_dentro` | `GUARNICION_NO_ESTAS_DENTRO` | La escuadra que dejaste de visita se recoge desde dentro de esa plaza. |
 
 ### Presencia: dónde está el héroe y si está en el mundo
 

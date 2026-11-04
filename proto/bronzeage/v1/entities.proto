@@ -478,7 +478,7 @@ message Asentamiento {
   // (`Batalla.lado_para_unirse`).
   optional string batalla_id = 37;
   // El interior visto desde dentro (4H T3c), todo en ids del contrato:
-  repeated string guarnicion_ids = 38;           // las escuadras (`esc-N`) en la guarnición de la plaza: las de sus residentes que se quedan dentro
+  repeated string guarnicion_ids = 38;           // las escuadras (`esc-N`) en la guarnición de la plaza: las de sus residentes que se quedan dentro y, desde 2026-11-04, las que dejan los de su Facción de visita
   uint32 cupo_guarnicion = 39;                   // cuántos soldados admite la guarnición (nivel, recintos completos, Palacio, políticas)
   repeated string presentes_ids = 40;            // los héroes que están dentro ahora: residentes y visitantes (su ficha pública llega por `VISTA`; aquí solo quiénes)
   repeated string caravanas_aparcadas_ids = 41;  // las caravanas aparcadas en la plaza, de quien sean
@@ -496,6 +496,8 @@ message Asentamiento {
   optional Tablon tablon = 46;
   // Si el Gobernador cerró a los ciudadanos el sacar del almacén al carro (`cargar_de_plaza`, 2026-10-29): interior y `ADMIN`.
   bool almacen_cerrado_a_ciudadanos = 47;
+  // La guarnición de la plaza escuadra a escuadra, en el orden de `guarnicion_ids`: tropa, soldados en pie y de qué héroe es (2026-11-04).
+  repeated GuarnicionInforme guarnicion = 48;
 }
 
 // Rectángulo en UNIDADES LOCALES del asentamiento (esquina mínima y tamaño). El espacio local está centrado en el Centro Urbano.
@@ -786,6 +788,7 @@ message ContenedorEscuadron {
     bool fuera = 4;                      // héroe desconectado
     string avanzada_id = 5;              // en la guarnición de una avanzada (`guarnecer_avanzada`), fuera del campamento de su plaza
     string pueblo_id = 6;                // en la guarnición de un pueblo o una aldea (`guarnecer_pueblo`), fuera del campamento de su plaza
+    string asentamiento_id = 7;          // en la guarnición de una plaza de su Facción donde no reside (`asignar_guarnicion` de visita, 2026-11-04)
   }
 }
 

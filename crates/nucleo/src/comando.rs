@@ -3056,6 +3056,8 @@ pub mod rechazos {
     pub const LOADOUT_PERK_NO_DESBLOQUEADO: &str = "loadout.perk_no_desbloqueado";
     pub const ESCUADRA_REPETIDA: &str = "escuadra.repetida";
     pub const ESCUADRA_AJENA: &str = "escuadra.ajena";
+    /// De visita en una plaza de tu Facción (2026-11-04): la escuadra que dejas en su guarnición o cedes de escolta tiene que ir en la columna con la que entraste.
+    pub const ESCUADRA_FUERA_DE_TU_COLUMNA: &str = "escuadra.fuera_de_tu_columna";
     pub const ESCUADRA_EN_BATALLA: &str = "escuadra.en_batalla";
     pub const LIDERAZGO_SUPERADO: &str = "liderazgo.superado";
     pub const GUARNICION_SIN_RESIDENCIA: &str = "guarnicion.sin_residencia";
@@ -3063,6 +3065,10 @@ pub mod rechazos {
     pub const GUARNICION_YA_ASIGNADA: &str = "guarnicion.ya_asignada";
     pub const GUARNICION_SUPERA_EL_CUPO: &str = "guarnicion.supera_el_cupo";
     pub const GUARNICION_NO_ASIGNADA: &str = "guarnicion.no_asignada";
+    /// De visita (2026-11-04): solo se guarnece una plaza de tu Facción.
+    pub const GUARNICION_FACCION_AJENA: &str = "guarnicion.faccion_ajena";
+    /// La escuadra que dejaste de visita se recoge desde dentro de esa plaza.
+    pub const GUARNICION_NO_ESTAS_DENTRO: &str = "guarnicion.no_estas_dentro";
     // Presencia: dónde está el héroe y si está en el mundo.
     pub const HEROE_FUERA_DEL_MUNDO: &str = "heroe.fuera_del_mundo";
     pub const HEROE_DESCONECTANDOSE: &str = "heroe.desconectandose";

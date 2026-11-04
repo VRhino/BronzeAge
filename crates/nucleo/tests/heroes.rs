@@ -812,6 +812,86 @@ fn la_escolta_se_cede_con_la_caravana_parada_en_su_origen_y_vuelve_al_campamento
     assert_eq!(contenedor(&e, milicia), Contenedor::Campamento);
 }
 
+/// Pedido del autor del 2026-11-04: de visita en una plaza de su Facción, el héroe usa la tropa que trae en su columna para la guarnición de la plaza (con el cupo de un residente)
+/// y para escoltar las caravanas de la plaza que están en casa; al salir no se lleva lo que dejó, que solo se recoge desde dentro y vuelve a su campamento si deja la Facción.
+#[test]
+fn de_visita_en_una_plaza_de_su_faccion_guarnece_y_escolta_con_lo_que_trae_y_al_salir_no_se_lo_lleva() {
+    let m = con_mundo!();
+    let (mut e, _) = escenario_de_escolta(m);
+    let a = e.a;
+    e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: a, nivel: 2 });
+    e.dar(a, Madera, 1_000_000);
+    e.ok("admin", Comando::AnadirEdificio { asentamiento: a, tipo: asentamiento::catalogo::Tipo::Barracon });
+    let activo = |e: &Escenario| e.n.economia(a).unwrap().edificios.iter().any(|x| x.tipo == asentamiento::catalogo::Tipo::Barracon && x.activo());
+    for _ in 0..80 {
+        if activo(&e) {
+            break;
+        }
+        e.avanzar(HORA);
+    }
+    assert_eq!(e.n.cupo_de_guarnicion(a), Some(7), "Barracón de nivel interno 1");
+    // Una caravana de la plaza, en casa.
+    let ana = e.heroe_en_la_plaza("ana");
+    let c = e.ok("ana", Comando::CrearCaravana { asentamiento: a }).creadas[0];
+    e.ok("ana", Comando::AnadirCarro { caravana: c, tipo: comercio::caravana::TipoCarro::Basico });
+    e.ok("ana", Comando::AnadirAnimal { caravana: c, carro: 0, animal: comercio::caravana::Animal::Buey });
+    // «dora», de la Facción 1, recluta en la plaza, sale con su tropa, se muda al campamento de mercenarios y vuelve de visita con su columna.
+    let h = e.heroe_en_la_plaza("dora");
+    let lenadores = e.ok("dora", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: Tropa::Lenadores }).creadas[0];
+    let milicia = e.ok("dora", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: Tropa::MiliciaLanceros }).creadas[0];
+    let col = e.ok("dora", Comando::SalirAlMundo { asentamiento: a, heroe: h, escuadras: vec![lenadores, milicia], carga: vec![] }).creadas[0];
+    e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Campamento(0)) });
+    let contenedor = |e: &Escenario, id| e.n.escuadra(id).unwrap().1.contenedor;
+    let guarnicion = |e: &Escenario| nucleo::proyeccion::interior::asentamiento(&e.n, a).unwrap();
+    let asignar = |escuadra| Comando::AsignarGuarnicion { heroe: h, escuadra };
+    assert_eq!(e.rechazada("dora", asignar(lenadores)), rechazos::GUARNICION_SIN_RESIDENCIA, "fuera de la plaza, como siempre");
+    e.ok("dora", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: h });
+    assert_eq!((contenedor(&e, lenadores), contenedor(&e, milicia)), (Contenedor::Ejercito(col), Contenedor::Ejercito(col)));
+
+    // La guarnición: con el cupo de un residente (la Milicia cuesta 14 de Liderazgo), de la columna con la que entró.
+    assert_eq!(e.rechazada("dora", asignar(milicia)), rechazos::GUARNICION_SUPERA_EL_CUPO);
+    assert_eq!(e.rechazada("dora", asignar(99_999)), rechazos::ESCUADRA_AJENA);
+    e.ok("dora", asignar(lenadores));
+    assert_eq!(contenedor(&e, lenadores), Contenedor::Plaza(a));
+    assert!(!e.n.estado().ejercitos[&col].columna.escuadras.contains(&lenadores), "sale de la columna");
+    assert_eq!(e.rechazada("dora", asignar(lenadores)), rechazos::GUARNICION_YA_ASIGNADA);
+    let p = guarnicion(&e);
+    let esc = format!("esc-{lenadores}");
+    assert_eq!(p.guarnicion_ids, vec![esc.clone()]);
+    let soldados = e.n.escuadra(lenadores).unwrap().1.cantidad as u32;
+    assert_eq!(p.guarnicion, vec![contrato::v1::GuarnicionInforme { tropa_id: "lenadores".into(), cantidad: soldados, heroe_id: format!("heroe-{h}") }], "de quién es cada escuadra");
+
+    // La escolta de una caravana de la plaza que está en casa, también de la columna; quitarla la devuelve a la columna.
+    let escoltar = |escuadras: &[u64]| Comando::AsignarEscolta { caravana: c, heroe: h, escuadras: escuadras.to_vec() };
+    assert_eq!(e.rechazada("dora", escoltar(&[lenadores])), rechazos::ESCUADRA_FUERA_DE_TU_COLUMNA);
+    e.ok("dora", escoltar(&[milicia]));
+    assert_eq!(contenedor(&e, milicia), Contenedor::Escolta(c));
+    e.ok("dora", Comando::QuitarEscolta { caravana: c, heroe: h, escuadras: None });
+    assert_eq!(contenedor(&e, milicia), Contenedor::Ejercito(col));
+    assert!(e.n.estado().ejercitos[&col].columna.escuadras.contains(&milicia));
+    e.ok("dora", escoltar(&[milicia]));
+
+    // Al salir, lo que dejó se queda: la columna sale vacía.
+    e.ok("dora", Comando::SalirDeAsentamiento { asentamiento: a, heroe: h });
+    assert!(e.n.estado().ejercitos[&col].columna.escuadras.is_empty(), "no se lleva lo que dejó");
+    assert_eq!((contenedor(&e, lenadores), contenedor(&e, milicia)), (Contenedor::Plaza(a), Contenedor::Escolta(c)));
+    assert_eq!(guarnicion(&e).guarnicion_ids, vec![esc.clone()], "la guarnición sigue en la plaza");
+    // Se recoge solo desde dentro.
+    assert_eq!(e.rechazada("dora", Comando::RetirarGuarnicion { heroe: h, escuadra: lenadores }), rechazos::GUARNICION_NO_ESTAS_DENTRO);
+    e.ok("dora", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: h });
+    e.ok("dora", Comando::RetirarGuarnicion { heroe: h, escuadra: lenadores });
+    assert_eq!(contenedor(&e, lenadores), Contenedor::Ejercito(col));
+    assert!(guarnicion(&e).guarnicion_ids.is_empty());
+
+    // Solo en una plaza de su Facción; si la deja, lo que tenía en la guarnición vuelve a su campamento.
+    e.ok("dora", asignar(lenadores));
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(2) });
+    assert_eq!(contenedor(&e, lenadores), Contenedor::Campamento, "vuelve, intacta, a su campamento");
+    e.ok("admin", Comando::QuitarEscolta { caravana: c, heroe: h, escuadras: None });
+    assert_eq!(e.rechazada("dora", asignar(milicia)), rechazos::GUARNICION_FACCION_AJENA);
+    let _ = ana;
+}
+
 #[test]
 fn la_escolta_tambien_se_cede_al_preparar_la_caravana_y_si_algo_falla_no_se_cede_nada() {
     // Paridad P5 (`prepararCaravana { heroeId, escoltaEscuadronIds }`): mismas condiciones y mismo cupo que `asignarEscolta`, en el mismo lanzamiento.

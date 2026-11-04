@@ -209,6 +209,9 @@ Distinta de la escolta por ejército (Doc 5.13.3), que exige a un héroe marchan
 - Un héroe **residente del asentamiento de origen** cede escuadrones de su campamento a la caravana **al
   lanzarla** (`prepararCaravana` con `escoltaEscuadronIds`). No necesita estar presente ni acompañar el viaje;
   lo que viaja son sus escuadrones (`Caravana.escoltaIds`).
+- **De visita en el origen** (decidido el 2026-11-04): un héroe de la Facción del asentamiento de origen que está dentro sin residir en él cede
+  escuadrones de la columna con la que entró a las caravanas de ese asentamiento que están en casa, con el mismo cupo; no se van con él al
+  salir y, si los retira estando dentro, vuelven a su columna.
 - **Siguen con la caravana hasta que termina el viaje o es destruida** — cesión **por viaje**, no enganche
   permanente. Al terminar vuelven al campamento de su héroe. Con una ruta o un envío (3.13.9) el "viaje" es el encargo entero: viajan en todas las vueltas y vuelven al terminar el encargo. Si la caravana es destruida o capturada, por el
   motivo que sea, quedan a 0 unidades y vuelven igualmente al campamento de su héroe (Doc 5.15.4).

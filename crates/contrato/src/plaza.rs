@@ -78,6 +78,7 @@ campos_de_la_plaza!(
     trazado,
     batalla_id,
     guarnicion_ids,
+    guarnicion,
     cupo_guarnicion,
     presentes_ids,
     caravanas_aparcadas_ids,

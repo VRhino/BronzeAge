@@ -126,6 +126,8 @@ impl Nucleo {
         }
         // Su guarnición en pueblos de plazas que ya no son de su Facción vuelve a su campamento (Economia_Construccion §14.0.1).
         self.guarnicion_de_pueblos_tras_cambiar_de_faccion(heroe);
+        // Y la que dejó de visita en plazas que ya no son de su Facción (2026-11-04).
+        self.guarnicion_de_visita_tras_cambiar_de_faccion(heroe);
         match residencia {
             Some(Residencia::Campamento(c)) => self.reprogramar_anillo(c, t),
             // Quien deja de ser de la Facción dueña de la plaza donde reside (la administración no le muda) deja sus cargos en ella (5E).

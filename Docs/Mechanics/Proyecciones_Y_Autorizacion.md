@@ -332,8 +332,8 @@ Las **161 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
 |---|---|---|---|
 | `aportar_a_refundacion` | `AportarARefundacion` | la cuenta del héroe | en un campamento (dentro o con su columna a la puerta, `campamento.fuera_de_la_puerta`), ciudadano (`faccion.no_pertenece`) de una Facción sin plazas (`refundacion.con_plazas`); del almacén personal residiendo allí (`refundacion.no_resides`) o del carro: dentro, el que lleva (2026-11-02; `heroe.sin_columna` si no trajo ninguno); a la puerta, el de su columna siendo su Líder (`columna.solo_el_lider`) (5G-b) |
-| `asignar_escolta` | `AsignarEscolta` | la cuenta del héroe | escuadras suyas en el campamento del origen de la caravana; cupo de escolta |
-| `asignar_guarnicion` | `AsignarGuarnicion` | la cuenta del héroe | residente de la plaza y cupo de guarnición |
+| `asignar_escolta` | `AsignarEscolta` | la cuenta del héroe | escuadras suyas en el campamento del origen de la caravana o, de visita dentro del origen siendo de su Facción, en la columna con la que entró (2026-11-04); cupo de escolta |
+| `asignar_guarnicion` | `AsignarGuarnicion` | la cuenta del héroe | residente de la plaza o, de visita dentro de una plaza de su Facción, una escuadra de la columna con la que entró (2026-11-04); cupo de guarnición |
 | `atacar` | `Atacar` | la cuenta del héroe | en guerra o con `declara_guerra` (`guerra.confirmar`); a la puerta del objetivo |
 | `borrar_loadout` | `BorrarLoadout` | la cuenta del héroe | — |
 | `cambiar_seleccion_de_convocatoria` | `CambiarSeleccionDeConvocatoria` | la cuenta del héroe | integrante |
@@ -384,7 +384,7 @@ Las **161 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `responder_peticion_de_union` | `ResponderPeticionDeUnion` | la cuenta del héroe | el Líder de la columna |
 | `retirar_de_refundacion` | `RetirarDeRefundacion` | la cuenta del héroe | como `aportar_a_refundacion`, sin mirar las plazas; lo que aportó (`refundacion.sin_aporte`), hasta el hueco (5G-b) |
 | `retirar_de_avanzada` | `RetirarDeAvanzada` | la cuenta del héroe | escuadras suyas; su columna a la puerta (`radioPuerta`) de la avanzada |
-| `retirar_guarnicion` | `RetirarGuarnicion` | la cuenta del héroe | — |
+| `retirar_guarnicion` | `RetirarGuarnicion` | la cuenta del héroe | la dejada de visita, desde dentro de esa plaza |
 | `sacar_del_almacen_personal` | `SacarDelAlmacenPersonal` | la cuenta del héroe | como `guardar_en_almacen_personal`; hasta lo que cabe en el carro (`carro.no_cabe`) |
 | `salir_al_mundo` | `SalirAlMundo` | la cuenta del héroe | desde su residencia (`salida.solo_de_tu_residencia`); escuadras suyas |
 | `salir_de_asentamiento` | `SalirDeAsentamiento` | la cuenta del héroe | estar dentro |
