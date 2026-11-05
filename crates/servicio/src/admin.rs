@@ -8,6 +8,8 @@
 //! | `PUT /v1/admin/registro/codigo` | `{ codigo }` (texto, o `null` para abrir el registro): lo cambia en caliente, hasta el próximo reinicio (luego vuelve `CODIGO_REGISTRO`) |
 //! | `POST /v1/admin/respaldos` | respaldo ahora: foto y copia de `mundo/` y `acceso/` en `<datos>/respaldos/<id>/`; `201` con el respaldo |
 //! | `GET /v1/admin/respaldos` | `{ respaldos: [...] }`, del más nuevo al más viejo |
+//! | `GET /v1/admin/carga` | la medida de carga del actor: `{ activo, detalle, cada_s, ultima }`, con la última ventana de `cada_s` segundos (ver `Docs/Arquitectura/Medida_De_Carga.md`) |
+//! | `POST /v1/admin/carga` | `{ activo?, detalle? }` (booleanos): la enciende o la apaga en caliente, sin reiniciar; contesta como el `GET` |
 //! | `GET /v1/admin/misiones/catalogo` | el catálogo **vigente** de las misiones recurrentes (Misiones_Recurrentes §6), en el JSON que acepta la orden de administración `fijar_catalogo_misiones`: `{ asentamiento: [...], faccion: [...] }` |
 //!
 //! Un respaldo es `{ id, creado_ms, version, instante, mundo_hash, semilla, bytes }` (también en su `respaldo.json`). Restaurarlo es copiar sus `mundo/` y `acceso/` sobre los de la carpeta
@@ -130,12 +132,30 @@ impl Admin {
                     Err(_) => error(503, "interno", "el núcleo no responde"),
                 }
             }
+            (metodo @ ("GET" | "POST"), "carga") => {
+                let (activo, detalle) = if metodo == "POST" {
+                    let Some(v) = serde_json::from_slice::<Value>(&p.cuerpo).ok().filter(|v| v.is_object() && ["activo", "detalle"].iter().all(|k| v.get(k).is_none_or(Value::is_boolean))) else {
+                        return error(400, "datos_invalidos", "el cuerpo es { \"activo\"?: booleano, \"detalle\"?: booleano }");
+                    };
+                    (v.get("activo").and_then(Value::as_bool), v.get("detalle").and_then(Value::as_bool))
+                } else {
+                    (None, None)
+                };
+                let (tx, rx) = oneshot::channel();
+                if self.nucleo.send(ComandoSesion::Admin(PeticionAdmin::Carga { activo, detalle, respuesta: tx })).await.is_err() {
+                    return error(503, "interno", "el núcleo no responde");
+                }
+                match rx.await {
+                    Ok(json) => RespuestaHttp::json(200, json),
+                    Err(_) => error(503, "interno", "el núcleo no responde"),
+                }
+            }
             ("GET", "respaldos") => RespuestaHttp::json(200, json!({ "respaldos": self.respaldos() }).to_string()),
             ("POST", "respaldos") => match self.respaldar().await {
                 Ok(r) => RespuestaHttp::json(201, r.to_string()),
                 Err(e) => error(500, "interno", &format!("no se pudo respaldar: {e}")),
             },
-            (_, "partida" | "registro/codigo" | "respaldos" | "misiones/catalogo") => error(405, "metodo_no_permitido", "método no permitido"),
+            (_, "partida" | "registro/codigo" | "respaldos" | "misiones/catalogo" | "carga") => error(405, "metodo_no_permitido", "método no permitido"),
             _ => error(404, "no_encontrado", "ruta desconocida"),
         }
     }

@@ -4,7 +4,7 @@ use std::{
     future::Future,
     io,
     path::PathBuf,
-    sync::{Arc, RwLock},
+    sync::{atomic::AtomicU64, Arc, RwLock},
     time::{Duration, Instant as Pared},
 };
 
@@ -116,6 +116,26 @@ pub enum PeticionAdmin {
     Respaldo { destino: PathBuf, respuesta: oneshot::Sender<io::Result<EstadoNucleo>> },
     /// El catálogo vigente de las misiones recurrentes (mecánica 55), en el JSON que acepta `fijar_catalogo_misiones`.
     CatalogoMisiones { respuesta: oneshot::Sender<String> },
+    /// La medida de carga del actor (2026-11-05, visibilidad de rendimiento), en JSON: si mide, si lleva el detalle y la última ventana. `activo` y `detalle`, si vienen, la encienden o la
+    /// apagan en caliente antes de contestar.
+    Carga { activo: Option<bool>, detalle: Option<bool>, respuesta: oneshot::Sender<String> },
+}
+
+/// Lo que mueven por la red todas las sesiones juntas (2026-11-05, visibilidad de rendimiento): contadores que solo crecen; el núcleo los lee en su medida de carga y saca la diferencia
+/// de cada ventana. Contar es una suma atómica por mensaje.
+#[derive(Debug, Default)]
+pub struct MetricasRed {
+    /// Mensajes enviados a los clientes.
+    pub mensajes: AtomicU64,
+    /// Bytes de esos mensajes antes de comprimir.
+    pub bytes_crudos: AtomicU64,
+    /// Bytes que salieron de verdad (comprimidos con zstd si el cliente lo negoció y la trama pasaba del umbral).
+    pub bytes_enviados: AtomicU64,
+    /// Escrituras que no acabaron a tiempo (`timeout_escritura`): la sesión se cierra por cliente lento.
+    pub escrituras_lentas: AtomicU64,
+    /// Tramas recibidas de los clientes y sus bytes.
+    pub tramas_recibidas: AtomicU64,
+    pub bytes_recibidos: AtomicU64,
 }
 
 /// La versión y el instante del núcleo.
@@ -165,6 +185,8 @@ pub struct Config {
     pub relieve: Option<(String, String)>,
     /// Los nombres de los héroes que la sesión añade a cada mensaje (`MensajeDeServidor.nombres_heroes`); el núcleo los apunta (`Nucleo::conectar_nombres`).
     pub nombres: crate::NombresHeroes,
+    /// Los contadores de red de todas las sesiones: se le pasan al actor del núcleo para su medida de carga.
+    pub red: Arc<MetricasRed>,
 }
 
 impl Default for Config {
@@ -181,6 +203,7 @@ impl Default for Config {
             datos_de_juego: None,
             relieve: None,
             nombres: crate::NombresHeroes::default(),
+            red: Arc::default(),
         }
     }
 }

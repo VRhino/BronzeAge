@@ -24,6 +24,7 @@
 //! además en cada muestreo de visión (cada [`MUESTREO_VISTA_MS`] de mundo) para poner al día lo que se ve: no cambia el estado del núcleo ni su versión.
 
 mod ambitos;
+mod carga;
 mod ordenes;
 
 use crate::comando::{rechazos, Comando, Peticion, Resultado, Respuesta};
@@ -44,7 +45,8 @@ use pb::orden::Cuerpo;
 use sha2::{Digest, Sha256};
 use servidor::{ComandoSesion, Difusion, EstadoNucleo, FinDeSesion, PeticionAdmin, RelojCompartido, SesionId};
 use std::collections::BTreeMap;
-use std::time::{Duration, Instant as Pared};
+use std::time::Duration;
+use carga::Medidor;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 
@@ -71,60 +73,8 @@ struct Actor {
     proxima_vista: base::Instante,
     /// Las sesiones de jugador de Unity abiertas, con su cuenta: las que conectan y desconectan a su héroe (Proyecciones §7.1).
     presentes: BTreeMap<SesionId, String>,
-    /// La carga del actor desde la última línea del registro ([`Medidor`]).
+    /// La medida de carga del actor ([`carga`]).
     carga: Medidor,
-}
-
-/// Cada cuánto (de pared) escribe el actor su línea de carga en el registro.
-const CADA_MEDIDA: Duration = Duration::from_secs(10);
-
-/// La carga del actor en vivo (2026-11-05, escalado: pedido del autor): cuánto tiempo de pared estuvo trabajando, cuánto de eso fue poner al día las `VISTA`, cuántas órdenes atendió y
-/// cuánto tardó cada una (de que la saca de la fila a que reparte su resultado), y cuántos mensajes llegó a tener esperando en la fila. Cada [`CADA_MEDIDA`] escribe una línea y vuelve a cero.
-struct Medidor {
-    desde: Pared,
-    ocupado: Duration,
-    vistas: Duration,
-    ordenes: u32,
-    en_ordenes: Duration,
-    orden_mas_lenta: Duration,
-    fila_maxima: usize,
-}
-
-impl Medidor {
-    fn nuevo() -> Self {
-        Self { desde: Pared::now(), ocupado: Duration::ZERO, vistas: Duration::ZERO, ordenes: 0, en_ordenes: Duration::ZERO, orden_mas_lenta: Duration::ZERO, fila_maxima: 0 }
-    }
-
-    fn orden(&mut self, tardo: Duration) {
-        self.ordenes += 1;
-        self.en_ordenes += tardo;
-        self.orden_mas_lenta = self.orden_mas_lenta.max(tardo);
-    }
-
-    /// La línea del registro, si toca (y vuelve a cero). Sin sesiones ni órdenes no escribe nada.
-    fn linea(&mut self, sesiones: usize, vistas: usize) -> Option<String> {
-        let pared = self.desde.elapsed();
-        if pared < CADA_MEDIDA {
-            return None;
-        }
-        let m = std::mem::replace(self, Medidor::nuevo());
-        if sesiones == 0 && m.ordenes == 0 {
-            return None;
-        }
-        let pct = |d: Duration| 100.0 * d.as_secs_f64() / pared.as_secs_f64();
-        let ms = |d: Duration| d.as_secs_f64() * 1e3;
-        let media = if m.ordenes > 0 { ms(m.en_ordenes) / f64::from(m.ordenes) } else { 0.0 };
-        Some(format!(
-            "carga: actor ocupado {:.0} % (vistas {:.0} %); {} órdenes en {:.0} s, {:.1} ms de media y {:.1} ms la más lenta; hasta {} esperando en la fila; {sesiones} sesiones, {vistas} con VISTA",
-            pct(m.ocupado),
-            pct(m.vistas),
-            m.ordenes,
-            pared.as_secs_f64(),
-            media,
-            ms(m.orden_mas_lenta),
-            m.fila_maxima
-        ))
-    }
 }
 
 /// El primer instante de muestreo de las vistas después de `t`.
@@ -134,11 +84,19 @@ fn siguiente_muestreo(t: base::Instante) -> base::Instante {
 
 /// Arranca el actor del núcleo. Termina (devolviendo el [`Nucleo`], ya apagado) cuando se cierran todos los emisores de `rx`.
 /// Conecta el reloj al núcleo: a partir de aquí el mundo avanza al ritmo del reloj.
-pub fn lanzar(mut nucleo: Nucleo, reloj: RelojCompartido, rx: mpsc::Receiver<ComandoSesion>) -> JoinHandle<Nucleo> {
+pub fn lanzar(nucleo: Nucleo, reloj: RelojCompartido, rx: mpsc::Receiver<ComandoSesion>) -> JoinHandle<Nucleo> {
+    lanzar_con_red(nucleo, reloj, rx, None)
+}
+
+/// Como [`lanzar`], con los contadores de red de las sesiones (`servidor::Config::red`) para la medida de carga.
+pub fn lanzar_con_red(mut nucleo: Nucleo, reloj: RelojCompartido, rx: mpsc::Receiver<ComandoSesion>, red: Option<std::sync::Arc<servidor::MetricasRed>>) -> JoinHandle<Nucleo> {
     nucleo.conectar_reloj(reloj.clone());
     nucleo.seguir_pertenencias();
     let (entregada, proxima_vista) = (nucleo.version(), siguiente_muestreo(nucleo.ahora()));
-    let actor = Actor { nucleo, reloj, mesa: Mesa::default(), publicadas: BTreeMap::new(), entregada, proxima_vista, presentes: BTreeMap::new(), carga: Medidor::nuevo() };
+    // El historial de la medida va junto a la carpeta del núcleo: `<partida>/carga.jsonl`.
+    let historial = nucleo.carpeta().and_then(|d| d.parent()).map(|p| p.join(carga::HISTORIAL_DE_CARGA));
+    let carga = Medidor::nuevo(red, historial);
+    let actor = Actor { nucleo, reloj, mesa: Mesa::default(), publicadas: BTreeMap::new(), entregada, proxima_vista, presentes: BTreeMap::new(), carga };
     // El actor en su propio hilo (2026-11-05, escalado): no ocupa uno de los hilos de tokio que atienden los sockets, ni ellos le quitan tiempo a él. Sigue siendo el único que escribe en el núcleo;
     // lo que reparte, lo reparte en paralelo con `rayon` (`Mesa::reconciliar_vistas`).
     tokio::task::spawn_blocking(move || {
@@ -158,23 +116,31 @@ impl Actor {
             tokio::select! {
                 c = rx.recv() => match c {
                     Some(c) => {
-                        self.carga.fila_maxima = self.carga.fila_maxima.max(rx.len() + 1);
-                        let (inicio, es_orden) = (Pared::now(), matches!(c, ComandoSesion::Orden { .. }));
-                        self.manejar(c);
-                        let tardo = inicio.elapsed();
-                        self.carga.ocupado += tardo;
-                        if es_orden {
-                            self.carga.orden(tardo);
+                        self.carga.fila(rx.len() + 1);
+                        let inicio = self.carga.inicio();
+                        match &c {
+                            ComandoSesion::Orden { orden, .. } => {
+                                let tipo = self.carga.detalle.then(|| carga::tipo_de_orden(&orden.cuerpo));
+                                self.manejar(c);
+                                self.carga.orden(inicio, tipo);
+                            }
+                            _ => {
+                                self.manejar(c);
+                                self.carga.ocupado(inicio);
+                            }
                         }
                     }
                     None => break,
                 },
                 _ = tokio::time::sleep(espera) => {}
             }
-            let inicio = Pared::now();
+            let inicio = self.carga.inicio();
             self.avanzar();
-            self.carga.ocupado += inicio.elapsed();
-            if let Some(l) = self.carga.linea(self.mesa.cuantas(), self.mesa.vistas_abiertas()) {
+            self.carga.ocupado(inicio);
+            for _ in 0..self.mesa.tomar_descartadas() {
+                self.carga.descartada();
+            }
+            if let Some(l) = self.carga.cerrar_si_toca(self.mesa.cuantas(), self.mesa.vistas_abiertas()) {
                 println!("{l}");
             }
         }
@@ -200,7 +166,9 @@ impl Actor {
     }
 
     fn avanzar(&mut self) {
+        let inicio = self.carga.inicio_detalle();
         self.nucleo.pulso();
+        self.carga.fase("mundo", inicio);
         self.distribuir(None);
     }
 
@@ -240,6 +208,10 @@ impl Actor {
             }
             ComandoSesion::Admin(PeticionAdmin::CatalogoMisiones { respuesta }) => {
                 let _ = respuesta.send(self.nucleo.recurrentes().catalogo.a_json().to_string());
+            }
+            ComandoSesion::Admin(PeticionAdmin::Carga { activo, detalle, respuesta }) => {
+                self.carga.fijar(activo, detalle);
+                let _ = respuesta.send(self.carga.estado().to_string());
             }
         }
     }
@@ -454,6 +426,7 @@ impl Actor {
         let mut envios: Vec<(SesionId, Difusion)> = Vec::new();
         // El mundo puede no haber avanzado y el interior de una plaza sí (el paso de minuto no sube la versión): los registros que faltan son los de `entregada` a `hasta`, quizá ninguno.
         let registros = if hasta == self.entregada { Some(Vec::new()) } else { self.nucleo.cambios_desde(self.entregada).map(|r| r.collect::<Vec<&CambioVersion>>()) };
+        let mut fase = self.carga.inicio_detalle();
         match registros {
             Some(registros) => {
                 self.mesa.reasignar_heroes(&self.nucleo, registros.iter().copied());
@@ -477,6 +450,8 @@ impl Actor {
                 for (id, a, version, plazas) in avances {
                     self.mesa.avanzar(id, a, version, plazas);
                 }
+                self.carga.fase("derechos y deltas", fase);
+                fase = self.carga.inicio_detalle();
                 // Lo que `ADMIN` ve y no pasa por el registro (6G): los contadores de la tecnología y los Aedas itinerantes.
                 self.mesa.admin_al_dia(&self.nucleo, None, &mut envios);
                 // Y lo que cobra cada campamento a quien está dentro: los precios siguen al stock de las plazas y a la reputación, sin subir la versión.
@@ -485,12 +460,14 @@ impl Actor {
                 self.mesa.pueblos_al_dia(&self.nucleo, &mut envios);
                 // Y lo que el paso de minuto cambia de las plazas de su Facción, a cada `FACCION` (2026-11-04).
                 self.mesa.propias_al_dia(&self.nucleo, &mut envios);
+                self.carga.fase("fuera del registro", fase);
             }
             None => {
                 // Se perdió registro (no debería ocurrir en vivo): foto completa de todos los ámbitos a todos.
                 for id in self.mesa.ids() {
                     self.mesa.sincronizar(&self.nucleo, id, true, &mut envios);
                 }
+                self.carga.fase("derechos y deltas", fase);
             }
         }
         // Lo que se ve (05 §3, decisión del autor del 2026-10-24): en cada muestreo, todas las vistas; tras una orden, al momento solo la de quien la dio (la causalidad es suya) y las demás
@@ -498,19 +475,31 @@ impl Actor {
         let ahora = self.nucleo.ahora();
         let parado = self.reloj.con(|r, _| r.pausado() || r.factor_milesimas() == 0);
         // Los alijos a la vista del `HEROE` (6G) se renuevan igual, con la columna que anda.
-        let inicio = Pared::now();
-        if ahora >= self.proxima_vista || (hasta != self.entregada && (causante.is_none() || parado)) {
-            self.mesa.reconciliar_vistas(&self.nucleo, None, &mut envios);
-            self.mesa.reconciliar_alijos(&self.nucleo, None, &mut envios);
-            self.proxima_vista = siguiente_muestreo(ahora);
-        } else if hasta != self.entregada {
-            self.mesa.reconciliar_vistas(&self.nucleo, causante, &mut envios);
-            self.mesa.reconciliar_alijos(&self.nucleo, causante, &mut envios);
+        let inicio = self.carga.inicio();
+        let todas = ahora >= self.proxima_vista || (hasta != self.entregada && (causante.is_none() || parado));
+        if todas || hasta != self.entregada {
+            let solo = if todas { None } else { causante };
+            let fase = self.carga.inicio_detalle();
+            self.mesa.reconciliar_vistas(&self.nucleo, solo, &mut envios);
+            self.carga.fase("vistas", fase);
+            let fase = self.carga.inicio_detalle();
+            self.mesa.reconciliar_alijos(&self.nucleo, solo, &mut envios);
+            self.carga.fase("alijos", fase);
         }
-        self.carga.vistas += inicio.elapsed();
+        if todas {
+            self.proxima_vista = siguiente_muestreo(ahora);
+        }
+        self.carga.vistas(inicio);
         self.entregada = hasta;
+        let fase = self.carga.inicio_detalle();
         self.mesa.entregar(envios);
+        self.carga.fase("entregar", fase);
+        let fase = self.carga.inicio_detalle();
         self.publicar_batallas();
+        self.carga.fase("batallas", fase);
+        if self.carga.detalle {
+            self.carga.canales_medio_llenos(self.mesa.canales_medio_llenos());
+        }
     }
 
     // ───────────────────────────── Órdenes ─────────────────────────────
@@ -526,7 +515,9 @@ impl Actor {
         };
         let respuesta = match traducida {
             Ok(p) => {
+                let fase = self.carga.inicio_detalle();
                 let r = self.nucleo.aplicar(p);
+                self.carga.fase("aplicar órdenes", fase);
                 // Causalidad: primero TODAS las Delta (las de eventos que vencieron justo antes y las de esta orden)...
                 self.distribuir(Some(sesion));
                 r

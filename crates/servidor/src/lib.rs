@@ -54,7 +54,7 @@ pub mod prueba;
 mod sesion;
 
 pub use nucleo::{
-    codigos, Autenticador, ComandoSesion, Config, Difusion, ErrorAcceso, EstadoNucleo, FinDeSesion, Identidad, PeticionAdmin, RelojCompartido, RolTecnico, SesionId,
+    codigos, Autenticador, ComandoSesion, Config, Difusion, ErrorAcceso, EstadoNucleo, FinDeSesion, Identidad, MetricasRed, PeticionAdmin, RelojCompartido, RolTecnico, SesionId,
 };
 pub use http::{Http, PeticionHttp, RespuestaHttp, SinHttp};
 pub use nombres::NombresHeroes;

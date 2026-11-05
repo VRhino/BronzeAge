@@ -155,6 +155,7 @@ enum Entrada {
 struct Receptor {
     stream: SplitStream<WebSocketStream<Rebobinado>>,
     max: usize,
+    red: Arc<crate::MetricasRed>,
 }
 
 impl Receptor {
@@ -164,6 +165,8 @@ impl Receptor {
             match self.stream.next().await {
                 None | Some(Err(_)) | Some(Ok(Message::Close(_))) => return Entrada::Cierre,
                 Some(Ok(Message::Binary(b))) => {
+                    self.red.tramas_recibidas.fetch_add(1, Ordering::Relaxed);
+                    self.red.bytes_recibidos.fetch_add(b.len() as u64, Ordering::Relaxed);
                     return decodificar(&b, self.max).map_or(Entrada::Invalido, Entrada::Mensaje)
                 }
                 Some(Ok(Message::Text(_))) => return Entrada::Invalido,
@@ -175,6 +178,7 @@ impl Receptor {
 
 struct Emisor {
     sink: SplitSink<WebSocketStream<Rebobinado>, Message>,
+    red: Arc<crate::MetricasRed>,
     secuencia: u64,
     comprimir: bool,
     escritura: Duration,
@@ -189,6 +193,7 @@ impl Emisor {
         self.secuencia += 1;
         let mut bytes = MensajeDeServidor { secuencia: self.secuencia, cuerpo: Some(cuerpo), ..Default::default() }.encode_to_vec();
         self.nombres.anadir(&mut bytes);
+        let crudos = bytes.len() as u64;
         if self.comprimir && bytes.len() >= self.umbral {
             if let Ok(c) = zstd::bulk::compress(&bytes, self.nivel) {
                 if c.len() < bytes.len() {
@@ -196,10 +201,22 @@ impl Emisor {
                 }
             }
         }
-        matches!(timeout(self.escritura, self.sink.feed(Message::Binary(bytes.into()))).await, Ok(Ok(())))
+        self.red.mensajes.fetch_add(1, Ordering::Relaxed);
+        self.red.bytes_crudos.fetch_add(crudos, Ordering::Relaxed);
+        self.red.bytes_enviados.fetch_add(bytes.len() as u64, Ordering::Relaxed);
+        let r = timeout(self.escritura, self.sink.feed(Message::Binary(bytes.into()))).await;
+        self.a_tiempo(r)
     }
     async fn vaciar(&mut self) -> bool {
-        matches!(timeout(self.escritura, self.sink.flush()).await, Ok(Ok(())))
+        let r = timeout(self.escritura, self.sink.flush()).await;
+        self.a_tiempo(r)
+    }
+    /// ¿Acabó bien la escritura? La que no acabó a tiempo cuenta como cliente lento.
+    fn a_tiempo<E>(&self, r: Result<Result<(), E>, tokio::time::error::Elapsed>) -> bool {
+        if r.is_err() {
+            self.red.escrituras_lentas.fetch_add(1, Ordering::Relaxed);
+        }
+        matches!(r, Ok(Ok(())))
     }
     async fn enviar(&mut self, cuerpo: ms::Cuerpo) -> bool {
         self.encolar(cuerpo).await && self.vaciar().await
@@ -241,6 +258,7 @@ async fn sesion<A: Autenticador>(ctx: Arc<Ctx<A>>, tcp: TcpStream) {
     let (sink, stream) = ws.split();
     let mut em = Emisor {
         sink,
+        red: ctx.config.red.clone(),
         secuencia: 0,
         comprimir: false,
         escritura: ctx.config.timeout_escritura,
@@ -248,7 +266,7 @@ async fn sesion<A: Autenticador>(ctx: Arc<Ctx<A>>, tcp: TcpStream) {
         nivel: ctx.config.nivel_zstd,
         nombres: ctx.config.nombres.clone(),
     };
-    let mut rx = Receptor { stream, max: ctx.config.max_trama_cliente };
+    let mut rx = Receptor { stream, max: ctx.config.max_trama_cliente, red: ctx.config.red.clone() };
     let id = ctx.siguiente_id.fetch_add(1, Ordering::Relaxed);
     let (fin_tx, fin_rx) = watch::channel(false);
     let expulsar = Arc::new(Notify::new());

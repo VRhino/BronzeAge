@@ -1432,6 +1432,11 @@ impl Nucleo {
 
     /// Respaldo en caliente (fase 7, rutas de administración): una foto ahora, espera a que el hilo de la persistencia la escriba (y la crónica), sincroniza el registro y copia la
     /// carpeta entera en `destino`. Mientras copia el núcleo no atiende nada más, así que la copia se abre como la carpeta: la foto y el registro que la sigue. Sin persistencia, error.
+    /// La carpeta donde persiste el núcleo (`None` sin persistencia).
+    pub fn carpeta(&self) -> Option<&Path> {
+        self.persist.as_ref().map(|p| p.dir.as_path())
+    }
+
     pub fn respaldar(&mut self, destino: &Path) -> io::Result<()> {
         self.foto_ahora();
         self.esperar_fotos();

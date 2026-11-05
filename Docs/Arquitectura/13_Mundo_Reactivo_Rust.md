@@ -100,7 +100,8 @@ clientes ─┤ WS/HTTP · auth · parseo y validación sin estado       │
   todas las sesiones de una perspectiva (el tramo y la forma avistada de cada columna ajena, lo propio de cada
   sitio, la red explorada) se calcula una vez. Los alijos del `HEROE` también se ponen al día en paralelo. Cada
   10 s de pared el servidor escribe una línea `carga:` con la ocupación del actor, la parte de las vistas, las
-  órdenes y lo que tardaron, y cuántas esperaron en la fila.
+  órdenes y lo que tardaron, y cuántas esperaron en la fila. Desde el 2026-11-05 tarde esa medida tiene más campos, se
+  puede apagar y encender en caliente y tiene un detalle opcional: ver `Medida_De_Carga.md`.
 - **Partir el núcleo por regiones** (simulación paralela de eventos con sincronización conservadora en los bordes)
   solo si una medición lo exige. Las entidades se diseñan con afinidad a una región para poder hacerlo sin rehacer.
 - **Números:** posiciones y tiempos en **punto fijo** (`i64`), no `f64`, para que las reproducciones sean idénticas

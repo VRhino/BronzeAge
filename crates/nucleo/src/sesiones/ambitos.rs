@@ -368,6 +368,8 @@ pub(super) struct Mesa {
     suscriptores: BTreeMap<Ambito, BTreeSet<SesionId>>,
     /// La última niebla de cada perspectiva con alguna `VISTA` abierta, la que tienen sus sesiones al día (4H T6).
     nieblas: BTreeMap<Perspectiva, Arc<pb::NieblaProyectada>>,
+    /// Las sesiones descartadas por tener el canal lleno desde la última vez que se preguntó (la medida de carga).
+    descartadas: u32,
 }
 
 impl Mesa {
@@ -385,6 +387,16 @@ impl Mesa {
 
     pub(super) fn ids(&self) -> Vec<SesionId> {
         self.sesiones.keys().copied().collect()
+    }
+
+    /// Las sesiones descartadas por canal lleno desde la última vez (y vuelve a cero).
+    pub(super) fn tomar_descartadas(&mut self) -> u32 {
+        std::mem::take(&mut self.descartadas)
+    }
+
+    /// Cuántas sesiones tienen su canal a medio llenar o más (clientes que no leen al ritmo del servidor).
+    pub(super) fn canales_medio_llenos(&self) -> usize {
+        self.sesiones.values().filter(|s| s.tx.capacity() * 2 <= s.tx.max_capacity()).count()
     }
 
     /// Cuántas sesiones hay abiertas.
@@ -857,6 +869,7 @@ impl Mesa {
     pub(super) fn entregar(&mut self, envios: Vec<(SesionId, Difusion)>) {
         for (id, d) in envios {
             if self.sesiones.get(&id).is_some_and(|s| !depositar(&s.tx, d)) {
+                self.descartadas += 1;
                 self.quitar(id);
             }
         }

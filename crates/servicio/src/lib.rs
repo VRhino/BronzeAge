@@ -197,7 +197,8 @@ pub async fn arrancar(
     let (tx, rx) = mpsc::channel(1024);
     let nombres = servidor::NombresHeroes::default();
     n.conectar_nombres(nombres.clone());
-    let actor = sesiones::lanzar(n, reloj.clone(), rx);
+    let red = std::sync::Arc::new(servidor::MetricasRed::default());
+    let actor = sesiones::lanzar_con_red(n, reloj.clone(), rx, Some(red.clone()));
     let mundo = artefacto.map(|b| (informe.mundo_hash.clone(), b));
     let relieve = relieve.filter(|_| mundo.is_some());
     let config = Config {
@@ -205,6 +206,7 @@ pub async fn arrancar(
         relieve: relieve.as_ref().map(|r| (r.hash.clone(), format!("{RUTA_MUNDO}{}{SUFIJO_RELIEVE}", informe.mundo_hash))),
         datos_de_juego: Some((datos_de_juego.version.clone(), format!("{RUTA_DATOS}/{}", datos_de_juego.version))),
         nombres,
+        red,
         ..Config::default()
     };
     let admin = admin::Admin { acceso: acceso.clone(), nucleo: tx.clone(), carpeta: datos.to_owned(), mundo_hash: informe.mundo_hash.clone(), semilla, id_partida };

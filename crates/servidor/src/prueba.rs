@@ -200,6 +200,9 @@ impl NucleoFalso {
                     ComandoSesion::Admin(crate::PeticionAdmin::CatalogoMisiones { respuesta }) => {
                         let _ = respuesta.send(r#"{"asentamiento":[],"faccion":[]}"#.to_owned());
                     }
+                    ComandoSesion::Admin(crate::PeticionAdmin::Carga { respuesta, .. }) => {
+                        let _ = respuesta.send(r#"{"activo":false,"detalle":false,"ultima":null}"#.to_owned());
+                    }
                     ComandoSesion::Cronica { sesion, pedir } => {
                         if let Some(s) = e.sesiones.get(&sesion) {
                             let c = contrato::v1::Cronica { peticion_id: pedir.peticion_id, version: e.version, ..Default::default() };

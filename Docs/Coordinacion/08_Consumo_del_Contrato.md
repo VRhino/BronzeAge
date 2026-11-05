@@ -137,6 +137,8 @@ Dos sitios, porque parar y arrancar el proceso no lo puede hacer el propio proce
 | `POST /v1/admin/respaldos` | foto ahora y copia de `mundo/` y `acceso/` en `<datos>/respaldos/<id>/`; `201 { id, creado_ms, version, instante, mundo_hash, semilla, bytes }` |
 | `GET /v1/admin/respaldos` | `{ respaldos: [...] }`, del más nuevo al más viejo |
 | `GET /v1/admin/misiones/catalogo` | el catálogo **vigente** de las misiones recurrentes `{ asentamiento: [...], faccion: [...] }`, en el JSON que acepta la orden de administración `fijar_catalogo_misiones` (la fija, `participacion` o `xp`, y la lista `recompensas`, con las cantidades en unidades; Misiones_Recurrentes §6) |
+| `GET /v1/admin/carga` | la medida de carga del motor: `{ activo, detalle, cada_s, ultima }`, con la última ventana de 10 s (`null` si aún no hay); formato en `Docs/Arquitectura/Medida_De_Carga.md` (desde el 2026-11-05) |
+| `POST /v1/admin/carga` | cuerpo `{ activo?, detalle? }` (booleanos); enciende o apaga en caliente lo básico y el detalle; contesta como el `GET` |
 
 El núcleo atiende el respaldo entre dos órdenes y no hace nada más mientras copia, así que la copia es coherente. El histórico de batallas retiradas está en `<datos>/mundo/batallas.jsonl` (un JSON por línea, Batalla_Unity_Ciclo §3.3), así que va en el respaldo.
 
