@@ -125,6 +125,9 @@ pub struct ReglasBandidos {
     pub radio_ataque_caravana: Mil,
     /// Cuántos campamentos tiene como mucho cada plaza (`porPlaza`, 2026-11-02).
     pub por_plaza: i64,
+    /// A cuánto del borde del disco de toda zona ha de quedar el centro del bosque de los bandidos de una plaza (`margenZonaPlaza`: 5 desde el 2026-11-05,
+    /// antes 10 escrito en el código).
+    pub margen_zona_plaza: Mil,
     /// Tras destruirse un campamento de una plaza sin oleada pendiente, cuánto tarda la oleada que repone los que falten (ms).
     pub respawn: i64,
 }
@@ -306,6 +309,7 @@ impl Reglas {
                 reaparicion_anillo: minutos(&bd, "anillo.reaparicionMinutos"),
                 radio_ataque_caravana: mil(num(&bd, "radioAtaqueCaravana")),
                 por_plaza: entero(&bd, "porPlaza"),
+                margen_zona_plaza: mil(num(&bd, "margenZonaPlaza")),
                 respawn: minutos(&bd, "respawnMinutos"),
             },
             pueblos: ReglasPueblos { mineros: pueblos.mineros as i64, cada_minero: pueblos.minutos_por_minero * MS_POR_MINUTO, granjeros: pueblos.aldea.granjeros as i64 },

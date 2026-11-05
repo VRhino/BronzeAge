@@ -224,8 +224,8 @@ fn reclamar_es_todo_o_nada_si_no_caben_juntos_el_oro_y_el_recurso_no_se_da_nada_
     let pa = Dueno::Asentamiento(a);
     x.con_poblacion(a);
     let h = x.heroe_en("ana", a);
-    // El almacén personal admite 1000: con 600 de piedra cabe el oro (300) o la madera (300), pero no los dos juntos.
-    x.ok("admin", Comando::DarAlmacenPersonal { heroe: h, recurso: Recurso::Piedra, cantidad: 600 * UNIDAD });
+    // El almacén personal admite 2000 (desde el 2026-11-05): con 1600 de piedra cabe el oro (300) o la madera (300), pero no los dos juntos.
+    x.ok("admin", Comando::DarAlmacenPersonal { heroe: h, recurso: Recurso::Piedra, cantidad: 1_600 * UNIDAD });
     x.ok("ana", aceptar(h, pa, "IT"));
     x.ok("ana", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: Tropa::MiliciaLanceros });
     assert_eq!(x.situacion(pa, "IT", h), Situacion::Cumplida);

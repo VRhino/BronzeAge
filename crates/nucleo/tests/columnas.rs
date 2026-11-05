@@ -582,13 +582,13 @@ fn salir_del_campamento_da_la_racion_gratis_cada_media_hora_y_entrar_en_el_deja_
     assert_eq!((e.viveres(col2), e.ejercito(col2).columna.carga[&Oro]), (350_000, 20_000), "los víveres que traía el héroe y el carro con el que entró");
     assert_eq!(e.n.heroe(h).unwrap().heroe.racion_en, Some(t), "la ración no se renovó: no pasaron 30 minutos");
 
-    // Lo que no cabe en el almacén personal se queda en el carro, que sale con el héroe: el almacén queda a 10 000 de su tope (1 000 000) y el carro lleva 20 000.
+    // Lo que no cabe en el almacén personal se queda en el carro, que sale con el héroe: el almacén queda a 10 000 de su tope (2 000 000 desde el 2026-11-05) y el carro lleva 20 000.
     e.ok("ana", Comando::EntrarEnCampamento { campamento: 0, heroe: h });
-    e.ok("admin", Comando::DarAlmacenPersonal { heroe: h, recurso: Oro, cantidad: 960_000 });
-    assert_eq!(e.n.heroe(h).unwrap().almacen_personal[&Oro], 990_000);
+    e.ok("admin", Comando::DarAlmacenPersonal { heroe: h, recurso: Oro, cantidad: 1_960_000 });
+    assert_eq!(e.n.heroe(h).unwrap().almacen_personal[&Oro], 1_990_000);
     e.ok("ana", Comando::VaciarCarro { heroe: h });
     let h0 = e.n.heroe(h).unwrap();
-    assert_eq!((h0.almacen_personal[&Oro], h0.carro[&Oro]), (1_000_000, 10_000), "lleno: lo que no cabe se queda en el carro");
+    assert_eq!((h0.almacen_personal[&Oro], h0.carro[&Oro]), (2_000_000, 10_000), "lleno: lo que no cabe se queda en el carro");
     assert_eq!(e.rechazada("ana", Comando::VaciarCarro { heroe: h }), rechazos::ALMACEN_PERSONAL_LLENO);
     let col3 = e.ok("ana", salir(&ids, &[], Politica::Rechazar)).creadas[0];
     assert_eq!((e.ejercito(col3).columna.escuadras.clone(), e.ejercito(col3).columna.carga[&Oro]), (ids.clone(), 10_000), "se lleva lo que no cupo");

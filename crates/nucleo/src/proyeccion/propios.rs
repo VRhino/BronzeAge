@@ -1035,7 +1035,7 @@ pub fn avanzada(n: &Nucleo, madre: Option<u64>, v: &Avanzada) -> pb::Avanzada {
         etapa: v.etapa.indice() as u32 + 1,
         posicion: Some(punto(v.posicion)),
         estado: if v.en_ruinas() { pb::EstadoAvanzada::AvanzadaEnRuinas } else { pb::EstadoAvanzada::AvanzadaActiva } as i32,
-        radio_vision: vision::radios::AVANZADA,
+        radio_vision: e.reglas.economia.militar.vision.avanzada,
         guarnicion_serie_ids: g.into_iter().flat_map(|g| &g.escuadras).map(|s| ids::escuadra(s.id)).collect(),
         tropa_elegida_escalon2: elegida(2),
         invulnerable_hasta_ms: match v.estado {

@@ -56,7 +56,7 @@ RecursoAlmacenado = { cantidad, capacidad }          Asentamiento.almacen: Recor
 
 29 tipos de recurso (`RECURSOS_TIPO`): madera, piedra, trigo, cobre, estano, oro, livestock, hierro; intermedios (lingoteCobre/Estano/Bronce/Hierro, cuero, cueroCurtido,
 cueroCalidad); equipo (armaMadera/Cobre/Bronce/BronceCalidad/Hierro/HierroCalidad, armaduraBasica/Intermedia/Bronce/BronceCalidad, carroGuerra); chatarra (Cobre/Bronce/Hierro).
-**Todos** nacen en el almacén (cantidad 0 o inicial, capacidad 400) para que la capacidad exista desde el principio.
+**Todos** nacen en el almacén (cantidad 0 o inicial, capacidad 800 desde el 2026-11-05, antes 400) para que la capacidad exista desde el principio.
 
 ```
 Edificio = {
@@ -96,7 +96,7 @@ Validaciones, en este orden (cada una lanza `FundacionInvalidaError`):
 
 1. Entre 1 y `FUNDACION.maxJugadoresFundacionGrupal` (5) héroes fundadores.
 2. La posición está dentro del mapa.
-3. `posicionLibreParaFundar`: el punto **no cae dentro de la zona real (recortada) de ningún asentamiento existente** (de cualquier Facción, también la propia) y está **a `FUNDACION.separacionPlazas` (10) o más de cualquier plaza** (Doc 1.0a). **Desde el 2026-11-04** (decisión del autor) la separación es **10** (antes 30) y el motor lee las cifras del territorio de los bloques (`ZONA_INFLUENCIA`, `FUNDACION.separacionPlazas`, `MERCENARIOS.radioExclusionFundar`; antes iban escritas en el código, `ReglasTerritorio`). Con 10, junto a una plaza de nivel 1 manda la separación y junto a una más grande manda su zona (hasta 30 de radio): no se funda dentro de ella.
+3. `posicionLibreParaFundar`: el punto **no cae dentro de la zona real (recortada) de ningún asentamiento existente** (de cualquier Facción, también la propia) y está **a `FUNDACION.separacionPlazas` (20) o más de cualquier plaza** (Doc 1.0a). **Desde el 2026-11-04** (decisión del autor) la separación fue **10** (antes 30), y **20 desde el 2026-11-05**, y el motor lee las cifras del territorio de los bloques (`ZONA_INFLUENCIA`, `FUNDACION.separacionPlazas`, `MERCENARIOS.radioExclusionFundar`; antes iban escritas en el código, `ReglasTerritorio`). Con 20 y las zonas al doble, junto a una plaza de nivel 1 (zona de 12 a 20) manda la separación y junto a una más grande manda su zona (hasta 60 de radio): no se funda dentro de ella.
 4. El terreno no es `cima`, ni `agua`, ni una celda **no transitable** del artefacto (río sin vado, pendiente: la plaza quedaría incomunicada). En Rust las tres comprobaciones de terreno van antes que las de zona y distancia.
 5. La Facción existe y no ha llegado al tope de fundación `calcularCapFundacion(nivel de Facción)` (cuenta los asentamientos que ya tiene).
 
@@ -133,7 +133,7 @@ Leñera en la zona real con que nacería ∧ hay ≥ 1 nodo de piedra sin explot
 
 > **Implementado en Rust (2026-10-13)**: `crates/territorio/src/zona.rs` (reglas puras) y `crates/nucleo/src/nucleo/zonas.rs` (estado, órdenes y eventos).
 
-La zona es un **disco** (centro = la plaza). Nace con `radioInicial` (6) y **solo crece por obra, nunca por tiempo**: cada edificio completado la agranda `crecimientoPorEdificioCompletado` (1), sin pasar del **techo de su nivel** (`radioMaximoPorNivel`: 10 / 15 / 20 / 25 / 30). Subir de nivel solo levanta el techo: el radio no salta. La construcción llama a `AgrandarZona` al completar cada edificio (hasta entonces la administración); el ascenso, a `FijarNivelAsentamiento`.
+La zona es un **disco** (centro = la plaza). Nace con `radioInicial` (12) y **solo crece por obra, nunca por tiempo**: cada edificio completado la agranda `crecimientoPorEdificioCompletado` (2), sin pasar del **techo de su nivel** (`radioMaximoPorNivel`: 20 / 30 / 40 / 50 / 60). **Al doble desde el 2026-11-05** (decisión del autor: las zonas se quedaban pequeñas; las velocidades no cambian): antes 6, 1 y 10 / 15 / 20 / 25 / 30, así que el techo se alcanza con los mismos edificios. Subir de nivel solo levanta el techo: el radio no salta. La construcción llama a `AgrandarZona` al completar cada edificio (hasta entonces la administración); el ascenso, a `FijarNivelAsentamiento`.
 
 **Contacto.** Como el radio solo cambia en esos instantes, no hay eventos programados: al fundar y al agrandar una zona se comprueba qué plazas de **otra Facción** quedan tocándola (`distancia ≤ suma de radios`) y se anuncia una sola vez por pareja (`zona.frontera`, `Estado.contactos`). Las zonas nunca se encogen, así que un contacto no se deshace.
 
@@ -153,7 +153,7 @@ La zona es un **disco** (centro = la plaza). Nace con `radioInicial` (6) y **sol
 > - La foto guarda, por recurso, cantidad, capacidad y resto (`codec_economia`). La auditoría de cambios (`BRONZEAGE_AUDITAR_CAMBIOS=1`) y el batch comprueban en cada versión que **ninguna cantidad almacenada** (almacenes, carros, caravanas, almacén personal, existencias, lo pactado y entregado de un trueque, las órdenes del mercado) tenga fracción (`Nucleo::fracciones_almacenadas`).
 > - Diseño y reparto por operación: [`Docs/Arquitectura/Economia_Entera_Plan.md`](../Arquitectura/Economia_Entera_Plan.md).
 - `ampliarCapacidad(a, r, extra)`: `capacidad = max(0, capacidad + extra)` y `cantidad = min(cantidad, capacidad)` (lo que no cabe se pierde).
-- **Capacidad por edificio** (`aplicarCapacidadDeEdificio`, `signo` ±1): el Almacén suma `signo × capacidadPorRecursoAdicional` (300) a **cada recurso que exista**; el Granero suma `signo × capacidadTrigo[nivel]` al trigo.
+- **Capacidad por edificio** (`aplicarCapacidadDeEdificio`, `signo` ±1): el Almacén suma `signo × capacidadPorRecursoAdicional` (600) a **cada recurso que exista**; el Granero suma `signo × capacidadTrigo[nivel]` (4.000 / 6.000 / 8.000 / 12.000) al trigo. **Los almacenes van al doble desde el 2026-11-05** (decisión del autor: se quedaban cortos): la base de la plaza `ALMACEN.capacidadInicialPorRecurso` 800 (antes 400), el Almacén +600 (antes +300; el tope de Almacenes por nivel no cambia), el Granero ×2 (antes 2.000 a 6.000), el almacén local de pueblos y aldeas 1.000 (antes 500), el de las avanzadas 4.000 el fuerte y 20.000 la ciudadela (antes 2.000 y 10.000) y el almacén personal del héroe 2.000 (antes 1.000; `Comercio_Caravanas.md` §9.2). Caravanas, carros y víveres no cambian.
   Se suma al **entrar en servicio** (obra o reconstrucción terminada) y se resta al dejar de estarlo (daño de un saqueo). Una mejora de Granero suma el **delta** entre niveles.
 - Tope de Almacenes por nivel operativo: `NECESIDADES.maximoAlmacenesPorNivel[nivelActual]`, contando los de **cualquier estado**. Tope de Viviendas: §6.5.
 
@@ -711,7 +711,7 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
       "madera": 50
     },
     "tiempoConstruccionMinutos": 360,
-    "capacidadPorRecursoAdicional": 300
+    "capacidadPorRecursoAdicional": 600
   },
   "granero": {
     "costo": {
@@ -722,12 +722,12 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
       "1": {
         "trabajadoresRequeridos": 0,
         "recetas": [],
-        "capacidadTrigo": 2000
+        "capacidadTrigo": 4000
       },
       "2": {
         "trabajadoresRequeridos": 0,
         "recetas": [],
-        "capacidadTrigo": 3000,
+        "capacidadTrigo": 6000,
         "requisitoNivelAsentamiento": 2,
         "costoMejora": {
           "madera": 100,
@@ -737,7 +737,7 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
       "3": {
         "trabajadoresRequeridos": 0,
         "recetas": [],
-        "capacidadTrigo": 4000,
+        "capacidadTrigo": 8000,
         "requisitoNivelAsentamiento": 2,
         "costoMejora": {
           "madera": 200,
@@ -747,7 +747,7 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
       "4": {
         "trabajadoresRequeridos": 0,
         "recetas": [],
-        "capacidadTrigo": 6000,
+        "capacidadTrigo": 12000,
         "requisitoNivelAsentamiento": 3,
         "costoMejora": {
           "madera": 400,
@@ -1622,7 +1622,7 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
 <!-- parametros:ALMACEN -->
 ```json
 {
-  "capacidadInicialPorRecurso": 400
+  "capacidadInicialPorRecurso": 800
 }
 ```
 <!-- /parametros -->
@@ -1770,7 +1770,7 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
   "caducidadCaravanaHoras": 48,
   "densidadBosqueMaximaParaFundar": 0.7,
   "pendienteMaximaParaFundar": 0.3,
-  "separacionPlazas": 10
+  "separacionPlazas": 20
 }
 ```
 <!-- /parametros -->
@@ -1778,14 +1778,14 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
 <!-- parametros:ZONA_INFLUENCIA -->
 ```json
 {
-  "radioInicial": 6,
-  "crecimientoPorEdificioCompletado": 1,
+  "radioInicial": 12,
+  "crecimientoPorEdificioCompletado": 2,
   "radioMaximoPorNivel": {
-    "1": 10,
-    "2": 15,
-    "3": 20,
-    "4": 25,
-    "5": 30
+    "1": 20,
+    "2": 30,
+    "3": 40,
+    "4": 50,
+    "5": 60
   },
   "segmentosPoligono": 48,
   "pasoFusionContorno": 1,
@@ -2169,7 +2169,7 @@ Ninguna abierta (las encontradas al documentar se resolvieron el 2026-10-11; ver
 > - **Hitos y épicas (2026-11-01).** Un pueblo extractor activo cuenta como su edificio (Cantera o mina) para los hitos `edificio` de las tecnologías (`VistaFaccion::edificio_activo`), y completarlo anota la obra de su tipo en las épicas (la aldea, la de Corral): así la cantería aparece con la primera cantera de la Facción, que ya solo puede ser un pueblo, y su ×1,5 llega a la piedra que sacan sus pueblos (`factorTecnologia`).
 > - **Obra de mapa** (órdenes 45-48, con la autorización provisional de las demás órdenes de plaza: administración o propietario de una columna de la Facción de la madre). `MarcarPueblo { asentamiento, nodo }` exige un nodo de piedra o mineral **libre, dentro de la zona real** de la madre **y con ruta por tierra hasta ella** (el A\* del mapa sin la red de caminos; `pueblo.sin_ruta` si no la hay), madre de nivel operativo ≥ 1 (≥ 2 hasta el 2026-10-31), cupo (**2 / 3 / 4 / 5 / 6** por nivel desde el 2026-11-01, antes 1 / 3 / 4 / 5 / 6, contando pendientes y en obra y las aldeas agrícolas) y la tecnología del extractor; deja la obra «pendiente de materiales» (`pueblo.marcado`), reclama el nodo y **no cobra nada al almacén**. `EntregarMateriales { ejercito, pueblo }` lleva a la obra, con la columna **a `radioPuerta` (2 u)** de su nodo y de la misma Facción, y la da cualquier héroe de la columna que sea **ciudadano** de esa Facción, sea o no su Líder (Doc 4.2.2; paridad, 2026-10-27), lo que falta de lo que cargan su carro (`suministro`) y sus caravanas adjuntas (primero el carro, luego las caravanas por id), recurso a recurso; con todo entregado arranca la obra (`pueblo.obra_iniciada`, la duración del extractor del catálogo: Cantera 4 h, cobre y hierro 6 h, oro y estaño 8 h) y el primer paso de minuto de la plaza con `t >= completaEn` la termina (precisión de un minuto, sin evento propio). `DestruirPueblo { pueblo }` cancela la obra o destruye el pueblo: libera cupo y nodo y **no devuelve nada** (ni lo entregado ni lo almacenado); el carro se pierde con su carga. `ReponerCarro { pueblo }` compra en la madre un carro nuevo (carro + buey) solo si el pueblo activo no tiene ninguno; sin la orden, la madre lo repone sola en su paso de minuto en cuanto puede pagarlo (2026-10-27; `Comercio_Caravanas.md`, el carro de acarreo). `Nucleo::candidatos_de_pueblo(plaza)` es el panel: los nodos de la zona sin pueblo cuyo extractor puede levantar la Facción.
 > - **Coste.** `PUEBLOS_EXTRACTORES.costeAdicional` (50 madera) + el coste del extractor del catálogo + el carro con su buey de la flota (`comercio::acarreo::coste_reposicion`: 20 madera y 12 oro): una mina de cobre son **100 madera y 12 oro**, como dice el ejemplo de arriba.
-> - **Extracción.** Un minuto de extracción del pueblo activo es `produccionBase × ratioManoObra × factorTecnología` contra el almacén local (500 por recurso: `capacidadAlmacenLocal`, que debe ser al menos la capacidad del carro). Con el almacén lleno para y avisa una sola vez (`pueblo.almacen_lleno`); con el nodo agotado espera a la regeneración (10 min) sin mudarse. Va dentro del paso de minuto de la plaza: no hay evento por pueblo, tampoco por el ocioso.
+> - **Extracción.** Un minuto de extracción del pueblo activo es `produccionBase × ratioManoObra × factorTecnología` contra el almacén local (1.000 por recurso desde el 2026-11-05, antes 500: `capacidadAlmacenLocal`, que debe ser al menos la capacidad del carro). Con el almacén lleno para y avisa una sola vez (`pueblo.almacen_lleno`); con el nodo agotado espera a la regeneración (10 min) sin mudarse. Va dentro del paso de minuto de la plaza: no hay evento por pueblo, tampoco por el ocioso.
 > - **Solvencia del ascenso (2026-10-19, decidido por el autor).** Lo que llega por acarreo cuenta como la **media por minuto de lo que ingresó en el almacén de la madre en las últimas 24 h**, no como la producción nominal. `Asentamiento.ingresos_acarreo` guarda la ventana como cubos de una hora por recurso (`IngresoAcarreo { recurso, hora, cantidad }`, a lo sumo 24 por recurso): el carro, al llegar (`acarreo_llega`), anota en su hora **todo lo que trae, quepa o no** (desde el 2026-11-01, decisión del autor; antes solo lo que cupo, y lo perdido por almacén lleno no contaba) y descarta los cubos que salieron de la ventana. Es una acumulación en la llegada: ningún evento por pueblo ocioso y el paso de minuto no cambia. La solvencia suma los cubos con `hora ∈ (ahora − 24, ahora]` (la hora en curso y las 23 anteriores: entre 23 y 24 horas de historia) y divide, en enteros con división truncada, entre los minutos desde el principio de la hora del primer cubo de la ventana más 60, con 1.440 como mucho (desde el 2026-11-03, decisión del autor; hasta entonces, siempre entre 1.440, y un pueblo recién levantado no pesaba del todo hasta llevar un día entregando). Sin formato de foto nuevo: sale de los mismos cubos. `bloqueos_de_ascenso` recibe ahora el instante de la pregunta. Sin bloque de parámetros nuevo: **la huella de las reglas no cambia**; sí cambia el formato de foto (`BAN8`).
 > - **Ruina y conquista de la madre.** Los pueblos son de la plaza: en la ruina desaparecen con ella (sus nodos quedan libres y sus carros, que la tienen por origen, se pierden en la cascada de comercio); en la conquista pasan con la plaza (y su carro, en la flota traspasada) a quien la tenga.
 > - **Planta del pueblo.** `Nucleo::planta_de_pueblo(id)` / `urbanismo::planta_de_pueblo`: función pura del id (`hash(semilla, "pueblo", [id])`), no se guarda; el trazado de asentamientos una sola vez con el extractor como ancla en el origen, **6 casas** (`casasDeLaPlanta`), el almacén y el corral del buey. La planta interna toma **el radio que necesiten sus piezas** (decisión del autor, 2026-10-23: el tope de 8 u. que salía del «0,2 de mapa» no lo decidió nadie; ver Trazado_Urbano, nota de los pueblos); en el mapa del mundo el pueblo sigue ocupando 0,2.
@@ -2197,7 +2197,7 @@ Ninguna abierta (las encontradas al documentar se resolvieron el 2026-10-11; ver
 
 - **Qué es.** Un pueblo más de la plaza madre (cuenta en el cupo, en su mantenimiento y en la mano de obra, se destruye y se conquista igual), con tipo de catálogo `Granja` y nombre `aldeaAgricola`. Lleva **granjas y los únicos corrales del juego** por niveles fijos (`aldea.niveles`: 1 → 2 granjas y 1 corral; 2 → 4 y 2; 3 → 6 y 3) y acarrea **trigo y ganado** a la madre con el carro de siempre.
 - **Dónde.** En un **punto** de la zona real de la madre, sin nodo (`Pueblo.sitio` es `Nodo(n)` o `Punto { pos, fertilidad }`): tierra firme, fertilidad del artefacto en el punto ≥ `fertilidadMinima` (0,3), a `separacionMinima` (3 u) de toda plaza y todo pueblo de cualquier Facción y con ruta por tierra hasta la madre. Desde el **nivel 1** de la madre (`nivelMadreMinimo` es por tipo: `{extractor: 1, aldea: 1}` desde el 2026-10-31; el extractor pedía 2). Una plaza puede tener varias aldeas si el cupo se lo permite.
-- **Por anillos (2026-11-01, decisión del autor: que no se levanten todas juntas).** La aldea número k de la plaza (cuentan las que tiene en cualquier estado, no los pueblos extractores, que van donde está su nodo) va en el **anillo que añade a la zona el primer nivel cuyo cupo llega a k**: con el cupo 2 / 3 / 4 / 5 / 6 y los techos de la zona 10 / 15 / 20 / 25 / 30 u (`TERRITORIO.techos`), las dos primeras hasta 10 u de la plaza, la tercera de 10 a 15 u, la cuarta de 15 a 20 u, y así; el anillo es `(desde, hasta]` y lo recorta la zona real de la plaza. Fuera de su anillo, `MarcarAldea` rechaza con **`pueblo.fuera_de_su_anillo`** (se mira tras la zona y antes de la separación). `Nucleo::anillo_de_aldea`. Prueba: `las_aldeas_van_por_anillos_…` (`tests/pueblos.rs`).
+- **Por anillos (2026-11-01, decisión del autor: que no se levanten todas juntas).** La aldea número k de la plaza (cuentan las que tiene en cualquier estado, no los pueblos extractores, que van donde está su nodo) va en el **anillo que añade a la zona el primer nivel cuyo cupo llega a k**: con el cupo 2 / 3 / 4 / 5 / 6 y los techos de la zona 20 / 30 / 40 / 50 / 60 u (`TERRITORIO.techos`; el doble desde el 2026-11-05), las dos primeras hasta 20 u de la plaza, la tercera de 20 a 30 u, la cuarta de 30 a 40 u, y así; el anillo es `(desde, hasta]` y lo recorta la zona real de la plaza. Fuera de su anillo, `MarcarAldea` rechaza con **`pueblo.fuera_de_su_anillo`** (se mira tras la zona y antes de la separación). `Nucleo::anillo_de_aldea`. Prueba: `las_aldeas_van_por_anillos_…` (`tests/pueblos.rs`).
 - **Coste y obra.** Como cualquier obra de mapa: su nivel 1 (`coste`, 30 madera) + `costeAdicional` (50 madera) + el carro con su buey (20 madera, 12 oro) = **100 madera y 12 oro** (`Asentamiento::costo_de_aldea`), llevados en una columna y entregados con `EntregarMateriales`; obra de 4 h.
 - **Subir de nivel** (`MejorarAldea { pueblo }`, aldea activa sin mejora en curso y con nivel siguiente): deja una mejora «pendiente de materiales» con el coste del nivel siguiente (2: 180 madera y 60 piedra; 3: 360 y 120; triplicados por decisión del autor del 2026-10-31, antes 60/20 y 120/40), que se entrega igual que una obra; entregada, obra de 2 h. **La aldea sigue produciendo mientras tanto** con su nivel de antes; al acabar sube (`aldea.subio`) y crecen granjas, corrales y el tope del rebaño.
 - **Producción.** Por minuto, el trigo es `granjas × produccionBaseTrigo(Granja, nivel 1) × fertilidad del punto × ratioManoObra × factorProduccionTrigo` (la fertilidad del punto, no la de la zona de la madre). Trabajan 4 pesants por granja y 4 por corral de la madre. **El almacén local es uno para los dos recursos** (500 entre trigo y ganado): el trigo entra primero y el ganado con el hueco que queda.
@@ -2219,7 +2219,7 @@ Todo se hace con el héroe **dentro** del pueblo o la aldea (`entrarEnPueblo`) y
 
 - **Guarnición de jugadores** (`GuarnecerPueblo { heroe, pueblo, escuadras }` y `RetirarDePueblo`). Además de la de serie (mineros o granjeros), cada héroe deja escuadras **de su columna** en el pueblo, con un cupo **por héroe** en Liderazgo: `guarnicionJugadores.cupo` (30) en el nivel 1 y `porNivel` (15) más por cada nivel de la aldea (un extractor es siempre de nivel 1: 30). Las recoge a la misma columna, sin pasar de su Liderazgo. Comen como su campamento (el de la plaza donde reside su héroe) y **defienden el pueblo** en el saqueo y en la batalla, con o sin su héroe (después de la de serie). Vuelven **intactas al campamento de su héroe** si el pueblo desaparece (destruido a mano o en la ruina de la madre), si el héroe deja la Facción de la madre o si la madre cambia de dueño y él no es de la Facción nueva. Cambiar de residencia no las mueve. Hechos: `pueblo.guarnecido` (pueblo, heroe, escuadras, liderazgo) y `pueblo.guarnicion_retirada` (pueblo, heroe, escuadras).
 - **Escolta del carro de acarreo desde dentro.** `AsignarEscolta` sobre el carro del pueblo, dado dentro, cede escuadras de la columna (no del campamento) con el mismo cupo de escolta de siempre (el del Mercado de la madre), sin tener que residir en ella; `QuitarEscolta` dado dentro las devuelve a la columna, sin pasar de su Liderazgo. El carro ya se repone solo (§14), así que no hay orden para cambiarlo.
-- **Carro de la columna y almacén local** (`CargarDePueblo { heroe, pueblo, recurso, cantidad }` y `DejarEnPueblo`). Se carga lo que haya en el almacén, hasta donde quepa en el carro de la columna. Solo se deja **lo que el pueblo produce** (su recurso; en la aldea, trigo y ganado), hasta la capacidad del almacén (`capacidadAlmacenLocal`, compartida en la aldea). Si al dejar se llena y el carro de acarreo está en casa, **sale**. Hechos: `pueblo.cargado` y `pueblo.dejado` (pueblo, heroe, recurso, cantidad: lo que se movió de verdad).
+- **Carro de la columna y almacén local** (`CargarDePueblo { heroe, pueblo, recurso, cantidad }` y `DejarEnPueblo`). Se carga lo que haya en el almacén, hasta donde quepa en el carro de la columna. Solo se deja **lo que el pueblo produce** (su recurso; en la aldea, trigo y ganado), hasta la capacidad del almacén (`capacidadAlmacenLocal`, compartida en la aldea). Si al dejar tiene para llenar el carro de acarreo (500) y el carro está en casa, **sale** (hasta el 2026-11-05, con el almacén de 500, era lo mismo que llenarse). Hechos: `pueblo.cargado` y `pueblo.dejado` (pueblo, heroe, recurso, cantidad: lo que se movió de verdad).
 - **Mejorar la aldea desde dentro.** `MejorarAldea` la da también, dentro de la aldea, el Gobernador o el Maestro de Obras de la madre (residente en ella), además de desde la plaza.
 - **Rechazos nuevos**: `pueblo.escuadra_fuera_de_tu_columna`, `pueblo.escuadra_no_esta`, `pueblo.recurso_ajeno`, `pueblo.almacen_sin_sitio`, `pueblo.nada_que_cargar` y `pueblo.nada_que_dejar`; se reutilizan `pueblo.faccion_ajena`, `heroe.no_esta_en_el_pueblo`, `guarnicion.supera_el_cupo`, `liderazgo.superado`, `carro.no_cabe` y los de las escuadras.
 - **Contrato.** Órdenes `guarnecer_pueblo` (161), `retirar_de_pueblo` (162), `cargar_de_pueblo` (163) y `dejar_en_pueblo` (164); el `Pueblo` lleva `guarnicion_jugadores_ids` (18) y `cupo_guarnicion_por_heroe` (19), y un `Escuadron` de la guarnición, `contenedor.pueblo_id` (6).
@@ -2239,7 +2239,7 @@ Todo se hace con el héroe **dentro** del pueblo o la aldea (`entrarEnPueblo`) y
     "4": 5,
     "5": 6
   },
-  "capacidadAlmacenLocal": 500,
+  "capacidadAlmacenLocal": 1000,
   "costeAdicional": {
     "madera": 50
   },
@@ -2323,10 +2323,10 @@ Una avanzada es la otra obra de mapa (§14, «Obras de mapa»). Reglas puras en 
   "cupoPorNivelDeLaMadre": 1,
   "capacidadAlmacen": {
     "atalaya": 0,
-    "fuerte": 2000,
-    "ciudadela": 10000
+    "fuerte": 4000,
+    "ciudadela": 20000
   },
-  "fraccionCiudadDeLaZona": 0.1,
+  "fraccionCiudadDeLaZona": 0.05,
   "fraccionReparacion": 0.5,
   "obras": {
     "atalaya": {
@@ -2357,7 +2357,7 @@ Una avanzada es la otra obra de mapa (§14, «Obras de mapa»). Reglas puras en 
 ```
 <!-- /parametros -->
 
-Las etapas son las tres de Doc 5.17 (atalaya → fuerte → ciudadela) y `obras` es el coste de **cada paso** (construir la atalaya, mejorarla a fuerte, mejorar el fuerte a ciudadela), con su duración en minutos de mundo: los «viajes de carro de 500» del documento son unidades de mapa, a **placeholder**. `nivelMadre` es el nivel operativo mínimo de la plaza madre para tener esa etapa y `cupoPorNivelDeLaMadre`, cuántas avanzadas admite por nivel (2 en el nivel 2 … 5 en el 5, contando las pendientes y las que están en ruinas). `capacidadAlmacen` es la cabida **por recurso** de cada etapa (la atalaya no tiene almacén). Lo que mide la avanzada en el mapa es su tamaño de `TAMANOS_MAPA` (abajo). `fraccionCiudadDeLaZona` es lo que mide la ciudad de la plaza en el mapa como fracción del radio de su zona (una décima: «la ciudad nunca pasa de una décima de su provincia», Calibración de distancias §4.2): una avanzada no se coloca a menos de ese radio más la mitad de su tamaño del centro de la madre. `fraccionReparacion` es el 50 % del coste de la etapa que cuesta reparar unas ruinas.
+Las etapas son las tres de Doc 5.17 (atalaya → fuerte → ciudadela) y `obras` es el coste de **cada paso** (construir la atalaya, mejorarla a fuerte, mejorar el fuerte a ciudadela), con su duración en minutos de mundo: los «viajes de carro de 500» del documento son unidades de mapa, a **placeholder**. `nivelMadre` es el nivel operativo mínimo de la plaza madre para tener esa etapa y `cupoPorNivelDeLaMadre`, cuántas avanzadas admite por nivel (2 en el nivel 2 … 5 en el 5, contando las pendientes y las que están en ruinas). `capacidadAlmacen` es la cabida **por recurso** de cada etapa (la atalaya no tiene almacén). Lo que mide la avanzada en el mapa es su tamaño de `TAMANOS_MAPA` (abajo). `fraccionCiudadDeLaZona` es lo que mide la ciudad de la plaza en el mapa como fracción del radio de su zona (una vigésima desde el 2026-11-05, al doblar las zonas, para que la ciudad mida lo mismo que antes; antes una décima: «la ciudad nunca pasa de una décima de su provincia», Calibración de distancias §4.2): una avanzada no se coloca a menos de ese radio más la mitad de su tamaño del centro de la madre. `fraccionReparacion` es el 50 % del coste de la etapa que cuesta reparar unas ruinas.
 
 **Tamaños de los elementos del mapa** (decisión del autor del 2026-10-27). `TAMANOS_MAPA` dice cuánto mide cada elemento en el mapa del mundo: el **diámetro**, en unidades de mapa, del disco que ocupa. Sirven para **pintar y para colocar**, nunca para el movimiento: el A\* de las rutas solo mira el terreno y ningún elemento le estorba (`Movimiento_Ejercitos.md` §4). Al colocar una avanzada, dos elementos se pisan si sus centros distan menos de la media de sus diámetros; la ciudad de una plaza no tiene cifra aquí, porque mide `fraccionCiudadDeLaZona` del radio de su zona. Los elementos que se mueven (héroe, columna, ejército, caravana) y el nodo y el alijo solo los usan los clientes al pintar. Viajan en `/v1/datos` con los demás bloques. Las cifras de hoy son el «como mucho 0,2 de mapa» del canon (Doc 4.2.2 y 5.17) para todos: **placeholder**, para ajustar.
 
@@ -2379,7 +2379,7 @@ Las etapas son las tres de Doc 5.17 (atalaya → fuerte → ciudadela) y `obras`
 <!-- /parametros -->
 
 > **Implementado en Rust (2026-10-22, fase 4F).** Foto `BAN15` (hoy `BAN16`).
-> - **Colocar** (`ColocarAvanzada { asentamiento, heroe, posicion }`, 106): el Gobernador o el Maestro de Obras de la madre, que reside en ella (5E-1, decisión del autor del 2026-10-25; o la administración), con su columna **en el sitio** y no dentro de la plaza (a ≤ `radioPuerta` de `posicion`), la marca dentro de la zona real de la madre, sin pisar su ciudad (`avanzada.dentro_del_asentamiento`: a menos de `radio de la zona × fraccionCiudadDeLaZona + TAMANOS_MAPA.avanzada / 2` de su centro) ni otro elemento del mapa (`avanzada.pisa_otro_elemento`: otra avanzada en cualquier estado, un pueblo sobre su nodo o un campamento de mercenarios o de bandidos a menos de la media de los dos diámetros de `TAMANOS_MAPA`). La madre ha de tener nivel operativo ≥ 2 y cupo. La obra queda **«pendiente de materiales»** (no se ve como puesto, no se ataca, no ve, ocupa cupo), no cobra nada al almacén y no pasa por la cola de construcción.
+> - **Colocar** (`ColocarAvanzada { asentamiento, heroe, posicion }`, 106): el Gobernador o el Maestro de Obras de la madre, que reside en ella y está **dentro** (como al marcar la aldea, desde el 2026-11-04; antes con su columna en el sitio; o la administración), la marca en tierra firme (`avanzada.fuera_del_sitio`), dentro de la zona real de la madre, con ruta por tierra hasta ella (`avanzada.sin_ruta`), sin pisar su ciudad (`avanzada.dentro_del_asentamiento`: a menos de `radio de la zona × fraccionCiudadDeLaZona + TAMANOS_MAPA.avanzada / 2` de su centro) ni otro elemento del mapa (`avanzada.pisa_otro_elemento`: otra avanzada en cualquier estado, un pueblo sobre su nodo o un campamento de mercenarios o de bandidos a menos de la media de los dos diámetros de `TAMANOS_MAPA`). La madre ha de tener nivel operativo ≥ 2 y cupo. La obra queda **«pendiente de materiales»** (no se ve como puesto, no se ataca, no ve, ocupa cupo), no cobra nada al almacén y no pasa por la cola de construcción.
 > - **Entregar** (`EntregarMaterialesAAvanzada { ejercito, avanzada }`, 107): con la columna a la puerta de la obra y de la misma Facción, y dada por un héroe de la columna ciudadano de esa Facción (como en un pueblo), lo que lleva su carro y sus caravanas adjuntas, recurso a recurso, como en un pueblo. Con todo entregado arranca la obra y su **fin tiene cita propia** (`SucesoCombate::FinObraAvanzada`, ligada a la avanzada —`entidad_obra_de_avanzada`—, prioridad 1, en su instante exacto: no espera al paso de minuto).
 > - **Mejorar** (108) y **reparar** (109) son la misma obra con otro coste: pasar a la etapa siguiente (a nivel de la madre suficiente) o reparar unas ruinas de fuerte o ciudadela (la mitad del coste de la etapa, la duración entera). Mientras se mejora la avanzada sigue funcionando; mientras se repara sigue en ruinas. Un ataque que la derriba pierde la obra. **Cancelar** (`CancelarObraDeAvanzada { heroe, avanzada }`, 116): la mejora o la reparación, pendiente de materiales o ya en marcha, se abandona **sin reembolso** (lo entregado se pierde) y la avanzada sigue como estaba (operativa en su etapa, o en ruinas). Rechazos: `avanzada.nada_que_cancelar` (sin obra, o la primera, que se cancela destruyendo la avanzada), `avanzada.desconocida`, `no_autorizado`. Su cita de fin deja de ser vigente (sube la generación de la entidad de su obra: lo mismo que pasa al destruir la avanzada, derribarla un ataque o caer su madre) y el hecho es `avanzada.obra_cancelada` (avanzada, tipo).
 > - **Destruir a mano** (110): atalaya y fuerte, también si solo es una obra pendiente; la ciudadela no. No recupera nada.
@@ -2395,10 +2395,10 @@ Los bloques de parámetros de este documento venían del motor TypeScript. Valor
 
 | Parámetro | Bloque (TypeScript) | Vigente |
 |---|---|---|
-| `ZONA_INFLUENCIA.radioInicial` | 30 | **6** |
-| `ZONA_INFLUENCIA.radioMaximoPorNivel` | 60 / 90 / 120 / 150 / 180 | **10 / 15 / 20 / 25 / 30** |
-| `ZONA_INFLUENCIA.crecimientoPorEdificioCompletado` | 5 | **1** |
-| `FUNDACION.separacionPlazas` | — | **10** (Doc 1.0a; 30 hasta el 2026-11-04; en el bloque desde ese día) |
+| `ZONA_INFLUENCIA.radioInicial` | 30 | **12** (6 hasta el 2026-11-05) |
+| `ZONA_INFLUENCIA.radioMaximoPorNivel` | 60 / 90 / 120 / 150 / 180 | **20 / 30 / 40 / 50 / 60** (10 / 15 / 20 / 25 / 30 hasta el 2026-11-05) |
+| `ZONA_INFLUENCIA.crecimientoPorEdificioCompletado` | 5 | **2** (1 hasta el 2026-11-05) |
+| `FUNDACION.separacionPlazas` | — | **20** (Doc 1.0a; 30 hasta el 2026-11-04, 10 ese día; en el bloque desde entonces) |
 | `ZONA_INFLUENCIA.cuotaParcelasPorAsentamiento` | — | **50** (%; en el bloque desde el 2026-11-04) |
 | `MERCENARIOS.radioExclusionFundar` | 100 | **20** |
 | `ESCALA` / `radioUrbanoDe` | existían | **se borran**: el espacio local y el del mapa son independientes (Doc 1.0a). La ciudad usa su propio `radioCiudad` (30, +5 por edificio, máximos 60-180; `Trazado_Urbano.md`) |

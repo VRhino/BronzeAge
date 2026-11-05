@@ -306,7 +306,7 @@ Cada uno lo emite el comando que lo nombra, en la misma transición. «Plaza» e
 | `LOGISTICA.radioReabastecimiento` | 60 | **retirado** (§8) |
 | `VISION.ejercito` | 150 | **30** |
 | `VISION.jugadorSolo` | 80 | **15** |
-| `VISION.margenAsentamiento` | 60 | **0** (la plaza ve solo su zona; las avanzadas ven 12) |
+| `VISION.margenAsentamiento` | 60 | **0** (la plaza ve solo su zona; las avanzadas ven `VISION.avanzada`, 24 desde el 2026-11-05) |
 | `VISION.caravanaGrande.radio` | 300 | **60** |
 | `PERSECUCION.umbralRecalculo` | 30 | **retirado** (§7) |
 
@@ -353,6 +353,7 @@ Cada uno lo emite el comando que lo nombra, en la misma transición. «Plaza» e
 {
   "ejercito": 30,
   "jugadorSolo": 15,
+  "avanzada": 24,
   "margenAsentamiento": 0,
   "caravanaGrande": {
     "carros": 3,

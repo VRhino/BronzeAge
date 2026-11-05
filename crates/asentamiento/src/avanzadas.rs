@@ -394,8 +394,8 @@ mod pruebas {
     #[test]
     fn las_cifras_salen_del_documento() {
         let r = Reglas::cargar().avanzadas;
-        assert_eq!((r.nivel_madre, r.cupo_por_nivel, r.capacidad_almacen), ([2, 2, 3], 1, [0, 2_000_000, 10_000_000]));
-        assert_eq!((r.tamano, r.ciudad_de_la_zona, r.fraccion_reparacion), (200, 100_000, 500_000), "elemento de 0,2; ciudad de una décima de la zona; reparar cuesta la mitad");
+        assert_eq!((r.nivel_madre, r.cupo_por_nivel, r.capacidad_almacen), ([2, 2, 3], 1, [0, 4_000_000, 20_000_000]), "almacenes al doble desde el 2026-11-05");
+        assert_eq!((r.tamano, r.ciudad_de_la_zona, r.fraccion_reparacion), (200, 50_000, 500_000), "elemento de 0,2; ciudad de una vigésima de la zona (desde el 2026-11-05); reparar cuesta la mitad");
         assert_eq!(r.costo(Etapa::Atalaya), &vec![(Madera, 200_000), (Piedra, 100_000)], "200 madera + 100 piedra, obra de 2 h");
         assert_eq!(r.duracion(Etapa::Atalaya), 120 * MIN);
         assert_eq!(r.costo(Etapa::Fuerte), &vec![(Madera, 600_000), (Oro, 50_000), (Piedra, 400_000)]);
@@ -465,14 +465,14 @@ mod pruebas {
         entregar_todo(&mut a, &r, t, 1);
         a.cumplir_avanzadas(t + 12 * 60 * MIN, &r, &mut vec![]);
         let av = a.avanzada(1).unwrap();
-        assert_eq!((av.etapa, av.operativa(), av.almacen.capacidad(Trigo)), (Etapa::Fuerte, true, 2_000_000));
+        assert_eq!((av.etapa, av.operativa(), av.almacen.capacidad(Trigo)), (Etapa::Fuerte, true, 4_000_000));
         // La ciudadela pide el nivel 3 de la madre.
         assert_eq!(a.mejorar_avanzada(&r, 1, &mut vec![]), Err(ErrorAvanzada::NivelInsuficiente));
         (a.nivel, a.medidor.nivel_actual) = (3, 3);
         a.mejorar_avanzada(&r, 1, &mut vec![]).unwrap();
         entregar_todo(&mut a, &r, 2_000 * MIN, 1);
         a.cumplir_avanzadas(2_000 * MIN + 2 * 24 * 60 * MIN, &r, &mut vec![]);
-        assert_eq!((a.avanzada(1).unwrap().etapa, a.avanzada(1).unwrap().almacen.capacidad(Madera)), (Etapa::Ciudadela, 10_000_000));
+        assert_eq!((a.avanzada(1).unwrap().etapa, a.avanzada(1).unwrap().almacen.capacidad(Madera)), (Etapa::Ciudadela, 20_000_000));
         assert_eq!(a.mejorar_avanzada(&r, 1, &mut vec![]), Err(ErrorAvanzada::NoMejorable), "la ciudadela no tiene siguiente");
     }
 
@@ -522,25 +522,25 @@ mod pruebas {
         let r = Reglas::cargar().avanzadas;
         let plaza = Punto::new(100_000, 100_000);
         let a = |dx: i64, dy: i64| Punto::new(plaza.x + dx, plaza.y + dy);
-        // La ciudad mide una décima de la zona (zona 15 → 1,5) y la avanzada pide además la mitad de su tamaño (0,1): 1,6 de centro a centro.
-        assert_eq!((r.radio_de_ciudad(6_000), r.radio_de_ciudad(15_000)), (600, 1_500));
-        assert_eq!(r.comprobar_sitio(plaza, 15_000, a(1_599, 0), []), Err(ErrorAvanzada::DentroDelAsentamiento));
-        assert_eq!(r.comprobar_sitio(plaza, 15_000, a(0, -1_599), []), Err(ErrorAvanzada::DentroDelAsentamiento));
-        assert_eq!(r.comprobar_sitio(plaza, 15_000, a(1_600, 0), []), Ok(()), "justo fuera, sin pisarla");
+        // La ciudad mide una vigésima de la zona (zona 30 → 1,5; desde el 2026-11-05, con las zonas al doble) y la avanzada pide además la mitad de su tamaño (0,1): 1,6 de centro a centro.
+        assert_eq!((r.radio_de_ciudad(12_000), r.radio_de_ciudad(30_000)), (600, 1_500));
+        assert_eq!(r.comprobar_sitio(plaza, 30_000, a(1_599, 0), []), Err(ErrorAvanzada::DentroDelAsentamiento));
+        assert_eq!(r.comprobar_sitio(plaza, 30_000, a(0, -1_599), []), Err(ErrorAvanzada::DentroDelAsentamiento));
+        assert_eq!(r.comprobar_sitio(plaza, 30_000, a(1_600, 0), []), Ok(()), "justo fuera, sin pisarla");
         // Con una zona mayor la ciudad es mayor: lo que valía deja de valer.
-        assert_eq!(r.comprobar_sitio(plaza, 30_000, a(2_000, 0), []), Err(ErrorAvanzada::DentroDelAsentamiento));
-        assert_eq!(r.comprobar_sitio(plaza, 30_000, a(3_100, 0), []), Ok(()));
+        assert_eq!(r.comprobar_sitio(plaza, 60_000, a(2_000, 0), []), Err(ErrorAvanzada::DentroDelAsentamiento));
+        assert_eq!(r.comprobar_sitio(plaza, 60_000, a(3_100, 0), []), Ok(()));
         // Otro elemento (una avanzada, un pueblo, un campamento) a menos de la media de los dos diámetros (0,2 y 0,2) se pisa; a 0,2 justo, no.
         let sitio = a(8_000, 0);
         let otros = [(a(8_199, 0), 200), (a(20_000, 0), 200)];
-        assert_eq!(r.comprobar_sitio(plaza, 15_000, sitio, otros), Err(ErrorAvanzada::PisaOtroElemento));
-        assert_eq!(r.comprobar_sitio(plaza, 15_000, sitio, [(a(8_000, 200), 200), (a(7_800, 0), 200)]), Ok(()));
-        assert_eq!(r.comprobar_sitio(plaza, 15_000, sitio, [(sitio, 200)]), Err(ErrorAvanzada::PisaOtroElemento), "ni encima");
+        assert_eq!(r.comprobar_sitio(plaza, 30_000, sitio, otros), Err(ErrorAvanzada::PisaOtroElemento));
+        assert_eq!(r.comprobar_sitio(plaza, 30_000, sitio, [(a(8_000, 200), 200), (a(7_800, 0), 200)]), Ok(()));
+        assert_eq!(r.comprobar_sitio(plaza, 30_000, sitio, [(sitio, 200)]), Err(ErrorAvanzada::PisaOtroElemento), "ni encima");
         // Uno más grande pisa desde más lejos: con 1 de diámetro, la media es 0,6.
-        assert_eq!(r.comprobar_sitio(plaza, 15_000, sitio, [(a(8_599, 0), 1_000)]), Err(ErrorAvanzada::PisaOtroElemento));
-        assert_eq!(r.comprobar_sitio(plaza, 15_000, sitio, [(a(8_600, 0), 1_000)]), Ok(()));
+        assert_eq!(r.comprobar_sitio(plaza, 30_000, sitio, [(a(8_599, 0), 1_000)]), Err(ErrorAvanzada::PisaOtroElemento));
+        assert_eq!(r.comprobar_sitio(plaza, 30_000, sitio, [(a(8_600, 0), 1_000)]), Ok(()));
         // La ciudad se mira antes que los demás elementos.
-        assert_eq!(r.comprobar_sitio(plaza, 15_000, a(500, 0), [(a(500, 0), 200)]), Err(ErrorAvanzada::DentroDelAsentamiento));
+        assert_eq!(r.comprobar_sitio(plaza, 30_000, a(500, 0), [(a(500, 0), 200)]), Err(ErrorAvanzada::DentroDelAsentamiento));
     }
 
     #[test]

@@ -130,6 +130,8 @@ pub struct ReglasVision {
     /// Alcance de vista de una columna con soldados y de un héroe solo.
     pub ejercito: Mil,
     pub jugador_solo: Mil,
+    /// Alcance de una avanzada operativa, igual en las tres etapas (`VISION.avanzada`: 24 desde el 2026-11-05, antes 12 escrito en el código).
+    pub avanzada: Mil,
     /// Lado de la celda de la rejilla de lo explorado (`EXPLORACION.tamanoCelda`, Niebla_De_Guerra §7).
     pub tamano_celda: Mil,
 }
@@ -268,7 +270,7 @@ impl Reglas {
                 factor_consumo_forzada: ppm(num(&mv, "factorConsumoMarchaForzada")),
             },
             formacion: ReglasFormacion { minimo: entero(&fm, "minimo") as usize, plazo: entero(&fm, "plazoMinutos") * MS_POR_MINUTO },
-            vision: ReglasVision { ejercito: mil(num(&vs, "ejercito")), jugador_solo: mil(num(&vs, "jugadorSolo")), tamano_celda: mil(num(&bloque(NIEBLA, "EXPLORACION"), "tamanoCelda")) },
+            vision: ReglasVision { ejercito: mil(num(&vs, "ejercito")), jugador_solo: mil(num(&vs, "jugadorSolo")), avanzada: mil(num(&vs, "avanzada")), tamano_celda: mil(num(&bloque(NIEBLA, "EXPLORACION"), "tamanoCelda")) },
             militar: ReglasMilitar {
                 racion_por_soldado: mil(num(&mi, "racionPorSoldadoPorMinuto")),
                 regeneracion_moral: mil(num(&mi, "regeneracionMoralPorMinuto")),

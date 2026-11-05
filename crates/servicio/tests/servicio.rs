@@ -99,7 +99,7 @@ async fn un_bot_entra_por_el_acceso_real_y_sigue_tras_un_reinicio() {
     let v: Value = serde_json::from_slice(&cuerpo).unwrap();
     assert!(v["documentos"]["Fundacion_Y_Refundacion"]["FUNDACION"].is_object(), "los bloques de Mechanics, por documento");
     assert!(v["documentos"]["Proyecciones_Y_Autorizacion"]["ACCESO"]["duracionSesionMs"].is_number());
-    assert_eq!(v["reglas"]["territorio"]["separacion_plazas"], json!(10_000), "FUNDACION.separacionPlazas: 10 u desde el 2026-11-04");
+    assert_eq!(v["reglas"]["territorio"]["separacion_plazas"], json!(20_000), "FUNDACION.separacionPlazas: 20 u desde el 2026-11-05");
     assert_eq!(v["huella_reglas"].as_str().map(str::len), Some(64));
     // Los costes derivados, por recurso en milésimas: los mismos que cobra el núcleo.
     let r = Reglas::default();

@@ -1017,7 +1017,10 @@ fn sitio_junto_a(n: &Nucleo, m: &Mundo, c: Punto, r: i64) -> Option<Punto> {
 
 /// La plaza madre de «ana» (F1, nivel 2) con un pueblo de cobre levantado y activo, y su carro. `Esc.b` no se usa.
 fn con_pueblo(m: &M, semilla: u64) -> (Esc, u64) {
-    let mut n = Nucleo::nuevo(arranque(m, semilla));
+    // El almacén local de antes (500, el del carro): desde el 2026-11-05 mide 1.000 y su mitad protegida es justo lo que llena el carro, así que el pueblo apenas pasa de ella.
+    let mut arr = arranque(m, semilla);
+    std::sync::Arc::make_mut(&mut arr.reglas.economia.datos).pueblos.capacidad_almacen = 500_000;
+    let mut n = Nucleo::nuevo(arr);
     let mapa = nucleo::economia::Mapa::de(&m.0);
     // El nodo más rico que tenga un sitio al lado: los de poca reserva se vacían en la primera hora y el pueblo no llega a la mitad de su almacén.
     let mut ricos: Vec<usize> = (0..mapa.nodos.len()).filter(|&i| mapa.nodos[i].tipo == Tipo::MinaCobre).collect();
@@ -1235,11 +1238,13 @@ fn toda_plaza_tiene_diez_campamentos_en_bosques_libres_y_su_oleada_a_las_2_horas
         let bosque = &m.0.bosques()[c.bosque.unwrap() as usize];
         let centro = Punto::new(bosque.centro.as_ref().unwrap().x, bosque.centro.as_ref().unwrap().y);
         assert_eq!(c.posicion, centro);
-        // El margen se mide al aparecer, contra la zona de entonces; la zona crece después (una unidad por edificio, hasta su techo). Así que, como poco, contra el radio inicial.
+        // El margen se mide al aparecer, contra la zona de entonces; la zona crece después (dos unidades por edificio, hasta su techo). Así que, como poco, contra el radio inicial.
+        let margen = e.n.estado().reglas.economia.combate.bandidos.margen_zona_plaza;
+        assert_eq!(margen, 5_000, "margenZonaPlaza: 5 u desde el 2026-11-05");
         for q in e.n.estado().asentamientos.values() {
-            assert!(q.posicion.dist(centro) >= inicial + 10_000, "el campamento de as-{p} está a ≥ 10 u de la zona inicial de as-{}", q.id);
+            assert!(q.posicion.dist(centro) >= inicial + margen, "el campamento de as-{p} está a ≥ 5 u de la zona inicial de as-{}", q.id);
         }
-        assert!(!e.n.en_zona(a, c.posicion) && !e.n.en_zona(b, c.posicion));
+        // Ya no se mira la zona de ahora: con el margen de 5 (desde el 2026-11-05) y la zona creciendo 2 por edificio, la zona de nivel 1 (hasta 20) puede llegar a cubrirlo.
     }
     let pa = e.n.estado().asentamientos[&a].posicion;
     let lejos = ca.iter().map(|c| c.posicion.dist(pa)).max().unwrap();

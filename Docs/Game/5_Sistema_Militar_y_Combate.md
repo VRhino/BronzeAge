@@ -399,7 +399,7 @@ Una marcha en curso **se puede cancelar en cualquier momento**, y hacerlo **deti
 Un jugador ve de lo AJENO lo que alcancen sus tres clases de ojos:
 
 1. **Sus plazas**, que vigilan **solo su zona de influencia** (`VISION.margenAsentamiento` = 0): ni un paso más allá de su frontera. Lo de fuera lo ven las avanzadas (5.17).
-   - **Sus avanzadas**, cada una con un círculo de **12** unidades de mapa alrededor de sí, fijo en las tres etapas e independiente del de la plaza. Puesta en la frontera, asoma 12 más allá; como solo se construye dentro de la zona, nunca ve más de 12 por fuera.
+   - **Sus avanzadas**, cada una con un círculo de **24** unidades de mapa alrededor de sí (`VISION.avanzada`; 12 hasta el 2026-11-05, decisión del autor), fijo en las tres etapas e independiente del de la plaza. Puesta en la frontera, asoma 24 más allá; como solo se construye dentro de la zona, nunca ve más de 24 por fuera.
 2. **Sus ejércitos en marcha**, que ven **30** a la redonda.
 3. **Él mismo, viajando solo**, que ve **15**, más o menos el ancho de la pantalla. Menos que una columna a propósito: un hombre solo no despliega batidores. Es bastante para viajar sin caer a ciegas en una emboscada, y poco para que el explorador solitario sea la mejor unidad de información del juego.
 
@@ -409,7 +409,7 @@ Sobre el mundo de 2.667×2.000, los 30 del ejército son **un minuto de camino**
 
 La visión de la plaza se mide sobre su **radio**, no sobre la silueta de su zona. La zona viene recortada por las fronteras con Facciones rivales (Doc 1.2), y ese recorte es político, no óptico: que un rival plante su frontera pegada a tu ciudad no ciega a tus vigías.
 
-> **Consecuencia**: una plaza joven (zona de 6 a 10) ve mucho menos que un ejército (30), que gana iniciativa frente a ella; el día de protección tras fundar amortigua el arranque. Una capital de nivel 5 ve exactamente lo que ve un ejército (30), y solo las avanzadas le dan ojos más allá de su frontera.
+> **Consecuencia** (con las zonas al doble desde el 2026-11-05, decisión del autor: la visión sigue ligada a la zona): una plaza joven (zona de 12 a 20) ve menos que un ejército (30), que gana iniciativa frente a ella; el día de protección tras fundar amortigua el arranque. Desde el nivel 2 (techo 30) una plaza puede ver tanto como un ejército, y una capital de nivel 5 (60) el doble; solo las avanzadas le dan ojos más allá de su frontera.
 
 De lo ajeno se ve **quién es y dónde está, nunca su interior**:
 
@@ -879,7 +879,7 @@ Un héroe derrotado en una partida real pierde **parte de las tropas que llevó 
 **Una avanzada es un puesto fortificado de la plaza madre, en el mapa.** Tres etapas, que son sus tres niveles: **atalaya → fuerte (empalizada) → ciudadela (piedra)** (nombres de etapa: una avanzada no tiene recintos de muralla, su fortaleza es su guarnición de serie). Siempre se empieza por la atalaya y se va subiendo; no se construye directamente un fuerte ni una ciudadela.
 
 - **Plaza madre**: atalaya y fuerte desde el **nivel 2**; ciudadela desde el **3** (como las murallas). **Cupo**: una avanzada por nivel de la madre (2 en nivel 2 … 5 en nivel 5).
-- **Ubicación**: donde quiera el jugador **dentro de la zona propia, nunca fuera**, sin pisar la ciudad de su plaza madre (que mide una décima del radio de su zona) ni ningún otro elemento del mapa: cada uno mide **como mucho 0,2 de mapa**, así que dos no se pisan si sus centros distan 0,2 o más. Se construye, se mejora y se repara como obra de mapa (4.2.2); una mejora o una reparación en marcha se puede **cancelar** (sin reembolso: lo entregado se pierde) y la avanzada sigue como estaba. **No genera zona de influencia.**
+- **Ubicación**: donde quiera el jugador **dentro de la zona propia, nunca fuera**, sin pisar la ciudad de su plaza madre (que mide una vigésima del radio de su zona: una décima hasta el 2026-11-05, cuando las zonas pasaron al doble) ni ningún otro elemento del mapa: cada uno mide **como mucho 0,2 de mapa**, así que dos no se pisan si sus centros distan 0,2 o más. Se construye, se mejora y se repara como obra de mapa (4.2.2); una mejora o una reparación en marcha se puede **cancelar** (sin reembolso: lo entregado se pierde) y la avanzada sigue como estaba. **No genera zona de influencia.**
 - **Visión**: círculo fijo de **12** alrededor de sí (5.12.7). Es lo que ve la plaza fuera de su frontera.
 - **Guarnición de jugadores**: cupo **por héroe residente de la madre y por avanzada**, en puntos de Liderazgo: **14 / 45 / 90** (atalaya / fuerte / ciudadela). Las escuadras las llevan sus héroes hasta allí y comen el trigo de la madre.
 - **Guarnición de serie**, manejada por la IA y fuera de cupo, que se repone gratis **soldado a soldado, entera en 6 horas desde cero** (como los mineros de un pueblo; decisión del autor, 2026-10-24). **La tropa la elige el Gobernador de la madre** para cada escalón, solo entre las que la plaza madre puede reclutar (la tecnología de la Facción y el edificio activo al nivel que pide); por defecto, milicia de lanceros —la del escalón 2— en todos los escalones.

@@ -2168,7 +2168,10 @@ fn sitio_junto_a(n: &Nucleo, m: &Mundo, c: Punto, r: i64) -> Option<Punto> {
 
 /// La plaza madre de «ana» (F1, nivel 2) con un pueblo de cobre levantado y activo, una hora después de acabar su obra: (escenario, madre, pueblo, sitio del pueblo).
 fn con_pueblo(m: &M) -> (Esc, u64, u64, Punto) {
-    let mut n = Nucleo::nuevo(arranque_mundo(m, 7));
+    // El almacén local de antes (500, el del carro): desde el 2026-11-05 mide 1.000 y su mitad protegida es justo lo que llena el carro, así que el pueblo apenas pasa de ella.
+    let mut arr = arranque_mundo(m, 7);
+    std::sync::Arc::make_mut(&mut arr.reglas.economia.datos).pueblos.capacidad_almacen = 500_000;
+    let mut n = Nucleo::nuevo(arr);
     let mapa = nucleo::economia::Mapa::de(&m.0);
     // El nodo más rico que tenga un sitio al lado: los de poca reserva se vacían en la primera hora y el pueblo no llega a la mitad de su almacén.
     let mut ricos: Vec<usize> = (0..mapa.nodos.len()).filter(|&i| mapa.nodos[i].tipo == Tipo::MinaCobre).collect();

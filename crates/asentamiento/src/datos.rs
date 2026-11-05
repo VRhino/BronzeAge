@@ -358,7 +358,7 @@ mod pruebas {
         assert_eq!((p.hambre.nutricion_inicial, p.hambre.regeneracion_por_minuto, p.hambre.degradacion_sin_comida), (100_000, 5_000, 20_000));
         assert_eq!((p.hambre.factor_crecimiento_minimo, p.hambre.muerte_por_minuto, p.hambre.muerte_nobleza_por_minuto), (200_000, 50_000, 10_000));
         assert_eq!((p.impuesto_pesants, p.impuesto_artesanos, p.impuesto_nobleza), (4_000, 15_000, 60_000));
-        assert_eq!(r.capacidad_inicial, 400_000);
+        assert_eq!(r.capacidad_inicial, 800_000, "almacenes al doble desde el 2026-11-05");
         assert_eq!(r.politicas.catalogo.len(), 16);
         assert_eq!(r.politicas.slots["gobernador"].maximo, 5);
         let racion = r.politicas.catalogo.iter().find(|p| p.id == "racionamiento").unwrap();

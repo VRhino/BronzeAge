@@ -224,9 +224,9 @@ impl Nucleo {
     }
 
     /// Los ojos fijos de una plaza: su zona y sus avanzadas operativas.
-    fn fijos_de(a: &crate::estado::Asentamiento) -> Vec<(Sitio, Fijo)> {
+    fn fijos_de(a: &crate::estado::Asentamiento, avanzada: Mil) -> Vec<(Sitio, Fijo)> {
         let mut v = vec![(Sitio::Plaza(a.id), Fijo { faccion: a.faccion, centro: a.posicion, radio: a.radio })];
-        v.extend(a.economia.avanzadas.iter().filter(|x| x.operativa()).map(|x| (Sitio::Avanzada(x.id), Fijo { faccion: a.faccion, centro: x.posicion, radio: vision::radios::AVANZADA })));
+        v.extend(a.economia.avanzadas.iter().filter(|x| x.operativa()).map(|x| (Sitio::Avanzada(x.id), Fijo { faccion: a.faccion, centro: x.posicion, radio: avanzada })));
         v
     }
 
@@ -282,7 +282,7 @@ impl Nucleo {
         };
         for a in self.estado.asentamientos.values() {
             self.sitios_con_datos(a).into_iter().for_each(|(s, d)| ojos.sitio(s, Some(d)));
-            Self::fijos_de(a).into_iter().for_each(|(s, o)| ojos.fijo(s, Some(o)));
+            Self::fijos_de(a, self.estado.reglas.economia.militar.vision.avanzada).into_iter().for_each(|(s, o)| ojos.fijo(s, Some(o)));
         }
         for x in self.estado.combate.huerfanas.values() {
             ojos.sitio(Sitio::Avanzada(x.id), Some(datos_de_avanzada(0, x)));
@@ -319,7 +319,7 @@ impl Nucleo {
             match self.estado.asentamientos.get(&a) {
                 Some(p) => {
                     nuevos_sitios.extend(self.sitios_con_datos(p));
-                    nuevos_fijos.extend(Self::fijos_de(p));
+                    nuevos_fijos.extend(Self::fijos_de(p, self.estado.reglas.economia.militar.vision.avanzada));
                     viejos.hijos.insert(a, self.hijos_de(a));
                 }
                 None => {

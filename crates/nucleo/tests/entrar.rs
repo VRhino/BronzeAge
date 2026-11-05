@@ -404,8 +404,8 @@ fn el_residente_no_vacia_el_carro_al_entrar_el_carro_ocupa_su_capacidad_y_vaciar
 
     // El carro nunca lleva más de su capacidad (500 000): lo que ya trae cuenta al volver a salir.
     assert_eq!(e.rechazada("ana", sacar(vec![(Madera, 461_000)])), rechazos::CARRO_LLENO);
-    // Lo que no cabe en el almacén personal (1 000 000 de capacidad) se queda en el carro: aquí solo caben 20 000.
-    e.ok("admin", Comando::DarAlmacenPersonal { heroe: h, recurso: Oro, cantidad: 980_000 });
+    // Lo que no cabe en el almacén personal (2 000 000 de capacidad desde el 2026-11-05) se queda en el carro: aquí solo caben 20 000.
+    e.ok("admin", Comando::DarAlmacenPersonal { heroe: h, recurso: Oro, cantidad: 1_980_000 });
     e.ok("ana", Comando::VaciarCarro { heroe: h });
     let hn = e.n.heroe(h).unwrap();
     assert_eq!((hn.almacen_personal.get(&Madera).copied(), hn.carro.get(&Madera).copied()), (Some(20_000), Some(20_000)));

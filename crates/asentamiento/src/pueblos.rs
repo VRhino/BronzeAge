@@ -665,7 +665,7 @@ mod pruebas {
     #[test]
     fn las_cifras_salen_del_documento() {
         let r = Reglas::cargar().pueblos;
-        assert_eq!((r.nivel_madre_minimo, r.capacidad_almacen, r.mineros, r.minutos_por_minero, r.casas_de_la_planta), (1, 500_000, 30, 12, 6));
+        assert_eq!((r.nivel_madre_minimo, r.capacidad_almacen, r.mineros, r.minutos_por_minero, r.casas_de_la_planta), (1, 1_000_000, 30, 12, 6), "almacén local al doble desde el 2026-11-05");
         assert_eq!(r.cupo_por_nivel.values().copied().collect::<Vec<_>>(), vec![2, 3, 4, 5, 6]);
         assert_eq!(r.coste_adicional, vec![(Recurso::Madera, 50_000)]);
         let a = &r.aldea;
@@ -754,6 +754,7 @@ mod pruebas {
         let r = Reglas::cargar();
         let mut a = con_pueblo_activo(&r);
         let (mut w, mut ev) = (Mundo::default(), vec![]);
+        w.0.insert(1, 2_000_000); // un yacimiento mayor que el almacén local (1.000)
         let mano = mano_de_obra(&r.catalogo, &a.edificios, 20, 0, a.trabajadores_de_pueblos(&r));
         assert_eq!(mano.requeridos_pesants, 12_000, "la Granja de la fundación (4) y los 8 del pueblo");
         a.extraer_pueblos(&r, &mano, &ctx(), &mut w, &mut ev);
@@ -762,10 +763,10 @@ mod pruebas {
         for _ in 0..200 {
             a.extraer_pueblos(&r, &mano, &ctx(), &mut w, &mut ev);
         }
-        assert_eq!((a.pueblos[0].almacen.cantidad(Recurso::Cobre), w.0[&1]), (500_000, 500_000), "para al llenarse y no gasta el yacimiento");
+        assert_eq!((a.pueblos[0].almacen.cantidad(Recurso::Cobre), w.0[&1]), (1_000_000, 1_000_000), "para al llenarse y no gasta el yacimiento");
         assert_eq!(ev, vec![Evento::PuebloLleno { id: 1 }], "avisa una sola vez");
         // Al vaciarse el almacén vuelve a extraer y a poder avisar.
-        a.pueblos[0].almacen.quitar(Recurso::Cobre, 500_000);
+        a.pueblos[0].almacen.quitar(Recurso::Cobre, 1_000_000);
         a.extraer_pueblos(&r, &mano, &ctx(), &mut w, &mut ev);
         assert!(!a.pueblos[0].lleno && a.pueblos[0].almacen.cantidad(Recurso::Cobre) == 5_000);
     }
@@ -871,7 +872,7 @@ mod pruebas {
             a.extraer_pueblos(&r, &mano, &ctx(), &mut w, &mut ev);
         }
         let p = &a.pueblos[0];
-        assert_eq!(p.existencias(&r), 500_000, "el almacén local es uno para los dos");
+        assert_eq!(p.existencias(&r), 1_000_000, "el almacén local es uno para los dos");
         assert_eq!(ev, vec![Evento::PuebloLleno { id: 1 }]);
         assert_eq!(p.carga_del_carro(&r, 500_000).iter().map(|x| x.1).sum::<Mil>(), 500_000, "el carro se lo lleva todo");
         assert_eq!(p.carga_del_carro(&r, 500_000)[0].0, Recurso::Trigo);

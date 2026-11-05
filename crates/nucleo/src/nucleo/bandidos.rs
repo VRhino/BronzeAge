@@ -6,7 +6,7 @@
 //! cosa ociosa:
 //! - **Hasta `porPlaza` (10) por plaza, de golpe** (`SucesoCombate::BandidosDeLaPlaza`; 2026-11-02, decisión del autor: antes uno y a las 6 h): al fundarla llegan
 //!   todos, y al destruirse uno sin oleada pendiente se programa la siguiente a `respawnMinutos` (2 h), que repone de golpe los que falten entonces. Cada uno en el
-//!   bosque no reclamado más cercano a ella, sin campamento encima y con el centro a ≥ 10 u del borde de toda zona (`MARGEN_DE_ZONA`), con su tirada de nivel. Sin
+//!   bosque no reclamado más cercano a ella, sin campamento encima y con el centro a ≥ `margenZonaPlaza` (5 u) del borde de toda zona, con su tirada de nivel. Sin
 //!   bosque que valga no gasta tirada y espera: cuando un bosque queda libre o válido (se va un campamento de bandidos que lo ocupaba o una plaza cae en ruinas y su
 //!   zona desaparece), las plazas que esperan los suyos los vuelven a buscar en ese instante, por orden de id (el TypeScript volvía a mirar cada tick).
 //! - **En el anillo de cada campamento de mercenarios** (`SucesoCombate::BandidosDelAnillo`): `clamp(residentes sin plaza × 4, 5, 10)` campamentos. Por debajo
@@ -43,10 +43,6 @@ use combate::bandidos::{campamentos_que_tocan, cuantos_crear_en_el_anillo, falta
 use combate::caravana::{Defensa, Zona};
 use militar::escuadra::Escuadra;
 use std::collections::BTreeSet;
-
-/// Cuánto más lejos del borde de la zona que el propio centro del bosque (mil. = 10 u): el sitio de una plaza no pega a una frontera. Se mide contra el
-/// disco de la zona, que contiene a su polígono (Generacion_Del_Mundo §13).
-const MARGEN_DE_ZONA: Mil = 10_000;
 
 impl Nucleo {
     // ───────────────────────────── Consultas ─────────────────────────────
@@ -220,8 +216,9 @@ impl Nucleo {
         let geo = self.geografia.as_ref()?;
         let mut candidatos: Vec<(i128, u32, Punto)> = geo.bosques().iter().enumerate().filter_map(|(i, b)| b.centro.as_ref().map(|c| (Punto::new(c.x, c.y).dist2(desde), i as u32, Punto::new(c.x, c.y)))).collect();
         candidatos.sort_by_key(|&(d, i, _)| (d, i));
+        let margen = self.estado.reglas.economia.combate.bandidos.margen_zona_plaza;
         let ocupados: BTreeSet<u32> = self.estado.combate.bandidos.values().filter_map(|b| b.bosque).collect();
-        candidatos.into_iter().find(|&(_, i, centro)| !ocupados.contains(&i) && !self.estado.asentamientos.values().any(|a| a.posicion.dist(centro) < a.radio + MARGEN_DE_ZONA)).map(|(_, i, c)| (i, c))
+        candidatos.into_iter().find(|&(_, i, centro)| !ocupados.contains(&i) && !self.estado.asentamientos.values().any(|a| a.posicion.dist(centro) < a.radio + margen)).map(|(_, i, c)| (i, c))
     }
 
     /// Vence la cita de la oleada de la plaza: llegan de golpe los que le falten, cada uno en el bosque libre más cercano que quede.

@@ -191,7 +191,7 @@ fn la_plaza_cumple_por_estado_al_completar_el_edificio_y_la_cadena_sigue_en_el_m
     // Sin Gobernador ni residentes, solo la administración la reclama. Los recursos van al almacén de la plaza si caben enteros: con el almacén casi lleno, no caben y siguen por
     // reclamar; con un Almacén más, sí.
     let almacen = |x: &X, r: Recurso| x.n.economia(a).unwrap().almacen.cantidad(r);
-    x.ok("admin", Comando::DarRecursos { asentamiento: a, recurso: Recurso::Piedra, cantidad: 100_000 });
+    x.ok("admin", Comando::DarRecursos { asentamiento: a, recurso: Recurso::Piedra, cantidad: 600_000 }); // la base es 800 desde el 2026-11-05
     assert!(x.n.economia(a).unwrap().almacen.espacio(Recurso::Piedra) < 300 * UNIDAD);
     assert_eq!(x.rechazo("admin", reclamar(0, d, "A4")), rechazos::MISION_ALMACEN_LLENO);
     x.ok("admin", Comando::DarRecursos { asentamiento: a, recurso: Recurso::Madera, cantidad: 50_000 });

@@ -73,7 +73,7 @@ Con servidores de batalla, todo combate se juega como una partida aparte en Unit
 **Ya no existe** (2026-10-02). Era el héroe sin residencia ni campamento. Ahora quien pierde su casa —por conquista, ruina o dejándola— pasa en el acto a residir en el campamento de mercenarios más cercano al sitio que perdió (Doc 1.9b, 5.15.5), con sus escuadrones. Solo quedan sin campamento los héroes aún sin Facción.
 
 ## Almacén personal
-Lo que un Héroe guarda para sí: hasta 1000 unidades en total, de cualquier recurso (`ALMACEN_PERSONAL`, placeholder). Viaja con él en cada cambio de residencia —es lo único que se mueve sin caravana— y lo gasta quien lo tiene. Se llena y se vacía con el carro de su columna (Doc 2.5); nunca toca el almacén de una plaza.
+Lo que un Héroe guarda para sí: hasta 2000 unidades en total, de cualquier recurso (`ALMACEN_PERSONAL`, placeholder; 1000 hasta el 2026-11-05). Viaja con él en cada cambio de residencia —es lo único que se mueve sin caravana— y lo gasta quien lo tiene. Se llena y se vacía con el carro de su columna (Doc 2.5); nunca toca el almacén de una plaza.
 
 ## Liderazgo
 Valor del Héroe que limita **cuánto puede llevarse consigo a la vez** — no cuánto puede poseer. Cada tropa tiene un coste de Liderazgo según su escalón; la suma de lo que un Héroe se lleva no puede exceder su Liderazgo (Doc 5.11). Lo que se queda en su campamento no defiende: solo la guarnición que asigna, que tiene su propio cupo (ver Guarnición). La selección de qué llevarse se puede guardar como **loadout** (abajo).

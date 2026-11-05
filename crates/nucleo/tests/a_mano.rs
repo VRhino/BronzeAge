@@ -168,13 +168,13 @@ fn el_almacen_personal_se_llena_y_se_vacia_con_el_carro_dentro_o_a_la_puerta_de_
     assert_eq!(e.no("ana", Comando::SacarDelAlmacenPersonal { heroe: ana, recurso: Oro, cantidad: 1_000 }), rechazos::ALMACEN_SIN_EXISTENCIAS);
 
     // El tope del almacén es en total, de cualquier recurso: con 10 de hueco entran 10 de piedra y luego nada.
-    let hueco = 1_000_000 - 110_000 - 600_000 - 10_000;
+    let hueco = 2_000_000 - 110_000 - 600_000 - 10_000; // 2.000 desde el 2026-11-05
     e.ok("admin", Comando::DarAlmacenPersonal { heroe: ana, recurso: Oro, cantidad: hueco });
     let piedra = |e: &Esc| e.personal(ana, Piedra) + e.carro(col, Piedra);
     let antes = piedra(&e);
     e.ok("ana", Comando::GuardarEnAlmacenPersonal { heroe: ana, recurso: Piedra, cantidad: 100_000 });
     assert_eq!((e.personal(ana, Piedra), piedra(&e)), (610_000, antes));
-    assert_eq!(e.n.heroe(ana).unwrap().almacen_personal.values().sum::<i64>(), 1_000_000);
+    assert_eq!(e.n.heroe(ana).unwrap().almacen_personal.values().sum::<i64>(), 2_000_000);
     assert_eq!(e.no("ana", Comando::GuardarEnAlmacenPersonal { heroe: ana, recurso: Piedra, cantidad: 1_000 }), rechazos::ALMACEN_PERSONAL_LLENO);
     assert_eq!(e.no("ana", Comando::GuardarEnAlmacenPersonal { heroe: ana, recurso: Estano, cantidad: 1_000 }), rechazos::CARRO_NO_LLEVA);
     assert_eq!(e.no("ana", Comando::GuardarEnAlmacenPersonal { heroe: ana, recurso: Madera, cantidad: 999 }), rechazos::CANTIDAD_NO_POSITIVA, "menos de una unidad");
@@ -568,7 +568,7 @@ async fn por_la_sesion_el_almacen_personal_se_guarda_y_se_saca_y_el_heroe_lo_ve_
     let w = arrancar_con(e.n).await;
     let (mut c, f) = w.entrar("ana", TipoCliente::ClienteUnity).await;
     let h = heroes(f.entidades.into_iter().map(Some));
-    assert_eq!((h.len(), madera_de(&h[0]), h[0].capacidad_almacen_personal), (1, 20_000, 1_000_000), "el héroe propio con su almacén y su capacidad");
+    assert_eq!((h.len(), madera_de(&h[0]), h[0].capacidad_almacen_personal), (1, 20_000, 2_000_000), "el héroe propio con su almacén y su capacidad");
 
     let guardar = orden::Cuerpo::GuardarEnAlmacenPersonal(pb::OrdenGuardarEnAlmacenPersonal { recurso: "madera".into(), cantidad: 50_000 });
     let (deltas, r) = dar(&mut c, "g1", guardar).await;

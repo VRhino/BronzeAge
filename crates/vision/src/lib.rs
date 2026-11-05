@@ -7,7 +7,7 @@
 //!
 //! # Reglas del diseño que se respetan (secciones de `Niebla_De_Guerra.md`)
 //!
-//! - §3 Los ojos: plaza = `radioPotencial` (margen 0: **ve solo su zona**, contra el disco); avanzada = 12; columna con
+//! - §3 Los ojos: plaza = `radioPotencial` (margen 0: **ve solo su zona**, contra el disco); avanzada = `VISION.avanzada` (24, en las reglas militares); columna con
 //!   soldados = 30; columna sin soldados = 15; Mirada = su radio. Ver es `distancia ≤ radio` (**no estricto**).
 //! - §3 / §5.4: una caravana «grande» llama la atención si hay un ojo propio, aliado o prestado a `≤ 60` de ella
 //!   aunque no entre en su radio normal → [`Movil::atencion`].
@@ -51,7 +51,6 @@ pub mod radios {
     use base::Mil;
     pub const EJERCITO: Mil = 30_000;
     pub const JUGADOR_SOLO: Mil = 15_000;
-    pub const AVANZADA: Mil = 12_000;
     pub const MIRADA: Mil = 30_000;
     pub const CARAVANA_GRANDE: Mil = 60_000;
     /// Horizonte corto del plan ajeno (contrato 05).

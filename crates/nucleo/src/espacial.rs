@@ -61,9 +61,9 @@ impl GeneradorDeEventos for GeneradorVision {
             ojos.push(Observador { faccion: e.bandera(), radio, donde });
             moviles.push(Movil::new(e.id, e.bandera(), donde));
         }
-        // Las avanzadas operativas ven 12 alrededor de sí, fijo en las tres etapas (Niebla_De_Guerra §3); en obra o en ruinas no ven nada.
+        // Las avanzadas operativas ven `VISION.avanzada` (24) alrededor de sí, fijo en las tres etapas (Niebla_De_Guerra §3); en obra o en ruinas no ven nada.
         for a in estado.asentamientos.values() {
-            ojos.extend(a.economia.avanzadas.iter().filter(|v| v.operativa()).map(|v| Observador::fijo(a.faccion, v.posicion, vision::radios::AVANZADA)));
+            ojos.extend(a.economia.avanzadas.iter().filter(|v| v.operativa()).map(|v| Observador::fijo(a.faccion, v.posicion, estado.reglas.economia.militar.vision.avanzada)));
         }
         // Las caravanas en el mapa se ven como móviles de la Facción de su plaza de origen; una «grande» en tránsito llama la atención a 60.
         let reglas = &estado.reglas.economia.comercio.flota;

@@ -165,7 +165,7 @@ impl<'n> Mirada<'n> {
         let mut ojos: Vec<Ojo> = columnas.iter().filter(|(x, _)| propias.contains(&x.id) || x.columna.faccion.is_some_and(|f| grupo.contains(&f))).map(|&(x, p)| (p, n.radio_de_vista(x))).collect();
         for a in e.asentamientos.values().filter(|a| grupo.contains(&a.faccion)) {
             ojos.push((a.posicion, a.radio));
-            ojos.extend(a.economia.avanzadas.iter().filter(|v| v.operativa()).map(|v| (v.posicion, radios::AVANZADA)));
+            ojos.extend(a.economia.avanzadas.iter().filter(|v| v.operativa()).map(|v| (v.posicion, e.reglas.economia.militar.vision.avanzada)));
         }
         // Las Miradas abiertas de la Facción y de sus aliados: ven, pero lo que ven no se explora (no entran en `celdas`).
         let prestados = ojos.len();
@@ -663,7 +663,7 @@ impl<'n> Mirada<'n> {
                     etapa,
                     posicion: Some(punto(pos)),
                     estado: if ruinas { pb::EstadoAvanzada::AvanzadaEnRuinas } else { pb::EstadoAvanzada::AvanzadaActiva } as i32,
-                    radio_vision: radios::AVANZADA,
+                    radio_vision: n.estado().reglas.economia.militar.vision.avanzada,
                     invulnerable_hasta_ms: invulnerable,
                     batalla_id: propios::batalla_sobre(n, Ubicacion::Avanzada(vid)),
                     ..Default::default()

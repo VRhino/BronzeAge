@@ -604,7 +604,8 @@ fn caravana_para_comerciar(e: &mut E) -> u64 {
     }
     e.n.avanzar_hasta(e.n.ahora() + 9 * HORA);
     for recurso in [Recurso::Cobre, Recurso::Madera] {
-        mc::ok(&mut e.n, "admin", Comando::DarRecursos { asentamiento: plaza, recurso, cantidad: 100_000 });
+        // Sin exigir que entre: tras 9 horas la madera puede estar ya en su tope.
+        let _ = mc::dar(&mut e.n, "admin", Comando::DarRecursos { asentamiento: plaza, recurso, cantidad: 100_000 });
     }
     let k = mc::ok(&mut e.n, "admin", Comando::CrearCaravana { asentamiento: plaza }).creadas[0];
     mc::ok(&mut e.n, "admin", Comando::ReservarCaravana { caravana: k, reservada: true });

@@ -3,7 +3,7 @@
 //! determinismo y recuperación desde foto. Sobre el artefacto de mundo real (`generador/salida/mundo/mundo-*.bin`); las pruebas que lo
 //! necesitan se omiten si no está.
 //!
-//! Los almacenes caben 400 de cada recurso (`ALMACEN.capacidadInicialPorRecurso`), así que las cantidades de las pruebas son pequeñas.
+//! Los almacenes caben 800 de cada recurso (`ALMACEN.capacidadInicialPorRecurso`; 400 hasta el 2026-11-05), así que las cantidades de las pruebas son pequeñas.
 
 mod comun;
 use asentamiento::catalogo::Tipo;
@@ -760,7 +760,7 @@ fn preparar_reserva_la_carga_registra_el_fin_y_cancelar_la_devuelve_topada_por_l
     assert!(e.n.caravana(c).unwrap().plan.is_none());
     // Cancelar: la carga vuelve al almacén, pero solo cabe lo que deja la capacidad (el resto se pierde).
     let espacio = e.n.economia(a).unwrap().almacen.espacio(Madera);
-    assert!(espacio >= 200_000, "{espacio}");
+    assert!(espacio >= 100_000, "{espacio}");
     e.dar(a, Madera, espacio - 100_000);
     let (madera_antes, mundo_antes) = (cantidad(&e.n, a, Madera), mundo_de(&e.n, Madera));
     e.ok("ana", Comando::CancelarCaravana { caravana: c });
@@ -784,7 +784,10 @@ fn preparar_reserva_la_carga_registra_el_fin_y_cancelar_la_devuelve_topada_por_l
 #[test]
 fn una_aparcada_se_carga_se_descarga_y_vuelve_vacia_al_origen() {
     let m = con_mundo!();
-    let mut e = escenario(m, 7, true);
+    // Con el almacén de antes (400 por recurso; 800 desde el 2026-11-05): la madera que junta la plaza en 9 horas no llena un carro y se ve el tope de lo que hay.
+    let mut arr = arranque(m, 7);
+    std::sync::Arc::make_mut(&mut arr.reglas.economia.datos).capacidad_inicial = 400_000;
+    let mut e = montar(Nucleo::nuevo(arr), m, true, 350_000, false);
     let (a, b) = (e.a, e.b);
     e.dar(a, Piedra, 400_000);
     let col = e.columna_en("ana", 1, a);
@@ -792,7 +795,7 @@ fn una_aparcada_se_carga_se_descarga_y_vuelve_vacia_al_origen() {
     assert_eq!(e.n.caravana(c).unwrap().anfitriona, Some(a as u32));
     // Cargar: min(pedido, capacidad − lo cargado, lo que hay en el almacén). La capacidad de un carro con buey es 500.
     let madera0 = cantidad(&e.n, a, Madera);
-    assert!(madera0 > 100_000 && madera0 < 400_000);
+    assert!(madera0 > 100_000 && madera0 < 400_000, "{madera0}");
     e.cargar("ana", c, Madera, 600_000);
     assert_eq!((e.n.caravana(c).unwrap().contenido[&Madera], cantidad(&e.n, a, Madera)), (madera0, 0), "se llevó todo lo que había");
     let piedra0 = cantidad(&e.n, a, Piedra);

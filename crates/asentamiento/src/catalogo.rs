@@ -334,9 +334,9 @@ mod pruebas {
         assert_eq!(granja.niveles.iter().map(|n| n.obra_minutos).collect::<Vec<_>>(), vec![None, Some(240), Some(480), Some(960)]);
         let trigo: Vec<Mil> = granja.niveles.iter().map(|n| n.produccion_base_trigo).collect();
         assert_eq!(trigo, vec![120_000, 180_000, 240_000, 360_000], "120 / 180 / 240 / 360 por minuto (el doble del TypeScript, 2026-10-27)");
-        assert_eq!(c.tipo(Tipo::Almacen).capacidad_por_recurso, 300_000);
+        assert_eq!(c.tipo(Tipo::Almacen).capacidad_por_recurso, 600_000, "almacenes al doble desde el 2026-11-05");
         assert_eq!(c.tipo(Tipo::Palacio).nivel(3).unwrap().capacidad_nobles, 400_000);
-        assert_eq!(c.tipo(Tipo::Granero).nivel(4).unwrap().capacidad_trigo, 6_000_000);
+        assert_eq!(c.tipo(Tipo::Granero).nivel(4).unwrap().capacidad_trigo, 12_000_000);
         let fundicion = c.tipo(Tipo::Fundicion);
         assert_eq!(fundicion.nivel(2).unwrap().trabajadores, 8_000);
         let bronce = fundicion.nivel(2).unwrap().recetas.iter().find(|r| r.produce == Recurso::LingoteBronce).unwrap();

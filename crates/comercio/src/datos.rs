@@ -444,7 +444,7 @@ mod pruebas {
         assert_eq!((m.cada, m.proporcion_repone, m.tope_por_bien, m.stock_inicial, m.margen), (3 * 3_600_000, 30_000, 300_000, 100_000, 1_300_000));
         assert_eq!(m.pilas[&Recurso::Piedra], 60_000);
         assert_eq!(m.cupo_diario[&Recurso::Madera], 60_000);
-        assert_eq!((m.capacidad_almacen_personal, m.capacidad_viveres_por_heroe), (1_000_000, 350_000));
+        assert_eq!((m.capacidad_almacen_personal, m.capacidad_viveres_por_heroe), (2_000_000, 350_000), "almacén personal al doble desde el 2026-11-05");
         let n = &r.navegacion;
         assert_eq!((n.espaciado_min, n.separacion_vados_min), (8_000, 100_000));
         assert_eq!((n.atraccion_por_peso, n.atraccion_min, n.factor_camino), (100_000, 500_000, 500_000));

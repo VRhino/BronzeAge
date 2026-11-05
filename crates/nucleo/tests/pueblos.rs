@@ -243,9 +243,10 @@ fn un_pueblo_hereda_el_acceso_de_su_plaza_madre() {
 }
 
 #[test]
-fn el_almacen_local_del_pueblo_es_del_tamano_del_carro_de_acarreo() {
+fn el_almacen_local_del_pueblo_cabe_al_menos_el_carro_de_acarreo() {
     let r = Reglas::default().economia;
-    assert_eq!(r.datos.pueblos.capacidad_almacen, comercio::acarreo::capacidad(&r.comercio.flota), "con un almacén menor que el carro, «sale lleno» no se dispararía nunca");
+    // Desde el 2026-11-05 el almacén local es el doble que el carro (1.000 y 500): guarda lo que se extrae mientras el carro va y viene.
+    assert!(r.datos.pueblos.capacidad_almacen >= comercio::acarreo::capacidad(&r.comercio.flota), "con un almacén menor que el carro, «sale lleno» no se dispararía nunca");
 }
 
 // ───────────────────────────── 1. La obra de mapa ─────────────────────────────
@@ -476,13 +477,14 @@ fn el_pueblo_extrae_contra_su_almacen_y_el_carro_sale_lleno_vuelca_en_la_madre_y
         t += 10 * MIN;
         assert!(t < activo_desde + 12 * HORA, "el carro debería haber vuelto");
         e.n.avanzar_hasta(t);
-        assert!(e.pueblo(id).almacen.cantidad(Cobre) <= 500_000);
+        assert!(e.pueblo(id).almacen.cantidad(Cobre) <= 1_000_000, "no pasa de su almacén (1.000)");
     }
     assert_eq!(e.pueblo(id).nodo(), Some(cobre));
     let sale = hechos(&e.n, "acarreo.sale");
     let (sale_en, carga) = (sale[0].0, dato(&sale[0], "carga"));
     assert_eq!(carga, 500_000, "solo sale con el carro lleno");
-    assert_eq!(hechos(&e.n, "pueblo.almacen_lleno")[0].0, sale_en, "sale en el mismo minuto en que se llena");
+    // Desde el 2026-11-05 el almacén local (1.000) es el doble que el carro: sale en cuanto tiene para llenarlo, sin esperar a que se llene el almacén.
+    assert!(hechos(&e.n, "pueblo.almacen_lleno").iter().all(|h| h.0 > sale_en), "sale antes de que se llene el almacén local");
     // El viaje es el de una caravana: plan por el mapa real a 24 u/min (el buey) hasta la plaza madre, sin la ventaja del camino aunque su ruta
     // ya esté en la red (decisión del autor del 2026-10-29: con ella iba al doble).
     let llega = hechos(&e.n, "acarreo.llega");
@@ -492,8 +494,8 @@ fn el_pueblo_extrae_contra_su_almacen_y_el_carro_sale_lleno_vuelca_en_la_madre_y
     let esperado = (camino.coste_total() as i128 * m.1.espaciado() as i128 * 60 / 24_000) as i64;
     assert!(e.n.red_de_caminos().ruta(plaza as u32, id as u32).is_some(), "su ruta está en la red de caminos");
     assert!((llega_en - sale_en - esperado).abs() < 1_000, "tarda lo que su ruta a 24 u/min: {} frente a {}", llega_en - sale_en, esperado);
-    // El almacén de la madre admite 400 de cada recurso: lo que no cabe se pierde.
-    assert_eq!((ingresado, perdido), (400_000, 100_000));
+    // El almacén de la madre admite 800 de cada recurso (desde el 2026-11-05): cabe todo.
+    assert_eq!((ingresado, perdido), (500_000, 0));
     // Lo que el carro vuelca en la madre no se cuenta otra vez: el contador es lo que salió del nodo, en los carros y en el almacén del pueblo.
     let salido: i64 = hechos(&e.n, "acarreo.sale").iter().map(|h| dato(h, "carga")).sum::<i64>() + e.pueblo(id).almacen.cantidad(Cobre);
     assert_eq!(extraido(&e) as i64 * 1_000, salido);
@@ -514,8 +516,8 @@ fn con_el_almacen_de_la_madre_lleno_el_acarreo_se_pierde_pero_cuenta_para_la_sol
     let m = con_mundo!();
     let mut e = montar(m, 7, 2);
     let plaza = e.plaza;
-    e.dar(Cobre, 400_000);
-    assert_eq!(e.almacen(Cobre), 400_000, "el almacén de la madre admite 400 de cada recurso y queda lleno");
+    e.dar(Cobre, 800_000);
+    assert_eq!(e.almacen(Cobre), 800_000, "el almacén de la madre admite 800 de cada recurso (desde el 2026-11-05) y queda lleno");
     let id = e.pueblo_levantado();
     let activo_desde = hechos(&e.n, "pueblo.completado")[0].0;
     let mut t = activo_desde;
@@ -597,7 +599,7 @@ fn sin_carro_el_pueblo_acumula_hasta_llenar_el_almacen_y_para_hasta_que_se_repon
     assert!(e.almacen(Madera) < 20_000);
     e.avanzar(8 * HORA);
     assert!(e.pueblo(id).carro.is_none());
-    assert_eq!(e.pueblo(id).almacen.cantidad(Cobre), 500_000);
+    assert_eq!(e.pueblo(id).almacen.cantidad(Cobre), 1_000_000, "el almacén local, 1.000 desde el 2026-11-05");
     assert!(e.pueblo(id).lleno);
     assert_eq!((hechos(&e.n, "pueblo.almacen_lleno").len(), hechos(&e.n, "acarreo.sale").len()), (1, 0));
     let stock_nodo = e.n.estado().yacimientos.get(&cobre).map(|s| s.stock);
@@ -608,7 +610,7 @@ fn sin_carro_el_pueblo_acumula_hasta_llenar_el_almacen_y_para_hasta_que_se_repon
     e.avanzar(MIN);
     let ultimo = e.pueblo(id).carro.expect("repuesto en cuanto pudo");
     assert_eq!(e.n.caravana(ultimo).unwrap().estado, EstadoCaravana::EnTransito);
-    assert_eq!((e.pueblo(id).almacen.cantidad(Cobre), e.n.caravana(ultimo).unwrap().contenido[&Cobre]), (0, 500_000));
+    assert_eq!((e.pueblo(id).almacen.cantidad(Cobre), e.n.caravana(ultimo).unwrap().contenido[&Cobre]), (500_000, 500_000), "el carro se lleva 500 y quedan otros 500");
     // Un pueblo aún sin levantar no tiene carro que reponer.
     let otro = e.n.candidatos_de_pueblo(plaza).into_iter().find(|c| c.1 == Tipo::Cantera).unwrap().0;
     let pendiente = e.ok("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: otro }).creadas[0];
@@ -1348,17 +1350,17 @@ impl Escenario {
 }
 
 #[test]
-fn las_aldeas_van_por_anillos_las_del_cupo_del_nivel_1_hasta_10_u_y_la_siguiente_en_el_anillo_que_suma_el_nivel_2() {
+fn las_aldeas_van_por_anillos_las_del_cupo_del_nivel_1_hasta_20_u_y_la_siguiente_en_el_anillo_que_suma_el_nivel_2() {
     let m = con_mundo!();
     // Decisión del autor del 2026-10-31: la aldea número k va en el anillo que añade a la zona el primer nivel cuyo cupo llega a k, para que no se levanten
-    // todas juntas. Con el cupo 2 / 3 / 4 / 5 / 6 y los techos 10 / 15 / 20 / 25 / 30 u, las dos primeras hasta 10 u y la tercera de 10 a 15 u.
+    // todas juntas. Con el cupo 2 / 3 / 4 / 5 / 6 y los techos 20 / 30 / 40 / 50 / 60 u (el doble desde el 2026-11-05), las dos primeras hasta 20 u y la tercera de 20 a 30 u.
     let mut e = montar(m, 7, 2);
     let plaza = e.plaza;
     let centro = e.n.estado().asentamientos[&plaza].posicion;
     let mut puestas = vec![];
     for k in 1..=2 {
-        let punto = e.n.sitio_de_aldea(plaza).expect("hay tierra fértil a 10 u o menos");
-        assert!(centro.dist(punto) <= 10_000, "la aldea {k} va a 10 u o menos: {}", centro.dist(punto));
+        let punto = e.n.sitio_de_aldea(plaza).expect("hay tierra fértil a 20 u o menos");
+        assert!(centro.dist(punto) <= 20_000, "la aldea {k} va a 20 u o menos: {}", centro.dist(punto));
         e.ok("ana", Comando::MarcarAldea { asentamiento: plaza, punto });
         puestas.push(punto);
     }
@@ -1366,9 +1368,9 @@ fn las_aldeas_van_por_anillos_las_del_cupo_del_nivel_1_hasta_10_u_y_la_siguiente
     let rastro = e.n.hash_estado();
     assert_eq!(e.rechazada("ana", Comando::MarcarAldea { asentamiento: plaza, punto: puestas[0] }), rechazos::PUEBLO_FUERA_DE_SU_ANILLO);
     assert_eq!(e.n.hash_estado(), rastro);
-    let punto = e.n.sitio_de_aldea(plaza).expect("hay tierra fértil de 10 a 15 u");
+    let punto = e.n.sitio_de_aldea(plaza).expect("hay tierra fértil de 20 a 30 u");
     let d = centro.dist(punto);
-    assert!(d > 10_000 && d <= 15_000, "el panel propone el anillo del nivel 2: {d}");
+    assert!(d > 20_000 && d <= 30_000, "el panel propone el anillo del nivel 2: {d}");
     e.ok("ana", Comando::MarcarAldea { asentamiento: plaza, punto });
     assert_eq!(e.n.pueblos_de(plaza).iter().filter(|p| p.es_aldea()).count(), 3);
 }
@@ -1547,7 +1549,10 @@ fn dentro_un_ciudadano_de_la_faccion_deja_escuadras_de_su_columna_de_guarnicion_
 #[test]
 fn dentro_se_deja_en_el_almacen_local_solo_lo_que_produce_el_pueblo_y_se_carga_lo_que_haya_hasta_llenar_el_carro() {
     let m = con_mundo!();
-    let mut e = montar(m, 7, 2);
+    // Con el almacén local del tamaño del carro de la columna (500, el de antes del 2026-11-05), para dejarlo lleno de una vez y cargarlo entero.
+    let mut a = arranque(m, 7);
+    std::sync::Arc::make_mut(&mut a.reglas.economia.datos).pueblos.capacidad_almacen = 500_000;
+    let mut e = montar_con(Nucleo::nuevo(a), m, 2);
     let pueblo = e.pueblo_levantado();
     let carro = e.pueblo(pueblo).carro.unwrap();
     let capacidad = e.n.estado().reglas.economia.datos.pueblos.capacidad_almacen;

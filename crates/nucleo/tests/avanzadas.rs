@@ -434,12 +434,12 @@ fn colocar_se_rechaza_sin_rastro_y_en_su_orden() {
     assert_eq!(e.rechazada("!ana", colocar(plaza, 9_999, pos)), rechazos::HEROE_DESCONOCIDO);
     // La zona manda y el asentamiento no vale. (Desde el 2026-11-04 no hace falta la columna en el sitio: se coloca desde dentro de la madre.)
     let _ = heroe;
-    let lejos = Punto::new(e.centro.x + 25_000, e.centro.y);
+    let lejos = Punto::new(e.centro.x + 35_000, e.centro.y);
     let (_, h2) = e.colocador(lejos);
-    assert_eq!(e.rechazada("ana", colocar(plaza, h2, lejos)), rechazos::AVANZADA_FUERA_DE_LA_ZONA, "la zona de nivel 2 llega a 15 u");
+    assert_eq!(e.rechazada("ana", colocar(plaza, h2, lejos)), rechazos::AVANZADA_FUERA_DE_LA_ZONA, "la zona de nivel 2 llega a 30 u (15 hasta el 2026-11-05)");
     let dentro = Punto::new(e.centro.x + 1_599, e.centro.y);
     let (_, h3) = e.colocador(dentro);
-    assert_eq!(e.rechazada("ana", colocar(plaza, h3, dentro)), rechazos::AVANZADA_DENTRO_DEL_ASENTAMIENTO, "la ciudad mide una décima de la zona (1,5) y la avanzada pide su media anchura (0,1) más");
+    assert_eq!(e.rechazada("ana", colocar(plaza, h3, dentro)), rechazos::AVANZADA_DENTRO_DEL_ASENTAMIENTO, "la ciudad mide una vigésima de la zona (1,5) y la avanzada pide su media anchura (0,1) más");
     // Con la plaza de nivel 1 no hay avanzadas.
     let mut uno = montar(m, 7, 1);
     let (p1, centro) = (uno.plaza, uno.centro);
@@ -468,7 +468,7 @@ fn colocar_respeta_la_ciudad_de_la_madre_y_no_pisa_otro_elemento_del_mapa() {
     let mut e = montar(m, 7, 2);
     let (plaza, centro) = (e.plaza, e.centro);
     let colocar = |heroe: u64, posicion: Punto| Comando::ColocarAvanzada { asentamiento: plaza, heroe, posicion };
-    // La ciudad mide una décima de la zona (la de nivel 2 son 15: 1,5) y la avanzada pide además su media anchura (0,1): justo fuera de 1,6 sí cabe.
+    // La ciudad mide una vigésima de la zona (desde el 2026-11-05; la de nivel 2 son 30: 1,5) y la avanzada pide además su media anchura (0,1): justo fuera de 1,6 sí cabe.
     let primera = Punto::new(centro.x + 1_600, centro.y);
     let (_, h1) = e.colocador(primera);
     e.ok("ana", colocar(h1, primera));
@@ -581,7 +581,7 @@ fn mejorar_sigue_funcionando_acaba_en_su_instante_y_sube_de_etapa_con_su_almacen
     assert_eq!(e.avanzada(av).etapa, Etapa::Atalaya);
     e.hasta(fin);
     let a = e.avanzada(av);
-    assert_eq!((a.etapa, a.operativa(), a.obra.is_none(), a.almacen.capacidad(Trigo)), (Etapa::Fuerte, true, true, 2_000_000));
+    assert_eq!((a.etapa, a.operativa(), a.obra.is_none(), a.almacen.capacidad(Trigo)), (Etapa::Fuerte, true, true, 4_000_000));
     let h = &hechos(&e.n, "avanzada.completada")[1];
     assert_eq!((h.0, dato(h, "etapa"), dato(h, "tipo")), (fin, 1, 1));
     // La ciudadela pide el nivel 3 de la madre.
@@ -590,7 +590,7 @@ fn mejorar_sigue_funcionando_acaba_en_su_instante_y_sube_de_etapa_con_su_almacen
     e.ok("ana", Comando::MejorarAvanzada { heroe, avanzada: av });
     e.acabar_obra(av, col);
     let a = e.avanzada(av);
-    assert_eq!((a.etapa, a.almacen.capacidad(Madera)), (Etapa::Ciudadela, 10_000_000));
+    assert_eq!((a.etapa, a.almacen.capacidad(Madera)), (Etapa::Ciudadela, 20_000_000));
     assert_eq!(e.rechazada("ana", Comando::MejorarAvanzada { heroe, avanzada: av }), rechazos::AVANZADA_NO_MEJORABLE, "la ciudadela no tiene siguiente");
 }
 
@@ -834,12 +834,12 @@ fn el_almacen_se_llena_con_los_carros_y_un_ejercito_reposta_en_su_puerta() {
     e.ok("ana", deposita(300_000));
     assert_eq!((e.avanzada(fuerte).almacen.cantidad(Trigo), en_carro(&e)), (300_000, antes - 300_000));
     assert_eq!(dato(&hechos(&e.n, "avanzada.deposito")[0], "cantidad"), 300_000);
-    // El tope por recurso: caben 2.000.
-    for _ in 0..4 {
+    // El tope por recurso: caben 4.000 (2.000 hasta el 2026-11-05).
+    for _ in 0..8 {
         e.ord("admin", Comando::DarSuministro { ejercito: col, recurso: Trigo, cantidad: 500_000 });
         e.ord("ana", Comando::DepositarEnAvanzada { ejercito: col, avanzada: fuerte, recurso: Trigo, cantidad: 500_000 });
     }
-    assert_eq!(e.avanzada(fuerte).almacen.cantidad(Trigo), 2_000_000);
+    assert_eq!(e.avanzada(fuerte).almacen.cantidad(Trigo), 4_000_000);
     e.ord("admin", Comando::DarSuministro { ejercito: col, recurso: Trigo, cantidad: 10_000 });
     assert_eq!(e.rechazada("ana", deposita(10_000)), rechazos::AVANZADA_ALMACEN_LLENO);
     // Repostar: la columna del Líder, a la puerta, llena sus víveres con el trigo del almacén.
@@ -855,7 +855,7 @@ fn el_almacen_se_llena_con_los_carros_y_un_ejercito_reposta_en_su_puerta() {
     e.ok("ana", Comando::RepostarEnAvanzada { heroe: h2, avanzada: fuerte });
     let t = e.n.ahora();
     assert_eq!(e.n.ejercito(reposta).unwrap().columna.viveres.valor_en(t), cap);
-    assert_eq!(e.avanzada(fuerte).almacen.cantidad(Trigo), 2_000_000 - (cap - viveres));
+    assert_eq!(e.avanzada(fuerte).almacen.cantidad(Trigo), 4_000_000 - (cap - viveres));
     assert_eq!(dato(&hechos(&e.n, "avanzada.reabastecimiento")[0], "repuesto"), cap - viveres);
     assert_eq!(e.rechazada("ana", Comando::RepostarEnAvanzada { heroe: h2, avanzada: fuerte }), rechazos::COLUMNA_VIVERES_LLENOS);
 }
@@ -1307,7 +1307,7 @@ fn una_columna_ajena_que_se_acerca_a_una_avanzada_operativa_deja_un_encuentro_y_
 }
 
 #[test]
-fn una_avanzada_operativa_ve_a_12_en_los_limites_y_una_destruida_ya_no_ve() {
+fn una_avanzada_operativa_ve_a_24_en_los_limites_y_una_destruida_ya_no_ve() {
     use nucleo::espacial::GeneradorVision;
     let m = con_mundo!();
     let ajustes = Ajustes { muestreo_ms: 250, ..Ajustes::default() };
@@ -1316,21 +1316,21 @@ fn una_avanzada_operativa_ve_a_12_en_los_limites_y_una_destruida_ya_no_ve() {
     let (plaza, pos) = (e.plaza, e.sitio());
     let (av, col, heroe) = e.atalaya();
     // La columna que la levantó vuelve a la plaza y entra: a partir de aquí los únicos ojos de la Facción 1 son la avanzada y dos columnas en el centro de la plaza
-    // (que ven 15), y las de las otras Facciones se ponen al otro lado de la avanzada, a más de 15 u del centro.
+    // (que ven 15), y las de las otras Facciones se ponen al otro lado de la avanzada, lejos del centro.
     let centro = e.centro;
     e.ok("ana", Comando::MarcharA { ejercito: col, destino: centro });
     e.avanzar(2 * MIN);
     e.ok("admin", Comando::Guarnecer { asentamiento: plaza, heroe });
     let ve = |e: &Esc, otra: u32| hechos(&e.n, "vision.contacto").iter().any(|h| dato(h, "faccionQueVe") == 1 && dato(h, "faccionVista") == otra as i64);
-    // Fuera de las 12 u (13) no se ve; en el límite exacto (12) sí, porque ver es «distancia ≤ radio»; y dentro, también.
-    e.columna("c3", 3, Punto::new(pos.x + 13_000, pos.y));
-    e.columna("c4", 4, Punto::new(pos.x + 12_000, pos.y));
-    e.columna("c2", 2, Punto::new(pos.x + 11_000, pos.y));
+    // Fuera de las 24 u (25) no se ve; en el límite exacto (24) sí, porque ver es «distancia ≤ radio»; y dentro, también.
+    e.columna("c3", 3, Punto::new(pos.x + 25_000, pos.y));
+    e.columna("c4", 4, Punto::new(pos.x + 24_000, pos.y));
+    e.columna("c2", 2, Punto::new(pos.x + 22_000, pos.y));
     e.avanzar(MIN);
     assert!((ve(&e, 2), ve(&e, 3), ve(&e, 4)) == (true, false, true), "{:?}", hechos(&e.n, "vision.contacto"));
-    // Destruida (a mano), ya no ve: una Facción nueva a 11 u de ella (y a 19 del centro de la plaza) pasa inadvertida.
+    // Destruida (a mano), ya no ve: una Facción nueva a 22 u de ella (y a algo más de 30 del centro de la plaza) pasa inadvertida.
     e.ok("ana", Comando::DestruirAvanzada { heroe, avanzada: av });
-    e.columna("c5", 5, Punto::new(pos.x + 11_000, pos.y + 1_000));
+    e.columna("c5", 5, Punto::new(pos.x + 22_000, pos.y + 1_000));
     e.avanzar(MIN);
     assert!(!ve(&e, 5));
 }
@@ -2187,29 +2187,29 @@ fn una_foto_con_un_heroe_dentro_de_una_avanzada_se_recupera_y_sigue_igual_que_el
     e.n.apagar().unwrap();
 }
 
-// ───────────────────────────── La niebla: la avanzada es un ojo de 12 (4H T3d) ─────────────────────────────
+// ───────────────────────────── La niebla: la avanzada es un ojo de 24 (4H T3d; 12 hasta el 2026-11-05) ─────────────────────────────
 
 #[test]
-fn la_avanzada_operativa_ve_12_explora_su_disco_y_deja_de_ver_al_destruirla() {
+fn la_avanzada_operativa_ve_24_explora_su_disco_y_deja_de_ver_al_destruirla() {
     use contrato::v1::TipoEntidad;
     use nucleo::proyeccion::vista::{Mirada, Perspectiva};
     let m = con_mundo!();
     let mut e = montar(m, 7, 2);
     let (av, col, heroe) = e.atalaya();
     let pos = e.avanzada(av).posicion;
-    assert!(e.n.estado().memoria.exploracion[&1].explorado_en(Punto::new(pos.x + 11_500, pos.y)), "la avanzada explora su disco al quedar operativa");
-    // La columna de Ana se va lejos: solo la plaza (15 alrededor de su centro, a 8 u al oeste) y la avanzada (12) ven por F1.
+    assert!(e.n.estado().memoria.exploracion[&1].explorado_en(Punto::new(pos.x + 22_000, pos.y)), "la avanzada explora su disco al quedar operativa");
+    // La columna de Ana se va lejos: solo la plaza (30 alrededor de su centro) y la avanzada (24, `VISION.avanzada` desde el 2026-11-05) ven por F1.
     e.ok("ana", Comando::MarcharA { ejercito: col, destino: Punto::new(e.centro.x - 80_000, e.centro.y) });
     let fin = e.n.ejercito(col).unwrap().plan.fin().unwrap();
     e.hasta(fin + MIN);
-    let (cerca, lejos) = (e.columna("beto", 2, Punto::new(pos.x + 11_500, pos.y)).0, e.columna("gus", 3, Punto::new(pos.x + 13_000, pos.y)).0);
+    let (cerca, lejos) = (e.columna("beto", 2, Punto::new(pos.x + 23_500, pos.y)).0, e.columna("gus", 3, Punto::new(pos.x + 25_000, pos.y)).0);
     let ve = |e: &Esc| {
         let rect = vision::Rect { min: Punto::new(0, 0), max: Punto::new(2_667_000, 2_000_000) };
         let m = Mirada::de(&e.n, Perspectiva::Faccion(1));
         let ids: Vec<String> = m.contenido(None, rect, &Default::default()).into_iter().filter(|v| v.clave.0 == TipoEntidad::Ejercito as i32).map(|v| v.clave.1).collect();
         (ids.contains(&nucleo::proyeccion::ids::ejercito(cerca)), ids.contains(&nucleo::proyeccion::ids::ejercito(lejos)))
     };
-    assert_eq!(ve(&e), (true, false), "a 11,5 de la avanzada se ve; a 13, no");
+    assert_eq!(ve(&e), (true, false), "a 23,5 de la avanzada se ve; a 25, no");
     e.ok("ana", Comando::DestruirAvanzada { heroe, avanzada: av });
     assert_eq!(ve(&e), (false, false), "destruida, no ve");
 }

@@ -888,7 +888,10 @@ fn un_envio_a_una_plaza_ajena_sin_mercado_activo_no_comercia_y_vuelve_con_lo_que
 #[test]
 fn un_envio_a_una_plaza_ajena_con_mercado_vende_a_sus_ordenes_de_compra_y_con_lo_cobrado_compra_en_el_mismo_viaje() {
     let m = con_mundo!();
-    let mut e = escenario(m, 7);
+    // Con el almacén de antes (400; 800 desde el 2026-11-05), el oro de la plaza ajena está a tope y lo que recauda durante el viaje no se suma al que paga.
+    let mut arr = arranque(m, 7);
+    std::sync::Arc::make_mut(&mut arr.reglas.economia.datos).capacidad_inicial = 400_000;
+    let mut e = escenario_de(Nucleo::nuevo(arr), m);
     let a = e.a;
     let c = ajena_con_mercado(&mut e, m);
     e.dar(a, Cobre, 300_000);

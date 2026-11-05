@@ -363,9 +363,14 @@ impl Nucleo {
         for s in &sucesos {
             match s {
                 EventoEco::PuebloCompletado { id: pueblo } => self.dar_carro_a_pueblo(id, *pueblo, t),
-                EventoEco::PuebloLleno { id: pueblo } => self.salir_acarreo(id, *pueblo, t),
                 _ => {}
             }
+        }
+        // El carro en casa sale en cuanto el almacén local tiene para llenarlo, no solo al llenarse ese almacén: desde el 2026-11-05 (almacenes al doble, carros igual) el
+        // almacén local es mayor que el carro y guarda lo que se extrae mientras el carro va y viene.
+        let con_carro: Vec<u64> = self.estado.asentamientos[&id].economia.pueblos.iter().filter(|p| p.carro.is_some()).map(|p| p.id).collect();
+        for pueblo in con_carro {
+            self.salir_acarreo(id, pueblo, t);
         }
         // Los pueblos sin carro lo reponen en cuanto la madre puede pagarlo (2026-10-27).
         self.reponer_carros(id, t);
