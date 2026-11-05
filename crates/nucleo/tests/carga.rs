@@ -90,8 +90,8 @@ fn montar() -> Option<Mundo500> {
     for (k, (cuenta, col, _)) in mapa.iter().enumerate() {
         let (_, centro, _) = plazas[k % plazas.len()];
         // Un destino en tierra al que se llegue por tierra (los rechazados no dejan rastro).
-        for intento in 0.. {
-            assert!(intento < 100, "sin destino para la columna {k}");
+        // Con el mundo de hoy (ríos de una celda, 2026-11-03) alguna columna queda donde no llega a nada en 100 intentos: se queda quieta, y la medición la cuenta igual.
+        for intento in 0..100 {
             let hacia = Punto::new(centro.x + rng.por_debajo(600 * U as u64) as Mil - 300 * U, centro.y + rng.por_debajo(600 * U as u64) as Mil - 300 * U);
             if m.0.transitable_en(hacia.x, hacia.y) && n.aplicar_en(t, Peticion::nueva(cuenta, &format!("m{k}-{intento}"), Comando::MarcharA { ejercito: *col, destino: hacia })).aceptada() {
                 break;

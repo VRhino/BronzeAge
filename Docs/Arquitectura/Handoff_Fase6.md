@@ -31,7 +31,7 @@ Escrito el 2026-10-21 y reescrito el 2026-10-26, al cerrar la fase 6, como **el 
 | `combate` | combate con números y ciclo de la batalla de Unity (sistema 4) |
 | `politica` | política y Facciones (sistema 5) |
 | `tecnologia` | tecnología por Eras y Aedas (sistema 6) |
-| `nucleo` | el núcleo de un solo hilo del mundo reactivo: estado, órdenes, eventos, proyecciones y sesiones |
+| `nucleo` | el núcleo de un solo hilo que escribe del mundo reactivo (estado, órdenes, eventos, proyecciones y sesiones), con el reparto de la `VISTA` en paralelo |
 | `servidor` | la sesión en tiempo real del contrato 05 sobre WebSocket |
 | `contrato` | los tipos del contrato 05 generados desde `proto/` y el almacén de referencia de un cliente |
 | `batch` | los batches de validación de cada sistema (bots mínimos que solo dan órdenes del núcleo o del contrato) |
@@ -67,13 +67,13 @@ Con 0 violaciones de sus invariantes en todas las corridas. Las pruebas cortas d
 | Qué | Cifra al cerrar la fase (6G) | Cómo |
 |---|---|---|
 | Paso de minuto: 1.000 plazas × 3 días | 20,4-20,7 s; 3.069.110 pasos, versión 50.408 | `cargo test --release -p nucleo --test asentamientos rendimiento -- --ignored` |
-| Carga: 5 min de mundo en pasos de 250 ms con 500 sesiones | 32-36 s de actor | `crates/nucleo/tests/carga.rs` (ignorada) |
-| Coste por orden con el reloj parado y 500 sesiones | ≈ 21-24 ms | ídem |
+| Carga: 5 min de mundo en pasos de 250 ms con 500 sesiones | 32-36 s de actor en 4H (vista de 600 × 600 u); 107 s el 2026-11-05 con la vista del mapa entero que pide el cliente; 49 s tras el escalado (4 núcleos; 93 s con un solo hilo de `rayon`) | `crates/nucleo/tests/carga.rs` (ignorada) |
+| Coste por orden con 500 sesiones | reloj parado: ≈ 21-24 ms en 4H, 69 ms → 29 ms el 2026-11-05; a ×1: 15,5 ms → 7,5 ms | ídem |
 | Crónica: 100.000 entradas por el núcleo | 13,3 MB; página de 200 en 0,66 ms; recuperar 0,22 s; ≈ 2,6 µs por entrada | `crates/nucleo/tests/cronica.rs`, `persistencia` |
 | Batch militar | ≈ 9,7-11 s de CPU por día de mundo | `batch militar` |
 | Batch tecnológico | ≈ 2,4 s de CPU por día de mundo | `batch tecnologia` |
 
-Una orden cuesta lo que cuesta reconciliar las vistas: con ≈ 450 vistas el techo es de ≈ 65 órdenes/s (4H, T6). Lo que hay que medir con 500 bots está en «Para la fase 7» de `Docs/Mecanicas a desarrollar.md`.
+Una orden cuesta lo que cuesta reconciliar las vistas: con ≈ 450 vistas el techo era de ≈ 65 órdenes/s (4H, T6); desde el escalado del 2026-11-05 ese reparto va en paralelo y el servidor escribe cada 10 s una línea `carga:` con la ocupación del actor. Lo que hay que medir con 500 bots está en «Para la fase 7» de `Docs/Mecanicas a desarrollar.md`.
 
 ## Reglas de trabajo
 

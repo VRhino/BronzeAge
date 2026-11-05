@@ -53,7 +53,8 @@ use contrato::v1 as pb;
 use militar::presencia::Ubicacion;
 use servidor::{Difusion, SesionId};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::sync::Arc;
+use rayon::prelude::*;
+use std::sync::{Arc, OnceLock};
 use tokio::sync::mpsc;
 use vision::Rect;
 
@@ -106,6 +107,11 @@ pub(super) struct AdminVisto {
 
 impl AdminVisto {
     fn de(n: &Nucleo) -> Self {
+        Self::con(n, vista::huellas_de_admin(n))
+    }
+
+    /// Con las huellas ya calculadas (en un reparto, una vez para todas las sesiones de administración).
+    fn con(n: &Nucleo, sin_clase: BTreeMap<vista::ClaveAdmin, u64>) -> Self {
         let t = &n.estado().tecnologia;
         let tecnologia = tecnologia::EstadoTecnologia {
             era: t.era,
@@ -117,7 +123,7 @@ impl AdminVisto {
             cantadas: t.cantadas,
             por_faccion: BTreeMap::new(),
         };
-        AdminVisto { tecnologia, aedas: n.estado().aedas.clone(), sin_clase: vista::huellas_de_admin(n) }
+        AdminVisto { tecnologia, aedas: n.estado().aedas.clone(), sin_clase }
     }
 
     /// ¿Lo ve igual que ahora? (Sin copiar nada: es lo que se pregunta en cada reparto.)
@@ -381,6 +387,16 @@ impl Mesa {
         self.sesiones.keys().copied().collect()
     }
 
+    /// Cuántas sesiones hay abiertas.
+    pub(super) fn cuantas(&self) -> usize {
+        self.sesiones.len()
+    }
+
+    /// Cuántas sesiones tienen su `VISTA` abierta.
+    pub(super) fn vistas_abiertas(&self) -> usize {
+        self.suscriptores.iter().filter(|(a, _)| matches!(a, Ambito::Vista(_))).map(|(_, ss)| ss.len()).sum()
+    }
+
     pub(super) fn sesiones(&self) -> impl Iterator<Item = (SesionId, &Sesion)> {
         self.sesiones.iter().map(|(&id, s)| (id, s))
     }
@@ -638,53 +654,52 @@ impl Mesa {
             .filter_map(|(a, ss)| if let Ambito::Vista(p) = a { Some(ss.iter().filter(|s| solo.is_none_or(|x| x == **s)).map(|&s| (s, *p)).collect::<Vec<_>>()) } else { None })
             .flatten()
             .collect();
-        let mut miradas: BTreeMap<Perspectiva, (Mirada<'_>, Option<Arc<pb::NieblaProyectada>>)> = BTreeMap::new();
-        // El cambio de la niebla de cada perspectiva para las sesiones que tienen la anterior de la perspectiva (casi todas): se calcula una vez.
-        let mut cambios_de_niebla: BTreeMap<Perspectiva, pb::NieblaProyectada> = BTreeMap::new();
-        let v = n.version();
-        for (id, p) in abiertas {
-            let (m, niebla) = miradas.entry(p).or_insert_with(|| {
-                let m = Mirada::de(n, p);
-                let niebla = m.niebla().map(|nueva| self.nieblas.get(&p).filter(|vieja| ***vieja == *nueva).cloned().unwrap_or_else(|| Arc::new(nueva.clone())));
-                (m, niebla)
-            });
-            let Some(s) = self.sesiones.get_mut(&id) else { continue };
-            let (Some(rect), Some(mapa)) = (s.rect(), s.mapa.as_ref()) else { continue };
-            let a = Ambito::Vista(p);
-            let (mut cambios, mut tiene) = (Vec::new(), BTreeMap::new());
-            for x in m.contenido(s.heroe, rect, &mapa.tiene) {
-                if mapa.tiene.get(&x.clave) != Some(&x.sello) {
-                    let Some(c) = x.cuerpo() else { continue };
-                    cambios.push(pb::Cambio { tipo: pb::TipoCambio::CambioActualiza as i32, entidad: x.clave.0, id: x.clave.1.clone(), datos: Some(pb::Entidad { cuerpo: Some(c) }), reemplaza: true, ..Default::default() });
-                }
-                tiene.insert(x.clave, x.sello);
-            }
-            cambios.extend(mapa.tiene.keys().filter(|c| !tiene.contains_key(*c)).map(|(tipo, eid)| cambio_quita(pb::TipoEntidad::try_from(*tipo).unwrap_or_default(), eid.clone())));
-            let nueva_niebla = match (niebla.as_ref(), mapa.niebla.as_ref()) {
-                (Some(ahora), Some(antes)) => !Arc::ptr_eq(ahora, antes) && **ahora != **antes,
-                (ahora, _) => ahora.is_some(),
-            };
-            if cambios.is_empty() && !nueva_niebla {
-                // Lo mismo con otro puntero (tras una `Foto`): en adelante, el de la perspectiva.
-                s.mapa = Some(Mapa { tiene, niebla: niebla.clone() });
-                continue;
-            }
-            let envio = niebla.as_ref().filter(|_| nueva_niebla).map(|ahora| match &mapa.niebla {
-                Some(antes) if self.nieblas.get(&p).is_some_and(|x| Arc::ptr_eq(x, antes)) => cambios_de_niebla.entry(p).or_insert_with(|| cambio_de_niebla(antes, ahora)).clone(),
-                Some(antes) => cambio_de_niebla(antes, ahora),
-                None => (**ahora).clone(),
-            });
-            let desde = s.abiertos[&a];
-            envios.push((id, Difusion::Delta(pb::Delta { ambito: Some(a.a_contrato(&|b| n.uuid_de_batalla(b))), desde, hasta: v, cambios, eventos: Vec::new(), niebla: envio })));
-            s.abiertos.insert(a, v);
-            s.mapa = Some(Mapa { tiene, niebla: niebla.clone() });
+        if abiertas.is_empty() {
+            return;
         }
+        let v = n.version();
+        // Escalado (2026-11-05): primero la Mirada de cada perspectiva y después cada sesión, las dos cosas en paralelo. Solo leen el núcleo; cada sesión escribe solo lo suyo, así que el
+        // resultado no depende de los hilos. La niebla de cada perspectiva se compara una vez con la última entregada y su cambio se calcula una vez para las sesiones que la tienen.
+        let perspectivas: Vec<Perspectiva> = abiertas.iter().map(|&(_, p)| p).collect::<BTreeSet<_>>().into_iter().collect();
+        let nieblas = &self.nieblas;
+        let miradas: BTreeMap<Perspectiva, Vista<'_>> = perspectivas
+            .par_iter()
+            .map(|&p| {
+                let m = Mirada::de(n, p);
+                let niebla = m.niebla().map(|nueva| nieblas.get(&p).filter(|vieja| ***vieja == *nueva).cloned().unwrap_or_else(|| Arc::new(nueva.clone())));
+                (p, Vista { m, niebla, cambio: OnceLock::new() })
+            })
+            .collect();
+        // Las sesiones, en el orden en que salen en `abiertas` (cada una con sus vistas, en orden).
+        let mut orden: Vec<SesionId> = Vec::new();
+        let mut suyas: HashMap<SesionId, Vec<Perspectiva>> = HashMap::new();
+        for &(id, p) in &abiertas {
+            let e = suyas.entry(id).or_default();
+            if e.is_empty() {
+                orden.push(id);
+            }
+            e.push(p);
+        }
+        let posicion: HashMap<SesionId, usize> = orden.iter().enumerate().map(|(k, &id)| (id, k)).collect();
+        let mut trabajo: Vec<(usize, SesionId, &mut Sesion)> = self.sesiones.iter_mut().filter_map(|(&id, s)| posicion.get(&id).map(|&k| (k, id, s))).collect();
+        trabajo.sort_unstable_by_key(|&(k, _, _)| k);
+        let por_sesion: Vec<Vec<(SesionId, Difusion)>> = trabajo
+            .par_iter_mut()
+            .map(|(_, id, s)| {
+                let mut salida = Vec::new();
+                for &p in &suyas[id] {
+                    salida.extend(reconciliar_una(n, *id, s, p, &miradas[&p], nieblas, v));
+                }
+                salida
+            })
+            .collect();
+        envios.extend(por_sesion.into_iter().flatten());
         // La niebla de cada perspectiva que se miró queda como la última entregada; con todas las vistas, las de perspectivas que ya nadie mira se olvidan.
         if solo.is_none() {
             self.nieblas.clear();
         }
-        for (p, (_, niebla)) in miradas {
-            match niebla {
+        for (p, vista) in miradas {
+            match vista.niebla {
                 Some(x) => drop(self.nieblas.insert(p, x)),
                 None => drop(self.nieblas.remove(&p)),
             }
@@ -712,7 +727,7 @@ impl Mesa {
         let Some(s) = self.sesiones.get_mut(&id) else { return Vec::new() };
         match a {
             Ambito::Heroe(h) => cambios_de_heroe(n, s, h),
-            Ambito::Admin => cambios_de_admin(n, s),
+            Ambito::Admin => cambios_de_admin(n, s, &vista::huellas_de_admin(n)),
             Ambito::Campamento(c) => cambios_de_campamento(n, s, c),
             _ => Vec::new(),
         }
@@ -796,20 +811,39 @@ impl Mesa {
             .filter_map(|(a, ss)| if let Ambito::Heroe(h) = a { Some(ss.iter().filter(|s| solo.is_none_or(|x| x == **s)).map(|&s| (s, *h)).collect::<Vec<_>>()) } else { None })
             .flatten()
             .collect();
-        for (id, h) in heroes {
-            let Some(s) = self.sesiones.get_mut(&id) else { continue };
-            let cambios = cambios_de_heroe(n, s, h);
-            entregar_fuera_del_registro(n, id, s, Ambito::Heroe(h), cambios, envios);
+        // Cada sesión, en paralelo (2026-11-05, escalado): solo lee el núcleo y escribe lo suyo. Los envíos salen en el orden de `heroes`.
+        let mut suyos: HashMap<SesionId, Vec<(usize, u64)>> = HashMap::new();
+        for (k, &(id, h)) in heroes.iter().enumerate() {
+            suyos.entry(id).or_default().push((k, h));
         }
+        let mut trabajo: Vec<(SesionId, &mut Sesion)> = self.sesiones.iter_mut().filter(|(id, _)| suyos.contains_key(id)).map(|(&id, s)| (id, s)).collect();
+        trabajo.sort_unstable_by_key(|&(id, _)| suyos[&id][0].0);
+        let mut por_heroe: Vec<(usize, (SesionId, Difusion))> = trabajo
+            .par_iter_mut()
+            .flat_map_iter(|(id, s)| {
+                let mut salida = Vec::new();
+                for &(k, h) in &suyos[id] {
+                    let cambios = cambios_de_heroe(n, s, h);
+                    let mut uno = Vec::new();
+                    entregar_fuera_del_registro(n, *id, s, Ambito::Heroe(h), cambios, &mut uno);
+                    salida.extend(uno.into_iter().map(|d| (k, d)));
+                }
+                salida
+            })
+            .collect();
+        por_heroe.sort_by_key(|&(k, _)| k);
+        envios.extend(por_heroe.into_iter().map(|(_, d)| d));
     }
 
     /// Pone al día en cada `ADMIN` (de `solo`, si se da) lo que no pasa por el registro de cambios (6G): el estado de tecnología con sus contadores, si cambió, y los Aedas itinerantes que se movieron
     /// de plaza o de plan. En cada reparto: las sesiones de administración son pocas y la comparación no copia nada.
     pub(super) fn admin_al_dia(&mut self, n: &Nucleo, solo: Option<SesionId>, envios: &mut Vec<(SesionId, Difusion)>) {
         let admins: Vec<SesionId> = self.suscritos(Ambito::Admin).map(|(s, _)| s).filter(|&s| solo.is_none_or(|x| x == s)).collect();
+        // Las huellas de lo que no tiene clase, una vez por reparto para todas las sesiones de administración (2026-11-05, escalado).
+        let mut huellas = None;
         for id in admins {
             let Some(s) = self.sesiones.get_mut(&id) else { continue };
-            let cambios = cambios_de_admin(n, s);
+            let cambios = cambios_de_admin(n, s, huellas.get_or_insert_with(|| vista::huellas_de_admin(n)));
             entregar_fuera_del_registro(n, id, s, Ambito::Admin, cambios, envios);
         }
     }
@@ -893,11 +927,10 @@ fn cambios_de_campamento(n: &Nucleo, s: &mut Sesion, c: u32) -> Vec<pb::Cambio> 
 /// Lo que `ADMIN` ve y no pasa por el registro, si cambió respecto de lo que el cliente tiene (todo, si no se sabe): el estado de tecnología entero, los Aedas itinerantes que se movieron y lo que no
 /// tiene clase cuya huella cambió (`ACTUALIZA`) o que ya no está (`QUITA`: una Mirada que dejó de enfriar, la zona de una Facción que se quedó sin plazas). Al reanudar no se sabe qué tiene el
 /// cliente: se manda todo lo de ahora y nada se quita.
-fn cambios_de_admin(n: &Nucleo, s: &mut Sesion) -> Vec<pb::Cambio> {
+fn cambios_de_admin(n: &Nucleo, s: &mut Sesion, huellas: &BTreeMap<vista::ClaveAdmin, u64>) -> Vec<pb::Cambio> {
     let visto = s.admin_visto.as_ref();
     let tecnologia = visto.is_none_or(|x| !x.igual_tecnologia(n));
     let movidos: Vec<&tecnologia::itinerantes::AedaItinerante> = n.estado().aedas.iter().enumerate().filter(|(i, x)| visto.and_then(|v| v.aedas.get(*i)) != Some(*x)).map(|(_, x)| x).collect();
-    let huellas = vista::huellas_de_admin(n);
     let cambiadas: Vec<&vista::ClaveAdmin> = huellas.iter().filter(|(k, h)| visto.and_then(|v| v.sin_clase.get(*k)) != Some(*h)).map(|(k, _)| k).collect();
     let quitadas: Vec<&vista::ClaveAdmin> = visto.map(|v| v.sin_clase.keys().filter(|k| !huellas.contains_key(*k)).collect()).unwrap_or_default();
     if !tecnologia && movidos.is_empty() && cambiadas.is_empty() && quitadas.is_empty() {
@@ -910,7 +943,7 @@ fn cambios_de_admin(n: &Nucleo, s: &mut Sesion) -> Vec<pb::Cambio> {
     cambios.extend(movidos.into_iter().map(|x| actualiza(pb::TipoEntidad::Aeda, crate::proyeccion::ids::aeda(x.id), pb::entidad::Cuerpo::AedaItinerante(propios::aeda_itinerante(x)))));
     cambios.extend(cambiadas.into_iter().filter_map(|k| Some(actualiza(k.0, k.1.clone(), vista::de_admin(n, k)?))));
     cambios.extend(quitadas.into_iter().map(|k| cambio_quita(k.0, k.1.clone())));
-    s.admin_visto = Some(AdminVisto::de(n));
+    s.admin_visto = Some(AdminVisto::con(n, huellas.clone()));
     cambios
 }
 
@@ -962,4 +995,55 @@ fn entregar_fuera_del_registro(n: &Nucleo, id: SesionId, s: &mut Sesion, a: Ambi
     let (Some(&desde), v) = (s.abiertos.get(&a), n.version()) else { return };
     envios.push((id, Difusion::Delta(pb::Delta { ambito: Some(a.a_contrato(&|b| n.uuid_de_batalla(b))), desde, hasta: v, cambios, eventos: Vec::new(), niebla: None })));
     s.abiertos.insert(a, v);
+}
+
+/// Lo que [`Mesa::reconciliar_vistas`] calcula una vez por perspectiva: la Mirada, su niebla (la última entregada si no cambió) y el cambio de esa niebla para las sesiones que tienen la
+/// anterior de la perspectiva (casi todas), que se calcula la primera vez que una lo pide.
+struct Vista<'n> {
+    m: Mirada<'n>,
+    niebla: Option<Arc<pb::NieblaProyectada>>,
+    cambio: OnceLock<pb::NieblaProyectada>,
+}
+
+/// Pone al día la `VISTA` de la perspectiva `p` de una sesión: lo que entra, cambia o sale de lo que tiene y, si cambió, su niebla, en una `Delta`. `None` si no hay nada que mandar.
+fn reconciliar_una(n: &Nucleo, id: SesionId, s: &mut Sesion, p: Perspectiva, vista: &Vista<'_>, nieblas: &BTreeMap<Perspectiva, Arc<pb::NieblaProyectada>>, v: u64) -> Option<(SesionId, Difusion)> {
+    let (m, niebla) = (&vista.m, &vista.niebla);
+    let (Some(rect), Some(mapa)) = (s.rect(), s.mapa.as_ref()) else { return None };
+    let a = Ambito::Vista(p);
+    let (mut cambios, mut tiene) = (Vec::new(), BTreeMap::new());
+    for x in m.contenido(s.heroe, rect, &mapa.tiene) {
+        if mapa.tiene.get(&x.clave) != Some(&x.sello) {
+            let Some(c) = x.cuerpo() else { continue };
+            cambios.push(pb::Cambio { tipo: pb::TipoCambio::CambioActualiza as i32, entidad: x.clave.0, id: x.clave.1.clone(), datos: Some(pb::Entidad { cuerpo: Some(c) }), reemplaza: true, ..Default::default() });
+        }
+        tiene.insert(x.clave, x.sello);
+    }
+    cambios.extend(mapa.tiene.keys().filter(|c| !tiene.contains_key(*c)).map(|(tipo, eid)| cambio_quita(pb::TipoEntidad::try_from(*tipo).unwrap_or_default(), eid.clone())));
+    let nueva_niebla = match (niebla.as_ref(), mapa.niebla.as_ref()) {
+        (Some(ahora), Some(antes)) => !Arc::ptr_eq(ahora, antes) && **ahora != **antes,
+        (ahora, _) => ahora.is_some(),
+    };
+    if cambios.is_empty() && !nueva_niebla {
+        // Lo mismo con otro puntero (tras una `Foto`): en adelante, el de la perspectiva.
+        s.mapa = Some(Mapa { tiene, niebla: niebla.clone() });
+        return None;
+    }
+    let envio = niebla.as_ref().filter(|_| nueva_niebla).map(|ahora| match &mapa.niebla {
+        Some(antes) if nieblas.get(&p).is_some_and(|x| Arc::ptr_eq(x, antes)) => vista.cambio.get_or_init(|| cambio_de_niebla(antes, ahora)).clone(),
+        Some(antes) => cambio_de_niebla(antes, ahora),
+        None => (**ahora).clone(),
+    });
+    let desde = s.abiertos[&a];
+    s.abiertos.insert(a, v);
+    s.mapa = Some(Mapa { tiene, niebla: niebla.clone() });
+    Some((id, Difusion::Delta(pb::Delta { ambito: Some(a.a_contrato(&|b| n.uuid_de_batalla(b))), desde, hasta: v, cambios, eventos: Vec::new(), niebla: envio })))
+}
+
+/// Lo que `reconciliar_vistas` reparte entre hilos tiene que poder compartirse (2026-11-05): si una pieza nueva del núcleo deja de ser `Sync`, esto no compila.
+#[allow(dead_code)]
+fn _comprobar_sync() {
+    fn s<T: Sync + Send>() {}
+    s::<Nucleo>();
+    s::<Sesion>();
+    s::<Mirada<'static>>();
 }

@@ -44,7 +44,7 @@ use pb::orden::Cuerpo;
 use sha2::{Digest, Sha256};
 use servidor::{ComandoSesion, Difusion, EstadoNucleo, FinDeSesion, PeticionAdmin, RelojCompartido, SesionId};
 use std::collections::BTreeMap;
-use std::time::Duration;
+use std::time::{Duration, Instant as Pared};
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 
@@ -71,6 +71,60 @@ struct Actor {
     proxima_vista: base::Instante,
     /// Las sesiones de jugador de Unity abiertas, con su cuenta: las que conectan y desconectan a su héroe (Proyecciones §7.1).
     presentes: BTreeMap<SesionId, String>,
+    /// La carga del actor desde la última línea del registro ([`Medidor`]).
+    carga: Medidor,
+}
+
+/// Cada cuánto (de pared) escribe el actor su línea de carga en el registro.
+const CADA_MEDIDA: Duration = Duration::from_secs(10);
+
+/// La carga del actor en vivo (2026-11-05, escalado: pedido del autor): cuánto tiempo de pared estuvo trabajando, cuánto de eso fue poner al día las `VISTA`, cuántas órdenes atendió y
+/// cuánto tardó cada una (de que la saca de la fila a que reparte su resultado), y cuántos mensajes llegó a tener esperando en la fila. Cada [`CADA_MEDIDA`] escribe una línea y vuelve a cero.
+struct Medidor {
+    desde: Pared,
+    ocupado: Duration,
+    vistas: Duration,
+    ordenes: u32,
+    en_ordenes: Duration,
+    orden_mas_lenta: Duration,
+    fila_maxima: usize,
+}
+
+impl Medidor {
+    fn nuevo() -> Self {
+        Self { desde: Pared::now(), ocupado: Duration::ZERO, vistas: Duration::ZERO, ordenes: 0, en_ordenes: Duration::ZERO, orden_mas_lenta: Duration::ZERO, fila_maxima: 0 }
+    }
+
+    fn orden(&mut self, tardo: Duration) {
+        self.ordenes += 1;
+        self.en_ordenes += tardo;
+        self.orden_mas_lenta = self.orden_mas_lenta.max(tardo);
+    }
+
+    /// La línea del registro, si toca (y vuelve a cero). Sin sesiones ni órdenes no escribe nada.
+    fn linea(&mut self, sesiones: usize, vistas: usize) -> Option<String> {
+        let pared = self.desde.elapsed();
+        if pared < CADA_MEDIDA {
+            return None;
+        }
+        let m = std::mem::replace(self, Medidor::nuevo());
+        if sesiones == 0 && m.ordenes == 0 {
+            return None;
+        }
+        let pct = |d: Duration| 100.0 * d.as_secs_f64() / pared.as_secs_f64();
+        let ms = |d: Duration| d.as_secs_f64() * 1e3;
+        let media = if m.ordenes > 0 { ms(m.en_ordenes) / f64::from(m.ordenes) } else { 0.0 };
+        Some(format!(
+            "carga: actor ocupado {:.0} % (vistas {:.0} %); {} órdenes en {:.0} s, {:.1} ms de media y {:.1} ms la más lenta; hasta {} esperando en la fila; {sesiones} sesiones, {vistas} con VISTA",
+            pct(m.ocupado),
+            pct(m.vistas),
+            m.ordenes,
+            pared.as_secs_f64(),
+            media,
+            ms(m.orden_mas_lenta),
+            m.fila_maxima
+        ))
+    }
 }
 
 /// El primer instante de muestreo de las vistas después de `t`.
@@ -84,8 +138,13 @@ pub fn lanzar(mut nucleo: Nucleo, reloj: RelojCompartido, rx: mpsc::Receiver<Com
     nucleo.conectar_reloj(reloj.clone());
     nucleo.seguir_pertenencias();
     let (entregada, proxima_vista) = (nucleo.version(), siguiente_muestreo(nucleo.ahora()));
-    let actor = Actor { nucleo, reloj, mesa: Mesa::default(), publicadas: BTreeMap::new(), entregada, proxima_vista, presentes: BTreeMap::new() };
-    tokio::spawn(actor.correr(rx))
+    let actor = Actor { nucleo, reloj, mesa: Mesa::default(), publicadas: BTreeMap::new(), entregada, proxima_vista, presentes: BTreeMap::new(), carga: Medidor::nuevo() };
+    // El actor en su propio hilo (2026-11-05, escalado): no ocupa uno de los hilos de tokio que atienden los sockets, ni ellos le quitan tiempo a él. Sigue siendo el único que escribe en el núcleo;
+    // lo que reparte, lo reparte en paralelo con `rayon` (`Mesa::reconciliar_vistas`).
+    tokio::task::spawn_blocking(move || {
+        let rt = tokio::runtime::Builder::new_current_thread().enable_time().build().expect("el runtime del actor");
+        rt.block_on(actor.correr(rx))
+    })
 }
 
 fn depositar(tx: &mpsc::Sender<Difusion>, d: Difusion) -> bool {
@@ -98,12 +157,26 @@ impl Actor {
             let espera = Duration::from_millis(self.espera_ms() as u64);
             tokio::select! {
                 c = rx.recv() => match c {
-                    Some(c) => self.manejar(c),
+                    Some(c) => {
+                        self.carga.fila_maxima = self.carga.fila_maxima.max(rx.len() + 1);
+                        let (inicio, es_orden) = (Pared::now(), matches!(c, ComandoSesion::Orden { .. }));
+                        self.manejar(c);
+                        let tardo = inicio.elapsed();
+                        self.carga.ocupado += tardo;
+                        if es_orden {
+                            self.carga.orden(tardo);
+                        }
+                    }
                     None => break,
                 },
                 _ = tokio::time::sleep(espera) => {}
             }
+            let inicio = Pared::now();
             self.avanzar();
+            self.carga.ocupado += inicio.elapsed();
+            if let Some(l) = self.carga.linea(self.mesa.cuantas(), self.mesa.vistas_abiertas()) {
+                println!("{l}");
+            }
         }
         self.avanzar();
         if let Err(e) = self.nucleo.apagar() {
@@ -425,6 +498,7 @@ impl Actor {
         let ahora = self.nucleo.ahora();
         let parado = self.reloj.con(|r, _| r.pausado() || r.factor_milesimas() == 0);
         // Los alijos a la vista del `HEROE` (6G) se renuevan igual, con la columna que anda.
+        let inicio = Pared::now();
         if ahora >= self.proxima_vista || (hasta != self.entregada && (causante.is_none() || parado)) {
             self.mesa.reconciliar_vistas(&self.nucleo, None, &mut envios);
             self.mesa.reconciliar_alijos(&self.nucleo, None, &mut envios);
@@ -433,6 +507,7 @@ impl Actor {
             self.mesa.reconciliar_vistas(&self.nucleo, causante, &mut envios);
             self.mesa.reconciliar_alijos(&self.nucleo, causante, &mut envios);
         }
+        self.carga.vistas += inicio.elapsed();
         self.entregada = hasta;
         self.mesa.entregar(envios);
         self.publicar_batallas();

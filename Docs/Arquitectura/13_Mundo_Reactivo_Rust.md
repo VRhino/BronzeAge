@@ -94,6 +94,13 @@ clientes ─┤ WS/HTTP · auth · parseo y validación sin estado       │
 - **Lo caro, fuera y en paralelo:** rutas (A* sobre el grafo de navegación), visión, diffs y serialización por
   grupo, resolución de combate, persistencia. Lo que vuelve de un worker (p. ej. una ruta) entra al núcleo como un
   evento más **y se escribe en el log**, para que una reproducción no dependa de qué hilo terminó antes.
+- **Implementado (2026-11-05, escalado):** el actor del núcleo corre en su propio hilo (fuera de los de tokio que
+  atienden los sockets) y reparte la `VISTA` en paralelo con `rayon`: la `Mirada` de cada perspectiva y después cada
+  sesión, cada una escribiendo solo lo suyo, así que el resultado no depende de los hilos. Lo que es igual para
+  todas las sesiones de una perspectiva (el tramo y la forma avistada de cada columna ajena, lo propio de cada
+  sitio, la red explorada) se calcula una vez. Los alijos del `HEROE` también se ponen al día en paralelo. Cada
+  10 s de pared el servidor escribe una línea `carga:` con la ocupación del actor, la parte de las vistas, las
+  órdenes y lo que tardaron, y cuántas esperaron en la fila.
 - **Partir el núcleo por regiones** (simulación paralela de eventos con sincronización conservadora en los bordes)
   solo si una medición lo exige. Las entidades se diseñan con afinidad a una región para poder hacerlo sin rehacer.
 - **Números:** posiciones y tiempos en **punto fijo** (`i64`), no `f64`, para que las reproducciones sean idénticas

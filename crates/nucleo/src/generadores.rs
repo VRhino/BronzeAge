@@ -73,7 +73,7 @@ impl Cx<'_> {
     }
 }
 
-pub trait GeneradorDeEventos: Send {
+pub trait GeneradorDeEventos: Send + Sync {
     /// Plan ya vigente al registrar el generador (p. ej. tras recuperar). Solo para reconstruir el índice propio.
     fn plan_vigente(&mut self, _ejercito: u64, _plan: &Plan) {}
     fn plan_cambiado(&mut self, _cx: &mut Cx<'_>, _ejercito: u64, _plan: &Plan) {}

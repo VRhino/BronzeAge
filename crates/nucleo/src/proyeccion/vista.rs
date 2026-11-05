@@ -33,6 +33,7 @@ use militar::escuadra::{Contenedor, Escuadra};
 use militar::presencia::Ubicacion;
 use pb::entidad::Cuerpo;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::{Arc, Mutex, OnceLock};
 use vision::{radios, tramo_visible, Mascara, Rect};
 
 /// Un ojo: su centro y su alcance.
@@ -98,6 +99,16 @@ pub struct Mirada<'n> {
     directorio: Sello,
     /// Los Aedas itinerantes que se ven ahora, con su posición (6G): una vez por perspectiva y no por sesión.
     aedas: Vec<(&'n tecnologia::itinerantes::AedaItinerante, Punto)>,
+    /// Por columna, en el orden de `columnas` (2026-11-05, escalado): si la ven los ojos y su id, una vez por perspectiva; de la ajena, su tramo visible y su forma avistada, la primera vez
+    /// que una sesión los pide y compartidos por todas las de la perspectiva (las sesiones se reconcilian en paralelo: de ahí los `OnceLock`).
+    vista_col: Vec<bool>,
+    ids_col: Vec<OnceLock<String>>,
+    tramo_col: Vec<OnceLock<Vec<Vertice>>>,
+    avistado_col: Vec<OnceLock<pb::Ejercito>>,
+    /// Lo propio de cada sitio ([`Mirada::propias_de`]), proyectado una vez por perspectiva.
+    propias_hechas: Mutex<BTreeMap<(Clase, u64), Arc<Vec<(pb::TipoEntidad, String, Cuerpo)>>>>,
+    /// Las aristas de la red con algún extremo explorado y la huella de las rutas vigentes, una vez por perspectiva.
+    red: OnceLock<(Vec<&'n Arista>, u64)>,
 }
 
 /// El sello del directorio de las Facciones ([`propios::directorio_facciones`]): la huella de lo que lleva de cada una y cuántas son. No usa la versión de la Facción, que cambia con
@@ -218,7 +229,32 @@ impl<'n> Mirada<'n> {
         let ve = |p: Punto| ojos.iter().any(|&(c, r)| crate::nucleo::cerca(c, p, r));
         let aedas = e.aedas.iter().map(|a| (a, a.plan.as_ref().and_then(|x| x.posicion_en(t)).unwrap_or(a.posicion))).filter(|&(_, p)| ve(p)).collect();
         let directorio = huella_del_directorio(n);
-        Mirada { n, perspectiva, faccion, t, columnas, ojos, propias, suelo, celdas, niebla, fichas, informes, publicas, directorio, aedas }
+        let vista_col = columnas.iter().map(|&(_, p)| ve(p)).collect();
+        let ids_col = columnas.iter().map(|_| OnceLock::new()).collect();
+        let (tramo_col, avistado_col) = (columnas.iter().map(|_| OnceLock::new()).collect(), columnas.iter().map(|_| OnceLock::new()).collect());
+        Mirada {
+            n,
+            perspectiva,
+            faccion,
+            t,
+            columnas,
+            ojos,
+            propias,
+            suelo,
+            celdas,
+            niebla,
+            fichas,
+            informes,
+            publicas,
+            directorio,
+            aedas,
+            vista_col,
+            ids_col,
+            tramo_col,
+            avistado_col,
+            propias_hechas: Mutex::new(BTreeMap::new()),
+            red: OnceLock::new(),
+        }
     }
 
     /// ¿Se ve ahora el punto? (alguno de los ojos a `≤` su alcance, no estricto).
@@ -244,22 +280,24 @@ impl<'n> Mirada<'n> {
 
         // Columnas: las propias, enteras; las ajenas que se ven, con su tramo (sin las que una batalla aparta: la batalla las sustituye).
         let mut heroes: BTreeSet<u64> = BTreeSet::new();
-        for &(x, p) in &self.columnas {
+        for (i, &(x, p)) in self.columnas.iter().enumerate() {
             if !rect.contiene(p) {
                 continue;
             }
-            let id = ids::ejercito(x.id);
+            let id = || self.ids_col[i].get_or_init(|| ids::ejercito(x.id)).clone();
             if propia(x) {
+                let id = id();
                 // De quién es el suelo que pisa (`territorioPorEjercito`): entra en el sello, así que la columna vuelve a viajar cuando cruza una frontera.
                 let suelo = self.suelo.get(&x.id).copied().unwrap_or_else(|| n.faccion_del_suelo(&[p])[0]);
                 v.push(visible(pb::TipoEntidad::Ejercito, id, Sello(x.version, suelo.map_or(0, |f| i64::from(f) + 1)), move || {
                     Some(Cuerpo::Ejercito(pb::Ejercito { territorio_faccion_id: Some(suelo.map(ids::faccion).unwrap_or_default()), ..propios::ejercito(n, x) }))
                 }));
-            } else if !x.en_batalla && self.ve(p) {
-                let tramo = self.tramo(&x.plan, x.version, tiene.get(&(pb::TipoEntidad::Ejercito as i32, id.clone())), &self.ojos);
+            } else if !x.en_batalla && self.vista_col[i] {
+                let id = id();
+                let tramo = self.tramo_con(&x.plan, x.version, tiene.get(&(pb::TipoEntidad::Ejercito as i32, id.clone())), || self.tramo_de_columna(i).clone());
                 let sello = Sello(x.version, tramo.as_ref().map_or_else(|v| *v, |t| t.last().map_or(0, |v| v.en)));
                 nombradas.extend(x.columna.faccion);
-                v.push(visible(pb::TipoEntidad::Ejercito, id, sello, move || Some(Cuerpo::Ejercito(self.ejercito_avistado(x)))));
+                v.push(visible(pb::TipoEntidad::Ejercito, id, sello, move || Some(Cuerpo::Ejercito(self.avistado_col[i].get_or_init(|| self.ejercito_avistado(x, self.tramo_de_columna(i))).clone()))));
             } else {
                 continue;
             }
@@ -465,12 +503,18 @@ impl<'n> Mirada<'n> {
         // Los caminos de la red con algún extremo explorado y alguno dentro del rectángulo, con el escalón de cada arista, y las rutas vigentes de la Facción. Las aristas no salen nunca de la red y lo
         // explorado solo crece, así que cuántas son dice si cambiaron; los escalones y las rutas, la huella de las rutas vigentes (qué pares y, de las propias, cuándo se lanzaron).
         if let Some(m) = &self.celdas {
-            let aristas: Vec<&Arista> = e.comercio.red.aristas().filter(|a| arista_en(a, |p| m.explorado_en(p)) && arista_en(a, |p| rect.contiene(p))).collect();
-            if !aristas.is_empty() {
-                // Regla (decisión del autor del 2026-10-27): solo viajan las rutas de la propia Facción (las ajenas dirían quién comercia con quién); el escalón de cada arista cuenta todas.
-                let faccion = self.faccion;
-                let propia = move |r: &RutaComercial| Some(r.faccion) == faccion;
+            // Regla (decisión del autor del 2026-10-27): solo viajan las rutas de la propia Facción (las ajenas dirían quién comercia con quién); el escalón de cada arista cuenta todas.
+            let faccion = self.faccion;
+            let propia = move |r: &RutaComercial| Some(r.faccion) == faccion;
+            // Lo explorado y la huella son de la perspectiva: una vez para todas sus sesiones; el rectángulo, de cada una.
+            let (exploradas, huella) = self.red.get_or_init(|| {
+                let exploradas = e.comercio.red.aristas().filter(|a| arista_en(a, |p| m.explorado_en(p))).collect();
                 let huella = n.rutas_vigentes().fold(0u64, |h, r| h.rotate_left(7) ^ (u64::from(r.origen) << 32 | u64::from(r.destino)) ^ if propia(r) { r.ultimo_lanzamiento as u64 } else { 0 });
+                (exploradas, huella)
+            });
+            let huella = *huella;
+            let aristas: Vec<&Arista> = exploradas.iter().copied().filter(|a| arista_en(a, |p| rect.contiene(p))).collect();
+            if !aristas.is_empty() {
                 v.push(visible(pb::TipoEntidad::RedCaminos, "red".into(), Sello(huella, aristas.len() as i64), move || Some(Cuerpo::RedCaminos(red_caminos(n, &aristas, propia)))));
             }
         }
@@ -501,7 +545,7 @@ impl<'n> Mirada<'n> {
     }
 
     /// Las órdenes de mercado activas de la plaza ajena `plaza` (2026-10-29: quien está dentro; Comercio_Caravanas §5.8.8: la Facción con una caravana esperando en ella), para tomarlas.
-    fn ordenes_activas(&self, plaza: u64) -> impl Iterator<Item = Visible<'n>> {
+    fn ordenes_activas(&self, plaza: u64) -> impl Iterator<Item = Visible<'_>> + '_ {
         let n = self.n;
         n.estado().comercio.libro.ordenes.iter().filter(move |o| u64::from(o.asentamiento) == plaza && o.estado == EstadoOrden::Activa).map(move |o| {
             visible(pb::TipoEntidad::OrdenMercado, ids::orden_de_mercado(o.id), Sello(n.version_de(Clase::OrdenMercado, o.id), 0), move || Some(Cuerpo::OrdenMercado(propios::orden_de_mercado(n, o))))
@@ -528,6 +572,11 @@ impl<'n> Mirada<'n> {
     /// El tramo de un plan ajeno que toca mandar: el que el cliente ya tiene (`Err(dónde acaba)`) si es de la misma versión y le dura aún [`radios::RENOVAR_MS`] o más, o el plan llega a su fin
     /// dentro de él; si no, el tramo nuevo al alcance de los ojos y dentro del horizonte de 30 s.
     fn tramo(&self, plan: &Plan, version: u64, tiene: Option<&Sello>, ojos: &[Ojo]) -> Result<Vec<Vertice>, i64> {
+        self.tramo_con(plan, version, tiene, || tramo_visible(plan, self.t, radios::HORIZONTE_MS, ojos))
+    }
+
+    /// Como [`Mirada::tramo`], con el tramo nuevo de `calcular` (el de una columna sale de lo calculado para la perspectiva).
+    fn tramo_con(&self, plan: &Plan, version: u64, tiene: Option<&Sello>, calcular: impl FnOnce() -> Vec<Vertice>) -> Result<Vec<Vertice>, i64> {
         if plan.vertices.is_empty() {
             return Ok(Vec::new());
         }
@@ -536,19 +585,37 @@ impl<'n> Mirada<'n> {
                 return Err(hasta);
             }
         }
-        Ok(tramo_visible(plan, self.t, radios::HORIZONTE_MS, ojos))
+        Ok(calcular())
+    }
+
+    /// El tramo visible de la columna `i` de `columnas`, calculado una vez por perspectiva.
+    fn tramo_de_columna(&self, i: usize) -> &Vec<Vertice> {
+        self.tramo_col[i].get_or_init(|| tramo_visible(&self.columnas[i].0.plan, self.t, radios::HORIZONTE_MS, &self.ojos))
     }
 
     /// Lo propio de una clase (las mismas entidades que en `FACCION`: la ficha de la plaza; el pueblo, la avanzada y sus obras).
+    /// Se proyecta una vez por perspectiva (2026-11-05, escalado): todas las sesiones de la Facción ven lo mismo de lo suyo.
     fn propias_de(&self, clase: Clase, id: u64, version: u64) -> Vec<Visible<'_>> {
         let n = self.n;
-        propios::proyectar(n, propios::Espectador::Heroe(None), clase, id).existen.into_iter().map(|(tipo, eid, cuerpo)| visible(tipo, eid, Sello(version, 0), move || Some(cuerpo.clone()))).collect()
+        let hecha = self.propias_hechas.lock().unwrap_or_else(|e| e.into_inner()).get(&(clase, id)).cloned();
+        // Se proyecta fuera del cerrojo: otra sesión de la perspectiva, en otro hilo, puede proyectarla a la vez; queda la primera.
+        let hecha = hecha.unwrap_or_else(|| {
+            let nueva = Arc::new(propios::proyectar(n, propios::Espectador::Heroe(None), clase, id).existen);
+            self.propias_hechas.lock().unwrap_or_else(|e| e.into_inner()).entry((clase, id)).or_insert(nueva).clone()
+        });
+        (0..hecha.len())
+            .map(|k| {
+                let (tipo, eid) = (hecha[k].0, hecha[k].1.clone());
+                let hecha = hecha.clone();
+                visible(tipo, eid, Sello(version, 0), move || Some(hecha[k].2.clone()))
+            })
+            .collect()
     }
 
     /// La columna ajena (`EjercitoAvistado`): quién es, de quién, de qué tipo, quiénes van (los rombos), si está en formación, dónde está y el tramo visible de su plan; `te_sigue` si persigue a una
     /// columna propia, y las caravanas que lleva adjuntas. Ni carro, ni víveres, ni Líder, ni destino; lo que lleva cada héroe (tipo de tropa y cantidad) va en su `HeroePublico`.
-    fn ejercito_avistado(&self, x: &Ejercito) -> pb::Ejercito {
-        let tramo = tramo_visible(&x.plan, self.t, radios::HORIZONTE_MS, &self.ojos);
+    fn ejercito_avistado(&self, x: &Ejercito, tramo: &[Vertice]) -> pb::Ejercito {
+        let tramo = tramo.to_vec();
         pb::Ejercito {
             id: ids::ejercito(x.id),
             version: x.version,
