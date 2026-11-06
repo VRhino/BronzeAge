@@ -62,7 +62,7 @@ pub fn cerca_de_campamento(plazas: &[Plaza], geo: &Geo, exclusion: i64) -> usize
 }
 
 /// (mayor fracción de una masa que ocupa un asentamiento, en %; masas con todas sus parcelas ocupadas)
-pub fn cuota_y_masas_llenas(n: &Nucleo, plazas: &[Plaza], geo: &Geo) -> (Option<f64>, usize) {
+pub fn mayor_fraccion_y_masas_llenas(n: &Nucleo, plazas: &[Plaza], geo: &Geo) -> (Option<f64>, usize) {
     let mut mayor: Option<f64> = None;
     for p in plazas {
         let mut por_masa: BTreeMap<usize, usize> = BTreeMap::new();

@@ -85,7 +85,6 @@ pub fn datos_de_juego(r: &Reglas) -> DatosDeJuego {
                 "crecimiento_por_edificio": t.crecimiento_por_edificio,
                 "separacion_plazas": t.separacion_plazas,
                 "exclusion_campamento": t.exclusion_campamento,
-                "cuota_parcelas_pct": t.cuota_parcelas_pct,
             },
             "viveres_bajos_pct": r.viveres_bajos_pct,
             "limite_idempotencia": r.limite_idempotencia,

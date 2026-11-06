@@ -13,7 +13,7 @@ use crate::estado::Asentamiento;
 use base::Instante;
 use mundo::Mundo;
 use std::collections::BTreeSet;
-use territorio::{Disco, DistanciasDeFundacion, Motivo, SinParcela, Terreno, Viabilidad};
+use territorio::{Disco, DistanciasDeFundacion, Motivo, Terreno, Viabilidad};
 
 /// Muestras de la fertilidad de una zona (`SITIO.muestrasFertilidad`).
 pub(super) const MUESTRAS_FERTILIDAD: usize = 40;
@@ -377,19 +377,8 @@ impl Nucleo {
                 let yo = self.disco_de(a);
                 // Solo importan las vecinas que recortan esta zona; el resto no cambia la respuesta.
                 let tocan: Vec<Disco> = self.discos().into_iter().filter(|&(o, d)| o != *asentamiento && territorio::se_tocan(&yo, &d)).map(|(_, d)| d).collect();
-                let elegida = geo.mapa.parcela(
-                    a.posicion,
-                    yo.radio,
-                    &a.parcelas,
-                    self.estado.reglas.territorio.cuota_parcelas_pct,
-                    &|i| !self.estado.parcelas_ocupadas.contains_key(&i),
-                    &|c| territorio::en_zona(c, &yo, &tocan),
-                );
-                let parcela = match elegida {
-                    Ok(i) => i,
-                    Err(SinParcela::NoHayLibres) => return Err(rechazo(rechazos::PARCELA_SIN_LIBRES, "no hay parcelas libres en la zona".into())),
-                    Err(SinParcela::CupoAgotado) => return Err(rechazo(rechazos::PARCELA_CUPO_AGOTADO, "ya explota todo lo que le toca de los bosques que alcanza".into())),
-                };
+                let elegida = geo.mapa.parcela(a.posicion, yo.radio, &|i| !self.estado.parcelas_ocupadas.contains_key(&i), &|c| territorio::en_zona(c, &yo, &tocan));
+                let Some(parcela) = elegida else { return Err(rechazo(rechazos::PARCELA_SIN_LIBRES, "no hay parcelas libres en la zona".into())) };
                 let centro = geo.mapa.parcelas[parcela as usize].centro;
                 self.estado.parcelas_ocupadas.insert(parcela, *asentamiento);
                 self.estado.asentamientos.get_mut(asentamiento).expect("existe").parcelas.insert(parcela);
@@ -525,7 +514,7 @@ mod pruebas {
             let parcelas: Vec<Parcela> = (0..2000).map(|_| Parcela { bosque: rng.por_debajo(3) as u32, centro: punto(&mut rng), densidad: rng.por_debajo(1001) as u32 }).collect();
             let tipos = [Tipo::Cantera, Tipo::Corral, Tipo::Mina];
             let nodos: Vec<NodoMapa> = (0..600).map(|_| NodoMapa { pos: punto(&mut rng), tipo: tipos[rng.por_debajo(3) as usize], inicial: 1000 }).collect();
-            let mapa = Mapa::nuevo(nodos, parcelas, vec![0; 3], vec![], ancho, alto);
+            let mapa = Mapa::nuevo(nodos, parcelas, vec![], ancho, alto);
             let ocupadas: BTreeSet<u32> = (0..500).map(|_| rng.por_debajo(2000) as u32).collect();
             let plazas: Vec<Disco> = (0..60).map(|_| Disco { centro: punto(&mut rng), radio: 6_000 + rng.por_debajo(24_001) as i64, faccion: 1 + rng.por_debajo(4) as u32 }).collect();
             for _ in 0..300 {
@@ -548,7 +537,7 @@ mod pruebas {
         // Rival de r 6 a 14 u: no toca el disco inicial (6 + 6 < 14) pero sí el techo (10 + 6 ≥ 14). La frontera del techo queda a
         // 14 · 10 / 16 = 8,75 u, así que la parcela a 9 u en su dirección no es de la zona; la de 9 u al otro lado, sí.
         let parcela = |x: i64| Parcela { bosque: 0, centro: Punto::new(x, 100_000), densidad: 500 };
-        let mapa = Mapa::nuevo(vec![], vec![parcela(109_000), parcela(91_000)], vec![2], vec![], 200_000, 200_000);
+        let mapa = Mapa::nuevo(vec![], vec![parcela(109_000), parcela(91_000)], vec![], 200_000, 200_000);
         let nuevo = Disco { centro: Punto::new(100_000, 100_000), radio: 6_000, faccion: 1 };
         let techo = Disco { radio: 10_000, ..nuevo };
         let rival = Disco { centro: Punto::new(114_000, 100_000), radio: 6_000, faccion: 2 };
@@ -560,34 +549,29 @@ mod pruebas {
         assert_eq!(en_techo.len(), 2);
     }
 
-    /// `ReclamarParcela` con la rejilla elige lo mismo, y falla con el mismo motivo, que `elegir_parcela` sobre el mapa entero.
+    /// `ReclamarParcela` con la rejilla elige lo mismo (o ninguna, igual) que `elegir_parcela` sobre el mapa entero.
     #[test]
     fn reclamar_parcela_con_la_rejilla_es_lo_mismo_que_el_recorrido_lineal() {
         let mut rng = Rng::nuevo(2026_10_24_2);
-        let mut vistos = [0usize; 3];
+        let mut vistos = [0usize; 2];
         for _ in 0..15 {
             let (ancho, alto) = (100_000 + rng.por_debajo(300_000) as i64, 100_000 + rng.por_debajo(300_000) as i64);
             let punto = |rng: &mut Rng| Punto::new(rng.por_debajo(ancho as u64 + 40_000) as i64 - 20_000, rng.por_debajo(alto as u64 + 40_000) as i64 - 20_000);
             let parcelas: Vec<Parcela> = (0..2000).map(|_| Parcela { bosque: rng.por_debajo(3) as u32, centro: punto(&mut rng), densidad: rng.por_debajo(4) as u32 * 250 }).collect();
-            let mut total = vec![0; 3];
-            parcelas.iter().for_each(|p| total[p.bosque as usize] += 1);
-            let mapa = Mapa::nuevo(vec![], parcelas, total, vec![], ancho, alto);
+            let mapa = Mapa::nuevo(vec![], parcelas, vec![], ancho, alto);
             let ocupadas: BTreeSet<u32> = (0..800).map(|_| rng.por_debajo(2000) as u32).collect();
             let plazas: Vec<Disco> = (0..60).map(|_| Disco { centro: punto(&mut rng), radio: 6_000 + rng.por_debajo(24_001) as i64, faccion: 1 + rng.por_debajo(4) as u32 }).collect();
             for _ in 0..300 {
                 let yo = Disco { centro: punto(&mut rng), radio: 6_000 + rng.por_debajo(24_001) as i64, faccion: 1 + rng.por_debajo(4) as u32 };
                 let tocan: Vec<Disco> = plazas.iter().copied().filter(|d| territorio::se_tocan(&yo, d)).collect();
-                // Propias: ocupadas por esta plaza; con cuota 0 el cupo es 1 por masa y se agota en cuanto tiene una.
-                let propias: BTreeSet<u32> = ocupadas.iter().copied().filter(|_| rng.por_debajo(400) == 0).collect();
-                let cuota = [0, 1, 50][rng.por_debajo(3) as usize];
                 let libre = |i: u32| !ocupadas.contains(&i);
                 let r2 = (yo.radio as i128).pow(2);
-                let lineal = territorio::elegir_parcela(&mapa.parcelas, &mapa.total_por_masa, cuota, yo.centro, &propias, libre, |c| c.dist2(yo.centro) <= r2 && territorio::en_zona(c, &yo, &tocan));
-                let rejilla = mapa.parcela(yo.centro, yo.radio, &propias, cuota, &libre, &|c| territorio::en_zona(c, &yo, &tocan));
+                let lineal = territorio::elegir_parcela(&mapa.parcelas, yo.centro, libre, |c| c.dist2(yo.centro) <= r2 && territorio::en_zona(c, &yo, &tocan));
+                let rejilla = mapa.parcela(yo.centro, yo.radio, &libre, &|c| territorio::en_zona(c, &yo, &tocan));
                 assert_eq!(rejilla, lineal);
-                vistos[match lineal { Ok(_) => 0, Err(SinParcela::NoHayLibres) => 1, Err(SinParcela::CupoAgotado) => 2 }] += 1;
+                vistos[lineal.is_none() as usize] += 1;
             }
         }
-        assert!(vistos.iter().all(|&k| k > 0), "se prueban los tres desenlaces: {vistos:?}");
+        assert!(vistos.iter().all(|&k| k > 0), "se prueban los dos desenlaces: {vistos:?}");
     }
 }

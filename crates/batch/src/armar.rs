@@ -134,7 +134,6 @@ fn parametros(x: &Entrada) -> Vec<Parametro> {
         parametro("Separación mínima entre plazas", u(r.separacion_plazas)),
         parametro("Exclusión junto a campamentos de mercenarios", u(r.exclusion_campamento)),
         parametro("Cap de fundación por nivel de Facción", format!("{:?}", politica::Reglas::cargar().nivel.cap_fundacion)),
-        parametro("Cuota de parcelas por masa y asentamiento", format!("{} %", r.cuota_parcelas_pct)),
         parametro("Supuesto del batch: nacimientos", format!("repartidos al azar en las primeras {} h, en el campamento i mod n", sim::NACEN_EN_HORAS)),
         parametro("Supuesto del batch: columna", format!("velocidad {} u/min, víveres {}", sim::VELOCIDAD as f64 * 0.06, sim::VIVERES / 1000)),
         parametro("Supuesto del batch: búsqueda de sitio", format!("{} candidatos; 30-120 u del campamento (expansión: 30-70 u de una plaza propia); se descartan los que el aviso de viabilidad da por condenados a ruina", sim::CANDIDATOS)),
@@ -222,13 +221,13 @@ fn vida_de_las_plazas(x: &Entrada, plazas: &[Plaza]) -> Vec<Metrica> {
     ]
 }
 
-/// Cuota por masa y ocupación del bosque.
+/// Ocupación del bosque.
 fn bosque(x: &Entrada, plazas: &[Plaza]) -> Vec<Metrica> {
     let n = &x.corrida.nucleo;
-    let (mayor, llenas) = md::cuota_y_masas_llenas(n, plazas, x.geo);
+    let (mayor, llenas) = md::mayor_fraccion_y_masas_llenas(n, plazas, x.geo);
     let ocupadas = n.estado().parcelas_ocupadas.len();
     vec![
-        metrica("cuota_max_masa", "Máxima fracción de una masa de bosque ocupada por un solo asentamiento", "%", max(50.0), mayor, "Doc 1.9c (cuota de parcelas por asentamiento)", "Mayor parcelas_del_asentamiento / parcelas_de_la_masa sobre todas las plazas y masas de 2 o más parcelas (con una sola parcela la cuota mínima es 1, así que 100 % no es una infracción)."),
+        metrica("fraccion_max_masa", "Máxima fracción de una masa de bosque ocupada por un solo asentamiento", "%", INFO, mayor, "Doc 1.9c (sin cuota por masa desde el 2026-11-06)", "Mayor parcelas_del_asentamiento / parcelas_de_la_masa sobre todas las plazas y masas de 2 o más parcelas (informativa: la frontera entre zonas reparte el bosque)."),
         metrica("parcelas_ocupadas", "Parcelas ocupadas del mundo", "%", INFO, pct(ocupadas, x.geo.parcelas.len()), "Doc 1.9c", "Parcelas con Leñera sobre el total del artefacto (informativa). La economía real de cada plaza (no una petición sintética) reclama las parcelas, así que depende de cuánto construyan las plazas en el tiempo simulado."),
         metrica("masas_agotadas", "Masas de bosque con todas sus parcelas ocupadas", "masas", INFO, Some(llenas as f64), "Doc 1.9c", "Masas cuyas parcelas están todas explotadas (informativa). La economía real de la plaza (no una petición sintética) reclama las parcelas."),
     ]
@@ -360,9 +359,9 @@ fn mapa(x: &Entrada, plazas: &[Plaza]) -> Mapa {
     }
 }
 
-/// Anomalías automáticas: solo violaciones de invariante (métricas 1, 2, 3 y 9).
+/// Anomalías automáticas: solo violaciones de invariante (métricas 1, 2 y 3).
 fn anomalias(metricas: &[Metrica]) -> Vec<Anomalia> {
-    ["separacion_min", "plazas_en_zona_ajena", "plazas_cerca_campamento", "cuota_max_masa"]
+    ["separacion_min", "plazas_en_zona_ajena", "plazas_cerca_campamento"]
         .iter()
         .filter_map(|id| metricas.iter().find(|m| m.id == *id))
         .filter(|m| !matches!(informe::semaforo(m), Semaforo::Verde | Semaforo::Informativa | Semaforo::SinDato))

@@ -61,7 +61,7 @@ fn el_escenario_pequeno_produce_todas_las_metricas() {
 fn los_invariantes_se_cumplen() {
     let c = con_mundo!();
     let i = territorio(c, &pequeno());
-    for id in ["separacion_min", "plazas_en_zona_ajena", "plazas_cerca_campamento", "cuota_max_masa", "determinismo"] {
+    for id in ["separacion_min", "plazas_en_zona_ajena", "plazas_cerca_campamento", "determinismo"] {
         let m = i.metricas.iter().find(|m| m.id == id).unwrap();
         assert_eq!(semaforo(m), Semaforo::Verde, "{id}: {:?}", m.medido);
     }

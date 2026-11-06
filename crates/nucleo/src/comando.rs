@@ -2776,7 +2776,6 @@ pub mod rechazos {
     pub const CAP_ALCANZADO: &str = "fundacion.cap_alcanzado";
     pub const NIVEL_INVALIDO: &str = "nivel.invalido";
     pub const PARCELA_SIN_LIBRES: &str = "parcela.sin_libres";
-    pub const PARCELA_CUPO_AGOTADO: &str = "parcela.cupo_agotado";
     pub const PARCELA_AJENA: &str = "parcela.no_es_tuya";
     // Obras (`ErrorObra` del crate `asentamiento`).
     pub const OBRA_TECNOLOGIA_FALTANTE: &str = "obra.tecnologia_faltante";

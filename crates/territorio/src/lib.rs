@@ -8,5 +8,5 @@ mod zona;
 
 pub use contorno::contornos;
 pub use fundacion::{validar, viabilidad, DistanciasDeFundacion, Motivo, Terreno, Viabilidad};
-pub use parcelas::{cupo_por_masa, elegir as elegir_parcela, Parcela, SinParcela};
+pub use parcelas::{elegir as elegir_parcela, Parcela};
 pub use zona::{en_zona, poligono, se_tocan, Disco};

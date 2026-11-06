@@ -22,7 +22,7 @@ use mundo::Mundo;
 use std::cell::OnceCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
-use territorio::{Disco, Parcela, SinParcela};
+use territorio::{Disco, Parcela};
 
 use crate::estado::Asentamiento;
 use crate::urbanismo::{Urbanismo, Urbe};
@@ -90,7 +90,6 @@ pub struct Mapa {
     /// Piedra, ganado y minerales en una sola lista: `Fuente::Nodo(i)` indexa aquí.
     pub nodos: Vec<NodoMapa>,
     pub parcelas: Vec<Parcela>,
-    pub total_por_masa: Vec<usize>,
     /// Densidad de cada parcela en ppm (la del contrato son milésimas: ×1000).
     pub densidad_ppm: Vec<i64>,
     pub campamentos: Vec<Punto>,
@@ -112,8 +111,6 @@ impl Mapa {
     pub fn de(m: &Mundo) -> Arc<Mapa> {
         let masas: std::collections::HashMap<&str, usize> = m.bosques().iter().enumerate().map(|(i, b)| (b.id.as_str(), i)).collect();
         let parcelas: Vec<Parcela> = m.parcelas().iter().map(|p| Parcela { bosque: masas[p.bosque_id.as_str()] as u32, centro: pt!(p.centro), densidad: p.densidad_milesimas }).collect();
-        let mut total_por_masa = vec![0; masas.len()];
-        parcelas.iter().for_each(|p| total_por_masa[p.bosque as usize] += 1);
         let nodos: Vec<NodoMapa> = m
             .nodos()
             .iter()
@@ -131,11 +128,11 @@ impl Mapa {
             })
             .collect();
         let (ancho, alto) = m.tamano();
-        Self::nuevo(nodos, parcelas, total_por_masa, m.campamentos().iter().map(|c| pt!(c.posicion)).collect(), ancho, alto)
+        Self::nuevo(nodos, parcelas, m.campamentos().iter().map(|c| pt!(c.posicion)).collect(), ancho, alto)
     }
 
     /// El mapa a partir de sus partes (también para los mundos de pruebas).
-    pub fn nuevo(nodos: Vec<NodoMapa>, parcelas: Vec<Parcela>, total_por_masa: Vec<usize>, campamentos: Vec<Punto>, ancho: i64, alto: i64) -> Arc<Mapa> {
+    pub fn nuevo(nodos: Vec<NodoMapa>, parcelas: Vec<Parcela>, campamentos: Vec<Punto>, ancho: i64, alto: i64) -> Arc<Mapa> {
         let densidad_ppm = parcelas.iter().map(|p| p.densidad as i64 * 1000).collect();
         let de_tipo = |t: Tipo| nodos.iter().enumerate().filter(move |(_, n)| n.tipo == t).map(|(i, n)| (i as u32, n.pos)).collect::<Vec<_>>();
         let rej_piedra = Rejilla::nueva(ancho, alto, de_tipo(Tipo::Cantera).into_iter());
@@ -143,7 +140,7 @@ impl Mapa {
         let minerales = nodos.iter().enumerate().filter(|(_, n)| n.tipo.es_de_pueblo() && n.tipo != Tipo::Cantera).map(|(i, n)| (i as u32, n.pos));
         let rej_minerales = Rejilla::nueva(ancho, alto, minerales);
         let rej_parcelas = Rejilla::nueva(ancho, alto, parcelas.iter().enumerate().map(|(i, p)| (i as u32, p.centro)));
-        Arc::new(Mapa { nodos, parcelas, total_por_masa, densidad_ppm, campamentos, ancho, alto, rej_parcelas, rej_piedra, rej_ganado, rej_minerales })
+        Arc::new(Mapa { nodos, parcelas, densidad_ppm, campamentos, ancho, alto, rej_parcelas, rej_piedra, rej_ganado, rej_minerales })
     }
 
     pub fn parcelas_en(&self, centro: Punto, radio: Mil) -> Vec<u32> {
@@ -163,18 +160,14 @@ impl Mapa {
     }
 
     /// La parcela para una Leñera nueva de la plaza en `centro` con zona de `radio` (`territorio::elegir_parcela` sobre todo el mapa, con el
-    /// mismo resultado y el mismo error). `en_zona` recorta el disco por las fronteras con otras Facciones.
-    pub(crate) fn parcela(&self, centro: Punto, radio: Mil, propias: &BTreeSet<u32>, cuota_pct: u32, libre: &dyn Fn(u32) -> bool, en_zona: &dyn Fn(Punto) -> bool) -> Result<u32, SinParcela> {
-        // Solo las parcelas del disco (y las propias, que cuentan para el cupo de su masa): el resto no cambia la respuesta de `elegir`.
+    /// mismo resultado). `en_zona` recorta el disco por las fronteras con otras Facciones.
+    pub(crate) fn parcela(&self, centro: Punto, radio: Mil, libre: &dyn Fn(u32) -> bool, en_zona: &dyn Fn(Punto) -> bool) -> Option<u32> {
+        // Solo las parcelas del disco: el resto no cambia la respuesta de `elegir`.
         let mut locales = self.parcelas_en(centro, radio);
-        locales.extend(propias.iter().copied());
         locales.sort_unstable();
-        locales.dedup();
         let ps: Vec<Parcela> = locales.iter().map(|&g| self.parcelas[g as usize]).collect();
-        let propias_locales: BTreeSet<u32> = locales.iter().enumerate().filter(|(_, g)| propias.contains(g)).map(|(i, _)| i as u32).collect();
         let r2 = (radio as i128).pow(2);
-        territorio::elegir_parcela(&ps, &self.total_por_masa, cuota_pct, centro, &propias_locales, |i| libre(locales[i as usize]), |c| c.dist2(centro) <= r2 && en_zona(c))
-            .map(|i| locales[i as usize])
+        territorio::elegir_parcela(&ps, centro, |i| libre(locales[i as usize]), |c| c.dist2(centro) <= r2 && en_zona(c)).map(|i| locales[i as usize])
     }
 
     fn mas_cercano(&self, candidatos: Vec<u32>, centro: Punto, libre: &dyn Fn(u32) -> bool, en_zona: &dyn Fn(Punto) -> bool) -> Option<u32> {
@@ -182,7 +175,7 @@ impl Mapa {
     }
 
     /// Dónde puede ir un edificio de esa plaza (el contrato de `Sitios::proponer`, sin tomar nada):
-    /// Leñera → parcela de bosque libre en la zona, con la cuota por masa; Corral → el nodo de ganado libre más cercano en la zona; Cantera y
+    /// Leñera → parcela de bosque libre en la zona; Corral → el nodo de ganado libre más cercano en la zona; Cantera y
     /// minas → `None` (van por pueblo extractor, Doc 4.2.2); el resto, `Some(None)`: este método solo conoce los yacimientos, y que
     /// el edificio **quepa en la ciudad** lo decide el trazado urbano ([`crate::urbanismo::Urbe`]) en las plazas del núcleo; el batch de
     /// población no lo usa y deja que siempre quepa. `en_zona` recorta el disco `(centro, radio)` por las fronteras con otras Facciones.
@@ -192,14 +185,12 @@ impl Mapa {
         tipo: Tipo,
         centro: Punto,
         radio: Mil,
-        propias: &BTreeSet<u32>,
-        cuota_pct: u32,
         parcela_libre: &dyn Fn(u32) -> bool,
         nodo_libre: &dyn Fn(u32) -> bool,
         en_zona: &dyn Fn(Punto) -> bool,
     ) -> Option<Option<Fuente>> {
         match tipo {
-            Tipo::Lenera => self.parcela(centro, radio, propias, cuota_pct, parcela_libre, en_zona).ok().map(|p| Some(Fuente::Parcela(p))),
+            Tipo::Lenera => self.parcela(centro, radio, parcela_libre, en_zona).map(|p| Some(Fuente::Parcela(p))),
             Tipo::Corral => self.mas_cercano(self.ganado_en(centro, radio), centro, nodo_libre, en_zona).map(|n| Some(Fuente::Nodo(n))),
             // Van por pueblo extractor (Doc 4.2.2), no por la ciudad.
             Tipo::Cantera | Tipo::Mina | Tipo::MinaCobre | Tipo::MinaEstano | Tipo::MinaHierro => None,
@@ -298,7 +289,6 @@ impl Fuentes for FuentesMundo<'_> {
 /// la tocan (`Estado::contactos`); esas vecinas se buscan solo cuando hace falta (la mayoría de los minutos no se pregunta por un sitio).
 pub(crate) struct SitiosPlaza<'a> {
     pub mapa: &'a Mapa,
-    pub cuota_pct: u32,
     pub id: u64,
     pub yo: Disco,
     pub parcelas: &'a mut BTreeSet<u32>,
@@ -336,7 +326,7 @@ impl Sitios for SitiosPlaza<'_> {
         let ligado = matches!(tipo, Tipo::Lenera | Tipo::Cantera | Tipo::Corral);
         let vecinos: &[Disco] = if ligado { self.vecinos() } else { &[] };
         let (po, nr) = (&*self.parcelas_ocupadas, &*self.nodos_reclamados);
-        let fuente = self.mapa.proponer(tipo, yo.centro, yo.radio, self.parcelas, self.cuota_pct, &|i| !po.contains_key(&i), &|n| !nr.contains_key(&n), &|c| territorio::en_zona(c, &yo, vecinos))?;
+        let fuente = self.mapa.proponer(tipo, yo.centro, yo.radio, &|i| !po.contains_key(&i), &|n| !nr.contains_key(&n), &|c| territorio::en_zona(c, &yo, vecinos))?;
         let (cabe, nuevas) = self.urbe.proponer(self.urbanismo, tipo, u, ids);
         anclas.extend(nuevas);
         cabe.then_some(fuente)
@@ -381,7 +371,7 @@ mod pruebas {
 
     #[test]
     fn la_extraccion_anota_el_nodo_que_se_agota_y_el_que_se_regenera() {
-        let mapa = Mapa::nuevo(vec![NodoMapa { pos: Punto::new(0, 0), tipo: Tipo::Cantera, inicial: 10_000 }], vec![], vec![], vec![], 100_000, 100_000);
+        let mapa = Mapa::nuevo(vec![NodoMapa { pos: Punto::new(0, 0), tipo: Tipo::Cantera, inicial: 10_000 }], vec![], vec![], 100_000, 100_000);
         let catalogo = asentamiento::Reglas::cargar().catalogo;
         let mut nodos = BTreeMap::new();
         let mut paso = |ahora: Instante, pedido: Mil| {

@@ -316,7 +316,7 @@ fn las_zonas_de_la_misma_faccion_se_solapan_sin_frontera() {
 }
 
 #[test]
-fn las_parcelas_respetan_zona_cupo_y_exclusividad() {
+fn las_parcelas_respetan_zona_y_exclusividad() {
     let m = con_mundo!();
     let mut n = nuevo(m);
     // Un sitio verde: con bosque libre en la zona inicial.
@@ -331,26 +331,20 @@ fn las_parcelas_respetan_zona_cupo_y_exclusividad() {
         match &r.resultado {
             Resultado::Aceptada => tomadas.push(r.creadas[0] as u32),
             Resultado::Rechazada { codigo, .. } => {
-                assert!(*codigo == rechazos::PARCELA_SIN_LIBRES || *codigo == rechazos::PARCELA_CUPO_AGOTADO, "{codigo}");
+                assert_eq!(*codigo, rechazos::PARCELA_SIN_LIBRES);
                 break;
             }
             otro => panic!("{otro:?}"),
         }
     }
     assert!(!tomadas.is_empty(), "un sitio verde tiene al menos una parcela");
-    // Todas caen en la zona, ninguna se repite, y por masa no pasa del cupo.
+    // Todas caen en la zona y ninguna se repite (sin cuota por masa desde el 2026-11-06).
     let parcelas = m.0.parcelas();
-    let mut por_masa = std::collections::BTreeMap::new();
     for &i in &tomadas {
         let c = parcelas[i as usize].centro.unwrap();
         assert!(n.en_zona(id, Punto::new(c.x, c.y)));
-        *por_masa.entry(parcelas[i as usize].bosque_id.clone()).or_insert(0usize) += 1;
     }
     assert_eq!(tomadas.len(), tomadas.iter().collect::<std::collections::BTreeSet<_>>().len());
-    for (bosque, n_tomadas) in por_masa {
-        let total = parcelas.iter().filter(|q| q.bosque_id == bosque).count();
-        assert!(n_tomadas <= (total * 50 / 100).max(1), "{bosque}: {n_tomadas} de {total}");
-    }
     // Soltar devuelve la parcela; la ajena no se puede soltar.
     let primera = tomadas[0];
     assert!(n.aplicar_en(80 * MIN, admin("s", Comando::SoltarParcela { asentamiento: id, parcela: primera })).aceptada());
@@ -416,5 +410,4 @@ fn las_reglas_del_territorio_salen_de_los_bloques_del_documento() {
     assert_eq!(t.techos, vec![20_000, 30_000, 40_000, 50_000, 60_000]);
     assert_eq!(t.separacion_plazas, 20_000, "2026-11-05: 20 u (10 el 2026-11-04, antes 30)");
     assert_eq!(t.exclusion_campamento, 20_000);
-    assert_eq!(t.cuota_parcelas_pct, 50);
 }

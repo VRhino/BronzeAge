@@ -303,7 +303,9 @@ pub fn entidad_contrato(mercenario: u64) -> u64 {
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
 /// BAN56: BAN55 más, en el encargo de cada caravana, el inicio del paso en curso y si la ruta está detenida (2026-11-04, `codec_comercio`). BAN55 se lee sin ellos.
-const MAGIA: &[u8; 5] = b"BAN56";
+///
+/// BAN57: BAN56 sin la cuota de parcelas por masa en la cabecera de reglas (2026-11-06, la regla se quita). De BAN56 y anteriores se lee y se descarta.
+const MAGIA: &[u8; 5] = b"BAN57";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -415,13 +417,11 @@ pub struct ReglasTerritorio {
     pub separacion_plazas: Mil,
     /// Distancia mínima a un campamento de mercenarios para fundar (`radioExclusionFundar`: 20).
     pub exclusion_campamento: Mil,
-    /// Parte de las parcelas de una masa de bosque que puede ocupar un asentamiento (`cuotaParcelasPorAsentamiento`: 50).
-    pub cuota_parcelas_pct: u32,
 }
 
 impl Default for ReglasTerritorio {
     /// Las cifras de los bloques del documento (2026-11-04, decisión del autor: nada de esto va escrito en el código): `ZONA_INFLUENCIA` (radio inicial, crecimiento por edificio,
-    /// techos por nivel y cuota de parcelas) y `FUNDACION.separacionPlazas` de `Economia_Construccion.md`, y `MERCENARIOS.radioExclusionFundar` de `Campamentos_Mercenarios.md`.
+    /// techos por nivel) y `FUNDACION.separacionPlazas` de `Economia_Construccion.md`, y `MERCENARIOS.radioExclusionFundar` de `Campamentos_Mercenarios.md`.
     fn default() -> Self {
         let (zona, fundacion) = (asentamiento::datos::bloque("ZONA_INFLUENCIA"), asentamiento::datos::bloque("FUNDACION"));
         let mercenarios = militar::datos::bloque(militar::datos::CAMPAMENTOS, "MERCENARIOS");
@@ -441,7 +441,6 @@ impl Default for ReglasTerritorio {
             crecimiento_por_edificio: u(&zona, "crecimientoPorEdificioCompletado"),
             separacion_plazas: u(&fundacion, "separacionPlazas"),
             exclusion_campamento: u(&mercenarios, "radioExclusionFundar"),
-            cuota_parcelas_pct: num(&zona, "cuotaParcelasPorAsentamiento") as u32,
         }
     }
 }
@@ -1256,7 +1255,6 @@ impl Estado {
         w.i64(t.crecimiento_por_edificio);
         w.i64(t.separacion_plazas);
         w.i64(t.exclusion_campamento);
-        w.u32(t.cuota_parcelas_pct);
         w.texto(r.economia.huella());
         w.u64(self.version);
         w.i64(self.ahora);
@@ -1445,7 +1443,7 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN56`): los cuatro primeros dicen la familia («BAN5» es el formato 50 y «BAN4» los formatos 40 a 49, y se admiten todos; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
+        // La cabecera es de 5 bytes (`BAN57`): los cuatro primeros dicen la familia («BAN5» es el formato 50 y «BAN4» los formatos 40 a 49, y se admiten todos; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
         // 20 a 29 y 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         let (mut con_eligieron, mut con_rutas_acarreo, mut con_nombres, mut con_precios, mut con_forzadas, mut con_misiones, mut con_aldeas) = (true, true, true, true, true, true, true);
@@ -1453,8 +1451,13 @@ impl Estado {
         let (mut con_nombres_de_caravana, mut con_paso_de_encargo) = (false, false);
         // Hasta BAN52 cada plaza trae los minutos sin cupo de sus extractores; desde BAN53, no.
         let mut con_desempate = true;
+        let mut con_cuota_de_parcelas = true;
         if magia == MAGIA[..4] {
             match r.u8()? {
+                b'7' => {
+                    (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos, con_desempate, con_contratos) = (true, true, true, true, true, false, true);
+                    (con_nombres_de_caravana, con_paso_de_encargo, con_cuota_de_parcelas) = (true, true, false);
+                }
                 b'6' => {
                     (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos, con_desempate, con_contratos) = (true, true, true, true, true, false, true);
                     (con_nombres_de_caravana, con_paso_de_encargo) = (true, true);
@@ -1541,7 +1544,11 @@ impl Estado {
                     techos.push(r.i64()?);
                 }
                 let (crecimiento_por_edificio, separacion_plazas, exclusion_campamento) = (r.i64()?, r.i64()?, r.i64()?);
-                ReglasTerritorio { radio_inicial, techos, crecimiento_por_edificio, separacion_plazas, exclusion_campamento, cuota_parcelas_pct: r.u32()? }
+                // Hasta BAN56 la cabecera traía la cuota de parcelas por masa, que ya no existe.
+                if con_cuota_de_parcelas {
+                    r.u32()?;
+                }
+                ReglasTerritorio { radio_inicial, techos, crecimiento_por_edificio, separacion_plazas, exclusion_campamento }
             },
             economia: {
                 let huella = r.texto()?;

@@ -32,7 +32,6 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `fundacion.cap_alcanzado` | `CAP_ALCANZADO` | — |
 | `nivel.invalido` | `NIVEL_INVALIDO` | — |
 | `parcela.sin_libres` | `PARCELA_SIN_LIBRES` | — |
-| `parcela.cupo_agotado` | `PARCELA_CUPO_AGOTADO` | — |
 | `parcela.no_es_tuya` | `PARCELA_AJENA` | — |
 
 ### Obras (`ErrorObra` del crate `asentamiento`)

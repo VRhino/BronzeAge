@@ -252,7 +252,6 @@ impl Nucleo {
             let mut fuentes = FuentesMundo { mapa: &geo.mapa, nodos: yacimientos, ahora: t, catalogo: &reglas.economia.datos.catalogo, contado: [0; 24], agotados: vec![], regenerados: vec![] };
             let mut sitios = SitiosPlaza {
                 mapa: &geo.mapa,
-                cuota_pct: reglas.territorio.cuota_parcelas_pct,
                 id,
                 yo: Disco { centro: a.posicion, radio: a.radio, faccion: a.faccion },
                 parcelas: &mut a.parcelas,

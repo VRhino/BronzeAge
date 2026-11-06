@@ -1,6 +1,6 @@
 [package]
 name = "servicio"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 description = "El proceso del servidor (fase 7, 7B): el artefacto de mundo, el núcleo persistente, el WebSocket del contrato 05 y el servicio de acceso en un solo puerto"
 

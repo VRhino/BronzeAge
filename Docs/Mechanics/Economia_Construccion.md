@@ -1791,8 +1791,7 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
     "5": 60
   },
   "segmentosPoligono": 48,
-  "pasoFusionContorno": 1,
-  "cuotaParcelasPorAsentamiento": 50
+  "pasoFusionContorno": 1
 }
 ```
 <!-- /parametros -->
@@ -2402,7 +2401,7 @@ Los bloques de parámetros de este documento venían del motor TypeScript. Valor
 | `ZONA_INFLUENCIA.radioMaximoPorNivel` | 60 / 90 / 120 / 150 / 180 | **20 / 30 / 40 / 50 / 60** (10 / 15 / 20 / 25 / 30 hasta el 2026-11-05) |
 | `ZONA_INFLUENCIA.crecimientoPorEdificioCompletado` | 5 | **2** (1 hasta el 2026-11-05) |
 | `FUNDACION.separacionPlazas` | — | **20** (Doc 1.0a; 30 hasta el 2026-11-04, 10 ese día; en el bloque desde entonces) |
-| `ZONA_INFLUENCIA.cuotaParcelasPorAsentamiento` | — | **50** (%; en el bloque desde el 2026-11-04) |
+| `ZONA_INFLUENCIA.cuotaParcelasPorAsentamiento` | — | **se borra** (2026-11-06, decisión del autor: la frontera entre zonas ya reparte el bosque; antes 50 %, en el bloque desde el 2026-11-04) |
 | `MERCENARIOS.radioExclusionFundar` | 100 | **20** |
 | `ESCALA` / `radioUrbanoDe` | existían | **se borran**: el espacio local y el del mapa son independientes (Doc 1.0a). La ciudad usa su propio `radioCiudad` (30, +5 por edificio, máximos 60-180; `Trazado_Urbano.md`) |
 | `MANTENIMIENTO.escalaDistancia` | 400 | **300**, ya en el bloque desde el 2026-10-26 (80 hasta el 2026-10-25; P1 del batch político) |

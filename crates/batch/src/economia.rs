@@ -25,8 +25,8 @@ use territorio::Parcela;
 pub use nucleo::economia::NodoMapa;
 pub use nucleo::economia::{REGENERA_GANADO_MIN, REGENERA_MINERAL_MIN};
 
-/// Lo que el batch necesita del artefacto para la economía, inmutable: el mapa del núcleo y las reglas de territorio (cuota de parcelas por
-/// masa, techos de la zona, crecimiento por edificio). Se usa como el mapa del núcleo (`Deref`).
+/// Lo que el batch necesita del artefacto para la economía, inmutable: el mapa del núcleo y las reglas de territorio (techos
+/// de la zona, crecimiento por edificio). Se usa como el mapa del núcleo (`Deref`).
 pub struct Mapa {
     base: Arc<nucleo::economia::Mapa>,
     pub reglas: nucleo::ReglasTerritorio,
@@ -46,8 +46,8 @@ impl Mapa {
 
     /// El mapa a partir de sus partes (los mundos de pruebas).
     #[cfg(test)]
-    pub fn nuevo(nodos: Vec<NodoMapa>, parcelas: Vec<Parcela>, total_por_masa: Vec<usize>, campamentos: Vec<Punto>, ancho: i64, alto: i64) -> Arc<Mapa> {
-        Arc::new(Mapa { base: nucleo::economia::Mapa::nuevo(nodos, parcelas, total_por_masa, campamentos, ancho, alto), reglas: nucleo::ReglasTerritorio::default() })
+    pub fn nuevo(nodos: Vec<NodoMapa>, parcelas: Vec<Parcela>, campamentos: Vec<Punto>, ancho: i64, alto: i64) -> Arc<Mapa> {
+        Arc::new(Mapa { base: nucleo::economia::Mapa::nuevo(nodos, parcelas, campamentos, ancho, alto), reglas: nucleo::ReglasTerritorio::default() })
     }
 }
 
@@ -133,7 +133,7 @@ pub struct SinSitioCiudad {
 }
 
 /// El `Sitios` de una plaza: disco de zona sin recorte por vecinas (simplificación) y su ciudad real, la del núcleo. Lenera → parcela de
-/// bosque con la cuota por masa; Corral → el nodo de ganado libre más cercano; Cantera y minas → ninguno (van por pueblo extractor);
+/// bosque libre; Corral → el nodo de ganado libre más cercano; Cantera y minas → ninguno (van por pueblo extractor);
 /// y todo lo que tiene huella en la rejilla, además, solo si **cabe en la ciudad** (anclas, puestos y mudanza de la Granja
 /// incluidos: es el mismo adaptador que [`nucleo::economia`] usa en las plazas del núcleo, sin recorte de zona por vecinas).
 pub struct SitiosVilla<'a> {
@@ -158,8 +158,6 @@ impl Sitios for SitiosVilla<'_> {
             tipo,
             self.centro,
             self.radio,
-            self.parcelas,
-            self.mapa.reglas.cuota_parcelas_pct,
             &|i| reclamos.parcela[i as usize].is_none(),
             &|n| reclamos.nodo[n as usize].is_none(),
             &|_| true,
@@ -249,7 +247,7 @@ mod pruebas {
     fn mapa() -> Arc<Mapa> {
         let nodos = vec![nodo(5, Tipo::Cantera), nodo(8, Tipo::Cantera), nodo(5, Tipo::Corral), nodo(8, Tipo::Corral)];
         let parcelas = vec![parcela(3, 0), parcela(4, 0), parcela(50, 1), parcela(51, 1), parcela(52, 1), parcela(53, 1)];
-        Mapa::nuevo(nodos, parcelas, vec![2, 4], vec![], 100_000, 100_000)
+        Mapa::nuevo(nodos, parcelas, vec![], 100_000, 100_000)
     }
 
     /// Una plaza de pruebas: su ciudad recién fundada y los registros que el `Sitios` rellena.
@@ -332,17 +330,19 @@ mod pruebas {
     }
 
     #[test]
-    fn la_lenera_respeta_la_cuota_de_la_masa_y_las_minas_van_por_pueblo() {
+    fn la_lenera_toma_todas_las_parcelas_de_su_zona_y_las_minas_van_por_pueblo() {
         let m = mapa();
         let (mut rec, mut propias, mut ss, mut plaza) = (Reclamos::nuevo(&m), BTreeSet::new(), SinSitio::default(), Plaza::nueva());
         let mut s = sitios(&m, &mut rec, 0, 10_000, &mut propias, &mut ss, &mut plaza);
-        // Masa de 2 parcelas, cuota 50 % = 1: una Leñera y no más.
-        let Some(Some(Fuente::Parcela(p))) = s.proponer(Tipo::Lenera, &U, &mut 100, &mut vec![]) else { panic!("hay parcela") };
-        s.tomar(100, Tipo::Lenera, Some(Fuente::Parcela(p)), &U, &mut 101);
-        assert_eq!(s.proponer(Tipo::Lenera, &U, &mut 100, &mut vec![]), None, "cupo de la masa agotado");
+        // Masa de 2 parcelas en la zona: sin cuota por masa (2026-11-06), las dos Leñeras y no más.
+        for id in [100, 102] {
+            let Some(Some(Fuente::Parcela(p))) = s.proponer(Tipo::Lenera, &U, &mut 200, &mut vec![]) else { panic!("hay parcela") };
+            s.tomar(id, Tipo::Lenera, Some(Fuente::Parcela(p)), &U, &mut 201);
+        }
+        assert_eq!(s.proponer(Tipo::Lenera, &U, &mut 200, &mut vec![]), None, "no quedan parcelas libres en la zona");
         assert_eq!(s.proponer(Tipo::MinaEstano, &U, &mut 100, &mut vec![]), None);
         assert_eq!(s.proponer(Tipo::Vivienda, &U, &mut 100, &mut vec![]), Some(None), "en una ciudad recién fundada cabe una Vivienda");
         assert_eq!((ss.sin_ninguno[0], ss.total[0], ss.tiene[0]), (0, 1, true));
-        assert_eq!(rec.parcela.iter().flatten().count(), 1);
+        assert_eq!(rec.parcela.iter().flatten().count(), 2);
     }
 }
