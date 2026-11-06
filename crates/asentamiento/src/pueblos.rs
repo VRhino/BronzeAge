@@ -487,12 +487,14 @@ impl Asentamiento {
     /// a recurso, y lo anota. Con todo entregado arranca la obra (la del extractor del catálogo, o la del nivel de la aldea). Devuelve lo tomado,
     /// para que quien entrega lo quite de donde lo llevaba.
     pub fn entregar_a_pueblo(&mut self, t: Instante, r: &Reglas, id: u64, disponible: &[(Recurso, Mil)], ev: &mut Vec<Evento>) -> Result<Costo, ErrorPueblo> {
-        let p = self.pueblos.iter_mut().find(|p| p.id == id).ok_or(ErrorPueblo::NoExiste)?;
-        let minutos = match (p.es_aldea(), p.activo()) {
+        let p = self.pueblos.iter().find(|p| p.id == id).ok_or(ErrorPueblo::NoExiste)?;
+        let base = match (p.es_aldea(), p.activo()) {
             (false, _) => r.catalogo.tipo(p.tipo).tiempo_minutos,
             (true, false) => r.pueblos.aldea.nivel(1).obra_minutos,
             (true, true) => r.pueblos.aldea.niveles.get(&(p.nivel + 1)).map_or(0, |n| n.obra_minutos),
         };
+        let minutos = self.minutos_de_obra(r, base);
+        let p = self.pueblos.iter_mut().find(|p| p.id == id).expect("está");
         let obra = match (&mut p.estado, &mut p.mejora) {
             (EstadoPueblo::Pendiente { .. }, _) => &mut p.estado,
             (EstadoPueblo::Activo, Some(m @ EstadoPueblo::Pendiente { .. })) => m,
@@ -700,6 +702,20 @@ mod pruebas {
             (a.nivel, a.medidor.nivel_actual) = (nivel, nivel);
             assert_eq!(a.cupo_de_pueblos(&r), cupo);
         }
+    }
+
+    #[test]
+    fn la_via_rapida_de_la_plaza_acorta_la_obra_del_pueblo_al_arrancar() {
+        use crate::politicas::Activador;
+        let r = Reglas::cargar();
+        let mut a = madre(&r);
+        marcar(&mut a, &r, 1, Tipo::MinaCobre).unwrap();
+        a.politicas.activar(&r.politicas, "via_rapida", &Activador { cargo: crate::Cargo::Gobernador, cargo_ocupado: true, nivel_faccion: 1, sala_consejo: false }, 0).unwrap();
+        let factor = a.politicas.factor(&r.politicas, "factorTiempoConstruccion");
+        assert!(factor < crate::datos::UNO, "la Vía Rápida acorta");
+        a.entregar_a_pueblo(1_000, &r, 1, &[(Recurso::Madera, 500_000), (Recurso::Oro, 12_000)], &mut vec![]).unwrap();
+        let fin = 1_000 + crate::obras::minutos(360, factor) * MS_POR_MINUTO;
+        assert_eq!(a.pueblo(1).unwrap().estado, EstadoPueblo::EnObra { completa_en: fin }, "las 6 h de la mina de cobre, por el factor");
     }
 
     #[test]

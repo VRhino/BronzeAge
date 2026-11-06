@@ -299,8 +299,9 @@ impl Asentamiento {
     }
 
     /// Entrega materiales a la obra pendiente: toma de `disponible` lo que falta, recurso a recurso. Con todo entregado arranca la obra (la duración de
-    /// la etapa a la que lleva). Devuelve lo tomado, para que quien entrega lo quite de donde lo llevaba.
+    /// la etapa a la que lleva, por el factor de tiempo de la plaza). Devuelve lo tomado, para que quien entrega lo quite de donde lo llevaba.
     pub fn entregar_a_avanzada(&mut self, t: Instante, r: &Reglas, id: u64, disponible: &[(Recurso, Mil)], ev: &mut Vec<Evento>) -> Result<Costo, ErrorAvanzada> {
+        let factor = self.politicas.factor(&r.politicas, "factorTiempoConstruccion");
         let a = self.avanzadas.iter_mut().find(|a| a.id == id).ok_or(ErrorAvanzada::NoExiste)?;
         let etapa = a.etapa;
         let Some(obra @ Obra { completa_en: None, .. }) = &mut a.obra else { return Err(ErrorAvanzada::NoEstaPendiente) };
@@ -311,7 +312,8 @@ impl Asentamiento {
         ev.push(Evento::AvanzadaEntrega { id, cantidad: tomado.iter().map(|&(_, n)| n).sum() });
         if obra.falta().is_empty() {
             let destino = if obra.tipo == TipoObra::Mejorar { etapa.siguiente().expect("una mejora tiene etapa siguiente") } else { etapa };
-            let completa_en = t + r.avanzadas.duracion(destino);
+            // Con el factor de tiempo de la plaza (Vía Rápida, 2026-11-06), como sus obras.
+            let completa_en = t + crate::obras::minutos(r.avanzadas.duracion(destino) / MS_POR_MINUTO, factor) * MS_POR_MINUTO;
             obra.completa_en = Some(completa_en);
             ev.push(Evento::AvanzadaObraIniciada { id, tipo: obra.tipo, completa_en });
         }
@@ -418,6 +420,19 @@ mod pruebas {
             (a.nivel, a.medidor.nivel_actual) = (nivel, nivel);
             assert_eq!(a.cupo_de_avanzadas(&r), cupo);
         }
+    }
+
+    #[test]
+    fn la_via_rapida_de_la_madre_acorta_la_obra_de_la_avanzada() {
+        let r = Reglas::cargar();
+        let mut a = madre(&r, 2);
+        marcar(&mut a, &r, 1).unwrap();
+        a.politicas.activar(&r.politicas, "via_rapida", &crate::Activador { cargo: crate::Cargo::Gobernador, cargo_ocupado: true, nivel_faccion: 1, sala_consejo: false }, 0).unwrap();
+        let factor = a.politicas.factor(&r.politicas, "factorTiempoConstruccion");
+        let mut ev = vec![];
+        a.entregar_a_avanzada(5_000, &r, 1, &[(Madera, 200_000), (Piedra, 100_000)], &mut ev).unwrap();
+        let fin = 5_000 + crate::obras::minutos(120, factor) * MIN;
+        assert!(fin < 5_000 + 120 * MIN && ev.contains(&Evento::AvanzadaObraIniciada { id: 1, tipo: TipoObra::Construir, completa_en: fin }), "{ev:?}");
     }
 
     #[test]

@@ -39,7 +39,18 @@ use crate::estado_comercio::es_entidad_caravana;
 use crate::estado_fundacion::{es_entidad_fundacion, Origen as OrigenFundacion, Situacion as SituacionFundacion};
 use ::encuentros::{plan_quieto, Entradas};
 use ::mercenarios::Objetivo;
-use combate::bandidos::{campamentos_que_tocan, cuantos_crear_en_el_anillo, faltan_junto_a_plaza, nivel_al_azar, proxima_aparicion_en_el_anillo, punto_del_anillo, puede_acosar, reaparece_en, resolver_acoso};
+use combate::bandidos::{campamentos_que_tocan, cuantos_crear_en_el_anillo, faltan_junto_a_plaza, nivel_al_azar, proxima_aparicion_en_el_anillo, punto_del_anillo, puede_acosar, reaparece_en, resolver_acoso, resolver_emboscada};
+use combate::resolucion::Bando;
+use super::combates::caidos;
+use asentamiento::Recurso;
+use militar::Carga as Mercancia;
+
+/// A dónde va el oro de unos bandidos vencidos al defenderse de ellos.
+#[derive(Clone, Copy)]
+pub(super) enum Botin {
+    Columna(u64),
+    Caravana(u64),
+}
 use combate::caravana::{Defensa, Zona};
 use militar::escuadra::Escuadra;
 use std::collections::BTreeSet;
@@ -322,9 +333,9 @@ impl Nucleo {
         }
         if es_entidad_caravana(presa) {
             let idk = crate::estado_comercio::id_de_entidad(presa);
-            self.acosar(idc, idk, None, t);
+            self.acosar(idc, idk, t);
         } else if es_entidad_fundacion(presa) {
-            self.acosar_fundacion(idc, crate::estado_comercio::id_de_entidad(presa), None, t);
+            self.acosar_fundacion(idc, crate::estado_comercio::id_de_entidad(presa), t);
         } else if self.estado.ejercitos.get(&presa).is_some_and(|e| self.columna_en_el_mapa(e) && !self.acoso_ya_jugado(idc, e.id)) {
             self.acosar_columna(idc, presa, t);
         }
@@ -347,85 +358,157 @@ impl Nucleo {
                 return;
             }
         }
-        for idk in self.estado.ejercitos[&columna].caravanas_adjuntas.clone() {
-            self.acosar(idc, idk, Some(columna), t);
-        }
-        if let Some(x) = self.estado.fundacion.de_columna(columna) {
-            self.acosar_fundacion(idc, x, Some(columna), t);
-        }
+        self.emboscar_columna(idc, columna, t);
     }
 
-    /// El campamento `idc` acosa con una tirada con números a la Caravana de Fundación `x` (paridad con el TypeScript, P2): la que vuelve sola se defiende con los carreteros
-    /// (`defensaBaseCaravana`: no lleva escolta) y la que va adjunta a la columna `ejercito`, con el poder de esa columna. Si gana el bandido se la llevan entera, como en una disputa
-    /// ([`Nucleo::caer_fundacion`]). Va siempre con números: la batalla de acoso de Unity solo se juega las caravanas comerciales.
-    fn acosar_fundacion(&mut self, idc: u64, x: u64, ejercito: Option<u64>, t: Instante) {
-        let (Some(b), Some(k)) = (self.estado.combate.bandidos.get(&idc), self.estado.fundacion.caravanas.get(&x)) else { return };
-        let (nivel, origen) = (b.nivel, k.origen);
-        let (estado, donde) = match (ejercito, &k.situacion) {
-            (Some(c), SituacionFundacion::Adjunta(e)) if *e == c => (EstadoCaravana::Adjunta, self.estado.ejercitos[&c].posicion_en(t)),
-            (None, SituacionFundacion::Retornando(_)) => (EstadoCaravana::Retornando, k.posicion_en(t)),
-            _ => return,
-        };
-        if !self.es_presa_de_bandidos(estado, donde) {
+    /// La emboscada con números (2026-11-06, pedido del autor): los bandidos atacan a la columna y es un combate de verdad, el ataque a un campamento al revés
+    /// ([`combate::bandidos::resolver_emboscada`]). Defiende la tropa de la columna con sus héroes, que sufre bajas gane o pierda. Si ganan los bandidos se pierden **todas** las
+    /// caravanas adjuntas que son presa (y la de Fundación), como en la batalla de Unity; si gana la columna, el campamento cae y da su oro y su experiencia como si lo hubiera atacado.
+    fn emboscar_columna(&mut self, idc: u64, columna: u64, t: Instante) {
+        let Some(nivel) = self.estado.combate.bandidos.get(&idc).map(|b| b.nivel) else { return };
+        let donde = self.estado.ejercitos[&columna].posicion_en(t);
+        let caravanas: Vec<u64> =
+            self.estado.ejercitos[&columna].caravanas_adjuntas.iter().copied().filter(|&k| self.estado.comercio.caravana(k).is_some_and(|c| self.es_presa_de_bandidos(c.estado, donde))).collect();
+        let fundacion = self.estado.fundacion.de_columna(columna).filter(|_| self.es_presa_de_bandidos(EstadoCaravana::Adjunta, donde));
+        if caravanas.is_empty() && fundacion.is_none() {
             return;
         }
         let cr = self.estado.reglas.economia.combate.clone();
-        let de_la_columna: Vec<Escuadra> = ejercito.map(|c| self.escuadras_de_columna(c).into_iter().cloned().collect()).unwrap_or_default();
-        let defensa = if ejercito.is_some() { Defensa::Ejercito(&de_la_columna) } else { Defensa::Base };
-        let acoso = resolver_acoso(&cr, nivel, defensa, &mut self.estado.rng);
+        let mut tropa = self.tropa_de_columna(columna, t, cr.batalla.capacidad_resto);
+        let columnas = self.columnas_de(&tropa.escuadras);
+        let participantes = Self::participantes_de(&self.estado.ejercitos[&columna]);
+        let e = resolver_emboscada(&cr, nivel, Bando { escuadras: &mut tropa.escuadras, heroes: &tropa.heroes }, &mut self.estado.rng);
+        self.volcar_escuadras(&tropa.escuadras);
+        self.recomponer_tras_bajas(&columnas, t);
+        let origenes: Vec<u64> = caravanas.iter().filter_map(|&k| self.estado.comercio.caravana(k)).map(|k| k.origen as u64).collect();
+        // La participación (Participacion §2): la defensa a los de la columna; las misiones cuentan la batalla.
+        self.participacion_de_batalla(t, &origenes, &participantes, &[]);
+        self.avance_de_heroes(t, &participantes, "batallas", 1);
+        let atacados: Vec<Objetivo> = caravanas.iter().map(|&k| Objetivo::Caravana(k)).collect();
+        self.tras_batalla(t, &Desenlace { atacados: &atacados, atacantes: &[], defensores: &participantes, gana_atacante: e.gana_el_bandido, nivel_bandidos: None });
+        let codigo = if e.gana_el_bandido { "bandidos.caravana_interceptada" } else { "bandidos.caravana_escapa" };
+        for (&k, &origen) in caravanas.iter().zip(&origenes) {
+            let plazas = vec![origen].into_iter().filter(|o| self.estado.asentamientos.contains_key(o)).collect();
+            let datos = vec![("campamento", idc as i64), ("caravana", k as i64), ("poderBandido", e.poder_bandido), ("defensa", e.defensa), ("bajasEscolta", caidos(&e.bajas))];
+            self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed(codigo), en: t, ejercitos: vec![columna], asentamientos: plazas, punto: Some(donde), datos, ..Default::default() });
+        }
+        if let Some(x) = fundacion {
+            let plazas = match self.estado.fundacion.caravanas.get(&x).map(|k| k.origen) {
+                Some(OrigenFundacion::Plaza(a)) if self.estado.asentamientos.contains_key(&a) => vec![a],
+                _ => vec![],
+            };
+            let datos = vec![("campamento", idc as i64), ("caravana", x as i64), ("poderBandido", e.poder_bandido), ("defensa", e.defensa), ("bajasEscolta", caidos(&e.bajas))];
+            self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed(codigo), en: t, ejercitos: vec![columna], asentamientos: plazas, punto: Some(donde), datos, ..Default::default() });
+        }
+        if e.gana_el_bandido {
+            for k in caravanas {
+                self.contar(t, tecnologia::contador::Delta::uno(tecnologia::Contador::CaravanasDestruidasOCapturadas));
+                self.perder_caravana(t, k);
+            }
+            if let Some(x) = fundacion {
+                self.contar(t, tecnologia::contador::Delta::uno(tecnologia::Contador::CaravanasDestruidasOCapturadas));
+                let antes = self.velocidad_antes(columna);
+                self.caer_fundacion(t, x, combate::caravana::Modalidad::Disputa);
+                self.recomponer_por_fundacion(columna, t, antes);
+            }
+        } else {
+            let faccion = self.estado.ejercitos[&columna].columna.faccion;
+            self.bandidos_vencidos(t, idc, &tropa.heroes, Botin::Columna(columna), faccion, donde);
+        }
+    }
+
+    /// Un campamento que ataca y pierde cae (2026-11-06, pedido del autor), con el premio de haberlo destruido: el oro de cada héroe que lo venció (a la columna que
+    /// defendía o a la caravana escoltada, lo que quepa), la experiencia de bandidos de su Facción, el contador de campamentos destruidos y las misiones de bandidos.
+    pub(super) fn bandidos_vencidos(&mut self, t: Instante, idc: u64, heroes: &[u64], botin: Botin, faccion: Option<u32>, donde: Punto) {
+        let Some((nivel, origen)) = self.estado.combate.bandidos.get(&idc).map(|b| (b.nivel, b.origen)) else { return };
+        let mut oro = Mercancia::new();
+        for &h in heroes {
+            let ganado = self.oro_de_bandidos_para(h, origen, nivel, t);
+            militar::sumar(&mut oro, Recurso::Oro, ganado);
+        }
+        let cogido = match botin {
+            Botin::Columna(c) => self.cargar_botin_en(c, &oro),
+            Botin::Caravana(k) => self.cargar_botin_en_caravana(k, &oro),
+        };
+        self.destruir_bandidos(idc, t);
+        self.experiencia_de_bandidos(t, faccion);
+        self.contar(t, tecnologia::contador::Delta::uno(tecnologia::Contador::BandidosCampamentosDestruidos));
+        self.avance_de_heroes(t, heroes, "bandidos", 1);
+        if let Some(f) = faccion {
+            self.avance(t, Dueno::Faccion(f), "bandidos", 1);
+        }
+        let ejercitos = match botin {
+            Botin::Columna(c) => vec![c],
+            Botin::Caravana(_) => vec![],
+        };
+        self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed("bandidos.campamento_vencido"), en: t, ejercitos, asentamientos: vec![], punto: Some(donde), datos: vec![("campamento", idc as i64), ("nivel", nivel as i64), ("oro", militar::total(&cogido))], ..Default::default() });
+    }
+
+    /// El oro de unos bandidos vencidos en la caravana que los venció con su escolta: lo que quepa en su capacidad.
+    fn cargar_botin_en_caravana(&mut self, k: u64, botin: &Mercancia) -> Mercancia {
+        let flota = self.estado.reglas.economia.comercio.flota.clone();
+        let Some(i) = self.estado.comercio.posicion_caravana(k) else { return Mercancia::new() };
+        let c = &mut self.estado.comercio.flota[i];
+        let capacidad = c.capacidad(&flota);
+        let cogido = combate::botin::cargar_botin(&mut c.contenido, botin, capacidad);
+        self.tr.tocar(Clase::Caravana, k);
+        cogido
+    }
+
+    /// El campamento `idc` acosa con una tirada con números a la Caravana de Fundación `x` que vuelve sola (paridad con el TypeScript, P2): se defiende con los carreteros
+    /// (`defensaBaseCaravana`: no lleva escolta). Si gana el bandido se la llevan entera, como en una disputa ([`Nucleo::caer_fundacion`]). La que va adjunta a una columna cae o se
+    /// salva con la emboscada de la columna ([`Nucleo::emboscar_columna`]).
+    fn acosar_fundacion(&mut self, idc: u64, x: u64, t: Instante) {
+        let (Some(b), Some(k)) = (self.estado.combate.bandidos.get(&idc), self.estado.fundacion.caravanas.get(&x)) else { return };
+        let (nivel, origen) = (b.nivel, k.origen);
+        let SituacionFundacion::Retornando(_) = k.situacion else { return };
+        let donde = k.posicion_en(t);
+        if !self.es_presa_de_bandidos(EstadoCaravana::Retornando, donde) {
+            return;
+        }
+        let cr = self.estado.reglas.economia.combate.clone();
+        let acoso = resolver_acoso(&cr, nivel, Defensa::Base, &mut self.estado.rng);
         let plazas = match origen {
             OrigenFundacion::Plaza(a) if self.estado.asentamientos.contains_key(&a) => vec![a],
             _ => vec![],
         };
         let datos = vec![("campamento", idc as i64), ("caravana", x as i64), ("poderBandido", acoso.poder_bandido), ("defensa", acoso.defensa), ("bajasEscolta", 0)];
-        self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed(if acoso.gana_el_bandido { "bandidos.caravana_interceptada" } else { "bandidos.caravana_escapa" }), en: t, ejercitos: ejercito.into_iter().collect(), asentamientos: plazas, punto: Some(donde), datos, ..Default::default() });
+        self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed(if acoso.gana_el_bandido { "bandidos.caravana_interceptada" } else { "bandidos.caravana_escapa" }), en: t, ejercitos: vec![], asentamientos: plazas, punto: Some(donde), datos, ..Default::default() });
         if acoso.gana_el_bandido {
             self.contar(t, tecnologia::contador::Delta::uno(tecnologia::Contador::CaravanasDestruidasOCapturadas));
-            let antes = ejercito.and_then(|c| self.velocidad_antes(c));
             self.caer_fundacion(t, x, combate::caravana::Modalidad::Disputa);
-            // La columna que la llevaba ya no va a su paso.
-            if let Some(c) = ejercito {
-                self.recomponer_por_fundacion(c, t, antes);
-            }
         }
     }
 
-    /// El campamento `idc` acosa con una tirada con números a la caravana `idk`, que se defiende sola (con su escolta cedida o con los carreteros) o, si va adjunta a la columna `ejercito`,
-    /// con el poder de esa columna (que no sufre bajas).
-    fn acosar(&mut self, idc: u64, idk: u64, ejercito: Option<u64>, t: Instante) {
+    /// El campamento `idc` acosa con una tirada con números a la caravana suelta `idk`, que se defiende con su escolta cedida (que sufre bajas) o con los carreteros. Si la escolta
+    /// gana, el campamento cae (2026-11-06, pedido del autor): su oro, para los héroes de la escolta, va en la caravana. Contra los carreteros solo se salva la caravana.
+    fn acosar(&mut self, idc: u64, idk: u64, t: Instante) {
         let (Some(b), Some(k)) = (self.estado.combate.bandidos.get(&idc), self.estado.comercio.caravana(idk)) else { return };
         let (nivel, origen, estado) = (b.nivel, k.origen as u64, k.estado);
-        let donde = match ejercito {
-            Some(c) => self.estado.ejercitos[&c].posicion_en(t),
-            None => self.posicion_de_caravana(idk, t).unwrap_or(k.posicion),
-        };
+        let donde = self.posicion_de_caravana(idk, t).unwrap_or(k.posicion);
         if !self.es_presa_de_bandidos(estado, donde) {
             return;
         }
         let cr = self.estado.reglas.economia.combate.clone();
         let mut escolta: Vec<Escuadra> = k.escolta.iter().filter_map(|c| self.escuadra(c.id).map(|(_, s)| s.clone())).collect();
-        let de_la_columna: Vec<Escuadra> = ejercito.map(|c| self.escuadras_de_columna(c).into_iter().cloned().collect()).unwrap_or_default();
-        // La participación (Participacion §2): el acoso no es una batalla; solo da la defensa a quien defiende la caravana (la columna que la lleva o su escolta cedida).
-        let defensores = match ejercito {
-            Some(c) => Self::participantes_de(&self.estado.ejercitos[&c]),
-            None => self.heroes_de_escolta(&escolta),
-        };
-        let defensa = match ejercito {
-            Some(_) => Defensa::Ejercito(&de_la_columna),
-            None if escolta.iter().any(Escuadra::con_soldados) => Defensa::Escolta(&mut escolta),
-            None => Defensa::Base,
-        };
+        // La participación (Participacion §2): solo da la defensa a los héroes de la escolta cedida.
+        let defensores = self.heroes_de_escolta(&escolta);
+        let escoltada = escolta.iter().any(Escuadra::con_soldados);
+        let defensa = if escoltada { Defensa::Escolta(&mut escolta) } else { Defensa::Base };
         let acoso = resolver_acoso(&cr, nivel, defensa, &mut self.estado.rng);
         self.participacion_de_batalla(t, &[origen], &defensores, &[]);
         self.tras_batalla(t, &Desenlace { atacados: &[Objetivo::Caravana(idk)], atacantes: &[], defensores: &defensores, gana_atacante: acoso.gana_el_bandido, nivel_bandidos: None });
         self.volcar_escuadras(&escolta);
         let plazas = vec![origen].into_iter().filter(|o| self.estado.asentamientos.contains_key(o)).collect();
         let datos = vec![("campamento", idc as i64), ("caravana", idk as i64), ("poderBandido", acoso.poder_bandido), ("defensa", acoso.defensa), ("bajasEscolta", acoso.bajas_escolta.iter().map(|b| b.antes - b.despues).sum())];
-        self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed(if acoso.gana_el_bandido { "bandidos.caravana_interceptada" } else { "bandidos.caravana_escapa" }), en: t, ejercitos: ejercito.into_iter().collect(), asentamientos: plazas, punto: Some(donde), datos, ..Default::default() });
+        self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed(if acoso.gana_el_bandido { "bandidos.caravana_interceptada" } else { "bandidos.caravana_escapa" }), en: t, ejercitos: vec![], asentamientos: plazas, punto: Some(donde), datos, ..Default::default() });
         if acoso.gana_el_bandido {
             self.contar(t, tecnologia::contador::Delta::uno(tecnologia::Contador::CaravanasDestruidasOCapturadas));
             // La caravana desaparece con su carga; su escolta (a 0) vuelve al campamento de su héroe al perderse.
             self.perder_caravana(t, idk);
+        } else if escoltada {
+            let faccion = self.estado.asentamientos.get(&origen).map(|a| a.faccion);
+            self.bandidos_vencidos(t, idc, &defensores, Botin::Caravana(idk), faccion, donde);
         }
     }
 

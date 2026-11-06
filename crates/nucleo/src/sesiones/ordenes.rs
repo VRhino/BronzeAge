@@ -635,6 +635,10 @@ impl Ctx<'_> {
                 let plaza = self.plaza(&o.asentamiento_id)?;
                 Comando::QuitarDeCola { asentamiento: plaza, edificio: self.edificio(plaza, &o.edificio_id)? }
             }
+            Cuerpo::CancelarConstruccion(o) => {
+                let plaza = self.plaza(&o.asentamiento_id)?;
+                Comando::CancelarConstruccion { asentamiento: plaza, edificio: self.edificio(plaza, &o.edificio_id)? }
+            }
             Cuerpo::MoverEnCola(o) => {
                 let plaza = self.plaza(&o.asentamiento_id)?;
                 let arriba = match o.direccion.as_str() {

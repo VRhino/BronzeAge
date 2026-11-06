@@ -170,6 +170,7 @@ impl Nucleo {
             | Comando::SoltarParcela { .. }
             | Comando::AnadirEdificio { .. }
             | Comando::QuitarDeCola { .. }
+            | Comando::CancelarConstruccion { .. }
             | Comando::MoverEnCola { .. }
             | Comando::MejorarEdificio { .. }
             | Comando::AlternarAutoConstruccion { .. }

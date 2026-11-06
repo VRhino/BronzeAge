@@ -1122,6 +1122,12 @@ impl Nucleo {
                     _ => {}
                 }
             }
+            // La columna que aguanta la emboscada de unos bandidos los vence (2026-11-06, pedido del autor): el mismo premio que con números.
+            Contexto::Caravana { punto, .. } if acoso && res.ganador == Lado::Defensor => {
+                if let (Some(c), Some(&columna)) = (b.bloqueo.campamento, b.bloqueo.ejercitos.first()) {
+                    self.bandidos_vencidos(t, u64::from(c), &defendieron, super::bandidos::Botin::Columna(columna), b.ticket.defensor.faccion, punto);
+                }
+            }
             _ => {}
         }
         // La experiencia de Facción: por cada héroe que participó, a la Facción con la que entró (la del ticket), sin filtro de dignidad (5C). Contra un campamento de bandidos, solo la

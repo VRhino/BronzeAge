@@ -215,6 +215,13 @@ fn el_heroe_nace_en_un_campamento_con_su_progresion_inicial_y_cada_rechazo_tiene
         assert_eq!(e.rechazada("admin", con_nombre("dora", malo)), rechazos::HEROE_NOMBRE_INVALIDO, "«{malo}»");
     }
     let dora = e.ok("admin", con_nombre("dora", "Arkanthos")).creadas[0];
+    // Dos héroes no se llaman igual, sin distinguir mayúsculas (2026-11-06); el rechazo no gasta ids.
+    let id_antes = e.n.estado().siguiente_id;
+    for repetido in ["Arkanthos", "arkanthos", "ARKANTHOS"] {
+        assert_eq!(e.rechazada("admin", con_nombre("eva", repetido)), rechazos::HEROE_NOMBRE_EN_USO, "«{repetido}»");
+    }
+    assert_eq!(e.n.estado().siguiente_id, id_antes);
+    e.ok("admin", con_nombre("eva", "Arkanthos II"));
     assert_eq!(nucleo::proyeccion::propios::heroe(&e.n, e.n.heroe(dora).unwrap()).display_name, "Arkanthos");
     assert_eq!(nucleo::proyeccion::vista::heroe_publico(&e.n, dora).display_name, "Arkanthos", "también el héroe que ven los demás");
     assert_eq!(nucleo::proyeccion::propios::heroe(&e.n, e.n.heroe(bot).unwrap()).display_name, format!("Héroe {bot}"));

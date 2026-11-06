@@ -1031,6 +1031,7 @@ impl Nucleo {
             },
             Comando::AnadirEdificio { .. }
             | Comando::QuitarDeCola { .. }
+            | Comando::CancelarConstruccion { .. }
             | Comando::MoverEnCola { .. }
             | Comando::MejorarEdificio { .. }
             | Comando::AlternarAutoConstruccion { .. }

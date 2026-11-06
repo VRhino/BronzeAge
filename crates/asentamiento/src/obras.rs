@@ -1,5 +1,6 @@
 //! Obras de un asentamiento (Economia_Construccion §6.1, §6.4, §7, §8): cola, cuadrillas, mejoras de nivel interno y las
-//! órdenes manuales del Gobernador y el Maestro de Obras. El pago ocurre **al encolar**; una obra ya empezada no se cancela.
+//! órdenes manuales del Gobernador y el Maestro de Obras. El pago ocurre **al encolar**; una obra ya empezada se cancela sin recuperar nada
+//! (`cancelar_obra`, desde el 2026-11-06).
 
 use crate::asentamiento::{Asentamiento, Evento, Exterior};
 use crate::catalogo::Tipo;
@@ -34,12 +35,14 @@ pub enum ErrorObra {
     RecursosInsuficientes,
     NoExiste,
     NoEstaEnCola,
+    /// No hay obra en curso que cancelar: ni en construcción ni mejorándose.
+    NoEstaEnObra,
     NoEsMejorable,
     SinCuadrilla,
 }
 
 /// Minutos de una obra con los factores de tiempo (política «Vía Rápida», reconstrucción): `max(1, round(tiempo × factor))`.
-fn minutos(tiempo: i64, factor_ppm: i64) -> i64 {
+pub(crate) fn minutos(tiempo: i64, factor_ppm: i64) -> i64 {
     ((tiempo as i128 * factor_ppm as i128 + UNO as i128 / 2) / UNO as i128).max(1) as i64
 }
 
@@ -133,6 +136,12 @@ impl Asentamiento {
         self.nivel_actual() >= sig.requisito_nivel_asentamiento
             && sig.tecnologia.as_deref().map_or(true, |t| (x.tiene_tecnologia)(t))
             && sig.requiere_edificio.map_or(true, |(t, n)| self.edificios.hay_activo_con_nivel(t, n))
+    }
+
+    /// Los minutos de una obra de la plaza fuera de su cola, con su factor de tiempo (Vía Rápida): la de un pueblo o una aldea, la subida de nivel de
+    /// una aldea y la de una avanzada (2026-11-06, pedido del autor). Como en la ciudad, al arrancar: una obra ya empezada no cambia.
+    pub fn minutos_de_obra(&self, r: &Reglas, base: i64) -> i64 {
+        minutos(base, self.politicas.factor(&r.politicas, "factorTiempoConstruccion"))
     }
 
     /// Minutos de una mejora al nivel siguiente: `obraMinutos` propio o la obra base × 2 / 4 / 8, por el factor de tiempo.
@@ -307,6 +316,26 @@ impl Asentamiento {
         self.almacen.devolver(&total);
         self.edificios.remove(i);
         Ok(())
+    }
+
+    /// `cancelarObra` (2026-11-06, pedido del autor): para la obra que ya empezó y **no devuelve nada**. Un edificio en construcción (también una
+    /// reconstrucción tras un saqueo) desaparece; una mejora en curso se abandona y el edificio sigue activo en su nivel. La cuadrilla queda
+    /// libre y la cola arranca en ese instante lo que esperaba. Devuelve si el edificio desapareció, para que quien lleva el suelo y las fuentes
+    /// los suelte.
+    pub fn cancelar_obra(&mut self, t: Instante, r: &Reglas, id: u32, ev: &mut Vec<Evento>) -> Result<bool, ErrorObra> {
+        let i = self.edificios.iter().position(|e| e.id == id).ok_or(ErrorObra::NoExiste)?;
+        let e = &mut self.edificios[i];
+        let quitado = if e.estado == Estado::EnConstruccion {
+            self.edificios.remove(i);
+            true
+        } else if e.mejora.take().is_some() {
+            false
+        } else {
+            return Err(ErrorObra::NoEstaEnObra);
+        };
+        ev.push(Evento::ObraCancelada { id, mejora: !quitado });
+        self.arrancar_obras(t, r, ev);
+        Ok(quitado)
     }
 
     /// `moverEnCola`: intercambia la `prioridad` con la del vecino de la lista ordenada por prioridad descendente.

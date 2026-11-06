@@ -96,6 +96,7 @@ fn rechazo_de_obra(e: ErrorObra) -> (&'static str, &'static str) {
         ErrorObra::RecursosInsuficientes => (OBRA_RECURSOS_INSUFICIENTES, "faltan recursos (o se bajaría de la reserva)"),
         ErrorObra::NoExiste => (EDIFICIO_DESCONOCIDO, "la plaza no tiene ese edificio"),
         ErrorObra::NoEstaEnCola => (OBRA_NO_ESTA_EN_COLA, "el edificio no está en la cola de obras"),
+        ErrorObra::NoEstaEnObra => (OBRA_NO_ESTA_EN_CURSO, "el edificio no tiene obra en curso"),
         ErrorObra::NoEsMejorable => (OBRA_NO_MEJORABLE, "el edificio no se puede mejorar ahora"),
         ErrorObra::SinCuadrilla => (OBRA_SIN_CUADRILLA, "no queda cuadrilla libre"),
     }
@@ -151,6 +152,7 @@ fn evento_nucleo(id: u64, t: Instante, punto: Punto, e: &EventoEco, reglas: &ase
         EventoEco::NecesidadDetectada { id, tipo, prioridad } => ("construccion.necesidad_detectada", vec![("edificio", *id as i64), ("tipo", tipo_a_u8(*tipo) as i64), ("prioridad", *prioridad)]),
         EventoEco::Encolada { id, tipo } => ("construccion.encolada", vec![("edificio", *id as i64), ("tipo", tipo_a_u8(*tipo) as i64)]),
         EventoEco::Desencolada { id } => ("construccion.desencolada", vec![("edificio", *id as i64)]),
+        EventoEco::ObraCancelada { id, mejora } => ("construccion.obra_cancelada", vec![("edificio", *id as i64), ("mejora", *mejora as i64)]),
         EventoEco::ColaReordenada => ("construccion.cola_reordenada", vec![]),
         EventoEco::PrimerosArtesanos => ("poblacion.primeros_artesanos", vec![]),
         EventoEco::PrimerosNobles => ("poblacion.primeros_nobles", vec![]),
@@ -597,6 +599,7 @@ impl Nucleo {
         let sin_cambios = || Respuesta::sin_cambios(v);
         let (Comando::AnadirEdificio { asentamiento, .. }
         | Comando::QuitarDeCola { asentamiento, .. }
+        | Comando::CancelarConstruccion { asentamiento, .. }
         | Comando::MoverEnCola { asentamiento, .. }
         | Comando::MejorarEdificio { asentamiento, .. }
         | Comando::AlternarAutoConstruccion { asentamiento, .. }
@@ -637,6 +640,14 @@ impl Nucleo {
                 plaza.urbe.quitar(*edificio); // su pieza deja de ocupar suelo
                 self.liberar_fuente(id, fuente);
                 sucesos.push(EventoEco::Desencolada { id: *edificio });
+            }
+            Comando::CancelarConstruccion { edificio, .. } => {
+                let plaza = self.estado.asentamientos.get_mut(&id).expect("existe");
+                let fuente = plaza.economia.edificio(*edificio).and_then(|e| e.fuente);
+                if plaza.economia.cancelar_obra(t, &datos, *edificio, &mut sucesos).map_err(rechazo_obra)? {
+                    plaza.urbe.quitar(*edificio); // su pieza deja de ocupar suelo
+                    self.liberar_fuente(id, fuente);
+                }
             }
             Comando::MoverEnCola { edificio, arriba, .. } => {
                 let eco = &mut self.estado.asentamientos.get_mut(&id).expect("existe").economia;

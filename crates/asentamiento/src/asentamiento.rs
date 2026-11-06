@@ -140,6 +140,8 @@ pub enum Evento {
     /// Un jugador añadió, quitó o reordenó la cola.
     Encolada { id: u32, tipo: Tipo },
     Desencolada { id: u32 },
+    /// Se canceló una obra en curso sin recuperar nada (2026-11-06): el edificio desapareció o, si `mejora`, se abandonó su mejora.
+    ObraCancelada { id: u32, mejora: bool },
     ColaReordenada,
     PrimerosArtesanos,
     PrimerosNobles,

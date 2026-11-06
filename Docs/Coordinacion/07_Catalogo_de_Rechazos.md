@@ -56,6 +56,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `obra.recursos_insuficientes` | `OBRA_RECURSOS_INSUFICIENTES` | — |
 | `edificio.desconocido` | `EDIFICIO_DESCONOCIDO` | — |
 | `obra.no_esta_en_cola` | `OBRA_NO_ESTA_EN_COLA` | — |
+| `obra.no_esta_en_curso` | `OBRA_NO_ESTA_EN_CURSO` | El edificio no tiene obra en curso que cancelar: ni en construcción ni mejorándose (2026-11-06). |
 | `obra.no_mejorable` | `OBRA_NO_MEJORABLE` | — |
 | `obra.sin_cuadrilla` | `OBRA_SIN_CUADRILLA` | — |
 
@@ -331,6 +332,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 |---|---|---|
 | `heroe.ya_existe` | `HEROE_YA_EXISTE` | — |
 | `heroe.nombre_invalido` | `HEROE_NOMBRE_INVALIDO` | El nombre del héroe está vacío, empieza o acaba en espacio, pasa de 24 caracteres o lleva caracteres de control. |
+| `heroe.nombre_en_uso` | `HEROE_NOMBRE_EN_USO` | Ya hay otro héroe con ese nombre (sin distinguir mayúsculas; 2026-11-06, pedido del autor). |
 | `heroe.campamento_desconocido` | `HEROE_CAMPAMENTO_DESCONOCIDO` | — |
 | `heroe.puntos_negativos` | `HEROE_PUNTOS_NEGATIVOS` | — |
 | `heroe.ningun_punto` | `HEROE_NINGUN_PUNTO` | — |

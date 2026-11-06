@@ -788,6 +788,15 @@ message OrdenQuitarDeCola {
   string edificio_id = 3;
 }
 
+// Cancela la obra en curso de un edificio sin devolver nada (2026-11-06): el que se construye o se reconstruye
+// desaparece y una mejora se abandona con el edificio en su nivel. Los mismos cargos que quitar_de_cola. La obra de una
+// avanzada se cancela con cancelar_obra.
+message OrdenCancelarConstruccion {
+  string asentamiento_id = 1;
+  string cargo = 2;  // gobernador | maestroObras
+  string edificio_id = 3;
+}
+
 message OrdenQuitarEscolta {
   string caravana_id = 1;
   string heroe_id = 2;
@@ -1289,5 +1298,6 @@ message Orden {
     OrdenCerrarSesion cerrar_sesion = 180;
     OrdenRenombrarCaravana renombrar_caravana = 181;
     OrdenDetenerEncargo detener_encargo = 182;
+    OrdenCancelarConstruccion cancelar_construccion = 183;
   }
 }

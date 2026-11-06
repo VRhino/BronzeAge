@@ -214,6 +214,9 @@ impl Nucleo {
                 if let Some(x) = nombre.as_deref().filter(|x| x.trim() != *x || x.is_empty() || x.chars().count() > crate::comando::NOMBRE_HEROE_MAX || x.chars().any(char::is_control)) {
                     return Err(rechazo(rechazos::HEROE_NOMBRE_INVALIDO, format!("«{x}»: el nombre lleva de 1 a {} caracteres, sin espacios a los lados", crate::comando::NOMBRE_HEROE_MAX)));
                 }
+                if let Some(x) = nombre.as_deref().filter(|x| self.estado.militar.nombre_en_uso(x)) {
+                    return Err(rechazo(rechazos::HEROE_NOMBRE_EN_USO, format!("«{x}»: ya hay un héroe con ese nombre")));
+                }
                 let (id, loadout) = (self.estado.siguiente_id, self.estado.siguiente_id + 1);
                 self.estado.siguiente_id += 2;
                 let heroe = Heroe::nuevo(&mr, id, *controlador, *campamento, loadout);

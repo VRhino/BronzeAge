@@ -760,7 +760,7 @@ async fn los_bandidos_que_acosan_a_una_columna_de_bots_juegan_una_batalla_sin_hu
     let b = n.batallas().next().expect("la batalla sigue en el estado, cerrada");
     assert_eq!((b.iniciada_por, b.estado, b.ticket.atacante.faccion, b.bloqueo.campamento), (0, combate::ciclo::EstadoBatalla::Aplicada, None, Some(campamento as u32)), "nadie la inició");
     assert!(n.caravana(caravana).is_some(), "ganaron los defensores: la caravana sigue");
-    assert!(n.campamento_de_bandidos(campamento).is_some(), "y el campamento, donde estaba");
+    assert!(n.campamento_de_bandidos(campamento).is_none(), "y los bandidos que la emboscaron caen (2026-11-06)");
 }
 
 // ───────────────────────────── La Caravana de Fundación que vuelve sola ─────────────────────────────

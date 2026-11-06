@@ -99,6 +99,30 @@ pub fn puede_acosar(r: &Reglas, estado: EstadoCaravana, distancia: Mil, en_zona:
         && distancia <= r.bandidos.radio_ataque_caravana
 }
 
+/// La emboscada a una columna que lleva caravanas (2026-11-06, pedido del autor): el ataque a un campamento al revés.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Emboscada {
+    /// Las caravanas que lleva la columna se pierden; si no, el campamento cae.
+    pub gana_el_bandido: bool,
+    pub poder_bandido: Mil,
+    /// El poder de la columna con sus héroes, sin tirada (la tira el campamento).
+    pub defensa: Mil,
+    /// Las de la columna: el 25 % si pierde y el 5 % si gana.
+    pub bajas: Vec<Baja>,
+}
+
+/// Los bandidos atacan a la columna: `poder del campamento × tirada > poder de la columna` con **una** tirada, como [`resolver_campamento`] con los
+/// papeles cambiados. La columna sufre las bajas del combate (25 % si pierde, 5 % si gana) y los bandidos no tienen ventaja de tipo. Una columna
+/// sin nadie que combata no se defiende.
+pub fn resolver_emboscada(r: &Reglas, nivel: u8, columna: Bando, rng: &mut Rng) -> Emboscada {
+    let poder = (nivel_de(r, nivel).poder as i128 * tirada(r, rng) as i128 / UNO as i128) as Mil;
+    let defensa = poder_de_bando(r, columna.escuadras, columna.heroes.len());
+    let gana = ganador_de(poder, defensa) == Lado::Atacante;
+    let n = &r.numericas;
+    let bajas = aplicar_bajas(r, columna.escuadras, if gana { n.bajas_fijas_perdedor } else { n.bajas_fijas_ganador }, !gana, &mut Carga::new());
+    Emboscada { gana_el_bandido: gana, poder_bandido: poder, defensa, bajas }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Acoso {
     /// La caravana desaparece (no hay quien reciba la carga) y su escolta sin héroe queda a 0 y vuelve al campamento de su héroe.
@@ -108,8 +132,8 @@ pub struct Acoso {
     pub bajas_escolta: Vec<Baja>,
 }
 
-/// El acoso: **una** tirada, `poder del campamento × tirada > defensa`. La defensa es el ejército al que va adjunta (no sufre nada), la escolta sin
-/// héroe (25 % si el bandido gana, 5 % si no; a 0 si cae) o la base. Los bandidos no tienen ventaja de tipo.
+/// El acoso a una caravana que viaja sola: **una** tirada, `poder del campamento × tirada > defensa`. La defensa es la escolta sin héroe (25 % si el
+/// bandido gana, 5 % si no; a 0 si cae) o la base. Los bandidos no tienen ventaja de tipo. La que va con una columna es una [`Emboscada`].
 pub fn resolver_acoso(r: &Reglas, nivel: u8, defensa: Defensa, rng: &mut Rng) -> Acoso {
     let poder = (nivel_de(r, nivel).poder as i128 * tirada(r, rng) as i128 / UNO as i128) as Mil;
     let d = defensa_de(r, &defensa);
@@ -297,7 +321,7 @@ mod pruebas {
     }
 
     #[test]
-    fn la_escolta_pierde_el_25_si_cae_y_el_5_si_aguanta_y_el_ejercito_nada() {
+    fn la_escolta_pierde_el_25_si_cae_y_el_5_si_aguanta() {
         let r = r();
         let mut cae = [escuadra(1, 5, Tropa::MiliciaLanceros)];
         let a = resolver_acoso(r, 3, Defensa::Escolta(&mut cae), &mut Rng::nuevo(1));
@@ -310,10 +334,28 @@ mod pruebas {
         assert!(!a.gana_el_bandido);
         assert_eq!(a.bajas_escolta.iter().map(|b| b.antes - b.despues).collect::<Vec<_>>(), vec![1, 1]);
         assert_eq!(aguanta[0].experiencia, 1_000);
+    }
 
-        let ejercito = [escuadra(4, 6, Tropa::Shardana)];
-        let a = resolver_acoso(r, 3, Defensa::Ejercito(&ejercito), &mut Rng::nuevo(1));
-        assert!(a.bajas_escolta.is_empty() && ejercito[0].cantidad == r.militar.tropas.tropa(Tropa::Shardana).unidades);
+    #[test]
+    fn en_la_emboscada_la_columna_combate_con_sus_heroes_y_sufre_bajas() {
+        let r = r();
+        let unidades = r.militar.tropas.tropa(Tropa::Shardana).unidades;
+        // Gana la columna: el 5 % de bajas y un consumo de una tirada.
+        let mut fuerte = [escuadra(4, 6, Tropa::Shardana)];
+        let (mut rng, mut espejo) = (Rng::nuevo(1), Rng::nuevo(1));
+        espejo.siguiente();
+        let e = resolver_emboscada(r, 1, Bando { escuadras: &mut fuerte, heroes: &[7] }, &mut rng);
+        assert_eq!(rng.estado(), espejo.estado(), "una tirada");
+        assert!(!e.gana_el_bandido && e.defensa > e.poder_bandido, "{e:?}");
+        assert_eq!(e.bajas[0].antes - e.bajas[0].despues, (unidades * 5 + 50) / 100, "el 5 %");
+        // Un héroe solo, sin tropa, contra un nivel 3: gana el bandido, sin bajas que repartir.
+        let e = resolver_emboscada(r, 3, Bando { escuadras: &mut [], heroes: &[7] }, &mut Rng::nuevo(1));
+        assert!(e.gana_el_bandido && e.bajas.is_empty());
+        // Pierde la columna: el 25 % y sigue en pie (no queda a 0, como la escolta).
+        let mut floja = [escuadra(5, 1, Tropa::MiliciaLanceros)];
+        let e = resolver_emboscada(r, 3, Bando { escuadras: &mut floja, heroes: &[] }, &mut Rng::nuevo(1));
+        assert!(e.gana_el_bandido);
+        assert_eq!((e.bajas[0].antes, e.bajas[0].despues, floja[0].cantidad), (25, 25 - 6, 25 - 6));
     }
 
     #[test]

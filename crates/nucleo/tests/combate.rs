@@ -1440,6 +1440,36 @@ fn bandidos_en_la_ruta(e: &mut Esc, caravana: u64, nivel: u8) -> (u64, Instante)
 }
 
 #[test]
+/// La escolta que vence a los bandidos que la acosan los destruye (2026-11-06, pedido del autor): su oro, para el héroe de la escolta, va en la caravana; la escolta sufre el 5 %.
+fn una_escolta_que_gana_el_acoso_destruye_el_campamento_y_su_oro_viaja_en_la_caravana() {
+    let m = con_mundo!();
+    let mut e = montar_lejos(m, 7, true);
+    let a = e.a;
+    let ca = e.caravana("ana", a, 2);
+    let carla = e.heroe_en(&m.0, "carla", 1, a);
+    let escolta: Vec<u64> = [(Tropa::ArquerosCompuesto, 12), (Tropa::EspadachinesBronce, 12)].iter().map(|&(t, cantidad)| e.ok("admin", Comando::DarEscuadra { heroe: carla, tropa: t, cantidad }).creadas[0]).collect();
+    e.ok("carla", Comando::AsignarEscolta { caravana: ca, heroe: carla, escuadras: escolta.clone() });
+    e.lanzar(ca);
+    let oro0 = e.n.caravana(ca).unwrap().contenido.get(&Oro).copied().unwrap_or(0);
+    let (b1, llegada) = bandidos_en_la_ruta(&mut e, ca, 1);
+    e.n.avanzar_hasta(llegada + 1_000);
+    let suyos = |codigo: &str| -> Vec<Hecho> { hechos(&e.n, codigo).into_iter().filter(|h| dato(h, "campamento") == b1 as i64).collect() };
+    assert_eq!(suyos("bandidos.caravana_escapa").len(), 1, "{:?}", suyos("bandidos.caravana_escapa"));
+    let vencido = suyos("bandidos.campamento_vencido");
+    assert_eq!(vencido.len(), 1, "el campamento cae");
+    assert!(e.n.campamento_de_bandidos(b1).is_none());
+    assert!(dato(&vencido[0], "oro") > 0, "el nivel 1 da oro");
+    // Por el camino puede vencer también a alguno de los de la plaza: cada victoria cuenta, trae su oro y cuesta el 5 % de la escolta.
+    let todos = hechos(&e.n, "bandidos.campamento_vencido");
+    assert_eq!(e.n.tecnologia().contador(Contador::BandidosCampamentosDestruidos), todos.len() as u64);
+    let oro: i64 = todos.iter().map(|h| dato(h, "oro")).sum();
+    assert_eq!(e.n.caravana(ca).unwrap().contenido.get(&Oro).copied().unwrap_or(0), oro0 + oro, "el oro viaja en la caravana");
+    let quedan: Vec<i64> = escolta.iter().map(|&s| e.n.heroe(carla).unwrap().heroe.escuadra(s).unwrap().cantidad).collect();
+    let tras = (0..todos.len()).fold(12, |n, _| n - (n * 5 + 50) / 100);
+    assert_eq!(quedan, vec![tras, tras], "el 5 % de bajas por combate (redondeado)");
+}
+
+#[test]
 fn una_caravana_que_cruza_el_radio_de_un_campamento_de_bandidos_es_acosada_en_ese_instante_exacto() {
     let m = con_mundo!();
     // Nivel 3 (poder 120, 102 como mínimo) contra los carreteros (26): la caravana desaparece con su carga. Con las plazas lejos: entre vecinas el 40 % del camino puede caer
@@ -1480,8 +1510,9 @@ fn una_caravana_que_cruza_el_radio_de_un_campamento_de_bandidos_es_acosada_en_es
 }
 
 #[test]
-/// Y si la pierde, la carga sigue a los carros (calibración del sistema 4, M10): lo que la columna llevaba con la capacidad de la caravana se pierde con ella.
-fn una_caravana_adjunta_a_un_ejercito_se_defiende_con_el_poder_de_la_columna_que_no_sufre_bajas() {
+/// Y si la pierde, la carga sigue a los carros (calibración del sistema 4, M10): lo que la columna llevaba con la capacidad de la caravana se pierde con ella. Desde el
+/// 2026-11-06 (pedido del autor) es una emboscada: la columna combate con sus héroes y sufre las bajas del combate (25 % si pierde, 5 % si gana), y si gana el campamento cae.
+fn una_caravana_adjunta_a_un_ejercito_se_defiende_en_una_emboscada_con_bajas_y_si_gana_la_columna_el_campamento_cae() {
     let m = con_mundo!();
     for (tropas, cae) in [(&[Tropa::MiliciaLanceros][..], true), (&[Tropa::ArquerosCompuesto][..], false)] {
         let mut e = montar_lejos(m, 7, true); // lejos, como en la anterior: el acoso es fuera de toda zona
@@ -1504,7 +1535,10 @@ fn una_caravana_adjunta_a_un_ejercito_se_defiende_con_el_poder_de_la_columna_que
         let (perdida, escapa) = (suyos("bandidos.caravana_interceptada"), suyos("bandidos.caravana_escapa"));
         assert_eq!((perdida.len(), escapa.len()), (cae as usize, !cae as usize), "{tropas:?}: {perdida:?} {escapa:?}");
         assert_eq!(e.n.caravana(ca).is_none(), cae);
-        assert_eq!(e.n.soldados_de_columna(col.0).unwrap(), soldados0, "la columna no sufre bajas por el acoso");
+        let bajas = if cae { 25 } else { 5 };
+        assert_eq!(e.n.soldados_de_columna(col.0).unwrap(), soldados0 - (soldados0 * bajas + 50) / 100, "{tropas:?}: el {bajas} % de bajas");
+        assert_eq!(e.n.estado().combate.bandidos.contains_key(&mio), cae, "{tropas:?}: el campamento cae si gana la columna");
+        assert_eq!(suyos("bandidos.campamento_vencido").len(), !cae as usize);
         assert!(!e.n.ejercito(col.0).unwrap().caravanas_adjuntas.contains(&ca) || !cae);
         let lleva: i64 = e.n.ejercito(col.0).unwrap().columna.carga.values().sum();
         let cabe = e.n.capacidad_de_carga(col.0).unwrap();

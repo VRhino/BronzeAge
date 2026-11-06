@@ -203,6 +203,12 @@ impl EstadoMilitar {
         self.residentes.get(&plaza).into_iter().flatten().filter_map(|id| self.heroes.get(id))
     }
 
+    /// ¿Lleva ya algún héroe ese nombre? Sin distinguir mayúsculas (2026-11-06, pedido del autor: no puede haber dos héroes con el mismo nombre).
+    pub fn nombre_en_uso(&self, nombre: &str) -> bool {
+        let buscado = nombre.to_lowercase();
+        self.nombres.values().any(|n| n.to_lowercase() == buscado)
+    }
+
     /// El héroe de una cuenta, si lo hay (uno por cuenta y partida).
     pub fn heroe_de_cuenta(&self, cuenta: &str) -> Option<&HeroeNucleo> {
         self.heroes_de_cuenta(cuenta).iter().filter_map(|id| self.heroes.get(id)).find(|h| !h.sintetico)

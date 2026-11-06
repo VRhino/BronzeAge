@@ -1981,7 +1981,9 @@ fn los_bandidos_que_acosan_una_caravana_adjunta_a_una_columna_con_heroes_la_jueg
         } else {
             assert_eq!((e.n.caravana(ca).unwrap().estado, ej.caravanas_adjuntas.clone()), (EstadoCaravana::Adjunta, vec![ca]), "sigue enganchada a su columna");
         }
-        assert!(e.n.campamento_de_bandidos(camp).is_some(), "el campamento sigue donde estaba: no es una batalla contra él");
+        // Si gana la columna, los bandidos que la emboscaron caen (2026-11-06), con el premio de destruirlos; si ganan ellos, siguen donde estaban.
+        assert_eq!(e.n.campamento_de_bandidos(camp).is_some(), gana_el_bandido, "el campamento cae si lo vence la columna");
+        assert_eq!(hechos(&e.n, "bandidos.campamento_vencido").len(), !gana_el_bandido as usize);
         // Y el cruce acabó ahí: los bandidos no la acosan otra vez.
         e.n.avanzar_hasta(t + 20 * MIN);
         assert_eq!(e.n.batallas().filter(|b| b.id != id).count(), 0, "no se abre otra batalla");
@@ -2103,7 +2105,7 @@ fn los_bandidos_que_acosan_una_columna_con_dos_caravanas_juegan_las_dos_en_la_mi
                 assert_eq!(escuadra(esc), (25, militar::escuadra::Contenedor::Escolta(ca), None), "la escolta cedida no combatió: sigue cedida y entera");
             }
         }
-        assert!(e.n.campamento_de_bandidos(camp).is_some());
+        assert_eq!(e.n.campamento_de_bandidos(camp).is_some(), gana_el_bandido, "cae si lo vence la columna (2026-11-06)");
         e.n.avanzar_hasta(t + 20 * MIN);
         assert_eq!(hechos(&e.n, "batalla.abierta").len(), 1, "no se abre otra batalla");
     }

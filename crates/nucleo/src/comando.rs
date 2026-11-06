@@ -116,6 +116,9 @@ pub enum Comando {
     AnadirEdificio { asentamiento: u64, tipo: Tipo },
     /// Saca de la cola un edificio que aún no empezó y devuelve su coste.
     QuitarDeCola { asentamiento: u64, edificio: u32 },
+    /// Cancela la obra en curso de un edificio sin devolver nada (2026-11-06): el que se construye (o se reconstruye) desaparece y una
+    /// mejora se abandona con el edificio en su nivel.
+    CancelarConstruccion { asentamiento: u64, edificio: u32 },
     /// Sube o baja un puesto en la cola de obras.
     MoverEnCola { asentamiento: u64, edificio: u32, arriba: bool },
     /// Mejora un edificio activo al siguiente nivel interno.
@@ -788,6 +791,7 @@ impl Comando {
             Comando::AsignarRey { .. } => CiudadanoDeLaFaccion,
             Comando::AnadirEdificio { .. }
             | Comando::QuitarDeCola { .. }
+            | Comando::CancelarConstruccion { .. }
             | Comando::MoverEnCola { .. }
             | Comando::MejorarEdificio { .. }
             | Comando::AlternarAutoConstruccion { .. }
@@ -1043,6 +1047,7 @@ impl Comando {
             | Comando::SoltarParcela { asentamiento, .. }
             | Comando::AnadirEdificio { asentamiento, .. }
             | Comando::QuitarDeCola { asentamiento, .. }
+            | Comando::CancelarConstruccion { asentamiento, .. }
             | Comando::MoverEnCola { asentamiento, .. }
             | Comando::MejorarEdificio { asentamiento, .. }
             | Comando::AlternarAutoConstruccion { asentamiento, .. }
@@ -1429,6 +1434,11 @@ impl Peticion {
             }
             Comando::QuitarDeCola { asentamiento, edificio } => {
                 w.u8(13);
+                w.u64(*asentamiento);
+                w.u32(*edificio);
+            }
+            Comando::CancelarConstruccion { asentamiento, edificio } => {
+                w.u8(213);
                 w.u64(*asentamiento);
                 w.u32(*edificio);
             }
@@ -2708,6 +2718,7 @@ impl Peticion {
             196 => Comando::CambiarEncargo { caravana: r.u64()?, destino: r.u64()?, salir_en: r.opt_i64()?, en_origen: parada_leer(&mut r)?, en_destino: parada_leer(&mut r)? },
             197 => Comando::CancelarEncargo { caravana: r.u64()? },
             212 => Comando::DetenerEncargo { caravana: r.u64()? },
+            213 => Comando::CancelarConstruccion { asentamiento: r.u64()?, edificio: r.u32()? },
             198 => Comando::OfrecerseComoMercenario { heroe: r.u64()? },
             199 => Comando::RetirarOferta { heroe: r.u64()? },
             200 | 210 => Comando::ContratarMercenario {
@@ -2787,6 +2798,8 @@ pub mod rechazos {
     pub const OBRA_RECURSOS_INSUFICIENTES: &str = "obra.recursos_insuficientes";
     pub const EDIFICIO_DESCONOCIDO: &str = "edificio.desconocido";
     pub const OBRA_NO_ESTA_EN_COLA: &str = "obra.no_esta_en_cola";
+    /// El edificio no tiene obra en curso que cancelar: ni en construcción ni mejorándose (2026-11-06).
+    pub const OBRA_NO_ESTA_EN_CURSO: &str = "obra.no_esta_en_curso";
     pub const OBRA_NO_MEJORABLE: &str = "obra.no_mejorable";
     pub const OBRA_SIN_CUADRILLA: &str = "obra.sin_cuadrilla";
     // Ascenso (`Bloqueo`): el rechazo lleva el código del primero y todos en el mensaje.
@@ -3053,6 +3066,8 @@ pub mod rechazos {
     pub const HEROE_YA_EXISTE: &str = "heroe.ya_existe";
     /// El nombre del héroe está vacío, empieza o acaba en espacio, pasa de 24 caracteres o lleva caracteres de control.
     pub const HEROE_NOMBRE_INVALIDO: &str = "heroe.nombre_invalido";
+    /// Ya hay otro héroe con ese nombre (sin distinguir mayúsculas; 2026-11-06, pedido del autor).
+    pub const HEROE_NOMBRE_EN_USO: &str = "heroe.nombre_en_uso";
     pub const HEROE_CAMPAMENTO_DESCONOCIDO: &str = "heroe.campamento_desconocido";
     pub const HEROE_PUNTOS_NEGATIVOS: &str = "heroe.puntos_negativos";
     pub const HEROE_NINGUN_PUNTO: &str = "heroe.ningun_punto";
@@ -3620,6 +3635,7 @@ mod pruebas {
         let comandos = vec![
             Comando::AnadirEdificio { asentamiento: 3, tipo: Tipo::Lenera },
             Comando::QuitarDeCola { asentamiento: 3, edificio: 17 },
+            Comando::CancelarConstruccion { asentamiento: 3, edificio: 17 },
             Comando::MoverEnCola { asentamiento: 3, edificio: 17, arriba: true },
             Comando::MejorarEdificio { asentamiento: 3, edificio: 4 },
             Comando::AlternarAutoConstruccion { asentamiento: 3, pausada: true },

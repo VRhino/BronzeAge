@@ -101,6 +101,35 @@ fn la_cola_manual_paga_al_encolar_respeta_los_topes_y_se_reembolsa_entera_al_qui
 }
 
 #[test]
+fn cancelar_una_obra_en_curso_no_devuelve_nada_y_la_cola_toma_la_cuadrilla_libre() {
+    let r = Reglas::cargar();
+    let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
+    ocupar_cuadrillas(&mut a, &r);
+    let mut x = exterior!(&r, s, w);
+    let espera = a.anadir_manual(0, &r, &mut x, Tipo::Vivienda, &mut vec![]).unwrap();
+    assert_eq!(a.cancelar_obra(5, &r, espera, &mut vec![]), Err(ErrorObra::NoEstaEnObra), "en la cola se quita, no se cancela");
+    let madera = a.almacen.cantidad(Recurso::Madera);
+    let mut ev = vec![];
+    assert_eq!(a.cancelar_obra(5 * MS_POR_MINUTO, &r, 900, &mut ev), Ok(true));
+    assert!(a.edificio(900).is_none(), "el edificio en construcción desaparece");
+    assert_eq!(a.almacen.cantidad(Recurso::Madera), madera, "no se recupera nada");
+    assert_eq!(ev[0], Evento::ObraCancelada { id: 900, mejora: false });
+    assert!(matches!(ev[1], Evento::ObraIniciada { id, .. } if id == espera), "la que esperaba arranca en ese instante: {ev:?}");
+    assert_eq!(a.edificio(espera).unwrap().estado, Estado::EnConstruccion);
+    // Una mejora en curso se abandona: el edificio sigue activo en su nivel.
+    let granja = a.edificios.iter().find(|e| e.tipo == Tipo::Granja).unwrap().id;
+    let nivel = a.edificio(granja).unwrap().nivel_interno;
+    a.edificios.iter_mut().find(|e| e.id == granja).unwrap().mejora = Some(asentamiento::edificio::Mejora { nivel_objetivo: nivel + 1, completa_en: i64::MAX / 2 });
+    let mut ev = vec![];
+    assert_eq!(a.cancelar_obra(6 * MS_POR_MINUTO, &r, granja, &mut ev), Ok(false));
+    let g = a.edificio(granja).unwrap();
+    assert_eq!((g.estado, g.nivel_interno, g.mejora), (Estado::Activo, nivel, None));
+    assert_eq!(ev[0], Evento::ObraCancelada { id: granja, mejora: true });
+    assert_eq!(a.cancelar_obra(6 * MS_POR_MINUTO, &r, granja, &mut vec![]), Err(ErrorObra::NoEstaEnObra), "activo y sin mejora");
+    assert_eq!(a.cancelar_obra(6 * MS_POR_MINUTO, &r, 12_345, &mut vec![]), Err(ErrorObra::NoExiste));
+}
+
+#[test]
 fn los_tipos_unicos_y_los_topes_de_nivel_se_hacen_cumplir() {
     let r = Reglas::cargar();
     let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);

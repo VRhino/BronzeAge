@@ -394,6 +394,16 @@ fn las_ordenes_de_economia_y_sus_rechazos() {
     assert!(orden(&mut n, "q1", Comando::QuitarDeCola { asentamiento: id, edificio: v1 }).aceptada());
     assert!(n.economia(id).unwrap().edificio(v1).is_none());
     assert_eq!(codigo(&orden(&mut n, "q2", Comando::QuitarDeCola { asentamiento: id, edificio: v1 })), rechazos::EDIFICIO_DESCONOCIDO);
+    // Cancelar una obra en curso (2026-11-06): el edificio desaparece sin devolver nada y la que esperaba toma su cuadrilla en ese instante.
+    let en_obra = n.economia(id).unwrap().edificios.iter().find(|e| e.estado == asentamiento::edificio::Estado::EnConstruccion).unwrap().id;
+    assert_eq!(codigo(&orden(&mut n, "o1", Comando::CancelarConstruccion { asentamiento: id, edificio: g })), rechazos::OBRA_NO_ESTA_EN_CURSO, "en la cola se quita, no se cancela");
+    let madera = n.economia(id).unwrap().almacen.cantidad(Recurso::Madera);
+    assert!(orden(&mut n, "o2", Comando::CancelarConstruccion { asentamiento: id, edificio: en_obra }).aceptada());
+    assert!(n.economia(id).unwrap().edificio(en_obra).is_none());
+    assert_eq!(n.economia(id).unwrap().almacen.cantidad(Recurso::Madera), madera, "no se recupera nada");
+    assert_eq!(n.economia(id).unwrap().edificio(g).unwrap().estado, asentamiento::edificio::Estado::EnConstruccion, "la que esperaba arranca");
+    assert_eq!(eventos(&n, "construccion.obra_cancelada").len(), 1);
+    assert_eq!(codigo(&orden(&mut n, "o3", Comando::CancelarConstruccion { asentamiento: id, edificio: en_obra })), rechazos::EDIFICIO_DESCONOCIDO);
     assert_eq!(codigo(&orden(&mut n, "a1", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::CentroUrbano })), rechazos::OBRA_TIPO_NO_MANUAL);
     assert_eq!(codigo(&orden(&mut n, "a2", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Palacio })), rechazos::OBRA_NIVEL_INSUFICIENTE);
     assert_eq!(codigo(&orden(&mut n, "a3", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Maravilla })), rechazos::OBRA_ERA_INSUFICIENTE);
