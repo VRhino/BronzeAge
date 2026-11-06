@@ -22,8 +22,10 @@ export const PARAMETROS_RECURSOS = {
   /**
    * Totales de partida: los de Codex con densidad 4 (piedra 140·4, cobre 60·4) para su mundo de 32000×24000,
    * más el hierro a 1,5 veces el cobre (`HIERRO.factorCantidad` de typescript-final). Se escalan por área.
+   * La piedra, entre 2,25 desde el 2026-11-06 (decisión del autor, de 5600 a 2489): con las zonas de influencia al doble de radio
+   * una plaza abarca cuatro veces más terreno y veía cuatro veces más piedra. Los metales no cambian.
    */
-  totalBase: { piedra: 5600, cobre: 240, hierro: 360 } as Record<TipoNoMetalico, number>,
+  totalBase: { piedra: 2489, cobre: 240, hierro: 360 } as Record<TipoNoMetalico, number>,
   areaBase: 32000 * 24000,
   /**
    * Reparto por anillo (suma 1 por tipo). El anillo con 0 no recibe ninguno salvo que otro no tenga sitio:
@@ -35,8 +37,11 @@ export const PARAMETROS_RECURSOS = {
     cobre: { foco: 0.2, frontera: 0.8, lejana: 0 },
     hierro: { foco: 0.2, frontera: 0.8, lejana: 0 },
   } as Record<TipoNoMetalico, Record<Anillo, number>>,
-  /** Separación mínima (generador) entre yacimientos del mismo tipo (la piedra, más densa, 70) y con cualquier otro. */
-  separacionMismoTipo: { piedra: 70, cobre: 250, hierro: 250 } as Record<TipoNoMetalico, number>,
+  /**
+   * Separación mínima (generador) entre yacimientos del mismo tipo y con cualquier otro. La piedra, a una vez y media desde el
+   * 2026-11-06 (de 70 a 105, 8,75 u estratégicas), con su total entre 2,25 (arriba).
+   */
+  separacionMismoTipo: { piedra: 105, cobre: 250, hierro: 250 } as Record<TipoNoMetalico, number>,
   separacionOtroTipo: 45,
   /** Rejilla de prospección y azar de cada punto (generador), como la «prospección fina» de Codex. */
   pasoPrueba: 150,

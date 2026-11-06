@@ -82,7 +82,7 @@ console.log(`grafo: ${est.nodos} nodos, ${est.aristas} aristas (${est.aristasVad
   `fuera de la mayor: campamentos ${fuera(e.campamentos.map(c => c.posicion))}/${e.campamentos.length}, recursos ${fuera(recursos.map(x => x.posicion))}/${recursos.length}, vados ${[...vadosPorRio.values()].flat().length}`);
 
 const mundo: MundoGenerado = {
-  seed, ancho, alto, generador: 'regional-18-costas-2+estrategico-3+cauce-1',
+  seed, ancho, alto, generador: 'regional-19-costas-2+estrategico-3+cauce-1',
   campamentos: e.campamentos, recursos, vetas: e.vetas, masas: e.masas, parcelas: e.parcelas, bandidos, alijos, rios, grafo,
   muestras: {
     altura: p => { const i = celdas.indice(p); return i >= 0 ? celdas.altura[i]! : evaluarElevacion(r.elevacion, p); },

@@ -154,8 +154,8 @@ entonces.
 
 **Hecho después (en el generador y las reglas, ver `Docs/Mechanics/Generacion_Del_Mundo.md`):** el 2026-10-31, la región alpina con
 altiplanos y pasos (§5.1), las reglas del terreno por pendiente (§5.2 y §5.4; 63.2), el bosque en manchas (§8) y los metales en la montaña
-lejana (§9); el 2026-11-01, las costas con acantilados, calas, farallones y estuarios (§5.1) y el estaño repartido en varias sierras (§9).
-Semilla 42: mundo `e5c637d4…`. Lo demás de 63.1 y 63.2 sigue abierto.
+lejana (§9); el 2026-11-01, las costas con acantilados, calas, farallones y estuarios (§5.1) y el estaño repartido en varias sierras (§9);
+el 2026-11-06, la piedra más separada por las zonas al doble (§9). Semilla 42: mundo `da9cc6de…`. Lo demás de 63.1 y 63.2 sigue abierto.
 
 ### 63.1 Generador v2: el relieve, el bosque y los recursos
 
