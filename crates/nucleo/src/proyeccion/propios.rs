@@ -799,8 +799,8 @@ pub fn tecnologias(n: &Nucleo, f: u32) -> pb::TecnologiasFaccion {
 }
 
 /// El estado de tecnología del mundo (6G; la entidad `ESTADO_TECNOLOGIA`, id `tecnologia`). Para un jugador, su forma pública (decisión Q6 del autor; Proyecciones §6.3): la Era, desde cuándo, los
-/// logros cumplidos como hechos del mundo (`contador` llegó a `umbral`, por orden, sin decir qué tecnología abren), lo cantado y, de las descubridoras, solo las cantadas. La administración lo ve
-/// entero: los contadores en curso y los logros y las descubridoras por tecnología.
+/// logros cumplidos como hechos del mundo (`contador` llegó a `umbral`, por orden, sin decir qué tecnología abren), lo cantado, de las descubridoras solo las cantadas y, desde el 2026-11-06 (pedido
+/// del autor: la barra «x / y» del logro), los contadores en curso. La administración lo ve entero: además, los logros y las descubridoras por tecnología.
 pub fn estado_tecnologia(n: &Nucleo, quien: Espectador) -> pb::EstadoTecnologia {
     let e = n.estado();
     let (r, t) = (&e.reglas.economia.tecnologia, &e.tecnologia);
@@ -826,7 +826,7 @@ pub fn estado_tecnologia(n: &Nucleo, quien: Espectador) -> pb::EstadoTecnologia 
     pb::EstadoTecnologia {
         era: r.eras[t.era as usize].id.clone(),
         era_desde_ms: t.era_desde,
-        contadores: if admin { tecnologia::contador::Contador::TODOS.into_iter().map(|c| (c.nombre().to_owned(), t.contador(c) as i64)).collect() } else { Default::default() },
+        contadores: tecnologia::contador::Contador::TODOS.into_iter().map(|c| (c.nombre().to_owned(), t.contador(c) as i64)).collect(),
         logros: if admin { t.logros.iter().enumerate().filter_map(|(x, en)| Some((id(x), (*en)?))).collect() } else { Default::default() },
         primeros,
         cantadas,

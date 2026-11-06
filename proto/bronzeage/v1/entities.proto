@@ -1221,8 +1221,8 @@ message EstadoTecnologia {
   map<string, PrimeroEnLograr> primeros = 5;
   repeated string cantadas = 6;
   // 6G: los logros cumplidos como hechos del mundo (`contador` llegó a `umbral` en `en_ms`), por orden, sin decir qué tecnología abren. La forma pública
-  // (`HEROE`) solo lleva `era`, `era_desde_ms`, `logros_cumplidos`, `cantadas` y, de `primeros`, las ya cantadas; `contadores` y `logros` (por id de tecnología)
-  // solo viajan a `ADMIN` (decisión Q6 del autor).
+  // (`HEROE`) lleva `era`, `era_desde_ms`, `logros_cumplidos`, `cantadas`, de `primeros` las ya cantadas y, desde el 2026-11-06, `contadores` (los en curso,
+  // para la barra «x / y» de cada logro; se renuevan con el muestreo de la vista cuando suben); `logros` (por id de tecnología) solo viaja a `ADMIN` (decisión Q6 del autor).
   repeated LogroCumplido logros_cumplidos = 7;
   // 6G, con la decisión del autor sobre 6B (cada Era dura un mínimo): desde cuándo puede empezar la siguiente si la vigente cumple todos sus logros
   // (`era_desde_ms` + el mínimo) y cuándo empieza por plazo aunque no los cumpla. Ausentes en la última Era. Públicos: no dicen si los logros están cumplidos.

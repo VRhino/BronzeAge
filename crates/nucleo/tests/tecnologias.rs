@@ -486,6 +486,50 @@ async fn por_la_sesion_el_rey_adopta_en_la_capital_y_su_faccion_oye_el_hecho() {
     assert!(n.tiene_tecnologia(1, "canteria"));
 }
 
+/// Los contadores en curso viajan en la forma pública del `HEROE` (2026-11-06, pedido del autor: la barra «x / y» del logro) y, como lo extraído sube sin subir la versión (con el paso de minuto),
+/// le llegan al día con el muestreo de la vista; qué tecnología abre cada logro, no.
+#[tokio::test]
+async fn por_la_sesion_el_heroe_ve_los_contadores_en_curso_y_le_llegan_al_dia_cuando_sube_lo_extraido() {
+    use comun::sesion::*;
+    use contrato::v1::{self as pb, entidad::Cuerpo, mensaje_de_servidor as ms, orden, TipoCliente};
+    use servidor::prueba::hola;
+    let m = con_mundo!();
+    let (mut e, _) = con_canteria(m);
+    e.ord("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None });
+    let desde = e.n.ahora();
+    let w = arrancar_con(e.n).await;
+    let estado = |m: &ms::Cuerpo| -> Option<pb::EstadoTecnologia> {
+        let cuerpos: Vec<Cuerpo> = match m {
+            ms::Cuerpo::Foto(f) => f.entidades.iter().filter_map(|x| x.cuerpo.clone()).collect(),
+            ms::Cuerpo::Delta(d) => d.cambios.iter().filter_map(|c| c.datos.as_ref()?.cuerpo.clone()).collect(),
+            _ => Vec::new(),
+        };
+        cuerpos.into_iter().find_map(|x| if let Cuerpo::EstadoTecnologia(t) = x { Some(t) } else { None })
+    };
+    let (mut c, _, recibido) = w.conectar(hola("ok:ana", TipoCliente::ClienteUnity)).await;
+    let antes = recibido.iter().find_map(estado).expect("en su HEROE");
+    assert_eq!((antes.contadores.len(), antes.logros.is_empty()), (24, true), "los 24 contadores, sin qué tecnología abre cada logro");
+    let piedra = antes.contadores["extraido.piedra"];
+    // La administración para el reloj y lo avanza tres minutos: el pueblo de cantera saca piedra.
+    let (mut adm, _, _) = w.conectar(hola("ok:admin", TipoCliente::ClienteAdminWeb)).await;
+    let reloj = |accion: &str, hasta_ms: Option<i64>| orden::Cuerpo::ControlarReloj(pb::OrdenControlarReloj { accion: accion.into(), hasta_ms, ..Default::default() });
+    let (_, r) = dar(&mut adm, "r1", reloj("pausar", None)).await;
+    assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
+    let (_, r) = dar(&mut adm, "r2", reloj("avanzar_hasta", Some(desde + 3 * MIN))).await;
+    assert_eq!(r.resultado, pb::Resultado::OrdenAceptada as i32);
+    // A ana le llega, sin orden suya, el estado público con la piedra que subió.
+    let despues = loop {
+        let m = c.esperar().await;
+        if let Some(t) = m.cuerpo.as_ref().and_then(estado).filter(|t| t.contadores != antes.contadores) {
+            break t;
+        }
+    };
+    assert!(despues.contadores["extraido.piedra"] > piedra && despues.logros.is_empty(), "sube la piedra: {piedra} → {}", despues.contadores["extraido.piedra"]);
+    adm.cerrar().await;
+    c.cerrar().await;
+    w.parar().await;
+}
+
 #[test]
 fn con_todos_sus_logros_la_era_espera_a_su_minimo_de_una_semana() {
     let m = con_mundo!();

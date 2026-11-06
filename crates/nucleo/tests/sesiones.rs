@@ -151,7 +151,9 @@ async fn reanudacion_sin_novedad_con_deltas_y_con_foto() {
     let (_, b, mensajes) = w.conectar(conoce(f.version)).await;
     assert_eq!(b.ambitos[0].decision, DecisionReanudacion::ReanudaConDeltas as i32);
     let ms::Cuerpo::Delta(d) = &mensajes[0] else { panic!("se esperaba la Delta del héroe") };
-    assert_eq!((d.desde, d.hasta, d.cambios.len()), (f.version, b.ambitos[0].version_actual, 1));
+    assert_eq!((d.desde, d.hasta, d.cambios.len()), (f.version, b.ambitos[0].version_actual, 2));
+    // La columna y, como al reanudar por deltas no se sabe qué contadores tiene, el estado público de tecnología entero (2026-11-06).
+    assert_eq!(d.cambios[1].entidad, pb::TipoEntidad::EstadoTecnologia as i32);
 
     // Una versión del futuro (el servidor volvió de una copia vieja) o ninguna: foto.
     let (_, b, mensajes) = w.conectar(conoce(999_999)).await;

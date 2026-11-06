@@ -580,7 +580,7 @@ fn vista_de_todo() -> contrato::v1::mensaje_de_cliente::Cuerpo {
 }
 
 /// 6G por el WebSocket real, con la metalurgia del cobre descubierta por la Facción 1 y revelada a la 2 por los tres Aedas parados en su plaza B. **HEROE**: la forma pública del estado de
-/// tecnología (la Era, el logro cumplido como hecho del mundo, el descubrimiento ya cantado con su descubridora), sin contadores ni logros por tecnología. **FACCION**: las tecnologías de la
+/// tecnología (la Era, el logro cumplido como hecho del mundo, el descubrimiento ya cantado con su descubridora y, desde el 2026-11-06, los contadores en curso), sin logros por tecnología. **FACCION**: las tecnologías de la
 /// propia, con el detalle de la revelada (descubridora y qué condiciones del hito cumple); nunca las de la otra. **VISTA**: los Aedas que se ven, redactados (su plaza; ni hasta cuándo, ni adónde, ni
 /// dónde estuvieron); quien no los ve, no los recibe. **ADMIN**: el estado entero con los contadores, y los Aedas enteros, que se ponen al día cuando cambian sin que cambie la versión.
 #[tokio::test]
@@ -613,7 +613,8 @@ async fn por_la_sesion_cada_ambito_lleva_lo_suyo_de_la_tecnologia_y_de_los_aedas
     assert_eq!(publicas.len(), 1, "una vez, en HEROE");
     let (a, t) = publicas[0];
     assert_eq!(a, &format!("HEROE:heroe-{bea}"));
-    assert!(t.contadores.is_empty() && t.logros.is_empty(), "ni contadores en curso ni qué tecnología abre cada logro (Q6)");
+    assert!(t.logros.is_empty(), "ni qué tecnología abre cada logro (Q6)");
+    assert_eq!((t.contadores.get("plazasEnNivel.2"), t.contadores.len()), (Some(&1), 24), "los contadores en curso sí (2026-11-06)");
     assert_eq!(t.logros_cumplidos.iter().map(|l| (l.contador.as_str(), l.umbral)).collect::<Vec<_>>(), [("plazasEnNivel.2", 1)]);
     assert_eq!(t.cantadas, ["metalurgia_cobre"]);
     let era = &e_reglas.eras[0];
@@ -660,6 +661,7 @@ async fn por_la_sesion_cada_ambito_lleva_lo_suyo_de_la_tecnologia_y_de_los_aedas
     let al_dia = cuerpos(&deltas.into_iter().map(ms::Cuerpo::Delta).collect::<Vec<_>>());
     let nuevo = al_dia.iter().filter_map(|(_, x)| if let Cuerpo::AedaItinerante(x) = x { Some(x) } else { None }).find(|x| x.hasta_ms > Some(fin));
     assert!(nuevo.is_some(), "el Aeda cuya estancia acabó llega a ADMIN con su nueva estancia: {al_dia:?}");
+
     adm.cerrar().await;
     w.parar().await;
 }

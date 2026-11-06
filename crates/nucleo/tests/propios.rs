@@ -227,6 +227,12 @@ async fn pendiente(c: &mut ClientePrueba) -> Vec<ms::Cuerpo> {
     previos
 }
 
+/// Lo que llegó sin las `Delta` que solo traen el estado público de tecnología: sus contadores en curso suben con cualquier recluta, en cualquier plaza, y llegan a todo `HEROE` (2026-11-06).
+fn sin_contadores(mensajes: Vec<ms::Cuerpo>) -> Vec<ms::Cuerpo> {
+    let solo_tecnologia = |d: &pb::Delta| !d.cambios.is_empty() && d.cambios.iter().all(|c| c.entidad == TipoEntidad::EstadoTecnologia as i32) && d.eventos.is_empty();
+    mensajes.into_iter().filter(|m| !matches!(m, ms::Cuerpo::Delta(d) if solo_tecnologia(d))).collect()
+}
+
 /// Las `Delta` de un ámbito (`HEROE:heroe-3`, `FACCION:f-1`...) entre lo que llegó.
 fn deltas_de<'a>(mensajes: &'a [ms::Cuerpo], ambito_buscado: &str) -> Vec<&'a pb::Delta> {
     mensajes.iter().filter_map(|m| if let ms::Cuerpo::Delta(d) = m { Some(d) } else { None }).filter(|d| ambito(&d.ambito) == ambito_buscado).collect()
@@ -511,10 +517,15 @@ async fn reclutar_y_guardar_un_loadout_llegan_a_su_heroe_y_a_nadie_mas() {
 
     // Reclutar una escuadra: la delta de su héroe trae la escuadra nueva y el héroe que ya la cuenta; el resultado dice cuál es.
     let reclutar = orden::Cuerpo::ReclutarTropa(pb::OrdenReclutarTropa { asentamiento_id: ids::asentamiento(a), heroe_id: h_ana.clone(), tropa_id: "milicia_lanceros".into(), origen: None });
-    let (previos, r) = dar_todo(&mut ana, "r1", reclutar).await;
+    let (todos, r) = dar_todo(&mut ana, "r1", reclutar).await;
     aceptada(&r);
     let escuadra = r.creadas[0].clone();
     assert_eq!(TipoEntidad::try_from(escuadra.entidad).unwrap(), TipoEntidad::Escuadron);
+    // Reclutar sube un contador de los logros: el estado público de tecnología llega aparte a su HEROE (y al de todos).
+    for d in deltas_de(&todos, &format!("HEROE:{h_ana}")).into_iter().filter(|d| d.cambios.iter().all(|c| c.entidad == TipoEntidad::EstadoTecnologia as i32)) {
+        vista_ana.aplicar(d);
+    }
+    let previos = sin_contadores(todos);
     let del_heroe = deltas_de(&previos, &format!("HEROE:{h_ana}"));
     assert_eq!(del_heroe.len(), 1, "{:?}", etiquetas(&previos));
     let (nuevos_h, nuevas_e) = (heroes(nuevas(del_heroe[0])), escuadrones(nuevas(del_heroe[0])));
@@ -536,8 +547,8 @@ async fn reclutar_y_guardar_un_loadout_llegan_a_su_heroe_y_a_nadie_mas() {
     vista_ana.aplicar(del_heroe[0]);
 
     // La Facción ve cambiar la plaza (reclutar le gasta población y almacén) pero ni una escuadra ni un loadout; el héroe es solo de ana, y la otra Facción no se entera de nada.
-    assert_eq!(etiquetas(&pendiente(&mut beto).await), ["delta FACCION:f-1"]);
-    assert!(pendiente(&mut gus).await.is_empty());
+    assert_eq!(etiquetas(&sin_contadores(pendiente(&mut beto).await)), ["delta FACCION:f-1"]);
+    assert!(sin_contadores(pendiente(&mut gus).await).is_empty());
     // Lo que ana reconstruyó con la foto y los deltas es lo que hay.
     let (_, _, mensajes) = w.conectar(hola_con("ana", TipoCliente::ClienteUnity, &[])).await;
     assert!(vista_ana.entidades == Cliente::desde(foto_de(&mensajes, &format!("HEROE:{h_ana}"))).entidades, "foto + deltas = foto final");

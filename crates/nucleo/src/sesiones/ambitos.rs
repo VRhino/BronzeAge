@@ -80,6 +80,9 @@ pub(super) struct Sesion {
     /// Los informes de inspección vigentes que el cliente tiene en su `HEROE`, por id. Al caducar uno sale con `QUITA` en la reconciliación siguiente (caducar no cambia el mundo). `None`: no se
     /// sabe (reanudó por deltas): se toma lo vigente de ahora, sin quitar nada.
     pub(super) informes: Option<BTreeSet<String>>,
+    /// Los contadores de los logros que el cliente tiene en la forma pública del estado de tecnología de su `HEROE` (2026-11-06, pedido del autor: la barra «x / y» del logro). Suben sin que
+    /// suba la versión (lo extraído y lo fabricado, con el paso de minuto). `None`: no se sabe (reanudó por deltas): se manda el estado.
+    pub(super) contadores: Option<[u64; 24]>,
     /// Lo que el cliente tiene de lo que cobra su `CAMPAMENTO` (los precios del mercado y, al residente, los de reclutar: `interior::lo_que_cobra`), que cambia sin que cambie la versión.
     /// `None`: no se sabe (reanudó por deltas): se manda el campamento.
     pub(super) cobra: Option<Cobra>,
@@ -142,7 +145,7 @@ pub(super) struct Mapa {
 impl Sesion {
     pub(super) fn nueva(n: &Nucleo, cliente: String, rol: pb::TipoCliente, tx: mpsc::Sender<Difusion>) -> Self {
         let heroe = es_jugador(rol).then(|| heroe_de_cuenta(n, &cliente)).flatten();
-        Sesion { cliente, rol, tx, heroe, abiertos: BTreeMap::new(), vista: None, plazas: BTreeMap::new(), mapa: None, moderador: false, alijos: None, informes: None, cobra: None, admin_visto: None, pueblo_dentro: None, propias: BTreeMap::new() }
+        Sesion { cliente, rol, tx, heroe, abiertos: BTreeMap::new(), vista: None, plazas: BTreeMap::new(), mapa: None, moderador: false, alijos: None, informes: None, contadores: None, cobra: None, admin_visto: None, pueblo_dentro: None, propias: BTreeMap::new() }
     }
 
     pub(super) fn es_admin(&self) -> bool {
@@ -726,6 +729,7 @@ impl Mesa {
             Ambito::Heroe(h) => {
                 s.alijos = Some(alijos_a_la_vista(n, h).into_iter().collect());
                 s.informes = Some(informes_vigentes(n, h));
+                s.contadores = Some(n.estado().tecnologia.contadores);
             }
             Ambito::Admin => s.admin_visto = Some(AdminVisto::de(n)),
             Ambito::Campamento(c) => s.cobra = Some(interior::lo_que_cobra(n, c, s.heroe)),
@@ -881,11 +885,24 @@ fn actualiza(tipo: pb::TipoEntidad, id: String, cuerpo: pb::entidad::Cuerpo) -> 
     pb::Cambio { tipo: pb::TipoCambio::CambioActualiza as i32, entidad: tipo as i32, id, datos: Some(pb::Entidad { cuerpo: Some(cuerpo) }), reemplaza: true, ..Default::default() }
 }
 
-/// Lo que el `HEROE` de `h` ve cambiar sin que cambie el mundo: los alijos a la vista y los informes de inspección que caducaron.
+/// Lo que el `HEROE` de `h` ve cambiar sin que cambie el mundo: los alijos a la vista, los informes de inspección que caducaron y los contadores de los logros.
 fn cambios_de_heroe(n: &Nucleo, s: &mut Sesion, h: u64) -> Vec<pb::Cambio> {
     let mut cambios = cambios_de_alijos(n, s, h);
     cambios.extend(cambios_de_informes(n, s, h));
+    cambios.extend(cambios_de_contadores(n, s));
     cambios
+}
+
+/// La forma pública del estado de tecnología entera si sus contadores cambiaron respecto de los que tiene el cliente (todo, si no se sabe), dejándolos anotados (2026-11-06). La Era, los logros y lo
+/// cantado llegan por el registro de cambios; los contadores suben sin subir la versión y se miran aquí, en cada muestreo.
+fn cambios_de_contadores(n: &Nucleo, s: &mut Sesion) -> Vec<pb::Cambio> {
+    let ahora = n.estado().tecnologia.contadores;
+    if s.contadores == Some(ahora) {
+        return Vec::new();
+    }
+    s.contadores = Some(ahora);
+    let t = propios::estado_tecnologia(n, s.espectador());
+    vec![actualiza(pb::TipoEntidad::EstadoTecnologia, propios::ID_ESTADO_TECNOLOGIA.into(), pb::entidad::Cuerpo::EstadoTecnologia(t))]
 }
 
 /// Los ids de los informes de inspección vigentes del héroe de la sesión `h` y de los de campo de su cuenta, que viajan en su `HEROE`.

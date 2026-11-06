@@ -185,7 +185,7 @@ enum TipoEntidad {
   // que se ve viaja como su entidad (`ASENTAMIENTO`, `PUEBLO`, `AVANZADA`, `OBRA_DE_MAPA`); el que solo se recuerda, como ficha: nunca los dos a la vez.
   FICHA_CONOCIDA = 33;
   // El estado de tecnología del mundo (sistema 6, 6G), una sola entidad con id `tecnologia`: en `HEROE`, su forma pública (la Era, los logros
-  // cumplidos sin decir qué abren y los descubrimientos ya cantados); en `ADMIN`, entero, con los contadores en curso.
+  // cumplidos sin decir qué abren, los descubrimientos ya cantados y, desde el 2026-11-06, los contadores en curso); en `ADMIN`, entero, con qué tecnología abre cada logro.
   ESTADO_TECNOLOGIA = 34;
   // El directorio público de todas las Facciones (2026-10-29, ámbito `VISTA`), una sola entidad con id `facciones`: de cada una, lo justo para listarla
   // (nombre, sigilo, nivel, cuántos ciudadanos tiene y si está derrotada). La forma pública completa sigue llegando como `FACCION` de las que nombra lo que se ve.

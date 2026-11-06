@@ -84,8 +84,9 @@ de mercenarios (decisión del autor, 2026-10-24).
 - Los **Aedas itinerantes** esparcen el conocimiento (6.7): al llegar a un asentamiento, le **revelan** las
   tecnologías que conocen y la Facción aún no tiene aparecidas: cuáles son, qué requisitos de hito le faltan y quién
   las desbloqueó.
-- **Lo público del avance** son los logros cumplidos (sin decir qué tecnología abren) y la Era; los contadores en curso
-  solo los ve la administración (decisión del autor, 2026-10-24).
+- **Lo público del avance** son los logros cumplidos (sin decir qué tecnología abren), la Era y, desde el 2026-11-06,
+  los contadores en curso de todo el servidor (para ver cuánto falta para cada logro). Qué tecnología abre cada logro
+  solo lo ve la administración (decisión del autor, 2026-10-24).
 - **La ventaja del primero** es ese tiempo: los Aedas conocen una tecnología **24 horas** después de que alguien la
   desbloquea (`AEDAS.retrasoConocimientoMinutos`, 24 · 60, placeholder), no antes. No hay descuento: todos pagan la misma tarifa.
 
