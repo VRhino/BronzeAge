@@ -763,16 +763,21 @@ fn propias_adjunta(e: &crate::estado::Estado, c: &Caravana, propias: &BTreeSet<u
     c.estado == EstadoCaravana::Adjunta && propias.iter().filter_map(|id| e.ejercitos.get(id)).any(|x| x.caravanas_adjuntas.contains(&c.id))
 }
 
-/// La plaza ajena que se ve (`AsentamientoAvistado`): la ficha (Facción, sitio, nivel, zona real recortada, asedio) con sus edificios **activos** (tipo, sitio y huella); nunca su almacén, su
-/// población, sus obras, su cola, sus pueblos y avanzadas, sus políticas ni su trazado.
+/// La plaza ajena avistada desde fuera (`AsentamientoAvistado`): la ficha (id, Facción, sitio, nivel, zona, asedio, nombre, si tiene muralla y si tiene Mercado activo), **sin la lista de edificios** (decisión
+/// del autor, 2026-11-07: desde fuera solo se sabe si hay Mercado y muralla); nunca su almacén, su población, sus obras, su cola, sus pueblos y avanzadas, sus políticas ni su trazado.
 pub fn plaza_avistada(n: &Nucleo, id: u64) -> pb::Asentamiento {
     let a = &n.estado().asentamientos[&id];
     let mut p = ficha_de_asentamiento(a, &n.poligono_zona(id), propios::batalla_sobre(n, Ubicacion::Asentamiento(id as u32)));
     p.pueblos_ids.clear();
     p.avanzadas_ids.clear();
+    p
+}
+
+/// Los edificios activos de una plaza ajena, con su sitio en la ciudad: lo que se ve estando dentro (y antes del 2026-11-07, también desde fuera).
+fn edificios_activos(n: &Nucleo, id: u64) -> Vec<pb::Edificio> {
+    let a = &n.estado().asentamientos[&id];
     let ciudad = n.vista_ciudad(id);
-    p.edificios = a
-        .economia
+    a.economia
         .edificios
         .iter()
         .filter(|b| b.estado == EstadoEdificio::Activo)
@@ -791,13 +796,13 @@ pub fn plaza_avistada(n: &Nucleo, id: u64) -> pb::Asentamiento {
                 ..Default::default()
             }
         })
-        .collect();
-    p
+        .collect()
 }
 
-/// La plaza ajena vista desde dentro (2026-10-29): la de fuera ([`plaza_avistada`]) con su trazado urbano. Nada más de su interior (almacén, población, cola, puerta, cargos...).
+/// La plaza ajena vista desde dentro (2026-10-29): la de fuera ([`plaza_avistada`]) con sus edificios activos y su trazado urbano. Nada más de su interior (almacén, población, cola, puerta,
+/// cargos...).
 pub fn plaza_desde_dentro(n: &Nucleo, id: u64) -> pb::Asentamiento {
-    pb::Asentamiento { trazado: interior::trazado_de(n, id), ..plaza_avistada(n, id) }
+    pb::Asentamiento { trazado: interior::trazado_de(n, id), edificios: edificios_activos(n, id), ..plaza_avistada(n, id) }
 }
 
 /// El pueblo donde está el héroe de la sesión (2026-11-02, pedido del hilo de la vista 3D): lo de fuera —entero si es de su Facción (`propios::pueblo`), avistado si no— más su planta

@@ -370,3 +370,16 @@ fn un_envio_que_espera_en_una_plaza_ajena_hace_llegar_a_su_faccion_las_ordenes_a
         assert!(ordenes_en_vista(&e.n, f, todo()).is_empty() && ordenes_en_vista(&e.n, f, lejos).is_empty(), "al irse la caravana, la Facción {f} no las recibe");
     }
 }
+
+#[test]
+fn desde_fuera_la_ficha_dice_si_hay_mercado_sin_la_lista_de_edificios_y_desde_dentro_la_lleva() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 11);
+    let c = con_ajena(&mut e, m);
+    let fuera = nucleo::proyeccion::vista::plaza_avistada(&e.n, e.a);
+    assert!(fuera.mercado_activo && fuera.edificios.is_empty(), "con Mercado y sin la lista: {fuera:?}");
+    let ajena = nucleo::proyeccion::vista::plaza_avistada(&e.n, c);
+    assert!(!ajena.mercado_activo && ajena.edificios.is_empty(), "sin Mercado: {ajena:?}");
+    let dentro = nucleo::proyeccion::vista::plaza_desde_dentro(&e.n, e.a);
+    assert!(dentro.mercado_activo && dentro.edificios.iter().any(|b| b.tipo == "mercado"), "dentro, la lista con el Mercado");
+}

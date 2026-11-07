@@ -277,7 +277,7 @@ La ficha pública (edificios `activo`, zona) y el mostrador de órdenes activas.
 
 Entrar es reconocimiento legítimo —ves si la ciudad es grande, rica y está amurallada— y por eso cerrar la puerta sigue siendo una defensa real sin que abrirla sea suicida.
 
-**Desde fuera, sin entrar** (2026-11-07), de una plaza ajena solo se sabe **si tiene muralla o no**, sin detalle: ni su tipo, ni cuánto lleva levantado. Una muralla empezada ya cuenta como que la tiene. El tipo y el avance se ven dentro o con una inspección.
+**Desde fuera, sin entrar** (2026-11-07), de una plaza ajena solo se sabe **si tiene muralla o no**, sin detalle: ni su tipo, ni cuánto lleva levantado. Una muralla empezada ya cuenta como que la tiene. El tipo y el avance se ven dentro o con una inspección. De sus edificios, desde fuera, solo se sabe **si tiene un Mercado activo** (para saber si se puede comerciar allí); la lista de edificios se ve dentro o en un informe.
 
 ### 1.10.5 La puerta: el Gobernador y el Rey (el exilio)
 

@@ -521,6 +521,9 @@ message Asentamiento {
   // 2026-11-07 (decisión del autor): si la plaza tiene muralla, sin más detalle (sin nivel, avance ni celdas). Cuenta un recinto empezado: verdadero en cuanto hay
   // algún recinto comprometido o en pie. Va en toda ficha, también en la avistada desde fuera (`VISTA`); el detalle sigue en `recintos`, de dentro.
   bool tiene_muralla = 49;
+  // 2026-11-07 (decisión del autor): si la plaza tiene algún Mercado activo, sin nivel. Desde fuera (`VISTA`, la avistada) es lo único que se sabe de sus
+  // edificios: la avistada ya no lleva `edificios`, que siguen viajando desde dentro, en la ficha propia y en los Informes.
+  bool mercado_activo = 50;
 }
 
 // Rectángulo en UNIDADES LOCALES del asentamiento (esquina mínima y tamaño). El espacio local está centrado en el Centro Urbano.

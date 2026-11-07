@@ -57,6 +57,7 @@ campos_de_la_plaza!(
     edificios,
     recintos,
     tiene_muralla,
+    mercado_activo,
     cargos,
     casas_compradas,
     puerta_cerrada_a,

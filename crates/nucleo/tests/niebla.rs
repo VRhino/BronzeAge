@@ -359,7 +359,7 @@ fn lo_ajeno_se_ve_redactado_y_el_tramo_ajeno_se_renueva_solo_cuando_le_quedan_me
 
     // La plaza ajena y la caravana ajena: lo que se ve desde fuera, nada más.
     let v = vista(&e.n, Perspectiva::Faccion(2), None, todo());
-    assert!(de_vista(&v, TipoEntidad::Asentamiento, &nucleo::proyeccion::ids::asentamiento(plaza)).is_some_and(|c| matches!(c, Cuerpo::Asentamiento(a) if a.almacen.is_empty() && a.poblacion.is_none() && a.pueblos_ids.is_empty() && a.trazado.is_none() && a.edificios.iter().all(|b| b.estado == pb::EstadoEdificio::EdificioActivo as i32) && !a.zona.is_empty())), "la columna de F2 ve la plaza de F1 como ficha con su zona: {v:?}");
+    assert!(de_vista(&v, TipoEntidad::Asentamiento, &nucleo::proyeccion::ids::asentamiento(plaza)).is_some_and(|c| matches!(c, Cuerpo::Asentamiento(a) if a.almacen.is_empty() && a.poblacion.is_none() && a.pueblos_ids.is_empty() && a.trazado.is_none() && a.edificios.is_empty() && !a.mercado_activo && !a.zona.is_empty())), "la columna de F2 ve la plaza de F1 como ficha con su zona: {v:?}");
 }
 
 #[test]
@@ -541,7 +541,7 @@ fn la_vista_lleva_la_zona_fundida_el_suelo_bajo_cada_columna_propia_y_el_almacen
     let as_a = nucleo::proyeccion::ids::asentamiento(a);
     let Some(Cuerpo::Asentamiento(ficha)) = de_vista(&v, TipoEntidad::Asentamiento, &as_a) else { panic!("la plaza A") };
     assert_eq!(ficha.almacen.len(), asentamiento::recurso::TODOS.len(), "a la puerta, su almacén");
-    assert!(ficha.edificios.iter().all(|x| x.estado == pb::EstadoEdificio::EdificioActivo as i32) && ficha.trazado.is_none(), "y nada más del interior");
+    assert!(ficha.edificios.is_empty() && ficha.trazado.is_none(), "y nada más del interior");
     let otro = vista(&e.n, Perspectiva::Faccion(1), Some(heroe_de(&e.n, en_f2)), todo());
     let Some(Cuerpo::Asentamiento(ficha)) = de_vista(&otro, TipoEntidad::Asentamiento, &as_a) else { panic!() };
     assert!(ficha.almacen.is_empty(), "lejos de la puerta, solo la ficha");
