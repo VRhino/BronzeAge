@@ -277,6 +277,8 @@ La ficha pública (edificios `activo`, zona) y el mostrador de órdenes activas.
 
 Entrar es reconocimiento legítimo —ves si la ciudad es grande, rica y está amurallada— y por eso cerrar la puerta sigue siendo una defensa real sin que abrirla sea suicida.
 
+**Desde fuera, sin entrar** (2026-11-07), de una plaza ajena solo se sabe **si tiene muralla o no**, sin detalle: ni su tipo, ni cuánto lleva levantado. Una muralla empezada ya cuenta como que la tiene. El tipo y el avance se ven dentro o con una inspección.
+
 ### 1.10.5 La puerta: el Gobernador y el Rey (el exilio)
 
 Los héroes que llegan a una plaza se agrupan por la relación entre su Facción y la de la plaza: **la propia Facción** (nunca se le cierra la puerta), **aliados** (alianza o vasallaje, en cualquier sentido), **enemigos** (en guerra, Doc 2.4.1) y **neutrales** (el resto). La puerta se cierra **por grupo**, y cada uno es un interruptor independiente: no dejar entrar a neutrales, no dejar entrar a aliados, no dejar entrar a enemigos, no dejar entrar a los Aedas (Doc 6.7). Una plaza que nadie ha tocado deja entrar a los suyos y a los aliados, y cierra a neutrales y enemigos (confirmado por el autor el 2026-10-24; el motor lo aplica desde la tanda 5E del sistema político). Los pueblos extractores y las avanzadas heredan la puerta de su plaza madre, y cerrarla o vetar saca al mapa a quien ya está dentro y ya no puede entrar. Al conquistar una plaza su puerta vuelve a la de por defecto (sin vetos), respecto al dueño nuevo, que la cambia luego como quiera; sus pueblos y avanzadas la heredan, y salen al mapa quienes ya no podrían entrar con ella.

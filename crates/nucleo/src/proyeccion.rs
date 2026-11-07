@@ -69,7 +69,7 @@ fn ejercito_base(e: &Ejercito) -> pb::Ejercito {
 }
 
 /// La plaza como ficha del contrato (la que va a `FACCION`; el interior es de `proyeccion::interior`). `zona` es el polígono real recortado (`Nucleo::poligono_zona`) y `batalla_id`, la batalla que se juega ahora contra ella (el asedio visible). Es la ficha: id, Facción,
-/// sitio, nivel, zona, los ids de sus pueblos y avanzadas y el asedio.
+/// sitio, nivel, zona, los ids de sus pueblos y avanzadas, el asedio y si tiene muralla (sin detalle).
 pub fn ficha_de_asentamiento(a: &Asentamiento, zona: &[base::Punto], batalla_id: Option<String>) -> pb::Asentamiento {
     pb::Asentamiento {
         id: ids::asentamiento(a.id),
@@ -86,6 +86,8 @@ pub fn ficha_de_asentamiento(a: &Asentamiento, zona: &[base::Punto], batalla_id:
         batalla_id,
         nombre: (!a.nombre.is_empty()).then(|| a.nombre.clone()),
         capital_de_faccion_id: a.capital_de.map(ids::faccion),
+        // Sí o no, sin detalle: un recinto comprometido (aunque no tenga aún ninguna celda en pie) cuenta (2026-11-07).
+        tiene_muralla: !a.economia.recintos.is_empty(),
         ..Default::default()
     }
 }

@@ -603,7 +603,11 @@ fn abandonar_borra_un_recinto_que_nunca_se_cerro_sin_devolver_nada_y_libera_el_s
     let a = e.a;
     e.nivel(2);
     e.hasta(HORA + 30_000);
+    // Desde fuera solo se ve si tiene muralla, sin detalle; un recinto recién comprometido ya cuenta (2026-11-07).
+    let de_fuera = |e: &Escenario| nucleo::proyeccion::vista::plaza_avistada(&e.n, a);
+    assert!(!de_fuera(&e).tiene_muralla);
     e.comprometer(1);
+    assert!(de_fuera(&e).tiene_muralla && de_fuera(&e).recintos.is_empty(), "sí, y sin nivel, avance ni celdas");
     let celdas = e.recintos()[0].celdas.clone();
     e.avanzar(3 * 15 * MIN);
     assert_eq!(e.recintos()[0].avance, 3);
@@ -614,6 +618,7 @@ fn abandonar_borra_un_recinto_que_nunca_se_cerro_sin_devolver_nada_y_libera_el_s
     let r = e.ok("ana", Comando::AbandonarRecinto { asentamiento: a, recinto: 1 });
     assert!(r.creadas.is_empty());
     assert!(e.recintos().is_empty());
+    assert!(!de_fuera(&e).tiene_muralla, "abandonado, ya no tiene");
     assert_eq!((e.almacen(Recurso::Madera), e.almacen(Recurso::Piedra)), (madera, piedra), "sin devolución");
     let c = e.n.ciudad(a).unwrap();
     assert!(c.recintos().is_empty(), "la ciudad deja de tener el anillo");

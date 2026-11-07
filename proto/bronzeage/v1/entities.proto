@@ -518,6 +518,9 @@ message Asentamiento {
   bool almacen_cerrado_a_ciudadanos = 47;
   // La guarnición de la plaza escuadra a escuadra, en el orden de `guarnicion_ids`: tropa, soldados en pie y de qué héroe es (2026-11-04).
   repeated GuarnicionInforme guarnicion = 48;
+  // 2026-11-07 (decisión del autor): si la plaza tiene muralla, sin más detalle (sin nivel, avance ni celdas). Cuenta un recinto empezado: verdadero en cuanto hay
+  // algún recinto comprometido o en pie. Va en toda ficha, también en la avistada desde fuera (`VISTA`); el detalle sigue en `recintos`, de dentro.
+  bool tiene_muralla = 49;
 }
 
 // Rectángulo en UNIDADES LOCALES del asentamiento (esquina mínima y tamaño). El espacio local está centrado en el Centro Urbano.

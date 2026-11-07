@@ -56,6 +56,7 @@ campos_de_la_plaza!(
     almacen,
     edificios,
     recintos,
+    tiene_muralla,
     cargos,
     casas_compradas,
     puerta_cerrada_a,

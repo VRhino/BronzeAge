@@ -157,6 +157,7 @@ indica si está parado.
 - **`Cambio`** (forma **híbrida**, decisión del autor del 2026-10-22): `ACTUALIZA` (crea o actualiza) o `QUITA`. Hay dos formas de actualizar y las distingue `reemplaza`:
   - **Entidad completa** (`reemplaza = true`): para todas las entidades menos el asentamiento. `datos` es la entidad entera y **sustituye** a la que el cliente tenía; lo que no
     venga ha vuelto a su valor por defecto. No hay diff por entidad que calcular ni aplicar.
+  - **`Asentamiento.tiene_muralla`** (49, 2026-11-07): si la plaza tiene muralla, sin detalle; va en toda ficha, también en la avistada desde fuera, y cuenta un recinto comprometido. Es un campo más de la máscara.
   - **Parcial con máscara** (`reemplaza = false`): solo para el `Asentamiento` (la plaza y su ciudad, que son grandes). `campos` lista los campos de `Asentamiento` que el cambio
     actualiza (`almacen`, `edificios`, `trazado`...); lo que no está en la máscara no cambia. Un campo de la máscara con su valor por defecto **sí** se pone a ese valor (con proto3 un `0` y
     un «sin cambio» no se distinguen, por eso hay máscara) y un `optional` de la máscara que no viene en `datos` se borra. Los repetidos y los mapas de la máscara vienen completos.
