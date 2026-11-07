@@ -275,7 +275,7 @@ Las **161 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `comprometer_recinto` | `ComprometerRecinto` | el titular del cargo de la orden, residente y dentro | de la plaza |
 | `destruir_avanzada` | `DestruirAvanzada` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre |
 | `destruir_pueblo` | `DestruirPueblo` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre |
-| `elegir_tropa_de_avanzada` | `ElegirTropaDeAvanzada` | el Gobernador de la plaza, residente y dentro | de la plaza madre |
+| `elegir_tropa_de_avanzada` | `ElegirTropaDeAvanzada` | el Gobernador de la plaza, residente y dentro | de la plaza madre, o dentro de la avanzada (2026-11-07) |
 | `empezar_epica` | `EmpezarEpica` | el Rey de la dueña, el Gobernador o el Sacerdote de la plaza, dentro | `dirigeAedas` (no exige residir); la tecnología del catálogo (`tecnologia.desconocida`) y los ocho de `Tecnologia_Aedas.md` §7.2 en el orden del TypeScript: el Aeda vive en la plaza (`epica.no_vive_aqui`), la tecnología tiene épica (`epica.sin_epica`), el Aeda es de la dueña (`epica.aeda_ajeno`), no canta otra (`epica.ya_canta`), el logro cumplido (`epica.sin_logro`), la Era abierta (`epica.era_cerrada`), sin aparecer a la Facción (`epica.ya_aparecida`) y ningún otro Aeda suyo la canta (`epica.otro_la_canta`) (6E) |
 | `encargar_caravana` | `EncargarCaravana` | el Gobernador, el Tesorero o el Maestro de Caravanas de la plaza, residente y dentro | del origen de la caravana (`caravana.desconocida`); el destino existe (`asentamiento.desconocido`); sin encargo (`encargo.ya_tiene`); destino distinto del origen (`encargo.mismo_origen`), de la Facción si es una ruta (`encargo.destino_ajeno`); hora de salida solo en un envío y en `(ahora, ahora + maxProgramacionDias]` (`caravana.salida_invalida`); líneas válidas (`encargo.linea_invalida`), con precio en una plaza ajena (`encargo.falta_precio`) y que caben (`encargo.supera_capacidad`); la caravana, comercial (`caravana.no_es_comercial`), disponible (`caravana.no_disponible`) y con algún carro con animal (`caravana.sin_capacidad`); y ruta por tierra hasta el destino (`caravana.sin_ruta`), todo en ese orden (Comercio_Caravanas §5.8.3) |
 | `fijar_puerta` | `FijarPuerta` | el Gobernador, residente y dentro, o el Rey de la Facción | de la plaza; los grupos `neutrales`, `aliados`, `enemigos` y `aedas` (`orden.forma_invalida` si no); sin cambio, `sin_cambios`; no con un pueblo o una avanzada de la plaza en batalla (`batalla.bloqueado`); quien ya no puede entrar sale al mapa (5E). `FijarAcceso` (117) es su alias en el núcleo |
@@ -318,7 +318,7 @@ Las **161 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `aparcar_caravana` | `AparcarCaravana` | el Líder de la columna | la caravana adjunta, con la columna dentro de la plaza (`caravana.soltar_solo_dentro`, como `soltar_caravana`) |
 | `cargar_caravana` | `CargarCaravana` | un participante de la columna | la caravana adjunta (`caravana.no_esta_adjunta`), a la puerta (`radioPuerta`) de una plaza de su Facción (`caravana.plaza_ajena`); hasta lo que le cabe (`caravana.sin_capacidad`) |
 | `comerciar_en_plaza` | `ComerciarEnPlaza` | el Líder de la columna | a la puerta de la plaza de la orden |
-| `depositar_en_avanzada` | `DepositarEnAvanzada` | un participante de la columna | a la puerta de la avanzada operativa |
+| `depositar_en_avanzada` | `DepositarEnAvanzada` | un participante de la columna | a la puerta de la avanzada operativa, o un participante de la cuenta dentro de ella con la columna (2026-11-07) |
 | `entregar_de_caravana` | `EntregarDeCaravana` | un participante de la columna | la caravana adjunta, a la puerta de la plaza B |
 | `entregar_en_obra` | `EntregarMateriales` | un participante de la columna | a la puerta de la obra del pueblo; ciudadano de la Facción de la obra |
 | `entregar_en_obra` | `EntregarMaterialesAAvanzada` | un participante de la columna | a la puerta de la obra de la avanzada; ciudadano de la Facción de la obra |
@@ -365,7 +365,7 @@ Las **161 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `guardar_loadout` | `GuardarLoadout` | la cuenta del héroe | — |
 | `guardar_en_almacen_personal` | `GuardarEnAlmacenPersonal` | la cuenta del héroe | dentro de su residencia; o el Líder de su columna (`columna.solo_el_lider`) con ella a la puerta de su residencia (`almacen_personal.fuera_de_tu_residencia`) |
 | `guarnecer` | `Guarnecer` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`); su columna a la puerta (`radioPuerta`) |
-| `guarnecer_avanzada` | `GuarnecerAvanzada` | la cuenta del héroe | residente de la plaza madre (`avanzada.no_resides`); su columna a la puerta (`radioPuerta`) de la avanzada |
+| `guarnecer_avanzada` | `GuarnecerAvanzada` | la cuenta del héroe | residente de la plaza madre (`avanzada.no_resides`); su columna a la puerta (`radioPuerta`) de la avanzada, o él dentro con ella (2026-11-07) |
 | `inspeccionar` | `Inspeccionar` | la cuenta del héroe | el objetivo en el mapa (`inspeccion.a_cubierto`) y a su alcance |
 | `lanzar_caravana_fundacion` | `LanzarCaravanaFundacion` | la cuenta del héroe | ciudadano de la Facción de la plaza (`fundacion.no_ciudadano`) que reside y está en ella (`fundacion.no_resides`, Proy §5.2.4); nivel operativo 2 (`fundacion.nivel_insuficiente`), cooldown de caravanas (`caravana.en_cooldown`), cap con las caravanas vivas (`fundacion.cap_alcanzado`) y el coste (`caravana.sin_recursos`) (5G-b) |
 | `movilizar_ejercito` | `MovilizarEjercito` | la cuenta del héroe | como `salir_al_mundo` |
@@ -382,12 +382,12 @@ Las **161 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `repartir_puntos` | `RepartirPuntos` | la cuenta del héroe | — |
 | `reponer_prestamo` | `ReponerPrestamo` | la cuenta del héroe | dentro del campamento |
 | `repostar` | `Repostar` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`); su columna a la puerta (`radioPuerta`) de la plaza (`repostar.sin_lugar`) |
-| `repostar` | `RepostarEnAvanzada` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`); su columna a la puerta (`radioPuerta`) de la avanzada |
+| `repostar` | `RepostarEnAvanzada` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`); su columna a la puerta (`radioPuerta`) de la avanzada, o él dentro con ella (2026-11-07) |
 | `repostar_en_campamento` | `RepostarEnCampamento` | la cuenta del héroe | a la puerta del campamento |
 | `responder_peticion_de_convocatoria` | `ResponderPeticionDeConvocatoria` | la cuenta del héroe | el Líder de la convocatoria |
 | `responder_peticion_de_union` | `ResponderPeticionDeUnion` | la cuenta del héroe | el Líder de la columna |
 | `retirar_de_refundacion` | `RetirarDeRefundacion` | la cuenta del héroe | como `aportar_a_refundacion`, sin mirar las plazas; lo que aportó (`refundacion.sin_aporte`), hasta el hueco (5G-b) |
-| `retirar_de_avanzada` | `RetirarDeAvanzada` | la cuenta del héroe | escuadras suyas; su columna a la puerta (`radioPuerta`) de la avanzada |
+| `retirar_de_avanzada` | `RetirarDeAvanzada` | la cuenta del héroe | escuadras suyas; su columna a la puerta (`radioPuerta`) de la avanzada, o él dentro con ella (2026-11-07) |
 | `retirar_guarnicion` | `RetirarGuarnicion` | la cuenta del héroe | la dejada de visita, desde dentro de esa plaza |
 | `sacar_del_almacen_personal` | `SacarDelAlmacenPersonal` | la cuenta del héroe | como `guardar_en_almacen_personal`; hasta lo que cabe en el carro (`carro.no_cabe`) |
 | `salir_al_mundo` | `SalirAlMundo` | la cuenta del héroe | desde su residencia (`salida.solo_de_tu_residencia`); escuadras suyas |

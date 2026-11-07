@@ -719,7 +719,9 @@ Un ejército en la puerta de **una plaza que le abre su puerta** (`guarnecer`: l
 
 Esto sustituye la regla del 2026-09-14 de guarnecer solo si todos los del ejército residían en la plaza.
 
-**Un pueblo o una avanzada también se entran** (2026-10-22): lo ordena el Líder (o el héroe solo, en una columna personal), se desarma el ejército y cada héroe entra como lo haría solo, con todo, de visita (en ellos nadie reside). Si el lugar desaparece o cambia de dueño, o el dueño cierra la puerta a su relación, se sale al mapa con todo lo tuyo.
+**Un pueblo o una avanzada también se entran** (2026-10-22): lo ordena el Líder (o el héroe solo, en una columna personal), se desarma el ejército y cada héroe entra como lo haría solo, con todo, de visita (en ellos nadie reside). Dentro de una avanzada se hace lo mismo que con la columna a su puerta (2026-11-07):
+dejar y recoger escuadras de la guarnición de jugadores, depositar en el almacén, repostar y, el Gobernador de la madre,
+elegir la tropa de la guarnición de serie. Si el lugar desaparece o cambia de dueño, o el dueño cierra la puerta a su relación, se sale al mapa con todo lo tuyo.
 
 ## 5.15 Batallas con héroes: quién combate, guarnición y campamento
 

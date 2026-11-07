@@ -119,7 +119,7 @@ impl Nucleo {
         self.estado.siguiente_id - 1
     }
 
-    fn cuenta_de(&self, heroe: u64) -> Option<&str> {
+    pub(super) fn cuenta_de(&self, heroe: u64) -> Option<&str> {
         self.heroe(heroe).map(|h| h.cuenta.as_str())
     }
 

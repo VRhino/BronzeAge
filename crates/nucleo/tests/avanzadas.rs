@@ -791,6 +791,52 @@ fn guarnecer_deja_escuadras_en_la_avanzada_dentro_del_cupo_comen_de_la_madre_y_s
 }
 
 #[test]
+fn desde_dentro_de_la_avanzada_se_guarnece_se_retira_se_deposita_se_reposta_y_se_elige_la_tropa() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let (av, col, heroe) = e.avanzada_de(Etapa::Fuerte);
+    e.residir(heroe);
+    let a = e.dar_escuadra(heroe, Tropa::MiliciaLanceros);
+    e.ord("admin", Comando::DarSuministro { ejercito: col, recurso: Trigo, cantidad: 100_000 });
+    e.ok("ana", Comando::EntrarEnAvanzada { avanzada: av, heroe });
+    assert_eq!((e.ubicacion(heroe), e.n.en_el_mapa(col)), (Ubicacion::Avanzada(av), false), "dentro, con su columna fuera del mapa");
+
+    // La guarnición, con la columna con la que entró.
+    e.ok("ana", Comando::GuarnecerAvanzada { heroe, avanzada: av, escuadras: vec![a] });
+    assert_eq!(e.n.heroe(heroe).unwrap().heroe.escuadra(a).unwrap().contenedor, Contenedor::Avanzada(av));
+    assert!(!e.n.ejercito(col).unwrap().columna.escuadras.contains(&a));
+    e.ok("ana", Comando::RetirarDeAvanzada { heroe, avanzada: av, escuadras: vec![a] });
+    assert_eq!(e.n.heroe(heroe).unwrap().heroe.escuadra(a).unwrap().contenedor, Contenedor::Ejercito(col));
+
+    // El almacén: depositar del carro de la columna de dentro y repostar sus víveres.
+    assert_eq!(e.rechazada("beto", Comando::DepositarEnAvanzada { ejercito: col, avanzada: av, recurso: Trigo, cantidad: 10_000 }), rechazos::NO_AUTORIZADO, "la columna no es suya");
+    e.ok("ana", Comando::DepositarEnAvanzada { ejercito: col, avanzada: av, recurso: Trigo, cantidad: 60_000 });
+    assert_eq!(e.avanzada(av).almacen.cantidad(Trigo), 60_000);
+    assert_eq!(dato(&hechos(&e.n, "avanzada.deposito")[0], "cantidad"), 60_000);
+    e.avanzar(HORA);
+    let viveres = |e: &Esc| e.n.ejercito(col).unwrap().columna.viveres.valor_en(e.n.ahora());
+    let antes = viveres(&e);
+    e.ok("ana", Comando::RepostarEnAvanzada { heroe, avanzada: av });
+    assert!(viveres(&e) > antes && e.avanzada(av).almacen.cantidad(Trigo) < 60_000, "llena sus víveres con el trigo del almacén");
+
+    // El Gobernador elige la tropa de la guarnición de serie sin salir.
+    e.ok("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["escudos_ligeros".into()] });
+    e.con_barracon();
+    e.ok("ana", Comando::ElegirTropaDeAvanzada { heroe, avanzada: av, tropa: Tropa::LancerosMimbre });
+    assert_eq!(e.n.tropas_elegidas_de_avanzada(av).get(&2), Some(&Tropa::LancerosMimbre));
+    assert_eq!(e.ubicacion(heroe), Ubicacion::Avanzada(av), "todo sin salir");
+
+    // Dentro de otra avanzada no vale: hace falta estar en esta, o con la columna a su puerta.
+    let lejos = Punto::new(e.centro.x - 8_000, e.centro.y);
+    let (otra, col2, h2) = e.colocar_en(lejos);
+    e.acabar_obra(otra, col2);
+    e.residir(h2);
+    let b = e.dar_escuadra(h2, Tropa::MiliciaLanceros);
+    e.ok("ana", Comando::EntrarEnAvanzada { avanzada: otra, heroe: h2 });
+    assert_eq!(e.rechazada("ana", Comando::GuarnecerAvanzada { heroe: h2, avanzada: av, escuadras: vec![b] }), rechazos::HEROE_SIN_COLUMNA);
+}
+
+#[test]
 fn el_cupo_crece_con_la_etapa_y_cada_heroe_tiene_el_suyo() {
     let m = con_mundo!();
     let mut e = montar(m, 7, 2);

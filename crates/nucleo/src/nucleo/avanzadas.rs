@@ -369,7 +369,7 @@ impl Nucleo {
             Comando::ElegirTropaDeAvanzada { heroe, avanzada, tropa } => {
                 let (madre, v) = self.con_madre(*avanzada)?;
                 let (faccion, punto) = (self.estado.asentamientos[&madre].faccion, v.posicion);
-                self.autorizar_en_plaza(p, madre, Some(*heroe))?;
+                self.autorizar_en_plaza_o_en_avanzada(p, madre, *heroe, *avanzada)?;
                 let cr = self.estado.reglas.economia.combate.clone();
                 let escalon = regla::escalon_elegible(&cr, *tropa).ok_or_else(|| rechazo(rechazos::AVANZADA_TROPA_NO_ELEGIBLE, "la guarnición de serie solo usa tropas de los escalones 2, 3 y 4".into()))?;
                 // Solo lo que la plaza madre puede reclutar: la tecnología de la Facción y el edificio activo al nivel que pide la tropa.
@@ -396,15 +396,12 @@ impl Nucleo {
                 let (madre, av) = self.con_madre(*avanzada)?;
                 let (faccion, posicion) = (self.estado.asentamientos[&madre].faccion, av.posicion);
                 self.autorizar_heroe(p, *heroe, false)?;
-                let (cid, e) = self.columna_a_bordo(*heroe)?;
+                let (cid, e) = self.columna_en_avanzada(p, t, *heroe, *avanzada, posicion)?;
                 if e.columna.lider != *heroe {
                     return Err(rechazo(rechazos::COLUMNA_SOLO_EL_LIDER, "solo el Líder reposta".into()));
                 }
                 if e.columna.faccion != Some(faccion) {
                     return Err(rechazo(rechazos::AVANZADA_FACCION_AJENA, "esa avanzada no abre su almacén a esta columna".into()));
-                }
-                if !p.admin && e.posicion_en(t).dist(posicion) > self.radio_puerta() {
-                    return Err(rechazo(rechazos::AVANZADA_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la avanzada".into()));
                 }
                 if !av.operativa() {
                     return Err(rechazo(rechazos::AVANZADA_NO_OPERATIVA, "en ruinas o en obra no funciona nada, ni el reabastecimiento".into()));
@@ -436,8 +433,10 @@ impl Nucleo {
                 if e.columna.faccion != Some(self.estado.asentamientos[&madre].faccion) {
                     return Err(rechazo(rechazos::AVANZADA_FACCION_AJENA, "esa avanzada es de otra Facción".into()));
                 }
-                if e.posicion_en(t).dist(av.posicion) > self.radio_puerta() {
-                    return Err(rechazo(rechazos::AVANZADA_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la avanzada".into()));
+                // A la puerta, o dentro: algún participante de la columna, de la cuenta, está dentro de la avanzada con ella (2026-11-07).
+                let dentro = e.columna.participantes.iter().any(|x| self.cuenta_de(x.heroe) == Some(p.actor.as_str()) && self.esta_dentro_con(x.heroe, *avanzada, *ejercito));
+                if !dentro && e.posicion_en(t).dist(av.posicion) > self.radio_puerta() {
+                    return Err(rechazo(rechazos::AVANZADA_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la avanzada ni dentro".into()));
                 }
                 if *cantidad <= 0 {
                     return Err(rechazo(rechazos::CANTIDAD_NO_POSITIVA, "hay que depositar una cantidad positiva".into()));
@@ -525,18 +524,49 @@ impl Nucleo {
         Ok(vec![])
     }
 
+    /// La columna con la que el héroe da una orden en la avanzada: la suya a la puerta (la administración, esté donde esté) o, si él está **dentro** de la avanzada (`entrarEnAvanzada`), la
+    /// columna con la que entró, que lo espera dentro fuera del mapa (desde dentro, 2026-11-07, decisión del autor: como en los pueblos).
+    fn columna_en_avanzada(&self, p: &Peticion, t: Instante, heroe: u64, avanzada: u64, puerta: Punto) -> Result<(u64, &Ejercito), Respuesta> {
+        let v = self.estado.version;
+        if self.heroe(heroe).is_some_and(|h| h.heroe.presencia.ubicacion == Ubicacion::Avanzada(avanzada)) {
+            let cid = self.columna_que_lleva(heroe).ok_or_else(|| Respuesta::rechazo(rechazos::HEROE_SIN_COLUMNA, "el héroe no trajo columna", v))?;
+            return Ok((cid, &self.estado.ejercitos[&cid]));
+        }
+        let (cid, e) = self.columna_a_bordo(heroe)?;
+        if !p.admin && e.posicion_en(t).dist(puerta) > self.radio_puerta() {
+            return Err(Respuesta::rechazo(rechazos::AVANZADA_FUERA_DE_LA_PUERTA, "la columna del héroe no está a la puerta de la avanzada ni él dentro", v));
+        }
+        Ok((cid, e))
+    }
+
+    /// ¿Está `heroe` dentro de la avanzada con la columna `ejercito`?
+    fn esta_dentro_con(&self, heroe: u64, avanzada: u64, ejercito: u64) -> bool {
+        self.heroe(heroe).is_some_and(|h| h.heroe.presencia.ubicacion == Ubicacion::Avanzada(avanzada)) && self.columna_que_lleva(heroe) == Some(ejercito)
+    }
+
+    /// `elegirTropaDeAvanzada` la da el Gobernador de la madre dentro de la plaza (la matriz de siempre) o **dentro de la avanzada** (2026-11-07): un héroe de la cuenta dentro de ella que
+    /// reside en la madre y es su Gobernador.
+    fn autorizar_en_plaza_o_en_avanzada(&self, p: &Peticion, madre: u64, heroe: u64, avanzada: u64) -> Result<(), Respuesta> {
+        let en_la_plaza = self.autorizar_en_plaza(p, madre, Some(heroe));
+        if en_la_plaza.is_ok() {
+            return en_la_plaza;
+        }
+        let dentro = self.heroe(heroe).is_some_and(|h| h.cuenta == p.actor && h.heroe.presencia.ubicacion == Ubicacion::Avanzada(avanzada));
+        if dentro && (politica::autorizacion::Actor { yo: heroe, politica: &self.estado.politica, vista: self }).cargo_en_el_sitio(madre as u32, &[politica::Cargo::Gobernador]) {
+            return Ok(());
+        }
+        en_la_plaza
+    }
+
     /// `guarnecerAvanzada`: el héroe residente de la madre —o el mercenario con la orden `guardar` de esa avanzada, que no necesita residir (Mercenarios_Por_Contrato §6.1)—, con su columna
-    /// a la puerta, deja escuadras suyas de la columna en la guarnición de jugadores de la avanzada, dentro de su cupo (14 / 45 / 90 puntos de Liderazgo). Comen del trigo de la madre; la columna recalcula lo que come y su velocidad.
+    /// a la puerta o él dentro con ella (2026-11-07), deja escuadras suyas de la columna en la guarnición de jugadores de la avanzada, dentro de su cupo (14 / 45 / 90 puntos de Liderazgo). Comen del trigo de la madre; la columna recalcula lo que come y su velocidad.
     fn guarnecer_avanzada(&mut self, t: Instante, p: &Peticion, heroe: u64, avanzada: u64, escuadras: &[u64]) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         let (madre, av) = self.con_madre(avanzada)?;
         let (posicion, etapa, punto) = (av.posicion, av.etapa, av.posicion);
         self.autorizar_heroe(p, heroe, false)?;
-        let (cid, e) = self.columna_a_bordo(heroe)?;
-        if !p.admin && e.posicion_en(t).dist(posicion) > self.radio_puerta() {
-            return Err(rechazo(rechazos::AVANZADA_FUERA_DE_LA_PUERTA, "la columna del héroe no está a la puerta de la avanzada".into()));
-        }
+        let (cid, _) = self.columna_en_avanzada(p, t, heroe, avanzada, posicion)?;
         if !av.operativa() {
             return Err(rechazo(rechazos::AVANZADA_NO_OPERATIVA, "solo se guarnece una avanzada operativa".into()));
         }
@@ -579,7 +609,7 @@ impl Nucleo {
         Ok(vec![])
     }
 
-    /// El héroe, con su columna a la puerta, recoge de la avanzada escuadras suyas. Las escuadras que lleva fuera del campamento (con las que recoge) no pasan de su
+    /// El héroe, con su columna a la puerta o él dentro con ella (2026-11-07), recoge de la avanzada escuadras suyas. Las escuadras que lleva fuera del campamento (con las que recoge) no pasan de su
     /// Liderazgo.
     fn retirar_de_avanzada(&mut self, t: Instante, p: &Peticion, heroe: u64, avanzada: u64, escuadras: &[u64]) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
@@ -587,10 +617,7 @@ impl Nucleo {
         let (madre, av) = self.con_madre(avanzada)?;
         let posicion = av.posicion;
         self.autorizar_heroe(p, heroe, false)?;
-        let (cid, e) = self.columna_a_bordo(heroe)?;
-        if !p.admin && e.posicion_en(t).dist(posicion) > self.radio_puerta() {
-            return Err(rechazo(rechazos::AVANZADA_FUERA_DE_LA_PUERTA, "la columna del héroe no está a la puerta de la avanzada".into()));
-        }
+        let (cid, _) = self.columna_en_avanzada(p, t, heroe, avanzada, posicion)?;
         if escuadras.is_empty() {
             return Err(rechazo(rechazos::SALIDA_SIN_ESCUADRAS, "hay que recoger al menos una escuadra".into()));
         }
