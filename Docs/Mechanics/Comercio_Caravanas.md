@@ -97,6 +97,7 @@ Una caravana es un contenedor de **carros** (cada uno con a lo sumo un animal) y
 | `origenAcuerdoId`, `ladoAcuerdo` | Solo en el reparto automático: a qué trueque y a qué lado sirve. |
 | `preparaHasta` | Solo en `preparando`: el instante en que sale. |
 | `escoltaIds[]` | Escuadrones cedidos (viven en su héroe con `contenedor: {tipo: 'escolta', caravanaId}`). |
+| `escolta[]` | En el contrato (`Caravana.escolta`, 27, 2026-11-07): la misma escolta escuadra a escuadra, en el orden de `escoltaIds`, con `{ tropa_id, cantidad, heroe_id }` (como la guarnición de una plaza), para decir de quién es cada una. Viaja donde viaja `escoltaIds` (la caravana propia y el carro de acarreo), nunca en la avistada. |
 | `reservadaManual` | `true` ⇒ fuera del reparto automático, sea cual sea su tamaño. |
 | `nombre` | Solo en Rust (2026-11-02): el que le pone quien reside en su origen (`renombrarCaravana`, §5.2); vacío = sin nombre. No cambia nada del juego: es para reconocerla. |
 | `encargo` | Solo en Rust: el encargo de transporte que tiene (`Option<Encargo>`, §5.8.2): modo, destino, hora de salida, las dos paradas, `vueltas`, `punta`, `fase`, `fin_paso` y `cancelado`. Mientras lo tiene, la caravana no está `disponible` y el reparto del trueque no la usa (§4.3). |

@@ -667,6 +667,9 @@ async fn una_caravana_es_del_heroe_mientras_la_escolta_o_va_en_su_columna_y_de_l
     vista.aplicar(d);
     let de_beto = pendiente(&mut beto).await;
     assert_eq!(caravanas(nuevas(deltas_de(&de_beto, faccion)[0]))[0].escolta_ids, [escuadra.clone()], "la Facción ve la escolta de la caravana de su plaza");
+    let informe = caravanas(nuevas(deltas_de(&de_beto, faccion)[0]))[0].escolta.clone();
+    assert_eq!(informe.len(), 1, "una línea por escuadra de `escolta_ids`");
+    assert!(informe[0].heroe_id == h_ana && informe[0].tropa_id == "milicia_lanceros" && informe[0].cantidad > 0, "y de quién es, con su tropa y sus soldados: {informe:?}");
     assert!(deltas_de(&de_beto, &ambito_h).is_empty() && deltas_de(&pendiente(&mut dora).await, &ambito_h).is_empty(), "la escuadra y su héroe son solo de ana");
 
     // Retirarla: la caravana deja de ser del héroe (QUITA en su ámbito) y sigue siendo de la Facción (ACTUALIZA, ya sin escolta).

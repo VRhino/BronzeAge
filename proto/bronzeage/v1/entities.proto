@@ -982,6 +982,9 @@ message Caravana {
   optional Encargo encargo = 25;
   // Solo en la proyección propia (2026-11-02, `renombrar_caravana`): su nombre; sin él, la caravana no tiene nombre y se muestra su id.
   optional string nombre = 26;
+  // 2026-11-07 (pedido del cliente, aprobado por el autor): la escolta escuadra a escuadra, en el orden de `escolta_ids`: tropa, soldados y de qué héroe es
+  // (como `Asentamiento.guarnicion`). Viaja allí donde viaja `escolta_ids` (la caravana propia y el carro de acarreo); nunca en la avistada.
+  repeated GuarnicionInforme escolta = 27;
 }
 
 // El encargo de una caravana (rutas de caravanas automáticas, 2026-10-31).

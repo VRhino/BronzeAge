@@ -535,6 +535,14 @@ pub fn caravana(n: &Nucleo, c: &Caravana) -> pb::Caravana {
             })
             .collect(),
         escolta_ids: c.escolta.iter().map(|s| ids::escuadra(s.id)).collect(),
+        escolta: c
+            .escolta
+            .iter()
+            .map(|s| {
+                let (tropa, cantidad) = n.escuadra(s.id).map_or((String::new(), 0), |(_, x)| (x.tropa.nombre().to_owned(), x.cantidad.max(0) as u32));
+                pb::GuarnicionInforme { tropa_id: tropa, cantidad, heroe_id: ids::heroe(s.heroe) }
+            })
+            .collect(),
         reservada_manual: c.reservada_manual,
         prepara_hasta_ms: c.prepara_hasta,
         pueblo_id: pueblo,
