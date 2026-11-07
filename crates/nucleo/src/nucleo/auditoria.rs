@@ -108,7 +108,7 @@ impl Nucleo {
         // públicas, y la de una cantada ya no cambia).
         m.extend(e.residentes.aedas.iter().map(|a| ((Clase::Residente, u64::from(a.id)), huella(a))));
         let t = &e.tecnologia;
-        m.insert((Clase::Tecnologia, 0), huella(&(t.era, t.era_desde, &t.logros, t.cantadas)));
+        m.insert((Clase::Tecnologia, 0), huella(&(t.era, t.era_desde, &t.logros, &t.plazas_al_cumplir, t.plazas, t.cantadas)));
         m
     }
 

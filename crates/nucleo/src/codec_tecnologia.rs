@@ -1,9 +1,9 @@
 //! Serialización canónica del estado de tecnología del mundo (`tecnologia::EstadoTecnologia`) para el hash y las fotos (desde BAN36, tanda 6B). La estructura se desestructura **entera**
 //! (sin `..`): si el crate `tecnologia` añade un campo, esto deja de compilar y obliga a decidir cómo se guarda.
 //!
-//! Formato (little endian, el de `codec`): `era u8 · era_desde i64 · contadores{24 × u64} · restos{24 × u64} · logros{n u64 · n × opt_i64} · primeros{n u64 · n × (opt: facción u32, en i64)} ·
+//! Formato (little endian, el de `codec`): `era u8 · era_desde i64 · contadores{24 × u64} · restos{24 × u64} · logros{n u64 · n × opt_i64} · plazas_al_cumplir{n u64 · n × u32} (desde BAN58) · primeros{n u64 · n × (opt: facción u32, en i64)} ·
 //! cantadas u64 · por_faccion{n u64 · n × (facción u32, aparecidas u64, adoptadas u64, reveladas u64)}`. Las tecnologías van por índice del catálogo (el orden del bloque `TECNOLOGIAS`, que
-//! fija la huella de las reglas) y los conjuntos, como mapas de bits.
+//! fija la huella de las reglas) y los conjuntos, como mapas de bits. `plazas` (N de los umbrales por plaza) es derivado y no se guarda: lo rehace el núcleo con el espacio.
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use base::Instante;
@@ -15,12 +15,14 @@ use tecnologia::itinerantes::AedaItinerante;
 use tecnologia::{AedaResidente, Conjunto, Epica, EstadoTecnologia, Residentes, TecnologiasFaccion};
 
 pub(crate) fn escribir(w: &mut Escritor, e: &EstadoTecnologia) {
-    let EstadoTecnologia { era, era_desde, contadores, restos, logros, primeros, cantadas, por_faccion } = e;
+    let EstadoTecnologia { era, era_desde, contadores, restos, logros, plazas_al_cumplir, plazas: _, primeros, cantadas, por_faccion } = e;
     w.u8(*era);
     w.i64(*era_desde);
     contadores.iter().chain(restos).for_each(|&n| w.u64(n));
     w.u64(logros.len() as u64);
     logros.iter().for_each(|&l| w.opt_i64(l));
+    w.u64(plazas_al_cumplir.len() as u64);
+    plazas_al_cumplir.iter().for_each(|&n| w.u32(n));
     w.u64(primeros.len() as u64);
     for p in primeros {
         w.bool(p.is_some());
@@ -37,13 +39,19 @@ pub(crate) fn escribir(w: &mut Escritor, e: &EstadoTecnologia) {
     }
 }
 
-pub(crate) fn leer(r: &mut Lector) -> Result<EstadoTecnologia, ErrorFormato> {
+/// `con_plazas_al_cumplir`: la foto es BAN58 o posterior; si no, cada logro cumplido se lee con 1 plaza.
+pub(crate) fn leer(r: &mut Lector, con_plazas_al_cumplir: bool) -> Result<EstadoTecnologia, ErrorFormato> {
     let (era, era_desde) = (r.u8()?, r.i64()?);
     let (mut contadores, mut restos) = ([0u64; 24], [0u64; 24]);
     for n in contadores.iter_mut().chain(restos.iter_mut()) {
         *n = r.u64()?;
     }
     let logros = (0..r.cuenta()?).map(|_| r.opt_i64()).collect::<Result<Vec<_>, _>>()?;
+    let plazas_al_cumplir = if con_plazas_al_cumplir {
+        (0..r.cuenta()?).map(|_| r.u32()).collect::<Result<Vec<_>, _>>()?
+    } else {
+        logros.iter().map(|l| u32::from(l.is_some())).collect()
+    };
     let mut primeros = Vec::new();
     for _ in 0..r.cuenta()? {
         primeros.push(if r.bool()? { Some(Primero { faccion: r.u32()?, en: r.i64()? }) } else { None });
@@ -54,7 +62,7 @@ pub(crate) fn leer(r: &mut Lector) -> Result<EstadoTecnologia, ErrorFormato> {
         let f = r.u32()?;
         por_faccion.insert(f, TecnologiasFaccion { aparecidas: Conjunto(r.u64()?), adoptadas: Conjunto(r.u64()?), reveladas: Conjunto(r.u64()?) });
     }
-    Ok(EstadoTecnologia { era, era_desde, contadores, restos, logros, primeros, cantadas, por_faccion })
+    Ok(EstadoTecnologia { era, era_desde, contadores, restos, logros, plazas_al_cumplir, plazas: 0, primeros, cantadas, por_faccion })
 }
 
 /// Los Aedas residentes (desde BAN40, tanda 6E), desestructurados enteros como el estado de tecnología. Formato: `siguiente u32 · aedas{n · (id u32, plaza u32, facción u32, llegada i64,

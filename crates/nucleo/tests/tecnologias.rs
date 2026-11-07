@@ -53,7 +53,7 @@ fn con_almacen_grande(mut r: Reglas) -> Reglas {
 /// El logro de `id` pasa a ser `plazasEnNivel.2 ≥ 1`.
 fn con_logro_de_nivel_2(r: &mut tecnologia::Reglas, id: &str) {
     let t = r.buscar(id).unwrap();
-    r.catalogo[t as usize].logro = Some(Logro { contador: Contador::PlazasEnNivel2, umbral: 1 });
+    r.catalogo[t as usize].logro = Some(Logro::fijo(Contador::PlazasEnNivel2, 1));
 }
 
 fn arranque(m: &M, reglas: Reglas, ajustes: Ajustes) -> Arranque {
@@ -393,7 +393,7 @@ fn la_foto_ban38_lleva_las_citas_de_cada_descubrimiento_y_ban37_se_rechaza() {
     let reglas = e.n.estado().reglas.clone();
     let mundo_hash = e.n.estado().mundo_hash.clone();
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN57");
+    assert_eq!(&bytes[..5], b"BAN58");
     let vuelta = Estado::deserializar(&bytes, &reglas, &mundo_hash).unwrap();
     assert_eq!(vuelta.serializar(), bytes);
     assert_eq!(vuelta.hash(), e.n.estado().hash());

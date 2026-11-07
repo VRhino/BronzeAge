@@ -316,7 +316,7 @@ fn los_cargos_y_la_puerta_viajan_en_la_foto_ban33_y_la_ban32_se_rechaza() {
     e.ok("ana", Comando::VetarJugador { heroe: ana, asentamiento: plaza, vetado: cai, vetar: true });
     assert!(hash0 != hash1 && hash1 != hash2 && hash2 != e.n.hash_estado(), "cada pieza mueve el hash");
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN57");
+    assert_eq!(&bytes[..5], b"BAN58");
     let reglas = e.n.estado().reglas.clone();
     let vuelta = Estado::deserializar(&bytes, &reglas, &e.n.estado().mundo_hash).unwrap();
     let a = &vuelta.asentamientos[&plaza];
@@ -401,6 +401,10 @@ fn el_maestro_de_caravanas_viaja_en_la_foto_y_una_foto_ban51_llega_con_el_sexto_
     let mut otra = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     otra.contratos.ofertas.insert(1, mercenarios::Oferta { campamento: 0, desde: 0 });
     cortes.push((primera_diferencia(otra), 5 * 8, vec![]));
+    // Hasta BAN57 no estaban las plazas al cumplir cada logro (cuenta u64 y un u32 por tecnología, tras los logros).
+    let mut otra = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
+    otra.tecnologia.plazas_al_cumplir[0] += 1;
+    cortes.push((primera_diferencia(otra) - 8, 8 + 4 * e.n.estado().tecnologia.plazas_al_cumplir.len(), vec![]));
     // Hasta BAN56 la cabecera de reglas traía la cuota de parcelas (un u32) justo antes de la huella de economía (u32 de longitud y texto).
     cortes.push((donde(&bytes, reglas.economia.huella().as_bytes()) - 4, 0, 50u32.to_le_bytes().to_vec()));
     cortes.sort_by_key(|c| std::cmp::Reverse(c.0));

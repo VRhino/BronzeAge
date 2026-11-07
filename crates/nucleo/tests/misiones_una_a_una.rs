@@ -48,7 +48,7 @@ fn reglas() -> Reglas {
     // La cantería aparece con una plaza de nivel 2 (F5) y tiene una épica (F12), como en `tests/aedas_residentes.rs`.
     let t = Arc::make_mut(&mut r.economia.tecnologia);
     let c = t.buscar("canteria").unwrap();
-    t.catalogo[c as usize].logro = Some(Logro { contador: Contador::PlazasEnNivel2, umbral: 1 });
+    t.catalogo[c as usize].logro = Some(Logro::fijo(Contador::PlazasEnNivel2, 1));
     t.catalogo[c as usize].epica = Some(DefinicionEpica {
         nombre: "Canto de la piedra".into(),
         capitulos: vec![Capitulo { hecho: HechoEpico::Obra, cantidad: 1, edificio: Some(Tipo::Almacen) }, Capitulo { hecho: HechoEpico::Obra, cantidad: 1, edificio: None }],

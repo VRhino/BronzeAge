@@ -40,7 +40,7 @@ fn reglas_con(tec: impl FnOnce(&mut tecnologia::Reglas)) -> Reglas {
     std::sync::Arc::make_mut(&mut r.economia.datos).capacidad_inicial = 100_000_000;
     let t = std::sync::Arc::make_mut(&mut r.economia.tecnologia);
     let cobre = t.buscar("metalurgia_cobre").unwrap();
-    t.catalogo[cobre as usize].logro = Some(Logro { contador: Contador::PlazasEnNivel2, umbral: 1 });
+    t.catalogo[cobre as usize].logro = Some(Logro::fijo(Contador::PlazasEnNivel2, 1));
     tec(t);
     t.indexar();
     r
@@ -443,7 +443,7 @@ fn la_foto_ban39_lleva_los_aedas_y_su_evento_y_ban38_se_rechaza() {
     let reglas = e.n.estado().reglas.clone();
     let mundo_hash = e.n.estado().mundo_hash.clone();
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN57");
+    assert_eq!(&bytes[..5], b"BAN58");
     let vuelta = Estado::deserializar(&bytes, &reglas, &mundo_hash).unwrap();
     assert_eq!(vuelta.serializar(), bytes);
     assert_eq!(vuelta.hash(), e.n.estado().hash());

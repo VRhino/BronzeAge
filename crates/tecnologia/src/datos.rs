@@ -46,6 +46,16 @@ fn recurso(n: &str) -> Recurso {
     Recurso::desde_nombre(n).unwrap_or_else(|| panic!("recurso «{n}» desconocido"))
 }
 
+/// Una parte de un logro: `{ contador, umbral }` (fijo) o `{ contador, porPlaza }` (por plaza viva).
+fn parte(id: &str, l: &Value) -> Parte {
+    let contador = Contador::desde_nombre(&texto(l, "contador")).unwrap_or_else(|| panic!("{id}: contador desconocido"));
+    match (l.get("umbral"), l.get("porPlaza")) {
+        (Some(_), None) => Parte { contador, umbral: num(l, "umbral") as u64, por_plaza: false },
+        (None, Some(_)) => Parte { contador, umbral: num(l, "porPlaza") as u64, por_plaza: true },
+        _ => panic!("{id}: el logro lleva «umbral» o «porPlaza», uno de los dos"),
+    }
+}
+
 /// Las entradas de un bloque-objeto en el orden en que aparecen en el documento.
 fn en_orden_del_documento(nombre: &str) -> Vec<(String, Value)> {
     let desde = TECNOLOGIA_AEDAS.find(&format!("<!-- parametros:{nombre} -->")).expect("bloque");
@@ -75,10 +85,52 @@ pub enum Condicion {
     YacimientoEnTerritorio(Recurso),
 }
 
+/// Una parte del logro: un contador del servidor y su umbral. Con `por_plaza`, el umbral es `umbral × N`, con N las plazas vivas del mundo en ese momento (mínimo 1;
+/// decisión del autor, 2026-11-07: los logros se adaptan al tamaño del servidor). En los datos, `"umbral": X` es fijo y `"porPlaza": X` es por plaza.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Logro {
+pub struct Parte {
     pub contador: Contador,
     pub umbral: u64,
+    pub por_plaza: bool,
+}
+
+impl Parte {
+    /// El umbral con `plazas` plazas vivas en el mundo.
+    pub fn umbral_con(self, plazas: u32) -> u64 {
+        if self.por_plaza {
+            self.umbral * u64::from(plazas.max(1))
+        } else {
+            self.umbral
+        }
+    }
+}
+
+/// El logro del servidor de una tecnología: una parte o dos (`"ademas"` en los datos: la aleación del bronce pide cobre y estaño); se cumple cuando se cumplen todas a la vez.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Logro {
+    pub parte: Parte,
+    pub ademas: Option<Parte>,
+}
+
+impl Logro {
+    /// Un logro de una sola parte con umbral fijo.
+    pub const fn fijo(contador: Contador, umbral: u64) -> Logro {
+        Logro { parte: Parte { contador, umbral, por_plaza: false }, ademas: None }
+    }
+
+    /// Un logro de una sola parte con umbral por plaza viva.
+    pub const fn por_plaza(contador: Contador, umbral: u64) -> Logro {
+        Logro { parte: Parte { contador, umbral, por_plaza: true }, ademas: None }
+    }
+
+    pub fn partes(self) -> impl Iterator<Item = Parte> {
+        std::iter::once(self.parte).chain(self.ademas)
+    }
+
+    /// ¿Depende su umbral de las plazas vivas?
+    pub fn por_plazas(self) -> bool {
+        self.partes().any(|p| p.por_plaza)
+    }
 }
 
 /// `bonusProduccion`: el factor (ppm) que multiplica lo que sacan los extractores de ese recurso a la Facción que la tiene adoptada.
@@ -205,8 +257,10 @@ pub struct Reglas {
     pub titulos_capitulo: Vec<String>,
     /// Las de arranque (`deArranque`): toda Facción las tiene aparecidas y adoptadas desde que nace.
     pub de_arranque: Conjunto,
-    /// Los logros de cada contador ordenados por umbral (a igual umbral, por índice): el siguiente pendiente se mira en O(1).
-    pub por_contador: Vec<Vec<(u64, TecId)>>,
+    /// Las tecnologías cuyo logro mira cada contador (en alguna de sus partes), en el orden del catálogo: a lo sumo un par por contador.
+    pub por_contador: Vec<Vec<TecId>>,
+    /// Las que tienen alguna parte del logro por plaza viva: lo único que se mira cuando cambia el número de plazas del mundo.
+    pub por_plazas: Conjunto,
     /// Las que piden `recursoEnCapital` en su hito: lo único que el paso de minuto de una capital mira (plan §5.1), sin recorrer el catálogo.
     pub piden_capital: Conjunto,
     /// Las que dan un `bonusProduccion`: el `factor_tecnologia` de una Facción que no ha adoptado ninguna es 1 sin mirar nada más.
@@ -242,10 +296,7 @@ impl Reglas {
                 nombre: texto(t, "nombre"),
                 era: eras.iter().position(|e| e.id == texto(t, "era")).unwrap_or_else(|| panic!("{id}: Era desconocida")) as u8,
                 de_arranque: t["deArranque"].as_bool() == Some(true),
-                logro: t.get("logro").map(|l| Logro {
-                    contador: Contador::desde_nombre(&texto(l, "contador")).unwrap_or_else(|| panic!("{id}: contador desconocido")),
-                    umbral: num(l, "umbral") as u64,
-                }),
+                logro: t.get("logro").map(|l| Logro { parte: parte(id, l), ademas: l.get("ademas").map(|a| parte(id, a)) }),
                 hito: t["hito"].as_array().expect("hito").iter().map(|c| condicion(c, &indice)).collect(),
                 bonus: t.get("bonusProduccion").map(|b| Bonus { recurso: recurso(&texto(b, "recurso")), factor: ppm(num(b, "factor")) }),
                 epica: epicas.get(id).map(|e| DefinicionEpica {
@@ -274,6 +325,7 @@ impl Reglas {
             piden_capital: Conjunto::VACIO,
             con_bonus: Conjunto::VACIO,
             por_contador: Vec::new(),
+            por_plazas: Conjunto::VACIO,
             catalogo,
             eras,
             aedas: ReglasAedas {
@@ -305,18 +357,19 @@ impl Reglas {
         r
     }
 
-    /// Rehace lo que se deriva del catálogo (las de arranque, las que piden la capital, las que dan bonus y los logros de cada contador): tras leerlo y en las pruebas que lo cambian.
+    /// Rehace lo que se deriva del catálogo (las de arranque, las que piden la capital, las que dan bonus, los logros de cada contador y los que van por plaza): tras leerlo y en las
+    /// pruebas que lo cambian.
     pub fn indexar(&mut self) {
         let de = |f: &dyn Fn(&Definicion) -> bool| self.catalogo.iter().enumerate().filter(|(_, d)| f(d)).map(|(i, _)| i as TecId).collect::<Conjunto>();
         (self.de_arranque, self.piden_capital, self.con_bonus) =
             (de(&|d| d.de_arranque), de(&|d| d.hito.iter().any(|c| matches!(c, Condicion::RecursoEnCapital(_)))), de(&|d| d.bonus.is_some()));
+        self.por_plazas = de(&|d| d.logro.is_some_and(Logro::por_plazas));
         let mut por_contador = vec![Vec::new(); Contador::TODOS.len()];
         for (i, d) in self.catalogo.iter().enumerate() {
-            if let Some(l) = d.logro {
-                por_contador[l.contador.indice()].push((l.umbral, i as TecId));
+            for p in d.logro.iter().flat_map(|l| l.partes()) {
+                por_contador[p.contador.indice()].push(i as TecId);
             }
         }
-        por_contador.iter_mut().for_each(|v| v.sort());
         self.por_contador = por_contador;
     }
 
@@ -404,7 +457,15 @@ mod pruebas {
         assert_eq!(r.titulos_capitulo[HechoEpico::Obra as usize], "La obra de las manos");
         let canteria = r.def(r.buscar("canteria").unwrap());
         assert_eq!(canteria.bonus, Some(Bonus { recurso: Recurso::Piedra, factor: 1_500_000 }));
-        assert_eq!(canteria.logro, Some(Logro { contador: Contador::ExtraidoPiedra, umbral: 11_000_000 }));
+        assert_eq!(canteria.logro, Some(Logro::fijo(Contador::ExtraidoPiedra, 11_000_000)));
+        let por_plaza = |id: &str| r.def(r.buscar(id).unwrap()).logro;
+        assert_eq!(por_plaza("escudos_ligeros"), Some(Logro::por_plaza(Contador::BandidosCampamentosDestruidos, 20)));
+        assert_eq!(por_plaza("metalurgia_cobre"), Some(Logro::por_plaza(Contador::ExtraidoCobre, 1_000)));
+        assert_eq!(por_plaza("cria_caballar"), Some(Logro::por_plaza(Contador::AnimalesComprados, 5)));
+        let aleacion = Logro { ademas: Some(Parte { contador: Contador::ExtraidoEstano, umbral: 1_000, por_plaza: true }), ..Logro::por_plaza(Contador::ExtraidoCobre, 2_000) };
+        assert_eq!(por_plaza("aleacion_bronce"), Some(aleacion));
+        let ids: Vec<&str> = r.por_plazas.iter().map(|t| r.def(t).id.as_str()).collect();
+        assert_eq!(ids, ["metalurgia_cobre", "aleacion_bronce", "escudos_ligeros", "cria_caballar"]);
         let bronce = r.def(r.buscar("aleacion_bronce").unwrap());
         assert_eq!(bronce.hito, vec![Condicion::Edificio { tipo: Tipo::Fundicion, nivel: 2 }, Condicion::RecursoEnCapital(Recurso::Estano)]);
         let civicas = r.def(r.buscar("instituciones_civicas").unwrap());
@@ -418,7 +479,7 @@ mod pruebas {
         let r = Reglas::cargar();
         for d in &r.catalogo {
             assert_eq!(d.de_arranque, d.logro.is_none(), "{}", d.id);
-            assert!(d.logro.is_none_or(|l| l.umbral > 0), "{}", d.id);
+            assert!(d.logro.is_none_or(|l| l.partes().all(|p| p.umbral > 0)), "{}", d.id);
         }
         let mut arranque: Vec<&str> = r.de_arranque.iter().map(|t| r.def(t).id.as_str()).collect();
         arranque.sort();
@@ -456,12 +517,13 @@ mod pruebas {
     }
 
     #[test]
-    fn los_logros_de_cada_contador_van_por_umbral() {
+    fn cada_contador_sabe_que_logros_mira() {
         let r = Reglas::cargar();
-        assert_eq!(r.por_contador.iter().map(Vec::len).sum::<usize>(), 24, "un logro por tecnología sin arranque, uno por contador");
-        assert!(r.por_contador.iter().all(|v| v.len() == 1));
-        assert_eq!(r.por_contador[Contador::ExtraidoCobre.indice()], vec![(41_000, r.buscar("metalurgia_cobre").unwrap())]);
-        assert!(r.por_contador.iter().all(|v| v.windows(2).all(|w| w[0] <= w[1])));
+        assert_eq!(r.por_contador.iter().map(Vec::len).sum::<usize>(), 25, "una parte por tecnología sin arranque, y la aleación con dos");
+        let (cobre, bronce) = (r.buscar("metalurgia_cobre").unwrap(), r.buscar("aleacion_bronce").unwrap());
+        assert_eq!(r.por_contador[Contador::ExtraidoCobre.indice()], vec![cobre, bronce], "en el orden del catálogo");
+        assert_eq!(r.por_contador[Contador::ExtraidoEstano.indice()], vec![bronce]);
+        assert!(r.por_contador.iter().all(|v| v.windows(2).all(|w| w[0] < w[1])));
     }
 
     #[test]

@@ -122,6 +122,8 @@ impl AdminVisto {
             contadores: t.contadores,
             restos: [0; 24],
             logros: t.logros.clone(),
+            plazas_al_cumplir: t.plazas_al_cumplir.clone(),
+            plazas: t.plazas,
             primeros: t.primeros.clone(),
             cantadas: t.cantadas,
             por_faccion: BTreeMap::new(),
@@ -132,7 +134,7 @@ impl AdminVisto {
     /// ¿Lo ve igual que ahora? (Sin copiar nada: es lo que se pregunta en cada reparto.)
     fn igual_tecnologia(&self, n: &Nucleo) -> bool {
         let (v, t) = (&self.tecnologia, &n.estado().tecnologia);
-        v.era == t.era && v.era_desde == t.era_desde && v.contadores == t.contadores && v.logros == t.logros && v.primeros == t.primeros && v.cantadas == t.cantadas
+        v.era == t.era && v.era_desde == t.era_desde && v.contadores == t.contadores && v.logros == t.logros && v.plazas == t.plazas && v.primeros == t.primeros && v.cantadas == t.cantadas
     }
 }
 

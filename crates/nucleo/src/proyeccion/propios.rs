@@ -800,18 +800,19 @@ pub fn tecnologias(n: &Nucleo, f: u32) -> pb::TecnologiasFaccion {
 
 /// El estado de tecnología del mundo (6G; la entidad `ESTADO_TECNOLOGIA`, id `tecnologia`). Para un jugador, su forma pública (decisión Q6 del autor; Proyecciones §6.3): la Era, desde cuándo, los
 /// logros cumplidos como hechos del mundo (`contador` llegó a `umbral`, por orden, sin decir qué tecnología abren), lo cantado, de las descubridoras solo las cantadas y, desde el 2026-11-06 (pedido
-/// del autor: la barra «x / y» del logro), los contadores en curso. La administración lo ve entero: además, los logros y las descubridoras por tecnología.
+/// del autor: la barra «x / y» del logro), los contadores en curso y, desde el 2026-11-07, las plazas vivas (N) y el umbral de ahora de cada parte pendiente. La administración lo ve entero: además, los logros y las descubridoras por tecnología.
 pub fn estado_tecnologia(n: &Nucleo, quien: Espectador) -> pb::EstadoTecnologia {
     let e = n.estado();
     let (r, t) = (&e.reglas.economia.tecnologia, &e.tecnologia);
     let admin = quien == Espectador::Admin;
     let id = |x: usize| r.def(x as tecnologia::TecId).id.clone();
+    // Una parte por entrada (la aleación del bronce son dos), con el umbral con que se cumplió.
     let mut logros_cumplidos: Vec<pb::LogroCumplido> = t
         .logros
         .iter()
         .enumerate()
-        .filter_map(|(x, en)| Some((r.def(x as tecnologia::TecId).logro?, (*en)?)))
-        .map(|(l, en)| pb::LogroCumplido { contador: l.contador.nombre().to_owned(), umbral: l.umbral as i64, en_ms: en })
+        .filter_map(|(x, en)| Some((x as tecnologia::TecId, (*en)?)))
+        .flat_map(|(x, en)| t.partes_del_logro(r, x).map(move |(c, umbral)| pb::LogroCumplido { contador: c.nombre().to_owned(), umbral: umbral as i64, en_ms: en }))
         .collect();
     logros_cumplidos.sort_by(|a, b| (a.en_ms, &a.contador, a.umbral).cmp(&(b.en_ms, &b.contador, b.umbral)));
     let primeros = t
@@ -834,6 +835,8 @@ pub fn estado_tecnologia(n: &Nucleo, quien: Espectador) -> pb::EstadoTecnologia 
         // Los dos bordes de la Era vigente (decisión del autor sobre 6B): no dicen si sus logros están cumplidos, así que son públicos.
         era_minimo_hasta_ms: t.fin_del_plazo(r).map(|_| t.era_desde + r.eras[t.era as usize].minimo),
         era_plazo_hasta_ms: t.fin_del_plazo(r),
+        plazas: t.plazas,
+        logros_pendientes: t.umbrales_pendientes(r).map(|(c, umbral)| pb::LogroPendiente { contador: c.nombre().to_owned(), umbral: umbral as i64 }).collect(),
     }
 }
 

@@ -109,9 +109,12 @@ fn dias(x: &Entrada, t: &Tec) -> Vec<Metrica> {
         v.push(metrica(&format!("dia_era_{}", era.orden), &format!("Día en que empieza la Era {} ({})", era.orden, era.nombre), "día", INFO, cuando.map(|&(en, _, _)| dia(en)), "Tecnologia_Aedas §3 paso 2", &nota));
     }
     for (k, d) in r.catalogo.iter().enumerate() {
-        let Some(l) = d.logro else { continue };
+        if d.logro.is_none() {
+            continue;
+        }
         let primero = e.primeros[k].map_or("no aparece a nadie".into(), |p| format!("aparece por primera vez el día {:.2} (descubridora f-{})", dia(p.en), p.faccion));
-        let nota = format!("Era {}; `{}` ≥ {} (al final, {}); {}.", r.eras[d.era as usize].orden, l.contador.nombre(), l.umbral, e.contador(l.contador), primero);
+        let partes: Vec<String> = e.partes_del_logro(r, k as tecnologia::TecId).map(|(c, umbral)| format!("`{}` ≥ {} (al final, {})", c.nombre(), umbral, e.contador(c))).collect();
+        let nota = format!("Era {}; {}; {}.", r.eras[d.era as usize].orden, partes.join(" y "), primero);
         v.push(metrica(&format!("dia_logro_{}", d.id), &format!("Día del logro de {}", d.nombre), "día", INFO, e.logros[k].map(dia), "Tecnologia_Aedas §2 y §11.1 (Q3: X del TypeScript)", &nota));
     }
     v

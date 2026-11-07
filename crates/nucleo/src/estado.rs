@@ -305,7 +305,10 @@ pub fn entidad_contrato(mercenario: u64) -> u64 {
 /// BAN56: BAN55 más, en el encargo de cada caravana, el inicio del paso en curso y si la ruta está detenida (2026-11-04, `codec_comercio`). BAN55 se lee sin ellos.
 ///
 /// BAN57: BAN56 sin la cuota de parcelas por masa en la cabecera de reglas (2026-11-06, la regla se quita). De BAN56 y anteriores se lee y se descarta.
-const MAGIA: &[u8; 5] = b"BAN57";
+///
+/// BAN58: BAN57 con las plazas vivas del mundo cuando se cumplió cada logro (`EstadoTecnologia::plazas_al_cumplir`, tras los logros en `codec_tecnologia`; umbrales por plaza,
+/// 2026-11-07). De BAN57 y anteriores se lee 1 en cada logro cumplido.
+const MAGIA: &[u8; 5] = b"BAN58";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -1443,7 +1446,7 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN57`): los cuatro primeros dicen la familia («BAN5» es el formato 50 y «BAN4» los formatos 40 a 49, y se admiten todos; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
+        // La cabecera es de 5 bytes (`BAN58`): los cuatro primeros dicen la familia («BAN5» es el formato 50 y «BAN4» los formatos 40 a 49, y se admiten todos; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
         // 20 a 29 y 10 a 19, ya no admitidos) y el quinto el formato.
         let magia = r.magia()?;
         let (mut con_eligieron, mut con_rutas_acarreo, mut con_nombres, mut con_precios, mut con_forzadas, mut con_misiones, mut con_aldeas) = (true, true, true, true, true, true, true);
@@ -1452,8 +1455,13 @@ impl Estado {
         // Hasta BAN52 cada plaza trae los minutos sin cupo de sus extractores; desde BAN53, no.
         let mut con_desempate = true;
         let mut con_cuota_de_parcelas = true;
+        let mut con_plazas_al_cumplir = false;
         if magia == MAGIA[..4] {
             match r.u8()? {
+                b'8' => {
+                    (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos, con_desempate, con_contratos) = (true, true, true, true, true, false, true);
+                    (con_nombres_de_caravana, con_paso_de_encargo, con_cuota_de_parcelas, con_plazas_al_cumplir) = (true, true, false, true);
+                }
                 b'7' => {
                     (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos, con_desempate, con_contratos) = (true, true, true, true, true, false, true);
                     (con_nombres_de_caravana, con_paso_de_encargo, con_cuota_de_parcelas) = (true, true, false);
@@ -1627,7 +1635,7 @@ impl Estado {
         s.politica = codec_politica::leer(&mut r, con_contratos)?;
         s.fundacion = estado_fundacion::leer(&mut r)?;
         s.titulos_en = r.opt_i64()?;
-        s.tecnologia = codec_tecnologia::leer(&mut r)?;
+        s.tecnologia = codec_tecnologia::leer(&mut r, con_plazas_al_cumplir)?;
         s.era_en = r.opt_i64()?;
         s.aedas = codec_tecnologia::leer_aedas(&mut r)?;
         (s.residentes, s.residentes_citas) = codec_tecnologia::leer_residentes(&mut r)?;

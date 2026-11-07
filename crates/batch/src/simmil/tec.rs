@@ -81,7 +81,9 @@ impl Default for Ajustes {
 pub fn escalar_logros(r: &mut tecnologia::Reglas, escala: u64) {
     for d in r.catalogo.iter_mut() {
         if let Some(l) = &mut d.logro {
-            l.umbral = (l.umbral / escala).max(1);
+            for p in std::iter::once(&mut l.parte).chain(l.ademas.as_mut()) {
+                p.umbral = (p.umbral / escala).max(1);
+            }
         }
     }
     r.indexar();
@@ -315,7 +317,7 @@ impl Sim<'_> {
         }
         let r = self.n.estado().reglas.economia.tecnologia.clone();
         let e = self.n.tecnologia();
-        let pendiente = |c: Contador| r.por_contador[c.indice()].iter().any(|&(_, x)| !e.logro_cumplido(x) && e.era_abierta(&r, x));
+        let pendiente = |c: Contador| r.por_contador[c.indice()].iter().any(|&x| !e.logro_cumplido(x) && e.era_abierta(&r, x));
         let mina = self.n.candidatos_de_pueblo(p).into_iter().find(|&(_, tipo)| match tipo {
             Tipo::MinaCobre => pendiente(Contador::ExtraidoCobre),
             Tipo::MinaEstano => pendiente(Contador::ExtraidoEstano),
@@ -717,13 +719,16 @@ impl Sim<'_> {
                 v.contador += (e.contador(c) < a.contadores[c.indice()]) as u64;
             }
             for (x, d) in r.catalogo.iter().enumerate() {
-                let Some(l) = d.logro else { continue };
-                let (valor, antes) = (e.contador(l.contador), a.contadores[l.contador.indice()]);
+                if d.logro.is_none() {
+                    continue;
+                }
+                // Con el umbral con que se cumplió (o el de ahora, si sigue pendiente: las plazas vivas pueden haber cambiado desde la orden anterior, así que no se mira el de antes).
+                let cumple = e.partes_del_logro(r, x as tecnologia::TecId).all(|(c, umbral)| e.contador(c) >= umbral);
                 v.logro += match (a.logros[x], e.logros[x]) {
                     (Some(x0), Some(x1)) => x0 != x1,
                     (Some(_), None) => true,
-                    (None, Some(en)) => en < a.t || en > t || valor < l.umbral || antes >= l.umbral,
-                    (None, None) => valor >= l.umbral,
+                    (None, Some(en)) => en < a.t || en > t || !cumple,
+                    (None, None) => cumple,
                 } as u64;
             }
             if e.era != a.era {

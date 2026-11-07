@@ -16,6 +16,10 @@
 //! | `reclutados.*` | reclutar (y reponer) en una plaza y en un campamento de mercenarios (Q4); no la guarnición de serie de las avanzadas ni la tropa prestada |
 //! | `plazasEnNivel.N` | el récord, al subir el número de plazas con nivel actual ≥ N (el índice derivado `Espacio::plazas_por_nivel`) |
 //!
+//! # Umbrales por plaza (2026-11-07)
+//! Los logros con `porPlaza` piden `X × N`, con N las plazas vivas del mundo (mínimo 1), para que se adapten al tamaño del servidor. N es `EstadoTecnologia::plazas`, derivado del mismo índice
+//! (no va en la foto): se rehace con el espacio y cambia al nacer o caer una plaza (`contar_plazas`), que también puede cumplir un logro si N baja. Al cumplirse queda fijo, con el N de entonces.
+//!
 //! # La Era, sin tick
 //! Al fijar un logro se mira si la Era vigente tiene ya todos los suyos; y hay **una cita global** (`Carga::Era`, prioridad 10) al fin de su plazo. Se arma como el plazo de los títulos: al
 //! pasar algo en el mundo con alguna Facción, si no hay otra (`Estado::era_en`). Cada Era dura al menos su mínimo (`minimoSemanas`, 1 semana; decisión del autor, 2026-10-25): con todos sus
@@ -118,6 +122,9 @@ impl Nucleo {
         if let Some(n) = ahora {
             indice[indice_de_nivel(n)] += 1;
         }
+        if antes.is_none() || ahora.is_none() {
+            self.contar_plazas(t);
+        }
         if ahora.unwrap_or(0) <= antes.unwrap_or(0) {
             return;
         }
@@ -131,16 +138,32 @@ impl Nucleo {
         self.tras_logros(t, &fijados);
     }
 
-    /// Anuncia los logros recién fijados (`tecnologia.logro { contador, umbral }`, público: dice qué pasó, nunca qué tecnología abre) y mira si con ellos empieza la Era siguiente.
+    /// Nace o cae una plaza: cambia N, las plazas vivas del mundo, y con él el umbral de los logros por plaza (decisión del autor, 2026-11-07). Si baja, alguno puede cumplirse ya; la
+    /// forma pública del estado de tecnología cambia (las plazas y la barra «x / y» de los pendientes en `HEROE`).
+    fn contar_plazas(&mut self, t: Instante) {
+        let r = self.estado.reglas.economia.tecnologia.clone();
+        let plazas = self.plazas_en_nivel(0);
+        if plazas == self.estado.tecnologia.plazas {
+            return;
+        }
+        let fijados = self.estado.tecnologia.poner_plazas(&r, plazas, t);
+        self.tr.tocar(Clase::Tecnologia, 0);
+        self.tras_logros(t, &fijados);
+    }
+
+    /// Anuncia los logros recién fijados (`tecnologia.logro { contador, umbral }`, público, uno por parte del logro y con el umbral con que se cumplió: dice qué pasó, nunca qué
+    /// tecnología abre) y mira si con ellos empieza la Era siguiente.
     fn tras_logros(&mut self, t: Instante, fijados: &[TecId]) {
         if fijados.is_empty() {
             return;
         }
         let r = self.estado.reglas.economia.tecnologia.clone();
         for &x in fijados {
-            let l = r.def(x).logro.expect("solo se fija lo que tiene logro");
-            let valores = vec![("contador", Dato::Texto(l.contador.nombre().to_owned()))];
-            self.tr.emitir(&self.estado, EventoNucleo { valores, publico: true, ..EventoNucleo::nuevo("tecnologia.logro", t, vec![("umbral", l.umbral as i64)]) });
+            let partes: Vec<_> = self.estado.tecnologia.partes_del_logro(&r, x).collect();
+            for (contador, umbral) in partes {
+                let valores = vec![("contador", Dato::Texto(contador.nombre().to_owned()))];
+                self.tr.emitir(&self.estado, EventoNucleo { valores, publico: true, ..EventoNucleo::nuevo("tecnologia.logro", t, vec![("umbral", umbral as i64)]) });
+            }
         }
         self.tocar_lo_publico();
         // 6C: con el logro, sus tecnologías pueden aparecer a cualquier Facción viva, y la que ya tenía descubridora, cantarse.

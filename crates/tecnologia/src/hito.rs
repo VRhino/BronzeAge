@@ -194,7 +194,9 @@ pub(crate) mod pruebas {
         let r = r();
         let mut e = EstadoTecnologia::nuevo(&r, 0);
         assert!(!e.pide_recurso_en_capital(&r, 1));
-        e.sumar(&r, Contador::ExtraidoEstano, 245_000, 0);
+        e.sumar(&r, Contador::ExtraidoEstano, 1_000, 0);
+        assert!(!e.pide_recurso_en_capital(&r, 1), "la aleación pide también el cobre");
+        e.sumar(&r, Contador::ExtraidoCobre, 2_000, 0);
         assert!(e.pide_recurso_en_capital(&r, 1));
         let v = Vista { edificios: vec![(Tipo::Fundicion, 2)], capital: vec![Recurso::Estano], ..Vista::default() };
         // El paso de minuto de la capital mira solo las que piden la capital (hoy la aleación del bronce), y solo si su hito ya se cumple.
@@ -203,7 +205,7 @@ pub(crate) mod pruebas {
         assert!(e.listas_por_hito(&r, 1, &Vista { edificios: vec![(Tipo::Fundicion, 2)], ..Vista::default() }, r.piden_capital).is_empty());
         assert_eq!(e.listas_por_hito(&r, 1, &v, r.piden_capital), vec![bronce]);
         assert_eq!(r.todas().len(), r.catalogo.len());
-        assert_eq!(e.aparecer_por_hito(&r, 1, &v, 1).len(), 1);
+        assert_eq!(e.aparecer_por_hito(&r, 1, &v, 1).len(), 2, "también la metalurgia del cobre: su cobre ya está");
         assert!(!e.pide_recurso_en_capital(&r, 1));
     }
 

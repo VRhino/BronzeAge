@@ -69,6 +69,14 @@ Para que una tecnología aparezca por desarrollo propio hacen falta dos cosas:
 Cuando una Facción cumple el hito de una tecnología cuyo logro ya existe y cuya Era ya empezó, la tecnología **le
 aparece**. La primera Facción en conseguirla —por hito o por épica de un Aeda— queda en la crónica como su descubridora.
 
+**Logros que se adaptan al tamaño del servidor (decisión del autor, 2026-11-07).** Algunos logros no piden una X fija sino
+una X **por plaza viva del mundo** (N, las plazas de todas las Facciones que existen en ese momento, mínimo 1): el umbral
+sube cuando se funda una plaza y baja cuando una cae, y una vez cumplido queda fijo. El contador sigue siendo de todo el
+servidor: todas las Facciones suman para todas. Así un servidor con poca población no se queda con logros imposibles ni
+uno grande con logros regalados. Hoy van por plaza `escudos_ligeros` (20 × N campamentos de bandidos destruidos),
+`metalurgia_cobre` (1.000 × N de cobre extraído), `cria_caballar` (5 × N animales comprados) y `aleacion_bronce`, que pide
+dos cosas a la vez: 2.000 × N de cobre extraído y 1.000 × N de estaño extraído.
+
 Las cifras X de los logros se ajustan para que cada logro se cumpla en una semana concreta de su Era: los de cada
 Era se reparten por su tramo en el orden de adopción, y el último cae una semana antes del plazo. Ese es el objetivo; hoy
 las X son las del servidor TypeScript y **no se vuelven a medir hasta la fase 7**, con bots reales (decisión del autor,
@@ -85,7 +93,8 @@ de mercenarios (decisión del autor, 2026-10-24).
   tecnologías que conocen y la Facción aún no tiene aparecidas: cuáles son, qué requisitos de hito le faltan y quién
   las desbloqueó.
 - **Lo público del avance** son los logros cumplidos (sin decir qué tecnología abren), la Era y, desde el 2026-11-06,
-  los contadores en curso de todo el servidor (para ver cuánto falta para cada logro). Qué tecnología abre cada logro
+  los contadores en curso de todo el servidor (para ver cuánto falta para cada logro) y, desde el 2026-11-07, las plazas
+  vivas del mundo y el umbral de ahora de cada logro pendiente (los que van por plaza cambian con ellas). Qué tecnología abre cada logro
   solo lo ve la administración (decisión del autor, 2026-10-24).
 - **La ventaja del primero** es ese tiempo: los Aedas conocen una tecnología **24 horas** después de que alguien la
   desbloquea (`AEDAS.retrasoConocimientoMinutos`, 24 · 60, placeholder), no antes. No hay descuento: todos pagan la misma tarifa.
@@ -121,12 +130,12 @@ extractores): hoy solo `canteria`, que se pensó para la piedra del nivel 3 (Doc
 |---|---|---|---|
 | `leva_comunal` | milicia de lanceros, leñadores, granjeros | — (de arranque) | — |
 | `hostigamiento_tribal` | honderos, escaramuzadores con jabalina | — (de arranque) | — |
-| `metalurgia_cobre` | Arma de Cobre (Armería 1) | X de cobre extraído | Fundición activa |
-| `aleacion_bronce` | Lingote de Estaño y de Bronce (Fundición 2), Arma de Bronce (Armería 2); espadachines de bronce, hacheros armados | X de estaño extraído en el mundo (Uluburun) | Fundición 2 + estaño en el almacén de la capital |
-| `escudos_ligeros` | lanceros con escudo de mimbre | X campamentos de bandidos destruidos | Barracón activo |
+| `metalurgia_cobre` | Arma de Cobre (Armería 1) | 1.000 × N de cobre extraído (N = plazas vivas del mundo, 6.3) | Fundición activa |
+| `aleacion_bronce` | Lingote de Estaño y de Bronce (Fundición 2), Arma de Bronce (Armería 2); espadachines de bronce, hacheros armados | 2.000 × N de cobre extraído y 1.000 × N de estaño extraído en el mundo (Uluburun) | Fundición 2 + estaño en el almacén de la capital |
+| `escudos_ligeros` | lanceros con escudo de mimbre | 20 × N campamentos de bandidos destruidos | Barracón activo |
 | `armamento_palacial` | espadachines de cobre, hacheros ligeros | X asentamientos en nivel 2 (lineal B) | Armería activa + `metalurgia_cobre` adoptada |
 | `arqueria_palacial` | arqueros | X batallas libradas | Galería de tiro activa |
-| `cria_caballar` | Caballerizas; exploradores a caballo | X animales comprados (caravanas incluidas) | Corral activo (el de una aldea agrícola, 4.2.2) |
+| `cria_caballar` | Caballerizas; exploradores a caballo | 5 × N animales comprados (caravanas incluidas) | Corral activo (el de una aldea agrícola, 4.2.2) |
 | `carros_guerra` | Carro de Guerra (Carpintería 2); carros de guerra | X batallas a campo abierto (Qadesh) | `cria_caballar` + Caballerizas 2 + Carpintería 2 |
 | `canteria` | las Canteras de la Facción sacan **1,5×** la piedra (en todos sus asentamientos) | X de piedra extraída en el mundo | Cantera activa (un pueblo de cantera, desde el 2026-11-01) |
 

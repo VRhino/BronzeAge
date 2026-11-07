@@ -44,7 +44,7 @@ fn reglas(mas: impl FnOnce(&mut tecnologia::Reglas)) -> Reglas {
     let t = std::sync::Arc::make_mut(&mut r.economia.tecnologia);
     for id in ["canteria", "bronce_calidad_militar", "metalurgia_cobre"] {
         let x = t.buscar(id).unwrap();
-        t.catalogo[x as usize].logro = Some(Logro { contador: Contador::PlazasEnNivel2, umbral: 1 });
+        t.catalogo[x as usize].logro = Some(Logro::fijo(Contador::PlazasEnNivel2, 1));
     }
     let c = t.buscar("canteria").unwrap();
     t.catalogo[c as usize].epica = Some(DefinicionEpica {
@@ -382,7 +382,7 @@ fn las_obras_de_la_plaza_avanzan_la_epica_y_el_ultimo_capitulo_la_hace_aparecer_
 fn ida_y_vuelta(e: &Escenario) {
     let (reglas, mundo_hash) = (e.n.estado().reglas.clone(), e.n.estado().mundo_hash.clone());
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN57");
+    assert_eq!(&bytes[..5], b"BAN58");
     let vuelta = Estado::deserializar(&bytes, &reglas, &mundo_hash).unwrap();
     assert_eq!(vuelta.serializar(), bytes);
     assert_eq!(vuelta.hash(), e.n.estado().hash());

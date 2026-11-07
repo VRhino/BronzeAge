@@ -53,6 +53,11 @@ pub struct EstadoTecnologia {
     pub restos: [u64; 24],
     /// Por [`TecId`]: cuándo se cumplió el logro. Fijo para siempre.
     pub logros: Vec<Option<Instante>>,
+    /// Por [`TecId`]: las plazas vivas del mundo cuando se cumplió el logro (0 si aún no se ha cumplido). Dicen con qué umbral se cumplió uno por plaza.
+    pub plazas_al_cumplir: Vec<u32>,
+    /// Las plazas vivas del mundo ahora (N de los umbrales por plaza). **Derivado**: no va en la foto; lo pone el núcleo al rehacer su índice de plazas y al cambiar el número
+    /// ([`EstadoTecnologia::poner_plazas`]).
+    pub plazas: u32,
     /// Por [`TecId`].
     pub primeros: Vec<Option<Primero>>,
     /// Descubrimientos que los Aedas ya han cantado.
@@ -65,7 +70,7 @@ impl EstadoTecnologia {
     /// `estadoTecnologiaInicial`: el servidor arranca en la Era I, sin logros.
     pub fn nuevo(r: &Reglas, desde: Instante) -> Self {
         let n = r.catalogo.len();
-        EstadoTecnologia { era: 0, era_desde: desde, contadores: [0; 24], restos: [0; 24], logros: vec![None; n], primeros: vec![None; n], cantadas: Conjunto::VACIO, por_faccion: BTreeMap::new() }
+        EstadoTecnologia { era: 0, era_desde: desde, contadores: [0; 24], restos: [0; 24], logros: vec![None; n], plazas_al_cumplir: vec![0; n], plazas: 0, primeros: vec![None; n], cantadas: Conjunto::VACIO, por_faccion: BTreeMap::new() }
     }
 
     /// `tecnologiasDe`.
@@ -96,13 +101,50 @@ impl EstadoTecnologia {
         r.orden_era(t) <= r.eras[self.era as usize].orden
     }
 
-    /// El umbral del siguiente logro pendiente del contador (`None` si ya no le queda ninguno). Los logros de un contador vienen ordenados por umbral
-    /// y son a lo sumo un par: mirarlo es O(1) en cada suma.
+    /// El umbral más bajo que le queda por cumplir al contador entre los logros pendientes que lo miran, con las plazas vivas de ahora (`None` si no le queda ninguno). Son a lo
+    /// sumo un par.
     pub fn umbral_pendiente(&self, r: &Reglas, c: Contador) -> Option<u64> {
-        r.por_contador[c.indice()].iter().find(|(_, t)| !self.logro_cumplido(*t)).map(|&(u, _)| u)
+        r.por_contador[c.indice()]
+            .iter()
+            .filter(|&&t| !self.logro_cumplido(t))
+            .flat_map(|&t| r.def(t).logro.into_iter().flat_map(|l| l.partes()))
+            .filter(|p| p.contador == c)
+            .map(|p| p.umbral_con(self.plazas))
+            .min()
     }
 
-    /// Suma `n` a un contador y fija los logros que cruzan su umbral (`tecnologia.logro { contador, umbral }`, público). Devuelve los fijados, por umbral.
+    /// Las partes de los logros pendientes con su umbral de ahora (`contador`, umbral), en el orden del catálogo: lo que necesita la barra «x / y» de cada logro, sin decir qué
+    /// tecnología abre.
+    pub fn umbrales_pendientes<'a>(&'a self, r: &'a Reglas) -> impl Iterator<Item = (Contador, u64)> + 'a {
+        (0..r.catalogo.len() as TecId)
+            .filter(|&t| !self.logro_cumplido(t))
+            .flat_map(|t| r.def(t).logro.into_iter().flat_map(|l| l.partes()))
+            .map(|p| (p.contador, p.umbral_con(self.plazas)))
+    }
+
+    /// Las partes del logro de `t` con el umbral con que se cumplió (o el de ahora, si aún no se ha cumplido).
+    pub fn partes_del_logro<'a>(&'a self, r: &'a Reglas, t: TecId) -> impl Iterator<Item = (Contador, u64)> + 'a {
+        let plazas = if self.logro_cumplido(t) { self.plazas_al_cumplir[t as usize] } else { self.plazas };
+        r.def(t).logro.into_iter().flat_map(|l| l.partes()).map(move |p| (p.contador, p.umbral_con(plazas)))
+    }
+
+    /// ¿Cumplen ahora los contadores todas las partes del logro de `t`?
+    fn cumple(&self, r: &Reglas, t: TecId) -> bool {
+        r.def(t).logro.is_some_and(|l| l.partes().all(|p| self.contadores[p.contador.indice()] >= p.umbral_con(self.plazas)))
+    }
+
+    /// Cambia el número de plazas vivas del mundo (N) y fija los logros por plaza que con el umbral nuevo ya se cumplen (si baja). Devuelve los fijados, en el orden del catálogo.
+    pub fn poner_plazas(&mut self, r: &Reglas, plazas: u32, ahora: Instante) -> Vec<TecId> {
+        if plazas == self.plazas {
+            return Vec::new();
+        }
+        self.plazas = plazas;
+        let candidatas: Vec<TecId> = r.por_plazas.iter().collect();
+        self.fijar(r, &candidatas, ahora)
+    }
+
+    /// Suma `n` a un contador y fija los logros que con él se cumplen enteros (`tecnologia.logro { contador, umbral }`, público, uno por parte). Devuelve los fijados, en el orden
+    /// del catálogo.
     /// Un récord no se suma: [`EstadoTecnologia::subir_record`].
     pub fn sumar(&mut self, r: &Reglas, c: Contador, n: u64, ahora: Instante) -> Vec<TecId> {
         debug_assert!(!c.es_record(), "{} es un récord", c.nombre());
@@ -138,14 +180,16 @@ impl EstadoTecnologia {
     }
 
     fn fijar_logros(&mut self, r: &Reglas, c: Contador, ahora: Instante) -> Vec<TecId> {
-        let valor = self.contadores[c.indice()];
+        self.fijar(r, &r.por_contador[c.indice()], ahora)
+    }
+
+    /// Fija, de entre `candidatas`, las que aún no tienen el logro y ya cumplen todas sus partes, con las plazas vivas de ahora.
+    fn fijar(&mut self, r: &Reglas, candidatas: &[TecId], ahora: Instante) -> Vec<TecId> {
         let mut fijados = Vec::new();
-        for &(umbral, t) in &r.por_contador[c.indice()] {
-            if umbral > valor {
-                break;
-            }
-            if self.logros[t as usize].is_none() {
+        for &t in candidatas {
+            if self.logros[t as usize].is_none() && self.cumple(r, t) {
                 self.logros[t as usize] = Some(ahora);
+                self.plazas_al_cumplir[t as usize] = self.plazas.max(1);
                 fijados.push(t);
             }
         }
@@ -260,16 +304,42 @@ pub(crate) mod pruebas {
     #[test]
     fn el_logro_se_fija_al_cruzar_el_umbral_una_vez_y_para_siempre() {
         let r = r();
-        let cobre = t(&r, "metalurgia_cobre");
+        let (cobre, bronce) = (t(&r, "metalurgia_cobre"), t(&r, "aleacion_bronce"));
         let mut e = EstadoTecnologia::nuevo(&r, 0);
-        assert_eq!(e.umbral_pendiente(&r, Contador::ExtraidoCobre), Some(41_000));
-        assert!(e.sumar(&r, Contador::ExtraidoCobre, 40_999, 5).is_empty());
+        // Sin plazas cuenta como una: 1.000 × 1.
+        assert_eq!(e.umbral_pendiente(&r, Contador::ExtraidoCobre), Some(1_000));
+        assert!(e.sumar(&r, Contador::ExtraidoCobre, 999, 5).is_empty());
         assert_eq!(e.sumar(&r, Contador::ExtraidoCobre, 1, 7), vec![cobre]);
         assert_eq!(e.logros[cobre as usize], Some(7));
-        assert_eq!(e.umbral_pendiente(&r, Contador::ExtraidoCobre), None);
-        assert!(e.sumar(&r, Contador::ExtraidoCobre, 1_000_000, 9).is_empty(), "fijo: no se vuelve a fijar");
+        assert_eq!(e.umbral_pendiente(&r, Contador::ExtraidoCobre), Some(2_000), "queda el cobre de la aleación");
+        assert!(e.sumar(&r, Contador::ExtraidoCobre, 1_000_000, 9).is_empty(), "fijo: no se vuelve a fijar; la aleación espera al estaño");
         assert_eq!(e.logros[cobre as usize], Some(7));
-        assert_eq!(e.contador(Contador::ExtraidoCobre), 1_041_000, "ningún contador baja ni se recorta");
+        assert_eq!(e.contador(Contador::ExtraidoCobre), 1_001_000, "ningún contador baja ni se recorta");
+        assert_eq!(e.sumar(&r, Contador::ExtraidoEstano, 1_000, 11), vec![bronce], "las dos partes a la vez");
+        assert_eq!(e.umbral_pendiente(&r, Contador::ExtraidoCobre), None);
+    }
+
+    #[test]
+    fn el_umbral_por_plaza_sigue_a_las_plazas_vivas_y_queda_fijo_al_cumplirse() {
+        let r = r();
+        let (escudos, cobre, bronce) = (t(&r, "escudos_ligeros"), t(&r, "metalurgia_cobre"), t(&r, "aleacion_bronce"));
+        let mut e = EstadoTecnologia::nuevo(&r, 0);
+        assert!(e.poner_plazas(&r, 10, 1).is_empty());
+        assert_eq!(e.umbral_pendiente(&r, Contador::BandidosCampamentosDestruidos), Some(200), "20 × 10");
+        assert_eq!(e.umbral_pendiente(&r, Contador::AnimalesComprados), Some(50), "5 × 10");
+        assert!(e.sumar(&r, Contador::BandidosCampamentosDestruidos, 150, 2).is_empty());
+        // Caen tres plazas: el umbral baja a 140 y el logro se cumple sin sumar nada.
+        assert_eq!(e.poner_plazas(&r, 7, 3), vec![escudos]);
+        assert_eq!((e.logros[escudos as usize], e.plazas_al_cumplir[escudos as usize]), (Some(3), 7));
+        assert_eq!(e.partes_del_logro(&r, escudos).collect::<Vec<_>>(), [(Contador::BandidosCampamentosDestruidos, 140)], "con el umbral con que se cumplió");
+        assert!(e.poner_plazas(&r, 40, 4).is_empty());
+        assert_eq!(e.partes_del_logro(&r, escudos).collect::<Vec<_>>(), [(Contador::BandidosCampamentosDestruidos, 140)], "ya no se mueve");
+        // La aleación: 2.000 × N de cobre y 1.000 × N de estaño, las dos.
+        assert_eq!(e.partes_del_logro(&r, bronce).collect::<Vec<_>>(), [(Contador::ExtraidoCobre, 80_000), (Contador::ExtraidoEstano, 40_000)]);
+        assert!(e.sumar(&r, Contador::ExtraidoEstano, 40_000, 5).is_empty());
+        assert_eq!(e.sumar(&r, Contador::ExtraidoCobre, 80_000, 6), vec![cobre, bronce], "en el orden del catálogo");
+        let pendientes: Vec<_> = e.umbrales_pendientes(&r).filter(|(c, _)| *c == Contador::AnimalesComprados).collect();
+        assert_eq!(pendientes, [(Contador::AnimalesComprados, 200)], "5 × 40");
     }
 
     #[test]
@@ -307,11 +377,11 @@ pub(crate) mod pruebas {
         let mut todos = Delta::default();
         let mut e = inicial.clone();
         for d in r.catalogo.iter().filter(|d| d.era == 0) {
-            if let Some(l) = d.logro {
-                if l.contador.es_record() {
-                    e.subir_record(&r, l.contador, l.umbral, 10);
+            for p in d.logro.iter().flat_map(|l| l.partes()) {
+                if p.contador.es_record() {
+                    e.subir_record(&r, p.contador, p.umbral_con(e.plazas), 10);
                 } else {
-                    todos = todos.con(l.contador, l.umbral);
+                    todos = todos.con(p.contador, p.umbral_con(e.plazas));
                 }
             }
         }

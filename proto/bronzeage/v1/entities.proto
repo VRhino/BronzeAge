@@ -1228,6 +1228,16 @@ message EstadoTecnologia {
   // (`era_desde_ms` + el mínimo) y cuándo empieza por plazo aunque no los cumpla. Ausentes en la última Era. Públicos: no dicen si los logros están cumplidos.
   optional int64 era_minimo_hasta_ms = 8;
   optional int64 era_plazo_hasta_ms = 9;
+  // 2026-11-07 (umbrales por plaza, decisión del autor): N, las plazas vivas del mundo ahora, con las que se calcula el umbral de los logros con `porPlaza`
+  // (`porPlaza × max(N, 1)`), y las partes de los logros aún pendientes con su umbral de ahora, en el orden del catálogo y sin decir qué tecnología abren
+  // (la aleación del bronce son dos: cobre y estaño). Públicos, como los contadores. Un logro cumplido queda con el umbral con que se cumplió (`logros_cumplidos`).
+  uint32 plazas = 10;
+  repeated LogroPendiente logros_pendientes = 11;
+}
+
+message LogroPendiente {
+  string contador = 1;
+  sint64 umbral = 2;
 }
 
 message LogroCumplido {

@@ -174,6 +174,8 @@ impl Nucleo {
             self.espacio.plazas_por_nivel[(a.nivel_actual() as usize).min(super::logros::NIVELES_INDICE - 1)] += 1;
             self.espacio.plazas_por_alcanzado[(a.nivel() as usize).min(super::logros::NIVELES_INDICE - 1)] += 1;
         }
+        // N de los logros por plaza (derivado, no va en la foto): las plazas vivas del mundo.
+        self.estado.tecnologia.plazas = self.estado.asentamientos.len() as u32;
         self.espacio.residentes_por_plaza = super::residentes::por_plaza(&self.estado.residentes);
         for e in self.estado.ejercitos.values() {
             if let Some(presa) = e.persiguiendo {

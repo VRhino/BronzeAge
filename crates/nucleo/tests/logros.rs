@@ -102,7 +102,7 @@ fn la_foto_ban37_lleva_el_estado_de_tecnologia_cada_campo_cambia_el_hash_y_ban36
     let reglas = n.estado().reglas.clone();
     let mundo_hash = n.estado().mundo_hash.clone();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN57");
+    assert_eq!(&bytes[..5], b"BAN58");
     let vuelta = Estado::deserializar(&bytes, &reglas, &mundo_hash).unwrap();
     assert_eq!(vuelta.serializar(), bytes);
     assert_eq!((vuelta.tecnologia.clone(), vuelta.era_en), (n.estado().tecnologia.clone(), n.estado().era_en));
@@ -120,6 +120,7 @@ fn la_foto_ban37_lleva_el_estado_de_tecnologia_cada_campo_cambia_el_hash_y_ban36
         ("otro contador", Box::new(|s| s.tecnologia.contadores[Contador::PlazasEnNivel3.indice()] += 1)),
         ("resto", Box::new(|s| s.tecnologia.restos[Contador::ExtraidoCobre.indice()] += 1)),
         ("logro", Box::new(|s| s.tecnologia.logros[3] = Some(9))),
+        ("plazas al cumplir", Box::new(|s| s.tecnologia.plazas_al_cumplir[3] += 2)),
         ("primero", Box::new(|s| s.tecnologia.primeros[3] = Some(Primero { faccion: 2, en: 1 }))),
         ("primero.en", Box::new(|s| s.tecnologia.primeros.iter_mut().flatten().for_each(|p| p.en += 1))),
         ("cantadas", Box::new(|s| s.tecnologia.cantadas.poner(4))),
@@ -180,4 +181,31 @@ fn el_record_de_plazas_por_nivel_actual_sube_con_el_indice_y_no_baja() {
     let reglas = n.estado().reglas.clone();
     let vuelta = Estado::deserializar(&n.estado().serializar(), &reglas, &m.0.hash().to_string()).unwrap();
     assert_eq!(vuelta.tecnologia.contador(Contador::PlazasEnNivel2), 2);
+}
+
+#[test]
+fn los_umbrales_por_plaza_siguen_a_las_plazas_vivas_del_mundo_y_se_ven_en_la_forma_publica() {
+    use nucleo::proyeccion::propios::{estado_tecnologia, Espectador};
+    let Some(m) = comun::real::mundo() else { return };
+    let a = nucleo::Arranque { reglas: comun::reglas(), ajustes: nucleo::Ajustes::default(), semilla: 7, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) };
+    let mut n = Nucleo::nuevo(a);
+    // Sin plazas, N cuenta como 1.
+    let pendiente = |n: &Nucleo, c: Contador| n.tecnologia().umbral_pendiente(&n.estado().reglas.economia.tecnologia, c);
+    assert_eq!((n.tecnologia().plazas, pendiente(&n, Contador::BandidosCampamentosDestruidos)), (0, Some(20)));
+    let p1 = comun::real::sitio_rico(&n, &m.0, 0, 1);
+    comun::real::fundar(&mut n, "ana", 1, p1);
+    let p2 = comun::real::sitio_rico(&n, &m.0, 3, 2);
+    comun::real::fundar(&mut n, "beto", 2, p2);
+    assert_eq!(n.tecnologia().plazas, 2, "las dos plazas vivas, de dos Facciones");
+    assert_eq!(pendiente(&n, Contador::BandidosCampamentosDestruidos), Some(40), "20 × 2");
+    assert_eq!(pendiente(&n, Contador::AnimalesComprados), Some(10), "5 × 2");
+    assert_eq!(pendiente(&n, Contador::ExtraidoCobre), Some(2_000), "1.000 × 2 (la metalurgia; la aleación pide 4.000)");
+    assert_eq!(pendiente(&n, Contador::ExtraidoEstano), Some(2_000), "1.000 × 2 (la aleación)");
+    // La forma pública (`HEROE`): N y cada parte pendiente con su umbral de ahora, sin la tecnología.
+    let publico = estado_tecnologia(&n, Espectador::Heroe(None));
+    assert_eq!(publico.plazas, 2);
+    let de = |c: &str| publico.logros_pendientes.iter().filter(|l| l.contador == c).map(|l| l.umbral).collect::<Vec<_>>();
+    assert_eq!((de("bandidos.campamentosDestruidos"), de("extraido.cobre"), de("extraido.estano"), de("animales.comprados")), (vec![40], vec![2_000, 4_000], vec![2_000], vec![10]));
+    assert_eq!(de("extraido.piedra"), vec![11_000_000], "las de umbral fijo, igual");
+    assert!(publico.logros.is_empty(), "qué tecnología abre cada logro sigue siendo de ADMIN");
 }

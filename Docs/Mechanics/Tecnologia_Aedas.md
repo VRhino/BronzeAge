@@ -21,13 +21,16 @@ EstadoTecnologia (del servidor) = {
   eraDesde:   Instante                               cuándo empezó (su plazo cuenta desde aquí)
   contadores: Partial<Record<ContadorLogro, number>> los hechos del mundo, acumulados
   logros:     Partial<Record<TecnologiaId, Instante>>  cuándo se cumplió el logro de cada tecnología; FIJO para siempre
+  plazasAlCumplir: Record<TecnologiaId, number>       las plazas vivas del mundo cuando se cumplió (dice con qué umbral se cumplió uno por plaza; 2026-11-07)
+  plazas:     number                                  N, las plazas vivas del mundo ahora (derivado: no va en la foto, lo rehace el núcleo)
   primeros:   Partial<Record<TecnologiaId, { faccionId, en }>>   la primera Facción que la desbloqueó (descubridora), por hito o por épica
   cantadas?:  TecnologiaId[]                          descubrimientos que los Aedas ya han cantado
   porFaccion: Record<faccionId, TecnologiasFaccion>   una Facción sin entrada solo tiene las de arranque
 }
 TecnologiasFaccion = { aparecidas[], adoptadas[] (⊆ aparecidas), reveladas? }      reveladas = un Aeda se las mostró y aún no le han aparecido
 
-DefinicionTecnologia = { nombre, era, deArranque?, logro?: { contador, umbral }, hito: CondicionHito[], bonusProduccion?: { recurso, factor } }
+DefinicionTecnologia = { nombre, era, deArranque?, logro?: ParteLogro & { ademas?: ParteLogro }, hito: CondicionHito[], bonusProduccion?: { recurso, factor } }
+ParteLogro = { contador, umbral } (fijo) | { contador, porPlaza } (umbral = porPlaza × max(N, 1), N = plazas vivas del mundo; 2026-11-07)
 CondicionHito = edificio{edificio, nivelInterno?} | tecnologia{id} | recursoEnCapital{recurso} | capitalEnNivel{nivel, conEdificio} | yacimientoEnTerritorio{recurso}
 
 AedaItinerante = { id, posicion, enAsentamientoId?, hasta?, destinoId?, ruta?, progreso, recientes[] }
@@ -42,6 +45,15 @@ Una tecnología pasa, para cada Facción, por **oculta → revelada → aparecid
 
 Un **contador** es un hecho del mundo (entre todas las Facciones, bots incluidos); el **logro** de una tecnología se cumple cuando su contador llega a su `umbral`, y **queda fijo** (se guarda el instante).
 Cada logro cumplido emite el evento **público** `tecnologia.logro { contador, umbral }`: dice qué pasó, **nunca qué tecnología abre**.
+
+**Umbrales por plaza (decisión del autor, 2026-11-07).** Un logro con `porPlaza` pide `porPlaza × N`, con **N las plazas vivas del mundo en ese momento** (de todas las Facciones, bots incluidos; mínimo 1), para que las tecnologías se adapten al tamaño del servidor: un servidor con pocas plazas no se queda con umbrales imposibles ni uno grande con umbrales regalados. El contador sigue siendo uno solo para todo el servidor: todas las Facciones suman para todas (si una destruye 15 campamentos y otra 5, son 20). El umbral se mueve con N: sube cuando se funda una plaza y baja cuando una cae en ruinas, y si al bajar ya se cumple, el logro se fija en ese instante sin sumar nada. **Una vez cumplido queda fijo**, con el N de entonces (`plazasAlCumplir`). Un logro puede tener **dos partes** (`ademas`), y se cumple cuando se cumplen las dos a la vez; el evento `tecnologia.logro` sale una vez por parte, con el umbral con que se cumplió. Hoy van por plaza:
+
+| Tecnología | Logro |
+|---|---|
+| `escudos_ligeros` | 20 × N campamentos de bandidos destruidos |
+| `metalurgia_cobre` | 1.000 × N de cobre extraído |
+| `cria_caballar` | 5 × N animales comprados |
+| `aleacion_bronce` | 2.000 × N de cobre extraído **y** 1.000 × N de estaño extraído (el cobre es el mismo contador acumulado que el de la metalurgia) |
 
 ### 2.1 De dónde sale cada contador
 
@@ -82,7 +94,8 @@ Determinista y **sin generador aleatorio**. Los pasos no se evalúan en un tick:
 
 ```
 0. récords:  para N en {2, 3}:  ahora = nº de plazas con nivelActual ≥ N;  si ahora > contadores['plazasEnNivel.N'] → se guarda
-1. logros:   para cada tecnología con logro, sin logro cumplido, con contador ≥ umbral:  logros[id] = instante;  evento público tecnologia.logro
+1. logros:   para cada tecnología con logro, sin logro cumplido, con contador ≥ umbral en todas sus partes (umbral = porPlaza × max(N, 1) si va por plaza):
+             logros[id] = instante, plazasAlCumplir[id] = max(N, 1);  evento público tecnologia.logro, uno por parte (también al cambiar N, §2)
 2. Era:      siguiente = la Era que sigue a la vigente (ninguna en la última)
              todos   = TODAS las tecnologías de la Era vigente que tienen logro lo tienen cumplido
              minimo  = instante − eraDesde ≥ minimoSemanas × 7 días
@@ -464,7 +477,7 @@ la Era de cada tecnología propia (decide lo que cuesta adoptarla o comprarla); 
 
 ### 11.1 Catálogo de tecnologías
 
-Cada entrada: `era`, `deArranque?`, `logro {contador, umbral}` (el umbral es la X del logro: **calibrado con batch para la Era I**; las de las Eras II y III siguen siendo placeholder), `hito[]` y `bonusProduccion?`.
+Cada entrada: `era`, `deArranque?`, `logro {contador, umbral | porPlaza, ademas?}` (el umbral es la X del logro: **calibrado con batch para la Era I**; las de las Eras II y III siguen siendo placeholder; `porPlaza` es la X por plaza viva del mundo y `ademas` una segunda parte que se pide a la vez, §2, decisión del autor del 2026-11-07), `hito[]` y `bonusProduccion?`.
 
 <!-- parametros:TECNOLOGIAS -->
 ```json
@@ -486,7 +499,7 @@ Cada entrada: `era`, `deArranque?`, `logro {contador, umbral}` (el umbral es la 
     "era": "reinos_palaciales",
     "logro": {
       "contador": "extraido.cobre",
-      "umbral": 41000
+      "porPlaza": 1000
     },
     "hito": [
       {
@@ -499,8 +512,12 @@ Cada entrada: `era`, `deArranque?`, `logro {contador, umbral}` (el umbral es la 
     "nombre": "Aleación del bronce",
     "era": "reinos_palaciales",
     "logro": {
-      "contador": "extraido.estano",
-      "umbral": 245000
+      "contador": "extraido.cobre",
+      "porPlaza": 2000,
+      "ademas": {
+        "contador": "extraido.estano",
+        "porPlaza": 1000
+      }
     },
     "hito": [
       {
@@ -519,7 +536,7 @@ Cada entrada: `era`, `deArranque?`, `logro {contador, umbral}` (el umbral es la 
     "era": "reinos_palaciales",
     "logro": {
       "contador": "bandidos.campamentosDestruidos",
-      "umbral": 2250
+      "porPlaza": 20
     },
     "hito": [
       {
@@ -565,7 +582,7 @@ Cada entrada: `era`, `deArranque?`, `logro {contador, umbral}` (el umbral es la 
     "era": "reinos_palaciales",
     "logro": {
       "contador": "animales.comprados",
-      "umbral": 700
+      "porPlaza": 5
     },
     "hito": [
       {
@@ -1445,6 +1462,7 @@ Cada entrada: `era`, `deArranque?`, `logro {contador, umbral}` (el umbral es la 
 | Una tecnología de una Era cerrada no aparece aunque su logro y su hito se cumplan; el logro queda fijado | ídem |
 | La Era avanza al agotar el plazo o al cumplir todos sus logros, lo que llegue antes, pero nunca antes de su mínimo (`minimoSemanas`, decisión del autor del 2026-10-25) | ídem; en Rust, `nucleo/tests/logros.rs` y el invariante `inv_era` de `batch tecnologia` |
 | Comprar a un Aeda nunca salta el logro del servidor | `aedas.test.ts` |
+| Un umbral por plaza es `porPlaza × max(N, 1)` con N las plazas vivas; baja al caer una plaza y puede cumplirse sin sumar nada; una vez cumplido no se mueve; las dos partes de la aleación se piden a la vez (2026-11-07) | Rust: `tecnologia::estado` (`el_umbral_por_plaza_sigue_a_las_plazas_vivas…`) y `nucleo/tests/logros.rs` (`los_umbrales_por_plaza_siguen_a_las_plazas_vivas…`) |
 | Una épica no cuenta dos veces el mismo hecho, ni dos hechos antes del enfriamiento | `aedasResidentes.test.ts` |
 | Un Aeda de una plaza conquistada pierde la épica | ídem |
 
@@ -1477,7 +1495,9 @@ Divergencia aprobada del TS (Q4 del autor, 2026-10-24): los reclutas de un campa
 
 > **Implementado en Rust (2026-10-25, 6G): el contrato y las proyecciones** (sin cambio de foto; esquema aditivo; `Docs/Arquitectura/Sistema6_Contraste_y_Plan.md`, «Avance de 6G»). Lo que ve cada uno (Proyecciones §6.3, decisión Q6): la Facción, sus tecnologías enteras en `FACCION` (`TecnologiasFaccion`: aparecidas, adoptadas, reveladas con su descubridora y qué condiciones del hito cumple ya, y las épicas que un Aeda suyo podría empezar) y sus Aedas residentes con su épica (`AedaResidente`); todo jugador, la forma pública del estado del mundo en `HEROE` (`EstadoTecnologia`: la Era, desde cuándo, los logros cumplidos como «`contador` llegó a `umbral`» sin la tecnología que abren, lo cantado con su descubridora y, desde el 2026-11-06, los contadores en curso: ver la nota de abajo); los Aedas itinerantes que ve, redactados en `VISTA`; el héroe que puede buscar alijos, los que tiene a la vista en `HEROE`; la administración, todo (los contadores, los logros y las descubridoras por tecnología, las claves de las épicas, los itinerantes enteros). Los quince códigos de este documento llevan desde 6G su mensaje tipado (diez mensajes, contrato 05 §8) y los cuatro públicos (`tecnologia.logro`, `era.comienza`, `aedas.canta_descubrimiento`, `aedas.epica_cumplida`) llegan a todo `HEROE` con su `cronica.entrada`, también en las páginas de la crónica.
 
-> **Los contadores, públicos (2026-11-06, pedido del autor; Rust).** Para la barra «x / y» de cada logro en la ficha de la tecnología (p. ej. «estaño extraído por todas las facciones 0 / 245.000»), la forma pública de `EstadoTecnologia` en `HEROE` lleva también `contadores` (los 24, por nombre, el valor en curso de todo el servidor). Cambia la decisión Q6 solo en eso: **qué tecnología abre cada logro** (`logros` por id) sigue siendo solo de `ADMIN`. Como los contadores suben sin subir la versión (lo extraído y lo fabricado, con el paso de minuto), el `HEROE` de cada sesión los compara con los que tiene el cliente en cada muestreo de la vista y, si cambiaron, recibe el estado público entero (`ACTUALIZA`); al reanudar por deltas también llega entero.
+> **Los contadores, públicos (2026-11-06, pedido del autor; Rust).** Para la barra «x / y» de cada logro en la ficha de la tecnología (p. ej. «estaño extraído por todas las facciones 0 / 245.000», el umbral fijo de entonces), la forma pública de `EstadoTecnologia` en `HEROE` lleva también `contadores` (los 24, por nombre, el valor en curso de todo el servidor). Cambia la decisión Q6 solo en eso: **qué tecnología abre cada logro** (`logros` por id) sigue siendo solo de `ADMIN`. Como los contadores suben sin subir la versión (lo extraído y lo fabricado, con el paso de minuto), el `HEROE` de cada sesión los compara con los que tiene el cliente en cada muestreo de la vista y, si cambiaron, recibe el estado público entero (`ACTUALIZA`); al reanudar por deltas también llega entero.
+
+> **Umbrales por plaza (2026-11-07, decisión del autor; Rust).** El crate `tecnologia` lleva el logro como una parte o dos (`Logro { parte, ademas }`, `Parte { contador, umbral, por_plaza }`); `EstadoTecnologia::plazas` es N (derivado, no va en la foto: lo rehace `reconstruir_espacio` con el número de plazas) y `plazas_al_cumplir` el N con que se cumplió cada logro (va en la foto desde `BAN58`; de una `BAN57` o anterior se lee 1 en cada logro cumplido). El núcleo cambia N al nacer o caer una plaza (`contar_nivel` con un lado vacío → `contar_plazas` → `EstadoTecnologia::poner_plazas`), que fija los logros por plaza que con el umbral nuevo ya se cumplen y toca la forma pública. La forma pública de `EstadoTecnologia` en `HEROE` lleva además `plazas` (N) y `logros_pendientes` (`LogroPendiente { contador, umbral }`: cada parte de cada logro aún pendiente con su umbral de ahora, en el orden del catálogo y sin la tecnología que abre), y `logros_cumplidos` lleva una entrada por parte con el umbral con que se cumplió (contrato 0.16.0). El índice `Reglas::por_contador` ya no va por umbral: lista las tecnologías cuyo logro mira cada contador; `Reglas::por_plazas`, las que tienen alguna parte por plaza.
 
 > **Implementado en Rust (2026-10-26, 6H): el batch tecnológico** (`batch tecnologia`, `crates/batch/src/simmil/tec.rs` y `armartec.rs`; conclusiones y preguntas en `crates/batch/decisiones/tecnologia.json`; `Docs/Arquitectura/Sistema6_Contraste_y_Plan.md`, «Avance de 6H»). La población del batch político con bots que solo dan órdenes del contrato: el Rey adopta dentro de su capital (y va a ella si está en otra plaza suya), el Gobernador de la capital construye hacia los hitos, los de cada plaza compran a los Aedas lo revelado, les cierran y abren la puerta y encargan épicas a sus residentes, y buscadores sin Facción abren alijos y reclutan en su campamento. Comprueba orden a orden los invariantes de §12 y los de este sistema (logro fijo y nunca antes de su umbral, ningún contador baja, `adoptadas ⊆ aparecidas`, nada de una Era cerrada, la Era entre su mínimo y su plazo, comprar nunca salta el logro, una épica por tecnología y Facción también tras unificar, un hecho no cuenta dos veces, los itinerantes nunca bajan ni quedan en una plaza que les cierra la puerta, un alijo una vez por héroe, la crónica guardada igual a la emitida) y **no calibra** (Q3): informa en qué día cae cada logro y cada Era, para la fase 7. Desde 6H ningún batch usa `FijarTecnologias`: el militar, el político y el de comercio adoptan por la orden lo que les aparece.
 
