@@ -515,7 +515,7 @@ const E = {
     campos: [
       ['Identidad: id, nombre, Facción, posición, nivel', 'si si si si si no', 'Lo recordado lleva además la fecha de la foto (conocidoEn).'],
       ['Zona de influencia', 'si si si si red no', 'Ajena y vista: el polígono REAL (fuga aceptada). Recordada: solo el radio.'],
-      ['Edificios en pie', 'si si si si no no', 'Solo los activos: un muro a medio construir se ve, el plan de hacerlo no.'],
+      ['Edificios en pie', 'si si si red no no', 'Solo los activos: un muro a medio construir se ve, el plan de hacerlo no. Ajena desde fuera (2026-11-07): solo si tiene Mercado activo y si tiene muralla; la lista, al entrar.'],
       ['Cargos y políticas activas', 'si si si no no no', 'Público dentro de casa, opaco fuera.'],
       ['Almacén', 'si si red no no no', 'Desde fuera de la propia, solo si tu columna está a la puerta.'],
       ['Cola de obras y edificios en construcción', 'si si red no no no', 'Desde fuera, el último recuerdo de tu visita (con su fecha). Con un Informe de plaza comprado, la foto exacta de entonces.'],
@@ -527,7 +527,7 @@ const E = {
       adm: 'Todo el estado, sin niebla. Menos el mapa (viaja su id) y los tokens de batalla.',
       dentro: 'El Asentamiento entero en `asentamientos[0]`, más su trazado. Solo si eres de la Facción dueña Y estás pisándola.',
       fuera: 'Una ficha en `asentamientosAvistados` (si la ves) con cargos y políticas, el almacén si hay columna a la puerta y `interiorRecordado` si la pisaste.',
-      ajena: 'Una ficha pública con su zona real y sus edificios en pie. Nada de su interior, ni recordado.',
+      ajena: 'Una ficha pública con su zona real, si tiene muralla y si tiene Mercado activo (sin la lista de edificios, que se ve dentro). Nada de su interior, ni recordado.',
       rec: 'La última ficha en `asentamientosConocidos` con `conocidoEn` y el radio de su tierra. Aparece en una lista o en la otra, nunca en las dos.',
       nunca: 'Nada. Ni siquiera su existencia.',
     },

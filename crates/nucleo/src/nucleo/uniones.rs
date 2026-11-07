@@ -367,7 +367,11 @@ impl Nucleo {
 
     /// Dónde reposta el Líder cuando la orden no lo dice (`repostar` sin `lugar_id`): la plaza o la avanzada operativa más cercana a la puerta (`radioPuerta`) de la columna
     /// del héroe, con las plazas antes que las avanzadas y el menor id si empatan. `None` si no hay ninguna: la orden se rechaza con `repostar.sin_lugar`.
+    /// Con el héroe dentro de una avanzada (2026-11-07), esa avanzada.
     pub fn lugar_de_repostar(&self, heroe: u64) -> Option<Ubicacion> {
+        if let Some(dentro @ Ubicacion::Avanzada(_)) = self.heroe(heroe).map(|h| h.heroe.presencia.ubicacion) {
+            return Some(dentro);
+        }
         let aqui = self.columna_del_heroe(heroe)?.posicion_en(self.estado.ahora);
         let plazas = self.estado.asentamientos.values().map(|a| (aqui.dist(a.posicion), 0, a.id, Ubicacion::Asentamiento(a.id as u32)));
         let avanzadas = self.estado.asentamientos.values().flat_map(|a| &a.economia.avanzadas).filter(|v| v.operativa()).map(|v| (aqui.dist(v.posicion), 1, v.id, Ubicacion::Avanzada(v.id)));

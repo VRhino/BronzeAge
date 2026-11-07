@@ -816,6 +816,7 @@ fn desde_dentro_de_la_avanzada_se_guarnece_se_retira_se_deposita_se_reposta_y_se
     e.avanzar(HORA);
     let viveres = |e: &Esc| e.n.ejercito(col).unwrap().columna.viveres.valor_en(e.n.ahora());
     let antes = viveres(&e);
+    assert_eq!(e.n.lugar_de_repostar(heroe), Some(Ubicacion::Avanzada(av)), "`repostar` sin lugar, dentro: esa avanzada");
     e.ok("ana", Comando::RepostarEnAvanzada { heroe, avanzada: av });
     assert!(viveres(&e) > antes && e.avanzada(av).almacen.cantidad(Trigo) < 60_000, "llena sus víveres con el trigo del almacén");
 
