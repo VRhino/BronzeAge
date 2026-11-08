@@ -29,8 +29,8 @@ Facción que le paga. La marca le pone límites:
 
 El bot se ofrece **dentro de su campamento**, sin Facción. Se le contrata **en persona**, en su campamento: quien firma llega con su columna y paga con el oro de su carro o, si reside en ese
 campamento, también desde dentro, con su almacén personal o con el carro que tiene allí (como en el mercado del campamento). La **tarifa** la fija
-el juego por el nivel del héroe y lo que vale su tropa, multiplicada por el plazo y por su rango; el permanente es caro a propósito. El oro va al almacén personal del mercenario hasta
-llenarlo (lo que no cabe se pierde) y nunca se devuelve.
+el juego por el nivel del héroe y lo que vale su tropa, multiplicada por el plazo y por su rango; el permanente es caro a propósito. **Desde el 2026-11-08 la tarifa es la cuarta parte** de lo que era (factor de oro del 25 %, provisional) y se puede pagar de dos maneras: **en oro** (el de su carro o su almacén personal, como arriba) o **con las monedas del héroe que firma**, en cualquier sitio y sin carro ni almacén, a 100 monedas por cada oro de la tarifa. El oro va al almacén personal del mercenario hasta
+llenarlo (lo que no cabe se pierde) y nunca se devuelve; las monedas pagadas pasan a las del mercenario. Vale al contratar y al prorrogar.
 
 | Trabajo | Tipo | Quién lo firma |
 |---|---|---|

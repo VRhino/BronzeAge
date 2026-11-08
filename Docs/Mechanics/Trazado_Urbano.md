@@ -2,7 +2,7 @@
 
 > **Reescrito el 2026-10-13**: el **servidor calcula el trazado** de cada asentamiento una vez, con este algoritmo, y lo entrega; Unity solo lo dibuja (decisión del usuario). El espacio local de la ciudad y el mapa del mundo son **dos espacios separados, sin conversión entre ellos** (Doc 1.0a; la escala de transición `ESCALA` se borró). Los algoritmos de este documento no cambian. El «cómo funcionaba» está en `typescript-final:Docs/Mechanics/Trazado_Urbano.md`.
 
-> **Implementado en Rust (2026-10-18).** La geometría es el crate `crates/trazado` (reglas puras en enteros; `LAYOUT_VERSION` = 6, no 2: `pseudoAleatorio` con `sin` se sustituyó por un hash entero, así que **no reproduce el trazado de TypeScript**). **Versión 4 (2026-10-23, decisiones del autor tras el laboratorio del trazado):** las reglas de colocación vuelven a ser las del TypeScript en lo que la versión 3 había cambiado: **sin disco urbano para anclas ni satélites** (§6.5, §7.2: solo los genéricos lo miran), el núcleo de un ancla se barre con **su círculo** (§6.5), un ancla queda **llena en cuanto no cabe la huella pedida** (§7.1), la Granja que crece busca sitio **sin su suelo pero conservando su camino** (§6.7) y **el ancla nace al proponer** (§7.1, ver «Cuándo se coloca»). No se adoptan (decisión del autor): la semilla fuera de la separación del ancla nueva ni `continuaFila` con calles. La muralla conserva el orden del Rust ([`Murallas.md`](Murallas.md) §3). Su integración en el núcleo:
+> **Implementado en Rust (2026-10-18).** La geometría es el crate `crates/trazado` (reglas puras en enteros; `LAYOUT_VERSION` = 7 desde el 2026-11-08, no 2: `pseudoAleatorio` con `sin` se sustituyó por un hash entero, así que **no reproduce el trazado de TypeScript**). **Versión 4 (2026-10-23, decisiones del autor tras el laboratorio del trazado):** las reglas de colocación vuelven a ser las del TypeScript en lo que la versión 3 había cambiado: **sin disco urbano para anclas ni satélites** (§6.5, §7.2: solo los genéricos lo miran), el núcleo de un ancla se barre con **su círculo** (§6.5), un ancla queda **llena en cuanto no cabe la huella pedida** (§7.1), la Granja que crece busca sitio **sin su suelo pero conservando su camino** (§6.7) y **el ancla nace al proponer** (§7.1, ver «Cuándo se coloca»). No se adoptan (decisión del autor): la semilla fuera de la separación del ancla nueva ni `continuaFila` con calles. La muralla conserva el orden del Rust ([`Murallas.md`](Murallas.md) §3). Su integración en el núcleo:
 >
 > - `crates/nucleo/src/urbanismo.rs`: la tabla tipo → huella y categoría (las huellas salen de los bloques `EDIFICIO_TAMANO_POR_DEFECTO`, `EDIFICIO_TAMANO`, `PUESTO_MERCADO_FORMA` y `MERCADO_PUESTOS_POR_NIVEL` de este documento, incrustado con `include_str!`, y del `tamano` de cada nivel de la Granja en `EDIFICIO_CATALOGO`; **esos bloques entran en la huella de las reglas de las fotos**; la categoría de cada tipo es §6.1), la `Urbe` de cada plaza (la `Ciudad` más el caché de consultas) y `SitiosUrbe`. Cada plaza del núcleo lleva su `Urbe` (`nucleo::Asentamiento.urbe`); `Nucleo::ciudad(id)` y `Nucleo::vista_ciudad(id)` la entregan para pintar (piezas con su rectángulo en unidades locales, calles y caminos).
 > - `crates/nucleo/src/codec_ciudad.rs`: serialización para el hash y las fotos (formato de la ciudad introducido en `BAN4` y vigente en `BAN5`: semilla, `Parametros`, piezas en su orden de construcción y recintos; suelo y red se derivan al leer). Una foto con otra `LAYOUT_VERSION` se rechaza.
@@ -38,7 +38,7 @@ Las manzanas no existen como dato: son el espacio que queda encerrado cuando las
 - **Espacio local** de cada asentamiento: plano, centrado en el Centro Urbano, `(0,0)` = su centro. Unidades «locales».
 - **Celda** = `REJILLA_ASENTAMIENTO.tamanoCelda` = **3 unidades locales** de lado. Una calle mide una celda (`TRAZADO.anchoCalle = 1`).
 - `radioMapa = 220` es solo presentación (zoom del lienzo); no interviene en ninguna decisión.
-- `LAYOUT_VERSION = 6` (2 en el TypeScript; ver la nota de implementación): revisión de la geometría. **Un snapshot de otra revisión se rechaza al cargar** (`cargarPartida`), porque las huellas y la red se *derivan* de las tablas y se
+- `LAYOUT_VERSION = 7` (2 en el TypeScript; ver la nota de implementación; **la 7, de la tanda 69 (2026-11-08), endereza el muro alrededor de cada puerta de la muralla**, [`Murallas.md`](Murallas.md) §3; el valor que usa el motor es la constante de `crates/trazado/src/tipos.rs`, y el bloque `LAYOUT_VERSION` de abajo lo repite): revisión de la geometría. **Un snapshot de otra revisión se rechaza al cargar** (`cargarPartida`), porque las huellas y la red se *derivan* de las tablas y se
   reinterpretarían en silencio. Se sube al cambiar cualquier huella, el tamaño de celda, `FONDO_MANZANA` o una constante de `TRAZADO` que mueva lo ya colocado.
 - El espacio local de la ciudad y el mapa del mundo son **espacios separados**: la ciudad no se mide contra el exterior (decidido el 2026-10-17; `ESCALA` y `radioUrbanoDe` se borraron). Su tamaño es **propio e interno**: `radioCiudad`, en unidades locales, nace en `RADIO_CIUDAD.inicial` (30), crece `RADIO_CIUDAD.crecimientoPorEdificio` (5) por edificio completado y topa en `RADIO_CIUDAD.maximoPorNivel` (60 / 90 / 120 / 150 / 180 para los niveles 1-5; bloque en §12). No se deriva del radio de la zona de influencia ni de ninguna cifra del mapa; los valores son los de siempre, así que el trazado no cambia.
   **Qué edificios cuentan** (decisión del autor, 2026-10-23): solo los que pasaron por la cola y están activos (los mismos que agrandan la zona del mapa); ni los de la fundación (la ciudad nace con su radio inicial, sin salto) ni los gratuitos (anclas y puestos del Mercado, que nacen sin obra). El tope por nivel usa el nivel **alcanzado**, como la zona; el gate de las anclas, el operativo (`nivelActual`, Economia_Construccion §6.2).
@@ -352,12 +352,12 @@ El **perfil** efectivo es `TRAZADO.perfilForzado ?? perfil de la política activ
 ### 6.1 Despacho por tipo (en este orden)
 
 1. **Afueras** (`granja`, `corral`) → §6.3.
-2. **Genéricos** (`palacio`, `almacen`, `granero`, `lenera`, `taberna`, `salaConsejo`) → §6.4.
+2. **Genéricos** (`palacio`, `almacen`, `granero`, `lenera`, `taberna`, `salaConsejo` y, en Rust, desde la tanda 69, el `molino` y el `horno`) → §6.4.
 3. Sin categoría (`CATEGORIA_POR_TIPO[tipo]` ausente) → **lista vacía**.
 4. **Ancla primaria de su categoría** (`mercado`) → nace por el árbol de anclas (§7.2): un único sitio, el de `crearAnclaNueva`.
 5. **Satélites** (vivienda, fundición, curtiduría, armería, gran fundición, maravilla, barracón, galería de tiro, caballerizas, carpintería, puestos de mercado, Albergue de caravanas) → §6.5.
 
-`CATEGORIA_POR_TIPO`: `residencial` (vivienda) · `industria` (fundición, curtiduría, armería, gran fundición, maravilla) · `militar` (barracón, galería de tiro, caballerizas, carpintería) · `mercado` (mercado, albergueCaravanas,
+`CATEGORIA_POR_TIPO`: `residencial` (vivienda y, en Rust, la `estatua`) · `industria` (fundición, curtiduría, armería, gran fundición, maravilla y, en Rust, la `quesera`, la `bodega` y la `prensa`) · `militar` (barracón, galería de tiro, caballerizas, carpintería) · `mercado` (mercado, albergueCaravanas,
 puestoMercado) · `almacenaje` (almacén, granero, leñera, corral).
 
 ### 6.2 El barrido de candidatos (`candidatosLibres`)
@@ -392,6 +392,8 @@ para col, row en [centro±maxCeldas]:
 - Orden: **el más lejano al origen primero** (`porDistanciaAlOrigen(…, masLejos = true)`); empate por `semillaCandidato`. Así las granjas acompañan el borde de la ciudad.
 
 ### 6.4 Genéricos (palacio, almacén, granero, leñera, taberna, Sala del Consejo)
+
+> **Implementado en Rust (2026-11-08, tanda 69, §10 del diseño):** el **molino** y el **horno** se colocan como genéricos —**sueltos en la ciudad, sin ancla de barrio**— (`crates/nucleo/src/urbanismo.rs`), porque se levantan desde el nivel 1 de la plaza y el barrio de la industria no tiene ancla hasta `NIVEL_GATE_ANCLAS` (2): como satélites no habrían tenido dónde ir. La quesera, la bodega y la prensa (nivel 2, 3 y 4) sí son satélites de la industria, y la estatua, del barrio residencial. Las huellas están en `EDIFICIO_TAMANO` (molino 2×2, horno 2×1, quesera 2×1, bodega 2×2, prensa 2×1); la estatua usa `EDIFICIO_TAMANO_POR_DEFECTO` (1×1). Sin cambios de algoritmo.
 
 Sin ancla ni barrio: todos los candidatos del radio urbano con `distanciaMinima = 0`, ordenados **del más cercano al origen** (desempate `semillaCandidato`), y después la preferencia intramuros (§6.6).
 
@@ -537,7 +539,7 @@ origen** `(0,0)`, encima del Centro Urbano: el fallback es defensivo); contexto 
 
 <!-- parametros:LAYOUT_VERSION -->
 ```json
-6
+7
 ```
 <!-- /parametros -->
 

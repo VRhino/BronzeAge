@@ -115,6 +115,8 @@ Ruido de gradiente 2D (Perlin) sumado en octavas (fBm). Es **puro** y está defi
 
 ## 5. Elevación, terreno, bioma, fertilidad y coste
 
+> **Implementado en Rust (2026-11-08, tanda 69, T9; §12 del diseño):** el artefacto del mundo lleva **tres capas u8 más**, todas obligatorias ([`Docs/Coordinacion/06_Contrato_de_Mundo.md`](../Coordinacion/06_Contrato_de_Mundo.md)): `fertilidad_vid` y `fertilidad_oliva`, la fertilidad (0 a 1, 255 = 1,0) de cada cultivo de las aldeas de un cultivo ([`Economia_Construccion.md`](Economia_Construccion.md) §14.0), y `region`, el `id` de la región del relieve en cada celda (con la lista `regiones` de ids y nombres). La vid es fértil en laderas soleadas y secas (pendiente suave a media, humedad baja a media, 0 en el agua y en las cumbres) y la oliva en tierra baja cercana a la costa (humedad baja a media, 0 en el agua); sus cifras están en `generador/src/config.ts` (`CULTIVOS`), son funciones puras del relieve (no consumen azar) y `generador/src/cultivos.ts` las evalúa. `fertilidad` (la del trigo) no cambia. El crate `mundo` las lee (`fertilidad_vid_en`, `fertilidad_oliva_en`, `region_en`) y las valida al cargar; el núcleo toma la capa del cultivo de la aldea en `zonas.rs`. La fertilidad que usa el relieve de este documento sigue siendo la del trigo.
+
 ### 5.1 Elevación (`evaluarElevacion`)
 
 ```
@@ -935,7 +937,7 @@ Evento `alijo.abierto { heroeId, alijoId, oro }`.
 Si ya hay `≥ tocan` campamentos suyos (`campamentoMercenariosId`), nada. Si no, `puntoDelAnillo`: hasta 20 intentos con `angulo = r·2π` y `radio = radioMin + r·(radioMax − radioMin)` (dos tiradas por intento), válido si está dentro del mapa, es transitable, no es agua, **no** cae en ninguna zona de influencia y no está en la
 protección de ningún campamento de mercenarios. Sin punto: no se hace nada (ni se agenda), de modo que **se reintenta en el siguiente evento de aparición** y gasta tiradas cada vez. Con punto: `{ id: "bandidos-{merc.id}-{instante}", bosqueId: "", campamentoMercenariosId, nivel }` (una tirada de nivel) y
 `bandidosEn = instante + reaparicionMinutos`.
-**Su oro solo lo cobran los héroes sin plaza** (calibración 2, Cal-5, decisión del autor del 2026-10-24; en Rust, no en el TypeScript): los mismos `residentesSinPlaza` que piden estos campamentos, es decir, residentes de un campamento de mercenarios cuya Facción no tiene asentamientos o que no tienen Facción. Cualquier otro héroe que destruya uno gana solo experiencia, y esa destrucción no cuenta en sus rendimientos decrecientes ([`Combate.md`](Combate.md) §7.2). Los campamentos de los orígenes A (por asentamiento) y de las vetas pagan a todos.
+**Su botín solo lo cobran los héroes sin plaza** (calibración 2, Cal-5, decisión del autor del 2026-10-24; en Rust, no en el TypeScript): los mismos `residentesSinPlaza` que piden estos campamentos, es decir, residentes de un campamento de mercenarios cuya Facción no tiene asentamientos o que no tienen Facción. Cualquier otro héroe que destruya uno gana solo experiencia, y esa destrucción no cuenta en sus rendimientos decrecientes ([`Combate.md`](Combate.md) §7.2). Los campamentos de los orígenes A (por asentamiento) y de las vetas pagan a todos.
 
 **Acoso** (`avanzarAtaquesBandidos`, paso 9). Para cada caravana en orden, salvo las `disponible`, `preparando` y `aparcada`: toma el **primer** campamento (en el orden de la lista) a `≤ radioAtaqueCaravana`. No actúa si no hay ninguno, si la caravana está dentro de **cualquier** zona de influencia
 (inmunidad, sin mirar de quién) o en la protección de un campamento de mercenarios. Si actúa gasta **una** tirada: `gana = poder_campamento · (1 + (2r − 1)·varianzaCombate) > defensa`, con `defensa` = `poderTotal(escuadras del ejército al que va adjunta, cohesión)` si va enganchada a una columna; si no,
@@ -1279,6 +1281,8 @@ Todos los de `worldgen/config.ts` están **congelados** (no se editan en calient
 > **2026-10-24 (calibración del sistema 4, M4):** `respawnMinutos` pasa de 60 a **360** (6 h): el campamento de bandidos de una plaza reaparece seis horas después de destruirse (decisión del autor tras el batch militar: con 60 min, 2.247 campamentos destruidos en 30 días). El anillo (`anillo.reaparicionMinutos`) no cambia.
 >
 > **2026-11-02 (decisión del autor):** `porPlaza` **10** (antes uno por plaza, sin parámetro) y `respawnMinutos` de 360 a **120** (2 h): la oleada repone de golpe los que falten a la plaza (§13 A).
+>
+> **Implementado en Rust (2026-11-08, tanda 69, T1; §1 del diseño):** el campamento destruido **ya no da oro**. `niveles.N.oroPorHeroe` (30 / 33 / 36) desaparece y lo sustituyen `botinPorHeroe` (5 / 7 / 10 **de cada uno** de madera, piedra y trigo) y `monedasPorHeroe` (50 / 75 / 100 monedas del héroe); los `rendimientos` (24 h, 8 completas, −15 % cada una, solo experiencia desde la 14.ª) se aplican a los dos. Detalle del cobro y de los hechos en [`Combate.md`](Combate.md) §7.2 (`combate::bandidos::botin_de_bandidos`). Los alijos (`ALIJOS`) siguen dando oro.
 
 ## 15. Invariantes
 

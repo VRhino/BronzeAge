@@ -2,7 +2,7 @@
 
 > **Implementado en Rust el 2026-11-01 (entrada 48).** Reglas puras en el crate `crates/mercenarios` (`tipos.rs`, `datos.rs`, `contrato.rs`, `orden.rs`, `progresion.rs`); la marca de
 > ciudadanía en `crates/politica`; el mundo en `crates/nucleo/src/nucleo/contratos/` (`firma`, `mando`, `fin`, `guardas`, `tropa`, `renombre`); lo que ve cada uno en
-> `crates/nucleo/src/proyeccion/mercenarios.rs` y `audiencia.rs`. Foto **BAN54** (hoy BAN55, que añade el nombre de las caravanas). El canon está en [`Docs/Game/7_Bots_Mercenarios.md`](../Game/7_Bots_Mercenarios.md).
+> `crates/nucleo/src/proyeccion/mercenarios.rs` y `audiencia.rs`. Foto **BAN54** (hoy BAN59; las fotos anteriores a BAN59 ya no se leen). El canon está en [`Docs/Game/7_Bots_Mercenarios.md`](../Game/7_Bots_Mercenarios.md).
 > Todas las cifras son borradores que se calibran con bots (fase 7).
 
 ## 1. Qué es
@@ -68,7 +68,7 @@ su Facción) o bandidos u objetivo de una Facción en guerra (atacar).
 5. El plazo es uno de la tabla en el temporal y ninguno en el permanente (`mercenario.plazo_invalido`); el permanente lleva una plaza de residencia de la Facción y el temporal ninguna
    (`mercenario.objetivo_invalido`).
 6. El objetivo existe y vale para el trabajo (`mercenario.objetivo_invalido`), y algún cargo del firmante alcanza (`mercenario.sin_alcance`).
-7. Lo que paga (el carro o el almacén personal) tiene la tarifa (`mercenarios.sin_oro`).
+7. Lo que paga (el carro o el almacén personal, o las monedas del héroe) tiene la tarifa (`mercenarios.sin_oro`; con monedas, `heroe.sin_monedas`).
 
 ## 4. Los trabajos
 
@@ -99,14 +99,17 @@ id que no es un `Trabajo` del motor hace fallar la carga; quién firma qué va e
 ### 5.1 La tarifa y el pago
 
 Valor del mercenario = `oroPorNivelHeroe` × su nivel + lo que costaría hoy reclutar en su campamento cada escuadra suya **no prestada** con los soldados que tiene (precio de
-`Campamentos_Mercenarios.md` §5.2, sin recargo de reputación ni descuento). **Tarifa** = ⌈valor × `tarifaPct` del plazo (o `permanentePct`) × `tarifaPct` del rango⌉, en oro
+`Campamentos_Mercenarios.md` §5.2, sin recargo de reputación ni descuento). **Tarifa** = ⌈valor × `tarifaPct` del plazo (o `permanentePct`) × `tarifaPct` del rango × `factorOroPct`⌉, en oro
 entero. La calcula el motor; el bot no fija precio. El tablón la muestra para cada plazo y para el permanente con el valor de ese momento.
 
-**De dónde sale el oro** (orden con `pagar_con` = `almacenPersonal` | `carro`, opcional; desde el 2026-11-03 también desde dentro del campamento donde reside, como en su mercado):
+> **Implementado en Rust (2026-11-08, tanda 69, T2; §5 del diseño):** la tarifa baja a un cuarto (`MERCENARIOS_CONTRATO.factorOroPct`, 25: se multiplica por 25/100 antes de redondear hacia arriba a oro entero; `mercenarios::contrato::tarifa`) y se puede pagar en **monedas del héroe**: `tarifa_en_monedas` = el oro ya reducido × `monedasPorOro` (100) monedas, y el tablón (`TarifaMercenario`) lleva las dos, `oro` y `monedas`, de cada plazo y del permanente. Cifras provisionales, a calibrar con el batch.
+
+**De dónde sale el pago** (orden con `pagar_con` = `almacenPersonal` | `carro` | `monedas`, opcional; desde el 2026-11-03 también desde dentro del campamento donde reside, como en su mercado):
 
 - Sin `pagar_con`: el carro de la columna que lleva si va en una (a la puerta, o dentro de un campamento de visita) y, si no (dentro del campamento donde reside), su almacén personal.
 - `almacenPersonal`: solo en el campamento donde reside, dentro o con su columna a la puerta (`almacen_personal.fuera_de_tu_residencia` en otro).
 - `carro`: el que lleva allí: el de su columna a la puerta o dentro; en el campamento donde reside sin columna, el que trajo al entrar (y si no trajo oro, `mercenarios.sin_oro`).
+- `monedas` (2026-11-08, tanda 69): las monedas del héroe que firma (`Heroe.monedas`), a la tarifa en monedas, **en cualquier sitio** donde pueda firmar o prorrogar (no pide carro ni almacén personal). Si no le alcanzan, `heroe.sin_monedas`. Las monedas pagadas **pasan a las del mercenario** (no desaparecen, a diferencia del oro que no cabe). Vale al contratar y al prorrogar; los hechos `mercenarios.contratado` y `mercenarios.prorrogado` llevan `oro` y `monedas` (uno de los dos es 0).
 
 El oro entra en el **almacén personal del mercenario** hasta llenarlo (`capacidadAlmacenPersonal`); lo que no cabe desaparece. Nunca bloquea una firma
 y nunca se devuelve. El temporal lo gasta como residente de su campamento (reclutar y reponer, víveres, compras); el permanente, de visita con el carro de su columna o cuando vuelve a

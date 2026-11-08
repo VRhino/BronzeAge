@@ -37,6 +37,7 @@ desaparece), la **derrota** y los **títulos** de prestigio.
 | `reyId`, `embajadorId` | Cargos de Facción. `reyId = null` solo si no queda ningún ciudadano. |
 | `capitalDesignadaEn?` | Cuándo designó el Rey su capital (cooldown, §3.7). |
 | `experiencia`, `nivel` | Experiencia monótona y nivel derivado (§3.5). |
+| `prestigio` | Prestigio acumulado de la Facción (tanda 69, §3.5b): entero que solo sube, desde 0. Público. Con él sale el tope de alianzas (`tope_alianzas` en el contrato). |
 | `ciudadanosIds` | Ciudadanos, en **orden de ingreso** (el fundador primero): de ahí sale la sucesión del trono. |
 | `solicitudesIds?` | Héroes que han pedido entrar. |
 | `reputacion` | −100..+100. |
@@ -163,6 +164,26 @@ lado de un trueque entre Facciones distintas, y `bandidos` por campamento destru
 }
 ```
 <!-- /parametros -->
+
+### 3.5b Prestigio de la Facción
+
+> **Implementado en Rust (2026-11-08, tanda 69, §13 del diseño):** `crates/nucleo/src/nucleo/prestigio.rs` (`Nucleo::dar_prestigio`, `prestigio_por_victoria`, `prestigio_para_obras`), `crates/politica/src/{faccion,datos,propuestas}.rs` (`Facciones::sumar_prestigio`, `ReglasPrestigio::tope_de_alianzas`, `exigir_tope_de_alianzas`) y `crates/asentamiento/src/obras.rs` (la Maravilla y la estatua). Cifras: el bloque `PRESTIGIO` de arriba. Pruebas: `crates/nucleo/tests/prestigio.rs`.
+
+El prestigio es un entero **de la Facción** (`Faccion.prestigio`, en la foto desde `BAN59`): **se acumula y ni se gasta ni se pierde** (lo ≤ 0 se ignora y una Facción que no existe no gana nada). Cada hecho lo suma en el instante en que ocurre y emite `faccion.prestigio` con `ganado`, `total` y `motivo`:
+
+| Motivo | Hecho | Cuantía (`PRESTIGIO`) |
+|---|---|---|
+| 1 | **Victoria** contra héroes de otra Facción, en un combate con números o en una batalla de Unity: **una vez por combate y Facción ganadora** (no por héroe), con los mismos combates y héroes que dan monedas (Combate §4.2). Contra bandidos, o entre héroes de la misma Facción, nada | `victoria` (5) |
+| 2 | **Conquista** de una plaza, a la Facción conquistadora | `conquista` (50) |
+| 3 | **Fundación** de una plaza (también la primera de la Facción, a diferencia de la experiencia) | `fundacion` (20) |
+| 4 | **Subida de nivel** de una plaza | `ascensoPorNivel` × el nivel nuevo (10 × 3 = 30 al llegar al 3) |
+| 5 | **Comercio entre Facciones distintas**: un trueque que se cumple, a cada una de las dos, y **cada orden de mercado tomada** en una plaza de otra Facción (una vez por toma, a la que toma y a la dueña de la plaza; vale la del héroe en persona y la de una caravana con encargo) | `comercio` (2) |
+
+Lo que lo usa son **umbrales**, sin gastarlo:
+
+- **Alianzas activas a la vez:** `alianzas.base` (1) y **una más por cada `alianzas.unaMasCada` (100)** de prestigio: `tope = 1 + ⌊prestigio / 100⌋`. Se mira en **las dos** Facciones, contando las alianzas activas que ya tienen, **al proponer y al aceptar** una alianza (`diplomacia.tope_alianzas`; un rechazo no consume la propuesta). El vasallaje no cuenta. Antes de la tanda 69 no había tope.
+- **Estatuas** de la capital (`estatuas`: 200, 500 y 1.000): tantas estatuas como umbrales alcanzados, contando las hechas y las que están en obra (Economia_Construccion §6.4). Son decorativas.
+- **Maravilla** (`maravilla`, 2.000): el umbral de prestigio **sustituye a la Era** (`ordenEraMinimo` desaparece del catálogo, y con él `obra.era_insuficiente`); además sigue pidiendo el nivel 5 de la plaza.
 
 ### 3.6 Reputación
 
@@ -556,10 +577,10 @@ Distintas, las dos existen y **no hay entre ellas ninguna relación activa de ni
 
 ### 5.3 Alianza y vasallaje: propuesta y respuesta
 - **Proponer** (`proponerRelacionPendiente`): `exigirRelacionPosible` + no hay otra propuesta vigente del par. Condiciones de `exigirRelacionPosible`: par válido; las dos tienen **Rey**; **vasallaje:** ninguna de las
-  dos es ya vasalla de una tercera (basta con que lo sea cualquiera de las dos); **alianza:** `puedeProponerAlianza(A)` (reputación de A ≥ `REPUTACION.umbralBajoParaEmbajador`; la de B no se mira). Crea la propuesta
+  dos es ya vasalla de una tercera (basta con que lo sea cualquiera de las dos); **alianza:** `puedeProponerAlianza(A)` (reputación de A ≥ `REPUTACION.umbralBajoParaEmbajador`; la de B no se mira). **Una alianza pide además el tope de alianzas (tanda 69, §3.5b):** ni A ni B han de tener ya todas las alianzas activas que les deja su prestigio (`diplomacia.tope_alianzas`; el vasallaje no cuenta ni se topa). Crea la propuesta
   (`expiraEn = ahora + RELACION_PROPUESTA.caducidadDias` días); en vasallaje lleva `tributo {recurso (por defecto trigo), cantidadPorMinuto (por defecto 0)}`; sin validar la cantidad.
   La lista se **poda de caducadas al añadir**: no hay barrido en el tick.
-- **Responder:** debe estar vigente (si no existe o caducó, se rechaza con su código). **Rechazar:** la quita. **Aceptar:** vuelve a mirar `exigirRelacionPosible` y que **ninguna de las dos tenga una batalla
+- **Responder:** debe estar vigente (si no existe o caducó, se rechaza con su código). **Rechazar:** la quita. **Aceptar:** vuelve a mirar `exigirRelacionPosible`, **el tope de alianzas** (solo si es una alianza, §3.5b) y que **ninguna de las dos tenga una batalla
   abierta**; entonces nace la relación (`activa`, `creadoEn = ahora`) y se quita la propuesta.
 - **Retirar:** la autoridad de la que ofreció, mientras nadie contestó.
 
@@ -635,7 +656,7 @@ Vale para cualquier batalla cuyo defensor sea de la vasalla (plaza, caravana, y 
 - **Proponer** (`proponerFusion`): el Rey de A, que fija `nuevoNombre` y `nuevoReyId`. `exigirFusionPosible`: distintas; existen; las dos tienen Rey; `nuevoReyId` es el Rey de A o el de B; nombre no vacío tras recortar;
   ninguna es vasalla de una tercera. **El nombre se revisa como en `crearFaccion`:** no vacío y no usado por otra Facción (sin mirar mayúsculas); las dos que se disuelven no cuentan, así que C puede quedarse con el nombre de una. `propuestaPor = a.reyId`.
 - **Responder** (Rey de B): aceptar vuelve a mirar todo lo anterior, que `a.reyId` siga siendo `propuestaPor` y que no haya batalla abierta (como en la anexión, también un héroe de las dos incorporado: 5F-3).
-- **Nace C:** `id = faccion-fusion-{instante}-{A}-{B}`, `nombre`, `sigilo` de A, `reyId = nuevoReyId`, `embajadorId = null`, `experiencia = max`, `reputacion = max` de las dos, `nivel = calcularNivelFaccion`,
+- **Nace C:** `id = faccion-fusion-{instante}-{A}-{B}`, `nombre`, `sigilo` de A, `reyId = nuevoReyId`, `embajadorId = null`, `experiencia = max`, `reputacion = max` y `prestigio = max` de las dos (tanda 69), `nivel = calcularNivelFaccion`,
   `ciudadanosIds` vacío (luego se llenan), tecnología = **unión** (aparecidas y adoptadas; reveladas menos las ya aparecidas). **Capitales:** la marca de capital de cada plaza sale; solo la que tenía designada el Rey
   electo pasa a `C` (`capitalDeFaccionId = C`), tal cual, sin mirar si sigue vigente (5A-5: `capitalDesignada` ya ignora una marca sin Palacio activo); `capitalDesignadaEn` de C queda sin definir. Después `trasladarFaccion(A → C)` y `trasladarFaccion(B → C)`. El Rey que no lo es de C queda como ciudadano.
 
@@ -710,6 +731,7 @@ siguen, residen en campamentos y puede volver a fundar (al fundar, `derrotadaPor
 | Evento | Quién lo emite |
 |---|---|
 | `faccion.creada`, `faccion.solicitud_ingreso`, `faccion.ciudadania_union`, `faccion.solicitud_denegada`, `faccion.abandonada`, `faccion.nivel_subio`, `faccion.capital_designada`, `faccion.admision_en_ataques` | comandos y tick |
+| `faccion.prestigio` `{ faccion, ganado, total, motivo }` (`motivo`: 1 victoria, 2 conquista, 3 fundación, 4 ascenso, 5 comercio) | combates, batallas, conquistas, fundaciones, ascensos, trueques y órdenes de mercado (§3.5b) |
 | `cargo.rey_asignado`, `cargo.embajador_asignado`, `cargo.local_asignado` | comandos |
 | `ciudadania.residencia_cambiada`, `…_dejada`, `…_en_campamento` | comandos |
 | `diplomacia.relacion_propuesta`, `_aceptada`, `_rechazada`, `_retirada`, `relacion_rota`, `guerra_declarada`, `paz_propuesta`, `paz_firmada`, `rebelion_vasallo`, `vasallo_liberado`, `vasallo_conquistado`, `tributo_pagado` | comandos y tick |
@@ -735,6 +757,7 @@ La crónica de los Aedas canta la anexión, la fusión, la liberación de vasall
 | Sigilo: catálogo, duplicado exacto, `sigiloLibre` determinista | `sigilo.test.ts` |
 | Puerta: grupos, capas (residente > veto > grupo), propia Facción nunca bloqueada | `puerta.test.ts` |
 | Proponer y responder alianza/vasallaje, una sola pendiente, caducidad, revalidación | `comandosDiplomacia.test.ts` |
+| El prestigio solo sube y se gana por cada hecho; el tope de alianzas mira a las dos Facciones al proponer y al aceptar | `crates/politica/src/{faccion,propuestas}.rs`, `crates/nucleo/tests/prestigio.rs` |
 | Eventos de diplomacia (guerra, paz, rebelión, tributo, liberación) | `eventosDominioDiplomacia.test.ts` |
 | Anexión: propuesta, respuesta, traslado, relaciones, desarme del señor | `comandosAnexion.test.ts` |
 | Fusión: propuesta, respuesta, qué hereda C, capital, relaciones | `comandosFusion.test.ts` |
