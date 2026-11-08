@@ -102,14 +102,14 @@ La taberna de la plaza **vende información**, como la Mirada y los informes (en
 
 Con esa información comprada, **desde el Mercado** de la plaza se puede tomar a distancia cualquiera de esas órdenes, **de compra y de venta**: la toma lanza una caravana libre de la plaza con un encargo a esa plaza (Comercio §5.8.8), y **la mercancía viaja**; el oro, no (§6). La orden no se reserva; se liquida al llegar con lo que quede.
 
-- **Abierto 7.1:** qué es «neutral»: (a) Facciones sin alianza, vasallaje ni guerra con la del comprador; (b) también las aliadas y vasallas, que hoy tampoco enseñan sus órdenes. Recomendación: (b) sin las enemigas, porque una caravana no comercia con quien está en guerra.
-- **Abierto 7.2:** precio, enfriamiento y caducidad (propuesta: como el Informe de plaza, y que caduque a los `plazoOrdenMinutos`, 200 min) y quién la compra (propuesta: Rey, Embajador o Gobernador, como hoy).
+- **Qué plazas entran** (autor, 2026-11-08): **todas menos las de Facciones enemigas** (en guerra), también las aliadas y vasallas. Las plazas aliadas y vasallas ya se ven por la visión compartida (Niebla §5), pero sus órdenes no: hoy las órdenes de una plaza ajena solo llegan con el héroe dentro o con una caravana propia esperando en ella (`proyeccion/vista.rs`, `ordenes_activas`).
+- **Precio, enfriamiento y caducidad** (autor, 2026-11-08): como el Informe de plaza; la información caduca a los `plazoOrdenMinutos` (200 min). La compran el Rey, el Embajador o el Gobernador.
 
 ## 8. Mercenarios de la región en la taberna
 
 La taberna de la plaza enseña el **tablón de mercenarios** de los campamentos de su región (los bots ofrecidos, con ficha, tropa y tarifas) y permite **contratarlos** desde allí, sin ir en persona: paga el almacén de la plaza (oro) o el héroe que firma (monedas, §5). El mercenario contratado se pone en camino solo.
 
-- **Abierto 8.1:** ver el tablón ¿es gratis o es información de pago como §7? Recomendación: gratis, porque en el campamento el tablón es público.
+- **Ver el tablón es gratis** (autor, 2026-11-08), como en el campamento.
 
 ## 9. Bienes por clase de población
 
@@ -123,7 +123,7 @@ Los bienes de comida nuevos **alimentan** y además dan un **modificador de crec
 | Queso | artesanos | ×1,5 (placeholder) | 0,02 |
 | Vino | nobleza | ×1,5 (placeholder) | 0,01 |
 | Aceite | nobleza | ×1,5 (placeholder) | 0,01 |
-| Leche | **Abierto 9.2** | **Abierto 9.2** | — |
+| Leche | nadie: solo es materia prima de la quesera (autor, 2026-11-08) | — | — |
 
 **El consumo mezclado, cada minuto y en cada plaza** (propuesta del estudio sobre la decisión del autor):
 1. Cada clase tiene su **necesidad de comida**, la de hoy (`consumoComidaPorHabitante`, 0,1 por habitante y minuto, por las políticas).
@@ -135,15 +135,15 @@ Los bienes de comida nuevos **alimentan** y además dan un **modificador de crec
 
 Ejemplo: 400 pesants necesitan 40 por minuto y quieren 16 de pan y 8 de carne. Con solo 8 de pan en el almacén: pan ×1,5, carne ×1,2 y 24 de trigo; crecen ×1,8.
 
-- **Abierto 9.2: la leche.** Qué clase la consume y qué modificador da; si no, solo es materia prima de la quesera.
-- **Abierto 9.3: la guarnición.** No crece, así que los bienes no le dan nada. Propuesta: come solo trigo y carne, para no quitarle a la población el pan, el queso, el vino ni el aceite.
+- **La leche** no se consume: solo es materia prima de la quesera (autor, 2026-11-08).
+- **La guarnición** come solo **trigo y carne** (autor, 2026-11-08): no crece, así que los bienes no le dan nada, y así no le quita a la población el pan, el queso, el vino ni el aceite.
 
 ## 10. Ciclo del pan
 
 - **Molino:** trigo → **harina**. Admite **un buey** asignado, que se compra como el de una caravana (12 de oro; autor, 2026-11-08) y se queda allí; dobla su producción.
 - **Horno:** harina → **pan**.
 - Los dos desde el nivel 1 de la plaza; harina y pan se comercian como el resto. El pan lo consumen los pesants (§9).
-- **Abierto 10.1: tecnologías.** Hoy cada edificio pide una tecnología de la Facción (Economía §6.4). Recomendación: los edificios nuevos (molino, horno, quesera, prensa, el del vino) piden **solo el nivel de la plaza**, sin tecnología, para no tocar el árbol en esta tanda.
+- **Sin tecnología** (autor, 2026-11-08): los edificios nuevos (molino, horno, quesera, prensa y bodega) piden **solo el nivel de la plaza**; el árbol de tecnologías no cambia.
 
 ## 11. Carne, leche y queso
 
@@ -160,8 +160,8 @@ Retoma la idea 53 de `Ideas a diseñar.md`.
 - **Aldeas de un solo cultivo:** al marcar la aldea se elige su cultivo (trigo, vid u oliva) y no cambia; todas sus granjas son de ese cultivo y su sitio mira la fertilidad de ese cultivo. Vid desde el nivel 3 de la plaza madre; oliva desde el 4. Los corrales, solo en las aldeas de trigo. La Granja de la ciudad sigue siendo de trigo.
 - Las granjas de vid dan **uva**, y las de oliva, **aceituna**.
 - **Prensa** (autor): aceituna → **aceite**.
-- **Edificio del vino**, uva → **vino**. **Abierto 12.1: el nombre.** Alternativas: **Lagar** (la pila de piedra donde se pisa la uva; los hay de la Edad del Bronce en Creta), **Bodega** (donde fermenta y se guarda en tinajas), **Pisadero** (el sitio donde se pisa) o **Casa del vino**. Recomendación: Lagar.
-- Vino y aceite los consume la nobleza (§9). Prensa y edificio del vino, desde el nivel de su cultivo (3 y 4).
+- **Bodega** (autor, 2026-11-08): uva → **vino**.
+- Vino y aceite los consume la nobleza (§9). Bodega y prensa, desde el nivel de su cultivo (3 y 4).
 
 ## 13. Prestigio
 
@@ -171,7 +171,7 @@ Retoma la idea 53 de `Ideas a diseñar.md`.
   - **Alianzas abiertas** a la vez: 1, y una más cada 100 de prestigio (hoy no hay tope).
   - **Estatuas** en la capital: **decorativas**, desbloqueadas con prestigio (200, 500 y 1.000).
   - **Maravilla** en la plaza de nivel 5: ya pide el nivel 5 (`requisitoNivelAsentamientoConstruccion`); su `ordenEraMinimo` 5 (la Era V, que no existe) se sustituye por un umbral de prestigio (2.000).
-- **Abierto 13.1:** las cifras.
+- **Cifras aprobadas por el autor (2026-11-08)** como punto de partida; se calibran con el batch.
 
 ## 14. Puertas de la muralla en línea recta
 
