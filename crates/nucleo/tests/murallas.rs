@@ -12,7 +12,7 @@ use mundo::{Mundo, OpcionesValidacion};
 use nucleo::{rechazos, Ajustes, Arranque, Carga, Comando, ErrorPresupuesto, Estado, Nucleo, Peticion, Presupuesto, Reglas, ReglasEconomia, Resultado, Respuesta};
 use rutas::Rutas;
 use std::sync::{Arc, OnceLock};
-use trazado::{CeldaMuro, ClaseCelda};
+use trazado::{Celda, CeldaMuro, Ciudad, ClaseCelda};
 
 const MIN: i64 = MS_POR_MINUTO;
 const HORA: i64 = 60 * MIN;
@@ -279,6 +279,16 @@ fn el_presupuesto_ensena_el_trazo_y_su_coste_sin_tocar_nada() {
 
 // ───────────────────────────── Comprometer y levantar ─────────────────────────────
 
+/// Las celdas de calle y camino de la ciudad.
+fn red_de(c: &Ciudad) -> Vec<Celda> {
+    c.calles().into_iter().chain(c.caminos()).collect()
+}
+
+/// ¿Es una celda del anillo que no cae en la red de antes (ni puerta ni cruce cortado)?
+fn fuera_de_la_red(x: &CeldaMuro, red: &[Celda]) -> bool {
+    x.clase != ClaseCelda::Puerta && !red.contains(&x.celda)
+}
+
 #[test]
 fn comprometer_es_gratis_congela_el_trazo_ocupa_suelo_y_levanta_la_primera_celda_en_la_orden() {
     let m = con_mundo!();
@@ -288,7 +298,9 @@ fn comprometer_es_gratis_congela_el_trazo_ocupa_suelo_y_levanta_la_primera_celda
     let a = e.a;
     let p = e.presupuesto(1).unwrap();
     let c = e.n.ciudad(a).unwrap();
-    assert!(p.trazo.celdas.iter().filter(|c| c.clase != ClaseCelda::Puerta).all(|x| !c.esta_ocupada(x.celda)), "antes de comprometer el suelo del anillo está libre");
+    // El anillo solo pisa la red en sus puertas y en los cruces que corta (Cal-6, y el enderezado de las puertas del 2026-11-08): fuera de ellos, el suelo está libre.
+    let red = red_de(c);
+    assert!(p.trazo.celdas.iter().filter(|x| fuera_de_la_red(x, &red)).all(|x| !c.esta_ocupada(x.celda)), "antes de comprometer el suelo del anillo está libre");
     let t0 = e.n.ahora();
     let antes = [e.almacen(Recurso::Madera), e.almacen(Recurso::Piedra)];
     e.las_citas_cuadran();
@@ -606,6 +618,7 @@ fn abandonar_borra_un_recinto_que_nunca_se_cerro_sin_devolver_nada_y_libera_el_s
     // Desde fuera solo se ve si tiene muralla, sin detalle; un recinto recién comprometido ya cuenta (2026-11-07).
     let de_fuera = |e: &Escenario| nucleo::proyeccion::vista::plaza_avistada(&e.n, a);
     assert!(!de_fuera(&e).tiene_muralla);
+    let red = red_de(e.n.ciudad(a).unwrap());
     e.comprometer(1);
     assert!(de_fuera(&e).tiene_muralla && de_fuera(&e).recintos.is_empty(), "sí, y sin nivel, avance ni celdas");
     let celdas = e.recintos()[0].celdas.clone();
@@ -622,7 +635,7 @@ fn abandonar_borra_un_recinto_que_nunca_se_cerro_sin_devolver_nada_y_libera_el_s
     assert_eq!((e.almacen(Recurso::Madera), e.almacen(Recurso::Piedra)), (madera, piedra), "sin devolución");
     let c = e.n.ciudad(a).unwrap();
     assert!(c.recintos().is_empty(), "la ciudad deja de tener el anillo");
-    assert!(celdas.iter().filter(|c| c.clase != ClaseCelda::Puerta).all(|x| !c.esta_ocupada(x.celda)), "el suelo queda libre");
+    assert!(celdas.iter().filter(|x| fuera_de_la_red(x, &red)).all(|x| !c.esta_ocupada(x.celda)), "el suelo queda libre");
     assert_eq!(hechos(&e.n, "construccion.recinto_abandonado").len(), 1);
     assert_eq!(recintos::upkeep(&e.muralla(), e.recintos()), vec![]);
     // La cita que quedaba en la cola no encuentra nada que cumplir.

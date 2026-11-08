@@ -252,6 +252,7 @@ Eventos de la obra: `construccion.recinto_completado` y `construccion.recinto_me
   "puertasMaximas": 4,
   "puertasNormales": [2, 3],
   "anchoMaximoPuerta": 2,
+  "desplazamientoMaximoPuerta": 3,
   "arrabalMinimo": 6,
   "minutosPorCelda": {
     "1": 15,
