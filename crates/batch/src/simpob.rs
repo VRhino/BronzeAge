@@ -342,10 +342,14 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
             }
         }
     }
-    if let Some(p) = a.pueblos.iter_mut().find(|p| p.tipo == Tipo::Cantera) {
-        let sacado = p.almacen.quitar(Recurso::Piedra, p.almacen.cantidad(Recurso::Piedra));
-        a.almacen.agregar(Recurso::Piedra, sacado);
-        a.registrar_acarreo(t, Recurso::Piedra, sacado);
+    // El acarreo de los dos pueblos vuelca cada minuto en la plaza lo que sacaron: la piedra del de cantera y el trigo de la aldea, que es el trigo de más de la
+    // ciudad (Doc 4.2: desde el 2026-11-02 la ciudad no hace otra Granja).
+    for (id, recurso) in [(ID_CANTERA, Recurso::Piedra), (ID_ALDEA, Recurso::Trigo)] {
+        if let Some(p) = a.pueblos.iter_mut().find(|p| p.id == id) {
+            let sacado = p.almacen.quitar(recurso, p.almacen.cantidad(recurso));
+            a.almacen.agregar(recurso, sacado);
+            a.registrar_acarreo(t, recurso, sacado);
+        }
     }
 
     for e in ev {
