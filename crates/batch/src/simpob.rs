@@ -72,7 +72,8 @@ pub struct Registro {
     pub degradacion_max: u32,
     pub colapsos: u32,
     pub pesants_max: i64,
-    pub pesants_200: Option<i64>,
+    /// Minuto en que los pesants llegaron por primera vez al requisito del nivel 2 (`NIVEL_ASENTAMIENTO`).
+    pub pesants_nivel2: Option<i64>,
     /// Pesants al final de cada día, del 0 al último.
     pub pesants_dia: Vec<i64>,
     pub viviendas_dia: Vec<u32>,
@@ -378,8 +379,8 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
     reg.medidor_min = reg.medidor_min.min(a.medidor.valor);
     reg.degradacion_max = reg.degradacion_max.max(a.nivel.saturating_sub(a.medidor.nivel_actual));
     reg.pesants_max = reg.pesants_max.max(a.poblacion.pesants);
-    if a.poblacion.pesants >= 200 {
-        reg.pesants_200.get_or_insert(minuto);
+    if a.poblacion.pesants >= reglas.nivel.requisitos[&2].pesants {
+        reg.pesants_nivel2.get_or_insert(minuto);
     }
     // Fuera de [0, capacidad], o con una fracción (C3b: el almacén guarda unidades enteras y un resto oculto en (−1000, 1000)).
     let (cantidad, _, resto) = a.almacen.partes();

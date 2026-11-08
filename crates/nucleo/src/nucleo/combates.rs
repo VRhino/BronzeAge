@@ -26,6 +26,7 @@
 //! distintas hace falta guerra; `declara_guerra` la declara si falta, pero solo cuando todo lo demás ya vale (las relaciones son un andamiaje de
 //! administración hasta el sistema político, sin arrastre). Una columna sin Facción ni exige ni declara guerra: no hay a quién.
 
+use super::bandidos::datos_del_botin;
 use super::contratos::Desenlace;
 use super::persecuciones::Fin;
 use super::*;
@@ -43,7 +44,6 @@ use combate::pueblo as reglas_pueblo;
 use combate::resolucion::{resolver_combate, Baja, Bando, Informe, Lado, SIN_DUENO};
 use combate::seleccion::{seleccionar, Candidato};
 use militar::escuadra::{Contenedor, Escuadra};
-use asentamiento::Recurso;
 use militar::presencia::Ubicacion;
 use militar::{sumar, total, Carga as Mercancia};
 
@@ -562,7 +562,7 @@ impl Nucleo {
 
     // ───────────────────────────── Un campamento de bandidos ─────────────────────────────
 
-    /// Combate §7.2. No exige guerra. Una tirada contra el poder de su nivel: si gana, el campamento cae (oro por cada héroe que combatió, a su carro) y se
+    /// Combate §7.2. No exige guerra. Una tirada contra el poder de su nivel: si gana, el campamento cae (el botín de cada héroe que combatió, a su carro) y se
     /// agenda su reaparición; si no, todos los héroes de la columna quedan heridos y la columna pierde la mitad del carro (nadie se la queda).
     fn atacar_campamento(&mut self, t: Instante, heroe: u64, id: u64, x: u64) -> Result<(), Respuesta> {
         let v = self.estado.version;
@@ -583,14 +583,11 @@ impl Nucleo {
         let r = combate::bandidos::resolver_campamento(&cr, Bando { escuadras: &mut atac.escuadras, heroes: &atac.heroes }, nivel, &mut self.estado.rng).expect("la columna lleva al menos un héroe sano");
         self.volcar_escuadras(&atac.escuadras);
 
-        let (mut oro, mut heridos, mut perdido) = (Mercancia::new(), 0, Mercancia::new());
+        let (mut botin, mut monedas, mut heridos, mut perdido) = (Mercancia::new(), 0, 0, Mercancia::new());
         if r.destruido {
-            for &h in &atac.heroes {
-                let ganado = self.oro_de_bandidos_para(h, origen, nivel, t);
-                sumar(&mut oro, Recurso::Oro, ganado);
-            }
-            let cogido = self.cargar_botin_en(id, &oro);
-            oro = cogido;
+            let (recursos, ganadas) = self.botin_de_los_heroes(atac.heroes.iter().copied(), origen, nivel, t);
+            botin = self.cargar_botin_en(id, &recursos);
+            monedas = ganadas;
             self.destruir_bandidos(x, t);
             let faccion = self.estado.ejercitos[&id].columna.faccion;
             self.experiencia_de_bandidos(t, faccion);
@@ -605,7 +602,7 @@ impl Nucleo {
             vec![id],
             vec![],
             punto,
-            vec![("campamento", x as i64), ("nivel", nivel as i64), ("poderAtacante", r.poder_atacante), ("poderCampamento", r.poder_campamento), ("bajasAtacante", caidos(&r.bajas)), ("oro", total(&oro)), ("heridos", heridos as i64), ("carroPerdido", total(&perdido))],
+            vec![("campamento", x as i64), ("nivel", nivel as i64), ("poderAtacante", r.poder_atacante), ("poderCampamento", r.poder_campamento), ("bajasAtacante", caidos(&r.bajas)), ("heridos", heridos as i64), ("carroPerdido", total(&perdido))].into_iter().chain(datos_del_botin(&botin, monedas)).collect(),
         );
         if r.destruido {
             self.contar(t, tecnologia::contador::Delta::uno(tecnologia::Contador::BandidosCampamentosDestruidos));

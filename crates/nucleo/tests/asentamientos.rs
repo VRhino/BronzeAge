@@ -146,8 +146,13 @@ fn una_plaza_vive_sola_construye_crece_y_sube_al_nivel_2() {
     let p = sitio(&n, &m.0, 0, 50_000, 0, 1, true);
     let fundada = 90_123; // una fase que no es múltiplo de minuto: los pasos caen en `fundado_en + k·60 s`
     let id = fundar_en(&mut n, fundada, "a", 1, p);
+    let mut pesants_al_pedir = None;
     for hora in 2..=12 * 24 {
         hora_de_jugador(&mut n, id, hora);
+        let eco = n.economia(id).expect("la plaza sigue viva");
+        if pesants_al_pedir.is_none() && eco.ascenso.is_some() {
+            pesants_al_pedir = Some(eco.poblacion.pesants);
+        }
         if hora == 2 {
             // La piedra del mantenimiento del nivel 2 sale de un pueblo de cantera (2026-11-01): el jugador lo levanta enseguida.
             comun::levantar_cantera(&mut n, "ana", id).expect("hay piedra en la zona");
@@ -164,6 +169,10 @@ fn una_plaza_vive_sola_construye_crece_y_sube_al_nivel_2() {
     assert!(de_tipo(Tipo::Lenera) >= 1 && de_tipo(Tipo::Cantera) == 0, "construye su Leñera sola, y ninguna Cantera: {completados:?}");
     assert!(eventos(&n, "asentamiento.nivel_subio").iter().any(|(_, _, d)| d.contains(&("nivel", 2))), "sube al nivel 2 pidiéndolo");
     assert_eq!((eco.nivel, eco.nivel_actual()), (2, 2));
+    // Tanda 69: el nivel 2 pide el doble de pesants que antes (400, no 200); el gate de 399 frente a 400 lo fija `asentamiento` (`nivel.rs`).
+    let pedidos = n.estado().reglas.economia.datos.nivel.requisitos[&2].pesants;
+    assert_eq!(pedidos, 400);
+    assert!(pesants_al_pedir.is_some_and(|p| p >= pedidos), "se pidió la subida con {pesants_al_pedir:?} pesants");
     assert!(eco.poblacion.pesants > 20, "la población crece: {}", eco.poblacion.pesants);
     assert!(eco.almacen.cantidad(Recurso::Madera) >= 0);
     // Los pasos de minuto caen en `fundado_en + k·60 s`, mirando o no; lo que acaba no espera al paso: cae en el instante exacto que dijo al empezar.

@@ -45,7 +45,7 @@ use super::combates::caidos;
 use asentamiento::Recurso;
 use militar::Carga as Mercancia;
 
-/// A dónde va el oro de unos bandidos vencidos al defenderse de ellos.
+/// A dónde va el botín de unos bandidos vencidos al defenderse de ellos.
 #[derive(Clone, Copy)]
 pub(super) enum Botin {
     Columna(u64),
@@ -54,6 +54,12 @@ pub(super) enum Botin {
 use combate::caravana::{Defensa, Zona};
 use militar::escuadra::Escuadra;
 use std::collections::BTreeSet;
+
+/// Lo cobrado de un campamento destruido, tal como lo llevan sus hechos: madera, piedra y trigo (lo que cupo en el carro) y las monedas.
+pub(super) fn datos_del_botin(cogido: &Mercancia, monedas: i64) -> [(&'static str, i64); 4] {
+    let de = |r| cogido.get(&r).copied().unwrap_or(0);
+    [("madera", de(Recurso::Madera)), ("piedra", de(Recurso::Piedra)), ("trigo", de(Recurso::Trigo)), ("monedas", monedas)]
+}
 
 impl Nucleo {
     // ───────────────────────────── Consultas ─────────────────────────────
@@ -183,17 +189,33 @@ impl Nucleo {
         matches!(h.heroe.residencia, Some(militar::heroe::Residencia::Campamento(_))) && h.faccion.is_none_or(|f| self.plazas_de(f).next().is_none())
     }
 
-    /// El oro que gana el héroe `heroe` al destruir un campamento de ese `origen` y ese `nivel`, con los rendimientos decrecientes de su ventana. **El oro de
-    /// los bandidos del anillo de un campamento de mercenarios solo lo cobran los héroes sin plaza** (Cal-5, 2026-10-24: el anillo existe para el jugador
-    /// nuevo); los demás ganan solo experiencia, y esa destrucción no cuenta en su ventana. Los de plaza, vetas y administración pagan a todos.
-    pub(super) fn oro_de_bandidos_para(&mut self, heroe: u64, origen: OrigenBandidos, nivel: u8, t: Instante) -> Mil {
+    /// El botín que gana el héroe `heroe` al destruir un campamento de ese `origen` y ese `nivel`, con los rendimientos decrecientes de su ventana: devuelve
+    /// los recursos (para el carro) y las monedas, que ya suma a las del héroe. **El botín de los bandidos del anillo de un campamento de mercenarios solo lo
+    /// cobran los héroes sin plaza** (Cal-5, 2026-10-24: el anillo existe para el jugador nuevo); los demás ganan solo experiencia, y esa destrucción no
+    /// cuenta en su ventana. Los de plaza, vetas y administración pagan a todos.
+    pub(super) fn botin_de_bandidos_para(&mut self, heroe: u64, origen: OrigenBandidos, nivel: u8, t: Instante) -> (Mercancia, i64) {
         if matches!(origen, OrigenBandidos::Anillo(_)) && !self.heroe(heroe).is_some_and(|h| self.sin_plaza(h)) {
-            return 0;
+            return (Mercancia::new(), 0);
         }
         let mut recientes = self.estado.combate.destruidos.get(&heroe).cloned().unwrap_or_default();
-        let ganado = combate::bandidos::botin_de_bandidos(&self.estado.reglas.economia.combate, &mut recientes, nivel, t);
+        let (recursos, monedas) = combate::bandidos::botin_de_bandidos(&self.estado.reglas.economia.combate, &mut recientes, nivel, t);
         self.estado.combate.destruidos.insert(heroe, recientes);
-        ganado
+        if self.heroe(heroe).is_some() {
+            let h = &mut self.heroe_mut(heroe).heroe;
+            h.monedas = h.monedas.saturating_add(monedas);
+        }
+        (recursos, monedas)
+    }
+
+    /// El botín de los héroes `heroes` al destruir un campamento: todos los recursos juntos (para el carro) y el total de monedas (ya en cada héroe).
+    pub(super) fn botin_de_los_heroes(&mut self, heroes: impl IntoIterator<Item = u64>, origen: OrigenBandidos, nivel: u8, t: Instante) -> (Mercancia, i64) {
+        let (mut recursos, mut monedas) = (Mercancia::new(), 0);
+        for h in heroes {
+            let (r, m) = self.botin_de_bandidos_para(h, origen, nivel, t);
+            r.into_iter().for_each(|(recurso, n)| militar::sumar(&mut recursos, recurso, n));
+            monedas += m;
+        }
+        (recursos, monedas)
     }
 
     /// Los campamentos que tiene ahora el anillo de `c`.
@@ -417,18 +439,14 @@ impl Nucleo {
         }
     }
 
-    /// Un campamento que ataca y pierde cae (2026-11-06, pedido del autor), con el premio de haberlo destruido: el oro de cada héroe que lo venció (a la columna que
+    /// Un campamento que ataca y pierde cae (2026-11-06, pedido del autor), con el premio de haberlo destruido: el botín de cada héroe que lo venció (a la columna que
     /// defendía o a la caravana escoltada, lo que quepa), la experiencia de bandidos de su Facción, el contador de campamentos destruidos y las misiones de bandidos.
     pub(super) fn bandidos_vencidos(&mut self, t: Instante, idc: u64, heroes: &[u64], botin: Botin, faccion: Option<u32>, donde: Punto) {
         let Some((nivel, origen)) = self.estado.combate.bandidos.get(&idc).map(|b| (b.nivel, b.origen)) else { return };
-        let mut oro = Mercancia::new();
-        for &h in heroes {
-            let ganado = self.oro_de_bandidos_para(h, origen, nivel, t);
-            militar::sumar(&mut oro, Recurso::Oro, ganado);
-        }
+        let (recursos, monedas) = self.botin_de_los_heroes(heroes.iter().copied(), origen, nivel, t);
         let cogido = match botin {
-            Botin::Columna(c) => self.cargar_botin_en(c, &oro),
-            Botin::Caravana(k) => self.cargar_botin_en_caravana(k, &oro),
+            Botin::Columna(c) => self.cargar_botin_en(c, &recursos),
+            Botin::Caravana(k) => self.cargar_botin_en_caravana(k, &recursos),
         };
         self.destruir_bandidos(idc, t);
         self.experiencia_de_bandidos(t, faccion);
@@ -441,10 +459,10 @@ impl Nucleo {
             Botin::Columna(c) => vec![c],
             Botin::Caravana(_) => vec![],
         };
-        self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed("bandidos.campamento_vencido"), en: t, ejercitos, asentamientos: vec![], punto: Some(donde), datos: vec![("campamento", idc as i64), ("nivel", nivel as i64), ("oro", militar::total(&cogido))], ..Default::default() });
+        self.tr.emitir(&self.estado, EventoNucleo { codigo: Cow::Borrowed("bandidos.campamento_vencido"), en: t, ejercitos, asentamientos: vec![], punto: Some(donde), datos: [("campamento", idc as i64), ("nivel", nivel as i64)].into_iter().chain(datos_del_botin(&cogido, monedas)).collect(), ..Default::default() });
     }
 
-    /// El oro de unos bandidos vencidos en la caravana que los venció con su escolta: lo que quepa en su capacidad.
+    /// El botín de unos bandidos vencidos en la caravana que los venció con su escolta: lo que quepa en su capacidad.
     fn cargar_botin_en_caravana(&mut self, k: u64, botin: &Mercancia) -> Mercancia {
         let flota = self.estado.reglas.economia.comercio.flota.clone();
         let Some(i) = self.estado.comercio.posicion_caravana(k) else { return Mercancia::new() };
@@ -481,7 +499,7 @@ impl Nucleo {
     }
 
     /// El campamento `idc` acosa con una tirada con números a la caravana suelta `idk`, que se defiende con su escolta cedida (que sufre bajas) o con los carreteros. Si la escolta
-    /// gana, el campamento cae (2026-11-06, pedido del autor): su oro, para los héroes de la escolta, va en la caravana. Contra los carreteros solo se salva la caravana.
+    /// gana, el campamento cae (2026-11-06, pedido del autor): su botín, para los héroes de la escolta, va en la caravana. Contra los carreteros solo se salva la caravana.
     fn acosar(&mut self, idc: u64, idk: u64, t: Instante) {
         let (Some(b), Some(k)) = (self.estado.combate.bandidos.get(&idc), self.estado.comercio.caravana(idk)) else { return };
         let (nivel, origen, estado) = (b.nivel, k.origen as u64, k.estado);

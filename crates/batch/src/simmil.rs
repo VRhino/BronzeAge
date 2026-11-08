@@ -240,8 +240,8 @@ pub struct Medidas {
     pub asaltos_resistidos: [u64; 2],
     pub carros_perdidos_adjuntas: i64,
     pub saqueado_de_pueblos: i64,
-    /// Oro de bandidos que cobró cada héroe que combatió (milésimas).
-    pub oro_por_heroe: Vec<i64>,
+    /// Monedas de bandidos que cobró cada héroe que combatió.
+    pub monedas_por_heroe: Vec<i64>,
     /// Conquistas: (instante, plaza, facción vieja, facción nueva, muralla dañada).
     pub conquistas: Vec<(Instante, u64, u32, u32, bool)>,
     pub ruinas: Vec<(Instante, u64)>,
@@ -1626,7 +1626,7 @@ impl Sim<'_> {
             "combate.caravana_resiste" => m.asaltos_resistidos[h.dato("aguante") as usize] += 1,
             "combate.campamento_destruido" => {
                 let heroes = self.n.ejercito(c).map_or(1, |e| e.columna.participantes.len()).clamp(1, 5) as i64;
-                m.oro_por_heroe.extend(std::iter::repeat_n(h.dato("oro") / heroes, heroes as usize));
+                m.monedas_por_heroe.extend(std::iter::repeat_n(h.dato("monedas") / heroes, heroes as usize));
             }
             "combate.pueblo_saqueado" => m.saqueado_de_pueblos += h.dato("saqueado"),
             "combate.asedio_conquista" => {

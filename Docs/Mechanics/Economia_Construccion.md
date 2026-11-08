@@ -1975,7 +1975,7 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
   "nivelMaximo": 5,
   "requisitos": {
     "2": {
-      "pesants": 200,
+      "pesants": 400,
       "artesanos": 0,
       "edificios": [
         "lenera",
@@ -1987,8 +1987,8 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
       "pueblosActivos": 1
     },
     "3": {
-      "pesants": 500,
-      "artesanos": 400,
+      "pesants": 1000,
+      "artesanos": 800,
       "edificios": [
         "armeria",
         "curtiduria",
@@ -1998,16 +1998,16 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
       ]
     },
     "4": {
-      "pesants": 1000,
-      "artesanos": 800,
+      "pesants": 2000,
+      "artesanos": 1600,
       "edificios": [
         "salaConsejo"
       ],
       "recintoCompletoNivelMinimo": 2
     },
     "5": {
-      "pesants": 2000,
-      "artesanos": 1600,
+      "pesants": 4000,
+      "artesanos": 3200,
       "edificios": [
         "palacio"
       ],
@@ -2017,11 +2017,11 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
     }
   },
   "techoPoblacion": {
-    "1": 300,
-    "2": 1500,
-    "3": 6000,
-    "4": 12000,
-    "5": 20000
+    "1": 600,
+    "2": 3000,
+    "3": 12000,
+    "4": 24000,
+    "5": 40000
   }
 }
 ```

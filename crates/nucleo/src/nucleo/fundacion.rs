@@ -52,14 +52,16 @@ impl Reglas {
         c
     }
 
-    /// `costoRefundacion` (§3): cada recurso del coste normal por `porcentajeCoste`, **redondeado hacia arriba** a unidades, sin los que quedan en 0. Hoy 64, 8, 40 y 40.
+    /// `costoRefundacion` (§3): cada recurso del coste normal por `porcentajeCoste`, **redondeado hacia arriba** a unidades, sin los que quedan en 0 y sin los que la refundación no pide
+    /// (`excluir`: el oro, tanda 69). Hoy 64 de madera, 8 de piedra y 40 de trigo.
     pub fn costo_refundacion(&self) -> Mercancia {
-        let pct = self.economia.comercio.mercenarios.porcentaje_refundacion as i128;
+        let mercenarios = &self.economia.comercio.mercenarios;
+        let pct = mercenarios.porcentaje_refundacion as i128;
         let por_unidad = UNO as i128 * UNIDAD as i128;
         self.costo_caravana_fundacion()
             .into_iter()
             .map(|(r, n)| (r, ((n as i128 * pct + por_unidad - 1) / por_unidad) as Mil * UNIDAD))
-            .filter(|&(_, n)| n > 0)
+            .filter(|&(r, n)| n > 0 && !mercenarios.excluidos_refundacion.contains(&r))
             .collect()
     }
 }

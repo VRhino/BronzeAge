@@ -48,7 +48,7 @@ fn el_escenario_pequeno_produce_todas_las_metricas() {
     }
     let ids: std::collections::BTreeSet<_> = i.metricas.iter().map(|m| &m.id).collect();
     assert_eq!(ids.len(), i.metricas.len(), "ids repetidos");
-    for id in ["nivel2_pct", "nivel2_mediana_dias", "ruinas_pct", "hambre_pct", "muertes_totales", "primera_lenera_horas", "sin_lenera_pct", "sin_cantera_pct", "pesants_fin", "pesants_200_pct", "viviendas_fin", "edificios_fin", "deficit_trigo_pct", "nutricion_min", "medidor_bajo50_pct", "pared_total", "pasos", "us_por_paso", "determinismo", "invariantes", "invariantes_ciudad", "ciudad_sin_sitio_vivienda_pct", "ciudad_sin_sitio_almacen_pct", "ciudad_sin_sitio_granero_pct", "ciudad_sin_sitio_lenera_pct", "piezas_a", "piezas_fin", "anclas_plazas_pct", "ancla_primera_dia", "mejora_espera_pct", "mejora_espera_max_h", "cuadrilla_retenida_24h", "radio_ciudad_medio", "radio_tope_pct", "puestos_mercado_total"] {
+    for id in ["nivel2_pct", "nivel2_mediana_dias", "ruinas_pct", "hambre_pct", "muertes_totales", "primera_lenera_horas", "sin_lenera_pct", "sin_cantera_pct", "pesants_fin", "pesants_nivel2_pct", "viviendas_fin", "edificios_fin", "deficit_trigo_pct", "nutricion_min", "medidor_bajo50_pct", "pared_total", "pasos", "us_por_paso", "determinismo", "invariantes", "invariantes_ciudad", "ciudad_sin_sitio_vivienda_pct", "ciudad_sin_sitio_almacen_pct", "ciudad_sin_sitio_granero_pct", "ciudad_sin_sitio_lenera_pct", "piezas_a", "piezas_fin", "anclas_plazas_pct", "ancla_primera_dia", "mejora_espera_pct", "mejora_espera_max_h", "cuadrilla_retenida_24h", "radio_ciudad_medio", "radio_tope_pct", "puestos_mercado_total"] {
         assert!(i.metricas.iter().any(|m| m.id == id), "falta la métrica «{id}»");
     }
     assert_eq!(i.series.len(), 6);

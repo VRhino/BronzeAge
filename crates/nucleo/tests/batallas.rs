@@ -831,16 +831,19 @@ fn contra_un_campamento_de_bandidos_se_juega_un_evento_pve_cualquiera_se_une_com
     assert_eq!(x.n.incorporaciones_vigentes(id).iter().map(|i| i.secuencia).collect::<Vec<_>>(), vec![1, 2, 3, 4]);
     assert_eq!(x.n.ticket_publicado(id).map(|t| t.revision), Some(0));
 
-    // Juegan y ganan: el campamento desaparece y paga su oro (nivel 2) a cada héroe atacante, al carro de su columna.
+    // Juegan y ganan: el campamento desaparece y paga su botín (nivel 2) a cada héroe atacante, al carro de su columna.
     en_curso(&mut x.n, id, 14 * MIN, &[ana.1]);
     let res = resultado(&x.n, id, Lado::Atacante, 3);
     assert_eq!(res.por_heroe.len(), 5, "los héroes de las incorporaciones también");
     let heridos0 = x.n.heroe_herido(ana.1);
     assert!(aplicar(&mut x.n, 15 * MIN, "res", id, res).aceptada());
     assert!(x.n.campamento_de_bandidos(x.campamento).is_none());
-    let oro = |col: u64| x.n.ejercito(col).unwrap().columna.carga.get(&asentamiento::Recurso::Oro).copied().unwrap_or(0);
-    let total_oro: i64 = [ana.0, otra.0].into_iter().chain(mas.iter().take(3).map(|m| m.0)).map(oro).sum();
-    assert_eq!(total_oro, 5 * 33_000, "33 de oro por héroe del nivel 2, repartido por rondas entre las cinco columnas");
+    use asentamiento::Recurso::{Madera, Oro, Piedra, Trigo};
+    let carga = |col: u64, r| x.n.ejercito(col).unwrap().columna.carga.get(&r).copied().unwrap_or(0);
+    let total = |r| [ana.0, otra.0].into_iter().chain(mas.iter().take(3).map(|m| m.0)).map(|col| carga(col, r)).sum::<i64>();
+    let por_heroe = combate::Reglas::cargar().bandidos.niveles[1].botin_por_heroe;
+    assert_eq!([Madera, Piedra, Trigo].map(total), [5 * por_heroe; 3], "madera, piedra y trigo del nivel 2 por héroe, repartidos por rondas entre las cinco columnas");
+    assert_eq!(total(Oro), 0, "los bandidos ya no dan oro");
     assert_eq!(hechos(&x.n, "evento_pve.aplicada").len(), 1);
     assert_eq!(comun::logros_de_hechos(&x.n), vec![(Contador::BandidosCampamentosDestruidos, 1), (Contador::BatallasLibradas, 1)], "el campamento destruido por Unity cuenta (6B)");
     // Solo la experiencia de bandidos (1 ÷ nivel 1) para la Facción atacante, no la de la batalla: el mismo premio que con números (5C-4).
@@ -1974,7 +1977,9 @@ fn los_bandidos_que_acosan_una_caravana_adjunta_a_una_columna_con_heroes_la_jueg
         assert!(aplicar(&mut e.n, t + MIN, "res", id, res).aceptada());
         let ej = e.n.ejercito(col.0).unwrap();
         assert!(!ej.en_batalla && ej.marchando(), "la columna retoma su camino");
-        assert_eq!(e.carga(col.0, Madera), if gana_el_bandido { 21_000 } else { 41_000 }, "el bando que pierde entrega la mitad de su carro; los bandidos no tienen columna que lo cargue");
+        // Si gana la columna, el campamento nivel 3 le paga a su héroe madera, piedra y trigo (`botinPorHeroe`) al carro.
+        let premio = combate::Reglas::cargar().bandidos.niveles[2].botin_por_heroe;
+        assert_eq!(e.carga(col.0, Madera), if gana_el_bandido { 21_000 } else { 41_000 + premio }, "el bando que pierde entrega la mitad de su carro; los bandidos no tienen columna que lo cargue");
         if gana_el_bandido {
             assert!(e.n.caravana(ca).is_none() && !ej.caravanas_adjuntas.contains(&ca), "Unity dio por perdido su único carro: la caravana desaparece");
             assert!(hechos(&e.n, "comercio.caravana_perdida").iter().any(|h| dato(h, "caravana") == ca as i64));
@@ -2088,7 +2093,8 @@ fn los_bandidos_que_acosan_una_columna_con_dos_caravanas_juegan_las_dos_en_la_mi
         assert!(aplicar(&mut e.n, t + MIN, "res", id, res).aceptada());
         let ej = e.n.ejercito(col.0).unwrap();
         assert!(!ej.en_batalla && ej.marchando(), "la columna retoma su camino");
-        assert_eq!(e.carga(col.0, Madera), if gana_el_bandido { 21_000 } else { 41_000 }, "el bando que pierde entrega la mitad de su carro");
+        let premio = combate::Reglas::cargar().bandidos.niveles[2].botin_por_heroe;
+        assert_eq!(e.carga(col.0, Madera), if gana_el_bandido { 21_000 } else { 41_000 + premio }, "el bando que pierde entrega la mitad de su carro; si gana la columna, el botín del campamento nivel 3");
         let escuadra = |(h, s): (u64, u64)| e.n.heroe(h).unwrap().heroe.escuadra(s).map(|s| (s.cantidad, s.contenedor, s.reserva_batalla)).unwrap();
         if gana_el_bandido {
             assert!(e.n.caravana(ca1).is_none() && !ej.caravanas_adjuntas.contains(&ca1), "perdió su único carro: desaparece");

@@ -100,7 +100,6 @@ pub struct ReglasBatalla {
 pub struct NivelBandidos {
     pub poder: Mil,
     pub unidades: i64,
-    pub oro_por_heroe: Mil,
     /// Madera, piedra y trigo (de cada uno, milésimas) para cada héroe que lo destruye (`botinPorHeroe`, tanda 69).
     pub botin_por_heroe: Mil,
     /// Monedas para cada héroe que lo destruye (`monedasPorHeroe`, tanda 69).
@@ -270,7 +269,6 @@ fn nivel_de_bandidos(b: &Value, nivel: &str) -> NivelBandidos {
     NivelBandidos {
         poder: mil(num(n, "poder")),
         unidades: entero(n, "unidades"),
-        oro_por_heroe: mil(num(n, "oroPorHeroe")),
         botin_por_heroe: mil(num(n, "botinPorHeroe")),
         monedas_por_heroe: entero(n, "monedasPorHeroe"),
         peso: ppm(num(n, "peso")),
@@ -415,7 +413,7 @@ mod pruebas {
     fn los_bandidos_traen_la_calibracion_de_distancias() {
         let b = r().bandidos;
         assert_eq!((b.radio_ataque_caravana, b.anillo_min, b.anillo_max), (7_000, 12_000, 25_000), "el anillo, a 12-25 u desde el 2026-10-27");
-        assert_eq!(b.niveles.clone().map(|n| (n.poder, n.unidades, n.oro_por_heroe, n.peso)), [(20_000, 10, 30_000, 500_000), (60_000, 30, 33_000, 300_000), (120_000, 60, 36_000, 200_000)]);
+        assert_eq!(b.niveles.clone().map(|n| (n.poder, n.unidades, n.peso)), [(20_000, 10, 500_000), (60_000, 30, 300_000), (120_000, 60, 200_000)]);
         let rend = Rendimientos { ventana: 24 * 60 * MS_POR_MINUTO, completas: 8, caida_por_cada: 150_000, solo_experiencia_desde: 14 };
         assert_eq!(b.rendimientos, rend);
         assert_eq!(b.niveles.clone().map(|n| (n.botin_por_heroe, n.monedas_por_heroe)), [(5_000, 50), (7_000, 75), (10_000, 100)], "tanda 69");

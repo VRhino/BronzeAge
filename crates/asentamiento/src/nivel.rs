@@ -148,8 +148,10 @@ mod pruebas {
     #[test]
     fn requisitos_techos_y_costes_de_ascenso_son_los_del_canon() {
         let r = Reglas::cargar().nivel;
-        assert_eq!((r.requisitos[&2].pesants, r.requisitos[&3].artesanos, r.requisitos[&4].recinto_nivel_minimo), (200, 400, Some(2)));
-        assert_eq!((r.techo(1), r.techo(3), r.techo(5)), (300_000, 6_000_000, 20_000_000));
+        assert_eq!((r.requisitos[&2].pesants, r.requisitos[&3].artesanos, r.requisitos[&4].recinto_nivel_minimo), (400, 800, Some(2)));
+        // Tanda 69: la población de los requisitos y todos los techos van al doble.
+        assert_eq!([2, 3, 4, 5].map(|n| (r.requisitos[&n].pesants, r.requisitos[&n].artesanos)), [(400, 0), (1_000, 800), (2_000, 1_600), (4_000, 3_200)]);
+        assert_eq!([1, 2, 3, 4, 5].map(|n| r.techo(n)), [600_000, 3_000_000, 12_000_000, 24_000_000, 40_000_000]);
         let a2 = &r.ascenso[&2];
         // 10 minutos cada subida mientras duren las pruebas (2026-11-02, decisión del autor; antes 4.320, 10.080, 20.160 y 30.240).
         assert_eq!((a2.obra_minutos, a2.costo.clone()), (10, vec![(Recurso::Madera, 600_000), (Recurso::Oro, 150_000), (Recurso::Piedra, 400_000)]));
@@ -158,18 +160,18 @@ mod pruebas {
     }
 
     #[test]
-    fn el_nivel_2_pide_200_pesants_una_lenera_una_granja_a_nivel_2_y_un_pueblo_activo() {
+    fn el_nivel_2_pide_400_pesants_una_lenera_una_granja_a_nivel_2_y_un_pueblo_activo() {
         let r = Reglas::cargar().nivel;
         // Desde el 2026-11-01 la Cantera es de pueblo extractor: ni ella, ni el Corral ni las minas cuentan.
         let uno = activos(&[(Tipo::Cantera, 1), (Tipo::Corral, 1), (Tipo::Mina, 1), (Tipo::Granja, 2)]);
-        assert_eq!(r.gates(2, &uno, 200, 0, 0, 1), Some(vec![Falta::Edificios]), "sin Leñera no se sube");
+        assert_eq!(r.gates(2, &uno, 400, 0, 0, 1), Some(vec![Falta::Edificios]), "sin Leñera no se sube");
         let dos = activos(&[(Tipo::Lenera, 1), (Tipo::Granja, 1), (Tipo::Granja, 2)]);
-        assert_eq!(r.gates(2, &dos, 200, 0, 0, 1), Some(vec![]));
+        assert_eq!(r.gates(2, &dos, 400, 0, 0, 1), Some(vec![]));
         // La Granja ha de estar a nivel 2 (2026-10-28): Leñera y Granjas a nivel 1 no bastan.
-        assert_eq!(r.gates(2, &activos(&[(Tipo::Lenera, 1), (Tipo::Granja, 1)]), 200, 0, 0, 1), Some(vec![Falta::Edificios]));
-        assert_eq!(r.gates(2, &activos(&[(Tipo::Granja, 2)]), 200, 0, 0, 1), Some(vec![Falta::Edificios]), "sin Leñera no se sube");
-        assert_eq!(r.gates(2, &dos, 200, 0, 0, 0), Some(vec![Falta::Pueblo]));
-        assert_eq!(r.gates(2, &dos, 199, 0, 0, 1), Some(vec![Falta::Poblacion]));
+        assert_eq!(r.gates(2, &activos(&[(Tipo::Lenera, 1), (Tipo::Granja, 1)]), 400, 0, 0, 1), Some(vec![Falta::Edificios]));
+        assert_eq!(r.gates(2, &activos(&[(Tipo::Granja, 2)]), 400, 0, 0, 1), Some(vec![Falta::Edificios]), "sin Leñera no se sube");
+        assert_eq!(r.gates(2, &dos, 400, 0, 0, 0), Some(vec![Falta::Pueblo]));
+        assert_eq!(r.gates(2, &dos, 399, 0, 0, 1), Some(vec![Falta::Poblacion]));
         assert_eq!(r.gates(9, &dos, 0, 0, 0, 0), None);
         assert_eq!(r.requisitos[&3].pueblos, 0, "solo el nivel 2 pide el pueblo");
     }
@@ -178,21 +180,21 @@ mod pruebas {
     fn el_nivel_4_pide_un_recinto_de_piedra_y_el_5_el_palacio_a_nivel_3() {
         let r = Reglas::cargar().nivel;
         let e = activos(&[(Tipo::SalaConsejo, 1)]);
-        assert_eq!(r.gates(4, &e, 1000, 800, 1, 0), Some(vec![Falta::Edificios]), "la empalizada (nivel 1) no basta");
-        assert_eq!(r.gates(4, &e, 1000, 800, 2, 0), Some(vec![]));
+        assert_eq!(r.gates(4, &e, 2000, 1600, 1, 0), Some(vec![Falta::Edificios]), "la empalizada (nivel 1) no basta");
+        assert_eq!(r.gates(4, &e, 2000, 1600, 2, 0), Some(vec![]));
         let p = activos(&[(Tipo::Palacio, 2)]);
-        assert_eq!(r.gates(5, &p, 2000, 1600, 0, 0), Some(vec![Falta::Edificios]));
-        assert_eq!(r.gates(5, &activos(&[(Tipo::Palacio, 3)]), 2000, 1600, 0, 0), Some(vec![]));
+        assert_eq!(r.gates(5, &p, 4000, 3200, 0, 0), Some(vec![Falta::Edificios]));
+        assert_eq!(r.gates(5, &activos(&[(Tipo::Palacio, 3)]), 4000, 3200, 0, 0), Some(vec![]));
     }
 
     #[test]
     fn el_tope_de_viviendas_sale_del_nivel_siguiente() {
         let r = Reglas::cargar().nivel;
-        // Nivel 1 → pide 200 pesants (15 por Vivienda → 14) y 0 artesanos.
-        assert_eq!(r.maximo_viviendas(1, 15, 10), 14 + MARGEN_VIVIENDAS);
-        // Nivel 2 → 500 pesants (34) y 400 artesanos (40): el mayor.
-        assert_eq!(r.maximo_viviendas(2, 15, 10), 40 + MARGEN_VIVIENDAS, "cupo de 420 artesanos para un requisito de 400");
-        // Nivel 5, el máximo: las que llenan el techo de 20.000.
-        assert_eq!(r.maximo_viviendas(5, 15, 10), 1334, "en el nivel máximo no hay margen: solo llenan el techo");
+        // Nivel 1 → pide 400 pesants (15 por Vivienda → 27) y 0 artesanos.
+        assert_eq!(r.maximo_viviendas(1, 15, 10), 27 + MARGEN_VIVIENDAS);
+        // Nivel 2 → 1.000 pesants (67) y 800 artesanos (80): el mayor.
+        assert_eq!(r.maximo_viviendas(2, 15, 10), 80 + MARGEN_VIVIENDAS, "cupo de 820 artesanos para un requisito de 800");
+        // Nivel 5, el máximo: las que llenan el techo de 40.000.
+        assert_eq!(r.maximo_viviendas(5, 15, 10), 2667, "en el nivel máximo no hay margen: solo llenan el techo");
     }
 }
