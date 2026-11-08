@@ -114,9 +114,10 @@ fn trueque(con_peaje: bool) -> Resultado {
 
         // Peajes y llegadas, en orden de instante.
         let tasa = r.peaje;
+        let precios_peaje = TablaPrecios::de(&r.precio, [&alm_a, &alm_b, &ciudad]);
         for c in caravanas.iter_mut().filter(|c| c.estado == EstadoCaravana::EnTransito) {
             let t = c.proximo_peaje();
-            for cobro in t.map(|t| c.cobrar_peajes(t, tasa)).unwrap_or_default() {
+            for cobro in t.map(|t| c.cobrar_peajes(t, tasa, &precios_peaje, &mut 0)).unwrap_or_default() {
                 assert_eq!(cobro.ciudad, CIUDAD);
                 for (rec, n) in cobro.cobrado {
                     ciudad.agregar(rec, n);
@@ -138,7 +139,7 @@ fn trueque(con_peaje: bool) -> Resultado {
                 oro_origen: origen.cantidad(Oro),
                 precios: &precios,
             };
-            let e = entregar(&r, &contenido, dest, &d);
+            let e = entregar(&r, &contenido, dest, None, &d);
             comisiones += e.comision;
             if let Some(c) = acuerdo.abonar(lado, &contenido, facciones) {
                 assert!(c.entre_facciones);
@@ -266,7 +267,7 @@ fn caso_limite_llevar_la_carga_al_propio_origen_no_acuna() {
         oro_origen: 0,
         precios: &precios,
     };
-    let e = entregar(&r, &[(Cobre, 100_000)].into_iter().collect(), &mut alm, &d);
+    let e = entregar(&r, &[(Cobre, 100_000)].into_iter().collect(), &mut alm, None, &d);
     assert_eq!((e.comision, alm.cantidad(Oro)), (0, 0));
 }
 
@@ -325,7 +326,7 @@ fn recorrido_aleatorio(semilla: u64) -> (Vec<EstadoCaravana>, Almacen, Caravana)
                 }
             }
             4 => {
-                let _ = c.cobrar_peajes(ahora, r.peaje);
+                let _ = c.cobrar_peajes(ahora, r.peaje, &TablaPrecios::de(&r.precio, [&alm]), &mut 0);
             }
             5 => {
                 let _ = c.adjuntar();

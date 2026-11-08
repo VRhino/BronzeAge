@@ -151,7 +151,7 @@ impl Vigia {
             "comercio.caravana_perdida" => drop(self.en_ruta.remove(&caravana)),
             "comercio.caravana_animal_comprado" => self.animales_comprados += 1,
             "comercio.peaje_paso" => {
-                let unidades: i64 = datos.iter().filter(|(k, _)| !["caravana", "ciudad"].contains(k)).map(|&(_, v)| v).sum();
+                let unidades: i64 = datos.iter().filter(|(k, _)| !["caravana", "ciudad", "oroPagado"].contains(k)).map(|&(_, v)| v).sum();
                 let (origen, ciudad) = (self.en_ruta.get(&caravana).map(|x| x.1), plazas.first().copied());
                 if let Some(x) = self.en_ruta.get_mut(&caravana) {
                     x.3 += 1;

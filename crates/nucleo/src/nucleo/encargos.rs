@@ -19,6 +19,7 @@ use crate::estado_comercio::entidad_caravana;
 use crate::nucleo::flota::rechazo_de_caravana;
 use crate::estado_comercio::EstadoComercio;
 use crate::nucleo::mercado::{id32, nivel_mercado};
+use asentamiento::Recurso;
 use base::MS_POR_MINUTO;
 use comercio::caravana::{Caravana, ErrorCaravana};
 use comercio::encargo::{a_recoger, carros_del_paso, repartir_descarga, ContextoEncargo, Encargo, ErrorEncargo, Fase, Modo, Parada, Punta};
@@ -392,18 +393,26 @@ impl Nucleo {
         let faccion = self.estado.asentamientos.get(&u64::from(c.origen))?.faccion;
         let pd = self.estado.asentamientos.get(&plaza)?;
         nivel_mercado(pd)?;
-        let contexto = ContextoParada { plaza_id: id32(plaza), ahora: t, factor_comision_externa: self.factores_de(pd).comision_externa };
+        let contexto = ContextoParada { plaza_id: id32(plaza), ahora: t, factor_comision_externa: self.factores_de(pd).comision_externa, capacidad };
         let cr = self.estado.reglas.economia.comercio.clone();
         let antes = self.ordenes_del_libro();
+        // El oro de la compra sale de la capital de la Facción del origen y el de la venta entra en ella: la bolsa es lo que tiene, y al volver se guarda lo que quede, topado por su capacidad.
+        let capital = self.plaza_de_oro(u64::from(self.estado.comercio.flota[i].origen));
+        let mut bolsa = self.estado.asentamientos.get(&capital)?.economia.almacen.cantidad(Recurso::Oro);
+        let oro_antes = bolsa;
         let Estado { comercio, asentamientos, .. } = &mut self.estado;
         let almacen = &mut asentamientos.get_mut(&plaza)?.economia.almacen;
         let EstadoComercio { flota, libro, .. } = comercio;
         let a_bordo = &mut flota[i].contenido;
         let tratos = if vende {
-            vender(&cr, &parada.dejar, &mut libro.ordenes, almacen, a_bordo, capacidad, &contexto)
+            vender(&cr, &parada.dejar, &mut libro.ordenes, almacen, a_bordo, &mut bolsa, &contexto)
         } else {
-            comprar(&cr, &parada.recoger, &mut libro.ordenes, almacen, a_bordo, capacidad, &contexto)
+            comprar(&cr, &parada.recoger, &mut libro.ordenes, almacen, a_bordo, &mut bolsa, &contexto)
         };
+        let reserva = &mut asentamientos.get_mut(&capital)?.economia.almacen;
+        reserva.quitar(Recurso::Oro, oro_antes);
+        reserva.agregar(Recurso::Oro, bolsa);
+        self.tr.tocar(Clase::Asentamiento, capital);
         let servido = self.por_recurso(&tratos);
         if !tratos.is_empty() {
             self.tras_servir(t, plaza, &antes, ("caravana", id), faccion, &tratos);

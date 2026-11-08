@@ -469,22 +469,111 @@ fn una_ciudad_ajena_en_el_camino_cobra_el_peaje_a_la_ida_y_no_al_regreso() {
     e.avanzar_hasta(cruce - 1);
     assert!(hechos(&e.n, "comercio.peaje_paso").is_empty());
     assert_eq!(e.caravana_de(car).contenido[&Cobre], 100_000);
+    // El 2 % del valor de lo que lleva, en oro: sale de la capital de la Facción dueña (la única plaza de F1 es A) y entra en la de la ciudad cruzada (la única de F3 es C).
+    let (debido, oro_a, oro_c) = (peaje_en_oro(&e.n, &[(Cobre, 100_000)]), cantidad(&e.n, a, Oro), cantidad(&e.n, c, Oro));
+    assert!(debido > 0 && oro_a >= debido, "la capital tiene oro de sobra: {oro_a} para {debido}");
     e.avanzar_hasta(cruce);
     let peaje = hechos(&e.n, "comercio.peaje_paso");
-    assert_eq!((peaje.len(), peaje[0].0, peaje[0].1.clone(), dato(&peaje[0], "ciudad"), dato(&peaje[0], "cobre")), (1, cruce, vec![c], c as i64, 2_000), "el 2 % de lo que lleva");
-    assert_eq!(cantidad(&e.n, c, Cobre) - cobre_c0, 2_000, "el peaje es de la ciudad cruzada");
-    assert_eq!((e.caravana_de(car).contenido[&Cobre], e.caravana_de(car).peajes.len()), (98_000, 0));
+    assert_eq!((peaje.len(), peaje[0].0, peaje[0].1.clone(), dato(&peaje[0], "ciudad"), dato(&peaje[0], "oroPagado")), (1, cruce, vec![a, c], c as i64, debido));
+    assert!(peaje[0].2.iter().all(|(k, _)| ["caravana", "ciudad", "oroPagado"].contains(k)), "con oro bastante no se paga nada en especie: {:?}", peaje[0].2);
+    assert_eq!((oro_a - cantidad(&e.n, a, Oro), cantidad(&e.n, c, Oro) - oro_c), (debido, debido));
+    assert_eq!(cantidad(&e.n, c, Cobre) - cobre_c0, 0, "la carga no se toca");
+    assert_eq!((e.caravana_de(car).contenido[&Cobre], e.caravana_de(car).peajes.len()), (100_000, 0));
     assert!(peajes(&e).is_empty());
-    // El destino recibe lo que queda y el regreso, vacío, no paga nada.
+    // El destino recibe la carga entera y el regreso, vacío, no paga nada.
     let cobre_b0 = cantidad(&e.n, b, Cobre);
     let fin = fin_del_plan(&e, car);
     e.avanzar_hasta(fin);
-    assert_eq!(cantidad(&e.n, b, Cobre) - cobre_b0, 98_000);
+    assert_eq!(cantidad(&e.n, b, Cobre) - cobre_b0, 100_000);
     assert_eq!(e.caravana_de(car).estado, EstadoCaravana::Retornando);
     let vuelta = fin_del_plan(&e, car);
     e.avanzar_hasta(vuelta + MIN);
-    assert_eq!((hechos(&e.n, "comercio.peaje_paso").len(), cantidad(&e.n, c, Cobre) - cobre_c0), (1, 2_000));
+    assert_eq!((hechos(&e.n, "comercio.peaje_paso").len(), cantidad(&e.n, c, Cobre) - cobre_c0), (1, 0));
     assert_eq!(e.caravana_de(car).estado, EstadoCaravana::Disponible);
+}
+
+/// El peaje en oro de una carga con los precios vigentes: el 2 % de su valor, en unidades enteras hacia arriba (`PEAJE_PASO`).
+fn peaje_en_oro(n: &Nucleo, carga: &[(Recurso, i64)]) -> i64 {
+    let c: Mercancia = carga.iter().copied().collect();
+    base::entero_arriba(asentamiento::datos::por(n.tabla_de_precios().valor(&c), comercio::Reglas::cargar().peaje))
+}
+
+/// Funda una plaza más de `faccion` (la Facción sube de nivel para poder) lejos de las demás, cerca del campamento `i`: queda más joven que las que ya tenía.
+fn segunda_plaza(e: &mut Escenario, m: &M, faccion: u32, dueno: &str, i: usize) -> u64 {
+    e.ok("admin", Comando::FijarNivelFaccion { faccion, nivel: 2 });
+    let (p, t) = (sitio_rico(&e.n, &m.0, i, faccion), e.n.ahora());
+    fundar(&mut e.n, t, &format!("s{faccion}-{i}"), dueno, faccion, p)
+}
+
+#[test]
+fn el_peaje_se_cobra_en_la_capital_de_la_faccion_de_la_ciudad_cruzada_y_no_en_la_ciudad() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let (a, b) = (e.a, e.b);
+    // La Facción 3 tiene dos plazas: la capital es la más antigua (c0), que no está en el camino; la cruzada (c) es la segunda.
+    let c0 = segunda_plaza(&mut e, m, 3, "carlos", 6);
+    let c = plaza_en_el_camino(&mut e, m, 3);
+    assert_eq!(e.n.capital_de(3), Some(c0));
+    e.dar(a, Cobre, 100_000);
+    let car = e.caravana("ana", a, 1, true);
+    e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 100_000)], salir_en: None, escolta: None });
+    let p = e.caravana_de(car).peajes.iter().position(|p| p.ciudad == c as u32).expect("la ruta cruza C");
+    let cruce = comercio::viaje::instante_de_progreso(e.caravana_de(car).plan.as_ref().unwrap(), e.caravana_de(car).peajes[p].progreso).unwrap();
+    e.avanzar_hasta(cruce - 1);
+    let (debido, oro_a, oro_c0, oro_c) = (peaje_en_oro(&e.n, &[(Cobre, 100_000)]), cantidad(&e.n, a, Oro), cantidad(&e.n, c0, Oro), cantidad(&e.n, c, Oro));
+    e.avanzar_hasta(cruce);
+    let peaje = hechos(&e.n, "comercio.peaje_paso").into_iter().find(|h| dato(h, "ciudad") == c as i64).expect("cruzó C");
+    assert_eq!(dato(&peaje, "oroPagado"), debido);
+    assert_eq!((oro_a - cantidad(&e.n, a, Oro), cantidad(&e.n, c0, Oro) - oro_c0), (debido, debido), "sale de la capital del dueño y entra en la de la ciudad cruzada");
+    assert_eq!(cantidad(&e.n, c, Oro), oro_c, "la ciudad cruzada no cobra el oro");
+    assert_eq!(e.caravana_de(car).contenido[&Cobre], 100_000, "la carga queda intacta");
+}
+
+#[test]
+fn si_el_oro_de_la_capital_no_alcanza_lo_que_falta_se_paga_en_especie_a_la_ciudad_cruzada() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let (a, b) = (e.a, e.b);
+    let c = plaza_en_el_camino(&mut e, m, 3);
+    // Medio millar de armas de bronce valen (a 70,8 de oro cada una) mucho más de lo que A tiene para pagar el 2 %: la capital paga lo que tiene.
+    e.dar(a, ArmaBronce, 500_000);
+    let car = e.caravana("ana", a, 1, true);
+    let carga = [(ArmaBronce, 500_000)];
+    e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: carga.to_vec(), salir_en: None, escolta: None });
+    let cruce = comercio::viaje::instante_de_progreso(e.caravana_de(car).plan.as_ref().unwrap(), e.caravana_de(car).peajes[0].progreso).unwrap();
+    e.avanzar_hasta(cruce - 1);
+    let (debido, oro_a, armas_c0) = (peaje_en_oro(&e.n, &carga), cantidad(&e.n, a, Oro), cantidad(&e.n, c, ArmaBronce));
+    assert!(oro_a > 0 && oro_a < debido, "la capital tiene {oro_a} y el peaje son {debido}");
+    e.avanzar_hasta(cruce);
+    let peaje = hechos(&e.n, "comercio.peaje_paso");
+    assert_eq!((peaje.len(), dato(&peaje[0], "oroPagado"), cantidad(&e.n, a, Oro)), (1, oro_a, 0), "paga todo su oro");
+    // Lo que falta (debido − oro) es la fracción de la tasa que se paga en especie: 2 % × falta / debido de la carga, en unidades enteras hacia abajo.
+    let tasa = comercio::Reglas::cargar().peaje;
+    let especie = base::entero((500_000i128 * tasa as i128 / UNO as i128 * (debido - oro_a) as i128 / debido as i128) as i64);
+    assert!(especie > 0);
+    assert_eq!(dato(&peaje[0], "armaBronce"), especie);
+    assert_eq!(cantidad(&e.n, c, ArmaBronce) - armas_c0, especie, "la especie va a la ciudad cruzada");
+    assert_eq!(e.caravana_de(car).contenido[&ArmaBronce], 500_000 - especie);
+}
+
+#[test]
+fn la_comision_se_acuna_en_la_capital_de_la_faccion_del_destino() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let (a, b) = (e.a, e.b);
+    // El destino (b2) es la segunda plaza de la Facción 2: su capital es B, que es donde se acuña la comisión; la carga y el recargo (ninguno aquí) van a b2.
+    let b2 = segunda_plaza(&mut e, m, 2, "beto", 6);
+    assert_eq!(e.n.capital_de(2), Some(b));
+    e.dar(a, Cobre, 100_000);
+    let car = e.caravana("ana", a, 1, true);
+    e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b2, carga: vec![(Cobre, 100_000)], salir_en: None, escolta: None });
+    let (oro_b, oro_b2, cobre_b2) = (cantidad(&e.n, b, Oro), cantidad(&e.n, b2, Oro), cantidad(&e.n, b2, Cobre));
+    let esperada = comision_esperada(&e.n, a, b2, &[(Cobre, 100_000)]);
+    let entrega = e.n.entregar_contenido(e.n.ahora(), car, b2, None).expect("existen");
+    assert!(entrega.comision > 0 && entrega.comision <= esperada && esperada - entrega.comision < 1_000);
+    assert_eq!(cantidad(&e.n, b, Oro) - oro_b, entrega.comision, "la comisión se acuña en la capital");
+    assert_eq!(cantidad(&e.n, b2, Oro), oro_b2, "y no en el destino");
+    assert_eq!(cantidad(&e.n, b2, Cobre) - cobre_b2, 100_000, "la carga llega al destino");
 }
 
 #[test]
