@@ -12,7 +12,7 @@
 //!
 //! La tabla orden ↔ comando, con lo que cada una ignora, está en `Docs/Mechanics/Comandos_Parametros.md`.
 
-use crate::comando::{rechazos, AccionReloj, Comando, LadoDelFondo, ObjetivoAtaque, OrigenIntel, PagarCon, Peticion, Respuesta};
+use crate::comando::{rechazos, AccionReloj, Comando, LadoDelFondo, ObjetivoAtaque, OrigenIntel, PagarCon, Peticion, Respuesta, PETICION_ID_MAX};
 use crate::estado_militar::Relacion;
 use crate::nucleo::Nucleo;
 use crate::proyeccion::ids;
@@ -113,6 +113,10 @@ fn sigilo(s: &pb::orden_crear_faccion::Sigilo) -> politica::sigilo::Sigilo {
 /// crea nace bot (lo decide la cuenta, no el cliente; Proyecciones §4, 2026-11-01).
 pub fn traducir(mundo: &dyn Consulta, orden: &pb::Orden, cliente: &str, admin: bool, bot: bool) -> Result<Peticion, Respuesta> {
     let x = Ctx { mundo, cliente, bot };
+    // La `peticion_id` que manda el cliente se guarda para la idempotencia: con tope. (Las que arma el núcleo para el servidor de batalla no pasan por aquí.)
+    if orden.peticion_id.len() > PETICION_ID_MAX {
+        return Err(x.no(rechazos::PETICION_ID_LARGO, format!("la peticion_id tiene como mucho {PETICION_ID_MAX} bytes")));
+    }
     let Some(cuerpo) = &orden.cuerpo else { return Err(x.no(rechazos::ORDEN_NO_SOPORTADA, "orden vacía")) };
     let comando = x.comando(cuerpo, admin)?;
     Ok(Peticion { actor: cliente.into(), admin, peticion_id: orden.peticion_id.clone(), version_esperada: orden.version_esperada, comando })

@@ -15,6 +15,7 @@ import http from 'node:http';
 import net from 'node:net';
 import { spawn, exec } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -26,18 +27,19 @@ const { configurations } = JSON.parse(readFileSync(path.join(RAIZ, '.claude/laun
 // El servidor sirve en un solo puerto el WebSocket del contrato 05 y el HTTP del acceso.
 const VITE = (p) => ['--', '--port', p, '--strictPort'];
 // `aviso`: por qué no se puede arrancar todavía (la tarjeta lo dice y deja el botón apagado).
+// `secretos`: variables de entorno secretas que el servicio necesita; `secreto()` las resuelve al arrancarlo (ver más abajo).
 const SERVICIOS = {
   // `parar`: el servidor se apaga con su foto al leer esa línea por la entrada estándar (Windows no deja mandarle Ctrl+C).
-  'bronzeage-servidor': { tipo: 'backend', parar: 'parar\n', aviso: avisoMundo, con: (p) => ({ env: { BRONZEAGE_DIRECCION: `127.0.0.1:${p}`, ...envPartida() } }) },
+  'bronzeage-servidor': { tipo: 'backend', parar: 'parar\n', aviso: avisoMundo, secretos: ['CODIGO_REGISTRO_BOTS'], con: (p) => ({ env: { BRONZEAGE_DIRECCION: `127.0.0.1:${p}`, ...envPartida() } }) },
   // Una tarea que termina sola: sin puerto. La semilla la elige POST /api/mundo.
   'generar-mundo': { tipo: 'tarea', con: () => ({ args: [String(mundo.semilla)] }) },
   // `BOTS_REGISTROS` (2026-11-03, aviso de los bots): la ruta absoluta de `partidas/`. Los bots guardan sus registros dentro de cada partida
   // (`partidas/<nombre>/bots.json` y `mercs.json`), así que borrar la partida los borra con ella; `servicio-bots.json` y `servicio-mercs.json` van en esa carpeta.
-  'bronzeage-bots': { tipo: 'backend', con: (p, P) => ({ env: { BOTS_PUERTO: p, BOTS_SERVIDOR: `http://localhost:${P['bronzeage-servidor']}`, BOTS_REGISTROS: PARTIDAS } }) },
+  'bronzeage-bots': { tipo: 'backend', secretos: ['CODIGO_REGISTRO_BOTS', 'BOTS_TOKEN'], con: (p, P) => ({ env: { BOTS_PUERTO: p, BOTS_SERVIDOR: `http://localhost:${P['bronzeage-servidor']}`, BOTS_REGISTROS: PARTIDAS } }) },
   // Los bots mercenarios (2026-11-02): el mismo ejecutable de bots en un segundo proceso, con `BOTS_POBLACION=mercenarios` (en .claude/launch.json),
-  // su propio puerto de control y el mismo servidor, token y código de registro que los libres. Los dos comparten carpeta y `target` de cargo:
+  // su propio puerto de control y el mismo servidor, token y código de registro que los libres (los secretos los pone `secreto()`, no launch.json). Los dos comparten carpeta y `target` de cargo:
   // si cambia el código de los bots, conviene parar los dos antes de arrancar (en Windows un ejecutable en marcha no se puede reemplazar).
-  'bronzeage-bots-mercenarios': { tipo: 'backend', con: (p, P) => ({ env: { BOTS_PUERTO: p, BOTS_SERVIDOR: `http://localhost:${P['bronzeage-servidor']}`, BOTS_REGISTROS: PARTIDAS } }) },
+  'bronzeage-bots-mercenarios': { tipo: 'backend', secretos: ['CODIGO_REGISTRO_BOTS', 'BOTS_TOKEN'], con: (p, P) => ({ env: { BOTS_PUERTO: p, BOTS_SERVIDOR: `http://localhost:${P['bronzeage-servidor']}`, BOTS_REGISTROS: PARTIDAS } }) },
   // El admin lee el control de los libres de `BOTS_URL` y el de los mercenarios de `MERCS_URL` (sin ella, ws://localhost:4001/control).
   'bronzeage-admin': { tipo: 'cliente', con: (p, P) => ({ args: VITE(p), env: {
     BACKEND_URL: `http://localhost:${P['bronzeage-servidor']}`, BOTS_URL: `ws://localhost:${P['bronzeage-bots']}/control`,
@@ -104,6 +106,20 @@ const puertos = Object.fromEntries(configurations.map((c) => [c.name, c.port]));
 const procesos = {}; // nombre -> { hijo, log[] }
 const carpeta = (c) => path.resolve(RAIZ, c.cwd ?? '.');
 
+// Un secreto de un servicio: el que traiga en su `env` de launch.json, si no el del entorno del panel (para quien quiera fijarlo) y, si no, uno aleatorio
+// que se genera la primera vez y se guarda en `partidas/secretos.json` (fuera de git) para que sea el mismo en los arranques siguientes.
+function secreto(c, clave) {
+  const fijo = c.env?.[clave] || process.env[clave];
+  if (fijo) return fijo;
+  const f = path.join(PARTIDAS, 'secretos.json'), guardados = leerJson(f) ?? {};
+  if (!guardados[clave]) {
+    guardados[clave] = randomBytes(18).toString('base64url');
+    mkdirSync(PARTIDAS, { recursive: true });
+    writeFileSync(f, JSON.stringify(guardados, null, 2), { mode: 0o600 });
+  }
+  return guardados[clave];
+}
+
 function escucha(puerto) {
   return new Promise((ok) => {
     // 'localhost' + autoSelectFamily: Vite escucha solo en ::1, el servidor en 127.0.0.1.
@@ -118,6 +134,7 @@ function arrancar(c) {
   if (procesos[c.name]?.hijo || !existsSync(carpeta(c)) || SERVICIOS[c.name]?.aviso?.(c)) return;
   const P = Object.fromEntries(Object.entries(puertos).map(([k, v]) => [k, String(v)]));
   const { args = [], env = {} } = SERVICIOS[c.name]?.con(P[c.name], P) ?? {};
+  for (const k of SERVICIOS[c.name]?.secretos ?? []) env[k] = secreto(c, k);
   const p = { log: [] };
   // detached fuera de Windows: el hijo encabeza su grupo de procesos y parar() lo corta entero (shell:true deja un sh en medio).
   const hijo = spawn(c.runtimeExecutable, [...c.runtimeArgs, ...args], {
@@ -161,6 +178,8 @@ async function estado() {
       nombre: c.name, tipo: SERVICIOS[c.name]?.tipo ?? 'backend', puerto: puertos[c.name],
       comando: [c.runtimeExecutable, ...c.runtimeArgs].join(' ') + (c.cwd ? `  (en ${c.cwd})` : '')
         + (c.name === 'bronzeage-servidor' ? `  [partida ${partidaActual() ?? 'ninguna'}]` : ''),
+      // El token del canal de control de los bots, para pegarlo en el admin web (el código de registro no sale del panel).
+      token_control: SERVICIOS[c.name]?.secretos?.includes('BOTS_TOKEN') ? secreto(c, 'BOTS_TOKEN') : null,
       falta: !existsSync(carpeta(c)), aviso: SERVICIOS[c.name]?.aviso?.(c) ?? null,
       escucha: puertos[c.name] ? await escucha(puertos[c.name]) : false, lanzado: !!p?.hijo, log: p?.log.slice(-200) ?? [],
     };
@@ -187,6 +206,7 @@ button{background:#2b241b;color:var(--txt);border:1px solid var(--borde);border-
 button:hover:not(:disabled){border-color:var(--acento)}button:disabled{opacity:.4;cursor:default}
 .abrir{border-color:var(--cli-acento);color:var(--cli-acento)}.abrir:not(.on){display:none}
 label{color:var(--sub);font-size:12px;margin-left:auto}
+.token{margin:0 0 8px}.token[hidden]{display:none}.token code{font:12px ui-monospace,monospace;user-select:all}
 input{width:76px;background:#0d0b08;color:var(--txt);border:1px solid var(--borde);border-radius:6px;padding:5px 6px;font:inherit}
 input:disabled{opacity:.5}
 pre{background:#0d0b08;border-radius:6px;padding:8px;height:clamp(220px,42vh,720px);min-height:120px;resize:vertical;overflow:auto;font-size:11px;margin:10px 0 0;white-space:pre-wrap;color:var(--sub)}
@@ -307,10 +327,11 @@ async function pintar(){
     let c=document.getElementById(d.nombre);
     if(!c){c=document.createElement('div');c.className='card';c.id=d.nombre;
       document.getElementById(d.tipo==='cliente'?'clientes':d.tipo==='tarea'?'tareas':'backend').append(c);
-      c.innerHTML='<div class="top"><span class="dot"></span><span class="nom"></span><span class="est"></span></div><div class="cmd"></div><div class="aviso"></div>'
+      c.innerHTML='<div class="top"><span class="dot"></span><span class="nom"></span><span class="est"></span></div><div class="cmd"></div><div class="aviso"></div><div class="token fila" hidden><span class="est">token de control</span><code></code><button>Copiar</button></div>'
         +'<div class="fila"><button data-a="arrancar">Arrancar</button><button data-a="parar">Parar</button><button class="abrir">Abrir ↗</button>'
         +'<label>puerto <input type="number" min="1" max="65535"></label></div><pre></pre>';
       c.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>post('/api/'+b.dataset.a+'/'+n));
+      c.querySelector('.token button').onclick=e=>navigator.clipboard.writeText(c.querySelector('.token code').textContent).then(()=>{e.target.textContent='Copiado';setTimeout(()=>e.target.textContent='Copiar',1500)});
       c.querySelector('.abrir').onclick=()=>window.open('http://localhost:'+c.querySelector('input').value,'_blank');
       c.querySelector('input').onchange=e=>post('/api/puerto/'+n+'/'+e.target.value);}
     c.querySelector('.dot').style.background=d.escucha?'var(--on)':d.lanzado?'var(--wait)':'var(--off)';
@@ -318,6 +339,7 @@ async function pintar(){
     c.querySelector('.est').textContent=d.falta?'sin carpeta':d.tipo==='tarea'?(d.lanzado?'en marcha…':'parada'):d.aviso&&!d.lanzado?'no puede arrancar':d.escucha?(d.lanzado?'encendido':'encendido (externo)'):d.lanzado?'arrancando…':'apagado';
     c.querySelector('.cmd').textContent=d.comando;
     c.querySelector('.aviso').textContent=d.aviso??'';
+    c.querySelector('.token').hidden=!d.token_control;c.querySelector('.token code').textContent=d.token_control??'';
     c.querySelector('label').style.display=d.tipo==='tarea'?'none':'';
     const inp=c.querySelector('input');
     if(document.activeElement!==inp)inp.value=d.puerto;

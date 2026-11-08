@@ -118,9 +118,9 @@ impl Http for RutasHttp {
             };
             let vigente = self.mundo.as_ref().filter(|(h, _)| h == hash);
             let r = match (vigente, relieve, p.metodo.as_str()) {
-                (Some((_, bytes)), false, "GET") => RespuestaHttp { estado: 200, tipo: "application/octet-stream", cuerpo: bytes.as_ref().clone() },
+                (Some((_, bytes)), false, "GET") => RespuestaHttp { estado: 200, tipo: "application/octet-stream", cuerpo: Arc::clone(bytes) },
                 (Some(_), true, "GET") => match &self.relieve {
-                    Some(r) => RespuestaHttp { estado: 200, tipo: "application/octet-stream", cuerpo: r.bytes.as_ref().clone() },
+                    Some(r) => RespuestaHttp { estado: 200, tipo: "application/octet-stream", cuerpo: Arc::clone(&r.bytes) },
                     None => RespuestaHttp::texto(404, "este mundo no tiene paquete de relieve"),
                 },
                 (None, _, "GET") => RespuestaHttp::texto(404, "no hay artefacto con ese hash"),

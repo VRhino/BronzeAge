@@ -1,5 +1,6 @@
 //! El servidor WebSocket: acepta conexiones, hace el handshake y mueve mensajes entre el cliente y el núcleo.
 //! Una tarea por sesión (`sesion`) que es la única que numera y escribe en el socket.
+//! Freno de la vista: como mucho un `CambiarVista` cada `Config::intervalo_vista` pasa al núcleo; los que llegan antes se fusionan y sale el último al cumplirse el plazo (el resto de mensajes no espera).
 
 use std::{
     collections::HashMap,
@@ -13,7 +14,7 @@ use std::{
 
 use contrato::v1::{
     mensaje_de_cliente as mc, mensaje_de_servidor as ms, Bienvenida, ErrorSesion, MensajeDeCliente, MensajeDeServidor,
-    Pong, Aviso, TipoCliente,
+    Pong, Aviso, Rectangulo, TipoCliente,
 };
 use futures_util::{stream::SplitSink, stream::SplitStream, SinkExt, StreamExt};
 use prost::Message as _;
@@ -21,7 +22,7 @@ use tokio::{
     net::{TcpListener, TcpStream},
     sync::{mpsc, watch, Notify},
     task::{JoinHandle, JoinSet},
-    time::timeout,
+    time::{sleep_until, timeout, Instant},
 };
 use tokio_tungstenite::{
     accept_async_with_config,
@@ -251,7 +252,7 @@ async fn sesion<A: Autenticador>(ctx: Arc<Ctx<A>>, tcp: TcpStream) {
         .max_frame_size(Some(ctx.config.max_trama_cliente));
     let (flujo, ip) = match timeout(ctx.config.timeout_hola, http::leer_inicio(tcp, &ctx.config.origenes)).await {
         Ok(Inicio::WebSocket(f, ip)) => (f, ip),
-        Ok(Inicio::Http(tcp, p)) => return http::contestar(tcp, p, ctx.http.as_ref()).await,
+        Ok(Inicio::Http(tcp, p)) => return http::contestar(tcp, p, ctx.http.as_ref(), ctx.config.timeout_escritura).await,
         Ok(Inicio::Rechazada(tcp)) => return http::rechazar(tcp).await,
         Ok(Inicio::Nada) | Err(_) => return,
     };
@@ -416,8 +417,19 @@ async fn bucle<A: Autenticador>(
 ) {
     let mut parada = ctx.parada.clone();
     let mut pendientes: u32 = 0;
+    // Freno de la vista: `vista_libre` es el instante desde el que puede pasar otra al núcleo; una que llega antes se guarda en `vista_pendiente` (pisando la anterior) y sale al cumplirse el plazo.
+    let mut vista_libre = Instant::now();
+    let mut vista_pendiente: Option<Rectangulo> = None;
     loop {
         tokio::select! {
+            _ = sleep_until(vista_libre), if vista_pendiente.is_some() => {
+                let Some(rect) = vista_pendiente.take() else { continue };
+                vista_libre = Instant::now() + ctx.config.intervalo_vista;
+                if ctx.nucleo.send(ComandoSesion::Vista { sesion: id, rect }).await.is_err() {
+                    em.error(error(codigos::INTERNO, "núcleo no disponible", true)).await;
+                    return;
+                }
+            }
             _ = parada.changed() => {
                 aviso(em, "servidor.reiniciando", "el servidor se detiene").await;
                 return;
@@ -509,7 +521,14 @@ async fn bucle<A: Autenticador>(
                         ComandoSesion::Cronica { sesion: id, pedir }
                     }
                     Some(mc::Cuerpo::Vista(v)) => match v.rectangulo {
-                        Some(rect) => ComandoSesion::Vista { sesion: id, rect },
+                        Some(rect) if vista_pendiente.is_none() && Instant::now() >= vista_libre => {
+                            vista_libre = Instant::now() + ctx.config.intervalo_vista;
+                            ComandoSesion::Vista { sesion: id, rect }
+                        }
+                        Some(rect) => {
+                            vista_pendiente = Some(rect);
+                            continue;
+                        }
                         None => continue,
                     },
                     Some(mc::Cuerpo::Hola(_)) => {

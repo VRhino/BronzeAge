@@ -211,6 +211,9 @@ fn la_fusion_hace_nacer_una_faccion_con_su_nombre_su_rey_el_sigilo_de_a_y_lo_may
     assert_eq!(e.no("c1", propone(r1, "   ", r2)), rechazos::FACCION_NOMBRE_VACIO);
     let tercera = e.n.faccion(3).unwrap().nombre.to_uppercase();
     assert_eq!(e.no("c1", propone(r1, &tercera, r2)), rechazos::FACCION_NOMBRE_DUPLICADO, "sin mirar mayúsculas");
+    // El mismo tope que crear una Facción: 32 caracteres, recortado, sin caracteres de control.
+    assert_eq!(e.no("c1", propone(r1, &"x".repeat(33), r2)), rechazos::FACCION_NOMBRE_LARGO);
+    assert_eq!(e.no("c1", propone(r1, "Ar\tgos", r2)), rechazos::FACCION_NOMBRE_CONTROL);
     // El Rey de A ya no es quien la propuso: su consentimiento no vale.
     let p = e.ok("c1", propone(r1, " Argos ", r2)).creadas[0];
     assert_eq!(e.no("c2", Comando::ProponerFusion { heroe: r2, a: 2, b: 1, nombre: "Otra".into(), rey: r1 }), rechazos::DIPLOMACIA_YA_PENDIENTE);

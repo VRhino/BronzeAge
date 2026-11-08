@@ -1,6 +1,6 @@
 //! El servicio de acceso (7B) por el puerto real: HTTP para el alta y el login, el WebSocket del contrato 05 con el token, y lo que sobrevive a un reinicio.
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, time::Duration};
 
 use acceso::{ahora_ms, Acceso, Config, Coste, ErrorAdmin, ErrorLogin, ErrorRegistro};
 use contrato::v1::{mensaje_de_cliente as mc, mensaje_de_servidor as ms, TipoCliente};
@@ -118,6 +118,7 @@ async fn alta_login_y_sesion_por_el_mismo_puerto() {
     assert_eq!((e, r["error"].as_str()), (401, Some("credenciales_invalidas")));
     assert_eq!(post(dir, "/v1/sesiones", json!({ "nick": "nadie", "clave": "una clave larga" })).await.0, 401);
     assert_eq!(http(dir, "GET", "/v1/registro", &[], "").await.0, 405);
+    assert_eq!(http(dir, "PUT", "/v1/sesiones/actual", &[], "").await.0, 405);
     assert_eq!(http(dir, "GET", "/v1/otra", &[], "").await.0, 404);
     srv.detener().await;
 }
@@ -239,4 +240,61 @@ async fn la_marca_de_administrador_se_da_se_quita_y_sobrevive_a_un_reinicio() {
     b.registrar("ana", "una clave larga", Some("humanos")).await.unwrap();
     drop(b);
     assert!(Acceso::abrir(vacia.path(), config()).unwrap().codigo_admin().is_some());
+}
+
+#[tokio::test]
+async fn con_un_solo_turno_de_argon_el_segundo_login_a_la_vez_recibe_ocupado_y_el_turno_se_suelta() {
+    let caro = Coste { memoria_kib: 8192, pasadas: 3 };
+    let a = Acceso::en_memoria(Config { coste: caro, argon_a_la_vez: 1, argon_espera: Duration::from_millis(5), ..Config::default() });
+    a.registrar("ana", "una clave larga", None).await.unwrap();
+    let (x, y) = tokio::join!(a.entrar("ana", "una clave larga"), a.entrar("ana", "una clave larga"));
+    assert!(x.is_ok(), "{x:?}");
+    assert_eq!(y.unwrap_err(), ErrorLogin::Ocupado);
+    // El permiso se soltó: un tercero entra, y el alta también pasa por el mismo tope.
+    assert!(a.entrar("ana", "una clave larga").await.is_ok());
+    let (r, l) = tokio::join!(a.registrar("luis", "una clave larga", None), a.entrar("ana", "una clave larga"));
+    assert_eq!((r.is_ok(), l.unwrap_err()), (true, ErrorLogin::Ocupado));
+    // Lo que se rechaza solo no gasta turno: un nick que no existe o repetido contesta aunque el turno esté tomado.
+    let (_, inexistente, repetido) = tokio::join!(a.entrar("ana", "una clave larga"), a.entrar("nadie", "una clave larga"), a.registrar("ana", "una clave larga", None));
+    assert_eq!((inexistente.unwrap_err(), repetido.unwrap_err()), (ErrorLogin::Credenciales, ErrorRegistro::NickRepetido));
+}
+
+#[tokio::test]
+async fn cerrar_sesion_anula_solo_ese_token_y_sobrevive_a_un_reinicio() {
+    let dir = tempfile::tempdir().unwrap();
+    let (cerrado, otro) = {
+        let a = Acceso::abrir(dir.path(), config()).unwrap();
+        a.registrar("ana", "una clave larga", Some("humanos")).await.unwrap();
+        let cerrado = a.entrar("ana", "una clave larga").await.unwrap().token;
+        let otro = a.entrar("ana", "una clave larga").await.unwrap().token;
+        assert_eq!(a.cerrar_sesion(&cerrado), Ok(true));
+        assert_eq!(a.identidad(&cerrado, ahora_ms()).unwrap_err(), ErrorAcceso::Invalido);
+        assert_eq!(a.cerrar_sesion(&cerrado), Ok(false), "ya no hay sesión");
+        assert_eq!(a.cerrar_sesion("no-es-un-token"), Ok(false));
+        assert!(a.identidad(&otro, ahora_ms()).is_ok());
+        (cerrado, otro)
+    };
+    let a = Acceso::abrir(dir.path(), config()).unwrap();
+    assert_eq!(a.identidad(&cerrado, ahora_ms()).unwrap_err(), ErrorAcceso::Invalido, "no resucita al reabrir");
+    assert!(a.identidad(&otro, ahora_ms()).is_ok());
+    assert_eq!(std::fs::read_to_string(dir.path().join("sesiones.jsonl")).unwrap().lines().count(), 1, "la anulada se quitó al abrir");
+}
+
+#[tokio::test]
+async fn delete_sesiones_actual_anula_el_token_por_http() {
+    let (srv, _n) = arrancar(Acceso::en_memoria(config())).await;
+    let dir = srv.direccion;
+    let s = registrar_y_entrar(dir, "bot-1", "bots").await;
+    let otro = post(dir, "/v1/sesiones", json!({ "nick": "bot-1", "clave": "una clave larga" })).await.1;
+    let (token, otro) = (s["token"].as_str().unwrap(), otro["token"].as_str().unwrap());
+    let auth = |t: &str| format!("sesion {t}");
+    assert_eq!(http(dir, "DELETE", "/v1/sesiones/actual", &[], "").await.0, 401);
+    assert_eq!(http(dir, "DELETE", "/v1/sesiones/actual", &[("Authorization", "sesion nada")], "").await.0, 401);
+    assert_eq!(http(dir, "DELETE", "/v1/sesiones/actual", &[("Authorization", &auth(token))], "").await, (204, String::new()));
+    assert_eq!(http(dir, "GET", "/v1/sesiones/actual", &[("Authorization", &auth(token))], "").await.0, 401);
+    assert_eq!(http(dir, "DELETE", "/v1/sesiones/actual", &[("Authorization", &auth(token))], "").await.0, 401);
+    assert_eq!(abrir(dir, token, TipoCliente::ClienteBot).await, Err("token_invalido".into()));
+    assert_eq!(http(dir, "GET", "/v1/sesiones/actual", &[("Authorization", &auth(otro))], "").await.0, 200);
+    abrir(dir, otro, TipoCliente::ClienteBot).await.unwrap();
+    srv.detener().await;
 }

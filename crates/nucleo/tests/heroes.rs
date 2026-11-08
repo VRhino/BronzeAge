@@ -437,6 +437,14 @@ fn los_loadouts_el_orden_de_las_escuadras_y_el_reparto_de_puntos_validan_cada_un
     assert_eq!(e.rechazada("ana", guardar(None, "x", &[s1, 99_999], None)), rechazos::ESCUADRA_AJENA);
     assert_eq!(e.rechazada("ana", Comando::GuardarLoadout { heroe: h, loadout: None, nombre: "x".into(), escuadras: vec![s1], perks: vec![7], activo: None }), rechazos::LOADOUT_PERK_NO_DESBLOQUEADO);
     assert_eq!(e.n.heroe(h).unwrap().heroe.loadouts.len(), 1, "los rechazos no dejan rastro");
+    // Como mucho 32 caracteres (no bytes, el tope de las plazas), recortado y sin caracteres de control.
+    assert_eq!(e.rechazada("ana", guardar(None, &"x".repeat(33), &[s1], None)), rechazos::LOADOUT_NOMBRE_LARGO);
+    for malo in ["Asal\nto", "\u{7}", "As\0alto"] {
+        assert_eq!(e.rechazada("ana", guardar(None, malo, &[s1], None)), rechazos::LOADOUT_NOMBRE_CONTROL, "{malo:?}");
+    }
+    assert_eq!(e.n.heroe(h).unwrap().heroe.loadouts.len(), 1, "los rechazos no dejan rastro");
+    let largo = e.ok("ana", guardar(None, &format!(" {} ", "á".repeat(32)), &[s1], None)).creadas[0];
+    e.ok("ana", Comando::BorrarLoadout { heroe: h, loadout: largo });
 
     // Uno nuevo se añade al final, inactivo, y su id sale del contador común.
     let ids0 = e.n.estado().siguiente_id;

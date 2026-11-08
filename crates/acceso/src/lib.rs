@@ -4,14 +4,16 @@
 //! - **Alta** (`POST /v1/registro`, `{nick, clave, codigo?}`): el nick se recorta y pasa a minúsculas, y es único. Con `codigo_registro_bots` configurado y coincidente, la cuenta es **de bot**
 //!   (sin ningún privilegio: solo abre sesiones `CLIENTE_BOT`, como un jugador); si no, con `codigo_registro` configurado hace falta que coincida; sin él el registro está abierto. No da sesión.
 //! - **Login** (`POST /v1/sesiones`, `{nick, clave}`): cada login emite un token nuevo que dura `ACCESO.duracionSesionMs`. Se guarda solo su SHA-256.
+//! - **Cerrar sesión** (`DELETE /v1/sesiones/actual` con `Authorization: sesion <token>`): anula ese token (`204`; `401 token_invalido` si no hay sesión). Los demás tokens de la cuenta siguen valiendo.
+//! - **Argon2 acotado**: cada hash o verificación gasta ~19 MiB, así que solo corren `Config::argon_a_la_vez` a la vez; quien no consigue turno en `Config::argon_espera` recibe `503 ocupado`.
 //! - **Quién es quién**: la cuenta de bot abre `CLIENTE_BOT`; la humana, `CLIENTE_UNITY`; la humana con la marca `admin`, además `CLIENTE_ADMIN_WEB` con el rol de administrador
 //!   global. `Identidad::cliente_id` es el id de la cuenta (`u-N`): el núcleo lo usa como cuenta del héroe. Un bot nunca es administrador.
 //! - **Administradores**: la marca vive en la cuenta. Si al abrir no hay ninguna cuenta admin, se genera un código de un solo uso, solo en memoria ([`Acceso::codigo_admin`]): quien
 //!   se registra con él nace administrador y lo gasta. Después se da y se quita la marca con [`Acceso::fijar_admin`] (nunca se queda la partida sin administradores).
-//! - **Disco**: `cuentas.jsonl` y `sesiones.jsonl` en la carpeta del servicio, una línea por alta, por cambio de la marca admin o por login, con `sync_data` antes de contestar. Al abrir
-//!   se leen las dos (de una cuenta manda su última línea) y se reescribe `sesiones.jsonl` sin las caducadas: los tokens sobreviven a un reinicio. Las claves, con Argon2id.
+//! - **Disco**: `cuentas.jsonl` y `sesiones.jsonl` en la carpeta del servicio, una línea por alta, por cambio de la marca admin, por login o por cierre de sesión (la línea del token con `expira_ms: 0`), con `sync_data` antes
+//!   de contestar. Al abrir se leen las dos (de una cuenta manda su última línea; de un token, también) y se reescribe `sesiones.jsonl` sin las caducadas ni las anuladas: los tokens sobreviven a un reinicio. Las claves, con Argon2id.
 //!
-//! Lo que falta y no hace falta aún: membresías por partida (moderador y administrador de la partida), deshabilitar cuentas, cerrar sesión y los tokens de los servidores de batalla (fase 8).
+//! Lo que falta y no hace falta aún: membresías por partida (moderador y administrador de la partida), deshabilitar cuentas y los tokens de los servidores de batalla (fase 8).
 
 use std::{
     collections::HashMap,
@@ -21,7 +23,7 @@ use std::{
     path::{Path, PathBuf},
     pin::Pin,
     sync::{Arc, Mutex},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use argon2::{
@@ -36,6 +38,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use servidor::{Autenticador, ErrorAcceso, Http, Identidad, PeticionHttp, RespuestaHttp, RolTecnico};
 use sha2::{Digest, Sha256};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 const PROYECCIONES: &str = include_str!("../../../Docs/Mechanics/Proyecciones_Y_Autorizacion.md");
 
@@ -80,6 +83,10 @@ pub struct Config {
     pub ips_admin: Vec<std::net::IpAddr>,
     pub duracion_sesion_ms: i64,
     pub coste: Coste,
+    /// Cuántos cálculos de Argon2 (altas y logins) pueden correr a la vez; cada uno usa `coste.memoria_kib`. Por defecto, los núcleos disponibles (mínimo 1).
+    pub argon_a_la_vez: usize,
+    /// Lo que espera un alta o un login por un turno de Argon2 antes de rendirse con `Ocupado`.
+    pub argon_espera: Duration,
 }
 
 impl Default for Config {
@@ -91,6 +98,8 @@ impl Default for Config {
             ips_admin: Vec::new(),
             duracion_sesion_ms: duracion_sesion_ms(),
             coste: Coste::PRODUCCION,
+            argon_a_la_vez: std::thread::available_parallelism().map_or(1, usize::from),
+            argon_espera: Duration::from_secs(2),
         }
     }
 }
@@ -105,6 +114,8 @@ pub enum ErrorRegistro {
     NickRepetido,
     /// No se pudo escribir en disco (500).
     Disco,
+    /// Todos los turnos de Argon2 siguen ocupados pasada `Config::argon_espera` (503).
+    Ocupado,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -124,6 +135,8 @@ pub enum ErrorLogin {
     /// Nick que no existe o clave que no coincide (401): no se dice cuál.
     Credenciales,
     Disco,
+    /// Todos los turnos de Argon2 siguen ocupados pasada `Config::argon_espera` (503).
+    Ocupado,
 }
 
 /// Una cuenta.
@@ -199,6 +212,8 @@ struct Interior {
     /// La carpeta de los ficheros (`None`: en memoria).
     dir: Option<PathBuf>,
     estado: Mutex<Estado>,
+    /// Los turnos de Argon2: tantos como `Config::argon_a_la_vez`.
+    argon: Arc<Semaphore>,
 }
 
 /// El servicio. Barato de clonar: lo comparten el [`Autenticador`] y el [`Http`] del servidor.
@@ -280,7 +295,8 @@ impl Acceso {
     pub fn en_memoria(config: Config) -> Self {
         let mut estado = Estado { codigo_registro: config.codigo_registro.clone(), ..Estado::default() };
         estado.preparar_codigo_admin();
-        Self { interior: Arc::new(Interior { config, dir: None, estado: Mutex::new(estado) }) }
+        let argon = Arc::new(Semaphore::new(config.argon_a_la_vez.max(1)));
+        Self { interior: Arc::new(Interior { config, dir: None, estado: Mutex::new(estado), argon }) }
     }
 
     /// Abre (o crea) el servicio en `dir`: lee las cuentas y las sesiones aún vigentes y reescribe `sesiones.jsonl` sin las caducadas.
@@ -296,8 +312,11 @@ impl Acceso {
         e.preparar_codigo_admin();
         let ahora = ahora_ms();
         for s in leer_lineas::<SesionGuardada>(&fs_)? {
+            // La última línea de un token manda: una caducada (o la de un cierre de sesión, con `expira_ms: 0`) quita la anterior.
             if s.expira_ms > ahora && e.cuentas.contains_key(&s.cuenta) {
                 e.sesiones.insert(s.token_sha256.clone(), s);
+            } else {
+                e.sesiones.remove(&s.token_sha256);
             }
         }
         let temporal = dir.join("sesiones.jsonl.nuevo");
@@ -313,7 +332,8 @@ impl Acceso {
         fs::rename(&temporal, &fs_)?;
         let abrir = |f: &Path| OpenOptions::new().create(true).append(true).open(f);
         e.ficheros = Some(Ficheros { cuentas: abrir(&fc)?, sesiones: abrir(&fs_)? });
-        Ok(Self { interior: Arc::new(Interior { config, dir: Some(dir.to_owned()), estado: Mutex::new(e) }) })
+        let argon = Arc::new(Semaphore::new(config.argon_a_la_vez.max(1)));
+        Ok(Self { interior: Arc::new(Interior { config, dir: Some(dir.to_owned()), estado: Mutex::new(e), argon }) })
     }
 
     fn estado(&self) -> std::sync::MutexGuard<'_, Estado> {
@@ -323,6 +343,11 @@ impl Acceso {
     fn argon(&self) -> Argon2<'static> {
         let c = self.interior.config.coste;
         Argon2::new(Algorithm::Argon2id, Version::V0x13, Params::new(c.memoria_kib, c.pasadas, 1, None).expect("coste de Argon2 válido"))
+    }
+
+    /// Un turno de Argon2, con la espera máxima de `Config::argon_espera`. Se suelta al soltar el permiso: va dentro del cálculo, que sigue gastando memoria aunque la petición se cancele.
+    async fn turno_argon(&self) -> Option<OwnedSemaphorePermit> {
+        tokio::time::timeout(self.interior.config.argon_espera, self.interior.argon.clone().acquire_owned()).await.ok()?.ok()
     }
 
     pub fn config(&self) -> &Config {
@@ -433,8 +458,10 @@ impl Acceso {
                 return Err(ErrorRegistro::NickRepetido);
             }
         }
+        let turno = self.turno_argon().await.ok_or(ErrorRegistro::Ocupado)?;
         let (argon, clave) = (self.argon(), clave.to_owned());
         let hash = tokio::task::spawn_blocking(move || {
+            let _turno = turno;
             let sal = SaltString::generate(&mut OsRng);
             argon.hash_password(clave.as_bytes(), &sal).map(|h| h.to_string())
         })
@@ -470,8 +497,10 @@ impl Acceso {
             e.por_nick.get(&normalizar(nick)).and_then(|id| e.cuentas.get(id)).cloned()
         };
         let Some(cuenta) = cuenta else { return Err(ErrorLogin::Credenciales) };
+        let turno = self.turno_argon().await.ok_or(ErrorLogin::Ocupado)?;
         let (argon, clave, hash) = (self.argon(), clave.to_owned(), cuenta.clave.clone());
         let bien = tokio::task::spawn_blocking(move || {
+            let _turno = turno;
             PasswordHash::new(&hash).is_ok_and(|h| argon.verify_password(clave.as_bytes(), &h).is_ok())
         })
         .await
@@ -490,6 +519,19 @@ impl Acceso {
         let expira_ms = s.expira_ms;
         e.sesiones.insert(s.token_sha256.clone(), s);
         Ok(Sesion { token, cuenta, expira_ms })
+    }
+
+    /// Cierra la sesión de `token`: `true` si estaba vigente y queda anulado, `false` si no había sesión. Se guarda la línea del token con `expira_ms: 0`, que al abrir quita la anterior.
+    /// Las sesiones WebSocket ya abiertas con ese token siguen hasta que se cierren: solo se anula para abrir otras.
+    pub fn cerrar_sesion(&self, token: &str) -> Result<bool, ErrorLogin> {
+        let hash = sha256(token);
+        let mut e = self.estado();
+        let Some(cuenta) = e.sesiones.get(&hash).filter(|s| s.expira_ms > ahora_ms()).map(|s| s.cuenta.clone()) else { return Ok(false) };
+        if let Some(f) = e.ficheros.as_mut() {
+            anadir(&mut f.sesiones, &SesionGuardada { token_sha256: hash.clone(), cuenta, expira_ms: 0 }).map_err(|_| ErrorLogin::Disco)?;
+        }
+        e.sesiones.remove(&hash);
+        Ok(true)
     }
 
     /// La cuenta y la caducidad de un token vigente en `ahora`.
@@ -525,6 +567,10 @@ fn error(estado: u16, codigo: &str, mensaje: &str) -> RespuestaHttp {
     RespuestaHttp::json(estado, json!({ "error": codigo, "mensaje": mensaje }).to_string())
 }
 
+fn ocupado() -> RespuestaHttp {
+    error(503, "ocupado", "el servidor está ocupado; reinténtalo en unos segundos")
+}
+
 fn texto<'a>(v: &'a Value, campo: &str) -> Option<&'a str> {
     v.get(campo).and_then(Value::as_str)
 }
@@ -551,6 +597,7 @@ impl Acceso {
                     Err(ErrorRegistro::CodigoIncorrecto) => error(403, "codigo_incorrecto", "el código de registro no coincide"),
                     Err(ErrorRegistro::NickRepetido) => error(409, "nick_repetido", "ese nick ya existe"),
                     Err(ErrorRegistro::Disco) => error(500, "interno", "no se pudo guardar la cuenta"),
+                    Err(ErrorRegistro::Ocupado) => ocupado(),
                 }
             }
             ("POST", "/v1/sesiones") => {
@@ -565,11 +612,17 @@ impl Acceso {
                     ),
                     Err(ErrorLogin::Credenciales) => error(401, "credenciales_invalidas", "nick o clave incorrectos"),
                     Err(ErrorLogin::Disco) => error(500, "interno", "no se pudo guardar la sesión"),
+                    Err(ErrorLogin::Ocupado) => ocupado(),
                 }
             }
             ("GET", "/v1/sesiones/actual") => match token_de(&p).and_then(|t| self.sesion(t, ahora_ms())) {
                 Some((c, expira_ms)) => RespuestaHttp::json(200, json!({ "cuenta_id": c.id, "nick": c.nick, "bot": c.bot, "admin": c.admin, "expira_ms": expira_ms }).to_string()),
                 None => error(401, "token_invalido", "sin sesión o caducada"),
+            },
+            ("DELETE", "/v1/sesiones/actual") => match token_de(&p).map(|t| self.cerrar_sesion(t)) {
+                Some(Ok(true)) => RespuestaHttp::texto(204, ""),
+                Some(Ok(false)) | None => error(401, "token_invalido", "sin sesión o caducada"),
+                Some(Err(_)) => error(500, "interno", "no se pudo guardar el cierre de sesión"),
             },
             (_, "/v1/registro" | "/v1/sesiones" | "/v1/sesiones/actual") => error(405, "metodo_no_permitido", "método no permitido"),
             _ => error(404, "no_encontrado", "ruta desconocida"),

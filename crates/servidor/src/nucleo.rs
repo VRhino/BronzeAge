@@ -192,6 +192,8 @@ pub struct Config {
     /// Las IPs desde las que se puede administrar además de esta máquina (`BRONZEAGE_IPS_ADMIN`; ver [`crate::http::ip_de_administracion`]). Vale para el WebSocket de `CLIENTE_ADMIN_WEB`; las
     /// rutas HTTP de administración las comprueba quien las atiende, con la misma lista.
     pub ips_admin: Vec<std::net::IpAddr>,
+    /// Tiempo mínimo entre dos `CambiarVista` de una sesión que pasan al núcleo (rehacer la `Foto` de `VISTA` es lo más caro del servidor): las que llegan antes se fusionan y pasa la última al cumplirse el plazo.
+    pub intervalo_vista: Duration,
 }
 
 impl Default for Config {
@@ -211,6 +213,7 @@ impl Default for Config {
             red: Arc::default(),
             origenes: Vec::new(),
             ips_admin: Vec::new(),
+            intervalo_vista: Duration::from_millis(250),
         }
     }
 }

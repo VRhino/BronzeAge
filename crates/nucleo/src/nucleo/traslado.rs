@@ -98,6 +98,7 @@ impl Nucleo {
             }
             Comando::ProponerFusion { heroe, a, b, nombre, rey } => {
                 self.exigir_rey(p, *heroe, *a)?;
+                self.exigir_nombre_de_jugador(nombre, "una Facción", rechazos::FACCION_NOMBRE_LARGO, rechazos::FACCION_NOMBRE_CONTROL)?;
                 let id = self.estado.siguiente_id;
                 let nombre = self.estado.politica.proponer_fusion(&r, id, *a, *b, nombre, *rey, t).map_err(|e| rechazo(de_union(e)))?.clase.clone();
                 let ClaseDePropuesta::Fusion { nombre, .. } = nombre else { unreachable!("es de fusión") };

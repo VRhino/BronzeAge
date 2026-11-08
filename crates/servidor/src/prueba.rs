@@ -60,6 +60,8 @@ struct Estado {
     sesiones: HashMap<SesionId, SesionFalsa>,
     vistos: HashSet<String>,
     ordenes: u64,
+    /// Los rectángulos de los `ComandoSesion::Vista` que han llegado, en orden.
+    vistas: Vec<contrato::v1::Rectangulo>,
 }
 
 /// Núcleo de mentira: un único ámbito `HEROE:<cliente>` y una versión de mundo global.
@@ -116,6 +118,11 @@ fn reanudar(version: u64, cliente: &str, conocidas: &BTreeMap<String, u64>, tx: 
 }
 
 impl NucleoFalso {
+    /// Los rectángulos de las vistas que han llegado al núcleo, en orden (para contar cuántas pasan).
+    pub fn vistas(&self) -> Vec<contrato::v1::Rectangulo> {
+        self.estado.lock().unwrap().vistas.clone()
+    }
+
     pub fn arrancar(reloj: RelojCompartido) -> Self {
         let (comandos, mut rx) = mpsc::channel(8192);
         let estado = Arc::new(Mutex::new(Estado::default()));
@@ -183,7 +190,8 @@ impl NucleoFalso {
                             e.sesiones.remove(&sesion);
                         }
                     }
-                    ComandoSesion::Vista { sesion, .. } => {
+                    ComandoSesion::Vista { sesion, rect } => {
+                        e.vistas.push(rect);
                         if let Some(s) = e.sesiones.get(&sesion) {
                             let ambito = Ambito { tipo: AmbitoTipo::AmbitoVista as i32, id: String::new() };
                             let foto = Foto { ambito: Some(ambito), version: e.version, ..Default::default() };

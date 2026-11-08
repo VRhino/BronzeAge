@@ -15,18 +15,23 @@ use std::{
     io,
     net::IpAddr,
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
+    time::Duration,
 };
 
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
     net::TcpStream,
+    time::timeout,
 };
 
 /// Tamaño máximo de la cabecera de una petición.
 pub const MAX_CABECERA: usize = 16 << 10;
 /// Tamaño máximo del cuerpo de una petición HTTP.
 pub const MAX_CUERPO: usize = 64 << 10;
+/// Tamaño de cada trozo en que se escribe una respuesta: el tiempo máximo de escritura se aplica por trozo.
+const TROZO_ESCRITURA: usize = 64 << 10;
 
 /// Una petición HTTP ya leída.
 #[derive(Clone, Debug)]
@@ -51,15 +56,16 @@ impl PeticionHttp {
 pub struct RespuestaHttp {
     pub estado: u16,
     pub tipo: &'static str,
-    pub cuerpo: Vec<u8>,
+    /// Compartido: un artefacto grande se sirve clonando el `Arc`, sin copiar los bytes en cada petición.
+    pub cuerpo: Arc<Vec<u8>>,
 }
 
 impl RespuestaHttp {
     pub fn json(estado: u16, cuerpo: impl Into<Vec<u8>>) -> Self {
-        Self { estado, tipo: "application/json", cuerpo: cuerpo.into() }
+        Self { estado, tipo: "application/json", cuerpo: Arc::new(cuerpo.into()) }
     }
     pub fn texto(estado: u16, cuerpo: impl Into<Vec<u8>>) -> Self {
-        Self { estado, tipo: "text/plain; charset=utf-8", cuerpo: cuerpo.into() }
+        Self { estado, tipo: "text/plain; charset=utf-8", cuerpo: Arc::new(cuerpo.into()) }
     }
 }
 
@@ -215,7 +221,10 @@ pub(crate) async fn rechazar(mut tcp: TcpStream) {
 
 /// Atiende la petición (`OPTIONS` y `GET /salud` aquí; el resto, `http`) y cierra. La procedencia ya se miró en [`leer_inicio`]: si trae `Origin`, es uno permitido y es el que
 /// se devuelve en el CORS.
-pub(crate) async fn contestar(mut tcp: TcpStream, p: PeticionHttp, http: &dyn Http) {
+///
+/// La escritura tiene un tiempo máximo **por trozo** de 64 KiB (`escritura`, el `timeout_escritura` del servidor), no para el total: un artefacto de decenas de MB a una conexión
+/// lenta pero que avanza llega entero, y un cliente que deja de leer pierde la conexión a los `escritura` (sin él retendría el socket para siempre; revisión de seguridad, hallazgo 4).
+pub(crate) async fn contestar(mut tcp: TcpStream, p: PeticionHttp, http: &dyn Http, escritura: Duration) {
     let cors = match p.cabecera("origin") {
         Some(o) => format!(
             "Access-Control-Allow-Origin: {}\r\nVary: Origin\r\nAccess-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\nAccess-Control-Allow-Headers: content-type, authorization\r\n",
@@ -224,14 +233,22 @@ pub(crate) async fn contestar(mut tcp: TcpStream, p: PeticionHttp, http: &dyn Ht
         None => String::new(),
     };
     let r = match (p.metodo.as_str(), p.ruta.as_str()) {
-        ("OPTIONS", _) => RespuestaHttp { estado: 204, tipo: "text/plain", cuerpo: Vec::new() },
+        ("OPTIONS", _) => RespuestaHttp { estado: 204, tipo: "text/plain", cuerpo: Arc::default() },
         ("GET", "/salud") => RespuestaHttp::texto(200, "ok"),
         _ => http.atender(p).await,
     };
     let cabecera = format!("HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\n{cors}Connection: close\r\n\r\n", r.estado, razon(r.estado), r.tipo, r.cuerpo.len());
-    let _ = tcp.write_all(cabecera.as_bytes()).await;
-    let _ = tcp.write_all(&r.cuerpo).await;
-    let _ = tcp.shutdown().await;
+    if escribir_por_trozos(&mut tcp, cabecera.as_bytes(), escritura).await.is_ok() && escribir_por_trozos(&mut tcp, &r.cuerpo, escritura).await.is_ok() {
+        let _ = timeout(escritura, tcp.shutdown()).await;
+    }
+}
+
+/// Escribe `datos` de `TROZO_ESCRITURA` en `TROZO_ESCRITURA` y vacía el búfer; cada trozo tiene `limite` para entrar. `Err` si el otro extremo falla o no avanza a tiempo.
+async fn escribir_por_trozos<W: AsyncWrite + Unpin>(w: &mut W, datos: &[u8], limite: Duration) -> io::Result<()> {
+    for trozo in datos.chunks(TROZO_ESCRITURA) {
+        timeout(limite, async { w.write_all(trozo).await?; w.flush().await }).await.map_err(|_| io::ErrorKind::TimedOut)??;
+    }
+    Ok(())
 }
 
 /// El flujo TCP con lo ya leído delante: el handshake del WebSocket vuelve a leer la cabecera.
@@ -268,8 +285,27 @@ impl AsyncWrite for Rebobinado {
 
 #[cfg(test)]
 mod pruebas {
-    use super::{ip_de_administracion, origen_permitido};
-    use std::net::IpAddr;
+    use super::{escribir_por_trozos, ip_de_administracion, origen_permitido};
+    use std::{net::IpAddr, time::Duration};
+    use tokio::io::AsyncReadExt;
+
+    #[tokio::test]
+    async fn escribir_por_trozos_corta_al_cliente_que_no_lee_y_deja_pasar_al_que_avanza() {
+        let datos = vec![7u8; 1 << 20];
+        let (mut w, mut r) = tokio::io::duplex(1024);
+        let lector = tokio::spawn(async move {
+            let mut v = Vec::new();
+            r.read_to_end(&mut v).await.unwrap();
+            v
+        });
+        let t = Duration::from_millis(500);
+        escribir_por_trozos(&mut w, &datos, t).await.expect("un lector que avanza no se corta");
+        drop(w);
+        assert_eq!(lector.await.unwrap().len(), datos.len());
+        let (mut w, _r) = tokio::io::duplex(1024);
+        let e = escribir_por_trozos(&mut w, &datos, Duration::from_millis(50)).await.expect_err("sin leer, se corta");
+        assert_eq!(e.kind(), std::io::ErrorKind::TimedOut);
+    }
 
     #[test]
     fn administracion_solo_desde_esta_maquina_o_la_lista() {

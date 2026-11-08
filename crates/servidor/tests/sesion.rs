@@ -1,6 +1,6 @@
 //! Pruebas de integración: servidor real + núcleo falso + cliente `tokio-tungstenite` en el mismo proceso.
 
-use std::{collections::HashSet, net::SocketAddr, time::Duration};
+use std::{collections::HashSet, future::Future, net::SocketAddr, pin::Pin, sync::Arc, time::Duration};
 
 use contrato::v1::{
     mensaje_de_cliente as mc, mensaje_de_servidor as ms, AmbitoTipo, CambiarVista, DecisionReanudacion, Punto,
@@ -8,7 +8,7 @@ use contrato::v1::{
 };
 use servidor::{
     prueba::{hola, AutenticadorDePrueba, ClientePrueba, NucleoFalso},
-    servir, Config, RelojCompartido, Servidor,
+    servir, servir_con_http, Config, Http, PeticionHttp, RelojCompartido, RespuestaHttp, Servidor,
 };
 use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::TcpStream};
 use tokio_tungstenite::{connect_async, tungstenite::client::IntoClientRequest};
@@ -406,4 +406,97 @@ async fn el_websocket_exige_origen_permitido() {
     };
     assert!(desde("https://evil.example").await.is_err(), "el handshake desde un origen ajeno no debe abrirse");
     assert!(desde("http://localhost:5174").await.is_ok());
+}
+
+fn rect(n: i64) -> Rectangulo {
+    Rectangulo { min: Some(Punto::default()), max: Some(Punto { x: n, y: n }) }
+}
+
+#[tokio::test]
+async fn una_rafaga_de_vistas_se_fusiona_y_llega_la_ultima() {
+    let (srv, nucleo) = arrancar(Config { intervalo_vista: Duration::from_millis(200), ..Config::default() }).await;
+    let (mut c, _) = ClientePrueba::entrar(srv.direccion, hola("ok:ana", TipoCliente::ClienteUnity)).await;
+    c.esperar().await;
+    for n in 1..=20 {
+        c.enviar(mc::Cuerpo::Vista(CambiarVista { rectangulo: Some(rect(n)) })).await;
+    }
+    // La primera pasa al momento y la última, al cumplirse el plazo, sin que el cliente mande nada más.
+    for _ in 0..2 {
+        let Some(ms::Cuerpo::Foto(f)) = c.esperar().await.cuerpo else { panic!("se esperaba la Foto de VISTA") };
+        assert_eq!(f.ambito.unwrap().tipo, AmbitoTipo::AmbitoVista as i32);
+    }
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let vistas = nucleo.vistas();
+    assert!((2..=3).contains(&vistas.len()), "{} vistas llegaron al núcleo", vistas.len());
+    assert_eq!(vistas.last(), Some(&rect(20)));
+}
+
+#[tokio::test]
+async fn dos_vistas_separadas_por_mas_del_intervalo_llegan_las_dos() {
+    let (srv, nucleo) = arrancar(Config { intervalo_vista: Duration::from_millis(100), ..Config::default() }).await;
+    let (mut c, _) = ClientePrueba::entrar(srv.direccion, hola("ok:ana", TipoCliente::ClienteUnity)).await;
+    c.esperar().await;
+    c.enviar(mc::Cuerpo::Vista(CambiarVista { rectangulo: Some(rect(1)) })).await;
+    let Some(ms::Cuerpo::Foto(_)) = c.esperar().await.cuerpo else { panic!() };
+    tokio::time::sleep(Duration::from_millis(250)).await;
+    c.enviar(mc::Cuerpo::Vista(CambiarVista { rectangulo: Some(rect(2)) })).await;
+    let Some(ms::Cuerpo::Foto(_)) = c.esperar().await.cuerpo else { panic!() };
+    assert_eq!(nucleo.vistas(), vec![rect(1), rect(2)]);
+}
+
+#[tokio::test]
+async fn una_orden_tras_una_rafaga_de_vistas_no_espera_al_intervalo() {
+    let (srv, _) = arrancar(Config { intervalo_vista: Duration::from_secs(3), ..Config::default() }).await;
+    let (mut c, _) = ClientePrueba::entrar(srv.direccion, hola("ok:ana", TipoCliente::ClienteUnity)).await;
+    c.esperar().await;
+    for n in 1..=5 {
+        c.enviar(mc::Cuerpo::Vista(CambiarVista { rectangulo: Some(rect(n)) })).await;
+    }
+    let t = std::time::Instant::now();
+    c.orden("o1").await;
+    loop {
+        if let Some(ms::Cuerpo::Resultado(r)) = c.esperar().await.cuerpo {
+            assert_eq!(r.peticion_id, "o1");
+            break;
+        }
+    }
+    assert!(t.elapsed() < Duration::from_secs(1), "la orden esperó {:?}", t.elapsed());
+}
+
+/// Un HTTP que contesta siempre con el mismo cuerpo grande y compartido.
+struct CuerpoGrande(Arc<Vec<u8>>);
+
+impl Http for CuerpoGrande {
+    fn atender(&self, _: PeticionHttp) -> Pin<Box<dyn Future<Output = RespuestaHttp> + Send + '_>> {
+        let r = RespuestaHttp { estado: 200, tipo: "application/octet-stream", cuerpo: Arc::clone(&self.0) };
+        Box::pin(async move { r })
+    }
+}
+
+#[tokio::test]
+async fn un_cliente_http_que_no_lee_pierde_la_conexion_por_el_tiempo_de_escritura() {
+    let grande = Arc::new(vec![0u8; 8 << 20]);
+    let reloj = RelojCompartido::nuevo(1_000_000);
+    let nucleo = NucleoFalso::arrancar(reloj.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let config = Config { timeout_escritura: Duration::from_millis(200), ..Config::default() };
+    let srv = servir_con_http(listener, nucleo.comandos.clone(), AutenticadorDePrueba, Arc::new(CuerpoGrande(grande.clone())), reloj, config).await;
+    let mut tcp = TcpStream::connect(srv.direccion).await.unwrap();
+    tcp.write_all(b"GET /x HTTP/1.1\r\nHost: x\r\n\r\n").await.unwrap();
+    // No lee nada: los búferes del socket se llenan mucho antes de los 8 MiB y el servidor tiene que soltar la conexión (aquí solo la mira, tras pasar el tiempo, hasta ver el cierre).
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    let mut buf = vec![0u8; 1 << 20];
+    let mut leido = 0usize;
+    let cierre = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            match tcp.read(&mut buf).await {
+                Ok(0) | Err(_) => break,
+                Ok(n) => leido += n,
+            }
+        }
+    })
+    .await;
+    assert!(cierre.is_ok(), "el servidor tenía que cerrar la conexión del cliente que no lee");
+    assert!(leido < grande.len(), "no se pudo entregar el cuerpo entero: {leido} bytes");
+    assert_eq!(Arc::strong_count(&grande), 1 + 1, "el servidor soltó su referencia al cuerpo (solo quedan la prueba y el Http)");
 }

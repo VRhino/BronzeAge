@@ -113,6 +113,16 @@ fn sigilo_inventado() -> politica::sigilo::Sigilo {
 // ───────────────────────────── 1. Crear, entrar, salir ─────────────────────────────
 
 #[test]
+fn el_nombre_de_una_faccion_de_largo_maximo_vale() {
+    let m = con_mundo!();
+    let mut e = E::nuevo(m);
+    let ana = e.heroe("ana");
+    // 32 caracteres de dos bytes (y espacios a los lados, que se recortan): caben; el nombre guardado es el recortado.
+    e.ok("ana", Comando::CrearFaccion { heroe: ana, nombre: format!(" {} ", "á".repeat(32)), sigilo: None });
+    assert_eq!(e.faccion(1).nombre, "á".repeat(32));
+}
+
+#[test]
 fn crear_pedir_responder_nombrar_y_dejar_la_faccion_con_la_sucesion_del_trono() {
     let m = con_mundo!();
     let mut e = E::nuevo(m);
@@ -120,6 +130,12 @@ fn crear_pedir_responder_nombrar_y_dejar_la_faccion_con_la_sucesion_del_trono() 
 
     // Crear: nombre no vacío y libre, sigilo del catálogo, 1 héroe 1 Facción. Quien la crea es su primer ciudadano y su Rey.
     assert_eq!(e.no("ana", Comando::CrearFaccion { heroe: ana, nombre: "   ".into(), sigilo: None }), rechazos::FACCION_NOMBRE_VACIO);
+    // Como mucho 32 caracteres (no bytes, el tope de las plazas), recortado y sin caracteres de control.
+    let crear = |nombre: &str| Comando::CrearFaccion { heroe: ana, nombre: nombre.into(), sigilo: None };
+    assert_eq!(e.no("ana", crear(&"x".repeat(33))), rechazos::FACCION_NOMBRE_LARGO);
+    for malo in ["x\ny", "\u{7}", "Mi\0cenas", "Mi\u{85}cenas"] {
+        assert_eq!(e.no("ana", crear(malo)), rechazos::FACCION_NOMBRE_CONTROL, "{malo:?}");
+    }
     let mal = sigilo_inventado();
     assert_eq!(e.no("ana", Comando::CrearFaccion { heroe: ana, nombre: "Micenas".into(), sigilo: Some(mal) }), rechazos::FACCION_SIGILO_INVALIDO);
     assert_eq!(e.no("bea", Comando::CrearFaccion { heroe: ana, nombre: "Micenas".into(), sigilo: None }), rechazos::NO_AUTORIZADO, "nadie crea a nombre de otro");

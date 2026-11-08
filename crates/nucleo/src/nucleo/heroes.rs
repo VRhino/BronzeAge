@@ -145,6 +145,19 @@ impl Nucleo {
         Ok(())
     }
 
+    /// El nombre que escribe un jugador para una Facción o un loadout: recortado, como mucho `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres (el tope de las plazas) y sin caracteres de control.
+    /// Uno vacío pasa: lo rechaza la regla de cada cosa con su código. `que` es «una Facción» o «un loadout»; `largo` y `control`, los códigos de rechazo de cada una.
+    pub(super) fn exigir_nombre_de_jugador(&self, nombre: &str, que: &str, largo: &'static str, control: &'static str) -> Result<(), Respuesta> {
+        let (v, limpio, maximo) = (self.estado.version, nombre.trim(), self.estado.reglas.economia.datos.largo_maximo_nombre);
+        if limpio.chars().count() > maximo {
+            return Err(Respuesta::rechazo(largo, format!("el nombre de {que} tiene como mucho {maximo} caracteres"), v));
+        }
+        if limpio.chars().any(char::is_control) {
+            return Err(Respuesta::rechazo(control, format!("el nombre de {que} no puede llevar caracteres de control"), v));
+        }
+        Ok(())
+    }
+
     /// El héroe de una orden ya autorizada.
     pub(super) fn heroe_mut(&mut self, id: u64) -> &mut HeroeNucleo {
         self.tr.tocar(Clase::Heroe, id);
@@ -237,6 +250,7 @@ impl Nucleo {
             Comando::ReclutarTropa { asentamiento, heroe, tropa } => self.reclutar_en_plaza(t, p, *asentamiento, *heroe, *tropa),
             Comando::GuardarLoadout { heroe, loadout, nombre, escuadras, perks, activo } => {
                 self.autorizar_heroe(p, *heroe, false)?;
+                self.exigir_nombre_de_jugador(nombre, "un loadout", rechazos::LOADOUT_NOMBRE_LARGO, rechazos::LOADOUT_NOMBRE_CONTROL)?;
                 let datos = DatosLoadout { id: *loadout, nombre: nombre.clone(), escuadras: escuadras.clone(), perks: perks.clone(), activo: *activo };
                 let Estado { militar, siguiente_id, .. } = &mut self.estado;
                 let h = &mut militar.heroes.get_mut(heroe).expect("existe").heroe;

@@ -80,6 +80,9 @@ pub enum AccionReloj {
 /// El nombre más largo de un héroe, en caracteres (2026-10-27).
 pub const NOMBRE_HEROE_MAX: usize = 24;
 
+/// La `peticion_id` más larga, en bytes: se guarda para la idempotencia (`Reglas::limite_idempotencia` por actor), así que no puede crecer sin tope.
+pub const PETICION_ID_MAX: usize = 64;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Comando {
     /// Alta de una columna con su héroe de campo (de la cuenta dada, sin residencia ni loadout), quieta en `posicion`. Andamiaje de administración para
@@ -2760,6 +2763,8 @@ pub mod rechazos {
     pub const ORDEN_NO_DISPONIBLE: &str = "orden.no_disponible";
     /// Un valor de la orden fuera de su catálogo cerrado, o un id que no tiene la forma de ninguna entidad (`orden.forma_invalida`).
     pub const ORDEN_FORMA_INVALIDA: &str = "orden.forma_invalida";
+    /// La `peticion_id` que manda el cliente pasa de `PETICION_ID_MAX` bytes (64): la orden no llega al núcleo ni se recuerda.
+    pub const PETICION_ID_LARGO: &str = "peticion_id.largo";
     /// `obra-N` no es ningún pueblo ni ninguna avanzada.
     pub const OBRA_DE_MAPA_DESCONOCIDA: &str = "obra_de_mapa.desconocida";
     /// `repostar` sin `lugar_id` y sin ninguna plaza ni avanzada operativa a la puerta de la columna.
@@ -3073,6 +3078,10 @@ pub mod rechazos {
     pub const HEROE_PUNTOS_INSUFICIENTES: &str = "heroe.puntos_insuficientes";
     pub const HEROE_TOPE_DE_ATRIBUTO: &str = "heroe.tope_de_atributo";
     pub const LOADOUT_SIN_NOMBRE: &str = "loadout.sin_nombre";
+    /// El nombre recortado del loadout pasa de `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres (el mismo tope que el de las plazas).
+    pub const LOADOUT_NOMBRE_LARGO: &str = "loadout.nombre_largo";
+    /// El nombre del loadout lleva caracteres de control.
+    pub const LOADOUT_NOMBRE_CONTROL: &str = "loadout.nombre_control";
     pub const LOADOUT_DESCONOCIDO: &str = "loadout.desconocido";
     pub const LOADOUT_PERK_NO_DESBLOQUEADO: &str = "loadout.perk_no_desbloqueado";
     pub const ESCUADRA_REPETIDA: &str = "escuadra.repetida";
@@ -3295,6 +3304,10 @@ pub mod rechazos {
     pub const FACCION_NOMBRE_VACIO: &str = "faccion.nombre_vacio";
     /// Otra Facción ya se llama así (sin mirar mayúsculas).
     pub const FACCION_NOMBRE_DUPLICADO: &str = "faccion.nombre_duplicado";
+    /// El nombre recortado de la Facción (al crearla o al proponer una fusión) pasa de `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres (el mismo tope que el de las plazas).
+    pub const FACCION_NOMBRE_LARGO: &str = "faccion.nombre_largo";
+    /// El nombre de la Facción (al crearla o al proponer una fusión) lleva caracteres de control.
+    pub const FACCION_NOMBRE_CONTROL: &str = "faccion.nombre_control";
     /// Alguna pieza del sigilo no es del catálogo, o los dos colores del fondo son el mismo.
     pub const FACCION_SIGILO_INVALIDO: &str = "faccion.sigilo_invalido";
     /// Otra Facción lleva un sigilo idéntico.

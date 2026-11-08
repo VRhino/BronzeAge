@@ -20,6 +20,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `orden.no_soportada` | `ORDEN_NO_SOPORTADA` | Una orden vacía (sin cuerpo). |
 | `orden.no_disponible` | `ORDEN_NO_DISPONIBLE` | Una orden del contrato que el núcleo aún no tiene (política, tecnología, Aedas y refundación): se rechaza con este código estable en vez de descartarse. |
 | `orden.forma_invalida` | `ORDEN_FORMA_INVALIDA` | Un valor de la orden fuera de su catálogo cerrado, o un id que no tiene la forma de ninguna entidad (`orden.forma_invalida`). |
+| `peticion_id.largo` | `PETICION_ID_LARGO` | La `peticion_id` que manda el cliente pasa de `PETICION_ID_MAX` bytes (64): la orden no llega al núcleo ni se recuerda. |
 | `obra_de_mapa.desconocida` | `OBRA_DE_MAPA_DESCONOCIDA` | `obra-N` no es ningún pueblo ni ninguna avanzada. |
 | `repostar.sin_lugar` | `REPOSTAR_SIN_LUGAR` | `repostar` sin `lugar_id` y sin ninguna plaza ni avanzada operativa a la puerta de la columna. |
 | `objetivo.no_soportado` | `OBJETIVO_NO_SOPORTADO` | — |
@@ -338,6 +339,8 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `heroe.puntos_insuficientes` | `HEROE_PUNTOS_INSUFICIENTES` | — |
 | `heroe.tope_de_atributo` | `HEROE_TOPE_DE_ATRIBUTO` | — |
 | `loadout.sin_nombre` | `LOADOUT_SIN_NOMBRE` | — |
+| `loadout.nombre_largo` | `LOADOUT_NOMBRE_LARGO` | El nombre recortado del loadout pasa de `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres (el mismo tope que el de las plazas). |
+| `loadout.nombre_control` | `LOADOUT_NOMBRE_CONTROL` | El nombre del loadout lleva caracteres de control. |
 | `loadout.desconocido` | `LOADOUT_DESCONOCIDO` | — |
 | `loadout.perk_no_desbloqueado` | `LOADOUT_PERK_NO_DESBLOQUEADO` | — |
 | `escuadra.repetida` | `ESCUADRA_REPETIDA` | — |
@@ -556,6 +559,8 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `faccion.no_existe` | `FACCION_NO_EXISTE` | — |
 | `faccion.nombre_vacio` | `FACCION_NOMBRE_VACIO` | El nombre queda vacío tras recortarlo. |
 | `faccion.nombre_duplicado` | `FACCION_NOMBRE_DUPLICADO` | Otra Facción ya se llama así (sin mirar mayúsculas). |
+| `faccion.nombre_largo` | `FACCION_NOMBRE_LARGO` | El nombre recortado de la Facción (al crearla o al proponer una fusión) pasa de `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres (el mismo tope que el de las plazas). |
+| `faccion.nombre_control` | `FACCION_NOMBRE_CONTROL` | El nombre de la Facción (al crearla o al proponer una fusión) lleva caracteres de control. |
 | `faccion.sigilo_invalido` | `FACCION_SIGILO_INVALIDO` | Alguna pieza del sigilo no es del catálogo, o los dos colores del fondo son el mismo. |
 | `faccion.sigilo_duplicado` | `FACCION_SIGILO_DUPLICADO` | Otra Facción lleva un sigilo idéntico. |
 | `faccion.ya_pertenece` | `FACCION_YA_PERTENECE` | Ya es ciudadano de una Facción: 1 héroe, 1 Facción. |

@@ -10,9 +10,6 @@
         "-p",
         "servicio"
       ],
-      "env": {
-        "CODIGO_REGISTRO_BOTS": "dev-bots"
-      },
       "port": 7878
     },
     {
@@ -31,10 +28,6 @@
         "--release"
       ],
       "cwd": "../BronceAgeBotsBrain",
-      "env": {
-        "CODIGO_REGISTRO_BOTS": "dev-bots",
-        "BOTS_TOKEN": "dev-bots-control"
-      },
       "port": 4000
     },
     {
@@ -46,8 +39,6 @@
       ],
       "cwd": "../BronceAgeBotsBrain",
       "env": {
-        "CODIGO_REGISTRO_BOTS": "dev-bots",
-        "BOTS_TOKEN": "dev-bots-control",
         "BOTS_POBLACION": "mercenarios"
       },
       "port": 4001

@@ -213,6 +213,7 @@ impl Nucleo {
         match &p.comando {
             Comando::CrearFaccion { heroe, nombre, sigilo } => {
                 self.autorizar_heroe(p, *heroe, false)?;
+                self.exigir_nombre_de_jugador(nombre, "una Facción", rechazos::FACCION_NOMBRE_LARGO, rechazos::FACCION_NOMBRE_CONTROL)?;
                 let (id, pidio) = (self.siguiente_faccion(), self.pedidas_por(*heroe));
                 self.estado.politica.facciones.crear(&r, id, *heroe, nombre, sigilo.clone(), t).map_err(de_faccion)?;
                 self.asegurar_tablon(t, crate::misiones::Dueno::Faccion(id));

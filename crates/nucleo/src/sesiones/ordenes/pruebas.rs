@@ -552,6 +552,10 @@ fn las_ordenes_sin_comando_en_el_nucleo_se_rechazan_con_un_codigo_estable() {
     // Una orden vacía tampoco se descarta.
     let vacia = pb::Orden { peticion_id: "p".into(), ..Default::default() };
     assert_eq!(codigo_de(traducir(&Mundo, &vacia, "ana", false, false)), rechazos::ORDEN_NO_SOPORTADA);
+    // La `peticion_id` del cliente se guarda para la idempotencia: hasta 64 bytes vale, una más se rechaza.
+    let con_id = |id: String| pb::Orden { peticion_id: id, ..Default::default() };
+    assert_eq!(codigo_de(traducir(&Mundo, &con_id("p".repeat(64)), "ana", false, false)), rechazos::ORDEN_NO_SOPORTADA, "llega a mirar el cuerpo");
+    assert_eq!(codigo_de(traducir(&Mundo, &con_id("p".repeat(65)), "ana", false, false)), rechazos::PETICION_ID_LARGO);
 }
 
 #[test]
