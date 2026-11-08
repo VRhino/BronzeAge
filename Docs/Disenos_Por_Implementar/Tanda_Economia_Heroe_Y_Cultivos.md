@@ -1,6 +1,6 @@
 # Tanda de economía, héroe y cultivos (2026-11-08)
 
-> **Diseño en curso con el autor, sin implementar** (vive en `Docs/Disenos_Por_Implementar/` hasta que se implemente; ver su README). Entrada 69 de `Docs/Mecanicas a desarrollar.md`. Contrastado con el motor en `main` ef5db11. Las cifras marcadas «placeholder» son del estudio y las cambia el autor. Lo marcado **Abierto** espera respuesta. Revisado entero el 2026-11-08 por la tarde con las respuestas del autor.
+> **Diseño en curso con el autor, sin implementar** (vive en `Docs/Disenos_Por_Implementar/` hasta que se implemente; ver su README). Entrada 69 de `Docs/Mecanicas a desarrollar.md`. Contrastado con el motor en `main` ef5db11. Las cifras marcadas «placeholder» son del estudio y las cambia el autor. Lo marcado **Abierto** espera respuesta. Revisado entero el 2026-11-08 por la tarde con las respuestas del autor. **No se implementa nada hasta que esté todo cerrado** (autor, 2026-11-08).
 
 ## 0. Orden de implementación
 
@@ -10,12 +10,12 @@
 | 2 | Moneda única del héroe: fuentes y usos (§4), mercenarios por contrato a 1/4 del oro o en monedas (§5) | motor, contrato, Unity, clientes | sí | — |
 | 3 | Oro de peajes, comisiones y compras desde la capital (§6), información regional de la taberna y toma de órdenes a distancia (§7), mercenarios de la región en la taberna (§8) | motor, contrato, cliente | no | 2; entrada 65 (informes por tipo) |
 | 4 | Prestigio (§13) | motor, contrato, cliente | no | — |
-| 5 | Recursos nuevos en el contrato (los nueve de §9-§12), bienes por clase (§9) y ciclo del pan (§10) | motor, contrato, clientes | sí | estudio de §9.1 |
+| 5 | Recursos nuevos en el contrato (los nueve de §9-§12), bienes por clase (§9) y ciclo del pan (§10) | motor, contrato, clientes | sí | — |
 | 6 | Carne, leche y queso (§11) | motor | sí | 5 |
 | 7 | Vid y oliva: fertilidad, aldeas de un cultivo, vino y aceite (§12) | generador, motor, cliente | sí (mundo nuevo) | 5 |
 | aparte | Puertas de la muralla en línea recta (§14) | `trazado` | sí (`LAYOUT_VERSION`) | — |
 
-- El prestigio sube del puesto 7 al 4: no depende de la comida (combate, conquista, comercio, fundación y nivel ya existen) y la cadena de alimentos espera al estudio de la cobertura (§9.1).
+- El prestigio sube del puesto 7 al 4: no depende de la comida (combate, conquista, comercio, fundación y nivel ya existen) y la cadena de alimentos es la parte más grande.
 - Los nueve recursos nuevos (harina, pan, carne, leche, queso, uva, aceituna, vino, aceite) entran **todos a la vez** en el enum `Recurso`, el `.proto`, los dorados, los precios de referencia y la capacidad del almacén al empezar la tanda 5, para que clientes, bots y admin se adapten una sola vez. Se comercian como el resto (órdenes, trueques, caravanas).
 - Las tandas 1, 2 y 5 a 7 piden partida nueva: conviene agruparlas para no reiniciar varias veces.
 
@@ -113,20 +113,34 @@ La taberna de la plaza enseña el **tablón de mercenarios** de los campamentos 
 
 ## 9. Bienes por clase de población
 
-Un bien de consumo multiplica el crecimiento de una clase cuando esa clase lo consume (por habitante y por minuto, como el trigo). Los efectos se multiplican entre sí.
+Los bienes de comida nuevos **alimentan** y además dan un **modificador de crecimiento** propio de cada clase (autor, 2026-11-08). Los **víveres de movimiento** (columnas, ejércitos, héroes) **solo** usan trigo.
 
-| Bien | Clase | Efecto |
-|---|---|---|
-| Pan | pesants | ×2 |
-| Queso | artesanos | placeholder ×1,5 |
-| Vino | nobleza | placeholder ×1,5 |
-| Aceite | nobleza | placeholder ×1,5 |
+| Bien | Quién lo consume | Modificador (ración entera) | Ración por cabeza y minuto (placeholder) |
+|---|---|---|---|
+| Trigo | todos, también los víveres | — (comida base) | lo que falte hasta la necesidad |
+| Carne | todas las clases | ×1,2 a todas | 0,02 |
+| Pan | pesants | ×2 | 0,04 |
+| Queso | artesanos | ×1,5 (placeholder) | 0,02 |
+| Vino | nobleza | ×1,5 (placeholder) | 0,01 |
+| Aceite | nobleza | ×1,5 (placeholder) | 0,01 |
+| Leche | **Abierto 9.2** | **Abierto 9.2** | — |
 
-**Abierto 9.1: cobertura parcial (en estudio, autor 2026-11-08).** Qué pasa cuando no hay bien para toda la clase: todo o nada, o proporcional a lo cubierto. Propuesta de estudio: medir las dos reglas con `batch poblacion` antes de la tanda 5.
+**El consumo mezclado, cada minuto y en cada plaza** (propuesta del estudio sobre la decisión del autor):
+1. Cada clase tiene su **necesidad de comida**, la de hoy (`consumoComidaPorHabitante`, 0,1 por habitante y minuto, por las políticas).
+2. Primero consume sus **bienes propios**, cada uno hasta su ración por cabeza.
+3. Cada bien consumido **alimenta 1 a 1**, como el trigo; lo que falte hasta la necesidad lo pone el **trigo**. Las raciones de una clase suman menos que su necesidad: el trigo siempre hace falta.
+4. **Cobertura proporcional (autor, 2026-11-08):** cada bien da su modificador en proporción a lo consumido de su ración en ese minuto: `1 + (M − 1) × consumido / ración`. El pan con media ración da ×1,5. Los modificadores se **multiplican** entre sí y con los factores de crecimiento de hoy.
+5. Un bien que no llega para todos se reparte **en proporción** entre las clases que lo consumen.
+6. La **nutrición y el hambre** se miden como hoy, con la necesidad cubierta por todo lo consumido (bienes y trigo).
+
+Ejemplo: 400 pesants necesitan 40 por minuto y quieren 16 de pan y 8 de carne. Con solo 8 de pan en el almacén: pan ×1,5, carne ×1,2 y 24 de trigo; crecen ×1,8.
+
+- **Abierto 9.2: la leche.** Qué clase la consume y qué modificador da; si no, solo es materia prima de la quesera.
+- **Abierto 9.3: la guarnición.** No crece, así que los bienes no le dan nada. Propuesta: come solo trigo y carne, para no quitarle a la población el pan, el queso, el vino ni el aceite.
 
 ## 10. Ciclo del pan
 
-- **Molino:** trigo → **harina**. Admite **un buey** asignado, que se compra como el de una caravana (12 de oro, placeholder) y se queda allí; dobla su producción.
+- **Molino:** trigo → **harina**. Admite **un buey** asignado, que se compra como el de una caravana (12 de oro; autor, 2026-11-08) y se queda allí; dobla su producción.
 - **Horno:** harina → **pan**.
 - Los dos desde el nivel 1 de la plaza; harina y pan se comercian como el resto. El pan lo consumen los pesants (§9).
 - **Abierto 10.1: tecnologías.** Hoy cada edificio pide una tecnología de la Facción (Economía §6.4). Recomendación: los edificios nuevos (molino, horno, quesera, prensa, el del vino) piden **solo el nivel de la plaza**, sin tecnología, para no tocar el árbol en esta tanda.
@@ -135,10 +149,10 @@ Un bien de consumo multiplica el crecimiento de una clase cuando esa clase lo co
 
 Retoma la idea 53 de `Ideas a diseñar.md`.
 - De los **corrales** de la aldea: la **leche** sale del rebaño sin sacrificar; la **carne**, al sacrificar, junto al ganado de hoy (que sigue haciendo falta para el cuero y la Maravilla).
-- La **carne alimenta como el trigo y rinde 1,2×**: una unidad de carne cubre 1,2 de trigo.
+- La **carne** alimenta como el trigo (1 a 1) y da ×1,2 al crecimiento de todas las clases (§9); no vale para los víveres de movimiento.
 - **Quesera** (nivel 2 de la plaza): leche → **queso**, que consumen los artesanos (§9).
 - El carro de la aldea lleva ya dos recursos (trigo y ganado); con carne y leche, cuatro.
-- **Abierto 11.1:** ¿dónde vale la carne como comida? Propuesta: en la población, la guarnición y los víveres, y se come **antes que el trigo** (rinde más).
+- El consumo de la carne, la leche y el queso es el de §9.
 
 ## 12. Vid y oliva
 
@@ -173,4 +187,4 @@ x-------
 
 Toca `crates/trazado` (el trazo del anillo, junto a `estrecharPuertas`/`limitarPuertas`), sube `LAYOUT_VERSION` y pide partida nueva. Las murallas ya trazadas no cambian (las puertas están congeladas).
 
-- **Abierto 14.1:** si en el sitio de la puerta el anillo no tiene ese tramo recto, (a) se endereza el muro alrededor de la puerta (puede encerrar o dejar fuera alguna celda), o (b) la puerta se corre por el anillo hasta donde quepa. Recomendación: (a), porque la puerta sigue en el camino.
+- **Cuando el anillo no tiene el tramo recto** donde va la puerta, **se endereza el muro** a su alrededor, para que la puerta quede donde llega el camino (autor, 2026-11-08: «es primordial»). Puede encerrar o dejar fuera alguna celda; la puerta no se mueve.
