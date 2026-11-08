@@ -196,7 +196,7 @@ impl Nucleo {
                 self.anotar_sucesos(*asentamiento, t, &ev);
                 Ok(Some(id))
             }
-            Comando::MarcarAldea { asentamiento, punto } => {
+            Comando::MarcarAldea { asentamiento, punto, cultivo } => {
                 self.plaza_o_rechazo(*asentamiento)?;
                 self.autorizar_en_plaza(p, *asentamiento, None)?;
                 let pos = *punto;
@@ -209,7 +209,7 @@ impl Nucleo {
                 let id = self.estado.siguiente_id;
                 let mut ev = vec![];
                 let eco = &mut self.estado.asentamientos.get_mut(asentamiento).expect("existe").economia;
-                eco.iniciar_aldea(&datos, id, pos, fertilidad, &carro, &mut ev).map_err(de_pueblo)?;
+                eco.iniciar_aldea(&datos, id, pos, fertilidad, *cultivo, &carro, &mut ev).map_err(de_pueblo)?;
                 self.estado.siguiente_id += 1;
                 self.anotar_sucesos(*asentamiento, t, &ev);
                 Ok(Some(id))

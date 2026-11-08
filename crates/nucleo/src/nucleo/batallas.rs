@@ -1049,9 +1049,7 @@ impl Nucleo {
             self.tr.tocar(Clase::Heroe, e.heroe);
             h.heroe.experiencia += e.xp;
             if let Some(botin) = &e.botin {
-                h.heroe.monedas.bronce += botin.monedas.bronce;
-                h.heroe.monedas.plata += botin.monedas.plata;
-                h.heroe.monedas.oro += botin.monedas.oro;
+                h.heroe.monedas += botin.monedas;
             }
         }
         self.reservar(&efectos.soltar, None);

@@ -146,6 +146,24 @@ lado de un trueque entre Facciones distintas, y `bandidos` por campamento destru
 ```
 <!-- /parametros -->
 
+<!-- parametros:PRESTIGIO -->
+```json
+{
+  "victoria": 5,
+  "conquista": 50,
+  "fundacion": 20,
+  "ascensoPorNivel": 10,
+  "comercio": 2,
+  "alianzas": {
+    "base": 1,
+    "unaMasCada": 100
+  },
+  "estatuas": [200, 500, 1000],
+  "maravilla": 2000
+}
+```
+<!-- /parametros -->
+
 ### 3.6 Reputación
 
 Cada Facción lleva un número −100..+100 (`ajustarReputacion` lo recorta). La reputación es un **ritmo** (no se barre cada minuto):

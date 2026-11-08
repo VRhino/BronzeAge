@@ -5,7 +5,6 @@
 use crate::ciclo::{Batalla, CaravanaEnBatalla, Contexto, EscuadraEnBatalla};
 use crate::resolucion::Lado;
 use base::Mil;
-use militar::heroe::Monedas;
 use militar::{CaravanaId, EscuadraId, HeroeId};
 use std::collections::BTreeSet;
 
@@ -37,7 +36,7 @@ pub struct ObjetoBotin {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Botin {
     pub objetos: Vec<ObjetoBotin>,
-    pub monedas: Monedas,
+    pub monedas: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -142,7 +141,7 @@ impl Batalla {
     pub fn validar_resultado(&self, servidor: &str, res: &Resultado, objeto_ya_existe: &dyn Fn(&str) -> bool) -> Result<(), ErrorResultado> {
         use ErrorResultado::*;
         // Lo que el esquema valida por forma: enteros >= 0 y objetos con cantidad >= 1.
-        let m = |b: &Botin| b.monedas.bronce < 0 || b.monedas.plata < 0 || b.monedas.oro < 0 || b.objetos.iter().any(|o| o.cantidad < 1);
+        let m = |b: &Botin| b.monedas < 0 || b.objetos.iter().any(|o| o.cantidad < 1);
         if res.por_escuadra.iter().any(|e| e.desplegados < 0 || e.supervivientes_al_cierre < 0 || e.muertos < 0 || e.xp_ganada < 0)
             || res.por_heroe.iter().any(|h| h.xp_ganada < 0 || h.botin.as_ref().is_some_and(m))
         {

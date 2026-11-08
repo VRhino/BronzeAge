@@ -1,6 +1,7 @@
 //! Utilidades de las pruebas: una retícula sintética como mundo y un escenario aleatorio determinista.
 #![allow(dead_code)]
 
+use asentamiento::pueblos::Cultivo;
 use base::{Instante, Punto, Rng};
 use contrato::v1::{AristaGrafo, GrafoNavegacion, NodoGrafo, Punto as PuntoPb};
 use nucleo::{Ajustes, Arranque, Comando, Nucleo, Peticion, Reglas};
@@ -286,7 +287,7 @@ pub fn levantar_aldea(n: &mut Nucleo, cuenta: &str, plaza: u64) -> Option<u64> {
     let faccion = n.estado().asentamientos[&plaza].faccion;
     let punto = n.sitio_de_aldea(plaza)?;
     let t = n.ahora();
-    let r = n.aplicar_en(t, Peticion::nueva("admin", &format!("aldea-{plaza}"), Comando::MarcarAldea { asentamiento: plaza, punto }).de_admin());
+    let r = n.aplicar_en(t, Peticion::nueva("admin", &format!("aldea-{plaza}"), Comando::MarcarAldea { asentamiento: plaza, punto, cultivo: Cultivo::Trigo }).de_admin());
     assert!(r.aceptada(), "el sitio del panel se acepta: {r:?}");
     let pueblo = r.creadas[0];
     let sitio = n.posicion_de_pueblo(pueblo)?;

@@ -419,8 +419,8 @@ async fn la_foto_de_la_plaza_trae_su_interior_entero_y_es_la_proyeccion_del_nucl
     assert_eq!(ana.plaza.id, as_);
     let p = &ana.plaza;
 
-    // El almacén en escalones: los 29 recursos con su valor, su capacidad y su tendencia; la población entera por clase con la marca de recuperación.
-    assert_eq!(p.almacen.len(), 29);
+    // El almacén en escalones: todos los recursos (38 desde la tanda 69) con su valor, su capacidad y su tendencia; la población entera por clase con la marca de recuperación.
+    assert_eq!(p.almacen.len(), asentamiento::recurso::N);
     assert!(p.almacen.values().all(|e| e.cantidad.as_ref().is_some_and(|c| c.en_escalones) && e.capacidad > 0));
     assert_eq!(existencia(p, "madera").maximo, Some(p.almacen["madera"].capacidad), "el contador no pasa de la capacidad");
     let pob = p.poblacion.as_ref().unwrap();

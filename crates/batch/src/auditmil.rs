@@ -5,7 +5,7 @@
 
 use asentamiento::datos::UNO;
 use asentamiento::recintos::Recinto;
-use asentamiento::recurso::TODOS;
+use asentamiento::recurso::{N, TODOS};
 use asentamiento::Recurso;
 use base::{Instante, Mil};
 use comercio::caravana::EstadoCaravana;
@@ -39,8 +39,8 @@ pub fn escuadras(n: &Nucleo) -> BTreeMap<u64, Esc> {
 
 /// Lo que hay de cada recurso en todos los contenedores del mundo: almacenes de plazas, pueblos y avanzadas (también las huérfanas), carros de columnas, caravanas, almacenes
 /// personales y carros de los héroes.
-pub fn recursos(n: &Nucleo) -> [i64; 29] {
-    let mut v = [0i64; 29];
+pub fn recursos(n: &Nucleo) -> [i64; N] {
+    let mut v = [0i64; N];
     let e = n.estado();
     let mut sumar = |r: Recurso, q: i64| v[r.indice()] += q;
     for a in e.asentamientos.values() {
@@ -95,7 +95,7 @@ pub struct Antes {
     escuadras: BTreeMap<u64, Esc>,
     /// Héroe → hasta cuándo está herido.
     heridos: BTreeMap<u64, Option<Instante>>,
-    recursos: [i64; 29],
+    recursos: [i64; N],
     /// La caravana atacada: carros y carga total.
     caravana: Option<(usize, i64)>,
     recintos: Vec<Recinto>,

@@ -47,6 +47,8 @@ pub struct Faccion {
     pub admite_otras_en_ataques: bool,
     /// Los ciudadanos marcados (mercenarios contratados); los demás no tienen entrada.
     pub marcas: BTreeMap<HeroeId, Marca>,
+    /// El prestigio (tanda 69 §13): se acumula y no se gasta ni se pierde.
+    pub prestigio: i64,
 }
 
 impl Faccion {
@@ -198,6 +200,7 @@ impl Facciones {
                 derrota: None,
                 admite_otras_en_ataques: false,
                 marcas: BTreeMap::new(),
+                prestigio: 0,
             },
         );
         self.de_heroe.insert(actor, id);
@@ -224,6 +227,7 @@ impl Facciones {
             derrota: None,
             admite_otras_en_ataques: false,
             marcas: BTreeMap::new(),
+            prestigio: 0,
         };
         self.por_id.entry(id).or_insert(f)
     }

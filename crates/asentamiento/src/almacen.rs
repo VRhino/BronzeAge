@@ -14,46 +14,53 @@
 //! Lo que se **ve** ([`Almacen::visible`]) es lo guardado: la unidad que se está consumiendo sigue ahí hasta acabarse. Lo que se **mueve, comercia
 //! y paga** ([`Almacen::cantidad`]) es lo que hay entero de verdad: lo guardado sin esa unidad empezada.
 
-use crate::recurso::{Recurso, TODOS};
+use crate::recurso::{Recurso, N, TODOS};
 use base::{entero, entero_arriba, Mil, UNIDAD};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Almacen {
     /// Unidades guardadas (múltiplo de 1000), con la que se está consumiendo.
-    cantidad: [Mil; 29],
-    capacidad: [Mil; 29],
+    cantidad: [Mil; N],
+    capacidad: [Mil; N],
     /// Resto oculto de los flujos, en `(−1000, 1000)`; lo exacto (`cantidad + resto`) nunca es negativo ni pasa de la capacidad. Nadie fuera de
     /// aquí lo lee salvo la foto.
-    resto: [Mil; 29],
+    resto: [Mil; N],
     /// Lo que entra por [`Almacen::producir`] y sale por [`Almacen::consumir`] mientras se registra ([`Almacen::registrar_flujos`]): el paso de minuto de la plaza lo abre y lo
     /// cierra ([`Almacen::tomar_flujos`]), así que fuera del paso siempre es `None` y no cuenta en la igualdad ni en la foto.
     flujos: Option<Box<Flujos>>,
 }
 
 /// Lo producido y lo consumido de cada recurso en un tramo (milésimas), por separado: producción y consumo del mismo recurso no se compensan aquí (mecánica 60).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Flujos {
-    pub producido: [Mil; 29],
-    pub consumido: [Mil; 29],
+    pub producido: [Mil; N],
+    pub consumido: [Mil; N],
     /// Lo que produjeron los flujos de entrada **quepa o no** (2026-11-03): con el almacén lleno, `producido` solo cuenta lo que entró y esto lo que
     /// rinden de verdad los edificios ([`Almacen::producir`] apunta lo pedido; el extractor que no pide por falta de hueco lo suma con
     /// [`Almacen::apuntar_produccion`]).
-    pub produccion: [Mil; 29],
+    pub produccion: [Mil; N],
+}
+
+// A mano: `Default` no está derivado para las listas de más de 32 elementos.
+impl Default for Flujos {
+    fn default() -> Self {
+        Flujos { producido: [0; N], consumido: [0; N], produccion: [0; N] }
+    }
 }
 
 impl Almacen {
-    /// Un almacén vacío con `capacidad` para cada uno de los 29 recursos (`ALMACEN.capacidadInicialPorRecurso`).
+    /// Un almacén vacío con `capacidad` para cada uno de los recursos (`ALMACEN.capacidadInicialPorRecurso`).
     pub fn nuevo(capacidad: Mil) -> Self {
-        Self { cantidad: [0; 29], capacidad: [capacidad; 29], resto: [0; 29], flujos: None }
+        Self { cantidad: [0; N], capacidad: [capacidad; N], resto: [0; N], flujos: None }
     }
 
-    /// Las unidades guardadas, capacidades y restos de los 29 recursos, en orden de [`TODOS`] (para serializar).
-    pub fn partes(&self) -> (&[Mil; 29], &[Mil; 29], &[Mil; 29]) {
+    /// Las unidades guardadas, capacidades y restos de los recursos, en orden de [`TODOS`] (para serializar).
+    pub fn partes(&self) -> (&[Mil; N], &[Mil; N], &[Mil; N]) {
         (&self.cantidad, &self.capacidad, &self.resto)
     }
 
     /// Inversa de [`Almacen::partes`] (restaurar de una foto). No recorta: se guardó un almacén válido.
-    pub fn desde_partes(cantidad: [Mil; 29], capacidad: [Mil; 29], resto: [Mil; 29]) -> Self {
+    pub fn desde_partes(cantidad: [Mil; N], capacidad: [Mil; N], resto: [Mil; N]) -> Self {
         Self { cantidad, capacidad, resto, flujos: None }
     }
 

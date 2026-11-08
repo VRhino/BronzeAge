@@ -16,6 +16,7 @@ use crate::comando::{rechazos, AccionReloj, Comando, LadoDelFondo, ObjetivoAtaqu
 use crate::estado_militar::Relacion;
 use crate::nucleo::Nucleo;
 use crate::proyeccion::ids;
+use asentamiento::pueblos::Cultivo;
 use asentamiento::{Cargo, Recurso, Tipo};
 use base::{Mil, Punto};
 use combate::resolucion::Lado;
@@ -155,6 +156,13 @@ impl Ctx<'_> {
             Some("almacenPersonal") => Ok(Some(PagarCon::AlmacenPersonal)),
             Some("carro") => Ok(Some(PagarCon::Carro)),
             Some(otro) => self.forma(format!("forma de pago desconocida: {otro}")),
+        }
+    }
+    /// El cultivo de una aldea (`trigo`, el de sin él, | `vid` | `oliva`); otro valor, `orden.forma_invalida`.
+    fn cultivo(&self, s: Option<&str>) -> R<Cultivo> {
+        match s {
+            None => Ok(Cultivo::Trigo),
+            Some(n) => Cultivo::desde_nombre(n).map_or_else(|| self.forma(format!("cultivo desconocido: {n}")), Ok),
         }
     }
     fn ejercito(&self, s: &str) -> R<u64> {
@@ -743,7 +751,7 @@ impl Ctx<'_> {
             Cuerpo::MarcarPueblo(o) => Comando::MarcarPueblo { asentamiento: self.plaza(&o.asentamiento_id)?, nodo: self.nodo(&o.nodo_id)? },
             Cuerpo::DestruirPueblo(o) => Comando::DestruirPueblo { pueblo: self.pueblo(&o.pueblo_id)? },
             Cuerpo::ReponerCarroDeAcarreo(o) => Comando::ReponerCarro { pueblo: self.pueblo(&o.pueblo_id)? },
-            Cuerpo::MarcarAldea(o) => Comando::MarcarAldea { asentamiento: self.plaza(&o.asentamiento_id)?, punto: self.punto(o.punto.as_ref())? },
+            Cuerpo::MarcarAldea(o) => Comando::MarcarAldea { asentamiento: self.plaza(&o.asentamiento_id)?, punto: self.punto(o.punto.as_ref())?, cultivo: self.cultivo(o.cultivo.as_deref())? },
             Cuerpo::MejorarAldea(o) => Comando::MejorarAldea { pueblo: self.pueblo(&o.pueblo_id)? },
             Cuerpo::EntrarEnPueblo(o) => Comando::EntrarEnPueblo { pueblo: self.pueblo(&o.pueblo_id)?, heroe: self.heroe(&o.heroe_id)? },
             Cuerpo::SalirDePueblo(o) => Comando::SalirDePueblo { pueblo: self.pueblo(&o.pueblo_id)?, heroe: self.heroe(&o.heroe_id)? },

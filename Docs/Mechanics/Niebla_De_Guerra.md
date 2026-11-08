@@ -285,6 +285,11 @@ efecto:  memoria[mi Facción].informes[plaza] = informe;  evento asentamiento.in
   },
   "campamento": {
     "cupoMiradas": 1
+  },
+  "region": {
+    "oroPorNivel": 60,
+    "cooldownMinutos": 360,
+    "caducidadMinutos": 200
   }
 }
 ```

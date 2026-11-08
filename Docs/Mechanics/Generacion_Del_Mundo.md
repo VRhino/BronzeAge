@@ -1234,18 +1234,24 @@ Todos los de `worldgen/config.ts` están **congelados** (no se editan en calient
       "poder": 20,
       "unidades": 10,
       "oroPorHeroe": 30,
+      "botinPorHeroe": 5,
+      "monedasPorHeroe": 50,
       "peso": 0.5
     },
     "2": {
       "poder": 60,
       "unidades": 30,
       "oroPorHeroe": 33,
+      "botinPorHeroe": 7,
+      "monedasPorHeroe": 75,
       "peso": 0.3
     },
     "3": {
       "poder": 120,
       "unidades": 60,
       "oroPorHeroe": 36,
+      "botinPorHeroe": 10,
+      "monedasPorHeroe": 100,
       "peso": 0.2
     }
   },

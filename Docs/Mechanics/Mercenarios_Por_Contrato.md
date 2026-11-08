@@ -436,6 +436,8 @@ Las tarifas son porcentajes enteros del valor del mercenario (20 de oro por nive
     { "dias": 7, "tarifaPct": 70, "renombre": 50 }
   ],
   "permanentePct": 500,
+  "factorOroPct": 25,
+  "monedasPorOro": 100,
   "oroPorNivelHeroe": 20,
   "radioDefensa": 20,
   "plazoOrdenHoras": 24,

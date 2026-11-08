@@ -93,6 +93,7 @@ fn nombre(d: &impl std::fmt::Debug) -> String {
     format!("{d:?}").split(|c: char| !c.is_alphanumeric()).next().unwrap_or_default().to_owned()
 }
 
+use asentamiento::pueblos::Cultivo;
 use asentamiento::Recurso::{Madera, Oro, Piedra, Trigo};
 
 /// Una fila por orden del jugador que el núcleo tiene (y una más por cada orden que da dos comandos según la obra o el lugar): la orden del contrato y el comando que debe salir.
@@ -319,7 +320,8 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         (orden!(MarcarPueblo, OrdenMarcarPueblo, asentamiento_id: s("as-3"), heroe_id: h.clone(), nodo_id: s("nodo-12")), Comando::MarcarPueblo { asentamiento: 3, nodo: 12 }),
         (orden!(DestruirPueblo, OrdenDestruirPueblo, heroe_id: h.clone(), pueblo_id: pueblo()), Comando::DestruirPueblo { pueblo: 4 }),
         (orden!(ReponerCarroDeAcarreo, OrdenReponerCarroDeAcarreo, heroe_id: h.clone(), pueblo_id: pueblo()), Comando::ReponerCarro { pueblo: 4 }),
-        (orden!(MarcarAldea, OrdenMarcarAldea, asentamiento_id: s("as-3"), heroe_id: h.clone(), punto: pb_punto(1_000, 2_000)), Comando::MarcarAldea { asentamiento: 3, punto: Punto::new(1_000, 2_000) }),
+        (orden!(MarcarAldea, OrdenMarcarAldea, asentamiento_id: s("as-3"), heroe_id: h.clone(), punto: pb_punto(1_000, 2_000)), Comando::MarcarAldea { asentamiento: 3, punto: Punto::new(1_000, 2_000), cultivo: Cultivo::Trigo }),
+        (orden!(MarcarAldea, OrdenMarcarAldea, asentamiento_id: s("as-3"), heroe_id: h.clone(), punto: pb_punto(1_000, 2_000), cultivo: Some(s("oliva"))), Comando::MarcarAldea { asentamiento: 3, punto: Punto::new(1_000, 2_000), cultivo: Cultivo::Oliva }),
         (orden!(MejorarAldea, OrdenMejorarAldea, heroe_id: h.clone(), pueblo_id: pueblo()), Comando::MejorarAldea { pueblo: 4 }),
         (orden!(EntrarEnPueblo, OrdenEntrarEnPueblo, pueblo_id: pueblo(), heroe_id: h.clone()), Comando::EntrarEnPueblo { pueblo: 4, heroe: 7 }),
         // ── Dentro de un pueblo o una aldea (§14.0.1) ──
@@ -690,6 +692,7 @@ fn un_id_sin_la_forma_de_su_entidad_o_un_valor_fuera_de_su_catalogo_se_rechazan_
         (orden!(OrdenarMercenario, OrdenOrdenarMercenario, mercenario_ids: v(&["heroe-9"]), tipo: s("huir"), objetivo: Some(pb::ObjetivoMercenario { tipo: Some(Mercenario::AsentamientoId(s("as-3"))) })), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(OrdenarMercenario, OrdenOrdenarMercenario, mercenario_ids: v(&["heroe-9", "esc-2"]), tipo: s("guardar"), objetivo: Some(pb::ObjetivoMercenario { tipo: Some(Mercenario::AsentamientoId(s("as-3"))) })), rechazos::HEROE_DESCONOCIDO),
         (orden!(ReclamarPremioDeRango, OrdenReclamarPremioDeRango, tropa_id: s("dragones")), rechazos::ORDEN_FORMA_INVALIDA),
+        (orden!(MarcarAldea, OrdenMarcarAldea, asentamiento_id: s("as-3"), heroe_id: h(), punto: pb_punto(1_000, 2_000), cultivo: Some(s("lino"))), rechazos::ORDEN_FORMA_INVALIDA),
     ];
     for (cuerpo, codigo) in casos {
         assert_eq!(traduce(cuerpo.clone(), false), Err(codigo), "{cuerpo:?}");

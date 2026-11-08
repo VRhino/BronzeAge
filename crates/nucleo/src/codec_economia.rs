@@ -2,17 +2,17 @@
 //! desestructura **entera** (sin `..`): si el crate añade un campo, esto deja de compilar y obliga a decidir cómo se guarda.
 //!
 //! Formato (BAN27: los almacenes guardan unidades enteras —cantidad múltiplo de 1000— y el resto oculto de sus flujos, en `(−1000, 1000)`; BAN20: BAN15 más los recintos de muralla de cada plaza, que ya no se guardan con su ciudad; BAN15 era BAN14, con la población entera, sus restos y la marca de recuperación del hambre, más las avanzadas de cada plaza; little endian, el de `codec`): `fundado_en i64 · nivel u32 · medidor{valor i64, racha u32, nivel_actual u32} ·
-//! población{pesants, artesanos, nobleza: i64 (habitantes enteros) · restos 3 × i64 (milésimas de habitante, uno por clase) · nutrición i64 · recuperando bool} · almacén{29 × (cantidad i64, capacidad i64, resto i64)} · políticas{n u64 ·
+//! población{pesants, artesanos, nobleza: i64 (habitantes enteros) · restos 3 × i64 (milésimas de habitante, uno por clase) · nutrición i64 · recuperando bool} · almacén{N × (cantidad i64, capacidad i64, resto i64)} · políticas{n u64 ·
 //! n × (id texto, cargo u8, expira_en i64)} · edificios{n u64 · n × edificio} · pueblos{n u64 · n × pueblo} · avanzadas{n u64 · n × avanzada} · recintos{n u64 · n × recinto} · ingresos_acarreo{n u64 · n × (recurso u8, hora i64, cantidad i64)} · siguiente_edificio u32 · ascenso{opt: nivel_objetivo u32,
-//! iniciado_en i64, completa_en i64} · recetas_pausadas{n u64 · n × recurso u8} · auto_pausada bool · reserva_manual 29 × i64 · ocupado
-//! bool · completados_pendientes u32 · destruido bool · ultimo_minuto i64 · tendencia{almacén 29 × i64 · población 3 × i64}` (BAN22: la tendencia «+N/min» del último paso de minuto).
+//! iniciado_en i64, completa_en i64} · recetas_pausadas{n u64 · n × recurso u8} · auto_pausada bool · reserva_manual N × i64 · ocupado
+//! bool · completados_pendientes u32 · destruido bool · ultimo_minuto i64 · tendencia{almacén N × i64 · población 3 × i64}` (BAN22: la tendencia «+N/min» del último paso de minuto).
 //! Un edificio: `id u32 · tipo u8 · estado u8 · completa_en opt_i64 · prioridad i64 · nivel_interno u8 · mejora{bool, nivel u8,
-//! completa_en i64} · danado bool · fuente{u8: 0 ninguna, 1 nodo, 2 parcela; u32} · pausado_por_almacen bool`.
-//! Un pueblo: `id u64 · tipo u8 · sitio{u8: 0 nodo → u32; 1 punto → punto, fertilidad i64} · nivel u32 · estado{u8: 0 pendiente → requerido y entregado, cada uno
-//! n u64 · n × (recurso u8, i64); 1 en obra → completa_en i64; 2 activo} · mejora{opt: estado} · rebaño{opt: especie texto, cabezas i64} · almacén{29 × (cantidad i64, capacidad i64, resto i64)} · carro opt_u64 ·
+//! completa_en i64} · danado bool · fuente{u8: 0 ninguna, 1 nodo, 2 parcela; u32} · pausado_por_almacen bool · buey bool`.
+//! Un pueblo: `id u64 · tipo u8 · sitio{u8: 0 nodo → u32; 1 punto → punto, fertilidad i64, cultivo u8} · nivel u32 · estado{u8: 0 pendiente → requerido y entregado, cada uno
+//! n u64 · n × (recurso u8, i64); 1 en obra → completa_en i64; 2 activo} · mejora{opt: estado} · rebaño{opt: especie texto, cabezas i64} · almacén{N × (cantidad i64, capacidad i64, resto i64)} · carro opt_u64 ·
 //! lleno bool` (BAN47, la aldea agrícola; antes `id · tipo · nodo u32 · estado · almacén · carro · lleno`, siempre sobre un nodo y de nivel 1).
 //! Una avanzada: `id u64 · posición punto · etapa u8 (0 atalaya, 1 fuerte, 2 ciudadela) · estado{u8: 0 en construcción, 1 operativa, 2 en ruinas → invulnerable_hasta opt_i64} ·
-//! obra{opt: tipo u8 (0 construir, 1 mejorar, 2 reparar) · requerido y entregado, cada uno n u64 · n × (recurso u8, i64) · completa_en opt_i64} · almacén{29 × (cantidad i64, capacidad i64, resto i64)}`.
+//! obra{opt: tipo u8 (0 construir, 1 mejorar, 2 reparar) · requerido y entregado, cada uno n u64 · n × (recurso u8, i64) · completa_en opt_i64} · almacén{N × (cantidad i64, capacidad i64, resto i64)}`.
 //! Un recinto: `id u32 · nivel u8 · celdas{n u64 · n × (col i32, row i32, clase u8: 0 muro, 1 puerta, 2 torre)} · avance i32 · mejora{opt: nivel u8, avance i32} ·
 //! siguiente_celda_en opt_i64 · comprometido_en i64 · completado_en opt_i64`. La ciudad de la plaza (`codec_ciudad`) no guarda recintos: se derivan de estos al leer.
 //! Los tipos y recursos van por su índice en el enum (`Tipo as u8`, `Recurso::indice`).
@@ -24,9 +24,9 @@ use asentamiento::catalogo::{Tipo, TIPOS};
 use asentamiento::edificio::{Edificio, Estado, Fuente, Mejora};
 use asentamiento::mantenimiento::Medidor;
 use asentamiento::politicas::Activa;
-use asentamiento::pueblos::{EstadoPueblo, IngresoAcarreo, Pueblo, Rebano, Sitio};
+use asentamiento::pueblos::{Cultivo, EstadoPueblo, IngresoAcarreo, Pueblo, Rebano, Sitio};
 use asentamiento::recintos::{Mejora as MejoraDeRecinto, Recinto};
-use asentamiento::recurso::TODOS;
+use asentamiento::recurso::{N, TODOS};
 use asentamiento::{Almacen, Cargo, Costo, Politicas, Poblacion, Recurso};
 use trazado::{Celda, CeldaDeRed, CeldaMuro, ClaseCelda};
 
@@ -79,7 +79,7 @@ fn estado_a_u8(e: Estado) -> u8 {
 
 fn escribir_almacen(w: &mut Escritor, a: &Almacen) {
     let (cantidad, capacidad, resto) = a.partes();
-    for i in 0..29 {
+    for i in 0..N {
         w.i64(cantidad[i]);
         w.i64(capacidad[i]);
         w.i64(resto[i]);
@@ -87,8 +87,8 @@ fn escribir_almacen(w: &mut Escritor, a: &Almacen) {
 }
 
 fn leer_almacen(r: &mut Lector) -> Result<Almacen, ErrorFormato> {
-    let (mut cantidad, mut capacidad, mut resto) = ([0; 29], [0; 29], [0; 29]);
-    for i in 0..29 {
+    let (mut cantidad, mut capacidad, mut resto) = ([0; N], [0; N], [0; N]);
+    for i in 0..N {
         cantidad[i] = r.i64()?;
         capacidad[i] = r.i64()?;
         resto[i] = r.i64()?;
@@ -307,7 +307,7 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
     }
     w.u64(edificios.len() as u64);
     for e in edificios {
-        let Edificio { id, tipo, estado, completa_en, prioridad, nivel_interno, mejora, danado, fuente, pausado_por_almacen } = e;
+        let Edificio { id, tipo, estado, completa_en, prioridad, nivel_interno, mejora, danado, fuente, pausado_por_almacen, buey } = e;
         w.u32(*id);
         w.u8(tipo_a_u8(*tipo));
         w.u8(estado_a_u8(*estado));
@@ -335,6 +335,7 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
             }
         }
         w.bool(*pausado_por_almacen);
+        w.bool(*buey);
     }
     w.u64(pueblos.len() as u64);
     for Pueblo { id, tipo, sitio, nivel, estado, mejora, rebano, almacen, carro, lleno } in pueblos {
@@ -345,10 +346,11 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
                 w.u8(0);
                 w.u32(*n);
             }
-            Sitio::Punto { pos, fertilidad } => {
+            Sitio::Punto { pos, fertilidad, cultivo } => {
                 w.u8(1);
                 w.punto(*pos);
                 w.i64(*fertilidad);
+                w.u8(*cultivo as u8);
             }
         }
         w.u32(*nivel);
@@ -431,7 +433,7 @@ pub(crate) fn leer(r: &mut Lector, con_aldeas: bool, con_flujos: bool, con_desem
             2 => Some(Fuente::Parcela(r.u32()?)),
             _ => return Err(ErrorFormato("fuente de edificio desconocida")),
         };
-        edificios.push(Edificio { id, tipo, estado, completa_en, prioridad, nivel_interno, mejora, danado, fuente, pausado_por_almacen: r.bool()? });
+        edificios.push(Edificio { id, tipo, estado, completa_en, prioridad, nivel_interno, mejora, danado, fuente, pausado_por_almacen: r.bool()?, buey: r.bool()? });
     }
     let mut pueblos = Vec::new();
     for _ in 0..r.cuenta()? {
@@ -439,7 +441,7 @@ pub(crate) fn leer(r: &mut Lector, con_aldeas: bool, con_flujos: bool, con_desem
         let (sitio, nivel, estado, mejora, rebano) = if con_aldeas {
             let sitio = match r.u8()? {
                 0 => Sitio::Nodo(r.u32()?),
-                1 => Sitio::Punto { pos: r.punto()?, fertilidad: r.i64()? },
+                1 => Sitio::Punto { pos: r.punto()?, fertilidad: r.i64()?, cultivo: *Cultivo::TODOS.get(usize::from(r.u8()?)).ok_or(ErrorFormato("cultivo de aldea desconocido"))? },
                 _ => return Err(ErrorFormato("sitio de pueblo desconocido")),
             };
             let (nivel, estado) = (r.u32()?, leer_estado_pueblo(r)?);
@@ -470,7 +472,7 @@ pub(crate) fn leer(r: &mut Lector, con_aldeas: bool, con_flujos: bool, con_desem
         recetas_pausadas.push(recurso_de_u8(r.u8()?)?);
     }
     let auto_pausada = r.bool()?;
-    let mut reserva_manual = [0; 29];
+    let mut reserva_manual = [0; N];
     for x in reserva_manual.iter_mut() {
         *x = r.i64()?;
     }

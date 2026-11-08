@@ -452,10 +452,19 @@ la Era de cada tecnología propia (decide lo que cuesta adoptarla o comprarla); 
       "madera": 60,
       "piedra": 10
     },
-    "margen": 1.3
+    "margen": 1.3,
+    "fueraDeVenta": [
+      "carne",
+      "leche",
+      "uva",
+      "aceituna"
+    ]
   },
   "refundacion": {
-    "porcentajeCoste": 0.4
+    "porcentajeCoste": 0.4,
+    "excluir": [
+      "oro"
+    ]
   }
 }
 ```

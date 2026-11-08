@@ -1562,6 +1562,82 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
     "tiempoConstruccionMinutos": 40320,
     "requisitoNivelAsentamientoConstruccion": 5,
     "ordenEraMinimo": 5
+  },
+  "molino": {
+    "costo": {
+      "madera": 60,
+      "piedra": 20
+    },
+    "tiempoConstruccionMinutos": 5,
+    "requisitoNivelAsentamientoConstruccion": 1,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 2,
+        "recetas": []
+      }
+    }
+  },
+  "horno": {
+    "costo": {
+      "madera": 30,
+      "piedra": 30
+    },
+    "tiempoConstruccionMinutos": 5,
+    "requisitoNivelAsentamientoConstruccion": 1,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 2,
+        "recetas": []
+      }
+    }
+  },
+  "quesera": {
+    "costo": {
+      "madera": 40,
+      "piedra": 20
+    },
+    "tiempoConstruccionMinutos": 5,
+    "requisitoNivelAsentamientoConstruccion": 2,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 2,
+        "recetas": []
+      }
+    }
+  },
+  "bodega": {
+    "costo": {
+      "madera": 60,
+      "piedra": 30
+    },
+    "tiempoConstruccionMinutos": 5,
+    "requisitoNivelAsentamientoConstruccion": 3,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 3,
+        "recetas": []
+      }
+    }
+  },
+  "prensa": {
+    "costo": {
+      "madera": 50,
+      "piedra": 30
+    },
+    "tiempoConstruccionMinutos": 5,
+    "requisitoNivelAsentamientoConstruccion": 4,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 3,
+        "recetas": []
+      }
+    }
+  },
+  "estatua": {
+    "costo": {
+      "piedra": 100
+    },
+    "tiempoConstruccionMinutos": 60
   }
 }
 ```
@@ -1822,6 +1898,21 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
     "fraccionMuertePorMinutoHambre": 0.05,
     "fraccionMuertePorMinutoHambreNobleza": 0.01
   }
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:BIENES_DE_CONSUMO -->
+```json
+{
+  "bienes": {
+    "carne": { "clases": ["pesants", "artesanos", "nobleza"], "racion": 0.02, "modificador": 1.2 },
+    "pan": { "clases": ["pesants"], "racion": 0.04, "modificador": 2 },
+    "queso": { "clases": ["artesanos"], "racion": 0.02, "modificador": 1.5 },
+    "vino": { "clases": ["nobleza"], "racion": 0.01, "modificador": 1.5 },
+    "aceite": { "clases": ["nobleza"], "racion": 0.01, "modificador": 1.5 }
+  },
+  "guarnicion": ["carne"]
 }
 ```
 <!-- /parametros -->
@@ -2289,7 +2380,12 @@ Todo se hace con el héroe **dentro** del pueblo o la aldea (`entrarEnPueblo`) y
       }
     },
     "especieInicial": "vacuno",
-    "saqueoRebano": 0.5
+    "saqueoRebano": 0.5,
+    "cultivos": {
+      "trigo": { "produce": "trigo", "nivelMadre": 1, "corrales": true },
+      "vid": { "produce": "uva", "nivelMadre": 3, "corrales": false },
+      "oliva": { "produce": "aceituna", "nivelMadre": 4, "corrales": false }
+    }
   }
 }
 ```

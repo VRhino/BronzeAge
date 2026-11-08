@@ -12,6 +12,7 @@ use crate::codec_politica::{sigilo_escribir, sigilo_leer};
 use crate::codec_militar::{controlador_a_u8, controlador_de_u8, objetivo_escribir, objetivo_leer, relacion_a_u8, relacion_de_u8, residencia_escribir, residencia_leer, tropa_a_u8, tropa_de_u8, ubicacion_escribir, ubicacion_leer};
 use crate::estado_militar::Relacion;
 pub use crate::memoria::OrigenIntel;
+use asentamiento::pueblos::Cultivo;
 use asentamiento::{Cargo, Recurso, Tipo};
 use base::{Instante, Mil, Punto};
 use combate::ciclo::{Asignacion, SalidaBatalla, Token};
@@ -212,9 +213,9 @@ pub enum Comando {
     DestruirPueblo { pueblo: u64 },
     /// Compra en la plaza madre un carro de acarreo nuevo (carro + buey) para un pueblo que se quedó sin él.
     ReponerCarro { pueblo: u64 },
-    /// Marca la obra de una aldea agrícola en un punto de la zona de la plaza madre (§14.2): queda «pendiente de materiales» y ocupa cupo.
-    /// `creadas` lleva el id del pueblo.
-    MarcarAldea { asentamiento: u64, punto: Punto },
+    /// Marca la obra de una aldea agrícola de `cultivo` en un punto de la zona de la plaza madre (§14.2; el cultivo, tanda 69 §12): queda «pendiente de
+    /// materiales» y ocupa cupo. `creadas` lleva el id del pueblo.
+    MarcarAldea { asentamiento: u64, punto: Punto, cultivo: Cultivo },
     /// Marca la subida de nivel de una aldea agrícola activa: otra obra de mapa pendiente de materiales, que se entregan con `EntregarMateriales`.
     MejorarAldea { pueblo: u64 },
     // ── Héroes y tropa (Heroe_Y_Tropa, Campamentos_Mercenarios §5-§6). Las da la cuenta del héroe o la administración; la cuenta solo manda en
@@ -2067,10 +2068,11 @@ impl Peticion {
                 w.u64(*heroe);
                 w.u32(*alijo);
             }
-            Comando::MarcarAldea { asentamiento, punto } => {
+            Comando::MarcarAldea { asentamiento, punto, cultivo } => {
                 w.u8(183);
                 w.u64(*asentamiento);
                 w.punto(*punto);
+                w.u8(*cultivo as u8);
             }
             Comando::MejorarAldea { pueblo } => {
                 w.u8(184);
@@ -2700,7 +2702,7 @@ impl Peticion {
             180 => Comando::CrearHeroe { cuenta: r.texto()?, campamento: r.u32()?, controlador: controlador_de_u8(r.u8()?)?, nombre: Some(r.texto()?) },
             181 => Comando::MarchaForzada { ejercito: r.u64()?, activa: r.bool()? },
             182 => Comando::ReclamarRecompensa { heroe: r.u64()?, dueno: crate::misiones::leer_dueno(&mut r)?, mision: r.texto()? },
-            183 => Comando::MarcarAldea { asentamiento: r.u64()?, punto: r.punto()? },
+            183 => Comando::MarcarAldea { asentamiento: r.u64()?, punto: r.punto()?, cultivo: *Cultivo::TODOS.get(usize::from(r.u8()?)).ok_or(ErrorFormato("cultivo de aldea desconocido"))? },
             184 => Comando::MejorarAldea { pueblo: r.u64()? },
             185 => Comando::AceptarMision { heroe: r.u64()?, dueno: crate::misiones::leer_dueno(&mut r)?, mision: r.texto()? },
             186 => {
@@ -2806,6 +2808,15 @@ pub mod rechazos {
     pub const OBRA_NO_ESTA_EN_CURSO: &str = "obra.no_esta_en_curso";
     pub const OBRA_NO_MEJORABLE: &str = "obra.no_mejorable";
     pub const OBRA_SIN_CUADRILLA: &str = "obra.sin_cuadrilla";
+    /// La Maravilla o la estatua piden más prestigio del que tiene la Facción (tanda 69 §13).
+    pub const OBRA_PRESTIGIO_INSUFICIENTE: &str = "obra.prestigio_insuficiente";
+    /// La estatua solo se levanta en la capital de la Facción (tanda 69 §13).
+    pub const OBRA_SOLO_EN_CAPITAL: &str = "obra.solo_en_capital";
+    // El molino y su buey (tanda 69 §10).
+    /// El edificio al que se asigna el buey no es un molino.
+    pub const MOLINO_NO_ES_MOLINO: &str = "molino.no_es_molino";
+    /// El molino ya tiene su buey.
+    pub const MOLINO_YA_TIENE_BUEY: &str = "molino.ya_tiene_buey";
     // Ascenso (`Bloqueo`): el rechazo lleva el código del primero y todos en el mensaje.
     pub const ASCENSO_NIVEL_MAXIMO: &str = "ascenso.nivel_maximo";
     pub const ASCENSO_EN_CURSO: &str = "ascenso.en_curso";
@@ -2924,6 +2935,8 @@ pub mod rechazos {
     pub const PUEBLO_NO_ES_ALDEA: &str = "pueblo.no_es_aldea";
     pub const PUEBLO_NIVEL_MAXIMO: &str = "pueblo.nivel_maximo";
     pub const PUEBLO_MEJORA_EN_CURSO: &str = "pueblo.mejora_en_curso";
+    /// La plaza madre no tiene aún el nivel que pide ese cultivo (tanda 69 §12: la vid, el 3; la oliva, el 4).
+    pub const PUEBLO_CULTIVO_BLOQUEADO: &str = "pueblo.cultivo_bloqueado";
     // Dentro de un pueblo o una aldea (§14.0.1, 2026-10-29).
     /// La escuadra que se deja en la guarnición del pueblo no va en la columna con la que entró el héroe.
     pub const PUEBLO_ESCUADRA_FUERA_DE_TU_COLUMNA: &str = "pueblo.escuadra_fuera_de_tu_columna";
@@ -3055,6 +3068,8 @@ pub mod rechazos {
     pub const MERCENARIO_SIN_PREMIO: &str = "mercenario.sin_premio";
     /// La tropa está por encima del escalón que permite su rango, o no es de su leva propia ni la recluta su campamento.
     pub const MERCENARIO_FUERA_DE_LICENCIA: &str = "mercenario.fuera_de_licencia";
+    /// Desde la taberna solo se contrata a los mercenarios de los campamentos de su región (tanda 69 §8).
+    pub const MERCENARIO_FUERA_DE_LA_REGION: &str = "mercenario.fuera_de_la_region";
     // Reclutar en una plaza (`ErrorReclutamiento`), en el orden en que se comprueban.
     pub const RECLUTAMIENTO_NO_PUEDES: &str = "reclutamiento.no_puedes";
     pub const RECLUTAMIENTO_SIN_TECNOLOGIA: &str = "reclutamiento.sin_tecnologia";
@@ -3072,6 +3087,8 @@ pub mod rechazos {
     pub const HEROE_NOMBRE_INVALIDO: &str = "heroe.nombre_invalido";
     /// Ya hay otro héroe con ese nombre (sin distinguir mayúsculas; 2026-11-06, pedido del autor).
     pub const HEROE_NOMBRE_EN_USO: &str = "heroe.nombre_en_uso";
+    /// El héroe no tiene las monedas que cuesta (tanda 69 §4).
+    pub const HEROE_SIN_MONEDAS: &str = "heroe.sin_monedas";
     pub const HEROE_CAMPAMENTO_DESCONOCIDO: &str = "heroe.campamento_desconocido";
     pub const HEROE_PUNTOS_NEGATIVOS: &str = "heroe.puntos_negativos";
     pub const HEROE_NINGUN_PUNTO: &str = "heroe.ningun_punto";
@@ -3221,6 +3238,8 @@ pub mod rechazos {
     pub const INTEL_PLAZA_PROPIA: &str = "intel.plaza_propia";
     /// La Facción no conoce esa plaza: ni tiene su ficha ni cae en una Mirada abierta.
     pub const INTEL_PLAZA_DESCONOCIDA: &str = "intel.plaza_desconocida";
+    /// Tomar una orden a distancia pide el informe vigente de las órdenes de la región de esa plaza (tanda 69 §7).
+    pub const INTEL_SIN_INFORME_DE_ORDENES: &str = "intel.sin_informe_de_ordenes";
     /// Ya tiene un Informe reciente de esa plaza.
     pub const INTEL_INFORME_RECIENTE: &str = "intel.informe_reciente";
     /// No hay oro para pagarla (en el almacén de la plaza, en el personal o en el carro).
@@ -3383,6 +3402,8 @@ pub mod rechazos {
     pub const DIPLOMACIA_VASALLA_DE_TERCERA: &str = "diplomacia.vasalla_de_tercera";
     /// Proponer una alianza con la reputación por debajo de `REPUTACION.umbralBajoParaEmbajador`.
     pub const DIPLOMACIA_REPUTACION_BAJA: &str = "diplomacia.reputacion_baja";
+    /// Una de las dos ya tiene todas las alianzas activas que le deja su prestigio (una, y una más cada 100; tanda 69 §13).
+    pub const DIPLOMACIA_TOPE_ALIANZAS: &str = "diplomacia.tope_alianzas";
     /// Ya hay una propuesta de esa clase (relación, anexión o fusión) vigente entre las dos, en cualquier sentido.
     pub const DIPLOMACIA_YA_PENDIENTE: &str = "diplomacia.ya_pendiente";
     /// `prop-N` no es ninguna propuesta pendiente de la clase de la orden (relación, anexión o fusión), o ya se contestó o se retiró.
@@ -3699,7 +3720,7 @@ mod pruebas {
             Comando::EntregarMateriales { ejercito: 2, pueblo: 9 },
             Comando::DestruirPueblo { pueblo: 9 },
             Comando::ReponerCarro { pueblo: 9 },
-            Comando::MarcarAldea { asentamiento: 3, punto: Punto::new(1_500, -2_000) },
+            Comando::MarcarAldea { asentamiento: 3, punto: Punto::new(1_500, -2_000), cultivo: Cultivo::Vid },
             Comando::MejorarAldea { pueblo: 9 },
         ];
         for c in comandos {
@@ -3976,7 +3997,7 @@ mod pruebas {
                             sobrevivio_al_cierre: true,
                             xp_ganada: 1,
                             derrotado: None,
-                            botin: Some(Botin { objetos: vec![ObjetoBotin { definicion: "espada".into(), cantidad: 1, instancia: Some("i-1".into()) }, ObjetoBotin { definicion: "oro".into(), cantidad: 5, instancia: None }], monedas: militar::heroe::Monedas { bronce: 1, plata: 2, oro: 3 } }),
+                            botin: Some(Botin { objetos: vec![ObjetoBotin { definicion: "espada".into(), cantidad: 1, instancia: Some("i-1".into()) }, ObjetoBotin { definicion: "oro".into(), cantidad: 5, instancia: None }], monedas: 7 }),
                         },
                         ResultadoHeroe { heroe: 6, participo: false, sobrevivio_al_cierre: true, xp_ganada: 0, derrotado: Some(false), botin: None },
                     ],

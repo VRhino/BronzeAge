@@ -696,7 +696,7 @@ impl Nucleo {
         let Some(madre) = madre else {
             return Err(rechazo(rechazos::COMBATE_AVANZADA_SIN_DUENO, "unas ruinas de ciudadela sin dueño no tienen Facción con la que estar en guerra ni nada que defender"));
         };
-        let (faccion_madre, posicion, etapa, estado, vacia) = (self.estado.asentamientos[&madre].faccion, av.posicion, av.etapa, av.estado, (0..29).all(|i| av.almacen.partes().0[i] == 0));
+        let (faccion_madre, posicion, etapa, estado, vacia) = (self.estado.asentamientos[&madre].faccion, av.posicion, av.etapa, av.estado, (0..asentamiento::recurso::N).all(|i| av.almacen.partes().0[i] == 0));
         let e = &self.estado.ejercitos[&id];
         if !Self::es_ejercito(e) {
             return Err(rechazo(rechazos::COMBATE_SOLO_UN_EJERCITO, "solo un ejército ataca una avanzada: una columna personal no"));

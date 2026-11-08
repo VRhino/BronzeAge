@@ -855,6 +855,7 @@ message OrdenMarcarAldea {
   string asentamiento_id = 1;
   string heroe_id = 2;
   Punto punto = 3;
+  optional string cultivo = 4;  // trigo (sin él) | vid | oliva (tanda 69 §12)
 }
 
 message OrdenMejorarAldea {

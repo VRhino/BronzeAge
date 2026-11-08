@@ -338,9 +338,24 @@ Los bloques de este documento son los vigentes (2026-10-19). `radioEncuentro` (1
 <!-- parametros:HEROE -->
 ```json
 {
-  "bronceInicial": 500,
+  "monedasIniciales": 1500,
   "topeAtributo": 100,
   "heridoMinutos": 2
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:MONEDAS -->
+```json
+{
+  "ganador": 500,
+  "perdedor": 150,
+  "rendimientos": {
+    "ventanaHoras": 24,
+    "completas": 8,
+    "caidaPorCada": 0.15,
+    "soloExperienciaDesde": 14
+  }
 }
 ```
 <!-- /parametros -->

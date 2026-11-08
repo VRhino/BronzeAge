@@ -7,8 +7,8 @@
 //!
 //! Una facción: `id u32 · nombre texto · sigilo{forma, campo, emblema, color_primario, color_secundario, color_emblema, orla, color_orla: 8 × texto} · rey opt_u64 ·
 //! embajador opt_u64 · capital_designada_en opt_i64 · experiencia i64 · ciudadanos{n u64 · n × u64} (en orden de ingreso) · solicitudes{n u64 · n × u64} ·
-//! derrota{u8: 0 ninguna, 1 por una Facción (· u32), 2 colapso} · admite_otras_en_ataques bool · marcas{n u64 · n × (héroe u64 · marca u8: 0 temporal, 1 permanente)}` (las
-//! marcas, desde BAN54: los mercenarios por contrato).
+//! derrota{u8: 0 ninguna, 1 por una Facción (· u32), 2 colapso} · admite_otras_en_ataques bool · marcas{n u64 · n × (héroe u64 · marca u8: 0 temporal, 1 permanente)} ·
+//! prestigio i64` (las marcas, desde BAN54: los mercenarios por contrato; el prestigio, desde BAN59).
 //! Una relación: `id u64 · tipo u8 (0 vasallaje, 1 alianza, 2 guerra) · a u32 · b u32 · tributo · creada_en i64 · estado u8 (0 activa, 1 rota) · rota_por opt_u64 ·
 //! rota_en opt_i64 · paz_propuesta_por opt_u64`, con un tributo `hay bool · recurso u8 · cantidad_por_minuto i64`.
 //! Una propuesta: `id u64 · clase{u8: 0 relación (pacto u8: 0 alianza, 1 vasallaje · a u32 · b u32 · tributo), 1 anexión (absorbente u32 · absorbida u32), 2 fusión (a u32 · b u32 ·
@@ -55,7 +55,7 @@ pub(crate) fn sigilo_leer(r: &mut Lector) -> Result<Sigilo, ErrorFormato> {
 }
 
 fn faccion_escribir(w: &mut Escritor, f: &Faccion) {
-    let Faccion { id, nombre, sigilo, rey, embajador, capital_designada_en, experiencia, ciudadanos, solicitudes, derrota, admite_otras_en_ataques, marcas } = f;
+    let Faccion { id, nombre, sigilo, rey, embajador, capital_designada_en, experiencia, ciudadanos, solicitudes, derrota, admite_otras_en_ataques, marcas, prestigio } = f;
     w.u32(*id);
     w.texto(nombre);
     sigilo_escribir(w, sigilo);
@@ -82,6 +82,7 @@ fn faccion_escribir(w: &mut Escritor, f: &Faccion) {
             Marca::Permanente => 1,
         });
     }
+    w.i64(*prestigio);
 }
 
 /// `con_marcas`: la foto es de BAN54 o posterior; las de antes no traen marcas (no había mercenarios por contrato).
@@ -104,6 +105,7 @@ fn faccion_leer(r: &mut Lector, con_marcas: bool) -> Result<Faccion, ErrorFormat
         },
         admite_otras_en_ataques: r.bool()?,
         marcas: if con_marcas { marcas_leer(r)? } else { Default::default() },
+        prestigio: r.i64()?,
     })
 }
 

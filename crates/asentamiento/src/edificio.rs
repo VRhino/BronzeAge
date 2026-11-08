@@ -41,11 +41,13 @@ pub struct Edificio {
     pub danado: bool,
     pub fuente: Option<Fuente>,
     pub pausado_por_almacen: bool,
+    /// El molino tiene su buey (tanda 69 §10): se compra una vez y se queda allí.
+    pub buey: bool,
 }
 
 impl Edificio {
     pub fn nuevo(id: u32, tipo: Tipo, estado: Estado) -> Self {
-        Self { id, tipo, estado, completa_en: None, prioridad: 0, nivel_interno: 1, mejora: None, danado: false, fuente: None, pausado_por_almacen: false }
+        Self { id, tipo, estado, completa_en: None, prioridad: 0, nivel_interno: 1, mejora: None, danado: false, fuente: None, pausado_por_almacen: false, buey: false }
     }
 
     pub fn activo(&self) -> bool {

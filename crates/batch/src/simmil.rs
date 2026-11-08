@@ -45,6 +45,7 @@ use crate::geo::{Cargado, Geo};
 use crate::sim::{ANILLO_CAMPAMENTO, ANILLO_PLAZA, VELOCIDAD, VIVERES};
 use crate::simcom::{sitio, Cuenta};
 use asentamiento::catalogo::Tipo;
+use asentamiento::recurso::N;
 use asentamiento::{Cargo, Recurso};
 use base::{Instante, Punto, Rng, MS_POR_MINUTO};
 use comercio::caravana::{Animal, EstadoCaravana, TipoCaravana, TipoCarro};
@@ -542,8 +543,8 @@ impl Sim<'_> {
         r
     }
 
-    fn almacen(&self, plaza: u64) -> [i64; 29] {
-        self.n.estado().asentamientos.get(&plaza).map_or([0; 29], |a| *a.economia.almacen.partes().0)
+    fn almacen(&self, plaza: u64) -> [i64; N] {
+        self.n.estado().asentamientos.get(&plaza).map_or([0; N], |a| *a.economia.almacen.partes().0)
     }
 
     // ───────────────────────────── Fundación ─────────────────────────────

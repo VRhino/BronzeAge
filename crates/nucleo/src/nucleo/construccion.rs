@@ -57,7 +57,7 @@ pub(super) fn factores_extra(r: &tecnologia::Reglas, ocupacion: Option<i64>, res
 /// Lo que del interior de una plaza cambia con el paso de minuto y es la base de la tendencia «+N/min»: el almacén **exacto** (con su resto oculto: el neto real del
 /// flujo, aunque lo visible vaya en unidades enteras) y la población entera (sus restos no viajan).
 struct Contadores {
-    almacen: [Mil; 29],
+    almacen: [Mil; asentamiento::recurso::N],
     poblacion: [i64; 3],
 }
 

@@ -107,6 +107,8 @@ impl Urbanismo {
             Tipo::Palacio | Tipo::Almacen | Tipo::Granero | Tipo::Lenera | Tipo::Taberna | Tipo::SalaConsejo => (Generico, Rol::Normal, true),
             Tipo::Vivienda => (Residencial, Rol::Normal, true),
             Tipo::Fundicion | Tipo::Curtiduria | Tipo::Armeria | Tipo::GranFundicion | Tipo::Maravilla => (Industria, Rol::Normal, true),
+            Tipo::Molino | Tipo::Horno | Tipo::Quesera | Tipo::Bodega | Tipo::Prensa => (Industria, Rol::Normal, true),
+            Tipo::Estatua => (Residencial, Rol::Normal, true),
             Tipo::Barracon | Tipo::GaleriaDeTiro | Tipo::Caballerizas | Tipo::Carpinteria => (Militar, Rol::Normal, true),
             Tipo::Mercado => (Mercado, Rol::AnclaPrimaria, true),
             Tipo::PuestoMercado | Tipo::AlbergueCaravanas => (Mercado, Rol::Normal, true),

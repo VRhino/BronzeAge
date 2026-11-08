@@ -30,6 +30,8 @@ tipos! {
     PatioDeGremios = "patioDeGremios", Pozo = "pozo", Parque = "parque", Maravilla = "maravilla",
     // Al final: la foto guarda el tipo por su posición en esta lista.
     AlbergueCaravanas = "albergueCaravanas",
+    // Los de la comida y el prestigio de la tanda 69 (2026-11-08).
+    Molino = "molino", Horno = "horno", Quesera = "quesera", Bodega = "bodega", Prensa = "prensa", Estatua = "estatua",
 }
 
 impl Tipo {
@@ -313,9 +315,9 @@ mod pruebas {
     use crate::datos::Reglas;
 
     #[test]
-    fn los_32_tipos_se_leen_y_sus_nombres_son_coherentes() {
+    fn los_38_tipos_se_leen_y_sus_nombres_son_coherentes() {
         let r = Reglas::cargar();
-        assert_eq!(TIPOS.len(), 32);
+        assert_eq!(TIPOS.len(), 38);
         for &t in TIPOS {
             assert_eq!(Tipo::desde_nombre(t.nombre()), Some(t));
             assert_eq!(r.catalogo.tipo(t).tipo, t);

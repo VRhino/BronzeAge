@@ -210,7 +210,7 @@ pub(super) fn razon(r: Razon) -> pb::RazonVictoria {
 pub fn resultado(n: &Nucleo, b: &Batalla, r: &Resultado) -> pb::BattleResult {
     let botin = |b: &Botin| pb::Botin {
         objetos: b.objetos.iter().map(|o| pb::ObjetoBotin { item_definition_id: o.definicion.clone(), cantidad: o.cantidad.max(0) as u32, item_instance_id: o.instancia.clone(), estadisticas: Vec::new() }).collect(),
-        monedas: Some(pb::Monedas { bronce: b.monedas.bronce.max(0) as u64, plata: b.monedas.plata.max(0) as u64, oro: b.monedas.oro.max(0) as u64 }),
+        monedas: b.monedas.max(0) as u64,
     };
     pb::BattleResult {
         schema_version: SCHEMA_VERSION,

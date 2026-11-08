@@ -20,8 +20,9 @@ use crate::geo::{Cargado, Geo};
 use crate::sim::{cuenta_de_gobernador as gobernador, gobernador_de_oficio, nucleo_nuevo, ANILLO_CAMPAMENTO, ANILLO_PLAZA, ASCENSO_CADA_MIN, CANDIDATOS, VELOCIDAD, VIVERES};
 use crate::vigia::Vigia;
 use asentamiento::catalogo::Tipo;
+use asentamiento::pueblos::Cultivo;
 
-use asentamiento::recurso::TODOS;
+use asentamiento::recurso::{N, TODOS};
 use asentamiento::Recurso;
 use base::{Instante, Punto, Rng, MS_POR_MINUTO};
 use comercio::caravana::{Animal, EstadoCaravana, TipoCarro};
@@ -567,7 +568,7 @@ impl Sim<'_> {
     }
 
     /// Cantidades y capacidades de un almacén.
-    fn almacen_de(&self, id: u64) -> ([i64; 29], [i64; 29]) {
+    fn almacen_de(&self, id: u64) -> ([i64; N], [i64; N]) {
         let (c, k, _) = self.n.estado().asentamientos[&id].economia.almacen.partes();
         (*c, *k)
     }
@@ -577,10 +578,10 @@ impl Sim<'_> {
     /// llenos). Nada que no quepa en el almacén que lo recibe.
     fn pareja(&self, a: u64, b: u64) -> Option<(Recurso, i64, Recurso, i64)> {
         let ((ca, ka), (cb, kb)) = (self.almacen_de(a), self.almacen_de(b));
-        let ofrece = |c: &[i64; 29], k: &[i64; 29], r: Recurso| !BASICOS.contains(&r) && if MINERALES.contains(&r) { c[r.indice()] >= MINERAL_MIN } else { 100 * c[r.indice()] >= SOBRA_PCT * k[r.indice()] && k[r.indice()] > 0 };
-        let quiere = |c: &[i64; 29], k: &[i64; 29], r: Recurso| !BASICOS.contains(&r) && if MINERALES.contains(&r) { c[r.indice()] < MINERAL_MIN } else { 100 * c[r.indice()] <= FALTA_PCT * k[r.indice()] && k[r.indice()] > 0 };
+        let ofrece = |c: &[i64; N], k: &[i64; N], r: Recurso| !BASICOS.contains(&r) && if MINERALES.contains(&r) { c[r.indice()] >= MINERAL_MIN } else { 100 * c[r.indice()] >= SOBRA_PCT * k[r.indice()] && k[r.indice()] > 0 };
+        let quiere = |c: &[i64; N], k: &[i64; N], r: Recurso| !BASICOS.contains(&r) && if MINERALES.contains(&r) { c[r.indice()] < MINERAL_MIN } else { 100 * c[r.indice()] <= FALTA_PCT * k[r.indice()] && k[r.indice()] > 0 };
         // Lo que sobra por encima de la reserva (un mineral deja 5 u).
-        let libre = |c: &[i64; 29], k: &[i64; 29], r: Recurso| c[r.indice()] - if MINERALES.contains(&r) { 5_000 } else { k[r.indice()] * SOBRA_PCT / 100 };
+        let libre = |c: &[i64; N], k: &[i64; N], r: Recurso| c[r.indice()] - if MINERALES.contains(&r) { 5_000 } else { k[r.indice()] * SOBRA_PCT / 100 };
         for ro in TODOS.iter().copied().filter(|&r| ofrece(&ca, &ka, r) && quiere(&cb, &kb, r)) {
             let q_ro = libre(&ca, &ka, ro).clamp(0, OFERTA_MAX);
             if q_ro < 1_000 || kb[ro.indice()] - cb[ro.indice()] < q_ro {
@@ -662,7 +663,7 @@ impl Sim<'_> {
                 self.pjs.get_mut(&id).expect("existe").proxima_obra = t + 24 * HORA;
                 return;
             };
-            self.orden(t, &gobernador(id), "MarcarAldea", Comando::MarcarAldea { asentamiento: id, punto })
+            self.orden(t, &gobernador(id), "MarcarAldea", Comando::MarcarAldea { asentamiento: id, punto, cultivo: Cultivo::Trigo })
         } else {
             if self.n.pueblos_de(id).len() >= (PUEBLOS_OBJETIVO + 1).min(cupo as usize) {
                 return;

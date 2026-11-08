@@ -351,7 +351,7 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
 <!-- parametros:HEROE -->
 ```json
 {
-  "bronceInicial": 500,
+  "monedasIniciales": 1500,
   "topeAtributo": 100,
   "heridoMinutos": 2
 }

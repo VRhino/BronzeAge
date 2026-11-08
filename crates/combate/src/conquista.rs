@@ -15,6 +15,7 @@ use asentamiento::catalogo::Tipo;
 use asentamiento::datos::UNO;
 use asentamiento::edificio::Estado;
 use asentamiento::recintos;
+use asentamiento::recurso::N;
 use base::{Instante, Mil};
 use militar::escuadra::Contenedor;
 use militar::heroe::{Heroe, Residencia};
@@ -83,7 +84,7 @@ pub fn aplicar_conquista(r: &Reglas, economia: &asentamiento::Reglas, a: &mut As
 
     a.ascenso = None;
     a.politicas = Default::default();
-    a.reserva_manual = [0; 29];
+    a.reserva_manual = [0; N];
     a.auto_pausada = false;
     a.recetas_pausadas.clear();
     a.medidor.valor = economia.mantenimiento.medidor_inicial;
@@ -265,13 +266,13 @@ mod pruebas {
         let r = r();
         let mut a = plaza(&[Tipo::CentroUrbano]);
         a.ascenso = Some(asentamiento::asentamiento::Ascenso { nivel_objetivo: 3, iniciado_en: 0, completa_en: 10 });
-        a.reserva_manual = [5; 29];
+        a.reserva_manual = [5; N];
         a.auto_pausada = true;
         a.recetas_pausadas = vec![asentamiento::Recurso::LingoteCobre];
         a.medidor.valor = 12_000;
         let c = aplicar_conquista(r, economia(), &mut a, 3 * MS_POR_MINUTO);
         assert!(a.ascenso.is_none() && !a.auto_pausada && a.recetas_pausadas.is_empty());
-        assert_eq!(a.reserva_manual, [0; 29]);
+        assert_eq!(a.reserva_manual, [0; N]);
         assert_eq!(a.politicas, Default::default());
         assert_eq!(a.medidor.valor, economia().mantenimiento.medidor_inicial, "medidor a 100");
         assert!(a.ocupado);

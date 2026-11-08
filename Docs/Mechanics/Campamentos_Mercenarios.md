@@ -219,10 +219,19 @@ Con las cifras de hoy, un campamento típico (taberna, mercado, barracón y diez
       "madera": 60,
       "piedra": 10
     },
-    "margen": 1.3
+    "margen": 1.3,
+    "fueraDeVenta": [
+      "carne",
+      "leche",
+      "uva",
+      "aceituna"
+    ]
   },
   "refundacion": {
-    "porcentajeCoste": 0.4
+    "porcentajeCoste": 0.4,
+    "excluir": [
+      "oro"
+    ]
   }
 }
 ```

@@ -216,6 +216,10 @@ pub struct ReglasMercenarios {
     pub capacidad_viveres_por_heroe: Mil,
     /// `MERCENARIOS.refundacion.porcentajeCoste` (ppm): lo que cuesta la Caravana de Fundación en un campamento, sobre el coste de la de una plaza (Fundacion_Y_Refundacion §3).
     pub porcentaje_refundacion: i64,
+    /// `MERCENARIOS.refundacion.excluir`: los recursos que esa caravana no pide (el oro, desde la tanda 69).
+    pub excluidos_refundacion: Vec<Recurso>,
+    /// `MERCENARIOS.mercado.fueraDeVenta`: los bienes con `PRECIO_BASE` que los campamentos no venden (los de las aldeas de la tanda 69).
+    pub fuera_de_venta: Vec<Recurso>,
 }
 
 /// Lo que el comercio lee de `NAVEGACION` (el grafo lo construye `crates/rutas`); con los valores vigentes.
@@ -358,6 +362,8 @@ impl Reglas {
             capacidad_almacen_personal: mil(num(&b("ALMACEN_PERSONAL"), "capacidad")),
             capacidad_viveres_por_heroe: mil(num(&bloque(MOVIMIENTO, "LOGISTICA"), "capacidadViveresPorHeroe")),
             porcentaje_refundacion: ppm(num(&mer, "refundacion.porcentajeCoste")),
+            excluidos_refundacion: mer["refundacion"]["excluir"].as_array().expect("refundacion.excluir").iter().map(|r| Recurso::desde_nombre(r.as_str().expect("recurso")).expect("recurso de refundacion.excluir")).collect(),
+            fuera_de_venta: mer["mercado"]["fueraDeVenta"].as_array().expect("mercado.fueraDeVenta").iter().map(|r| Recurso::desde_nombre(r.as_str().expect("recurso")).expect("recurso de mercado.fueraDeVenta")).collect(),
         };
         let nv = b("NAVEGACION");
         let navegacion = Navegacion {
@@ -445,6 +451,7 @@ mod pruebas {
         assert_eq!(m.pilas[&Recurso::Piedra], 60_000);
         assert_eq!(m.cupo_diario[&Recurso::Madera], 60_000);
         assert_eq!((m.capacidad_almacen_personal, m.capacidad_viveres_por_heroe), (2_000_000, 350_000), "almacén personal al doble desde el 2026-11-05");
+        assert_eq!((m.porcentaje_refundacion, m.excluidos_refundacion.as_slice()), (400_000, [Recurso::Oro].as_slice()), "la refundación no pide oro (tanda 69)");
         let n = &r.navegacion;
         assert_eq!((n.espaciado_min, n.separacion_vados_min), (8_000, 100_000));
         assert_eq!((n.atraccion_por_peso, n.atraccion_min, n.factor_camino), (100_000, 500_000, 500_000));

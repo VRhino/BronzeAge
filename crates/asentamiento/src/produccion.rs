@@ -7,7 +7,7 @@ use crate::almacen::Almacen;
 use crate::catalogo::{Catalogo, Tipo};
 use crate::datos::{por, razon, UNO};
 use crate::edificio::{Edificio, Edificios, Fuente};
-use crate::recurso::{Costo, Recurso};
+use crate::recurso::{Costo, Recurso, N};
 use base::Mil;
 
 /// El mundo que ve la producción: los yacimientos finitos y las parcelas de bosque.
@@ -61,8 +61,8 @@ pub fn mano_de_obra(cat: &Catalogo, edificios: &[Edificio], pesants_enteros: i64
 
 /// Reserva mínima: lo que el mantenimiento y la comida van a cobrar en los próximos minutos (§6.3). Una obra, un taller o una
 /// mejora automáticos no pueden bajar un recurso de ahí. La reserva manual del Tesorero se suma aparte, solo en el camino automático.
-pub fn reserva_dinamica(coste_mantenimiento: &Costo, consumo_comida: Mil, horizonte_mantenimiento: i64, horizonte_comida: i64) -> [Mil; 29] {
-    let mut r = [0; 29];
+pub fn reserva_dinamica(coste_mantenimiento: &Costo, consumo_comida: Mil, horizonte_mantenimiento: i64, horizonte_comida: i64) -> [Mil; N] {
+    let mut r = [0; N];
     for &(rec, n) in coste_mantenimiento {
         r[rec.indice()] += n * horizonte_mantenimiento;
     }
@@ -114,7 +114,7 @@ pub fn extraer_y_cultivar(cat: &Catalogo, edificios: &mut [Edificio], almacen: &
 
 /// Una pasada de recetas de los talleres (un minuto), en el orden de la lista y del catálogo: una receta puede consumir lo que otra
 /// produjo este mismo minuto. `reserva` es la misma de la auto-construcción más la manual.
-pub fn recetas(cat: &Catalogo, edificios: &mut [Edificio], almacen: &mut Almacen, mano: &Mano, ctx: &Contexto, reserva: &[Mil; 29]) -> Vec<(Recurso, Mil)> {
+pub fn recetas(cat: &Catalogo, edificios: &mut [Edificio], almacen: &mut Almacen, mano: &Mano, ctx: &Contexto, reserva: &[Mil; N]) -> Vec<(Recurso, Mil)> {
     let mut hecho: Vec<(Recurso, Mil)> = vec![];
     // `requiereEdificio` se mide con el estado al empezar la pasada (un taller recién activo no se cuenta a sí mismo dos veces).
     for i in 0..edificios.len() {
@@ -307,15 +307,15 @@ mod pruebas {
         let m = mano_de_obra(&cat, &e, 0, 4, 0);
         a.poner(Recurso::Cobre, 6_000);
         let c = ctx(&[], &[]);
-        let h = recetas(&cat, &mut e, &mut a, &m, &c, &[0; 29]);
+        let h = recetas(&cat, &mut e, &mut a, &m, &c, &[0; N]);
         assert_eq!((a.cantidad(Recurso::Cobre), a.cantidad(Recurso::LingoteCobre)), (0, 3_000), "6 cobre → 3 lingotes (2 por 1), no los 5 del techo");
         assert_eq!(h, vec![(Recurso::LingoteCobre, 3_000)]);
         // Con 20 de cobre sale el techo de 5 lingotes (10 cobre).
         a.poner(Recurso::Cobre, 20_000);
-        recetas(&cat, &mut e, &mut a, &m, &c, &[0; 29]);
+        recetas(&cat, &mut e, &mut a, &m, &c, &[0; N]);
         assert_eq!((a.cantidad(Recurso::Cobre), a.cantidad(Recurso::LingoteCobre)), (10_000, 8_000));
         // Una reserva de 18 deja solo 2 de cobre utilizables → 1 lingote.
-        let mut reserva = [0; 29];
+        let mut reserva = [0; N];
         reserva[Recurso::Cobre.indice()] = 18_000;
         a.poner(Recurso::Cobre, 20_000);
         let antes = a.cantidad(Recurso::LingoteCobre);
@@ -330,10 +330,10 @@ mod pruebas {
         a.poner(Recurso::Cobre, 100_000);
         let mut e = vec![activo(1, Tipo::Fundicion)];
         let m = mano_de_obra(&cat, &e, 0, 2, 0);
-        recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; 29]);
+        recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; N]);
         assert_eq!((a.cantidad(Recurso::LingoteCobre), a.disponible(Recurso::LingoteCobre)), (2_000, 2_500), "ratio 0,5 de los 5 del techo: 2 enteros y medio en el resto");
         let antes = a.cantidad(Recurso::Cobre);
-        recetas(&cat, &mut e, &mut a, &m, &ctx(&[Recurso::LingoteCobre], &[]), &[0; 29]);
+        recetas(&cat, &mut e, &mut a, &m, &ctx(&[Recurso::LingoteCobre], &[]), &[0; N]);
         assert_eq!(a.cantidad(Recurso::Cobre), antes, "pausada por el Gobernador");
     }
 
@@ -346,14 +346,14 @@ mod pruebas {
         let mut e = vec![f];
         let m = mano_de_obra(&cat, &e, 0, 8, 0);
         a.poner(Recurso::Estano, 100_000);
-        recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; 29]);
+        recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; N]);
         assert_eq!(a.cantidad(Recurso::LingoteEstano), 0, "sin aleacion_bronce no funde estaño");
-        recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &["aleacion_bronce"]), &[0; 29]);
+        recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &["aleacion_bronce"]), &[0; N]);
         assert_eq!(a.cantidad(Recurso::LingoteEstano), 3_000);
         // Con el producto lleno, no consume insumos y queda marcado.
         a.poner(Recurso::LingoteEstano, 400_000);
         let antes = a.cantidad(Recurso::Estano);
-        recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &["aleacion_bronce"]), &[0; 29]);
+        recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &["aleacion_bronce"]), &[0; N]);
         assert_eq!(a.cantidad(Recurso::Estano), antes);
         assert!(e[0].pausado_por_almacen);
     }

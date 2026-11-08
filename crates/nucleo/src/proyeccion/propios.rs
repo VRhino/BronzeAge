@@ -175,7 +175,7 @@ pub fn heroe(n: &Nucleo, h: &HeroeNucleo) -> pb::Heroe {
         fuera_carro: con_algo(&h.carro),
         escuadrones_ids: h.heroe.escuadras.iter().map(|s| ids::escuadra(s.id)).collect(),
         loadouts,
-        monedas_heroe: Some(pb::Monedas { bronce: h.heroe.monedas.bronce.max(0) as u64, plata: h.heroe.monedas.plata.max(0) as u64, oro: h.heroe.monedas.oro.max(0) as u64 }),
+        monedas: h.heroe.monedas.max(0) as u64,
         cupo_guarnicion: u32::try_from(cupo_guarnicion).unwrap_or(0),
         residencia_id: residencia,
         faccion_id: h.faccion.map(ids::faccion),
@@ -706,6 +706,7 @@ pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
         ..Default::default()
     };
     let Some(x) = e.politica.facciones.get(f) else { return base };
+    let prestigio = &e.reglas.economia.politica.prestigio;
     let heroes = |v: &[u64]| v.iter().map(|&h| ids::heroe(h)).collect();
     let cupos = n.cupos_de_faccion(f);
     pb::Faccion {
@@ -723,6 +724,8 @@ pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
             politica::faccion::Derrota::Colapso => String::new(),
         }),
         admite_otras_en_ataques: x.admite_otras_en_ataques,
+        prestigio: x.prestigio,
+        tope_alianzas: prestigio.tope_de_alianzas(x.prestigio),
         misiones: misiones(n, crate::misiones::Dueno::Faccion(f)),
         miembros: n.miembros_de(f).into_iter().map(|m| pb::MiembroFaccion { heroe_id: ids::heroe(m.heroe), residencia_id: m.residencia.map(residencia_id), cargos: m.cargos, participacion: m.participacion, marca: x.marcas.get(&m.heroe).map(|&marca| mercenarios::marca(marca).to_owned()) }).collect(),
         tablon: tablon(n, crate::misiones::Dueno::Faccion(f)),
@@ -983,6 +986,10 @@ pub fn pueblo(n: &Nucleo, madre: u64, p: &Pueblo) -> pb::Pueblo {
         nivel_aldea: p.es_aldea().then_some(p.nivel),
         fertilidad: match p.sitio {
             asentamiento::pueblos::Sitio::Punto { fertilidad, .. } => Some(fertilidad / 1000),
+            asentamiento::pueblos::Sitio::Nodo(_) => None,
+        },
+        cultivo: match p.sitio {
+            asentamiento::pueblos::Sitio::Punto { cultivo, .. } => Some(cultivo.nombre().to_owned()),
             asentamiento::pueblos::Sitio::Nodo(_) => None,
         },
         almacen_por_recurso: if p.es_aldea() {

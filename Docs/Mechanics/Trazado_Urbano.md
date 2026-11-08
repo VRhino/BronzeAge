@@ -134,6 +134,26 @@ El **orden del array `edificios` es significativo**: es el orden de construcció
     "ancho": 2,
     "alto": 3
   },
+  "molino": {
+    "ancho": 2,
+    "alto": 2
+  },
+  "horno": {
+    "ancho": 2,
+    "alto": 1
+  },
+  "quesera": {
+    "ancho": 2,
+    "alto": 1
+  },
+  "bodega": {
+    "ancho": 2,
+    "alto": 2
+  },
+  "prensa": {
+    "ancho": 2,
+    "alto": 1
+  },
   "palacio": {
     "ancho": 4,
     "alto": 4

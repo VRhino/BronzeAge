@@ -13,7 +13,7 @@
 
 use crate::asentamiento::{Asentamiento, Evento, Exterior};
 use crate::datos::{mil, por, ppm, UNO};
-use crate::recurso::{Costo, Recurso};
+use crate::recurso::{Costo, Recurso, N};
 use base::{Instante, Mil, MS_POR_MINUTO};
 use serde_json::Value;
 use trazado::{CeldaDeRed, CeldaMuro, ClaseCelda, ParametrosMuralla};
@@ -410,7 +410,7 @@ impl Asentamiento {
     /// Una pasada de obra (Murallas §5): de cada recinto en obra, dañado o con mejora que ya pueda, **una celda** en el orden del recorrido, pagándola al
     /// levantarla. Si no hay recursos, o pagarlos dejaría un recurso por debajo de la reserva, no hace nada (no falla, no se cancela, no hay deuda).
     /// No ocupa cuadrilla ni entra en la cola de edificios. Cada celda deja su cita en `siguiente_celda_en` y su [`Evento::RecintoCelda`].
-    pub fn avanzar_recintos(&mut self, t: Instante, x: &mut Exterior, reserva: &[Mil; 29], ev: &mut Vec<Evento>) {
+    pub fn avanzar_recintos(&mut self, t: Instante, x: &mut Exterior, reserva: &[Mil; N], ev: &mut Vec<Evento>) {
         let r = x.reglas;
         let factor = self.politicas.factor(&r.politicas, "factorTiempoMuralla");
         for i in 0..self.recintos.len() {
@@ -532,7 +532,7 @@ mod pruebas {
     }
 
     /// Una pasada de obra de la plaza con una reserva dada.
-    fn pasada(r: &Reglas, a: &mut Asentamiento, t: Instante, reserva: &[Mil; 29]) -> Vec<Evento> {
+    fn pasada(r: &Reglas, a: &mut Asentamiento, t: Instante, reserva: &[Mil; N]) -> Vec<Evento> {
         let (mut f, mut s) = (SinMundo, SitiosLibres);
         let mut x = exterior(r, &mut f, &mut s);
         let mut ev = vec![];
@@ -614,7 +614,7 @@ mod pruebas {
         let mut a = plaza(&r, 2);
         let celdas = anillo(4, &[0], 0);
         a.comprometer_recinto(0, 1, celdas, vec![], 0, &mut vec![]);
-        let reserva = [0; 29];
+        let reserva = [0; N];
         let madera = a.almacen.cantidad(Recurso::Madera);
         // La primera celda es la puerta (×4): 80 de madera y 8 de piedra.
         let ev = pasada(&r, &mut a, 0, &reserva);
@@ -649,11 +649,11 @@ mod pruebas {
         // Falta piedra: ni avanza ni cobra madera.
         a.almacen.poner(Recurso::Piedra, 1_000);
         let madera = a.almacen.cantidad(Recurso::Madera);
-        assert!(pasada(&r, &mut a, 0, &[0; 29]).is_empty());
+        assert!(pasada(&r, &mut a, 0, &[0; N]).is_empty());
         assert_eq!((a.almacen.cantidad(Recurso::Madera), a.recintos[0].avance, a.recintos[0].siguiente_celda_en), (madera, -1, None));
         // Hay madera de sobra pero pagarla dejaría la madera por debajo de la reserva.
         a.almacen.poner(Recurso::Piedra, 50_000_000);
-        let mut reserva = [0; 29];
+        let mut reserva = [0; N];
         reserva[Recurso::Madera.indice()] = madera - 19_999;
         assert!(pasada(&r, &mut a, 0, &reserva).is_empty());
         // Con la reserva justa sí se paga, y el almacén nunca baja de ella.
@@ -662,7 +662,7 @@ mod pruebas {
         assert_eq!(a.almacen.cantidad(Recurso::Madera), reserva[Recurso::Madera.indice()]);
         // Cuando la cita llega y no hay con qué, se queda sin cita (el paso de minuto reintenta): sigue vencida.
         a.almacen.poner(Recurso::Madera, 0);
-        assert!(pasada(&r, &mut a, 15 * MIN, &[0; 29]).is_empty());
+        assert!(pasada(&r, &mut a, 15 * MIN, &[0; N]).is_empty());
         assert!(a.recintos[0].vence(16 * MIN), "sigue esperando su celda");
     }
 
@@ -673,7 +673,7 @@ mod pruebas {
         a.politicas = Politicas::desde_activas(vec![Activa { id: "postura_defensiva".into(), cargo: crate::politicas::Cargo::MaestroObras, expira_en: i64::MAX }]);
         assert_eq!(a.politicas.factor(&r.politicas, "factorTiempoMuralla"), 750_000, "la política existe en el catálogo");
         a.comprometer_recinto(0, 1, anillo(3, &[], 0), vec![], 0, &mut vec![]);
-        let ev = pasada(&r, &mut a, 0, &[0; 29]);
+        let ev = pasada(&r, &mut a, 0, &[0; N]);
         assert_eq!(ev, vec![Evento::RecintoCelda { recinto: 1, levantadas: 1, siguiente_en: Some(675_000) }], "15 min × 0,75 = 11,25 min exactos");
     }
 
@@ -685,7 +685,7 @@ mod pruebas {
         assert_eq!(a.comprobar_mejora(&r, 9), Err(ErrorRecinto::NoExiste));
         assert_eq!(a.comprobar_mejora(&r, 1), Err(ErrorRecinto::Incompleto));
         for k in 0..3 {
-            pasada(&r, &mut a, k * 15 * MIN, &[0; 29]);
+            pasada(&r, &mut a, k * 15 * MIN, &[0; N]);
         }
         assert!(a.recintos[0].completo());
         assert_eq!(a.comprobar_mejora(&r, 1), Ok(()));
@@ -699,11 +699,11 @@ mod pruebas {
         assert_eq!(nivel_del_mejor_completo(&a.recintos), 1);
         let madera = a.almacen.cantidad(Recurso::Madera);
         // La primera celda a mejorar es la puerta: la diferencia (5 de madera) × 4; tarda lo del nivel destino (30 min).
-        let ev = pasada(&r, &mut a, 100 * MIN, &[0; 29]);
+        let ev = pasada(&r, &mut a, 100 * MIN, &[0; N]);
         assert_eq!(ev, vec![Evento::RecintoCelda { recinto: 1, levantadas: 1, siguiente_en: Some(130 * MIN) }]);
         assert_eq!(madera - a.almacen.cantidad(Recurso::Madera), 20_000);
-        pasada(&r, &mut a, 130 * MIN, &[0; 29]);
-        let ev = pasada(&r, &mut a, 160 * MIN, &[0; 29]);
+        pasada(&r, &mut a, 130 * MIN, &[0; N]);
+        let ev = pasada(&r, &mut a, 160 * MIN, &[0; N]);
         assert_eq!(ev.last(), Some(&Evento::RecintoMejorado { recinto: 1, nivel: 2, celdas: 3, puertas: 1 }));
         let rec = &a.recintos[0];
         assert_eq!((rec.nivel, rec.mejora, rec.siguiente_celda_en), (2, None, None));
@@ -866,9 +866,9 @@ mod pruebas {
         danar_por_conquista(&mut a.recintos, 500_000);
         assert_eq!(a.recintos[0].avance, 1);
         // Repara a la tarifa del nivel del recinto, desde la primera celda sin levantar.
-        let ev = pasada(&r, &mut a, 10, &[0; 29]);
+        let ev = pasada(&r, &mut a, 10, &[0; N]);
         assert_eq!(ev, vec![Evento::RecintoCelda { recinto: 1, levantadas: 3, siguiente_en: Some(10 + 15 * MIN) }]);
-        let ev = pasada(&r, &mut a, 10 + 15 * MIN, &[0; 29]);
+        let ev = pasada(&r, &mut a, 10 + 15 * MIN, &[0; N]);
         assert_eq!(ev, vec![Evento::RecintoCelda { recinto: 1, levantadas: 4, siguiente_en: None }], "sin evento propio de cierre");
         assert!(a.recintos[0].completo());
         assert_eq!(a.recintos[0].completado_en, Some(5), "completado_en no se toca");

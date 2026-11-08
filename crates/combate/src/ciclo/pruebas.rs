@@ -572,7 +572,7 @@ fn los_carros_perdidos_son_caravana_y_posicion_de_la_lista_sin_repetir() {
 fn el_botin_exige_participar_objetos_nuevos_y_casillas() {
     use ErrorResultado::*;
     let objeto = |i: &str| ObjetoBotin { definicion: "espada".into(), cantidad: 1, instancia: Some(i.into()) };
-    let con = |objetos: Vec<ObjetoBotin>| Botin { objetos, monedas: Default::default() };
+    let con = |objetos: Vec<ObjetoBotin>| Botin { objetos, monedas: 0 };
     assert_eq!(rechazo(|r| r.por_heroe[0].botin = Some(con(vec![objeto("a"), objeto("a")]))), ObjetoRepetido("a".into()));
     assert_eq!(rechazo(|r| r.por_heroe[0].botin = Some(con(vec![objeto("existente")]))), ObjetoRepetido("existente".into()));
     assert_eq!(rechazo(|r| r.por_heroe[0].botin = Some(con(vec![objeto("a"), objeto("b"), objeto("c")]))), SinCasillas(1), "tenía 2 casillas libres");
@@ -584,7 +584,7 @@ fn el_botin_exige_participar_objetos_nuevos_y_casillas() {
         BotinSinParticipar(1)
     );
     assert_eq!(rechazo(|r| r.por_heroe[0].botin = Some(con(vec![ObjetoBotin { definicion: "x".into(), cantidad: 0, instancia: None }]))), Forma);
-    assert_eq!(rechazo(|r| r.por_heroe[0].botin = Some(Botin { objetos: vec![], monedas: militar::heroe::Monedas { bronce: -1, plata: 0, oro: 0 } })), Forma);
+    assert_eq!(rechazo(|r| r.por_heroe[0].botin = Some(Botin { objetos: vec![], monedas: -1 })), Forma);
     // Un botín válido (con y sin identidad propia) pasa, y el mismo `itemInstanceId` en dos héroes no.
     let b = en_curso(CAMPAL);
     let mut res = resultado(&b);

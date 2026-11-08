@@ -39,7 +39,6 @@ use base::Punto;
 use combate::ciclo::{Asignacion, Batalla, EscuadraDeSalida, EstadoBatalla, Instancia, MotivoSalida, SalidaBatalla, Token};
 use combate::resolucion::Lado;
 use combate::resultado::{Botin, ObjetoBotin, Razon, Resultado as ResultadoDeBatalla, ResultadoEscuadra, ResultadoHeroe};
-use militar::heroe::Monedas;
 use contrato::v1 as pb;
 use pb::orden::Cuerpo;
 use sha2::{Digest, Sha256};
@@ -678,9 +677,8 @@ impl Actor {
                         let botin = h
                             .botin
                             .map(|b| {
-                                let m = b.monedas.unwrap_or_default();
                                 let objetos = b.objetos.into_iter().map(|o| ObjetoBotin { definicion: o.item_definition_id, cantidad: i64::from(o.cantidad), instancia: o.item_instance_id }).collect();
-                                Ok(Botin { objetos, monedas: Monedas { bronce: entero(m.bronce)?, plata: entero(m.plata)?, oro: entero(m.oro)? } })
+                                Ok(Botin { objetos, monedas: entero(b.monedas)? })
                             })
                             .transpose()?;
                         Ok(ResultadoHeroe { heroe: heroe(&h.heroe_id)?, participo: h.participo, sobrevivio_al_cierre: h.sobrevivio_al_cierre, xp_ganada: h.xp_ganada, derrotado: h.derrotado, botin })

@@ -308,7 +308,10 @@ pub fn entidad_contrato(mercenario: u64) -> u64 {
 ///
 /// BAN58: BAN57 con las plazas vivas del mundo cuando se cumplió cada logro (`EstadoTecnologia::plazas_al_cumplir`, tras los logros en `codec_tecnologia`; umbrales por plaza,
 /// 2026-11-07). De BAN57 y anteriores se lee 1 en cada logro cumplido.
-const MAGIA: &[u8; 5] = b"BAN58";
+///
+/// BAN59: BAN58 con los nueve recursos de la tanda 69 (38 en cada almacén, flujo y tendencia), el cultivo de cada aldea, el buey de cada edificio (`codec_economia`) y el prestigio de
+/// cada Facción (`codec_politica`), 2026-11-08. BAN58 y anteriores ya no se admiten: sus listas de recursos son de 29 y la partida es nueva.
+const MAGIA: &[u8; 5] = b"BAN59";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -1446,55 +1449,17 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN58`): los cuatro primeros dicen la familia («BAN5» es el formato 50 y «BAN4» los formatos 40 a 49, y se admiten todos; «BAN3», «BAN2» y «BAN1», los formatos 30 a 39,
-        // 20 a 29 y 10 a 19, ya no admitidos) y el quinto el formato.
+        // La cabecera es de 5 bytes (`BAN59`): los cuatro primeros dicen la familia («BAN5» es el formato 50; «BAN4», «BAN3», «BAN2» y «BAN1», los formatos 40 a 49, 30 a 39,
+        // 20 a 29 y 10 a 19, ya no admitidos) y el quinto el formato. Solo se admite BAN59.
         let magia = r.magia()?;
-        let (mut con_eligieron, mut con_rutas_acarreo, mut con_nombres, mut con_precios, mut con_forzadas, mut con_misiones, mut con_aldeas) = (true, true, true, true, true, true, true);
-        let (mut con_flujos, mut con_participacion, mut con_recurrentes, mut con_almacen_cerrado, mut con_encargos, mut con_contratos) = (false, false, false, false, false, false);
-        let (mut con_nombres_de_caravana, mut con_paso_de_encargo) = (false, false);
-        // Hasta BAN52 cada plaza trae los minutos sin cupo de sus extractores; desde BAN53, no.
-        let mut con_desempate = true;
-        let mut con_cuota_de_parcelas = true;
-        let mut con_plazas_al_cumplir = false;
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'8' => {
-                    (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos, con_desempate, con_contratos) = (true, true, true, true, true, false, true);
-                    (con_nombres_de_caravana, con_paso_de_encargo, con_cuota_de_parcelas, con_plazas_al_cumplir) = (true, true, false, true);
-                }
-                b'7' => {
-                    (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos, con_desempate, con_contratos) = (true, true, true, true, true, false, true);
-                    (con_nombres_de_caravana, con_paso_de_encargo, con_cuota_de_parcelas) = (true, true, false);
-                }
-                b'6' => {
-                    (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos, con_desempate, con_contratos) = (true, true, true, true, true, false, true);
-                    (con_nombres_de_caravana, con_paso_de_encargo) = (true, true);
-                }
-                b'5' => {
-                    (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos, con_desempate, con_contratos) = (true, true, true, true, true, false, true);
-                    con_nombres_de_caravana = true;
-                }
-                b'4' => (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos, con_desempate, con_contratos) = (true, true, true, true, true, false, true),
-                b'3' => (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos, con_desempate) = (true, true, true, true, true, false),
-                b'2' => (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos) = (true, true, true, true, true),
-                b'1' => (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado) = (true, true, true, true),
-                b'0' => (con_flujos, con_participacion, con_recurrentes) = (true, true, true),
+                b'9' => {}
+                b'0'..=b'8' => return Err(ErrorFormato("foto de un formato de BAN50 a BAN58 (29 recursos en cada almacén, sin el cultivo de las aldeas, el buey de los molinos ni el prestigio de las Facciones): ya no se admite")),
                 _ => return Err(ErrorFormato("no es un estado del núcleo")),
             }
         } else if magia == *b"BAN4" {
-            match r.u8()? {
-                b'9' => (con_flujos, con_participacion) = (true, true),
-                b'8' => con_flujos = true,
-                b'7' => {}
-                b'6' => con_aldeas = false,
-                b'5' => (con_misiones, con_aldeas) = (false, false),
-                b'4' => (con_forzadas, con_misiones, con_aldeas) = (false, false, false),
-                b'3' => (con_precios, con_forzadas, con_misiones, con_aldeas) = (false, false, false, false),
-                b'2' => (con_nombres, con_precios, con_forzadas, con_misiones, con_aldeas) = (false, false, false, false, false),
-                b'1' => (con_rutas_acarreo, con_nombres, con_precios, con_forzadas, con_misiones, con_aldeas) = (false, false, false, false, false, false),
-                b'0' => (con_eligieron, con_rutas_acarreo, con_nombres, con_precios, con_forzadas, con_misiones, con_aldeas) = (false, false, false, false, false, false, false),
-                _ => return Err(ErrorFormato("no es un estado del núcleo")),
-            }
+            return Err(ErrorFormato("foto de un formato de BAN40 a BAN49 (29 recursos en cada almacén, sin el cultivo de las aldeas, el buey de los molinos ni el prestigio de las Facciones): ya no se admite"));
         } else if magia == *b"BAN3" {
             match r.u8()? {
                 b'9' => return Err(ErrorFormato("foto del formato BAN39 (sin los Aedas residentes ni sus épicas: quién vive en cada plaza, la espera de las plazas con cupo libre, sus citas de llegada y las épicas cumplidas de cada Facción, que no se pueden deducir del estado): ya no se admite")),
@@ -1538,6 +1503,11 @@ impl Estado {
                 _ => return Err(ErrorFormato("no es un estado del núcleo")),
             }
         }
+        // Lo que traían o no los formatos de antes de BAN59, que ya no se leen: en BAN59 todo está.
+        let (con_eligieron, con_rutas_acarreo, con_nombres, con_precios, con_forzadas, con_misiones, con_aldeas) = (true, true, true, true, true, true, true);
+        let (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos, con_contratos) = (true, true, true, true, true, true);
+        let (con_nombres_de_caravana, con_paso_de_encargo, con_plazas_al_cumplir) = (true, true, true);
+        let (con_desempate, con_cuota_de_parcelas) = (false, false);
         if r.texto()? != mundo_hash {
             return Err(ErrorFormato("la foto es de otro mundo (hash del artefacto distinto)"));
         }

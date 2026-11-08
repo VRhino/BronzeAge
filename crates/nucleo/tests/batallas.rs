@@ -12,7 +12,7 @@ use combate::resolucion::Lado;
 use combate::resultado::{Botin, ObjetoBotin, Razon, Resultado as ResultadoDeBatalla, ResultadoEscuadra, ResultadoHeroe};
 use comun::c;
 use militar::catalogo::Tropa;
-use militar::heroe::{Controlador, Monedas};
+use militar::heroe::Controlador;
 use nucleo::{rechazos, Ajustes, Arranque, Carga, Comando, Nucleo, ObjetivoAtaque, Peticion, Relacion, Reglas, Resultado, Respuesta, SucesoBatalla};
 use tecnologia::Contador;
 use std::collections::BTreeSet;
@@ -447,7 +447,7 @@ fn el_ciclo_completo_con_los_cinco_mensajes_sus_rechazos_y_su_idempotencia() {
     assert_eq!(malo(&mut x, "r6", &|r| r.por_escuadra[0].muertos += 1), rechazos::BATALLA_INVALIDA, "no cierra sobre lo autorizado");
     assert_eq!(malo(&mut x, "r7", &|r| (r.razon, r.ganador) = (Razon::TiempoAgotado, Lado::Atacante)), rechazos::BATALLA_INVALIDA);
     assert_eq!(malo(&mut x, "r8", &|r| r.fin = r.inicio + 15 * MIN + 1), rechazos::BATALLA_INVALIDA, "dura más que la duración máxima");
-    assert_eq!(malo(&mut x, "r9", &|r| r.por_heroe[1].botin = Some(Botin { objetos: vec![], monedas: Monedas { bronce: -1, plata: 0, oro: 0 } })), rechazos::BATALLA_INVALIDA);
+    assert_eq!(malo(&mut x, "r9", &|r| r.por_heroe[1].botin = Some(Botin { objetos: vec![], monedas: -1 })), rechazos::BATALLA_INVALIDA);
     assert_eq!(malo(&mut x, "r10", &|r| r.carros_perdidos = vec!["1:0".into()]), rechazos::BATALLA_INVALIDA, "no hay carros que perder fuera de una caravana");
     let r = x.n.aplicar_en(14 * MIN, Peticion::nueva("ana", "r11", Comando::AplicarResultado { batalla: id, resultado: bueno.clone() }));
     assert_eq!(codigo(&r), rechazos::BATALLA_SIN_CREDENCIAL);
@@ -502,10 +502,10 @@ fn jugada(muertos: i64, ajusta: &dyn Fn(&Choque, &mut ResultadoDeBatalla)) -> (C
 
 #[test]
 fn el_resultado_deja_las_bajas_la_experiencia_el_botin_el_carro_y_la_chatarra_y_las_columnas_vuelven_al_mundo() {
-    let botin = Botin { objetos: vec![ObjetoBotin { definicion: "espada".into(), cantidad: 1, instancia: Some("i-1".into()) }], monedas: Monedas { bronce: 5, plata: 2, oro: 1 } };
+    let botin = Botin { objetos: vec![ObjetoBotin { definicion: "espada".into(), cantidad: 1, instancia: Some("i-1".into()) }], monedas: 8 };
     let (x, id) = jugada(5, &|x, r| r.por_heroe.iter_mut().find(|h| h.heroe == x.ana.1).unwrap().botin = Some(botin.clone()));
     let (ana, beto) = (x.ana, x.beto);
-    let bronce0 = militar::Reglas::cargar().heroe.bronce_inicial;
+    let monedas0 = militar::Reglas::cargar().heroe.monedas_iniciales;
     // Cada escuadra cierra sobre sus supervivientes, con la experiencia que dijo Unity (puntos enteros, guardados en milésimas).
     for (h, e, antes) in [(ana.1, x.fuerte[0], completa(Tropa::EspadachinesBronce)), (ana.1, x.fuerte[1], completa(Tropa::ArquerosCompuesto)), (beto.1, x.debil, completa(Tropa::MiliciaLanceros))] {
         let s = x.n.heroe(h).unwrap().heroe.escuadra(e).unwrap();
@@ -513,7 +513,7 @@ fn el_resultado_deja_las_bajas_la_experiencia_el_botin_el_carro_y_la_chatarra_y_
     }
     // El héroe suma su experiencia y las monedas del botín; el objeto no tiene dónde caer (CQ-004) y el nivel no sube (CQ-001).
     let h = &x.n.heroe(ana.1).unwrap().heroe;
-    assert_eq!((h.experiencia, h.nivel, h.monedas), (7, 1, Monedas { bronce: bronce0 + 5, plata: 2, oro: 1 }));
+    assert_eq!((h.experiencia, h.nivel, h.monedas), (7, 1, monedas0 + 8));
     // Heridos: el bando que pierde (sin `derrotado`); el que gana, no.
     assert!(x.n.heroe_herido(beto.1) && !x.n.heroe_herido(ana.1));
     assert_eq!(x.n.heroe(beto.1).unwrap().heroe.herido_hasta, Some(20 * MIN + 2 * MIN));
@@ -911,7 +911,7 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_rechaza_el_formato_anterior_
     let (n, id) = a_mitad();
     let reglas = reglas_unity();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN58");
+    assert_eq!(&bytes[..5], b"BAN59");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "hash-de-prueba").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.batallas, n.estado().batallas);
@@ -983,7 +983,7 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_rechaza_el_formato_anterior_
     let mut res = resultado(&n, id, Lado::Atacante, 1);
     e.batallas.batallas.get_mut(&id).unwrap().resultado = Some(res.clone());
     let h1 = e.hash();
-    res.por_heroe[0].botin = Some(Botin { objetos: vec![ObjetoBotin { definicion: "x".into(), cantidad: 2, instancia: None }], monedas: Monedas { bronce: 1, plata: 0, oro: 0 } });
+    res.por_heroe[0].botin = Some(Botin { objetos: vec![ObjetoBotin { definicion: "x".into(), cantidad: 2, instancia: None }], monedas: 1 });
     e.batallas.batallas.get_mut(&id).unwrap().resultado = Some(res);
     assert_ne!(e.hash(), h1);
     assert_eq!(nucleo::Estado::deserializar(&e.serializar(), &reglas, "hash-de-prueba").unwrap().hash(), e.hash());
@@ -2074,7 +2074,7 @@ fn los_bandidos_que_acosan_una_columna_con_dos_caravanas_juegan_las_dos_en_la_mi
 
         // La foto a mitad de la batalla lleva las dos caravanas y vuelve idéntica; la del formato anterior (una sola caravana) se rechaza con su motivo.
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN58");
+        assert_eq!(&bytes[..5], b"BAN59");
         let vuelta = nucleo::Estado::deserializar(&bytes, &arranque_mundo(m, 7).reglas, &m.0.hash().to_string()).unwrap();
         assert_eq!((vuelta.serializar(), vuelta.batallas.clone()), (bytes.clone(), e.n.estado().batallas.clone()));
         let viejo = [b"BAN18".as_slice(), &bytes[5..]].concat();

@@ -65,6 +65,31 @@ pub struct ReglasNivel {
     pub cupo_nivel5: Vec<u32>,
 }
 
+/// `PRESTIGIO` (tanda 69): lo que suma cada hecho al prestigio de la Facción y los umbrales que lo usan. El prestigio no se gasta ni se pierde.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReglasPrestigio {
+    pub victoria: i64,
+    pub conquista: i64,
+    pub fundacion: i64,
+    /// Por subir una plaza de nivel: esto por el nivel nuevo.
+    pub ascenso_por_nivel: i64,
+    pub comercio: i64,
+    /// Alianzas activas a la vez: `alianzas_base` y una más cada `alianza_cada` de prestigio.
+    pub alianzas_base: u32,
+    pub alianza_cada: i64,
+    /// Los umbrales que desbloquean cada estatua de la capital, crecientes.
+    pub estatuas: Vec<i64>,
+    /// El que pide la Maravilla.
+    pub maravilla: i64,
+}
+
+impl ReglasPrestigio {
+    /// Cuántas alianzas puede tener activas a la vez una Facción con ese prestigio.
+    pub fn tope_de_alianzas(&self, prestigio: i64) -> u32 {
+        self.alianzas_base.saturating_add(u32::try_from(prestigio.max(0) / self.alianza_cada).unwrap_or(u32::MAX))
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Reglas {
     /// `CIUDADANIA.cooldownCreacionFaccionDias` (ms): tras dejar una Facción no se crea otra hasta que pase.
@@ -84,6 +109,7 @@ pub struct Reglas {
     /// `TITULOS.margenAspirante` (ppm): cuánto tiene que superar la aspirante a la poseedora para quitarle un título (§7, P2 del 2026-10-25).
     pub margen_titulos: i64,
     pub nivel: ReglasNivel,
+    pub prestigio: ReglasPrestigio,
     pub sigilo: Catalogo,
 }
 
@@ -129,6 +155,21 @@ impl Reglas {
                 cupo_nivel4: lista_u32(&cupo["maxNivel4"]),
                 cupo_nivel5: lista_u32(&cupo["maxNivel5"]),
             },
+            prestigio: {
+                let p = bloque("PRESTIGIO");
+                let entero = |k: &str| num(&p, k) as i64;
+                ReglasPrestigio {
+                    victoria: entero("victoria"),
+                    conquista: entero("conquista"),
+                    fundacion: entero("fundacion"),
+                    ascenso_por_nivel: entero("ascensoPorNivel"),
+                    comercio: entero("comercio"),
+                    alianzas_base: entero("alianzas.base") as u32,
+                    alianza_cada: entero("alianzas.unaMasCada"),
+                    estatuas: lista_u32(&p["estatuas"]).into_iter().map(i64::from).collect(),
+                    maravilla: entero("maravilla"),
+                }
+            },
             sigilo: Catalogo::de(&bloque("CATALOGO_SIGILO")),
         }
     }
@@ -165,12 +206,17 @@ mod pruebas {
         assert_eq!(n.cupo_nivel3, vec![0, 0, 1, 1, 1, 2, 2, 2, 2, 3]);
         assert_eq!(n.cupo_nivel4, vec![0, 0, 0, 0, 1, 1, 2, 2, 3, 3], "2026-11-04: como mucho tres plazas en nivel 4");
         assert_eq!(n.cupo_nivel5, vec![0, 0, 0, 0, 0, 0, 0, 1, 1, 1], "2026-11-04: como mucho una plaza en nivel 5");
+        let p = &r.prestigio;
+        assert_eq!((p.victoria, p.conquista, p.fundacion, p.ascenso_por_nivel, p.comercio), (5, 50, 20, 10, 2), "tanda 69");
+        assert_eq!((p.alianzas_base, p.alianza_cada, p.estatuas.as_slice(), p.maravilla), (1, 100, [200, 500, 1000].as_slice(), 2000));
+        // Una alianza, y una más cada 100 de prestigio (tanda 69 §13).
+        assert_eq!([0, 99, 100, 250].map(|x| p.tope_de_alianzas(x)), [1, 1, 2, 3]);
     }
 
     #[test]
     fn la_identidad_son_los_bloques_del_documento() {
         let t = texto_de_parametros();
-        for nombre in ["CIUDADANIA", "CAPITAL", "PUERTA", "RELACION_PROPUESTA", "ANEXION", "FUSION", "CATALOGO_SIGILO", "NIVEL_FACCION", "TITULOS"] {
+        for nombre in ["CIUDADANIA", "CAPITAL", "PUERTA", "RELACION_PROPUESTA", "ANEXION", "FUSION", "CATALOGO_SIGILO", "NIVEL_FACCION", "TITULOS", "PRESTIGIO"] {
             assert!(t.contains(&format!("<!-- parametros:{nombre} -->")), "falta {nombre}");
         }
     }

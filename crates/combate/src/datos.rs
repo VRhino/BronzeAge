@@ -101,8 +101,44 @@ pub struct NivelBandidos {
     pub poder: Mil,
     pub unidades: i64,
     pub oro_por_heroe: Mil,
+    /// Madera, piedra y trigo (de cada uno, milésimas) para cada héroe que lo destruye (`botinPorHeroe`, tanda 69).
+    pub botin_por_heroe: Mil,
+    /// Monedas para cada héroe que lo destruye (`monedasPorHeroe`, tanda 69).
+    pub monedas_por_heroe: i64,
     /// Probabilidad de que un campamento nuevo sea de este nivel (ppm).
     pub peso: i64,
+}
+
+/// Rendimientos decrecientes de algo que se cobra muchas veces (D22, D26, D27): en la `ventana`, completo las primeras `completas` veces, luego
+/// `caida_por_cada` menos por cada una más, y desde `solo_experiencia_desde`, nada. Los usan el botín de bandidos y las monedas de combate.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Rendimientos {
+    /// ms.
+    pub ventana: i64,
+    pub completas: i64,
+    /// ppm.
+    pub caida_por_cada: i64,
+    pub solo_experiencia_desde: i64,
+}
+
+impl Rendimientos {
+    fn de(v: &Value) -> Self {
+        Rendimientos {
+            ventana: entero(v, "ventanaHoras") * 60 * MS_POR_MINUTO,
+            completas: entero(v, "completas"),
+            caida_por_cada: ppm(num(v, "caidaPorCada")),
+            solo_experiencia_desde: entero(v, "soloExperienciaDesde"),
+        }
+    }
+}
+
+/// Las monedas del héroe por combatir contra héroes de otra Facción (`MONEDAS`, tanda 69): al ganador y al perdedor de cada bando, con rendimientos
+/// decrecientes por par de Facciones.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReglasMonedas {
+    pub ganador: i64,
+    pub perdedor: i64,
+    pub rendimientos: Rendimientos,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -110,10 +146,7 @@ pub struct ReglasBandidos {
     /// Niveles 1, 2 y 3 (índice 0, 1, 2).
     pub niveles: [NivelBandidos; 3],
     /// Rendimientos decrecientes del botín por héroe.
-    pub ventana: i64,
-    pub completas: i64,
-    pub caida_por_cada: i64,
-    pub solo_experiencia_desde: i64,
+    pub rendimientos: Rendimientos,
     /// Anillo de campamentos de mercenarios donde aparecen, y cuántos según la demanda.
     pub anillo_min: Mil,
     pub anillo_max: Mil,
@@ -227,13 +260,21 @@ pub struct Reglas {
     pub ocupacion: ReglasOcupacion,
     pub batalla: ReglasBatalla,
     pub bandidos: ReglasBandidos,
+    pub monedas: ReglasMonedas,
     pub pueblos: ReglasPueblos,
     pub avanzada: ReglasAvanzada,
 }
 
 fn nivel_de_bandidos(b: &Value, nivel: &str) -> NivelBandidos {
     let n = &b["niveles"][nivel];
-    NivelBandidos { poder: mil(num(n, "poder")), unidades: entero(n, "unidades"), oro_por_heroe: mil(num(n, "oroPorHeroe")), peso: ppm(num(n, "peso")) }
+    NivelBandidos {
+        poder: mil(num(n, "poder")),
+        unidades: entero(n, "unidades"),
+        oro_por_heroe: mil(num(n, "oroPorHeroe")),
+        botin_por_heroe: mil(num(n, "botinPorHeroe")),
+        monedas_por_heroe: entero(n, "monedasPorHeroe"),
+        peso: ppm(num(n, "peso")),
+    }
 }
 
 impl Reglas {
@@ -297,10 +338,7 @@ impl Reglas {
             },
             bandidos: ReglasBandidos {
                 niveles: [nivel_de_bandidos(&bd, "1"), nivel_de_bandidos(&bd, "2"), nivel_de_bandidos(&bd, "3")],
-                ventana: entero(&bd, "rendimientos.ventanaHoras") * 60 * MS_POR_MINUTO,
-                completas: entero(&bd, "rendimientos.completas"),
-                caida_por_cada: ppm(num(&bd, "rendimientos.caidaPorCada")),
-                solo_experiencia_desde: entero(&bd, "rendimientos.soloExperienciaDesde"),
+                rendimientos: Rendimientos::de(&bd["rendimientos"]),
                 anillo_min: mil(num(&bd, "anillo.radioMin")),
                 anillo_max: mil(num(&bd, "anillo.radioMax")),
                 bandidos_por_residente: entero(&bd, "anillo.bandidosPorResidente"),
@@ -311,6 +349,10 @@ impl Reglas {
                 por_plaza: entero(&bd, "porPlaza"),
                 margen_zona_plaza: mil(num(&bd, "margenZonaPlaza")),
                 respawn: minutos(&bd, "respawnMinutos"),
+            },
+            monedas: {
+                let m = bloque(COMBATE, "MONEDAS");
+                ReglasMonedas { ganador: entero(&m, "ganador"), perdedor: entero(&m, "perdedor"), rendimientos: Rendimientos::de(&m["rendimientos"]) }
             },
             pueblos: ReglasPueblos { mineros: pueblos.mineros as i64, cada_minero: pueblos.minutos_por_minero * MS_POR_MINUTO, granjeros: pueblos.aldea.granjeros as i64 },
             avanzada: ReglasAvanzada {
@@ -374,7 +416,10 @@ mod pruebas {
         let b = r().bandidos;
         assert_eq!((b.radio_ataque_caravana, b.anillo_min, b.anillo_max), (7_000, 12_000, 25_000), "el anillo, a 12-25 u desde el 2026-10-27");
         assert_eq!(b.niveles.clone().map(|n| (n.poder, n.unidades, n.oro_por_heroe, n.peso)), [(20_000, 10, 30_000, 500_000), (60_000, 30, 33_000, 300_000), (120_000, 60, 36_000, 200_000)]);
-        assert_eq!((b.ventana, b.completas, b.caida_por_cada, b.solo_experiencia_desde), (24 * 60 * MS_POR_MINUTO, 8, 150_000, 14));
+        let rend = Rendimientos { ventana: 24 * 60 * MS_POR_MINUTO, completas: 8, caida_por_cada: 150_000, solo_experiencia_desde: 14 };
+        assert_eq!(b.rendimientos, rend);
+        assert_eq!(b.niveles.clone().map(|n| (n.botin_por_heroe, n.monedas_por_heroe)), [(5_000, 50), (7_000, 75), (10_000, 100)], "tanda 69");
+        assert_eq!(r().monedas, ReglasMonedas { ganador: 500, perdedor: 150, rendimientos: rend }, "las monedas de combate decrecen como el botín (D8)");
         assert_eq!((b.bandidos_por_residente, b.anillo_minimo, b.anillo_maximo, b.reaparicion_anillo), (4, 5, 10, 10 * MS_POR_MINUTO), "4 por residente, de 5 a 10 (2026-11-03)");
         assert_eq!((b.por_plaza, b.respawn), (10, 120 * MS_POR_MINUTO), "10 por plaza, de golpe cada 2 h (2026-11-02)");
         assert_eq!(b.niveles.iter().map(|n| n.peso).sum::<i64>(), UNO, "los pesos suman 1");

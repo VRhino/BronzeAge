@@ -6,7 +6,7 @@ use crate::asentamiento::{Asentamiento, Evento, Exterior};
 use crate::catalogo::Tipo;
 use crate::datos::{Reglas, UNO};
 use crate::edificio::{Edificio, Edificios, Estado, Mejora};
-use crate::recurso::{Costo, Recurso};
+use crate::recurso::{Costo, Recurso, N};
 use base::{Instante, Mil, MS_POR_MINUTO};
 
 /// Fracción del coste (y del tiempo) de una reconstrucción tras un saqueo (`OCUPACION.fraccionCosteReconstruccion`).
@@ -49,7 +49,7 @@ pub(crate) fn minutos(tiempo: i64, factor_ppm: i64) -> i64 {
 impl Asentamiento {
     /// `puedeIniciarConstruccion`: hay con qué pagar y, recurso a recurso, no se baja de la reserva. La Granja ignora la reserva de
     /// trigo y la Leñera la de madera: son la única forma de recuperarlos.
-    pub fn puede_iniciar(&self, r: &Reglas, tipo: Tipo, costo: &Costo, reserva: &[Mil; 29]) -> bool {
+    pub fn puede_iniciar(&self, r: &Reglas, tipo: Tipo, costo: &Costo, reserva: &[Mil; N]) -> bool {
         let propio = r.construccion.recurso_propio.get(&tipo).copied();
         self.almacen.tiene(costo) && costo.iter().all(|&(rec, n)| Some(rec) == propio || reserva[rec.indice()] <= 0 || self.almacen.cantidad(rec) - n >= reserva[rec.indice()])
     }
@@ -184,7 +184,7 @@ impl Asentamiento {
 
     /// Empieza las mejoras automáticas (siempre dejando una cuadrilla libre para construir). Como la manual, exige el hueco de la huella
     /// nueva al arrancar (Economia_Construccion §7): una Granja sin hueco no arranca y no retiene cuadrilla.
-    pub(crate) fn iniciar_mejoras_automaticas(&mut self, t: Instante, r: &Reglas, x: &mut Exterior, reserva: &[Mil; 29], ev: &mut Vec<Evento>) {
+    pub(crate) fn iniciar_mejoras_automaticas(&mut self, t: Instante, r: &Reglas, x: &mut Exterior, reserva: &[Mil; N], ev: &mut Vec<Evento>) {
         let maxc = r.construccion.necesidades.maximo_en_construccion_simultanea;
         let mut libres = maxc.saturating_sub(self.edificios.cuadrillas_ocupadas()).saturating_sub(1);
         for i in 0..self.edificios.len() {

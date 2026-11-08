@@ -411,7 +411,7 @@ async fn la_foto_inicial_de_heroe_y_faccion_lleva_todo_lo_propio_y_nada_de_otra_
     assert_eq!((h.loadouts.len(), h.loadouts[0].display_name.as_str(), h.loadouts[0].activo), (1, "Default", true));
     assert!(h.liderazgo_base > 0);
     assert_eq!(i64::from(h.cupo_guarnicion), cupo, "derivado: el cupo de la guarnición de su residencia");
-    assert!(h.monedas_heroe.as_ref().unwrap().bronce > 0);
+    assert!(h.monedas > 0);
     let e = escuadrones(&propia.entidades);
     assert_eq!(e.len(), 1);
     assert_eq!((e[0].id.as_str(), e[0].heroe_id.as_str(), e[0].tropa_id.as_str(), e[0].origen.as_str(), e[0].nivel), (ids::escuadra(escuadra).as_str(), h_ana.as_str(), "milicia_lanceros", "pesants", 1));

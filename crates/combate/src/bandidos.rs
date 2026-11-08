@@ -5,7 +5,7 @@
 //! Los bandidos **no actúan dentro de ninguna zona de influencia**, ni junto a un campamento de mercenarios. Es PvE: no exige guerra.
 
 use crate::caravana::{defensa_de, Defensa};
-use crate::datos::{NivelBandidos, Reglas};
+use crate::datos::{NivelBandidos, Reglas, Rendimientos};
 use crate::resolucion::{aplicar_bajas, ganador_de, poder_de_bando, tirada, Baja, Bando, CombateInvalido, Lado};
 use asentamiento::datos::UNO;
 use base::{Instante, Mil, Punto, Rng};
@@ -178,21 +178,25 @@ pub fn resolver_campamento(r: &Reglas, atacante: Bando, nivel: u8, rng: &mut Rng
     Ok(AtaqueACampamento { destruido, poder_atacante: poder, poder_campamento: objetivo, bajas, heridos: if destruido { vec![] } else { atacante.heroes.to_vec() } })
 }
 
-/// El oro de un campamento destruido para **un** héroe, con rendimientos decrecientes (D22, D26, D27): en la ventana de 24 h, completo las primeras
-/// `completas` veces, luego `caidaPorCada` menos por cada una más, y desde `soloExperienciaDesde`, nada. `recientes` son los instantes en que ese
-/// héroe destruyó campamentos: se podan los de fuera de la ventana y se anota este.
-pub fn botin_de_bandidos(r: &Reglas, recientes: &mut Vec<Instante>, nivel: u8, ahora: Instante) -> Mil {
-    let b = &r.bandidos;
-    recientes.retain(|&t| t > ahora - b.ventana);
+/// El factor (ppm) de una vez más de algo con rendimientos decrecientes ([`Rendimientos`]). `recientes` son los instantes de las veces anteriores:
+/// se podan los de fuera de la ventana y se anota esta.
+pub fn factor_de_rendimiento(r: &Rendimientos, recientes: &mut Vec<Instante>, ahora: Instante) -> i64 {
+    recientes.retain(|&t| t > ahora - r.ventana);
     let n = recientes.len() as i64 + 1;
-    let factor = if n <= b.completas {
+    recientes.push(ahora);
+    if n <= r.completas {
         UNO
-    } else if n >= b.solo_experiencia_desde {
+    } else if n >= r.solo_experiencia_desde {
         0
     } else {
-        (UNO - b.caida_por_cada * (n - b.completas)).max(0)
-    };
-    recientes.push(ahora);
+        (UNO - r.caida_por_cada * (n - r.completas)).max(0)
+    }
+}
+
+/// El oro de un campamento destruido para **un** héroe, con los rendimientos decrecientes del botín. `recientes` son los instantes en que ese
+/// héroe destruyó campamentos.
+pub fn botin_de_bandidos(r: &Reglas, recientes: &mut Vec<Instante>, nivel: u8, ahora: Instante) -> Mil {
+    let factor = factor_de_rendimiento(&r.bandidos.rendimientos, recientes, ahora);
     // En unidades enteras de oro, hacia abajo (C3b): nunca se crea de más.
     base::entero((nivel_de(r, nivel).oro_por_heroe as i128 * factor as i128 / UNO as i128) as Mil)
 }

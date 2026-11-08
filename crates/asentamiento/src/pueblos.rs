@@ -50,6 +50,40 @@ pub struct Especie {
     pub productos: Costo,
 }
 
+/// Lo que siembra una aldea agrícola (tanda 69 §12): se elige al marcarla y no cambia. La Granja de la ciudad es siempre de trigo.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Cultivo {
+    Trigo,
+    Vid,
+    Oliva,
+}
+
+impl Cultivo {
+    /// En el orden de la foto (la posición es su código).
+    pub const TODOS: [Cultivo; 3] = [Cultivo::Trigo, Cultivo::Vid, Cultivo::Oliva];
+
+    /// El id que ven los clientes y que traen los bloques.
+    pub fn nombre(self) -> &'static str {
+        match self {
+            Cultivo::Trigo => "trigo",
+            Cultivo::Vid => "vid",
+            Cultivo::Oliva => "oliva",
+        }
+    }
+
+    pub fn desde_nombre(n: &str) -> Option<Cultivo> {
+        Cultivo::TODOS.into_iter().find(|c| c.nombre() == n)
+    }
+}
+
+/// `PUEBLOS_EXTRACTORES.aldea.cultivos`: lo que dan las granjas de un cultivo, desde qué nivel de la plaza madre se siembra y si la aldea lleva corrales.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReglaCultivo {
+    pub produce: Recurso,
+    pub nivel_madre: u32,
+    pub corrales: bool,
+}
+
 /// `PUEBLOS_EXTRACTORES.aldea`: las cifras de la aldea agrícola (§14.2).
 #[derive(Clone, Debug)]
 pub struct ReglasAldea {
@@ -68,6 +102,7 @@ pub struct ReglasAldea {
     pub saqueo_rebano: i64,
     /// `ESPECIES`, por id.
     pub especies: BTreeMap<String, Especie>,
+    pub cultivos: BTreeMap<Cultivo, ReglaCultivo>,
 }
 
 impl ReglasAldea {
@@ -134,6 +169,16 @@ impl ReglasPueblos {
                 .collect(),
             especie_inicial: a["especieInicial"].as_str().expect("aldea.especieInicial").to_owned(),
             saqueo_rebano: ppm(num(a, "saqueoRebano")),
+            cultivos: a["cultivos"]
+                .as_object()
+                .expect("aldea.cultivos")
+                .iter()
+                .map(|(k, v)| {
+                    let produce = v["produce"].as_str().and_then(Recurso::desde_nombre).unwrap_or_else(|| panic!("«produce» del cultivo «{k}»"));
+                    let regla = ReglaCultivo { produce, nivel_madre: num(v, "nivelMadre") as u32, corrales: v["corrales"].as_bool().expect("corrales") };
+                    (Cultivo::desde_nombre(k).unwrap_or_else(|| panic!("cultivo «{k}» desconocido")), regla)
+                })
+                .collect(),
             especies: especies
                 .as_object()
                 .expect("ESPECIES")
@@ -180,12 +225,12 @@ pub struct Rebano {
     pub cabezas: Mil,
 }
 
-/// Dónde está plantado un pueblo: un extractor, sobre su nodo; la aldea agrícola, en un punto de la zona, con la fertilidad del terreno en
-/// ese punto (ppm, la que manda en sus granjas; el terreno no cambia, así que se lee una vez al marcarla).
+/// Dónde está plantado un pueblo: un extractor, sobre su nodo; la aldea agrícola, en un punto de la zona, con su cultivo y la fertilidad del
+/// terreno en ese punto (ppm, la que manda en sus granjas; el terreno no cambia, así que se lee una vez al marcarla).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Sitio {
     Nodo(u32),
-    Punto { pos: Punto, fertilidad: i64 },
+    Punto { pos: Punto, fertilidad: i64, cultivo: Cultivo },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -447,15 +492,16 @@ impl Asentamiento {
         Ok(())
     }
 
-    /// Marca la obra de una aldea agrícola en `pos` (que el núcleo ya comprobó dentro de la zona, con ruta y separada de los demás pueblos), con
-    /// la `fertilidad` del terreno en ese punto: queda pendiente de materiales y ocupa cupo.
-    pub fn iniciar_aldea(&mut self, r: &Reglas, id: u64, pos: Punto, fertilidad: i64, carro: &Costo, ev: &mut Vec<Evento>) -> Result<(), ErrorPueblo> {
+    /// Marca la obra de una aldea agrícola de `cultivo` en `pos` (que el núcleo ya comprobó dentro de la zona, con ruta y separada de los demás
+    /// pueblos), con la `fertilidad` del terreno en ese punto: queda pendiente de materiales y ocupa cupo.
+    #[allow(clippy::too_many_arguments)]
+    pub fn iniciar_aldea(&mut self, r: &Reglas, id: u64, pos: Punto, fertilidad: i64, cultivo: Cultivo, carro: &Costo, ev: &mut Vec<Evento>) -> Result<(), ErrorPueblo> {
         self.admite_otro_pueblo(r, r.pueblos.aldea.nivel_madre_minimo)?;
         if fertilidad < r.pueblos.aldea.fertilidad_minima {
             return Err(ErrorPueblo::FertilidadInsuficiente);
         }
         let estado = pendiente(Self::costo_de_aldea(r, carro));
-        let sitio = Sitio::Punto { pos, fertilidad };
+        let sitio = Sitio::Punto { pos, fertilidad, cultivo };
         self.pueblos.push(Pueblo { id, tipo: Tipo::Granja, sitio, nivel: 1, estado, mejora: None, rebano: None, almacen: Almacen::nuevo(r.pueblos.capacidad_almacen), carro: None, lleno: false });
         ev.push(Evento::AldeaMarcada { id, pos });
         Ok(())
@@ -673,6 +719,9 @@ mod pruebas {
         let a = &r.aldea;
         assert_eq!((a.nivel_madre_minimo, a.fertilidad_minima, a.separacion_minima, a.granjeros, a.nivel_maximo()), (1, 300_000, 3_000, 30, 3));
         assert_eq!(a.niveles.values().map(|n| (n.granjas, n.corrales)).collect::<Vec<_>>(), vec![(2, 1), (4, 2), (6, 3)]);
+        // Tanda 69 §12: la vid desde el nivel 3 de la madre y la oliva desde el 4, las dos sin corrales.
+        let cultivo = |c: Cultivo| (a.cultivos[&c].produce, a.cultivos[&c].nivel_madre, a.cultivos[&c].corrales);
+        assert_eq!(Cultivo::TODOS.map(cultivo), [(Recurso::Trigo, 1, true), (Recurso::Uva, 3, false), (Recurso::Aceituna, 4, false)]);
     }
 
     #[test]
@@ -840,7 +889,7 @@ mod pruebas {
     /// Una plaza de nivel 1 con una aldea marcada en un punto de fertilidad 0,5.
     fn con_aldea(r: &Reglas) -> Asentamiento {
         let mut a = Asentamiento::fundar(r, 0, &[], 3);
-        a.iniciar_aldea(r, 1, Punto::new(5_000, 0), 500_000, &carro(), &mut vec![]).unwrap();
+        a.iniciar_aldea(r, 1, Punto::new(5_000, 0), 500_000, Cultivo::Trigo, &carro(), &mut vec![]).unwrap();
         a
     }
 
@@ -849,15 +898,15 @@ mod pruebas {
         let r = Reglas::cargar();
         let mut a = Asentamiento::fundar(&r, 0, &[], 3);
         let mut ev = vec![];
-        assert_eq!(a.iniciar_aldea(&r, 1, Punto::new(5_000, 0), 299_999, &carro(), &mut ev), Err(ErrorPueblo::FertilidadInsuficiente));
-        a.iniciar_aldea(&r, 1, Punto::new(5_000, 0), 300_000, &carro(), &mut ev).unwrap();
+        assert_eq!(a.iniciar_aldea(&r, 1, Punto::new(5_000, 0), 299_999, Cultivo::Trigo, &carro(), &mut ev), Err(ErrorPueblo::FertilidadInsuficiente));
+        a.iniciar_aldea(&r, 1, Punto::new(5_000, 0), 300_000, Cultivo::Trigo, &carro(), &mut ev).unwrap();
         assert_eq!(ev, vec![Evento::AldeaMarcada { id: 1, pos: Punto::new(5_000, 0) }]);
         let p = a.pueblo(1).unwrap();
         assert!(p.es_aldea() && p.nodo().is_none() && p.nivel == 1 && p.mejora.is_none());
         // Nivel 1 (30) + 50 + el carro (20 de madera y 12 de oro): lo mismo que una mina de cobre.
         assert_eq!(p.falta(), vec![(Recurso::Madera, 100_000), (Recurso::Oro, 12_000)]);
-        a.iniciar_aldea(&r, 2, Punto::new(9_000, 0), UNO, &carro(), &mut ev).unwrap();
-        assert_eq!(a.iniciar_aldea(&r, 3, Punto::new(0, 9_000), UNO, &carro(), &mut ev), Err(ErrorPueblo::SinCupo), "en el nivel 1, dos pueblos");
+        a.iniciar_aldea(&r, 2, Punto::new(9_000, 0), UNO, Cultivo::Trigo, &carro(), &mut ev).unwrap();
+        assert_eq!(a.iniciar_aldea(&r, 3, Punto::new(0, 9_000), UNO, Cultivo::Trigo, &carro(), &mut ev), Err(ErrorPueblo::SinCupo), "en el nivel 1, dos pueblos");
         assert_eq!(a.aldeas_activas(), 0, "pendiente no cuenta");
     }
 

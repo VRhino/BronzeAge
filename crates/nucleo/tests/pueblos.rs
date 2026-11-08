@@ -5,7 +5,7 @@
 
 mod comun;
 use asentamiento::catalogo::Tipo;
-use asentamiento::pueblos::{EstadoPueblo, IngresoAcarreo};
+use asentamiento::pueblos::{Cultivo, EstadoPueblo, IngresoAcarreo};
 use asentamiento::Recurso::{self, *};
 use base::{Instante, Punto, MS_POR_MINUTO};
 use comercio::caravana::{EstadoCaravana, TipoCaravana};
@@ -316,9 +316,9 @@ fn vale_desde_el_nivel_1_y_respeta_el_cupo_que_libera_destruirlo_a_mano() {
     let (plaza, cobre) = (uno.plaza, uno.cobre);
     uno.ok("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: cobre });
     if let Some(punto) = uno.n.sitio_de_aldea(plaza) {
-        uno.ok("ana", Comando::MarcarAldea { asentamiento: plaza, punto });
+        uno.ok("ana", Comando::MarcarAldea { asentamiento: plaza, punto, cultivo: Cultivo::Trigo });
         if let Some(punto) = uno.n.sitio_de_aldea(plaza) {
-            assert_eq!(uno.rechazada("ana", Comando::MarcarAldea { asentamiento: plaza, punto }), rechazos::PUEBLO_SIN_CUPO, "en el nivel 1 caben dos pueblos");
+            assert_eq!(uno.rechazada("ana", Comando::MarcarAldea { asentamiento: plaza, punto, cultivo: Cultivo::Trigo }), rechazos::PUEBLO_SIN_CUPO, "en el nivel 1 caben dos pueblos");
         }
     }
 
@@ -1230,7 +1230,7 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
     e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN58");
+    assert_eq!(&bytes[..5], b"BAN59");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
@@ -1361,17 +1361,17 @@ fn las_aldeas_van_por_anillos_las_del_cupo_del_nivel_1_hasta_20_u_y_la_siguiente
     for k in 1..=2 {
         let punto = e.n.sitio_de_aldea(plaza).expect("hay tierra fértil a 20 u o menos");
         assert!(centro.dist(punto) <= 20_000, "la aldea {k} va a 20 u o menos: {}", centro.dist(punto));
-        e.ok("ana", Comando::MarcarAldea { asentamiento: plaza, punto });
+        e.ok("ana", Comando::MarcarAldea { asentamiento: plaza, punto, cultivo: Cultivo::Trigo });
         puestas.push(punto);
     }
     // La tercera ya no cabe en el primer anillo: el anillo se mira antes que la cercanía a las otras aldeas, y el rechazo no deja rastro.
     let rastro = e.n.hash_estado();
-    assert_eq!(e.rechazada("ana", Comando::MarcarAldea { asentamiento: plaza, punto: puestas[0] }), rechazos::PUEBLO_FUERA_DE_SU_ANILLO);
+    assert_eq!(e.rechazada("ana", Comando::MarcarAldea { asentamiento: plaza, punto: puestas[0], cultivo: Cultivo::Trigo }), rechazos::PUEBLO_FUERA_DE_SU_ANILLO);
     assert_eq!(e.n.hash_estado(), rastro);
     let punto = e.n.sitio_de_aldea(plaza).expect("hay tierra fértil de 20 a 30 u");
     let d = centro.dist(punto);
     assert!(d > 20_000 && d <= 30_000, "el panel propone el anillo del nivel 2: {d}");
-    e.ok("ana", Comando::MarcarAldea { asentamiento: plaza, punto });
+    e.ok("ana", Comando::MarcarAldea { asentamiento: plaza, punto, cultivo: Cultivo::Trigo });
     assert_eq!(e.n.pueblos_de(plaza).iter().filter(|p| p.es_aldea()).count(), 3);
 }
 
@@ -1391,8 +1391,8 @@ fn la_aldea_se_marca_en_tierra_fertil_nace_con_su_rebano_y_su_carro_lleva_trigo_
     let plaza = e.plaza;
     let centro = e.n.estado().asentamientos[&plaza].posicion;
     // Junto a la plaza, fuera de la zona, o en tierra pobre: no.
-    assert_eq!(e.rechazada("ana", Comando::MarcarAldea { asentamiento: plaza, punto: Punto::new(centro.x + 1_000, centro.y) }), rechazos::PUEBLO_DEMASIADO_CERCA);
-    assert_eq!(e.rechazada("ana", Comando::MarcarAldea { asentamiento: plaza, punto: Punto::new(centro.x + 400_000, centro.y) }), rechazos::PUEBLO_FUERA_DE_LA_ZONA);
+    assert_eq!(e.rechazada("ana", Comando::MarcarAldea { asentamiento: plaza, punto: Punto::new(centro.x + 1_000, centro.y), cultivo: Cultivo::Trigo }), rechazos::PUEBLO_DEMASIADO_CERCA);
+    assert_eq!(e.rechazada("ana", Comando::MarcarAldea { asentamiento: plaza, punto: Punto::new(centro.x + 400_000, centro.y), cultivo: Cultivo::Trigo }), rechazos::PUEBLO_FUERA_DE_LA_ZONA);
     let pobre = (0..24).flat_map(|k| (0..24).map(move |g| (3_500 + k * 500, g))).any(|(d, g)| {
         let a = ((g * 15) as f64).to_radians();
         let punto = Punto::new(centro.x + (d as f64 * a.cos()) as i64, centro.y + (d as f64 * a.sin()) as i64);
@@ -1400,7 +1400,7 @@ fn la_aldea_se_marca_en_tierra_fertil_nace_con_su_rebano_y_su_carro_lleva_trigo_
         if !m.0.transitable_en(punto.x, punto.y) || m.0.fertilidad_en(punto.x, punto.y).is_none_or(|f| f > 76) {
             return false;
         }
-        let r = e.ord("ana", Comando::MarcarAldea { asentamiento: plaza, punto });
+        let r = e.ord("ana", Comando::MarcarAldea { asentamiento: plaza, punto, cultivo: Cultivo::Trigo });
         matches!(r.resultado, Resultado::Rechazada { codigo, .. } if codigo == rechazos::PUEBLO_FERTILIDAD_INSUFICIENTE)
     });
     assert!(pobre, "en la tierra pobre de la zona no se marca la aldea");

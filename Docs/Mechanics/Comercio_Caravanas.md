@@ -181,7 +181,11 @@ Distinta: se **conserva** (§8.3). No lleva bonus por distancia ni recargo por r
   "cobre": 3,
   "estano": 6,
   "hierro": 4,
-  "livestock": 2
+  "livestock": 2,
+  "carne": 1.8,
+  "leche": 1,
+  "uva": 1.5,
+  "aceituna": 1.5
 }
 ```
 <!-- /parametros -->

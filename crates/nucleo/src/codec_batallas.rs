@@ -23,7 +23,7 @@
 //!   agotado) · objetivos{n u64 · n × (id texto, capturado_por u8: 0 atacante, 1 defensor, 2 nadie)} · por_escuadra{n u64 · n × (escuadra u64, desplegados,
 //!   supervivientes, muertos, xp: i64)} · por_héroe{n u64 · n × (héroe u64, participó bool, sobrevivió bool, xp i64, derrotado u8: 0 no, 1 sí, 2 ausente, botín
 //!   opt{bool · botín})} · versión_servidor texto · carros_perdidos{n u64 · n × texto}`. Botín: `objetos{n u64 · n × (definición texto, cantidad i64,
-//!   instancia opt{bool · texto})} · monedas{bronce, plata, oro: i64}`.
+//!   instancia opt{bool · texto})} · monedas i64`.
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::codec_economia::{escribir_celdas, leer_celdas};
@@ -35,7 +35,6 @@ use combate::caravana::Modalidad;
 use combate::ciclo::{Asignacion, Batalla, BandoDeTicket, Bloqueo, CaravanaEnBatalla, Contexto, EdificioCongelado, EscuadraDeSalida, EscuadraEnBatalla, EstadoBatalla, Incorporacion, Instancia, MotivoSalida, Participante, PlazaCongelada, RecintoCongelado, Salida, SalidaBatalla, Ticket, Token};
 use combate::resolucion::Lado;
 use combate::resultado::{Botin, ObjetoBotin, Razon, Resultado, ResultadoEscuadra, ResultadoHeroe};
-use militar::heroe::Monedas;
 
 fn lado_a_u8(l: Lado) -> u8 {
     match l {
@@ -374,8 +373,7 @@ fn botin_escribir(w: &mut Escritor, b: &Botin) {
         w.bool(instancia.is_some());
         w.texto(instancia.as_deref().unwrap_or(""));
     }
-    let Monedas { bronce, plata, oro } = monedas;
-    [bronce, plata, oro].into_iter().for_each(|&m| w.i64(m));
+    w.i64(*monedas);
 }
 
 fn botin_leer(r: &mut Lector) -> Result<Botin, ErrorFormato> {
@@ -384,7 +382,7 @@ fn botin_leer(r: &mut Lector) -> Result<Botin, ErrorFormato> {
         let (definicion, cantidad, hay, texto) = (r.texto()?, r.i64()?, r.bool()?, r.texto()?);
         objetos.push(ObjetoBotin { definicion, cantidad, instancia: hay.then_some(texto) });
     }
-    Ok(Botin { objetos, monedas: Monedas { bronce: r.i64()?, plata: r.i64()?, oro: r.i64()? } })
+    Ok(Botin { objetos, monedas: r.i64()? })
 }
 
 pub(crate) fn resultado_escribir(w: &mut Escritor, res: &Resultado) {

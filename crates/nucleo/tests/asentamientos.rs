@@ -1036,7 +1036,7 @@ fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash_y_el_formato_anterior_se
     let reglas = Reglas::default();
     let base = estado_con_una_plaza();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN58");
+    assert_eq!(&bytes[..5], b"BAN59");
     let viejo = [b"BAN13".as_slice(), &bytes[5..]].concat();
     let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN13 no debe admitirse") };
     assert!(e.to_string().contains("BAN13") && e.to_string().contains("población"), "{e}");
@@ -1095,7 +1095,7 @@ fn el_paso_de_minuto_guarda_su_tendencia_y_no_sube_la_version_con_o_sin_sesiones
     let bytes = n.estado().serializar();
     let reglas = Reglas::default();
     let vuelta = Estado::deserializar(&bytes, &reglas, &m.0.hash().to_string()).expect("la foto vuelve");
-    assert_eq!(vuelta.asentamientos[&id].economia.tendencia.produccion, [0; 29], "la producción quepa o no, no viaja en la foto");
+    assert_eq!(vuelta.asentamientos[&id].economia.tendencia.produccion, [0; asentamiento::recurso::N], "la producción quepa o no, no viaja en la foto");
     assert_eq!(vuelta.asentamientos[&id].economia.tendencia, t, "y no cuenta en la igualdad");
     assert_eq!(vuelta.serializar(), bytes);
     let viejo = [b"BAN21".as_slice(), &bytes[5..]].concat();
