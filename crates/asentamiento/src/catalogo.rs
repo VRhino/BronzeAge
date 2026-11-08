@@ -56,12 +56,22 @@ impl Tipo {
         self.es_extractor() || matches!(self, Tipo::Granja | Tipo::Lenera)
     }
 
-    /// Talleres que piden artesanos y llevan recetas (los cinco de la comida de la tanda 69 incluidos).
+    /// Talleres: los edificios con recetas (los cinco de la comida de la tanda 69 incluidos).
     pub fn es_taller(self) -> bool {
         matches!(
             self,
             Tipo::Fundicion | Tipo::Curtiduria | Tipo::Armeria | Tipo::Carpinteria | Tipo::GranFundicion | Tipo::Molino | Tipo::Horno | Tipo::Quesera | Tipo::Bodega | Tipo::Prensa
         )
+    }
+
+    /// Los talleres que trabajan los pesants: el molino y el horno, de pesants para pesants (autor, 2026-11-08). No traen artesanos.
+    pub fn taller_de_pesants(self) -> bool {
+        matches!(self, Tipo::Molino | Tipo::Horno)
+    }
+
+    /// Los talleres que trabajan los artesanos, y que traen a los primeros.
+    pub fn pide_artesanos(self) -> bool {
+        self.es_taller() && !self.taller_de_pesants()
     }
 }
 

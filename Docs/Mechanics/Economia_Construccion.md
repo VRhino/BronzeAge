@@ -235,15 +235,15 @@ descontar  porUnidad × cantidad  de cada insumo;  añadir cantidad de receta.pr
 - `factorProduccionTalleres` es el producto de las políticas activas (Barrios Gremiales ×1,1).
 - Las recetas devuelven además la cantidad fabricada por recurso, que alimenta los logros de Tecnología.
 
-> **Implementado en Rust (2026-11-08, tanda 69): los cinco edificios de la comida.** Cinco tipos nuevos del catálogo (§14.1) que se encargan **solo a mano** (la auto-construcción no propone ninguno, §6.2) y **sin tecnología** (autor, 2026-11-08: piden solo el nivel de la plaza; el árbol de tecnologías no cambia). Son talleres como los demás (`Tipo::es_taller`: piden artesanos, `ratioManoObraArtesanos`, `factorProduccionTalleres`, recetas pausables con `alternarReceta`) y tienen un solo nivel interno. Código: `crates/asentamiento/src/{catalogo,produccion}.rs`.
+> **Implementado en Rust (2026-11-08, tanda 69): los cinco edificios de la comida.** Cinco tipos nuevos del catálogo (§14.1) que se encargan **solo a mano** (la auto-construcción no propone ninguno, §6.2) y **sin tecnología** (autor, 2026-11-08: piden solo el nivel de la plaza; el árbol de tecnologías no cambia). Son talleres como los demás (`Tipo::es_taller`: `factorProduccionTalleres`, recetas pausables con `alternarReceta`) y tienen un solo nivel interno. **El molino y el horno los trabajan los pesants** (autor, 2026-11-08: de pesants para pesants; `Tipo::taller_de_pesants`): sus trabajadores cuentan con los de la Granja y la Leñera (`ratioManoObra` de los pesants) y no traen artesanos. La quesera, la bodega y la prensa los trabajan artesanos (`ratioManoObraArtesanos`). Código: `crates/asentamiento/src/{catalogo,produccion}.rs`.
 >
-> | Edificio | Nivel de plaza | Receta (por minuto, con la mano de obra entera) | Artesanos |
+> | Edificio | Nivel de plaza | Receta (por minuto, con la mano de obra entera) | Trabajadores |
 > |---|---|---|---|
-> | **Molino** | 1 | 4 de **harina** de 4 de trigo (1 por unidad) | 2 |
-> | **Horno** | 1 | 4 de **pan** de 4 de harina (1 por unidad) | 2 |
-> | **Quesera** | 2 | 2 de **queso** de 4 de leche (2 por unidad) | 2 |
-> | **Bodega** | 3 | 1 de **vino** de 2 de uva (2 por unidad) | 3 |
-> | **Prensa** | 4 | 1 de **aceite** de 2 de aceituna (2 por unidad) | 3 |
+> | **Molino** | 1 | 4 de **harina** de 4 de trigo (1 por unidad) | 2 pesants |
+> | **Horno** | 1 | 4 de **pan** de 4 de harina (1 por unidad) | 2 pesants |
+> | **Quesera** | 2 | 2 de **queso** de 4 de leche (2 por unidad) | 2 artesanos |
+> | **Bodega** | 3 | 1 de **vino** de 2 de uva (2 por unidad) | 3 artesanos |
+> | **Prensa** | 4 | 1 de **aceite** de 2 de aceituna (2 por unidad) | 3 artesanos |
 >
 > **Las cifras de las recetas son provisionales, a calibrar con el batch.** Se eligieron para que un edificio de nivel 1 cubra la ración (`BIENES_DE_CONSUMO`, §9.2) de unas 100 cabezas de la clase que come el bien (pan 100 × 0,04 = 4; queso 100 × 0,02 = 2; vino y aceite 100 × 0,01 = 1); la harina, lo que gasta un horno (4). Como cualquier receta, produce solo lo que cabe en el almacén y lo que alcanzan los insumos (`disponible − reserva`).
 >
@@ -448,7 +448,7 @@ felicidad    = factorCrecimientoPoblacion(políticas) × (ocupado ? OCUPACION.fa
 
 Pesants:   espacio = capacidadPesants ≤ 0 ? 0 : clamp(1 − pesants/capacidadPesants, 0, 1)      (capacidad = nº de Viviendas activas × 15)
            tasa = pesants.tasaCrecimientoBase × comida × espacio × felicidad × modificadorDeBienes(pesants)
-Artesanos: solo si hay ALGÚN taller activo (fundicion, curtiduria, armeria, carpinteria; en Rust, cualquier `Tipo::es_taller`: también granFundicion y, desde la tanda 69, molino, horno, quesera, bodega y prensa) y espacio > 0 (capacidad = Viviendas activas × 10):
+Artesanos: solo si hay ALGÚN taller activo (fundicion, curtiduria, armeria, carpinteria; en Rust, cualquier taller de artesanos, `Tipo::pide_artesanos`: también granFundicion y, desde la tanda 69, quesera, bodega y prensa; el molino y el horno no, que los trabajan los pesants) y espacio > 0 (capacidad = Viviendas activas × 10):
            si artesanos = 0 → +1 sin tirar el dado (evento poblacion.primeros_artesanos);  si no, tasa = artesanos.tasaCrecimientoBase × comida × espacio × felicidad × modificadorDeBienes(artesanos)
 Nobleza:   solo si residentes ≥ nobleza.minCiudadanos ∧ hay Palacio activo ∧ espacio > 0 (capacidad = capacidadNobles del nivel del Palacio, 80/240/400);
            si nobleza = 0 → +1 sin dado (evento poblacion.primeros_nobles);  si no, tasa = nobleza.tasaCrecimientoBase × comida × espacio × felicidad × modificadorDeBienes(nobleza) × factorCrecimientoNobleza × (1 + AEDAS.residentes.bonoNobleza × aedasResidentes)
@@ -594,13 +594,13 @@ pueblo = pueblos ACTIVOS de la plaza (aldeas agrícolas y extractores) ≥ req.p
 
 | Nivel | Pesants | Artesanos | Techo de población |
 |---|---|---|---|
-| 1 | — | — | 300 → 750 |
+| 1 | — | — | 300 → 600 |
 | 2 | 200 → 400 | 0 | 1.500 → 3.000 |
 | 3 | 500 → 1.000 | 400 → 800 | 6.000 → 12.000 |
 | 4 | 1.000 → 2.000 | 800 → 1.600 | 12.000 → 24.000 |
 | 5 | 2.000 → 4.000 | 1.600 → 3.200 | 20.000 → 40.000 |
 
-El del nivel 1 no es el doble sino 750 (autor, 2026-11-08): con 600, una plaza que hace molino u horno en el nivel 1 (§5.3) trae artesanos que llenan el techo y deja a los pesants por debajo de los 400 del nivel 2 para siempre; 750 es lo que cabe en sus 29 Viviendas (435 pesants y 290 artesanos), y lo midió el batch `poblacion`. Código: `crates/asentamiento/src/nivel.rs` (lee el bloque); los topes de Viviendas que salen de ellos, en §6.5. La mortalidad, el crecimiento y el espacio de Viviendas no cambian de fórmula: con el mismo ritmo, llegar a cada requisito tarda más (el batch `poblacion` lo mide).
+Código: `crates/asentamiento/src/nivel.rs` (lee el bloque); los topes de Viviendas que salen de ellos, en §6.5. La mortalidad, el crecimiento y el espacio de Viviendas no cambian de fórmula: con el mismo ritmo, llegar a cada requisito tarda más (el batch `poblacion` lo mide).
 
 Devuelve `null` si el nivel no tiene requisito. `calcularNivelAsentamiento` encadena los gates desde `nivel` y dice hasta dónde se cumplirían (la usan los bots para decidir si piden la subida; **no sube nada**).
 
@@ -2120,7 +2120,7 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
     }
   },
   "techoPoblacion": {
-    "1": 750,
+    "1": 600,
     "2": 3000,
     "3": 12000,
     "4": 24000,

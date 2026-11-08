@@ -6,7 +6,7 @@ Los HÉROES son una categoría SEPARADA de estas 3 clases.
 | Clase | Rol | Aparición | Crecimiento |
 |---|---|---|---|
 | Pesants | Trabajan recursos genéricos (granjas, canteras, bosques); reclutan la tropa de escalón 1 y 2 (Doc 5.8) | Desde la fundación, sin condición | Rápido (tasa 0.12) |
-| Artesanos | Operan edificios de producción especializada (Fundición, Curtiduría, Armería, Carpintería y los de la comida: Molino, Horno, Quesera, Bodega y Prensa — ver catálogo en 4.2.1); reclutan la tropa de escalón 3 (Doc 5.8) | En cuanto hay un taller activo (Curtiduría, Armería, Fundición, Carpintería o uno de los de la comida, como el Molino o el Horno desde el nivel 1) aparece el primero | Medio (tasa 0.15), limitado por su cupo de Vivienda |
+| Artesanos | Operan edificios de producción especializada (Fundición, Curtiduría, Armería, Carpintería y tres de la comida: Quesera, Bodega y Prensa — ver catálogo en 4.2.1); reclutan la tropa de escalón 3 (Doc 5.8) | En cuanto hay un taller de artesanos activo (Curtiduría, Armería, Fundición, Carpintería, Quesera, Bodega o Prensa) aparece el primero; el Molino y el Horno no los traen | Medio (tasa 0.15), limitado por su cupo de Vivienda |
 | Nobleza | Clase rica: la que más oro recauda (abajo). Recluta la tropa de escalón 4 y 5 (Doc 5.8) | Palacio construido + cantidad MÍNIMA de ciudadanos (héroes) en el asentamiento | Muy lento (tasa 0.01); acelerado por el Sacerdote (no requisito) |
 
 **Las 3 clases crecen con la MISMA fórmula**: `población × tasa propia × factor de nutrición × cupo libre de la clase × felicidad` (crecimiento logístico continuo, sin tirada), y difieren solo en la tasa. La felicidad es el producto de las políticas (`factorCrecimientoPoblacion`), la ocupación y el bono de Aedas; solo la estabilidad vale 1 (placeholder). Cada clase tiene su propio cupo: los Pesants y los Artesanos, en la Vivienda (cupos SEPARADOS por clase, 4.2.1), para que los Pesants, que crecen más deprisa, no dejen sin sitio a los Artesanos; la Nobleza, en el Palacio. Por encima de todo, el nivel del asentamiento fija un techo de población total (4.5).
@@ -182,15 +182,15 @@ Van por AUTO-CONSTRUCCIÓN (como la Leñera y la Vivienda), disparadas en cuanto
 
 ### La comida (desde el 2026-11-08)
 
-Cinco talleres que convierten las cosechas de la aldea en los bienes de consumo de 4.1. **Solo se encargan a mano** (Gobernador o Maestro de Obras; la auto-construcción no los propone), **no piden tecnología** (solo el nivel de la plaza), tienen **un único nivel interno**, los atienden artesanos, y su obra dura 5 minutos. Las cifras de las recetas son provisionales, a calibrar con las partidas de prueba. Cada receta produce, por minuto y con la mano de obra completa, lo que alcanzan los insumos y lo que cabe en el almacén.
+Cinco talleres que convierten las cosechas de la aldea en los bienes de consumo de 4.1. **Solo se encargan a mano** (Gobernador o Maestro de Obras; la auto-construcción no los propone), **no piden tecnología** (solo el nivel de la plaza), tienen **un único nivel interno** y su obra dura 5 minutos. **El Molino y el Horno los atienden pesants** (de pesants para pesants, decidido el 2026-11-08) y no traen artesanos; la Quesera, la Bodega y la Prensa, artesanos. Las cifras de las recetas son provisionales, a calibrar con las partidas de prueba. Cada receta produce, por minuto y con la mano de obra completa, lo que alcanzan los insumos y lo que cabe en el almacén.
 
-| Edificio | Plaza de nivel | Coste | Artesanos | Receta por minuto |
+| Edificio | Plaza de nivel | Coste | Trabajadores | Receta por minuto |
 |---|---|---|---|---|
-| **Molino** | 1 | 60 madera + 20 piedra | 2 | 4 de trigo → 4 de harina |
-| **Horno** | 1 | 30 madera + 30 piedra | 2 | 4 de harina → 4 de pan |
-| **Quesera** | 2 | 40 madera + 20 piedra | 2 | 4 de leche → 2 de queso |
-| **Bodega** | 3 | 60 madera + 30 piedra | 3 | 2 de uva → 1 de vino |
-| **Prensa** | 4 | 50 madera + 30 piedra | 3 | 2 de aceituna → 1 de aceite |
+| **Molino** | 1 | 60 madera + 20 piedra | 2 pesants | 4 de trigo → 4 de harina |
+| **Horno** | 1 | 30 madera + 30 piedra | 2 pesants | 4 de harina → 4 de pan |
+| **Quesera** | 2 | 40 madera + 20 piedra | 2 artesanos | 4 de leche → 2 de queso |
+| **Bodega** | 3 | 60 madera + 30 piedra | 3 artesanos | 2 de uva → 1 de vino |
+| **Prensa** | 4 | 50 madera + 30 piedra | 3 artesanos | 2 de aceituna → 1 de aceite |
 
 La leche sale de los rebaños de las aldeas de trigo, la uva de las aldeas de vid y la aceituna de las de oliva (4.2.2); la harina y el pan son los que fabrican el Molino y el Horno.
 
@@ -291,7 +291,7 @@ Dos edificios lo amplían, y no compiten: el **Almacén** sube la capacidad de T
   - Nivel 4: 2.000 pesants + 1.600 artesanos + un recinto de muralla completo **de piedra** (muro de piedra o muralla con adarve, no empalizada) + Sala del Consejo (4.2.1).
   - Nivel 5: 4.000 pesants + 3.200 artesanos + Palacio de nivel 3.
 
-  Poblaciones placeholder (`NIVEL_ASENTAMIENTO`; **al doble desde el 2026-11-08**, para que subir de nivel lleve más tiempo sin tocar el crecimiento). El nivel alimenta: el techo de zona de influencia (Doc 1.2), qué materiales cobra el Mantenimiento (abajo) y el **techo de población total** — 750 / 3.000 / 12.000 / 24.000 / 40.000 habitantes para los niveles 1-5 (el doble desde el 2026-11-08, salvo el nivel 1, que va a 750 para que los artesanos del molino y el horno quepan junto a los 400 pesants del nivel 2): por encima, la Vivienda y el Palacio dejan de dar cupo aunque tengan espacio. Es el nivel de ASENTAMIENTO — distinto del nivel de FACCIÓN (Doc 2.2.1), que sube por experiencia.
+  Poblaciones placeholder (`NIVEL_ASENTAMIENTO`; **al doble desde el 2026-11-08**, para que subir de nivel lleve más tiempo sin tocar el crecimiento). El nivel alimenta: el techo de zona de influencia (Doc 1.2), qué materiales cobra el Mantenimiento (abajo) y el **techo de población total** — 600 / 3.000 / 12.000 / 24.000 / 40.000 habitantes para los niveles 1-5 (el doble desde el 2026-11-08): por encima, la Vivienda y el Palacio dejan de dar cupo aunque tengan espacio. Es el nivel de ASENTAMIENTO — distinto del nivel de FACCIÓN (Doc 2.2.1), que sube por experiencia.
 - **Subida de nivel** (decidido el 2026-09-26): la pide el **Gobernador** del asentamiento, se sube de uno en uno y se hace con una **obra de ascenso**. Para pedirla hacen falta cuatro cosas a la vez:
   1. **Los requisitos** de población y edificios del nivel siguiente (arriba).
   2. **Cupo libre en la Facción** para ese nivel (Doc 2.2.1, `CUPO_NIVEL_ASENTAMIENTO`); existe para los niveles 2 a 5 (el 4 y el 5 desde el 2026-11-04: como mucho tres plazas en el 4 y una en el 5), y el 5 aún no se puede pedir (techo provisional en el nivel 4). Se reserva al pedir.

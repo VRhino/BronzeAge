@@ -52,9 +52,11 @@ pub struct Mano {
 /// piden los pueblos extractores activos de la plaza (no tienen población propia: trabajan los de la madre).
 pub fn mano_de_obra(cat: &Catalogo, edificios: &[Edificio], pesants_enteros: i64, artesanos_enteros: i64, pueblos: Mil) -> Mano {
     let activos = edificios.iter().filter(|e| e.activo());
-    let requeridos_pesants: Mil = activos.clone().filter(|e| e.tipo.usa_pesants()).map(|e| cat.tipo(e.tipo).trabajadores).sum::<Mil>() + pueblos;
-    let requeridos_artesanos: Mil =
-        activos.filter(|e| e.tipo.es_taller()).map(|e| cat.tipo(e.tipo).nivel(e.nivel_interno).map_or(0, |n| n.trabajadores)).sum();
+    let del_taller = |e: &Edificio| cat.tipo(e.tipo).nivel(e.nivel_interno).map_or(0, |n| n.trabajadores);
+    let requeridos_pesants: Mil = activos.clone().filter(|e| e.tipo.usa_pesants()).map(|e| cat.tipo(e.tipo).trabajadores).sum::<Mil>()
+        + activos.clone().filter(|e| e.tipo.taller_de_pesants()).map(del_taller).sum::<Mil>()
+        + pueblos;
+    let requeridos_artesanos: Mil = activos.filter(|e| e.tipo.pide_artesanos()).map(del_taller).sum();
     let ratio = |habitantes: i64, requeridos: Mil| if requeridos <= 0 { UNO } else { razon(habitantes * 1000, requeridos).min(UNO) };
     Mano { pesants: ratio(pesants_enteros, requeridos_pesants), artesanos: ratio(artesanos_enteros, requeridos_artesanos), requeridos_pesants, requeridos_artesanos }
 }
@@ -124,12 +126,13 @@ pub fn recetas(cat: &Catalogo, edificios: &mut [Edificio], almacen: &mut Almacen
         }
         let Some(nivel) = cat.tipo(e.tipo).nivel(e.nivel_interno) else { continue };
         let factor_buey = if e.buey { cat.tipo(e.tipo).factor_buey } else { UNO };
+        let ratio = if e.tipo.taller_de_pesants() { mano.pesants } else { mano.artesanos };
         let mut limitado = false;
         for rc in &nivel.recetas {
             if ctx.recetas_pausadas.contains(&rc.produce) || rc.tecnologia.as_deref().is_some_and(|t| !(ctx.tiene_tecnologia)(t)) {
                 continue;
             }
-            let mut cantidad = por(por(por(rc.produccion_base, mano.artesanos), ctx.factor_talleres), factor_buey);
+            let mut cantidad = por(por(por(rc.produccion_base, ratio), ctx.factor_talleres), factor_buey);
             for &(insumo, por_unidad) in &rc.consume_por_unidad {
                 let disponible = (almacen.disponible(insumo) - reserva[insumo.indice()]).max(0);
                 cantidad = cantidad.min(disponible * 1000 / por_unidad.max(1));
@@ -375,7 +378,7 @@ mod pruebas {
             let mut a = Almacen::nuevo(400_000);
             a.poner(materia, 100_000);
             let mut e = vec![activo(1, tipo)];
-            let m = mano_de_obra(&cat, &e, 0, 3, 0); // 3 artesanos: más de los 2 o 3 que pide cada uno
+            let m = mano_de_obra(&cat, &e, 3, 3, 0); // 3 pesants y 3 artesanos: más de los 2 o 3 que pide cada uno
             let hecho = recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; N]);
             assert_eq!(hecho, vec![(bien, por_minuto)], "{tipo:?}");
             assert_eq!((a.cantidad(bien), a.cantidad(materia)), (por_minuto, 100_000 - por_minuto * por_unidad / 1_000), "{tipo:?}: produce su bien y gasta su materia");
@@ -383,9 +386,18 @@ mod pruebas {
     }
 
     #[test]
+    fn el_molino_y_el_horno_los_trabajan_pesants_y_la_quesera_artesanos() {
+        let cat = Reglas::cargar().catalogo;
+        let e = [activo(1, Tipo::Molino), activo(2, Tipo::Horno), activo(3, Tipo::Quesera)];
+        let m = mano_de_obra(&cat, &e, 2, 2, 0);
+        assert_eq!((m.requeridos_pesants, m.requeridos_artesanos), (4_000, 2_000), "2 pesants por el molino y 2 por el horno; 2 artesanos por la quesera");
+        assert_eq!((m.pesants, m.artesanos), (500_000, UNO), "con 2 pesants, el molino y el horno van a medias");
+    }
+
+    #[test]
     fn con_buey_el_molino_produce_el_doble_gastando_lo_mismo_por_unidad() {
         let cat = Reglas::cargar().catalogo;
-        let m = mano_de_obra(&cat, &[activo(1, Tipo::Molino)], 0, 2, 0);
+        let m = mano_de_obra(&cat, &[activo(1, Tipo::Molino)], 2, 0, 0);
         let molino = |buey: bool, trigo: Mil| {
             let mut a = Almacen::nuevo(400_000);
             a.poner(Recurso::Trigo, trigo);

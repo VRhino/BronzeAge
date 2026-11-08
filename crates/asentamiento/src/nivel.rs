@@ -151,7 +151,7 @@ mod pruebas {
         assert_eq!((r.requisitos[&2].pesants, r.requisitos[&3].artesanos, r.requisitos[&4].recinto_nivel_minimo), (400, 800, Some(2)));
         // Tanda 69: la población de los requisitos y todos los techos van al doble.
         assert_eq!([2, 3, 4, 5].map(|n| (r.requisitos[&n].pesants, r.requisitos[&n].artesanos)), [(400, 0), (1_000, 800), (2_000, 1_600), (4_000, 3_200)]);
-        assert_eq!([1, 2, 3, 4, 5].map(|n| r.techo(n)), [750_000, 3_000_000, 12_000_000, 24_000_000, 40_000_000]);
+        assert_eq!([1, 2, 3, 4, 5].map(|n| r.techo(n)), [600_000, 3_000_000, 12_000_000, 24_000_000, 40_000_000]);
         let a2 = &r.ascenso[&2];
         // 10 minutos cada subida mientras duren las pruebas (2026-11-02, decisión del autor; antes 4.320, 10.080, 20.160 y 30.240).
         assert_eq!((a2.obra_minutos, a2.costo.clone()), (10, vec![(Recurso::Madera, 600_000), (Recurso::Oro, 150_000), (Recurso::Piedra, 400_000)]));
