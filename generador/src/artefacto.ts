@@ -21,8 +21,8 @@ import {
  * Convenciones (las asume igual el cargador en Rust; no cambiarlas):
  *  - Rasters: celdas de `TAMANO_CELDA` = 4 unidades estratégicas (4000 milésimas), columnas = ceil(ancho/celda), orden por filas,
  *    fila 0 al norte (y creciente = sur en el generador). Se muestrea el centro de cada celda.
- *  - altura u16 LE (0..1 → 0..65535); terreno/anillos u8 con los enums de world.proto; fertilidad, humedad y densidad_bosque u8
- *    (0..1 → 0..255); transitable en bits, celda i → byte i>>3, bit i&7 (LSB primero); coste u16 LE en milésimas del
+ *  - altura u16 LE (0..1 → 0..65535); terreno/anillos u8 con los enums de world.proto; fertilidad, fertilidad_vid, fertilidad_oliva, humedad y
+ *    densidad_bosque u8 (0..1 → 0..255); region u8 (id de `regiones`); transitable en bits, celda i → byte i>>3, bit i&7 (LSB primero); coste u16 LE en milésimas del
  *    multiplicador de movimiento (1000 = llano, 0 = no transitable). Todos comprimidos con zstd.
  *  - Unidades: del generador a milésimas estratégicas, `round(u * 1000 / FACTOR)`.
  *  - hash = sha256 (hex minúsculas) de la serialización del artefacto con `manifiesto.hash = ""`.
@@ -78,6 +78,7 @@ function raster(columnas: number, filas: number, encoding: EncodingRaster, datos
 function rasterizar(m: MundoGenerado): Capa[] {
   const columnas = Math.ceil(m.ancho / CELDA_GEN), filas = Math.ceil(m.alto / CELDA_GEN), n = columnas * filas;
   const altura = new Uint8Array(n * 2), terreno = new Uint8Array(n), fertilidad = new Uint8Array(n), humedad = new Uint8Array(n);
+  const region = new Uint8Array(n), vid = new Uint8Array(n), oliva = new Uint8Array(n);
   const bosque = new Uint8Array(n), anillos = new Uint8Array(n), transitable = new Uint8Array(Math.ceil(n / 8));
   const coste = new Uint8Array(n * 2);
   const u8 = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 255);
@@ -91,6 +92,9 @@ function rasterizar(m: MundoGenerado): Capa[] {
       terreno[i] = TERRENO[s.terreno(p)];
       fertilidad[i] = u8(s.fertilidad(p));
       humedad[i] = u8(s.humedad(p));
+      region[i] = s.region(p);
+      vid[i] = u8(s.fertilidadVid(p));
+      oliva[i] = u8(s.fertilidadOliva(p));
       bosque[i] = u8(s.densidadBosque(p));
       anillos[i] = ANILLO[anilloEn(m.campamentos, p).anillo];
       if (s.transitable(p)) transitable[i >> 3]! |= 1 << (i & 7);
@@ -110,6 +114,9 @@ function rasterizar(m: MundoGenerado): Capa[] {
     r('anillos', EncodingRaster.ENCODING_U8, anillos),
     r('transitable', EncodingRaster.ENCODING_BITS, transitable),
     r('coste', EncodingRaster.ENCODING_U16_LE, coste),
+    r('region', EncodingRaster.ENCODING_U8, region),
+    r('fertilidad_vid', EncodingRaster.ENCODING_U8, vid),
+    r('fertilidad_oliva', EncodingRaster.ENCODING_U8, oliva),
   ];
 }
 
@@ -162,6 +169,10 @@ function construirMensaje(m: MundoGenerado): ArtefactoDeMundo {
     anillos: rast('anillos'),
     transitable: rast('transitable'),
     coste: rast('coste'),
+    region: rast('region'),
+    fertilidadVid: rast('fertilidad_vid'),
+    fertilidadOliva: rast('fertilidad_oliva'),
+    regiones: [...m.regiones].sort((x, y) => x.id - y.id),
     rios: porId(m.rios).map(r => ({
       id: r.id, puntos: r.puntos.map(punto), terminaEnLago: r.terminaEnLago, navegable: r.navegable, vados: r.vados.map(punto),
     })),

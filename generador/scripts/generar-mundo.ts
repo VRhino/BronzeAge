@@ -12,7 +12,9 @@ import { costeEnPunto, esTransitable } from '../src/costeMovimiento';
 import { evaluarElevacion, evaluarTerreno } from '../src/elevacion';
 import { densidadForestal } from '../src/forestacionRegional';
 import { fertilidadSuelo } from '../src/suelosRegional';
-import { humedadRegionalEn } from '../src/regional';
+import { distanciaCostaRegional, humedadRegionalEn, regionEn } from '../src/regional';
+import { fertilidadOliva, fertilidadVid } from '../src/cultivos';
+import { muestrearRelieve, type MuestraRelieve } from '../src/muestras';
 import { FACTOR } from '../src/campamentos';
 import type { MundoGenerado, RioMundo } from '../src/mundoTipos';
 import type { Point } from '../src/tipos';
@@ -81,9 +83,15 @@ const fuera = (puntos: Point[]) => puntos.filter(p => { const n = nodoMasCercano
 console.log(`grafo: ${est.nodos} nodos, ${est.aristas} aristas (${est.aristasVado} de vado), ${est.componentes} componentes, mayor ${(100 * est.fraccionMayor).toFixed(2)} %; ` +
   `fuera de la mayor: campamentos ${fuera(e.campamentos.map(c => c.posicion))}/${e.campamentos.length}, recursos ${fuera(recursos.map(x => x.posicion))}/${recursos.length}, vados ${[...vadosPorRio.values()].flat().length}`);
 
+// Altura, pendiente y humedad de `p`: las del raster de celdas si `p` es un centro, y si no, las evaluadas.
+const muestraEn = (p: Point): MuestraRelieve => {
+  const i = celdas.indice(p);
+  return i >= 0 ? { altura: celdas.altura[i]!, pendiente: celdas.pendiente[i]!, humedad: celdas.humedad[i]! } : muestrearRelieve(r.elevacion, p);
+};
 const mundo: MundoGenerado = {
   seed, ancho, alto, generador: 'regional-19-costas-2+estrategico-3+cauce-1',
   campamentos: e.campamentos, recursos, vetas: e.vetas, masas: e.masas, parcelas: e.parcelas, bandidos, alijos, rios, grafo,
+  regiones: r.elevacion.regional.areas.map(a => ({ id: a.id, nombre: a.nombre })),
   muestras: {
     altura: p => { const i = celdas.indice(p); return i >= 0 ? celdas.altura[i]! : evaluarElevacion(r.elevacion, p); },
     terreno: p => { const i = celdas.indice(p); return evaluarTerreno(r.elevacion, p, i >= 0 ? celdas.altura[i]! : undefined); },
@@ -93,6 +101,12 @@ const mundo: MundoGenerado = {
       return fertilidadSuelo(r.suelos, r.elevacion, p,
         { altura: celdas.altura[i]!, pendiente: celdas.pendiente[i]!, humedad: celdas.humedad[i]! });
     },
+    fertilidadVid: p => { const m = muestraEn(p); return fertilidadVid(m, evaluarTerreno(r.elevacion, p, m.altura)); },
+    fertilidadOliva: p => {
+      const m = muestraEn(p);
+      return fertilidadOliva(m, evaluarTerreno(r.elevacion, p, m.altura), distanciaCostaRegional(r.elevacion.regional, p));
+    },
+    region: p => regionEn(r.elevacion.regional, p),
     humedad: p => { const i = celdas.indice(p); return i >= 0 ? celdas.humedad[i]! : humedadRegionalEn(r.elevacion.regional, p); },
     densidadBosque: densidadEn,
     transitable: transitableCelda,

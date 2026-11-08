@@ -6,8 +6,11 @@ import { fromBinary, toBinary } from '@bufbuild/protobuf';
 import { describe, expect, it } from 'vitest';
 import { construirArtefacto, escribirArtefacto, mil } from '../artefacto';
 import { FACTOR } from '../campamentos';
+import { crearRelieveRegional, regionEn } from '../regional';
 import type { MundoGenerado } from '../mundoTipos';
 import { Anillo, ArtefactoDeMundoSchema, ClaseTerreno, EncodingRaster } from '../gen/bronzeage/v1/world_pb';
+
+const regional = crearRelieveRegional(7, { ancho: 480, alto: 360 });
 
 /** Mundo sintético de 480×360 unidades del generador (40×30 estratégicas): 10×8 celdas de 48. */
 function mundoSintetico(): MundoGenerado {
@@ -35,6 +38,7 @@ function mundoSintetico(): MundoGenerado {
     ],
     bandidos: [{ id: 'bandidos-0', posicion: { x: 310, y: 210 }, nivel: 2, vetaId: 'veta-0', anillo: 'frontera' }],
     alijos: [{ id: 'alijo-0', posicion: { x: 450, y: 40 }, recurso: 'piedra', cantidad: 15, anillo: 'lejana' }],
+    regiones: regional.areas.map(a => ({ id: a.id, nombre: a.nombre })),
     rios: [{ id: 'rio-0', puntos: [{ x: 0, y: 120 }, { x: 240, y: 130 }], terminaEnLago: true, navegable: false, vados: [{ x: 120, y: 125 }] }],
     grafo: {
       espaciado: 96,
@@ -45,6 +49,9 @@ function mundoSintetico(): MundoGenerado {
       altura: p => p.x / 480,
       terreno: p => (p.x < 100 ? 'agua' : p.y > 300 ? 'montana' : 'llano'),
       fertilidad: p => p.y / 360,
+      fertilidadVid: p => p.x / 480,
+      fertilidadOliva: p => 1 - p.y / 360,
+      region: p => regionEn(regional, p),
       humedad: () => 0.5,
       densidadBosque: p => (p.x > 240 ? 1 : 0),
       transitable: p => p.x >= 100 && (p.x + p.y) % 3 < 2,
@@ -87,7 +94,7 @@ describe('artefacto de mundo', () => {
     expect(man.generador).toBe('sintetico-0.1');
     expect(man.factorUnity).toBe(12);
     expect(man.tamano).toMatchObject({ x: 40000n, y: 30000n });
-    const rasters = { altura: msg.altura, terreno: msg.terreno, fertilidad: msg.fertilidad, humedad: msg.humedad, densidad_bosque: msg.densidadBosque, anillos: msg.anillos, transitable: msg.transitable, coste: msg.coste };
+    const rasters = { altura: msg.altura, terreno: msg.terreno, fertilidad: msg.fertilidad, humedad: msg.humedad, densidad_bosque: msg.densidadBosque, anillos: msg.anillos, transitable: msg.transitable, coste: msg.coste, region: msg.region, fertilidad_vid: msg.fertilidadVid, fertilidad_oliva: msg.fertilidadOliva };
     expect(man.capas.map(c => c.nombre)).toEqual(Object.keys(rasters));
     for (const c of man.capas) {
       const r = rasters[c.nombre as keyof typeof rasters]!;
@@ -107,7 +114,7 @@ describe('artefacto de mundo', () => {
     };
     expect(msg.altura!.encoding).toBe(EncodingRaster.ENCODING_U16_LE);
     expect(largo(msg.altura!)).toBe(2 * celdas);
-    for (const r of [msg.terreno, msg.fertilidad, msg.humedad, msg.densidadBosque, msg.anillos]) {
+    for (const r of [msg.terreno, msg.fertilidad, msg.humedad, msg.densidadBosque, msg.anillos, msg.region, msg.fertilidadVid, msg.fertilidadOliva]) {
       expect(r!.encoding).toBe(EncodingRaster.ENCODING_U8);
       expect(largo(r!)).toBe(celdas);
     }
@@ -146,6 +153,21 @@ describe('artefacto de mundo', () => {
     }
     expect(ceros).toBeGreaterThan(0);
     expect(positivos).toBeGreaterThan(0);
+  });
+
+  it('región y fertilidad de la vid y de la oliva: el centro de cada celda; la región es la de regionEn', () => {
+    const msg = fromBinary(ArtefactoDeMundoSchema, construirArtefacto(mundoSintetico()).bytes);
+    const m = mundoSintetico(), region = zstdDecompressSync(msg.region!.datos);
+    const vid = zstdDecompressSync(msg.fertilidadVid!.datos), oliva = zstdDecompressSync(msg.fertilidadOliva!.datos);
+    for (let k = 0; k < 80; k++) {
+      const p = { x: ((k % 10) + 0.5) * 48, y: (Math.floor(k / 10) + 0.5) * 48 };
+      expect(region[k]).toBe(regionEn(regional, p));
+      expect(vid[k]).toBe(Math.round(m.muestras.fertilidadVid(p) * 255));
+      expect(oliva[k]).toBe(Math.round(m.muestras.fertilidadOliva(p) * 255));
+    }
+    expect(new Set(region).size).toBeGreaterThan(1);
+    expect(msg.regiones.map(r => r.id)).toEqual(regional.areas.map(a => a.id).sort((a, b) => a - b));
+    expect(msg.regiones.find(r => r.id === region[0])!.nombre).toMatch(/\S/);
   });
 
   it('vectoriales: milésimas, ordenación por id y asociaciones', () => {

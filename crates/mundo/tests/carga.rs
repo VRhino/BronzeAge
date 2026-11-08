@@ -14,6 +14,8 @@ const CAMPAMENTOS: [(i64, i64); 2] = [(200_000, 200_000), (800_000, 200_000)];
 const LAGO: (i64, i64, i64, i64) = (100_000, 140_000, 500_000, 540_000);
 const PENASCO: (i64, i64, i64, i64) = (300_000, 340_000, 500_000, 540_000);
 const TIERRA: (i64, i64) = (500_000, 100_000);
+/// Desde esta x (incluida) la región es la 1; antes, la 0.
+const REGION_ESTE: i64 = 600_000;
 
 fn punto(x: i64, y: i64) -> Option<Punto> {
     Some(Punto { x, y })
@@ -41,6 +43,7 @@ fn sellar(a: &mut ArtefactoDeMundo) -> Vec<u8> {
     let capas = [
         ("altura", &a.altura), ("terreno", &a.terreno), ("fertilidad", &a.fertilidad), ("humedad", &a.humedad),
         ("densidad_bosque", &a.densidad_bosque), ("anillos", &a.anillos), ("transitable", &a.transitable), ("coste", &a.coste),
+        ("region", &a.region), ("fertilidad_vid", &a.fertilidad_vid), ("fertilidad_oliva", &a.fertilidad_oliva),
     ];
     let declaradas = capas
         .iter()
@@ -69,6 +72,7 @@ fn nodo(id: &str, tipo: &str, anillo: Option<&str>, x: i64, y: i64) -> NodoRecur
 fn base() -> ArtefactoDeMundo {
     let mut terreno = vec![ClaseTerreno::TerrenoLlano as u8; COLS * FILAS];
     let mut anillos = vec![0u8; COLS * FILAS];
+    let mut region = vec![0u8; COLS * FILAS];
     let mut transitable = vec![0u8; (COLS * FILAS).div_ceil(8)];
     for i in 0..COLS * FILAS {
         let (x, y) = ((i % COLS) as i64 * 4000 + 2000, (i / COLS) as i64 * 4000 + 2000); // centro de la celda
@@ -79,10 +83,12 @@ fn base() -> ArtefactoDeMundo {
         } else {
             transitable[i >> 3] |= 1 << (i & 7);
         }
+        region[i] = (x >= REGION_ESTE) as u8;
         let d = CAMPAMENTOS.iter().map(|&c| dist(c, x, y)).fold(f64::MAX, f64::min);
         anillos[i] = if d <= 150_000.0 { Anillo::Foco } else if d <= 250_000.0 { Anillo::Frontera } else { Anillo::Lejana } as u8;
     }
     let u8s = vec![128u8; COLS * FILAS];
+    let vid = vec![200u8; COLS * FILAS];
     let alturas: Vec<u8> = (0..COLS * FILAS).flat_map(|i| (i as u16).to_le_bytes()).collect();
 
     // Estaño: 20 → 1 / 5 / 14. Oro: 10 → empate de restos entre foco y frontera, gana foco: 1 / 2 / 7.
@@ -127,6 +133,10 @@ fn base() -> ArtefactoDeMundo {
         altura: Some(raster(EncodingRaster::EncodingU16Le, &alturas)),
         terreno: Some(raster(EncodingRaster::EncodingU8, &terreno)),
         fertilidad: Some(raster(EncodingRaster::EncodingU8, &u8s)),
+        fertilidad_vid: Some(raster(EncodingRaster::EncodingU8, &vid)),
+        fertilidad_oliva: Some(raster(EncodingRaster::EncodingU8, &(0..COLS * FILAS).map(|i| (i % COLS) as u8).collect::<Vec<_>>())),
+        region: Some(raster(EncodingRaster::EncodingU8, &region)),
+        regiones: vec![RegionDeMundo { id: 0, nombre: "Oeste".into() }, RegionDeMundo { id: 1, nombre: "Este".into() }],
         humedad: Some(raster(EncodingRaster::EncodingU8, &u8s)),
         densidad_bosque: Some(raster(EncodingRaster::EncodingU8, &u8s)),
         anillos: Some(raster(EncodingRaster::EncodingU8, &anillos)),
@@ -179,6 +189,9 @@ fn el_mundo_valido_carga_y_responde_consultas() {
     assert_eq!(m.anillo_en(CAMPAMENTOS[0].0 + 200_000, CAMPAMENTOS[0].1), Some(Anillo::Frontera));
     assert_eq!(m.anillo_en(1_100_000, 700_000), Some(Anillo::Lejana));
     assert_eq!(m.altura_en(8000, 0), Some(2)); // celda 2 de la fila 0
+    assert_eq!((m.fertilidad_vid_en(TIERRA.0, TIERRA.1), m.fertilidad_oliva_en(8000, 0), m.fertilidad_vid_en(-1, 0)), (Some(200), Some(2), None));
+    assert_eq!((m.region_en(REGION_ESTE - 1, 0), m.region_en(REGION_ESTE, 0), m.region_en(ANCHO, 0)), (Some(0), Some(1), None));
+    assert_eq!((m.nombre_region(0), m.nombre_region(1), m.nombre_region(2)), (Some("Oeste"), Some("Este"), None));
     assert_eq!((m.nodos().len(), m.parcelas().len(), m.campamentos().len(), m.alijos().len()), (31, 9, 2, 1));
     assert_eq!(m.navegacion().aristas.len(), 2);
 }
@@ -275,6 +288,20 @@ fn capa_ausente_del_manifiesto() {
 #[test]
 fn raster_ausente() {
     assert!(matches!(error_de(|a| a.fertilidad = None), ErrorMundo::RasterAusente { capa: "fertilidad" }));
+}
+
+#[test]
+fn raster_ausente_de_las_capas_nuevas() {
+    assert!(matches!(error_de(|a| a.region = None), ErrorMundo::RasterAusente { capa: "region" }));
+    assert!(matches!(error_de(|a| a.fertilidad_vid = None), ErrorMundo::RasterAusente { capa: "fertilidad_vid" }));
+    assert!(matches!(error_de(|a| a.fertilidad_oliva = None), ErrorMundo::RasterAusente { capa: "fertilidad_oliva" }));
+}
+
+#[test]
+fn region_con_un_id_que_no_esta_en_regiones() {
+    // La región 1 ya no existe, y la primera celda con ella es la de la fila 0 en la columna REGION_ESTE / 4000.
+    let e = error_de(|a| a.regiones.retain(|r| r.id != 1));
+    assert_eq!(e, ErrorMundo::RegionInexistente { celda: ((REGION_ESTE / 4000) as usize, 0), id: 1 });
 }
 
 #[test]

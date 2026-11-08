@@ -122,6 +122,16 @@ message ArtefactoDeMundo {
   repeated ParcelaBosque parcelas = 17;  // cupos de explotación de los bosques (separados >= 2·rp)
   Raster coste = 18;                     // u16: coste de movimiento en el centro de la celda, en milésimas (1000 = llano;
                                          // 0 = no transitable). Opcional: sin él, el servidor no suaviza las rutas
+  Raster region = 19;                    // u8: id de RegionDeMundo (la región del relieve del generador en el centro de la celda)
+  Raster fertilidad_vid = 20;            // u8
+  Raster fertilidad_oliva = 21;          // u8
+  repeated RegionDeMundo regiones = 22;  // las regiones del relieve, con su nombre
+}
+
+// Una región del relieve del generador («Altiplano interior», «Estepa abierta»...).
+message RegionDeMundo {
+  uint32 id = 1;
+  string nombre = 2;
 }
 
 // Paquete de Unity derivado del artefacto: terreno en sectores a escala ×12.

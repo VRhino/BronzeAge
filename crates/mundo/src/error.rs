@@ -31,6 +31,8 @@ pub enum ErrorMundo {
     RasterLongitud { capa: &'static str, esperado: usize, obtenido: usize },
     #[error("raster «coste»: la celda {celda:?} (columna, fila) vale {coste} y {transitable}es transitable", transitable = if *transitable { "" } else { "no " })]
     CosteIncoherente { celda: (usize, usize), coste: u16, transitable: bool },
+    #[error("raster «region»: la celda {celda:?} (columna, fila) vale {id}, que no es el id de ninguna región de `regiones`")]
+    RegionInexistente { celda: (usize, usize), id: u8 },
     #[error("id repetido en {coleccion}: «{id}»")]
     IdRepetido { coleccion: &'static str, id: String },
     #[error("{coleccion} «{id}» sin posición")]
