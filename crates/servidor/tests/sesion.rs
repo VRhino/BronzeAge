@@ -52,6 +52,33 @@ async fn handshake_feliz() {
     assert!(matches!(c.esperar().await.cuerpo, Some(ms::Cuerpo::Foto(f)) if f.entidades.len() == 1));
 }
 
+/// Una IP de esta máquina que no es de bucle local, si la hay (la que da `UdpSocket` al "conectar" con una dirección externa; no se envía nada).
+fn ip_no_local() -> Option<std::net::IpAddr> {
+    let u = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    u.connect("192.0.2.1:9").ok()?;
+    Some(u.local_addr().ok()?.ip()).filter(|ip| !ip.is_loopback() && !ip.is_unspecified())
+}
+
+#[tokio::test]
+async fn la_administracion_web_desde_esta_maquina_o_una_ip_de_la_lista() {
+    let (srv, _) = arrancar(Config::default()).await;
+    ClientePrueba::entrar(srv.direccion, hola("ok:admin", TipoCliente::ClienteAdminWeb)).await;
+    let Some(ip) = ip_no_local() else { return };
+    for (lista, entra) in [(vec![], false), (vec![ip], true)] {
+        let reloj = RelojCompartido::nuevo(1_000_000);
+        let nucleo = NucleoFalso::arrancar(reloj.clone());
+        let Ok(listener) = tokio::net::TcpListener::bind((ip, 0)).await else { return };
+        let srv = servir(listener, nucleo.comandos.clone(), AutenticadorDePrueba, reloj, Config { ips_admin: lista, ..Config::default() }).await;
+        if entra {
+            ClientePrueba::entrar(srv.direccion, hola("ok:admin", TipoCliente::ClienteAdminWeb)).await;
+        } else {
+            debe_fallar(&srv, mc::Cuerpo::Hola(hola("ok:admin", TipoCliente::ClienteAdminWeb)), "rol_no_permitido").await;
+            // Un jugador sí entra desde esa IP.
+            ClientePrueba::entrar(srv.direccion, hola("ok:ana", TipoCliente::ClienteUnity)).await;
+        }
+    }
+}
+
 #[tokio::test]
 async fn versiones_de_protocolo_erroneas() {
     let (srv, _) = arrancar(Config::default()).await;

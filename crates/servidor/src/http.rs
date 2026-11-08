@@ -6,10 +6,14 @@
 //! **Procedencia** (revisión de seguridad del 2026-11-03, hallazgo 1): un navegador manda `Origin` en toda petición de otra página y en el handshake del WebSocket. Si la trae, tiene
 //! que ser de un origen permitido ([`origen_permitido`]); si no, `403 origen_no_permitido` (y el WebSocket ni se abre). Sin `Origin` (bots, Unity, `curl`) no se mira. El CORS ya no
 //! es `*`: se devuelve el origen permitido que pidió, con `Vary: Origin`. Así una web ajena abierta en el navegador no puede registrar cuentas, entrar ni hablar el contrato 05.
+//!
+//! **Administración por IP**: cada petición lleva la IP del otro extremo ([`PeticionHttp::ip`]) y [`ip_de_administracion`] dice si desde ella se puede administrar (esta máquina o
+//! `BRONZEAGE_IPS_ADMIN`). Detrás de un proxy inverso en la misma máquina todas las conexiones parecen locales: entonces la protección es solo la cuenta.
 
 use std::{
     future::Future,
     io,
+    net::IpAddr,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -33,6 +37,8 @@ pub struct PeticionHttp {
     /// Las cabeceras con el nombre en minúsculas.
     pub cabeceras: Vec<(String, String)>,
     pub cuerpo: Vec<u8>,
+    /// La IP del otro extremo de la conexión; `None` si no se pudo leer.
+    pub ip: Option<IpAddr>,
 }
 
 impl PeticionHttp {
@@ -81,6 +87,12 @@ fn nombre_de(autoridad: &str) -> String {
     nombre.to_ascii_lowercase()
 }
 
+/// Si se puede administrar desde `ip`: es de esta máquina (bucle local, también una IPv4 mapeada en IPv6 como `::ffff:127.0.0.1`) o está en `extra` (`BRONZEAGE_IPS_ADMIN`).
+pub fn ip_de_administracion(ip: IpAddr, extra: &[IpAddr]) -> bool {
+    let ip = ip.to_canonical();
+    ip.is_loopback() || extra.iter().any(|e| e.to_canonical() == ip)
+}
+
 /// `localhost` o una IP de bucle local.
 fn es_local(nombre: &str) -> bool {
     nombre == "localhost" || nombre.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback())
@@ -118,7 +130,8 @@ fn procedencia(cabeceras: &[(String, String)], extra: &[String]) -> Result<Optio
 
 /// Lo que empezó la conexión.
 pub(crate) enum Inicio {
-    WebSocket(Rebobinado),
+    /// El WebSocket y la IP del otro extremo.
+    WebSocket(Rebobinado, Option<IpAddr>),
     Http(TcpStream, PeticionHttp),
     /// Un navegador desde un origen que no está permitido: se contesta `403` y se cierra.
     Rechazada(TcpStream),
@@ -128,6 +141,7 @@ pub(crate) enum Inicio {
 
 /// Lee la cabecera (y, si no es un WebSocket, el cuerpo) de la primera petición.
 pub(crate) async fn leer_inicio(mut tcp: TcpStream, origenes: &[String]) -> Inicio {
+    let ip = tcp.peer_addr().ok().map(|a| a.ip());
     let mut buf = Vec::with_capacity(1024);
     let fin = loop {
         if let Some(i) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
@@ -156,7 +170,7 @@ pub(crate) async fn leer_inicio(mut tcp: TcpStream, origenes: &[String]) -> Inic
     }
     let es_ws = cabeceras.iter().any(|(k, v)| k == "upgrade" && v.eq_ignore_ascii_case("websocket"));
     if es_ws {
-        return Inicio::WebSocket(Rebobinado { previo: buf, pos: 0, tcp });
+        return Inicio::WebSocket(Rebobinado { previo: buf, pos: 0, tcp }, ip);
     }
     let largo = cabeceras.iter().find(|(k, _)| k == "content-length").and_then(|(_, v)| v.parse::<usize>().ok()).unwrap_or(0);
     if largo > MAX_CUERPO {
@@ -171,7 +185,7 @@ pub(crate) async fn leer_inicio(mut tcp: TcpStream, origenes: &[String]) -> Inic
         }
     }
     cuerpo.truncate(largo);
-    Inicio::Http(tcp, PeticionHttp { metodo: metodo.to_owned(), ruta, cabeceras, cuerpo })
+    Inicio::Http(tcp, PeticionHttp { metodo: metodo.to_owned(), ruta, cabeceras, cuerpo, ip })
 }
 
 fn razon(estado: u16) -> &'static str {
@@ -254,7 +268,23 @@ impl AsyncWrite for Rebobinado {
 
 #[cfg(test)]
 mod pruebas {
-    use super::origen_permitido;
+    use super::{ip_de_administracion, origen_permitido};
+    use std::net::IpAddr;
+
+    #[test]
+    fn administracion_solo_desde_esta_maquina_o_la_lista() {
+        let ip = |s: &str| s.parse::<IpAddr>().unwrap();
+        for s in ["127.0.0.1", "127.0.0.2", "::1", "::ffff:127.0.0.1"] {
+            assert!(ip_de_administracion(ip(s), &[]), "debía valer: {s}");
+        }
+        for s in ["192.168.1.10", "::ffff:192.168.1.10", "2001:db8::1"] {
+            assert!(!ip_de_administracion(ip(s), &[]), "no debía valer: {s}");
+        }
+        let extra = [ip("192.168.1.10")];
+        assert!(ip_de_administracion(ip("192.168.1.10"), &extra));
+        assert!(ip_de_administracion(ip("::ffff:192.168.1.10"), &extra));
+        assert!(!ip_de_administracion(ip("192.168.1.11"), &extra));
+    }
 
     #[test]
     fn origenes_permitidos_y_rechazados() {

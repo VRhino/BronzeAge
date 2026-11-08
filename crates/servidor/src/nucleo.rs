@@ -189,6 +189,9 @@ pub struct Config {
     pub red: Arc<MetricasRed>,
     /// Los nombres de máquina desde los que una página puede llamar, además de esta máquina y de la IP del servidor (`BRONZEAGE_ORIGENES`; ver [`crate::http::origen_permitido`]).
     pub origenes: Vec<String>,
+    /// Las IPs desde las que se puede administrar además de esta máquina (`BRONZEAGE_IPS_ADMIN`; ver [`crate::http::ip_de_administracion`]). Vale para el WebSocket de `CLIENTE_ADMIN_WEB`; las
+    /// rutas HTTP de administración las comprueba quien las atiende, con la misma lista.
+    pub ips_admin: Vec<std::net::IpAddr>,
 }
 
 impl Default for Config {
@@ -207,6 +210,7 @@ impl Default for Config {
             nombres: crate::NombresHeroes::default(),
             red: Arc::default(),
             origenes: Vec::new(),
+            ips_admin: Vec::new(),
         }
     }
 }

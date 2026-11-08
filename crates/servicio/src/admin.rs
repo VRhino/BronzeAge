@@ -1,6 +1,7 @@
-//! Las rutas de administración del proceso (fase 7, a petición del admin web): solo con el token de una cuenta con la marca de administrador (`Authorization: sesion <token>`;
-//! la marca se da con el código de un solo uso del arranque, con estas rutas o con `admin dar <nick>` por la entrada estándar). Sin token o con uno caducado, `401 token_invalido`;
-//! con el de otra cuenta, `403 no_autorizado`.
+//! Las rutas de administración del proceso (fase 7, a petición del admin web): solo desde la máquina del servidor o una IP de `BRONZEAGE_IPS_ADMIN` (si no, `403 ip_no_permitida`;
+//! detrás de un proxy inverso en la misma máquina todas las conexiones parecen locales y la protección es solo la cuenta) y con el token de una cuenta con la marca de administrador
+//! (`Authorization: sesion <token>`; la marca se da con el código de un solo uso del arranque, con estas rutas o con `admin dar <nick>` por la entrada estándar). Sin token o con uno
+//! caducado, `401 token_invalido`; con el de otra cuenta, `403 no_autorizado`.
 //!
 //! | Ruta | Qué |
 //! |---|---|
@@ -20,12 +21,13 @@
 
 use std::{
     io,
+    net::IpAddr,
     path::{Path, PathBuf},
 };
 
 use acceso::{ahora_ms, token_de, Acceso, ErrorAdmin};
 use serde_json::{json, Value};
-use servidor::{ComandoSesion, EstadoNucleo, PeticionAdmin, PeticionHttp, RespuestaHttp};
+use servidor::{ip_de_administracion, ComandoSesion, EstadoNucleo, PeticionAdmin, PeticionHttp, RespuestaHttp};
 use tokio::sync::{mpsc, oneshot};
 
 /// El prefijo de las rutas de administración.
@@ -42,6 +44,8 @@ pub(crate) struct Admin {
     pub semilla: u64,
     /// El `gameId` de la partida (`partida.id`).
     pub id_partida: String,
+    /// Las IPs desde las que se administra además de esta máquina (`BRONZEAGE_IPS_ADMIN`).
+    pub ips_admin: Vec<IpAddr>,
 }
 
 fn error(estado: u16, codigo: &str, mensaje: &str) -> RespuestaHttp {
@@ -94,6 +98,9 @@ impl Admin {
     }
 
     pub async fn atender(&self, p: PeticionHttp) -> RespuestaHttp {
+        if !p.ip.is_some_and(|ip| ip_de_administracion(ip, &self.ips_admin)) {
+            return error(403, "ip_no_permitida", "la administración solo se atiende desde la máquina del servidor o una IP de BRONZEAGE_IPS_ADMIN");
+        }
         let Some(token) = token_de(&p) else { return error(401, "token_invalido", "falta Authorization: sesion <token>") };
         let ahora = ahora_ms();
         if self.acceso.administrador(token, ahora).is_none() {

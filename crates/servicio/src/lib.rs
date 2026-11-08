@@ -194,6 +194,7 @@ pub async fn arrancar(
     let id_partida = id_de_partida(datos, n.recuperado(), &n.id_de_partida())?;
     n.fijar_id_de_partida(id_partida.clone());
     let origenes = acceso.origenes.clone();
+    let ips_admin = acceso.ips_admin.clone();
     let acceso = Acceso::abrir(&datos.join("acceso"), acceso)?;
     let informe = Informe { mundo_hash: n.mundo_hash().into(), version: n.version(), ahora: n.ahora(), recuperado: n.recuperado(), cuentas: acceso.cuentas(), codigo_admin: acceso.codigo_admin() };
     let reloj = RelojCompartido::nuevo(n.ahora());
@@ -211,9 +212,10 @@ pub async fn arrancar(
         nombres,
         red,
         origenes,
+        ips_admin: ips_admin.clone(),
         ..Config::default()
     };
-    let admin = admin::Admin { acceso: acceso.clone(), nucleo: tx.clone(), carpeta: datos.to_owned(), mundo_hash: informe.mundo_hash.clone(), semilla, id_partida };
+    let admin = admin::Admin { acceso: acceso.clone(), nucleo: tx.clone(), carpeta: datos.to_owned(), mundo_hash: informe.mundo_hash.clone(), semilla, id_partida, ips_admin };
     let http = Arc::new(RutasHttp { acceso: acceso.clone(), admin, mundo, relieve, datos: datos_de_juego });
     let listener = tokio::net::TcpListener::bind(direccion).await?;
     let srv = servir_con_http(listener, tx.clone(), acceso.clone(), http, reloj, config).await;

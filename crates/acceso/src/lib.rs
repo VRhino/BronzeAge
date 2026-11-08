@@ -76,6 +76,8 @@ pub struct Config {
     pub codigo_registro_bots: Option<String>,
     /// Nombres de máquina desde los que una página puede llamar al servidor, además de esta máquina y de la IP del servidor (`BRONZEAGE_ORIGENES`).
     pub origenes: Vec<String>,
+    /// Las IPs desde las que se puede administrar además de esta máquina (`BRONZEAGE_IPS_ADMIN`); el proceso las pasa al servidor y a las rutas de administración.
+    pub ips_admin: Vec<std::net::IpAddr>,
     pub duracion_sesion_ms: i64,
     pub coste: Coste,
 }
@@ -86,6 +88,7 @@ impl Default for Config {
             codigo_registro: None,
             codigo_registro_bots: None,
             origenes: Vec::new(),
+            ips_admin: Vec::new(),
             duracion_sesion_ms: duracion_sesion_ms(),
             coste: Coste::PRODUCCION,
         }

@@ -83,13 +83,14 @@ CODIGO_REGISTRO_BOTS=<código de bots> cargo run --release -p servicio
 | `BRONZEAGE_SEMILLA` | la semilla de la partida (solo cuenta al crearla) | `42` |
 | `CODIGO_REGISTRO` | código de invitación de las cuentas humanas; sin él, registro abierto | — |
 | `CODIGO_REGISTRO_BOTS` | código que marca la cuenta como bot; sin él, no se pueden crear bots | — |
+| `BRONZEAGE_IPS_ADMIN` | IPs, separadas por comas, desde las que se puede administrar además de esta máquina (el WebSocket `CLIENTE_ADMIN_WEB` y `/v1/admin/*`; siempre hace falta además la cuenta con la marca `admin`) | solo esta máquina |
 | `BRONZEAGE_ORIGENES` | nombres de máquina, separados por comas, desde los que una página web puede llamar al servidor, además de esta máquina y de la IP con la que se llega al servidor (desde el 2026-11-08) | — |
 
 El artefacto de mundo no está en git (`generador/salida/` se ignora): en un checkout nuevo se genera una vez con `node scripts/generar-mundo.mjs [semilla]` o con la tarea «generar-mundo» del panel (unos dos minutos con 4 hilos; instala las dependencias del generador si faltan). Escribe el artefacto y, al lado, su paquete de relieve (`relieve-<hash>.bin`, 06 §8). Sin él, el servidor no arranca y lo dice, y el panel deja apagado su botón.
 
 Un reinicio con la misma carpeta y el mismo artefacto sigue la partida donde se quedó, y los tokens vigentes siguen valiendo. Ctrl+C para el proceso con su foto. Sin servidores de batalla: toda batalla se resuelve con números.
 
-**Quién puede llamar desde un navegador** (desde el 2026-11-08; antes el CORS era `*`): si la petición HTTP o el handshake del WebSocket trae `Origin`, solo vale si es de esta máquina (`localhost`, `127.0.0.1`, `[::1]`, cualquier puerto), de la misma IP con la que se llega al servidor o de un nombre de `BRONZEAGE_ORIGENES`; si no, `403 origen_no_permitido` sin cabeceras CORS, y el WebSocket no se abre. El CORS devuelve el origen permitido que pidió (con `Vary: Origin`), no `*`. Un dominio que no esté en la lista no vale aunque coincida con `Host` (contra el DNS rebinding). Sin `Origin` (bots, Unity, `curl`) no se mira nada.
+**Quién puede llamar desde un navegador** (desde el 2026-11-08; antes el CORS era `*`): si la petición HTTP o el handshake del WebSocket trae `Origin`, solo vale si es de esta máquina (`localhost`, `127.0.0.1`, `[::1]`, cualquier puerto), de la misma IP con la que se llega al servidor o de un nombre de `BRONZEAGE_ORIGENES`; si no, `403 origen_no_permitido` sin cabeceras CORS, y el WebSocket no se abre. El CORS devuelve el origen permitido que pidió (con `Vary: Origin`), no `*`. Un dominio que no esté en la lista no vale aunque coincida con `Host` (contra el DNS rebinding). Sin `Origin` (bots, Unity, `curl`) no se mira nada. **Administración por IP** (desde el 2026-11-08): las rutas `/v1/admin/*` (`403 ip_no_permitida`) y un `Hola` de `CLIENTE_ADMIN_WEB` (`rol_no_permitido`, fatal) solo se atienden desde la máquina del servidor o una IP de `BRONZEAGE_IPS_ADMIN`; detrás de un proxy inverso en la misma máquina todas las conexiones parecen locales y la protección es solo la cuenta.
 
 **Entrar, paso a paso:**
 

@@ -8,13 +8,14 @@
 //! | `BRONZEAGE_SEMILLA` | la semilla de la partida (solo cuenta la primera vez) | `42` |
 //! | `CODIGO_REGISTRO` | código de invitación de las cuentas humanas; sin él, registro abierto | — |
 //! | `CODIGO_REGISTRO_BOTS` | código que marca la cuenta como bot; sin él, no hay bots | — |
+//! | `BRONZEAGE_IPS_ADMIN` | IPs, separadas por comas, desde las que se puede administrar (WebSocket de `CLIENTE_ADMIN_WEB` y `/v1/admin/`) además de esta máquina; siempre hace falta además la cuenta admin | solo esta máquina |
 //! | `BRONZEAGE_ORIGENES` | nombres de máquina, separados por comas, desde los que una página puede llamar al servidor (además de esta máquina y de la IP del servidor) | — |
 //!
 //! Sin ninguna cuenta administradora, al arrancar se imprime un código de administrador de un solo uso: quien se registra con él lo es. Ctrl+C, o la línea `parar` por la entrada
 //! estándar (la usa el panel de arranque, `scripts/panel.mjs`, porque en Windows no puede mandar Ctrl+C a un proceso hijo), para el proceso: cierra las sesiones y apaga el núcleo
 //! con su foto. Por la misma entrada, `admin dar <nick>` y `admin quitar <nick>` dan y quitan la marca de administrador.
 
-use std::{env, net::SocketAddr, path::PathBuf, process::ExitCode};
+use std::{env, net::{IpAddr, SocketAddr}, path::PathBuf, process::ExitCode};
 
 use acceso::ErrorAdmin;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -66,10 +67,15 @@ async fn correr() -> Result<(), String> {
     let mundo = PathBuf::from(var("BRONZEAGE_MUNDO").unwrap_or_else(|| "generador/salida/mundo".into()));
     let datos = PathBuf::from(var("BRONZEAGE_DATOS").unwrap_or_else(|| "datos".into()));
     let semilla: u64 = var("BRONZEAGE_SEMILLA").map_or(Ok(42), |s| s.parse()).map_err(|e| format!("BRONZEAGE_SEMILLA: {e}"))?;
+    let ips_admin = var("BRONZEAGE_IPS_ADMIN")
+        .map(|v| v.split(',').map(str::trim).filter(|s| !s.is_empty()).map(|s| s.parse::<IpAddr>().map_err(|e| format!("BRONZEAGE_IPS_ADMIN: «{s}» no es una IP ({e})"))).collect::<Result<Vec<_>, _>>())
+        .transpose()?
+        .unwrap_or_default();
     let config = acceso::Config {
         codigo_registro: var("CODIGO_REGISTRO"),
         codigo_registro_bots: var("CODIGO_REGISTRO_BOTS"),
         origenes: var("BRONZEAGE_ORIGENES").map(|v| v.split(',').map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()).collect()).unwrap_or_default(),
+        ips_admin,
         ..acceso::Config::default()
     };
     let fichero = servicio::buscar_mundo(&mundo).map_err(|e| {
