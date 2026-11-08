@@ -1,7 +1,11 @@
 //! Lo poco de HTTP que comparte el puerto del WebSocket (7B): el servicio de acceso (`POST /v1/registro`, `POST /v1/sesiones`) y la salud. El contrato 05 no lo usa.
 //!
 //! Cada conexión empieza leyendo la cabecera de la petición. Si pide `Upgrade: websocket`, lo leído se devuelve al flujo ([`Rebobinado`]) y sigue el WebSocket de siempre; si no,
-//! se contesta una sola petición HTTP/1.1 y se cierra (`Connection: close`). `OPTIONS` se contesta aquí (CORS abierto: el admin web llama desde el navegador).
+//! se contesta una sola petición HTTP/1.1 y se cierra (`Connection: close`). `OPTIONS` se contesta aquí (el admin web y el cliente de jugador llaman desde el navegador).
+//!
+//! **Procedencia** (revisión de seguridad del 2026-11-03, hallazgo 1): un navegador manda `Origin` en toda petición de otra página y en el handshake del WebSocket. Si la trae, tiene
+//! que ser de un origen permitido ([`origen_permitido`]); si no, `403 origen_no_permitido` (y el WebSocket ni se abre). Sin `Origin` (bots, Unity, `curl`) no se mira. El CORS ya no
+//! es `*`: se devuelve el origen permitido que pidió, con `Vary: Origin`. Así una web ajena abierta en el navegador no puede registrar cuentas, entrar ni hablar el contrato 05.
 
 use std::{
     future::Future,
@@ -67,16 +71,63 @@ impl Http for SinHttp {
     }
 }
 
+/// El nombre de máquina de una autoridad (`host:puerto`, `[v6]:puerto` o `host`), en minúsculas y sin corchetes.
+fn nombre_de(autoridad: &str) -> String {
+    let a = autoridad.trim();
+    let nombre = match a.strip_prefix('[') {
+        Some(resto) => resto.split(']').next().unwrap_or(""),
+        None => a.split(':').next().unwrap_or(""),
+    };
+    nombre.to_ascii_lowercase()
+}
+
+/// `localhost` o una IP de bucle local.
+fn es_local(nombre: &str) -> bool {
+    nombre == "localhost" || nombre.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback())
+}
+
+/// Si un navegador puede llamar desde `origen` (la cabecera `Origin`, `esquema://host[:puerto]`) a este servidor, al que llegó como `host` (la cabecera `Host`).
+///
+/// Se permite: una página de esta misma máquina (`localhost`, `127.0.0.1`, `[::1]`, en cualquier puerto: el admin web y el cliente en desarrollo); una página servida desde la misma
+/// **IP** con la que se llega al servidor (el cliente abierto por la IP de la red local); y los nombres de `extra` (`BRONZEAGE_ORIGENES`, para un dominio propio). Un nombre de dominio
+/// que no está en la lista no vale aunque coincida con `Host`: así un DNS que cambia a `127.0.0.1` (*DNS rebinding*) tampoco cuela. `null` (un fichero local, un iframe aislado) no vale.
+pub fn origen_permitido(origen: &str, host: Option<&str>, extra: &[String]) -> bool {
+    let Some((esquema, resto)) = origen.trim().split_once("://") else { return false };
+    if !matches!(esquema.to_ascii_lowercase().as_str(), "http" | "https") {
+        return false;
+    }
+    let nombre = nombre_de(resto.split('/').next().unwrap_or(""));
+    if nombre.is_empty() {
+        return false;
+    }
+    if es_local(&nombre) || extra.iter().any(|e| nombre_de(e) == nombre) {
+        return true;
+    }
+    nombre.parse::<std::net::IpAddr>().is_ok() && host.is_some_and(|h| nombre_de(h) == nombre)
+}
+
+/// Mira la procedencia de una petición: `Ok(None)` sin `Origin`, `Ok(Some(origen))` si viene de un origen permitido (el que se devuelve en el CORS), `Err` si no.
+fn procedencia(cabeceras: &[(String, String)], extra: &[String]) -> Result<Option<String>, ()> {
+    let cabecera = |n: &str| cabeceras.iter().find(|(k, _)| k == n).map(|(_, v)| v.as_str());
+    match cabecera("origin") {
+        None => Ok(None),
+        Some(o) if origen_permitido(o, cabecera("host"), extra) => Ok(Some(o.trim().to_owned())),
+        Some(_) => Err(()),
+    }
+}
+
 /// Lo que empezó la conexión.
 pub(crate) enum Inicio {
     WebSocket(Rebobinado),
     Http(TcpStream, PeticionHttp),
+    /// Un navegador desde un origen que no está permitido: se contesta `403` y se cierra.
+    Rechazada(TcpStream),
     /// Mal formada, demasiado grande o cortada: se cierra sin más.
     Nada,
 }
 
 /// Lee la cabecera (y, si no es un WebSocket, el cuerpo) de la primera petición.
-pub(crate) async fn leer_inicio(mut tcp: TcpStream) -> Inicio {
+pub(crate) async fn leer_inicio(mut tcp: TcpStream, origenes: &[String]) -> Inicio {
     let mut buf = Vec::with_capacity(1024);
     let fin = loop {
         if let Some(i) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
@@ -100,6 +151,9 @@ pub(crate) async fn leer_inicio(mut tcp: TcpStream) -> Inicio {
         .filter_map(|l| l.split_once(':'))
         .map(|(k, v)| (k.trim().to_ascii_lowercase(), v.trim().to_owned()))
         .collect();
+    if procedencia(&cabeceras, origenes).is_err() {
+        return Inicio::Rechazada(tcp);
+    }
     let es_ws = cabeceras.iter().any(|(k, v)| k == "upgrade" && v.eq_ignore_ascii_case("websocket"));
     if es_ws {
         return Inicio::WebSocket(Rebobinado { previo: buf, pos: 0, tcp });
@@ -136,20 +190,31 @@ fn razon(estado: u16) -> &'static str {
     }
 }
 
-/// Atiende la petición (`OPTIONS` y `GET /salud` aquí; el resto, `http`) y cierra.
+/// Contesta `403 origen_no_permitido` a un navegador de otro origen y cierra, sin CORS: el navegador ni deja leer la respuesta.
+pub(crate) async fn rechazar(mut tcp: TcpStream) {
+    let cuerpo = br#"{"error":"origen_no_permitido","mensaje":"este servidor no atiende a paginas de ese origen"}"#;
+    let cabecera = format!("HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", cuerpo.len());
+    let _ = tcp.write_all(cabecera.as_bytes()).await;
+    let _ = tcp.write_all(cuerpo).await;
+    let _ = tcp.shutdown().await;
+}
+
+/// Atiende la petición (`OPTIONS` y `GET /salud` aquí; el resto, `http`) y cierra. La procedencia ya se miró en [`leer_inicio`]: si trae `Origin`, es uno permitido y es el que
+/// se devuelve en el CORS.
 pub(crate) async fn contestar(mut tcp: TcpStream, p: PeticionHttp, http: &dyn Http) {
+    let cors = match p.cabecera("origin") {
+        Some(o) => format!(
+            "Access-Control-Allow-Origin: {}\r\nVary: Origin\r\nAccess-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\nAccess-Control-Allow-Headers: content-type, authorization\r\n",
+            o.trim()
+        ),
+        None => String::new(),
+    };
     let r = match (p.metodo.as_str(), p.ruta.as_str()) {
         ("OPTIONS", _) => RespuestaHttp { estado: 204, tipo: "text/plain", cuerpo: Vec::new() },
         ("GET", "/salud") => RespuestaHttp::texto(200, "ok"),
         _ => http.atender(p).await,
     };
-    let cabecera = format!(
-        "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\nAccess-Control-Allow-Headers: content-type, authorization\r\nConnection: close\r\n\r\n",
-        r.estado,
-        razon(r.estado),
-        r.tipo,
-        r.cuerpo.len()
-    );
+    let cabecera = format!("HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\n{cors}Connection: close\r\n\r\n", r.estado, razon(r.estado), r.tipo, r.cuerpo.len());
     let _ = tcp.write_all(cabecera.as_bytes()).await;
     let _ = tcp.write_all(&r.cuerpo).await;
     let _ = tcp.shutdown().await;
@@ -184,5 +249,40 @@ impl AsyncWrite for Rebobinado {
     }
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.tcp).poll_shutdown(cx)
+    }
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::origen_permitido;
+
+    #[test]
+    fn origenes_permitidos_y_rechazados() {
+        let extra = ["juego.example".to_owned()];
+        let host = Some("192.168.1.10:7878");
+        let valen = [
+            "http://localhost:5174",
+            "http://127.0.0.1",
+            "http://[::1]:8080",
+            "https://LOCALHOST",
+            "http://192.168.1.10:5174",
+            "https://juego.example",
+        ];
+        for o in valen {
+            assert!(origen_permitido(o, host, &extra), "debía valer: {o}");
+        }
+        let no_valen = [
+            ("http://192.168.1.11:5174", host),
+            ("http://evil.com:7878", Some("evil.com:7878")),
+            ("null", host),
+            ("file:///index.html", host),
+            ("ftp://localhost", host),
+            ("", host),
+            ("http://", host),
+            ("http://192.168.1.10", None),
+        ];
+        for (o, h) in no_valen {
+            assert!(!origen_permitido(o, h, &extra), "no debía valer: {o} con Host {h:?}");
+        }
     }
 }

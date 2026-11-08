@@ -215,17 +215,22 @@ async fn pedir(dir: SocketAddr, metodo: &str, ruta: &str, token: Option<&str>, c
     (cabecera.split(' ').nth(1).unwrap().parse().unwrap(), serde_json::from_str(cuerpo).unwrap_or(Value::Null))
 }
 
+/// Da (`true`) o quita (`false`) la marca de administrador por `PUT /v1/admin/administradores`.
+async fn marca(dir: SocketAddr, nick: &str, admin: bool, token: &str) -> (u16, Value) {
+    pedir(dir, "PUT", "/v1/admin/administradores", Some(token), Some(json!({ "nick": nick, "admin": admin }))).await
+}
+
 /// Las rutas de administración: solo un administrador; el código de invitación cambia en caliente; un respaldo copia la partida y, copiado sobre la carpeta con el servidor parado,
 /// la devuelve a ese punto.
 #[tokio::test(flavor = "multi_thread")]
 async fn un_administrador_cambia_el_codigo_y_respalda_la_partida() {
     let datos = tempfile::tempdir().unwrap();
-    let cfg = || acceso::Config { administradores: vec!["jefa".into()], ..acceso() };
-    let (s, _) = servicio::arrancar(arranque_sintetico(), None, None, datos.path(), libre(), cfg()).await.unwrap();
+    let (s, i) = servicio::arrancar(arranque_sintetico(), None, None, datos.path(), libre(), acceso()).await.unwrap();
     let dir = s.direccion;
-    for nick in ["jefa", "pepe"] {
-        assert_eq!(post(dir, "/v1/registro", json!({ "nick": nick, "clave": "clave larga" })).await.0, 201);
-    }
+    // La partida nueva no tiene administradores: el arranque da el código de un solo uso y quien se registra con él lo es.
+    let codigo = i.codigo_admin.expect("sin administradores hay código");
+    assert_eq!(post(dir, "/v1/registro", json!({ "nick": "jefa", "clave": "clave larga", "codigo": codigo })).await.0, 201);
+    assert_eq!(post(dir, "/v1/registro", json!({ "nick": "pepe", "clave": "clave larga", "codigo": codigo })).await.0, 201, "gastado: queda un humano normal");
     let token = |nick: &'static str| async move { post(dir, "/v1/sesiones", json!({ "nick": nick, "clave": "clave larga" })).await.1["token"].as_str().unwrap().to_owned() };
     let (jefa, pepe) = (token("jefa").await, token("pepe").await);
     token_de_bot(dir, "bot-1", true).await;
@@ -242,7 +247,7 @@ async fn un_administrador_cambia_el_codigo_y_respalda_la_partida() {
 
     // El navegador pregunta antes de un PUT (CORS): se permite.
     let mut tcp = tokio::net::TcpStream::connect(dir).await.unwrap();
-    tcp.write_all(b"OPTIONS /v1/admin/registro/codigo HTTP/1.1\r\nHost: prueba\r\nAccess-Control-Request-Method: PUT\r\n\r\n").await.unwrap();
+    tcp.write_all(b"OPTIONS /v1/admin/registro/codigo HTTP/1.1\r\nHost: prueba\r\nOrigin: http://localhost:5173\r\nAccess-Control-Request-Method: PUT\r\n\r\n").await.unwrap();
     let mut r = String::new();
     tcp.read_to_string(&mut r).await.unwrap();
     assert!(r.starts_with("HTTP/1.1 204") && r.contains("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS"), "{r}");
@@ -256,6 +261,21 @@ async fn un_administrador_cambia_el_codigo_y_respalda_la_partida() {
     assert_eq!(pedir(dir, "PUT", "/v1/admin/registro/codigo", Some(&jefa), Some(json!({ "otro": 1 }))).await.0, 400);
     assert_eq!(pedir(dir, "PUT", "/v1/admin/registro/codigo", Some(&jefa), Some(json!({ "codigo": null }))).await.1["codigo"], Value::Null);
     assert_eq!(pedir(dir, "PUT", "/v1/admin/registro/codigo", Some(&pepe), Some(json!({ "codigo": null }))).await.0, 403);
+
+    // Dar y quitar la marca de administrador.
+    assert_eq!(pedir(dir, "GET", "/v1/admin/administradores", Some(&jefa), None).await.1, json!({ "administradores": ["jefa"] }));
+    assert_eq!(marca(dir, "pepe", true, &pepe).await.0, 403);
+    assert_eq!(marca(dir, "pepe", true, &jefa).await, (200, json!({ "nick": "pepe", "admin": true })));
+    assert_eq!(pedir(dir, "GET", "/v1/admin/administradores", Some(&pepe), None).await.1, json!({ "administradores": ["jefa", "pepe"] }), "el token que ya tenía pasa a valer como de administrador");
+    assert_eq!(marca(dir, "PEPE", false, &jefa).await, (200, json!({ "nick": "pepe", "admin": false })));
+    assert_eq!(marca(dir, "pepe", false, &jefa).await.0, 200, "sin cambios, igual contesta");
+    let (e, v) = marca(dir, "jefa", false, &jefa).await;
+    assert_eq!((e, v["error"].as_str()), (409, Some("ultimo_administrador")));
+    assert_eq!(marca(dir, "bot-1", true, &jefa).await.1["error"], json!("es_bot"));
+    assert_eq!(marca(dir, "nadie", true, &jefa).await.1["error"], json!("no_encontrado"));
+    assert_eq!(pedir(dir, "DELETE", "/v1/admin/administradores", Some(&jefa), None).await.0, 405);
+    assert_eq!(pedir(dir, "PUT", "/v1/admin/administradores", Some(&jefa), Some(json!({ "nick": "pepe" }))).await.0, 400);
+    assert_eq!(pedir(dir, "GET", "/v1/admin/administradores", Some(&pepe), None).await.0, 403);
 
     // Respaldo: la partida con ana y bot-1, en <datos>/respaldos/<id>.
     let (e, r) = pedir(dir, "POST", "/v1/admin/respaldos", Some(&jefa), None).await;
@@ -295,8 +315,8 @@ async fn un_administrador_cambia_el_codigo_y_respalda_la_partida() {
         std::fs::remove_dir_all(datos.path().join(sub)).unwrap();
         copiar(&copia.join(sub), &datos.path().join(sub));
     }
-    let (s, i) = servicio::arrancar(arranque_sintetico(), None, None, datos.path(), libre(), cfg()).await.unwrap();
-    assert!(i.recuperado && i.cuentas == 4, "{i:?}");
+    let (s, i) = servicio::arrancar(arranque_sintetico(), None, None, datos.path(), libre(), acceso()).await.unwrap();
+    assert!(i.recuperado && i.cuentas == 4 && i.codigo_admin.is_none(), "{i:?}");
     assert!(i.version >= r["version"].as_u64().unwrap(), "{i:?} {r}");
     s.parar().await;
 }

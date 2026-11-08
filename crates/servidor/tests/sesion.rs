@@ -1,6 +1,6 @@
 //! Pruebas de integración: servidor real + núcleo falso + cliente `tokio-tungstenite` en el mismo proceso.
 
-use std::{collections::HashSet, time::Duration};
+use std::{collections::HashSet, net::SocketAddr, time::Duration};
 
 use contrato::v1::{
     mensaje_de_cliente as mc, mensaje_de_servidor as ms, AmbitoTipo, CambiarVista, DecisionReanudacion, Punto,
@@ -10,6 +10,8 @@ use servidor::{
     prueba::{hola, AutenticadorDePrueba, ClientePrueba, NucleoFalso},
     servir, Config, RelojCompartido, Servidor,
 };
+use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::TcpStream};
+use tokio_tungstenite::{connect_async, tungstenite::client::IntoClientRequest};
 
 async fn arrancar(config: Config) -> (Servidor, NucleoFalso) {
     let reloj = RelojCompartido::nuevo(1_000_000);
@@ -327,4 +329,54 @@ async fn rendimiento_con_200_sesiones() {
     let m = servidor::prueba::medir_rendimiento(200, 50).await;
     println!("{m:?} → {:.0} mensajes/s", m.mensajes_por_s());
     assert_eq!(m.mensajes, 200 * 50 * 2);
+}
+
+/// `GET /salud` con el `Origin` dado (si lo hay); devuelve la respuesta entera, cabeceras incluidas.
+async fn salud(dir: SocketAddr, origen: Option<&str>) -> String {
+    let origen = origen.map(|o| format!("Origin: {o}\r\n")).unwrap_or_default();
+    let mut tcp = TcpStream::connect(dir).await.unwrap();
+    tcp.write_all(format!("GET /salud HTTP/1.1\r\nHost: {dir}\r\n{origen}\r\n").as_bytes()).await.unwrap();
+    let mut respuesta = String::new();
+    tcp.read_to_string(&mut respuesta).await.unwrap();
+    respuesta
+}
+
+#[tokio::test]
+async fn http_de_un_origen_ajeno_se_rechaza_sin_cors() {
+    let (srv, _) = arrancar(Config::default()).await;
+    let r = salud(srv.direccion, Some("https://evil.example")).await;
+    assert!(r.starts_with("HTTP/1.1 403"), "{r}");
+    assert!(r.contains("origen_no_permitido"));
+    assert!(!r.to_ascii_lowercase().contains("access-control"), "{r}");
+}
+
+#[tokio::test]
+async fn http_devuelve_el_origen_permitido_y_sin_origen_no_hay_cors() {
+    let (srv, _) = arrancar(Config::default()).await;
+    let r = salud(srv.direccion, Some("http://localhost:5174")).await;
+    assert!(r.starts_with("HTTP/1.1 200"), "{r}");
+    assert!(r.contains("Access-Control-Allow-Origin: http://localhost:5174\r\n") && r.contains("Vary: Origin\r\n"), "{r}");
+
+    let r = salud(srv.direccion, None).await;
+    assert!(r.starts_with("HTTP/1.1 200"), "{r}");
+    assert!(!r.to_ascii_lowercase().contains("access-control"), "{r}");
+}
+
+#[tokio::test]
+async fn los_origenes_extra_de_la_configuracion_valen() {
+    let (srv, _) = arrancar(Config { origenes: vec!["juego.example".into()], ..Config::default() }).await;
+    assert!(salud(srv.direccion, Some("https://juego.example")).await.starts_with("HTTP/1.1 200"));
+    assert!(salud(srv.direccion, Some("https://otro.example")).await.starts_with("HTTP/1.1 403"));
+}
+
+#[tokio::test]
+async fn el_websocket_exige_origen_permitido() {
+    let (srv, _) = arrancar(Config::default()).await;
+    let desde = |origen: &str| {
+        let mut peticion = format!("ws://{}", srv.direccion).into_client_request().unwrap();
+        peticion.headers_mut().insert("Origin", origen.parse().unwrap());
+        connect_async(peticion)
+    };
+    assert!(desde("https://evil.example").await.is_err(), "el handshake desde un origen ajeno no debe abrirse");
+    assert!(desde("http://localhost:5174").await.is_ok());
 }

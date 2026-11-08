@@ -56,6 +56,6 @@ mod sesion;
 pub use nucleo::{
     codigos, Autenticador, ComandoSesion, Config, Difusion, ErrorAcceso, EstadoNucleo, FinDeSesion, Identidad, MetricasRed, PeticionAdmin, RelojCompartido, RolTecnico, SesionId,
 };
-pub use http::{Http, PeticionHttp, RespuestaHttp, SinHttp};
+pub use http::{origen_permitido, Http, PeticionHttp, RespuestaHttp, SinHttp};
 pub use nombres::NombresHeroes;
 pub use sesion::{servir, servir_con_http, Servidor};

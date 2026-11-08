@@ -1,6 +1,6 @@
 [package]
 name = "servidor"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 description = "Sesión en tiempo real del contrato 05 sobre WebSocket: hola, foto, delta, órdenes con respuesta causal, reloj y reanudación (fase 5)"
 

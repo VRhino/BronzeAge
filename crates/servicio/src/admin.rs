@@ -1,5 +1,6 @@
-//! Las rutas de administración del proceso (fase 7, a petición del admin web): solo con el token de una cuenta de administrador (`Authorization: sesion <token>` de un nick de
-//! `ADMINISTRADORES`). Sin token o con uno caducado, `401 token_invalido`; con el de otra cuenta, `403 no_autorizado`.
+//! Las rutas de administración del proceso (fase 7, a petición del admin web): solo con el token de una cuenta con la marca de administrador (`Authorization: sesion <token>`;
+//! la marca se da con el código de un solo uso del arranque, con estas rutas o con `admin dar <nick>` por la entrada estándar). Sin token o con uno caducado, `401 token_invalido`;
+//! con el de otra cuenta, `403 no_autorizado`.
 //!
 //! | Ruta | Qué |
 //! |---|---|
@@ -11,6 +12,8 @@
 //! | `GET /v1/admin/carga` | la medida de carga del actor: `{ activo, detalle, cada_s, ultima }`, con la última ventana de `cada_s` segundos (ver `Docs/Arquitectura/Medida_De_Carga.md`) |
 //! | `POST /v1/admin/carga` | `{ activo?, detalle? }` (booleanos): la enciende o la apaga en caliente, sin reiniciar; contesta como el `GET` |
 //! | `GET /v1/admin/misiones/catalogo` | el catálogo **vigente** de las misiones recurrentes (Misiones_Recurrentes §6), en el JSON que acepta la orden de administración `fijar_catalogo_misiones`: `{ asentamiento: [...], faccion: [...] }` |
+//! | `GET /v1/admin/administradores` | `{ administradores: [nick, ...] }`, ordenados |
+//! | `PUT /v1/admin/administradores` | `{ nick, admin }`: da (`true`) o quita (`false`) la marca de administrador a la cuenta; `200 { nick, admin }`. `404 no_encontrado` si no existe, `400 es_bot` si es de bot, `409 ultimo_administrador` si se quita al único |
 //!
 //! Un respaldo es `{ id, creado_ms, version, instante, mundo_hash, semilla, bytes }` (también en su `respaldo.json`). Restaurarlo es copiar sus `mundo/` y `acceso/` sobre los de la carpeta
 //! de datos con el servidor parado: lo hace el panel de arranque (`scripts/panel.mjs`), que es quien para y arranca el proceso.
@@ -20,7 +23,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use acceso::{ahora_ms, token_de, Acceso};
+use acceso::{ahora_ms, token_de, Acceso, ErrorAdmin};
 use serde_json::{json, Value};
 use servidor::{ComandoSesion, EstadoNucleo, PeticionAdmin, PeticionHttp, RespuestaHttp};
 use tokio::sync::{mpsc, oneshot};
@@ -122,6 +125,20 @@ impl Admin {
                 self.acceso.cambiar_codigo_registro(v["codigo"].as_str().map(str::to_owned));
                 RespuestaHttp::json(200, json!({ "codigo": self.acceso.codigo_registro() }).to_string())
             }
+            ("GET", "administradores") => RespuestaHttp::json(200, json!({ "administradores": self.acceso.administradores() }).to_string()),
+            ("PUT", "administradores") => {
+                let v = serde_json::from_slice::<Value>(&p.cuerpo).unwrap_or_default();
+                let (Some(nick), Some(admin)) = (v["nick"].as_str(), v["admin"].as_bool()) else {
+                    return error(400, "datos_invalidos", "el cuerpo es { \"nick\": texto, \"admin\": booleano }");
+                };
+                match self.acceso.fijar_admin(nick, admin) {
+                    Ok(c) => RespuestaHttp::json(200, json!({ "nick": c.nick, "admin": c.admin }).to_string()),
+                    Err(ErrorAdmin::NoExiste) => error(404, "no_encontrado", "no hay ninguna cuenta con ese nick"),
+                    Err(ErrorAdmin::EsBot) => error(400, "es_bot", "una cuenta de bot no puede ser administradora"),
+                    Err(ErrorAdmin::UltimoAdministrador) => error(409, "ultimo_administrador", "no se puede quitar al último administrador"),
+                    Err(ErrorAdmin::Disco) => error(500, "interno", "no se pudo guardar la cuenta"),
+                }
+            }
             ("GET", "misiones/catalogo") => {
                 let (tx, rx) = oneshot::channel();
                 if self.nucleo.send(ComandoSesion::Admin(PeticionAdmin::CatalogoMisiones { respuesta: tx })).await.is_err() {
@@ -155,7 +172,7 @@ impl Admin {
                 Ok(r) => RespuestaHttp::json(201, r.to_string()),
                 Err(e) => error(500, "interno", &format!("no se pudo respaldar: {e}")),
             },
-            (_, "partida" | "registro/codigo" | "respaldos" | "misiones/catalogo" | "carga") => error(405, "metodo_no_permitido", "método no permitido"),
+            (_, "partida" | "registro/codigo" | "respaldos" | "misiones/catalogo" | "carga" | "administradores") => error(405, "metodo_no_permitido", "método no permitido"),
             _ => error(404, "no_encontrado", "ruta desconocida"),
         }
     }

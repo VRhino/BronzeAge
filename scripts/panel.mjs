@@ -6,7 +6,7 @@
 //
 // Partidas (fase 7, para el admin web): cada partida es una carpeta de datos del servidor en `partidas/<nombre>/` (`mundo/`, `acceso/`, `respaldos/` y
 // `partida.json` con su semilla y su artefacto de mundo); la carpeta `datos/` de antes cuenta como la partida «datos». El servidor arranca con la partida
-// actual. La API de partidas está más abajo (`/api/partidas`, `/api/mundo`), con CORS abierto. Desde el 2026-10-27 (decisión del autor) las partidas y el mundo se
+// actual. La API de partidas está más abajo (`/api/partidas`, `/api/mundo`); solo contesta a esta máquina (ver `procedencia`). Desde el 2026-10-27 (decisión del autor) las partidas y el mundo se
 // manejan desde la pestaña «Mundo y partidas» del propio panel, que funciona con el servidor apagado; el admin web ya no las lleva.
 //
 // Cada servicio puede llevar `cwd` (relativo a la raíz del motor): el motor es esta carpeta y los repos hermanos están al lado
@@ -87,17 +87,14 @@ function respaldosDe(n) {
 function infoPartida(n) {
   const meta = leerJson(path.join(carpetaPartida(n), 'partida.json')) ?? {};
   return { nombre: n, carpeta: carpetaPartida(n), semilla: meta.semilla ?? 42, mundo: meta.mundo ?? null, creada_ms: meta.creada_ms ?? null,
-    administradores: meta.administradores ?? listaAdmins(servidor().env?.ADMINISTRADORES),
     respaldos: respaldosDe(n).length, actual: n === partidaActual(), en_marcha: n === partidaActual() && enMarcha() };
 }
-// Los nicks de administrador como lista, desde texto «a, b» o desde una lista.
-const listaAdmins = (v) => (Array.isArray(v) ? v : String(v ?? '').split(',')).map((x) => String(x).trim()).filter(Boolean);
-// El entorno del servidor para la partida actual: su carpeta, su semilla, su artefacto (si lo fijó al crearla) y sus administradores.
+// El entorno del servidor para la partida actual: su carpeta, su semilla, y su artefacto (si lo fijó al crearla).
 function envPartida() {
   const n = partidaActual();
   if (!n) return {};
   const i = infoPartida(n);
-  return { BRONZEAGE_DATOS: i.carpeta, BRONZEAGE_SEMILLA: String(i.semilla), ADMINISTRADORES: i.administradores.join(','), ...(i.mundo ? { BRONZEAGE_MUNDO: path.join(MUNDOS, i.mundo) } : {}) };
+  return { BRONZEAGE_DATOS: i.carpeta, BRONZEAGE_SEMILLA: String(i.semilla), ...(i.mundo ? { BRONZEAGE_MUNDO: path.join(MUNDOS, i.mundo) } : {}) };
 }
 
 // La regeneración del mundo (la tarea «generar-mundo»): con qué semilla y cómo acabó la última.
@@ -209,13 +206,12 @@ th{color:var(--sub);font-weight:500;font-size:12px}td .fila{gap:6px}td button{pa
 <nav class="pestanas"><button data-vista="partidas">Mundo y partidas</button><button data-vista="servicios">Servicios</button></nav>
 <section class="vista" id="v-partidas">
 <details open data-seccion="partidas"><summary>Partidas<span class="cuenta" id="p-cuenta"></span></summary>
-<div class="card"><table><thead><tr><th>Partida</th><th>Semilla</th><th>Mundo</th><th>Creada</th><th>Administradores</th><th>Estado</th><th></th></tr></thead><tbody id="p-lista"></tbody></table>
+<div class="card"><table><thead><tr><th>Partida</th><th>Semilla</th><th>Mundo</th><th>Creada</th><th>Estado</th><th></th></tr></thead><tbody id="p-lista"></tbody></table>
 <div class="msg" id="p-msg"></div></div></details>
 <details open data-seccion="nueva"><summary>Nueva partida</summary>
 <div class="card"><div class="form"><label>Nombre<input id="n-nombre" placeholder="misiones" maxlength="40"></label>
 <label>Semilla<input id="n-semilla" type="number" min="0" value="42"></label>
 <label>Mundo<select id="n-mundo"></select></label>
-<label>Administradores<input id="n-admins" placeholder="tu nick, otro"></label>
 <label style="flex-direction:row;align-items:center"><input id="n-activar" type="checkbox" checked style="width:auto"> activarla y arrancar el servidor</label>
 <button id="n-crear">Crear</button></div><div class="msg" id="n-msg"></div></div></details>
 <details open data-seccion="mundo"><summary>Mundo</summary>
@@ -261,14 +257,12 @@ async function pintarPartidas(){
   document.getElementById('p-cuenta').textContent='· '+d.partidas.length+(d.actual?' · activa: '+d.actual:' · ninguna activa');
   for(const p of d.partidas){
     const tr=document.createElement('tr'),n=encodeURIComponent(p.nombre);
-    celda(tr,p.nombre,p.actual?'activa':'');celda(tr,String(p.semilla));celda(tr,p.mundo?p.mundo.slice(6,18)+'…':'el último');celda(tr,fecha(p.creada_ms));celda(tr,p.administradores.join(', ')||'ninguno');
+    celda(tr,p.nombre,p.actual?'activa':'');celda(tr,String(p.semilla));celda(tr,p.mundo?p.mundo.slice(6,18)+'…':'el último');celda(tr,fecha(p.creada_ms));
     celda(tr,p.actual?(p.en_marcha?'activa · servidor en marcha':'activa · servidor parado'):'guardada');
     const acc=celda(tr,'');acc.innerHTML='<div class="fila"></div>';
     if(!p.actual)boton(acc,'Activar',()=>api('POST','/api/partidas/'+n+'/activar',null,'p-msg'));
     else{if(!p.en_marcha)boton(acc,'Arrancar',()=>api('POST','/api/partidas/'+n+'/activar',null,'p-msg'));
       boton(acc,'Apagar',()=>api('POST','/api/partidas/'+n+'/apagar',null,'p-msg'));}
-    boton(acc,'Administradores',()=>{const v=prompt('Nicks de administrador, separados por comas (se reinicia el servidor si está en marcha)',p.administradores.join(', '));
-      if(v!==null)api('POST','/api/partidas/'+n+'/administradores',{administradores:v},'p-msg')});
     boton(acc,'Respaldar',()=>api('POST','/api/partidas/'+n+'/respaldar',{nota:prompt('Nota del respaldo (opcional)')??''},'p-msg'));
     boton(acc,'Respaldos ('+p.respaldos+')',()=>{abiertos.has(p.nombre)?abiertos.delete(p.nombre):abiertos.add(p.nombre);pintarPartidas()});
     boton(acc,'Borrar',()=>{if(confirm('¿Borrar la partida «'+p.nombre+'» con sus respaldos?'+(p.actual?' Es la activa: se apaga el servidor.':'')+' No se puede deshacer.'))
@@ -303,8 +297,7 @@ async function pintarPartidas(){
   document.getElementById('m-estado').textContent=m.generando?'generando con la semilla '+m.semilla+'…':m.ultima?('último: semilla '+m.ultima.semilla+(m.ultima.codigo===0?', bien':', falló (código '+m.ultima.codigo+'; mira su log en Servicios)')):'';
 }
 document.getElementById('n-crear').onclick=()=>api('POST','/api/partidas',{nombre:document.getElementById('n-nombre').value,semilla:Number(document.getElementById('n-semilla').value),
-  mundo:document.getElementById('n-mundo').value||undefined,activar:document.getElementById('n-activar').checked,
-  ...(document.getElementById('n-admins').value.trim()?{administradores:document.getElementById('n-admins').value}:{})},'n-msg');
+  mundo:document.getElementById('n-mundo').value||undefined,activar:document.getElementById('n-activar').checked},'n-msg');
 document.getElementById('m-generar').onclick=()=>api('POST','/api/mundo',{semilla:Number(document.getElementById('m-semilla').value)},'m-msg');
 pintarPartidas();setInterval(pintarPartidas,4000);
 async function pintar(){
@@ -371,9 +364,8 @@ async function apiPartidas(metodo, partes, cuerpo) {
     if (!elegido) return [409, { error: 'sin_mundo', mensaje: 'no hay ese artefacto de mundo: genera uno con POST /api/mundo' }];
     const semilla = Number(cuerpo?.semilla ?? 42);
     if (!Number.isSafeInteger(semilla) || semilla < 0) return [400, { error: 'datos_invalidos', mensaje: 'la semilla es un entero ≥ 0' }];
-    const administradores = cuerpo?.administradores === undefined ? listaAdmins(servidor().env?.ADMINISTRADORES) : listaAdmins(cuerpo.administradores);
     mkdirSync(path.join(PARTIDAS, n), { recursive: true });
-    writeFileSync(path.join(PARTIDAS, n, 'partida.json'), JSON.stringify({ nombre: n, semilla, mundo: elegido.archivo, creada_ms: Date.now(), administradores }, null, 2));
+    writeFileSync(path.join(PARTIDAS, n, 'partida.json'), JSON.stringify({ nombre: n, semilla, mundo: elegido.archivo, creada_ms: Date.now() }, null, 2));
     if (cuerpo?.activar !== false) { await pararServidor(); ponerActual(n); arrancar(servidor()); }
     return [201, { ...infoPartida(n), ...arranque() }];
   }
@@ -408,15 +400,6 @@ async function apiPartidas(metodo, partes, cuerpo) {
     writeFileSync(path.join(carpeta, 'respaldos', id, 'respaldo.json'), JSON.stringify(r));
     if (seguia) arrancar(servidor());
     return [201, { respaldo: r, ...(seguia ? arranque() : { arrancado: false, aviso: null }) }];
-  }
-  if (accion === 'administradores') {
-    // Cambia los nicks de administrador de la partida (los que pueden abrir el admin web). Si el servidor la sirve, se reinicia para aplicarlo.
-    const fichero = path.join(carpetaPartida(nombre), 'partida.json');
-    const meta = { ...(leerJson(fichero) ?? { nombre, semilla: infoPartida(nombre).semilla }), administradores: listaAdmins(cuerpo?.administradores) };
-    const seguia = nombre === partidaActual() && (await pararServidor());
-    writeFileSync(fichero, JSON.stringify(meta, null, 2));
-    if (seguia) arrancar(servidor());
-    return [200, { ...infoPartida(nombre), ...(seguia ? arranque() : { arrancado: false, aviso: null }) }];
   }
   if (accion === 'activar') {
     await pararServidor(); ponerActual(nombre); arrancar(servidor());
@@ -466,14 +449,27 @@ async function apiMundo(metodo, cuerpo, archivo) {
   return [202, { generando: true, semilla }];
 }
 
-const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS', 'access-control-allow-headers': 'content-type, authorization' };
+// Solo se atiende a páginas y llamadas de esta máquina (contra webs ajenas y DNS rebinding): `Host` y, si viene, `Origin` han de ser de aquí.
+// Devuelve las cabeceras CORS para ese origen ({} sin `Origin`) o null si no se atiende.
+const LOCAL = '(localhost|127\\.0\\.0\\.1|\\[::1\\])(:\\d+)?';
+const HOST_LOCAL = new RegExp(`^${LOCAL}$`, 'i');
+const ORIGEN_LOCAL = new RegExp(`^https?://${LOCAL}$`, 'i');
+function procedencia(req) {
+  if (!HOST_LOCAL.test(req.headers.host ?? '')) return null;
+  const origen = req.headers.origin;
+  if (origen === undefined) return {};
+  if (!ORIGEN_LOCAL.test(origen)) return null;
+  return { 'access-control-allow-origin': origen, vary: 'origin', 'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS', 'access-control-allow-headers': 'content-type, authorization' };
+}
 const leerCuerpo = (req) => new Promise((ok) => { let b = ''; req.on('data', (d) => { b += d; }); req.on('end', () => { try { ok(b ? JSON.parse(b) : null); } catch { ok(undefined); } }); });
 
 http.createServer(async (req, res) => {
+  const cors = procedencia(req);
+  if (!cors) { res.writeHead(403); return res.end(); }
   const partes = new URL(req.url, 'http://x').pathname.split('/').filter(Boolean).map(decodeURIComponent);
   if (partes[0] !== 'api') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(HTML); }
-  if (req.method === 'OPTIONS') { res.writeHead(204, CORS); return res.end(); }
-  const json = (estado, v) => { res.writeHead(estado, { ...CORS, 'content-type': 'application/json' }); res.end(JSON.stringify(v)); };
+  if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
+  const json = (estado, v) => { res.writeHead(estado, { ...cors, 'content-type': 'application/json' }); res.end(JSON.stringify(v)); };
   if (partes[1] === 'partidas' || partes[1] === 'mundo') {
     const cuerpo = await leerCuerpo(req);
     if (cuerpo === undefined) return json(400, { error: 'datos_invalidos', mensaje: 'el cuerpo es JSON' });
@@ -483,15 +479,15 @@ http.createServer(async (req, res) => {
   const [, accion, nombre, valor] = partes;
   if (accion === 'estado') return json(200, await estado());
   const c = configurations.find((x) => x.name === (nombre ?? ''));
-  if (req.method !== 'POST' || !c) { res.writeHead(404, CORS); return res.end(); }
+  if (req.method !== 'POST' || !c) { res.writeHead(404, cors); return res.end(); }
   if (accion === 'arrancar') arrancar(c);
   else if (accion === 'parar') parar(c.name);
   else if (accion === 'puerto') {
     const p = Number(valor);
-    if (!Number.isInteger(p) || p < 1 || p > 65535 || procesos[c.name]?.hijo) { res.writeHead(400, CORS); return res.end(); }
+    if (!Number.isInteger(p) || p < 1 || p > 65535 || procesos[c.name]?.hijo) { res.writeHead(400, cors); return res.end(); }
     puertos[c.name] = p;
   }
-  res.writeHead(204, CORS); res.end();
+  res.writeHead(204, cors); res.end();
 }).listen(PUERTO, '127.0.0.1', () => {
   const url = `http://localhost:${PUERTO}`;
   console.log(`Panel en ${url}`);

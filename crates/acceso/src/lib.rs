@@ -4,10 +4,12 @@
 //! - **Alta** (`POST /v1/registro`, `{nick, clave, codigo?}`): el nick se recorta y pasa a minúsculas, y es único. Con `codigo_registro_bots` configurado y coincidente, la cuenta es **de bot**
 //!   (sin ningún privilegio: solo abre sesiones `CLIENTE_BOT`, como un jugador); si no, con `codigo_registro` configurado hace falta que coincida; sin él el registro está abierto. No da sesión.
 //! - **Login** (`POST /v1/sesiones`, `{nick, clave}`): cada login emite un token nuevo que dura `ACCESO.duracionSesionMs`. Se guarda solo su SHA-256.
-//! - **Quién es quién**: la cuenta de bot abre `CLIENTE_BOT`; la humana, `CLIENTE_UNITY`; la que figura en `administradores` (por nick), además `CLIENTE_ADMIN_WEB` con el rol de
-//!   administrador global. `Identidad::cliente_id` es el id de la cuenta (`u-N`): el núcleo lo usa como cuenta del héroe.
-//! - **Disco**: `cuentas.jsonl` y `sesiones.jsonl` en la carpeta del servicio, una línea por alta o por login, con `sync_data` antes de contestar. Al abrir se leen las dos y se reescribe
-//!   `sesiones.jsonl` sin las caducadas: los tokens sobreviven a un reinicio. Las claves, con Argon2id.
+//! - **Quién es quién**: la cuenta de bot abre `CLIENTE_BOT`; la humana, `CLIENTE_UNITY`; la humana con la marca `admin`, además `CLIENTE_ADMIN_WEB` con el rol de administrador
+//!   global. `Identidad::cliente_id` es el id de la cuenta (`u-N`): el núcleo lo usa como cuenta del héroe. Un bot nunca es administrador.
+//! - **Administradores**: la marca vive en la cuenta. Si al abrir no hay ninguna cuenta admin, se genera un código de un solo uso, solo en memoria ([`Acceso::codigo_admin`]): quien
+//!   se registra con él nace administrador y lo gasta. Después se da y se quita la marca con [`Acceso::fijar_admin`] (nunca se queda la partida sin administradores).
+//! - **Disco**: `cuentas.jsonl` y `sesiones.jsonl` en la carpeta del servicio, una línea por alta, por cambio de la marca admin o por login, con `sync_data` antes de contestar. Al abrir
+//!   se leen las dos (de una cuenta manda su última línea) y se reescribe `sesiones.jsonl` sin las caducadas: los tokens sobreviven a un reinicio. Las claves, con Argon2id.
 //!
 //! Lo que falta y no hace falta aún: membresías por partida (moderador y administrador de la partida), deshabilitar cuentas, cerrar sesión y los tokens de los servidores de batalla (fase 8).
 
@@ -72,8 +74,8 @@ pub struct Config {
     pub codigo_registro: Option<String>,
     /// Código que marca la cuenta como bot (`CODIGO_REGISTRO_BOTS`); `None`, no hay cuentas de bot.
     pub codigo_registro_bots: Option<String>,
-    /// Nicks de los administradores globales (`ADMINISTRADORES`).
-    pub administradores: Vec<String>,
+    /// Nombres de máquina desde los que una página puede llamar al servidor, además de esta máquina y de la IP del servidor (`BRONZEAGE_ORIGENES`).
+    pub origenes: Vec<String>,
     pub duracion_sesion_ms: i64,
     pub coste: Coste,
 }
@@ -83,7 +85,7 @@ impl Default for Config {
         Config {
             codigo_registro: None,
             codigo_registro_bots: None,
-            administradores: Vec::new(),
+            origenes: Vec::new(),
             duracion_sesion_ms: duracion_sesion_ms(),
             coste: Coste::PRODUCCION,
         }
@@ -98,6 +100,18 @@ pub enum ErrorRegistro {
     CodigoIncorrecto,
     /// El nick ya existe (409).
     NickRepetido,
+    /// No se pudo escribir en disco (500).
+    Disco,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ErrorAdmin {
+    /// No hay cuenta con ese nick (404).
+    NoExiste,
+    /// Un bot no puede ser administrador (400).
+    EsBot,
+    /// Quitar al último administrador dejaría la partida sin ninguno (409).
+    UltimoAdministrador,
     /// No se pudo escribir en disco (500).
     Disco,
 }
@@ -118,6 +132,9 @@ pub struct Cuenta {
     /// La clave en formato PHC de Argon2id.
     clave: String,
     pub bot: bool,
+    /// Administrador global (nunca un bot). Cambiarla añade la línea actualizada de la cuenta a `cuentas.jsonl`.
+    #[serde(default)]
+    pub admin: bool,
     pub creada_ms: i64,
 }
 
@@ -150,6 +167,8 @@ struct Estado {
     ficheros: Option<Ficheros>,
     /// El código de invitación vigente: el de `Config::codigo_registro` al abrir; lo cambia un administrador en caliente (no se guarda: un reinicio vuelve al de la configuración).
     codigo_registro: Option<String>,
+    /// El código de un solo uso que hace administrador a quien se registra con él: solo existe mientras no haya ninguna cuenta admin, y solo en memoria.
+    codigo_admin: Option<String>,
 }
 
 impl Estado {
@@ -159,6 +178,16 @@ impl Estado {
         }
         self.por_nick.insert(c.nick.clone(), c.id.clone());
         self.cuentas.insert(c.id.clone(), c);
+    }
+
+    fn administradores(&self) -> impl Iterator<Item = &Cuenta> {
+        self.cuentas.values().filter(|c| c.admin && !c.bot)
+    }
+
+    /// Sin ningún administrador hay código de un solo uso; con alguno, no.
+    fn preparar_codigo_admin(&mut self) {
+        let sin_admin = self.administradores().next().is_none();
+        self.codigo_admin = sin_admin.then(generar_codigo_admin);
     }
 }
 
@@ -199,6 +228,20 @@ fn validar(nick: &str, clave: &str) -> Result<(), ErrorRegistro> {
     Ok(())
 }
 
+/// Un código de administrador: 4 grupos de 4 caracteres de un alfabeto de 32 sin ambiguos (sin `I`, `O`, `0` ni `1`), 80 bits, separados por `-`.
+fn generar_codigo_admin() -> String {
+    const ALFABETO: &[u8; 32] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let mut bytes = [0u8; 16];
+    OsRng.fill_bytes(&mut bytes);
+    let grupos: Vec<String> = bytes.chunks(4).map(|g| g.iter().map(|b| ALFABETO[(b & 31) as usize] as char).collect()).collect();
+    grupos.join("-")
+}
+
+/// Igualdad de textos sin atajos de tiempo: recorre todos los bytes acumulando las diferencias (la longitud no es secreta).
+fn iguales(a: &str, b: &str) -> bool {
+    a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0, |dif, (x, y)| dif | (x ^ y)) == 0
+}
+
 fn leer_lineas<T: for<'de> Deserialize<'de>>(f: &Path) -> io::Result<Vec<T>> {
     let Ok(abierto) = File::open(f) else { return Ok(Vec::new()) };
     let mut fuera = Vec::new();
@@ -232,7 +275,8 @@ fn anadir<T: Serialize>(f: &mut File, v: &T) -> io::Result<()> {
 impl Acceso {
     /// Sin disco: lo que se registra se pierde al parar.
     pub fn en_memoria(config: Config) -> Self {
-        let estado = Estado { codigo_registro: config.codigo_registro.clone(), ..Estado::default() };
+        let mut estado = Estado { codigo_registro: config.codigo_registro.clone(), ..Estado::default() };
+        estado.preparar_codigo_admin();
         Self { interior: Arc::new(Interior { config, dir: None, estado: Mutex::new(estado) }) }
     }
 
@@ -246,6 +290,7 @@ impl Acceso {
         for c in leer_lineas::<Cuenta>(&fc)? {
             e.insertar(c);
         }
+        e.preparar_codigo_admin();
         let ahora = ahora_ms();
         for s in leer_lineas::<SesionGuardada>(&fs_)? {
             if s.expira_ms > ahora && e.cuentas.contains_key(&s.cuenta) {
@@ -304,10 +349,61 @@ impl Acceso {
         self.estado().codigo_registro = codigo.map(|c| c.trim().to_owned()).filter(|c| !c.is_empty());
     }
 
-    /// La cuenta de un token vigente si es de un administrador global (un nick de `ADMINISTRADORES` que no es bot).
+    /// La cuenta de un token vigente si es de un administrador global (con la marca `admin` y no bot).
     pub fn administrador(&self, token: &str, ahora: i64) -> Option<Cuenta> {
         let (c, _) = self.sesion(token, ahora)?;
-        (!c.bot && self.interior.config.administradores.iter().any(|a| normalizar(a) == c.nick)).then_some(c)
+        (c.admin && !c.bot).then_some(c)
+    }
+
+    /// Los nicks de los administradores globales, ordenados.
+    pub fn administradores(&self) -> Vec<String> {
+        let mut nicks: Vec<String> = self.estado().administradores().map(|c| c.nick.clone()).collect();
+        nicks.sort();
+        nicks
+    }
+
+    /// El código de administrador de un solo uso, si sigue vivo (solo mientras no haya ningún administrador). Registrarse con él da la marca y lo gasta.
+    pub fn codigo_admin(&self) -> Option<String> {
+        self.estado().codigo_admin.clone()
+    }
+
+    /// Da o quita la marca de administrador a la cuenta `nick`. Sin cambios (y sin escribir) si ya está así. Con administrador, el código de un solo uso deja de valer.
+    pub fn fijar_admin(&self, nick: &str, admin: bool) -> Result<Cuenta, ErrorAdmin> {
+        let mut e = self.estado();
+        let mut c = e.por_nick.get(&normalizar(nick)).and_then(|id| e.cuentas.get(id)).cloned().ok_or(ErrorAdmin::NoExiste)?;
+        if c.bot {
+            return Err(ErrorAdmin::EsBot);
+        }
+        if c.admin == admin {
+            return Ok(c);
+        }
+        if !admin && e.administradores().count() == 1 {
+            return Err(ErrorAdmin::UltimoAdministrador);
+        }
+        c.admin = admin;
+        if let Some(f) = e.ficheros.as_mut() {
+            anadir(&mut f.cuentas, &c).map_err(|_| ErrorAdmin::Disco)?;
+        }
+        e.insertar(c.clone());
+        if admin {
+            e.codigo_admin = None;
+        }
+        Ok(c)
+    }
+
+    /// Qué cuenta crea un alta con `codigo`: `(bot, admin)`. El código de bots manda; luego el de administrador (si sigue vivo); si no, hace falta el de invitación, si lo hay.
+    fn clase_del_alta(&self, e: &Estado, codigo: Option<&str>) -> Result<(bool, bool), ErrorRegistro> {
+        let coincide = |vigente: Option<&str>| matches!((vigente, codigo), (Some(v), Some(c)) if iguales(v, c));
+        if coincide(self.interior.config.codigo_registro_bots.as_deref()) {
+            return Ok((true, false));
+        }
+        if coincide(e.codigo_admin.as_deref()) {
+            return Ok((false, true));
+        }
+        if e.codigo_registro.is_some() && !coincide(e.codigo_registro.as_deref()) {
+            return Err(ErrorRegistro::CodigoIncorrecto);
+        }
+        Ok((false, false))
     }
 
     /// Copia los ficheros a `destino` (respaldo), con el servicio bloqueado mientras copia para que no quede una línea a medias. En memoria no copia nada.
@@ -327,13 +423,12 @@ impl Acceso {
     pub async fn registrar(&self, nick: &str, clave: &str, codigo: Option<&str>) -> Result<Cuenta, ErrorRegistro> {
         let nick = normalizar(nick);
         validar(&nick, clave)?;
-        let cfg = &self.interior.config;
-        let bot = cfg.codigo_registro_bots.as_deref().is_some_and(|c| Some(c) == codigo);
-        if !bot && self.codigo_registro().as_deref().is_some_and(|c| Some(c) != codigo) {
-            return Err(ErrorRegistro::CodigoIncorrecto);
-        }
-        if self.estado().por_nick.contains_key(&nick) {
-            return Err(ErrorRegistro::NickRepetido);
+        {
+            let e = self.estado();
+            self.clase_del_alta(&e, codigo)?;
+            if e.por_nick.contains_key(&nick) {
+                return Err(ErrorRegistro::NickRepetido);
+            }
         }
         let (argon, clave) = (self.argon(), clave.to_owned());
         let hash = tokio::task::spawn_blocking(move || {
@@ -344,14 +439,19 @@ impl Acceso {
         .map_err(|_| ErrorRegistro::Disco)?
         .map_err(|_| ErrorRegistro::Disco)?;
         let mut e = self.estado();
+        // Con el bloqueo tomado otra vez: si el código de administrador lo gastó otro alta mientras se hacía el hash, ya no vale.
+        let (bot, admin) = self.clase_del_alta(&e, codigo)?;
         if e.por_nick.contains_key(&nick) {
             return Err(ErrorRegistro::NickRepetido);
         }
-        let c = Cuenta { id: format!("u-{}", e.siguiente + 1), nick, clave: hash, bot, creada_ms: ahora_ms() };
+        let c = Cuenta { id: format!("u-{}", e.siguiente + 1), nick, clave: hash, bot, admin, creada_ms: ahora_ms() };
         if let Some(f) = e.ficheros.as_mut() {
             anadir(&mut f.cuentas, &c).map_err(|_| ErrorRegistro::Disco)?;
         }
         e.insertar(c.clone());
+        if admin {
+            e.codigo_admin = None;
+        }
         Ok(c)
     }
 
@@ -399,10 +499,9 @@ impl Acceso {
     /// Quién es el dueño de un token vigente en `ahora`: lo que el servidor necesita para abrir la sesión.
     pub fn identidad(&self, token: &str, ahora: i64) -> Result<Identidad, ErrorAcceso> {
         let (c, _) = self.sesion(token, ahora).ok_or(ErrorAcceso::Invalido)?;
-        let admin = self.administrador(token, ahora).is_some();
         let (roles, rol) = if c.bot {
             (vec![TipoCliente::ClienteBot], RolTecnico::Jugador)
-        } else if admin {
+        } else if c.admin {
             (vec![TipoCliente::ClienteUnity, TipoCliente::ClienteAdminWeb], RolTecnico::AdministradorGlobal)
         } else {
             (vec![TipoCliente::ClienteUnity], RolTecnico::Jugador)
@@ -444,7 +543,7 @@ impl Acceso {
                     return error(400, "datos_invalidos", "faltan nick o clave");
                 };
                 match self.registrar(nick, clave, texto(&v, "codigo")).await {
-                    Ok(c) => RespuestaHttp::json(201, json!({ "cuenta_id": c.id, "nick": c.nick, "bot": c.bot }).to_string()),
+                    Ok(c) => RespuestaHttp::json(201, json!({ "cuenta_id": c.id, "nick": c.nick, "bot": c.bot, "admin": c.admin }).to_string()),
                     Err(ErrorRegistro::Invalido(m)) => error(400, "datos_invalidos", m),
                     Err(ErrorRegistro::CodigoIncorrecto) => error(403, "codigo_incorrecto", "el código de registro no coincide"),
                     Err(ErrorRegistro::NickRepetido) => error(409, "nick_repetido", "ese nick ya existe"),
@@ -459,14 +558,14 @@ impl Acceso {
                 match self.entrar(nick, clave).await {
                     Ok(s) => RespuestaHttp::json(
                         200,
-                        json!({ "token": s.token, "cuenta_id": s.cuenta.id, "nick": s.cuenta.nick, "bot": s.cuenta.bot, "expira_ms": s.expira_ms }).to_string(),
+                        json!({ "token": s.token, "cuenta_id": s.cuenta.id, "nick": s.cuenta.nick, "bot": s.cuenta.bot, "admin": s.cuenta.admin, "expira_ms": s.expira_ms }).to_string(),
                     ),
                     Err(ErrorLogin::Credenciales) => error(401, "credenciales_invalidas", "nick o clave incorrectos"),
                     Err(ErrorLogin::Disco) => error(500, "interno", "no se pudo guardar la sesión"),
                 }
             }
             ("GET", "/v1/sesiones/actual") => match token_de(&p).and_then(|t| self.sesion(t, ahora_ms())) {
-                Some((c, expira_ms)) => RespuestaHttp::json(200, json!({ "cuenta_id": c.id, "nick": c.nick, "bot": c.bot, "expira_ms": expira_ms }).to_string()),
+                Some((c, expira_ms)) => RespuestaHttp::json(200, json!({ "cuenta_id": c.id, "nick": c.nick, "bot": c.bot, "admin": c.admin, "expira_ms": expira_ms }).to_string()),
                 None => error(401, "token_invalido", "sin sesión o caducada"),
             },
             (_, "/v1/registro" | "/v1/sesiones" | "/v1/sesiones/actual") => error(405, "metodo_no_permitido", "método no permitido"),

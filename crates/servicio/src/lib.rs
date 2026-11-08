@@ -149,6 +149,8 @@ pub struct Informe {
     pub ahora: i64,
     pub recuperado: bool,
     pub cuentas: usize,
+    /// El código de administrador de un solo uso, si no hay ninguna cuenta admin (ver [`Acceso::codigo_admin`]).
+    pub codigo_admin: Option<String>,
 }
 
 /// El fichero de la carpeta de datos con el id de la partida (el `gameId` del contrato de batalla).
@@ -191,8 +193,9 @@ pub async fn arrancar(
     let mut n = tokio::task::block_in_place(|| Nucleo::con_persistencia(arranque, &dir_mundo, persistencia::Config::default()))?;
     let id_partida = id_de_partida(datos, n.recuperado(), &n.id_de_partida())?;
     n.fijar_id_de_partida(id_partida.clone());
+    let origenes = acceso.origenes.clone();
     let acceso = Acceso::abrir(&datos.join("acceso"), acceso)?;
-    let informe = Informe { mundo_hash: n.mundo_hash().into(), version: n.version(), ahora: n.ahora(), recuperado: n.recuperado(), cuentas: acceso.cuentas() };
+    let informe = Informe { mundo_hash: n.mundo_hash().into(), version: n.version(), ahora: n.ahora(), recuperado: n.recuperado(), cuentas: acceso.cuentas(), codigo_admin: acceso.codigo_admin() };
     let reloj = RelojCompartido::nuevo(n.ahora());
     let (tx, rx) = mpsc::channel(1024);
     let nombres = servidor::NombresHeroes::default();
@@ -207,6 +210,7 @@ pub async fn arrancar(
         datos_de_juego: Some((datos_de_juego.version.clone(), format!("{RUTA_DATOS}/{}", datos_de_juego.version))),
         nombres,
         red,
+        origenes,
         ..Config::default()
     };
     let admin = admin::Admin { acceso: acceso.clone(), nucleo: tx.clone(), carpeta: datos.to_owned(), mundo_hash: informe.mundo_hash.clone(), semilla, id_partida };

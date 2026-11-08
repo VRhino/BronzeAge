@@ -247,9 +247,10 @@ async fn sesion<A: Autenticador>(ctx: Arc<Ctx<A>>, tcp: TcpStream) {
     let cfg = WebSocketConfig::default()
         .max_message_size(Some(ctx.config.max_trama_cliente))
         .max_frame_size(Some(ctx.config.max_trama_cliente));
-    let flujo = match timeout(ctx.config.timeout_hola, http::leer_inicio(tcp)).await {
+    let flujo = match timeout(ctx.config.timeout_hola, http::leer_inicio(tcp, &ctx.config.origenes)).await {
         Ok(Inicio::WebSocket(f)) => f,
         Ok(Inicio::Http(tcp, p)) => return http::contestar(tcp, p, ctx.http.as_ref()).await,
+        Ok(Inicio::Rechazada(tcp)) => return http::rechazar(tcp).await,
         Ok(Inicio::Nada) | Err(_) => return,
     };
     let Ok(Ok(ws)) = timeout(ctx.config.timeout_hola, accept_async_with_config(flujo, Some(cfg))).await else {

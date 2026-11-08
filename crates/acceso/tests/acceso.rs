@@ -2,7 +2,7 @@
 
 use std::net::SocketAddr;
 
-use acceso::{Acceso, Config, Coste, ErrorLogin, ErrorRegistro};
+use acceso::{ahora_ms, Acceso, Config, Coste, ErrorAdmin, ErrorLogin, ErrorRegistro};
 use contrato::v1::{mensaje_de_cliente as mc, mensaje_de_servidor as ms, TipoCliente};
 use serde_json::{json, Value};
 use servidor::{
@@ -16,7 +16,6 @@ fn config() -> Config {
     Config {
         codigo_registro: Some("humanos".into()),
         codigo_registro_bots: Some("bots".into()),
-        administradores: vec!["Víctor".into()],
         coste: Coste::PRUEBAS,
         ..Config::default()
     }
@@ -44,7 +43,6 @@ async fn http(dir: SocketAddr, metodo: &str, ruta: &str, cabeceras: &[(&str, &st
     tcp.read_to_string(&mut r).await.unwrap();
     let (cabecera, cuerpo) = r.split_once("\r\n\r\n").expect("respuesta con cabecera");
     let estado = cabecera.split(' ').nth(1).unwrap().parse().unwrap();
-    assert!(cabecera.contains("Access-Control-Allow-Origin: *"), "{cabecera}");
     (estado, cuerpo.to_owned())
 }
 
@@ -76,7 +74,9 @@ async fn abrir(dir: SocketAddr, token: &str, tipo: TipoCliente) -> Result<(), St
 
 #[tokio::test]
 async fn alta_login_y_sesion_por_el_mismo_puerto() {
-    let (srv, _n) = arrancar(Acceso::en_memoria(config())).await;
+    let acceso = Acceso::en_memoria(config());
+    let codigo_admin = acceso.codigo_admin().expect("sin administradores hay código");
+    let (srv, _n) = arrancar(acceso).await;
     let dir = srv.direccion;
     assert_eq!(http(dir, "GET", "/salud", &[], "").await, (200, "ok".into()));
     assert_eq!(http(dir, "OPTIONS", "/v1/registro", &[], "").await.0, 204);
@@ -91,12 +91,12 @@ async fn alta_login_y_sesion_por_el_mismo_puerto() {
     assert_eq!(abrir(dir, token, TipoCliente::ClienteUnity).await, Err("rol_no_permitido".into()));
     assert_eq!(abrir(dir, "no-es-un-token", TipoCliente::ClienteBot).await, Err("token_invalido".into()));
 
-    // Un humano con el código de invitación, y el administrador global (por nick).
+    // Un humano con el código de invitación, y el administrador global (con el código de un solo uso).
     let h = registrar_y_entrar(dir, "ana", "humanos").await;
     assert_eq!(h["bot"], json!(false));
     abrir(dir, h["token"].as_str().unwrap(), TipoCliente::ClienteUnity).await.unwrap();
     assert_eq!(abrir(dir, h["token"].as_str().unwrap(), TipoCliente::ClienteBot).await, Err("rol_no_permitido".into()));
-    let a = registrar_y_entrar(dir, "VÍCTOR", "humanos").await;
+    let a = registrar_y_entrar(dir, "VÍCTOR", &codigo_admin).await;
     abrir(dir, a["token"].as_str().unwrap(), TipoCliente::ClienteAdminWeb).await.unwrap();
 
     // La sesión actual por cabecera.
@@ -182,4 +182,61 @@ async fn cuentas_y_tokens_sobreviven_a_un_reinicio() {
     assert_eq!(a.registrar("eva", "una clave larga", Some("humanos")).await.unwrap().id, "u-4");
     drop(a);
     assert_eq!(Acceso::abrir(dir.path(), config()).unwrap().cuentas(), 4, "la línea nueva no se pegó a la cortada");
+}
+
+#[tokio::test]
+async fn el_codigo_de_administrador_hace_admin_una_sola_vez() {
+    let a = Acceso::en_memoria(config());
+    let codigo = a.codigo_admin().unwrap();
+    assert_eq!(codigo.len(), 19, "{codigo}");
+    // El de bots manda: un bot nunca es administrador y no gasta el código.
+    assert!(!a.registrar("bot-1", "una clave larga", Some("bots")).await.unwrap().admin);
+    assert_eq!(a.codigo_admin(), Some(codigo.clone()));
+    // Dos altas a la vez con el código: solo una es administradora; la otra no cumple el código de invitación.
+    let (x, y) = tokio::join!(a.registrar("ana", "una clave larga", Some(&codigo)), a.registrar("luis", "una clave larga", Some(&codigo)));
+    assert_eq!([&x, &y].iter().filter(|r| r.as_ref().is_ok_and(|c| c.admin)).count(), 1, "{x:?} {y:?}");
+    assert!([&x, &y].iter().any(|r| matches!(r, Err(ErrorRegistro::CodigoIncorrecto))), "{x:?} {y:?}");
+    assert_eq!(a.codigo_admin(), None);
+    assert_eq!(a.registrar("eva", "una clave larga", Some(&codigo)).await.unwrap_err(), ErrorRegistro::CodigoIncorrecto);
+    assert!(!a.registrar("eva", "una clave larga", Some("humanos")).await.unwrap().admin);
+    let admin = a.administradores();
+    assert_eq!(admin.len(), 1);
+    let token = a.entrar(&admin[0], "una clave larga").await.unwrap().token;
+    assert!(a.administrador(&token, ahora_ms()).is_some());
+}
+
+#[tokio::test]
+async fn la_marca_de_administrador_se_da_se_quita_y_sobrevive_a_un_reinicio() {
+    let dir = tempfile::tempdir().unwrap();
+    let a = Acceso::abrir(dir.path(), config()).unwrap();
+    let codigo = a.codigo_admin().unwrap();
+    a.registrar("ana", "una clave larga", Some(&codigo)).await.unwrap();
+    a.registrar("luis", "una clave larga", Some("humanos")).await.unwrap();
+    a.registrar("bot-1", "una clave larga", Some("bots")).await.unwrap();
+    assert_eq!(a.fijar_admin("nadie", true).unwrap_err(), ErrorAdmin::NoExiste);
+    assert_eq!(a.fijar_admin("bot-1", true).unwrap_err(), ErrorAdmin::EsBot);
+    assert_eq!(a.fijar_admin("ANA", false).unwrap_err(), ErrorAdmin::UltimoAdministrador);
+    assert!(a.fijar_admin("ana", true).unwrap().admin);
+    let lineas = || std::fs::read_to_string(dir.path().join("cuentas.jsonl")).unwrap().lines().count();
+    assert_eq!(lineas(), 3, "sin cambios no se escribe");
+    assert!(a.fijar_admin(" Luis ", true).unwrap().admin);
+    assert!(!a.fijar_admin("ana", false).unwrap().admin);
+    assert_eq!((lineas(), a.administradores(), a.cuentas()), (5, vec!["luis".to_owned()], 3));
+    drop(a);
+
+    // Con un administrador, el reinicio no genera código; la última línea de cada cuenta manda y la numeración sigue.
+    let a = Acceso::abrir(dir.path(), config()).unwrap();
+    assert_eq!((a.codigo_admin(), a.administradores(), a.cuentas()), (None, vec!["luis".to_owned()], 3));
+    assert_eq!(a.registrar("eva", "una clave larga", Some("humanos")).await.unwrap().id, "u-4");
+    let token = a.entrar("luis", "una clave larga").await.unwrap().token;
+    assert_eq!(a.identidad(&token, ahora_ms()).unwrap().rol, RolTecnico::AdministradorGlobal);
+    let token = a.entrar("ana", "una clave larga").await.unwrap().token;
+    assert_eq!(a.identidad(&token, ahora_ms()).unwrap().rol, RolTecnico::Jugador);
+
+    // Una carpeta sin ningún administrador genera otro código.
+    let vacia = tempfile::tempdir().unwrap();
+    let b = Acceso::abrir(vacia.path(), config()).unwrap();
+    b.registrar("ana", "una clave larga", Some("humanos")).await.unwrap();
+    drop(b);
+    assert!(Acceso::abrir(vacia.path(), config()).unwrap().codigo_admin().is_some());
 }

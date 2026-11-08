@@ -187,6 +187,8 @@ pub struct Config {
     pub nombres: crate::NombresHeroes,
     /// Los contadores de red de todas las sesiones: se le pasan al actor del núcleo para su medida de carga.
     pub red: Arc<MetricasRed>,
+    /// Los nombres de máquina desde los que una página puede llamar, además de esta máquina y de la IP del servidor (`BRONZEAGE_ORIGENES`; ver [`crate::http::origen_permitido`]).
+    pub origenes: Vec<String>,
 }
 
 impl Default for Config {
@@ -204,6 +206,7 @@ impl Default for Config {
             relieve: None,
             nombres: crate::NombresHeroes::default(),
             red: Arc::default(),
+            origenes: Vec::new(),
         }
     }
 }

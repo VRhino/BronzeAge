@@ -72,7 +72,7 @@ Conviene guardar la revisión usada en el propio repositorio del cliente (en el 
 El proceso del servidor es `bronzeage-servidor` (`crates/servicio`): carga el artefacto de mundo, abre el núcleo persistente y sirve **en un solo puerto** el WebSocket del contrato 05 y el HTTP del servicio de acceso. Se arranca desde la raíz del repositorio:
 
 ```sh
-CODIGO_REGISTRO_BOTS=<código de bots> ADMINISTRADORES=victor cargo run --release -p servicio
+CODIGO_REGISTRO_BOTS=<código de bots> cargo run --release -p servicio
 ```
 
 | Variable | Qué | Por defecto |
@@ -83,20 +83,22 @@ CODIGO_REGISTRO_BOTS=<código de bots> ADMINISTRADORES=victor cargo run --releas
 | `BRONZEAGE_SEMILLA` | la semilla de la partida (solo cuenta al crearla) | `42` |
 | `CODIGO_REGISTRO` | código de invitación de las cuentas humanas; sin él, registro abierto | — |
 | `CODIGO_REGISTRO_BOTS` | código que marca la cuenta como bot; sin él, no se pueden crear bots | — |
-| `ADMINISTRADORES` | nicks de los administradores globales, separados por comas | — |
+| `BRONZEAGE_ORIGENES` | nombres de máquina, separados por comas, desde los que una página web puede llamar al servidor, además de esta máquina y de la IP con la que se llega al servidor (desde el 2026-11-08) | — |
 
 El artefacto de mundo no está en git (`generador/salida/` se ignora): en un checkout nuevo se genera una vez con `node scripts/generar-mundo.mjs [semilla]` o con la tarea «generar-mundo» del panel (unos dos minutos con 4 hilos; instala las dependencias del generador si faltan). Escribe el artefacto y, al lado, su paquete de relieve (`relieve-<hash>.bin`, 06 §8). Sin él, el servidor no arranca y lo dice, y el panel deja apagado su botón.
 
 Un reinicio con la misma carpeta y el mismo artefacto sigue la partida donde se quedó, y los tokens vigentes siguen valiendo. Ctrl+C para el proceso con su foto. Sin servidores de batalla: toda batalla se resuelve con números.
 
-**Entrar, paso a paso** (el CORS está abierto, así que el admin web puede llamar desde el navegador):
+**Quién puede llamar desde un navegador** (desde el 2026-11-08; antes el CORS era `*`): si la petición HTTP o el handshake del WebSocket trae `Origin`, solo vale si es de esta máquina (`localhost`, `127.0.0.1`, `[::1]`, cualquier puerto), de la misma IP con la que se llega al servidor o de un nombre de `BRONZEAGE_ORIGENES`; si no, `403 origen_no_permitido` sin cabeceras CORS, y el WebSocket no se abre. El CORS devuelve el origen permitido que pidió (con `Vary: Origin`), no `*`. Un dominio que no esté en la lista no vale aunque coincida con `Host` (contra el DNS rebinding). Sin `Origin` (bots, Unity, `curl`) no se mira nada.
 
-1. `POST /v1/registro` con `{"nick", "clave", "codigo"}`. Respuesta `201 {"cuenta_id", "nick", "bot"}`. El nick se recorta y pasa a minúsculas. Con el código de bots, la cuenta es de bot. Errores (cuerpo `{"error", "mensaje"}`): `400 datos_invalidos`, `403 codigo_incorrecto`, `409 nick_repetido`.
-2. `POST /v1/sesiones` con `{"nick", "clave"}`. Respuesta `200 {"token", "cuenta_id", "nick", "bot", "expira_ms"}`, con `expira_ms` en ms de época (12 h, `ACCESO.duracionSesionMs`). Cada login da un token nuevo; `401 credenciales_invalidas` si no coincide.
-3. El WebSocket en `ws://<dirección>/` con `Hola.token = <token>` y el `Hola.cliente` que toque: una cuenta de bot solo abre `CLIENTE_BOT`, una humana `CLIENTE_UNITY` y un administrador también `CLIENTE_ADMIN_WEB`. Otro tipo da `ErrorSesion{rol_no_permitido}`; un token caducado o ajeno, `token_invalido`.
+**Entrar, paso a paso:**
+
+1. `POST /v1/registro` con `{"nick", "clave", "codigo"}`. Respuesta `201 {"cuenta_id", "nick", "bot", "admin"}`. El nick se recorta y pasa a minúsculas. Con el código de bots, la cuenta es de bot. **Cómo nace la primera cuenta de administrador**: si al arrancar el servidor no hay ninguna cuenta administradora, imprime en su consola (y por tanto en el log del panel) un código de un solo uso; quien se registra con él en `codigo` nace administrador (`admin: true`) y lo gasta. Ese código solo existe en memoria y mientras no haya administrador; un bot nunca lo es. Con administrador ya hecho, los demás se dan y quitan con las rutas de abajo. Errores (cuerpo `{"error", "mensaje"}`): `400 datos_invalidos`, `403 codigo_incorrecto`, `409 nick_repetido`.
+2. `POST /v1/sesiones` con `{"nick", "clave"}`. Respuesta `200 {"token", "cuenta_id", "nick", "bot", "admin", "expira_ms"}`, con `expira_ms` en ms de época (12 h, `ACCESO.duracionSesionMs`). Cada login da un token nuevo; `401 credenciales_invalidas` si no coincide.
+3. El WebSocket en `ws://<dirección>/` con `Hola.token = <token>` y el `Hola.cliente` que toque: una cuenta de bot solo abre `CLIENTE_BOT`, una humana `CLIENTE_UNITY` y una cuenta con `admin` también `CLIENTE_ADMIN_WEB`. Otro tipo da `ErrorSesion{rol_no_permitido}`; un token caducado o ajeno, `token_invalido`.
 4. El mapa: `Bienvenida.mundo.url_artefacto` es `/v1/mundo/<hash>`, una ruta relativa al servidor. `GET` en esa ruta devuelve el artefacto de mundo tal cual (`application/octet-stream`, contrato 06); con `Hola.mundo_hash_conocido` igual al vigente no hace falta bajarlo otra vez. Los clientes 3D bajan además el relieve fino: `Bienvenida.mundo.url_relieve` es `/v1/mundo/<hash>/relieve` y `hash_relieve`, su hash (`PaqueteRelieve`, 06 §8, unos 9 MB). Se baja una vez por mundo y se guarda por hash: si el que hay en disco tiene ese `hash_relieve`, no se baja otra vez. Si el servidor no tiene el paquete, las dos van vacías. Los bots y el admin web no lo necesitan.
 5. Las cifras de las reglas: `Bienvenida.mundo.url_datos_de_juego` es `/v1/datos/<versión>` (la versión, en `version_datos_de_juego`, es el SHA-256 del archivo; `GET /v1/datos` da el vigente). Es un JSON con `documentos` (cada bloque `<!-- parametros:NOMBRE -->` de `Docs/Mechanics`, ya parseado, por documento y nombre: `documentos.Fundacion_Y_Refundacion.FUNDACION`, por ejemplo), `reglas` (lo que no sale de un bloque: el territorio en milésimas de unidad, el aviso de víveres, la idempotencia y si las batallas van a Unity), `derivados` (lo que el núcleo calcula de varios bloques: `costo_caravana_fundacion` y `costo_refundacion`, por recurso en milésimas) y `huella_reglas`. Son las mismas cifras con las que juega el núcleo: un cliente no las copia a mano. Dónde está lo que más se usa, en la tabla de abajo.
-6. Opcional: `GET /v1/sesiones/actual` con `Authorization: sesion <token>` dice de quién es y cuándo caduca. `GET /salud` responde `ok`.
+6. Opcional: `GET /v1/sesiones/actual` con `Authorization: sesion <token>` dice de quién es (con `admin`) y cuándo caduca. `GET /salud` responde `ok`.
 
 **Dónde está cada cifra en `/v1/datos`** (dentro de `documentos` las cifras van como en el bloque, en unidades del juego; en `reglas` y `derivados`, en milésimas):
 
@@ -127,7 +129,7 @@ Detalle y diferencias con el TypeScript: `Docs/Mechanics/Proyecciones_Y_Autoriza
 
 Dos sitios, porque parar y arrancar el proceso no lo puede hacer el propio proceso:
 
-**El servidor** (`crates/servicio/src/admin.rs`), en su mismo puerto y solo con `Authorization: sesion <token>` de una cuenta de `ADMINISTRADORES` (sin token o caducado, `401 token_invalido`; de otra cuenta, `403 no_autorizado`):
+**El servidor** (`crates/servicio/src/admin.rs`), en su mismo puerto y solo con `Authorization: sesion <token>` de una cuenta con la marca `admin` (sin token o caducado, `401 token_invalido`; de otra cuenta, `403 no_autorizado`):
 
 | Ruta | Qué |
 |---|---|
@@ -139,17 +141,18 @@ Dos sitios, porque parar y arrancar el proceso no lo puede hacer el propio proce
 | `GET /v1/admin/misiones/catalogo` | el catálogo **vigente** de las misiones recurrentes `{ asentamiento: [...], faccion: [...] }`, en el JSON que acepta la orden de administración `fijar_catalogo_misiones` (la fija, `participacion` o `xp`, y la lista `recompensas`, con las cantidades en unidades; Misiones_Recurrentes §6) |
 | `GET /v1/admin/carga` | la medida de carga del motor: `{ activo, detalle, cada_s, ultima }`, con la última ventana de 10 s (`null` si aún no hay); formato en `Docs/Arquitectura/Medida_De_Carga.md` (desde el 2026-11-05) |
 | `POST /v1/admin/carga` | cuerpo `{ activo?, detalle? }` (booleanos); enciende o apaga en caliente lo básico y el detalle; contesta como el `GET` |
+| `GET /v1/admin/administradores` | `{ administradores: [nick, ...] }`, ordenados (desde el 2026-11-08) |
+| `PUT /v1/admin/administradores` | cuerpo `{ nick, admin }`; da (`true`) o quita (`false`) la marca de administrador a la cuenta; `200 { nick, admin }`. `404 no_encontrado`, `400 es_bot`, `409 ultimo_administrador` (nunca se queda la partida sin administradores). Lo mismo, por la entrada estándar del proceso: `admin dar <nick>` y `admin quitar <nick>` |
 
 El núcleo atiende el respaldo entre dos órdenes y no hace nada más mientras copia, así que la copia es coherente. El histórico de batallas retiradas está en `<datos>/mundo/batallas.jsonl` (un JSON por línea, Batalla_Unity_Ciclo §3.3), así que va en el respaldo.
 
-**El panel de arranque** (`scripts/panel.mjs`, puerto 3999), que pasa su dirección al admin como `PANEL_URL` (como `BOTS_URL`). Lanza dos procesos de bots con el mismo ejecutable: los libres (`bronzeage-bots`, puerto 4000, control en `BOTS_URL`) y los mercenarios (`bronzeage-bots-mercenarios`, `BOTS_POBLACION=mercenarios`, puerto 4001, control en `MERCS_URL`; desde el 2026-11-02). A los dos les pasa `BOTS_REGISTROS` con la ruta absoluta de `partidas/` (desde el 2026-11-03): los bots guardan sus registros dentro de cada partida (`partidas/<nombre>/bots.json` y `mercs.json`), así que borrar una partida borra también sus bots, y `servicio-bots.json` y `servicio-mercs.json` quedan en `partidas/`. CORS abierto, cuerpos JSON. Desde el 2026-10-27 las partidas y el mundo se gestionan en la pestaña «Mundo y partidas» del propio panel (la otra pestaña, «Servicios», es la vista de procesos de siempre), porque funcionan con el servidor apagado; el admin ya no las lleva. Una partida es una carpeta de datos del servidor en `partidas/<nombre>/` (ignorada por git) con su `partida.json` (`semilla`, `mundo`, el artefacto con el que se creó, y `administradores`, los nicks que el panel pasa al servidor como `ADMINISTRADORES`; si falta, el de `.claude/launch.json`); la carpeta `datos/` de antes cuenta como la partida `datos`. El servidor del panel arranca siempre con la partida actual.
+**El panel de arranque** (`scripts/panel.mjs`, puerto 3999), que pasa su dirección al admin como `PANEL_URL` (como `BOTS_URL`). Lanza dos procesos de bots con el mismo ejecutable: los libres (`bronzeage-bots`, puerto 4000, control en `BOTS_URL`) y los mercenarios (`bronzeage-bots-mercenarios`, `BOTS_POBLACION=mercenarios`, puerto 4001, control en `MERCS_URL`; desde el 2026-11-02). A los dos les pasa `BOTS_REGISTROS` con la ruta absoluta de `partidas/` (desde el 2026-11-03): los bots guardan sus registros dentro de cada partida (`partidas/<nombre>/bots.json` y `mercs.json`), así que borrar una partida borra también sus bots, y `servicio-bots.json` y `servicio-mercs.json` quedan en `partidas/`. Cuerpos JSON. Desde el 2026-11-08 solo atiende si `Host` es de esta máquina (`localhost`, `127.0.0.1`, `[::1]`) y, si viene `Origin`, si también lo es; si no, `403`. El CORS devuelve ese origen, no `*`. Desde el 2026-10-27 las partidas y el mundo se gestionan en la pestaña «Mundo y partidas» del propio panel (la otra pestaña, «Servicios», es la vista de procesos de siempre), porque funcionan con el servidor apagado; el admin ya no las lleva. Una partida es una carpeta de datos del servidor en `partidas/<nombre>/` (ignorada por git) con su `partida.json` (`semilla`, `mundo`, y el artefacto con el que se creó; los administradores ya no se guardan aquí: viven en las cuentas de la partida, en `acceso/cuentas.jsonl`); la carpeta `datos/` de antes cuenta como la partida `datos`. El servidor del panel arranca siempre con la partida actual.
 
 | Ruta | Qué |
 |---|---|
 | `GET /api/partidas` | `{ actual, servidor: { lanzado, escucha }, partidas: [{ nombre, carpeta, semilla, mundo, creada_ms, respaldos, actual, en_marcha }], artefactos: [{ archivo, hash, creado_ms }] }`. `actual: null` es «sin partida activa»: el servidor no arranca hasta crear o activar una |
-| `POST /api/partidas` | `{ nombre, semilla?, mundo?, administradores?, activar? }` (`administradores`: lista o texto «a, b»; por defecto el de `launch.json`): crea la partida con el artefacto dado (archivo o hash; por defecto el más nuevo) y, salvo `activar: false`, para el servidor y lo arranca con ella. `201`; `409 partida_repetida` o `sin_mundo` |
+| `POST /api/partidas` | `{ nombre, semilla?, mundo?, activar? }`: crea la partida con el artefacto dado (archivo o hash; por defecto el más nuevo) y, salvo `activar: false`, para el servidor y lo arranca con ella. `201`; `409 partida_repetida` o `sin_mundo` |
 | `GET /api/partidas/<nombre>` | la partida y su `lista_respaldos` |
-| `POST /api/partidas/<nombre>/administradores` | `{ administradores }`: cambia los nicks que pueden abrir el admin web; si el servidor sirve esa partida, lo reinicia para aplicarlo |
 | `POST /api/partidas/<nombre>/activar` | cambiar de partida: para el servidor (con su foto) y lo arranca con esa |
 | `POST /api/partidas/<nombre>/apagar` | solo la activa: para el servidor (con su foto) y deja el panel **sin partida activa**; la partida se queda guardada. `{ apagada, estaba_en_marcha, actual: null }`; `409 no_es_la_activa` |
 | `DELETE /api/partidas/<nombre>` | la borra entera. La activa pide el cuerpo `{ "confirmar": true }` (si no, `409 partida_activa`): para el servidor, la borra y deja el panel sin partida activa |

@@ -143,7 +143,7 @@ Todo lo que se ha ido dejando «para la fase 7» (bots en Rust y admin web, `Con
 | `src/server/auditoria.ts` | Quién pidió qué, desde qué sesión y con qué resultado, también los rechazos (la señal de moderación), en `<partida>.auditoria.jsonl` con poda por edad; `GET /admin/partidas/:gameId/auditoria` con filtros y el recuento por comando de `GET /admin/metricas` | Un registro por orden (cuenta, héroe, tipo de cliente, código de orden, resultado o código de rechazo, coste en µs) junto a la crónica; servido con filtros |
 | `src/server/informeDeCarga.ts` (+ `scripts/informe-carga.ts`) | Informe puro de una prueba de carga: agrega muestras y auditoría, compara bytes/min por cliente con el sondeo y dice qué mejora de rendimiento pide cada umbral (`UMBRALES`) | `GET /v1/telemetria/informe` (o el cálculo en el admin web a partir de las muestras) |
 
-Todo, solo para cuentas de administrador (`Authorization: sesion <token>` de un nick de `ADMINISTRADORES`), y fuera del camino caliente del núcleo (bots y cargas de 500 jugadores, ver «Rendimiento con 500 bots» arriba). Las rutas y formatos son una propuesta, sin decidir: se cierran con el frente admin web cuando el autor dé la orden.
+Todo, solo para cuentas de administrador (`Authorization: sesion <token>` de una cuenta con la marca `admin`), y fuera del camino caliente del núcleo (bots y cargas de 500 jugadores, ver «Rendimiento con 500 bots» arriba). Las rutas y formatos son una propuesta, sin decidir: se cierran con el frente admin web cuando el autor dé la orden.
 
 ## 63. El mundo en 3D: generador, reglas y lo que queda (2026-10-31)
 

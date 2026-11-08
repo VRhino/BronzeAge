@@ -8,25 +8,42 @@
 //! | `BRONZEAGE_SEMILLA` | la semilla de la partida (solo cuenta la primera vez) | `42` |
 //! | `CODIGO_REGISTRO` | código de invitación de las cuentas humanas; sin él, registro abierto | — |
 //! | `CODIGO_REGISTRO_BOTS` | código que marca la cuenta como bot; sin él, no hay bots | — |
-//! | `ADMINISTRADORES` | nicks de los administradores globales, separados por comas | — |
+//! | `BRONZEAGE_ORIGENES` | nombres de máquina, separados por comas, desde los que una página puede llamar al servidor (además de esta máquina y de la IP del servidor) | — |
 //!
-//! Ctrl+C, o la línea `parar` por la entrada estándar (la usa el panel de arranque, `scripts/panel.mjs`, porque en Windows no puede mandar Ctrl+C a un
-//! proceso hijo), para el proceso: cierra las sesiones y apaga el núcleo con su foto.
+//! Sin ninguna cuenta administradora, al arrancar se imprime un código de administrador de un solo uso: quien se registra con él lo es. Ctrl+C, o la línea `parar` por la entrada
+//! estándar (la usa el panel de arranque, `scripts/panel.mjs`, porque en Windows no puede mandar Ctrl+C a un proceso hijo), para el proceso: cierra las sesiones y apaga el núcleo
+//! con su foto. Por la misma entrada, `admin dar <nick>` y `admin quitar <nick>` dan y quitan la marca de administrador.
 
 use std::{env, net::SocketAddr, path::PathBuf, process::ExitCode};
 
+use acceso::ErrorAdmin;
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 fn var(nombre: &str) -> Option<String> {
     env::var(nombre).ok().filter(|v| !v.trim().is_empty())
 }
 
-/// Espera la línea `parar` en la entrada estándar. Si la entrada se cierra (un proceso sin consola), espera para siempre: solo para Ctrl+C.
-async fn parar_por_la_entrada() {
+/// Atiende la entrada estándar: `admin dar|quitar <nick>` contesta una línea y vuelve a esperar; `parar` vuelve. Si la entrada se cierra (un proceso sin consola), espera para
+/// siempre: solo para Ctrl+C.
+async fn parar_por_la_entrada(acceso: &acceso::Acceso) {
     let mut lineas = BufReader::new(tokio::io::stdin()).lines();
     while let Ok(Some(l)) = lineas.next_line().await {
-        if l.trim() == "parar" {
-            return;
+        let palabras: Vec<&str> = l.split_whitespace().collect();
+        match palabras[..] {
+            ["parar"] => return,
+            ["admin", orden @ ("dar" | "quitar"), nick] => match acceso.fijar_admin(nick, orden == "dar") {
+                Ok(c) => println!("{} {} administrador", c.nick, if c.admin { "es" } else { "ya no es" }),
+                Err(e) => {
+                    let motivo = match e {
+                        ErrorAdmin::NoExiste => "no existe esa cuenta",
+                        ErrorAdmin::EsBot => "es una cuenta de bot",
+                        ErrorAdmin::UltimoAdministrador => "es el último administrador",
+                        ErrorAdmin::Disco => "no se pudo guardar",
+                    };
+                    println!("admin {orden} {nick}: {motivo}");
+                }
+            },
+            _ => {}
         }
     }
     std::future::pending::<()>().await
@@ -52,7 +69,7 @@ async fn correr() -> Result<(), String> {
     let config = acceso::Config {
         codigo_registro: var("CODIGO_REGISTRO"),
         codigo_registro_bots: var("CODIGO_REGISTRO_BOTS"),
-        administradores: var("ADMINISTRADORES").map(|v| v.split(',').map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()).collect()).unwrap_or_default(),
+        origenes: var("BRONZEAGE_ORIGENES").map(|v| v.split(',').map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()).collect()).unwrap_or_default(),
         ..acceso::Config::default()
     };
     let fichero = servicio::buscar_mundo(&mundo).map_err(|e| {
@@ -91,11 +108,14 @@ async fn correr() -> Result<(), String> {
         i.cuentas,
         if config.codigo_registro.is_some() { "con código" } else { "abierto" },
         if config.codigo_registro_bots.is_some() { "permitidos" } else { "sin código: no hay" },
-        config.administradores.len(),
+        s.acceso.administradores().len(),
     );
+    if let Some(codigo) = &i.codigo_admin {
+        println!("código de administrador (un solo uso, regístrate con él): {codigo}");
+    }
     tokio::select! {
         r = tokio::signal::ctrl_c() => r.map_err(|e| format!("señal: {e}"))?,
-        _ = parar_por_la_entrada() => {}
+        _ = parar_por_la_entrada(&s.acceso) => {}
     }
     println!("parando...");
     let n = s.parar().await;

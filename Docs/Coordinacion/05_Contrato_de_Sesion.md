@@ -354,5 +354,5 @@ saqueo de pueblo y ataque a una avanzada ([`Combate.md`](../Mechanics/Combate.md
 ## 13. Decisiones abiertas
 
 1. ~~**Payload de los eventos**~~ — **cerrada (2026-10-22)**: `Struct` genérico para todos y quince mensajes tipados para los que mueven la interfaz (§8).
-2. ~~**Autenticación y acceso**~~ — **cerrada en lo mínimo (2026-10-26, fase 7, 7B)**: registro con código, cuenta de bot, login con token opaco de `ACCESO.duracionSesionMs` y administradores globales por nick (`crates/acceso`). Quedan las membresías por partida (moderador, administrador de la partida) y los tokens de los servidores de batalla (fase 8).
+2. ~~**Autenticación y acceso**~~ — **cerrada en lo mínimo (2026-10-26, fase 7, 7B)**: registro con código, cuenta de bot, login con token opaco de `ACCESO.duracionSesionMs` y administradores globales por marca en la cuenta (`crates/acceso`; desde el 2026-11-08 la primera cuenta administradora nace con un código de un solo uso que imprime el servidor, ya no hay lista de nicks por entorno; ver 08). Quedan las membresías por partida (moderador, administrador de la partida) y los tokens de los servidores de batalla (fase 8).
 3. **Retención de deltas y tamaño del registro**: se fijan al construir el núcleo con mediciones.
