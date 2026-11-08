@@ -160,10 +160,11 @@ fn la_anexion_pasa_ciudadanos_columnas_vasallas_y_propuestas_y_rompe_lo_demas_si
     let mut e = facciones(5);
     let (_, dora) = e.columna("dora", 2, c(25, 3));
     let vasallaje = e.relacion("c2", 2, "c4", 4, true);
-    let alianza = e.relacion("c2", 2, "c3", 3, false);
     let (r5, r1, r2) = (e.rey(5), e.rey(1), e.rey(2));
+    // Las propuestas de F5 se abren antes de la alianza de F2 con F3: con una alianza activa F2 está en su tope de alianzas (tanda 69 §13) y no podría recibirlas.
     let a_f2 = e.ok("c5", Comando::ProponerRelacion { heroe: r5, a: 5, b: 2, vasallaje: false, tributo: None }).creadas[0];
     let a_f1 = e.ok("c5", Comando::ProponerRelacion { heroe: r5, a: 5, b: 1, vasallaje: false, tributo: None }).creadas[0];
+    let alianza = e.relacion("c2", 2, "c3", 3, false);
     e.ok("admin", Comando::FijarTecnologias { faccion: 2, tecnologias: vec!["escudos_ligeros".into()] });
     let (rep3, xp1) = (e.n.reputacion(3), e.n.faccion(1).unwrap().experiencia);
     let columnas_f2: Vec<u64> = e.n.estado().ejercitos.values().filter(|x| x.columna.faccion == Some(2)).map(|x| x.id).collect();

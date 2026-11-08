@@ -103,7 +103,6 @@ pub struct TipoEdificio {
     pub nivel_construccion: u32,
     pub tecnologia: Option<String>,
     pub nivel_faccion_minimo: Option<u32>,
-    pub orden_era_minimo: Option<u32>,
     /// Cupos de habitantes (milésimas) que aporta cada edificio activo (Vivienda).
     pub capacidad_pesants: Mil,
     pub capacidad_artesanos: Mil,
@@ -255,7 +254,6 @@ impl Catalogo {
                     nivel_construccion: f(v, "requisitoNivelAsentamientoConstruccion").unwrap_or(0.0) as u32,
                     tecnologia: texto(v, "requiereTecnologia"),
                     nivel_faccion_minimo: f(v, "nivelFaccionMinimo").map(|x| x as u32),
-                    orden_era_minimo: f(v, "ordenEraMinimo").map(|x| x as u32),
                     capacidad_pesants: mil(f(v, "capacidadPesants").unwrap_or(0.0)),
                     capacidad_artesanos: mil(f(v, "capacidadArtesanos").unwrap_or(0.0)),
                     capacidad_por_recurso: mil(f(v, "capacidadPorRecursoAdicional").unwrap_or(0.0)),

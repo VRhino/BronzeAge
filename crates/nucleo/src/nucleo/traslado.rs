@@ -34,6 +34,7 @@ fn de_union(e: ErrorPropuesta) -> (&'static str, &'static str) {
         ErrorPropuesta::SinRey(_) => (DIPLOMACIA_SIN_REY, "una de las dos Facciones no tiene Rey que acepte o consienta"),
         ErrorPropuesta::VasallaDeTercera(_) => (DIPLOMACIA_VASALLA_DE_TERCERA, "una de las dos es vasalla de una tercera: su señora tiene que liberarla antes"),
         ErrorPropuesta::ReputacionBaja => (DIPLOMACIA_REPUTACION_BAJA, "con esa reputación nadie pacta"),
+        ErrorPropuesta::TopeAlianzas(_) => (DIPLOMACIA_TOPE_ALIANZAS, "una de las dos ya tiene todas las alianzas que le deja su prestigio"),
         ErrorPropuesta::YaPendiente => (DIPLOMACIA_YA_PENDIENTE, "ya hay una propuesta de esa clase pendiente entre las dos"),
         ErrorPropuesta::NoExiste => (DIPLOMACIA_PROPUESTA_DESCONOCIDA, "esa propuesta no existe"),
         ErrorPropuesta::Caducada => (DIPLOMACIA_PROPUESTA_CADUCADA, "la propuesta caducó"),

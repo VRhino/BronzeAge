@@ -15,7 +15,10 @@ const FRACCION_RECONSTRUCCION: i64 = 500_000;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ErrorObra {
     TecnologiaFaltante,
-    EraInsuficiente,
+    /// La Maravilla pide el umbral de prestigio de la Facción; la estatua, uno por cada estatua levantada o en obra.
+    PrestigioInsuficiente,
+    /// La estatua solo se levanta en la capital de la Facción.
+    SoloEnCapital,
     /// El Centro Urbano y los puestos del Mercado nunca se añaden a mano.
     TipoNoManual,
     Unico,
@@ -231,8 +234,17 @@ impl Asentamiento {
         if def.tecnologia.as_deref().is_some_and(|t| !(x.tiene_tecnologia)(t)) {
             return Err(ErrorObra::TecnologiaFaltante);
         }
-        if def.orden_era_minimo.is_some_and(|o| x.orden_era < o) {
-            return Err(ErrorObra::EraInsuficiente);
+        if tipo == Tipo::Maravilla && !x.maravilla_desbloqueada {
+            return Err(ErrorObra::PrestigioInsuficiente);
+        }
+        // La estatua es decorativa: solo en la capital, y las hechas y las que están en obra cuentan contra las que deja el prestigio.
+        if tipo == Tipo::Estatua {
+            if !x.es_capital {
+                return Err(ErrorObra::SoloEnCapital);
+            }
+            if self.edificios.en_cualquier_estado(Tipo::Estatua) as u32 >= x.estatuas_permitidas {
+                return Err(ErrorObra::PrestigioInsuficiente);
+            }
         }
         if matches!(tipo, Tipo::CentroUrbano | Tipo::PuestoMercado) {
             return Err(ErrorObra::TipoNoManual);

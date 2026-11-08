@@ -80,7 +80,8 @@ fn rechazo_de_obra(e: ErrorObra) -> (&'static str, &'static str) {
     use rechazos::*;
     match e {
         ErrorObra::TecnologiaFaltante => (OBRA_TECNOLOGIA_FALTANTE, "la Facción no tiene la tecnología que pide el edificio"),
-        ErrorObra::EraInsuficiente => (OBRA_ERA_INSUFICIENTE, "el servidor aún no ha llegado a la Era que pide el edificio"),
+        ErrorObra::PrestigioInsuficiente => (OBRA_PRESTIGIO_INSUFICIENTE, "la Facción no tiene el prestigio que piden la Maravilla o una estatua más"),
+        ErrorObra::SoloEnCapital => (OBRA_SOLO_EN_CAPITAL, "la estatua solo se levanta en la capital de la Facción"),
         ErrorObra::TipoNoManual => (OBRA_TIPO_NO_MANUAL, "el Centro Urbano y los puestos del Mercado no se añaden a mano"),
         ErrorObra::Unico => (OBRA_UNICO, "ya hay uno y solo puede haber uno por plaza"),
         ErrorObra::TopeAlmacenes => (OBRA_TOPE_ALMACENES, "se alcanzó el máximo de Almacenes del nivel"),
@@ -234,7 +235,7 @@ impl Nucleo {
         }
         let nivel_faccion = self.nivel_de_faccion(self.estado.asentamientos[&id].faccion);
         let (es_capital, distancia_capital, faccion_tiene_gran_fundicion) = self.exterior_de_capital(id, nivel_faccion);
-        let orden_era = self.orden_era();
+        let (maravilla_desbloqueada, estatuas_permitidas) = self.prestigio_para_obras(self.estado.asentamientos[&id].faccion);
         let residentes = self.residentes_en(id);
         let cupo_para_recuperar = self.cupo_para_recuperar(id, nivel_faccion);
         // La mejor fertilidad de su zona real: la comparten todas sus Granjas.
@@ -271,7 +272,8 @@ impl Nucleo {
                 tiene_tecnologia: &tiene_tecnologia,
                 factor_tecnologia: &factor_tecnologia,
                 nivel_faccion,
-                orden_era,
+                maravilla_desbloqueada,
+                estatuas_permitidas,
                 es_capital,
                 faccion_tiene_gran_fundicion,
                 ciudadanos,
@@ -478,6 +480,11 @@ impl Nucleo {
         }
         // La experiencia de Facción por construir y por ascender (§3.5), en el instante en que acaba la obra.
         for s in sucesos {
+            // El prestigio del ascenso: `ascensoPorNivel` por el nivel nuevo.
+            if let &EventoEco::NivelSubio { nivel } = s {
+                let por_nivel = self.estado.reglas.economia.politica.prestigio.ascenso_por_nivel;
+                self.dar_prestigio(t, faccion, por_nivel.saturating_mul(i64::from(nivel)), super::prestigio::motivo::ASCENSO);
+            }
             let hecho = match s {
                 EventoEco::EdificioCompletado { .. } => (politica::nivel::Hecho::EdificioCompletado, super::experiencia::motivo::EDIFICIO),
                 &EventoEco::NivelSubio { nivel } => (politica::nivel::Hecho::Ascenso { nivel }, super::experiencia::motivo::ASCENSO),

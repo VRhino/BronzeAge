@@ -62,7 +62,8 @@ macro_rules! exterior {
             tiene_tecnologia: &|_| false,
             factor_tecnologia: &|_| UNO,
             nivel_faccion: 1,
-            orden_era: 1,
+            maravilla_desbloqueada: false,
+            estatuas_permitidas: 0,
             es_capital: true,
             faccion_tiene_gran_fundicion: false,
             ciudadanos: 0,
@@ -88,7 +89,7 @@ fn la_cola_manual_paga_al_encolar_respeta_los_topes_y_se_reembolsa_entera_al_qui
     assert_eq!(a.edificio(id).unwrap().prioridad, 900, "banda «manual»");
     assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::CentroUrbano, &mut vec![]), Err(ErrorObra::TipoNoManual));
     assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::Palacio, &mut vec![]), Err(ErrorObra::NivelInsuficiente), "el Palacio pide nivel 2");
-    assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::Maravilla, &mut vec![]), Err(ErrorObra::EraInsuficiente));
+    assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::Maravilla, &mut vec![]), Err(ErrorObra::PrestigioInsuficiente), "la Maravilla pide el umbral de prestigio de la Facción, no una Era");
     a.quitar_de_cola(&r, id).unwrap();
     assert_eq!(a.almacen.cantidad(Recurso::Madera), antes, "se devuelve el coste completo");
     assert!(a.edificio(id).is_none());
@@ -98,6 +99,28 @@ fn la_cola_manual_paga_al_encolar_respeta_los_topes_y_se_reembolsa_entera_al_qui
         a.anadir_manual(0, &r, &mut x, Tipo::Vivienda, &mut vec![]).unwrap();
     }
     assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::Vivienda, &mut vec![]), Err(ErrorObra::ColaLlena));
+}
+
+#[test]
+fn la_maravilla_pide_el_umbral_de_prestigio_y_la_estatua_la_capital_y_un_umbral_por_estatua() {
+    let r = Reglas::cargar();
+    let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
+    let mut x = exterior!(&r, s, w);
+    // La Maravilla: sin el umbral, el prestigio; con él se llega al nivel 5 de plaza que también pide (esta es de nivel 1).
+    assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::Maravilla, &mut vec![]), Err(ErrorObra::PrestigioInsuficiente));
+    x.maravilla_desbloqueada = true;
+    assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::Maravilla, &mut vec![]), Err(ErrorObra::NivelInsuficiente));
+    // La estatua: fuera de la capital, ni con prestigio de sobra; en la capital, tantas como estatuas deja el prestigio, contando las que están en obra.
+    (x.es_capital, x.estatuas_permitidas) = (false, 2);
+    assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::Estatua, &mut vec![]), Err(ErrorObra::SoloEnCapital));
+    x.es_capital = true;
+    x.estatuas_permitidas = 0;
+    assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::Estatua, &mut vec![]), Err(ErrorObra::PrestigioInsuficiente), "sin ningún umbral alcanzado");
+    x.estatuas_permitidas = 2;
+    a.anadir_manual(0, &r, &mut x, Tipo::Estatua, &mut vec![]).unwrap();
+    a.anadir_manual(0, &r, &mut x, Tipo::Estatua, &mut vec![]).unwrap();
+    assert_eq!(a.anadir_manual(0, &r, &mut x, Tipo::Estatua, &mut vec![]), Err(ErrorObra::PrestigioInsuficiente), "las dos en obra ya cuentan");
+    assert_eq!(a.edificios.en_cualquier_estado(Tipo::Estatua), 2);
 }
 
 #[test]

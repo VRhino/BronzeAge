@@ -587,9 +587,16 @@ impl Nucleo {
         let ordenes: Vec<u64> = tratos.iter().map(|x| x.orden).collect();
         self.anotar_ordenes_cambiadas(antes, &ordenes);
         self.tr.tocar(Clase::Asentamiento, plaza_id);
-        let entre_facciones = self.estado.asentamientos.get(&plaza_id).is_some_and(|p| p.faccion != faccion);
+        let duena = self.estado.asentamientos.get(&plaza_id).map(|p| p.faccion).filter(|&d| d != faccion);
+        let entre_facciones = duena.is_some();
         self.registrar_comercio_de_mercenarios(entre_facciones, &servido);
         for x in tratos {
+            // El prestigio del comercio por cada orden tomada de otra Facción, a la que toma y a la dueña de la plaza (tanda 69 §13).
+            if let Some(duena) = duena {
+                for f in [faccion, duena] {
+                    self.dar_prestigio(t, f, self.estado.reglas.economia.politica.prestigio.comercio, super::prestigio::motivo::COMERCIO);
+                }
+            }
             let s = x.servido;
             let hecho = EventoComercio::ComercioEnPlaza { orden: x.orden, cantidad: s.cantidad, entre_facciones };
             self.emitir_comercio(t, hecho, vec![plaza_id], &[(quien.0, quien.1 as i64), ("valor", s.valor), ("comision", s.comision), ("oroMovido", s.oro_movido)]);
@@ -697,6 +704,10 @@ impl Nucleo {
         if cierre.entre_facciones {
             self.avance(t, Dueno::Faccion(facciones.0), "trueques", 1);
             self.avance(t, Dueno::Faccion(facciones.1), "trueques", 1);
+            // El prestigio del comercio, a cada una de las dos (tanda 69 §13).
+            for faccion in [facciones.0, facciones.1] {
+                self.dar_prestigio(t, faccion, self.estado.reglas.economia.politica.prestigio.comercio, super::prestigio::motivo::COMERCIO);
+            }
         }
         for (faccion, suceso) in cierre.reputacion {
             self.aplicar_reputacion(t, faccion, suceso);

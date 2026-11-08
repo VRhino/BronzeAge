@@ -498,6 +498,7 @@ impl Nucleo {
         self.estado.politica.facciones.anular_derrota(faccion);
         self.tr.tocar(Clase::Faccion, u64::from(faccion));
         self.dar_experiencia_por(t, faccion, politica::nivel::Hecho::Fundacion { primera: tiene == 0 }, super::experiencia::motivo::FUNDACION);
+        self.dar_prestigio(t, faccion, self.estado.reglas.economia.politica.prestigio.fundacion, super::prestigio::motivo::FUNDACION);
         self.contactos_nuevos(id, t);
         Ok(Some(id))
     }

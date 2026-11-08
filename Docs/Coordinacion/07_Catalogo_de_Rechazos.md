@@ -40,7 +40,6 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | Código | Constante | Qué dice |
 |---|---|---|
 | `obra.tecnologia_faltante` | `OBRA_TECNOLOGIA_FALTANTE` | — |
-| `obra.era_insuficiente` | `OBRA_ERA_INSUFICIENTE` | — |
 | `obra.tipo_no_manual` | `OBRA_TIPO_NO_MANUAL` | — |
 | `obra.unico` | `OBRA_UNICO` | — |
 | `obra.tope_almacenes` | `OBRA_TOPE_ALMACENES` | — |

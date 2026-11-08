@@ -777,7 +777,7 @@ Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; cont
   "diplomacia.fusion", "diplomacia.fusion_propuesta", "diplomacia.fusion_rechazada", "diplomacia.fusion_retirada", "diplomacia.guerra_declarada", "diplomacia.paz_firmada",
   "diplomacia.paz_propuesta", "diplomacia.rebelion_vasallo", "diplomacia.relacion_aceptada", "diplomacia.relacion_propuesta", "diplomacia.relacion_rechazada",
   "diplomacia.relacion_retirada", "diplomacia.relacion_rota", "diplomacia.tributo_pagado", "diplomacia.vasallo_conquistado", "diplomacia.vasallo_liberado",
-  "faccion.abandonada", "faccion.admision_en_ataques", "faccion.capital_designada", "faccion.ciudadania_union", "faccion.creada", "faccion.nivel_subio",
+  "faccion.abandonada", "faccion.admision_en_ataques", "faccion.capital_designada", "faccion.ciudadania_union", "faccion.creada", "faccion.nivel_subio", "faccion.prestigio",
   "faccion.solicitud_denegada", "faccion.solicitud_ingreso", "titulo.cambia_manos", "titulo.nace"
 ]
 ```

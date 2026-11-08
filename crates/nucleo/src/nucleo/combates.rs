@@ -376,6 +376,7 @@ impl Nucleo {
             .expect("los dos bandos llevan al menos un héroe sano");
         self.experiencia_de_combate(t, &informe);
         self.monedas_de_informe(t, &informe);
+        self.prestigio_de_informe(t, &informe);
         let defendida = self.estado.ejercitos[&x].columna.faccion;
         self.defensa_de_vasallo(t, defendida, &def.heroes, informe.ganador == Lado::Defensor);
         self.volcar_escuadras(&atac.escuadras);
@@ -741,6 +742,7 @@ impl Nucleo {
         if let Asedio::Combate(i) = &resultado {
             self.experiencia_de_combate(t, i);
             self.monedas_de_informe(t, i);
+            self.prestigio_de_informe(t, i);
             chatarra = i.chatarra.clone();
             datos.extend([("poderAtacante", i.atacante.poder), ("poderDefensor", i.defensor.poder), ("bajasAtacante", caidos(&i.atacante.bajas)), ("bajasDefensor", caidos(&i.defensor.bajas))]);
         }
@@ -846,6 +848,7 @@ impl Nucleo {
                 .expect("los dos bandos tienen quién combata");
             self.experiencia_de_combate(t, &i);
             self.monedas_de_informe(t, &i);
+            self.prestigio_de_informe(t, &i);
             (i.ganador == Lado::Atacante, Some(i))
         } else {
             (true, None)

@@ -164,6 +164,8 @@ mod pruebas {
         m.facciones.registrar_derrota(7, Some(2));
         let r = Reglas::default();
         let rr = comercio::datos::Reglas::cargar().reputacion;
+        // La 1 ya está aliada de la 4: con el prestigio de una alianza más puede aceptar otra propuesta (tanda 69 §13).
+        m.facciones.get_mut(1).unwrap().prestigio = r.prestigio.alianza_cada;
         m.proponer_anexion(&r, 30, 2, 7, 20, 0).unwrap();
         m.proponer_relacion(&r, &rr, 31, Pacto::Alianza, 6, 1, None, 60, 0, 0).unwrap();
 

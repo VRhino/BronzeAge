@@ -96,8 +96,10 @@ pub struct Exterior<'a> {
     pub tiene_tecnologia: &'a dyn Fn(&str) -> bool,
     pub factor_tecnologia: &'a dyn Fn(Recurso) -> i64,
     pub nivel_faccion: u32,
-    /// Orden de la Era que ha alcanzado el servidor (la Maravilla pide la V).
-    pub orden_era: u32,
+    /// El prestigio de la Facción alcanza el umbral de la Maravilla (`PRESTIGIO.maravilla`; tanda 69 §13).
+    pub maravilla_desbloqueada: bool,
+    /// Cuántas estatuas deja levantar el prestigio de la Facción: tantas como umbrales de `PRESTIGIO.estatuas` alcanzados.
+    pub estatuas_permitidas: u32,
     /// Este asentamiento es la capital de su Facción, y la Facción ya tiene una Gran Fundición.
     pub es_capital: bool,
     pub faccion_tiene_gran_fundicion: bool,

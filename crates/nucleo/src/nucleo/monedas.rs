@@ -6,11 +6,19 @@ use super::*;
 use std::collections::BTreeSet;
 use combate::resolucion::Informe;
 
+/// Los héroes de un bando, cada uno con la Facción con la que combatió.
+pub(super) type HeroesConFaccion = Vec<(u64, u32)>;
+
 impl Nucleo {
-    /// Las monedas de un combate con números: los héroes de cada bando que combatieron, con la Facción que tienen.
+    /// Los héroes de cada bando de un combate con números (ganadores y perdedores) que combatieron, con la Facción que tienen.
+    pub(super) fn bandos_con_faccion(&self, informe: &Informe) -> (HeroesConFaccion, HeroesConFaccion) {
+        let con_faccion = |heroes: &[u64]| -> HeroesConFaccion { heroes.iter().filter_map(|&h| Some((h, self.heroe(h)?.faccion?))).collect() };
+        (con_faccion(&informe.bando(informe.ganador).heroes), con_faccion(&informe.bando(informe.perdedor()).heroes))
+    }
+
+    /// Las monedas de un combate con números.
     pub(super) fn monedas_de_informe(&mut self, t: Instante, informe: &Informe) {
-        let con_faccion = |heroes: &[u64]| -> Vec<(u64, u32)> { heroes.iter().filter_map(|&h| Some((h, self.heroe(h)?.faccion?))).collect() };
-        let (ganadores, perdedores) = (con_faccion(&informe.bando(informe.ganador).heroes), con_faccion(&informe.bando(informe.perdedor()).heroes));
+        let (ganadores, perdedores) = self.bandos_con_faccion(informe);
         self.monedas_de_combate(t, &ganadores, &perdedores);
     }
 

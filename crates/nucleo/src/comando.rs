@@ -2799,7 +2799,6 @@ pub mod rechazos {
     pub const PARCELA_AJENA: &str = "parcela.no_es_tuya";
     // Obras (`ErrorObra` del crate `asentamiento`).
     pub const OBRA_TECNOLOGIA_FALTANTE: &str = "obra.tecnologia_faltante";
-    pub const OBRA_ERA_INSUFICIENTE: &str = "obra.era_insuficiente";
     pub const OBRA_TIPO_NO_MANUAL: &str = "obra.tipo_no_manual";
     pub const OBRA_UNICO: &str = "obra.unico";
     pub const OBRA_TOPE_ALMACENES: &str = "obra.tope_almacenes";

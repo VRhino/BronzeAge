@@ -1560,8 +1560,7 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
       "livestock": 200
     },
     "tiempoConstruccionMinutos": 40320,
-    "requisitoNivelAsentamientoConstruccion": 5,
-    "ordenEraMinimo": 5
+    "requisitoNivelAsentamientoConstruccion": 5
   },
   "molino": {
     "costo": {

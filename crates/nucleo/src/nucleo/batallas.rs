@@ -1144,6 +1144,7 @@ impl Nucleo {
             let del_lado = |n: &Nucleo, lado: Lado| -> Vec<(u64, u32)> { n.participantes_del_lado(&b, lado).iter().filter(|p| participo(p.heroe)).filter_map(|p| Some((p.heroe, p.faccion?))).collect() };
             let (ganadores, perdedores) = (del_lado(self, res.ganador), del_lado(self, res.ganador.otro()));
             self.monedas_de_combate(t, &ganadores, &perdedores);
+            self.prestigio_por_victoria(t, &ganadores, &perdedores);
         }
         // Vuelve al mundo lo que estaba apartado (las columnas retoman su plan con la velocidad que les dejan las bajas) y se programa la retirada.
         self.devolver_al_mundo(t, id);
