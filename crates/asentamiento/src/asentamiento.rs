@@ -373,7 +373,8 @@ impl Asentamiento {
             capacidad_artesanos: cap_a,
             capacidad_nobles: cap_n,
             techo: r.nivel.techo(self.nivel),
-            hay_transformacion: [Tipo::Fundicion, Tipo::Curtiduria, Tipo::Armeria, Tipo::Carpinteria].iter().any(|&t| self.edificios.activos(t) > 0),
+            // Cualquier taller activo trae a los primeros artesanos: también el molino y el horno, que se hacen desde el nivel 1 (tanda 69 §10).
+            hay_transformacion: self.edificios.iter().any(|e| e.activo() && e.tipo.es_taller()),
             hay_palacio: self.edificios.activos(Tipo::Palacio) > 0,
             ciudadanos: x.ciudadanos,
             factor_consumo: self.politicas.factor(pol, "factorConsumoComida"),

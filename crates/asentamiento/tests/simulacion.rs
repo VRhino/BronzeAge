@@ -236,6 +236,19 @@ fn paso_de_hambre(a: &mut Asentamiento, reglas: &Reglas, minuto: i64) -> Vec<Eve
 }
 
 #[test]
+fn un_molino_activo_trae_a_los_primeros_artesanos_aunque_la_plaza_no_tenga_otro_taller() {
+    // El molino lo trabajan artesanos y se levanta desde el nivel 1 (tanda 69 §10), antes que la fundición o la carpintería: sin él no tendría quien lo trabajara.
+    let reglas = Reglas::cargar();
+    let mut a = Asentamiento::fundar(&reglas, 0, &[(Recurso::Trigo, 100_000)], 3);
+    a.auto_pausada = true;
+    for (id, tipo) in [(90, Tipo::Molino), (91, Tipo::Vivienda)] {
+        a.edificios.push(asentamiento::edificio::Edificio::nuevo(id, tipo, asentamiento::edificio::Estado::Activo));
+    }
+    let ev = paso_de_hambre(&mut a, &reglas, 1);
+    assert!(ev.iter().any(|e| matches!(e, Evento::PrimerosArtesanos)) && a.poblacion.artesanos == 1, "artesanos {}: {ev:?}", a.poblacion.artesanos);
+}
+
+#[test]
 fn tras_tocar_cero_de_nutricion_la_plaza_no_crece_hasta_recuperar_cien() {
     let reglas = Reglas::cargar();
     let mut a = Asentamiento::fundar(&reglas, 0, &[(Recurso::Oro, 100_000)], 3);
