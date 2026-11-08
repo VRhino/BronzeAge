@@ -264,15 +264,18 @@ pub fn comparar(n: &Nucleo, a: &Antes, t: Instante, columnas: &[u64], objetivo: 
         }
     }
 
-    // Nada se crea: ningún recurso crece, salvo la chatarra de las bajas y la madera, la piedra y el trigo de los bandidos, que no pasan de lo que dicen los hechos (el oro no crece nunca).
+    // Nada se crea: ningún recurso crece, salvo la chatarra de las bajas, la madera, la piedra y el trigo de los bandidos, y el ganado y la carne del rebaño de una aldea
+    // saqueada (sus cabezas entran sacrificadas en el carro, Combate §7.3), que no pasan de lo que dicen los hechos (el oro no crece nunca).
     let r = recursos(n);
     let suma = |c: &str| hechos.iter().map(|h| h.dato(c)).sum::<i64>();
     let crece = |rc: Recurso| r[rc.indice()] - a.recursos[rc.indice()];
     let de_bandidos = |c: &str| if combate.is_some_and(|h| h.codigo == "combate.campamento_destruido") { suma(c) } else { 0 };
+    let del_rebano = combate.filter(|h| h.codigo == "combate.pueblo_saqueado").map_or(0, |h| h.dato("saqueado"));
     let permitido = |rc: Recurso| match rc {
         Recurso::Madera => de_bandidos("madera"),
         Recurso::Piedra => de_bandidos("piedra"),
         Recurso::Trigo => de_bandidos("trigo"),
+        Recurso::Livestock | Recurso::Carne => del_rebano,
         _ => 0,
     };
     v.conservacion += TODOS.iter().filter(|&&rc| !CHATARRA.contains(&rc) && crece(rc) > permitido(rc)).count() as u64;

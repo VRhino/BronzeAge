@@ -2,6 +2,7 @@
 
 use crate::armar::{hex, hoy, max, metrica, min, parametro, r3, serie, INFO};
 use crate::armarpob::{mediana, pct, percentil};
+use crate::comida;
 use crate::fondo;
 use crate::geo::{Cargado, Geo};
 use crate::simcom::{self as sc, Corrida, ESTADOS, LLENADO};
@@ -42,6 +43,7 @@ pub fn armar(x: &Entrada) -> Informe {
     metricas.extend(red(x));
     metricas.extend(mercenarios(x));
     metricas.extend(pueblos(x));
+    metricas.extend(comida::metricas(x.corrida.nucleo.estado().asentamientos.values().map(|a| &a.economia)));
     metricas.extend(invariantes(x));
     metricas.extend(rendimiento(x));
     metricas.extend(determinismo(x));

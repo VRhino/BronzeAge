@@ -1,7 +1,9 @@
 //! La población sintética del sistema «población, construcción y mantenimiento»: N asentamientos fundados a la vez sobre el mundo real
-//! que viven `dias` días minuto a minuto con la política más simple posible (pedir la subida cada hora si nada la bloquea). Un bucle
-//! global por minuto avanza todos, así que compiten de verdad por los nodos de piedra y las parcelas de bosque.
+//! que viven `dias` días minuto a minuto con la política más simple posible: pedir la subida cada hora si nada la bloquea, levantar la aldea de trigo y el
+//! pueblo de cantera, subir la aldea de nivel y encargar los talleres de la comida (`comida`). Un bucle global por minuto avanza todos, así que compiten de
+//! verdad por los nodos de piedra y las parcelas de bosque.
 
+use crate::comida;
 use crate::economia::{Mapa, Reclamos, Recursos, SinSitio, SinSitioCiudad, SitiosVilla};
 use asentamiento::asentamiento::{Asentamiento, Evento, Exterior};
 use asentamiento::ascenso::Bloqueo;
@@ -298,6 +300,27 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
             a.entregar_a_pueblo(t, reglas, ID_ALDEA, &requerido, &mut ev).expect("todo entregado");
         }
     }
+    // Y la sube de nivel en cuanto puede pagar el siguiente (tanda 69: la aldea no sube sola), con los materiales también al instante.
+    if let Some(p) = comida::aldea_que_sube(a, reglas).filter(|_| minuto % CADA_MIN_ASCENSO == 0) {
+        let (id, coste) = (p.id, reglas.pueblos.aldea.niveles[&(p.nivel + 1)].coste.clone());
+        if a.almacen.tiene(&coste) && a.mejorar_aldea(reglas, id, &mut ev).is_ok() {
+            a.almacen.pagar(&coste);
+            let requerido = a.pueblo(id).expect("está").falta();
+            a.entregar_a_pueblo(t, reglas, id, &requerido, &mut ev).expect("todo entregado");
+        }
+    }
+    // Los talleres de la comida, a mano como cualquier jugador (la auto-construcción no los propone), y el buey del molino al precio del de una caravana; el
+    // encargo paga o se rechaza, y se reintenta a la hora siguiente.
+    if minuto % CADA_MIN_ASCENSO == 0 {
+        if let Some(tipo) = comida::taller_que_falta(a, reglas) {
+            let _ = a.anadir_manual(t, reglas, &mut x, tipo, &mut ev);
+        }
+        if let Some(id) = comida::molino_sin_buey(a) {
+            if a.almacen.pagar(&re.comercio.flota.buey.costo) {
+                a.edificios.iter_mut().find(|e| e.id == id).expect("está").buey = true;
+            }
+        }
+    }
 
     // La política del jugador: cada hora, si nada lo bloquea, pide la subida. Cada plaza es de una Facción distinta de nivel 1 (cupo ocupado 0: sin cupo solo si el cupo es 0).
     if minuto % CADA_MIN_ASCENSO == 0 && a.ascenso.is_none() {
@@ -342,14 +365,17 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
             }
         }
     }
-    // El acarreo de los dos pueblos vuelca cada minuto en la plaza lo que sacaron: la piedra del de cantera y el trigo de la aldea, que es el trigo de más de la
-    // ciudad (Doc 4.2: desde el 2026-11-02 la ciudad no hace otra Granja).
-    for (id, recurso) in [(ID_CANTERA, Recurso::Piedra), (ID_ALDEA, Recurso::Trigo)] {
-        if let Some(p) = a.pueblos.iter_mut().find(|p| p.id == id) {
-            let sacado = p.almacen.quitar(recurso, p.almacen.cantidad(recurso));
-            a.almacen.agregar(recurso, sacado);
-            a.registrar_acarreo(t, recurso, sacado);
+    // El acarreo de los dos pueblos vuelca cada minuto en la plaza todo lo que sacaron: la piedra del de cantera y, de la aldea, el trigo (el trigo de más de la
+    // ciudad, Doc 4.2: desde el 2026-11-02 la ciudad no hace otra Granja) y el ganado, la carne y la leche de su rebaño.
+    let mut sacado = Vec::new();
+    for p in &mut a.pueblos {
+        for recurso in p.recursos(reglas) {
+            sacado.push((recurso, p.almacen.quitar(recurso, p.almacen.cantidad(recurso))));
         }
+    }
+    for (recurso, n) in sacado {
+        a.almacen.agregar(recurso, n);
+        a.registrar_acarreo(t, recurso, n);
     }
 
     for e in ev {

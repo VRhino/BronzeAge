@@ -23,6 +23,7 @@ mod armarpol;
 mod armartec;
 mod auditmil;
 mod auditoria;
+mod comida;
 mod economia;
 mod fondo;
 mod geo;

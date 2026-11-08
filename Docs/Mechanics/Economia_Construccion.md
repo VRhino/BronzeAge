@@ -594,13 +594,13 @@ pueblo = pueblos ACTIVOS de la plaza (aldeas agrícolas y extractores) ≥ req.p
 
 | Nivel | Pesants | Artesanos | Techo de población |
 |---|---|---|---|
-| 1 | — | — | 300 → 600 |
+| 1 | — | — | 300 → 750 |
 | 2 | 200 → 400 | 0 | 1.500 → 3.000 |
 | 3 | 500 → 1.000 | 400 → 800 | 6.000 → 12.000 |
 | 4 | 1.000 → 2.000 | 800 → 1.600 | 12.000 → 24.000 |
 | 5 | 2.000 → 4.000 | 1.600 → 3.200 | 20.000 → 40.000 |
 
-Código: `crates/asentamiento/src/nivel.rs` (lee el bloque); los topes de Viviendas que salen de ellos, en §6.5. La mortalidad, el crecimiento y el espacio de Viviendas no cambian de fórmula: con el mismo ritmo, llegar a cada requisito tarda más (el batch `poblacion` lo mide).
+El del nivel 1 no es el doble sino 750 (autor, 2026-11-08): con 600, una plaza que hace molino u horno en el nivel 1 (§5.3) trae artesanos que llenan el techo y deja a los pesants por debajo de los 400 del nivel 2 para siempre; 750 es lo que cabe en sus 29 Viviendas (435 pesants y 290 artesanos), y lo midió el batch `poblacion`. Código: `crates/asentamiento/src/nivel.rs` (lee el bloque); los topes de Viviendas que salen de ellos, en §6.5. La mortalidad, el crecimiento y el espacio de Viviendas no cambian de fórmula: con el mismo ritmo, llegar a cada requisito tarda más (el batch `poblacion` lo mide).
 
 Devuelve `null` si el nivel no tiene requisito. `calcularNivelAsentamiento` encadena los gates desde `nivel` y dice hasta dónde se cumplirían (la usan los bots para decidir si piden la subida; **no sube nada**).
 
@@ -2120,7 +2120,7 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
     }
   },
   "techoPoblacion": {
-    "1": 600,
+    "1": 750,
     "2": 3000,
     "3": 12000,
     "4": 24000,

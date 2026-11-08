@@ -1,6 +1,7 @@
 //! Monta el `Informe` del sistema «población, construcción y mantenimiento» con lo medido en la simulación de plazas.
 
 use crate::armar::{hex, hoy, metrica, min, max, parametro, serie, INFO};
+use crate::comida;
 use crate::fondo;
 use crate::geo::Cargado;
 use crate::economia::Mapa;
@@ -59,6 +60,7 @@ pub fn armar(x: &Entrada) -> Informe {
     metricas.extend(construccion(x));
     metricas.extend(poblacion(x));
     metricas.extend(trigo_y_mantenimiento(x));
+    metricas.extend(comida::metricas(c.villas.iter().map(|v| &v.a)));
     metricas.extend(cuellos(x));
     metricas.extend(ciudad(x));
     metricas.extend(murallas(x));
