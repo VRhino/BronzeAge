@@ -7,7 +7,7 @@ use comun::*;
 use std::collections::{HashSet, VecDeque};
 use trazado::*;
 
-const P: ParametrosMuralla = ParametrosMuralla { franja_de_ronda: 1, paso_torres: [0, 8, 5], puertas_maximas: 4, ancho_maximo_puerta: 2 };
+const P: ParametrosMuralla = ParametrosMuralla { franja_de_ronda: 1, paso_torres: [0, 8, 5], puertas_maximas: 4, ancho_maximo_puerta: 2, desplazamiento_maximo_puerta: 3 };
 
 /// 20 ciudades: semilla, perfil y tamaño distintos (de 35 a 140 piezas), menos las que no se pueden amurallar. Desde Cal2-1 (puertas de 2 celdas como mucho) una
 /// se queda fuera: la 17 (130 piezas), cuyas piezas solo salen por un paso de 4 celdas pegado al muro, que al estrecharse las dejaría sin salida.
@@ -327,4 +327,40 @@ fn ningun_anillo_pasa_de_cuatro_puertas_y_la_red_sigue_conectada_en_200_ciudades
         }
     }
     assert!(fallos.is_empty(), "ciudades con la red partida o piezas sin salida (ciudad, semilla, puertas, red conexa, piezas sin salida): {fallos:?}");
+}
+
+/// ¿Tiene la abertura 2 celdas de muro (ni puerta ni torre) en línea recta a cada lado, en su fila o en su columna?
+fn tiene_dos_y_dos_rectas(t: &Trazo, abertura: &[usize]) -> bool {
+    let muro: HashSet<Celda> = t.celdas.iter().filter(|c| c.clase != ClaseCelda::Puerta).map(|c| c.celda).collect();
+    let celdas: Vec<Celda> = abertura.iter().map(|&k| t.celdas[k].celda).collect();
+    let (menor, mayor) = (*celdas.iter().min().unwrap(), *celdas.iter().max().unwrap());
+    let (en_fila, en_columna) = (celdas.iter().all(|c| c.row == menor.row), celdas.iter().all(|c| c.col == menor.col));
+    let lado = |desde: Celda, paso: (i32, i32)| (1..=2).all(|k| muro.contains(&Celda::new(desde.col + paso.0 * k, desde.row + paso.1 * k)));
+    (en_fila && lado(menor, (-1, 0)) && lado(mayor, (1, 0))) || (en_columna && lado(menor, (0, -1)) && lado(mayor, (0, 1)))
+}
+
+/// `LAYOUT_VERSION` 7 (Tanda Economía §14, autor 2026-11-08): toda puerta del trazo tiene 2 celdas de muro rectas a cada lado (`xxpxx`; una de 2 celdas, un tramo de 6),
+/// y el anillo sigue cerrado y sin pisar piezas. Las que no se pueden enderezar ni corriéndolas por su camino (y cortando las calles vecinas que el muro pise) sin tirar
+/// un edificio, partir la red o romper el tramo recto de otra puerta se quedan como estaban (`enderezar_puertas`): son una minoría (en 200 ciudades, 60 de 559; sin el
+/// enderezado, 560).
+/// Imprime cuántas (`-- --nocapture`).
+#[test]
+fn casi_toda_puerta_tiene_dos_celdas_rectas_de_muro_a_cada_lado_en_200_ciudades() {
+    let con_trazo: Vec<(Sim, Trazo)> = (0..200u64).map(|k| ciudad_de(1000 + k, Perfil::TODOS[k as usize % 4], 35 + 5 * (k as usize % 22))).filter_map(|s| trazar_recinto(&s.c, &P, 2).ok().map(|t| (s, t))).collect();
+    let (mut puertas, mut quebradas) = (0, Vec::new());
+    for (k, (s, t)) in con_trazo.iter().enumerate() {
+        let muro = celdas_de(t);
+        let fuera = alcanzables_desde_fuera(&muro);
+        let centro = s.c.piezas().iter().find(|p| p.rol == Rol::Centro).unwrap();
+        assert!(centro.rect.celdas().all(|c| !fuera.contains(&c)), "ciudad {k}: el anillo no aísla el Centro Urbano");
+        assert!(s.c.piezas().iter().all(|p| p.rect.celdas().all(|c| !muro.contains(&c))), "ciudad {k}: el anillo pisa una pieza");
+        for ab in aberturas(&t.celdas) {
+            puertas += 1;
+            if !tiene_dos_y_dos_rectas(t, &ab) {
+                quebradas.push((k, t.celdas[ab[0]].celda));
+            }
+        }
+    }
+    eprintln!("puertas sin 2+2 celdas rectas: {} de {puertas} en {} ciudades", quebradas.len(), con_trazo.len());
+    assert!(quebradas.len() * 8 <= puertas, "demasiadas puertas sin enderezar: {} de {puertas}", quebradas.len());
 }

@@ -10,12 +10,13 @@
 
 use crate::datos::{DefAnimal, DefCarro, ReglasFlota};
 use crate::encargo::{Encargo, Fase, Punta};
+use crate::precio::TablaPrecios;
 use crate::reparto::Candidata;
 use crate::tipos::{total, AcuerdoId, AsentamientoId, CaravanaId, Carga, EscuadraId, HeroeId, Lado};
 use crate::viaje::{instante_de_progreso, invertir_plan, invertir_ruta, progreso_en, CobroPeaje, Peaje};
 use asentamiento::datos::{por, UNO};
 use asentamiento::{Almacen, Recurso};
-use base::{entero, Instante, Mil, Plan, Punto};
+use base::{entero, entero_arriba, Instante, Mil, Plan, Punto};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum TipoCaravana {
@@ -693,10 +694,12 @@ impl Caravana {
         self.peajes.first().and_then(|p| instante_de_progreso(plan, p.progreso))
     }
 
-    /// Cobra los peajes alcanzados en `ahora` (§7.3, solo a la ida; con encargo, también a la vuelta): para cada uno, `PEAJE_PASO.tasa` del contenido **de ese momento**
-    /// (ya reducido por los anteriores), solo lo que sea `> 0`; se resta del contenido y se devuelve para que el núcleo lo sume al
-    /// almacén de la ciudad (topado). Los peajes alcanzados se descartan se haya cobrado o no. La caravana sigue de largo.
-    pub fn cobrar_peajes(&mut self, ahora: Instante, tasa: i64) -> Vec<CobroPeaje> {
+    /// Cobra los peajes alcanzados en `ahora` (§7.3, solo a la ida; con encargo, también a la vuelta): para cada uno se debe en **oro** `PEAJE_PASO.tasa` del
+    /// **valor** de lo que lleva en ese momento (ya reducido por los anteriores), a los precios de `precios`. El pagador es la capital de la Facción dueña y
+    /// `oro` es lo que tiene: se paga hasta donde llegue y baja en lo pagado. Lo que falta se paga en **especie de la carga** con la regla de siempre
+    /// ([`cobrar_en_especie`]) a la fracción de la tasa que queda sin pagar: sin oro paga lo de siempre y con oro bastante la carga no se toca. El núcleo
+    /// aplica los cobros a los almacenes (topados). Los peajes alcanzados se descartan se haya cobrado o no. La caravana sigue de largo.
+    pub fn cobrar_peajes(&mut self, ahora: Instante, tasa: i64, precios: &TablaPrecios, oro: &mut Mil) -> Vec<CobroPeaje> {
         if !self.cruza_peajes() {
             return Vec::new();
         }
@@ -706,26 +709,15 @@ impl Caravana {
         self.peajes = pendientes;
         let mut cobros = Vec::new();
         for pj in alcanzados {
-            let mut cobrado = Carga::new();
-            for (&rec, n) in self.contenido.iter_mut() {
-                let c = entero((*n as i128 * tasa as i128 / UNO as i128) as Mil);
-                if c > 0 {
-                    cobrado.insert(rec, c);
-                    *n -= c;
-                }
-            }
-            // Como mínimo una unidad a toda caravana con carga (EE-4, 2026-10-24): si la tasa no llega a una unidad en ningún recurso, se cobra una del
-            // que más lleva (a igualdad, el primero del catálogo). Pero el peaje nunca deja la carga en cero (decisión del autor, 2026-10-24): una
-            // caravana de una sola unidad pasa sin pagar.
-            if cobrado.is_empty() && tasa > 0 && self.contenido.values().sum::<Mil>() >= 2 * base::UNIDAD {
-                let mayor = self.contenido.iter().filter(|(_, &n)| n >= base::UNIDAD).max_by_key(|(&r, &n)| (n, std::cmp::Reverse(r))).map(|(&r, _)| r);
-                if let Some(rec) = mayor {
-                    *self.contenido.get_mut(&rec).expect("está") -= base::UNIDAD;
-                    cobrado.insert(rec, base::UNIDAD);
-                }
-            }
-            if !cobrado.is_empty() {
-                cobros.push(CobroPeaje { ciudad: pj.ciudad, cobrado });
+            // El oro se mueve en unidades enteras (el almacén no guarda fracciones): se debe hacia arriba, como el oro de una compra en el mostrador.
+            let debido = entero_arriba(por(precios.valor(&self.contenido), tasa));
+            let pagado = entero(debido.min(*oro).max(0));
+            *oro -= pagado;
+            // Sin deuda en oro (carga sin valor) la fracción sin pagar es toda la tasa, como siempre.
+            let tasa_especie = if debido > 0 { (tasa as i128 * (debido - pagado) as i128 / debido as i128) as i64 } else { tasa };
+            let cobrado = cobrar_en_especie(&mut self.contenido, tasa_especie);
+            if pagado > 0 || !cobrado.is_empty() {
+                cobros.push(CobroPeaje { ciudad: pj.ciudad, oro: pagado, cobrado });
             }
         }
         self.contenido.retain(|_, n| *n > 0);
@@ -1028,6 +1020,28 @@ pub fn candidatas_de_reparto(caravanas: &[Caravana], r: &ReglasFlota, origen: As
     caravanas.iter().filter_map(|c| c.candidata_de_reparto(r, origen, factor_capacidad)).collect()
 }
 
+/// El peaje en especie: `tasa` de cada recurso que lleva, en unidades enteras hacia abajo, y se quita de la carga. Como mínimo una unidad a toda caravana con carga
+/// (EE-4, 2026-10-24): si la tasa no llega a una unidad en ningún recurso, se cobra una del que más lleva (a igualdad, el primero del catálogo). Pero el peaje nunca deja
+/// la carga en cero (decisión del autor, 2026-10-24): una caravana de una sola unidad pasa sin pagar. Con `tasa` 0 no cobra nada.
+fn cobrar_en_especie(contenido: &mut Carga, tasa: i64) -> Carga {
+    let mut cobrado = Carga::new();
+    for (&rec, n) in contenido.iter_mut() {
+        let c = entero((*n as i128 * tasa as i128 / UNO as i128) as Mil);
+        if c > 0 {
+            cobrado.insert(rec, c);
+            *n -= c;
+        }
+    }
+    if cobrado.is_empty() && tasa > 0 && contenido.values().sum::<Mil>() >= 2 * base::UNIDAD {
+        let mayor = contenido.iter().filter(|(_, &n)| n >= base::UNIDAD).max_by_key(|(&r, &n)| (n, std::cmp::Reverse(r))).map(|(&r, _)| r);
+        if let Some(rec) = mayor {
+            *contenido.get_mut(&rec).expect("está") -= base::UNIDAD;
+            cobrado.insert(rec, base::UNIDAD);
+        }
+    }
+    cobrado
+}
+
 #[cfg(test)]
 mod pruebas {
     use super::*;
@@ -1040,6 +1054,16 @@ mod pruebas {
 
     fn r() -> ReglasFlota {
         Reglas::cargar().flota
+    }
+
+    /// Los precios de referencia (stock global = objetivo: cada bien a su precio base; la madera vale 1 de oro por unidad).
+    fn precios() -> TablaPrecios {
+        let reglas = Reglas::cargar();
+        let mut a = Almacen::nuevo(10_000_000);
+        for rec in reglas.precio.cotizados() {
+            a.poner(rec, 500_000);
+        }
+        TablaPrecios::de(&reglas.precio, [&a])
     }
 
     fn almacen(items: &[(Recurso, Mil)]) -> Almacen {
@@ -1511,20 +1535,56 @@ mod pruebas {
         let pj = peajes_de_paradas(&[(7, 60_000), (8, 100_000)], 140_000);
         let mut c = en_marcha(&r, &[(Recurso::Madera, 200_000)], pj);
         let t1 = c.proximo_peaje().unwrap();
-        assert_eq!(c.cobrar_peajes(t1 - 1, tasa), vec![], "aún no ha cruzado");
-        let cobros = c.cobrar_peajes(t1, tasa);
+        assert_eq!(c.cobrar_peajes(t1 - 1, tasa, &precios(), &mut 0), vec![], "aún no ha cruzado");
+        let cobros = c.cobrar_peajes(t1, tasa, &precios(), &mut 0);
         assert_eq!(cobros.len(), 1);
         assert_eq!((cobros[0].ciudad, cobros[0].cobrado[&Recurso::Madera]), (7, 4_000), "2 % de 200");
         assert_eq!(c.contenido[&Recurso::Madera], 196_000);
         assert_eq!(c.peajes.len(), 1);
         let t2 = c.proximo_peaje().unwrap();
-        let cobros = c.cobrar_peajes(t2, tasa);
+        let cobros = c.cobrar_peajes(t2, tasa, &precios(), &mut 0);
         assert_eq!(cobros[0].cobrado[&Recurso::Madera], 3_000, "el segundo peaje es el 2 % de lo que queda (3,92), en unidades enteras hacia abajo");
         assert_eq!(c.contenido[&Recurso::Madera], 193_000);
         assert!(c.peajes.is_empty() && c.proximo_peaje().is_none());
         // Al retornar no hay peajes ni nada que cobrar.
         c.llegar(c.llegada_en().unwrap()).unwrap();
-        assert!(c.cobrar_peajes(c.llegada_en().unwrap(), tasa).is_empty());
+        assert!(c.cobrar_peajes(c.llegada_en().unwrap(), tasa, &precios(), &mut 0).is_empty());
+    }
+
+    #[test]
+    fn el_peaje_se_paga_en_oro_y_la_especie_cubre_solo_lo_que_la_bolsa_no_alcanza() {
+        let r = r();
+        let tasa = Reglas::cargar().peaje;
+        let pj = || vec![Peaje { ciudad: 7, progreso: 100_000 }];
+        // 200 de madera valen 200 de oro: el 2 % son 4 de oro. Con bolsa de sobra, se pagan en oro y la carga no se toca.
+        let mut c = en_marcha(&r, &[(Recurso::Madera, 200_000)], pj());
+        let mut bolsa = 100_000;
+        let cobros = c.cobrar_peajes(c.proximo_peaje().unwrap(), tasa, &precios(), &mut bolsa);
+        assert_eq!(cobros, vec![CobroPeaje { ciudad: 7, oro: 4_000, cobrado: Carga::new() }]);
+        assert_eq!((c.contenido[&Recurso::Madera], bolsa), (200_000, 96_000));
+        // Con 1 de oro faltan 3 de los 4: tres cuartos de la tasa (1,5 %) en especie, es decir 3 de madera.
+        let mut c = en_marcha(&r, &[(Recurso::Madera, 200_000)], pj());
+        let mut bolsa = 1_000;
+        let cobros = c.cobrar_peajes(c.proximo_peaje().unwrap(), tasa, &precios(), &mut bolsa);
+        assert_eq!(cobros, vec![CobroPeaje { ciudad: 7, oro: 1_000, cobrado: [(Recurso::Madera, 3_000)].into_iter().collect() }]);
+        assert_eq!((c.contenido[&Recurso::Madera], bolsa), (197_000, 0));
+        // Sin oro, lo de siempre: el 2 % entero en especie.
+        let mut c = en_marcha(&r, &[(Recurso::Madera, 200_000)], pj());
+        let cobros = c.cobrar_peajes(c.proximo_peaje().unwrap(), tasa, &precios(), &mut 0);
+        assert_eq!(cobros, vec![CobroPeaje { ciudad: 7, oro: 0, cobrado: [(Recurso::Madera, 4_000)].into_iter().collect() }]);
+    }
+
+    #[test]
+    fn la_bolsa_se_gasta_de_un_peaje_a_otro_del_mismo_instante() {
+        let r = r();
+        let tasa = Reglas::cargar().peaje;
+        let mut c = en_marcha(&r, &[(Recurso::Madera, 200_000)], vec![Peaje { ciudad: 1, progreso: 100_000 }, Peaje { ciudad: 2, progreso: 100_000 }]);
+        // El primero debe 4 de oro y la bolsa tiene 5: el segundo (sobre 200 de valor, la carga no se tocó) debe otros 4 y paga el 1 que queda más 3 en especie (1,5 %).
+        let mut bolsa = 5_000;
+        let cobros = c.cobrar_peajes(c.proximo_peaje().unwrap(), tasa, &precios(), &mut bolsa);
+        assert_eq!(cobros.iter().map(|x| (x.ciudad, x.oro)).collect::<Vec<_>>(), vec![(1, 4_000), (2, 1_000)]);
+        assert_eq!(cobros[1].cobrado[&Recurso::Madera], 3_000);
+        assert_eq!(bolsa, 0);
     }
 
     #[test]
@@ -1534,20 +1594,20 @@ mod pruebas {
         let mut c = en_marcha(&r, &[(Recurso::Madera, 40_000)], vec![Peaje { ciudad: 1, progreso: 100_000 }, Peaje { ciudad: 2, progreso: 100_000 }]);
         // Una caravana de una sola unidad pasa sin pagar: el peaje nunca deja la carga en cero.
         let mut u = en_marcha(&r, &[(Recurso::Madera, 1_000)], vec![Peaje { ciudad: 1, progreso: 100_000 }]);
-        assert!(u.cobrar_peajes(u.proximo_peaje().unwrap(), tasa).is_empty());
+        assert!(u.cobrar_peajes(u.proximo_peaje().unwrap(), tasa, &precios(), &mut 0).is_empty());
         assert_eq!(u.contenido[&Recurso::Madera], 1_000);
         // 2 % de 40 = 0,8, menos de una unidad: cada peaje cobra el mínimo de una unidad (EE-4); los alcanzados se descartan.
         let t = c.proximo_peaje().unwrap();
-        let cobros = c.cobrar_peajes(t, tasa);
+        let cobros = c.cobrar_peajes(t, tasa, &precios(), &mut 0);
         assert_eq!(cobros.iter().map(|x| x.cobrado[&Recurso::Madera]).collect::<Vec<_>>(), vec![1_000, 1_000]);
         assert!(c.peajes.is_empty(), "se descartan los alcanzados");
         assert_eq!(c.contenido[&Recurso::Madera], 38_000);
         // El mínimo sale del recurso que más lleva (a igualdad, el primero del catálogo).
         let mut d = en_marcha(&r, &[(Recurso::Piedra, 3_000), (Recurso::Madera, 3_000), (Recurso::Oro, 2_000)], vec![Peaje { ciudad: 1, progreso: 100_000 }]);
-        let cobros = d.cobrar_peajes(d.proximo_peaje().unwrap(), tasa);
+        let cobros = d.cobrar_peajes(d.proximo_peaje().unwrap(), tasa, &precios(), &mut 0);
         assert_eq!(cobros[0].cobrado, [(Recurso::Madera, 1_000)].into_iter().collect());
         let mut d = en_marcha(&r, &[(Recurso::Madera, 200_000)], vec![Peaje { ciudad: 1, progreso: 100_000 }, Peaje { ciudad: 2, progreso: 100_000 }]);
-        let cobros = d.cobrar_peajes(t, tasa);
+        let cobros = d.cobrar_peajes(t, tasa, &precios(), &mut 0);
         assert_eq!(cobros.iter().map(|c| c.ciudad).collect::<Vec<_>>(), vec![1, 2]);
         assert_eq!(d.contenido[&Recurso::Madera], 200_000 - 4_000 - 3_000);
     }
@@ -1818,14 +1878,14 @@ mod pruebas {
         sale(&mut c, &r, vec![Peaje { ciudad: 7, progreso: 100_000 }]);
         assert_eq!(c.estado, Retornando);
         let t = c.proximo_peaje().unwrap();
-        let cobros = c.cobrar_peajes(t, tasa);
+        let cobros = c.cobrar_peajes(t, tasa, &precios(), &mut 0);
         assert_eq!((cobros.len(), cobros[0].cobrado[&Recurso::Madera]), (1, 4_000));
         // Sin encargo, la vuelta no paga.
         let mut s = en_marcha(&r, &[(Recurso::Madera, 200_000)], vec![]);
         s.llegar(s.llegada_en().unwrap()).unwrap();
         s.peajes = vec![Peaje { ciudad: 7, progreso: 100_000 }];
         assert_eq!(s.estado, Retornando);
-        assert!(s.proximo_peaje().is_none() && s.cobrar_peajes(s.llegada_en().unwrap(), tasa).is_empty());
+        assert!(s.proximo_peaje().is_none() && s.cobrar_peajes(s.llegada_en().unwrap(), tasa, &precios(), &mut 0).is_empty());
     }
 
     #[test]

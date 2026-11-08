@@ -452,10 +452,19 @@ la Era de cada tecnología propia (decide lo que cuesta adoptarla o comprarla); 
       "madera": 60,
       "piedra": 10
     },
-    "margen": 1.3
+    "margen": 1.3,
+    "fueraDeVenta": [
+      "carne",
+      "leche",
+      "uva",
+      "aceituna"
+    ]
   },
   "refundacion": {
-    "porcentajeCoste": 0.4
+    "porcentajeCoste": 0.4,
+    "excluir": [
+      "oro"
+    ]
   }
 }
 ```
@@ -1497,7 +1506,7 @@ Divergencia aprobada del TS (Q4 del autor, 2026-10-24): los reclutas de un campa
 
 > **Los contadores, públicos (2026-11-06, pedido del autor; Rust).** Para la barra «x / y» de cada logro en la ficha de la tecnología (p. ej. «estaño extraído por todas las facciones 0 / 245.000», el umbral fijo de entonces), la forma pública de `EstadoTecnologia` en `HEROE` lleva también `contadores` (los 24, por nombre, el valor en curso de todo el servidor). Cambia la decisión Q6 solo en eso: **qué tecnología abre cada logro** (`logros` por id) sigue siendo solo de `ADMIN`. Como los contadores suben sin subir la versión (lo extraído y lo fabricado, con el paso de minuto), el `HEROE` de cada sesión los compara con los que tiene el cliente en cada muestreo de la vista y, si cambiaron, recibe el estado público entero (`ACTUALIZA`); al reanudar por deltas también llega entero.
 
-> **Umbrales por plaza (2026-11-07, decisión del autor; Rust).** El crate `tecnologia` lleva el logro como una parte o dos (`Logro { parte, ademas }`, `Parte { contador, umbral, por_plaza }`); `EstadoTecnologia::plazas` es N (derivado, no va en la foto: lo rehace `reconstruir_espacio` con el número de plazas) y `plazas_al_cumplir` el N con que se cumplió cada logro (va en la foto desde `BAN58`; de una `BAN57` o anterior se lee 1 en cada logro cumplido). El núcleo cambia N al nacer o caer una plaza (`contar_nivel` con un lado vacío → `contar_plazas` → `EstadoTecnologia::poner_plazas`), que fija los logros por plaza que con el umbral nuevo ya se cumplen y toca la forma pública. La forma pública de `EstadoTecnologia` en `HEROE` lleva además `plazas` (N) y `logros_pendientes` (`LogroPendiente { contador, umbral }`: cada parte de cada logro aún pendiente con su umbral de ahora, en el orden del catálogo y sin la tecnología que abre), y `logros_cumplidos` lleva una entrada por parte con el umbral con que se cumplió (contrato 0.16.0). El índice `Reglas::por_contador` ya no va por umbral: lista las tecnologías cuyo logro mira cada contador; `Reglas::por_plazas`, las que tienen alguna parte por plaza.
+> **Umbrales por plaza (2026-11-07, decisión del autor; Rust).** El crate `tecnologia` lleva el logro como una parte o dos (`Logro { parte, ademas }`, `Parte { contador, umbral, por_plaza }`); `EstadoTecnologia::plazas` es N (derivado, no va en la foto: lo rehace `reconstruir_espacio` con el número de plazas) y `plazas_al_cumplir` el N con que se cumplió cada logro (va en la foto desde `BAN58`; las fotos anteriores a `BAN59` ya no se leen). El núcleo cambia N al nacer o caer una plaza (`contar_nivel` con un lado vacío → `contar_plazas` → `EstadoTecnologia::poner_plazas`), que fija los logros por plaza que con el umbral nuevo ya se cumplen y toca la forma pública. La forma pública de `EstadoTecnologia` en `HEROE` lleva además `plazas` (N) y `logros_pendientes` (`LogroPendiente { contador, umbral }`: cada parte de cada logro aún pendiente con su umbral de ahora, en el orden del catálogo y sin la tecnología que abre), y `logros_cumplidos` lleva una entrada por parte con el umbral con que se cumplió (contrato 0.16.0). El índice `Reglas::por_contador` ya no va por umbral: lista las tecnologías cuyo logro mira cada contador; `Reglas::por_plazas`, las que tienen alguna parte por plaza.
 
 > **Implementado en Rust (2026-10-26, 6H): el batch tecnológico** (`batch tecnologia`, `crates/batch/src/simmil/tec.rs` y `armartec.rs`; conclusiones y preguntas en `crates/batch/decisiones/tecnologia.json`; `Docs/Arquitectura/Sistema6_Contraste_y_Plan.md`, «Avance de 6H»). La población del batch político con bots que solo dan órdenes del contrato: el Rey adopta dentro de su capital (y va a ella si está en otra plaza suya), el Gobernador de la capital construye hacia los hitos, los de cada plaza compran a los Aedas lo revelado, les cierran y abren la puerta y encargan épicas a sus residentes, y buscadores sin Facción abren alijos y reclutan en su campamento. Comprueba orden a orden los invariantes de §12 y los de este sistema (logro fijo y nunca antes de su umbral, ningún contador baja, `adoptadas ⊆ aparecidas`, nada de una Era cerrada, la Era entre su mínimo y su plazo, comprar nunca salta el logro, una épica por tecnología y Facción también tras unificar, un hecho no cuenta dos veces, los itinerantes nunca bajan ni quedan en una plaza que les cierra la puerta, un alijo una vez por héroe, la crónica guardada igual a la emitida) y **no calibra** (Q3): informa en qué día cae cada logro y cada Era, para la fase 7. Desde 6H ningún batch usa `FijarTecnologias`: el militar, el político y el de comercio adoptan por la orden lo que les aparece.
 

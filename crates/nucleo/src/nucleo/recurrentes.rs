@@ -18,17 +18,6 @@ fn duenos_con_tablon(e: &crate::estado::Estado) -> Vec<Dueno> {
     e.asentamientos.keys().map(|&a| Dueno::Asentamiento(a)).chain(e.politica.facciones.iter().map(|f| Dueno::Faccion(f.id))).collect()
 }
 
-/// Una foto anterior a las recurrentes (BAN49 o antes): las semanas cuentan desde el día de la foto y cada plaza y cada Facción sacan su tablón ya (Misiones_Recurrentes §9). La
-/// renovación la arma el primer evento u orden que llegue ([`Nucleo::armar_tablon`]).
-pub(crate) fn arrancar_tablones(e: &mut crate::estado::Estado) {
-    e.recurrentes = EstadoRecurrentes::nuevo(e.reglas.economia.recurrentes.clone(), e.ahora);
-    for d in duenos_con_tablon(e) {
-        if let Some(t) = e.recurrentes.tablon_nuevo(d, e.ahora) {
-            e.recurrentes.tablones.insert(d, t);
-        }
-    }
-}
-
 impl Nucleo {
     // ───────────────────────────── Consultas ─────────────────────────────
 

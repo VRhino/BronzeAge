@@ -8,7 +8,7 @@
 //! Un héroe: `id u64 · cuenta texto · facción opt_u64 · controlador u8 (0 humano, 1 bot) · liderazgo_base i64 · presencia{ubicación ·
 //! desconecta_en opt_i64 · fuera bool} · residencia{u8: 0 ninguna, 1 plaza, 2 campamento · u32} · nivel u32 · experiencia i64 · puntos de
 //! atributo i64 · puntos de perk i64 · atributos{fuerza, destreza, armadura, vitalidad: 4 × i64} · perks{n u64 · n × u32} · loadouts{n u64 ·
-//! n × (id u64, nombre texto, escuadras{n u64 · n × u64}, perks{n u64 · n × u32}, activo bool)} · monedas{bronce, plata, oro: 3 × i64} ·
+//! n × (id u64, nombre texto, escuadras{n u64 · n × u64}, perks{n u64 · n × u32}, activo bool)} · monedas i64 ·
 //! herido_hasta opt_i64 · víveres i64 · ración_en opt_i64 · almacén personal{carga} · cupo{día i64 · carga} · columna opt_u64 · carro{carga} · sintético bool ·
 //! informes{n u64 · n × informe} · plazas recordadas{n u64 · n × (plaza u32 · visto_en i64 · almacén{carga} · cola{n u64 · n × (id u32 · tipo u8 · nivel u8 · completa_en opt_i64)} ·
 //! guarnición{n u64 · n × u64})} (BAN25) · residencia_cambiada_en opt_i64 (BAN28) · alijos abiertos{n u64 · n × u32, en orden} (BAN36) ·
@@ -34,7 +34,7 @@ use comercio::mercenarios::CupoDiario;
 use militar::catalogo::{Origen, Tropa, TROPAS};
 use militar::convocatoria::{Convocatoria, Integrante, Lugar, Peticion, Seleccion};
 use militar::escuadra::{Contenedor, Escuadra};
-use militar::heroe::{Atributos, Controlador, Heroe, Loadout, Monedas, Residencia};
+use militar::heroe::{Atributos, Controlador, Heroe, Loadout, Residencia};
 use militar::inspeccion::{Avistada, Contenido, Informe, Objetivo, RecintoAvistado};
 use militar::mercenarios::Reclutas;
 use militar::presencia::{Presencia, Ubicacion};
@@ -248,8 +248,7 @@ fn heroe_escribir(w: &mut Escritor, h: &HeroeNucleo) {
         lista_u32_escribir(w, perks);
         w.bool(*activo);
     }
-    let Monedas { bronce, plata, oro } = monedas;
-    [bronce, plata, oro].into_iter().for_each(|&m| w.i64(m));
+    w.i64(*monedas);
     w.opt_i64(*herido_hasta);
     w.i64(*viveres);
     w.opt_i64(*racion_en);
@@ -294,7 +293,7 @@ fn heroe_leer(r: &mut Lector) -> Result<HeroeNucleo, ErrorFormato> {
     for _ in 0..r.cuenta()? {
         loadouts.push(Loadout { id: r.u64()?, nombre: r.texto()?, escuadras: lista_u64_leer(r)?, perks: lista_u32_leer(r)?, activo: r.bool()? });
     }
-    let monedas = Monedas { bronce: r.i64()?, plata: r.i64()?, oro: r.i64()? };
+    let monedas = r.i64()?;
     let (herido_hasta, viveres, racion_en, almacen_personal) = (r.opt_i64()?, r.i64()?, r.opt_i64()?, carga_leer(r)?);
     let cupo = CupoDiario { dia: r.i64()?, comprado: carga_leer(r)? };
     let (columna, carro, sintetico) = (r.opt_u64()?, carga_leer(r)?, r.bool()?);
@@ -506,8 +505,7 @@ pub(crate) fn escribir(w: &mut Escritor, m: &EstadoMilitar) {
     }
 }
 
-/// `con_eligieron`: la foto trae lo que eligió cada campamento (desde BAN41); en una BAN40 empieza en 0. `con_nombres`: trae los nombres de los héroes (desde BAN43); antes, ninguno.
-pub(crate) fn leer(r: &mut Lector, con_eligieron: bool, con_nombres: bool) -> Result<EstadoMilitar, ErrorFormato> {
+pub(crate) fn leer(r: &mut Lector) -> Result<EstadoMilitar, ErrorFormato> {
     let mut m = EstadoMilitar::default();
     for _ in 0..r.cuenta()? {
         m.insertar(heroe_leer(r)?);
@@ -520,17 +518,13 @@ pub(crate) fn leer(r: &mut Lector, con_eligieron: bool, con_nombres: bool) -> Re
         let campamento = r.u32()?;
         m.reclutas.insert(campamento, Reclutas { poblacion: r.i64()?, en: r.i64()? });
     }
-    if con_eligieron {
-        for _ in 0..r.cuenta()? {
-            let campamento = r.u32()?;
-            m.eligieron.insert(campamento, r.u32()?);
-        }
+    for _ in 0..r.cuenta()? {
+        let campamento = r.u32()?;
+        m.eligieron.insert(campamento, r.u32()?);
     }
-    if con_nombres {
-        for _ in 0..r.cuenta()? {
-            let heroe = r.u64()?;
-            m.nombres.insert(heroe, r.texto()?);
-        }
+    for _ in 0..r.cuenta()? {
+        let heroe = r.u64()?;
+        m.nombres.insert(heroe, r.texto()?);
     }
     Ok(m)
 }

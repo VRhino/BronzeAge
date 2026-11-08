@@ -53,6 +53,7 @@ fn de_propuesta(e: ErrorPropuesta) -> (&'static str, &'static str) {
         ErrorPropuesta::SinRey(_) => (DIPLOMACIA_SIN_REY, "una de las dos Facciones no tiene Rey"),
         ErrorPropuesta::VasallaDeTercera(_) => (DIPLOMACIA_VASALLA_DE_TERCERA, "una de las dos ya es vasalla de otra: su señora tiene que liberarla antes"),
         ErrorPropuesta::ReputacionBaja => (DIPLOMACIA_REPUTACION_BAJA, "con esa reputación nadie se alía: está por debajo del umbral del Embajador"),
+        ErrorPropuesta::TopeAlianzas(_) => (DIPLOMACIA_TOPE_ALIANZAS, "una de las dos ya tiene todas las alianzas que le deja su prestigio"),
         ErrorPropuesta::YaPendiente => (DIPLOMACIA_YA_PENDIENTE, "ya hay una propuesta de relación pendiente entre las dos"),
         ErrorPropuesta::Caducada => (DIPLOMACIA_PROPUESTA_CADUCADA, "la propuesta caducó"),
         ErrorPropuesta::BatallaAbierta => (DIPLOMACIA_BATALLA_ABIERTA, "alguna de las dos combate en una batalla abierta: se contesta cuando termine"),
@@ -422,9 +423,9 @@ impl Nucleo {
             Comando::ResponderRelacion { heroe, propuesta, aceptar } => {
                 let (a, b, pacto) = self.propuesta_de_relacion(*propuesta, t)?;
                 self.exigir_rey(p, *heroe, b)?;
-                let rr = self.estado.reglas.economia.comercio.reputacion.clone();
+                let (rr, pr) = (self.estado.reglas.economia.comercio.reputacion.clone(), self.estado.reglas.economia.politica.prestigio.clone());
                 let (rep, batalla, id) = (self.reputacion(a), self.faccion_en_batalla(a) || self.faccion_en_batalla(b), self.estado.siguiente_id);
-                let nueva = self.estado.politica.responder_relacion(&rr, *propuesta, *aceptar, rep, batalla, id, t).map_err(|e| rechazo(de_propuesta(e)))?;
+                let nueva = self.estado.politica.responder_relacion(&rr, &pr, *propuesta, *aceptar, rep, batalla, id, t).map_err(|e| rechazo(de_propuesta(e)))?;
                 self.tr.tocar_todos(Clase::Faccion, [u64::from(a), u64::from(b)]);
                 let mut datos = vec![("propuesta", *propuesta as i64), ("faccionA", i64::from(a)), ("faccionB", i64::from(b)), ("tipo", (pacto == Pacto::Vasallaje) as i64), ("heroe", *heroe as i64)];
                 let Some(id) = nueva else {

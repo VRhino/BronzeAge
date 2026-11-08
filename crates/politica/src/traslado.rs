@@ -93,7 +93,7 @@ pub fn anexionar(p: &mut Politica, absorbente: FaccionId, absorbida: FaccionId) 
     plan
 }
 
-/// `fusionar` (§6.2): nace C (`id`) con el nombre y el Rey de la propuesta, el sigilo de A, la experiencia mayor, sin Embajador ni `capital_designada_en`; luego
+/// `fusionar` (§6.2): nace C (`id`) con el nombre y el Rey de la propuesta, el sigilo de A, la experiencia y el prestigio mayores, sin Embajador ni `capital_designada_en`; luego
 /// `A → C` y `B → C`. El Rey que no lo es de C queda de ciudadano. La reputación mayor, la unión de tecnologías y la marca de capital (solo la que había designado
 /// el Rey electo pasa a C: [`marca_tras_fusion`]) son del núcleo. Devuelve los dos planes.
 pub fn fusionar(p: &mut Politica, r: &Reglas, id: FaccionId, union: &Union) -> Option<[Plan; 2]> {
@@ -112,6 +112,7 @@ pub fn fusionar(p: &mut Politica, r: &Reglas, id: FaccionId, union: &Union) -> O
         derrota: None,
         admite_otras_en_ataques: false,
         marcas: Default::default(),
+        prestigio: fa.prestigio.max(fb.prestigio),
     };
     debug_assert!(c.nivel(r) >= fa.nivel(r).max(fb.nivel(r)));
     p.facciones.insertar(c);
@@ -163,6 +164,8 @@ mod pruebas {
         m.facciones.registrar_derrota(7, Some(2));
         let r = Reglas::default();
         let rr = comercio::datos::Reglas::cargar().reputacion;
+        // La 1 ya está aliada de la 4: con el prestigio de una alianza más puede aceptar otra propuesta (tanda 69 §13).
+        m.facciones.get_mut(1).unwrap().prestigio = r.prestigio.alianza_cada;
         m.proponer_anexion(&r, 30, 2, 7, 20, 0).unwrap();
         m.proponer_relacion(&r, &rr, 31, Pacto::Alianza, 6, 1, None, 60, 0, 0).unwrap();
 

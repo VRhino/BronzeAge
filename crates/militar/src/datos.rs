@@ -56,8 +56,8 @@ pub struct ReglasLiderazgo {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReglasHeroe {
-    /// Bronce con el que nace (`HEROE.bronceInicial`).
-    pub bronce_inicial: i64,
+    /// Monedas con las que nace (`HEROE.monedasIniciales`).
+    pub monedas_iniciales: i64,
     pub tope_atributo: i64,
     /// Cuánto dura estar herido (ms de mundo).
     pub herido: i64,
@@ -174,6 +174,10 @@ pub struct ReglasIntel {
     pub enfriamiento_informe: i64,
     /// Miradas abiertas a la vez que admite la taberna de un campamento, por Facción.
     pub cupo_campamento: u32,
+    /// Informes de la región en la taberna de una plaza (tanda 69): su precio fijo, cuánto esperar para pedir otro igual y cuánto vale el de órdenes.
+    pub oro_region: Mil,
+    pub enfriamiento_region: i64,
+    pub caducidad_region: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -240,7 +244,7 @@ impl Reglas {
         Reglas {
             tropas: Catalogo::de(&bloque(HEROE_Y_TROPA, "TROPAS_RECLUTABLES")),
             liderazgo: ReglasLiderazgo { base: entero(&l, "base"), coste_por_escalon: por_escalon(&l["costePorEscalon"]).map(|x| x as i64) },
-            heroe: ReglasHeroe { bronce_inicial: entero(&h, "bronceInicial"), tope_atributo: entero(&h, "topeAtributo"), herido: entero(&h, "heridoMinutos") * MS_POR_MINUTO },
+            heroe: ReglasHeroe { monedas_iniciales: entero(&h, "monedasIniciales"), tope_atributo: entero(&h, "topeAtributo"), herido: entero(&h, "heridoMinutos") * MS_POR_MINUTO },
             guarnicion: ReglasGuarnicion {
                 por_nivel_edificio: enteros(lista(&g, "cupoPorNivelEdificio")),
                 por_nivel_caballerizas: enteros(lista(&g, "cupoPorNivelCaballerizas")),
@@ -293,6 +297,9 @@ impl Reglas {
                     oro_por_nivel: mil(num(&i, "informe.oroPorNivel")),
                     enfriamiento_informe: entero(&i, "informe.cooldownMinutos") * MS_POR_MINUTO,
                     cupo_campamento: entero(&i, "campamento.cupoMiradas") as u32,
+                    oro_region: mil(num(&i, "region.oro")),
+                    enfriamiento_region: entero(&i, "region.cooldownMinutos") * MS_POR_MINUTO,
+                    caducidad_region: entero(&i, "region.caducidadMinutos") * MS_POR_MINUTO,
                 }
             },
             mercenarios: ReglasMercenarios {
@@ -360,7 +367,7 @@ mod pruebas {
     fn las_cifras_vigentes_son_las_de_los_bloques_sin_correcciones() {
         let r = Reglas::cargar();
         assert_eq!((r.liderazgo.base, r.liderazgo.coste_por_escalon), (100, [7, 14, 22, 32, 45]));
-        assert_eq!((r.heroe.bronce_inicial, r.heroe.tope_atributo, r.heroe.herido), (500, 100, 2 * MS_POR_MINUTO));
+        assert_eq!((r.heroe.monedas_iniciales, r.heroe.tope_atributo, r.heroe.herido), (1_500, 100, 2 * MS_POR_MINUTO));
         assert_eq!(r.guarnicion.por_nivel_edificio, vec![7, 14, 22]);
         assert_eq!(r.guarnicion.por_nivel_caballerizas, vec![0, 14, 32]);
         assert_eq!(r.guarnicion.recinto_completo_por_nivel, vec![10, 15, 20]);
@@ -375,6 +382,8 @@ mod pruebas {
         assert_eq!((r.formacion.minimo, r.formacion.plazo), (3, 10 * MS_POR_MINUTO));
         assert_eq!((r.vision.ejercito, r.vision.jugador_solo), (30_000, 15_000));
         assert_eq!((r.presencia.retardo_desconexion, r.presencia.tope_aplazamiento), (150_000, 300_000));
+        let i = &r.intel;
+        assert_eq!((i.oro_region, i.enfriamiento_region, i.caducidad_region), (60_000, 360 * MS_POR_MINUTO, 200 * MS_POR_MINUTO), "el informe de región, de precio fijo (tanda 69)");
     }
 
     #[test]

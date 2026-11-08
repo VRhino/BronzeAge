@@ -109,6 +109,41 @@ pub struct ReglasPoblacion {
     pub impuesto_pesants: i64,
     pub impuesto_artesanos: i64,
     pub impuesto_nobleza: i64,
+    /// `BIENES_DE_CONSUMO.bienes`: los bienes de comida que cada clase toma antes que el trigo (tanda 69 §9), en el orden del bloque.
+    pub bienes: Vec<BienDeConsumo>,
+    /// `BIENES_DE_CONSUMO.guarnicion`: lo único que come la guarnición además del trigo (no crece, así que los demás bienes no le dan nada).
+    pub guarnicion: Vec<Recurso>,
+}
+
+/// Un bien de comida de `BIENES_DE_CONSUMO` (tanda 69 §9): alimenta 1 a 1, como el trigo, y con la ración entera da su modificador de
+/// crecimiento a las clases que lo comen.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BienDeConsumo {
+    pub recurso: Recurso,
+    /// Qué clases lo comen: pesants, artesanos y nobleza, en ese orden.
+    pub clases: [bool; 3],
+    /// Por cabeza y minuto (ppm de unidad, como `consumo_por_habitante`).
+    pub racion: i64,
+    /// El factor de crecimiento con la ración entera (ppm: ×2 es 2.000.000).
+    pub modificador: i64,
+}
+
+impl BienDeConsumo {
+    /// `b` es `BIENES_DE_CONSUMO`.
+    fn de(b: &Value) -> Vec<Self> {
+        let clase = |c: &Value| ["pesants", "artesanos", "nobleza"].iter().position(|n| Some(*n) == c.as_str()).unwrap_or_else(|| panic!("clase «{c}» en BIENES_DE_CONSUMO"));
+        b["bienes"]
+            .as_object()
+            .expect("BIENES_DE_CONSUMO.bienes")
+            .iter()
+            .map(|(k, v)| {
+                let mut clases = [false; 3];
+                v["clases"].as_array().expect("clases").iter().for_each(|c| clases[clase(c)] = true);
+                let recurso = Recurso::desde_nombre(k).unwrap_or_else(|| panic!("recurso «{k}» en BIENES_DE_CONSUMO"));
+                BienDeConsumo { recurso, clases, racion: ppm(num(v, "racion")), modificador: ppm(num(v, "modificador")) }
+            })
+            .collect()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -215,7 +250,7 @@ impl Reglas {
     }
 
     fn de(b: &dyn Fn(&str) -> Value) -> Self {
-        let (p, i, h) = (b("POBLACION"), b("IMPUESTOS"), b("POBLACION"));
+        let (p, i, h, c) = (b("POBLACION"), b("IMPUESTOS"), b("POBLACION"), b("BIENES_DE_CONSUMO"));
         let hambre = Hambre {
             nutricion_inicial: mil(num(&h, "hambre.nutricionInicial")),
             regeneracion_por_minuto: mil(num(&h, "hambre.regeneracionPorMinuto")),
@@ -236,6 +271,8 @@ impl Reglas {
             impuesto_pesants: ppm(num(&i, "tasaPesants")),
             impuesto_artesanos: ppm(num(&i, "tasaArtesanos")),
             impuesto_nobleza: ppm(num(&i, "tasaNobleza")),
+            bienes: BienDeConsumo::de(&c),
+            guarnicion: c["guarnicion"].as_array().expect("guarnicion").iter().map(|v| v.as_str().and_then(Recurso::desde_nombre).expect("recurso de la guarnición")).collect(),
         };
 
         let pol = b("POLITICAS");
@@ -358,6 +395,12 @@ mod pruebas {
         assert_eq!((p.hambre.nutricion_inicial, p.hambre.regeneracion_por_minuto, p.hambre.degradacion_sin_comida), (100_000, 5_000, 20_000));
         assert_eq!((p.hambre.factor_crecimiento_minimo, p.hambre.muerte_por_minuto, p.hambre.muerte_nobleza_por_minuto), (200_000, 50_000, 10_000));
         assert_eq!((p.impuesto_pesants, p.impuesto_artesanos, p.impuesto_nobleza), (4_000, 15_000, 60_000));
+        // Tanda 69 §9: el pan solo para los pesants (0,04 y ×2), la carne para todos (0,02 y ×1,2); la guarnición, solo carne.
+        let bien = |r: Recurso| p.bienes.iter().find(|b| b.recurso == r).unwrap();
+        assert_eq!(bien(Recurso::Pan), &BienDeConsumo { recurso: Recurso::Pan, clases: [true, false, false], racion: 40_000, modificador: 2_000_000 });
+        assert_eq!(bien(Recurso::Carne), &BienDeConsumo { recurso: Recurso::Carne, clases: [true; 3], racion: 20_000, modificador: 1_200_000 });
+        assert_eq!((bien(Recurso::Queso).clases, bien(Recurso::Vino).clases, bien(Recurso::Aceite).racion), ([false, true, false], [false, false, true], 10_000));
+        assert_eq!((p.bienes.len(), &p.guarnicion[..]), (5, &[Recurso::Carne][..]));
         assert_eq!(r.capacidad_inicial, 800_000, "almacenes al doble desde el 2026-11-05");
         assert_eq!(r.politicas.catalogo.len(), 16);
         assert_eq!(r.politicas.slots["gobernador"].maximo, 5);

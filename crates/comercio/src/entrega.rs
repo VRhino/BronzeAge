@@ -1,4 +1,4 @@
-//! La entrega de una caravana (Comercio_Caravanas §4.4, §3.3): lo que llega al almacén del destino, la comisión que se acuña y el
+//! La entrega de una caravana (Comercio_Caravanas §4.4, §3.3): lo que llega al almacén del destino, la comisión que se acuña en la capital de su Facción y el
 //! recargo por mala reputación que sale del almacén de origen. El abono al trueque lo hace [`crate::trueque::AcuerdoTrueque::abonar`]
 //! con el `contenido` que la caravana llevaba al llegar (tras los peajes), no con lo que entró.
 
@@ -27,16 +27,17 @@ pub struct ResultadoEntrega {
     pub perdido: Carga,
     /// Valor de lo que llevaba, en milésimas de oro (el oro vale 0).
     pub valor: Mil,
-    /// Comisión **acuñada** en el destino (topada por su capacidad de oro).
+    /// Comisión **acuñada** en la capital del destino (topada por su capacidad de oro).
     pub comision: Mil,
     /// Recargo por reputación: sale del oro del almacén de origen y se suma al del destino (se conserva). El núcleo lo resta del origen.
     pub recargo: Mil,
 }
 
 /// Entrega `contenido` en el almacén del destino: cada recurso con `agregar` (lo que no cabe se pierde), luego la comisión (se acuña,
-/// topada) y, si procede, el recargo por reputación (conservado: no se acuña), topado también por el hueco de oro que deja la comisión: el origen
+/// topada) en el almacén de `capital` (la capital de la Facción del destino; `None` si el destino no tiene otra: se acuña en él) y, si procede, el recargo por
+/// reputación (conservado: no se acuña) en el destino, topado también por el hueco de oro que deja la comisión cuando es el mismo almacén: el origen
 /// solo paga lo que entró (Comercio_Caravanas §3.3).
-pub fn entregar(r: &Reglas, contenido: &Carga, destino: &mut Almacen, d: &DatosEntrega) -> ResultadoEntrega {
+pub fn entregar(r: &Reglas, contenido: &Carga, destino: &mut Almacen, capital: Option<&mut Almacen>, d: &DatosEntrega) -> ResultadoEntrega {
     let mut ingresado = Carga::new();
     let mut perdido = Carga::new();
     for (&rec, &n) in contenido.iter().filter(|(_, &n)| n > 0) {
@@ -50,7 +51,7 @@ pub fn entregar(r: &Reglas, contenido: &Carga, destino: &mut Almacen, d: &DatosE
     }
     let valor = d.precios.valor(contenido);
     let calculada = comision_de_entrega(&r.comision, valor, &d.comision);
-    let comision = destino.agregar(Recurso::Oro, calculada);
+    let comision = capital.unwrap_or(&mut *destino).agregar(Recurso::Oro, calculada);
     let recargo_debido = recargo_por_reputacion(&r.reputacion, calculada, d.comision.misma_faccion, d.reputacion_origen, d.oro_origen);
     let recargo = destino.agregar(Recurso::Oro, recargo_debido);
     ResultadoEntrega { ingresado, perdido, valor, comision, recargo }
@@ -98,7 +99,7 @@ mod pruebas {
         let p = precios_a_uno(&r);
         let mut dest = alm(&[]);
         // 100 de madera (valor 100) + 50 de cobre (valor 150) = 250 de oro; misma Facción, distancia máxima: 4,5 % = 11,25, que acuñan 11 (hacia abajo).
-        let e = entregar(&r, &carga(&[(Recurso::Madera, 100_000), (Recurso::Cobre, 50_000)]), &mut dest, &datos(&p, true, false, 0, 0));
+        let e = entregar(&r, &carga(&[(Recurso::Madera, 100_000), (Recurso::Cobre, 50_000)]), &mut dest, None, &datos(&p, true, false, 0, 0));
         assert_eq!(e.valor, 250_000);
         assert_eq!(e.comision, 11_000);
         assert_eq!(dest.cantidad(Recurso::Oro), 11_000, "la comisión se acuña en el destino, en unidades enteras");
@@ -113,11 +114,30 @@ mod pruebas {
         // Antes las armas de madera no cotizaban y su mitad del trueque valía 0. 10 armas de madera (2 de oro cada una: 2 de madera de la
         // receta) = 20; externa a distancia máxima: 12 % = 2,4 → 2. Y 10 de ganado (2 cada uno) = 20 → otros 2.
         let mut dest = alm(&[]);
-        let armas = entregar(&r, &carga(&[(Recurso::ArmaMadera, 10_000)]), &mut dest, &datos(&p, false, false, 0, 0));
+        let armas = entregar(&r, &carga(&[(Recurso::ArmaMadera, 10_000)]), &mut dest, None, &datos(&p, false, false, 0, 0));
         assert_eq!((armas.valor, armas.comision), (20_000, 2_000));
-        let ganado = entregar(&r, &carga(&[(Recurso::Livestock, 10_000)]), &mut dest, &datos(&p, false, false, 0, 0));
+        let ganado = entregar(&r, &carga(&[(Recurso::Livestock, 10_000)]), &mut dest, None, &datos(&p, false, false, 0, 0));
         assert_eq!((ganado.valor, ganado.comision), (20_000, 2_000));
         assert_eq!(dest.cantidad(Recurso::Oro), 4_000);
+    }
+
+    #[test]
+    fn la_comision_se_acuna_en_la_capital_y_la_carga_y_el_recargo_van_al_destino() {
+        let r = Reglas::cargar();
+        let p = precios_a_uno(&r);
+        let lleva = carga(&[(Recurso::Cobre, 100_000)]);
+        // Externa: 300 de valor × 12 % = 36 de comisión, y un recargo de 18 (50 % de 36): la comisión a la capital, el recargo al destino.
+        let (mut dest, mut capital) = (alm(&[]), alm(&[(Recurso::Oro, 5_000)]));
+        let e = entregar(&r, &lleva, &mut dest, Some(&mut capital), &datos(&p, false, false, -40 * PUNTO, 1_000_000));
+        assert_eq!((e.comision, e.recargo), (36_000, 18_000));
+        assert_eq!((dest.cantidad(Recurso::Cobre), dest.cantidad(Recurso::Oro)), (100_000, 18_000), "el destino recibe la carga y el recargo, no la comisión");
+        assert_eq!(capital.cantidad(Recurso::Oro), 5_000 + 36_000);
+        // La comisión se topa por el hueco de oro de la capital, no por el del destino.
+        let (mut dest, mut capital) = (alm(&[(Recurso::Oro, 1_000_000)]), alm(&[(Recurso::Oro, 990_000)]));
+        let e = entregar(&r, &lleva, &mut dest, Some(&mut capital), &datos(&p, true, false, 0, 0));
+        assert_eq!(e.comision, 10_000, "300 × 4,5 % = 13,5, pero en la capital caben 10");
+        assert_eq!(capital.cantidad(Recurso::Oro), 1_000_000);
+        assert_eq!(dest.cantidad(Recurso::Oro), 1_000_000);
     }
 
     #[test]
@@ -126,7 +146,7 @@ mod pruebas {
         let p = precios_a_uno(&r);
         let mut dest = alm(&[(Recurso::Madera, 950_000)]);
         let lleva = carga(&[(Recurso::Madera, 100_000)]);
-        let e = entregar(&r, &lleva, &mut dest, &datos(&p, true, false, 0, 0));
+        let e = entregar(&r, &lleva, &mut dest, None, &datos(&p, true, false, 0, 0));
         assert_eq!((e.ingresado[&Recurso::Madera], e.perdido[&Recurso::Madera]), (50_000, 50_000));
         assert_eq!(dest.cantidad(Recurso::Madera), 1_000_000);
         assert_eq!(lleva[&Recurso::Madera], 100_000, "el abono usa lo que llevaba, no lo que entró");
@@ -138,7 +158,7 @@ mod pruebas {
         let r = Reglas::cargar();
         let p = precios_a_uno(&r);
         let mut dest = alm(&[(Recurso::Oro, 999_000)]);
-        let e = entregar(&r, &carga(&[(Recurso::Cobre, 100_000)]), &mut dest, &datos(&p, true, false, 0, 0));
+        let e = entregar(&r, &carga(&[(Recurso::Cobre, 100_000)]), &mut dest, None, &datos(&p, true, false, 0, 0));
         assert_eq!(e.comision, 1_000, "300 de valor × 4,5 % = 13,5, pero solo cabe 1");
         assert_eq!(dest.cantidad(Recurso::Oro), 1_000_000);
     }
@@ -148,7 +168,7 @@ mod pruebas {
         let r = Reglas::cargar();
         let p = precios_a_uno(&r);
         let mut dest = alm(&[]);
-        let e = entregar(&r, &carga(&[(Recurso::Cobre, 100_000)]), &mut dest, &datos(&p, false, true, -90 * PUNTO, 500_000));
+        let e = entregar(&r, &carga(&[(Recurso::Cobre, 100_000)]), &mut dest, None, &datos(&p, false, true, -90 * PUNTO, 500_000));
         assert_eq!((e.comision, e.recargo), (0, 0));
         assert_eq!(dest.cantidad(Recurso::Oro), 0);
     }
@@ -158,7 +178,7 @@ mod pruebas {
         let r = Reglas::cargar();
         let p = precios_a_uno(&r);
         let mut dest = alm(&[]);
-        let e = entregar(&r, &carga(&[(Recurso::Oro, 100_000)]), &mut dest, &datos(&p, false, false, 0, 0));
+        let e = entregar(&r, &carga(&[(Recurso::Oro, 100_000)]), &mut dest, None, &datos(&p, false, false, 0, 0));
         assert_eq!((e.valor, e.comision), (0, 0));
         assert_eq!(dest.cantidad(Recurso::Oro), 100_000, "solo el oro entregado");
     }
@@ -170,17 +190,17 @@ mod pruebas {
         let mut dest = alm(&[]);
         // Externa: 300 de valor × 12 % = 36; recargo = 50 % de 36 = 18, del oro del origen.
         let lleva = carga(&[(Recurso::Cobre, 100_000)]);
-        let e = entregar(&r, &lleva, &mut dest, &datos(&p, false, false, -40 * PUNTO, 1_000_000));
+        let e = entregar(&r, &lleva, &mut dest, None, &datos(&p, false, false, -40 * PUNTO, 1_000_000));
         assert_eq!((e.comision, e.recargo), (36_000, 18_000));
         assert_eq!(dest.cantidad(Recurso::Oro), 36_000 + 18_000);
         // Sin oro en el origen: se queda en lo que tenga, nunca negativo.
         let mut dest = alm(&[]);
-        let e = entregar(&r, &lleva, &mut dest, &datos(&p, false, false, -40 * PUNTO, 5_000));
+        let e = entregar(&r, &lleva, &mut dest, None, &datos(&p, false, false, -40 * PUNTO, 5_000));
         assert_eq!(e.recargo, 5_000);
         // Misma Facción: nada. Reputación por encima del umbral: nada.
         let mut dest = alm(&[]);
-        assert_eq!(entregar(&r, &lleva, &mut dest, &datos(&p, true, false, -90 * PUNTO, 1_000_000)).recargo, 0);
-        assert_eq!(entregar(&r, &lleva, &mut dest, &datos(&p, false, false, -39 * PUNTO, 1_000_000)).recargo, 0);
+        assert_eq!(entregar(&r, &lleva, &mut dest, None, &datos(&p, true, false, -90 * PUNTO, 1_000_000)).recargo, 0);
+        assert_eq!(entregar(&r, &lleva, &mut dest, None, &datos(&p, false, false, -39 * PUNTO, 1_000_000)).recargo, 0);
     }
 
     #[test]
@@ -190,7 +210,7 @@ mod pruebas {
         let lleva = carga(&[(Recurso::Cobre, 100_000)]);
         for oro_destino in [0, 990_000, 1_000_000] {
             let mut dest = alm(&[(Recurso::Oro, oro_destino)]);
-            let e = entregar(&r, &lleva, &mut dest, &datos(&p, false, false, -90 * PUNTO, 1_000_000));
+            let e = entregar(&r, &lleva, &mut dest, None, &datos(&p, false, false, -90 * PUNTO, 1_000_000));
             // Lo que entró de oro en el destino es exactamente comisión + recargo: nada se pierde del recargo.
             assert_eq!(dest.cantidad(Recurso::Oro) - oro_destino, e.comision + e.recargo);
         }

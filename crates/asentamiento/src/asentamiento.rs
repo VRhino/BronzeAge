@@ -19,7 +19,7 @@ use crate::politicas::Politicas;
 use crate::produccion::{self, Fuentes};
 use crate::recintos::{self, Recinto};
 use crate::pueblos::{IngresoAcarreo, Pueblo};
-use crate::recurso::{Costo, Recurso};
+use crate::recurso::{Costo, Recurso, N};
 use base::{Instante, Mil, Punto, MS_POR_MINUTO};
 use trazado::{CeldaMuro, ParametrosMuralla};
 
@@ -96,8 +96,10 @@ pub struct Exterior<'a> {
     pub tiene_tecnologia: &'a dyn Fn(&str) -> bool,
     pub factor_tecnologia: &'a dyn Fn(Recurso) -> i64,
     pub nivel_faccion: u32,
-    /// Orden de la Era que ha alcanzado el servidor (la Maravilla pide la V).
-    pub orden_era: u32,
+    /// El prestigio de la Facción alcanza el umbral de la Maravilla (`PRESTIGIO.maravilla`; tanda 69 §13).
+    pub maravilla_desbloqueada: bool,
+    /// Cuántas estatuas deja levantar el prestigio de la Facción: tantas como umbrales de `PRESTIGIO.estatuas` alcanzados.
+    pub estatuas_permitidas: u32,
     /// Este asentamiento es la capital de su Facción, y la Facción ya tiene una Gran Fundición.
     pub es_capital: bool,
     pub faccion_tiene_gran_fundicion: bool,
@@ -200,18 +202,25 @@ pub enum Evento {
 /// La tendencia «+N/min» de una plaza (4H T3c, decisión 3 del autor): el neto **real** del último paso de minuto —producción, consumo, recaudación, mantenimiento y lo que come la guarnición; no el gasto
 /// de las órdenes—, por recurso del almacén (milésimas) y por clase de la población (personas enteras: pesants, artesanos, nobleza). Vale 0 hasta el primer paso. Lo escribe quien lleva el reloj de la plaza
 /// (el núcleo, que cierra el paso entero); el crate no lo toca, así que el batch no paga nada por ella.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug)]
 pub struct Tendencia {
-    pub almacen: [Mil; 29],
+    pub almacen: [Mil; N],
     pub poblacion: [i64; 3],
     /// Lo que entró y lo que salió de cada recurso por los flujos del paso, por separado (mecánica 60, 2026-10-28): la Granja y la comida del trigo, por ejemplo, no se
     /// compensan. `almacen` sigue siendo el neto.
-    pub producido: [Mil; 29],
-    pub consumido: [Mil; 29],
+    pub producido: [Mil; N],
+    pub consumido: [Mil; N],
     /// Lo que rindieron los flujos de entrada, quepa o no (2026-11-03; [`crate::almacen::Flujos::produccion`]): con el almacén lleno, más que `producido`. No viaja en la
     /// foto: tras recuperar vale 0 hasta el siguiente paso (la proyección enseña entonces `producido`), y por eso no cuenta en la igualdad (como los flujos del
     /// almacén).
-    pub produccion: [Mil; 29],
+    pub produccion: [Mil; N],
+}
+
+// A mano: `Default` no está derivado para las listas de más de 32 elementos.
+impl Default for Tendencia {
+    fn default() -> Self {
+        Tendencia { almacen: [0; N], poblacion: [0; 3], producido: [0; N], consumido: [0; N], produccion: [0; N] }
+    }
 }
 
 impl PartialEq for Tendencia {
@@ -247,7 +256,7 @@ pub struct Asentamiento {
     pub recetas_pausadas: Vec<Recurso>,
     pub auto_pausada: bool,
     /// Reserva manual del Tesorero por recurso (milésimas); solo cuenta en el camino automático.
-    pub reserva_manual: [Mil; 29],
+    pub reserva_manual: [Mil; N],
     /// Tras una conquista el mantenimiento se suspende.
     pub ocupado: bool,
     /// Edificios completados desde la última lectura: el núcleo agranda la zona uno por cada uno.
@@ -288,7 +297,7 @@ impl Asentamiento {
             ascenso: None,
             recetas_pausadas: vec![],
             auto_pausada: false,
-            reserva_manual: [0; 29],
+            reserva_manual: [0; N],
             ocupado: false,
             completados_pendientes: 0,
             destruido: false,
@@ -364,7 +373,8 @@ impl Asentamiento {
             capacidad_artesanos: cap_a,
             capacidad_nobles: cap_n,
             techo: r.nivel.techo(self.nivel),
-            hay_transformacion: [Tipo::Fundicion, Tipo::Curtiduria, Tipo::Armeria, Tipo::Carpinteria].iter().any(|&t| self.edificios.activos(t) > 0),
+            // Cualquier taller de artesanos activo trae a los primeros (la quesera, la bodega y la prensa también); el molino y el horno no, que los trabajan los pesants.
+            hay_transformacion: self.edificios.iter().any(|e| e.activo() && e.tipo.pide_artesanos()),
             hay_palacio: self.edificios.activos(Tipo::Palacio) > 0,
             ciudadanos: x.ciudadanos,
             factor_consumo: self.politicas.factor(pol, "factorConsumoComida"),
@@ -376,7 +386,7 @@ impl Asentamiento {
 
     /// Reserva mínima de construcción (§6.3): lo que el mantenimiento y la comida van a cobrar en los próximos minutos. Con
     /// `con_manual`, más la reserva manual del Tesorero (solo el camino automático).
-    pub fn reserva(&self, r: &Reglas, x: &Exterior, con_manual: bool) -> [Mil; 29] {
+    pub fn reserva(&self, r: &Reglas, x: &Exterior, con_manual: bool) -> [Mil; N] {
         let entorno = self.entorno_poblacion(r, x);
         let comida = self.poblacion.consumo_por_minuto(&r.poblacion, &entorno) + x.racion_guarnicion;
         let c = &r.construccion;
@@ -436,9 +446,8 @@ impl Asentamiento {
         // 2. Comida y hambre, crecimiento y recaudación.
         let entorno = self.entorno_poblacion(r, x);
         let mut sucesos = vec![];
-        let comido = self.poblacion.nutrir(&r.poblacion, &entorno, self.almacen.disponible(Recurso::Trigo), &mut sucesos);
-        self.almacen.consumir(Recurso::Trigo, comido);
-        self.poblacion.crecer(&r.poblacion, &entorno, &mut sucesos);
+        let modificadores = self.poblacion.nutrir(&r.poblacion, &entorno, &mut self.almacen, &mut sucesos);
+        self.poblacion.crecer(&r.poblacion, &entorno, modificadores, &mut sucesos);
         self.almacen.producir(Recurso::Oro, self.poblacion.recaudacion_por_minuto(&r.poblacion, &entorno));
         for s in sucesos {
             ev.push(match s {

@@ -46,6 +46,9 @@ pub(crate) fn validar(mut a: ArtefactoDeMundo, op: &OpcionesValidacion) -> R<Mun
     let altura_bytes = capa("altura", &a.altura, (EncodingRaster::EncodingU16Le, 2 * n))?;
     let terreno = capa("terreno", &a.terreno, u8s)?;
     let fertilidad = capa("fertilidad", &a.fertilidad, u8s)?;
+    let fertilidad_vid = capa("fertilidad_vid", &a.fertilidad_vid, u8s)?;
+    let fertilidad_oliva = capa("fertilidad_oliva", &a.fertilidad_oliva, u8s)?;
+    let region = capa("region", &a.region, u8s)?;
     let humedad = capa("humedad", &a.humedad, u8s)?;
     let densidad_bosque = capa("densidad_bosque", &a.densidad_bosque, u8s)?;
     let anillos = capa("anillos", &a.anillos, u8s)?;
@@ -64,9 +67,13 @@ pub(crate) fn validar(mut a: ArtefactoDeMundo, op: &OpcionesValidacion) -> R<Mun
         }
     }
 
-    let mundo = Mundo { artefacto: a, columnas, filas, altura, terreno, fertilidad, humedad, densidad_bosque, anillos, transitable, coste };
+    let mundo = Mundo {
+        artefacto: a, columnas, filas, altura, terreno, fertilidad, fertilidad_vid, fertilidad_oliva, region, humedad, densidad_bosque, anillos,
+        transitable, coste,
+    };
 
-    // 4. Vectoriales.
+    // 4. Regiones y vectoriales.
+    regiones(&mundo)?;
     ids_unicos(&mundo)?;
     grafo(&mundo)?;
     en_tierra(&mundo)?;
@@ -105,6 +112,20 @@ fn raster(nombre: &'static str, m: &Manifiesto, r: &Raster, dim: (u32, u32, u32)
         return Err(ErrorMundo::RasterLongitud { capa: nombre, esperado: largo, obtenido: datos.len() });
     }
     Ok(datos)
+}
+
+/// Todo id del raster `region` es el de una región de `regiones`.
+fn regiones(m: &Mundo) -> R<()> {
+    let mut existe = [false; 256];
+    for r in m.regiones() {
+        if let Some(e) = existe.get_mut(r.id as usize) {
+            *e = true;
+        }
+    }
+    match m.region.iter().position(|&id| !existe[id as usize]) {
+        Some(i) => Err(ErrorMundo::RegionInexistente { celda: (i % m.columnas, i / m.columnas), id: m.region[i] }),
+        None => Ok(()),
+    }
 }
 
 fn unicos<'a>(coleccion: &'static str, ids: impl Iterator<Item = &'a str>) -> R<()> {

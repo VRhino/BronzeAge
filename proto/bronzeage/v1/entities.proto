@@ -55,6 +55,11 @@ message Faccion {
   // (`FACCION`, que un mercenario con marca no recibe) y en `ADMIN`; ausente y vacío en la forma pública.
   optional CapFundacion cap_fundacion = 22;
   repeated CupoDeNivel cupos_de_nivel = 23;
+  // Su prestigio (tanda 69 §13: se acumula y no se gasta) y cuántas alianzas puede tener activas a la vez con él (una, y una más cada 100). Públicos.
+  int64 prestigio = 24;
+  uint32 tope_alianzas = 25;
+  // Los informes de región que compró en sus tabernas y aún no puede repetir (tanda 69 §7): solo en la Facción propia (`FACCION`) y en `ADMIN`; vacío en la forma pública.
+  repeated InformeRegion informes_region = 26;
 }
 
 // El cap de fundación de la Facción (Diplomacia §3.5, `CAP_FUNDACION_POR_NIVEL` por su nivel): lo gastan sus plazas de hoy (fundadas o no) y sus Caravanas de Fundación vivas. Con
@@ -142,13 +147,14 @@ message FichaMercenario {
   uint32 premios = 7;                    // escuadras de premio de rango sin reclamar
 }
 
-// Lo que cobra hoy un mercenario por un plazo, o por el permanente (`plazo_dias` ausente), en milésimas de oro (§3, duda 1 del plan).
+// Lo que cobra hoy un mercenario por un plazo, o por el permanente (`plazo_dias` ausente), en milésimas de oro (§3, duda 1 del plan), o su equivalente en monedas del héroe (tanda 69).
 message TarifaMercenario {
   optional uint32 plazo_dias = 1;
   sint64 oro = 2;
+  sint64 monedas = 3;
 }
 
-// Un mercenario en el tablón de su campamento (`CampamentoMercenarios.tablon`, solo en `CAMPAMENTO`).
+// Un mercenario en el tablón de su campamento (`CampamentoMercenarios.tablon`, solo en `CAMPAMENTO`; y, desde la tanda 69, `Asentamiento.mercenarios_region`).
 message OfertaMercenario {
   string heroe_id = 1;
   int64 desde_ms = 2;
@@ -156,6 +162,7 @@ message OfertaMercenario {
   repeated EscuadraQueLleva tropa = 4;
   optional int64 herido_hasta_ms = 5;
   repeated TarifaMercenario tarifas = 6;
+  string campamento_id = 7;  // el campamento del tablón donde se ofrece: en el tablón de la región de una plaza vienen los de varios
 }
 
 enum EstadoMision {
@@ -382,6 +389,7 @@ message Edificio {
   // (no ve celdas) junto con `TrazadoUrbano`.
   uint32 ancho = 16;
   uint32 alto = 17;
+  bool buey = 18;                        // el molino tiene su buey y produce el doble (tanda 69 §10)
 }
 
 enum ClaseCelda {
@@ -524,6 +532,9 @@ message Asentamiento {
   // 2026-11-07 (decisión del autor): si la plaza tiene algún Mercado activo, sin nivel. Desde fuera (`VISTA`, la avistada) es lo único que se sabe de sus
   // edificios: la avistada ya no lleva `edificios`, que siguen viajando desde dentro, en la ficha propia y en los Informes.
   bool mercado_activo = 50;
+  // Tanda 69 §8: el tablón de mercenarios de los campamentos de la región de la plaza, con la forma del `CampamentoMercenarios.tablon` y gratis. Solo de dentro (interior y `ADMIN`), y solo
+  // si la plaza tiene una Taberna activa.
+  repeated OfertaMercenario mercenarios_region = 51;
 }
 
 // Rectángulo en UNIDADES LOCALES del asentamiento (esquina mínima y tamaño). El espacio local está centrado en el Centro Urbano.
@@ -582,6 +593,8 @@ message Pueblo {
   optional TrazadoUrbano trazado = 21;   // layout_version, unidades_por_celda, radio_ul, calles y caminos de la planta
   // El nivel alcanzado de su plaza madre, solo con la planta (el cliente pinta las casas con ese estilo, hasta el 3).
   optional uint32 nivel_madre = 22;
+  // El cultivo de la aldea agrícola (tanda 69 §12): trigo | vid | oliva. Se elige al marcarla y no cambia; ausente en un extractor.
+  optional string cultivo = 23;
 }
 
 enum EstadoAvanzada {
@@ -673,12 +686,6 @@ message Atributos {
   uint32 vitalidad = 4;
 }
 
-message Monedas {
-  uint64 bronce = 1;
-  uint64 plata = 2;
-  uint64 oro = 3;
-}
-
 message Estadistica {
   string nombre = 1;
   sint64 valor = 2;
@@ -765,7 +772,7 @@ message Heroe {
   repeated Loadout loadouts = 27;
   repeated ItemInstancia inventario = 28;
   Equipamiento equipamiento = 29;
-  Monedas monedas_heroe = 30;
+  reserved 30;                           // antes `monedas_heroe` (bronce, plata y oro): desde la tanda 69 (2026-11-08) es un solo saldo, `monedas`
   uint32 cupo_guarnicion = 31;           // derivado
   bytes exploracion_personal = 32;       // máscara de lo explorado sin bandera
   map<string, InteriorRecordado> plazas_recordadas = 33;
@@ -787,6 +794,9 @@ message Heroe {
   optional Contrato contrato = 40;
   optional FichaMercenario ficha_mercenario = 41;
   optional string contratado = 42;
+  // Las monedas del héroe (tanda 69, 2026-11-08): un solo saldo de monedas sueltas, aparte del oro de las plazas (100 monedas = 1 de oro en los precios que
+  // admiten las dos). Solo en el héroe propio (`HEROE`) y en `ADMIN`.
+  uint64 monedas = 43;
 }
 
 // Una escuadra que un héroe ajeno lleva en su columna, tal como se ve (`HeroePublico.escuadrasQueLleva`).
@@ -1409,6 +1419,15 @@ message MemoriaFaccion {
   bytes exploracion = 3;
   map<string, FichaConocida> asentamientos = 4;
   map<string, InformePlaza> informes = 5;
+}
+
+// Un informe de región comprado en una taberna (tanda 69 §7): de qué región del relieve y de qué tipo, cuándo se compró, cuándo caduca (solo el de órdenes) y cuándo se puede volver a comprar.
+message InformeRegion {
+  uint32 region = 1;
+  string tipo = 2;               // plazas | ordenes
+  int64 comprado_en_ms = 3;
+  optional int64 caduca_en_ms = 4;
+  int64 libre_en_ms = 5;
 }
 
 // Máscara de niebla que viaja con la vista: dos máscaras sobre la misma rejilla y su geometría.

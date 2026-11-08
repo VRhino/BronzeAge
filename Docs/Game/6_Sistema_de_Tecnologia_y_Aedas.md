@@ -54,7 +54,7 @@ La season (12 meses) se divide en cinco Eras, de ~1300 a 323 a. C. (hasta Alejan
 - **El techo de nivel de asentamiento de cada Era es derivado**: no hay una regla que prohíba subir, sino que la
   subida pide algo que solo existe a partir de cierta Era (Doc 4.5). La tabla de niveles de arriba es la guía con la
   que se reparte el contenido de cada Era.
-- La Maravilla exige que el servidor haya llegado a la Era V (Doc 4.2.1). La season termina por tiempo aunque nadie
+- La Maravilla ya no exige ninguna Era: pide 2.000 de prestigio de la Facción y el nivel 5 de la plaza (Doc 4.2.1, 2.2.2; decidido el 2026-11-08). La season termina por tiempo aunque nadie
   la haya construido.
 
 ## 6.3 Logro del servidor e hito de la Facción

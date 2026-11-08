@@ -1,6 +1,6 @@
 [package]
 name = "mercenarios"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Mercenarios por contrato (entrada 48, Mechanics/Mercenarios_Por_Contrato): contratos, órdenes de mando, renombre, rangos y medallas. Reglas puras en enteros, sin reloj propio ni mundo"
 

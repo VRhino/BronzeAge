@@ -40,7 +40,6 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | Código | Constante | Qué dice |
 |---|---|---|
 | `obra.tecnologia_faltante` | `OBRA_TECNOLOGIA_FALTANTE` | — |
-| `obra.era_insuficiente` | `OBRA_ERA_INSUFICIENTE` | — |
 | `obra.tipo_no_manual` | `OBRA_TIPO_NO_MANUAL` | — |
 | `obra.unico` | `OBRA_UNICO` | — |
 | `obra.tope_almacenes` | `OBRA_TOPE_ALMACENES` | — |
@@ -59,6 +58,15 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `obra.no_esta_en_curso` | `OBRA_NO_ESTA_EN_CURSO` | El edificio no tiene obra en curso que cancelar: ni en construcción ni mejorándose (2026-11-06). |
 | `obra.no_mejorable` | `OBRA_NO_MEJORABLE` | — |
 | `obra.sin_cuadrilla` | `OBRA_SIN_CUADRILLA` | — |
+| `obra.prestigio_insuficiente` | `OBRA_PRESTIGIO_INSUFICIENTE` | La Maravilla o la estatua piden más prestigio del que tiene la Facción (tanda 69 §13). |
+| `obra.solo_en_capital` | `OBRA_SOLO_EN_CAPITAL` | La estatua solo se levanta en la capital de la Facción (tanda 69 §13). |
+
+### El molino y su buey (tanda 69 §10)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `molino.no_es_molino` | `MOLINO_NO_ES_MOLINO` | El edificio al que se asigna el buey no es un molino. |
+| `molino.ya_tiene_buey` | `MOLINO_YA_TIENE_BUEY` | El molino ya tiene su buey. |
 
 ### Ascenso (`Bloqueo`): el rechazo lleva el código del primero y todos en el mensaje
 
@@ -194,6 +202,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `pueblo.no_es_aldea` | `PUEBLO_NO_ES_ALDEA` | Solo las aldeas agrícolas suben de nivel. |
 | `pueblo.nivel_maximo` | `PUEBLO_NIVEL_MAXIMO` | — |
 | `pueblo.mejora_en_curso` | `PUEBLO_MEJORA_EN_CURSO` | — |
+| `pueblo.cultivo_bloqueado` | `PUEBLO_CULTIVO_BLOQUEADO` | La plaza madre no tiene aún el nivel que pide ese cultivo (tanda 69 §12: la vid, el 3; la oliva, el 4). |
 
 ### Dentro de un pueblo o una aldea (§14.0.1, 2026-10-29)
 
@@ -310,6 +319,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `mercenario.sin_valoracion` | `MERCENARIO_SIN_VALORACION` | No hay contrato terminado de ese mercenario con la Facción que se pueda valorar: no lo hubo, ya se valoró o pasó el plazo. |
 | `mercenario.sin_premio` | `MERCENARIO_SIN_PREMIO` | No le queda ninguna escuadra de premio de rango por reclamar. |
 | `mercenario.fuera_de_licencia` | `MERCENARIO_FUERA_DE_LICENCIA` | La tropa está por encima del escalón que permite su rango, o no es de su leva propia ni la recluta su campamento. |
+| `mercenario.fuera_de_la_region` | `MERCENARIO_FUERA_DE_LA_REGION` | Desde la taberna solo se contrata a los mercenarios de los campamentos de su región (tanda 69 §8). |
 
 ### Reclutar en una plaza (`ErrorReclutamiento`), en el orden en que se comprueban
 
@@ -333,6 +343,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `heroe.ya_existe` | `HEROE_YA_EXISTE` | — |
 | `heroe.nombre_invalido` | `HEROE_NOMBRE_INVALIDO` | El nombre del héroe está vacío, empieza o acaba en espacio, pasa de 24 caracteres o lleva caracteres de control. |
 | `heroe.nombre_en_uso` | `HEROE_NOMBRE_EN_USO` | Ya hay otro héroe con ese nombre (sin distinguir mayúsculas; 2026-11-06, pedido del autor). |
+| `heroe.sin_monedas` | `HEROE_SIN_MONEDAS` | El héroe no tiene las monedas que cuesta (tanda 69 §4). |
 | `heroe.campamento_desconocido` | `HEROE_CAMPAMENTO_DESCONOCIDO` | — |
 | `heroe.puntos_negativos` | `HEROE_PUNTOS_NEGATIVOS` | — |
 | `heroe.ningun_punto` | `HEROE_NINGUN_PUNTO` | — |
@@ -484,7 +495,8 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `intel.zona_reciente` | `INTEL_ZONA_RECIENTE` | La Facción miró esa zona hace poco: hay que esperar a que se enfríe. |
 | `intel.plaza_propia` | `INTEL_PLAZA_PROPIA` | — |
 | `intel.plaza_desconocida` | `INTEL_PLAZA_DESCONOCIDA` | La Facción no conoce esa plaza: ni tiene su ficha ni cae en una Mirada abierta. |
-| `intel.informe_reciente` | `INTEL_INFORME_RECIENTE` | Ya tiene un Informe reciente de esa plaza. |
+| `intel.sin_informe_de_ordenes` | `INTEL_SIN_INFORME_DE_ORDENES` | Tomar una orden a distancia pide el informe vigente de las órdenes de la región de esa plaza (tanda 69 §7). |
+| `intel.informe_reciente` | `INTEL_INFORME_RECIENTE` | Ya tiene un Informe reciente de esa plaza o, en el informe de región, uno del mismo tipo de esa región. |
 | `intel.sin_oro` | `INTEL_SIN_ORO` | No hay oro para pagarla (en el almacén de la plaza, en el personal o en el carro). |
 | `columna.en_batalla` | `COLUMNA_EN_BATALLA` | La columna está apartada por una batalla: no se mueve ni se le dan órdenes de movimiento, de persecución ni de inspección. |
 | `relacion.consigo_misma` | `RELACION_CONSIGO_MISMA` | — |
@@ -617,6 +629,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `diplomacia.sin_rey` | `DIPLOMACIA_SIN_REY` | Una de las dos Facciones no tiene Rey que pacte o conteste. |
 | `diplomacia.vasalla_de_tercera` | `DIPLOMACIA_VASALLA_DE_TERCERA` | Una de las dos ya es vasalla de una tercera (una Facción tiene como mucho una señora). |
 | `diplomacia.reputacion_baja` | `DIPLOMACIA_REPUTACION_BAJA` | Proponer una alianza con la reputación por debajo de `REPUTACION.umbralBajoParaEmbajador`. |
+| `diplomacia.tope_alianzas` | `DIPLOMACIA_TOPE_ALIANZAS` | Una de las dos ya tiene todas las alianzas activas que le deja su prestigio (una, y una más cada 100; tanda 69 §13). |
 | `diplomacia.ya_pendiente` | `DIPLOMACIA_YA_PENDIENTE` | Ya hay una propuesta de esa clase (relación, anexión o fusión) vigente entre las dos, en cualquier sentido. |
 | `diplomacia.propuesta_desconocida` | `DIPLOMACIA_PROPUESTA_DESCONOCIDA` | `prop-N` no es ninguna propuesta pendiente de la clase de la orden (relación, anexión o fusión), o ya se contestó o se retiró. |
 | `diplomacia.propuesta_caducada` | `DIPLOMACIA_PROPUESTA_CADUCADA` | La propuesta caducó (`RELACION_PROPUESTA`, `ANEXION` o `FUSION.caducidadDias`). |

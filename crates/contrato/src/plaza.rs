@@ -89,4 +89,5 @@ campos_de_la_plaza!(
     participacion,
     tablon,
     almacen_cerrado_a_ciudadanos,
+    mercenarios_region,
 );

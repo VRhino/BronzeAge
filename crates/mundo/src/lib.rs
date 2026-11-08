@@ -8,18 +8,20 @@
 //! - **Unidades**: milésimas de unidad estratégica (`sint64`). Mundo real: 2.667.000 × 2.000.000.
 //! - **Rasters**: `tamano_celda` = 4000; orden por filas, fila 0 al norte; se muestrea el centro de la celda
 //!   (la celda de un punto `(x, y)` es `(x / 4000, y / 4000)`). Columnas = ⌈ancho / 4000⌉, filas = ⌈alto / 4000⌉.
-//!   `altura` es `u16` LE; `terreno` es `u8` = `ClaseTerreno`; `fertilidad`, `humedad` y `densidad_bosque` son `u8`;
+//!   `altura` es `u16` LE; `terreno` es `u8` = `ClaseTerreno`; `fertilidad`, `fertilidad_vid`, `fertilidad_oliva`, `humedad` y
+//!   `densidad_bosque` son `u8`; `region` es `u8` = `id` de una `RegionDeMundo` de `regiones` (con su nombre);
 //!   `anillos` es `u8` = `Anillo`; `transitable` va en bits (celda `i` → byte `i >> 3`, bit `i & 7`, LSB primero).
 //!   `coste` (opcional) es `u16` LE: coste de movimiento en milésimas (1000 = llano), 0 justo en las celdas no transitables.
 //!   Todos con `zstd = true`.
 //! - **Hash**: `manifiesto.hash` = sha256 hex minúsculas de la serialización prost del `ArtefactoDeMundo` con
 //!   `manifiesto.hash = ""`. Cada `CapaDeMundo.sha256` = sha256 hex de los `datos` del raster tal como se guardan
-//!   (comprimidos). `CapaDeMundo.nombre` ∈ {altura, terreno, fertilidad, humedad, densidad_bosque, anillos, transitable, coste};
+//!   (comprimidos). `CapaDeMundo.nombre` ∈ {altura, terreno, fertilidad, fertilidad_vid, fertilidad_oliva, region, humedad,
+//!   densidad_bosque, anillos, transitable, coste};
 //!   se ignoran otras capas declaradas y el campo `bytes`.
 //!
 //! # Reglas que se comprueban (en este orden)
 //!
-//! hash del contenido; tamaño (si `tamano_esperado`); sha256 y dimensiones/encoding/longitud de cada capa; coste mayor que
+//! hash del contenido; tamaño (si `tamano_esperado`); sha256 y dimensiones/encoding/longitud de cada capa; todo id de `region` existe en `regiones`; coste mayor que
 //! 0 justo en las celdas transitables (si trae la capa); ids únicos
 //! por colección; aristas del grafo (nodos existentes, origen y destino transitables); nodos de recurso, campamentos
 //! (mercenarios y bandidos) y alijos en tierra transitable y fuera del agua; cuotas por anillo de estaño y oro
@@ -70,6 +72,9 @@ pub struct Mundo {
     altura: Vec<u16>,
     terreno: Vec<u8>,
     fertilidad: Vec<u8>,
+    fertilidad_vid: Vec<u8>,
+    fertilidad_oliva: Vec<u8>,
+    region: Vec<u8>,
     humedad: Vec<u8>,
     densidad_bosque: Vec<u8>,
     anillos: Vec<u8>,
@@ -134,6 +139,24 @@ impl Mundo {
         self.celda(x, y).map(|i| self.fertilidad[i])
     }
 
+    pub fn fertilidad_vid_en(&self, x: i64, y: i64) -> Option<u8> {
+        self.celda(x, y).map(|i| self.fertilidad_vid[i])
+    }
+
+    pub fn fertilidad_oliva_en(&self, x: i64, y: i64) -> Option<u8> {
+        self.celda(x, y).map(|i| self.fertilidad_oliva[i])
+    }
+
+    /// Id de la región del relieve en la celda de `(x, y)`; su nombre, con [`Mundo::nombre_region`].
+    pub fn region_en(&self, x: i64, y: i64) -> Option<u8> {
+        self.celda(x, y).map(|i| self.region[i])
+    }
+
+    /// Nombre de la región con ese id («Altiplano interior»...).
+    pub fn nombre_region(&self, id: u8) -> Option<&str> {
+        self.regiones().iter().find(|r| r.id == id as u32).map(|r| r.nombre.as_str())
+    }
+
     pub fn humedad_en(&self, x: i64, y: i64) -> Option<u8> {
         self.celda(x, y).map(|i| self.humedad[i])
     }
@@ -176,6 +199,9 @@ impl Mundo {
     }
     pub fn artefacto(&self) -> &ArtefactoDeMundo {
         &self.artefacto
+    }
+    pub fn regiones(&self) -> &[RegionDeMundo] {
+        &self.artefacto.regiones
     }
     pub fn rios(&self) -> &[Rio] {
         &self.artefacto.rios

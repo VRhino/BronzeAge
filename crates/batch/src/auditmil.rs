@@ -5,7 +5,7 @@
 
 use asentamiento::datos::UNO;
 use asentamiento::recintos::Recinto;
-use asentamiento::recurso::TODOS;
+use asentamiento::recurso::{N, TODOS};
 use asentamiento::Recurso;
 use base::{Instante, Mil};
 use comercio::caravana::EstadoCaravana;
@@ -39,8 +39,8 @@ pub fn escuadras(n: &Nucleo) -> BTreeMap<u64, Esc> {
 
 /// Lo que hay de cada recurso en todos los contenedores del mundo: almacenes de plazas, pueblos y avanzadas (también las huérfanas), carros de columnas, caravanas, almacenes
 /// personales y carros de los héroes.
-pub fn recursos(n: &Nucleo) -> [i64; 29] {
-    let mut v = [0i64; 29];
+pub fn recursos(n: &Nucleo) -> [i64; N] {
+    let mut v = [0i64; N];
     let e = n.estado();
     let mut sumar = |r: Recurso, q: i64| v[r.indice()] += q;
     for a in e.asentamientos.values() {
@@ -95,7 +95,7 @@ pub struct Antes {
     escuadras: BTreeMap<u64, Esc>,
     /// Héroe → hasta cuándo está herido.
     heridos: BTreeMap<u64, Option<Instante>>,
-    recursos: [i64; 29],
+    recursos: [i64; N],
     /// La caravana atacada: carros y carga total.
     caravana: Option<(usize, i64)>,
     recintos: Vec<Recinto>,
@@ -264,12 +264,21 @@ pub fn comparar(n: &Nucleo, a: &Antes, t: Instante, columnas: &[u64], objetivo: 
         }
     }
 
-    // Nada se crea: ningún recurso crece, salvo la chatarra de las bajas y el oro de los bandidos, que no pasan de lo que dicen los hechos.
+    // Nada se crea: ningún recurso crece, salvo la chatarra de las bajas, la madera, la piedra y el trigo de los bandidos, y el ganado y la carne del rebaño de una aldea
+    // saqueada (sus cabezas entran sacrificadas en el carro, Combate §7.3), que no pasan de lo que dicen los hechos (el oro no crece nunca).
     let r = recursos(n);
     let suma = |c: &str| hechos.iter().map(|h| h.dato(c)).sum::<i64>();
     let crece = |rc: Recurso| r[rc.indice()] - a.recursos[rc.indice()];
-    let oro_de_bandidos = if combate.is_some_and(|h| h.codigo == "combate.campamento_destruido") { suma("oro") } else { 0 };
-    v.conservacion += TODOS.iter().filter(|&&rc| !CHATARRA.contains(&rc) && crece(rc) > if rc == Recurso::Oro { oro_de_bandidos } else { 0 }).count() as u64;
+    let de_bandidos = |c: &str| if combate.is_some_and(|h| h.codigo == "combate.campamento_destruido") { suma(c) } else { 0 };
+    let del_rebano = combate.filter(|h| h.codigo == "combate.pueblo_saqueado").map_or(0, |h| h.dato("saqueado"));
+    let permitido = |rc: Recurso| match rc {
+        Recurso::Madera => de_bandidos("madera"),
+        Recurso::Piedra => de_bandidos("piedra"),
+        Recurso::Trigo => de_bandidos("trigo"),
+        Recurso::Livestock | Recurso::Carne => del_rebano,
+        _ => 0,
+    };
+    v.conservacion += TODOS.iter().filter(|&&rc| !CHATARRA.contains(&rc) && crece(rc) > permitido(rc)).count() as u64;
     v.conservacion += (CHATARRA.iter().map(|&c| crece(c)).sum::<i64>() > suma("chatarra")) as u64;
 
     // El botín es lo que entró en el carro del atacante cuando gana una columna, una caravana o un campamento, y el carro no pasa de su capacidad.
@@ -279,7 +288,7 @@ pub fn comparar(n: &Nucleo, a: &Antes, t: Instante, columnas: &[u64], objetivo: 
         let cobrado = match combate {
             Some(h) if h.codigo == "combate.resuelto" && h.dato("ganaElAtacante") == 1 => Some(h.dato("botin")),
             Some(h) if h.codigo == "combate.caravana_interceptada" => Some(h.dato("botin")),
-            Some(h) if h.codigo == "combate.campamento_destruido" => Some(h.dato("oro")),
+            Some(h) if h.codigo == "combate.campamento_destruido" => Some(h.dato("madera") + h.dato("piedra") + h.dato("trigo")),
             _ => None,
         };
         v.botin += cobrado.is_some_and(|b| carga - a.carga_atacante != b) as u64;

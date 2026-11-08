@@ -163,6 +163,61 @@ fn una_columna_ataca_a_otra_y_el_derrotado_queda_herido_pierde_la_mitad_del_carr
     assert!(!x.n.heroe_herido(beto.1));
 }
 
+/// Las monedas de un héroe.
+fn monedas_de(n: &Nucleo, heroe: u64) -> i64 {
+    n.heroe(heroe).unwrap().heroe.monedas
+}
+
+#[test]
+fn un_combate_entre_dos_facciones_paga_monedas_al_heroe_ganador_y_al_perdedor() {
+    let mut x = choque();
+    let (ana, beto) = (x.ana, x.beto);
+    let (m0_ana, m0_beto) = (monedas_de(&x.n, ana.1), monedas_de(&x.n, beto.1));
+    let r = atacar(&mut x.n, 10 * MIN, "ana", "a1", ana.1, ObjetivoAtaque::Ejercito(beto.0), false);
+    assert!(r.aceptada(), "{r:?}");
+    assert_eq!(dato(&hechos(&x.n, "combate.resuelto")[0], "ganaElAtacante"), 1, "ana gana");
+    // Las cuantías de `MONEDAS` (Combate §7): 500 al ganador y 150 al perdedor, con la primera vez del par a factor completo.
+    let monedas = mc().monedas;
+    assert_eq!((monedas_de(&x.n, ana.1) - m0_ana, monedas_de(&x.n, beto.1) - m0_beto), (monedas.ganador, monedas.perdedor));
+    assert_eq!(x.n.estado().combate.encuentros.get(&(1, 2)), Some(&vec![10 * MIN]), "el encuentro del par queda anotado, con la Facción menor primero");
+}
+
+#[test]
+fn el_mismo_par_de_facciones_paga_con_rendimientos_decrecientes_hasta_que_la_ventana_deja_de_pagar() {
+    let mut x = choque();
+    let (ana, beto) = (x.ana, x.beto);
+    let r = mc().monedas;
+    let factor = |v: i64| (1_000_000 - r.rendimientos.caida_por_cada * (v - r.rendimientos.completas).max(0)).max(0) * i64::from(v < r.rendimientos.solo_experiencia_desde);
+    let (mut cobrado, mut esperado) = (vec![], vec![]);
+    for k in 1..=r.rendimientos.solo_experiencia_desde + 1 {
+        let (m_ana, m_beto) = (monedas_de(&x.n, ana.1), monedas_de(&x.n, beto.1));
+        // Cada tres minutos (el herido se cura a los dos): ana ataca a beto.
+        let res = atacar(&mut x.n, (10 + 3 * k) * MIN, "ana", &format!("a{k}"), ana.1, ObjetivoAtaque::Ejercito(beto.0), false);
+        assert!(res.aceptada(), "{res:?}");
+        let gana_ana = dato(hechos(&x.n, "combate.resuelto").last().unwrap(), "ganaElAtacante") == 1;
+        let (de_ana, de_beto) = if gana_ana { (r.ganador, r.perdedor) } else { (r.perdedor, r.ganador) };
+        cobrado.push((monedas_de(&x.n, ana.1) - m_ana, monedas_de(&x.n, beto.1) - m_beto));
+        esperado.push((de_ana * factor(k) / 1_000_000, de_beto * factor(k) / 1_000_000));
+    }
+    assert_eq!(cobrado, esperado);
+    assert!(cobrado[0].0 > 0 && cobrado[r.rendimientos.completas as usize].0 < cobrado[0].0, "baja después de las completas");
+    assert_eq!(cobrado[r.rendimientos.solo_experiencia_desde as usize - 1..], [(0, 0), (0, 0)], "desde `soloExperienciaDesde`, nada");
+}
+
+#[test]
+fn un_heroe_sin_faccion_no_cobra_monedas() {
+    let mut x = choque();
+    let (ana, beto) = (x.ana, x.beto);
+    // El héroe de beto se queda sin Facción sin que su columna cambie de bando: sigue siendo un enemigo al que atacar, pero el diseño pide dos Facciones.
+    assert!(x.n.aplicar_en(x.n.ahora(), admin("f", Comando::FijarFaccionDeHeroe { heroe: beto.1, faccion: None })).aceptada());
+    let (m0_ana, m0_beto) = (monedas_de(&x.n, ana.1), monedas_de(&x.n, beto.1));
+    let r = atacar(&mut x.n, 10 * MIN, "ana", "a1", ana.1, ObjetivoAtaque::Ejercito(beto.0), false);
+    assert!(r.aceptada(), "{r:?}");
+    assert_eq!(hechos(&x.n, "combate.resuelto").len(), 1);
+    assert_eq!((monedas_de(&x.n, ana.1), monedas_de(&x.n, beto.1)), (m0_ana, m0_beto));
+    assert!(x.n.estado().combate.encuentros.is_empty(), "y no anota ningún encuentro");
+}
+
 #[test]
 fn las_ordenes_que_no_valen_se_rechazan_sin_rastro_y_en_su_orden() {
     let mut x = choque();
@@ -287,8 +342,14 @@ fn atacar_un_campamento_de_bandidos_no_exige_guerra_gasta_una_tirada_y_su_oro_va
     let h = &hechos(&n, "combate.campamento_destruido")[0];
     assert_eq!((dato(h, "campamento"), dato(h, "nivel"), dato(h, "heridos")), (b as i64, 2, 0));
     assert!(n.campamento_de_bandidos(b).is_none(), "el campamento cae");
-    assert_eq!(n.estado().ejercitos[&ana.0].columna.carga[&Oro], 33_000, "el oro por héroe del nivel 2");
-    assert_eq!(dato(h, "oro"), 33_000);
+    // Nivel 2 (Generacion_Del_Mundo §13): 7 de madera, de piedra y de trigo, y 75 monedas para el héroe.
+    let r = combate::Reglas::cargar();
+    let nivel2 = &r.bandidos.niveles[1];
+    let carga = &n.estado().ejercitos[&ana.0].columna.carga;
+    assert_eq!([Madera, Piedra, Trigo].map(|x| carga[&x]), [nivel2.botin_por_heroe; 3], "el botín por héroe del nivel 2");
+    assert!(!carga.contains_key(&Oro), "los bandidos ya no dan oro");
+    assert_eq!(["madera", "piedra", "trigo"].map(|k| dato(h, k)), [nivel2.botin_por_heroe; 3]);
+    assert_eq!((dato(h, "monedas"), n.heroe(ana.1).unwrap().heroe.monedas), (nivel2.monedas_por_heroe, militar::Reglas::cargar().heroe.monedas_iniciales + nivel2.monedas_por_heroe));
     assert_eq!(comun::logros_de_hechos(&n), vec![(Contador::BandidosCampamentosDestruidos, 1)], "el logro cuenta el campamento destruido (6B)");
     assert_eq!(n.cosas_en_el_espacio(), 1, "ya no está en el espacio");
     // Ya no existe.
@@ -305,32 +366,42 @@ fn un_heroe_solo_ataca_a_los_bandidos_pero_no_basta_para_un_campamento_de_nivel_
     let r = atacar(&mut n, MIN, "ana", "a1", ana.1, ObjetivoAtaque::Campamento(b), false);
     assert!(r.aceptada(), "{r:?}");
     let h = &hechos(&n, "combate.ataque_campamento_fallido")[0];
-    assert_eq!((dato(h, "heridos"), dato(h, "carroPerdido"), dato(h, "oro")), (1, 15_000, 0));
+    assert_eq!((dato(h, "heridos"), dato(h, "carroPerdido"), dato(h, "monedas")), (1, 15_000, 0));
     assert!(n.campamento_de_bandidos(b).is_some(), "el campamento aguanta");
     assert!(n.heroe_herido(ana.1));
     assert_eq!(n.estado().ejercitos[&ana.0].columna.carga[&Piedra], 16_000, "pierde la mitad del carro, hacia abajo, y nadie se la queda");
 }
 
 #[test]
-fn el_oro_de_los_bandidos_cae_con_los_rendimientos_decrecientes_de_cada_heroe() {
+fn el_botin_de_los_bandidos_cae_con_los_rendimientos_decrecientes_de_cada_heroe() {
     let mut n = nucleo(40, 5);
     let ana = columna(&mut n, "ana", 1, c(10, 2));
     dar(&mut n, "d1", ana.1, Tropa::ArquerosCompuesto, completa(Tropa::ArquerosCompuesto));
-    let mut oros = vec![];
+    let r = combate::Reglas::cargar();
+    let (rend, nivel1) = (&r.bandidos.rendimientos, &r.bandidos.niveles[0]);
+    let madera = |n: &Nucleo| n.estado().ejercitos[&ana.0].columna.carga.get(&Madera).copied().unwrap_or(0);
+    let monedas = |n: &Nucleo| n.heroe(ana.1).unwrap().heroe.monedas;
+    let (mut maderas, mut pagas) = (vec![], vec![]);
     for k in 0..15 {
         let b = colocar(&mut n, &format!("b{k}"), Punto::new(c(10, 2).x + 1_000, c(10, 2).y), 1);
-        let antes = n.estado().ejercitos[&ana.0].columna.carga.get(&Oro).copied().unwrap_or(0);
-        let r = atacar(&mut n, (k + 1) * MIN, "ana", &format!("a{k}"), ana.1, ObjetivoAtaque::Campamento(b), false);
-        assert!(r.aceptada(), "{r:?}");
-        oros.push(n.estado().ejercitos[&ana.0].columna.carga.get(&Oro).copied().unwrap_or(0) - antes);
+        let (m0, p0) = (madera(&n), monedas(&n));
+        let res = atacar(&mut n, (k + 1) * MIN, "ana", &format!("a{k}"), ana.1, ObjetivoAtaque::Campamento(b), false);
+        assert!(res.aceptada(), "{res:?}");
+        maderas.push(madera(&n) - m0);
+        pagas.push(monedas(&n) - p0);
     }
-    // Completo las 8 primeras veces en 24 h, luego 15 % menos por cada una más y, desde la 14.ª, solo experiencia.
-    assert_eq!(oros, [30_000, 30_000, 30_000, 30_000, 30_000, 30_000, 30_000, 30_000, 25_000, 21_000, 16_000, 12_000, 7_000, 0, 0], "en unidades enteras de oro, hacia abajo");
+    // Completo las completas primeras veces en la ventana, luego `caidaPorCada` menos por cada una más y, desde `soloExperienciaDesde`, solo experiencia; la madera en
+    // unidades enteras hacia abajo, igual que las monedas.
+    let factor = |v: i64| (1_000_000 - rend.caida_por_cada * (v - rend.completas).max(0)).max(0) * i64::from(v < rend.solo_experiencia_desde);
+    let esperado = |base: i64, v: i64| base * factor(v) / 1_000_000;
+    assert_eq!(maderas, (1..=15).map(|v| esperado(nivel1.botin_por_heroe, v) / 1_000 * 1_000).collect::<Vec<_>>(), "madera en unidades enteras");
+    assert_eq!(pagas, (1..=15).map(|v| esperado(nivel1.monedas_por_heroe, v)).collect::<Vec<_>>(), "monedas");
+    assert_eq!((maderas[13], pagas[13], maderas[14], pagas[14]), (0, 0, 0, 0), "desde la 14.ª, solo experiencia");
     // Pasadas 24 h desde las primeras, vuelve a pagar casi completo.
     let b = colocar(&mut n, "bz", Punto::new(c(10, 2).x + 1_000, c(10, 2).y), 1);
-    let antes = n.estado().ejercitos[&ana.0].columna.carga[&Oro];
+    let antes = madera(&n);
     assert!(atacar(&mut n, 25 * 60 * MIN, "ana", "az", ana.1, ObjetivoAtaque::Campamento(b), false).aceptada());
-    assert!(n.estado().ejercitos[&ana.0].columna.carga[&Oro] - antes >= 21_000, "la ventana de 24 h se desliza");
+    assert!(madera(&n) - antes >= esperado(nivel1.botin_por_heroe, rend.solo_experiencia_desde - 1) / 1_000 * 1_000, "la ventana de 24 h se desliza");
 }
 
 #[test]
@@ -359,8 +430,10 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.anillos.insert(1, 600_000);
     base.combate.guarniciones.insert(9, GuarnicionDePueblo { escuadra: combate::pueblo::guarnicion_de_serie(&mc(), 12, false, 0), repone_en: Some(7_000) });
     base.combate.destruidos.insert(6, vec![100, 200]);
+    base.combate.encuentros.insert((1, 2), vec![300, 400]);
+    base.combate.encuentros.insert((2, 5), vec![500]);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN58");
+    assert_eq!(&bytes[..5], b"BAN59");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -378,6 +451,8 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
         ("guarnición del pueblo", Box::new(|c| c.guarniciones.get_mut(&9).unwrap().escuadra.cantidad -= 1)),
         ("reposición de la guarnición", Box::new(|c| c.guarniciones.get_mut(&9).unwrap().repone_en = None)),
         ("héroe que destruyó", Box::new(|c| c.destruidos.get_mut(&6).unwrap().push(300))),
+        ("instante de un encuentro", Box::new(|c| c.encuentros.get_mut(&(1, 2)).unwrap().push(600))),
+        ("par de Facciones de un encuentro", Box::new(|c| drop(c.encuentros.remove(&(2, 5))))),
     ];
     for (nombre, f) in cambios {
         let mut s = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
@@ -1320,36 +1395,45 @@ fn la_cita_del_anillo_se_rehace_cuando_llega_o_se_va_un_residente() {
     assert_eq!(del_anillo(&n), 10, "el residente que llega adelanta la cita (y nunca pasa de 10)");
 }
 
-/// Cal-5 (decisión del autor del 2026-10-24): el oro de los bandidos del anillo de un campamento de mercenarios solo lo cobra un héroe **sin plaza** (reside en un
-/// campamento y su Facción no tiene plazas); uno con plaza destruye el campamento igual, pero sin oro, y esa destrucción no cuenta en su ventana. El de una plaza
-/// paga a todos.
+/// Cal-5 (decisión del autor del 2026-10-24): el botín (recursos y monedas, tanda 69) de los bandidos del anillo de un campamento de mercenarios solo lo cobra un héroe
+/// **sin plaza** (reside en un campamento y su Facción no tiene plazas); uno con plaza destruye el campamento igual, pero sin botín, y esa destrucción no cuenta en su
+/// ventana. El de una plaza paga a todos.
 #[test]
-fn el_oro_de_los_bandidos_del_anillo_solo_lo_cobra_un_heroe_sin_plaza() {
+fn el_botin_de_los_bandidos_del_anillo_solo_lo_cobra_un_heroe_sin_plaza() {
     let m = con_mundo!();
     let mut e = montar(m, 7, false);
     let del_anillo: Vec<(u32, nucleo::CampamentoBandidos)> = e.n.campamentos_de_bandidos().filter_map(|b| if let nucleo::OrigenBandidos::Anillo(c) = b.origen { Some((c, b.clone())) } else { None }).collect();
     let ((_, b1), (c2, b2)) = (del_anillo[0].clone(), del_anillo[1].clone());
     let tropas = [Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce, Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto];
-    let oro = |e: &Esc, camp: u64| hechos(&e.n, "combate.campamento_destruido").iter().find(|h| dato(h, "campamento") == camp as i64).map(|h| dato(h, "oro"));
+    // (madera, piedra, trigo, monedas) que cobró el héroe al destruir ese campamento.
+    let botin = |e: &Esc, camp: u64| {
+        hechos(&e.n, "combate.campamento_destruido").iter().find(|h| dato(h, "campamento") == camp as i64).map(|h| ["madera", "piedra", "trigo", "monedas"].map(|k| dato(h, k)))
+    };
     let reglas = combate::Reglas::cargar();
+    let del_nivel = |nivel: u8| {
+        let n = &reglas.bandidos.niveles[nivel as usize - 1];
+        [n.botin_por_heroe, n.botin_por_heroe, n.botin_por_heroe, n.monedas_por_heroe]
+    };
     // Con plaza: de la Facción 1, que tiene la plaza A, y residente en ella.
     let con = e.ejercito("ana", 1, b1.posicion, &tropas);
     let plaza = e.a as u32;
     e.ok("admin", Comando::FijarResidencia { heroe: con.1, residencia: Some(Residencia::Asentamiento(plaza)) });
     assert!(e.atacar("ana", con.1, ObjetivoAtaque::Campamento(b1.id), false).aceptada());
-    assert_eq!(oro(&e, b1.id), Some(0), "con plaza, el anillo no paga oro");
+    assert_eq!(botin(&e, b1.id), Some([0; 4]), "con plaza, el anillo no paga botín");
+    assert_eq!(e.n.heroe(con.1).unwrap().heroe.monedas, militar::Reglas::cargar().heroe.monedas_iniciales, "ni monedas");
     assert!(!e.n.estado().combate.destruidos.contains_key(&con.1), "y no cuenta en su ventana");
     // Sin plaza: de una Facción sin plazas y residente en un campamento de mercenarios.
     let sin = e.ejercito("gus", 3, b2.posicion, &tropas);
     e.ok("admin", Comando::FijarResidencia { heroe: sin.1, residencia: Some(Residencia::Campamento(c2)) });
     assert!(e.atacar("gus", sin.1, ObjetivoAtaque::Campamento(b2.id), false).aceptada());
-    assert_eq!(oro(&e, b2.id), Some(reglas.bandidos.niveles[b2.nivel as usize - 1].oro_por_heroe), "sin plaza, el oro de su nivel");
+    assert_eq!(botin(&e, b2.id), Some(del_nivel(b2.nivel)), "sin plaza, el botín de su nivel");
+    assert_eq!(e.n.heroe(sin.1).unwrap().heroe.monedas, militar::Reglas::cargar().heroe.monedas_iniciales + del_nivel(b2.nivel)[3], "y sus monedas, en el héroe");
     // El de una plaza paga también al que tiene plaza.
     let suyo = e.n.campamentos_de_bandidos().find(|b| b.origen == nucleo::OrigenBandidos::Plaza(e.b)).cloned().expect("la plaza B tiene su campamento");
     let otra = e.ejercito("ana", 1, suyo.posicion, &tropas);
     e.ok("admin", Comando::FijarResidencia { heroe: otra.1, residencia: Some(Residencia::Asentamiento(plaza)) });
     assert!(e.atacar("ana", otra.1, ObjetivoAtaque::Campamento(suyo.id), false).aceptada());
-    assert_eq!(oro(&e, suyo.id), Some(reglas.bandidos.niveles[suyo.nivel as usize - 1].oro_por_heroe));
+    assert_eq!(botin(&e, suyo.id), Some(del_nivel(suyo.nivel)));
 }
 
 #[test]
@@ -1440,8 +1524,8 @@ fn bandidos_en_la_ruta(e: &mut Esc, caravana: u64, nivel: u8) -> (u64, Instante)
 }
 
 #[test]
-/// La escolta que vence a los bandidos que la acosan los destruye (2026-11-06, pedido del autor): su oro, para el héroe de la escolta, va en la caravana; la escolta sufre el 5 %.
-fn una_escolta_que_gana_el_acoso_destruye_el_campamento_y_su_oro_viaja_en_la_caravana() {
+/// La escolta que vence a los bandidos que la acosan los destruye (2026-11-06, pedido del autor): su botín: los recursos, para la caravana, y las monedas, para el héroe de la escolta; la escolta sufre el 5 %.
+fn una_escolta_que_gana_el_acoso_destruye_el_campamento_y_su_botin_viaja_en_la_caravana() {
     let m = con_mundo!();
     let mut e = montar_lejos(m, 7, true);
     let a = e.a;
@@ -1450,7 +1534,9 @@ fn una_escolta_que_gana_el_acoso_destruye_el_campamento_y_su_oro_viaja_en_la_car
     let escolta: Vec<u64> = [(Tropa::ArquerosCompuesto, 12), (Tropa::EspadachinesBronce, 12)].iter().map(|&(t, cantidad)| e.ok("admin", Comando::DarEscuadra { heroe: carla, tropa: t, cantidad }).creadas[0]).collect();
     e.ok("carla", Comando::AsignarEscolta { caravana: ca, heroe: carla, escuadras: escolta.clone() });
     e.lanzar(ca);
-    let oro0 = e.n.caravana(ca).unwrap().contenido.get(&Oro).copied().unwrap_or(0);
+    let en_la_caravana = |e: &Esc, r| e.n.caravana(ca).unwrap().contenido.get(&r).copied().unwrap_or(0);
+    let antes = [Madera, Piedra, Trigo, Oro].map(|r| en_la_caravana(&e, r));
+    let monedas0 = e.n.heroe(carla).unwrap().heroe.monedas;
     let (b1, llegada) = bandidos_en_la_ruta(&mut e, ca, 1);
     e.n.avanzar_hasta(llegada + 1_000);
     let suyos = |codigo: &str| -> Vec<Hecho> { hechos(&e.n, codigo).into_iter().filter(|h| dato(h, "campamento") == b1 as i64).collect() };
@@ -1458,12 +1544,14 @@ fn una_escolta_que_gana_el_acoso_destruye_el_campamento_y_su_oro_viaja_en_la_car
     let vencido = suyos("bandidos.campamento_vencido");
     assert_eq!(vencido.len(), 1, "el campamento cae");
     assert!(e.n.campamento_de_bandidos(b1).is_none());
-    assert!(dato(&vencido[0], "oro") > 0, "el nivel 1 da oro");
-    // Por el camino puede vencer también a alguno de los de la plaza: cada victoria cuenta, trae su oro y cuesta el 5 % de la escolta.
+    assert!(dato(&vencido[0], "madera") > 0 && dato(&vencido[0], "monedas") > 0, "el nivel 1 da recursos y monedas");
+    // Por el camino puede vencer también a alguno de los de la plaza: cada victoria cuenta, trae su botín y cuesta el 5 % de la escolta.
     let todos = hechos(&e.n, "bandidos.campamento_vencido");
     assert_eq!(e.n.tecnologia().contador(Contador::BandidosCampamentosDestruidos), todos.len() as u64);
-    let oro: i64 = todos.iter().map(|h| dato(h, "oro")).sum();
-    assert_eq!(e.n.caravana(ca).unwrap().contenido.get(&Oro).copied().unwrap_or(0), oro0 + oro, "el oro viaja en la caravana");
+    let suma = |k: &str| todos.iter().map(|h| dato(h, k)).sum::<i64>();
+    let despues = [Madera, Piedra, Trigo, Oro].map(|r| en_la_caravana(&e, r));
+    assert_eq!(despues, [antes[0] + suma("madera"), antes[1] + suma("piedra"), antes[2] + suma("trigo"), antes[3]], "los recursos viajan en la caravana, sin oro");
+    assert_eq!(e.n.heroe(carla).unwrap().heroe.monedas, monedas0 + suma("monedas"), "y las monedas son del héroe de la escolta");
     let quedan: Vec<i64> = escolta.iter().map(|&s| e.n.heroe(carla).unwrap().heroe.escuadra(s).unwrap().cantidad).collect();
     let tras = (0..todos.len()).fold(12, |n, _| n - (n * 5 + 50) / 100);
     assert_eq!(quedan, vec![tras, tras], "el 5 % de bajas por combate (redondeado)");

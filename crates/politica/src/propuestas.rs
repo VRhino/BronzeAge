@@ -5,6 +5,7 @@
 use crate::faccion::Facciones;
 use crate::relaciones::{ErrorDiplomacia, Relaciones, TipoRelacion, Tributo};
 use crate::tipos::{FaccionId, HeroeId, PropuestaId, RelacionId};
+use crate::datos::ReglasPrestigio;
 use crate::{Politica, Reglas};
 use base::Instante;
 use comercio::datos::ReglasReputacion;
@@ -80,6 +81,8 @@ pub enum ErrorPropuesta {
     VasallaDeTercera(FaccionId),
     /// La reputación de quien propone una alianza está por debajo de `umbralBajoParaEmbajador`.
     ReputacionBaja,
+    /// Esa Facción ya tiene todas las alianzas activas que le deja su prestigio (`ReglasPrestigio::tope_de_alianzas`).
+    TopeAlianzas(FaccionId),
     /// Ya hay una pendiente de esa clase entre las dos.
     YaPendiente,
     NoExiste,
@@ -190,6 +193,14 @@ pub fn exigir_relacion_posible(fs: &Facciones, rs: &Relaciones, rr: &ReglasReput
     }
 }
 
+/// El tope de alianzas activas a la vez (tanda 69 §13): las **dos** Facciones de una alianza han de estar por debajo de `tope_de_alianzas(prestigio)` contando las que ya tienen.
+fn exigir_tope_de_alianzas(fs: &Facciones, rs: &Relaciones, pr: &ReglasPrestigio, a: FaccionId, b: FaccionId) -> Result<(), ErrorPropuesta> {
+    match [a, b].into_iter().find(|&f| rs.alianzas_de(f) >= pr.tope_de_alianzas(fs.get(f).map_or(0, |x| x.prestigio))) {
+        Some(f) => Err(ErrorPropuesta::TopeAlianzas(f)),
+        None => Ok(()),
+    }
+}
+
 /// `exigirAnexionPosible` (§6.1): distintas, existen, la absorbida tiene Rey y no es vasalla de una tercera (si su señora es la absorbente, vale).
 pub fn exigir_anexion_posible(fs: &Facciones, rs: &Relaciones, absorbente: FaccionId, absorbida: FaccionId) -> Result<(), ErrorPropuesta> {
     distintas_y_existentes(fs, absorbente, absorbida)?;
@@ -230,6 +241,9 @@ impl Politica {
     #[allow(clippy::too_many_arguments)]
     pub fn proponer_relacion(&mut self, r: &Reglas, rr: &ReglasReputacion, id: PropuestaId, pacto: Pacto, a: FaccionId, b: FaccionId, tributo: Option<Tributo>, por: HeroeId, reputacion_a: i64, ahora: Instante) -> Result<&Propuesta, ErrorPropuesta> {
         exigir_relacion_posible(&self.facciones, &self.relaciones, rr, pacto, a, b, reputacion_a)?;
+        if pacto == Pacto::Alianza {
+            exigir_tope_de_alianzas(&self.facciones, &self.relaciones, &r.prestigio, a, b)?;
+        }
         let tributo = (pacto == Pacto::Vasallaje).then(|| tributo.unwrap_or(Tributo::POR_DEFECTO));
         self.propuestas.anadir(Propuesta { id, clase: Clase::Relacion { pacto, a, b, tributo }, propuesta_por: por, creada_en: ahora, expira_en: ahora + r.caducidad_relacion }, ahora)
     }
@@ -237,10 +251,13 @@ impl Politica {
     /// `responderRelacion`: vigente; rechazar la quita (`Ok(None)`); aceptar revalida, exige que ninguna de las dos tenga una batalla abierta, crea la relación
     /// activa con el id `relacion` y quita la propuesta.
     #[allow(clippy::too_many_arguments)]
-    pub fn responder_relacion(&mut self, rr: &ReglasReputacion, id: PropuestaId, aceptar: bool, reputacion_a: i64, batalla_abierta: bool, relacion: RelacionId, ahora: Instante) -> Result<Option<RelacionId>, ErrorPropuesta> {
+    pub fn responder_relacion(&mut self, rr: &ReglasReputacion, pr: &ReglasPrestigio, id: PropuestaId, aceptar: bool, reputacion_a: i64, batalla_abierta: bool, relacion: RelacionId, ahora: Instante) -> Result<Option<RelacionId>, ErrorPropuesta> {
         let Clase::Relacion { pacto, a, b, tributo } = self.propuestas.vigente(id, ahora)?.clase.clone() else { return Err(ErrorPropuesta::NoExiste) };
         if aceptar {
             exigir_relacion_posible(&self.facciones, &self.relaciones, rr, pacto, a, b, reputacion_a)?;
+            if pacto == Pacto::Alianza {
+                exigir_tope_de_alianzas(&self.facciones, &self.relaciones, pr, a, b)?;
+            }
             if batalla_abierta {
                 return Err(ErrorPropuesta::BatallaAbierta);
             }
@@ -328,7 +345,7 @@ mod pruebas {
         let p = m.proponer_relacion(&r, &rr, 1, Pacto::Alianza, 1, 2, None, 10, 0, 0).unwrap();
         assert_eq!((p.expira_en, p.propuesta_por), (3 * DIA, 10));
         assert_eq!(m.proponer_relacion(&r, &rr, 2, Pacto::Alianza, 2, 1, None, 20, 0, 0).unwrap_err(), ErrorPropuesta::YaPendiente, "una sola en cualquier sentido");
-        assert_eq!(m.responder_relacion(&rr, 1, true, 0, false, 50, DIA), Ok(Some(50)));
+        assert_eq!(m.responder_relacion(&rr, &r.prestigio, 1, true, 0, false, 50, DIA), Ok(Some(50)));
         assert!(m.relaciones.estan_aliadas(1, 2));
         assert_eq!(m.propuestas.get(1), None);
     }
@@ -338,11 +355,11 @@ mod pruebas {
         let (r, rr) = (Reglas::default(), rr());
         let mut m = mundo(2);
         m.proponer_relacion(&r, &rr, 1, Pacto::Alianza, 1, 2, None, 10, 0, 0).unwrap();
-        assert_eq!(m.responder_relacion(&rr, 1, false, 0, false, 50, 0), Ok(None));
+        assert_eq!(m.responder_relacion(&rr, &r.prestigio, 1, false, 0, false, 50, 0), Ok(None));
         assert!(m.relaciones.activas().next().is_none() && m.propuestas.get(1).is_none());
         m.proponer_relacion(&r, &rr, 2, Pacto::Alianza, 1, 2, None, 10, 0, 0).unwrap();
-        assert_eq!(m.responder_relacion(&rr, 2, true, 0, false, 50, 3 * DIA), Err(ErrorPropuesta::Caducada));
-        assert_eq!(m.responder_relacion(&rr, 9, true, 0, false, 50, 0), Err(ErrorPropuesta::NoExiste));
+        assert_eq!(m.responder_relacion(&rr, &r.prestigio, 2, true, 0, false, 50, 3 * DIA), Err(ErrorPropuesta::Caducada));
+        assert_eq!(m.responder_relacion(&rr, &r.prestigio, 9, true, 0, false, 50, 0), Err(ErrorPropuesta::NoExiste));
         // La caducada ya no cuenta como pendiente, y se poda al añadir otra.
         m.proponer_relacion(&r, &rr, 3, Pacto::Alianza, 2, 1, None, 20, 0, 3 * DIA).unwrap();
         assert_eq!(m.propuestas.iter().map(|p| p.id).collect::<Vec<_>>(), vec![3]);
@@ -355,8 +372,30 @@ mod pruebas {
         assert_eq!(m.proponer_relacion(&r, &rr, 1, Pacto::Alianza, 1, 2, None, 10, -41 * PUNTO, 0).unwrap_err(), ErrorPropuesta::ReputacionBaja);
         assert!(m.proponer_relacion(&r, &rr, 1, Pacto::Alianza, 1, 2, None, 10, -40 * PUNTO, 0).is_ok(), "en el umbral, sí");
         // Al aceptar se vuelve a mirar.
-        assert_eq!(m.responder_relacion(&rr, 1, true, -41 * PUNTO, false, 50, 0), Err(ErrorPropuesta::ReputacionBaja));
+        assert_eq!(m.responder_relacion(&rr, &r.prestigio, 1, true, -41 * PUNTO, false, 50, 0), Err(ErrorPropuesta::ReputacionBaja));
         assert!(m.propuestas.get(1).is_some(), "un rechazo de la regla no la consume");
+    }
+
+    #[test]
+    fn el_tope_de_alianzas_mira_a_las_dos_facciones_al_proponer_y_al_aceptar() {
+        let (r, rr) = (Reglas::default(), rr());
+        let mut m = mundo(4);
+        // Sin prestigio, una alianza (`alianzas_base`): la 1 y la 2 ya están aliadas.
+        m.proponer_relacion(&r, &rr, 1, Pacto::Alianza, 1, 2, None, 10, 0, 0).unwrap();
+        m.responder_relacion(&rr, &r.prestigio, 1, true, 0, false, 50, 0).unwrap();
+        // Al proponer: la que propone (1) y la que recibe (2) llegan al tope; la 3 y la 4 están libres.
+        assert_eq!(m.proponer_relacion(&r, &rr, 2, Pacto::Alianza, 1, 3, None, 10, 0, 0).unwrap_err(), ErrorPropuesta::TopeAlianzas(1));
+        assert_eq!(m.proponer_relacion(&r, &rr, 2, Pacto::Alianza, 3, 2, None, 30, 0, 0).unwrap_err(), ErrorPropuesta::TopeAlianzas(2));
+        // Una más cada `alianza_cada` de prestigio: justo debajo, no; en la cifra, sí. Con el de las dos Facciones, no solo el de quien propone.
+        m.facciones.get_mut(1).unwrap().prestigio = r.prestigio.alianza_cada - 1;
+        assert_eq!(m.proponer_relacion(&r, &rr, 2, Pacto::Alianza, 1, 3, None, 10, 0, 0).unwrap_err(), ErrorPropuesta::TopeAlianzas(1));
+        m.facciones.get_mut(1).unwrap().prestigio = r.prestigio.alianza_cada;
+        m.proponer_relacion(&r, &rr, 2, Pacto::Alianza, 1, 3, None, 10, 0, 0).unwrap();
+        // Al aceptar se vuelve a mirar: con dos propuestas abiertas de la 1, la segunda en aceptarse ya no cabe.
+        m.proponer_relacion(&r, &rr, 3, Pacto::Alianza, 1, 4, None, 10, 0, 0).unwrap();
+        m.responder_relacion(&rr, &r.prestigio, 2, true, 0, false, 51, 0).unwrap();
+        assert_eq!(m.responder_relacion(&rr, &r.prestigio, 3, true, 0, false, 52, 0), Err(ErrorPropuesta::TopeAlianzas(1)));
+        assert!(m.propuestas.get(3).is_some(), "un rechazo de la regla no la consume");
     }
 
     #[test]
@@ -364,7 +403,7 @@ mod pruebas {
         let (r, rr) = (Reglas::default(), rr());
         let mut m = mundo(3);
         m.proponer_relacion(&r, &rr, 1, Pacto::Vasallaje, 1, 2, None, 10, 0, 0).unwrap();
-        assert_eq!(m.responder_relacion(&rr, 1, true, 0, false, 50, 0), Ok(Some(50)));
+        assert_eq!(m.responder_relacion(&rr, &r.prestigio, 1, true, 0, false, 50, 0), Ok(Some(50)));
         assert_eq!(m.relaciones.get(50).unwrap().tributo, Some(Tributo::POR_DEFECTO));
         // 2 ya es vasalla de 1: ni de señora ni de vasalla con 3.
         assert_eq!(m.proponer_relacion(&r, &rr, 2, Pacto::Vasallaje, 2, 3, None, 20, 0, 0).unwrap_err(), ErrorPropuesta::VasallaDeTercera(2));
@@ -379,9 +418,9 @@ mod pruebas {
         let (r, rr) = (Reglas::default(), rr());
         let mut m = mundo(2);
         m.proponer_relacion(&r, &rr, 1, Pacto::Alianza, 1, 2, None, 10, 0, 0).unwrap();
-        assert_eq!(m.responder_relacion(&rr, 1, true, 0, true, 50, 0), Err(ErrorPropuesta::BatallaAbierta));
+        assert_eq!(m.responder_relacion(&rr, &r.prestigio, 1, true, 0, true, 50, 0), Err(ErrorPropuesta::BatallaAbierta));
         m.relaciones.declarar_guerra(&m.facciones, 1, 2, 0, &mut || 60).unwrap();
-        assert_eq!(m.responder_relacion(&rr, 1, true, 0, false, 50, 0), Err(ErrorPropuesta::Diplomacia(ErrorDiplomacia::YaHayRelacion)));
+        assert_eq!(m.responder_relacion(&rr, &r.prestigio, 1, true, 0, false, 50, 0), Err(ErrorPropuesta::Diplomacia(ErrorDiplomacia::YaHayRelacion)));
         assert_eq!(m.retirar_propuesta(1, 0).unwrap().id, 1);
         assert_eq!(m.retirar_propuesta(1, 0), Err(ErrorPropuesta::NoExiste));
     }

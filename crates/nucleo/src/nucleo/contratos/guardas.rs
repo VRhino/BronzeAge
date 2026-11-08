@@ -173,6 +173,7 @@ impl Nucleo {
             | Comando::CancelarConstruccion { .. }
             | Comando::MoverEnCola { .. }
             | Comando::MejorarEdificio { .. }
+            | Comando::AsignarBuey { .. }
             | Comando::AlternarAutoConstruccion { .. }
             | Comando::AlternarReceta { .. }
             | Comando::CalibrarReserva { .. }
@@ -276,6 +277,7 @@ impl Nucleo {
             | Comando::AbandonarRecinto { .. }
             | Comando::ComprarMirada { .. }
             | Comando::ComprarInformePlaza { .. }
+            | Comando::ComprarInformeRegion { .. }
             | Comando::GuardarEnAlmacenPersonal { .. }
             | Comando::SacarDelAlmacenPersonal { .. }
             | Comando::CargarCaravana { .. }
@@ -325,6 +327,7 @@ impl Nucleo {
             | Comando::DejarEnPlaza { .. }
             | Comando::CerrarAlmacenACiudadanos { .. }
             | Comando::EncargarCaravana { .. }
+            | Comando::TomarOrdenADistancia { .. }
             | Comando::CambiarEncargo { .. }
             | Comando::CancelarEncargo { .. }
             | Comando::DetenerEncargo { .. }

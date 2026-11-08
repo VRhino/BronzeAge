@@ -5,12 +5,13 @@
 //! Los bandidos **no actúan dentro de ninguna zona de influencia**, ni junto a un campamento de mercenarios. Es PvE: no exige guerra.
 
 use crate::caravana::{defensa_de, Defensa};
-use crate::datos::{NivelBandidos, Reglas};
+use crate::datos::{NivelBandidos, Reglas, Rendimientos};
 use crate::resolucion::{aplicar_bajas, ganador_de, poder_de_bando, tirada, Baja, Bando, CombateInvalido, Lado};
 use asentamiento::datos::UNO;
+use asentamiento::Recurso;
 use base::{Instante, Mil, Punto, Rng};
 use comercio::caravana::EstadoCaravana;
-use militar::{Carga, HeroeId};
+use militar::{sumar, Carga, HeroeId};
 
 /// Niveles de un campamento: 1, 2 y 3.
 pub fn nivel_de(r: &Reglas, nivel: u8) -> &NivelBandidos {
@@ -154,7 +155,7 @@ pub fn resolver_acoso(r: &Reglas, nivel: u8, defensa: Defensa, rng: &mut Rng) ->
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AtaqueACampamento {
-    /// El campamento cae (su oro lo da [`botin_de_bandidos`]); si no, aguanta.
+    /// El campamento cae (su botín lo da [`botin_de_bandidos`]); si no, aguanta.
     pub destruido: bool,
     pub poder_atacante: Mil,
     pub poder_campamento: Mil,
@@ -178,23 +179,34 @@ pub fn resolver_campamento(r: &Reglas, atacante: Bando, nivel: u8, rng: &mut Rng
     Ok(AtaqueACampamento { destruido, poder_atacante: poder, poder_campamento: objetivo, bajas, heridos: if destruido { vec![] } else { atacante.heroes.to_vec() } })
 }
 
-/// El oro de un campamento destruido para **un** héroe, con rendimientos decrecientes (D22, D26, D27): en la ventana de 24 h, completo las primeras
-/// `completas` veces, luego `caidaPorCada` menos por cada una más, y desde `soloExperienciaDesde`, nada. `recientes` son los instantes en que ese
-/// héroe destruyó campamentos: se podan los de fuera de la ventana y se anota este.
-pub fn botin_de_bandidos(r: &Reglas, recientes: &mut Vec<Instante>, nivel: u8, ahora: Instante) -> Mil {
-    let b = &r.bandidos;
-    recientes.retain(|&t| t > ahora - b.ventana);
+/// El factor (ppm) de una vez más de algo con rendimientos decrecientes ([`Rendimientos`]). `recientes` son los instantes de las veces anteriores:
+/// se podan los de fuera de la ventana y se anota esta.
+pub fn factor_de_rendimiento(r: &Rendimientos, recientes: &mut Vec<Instante>, ahora: Instante) -> i64 {
+    recientes.retain(|&t| t > ahora - r.ventana);
     let n = recientes.len() as i64 + 1;
-    let factor = if n <= b.completas {
+    recientes.push(ahora);
+    if n <= r.completas {
         UNO
-    } else if n >= b.solo_experiencia_desde {
+    } else if n >= r.solo_experiencia_desde {
         0
     } else {
-        (UNO - b.caida_por_cada * (n - b.completas)).max(0)
-    };
-    recientes.push(ahora);
-    // En unidades enteras de oro, hacia abajo (C3b): nunca se crea de más.
-    base::entero((nivel_de(r, nivel).oro_por_heroe as i128 * factor as i128 / UNO as i128) as Mil)
+        (UNO - r.caida_por_cada * (n - r.completas)).max(0)
+    }
+}
+
+/// El botín de un campamento destruido para **un** héroe, con los rendimientos decrecientes (una sola llamada por héroe y campamento): madera, piedra y
+/// trigo del nivel (`botinPorHeroe`, de cada uno) y sus monedas (`monedasPorHeroe`), todo con el mismo factor. `recientes` son los instantes en que ese
+/// héroe destruyó campamentos.
+pub fn botin_de_bandidos(r: &Reglas, recientes: &mut Vec<Instante>, nivel: u8, ahora: Instante) -> (Carga, i64) {
+    let factor = factor_de_rendimiento(&r.bandidos.rendimientos, recientes, ahora) as i128;
+    let n = nivel_de(r, nivel);
+    // En unidades enteras, hacia abajo (C3b): nunca se crea de más.
+    let cada_recurso = base::entero((n.botin_por_heroe as i128 * factor / UNO as i128) as Mil);
+    let mut recursos = Carga::new();
+    for recurso in [Recurso::Madera, Recurso::Piedra, Recurso::Trigo] {
+        sumar(&mut recursos, recurso, cada_recurso);
+    }
+    (recursos, (n.monedas_por_heroe as i128 * factor / UNO as i128) as i64)
 }
 
 #[cfg(test)]
@@ -407,14 +419,30 @@ mod pruebas {
         assert_eq!(rng.estado(), antes);
     }
 
+    /// Lo que da un campamento del nivel 3 a su n-ésima destrucción dentro de la ventana, calculado a mano con las cifras del bloque: el factor
+    /// `1 − caída × (n − completas)` entre las completas y la `soloExperienciaDesde`, en unidades enteras hacia abajo.
+    fn esperado(r: &Reglas, n: i64, base: i64) -> i64 {
+        let rend = &r.bandidos.rendimientos;
+        let factor = if n <= rend.completas { UNO } else if n >= rend.solo_experiencia_desde { 0 } else { UNO - rend.caida_por_cada * (n - rend.completas) };
+        base * factor / UNO
+    }
+
     #[test]
     fn el_botin_es_completo_ocho_veces_y_luego_decrece_hasta_cero_en_la_catorce() {
         let r = r();
         let mut hist = vec![];
-        let oro: Vec<Mil> = (0..15).map(|i| botin_de_bandidos(r, &mut hist, 3, i * 1000)).collect();
-        assert_eq!(oro[..8], [36_000; 8]);
-        assert_eq!(oro[8..14], [30_000, 25_000, 19_000, 14_000, 9_000, 0], "n = 9‥14: 1 − 0,15 × (n − 8) en unidades enteras hacia abajo, y desde la 14.ª, solo experiencia");
-        assert_eq!(oro[14], 0);
+        let botines: Vec<(Carga, i64)> = (0..15).map(|i| botin_de_bandidos(r, &mut hist, 3, i * 1000)).collect();
+        let (unidades, monedas) = (nivel_de(r, 3).botin_por_heroe, nivel_de(r, 3).monedas_por_heroe);
+        for (i, (recursos, mon)) in botines.iter().enumerate() {
+            let n = i as i64 + 1;
+            let cada = base::entero(esperado(r, n, unidades));
+            let quiero: Carga = [Recurso::Madera, Recurso::Piedra, Recurso::Trigo].into_iter().filter(|_| cada > 0).map(|x| (x, cada)).collect();
+            assert_eq!((recursos, *mon), (&quiero, esperado(r, n, monedas)), "la vez {n}");
+        }
+        assert_eq!(botines[7].0[&Recurso::Madera], unidades, "la octava aún es completa");
+        assert_eq!(botines[13].1, 0, "desde la 14.ª, solo experiencia");
+        assert!(botines[13].0.is_empty() && botines[14].0.is_empty());
+        assert!(botines[8].1 < monedas && botines[8].1 > botines[9].1, "entre medias cae");
         assert_eq!(hist.len(), 15);
     }
 
@@ -425,17 +453,23 @@ mod pruebas {
         for i in 0..14 {
             botin_de_bandidos(r, &mut hist, 1, i);
         }
-        assert_eq!(botin_de_bandidos(r, &mut hist, 1, 0 + 24 * 60 * MS_POR_MINUTO + 14), 30_000, "pasadas 24 h todo vuelve a ser completo");
+        let ventana = r.bandidos.rendimientos.ventana;
+        assert_eq!(botin_de_bandidos(r, &mut hist, 1, ventana + 14).1, nivel_de(r, 1).monedas_por_heroe, "pasadas 24 h todo vuelve a ser completo");
         assert_eq!(hist.len(), 1, "se podan los antiguos");
         // Justo en el borde de la ventana ya no cuenta (t > ahora − ventana).
         let mut h = vec![0];
-        botin_de_bandidos(r, &mut h, 1, 24 * 60 * MS_POR_MINUTO);
-        assert_eq!(h, vec![24 * 60 * MS_POR_MINUTO]);
+        botin_de_bandidos(r, &mut h, 1, ventana);
+        assert_eq!(h, vec![ventana]);
     }
 
     #[test]
-    fn cada_nivel_da_su_oro() {
+    fn cada_nivel_da_madera_piedra_y_trigo_y_sus_monedas_pero_ningun_oro() {
         let r = r();
-        assert_eq!([1, 2, 3].map(|n| botin_de_bandidos(r, &mut vec![], n, 0)), [30_000, 33_000, 36_000]);
+        for (nivel, unidades, monedas) in [(1, 5_000, 50), (2, 7_000, 75), (3, 10_000, 100)] {
+            let (recursos, mon) = botin_de_bandidos(r, &mut vec![], nivel, 0);
+            let quiero: Carga = [Recurso::Madera, Recurso::Piedra, Recurso::Trigo].into_iter().map(|x| (x, unidades)).collect();
+            assert_eq!((recursos, mon), (quiero, monedas), "nivel {nivel}: 5/7/10 de cada uno y 50/75/100 monedas (Generacion_Del_Mundo §13)");
+        }
+        assert!(!botin_de_bandidos(r, &mut vec![], 3, 0).0.contains_key(&Recurso::Oro));
     }
 }

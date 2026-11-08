@@ -55,10 +55,10 @@ Ciclo de vida propiamente dicho:
 
 - PERMADEATH individual (excepto modo entrenamiento): bajas son permanentes.
 - El SQUAD (nombre, nivel y experiencia) persiste aunque el regimiento sea aniquilado — se puede rellenar con nuevos reclutas conservando el progreso.
-- DESERCIÓN POR HAMBRE: tropas consumen raciones continuamente; sin suministro, la moral colapsa y desertan permanentemente (mismo efecto que perderlas en combate). **Es la misma regla en guarnición y en campaña** — solo cambia de qué despensa se come (5.13).
+- DESERCIÓN POR HAMBRE: tropas consumen raciones continuamente; sin suministro, la moral colapsa y desertan permanentemente (mismo efecto que perderlas en combate). **Es la misma regla en guarnición y en campaña** — solo cambia de qué despensa se come (5.13). **La guarnición del campamento de una plaza come primero carne y después trigo, hasta su ración** (desde el 2026-11-08); la columna en campaña sigue comiendo solo trigo (sus víveres).
 - **La población civil come ANTES que las tropas.** Los civiles son quienes producen (Granja/Cantera/Fundición/...); las tropas no producen nada, así que bajo escasez sostenida el golpe lo absorbe primero la parte del sistema que no es productiva: la moral militar colapsa y empieza la deserción MUCHO antes de que la nutrición civil llegue a comprometerse. Para que los civiles se quedaran sin nada, la producción tendría que caer por debajo de SOLO su propio consumo. Está pensado para la escala multijugador real, donde el número de héroes por asentamiento y la presión militar crecen con el servidor mientras la producción de comida está acotada por el espacio construido (`typescript-final:Consideraciones/NPC_Gobernanza_Facciones_Controladas.md`).
 - **Reclutar exige reserva de trigo proyectada**: antes de aceptar un reclutamiento o una reposición, el trigo en almacén debe cubrir `RESERVA_CONSTRUCCION.horizonteMinutosComida` (8) minutos del consumo YA PROYECTADO CON la tropa nueva sumada (civiles + tropas existentes + la que se está reclutando). Es regla del MOTOR, igual para NPC y jugador: igual que la Vivienda acota cuánta población civil puede aparecer, esto acota cuánta tropa puede sostenerse, sin importar cuántos héroes residan en el asentamiento. Si varios reclutan en el mismo minuto, los primeros agotan el margen y el resto falla limpio.
-- **El pool de reclutamiento es la población MENOS la ya ocupada en producción**, no la población total: reclutar no puede sacar pesants que cubren los trabajadores de Granja/Cantera/Leñera/minas/Corral, ni artesanos que cubren los de Fundición/Curtiduría/Armería/Carpintería. Es simétrico entre pesants y artesanos, y aplica igual al reclutamiento de un jugador y al de la gobernanza NPC.
+- **El pool de reclutamiento es la población MENOS la ya ocupada en producción**, no la población total: reclutar no puede sacar pesants que cubren los trabajadores de Granja/Cantera/Leñera/minas/Corral/Molino/Horno, ni artesanos que cubren los de Fundición/Curtiduría/Armería/Carpintería/Quesera/Bodega/Prensa. Es simétrico entre pesants y artesanos, y aplica igual al reclutamiento de un jugador y al de la gobernanza NPC.
 
 ## 5.5 Progresión de las tropas (ver también Doc 4.1)
 Se recluta pagando equipo (5.8), y cada tropa sale de una clase de población según su escalón (5.8). Sus escuadrones suben de **nivel y experiencia** combatiendo de verdad, según su desempeño en la batalla (5.16.3).
@@ -477,7 +477,7 @@ Diseño en `typescript-final:Consideraciones/Ocupacion_Post_Conquista_Definicion
 **Al conquistar**:
 
 1. **La plaza queda sin guarnición** (5.15.5): los escuadrones de los antiguos residentes, guarnición incluida, quedan a 0 unidades y se van con el campamento de su héroe; no hay captura. El ejército conquistador sigue siendo una columna fuera.
-2. **Saqueo determinista** (sin azar): `pesants`, `artesanos` y `nobleza` pierden `OCUPACION.fraccionSaqueoPoblacion`; una fracción `OCUPACION.fraccionEdificiosDanados` de los edificios activos —por orden de id, **exentos Centro Urbano y al menos una Granja y una Leñera**— pasan a la cola marcados `danado` (un Almacén o Granero dañado deja de aportar capacidad hasta reconstruirse, y lo guardado que ya no cabe se pierde); cada recinto de muralla completo pierde `OCUPACION.fraccionDanoMuralla` de su `avance` (la muralla no cae: deja de dar el multiplicador defensivo pleno, el cupo y el requisito del nivel 4 hasta repararse sola por la vía normal de obra, a costa del nuevo dueño; un recinto en obra o en mejora no recibe daño).
+2. **Saqueo determinista** (sin azar): `pesants`, `artesanos` y `nobleza` pierden `OCUPACION.fraccionSaqueoPoblacion`; una fracción `OCUPACION.fraccionEdificiosDanados` de los edificios activos —por orden de id, **exentos Centro Urbano y al menos una Granja y una Leñera**— pasan a la cola marcados `danado` (un Almacén o Granero dañado deja de aportar capacidad hasta reconstruirse, y lo guardado que ya no cabe se pierde; un Molino dañado pierde su buey); cada recinto de muralla completo pierde `OCUPACION.fraccionDanoMuralla` de su `avance` (la muralla no cae: deja de dar el multiplicador defensivo pleno, el cupo y el requisito del nivel 4 hasta repararse sola por la vía normal de obra, a costa del nuevo dueño; un recinto en obra o en mejora no recibe daño).
 3. `medidorMantenimiento` a 100 y arrancan la **protección** (`Asentamiento.protegidaHasta`, `OCUPACION.proteccionMinutos`: un día de mundo) y la **ventana de ocupación** (`Asentamiento.ocupacionHasta`, `OCUPACION.duracionMinutos`, mismo orden que el período de gracia de fundación).
 4. **Las decisiones del gobierno derrotado caen con él** (decidido el 2026-10-02): se cancelan sus políticas activas, la reserva manual del Tesorero, la pausa de la auto-construcción y las recetas paradas. El nuevo dueño no hereda decisiones de quien ya no manda.
 
@@ -501,7 +501,7 @@ Diseño en `typescript-final:Consideraciones/Ocupacion_Post_Conquista_Definicion
 
 La niebla (5.12.7-8) tapa lo que queda fuera de tus ojos, y **saber qué pasa donde no ves vale oro**. La **taberna** vende esa información: no abre nada que la niebla no cierre para siempre, solo **presta ojos durante un rato** o **tira una foto** que luego envejece. Es el **sink recurrente de oro** del juego (Doc 3.1): una suscripción, no una compra de capital — se paga, caduca y se vuelve a pagar si todavía importa.
 
-Hay **dos productos**, los dos **exactos en el instante de la compra**: la información no lleva ruido ni miente, así que un bot y un jugador la usan igual.
+Hay **dos productos**, los dos **exactos en el instante de la compra**: la información no lleva ruido ni miente, así que un bot y un jugador la usan igual. La taberna de una **plaza** vende además, a partir de la tanda 69, dos **informes de región** (más abajo).
 
 | | **Mirada** | **Informe de plaza** |
 |---|---|---|
@@ -519,6 +519,17 @@ Hay **dos productos**, los dos **exactos en el instante de la compra**: la infor
 - **Taberna de plaza** (edificio, Doc 4.2.1). Compra el **Rey, el Embajador o el Gobernador** de esa plaza, **estando en ella**, y paga el **almacén de esa plaza**. El cupo de Miradas lo da su nivel interno: 1 / 2 / 3.
 - **Taberna de un campamento de mercenarios** (Doc 1.9b). Compra **cualquier héroe que pertenezca a una Facción**, dentro del campamento o con su columna a la puerta (como el resto de sus acciones), y paga con el oro de su **almacén personal** (si reside allí) o del **carro** de su columna (de visita). Es la vía de las Facciones sin plaza. El cupo es fijo (`INTEL.campamento.cupoMiradas`, 1 por Facción y campamento). La intel que compra es **de su Facción**: lo que un ciudadano mira, lo saben los suyos.
 - Un héroe **sin Facción** no compra: la intel es de una Facción, y sin ella no hay memoria donde guardar un informe ni aliados con quienes compartir una Mirada.
+
+**Informes de región (solo en la taberna de una plaza).** La taberna de una plaza vende información de **toda la región de relieve del mapa** en que está la plaza (Altiplano interior, Estepa abierta…), en dos tipos que se compran por separado:
+
+| | **Plazas de la región** | **Órdenes de la región** |
+|---|---|---|
+| Qué es | Las **fichas** (nombre, Facción, posición y nivel, 5.12.7) de las plazas de la región, aunque nunca las hayas visto | Las **órdenes de mercado en pie** de esas plazas (Doc 3.3), que ves mientras dura el informe |
+| Memoria | Se guardan en la memoria de la Facción y **envejecen a la vista** como cualquier ficha conocida (5.12.8); sirven para pedir luego el Informe de una de ellas | **Ninguna**: se ven en vivo, como si estuvieras dentro de cada plaza, y se dejan de ver al caducar (`INTEL.region.caducidadMinutos`, 200 min) |
+| Precio | **Fijo**, `INTEL.region.oro` (60), del almacén de la plaza: no depende del nivel de la plaza ni de cuántas plazas haya en la región (decisión del autor, 2026-11-08) | El mismo |
+| Freno | Un **cooldown** por Facción, región y tipo (`INTEL.region.cooldownMinutos`, 6 h) | El mismo |
+
+Entran **todas las plazas de la región menos las de tu Facción y las de una Facción en guerra con ella**: las aliadas, las vasallas, las de Facciones en paz y las de bots sí. Compra el **Rey, el Embajador o el Gobernador**, estando en la plaza; no hace falta conocer ninguna plaza antes, y **no avisa a nadie**. Con las órdenes a la vista se puede **tomar una a distancia** desde el Mercado de una plaza propia (Doc 3.13.9). Las dos compras de región se ven en la ficha de la Facción, con su caducidad y cuándo se pueden repetir. La taberna de un campamento no vende informes de región.
 
 **La víctima.** Un Informe **avisa a la Facción espiada** (`asentamiento.informe_pedido`, atribuido a su plaza): *«alguien ha pedido el plano y la defensa de Troya»*, **sin decir quién**. Es el mismo principio que la inspección a 8 (5.12.3) —obtener información de un rival delata— pero la compra es remota, así que el aviso es **anónimo**. La Mirada **no avisa a nadie**: es solo ver, y mirar un trozo de mapa no toca a nadie.
 
@@ -832,7 +843,7 @@ El detalle de datos del héroe está en `typescript-final:Docs/Coordinacion/01_M
 - Cada Jugador tiene **exactamente un Héroe en cada mundo**. El Héroe pertenece a esa partida, no a la cuenta: su progreso no pasa de un mundo a otro.
 - **No se cambia de héroe** dentro de una partida.
 - Todo lo que el Jugador hace dentro del mundo lo hace su Héroe: reside, lidera, tiene Liderazgo, está situado en el mundo, recuerda y explora, ocupa cargos y posee los escuadrones. El Jugador es la persona y su cuenta.
-- Trae de Conquest su estructura de personaje: clase, nivel y experiencia, puntos de atributo y puntos de perk por separado, atributos, perks, equipo, inventario y sus propias monedas. Esas monedas **no tienen relación con el oro** recurso de BronzeAge.
+- Trae de Conquest su estructura de personaje: clase, nivel y experiencia, puntos de atributo y puntos de perk por separado, atributos, perks, equipo, inventario y sus propias monedas. Esas monedas son **un solo saldo** del héroe, **aparte del oro** recurso de las plazas: no entran en la economía de una plaza (desde el 2026-11-08, 100 monedas valen 1 de oro solo al contratar mercenarios, Doc 7). Se ganan **combatiendo contra héroes de otra Facción** (cada héroe, 500 si su bando gana y 150 si pierde; las 8 primeras veces que esas dos Facciones se enfrentan en un día, completo; luego un 15 % menos cada vez y, desde la 14.ª, nada), **destruyendo campamentos de bandidos** (1.9) y en el botín de las batallas de Unity.
 
 ### 5.16.2 Sus escuadrones
 
@@ -846,7 +857,7 @@ El detalle de datos del héroe está en `typescript-final:Docs/Coordinacion/01_M
 - Héroe y escuadrones progresan con **nivel y experiencia**, al estilo de Conquest.
 - **El nivel de un escuadrón va del 1 al 10** y cada nivel le da **+1% de poder**: el nivel 1 tiene +1% y el 10, el máximo, +10%. Cada nivel pide una cantidad de experiencia; al llenarla, sube al siguiente. Los primeros piden poca y cada uno pide el doble que el anterior hasta el nivel 5; desde ahí todos piden lo mismo (`MILITAR.experienciaParaSubirEscuadra`: 5, 10, 20, 40 y luego 40 por nivel). En el combate con números, un escuadrón gana 1 de experiencia si su bando vence y 0,5 si pierde.
 - **La experiencia del Héroe depende de su desempeño en la batalla**: unidades y héroes abatidos, capturas de bandera, daño hecho y recibido, si fue el mejor de la partida, en qué puesto de la tabla de su bando terminó, entre otros factores. La calcula la propia partida (Unity), que es la única que ve esos datos. **La de los escuadrones también**: la calcula la partida con toda la información de la batalla.
-- **El botín también lo decide la partida**: qué objetos y cuántas monedas gana cada héroe en una batalla lo calcula Unity, igual que la experiencia, y el héroe lo guarda en su inventario y sus monedas.
+- **El botín también lo decide la partida**: qué objetos y cuántas monedas de botín gana cada héroe en una batalla jugada lo calcula Unity, igual que la experiencia, y el héroe lo guarda en su inventario y su saldo de monedas.
 
 ### 5.16.4 Herido
 

@@ -38,6 +38,23 @@
   - Para PEDIR la subida de nivel de un asentamiento (Doc 4.5) tiene que haber cupo libre en el nivel objetivo. **El cupo se reserva al pedirla**: ocupan plaza tanto los asentamientos que ya están en ese nivel como los que tienen una obra de ascenso en marcha hacia él, así que dos asentamientos de la misma Facción no pueden pagar a la vez por la última plaza, y al terminar la obra no se vuelve a mirar. Subir de 2 a 3 libera el cupo de nivel 2 que se abandona. El cupo se cuenta contra el nivel OPERATIVO (`nivelActual`), no contra el alcanzado: una ciudad degradada por mal mantenimiento libera su cupo de verdad. Por eso **recuperar el nivel también pide cupo** (2026-11-04): la ciudad degradada vuelve a su nivel solo si queda puesto libre en él; si otra lo ocupó mientras tanto, espera degradada a que se libere.
   - La interfaz enseña cuándo el cupo es uno de los motivos que impiden pedir la subida. La ventana de Facción enseña cada cupo con las plazas que lo ocupan, y el cap de fundación con lo que lo gasta (2026-11-04).
 
+## 2.2.2 Prestigio de la Facción (desde el 2026-11-08)
+
+El **prestigio** es un número de la Facción, público, que **solo sube**: no se gasta ni se pierde. Mide lo que ha conseguido, aparte de la experiencia del nivel de Facción. Lo dan:
+
+| Hecho | Prestigio |
+|---|---|
+| **Vencer** a héroes de otra Facción en un combate (una vez por combate para la Facción ganadora, no por héroe; contra bandidos o contra héroes de la propia Facción, nada) | 5 |
+| **Conquistar** una plaza | 50 |
+| **Fundar** una plaza (también la primera) | 20 |
+| **Subir de nivel** una plaza | 10 por el nivel nuevo (30 al llegar al nivel 3) |
+| **Comerciar entre Facciones distintas**: un trueque cumplido (a cada una) y cada orden de mercado tomada en una plaza de otra Facción (a la que toma y a la dueña de la plaza; cuenta cada vez que se toma una) | 2 |
+
+El prestigio no se paga: abre **umbrales** (cifras provisionales).
+- **Alianzas a la vez.** Una Facción puede tener **1** alianza activa y **una más por cada 100** de prestigio (tope = 1 + prestigio ÷ 100, hacia abajo). El tope se mira en **las dos** Facciones al proponer y al aceptar una alianza; el vasallaje no cuenta.
+- **Estatuas** (4.2.1): una en la capital por cada umbral de 200, 500 y 1.000 de prestigio.
+- **Maravilla** (4.2.1): pide 2.000 de prestigio, en lugar de una Era.
+
 ## 2.3 Formación de Liga (dos caminos)
 La Liga no se guarda: se deriva de las relaciones activas, y no tiene Rey ni votación (cada Facción conserva el suyo).
 1. **Por vasallaje** (jerarquía): una Facción reúne una o más Facciones vasallas; la señora que nunca es vasalla dentro de la Liga es su cima.
@@ -51,7 +68,7 @@ Una Facción puede someter a otra Facción entera como vasalla, o federarse con 
 1. El vasallo paga TRIBUTO al señor, en la forma que este decida: lo pactado por minuto se reparte entre todos sus asentamientos y cada uno lo paga en su paso de minuto, en unidades enteras, a la capital de la señora; lo que no cabe en su almacén se pierde (decisión del autor, 2026-10-24).
 2. Defender a los vasallos es un incentivo de reputación, no una obligación mecánica (+15 si defiende con éxito, −3 si no defiende; ver 2.7). Declarar guerra a un vasallo declara automáticamente guerra a su señor, y viceversa (guerra al señor = guerra a todos sus vasallos).
 
-**Formación:** propuesta diplomática — protección a cambio de tributo pactado en recursos específicos. **Hace falta aceptación** (decisión del autor, 2026-10-09), como en la anexión y la fusión (2.6): la señora propone (`proponerRelacion`, el Rey o el Embajador) y queda pendiente; la contesta **solo el Rey de la otra Facción** (`responderRelacion`, aceptar o rechazar) y quien propuso puede retirarla (`retirarRelacion`). Aceptar crea la relación activa en el acto, con su tributo. Caduca a los `RELACION_PROPUESTA.caducidadDias` (3 días de mundo, placeholder) y solo puede haber una propuesta pendiente entre dos Facciones, en cualquier sentido. Al aceptar se revalida: las dos existen y tienen Rey, no hay relación activa entre ellas (la guerra cuenta), ninguna es ya vasalla de una tercera, no hay batalla abierta de ninguna de las dos. **Lo mismo vale para la alianza** (2.3). La guerra y la paz no cambian.
+**Formación:** propuesta diplomática — protección a cambio de tributo pactado en recursos específicos. **Hace falta aceptación** (decisión del autor, 2026-10-09), como en la anexión y la fusión (2.6): la señora propone (`proponerRelacion`, el Rey o el Embajador) y queda pendiente; la contesta **solo el Rey de la otra Facción** (`responderRelacion`, aceptar o rechazar) y quien propuso puede retirarla (`retirarRelacion`). Aceptar crea la relación activa en el acto, con su tributo. Caduca a los `RELACION_PROPUESTA.caducidadDias` (3 días de mundo, placeholder) y solo puede haber una propuesta pendiente entre dos Facciones, en cualquier sentido. Al aceptar se revalida: las dos existen y tienen Rey, no hay relación activa entre ellas (la guerra cuenta), ninguna es ya vasalla de una tercera, no hay batalla abierta de ninguna de las dos. **Lo mismo vale para la alianza** (2.3), que además pide **cupo de alianzas** en las dos Facciones al proponer y al aceptar (2.2.2: 1 más una por cada 100 de prestigio). La guerra y la paz no cambian.
 
 **Ruptura (4 vías):**
 1. Rebelión forzada del vasallo → declaración de guerra automática del vasallo hacia el señor (y resto de vasallos), y los trueques activos entre asentamientos de las dos Facciones pasan a expirados sin penalización.
@@ -119,7 +136,7 @@ Menú con 2 opciones al ejecutar la acción:
    - **La votación es el pacto**: el sí del Rey de B es su voto y el de A está en la propuesta. El Rey que no lo es de C pasa a ser un ciudadano más. Los cargos de Facción de A y B se disuelven (el Embajador de C queda vacante hasta que su Rey designe); los cargos locales de asentamiento se mantienen.
    - **Caduca** a los `FUSION.caducidadDias` días de mundo (3, placeholder). Entre dos Facciones hay **una sola propuesta de fusión pendiente**, en cualquier sentido. Las dos necesitan Rey; no hay condición de Liga, proximidad ni nivel.
    - **Al aceptar se vuelve a validar**: el Rey de A ha de seguir siendo quien la propuso, el Rey nombrado ha de seguir siendo Rey de una de las dos, y ninguna puede ser vasalla de un tercero (su señor la libera antes; si el señor de una es la otra, el vasallaje termina con la fusión). Con una batalla abierta de cualquiera de las dos, o con un héroe de las dos combatiendo en una, no se acepta.
-   - **Qué hereda C**: el **sigilo de A** (el de B se pierde, Doc 2.8.1), la **experiencia mayor** y la **reputación mayor** de las dos (el nivel se recalcula, así que no se pierde cupo) y la **unión de las tecnologías** (aparecidas, adoptadas y reveladas). Su capital es la que había designado el Rey de C (si no, la plaza más antigua).
+   - **Qué hereda C**: el **sigilo de A** (el de B se pierde, Doc 2.8.1), la **experiencia mayor**, la **reputación mayor** y el **prestigio mayor** de las dos (el nivel se recalcula, así que no se pierde cupo) y la **unión de las tecnologías** (aparecidas, adoptadas y reveladas). Su capital es la que había designado el Rey de C (si no, la plaza más antigua).
    - **Qué pasa a C**: lo mismo que en la anexión — asentamientos con sus cargos locales y su guarnición, ciudadanos con su residencia, ejércitos, caravanas, rutas, Aedas residentes y épicas cumplidas, miradas y lo que recordaban del mundo — por la **misma ruta de traslado**.
    - **Relaciones**: las alianzas y guerras de A y B se cancelan **sin penalización de reputación** y C nace sin ellas; los **vasallos de las dos pasan a ser de C** con el mismo tributo; la relación entre A y B termina. Las propuestas pendientes (de fusión y de anexión) que nombraban a A o a B desaparecen.
    - **Quién lo ve**: como la anexión — la propuesta pendiente viaja solo a las dos Facciones (`propuestasFusion`), los eventos son públicos y el Rey bot rechaza las que recibe. La fusión consumada se canta en la crónica de los Aedas.

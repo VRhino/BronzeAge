@@ -1,6 +1,7 @@
 //! Monta el `Informe` del sistema «población, construcción y mantenimiento» con lo medido en la simulación de plazas.
 
 use crate::armar::{hex, hoy, metrica, min, max, parametro, serie, INFO};
+use crate::comida;
 use crate::fondo;
 use crate::geo::Cargado;
 use crate::economia::Mapa;
@@ -59,6 +60,7 @@ pub fn armar(x: &Entrada) -> Informe {
     metricas.extend(construccion(x));
     metricas.extend(poblacion(x));
     metricas.extend(trigo_y_mantenimiento(x));
+    metricas.extend(comida::metricas(c.villas.iter().map(|v| &v.a)));
     metricas.extend(cuellos(x));
     metricas.extend(ciudad(x));
     metricas.extend(murallas(x));
@@ -266,15 +268,15 @@ fn poblacion(x: &Entrada) -> Vec<Metrica> {
     let c = x.corrida;
     let v = &c.villas;
     let en_dia = |d: usize| mediana(&v.iter().map(|p| p.reg.pesants_dia.get(d).copied().unwrap_or(0) as f64).collect::<Vec<_>>());
-    let con200 = v.iter().filter(|p| p.reg.pesants_200.is_some()).count();
-    let p200 = dias_de(v, |p| p.reg.pesants_200);
+    let con_nivel2 = v.iter().filter(|p| p.reg.pesants_nivel2.is_some()).count();
+    let dias_nivel2 = dias_de(v, |p| p.reg.pesants_nivel2);
     vec![
         metrica("pesants_dia_foto", &format!("Pesants a los {} días (mediana)", c.dia_foto), "habitantes", INFO, en_dia(c.dia_foto as usize), "Economia_Construccion §9.1 (crecimiento logístico)", "Pesants enteros al final del día, mediana de las plazas."),
         metrica("pesants_fin", &format!("Pesants a los {} días (mediana)", x.e.dias), "habitantes", INFO, en_dia(x.e.dias as usize), "Economia_Construccion §9.1", "Pesants al final de la simulación, mediana de las plazas."),
-        metrica("artesanos_max", "Artesanos de la plaza que más tiene al final", "habitantes", INFO, v.iter().map(|p| p.a.poblacion.artesanos).max().map(|m| m as f64), "Doc 4.5 (el nivel 3 pide 400 artesanos)", "Artesanos enteros. El cupo de artesanos de 40 Viviendas es justo 400, el mismo número que pide el nivel 3."),
+        metrica("artesanos_max", "Artesanos de la plaza que más tiene al final", "habitantes", INFO, v.iter().map(|p| p.a.poblacion.artesanos).max().map(|m| m as f64), "Doc 4.5 (requisito de artesanos del nivel 3)", "Artesanos enteros."),
         metrica("nivel3_pct", "Plazas que llegan al nivel 3", "%", INFO, pct(v.iter().filter(|p| p.reg.nivel3.is_some()).count(), v.len()), "Doc 4.5 (ritmo de niveles 2-3 aprobado)", "Este batch no da órdenes manuales ni sube la Facción de nivel 1: Barracón y Galería de tiro solo se añaden a mano y el cupo de nivel 3 de una Facción de nivel 1 es 0. Informativa."),
-        metrica("pesants_200_pct", "Plazas que alcanzan 200 pesants", "%", INFO, pct(con200, v.len()), "Doc 4.5 (requisito del nivel 2: 200 pesants)", "Pesants máximos ≥ 200 en algún momento."),
-        metrica("pesants_200_mediana_dias", "Día mediano en que se alcanzan los 200 pesants", "días", INFO, mediana_censurada(&p200, MIN_POR_DIA, x.e.dias as f64), "Doc 4.5", "Las que nunca llegan cuentan como el tope."),
+        metrica("pesants_nivel2_pct", "Plazas que alcanzan los pesants del nivel 2", "%", INFO, pct(con_nivel2, v.len()), "Doc 4.5 (requisito del nivel 2)", "Pesants máximos ≥ el requisito de pesants del nivel 2 (`NIVEL_ASENTAMIENTO`) en algún momento."),
+        metrica("pesants_nivel2_mediana_dias", "Día mediano en que se alcanzan los pesants del nivel 2", "días", INFO, mediana_censurada(&dias_nivel2, MIN_POR_DIA, x.e.dias as f64), "Doc 4.5", "Las que nunca llegan cuentan como el tope."),
     ]
 }
 
@@ -303,7 +305,7 @@ fn cuellos(x: &Entrada) -> Vec<Metrica> {
     let en_n1 = v.iter().filter(|p| p.a.nivel == 1).count();
     let atascadas = |k: usize| pct(v.iter().filter(|p| p.a.nivel == 1 && p.reg.ultimos_bloqueos.contains(&k)).count(), en_n1);
     let mut metricas = vec![
-        metrica("bloqueo_poblacion_dias", "Día mediano en que deja de faltar población para el nivel 2", "días", INFO, libre(2), "Doc 4.5 (200 pesants)", "Primera comprobación horaria sin el bloqueo «falta población» (las que nunca lo superan cuentan como el tope)."),
+        metrica("bloqueo_poblacion_dias", "Día mediano en que deja de faltar población para el nivel 2", "días", INFO, libre(2), "Doc 4.5 (requisito de pesants del nivel 2)", "Primera comprobación horaria sin el bloqueo «falta población» (las que nunca lo superan cuentan como el tope)."),
         metrica("bloqueo_edificios_dias", "Día mediano en que dejan de faltar edificios para el nivel 2", "días", INFO, libre(3), "Doc 4.5 (3 de los 7 tipos de extracción)", "Primera comprobación horaria sin el bloqueo «faltan edificios»."),
         metrica("bloqueo_recursos_dias", "Día mediano en que el almacén cubre el coste del ascenso", "días", INFO, libre(5), "Doc 4.5 (coste del ascenso)", "Primera comprobación horaria sin el bloqueo «recursos insuficientes»."),
         metrica("bloqueo_solvencia_dias", "Día mediano en que la producción cubre el mantenimiento del nivel 2", "días", INFO, libre(6), "Doc 4.5 (solvencia en el nivel nuevo)", "Primera comprobación horaria sin el bloqueo «insolvente»."),

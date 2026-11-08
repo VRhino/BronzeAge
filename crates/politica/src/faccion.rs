@@ -47,6 +47,8 @@ pub struct Faccion {
     pub admite_otras_en_ataques: bool,
     /// Los ciudadanos marcados (mercenarios contratados); los demás no tienen entrada.
     pub marcas: BTreeMap<HeroeId, Marca>,
+    /// El prestigio (tanda 69 §13): se acumula y no se gasta ni se pierde.
+    pub prestigio: i64,
 }
 
 impl Faccion {
@@ -198,6 +200,7 @@ impl Facciones {
                 derrota: None,
                 admite_otras_en_ataques: false,
                 marcas: BTreeMap::new(),
+                prestigio: 0,
             },
         );
         self.de_heroe.insert(actor, id);
@@ -224,6 +227,7 @@ impl Facciones {
             derrota: None,
             admite_otras_en_ataques: false,
             marcas: BTreeMap::new(),
+            prestigio: 0,
         };
         self.por_id.entry(id).or_insert(f)
     }
@@ -386,6 +390,13 @@ impl Facciones {
         f.experiencia = f.experiencia.saturating_add(delta);
         let despues = f.nivel(r);
         (despues > antes).then_some(despues)
+    }
+
+    /// Suma `delta` al prestigio de la Facción (tanda 69 §13: solo sube; lo ≤ 0 se ignora) y devuelve el total, o `None` si no existe o no hubo nada que sumar.
+    pub fn sumar_prestigio(&mut self, faccion: FaccionId, delta: i64) -> Option<i64> {
+        let f = self.por_id.get_mut(&faccion).filter(|_| delta > 0)?;
+        f.prestigio = f.prestigio.saturating_add(delta);
+        Some(f.prestigio)
     }
 
     /// La administración fija la experiencia (`FijarNivelFaccion`, decisión 9 del plan del sistema 5: al umbral del nivel que pide). No es monótona: es andamiaje. Devuelve si cambió.
@@ -630,6 +641,16 @@ pub(crate) mod pruebas {
         assert_eq!(fs.get(1).unwrap().experiencia, 96_000, "lo negativo se ignora");
         assert_eq!(fs.aplicar_experiencia(&r, 1, 10_000), Some(2), "cruzando: nivel 2 en el acto");
         assert_eq!(fs.aplicar_experiencia(&r, 9, 10_000), None);
+    }
+
+    #[test]
+    fn el_prestigio_solo_sube() {
+        let mut fs = Facciones::default();
+        con_faccion(&mut fs, 1, "Micenas", 10, &[]);
+        assert_eq!(fs.sumar_prestigio(1, 5), Some(5));
+        assert_eq!(fs.sumar_prestigio(1, 50), Some(55));
+        assert_eq!((fs.sumar_prestigio(1, 0), fs.sumar_prestigio(1, -20), fs.sumar_prestigio(9, 5)), (None, None, None), "ni se pierde ni se suma a quien no existe");
+        assert_eq!(fs.get(1).unwrap().prestigio, 55);
     }
 
     #[test]

@@ -696,7 +696,7 @@ impl Nucleo {
         let Some(madre) = madre else {
             return Err(rechazo(rechazos::COMBATE_AVANZADA_SIN_DUENO, "unas ruinas de ciudadela sin dueño no tienen Facción con la que estar en guerra ni nada que defender"));
         };
-        let (faccion_madre, posicion, etapa, estado, vacia) = (self.estado.asentamientos[&madre].faccion, av.posicion, av.etapa, av.estado, (0..29).all(|i| av.almacen.partes().0[i] == 0));
+        let (faccion_madre, posicion, etapa, estado, vacia) = (self.estado.asentamientos[&madre].faccion, av.posicion, av.etapa, av.estado, (0..asentamiento::recurso::N).all(|i| av.almacen.partes().0[i] == 0));
         let e = &self.estado.ejercitos[&id];
         if !Self::es_ejercito(e) {
             return Err(rechazo(rechazos::COMBATE_SOLO_UN_EJERCITO, "solo un ejército ataca una avanzada: una columna personal no"));
@@ -767,6 +767,8 @@ impl Nucleo {
         let mut chatarra = Mercancia::new();
         if let Asedio::Combate(i) = &resultado {
             self.experiencia_de_combate(t, i);
+            self.monedas_de_informe(t, i);
+            self.prestigio_de_informe(t, i);
             chatarra = i.chatarra.clone();
             datos.extend([("poderAtacante", i.atacante.poder), ("poderDefensor", i.defensor.poder), ("bajasAtacante", caidos(&i.atacante.bajas)), ("bajasDefensor", caidos(&i.defensor.bajas))]);
         }

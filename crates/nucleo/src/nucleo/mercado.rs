@@ -123,8 +123,8 @@ fn datos_de(ev: &EventoComercio) -> Vec<(&'static str, i64)> {
         | CaravanaPerdida { caravana }
         | CaravanaVuelve { caravana } => vec![("caravana", *caravana as i64)],
         CaravanaReserva { caravana, reservada } => vec![("caravana", *caravana as i64), ("reservada", *reservada as i64)],
-        PeajePaso { caravana, ciudad, cobrado } => {
-            let mut d = vec![("caravana", *caravana as i64), ("ciudad", *ciudad as i64)];
+        PeajePaso { caravana, ciudad, oro, cobrado } => {
+            let mut d = vec![("caravana", *caravana as i64), ("ciudad", *ciudad as i64), ("oroPagado", *oro)];
             d.extend(cobrado.iter().map(|(r, n)| (r.nombre(), *n)));
             d
         }
@@ -535,7 +535,7 @@ impl Nucleo {
         let capacidad = self.capacidad_de_carga(ejercito).unwrap_or(CAPACIDAD_CARRO);
         let Estado { comercio, asentamientos, ejercitos, .. } = &mut self.estado;
         let suministro = ejercitos.get(&ejercito).map(|e| e.columna.carga.clone()).unwrap_or_default();
-        let carro = Carro { oro: comercio::de(&suministro, Recurso::Oro), recurso: comercio::de(&suministro, recurso), espacio: (capacidad - total(&suministro)).max(0) };
+        let carro = Carro { oro: comercio::de(&suministro, Recurso::Oro), oro_ocupa: true, recurso: comercio::de(&suministro, recurso), espacio: (capacidad - total(&suministro)).max(0) };
         let almacen = &mut asentamientos.get_mut(&plaza_id).expect("existe").economia.almacen;
         // Una orden ya cerrada vive en el historial: se comprueba sobre una copia, que `comerciar` rechaza sin tocar.
         let en_pie = comercio.libro.ordenes.iter().position(|o| o.id == orden);
@@ -587,9 +587,16 @@ impl Nucleo {
         let ordenes: Vec<u64> = tratos.iter().map(|x| x.orden).collect();
         self.anotar_ordenes_cambiadas(antes, &ordenes);
         self.tr.tocar(Clase::Asentamiento, plaza_id);
-        let entre_facciones = self.estado.asentamientos.get(&plaza_id).is_some_and(|p| p.faccion != faccion);
+        let duena = self.estado.asentamientos.get(&plaza_id).map(|p| p.faccion).filter(|&d| d != faccion);
+        let entre_facciones = duena.is_some();
         self.registrar_comercio_de_mercenarios(entre_facciones, &servido);
         for x in tratos {
+            // El prestigio del comercio por cada orden tomada de otra Facción, a la que toma y a la dueña de la plaza (tanda 69 §13).
+            if let Some(duena) = duena {
+                for f in [faccion, duena] {
+                    self.dar_prestigio(t, f, self.estado.reglas.economia.politica.prestigio.comercio, super::prestigio::motivo::COMERCIO);
+                }
+            }
             let s = x.servido;
             let hecho = EventoComercio::ComercioEnPlaza { orden: x.orden, cantidad: s.cantidad, entre_facciones };
             self.emitir_comercio(t, hecho, vec![plaza_id], &[(quien.0, quien.1 as i64), ("valor", s.valor), ("comision", s.comision), ("oroMovido", s.oro_movido)]);
@@ -642,7 +649,12 @@ impl Nucleo {
 
     // ───────────────────────────── Entregas ─────────────────────────────
 
-    /// Entrega `contenido` en el almacén de la plaza `destino` (§4.4, §3.3): cada recurso topado por su capacidad, la comisión **acuñada** y,
+    /// La plaza cuyo almacén lleva el oro del comercio de la Facción de `plaza`: su capital efectiva (`Nucleo::capital_de`) o, si la Facción no tiene ninguna, la propia `plaza`.
+    pub(super) fn plaza_de_oro(&self, plaza: u64) -> u64 {
+        self.estado.asentamientos.get(&plaza).and_then(|a| self.capital_de(a.faccion)).unwrap_or(plaza)
+    }
+
+    /// Entrega `contenido` en el almacén de la plaza `destino` (§4.4, §3.3): cada recurso topado por su capacidad, la comisión **acuñada** en la capital de su Facción y,
     /// si procede, el recargo por mala reputación que sale del oro del almacén de `origen` (se conserva). Devuelve lo que ocurrió, o `None`
     /// si alguna de las dos plazas ya no existe. No abona nada a ningún trueque.
     pub(super) fn liquidar_entrega(&mut self, t: Instante, origen: u64, destino: u64, contenido: &Mercancia) -> Option<ResultadoEntrega> {
@@ -660,16 +672,18 @@ impl Nucleo {
             oro_origen: po.economia.almacen.cantidad(Recurso::Oro),
             precios: &precios,
         };
-        let res = if origen == destino {
-            let almacen = &mut self.estado.asentamientos.get_mut(&destino)?.economia.almacen;
-            entregar(&cr, contenido, almacen, &datos)
-        } else {
-            let res = entregar(&cr, contenido, &mut self.estado.asentamientos.get_mut(&destino)?.economia.almacen, &datos);
+        // La comisión se acuña en la capital de la Facción del destino. Si es otra plaza, su almacén se saca un momento para tener los dos a la vez.
+        let capital = self.plaza_de_oro(destino);
+        let mut almacen_capital = if capital == destino { None } else { Some(self.estado.asentamientos.get(&capital)?.economia.almacen.clone()) };
+        let res = entregar(&cr, contenido, &mut self.estado.asentamientos.get_mut(&destino)?.economia.almacen, almacen_capital.as_mut(), &datos);
+        if let Some(almacen) = almacen_capital {
+            self.estado.asentamientos.get_mut(&capital)?.economia.almacen = almacen;
+        }
+        if origen != destino {
             // El recargo sale del oro del origen: el crate lo suma al destino y aquí se resta, así el oro se conserva.
             self.estado.asentamientos.get_mut(&origen)?.economia.almacen.quitar(Recurso::Oro, res.recargo);
-            res
-        };
-        self.tr.tocar_todos(Clase::Asentamiento, [origen, destino]);
+        }
+        self.tr.tocar_todos(Clase::Asentamiento, [origen, destino, capital]);
         Some(res)
     }
 
@@ -690,6 +704,10 @@ impl Nucleo {
         if cierre.entre_facciones {
             self.avance(t, Dueno::Faccion(facciones.0), "trueques", 1);
             self.avance(t, Dueno::Faccion(facciones.1), "trueques", 1);
+            // El prestigio del comercio, a cada una de las dos (tanda 69 §13).
+            for faccion in [facciones.0, facciones.1] {
+                self.dar_prestigio(t, faccion, self.estado.reglas.economia.politica.prestigio.comercio, super::prestigio::motivo::COMERCIO);
+            }
         }
         for (faccion, suceso) in cierre.reputacion {
             self.aplicar_reputacion(t, faccion, suceso);

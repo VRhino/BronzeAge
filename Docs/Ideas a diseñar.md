@@ -16,7 +16,6 @@ de `Mecanicas a desarrollar.md`. Aparcadas el 2026-10-05 (la cultura y las entra
 | 24 | Ciclo de servidor de 12 meses + Maravilla + legado NPC (pospuesto con las Eras IV-V) |
 | 43 | Cultura del asentamiento (y audio) |
 | 52 | Misiones que un humano coloca para otros humanos |
-| 53 | Carne y leche del ganado (y otros productos de la cría) |
 
 ## 9. Eventos de asentamiento
 
@@ -182,7 +181,3 @@ Salen de los documentos de decisión que se retiran. Ninguno tiene código.
 ## 52. Misiones que un humano coloca para otros humanos
 
 **Estado: idea, sin diseñar.** Salió del diseño de las misiones (`Docs/Mechanics/Misiones.md`, diseñado el 2026-10-26): el catálogo de misiones es del juego; que un jugador cree misiones para otros jugadores es otra idea. Hay que decidir quién puede crearlas, qué paga el creador (la recompensa saldría de su bolsillo), cómo se comprueba el cumplimiento y cómo se evita el abuso (misiones entre cuentas del mismo dueño).
-
-## 53. Carne y leche del ganado
-
-**Retomada el 2026-11-08** en la entrada 69 de `Mecanicas a desarrollar.md` (la carne alimenta como el trigo con 1,2×; la leche va a la quesera). **Estado anterior: idea aparcada el 2026-10-26, fuera también del MVP** (decisión del autor: un bien sin uso no sirve de nada en el comercio). La cría ampliada (`Docs/Disenos_Por_Implementar/Aldea_Agricola_Y_Cria.md` §2) deja preparada una tabla de especies, pero solo el vacuno con su producto de hoy. Para retomarla hay que diseñar primero **qué consume** carne y leche: hoy solo se come trigo (`consumoComidaPoblacion`, ración de la guarnición, víveres, déficit de trigo), así que activarlas es convertir la comida en una canasta con equivalencias, o darles otro uso. Cada recurso nuevo toca el enum `Recurso`, el almacén y el granero, precios, trueque y caravanas, el `.proto`, los dorados de C# y TypeScript, `Comandos_Parametros` y la foto.

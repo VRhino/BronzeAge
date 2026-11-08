@@ -47,7 +47,8 @@ pub enum Evento {
     CaravanaAnimalComprado { caravana: CaravanaId },
     // --- Viaje ---
     CaravanaSale { caravana: CaravanaId },
-    PeajePaso { caravana: CaravanaId, ciudad: AsentamientoId, cobrado: Carga },
+    /// Lleva el `oro` que paga la capital del dueño y la especie `cobrado` de la carga por lo que ese oro no cubrió.
+    PeajePaso { caravana: CaravanaId, ciudad: AsentamientoId, oro: Mil, cobrado: Carga },
     /// Lleva `comision` y `recargo` (hecho `caravana` de las épicas: origen = la plaza que cuenta).
     CaravanaLlega { caravana: CaravanaId, destino: AsentamientoId, comision: Mil, recargo: Mil },
     EntregaEscoltada { acuerdo: AcuerdoId, caravana: CaravanaId },
@@ -143,7 +144,7 @@ mod pruebas {
             Evento::CaravanaEnviadaAlOrigen { caravana: 1 },
             Evento::CaravanaAnimalComprado { caravana: 1 },
             Evento::CaravanaSale { caravana: 1 },
-            Evento::PeajePaso { caravana: 1, ciudad: 2, cobrado: c.clone() },
+            Evento::PeajePaso { caravana: 1, ciudad: 2, oro: 1, cobrado: c.clone() },
             Evento::CaravanaLlega { caravana: 1, destino: 2, comision: 0, recargo: 0 },
             Evento::EntregaEscoltada { acuerdo: 1, caravana: 1 },
             Evento::CaravanaPerdida { caravana: 1 },

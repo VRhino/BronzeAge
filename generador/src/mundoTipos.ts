@@ -53,6 +53,11 @@ export interface MuestrasRelieve {
   altura(p: Point): number;
   terreno(p: Point): ClaseTerreno;
   fertilidad(p: Point): number;
+  /** Fertilidad de la vid y de la oliva (`cultivos.ts`). */
+  fertilidadVid(p: Point): number;
+  fertilidadOliva(p: Point): number;
+  /** Id de la región del relieve (`regionEn`); está en `MundoGenerado.regiones`. */
+  region(p: Point): number;
   humedad(p: Point): number;
   densidadBosque(p: Point): number;
   transitable(p: Point): boolean;
@@ -75,6 +80,8 @@ export interface MundoGenerado {
   bandidos: BandidosMundo[];
   alijos: AlijoMundo[];
   rios: RioMundo[];
+  /** Las regiones del relieve (las áreas de `regional.ts`): id y nombre. */
+  regiones: { id: number; nombre: string }[];
   grafo: GrafoMundo;
   muestras: MuestrasRelieve;
 }

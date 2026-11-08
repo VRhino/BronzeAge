@@ -6,9 +6,10 @@
 //! # El «jugador» mínimo (hipótesis del batch, deterministas)
 //! Cada plaza tiene su columna parada en la puerta (fundó con ella) y su propia Facción-actor. Cada hora: pide la subida de nivel; con 150
 //! de madera sobrante construye el Mercado; con Mercado monta una caravana (2 carros con buey); con la flota lista propone un trueque a una
-//! plaza vecina (la mitad de las veces de otra Facción) de lo que le sobra por lo que le falta; y de nivel 2 en adelante marca un pueblo
-//! extractor y manda a su columna a comprar los materiales al campamento de mercenarios más cercano y a entregarlos en la obra. La otra
-//! parte contesta a los diez minutos: acepta si puede cumplir su lado y rechaza si no.
+//! plaza vecina (la mitad de las veces de otra Facción) de lo que le sobra por lo que le falta; marca su aldea de trigo y luego sus
+//! pueblos de cantera, después sube la aldea de nivel, y para cada obra manda a su columna a comprar los materiales al campamento de mercenarios
+//! más cercano y a entregarlos; y encarga los talleres de la comida con el buey del molino (`comida`). La otra parte de un trueque contesta a
+//! los diez minutos: acepta si puede cumplir su lado y rechaza si no.
 //!
 //! # Andamiaje de administración (provisional hasta el sistema de héroes)
 //! El oro que lleva el carro de una columna (`DarSuministro`), la residencia y el almacén personal de los sondeos de cupo (`FijarResidencia`,
@@ -16,12 +17,14 @@
 //! inyectado se suma en `oro_inyectado` y se declara en el informe.
 
 use crate::auditoria::{auditar_cola, Violaciones};
+use crate::comida;
 use crate::geo::{Cargado, Geo};
 use crate::sim::{cuenta_de_gobernador as gobernador, gobernador_de_oficio, nucleo_nuevo, ANILLO_CAMPAMENTO, ANILLO_PLAZA, ASCENSO_CADA_MIN, CANDIDATOS, VELOCIDAD, VIVERES};
 use crate::vigia::Vigia;
 use asentamiento::catalogo::Tipo;
+use asentamiento::pueblos::Cultivo;
 
-use asentamiento::recurso::TODOS;
+use asentamiento::recurso::{N, TODOS};
 use asentamiento::Recurso;
 use base::{Instante, Punto, Rng, MS_POR_MINUTO};
 use comercio::caravana::{Animal, EstadoCaravana, TipoCarro};
@@ -491,6 +494,7 @@ impl Sim<'_> {
         self.flota(t, id);
         self.proponer(t, id);
         self.pueblo(t, id);
+        self.comida(t, id);
     }
 
     /// La vía de juego de la tecnología (6H, como en `batch militar`): si la plaza es la capital efectiva de su Facción y le ha aparecido algo sin adoptar, su Rey lo adopta con la orden
@@ -567,7 +571,7 @@ impl Sim<'_> {
     }
 
     /// Cantidades y capacidades de un almacén.
-    fn almacen_de(&self, id: u64) -> ([i64; 29], [i64; 29]) {
+    fn almacen_de(&self, id: u64) -> ([i64; N], [i64; N]) {
         let (c, k, _) = self.n.estado().asentamientos[&id].economia.almacen.partes();
         (*c, *k)
     }
@@ -577,10 +581,10 @@ impl Sim<'_> {
     /// llenos). Nada que no quepa en el almacén que lo recibe.
     fn pareja(&self, a: u64, b: u64) -> Option<(Recurso, i64, Recurso, i64)> {
         let ((ca, ka), (cb, kb)) = (self.almacen_de(a), self.almacen_de(b));
-        let ofrece = |c: &[i64; 29], k: &[i64; 29], r: Recurso| !BASICOS.contains(&r) && if MINERALES.contains(&r) { c[r.indice()] >= MINERAL_MIN } else { 100 * c[r.indice()] >= SOBRA_PCT * k[r.indice()] && k[r.indice()] > 0 };
-        let quiere = |c: &[i64; 29], k: &[i64; 29], r: Recurso| !BASICOS.contains(&r) && if MINERALES.contains(&r) { c[r.indice()] < MINERAL_MIN } else { 100 * c[r.indice()] <= FALTA_PCT * k[r.indice()] && k[r.indice()] > 0 };
+        let ofrece = |c: &[i64; N], k: &[i64; N], r: Recurso| !BASICOS.contains(&r) && if MINERALES.contains(&r) { c[r.indice()] >= MINERAL_MIN } else { 100 * c[r.indice()] >= SOBRA_PCT * k[r.indice()] && k[r.indice()] > 0 };
+        let quiere = |c: &[i64; N], k: &[i64; N], r: Recurso| !BASICOS.contains(&r) && if MINERALES.contains(&r) { c[r.indice()] < MINERAL_MIN } else { 100 * c[r.indice()] <= FALTA_PCT * k[r.indice()] && k[r.indice()] > 0 };
         // Lo que sobra por encima de la reserva (un mineral deja 5 u).
-        let libre = |c: &[i64; 29], k: &[i64; 29], r: Recurso| c[r.indice()] - if MINERALES.contains(&r) { 5_000 } else { k[r.indice()] * SOBRA_PCT / 100 };
+        let libre = |c: &[i64; N], k: &[i64; N], r: Recurso| c[r.indice()] - if MINERALES.contains(&r) { 5_000 } else { k[r.indice()] * SOBRA_PCT / 100 };
         for ro in TODOS.iter().copied().filter(|&r| ofrece(&ca, &ka, r) && quiere(&cb, &kb, r)) {
             let q_ro = libre(&ca, &ka, ro).clamp(0, OFERTA_MAX);
             if q_ro < 1_000 || kb[ro.indice()] - cb[ro.indice()] < q_ro {
@@ -654,25 +658,52 @@ impl Sim<'_> {
             return;
         }
         // Primero la aldea agrícola (desde el nivel 1; la pide el nivel 2), en el sitio que propone el panel; sin sitio, se reintenta otro día.
-        let r = if !self.n.pueblos_de(id).iter().any(|p| p.es_aldea()) {
+        let obra = if !self.n.pueblos_de(id).iter().any(|p| p.es_aldea()) {
             if t < p.proxima_obra {
                 return;
             }
-            let Some(punto) = self.n.sitio_de_aldea(id) else {
+            let Some(punto) = self.n.sitio_de_aldea(id, Cultivo::Trigo) else {
                 self.pjs.get_mut(&id).expect("existe").proxima_obra = t + 24 * HORA;
                 return;
             };
-            self.orden(t, &gobernador(id), "MarcarAldea", Comando::MarcarAldea { asentamiento: id, punto })
+            let r = self.orden(t, &gobernador(id), "MarcarAldea", Comando::MarcarAldea { asentamiento: id, punto, cultivo: Cultivo::Trigo });
+            r.creadas.first().copied().filter(|_| r.aceptada())
+        } else if let Some(nodo) = self.cantera_que_falta(id, cupo) {
+            let r = self.orden(t, &gobernador(id), "MarcarPueblo", Comando::MarcarPueblo { asentamiento: id, nodo });
+            r.creadas.first().copied().filter(|_| r.aceptada())
         } else {
-            if self.n.pueblos_de(id).len() >= (PUEBLOS_OBJETIVO + 1).min(cupo as usize) {
-                return;
-            }
-            let Some(&(nodo, _)) = self.n.candidatos_de_pueblo(id).iter().find(|(_, tipo)| *tipo == Tipo::Cantera) else { return };
-            self.orden(t, &gobernador(id), "MarcarPueblo", Comando::MarcarPueblo { asentamiento: id, nodo })
+            // Con los pueblos hechos, sube la aldea de nivel (tanda 69: no sube sola): otra obra que espera materiales.
+            let e = self.n.estado();
+            let Some(aldea) = comida::aldea_que_sube(&e.asentamientos[&id].economia, &e.reglas.economia.datos).map(|x| x.id) else { return };
+            Some(aldea).filter(|&pueblo| self.orden(t, &gobernador(id), "MejorarAldea", Comando::MejorarAldea { pueblo }).aceptada())
         };
-        let Some(&pueblo) = r.creadas.first().filter(|_| r.aceptada()) else { return };
+        let Some(pueblo) = obra else { return };
         self.pjs.get_mut(&id).expect("existe").obra_pendiente = Some(pueblo);
         self.empezar(t, id, Mision { tipo: Clase::Pueblo, pueblo: Some(pueblo) });
+    }
+
+    /// El nodo de la siguiente cantera, mientras la plaza tenga menos pueblos que la aldea y [`PUEBLOS_OBJETIVO`] canteras y le quede cupo.
+    fn cantera_que_falta(&self, id: u64, cupo: u32) -> Option<u32> {
+        if self.n.pueblos_de(id).len() >= (PUEBLOS_OBJETIVO + 1).min(cupo as usize) {
+            return None;
+        }
+        self.n.candidatos_de_pueblo(id).iter().find(|(_, tipo)| *tipo == Tipo::Cantera).map(|&(nodo, _)| nodo)
+    }
+
+    /// Los talleres de la comida y el buey del molino (tanda 69), con las órdenes del Gobernador: el núcleo las rechaza mientras no haya con qué, y se reintentan
+    /// en el turno siguiente.
+    fn comida(&mut self, t: Instante, id: u64) {
+        let (taller, molino) = {
+            let e = self.n.estado();
+            let eco = &e.asentamientos[&id].economia;
+            (comida::taller_que_falta(eco, &e.reglas.economia.datos), comida::molino_sin_buey(eco))
+        };
+        if let Some(tipo) = taller {
+            self.orden(t, &gobernador(id), "AnadirEdificio(comida)", Comando::AnadirEdificio { asentamiento: id, tipo });
+        }
+        if let Some(edificio) = molino {
+            self.orden(t, &gobernador(id), "AsignarBuey", Comando::AsignarBuey { asentamiento: id, edificio });
+        }
     }
 
     /// Lo que falta entregar a la obra de un pueblo (vacío si ya no está pendiente).

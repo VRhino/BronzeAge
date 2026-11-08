@@ -56,7 +56,7 @@ impl Nucleo {
         self.estado.tiene_tecnologia(faccion, tecnologia)
     }
 
-    /// El `orden` de la Era vigente (lo que mira la Maravilla en el `Exterior`).
+    /// El `orden` de la Era vigente.
     pub fn orden_era(&self) -> u32 {
         self.estado.reglas.economia.tecnologia.eras[self.estado.tecnologia.era as usize].orden
     }

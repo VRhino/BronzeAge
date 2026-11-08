@@ -7,7 +7,7 @@ use crate::almacen::Almacen;
 use crate::catalogo::{Catalogo, Tipo};
 use crate::datos::{por, razon, UNO};
 use crate::edificio::{Edificio, Edificios, Fuente};
-use crate::recurso::{Costo, Recurso};
+use crate::recurso::{Costo, Recurso, N};
 use base::Mil;
 
 /// El mundo que ve la producción: los yacimientos finitos y las parcelas de bosque.
@@ -52,17 +52,19 @@ pub struct Mano {
 /// piden los pueblos extractores activos de la plaza (no tienen población propia: trabajan los de la madre).
 pub fn mano_de_obra(cat: &Catalogo, edificios: &[Edificio], pesants_enteros: i64, artesanos_enteros: i64, pueblos: Mil) -> Mano {
     let activos = edificios.iter().filter(|e| e.activo());
-    let requeridos_pesants: Mil = activos.clone().filter(|e| e.tipo.usa_pesants()).map(|e| cat.tipo(e.tipo).trabajadores).sum::<Mil>() + pueblos;
-    let requeridos_artesanos: Mil =
-        activos.filter(|e| e.tipo.es_taller()).map(|e| cat.tipo(e.tipo).nivel(e.nivel_interno).map_or(0, |n| n.trabajadores)).sum();
+    let del_taller = |e: &Edificio| cat.tipo(e.tipo).nivel(e.nivel_interno).map_or(0, |n| n.trabajadores);
+    let requeridos_pesants: Mil = activos.clone().filter(|e| e.tipo.usa_pesants()).map(|e| cat.tipo(e.tipo).trabajadores).sum::<Mil>()
+        + activos.clone().filter(|e| e.tipo.taller_de_pesants()).map(del_taller).sum::<Mil>()
+        + pueblos;
+    let requeridos_artesanos: Mil = activos.filter(|e| e.tipo.pide_artesanos()).map(del_taller).sum();
     let ratio = |habitantes: i64, requeridos: Mil| if requeridos <= 0 { UNO } else { razon(habitantes * 1000, requeridos).min(UNO) };
     Mano { pesants: ratio(pesants_enteros, requeridos_pesants), artesanos: ratio(artesanos_enteros, requeridos_artesanos), requeridos_pesants, requeridos_artesanos }
 }
 
 /// Reserva mínima: lo que el mantenimiento y la comida van a cobrar en los próximos minutos (§6.3). Una obra, un taller o una
 /// mejora automáticos no pueden bajar un recurso de ahí. La reserva manual del Tesorero se suma aparte, solo en el camino automático.
-pub fn reserva_dinamica(coste_mantenimiento: &Costo, consumo_comida: Mil, horizonte_mantenimiento: i64, horizonte_comida: i64) -> [Mil; 29] {
-    let mut r = [0; 29];
+pub fn reserva_dinamica(coste_mantenimiento: &Costo, consumo_comida: Mil, horizonte_mantenimiento: i64, horizonte_comida: i64) -> [Mil; N] {
+    let mut r = [0; N];
     for &(rec, n) in coste_mantenimiento {
         r[rec.indice()] += n * horizonte_mantenimiento;
     }
@@ -114,7 +116,7 @@ pub fn extraer_y_cultivar(cat: &Catalogo, edificios: &mut [Edificio], almacen: &
 
 /// Una pasada de recetas de los talleres (un minuto), en el orden de la lista y del catálogo: una receta puede consumir lo que otra
 /// produjo este mismo minuto. `reserva` es la misma de la auto-construcción más la manual.
-pub fn recetas(cat: &Catalogo, edificios: &mut [Edificio], almacen: &mut Almacen, mano: &Mano, ctx: &Contexto, reserva: &[Mil; 29]) -> Vec<(Recurso, Mil)> {
+pub fn recetas(cat: &Catalogo, edificios: &mut [Edificio], almacen: &mut Almacen, mano: &Mano, ctx: &Contexto, reserva: &[Mil; N]) -> Vec<(Recurso, Mil)> {
     let mut hecho: Vec<(Recurso, Mil)> = vec![];
     // `requiereEdificio` se mide con el estado al empezar la pasada (un taller recién activo no se cuenta a sí mismo dos veces).
     for i in 0..edificios.len() {
@@ -123,12 +125,14 @@ pub fn recetas(cat: &Catalogo, edificios: &mut [Edificio], almacen: &mut Almacen
             continue;
         }
         let Some(nivel) = cat.tipo(e.tipo).nivel(e.nivel_interno) else { continue };
+        let factor_buey = if e.buey { cat.tipo(e.tipo).factor_buey } else { UNO };
+        let ratio = if e.tipo.taller_de_pesants() { mano.pesants } else { mano.artesanos };
         let mut limitado = false;
         for rc in &nivel.recetas {
             if ctx.recetas_pausadas.contains(&rc.produce) || rc.tecnologia.as_deref().is_some_and(|t| !(ctx.tiene_tecnologia)(t)) {
                 continue;
             }
-            let mut cantidad = por(por(rc.produccion_base, mano.artesanos), ctx.factor_talleres);
+            let mut cantidad = por(por(por(rc.produccion_base, ratio), ctx.factor_talleres), factor_buey);
             for &(insumo, por_unidad) in &rc.consume_por_unidad {
                 let disponible = (almacen.disponible(insumo) - reserva[insumo.indice()]).max(0);
                 cantidad = cantidad.min(disponible * 1000 / por_unidad.max(1));
@@ -307,15 +311,15 @@ mod pruebas {
         let m = mano_de_obra(&cat, &e, 0, 4, 0);
         a.poner(Recurso::Cobre, 6_000);
         let c = ctx(&[], &[]);
-        let h = recetas(&cat, &mut e, &mut a, &m, &c, &[0; 29]);
+        let h = recetas(&cat, &mut e, &mut a, &m, &c, &[0; N]);
         assert_eq!((a.cantidad(Recurso::Cobre), a.cantidad(Recurso::LingoteCobre)), (0, 3_000), "6 cobre → 3 lingotes (2 por 1), no los 5 del techo");
         assert_eq!(h, vec![(Recurso::LingoteCobre, 3_000)]);
         // Con 20 de cobre sale el techo de 5 lingotes (10 cobre).
         a.poner(Recurso::Cobre, 20_000);
-        recetas(&cat, &mut e, &mut a, &m, &c, &[0; 29]);
+        recetas(&cat, &mut e, &mut a, &m, &c, &[0; N]);
         assert_eq!((a.cantidad(Recurso::Cobre), a.cantidad(Recurso::LingoteCobre)), (10_000, 8_000));
         // Una reserva de 18 deja solo 2 de cobre utilizables → 1 lingote.
-        let mut reserva = [0; 29];
+        let mut reserva = [0; N];
         reserva[Recurso::Cobre.indice()] = 18_000;
         a.poner(Recurso::Cobre, 20_000);
         let antes = a.cantidad(Recurso::LingoteCobre);
@@ -330,10 +334,10 @@ mod pruebas {
         a.poner(Recurso::Cobre, 100_000);
         let mut e = vec![activo(1, Tipo::Fundicion)];
         let m = mano_de_obra(&cat, &e, 0, 2, 0);
-        recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; 29]);
+        recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; N]);
         assert_eq!((a.cantidad(Recurso::LingoteCobre), a.disponible(Recurso::LingoteCobre)), (2_000, 2_500), "ratio 0,5 de los 5 del techo: 2 enteros y medio en el resto");
         let antes = a.cantidad(Recurso::Cobre);
-        recetas(&cat, &mut e, &mut a, &m, &ctx(&[Recurso::LingoteCobre], &[]), &[0; 29]);
+        recetas(&cat, &mut e, &mut a, &m, &ctx(&[Recurso::LingoteCobre], &[]), &[0; N]);
         assert_eq!(a.cantidad(Recurso::Cobre), antes, "pausada por el Gobernador");
     }
 
@@ -346,16 +350,64 @@ mod pruebas {
         let mut e = vec![f];
         let m = mano_de_obra(&cat, &e, 0, 8, 0);
         a.poner(Recurso::Estano, 100_000);
-        recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; 29]);
+        recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; N]);
         assert_eq!(a.cantidad(Recurso::LingoteEstano), 0, "sin aleacion_bronce no funde estaño");
-        recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &["aleacion_bronce"]), &[0; 29]);
+        recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &["aleacion_bronce"]), &[0; N]);
         assert_eq!(a.cantidad(Recurso::LingoteEstano), 3_000);
         // Con el producto lleno, no consume insumos y queda marcado.
         a.poner(Recurso::LingoteEstano, 400_000);
         let antes = a.cantidad(Recurso::Estano);
-        recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &["aleacion_bronce"]), &[0; 29]);
+        recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &["aleacion_bronce"]), &[0; N]);
         assert_eq!(a.cantidad(Recurso::Estano), antes);
         assert!(e[0].pausado_por_almacen);
+    }
+
+    #[test]
+    fn cada_receta_de_la_comida_convierte_su_materia_en_su_bien_con_la_mano_de_obra_entera() {
+        let cat = Reglas::cargar().catalogo;
+        // (edificio, materia, bien, bien por minuto, materia por unidad). Cifras provisionales de la tanda 69: un nivel 1 cubre la ración (`BIENES_DE_CONSUMO`) de 100 cabezas de la clase
+        // que come el bien: pan 100 × 0,04 = 4; queso 100 × 0,02 = 2; vino y aceite 100 × 0,01 = 1; la harina, lo que gasta el horno (4). El molino y el horno gastan 1 por unidad; los demás, 2.
+        let casos = [
+            (Tipo::Molino, Recurso::Trigo, Recurso::Harina, 4_000, 1_000),
+            (Tipo::Horno, Recurso::Harina, Recurso::Pan, 4_000, 1_000),
+            (Tipo::Quesera, Recurso::Leche, Recurso::Queso, 2_000, 2_000),
+            (Tipo::Bodega, Recurso::Uva, Recurso::Vino, 1_000, 2_000),
+            (Tipo::Prensa, Recurso::Aceituna, Recurso::Aceite, 1_000, 2_000),
+        ];
+        for (tipo, materia, bien, por_minuto, por_unidad) in casos {
+            let mut a = Almacen::nuevo(400_000);
+            a.poner(materia, 100_000);
+            let mut e = vec![activo(1, tipo)];
+            let m = mano_de_obra(&cat, &e, 3, 3, 0); // 3 pesants y 3 artesanos: más de los 2 o 3 que pide cada uno
+            let hecho = recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; N]);
+            assert_eq!(hecho, vec![(bien, por_minuto)], "{tipo:?}");
+            assert_eq!((a.cantidad(bien), a.cantidad(materia)), (por_minuto, 100_000 - por_minuto * por_unidad / 1_000), "{tipo:?}: produce su bien y gasta su materia");
+        }
+    }
+
+    #[test]
+    fn el_molino_y_el_horno_los_trabajan_pesants_y_la_quesera_artesanos() {
+        let cat = Reglas::cargar().catalogo;
+        let e = [activo(1, Tipo::Molino), activo(2, Tipo::Horno), activo(3, Tipo::Quesera)];
+        let m = mano_de_obra(&cat, &e, 2, 2, 0);
+        assert_eq!((m.requeridos_pesants, m.requeridos_artesanos), (4_000, 2_000), "2 pesants por el molino y 2 por el horno; 2 artesanos por la quesera");
+        assert_eq!((m.pesants, m.artesanos), (500_000, UNO), "con 2 pesants, el molino y el horno van a medias");
+    }
+
+    #[test]
+    fn con_buey_el_molino_produce_el_doble_gastando_lo_mismo_por_unidad() {
+        let cat = Reglas::cargar().catalogo;
+        let m = mano_de_obra(&cat, &[activo(1, Tipo::Molino)], 2, 0, 0);
+        let molino = |buey: bool, trigo: Mil| {
+            let mut a = Almacen::nuevo(400_000);
+            a.poner(Recurso::Trigo, trigo);
+            let mut e = vec![Edificio { buey, ..activo(1, Tipo::Molino) }];
+            recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; N]);
+            (a.cantidad(Recurso::Harina), a.cantidad(Recurso::Trigo))
+        };
+        assert_eq!(molino(false, 100_000), (4_000, 96_000), "sin buey, la receta: 4 de harina por minuto");
+        assert_eq!(molino(true, 100_000), (8_000, 92_000), "con buey (`factorBuey` 2), el doble de harina con el mismo trigo por unidad");
+        assert_eq!(molino(true, 6_000), (6_000, 0), "y sigue limitado por el trigo que hay");
     }
 
     #[test]

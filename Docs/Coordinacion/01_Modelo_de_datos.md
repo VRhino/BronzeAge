@@ -12,6 +12,8 @@
 > del interior de cada plaza de la que el héroe salió al mundo; estado en la foto `BAN25`), `Ejercito.territorio_faccion_id` (solo en `VISTA`), `ZonaFaccion` fundida, `RedCaminos.escalones` y
 > `BattleServerAssignment.servidor_id` (solo en `ADMIN`).
 
+> **Campos de la tanda 69 (2026-11-08, contrato 0.19.0).** `Heroe.monedas` (un solo saldo de monedas, aparte del oro de las plazas; sustituye a `Monedas { bronce, plata, oro }`, que desaparece, y `Botin.monedas` es ahora un número); `Faccion.prestigio` y `Faccion.tope_alianzas` (públicos); `Edificio.buey` (el molino con su buey); `Pueblo.cultivo` (`trigo`, `vid` u `oliva`, solo en la aldea) y el almacén local de la aldea con más recursos; `TarifaMercenario.monedas` (la tarifa del tablón en monedas); nueve recursos nuevos de la comida (38 en total) y seis tipos de edificio nuevos (molino, horno, quesera, bodega, prensa y estatua). Las capas nuevas del mundo (`region`, `fertilidad_vid`, `fertilidad_oliva`) están en [`06_Contrato_de_Mundo.md`](06_Contrato_de_Mundo.md). Las fotos anteriores a `BAN59` ya no se leen.
+
 ## 1. Reglas del modelo
 
 1. **Entidad con identidad** = mensaje con `id` y `version` (la versión de mundo del último cambio). Es lo que el almacén del cliente guarda por id.
@@ -33,7 +35,7 @@
 | **Columnas y caravanas** | `Ejercito` (con `Plan`, víveres propios, sin origen), `Caravana` (plan, estado, carros), `Convocatoria` | Doc 5.12-5.14, 3.13; `Movimiento_Ejercitos`, `Comercio_Caravanas` |
 | **Campamentos y mundo vivo** | `CampamentoMercenarios`, `CampamentoBandidos`, `Alijo`, `NodoRecurso`, `ZonaBosque`, `ZonaFaccion` | Doc 1.4, 1.9-1.9c; `Campamentos_Mercenarios`, `Generacion_Del_Mundo` |
 | **Comercio** | `AcuerdoTrueque`, `LineaTrueque`, `OrdenMercado`, `RutaComercial`, `RedCaminos` | Doc 3; `Comercio_Caravanas` |
-| **Tecnología, Aedas, intel** | `TecnologiasFaccion`, `EstadoTecnologia`, `AedaResidente`, `AedaItinerante`, `EpicaEnCurso`, `MiradaIntel`, `InformePlaza`, `MemoriaFaccion`, `FichaConocida`, `NieblaProyectada` | Doc 6, 5.12.7-5.12.10; `Tecnologia_Aedas`, `Niebla_De_Guerra` |
+| **Tecnología, Aedas, intel** | `TecnologiasFaccion`, `EstadoTecnologia`, `AedaResidente`, `AedaItinerante`, `EpicaEnCurso`, `MiradaIntel`, `InformePlaza`, `InformeRegion`, `MemoriaFaccion`, `FichaConocida`, `NieblaProyectada` | Doc 6, 5.12.7-5.12.10; `Tecnologia_Aedas`, `Niebla_De_Guerra` |
 | **Batalla de Unity** | `Batalla`, `BattleTicket`, `IncorporacionBatalla`, `BattleServerAssignment`, `TokensBatalla`, `InicioBatalla`, `SalidaBatalla`, `BattleResult`, `Botin`, y los contextos (asedio, campo abierto, caravana disputa/aguante, campamento de bandidos, saqueo de pueblo, avanzada) | Doc 5.15; `Batalla_Unity_Ciclo` |
 | **Mundo** | `ArtefactoDeMundo` y sus capas (`world.proto`) | [`06_Contrato_de_Mundo.md`](06_Contrato_de_Mundo.md) |
 
@@ -46,6 +48,7 @@
 - El almacén nunca baja de 0 ni supera su capacidad y cambia en escalones (paso de minuto); la población es **entera** (habitantes enteros, con un resto de crecimiento oculto que no viaja); el medidor de mantenimiento ∈ [0, 100]; la reputación ∈ [−100, 100]; `nivel` es monótono.
 - Un pueblo extractor o una avanzada **cuenta como edificio activo de su plaza madre**; los pueblos pasan al conquistador con la madre y desaparecen con su ruina.
 - Los `Plan` son monótonos en el tiempo (`en_ms` no decrece) y su primera posición es la de la entidad en el instante en que se emite.
+- El prestigio de una Facción **solo sube** (no se gasta ni se pierde) y `Heroe.monedas` nunca es negativo; un molino pierde su buey con el molino (ruinas, obra cancelada o dañado en una conquista).
 - Un identificador nunca se reutiliza dentro de una partida. Todos son `<prefijo>-<n>` (la Facción, `f-3`; ver `common.proto`).
 - Las zonas de una misma Facción se solapan (no se recortan entre sí) y las de Facciones distintas no: `ZonaFaccion` es su unión y cada punto del mapa es como mucho de una Facción (`Ejercito.territorio_faccion_id`).
 - Un héroe puede estar además **dentro de un pueblo extractor o de una avanzada** (`UbicacionHeroe.pueblo_id`/`avanzada_id`); la columna que entró en un lugar queda fuera del mapa (`Ejercito.dentro_de`).

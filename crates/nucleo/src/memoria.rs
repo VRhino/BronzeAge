@@ -9,7 +9,7 @@
 //! fichas{n · n × (facción u32 · m · m × (sitio, datos, conocido_en i64))} · vigías{n · n × (columna u64, desde i64, radio i64)} · sitios{n · n × (sitio, desde i64)}`, con
 //! `sitio = (clase u8: 0 plaza, 1 pueblo, 2 avanzada; id u64)` y `datos = (facción u32, posición, nivel u32, radio i64, estado u8: 0 activo, 1 en obra, 2 en ruinas)`; detrás, `miradas{n · n × (id u64, facción u32, origen, centro, radio i64,
 //! comprada_en i64, expira_en i64, libre_en i64)} · informes{n · n × (facción u32 · m · m × (plaza u64, nivel u32, posición, conocido_en i64, edificios{k · k × (tipo u8, en_obra bool, nivel u8,
-//! hay bool, sitio)}, defensa))}`, con `origen = (0 plaza u64 | 1 campamento u32)`, el sitio de un edificio en milésimas de unidad local y la defensa como el contenido de un informe de inspección.
+//! hay bool, sitio)}, defensa))} · informes de región{n · n × (facción u32, región u8, tipo u8: 0 plazas, 1 órdenes, comprado_en i64)}`, con `origen = (0 plaza u64 | 1 campamento u32)`, el sitio de un edificio en milésimas de unidad local y la defensa como el contenido de un informe de inspección.
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::codec_economia::{tipo_a_u8, tipo_de_u8};
@@ -89,6 +89,13 @@ impl Mirada {
     }
 }
 
+/// Qué vende la taberna de una plaza de la región del relieve (tanda 69 §7): las plazas de la región o las órdenes de mercado de esas plazas.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum TipoInformeRegion {
+    Plazas,
+    Ordenes,
+}
+
 /// Un edificio de una plaza ajena tal como lo trae un Informe: su tipo, si está levantado o en obra, su nivel interno y su sitio en la ciudad (milésimas de unidad local, el centro de su huella).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct EdificioVisto {
@@ -128,6 +135,8 @@ pub struct Memoria {
     pub miradas: Vec<Mirada>,
     /// El último Informe de cada plaza ajena que compró cada Facción, por plaza.
     pub informes: BTreeMap<u32, BTreeMap<u64, InformeDePlaza>>,
+    /// Cuándo compró cada Facción cada informe de región, por (Facción, región del relieve, tipo): lo que ya pasó su enfriamiento se quita al comprar.
+    pub informes_region: BTreeMap<(u32, u8, TipoInformeRegion), Instante>,
 }
 
 impl Memoria {
@@ -157,8 +166,17 @@ fn sitio_leer(r: &mut Lector) -> Result<Sitio, ErrorFormato> {
     })
 }
 
+/// El tipo de un informe de región, escrito como `tipo as u8` (0 plazas, 1 órdenes): en la memoria y en el comando que lo compra.
+pub(crate) fn tipo_informe_region_leer(r: &mut Lector) -> Result<TipoInformeRegion, ErrorFormato> {
+    match r.u8()? {
+        0 => Ok(TipoInformeRegion::Plazas),
+        1 => Ok(TipoInformeRegion::Ordenes),
+        _ => Err(ErrorFormato("tipo de informe de región desconocido")),
+    }
+}
+
 pub(crate) fn escribir(w: &mut Escritor, m: &Memoria) {
-    let Memoria { rejilla, exploracion, personal, fichas, vigias, sitios, miradas, informes } = m;
+    let Memoria { rejilla, exploracion, personal, fichas, vigias, sitios, miradas, informes, informes_region } = m;
     w.bool(rejilla.is_some());
     let (c, f, t) = rejilla.unwrap_or_default();
     w.u64(c as u64);
@@ -237,6 +255,13 @@ pub(crate) fn escribir(w: &mut Escritor, m: &Memoria) {
             contenido_escribir(w, defensa);
         }
     }
+    w.u64(informes_region.len() as u64);
+    for (&(faccion, region, tipo), &comprado_en) in informes_region {
+        w.u32(faccion);
+        w.u8(region);
+        w.u8(tipo as u8);
+        w.i64(comprado_en);
+    }
 }
 
 pub(crate) fn leer(r: &mut Lector) -> Result<Memoria, ErrorFormato> {
@@ -305,6 +330,10 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Memoria, ErrorFormato> {
             }
             de.insert(plaza, InformeDePlaza { nivel, posicion, conocido_en, edificios, defensa: contenido_leer(r)? });
         }
+    }
+    for _ in 0..r.cuenta()? {
+        let (faccion, region) = (r.u32()?, r.u8()?);
+        m.informes_region.insert((faccion, region, tipo_informe_region_leer(r)?), r.i64()?);
     }
     Ok(m)
 }

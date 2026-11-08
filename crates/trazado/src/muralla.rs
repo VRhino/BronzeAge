@@ -32,7 +32,7 @@ pub struct CeldaMuro {
     pub clase: ClaseCelda,
 }
 
-/// Lo que el trazo lee del bloque `MURALLA` de Murallas.md §11 (`franjaDeRonda`, `pasoTorres`, `puertasMaximas`, `anchoMaximoPuerta`); lo construye quien parsea el bloque.
+/// Lo que el trazo lee del bloque `MURALLA` de Murallas.md §11 (`franjaDeRonda`, `pasoTorres`, `puertasMaximas`, `anchoMaximoPuerta`, `desplazamientoMaximoPuerta`); lo construye quien parsea el bloque.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ParametrosMuralla {
     /// Pasos de dilatación del casco urbano para el anillo (vecindad 4).
@@ -43,11 +43,13 @@ pub struct ParametrosMuralla {
     pub puertas_maximas: usize,
     /// Celdas de ancho que mide como mucho una puerta (`anchoMaximoPuerta`, Cal2-1).
     pub ancho_maximo_puerta: usize,
+    /// Celdas que se puede correr una puerta por su camino para que le quepa el tramo recto (`desplazamientoMaximoPuerta`, Tanda Economía §14).
+    pub desplazamiento_maximo_puerta: usize,
 }
 
 impl Default for ParametrosMuralla {
     fn default() -> Self {
-        Self { franja_de_ronda: 1, paso_torres: [0, 8, 5], puertas_maximas: 4, ancho_maximo_puerta: 2 }
+        Self { franja_de_ronda: 1, paso_torres: [0, 8, 5], puertas_maximas: 4, ancho_maximo_puerta: 2, desplazamiento_maximo_puerta: 3 }
     }
 }
 
@@ -255,7 +257,7 @@ pub fn trazar_recinto(ciudad: &Ciudad, p: &ParametrosMuralla, nivel: u8) -> Resu
             return Err(ErrorMuralla::NoSePuedeCerrar);
         }
     }
-    let (region, muro) = resuelto.ok_or(ErrorMuralla::NoSePuedeCerrar)?;
+    let (mut region, mut muro) = resuelto.ok_or(ErrorMuralla::NoSePuedeCerrar)?;
 
     // 6. el anillo tiene que aislar de verdad.
     if se_llega_desde_fuera(&muro, &centro) {
@@ -271,12 +273,19 @@ pub fn trazar_recinto(ciudad: &Ciudad, p: &ParametrosMuralla, nivel: u8) -> Resu
     colapsar_puertas(&mut celdas, &region, &muro, &en_red);
     reabrir_cortes(&mut celdas, &en_red, base);
     let piezas_hasta = piezas.iter().map(|q| q.id).max().unwrap_or(0);
-    let valida = |celdas: &[CeldaMuro], cortados: &[usize]| sigue_conectada(base, celdas, &red_de_puertas(base, celdas, cortados, &region, &muro), piezas_hasta);
+    let mut ocupado = vacio();
+    por_pieza.iter().flatten().for_each(|&i| ocupado[i] = true);
+    // Un anillo es válido si no pisa ninguna pieza, aísla el Centro Urbano y deja la red de la ciudad en una pieza ([`sigue_conectada`]).
+    let valida = |celdas: &[CeldaMuro], cortados: &[usize], region: &[bool], muro: &[bool]| {
+        let pisa = muro.iter().zip(&ocupado).any(|(&m, &o)| m && o);
+        !pisa && !se_llega_desde_fuera(muro, &centro) && sigue_conectada(base, celdas, &red_de_puertas(base, celdas, cortados, region, muro), piezas_hasta)
+    };
     let estrechadas = estrechar_puertas(&mut celdas, &region, &muro, &en_red, p.ancho_maximo_puerta);
-    if !estrechadas.is_empty() && !valida(&celdas, &estrechadas) {
+    if !estrechadas.is_empty() && !valida(&celdas, &estrechadas, &region, &muro) {
         return Err(ErrorMuralla::NoSePuedeCerrar);
     }
-    let cortados = limitar_puertas(&mut celdas, &base.suelo.red, &region, &muro, p.puertas_maximas, estrechadas, valida).ok_or(ErrorMuralla::NoSePuedeCerrar)?;
+    let mut cortados = limitar_puertas(&mut celdas, &base.suelo.red, &region, &muro, p.puertas_maximas, estrechadas, |c, k| valida(c, k, &region, &muro)).ok_or(ErrorMuralla::NoSePuedeCerrar)?;
+    enderezar_puertas(&mut celdas, &mut region, &mut muro, &mut cortados, &en_red, p.desplazamiento_maximo_puerta, valida);
     let red_de_puertas = red_de_puertas(base, &celdas, &cortados, &region, &muro);
     let interior = Interior(region);
     marcar_torres(&mut celdas, &interior, p, nivel);
@@ -551,6 +560,137 @@ fn limitar_puertas(anillo: &mut [CeldaMuro], red: &[u8], region: &[bool], muro: 
     (quedan <= maximas).then_some(cortadas)
 }
 
+/// Cómo corre el muro en una puerta: la dirección a lo largo del muro y la que va hacia dentro (perpendicular).
+type Eje = ((i32, i32), (i32, i32));
+
+fn mover(c: Celda, d: (i32, i32), k: i32) -> Celda {
+    Celda::new(c.col + d.0 * k, c.row + d.1 * k)
+}
+
+/// Los índices de la celda de dentro y la de fuera de `c` según `dentro`; `None` si alguna se sale de la ventana.
+fn lados(c: Celda, dentro: (i32, i32)) -> Option<(usize, usize)> {
+    Some((idx(mover(c, dentro, 1))?, idx(mover(c, dentro, -1))?))
+}
+
+/// Los ejes en que puede correr el muro en una abertura: sus celdas alineadas en una fila (o columna) y con región a un lado y no al otro. Si la red cruza la puerta de
+/// lado a lado (red dentro y fuera) solo valen los ejes por los que cruza: en una esquina, el del camino perpendicular al muro.
+fn ejes_de_la_puerta(grupo: &[Celda], region: &[bool], en_red: &[bool]) -> Vec<Eje> {
+    let mut ejes = Vec::new();
+    for a_lo_largo in [(1, 0), (0, 1)] {
+        let perp = (a_lo_largo.1, a_lo_largo.0);
+        let linea = |c: &Celda| c.col * perp.0 + c.row * perp.1;
+        if grupo.iter().any(|c| linea(c) != linea(&grupo[0])) {
+            continue;
+        }
+        for signo in [1, -1] {
+            let dentro = (perp.0 * signo, perp.1 * signo);
+            if grupo.iter().all(|&c| lados(c, dentro).is_some_and(|(d, _)| region[d])) {
+                ejes.push((a_lo_largo, dentro));
+            }
+        }
+    }
+    let cruza = |&(_, dentro): &Eje| grupo.iter().all(|&c| lados(c, dentro).is_some_and(|(d, f)| en_red[d] && en_red[f]));
+    if ejes.iter().any(cruza) {
+        ejes.retain(cruza);
+    }
+    ejes
+}
+
+/// La línea de la puerta con 2 celdas de muro a cada lado (en orden): la abertura, alineada según `a_lo_largo`, y 2 celdas más por cada extremo.
+fn tramo_recto(grupo: &[Celda], a_lo_largo: (i32, i32)) -> Vec<Celda> {
+    let primera = *grupo.iter().min_by_key(|c| c.col * a_lo_largo.0 + c.row * a_lo_largo.1).expect("una abertura tiene celdas");
+    (-2..grupo.len() as i32 + 2).map(|k| mover(primera, a_lo_largo, k)).collect()
+}
+
+/// ¿Es recto el muro a cada lado de la puerta? Toda celda de la línea tiene región por dentro y no por fuera; las que no son de la abertura, además, ni son región ni
+/// son puerta de otra abertura (son muro).
+fn es_recta(grupo: &[Celda], a_lo_largo: (i32, i32), dentro: (i32, i32), region: &[bool], puertas: &[bool]) -> bool {
+    tramo_recto(grupo, a_lo_largo).iter().all(|&c| match (idx(c), lados(c, dentro)) {
+        (Some(i), Some((d, f))) => !region[i] && region[d] && !region[f] && (grupo.contains(&c) || !puertas[i]),
+        _ => false,
+    })
+}
+
+/// La región con el muro de una puerta enderezado y su anillo: la línea de la puerta pasa a ser muro, su fila de dentro región y su fila de fuera no; solo queda la parte
+/// de la región que toca la puerta (lo que se separa se queda fuera) y los agujeros se rellenan. `None` si el anillo se sale de la ventana, pierde alguna puerta o deja
+/// quebrado el muro de otra puerta ya recta (`rectas`).
+fn region_enderezada(region: &[bool], grupo: &[Celda], (a_lo_largo, dentro): Eje, puertas: &[bool], rectas: &[(Vec<Celda>, Eje)]) -> Option<(Vec<bool>, Vec<bool>)> {
+    let mut nueva = region.to_vec();
+    for c in tramo_recto(grupo, a_lo_largo) {
+        let (d, f) = lados(c, dentro)?;
+        nueva[idx(c)?] = false;
+        nueva[d] = true;
+        nueva[f] = false;
+    }
+    let (dentro_de_la_puerta, _) = lados(grupo[0], dentro)?;
+    let nueva = rellenar_agujeros(&inundar([dentro_de_la_puerta], |i| nueva[i]));
+    let muro = anillo(&nueva)?;
+    let conserva_puertas = (0..CELDAS).all(|i| !puertas[i] || muro[i]);
+    let conserva_rectas = rectas.iter().chain([&(grupo.to_vec(), (a_lo_largo, dentro))]).all(|(g, (a, d))| es_recta(g, *a, *d, &nueva, puertas));
+    (conserva_puertas && conserva_rectas).then_some((nueva, muro))
+}
+
+/// La puerta corrida `k` celdas por su camino (hacia dentro si `k > 0`, hacia fuera si `k < 0`): sus celdas nuevas y la región con la franja entre la línea vieja y la
+/// nueva vaciada (hacia dentro) o llena (hacia fuera), para que [`region_enderezada`] trace la línea nueva. `None` si el camino no llega hasta allí (toda celda del
+/// recorrido, la nueva puerta incluida, tiene que ser red) o se sale de la ventana.
+fn puerta_corrida(grupo: &[Celda], (a_lo_largo, dentro): Eje, k: i32, region: &[bool], en_red: &[bool]) -> Option<(Vec<Celda>, Vec<bool>)> {
+    let recorrido = if k > 0 { 1..=k } else { k..=-1 };
+    for &c in grupo {
+        if !recorrido.clone().all(|j| idx(mover(c, dentro, j)).is_some_and(|i| en_red[i])) {
+            return None;
+        }
+    }
+    let mut nueva = region.to_vec();
+    let franja = if k > 0 { 1..k } else { k + 1..1 };
+    for c in tramo_recto(grupo, a_lo_largo) {
+        for j in franja.clone() {
+            nueva[idx(mover(c, dentro, j))?] = k < 0;
+        }
+    }
+    Some((grupo.iter().map(|&c| mover(c, dentro, k)).collect(), nueva))
+}
+
+/// Cada puerta tiene 2 celdas de muro en línea recta a cada lado (`LAYOUT_VERSION` 7, Tanda Economía §14): `xxpxx`, y una puerta de 2 celdas queda en un tramo recto de 6.
+/// Donde el anillo no lo tiene, se endereza el muro alrededor ([`region_enderezada`]), que puede encerrar o dejar fuera alguna celda. Se prueba por puerta, en el orden del
+/// anillo, primero en su sitio y después **corrida por su propio camino** ([`puerta_corrida`]: el muro cruza la misma calle unas celdas más adentro o más afuera, hasta
+/// `desplazamiento_maximo` celdas, de la más cercana a la más lejana y, a igual distancia, primero hacia dentro), con cada eje posible ([`ejes_de_la_puerta`]); vale el primero
+/// que da un anillo válido (`valida`: sin pisar piezas, aislando el Centro Urbano, sin partir la red, con los cortes que haga falta) que además deja intacto el
+/// tramo recto de las puertas ya rectas. La red que el muro nuevo pisa fuera de la puerta pasa a ser un corte (como los de `limitar_puertas`: sin puerta nueva ni cuenta
+/// para el tope), si la red aguanta. Si ninguno lo da —un edificio que flanquea la puerta, otra puerta a menos de 2 celdas, el borde de la ventana, un corte que partiría
+/// la red— esa puerta se queda como estaba: el anillo sigue siendo válido y la puerta, donde llega el camino, aunque su muro no sea recto (no se tira ningún edificio ni se saca
+/// de la muralla para enderezarla). `cortados` queda con los cortes del muro final.
+fn enderezar_puertas(celdas: &mut Vec<CeldaMuro>, region: &mut Vec<bool>, muro: &mut Vec<bool>, cortados: &mut Vec<usize>, en_red: &[bool], desplazamiento_maximo: usize, valida: impl Fn(&[CeldaMuro], &[usize], &[bool], &[bool]) -> bool) {
+    let mut puertas = vacio();
+    celdas.iter().filter(|c| c.clase == ClaseCelda::Puerta).filter_map(|c| idx(c.celda)).for_each(|i| puertas[i] = true);
+    let grupos: Vec<Vec<Celda>> = aberturas(celdas).iter().map(|g| g.iter().map(|&k| celdas[k].celda).collect()).collect();
+    let mut rectas: Vec<(Vec<Celda>, Eje)> = Vec::new();
+    let intentos: Vec<i32> = std::iter::once(0).chain((1..=desplazamiento_maximo as i32).flat_map(|d| [d, -d])).collect();
+    for grupo in grupos {
+        let ejes = ejes_de_la_puerta(&grupo, region, en_red);
+        if let Some(&eje) = ejes.iter().find(|&&(a, d)| es_recta(&grupo, a, d, region, &puertas)) {
+            rectas.push((grupo, eje));
+            continue;
+        }
+        'intentos: for &k in &intentos {
+            for &eje in &ejes {
+                let Some((corrida, base)) = puerta_corrida(&grupo, eje, k, region, en_red) else { continue };
+                let mut nuevas_puertas = puertas.clone();
+                grupo.iter().filter_map(|&c| idx(c)).for_each(|i| nuevas_puertas[i] = false);
+                corrida.iter().filter_map(|&c| idx(c)).for_each(|i| nuevas_puertas[i] = true);
+                let Some((nueva, nuevo_muro)) = region_enderezada(&base, &corrida, eje, &nuevas_puertas, &rectas) else { continue };
+                let nuevas = ordenar_anillo((0..CELDAS).filter(|&i| nuevo_muro[i]).map(|i| CeldaMuro { celda: celda_de(i), clase: if nuevas_puertas[i] { ClaseCelda::Puerta } else { ClaseCelda::Muro } }).collect());
+                // La red que el muro nuevo pisa sin ser puerta se corta, como en `limitar_puertas` (no cuenta para el tope de puertas); `valida` dice si la red aguanta los cortes.
+                let siguen: Vec<usize> = (0..CELDAS).filter(|&i| nuevo_muro[i] && en_red[i] && !nuevas_puertas[i]).collect();
+                if valida(&nuevas, &siguen, &nueva, &nuevo_muro) {
+                    (*celdas, *region, *muro, *cortados, puertas) = (nuevas, nueva, nuevo_muro, siguen, nuevas_puertas);
+                    rectas.push((corrida, eje));
+                    break 'intentos;
+                }
+            }
+        }
+    }
+}
+
 /// ¿Sigue la red de la ciudad, con este anillo, siendo una pieza, y toda pieza que tenía salida la conserva? Se rehace la red con el recinto, como al comprometerlo.
 fn sigue_conectada(base: &Ciudad, celdas: &[CeldaMuro], red_de_puertas: &[CeldaDeRed], tras_pieza: u32) -> bool {
     let mut c = base.clone();
@@ -612,4 +752,149 @@ pub fn contiene_a(nuevo: &[CeldaMuro], anterior: &[CeldaMuro]) -> bool {
 /// Edificios urbanos (no granjas ni corrales) con alguna celda fuera del `interior`: el «extramuros» del gate de ampliación.
 pub fn edificios_extramuros(ciudad: &Ciudad, interior: &Interior) -> usize {
     ciudad.piezas().iter().filter(|q| q.categoria != Categoria::Afueras && !q.rect.celdas().all(|c| interior.contiene(c))).count()
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+
+    /// Una región rectangular de columnas `cols` y filas `filas`, sin las celdas que `quita` señale.
+    fn region_de(cols: std::ops::RangeInclusive<i32>, filas: std::ops::RangeInclusive<i32>, quita: impl Fn(i32, i32) -> bool) -> Vec<bool> {
+        let mut r = vacio();
+        for row in filas {
+            for col in cols.clone().filter(|&c| !quita(c, row)) {
+                r[idx(Celda::new(col, row)).unwrap()] = true;
+            }
+        }
+        r
+    }
+
+    fn puertas_en(celdas: &[Celda]) -> Vec<bool> {
+        let mut p = vacio();
+        celdas.iter().for_each(|&c| p[idx(c).unwrap()] = true);
+        p
+    }
+
+    /// Una fila del dibujo: `x` muro, `p` puerta, `.` región y `-` vacío.
+    fn fila(region: &[bool], muro: &[bool], puertas: &[bool], row: i32, cols: std::ops::RangeInclusive<i32>) -> String {
+        cols.map(|col| idx(Celda::new(col, row)).unwrap()).map(|i| if puertas[i] { 'p' } else if muro[i] { 'x' } else if region[i] { '.' } else { '-' }).collect()
+    }
+
+    /// Muro horizontal con la región por debajo (hacia las filas mayores).
+    const HORIZONTAL: Eje = ((1, 0), (0, 1));
+
+    /// El dibujo del diseño: el muro se quiebra justo junto a la puerta (a su izquierda corre una fila más arriba) y queda `xxpxx`.
+    #[test]
+    fn el_quiebro_junto_a_la_puerta_se_endereza_en_xxpxx() {
+        let region = region_de(-8..=8, -5..=3, |c, r| c >= 0 && r == -5);
+        let puerta = [Celda::new(0, -5)];
+        let puertas = puertas_en(&puerta);
+        assert_eq!(fila(&region, &anillo(&region).unwrap(), &puertas, -5, -4..=4), "....pxxxx");
+        assert!(!es_recta(&puerta, HORIZONTAL.0, HORIZONTAL.1, &region, &puertas));
+        let (nueva, muro) = region_enderezada(&region, &puerta, HORIZONTAL, &puertas, &[]).expect("se puede enderezar");
+        assert_eq!(fila(&nueva, &muro, &puertas, -5, -4..=4), "..xxpxxxx");
+        assert!(es_recta(&puerta, HORIZONTAL.0, HORIZONTAL.1, &nueva, &puertas));
+    }
+
+    /// Una puerta de 2 celdas queda en un tramo recto de 6: `xxppxx`.
+    #[test]
+    fn una_puerta_de_dos_celdas_queda_en_un_tramo_recto_de_seis() {
+        let region = region_de(-8..=8, -5..=3, |c, r| c >= 0 && r == -5);
+        let puerta = [Celda::new(0, -5), Celda::new(1, -5)];
+        let puertas = puertas_en(&puerta);
+        assert_eq!(tramo_recto(&puerta, HORIZONTAL.0).len(), 6);
+        let (nueva, muro) = region_enderezada(&region, &puerta, HORIZONTAL, &puertas, &[]).expect("se puede enderezar");
+        assert_eq!(fila(&nueva, &muro, &puertas, -5, -4..=5), "..xxppxxxx");
+        assert!(es_recta(&puerta, HORIZONTAL.0, HORIZONTAL.1, &nueva, &puertas));
+    }
+
+    /// Una esquina del anillo pegada a la puerta: el muro de arriba termina en la puerta y gira; al enderezar, la región crece para dar las 2 celdas rectas de ese lado.
+    #[test]
+    fn una_esquina_pegada_a_la_puerta_se_endereza_ensanchando_la_region() {
+        let region = region_de(-5..=4, -5..=3, |_, _| false);
+        let puerta = [Celda::new(4, -6)];
+        let puertas = puertas_en(&puerta);
+        let muro = anillo(&region).unwrap();
+        assert_eq!(fila(&region, &muro, &puertas, -6, 1..=7), "xxxp---");
+        assert!(!es_recta(&puerta, HORIZONTAL.0, HORIZONTAL.1, &region, &puertas));
+        let (nueva, muro) = region_enderezada(&region, &puerta, HORIZONTAL, &puertas, &[]).expect("se puede enderezar");
+        assert_eq!(fila(&nueva, &muro, &puertas, -6, 1..=7), "xxxpxx-");
+        assert!(es_recta(&puerta, HORIZONTAL.0, HORIZONTAL.1, &nueva, &puertas));
+        // el anillo sigue cerrado: desde fuera no se llega a la región
+        assert!(!se_llega_desde_fuera(&muro, &(0..CELDAS).filter(|&i| nueva[i]).collect::<Vec<_>>()));
+    }
+
+    /// El quiebro de siempre con la calle de la puerta bajando por la columna 0 (de la fila -9 a la 0): la región, su anillo y el muro con la puerta en (0, -5).
+    fn escena_con_calle() -> (Vec<CeldaMuro>, Vec<bool>, Vec<bool>, Vec<bool>) {
+        let region = region_de(-8..=8, -5..=3, |c, r| c >= 0 && r == -5);
+        let muro = anillo(&region).unwrap();
+        let celdas = ordenar_anillo((0..CELDAS).filter(|&i| muro[i]).map(|i| CeldaMuro { celda: celda_de(i), clase: if celda_de(i) == Celda::new(0, -5) { ClaseCelda::Puerta } else { ClaseCelda::Muro } }).collect());
+        let calle = puertas_en(&(-9..=0).map(|row| Celda::new(0, row)).collect::<Vec<_>>());
+        (celdas, region, muro, calle)
+    }
+
+    fn puertas_del(celdas: &[CeldaMuro]) -> Vec<Celda> {
+        celdas.iter().filter(|c| c.clase == ClaseCelda::Puerta).map(|c| c.celda).collect()
+    }
+
+    /// Un edificio en (-2, -5) impide enderezar la puerta en su sitio (el muro recto lo pisaría) y la puerta se corre una celda hacia fuera por su calle, donde el edificio
+    /// queda dentro de la región y el tramo `xxpxx` cabe.
+    #[test]
+    fn una_puerta_que_no_se_endereza_en_su_sitio_se_corre_por_su_calle() {
+        let (mut celdas, mut region, mut muro, calle) = escena_con_calle();
+        let edificio = idx(Celda::new(-2, -5)).unwrap();
+        let sin_pisar = |_: &[CeldaMuro], _: &[usize], _: &[bool], muro: &[bool]| !muro[edificio];
+        enderezar_puertas(&mut celdas, &mut region, &mut muro, &mut Vec::new(), &calle, 0, sin_pisar);
+        assert_eq!(puertas_del(&celdas), [Celda::new(0, -5)], "sin poder correrla se queda como estaba");
+        enderezar_puertas(&mut celdas, &mut region, &mut muro, &mut Vec::new(), &calle, 3, sin_pisar);
+        let puerta = puertas_del(&celdas);
+        assert_eq!(puerta, [Celda::new(0, -6)], "la misma calle, una celda más afuera");
+        assert!(es_recta(&puerta, HORIZONTAL.0, HORIZONTAL.1, &region, &puertas_en(&puerta)));
+        assert!(!muro[edificio] && region[edificio]);
+    }
+
+    /// Si el edificio flanquea la calle a todas las distancias a que se puede correr, la puerta se queda donde estaba y el anillo no cambia.
+    #[test]
+    fn una_puerta_que_no_cabe_ni_corrida_se_queda_como_estaba() {
+        let (mut celdas, mut region, mut muro, calle) = escena_con_calle();
+        let (celdas_antes, region_antes, muro_antes) = (celdas.clone(), region.clone(), muro.clone());
+        let edificio: Vec<usize> = (-9..=-1).map(|row| idx(Celda::new(-2, row)).unwrap()).collect();
+        enderezar_puertas(&mut celdas, &mut region, &mut muro, &mut Vec::new(), &calle, 3, |_, _, _, muro| edificio.iter().all(|&i| !muro[i]));
+        assert_eq!((celdas, region, muro), (celdas_antes, region_antes, muro_antes));
+    }
+
+    /// El tramo recto cruza una calle vecina que acaba en el muro (la de la columna -2, de la fila -5 a la 0): esa calle se corta (queda en `cortados`, no es puerta) y la puerta
+    /// sigue en su sitio, recta.
+    #[test]
+    fn el_tramo_recto_que_cruza_una_calle_vecina_la_corta() {
+        let (mut celdas, mut region, mut muro, mut calle) = escena_con_calle();
+        (-5..=0).for_each(|row| calle[idx(Celda::new(-2, row)).unwrap()] = true);
+        let mut cortados = Vec::new();
+        enderezar_puertas(&mut celdas, &mut region, &mut muro, &mut cortados, &calle, 0, |_, _, _, _| true);
+        let puerta = puertas_del(&celdas);
+        assert_eq!(puerta, [Celda::new(0, -5)]);
+        assert!(es_recta(&puerta, HORIZONTAL.0, HORIZONTAL.1, &region, &puertas_en(&puerta)));
+        assert_eq!(cortados, [idx(Celda::new(-2, -5)).unwrap()]);
+        assert!(muro[cortados[0]] && celdas.iter().any(|c| c.celda == Celda::new(-2, -5) && c.clase == ClaseCelda::Muro));
+    }
+
+    /// Si el corte partiría la red (`valida` lo rechaza), ese enderezado no vale: con una calle que cruza cada línea posible, la puerta se queda como estaba.
+    #[test]
+    fn un_enderezado_cuyo_corte_partiria_la_red_no_se_hace() {
+        let (mut celdas, mut region, mut muro, mut calle) = escena_con_calle();
+        (-9..=0).for_each(|row| calle[idx(Celda::new(-2, row)).unwrap()] = true);
+        let (celdas_antes, region_antes, muro_antes) = (celdas.clone(), region.clone(), muro.clone());
+        let mut cortados = Vec::new();
+        enderezar_puertas(&mut celdas, &mut region, &mut muro, &mut cortados, &calle, 3, |_, cortes, _, _| cortes.is_empty());
+        assert_eq!((celdas, region, muro), (celdas_antes, region_antes, muro_antes));
+    }
+
+    /// Dos puertas a menos de 2 celdas una de otra no se pueden enderezar a la vez: el trazo las deja como están.
+    #[test]
+    fn una_puerta_con_otra_a_dos_celdas_no_se_endereza() {
+        let region = region_de(-8..=8, -5..=3, |_, _| false);
+        let puerta = [Celda::new(0, -6)];
+        let puertas = puertas_en(&[puerta[0], Celda::new(2, -6)]);
+        assert!(region_enderezada(&region, &puerta, HORIZONTAL, &puertas, &[]).is_none());
+    }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "militar"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 description = "Héroe, tropa y columna (Doc 5, Mechanics/Heroe_Y_Tropa y Movimiento_Ejercitos): catálogo, Liderazgo, reclutamiento, guarnición, ración y moral, unirse y separarse, formación y convocatoria. Reglas puras en enteros, sin reloj propio"
 

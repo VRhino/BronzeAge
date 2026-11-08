@@ -32,6 +32,7 @@ use crate::estado_comercio::entidad_caravana;
 use crate::nucleo::flota::rechazo_de_caravana;
 use crate::nucleo::mercado::id32;
 use asentamiento::datos::UNO;
+use asentamiento::Recurso;
 use base::{Vertice, MS_POR_MINUTO};
 use comercio::caravana::{candidatas_de_reparto, Caravana, EstadoCaravana, Llegada, PerdidaCarros, TipoCaravana};
 use comercio::encargo::Punta;
@@ -403,27 +404,38 @@ impl Nucleo {
 
     // ───────────────────────────── Peajes y llegada ─────────────────────────────
 
-    /// Cobra los peajes alcanzados (§7.3): el 2 % de lo que lleva en ese momento a cada ciudad ajena que acaba de cruzar. La ciudad que ya no
-    /// existe no cobra (la caravana se queda con lo suyo).
+    /// Cobra los peajes alcanzados (§7.3): a cada ciudad ajena que acaba de cruzar, el 2 % del valor de lo que lleva en ese momento, en oro que sale del almacén de la
+    /// capital de la Facción dueña de la caravana y entra en el de la capital de la Facción de la ciudad (topado: lo que no cabe se pierde), y en especie de la carga, que va a
+    /// la ciudad cruzada, lo que el oro no cubrió. Sin capital, paga la plaza de origen y cobra la ciudad cruzada. La ciudad que ya no existe no cobra (la caravana se queda con lo suyo).
     pub(super) fn cobrar_peajes(&mut self, id: u64, t: Instante) {
         let tasa = self.estado.reglas.economia.comercio.peaje;
         let Some(i) = self.estado.comercio.posicion_caravana(id) else { return };
-        let cobros = self.estado.comercio.flota[i].cobrar_peajes(t, tasa);
+        let origen = self.estado.comercio.flota[i].origen as u64;
+        let pagadora = self.plaza_de_oro(origen);
+        let mut oro = self.estado.asentamientos.get(&pagadora).map_or(0, |p| p.economia.almacen.cantidad(Recurso::Oro));
+        let precios = self.tabla_de_precios().into_owned();
+        let cobros = self.estado.comercio.flota[i].cobrar_peajes(t, tasa, &precios, &mut oro);
         // Los peajes alcanzados se descartan se cobre o no: la caravana cambia aunque no pague nada (con unidades enteras, C3b, una carga pequeña no paga).
         self.tr.tocar(Clase::Caravana, id);
-        for CobroPeaje { ciudad, cobrado } in cobros {
+        for CobroPeaje { ciudad, oro, cobrado } in cobros {
             let ciudad_id = ciudad as u64;
-            let Some(plaza) = self.estado.asentamientos.get_mut(&ciudad_id) else {
+            if !self.estado.asentamientos.contains_key(&ciudad_id) {
                 for (r, n) in cobrado {
                     *self.estado.comercio.flota[i].contenido.entry(r).or_insert(0) += n;
                 }
                 continue;
-            };
+            }
+            let cobradora = self.plaza_de_oro(ciudad_id);
+            if let Some(pagada) = self.estado.asentamientos.get_mut(&pagadora).map(|p| p.economia.almacen.quitar(Recurso::Oro, oro)) {
+                self.estado.asentamientos.get_mut(&cobradora).expect("la capital de una plaza viva existe").economia.almacen.agregar(Recurso::Oro, pagada);
+            }
+            let plaza = self.estado.asentamientos.get_mut(&ciudad_id).expect("comprobada arriba");
             for (&r, &n) in &cobrado {
                 plaza.economia.almacen.agregar(r, n);
             }
-            self.tr.tocar(Clase::Asentamiento, ciudad_id);
-            self.emitir_comercio(t, EventoComercio::PeajePaso { caravana: id, ciudad, cobrado }, vec![ciudad_id], &[]);
+            self.tr.tocar_todos(Clase::Asentamiento, [pagadora, cobradora, ciudad_id]);
+            let oyentes = BTreeSet::from([ciudad_id, pagadora, cobradora]).into_iter().collect();
+            self.emitir_comercio(t, EventoComercio::PeajePaso { caravana: id, ciudad, oro, cobrado }, oyentes, &[]);
         }
     }
 

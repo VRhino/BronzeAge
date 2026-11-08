@@ -384,13 +384,15 @@ fn un_envio_programado_a_otra_plaza_propia_espera_su_hora_deja_con_comision_vuel
     // En el destino deja con la comisión de una entrega.
     let llegada = e.fin_del_plan(car);
     e.avanzar_hasta(llegada - 1);
-    let (esperada, oro_b) = (comision_esperada(&e.n, a, b, &[(Cobre, 50_000)]), cantidad(&e.n, b, Oro));
+    let (esperada, oro_b, oro_a) = (comision_esperada(&e.n, a, b, &[(Cobre, 50_000)]), cantidad(&e.n, b, Oro), cantidad(&e.n, a, Oro));
     e.avanzar_hasta(llegada);
     let h = hechos(&e.n, "comercio.caravana_descarga").into_iter().find(|h| h.1 == vec![b, a]).expect("descarga en el destino");
     let comision = dato(&h, "comision");
     assert!(comision > 0 && comision <= esperada && esperada - comision < 1_000, "comisión {comision} contra {esperada}: se acuña en unidades enteras, hacia abajo");
     assert_eq!(cantidad(&e.n, b, Cobre) - cobre_b, 50_000);
-    assert!((cantidad(&e.n, b, Oro) - oro_b - comision).abs() <= 1_000, "la comisión se acuña en el destino");
+    assert_eq!(e.n.capital_de(1), Some(a), "A es la capital de la Facción de B");
+    assert!((cantidad(&e.n, a, Oro) - oro_a - comision).abs() <= 1_000, "la comisión se acuña en la capital de la Facción del destino");
+    assert!((cantidad(&e.n, b, Oro) - oro_b).abs() <= 1_000, "y no en el destino");
     e.avanzar_hasta(llegada + descarga + carga);
     assert_eq!((e.k(car).estado, e.a_bordo(car, Estano)), (EstadoCaravana::Retornando, 20_000));
 
@@ -543,20 +545,20 @@ fn una_plaza_ajena_en_el_camino_cobra_peaje_a_la_ida_y_a_la_vuelta_cargada() {
     e.admin(encargar(car, b, Modo::Ruta, None, parada(&[(Cobre, 100_000)], &[Estano]), parada(&[(Estano, 100_000)], &[Cobre])));
     e.avanzar(e.tiempo_carga());
     assert_eq!((e.k(car).estado, e.k(car).peajes.len(), e.k(car).peajes[0].ciudad), (EstadoCaravana::EnTransito, 1, c as u32), "la ruta pasa por la ciudad ajena");
-    // A la ida cobra el 2 % de lo que lleva.
+    // A la ida cobra el 2 % del valor de lo que lleva, en oro de la capital: la carga no se toca.
     e.viajar(car);
     let peajes = hechos(&e.n, "comercio.peaje_paso");
-    assert_eq!((peajes.len(), peajes[0].1.clone(), dato(&peajes[0], "cobre")), (1, vec![c], 2_000));
-    assert_eq!(cantidad(&e.n, c, Cobre) - cobre_c, 2_000);
+    assert_eq!((peajes.len(), peajes[0].1.contains(&c), dato(&peajes[0], "oroPagado") > 0, peajes[0].2.iter().any(|(k, _)| *k == "cobre")), (1, true, true, false));
+    assert_eq!(cantidad(&e.n, c, Cobre) - cobre_c, 0);
     // Descarga lo que queda, recoge estaño y a la vuelta, cargada, paga otra vez.
     e.avanzar(e.tiempo_descarga() + e.tiempo_carga());
     assert_eq!((e.k(car).estado, e.a_bordo(car, Estano), e.k(car).peajes.len()), (EstadoCaravana::Retornando, 100_000, 1));
     e.viajar(car);
     let peajes = hechos(&e.n, "comercio.peaje_paso");
-    assert_eq!((peajes.len(), peajes[1].1.clone(), dato(&peajes[1], "estano")), (2, vec![c], 2_000), "la vuelta cargada paga");
-    assert_eq!(cantidad(&e.n, c, Estano) - estano_c, 2_000);
+    assert_eq!((peajes.len(), peajes[1].1.contains(&c), dato(&peajes[1], "oroPagado") > 0, peajes[1].2.iter().any(|(k, _)| *k == "estano")), (2, true, true, false), "la vuelta cargada paga en oro");
+    assert_eq!(cantidad(&e.n, c, Estano) - estano_c, 0);
     let h = hechos(&e.n, "comercio.caravana_descarga").into_iter().find(|h| h.1 == vec![a]).unwrap();
-    assert_eq!(dato(&h, "estano"), 98_000, "y deja en el origen lo que queda");
+    assert_eq!(dato(&h, "estano"), 100_000, "y deja en el origen toda la carga");
 }
 
 // ───────────────────────────── 6. Cancelar ─────────────────────────────
@@ -903,7 +905,7 @@ fn un_envio_a_una_plaza_ajena_con_mercado_vende_a_sus_ordenes_de_compra_y_con_lo
     // 600 de mercancía ocupan los dos carros; a cambio compra 100 de madera, que ocupa uno.
     let en_origen = parada(&[(Cobre, 300_000), (Estano, 300_000)], &[Madera, Oro]);
     let en_destino = Parada { dejar: vec![vende(Cobre, None, PUNTO / 2), vende(Estano, None, PUNTO / 2)], recoger: vec![compra(Madera, 100_000, 2 * PUNTO)], ..Parada::default() };
-    let (madera_a, madera_c, oro_c) = (cantidad(&e.n, a, Madera), cantidad(&e.n, c, Madera), cantidad(&e.n, c, Oro));
+    let (madera_a, madera_c, oro_c, oro_a) = (cantidad(&e.n, a, Madera), cantidad(&e.n, c, Madera), cantidad(&e.n, c, Oro), cantidad(&e.n, a, Oro));
     let llegada = enviar_y_llegar(&mut e, car, c, en_origen, en_destino);
 
     // Vende: la plaza recibe la mercancía y paga su oro, y los dos carros tardan lo suyo.
@@ -911,8 +913,11 @@ fn un_envio_a_una_plaza_ajena_con_mercado_vende_a_sus_ordenes_de_compra_y_con_lo
     assert_eq!((d.0, dato(&d, "cobre"), dato(&d, "estano"), dato(&d, "tirado"), dato(&d, "comision"), dato(&d, "carros")), (llegada, 300_000, 300_000, 0, 0, 2));
     assert_eq!((dato(&d, "finPaso"), e.encargo(car).fin_paso), (llegada + 2 * e.tiempo_descarga(), Some(llegada + 2 * e.tiempo_descarga())));
     assert_eq!((cantidad(&e.n, c, Cobre), cantidad(&e.n, c, Estano)), (300_000, 300_000));
-    let oro_cobrado = e.a_bordo(car, Oro);
-    assert!(oro_cobrado > 0 && oro_c - cantidad(&e.n, c, Oro) == oro_cobrado, "el oro que paga la plaza es el que cobra la caravana");
+    let oro_cobrado = oro_c - cantidad(&e.n, c, Oro);
+    let tope = e.n.economia(a).unwrap().almacen.capacidad(Oro);
+    assert!(oro_cobrado > 0 && oro_a + oro_cobrado > tope, "lo cobrado ({oro_cobrado}) no cabe del todo en el oro de la capital ({oro_a} de {tope})");
+    assert_eq!(cantidad(&e.n, a, Oro), tope, "entra en la capital del comprador, topado; lo que no cabe se pierde");
+    assert_eq!(e.a_bordo(car, Oro), 0, "la caravana no lleva el oro: va a su capital");
     assert_eq!((e.a_bordo(car, Cobre), e.a_bordo(car, Estano)), (0, 0));
     assert_eq!(servidas(&e, car).len(), 2);
 
@@ -923,7 +928,7 @@ fn un_envio_a_una_plaza_ajena_con_mercado_vende_a_sus_ordenes_de_compra_y_con_lo
     assert_eq!((k.0, dato(&k, "madera"), dato(&k, "carros"), dato(&k, "finPaso")), (fin_descarga, 100_000, 1, fin_descarga + e.tiempo_carga()));
     assert_eq!((e.situacion(car).2, e.encargo(car).fin_paso), (Fase::Carga, Some(fin_descarga + e.tiempo_carga())));
     assert_eq!((e.a_bordo(car, Madera), madera_c - cantidad(&e.n, c, Madera)), (100_000, 100_000));
-    assert!(e.a_bordo(car, Oro) < oro_cobrado, "pagó la madera con lo cobrado");
+    assert!(cantidad(&e.n, a, Oro) < tope, "pagó la madera con el oro de su capital");
     assert_eq!(servidas(&e, car).len(), 3);
     for orden in [compra_cobre, compra_estano, venta_madera] {
         assert!(e.n.libro_ordenes().orden(orden).is_none() && e.n.libro_ordenes().buscar(orden).is_some_and(|o| o.estado == EstadoOrden::Cumplida), "cumplida entera: pasa al historial");
@@ -931,13 +936,10 @@ fn un_envio_a_una_plaza_ajena_con_mercado_vende_a_sus_ordenes_de_compra_y_con_lo
     e.avanzar_hasta(fin_descarga + e.tiempo_carga());
     assert_eq!(e.k(car).estado, EstadoCaravana::Retornando);
 
-    // Vuelve con el oro y la madera y los deja en el origen: el envío queda cumplido.
-    let a_bordo_oro = e.a_bordo(car, Oro);
+    // Vuelve con la madera y la deja en el origen: el envío queda cumplido. El oro nunca viajó a bordo.
+    assert_eq!(e.a_bordo(car, Oro), 0);
     e.viajar_y_terminar(car);
-    let en_a = hechos(&e.n, "comercio.caravana_descarga").into_iter().rfind(|h| h.1 == vec![a]).expect("descarga en el origen");
-    // El almacén del origen tiene poco sitio para el oro: lo que cabe entra y el resto se queda a bordo (sin desechar) hasta que el envío termina y lo vuelca.
     assert_eq!(cantidad(&e.n, a, Madera) - madera_a, 100_000);
-    assert_eq!(dato(&en_a, "oro") + dato(&en_a, "aBordo"), a_bordo_oro, "todo el oro cobrado llegó al origen o sigue a bordo");
     let fin = hechos(&e.n, "comercio.encargo_terminado");
     assert_eq!((fin.len(), dato(&fin[0], "motivo"), e.k(car).estado), (1, 0, EstadoCaravana::Disponible));
 }
@@ -1043,23 +1045,110 @@ fn el_oro_se_conserva_lo_que_paga_la_plaza_es_lo_que_cobra_la_caravana_y_la_comi
     e.avanzar_hasta(e.encargo(car).fin_paso.unwrap());
     let llegada = e.fin_del_plan(car);
     e.avanzar_hasta(llegada - 1);
-    let (oro_mundo, oro_c) = (mundo_de(&e.n, Oro), cantidad(&e.n, c, Oro));
+    let (oro_mundo, oro_c, oro_a) = (mundo_de(&e.n, Oro), cantidad(&e.n, c, Oro), cantidad(&e.n, a, Oro));
     e.avanzar_hasta(llegada);
     // La venta: lo que sale del almacén de la plaza es lo que entra a la caravana, y la comisión no se paga: valor − comisión = oro movido (a la unidad entera).
     let ventas = hechos(&e.n, "mercado.comercio_en_plaza");
     let (valor, comision, movido) = (ventas.iter().map(|h| dato(h, "valor")).sum::<i64>(), ventas.iter().map(|h| dato(h, "comision")).sum::<i64>(), ventas.iter().map(|h| dato(h, "oroMovido")).sum::<i64>());
     assert!(comision > 0 && (valor - comision - movido).abs() < 1_000 * ventas.len() as i64, "valor {valor}, comisión {comision}, movido {movido}");
-    assert_eq!((oro_c - cantidad(&e.n, c, Oro), e.a_bordo(car, Oro)), (movido, movido));
-    assert_eq!(mundo_de(&e.n, Oro), oro_mundo, "no se acuña oro al vender");
+    let tope = e.n.economia(a).unwrap().almacen.capacidad(Oro);
+    assert!(oro_a + movido <= tope, "cabe entero en la capital: {oro_a} + {movido} de {tope}");
+    assert_eq!((oro_c - cantidad(&e.n, c, Oro), e.a_bordo(car, Oro)), (movido, 0), "el oro de la plaza va a la capital, no a la caravana");
+    assert!((cantidad(&e.n, a, Oro) - oro_a - movido).abs() <= 1_000, "y lo cobra la capital (más, a lo sumo, una unidad de su recaudación)");
+    assert!((0..=1_000 * e.n.estado().asentamientos.len() as i64).contains(&(mundo_de(&e.n, Oro) - oro_mundo)), "no se acuña oro al vender: solo entra la recaudación");
     // La compra paga con ese oro y el mundo sigue igual. En los minutos de la descarga las plazas siguen recaudando (unas décimas de oro por minuto), así que
     // cada una puede completar una unidad: es lo único que entra.
-    let (bordo, oro_c) = (e.a_bordo(car, Oro), cantidad(&e.n, c, Oro));
+    let (oro_a, oro_c) = (cantidad(&e.n, a, Oro), cantidad(&e.n, c, Oro));
     e.avanzar_hasta(llegada + e.tiempo_descarga());
-    assert!(e.a_bordo(car, Oro) < movido && e.a_bordo(car, Madera) == 50_000);
-    let (pagado, cobrado) = (bordo - e.a_bordo(car, Oro), cantidad(&e.n, c, Oro) - oro_c);
-    assert!(cobrado == pagado || cobrado == pagado + 1_000, "lo que paga la caravana lo cobra la plaza (más, a lo sumo, una unidad de su recaudación): {pagado} {cobrado}");
+    assert!(e.a_bordo(car, Madera) == 50_000 && e.a_bordo(car, Oro) == 0);
+    let (pagado, cobrado) = (oro_a - cantidad(&e.n, a, Oro), cantidad(&e.n, c, Oro) - oro_c);
     let plazas = e.n.estado().asentamientos.len() as i64;
+    let movido = dato(hechos(&e.n, "mercado.comercio_en_plaza").last().unwrap(), "oroMovido");
+    // Cada plaza puede completar una unidad con su recaudación en esos minutos: la capital paga lo movido menos lo que recauda, y la plaza cobra lo movido más lo que recauda.
+    assert!(movido > 0 && (movido - pagado).abs() <= 1_000 * plazas && (cobrado - movido).abs() <= 1_000 * plazas, "movido {movido}, pagado por la capital {pagado}, cobrado por la plaza {cobrado}");
     assert!((0..=1_000 * plazas).contains(&(mundo_de(&e.n, Oro) - oro_mundo)), "ni al comprar se acuña: solo entra la recaudación");
+}
+
+/// Un envío de A a la plaza ajena `c` con lo que lleve cada parada, hasta el instante anterior a la llegada (para tomar las cuentas de oro justo antes de comerciar).
+fn enviar_hasta_la_llegada(e: &mut Escenario, car: u64, c: u64, en_origen: Parada, en_destino: Parada) -> Instante {
+    e.admin(encargar(car, c, Modo::Envio, None, en_origen, en_destino));
+    e.avanzar_hasta(e.encargo(car).fin_paso.unwrap());
+    let llegada = e.fin_del_plan(car);
+    e.avanzar_hasta(llegada - 1);
+    llegada
+}
+
+/// Pasados los pasos de descarga y carga de la llegada.
+fn comerciar_tras_llegar(e: &mut Escenario, car: u64, llegada: Instante) {
+    e.avanzar_hasta(llegada + e.tiempo_descarga() + e.tiempo_carga() + 1);
+    assert_eq!(e.a_bordo(car, Oro), 0, "la caravana nunca lleva el oro");
+}
+
+#[test]
+fn un_encargo_compra_sin_llevar_oro_y_lo_paga_su_capital() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let a = e.a;
+    let c = ajena_con_mercado(&mut e, m);
+    e.dar(a, Cobre, 10_000);
+    e.dar(c, Madera, 50_000);
+    orden(&mut e, c, true, Madera, 50_000, PUNTO);
+    let car = e.caravana(a, 1);
+    assert_eq!(e.a_bordo(car, Oro), 0);
+    let en_destino = Parada { recoger: vec![compra(Madera, 50_000, 2 * PUNTO)], ..Parada::default() };
+    let llegada = enviar_hasta_la_llegada(&mut e, car, c, parada(&[(Cobre, 10_000)], &[]), en_destino);
+    let (oro_a, oro_c) = (cantidad(&e.n, a, Oro), cantidad(&e.n, c, Oro));
+    comerciar_tras_llegar(&mut e, car, llegada);
+    let movido = dato(hechos(&e.n, "mercado.comercio_en_plaza").last().expect("compró"), "oroMovido");
+    let plazas = e.n.estado().asentamientos.len() as i64;
+    assert_eq!((e.a_bordo(car, Madera), e.a_bordo(car, Oro)), (50_000, 0), "compró sin oro a bordo");
+    assert!(movido > 0 && (oro_a - cantidad(&e.n, a, Oro) - movido).abs() <= 1_000 * plazas, "lo paga la capital: {movido} de {oro_a} a {}", cantidad(&e.n, a, Oro));
+    assert!((cantidad(&e.n, c, Oro) - oro_c - movido).abs() <= 1_000 * plazas, "y lo cobra la plaza");
+}
+
+#[test]
+fn un_encargo_que_vende_cobra_en_su_capital_y_no_a_bordo() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let a = e.a;
+    let c = ajena_con_mercado(&mut e, m);
+    e.dar(a, Cobre, 50_000);
+    orden(&mut e, c, false, Cobre, 50_000, 2 * PUNTO);
+    let car = e.caravana(a, 1);
+    let en_destino = Parada { dejar: vec![vende(Cobre, None, PUNTO)], ..Parada::default() };
+    let llegada = enviar_hasta_la_llegada(&mut e, car, c, parada(&[(Cobre, 50_000)], &[]), en_destino);
+    let (oro_a, oro_c) = (cantidad(&e.n, a, Oro), cantidad(&e.n, c, Oro));
+    comerciar_tras_llegar(&mut e, car, llegada);
+    let movido = dato(hechos(&e.n, "mercado.comercio_en_plaza").last().expect("vendió"), "oroMovido");
+    let tope = e.n.economia(a).unwrap().almacen.capacidad(Oro);
+    let plazas = e.n.estado().asentamientos.len() as i64;
+    assert!(movido > 0 && oro_a + movido <= tope);
+    assert_eq!((e.a_bordo(car, Cobre), e.a_bordo(car, Oro)), (0, 0), "vendió todo y no lleva oro");
+    assert!((cantidad(&e.n, a, Oro) - oro_a - movido).abs() <= 1_000 * plazas, "lo cobra la capital: {movido}");
+    assert!((oro_c - cantidad(&e.n, c, Oro) - movido).abs() <= 1_000 * plazas, "y lo paga la plaza");
+}
+
+#[test]
+fn lo_que_no_cabe_en_el_almacen_de_la_capital_que_cobra_se_pierde() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let a = e.a;
+    let c = ajena_con_mercado(&mut e, m);
+    // El oro de A (capital) tiene un tope; con 300 de cobre a 3 de oro se cobra bastante más de lo que le cabe.
+    e.dar(a, Cobre, 300_000);
+    e.dar(c, Oro, 400_000);
+    orden(&mut e, c, false, Cobre, 300_000, 3 * PUNTO);
+    let car = e.caravana(a, 1);
+    let tope = e.n.economia(a).unwrap().almacen.capacidad(Oro);
+    let en_destino = Parada { dejar: vec![vende(Cobre, None, PUNTO)], ..Parada::default() };
+    let llegada = enviar_hasta_la_llegada(&mut e, car, c, parada(&[(Cobre, 300_000)], &[]), en_destino);
+    let (oro_a, oro_mundo) = (cantidad(&e.n, a, Oro), mundo_de(&e.n, Oro));
+    comerciar_tras_llegar(&mut e, car, llegada);
+    let movido = dato(hechos(&e.n, "mercado.comercio_en_plaza").last().expect("vendió"), "oroMovido");
+    assert!(oro_a + movido > tope, "lo cobrado ({movido}) no cabe en {oro_a} de {tope}");
+    assert_eq!(cantidad(&e.n, a, Oro), tope, "la capital se llena");
+    let plazas = e.n.estado().asentamientos.len() as i64;
+    assert!(mundo_de(&e.n, Oro) - oro_mundo <= 1_000 * plazas - (oro_a + movido - tope), "el exceso se pierde: no queda a bordo ni en otra plaza");
 }
 
 // ───────────────────────────── 9. Rechazos y autorización ─────────────────────────────

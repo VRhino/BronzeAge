@@ -204,4 +204,4 @@ Cada misión del bloque lleva su `id`, su `previa` (si es de una cadena), sus `c
 - **Una Facción sin plazas no cobra recursos ni oro.** No tiene capital efectiva donde dejarlos: `mision.sin_capital`. Como reclamar es todo o nada, la misión entera, experiencia incluida, sigue por reclamar hasta que la Facción tenga una plaza (§4.3).
 - **La tropa no rechaza por estar completa.** Si el héroe ya tiene la escuadra al tope, los soldados se pierden y el resto de la recompensa se cobra (decisión del 2026-11-01).
 - **La administración reclama sin héroe.** Una cadena de plaza reclamada por la administración sin héroe da todo lo demás pero la participación fija no se apunta a nadie.
-- **Foto anterior.** Las recompensas flexibles cambian la huella de las reglas: una foto anterior no carga y hace falta partida nueva. La foto sigue en BAN54 (hoy BAN55, por el nombre de las caravanas).
+- **Foto anterior.** Las recompensas flexibles cambian la huella de las reglas: una foto anterior no carga y hace falta partida nueva. La foto es hoy BAN59 (las anteriores ya no se leen).

@@ -42,14 +42,6 @@ impl Atributos {
     }
 }
 
-/// Las tres monedas del héroe: no tienen relación con el oro de las plazas.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Monedas {
-    pub bronce: i64,
-    pub plata: i64,
-    pub oro: i64,
-}
-
 /// Una selección de escuadras (y perks) guardada para salir. El activo es el que defiende una plaza en persona. El Liderazgo que suma no se
 /// guarda: se deriva.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -114,7 +106,8 @@ pub struct Heroe {
     pub atributos: Atributos,
     pub perks_desbloqueados: Vec<u32>,
     pub loadouts: Vec<Loadout>,
-    pub monedas: Monedas,
+    /// Sus monedas (tanda 69, 2026-11-08): un solo saldo de monedas sueltas, aparte del oro de las plazas.
+    pub monedas: i64,
     pub herido_hasta: Option<Instante>,
     /// Los víveres que lleva consigo cuando no va en una columna (la columna lleva los suyos mientras marcha).
     pub viveres: Mil,
@@ -126,7 +119,7 @@ pub struct Heroe {
 
 impl Heroe {
     /// Un héroe recién creado (`crearHeroe`): nace dentro de un campamento de mercenarios y reside en él, sin columna, de nivel 1, sin puntos
-    /// ni escuadras, con su bronce inicial y un loadout «Default» vacío y activo.
+    /// ni escuadras, con sus monedas iniciales y un loadout «Default» vacío y activo.
     pub fn nuevo(r: &Reglas, id: HeroeId, controlador: Controlador, campamento: CampamentoId, loadout_inicial: LoadoutId) -> Self {
         Self {
             id,
@@ -141,7 +134,7 @@ impl Heroe {
             atributos: Atributos::default(),
             perks_desbloqueados: vec![],
             loadouts: vec![Loadout { id: loadout_inicial, nombre: "Default".into(), escuadras: vec![], perks: vec![], activo: true }],
-            monedas: Monedas { bronce: r.heroe.bronce_inicial, plata: 0, oro: 0 },
+            monedas: r.heroe.monedas_iniciales,
             herido_hasta: None,
             viveres: 0,
             racion_en: None,
@@ -327,7 +320,7 @@ mod pruebas {
     fn nace_en_un_campamento_con_progresion_inicial_y_loadout_default() {
         let h = heroe();
         assert_eq!((h.nivel, h.experiencia, h.puntos_de_atributo, h.puntos_de_perk), (1, 0, 0, 0));
-        assert_eq!(h.monedas, Monedas { bronce: 500, plata: 0, oro: 0 });
+        assert_eq!(h.monedas, 1_500);
         assert_eq!((h.liderazgo_base, h.atributos), (100, Atributos::default()));
         assert_eq!(h.presencia.ubicacion, Ubicacion::Mercenarios(3));
         assert_eq!(h.residencia, Some(Residencia::Campamento(3)));

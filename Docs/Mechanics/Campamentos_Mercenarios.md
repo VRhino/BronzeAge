@@ -4,6 +4,8 @@
 
 > **Mercenarios por contrato (2026-11-01, en Rust; [`Mercenarios_Por_Contrato.md`](Mercenarios_Por_Contrato.md) §3 y §8.3).** Un bot sin Facción que reside en el campamento y está dentro se **ofrece en su tablón** (`ofrecerse_como_mercenario`), que va en el ámbito `CAMPAMENTO` con la ficha de cada ofrecido, su tropa y su tarifa; allí lo contrata en persona un cargo de una Facción humana, pagando con el carro (el oro entra en el almacén personal del mercenario hasta llenarlo). Al reclutar, `ReclutarEnCampamento` ofrece además a quien tiene ficha de mercenario las tropas de su **licencia** (las de su edificio militar hasta el escalón de su rango, en cuanto alguien descubrió su tecnología, sin las 72 h) y la **reposición de su leva propia** (lanceros de milicia, granjeros, mineros y leñadores, que el campamento no recluta) si ya tiene esa escuadra. La **escuadra de premio** de rango se reclama en el campamento base (`reclamar_premio_de_rango`).
 
+> **Implementado en Rust (2026-11-08, tanda 69; [`Mercenarios_Por_Contrato.md`](Mercenarios_Por_Contrato.md) §3.3 y §10).** El tablón del campamento ya no se ve solo desde dentro: la **taberna de una plaza** (Taberna activa) enseña, gratis, en `Asentamiento.mercenarios_region` el tablón de todos los campamentos que caen en su misma región del relieve, y desde allí se contrata sin ir al campamento (pagando con el almacén de la plaza, `almacenPlaza`, o con monedas). Por eso cada `OfertaMercenario` lleva ahora `campamento_id`, el campamento donde se ofrece. La compra de intel de la taberna del propio campamento (Niebla §6) no cambia.
+
 ## 1. Alcance y fuentes
 
 Un campamento de mercenarios es un **enclave neutral** del mundo abierto: sin Facción, sin zona de influencia, que no crece ni desaparece y al que se puede entrar, residir, comprar, reclutar y refundar. Su mecánica está repartida en varios documentos; este es el **índice** de todas
@@ -35,7 +37,7 @@ ellas (§3) y el lugar donde se describe lo que aún no tenía documento: la **p
 | `origen` | Variante de aspecto `0‥MERCENARIOS.origenes−1`; solo cambia cómo se ve. |
 | `edificios` | `[taberna, vivienda ×10, mercado, un militar]` (barracón, galería de tiro o caballerizas, elegido por la posición). Fijo: no se construye. |
 | `residentesIds` | Héroes que residen aquí (cualquier Facción, sin límite, aunque su Facción tenga plazas). |
-| `eligieronComoInicial` | Cuántos héroes lo eligieron al nacer (solo crece). En Rust (paridad P6, 2026-10-27), `EstadoMilitar::eligieron` (foto `BAN41`; una `BAN40` se admite y empieza en 0), sumado por `CrearHeroe`; sale en `Bienvenida.campamentos_para_elegir` y en el `CampamentoMercenarios` del ámbito `CAMPAMENTO`. |
+| `eligieronComoInicial` | Cuántos héroes lo eligieron al nacer (solo crece). En Rust (paridad P6, 2026-10-27), `EstadoMilitar::eligieron` (foto `BAN41`, hoy `BAN59`), sumado por `CrearHeroe`; sale en `Bienvenida.campamentos_para_elegir` y en el `CampamentoMercenarios` del ámbito `CAMPAMENTO`. |
 | `poblacion`, `poblacionEn` | Reclutas disponibles en ese instante (§4). |
 | `mercado` | Stock en venta ([`Comercio_Caravanas.md`](Comercio_Caravanas.md) §9). |
 | `fondos` | Fondo de refundación por héroe ([`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md) §9). En Rust (5G-b), `Estado::fundacion.fondos`; el contrato lo da por Facción. |
@@ -219,10 +221,19 @@ Con las cifras de hoy, un campamento típico (taberna, mercado, barracón y diez
       "madera": 60,
       "piedra": 10
     },
-    "margen": 1.3
+    "margen": 1.3,
+    "fueraDeVenta": [
+      "carne",
+      "leche",
+      "uva",
+      "aceituna"
+    ]
   },
   "refundacion": {
-    "porcentajeCoste": 0.4
+    "porcentajeCoste": 0.4,
+    "excluir": [
+      "oro"
+    ]
   }
 }
 ```

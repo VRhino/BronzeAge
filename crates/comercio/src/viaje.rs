@@ -15,10 +15,11 @@ pub struct Peaje {
     pub progreso: i64,
 }
 
-/// Lo que se cobró en un peaje.
+/// Lo que se cobró en un peaje: el oro que paga la capital del dueño y, de lo que no llegó, la especie de la carga.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CobroPeaje {
     pub ciudad: AsentamientoId,
+    pub oro: Mil,
     pub cobrado: Carga,
 }
 

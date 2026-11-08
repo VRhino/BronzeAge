@@ -251,7 +251,8 @@ message ObjetoBotin {
 
 message Botin {
   repeated ObjetoBotin objetos = 1;
-  Monedas monedas = 2;
+  reserved 2;                            // antes `monedas` (bronce, plata y oro): desde la tanda 69 (2026-11-08), un solo número
+  uint64 monedas = 3;                    // las monedas del héroe que ganó en la batalla
 }
 
 enum MotivoSalida {

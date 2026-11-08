@@ -99,6 +99,10 @@ pub struct Datos {
     /// En orden de días creciente.
     pub plazos: Vec<Plazo>,
     pub permanente_pct: u32,
+    /// La parte de la tarifa que se cobra en oro (`factorOroPct`, tanda 69: un cuarto).
+    pub factor_oro_pct: u32,
+    /// Cuántas monedas del héroe vale un oro, para la tarifa en monedas (`monedasPorOro`, tanda 69).
+    pub monedas_por_oro: u32,
     /// Oro por nivel del héroe en el valor del mercenario (milésimas).
     pub oro_por_nivel: Mil,
     /// Unidades de mapa en milésimas.
@@ -194,6 +198,8 @@ impl Datos {
         Ok(Datos {
             plazos,
             permanente_pct: entero(&c, "permanentePct")?,
+            factor_oro_pct: entero(&c, "factorOroPct")?,
+            monedas_por_oro: entero(&c, "monedasPorOro")?,
             oro_por_nivel: mil(f64::from(entero(&c, "oroPorNivelHeroe")?)),
             radio_defensa: mil(f64::from(entero(&c, "radioDefensa")?)),
             plazo_orden: horas("plazoOrdenHoras")?,
@@ -288,6 +294,7 @@ mod pruebas {
         assert_eq!(d.plazo(3).map(|p| (p.tarifa_pct, p.renombre)), Some((35, 25)));
         assert_eq!(d.plazo(2), None);
         assert_eq!(d.permanente_pct, 500);
+        assert_eq!((d.factor_oro_pct, d.monedas_por_oro), (25, 100), "un cuarto del oro, o 100 monedas por oro (tanda 69)");
         assert_eq!(d.oro_por_nivel, 20_000);
         assert_eq!(d.radio_defensa, 20_000);
         assert_eq!(d.plazo_orden, 24 * MS_POR_HORA);

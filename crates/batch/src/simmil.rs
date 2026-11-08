@@ -10,7 +10,8 @@
 //!   según el papel; mientras la plaza no llega al nivel 2, una por héroe y nada que la deje por debajo de los pesants del ascenso), dejan su loadout activo con
 //!   lo que tienen en el campamento (si la plaza es atacada, defienden en persona) y vacían en su almacén personal el carro que traen.
 //! - **El Guardián** no sale nunca: gobierna (pide el ascenso, construye el Mercado, el Barracón y la Galería de tiro, monta la flota de dos caravanas, marca un
-//!   pueblo extractor y compromete una empalizada) y pone su leva en la guarnición. En una plaza sin Guardián (una conquistada) gobierna cualquier residente.
+//!   pueblo extractor y una aldea de trigo que luego sube de nivel, encarga los talleres de la comida con el buey del molino y compromete una empalizada)
+//!   y pone su leva en la guarnición. En una plaza sin Guardián (una conquistada) gobierna cualquier residente.
 //! - **El Capitán** convoca un ejército en la plaza (o sale directamente y los demás se le unen en la puerta) y va a por lo que tiene más cerca: un ejército
 //!   enemigo a la vista (lo persigue), una plaza enemiga (tras inspeccionarla, si su poder supera con margen la defensa que le supone), un pueblo con algo que
 //!   saquear, una avanzada o el campamento de bandidos de casa (cada 12 h), en un orden que sortea la semilla. Ataca con `declara_guerra` cuando hace falta. Si
@@ -18,7 +19,7 @@
 //! - **El Cazador** sale con su columna personal a explorar, alrededor de casa o de la plaza enemiga más cercana; persigue columnas personales y caravanas
 //!   enemigas que ve y las ataca en el instante en que las tiene a tiro, y a veces ataca el campamento de bandidos de casa. Uno de cada cuatro es **temerario**:
 //!   una vez al día sale solo, sin tropa, contra ese campamento.
-//! - **El Intendente** lleva a la obra los materiales del pueblo y de la atalaya (los saca del almacén de su plaza al salir) y acompaña a las caravanas: o
+//! - **El Intendente** lleva a la obra los materiales del pueblo (o de la subida de la aldea) y de la atalaya (los saca del almacén de su plaza al salir) y acompaña a las caravanas: o
 //!   cede una escuadra como escolta y la manda a una plaza hermana, o sale como ejército con la caravana adjunta, la aparca allí y la manda de vuelta.
 //! - **Fuera**, quien manda la columna vuelve a casa con los víveres por debajo del 35 % (antes pasa a víveres el trigo del carro), tras tres objetivos o si lo
 //!   hieren; en la puerta reposta o entra (`Guarnecer` / `EntrarEnAsentamiento`). Si la Facción pierde todas sus plazas, el héroe vuelve a su campamento.
@@ -41,10 +42,13 @@
 
 use crate::auditmil::{self, Antes, ViolacionesCombate};
 use crate::auditoria::{auditar_cola, auditar_contenedores, Violaciones};
+use crate::comida;
 use crate::geo::{Cargado, Geo};
 use crate::sim::{ANILLO_CAMPAMENTO, ANILLO_PLAZA, VELOCIDAD, VIVERES};
 use crate::simcom::{sitio, Cuenta};
 use asentamiento::catalogo::Tipo;
+use asentamiento::pueblos::Cultivo;
+use asentamiento::recurso::N;
 use asentamiento::{Cargo, Recurso};
 use base::{Instante, Punto, Rng, MS_POR_MINUTO};
 use comercio::caravana::{Animal, EstadoCaravana, TipoCaravana, TipoCarro};
@@ -239,8 +243,8 @@ pub struct Medidas {
     pub asaltos_resistidos: [u64; 2],
     pub carros_perdidos_adjuntas: i64,
     pub saqueado_de_pueblos: i64,
-    /// Oro de bandidos que cobró cada héroe que combatió (milésimas).
-    pub oro_por_heroe: Vec<i64>,
+    /// Monedas de bandidos que cobró cada héroe que combatió.
+    pub monedas_por_heroe: Vec<i64>,
     /// Conquistas: (instante, plaza, facción vieja, facción nueva, muralla dañada).
     pub conquistas: Vec<(Instante, u64, u32, u32, bool)>,
     pub ruinas: Vec<(Instante, u64)>,
@@ -542,8 +546,8 @@ impl Sim<'_> {
         r
     }
 
-    fn almacen(&self, plaza: u64) -> [i64; 29] {
-        self.n.estado().asentamientos.get(&plaza).map_or([0; 29], |a| *a.economia.almacen.partes().0)
+    fn almacen(&self, plaza: u64) -> [i64; N] {
+        self.n.estado().asentamientos.get(&plaza).map_or([0; N], |a| *a.economia.almacen.partes().0)
     }
 
     // ───────────────────────────── Fundación ─────────────────────────────
@@ -1029,11 +1033,17 @@ impl Sim<'_> {
     }
 
     fn ordenes_de_plaza(&mut self, t: Instante, i: usize, p: u64) {
-        let (nivel, madera, tiene, recintos, pueblos, mercado_activo) = {
+        let (nivel, madera, tiene, recintos, mercado_activo) = {
             let a = &self.n.estado().asentamientos[&p];
             let ed = &a.economia.edificios;
             let tiene: BTreeSet<Tipo> = ed.iter().map(|e| e.tipo).collect();
-            (a.economia.nivel_actual(), a.economia.almacen.cantidad(Recurso::Madera), tiene, a.economia.recintos.len(), a.economia.pueblos.len(), ed.iter().any(|e| e.tipo == Tipo::Mercado && e.activo()))
+            (a.economia.nivel_actual(), a.economia.almacen.cantidad(Recurso::Madera), tiene, a.economia.recintos.len(), ed.iter().any(|e| e.tipo == Tipo::Mercado && e.activo()))
+        };
+        let (extractor, aldea, sube, taller, molino) = {
+            let e = self.n.estado();
+            let (eco, datos) = (&e.asentamientos[&p].economia, &e.reglas.economia.datos);
+            let (extractor, aldea) = (eco.pueblos.iter().any(|x| !x.es_aldea()), eco.pueblos.iter().any(|x| x.es_aldea()));
+            (extractor, aldea, comida::aldea_que_sube(eco, datos).map(|x| x.id), comida::taller_que_falta(eco, datos), comida::molino_sin_buey(eco))
         };
         if t % (3 * HORA) < HORA {
             self.suya(t, i, "SolicitarAscenso", Comando::SolicitarAscenso { asentamiento: p });
@@ -1049,8 +1059,24 @@ impl Sim<'_> {
         }
         let cantera = self.n.candidatos_de_pueblo(p).iter().find(|(_, tipo)| *tipo == Tipo::Cantera).map(|&(nodo, _)| nodo);
         // Su pueblo de cantera desde el nivel 1: la piedra del nivel 2 ya no sale de la ciudad (2026-11-01).
-        if let Some(nodo) = cantera.filter(|_| pueblos == 0) {
+        if let Some(nodo) = cantera.filter(|_| !extractor) {
             self.suya(t, i, "MarcarPueblo", Comando::MarcarPueblo { asentamiento: p, nodo });
+        }
+        // Y su aldea de trigo en el otro hueco del nivel 1, que luego sube de nivel (tanda 69: sin ella la plaza come solo de la Granja de la ciudad). Los
+        // materiales de las dos obras los lleva el Intendente.
+        if !aldea {
+            if let Some(punto) = self.n.sitio_de_aldea(p, Cultivo::Trigo) {
+                self.suya(t, i, "MarcarAldea", Comando::MarcarAldea { asentamiento: p, punto, cultivo: Cultivo::Trigo });
+            }
+        }
+        if let Some(pueblo) = sube {
+            self.suya(t, i, "MejorarAldea", Comando::MejorarAldea { pueblo });
+        }
+        if let Some(tipo) = taller {
+            self.suya(t, i, "AnadirEdificio(comida)", Comando::AnadirEdificio { asentamiento: p, tipo });
+        }
+        if let Some(edificio) = molino {
+            self.suya(t, i, "AsignarBuey", Comando::AsignarBuey { asentamiento: p, edificio });
         }
         if nivel >= 2 && recintos == 0 {
             self.suya(t, i, "ComprometerRecinto", Comando::ComprometerRecinto { asentamiento: p, cargo: Cargo::Gobernador, nivel: 1 });
@@ -1182,8 +1208,8 @@ impl Sim<'_> {
             (a.economia.nivel_actual(), a.posicion, a.radio)
         };
         let capacidad = self.libre_en_el_carro(i);
-        // 1. La obra de un pueblo que espera materiales: los saca del almacén (hasta lo que cabe en el carro).
-        let obra = self.n.pueblos_de(p).iter().find(|x| !x.activo() && !x.falta().is_empty()).map(|x| (x.id, x.falta()));
+        // 1. La obra de un pueblo, o la subida de nivel de la aldea, que espera materiales: los saca del almacén (hasta lo que cabe en el carro).
+        let obra = self.n.pueblos_de(p).iter().find(|x| !x.falta().is_empty()).map(|x| (x.id, x.falta()));
         if let Some((pueblo, falta)) = obra {
             let carga = self.cabe(p, &falta, capacidad);
             if let Some(destino) = self.n.posicion_de_pueblo(pueblo).filter(|_| !carga.is_empty()) {
@@ -1454,13 +1480,15 @@ impl Sim<'_> {
                 // Solo se aparca dentro de la plaza (decisión del autor, 2026-10-24): el ejército entra con todo en la plaza hermana, la aparca, la manda a su origen y sale con lo suyo.
                 // Si la plaza ya no es de su Facción o la caravana ya no va con él (la perdió por el camino), no hay nada que aparcar.
                 // La hermana, y el origen de la caravana, siguen siendo de su Facción (en el batch político una plaza puede caer en ruinas o cambiar de Facción por el camino), y la
-                // hermana no es ya su casa (la ruina de la suya le reubica en ella).
+                // hermana no es ya su casa (la ruina de la suya le reubica en ella). Ni la hermana ni él están en una batalla (puede llegar a una hermana asediada).
                 let f = self.faccion_bot(i);
                 let suya = |id: u64| self.n.estado().asentamientos.get(&id).is_some_and(|a| a.faccion == f);
                 let origen = self.n.caravana(caravana).map_or(0, |k| k.origen as u64);
                 let de_los_suyos = suya(plaza) && suya(origen) && self.casa(i) != Some(plaza);
                 let la_lleva = self.n.ejercito(c).is_some_and(|e| e.caravanas_adjuntas.contains(&caravana));
-                if de_los_suyos && la_lleva && self.esperada(t, i, "GuarnecerHermana", Comando::Guarnecer { asentamiento: plaza, heroe }).aceptada() {
+                let b = self.n.bloqueos();
+                let sin_batalla = !b.asentamientos.contains(&(plaza as u32)) && !b.ejercitos.contains(&c) && !b.heroes.contains(&heroe);
+                if de_los_suyos && la_lleva && sin_batalla && self.esperada(t, i, "GuarnecerHermana", Comando::Guarnecer { asentamiento: plaza, heroe }).aceptada() {
                     if self.esperada(t, i, "AparcarCaravana", Comando::AparcarCaravana { caravana, asentamiento: plaza }).aceptada() {
                         self.esperada(t, i, "EnviarCaravanaAlOrigen", Comando::EnviarCaravanaAlOrigen { caravana });
                     }
@@ -1625,7 +1653,7 @@ impl Sim<'_> {
             "combate.caravana_resiste" => m.asaltos_resistidos[h.dato("aguante") as usize] += 1,
             "combate.campamento_destruido" => {
                 let heroes = self.n.ejercito(c).map_or(1, |e| e.columna.participantes.len()).clamp(1, 5) as i64;
-                m.oro_por_heroe.extend(std::iter::repeat_n(h.dato("oro") / heroes, heroes as usize));
+                m.monedas_por_heroe.extend(std::iter::repeat_n(h.dato("monedas") / heroes, heroes as usize));
             }
             "combate.pueblo_saqueado" => m.saqueado_de_pueblos += h.dato("saqueado"),
             "combate.asedio_conquista" => {

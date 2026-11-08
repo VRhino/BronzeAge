@@ -120,6 +120,7 @@ impl Nucleo {
         // Las dos Facciones cambian (sus plazas, su capital); el conquistador gana la experiencia de la conquista (§3.5).
         self.tr.tocar_todos(Clase::Faccion, [u64::from(vieja), u64::from(conquistador)]);
         self.dar_experiencia_por(t, conquistador, politica::nivel::Hecho::Conquista, super::experiencia::motivo::CONQUISTA);
+        self.dar_prestigio(t, conquistador, self.estado.reglas.economia.politica.prestigio.conquista, super::prestigio::motivo::CONQUISTA);
         // Sus avanzadas pasan con ella: la guarnición de jugadores de los antiguos residentes se va (derrota) y la de serie se reinicia.
         self.avanzadas_de_la_madre_conquistada(plaza, t);
         // La plaza cambió de bandera: sus fronteras con otras Facciones se miran de nuevo.

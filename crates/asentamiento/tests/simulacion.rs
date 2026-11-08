@@ -7,6 +7,7 @@ use asentamiento::catalogo::Tipo;
 use asentamiento::datos::{Reglas, UNO};
 use asentamiento::edificio::{Edificios, Fuente};
 use asentamiento::produccion::Fuentes;
+use asentamiento::pueblos::Cultivo;
 use asentamiento::recurso::{Recurso, TODOS};
 use base::{Instante, Mil, Punto, MS_POR_MINUTO};
 use std::collections::HashMap;
@@ -103,7 +104,8 @@ fn correr_con(dias: i64, semilla_hambre: bool, apagar_en: Option<i64>) -> (Asent
             tiene_tecnologia: &sin_tecnologia,
             factor_tecnologia: &sin_bonus,
             nivel_faccion: 1,
-            orden_era: 1,
+            maravilla_desbloqueada: false,
+            estatuas_permitidas: 0,
             es_capital: true,
             faccion_tiene_gran_fundicion: false,
             ciudadanos: 1,
@@ -125,7 +127,7 @@ fn correr_con(dias: i64, semilla_hambre: bool, apagar_en: Option<i64>) -> (Asent
             let requerido = a.pueblos[0].falta();
             a.entregar_a_pueblo(t, &reglas, 1, &requerido, &mut ev).expect("todo entregado");
         }
-        if a.pueblos.len() == 1 && a.almacen.tiene(&aldea) && a.iniciar_aldea(&reglas, 2, Punto::new(5_000, 0), UNO, &carro, &mut ev).is_ok() {
+        if a.pueblos.len() == 1 && a.almacen.tiene(&aldea) && a.iniciar_aldea(&reglas, 2, Punto::new(5_000, 0), UNO, Cultivo::Trigo, &carro, &mut ev).is_ok() {
             a.almacen.pagar(&aldea);
             let requerido = a.pueblos[1].falta();
             a.entregar_a_pueblo(t, &reglas, 2, &requerido, &mut ev).expect("todo entregado");
@@ -218,7 +220,8 @@ fn paso_de_hambre(a: &mut Asentamiento, reglas: &Reglas, minuto: i64) -> Vec<Eve
         tiene_tecnologia: &sin_tecnologia,
         factor_tecnologia: &sin_bonus,
         nivel_faccion: 1,
-        orden_era: 1,
+        maravilla_desbloqueada: false,
+        estatuas_permitidas: 0,
         es_capital: true,
         faccion_tiene_gran_fundicion: false,
         ciudadanos: 1,
@@ -230,6 +233,22 @@ fn paso_de_hambre(a: &mut Asentamiento, reglas: &Reglas, minuto: i64) -> Vec<Eve
         cupo_para_recuperar: true,
     };
     a.avanzar_hasta(minuto * MS_POR_MINUTO, &mut x)
+}
+
+#[test]
+fn el_molino_y_el_horno_no_traen_artesanos_y_la_quesera_si() {
+    // El molino y el horno son de pesants para pesants (autor, 2026-11-08): con ellos solos la plaza no tiene artesanos. Cualquier taller de artesanos los trae.
+    let reglas = Reglas::cargar();
+    let mut a = Asentamiento::fundar(&reglas, 0, &[(Recurso::Trigo, 100_000)], 3);
+    a.auto_pausada = true;
+    for (id, tipo) in [(90, Tipo::Molino), (91, Tipo::Horno), (92, Tipo::Vivienda)] {
+        a.edificios.push(asentamiento::edificio::Edificio::nuevo(id, tipo, asentamiento::edificio::Estado::Activo));
+    }
+    let ev = paso_de_hambre(&mut a, &reglas, 1);
+    assert!(!ev.iter().any(|e| matches!(e, Evento::PrimerosArtesanos)) && a.poblacion.artesanos == 0, "artesanos {}: {ev:?}", a.poblacion.artesanos);
+    a.edificios.push(asentamiento::edificio::Edificio::nuevo(93, Tipo::Quesera, asentamiento::edificio::Estado::Activo));
+    let ev = paso_de_hambre(&mut a, &reglas, 2);
+    assert!(ev.iter().any(|e| matches!(e, Evento::PrimerosArtesanos)) && a.poblacion.artesanos == 1, "artesanos {}: {ev:?}", a.poblacion.artesanos);
 }
 
 #[test]
@@ -314,7 +333,8 @@ fn el_paso_de_minuto_le_dice_al_mundo_lo_que_fabrican_las_recetas_de_bronce() {
         tiene_tecnologia: &con_todo,
         factor_tecnologia: &sin_bonus,
         nivel_faccion: 1,
-        orden_era: 1,
+        maravilla_desbloqueada: false,
+        estatuas_permitidas: 0,
         es_capital: true,
         faccion_tiene_gran_fundicion: false,
         ciudadanos: 1,

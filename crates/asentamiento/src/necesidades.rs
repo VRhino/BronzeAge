@@ -10,6 +10,7 @@ use crate::asentamiento::{Asentamiento, Evento, Exterior};
 use crate::catalogo::Tipo;
 use crate::datos::{razon, Reglas, UNO};
 use crate::edificio::{Edificio, Edificios, Estado, Fuente};
+use crate::recurso::N;
 use base::{Instante, Mil};
 
 struct Candidato {
@@ -25,7 +26,7 @@ impl Asentamiento {
     }
 
     /// `puedePagar`: la Facción tiene la tecnología y el almacén entero, con la reserva, cubre el coste.
-    fn puede_pagar(&self, r: &Reglas, x: &Exterior, tipo: Tipo, reserva: &[Mil; 29]) -> bool {
+    fn puede_pagar(&self, r: &Reglas, x: &Exterior, tipo: Tipo, reserva: &[Mil; N]) -> bool {
         let def = r.catalogo.tipo(tipo);
         def.tecnologia.as_deref().map_or(true, |t| (x.tiene_tecnologia)(t)) && self.puede_iniciar(r, tipo, &def.costo, reserva)
     }
@@ -45,7 +46,7 @@ impl Asentamiento {
         crate::recurso::TODOS.iter().filter(|&&r| self.almacen.capacidad(r) > 0).map(|&r| razon(self.almacen.cantidad(r), self.almacen.capacidad(r))).max().unwrap_or(0)
     }
 
-    pub(crate) fn evaluar_necesidades(&mut self, _t: Instante, x: &mut Exterior, reserva: &[Mil; 29], ev: &mut Vec<Evento>) {
+    pub(crate) fn evaluar_necesidades(&mut self, _t: Instante, x: &mut Exterior, reserva: &[Mil; N], ev: &mut Vec<Evento>) {
         let r = x.reglas;
         let c = &r.construccion;
         let n = &c.necesidades;

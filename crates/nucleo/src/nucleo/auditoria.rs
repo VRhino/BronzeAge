@@ -195,7 +195,7 @@ impl Nucleo {
         v.extend(ordenes.filter(|o| o.cantidad % u != 0 || o.cantidad_cumplida % u != 0).map(|o| format!("la orden {} pide {} y lleva {}", o.id, o.cantidad, o.cantidad_cumplida)));
         let mut almacen = |donde: String, a: &asentamiento::Almacen| {
             let (cantidad, _, resto) = a.partes();
-            if let Some(i) = (0..29).find(|&i| cantidad[i] % u != 0 || !(-u + 1..u).contains(&resto[i]) || cantidad[i] + resto[i] < 0) {
+            if let Some(i) = (0..asentamiento::recurso::N).find(|&i| cantidad[i] % u != 0 || !(-u + 1..u).contains(&resto[i]) || cantidad[i] + resto[i] < 0) {
                 v.push(format!("{donde} guarda {} de {} con un resto de {}", cantidad[i], asentamiento::recurso::TODOS[i].nombre(), resto[i]));
             }
         };

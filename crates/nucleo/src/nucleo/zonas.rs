@@ -10,6 +10,7 @@
 use super::*;
 use crate::economia::Mapa;
 use crate::estado::Asentamiento;
+use asentamiento::pueblos::Cultivo;
 use base::Instante;
 use mundo::Mundo;
 use std::collections::BTreeSet;
@@ -68,9 +69,20 @@ impl Geografia {
         self.mundo.campamentos().iter().filter_map(|c| c.posicion.as_ref().map(|p| (Punto::new(p.x, p.y), c.origen))).collect()
     }
 
-    /// La fertilidad del artefacto en `p`, en ppm (el raster es u8: 255 = 1,0); `None` fuera del mapa. La que manda en las granjas de una aldea agrícola.
-    pub(super) fn fertilidad_en(&self, p: Punto) -> Option<i64> {
-        self.mundo.fertilidad_en(p.x, p.y).map(|f| f as i64 * asentamiento::datos::UNO / 255)
+    /// La fertilidad del artefacto en `p` para `cultivo`, en ppm (el raster es u8: 255 = 1,0); `None` fuera del mapa. Cada cultivo mira su capa del
+    /// mundo (trigo, vid u oliva) y es la que manda en las granjas de una aldea agrícola.
+    pub(super) fn fertilidad_en(&self, p: Punto, cultivo: Cultivo) -> Option<i64> {
+        let capa = match cultivo {
+            Cultivo::Trigo => self.mundo.fertilidad_en(p.x, p.y),
+            Cultivo::Vid => self.mundo.fertilidad_vid_en(p.x, p.y),
+            Cultivo::Oliva => self.mundo.fertilidad_oliva_en(p.x, p.y),
+        };
+        capa.map(|f| f as i64 * asentamiento::datos::UNO / 255)
+    }
+
+    /// La región del relieve del artefacto en `p` (la del generador: Altiplano interior, Estepa abierta...); `None` fuera del mapa.
+    pub(super) fn region_en(&self, p: Punto) -> Option<u8> {
+        self.mundo.region_en(p.x, p.y)
     }
 
     /// ¿Lo pisa una ruta? Lo que el A\* de las rutas da por transitable.
@@ -491,6 +503,7 @@ impl Nucleo {
         self.estado.politica.facciones.anular_derrota(faccion);
         self.tr.tocar(Clase::Faccion, u64::from(faccion));
         self.dar_experiencia_por(t, faccion, politica::nivel::Hecho::Fundacion { primera: tiene == 0 }, super::experiencia::motivo::FUNDACION);
+        self.dar_prestigio(t, faccion, self.estado.reglas.economia.politica.prestigio.fundacion, super::prestigio::motivo::FUNDACION);
         self.contactos_nuevos(id, t);
         Ok(Some(id))
     }

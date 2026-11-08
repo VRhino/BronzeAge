@@ -802,20 +802,25 @@ impl Nucleo {
     // ───────────────────────────── La ración de la guarnición ─────────────────────────────
 
     /// La guarnición de la plaza come en el paso de su minuto, justo después de la población (Reloj_Y_Eventos §2: la población come antes que las
-    /// tropas): toma del almacén `min(trigo, ración)`; con la ración entera la moral de cada escuadra sube y, sin ella, baja; con la moral a 0
+    /// tropas): toma del almacén, hasta su ración, primero los bienes de `BIENES_DE_CONSUMO.guarnicion` (la carne) y después el trigo; con la ración entera la moral de cada escuadra sube y, sin ella, baja; con la moral a 0
     /// desertan `ceil(5 %)` de los soldados. `racion` es la del `Exterior` del mismo paso (`residentes_en_el_paso`): una plaza sin residentes con tropa no hace nada. No programa ningún evento.
     pub(super) fn alimentar_guarnicion(&mut self, plaza: u64, t: Instante, racion: Mil) {
         if racion == 0 {
             return;
         }
         let mr = self.estado.reglas.economia.militar.clone();
+        let bienes = self.estado.reglas.economia.datos.poblacion.guarnicion.clone();
         let Estado { militar, asentamientos, .. } = &mut self.estado;
         let Some(a) = asentamientos.get_mut(&plaza) else { return };
         let almacen = &mut a.economia.almacen;
-        let consumido = almacen.consumir(Recurso::Trigo, racion); // flujo por minuto: la fracción va al resto oculto
-        // Lo que come la guarnición es parte del paso de minuto: cuenta en la tendencia «+N/min» del trigo.
-        a.economia.tendencia.almacen[Recurso::Trigo.indice()] -= consumido;
-        a.economia.tendencia.consumido[Recurso::Trigo.indice()] += consumido;
+        let mut consumido = 0;
+        for recurso in bienes.into_iter().chain([Recurso::Trigo]) {
+            let comido = almacen.consumir(recurso, racion - consumido); // flujo por minuto: la fracción va al resto oculto
+            // Lo que come la guarnición es parte del paso de minuto: cuenta en la tendencia «+N/min» de cada recurso que come.
+            a.economia.tendencia.almacen[recurso.indice()] -= comido;
+            a.economia.tendencia.consumido[recurso.indice()] += comido;
+            consumido += comido;
+        }
         // La parte de la ración que se pudo dar (ppm): con ella entera la moral sube y con menos baja en proporción a lo que faltó.
         let suministro = consumido * UNO / racion;
         let ids: Vec<u64> = militar.residentes_de(plaza).map(|h| h.heroe.id).collect();

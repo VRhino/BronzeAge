@@ -54,9 +54,9 @@ Decidido por el autor el 2026-10-22 ([`Economia_Por_Minuto_Definicion.md`](../..
 RecursoAlmacenado = { cantidad, capacidad }          Asentamiento.almacen: Record<RecursoTipo, RecursoAlmacenado>
 ```
 
-29 tipos de recurso (`RECURSOS_TIPO`): madera, piedra, trigo, cobre, estano, oro, livestock, hierro; intermedios (lingoteCobre/Estano/Bronce/Hierro, cuero, cueroCurtido,
-cueroCalidad); equipo (armaMadera/Cobre/Bronce/BronceCalidad/Hierro/HierroCalidad, armaduraBasica/Intermedia/Bronce/BronceCalidad, carroGuerra); chatarra (Cobre/Bronce/Hierro).
-**Todos** nacen en el almacén (cantidad 0 o inicial, capacidad 800 desde el 2026-11-05, antes 400) para que la capacidad exista desde el principio.
+38 tipos de recurso (`RECURSOS_TIPO`): madera, piedra, trigo, cobre, estano, oro, livestock, hierro; intermedios (lingoteCobre/Estano/Bronce/Hierro, cuero, cueroCurtido,
+cueroCalidad); equipo (armaMadera/Cobre/Bronce/BronceCalidad/Hierro/HierroCalidad, armaduraBasica/Intermedia/Bronce/BronceCalidad, carroGuerra); chatarra (Cobre/Bronce/Hierro);
+y **la comida de la tanda 69** (harina, pan, carne, leche, queso, uva, aceituna, vino y aceite). **Todos** nacen en el almacén (cantidad 0 o inicial, capacidad 800 desde el 2026-11-05, antes 400) para que la capacidad exista desde el principio.
 
 ```
 Edificio = {
@@ -170,7 +170,7 @@ trabajadoresRequeridosTotal   = Σ EDIFICIO_CATALOGO[tipo].trabajadoresRequerido
                                 (el valor del tipo, no el del nivel interno; un extractor con el nodo agotado sigue contando)
 ratioManoObra                 = trabajadoresRequeridosTotal ≤ 0 ? 1 : min(1, pesants / trabajadoresRequeridosTotal)
 
-trabajadoresTransformacion    = Σ niveles[nivelInterno].trabajadoresRequeridos   de los ACTIVOS fundicion, curtiduria, armeria, carpinteria, granFundicion
+trabajadoresTransformacion    = Σ niveles[nivelInterno].trabajadoresRequeridos   de los ACTIVOS fundicion, curtiduria, armeria, carpinteria, granFundicion y, en Rust desde la tanda 69, molino, horno, quesera, bodega y prensa
 ratioManoObraArtesanos        = trabajadoresTransformacion ≤ 0 ? 1 : min(1, artesanos / trabajadoresTransformacion)
 ```
 
@@ -217,12 +217,12 @@ pesants → el excedente; artesanos → `artesanos − trabajadoresTransformacio
 
 ### 5.3 Recetas (`avanzarRecetas`)
 
-Para cada edificio `activo` con `niveles` (fundicion, curtiduria, armeria, carpinteria, granFundicion), en el orden del array; para cada receta del **nivel interno actual** en el orden del catálogo
+Para cada edificio `activo` con `niveles` (fundicion, curtiduria, armeria, carpinteria, granFundicion y, en Rust, molino, horno, quesera, bodega y prensa), en el orden del array; para cada receta del **nivel interno actual** en el orden del catálogo
 (una receta puede consumir lo que otra produjo este mismo tick):
 
 ```
 saltar si  recetasPausadas contiene receta.produce   ó  falta la tecnología  ó  receta.requiereEdificio no está (algún edificio activo de ese tipo con nivelInterno ≥ nivel)
-cantidad = produccionBase × ratioManoObraArtesanos × factorProduccionTalleres
+cantidad = produccionBase × ratioManoObraArtesanos × factorProduccionTalleres × (buey ? factorBuey : 1)       ; el buey solo existe en el molino (tanda 69)
 para cada insumo:  disponible = max(0, almacen[insumo].cantidad − reserva[insumo]);  cantidad = min(cantidad, disponible / porUnidad)
 espacio = capacidad − cantidad de receta.produce;  si cantidad > espacio: cantidad = espacio y el edificio queda marcado pausadoPorAlmacenLleno
 si cantidad ≤ 0: nada
@@ -234,6 +234,21 @@ descontar  porUnidad × cantidad  de cada insumo;  añadir cantidad de receta.pr
 - **No hay penalización por distancia** entre el taller y sus fuentes (se descartó el 2026-10-11): la posición de un edificio dentro de la ciudad no cambia lo que produce.
 - `factorProduccionTalleres` es el producto de las políticas activas (Barrios Gremiales ×1,1).
 - Las recetas devuelven además la cantidad fabricada por recurso, que alimenta los logros de Tecnología.
+
+> **Implementado en Rust (2026-11-08, tanda 69): los cinco edificios de la comida.** Cinco tipos nuevos del catálogo (§14.1) que se encargan **solo a mano** (la auto-construcción no propone ninguno, §6.2) y **sin tecnología** (autor, 2026-11-08: piden solo el nivel de la plaza; el árbol de tecnologías no cambia). Son talleres como los demás (`Tipo::es_taller`: `factorProduccionTalleres`, recetas pausables con `alternarReceta`) y tienen un solo nivel interno. **El molino y el horno los trabajan los pesants** (autor, 2026-11-08: de pesants para pesants; `Tipo::taller_de_pesants`): sus trabajadores cuentan con los de la Granja y la Leñera (`ratioManoObra` de los pesants) y no traen artesanos. La quesera, la bodega y la prensa los trabajan artesanos (`ratioManoObraArtesanos`). Código: `crates/asentamiento/src/{catalogo,produccion}.rs`.
+>
+> | Edificio | Nivel de plaza | Receta (por minuto, con la mano de obra entera) | Trabajadores |
+> |---|---|---|---|
+> | **Molino** | 1 | 4 de **harina** de 4 de trigo (1 por unidad) | 2 pesants |
+> | **Horno** | 1 | 4 de **pan** de 4 de harina (1 por unidad) | 2 pesants |
+> | **Quesera** | 2 | 2 de **queso** de 4 de leche (2 por unidad) | 2 artesanos |
+> | **Bodega** | 3 | 1 de **vino** de 2 de uva (2 por unidad) | 3 artesanos |
+> | **Prensa** | 4 | 1 de **aceite** de 2 de aceituna (2 por unidad) | 3 artesanos |
+>
+> **Las cifras de las recetas son provisionales, a calibrar con el batch.** Se eligieron para que un edificio de nivel 1 cubra la ración (`BIENES_DE_CONSUMO`, §9.2) de unas 100 cabezas de la clase que come el bien (pan 100 × 0,04 = 4; queso 100 × 0,02 = 2; vino y aceite 100 × 0,01 = 1); la harina, lo que gasta un horno (4). Como cualquier receta, produce solo lo que cabe en el almacén y lo que alcanzan los insumos (`disponible − reserva`).
+>
+> **El buey del molino.** Un molino admite **un buey**, que se compra con la orden `asignarBuey` (§13) al precio del buey de una caravana (`ANIMAL_CATALOGO.buey.costo`, 12 de oro; autor, 2026-11-08) y se queda allí: con él la receta produce `factorBuey` (2) veces más gastando lo mismo por unidad, y sigue limitada por el trigo que haya. `Edificio.buey` va en la foto (`BAN59`) y en la proyección (`Edificio.buey`). Se puede comprar con el molino **aún en obra** (no se mira el estado) y **se pierde con el molino**: al cancelar su obra (§6.4), en las ruinas de la plaza y, sin devolver nada, cuando una conquista lo deja **dañado** (`aplicar_conquista`, Combate §8; el molino reconstruido nace sin buey).
+
 
 ### 5.4 Recetas pausadas
 
@@ -309,6 +324,8 @@ Cada candidato recibe `score = base de su banda + urgencia(0–100, recortada) +
 | 7 | **Curtiduría / Armería / Fundición** (a lo sumo **una** en vuelo de las tres, y solo **una** propuesta por pasada: el primero de la lista que valga) | `nivelActual ≥ requisitoNivelBase('fundicion')` (= 2) ∧ ninguna de las tres pendiente; para cada tipo en ese orden: ¬`alcanzoTopeDeTransformacion` ∧ `tieneInsumoDeArranque` ∧ `puedePagar` ∧ hay sitio | transformación (sin urgencia) |
 | 8 | **Carpintería** | `nivelActual ≥ requisitoNivelAsentamientoConstruccion` (2) ∧ ¬tope ∧ ¬pendiente ∧ `puedePagar` ∧ hay sitio | transformación |
 
+> **Implementado en Rust (2026-11-08, tanda 69):** la auto-construcción **no propone ninguno de los cinco edificios de la comida ni la estatua** (molino, horno, quesera, bodega, prensa y estatua solo se hacen a mano, §6.4); no están entre los candidatos de arriba. Prueba: `la_auto_construccion_nunca_levanta_ninguno_de_los_cinco_edificios_de_la_comida` (`crates/nucleo/tests/molino.rs`).
+
 Definiciones auxiliares:
 
 - **Déficit de trigo** (solo el TypeScript: en Rust no hay candidato Granja desde el 2026-11-02 y con él se fueron `maximoGranjasPendientesEnDeficit` y `hayMejoraGranjaDisponible`): `produccionActual = Σ por granja activa de produccionTrigoDeGranja(nivel) × fertilidadZona × ratioManoObra × factorProduccionTrigo`;
@@ -357,7 +374,7 @@ La construcción **manual** y la mejora manual usan la reserva dinámica **sin**
 La pide un residente presente con el cargo `gobernador` o `maestroObras` (el motor solo exige que **alguien** tenga ese cargo; es el comando el que comprueba que el actor es ese titular). Cualquier tipo del catálogo menos el Centro Urbano y los puestos
 de Mercado. Validaciones, en orden:
 
-1. Hay alguien en ese cargo. 2. La Facción tiene la tecnología del tipo. 3. Si el tipo pide una Era (`ordenEraMinimo`, hoy solo la Maravilla: la V), el servidor la ha alcanzado (`ERAS[era].orden`). 3b. No es `centroUrbano` ni `puestoMercado`. 3c (Rust). No es un extractor de pueblo (Cantera ni minas: `obra.solo_por_pueblo`, la Cantera también la primera desde el 2026-11-01) ni el Corral (`obra.solo_en_aldea`).
+1. Hay alguien en ese cargo. 2. La Facción tiene la tecnología del tipo. 3. **La Maravilla pide el umbral de prestigio de la Facción** (`PRESTIGIO.maravilla`, Diplomacia_Facciones §3.5b), **en lugar de la Era** (`ordenEraMinimo` desaparece del catálogo y con él `obra.era_insuficiente`; antes pedía la Era V, que no existe): `obra.prestigio_insuficiente`. 3a. **La estatua** solo se levanta en la **capital** de la Facción (`obra.solo_en_capital`) y tantas como umbrales de `PRESTIGIO.estatuas` alcanza su prestigio, contando las hechas y las que están en obra (`obra.prestigio_insuficiente`); es decorativa, de un solo nivel, y no está en `EDIFICIOS_UNICOS`. 3b. No es `centroUrbano` ni `puestoMercado`. 3c (Rust). No es un extractor de pueblo (Cantera ni minas: `obra.solo_por_pueblo`, la Cantera también la primera desde el 2026-11-01) ni el Corral (`obra.solo_en_aldea`).
 4. Tipos **únicos** (`EDIFICIOS_UNICOS`, §14.2): ya hay uno (de cualquier estado). **La Granja es única desde el 2026-11-02** (decisión del autor): la de la fundación es la única de la ciudad y otra se rechaza con `obra.unico`; se mejora como siempre.
 5. Tope de Almacenes; tope de Viviendas. 6. `nivelActual ≥ requisitoNivelAsentamientoConstruccion` del tipo. 6b (2026-11-03). Si el nivel 1 del tipo trae `requiereEdificio` (hoy solo el Albergue de caravanas: un Mercado), hay un edificio activo de ese tipo con `nivelInterno ≥ requiereEdificioNivel`; si no, `obra.falta_edificio`. 7. Tope de transformación.
 8. **Gran Fundición**: nivel de Facción ≥ `nivelFaccionMinimo` (6), el asentamiento es la **capital**, y la Facción no tiene ya otra (ninguno de sus asentamientos).
@@ -370,6 +387,8 @@ Paga el coste completo, crea el edificio `en_cola` con id `edificio-<id>-manual-
 `quitarDeCola(cargo, edificioId)`: solo un edificio `en_cola`; **devuelve el coste completo del catálogo** más el `costoMejora` de cada nivel interno 2..`nivelInterno`; **si el edificio está `danado` devuelve solo `OCUPACION.fraccionCosteReconstruccion` (la mitad) de cada recurso, redondeando hacia abajo**. Se añade con `agregarRecurso` (el tope de capacidad
 puede perder parte del reembolso). `moverEnCola(arriba|abajo)`: intercambia la `prioridad` con la del vecino de la lista ordenada por prioridad desc; en el extremo no hace nada.
 
+`asignarBuey(cargo, edificioId)` (tanda 69, §5.3): el Gobernador o el Maestro de Obras compran el buey de un **molino** (`molino.no_es_molino` si el edificio es de otro tipo, `molino.ya_tiene_buey` si ya lo tiene, `obra.recursos_insuficientes` si el almacén de la plaza no tiene su precio, 12 de oro; `edificio.desconocido` si la plaza no tiene tal edificio). Cobra del almacén y no mira el estado del molino (vale con la obra en curso). Evento `construccion.buey_asignado { edificio }`.
+
 `cancelarConstruccion(cargo, edificioId)` (desde el 2026-11-06, pedido del autor): para la obra que **ya empezó** y **no devuelve nada**. Un edificio `en_construccion` (también la reconstrucción de uno `danado`) desaparece con su pieza del trazado y, si es una Leñera, su parcela; una mejora en curso se abandona y el edificio sigue activo en su nivel. La cuadrilla queda libre y la cola arranca **en ese mismo instante** lo que esperaba. Un edificio en la cola se quita con `quitarDeCola` (`obra.no_esta_en_curso`). Con la auto-construcción encendida, la necesidad que lo pidió puede volver a encolarlo en el paso de minuto siguiente.
 
 ### 6.5 Topes por nivel
@@ -377,6 +396,8 @@ puede perder parte del reembolso). `moverEnCola(arriba|abajo)`: intercambia la `
 - **Almacenes**: `NECESIDADES.maximoAlmacenesPorNivel[nivelActual]`.
 - **Viviendas** (`maximoViviendasPorNivel(n)`): si existe el requisito del nivel `n+1`: `max( ceil(pesants_{n+1}/capacidadPesants), ceil(artesanos_{n+1}/capacidadArtesanos) ) + MARGEN_VIVIENDAS (2)`; en el nivel máximo, `ceil(techoPoblacion[n]/capacidadPesants)`. **El margen de 2 se decidió el 2026-10-18**: con el cupo justo (40 Viviendas × 10 = 400 artesanos para un requisito de 400) la población logística se acerca al cupo sin tocarlo y el requisito no se cumpliría nunca; con el margen el cupo es 420.
   Cuenta Viviendas de cualquier estado.
+
+  > **Implementado en Rust (2026-11-08, tanda 69):** como los requisitos de población y los techos van al doble (§11.1), los topes salen solos: con `capacidadPesants` 15 y `capacidadArtesanos` 10, **29 / 82 / 162 / 322 / 2.667** Viviendas en los niveles 1 a 5 (antes 16 / 42 / 82 / 162 / 1.334). El doble de Viviendas ocupa el doble de ciudad (cabida del trazado en la zona y separación de 20 u entre plazas) y sube el mantenimiento por edificio: se mide con el batch.
 
 ### 6.6 Puestos del Mercado
 
@@ -419,18 +440,18 @@ Quitar de la cola un `danado` devuelve la mitad del coste y de las mejoras (§6.
 
 ### 9.1 Crecimiento (`crecerPoblacion`)
 
-Las tres clases usan la misma forma: `esperado = actual × tasa`, con `tasa = tasaBase × comidaFactor × espacioFactor × estabilidad(1) × felicidad`, y **población siempre entera** (decisión del 2026-10-22, que sustituye a la «población continua» del 2026-10-13): cada clase guarda **habitantes enteros y un resto oculto** en milésimas de habitante; **no hay tirada**. En cada paso de un minuto el incremento `actual × tasa` (con `actual` = habitantes **más su resto**, que es la población continua de siempre, así que el ritmo de crecimiento es el mismo) se suma al resto, y **entra una persona entera cada vez que el resto llega a 1**. Requisitos de nivel, mano de obra, recaudación y consumo leen los habitantes enteros (el resto no lo lee nadie).
+Las tres clases usan la misma forma: `esperado = actual × tasa`, con `tasa = tasaBase × comidaFactor × espacioFactor × estabilidad(1) × felicidad` (en Rust, además, `× modificadorDeBienes` de su clase, §9.2, desde la tanda 69), y **población siempre entera** (decisión del 2026-10-22, que sustituye a la «población continua» del 2026-10-13): cada clase guarda **habitantes enteros y un resto oculto** en milésimas de habitante; **no hay tirada**. En cada paso de un minuto el incremento `actual × tasa` (con `actual` = habitantes **más su resto**, que es la población continua de siempre, así que el ritmo de crecimiento es el mismo) se suma al resto, y **entra una persona entera cada vez que el resto llega a 1**. Requisitos de nivel, mano de obra, recaudación y consumo leen los habitantes enteros (el resto no lo lee nadie).
 
 ```
 comidaFactor = factorCrecimientoMinimo + (1 − factorCrecimientoMinimo) × nutricion/100
 felicidad    = factorCrecimientoPoblacion(políticas) × (ocupado ? OCUPACION.factorCrecimiento : 1) × (1 + AEDAS.residentes.bonoFelicidad × aedasResidentes)
 
 Pesants:   espacio = capacidadPesants ≤ 0 ? 0 : clamp(1 − pesants/capacidadPesants, 0, 1)      (capacidad = nº de Viviendas activas × 15)
-           tasa = pesants.tasaCrecimientoBase × comida × espacio × felicidad
-Artesanos: solo si hay ALGÚN edificio de transformación activo (fundicion, curtiduria, armeria, carpinteria) y espacio > 0 (capacidad = Viviendas activas × 10):
-           si artesanos = 0 → +1 sin tirar el dado (evento poblacion.primeros_artesanos);  si no, tasa = artesanos.tasaCrecimientoBase × comida × espacio × felicidad
+           tasa = pesants.tasaCrecimientoBase × comida × espacio × felicidad × modificadorDeBienes(pesants)
+Artesanos: solo si hay ALGÚN taller activo (fundicion, curtiduria, armeria, carpinteria; en Rust, cualquier taller de artesanos, `Tipo::pide_artesanos`: también granFundicion y, desde la tanda 69, quesera, bodega y prensa; el molino y el horno no, que los trabajan los pesants) y espacio > 0 (capacidad = Viviendas activas × 10):
+           si artesanos = 0 → +1 sin tirar el dado (evento poblacion.primeros_artesanos);  si no, tasa = artesanos.tasaCrecimientoBase × comida × espacio × felicidad × modificadorDeBienes(artesanos)
 Nobleza:   solo si residentes ≥ nobleza.minCiudadanos ∧ hay Palacio activo ∧ espacio > 0 (capacidad = capacidadNobles del nivel del Palacio, 80/240/400);
-           si nobleza = 0 → +1 sin dado (evento poblacion.primeros_nobles);  si no, tasa = nobleza.tasaCrecimientoBase × comida × espacio × felicidad × factorCrecimientoNobleza × (1 + AEDAS.residentes.bonoNobleza × aedasResidentes)
+           si nobleza = 0 → +1 sin dado (evento poblacion.primeros_nobles);  si no, tasa = nobleza.tasaCrecimientoBase × comida × espacio × felicidad × modificadorDeBienes(nobleza) × factorCrecimientoNobleza × (1 + AEDAS.residentes.bonoNobleza × aedasResidentes)
 Techo:     techo = techoPoblacion[nivel ALCANZADO];  espacioBajoTecho = max(0, techo − población total)
            crecimientoBruto = suma de las tres;  factorTecho = (bruto > espacioBajoTecho ∧ bruto > 0) ? espacioBajoTecho/bruto : 1
            resto de cada clase += incremento × factorTecho;  habitantes += resto entero;  resto = lo que sobra (0 ≤ resto < 1)       (nunca purga población ya asentada)
@@ -444,6 +465,31 @@ Crecen las tres clases **solo** si la plaza puede crecer (§9.2: nutrición mayo
 **El crecimiento no consume el generador aleatorio.** Los eventos «primeros artesanos» y «primeros nobles» (+1 sin dado) se disparan al cumplirse la condición.
 
 ### 9.2 Comida y hambruna (`avanzarNutricionPoblacion`)
+
+> **Implementado en Rust (2026-11-08, tanda 69): la población come pan, queso, vino, aceite y carne.** `Poblacion::nutrir` y `Poblacion::crecer` (`crates/asentamiento/src/poblacion.rs`), con el bloque `BIENES_DE_CONSUMO` (§14.4) en lugar del trigo solo. **Cada minuto y en cada plaza** el consumo es mezclado:
+>
+> ```
+> necesidad = total × consumoComidaPorHabitante × factorConsumoComida(políticas)          ; la de siempre (0,1 por habitante y minuto), la clase no importa
+> para cada bien de BIENES_DE_CONSUMO.bienes, en el orden del bloque (carne, pan, queso, vino, aceite):
+>     pedido[clase]  = la clase lo come ? habitantes[clase] × bien.racion × factorConsumoComida : 0
+>     cobertura      = min(1, lo que hay del bien / Σ pedido)                              ; un bien que no llega se reparte EN PROPORCIÓN a lo que pide cada clase
+>     come[clase]    = pedido[clase] × cobertura                                           ; sale del almacén; alimenta 1 a 1, como el trigo
+>     modificador[clase] ×= 1 + (bien.modificador − 1) × come[clase] / pedido[clase]       ; cobertura proporcional: media ración da la mitad del salto
+> trigo     = max(0, necesidad − Σ lo que han comido los bienes)                           ; lo que falte hasta la necesidad lo pone el trigo
+> suministro = min(1, (Σ bienes + trigo comido) / necesidad)                               ; entra en la nutrición como más abajo
+> ```
+>
+> | Bien | Clases que lo comen | Ración por cabeza y minuto | Modificador con la ración entera |
+> |---|---|---|---|
+> | Carne | pesants, artesanos y nobleza | 0,02 | ×1,2 |
+> | Pan | pesants | 0,04 | ×2 |
+> | Queso | artesanos | 0,02 | ×1,5 |
+> | Vino | nobleza | 0,01 | ×1,5 |
+> | Aceite | nobleza | 0,01 | ×1,5 |
+>
+> Las raciones de una clase suman menos que su necesidad: **el trigo siempre hace falta**. Los modificadores de una clase **se multiplican** entre sí (pan ×2 por carne ×1,2 son ×2,4) y multiplican la tasa de crecimiento de su clase junto con los factores de siempre (§9.1: `tasa = tasaBase × comida × espacio × felicidad × modificador`); los «+1 sin dado» de los primeros artesanos y nobles no los usan. La **nutrición y el hambre** se miden como siempre, con la necesidad cubierta por todo lo consumido (bienes y trigo), no solo por el trigo. La **leche** no se consume: solo es materia prima de la quesera (§5.3). Ejemplo: 400 pesants necesitan 40 por minuto y piden 16 de pan y 8 de carne; con solo 8 de pan en el almacén el pan da ×1,5, la carne ×1,2 y se comen 8 de pan, 8 de carne y 24 de trigo; crecen ×1,8 (`el_ejemplo_del_diseno_…`, `poblacion.rs`). El consumo de bienes cuenta en el consumido y en la tendencia «+N/min» de cada recurso. Los **víveres de movimiento** (columnas, ejércitos y héroes) **solo usan trigo**, y la **guarnición** come carne y luego trigo (Heroe_Y_Tropa §7). Pruebas: `crates/asentamiento/src/poblacion.rs` y `crates/nucleo/tests/consumo.rs`.
+
+El bloque siguiente es el del TypeScript (solo trigo); en Rust el trigo es la parte que no cubren los bienes de arriba.
 
 ```
 consumo = total × consumoComidaPorHabitante × factorConsumoComida(políticas)          (por tick; la clase no importa)
@@ -536,13 +582,25 @@ edificios = construidos ≥ (req.edificiosMinimo ?? req.edificios.length) ∧ cu
 pueblo = pueblos ACTIVOS de la plaza (aldeas agrícolas y extractores) ≥ req.pueblosActivos (por defecto 0)
 ```
 
-**Implementado en Rust (2026-10-27, mecánica 50):** el nivel 2 pide **200 pesants + 2 de {Cantera, Leñera, Granja} + una aldea agrícola activa** (`aldeasAgricolas: 1` en `NIVEL_ASENTAMIENTO`); las minas y el Corral salen de su lista. Es el primer gate que mira un pueblo: `ReglasNivel::gates` recibe las aldeas activas (`Asentamiento::aldeas_activas`) y devuelve `Falta::Aldea`; `bloqueos_de_ascenso` da `Bloqueo::FaltaAldea` y `SolicitarAscenso` rechaza con `ascenso.falta_aldea`. Una aldea pendiente, en obra o destruida no cuenta; la que sube de nivel sí (sigue activa).
+**Implementado en Rust (2026-10-27, mecánica 50):** el nivel 2 pide **400 pesants (200 hasta la tanda 69, ver abajo) + 2 de {Cantera, Leñera, Granja} + una aldea agrícola activa** (`aldeasAgricolas: 1` en `NIVEL_ASENTAMIENTO`); las minas y el Corral salen de su lista. Es el primer gate que mira un pueblo: `ReglasNivel::gates` recibe las aldeas activas (`Asentamiento::aldeas_activas`) y devuelve `Falta::Aldea`; `bloqueos_de_ascenso` da `Bloqueo::FaltaAldea` y `SolicitarAscenso` rechaza con `ascenso.falta_aldea`. Una aldea pendiente, en obra o destruida no cuenta; la que sube de nivel sí (sigue activa).
 
 **Cambio del 2026-10-31 (decisión del autor):** el gate ya no pide una aldea agrícola sino **un pueblo activo, aldea agrícola o pueblo extractor** (`pueblosActivos: 1`; `Asentamiento::pueblos_activos`, `Falta::Pueblo`, `Bloqueo::FaltaPueblo`; el rechazo sigue siendo `ascenso.falta_aldea`, con el mensaje «falta un pueblo activo»). Así sube también una plaza sin tierra fértil pero con minas. Los pueblos extractores se fundan desde el **nivel 1** de la madre (`nivelMadreMinimo.extractor: 1`, antes 2); como el cupo del nivel 1 era uno, en el nivel 1 la plaza levantaba o una aldea o un extractor.
 
-**Cambio del 2026-11-01 (decisiones del autor):** la Cantera ya no es un edificio de la ciudad, así que el nivel 2 pide **200 pesants, una Leñera y una Granja a nivel 2 (las dos) y un pueblo activo** (`edificios: ["lenera", "granja"]` sin `edificiosMinimo`); la piedra del mantenimiento del nivel 2 (`nivelParaPiedra: 2`) sale de un **pueblo de cantera**, y por eso el cupo de pueblos del nivel 1 sube a **dos** (`cupoPorNivel` 2 / 3 / 4 / 5 / 6): la plaza levanta en el nivel 1 su cantera y su aldea agrícola. Prueba: `el_nivel_2_pide_200_pesants_una_lenera_una_granja_a_nivel_2_y_un_pueblo_activo` (`asentamiento`, `nivel.rs`) y `una_plaza_vive_sola_construye_crece_y_sube_al_nivel_2` (`tests/asentamientos.rs`).
+**Cambio del 2026-11-01 (decisiones del autor):** la Cantera ya no es un edificio de la ciudad, así que el nivel 2 pide **400 pesants (200 hasta la tanda 69), una Leñera y una Granja a nivel 2 (las dos) y un pueblo activo** (`edificios: ["lenera", "granja"]` sin `edificiosMinimo`); la piedra del mantenimiento del nivel 2 (`nivelParaPiedra: 2`) sale de un **pueblo de cantera**, y por eso el cupo de pueblos del nivel 1 sube a **dos** (`cupoPorNivel` 2 / 3 / 4 / 5 / 6): la plaza levanta en el nivel 1 su cantera y su aldea agrícola. Prueba: `el_nivel_2_pide_400_pesants_una_lenera_una_granja_a_nivel_2_y_un_pueblo_activo` (`asentamiento`, `nivel.rs`) y `una_plaza_vive_sola_construye_crece_y_sube_al_nivel_2` (`tests/asentamientos.rs`).
 
-**Implementado en Rust (2026-10-28, mecánica 56):** el nivel 2 pide **además una Granja a nivel 2** (`edificiosConNivel: {"granja": 2}` en `NIVEL_ASENTAMIENTO`, `Requisito::con_nivel`), aparte de los dos tipos de {Cantera, Leñera, Granja}: con Cantera y Leñera y las Granjas a nivel 1 no se sube. Si falta, es `Falta::Edificios` (`ascenso.faltan_edificios`), como cualquier otro edificio. Leñera y Cantera no tienen niveles. Va con el **arranque rápido** del mismo día: el nivel 1 de Vivienda, Granja y Leñera tarda 10, 5 y 2 minutos (`EDIFICIO_CATALOGO`; antes 240, 120 y 60) y las mejoras de la Granja fijan sus 240 / 480 / 960 minutos de antes (`obraMinutos`). Batch de población (300 plazas, 30 días, semilla 42, mundo `43ccdaa2`), antes → después: 200 pesants a los 2,2 → 0,36 días de mediana; se pide la subida al nivel 2 a los 2,2 → 0,6 días y se alcanza a los 5,2 → 3,6 (la obra del ascenso sigue en 3 días); 314 → 629 pesants y 46 → 72 edificios a los 7 días. Sin recalibrar: pendiente de la decisión del autor.
+**Implementado en Rust (2026-10-28, mecánica 56):** el nivel 2 pide **además una Granja a nivel 2** (`edificiosConNivel: {"granja": 2}` en `NIVEL_ASENTAMIENTO`, `Requisito::con_nivel`), aparte de los dos tipos de {Cantera, Leñera, Granja}: con Cantera y Leñera y las Granjas a nivel 1 no se sube. Si falta, es `Falta::Edificios` (`ascenso.faltan_edificios`), como cualquier otro edificio. Leñera y Cantera no tienen niveles. Va con el **arranque rápido** del mismo día: el nivel 1 de Vivienda, Granja y Leñera tarda 10, 5 y 2 minutos (`EDIFICIO_CATALOGO`; antes 240, 120 y 60) y las mejoras de la Granja fijan sus 240 / 480 / 960 minutos de antes (`obraMinutos`). Batch de población de entonces (300 plazas, 30 días, semilla 42, mundo `43ccdaa2`; con el requisito de 200 pesants de esa fecha), antes → después: 200 pesants a los 2,2 → 0,36 días de mediana; se pide la subida al nivel 2 a los 2,2 → 0,6 días y se alcanza a los 5,2 → 3,6 (la obra del ascenso sigue en 3 días); 314 → 629 pesants y 46 → 72 edificios a los 7 días. Sin recalibrar: pendiente de la decisión del autor.
+
+**Implementado en Rust (2026-11-08, tanda 69): requisitos de población y techos al doble.** En lugar de bajar el crecimiento (descartado por el autor) se dobla **solo la población** de los requisitos de `NIVEL_ASENTAMIENTO` (los edificios, la Granja a nivel 2, el pueblo activo, el recinto y el coste y la obra del ascenso no cambian) y se doblan **todos los techos de población**. Cifras en el bloque `NIVEL_ASENTAMIENTO` (§14.5); el cambio, por nivel:
+
+| Nivel | Pesants | Artesanos | Techo de población |
+|---|---|---|---|
+| 1 | — | — | 300 → 600 |
+| 2 | 200 → 400 | 0 | 1.500 → 3.000 |
+| 3 | 500 → 1.000 | 400 → 800 | 6.000 → 12.000 |
+| 4 | 1.000 → 2.000 | 800 → 1.600 | 12.000 → 24.000 |
+| 5 | 2.000 → 4.000 | 1.600 → 3.200 | 20.000 → 40.000 |
+
+Código: `crates/asentamiento/src/nivel.rs` (lee el bloque); los topes de Viviendas que salen de ellos, en §6.5. La mortalidad, el crecimiento y el espacio de Viviendas no cambian de fórmula: con el mismo ritmo, llegar a cada requisito tarda más (el batch `poblacion` lo mide).
 
 Devuelve `null` si el nivel no tiene requisito. `calcularNivelAsentamiento` encadena los gates desde `nivel` y dice hasta dónde se cumplirían (la usan los bots para decidir si piden la subida; **no sube nada**).
 
@@ -592,6 +650,7 @@ Los factores se **multiplican** entre las políticas activas del asentamiento (`
 | `alternarReceta { asentamientoId, recurso, pausada }` | gobernador o maestroObras | Idempotente. `construccion.receta_alternada` |
 | `calibrarReservaManual { asentamientoId, recurso, valor }` | `tesorero` (y debe haber uno) | `reservaManual[recurso] = clamp(round(valor), 0, NECESIDADES.reservaManualMaxima)`. Sin evento |
 | `renombrarAsentamiento { asentamientoId, nombre }` | cualquier residente | Nombre recortado; vacío = volver a mostrar el id. Como mucho `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres (`asentamiento.nombre_largo`) y **único** entre las plazas vivas del mundo, sin mirar tildes ni mayúsculas (`asentamiento.nombre_duplicado`) (5C-6, decisión del autor del 2026-10-24). `asentamiento.renombrado` (en Rust desde 5C: `RenombrarAsentamiento`, 143) |
+| `asignarBuey { asentamientoId, cargo, edificioId }` | `gobernador` o `maestroObras` | §6.4 (tanda 69, orden `asignar_buey`). Compra el buey de un molino. `construccion.buey_asignado { edificio }` |
 | `solicitarAscenso { asentamientoId }` | `gobernador` | §11.2. Error `ascenso.invalido` con todos los bloqueos |
 
 > **Implementado en Rust (2026-10-23, 4H T5).** `AlternarAutoConstruccion` emite `construccion.auto_alternada { pausada }`, `AlternarReceta` `construccion.receta_alternada { recurso, pausada }` (el recurso por su índice) y `MejorarEdificio` (`mejorarEdificioAhora`) `construccion.mejora_forzada { edificio }` antes de su `construccion.mejora_iniciada`; los oyen la Facción de la plaza y quien está dentro. `construccion.yacimiento_agotado` se emite desde la paridad P8 (2026-10-27, §5) y `asentamiento.renombrado` desde 5C.
@@ -616,6 +675,8 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
 (`capacidadPesants/Artesanos`, `produccionBase*`, `trabajadoresRequeridos`, `capacidadPorRecursoAdicional`, `nivelFaccionMinimo`) y, si mejora, `niveles` con `costoMejora`, `requisitoNivelAsentamiento`, `requiereEdificio(+Nivel)`, `requiereTecnologia`,
 `obraMinutos`, `recetas`, `capacidadNobles`, `cupoCaravanas`, `cupoCarros`, `cupoMiradas`, `capacidadTrigo`, `produccionBaseTrigo`, `tamano`. Los edificios sin coste (`centroUrbano`, `puestoMercado`, `plaza`, `plazaDeArmas`, `patioDeGremios`, `pozo`, `parque`) nunca pasan por la cola: nacen gratis
 (fundación, mejora del Mercado, ancla).
+
+> **Implementado en Rust (2026-11-08, tanda 69):** seis tipos nuevos al final del catálogo (38 en total, `Tipo` en `crates/asentamiento/src/catalogo.rs`). El **molino** (nivel de plaza 1; `factorBuey` 2), el **horno** (1), la **quesera** (2), la **bodega** (3) y la **prensa** (4) son los talleres de la comida de §5.3: `costo` en madera y piedra, 5 minutos de obra, un solo nivel con sus `trabajadoresRequeridos` y su receta, sin tecnología; la quesera, la bodega y la prensa piden desde el nivel de plaza de su cultivo (Pueblos §14.0). La **estatua** (100 de piedra, 60 minutos, sin nivel ni tecnología) es decorativa: la desbloquea el prestigio y solo se levanta en la capital (§6.4). La **Maravilla** pierde el `ordenEraMinimo` y pide en su lugar el umbral de prestigio (§6.4); sigue pidiendo el nivel de plaza 5. Las cifras de las recetas son provisionales, a calibrar con el batch.
 
 <!-- parametros:EDIFICIO_CATALOGO -->
 ```json
@@ -1560,8 +1621,124 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
       "livestock": 200
     },
     "tiempoConstruccionMinutos": 40320,
-    "requisitoNivelAsentamientoConstruccion": 5,
-    "ordenEraMinimo": 5
+    "requisitoNivelAsentamientoConstruccion": 5
+  },
+  "molino": {
+    "costo": {
+      "madera": 60,
+      "piedra": 20
+    },
+    "tiempoConstruccionMinutos": 5,
+    "requisitoNivelAsentamientoConstruccion": 1,
+    "factorBuey": 2,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 2,
+        "recetas": [
+          {
+            "produce": "harina",
+            "produccionBase": 4,
+            "consumePorUnidad": {
+              "trigo": 1
+            }
+          }
+        ]
+      }
+    }
+  },
+  "horno": {
+    "costo": {
+      "madera": 30,
+      "piedra": 30
+    },
+    "tiempoConstruccionMinutos": 5,
+    "requisitoNivelAsentamientoConstruccion": 1,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 2,
+        "recetas": [
+          {
+            "produce": "pan",
+            "produccionBase": 4,
+            "consumePorUnidad": {
+              "harina": 1
+            }
+          }
+        ]
+      }
+    }
+  },
+  "quesera": {
+    "costo": {
+      "madera": 40,
+      "piedra": 20
+    },
+    "tiempoConstruccionMinutos": 5,
+    "requisitoNivelAsentamientoConstruccion": 2,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 2,
+        "recetas": [
+          {
+            "produce": "queso",
+            "produccionBase": 2,
+            "consumePorUnidad": {
+              "leche": 2
+            }
+          }
+        ]
+      }
+    }
+  },
+  "bodega": {
+    "costo": {
+      "madera": 60,
+      "piedra": 30
+    },
+    "tiempoConstruccionMinutos": 5,
+    "requisitoNivelAsentamientoConstruccion": 3,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 3,
+        "recetas": [
+          {
+            "produce": "vino",
+            "produccionBase": 1,
+            "consumePorUnidad": {
+              "uva": 2
+            }
+          }
+        ]
+      }
+    }
+  },
+  "prensa": {
+    "costo": {
+      "madera": 50,
+      "piedra": 30
+    },
+    "tiempoConstruccionMinutos": 5,
+    "requisitoNivelAsentamientoConstruccion": 4,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 3,
+        "recetas": [
+          {
+            "produce": "aceite",
+            "produccionBase": 1,
+            "consumePorUnidad": {
+              "aceituna": 2
+            }
+          }
+        ]
+      }
+    }
+  },
+  "estatua": {
+    "costo": {
+      "piedra": 100
+    },
+    "tiempoConstruccionMinutos": 60
   }
 }
 ```
@@ -1826,6 +2003,23 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
 ```
 <!-- /parametros -->
 
+`BIENES_DE_CONSUMO` (tanda 69, §9.2): `bienes` da, por bien de comida, las clases que lo comen, su ración por cabeza y minuto y el modificador de crecimiento con la ración entera (los bienes se recorren en este orden); `guarnicion` lista lo único que come la guarnición además del trigo (Heroe_Y_Tropa §7). Cifras aprobadas por el autor como punto de partida, a calibrar con el batch.
+
+<!-- parametros:BIENES_DE_CONSUMO -->
+```json
+{
+  "bienes": {
+    "carne": { "clases": ["pesants", "artesanos", "nobleza"], "racion": 0.02, "modificador": 1.2 },
+    "pan": { "clases": ["pesants"], "racion": 0.04, "modificador": 2 },
+    "queso": { "clases": ["artesanos"], "racion": 0.02, "modificador": 1.5 },
+    "vino": { "clases": ["nobleza"], "racion": 0.01, "modificador": 1.5 },
+    "aceite": { "clases": ["nobleza"], "racion": 0.01, "modificador": 1.5 }
+  },
+  "guarnicion": ["carne"]
+}
+```
+<!-- /parametros -->
+
 <!-- parametros:IMPUESTOS -->
 ```json
 {
@@ -1884,7 +2078,7 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
   "nivelMaximo": 5,
   "requisitos": {
     "2": {
-      "pesants": 200,
+      "pesants": 400,
       "artesanos": 0,
       "edificios": [
         "lenera",
@@ -1896,8 +2090,8 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
       "pueblosActivos": 1
     },
     "3": {
-      "pesants": 500,
-      "artesanos": 400,
+      "pesants": 1000,
+      "artesanos": 800,
       "edificios": [
         "armeria",
         "curtiduria",
@@ -1907,16 +2101,16 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
       ]
     },
     "4": {
-      "pesants": 1000,
-      "artesanos": 800,
+      "pesants": 2000,
+      "artesanos": 1600,
       "edificios": [
         "salaConsejo"
       ],
       "recintoCompletoNivelMinimo": 2
     },
     "5": {
-      "pesants": 2000,
-      "artesanos": 1600,
+      "pesants": 4000,
+      "artesanos": 3200,
       "edificios": [
         "palacio"
       ],
@@ -1926,11 +2120,11 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
     }
   },
   "techoPoblacion": {
-    "1": 300,
-    "2": 1500,
-    "3": 6000,
-    "4": 12000,
-    "5": 20000
+    "1": 600,
+    "2": 3000,
+    "3": 12000,
+    "4": 24000,
+    "5": 40000
   }
 }
 ```
@@ -2195,27 +2389,29 @@ Ninguna abierta (las encontradas al documentar se resolvieron el 2026-10-11; ver
 
 ### 14.0 La aldea agrícola y la cría (mecánicas 50 y 51)
 
-> **Implementado en Rust (2026-10-27).** Reglas puras en `crates/asentamiento/src/pueblos.rs` (`Sitio`, `ReglasAldea`, `Especie`, `Rebano`, `iniciar_aldea`, `mejorar_aldea`, la cría `criar` y `saquear_rebano`), `nivel.rs` (el gate) y los bloques `PUEBLOS_EXTRACTORES.aldea` y `ESPECIES` (**entran en la huella de las reglas: hace falta partida nueva**); integración en `crates/nucleo/src/nucleo/pueblos.rs` (órdenes, panel `Nucleo::sitio_de_aldea`, carro de dos recursos, saqueo del rebaño). Foto **`BAN47`** (los pueblos guardan sitio, nivel, mejora y rebaño; `BAN40`–`BAN46` se siguen leyendo, con sus pueblos como extractores de nivel 1). Pruebas: los módulos `pueblos` y `nivel` de `asentamiento`, `crates/nucleo/tests/pueblos.rs` (la aldea de punta a punta, con foto) y `asentamientos.rs` (la plaza sube al nivel 2 con su aldea).
+> **Implementado en Rust (2026-10-27).** Reglas puras en `crates/asentamiento/src/pueblos.rs` (`Sitio`, `ReglasAldea`, `Especie`, `Rebano`, `iniciar_aldea`, `mejorar_aldea`, la cría `criar` y `saquear_rebano`), `nivel.rs` (el gate) y los bloques `PUEBLOS_EXTRACTORES.aldea` y `ESPECIES` (**entran en la huella de las reglas: hace falta partida nueva**); integración en `crates/nucleo/src/nucleo/pueblos.rs` (órdenes, panel `Nucleo::sitio_de_aldea`, carro de todos los recursos de la aldea, saqueo del rebaño). Foto `BAN47` (los pueblos guardan sitio, nivel, mejora y rebaño; hoy `BAN59`, y las fotos anteriores a `BAN59` ya no se leen). Pruebas: los módulos `pueblos` y `nivel` de `asentamiento`, `crates/nucleo/tests/pueblos.rs` (la aldea de punta a punta, con foto) y `asentamientos.rs` (la plaza sube al nivel 2 con su aldea).
 
-- **Qué es.** Un pueblo más de la plaza madre (cuenta en el cupo, en su mantenimiento y en la mano de obra, se destruye y se conquista igual), con tipo de catálogo `Granja` y nombre `aldeaAgricola`. Lleva **granjas y los únicos corrales del juego** por niveles fijos (`aldea.niveles`: 1 → 2 granjas y 1 corral; 2 → 4 y 2; 3 → 6 y 3) y acarrea **trigo y ganado** a la madre con el carro de siempre.
+- **Qué es.** Un pueblo más de la plaza madre (cuenta en el cupo, en su mantenimiento y en la mano de obra, se destruye y se conquista igual), con tipo de catálogo `Granja` y nombre `aldeaAgricola`. Lleva granjas por niveles fijos (`aldea.niveles`: 1 → 2 granjas; 2 → 4; 3 → 6) y acarrea lo que produce a la madre con el carro de siempre.
+
+> **Implementado en Rust (2026-11-08, tanda 69):** **cada aldea es de un solo cultivo**, que se elige al marcarla (`MarcarAldea { asentamiento, punto, cultivo }`: `trigo`, `vid` u `oliva`; sin cultivo es trigo; otro nombre, `orden.forma_invalida`) y no cambia (`Sitio::Punto { pos, fertilidad, cultivo }`, `Cultivo` y `ReglaCultivo` en `crates/asentamiento/src/pueblos.rs`; el bloque `PUEBLOS_EXTRACTORES.aldea.cultivos`). Sus granjas dan el producto del cultivo: trigo, **uva** (vid) o **aceituna** (oliva). La vid exige el nivel 3 de la plaza madre y la oliva el 4 (`nivelMadre`; el trigo, el 1); con menos, `MarcarAldea` rechaza con **`pueblo.cultivo_bloqueado`** (`ErrorPueblo::CultivoBloqueado`, `iniciar_aldea`). **Solo la aldea de trigo lleva corrales** (`cultivos.<cultivo>.corrales`): las de vid y oliva no tienen rebaño. La fertilidad del punto sale de **la capa del mundo de su cultivo** (`fertilidad`, `fertilidad_vid` o `fertilidad_oliva`, Generación del mundo; `Geografia::fertilidad_en(punto, cultivo)` en `zonas.rs`), con el mismo mínimo de 0,3; el panel `Nucleo::sitio_de_aldea(plaza, cultivo)` busca el punto más fértil para el cultivo pedido. El nivel de plaza de la quesera, la bodega y la prensa es el de su cultivo (§5.3).
 - **Dónde.** En un **punto** de la zona real de la madre, sin nodo (`Pueblo.sitio` es `Nodo(n)` o `Punto { pos, fertilidad }`): tierra firme, fertilidad del artefacto en el punto ≥ `fertilidadMinima` (0,3), a `separacionMinima` (3 u) de toda plaza y todo pueblo de cualquier Facción y con ruta por tierra hasta la madre. Desde el **nivel 1** de la madre (`nivelMadreMinimo` es por tipo: `{extractor: 1, aldea: 1}` desde el 2026-10-31; el extractor pedía 2). Una plaza puede tener varias aldeas si el cupo se lo permite.
 - **Por anillos (2026-11-01, decisión del autor: que no se levanten todas juntas).** La aldea número k de la plaza (cuentan las que tiene en cualquier estado, no los pueblos extractores, que van donde está su nodo) va en el **anillo que añade a la zona el primer nivel cuyo cupo llega a k**: con el cupo 2 / 3 / 4 / 5 / 6 y los techos de la zona 20 / 30 / 40 / 50 / 60 u (`TERRITORIO.techos`; el doble desde el 2026-11-05), las dos primeras hasta 20 u de la plaza, la tercera de 20 a 30 u, la cuarta de 30 a 40 u, y así; el anillo es `(desde, hasta]` y lo recorta la zona real de la plaza. Fuera de su anillo, `MarcarAldea` rechaza con **`pueblo.fuera_de_su_anillo`** (se mira tras la zona y antes de la separación). `Nucleo::anillo_de_aldea`. Prueba: `las_aldeas_van_por_anillos_…` (`tests/pueblos.rs`).
 - **Coste y obra.** Como cualquier obra de mapa: su nivel 1 (`coste`, 30 madera) + `costeAdicional` (50 madera) + el carro con su buey (20 madera, 12 oro) = **100 madera y 12 oro** (`Asentamiento::costo_de_aldea`), llevados en una columna y entregados con `EntregarMateriales`; obra de 4 h.
 - **Subir de nivel** (`MejorarAldea { pueblo }`, aldea activa sin mejora en curso y con nivel siguiente): deja una mejora «pendiente de materiales» con el coste del nivel siguiente (2: 180 madera y 60 piedra; 3: 360 y 120; triplicados por decisión del autor del 2026-10-31, antes 60/20 y 120/40), que se entrega igual que una obra; entregada, obra de 2 h. **La aldea sigue produciendo mientras tanto** con su nivel de antes; al acabar sube (`aldea.subio`) y crecen granjas, corrales y el tope del rebaño.
-- **Producción.** Por minuto, el trigo es `granjas × produccionBaseTrigo(Granja, nivel 1) × fertilidad del punto × ratioManoObra × factorProduccionTrigo` (la fertilidad del punto, no la de la zona de la madre). Trabajan 4 pesants por granja y 4 por corral de la madre. **El almacén local es uno para los dos recursos** (500 entre trigo y ganado): el trigo entra primero y el ganado con el hueco que queda.
-- **Cría (mecánica 51).** Al completarse la aldea nace su **rebaño** con el pie de cría de sus corrales (`ESPECIES.<especie>.pieDeCriaPorCorral × corrales`; `especieInicial` vacuno: 20 cabezas). Cada minuto crece `cabezas × crecimientoPorHora / 60 × ratioManoObra × factorTecnologia(ganado)` hasta el tope (`topePorCorral × corrales`), en milésimas de cabeza (crece continuo, sin azar). Las **cabezas enteras por encima del pie de cría** se sacrifican mientras quepan en el almacén local y dan los `productos` de su especie (vacuno: 60 de ganado, `livestock`, por cabeza). Solo hay vacuno; la especie va en el rebaño para cuando haya caballos y bueyes.
-- **El carro** sale cuando el almacén local suma 500 entre los dos recursos y se lleva los dos (trigo primero); al llegar, cada recurso entra en el almacén de la madre y en la ventana de la solvencia por su cuenta.
-- **Guarnición**: 30 **granjeros** de serie (`aldea.granjeros.escuadra`) en vez de mineros, con la misma reposición. **Saqueo**: quien gana en la aldea se lleva además la parte `saqueoRebano` (0,5) de sus cabezas enteras, hasta lo que quepa en sus carros, convertida en ganado.
+- **Producción.** Por minuto, el trigo es `granjas × produccionBaseTrigo(Granja, nivel 1) × fertilidad del punto × ratioManoObra × factorProduccionTrigo` (la fertilidad del punto, no la de la zona de la madre). Trabajan 4 pesants por granja y 4 por corral de la madre. **El almacén local es uno para todo lo que produce la aldea** (`capacidadAlmacenLocal`, 1.000 entre el producto del cultivo y, en la de trigo, ganado, carne y leche): el cultivo entra primero y el rebaño con el hueco que queda. Las granjas de vid y de oliva cosechan con la misma fórmula (`produccionBaseTrigo` de la Granja × granjas × fertilidad del punto de su capa × `ratioManoObra` × `factorProduccionTrigo`), pero dan uva o aceituna.
+- **Cría (mecánica 51).** Al completarse la aldea nace su **rebaño** con el pie de cría de sus corrales (`ESPECIES.<especie>.pieDeCriaPorCorral × corrales`; `especieInicial` vacuno: 20 cabezas). Cada minuto crece `cabezas × crecimientoPorHora / 60 × ratioManoObra × factorTecnologia(ganado)` hasta el tope (`topePorCorral × corrales`), en milésimas de cabeza (crece continuo, sin azar). **Leche (2026-11-08, tanda 69):** cada minuto el rebaño vivo da además `cabezas × lechePorCabezaYHora / 60 × ratioManoObra × factorTecnologia(ganado)` de leche (`leche` es un recurso; vacuno: 3 por cabeza y hora, **provisional, a calibrar con el batch**) sin sacrificar nada; la leche entra primero en el almacén local y las cabezas con el hueco que queda. Las **cabezas enteras por encima del pie de cría** se sacrifican mientras quepan en el almacén local y dan los `productos` de su especie (vacuno: **60 de ganado, `livestock`, y 60 de `carne`** por cabeza; la carne, desde la tanda 69, también **provisional, a calibrar con el batch**). Solo hay vacuno; la especie va en el rebaño para cuando haya caballos y bueyes.
+- **El carro** sale cuando el almacén local suma su capacidad entre todos los recursos de la aldea y se lleva todo lo que produce, por el orden de `Pueblo::recursos` (el cultivo y, en la de trigo, ganado, carne y leche; `Pueblo::carga_del_carro`); al llegar, cada recurso entra en el almacén de la madre y en la ventana de la solvencia por su cuenta.
+- **Guarnición**: 30 **granjeros** de serie (`aldea.granjeros.escuadra`) en vez de mineros, con la misma reposición. **Saqueo**: quien gana en la aldea se lleva además la parte `saqueoRebano` (0,5) de sus cabezas enteras, hasta lo que quepa en sus carros, convertida en lo que da sacrificada (ganado y carne, 60 de cada por cabeza). La leche y la cosecha del almacén local no se saquean por esta vía.
 - **Ganado del mundo.** Los nodos de ganado desaparecen del mundo (el artefacto regenerado el 2026-10-27 no los trae): el ganado sale solo de los rebaños. `MarcarPueblo` sobre un nodo de ganado de un mundo viejo sigue dando `pueblo.nodo_no_extraible`.
 - **Tecnología.** El hito «Corral activo» de `cria_caballar` y el capítulo «obra de corral» de su épica miran ahora la aldea: cuenta como Corral activo de la plaza mientras tenga una aldea activa, y completarla anota el hecho de la obra de corral.
-- **Panel.** `Nucleo::sitio_de_aldea(plaza)` propone el punto más fértil de la zona (anillos de 0,5 u y 24 rumbos desde la separación mínima) donde `MarcarAldea` se aceptaría ahora, y por eso dentro del anillo de la siguiente aldea; lo usa el batch.
-- **Órdenes** (de plaza: Gobernador o Maestro de Obras de la madre, como `MarcarPueblo`): `MarcarAldea { asentamiento, punto }` (crea el pueblo) y `MejorarAldea { pueblo }`. **Hechos**: `aldea.marcada` (pueblo, x, y), `aldea.mejora_marcada` (pueblo, nivel) y `aldea.subio` (pueblo, nivel); la obra y la entrega usan los de siempre (`pueblo.materiales_entregados`, `pueblo.obra_iniciada`, `pueblo.completado`). **Rechazos nuevos**: `pueblo.fertilidad_insuficiente`, `pueblo.demasiado_cerca`, `pueblo.no_es_aldea`, `pueblo.nivel_maximo`, `pueblo.mejora_en_curso`, `ascenso.falta_aldea` y `obra.solo_en_aldea`.
-- **Placeholders** (los decidió el estudio al implementar; los cambia el autor): fertilidad mínima 0,3, separación 3 u, costes y obras de los niveles, el rebaño (tope 40 y pie 20 por corral, 15 % por hora, 60 de ganado por cabeza) y el saqueo de la mitad.
+- **Panel.** `Nucleo::sitio_de_aldea(plaza, cultivo)` propone el punto más fértil de la zona para el cultivo (anillos de 0,5 u y 24 rumbos desde la separación mínima) donde `MarcarAldea` se aceptaría ahora, y por eso dentro del anillo de la siguiente aldea; lo usa el batch.
+- **Órdenes** (de plaza: Gobernador o Maestro de Obras de la madre, como `MarcarPueblo`): `MarcarAldea { asentamiento, punto, cultivo }` (crea el pueblo; `cultivo` es trigo, vid u oliva) y `MejorarAldea { pueblo }`. **Hechos**: `aldea.marcada` (pueblo, x, y), `aldea.mejora_marcada` (pueblo, nivel) y `aldea.subio` (pueblo, nivel); la obra y la entrega usan los de siempre (`pueblo.materiales_entregados`, `pueblo.obra_iniciada`, `pueblo.completado`). **Rechazos nuevos**: `pueblo.cultivo_bloqueado`, `pueblo.fertilidad_insuficiente`, `pueblo.demasiado_cerca`, `pueblo.no_es_aldea`, `pueblo.nivel_maximo`, `pueblo.mejora_en_curso`, `ascenso.falta_aldea` y `obra.solo_en_aldea`.
+- **Placeholders** (los decidió el estudio al implementar; los cambia el autor): fertilidad mínima 0,3, separación 3 u, costes y obras de los niveles, el rebaño (tope 40 y pie 20 por corral, 15 % por hora, 60 de ganado y 60 de carne por cabeza, 3 de leche por cabeza y hora) y el saqueo de la mitad.
 - **Batch.** El jugador de `batch poblacion` levanta la aldea en cuanto el almacén paga su obra (materiales al instante, fertilidad 1 al este de la plaza) y, desde el 2026-11-01, su pueblo de cantera en el nodo de piedra libre más cercano de su zona (materiales al instante; lo extraído pasa cada minuto al almacén de la plaza y a la ventana de la solvencia, sin carro); el de `batch comercio` marca la aldea en el sitio del panel y luego canteras desde el nivel 1, y lleva los materiales con su columna.
 
 ### 14.0.1 Dentro del pueblo o de la aldea (2026-10-29)
 
-> **Implementado en Rust (2026-10-29, decisiones del autor del mismo día).** Integración en `crates/nucleo/src/nucleo/pueblos_dentro.rs` (las cuatro órdenes y la guarnición que vuelve), `heroes.rs` (la escolta del carro de acarreo desde dentro), `cargos.rs` y `pueblos.rs` (`MejorarAldea` desde la aldea), `combates.rs` y `batallas.rs` (la guarnición defiende); el contenedor `Contenedor::Pueblo(id)` de `militar` (etiqueta 5 del códec, compatible con las fotos anteriores: **sin formato de foto nuevo**) y el sub-bloque `PUEBLOS_EXTRACTORES.guarnicionJugadores` (**entra en la huella de las reglas**). Pruebas: `crates/nucleo/tests/pueblos.rs` (sección 9) y `combate.rs` (la guarnición de un jugador defiende el pueblo).
+> **Implementado en Rust (2026-10-29, decisiones del autor del mismo día).** Integración en `crates/nucleo/src/nucleo/pueblos_dentro.rs` (las cuatro órdenes y la guarnición que vuelve), `heroes.rs` (la escolta del carro de acarreo desde dentro), `cargos.rs` y `pueblos.rs` (`MejorarAldea` desde la aldea), `combates.rs` y `batallas.rs` (la guarnición defiende); el contenedor `Contenedor::Pueblo(id)` de `militar` (etiqueta 5 del códec; **sin formato de foto nuevo** en su día) y el sub-bloque `PUEBLOS_EXTRACTORES.guarnicionJugadores` (**entra en la huella de las reglas**). Pruebas: `crates/nucleo/tests/pueblos.rs` (sección 9) y `combate.rs` (la guarnición de un jugador defiende el pueblo).
 
 Todo se hace con el héroe **dentro** del pueblo o la aldea (`entrarEnPueblo`) y **ciudadano de la Facción de la plaza madre**. Nadie reside en un pueblo: lo que se mueve es la **columna con la que entró**, que lo espera dentro (sus escuadras, su carro). La administración no necesita estar dentro ni ser de la Facción. El corral y el rebaño siguen automáticos.
 
@@ -2289,7 +2485,12 @@ Todo se hace con el héroe **dentro** del pueblo o la aldea (`entrarEnPueblo`) y
       }
     },
     "especieInicial": "vacuno",
-    "saqueoRebano": 0.5
+    "saqueoRebano": 0.5,
+    "cultivos": {
+      "trigo": { "produce": "trigo", "nivelMadre": 1, "corrales": true },
+      "vid": { "produce": "uva", "nivelMadre": 3, "corrales": false },
+      "oliva": { "produce": "aceituna", "nivelMadre": 4, "corrales": false }
+    }
   }
 }
 ```
@@ -2302,8 +2503,10 @@ Todo se hace con el héroe **dentro** del pueblo o la aldea (`entrarEnPueblo`) y
     "topePorCorral": 40,
     "pieDeCriaPorCorral": 20,
     "crecimientoPorHora": 0.15,
+    "lechePorCabezaYHora": 3,
     "productos": {
-      "livestock": 60
+      "livestock": 60,
+      "carne": 60
     }
   }
 }
@@ -2411,9 +2614,9 @@ Los bloques de parámetros de este documento venían del motor TypeScript. Valor
 | `LIVESTOCK.espacioMinimo` | 30 | **5** |
 | Ritmo de niveles 2-3 | — | aprobado (Doc 4.5); niveles 4-5 con las Eras IV-V, pospuestos |
 
-> **Implementado en Rust (2026-10-23, fase 4H T3c), el interior de la plaza por la sesión.** El almacén y la población se proyectan **en escalones** (sin interpolar): `Existencia.cantidad` con `en_escalones = true`, su tendencia «+N/min» en `por_minuto` y la población entera por clase (`Poblacion`, con la marca de recuperación del hambre). La tendencia es el **neto real del último paso de minuto** de la plaza —producción, recaudación, consumo, mantenimiento y lo que come la guarnición, no el gasto de las órdenes— y se guarda por plaza (`asentamiento::asentamiento::Tendencia` (campo `tendencia` de la economía de la plaza), foto `BAN22`; 29 recursos y 3 clases). Lo escribe `minuto_de_plaza` al cerrar el paso (la diferencia entre el estado antes y después de todo el paso) y ese paso **no marca nada ni sube la versión del mundo**, con sesiones o sin ellas (decisión del autor, 2026-10-23): lo que cambia dentro de la plaza (almacén, población, medidor, nutrición, edificios parados, tendencia y almacén local de sus pueblos) lleva su propia secuencia por plaza, `Nucleo::version_interior` = `(ultimo_minuto − fundado_en) / 60 s`, que viaja en `Asentamiento.version_interior` y sirve a la reanudación de `ASENTAMIENTO`; el contador `version` y el hash del mundo son los mismos con y sin sesiones. Los gastos de órdenes, el fin de obra y el fin de mejora, ascenso o política (en su instante) marcan la plaza como siempre y llegan en su milisegundo.
+> **Implementado en Rust (2026-10-23, fase 4H T3c), el interior de la plaza por la sesión.** El almacén y la población se proyectan **en escalones** (sin interpolar): `Existencia.cantidad` con `en_escalones = true`, su tendencia «+N/min» en `por_minuto` y la población entera por clase (`Poblacion`, con la marca de recuperación del hambre). La tendencia es el **neto real del último paso de minuto** de la plaza —producción, recaudación, consumo, mantenimiento y lo que come la guarnición, no el gasto de las órdenes— y se guarda por plaza (`asentamiento::asentamiento::Tendencia` (campo `tendencia` de la economía de la plaza), foto `BAN22`; entonces 29 recursos, hoy 38, y 3 clases). Lo escribe `minuto_de_plaza` al cerrar el paso (la diferencia entre el estado antes y después de todo el paso) y ese paso **no marca nada ni sube la versión del mundo**, con sesiones o sin ellas (decisión del autor, 2026-10-23): lo que cambia dentro de la plaza (almacén, población, medidor, nutrición, edificios parados, tendencia y almacén local de sus pueblos) lleva su propia secuencia por plaza, `Nucleo::version_interior` = `(ultimo_minuto − fundado_en) / 60 s`, que viaja en `Asentamiento.version_interior` y sirve a la reanudación de `ASENTAMIENTO`; el contador `version` y el hash del mundo son los mismos con y sin sesiones. Los gastos de órdenes, el fin de obra y el fin de mejora, ascenso o política (en su instante) marcan la plaza como siempre y llegan en su milisegundo.
 >
-> **Producción y consumo por minuto (2026-10-28, mecánica 60).** Además del neto, cada `Existencia` del interior lleva `producido_por_minuto` (lo que entró por los flujos del paso: producción de edificios y pueblos, recaudación) y `consumido_por_minuto` (lo que salió: comida de la población, insumos de los talleres, mantenimiento y lo que come la guarnición de la plaza). Se cumple siempre `producido_por_minuto − consumido_por_minuto = por_minuto`. El almacén los suma mientras dura el paso (`Almacen::registrar_flujos` / `tomar_flujos`, solo lo que de verdad entró o salió, con el tope y la falta aplicados); las entradas y salidas sueltas (órdenes, comercio, botín, caravanas) no cuentan. Se guardan en la `Tendencia` de la plaza, en la foto **`BAN48`** (las `BAN40`–`BAN47` se siguen leyendo con los dos valores a 0 hasta el primer paso de minuto), para que tras una recuperación el panel muestre lo mismo. Pueblos y avanzadas los mandan a 0. Pruebas: `almacen.rs` (unitaria), `crates/nucleo/tests/asentamientos.rs` (`el_paso_de_minuto_guarda_su_tendencia…`, la igualdad en los 29 recursos y la proyección) y `heroes.rs` (lo que come la guarnición suma al consumo del trigo).
+> **Producción y consumo por minuto (2026-10-28, mecánica 60).** Además del neto, cada `Existencia` del interior lleva `producido_por_minuto` (lo que entró por los flujos del paso: producción de edificios y pueblos, recaudación) y `consumido_por_minuto` (lo que salió: comida de la población, insumos de los talleres, mantenimiento y lo que come la guarnición de la plaza). Se cumple siempre `producido_por_minuto − consumido_por_minuto = por_minuto`. El almacén los suma mientras dura el paso (`Almacen::registrar_flujos` / `tomar_flujos`, solo lo que de verdad entró o salió, con el tope y la falta aplicados); las entradas y salidas sueltas (órdenes, comercio, botín, caravanas) no cuentan. Se guardan en la `Tendencia` de la plaza, en la foto **`BAN48`** (desde la tanda 69 solo se carga `BAN59`), para que tras una recuperación el panel muestre lo mismo. Pueblos y avanzadas los mandan a 0. Pruebas: `almacen.rs` (unitaria), `crates/nucleo/tests/asentamientos.rs` (`el_paso_de_minuto_guarda_su_tendencia…`, la igualdad en todos los recursos y la proyección) y `heroes.rs` (lo que come la guarnición suma al consumo del trigo).
 >
 > **Producción quepa o no (2026-11-03, pedido del autor).** Con el almacén lleno, `producido_por_minuto` bajaba a lo que dejaba sitio el consumo y el panel parecía decir que la plaza no producía o que perdía. Ahora cada `Existencia` lleva también `produccion_por_minuto` (campo 5, contrato 0.11.0): lo que **rindieron** los flujos de entrada del paso, quepa o no (`Flujos::produccion`: `Almacen::producir` apunta lo pedido y no solo lo que entró; el extractor que con el almacén lleno no saca del yacimiento lo que no cabe lo suma con `Almacen::apuntar_produccion`). Lo que no cabe se pierde, como antes; el yacimiento no se gasta por ello. Las recetas de los talleres cuentan lo que fabrican (con el almacén lleno paran y no gastan insumos). Sin almacén lleno vale lo mismo que `producido_por_minuto`. El neto real (`por_minuto`) y la igualdad de arriba no cambian. Va en la `Tendencia` de la plaza pero **no en la foto**: tras recuperar llega a 0 y la proyección envía `producido_por_minuto` hasta el siguiente paso de minuto. Prueba: `produccion.rs` (`con_el_almacen_lleno_se_pausa…`: entran 5, la Cantera rinde 10; lleno del todo, 0 y 10).
 
@@ -2427,7 +2630,7 @@ Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; cont
   "acarreo.carro_repuesto", "aldea.marcada", "aldea.mejora_marcada", "aldea.subio", "acarreo.llega", "acarreo.sale", "acarreo.vuelve", "asentamiento.ascenso_iniciado", "asentamiento.nivel", "asentamiento.nivel_subio",
   "asentamiento.renombrado", "asentamiento.ruinas", "avanzada.adoptada", "avanzada.completada", "avanzada.deposito", "avanzada.guarnecida", "avanzada.guarnicion_retirada",
   "avanzada.materiales_entregados", "avanzada.obra_cancelada", "avanzada.obra_iniciada", "avanzada.obra_marcada", "avanzada.reabastecimiento", "avanzada.sin_dueno",
-  "avanzada.traspasada", "avanzada.tropa_elegida", "construccion.auto_alternada", "construccion.cola_reordenada", "construccion.desencolada", "construccion.obra_cancelada",
+  "avanzada.traspasada", "avanzada.tropa_elegida", "construccion.auto_alternada", "construccion.buey_asignado", "construccion.cola_reordenada", "construccion.desencolada", "construccion.obra_cancelada",
   "construccion.edificio_completado", "construccion.edificio_gratuito", "construccion.encolada", "construccion.mejora_completada", "construccion.mejora_forzada",
   "construccion.mejora_iniciada", "construccion.necesidad_detectada", "construccion.obra_iniciada", "construccion.receta_alternada", "construccion.yacimiento_agotado",
   "faccion.experiencia", "faccion.nivel", "mantenimiento.colapsado", "mantenimiento.deficit", "mantenimiento.recuperado", "parcela.liberada", "parcela.reclamada",

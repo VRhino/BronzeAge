@@ -75,9 +75,11 @@ mod inspecciones;
 mod interiores;
 mod mercado;
 mod mercenarios;
+mod monedas;
 mod murallas;
 mod persecuciones;
 mod pertenencias;
+mod prestigio;
 mod ciudadania;
 mod pueblos;
 mod pueblos_dentro;
@@ -89,10 +91,8 @@ mod misiones;
 mod participacion;
 pub use participacion::Miembro;
 
-pub(crate) use misiones::arrancar_misiones;
 mod recompensas;
 mod recurrentes;
-pub(crate) use recurrentes::arrancar_tablones;
 mod tecnologias;
 mod titulos;
 mod traslado;
@@ -1034,6 +1034,7 @@ impl Nucleo {
             | Comando::CancelarConstruccion { .. }
             | Comando::MoverEnCola { .. }
             | Comando::MejorarEdificio { .. }
+            | Comando::AsignarBuey { .. }
             | Comando::AlternarAutoConstruccion { .. }
             | Comando::AlternarReceta { .. }
             | Comando::CalibrarReserva { .. }
@@ -1097,7 +1098,7 @@ impl Nucleo {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },
-            Comando::ComprarMirada { .. } | Comando::ComprarInformePlaza { .. } => match self.ejecutar_taberna(t, p) {
+            Comando::ComprarMirada { .. } | Comando::ComprarInformePlaza { .. } | Comando::ComprarInformeRegion { .. } => match self.ejecutar_taberna(t, p) {
                 Ok(Some(creada)) => creadas.push(creada),
                 Ok(None) => {}
                 Err(r) => return r,
@@ -1131,7 +1132,7 @@ impl Nucleo {
                 Ok(None) => {}
                 Err(r) => return r,
             },
-            Comando::EncargarCaravana { .. } | Comando::CambiarEncargo { .. } | Comando::CancelarEncargo { .. } | Comando::DetenerEncargo { .. } => {
+            Comando::EncargarCaravana { .. } | Comando::CambiarEncargo { .. } | Comando::CancelarEncargo { .. } | Comando::DetenerEncargo { .. } | Comando::TomarOrdenADistancia { .. } => {
                 if let Err(r) = self.ejecutar_encargos(t, p) {
                     return r;
                 }

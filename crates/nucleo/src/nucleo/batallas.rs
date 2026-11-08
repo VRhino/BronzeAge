@@ -1049,9 +1049,7 @@ impl Nucleo {
             self.tr.tocar(Clase::Heroe, e.heroe);
             h.heroe.experiencia += e.xp;
             if let Some(botin) = &e.botin {
-                h.heroe.monedas.bronce += botin.monedas.bronce;
-                h.heroe.monedas.plata += botin.monedas.plata;
-                h.heroe.monedas.oro += botin.monedas.oro;
+                h.heroe.monedas += botin.monedas;
             }
         }
         self.reservar(&efectos.soltar, None);
@@ -1142,6 +1140,12 @@ impl Nucleo {
             }
         }
         self.experiencia_de_batalla(t, por_faccion);
+        if !matches!(b.ticket.contexto, Contexto::CampamentoBandidos { .. }) {
+            let del_lado = |n: &Nucleo, lado: Lado| -> Vec<(u64, u32)> { n.participantes_del_lado(&b, lado).iter().filter(|p| participo(p.heroe)).filter_map(|p| Some((p.heroe, p.faccion?))).collect() };
+            let (ganadores, perdedores) = (del_lado(self, res.ganador), del_lado(self, res.ganador.otro()));
+            self.monedas_de_combate(t, &ganadores, &perdedores);
+            self.prestigio_por_victoria(t, &ganadores, &perdedores);
+        }
         // Vuelve al mundo lo que estaba apartado (las columnas retoman su plan con la velocidad que les dejan las bajas) y se programa la retirada.
         self.devolver_al_mundo(t, id);
         self.programar_batalla(id);
@@ -1243,7 +1247,7 @@ impl Nucleo {
         self.repartir_en_columnas(&atacantes, &robado);
     }
 
-    /// El atacante gana en mundo abierto: la caravana cae (sus carros, su carga y su escolta) o el campamento de bandidos desaparece y paga su oro.
+    /// El atacante gana en mundo abierto: la caravana cae (sus carros, su carga y su escolta) o el campamento de bandidos desaparece y paga su botín.
     fn captura_de_batalla(&mut self, t: Instante, b: &Batalla, efectos: &Efectos) {
         let atacantes = self.columnas_del_bando(b, Lado::Atacante);
         match &b.ticket.contexto {
@@ -1275,12 +1279,9 @@ impl Nucleo {
             &Contexto::CampamentoBandidos { campamento, .. } => {
                 let campamento = u64::from(campamento);
                 let Some((nivel, origen)) = self.estado.combate.bandidos.get(&campamento).map(|c| (c.nivel, c.origen)) else { return };
-                let mut oro = Mercancia::new();
-                for heroe in self.participantes_del_lado(b, Lado::Atacante).iter().map(|p| p.heroe) {
-                    let ganado = self.oro_de_bandidos_para(heroe, origen, nivel, t);
-                    sumar(&mut oro, asentamiento::Recurso::Oro, ganado);
-                }
-                self.repartir_en_columnas(&atacantes, &oro);
+                let heroes: Vec<u64> = self.participantes_del_lado(b, Lado::Atacante).iter().map(|p| p.heroe).collect();
+                let (recursos, _) = self.botin_de_los_heroes(heroes, origen, nivel, t);
+                self.repartir_en_columnas(&atacantes, &recursos);
                 self.destruir_bandidos(campamento, t);
                 self.experiencia_de_bandidos(t, b.ticket.atacante.faccion);
             }

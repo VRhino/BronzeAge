@@ -57,7 +57,7 @@ pub(super) fn factores_extra(r: &tecnologia::Reglas, ocupacion: Option<i64>, res
 /// Lo que del interior de una plaza cambia con el paso de minuto y es la base de la tendencia «+N/min»: el almacén **exacto** (con su resto oculto: el neto real del
 /// flujo, aunque lo visible vaya en unidades enteras) y la población entera (sus restos no viajan).
 struct Contadores {
-    almacen: [Mil; 29],
+    almacen: [Mil; asentamiento::recurso::N],
     poblacion: [i64; 3],
 }
 
@@ -80,7 +80,8 @@ fn rechazo_de_obra(e: ErrorObra) -> (&'static str, &'static str) {
     use rechazos::*;
     match e {
         ErrorObra::TecnologiaFaltante => (OBRA_TECNOLOGIA_FALTANTE, "la Facción no tiene la tecnología que pide el edificio"),
-        ErrorObra::EraInsuficiente => (OBRA_ERA_INSUFICIENTE, "el servidor aún no ha llegado a la Era que pide el edificio"),
+        ErrorObra::PrestigioInsuficiente => (OBRA_PRESTIGIO_INSUFICIENTE, "la Facción no tiene el prestigio que piden la Maravilla o una estatua más"),
+        ErrorObra::SoloEnCapital => (OBRA_SOLO_EN_CAPITAL, "la estatua solo se levanta en la capital de la Facción"),
         ErrorObra::TipoNoManual => (OBRA_TIPO_NO_MANUAL, "el Centro Urbano y los puestos del Mercado no se añaden a mano"),
         ErrorObra::Unico => (OBRA_UNICO, "ya hay uno y solo puede haber uno por plaza"),
         ErrorObra::TopeAlmacenes => (OBRA_TOPE_ALMACENES, "se alcanzó el máximo de Almacenes del nivel"),
@@ -234,7 +235,7 @@ impl Nucleo {
         }
         let nivel_faccion = self.nivel_de_faccion(self.estado.asentamientos[&id].faccion);
         let (es_capital, distancia_capital, faccion_tiene_gran_fundicion) = self.exterior_de_capital(id, nivel_faccion);
-        let orden_era = self.orden_era();
+        let (maravilla_desbloqueada, estatuas_permitidas) = self.prestigio_para_obras(self.estado.asentamientos[&id].faccion);
         let residentes = self.residentes_en(id);
         let cupo_para_recuperar = self.cupo_para_recuperar(id, nivel_faccion);
         // La mejor fertilidad de su zona real: la comparten todas sus Granjas.
@@ -271,7 +272,8 @@ impl Nucleo {
                 tiene_tecnologia: &tiene_tecnologia,
                 factor_tecnologia: &factor_tecnologia,
                 nivel_faccion,
-                orden_era,
+                maravilla_desbloqueada,
+                estatuas_permitidas,
                 es_capital,
                 faccion_tiene_gran_fundicion,
                 ciudadanos,
@@ -478,6 +480,11 @@ impl Nucleo {
         }
         // La experiencia de Facción por construir y por ascender (§3.5), en el instante en que acaba la obra.
         for s in sucesos {
+            // El prestigio del ascenso: `ascensoPorNivel` por el nivel nuevo.
+            if let &EventoEco::NivelSubio { nivel } = s {
+                let por_nivel = self.estado.reglas.economia.politica.prestigio.ascenso_por_nivel;
+                self.dar_prestigio(t, faccion, por_nivel.saturating_mul(i64::from(nivel)), super::prestigio::motivo::ASCENSO);
+            }
             let hecho = match s {
                 EventoEco::EdificioCompletado { .. } => (politica::nivel::Hecho::EdificioCompletado, super::experiencia::motivo::EDIFICIO),
                 &EventoEco::NivelSubio { nivel } => (politica::nivel::Hecho::Ascenso { nivel }, super::experiencia::motivo::ASCENSO),
@@ -601,6 +608,7 @@ impl Nucleo {
         | Comando::CancelarConstruccion { asentamiento, .. }
         | Comando::MoverEnCola { asentamiento, .. }
         | Comando::MejorarEdificio { asentamiento, .. }
+        | Comando::AsignarBuey { asentamiento, .. }
         | Comando::AlternarAutoConstruccion { asentamiento, .. }
         | Comando::AlternarReceta { asentamiento, .. }
         | Comando::CalibrarReserva { asentamiento, .. }
@@ -667,6 +675,23 @@ impl Nucleo {
                 r.map_err(rechazo_obra)?;
                 self.emitir_propio(t, "construccion.mejora_forzada", vec![id], vec![("edificio", *edificio as i64)]);
                 sucesos.extend(ev);
+            }
+            Comando::AsignarBuey { edificio, .. } => {
+                // El buey cuesta lo que el de una caravana (`ANIMAL_CATALOGO.buey.costo`) y se queda en el molino.
+                let precio = &self.estado.reglas.economia.comercio.flota.buey.costo;
+                let eco = &mut self.estado.asentamientos.get_mut(&id).expect("existe").economia;
+                let molino = eco.edificios.iter_mut().find(|e| e.id == *edificio).ok_or_else(|| rechazo_obra(ErrorObra::NoExiste))?;
+                if molino.tipo != Tipo::Molino {
+                    return Err(rechazo(rechazos::MOLINO_NO_ES_MOLINO, format!("ed-{edificio} no es un molino")));
+                }
+                if molino.buey {
+                    return Err(rechazo(rechazos::MOLINO_YA_TIENE_BUEY, format!("el molino ed-{edificio} ya tiene su buey")));
+                }
+                if !eco.almacen.pagar(precio) {
+                    return Err(rechazo_obra(ErrorObra::RecursosInsuficientes));
+                }
+                molino.buey = true;
+                self.emitir_propio(t, "construccion.buey_asignado", vec![id], vec![("edificio", *edificio as i64)]);
             }
             Comando::AlternarAutoConstruccion { pausada, .. } => {
                 if !self.estado.asentamientos.get_mut(&id).expect("existe").economia.alternar_auto_construccion(*pausada) {

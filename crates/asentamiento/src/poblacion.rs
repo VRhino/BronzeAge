@@ -10,7 +10,9 @@
 //! entra en **recuperación** y no vuelve a crecer hasta recuperar la nutrición 100; durante la recuperación con nutrición positiva la
 //! población queda quieta, y si la nutrición vuelve a 0 vuelve la mortalidad.
 
-use crate::datos::{por, razon, ReglasPoblacion, UNO};
+use crate::almacen::Almacen;
+use crate::datos::{por, razon, BienDeConsumo, ReglasPoblacion, UNO};
+use crate::recurso::Recurso;
 use base::Mil;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -100,14 +102,38 @@ impl Poblacion {
         por(por(self.total() * 1000, r.consumo_por_habitante), e.factor_consumo)
     }
 
-    /// Un minuto de comida y hambre (`avanzarNutricionPoblacion`). `trigo` es lo que hay en el almacén; devuelve lo que se
-    /// come. Con la nutrición en el umbral (0) la plaza entra en recuperación y muere la fracción de cada clase; al llegar a 100 la
-    /// recuperación termina.
-    pub fn nutrir(&mut self, r: &ReglasPoblacion, e: &Entorno, trigo: Mil, sucesos: &mut Vec<Suceso>) -> Mil {
+    /// Lo que pide cada clase de un bien en un minuto (milésimas): sus habitantes por la ración del bien, y por el consumo de las políticas. Cero
+    /// si la clase no lo come.
+    fn pedido_de_bien(&self, bien: &BienDeConsumo, e: &Entorno) -> [Mil; 3] {
+        let habitantes = [self.pesants, self.artesanos, self.nobleza];
+        std::array::from_fn(|c| if bien.clases[c] { por(por(habitantes[c] * 1000, bien.racion), e.factor_consumo) } else { 0 })
+    }
+
+    /// Un minuto de comida y hambre (`avanzarNutricionPoblacion`). Cada clase toma del `almacen` los bienes de `BIENES_DE_CONSUMO` que come, hasta su
+    /// ración (un bien que no llega para todas se reparte en proporción a lo que pide cada una); lo que falte hasta la necesidad lo pone el trigo.
+    /// Devuelve el modificador de crecimiento de cada clase (ppm) para [`Poblacion::crecer`]: de cada bien, `1 + (M − 1) × comido / ración`, y todos
+    /// multiplicados; sin bienes, `UNO`. Con la nutrición en el umbral (0) la plaza entra en recuperación y muere la fracción de cada clase; al
+    /// llegar a 100 la recuperación termina.
+    pub fn nutrir(&mut self, r: &ReglasPoblacion, e: &Entorno, almacen: &mut Almacen, sucesos: &mut Vec<Suceso>) -> [Mil; 3] {
         let h = &r.hambre;
         let consumo = self.consumo_por_minuto(r, e);
-        let suministro = if consumo > 0 { razon(trigo.max(0), consumo).min(UNO) } else { UNO };
-        let comido = consumo.min(trigo.max(0));
+        let mut modificadores = [UNO; 3];
+        let mut comido = 0;
+        for bien in &r.bienes {
+            let pedido = self.pedido_de_bien(bien, e);
+            let total: Mil = pedido.iter().sum();
+            if total == 0 {
+                continue;
+            }
+            let cobertura = razon(almacen.disponible(bien.recurso), total).min(UNO);
+            let por_clase = pedido.map(|p| por(p, cobertura));
+            comido += almacen.consumir(bien.recurso, por_clase.iter().sum());
+            for clase in (0..3).filter(|&c| pedido[c] > 0) {
+                modificadores[clase] = por(modificadores[clase], UNO + por(bien.modificador - UNO, razon(por_clase[clase], pedido[clase])));
+            }
+        }
+        comido += almacen.consumir(Recurso::Trigo, (consumo - comido).max(0));
+        let suministro = if consumo > 0 { razon(comido, consumo).min(UNO) } else { UNO };
         self.nutricion = if suministro >= UNO {
             (self.nutricion + h.regeneracion_por_minuto).min(100_000)
         } else {
@@ -124,25 +150,25 @@ impl Poblacion {
         } else if self.nutricion >= 100_000 {
             self.recuperando = false;
         }
-        comido
+        modificadores
     }
 
     /// Un minuto de crecimiento (`crecerPoblacion`): las tres clases a la vez, con el techo del nivel repartido en proporción. La tasa se
     /// aplica a los habitantes **con su resto** (la población continua de siempre); solo entran personas enteras. En recuperación o con la
-    /// nutrición en 0 no crece nadie.
-    pub fn crecer(&mut self, r: &ReglasPoblacion, e: &Entorno, sucesos: &mut Vec<Suceso>) {
+    /// nutrición en 0 no crece nadie. `modificadores` son los de [`Poblacion::nutrir`] de este minuto (uno por clase, ppm): multiplican la tasa de su clase.
+    pub fn crecer(&mut self, r: &ReglasPoblacion, e: &Entorno, modificadores: [Mil; 3], sucesos: &mut Vec<Suceso>) {
         let h = &r.hambre;
         if self.recuperando || self.nutricion <= h.umbral_muerte {
             return;
         }
         let comida = h.factor_crecimiento_minimo + por(UNO - h.factor_crecimiento_minimo, razon(self.nutricion, 100_000));
         let espacio = |p: Mil, cap: Mil| if cap <= 0 { 0 } else { razon(cap - p, cap).clamp(0, UNO) };
-        let tasa = |base: i64, esp: i64| por(por(por(base, comida), esp), e.felicidad);
+        let tasa = |base: i64, esp: i64, clase: usize| por(por(por(por(base, comida), esp), e.felicidad), modificadores[clase]);
         let con_resto = |personas: i64, resto: Mil| personas * 1000 + resto.max(0);
 
         let (pes, art, nob) = (con_resto(self.pesants, self.restos[0]), con_resto(self.artesanos, self.restos[1]), con_resto(self.nobleza, self.restos[2]));
         let (esp_p, esp_a, esp_n) = (espacio(pes, e.capacidad_pesants), espacio(art, e.capacidad_artesanos), espacio(nob, e.capacidad_nobles));
-        let mut inc_p = por(pes, tasa(r.tasa_pesants, esp_p));
+        let mut inc_p = por(pes, tasa(r.tasa_pesants, esp_p, 0));
         let (mut inc_a, mut inc_n) = (0, 0);
 
         if e.hay_transformacion && esp_a > 0 {
@@ -150,7 +176,7 @@ impl Poblacion {
                 self.artesanos = 1;
                 sucesos.push(Suceso::PrimerosArtesanos);
             } else {
-                inc_a = por(art, tasa(r.tasa_artesanos, esp_a));
+                inc_a = por(art, tasa(r.tasa_artesanos, esp_a, 1));
             }
         }
         if e.ciudadanos >= r.min_ciudadanos_nobleza && e.hay_palacio && esp_n > 0 {
@@ -158,7 +184,7 @@ impl Poblacion {
                 self.nobleza = 1;
                 sucesos.push(Suceso::PrimerosNobles);
             } else {
-                inc_n = por(por(nob, tasa(r.tasa_nobleza, esp_n)), e.factor_nobleza);
+                inc_n = por(por(nob, tasa(r.tasa_nobleza, esp_n, 2)), e.factor_nobleza);
             }
         }
 
@@ -184,6 +210,21 @@ impl Poblacion {
 mod pruebas {
     use super::*;
     use crate::datos::Reglas;
+
+    /// Los modificadores de una plaza que no come ningún bien: la que crece como siempre.
+    const SIN_BIENES: [Mil; 3] = [UNO; 3];
+
+    /// Un almacén con `n` de trigo (milésimas) y sitio de sobra.
+    fn trigo(n: Mil) -> Almacen {
+        con_bienes(&[(Recurso::Trigo, n)])
+    }
+
+    /// Un almacén con esas cantidades (milésimas) y sitio de sobra.
+    fn con_bienes(cantidades: &[(Recurso, Mil)]) -> Almacen {
+        let mut a = Almacen::nuevo(10_000_000);
+        cantidades.iter().for_each(|&(recurso, n)| a.poner(recurso, n));
+        a
+    }
 
     fn entorno() -> Entorno {
         Entorno {
@@ -233,8 +274,8 @@ mod pruebas {
         let (mut p, e, mut s) = (Poblacion::nueva(&r), entorno(), vec![]);
         let mut antes = p.pesants;
         for _ in 0..600 {
-            p.nutrir(&r, &e, 1_000_000, &mut s);
-            p.crecer(&r, &e, &mut s);
+            p.nutrir(&r, &e, &mut trigo(1_000_000), &mut s);
+            p.crecer(&r, &e, SIN_BIENES, &mut s);
             assert!(p.pesants >= antes, "nunca baja con comida");
             assert!(continua(&p) <= e.capacidad_pesants, "nunca pasa del cupo de Viviendas");
             assert!((0..1000).contains(&p.restos[0]), "el resto es una fracción de persona: {}", p.restos[0]);
@@ -249,10 +290,10 @@ mod pruebas {
         // 20 pesants, tasa 0,12 × comida 1 × espacio (1 − 20/150) = 0,104 → +2,08 por minuto: entran 2 y quedan 0,08.
         let r = Reglas::cargar().poblacion;
         let (mut p, e) = (Poblacion::nueva(&r), entorno());
-        p.crecer(&r, &e, &mut vec![]);
+        p.crecer(&r, &e, SIN_BIENES, &mut vec![]);
         assert_eq!((p.pesants, p.restos[0]), (22, 80));
         // El segundo minuto crece sobre 22,08 (con su resto), no sobre 22: +2,26 y el resto pasa a 0,34.
-        p.crecer(&r, &e, &mut vec![]);
+        p.crecer(&r, &e, SIN_BIENES, &mut vec![]);
         assert_eq!((p.pesants, p.restos[0]), (24, 340));
     }
 
@@ -261,10 +302,10 @@ mod pruebas {
         let r = Reglas::cargar().poblacion;
         let (mut p, e, mut s) = (Poblacion::nueva(&r), entorno(), vec![]);
         for _ in 0..4 {
-            assert_eq!(p.nutrir(&r, &e, 0, &mut s), 0);
+            assert_eq!(p.nutrir(&r, &e, &mut trigo(0), &mut s), SIN_BIENES);
         }
         assert!(s.is_empty() && !p.recuperando, "con nutrición 20 todavía no muere nadie ni hay recuperación");
-        p.nutrir(&r, &e, 0, &mut s);
+        p.nutrir(&r, &e, &mut trigo(0), &mut s);
         assert_eq!(p.nutricion, 0, "de 100 a 0 en 5 minutos (20 por minuto)");
         assert!(p.recuperando, "al tocar 0 entra en recuperación");
         assert_eq!((p.pesants, p.restos[0], s.clone()), (19, 0, vec![Suceso::Hambruna { pesants: 1, artesanos: 0, nobleza: 0 }]), "en el quinto minuto el 5 % de 20 es una persona entera");
@@ -276,14 +317,14 @@ mod pruebas {
         let (mut p, e, mut s) = (con(10, 0, 0, 0), entorno(), vec![]);
         let mut vivos = vec![];
         for _ in 0..4 {
-            p.nutrir(&r, &e, 0, &mut s);
+            p.nutrir(&r, &e, &mut trigo(0), &mut s);
             vivos.push((p.pesants, p.restos[0]));
         }
         assert_eq!(vivos, vec![(10, -500), (9, 0), (9, -450), (9, -900)], "la mitad cada minuto y, con 9, el 5 % de 9 es 0,45");
         // El decaimiento sigue la fracción de lo que queda, sin redondear hacia arriba: 100 nobles al 1 % durante 10 minutos son 91.
         let mut q = con(100, 0, 100, 0);
         for _ in 0..10 {
-            q.nutrir(&r, &e, 0, &mut vec![]);
+            q.nutrir(&r, &e, &mut trigo(0), &mut vec![]);
         }
         assert_eq!(q.nobleza, 91);
         assert!((58..=62).contains(&q.pesants), "0,95^10 de 100 es 59,9: {}", q.pesants);
@@ -299,11 +340,11 @@ mod pruebas {
         e.capacidad_nobles = 80_000;
         // Aunque no haya pasado por `nutrir` (sin marca de recuperación), con nutrición 0 no crece ninguna clase ni aparece una nueva.
         let mut p = con(20, 5, 5, 0);
-        p.crecer(&r, &e, &mut vec![]);
+        p.crecer(&r, &e, SIN_BIENES, &mut vec![]);
         assert_eq!((p.enteros(), p.restos), ((20, 5, 5), [0; 3]));
         let mut q = con(20, 0, 0, 0);
         let mut s = vec![];
-        q.crecer(&r, &e, &mut s);
+        q.crecer(&r, &e, SIN_BIENES, &mut s);
         assert!((q.enteros(), s.is_empty()) == ((20, 0, 0), true), "ni siquiera los primeros artesanos o nobles");
     }
 
@@ -312,29 +353,94 @@ mod pruebas {
         let r = Reglas::cargar().poblacion;
         let (mut p, e, mut s) = (con(30, 0, 0, 20_000), entorno(), vec![]);
         // Toca 0: entra en recuperación y muere el 5 %: 1,5 personas por minuto.
-        p.nutrir(&r, &e, 0, &mut s);
+        p.nutrir(&r, &e, &mut trigo(0), &mut s);
         assert!(p.recuperando && p.nutricion == 0);
         assert_eq!((p.pesants, p.restos[0]), (29, -500));
         // Con comida la nutrición sube 5 por minuto: en recuperación con nutrición positiva la población queda quieta (y el resto no cambia).
         for minuto in 1..=19 {
-            p.nutrir(&r, &e, 1_000_000, &mut s);
-            p.crecer(&r, &e, &mut s);
+            p.nutrir(&r, &e, &mut trigo(1_000_000), &mut s);
+            p.crecer(&r, &e, SIN_BIENES, &mut s);
             assert_eq!((p.enteros(), p.restos[0], p.recuperando), ((29, 0, 0), -500, true), "minuto {minuto}, nutrición {}", p.nutricion);
         }
         // Una hambruna a medias: vuelve a 0 y vuelve la mortalidad, y sigue pendiente llegar a 100.
         p.nutricion = 5_000;
-        p.nutrir(&r, &e, 0, &mut s);
+        p.nutrir(&r, &e, &mut trigo(0), &mut s);
         assert_eq!((p.nutricion, p.pesants), (0, 28), "el resto de muertes de antes se aprovecha: −0,5 −1,45 = −1,95 → una muerte");
         for _ in 0..19 {
-            p.nutrir(&r, &e, 1_000_000, &mut s);
+            p.nutrir(&r, &e, &mut trigo(1_000_000), &mut s);
         }
         assert!(p.recuperando && p.nutricion == 95_000);
         // Con 100 vuelve a crecer en ese mismo minuto.
-        p.nutrir(&r, &e, 1_000_000, &mut s);
+        p.nutrir(&r, &e, &mut trigo(1_000_000), &mut s);
         assert_eq!((p.nutricion, p.recuperando), (100_000, false));
         let antes = continua(&p);
-        p.crecer(&r, &e, &mut s);
+        p.crecer(&r, &e, SIN_BIENES, &mut s);
         assert!(continua(&p) > antes);
+    }
+
+    /// Ración de un bien por cabeza y minuto y su modificador, del bloque `BIENES_DE_CONSUMO` (ppm).
+    fn bien(r: &ReglasPoblacion, recurso: Recurso) -> (i64, i64) {
+        let b = r.bienes.iter().find(|b| b.recurso == recurso).expect("el bien está en BIENES_DE_CONSUMO");
+        (b.racion, b.modificador)
+    }
+
+    #[test]
+    fn el_ejemplo_del_diseno_400_pesants_con_8_de_pan_comen_8_de_pan_8_de_carne_y_24_de_trigo_y_crecen_por_1_8() {
+        let r = Reglas::cargar().poblacion;
+        let mut p = con(400, 0, 0, 100_000);
+        let mut a = con_bienes(&[(Recurso::Pan, 8_000), (Recurso::Carne, 100_000), (Recurso::Trigo, 100_000)]);
+        // Necesidad 400 × 0,1 = 40; piden pan 400 × 0,04 = 16 (llega la mitad: ×1,5) y carne 400 × 0,02 = 8 (entera: ×1,2). Lo que falta, 40 − 8 − 8, es trigo.
+        assert_eq!(bien(&r, Recurso::Pan), (40_000, 2_000_000), "las cifras del ejemplo son las del bloque");
+        let m = p.nutrir(&r, &entorno(), &mut a, &mut vec![]);
+        assert_eq!(m, [1_800_000, UNO, UNO]);
+        assert_eq!([Recurso::Pan, Recurso::Carne, Recurso::Trigo].map(|x| a.disponible(x)), [0, 92_000, 76_000]);
+        assert_eq!(p.nutricion, 100_000, "con la necesidad cubierta no hay hambre");
+    }
+
+    #[test]
+    fn un_bien_que_no_llega_para_dos_clases_se_reparte_en_proporcion_a_lo_que_pide_cada_una() {
+        let r = Reglas::cargar().poblacion;
+        // La carne la comen todas las clases: piden 400 × 0,02 = 8 los pesants y 100 × 0,02 = 2 los artesanos; con 5 en el almacén cubre la mitad a cada una.
+        let mut p = con(400, 100, 0, 100_000);
+        let mut a = con_bienes(&[(Recurso::Carne, 5_000), (Recurso::Trigo, 100_000)]);
+        let m = p.nutrir(&r, &entorno(), &mut a, &mut vec![]);
+        assert_eq!(m, [1_100_000, 1_100_000, UNO], "carne ×1,2 a media ración es ×1,1 para las dos");
+        assert_eq!((a.disponible(Recurso::Carne), a.disponible(Recurso::Trigo)), (0, 55_000), "500 × 0,1 = 50 de necesidad: 5 de carne y 45 de trigo");
+    }
+
+    #[test]
+    fn la_nobleza_con_vino_y_aceite_a_racion_entera_multiplica_1_5_por_1_5() {
+        let r = Reglas::cargar().poblacion;
+        let mut p = con(0, 0, 100, 100_000);
+        let mut a = con_bienes(&[(Recurso::Vino, 100_000), (Recurso::Aceite, 100_000), (Recurso::Trigo, 100_000)]);
+        let m = p.nutrir(&r, &entorno(), &mut a, &mut vec![]);
+        assert_eq!(m, [UNO, UNO, 2_250_000]);
+        // 100 nobles × 0,01 de cada uno: 1 de vino, 1 de aceite y 8 de trigo hasta los 10 de necesidad.
+        assert_eq!([Recurso::Vino, Recurso::Aceite, Recurso::Trigo].map(|x| a.disponible(x)), [99_000, 99_000, 92_000]);
+    }
+
+    #[test]
+    fn con_bienes_pero_sin_trigo_la_nutricion_baja_en_proporcion_a_lo_que_falta() {
+        let r = Reglas::cargar().poblacion;
+        let mut p = con(400, 0, 0, 100_000);
+        let mut a = con_bienes(&[(Recurso::Pan, 100_000), (Recurso::Carne, 100_000)]);
+        // Comen 16 de pan y 8 de carne de los 40 que necesitan: el suministro es 0,6 y falta el 0,4.
+        let m = p.nutrir(&r, &entorno(), &mut a, &mut vec![]);
+        assert_eq!(m, [2_400_000, UNO, UNO], "pan ×2 entero por carne ×1,2");
+        assert_eq!(p.nutricion, 100_000 - por(r.hambre.degradacion_sin_comida, 400_000));
+    }
+
+    #[test]
+    fn los_modificadores_multiplican_la_tasa_de_su_clase_y_sin_ellos_es_la_de_siempre() {
+        let r = Reglas::cargar().poblacion;
+        let e = entorno();
+        let crecimiento = |m: Mil| {
+            let mut p = con(20, 0, 0, 100_000);
+            p.crecer(&r, &e, [m, UNO, UNO], &mut vec![]);
+            continua(&p) - 20_000
+        };
+        assert_eq!(crecimiento(UNO), 2_080);
+        assert_eq!(crecimiento(1_800_000), 3_744, "2,08 × 1,8");
     }
 
     #[test]
@@ -343,7 +449,7 @@ mod pruebas {
         let e = entorno();
         let crecimiento = |nutricion: Mil| {
             let mut p = con(20, 0, 0, nutricion);
-            p.crecer(&r, &e, &mut vec![]);
+            p.crecer(&r, &e, SIN_BIENES, &mut vec![]);
             continua(&p) - 20_000
         };
         assert_eq!(crecimiento(100_000), 2_080);
@@ -355,18 +461,18 @@ mod pruebas {
     fn los_artesanos_y_la_nobleza_aparecen_cuando_se_cumple_su_condicion() {
         let r = Reglas::cargar().poblacion;
         let (mut p, mut e, mut s) = (Poblacion::nueva(&r), entorno(), vec![]);
-        p.crecer(&r, &e, &mut s);
+        p.crecer(&r, &e, SIN_BIENES, &mut s);
         assert_eq!((p.artesanos, p.nobleza), (0, 0), "sin taller ni Palacio no hay clases nuevas");
         e.hay_transformacion = true;
-        p.crecer(&r, &e, &mut s);
+        p.crecer(&r, &e, SIN_BIENES, &mut s);
         assert_eq!(p.artesanos, 1, "el primero llega sin tirada");
         assert_eq!(s, vec![Suceso::PrimerosArtesanos]);
         e.hay_palacio = true;
         e.capacidad_nobles = 80_000;
-        p.crecer(&r, &e, &mut s);
+        p.crecer(&r, &e, SIN_BIENES, &mut s);
         assert_eq!(p.nobleza, 0, "la nobleza pide un mínimo de ciudadanos");
         e.ciudadanos = 3;
-        p.crecer(&r, &e, &mut s);
+        p.crecer(&r, &e, SIN_BIENES, &mut s);
         assert_eq!(p.nobleza, 1);
         assert_eq!(s.last(), Some(&Suceso::PrimerosNobles));
     }
@@ -376,11 +482,11 @@ mod pruebas {
         let r = Reglas::cargar().poblacion;
         let (mut p, mut e) = (Poblacion::nueva(&r), entorno());
         e.techo = 21_000;
-        p.crecer(&r, &e, &mut vec![]);
+        p.crecer(&r, &e, SIN_BIENES, &mut vec![]);
         assert_eq!(continua(&p), 21_000, "el bruto de 2,08 se recorta a lo que cabe bajo el techo");
         assert_eq!((p.pesants, p.restos[0]), (21, 0), "y la persona entera entra");
         e.techo = 10_000;
-        p.crecer(&r, &e, &mut vec![]);
+        p.crecer(&r, &e, SIN_BIENES, &mut vec![]);
         assert_eq!(p.total(), 21, "ya por encima del techo no crece, pero tampoco se purga");
     }
 
@@ -401,8 +507,8 @@ mod pruebas {
         let correr = || {
             let (mut p, e, mut s) = (Poblacion::nueva(&r), entorno(), vec![]);
             for i in 0..2000 {
-                p.nutrir(&r, &e, if i % 7 == 0 { 0 } else { 5_000 }, &mut s);
-                p.crecer(&r, &e, &mut s);
+                p.nutrir(&r, &e, &mut trigo(if i % 7 == 0 { 0 } else { 5_000 }), &mut s);
+                p.crecer(&r, &e, SIN_BIENES, &mut s);
             }
             (p, s)
         };

@@ -189,7 +189,7 @@ fn el_heroe_nace_en_un_campamento_con_su_progresion_inicial_y_cada_rechazo_tiene
     let h = e.heroe("ana", 2);
     let hn = e.n.heroe(h).unwrap();
     assert_eq!((hn.cuenta.as_str(), hn.faccion, hn.heroe.controlador), ("ana", None, Controlador::Humano));
-    assert_eq!((hn.heroe.nivel, hn.heroe.monedas.bronce, hn.heroe.liderazgo_base), (1, 500, 100));
+    assert_eq!((hn.heroe.nivel, hn.heroe.monedas, hn.heroe.liderazgo_base), (1, 1_500, 100));
     assert_eq!(hn.heroe.residencia, Some(Residencia::Campamento(2)), "nace dentro de un campamento, donde reside");
     assert_eq!(hn.heroe.presencia.ubicacion, Ubicacion::Mercenarios(2));
     assert!(hn.heroe.escuadras.is_empty() && hn.almacen_personal.is_empty());
@@ -1083,7 +1083,7 @@ fn estado_con_heroes() -> nucleo::Estado {
     h.atributos.armadura = 7;
     h.perks_desbloqueados = vec![1, 4];
     h.loadouts.push(Loadout { id: 9, nombre: "Asalto".into(), escuadras: vec![10, 11], perks: vec![4], activo: false });
-    h.monedas.plata = 12;
+    h.monedas = 1_212;
     h.herido_hasta = Some(120_000);
     h.viveres = 33_000;
     h.racion_en = Some(40_000);
@@ -1140,7 +1140,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
     let reglas = Reglas::default();
     let base = estado_con_heroes();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN58");
+    assert_eq!(&bytes[..5], b"BAN59");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.militar, base.militar, "incluido el índice de residentes, que se reconstruye");
@@ -1175,7 +1175,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
         ("loadout.escuadras", Box::new(|m| h5(m).loadouts[1].escuadras.reverse())),
         ("loadout.perks", Box::new(|m| h5(m).loadouts[1].perks.clear())),
         ("loadout.activo", Box::new(|m| h5(m).loadouts[1].activo = true)),
-        ("monedas", Box::new(|m| h5(m).monedas.oro += 1)),
+        ("monedas", Box::new(|m| h5(m).monedas += 1)),
         ("herido_hasta", Box::new(|m| h5(m).herido_hasta = None)),
         ("viveres", Box::new(|m| h5(m).viveres += 1)),
         ("racion_en", Box::new(|m| h5(m).racion_en = None)),

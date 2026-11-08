@@ -11,7 +11,9 @@ use crate::codec_contratos;
 use crate::codec_politica::{sigilo_escribir, sigilo_leer};
 use crate::codec_militar::{controlador_a_u8, controlador_de_u8, objetivo_escribir, objetivo_leer, relacion_a_u8, relacion_de_u8, residencia_escribir, residencia_leer, tropa_a_u8, tropa_de_u8, ubicacion_escribir, ubicacion_leer};
 use crate::estado_militar::Relacion;
-pub use crate::memoria::OrigenIntel;
+pub use crate::memoria::{OrigenIntel, TipoInformeRegion};
+use crate::memoria::tipo_informe_region_leer;
+use asentamiento::pueblos::Cultivo;
 use asentamiento::{Cargo, Recurso, Tipo};
 use base::{Instante, Mil, Punto};
 use combate::ciclo::{Asignacion, SalidaBatalla, Token};
@@ -126,6 +128,8 @@ pub enum Comando {
     MoverEnCola { asentamiento: u64, edificio: u32, arriba: bool },
     /// Mejora un edificio activo al siguiente nivel interno.
     MejorarEdificio { asentamiento: u64, edificio: u32 },
+    /// Compra el buey de un molino (tanda 69 §10): cobra el precio del buey de una caravana del almacén de la plaza y el molino produce el doble.
+    AsignarBuey { asentamiento: u64, edificio: u32 },
     /// Pausa o reanuda la auto-construcción (solo la detección de necesidades nuevas).
     AlternarAutoConstruccion { asentamiento: u64, pausada: bool },
     /// Para o reanuda una receta por el recurso que produce, en todos los talleres.
@@ -212,9 +216,9 @@ pub enum Comando {
     DestruirPueblo { pueblo: u64 },
     /// Compra en la plaza madre un carro de acarreo nuevo (carro + buey) para un pueblo que se quedó sin él.
     ReponerCarro { pueblo: u64 },
-    /// Marca la obra de una aldea agrícola en un punto de la zona de la plaza madre (§14.2): queda «pendiente de materiales» y ocupa cupo.
-    /// `creadas` lleva el id del pueblo.
-    MarcarAldea { asentamiento: u64, punto: Punto },
+    /// Marca la obra de una aldea agrícola de `cultivo` en un punto de la zona de la plaza madre (§14.2; el cultivo, tanda 69 §12): queda «pendiente de
+    /// materiales» y ocupa cupo. `creadas` lleva el id del pueblo.
+    MarcarAldea { asentamiento: u64, punto: Punto, cultivo: Cultivo },
     /// Marca la subida de nivel de una aldea agrícola activa: otra obra de mapa pendiente de materiales, que se entregan con `EntregarMateriales`.
     MejorarAldea { pueblo: u64 },
     // ── Héroes y tropa (Heroe_Y_Tropa, Campamentos_Mercenarios §5-§6). Las da la cuenta del héroe o la administración; la cuenta solo manda en
@@ -402,6 +406,9 @@ pub enum Comando {
     ComprarMirada { heroe: u64, origen: OrigenIntel, centro: Punto },
     /// Compra el Informe de la plaza ajena `asentamiento`, que la Facción tiene que conocer: la foto, fechada, de sus edificios, sus recintos y su defensa, que se guarda en la memoria de la Facción.
     ComprarInformePlaza { heroe: u64, origen: OrigenIntel, asentamiento: u64 },
+    /// Compra en la taberna de la plaza `asentamiento` (de la Facción del héroe, que está dentro) el informe de `tipo` de la región del relieve donde está esa plaza (tanda 69 §7): las plazas de
+    /// la región que no son de la Facción ni de una en guerra con ella, o las órdenes de mercado de esas plazas. Paga el almacén de la plaza.
+    ComprarInformeRegion { heroe: u64, asentamiento: u64, tipo: TipoInformeRegion },
     // ── Almacén personal y caravanas a mano (5G-a, 2026-10-24; Movimiento_Ejercitos §3.3 y §9, Heroe_Y_Tropa §4.4). Los códigos empiezan en el 138: del 128 al 137 quedan para 5B. Todo en
     //    unidades enteras: lo que se mueve se redondea hacia abajo (C3b). ──
     /// Del carro al almacén personal del héroe, hasta su capacidad: dentro de su residencia, o el Líder con la columna a su puerta.
@@ -530,6 +537,9 @@ pub enum Comando {
     /// El Maestro de Caravanas, el Tesorero o el Gobernador del origen de la caravana, residente y dentro, le da un encargo de transporte: una ruta entre dos plazas de su Facción o un
     /// envío de una ida y vuelta a cualquier plaza, con lo que deja y recoge en cada punta.
     EncargarCaravana { caravana: u64, destino: u64, modo: Modo, salir_en: Option<Instante>, en_origen: Parada, en_destino: Parada },
+    /// Desde el Mercado de la plaza `asentamiento`, toma a distancia `cantidad` de la orden de mercado `orden` de otra plaza de una región con informe de órdenes vigente (tanda 69 §7): lanza
+    /// un envío en una caravana libre de la plaza con un encargo de una línea con el precio de la orden como tope. Los mismos cargos que `EncargarCaravana`.
+    TomarOrdenADistancia { asentamiento: u64, orden: u64, cantidad: Mil },
     /// Cambia el encargo de la caravana (el modo no cambia): vale para todo paso que aún no ha empezado; el destino solo cambia con la caravana esperando en su origen.
     CambiarEncargo { caravana: u64, destino: u64, salir_en: Option<Instante>, en_origen: Parada, en_destino: Parada },
     /// Cancela el encargo de la caravana.
@@ -557,7 +567,7 @@ pub enum Comando {
     /// El héroe quita su oferta del tablón.
     RetirarOferta { heroe: u64 },
     /// El Rey, el Embajador o un cargo local, en el campamento del mercenario, lo contrata para `trabajo` sobre `objetivo`: temporal con `plazo` días, o permanente (sin plazo)
-    /// residiendo en la plaza `residencia` (§3 a §5). Paga con `pagar_con` (2026-11-03; código 210): el almacén personal, en el campamento donde reside, o el carro que lleva. Sin él, el
+    /// residiendo en la plaza `residencia` (§3 a §5). Paga con `pagar_con` (2026-11-03; código 210): el almacén personal, en el campamento donde reside, el carro que lleva o, desde la tanda 69, sus monedas (a la tarifa en monedas). Sin él, el
     /// carro de la columna que lleva y, dentro del campamento donde reside sin columna, el almacén personal.
     ContratarMercenario { heroe: u64, mercenario: u64, trabajo: Trabajo, objetivo: ObjetivoMercenario, plazo: Option<u8>, residencia: Option<u64>, pagar_con: Option<PagarCon> },
     /// Quien podría firmarlo hoy alarga `plazo` días el contrato temporal del mercenario, en persona y pagándolo como al contratar (§6.2; `pagar_con` desde el 2026-11-03, código 211).
@@ -797,6 +807,7 @@ impl Comando {
             | Comando::CancelarConstruccion { .. }
             | Comando::MoverEnCola { .. }
             | Comando::MejorarEdificio { .. }
+            | Comando::AsignarBuey { .. }
             | Comando::AlternarAutoConstruccion { .. }
             | Comando::AlternarReceta { .. }
             | Comando::MarcarPueblo { .. }
@@ -818,7 +829,7 @@ impl Comando {
             | Comando::ColocarOrdenMercado { .. }
             | Comando::CancelarOrdenMercado { .. }
             | Comando::AlternarReabastecerAliados { .. } => Cargo(GOBERNADOR_O_TESORERO),
-            Comando::EncargarCaravana { .. } | Comando::CambiarEncargo { .. } | Comando::CancelarEncargo { .. } | Comando::DetenerEncargo { .. } => Cargo(GOBERNADOR_TESORERO_O_MAESTRO_CARAVANAS),
+            Comando::EncargarCaravana { .. } | Comando::CambiarEncargo { .. } | Comando::CancelarEncargo { .. } | Comando::DetenerEncargo { .. } | Comando::TomarOrdenADistancia { .. } => Cargo(GOBERNADOR_TESORERO_O_MAESTRO_CARAVANAS),
             Comando::CrearCaravana { .. }
             | Comando::AnadirCarro { .. }
             | Comando::AnadirAnimal { .. }
@@ -830,7 +841,7 @@ impl Comando {
             Comando::MoverCargaAparcada { .. } | Comando::EnviarCaravanaAlOrigen { .. } => OperaAparcada,
             Comando::AsignarCargoLocal { .. } => AsignaCargoLocal,
             Comando::FijarPuerta { .. } => FijaPuerta,
-            Comando::ComprarMirada { .. } | Comando::ComprarInformePlaza { .. } => CompraIntel,
+            Comando::ComprarMirada { .. } | Comando::ComprarInformePlaza { .. } | Comando::ComprarInformeRegion { .. } => CompraIntel,
             Comando::ComprarTecnologiaAeda { .. } => CompraTecnologiaAeda,
             Comando::EmpezarEpica { .. } | Comando::AbandonarEpica { .. } => DirigeAedas,
             Comando::ReclamarRecompensa { .. } => ReclamaMision,
@@ -1010,6 +1021,10 @@ impl Comando {
                     i.asentamientos.push(*a);
                 }
             }
+            Comando::ComprarInformeRegion { heroe, asentamiento, .. } => {
+                i.heroes.push(*heroe);
+                i.asentamientos.push(*asentamiento);
+            }
             // Aceptar cambia la Facción del solicitante, y con ella la de su columna: no mientras combate.
             Comando::ResponderSolicitud { heroe, solicitante, .. } => i.heroes.extend([*heroe, *solicitante]),
             Comando::CambiarResidencia { heroe, asentamiento }
@@ -1053,6 +1068,7 @@ impl Comando {
             | Comando::CancelarConstruccion { asentamiento, .. }
             | Comando::MoverEnCola { asentamiento, .. }
             | Comando::MejorarEdificio { asentamiento, .. }
+            | Comando::AsignarBuey { asentamiento, .. }
             | Comando::AlternarAutoConstruccion { asentamiento, .. }
             | Comando::AlternarReceta { asentamiento, .. }
             | Comando::CalibrarReserva { asentamiento, .. }
@@ -1062,6 +1078,7 @@ impl Comando {
             | Comando::MejorarRecinto { asentamiento, .. }
             | Comando::AbandonarRecinto { asentamiento, .. }
             | Comando::ColocarOrdenMercado { asentamiento, .. }
+            | Comando::TomarOrdenADistancia { asentamiento, .. }
             | Comando::CrearCaravana { asentamiento }
             | Comando::DarRecursos { asentamiento, .. }
             | Comando::MarcarPueblo { asentamiento, .. }
@@ -1219,7 +1236,7 @@ impl Comando {
             .collect();
         match self {
             Comando::AceptarTrueque { acuerdo } | Comando::RechazarTrueque { acuerdo } | Comando::EntregarDeCaravana { acuerdo, .. } => v.push((Clase::Acuerdo, *acuerdo)),
-            Comando::CancelarOrdenMercado { orden } | Comando::ComerciarEnPlaza { orden, .. } => v.push((Clase::OrdenMercado, *orden)),
+            Comando::CancelarOrdenMercado { orden } | Comando::ComerciarEnPlaza { orden, .. } | Comando::TomarOrdenADistancia { orden, .. } => v.push((Clase::OrdenMercado, *orden)),
             Comando::ComprarEnCampamento { campamento, .. }
             | Comando::RepostarEnCampamento { campamento, .. }
             | Comando::EntrarEnCampamento { campamento, .. }
@@ -1244,13 +1261,17 @@ impl Comando {
     }
 }
 
-/// De dónde sale el oro al reclutar o comprar en un campamento de mercenarios.
+/// De dónde sale el pago al reclutar, comprar o contratar en un campamento de mercenarios.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PagarCon {
     AlmacenPersonal,
     /// Del carro: al reclutar, el de la columna del héroe, a la puerta del campamento; al comprar y al pagar un contrato de mercenario, también el que lleva dentro (2026-11-02 y
     /// 2026-11-03).
     Carro,
+    /// Las monedas del héroe (tanda 69): solo al contratar o prorrogar a un mercenario; en el campamento, reclutar y comprar no la admiten.
+    Monedas,
+    /// El almacén de la plaza donde está la taberna (tanda 69 §8): solo al contratar a un mercenario desde dentro de una plaza, sin ir a su campamento.
+    AlmacenPlaza,
 }
 
 /// De dónde sale o adónde va lo del fondo de refundación (Fundacion_Y_Refundacion §9.1, D39): el almacén personal (en el campamento donde se reside) o el carro (el que lleva dentro, o el
@@ -1265,6 +1286,8 @@ fn pagar_con_de_u8(i: u8) -> Result<PagarCon, ErrorFormato> {
     match i {
         0 => Ok(PagarCon::AlmacenPersonal),
         1 => Ok(PagarCon::Carro),
+        2 => Ok(PagarCon::Monedas),
+        3 => Ok(PagarCon::AlmacenPlaza),
         _ => Err(ErrorFormato("forma de pago desconocida")),
     }
 }
@@ -1442,6 +1465,11 @@ impl Peticion {
             }
             Comando::CancelarConstruccion { asentamiento, edificio } => {
                 w.u8(213);
+                w.u64(*asentamiento);
+                w.u32(*edificio);
+            }
+            Comando::AsignarBuey { asentamiento, edificio } => {
+                w.u8(214);
                 w.u64(*asentamiento);
                 w.u32(*edificio);
             }
@@ -2067,10 +2095,11 @@ impl Peticion {
                 w.u64(*heroe);
                 w.u32(*alijo);
             }
-            Comando::MarcarAldea { asentamiento, punto } => {
+            Comando::MarcarAldea { asentamiento, punto, cultivo } => {
                 w.u8(183);
                 w.u64(*asentamiento);
                 w.punto(*punto);
+                w.u8(*cultivo as u8);
             }
             Comando::MejorarAldea { pueblo } => {
                 w.u8(184);
@@ -2259,6 +2288,18 @@ impl Peticion {
                 w.u64(*heroe);
                 origen_escribir(&mut w, *origen);
                 w.u64(*asentamiento);
+            }
+            Comando::ComprarInformeRegion { heroe, asentamiento, tipo } => {
+                w.u8(215);
+                w.u64(*heroe);
+                w.u64(*asentamiento);
+                w.u8(*tipo as u8);
+            }
+            Comando::TomarOrdenADistancia { asentamiento, orden, cantidad } => {
+                w.u8(216);
+                w.u64(*asentamiento);
+                w.u64(*orden);
+                w.i64(*cantidad);
             }
             Comando::GuardarEnAlmacenPersonal { heroe, recurso, cantidad } | Comando::SacarDelAlmacenPersonal { heroe, recurso, cantidad } => {
                 w.u8(if matches!(self.comando, Comando::GuardarEnAlmacenPersonal { .. }) { 138 } else { 139 });
@@ -2645,6 +2686,8 @@ impl Peticion {
             125 => Comando::AbandonarRecinto { asentamiento: r.u64()?, recinto: r.u32()? },
             126 => Comando::ComprarMirada { heroe: r.u64()?, origen: origen_leer(&mut r)?, centro: r.punto()? },
             127 => Comando::ComprarInformePlaza { heroe: r.u64()?, origen: origen_leer(&mut r)?, asentamiento: r.u64()? },
+            215 => Comando::ComprarInformeRegion { heroe: r.u64()?, asentamiento: r.u64()?, tipo: tipo_informe_region_leer(&mut r)? },
+            216 => Comando::TomarOrdenADistancia { asentamiento: r.u64()?, orden: r.u64()?, cantidad: r.i64()? },
             138 => Comando::GuardarEnAlmacenPersonal { heroe: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
             139 => Comando::SacarDelAlmacenPersonal { heroe: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
             140 => Comando::CargarCaravana { ejercito: r.u64()?, caravana: r.u64()?, asentamiento: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
@@ -2700,7 +2743,7 @@ impl Peticion {
             180 => Comando::CrearHeroe { cuenta: r.texto()?, campamento: r.u32()?, controlador: controlador_de_u8(r.u8()?)?, nombre: Some(r.texto()?) },
             181 => Comando::MarchaForzada { ejercito: r.u64()?, activa: r.bool()? },
             182 => Comando::ReclamarRecompensa { heroe: r.u64()?, dueno: crate::misiones::leer_dueno(&mut r)?, mision: r.texto()? },
-            183 => Comando::MarcarAldea { asentamiento: r.u64()?, punto: r.punto()? },
+            183 => Comando::MarcarAldea { asentamiento: r.u64()?, punto: r.punto()?, cultivo: *Cultivo::TODOS.get(usize::from(r.u8()?)).ok_or(ErrorFormato("cultivo de aldea desconocido"))? },
             184 => Comando::MejorarAldea { pueblo: r.u64()? },
             185 => Comando::AceptarMision { heroe: r.u64()?, dueno: crate::misiones::leer_dueno(&mut r)?, mision: r.texto()? },
             186 => {
@@ -2722,6 +2765,7 @@ impl Peticion {
             197 => Comando::CancelarEncargo { caravana: r.u64()? },
             212 => Comando::DetenerEncargo { caravana: r.u64()? },
             213 => Comando::CancelarConstruccion { asentamiento: r.u64()?, edificio: r.u32()? },
+            214 => Comando::AsignarBuey { asentamiento: r.u64()?, edificio: r.u32()? },
             198 => Comando::OfrecerseComoMercenario { heroe: r.u64()? },
             199 => Comando::RetirarOferta { heroe: r.u64()? },
             200 | 210 => Comando::ContratarMercenario {
@@ -2784,7 +2828,6 @@ pub mod rechazos {
     pub const PARCELA_AJENA: &str = "parcela.no_es_tuya";
     // Obras (`ErrorObra` del crate `asentamiento`).
     pub const OBRA_TECNOLOGIA_FALTANTE: &str = "obra.tecnologia_faltante";
-    pub const OBRA_ERA_INSUFICIENTE: &str = "obra.era_insuficiente";
     pub const OBRA_TIPO_NO_MANUAL: &str = "obra.tipo_no_manual";
     pub const OBRA_UNICO: &str = "obra.unico";
     pub const OBRA_TOPE_ALMACENES: &str = "obra.tope_almacenes";
@@ -2806,6 +2849,15 @@ pub mod rechazos {
     pub const OBRA_NO_ESTA_EN_CURSO: &str = "obra.no_esta_en_curso";
     pub const OBRA_NO_MEJORABLE: &str = "obra.no_mejorable";
     pub const OBRA_SIN_CUADRILLA: &str = "obra.sin_cuadrilla";
+    /// La Maravilla o la estatua piden más prestigio del que tiene la Facción (tanda 69 §13).
+    pub const OBRA_PRESTIGIO_INSUFICIENTE: &str = "obra.prestigio_insuficiente";
+    /// La estatua solo se levanta en la capital de la Facción (tanda 69 §13).
+    pub const OBRA_SOLO_EN_CAPITAL: &str = "obra.solo_en_capital";
+    // El molino y su buey (tanda 69 §10).
+    /// El edificio al que se asigna el buey no es un molino.
+    pub const MOLINO_NO_ES_MOLINO: &str = "molino.no_es_molino";
+    /// El molino ya tiene su buey.
+    pub const MOLINO_YA_TIENE_BUEY: &str = "molino.ya_tiene_buey";
     // Ascenso (`Bloqueo`): el rechazo lleva el código del primero y todos en el mensaje.
     pub const ASCENSO_NIVEL_MAXIMO: &str = "ascenso.nivel_maximo";
     pub const ASCENSO_EN_CURSO: &str = "ascenso.en_curso";
@@ -2924,6 +2976,8 @@ pub mod rechazos {
     pub const PUEBLO_NO_ES_ALDEA: &str = "pueblo.no_es_aldea";
     pub const PUEBLO_NIVEL_MAXIMO: &str = "pueblo.nivel_maximo";
     pub const PUEBLO_MEJORA_EN_CURSO: &str = "pueblo.mejora_en_curso";
+    /// La plaza madre no tiene aún el nivel que pide ese cultivo (tanda 69 §12: la vid, el 3; la oliva, el 4).
+    pub const PUEBLO_CULTIVO_BLOQUEADO: &str = "pueblo.cultivo_bloqueado";
     // Dentro de un pueblo o una aldea (§14.0.1, 2026-10-29).
     /// La escuadra que se deja en la guarnición del pueblo no va en la columna con la que entró el héroe.
     pub const PUEBLO_ESCUADRA_FUERA_DE_TU_COLUMNA: &str = "pueblo.escuadra_fuera_de_tu_columna";
@@ -3055,6 +3109,8 @@ pub mod rechazos {
     pub const MERCENARIO_SIN_PREMIO: &str = "mercenario.sin_premio";
     /// La tropa está por encima del escalón que permite su rango, o no es de su leva propia ni la recluta su campamento.
     pub const MERCENARIO_FUERA_DE_LICENCIA: &str = "mercenario.fuera_de_licencia";
+    /// Desde la taberna solo se contrata a los mercenarios de los campamentos de su región (tanda 69 §8).
+    pub const MERCENARIO_FUERA_DE_LA_REGION: &str = "mercenario.fuera_de_la_region";
     // Reclutar en una plaza (`ErrorReclutamiento`), en el orden en que se comprueban.
     pub const RECLUTAMIENTO_NO_PUEDES: &str = "reclutamiento.no_puedes";
     pub const RECLUTAMIENTO_SIN_TECNOLOGIA: &str = "reclutamiento.sin_tecnologia";
@@ -3072,6 +3128,8 @@ pub mod rechazos {
     pub const HEROE_NOMBRE_INVALIDO: &str = "heroe.nombre_invalido";
     /// Ya hay otro héroe con ese nombre (sin distinguir mayúsculas; 2026-11-06, pedido del autor).
     pub const HEROE_NOMBRE_EN_USO: &str = "heroe.nombre_en_uso";
+    /// El héroe no tiene las monedas que cuesta (tanda 69 §4).
+    pub const HEROE_SIN_MONEDAS: &str = "heroe.sin_monedas";
     pub const HEROE_CAMPAMENTO_DESCONOCIDO: &str = "heroe.campamento_desconocido";
     pub const HEROE_PUNTOS_NEGATIVOS: &str = "heroe.puntos_negativos";
     pub const HEROE_NINGUN_PUNTO: &str = "heroe.ningun_punto";
@@ -3221,7 +3279,9 @@ pub mod rechazos {
     pub const INTEL_PLAZA_PROPIA: &str = "intel.plaza_propia";
     /// La Facción no conoce esa plaza: ni tiene su ficha ni cae en una Mirada abierta.
     pub const INTEL_PLAZA_DESCONOCIDA: &str = "intel.plaza_desconocida";
-    /// Ya tiene un Informe reciente de esa plaza.
+    /// Tomar una orden a distancia pide el informe vigente de las órdenes de la región de esa plaza (tanda 69 §7).
+    pub const INTEL_SIN_INFORME_DE_ORDENES: &str = "intel.sin_informe_de_ordenes";
+    /// Ya tiene un Informe reciente de esa plaza o, en el informe de región, uno del mismo tipo de esa región.
     pub const INTEL_INFORME_RECIENTE: &str = "intel.informe_reciente";
     /// No hay oro para pagarla (en el almacén de la plaza, en el personal o en el carro).
     pub const INTEL_SIN_ORO: &str = "intel.sin_oro";
@@ -3383,6 +3443,8 @@ pub mod rechazos {
     pub const DIPLOMACIA_VASALLA_DE_TERCERA: &str = "diplomacia.vasalla_de_tercera";
     /// Proponer una alianza con la reputación por debajo de `REPUTACION.umbralBajoParaEmbajador`.
     pub const DIPLOMACIA_REPUTACION_BAJA: &str = "diplomacia.reputacion_baja";
+    /// Una de las dos ya tiene todas las alianzas activas que le deja su prestigio (una, y una más cada 100; tanda 69 §13).
+    pub const DIPLOMACIA_TOPE_ALIANZAS: &str = "diplomacia.tope_alianzas";
     /// Ya hay una propuesta de esa clase (relación, anexión o fusión) vigente entre las dos, en cualquier sentido.
     pub const DIPLOMACIA_YA_PENDIENTE: &str = "diplomacia.ya_pendiente";
     /// `prop-N` no es ninguna propuesta pendiente de la clase de la orden (relación, anexión o fusión), o ya se contestó o se retiró.
@@ -3650,6 +3712,7 @@ mod pruebas {
             Comando::CancelarConstruccion { asentamiento: 3, edificio: 17 },
             Comando::MoverEnCola { asentamiento: 3, edificio: 17, arriba: true },
             Comando::MejorarEdificio { asentamiento: 3, edificio: 4 },
+            Comando::AsignarBuey { asentamiento: 3, edificio: 4 },
             Comando::AlternarAutoConstruccion { asentamiento: 3, pausada: true },
             Comando::AlternarReceta { asentamiento: 3, recurso: Recurso::LingoteBronce, pausada: false },
             Comando::CalibrarReserva { asentamiento: 3, recurso: Recurso::Madera, valor: 12_345 },
@@ -3699,7 +3762,7 @@ mod pruebas {
             Comando::EntregarMateriales { ejercito: 2, pueblo: 9 },
             Comando::DestruirPueblo { pueblo: 9 },
             Comando::ReponerCarro { pueblo: 9 },
-            Comando::MarcarAldea { asentamiento: 3, punto: Punto::new(1_500, -2_000) },
+            Comando::MarcarAldea { asentamiento: 3, punto: Punto::new(1_500, -2_000), cultivo: Cultivo::Vid },
             Comando::MejorarAldea { pueblo: 9 },
         ];
         for c in comandos {
@@ -3856,6 +3919,8 @@ mod pruebas {
             Comando::ComprarMirada { heroe: 2, origen: OrigenIntel::Campamento(1), centro: Punto::new(0, 9) },
             Comando::ComprarInformePlaza { heroe: 2, origen: OrigenIntel::Campamento(4), asentamiento: 5 },
             Comando::ComprarInformePlaza { heroe: 2, origen: OrigenIntel::Plaza(3), asentamiento: 6 },
+            Comando::ComprarInformeRegion { heroe: 2, asentamiento: 3, tipo: TipoInformeRegion::Plazas },
+            Comando::ComprarInformeRegion { heroe: 2, asentamiento: 3, tipo: TipoInformeRegion::Ordenes },
             Comando::GuardarEnAlmacenPersonal { heroe: 2, recurso: Recurso::Oro, cantidad: 30_000 },
             Comando::SacarDelAlmacenPersonal { heroe: 2, recurso: Recurso::Madera, cantidad: 7_000 },
             Comando::CargarCaravana { ejercito: 9, caravana: 4, asentamiento: 3, recurso: Recurso::Piedra, cantidad: 12_000 },
@@ -3915,6 +3980,7 @@ mod pruebas {
             Comando::CambiarEncargo { caravana: 4, destino: 7, salir_en: None, en_origen: Parada { dejar: vec![LineaDejar { recurso: Recurso::Piedra, tope: None, precio_min: None }], ..Parada::default() }, en_destino: Parada::default() },
             Comando::CancelarEncargo { caravana: 4 },
             Comando::DetenerEncargo { caravana: 4 },
+            Comando::TomarOrdenADistancia { asentamiento: 3, orden: 9, cantidad: 40_000 },
             Comando::AdoptarTecnologia { heroe: 2, faccion: 1, tecnologia: 2 },
             Comando::ComprarTecnologiaAeda { heroe: 2, asentamiento: 5, tecnologia: 2 },
             Comando::EmpezarEpica { heroe: 2, asentamiento: 3, aeda: 4, tecnologia: 5 },
@@ -3927,6 +3993,9 @@ mod pruebas {
             Comando::ContratarMercenario { heroe: 2, mercenario: 8, trabajo: Trabajo::Permanente, objetivo: ObjetivoMercenario::Faccion(1), plazo: None, residencia: Some(5), pagar_con: Some(PagarCon::Carro) },
             Comando::ProrrogarContrato { heroe: 2, mercenario: 8, plazo: 7, pagar_con: None },
             Comando::ProrrogarContrato { heroe: 2, mercenario: 8, plazo: 3, pagar_con: Some(PagarCon::AlmacenPersonal) },
+            Comando::ContratarMercenario { heroe: 2, mercenario: 8, trabajo: Trabajo::Defender, objetivo: ObjetivoMercenario::Pueblo(4), plazo: Some(1), residencia: None, pagar_con: Some(PagarCon::Monedas) },
+            Comando::ContratarMercenario { heroe: 2, mercenario: 8, trabajo: Trabajo::Defender, objetivo: ObjetivoMercenario::Pueblo(4), plazo: Some(1), residencia: None, pagar_con: Some(PagarCon::AlmacenPlaza) },
+            Comando::ProrrogarContrato { heroe: 2, mercenario: 8, plazo: 1, pagar_con: Some(PagarCon::Monedas) },
             Comando::OrdenarMercenario { heroe: 2, mercenarios: vec![8, 9], tipo: TipoOrden::IrA, objetivo: ObjetivoMercenario::Punto(Punto::new(-5, 9_000)) },
             Comando::OrdenarMercenario { heroe: 2, mercenarios: vec![8], tipo: TipoOrden::Unirse, objetivo: ObjetivoMercenario::Convocatoria(12) },
             Comando::MudarMercenario { heroe: 2, mercenario: 8, plaza: 6 },
@@ -3976,7 +4045,7 @@ mod pruebas {
                             sobrevivio_al_cierre: true,
                             xp_ganada: 1,
                             derrotado: None,
-                            botin: Some(Botin { objetos: vec![ObjetoBotin { definicion: "espada".into(), cantidad: 1, instancia: Some("i-1".into()) }, ObjetoBotin { definicion: "oro".into(), cantidad: 5, instancia: None }], monedas: militar::heroe::Monedas { bronce: 1, plata: 2, oro: 3 } }),
+                            botin: Some(Botin { objetos: vec![ObjetoBotin { definicion: "espada".into(), cantidad: 1, instancia: Some("i-1".into()) }, ObjetoBotin { definicion: "oro".into(), cantidad: 5, instancia: None }], monedas: 7 }),
                         },
                         ResultadoHeroe { heroe: 6, participo: false, sobrevivio_al_cierre: true, xp_ganada: 0, derrotado: Some(false), botin: None },
                     ],

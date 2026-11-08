@@ -15,6 +15,7 @@ use asentamiento::catalogo::Tipo;
 use asentamiento::datos::UNO;
 use asentamiento::edificio::Estado;
 use asentamiento::recintos;
+use asentamiento::recurso::N;
 use base::{Instante, Mil};
 use militar::escuadra::Contenedor;
 use militar::heroe::{Heroe, Residencia};
@@ -47,7 +48,7 @@ pub struct Conquistada {
 ///   restos ocultos de crecimiento y de muertes se borran.
 /// - **Edificios**: de los `activo`, por id, exentos el Centro Urbano y la **primera Granja y la primera Leñera** activas, los primeros
 ///   `ceil(fraccionEdificiosDanados × n)` pasan a `en_cola` marcados `danado` (se reconstruyen por `fraccionCosteReconstruccion`). Un Almacén o
-///   Granero dañado deja de aportar capacidad y lo guardado que ya no cabe se pierde.
+///   Granero dañado deja de aportar capacidad y lo guardado que ya no cabe se pierde. Un molino dañado pierde su buey (tanda 69 §10).
 /// - La **obra de ascenso** en curso se pierde sin devolución y las **decisiones del gobierno derrotado** caen: políticas, reserva manual,
 ///   pausa de la auto-construcción y recetas paradas.
 /// - Cada **recinto de muralla completo y sin mejora en curso** pierde `fraccionDanoMuralla` de sus celdas ([`asentamiento::recintos::danar_por_conquista`]); el predicado
@@ -72,6 +73,7 @@ pub fn aplicar_conquista(r: &Reglas, economia: &asentamiento::Reglas, a: &mut As
         let e = &mut a.edificios[i];
         e.estado = Estado::EnCola;
         e.danado = true;
+        e.buey = false;
         e.completa_en = None;
         e.mejora = None;
         a.aplicar_capacidad(economia, tipo, nivel, -1);
@@ -83,7 +85,7 @@ pub fn aplicar_conquista(r: &Reglas, economia: &asentamiento::Reglas, a: &mut As
 
     a.ascenso = None;
     a.politicas = Default::default();
-    a.reserva_manual = [0; 29];
+    a.reserva_manual = [0; N];
     a.auto_pausada = false;
     a.recetas_pausadas.clear();
     a.medidor.valor = economia.mantenimiento.medidor_inicial;
@@ -227,6 +229,18 @@ mod pruebas {
     }
 
     #[test]
+    fn el_molino_danado_pierde_su_buey_y_el_que_queda_en_pie_lo_conserva() {
+        let r = r();
+        use Tipo::*;
+        let mut a = plaza(&[CentroUrbano, Molino, Vivienda, Vivienda, Vivienda, Vivienda, Molino]);
+        a.edificios[1].buey = true;
+        a.edificios[6].buey = true;
+        // 6 dañables; ceil(6 × 0,25) = 2: los ids 1 (un molino) y 2.
+        assert_eq!(aplicar_conquista(r, economia(), &mut a, 0).edificios_danados, vec![1, 2]);
+        assert_eq!((a.edificios[1].buey, a.edificios[6].buey), (false, true));
+    }
+
+    #[test]
     fn el_redondeo_de_edificios_es_hacia_arriba() {
         let r = r();
         use Tipo::*;
@@ -265,13 +279,13 @@ mod pruebas {
         let r = r();
         let mut a = plaza(&[Tipo::CentroUrbano]);
         a.ascenso = Some(asentamiento::asentamiento::Ascenso { nivel_objetivo: 3, iniciado_en: 0, completa_en: 10 });
-        a.reserva_manual = [5; 29];
+        a.reserva_manual = [5; N];
         a.auto_pausada = true;
         a.recetas_pausadas = vec![asentamiento::Recurso::LingoteCobre];
         a.medidor.valor = 12_000;
         let c = aplicar_conquista(r, economia(), &mut a, 3 * MS_POR_MINUTO);
         assert!(a.ascenso.is_none() && !a.auto_pausada && a.recetas_pausadas.is_empty());
-        assert_eq!(a.reserva_manual, [0; 29]);
+        assert_eq!(a.reserva_manual, [0; N]);
         assert_eq!(a.politicas, Default::default());
         assert_eq!(a.medidor.valor, economia().mantenimiento.medidor_inicial, "medidor a 100");
         assert!(a.ocupado);

@@ -28,12 +28,12 @@ macro_rules! con_mundo {
     };
 }
 
-/// Lo que vale por nivel un héroe sin tropa, en oro, y la fracción del plazo: con el héroe de nivel 1 y rango «a sueldo», 1 día son 3 de oro (15 % de 20), 3 días 7 (35 %), 7 días 14 (70 %) y
-/// el permanente 100 (500 %).
-const UN_DIA: Mil = 3_000;
-const TRES_DIAS: Mil = 7_000;
-const SIETE_DIAS: Mil = 14_000;
-const PERMANENTE: Mil = 100_000;
+/// Lo que vale por nivel un héroe sin tropa, en oro, y la fracción del plazo, con la cuarta parte de `factorOroPct` (tanda 69): con el héroe de nivel 1 y rango «a sueldo», 1 día son
+/// ⌈20 × 15 % × 25 %⌉ = 1 de oro, 3 días ⌈20 × 35 % × 25 %⌉ = 2, 7 días ⌈20 × 70 % × 25 %⌉ = 4 y el permanente 20 × 500 % × 25 % = 25.
+const UN_DIA: Mil = 1_000;
+const TRES_DIAS: Mil = 2_000;
+const SIETE_DIAS: Mil = 4_000;
+const PERMANENTE: Mil = 25_000;
 
 /// La Facción 1 (humana) con su Rey «rey», que espera con 500 de oro en el carro de su columna a la puerta del campamento 0; su plaza, fundada por «fundador» (Gobernador de oficio, fuera,
 /// en su columna), y la plaza de la Facción 2 (de «gus»). Los mercenarios y los demás firmantes los pone cada prueba.
@@ -411,12 +411,12 @@ fn hay_que_estar_en_el_campamento_del_mercenario_y_con_oro_bastante_en_el_carro(
     let lejos = mc::firmante(&mut e.n, "lejos", 1, 3, mc::ORO, Controlador::Humano);
     mc::ok(&mut e.n, "rey", Comando::AsignarEmbajador { heroe: rey, faccion: 1, designado: lejos });
     assert_eq!(e.rechazado(lejos, bot, Trabajo::Defender, Objetivo::Plaza(plaza), Some(1)), rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA);
-    // Uno sin oro bastante: 2 de oro no pagan 3.
-    let pobre = mc::firmante(&mut e.n, "pobre", 1, 0, 2_000, Controlador::Humano);
+    // Uno sin oro bastante: 1 de oro no paga 2 (tres días).
+    let pobre = mc::firmante(&mut e.n, "pobre", 1, 0, UN_DIA, Controlador::Humano);
     mc::ok(&mut e.n, "rey", Comando::AsignarEmbajador { heroe: rey, faccion: 1, designado: pobre });
-    assert_eq!(e.rechazado(pobre, bot, Trabajo::Defender, Objetivo::Plaza(plaza), Some(1)), rechazos::MERCENARIOS_SIN_ORO);
-    assert_eq!(mc::oro_del_carro(&e.n, pobre), 2_000);
-    // Con el oro justo, sí: una tarifa de 3 de oro.
+    assert_eq!(e.rechazado(pobre, bot, Trabajo::Defender, Objetivo::Plaza(plaza), Some(3)), rechazos::MERCENARIOS_SIN_ORO);
+    assert_eq!(mc::oro_del_carro(&e.n, pobre), UN_DIA);
+    // Con el oro justo, sí: una tarifa de 1 de oro.
     let justo = mc::firmante(&mut e.n, "justo", 1, 0, UN_DIA, Controlador::Humano);
     mc::ok(&mut e.n, "rey", Comando::AsignarEmbajador { heroe: rey, faccion: 1, designado: justo });
     assert!(e.contratar(justo, bot, Trabajo::Defender, Objetivo::Plaza(plaza), Some(1)).aceptada());
@@ -433,8 +433,8 @@ fn la_tarifa_suma_lo_que_costaria_reclutar_su_tropa() {
     let mr = &e.n.estado().reglas.economia.militar;
     let valor_tropa = militar::mercenarios::precio(mr, mr.tropas.tropa(tropa), 10, asentamiento::datos::UNO, false);
     assert!(valor_tropa > 0);
-    // (20 de oro por nivel + la tropa) × 35 % de tres días, redondeado hacia arriba a oro entero.
-    let esperado = ((20_000 + valor_tropa) * 35 + 99_999) / 100_000 * 1_000;
+    // (20 de oro por nivel + la tropa) × 35 % de tres días × 25 % de `factorOroPct`, redondeado hacia arriba a oro entero.
+    let esperado = ((20_000 + valor_tropa) * 35 * 25 + 9_999_999) / 10_000_000 * 1_000;
     let carro = mc::oro_del_carro(&e.n, rey);
     assert!(e.contratar(rey, bot, Trabajo::Defender, Objetivo::Plaza(plaza), Some(3)).aceptada());
     assert_eq!(carro - mc::oro_del_carro(&e.n, rey), esperado);
@@ -447,9 +447,9 @@ fn lo_que_no_cabe_en_el_almacen_del_mercenario_desaparece_y_no_impide_la_firma()
     let mut e = E::nuevo(m);
     let (rey, plaza) = (e.rey, e.plaza);
     let capacidad = e.n.estado().reglas.economia.comercio.mercenarios.capacidad_almacen_personal;
-    // Un bot con el almacén casi lleno: caben 2 de oro más y la tarifa es de 7.
+    // Un bot con el almacén casi lleno: cabe 1 de oro más y la tarifa es de 2.
     let bot = mc::heroe_en(&mut e.n, "bot-1", 0, Controlador::Bot);
-    mc::ok(&mut e.n, "admin", Comando::DarAlmacenPersonal { heroe: bot, recurso: Recurso::Oro, cantidad: capacidad - 2_000 });
+    mc::ok(&mut e.n, "admin", Comando::DarAlmacenPersonal { heroe: bot, recurso: Recurso::Oro, cantidad: capacidad - UN_DIA });
     mc::ok(&mut e.n, "bot-1", Comando::OfrecerseComoMercenario { heroe: bot });
     let carro = mc::oro_del_carro(&e.n, rey);
     assert!(e.contratar(rey, bot, Trabajo::Defender, Objetivo::Plaza(plaza), Some(3)).aceptada());
@@ -510,9 +510,9 @@ fn prorrogar_pide_un_contrato_de_su_faccion_un_plazo_de_la_tabla_estar_en_person
     mc::ok(&mut e.n, "rey", Comando::AsignarEmbajador { heroe: rey, faccion: 1, designado: lejos });
     assert_eq!(mc::rechazo(&mut e.n, "lejos", prorrogar(lejos, bot, 1)), rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA);
     // Sin oro.
-    let pobre = mc::firmante(&mut e.n, "pobre", 1, 0, 2_000, Controlador::Humano);
+    let pobre = mc::firmante(&mut e.n, "pobre", 1, 0, UN_DIA, Controlador::Humano);
     mc::ok(&mut e.n, "rey", Comando::AsignarEmbajador { heroe: rey, faccion: 1, designado: pobre });
-    assert_eq!(mc::rechazo(&mut e.n, "pobre", prorrogar(pobre, bot, 1)), rechazos::MERCENARIOS_SIN_ORO);
+    assert_eq!(mc::rechazo(&mut e.n, "pobre", prorrogar(pobre, bot, 3)), rechazos::MERCENARIOS_SIN_ORO);
     assert_eq!(mc::contrato(&e.n, bot).unwrap(), c, "ningún rechazo toca el contrato");
     // El Rey, a la puerta del campamento base, sí.
     mc::ok(&mut e.n, "rey", prorrogar(rey, bot, 1));
@@ -529,12 +529,12 @@ fn dentro_del_campamento_donde_reside_se_paga_con_el_almacen_personal_o_con_el_c
     let m = con_mundo!();
     let mut e = E::nuevo(m);
     let (uno, dos, tres, rey, plaza) = (e.bot("bot-1"), e.bot("bot-2"), e.bot("bot-3"), e.rey, e.plaza);
-    // El Rey entra en el campamento 0, donde reside: su columna se deshace y el oro del carro se queda con él. En el almacén personal, 5 de oro.
+    // El Rey entra en el campamento 0, donde reside: su columna se deshace y el oro del carro se queda con él. En el almacén personal, 1 de oro.
     mc::ok(&mut e.n, "rey", Comando::EntrarEnCampamento { campamento: 0, heroe: rey });
     assert_eq!(e.n.estado().ejercito_de_heroe(rey), None, "dentro y sin columna");
-    mc::ok(&mut e.n, "admin", Comando::DarAlmacenPersonal { heroe: rey, recurso: Recurso::Oro, cantidad: 5_000 });
+    mc::ok(&mut e.n, "admin", Comando::DarAlmacenPersonal { heroe: rey, recurso: Recurso::Oro, cantidad: UN_DIA });
     let (personal, carro) = (mc::oro_personal(&e.n, rey), oro_del_carro_propio(&e.n, rey));
-    assert_eq!((personal, carro), (5_000, mc::ORO));
+    assert_eq!((personal, carro), (UN_DIA, mc::ORO));
     let contratar = |mercenario: u64, plazo: u8, pagar_con: Option<PagarCon>| Comando::ContratarMercenario {
         heroe: rey,
         mercenario,
@@ -550,7 +550,7 @@ fn dentro_del_campamento_donde_reside_se_paga_con_el_almacen_personal_o_con_el_c
     assert_eq!((mc::oro_personal(&e.n, rey), oro_del_carro_propio(&e.n, rey)), (personal - UN_DIA, carro));
     assert_eq!(mc::oro_personal(&e.n, uno), UN_DIA);
     assert_eq!(mc::hechos(&e.n, "mercenarios.contratado")[0].dato("oro"), Some(UN_DIA));
-    // Le quedan 2 de oro: no pagan otra tarifa de 3, ni por defecto ni pedido a propósito.
+    // Se queda sin oro en el almacén: no paga otra tarifa de 1, ni por defecto ni pedido a propósito.
     assert_eq!(mc::rechazo(&mut e.n, "rey", contratar(dos, 1, None)), rechazos::MERCENARIOS_SIN_ORO);
     assert_eq!(mc::rechazo(&mut e.n, "rey", contratar(dos, 1, Some(PagarCon::AlmacenPersonal))), rechazos::MERCENARIOS_SIN_ORO);
     // Con el carro que trajo al entrar, sí.
@@ -602,7 +602,7 @@ fn prorrogar_desde_dentro_del_campamento_base_paga_con_el_almacen_personal_o_con
     let (bot, rey, plaza) = (e.bot("bot-1"), e.rey, e.plaza);
     assert!(e.contratar(rey, bot, Trabajo::Defender, Objetivo::Plaza(plaza), Some(1)).aceptada());
     let c0 = mc::contrato(&e.n, bot).unwrap();
-    // El Rey entra en el campamento base del mercenario, donde reside, con 7 de oro en el almacén personal.
+    // El Rey entra en el campamento base del mercenario, donde reside, con 2 de oro (tres días) en el almacén personal.
     mc::ok(&mut e.n, "rey", Comando::EntrarEnCampamento { campamento: 0, heroe: rey });
     mc::ok(&mut e.n, "admin", Comando::DarAlmacenPersonal { heroe: rey, recurso: Recurso::Oro, cantidad: TRES_DIAS });
     let (personal, carro) = (mc::oro_personal(&e.n, rey), oro_del_carro_propio(&e.n, rey));
@@ -616,6 +616,57 @@ fn prorrogar_desde_dentro_del_campamento_base_paga_con_el_almacen_personal_o_con
     assert_eq!(mc::contrato(&e.n, bot).unwrap().vence, Some(c0.vence.unwrap() + duracion(3) + duracion(1)));
     // Con el almacén personal ya vacío, no.
     assert_eq!(mc::rechazo(&mut e.n, "rey", prorrogar(1, None)), rechazos::MERCENARIOS_SIN_ORO);
+}
+
+/// Las monedas del héroe.
+fn monedas(n: &Nucleo, heroe: u64) -> i64 {
+    n.heroe(heroe).expect("el héroe existe").heroe.monedas
+}
+
+#[test]
+fn el_contrato_pagado_en_monedas_las_saca_del_firmante_y_las_lleva_al_mercenario() {
+    let m = con_mundo!();
+    let mut e = E::nuevo(m);
+    let (bot, rey, plaza) = (e.bot("bot-1"), e.rey, e.plaza);
+    let por_oro = i64::from(e.n.estado().reglas.economia.contratos.monedas_por_oro);
+    // La tarifa en monedas es la de oro, ya a un cuarto, a `monedasPorOro` monedas por oro: 3 días son 2 de oro.
+    let tarifa = TRES_DIAS / base::UNIDAD * por_oro;
+    let (del_rey, del_bot, carro) = (monedas(&e.n, rey), monedas(&e.n, bot), mc::oro_del_carro(&e.n, rey));
+    let c = Comando::ContratarMercenario { heroe: rey, mercenario: bot, trabajo: Trabajo::Defender, objetivo: Objetivo::Plaza(plaza), plazo: Some(3), residencia: None, pagar_con: Some(PagarCon::Monedas) };
+    mc::ok(&mut e.n, "rey", c);
+    assert_eq!((monedas(&e.n, rey), monedas(&e.n, bot)), (del_rey - tarifa, del_bot + tarifa));
+    assert_eq!(mc::oro_del_carro(&e.n, rey), carro, "el oro no se toca");
+    assert_eq!(mc::oro_personal(&e.n, bot), 0, "ni el almacén del mercenario");
+    let h = &mc::hechos(&e.n, "mercenarios.contratado")[0];
+    assert_eq!((h.dato("oro"), h.dato("monedas")), (Some(0), Some(tarifa)));
+
+    // Prorrogar también admite las monedas, junto al mercenario o a la puerta, y cobra la tarifa del plazo.
+    let (del_rey, del_bot) = (monedas(&e.n, rey), monedas(&e.n, bot));
+    mc::ok(&mut e.n, "rey", Comando::ProrrogarContrato { heroe: rey, mercenario: bot, plazo: 7, pagar_con: Some(PagarCon::Monedas) });
+    assert_eq!((monedas(&e.n, rey), monedas(&e.n, bot), mc::oro_del_carro(&e.n, rey)), (del_rey - SIETE_DIAS / base::UNIDAD * por_oro, del_bot + SIETE_DIAS / base::UNIDAD * por_oro, carro));
+}
+
+#[test]
+fn sin_monedas_bastantes_no_se_contrata_ni_se_prorroga_y_no_deja_rastro() {
+    let m = con_mundo!();
+    let mut e = E::nuevo(m);
+    let (rey, plaza) = (e.rey, e.plaza);
+    let (bots, ultimo) = ([e.bot("bot-1"), e.bot("bot-2"), e.bot("bot-3")], e.bot("bot-4"));
+    let por_oro = i64::from(e.n.estado().reglas.economia.contratos.monedas_por_oro);
+    let (inicial, siete_dias) = (militar::Reglas::cargar().heroe.monedas_iniciales, SIETE_DIAS / base::UNIDAD * por_oro);
+    // Con las monedas de salida (`HEROE.monedasIniciales`) caben tres contratos de siete días y no un cuarto; el permanente (25 de oro) no cabe ni uno, aunque el carro lleve oro de sobra.
+    assert!(3 * siete_dias <= inicial && inicial < 4 * siete_dias && PERMANENTE / base::UNIDAD * por_oro > inicial && mc::oro_del_carro(&e.n, rey) > PERMANENTE);
+    let con_monedas = |mercenario, trabajo, objetivo, plazo, residencia| Comando::ContratarMercenario { heroe: rey, mercenario, trabajo, objetivo, plazo, residencia, pagar_con: Some(PagarCon::Monedas) };
+    assert_eq!(mc::rechazo(&mut e.n, "rey", con_monedas(ultimo, Trabajo::Permanente, Objetivo::Faccion(1), None, Some(plaza))), rechazos::HEROE_SIN_MONEDAS);
+    for bot in bots {
+        mc::ok(&mut e.n, "rey", con_monedas(bot, Trabajo::Defender, Objetivo::Plaza(plaza), Some(7), None));
+    }
+    assert_eq!(monedas(&e.n, rey), inicial - 3 * siete_dias);
+    // Le quedan menos monedas que siete días: ni contratar a otro ni prorrogar uno por siete días, y el rechazo no deja rastro (`mc::rechazo` lo comprueba).
+    assert_eq!(mc::rechazo(&mut e.n, "rey", con_monedas(ultimo, Trabajo::Defender, Objetivo::Plaza(plaza), Some(7), None)), rechazos::HEROE_SIN_MONEDAS);
+    let prorroga = Comando::ProrrogarContrato { heroe: rey, mercenario: bots[0], plazo: 7, pagar_con: Some(PagarCon::Monedas) };
+    assert_eq!(mc::rechazo(&mut e.n, "rey", prorroga), rechazos::HEROE_SIN_MONEDAS);
+    assert!(mc::ofrecido(&e.n, ultimo));
 }
 
 #[test]

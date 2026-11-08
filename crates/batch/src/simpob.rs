@@ -1,13 +1,16 @@
 //! La población sintética del sistema «población, construcción y mantenimiento»: N asentamientos fundados a la vez sobre el mundo real
-//! que viven `dias` días minuto a minuto con la política más simple posible (pedir la subida cada hora si nada la bloquea). Un bucle
-//! global por minuto avanza todos, así que compiten de verdad por los nodos de piedra y las parcelas de bosque.
+//! que viven `dias` días minuto a minuto con la política más simple posible: pedir la subida cada hora si nada la bloquea, levantar la aldea de trigo y el
+//! pueblo de cantera, subir la aldea de nivel y encargar los talleres de la comida (`comida`). Un bucle global por minuto avanza todos, así que compiten de
+//! verdad por los nodos de piedra y las parcelas de bosque.
 
+use crate::comida;
 use crate::economia::{Mapa, Reclamos, Recursos, SinSitio, SinSitioCiudad, SitiosVilla};
 use asentamiento::asentamiento::{Asentamiento, Evento, Exterior};
 use asentamiento::ascenso::Bloqueo;
 use asentamiento::catalogo::{Tipo, TIPOS};
 use asentamiento::datos::UNO;
 use asentamiento::edificio::Fuente;
+use asentamiento::pueblos::Cultivo;
 use asentamiento::recurso::{Recurso, TODOS};
 use base::{Instante, Mil, Punto, Rng, MS_POR_MINUTO};
 use mundo::Mundo;
@@ -71,7 +74,8 @@ pub struct Registro {
     pub degradacion_max: u32,
     pub colapsos: u32,
     pub pesants_max: i64,
-    pub pesants_200: Option<i64>,
+    /// Minuto en que los pesants llegaron por primera vez al requisito del nivel 2 (`NIVEL_ASENTAMIENTO`).
+    pub pesants_nivel2: Option<i64>,
     /// Pesants al final de cada día, del 0 al último.
     pub pesants_dia: Vec<i64>,
     pub viviendas_dia: Vec<u32>,
@@ -268,7 +272,8 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
         tiene_tecnologia: &sin_tecnologia,
         factor_tecnologia: &sin_bonus,
         nivel_faccion: 1,
-        orden_era: 1,
+        maravilla_desbloqueada: false,
+        estatuas_permitidas: 0,
         es_capital: true,
         faccion_tiene_gran_fundicion: false,
         ciudadanos: 1,
@@ -289,10 +294,31 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
         let carro = comercio::acarreo::coste_reposicion(&re.comercio.flota);
         let coste = Asentamiento::costo_de_aldea(reglas, &carro);
         let sitio = Punto::new(pos.x + reglas.pueblos.aldea.separacion_minima + 500, pos.y);
-        if a.almacen.tiene(&coste) && a.iniciar_aldea(reglas, ID_ALDEA, sitio, UNO, &carro, &mut ev).is_ok() {
+        if a.almacen.tiene(&coste) && a.iniciar_aldea(reglas, ID_ALDEA, sitio, UNO, Cultivo::Trigo, &carro, &mut ev).is_ok() {
             a.almacen.pagar(&coste);
             let requerido = a.pueblo(ID_ALDEA).expect("recién marcada").falta();
             a.entregar_a_pueblo(t, reglas, ID_ALDEA, &requerido, &mut ev).expect("todo entregado");
+        }
+    }
+    // Y la sube de nivel en cuanto puede pagar el siguiente (tanda 69: la aldea no sube sola), con los materiales también al instante.
+    if let Some(p) = comida::aldea_que_sube(a, reglas).filter(|_| minuto % CADA_MIN_ASCENSO == 0) {
+        let (id, coste) = (p.id, reglas.pueblos.aldea.niveles[&(p.nivel + 1)].coste.clone());
+        if a.almacen.tiene(&coste) && a.mejorar_aldea(reglas, id, &mut ev).is_ok() {
+            a.almacen.pagar(&coste);
+            let requerido = a.pueblo(id).expect("está").falta();
+            a.entregar_a_pueblo(t, reglas, id, &requerido, &mut ev).expect("todo entregado");
+        }
+    }
+    // Los talleres de la comida, a mano como cualquier jugador (la auto-construcción no los propone), y el buey del molino al precio del de una caravana; el
+    // encargo paga o se rechaza, y se reintenta a la hora siguiente.
+    if minuto % CADA_MIN_ASCENSO == 0 {
+        if let Some(tipo) = comida::taller_que_falta(a, reglas) {
+            let _ = a.anadir_manual(t, reglas, &mut x, tipo, &mut ev);
+        }
+        if let Some(id) = comida::molino_sin_buey(a) {
+            if a.almacen.pagar(&re.comercio.flota.buey.costo) {
+                a.edificios.iter_mut().find(|e| e.id == id).expect("está").buey = true;
+            }
         }
     }
 
@@ -339,10 +365,17 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
             }
         }
     }
-    if let Some(p) = a.pueblos.iter_mut().find(|p| p.tipo == Tipo::Cantera) {
-        let sacado = p.almacen.quitar(Recurso::Piedra, p.almacen.cantidad(Recurso::Piedra));
-        a.almacen.agregar(Recurso::Piedra, sacado);
-        a.registrar_acarreo(t, Recurso::Piedra, sacado);
+    // El acarreo de los dos pueblos vuelca cada minuto en la plaza todo lo que sacaron: la piedra del de cantera y, de la aldea, el trigo (el trigo de más de la
+    // ciudad, Doc 4.2: desde el 2026-11-02 la ciudad no hace otra Granja) y el ganado, la carne y la leche de su rebaño.
+    let mut sacado = Vec::new();
+    for p in &mut a.pueblos {
+        for recurso in p.recursos(reglas) {
+            sacado.push((recurso, p.almacen.quitar(recurso, p.almacen.cantidad(recurso))));
+        }
+    }
+    for (recurso, n) in sacado {
+        a.almacen.agregar(recurso, n);
+        a.registrar_acarreo(t, recurso, n);
     }
 
     for e in ev {
@@ -377,8 +410,8 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
     reg.medidor_min = reg.medidor_min.min(a.medidor.valor);
     reg.degradacion_max = reg.degradacion_max.max(a.nivel.saturating_sub(a.medidor.nivel_actual));
     reg.pesants_max = reg.pesants_max.max(a.poblacion.pesants);
-    if a.poblacion.pesants >= 200 {
-        reg.pesants_200.get_or_insert(minuto);
+    if a.poblacion.pesants >= reglas.nivel.requisitos[&2].pesants {
+        reg.pesants_nivel2.get_or_insert(minuto);
     }
     // Fuera de [0, capacidad], o con una fracción (C3b: el almacén guarda unidades enteras y un resto oculto en (−1000, 1000)).
     let (cantidad, _, resto) = a.almacen.partes();

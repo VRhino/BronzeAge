@@ -146,8 +146,13 @@ fn una_plaza_vive_sola_construye_crece_y_sube_al_nivel_2() {
     let p = sitio(&n, &m.0, 0, 50_000, 0, 1, true);
     let fundada = 90_123; // una fase que no es múltiplo de minuto: los pasos caen en `fundado_en + k·60 s`
     let id = fundar_en(&mut n, fundada, "a", 1, p);
+    let mut pesants_al_pedir = None;
     for hora in 2..=12 * 24 {
         hora_de_jugador(&mut n, id, hora);
+        let eco = n.economia(id).expect("la plaza sigue viva");
+        if pesants_al_pedir.is_none() && eco.ascenso.is_some() {
+            pesants_al_pedir = Some(eco.poblacion.pesants);
+        }
         if hora == 2 {
             // La piedra del mantenimiento del nivel 2 sale de un pueblo de cantera (2026-11-01): el jugador lo levanta enseguida.
             comun::levantar_cantera(&mut n, "ana", id).expect("hay piedra en la zona");
@@ -164,6 +169,10 @@ fn una_plaza_vive_sola_construye_crece_y_sube_al_nivel_2() {
     assert!(de_tipo(Tipo::Lenera) >= 1 && de_tipo(Tipo::Cantera) == 0, "construye su Leñera sola, y ninguna Cantera: {completados:?}");
     assert!(eventos(&n, "asentamiento.nivel_subio").iter().any(|(_, _, d)| d.contains(&("nivel", 2))), "sube al nivel 2 pidiéndolo");
     assert_eq!((eco.nivel, eco.nivel_actual()), (2, 2));
+    // Tanda 69: el nivel 2 pide el doble de pesants que antes (400, no 200); el gate de 399 frente a 400 lo fija `asentamiento` (`nivel.rs`).
+    let pedidos = n.estado().reglas.economia.datos.nivel.requisitos[&2].pesants;
+    assert_eq!(pedidos, 400);
+    assert!(pesants_al_pedir.is_some_and(|p| p >= pedidos), "se pidió la subida con {pesants_al_pedir:?} pesants");
     assert!(eco.poblacion.pesants > 20, "la población crece: {}", eco.poblacion.pesants);
     assert!(eco.almacen.cantidad(Recurso::Madera) >= 0);
     // Los pasos de minuto caen en `fundado_en + k·60 s`, mirando o no; lo que acaba no espera al paso: cae en el instante exacto que dijo al empezar.
@@ -406,7 +415,7 @@ fn las_ordenes_de_economia_y_sus_rechazos() {
     assert_eq!(codigo(&orden(&mut n, "o3", Comando::CancelarConstruccion { asentamiento: id, edificio: en_obra })), rechazos::EDIFICIO_DESCONOCIDO);
     assert_eq!(codigo(&orden(&mut n, "a1", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::CentroUrbano })), rechazos::OBRA_TIPO_NO_MANUAL);
     assert_eq!(codigo(&orden(&mut n, "a2", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Palacio })), rechazos::OBRA_NIVEL_INSUFICIENTE);
-    assert_eq!(codigo(&orden(&mut n, "a3", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Maravilla })), rechazos::OBRA_ERA_INSUFICIENTE);
+    assert_eq!(codigo(&orden(&mut n, "a3", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Maravilla })), rechazos::OBRA_PRESTIGIO_INSUFICIENTE);
     assert_eq!(codigo(&orden(&mut n, "a4", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::MinaCobre })), rechazos::OBRA_SOLO_POR_PUEBLO, "las minas van por pueblo extractor");
     assert_eq!(codigo(&orden(&mut n, "u1", Comando::MejorarEdificio { asentamiento: id, edificio: 9_999 })), rechazos::EDIFICIO_DESCONOCIDO);
     assert_eq!(codigo(&orden(&mut n, "u2", Comando::MejorarEdificio { asentamiento: id, edificio: g })), rechazos::OBRA_NO_MEJORABLE, "aún no está activo");
@@ -1036,7 +1045,7 @@ fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash_y_el_formato_anterior_se
     let reglas = Reglas::default();
     let base = estado_con_una_plaza();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN58");
+    assert_eq!(&bytes[..5], b"BAN59");
     let viejo = [b"BAN13".as_slice(), &bytes[5..]].concat();
     let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN13 no debe admitirse") };
     assert!(e.to_string().contains("BAN13") && e.to_string().contains("población"), "{e}");
@@ -1095,7 +1104,7 @@ fn el_paso_de_minuto_guarda_su_tendencia_y_no_sube_la_version_con_o_sin_sesiones
     let bytes = n.estado().serializar();
     let reglas = Reglas::default();
     let vuelta = Estado::deserializar(&bytes, &reglas, &m.0.hash().to_string()).expect("la foto vuelve");
-    assert_eq!(vuelta.asentamientos[&id].economia.tendencia.produccion, [0; 29], "la producción quepa o no, no viaja en la foto");
+    assert_eq!(vuelta.asentamientos[&id].economia.tendencia.produccion, [0; asentamiento::recurso::N], "la producción quepa o no, no viaja en la foto");
     assert_eq!(vuelta.asentamientos[&id].economia.tendencia, t, "y no cuenta en la igualdad");
     assert_eq!(vuelta.serializar(), bytes);
     let viejo = [b"BAN21".as_slice(), &bytes[5..]].concat();

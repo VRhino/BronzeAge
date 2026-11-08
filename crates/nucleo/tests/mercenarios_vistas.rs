@@ -41,7 +41,7 @@ const U: Mil = 1_000;
 
 /// Lo que vale por nivel un héroe sin tropa, en oro, y la fracción del plazo: con el héroe de nivel 1 y rango «a sueldo», 1 día son 3 de oro (15 % de 20), 3 días 7 (35 %), 7 días 14 (70 %) y
 /// el permanente 100 (500 %).
-const TARIFAS_SIN_TROPA: [(Option<u32>, Mil); 4] = [(Some(1), 3_000), (Some(3), 7_000), (Some(7), 14_000), (None, 100_000)];
+const TARIFAS_SIN_TROPA: [(Option<u32>, Mil); 4] = [(Some(1), 1_000), (Some(3), 2_000), (Some(7), 4_000), (None, 25_000)];
 
 /// La Facción 1 (humana) con su Rey «rey», que espera con 500 de oro en el carro de su columna a la puerta del campamento 0; su plaza, fundada por «fundador», y la plaza de la Facción 2 (de «gus»).
 /// Los mercenarios los pone cada prueba.
@@ -324,6 +324,9 @@ fn el_tablon_lleva_a_cada_ofrecido_del_campamento_con_su_ficha_su_tropa_su_herid
     assert_eq!(a.herido_hasta_ms, herido_hasta);
     // Una tarifa por cada plazo y la del permanente: sin tropa, las del nivel 1; con ella, más.
     assert_eq!(tarifas(b), TARIFAS_SIN_TROPA);
+    // La tarifa en monedas es la de oro, ya reducida, a `monedasPorOro` monedas por cada oro entero.
+    let por_oro = i64::from(e.n.estado().reglas.economia.contratos.monedas_por_oro);
+    assert!(a.tarifas.iter().chain(&b.tarifas).all(|t| t.monedas == t.oro / base::UNIDAD * por_oro && t.monedas > 0), "{:?}", b.tarifas);
     assert_eq!(a.tarifas.iter().map(|t| t.plazo_dias).collect::<Vec<_>>(), [Some(1), Some(3), Some(7), None]);
     assert!(a.tarifas.iter().zip(&b.tarifas).all(|(con, sin)| con.oro > sin.oro), "la tropa se paga: {:?}", tarifas(a));
 }
@@ -343,7 +346,7 @@ fn el_tablon_cobra_lo_que_dice_y_el_contratado_sale_de_el() {
     assert_eq!(carro - mc::oro_del_carro(&e.n, rey), tres_dias, "la firma cobra la tarifa del tablón");
     let carro = mc::oro_del_carro(&e.n, rey);
     e.contratar(permanente, Trabajo::Permanente, Objetivo::Faccion(1), None);
-    assert_eq!((carro - mc::oro_del_carro(&e.n, rey), para_siempre), (100_000, 100_000));
+    assert_eq!((carro - mc::oro_del_carro(&e.n, rey), para_siempre), (25_000, 25_000));
 
     assert!(tablon(&e.n, 0, Espectador::Admin).is_empty(), "el contratado ya no está ofrecido");
 }

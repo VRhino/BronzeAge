@@ -1,7 +1,7 @@
 //! Catálogo de edificios (`EDIFICIO_CATALOGO`, Doc 4.2.1) y las reglas de construcción que lo acompañan (`NECESIDADES`,
 //! `SCORE_BANDAS`, `EDIFICIOS_UNICOS`…). Todo sale de los bloques de Mechanics; aquí solo se convierte a tipos y enteros.
 
-use crate::datos::{mil, ppm};
+use crate::datos::{mil, ppm, UNO};
 use crate::recurso::{Costo, Recurso};
 use base::Mil;
 use serde_json::Value;
@@ -30,6 +30,8 @@ tipos! {
     PatioDeGremios = "patioDeGremios", Pozo = "pozo", Parque = "parque", Maravilla = "maravilla",
     // Al final: la foto guarda el tipo por su posición en esta lista.
     AlbergueCaravanas = "albergueCaravanas",
+    // Los de la comida y el prestigio de la tanda 69 (2026-11-08).
+    Molino = "molino", Horno = "horno", Quesera = "quesera", Bodega = "bodega", Prensa = "prensa", Estatua = "estatua",
 }
 
 impl Tipo {
@@ -54,9 +56,22 @@ impl Tipo {
         self.es_extractor() || matches!(self, Tipo::Granja | Tipo::Lenera)
     }
 
-    /// Talleres que piden artesanos y llevan recetas.
+    /// Talleres: los edificios con recetas (los cinco de la comida de la tanda 69 incluidos).
     pub fn es_taller(self) -> bool {
-        matches!(self, Tipo::Fundicion | Tipo::Curtiduria | Tipo::Armeria | Tipo::Carpinteria | Tipo::GranFundicion)
+        matches!(
+            self,
+            Tipo::Fundicion | Tipo::Curtiduria | Tipo::Armeria | Tipo::Carpinteria | Tipo::GranFundicion | Tipo::Molino | Tipo::Horno | Tipo::Quesera | Tipo::Bodega | Tipo::Prensa
+        )
+    }
+
+    /// Los talleres que trabajan los pesants: el molino y el horno, de pesants para pesants (autor, 2026-11-08). No traen artesanos.
+    pub fn taller_de_pesants(self) -> bool {
+        matches!(self, Tipo::Molino | Tipo::Horno)
+    }
+
+    /// Los talleres que trabajan los artesanos, y que traen a los primeros.
+    pub fn pide_artesanos(self) -> bool {
+        self.es_taller() && !self.taller_de_pesants()
     }
 }
 
@@ -98,7 +113,6 @@ pub struct TipoEdificio {
     pub nivel_construccion: u32,
     pub tecnologia: Option<String>,
     pub nivel_faccion_minimo: Option<u32>,
-    pub orden_era_minimo: Option<u32>,
     /// Cupos de habitantes (milésimas) que aporta cada edificio activo (Vivienda).
     pub capacidad_pesants: Mil,
     pub capacidad_artesanos: Mil,
@@ -107,6 +121,8 @@ pub struct TipoEdificio {
     /// Producción base por minuto (milésimas) del extractor o la granja del nivel 1.
     pub produccion: Option<(Recurso, Mil)>,
     pub trabajadores: Mil,
+    /// Cuánto multiplica su producción tener buey, en ppm (`factorBuey` del molino); `UNO` en los demás.
+    pub factor_buey: i64,
     /// Niveles internos; vacío si no mejora. `niveles[0]` es el nivel 1.
     pub niveles: Vec<NivelInterno>,
 }
@@ -248,12 +264,12 @@ impl Catalogo {
                     nivel_construccion: f(v, "requisitoNivelAsentamientoConstruccion").unwrap_or(0.0) as u32,
                     tecnologia: texto(v, "requiereTecnologia"),
                     nivel_faccion_minimo: f(v, "nivelFaccionMinimo").map(|x| x as u32),
-                    orden_era_minimo: f(v, "ordenEraMinimo").map(|x| x as u32),
                     capacidad_pesants: mil(f(v, "capacidadPesants").unwrap_or(0.0)),
                     capacidad_artesanos: mil(f(v, "capacidadArtesanos").unwrap_or(0.0)),
                     capacidad_por_recurso: mil(f(v, "capacidadPorRecursoAdicional").unwrap_or(0.0)),
                     produccion,
                     trabajadores: mil(f(v, "trabajadoresRequeridos").unwrap_or(0.0)),
+                    factor_buey: f(v, "factorBuey").map_or(UNO, ppm),
                     niveles,
                 },
             );
@@ -313,9 +329,9 @@ mod pruebas {
     use crate::datos::Reglas;
 
     #[test]
-    fn los_32_tipos_se_leen_y_sus_nombres_son_coherentes() {
+    fn los_38_tipos_se_leen_y_sus_nombres_son_coherentes() {
         let r = Reglas::cargar();
-        assert_eq!(TIPOS.len(), 32);
+        assert_eq!(TIPOS.len(), 38);
         for &t in TIPOS {
             assert_eq!(Tipo::desde_nombre(t.nombre()), Some(t));
             assert_eq!(r.catalogo.tipo(t).tipo, t);
@@ -348,6 +364,8 @@ mod pruebas {
         assert_eq!(c.tipo(Tipo::Lenera).produccion, Some((Recurso::Madera, 8_000)));
         assert_eq!(c.tipo(Tipo::Mercado).nivel(3).unwrap().cupo_carros, 18);
         assert!(c.tipo(Tipo::CentroUrbano).costo.is_empty());
+        assert_eq!(c.tipo(Tipo::Molino).factor_buey, 2_000_000, "`factorBuey` 2 en el molino");
+        assert!(TIPOS.iter().filter(|&&t| t != Tipo::Molino).all(|&t| c.tipo(t).factor_buey == UNO), "los demás no tienen buey");
     }
 
     #[test]

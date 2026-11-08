@@ -126,10 +126,12 @@ pub struct EstadoCombate {
     pub huerfanas: BTreeMap<u64, Avanzada>,
     /// Héroe → instantes en que destruyó campamentos de bandidos en la ventana de rendimientos decrecientes.
     pub destruidos: BTreeMap<u64, Vec<Instante>>,
+    /// Par de Facciones (la menor primero) → instantes de sus combates entre héroes en la ventana de rendimientos decrecientes de las monedas (`MONEDAS.rendimientos`).
+    pub encuentros: BTreeMap<(u32, u32), Vec<Instante>>,
 }
 
 impl Default for EstadoCombate {
     fn default() -> Self {
-        Self { bandidos: BTreeMap::new(), siguiente_bandidos: 1, reaparecen: BTreeMap::new(), anillos: BTreeMap::new(), guarniciones: BTreeMap::new(), avanzadas: BTreeMap::new(), huerfanas: BTreeMap::new(), destruidos: BTreeMap::new() }
+        Self { bandidos: BTreeMap::new(), siguiente_bandidos: 1, reaparecen: BTreeMap::new(), anillos: BTreeMap::new(), guarniciones: BTreeMap::new(), avanzadas: BTreeMap::new(), huerfanas: BTreeMap::new(), destruidos: BTreeMap::new(), encuentros: BTreeMap::new() }
     }
 }

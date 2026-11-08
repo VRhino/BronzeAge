@@ -27,10 +27,12 @@ Facción que le paga. La marca le pone límites:
 
 ## 7.3 Ofrecerse y contratar
 
-El bot se ofrece **dentro de su campamento**, sin Facción. Se le contrata **en persona**, en su campamento: quien firma llega con su columna y paga con el oro de su carro o, si reside en ese
+El bot se ofrece **dentro de su campamento**, sin Facción. Se le contrata **en persona**, en su campamento, o **desde la taberna de una plaza propia de su misma región del mapa** (más abajo): quien firma llega con su columna y paga con el oro de su carro o, si reside en ese
 campamento, también desde dentro, con su almacén personal o con el carro que tiene allí (como en el mercado del campamento). La **tarifa** la fija
-el juego por el nivel del héroe y lo que vale su tropa, multiplicada por el plazo y por su rango; el permanente es caro a propósito. El oro va al almacén personal del mercenario hasta
-llenarlo (lo que no cabe se pierde) y nunca se devuelve.
+el juego por el nivel del héroe y lo que vale su tropa, multiplicada por el plazo y por su rango; el permanente es caro a propósito. **Desde el 2026-11-08 la tarifa es la cuarta parte** de lo que era (factor de oro del 25 %, provisional) y se puede pagar de dos maneras: **en oro** (el de su carro o su almacén personal, como arriba) o **con las monedas del héroe que firma**, en cualquier sitio y sin carro ni almacén, a 100 monedas por cada oro de la tarifa. El oro va al almacén personal del mercenario hasta
+llenarlo (lo que no cabe se pierde) y nunca se devuelve; las monedas pagadas pasan a las del mercenario. Vale al contratar y al prorrogar.
+
+**Contratar desde la taberna (2026-11-08).** La **taberna activa de una plaza** enseña, **gratis**, el tablón de los mercenarios de todos los campamentos de su región del mapa, cada oferta con el campamento donde se ofrece, y se les puede contratar desde allí sin ir al campamento, estando dentro de la plaza. Se paga con el **almacén de la plaza** (es lo que se toma por defecto; firma entonces el Rey, el Embajador o el Gobernador, como la intel de la taberna) o con las **monedas** del héroe que firma (el cargo que alcance el trabajo, como siempre). No se puede pagar allí con el almacén personal ni con el carro, el campamento ha de caer en la región de la plaza, y **prorrogar sigue siendo en persona**. El mercenario contratado recibe su primera orden y se pone en camino solo.
 
 | Trabajo | Tipo | Quién lo firma |
 |---|---|---|
@@ -83,4 +85,4 @@ momento. Quien lo firmó o el Rey lo **valora** al acabar: buena suma la mitad o
 
 El mercenario ve su contrato, su orden, su ficha y lo de su Facción a lo que apunta su trabajo, pero no los miembros, relaciones, tecnología ni el mapa de la Facción: un bot no se lleva
 información de una Facción humana al mundo de los bots. Su memoria del mapa sigue siendo suya. Los ciudadanos ven los contratos de su Facción; todos ven si un héroe es mercenario, su
-rango y sus medallas; el tablón, desde dentro del campamento, muestra a cada ofrecido con su ficha, su tropa y su tarifa. Nadie ve para quién trabajó ni quién le valoró.
+rango y sus medallas; el tablón, desde dentro del campamento o, gratis, desde la taberna de una plaza de su región, muestra a cada ofrecido con su ficha, su tropa y su tarifa. Nadie ve para quién trabajó ni quién le valoró.

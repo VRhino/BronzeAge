@@ -2,6 +2,7 @@
 
 use crate::armar::{hex, hoy, max, metrica, parametro, r3, serie, INFO};
 use crate::armarpob::{mediana, pct, percentil};
+use crate::comida;
 use crate::fondo;
 use crate::geo::{Cargado, Geo};
 use crate::simmil::{self as sm, Corrida, TIPOS};
@@ -36,6 +37,7 @@ pub fn armar(x: &Entrada) -> Informe {
     metricas.extend(hambre(x));
     metricas.extend(caravanas(x));
     metricas.extend(pueblos_y_avanzadas(x));
+    metricas.extend(comida::metricas(x.corrida.nucleo.estado().asentamientos.values().map(|a| &a.economia)));
     metricas.extend(bandidos(x));
     metricas.extend(conquistas(x));
     metricas.extend(persecuciones(x));
@@ -226,11 +228,11 @@ fn pueblos_y_avanzadas(x: &Entrada) -> Vec<Metrica> {
 
 fn bandidos(x: &Entrada) -> Vec<Metrica> {
     let (c, m) = (x.corrida, &x.corrida.medidas);
-    let oro: Vec<f64> = m.oro_por_heroe.iter().map(|&o| o as f64 / U).collect();
+    let monedas: Vec<f64> = m.monedas_por_heroe.iter().map(|&o| o as f64).collect();
     let solos = c.bots.iter().filter(|b| b.temerario).count();
     vec![
         metrica("bandidos_destruidos", "Campamentos de bandidos destruidos", "campamentos", INFO, Some(n_hecho(x, "combate.campamento_destruido")), "Combate §7.2", &format!("Ataques fallidos {}; campamentos que aparecieron (al empezar, al fundar y al reaparecer) {}; quedan {} al final.", n_hecho(x, "combate.ataque_campamento_fallido"), n_hecho(x, "bandidos.campamento_aparece"), c.muestras.last().map_or(0, |u| u.bandidos))),
-        metrica("oro_por_heroe", "Oro de bandidos por héroe que combatió (mediana)", "oro", INFO, mediana(&oro), "Combate §7.2 (`botinDeBandidos`)", &format!("Máximo {}; total {}.", oro.iter().copied().fold(0.0, f64::max), r3(oro.iter().sum::<f64>()))),
+        metrica("monedas_por_heroe", "Monedas de bandidos por héroe que combatió (mediana)", "monedas", INFO, mediana(&monedas), "Combate §7.2 (`botinDeBandidos`)", &format!("Máximo {}; total {}.", monedas.iter().copied().fold(0.0, f64::max), r3(monedas.iter().sum::<f64>()))),
         metrica("ataques_solos", "Ataques de un héroe sin soldados a un campamento de bandidos", "ataques", INFO, Some(m.ataques_solos as f64), "Combate §7.2 (un héroe solo no destruye ningún campamento)", &format!("Los de los {solos} Cazadores temerarios, que salen solos una vez al día contra el campamento de casa; ninguno puede destruirlo (invariante `inv_heroe_solo`).")),
     ]
 }

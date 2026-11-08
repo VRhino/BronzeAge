@@ -243,6 +243,15 @@ message OrdenComprarInformePlaza {
   string asentamiento_id = 2;
 }
 
+// Compra en la taberna de la plaza `asentamiento_id` (de la Facción del héroe, que está dentro; Rey, Embajador o Gobernador) el informe de la región del relieve de esa plaza (tanda 69 §7):
+// `plazas` (las plazas de la región, que quedan como fichas conocidas) u `ordenes` (las órdenes de mercado de esas plazas, que llegan en la `VISTA` `INTEL.region.caducidadMinutos` y se pueden tomar con
+// `tomar_orden_a_distancia`). Entran todas las plazas de la región menos las de la Facción y las de una Facción en guerra con ella. Paga el almacén de la plaza un precio fijo
+// (`INTEL.region.oro`); el mismo tipo de la misma región no se repite hasta `INTEL.region.cooldownMinutos` (`intel.informe_reciente`).
+message OrdenComprarInformeRegion {
+  string asentamiento_id = 1;
+  string tipo = 2;  // plazas | ordenes
+}
+
 message OrdenComprarMirada {
   message Origen {
     string tipo = 1;  // asentamiento | campamento
@@ -651,6 +660,15 @@ message OrdenEncargarCaravana {
   ParadaEncargo parada_destino = 6;
 }
 
+// Desde el Mercado de la plaza `asentamiento_id`, toma `cantidad` de la orden de mercado `orden_id` de otra plaza (tanda 69 §7). Los mismos cargos que `encargar_caravana`. Hace falta un informe
+// de órdenes vigente de la región de la plaza de la orden (`intel.sin_informe_de_ordenes`). Lanza un envío en la primera caravana libre de la plaza (por id) cuya capacidad llega a `cantidad`
+// (`caravana.no_disponible`) con una línea con el precio de la orden como tope: si la otra plaza vende, compra allí; si compra, lleva de la plaza lo que le vende. La mercancía viaja y el oro no.
+message OrdenTomarOrdenADistancia {
+  string asentamiento_id = 1;
+  string orden_id = 2;
+  sint64 cantidad = 3;
+}
+
 // Cambia el encargo de una caravana (los mismos que pueden darlo). Vale para todo paso que aún no ha empezado; el destino solo cambia con la caravana
 // esperando en su origen. El modo no cambia.
 message OrdenCambiarEncargo {
@@ -692,7 +710,10 @@ message OrdenContratarMercenario {
   optional string residencia_asentamiento_id = 5;
   // almacenPersonal | carro (2026-11-03). Con almacenPersonal, su almacén personal, solo en el campamento donde reside (`almacen_personal.fuera_de_tu_residencia`); con carro, el
   // carro que lleva dentro (también el suyo, en el campamento donde reside) o el de su columna a la puerta. Sin él, el carro de la columna que lleva y, dentro del campamento donde
-  // reside sin columna, el almacén personal.
+  // reside sin columna, el almacén personal. `monedas` (tanda 69): las monedas del héroe, a la tarifa en monedas del tablón, en cualquier sitio; van a las monedas del mercenario
+  // (`heroe.sin_monedas` si no bastan). `almacenPlaza` (tanda 69 §8): desde dentro de una plaza de su Facción con Taberna activa, sin ir al campamento, que ha de caer en la región de la plaza
+  // (`mercenario.fuera_de_la_region`); paga el almacén de la plaza, que firma el Rey, el Embajador o el Gobernador, y es lo que se toma allí sin `pagar_con`. Con `almacenPersonal` o `carro`
+  // fuera del campamento, `campamento.fuera_de_la_puerta`.
   optional string pagar_con = 6;
 }
 
@@ -701,7 +722,7 @@ message OrdenContratarMercenario {
 message OrdenProrrogarContrato {
   string mercenario_id = 1;
   uint32 plazo_dias = 2;
-  // Como en `OrdenContratarMercenario` (2026-11-03), en el campamento base; con la columna junto a la del mercenario, solo el carro de la columna.
+  // Como en `OrdenContratarMercenario` (2026-11-03), en el campamento base; con la columna junto a la del mercenario, solo el carro de la columna. `monedas` vale en los dos sitios.
   optional string pagar_con = 3;
 }
 
@@ -797,6 +818,14 @@ message OrdenCancelarConstruccion {
   string edificio_id = 3;
 }
 
+// Compra el buey de un molino (tanda 69 §10): cobra del almacén de la plaza el precio del buey de una caravana y el molino
+// produce el doble. Se queda allí hasta que el molino se pierde. Los mismos cargos que quitar_de_cola.
+message OrdenAsignarBuey {
+  string asentamiento_id = 1;
+  string cargo = 2;  // gobernador | maestroObras
+  string edificio_id = 3;
+}
+
 message OrdenQuitarEscolta {
   string caravana_id = 1;
   string heroe_id = 2;
@@ -855,6 +884,7 @@ message OrdenMarcarAldea {
   string asentamiento_id = 1;
   string heroe_id = 2;
   Punto punto = 3;
+  optional string cultivo = 4;  // trigo (sin él) | vid | oliva (tanda 69 §12)
 }
 
 message OrdenMejorarAldea {
@@ -1299,5 +1329,8 @@ message Orden {
     OrdenRenombrarCaravana renombrar_caravana = 181;
     OrdenDetenerEncargo detener_encargo = 182;
     OrdenCancelarConstruccion cancelar_construccion = 183;
+    OrdenAsignarBuey asignar_buey = 184;
+    OrdenComprarInformeRegion comprar_informe_region = 185;
+    OrdenTomarOrdenADistancia tomar_orden_a_distancia = 186;
   }
 }

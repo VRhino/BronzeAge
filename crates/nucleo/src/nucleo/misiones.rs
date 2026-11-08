@@ -21,7 +21,7 @@ pub fn id_de_dueno(d: Dueno) -> String {
     }
 }
 
-/// El valor de un contador de estado de `d` (Misiones §3). Lo usa también la foto anterior a las misiones para arrancarlas.
+/// El valor de un contador de estado de `d` (Misiones §3).
 pub(crate) fn valor_de_estado(e: &crate::estado::Estado, d: Dueno, contador: &str) -> u64 {
     match (d, contador) {
         (Dueno::Asentamiento(a), _) => {
@@ -223,24 +223,6 @@ impl Nucleo {
                 None => self.heroe(heroe).is_some_and(|h| h.heroe.residencia == Some(Residencia::Asentamiento(a as u32))),
             },
             Dueno::Faccion(f) => self.estado.politica.facciones.get(f).is_some_and(|x| x.rey == Some(heroe)),
-        }
-    }
-}
-
-/// Una foto anterior a las misiones (BAN45 o antes): cada plaza y cada Facción miran sus contadores de estado, sin hecho (Misiones §8).
-pub(crate) fn arrancar_misiones(e: &mut crate::estado::Estado) {
-    let r = e.reglas.economia.misiones.clone();
-    let duenos: Vec<Dueno> = e.asentamientos.keys().map(|&a| Dueno::Asentamiento(a)).chain(e.politica.facciones.iter().map(|f| Dueno::Faccion(f.id))).collect();
-    for d in duenos {
-        loop {
-            let mut nuevas = Vec::new();
-            for c in e.misiones.de_estado_activos(&r, d) {
-                let valor = valor_de_estado(e, d, c);
-                nuevas.extend(e.misiones.record(&r, d, c, valor));
-            }
-            if nuevas.is_empty() {
-                break;
-            }
         }
     }
 }
