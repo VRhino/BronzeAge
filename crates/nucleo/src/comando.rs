@@ -558,7 +558,7 @@ pub enum Comando {
     /// El héroe quita su oferta del tablón.
     RetirarOferta { heroe: u64 },
     /// El Rey, el Embajador o un cargo local, en el campamento del mercenario, lo contrata para `trabajo` sobre `objetivo`: temporal con `plazo` días, o permanente (sin plazo)
-    /// residiendo en la plaza `residencia` (§3 a §5). Paga con `pagar_con` (2026-11-03; código 210): el almacén personal, en el campamento donde reside, o el carro que lleva. Sin él, el
+    /// residiendo en la plaza `residencia` (§3 a §5). Paga con `pagar_con` (2026-11-03; código 210): el almacén personal, en el campamento donde reside, el carro que lleva o, desde la tanda 69, sus monedas (a la tarifa en monedas). Sin él, el
     /// carro de la columna que lleva y, dentro del campamento donde reside sin columna, el almacén personal.
     ContratarMercenario { heroe: u64, mercenario: u64, trabajo: Trabajo, objetivo: ObjetivoMercenario, plazo: Option<u8>, residencia: Option<u64>, pagar_con: Option<PagarCon> },
     /// Quien podría firmarlo hoy alarga `plazo` días el contrato temporal del mercenario, en persona y pagándolo como al contratar (§6.2; `pagar_con` desde el 2026-11-03, código 211).
@@ -1245,13 +1245,15 @@ impl Comando {
     }
 }
 
-/// De dónde sale el oro al reclutar o comprar en un campamento de mercenarios.
+/// De dónde sale el pago al reclutar, comprar o contratar en un campamento de mercenarios.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PagarCon {
     AlmacenPersonal,
     /// Del carro: al reclutar, el de la columna del héroe, a la puerta del campamento; al comprar y al pagar un contrato de mercenario, también el que lleva dentro (2026-11-02 y
     /// 2026-11-03).
     Carro,
+    /// Las monedas del héroe (tanda 69): solo al contratar o prorrogar a un mercenario; en el campamento, reclutar y comprar no la admiten.
+    Monedas,
 }
 
 /// De dónde sale o adónde va lo del fondo de refundación (Fundacion_Y_Refundacion §9.1, D39): el almacén personal (en el campamento donde se reside) o el carro (el que lleva dentro, o el
@@ -1266,6 +1268,7 @@ fn pagar_con_de_u8(i: u8) -> Result<PagarCon, ErrorFormato> {
     match i {
         0 => Ok(PagarCon::AlmacenPersonal),
         1 => Ok(PagarCon::Carro),
+        2 => Ok(PagarCon::Monedas),
         _ => Err(ErrorFormato("forma de pago desconocida")),
     }
 }
@@ -3948,6 +3951,8 @@ mod pruebas {
             Comando::ContratarMercenario { heroe: 2, mercenario: 8, trabajo: Trabajo::Permanente, objetivo: ObjetivoMercenario::Faccion(1), plazo: None, residencia: Some(5), pagar_con: Some(PagarCon::Carro) },
             Comando::ProrrogarContrato { heroe: 2, mercenario: 8, plazo: 7, pagar_con: None },
             Comando::ProrrogarContrato { heroe: 2, mercenario: 8, plazo: 3, pagar_con: Some(PagarCon::AlmacenPersonal) },
+            Comando::ContratarMercenario { heroe: 2, mercenario: 8, trabajo: Trabajo::Defender, objetivo: ObjetivoMercenario::Pueblo(4), plazo: Some(1), residencia: None, pagar_con: Some(PagarCon::Monedas) },
+            Comando::ProrrogarContrato { heroe: 2, mercenario: 8, plazo: 1, pagar_con: Some(PagarCon::Monedas) },
             Comando::OrdenarMercenario { heroe: 2, mercenarios: vec![8, 9], tipo: TipoOrden::IrA, objetivo: ObjetivoMercenario::Punto(Punto::new(-5, 9_000)) },
             Comando::OrdenarMercenario { heroe: 2, mercenarios: vec![8], tipo: TipoOrden::Unirse, objetivo: ObjetivoMercenario::Convocatoria(12) },
             Comando::MudarMercenario { heroe: 2, mercenario: 8, plaza: 6 },

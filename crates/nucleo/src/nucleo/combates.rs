@@ -375,6 +375,7 @@ impl Nucleo {
         let informe = resolver_combate(&cr, Bando { escuadras: &mut atac.escuadras, heroes: &atac.heroes }, Bando { escuadras: &mut def.escuadras, heroes: &def.heroes }, asedio::SIN_RECINTO, &mut self.estado.rng)
             .expect("los dos bandos llevan al menos un héroe sano");
         self.experiencia_de_combate(t, &informe);
+        self.monedas_de_informe(t, &informe);
         let defendida = self.estado.ejercitos[&x].columna.faccion;
         self.defensa_de_vasallo(t, defendida, &def.heroes, informe.ganador == Lado::Defensor);
         self.volcar_escuadras(&atac.escuadras);
@@ -739,6 +740,7 @@ impl Nucleo {
         let mut chatarra = Mercancia::new();
         if let Asedio::Combate(i) = &resultado {
             self.experiencia_de_combate(t, i);
+            self.monedas_de_informe(t, i);
             chatarra = i.chatarra.clone();
             datos.extend([("poderAtacante", i.atacante.poder), ("poderDefensor", i.defensor.poder), ("bajasAtacante", caidos(&i.atacante.bajas)), ("bajasDefensor", caidos(&i.defensor.bajas))]);
         }
@@ -843,6 +845,7 @@ impl Nucleo {
             let i = reglas_pueblo::resolver_saqueo(&cr, Bando { escuadras: &mut atac.escuadras, heroes: &atac.heroes }, Bando { escuadras: &mut defensa, heroes: &dentro.tropa.heroes }, &mut self.estado.rng)
                 .expect("los dos bandos tienen quién combata");
             self.experiencia_de_combate(t, &i);
+            self.monedas_de_informe(t, &i);
             (i.ganador == Lado::Atacante, Some(i))
         } else {
             (true, None)

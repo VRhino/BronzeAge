@@ -692,7 +692,8 @@ message OrdenContratarMercenario {
   optional string residencia_asentamiento_id = 5;
   // almacenPersonal | carro (2026-11-03). Con almacenPersonal, su almacén personal, solo en el campamento donde reside (`almacen_personal.fuera_de_tu_residencia`); con carro, el
   // carro que lleva dentro (también el suyo, en el campamento donde reside) o el de su columna a la puerta. Sin él, el carro de la columna que lleva y, dentro del campamento donde
-  // reside sin columna, el almacén personal.
+  // reside sin columna, el almacén personal. `monedas` (tanda 69): las monedas del héroe, a la tarifa en monedas del tablón, en cualquier sitio; van a las monedas del mercenario
+  // (`heroe.sin_monedas` si no bastan).
   optional string pagar_con = 6;
 }
 
@@ -701,7 +702,7 @@ message OrdenContratarMercenario {
 message OrdenProrrogarContrato {
   string mercenario_id = 1;
   uint32 plazo_dias = 2;
-  // Como en `OrdenContratarMercenario` (2026-11-03), en el campamento base; con la columna junto a la del mercenario, solo el carro de la columna.
+  // Como en `OrdenContratarMercenario` (2026-11-03), en el campamento base; con la columna junto a la del mercenario, solo el carro de la columna. `monedas` vale en los dos sitios.
   optional string pagar_con = 3;
 }
 

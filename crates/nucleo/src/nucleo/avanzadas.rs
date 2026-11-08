@@ -767,6 +767,7 @@ impl Nucleo {
         let mut chatarra = Mercancia::new();
         if let Asedio::Combate(i) = &resultado {
             self.experiencia_de_combate(t, i);
+            self.monedas_de_informe(t, i);
             chatarra = i.chatarra.clone();
             datos.extend([("poderAtacante", i.atacante.poder), ("poderDefensor", i.defensor.poder), ("bajasAtacante", caidos(&i.atacante.bajas)), ("bajasDefensor", caidos(&i.defensor.bajas))]);
         }

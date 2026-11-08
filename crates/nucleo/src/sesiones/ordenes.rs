@@ -158,6 +158,13 @@ impl Ctx<'_> {
             Some(otro) => self.forma(format!("forma de pago desconocida: {otro}")),
         }
     }
+    /// `pagar_con` de un contrato de mercenario: además de las de [`Self::pagar_con`], `monedas`.
+    fn pagar_con_de_contrato(&self, s: Option<&str>) -> R<Option<PagarCon>> {
+        if s == Some("monedas") {
+            return Ok(Some(PagarCon::Monedas));
+        }
+        self.pagar_con(s)
+    }
     /// El cultivo de una aldea (`trigo`, el de sin él, | `vid` | `oliva`); otro valor, `orden.forma_invalida`.
     fn cultivo(&self, s: Option<&str>) -> R<Cultivo> {
         match s {
@@ -842,13 +849,13 @@ impl Ctx<'_> {
                 objetivo: self.objetivo_mercenario(o.objetivo.as_ref())?,
                 plazo: o.plazo_dias.map(|n| self.dias(n)).transpose()?,
                 residencia: o.residencia_asentamiento_id.as_deref().map(|s| self.plaza(s)).transpose()?,
-                pagar_con: self.pagar_con(o.pagar_con.as_deref())?,
+                pagar_con: self.pagar_con_de_contrato(o.pagar_con.as_deref())?,
             },
             Cuerpo::ProrrogarContrato(o) => Comando::ProrrogarContrato {
                 heroe: self.mi_heroe()?,
                 mercenario: self.heroe(&o.mercenario_id)?,
                 plazo: self.dias(o.plazo_dias)?,
-                pagar_con: self.pagar_con(o.pagar_con.as_deref())?,
+                pagar_con: self.pagar_con_de_contrato(o.pagar_con.as_deref())?,
             },
             Cuerpo::OrdenarMercenario(o) => Comando::OrdenarMercenario {
                 heroe: self.mi_heroe()?,

@@ -4,7 +4,7 @@
 //! Formato (little endian, el de `codec`): `bandidos{n u64 · n × campamento} · siguiente_bandidos u64 · reaparecen{n u64 · n × (plaza u64, en i64)}
 //! · anillos{n u64 · n × (campamento u32, en i64)} · guarniciones{n u64 · n × (pueblo u64, escuadra, repone_en opt_i64)} · destruidos{n u64 ·
 //! n × (héroe u64, k u64, k × instante i64)} · avanzadas{n u64 · n × (avanzada u64, elegidas{k u64 · k × (escalón u8, tropa u8)}, escuadras{k u64 · k × escuadra}, repone_en opt_i64)} ·
-//! huérfanas{n u64 · n × avanzada}`.
+//! huérfanas{n u64 · n × avanzada} · encuentros{n u64 · n × (Facción menor u32, Facción mayor u32, k u64, k × instante i64)}`.
 //! Un campamento de bandidos: `id u64 · posición punto · nivel u8 · origen{u8 · u64: 0 plaza, 1 anillo, 2 veta, 3 administración} · bosque opt_u64`.
 //! Una escuadra, como en el estado militar (`codec_militar`); una avanzada, como en la economía de la plaza (`codec_economia`).
 
@@ -37,7 +37,7 @@ fn origen_leer(r: &mut Lector) -> Result<OrigenBandidos, ErrorFormato> {
 }
 
 pub(crate) fn escribir(w: &mut Escritor, c: &EstadoCombate) {
-    let EstadoCombate { bandidos, siguiente_bandidos, reaparecen, anillos, guarniciones, avanzadas, huerfanas, destruidos } = c;
+    let EstadoCombate { bandidos, siguiente_bandidos, reaparecen, anillos, guarniciones, avanzadas, huerfanas, destruidos, encuentros } = c;
     w.u64(bandidos.len() as u64);
     for b in bandidos.values() {
         let CampamentoBandidos { id, posicion, nivel, origen, bosque } = b;
@@ -83,6 +83,13 @@ pub(crate) fn escribir(w: &mut Escritor, c: &EstadoCombate) {
     w.u64(destruidos.len() as u64);
     for (&heroe, instantes) in destruidos {
         w.u64(heroe);
+        w.u64(instantes.len() as u64);
+        instantes.iter().for_each(|&t| w.i64(t));
+    }
+    w.u64(encuentros.len() as u64);
+    for (&(a, b), instantes) in encuentros {
+        w.u32(a);
+        w.u32(b);
         w.u64(instantes.len() as u64);
         instantes.iter().for_each(|&t| w.i64(t));
     }
@@ -132,6 +139,14 @@ pub(crate) fn leer(r: &mut Lector) -> Result<EstadoCombate, ErrorFormato> {
             instantes.push(r.i64()?);
         }
         c.destruidos.insert(heroe, instantes);
+    }
+    for _ in 0..r.cuenta()? {
+        let par = (r.u32()?, r.u32()?);
+        let mut instantes = Vec::new();
+        for _ in 0..r.cuenta()? {
+            instantes.push(r.i64()?);
+        }
+        c.encuentros.insert(par, instantes);
     }
     Ok(c)
 }

@@ -145,10 +145,11 @@ message FichaMercenario {
   uint32 premios = 7;                    // escuadras de premio de rango sin reclamar
 }
 
-// Lo que cobra hoy un mercenario por un plazo, o por el permanente (`plazo_dias` ausente), en milésimas de oro (§3, duda 1 del plan).
+// Lo que cobra hoy un mercenario por un plazo, o por el permanente (`plazo_dias` ausente), en milésimas de oro (§3, duda 1 del plan), o su equivalente en monedas del héroe (tanda 69).
 message TarifaMercenario {
   optional uint32 plazo_dias = 1;
   sint64 oro = 2;
+  sint64 monedas = 3;
 }
 
 // Un mercenario en el tablón de su campamento (`CampamentoMercenarios.tablon`, solo en `CAMPAMENTO`).

@@ -75,6 +75,7 @@ mod inspecciones;
 mod interiores;
 mod mercado;
 mod mercenarios;
+mod monedas;
 mod murallas;
 mod persecuciones;
 mod pertenencias;

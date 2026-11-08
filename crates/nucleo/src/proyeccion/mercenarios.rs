@@ -12,6 +12,7 @@
 use super::ids;
 use crate::estado::Estado;
 use crate::nucleo::Nucleo;
+use ::mercenarios::contrato::tarifa_en_monedas;
 use ::mercenarios::{Ambito, Datos, Ficha, Fin, Medalla, Objetivo, Orden, Puesto, TipoOrden};
 use asentamiento::Cargo;
 use contrato::v1 as pb;
@@ -156,7 +157,7 @@ pub(super) fn contratos_de(e: &Estado, f: u32) -> Vec<pb::Contrato> {
     marcados.filter_map(|m| e.contratos.contratos.get(m)).map(contrato).collect()
 }
 
-/// El tablón del campamento `c` (§3 y §10): una oferta por cada bot ofrecido en él, con su ficha entera, su tropa (la suya, no la prestada), si está herido y lo que cobra por cada plazo y por el
+/// El tablón del campamento `c` (§3 y §10): una oferta por cada bot ofrecido en él, con su ficha entera, su tropa (la suya, no la prestada), si está herido y lo que cobra, en oro y en monedas, por cada plazo y por el
 /// permanente, que es lo que cobraría la firma de hoy ([`Nucleo::tarifa_de`]). Por orden de héroe.
 pub(super) fn tablon(n: &Nucleo, c: u32) -> Vec<pb::OfertaMercenario> {
     let e = n.estado();
@@ -172,7 +173,13 @@ pub(super) fn tablon(n: &Nucleo, c: u32) -> Vec<pb::OfertaMercenario> {
                 ficha: Some(ficha(&e.reglas.economia.contratos, f, true)),
                 tropa: h.heroe.escuadras.iter().filter(|s| s.prestada.is_none() && s.con_soldados()).map(|s| super::vista::escuadra_que_lleva(n, s)).collect(),
                 herido_hasta_ms: h.heroe.herido_hasta,
-                tarifas: plazos.clone().map(|plazo| pb::TarifaMercenario { plazo_dias: plazo.map(u32::from), oro: n.tarifa_de(heroe, plazo) }).collect(),
+                tarifas: plazos
+                    .clone()
+                    .map(|plazo| {
+                        let oro = n.tarifa_de(heroe, plazo);
+                        pb::TarifaMercenario { plazo_dias: plazo.map(u32::from), oro, monedas: tarifa_en_monedas(&e.reglas.economia.contratos, oro) }
+                    })
+                    .collect(),
             }
         })
         .collect()

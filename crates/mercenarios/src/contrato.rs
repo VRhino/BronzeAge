@@ -68,7 +68,7 @@ pub fn ambito_de(puesto: Puesto) -> Ambito {
     }
 }
 
-/// Lo que cuesta un contrato (duda 1 del plan, §5): ⌈(oroPorNivelHeroe × nivel + valor_tropa) × pct del plazo (o `permanentePct`) × tarifaPct del rango⌉, en oro entero.
+/// Lo que cuesta un contrato (duda 1 del plan, §5): ⌈(oroPorNivelHeroe × nivel + valor_tropa) × pct del plazo (o `permanentePct`) × tarifaPct del rango × factorOroPct⌉, en oro entero.
 /// `plazo` son los días de un temporal, o `None` en el permanente; `valor_tropa` es lo que costaría hoy reclutar la tropa del mercenario, en milésimas de oro; `rango`, el de su
 /// ficha (1 a 5, §8.3).
 pub fn tarifa(d: &Datos, plazo: Option<u8>, nivel: u8, valor_tropa: Mil, rango: u8) -> Result<Mil, ErrorFirma> {
@@ -78,9 +78,14 @@ pub fn tarifa(d: &Datos, plazo: Option<u8>, nivel: u8, valor_tropa: Mil, rango: 
     };
     let valor = d.oro_por_nivel * Mil::from(nivel) + valor_tropa;
     let pct_del_rango = d.rangos[usize::from(rango) - 1].tarifa_pct;
-    // Los dos porcentajes son centésimas, y el oro se cobra en unidades enteras, hacia arriba.
-    let divisor = 100 * 100 * UNIDAD;
-    Ok((valor * Mil::from(pct_del_plazo) * Mil::from(pct_del_rango) + divisor - 1) / divisor * UNIDAD)
+    // Los tres porcentajes son centésimas, y el oro se cobra en unidades enteras, hacia arriba.
+    let divisor = 100 * 100 * 100 * UNIDAD;
+    Ok((valor * Mil::from(pct_del_plazo) * Mil::from(pct_del_rango) * Mil::from(d.factor_oro_pct) + divisor - 1) / divisor * UNIDAD)
+}
+
+/// La misma tarifa en monedas del héroe: el oro de [`tarifa`], ya reducido, a `monedasPorOro` monedas cada uno.
+pub fn tarifa_en_monedas(d: &Datos, oro: Mil) -> i64 {
+    oro / UNIDAD * i64::from(d.monedas_por_oro)
 }
 
 /// La duración de un plazo de `dias` días de mundo, en milisegundos.
@@ -271,19 +276,28 @@ mod pruebas {
     }
 
     #[test]
-    fn la_tarifa_es_valor_por_plazo_por_rango_redondeada_hacia_arriba_a_oro_entero() {
+    fn la_tarifa_es_valor_por_plazo_por_rango_por_un_cuarto_redondeada_hacia_arriba_a_oro_entero() {
         let d = datos();
-        // Nivel 1 sin tropa, 3 días, rango 1: 20 × 35 % = 7 de oro exactos (no se redondea de más).
-        assert_eq!(tarifa(&d, Some(3), 1, 0, 1), Ok(7_000));
-        // Nivel 3 con 14,5 de oro de tropa: 74,5 × 15 % × 120 % = 13,41 → 14.
-        assert_eq!(tarifa(&d, Some(1), 3, 14_500, 2), Ok(14_000));
-        // El permanente, ×5: 74,5 × 500 % = 372,5 → 373.
-        assert_eq!(tarifa(&d, None, 3, 14_500, 1), Ok(373_000));
-        // Un nivel 10 señor de la guerra (×2,2) a 7 días: 200 × 70 % × 220 % = 308.
-        assert_eq!(tarifa(&d, Some(7), 10, 0, 5), Ok(308_000));
+        // Con `factorOroPct` = 25 (un cuarto). Nivel 1 sin tropa, 3 días, rango 1: 20 × 35 % × 25 % = 1,75 → 2.
+        assert_eq!(tarifa(&d, Some(3), 1, 0, 1), Ok(2_000));
+        // Nivel 3 con 14,5 de oro de tropa: 74,5 × 15 % × 120 % × 25 % = 3,35 → 4.
+        assert_eq!(tarifa(&d, Some(1), 3, 14_500, 2), Ok(4_000));
+        // El permanente, ×5: 74,5 × 500 % × 25 % = 93,125 → 94.
+        assert_eq!(tarifa(&d, None, 3, 14_500, 1), Ok(94_000));
+        // Un nivel 10 señor de la guerra (×2,2) a 7 días: 200 × 70 % × 220 % × 25 % = 77 exactos (no se redondea de más).
+        assert_eq!(tarifa(&d, Some(7), 10, 0, 5), Ok(77_000));
         // Una fracción de milésima de oro de más sube una unidad entera.
-        assert_eq!(tarifa(&d, Some(3), 1, 1, 1), Ok(8_000));
+        assert_eq!(tarifa(&d, Some(3), 1, 1_000, 1), Ok(2_000));
+        assert_eq!(tarifa(&d, Some(3), 1, 4_000, 1), Ok(3_000));
         assert_eq!(tarifa(&d, Some(2), 1, 0, 1), Err(ErrorFirma::PlazoInvalido));
+    }
+
+    #[test]
+    fn la_tarifa_en_monedas_es_la_de_oro_ya_reducida_por_monedas_por_oro() {
+        let d = datos();
+        // 2 de oro × 100 monedas por oro (`monedasPorOro`).
+        assert_eq!(tarifa_en_monedas(&d, tarifa(&d, Some(3), 1, 0, 1).unwrap()), 200);
+        assert_eq!(tarifa_en_monedas(&d, 77_000), 7_700);
     }
 
     #[test]

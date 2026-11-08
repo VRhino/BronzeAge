@@ -2,15 +2,16 @@
 //!
 //! # Quién firma
 //! Firma el titular de un cargo ([`Nucleo::puestos_de`]) en persona: en el campamento del mercenario, dentro o con su columna a la puerta. Paga con el oro del carro de su columna o,
-//! desde el 2026-11-03 (pedido del autor), también desde dentro del campamento donde reside: con su almacén personal o con el carro que tiene allí ([`Bolsa`]).
-//! No elige con qué cargo: las reglas puras toman el de más rango que pueda firmar ese trabajo sobre ese objetivo. El pago entra en el almacén personal del mercenario hasta llenarlo y
-//! lo que no cabe desaparece: es un sumidero, y nunca bloquea una firma (decisión 9 del plan).
+//! desde el 2026-11-03 (pedido del autor), también desde dentro del campamento donde reside: con su almacén personal o con el carro que tiene allí ([`Bolsa`]). Desde la tanda 69 puede
+//! pagar en cambio con sus monedas, a la tarifa en monedas (la de oro × `monedasPorOro`), en cualquier sitio.
+//! No elige con qué cargo: las reglas puras toman el de más rango que pueda firmar ese trabajo sobre ese objetivo. El pago en oro entra en el almacén personal del mercenario hasta llenarlo y
+//! lo que no cabe desaparece: es un sumidero, y nunca bloquea una firma (decisión 9 del plan); las monedas pagadas pasan a las del mercenario.
 
 use super::*;
 use crate::codec_contratos::trabajo_a_u8;
 use crate::comando::PagarCon;
 use crate::estado_militar::Relacion;
-use ::mercenarios::contrato::{ambito_de, duracion, objetivo_valido, orden_inicial, puesto_para_firmar, renombre_del_plazo, tarifa, ErrorFirma};
+use ::mercenarios::contrato::{ambito_de, duracion, objetivo_valido, orden_inicial, puesto_para_firmar, renombre_del_plazo, tarifa, tarifa_en_monedas, ErrorFirma};
 use ::mercenarios::{Contrato, Ficha, Oferta, Puesto, Situacion};
 use asentamiento::datos::UNO;
 use asentamiento::{Cargo, Recurso};
@@ -122,6 +123,7 @@ impl Nucleo {
                 self.estado.version,
             )),
             PagarCon::AlmacenPersonal => Ok(Bolsa::AlmacenPersonal),
+            PagarCon::Monedas => Ok(Bolsa::Monedas),
             PagarCon::Carro => Ok(match self.carro_en_campamento(heroe, campamento)?.0 {
                 Some(columna) => Bolsa::Columna(columna),
                 None => Bolsa::CarroPropio,
@@ -129,11 +131,19 @@ impl Nucleo {
         }
     }
 
-    /// Lo que hay que pagar por `mercenario` a `plazo` (la tarifa de hoy) si la `bolsa` de `heroe`, quien firma, tiene oro bastante; si no, el rechazo `mercenarios.sin_oro` de la versión `v`.
-    fn oro_a_cobrar(&self, heroe: u64, bolsa: Bolsa, mercenario: u64, plazo: Option<u8>, v: u64) -> Result<Mil, Respuesta> {
+    /// Lo que hay que pagar por `mercenario` a `plazo` (la tarifa de hoy) con la `bolsa` de `heroe`, quien firma, como `(oro, monedas)` (uno de los dos es 0): la tarifa en oro, o la
+    /// tarifa en monedas si paga con ellas. Si no tiene bastante, el rechazo `mercenarios.sin_oro` o, con monedas, `heroe.sin_monedas`, de la versión `v`.
+    fn a_cobrar(&self, heroe: u64, bolsa: Bolsa, mercenario: u64, plazo: Option<u8>, v: u64) -> Result<(Mil, i64), Respuesta> {
         let oro = self.tarifa_de(mercenario, plazo);
         let h = self.heroe(heroe).expect("quien firma existe");
         let (hay, donde) = match bolsa {
+            Bolsa::Monedas => {
+                let monedas = tarifa_en_monedas(&self.estado.reglas.economia.contratos, oro);
+                if h.heroe.monedas < monedas {
+                    return Err(Respuesta::rechazo(rechazos::HEROE_SIN_MONEDAS, format!("la tarifa es de {monedas} monedas y el héroe tiene {}", h.heroe.monedas), v));
+                }
+                return Ok((0, monedas));
+            }
             Bolsa::Columna(c) => (de(&self.estado.ejercitos[&c].columna.carga, Recurso::Oro), "el carro lleva"),
             Bolsa::CarroPropio => (de(&h.carro, Recurso::Oro), "el carro lleva"),
             Bolsa::AlmacenPersonal => (de(&h.almacen_personal, Recurso::Oro), "el almacén personal tiene"),
@@ -141,12 +151,19 @@ impl Nucleo {
         if hay < oro {
             return Err(Respuesta::rechazo(rechazos::MERCENARIOS_SIN_ORO, format!("la tarifa es de {} de oro y {donde} {}", oro / UNIDAD, hay / UNIDAD), v));
         }
-        Ok(oro)
+        Ok((oro, 0))
     }
 
-    /// Cobra `oro` de la `bolsa` de `heroe`, quien firma, y lo ingresa en el almacén personal de `mercenario` hasta donde quepa; el resto desaparece (decisión 9 del plan).
-    fn pagar(&mut self, heroe: u64, bolsa: Bolsa, mercenario: u64, oro: Mil) {
+    /// Cobra de la `bolsa` de `heroe`, quien firma, el `(oro, monedas)` de [`Nucleo::a_cobrar`]. El oro se ingresa en el almacén personal de `mercenario` hasta donde quepa y el resto
+    /// desaparece (decisión 9 del plan); las monedas pasan a las del mercenario.
+    fn pagar(&mut self, heroe: u64, bolsa: Bolsa, mercenario: u64, (oro, monedas): (Mil, i64)) {
         let de_donde = match bolsa {
+            Bolsa::Monedas => {
+                self.heroe_mut(heroe).heroe.monedas -= monedas;
+                let m = &mut self.heroe_mut(mercenario).heroe.monedas;
+                *m = m.saturating_add(monedas);
+                return;
+            }
             Bolsa::Columna(c) => {
                 self.tr.tocar(Clase::Ejercito, c);
                 &mut self.estado.ejercitos.get_mut(&c).expect("la columna del carro existe").columna.carga
@@ -202,7 +219,7 @@ impl Nucleo {
         }
     }
 
-    /// `contratar_mercenario` (§3, §5): un cargo de una Facción humana contrata, en persona y pagando con el oro de su carro o de su almacén personal ([`Nucleo::bolsa_en_campamento`]), a
+    /// `contratar_mercenario` (§3, §5): un cargo de una Facción humana contrata, en persona y pagando con el oro de su carro o de su almacén personal, o con sus monedas ([`Nucleo::bolsa_en_campamento`]), a
     /// un bot del tablón de un campamento. El mercenario
     /// entra en la Facción con su marca, con la orden inicial de su trabajo; el permanente pasa a residir en la plaza `residencia`, sin cooldown.
     #[allow(clippy::too_many_arguments)]
@@ -252,9 +269,9 @@ impl Nucleo {
         objetivo_valido(&d, trabajo, &objetivo, faccion, &s).map_err(|e| rechazo_de_firma(e, v))?;
         let puesto = puesto_para_firmar(trabajo, &objetivo, &s, &self.puestos_de(heroe), heroe).map_err(|e| rechazo_de_firma(e, v))?;
         // La tarifa, con el oro de donde paga.
-        let oro = self.oro_a_cobrar(heroe, bolsa, mercenario, plazo, v)?;
+        let (oro, monedas) = self.a_cobrar(heroe, bolsa, mercenario, plazo, v)?;
 
-        self.pagar(heroe, bolsa, mercenario, oro);
+        self.pagar(heroe, bolsa, mercenario, (oro, monedas));
         self.estado.contratos.ofertas.remove(&mercenario);
         self.tr.tocar(Clase::Campamento, u64::from(oferta.campamento));
         let marca = if trabajo == Trabajo::Permanente { Marca::Permanente } else { Marca::Temporal };
@@ -299,6 +316,7 @@ impl Nucleo {
             ("trabajo", i64::from(trabajo_a_u8(trabajo))),
             ("plazo", plazo.map_or(0, i64::from)),
             ("oro", oro),
+            ("monedas", monedas),
             ("campamento", i64::from(oferta.campamento)),
         ];
         self.tr.emitir(&self.estado, EventoNucleo { heroes: vec![mercenario], facciones: vec![faccion], ..EventoNucleo::nuevo("mercenarios.contratado", t, datos) });
@@ -331,29 +349,31 @@ impl Nucleo {
             return Err(rechazo(CAMPAMENTO_FUERA_DE_LA_PUERTA, "prorrogar es en persona: en el campamento base del mercenario o con tu columna junto a la suya"));
         }
         let renombre = renombre_del_plazo(&d, c.trabajo, Some(plazo)).map_err(|e| rechazo_de_firma(e, v))?;
-        let bolsa = if en_el_campamento {
+        let bolsa = if pagar_con == Some(PagarCon::Monedas) {
+            Bolsa::Monedas
+        } else if en_el_campamento {
             self.bolsa_en_campamento(heroe, c.campamento_base, pagar_con)?
         } else if pagar_con == Some(PagarCon::AlmacenPersonal) {
             return Err(rechazo(ALMACEN_PERSONAL_FUERA_DE_TU_RESIDENCIA, "el almacén personal está en el campamento donde se reside: junto al mercenario se paga con el carro"));
         } else {
             Bolsa::Columna(self.columna_que_lleva(heroe).ok_or_else(|| rechazo(HEROE_SIN_COLUMNA, "se paga con el oro del carro de tu columna: no vas en ninguna"))?)
         };
-        let oro = self.oro_a_cobrar(heroe, bolsa, mercenario, Some(plazo), v)?;
+        let (oro, monedas) = self.a_cobrar(heroe, bolsa, mercenario, Some(plazo), v)?;
 
-        self.pagar(heroe, bolsa, mercenario, oro);
+        self.pagar(heroe, bolsa, mercenario, (oro, monedas));
         let vence = c.vence.expect("un temporal tiene vencimiento") + duracion(plazo);
         let guardado = self.estado.contratos.contratos.get_mut(&mercenario).expect("lo acabamos de leer");
         guardado.vence = Some(vence);
         guardado.renombre += renombre;
         self.citar_contrato(mercenario, SucesoContrato::Vence, vence);
         self.tr.tocar(Clase::Faccion, u64::from(c.faccion));
-        let datos = vec![("faccion", i64::from(c.faccion)), ("mercenario", mercenario as i64), ("firmante", heroe as i64), ("plazo", i64::from(plazo)), ("oro", oro)];
+        let datos = vec![("faccion", i64::from(c.faccion)), ("mercenario", mercenario as i64), ("firmante", heroe as i64), ("plazo", i64::from(plazo)), ("oro", oro), ("monedas", monedas)];
         self.tr.emitir(&self.estado, EventoNucleo { heroes: vec![mercenario], facciones: vec![c.faccion], ..EventoNucleo::nuevo("mercenarios.prorrogado", t, datos) });
         Ok(vec![])
     }
 }
 
-/// De dónde sale el oro de una firma o de una prórroga.
+/// De dónde sale el pago de una firma o de una prórroga.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Bolsa {
     /// El carro de una columna: la que lleva a la puerta o dentro del campamento, o la que guarda en el campamento donde reside.
@@ -362,4 +382,6 @@ enum Bolsa {
     CarroPropio,
     /// Su almacén personal, en el campamento donde reside.
     AlmacenPersonal,
+    /// Las monedas del héroe, estén donde estén.
+    Monedas,
 }

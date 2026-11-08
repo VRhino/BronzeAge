@@ -415,6 +415,11 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
             Comando::ContratarMercenario { heroe: 7, mercenario: 9, trabajo: Trabajo::Defender, objetivo: ObjetivoMercenario::Pueblo(4), plazo: Some(1), residencia: None, pagar_con: Some(PagarCon::AlmacenPersonal) },
         ),
         (orden!(ProrrogarContrato, OrdenProrrogarContrato, mercenario_id: s("heroe-9"), plazo_dias: 3, pagar_con: Some(s("carro"))), Comando::ProrrogarContrato { heroe: 7, mercenario: 9, plazo: 3, pagar_con: Some(PagarCon::Carro) }),
+        (orden!(ProrrogarContrato, OrdenProrrogarContrato, mercenario_id: s("heroe-9"), plazo_dias: 3, pagar_con: Some(s("monedas"))), Comando::ProrrogarContrato { heroe: 7, mercenario: 9, plazo: 3, pagar_con: Some(PagarCon::Monedas) }),
+        (
+            orden!(ContratarMercenario, OrdenContratarMercenario, mercenario_id: s("heroe-9"), trabajo: s("defender"), objetivo: Some(pb::ObjetivoMercenario { tipo: Some(Mercenario::PuebloId(s("pueblo-4"))) }), plazo_dias: Some(1), pagar_con: Some(s("monedas"))),
+            Comando::ContratarMercenario { heroe: 7, mercenario: 9, trabajo: Trabajo::Defender, objetivo: ObjetivoMercenario::Pueblo(4), plazo: Some(1), residencia: None, pagar_con: Some(PagarCon::Monedas) },
+        ),
         (
             orden!(OrdenarMercenario, OrdenOrdenarMercenario, mercenario_ids: v(&["heroe-9", "heroe-10"]), tipo: s("ir_a"), objetivo: Some(pb::ObjetivoMercenario { tipo: Some(Mercenario::Punto(pb::Punto { x: 1_500, y: -2_000 })) })),
             Comando::OrdenarMercenario { heroe: 7, mercenarios: vec![9, 10], tipo: TipoOrden::IrA, objetivo: ObjetivoMercenario::Punto(Punto::new(1_500, -2_000)) },
@@ -677,6 +682,8 @@ fn un_id_sin_la_forma_de_su_entidad_o_un_valor_fuera_de_su_catalogo_se_rechazan_
         (orden!(AsignarCargoLocal, OrdenAsignarCargoLocal, asentamiento_id: s("as-3"), cargo: s("rey"), heroe_id: h()), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(UnirseABatalla, OrdenUnirseABatalla, heroe_id: h(), battle_id: s("uuid-9"), lado: Some(s("espectador"))), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(ReclutarEnCampamento, OrdenReclutarEnCampamento, tropa_id: s("milicia_lanceros"), pagar_con: Some(s("honor"))), rechazos::ORDEN_FORMA_INVALIDA),
+        (orden!(ReclutarEnCampamento, OrdenReclutarEnCampamento, tropa_id: s("milicia_lanceros"), pagar_con: Some(s("monedas"))), rechazos::ORDEN_FORMA_INVALIDA),
+        (orden!(ComprarEnCampamento, OrdenComprarEnCampamento, recurso: s("madera"), cantidad: 2_000, campamento_id: Some(s("camp-9")), pagar_con: Some(s("monedas"))), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(SalirAlMundo, OrdenSalirAlMundo, asentamiento_id: s("as-3"), heroe_id: h(), carga: carga(&[("mithril", 1)])), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(GuardarLoadout, OrdenGuardarLoadout, display_name: s("x"), perks_seleccionados: vec![-1]), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(ColocarAvanzada, OrdenColocarAvanzada, asentamiento_id: s("as-3"), heroe_id: h()), rechazos::ORDEN_FORMA_INVALIDA),

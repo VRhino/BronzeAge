@@ -163,6 +163,61 @@ fn una_columna_ataca_a_otra_y_el_derrotado_queda_herido_pierde_la_mitad_del_carr
     assert!(!x.n.heroe_herido(beto.1));
 }
 
+/// Las monedas de un héroe.
+fn monedas_de(n: &Nucleo, heroe: u64) -> i64 {
+    n.heroe(heroe).unwrap().heroe.monedas
+}
+
+#[test]
+fn un_combate_entre_dos_facciones_paga_monedas_al_heroe_ganador_y_al_perdedor() {
+    let mut x = choque();
+    let (ana, beto) = (x.ana, x.beto);
+    let (m0_ana, m0_beto) = (monedas_de(&x.n, ana.1), monedas_de(&x.n, beto.1));
+    let r = atacar(&mut x.n, 10 * MIN, "ana", "a1", ana.1, ObjetivoAtaque::Ejercito(beto.0), false);
+    assert!(r.aceptada(), "{r:?}");
+    assert_eq!(dato(&hechos(&x.n, "combate.resuelto")[0], "ganaElAtacante"), 1, "ana gana");
+    // Las cuantías de `MONEDAS` (Combate §7): 500 al ganador y 150 al perdedor, con la primera vez del par a factor completo.
+    let monedas = mc().monedas;
+    assert_eq!((monedas_de(&x.n, ana.1) - m0_ana, monedas_de(&x.n, beto.1) - m0_beto), (monedas.ganador, monedas.perdedor));
+    assert_eq!(x.n.estado().combate.encuentros.get(&(1, 2)), Some(&vec![10 * MIN]), "el encuentro del par queda anotado, con la Facción menor primero");
+}
+
+#[test]
+fn el_mismo_par_de_facciones_paga_con_rendimientos_decrecientes_hasta_que_la_ventana_deja_de_pagar() {
+    let mut x = choque();
+    let (ana, beto) = (x.ana, x.beto);
+    let r = mc().monedas;
+    let factor = |v: i64| (1_000_000 - r.rendimientos.caida_por_cada * (v - r.rendimientos.completas).max(0)).max(0) * i64::from(v < r.rendimientos.solo_experiencia_desde);
+    let (mut cobrado, mut esperado) = (vec![], vec![]);
+    for k in 1..=r.rendimientos.solo_experiencia_desde + 1 {
+        let (m_ana, m_beto) = (monedas_de(&x.n, ana.1), monedas_de(&x.n, beto.1));
+        // Cada tres minutos (el herido se cura a los dos): ana ataca a beto.
+        let res = atacar(&mut x.n, (10 + 3 * k) * MIN, "ana", &format!("a{k}"), ana.1, ObjetivoAtaque::Ejercito(beto.0), false);
+        assert!(res.aceptada(), "{res:?}");
+        let gana_ana = dato(hechos(&x.n, "combate.resuelto").last().unwrap(), "ganaElAtacante") == 1;
+        let (de_ana, de_beto) = if gana_ana { (r.ganador, r.perdedor) } else { (r.perdedor, r.ganador) };
+        cobrado.push((monedas_de(&x.n, ana.1) - m_ana, monedas_de(&x.n, beto.1) - m_beto));
+        esperado.push((de_ana * factor(k) / 1_000_000, de_beto * factor(k) / 1_000_000));
+    }
+    assert_eq!(cobrado, esperado);
+    assert!(cobrado[0].0 > 0 && cobrado[r.rendimientos.completas as usize].0 < cobrado[0].0, "baja después de las completas");
+    assert_eq!(cobrado[r.rendimientos.solo_experiencia_desde as usize - 1..], [(0, 0), (0, 0)], "desde `soloExperienciaDesde`, nada");
+}
+
+#[test]
+fn un_heroe_sin_faccion_no_cobra_monedas() {
+    let mut x = choque();
+    let (ana, beto) = (x.ana, x.beto);
+    // El héroe de beto se queda sin Facción sin que su columna cambie de bando: sigue siendo un enemigo al que atacar, pero el diseño pide dos Facciones.
+    assert!(x.n.aplicar_en(x.n.ahora(), admin("f", Comando::FijarFaccionDeHeroe { heroe: beto.1, faccion: None })).aceptada());
+    let (m0_ana, m0_beto) = (monedas_de(&x.n, ana.1), monedas_de(&x.n, beto.1));
+    let r = atacar(&mut x.n, 10 * MIN, "ana", "a1", ana.1, ObjetivoAtaque::Ejercito(beto.0), false);
+    assert!(r.aceptada(), "{r:?}");
+    assert_eq!(hechos(&x.n, "combate.resuelto").len(), 1);
+    assert_eq!((monedas_de(&x.n, ana.1), monedas_de(&x.n, beto.1)), (m0_ana, m0_beto));
+    assert!(x.n.estado().combate.encuentros.is_empty(), "y no anota ningún encuentro");
+}
+
 #[test]
 fn las_ordenes_que_no_valen_se_rechazan_sin_rastro_y_en_su_orden() {
     let mut x = choque();
@@ -375,6 +430,8 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.anillos.insert(1, 600_000);
     base.combate.guarniciones.insert(9, GuarnicionDePueblo { escuadra: combate::pueblo::guarnicion_de_serie(&mc(), 12, false, 0), repone_en: Some(7_000) });
     base.combate.destruidos.insert(6, vec![100, 200]);
+    base.combate.encuentros.insert((1, 2), vec![300, 400]);
+    base.combate.encuentros.insert((2, 5), vec![500]);
     let bytes = base.serializar();
     assert_eq!(&bytes[..5], b"BAN59");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
@@ -394,6 +451,8 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
         ("guarnición del pueblo", Box::new(|c| c.guarniciones.get_mut(&9).unwrap().escuadra.cantidad -= 1)),
         ("reposición de la guarnición", Box::new(|c| c.guarniciones.get_mut(&9).unwrap().repone_en = None)),
         ("héroe que destruyó", Box::new(|c| c.destruidos.get_mut(&6).unwrap().push(300))),
+        ("instante de un encuentro", Box::new(|c| c.encuentros.get_mut(&(1, 2)).unwrap().push(600))),
+        ("par de Facciones de un encuentro", Box::new(|c| drop(c.encuentros.remove(&(2, 5))))),
     ];
     for (nombre, f) in cambios {
         let mut s = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
