@@ -7,4 +7,4 @@ Diseños **cerrados con el autor pero sin implementar**. Aquí viven mientras no
 | Documento | Diseño | Entrada |
 |---|---|---|
 | [`Informes_De_Taberna.md`](Informes_De_Taberna.md) | 2026-10-31 | `Mecanicas a desarrollar.md` 65 |
-
+| [`Tanda_Economia_Heroe_Y_Cultivos.md`](Tanda_Economia_Heroe_Y_Cultivos.md) | 2026-11-08 (en curso) | `Mecanicas a desarrollar.md` 69 |
