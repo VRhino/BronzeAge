@@ -188,6 +188,10 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
     p.reserva_manual = Some(cantidades(TODOS.iter().copied().zip(eco.reserva_manual).filter(|&(_, v)| v != 0)));
     p.misiones = super::propios::misiones(n, crate::misiones::Dueno::Asentamiento(id));
     p.tablon = super::propios::tablon(n, crate::misiones::Dueno::Asentamiento(id));
+    // La taberna de la plaza enseña, gratis, el tablón de los campamentos de su región (tanda 69 §8).
+    if n.tiene_taberna_activa(id) {
+        p.mercenarios_region = super::mercenarios::tablon_de(n, &n.campamentos_de_la_region(id));
+    }
     p.participacion = n.participacion_en(id).map_or_else(Default::default, |m| m.iter().map(|(&h, &puntos)| (ids::heroe(h), puntos)).collect());
     Some(p)
 }

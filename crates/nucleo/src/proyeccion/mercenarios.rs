@@ -157,17 +157,23 @@ pub(super) fn contratos_de(e: &Estado, f: u32) -> Vec<pb::Contrato> {
     marcados.filter_map(|m| e.contratos.contratos.get(m)).map(contrato).collect()
 }
 
-/// El tablón del campamento `c` (§3 y §10): una oferta por cada bot ofrecido en él, con su ficha entera, su tropa (la suya, no la prestada), si está herido y lo que cobra, en oro y en monedas, por cada plazo y por el
+/// El tablón del campamento `c` (§3 y §10): una oferta por cada bot ofrecido en él, con el campamento, su ficha entera, su tropa (la suya, no la prestada), si está herido y lo que cobra, en oro y en monedas, por cada plazo y por el
 /// permanente, que es lo que cobraría la firma de hoy ([`Nucleo::tarifa_de`]). Por orden de héroe.
 pub(super) fn tablon(n: &Nucleo, c: u32) -> Vec<pb::OfertaMercenario> {
+    tablon_de(n, &[c])
+}
+
+/// El tablón de los campamentos `cs` juntos, por orden de héroe: el de uno solo, o el de la región que enseña la taberna de una plaza (tanda 69 §8).
+pub(super) fn tablon_de(n: &Nucleo, cs: &[u32]) -> Vec<pb::OfertaMercenario> {
     let e = n.estado();
     let plazos = e.reglas.economia.contratos.plazos.iter().map(|p| Some(p.dias)).chain([None]);
-    let ofrecidos = e.contratos.ofertas.iter().filter(|(_, o)| o.campamento == c);
+    let ofrecidos = e.contratos.ofertas.iter().filter(|(_, o)| cs.contains(&o.campamento));
     ofrecidos
         .map(|(&heroe, oferta)| {
             let h = n.heroe(heroe).expect("un ofrecido es un héroe que existe");
             let f = e.contratos.fichas.get(&heroe).expect("la ficha nace con la oferta");
             pb::OfertaMercenario {
+                campamento_id: ids::campamento(oferta.campamento),
                 heroe_id: ids::heroe(heroe),
                 desde_ms: oferta.desde,
                 ficha: Some(ficha(&e.reglas.economia.contratos, f, true)),

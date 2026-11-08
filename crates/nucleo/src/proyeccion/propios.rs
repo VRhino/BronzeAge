@@ -12,6 +12,7 @@ use super::{audiencia, batalla, ids, mercenarios, plan, punto, ritmo};
 use crate::estado::{Clase, Ejercito};
 use crate::estado_militar::{HeroeNucleo, PlazaRecordada};
 use politica::relaciones::{RelacionPolitica, TipoRelacion};
+use crate::memoria::TipoInformeRegion;
 use crate::nucleo::{Nucleo, TokenDeJugador};
 use crate::recompensas::{Elemento, Fija, Recompensa};
 use asentamiento::avanzadas::{Avanzada, Estado as EstadoAvanzada, TipoObra};
@@ -726,6 +727,7 @@ pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
         admite_otras_en_ataques: x.admite_otras_en_ataques,
         prestigio: x.prestigio,
         tope_alianzas: prestigio.tope_de_alianzas(x.prestigio),
+        informes_region: informes_de_region(n, f),
         misiones: misiones(n, crate::misiones::Dueno::Faccion(f)),
         miembros: n.miembros_de(f).into_iter().map(|m| pb::MiembroFaccion { heroe_id: ids::heroe(m.heroe), residencia_id: m.residencia.map(residencia_id), cargos: m.cargos, participacion: m.participacion, marca: x.marcas.get(&m.heroe).map(|&marca| mercenarios::marca(marca).to_owned()) }).collect(),
         tablon: tablon(n, crate::misiones::Dueno::Faccion(f)),
@@ -735,6 +737,20 @@ pub fn faccion(n: &Nucleo, f: u32) -> pb::Faccion {
         cupos_de_nivel: cupos.niveles.into_iter().map(|(nivel, cupo, ocupadas)| pb::CupoDeNivel { nivel, cupo, ocupadas }).collect(),
         ..base
     }
+}
+
+/// Los informes de región que la Facción `f` compró en sus tabernas (tanda 69 §7), por región y tipo: cuándo los compró, cuándo caduca el de órdenes y cuándo se pueden volver a comprar. Los
+/// que ya pasaron su enfriamiento siguen hasta la próxima compra, que los quita.
+fn informes_de_region(n: &Nucleo, f: u32) -> Vec<pb::InformeRegion> {
+    let e = n.estado();
+    let intel = &e.reglas.economia.militar.intel;
+    let de_f = e.memoria.informes_region.range((f, 0, TipoInformeRegion::Plazas)..=(f, u8::MAX, TipoInformeRegion::Ordenes));
+    de_f.map(|(&(_, region, tipo), &comprado)| {
+        let ordenes = tipo == TipoInformeRegion::Ordenes;
+        let tipo = if ordenes { "ordenes" } else { "plazas" }.to_owned();
+        pb::InformeRegion { region: u32::from(region), tipo, comprado_en_ms: comprado, caduca_en_ms: ordenes.then_some(comprado + intel.caducidad_region), libre_en_ms: comprado + intel.enfriamiento_region }
+    })
+    .collect()
 }
 
 /// El sigilo de una Facción en el contrato.
@@ -776,7 +792,7 @@ pub fn directorio_facciones(n: &Nucleo) -> pb::DirectorioFacciones {
 /// La forma pública de otra Facción (5H, `VISTA`; Proyecciones §6: «facciones: públicas en la ficción»): la Facción sin su experiencia, su capital ni cuándo la designó (dónde está su capital es
 /// de la niebla). Regla (decisión del autor del 2026-10-26): de una Facción ajena se ve **solo el nivel**, sin la experiencia exacta ni la capital (el TypeScript la mandaba entera).
 pub fn faccion_publica(n: &Nucleo, f: u32) -> pb::Faccion {
-    pb::Faccion { experiencia: 0, capital_designada_en_ms: None, capital_id: None, misiones: vec![], miembros: vec![], tablon: None, contratos: vec![], cap_fundacion: None, cupos_de_nivel: vec![], ..faccion(n, f) }
+    pb::Faccion { experiencia: 0, capital_designada_en_ms: None, capital_id: None, misiones: vec![], miembros: vec![], tablon: None, contratos: vec![], cap_fundacion: None, cupos_de_nivel: vec![], informes_region: vec![], ..faccion(n, f) }
 }
 
 /// Las tecnologías de la Facción (6G, `Estado::tecnologia`; Proyecciones §6.3: las de un rival no viajan nunca): las aparecidas y las reveladas por su id, las adoptadas con las de arranque

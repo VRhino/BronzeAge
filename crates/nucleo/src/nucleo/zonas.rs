@@ -80,6 +80,11 @@ impl Geografia {
         capa.map(|f| f as i64 * asentamiento::datos::UNO / 255)
     }
 
+    /// La región del relieve del artefacto en `p` (la del generador: Altiplano interior, Estepa abierta...); `None` fuera del mapa.
+    pub(super) fn region_en(&self, p: Punto) -> Option<u8> {
+        self.mundo.region_en(p.x, p.y)
+    }
+
     /// ¿Lo pisa una ruta? Lo que el A\* de las rutas da por transitable.
     pub(super) fn transitable(&self, p: Punto) -> bool {
         self.mundo.transitable_en(p.x, p.y)

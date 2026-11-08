@@ -12,7 +12,7 @@
 //!
 //! La tabla orden ↔ comando, con lo que cada una ignora, está en `Docs/Mechanics/Comandos_Parametros.md`.
 
-use crate::comando::{rechazos, AccionReloj, Comando, LadoDelFondo, ObjetivoAtaque, OrigenIntel, PagarCon, Peticion, Respuesta, PETICION_ID_MAX};
+use crate::comando::{rechazos, AccionReloj, Comando, LadoDelFondo, ObjetivoAtaque, OrigenIntel, PagarCon, Peticion, Respuesta, TipoInformeRegion, PETICION_ID_MAX};
 use crate::estado_militar::Relacion;
 use crate::nucleo::Nucleo;
 use crate::proyeccion::ids;
@@ -158,12 +158,13 @@ impl Ctx<'_> {
             Some(otro) => self.forma(format!("forma de pago desconocida: {otro}")),
         }
     }
-    /// `pagar_con` de un contrato de mercenario: además de las de [`Self::pagar_con`], `monedas`.
+    /// `pagar_con` de un contrato de mercenario: además de las de [`Self::pagar_con`], `monedas` y `almacenPlaza`.
     fn pagar_con_de_contrato(&self, s: Option<&str>) -> R<Option<PagarCon>> {
-        if s == Some("monedas") {
-            return Ok(Some(PagarCon::Monedas));
+        match s {
+            Some("monedas") => Ok(Some(PagarCon::Monedas)),
+            Some("almacenPlaza") => Ok(Some(PagarCon::AlmacenPlaza)),
+            _ => self.pagar_con(s),
         }
-        self.pagar_con(s)
     }
     /// El cultivo de una aldea (`trigo`, el de sin él, | `vid` | `oliva`); otro valor, `orden.forma_invalida`.
     fn cultivo(&self, s: Option<&str>) -> R<Cultivo> {
@@ -330,6 +331,15 @@ impl Ctx<'_> {
             "ruta" => Ok(Modo::Ruta),
             "envio" => Ok(Modo::Envio),
             _ => self.forma(format!("modo de encargo desconocido: {s}")),
+        }
+    }
+
+    /// `tipo` de `comprar_informe_region`: `plazas | ordenes`.
+    fn tipo_de_informe_region(&self, s: &str) -> R<TipoInformeRegion> {
+        match s {
+            "plazas" => Ok(TipoInformeRegion::Plazas),
+            "ordenes" => Ok(TipoInformeRegion::Ordenes),
+            _ => self.forma(format!("tipo de informe de región desconocido: {s}")),
         }
     }
 
@@ -757,6 +767,7 @@ impl Ctx<'_> {
             },
             Cuerpo::CancelarEncargo(o) => Comando::CancelarEncargo { caravana: self.caravana(&o.caravana_id)? },
             Cuerpo::DetenerEncargo(o) => Comando::DetenerEncargo { caravana: self.caravana(&o.caravana_id)? },
+            Cuerpo::TomarOrdenADistancia(o) => Comando::TomarOrdenADistancia { asentamiento: self.plaza(&o.asentamiento_id)?, orden: self.orden_de_mercado(&o.orden_id)?, cantidad: o.cantidad },
 
             // ── Pueblos extractores ──
             Cuerpo::MarcarPueblo(o) => Comando::MarcarPueblo { asentamiento: self.plaza(&o.asentamiento_id)?, nodo: self.nodo(&o.nodo_id)? },
@@ -873,6 +884,7 @@ impl Ctx<'_> {
             Cuerpo::ReclamarPremioDeRango(o) => Comando::ReclamarPremioDeRango { heroe: self.mi_heroe()?, tropa: self.tropa(&o.tropa_id)? },
             Cuerpo::ElegirTablon(o) => Comando::ElegirTablon { heroe: self.mi_heroe()?, dueno: self.dueno_de_mision(&o.dueno_id)?, diarias: o.diarias_ids.clone(), semanales: o.semanales_ids.clone() },
             Cuerpo::ComprarMirada(o) => Comando::ComprarMirada { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, centro: self.punto(o.centro.as_ref())? },
+            Cuerpo::ComprarInformeRegion(o) => Comando::ComprarInformeRegion { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, tipo: self.tipo_de_informe_region(&o.tipo)? },
             Cuerpo::ComprarInformePlaza(o) => {
                 Comando::ComprarInformePlaza { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, asentamiento: self.plaza(&o.asentamiento_id)? }
             }

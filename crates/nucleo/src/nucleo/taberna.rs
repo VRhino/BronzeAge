@@ -5,10 +5,15 @@
 //! Dónde se compra y con qué oro: en la taberna de una plaza de la Facción, con el oro de su almacén; en la de un campamento de mercenarios, con el del héroe (el de su almacén personal si reside
 //! allí; si no, el del carro de su columna). Quien compra tiene que estar dentro del lugar (o con su columna a la puerta).
 //!
+//! Desde la tanda 69 (§7) la taberna de una plaza vende también el **informe de una región** del relieve: las plazas de la región, que quedan en la memoria como fichas, o sus órdenes de mercado,
+//! que llegan en la `VISTA` mientras el informe vale y se pueden tomar a distancia (`encargos.rs`). Entran todas las plazas de la región menos las de la Facción y las de una Facción en guerra con ella.
+//!
 //! En una plaza compra el Rey, el Embajador o el Gobernador, **dentro** de ella (Niebla_De_Guerra §6.1, Proyecciones `compraIntel`; 5E): la columna a la puerta ya no basta.
 
 use super::*;
-use crate::memoria::{EdificioVisto, InformeDePlaza, Mirada, OrigenIntel, Sitio};
+use crate::estado::Asentamiento;
+use crate::estado_militar::Relacion;
+use crate::memoria::{DatosSitio, EdificioVisto, InformeDePlaza, Mirada, OrigenIntel, Sitio, TipoInformeRegion};
 use asentamiento::catalogo::Tipo;
 use asentamiento::edificio::Estado as EstadoEdificio;
 use asentamiento::Recurso;
@@ -41,6 +46,38 @@ impl Nucleo {
     /// Las Miradas que ve la Facción `f` en `t` (las suyas abiertas; las de sus aliados las suma quien proyecta).
     pub fn miradas_activas(&self, f: u32, t: Instante) -> impl Iterator<Item = &Mirada> {
         self.estado.memoria.miradas.iter().filter(move |m| m.faccion == f && m.activa(t))
+    }
+
+    /// La región del relieve del artefacto en `p`; `None` sin mundo o fuera del mapa.
+    fn region_en(&self, p: Punto) -> Option<u8> {
+        self.geografia.as_ref()?.region_en(p)
+    }
+
+    /// ¿Entra la plaza `a` en un informe de la `region` de la Facción `f`? Está en esa región y no es de `f` ni de una Facción en guerra con ella (sí las aliadas, las vasallas y las de bots).
+    /// La mira la compra, la `VISTA` y la toma a distancia.
+    fn entra_en_la_region(&self, f: u32, a: &Asentamiento, region: u8) -> bool {
+        a.faccion != f && self.estado.relacion(f, a.faccion) != Some(Relacion::Guerra) && self.region_en(a.posicion) == Some(region)
+    }
+
+    /// Las plazas cuyas órdenes de mercado ve la Facción `f` en `t` por sus informes de órdenes vigentes (`caducidadMinutos` desde la compra).
+    pub(crate) fn plazas_con_ordenes_informadas(&self, f: u32, t: Instante) -> std::collections::BTreeSet<u64> {
+        let caducidad = self.estado.reglas.economia.militar.intel.caducidad_region;
+        let vigentes: Vec<u8> = (self.estado.memoria.informes_region.iter())
+            .filter(|(&(faccion, _, tipo), &comprado)| faccion == f && tipo == TipoInformeRegion::Ordenes && comprado + caducidad > t)
+            .map(|(&(_, region, _), _)| region)
+            .collect();
+        self.estado.asentamientos.values().filter(|a| vigentes.iter().any(|&r| self.entra_en_la_region(f, a, r))).map(|a| a.id).collect()
+    }
+
+    /// ¿Tiene la plaza `id` una Taberna activa?
+    pub(crate) fn tiene_taberna_activa(&self, id: u64) -> bool {
+        self.estado.asentamientos.get(&id).is_some_and(|a| a.economia.edificios.iter().any(|b| b.tipo == Tipo::Taberna && b.estado == EstadoEdificio::Activo))
+    }
+
+    /// Los campamentos de mercenarios que caen en la misma región del relieve que la plaza `id` (§8): los de cuyo tablón enseña y desde cuya oferta contrata su taberna.
+    pub(crate) fn campamentos_de_la_region(&self, id: u64) -> Vec<u32> {
+        let Some(region) = self.estado.asentamientos.get(&id).and_then(|a| self.region_en(a.posicion)) else { return Vec::new() };
+        self.puertas_de_campamentos().filter(|&(_, puerta)| self.region_en(puerta) == Some(region)).map(|(c, _)| c).collect()
     }
 
     /// ¿Conoce la Facción `f` la plaza `id`? La tiene en su memoria, la vio una columna suya que aún no lo grabó, o cae en una Mirada suya abierta (§6.2).
@@ -125,7 +162,7 @@ impl Nucleo {
         Ok(())
     }
 
-    /// `ComprarMirada` y `ComprarInformePlaza`. `Ok(Some(id))` = la Mirada comprada; `Ok(None)` = el Informe; los rechazos no tocan nada.
+    /// `ComprarMirada`, `ComprarInformePlaza` y `ComprarInformeRegion`. `Ok(Some(id))` = la Mirada comprada; `Ok(None)` = un Informe; los rechazos no tocan nada.
     pub(super) fn ejecutar_taberna(&mut self, t: Instante, p: &Peticion) -> Result<Option<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: &str| Respuesta::rechazo(c, m, v);
@@ -182,6 +219,33 @@ impl Nucleo {
                 self.estado.memoria.informes.entry(compra.faccion).or_default().insert(asentamiento, informe);
                 // A la plaza espiada: el aviso es para su Facción, sin decir quién.
                 self.emitir_propio(t, "asentamiento.informe_pedido", vec![asentamiento], vec![]);
+                Ok(None)
+            }
+            Comando::ComprarInformeRegion { heroe, asentamiento, tipo } => {
+                let compra = self.resolver_compra(t, p, heroe, OrigenIntel::Plaza(asentamiento))?;
+                let region = self.region_en(compra.posicion).ok_or_else(|| rechazo(rechazos::SIN_MUNDO, "la plaza no cae en ninguna región del mundo"))?;
+                let clave = (compra.faccion, region, tipo);
+                if self.estado.memoria.informes_region.get(&clave).is_some_and(|&comprado| comprado + ri.enfriamiento_region > t) {
+                    return Err(rechazo(rechazos::INTEL_INFORME_RECIENTE, "ya tienes un informe reciente de ese tipo de esa región"));
+                }
+                let precio = ri.oro_region;
+                let fichas: Vec<(Sitio, DatosSitio)> = match tipo {
+                    TipoInformeRegion::Plazas => {
+                        let entran = self.estado.asentamientos.values().filter(|a| self.entra_en_la_region(compra.faccion, a, region));
+                        entran.filter_map(|a| self.datos_de_sitio(Sitio::Plaza(a.id)).map(|d| (Sitio::Plaza(a.id), d))).collect()
+                    }
+                    TipoInformeRegion::Ordenes => Vec::new(),
+                };
+                self.cobrar(&compra.bolsa, precio)?;
+                let memoria = &mut self.estado.memoria;
+                // Lo que ya pasó su enfriamiento sobra; no avisa a nadie (como la Mirada).
+                memoria.informes_region.retain(|_, comprado| *comprado + ri.enfriamiento_region > t);
+                memoria.informes_region.insert(clave, t);
+                for (sitio, datos) in fichas {
+                    memoria.anotar(compra.faccion, sitio, datos, t);
+                }
+                // La Facción propia lleva sus informes de región (`Faccion.informes_region`).
+                self.tr.tocar(Clase::Faccion, u64::from(compra.faccion));
                 Ok(None)
             }
             _ => unreachable!("solo las compras de la taberna"),

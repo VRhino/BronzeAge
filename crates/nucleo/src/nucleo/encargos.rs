@@ -1,7 +1,7 @@
 //! Los encargos de caravana en el núcleo (Comercio_Caravanas §5.8): rutas y envíos automáticos entre una plaza propia y otra plaza.
 //!
 //! # Las órdenes
-//! `EncargarCaravana`, `CambiarEncargo`, `CancelarEncargo` y `DetenerEncargo` validan todo sobre una copia antes de tocar nada. Un encargo no guarda su ruta: se traza al salir de cada punta.
+//! `EncargarCaravana`, `CambiarEncargo`, `CancelarEncargo` y `DetenerEncargo` (y `TomarOrdenADistancia`, que monta un envío y lo da por el mismo camino que `EncargarCaravana`) validan todo sobre una copia antes de tocar nada. Un encargo no guarda su ruta: se traza al salir de cada punta.
 //!
 //! # El ciclo
 //! En cada punta la caravana llega, deja, recoge y sale. Cada paso con espera (la hora de salida de un envío, la descarga y la carga) es un
@@ -21,10 +21,11 @@ use crate::estado_comercio::EstadoComercio;
 use crate::nucleo::mercado::{id32, nivel_mercado};
 use asentamiento::Recurso;
 use base::MS_POR_MINUTO;
-use comercio::caravana::{Caravana, ErrorCaravana};
-use comercio::encargo::{a_recoger, carros_del_paso, repartir_descarga, ContextoEncargo, Encargo, ErrorEncargo, Fase, Modo, Parada, Punta};
+use comercio::caravana::{Caravana, ErrorCaravana, TipoCaravana};
+use comercio::encargo::{a_recoger, carros_del_paso, repartir_descarga, ContextoEncargo, Encargo, ErrorEncargo, Fase, LineaDejar, LineaRecoger, Modo, Parada, Punta};
 use comercio::evento::{Evento as EventoComercio, MotivoEncargo};
 use comercio::mostrador::{comprar, vender, ContextoParada};
+use comercio::orden_mercado::{EstadoOrden, TipoOrden};
 use comercio::viaje::{longitud_ruta, peajes_de_paradas};
 use comercio::{total, Carga as Mercancia};
 
@@ -72,6 +73,7 @@ impl Nucleo {
             }
             Comando::CancelarEncargo { caravana } => self.cancelar_encargo(t, p, *caravana),
             Comando::DetenerEncargo { caravana } => self.detener_encargo(t, p, *caravana),
+            Comando::TomarOrdenADistancia { asentamiento, orden, cantidad } => self.tomar_orden_a_distancia(t, p, *asentamiento, *orden, *cantidad),
             _ => unreachable!("solo se llama con órdenes de encargo"),
         }
     }
@@ -206,6 +208,42 @@ impl Nucleo {
         self.estado.comercio.flota[i].encargo.as_mut().expect("comprobado arriba").detener = true;
         self.tr.tocar(Clase::Caravana, caravana);
         Ok(())
+    }
+
+    /// `TomarOrdenADistancia` (tanda 69 §7): desde el Mercado de la plaza `plaza`, toma `cantidad` de la orden de mercado `orden` de otra plaza de una región con informe de órdenes vigente. Lanza
+    /// un envío en la primera caravana libre de la plaza cuya capacidad llega, con una línea hecha con la orden y su precio como tope; la mercancía viaja y el oro no (el encargo en un mercado ajeno
+    /// lo mueve la capital). La orden no se reserva: al llegar, la caravana comercia con lo que quede.
+    fn tomar_orden_a_distancia(&mut self, t: Instante, p: &Peticion, plaza: u64, orden: u64, cantidad: Mil) -> Result<(), Respuesta> {
+        let v = self.estado.version;
+        let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
+        let a = self.plaza_o_rechazo(plaza)?;
+        self.autorizar_en_plaza(p, plaza, None)?;
+        if nivel_mercado(a).is_none() {
+            return Err(rechazo(rechazos::MERCADO_SIN_MERCADO, "la plaza no tiene un Mercado activo".into()));
+        }
+        let faccion = a.faccion;
+        let libro = &self.estado.comercio.libro;
+        let o = libro.buscar(orden).ok_or_else(|| rechazo(rechazos::ORDEN_DESCONOCIDA, ids::orden_de_mercado(orden)))?;
+        if o.estado != EstadoOrden::Activa || libro.orden(orden).is_none() {
+            return Err(rechazo(rechazos::ORDEN_NO_ACTIVA, format!("{} ya no está activa", ids::orden_de_mercado(orden))));
+        }
+        if cantidad <= 0 {
+            return Err(rechazo(rechazos::ORDEN_CANTIDAD_NO_POSITIVA, "la cantidad debe ser mayor que cero".into()));
+        }
+        let (destino, recurso, precio, vende_la_otra) = (u64::from(o.asentamiento), o.recurso, o.precio_unitario, o.tipo == TipoOrden::Venta);
+        if !self.plazas_con_ordenes_informadas(faccion, t).contains(&destino) {
+            return Err(rechazo(rechazos::INTEL_SIN_INFORME_DE_ORDENES, "no tienes un informe de órdenes vigente de la región de esa plaza".into()));
+        }
+        let libres = self.estado.comercio.flota.iter().filter(|c| u64::from(c.origen) == plaza && c.tipo == TipoCaravana::Comercial && c.estado == EstadoCaravana::Disponible);
+        let caravana = libres.filter(|c| self.capacidad_de_caravana(c) >= cantidad).map(|c| c.id).min();
+        let caravana = caravana.ok_or_else(|| rechazo_en_caravana(ErrorCaravana::NoDisponible, v))?;
+        // Si la otra plaza vende, la caravana le compra allí; si compra, lleva de su almacén lo que le vende.
+        let (en_origen, en_destino) = if vende_la_otra {
+            (Parada::default(), Parada { recoger: vec![LineaRecoger { recurso, cantidad, precio_max: Some(precio) }], ..Parada::default() })
+        } else {
+            (Parada { recoger: vec![LineaRecoger { recurso, cantidad, precio_max: None }], ..Parada::default() }, Parada { dejar: vec![LineaDejar { recurso, tope: Some(cantidad), precio_min: Some(precio) }], ..Parada::default() })
+        };
+        self.encargar(t, p, caravana, Encargo::nuevo(Modo::Envio, id32(destino), None, en_origen, en_destino))
     }
 
     // ───────────────────────────── El ciclo ─────────────────────────────

@@ -93,6 +93,8 @@ pub struct Mirada<'n> {
     fichas: BTreeMap<Sitio, Ficha>,
     /// Los Informes de plaza que conserva la Facción (sin los de plazas que ya no existen y se han vuelto a mirar).
     informes: BTreeMap<u64, &'n InformeDePlaza>,
+    /// Las plazas ajenas cuyas órdenes de mercado ve la Facción por un informe de órdenes de su taberna (tanda 69 §7), una vez por perspectiva y no por plaza.
+    con_informe_de_ordenes: BTreeSet<u64>,
     /// Las demás Facciones (5H), con la clave y el sello de su forma pública: una vez por perspectiva y no por sesión; cada sesión manda las que nombra lo que ve.
     publicas: Vec<(u32, Clave, Sello)>,
     /// El sello del directorio de las Facciones (2026-10-29): la huella de lo que lleva y cuántas son. Una vez por perspectiva.
@@ -222,6 +224,7 @@ impl<'n> Mirada<'n> {
             fichas.retain(|&s, x| n.existe_sitio(s) || !a_la_vista(x.datos.posicion));
             informes.retain(|&id, i| n.existe_sitio(Sitio::Plaza(id)) || !a_la_vista(i.posicion));
         }
+        let con_informe_de_ordenes = faccion.map(|f| n.plazas_con_ordenes_informadas(f, t)).unwrap_or_default();
         let niebla = celdas.as_ref().zip(visibles.as_ref()).map(|(c, v)| vision::niebla_proyectada(c, v));
         let mias: Vec<(u64, Punto)> = columnas.iter().filter(|(x, _)| propias.contains(&x.id)).map(|&(x, p)| (x.id, p)).collect();
         let suelo = mias.iter().map(|&(id, _)| id).zip(n.faccion_del_suelo(&mias.iter().map(|&(_, p)| p).collect::<Vec<_>>())).collect();
@@ -245,6 +248,7 @@ impl<'n> Mirada<'n> {
             niebla,
             fichas,
             informes,
+            con_informe_de_ordenes,
             publicas,
             directorio,
             aedas,
@@ -396,8 +400,9 @@ impl<'n> Mirada<'n> {
                     v.push(visible(pb::TipoEntidad::Asentamiento, id, Sello(a.version, 0), move || Some(Cuerpo::Asentamiento(plaza_avistada(n, a.id)))));
                 }
             }
-            // Las órdenes de una plaza ajena llegan con el héroe dentro o con una caravana de la Facción esperando en ella, estén o no en el rectángulo; una sola vez aunque se den las dos.
-            if !duena && (dentro || con_caravana_dentro.contains(&a.id)) {
+            // Las órdenes de una plaza ajena llegan con el héroe dentro, con una caravana de la Facción esperando en ella o con un informe de órdenes de su región vigente (tanda 69 §7), estén o no
+            // en el rectángulo; una sola vez aunque se den varias.
+            if !duena && (dentro || con_caravana_dentro.contains(&a.id) || self.con_informe_de_ordenes.contains(&a.id)) {
                 v.extend(self.ordenes_activas(a.id));
             }
             for p in &a.economia.pueblos {

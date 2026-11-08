@@ -174,8 +174,8 @@ pub struct ReglasIntel {
     pub enfriamiento_informe: i64,
     /// Miradas abiertas a la vez que admite la taberna de un campamento, por Facción.
     pub cupo_campamento: u32,
-    /// Informes de la región en la taberna de una plaza (tanda 69): su precio por nivel de esa plaza, cuánto esperar para pedir otro igual y cuánto vale.
-    pub oro_por_nivel_region: Mil,
+    /// Informes de la región en la taberna de una plaza (tanda 69): su precio fijo, cuánto esperar para pedir otro igual y cuánto vale el de órdenes.
+    pub oro_region: Mil,
     pub enfriamiento_region: i64,
     pub caducidad_region: i64,
 }
@@ -297,7 +297,7 @@ impl Reglas {
                     oro_por_nivel: mil(num(&i, "informe.oroPorNivel")),
                     enfriamiento_informe: entero(&i, "informe.cooldownMinutos") * MS_POR_MINUTO,
                     cupo_campamento: entero(&i, "campamento.cupoMiradas") as u32,
-                    oro_por_nivel_region: mil(num(&i, "region.oroPorNivel")),
+                    oro_region: mil(num(&i, "region.oro")),
                     enfriamiento_region: entero(&i, "region.cooldownMinutos") * MS_POR_MINUTO,
                     caducidad_region: entero(&i, "region.caducidadMinutos") * MS_POR_MINUTO,
                 }
@@ -383,7 +383,7 @@ mod pruebas {
         assert_eq!((r.vision.ejercito, r.vision.jugador_solo), (30_000, 15_000));
         assert_eq!((r.presencia.retardo_desconexion, r.presencia.tope_aplazamiento), (150_000, 300_000));
         let i = &r.intel;
-        assert_eq!((i.oro_por_nivel_region, i.enfriamiento_region, i.caducidad_region), (60_000, 360 * MS_POR_MINUTO, 200 * MS_POR_MINUTO), "el informe de región, como el de plaza (tanda 69)");
+        assert_eq!((i.oro_region, i.enfriamiento_region, i.caducidad_region), (60_000, 360 * MS_POR_MINUTO, 200 * MS_POR_MINUTO), "el informe de región, de precio fijo (tanda 69)");
     }
 
     #[test]
