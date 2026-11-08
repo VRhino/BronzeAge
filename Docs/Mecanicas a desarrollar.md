@@ -27,7 +27,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 65 | INTEL / BOTS | Informes de taberna por niveles (diseño del 2026-10-31; `Docs/Disenos_Por_Implementar/Informes_De_Taberna.md`): el Informe de plaza se separa en Población, Guarnición, Tecnologías, Trazado y Rutas según la taberna del comprador, y Cuentas, Agravios, Corte y Planes, solo contra Facciones de bots, los vende el motor y los responde el servicio de bots | un solo `comprar_informe_plaza` |
 | 67 | MISIONES | Objetos como recompensa de misión (2026-11-01): un tipo `objeto` en la lista libre de recompensas de las misiones (Misiones §4.1). Parada hasta que haya catálogo de objetos e inventario real | nada |
 | 68 | MERCENARIOS | Huecos de los mercenarios por contrato tras implementarlos (2026-11-01): visión del objetivo enemigo, oro del anillo para el temporal, sucesión en `militar`, auditoría, bienvenida, orden `atacar` inicial y objetos de los rangos 4 y 5. Sección «68» | entrada 48 en `main` (7aa44b9), `Docs/Mechanics/Mercenarios_Por_Contrato.md` |
-| 69 | ECONOMÍA / HÉROE | Tanda del 2026-11-08: bandidos que dan recursos, refundación sin oro, requisitos de nivel al doble, moneda única del héroe, mercenarios por contrato en monedas, peajes desde la capital, taberna regional, bienes por clase, pan, carne, leche y queso, vid y oliva, prestigio y puertas de muralla rectas. Sección «69» | nada; diseño en curso |
+| 69 | ECONOMÍA / HÉROE | Tanda del 2026-11-08: bandidos que dan recursos, refundación sin oro, requisitos de nivel al doble, moneda única del héroe, mercenarios por contrato en monedas, peajes desde la capital, taberna regional, bienes por clase, pan, carne, leche y queso, vid y oliva, prestigio y puertas de muralla rectas. Sección «69» | nada; diseño cerrado el 2026-11-08 |
 | — | PARIDAD | Recortes temporales del motor Rust frente al TypeScript (sección «Paridad con TypeScript») | el motor no está migrado hasta cerrarlos |
 | — | DUDAS | Ninguna sin decisión desde el 2026-10-27 (sección «Dudas abiertas»: las `// DUDA:` que quedan en el código) | — |
 | — | FASE 7 | Todo lo que se dejó para los bots reales y la fase 7 (sección «Para la fase 7») | — |
@@ -246,4 +246,4 @@ La entrada 48 está en el motor (`Docs/Mechanics/Mercenarios_Por_Contrato.md`). 
 
 ## 69. Tanda de economía, héroe y cultivos (2026-11-08)
 
-Diseño en curso: `Docs/Disenos_Por_Implementar/Tanda_Economia_Heroe_Y_Cultivos.md`, con el orden por tandas (§0) y lo que sigue abierto. Retoma la idea 53 (carne y leche) de `Ideas a diseñar.md`.
+Diseño cerrado el 2026-11-08: `Docs/Disenos_Por_Implementar/Tanda_Economia_Heroe_Y_Cultivos.md`, con el orden por tandas (§0) y lo que sigue abierto. Retoma la idea 53 (carne y leche) de `Ideas a diseñar.md`.

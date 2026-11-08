@@ -1,6 +1,6 @@
 # Tanda de economía, héroe y cultivos (2026-11-08)
 
-> **Diseño en curso con el autor, sin implementar** (vive en `Docs/Disenos_Por_Implementar/` hasta que se implemente; ver su README). Entrada 69 de `Docs/Mecanicas a desarrollar.md`. Contrastado con el motor en `main` ef5db11. Las cifras marcadas «placeholder» son del estudio y las cambia el autor. Lo marcado **Abierto** espera respuesta. Revisado entero el 2026-11-08 por la tarde con las respuestas del autor. **No se implementa nada hasta que esté todo cerrado** (autor, 2026-11-08).
+> **Diseño cerrado con el autor el 2026-11-08, sin implementar** (vive en `Docs/Disenos_Por_Implementar/` hasta que se implemente; ver su README). Entrada 69 de `Docs/Mecanicas a desarrollar.md`. Contrastado con el motor en `main` ef5db11. Todas las cifras están aprobadas por el autor como punto de partida y se calibran con el batch al implementar. **No se implementa nada sin la orden del autor.**
 
 ## 0. Orden de implementación
 
@@ -64,7 +64,7 @@ Las **viviendas por nivel** se doblan solas: su tope ya sale de los requisitos d
 ### 4.1 Una sola moneda
 `Monedas { bronce, plata, oro }` pasa a un solo saldo, **monedas**: monedas sueltas, distintas del oro-recurso de las plazas (metal en bruto). **Equivalencia: 100 monedas = 1 de oro** (autor), la que usan los precios que admiten las dos. Partida nueva sin convertir saldos. El botín de Unity da un solo número (cambia el contrato: proto, `codec_batallas`, Unity).
 
-### 4.2 De dónde salen (cifras placeholder, a la escala de 100 = 1 de oro)
+### 4.2 De dónde salen (a la escala de 100 = 1 de oro)
 - **Saldo inicial:** 1.500 (lo que cuesta un contrato de un día de un bot de nivel 1, §5).
 - **Héroe contra héroe:** todo combate con héroes de **dos Facciones distintas** (columnas, asedio, pueblos, avanzadas, caravanas con escolta y Unity). Cobran los dos bandos: **500** por héroe ganador y **150** por perdedor. Rendimientos decrecientes por **par de Facciones** en una ventana de 24 h, para que no se pueda farmear entre amigos.
 - **Bandidos:** **50 / 75 / 100** por héroe según el nivel, con su ventana.
@@ -115,17 +115,17 @@ La taberna de la plaza enseña el **tablón de mercenarios** de los campamentos 
 
 Los bienes de comida nuevos **alimentan** y además dan un **modificador de crecimiento** propio de cada clase (autor, 2026-11-08). Los **víveres de movimiento** (columnas, ejércitos, héroes) **solo** usan trigo.
 
-| Bien | Quién lo consume | Modificador (ración entera) | Ración por cabeza y minuto (placeholder) |
+| Bien | Quién lo consume | Modificador (ración entera) | Ración por cabeza y minuto |
 |---|---|---|---|
 | Trigo | todos, también los víveres | — (comida base) | lo que falte hasta la necesidad |
 | Carne | todas las clases | ×1,2 a todas | 0,02 |
 | Pan | pesants | ×2 | 0,04 |
-| Queso | artesanos | ×1,5 (placeholder) | 0,02 |
-| Vino | nobleza | ×1,5 (placeholder) | 0,01 |
-| Aceite | nobleza | ×1,5 (placeholder) | 0,01 |
+| Queso | artesanos | ×1,5 | 0,02 |
+| Vino | nobleza | ×1,5 | 0,01 |
+| Aceite | nobleza | ×1,5 | 0,01 |
 | Leche | nadie: solo es materia prima de la quesera (autor, 2026-11-08) | — | — |
 
-**El consumo mezclado, cada minuto y en cada plaza** (propuesta del estudio sobre la decisión del autor):
+**El consumo mezclado, cada minuto y en cada plaza** (aprobado por el autor):
 1. Cada clase tiene su **necesidad de comida**, la de hoy (`consumoComidaPorHabitante`, 0,1 por habitante y minuto, por las políticas).
 2. Primero consume sus **bienes propios**, cada uno hasta su ración por cabeza.
 3. Cada bien consumido **alimenta 1 a 1**, como el trigo; lo que falte hasta la necesidad lo pone el **trigo**. Las raciones de una clase suman menos que su necesidad: el trigo siempre hace falta.
@@ -166,8 +166,8 @@ Retoma la idea 53 de `Ideas a diseñar.md`.
 ## 13. Prestigio
 
 - **De Facción, acumulado; no se gasta ni se pierde.**
-- **Se gana** (placeholders): victoria contra héroes de otra Facción 5 por batalla (no bandidos), conquista de una plaza 50, fundación 20, subida de nivel de una plaza 10 × nivel nuevo, y comercio entre Facciones distintas (trueque cumplido u orden tomada) 2.
-- **Se usa por umbrales** (placeholders):
+- **Se gana:** victoria contra héroes de otra Facción 5 por batalla (no bandidos), conquista de una plaza 50, fundación 20, subida de nivel de una plaza 10 × nivel nuevo, y comercio entre Facciones distintas (trueque cumplido u orden tomada) 2.
+- **Se usa por umbrales:**
   - **Alianzas abiertas** a la vez: 1, y una más cada 100 de prestigio (hoy no hay tope).
   - **Estatuas** en la capital: **decorativas**, desbloqueadas con prestigio (200, 500 y 1.000).
   - **Maravilla** en la plaza de nivel 5: ya pide el nivel 5 (`requisitoNivelAsentamientoConstruccion`); su `ordenEraMinimo` 5 (la Era V, que no existe) se sustituye por un umbral de prestigio (2.000).
