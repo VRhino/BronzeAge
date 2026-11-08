@@ -365,7 +365,7 @@ fn h12_entregar_materiales_a_una_obra() {
     let mut x = X::nuevo(m);
     let a = x.plaza(m, "ana", 1, 0);
     // La aldea agrícola marcada en el sitio del panel; una columna de «beto», de la Facción, a su puerta con el material.
-    let punto = x.n.sitio_de_aldea(a).expect("hay sitio de aldea");
+    let punto = x.n.sitio_de_aldea(a, Cultivo::Trigo).expect("hay sitio de aldea");
     let pueblo = x.ok("admin", Comando::MarcarAldea { asentamiento: a, punto, cultivo: Cultivo::Trigo }).creadas[0];
     let sitio = x.n.posicion_de_pueblo(pueblo).unwrap();
     let (col, h) = x.columna("beto", 1, sitio, 100_000);

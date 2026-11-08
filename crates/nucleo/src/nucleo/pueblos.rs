@@ -22,7 +22,7 @@
 use super::*;
 use crate::nucleo::mercado::id32;
 use asentamiento::catalogo::Tipo;
-use asentamiento::pueblos::{ErrorPueblo, Pueblo};
+use asentamiento::pueblos::{Cultivo, ErrorPueblo, Pueblo};
 use asentamiento::Costo;
 use super::dentro::MOTIVO_DESTRUIDO;
 use comercio::acarreo;
@@ -46,6 +46,7 @@ fn rechazo_de_pueblo(e: ErrorPueblo) -> (&'static str, &'static str) {
         ErrorPueblo::NivelMaximo => (PUEBLO_NIVEL_MAXIMO, "la aldea ya está en su último nivel"),
         ErrorPueblo::MejoraEnCurso => (PUEBLO_MEJORA_EN_CURSO, "la aldea ya tiene una subida de nivel en marcha"),
         ErrorPueblo::NoEstaActivo => (PUEBLO_NO_ESTA_ACTIVO, "el pueblo aún no está levantado"),
+        ErrorPueblo::CultivoBloqueado => (PUEBLO_CULTIVO_BLOQUEADO, "la plaza madre aún no tiene el nivel que pide ese cultivo"),
     }
 }
 
@@ -96,10 +97,10 @@ impl Nucleo {
 
     /// Lo que `MarcarAldea` mira de un punto antes de la ruta: tierra firme, en la zona real de la plaza, en el anillo de su siguiente aldea
     /// ([`Self::anillo_de_aldea`]) y a `separacionMinima` de toda plaza y todo pueblo, de cualquier Facción. Devuelve la fertilidad del punto
-    /// (ppm); el mínimo lo mira la regla (`iniciar_aldea`).
-    fn sitio_de_aldea_sin_ruta(&self, plaza: u64, pos: Punto) -> Result<i64, (&'static str, String)> {
+    /// en la capa de `cultivo` (ppm); el mínimo lo mira la regla (`iniciar_aldea`).
+    fn sitio_de_aldea_sin_ruta(&self, plaza: u64, pos: Punto, cultivo: Cultivo) -> Result<i64, (&'static str, String)> {
         let geo = self.geografia.as_ref().ok_or((rechazos::SIN_MUNDO, "el núcleo no tiene mundo cargado".into()))?;
-        let Some(fertilidad) = geo.fertilidad_en(pos).filter(|_| geo.es_tierra_firme(pos)) else { return Err((rechazos::PUEBLO_FUERA_DE_LA_ZONA, "ese punto no es tierra firme".into())) };
+        let Some(fertilidad) = geo.fertilidad_en(pos, cultivo).filter(|_| geo.es_tierra_firme(pos)) else { return Err((rechazos::PUEBLO_FUERA_DE_LA_ZONA, "ese punto no es tierra firme".into())) };
         if !self.en_zona(plaza, pos) {
             return Err((rechazos::PUEBLO_FUERA_DE_LA_ZONA, format!("el punto cae fuera de la zona de as-{plaza}")));
         }
@@ -121,10 +122,10 @@ impl Nucleo {
         Ok(fertilidad)
     }
 
-    /// El panel de la aldea agrícola: el punto más fértil de la zona de la plaza donde `MarcarAldea` se aceptaría ahora, muestreado en anillos de
-    /// 0,5 u y 24 rumbos desde la separación mínima hasta el radio de la zona (solo valen los del anillo de su siguiente aldea). `None` si no hay
-    /// ninguno (o no hay mundo).
-    pub fn sitio_de_aldea(&mut self, plaza: u64) -> Option<Punto> {
+    /// El panel de la aldea agrícola: el punto de la zona de la plaza más fértil para `cultivo` (en su capa) donde `MarcarAldea` se aceptaría ahora,
+    /// muestreado en anillos de 0,5 u y 24 rumbos desde la separación mínima hasta el radio de la zona (solo valen los del anillo de su siguiente
+    /// aldea). `None` si no hay ninguno (o no hay mundo).
+    pub fn sitio_de_aldea(&mut self, plaza: u64, cultivo: Cultivo) -> Option<Punto> {
         let a = self.estado.asentamientos.get(&plaza)?;
         let (centro, radio) = (a.posicion, a.radio);
         let (separacion, minima) = { let r = &self.estado.reglas.economia.datos.pueblos.aldea; (r.separacion_minima, r.fertilidad_minima) };
@@ -135,7 +136,7 @@ impl Nucleo {
             .filter_map(|(d, g)| {
                 let ang = ((g * 15) as f64).to_radians();
                 let p = Punto::new(centro.x + (d as f64 * ang.cos()) as i64, centro.y + (d as f64 * ang.sin()) as i64);
-                self.sitio_de_aldea_sin_ruta(plaza, p).ok().filter(|&f| f >= minima).map(|f| (f, p))
+                self.sitio_de_aldea_sin_ruta(plaza, p, cultivo).ok().filter(|&f| f >= minima).map(|f| (f, p))
             })
             .collect();
         // El más fértil primero (a igualdad, el más cercano); la ruta, un A*, solo se busca para los que se prueban.
@@ -147,7 +148,7 @@ impl Nucleo {
     pub fn planta_de_pueblo(&self, id: u64) -> Option<crate::urbanismo::VistaCiudad> {
         let (_, p) = self.pueblo(id)?;
         let r = &self.estado.reglas.economia;
-        let aldea = p.es_aldea().then(|| r.datos.pueblos.aldea.niveles.get(&p.nivel).map_or((1, 1), |n| (n.granjas, n.corrales)));
+        let aldea = p.cultivo().map(|c| r.datos.pueblos.aldea.niveles.get(&p.nivel).map_or((1, 1), |n| (n.granjas, r.datos.pueblos.aldea.corrales(c, p.nivel))));
         Some(crate::urbanismo::planta_de_pueblo(r, self.semilla, id, p.tipo, aldea))
     }
 
@@ -200,7 +201,7 @@ impl Nucleo {
                 self.plaza_o_rechazo(*asentamiento)?;
                 self.autorizar_en_plaza(p, *asentamiento, None)?;
                 let pos = *punto;
-                let fertilidad = self.sitio_de_aldea_sin_ruta(*asentamiento, pos).map_err(|(c, m)| rechazo(c, m))?;
+                let fertilidad = self.sitio_de_aldea_sin_ruta(*asentamiento, pos, *cultivo).map_err(|(c, m)| rechazo(c, m))?;
                 let madre = self.estado.asentamientos[asentamiento].posicion;
                 if self.camino_sin_red(pos, madre).is_none() {
                     return Err(rechazo(rechazos::PUEBLO_SIN_RUTA, format!("el punto no tiene ruta por tierra hasta as-{asentamiento}")));
@@ -435,7 +436,7 @@ impl Nucleo {
         if !acarreo::debe_salir(c, &flota, pu.existencias(datos)) {
             return;
         }
-        // Lo que se lleva: la capacidad entera, de su recurso o, en la aldea, del trigo y el ganado que tenga (por ese orden).
+        // Lo que se lleva: la capacidad entera, de su recurso o, en la aldea, de lo que tenga de cada uno de los suyos (por el orden de `Pueblo::recursos`).
         let carga: Mercancia = pu.carga_del_carro(datos, acarreo::capacidad(&flota)).into_iter().collect();
         let (pos_madre, faccion) = (a.posicion, a.faccion);
         let Some(pos_pueblo) = self.posicion_de_pueblo(pueblo) else { return };

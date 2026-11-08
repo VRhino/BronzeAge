@@ -48,7 +48,7 @@ pub struct Conquistada {
 ///   restos ocultos de crecimiento y de muertes se borran.
 /// - **Edificios**: de los `activo`, por id, exentos el Centro Urbano y la **primera Granja y la primera Leñera** activas, los primeros
 ///   `ceil(fraccionEdificiosDanados × n)` pasan a `en_cola` marcados `danado` (se reconstruyen por `fraccionCosteReconstruccion`). Un Almacén o
-///   Granero dañado deja de aportar capacidad y lo guardado que ya no cabe se pierde.
+///   Granero dañado deja de aportar capacidad y lo guardado que ya no cabe se pierde. Un molino dañado pierde su buey (tanda 69 §10).
 /// - La **obra de ascenso** en curso se pierde sin devolución y las **decisiones del gobierno derrotado** caen: políticas, reserva manual,
 ///   pausa de la auto-construcción y recetas paradas.
 /// - Cada **recinto de muralla completo y sin mejora en curso** pierde `fraccionDanoMuralla` de sus celdas ([`asentamiento::recintos::danar_por_conquista`]); el predicado
@@ -73,6 +73,7 @@ pub fn aplicar_conquista(r: &Reglas, economia: &asentamiento::Reglas, a: &mut As
         let e = &mut a.edificios[i];
         e.estado = Estado::EnCola;
         e.danado = true;
+        e.buey = false;
         e.completa_en = None;
         e.mejora = None;
         a.aplicar_capacidad(economia, tipo, nivel, -1);
@@ -225,6 +226,18 @@ mod pruebas {
             assert_eq!((e.danado, e.estado == Estado::EnCola), (danado, danado), "edificio {}", e.id);
         }
         assert_eq!(a.edificios[8].estado, Estado::EnConstruccion);
+    }
+
+    #[test]
+    fn el_molino_danado_pierde_su_buey_y_el_que_queda_en_pie_lo_conserva() {
+        let r = r();
+        use Tipo::*;
+        let mut a = plaza(&[CentroUrbano, Molino, Vivienda, Vivienda, Vivienda, Vivienda, Molino]);
+        a.edificios[1].buey = true;
+        a.edificios[6].buey = true;
+        // 6 dañables; ceil(6 × 0,25) = 2: los ids 1 (un molino) y 2.
+        assert_eq!(aplicar_conquista(r, economia(), &mut a, 0).edificios_danados, vec![1, 2]);
+        assert_eq!((a.edificios[1].buey, a.edificios[6].buey), (false, true));
     }
 
     #[test]

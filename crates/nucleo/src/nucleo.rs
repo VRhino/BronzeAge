@@ -1033,6 +1033,7 @@ impl Nucleo {
             | Comando::CancelarConstruccion { .. }
             | Comando::MoverEnCola { .. }
             | Comando::MejorarEdificio { .. }
+            | Comando::AsignarBuey { .. }
             | Comando::AlternarAutoConstruccion { .. }
             | Comando::AlternarReceta { .. }
             | Comando::CalibrarReserva { .. }

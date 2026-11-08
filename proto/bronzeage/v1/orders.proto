@@ -798,6 +798,14 @@ message OrdenCancelarConstruccion {
   string edificio_id = 3;
 }
 
+// Compra el buey de un molino (tanda 69 §10): cobra del almacén de la plaza el precio del buey de una caravana y el molino
+// produce el doble. Se queda allí hasta que el molino se pierde. Los mismos cargos que quitar_de_cola.
+message OrdenAsignarBuey {
+  string asentamiento_id = 1;
+  string cargo = 2;  // gobernador | maestroObras
+  string edificio_id = 3;
+}
+
 message OrdenQuitarEscolta {
   string caravana_id = 1;
   string heroe_id = 2;
@@ -1301,5 +1309,6 @@ message Orden {
     OrdenRenombrarCaravana renombrar_caravana = 181;
     OrdenDetenerEncargo detener_encargo = 182;
     OrdenCancelarConstruccion cancelar_construccion = 183;
+    OrdenAsignarBuey asignar_buey = 184;
   }
 }

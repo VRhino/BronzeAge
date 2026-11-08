@@ -315,9 +315,9 @@ fn vale_desde_el_nivel_1_y_respeta_el_cupo_que_libera_destruirlo_a_mano() {
     let mut uno = montar(m, 7, 1);
     let (plaza, cobre) = (uno.plaza, uno.cobre);
     uno.ok("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: cobre });
-    if let Some(punto) = uno.n.sitio_de_aldea(plaza) {
+    if let Some(punto) = uno.n.sitio_de_aldea(plaza, Cultivo::Trigo) {
         uno.ok("ana", Comando::MarcarAldea { asentamiento: plaza, punto, cultivo: Cultivo::Trigo });
-        if let Some(punto) = uno.n.sitio_de_aldea(plaza) {
+        if let Some(punto) = uno.n.sitio_de_aldea(plaza, Cultivo::Trigo) {
             assert_eq!(uno.rechazada("ana", Comando::MarcarAldea { asentamiento: plaza, punto, cultivo: Cultivo::Trigo }), rechazos::PUEBLO_SIN_CUPO, "en el nivel 1 caben dos pueblos");
         }
     }
@@ -1359,7 +1359,7 @@ fn las_aldeas_van_por_anillos_las_del_cupo_del_nivel_1_hasta_20_u_y_la_siguiente
     let centro = e.n.estado().asentamientos[&plaza].posicion;
     let mut puestas = vec![];
     for k in 1..=2 {
-        let punto = e.n.sitio_de_aldea(plaza).expect("hay tierra fértil a 20 u o menos");
+        let punto = e.n.sitio_de_aldea(plaza, Cultivo::Trigo).expect("hay tierra fértil a 20 u o menos");
         assert!(centro.dist(punto) <= 20_000, "la aldea {k} va a 20 u o menos: {}", centro.dist(punto));
         e.ok("ana", Comando::MarcarAldea { asentamiento: plaza, punto, cultivo: Cultivo::Trigo });
         puestas.push(punto);
@@ -1368,11 +1368,118 @@ fn las_aldeas_van_por_anillos_las_del_cupo_del_nivel_1_hasta_20_u_y_la_siguiente
     let rastro = e.n.hash_estado();
     assert_eq!(e.rechazada("ana", Comando::MarcarAldea { asentamiento: plaza, punto: puestas[0], cultivo: Cultivo::Trigo }), rechazos::PUEBLO_FUERA_DE_SU_ANILLO);
     assert_eq!(e.n.hash_estado(), rastro);
-    let punto = e.n.sitio_de_aldea(plaza).expect("hay tierra fértil de 20 a 30 u");
+    let punto = e.n.sitio_de_aldea(plaza, Cultivo::Trigo).expect("hay tierra fértil de 20 a 30 u");
     let d = centro.dist(punto);
     assert!(d > 20_000 && d <= 30_000, "el panel propone el anillo del nivel 2: {d}");
     e.ok("ana", Comando::MarcarAldea { asentamiento: plaza, punto, cultivo: Cultivo::Trigo });
     assert_eq!(e.n.pueblos_de(plaza).iter().filter(|p| p.es_aldea()).count(), 3);
+}
+
+/// Los puntos transitables del entorno de `centro` (anillos de 0,5 u y 24 rumbos, desde 3,5 u) cuya fertilidad en las capas de trigo y de vid (u8, en ese orden) cumple `vale`.
+fn puntos_con_capas(m: &Mundo, centro: Punto, vale: impl Fn(u8, u8) -> bool) -> Vec<Punto> {
+    (0..24)
+        .flat_map(|k| (0..24).map(move |g| (3_500 + k * 500, g)))
+        .map(|(d, g)| {
+            let a = ((g * 15) as f64).to_radians();
+            Punto::new(centro.x + (d as f64 * a.cos()) as i64, centro.y + (d as f64 * a.sin()) as i64)
+        })
+        .filter(|q| m.transitable_en(q.x, q.y) && vale(m.fertilidad_en(q.x, q.y).unwrap_or(0), m.fertilidad_vid_en(q.x, q.y).unwrap_or(0)))
+        .collect()
+}
+
+/// Un sitio de plaza con tierra para la vid y para la oliva en su zona de nivel 2 (hasta 14 u): la oliva es escasa en el mundo (la capa del generador la
+/// pone en pocos sitios), así que no toda plaza tiene donde plantar una aldea de oliva.
+fn con_vid_y_oliva(m: &Mundo) -> impl Fn(Punto) -> bool + '_ {
+    move |c| {
+        let hay = |capa: fn(&Mundo, i64, i64) -> Option<u8>| {
+            (0..24).flat_map(|k| (0..24).map(move |g| (3_500 + k * 450, g))).any(|(d, g)| {
+                let a = ((g * 15) as f64).to_radians();
+                let q = Punto::new(c.x + (d as f64 * a.cos()) as i64, c.y + (d as f64 * a.sin()) as i64);
+                m.transitable_en(q.x, q.y) && capa(m, q.x, q.y).is_some_and(|f| f >= 77)
+            })
+        };
+        hay(Mundo::fertilidad_vid_en) && hay(Mundo::fertilidad_oliva_en)
+    }
+}
+
+#[test]
+fn la_vid_y_la_oliva_piden_el_nivel_de_su_cultivo_en_la_madre() {
+    let m = con_mundo!();
+    // PUEBLOS_EXTRACTORES.aldea.cultivos: la vid desde el nivel 3 de la plaza madre y la oliva desde el 4.
+    let mut e = montar_donde(Nucleo::nuevo(arranque(m, 7)), m, 2, con_vid_y_oliva(&m.0));
+    let plaza = e.plaza;
+    let marcar = |e: &mut Escenario, cultivo: Cultivo| {
+        let punto = e.n.sitio_de_aldea(plaza, cultivo).expect("hay tierra fértil para el cultivo en la zona");
+        Comando::MarcarAldea { asentamiento: plaza, punto, cultivo }
+    };
+    let rastro = e.n.hash_estado();
+    for cultivo in [Cultivo::Vid, Cultivo::Oliva] {
+        let c = marcar(&mut e, cultivo);
+        assert_eq!(e.rechazada("ana", c), rechazos::PUEBLO_CULTIVO_BLOQUEADO, "con la madre en el nivel 2");
+    }
+    assert_eq!(e.n.hash_estado(), rastro, "el rechazo no deja rastro");
+    e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: plaza, nivel: 3 });
+    let c = marcar(&mut e, Cultivo::Oliva);
+    assert_eq!(e.rechazada("ana", c), rechazos::PUEBLO_CULTIVO_BLOQUEADO, "la oliva sigue bloqueada en el nivel 3");
+    let c = marcar(&mut e, Cultivo::Vid);
+    e.ok("ana", c);
+    e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: plaza, nivel: 4 });
+    let c = marcar(&mut e, Cultivo::Oliva);
+    e.ok("ana", c);
+    let cultivos: Vec<_> = e.n.pueblos_de(plaza).iter().filter_map(|p| p.cultivo()).collect();
+    assert_eq!(cultivos, vec![Cultivo::Vid, Cultivo::Oliva]);
+}
+
+#[test]
+fn la_fertilidad_de_la_aldea_es_la_de_la_capa_de_su_cultivo() {
+    let m = con_mundo!();
+    let mut e = montar_donde(Nucleo::nuevo(arranque(m, 7)), m, 3, con_vid_y_oliva(&m.0));
+    let plaza = e.plaza;
+    let centro = e.n.estado().asentamientos[&plaza].posicion;
+    // El mínimo se mira en la capa del cultivo: donde el trigo llega (≥ 77 de 255, el 30 %) y la vid no (≤ 76), la aldea de vid se rechaza y la de trigo se acepta.
+    let sin_vid = puntos_con_capas(&m.0, centro, |trigo, vid| trigo >= 77 && vid <= 76);
+    let rechazado = sin_vid.into_iter().find(|&punto| {
+        let r = e.ord("ana", Comando::MarcarAldea { asentamiento: plaza, punto, cultivo: Cultivo::Vid });
+        matches!(r.resultado, Resultado::Rechazada { codigo, .. } if codigo == rechazos::PUEBLO_FERTILIDAD_INSUFICIENTE)
+    });
+    let punto = rechazado.expect("hay un punto fértil para el trigo y pobre para la vid");
+    let id = e.ok("ana", Comando::MarcarAldea { asentamiento: plaza, punto, cultivo: Cultivo::Trigo }).creadas[0];
+    let (trigo, vid) = (m.0.fertilidad_en(punto.x, punto.y).unwrap() as i64, m.0.fertilidad_vid_en(punto.x, punto.y).unwrap() as i64);
+    assert!(trigo > vid);
+    let asentamiento::pueblos::Sitio::Punto { fertilidad, .. } = e.pueblo(id).sitio else { panic!("una aldea está en un punto") };
+    assert_eq!(fertilidad, trigo * 1_000_000 / 255, "la aldea de trigo guarda la fertilidad de la capa del trigo");
+    // La de vid guarda la de la capa de la vid, en el sitio que propone el panel (el más fértil de esa capa).
+    e.ok("admin", Comando::DestruirPueblo { pueblo: id });
+    let punto = e.n.sitio_de_aldea(plaza, Cultivo::Vid).expect("hay tierra para la vid");
+    let id = e.ok("ana", Comando::MarcarAldea { asentamiento: plaza, punto, cultivo: Cultivo::Vid }).creadas[0];
+    let asentamiento::pueblos::Sitio::Punto { fertilidad, cultivo, .. } = e.pueblo(id).sitio else { panic!("una aldea está en un punto") };
+    assert_eq!((fertilidad, cultivo), (m.0.fertilidad_vid_en(punto.x, punto.y).unwrap() as i64 * 1_000_000 / 255, Cultivo::Vid));
+}
+
+#[test]
+fn la_aldea_de_vid_da_uva_no_tiene_corrales_y_su_carro_lleva_uva() {
+    let m = con_mundo!();
+    let mut e = montar_donde(Nucleo::nuevo(arranque(m, 7)), m, 3, con_vid_y_oliva(&m.0));
+    let plaza = e.plaza;
+    let id = comun::levantar_aldea_de(&mut e.n, "ana", plaza, Cultivo::Vid).expect("hay tierra para la vid en la zona");
+    let EstadoPueblo::EnObra { completa_en } = e.pueblo(id).estado else { panic!("con todo entregado, en obra") };
+    e.n.avanzar_hasta(completa_en + MIN);
+    assert!(e.pueblo(id).activo());
+    assert!(e.pueblo(id).rebano.is_none(), "una aldea de vid no cría");
+    e.avanzar(3 * MIN);
+    let p = e.pueblo(id);
+    assert!(p.almacen.cantidad(Uva) > 0, "sus granjas dan uva");
+    assert_eq!((p.almacen.cantidad(Trigo), p.almacen.cantidad(Livestock), p.almacen.cantidad(Leche)), (0, 0, 0));
+    assert_eq!(p.recursos(&e.n.estado().reglas.economia.datos), vec![Uva]);
+    let vista = nucleo::proyeccion::propios::pueblo(&e.n, plaza, p);
+    assert_eq!(vista.almacen_por_recurso.keys().map(String::as_str).collect::<Vec<_>>(), vec!["uva"]);
+    // Su carro sale lleno de uva y la trae a la madre.
+    let limite = e.n.ahora() + 12 * HORA;
+    while !e.n.economia(plaza).unwrap().ingresos_acarreo.iter().any(|i| i.recurso == Uva) {
+        e.avanzar(10 * MIN);
+        assert!(e.n.ahora() < limite, "el carro debería haber traído uva");
+    }
+    assert!(e.n.economia(plaza).unwrap().ingresos_acarreo.iter().all(|i| i.recurso == Uva), "solo uva");
 }
 
 #[test]
@@ -1417,12 +1524,13 @@ fn la_aldea_se_marca_en_tierra_fertil_nace_con_su_rebano_y_su_carro_lleva_trigo_
     assert_eq!(p.rebano.as_ref().map(|r| (r.especie.as_str(), r.cabezas / 1_000)), Some(("vacuno", 20)), "nace con el pie de cría de su corral");
     assert!(e.n.economia(plaza).unwrap().aldeas_activas() == 1);
 
-    // Su carro sale con trigo y, cuando el rebaño pasa del pie de cría, también con ganado; los dos entran en el almacén de la madre.
+    // Su carro sale con trigo, con la leche del rebaño y, cuando este pasa del pie de cría, también con ganado y carne; los cuatro entran en el almacén
+    // de la madre.
     let limite = e.n.ahora() + 12 * HORA;
     let trae = |e: &Escenario, r: Recurso| e.n.economia(plaza).unwrap().ingresos_acarreo.iter().any(|i| i.recurso == r);
-    while !(trae(&e, Trigo) && trae(&e, Livestock)) {
+    while !([Trigo, Livestock, Carne, Leche].iter().all(|&r| trae(&e, r))) {
         e.avanzar(10 * MIN);
-        assert!(e.n.ahora() < limite, "el carro debería haber traído trigo y ganado: {:?}", e.n.economia(plaza).unwrap().ingresos_acarreo);
+        assert!(e.n.ahora() < limite, "el carro debería haber traído trigo, ganado, carne y leche: {:?}", e.n.economia(plaza).unwrap().ingresos_acarreo);
     }
 
     // Sube de nivel con otra obra de mapa: sigue produciendo mientras espera los materiales.

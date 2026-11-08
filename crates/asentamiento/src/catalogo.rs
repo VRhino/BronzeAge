@@ -1,7 +1,7 @@
 //! Catálogo de edificios (`EDIFICIO_CATALOGO`, Doc 4.2.1) y las reglas de construcción que lo acompañan (`NECESIDADES`,
 //! `SCORE_BANDAS`, `EDIFICIOS_UNICOS`…). Todo sale de los bloques de Mechanics; aquí solo se convierte a tipos y enteros.
 
-use crate::datos::{mil, ppm};
+use crate::datos::{mil, ppm, UNO};
 use crate::recurso::{Costo, Recurso};
 use base::Mil;
 use serde_json::Value;
@@ -56,9 +56,12 @@ impl Tipo {
         self.es_extractor() || matches!(self, Tipo::Granja | Tipo::Lenera)
     }
 
-    /// Talleres que piden artesanos y llevan recetas.
+    /// Talleres que piden artesanos y llevan recetas (los cinco de la comida de la tanda 69 incluidos).
     pub fn es_taller(self) -> bool {
-        matches!(self, Tipo::Fundicion | Tipo::Curtiduria | Tipo::Armeria | Tipo::Carpinteria | Tipo::GranFundicion)
+        matches!(
+            self,
+            Tipo::Fundicion | Tipo::Curtiduria | Tipo::Armeria | Tipo::Carpinteria | Tipo::GranFundicion | Tipo::Molino | Tipo::Horno | Tipo::Quesera | Tipo::Bodega | Tipo::Prensa
+        )
     }
 }
 
@@ -109,6 +112,8 @@ pub struct TipoEdificio {
     /// Producción base por minuto (milésimas) del extractor o la granja del nivel 1.
     pub produccion: Option<(Recurso, Mil)>,
     pub trabajadores: Mil,
+    /// Cuánto multiplica su producción tener buey, en ppm (`factorBuey` del molino); `UNO` en los demás.
+    pub factor_buey: i64,
     /// Niveles internos; vacío si no mejora. `niveles[0]` es el nivel 1.
     pub niveles: Vec<NivelInterno>,
 }
@@ -256,6 +261,7 @@ impl Catalogo {
                     capacidad_por_recurso: mil(f(v, "capacidadPorRecursoAdicional").unwrap_or(0.0)),
                     produccion,
                     trabajadores: mil(f(v, "trabajadoresRequeridos").unwrap_or(0.0)),
+                    factor_buey: f(v, "factorBuey").map_or(UNO, ppm),
                     niveles,
                 },
             );
@@ -350,6 +356,8 @@ mod pruebas {
         assert_eq!(c.tipo(Tipo::Lenera).produccion, Some((Recurso::Madera, 8_000)));
         assert_eq!(c.tipo(Tipo::Mercado).nivel(3).unwrap().cupo_carros, 18);
         assert!(c.tipo(Tipo::CentroUrbano).costo.is_empty());
+        assert_eq!(c.tipo(Tipo::Molino).factor_buey, 2_000_000, "`factorBuey` 2 en el molino");
+        assert!(TIPOS.iter().filter(|&&t| t != Tipo::Molino).all(|&t| c.tipo(t).factor_buey == UNO), "los demás no tienen buey");
     }
 
     #[test]

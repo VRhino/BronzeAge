@@ -601,6 +601,7 @@ impl Nucleo {
         | Comando::CancelarConstruccion { asentamiento, .. }
         | Comando::MoverEnCola { asentamiento, .. }
         | Comando::MejorarEdificio { asentamiento, .. }
+        | Comando::AsignarBuey { asentamiento, .. }
         | Comando::AlternarAutoConstruccion { asentamiento, .. }
         | Comando::AlternarReceta { asentamiento, .. }
         | Comando::CalibrarReserva { asentamiento, .. }
@@ -667,6 +668,23 @@ impl Nucleo {
                 r.map_err(rechazo_obra)?;
                 self.emitir_propio(t, "construccion.mejora_forzada", vec![id], vec![("edificio", *edificio as i64)]);
                 sucesos.extend(ev);
+            }
+            Comando::AsignarBuey { edificio, .. } => {
+                // El buey cuesta lo que el de una caravana (`ANIMAL_CATALOGO.buey.costo`) y se queda en el molino.
+                let precio = &self.estado.reglas.economia.comercio.flota.buey.costo;
+                let eco = &mut self.estado.asentamientos.get_mut(&id).expect("existe").economia;
+                let molino = eco.edificios.iter_mut().find(|e| e.id == *edificio).ok_or_else(|| rechazo_obra(ErrorObra::NoExiste))?;
+                if molino.tipo != Tipo::Molino {
+                    return Err(rechazo(rechazos::MOLINO_NO_ES_MOLINO, format!("ed-{edificio} no es un molino")));
+                }
+                if molino.buey {
+                    return Err(rechazo(rechazos::MOLINO_YA_TIENE_BUEY, format!("el molino ed-{edificio} ya tiene su buey")));
+                }
+                if !eco.almacen.pagar(precio) {
+                    return Err(rechazo_obra(ErrorObra::RecursosInsuficientes));
+                }
+                molino.buey = true;
+                self.emitir_propio(t, "construccion.buey_asignado", vec![id], vec![("edificio", *edificio as i64)]);
             }
             Comando::AlternarAutoConstruccion { pausada, .. } => {
                 if !self.estado.asentamientos.get_mut(&id).expect("existe").economia.alternar_auto_construccion(*pausada) {

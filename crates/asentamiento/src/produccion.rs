@@ -123,12 +123,13 @@ pub fn recetas(cat: &Catalogo, edificios: &mut [Edificio], almacen: &mut Almacen
             continue;
         }
         let Some(nivel) = cat.tipo(e.tipo).nivel(e.nivel_interno) else { continue };
+        let factor_buey = if e.buey { cat.tipo(e.tipo).factor_buey } else { UNO };
         let mut limitado = false;
         for rc in &nivel.recetas {
             if ctx.recetas_pausadas.contains(&rc.produce) || rc.tecnologia.as_deref().is_some_and(|t| !(ctx.tiene_tecnologia)(t)) {
                 continue;
             }
-            let mut cantidad = por(por(rc.produccion_base, mano.artesanos), ctx.factor_talleres);
+            let mut cantidad = por(por(por(rc.produccion_base, mano.artesanos), ctx.factor_talleres), factor_buey);
             for &(insumo, por_unidad) in &rc.consume_por_unidad {
                 let disponible = (almacen.disponible(insumo) - reserva[insumo.indice()]).max(0);
                 cantidad = cantidad.min(disponible * 1000 / por_unidad.max(1));
@@ -356,6 +357,45 @@ mod pruebas {
         recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &["aleacion_bronce"]), &[0; N]);
         assert_eq!(a.cantidad(Recurso::Estano), antes);
         assert!(e[0].pausado_por_almacen);
+    }
+
+    #[test]
+    fn cada_receta_de_la_comida_convierte_su_materia_en_su_bien_con_la_mano_de_obra_entera() {
+        let cat = Reglas::cargar().catalogo;
+        // (edificio, materia, bien, bien por minuto, materia por unidad). Cifras provisionales de la tanda 69: un nivel 1 cubre la ración (`BIENES_DE_CONSUMO`) de 100 cabezas de la clase
+        // que come el bien: pan 100 × 0,04 = 4; queso 100 × 0,02 = 2; vino y aceite 100 × 0,01 = 1; la harina, lo que gasta el horno (4). El molino y el horno gastan 1 por unidad; los demás, 2.
+        let casos = [
+            (Tipo::Molino, Recurso::Trigo, Recurso::Harina, 4_000, 1_000),
+            (Tipo::Horno, Recurso::Harina, Recurso::Pan, 4_000, 1_000),
+            (Tipo::Quesera, Recurso::Leche, Recurso::Queso, 2_000, 2_000),
+            (Tipo::Bodega, Recurso::Uva, Recurso::Vino, 1_000, 2_000),
+            (Tipo::Prensa, Recurso::Aceituna, Recurso::Aceite, 1_000, 2_000),
+        ];
+        for (tipo, materia, bien, por_minuto, por_unidad) in casos {
+            let mut a = Almacen::nuevo(400_000);
+            a.poner(materia, 100_000);
+            let mut e = vec![activo(1, tipo)];
+            let m = mano_de_obra(&cat, &e, 0, 3, 0); // 3 artesanos: más de los 2 o 3 que pide cada uno
+            let hecho = recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; N]);
+            assert_eq!(hecho, vec![(bien, por_minuto)], "{tipo:?}");
+            assert_eq!((a.cantidad(bien), a.cantidad(materia)), (por_minuto, 100_000 - por_minuto * por_unidad / 1_000), "{tipo:?}: produce su bien y gasta su materia");
+        }
+    }
+
+    #[test]
+    fn con_buey_el_molino_produce_el_doble_gastando_lo_mismo_por_unidad() {
+        let cat = Reglas::cargar().catalogo;
+        let m = mano_de_obra(&cat, &[activo(1, Tipo::Molino)], 0, 2, 0);
+        let molino = |buey: bool, trigo: Mil| {
+            let mut a = Almacen::nuevo(400_000);
+            a.poner(Recurso::Trigo, trigo);
+            let mut e = vec![Edificio { buey, ..activo(1, Tipo::Molino) }];
+            recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; N]);
+            (a.cantidad(Recurso::Harina), a.cantidad(Recurso::Trigo))
+        };
+        assert_eq!(molino(false, 100_000), (4_000, 96_000), "sin buey, la receta: 4 de harina por minuto");
+        assert_eq!(molino(true, 100_000), (8_000, 92_000), "con buey (`factorBuey` 2), el doble de harina con el mismo trigo por unidad");
+        assert_eq!(molino(true, 6_000), (6_000, 0), "y sigue limitado por el trigo que hay");
     }
 
     #[test]

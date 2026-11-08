@@ -127,6 +127,8 @@ pub enum Comando {
     MoverEnCola { asentamiento: u64, edificio: u32, arriba: bool },
     /// Mejora un edificio activo al siguiente nivel interno.
     MejorarEdificio { asentamiento: u64, edificio: u32 },
+    /// Compra el buey de un molino (tanda 69 §10): cobra el precio del buey de una caravana del almacén de la plaza y el molino produce el doble.
+    AsignarBuey { asentamiento: u64, edificio: u32 },
     /// Pausa o reanuda la auto-construcción (solo la detección de necesidades nuevas).
     AlternarAutoConstruccion { asentamiento: u64, pausada: bool },
     /// Para o reanuda una receta por el recurso que produce, en todos los talleres.
@@ -798,6 +800,7 @@ impl Comando {
             | Comando::CancelarConstruccion { .. }
             | Comando::MoverEnCola { .. }
             | Comando::MejorarEdificio { .. }
+            | Comando::AsignarBuey { .. }
             | Comando::AlternarAutoConstruccion { .. }
             | Comando::AlternarReceta { .. }
             | Comando::MarcarPueblo { .. }
@@ -1054,6 +1057,7 @@ impl Comando {
             | Comando::CancelarConstruccion { asentamiento, .. }
             | Comando::MoverEnCola { asentamiento, .. }
             | Comando::MejorarEdificio { asentamiento, .. }
+            | Comando::AsignarBuey { asentamiento, .. }
             | Comando::AlternarAutoConstruccion { asentamiento, .. }
             | Comando::AlternarReceta { asentamiento, .. }
             | Comando::CalibrarReserva { asentamiento, .. }
@@ -1446,6 +1450,11 @@ impl Peticion {
             }
             Comando::CancelarConstruccion { asentamiento, edificio } => {
                 w.u8(213);
+                w.u64(*asentamiento);
+                w.u32(*edificio);
+            }
+            Comando::AsignarBuey { asentamiento, edificio } => {
+                w.u8(214);
                 w.u64(*asentamiento);
                 w.u32(*edificio);
             }
@@ -2727,6 +2736,7 @@ impl Peticion {
             197 => Comando::CancelarEncargo { caravana: r.u64()? },
             212 => Comando::DetenerEncargo { caravana: r.u64()? },
             213 => Comando::CancelarConstruccion { asentamiento: r.u64()?, edificio: r.u32()? },
+            214 => Comando::AsignarBuey { asentamiento: r.u64()?, edificio: r.u32()? },
             198 => Comando::OfrecerseComoMercenario { heroe: r.u64()? },
             199 => Comando::RetirarOferta { heroe: r.u64()? },
             200 | 210 => Comando::ContratarMercenario {
@@ -3674,6 +3684,7 @@ mod pruebas {
             Comando::CancelarConstruccion { asentamiento: 3, edificio: 17 },
             Comando::MoverEnCola { asentamiento: 3, edificio: 17, arriba: true },
             Comando::MejorarEdificio { asentamiento: 3, edificio: 4 },
+            Comando::AsignarBuey { asentamiento: 3, edificio: 4 },
             Comando::AlternarAutoConstruccion { asentamiento: 3, pausada: true },
             Comando::AlternarReceta { asentamiento: 3, recurso: Recurso::LingoteBronce, pausada: false },
             Comando::CalibrarReserva { asentamiento: 3, recurso: Recurso::Madera, valor: 12_345 },

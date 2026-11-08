@@ -10,6 +10,7 @@
 use super::*;
 use crate::economia::Mapa;
 use crate::estado::Asentamiento;
+use asentamiento::pueblos::Cultivo;
 use base::Instante;
 use mundo::Mundo;
 use std::collections::BTreeSet;
@@ -68,9 +69,15 @@ impl Geografia {
         self.mundo.campamentos().iter().filter_map(|c| c.posicion.as_ref().map(|p| (Punto::new(p.x, p.y), c.origen))).collect()
     }
 
-    /// La fertilidad del artefacto en `p`, en ppm (el raster es u8: 255 = 1,0); `None` fuera del mapa. La que manda en las granjas de una aldea agrícola.
-    pub(super) fn fertilidad_en(&self, p: Punto) -> Option<i64> {
-        self.mundo.fertilidad_en(p.x, p.y).map(|f| f as i64 * asentamiento::datos::UNO / 255)
+    /// La fertilidad del artefacto en `p` para `cultivo`, en ppm (el raster es u8: 255 = 1,0); `None` fuera del mapa. Cada cultivo mira su capa del
+    /// mundo (trigo, vid u oliva) y es la que manda en las granjas de una aldea agrícola.
+    pub(super) fn fertilidad_en(&self, p: Punto, cultivo: Cultivo) -> Option<i64> {
+        let capa = match cultivo {
+            Cultivo::Trigo => self.mundo.fertilidad_en(p.x, p.y),
+            Cultivo::Vid => self.mundo.fertilidad_vid_en(p.x, p.y),
+            Cultivo::Oliva => self.mundo.fertilidad_oliva_en(p.x, p.y),
+        };
+        capa.map(|f| f as i64 * asentamiento::datos::UNO / 255)
     }
 
     /// ¿Lo pisa una ruta? Lo que el A\* de las rutas da por transitable.

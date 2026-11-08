@@ -659,7 +659,7 @@ impl Sim<'_> {
             if t < p.proxima_obra {
                 return;
             }
-            let Some(punto) = self.n.sitio_de_aldea(id) else {
+            let Some(punto) = self.n.sitio_de_aldea(id, Cultivo::Trigo) else {
                 self.pjs.get_mut(&id).expect("existe").proxima_obra = t + 24 * HORA;
                 return;
             };

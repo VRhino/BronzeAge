@@ -1570,10 +1570,19 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
     },
     "tiempoConstruccionMinutos": 5,
     "requisitoNivelAsentamientoConstruccion": 1,
+    "factorBuey": 2,
     "niveles": {
       "1": {
         "trabajadoresRequeridos": 2,
-        "recetas": []
+        "recetas": [
+          {
+            "produce": "harina",
+            "produccionBase": 4,
+            "consumePorUnidad": {
+              "trigo": 1
+            }
+          }
+        ]
       }
     }
   },
@@ -1587,7 +1596,15 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
     "niveles": {
       "1": {
         "trabajadoresRequeridos": 2,
-        "recetas": []
+        "recetas": [
+          {
+            "produce": "pan",
+            "produccionBase": 4,
+            "consumePorUnidad": {
+              "harina": 1
+            }
+          }
+        ]
       }
     }
   },
@@ -1601,7 +1618,15 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
     "niveles": {
       "1": {
         "trabajadoresRequeridos": 2,
-        "recetas": []
+        "recetas": [
+          {
+            "produce": "queso",
+            "produccionBase": 2,
+            "consumePorUnidad": {
+              "leche": 2
+            }
+          }
+        ]
       }
     }
   },
@@ -1615,7 +1640,15 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
     "niveles": {
       "1": {
         "trabajadoresRequeridos": 3,
-        "recetas": []
+        "recetas": [
+          {
+            "produce": "vino",
+            "produccionBase": 1,
+            "consumePorUnidad": {
+              "uva": 2
+            }
+          }
+        ]
       }
     }
   },
@@ -1629,7 +1662,15 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
     "niveles": {
       "1": {
         "trabajadoresRequeridos": 3,
-        "recetas": []
+        "recetas": [
+          {
+            "produce": "aceite",
+            "produccionBase": 1,
+            "consumePorUnidad": {
+              "aceituna": 2
+            }
+          }
+        ]
       }
     }
   },
@@ -2398,8 +2439,10 @@ Todo se hace con el héroe **dentro** del pueblo o la aldea (`entrarEnPueblo`) y
     "topePorCorral": 40,
     "pieDeCriaPorCorral": 20,
     "crecimientoPorHora": 0.15,
+    "lechePorCabezaYHora": 3,
     "productos": {
-      "livestock": 60
+      "livestock": 60,
+      "carne": 60
     }
   }
 }
@@ -2523,7 +2566,7 @@ Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; cont
   "acarreo.carro_repuesto", "aldea.marcada", "aldea.mejora_marcada", "aldea.subio", "acarreo.llega", "acarreo.sale", "acarreo.vuelve", "asentamiento.ascenso_iniciado", "asentamiento.nivel", "asentamiento.nivel_subio",
   "asentamiento.renombrado", "asentamiento.ruinas", "avanzada.adoptada", "avanzada.completada", "avanzada.deposito", "avanzada.guarnecida", "avanzada.guarnicion_retirada",
   "avanzada.materiales_entregados", "avanzada.obra_cancelada", "avanzada.obra_iniciada", "avanzada.obra_marcada", "avanzada.reabastecimiento", "avanzada.sin_dueno",
-  "avanzada.traspasada", "avanzada.tropa_elegida", "construccion.auto_alternada", "construccion.cola_reordenada", "construccion.desencolada", "construccion.obra_cancelada",
+  "avanzada.traspasada", "avanzada.tropa_elegida", "construccion.auto_alternada", "construccion.buey_asignado", "construccion.cola_reordenada", "construccion.desencolada", "construccion.obra_cancelada",
   "construccion.edificio_completado", "construccion.edificio_gratuito", "construccion.encolada", "construccion.mejora_completada", "construccion.mejora_forzada",
   "construccion.mejora_iniciada", "construccion.necesidad_detectada", "construccion.obra_iniciada", "construccion.receta_alternada", "construccion.yacimiento_agotado",
   "faccion.experiencia", "faccion.nivel", "mantenimiento.colapsado", "mantenimiento.deficit", "mantenimiento.recuperado", "parcela.liberada", "parcela.reclamada",
