@@ -89,10 +89,8 @@ mod misiones;
 mod participacion;
 pub use participacion::Miembro;
 
-pub(crate) use misiones::arrancar_misiones;
 mod recompensas;
 mod recurrentes;
-pub(crate) use recurrentes::arrancar_tablones;
 mod tecnologias;
 mod titulos;
 mod traslado;

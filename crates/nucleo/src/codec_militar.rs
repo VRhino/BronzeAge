@@ -505,8 +505,7 @@ pub(crate) fn escribir(w: &mut Escritor, m: &EstadoMilitar) {
     }
 }
 
-/// `con_eligieron`: la foto trae lo que eligió cada campamento (desde BAN41); en una BAN40 empieza en 0. `con_nombres`: trae los nombres de los héroes (desde BAN43); antes, ninguno.
-pub(crate) fn leer(r: &mut Lector, con_eligieron: bool, con_nombres: bool) -> Result<EstadoMilitar, ErrorFormato> {
+pub(crate) fn leer(r: &mut Lector) -> Result<EstadoMilitar, ErrorFormato> {
     let mut m = EstadoMilitar::default();
     for _ in 0..r.cuenta()? {
         m.insertar(heroe_leer(r)?);
@@ -519,17 +518,13 @@ pub(crate) fn leer(r: &mut Lector, con_eligieron: bool, con_nombres: bool) -> Re
         let campamento = r.u32()?;
         m.reclutas.insert(campamento, Reclutas { poblacion: r.i64()?, en: r.i64()? });
     }
-    if con_eligieron {
-        for _ in 0..r.cuenta()? {
-            let campamento = r.u32()?;
-            m.eligieron.insert(campamento, r.u32()?);
-        }
+    for _ in 0..r.cuenta()? {
+        let campamento = r.u32()?;
+        m.eligieron.insert(campamento, r.u32()?);
     }
-    if con_nombres {
-        for _ in 0..r.cuenta()? {
-            let heroe = r.u64()?;
-            m.nombres.insert(heroe, r.texto()?);
-        }
+    for _ in 0..r.cuenta()? {
+        let heroe = r.u64()?;
+        m.nombres.insert(heroe, r.texto()?);
     }
     Ok(m)
 }

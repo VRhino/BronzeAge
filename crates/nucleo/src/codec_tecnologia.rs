@@ -39,19 +39,14 @@ pub(crate) fn escribir(w: &mut Escritor, e: &EstadoTecnologia) {
     }
 }
 
-/// `con_plazas_al_cumplir`: la foto es BAN58 o posterior; si no, cada logro cumplido se lee con 1 plaza.
-pub(crate) fn leer(r: &mut Lector, con_plazas_al_cumplir: bool) -> Result<EstadoTecnologia, ErrorFormato> {
+pub(crate) fn leer(r: &mut Lector) -> Result<EstadoTecnologia, ErrorFormato> {
     let (era, era_desde) = (r.u8()?, r.i64()?);
     let (mut contadores, mut restos) = ([0u64; 24], [0u64; 24]);
     for n in contadores.iter_mut().chain(restos.iter_mut()) {
         *n = r.u64()?;
     }
     let logros = (0..r.cuenta()?).map(|_| r.opt_i64()).collect::<Result<Vec<_>, _>>()?;
-    let plazas_al_cumplir = if con_plazas_al_cumplir {
-        (0..r.cuenta()?).map(|_| r.u32()).collect::<Result<Vec<_>, _>>()?
-    } else {
-        logros.iter().map(|l| u32::from(l.is_some())).collect()
-    };
+    let plazas_al_cumplir = (0..r.cuenta()?).map(|_| r.u32()).collect::<Result<Vec<_>, _>>()?;
     let mut primeros = Vec::new();
     for _ in 0..r.cuenta()? {
         primeros.push(if r.bool()? { Some(Primero { faccion: r.u32()?, en: r.i64()? }) } else { None });

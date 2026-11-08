@@ -85,8 +85,7 @@ fn faccion_escribir(w: &mut Escritor, f: &Faccion) {
     w.i64(*prestigio);
 }
 
-/// `con_marcas`: la foto es de BAN54 o posterior; las de antes no traen marcas (no había mercenarios por contrato).
-fn faccion_leer(r: &mut Lector, con_marcas: bool) -> Result<Faccion, ErrorFormato> {
+fn faccion_leer(r: &mut Lector) -> Result<Faccion, ErrorFormato> {
     Ok(Faccion {
         id: r.u32()?,
         nombre: r.texto()?,
@@ -104,7 +103,7 @@ fn faccion_leer(r: &mut Lector, con_marcas: bool) -> Result<Faccion, ErrorFormat
             _ => return Err(ErrorFormato("derrota de una Facción desconocida")),
         },
         admite_otras_en_ataques: r.bool()?,
-        marcas: if con_marcas { marcas_leer(r)? } else { Default::default() },
+        marcas: marcas_leer(r)?,
         prestigio: r.i64()?,
     })
 }
@@ -255,8 +254,8 @@ pub(crate) fn escribir(w: &mut Escritor, p: &Politica) {
     w.u32(*mayor_desaparecida);
 }
 
-pub(crate) fn leer(r: &mut Lector, con_marcas: bool) -> Result<Politica, ErrorFormato> {
-    let facciones: Vec<Faccion> = (0..r.cuenta()?).map(|_| faccion_leer(r, con_marcas)).collect::<Result<_, _>>()?;
+pub(crate) fn leer(r: &mut Lector) -> Result<Politica, ErrorFormato> {
+    let facciones: Vec<Faccion> = (0..r.cuenta()?).map(|_| faccion_leer(r)).collect::<Result<_, _>>()?;
     let salidas = (0..r.cuenta()?).map(|_| Ok((r.u64()?, r.i64()?))).collect::<Result<_, ErrorFormato>>()?;
     let relaciones: Vec<RelacionPolitica> = (0..r.cuenta()?).map(|_| relacion_leer(r)).collect::<Result<_, _>>()?;
     let propuestas: Vec<Propuesta> = (0..r.cuenta()?).map(|_| propuesta_leer(r)).collect::<Result<_, _>>()?;
@@ -302,7 +301,7 @@ mod pruebas {
         let mut w = Escritor::default();
         escribir(&mut w, &p);
         let mut r = Lector::nuevo(&w.0);
-        assert_eq!(leer(&mut r, true).unwrap(), p);
+        assert_eq!(leer(&mut r).unwrap(), p);
         r.fin().unwrap();
     }
 }

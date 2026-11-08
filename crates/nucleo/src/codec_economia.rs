@@ -401,10 +401,7 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
     tendencia.producido.iter().chain(&tendencia.consumido).for_each(|&x| w.i64(x));
 }
 
-/// `con_aldeas`: la foto trae los pueblos con su sitio, su nivel y su subida (desde BAN47); antes, todos sobre un nodo y de nivel 1. `con_flujos`: la tendencia trae lo producido y lo
-/// consumido por separado (desde BAN48); antes, a 0 hasta el siguiente paso de minuto. `con_desempate`: la foto trae los minutos sin cupo de
-/// cada extractor que proponía la cola automática (hasta BAN52); desde BAN53 la cola ya no propone extractores y se leen para descartarlos.
-pub(crate) fn leer(r: &mut Lector, con_aldeas: bool, con_flujos: bool, con_desempate: bool) -> Result<Asentamiento, ErrorFormato> {
+pub(crate) fn leer(r: &mut Lector) -> Result<Asentamiento, ErrorFormato> {
     let (fundado_en, nivel) = (r.i64()?, r.u32()?);
     let medidor = Medidor { valor: r.i64()?, racha: r.u32()?, nivel_actual: r.u32()? };
     let (pesants, artesanos, nobleza) = (r.i64()?, r.i64()?, r.i64()?);
@@ -438,19 +435,14 @@ pub(crate) fn leer(r: &mut Lector, con_aldeas: bool, con_flujos: bool, con_desem
     let mut pueblos = Vec::new();
     for _ in 0..r.cuenta()? {
         let (id, tipo) = (r.u64()?, tipo_de_u8(r.u8()?)?);
-        let (sitio, nivel, estado, mejora, rebano) = if con_aldeas {
-            let sitio = match r.u8()? {
-                0 => Sitio::Nodo(r.u32()?),
-                1 => Sitio::Punto { pos: r.punto()?, fertilidad: r.i64()?, cultivo: *Cultivo::TODOS.get(usize::from(r.u8()?)).ok_or(ErrorFormato("cultivo de aldea desconocido"))? },
-                _ => return Err(ErrorFormato("sitio de pueblo desconocido")),
-            };
-            let (nivel, estado) = (r.u32()?, leer_estado_pueblo(r)?);
-            let mejora = if r.bool()? { Some(leer_estado_pueblo(r)?) } else { None };
-            let rebano = if r.bool()? { Some(Rebano { especie: r.texto()?, cabezas: r.i64()? }) } else { None };
-            (sitio, nivel, estado, mejora, rebano)
-        } else {
-            (Sitio::Nodo(r.u32()?), 1, leer_estado_pueblo(r)?, None, None)
+        let sitio = match r.u8()? {
+            0 => Sitio::Nodo(r.u32()?),
+            1 => Sitio::Punto { pos: r.punto()?, fertilidad: r.i64()?, cultivo: *Cultivo::TODOS.get(usize::from(r.u8()?)).ok_or(ErrorFormato("cultivo de aldea desconocido"))? },
+            _ => return Err(ErrorFormato("sitio de pueblo desconocido")),
         };
+        let (nivel, estado) = (r.u32()?, leer_estado_pueblo(r)?);
+        let mejora = if r.bool()? { Some(leer_estado_pueblo(r)?) } else { None };
+        let rebano = if r.bool()? { Some(Rebano { especie: r.texto()?, cabezas: r.i64()? }) } else { None };
         pueblos.push(Pueblo { id, tipo, sitio, nivel, estado, mejora, rebano, almacen: leer_almacen(r)?, carro: r.opt_u64()?, lleno: r.bool()? });
     }
     let mut avanzadas = Vec::new();
@@ -477,11 +469,6 @@ pub(crate) fn leer(r: &mut Lector, con_aldeas: bool, con_flujos: bool, con_desem
         *x = r.i64()?;
     }
     let ocupado = r.bool()?;
-    if con_desempate {
-        for _ in 0..r.cuenta()? {
-            (tipo_de_u8(r.u8()?)?, r.i64()?);
-        }
-    }
     Ok(Asentamiento {
         fundado_en,
         nivel,
@@ -511,10 +498,8 @@ pub(crate) fn leer(r: &mut Lector, con_aldeas: bool, con_flujos: bool, con_desem
             for x in &mut t.poblacion {
                 *x = r.i64()?;
             }
-            if con_flujos {
-                for x in t.producido.iter_mut().chain(&mut t.consumido) {
-                    *x = r.i64()?;
-                }
+            for x in t.producido.iter_mut().chain(&mut t.consumido) {
+                *x = r.i64()?;
             }
             t
         },
@@ -532,26 +517,12 @@ mod pruebas {
     }
 
     #[test]
-    fn una_foto_ban52_se_lee_descartando_los_minutos_sin_cupo_de_los_extractores() {
+    fn un_asentamiento_da_ida_y_vuelta_con_los_mismos_bytes() {
         let r = asentamiento::Reglas::cargar();
-        let a = Asentamiento::fundar(&r, 0, &[], 3);
-        let bytes = bytes_de(&a);
-        // Hasta BAN52, justo antes de `completados_pendientes` iba la lista de minutos sin cupo: el primer byte que cambia al tocar ese campo.
-        let mut otra = a.clone();
-        otra.completados_pendientes += 1;
-        let donde = bytes.iter().zip(bytes_de(&otra)).position(|(x, y)| *x != y).expect("el campo está en la foto");
-        let mut vieja = bytes[..donde].to_vec();
-        let mut w = Escritor::default();
-        w.u64(1);
-        w.u8(tipo_a_u8(Tipo::Cantera));
-        w.i64(7);
-        vieja.extend_from_slice(&w.0);
-        vieja.extend_from_slice(&bytes[donde..]);
-        let mut lector = Lector::nuevo(&vieja);
-        let leida = leer(&mut lector, true, true, true).unwrap();
-        lector.fin().unwrap();
-        assert_eq!(bytes_de(&leida), bytes, "al guardarla de nuevo es la BAN53, sin la lista");
+        let bytes = bytes_de(&Asentamiento::fundar(&r, 0, &[], 3));
         let mut lector = Lector::nuevo(&bytes);
-        assert_eq!(bytes_de(&leer(&mut lector, true, true, false).unwrap()), bytes);
+        let leida = leer(&mut lector).unwrap();
+        lector.fin().unwrap();
+        assert_eq!(bytes_de(&leida), bytes);
     }
 }

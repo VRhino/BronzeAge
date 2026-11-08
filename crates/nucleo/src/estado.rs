@@ -140,49 +140,48 @@ pub fn entidad_contrato(mercenario: u64) -> u64 {
     (24 * crate::estado_comercio::ETIQUETA) | mercenario
 }
 
-/// BAN55: BAN54 con el nombre de cada caravana comercial (`Caravana::nombre`, `renombrarCaravana`, 2026-11-02; al final de cada caravana, en `codec_comercio`). BAN54 a BAN40 se
-/// siguen admitiendo: ninguna caravana tiene nombre.
+/// BAN55: BAN54 con el nombre de cada caravana comercial (`Caravana::nombre`, `renombrarCaravana`, 2026-11-02; al final de cada caravana, en `codec_comercio`). BAN54 a BAN40 ya no
+/// se admiten.
 ///
 /// BAN54: BAN53 con los mercenarios por contrato (entrada 48): las marcas de ciudadanía de cada Facción (`politica::Faccion::marcas`, en el códec de la política) y
-/// `Estado::contratos` al final, tras las misiones recurrentes. BAN53 a BAN40 se siguen admitiendo: no hay ofertas, contratos ni marcas.
+/// `Estado::contratos` al final, tras las misiones recurrentes. BAN53 a BAN40 ya no se admiten.
 ///
 /// BAN53: BAN52 sin los minutos sin cupo de los extractores de la cola automática (`Asentamiento::extractor_minutos_sin_cupo`; desde el 2026-11-01 la
-/// cola no propone ningún extractor: la Cantera es de pueblo extractor). BAN52 a BAN40 se siguen admitiendo: se leen y se descartan.
+/// cola no propone ningún extractor: la Cantera es de pueblo extractor). BAN52 a BAN40 ya no se admiten.
 ///
 /// BAN52: BAN51 con el encargo de cada caravana (`Caravana::encargo`, rutas de caravanas automáticas, 2026-10-31; `codec_comercio`) y un sexto cargo local por plaza (el
-/// Maestro de Caravanas, tras los cinco de antes). BAN51 a BAN40 se siguen admitiendo: ninguna caravana tiene encargo y ninguna plaza Maestro de Caravanas.
+/// Maestro de Caravanas, tras los cinco de antes). BAN51 a BAN40 ya no se admiten.
 ///
 /// BAN51: BAN50 con el cierre del almacén a los ciudadanos de cada plaza (`Asentamiento::almacen_cerrado_a_ciudadanos`, detrás de `permite_reabastecer_aliados`; 2026-10-29). BAN50 a BAN40
-/// se siguen admitiendo: ninguna plaza lo tiene cerrado.
+/// ya no se admiten.
 ///
 /// BAN50: BAN49 con las misiones recurrentes (mecánica 55, 2026-10-28; `Estado::recurrentes`, al final: el catálogo vigente, el origen de las semanas, la renovación en la cola y cada
-/// tablón). BAN49 a BAN40 se siguen admitiendo: el catálogo es el inicial, las semanas cuentan desde el día de la foto y cada plaza y cada Facción sacan su tablón al cargar.
+/// tablón). BAN49 a BAN40 ya no se admiten.
 ///
-/// BAN49: BAN48 con la participación de cada héroe en cada plaza (mecánica 54, 2026-10-28; `Estado::participacion`, al final). BAN48 a BAN40 se siguen admitiendo: la
-/// participación empieza vacía.
+/// BAN49: BAN48 con la participación de cada héroe en cada plaza (mecánica 54, 2026-10-28; `Estado::participacion`, al final). BAN48 a BAN40 ya no se
+/// admiten.
 ///
 /// BAN48: BAN47 con lo producido y lo consumido de cada recurso en el último paso de minuto, por separado (mecánica 60, 2026-10-28; `Tendencia::producido` y `consumido`, en
-/// `codec_economia`). BAN47 a BAN40 se siguen admitiendo: los dos van a 0 hasta el siguiente paso de minuto de cada plaza.
+/// `codec_economia`). BAN47 a BAN40 ya no se admiten.
 ///
 /// BAN47: BAN46 con las aldeas agrícolas (mecánica 50, 2026-10-27): cada pueblo guarda su sitio (nodo o punto con su fertilidad), su nivel y su subida en curso
-/// (`codec_economia`). BAN46 a BAN40 se siguen admitiendo: sus pueblos son extractores sobre un nodo, de nivel 1.
+/// (`codec_economia`). BAN46 a BAN40 ya no se admiten.
 ///
-/// BAN46: BAN45 con las misiones de cada dueño (`Estado::misiones`, al final; mecánica 49, 2026-10-27). BAN45 a BAN40 se siguen admitiendo: cada plaza y cada Facción arrancan sus misiones
-/// al cargar, mirando sus contadores de estado (Misiones §8).
+/// BAN46: BAN45 con las misiones de cada dueño (`Estado::misiones`, al final; mecánica 49, 2026-10-27). BAN45 a BAN40 ya no se admiten.
 ///
-/// BAN45: BAN44 con las columnas en marcha forzada (la lista de sus ids, al final del estado; `Columna::forzada`; 2026-10-27). BAN44 a BAN40 se siguen admitiendo: ninguna columna va forzada.
+/// BAN45: BAN44 con las columnas en marcha forzada (la lista de sus ids, al final del estado; `Columna::forzada`; 2026-10-27). BAN44 a BAN40 ya no se admiten.
 ///
-/// BAN44: BAN43 con la tabla de precios de mercado vigente y su plazo (`Estado::precios`, `Estado::precios_en` y `Estado::precios_rearmar`, al final; `Carga::Precios` en la cola; 2026-10-27). BAN43 a BAN40 se
-/// siguen admitiendo: empiezan sin tabla y la primera se calcula al armar el plazo.
+/// BAN44: BAN43 con la tabla de precios de mercado vigente y su plazo (`Estado::precios`, `Estado::precios_en` y `Estado::precios_rearmar`, al final; `Carga::Precios` en la cola; 2026-10-27). BAN43 a BAN40 ya no se
+/// admiten.
 ///
-/// BAN43: BAN42 con el nombre que eligió el jugador para cada héroe (`EstadoMilitar::nombres`, al final del estado militar; 2026-10-27). BAN42, BAN41 y BAN40 se siguen
-/// admitiendo: sus héroes se llaman «Héroe N».
+/// BAN43: BAN42 con el nombre que eligió el jugador para cada héroe (`EstadoMilitar::nombres`, al final del estado militar; 2026-10-27). BAN42, BAN41 y BAN40 ya no se
+/// admiten.
 ///
 /// BAN42: BAN41 con la ruta guardada del carro de acarreo de cada pueblo (`EstadoComercio::rutas_acarreo`, al final del comercio; decisión del autor del 2026-10-27).
-/// BAN41 y BAN40 se siguen admitiendo: sus rutas empiezan vacías y cada carro traza y guarda la suya en su próxima salida.
+/// BAN41 y BAN40 ya no se admiten.
 ///
-/// BAN41: BAN40 con cuántos héroes eligieron cada campamento de mercenarios para nacer (`EstadoMilitar::eligieron`, paridad P6, al final del estado militar). BAN40 se
-/// sigue admitiendo: ese contador solo crece y empieza en 0.
+/// BAN41: BAN40 con cuántos héroes eligieron cada campamento de mercenarios para nacer (`EstadoMilitar::eligieron`, paridad P6, al final del estado militar). BAN40 ya no se
+/// admite.
 ///
 /// BAN40: BAN39 (6D, los Aedas itinerantes) con los Aedas residentes y sus épicas (sistema 6, tanda 6E; `codec_tecnologia::escribir_residentes`): cada residente (su N, su plaza,
 /// su Facción, cuándo llegó y su épica con el capítulo, los hechos, el último y sus claves), el contador de ids, desde cuándo espera cada plaza con cupo libre, las épicas cumplidas por Facción
@@ -302,12 +301,12 @@ pub fn entidad_contrato(mercenario: u64) -> u64 {
 ///
 /// Del BAN12 (fase 4D) vienen el estado del combate (`codec_combate`: campamentos de bandidos y sus plazos, guarnición de serie de los pueblos y lo que cada
 /// héroe ha destruido), el fin de la protección y de la ocupación de cada plaza y `Carga::Combate`.
-/// BAN56: BAN55 más, en el encargo de cada caravana, el inicio del paso en curso y si la ruta está detenida (2026-11-04, `codec_comercio`). BAN55 se lee sin ellos.
+/// BAN56: BAN55 más, en el encargo de cada caravana, el inicio del paso en curso y si la ruta está detenida (2026-11-04, `codec_comercio`). BAN55 ya no se admite.
 ///
-/// BAN57: BAN56 sin la cuota de parcelas por masa en la cabecera de reglas (2026-11-06, la regla se quita). De BAN56 y anteriores se lee y se descarta.
+/// BAN57: BAN56 sin la cuota de parcelas por masa en la cabecera de reglas (2026-11-06, la regla se quita). BAN56 y anteriores ya no se admiten.
 ///
 /// BAN58: BAN57 con las plazas vivas del mundo cuando se cumplió cada logro (`EstadoTecnologia::plazas_al_cumplir`, tras los logros en `codec_tecnologia`; umbrales por plaza,
-/// 2026-11-07). De BAN57 y anteriores se lee 1 en cada logro cumplido.
+/// 2026-11-07). BAN57 y anteriores ya no se admiten.
 ///
 /// BAN59: BAN58 con los nueve recursos de la tanda 69 (38 en cada almacén, flujo y tendencia), el cultivo de cada aldea, el buey de cada edificio (`codec_economia`) y el prestigio de
 /// cada Facción (`codec_politica`), 2026-11-08. BAN58 y anteriores ya no se admiten: sus listas de recursos son de 29 y la partida es nueva.
@@ -1503,11 +1502,6 @@ impl Estado {
                 _ => return Err(ErrorFormato("no es un estado del núcleo")),
             }
         }
-        // Lo que traían o no los formatos de antes de BAN59, que ya no se leen: en BAN59 todo está.
-        let (con_eligieron, con_rutas_acarreo, con_nombres, con_precios, con_forzadas, con_misiones, con_aldeas) = (true, true, true, true, true, true, true);
-        let (con_flujos, con_participacion, con_recurrentes, con_almacen_cerrado, con_encargos, con_contratos) = (true, true, true, true, true, true);
-        let (con_nombres_de_caravana, con_paso_de_encargo, con_plazas_al_cumplir) = (true, true, true);
-        let (con_desempate, con_cuota_de_parcelas) = (false, false);
         if r.texto()? != mundo_hash {
             return Err(ErrorFormato("la foto es de otro mundo (hash del artefacto distinto)"));
         }
@@ -1522,10 +1516,6 @@ impl Estado {
                     techos.push(r.i64()?);
                 }
                 let (crecimiento_por_edificio, separacion_plazas, exclusion_campamento) = (r.i64()?, r.i64()?, r.i64()?);
-                // Hasta BAN56 la cabecera traía la cuota de parcelas por masa, que ya no existe.
-                if con_cuota_de_parcelas {
-                    r.u32()?;
-                }
                 ReglasTerritorio { radio_inicial, techos, crecimiento_por_edificio, separacion_plazas, exclusion_campamento }
             },
             economia: {
@@ -1562,7 +1552,7 @@ impl Estado {
                 parcelas.insert(p);
             }
             let version = r.u64()?;
-            let economia = codec_economia::leer(&mut r, con_aldeas, con_flujos, con_desempate)?;
+            let economia = codec_economia::leer(&mut r)?;
             let urbe = Urbe::desde_ciudad(codec_ciudad::leer(&mut r, asentamiento::recintos::proyeccion(&economia.recintos))?);
             let (protegida_hasta, ocupada_hasta) = (r.opt_i64()?, r.opt_i64()?);
             let cerrada_a = r.opt_u64()?.map(|b| politica::Grupos::desde_bits(b as u8));
@@ -1572,13 +1562,12 @@ impl Estado {
             }
             let puerta = Puerta { cerrada_a, vetados };
             let mut cargos = Cargos::default();
-            // Hasta BAN51 había cinco cargos locales; el sexto (Maestro de Caravanas) llega vacío.
-            for c in politica::CARGOS.into_iter().take(if con_encargos { politica::CARGOS.len() } else { 5 }) {
+            for c in politica::CARGOS {
                 cargos.fijar(c, r.opt_u64()?);
             }
             let (nombre, capital_de, de_la_faccion_desde) = (r.texto()?, r.opt_u64()?.map(|f| f as u32), r.i64()?);
             let (resto_tributo, permite_reabastecer_aliados) = (r.i64()?, r.bool()?);
-            let almacen_cerrado_a_ciudadanos = if con_almacen_cerrado { r.bool()? } else { false };
+            let almacen_cerrado_a_ciudadanos = r.bool()?;
             let fundadores = (0..r.cuenta()?).map(|_| r.u64()).collect::<Result<Vec<_>, _>>()?;
             for e in &economia.edificios {
                 if let Some(asentamiento::edificio::Fuente::Nodo(n)) = e.fuente {
@@ -1597,55 +1586,39 @@ impl Estado {
         for _ in 0..r.cuenta()? {
             s.contactos.insert((r.u64()?, r.u64()?));
         }
-        s.comercio = codec_comercio::leer(&mut r, &s.reglas.economia.comercio, con_rutas_acarreo, con_encargos, con_nombres_de_caravana, con_paso_de_encargo)?;
-        s.militar = codec_militar::leer(&mut r, con_eligieron, con_nombres)?;
+        s.comercio = codec_comercio::leer(&mut r, &s.reglas.economia.comercio)?;
+        s.militar = codec_militar::leer(&mut r)?;
         s.combate = codec_combate::leer(&mut r)?;
         s.batallas = codec_batallas::leer(&mut r)?;
         s.memoria = memoria::leer(&mut r)?;
-        s.politica = codec_politica::leer(&mut r, con_contratos)?;
+        s.politica = codec_politica::leer(&mut r)?;
         s.fundacion = estado_fundacion::leer(&mut r)?;
         s.titulos_en = r.opt_i64()?;
-        s.tecnologia = codec_tecnologia::leer(&mut r, con_plazas_al_cumplir)?;
+        s.tecnologia = codec_tecnologia::leer(&mut r)?;
         s.era_en = r.opt_i64()?;
         s.aedas = codec_tecnologia::leer_aedas(&mut r)?;
         (s.residentes, s.residentes_citas) = codec_tecnologia::leer_residentes(&mut r)?;
-        if con_precios {
-            s.precios_en = r.opt_i64()?;
-            s.precios_rearmar = r.u8()? != 0;
-            s.precios = match r.u8()? {
-                0 => None,
-                1 => {
-                    let mut filas = std::collections::BTreeMap::new();
-                    for _ in 0..r.cuenta()? {
-                        filas.insert(codec_economia::recurso_de_u8(r.u8()?)?, r.i64()?);
-                    }
-                    Some(comercio::precio::TablaPrecios::desde(filas))
+        s.precios_en = r.opt_i64()?;
+        s.precios_rearmar = r.u8()? != 0;
+        s.precios = match r.u8()? {
+            0 => None,
+            1 => {
+                let mut filas = std::collections::BTreeMap::new();
+                for _ in 0..r.cuenta()? {
+                    filas.insert(codec_economia::recurso_de_u8(r.u8()?)?, r.i64()?);
                 }
-                _ => return Err(ErrorFormato("tabla de precios mal formada")),
-            };
-        }
-        if con_forzadas {
-            for _ in 0..r.cuenta()? {
-                let id = r.u64()?;
-                s.ejercitos.get_mut(&id).ok_or(ErrorFormato("marcha forzada de una columna que no está"))?.columna.forzada = true;
+                Some(comercio::precio::TablaPrecios::desde(filas))
             }
+            _ => return Err(ErrorFormato("tabla de precios mal formada")),
+        };
+        for _ in 0..r.cuenta()? {
+            let id = r.u64()?;
+            s.ejercitos.get_mut(&id).ok_or(ErrorFormato("marcha forzada de una columna que no está"))?.columna.forzada = true;
         }
-        if con_misiones {
-            s.misiones = crate::misiones::leer(&mut r, &s.reglas.economia.misiones)?;
-        } else {
-            crate::nucleo::arrancar_misiones(&mut s);
-        }
-        if con_participacion {
-            s.participacion = crate::participacion::leer(&mut r)?;
-        }
-        if con_recurrentes {
-            s.recurrentes = crate::recurrentes::leer(&mut r, &s.reglas.economia.militar.tropas)?;
-        } else {
-            crate::nucleo::arrancar_tablones(&mut s);
-        }
-        if con_contratos {
-            s.contratos = crate::codec_contratos::leer(&mut r)?;
-        }
+        s.misiones = crate::misiones::leer(&mut r, &s.reglas.economia.misiones)?;
+        s.participacion = crate::participacion::leer(&mut r)?;
+        s.recurrentes = crate::recurrentes::leer(&mut r, &s.reglas.economia.militar.tropas)?;
+        s.contratos = crate::codec_contratos::leer(&mut r)?;
 
         let mut gens = Vec::new();
         for _ in 0..r.cuenta()? {

@@ -215,7 +215,7 @@ fn la_plaza_cumple_por_estado_al_completar_el_edificio_y_la_cadena_sigue_en_el_m
     let a1 = interior.misiones.iter().find(|v| v.id == "A1").expect("la A1 viaja");
     assert_eq!(a1.estado, contrato::v1::EstadoMision::MisionActiva as i32, "activa mientras la plaza no tenga aldea agrícola");
     assert!(nucleo::proyeccion::propios::faccion_publica(&x.n, x.n.estado().asentamientos[&a].faccion).misiones.is_empty());
-    // Una foto anterior a las misiones arranca la plaza mirando su estado, sin hecho.
+    // Las reglas traen la A1 de las plazas.
     let r = &x.n.estado().reglas.economia.misiones;
     assert!(r.buscar(ClaseDueno::Asentamiento, "A1").is_some());
 }
