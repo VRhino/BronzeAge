@@ -3281,7 +3281,7 @@ pub mod rechazos {
     pub const INTEL_PLAZA_DESCONOCIDA: &str = "intel.plaza_desconocida";
     /// Tomar una orden a distancia pide el informe vigente de las órdenes de la región de esa plaza (tanda 69 §7).
     pub const INTEL_SIN_INFORME_DE_ORDENES: &str = "intel.sin_informe_de_ordenes";
-    /// Ya tiene un Informe reciente de esa plaza.
+    /// Ya tiene un Informe reciente de esa plaza o, en el informe de región, uno del mismo tipo de esa región.
     pub const INTEL_INFORME_RECIENTE: &str = "intel.informe_reciente";
     /// No hay oro para pagarla (en el almacén de la plaza, en el personal o en el carro).
     pub const INTEL_SIN_ORO: &str = "intel.sin_oro";

@@ -1,4 +1,4 @@
-//! El prestigio de la Facción (tanda 69, Diplomacia_Facciones §3.4 `PRESTIGIO`; Tanda_Economia_Heroe_Y_Cultivos §13): se acumula y no se gasta ni se pierde. Cada hecho suma su cuantía en el
+//! El prestigio de la Facción (tanda 69, Diplomacia_Facciones §3.4 `PRESTIGIO`): se acumula y no se gasta ni se pierde. Cada hecho suma su cuantía en el
 //! instante en que ocurre ([`Nucleo::dar_prestigio`]); lo que lo usa son umbrales: las alianzas activas a la vez (`politica::propuestas`), la Maravilla y las estatuas de la capital (`asentamiento::obras`,
 //! que reciben del núcleo lo que el prestigio deja hacer, [`Nucleo::prestigio_para_obras`]).
 //!

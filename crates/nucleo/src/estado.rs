@@ -308,8 +308,10 @@ pub fn entidad_contrato(mercenario: u64) -> u64 {
 /// BAN58: BAN57 con las plazas vivas del mundo cuando se cumplió cada logro (`EstadoTecnologia::plazas_al_cumplir`, tras los logros en `codec_tecnologia`; umbrales por plaza,
 /// 2026-11-07). BAN57 y anteriores ya no se admiten.
 ///
-/// BAN59: BAN58 con los nueve recursos de la tanda 69 (38 en cada almacén, flujo y tendencia), el cultivo de cada aldea, el buey de cada edificio (`codec_economia`) y el prestigio de
-/// cada Facción (`codec_politica`), 2026-11-08. BAN58 y anteriores ya no se admiten: sus listas de recursos son de 29 y la partida es nueva.
+/// BAN59: BAN58 con lo de la tanda 69 (2026-11-08): los nueve recursos nuevos (38 en cada almacén, flujo y tendencia), el cultivo de cada aldea y el buey de cada edificio
+/// (`codec_economia`); las monedas del héroe, un solo número en vez de bronce, plata y oro (`codec_militar`); el prestigio de cada Facción (`codec_politica`); los combates entre
+/// cada par de Facciones para los rendimientos decrecientes de las monedas (`codec_combate`) y los informes de región de la taberna (`memoria`). BAN58 y anteriores ya no se admiten: sus listas
+/// de recursos son de 29 y la partida es nueva.
 const MAGIA: &[u8; 5] = b"BAN59";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se

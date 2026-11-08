@@ -1,4 +1,4 @@
-//! La taberna regional (tanda 69, Tanda_Economia_Heroe_Y_Cultivos §7 y §8): comprar el informe de las plazas o de las órdenes de la región del relieve, tomar a distancia una orden de mercado de
+//! La taberna regional (tanda 69; Niebla_De_Guerra, Comercio_Caravanas §5.8 y Mercenarios_Por_Contrato): comprar el informe de las plazas o de las órdenes de la región del relieve, tomar a distancia una orden de mercado de
 //! esas plazas con un envío de caravana, y ver y contratar a los mercenarios de la región desde la taberna. Sobre el artefacto de mundo real (`generador/salida/mundo/mundo-*.bin`), que es el que
 //! tiene regiones; las pruebas se omiten si no está. Las cifras salen de las reglas (`INTEL.region`, la tarifa del tablón) o de lo que la propia prueba coloca.
 

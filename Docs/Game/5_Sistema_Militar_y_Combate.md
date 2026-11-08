@@ -501,7 +501,7 @@ Diseño en `typescript-final:Consideraciones/Ocupacion_Post_Conquista_Definicion
 
 La niebla (5.12.7-8) tapa lo que queda fuera de tus ojos, y **saber qué pasa donde no ves vale oro**. La **taberna** vende esa información: no abre nada que la niebla no cierre para siempre, solo **presta ojos durante un rato** o **tira una foto** que luego envejece. Es el **sink recurrente de oro** del juego (Doc 3.1): una suscripción, no una compra de capital — se paga, caduca y se vuelve a pagar si todavía importa.
 
-Hay **dos productos**, los dos **exactos en el instante de la compra**: la información no lleva ruido ni miente, así que un bot y un jugador la usan igual.
+Hay **dos productos**, los dos **exactos en el instante de la compra**: la información no lleva ruido ni miente, así que un bot y un jugador la usan igual. La taberna de una **plaza** vende además, a partir de la tanda 69, dos **informes de región** (más abajo).
 
 | | **Mirada** | **Informe de plaza** |
 |---|---|---|
@@ -519,6 +519,17 @@ Hay **dos productos**, los dos **exactos en el instante de la compra**: la infor
 - **Taberna de plaza** (edificio, Doc 4.2.1). Compra el **Rey, el Embajador o el Gobernador** de esa plaza, **estando en ella**, y paga el **almacén de esa plaza**. El cupo de Miradas lo da su nivel interno: 1 / 2 / 3.
 - **Taberna de un campamento de mercenarios** (Doc 1.9b). Compra **cualquier héroe que pertenezca a una Facción**, dentro del campamento o con su columna a la puerta (como el resto de sus acciones), y paga con el oro de su **almacén personal** (si reside allí) o del **carro** de su columna (de visita). Es la vía de las Facciones sin plaza. El cupo es fijo (`INTEL.campamento.cupoMiradas`, 1 por Facción y campamento). La intel que compra es **de su Facción**: lo que un ciudadano mira, lo saben los suyos.
 - Un héroe **sin Facción** no compra: la intel es de una Facción, y sin ella no hay memoria donde guardar un informe ni aliados con quienes compartir una Mirada.
+
+**Informes de región (solo en la taberna de una plaza).** La taberna de una plaza vende información de **toda la región de relieve del mapa** en que está la plaza (Altiplano interior, Estepa abierta…), en dos tipos que se compran por separado:
+
+| | **Plazas de la región** | **Órdenes de la región** |
+|---|---|---|
+| Qué es | Las **fichas** (nombre, Facción, posición y nivel, 5.12.7) de las plazas de la región, aunque nunca las hayas visto | Las **órdenes de mercado en pie** de esas plazas (Doc 3.3), que ves mientras dura el informe |
+| Memoria | Se guardan en la memoria de la Facción y **envejecen a la vista** como cualquier ficha conocida (5.12.8); sirven para pedir luego el Informe de una de ellas | **Ninguna**: se ven en vivo, como si estuvieras dentro de cada plaza, y se dejan de ver al caducar (`INTEL.region.caducidadMinutos`, 200 min) |
+| Precio | **Fijo**, `INTEL.region.oro` (60), del almacén de la plaza: no depende del nivel de la plaza ni de cuántas plazas haya en la región (decisión del autor, 2026-11-08) | El mismo |
+| Freno | Un **cooldown** por Facción, región y tipo (`INTEL.region.cooldownMinutos`, 6 h) | El mismo |
+
+Entran **todas las plazas de la región menos las de tu Facción y las de una Facción en guerra con ella**: las aliadas, las vasallas, las de Facciones en paz y las de bots sí. Compra el **Rey, el Embajador o el Gobernador**, estando en la plaza; no hace falta conocer ninguna plaza antes, y **no avisa a nadie**. Con las órdenes a la vista se puede **tomar una a distancia** desde el Mercado de una plaza propia (Doc 3.13.9). Las dos compras de región se ven en la ficha de la Facción, con su caducidad y cuándo se pueden repetir. La taberna de un campamento no vende informes de región.
 
 **La víctima.** Un Informe **avisa a la Facción espiada** (`asentamiento.informe_pedido`, atribuido a su plaza): *«alguien ha pedido el plano y la defensa de Troya»*, **sin decir quién**. Es el mismo principio que la inspección a 8 (5.12.3) —obtener información de un rival delata— pero la compra es remota, así que el aviso es **anónimo**. La Mirada **no avisa a nadie**: es solo ver, y mirar un trozo de mapa no toca a nadie.
 

@@ -393,7 +393,7 @@ para col, row en [centro±maxCeldas]:
 
 ### 6.4 Genéricos (palacio, almacén, granero, leñera, taberna, Sala del Consejo)
 
-> **Implementado en Rust (2026-11-08, tanda 69, §10 del diseño):** el **molino** y el **horno** se colocan como genéricos —**sueltos en la ciudad, sin ancla de barrio**— (`crates/nucleo/src/urbanismo.rs`), porque se levantan desde el nivel 1 de la plaza y el barrio de la industria no tiene ancla hasta `NIVEL_GATE_ANCLAS` (2): como satélites no habrían tenido dónde ir. La quesera, la bodega y la prensa (nivel 2, 3 y 4) sí son satélites de la industria, y la estatua, del barrio residencial. Las huellas están en `EDIFICIO_TAMANO` (molino 2×2, horno 2×1, quesera 2×1, bodega 2×2, prensa 2×1); la estatua usa `EDIFICIO_TAMANO_POR_DEFECTO` (1×1). Sin cambios de algoritmo.
+> **Implementado en Rust (2026-11-08, tanda 69):** el **molino** y el **horno** se colocan como genéricos —**sueltos en la ciudad, sin ancla de barrio**— (`crates/nucleo/src/urbanismo.rs`), porque se levantan desde el nivel 1 de la plaza y el barrio de la industria no tiene ancla hasta `NIVEL_GATE_ANCLAS` (2): como satélites no habrían tenido dónde ir. La quesera, la bodega y la prensa (nivel 2, 3 y 4) sí son satélites de la industria, y la estatua, del barrio residencial. Las huellas están en `EDIFICIO_TAMANO` (molino 2×2, horno 2×1, quesera 2×1, bodega 2×2, prensa 2×1); la estatua usa `EDIFICIO_TAMANO_POR_DEFECTO` (1×1). Sin cambios de algoritmo.
 
 Sin ancla ni barrio: todos los candidatos del radio urbano con `distanciaMinima = 0`, ordenados **del más cercano al origen** (desempate `semillaCandidato`), y después la preferencia intramuros (§6.6).
 

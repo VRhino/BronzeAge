@@ -35,7 +35,7 @@
 | **Columnas y caravanas** | `Ejercito` (con `Plan`, víveres propios, sin origen), `Caravana` (plan, estado, carros), `Convocatoria` | Doc 5.12-5.14, 3.13; `Movimiento_Ejercitos`, `Comercio_Caravanas` |
 | **Campamentos y mundo vivo** | `CampamentoMercenarios`, `CampamentoBandidos`, `Alijo`, `NodoRecurso`, `ZonaBosque`, `ZonaFaccion` | Doc 1.4, 1.9-1.9c; `Campamentos_Mercenarios`, `Generacion_Del_Mundo` |
 | **Comercio** | `AcuerdoTrueque`, `LineaTrueque`, `OrdenMercado`, `RutaComercial`, `RedCaminos` | Doc 3; `Comercio_Caravanas` |
-| **Tecnología, Aedas, intel** | `TecnologiasFaccion`, `EstadoTecnologia`, `AedaResidente`, `AedaItinerante`, `EpicaEnCurso`, `MiradaIntel`, `InformePlaza`, `MemoriaFaccion`, `FichaConocida`, `NieblaProyectada` | Doc 6, 5.12.7-5.12.10; `Tecnologia_Aedas`, `Niebla_De_Guerra` |
+| **Tecnología, Aedas, intel** | `TecnologiasFaccion`, `EstadoTecnologia`, `AedaResidente`, `AedaItinerante`, `EpicaEnCurso`, `MiradaIntel`, `InformePlaza`, `InformeRegion`, `MemoriaFaccion`, `FichaConocida`, `NieblaProyectada` | Doc 6, 5.12.7-5.12.10; `Tecnologia_Aedas`, `Niebla_De_Guerra` |
 | **Batalla de Unity** | `Batalla`, `BattleTicket`, `IncorporacionBatalla`, `BattleServerAssignment`, `TokensBatalla`, `InicioBatalla`, `SalidaBatalla`, `BattleResult`, `Botin`, y los contextos (asedio, campo abierto, caravana disputa/aguante, campamento de bandidos, saqueo de pueblo, avanzada) | Doc 5.15; `Batalla_Unity_Ciclo` |
 | **Mundo** | `ArtefactoDeMundo` y sus capas (`world.proto`) | [`06_Contrato_de_Mundo.md`](06_Contrato_de_Mundo.md) |
 

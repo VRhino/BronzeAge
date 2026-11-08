@@ -167,7 +167,7 @@ lado de un trueque entre Facciones distintas, y `bandidos` por campamento destru
 
 ### 3.5b Prestigio de la Facción
 
-> **Implementado en Rust (2026-11-08, tanda 69, §13 del diseño):** `crates/nucleo/src/nucleo/prestigio.rs` (`Nucleo::dar_prestigio`, `prestigio_por_victoria`, `prestigio_para_obras`), `crates/politica/src/{faccion,datos,propuestas}.rs` (`Facciones::sumar_prestigio`, `ReglasPrestigio::tope_de_alianzas`, `exigir_tope_de_alianzas`) y `crates/asentamiento/src/obras.rs` (la Maravilla y la estatua). Cifras: el bloque `PRESTIGIO` de arriba. Pruebas: `crates/nucleo/tests/prestigio.rs`.
+> **Implementado en Rust (2026-11-08, tanda 69):** `crates/nucleo/src/nucleo/prestigio.rs` (`Nucleo::dar_prestigio`, `prestigio_por_victoria`, `prestigio_para_obras`), `crates/politica/src/{faccion,datos,propuestas}.rs` (`Facciones::sumar_prestigio`, `ReglasPrestigio::tope_de_alianzas`, `exigir_tope_de_alianzas`) y `crates/asentamiento/src/obras.rs` (la Maravilla y la estatua). Cifras: el bloque `PRESTIGIO` de arriba. Pruebas: `crates/nucleo/tests/prestigio.rs`.
 
 El prestigio es un entero **de la Facción** (`Faccion.prestigio`, en la foto desde `BAN59`): **se acumula y ni se gasta ni se pierde** (lo ≤ 0 se ignora y una Facción que no existe no gana nada). Cada hecho lo suma en el instante en que ocurre y emite `faccion.prestigio` con `ganado`, `total` y `motivo`:
 

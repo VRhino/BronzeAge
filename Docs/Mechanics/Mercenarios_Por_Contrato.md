@@ -63,7 +63,9 @@ su Facción) o bandidos u objetivo de una Facción en guerra (atacar).
 2. El mercenario está en un tablón (`mercenario.no_ofrecido`) y no tiene Facción (`faccion.ya_pertenece`).
 3. **En persona**: el firmante está en ese campamento, dentro o con su columna a `radioPuerta` (`campamento.fuera_de_la_puerta`), y tiene allí con qué pagar (§5.1): el almacén
    personal solo en el campamento donde reside (`almacen_personal.fuera_de_tu_residencia`) y el carro, el que lleva allí (`heroe.sin_columna` si no trae ninguno). No hace falta estar
-   dentro de ninguna plaza.
+   dentro de ninguna plaza. **O desde la taberna de una plaza** (siguiente nota).
+
+> **Implementado en Rust (2026-11-08, tanda 69):** si el firmante no está en el campamento, puede contratar desde **dentro de una plaza de su Facción con Taberna activa** (`Nucleo::bolsa_de_firma`, `nucleo/contratos/firma.rs`), sin ir al campamento, siempre que el campamento del mercenario caiga en la **región del relieve de la plaza** (`Nucleo::campamentos_de_la_region`; si no, `mercenario.fuera_de_la_region`). Fuera del campamento y sin esa plaza, sigue siendo `campamento.fuera_de_la_puerta`. Desde la plaza solo se paga con el **almacén de la plaza** (`pagar_con` = `almacenPlaza`, y es lo que se toma si no lleva `pagar_con`) o con **monedas**; con `almacenPersonal` o `carro`, `campamento.fuera_de_la_puerta`. Con el almacén de la plaza firma solo el Rey, el Embajador o el Gobernador (la misma condición que la intel de la taberna; otro cargo, `no_autorizado`); con monedas firma el cargo que alcance el trabajo, como siempre (§3.2). El resto de condiciones (de 4 a 7) son las de siempre. Prorrogar sigue siendo en persona: `almacenPlaza` en `prorrogar_contrato` es `orden.forma_invalida`. Ver el tablón de la región es gratis (§10).
 4. No hay espera de recontrato de esa Facción con él (`mercenario.recontrato_en_espera`, `esperaRecontratoHoras` tras un despido).
 5. El plazo es uno de la tabla en el temporal y ninguno en el permanente (`mercenario.plazo_invalido`); el permanente lleva una plaza de residencia de la Facción y el temporal ninguna
    (`mercenario.objetivo_invalido`).
@@ -102,13 +104,14 @@ Valor del mercenario = `oroPorNivelHeroe` × su nivel + lo que costaría hoy rec
 `Campamentos_Mercenarios.md` §5.2, sin recargo de reputación ni descuento). **Tarifa** = ⌈valor × `tarifaPct` del plazo (o `permanentePct`) × `tarifaPct` del rango × `factorOroPct`⌉, en oro
 entero. La calcula el motor; el bot no fija precio. El tablón la muestra para cada plazo y para el permanente con el valor de ese momento.
 
-> **Implementado en Rust (2026-11-08, tanda 69, T2; §5 del diseño):** la tarifa baja a un cuarto (`MERCENARIOS_CONTRATO.factorOroPct`, 25: se multiplica por 25/100 antes de redondear hacia arriba a oro entero; `mercenarios::contrato::tarifa`) y se puede pagar en **monedas del héroe**: `tarifa_en_monedas` = el oro ya reducido × `monedasPorOro` (100) monedas, y el tablón (`TarifaMercenario`) lleva las dos, `oro` y `monedas`, de cada plazo y del permanente. Cifras provisionales, a calibrar con el batch.
+> **Implementado en Rust (2026-11-08, tanda 69, T2):** la tarifa baja a un cuarto (`MERCENARIOS_CONTRATO.factorOroPct`, 25: se multiplica por 25/100 antes de redondear hacia arriba a oro entero; `mercenarios::contrato::tarifa`) y se puede pagar en **monedas del héroe**: `tarifa_en_monedas` = el oro ya reducido × `monedasPorOro` (100) monedas, y el tablón (`TarifaMercenario`) lleva las dos, `oro` y `monedas`, de cada plazo y del permanente. Cifras provisionales, a calibrar con el batch.
 
 **De dónde sale el pago** (orden con `pagar_con` = `almacenPersonal` | `carro` | `monedas`, opcional; desde el 2026-11-03 también desde dentro del campamento donde reside, como en su mercado):
 
 - Sin `pagar_con`: el carro de la columna que lleva si va en una (a la puerta, o dentro de un campamento de visita) y, si no (dentro del campamento donde reside), su almacén personal.
 - `almacenPersonal`: solo en el campamento donde reside, dentro o con su columna a la puerta (`almacen_personal.fuera_de_tu_residencia` en otro).
 - `carro`: el que lleva allí: el de su columna a la puerta o dentro; en el campamento donde reside sin columna, el que trajo al entrar (y si no trajo oro, `mercenarios.sin_oro`).
+- `almacenPlaza` (2026-11-08, tanda 69, §8): el oro del **almacén de la plaza** desde cuya taberna se contrata (§3.3), a la tarifa en oro; no se puede en el campamento ni al prorrogar (`orden.forma_invalida`). El oro entra en el almacén personal del mercenario como el de cualquier otra bolsa; si el almacén de la plaza no llega, `mercenarios.sin_oro`.
 - `monedas` (2026-11-08, tanda 69): las monedas del héroe que firma (`Heroe.monedas`), a la tarifa en monedas, **en cualquier sitio** donde pueda firmar o prorrogar (no pide carro ni almacén personal). Si no le alcanzan, `heroe.sin_monedas`. Las monedas pagadas **pasan a las del mercenario** (no desaparecen, a diferencia del oro que no cabe). Vale al contratar y al prorrogar; los hechos `mercenarios.contratado` y `mercenarios.prorrogado` llevan `oro` y `monedas` (uno de los dos es 0).
 
 El oro entra en el **almacén personal del mercenario** hasta llenarlo (`capacidadAlmacenPersonal`); lo que no cabe desaparece. Nunca bloquea una firma
@@ -325,6 +328,7 @@ Logros con tres grados (bronce, plata, oro) que no se pierden; el grado nunca ba
 | `FACCION` (los ciudadanos sin marca) | los contratos vigentes de la Facción (`Faccion.contratos`) y la marca de cada miembro; el cargo decide quién ordena, no quién ve |
 | El héroe público (`VISTA`) | la marca (`Heroe.contratado`) y la ficha reducida: rango, renombre y grado de cada medalla, nunca el historial ni el contrato |
 | `CAMPAMENTO` (desde dentro) | el tablón: cada ofrecido con su ficha entera, su tropa (la suya, no la prestada), si está herido y la tarifa de cada plazo y del permanente |
+| `ASENTAMIENTO` (el interior de una plaza con Taberna activa) | `Asentamiento.mercenarios_region`: el tablón de **todos** los campamentos de la región de la plaza juntos, **gratis** y con la forma del anterior; cada oferta lleva el `campamento_id` donde se ofrece (`OfertaMercenario.campamento_id`, campo 7, que también va en el tablón del campamento). Sin Taberna activa el campo va vacío (`proyeccion/interior.rs`, `proyeccion/mercenarios.rs::tablon_de`) |
 | Nunca | quién le valoró ni para quién trabajó: el historial da cifras, no nombres |
 
 Lo **enemigo** que ataca le llega solo por sus ojos (su `VISTA`): no ve el interior de la plaza, el carro ni la composición del rival por tener la orden.
@@ -381,7 +385,7 @@ Los plazos van en la cola (`Carga::Contrato`): el vencimiento del contrato (`Ven
 |---|---|---|
 | 171 `ofrecerse_como_mercenario` | 198 `OfrecerseComoMercenario` | el bot |
 | 172 `retirar_oferta` | 199 `RetirarOferta` | el bot |
-| 173 `contratar_mercenario` | 200 `ContratarMercenario` (mercenario, trabajo, objetivo, plazo, residencia); 210 si lleva `pagar_con` | el cargo que firma |
+| 173 `contratar_mercenario` | 200 `ContratarMercenario` (mercenario, trabajo, objetivo, plazo, residencia); 210 si lleva `pagar_con` (`almacenPersonal`, `carro`, `monedas` o, desde la taberna de una plaza, `almacenPlaza`) | el cargo que firma |
 | 174 `prorrogar_contrato` | 201 `ProrrogarContrato` (mercenario, plazo); 211 si lleva `pagar_con` | quien podría firmarlo |
 | 175 `ordenar_mercenario` | 202 `OrdenarMercenario` (mercenarios, tipo, objetivo) | el cargo que alcanza |
 | 176 `mudar_mercenario` | 203 `MudarMercenario` (mercenario, plaza) | Rey o Embajador |

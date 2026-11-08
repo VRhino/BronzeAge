@@ -1,4 +1,4 @@
-//! El prestigio de la Facción (tanda 69, Diplomacia_Facciones §3.4 `PRESTIGIO`; Tanda_Economia_Heroe_Y_Cultivos §13): lo que suma cada fuente (victoria contra héroes de otra Facción en un
+//! El prestigio de la Facción (tanda 69, Diplomacia_Facciones §3.4 `PRESTIGIO`): lo que suma cada fuente (victoria contra héroes de otra Facción en un
 //! combate de columnas y en una batalla de Unity, conquista, fundación, subida de nivel, trueque y orden de mercado), lo que no suma (bandidos, la misma Facción, varios héroes ganadores)
 //! y lo que se desbloquea por umbrales (el tope de alianzas, la Maravilla y las estatuas de la capital). Las cuantías y los umbrales salen del bloque `PRESTIGIO` (`comun::reglas()`).
 //! Las pruebas de la primera mitad corren sobre la retícula sintética de `comun`; las de la segunda, sobre el artefacto de mundo real y se omiten si no está.

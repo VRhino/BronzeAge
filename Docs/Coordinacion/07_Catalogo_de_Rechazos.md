@@ -496,7 +496,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `intel.plaza_propia` | `INTEL_PLAZA_PROPIA` | — |
 | `intel.plaza_desconocida` | `INTEL_PLAZA_DESCONOCIDA` | La Facción no conoce esa plaza: ni tiene su ficha ni cae en una Mirada abierta. |
 | `intel.sin_informe_de_ordenes` | `INTEL_SIN_INFORME_DE_ORDENES` | Tomar una orden a distancia pide el informe vigente de las órdenes de la región de esa plaza (tanda 69 §7). |
-| `intel.informe_reciente` | `INTEL_INFORME_RECIENTE` | Ya tiene un Informe reciente de esa plaza. |
+| `intel.informe_reciente` | `INTEL_INFORME_RECIENTE` | Ya tiene un Informe reciente de esa plaza o, en el informe de región, uno del mismo tipo de esa región. |
 | `intel.sin_oro` | `INTEL_SIN_ORO` | No hay oro para pagarla (en el almacén de la plaza, en el personal o en el carro). |
 | `columna.en_batalla` | `COLUMNA_EN_BATALLA` | La columna está apartada por una batalla: no se mueve ni se le dan órdenes de movimiento, de persecución ni de inspección. |
 | `relacion.consigo_misma` | `RELACION_CONSIGO_MISMA` | — |
