@@ -46,7 +46,7 @@ dependencies = [
 
 [[package]]
 name = "asentamiento"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "base",
  "serde_json",
@@ -174,7 +174,7 @@ dependencies = [
 
 [[package]]
 name = "comercio"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "asentamiento",
  "base",
@@ -189,7 +189,7 @@ checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
 
 [[package]]
 name = "contrato"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "prost",
  "prost-build",
@@ -554,7 +554,7 @@ checksum = "1d87ecb2933e8aeadb3e3a02b828fed80a7528047e68b4f424523a0981a3a084"
 
 [[package]]
 name = "mundo"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "contrato",
  "prost",
@@ -565,7 +565,7 @@ dependencies = [
 
 [[package]]
 name = "nucleo"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "asentamiento",
  "base",

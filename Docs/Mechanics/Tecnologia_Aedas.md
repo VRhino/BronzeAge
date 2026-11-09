@@ -457,7 +457,9 @@ la Era de cada tecnología propia (decide lo que cuesta adoptarla o comprarla); 
       "carne",
       "leche",
       "uva",
-      "aceituna"
+      "aceituna",
+      "cebada",
+      "sesamo"
     ]
   },
   "refundacion": {

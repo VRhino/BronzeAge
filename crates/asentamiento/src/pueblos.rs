@@ -58,11 +58,14 @@ pub enum Cultivo {
     Trigo,
     Vid,
     Oliva,
+    // Los de las zonas húmedas (2026-11-09), al final por la foto.
+    Cebada,
+    Sesamo,
 }
 
 impl Cultivo {
     /// En el orden de la foto (la posición es su código).
-    pub const TODOS: [Cultivo; 3] = [Cultivo::Trigo, Cultivo::Vid, Cultivo::Oliva];
+    pub const TODOS: [Cultivo; 5] = [Cultivo::Trigo, Cultivo::Vid, Cultivo::Oliva, Cultivo::Cebada, Cultivo::Sesamo];
 
     /// El id que ven los clientes y que traen los bloques.
     pub fn nombre(self) -> &'static str {
@@ -70,6 +73,8 @@ impl Cultivo {
             Cultivo::Trigo => "trigo",
             Cultivo::Vid => "vid",
             Cultivo::Oliva => "oliva",
+            Cultivo::Cebada => "cebada",
+            Cultivo::Sesamo => "sesamo",
         }
     }
 
@@ -751,9 +756,13 @@ mod pruebas {
         let a = &r.aldea;
         assert_eq!((a.nivel_madre_minimo, a.fertilidad_minima, a.separacion_minima, a.granjeros, a.nivel_maximo()), (1, 300_000, 3_000, 30, 3));
         assert_eq!(a.niveles.values().map(|n| (n.granjas, n.corrales)).collect::<Vec<_>>(), vec![(2, 1), (4, 2), (6, 3)]);
-        // Tanda 69 §12: la vid desde el nivel 3 de la madre y la oliva desde el 4, las dos sin corrales.
+        // Tanda 69 §12: la vid desde el nivel 3 de la madre y la oliva desde el 4, las dos sin corrales; la cebada desde el 3 y el sésamo desde el 4
+        // (2026-11-09).
         let cultivo = |c: Cultivo| (a.cultivos[&c].produce, a.cultivos[&c].nivel_madre, a.cultivos[&c].corrales);
-        assert_eq!(Cultivo::TODOS.map(cultivo), [(Recurso::Trigo, 1, true), (Recurso::Uva, 3, false), (Recurso::Aceituna, 4, false)]);
+        assert_eq!(
+            Cultivo::TODOS.map(cultivo),
+            [(Recurso::Trigo, 1, true), (Recurso::Uva, 3, false), (Recurso::Aceituna, 4, false), (Recurso::Cebada, 3, false), (Recurso::Sesamo, 4, false)]
+        );
     }
 
     #[test]

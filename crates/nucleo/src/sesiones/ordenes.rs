@@ -685,6 +685,10 @@ impl Ctx<'_> {
                 let plaza = self.plaza(&o.asentamiento_id)?;
                 Comando::AsignarBuey { asentamiento: plaza, edificio: self.edificio(plaza, &o.edificio_id)? }
             }
+            Cuerpo::ElegirReceta(o) => {
+                let plaza = self.plaza(&o.asentamiento_id)?;
+                Comando::ElegirReceta { asentamiento: plaza, edificio: self.edificio(plaza, &o.edificio_id)?, insumo: self.recurso(&o.insumo)? }
+            }
             Cuerpo::AlternarAutoConstruccion(o) => Comando::AlternarAutoConstruccion { asentamiento: self.plaza(&o.asentamiento_id)?, pausada: o.pausada },
             Cuerpo::AlternarReceta(o) => Comando::AlternarReceta { asentamiento: self.plaza(&o.asentamiento_id)?, recurso: self.recurso(&o.recurso)?, pausada: o.pausada },
             Cuerpo::CalibrarReservaManual(o) => Comando::CalibrarReserva { asentamiento: self.plaza(&o.asentamiento_id)?, recurso: self.recurso(&o.recurso)?, valor: o.valor },

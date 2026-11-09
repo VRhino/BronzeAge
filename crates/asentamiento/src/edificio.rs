@@ -2,6 +2,7 @@
 //! El orden de la lista es el historial de crecimiento y **no se reordena nunca** (lo que se reordena en la cola es `prioridad`).
 
 use crate::catalogo::Tipo;
+use crate::recurso::Recurso;
 use base::Instante;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -43,11 +44,13 @@ pub struct Edificio {
     pub pausado_por_almacen: bool,
     /// El molino tiene su buey (tanda 69 §10): se compra una vez y se queda allí.
     pub buey: bool,
+    /// Bodega y prensa (2026-11-09): el insumo de su única receta activa (`TALLERES_DE_UNA_RECETA`); `None` en los demás edificios.
+    pub receta: Option<Recurso>,
 }
 
 impl Edificio {
     pub fn nuevo(id: u32, tipo: Tipo, estado: Estado) -> Self {
-        Self { id, tipo, estado, completa_en: None, prioridad: 0, nivel_interno: 1, mejora: None, danado: false, fuente: None, pausado_por_almacen: false, buey: false }
+        Self { id, tipo, estado, completa_en: None, prioridad: 0, nivel_interno: 1, mejora: None, danado: false, fuente: None, pausado_por_almacen: false, buey: false, receta: None }
     }
 
     pub fn activo(&self) -> bool {

@@ -433,7 +433,7 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.encuentros.insert((1, 2), vec![300, 400]);
     base.combate.encuentros.insert((2, 5), vec![500]);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN59");
+    assert_eq!(&bytes[..5], b"BAN60");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");

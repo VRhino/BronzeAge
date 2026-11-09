@@ -316,7 +316,7 @@ fn los_cargos_y_la_puerta_viajan_en_la_foto_ban33_y_la_ban32_se_rechaza() {
     e.ok("ana", Comando::VetarJugador { heroe: ana, asentamiento: plaza, vetado: cai, vetar: true });
     assert!(hash0 != hash1 && hash1 != hash2 && hash2 != e.n.hash_estado(), "cada pieza mueve el hash");
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN59");
+    assert_eq!(&bytes[..5], b"BAN60");
     let reglas = e.n.estado().reglas.clone();
     let vuelta = Estado::deserializar(&bytes, &reglas, &e.n.estado().mundo_hash).unwrap();
     let a = &vuelta.asentamientos[&plaza];
@@ -377,10 +377,12 @@ fn el_maestro_de_caravanas_viaja_en_la_foto_y_una_foto_ban51_ya_no_se_admite() {
     assert!(e.asignar("ana", ana, Cargo::Tesorero, bea).aceptada());
     let reglas = e.n.estado().reglas.clone();
     let hash = e.n.estado().mundo_hash.clone();
-    // Desde BAN59 (tanda 69, 38 recursos) no se lee ningún formato anterior: una BAN51 se rechaza sin mirar el resto.
+    // Desde BAN60 (2026-11-09, 41 recursos) no se lee ningún formato anterior: una BAN51 o una BAN59 se rechazan sin mirar el resto.
     let mut vieja = e.n.estado().serializar();
-    vieja[..5].copy_from_slice(b"BAN51");
-    assert!(Estado::deserializar(&vieja, &reglas, &hash).is_err_and(|ErrorFormato(m)| m.contains("ya no se admite")));
+    for magia in [b"BAN51", b"BAN59"] {
+        vieja[..5].copy_from_slice(magia);
+        assert!(Estado::deserializar(&vieja, &reglas, &hash).is_err_and(|ErrorFormato(m)| m.contains("ya no se admite")));
+    }
 
     // La foto guarda y lee al Maestro de Caravanas.
     assert!(e.asignar("ana", ana, Cargo::MaestroCaravanas, eli).aceptada());

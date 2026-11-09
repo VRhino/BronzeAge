@@ -132,6 +132,8 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
                 pausado_por_almacen_lleno: b.pausado_por_almacen,
                 danado: b.danado,
                 buey: b.buey,
+                receta: b.receta.map(|r| r.nombre().to_owned()),
+                // T2: `receta_parada` cuando la plaza bajó de nivel y la receta ya no cabe en su tope de recetas distintas.
                 ancho: pieza.map_or(0, |x| x.rect.ancho.max(0) as u32),
                 alto: pieza.map_or(0, |x| x.rect.alto.max(0) as u32),
                 ..Default::default()

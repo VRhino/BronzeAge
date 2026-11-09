@@ -249,6 +249,18 @@ descontar  porUnidad × cantidad  de cada insumo;  añadir cantidad de receta.pr
 >
 > **El buey del molino.** Un molino admite **un buey**, que se compra con la orden `asignarBuey` (§13) al precio del buey de una caravana (`ANIMAL_CATALOGO.buey.costo`, 12 de oro; autor, 2026-11-08) y se queda allí: con él la receta produce `factorBuey` (2) veces más gastando lo mismo por unidad, y sigue limitada por el trigo que haya. `Edificio.buey` va en la foto (`BAN59`) y en la proyección (`Edificio.buey`). Se puede comprar con el molino **aún en obra** (no se mira el estado) y **se pierde con el molino**: al cancelar su obra (§6.4), en las ruinas de la plaza y, sin devolver nada, cuando una conquista lo deja **dañado** (`aplicar_conquista`, Combate §8; el molino reconstruido nace sin buey).
 
+>
+> **Una receta a la vez en la bodega y la prensa (autor, 2026-11-09).** La bodega tiene dos recetas (vino de uva, **cerveza de cebada**) y la prensa dos (aceite de aceituna, **aceite de sésamo**), pero cada edificio trabaja **una sola**, la que elige el Gobernador o el Maestro de Obras con `elegirReceta` (§13). `TALLERES_DE_UNA_RECETA` da el tope de edificios de cada tipo por plaza y cuántas recetas distintas puede trabajar la plaza según su nivel operativo (un nivel que no está usa el más alto por debajo; por debajo del primero, el primero).
+
+<!-- parametros:TALLERES_DE_UNA_RECETA -->
+```json
+{
+  "bodega": { "maximoPorPlaza": 3, "recetasDistintasPorNivel": { "3": 1, "4": 1, "5": 2 } },
+  "prensa": { "maximoPorPlaza": 3, "recetasDistintasPorNivel": { "4": 1, "5": 1 } }
+}
+```
+<!-- /parametros -->
+
 
 ### 5.4 Recetas pausadas
 
@@ -1707,6 +1719,13 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
             "consumePorUnidad": {
               "uva": 2
             }
+          },
+          {
+            "produce": "cerveza",
+            "produccionBase": 1,
+            "consumePorUnidad": {
+              "cebada": 2
+            }
           }
         ]
       }
@@ -1728,6 +1747,13 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
             "produccionBase": 1,
             "consumePorUnidad": {
               "aceituna": 2
+            }
+          },
+          {
+            "produce": "aceite",
+            "produccionBase": 1,
+            "consumePorUnidad": {
+              "sesamo": 2
             }
           }
         ]
@@ -2013,6 +2039,7 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
     "pan": { "clases": ["pesants"], "racion": 0.04, "modificador": 2 },
     "queso": { "clases": ["artesanos"], "racion": 0.02, "modificador": 1.5 },
     "vino": { "clases": ["nobleza"], "racion": 0.01, "modificador": 1.5 },
+    "cerveza": { "clases": ["nobleza"], "racion": 0.01, "modificador": 1.25 },
     "aceite": { "clases": ["nobleza"], "racion": 0.01, "modificador": 1.5 }
   },
   "guarnicion": ["carne"]
@@ -2489,7 +2516,9 @@ Todo se hace con el héroe **dentro** del pueblo o la aldea (`entrarEnPueblo`) y
     "cultivos": {
       "trigo": { "produce": "trigo", "nivelMadre": 1, "corrales": true },
       "vid": { "produce": "uva", "nivelMadre": 3, "corrales": false },
-      "oliva": { "produce": "aceituna", "nivelMadre": 4, "corrales": false }
+      "oliva": { "produce": "aceituna", "nivelMadre": 4, "corrales": false },
+      "cebada": { "produce": "cebada", "nivelMadre": 3, "corrales": false },
+      "sesamo": { "produce": "sesamo", "nivelMadre": 4, "corrales": false }
     }
   }
 }

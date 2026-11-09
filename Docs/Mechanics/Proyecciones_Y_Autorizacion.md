@@ -293,6 +293,7 @@ Las **161 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `quitar_de_cola` | `QuitarDeCola` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza |
 | `cancelar_construccion` | `CancelarConstruccion` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza |
 | `asignar_buey` | `AsignarBuey` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza |
+| `elegir_receta` | `ElegirReceta` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza |
 | `rechazar_trueque` | `RechazarTrueque` | el Gobernador o el Tesorero de la plaza, residente y dentro | de la plaza B del acuerdo |
 | `reparar_avanzada` | `RepararAvanzada` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre (o de la plaza que tiene ahora la zona de una ciudadela sin dueño) |
 | `reponer_carro_de_acarreo` | `ReponerCarro` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre |

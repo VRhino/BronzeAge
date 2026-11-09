@@ -1,6 +1,6 @@
 [package]
 name = "mundo"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 description = "Cargador y validador del artefacto de mundo de BronzeAge (Docs/Coordinacion/06_Contrato_de_Mundo.md)"
 

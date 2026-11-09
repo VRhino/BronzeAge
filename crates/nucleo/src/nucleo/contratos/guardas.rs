@@ -174,6 +174,7 @@ impl Nucleo {
             | Comando::MoverEnCola { .. }
             | Comando::MejorarEdificio { .. }
             | Comando::AsignarBuey { .. }
+            | Comando::ElegirReceta { .. }
             | Comando::AlternarAutoConstruccion { .. }
             | Comando::AlternarReceta { .. }
             | Comando::CalibrarReserva { .. }

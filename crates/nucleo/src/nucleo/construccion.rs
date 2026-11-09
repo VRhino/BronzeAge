@@ -609,6 +609,7 @@ impl Nucleo {
         | Comando::MoverEnCola { asentamiento, .. }
         | Comando::MejorarEdificio { asentamiento, .. }
         | Comando::AsignarBuey { asentamiento, .. }
+        | Comando::ElegirReceta { asentamiento, .. }
         | Comando::AlternarAutoConstruccion { asentamiento, .. }
         | Comando::AlternarReceta { asentamiento, .. }
         | Comando::CalibrarReserva { asentamiento, .. }
@@ -693,6 +694,7 @@ impl Nucleo {
                 molino.buey = true;
                 self.emitir_propio(t, "construccion.buey_asignado", vec![id], vec![("edificio", *edificio as i64)]);
             }
+            Comando::ElegirReceta { .. } => todo!("T2: la receta activa de la bodega y la prensa"),
             Comando::AlternarAutoConstruccion { pausada, .. } => {
                 if !self.estado.asentamientos.get_mut(&id).expect("existe").economia.alternar_auto_construccion(*pausada) {
                     return Err(sin_cambios());

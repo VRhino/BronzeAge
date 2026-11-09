@@ -170,6 +170,25 @@ pub struct ReglasConstruccion {
     pub recurso_propio: BTreeMap<Tipo, Recurso>,
     pub horizonte_mantenimiento_min: i64,
     pub horizonte_comida_min: i64,
+    /// `TALLERES_DE_UNA_RECETA` (2026-11-09): la bodega y la prensa, que trabajan una sola receta a la vez.
+    pub talleres_de_una_receta: BTreeMap<Tipo, TallerDeUnaReceta>,
+}
+
+/// Un taller de `TALLERES_DE_UNA_RECETA` (2026-11-09): cada edificio trabaja una sola de sus recetas, la que se elige, y la plaza tiene topes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TallerDeUnaReceta {
+    /// Cuántos edificios de ese tipo caben en una plaza, de cualquier estado.
+    pub maximo_por_plaza: u32,
+    /// Cuántas recetas distintas puede trabajar la plaza en ese tipo, por nivel operativo.
+    pub recetas_distintas_por_nivel: BTreeMap<u32, u32>,
+}
+
+impl TallerDeUnaReceta {
+    /// Las recetas distintas que caben en ese nivel: un nivel que no está usa el más alto por debajo y, por debajo del primero, el primero.
+    pub fn recetas_distintas(&self, nivel: u32) -> u32 {
+        let t = &self.recetas_distintas_por_nivel;
+        t.range(..=nivel).next_back().or_else(|| t.iter().next()).map_or(1, |(_, &n)| n)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -319,6 +338,15 @@ impl ReglasConstruccion {
                 .collect(),
             horizonte_mantenimiento_min: g(&r, "horizonteMinutosMantenimiento") as i64,
             horizonte_comida_min: g(&r, "horizonteMinutosComida") as i64,
+            talleres_de_una_receta: b("TALLERES_DE_UNA_RECETA")
+                .as_object()
+                .expect("TALLERES_DE_UNA_RECETA")
+                .iter()
+                .map(|(k, v)| {
+                    let tipo = Tipo::desde_nombre(k).unwrap_or_else(|| panic!("tipo «{k}» en TALLERES_DE_UNA_RECETA"));
+                    (tipo, TallerDeUnaReceta { maximo_por_plaza: g(v, "maximoPorPlaza") as u32, recetas_distintas_por_nivel: mapa_niveles(&v["recetasDistintasPorNivel"]) })
+                })
+                .collect(),
         }
     }
 }
@@ -379,5 +407,21 @@ mod pruebas {
         assert!(r.unicos.contains(&Tipo::Palacio) && !r.unicos.contains(&Tipo::Vivienda));
         assert_eq!(r.recurso_propio[&Tipo::Granja], Recurso::Trigo);
         assert_eq!((r.horizonte_mantenimiento_min, r.horizonte_comida_min), (8, 8));
+    }
+
+    #[test]
+    fn la_bodega_y_la_prensa_trabajan_una_receta_con_topes_por_plaza() {
+        let r = Reglas::cargar();
+        let t = &r.construccion.talleres_de_una_receta;
+        assert_eq!(t.keys().copied().collect::<Vec<_>>(), vec![Tipo::Bodega, Tipo::Prensa]);
+        let (bodega, prensa) = (&t[&Tipo::Bodega], &t[&Tipo::Prensa]);
+        assert_eq!((bodega.maximo_por_plaza, prensa.maximo_por_plaza), (3, 3));
+        // Bebidas: una en los niveles 3 y 4, las dos en el 5; un nivel por debajo del primero usa el primero.
+        assert_eq!([1, 2, 3, 4, 5].map(|n| bodega.recetas_distintas(n)), [1, 1, 1, 1, 2]);
+        assert_eq!([1, 4, 5].map(|n| prensa.recetas_distintas(n)), [1, 1, 1], "el aceite, de una sola fuente");
+        // Las recetas: vino de uva y cerveza de cebada; aceite de aceituna y aceite de sésamo.
+        let recetas = |tipo: Tipo| r.catalogo.tipo(tipo).nivel(1).unwrap().recetas.iter().map(|rc| (rc.produce, rc.consume_por_unidad.clone())).collect::<Vec<_>>();
+        assert_eq!(recetas(Tipo::Bodega), vec![(Recurso::Vino, vec![(Recurso::Uva, 2_000)]), (Recurso::Cerveza, vec![(Recurso::Cebada, 2_000)])]);
+        assert_eq!(recetas(Tipo::Prensa), vec![(Recurso::Aceite, vec![(Recurso::Aceituna, 2_000)]), (Recurso::Aceite, vec![(Recurso::Sesamo, 2_000)])]);
     }
 }

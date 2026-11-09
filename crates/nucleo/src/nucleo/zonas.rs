@@ -76,6 +76,7 @@ impl Geografia {
             Cultivo::Trigo => self.mundo.fertilidad_en(p.x, p.y),
             Cultivo::Vid => self.mundo.fertilidad_vid_en(p.x, p.y),
             Cultivo::Oliva => self.mundo.fertilidad_oliva_en(p.x, p.y),
+            Cultivo::Cebada | Cultivo::Sesamo => todo!("T1: las capas de cebada y sésamo del mundo"),
         };
         capa.map(|f| f as i64 * asentamiento::datos::UNO / 255)
     }

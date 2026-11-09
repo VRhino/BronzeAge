@@ -187,7 +187,9 @@ Distinta: se **conserva** (§8.3). No lleva bonus por distancia ni recargo por r
   "carne": 1.8,
   "leche": 1,
   "uva": 1.5,
-  "aceituna": 1.5
+  "aceituna": 1.5,
+  "cebada": 1.5,
+  "sesamo": 1.5
 }
 ```
 <!-- /parametros -->

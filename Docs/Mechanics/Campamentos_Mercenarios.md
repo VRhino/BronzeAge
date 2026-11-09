@@ -226,7 +226,9 @@ Con las cifras de hoy, un campamento típico (taberna, mercado, barracón y diez
       "carne",
       "leche",
       "uva",
-      "aceituna"
+      "aceituna",
+      "cebada",
+      "sesamo"
     ]
   },
   "refundacion": {
