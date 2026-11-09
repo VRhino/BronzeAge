@@ -32,6 +32,8 @@ pub enum ErrorObra {
     /// El Corral solo existe en las aldeas agrícolas (§14.2).
     SoloEnAldea,
     TopeTransformacion,
+    /// La plaza ya tiene las bodegas (o prensas) que caben en ella (`TALLERES_DE_UNA_RECETA.maximoPorPlaza`, 2026-11-09).
+    TopePorPlaza,
     GranFundicion,
     ColaLlena,
     SinSitio,
@@ -267,6 +269,9 @@ impl Asentamiento {
         if self.tope_transformacion(r, tipo) {
             return Err(ErrorObra::TopeTransformacion);
         }
+        if self.tope_por_plaza(r, tipo) {
+            return Err(ErrorObra::TopePorPlaza);
+        }
         if tipo == Tipo::GranFundicion && (def.nivel_faccion_minimo.is_some_and(|m| x.nivel_faccion < m) || !x.es_capital || x.faccion_tiene_gran_fundicion) {
             return Err(ErrorObra::GranFundicion);
         }
@@ -292,6 +297,7 @@ impl Asentamiento {
         let mut e = Edificio::nuevo(id, tipo, Estado::EnCola);
         e.prioridad = c.bandas.manual;
         e.fuente = fuente;
+        e.receta = self.receta_de_partida(r, tipo);
         self.edificios.push(e);
         ev.push(Evento::Encolada { id, tipo });
         self.arrancar_obras(t, r, ev);

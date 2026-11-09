@@ -2661,7 +2661,7 @@ Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; cont
   "avanzada.materiales_entregados", "avanzada.obra_cancelada", "avanzada.obra_iniciada", "avanzada.obra_marcada", "avanzada.reabastecimiento", "avanzada.sin_dueno",
   "avanzada.traspasada", "avanzada.tropa_elegida", "construccion.auto_alternada", "construccion.buey_asignado", "construccion.cola_reordenada", "construccion.desencolada", "construccion.obra_cancelada",
   "construccion.edificio_completado", "construccion.edificio_gratuito", "construccion.encolada", "construccion.mejora_completada", "construccion.mejora_forzada",
-  "construccion.mejora_iniciada", "construccion.necesidad_detectada", "construccion.obra_iniciada", "construccion.receta_alternada", "construccion.yacimiento_agotado",
+  "construccion.mejora_iniciada", "construccion.necesidad_detectada", "construccion.obra_iniciada", "construccion.receta_alternada", "construccion.receta_elegida", "construccion.yacimiento_agotado",
   "faccion.experiencia", "faccion.nivel", "mantenimiento.colapsado", "mantenimiento.deficit", "mantenimiento.recuperado", "parcela.liberada", "parcela.reclamada",
   "poblacion.hambruna", "poblacion.primeros_artesanos", "poblacion.primeros_nobles", "politica.activada", "politica.expirada", "pueblo.almacen_lleno", "pueblo.cargado", "pueblo.completado",
   "pueblo.dejado", "pueblo.destruido", "pueblo.guarnecido", "pueblo.guarnicion_retirada", "pueblo.marcado", "pueblo.materiales_entregados", "pueblo.obra_iniciada", "zona.frontera"

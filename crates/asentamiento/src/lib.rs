@@ -20,6 +20,7 @@ pub mod politicas;
 pub mod poblacion;
 pub mod produccion;
 pub mod pueblos;
+pub mod recetas_unicas;
 pub mod recintos;
 pub mod recurso;
 

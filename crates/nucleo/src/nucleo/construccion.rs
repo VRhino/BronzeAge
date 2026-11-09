@@ -37,6 +37,7 @@ use asentamiento::catalogo::Tipo;
 use asentamiento::datos::UNO;
 use asentamiento::edificio::{Edificios, Fuente};
 use asentamiento::obras::ErrorObra;
+use asentamiento::recetas_unicas::ErrorReceta;
 use asentamiento::politicas::{Activador, ErrorPolitica};
 use asentamiento::Recurso;
 use std::cell::OnceCell;
@@ -91,6 +92,7 @@ fn rechazo_de_obra(e: ErrorObra) -> (&'static str, &'static str) {
         ErrorObra::SoloEnAldea => (OBRA_SOLO_EN_ALDEA, "el Corral solo se levanta en una aldea agrícola"),
         ErrorObra::SoloPorPueblo => (OBRA_SOLO_POR_PUEBLO, "los minerales y la Cantera solo se explotan con un pueblo extractor"),
         ErrorObra::TopeTransformacion => (OBRA_TOPE_TRANSFORMACION, "se alcanzó el máximo de talleres de ese tipo del nivel"),
+        ErrorObra::TopePorPlaza => (OBRA_TOPE_POR_PLAZA, "la plaza ya tiene todas las bodegas (o prensas) que caben"),
         ErrorObra::GranFundicion => (OBRA_GRAN_FUNDICION, "la Gran Fundición pide nivel de Facción, ser la capital y que no haya otra"),
         ErrorObra::ColaLlena => (OBRA_COLA_LLENA, "la cola de obras está llena"),
         ErrorObra::SinSitio => (OBRA_SIN_SITIO, "no hay sitio libre en la zona para ese edificio"),
@@ -694,7 +696,17 @@ impl Nucleo {
                 molino.buey = true;
                 self.emitir_propio(t, "construccion.buey_asignado", vec![id], vec![("edificio", *edificio as i64)]);
             }
-            Comando::ElegirReceta { .. } => todo!("T2: la receta activa de la bodega y la prensa"),
+            Comando::ElegirReceta { edificio, insumo, .. } => {
+                let eco = &mut self.estado.asentamientos.get_mut(&id).expect("existe").economia;
+                eco.elegir_receta(&datos, *edificio, *insumo).map_err(|e| match e {
+                    ErrorReceta::NoExiste => rechazo_obra(ErrorObra::NoExiste),
+                    ErrorReceta::NoSeElige => rechazo(rechazos::RECETA_NO_SE_ELIGE, format!("ed-{edificio} no elige receta: solo la bodega y la prensa")),
+                    ErrorReceta::Desconocida => rechazo(rechazos::RECETA_DESCONOCIDA, format!("ed-{edificio} no tiene ninguna receta con ese insumo")),
+                    ErrorReceta::TopePorPlaza => rechazo(rechazos::RECETA_TOPE_POR_PLAZA, "la plaza ya trabaja tantas recetas distintas de ese edificio como permite su nivel".into()),
+                    ErrorReceta::SinCambios => sin_cambios(),
+                })?;
+                self.emitir_propio(t, "construccion.receta_elegida", vec![id], vec![("edificio", *edificio as i64), ("insumo", recurso_a_u8(*insumo) as i64)]);
+            }
             Comando::AlternarAutoConstruccion { pausada, .. } => {
                 if !self.estado.asentamientos.get_mut(&id).expect("existe").economia.alternar_auto_construccion(*pausada) {
                     return Err(sin_cambios());

@@ -127,7 +127,7 @@ fn correr_con(dias: i64, semilla_hambre: bool, apagar_en: Option<i64>) -> (Asent
             let requerido = a.pueblos[0].falta();
             a.entregar_a_pueblo(t, &reglas, 1, &requerido, &mut ev).expect("todo entregado");
         }
-        if a.pueblos.len() == 1 && a.almacen.tiene(&aldea) && a.iniciar_aldea(&reglas, 2, Punto::new(5_000, 0), UNO, Cultivo::Trigo, &carro, &mut ev).is_ok() {
+        if a.pueblos.len() == 1 && a.almacen.tiene(&aldea) && a.iniciar_aldea(&reglas, 2, Punto::new(5_000, 0), UNO, Cultivo::Trigo, a.nivel, &carro, &mut ev).is_ok() {
             a.almacen.pagar(&aldea);
             let requerido = a.pueblos[1].falta();
             a.entregar_a_pueblo(t, &reglas, 2, &requerido, &mut ev).expect("todo entregado");

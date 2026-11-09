@@ -427,7 +427,8 @@ impl Asentamiento {
         let mano = produccion::mano_de_obra(&r.catalogo, &self.edificios, pesants, artesanos, self.trabajadores_de_pueblos(r));
         let reserva_auto = self.reserva(r, x, true);
         let pausadas = self.recetas_pausadas.clone();
-        let ctx = produccion::Contexto { fertilidad: x.fertilidad, factor_trigo: self.politicas.factor(&r.politicas, "factorProduccionTrigo"), factor_talleres: self.politicas.factor(&r.politicas, "factorProduccionTalleres"), factor_tecnologia: x.factor_tecnologia, tiene_tecnologia: x.tiene_tecnologia, recetas_pausadas: &pausadas };
+        let paradas = self.recetas_paradas(r);
+        let ctx = produccion::Contexto { fertilidad: x.fertilidad, factor_trigo: self.politicas.factor(&r.politicas, "factorProduccionTrigo"), factor_talleres: self.politicas.factor(&r.politicas, "factorProduccionTalleres"), factor_tecnologia: x.factor_tecnologia, tiene_tecnologia: x.tiene_tecnologia, recetas_pausadas: &pausadas, recetas_paradas: &paradas };
         produccion::extraer_y_cultivar(&r.catalogo, &mut self.edificios, &mut self.almacen, &mano, &ctx, x.fuentes);
         self.extraer_pueblos(r, &mano, &ctx, x.fuentes, &mut ev);
         for (recurso, n) in produccion::recetas(&r.catalogo, &mut self.edificios, &mut self.almacen, &mano, &ctx, &reserva_auto) {

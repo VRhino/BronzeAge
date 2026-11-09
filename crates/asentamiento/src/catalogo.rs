@@ -64,6 +64,11 @@ impl Tipo {
         )
     }
 
+    /// Bodega y prensa (2026-11-09): trabajan una sola receta a la vez, la de su insumo activo (`TALLERES_DE_UNA_RECETA`).
+    pub fn de_una_receta(self) -> bool {
+        matches!(self, Tipo::Bodega | Tipo::Prensa)
+    }
+
     /// Los talleres que trabajan los pesants: el molino y el horno, de pesants para pesants (autor, 2026-11-08). No traen artesanos.
     pub fn taller_de_pesants(self) -> bool {
         matches!(self, Tipo::Molino | Tipo::Horno)
@@ -414,6 +419,7 @@ mod pruebas {
         let r = Reglas::cargar();
         let t = &r.construccion.talleres_de_una_receta;
         assert_eq!(t.keys().copied().collect::<Vec<_>>(), vec![Tipo::Bodega, Tipo::Prensa]);
+        assert!(TIPOS.iter().all(|tipo| tipo.de_una_receta() == t.contains_key(tipo)), "`Tipo::de_una_receta` dice lo mismo que el bloque");
         let (bodega, prensa) = (&t[&Tipo::Bodega], &t[&Tipo::Prensa]);
         assert_eq!((bodega.maximo_por_plaza, prensa.maximo_por_plaza), (3, 3));
         // Bebidas: una en los niveles 3 y 4, las dos en el 5; un nivel por debajo del primero usa el primero.

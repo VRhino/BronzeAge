@@ -19,6 +19,7 @@ use super::{ficha_de_asentamiento, ids, punto};
 use crate::estado::Clase;
 use crate::nucleo::Nucleo;
 use asentamiento::edificio::{Estado as EstadoEdificio, Fuente};
+use asentamiento::recetas_unicas::insumo_activo;
 use asentamiento::recurso::TODOS;
 use contrato::v1 as pb;
 use militar::presencia::Ubicacion;
@@ -103,6 +104,7 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
     p.medidor_mantenimiento = Some(ritmo_en_escalones(eco.medidor.valor, 0, Some(100_000)));
     p.nutricion = Some(ritmo_en_escalones(eco.poblacion.nutricion, 0, Some(100_000)));
 
+    let paradas = eco.recetas_paradas(datos);
     p.edificios = eco
         .edificios
         .iter()
@@ -132,11 +134,11 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
                 pausado_por_almacen_lleno: b.pausado_por_almacen,
                 danado: b.danado,
                 buey: b.buey,
-                receta: b.receta.map(|r| r.nombre().to_owned()),
-                // T2: `receta_parada` cuando la plaza bajó de nivel y la receta ya no cabe en su tope de recetas distintas.
+                // La receta que trabaja (la de partida si no se eligió) y, si la plaza bajó de nivel y ya no cabe, que está parada (2026-11-09).
+                receta: insumo_activo(&datos.catalogo, b).map(|r| r.nombre().to_owned()),
+                receta_parada: paradas.contains(&b.id),
                 ancho: pieza.map_or(0, |x| x.rect.ancho.max(0) as u32),
                 alto: pieza.map_or(0, |x| x.rect.alto.max(0) as u32),
-                ..Default::default()
             }
         })
         .collect();
