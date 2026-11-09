@@ -8,15 +8,15 @@
 //! - **Unidades**: milésimas de unidad estratégica (`sint64`). Mundo real: 2.667.000 × 2.000.000.
 //! - **Rasters**: `tamano_celda` = 4000; orden por filas, fila 0 al norte; se muestrea el centro de la celda
 //!   (la celda de un punto `(x, y)` es `(x / 4000, y / 4000)`). Columnas = ⌈ancho / 4000⌉, filas = ⌈alto / 4000⌉.
-//!   `altura` es `u16` LE; `terreno` es `u8` = `ClaseTerreno`; `fertilidad`, `fertilidad_vid`, `fertilidad_oliva`, `humedad` y
-//!   `densidad_bosque` son `u8`; `region` es `u8` = `id` de una `RegionDeMundo` de `regiones` (con su nombre);
+//!   `altura` es `u16` LE; `terreno` es `u8` = `ClaseTerreno`; `fertilidad`, `fertilidad_vid`, `fertilidad_oliva`, `fertilidad_cebada`,
+//!   `fertilidad_sesamo`, `humedad` y `densidad_bosque` son `u8`; `region` es `u8` = `id` de una `RegionDeMundo` de `regiones` (con su nombre);
 //!   `anillos` es `u8` = `Anillo`; `transitable` va en bits (celda `i` → byte `i >> 3`, bit `i & 7`, LSB primero).
 //!   `coste` (opcional) es `u16` LE: coste de movimiento en milésimas (1000 = llano), 0 justo en las celdas no transitables.
 //!   Todos con `zstd = true`.
 //! - **Hash**: `manifiesto.hash` = sha256 hex minúsculas de la serialización prost del `ArtefactoDeMundo` con
 //!   `manifiesto.hash = ""`. Cada `CapaDeMundo.sha256` = sha256 hex de los `datos` del raster tal como se guardan
-//!   (comprimidos). `CapaDeMundo.nombre` ∈ {altura, terreno, fertilidad, fertilidad_vid, fertilidad_oliva, region, humedad,
-//!   densidad_bosque, anillos, transitable, coste};
+//!   (comprimidos). `CapaDeMundo.nombre` ∈ {altura, terreno, fertilidad, fertilidad_vid, fertilidad_oliva, fertilidad_cebada,
+//!   fertilidad_sesamo, region, humedad, densidad_bosque, anillos, transitable, coste};
 //!   se ignoran otras capas declaradas y el campo `bytes`.
 //!
 //! # Reglas que se comprueban (en este orden)
@@ -74,6 +74,8 @@ pub struct Mundo {
     fertilidad: Vec<u8>,
     fertilidad_vid: Vec<u8>,
     fertilidad_oliva: Vec<u8>,
+    fertilidad_cebada: Vec<u8>,
+    fertilidad_sesamo: Vec<u8>,
     region: Vec<u8>,
     humedad: Vec<u8>,
     densidad_bosque: Vec<u8>,
@@ -145,6 +147,16 @@ impl Mundo {
 
     pub fn fertilidad_oliva_en(&self, x: i64, y: i64) -> Option<u8> {
         self.celda(x, y).map(|i| self.fertilidad_oliva[i])
+    }
+
+    /// Fertilidad de la cebada (2026-11-09): la del trigo en la tierra húmeda y alta.
+    pub fn fertilidad_cebada_en(&self, x: i64, y: i64) -> Option<u8> {
+        self.celda(x, y).map(|i| self.fertilidad_cebada[i])
+    }
+
+    /// Fertilidad del sésamo (2026-11-09): la del trigo en la tierra húmeda y baja.
+    pub fn fertilidad_sesamo_en(&self, x: i64, y: i64) -> Option<u8> {
+        self.celda(x, y).map(|i| self.fertilidad_sesamo[i])
     }
 
     /// Id de la región del relieve en la celda de `(x, y)`; su nombre, con [`Mundo::nombre_region`].

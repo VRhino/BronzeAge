@@ -44,6 +44,7 @@ fn sellar(a: &mut ArtefactoDeMundo) -> Vec<u8> {
         ("altura", &a.altura), ("terreno", &a.terreno), ("fertilidad", &a.fertilidad), ("humedad", &a.humedad),
         ("densidad_bosque", &a.densidad_bosque), ("anillos", &a.anillos), ("transitable", &a.transitable), ("coste", &a.coste),
         ("region", &a.region), ("fertilidad_vid", &a.fertilidad_vid), ("fertilidad_oliva", &a.fertilidad_oliva),
+        ("fertilidad_cebada", &a.fertilidad_cebada), ("fertilidad_sesamo", &a.fertilidad_sesamo),
     ];
     let declaradas = capas
         .iter()
@@ -135,6 +136,8 @@ fn base() -> ArtefactoDeMundo {
         fertilidad: Some(raster(EncodingRaster::EncodingU8, &u8s)),
         fertilidad_vid: Some(raster(EncodingRaster::EncodingU8, &vid)),
         fertilidad_oliva: Some(raster(EncodingRaster::EncodingU8, &(0..COLS * FILAS).map(|i| (i % COLS) as u8).collect::<Vec<_>>())),
+        fertilidad_cebada: Some(raster(EncodingRaster::EncodingU8, &(0..COLS * FILAS).map(|i| (i / COLS) as u8 + 10).collect::<Vec<_>>())),
+        fertilidad_sesamo: Some(raster(EncodingRaster::EncodingU8, &vid.iter().map(|v| 255 - v).collect::<Vec<_>>())),
         region: Some(raster(EncodingRaster::EncodingU8, &region)),
         regiones: vec![RegionDeMundo { id: 0, nombre: "Oeste".into() }, RegionDeMundo { id: 1, nombre: "Este".into() }],
         humedad: Some(raster(EncodingRaster::EncodingU8, &u8s)),
@@ -190,6 +193,7 @@ fn el_mundo_valido_carga_y_responde_consultas() {
     assert_eq!(m.anillo_en(1_100_000, 700_000), Some(Anillo::Lejana));
     assert_eq!(m.altura_en(8000, 0), Some(2)); // celda 2 de la fila 0
     assert_eq!((m.fertilidad_vid_en(TIERRA.0, TIERRA.1), m.fertilidad_oliva_en(8000, 0), m.fertilidad_vid_en(-1, 0)), (Some(200), Some(2), None));
+    assert_eq!((m.fertilidad_cebada_en(8000, 4000), m.fertilidad_sesamo_en(TIERRA.0, TIERRA.1), m.fertilidad_cebada_en(-1, 0)), (Some(11), Some(55), None));
     assert_eq!((m.region_en(REGION_ESTE - 1, 0), m.region_en(REGION_ESTE, 0), m.region_en(ANCHO, 0)), (Some(0), Some(1), None));
     assert_eq!((m.nombre_region(0), m.nombre_region(1), m.nombre_region(2)), (Some("Oeste"), Some("Este"), None));
     assert_eq!((m.nodos().len(), m.parcelas().len(), m.campamentos().len(), m.alijos().len()), (31, 9, 2, 1));
@@ -295,6 +299,8 @@ fn raster_ausente_de_las_capas_nuevas() {
     assert!(matches!(error_de(|a| a.region = None), ErrorMundo::RasterAusente { capa: "region" }));
     assert!(matches!(error_de(|a| a.fertilidad_vid = None), ErrorMundo::RasterAusente { capa: "fertilidad_vid" }));
     assert!(matches!(error_de(|a| a.fertilidad_oliva = None), ErrorMundo::RasterAusente { capa: "fertilidad_oliva" }));
+    assert!(matches!(error_de(|a| a.fertilidad_cebada = None), ErrorMundo::RasterAusente { capa: "fertilidad_cebada" }));
+    assert!(matches!(error_de(|a| a.fertilidad_sesamo = None), ErrorMundo::RasterAusente { capa: "fertilidad_sesamo" }));
 }
 
 #[test]

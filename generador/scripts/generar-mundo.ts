@@ -13,7 +13,7 @@ import { evaluarElevacion, evaluarTerreno } from '../src/elevacion';
 import { densidadForestal } from '../src/forestacionRegional';
 import { fertilidadSuelo } from '../src/suelosRegional';
 import { distanciaCostaRegional, humedadRegionalEn, regionEn } from '../src/regional';
-import { fertilidadOliva, fertilidadVid } from '../src/cultivos';
+import { fertilidadCebada, fertilidadOliva, fertilidadSesamo, fertilidadVid } from '../src/cultivos';
 import { muestrearRelieve, type MuestraRelieve } from '../src/muestras';
 import { FACTOR } from '../src/campamentos';
 import type { MundoGenerado, RioMundo } from '../src/mundoTipos';
@@ -88,6 +88,13 @@ const muestraEn = (p: Point): MuestraRelieve => {
   const i = celdas.indice(p);
   return i >= 0 ? { altura: celdas.altura[i]!, pendiente: celdas.pendiente[i]!, humedad: celdas.humedad[i]! } : muestrearRelieve(r.elevacion, p);
 };
+// La fertilidad del trigo en `p` (la capa `fertilidad`); la cebada y el sésamo parten de ella.
+const trigoEn = (p: Point): number => {
+  const i = celdas.indice(p);
+  if (i < 0) return fertilidadSuelo(r.suelos, r.elevacion, p);
+  return fertilidadSuelo(r.suelos, r.elevacion, p,
+    { altura: celdas.altura[i]!, pendiente: celdas.pendiente[i]!, humedad: celdas.humedad[i]! });
+};
 const mundo: MundoGenerado = {
   seed, ancho, alto, generador: 'regional-19-costas-2+estrategico-3+cauce-1',
   campamentos: e.campamentos, recursos, vetas: e.vetas, masas: e.masas, parcelas: e.parcelas, bandidos, alijos, rios, grafo,
@@ -95,17 +102,14 @@ const mundo: MundoGenerado = {
   muestras: {
     altura: p => { const i = celdas.indice(p); return i >= 0 ? celdas.altura[i]! : evaluarElevacion(r.elevacion, p); },
     terreno: p => { const i = celdas.indice(p); return evaluarTerreno(r.elevacion, p, i >= 0 ? celdas.altura[i]! : undefined); },
-    fertilidad: p => {
-      const i = celdas.indice(p);
-      if (i < 0) return fertilidadSuelo(r.suelos, r.elevacion, p);
-      return fertilidadSuelo(r.suelos, r.elevacion, p,
-        { altura: celdas.altura[i]!, pendiente: celdas.pendiente[i]!, humedad: celdas.humedad[i]! });
-    },
+    fertilidad: trigoEn,
     fertilidadVid: p => { const m = muestraEn(p); return fertilidadVid(m, evaluarTerreno(r.elevacion, p, m.altura)); },
     fertilidadOliva: p => {
       const m = muestraEn(p);
       return fertilidadOliva(m, evaluarTerreno(r.elevacion, p, m.altura), distanciaCostaRegional(r.elevacion.regional, p));
     },
+    fertilidadCebada: p => { const m = muestraEn(p); return fertilidadCebada(trigoEn(p), m, evaluarTerreno(r.elevacion, p, m.altura)); },
+    fertilidadSesamo: p => { const m = muestraEn(p); return fertilidadSesamo(trigoEn(p), m, evaluarTerreno(r.elevacion, p, m.altura)); },
     region: p => regionEn(r.elevacion.regional, p),
     humedad: p => { const i = celdas.indice(p); return i >= 0 ? celdas.humedad[i]! : humedadRegionalEn(r.elevacion.regional, p); },
     densidadBosque: densidadEn,

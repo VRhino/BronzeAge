@@ -70,13 +70,14 @@ impl Geografia {
     }
 
     /// La fertilidad del artefacto en `p` para `cultivo`, en ppm (el raster es u8: 255 = 1,0); `None` fuera del mapa. Cada cultivo mira su capa del
-    /// mundo (trigo, vid u oliva) y es la que manda en las granjas de una aldea agrícola.
+    /// mundo (trigo, vid, oliva, cebada o sésamo) y es la que manda en las granjas de una aldea agrícola.
     pub(super) fn fertilidad_en(&self, p: Punto, cultivo: Cultivo) -> Option<i64> {
         let capa = match cultivo {
             Cultivo::Trigo => self.mundo.fertilidad_en(p.x, p.y),
             Cultivo::Vid => self.mundo.fertilidad_vid_en(p.x, p.y),
             Cultivo::Oliva => self.mundo.fertilidad_oliva_en(p.x, p.y),
-            Cultivo::Cebada | Cultivo::Sesamo => todo!("T1: las capas de cebada y sésamo del mundo"),
+            Cultivo::Cebada => self.mundo.fertilidad_cebada_en(p.x, p.y),
+            Cultivo::Sesamo => self.mundo.fertilidad_sesamo_en(p.x, p.y),
         };
         capa.map(|f| f as i64 * asentamiento::datos::UNO / 255)
     }

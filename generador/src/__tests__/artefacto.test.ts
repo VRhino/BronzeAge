@@ -51,6 +51,8 @@ function mundoSintetico(): MundoGenerado {
       fertilidad: p => p.y / 360,
       fertilidadVid: p => p.x / 480,
       fertilidadOliva: p => 1 - p.y / 360,
+      fertilidadCebada: p => p.y / 720,
+      fertilidadSesamo: p => 0.5 - p.x / 960,
       region: p => regionEn(regional, p),
       humedad: () => 0.5,
       densidadBosque: p => (p.x > 240 ? 1 : 0),
@@ -94,7 +96,7 @@ describe('artefacto de mundo', () => {
     expect(man.generador).toBe('sintetico-0.1');
     expect(man.factorUnity).toBe(12);
     expect(man.tamano).toMatchObject({ x: 40000n, y: 30000n });
-    const rasters = { altura: msg.altura, terreno: msg.terreno, fertilidad: msg.fertilidad, humedad: msg.humedad, densidad_bosque: msg.densidadBosque, anillos: msg.anillos, transitable: msg.transitable, coste: msg.coste, region: msg.region, fertilidad_vid: msg.fertilidadVid, fertilidad_oliva: msg.fertilidadOliva };
+    const rasters = { altura: msg.altura, terreno: msg.terreno, fertilidad: msg.fertilidad, humedad: msg.humedad, densidad_bosque: msg.densidadBosque, anillos: msg.anillos, transitable: msg.transitable, coste: msg.coste, region: msg.region, fertilidad_vid: msg.fertilidadVid, fertilidad_oliva: msg.fertilidadOliva, fertilidad_cebada: msg.fertilidadCebada, fertilidad_sesamo: msg.fertilidadSesamo };
     expect(man.capas.map(c => c.nombre)).toEqual(Object.keys(rasters));
     for (const c of man.capas) {
       const r = rasters[c.nombre as keyof typeof rasters]!;
@@ -114,7 +116,7 @@ describe('artefacto de mundo', () => {
     };
     expect(msg.altura!.encoding).toBe(EncodingRaster.ENCODING_U16_LE);
     expect(largo(msg.altura!)).toBe(2 * celdas);
-    for (const r of [msg.terreno, msg.fertilidad, msg.humedad, msg.densidadBosque, msg.anillos, msg.region, msg.fertilidadVid, msg.fertilidadOliva]) {
+    for (const r of [msg.terreno, msg.fertilidad, msg.humedad, msg.densidadBosque, msg.anillos, msg.region, msg.fertilidadVid, msg.fertilidadOliva, msg.fertilidadCebada, msg.fertilidadSesamo]) {
       expect(r!.encoding).toBe(EncodingRaster.ENCODING_U8);
       expect(largo(r!)).toBe(celdas);
     }
@@ -155,15 +157,18 @@ describe('artefacto de mundo', () => {
     expect(positivos).toBeGreaterThan(0);
   });
 
-  it('región y fertilidad de la vid y de la oliva: el centro de cada celda; la región es la de regionEn', () => {
+  it('región y fertilidad de la vid, la oliva, la cebada y el sésamo: el centro de cada celda; la región es la de regionEn', () => {
     const msg = fromBinary(ArtefactoDeMundoSchema, construirArtefacto(mundoSintetico()).bytes);
     const m = mundoSintetico(), region = zstdDecompressSync(msg.region!.datos);
     const vid = zstdDecompressSync(msg.fertilidadVid!.datos), oliva = zstdDecompressSync(msg.fertilidadOliva!.datos);
+    const cebada = zstdDecompressSync(msg.fertilidadCebada!.datos), sesamo = zstdDecompressSync(msg.fertilidadSesamo!.datos);
     for (let k = 0; k < 80; k++) {
       const p = { x: ((k % 10) + 0.5) * 48, y: (Math.floor(k / 10) + 0.5) * 48 };
       expect(region[k]).toBe(regionEn(regional, p));
       expect(vid[k]).toBe(Math.round(m.muestras.fertilidadVid(p) * 255));
       expect(oliva[k]).toBe(Math.round(m.muestras.fertilidadOliva(p) * 255));
+      expect(cebada[k]).toBe(Math.round(m.muestras.fertilidadCebada(p) * 255));
+      expect(sesamo[k]).toBe(Math.round(m.muestras.fertilidadSesamo(p) * 255));
     }
     expect(new Set(region).size).toBeGreaterThan(1);
     expect(msg.regiones.map(r => r.id)).toEqual(regional.areas.map(a => a.id).sort((a, b) => a - b));

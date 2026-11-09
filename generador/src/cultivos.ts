@@ -25,3 +25,20 @@ export function fertilidadOliva(m: MuestraRelieve, terreno: TerrenoTipo, distanc
   const c = CULTIVOS.oliva;
   return baja(m.altura, c.alturaBaja) * baja(distanciaCosta, c.distanciaCosta) * baja(m.humedad, c.humedadBaja) * baja(m.pendiente, c.pendienteBaja);
 }
+
+/**
+ * Fertilidad de la cebada (0..1, 2026-11-09): la del trigo (`trigo`, la capa `fertilidad`) en la tierra húmeda y alta. 0 en el agua.
+ * Función pura de la muestra del relieve: no consume azar.
+ */
+export function fertilidadCebada(trigo: number, m: MuestraRelieve, terreno: TerrenoTipo): number {
+  if (terreno === 'agua') return 0;
+  const c = CULTIVOS.cebada;
+  return trigo * sube(m.humedad, c.humedadSube) * sube(m.altura, c.alturaSube);
+}
+
+/** Fertilidad del sésamo (0..1, 2026-11-09): la del trigo en la tierra húmeda y baja, en todo el mapa. 0 en el agua. */
+export function fertilidadSesamo(trigo: number, m: MuestraRelieve, terreno: TerrenoTipo): number {
+  if (terreno === 'agua') return 0;
+  const c = CULTIVOS.sesamo;
+  return trigo * sube(m.humedad, c.humedadSube) * baja(m.altura, c.alturaBaja);
+}
