@@ -868,7 +868,7 @@ mod pruebas {
         let mano = mano_de_obra(&r.catalogo, &a.edificios, 20, 0, a.trabajadores_de_pueblos(&r));
         assert_eq!(mano.requeridos_pesants, 12_000, "la Granja de la fundación (4) y los 8 del pueblo");
         a.extraer_pueblos(&r, &mano, &ctx(), &mut w, &mut ev);
-        assert_eq!(a.pueblos[0].almacen.cantidad(Recurso::Cobre), 5_000, "5 por minuto con la mano de obra completa");
+        assert_eq!(a.pueblos[0].almacen.cantidad(Recurso::Cobre), 10_000, "10 por minuto con la mano de obra completa");
         assert_eq!(a.almacen.cantidad(Recurso::Cobre), 0, "lo extraído se queda en el pueblo, no en la plaza");
         for _ in 0..200 {
             a.extraer_pueblos(&r, &mano, &ctx(), &mut w, &mut ev);
@@ -878,7 +878,7 @@ mod pruebas {
         // Al vaciarse el almacén vuelve a extraer y a poder avisar.
         a.pueblos[0].almacen.quitar(Recurso::Cobre, 1_000_000);
         a.extraer_pueblos(&r, &mano, &ctx(), &mut w, &mut ev);
-        assert!(!a.pueblos[0].lleno && a.pueblos[0].almacen.cantidad(Recurso::Cobre) == 5_000);
+        assert!(!a.pueblos[0].lleno && a.pueblos[0].almacen.cantidad(Recurso::Cobre) == 10_000);
     }
 
     #[test]
@@ -887,8 +887,8 @@ mod pruebas {
         let mut a = con_pueblo_activo(&r);
         let mut w = Mundo::default();
         w.0.insert(1, 3_000);
-        let mano = mano_de_obra(&r.catalogo, &a.edificios, 6, 0, a.trabajadores_de_pueblos(&r));
-        assert_eq!(mano.pesants, 500_000, "6 pesants para 12 que piden la Granja y el pueblo");
+        let mano = mano_de_obra(&r.catalogo, &a.edificios, 3, 0, a.trabajadores_de_pueblos(&r));
+        assert_eq!(mano.pesants, 250_000, "3 pesants para 12 que piden la Granja y el pueblo: 2,5 por minuto");
         a.extraer_pueblos(&r, &mano, &ctx(), &mut w, &mut vec![]);
         assert_eq!((a.pueblos[0].almacen.cantidad(Recurso::Cobre), a.pueblos[0].almacen.disponible(Recurso::Cobre)), (2_000, 2_500));
         a.extraer_pueblos(&r, &mano, &ctx(), &mut w, &mut vec![]);

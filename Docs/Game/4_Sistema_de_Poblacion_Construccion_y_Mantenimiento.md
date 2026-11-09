@@ -117,10 +117,10 @@ Algunos edificios, niveles internos y recetas piden además una **tecnología ad
 | Leñera | Madera | 10 madera | 4 | 1 h | 8 madera (5 hasta el 2026-11-01) |
 | Granja | Trigo | 30 madera | 4 | 2 h | **60 trigo** (nivel 1) |
 | Corral | Livestock (ganado vacuno) | 30 madera | 4 | 4 h | 3 livestock (solo en la aldea agrícola de trigo desde el 2026-10-27: allí el ganado sale de la cría, 4.2.2) |
-| Mina de oro | Oro | 40 madera | 6 | 8 h | 4 oro |
-| Mina de cobre | Cobre | 30 madera | 8 | 6 h | 5 cobre |
-| Mina de estaño | Estaño | 50 madera | 8 | 8 h | 3 estaño |
-| Mina de hierro (pide `forja_hierro_temprana`) | Mineral de hierro | 30 madera | 8 | 6 h | 5 mineral de hierro |
+| Mina de oro | Oro | 40 madera | 6 | 8 h | 10 oro (4 hasta el 2026-11-09) |
+| Mina de cobre | Cobre | 30 madera | 8 | 6 h | 10 cobre (5 hasta el 2026-11-09) |
+| Mina de estaño | Estaño | 50 madera | 8 | 8 h | 10 estaño (3 hasta el 2026-11-09) |
+| Mina de hierro (pide `forja_hierro_temprana`) | Mineral de hierro | 30 madera | 8 | 6 h | 10 mineral de hierro (5 hasta el 2026-11-09) |
 
 Los extractores de nivel 1 se pagan solo con madera: son justo lo que hay que construir para subir a nivel 2 (4.5). La tecnología `canteria` (Doc 6.6) multiplica por 1,5 lo que sacan las Canteras de la Facción. Cantera y minas ligan a un nodo finito (Doc 1.4) y solo se levantan como pueblo extractor (4.2.2); el Corral, solo en la aldea agrícola.
 

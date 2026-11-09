@@ -484,13 +484,13 @@ fn el_pueblo_extrae_contra_su_almacen_y_el_carro_sale_lleno_vuelca_en_la_madre_y
     let id = e.pueblo_levantado();
     let activo_desde = hechos(&e.n, "pueblo.completado")[0].0;
     let carro = e.pueblo(id).carro.unwrap();
-    // Extrae contra el almacén local (no el de la plaza): 5 por minuto, también el minuto en que se completó.
+    // Extrae contra el almacén local (no el de la plaza): 10 por minuto (desde el 2026-11-09; antes 5), también el minuto en que se completó.
     e.n.avanzar_hasta(activo_desde + 10 * MIN);
-    assert_eq!(e.pueblo(id).almacen.cantidad(Cobre), 55_000);
+    assert_eq!(e.pueblo(id).almacen.cantidad(Cobre), 110_000);
     assert_eq!(e.almacen(Cobre), 0, "no entra en el almacén de la madre hasta que lo traiga el carro");
     // El logro `extraido.cobre` (6B) cuenta en origen lo que sale del nodo (D17): lo del pueblo, al extraerlo.
     let extraido = |e: &Escenario| e.n.tecnologia().contador(tecnologia::Contador::ExtraidoCobre);
-    assert_eq!(extraido(&e), 55);
+    assert_eq!(extraido(&e), 110);
     // Hasta llenarse: el nodo se agota y espera a regenerarse sin que el pueblo se mude.
     let mut t = activo_desde + 10 * MIN;
     while hechos(&e.n, "acarreo.vuelve").is_empty() {
@@ -562,8 +562,8 @@ fn con_el_nodo_agotado_el_pueblo_espera_a_que_se_regenere_y_no_se_muda() {
     let id = e.pueblo_levantado();
     let desde = hechos(&e.n, "pueblo.completado")[0].0;
     let inicial = e.mapa.nodos[cobre as usize].inicial;
-    // Hasta agotar el nodo extrae 5 por minuto; el stock del nodo es lo que hay (101-299 unidades): se agota antes de llenar el almacén.
-    let minutos_en_agotar = inicial / 5_000;
+    // Hasta agotar el nodo extrae 10 por minuto; el stock del nodo es lo que hay (101-299 unidades): se agota antes de llenar el almacén.
+    let minutos_en_agotar = inicial / 10_000;
     e.n.avanzar_hasta(desde + minutos_en_agotar * MIN + MIN);
     assert_eq!(e.pueblo(id).almacen.cantidad(Cobre), inicial, "sacó todo el nodo");
     assert_eq!(e.n.estado().yacimientos[&cobre].stock, 0);

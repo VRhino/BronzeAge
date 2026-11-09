@@ -2177,7 +2177,8 @@ fn sitio_junto_a(n: &Nucleo, m: &Mundo, c: Punto, r: i64) -> Option<Punto> {
     })
 }
 
-/// La plaza madre de «ana» (F1, nivel 2) con un pueblo de cobre levantado y activo, una hora después de acabar su obra: (escenario, madre, pueblo, sitio del pueblo).
+/// La plaza madre de «ana» (F1, nivel 2) con un pueblo de cobre levantado y activo, media hora después de acabar su obra (a 10 por minuto, más de la mitad
+/// de su almacén sin llenar el carro): (escenario, madre, pueblo, sitio del pueblo).
 fn con_pueblo(m: &M) -> (Esc, u64, u64, Punto) {
     // El almacén local de antes (500, el del carro): desde el 2026-11-05 mide 1.000 y su mitad protegida es justo lo que llena el carro, así que el pueblo apenas pasa de ella.
     let mut arr = arranque_mundo(m, 7);
@@ -2207,7 +2208,7 @@ fn con_pueblo(m: &M) -> (Esc, u64, u64, Punto) {
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Oro, cantidad: 12_000 });
     e.ok("ana", Comando::EntregarMateriales { ejercito: col, pueblo });
     let EstadoPueblo::EnObra { completa_en } = e.n.pueblo(pueblo).unwrap().1.estado else { panic!("debía estar en obra") };
-    e.n.avanzar_hasta(completa_en + HORA);
+    e.n.avanzar_hasta(completa_en + 30 * MIN);
     (e, madre, pueblo, sitio)
 }
 
