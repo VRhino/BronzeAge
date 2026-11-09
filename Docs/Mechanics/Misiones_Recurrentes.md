@@ -88,7 +88,7 @@ Son los del héroe de `Misiones.md` §3, sumados en origen: `salidas`, `prestamo
 
 ## 9. Foto
 
-Desde **BAN50**, al final del estado: el catálogo vigente (su JSON), el origen de las semanas, la renovación pendiente y cada tablón (lo que sale, lo elegido, las aceptadas de la semana y cada misión con su definición, su periodo y su avance). Las fotos anteriores a BAN59 ya no se leen (desde la tanda 69 el motor solo carga BAN59). Las recompensas flexibles (2026-11-01) cambian la forma del catálogo y la huella de las reglas: la foto sigue en BAN54, pero una foto anterior no carga y hace falta partida nueva.
+Desde **BAN50**, al final del estado: el catálogo vigente (su JSON), el origen de las semanas, la renovación pendiente y cada tablón (lo que sale, lo elegido, las aceptadas de la semana y cada misión con su definición, su periodo y su avance). Las fotos anteriores a BAN60 ya no se leen (desde el 2026-11-09 el motor solo carga BAN60). Las recompensas flexibles (2026-11-01) cambian la forma del catálogo y la huella de las reglas: la foto sigue en BAN54, pero una foto anterior no carga y hace falta partida nueva.
 
 ## 10. Catálogo inicial
 

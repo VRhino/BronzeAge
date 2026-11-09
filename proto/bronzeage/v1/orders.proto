@@ -895,7 +895,9 @@ message OrdenMarcarAldea {
   string asentamiento_id = 1;
   string heroe_id = 2;
   Punto punto = 3;
-  optional string cultivo = 4;  // trigo (sin él) | vid | oliva (tanda 69 §12)
+  // trigo (sin él) | vid | oliva (tanda 69 §12) | cebada | sesamo (2026-11-09). La vid y la cebada piden que alguna plaza de la Facción haya
+  // alcanzado el nivel 3, y la oliva y el sésamo el 4 (`pueblo.cultivo_bloqueado`).
+  optional string cultivo = 4;
 }
 
 message OrdenMejorarAldea {

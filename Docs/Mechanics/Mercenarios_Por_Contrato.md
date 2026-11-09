@@ -2,7 +2,7 @@
 
 > **Implementado en Rust el 2026-11-01 (entrada 48).** Reglas puras en el crate `crates/mercenarios` (`tipos.rs`, `datos.rs`, `contrato.rs`, `orden.rs`, `progresion.rs`); la marca de
 > ciudadanía en `crates/politica`; el mundo en `crates/nucleo/src/nucleo/contratos/` (`firma`, `mando`, `fin`, `guardas`, `tropa`, `renombre`); lo que ve cada uno en
-> `crates/nucleo/src/proyeccion/mercenarios.rs` y `audiencia.rs`. Foto **BAN54** (hoy BAN59; las fotos anteriores a BAN59 ya no se leen). El canon está en [`Docs/Game/7_Bots_Mercenarios.md`](../Game/7_Bots_Mercenarios.md).
+> `crates/nucleo/src/proyeccion/mercenarios.rs` y `audiencia.rs`. Foto **BAN54** (hoy BAN60; las fotos anteriores a BAN60 ya no se leen). El canon está en [`Docs/Game/7_Bots_Mercenarios.md`](../Game/7_Bots_Mercenarios.md).
 > Todas las cifras son borradores que se calibran con bots (fase 7).
 
 ## 1. Qué es
