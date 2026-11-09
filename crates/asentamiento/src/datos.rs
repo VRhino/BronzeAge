@@ -400,7 +400,9 @@ mod pruebas {
         assert_eq!(bien(Recurso::Pan), &BienDeConsumo { recurso: Recurso::Pan, clases: [true, false, false], racion: 40_000, modificador: 2_000_000 });
         assert_eq!(bien(Recurso::Carne), &BienDeConsumo { recurso: Recurso::Carne, clases: [true; 3], racion: 20_000, modificador: 1_200_000 });
         assert_eq!((bien(Recurso::Queso).clases, bien(Recurso::Vino).clases, bien(Recurso::Aceite).racion), ([false, true, false], [false, false, true], 10_000));
-        assert_eq!((p.bienes.len(), &p.guarnicion[..]), (5, &[Recurso::Carne][..]));
+        // La cerveza (2026-11-09): de la nobleza, con la ración del vino y ×1,25.
+        assert_eq!(bien(Recurso::Cerveza), &BienDeConsumo { recurso: Recurso::Cerveza, clases: [false, false, true], racion: 10_000, modificador: 1_250_000 });
+        assert_eq!((p.bienes.len(), &p.guarnicion[..]), (6, &[Recurso::Carne][..]));
         assert_eq!(r.capacidad_inicial, 800_000, "almacenes al doble desde el 2026-11-05");
         assert_eq!(r.politicas.catalogo.len(), 16);
         assert_eq!(r.politicas.slots["gobernador"].maximo, 5);

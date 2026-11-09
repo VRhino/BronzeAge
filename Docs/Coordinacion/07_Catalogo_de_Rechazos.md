@@ -60,6 +60,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `obra.sin_cuadrilla` | `OBRA_SIN_CUADRILLA` | — |
 | `obra.prestigio_insuficiente` | `OBRA_PRESTIGIO_INSUFICIENTE` | La Maravilla o la estatua piden más prestigio del que tiene la Facción (tanda 69 §13). |
 | `obra.solo_en_capital` | `OBRA_SOLO_EN_CAPITAL` | La estatua solo se levanta en la capital de la Facción (tanda 69 §13). |
+| `obra.tope_por_plaza` | `OBRA_TOPE_POR_PLAZA` | La plaza ya tiene todas las bodegas (o prensas) que caben en ella (`TALLERES_DE_UNA_RECETA.maximoPorPlaza`, 2026-11-09). |
 
 ### El molino y su buey (tanda 69 §10)
 
@@ -67,6 +68,14 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 |---|---|---|
 | `molino.no_es_molino` | `MOLINO_NO_ES_MOLINO` | El edificio al que se asigna el buey no es un molino. |
 | `molino.ya_tiene_buey` | `MOLINO_YA_TIENE_BUEY` | El molino ya tiene su buey. |
+
+### La receta de la bodega y de la prensa (2026-11-09)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `receta.no_se_elige` | `RECETA_NO_SE_ELIGE` | El edificio no elige receta: solo la bodega y la prensa trabajan una sola a la vez. |
+| `receta.desconocida` | `RECETA_DESCONOCIDA` | Ese insumo no es de ninguna receta del edificio. |
+| `receta.tope_por_plaza` | `RECETA_TOPE_POR_PLAZA` | La plaza ya trabaja tantas recetas distintas en ese tipo de edificio como permite su nivel (`TALLERES_DE_UNA_RECETA.recetasDistintasPorNivel`). |
 
 ### Ascenso (`Bloqueo`): el rechazo lleva el código del primero y todos en el mensaje
 

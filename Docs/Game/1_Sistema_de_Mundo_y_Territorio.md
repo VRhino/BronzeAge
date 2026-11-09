@@ -89,7 +89,7 @@ El comercio por mar está fuera de alcance (Doc 3.11): sin barcos, dos costas en
 - CABALLOS: no son livestock. **Se compran con oro** al reclutar caballería y carros (Doc 5.8), y los animales de tiro de las caravanas se compran igual (Doc 3.13). Cuando exista la captura y la cría habrá las dos fuentes.
 - MADERA y PIEDRA: materiales base de construcción de edificios e insumo de materiales derivados.
 - REGENERACIÓN DE YACIMIENTOS AGOTADOS: un nodo mineral que llega a stock 0 no queda muerto para siempre — vuelve a aparecer con su cantidad inicial completa pasado un cooldown, parametrizable por categoría (`REGENERACION_NODOS`). Los yacimientos minerales (piedra/cobre/estaño/hierro/oro) regeneran en 10 minutos de mundo (el cooldown de 3 del ganado queda sin uso desde que no hay nodos de ganado).
-- COMMODITIES DE NOBLEZA (uvas/olivas → vino/aceite): no son alimento básico, requeridas para felicidad de la Nobleza; su déficit arriesga rebelión/estancamiento, no hambruna.
+- BIENES DE LA NOBLEZA (uva → vino; cebada → cerveza, desde el 2026-11-09; aceituna o sésamo → aceite): no son alimento básico; salen de las aldeas de su cultivo (4.2.2) y, con su ración, dan a la Nobleza un salto de crecimiento (4.1). Su falta no causa hambruna.
 
 ## 1.6 Red de caminos
 Los caminos no se construyen: **los hace el uso**. Diseño y decisiones en `typescript-final:Consideraciones/Rutas_Caravana_Avanzadas_Definicion.md`. Cifras placeholder.

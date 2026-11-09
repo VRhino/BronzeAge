@@ -130,6 +130,9 @@ pub enum Comando {
     MejorarEdificio { asentamiento: u64, edificio: u32 },
     /// Compra el buey de un molino (tanda 69 §10): cobra el precio del buey de una caravana del almacén de la plaza y el molino produce el doble.
     AsignarBuey { asentamiento: u64, edificio: u32 },
+    /// Elige la receta activa de una bodega o una prensa por su insumo (2026-11-09): cada una trabaja una sola, dentro del tope de recetas
+    /// distintas de la plaza (`TALLERES_DE_UNA_RECETA`).
+    ElegirReceta { asentamiento: u64, edificio: u32, insumo: Recurso },
     /// Pausa o reanuda la auto-construcción (solo la detección de necesidades nuevas).
     AlternarAutoConstruccion { asentamiento: u64, pausada: bool },
     /// Para o reanuda una receta por el recurso que produce, en todos los talleres.
@@ -808,6 +811,7 @@ impl Comando {
             | Comando::MoverEnCola { .. }
             | Comando::MejorarEdificio { .. }
             | Comando::AsignarBuey { .. }
+            | Comando::ElegirReceta { .. }
             | Comando::AlternarAutoConstruccion { .. }
             | Comando::AlternarReceta { .. }
             | Comando::MarcarPueblo { .. }
@@ -1069,6 +1073,7 @@ impl Comando {
             | Comando::MoverEnCola { asentamiento, .. }
             | Comando::MejorarEdificio { asentamiento, .. }
             | Comando::AsignarBuey { asentamiento, .. }
+            | Comando::ElegirReceta { asentamiento, .. }
             | Comando::AlternarAutoConstruccion { asentamiento, .. }
             | Comando::AlternarReceta { asentamiento, .. }
             | Comando::CalibrarReserva { asentamiento, .. }
@@ -1472,6 +1477,12 @@ impl Peticion {
                 w.u8(214);
                 w.u64(*asentamiento);
                 w.u32(*edificio);
+            }
+            Comando::ElegirReceta { asentamiento, edificio, insumo } => {
+                w.u8(217);
+                w.u64(*asentamiento);
+                w.u32(*edificio);
+                w.u8(recurso_a_u8(*insumo));
             }
             Comando::MoverEnCola { asentamiento, edificio, arriba } => {
                 w.u8(14);
@@ -2766,6 +2777,7 @@ impl Peticion {
             212 => Comando::DetenerEncargo { caravana: r.u64()? },
             213 => Comando::CancelarConstruccion { asentamiento: r.u64()?, edificio: r.u32()? },
             214 => Comando::AsignarBuey { asentamiento: r.u64()?, edificio: r.u32()? },
+            217 => Comando::ElegirReceta { asentamiento: r.u64()?, edificio: r.u32()?, insumo: recurso_de_u8(r.u8()?)? },
             198 => Comando::OfrecerseComoMercenario { heroe: r.u64()? },
             199 => Comando::RetirarOferta { heroe: r.u64()? },
             200 | 210 => Comando::ContratarMercenario {
@@ -2853,11 +2865,20 @@ pub mod rechazos {
     pub const OBRA_PRESTIGIO_INSUFICIENTE: &str = "obra.prestigio_insuficiente";
     /// La estatua solo se levanta en la capital de la Facción (tanda 69 §13).
     pub const OBRA_SOLO_EN_CAPITAL: &str = "obra.solo_en_capital";
+    /// La plaza ya tiene todas las bodegas (o prensas) que caben en ella (`TALLERES_DE_UNA_RECETA.maximoPorPlaza`, 2026-11-09).
+    pub const OBRA_TOPE_POR_PLAZA: &str = "obra.tope_por_plaza";
     // El molino y su buey (tanda 69 §10).
     /// El edificio al que se asigna el buey no es un molino.
     pub const MOLINO_NO_ES_MOLINO: &str = "molino.no_es_molino";
     /// El molino ya tiene su buey.
     pub const MOLINO_YA_TIENE_BUEY: &str = "molino.ya_tiene_buey";
+    // La receta de la bodega y de la prensa (2026-11-09).
+    /// El edificio no elige receta: solo la bodega y la prensa trabajan una sola a la vez.
+    pub const RECETA_NO_SE_ELIGE: &str = "receta.no_se_elige";
+    /// Ese insumo no es de ninguna receta del edificio.
+    pub const RECETA_DESCONOCIDA: &str = "receta.desconocida";
+    /// La plaza ya trabaja tantas recetas distintas en ese tipo de edificio como permite su nivel (`TALLERES_DE_UNA_RECETA.recetasDistintasPorNivel`).
+    pub const RECETA_TOPE_POR_PLAZA: &str = "receta.tope_por_plaza";
     // Ascenso (`Bloqueo`): el rechazo lleva el código del primero y todos en el mensaje.
     pub const ASCENSO_NIVEL_MAXIMO: &str = "ascenso.nivel_maximo";
     pub const ASCENSO_EN_CURSO: &str = "ascenso.en_curso";
@@ -3713,6 +3734,7 @@ mod pruebas {
             Comando::MoverEnCola { asentamiento: 3, edificio: 17, arriba: true },
             Comando::MejorarEdificio { asentamiento: 3, edificio: 4 },
             Comando::AsignarBuey { asentamiento: 3, edificio: 4 },
+            Comando::ElegirReceta { asentamiento: 3, edificio: 4, insumo: Recurso::Cebada },
             Comando::AlternarAutoConstruccion { asentamiento: 3, pausada: true },
             Comando::AlternarReceta { asentamiento: 3, recurso: Recurso::LingoteBronce, pausada: false },
             Comando::CalibrarReserva { asentamiento: 3, recurso: Recurso::Madera, valor: 12_345 },

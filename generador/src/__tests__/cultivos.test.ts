@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fertilidadOliva, fertilidadVid } from '../cultivos';
+import { fertilidadCebada, fertilidadOliva, fertilidadSesamo, fertilidadVid } from '../cultivos';
 import { distanciaCostaRegional, crearRelieveRegional } from '../regional';
 import { evaluarTerreno, type CampoElevacion } from '../elevacion';
 import { muestrearRelieve, type MuestraRelieve } from '../muestras';
@@ -32,6 +32,33 @@ describe('fertilidad de la oliva', () => {
     const o = (m: Partial<MuestraRelieve>) => fertilidadOliva({ ...ladera, ...m }, 'llano', 500);
     expect(o({})).toBeGreaterThan(o({ altura: 0.58 }));
     expect(o({})).toBeGreaterThan(o({ humedad: 0.9 }));
+  });
+});
+
+describe('fertilidad de la cebada y del sésamo', () => {
+  const humeda: MuestraRelieve = { altura: 0.5, pendiente: 0.1, humedad: 0.8 };
+  it('son 0 en el agua y en la tierra seca (humedad hasta 0,55), aunque el trigo sea 1', () => {
+    for (const f of [fertilidadCebada, fertilidadSesamo]) {
+      expect(f(1, humeda, 'agua')).toBe(0);
+      expect(f(1, { altura: 0.46, pendiente: 0.1, humedad: 0.55 }, 'llano')).toBe(0);
+    }
+  });
+  it('en tierra muy húmeda valen el trigo: la cebada en lo alto (desde 0,48) y el sésamo en lo bajo (hasta 0,45)', () => {
+    expect(fertilidadCebada(0.6, { ...humeda, altura: 0.5 }, 'llano')).toBeCloseTo(0.6, 10);
+    expect(fertilidadCebada(0.6, { ...humeda, altura: 0.4 }, 'llano')).toBe(0);
+    expect(fertilidadSesamo(0.6, { ...humeda, altura: 0.4 }, 'llano')).toBeCloseTo(0.6, 10);
+    expect(fertilidadSesamo(0.6, { ...humeda, altura: 0.5 }, 'llano')).toBe(0);
+  });
+  it('entre las dos alturas se reparten el trigo: suman lo mismo que la tierra húmeda', () => {
+    const m = { ...humeda, altura: 0.465 };
+    expect(fertilidadCebada(0.8, m, 'llano') + fertilidadSesamo(0.8, m, 'llano')).toBeCloseTo(0.8, 10);
+    expect(fertilidadCebada(0.8, m, 'llano')).toBeGreaterThan(0);
+    expect(fertilidadSesamo(0.8, m, 'llano')).toBeGreaterThan(0);
+  });
+  it('crecen con la humedad y con el trigo', () => {
+    const c = (trigo: number, humedad: number) => fertilidadCebada(trigo, { ...humeda, humedad }, 'llano');
+    expect(c(0.5, 0.6)).toBeGreaterThan(c(0.5, 0.57));
+    expect(c(0.5, 0.9)).toBeGreaterThan(c(0.3, 0.9));
   });
 });
 

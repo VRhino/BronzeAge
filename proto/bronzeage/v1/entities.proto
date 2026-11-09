@@ -390,6 +390,10 @@ message Edificio {
   uint32 ancho = 16;
   uint32 alto = 17;
   bool buey = 18;                        // el molino tiene su buey y produce el doble (tanda 69 §10)
+  // Bodega y prensa (2026-11-09): el insumo de su única receta activa (uva | cebada | aceituna | sesamo); `receta_parada` si la plaza bajó
+  // de nivel y esa receta ya no cabe en su tope de recetas distintas (no produce hasta que la plaza recupere el nivel o se elija otra).
+  optional string receta = 19;
+  bool receta_parada = 20;
 }
 
 enum ClaseCelda {
@@ -593,7 +597,8 @@ message Pueblo {
   optional TrazadoUrbano trazado = 21;   // layout_version, unidades_por_celda, radio_ul, calles y caminos de la planta
   // El nivel alcanzado de su plaza madre, solo con la planta (el cliente pinta las casas con ese estilo, hasta el 3).
   optional uint32 nivel_madre = 22;
-  // El cultivo de la aldea agrícola (tanda 69 §12): trigo | vid | oliva. Se elige al marcarla y no cambia; ausente en un extractor.
+  // El cultivo de la aldea agrícola (tanda 69 §12): trigo | vid | oliva | cebada | sesamo (2026-11-09). Se elige al marcarla y no cambia; ausente
+  // en un extractor.
   optional string cultivo = 23;
 }
 

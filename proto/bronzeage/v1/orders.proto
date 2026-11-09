@@ -826,6 +826,17 @@ message OrdenAsignarBuey {
   string edificio_id = 3;
 }
 
+// La receta activa de una bodega o una prensa (2026-11-09): cada una trabaja una sola a la vez, la que consume `insumo` (bodega: uva → vino,
+// cebada → cerveza; prensa: aceituna o sésamo → aceite). La plaza tiene un tope de recetas distintas por tipo y nivel (`TALLERES_DE_UNA_RECETA`):
+// la bodega, una en los niveles 3 y 4 y dos en el 5; la prensa, siempre una. Rechazos: `receta.no_se_elige`, `receta.desconocida`,
+// `receta.tope_por_plaza`, `edificio.desconocido`.
+message OrdenElegirReceta {
+  string asentamiento_id = 1;
+  string cargo = 2;  // gobernador | maestroObras
+  string edificio_id = 3;
+  string insumo = 4;  // id de catálogo del recurso que consume la receta: uva | cebada | aceituna | sesamo
+}
+
 message OrdenQuitarEscolta {
   string caravana_id = 1;
   string heroe_id = 2;
@@ -884,7 +895,9 @@ message OrdenMarcarAldea {
   string asentamiento_id = 1;
   string heroe_id = 2;
   Punto punto = 3;
-  optional string cultivo = 4;  // trigo (sin él) | vid | oliva (tanda 69 §12)
+  // trigo (sin él) | vid | oliva (tanda 69 §12) | cebada | sesamo (2026-11-09). La vid y la cebada piden que alguna plaza de la Facción haya
+  // alcanzado el nivel 3, y la oliva y el sésamo el 4 (`pueblo.cultivo_bloqueado`).
+  optional string cultivo = 4;
 }
 
 message OrdenMejorarAldea {
@@ -1332,5 +1345,6 @@ message Orden {
     OrdenAsignarBuey asignar_buey = 184;
     OrdenComprarInformeRegion comprar_informe_region = 185;
     OrdenTomarOrdenADistancia tomar_orden_a_distancia = 186;
+    OrdenElegirReceta elegir_receta = 187;
   }
 }

@@ -56,6 +56,9 @@ export interface MuestrasRelieve {
   /** Fertilidad de la vid y de la oliva (`cultivos.ts`). */
   fertilidadVid(p: Point): number;
   fertilidadOliva(p: Point): number;
+  /** Fertilidad de la cebada y del sésamo (`cultivos.ts`): la del trigo en la tierra húmeda, alta o baja. */
+  fertilidadCebada(p: Point): number;
+  fertilidadSesamo(p: Point): number;
   /** Id de la región del relieve (`regionEn`); está en `MundoGenerado.regiones`. */
   region(p: Point): number;
   humedad(p: Point): number;

@@ -48,6 +48,8 @@ pub(crate) fn validar(mut a: ArtefactoDeMundo, op: &OpcionesValidacion) -> R<Mun
     let fertilidad = capa("fertilidad", &a.fertilidad, u8s)?;
     let fertilidad_vid = capa("fertilidad_vid", &a.fertilidad_vid, u8s)?;
     let fertilidad_oliva = capa("fertilidad_oliva", &a.fertilidad_oliva, u8s)?;
+    let fertilidad_cebada = capa("fertilidad_cebada", &a.fertilidad_cebada, u8s)?;
+    let fertilidad_sesamo = capa("fertilidad_sesamo", &a.fertilidad_sesamo, u8s)?;
     let region = capa("region", &a.region, u8s)?;
     let humedad = capa("humedad", &a.humedad, u8s)?;
     let densidad_bosque = capa("densidad_bosque", &a.densidad_bosque, u8s)?;
@@ -68,7 +70,7 @@ pub(crate) fn validar(mut a: ArtefactoDeMundo, op: &OpcionesValidacion) -> R<Mun
     }
 
     let mundo = Mundo {
-        artefacto: a, columnas, filas, altura, terreno, fertilidad, fertilidad_vid, fertilidad_oliva, region, humedad, densidad_bosque, anillos,
+        artefacto: a, columnas, filas, altura, terreno, fertilidad, fertilidad_vid, fertilidad_oliva, fertilidad_cebada, fertilidad_sesamo, region, humedad, densidad_bosque, anillos,
         transitable, coste,
     };
 

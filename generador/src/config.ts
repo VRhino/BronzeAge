@@ -34,7 +34,7 @@ export const COSTE_MOVIMIENTO = congelar({
   agua: 15,
 });
 
-/** Capas de fertilidad de la vid y de la oliva (Tanda Economía, Héroe y Cultivos §12). Cada capa es el producto de factores 0..1, cada
+/** Capas de fertilidad de la vid, la oliva, la cebada y el sésamo (Tanda Economía, Héroe y Cultivos §12). Cada capa es el producto de factores 0..1, cada
  * uno una rampa suave desde → hasta; `altura` va en elevación normalizada 0-1, `pendiente` en m/m, `humedad` en 0..1 y las distancias
  * en unidades del generador (1 u = 1 m). Ambas valen 0 en el agua; la vid, también en las cumbres (su `alturaBaja.hasta` es `ELEVACION.umbralCima`). */
 export const CULTIVOS = congelar({
@@ -53,5 +53,15 @@ export const CULTIVOS = congelar({
     distanciaCosta: { desde: 1500, hasta: 6000 },
     humedadBaja: { desde: 0.4, hasta: 0.75 },
     pendienteBaja: { desde: 0.1, hasta: 0.4 },
+  },
+  /** Cebada y sésamo (2026-11-09): el trigo en la tierra húmeda donde la vid y la oliva no crecen. `humedadSube` es de las dos; la cebada
+   * pide además altura (`alturaSube`: tierra húmeda y alta) y el sésamo la contraria (`alturaBaja`: tierra húmeda y baja, en todo el mapa). */
+  cebada: {
+    humedadSube: { desde: 0.55, hasta: 0.65 },
+    alturaSube: { desde: 0.45, hasta: 0.48 },
+  },
+  sesamo: {
+    humedadSube: { desde: 0.55, hasta: 0.65 },
+    alturaBaja: { desde: 0.45, hasta: 0.48 },
   },
 });

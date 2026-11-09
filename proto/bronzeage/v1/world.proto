@@ -126,6 +126,8 @@ message ArtefactoDeMundo {
   Raster fertilidad_vid = 20;            // u8
   Raster fertilidad_oliva = 21;          // u8
   repeated RegionDeMundo regiones = 22;  // las regiones del relieve, con su nombre
+  Raster fertilidad_cebada = 23;         // u8: la del trigo en la tierra húmeda (2026-11-09)
+  Raster fertilidad_sesamo = 24;         // u8: la del trigo en la tierra húmeda y baja (2026-11-09)
 }
 
 // Una región del relieve del generador («Altiplano interior», «Estepa abierta»...).

@@ -23,6 +23,7 @@ Está en **unidades estratégicas** (2.667 × 2.000, en milésimas). El factor 1
 | `terreno` | raster u8 (`ClaseTerreno`) | agua, costa, llano, colina, montaña, cima |
 | `fertilidad`, `humedad` | raster u8 | cultivos, bioma |
 | `fertilidad_vid`, `fertilidad_oliva` | raster u8 | fertilidad de la vid (laderas soleadas y secas: pendiente suave a media, humedad baja a media; 0 en el agua y en las cumbres) y de la oliva (tierra baja, cerca de la costa, humedad baja a media; 0 en el agua). Cifras en `generador/src/config.ts` (`CULTIVOS`); no consumen azar |
+| `fertilidad_cebada`, `fertilidad_sesamo` | raster u8 | fertilidad de la cebada y del sésamo (2026-11-09): la del trigo (`fertilidad`) en la tierra húmeda (humedad de 0,55 a 0,65) y, la cebada, alta (altura de 0,45 a 0,48 en adelante) y el sésamo, baja (por debajo de esa rampa, en todo el mapa); 0 en el agua. Cifras en `generador/src/config.ts` (`CULTIVOS`); no consumen azar |
 | `region` | raster u8 | `id` de la región del relieve del generador en el centro de la celda (`regionEn`); sus nombres, en `regiones` |
 | `regiones` | vectorial (`RegionDeMundo`) | las regiones del relieve con su `id` y su nombre («Altiplano interior», «Estepa abierta»...) |
 | `densidad_bosque` | raster u8 | campo continuo; coste de movimiento por bosque |
@@ -48,7 +49,7 @@ Está en **unidades estratégicas** (2.667 × 2.000, en milésimas). El factor 1
 
 ## 3. Validaciones al cargar (servidor)
 
-Hash del contenido = `Manifiesto.hash`; cada capa con su sha256 (también `region`, `fertilidad_vid` y `fertilidad_oliva`, obligatorias); todo id de `region` es el de una región de `regiones`; tamaño = 2.667 × 2.000; origen y destino de toda arista del grafo
+Hash del contenido = `Manifiesto.hash`; cada capa con su sha256 (también `region`, `fertilidad_vid`, `fertilidad_oliva`, `fertilidad_cebada` y `fertilidad_sesamo`, obligatorias); todo id de `region` es el de una región de `regiones`; tamaño = 2.667 × 2.000; origen y destino de toda arista del grafo
 transitables; si trae la capa `coste`, mayor que 0 justo en las celdas transitables; todo nodo, campamento y alijo en tierra transitable; cuotas por anillo exactas; parcelas dentro de su masa y a ≥ 2·`rp` unas de otras; ningún
 yacimiento dentro de agua. Un artefacto que no pasa **no se carga**.
 
@@ -81,7 +82,7 @@ unos 16 MB desde el grafo de 4 u (antes, unos 5,6 MB) y pasa todas las validacio
 
 - **Unidades:** milésimas de unidad estratégica (`round(u · 1000 / 12)` desde las del generador).
 - **Rasters:** celda de 4 unidades estratégicas (667 × 500 en el mundo real), filas de norte a sur, valor del centro de la celda. `altura` u16 LE;
-  `terreno`, `fertilidad`, `fertilidad_vid`, `fertilidad_oliva`, `region`, `humedad`, `densidad_bosque`, `anillos` u8; `transitable` en bits (celda `i` → byte `i>>3`, bit `i&7`, LSB primero); `coste` u16 LE en milésimas (1000 = llano, 0 = no transitable). Todos con zstd.
+  `terreno`, `fertilidad`, `fertilidad_vid`, `fertilidad_oliva`, `fertilidad_cebada`, `fertilidad_sesamo`, `region`, `humedad`, `densidad_bosque`, `anillos` u8; `transitable` en bits (celda `i` → byte `i>>3`, bit `i&7`, LSB primero); `coste` u16 LE en milésimas (1000 = llano, 0 = no transitable). Todos con zstd.
 - **Hash:** sha256 hexadecimal de la serialización Protobuf del artefacto con `manifiesto.hash = ""`. Cada capa lleva el sha256 de sus bytes comprimidos.
 - **Coherencia con el raster:** la transitabilidad es la del raster. Grafo, recursos, campamentos, bandidos y alijos se ajustan al centro de una celda transitable
   antes de escribirse; el campo `anillo` de cada elemento conserva el del punto original.

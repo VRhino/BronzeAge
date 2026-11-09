@@ -46,12 +46,18 @@ fn rechazo_de_pueblo(e: ErrorPueblo) -> (&'static str, &'static str) {
         ErrorPueblo::NivelMaximo => (PUEBLO_NIVEL_MAXIMO, "la aldea ya está en su último nivel"),
         ErrorPueblo::MejoraEnCurso => (PUEBLO_MEJORA_EN_CURSO, "la aldea ya tiene una subida de nivel en marcha"),
         ErrorPueblo::NoEstaActivo => (PUEBLO_NO_ESTA_ACTIVO, "el pueblo aún no está levantado"),
-        ErrorPueblo::CultivoBloqueado => (PUEBLO_CULTIVO_BLOQUEADO, "la plaza madre aún no tiene el nivel que pide ese cultivo"),
+        ErrorPueblo::CultivoBloqueado => (PUEBLO_CULTIVO_BLOQUEADO, "ninguna plaza de la Facción tiene aún el nivel que pide ese cultivo"),
     }
 }
 
 impl Nucleo {
     // ───────────────────────────── Consultas ─────────────────────────────
+
+    /// El mayor nivel **alcanzado** (no el operativo) entre las plazas que la Facción tiene ahora: lo que desbloquea los cultivos de las aldeas
+    /// (2026-11-09). Una plaza arruinada ya no está en el estado, así que no cuenta; las aldeas que ya levantó siguen.
+    pub fn nivel_maximo_de_plazas(&self, faccion: u32) -> u32 {
+        self.estado.asentamientos.values().filter(|a| a.faccion == faccion).map(|a| a.nivel()).max().unwrap_or(0)
+    }
 
     /// Los pueblos extractores de una plaza (en cualquier estado), por id.
     pub fn pueblos_de(&self, plaza: u64) -> &[Pueblo] {
@@ -209,8 +215,9 @@ impl Nucleo {
                 let carro = acarreo::coste_reposicion(&self.estado.reglas.economia.comercio.flota);
                 let id = self.estado.siguiente_id;
                 let mut ev = vec![];
+                let nivel_en_faccion = self.nivel_maximo_de_plazas(self.estado.asentamientos[asentamiento].faccion);
                 let eco = &mut self.estado.asentamientos.get_mut(asentamiento).expect("existe").economia;
-                eco.iniciar_aldea(&datos, id, pos, fertilidad, *cultivo, &carro, &mut ev).map_err(de_pueblo)?;
+                eco.iniciar_aldea(&datos, id, pos, fertilidad, *cultivo, nivel_en_faccion, &carro, &mut ev).map_err(de_pueblo)?;
                 self.estado.siguiente_id += 1;
                 self.anotar_sucesos(*asentamiento, t, &ev);
                 Ok(Some(id))

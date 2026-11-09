@@ -420,6 +420,31 @@ mod pruebas {
     }
 
     #[test]
+    fn la_nobleza_come_cerveza_a_una_centesima_por_cabeza_y_la_racion_entera_multiplica_1_25() {
+        let r = Reglas::cargar().poblacion;
+        assert_eq!(bien(&r, Recurso::Cerveza), (10_000, 1_250_000), "ración 0,01 y modificador 1,25 (BIENES_DE_CONSUMO)");
+        let mut p = con(0, 0, 100, 100_000);
+        let mut a = con_bienes(&[(Recurso::Cerveza, 100_000), (Recurso::Trigo, 100_000)]);
+        let m = p.nutrir(&r, &entorno(), &mut a, &mut vec![]);
+        assert_eq!(m, [UNO, UNO, 1_250_000]);
+        assert_eq!((a.disponible(Recurso::Cerveza), a.disponible(Recurso::Trigo)), (99_000, 91_000), "100 nobles × 0,01 = 1 de cerveza; hasta los 10 de necesidad, 9 de trigo");
+        // A media ración el modificador llega a la mitad de su ventaja: ×1,125.
+        let mut q = con(0, 0, 200, 100_000); // piden 2 de cerveza y hay 1 (el almacén da unidades enteras)
+        let mut b = con_bienes(&[(Recurso::Cerveza, 1_000), (Recurso::Trigo, 100_000)]);
+        assert_eq!(q.nutrir(&r, &entorno(), &mut b, &mut vec![]), [UNO, UNO, 1_125_000]);
+    }
+
+    #[test]
+    fn vino_cerveza_y_aceite_se_combinan_multiplicando_sus_modificadores() {
+        let r = Reglas::cargar().poblacion;
+        let mut p = con(0, 0, 100, 100_000);
+        let mut a = con_bienes(&[(Recurso::Vino, 100_000), (Recurso::Cerveza, 100_000), (Recurso::Aceite, 100_000), (Recurso::Trigo, 100_000)]);
+        let m = p.nutrir(&r, &entorno(), &mut a, &mut vec![]);
+        assert_eq!(m, [UNO, UNO, 2_812_500], "1,5 × 1,25 × 1,5, la misma regla que con vino y aceite");
+        assert_eq!([Recurso::Vino, Recurso::Cerveza, Recurso::Aceite].map(|x| a.disponible(x)), [99_000; 3]);
+    }
+
+    #[test]
     fn con_bienes_pero_sin_trigo_la_nutricion_baja_en_proporcion_a_lo_que_falta() {
         let r = Reglas::cargar().poblacion;
         let mut p = con(400, 0, 0, 100_000);

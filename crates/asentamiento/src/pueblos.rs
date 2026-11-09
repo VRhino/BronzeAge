@@ -58,11 +58,14 @@ pub enum Cultivo {
     Trigo,
     Vid,
     Oliva,
+    // Los de las zonas húmedas (2026-11-09), al final por la foto.
+    Cebada,
+    Sesamo,
 }
 
 impl Cultivo {
     /// En el orden de la foto (la posición es su código).
-    pub const TODOS: [Cultivo; 3] = [Cultivo::Trigo, Cultivo::Vid, Cultivo::Oliva];
+    pub const TODOS: [Cultivo; 5] = [Cultivo::Trigo, Cultivo::Vid, Cultivo::Oliva, Cultivo::Cebada, Cultivo::Sesamo];
 
     /// El id que ven los clientes y que traen los bloques.
     pub fn nombre(self) -> &'static str {
@@ -70,6 +73,8 @@ impl Cultivo {
             Cultivo::Trigo => "trigo",
             Cultivo::Vid => "vid",
             Cultivo::Oliva => "oliva",
+            Cultivo::Cebada => "cebada",
+            Cultivo::Sesamo => "sesamo",
         }
     }
 
@@ -522,10 +527,14 @@ impl Asentamiento {
 
     /// Marca la obra de una aldea agrícola de `cultivo` en `pos` (que el núcleo ya comprobó dentro de la zona, con ruta y separada de los demás
     /// pueblos), con la `fertilidad` del terreno en ese punto: queda pendiente de materiales y ocupa cupo.
+    ///
+    /// El cultivo se desbloquea por la Facción (2026-11-09): `nivel_en_faccion` es el mayor nivel **alcanzado** (`Asentamiento.nivel`, no el
+    /// operativo) entre las plazas de la Facción que existen ahora, y la madre puede ser de cualquier nivel. Si esa plaza se pierde, las aldeas
+    /// que ya hay siguen; solo se cierran las nuevas de ese cultivo.
     #[allow(clippy::too_many_arguments)]
-    pub fn iniciar_aldea(&mut self, r: &Reglas, id: u64, pos: Punto, fertilidad: i64, cultivo: Cultivo, carro: &Costo, ev: &mut Vec<Evento>) -> Result<(), ErrorPueblo> {
+    pub fn iniciar_aldea(&mut self, r: &Reglas, id: u64, pos: Punto, fertilidad: i64, cultivo: Cultivo, nivel_en_faccion: u32, carro: &Costo, ev: &mut Vec<Evento>) -> Result<(), ErrorPueblo> {
         self.admite_otro_pueblo(r, r.pueblos.aldea.nivel_madre_minimo)?;
-        if self.nivel_actual() < r.pueblos.aldea.cultivo(cultivo).nivel_madre {
+        if nivel_en_faccion < r.pueblos.aldea.cultivo(cultivo).nivel_madre {
             return Err(ErrorPueblo::CultivoBloqueado);
         }
         if fertilidad < r.pueblos.aldea.fertilidad_minima {
@@ -723,7 +732,7 @@ mod pruebas {
     }
 
     fn ctx<'a>() -> Contexto<'a> {
-        Contexto { fertilidad: UNO, factor_trigo: UNO, factor_talleres: UNO, factor_tecnologia: &|_| UNO, tiene_tecnologia: &|_| true, recetas_pausadas: &[] }
+        Contexto { fertilidad: UNO, factor_trigo: UNO, factor_talleres: UNO, factor_tecnologia: &|_| UNO, tiene_tecnologia: &|_| true, recetas_pausadas: &[], recetas_paradas: &[] }
     }
 
     fn carro() -> Costo {
@@ -751,9 +760,13 @@ mod pruebas {
         let a = &r.aldea;
         assert_eq!((a.nivel_madre_minimo, a.fertilidad_minima, a.separacion_minima, a.granjeros, a.nivel_maximo()), (1, 300_000, 3_000, 30, 3));
         assert_eq!(a.niveles.values().map(|n| (n.granjas, n.corrales)).collect::<Vec<_>>(), vec![(2, 1), (4, 2), (6, 3)]);
-        // Tanda 69 §12: la vid desde el nivel 3 de la madre y la oliva desde el 4, las dos sin corrales.
+        // Tanda 69 §12: la vid desde el nivel 3 de la madre y la oliva desde el 4, las dos sin corrales; la cebada desde el 3 y el sésamo desde el 4
+        // (2026-11-09).
         let cultivo = |c: Cultivo| (a.cultivos[&c].produce, a.cultivos[&c].nivel_madre, a.cultivos[&c].corrales);
-        assert_eq!(Cultivo::TODOS.map(cultivo), [(Recurso::Trigo, 1, true), (Recurso::Uva, 3, false), (Recurso::Aceituna, 4, false)]);
+        assert_eq!(
+            Cultivo::TODOS.map(cultivo),
+            [(Recurso::Trigo, 1, true), (Recurso::Uva, 3, false), (Recurso::Aceituna, 4, false), (Recurso::Cebada, 3, false), (Recurso::Sesamo, 4, false)]
+        );
     }
 
     #[test]
@@ -921,7 +934,7 @@ mod pruebas {
     /// Una plaza de nivel 1 con una aldea marcada en un punto de fertilidad 0,5.
     fn con_aldea(r: &Reglas) -> Asentamiento {
         let mut a = Asentamiento::fundar(r, 0, &[], 3);
-        a.iniciar_aldea(r, 1, Punto::new(5_000, 0), 500_000, Cultivo::Trigo, &carro(), &mut vec![]).unwrap();
+        a.iniciar_aldea(r, 1, Punto::new(5_000, 0), 500_000, Cultivo::Trigo, 1, &carro(), &mut vec![]).unwrap();
         a
     }
 
@@ -930,15 +943,15 @@ mod pruebas {
         let r = Reglas::cargar();
         let mut a = Asentamiento::fundar(&r, 0, &[], 3);
         let mut ev = vec![];
-        assert_eq!(a.iniciar_aldea(&r, 1, Punto::new(5_000, 0), 299_999, Cultivo::Trigo, &carro(), &mut ev), Err(ErrorPueblo::FertilidadInsuficiente));
-        a.iniciar_aldea(&r, 1, Punto::new(5_000, 0), 300_000, Cultivo::Trigo, &carro(), &mut ev).unwrap();
+        assert_eq!(a.iniciar_aldea(&r, 1, Punto::new(5_000, 0), 299_999, Cultivo::Trigo, 1, &carro(), &mut ev), Err(ErrorPueblo::FertilidadInsuficiente));
+        a.iniciar_aldea(&r, 1, Punto::new(5_000, 0), 300_000, Cultivo::Trigo, 1, &carro(), &mut ev).unwrap();
         assert_eq!(ev, vec![Evento::AldeaMarcada { id: 1, pos: Punto::new(5_000, 0) }]);
         let p = a.pueblo(1).unwrap();
         assert!(p.es_aldea() && p.nodo().is_none() && p.nivel == 1 && p.mejora.is_none());
         // Nivel 1 (30) + 50 + el carro (20 de madera y 12 de oro): lo mismo que una mina de cobre.
         assert_eq!(p.falta(), vec![(Recurso::Madera, 100_000), (Recurso::Oro, 12_000)]);
-        a.iniciar_aldea(&r, 2, Punto::new(9_000, 0), UNO, Cultivo::Trigo, &carro(), &mut ev).unwrap();
-        assert_eq!(a.iniciar_aldea(&r, 3, Punto::new(0, 9_000), UNO, Cultivo::Trigo, &carro(), &mut ev), Err(ErrorPueblo::SinCupo), "en el nivel 1, dos pueblos");
+        a.iniciar_aldea(&r, 2, Punto::new(9_000, 0), UNO, Cultivo::Trigo, 1, &carro(), &mut ev).unwrap();
+        assert_eq!(a.iniciar_aldea(&r, 3, Punto::new(0, 9_000), UNO, Cultivo::Trigo, 1, &carro(), &mut ev), Err(ErrorPueblo::SinCupo), "en el nivel 1, dos pueblos");
         assert_eq!(a.aldeas_activas(), 0, "pendiente no cuenta");
     }
 
@@ -995,7 +1008,7 @@ mod pruebas {
         let mut vid = Asentamiento::fundar(&r, 0, &[], 3);
         vid.nivel = 3;
         vid.medidor.nivel_actual = 3;
-        vid.iniciar_aldea(&r, 1, Punto::new(5_000, 0), UNO, Cultivo::Vid, &carro(), &mut vec![]).unwrap();
+        vid.iniciar_aldea(&r, 1, Punto::new(5_000, 0), UNO, Cultivo::Vid, 3, &carro(), &mut vec![]).unwrap();
         let v = &mut vid.pueblos[0];
         for x in [Recurso::Trigo, Recurso::Livestock, Recurso::Uva] {
             v.almacen.poner(x, 10_000);
@@ -1021,21 +1034,38 @@ mod pruebas {
     }
 
     #[test]
-    fn la_vid_y_la_oliva_piden_el_nivel_de_la_madre_de_su_cultivo() {
+    fn el_cultivo_pide_el_nivel_alcanzado_por_alguna_plaza_de_la_faccion_y_no_el_de_la_madre() {
         let r = Reglas::cargar();
-        let en_nivel = |nivel: u32, cultivo: Cultivo| {
+        // La madre es de nivel 1 (la de la prueba): lo que cuenta es el nivel que la Facción dice que alcanzó alguna plaza.
+        let marca = |nivel_en_faccion: u32, cultivo: Cultivo| {
             let mut a = Asentamiento::fundar(&r, 0, &[], 3);
-            a.nivel = nivel;
-            a.medidor.nivel_actual = nivel;
-            a.iniciar_aldea(&r, 1, Punto::new(5_000, 0), UNO, cultivo, &carro(), &mut vec![])
+            a.iniciar_aldea(&r, 1, Punto::new(5_000, 0), UNO, cultivo, nivel_en_faccion, &carro(), &mut vec![])
         };
         let pide = |c: Cultivo| r.pueblos.aldea.cultivo(c).nivel_madre;
-        assert_eq!((pide(Cultivo::Vid), pide(Cultivo::Oliva)), (3, 4), "los niveles son los del bloque");
-        assert_eq!(en_nivel(2, Cultivo::Vid), Err(ErrorPueblo::CultivoBloqueado));
-        assert_eq!(en_nivel(3, Cultivo::Vid), Ok(()));
-        assert_eq!(en_nivel(3, Cultivo::Oliva), Err(ErrorPueblo::CultivoBloqueado));
-        assert_eq!(en_nivel(4, Cultivo::Oliva), Ok(()));
-        assert_eq!(en_nivel(1, Cultivo::Trigo), Ok(()), "el trigo, desde el nivel 1");
+        assert_eq!((pide(Cultivo::Vid), pide(Cultivo::Oliva), pide(Cultivo::Cebada), pide(Cultivo::Sesamo)), (3, 4, 3, 4), "los niveles son los del bloque");
+        assert_eq!(marca(2, Cultivo::Vid), Err(ErrorPueblo::CultivoBloqueado));
+        assert_eq!(marca(3, Cultivo::Vid), Ok(()), "una plaza de nivel 3 en la Facción basta, aunque la madre sea de nivel 1");
+        assert_eq!(marca(3, Cultivo::Oliva), Err(ErrorPueblo::CultivoBloqueado));
+        assert_eq!(marca(4, Cultivo::Oliva), Ok(()));
+        assert_eq!(marca(1, Cultivo::Trigo), Ok(()), "el trigo, desde el nivel 1");
+    }
+
+    #[test]
+    fn la_cebada_se_marca_desde_el_nivel_3_de_la_faccion_y_el_sesamo_desde_el_4() {
+        let r = Reglas::cargar();
+        let marca = |nivel_en_faccion: u32, cultivo: Cultivo| Asentamiento::fundar(&r, 0, &[], 3).iniciar_aldea(&r, 1, Punto::new(5_000, 0), UNO, cultivo, nivel_en_faccion, &carro(), &mut vec![]);
+        assert_eq!([2, 3, 5].map(|n| marca(n, Cultivo::Cebada)), [Err(ErrorPueblo::CultivoBloqueado), Ok(()), Ok(())]);
+        assert_eq!([3, 4, 5].map(|n| marca(n, Cultivo::Sesamo)), [Err(ErrorPueblo::CultivoBloqueado), Ok(()), Ok(())]);
+    }
+
+    #[test]
+    fn la_madre_sigue_necesitando_su_propio_cupo_aunque_la_faccion_desbloquee_el_cultivo() {
+        let r = Reglas::cargar();
+        let mut a = Asentamiento::fundar(&r, 0, &[], 3);
+        let mut ev = vec![];
+        a.iniciar_aldea(&r, 1, Punto::new(5_000, 0), UNO, Cultivo::Vid, 5, &carro(), &mut ev).unwrap();
+        a.iniciar_aldea(&r, 2, Punto::new(9_000, 0), UNO, Cultivo::Vid, 5, &carro(), &mut ev).unwrap();
+        assert_eq!(a.iniciar_aldea(&r, 3, Punto::new(0, 9_000), UNO, Cultivo::Vid, 5, &carro(), &mut ev), Err(ErrorPueblo::SinCupo), "el cupo es el del nivel de la madre");
     }
 
     #[test]
@@ -1045,7 +1075,7 @@ mod pruebas {
         a.nivel = 3;
         a.medidor.nivel_actual = 3;
         let mut ev = vec![];
-        a.iniciar_aldea(&r, 1, Punto::new(5_000, 0), 500_000, Cultivo::Vid, &carro(), &mut ev).unwrap();
+        a.iniciar_aldea(&r, 1, Punto::new(5_000, 0), 500_000, Cultivo::Vid, 3, &carro(), &mut ev).unwrap();
         a.entregar_a_pueblo(0, &r, 1, &[(Recurso::Madera, 100_000), (Recurso::Oro, 12_000)], &mut ev).unwrap();
         a.completar_pueblos(240 * MS_POR_MINUTO, &r, &mut ev);
         assert!(a.pueblo(1).unwrap().activo() && a.pueblo(1).unwrap().rebano.is_none(), "sin corrales no nace rebaño");

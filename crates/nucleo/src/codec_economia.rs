@@ -7,7 +7,7 @@
 //! iniciado_en i64, completa_en i64} · recetas_pausadas{n u64 · n × recurso u8} · auto_pausada bool · reserva_manual N × i64 · ocupado
 //! bool · completados_pendientes u32 · destruido bool · ultimo_minuto i64 · tendencia{almacén N × i64 · población 3 × i64}` (BAN22: la tendencia «+N/min» del último paso de minuto).
 //! Un edificio: `id u32 · tipo u8 · estado u8 · completa_en opt_i64 · prioridad i64 · nivel_interno u8 · mejora{bool, nivel u8,
-//! completa_en i64} · danado bool · fuente{u8: 0 ninguna, 1 nodo, 2 parcela; u32} · pausado_por_almacen bool · buey bool`.
+//! completa_en i64} · danado bool · fuente{u8: 0 ninguna, 1 nodo, 2 parcela; u32} · pausado_por_almacen bool · buey bool · receta{bool, recurso u8}` (BAN60: la receta activa de la bodega y la prensa).
 //! Un pueblo: `id u64 · tipo u8 · sitio{u8: 0 nodo → u32; 1 punto → punto, fertilidad i64, cultivo u8} · nivel u32 · estado{u8: 0 pendiente → requerido y entregado, cada uno
 //! n u64 · n × (recurso u8, i64); 1 en obra → completa_en i64; 2 activo} · mejora{opt: estado} · rebaño{opt: especie texto, cabezas i64} · almacén{N × (cantidad i64, capacidad i64, resto i64)} · carro opt_u64 ·
 //! lleno bool` (BAN47, la aldea agrícola; antes `id · tipo · nodo u32 · estado · almacén · carro · lleno`, siempre sobre un nodo y de nivel 1).
@@ -307,7 +307,7 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
     }
     w.u64(edificios.len() as u64);
     for e in edificios {
-        let Edificio { id, tipo, estado, completa_en, prioridad, nivel_interno, mejora, danado, fuente, pausado_por_almacen, buey } = e;
+        let Edificio { id, tipo, estado, completa_en, prioridad, nivel_interno, mejora, danado, fuente, pausado_por_almacen, buey, receta } = e;
         w.u32(*id);
         w.u8(tipo_a_u8(*tipo));
         w.u8(estado_a_u8(*estado));
@@ -336,6 +336,10 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
         }
         w.bool(*pausado_por_almacen);
         w.bool(*buey);
+        w.bool(receta.is_some());
+        if let Some(insumo) = receta {
+            w.u8(recurso_a_u8(*insumo));
+        }
     }
     w.u64(pueblos.len() as u64);
     for Pueblo { id, tipo, sitio, nivel, estado, mejora, rebano, almacen, carro, lleno } in pueblos {
@@ -430,7 +434,9 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Asentamiento, ErrorFormato> {
             2 => Some(Fuente::Parcela(r.u32()?)),
             _ => return Err(ErrorFormato("fuente de edificio desconocida")),
         };
-        edificios.push(Edificio { id, tipo, estado, completa_en, prioridad, nivel_interno, mejora, danado, fuente, pausado_por_almacen: r.bool()?, buey: r.bool()? });
+        let (pausado_por_almacen, buey) = (r.bool()?, r.bool()?);
+        let receta = if r.bool()? { Some(recurso_de_u8(r.u8()?)?) } else { None };
+        edificios.push(Edificio { id, tipo, estado, completa_en, prioridad, nivel_interno, mejora, danado, fuente, pausado_por_almacen, buey, receta });
     }
     let mut pueblos = Vec::new();
     for _ in 0..r.cuenta()? {

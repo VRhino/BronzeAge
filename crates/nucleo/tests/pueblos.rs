@@ -191,6 +191,26 @@ fn montar_donde(n: Nucleo, m: &M, nivel: u32, vale: impl Fn(Punto) -> bool) -> E
     montar_en(n, mapa, nivel, cobre, sitio)
 }
 
+/// La plaza madre de Ana en el primer sitio fundable de una rejilla de 40 u que cumple `vale`, ya en el nivel `nivel` y con la zona agrandada como en
+/// [`montar_en`], pero sin buscar un nodo de cobre al lado (el sésamo, en la tierra húmeda y baja, casi nunca está junto al cobre): su `cobre` es un
+/// nodo cualquiera, que estas pruebas no usan.
+fn montar_en_rejilla(n: Nucleo, m: &M, nivel: u32, vale: impl Fn(Punto) -> bool) -> Escenario {
+    let (ancho, alto) = m.0.tamano();
+    let fundable = |p: Punto| n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 3 && !v.condenada);
+    let rejilla = (20_000..alto).step_by(40_000).flat_map(|y| (20_000..ancho).step_by(40_000).map(move |x| Punto::new(x, y)));
+    let sitio = rejilla.filter(|&p| vale(p)).find(|&p| fundable(p)).expect("hay un sitio fundable que vale");
+    let mapa = Mapa::de(&m.0);
+    let cobre = (0..mapa.nodos.len()).find(|&i| mapa.nodos[i].tipo == Tipo::MinaCobre).expect("hay cobre en el mundo") as u32;
+    let mut e = montar_en(n, mapa, 1, cobre, sitio);
+    if nivel > 1 {
+        e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: e.plaza, nivel });
+        for _ in 0..9 {
+            e.ok("admin", Comando::AgrandarZona { asentamiento: e.plaza });
+        }
+    }
+    e
+}
+
 /// La plaza madre de Ana fundada en `sitio`, con el nodo `nodo` como el de su pueblo (ver [`montar`]).
 fn montar_en(mut n: Nucleo, mapa: Arc<Mapa>, nivel: u32, cobre: u32, sitio: Punto) -> Escenario {
     let e = n.crear_ejercito(0, "ana", 1, sitio, 500, 100_000).unwrap();
@@ -1230,7 +1250,7 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
     e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN59");
+    assert_eq!(&bytes[..5], b"BAN60");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
@@ -1403,9 +1423,9 @@ fn con_vid_y_oliva(m: &Mundo) -> impl Fn(Punto) -> bool + '_ {
 }
 
 #[test]
-fn la_vid_y_la_oliva_piden_el_nivel_de_su_cultivo_en_la_madre() {
+fn la_vid_y_la_oliva_piden_el_nivel_de_su_cultivo_en_alguna_plaza_de_la_faccion() {
     let m = con_mundo!();
-    // PUEBLOS_EXTRACTORES.aldea.cultivos: la vid desde el nivel 3 de la plaza madre y la oliva desde el 4.
+    // PUEBLOS_EXTRACTORES.aldea.cultivos: la vid desde el nivel 3 y la oliva desde el 4, en alguna plaza de la Facción (aquí, la única es la madre).
     let mut e = montar_donde(Nucleo::nuevo(arranque(m, 7)), m, 2, con_vid_y_oliva(&m.0));
     let plaza = e.plaza;
     let marcar = |e: &mut Escenario, cultivo: Cultivo| {
@@ -1415,7 +1435,7 @@ fn la_vid_y_la_oliva_piden_el_nivel_de_su_cultivo_en_la_madre() {
     let rastro = e.n.hash_estado();
     for cultivo in [Cultivo::Vid, Cultivo::Oliva] {
         let c = marcar(&mut e, cultivo);
-        assert_eq!(e.rechazada("ana", c), rechazos::PUEBLO_CULTIVO_BLOQUEADO, "con la madre en el nivel 2");
+        assert_eq!(e.rechazada("ana", c), rechazos::PUEBLO_CULTIVO_BLOQUEADO, "con la Facción en el nivel 2");
     }
     assert_eq!(e.n.hash_estado(), rastro, "el rechazo no deja rastro");
     e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: plaza, nivel: 3 });
@@ -1428,6 +1448,108 @@ fn la_vid_y_la_oliva_piden_el_nivel_de_su_cultivo_en_la_madre() {
     e.ok("ana", c);
     let cultivos: Vec<_> = e.n.pueblos_de(plaza).iter().filter_map(|p| p.cultivo()).collect();
     assert_eq!(cultivos, vec![Cultivo::Vid, Cultivo::Oliva]);
+}
+
+/// Funda otra plaza de Ana (F1) lejos de las que hay, en la rejilla de 31 u, y devuelve su id.
+fn otra_plaza_de_la_faccion(e: &mut Escenario, m: &Mundo) -> u64 {
+    let (ancho, alto) = m.tamano();
+    let paso = 31_000;
+    // El cap de plazas de la Facción sube con su nivel (la Facción de nivel 1 solo tiene una).
+    e.ok("admin", Comando::FijarNivelFaccion { faccion: 1, nivel: 3 });
+    for y in (paso..alto).step_by(paso as usize) {
+        for x in (paso..ancho).step_by(paso as usize) {
+            let p = Punto::new(x, y);
+            if !e.n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde) {
+                continue;
+            }
+            let col = e.columna("ana", 1, p);
+            e.ok("admin", Comando::DarCaravanaFundacion { ejercito: col });
+            let r = e.ord("ana", Comando::Fundar { ejercito: col });
+            if r.aceptada() {
+                return r.creadas[0];
+            }
+        }
+    }
+    panic!("no cabe otra plaza en la rejilla");
+}
+
+#[test]
+fn el_cultivo_lo_desbloquea_la_plaza_de_mayor_nivel_de_la_faccion_aunque_la_madre_sea_de_nivel_2() {
+    let m = con_mundo!();
+    // Decisión del autor del 2026-11-09: el nivel que cuenta es el alcanzado por cualquier plaza de la Facción, no el de la madre.
+    let mut e = montar_donde(Nucleo::nuevo(arranque(m, 7)), m, 2, con_vid_y_oliva(&m.0));
+    let (madre, rastro) = (e.plaza, e.n.hash_estado());
+    let marcar = |e: &mut Escenario, cultivo: Cultivo| {
+        let punto = e.n.sitio_de_aldea(madre, cultivo).expect("hay tierra fértil para el cultivo en la zona");
+        Comando::MarcarAldea { asentamiento: madre, punto, cultivo }
+    };
+    let c = marcar(&mut e, Cultivo::Vid);
+    assert_eq!(e.rechazada("ana", c), rechazos::PUEBLO_CULTIVO_BLOQUEADO, "ninguna plaza de la Facción llega al nivel 3");
+    assert_eq!(e.n.hash_estado(), rastro);
+    // Otra plaza de la misma Facción sube al nivel 3: la vid se abre a la madre de nivel 2, y la oliva (nivel 4) sigue cerrada.
+    let hermana = otra_plaza_de_la_faccion(&mut e, &m.0);
+    e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: hermana, nivel: 3 });
+    assert_eq!(e.n.estado().asentamientos[&madre].nivel(), 2, "la madre sigue en el nivel 2");
+    let c = marcar(&mut e, Cultivo::Oliva);
+    assert_eq!(e.rechazada("ana", c), rechazos::PUEBLO_CULTIVO_BLOQUEADO, "la oliva pide el nivel 4");
+    let c = marcar(&mut e, Cultivo::Vid);
+    e.ok("ana", c);
+    assert_eq!(e.n.pueblos_de(madre).iter().filter_map(|p| p.cultivo()).collect::<Vec<_>>(), vec![Cultivo::Vid]);
+    // Con el nivel 4 en la hermana, la oliva también.
+    e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: hermana, nivel: 4 });
+    let c = marcar(&mut e, Cultivo::Oliva);
+    e.ok("ana", c);
+    assert_eq!(e.n.pueblos_de(madre).iter().filter_map(|p| p.cultivo()).collect::<Vec<_>>(), vec![Cultivo::Vid, Cultivo::Oliva]);
+}
+
+#[test]
+fn el_nivel_de_otra_faccion_no_desbloquea_el_cultivo() {
+    let m = con_mundo!();
+    let mut e = montar_donde(Nucleo::nuevo(arranque(m, 7)), m, 2, con_vid_y_oliva(&m.0));
+    let madre = e.plaza;
+    let (ancho, alto) = m.0.tamano();
+    let ajena = (1..).map(|k| k * 31_000).take_while(|&x| x < ancho).find_map(|x| {
+        let col = e.columna("beto", 2, Punto::new(x, alto / 2));
+        e.ok("admin", Comando::DarCaravanaFundacion { ejercito: col });
+        let r = e.ord("beto", Comando::Fundar { ejercito: col });
+        r.aceptada().then(|| r.creadas[0])
+    });
+    let ajena = ajena.expect("cabe una plaza de otra Facción");
+    e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: ajena, nivel: 4 });
+    let punto = e.n.sitio_de_aldea(madre, Cultivo::Vid).expect("hay tierra para la vid");
+    assert_eq!(e.rechazada("ana", Comando::MarcarAldea { asentamiento: madre, punto, cultivo: Cultivo::Vid }), rechazos::PUEBLO_CULTIVO_BLOQUEADO);
+}
+
+/// Una capa de fertilidad del mundo, como `Mundo::fertilidad_cebada_en`.
+type Capa = fn(&Mundo, i64, i64) -> Option<u8>;
+
+/// Un sitio de plaza con tierra para el cultivo de `capa` (≥ 77 de 255) en su zona de nivel 2 (hasta 14 u).
+fn con_capa(m: &Mundo, capa: Capa) -> impl Fn(Punto) -> bool + '_ {
+    move |c| {
+        (0..24).flat_map(|k| (0..24).map(move |g| (3_500 + k * 450, g))).any(|(d, g)| {
+            let a = ((g * 15) as f64).to_radians();
+            let q = Punto::new(c.x + (d as f64 * a.cos()) as i64, c.y + (d as f64 * a.sin()) as i64);
+            m.transitable_en(q.x, q.y) && capa(m, q.x, q.y).is_some_and(|f| f >= 77)
+        })
+    }
+}
+
+#[test]
+fn la_cebada_y_el_sesamo_se_marcan_desde_los_niveles_3_y_4_con_la_fertilidad_de_su_capa() {
+    let m = con_mundo!();
+    // 2026-11-09: la cebada, en la tierra húmeda y alta, desde el nivel 3; el sésamo, en la húmeda y baja, desde el 4. Cada aldea mira su capa del mundo.
+    let casos: [(Cultivo, Capa, u32); 2] = [(Cultivo::Cebada, Mundo::fertilidad_cebada_en, 3), (Cultivo::Sesamo, Mundo::fertilidad_sesamo_en, 4)];
+    for (cultivo, capa, nivel) in casos {
+        let mut e = montar_en_rejilla(Nucleo::nuevo(arranque(m, 7)), m, nivel - 1, con_capa(&m.0, capa));
+        let plaza = e.plaza;
+        let punto = e.n.sitio_de_aldea(plaza, cultivo).expect("hay tierra para el cultivo en la zona");
+        let marcar = Comando::MarcarAldea { asentamiento: plaza, punto, cultivo };
+        assert_eq!(e.rechazada("ana", marcar.clone()), rechazos::PUEBLO_CULTIVO_BLOQUEADO, "{cultivo:?} en el nivel {}", nivel - 1);
+        e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: plaza, nivel });
+        let id = e.ok("ana", marcar).creadas[0];
+        let asentamiento::pueblos::Sitio::Punto { fertilidad, cultivo: de_la_aldea, .. } = e.pueblo(id).sitio else { panic!("una aldea está en un punto") };
+        assert_eq!((fertilidad, de_la_aldea), (capa(&m.0, punto.x, punto.y).unwrap() as i64 * 1_000_000 / 255, cultivo));
+    }
 }
 
 #[test]

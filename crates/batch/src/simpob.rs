@@ -294,7 +294,7 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
         let carro = comercio::acarreo::coste_reposicion(&re.comercio.flota);
         let coste = Asentamiento::costo_de_aldea(reglas, &carro);
         let sitio = Punto::new(pos.x + reglas.pueblos.aldea.separacion_minima + 500, pos.y);
-        if a.almacen.tiene(&coste) && a.iniciar_aldea(reglas, ID_ALDEA, sitio, UNO, Cultivo::Trigo, &carro, &mut ev).is_ok() {
+        if a.almacen.tiene(&coste) && a.iniciar_aldea(reglas, ID_ALDEA, sitio, UNO, Cultivo::Trigo, a.nivel, &carro, &mut ev).is_ok() {
             a.almacen.pagar(&coste);
             let requerido = a.pueblo(ID_ALDEA).expect("recién marcada").falta();
             a.entregar_a_pueblo(t, reglas, ID_ALDEA, &requerido, &mut ev).expect("todo entregado");

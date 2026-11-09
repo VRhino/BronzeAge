@@ -7,6 +7,7 @@ use crate::almacen::Almacen;
 use crate::catalogo::{Catalogo, Tipo};
 use crate::datos::{por, razon, UNO};
 use crate::edificio::{Edificio, Edificios, Fuente};
+use crate::recetas_unicas;
 use crate::recurso::{Costo, Recurso, N};
 use base::Mil;
 
@@ -35,6 +36,8 @@ pub struct Contexto<'a> {
     pub tiene_tecnologia: &'a dyn Fn(&str) -> bool,
     /// Recetas paradas por el Gobernador o el Maestro de Obras (por el recurso que producen).
     pub recetas_pausadas: &'a [Recurso],
+    /// Edificios de una sola receta cuya receta está parada porque la plaza bajó de nivel y ya no cabe (`recetas_unicas::recetas_paradas`, 2026-11-09).
+    pub recetas_paradas: &'a [u32],
 }
 
 /// Cuánto de lo que piden los edificios cubren los habitantes, en ppm.
@@ -124,11 +127,20 @@ pub fn recetas(cat: &Catalogo, edificios: &mut [Edificio], almacen: &mut Almacen
         if !e.activo() || !e.tipo.es_taller() {
             continue;
         }
+        if ctx.recetas_paradas.contains(&e.id) {
+            edificios[i].pausado_por_almacen = false; // una receta parada no llena el almacén
+            continue;
+        }
         let Some(nivel) = cat.tipo(e.tipo).nivel(e.nivel_interno) else { continue };
         let factor_buey = if e.buey { cat.tipo(e.tipo).factor_buey } else { UNO };
+        let insumo_activo = recetas_unicas::insumo_activo(cat, e);
         let ratio = if e.tipo.taller_de_pesants() { mano.pesants } else { mano.artesanos };
         let mut limitado = false;
         for rc in &nivel.recetas {
+            // La bodega y la prensa solo trabajan la receta de su insumo activo (2026-11-09).
+            if insumo_activo.is_some_and(|ins| !rc.consume_por_unidad.iter().any(|&(i, _)| i == ins)) {
+                continue;
+            }
             if ctx.recetas_pausadas.contains(&rc.produce) || rc.tecnologia.as_deref().is_some_and(|t| !(ctx.tiene_tecnologia)(t)) {
                 continue;
             }
@@ -211,6 +223,7 @@ mod pruebas {
             factor_tecnologia: &|_| UNO,
             tiene_tecnologia: Box::leak(Box::new(move |t: &str| tecnologias.contains(&t))),
             recetas_pausadas: pausadas,
+            recetas_paradas: &[],
         }
     }
 
@@ -383,6 +396,57 @@ mod pruebas {
             assert_eq!(hecho, vec![(bien, por_minuto)], "{tipo:?}");
             assert_eq!((a.cantidad(bien), a.cantidad(materia)), (por_minuto, 100_000 - por_minuto * por_unidad / 1_000), "{tipo:?}: produce su bien y gasta su materia");
         }
+    }
+
+    #[test]
+    fn la_bodega_hace_cerveza_de_cebada_si_esa_es_su_receta_y_la_prensa_aceite_de_sesamo() {
+        let cat = Reglas::cargar().catalogo;
+        // (edificio, insumo elegido, otro insumo del edificio, bien, bien por minuto): la receta elegida gasta 2 por unidad y la otra no se toca.
+        let casos = [
+            (Tipo::Bodega, Recurso::Cebada, Recurso::Uva, Recurso::Cerveza),
+            (Tipo::Bodega, Recurso::Uva, Recurso::Cebada, Recurso::Vino),
+            (Tipo::Prensa, Recurso::Sesamo, Recurso::Aceituna, Recurso::Aceite),
+            (Tipo::Prensa, Recurso::Aceituna, Recurso::Sesamo, Recurso::Aceite),
+        ];
+        for (tipo, elegido, otro, bien) in casos {
+            let mut a = Almacen::nuevo(400_000);
+            a.poner(elegido, 100_000);
+            a.poner(otro, 100_000);
+            let mut e = vec![Edificio { receta: Some(elegido), ..activo(1, tipo) }];
+            let m = mano_de_obra(&cat, &e, 3, 3, 0);
+            let hecho = recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; N]);
+            assert_eq!(hecho, vec![(bien, 1_000)], "{tipo:?} con {elegido:?}: una sola receta, 1 por minuto");
+            assert_eq!((a.cantidad(elegido), a.cantidad(otro)), (98_000, 100_000), "{tipo:?}: gasta su insumo y no toca el otro");
+        }
+    }
+
+    #[test]
+    fn sin_receta_elegida_la_bodega_y_la_prensa_trabajan_la_primera_del_catalogo() {
+        let cat = Reglas::cargar().catalogo;
+        for (tipo, primero, segundo, bien) in [(Tipo::Bodega, Recurso::Uva, Recurso::Cebada, Recurso::Vino), (Tipo::Prensa, Recurso::Aceituna, Recurso::Sesamo, Recurso::Aceite)] {
+            let mut a = Almacen::nuevo(400_000);
+            a.poner(primero, 100_000);
+            a.poner(segundo, 100_000);
+            let mut e = vec![activo(1, tipo)];
+            assert_eq!(e[0].receta, None);
+            let m = mano_de_obra(&cat, &e, 3, 3, 0);
+            assert_eq!(recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; N]), vec![(bien, 1_000)], "{tipo:?}");
+            assert_eq!((a.cantidad(primero), a.cantidad(segundo)), (98_000, 100_000), "{tipo:?}");
+        }
+    }
+
+    #[test]
+    fn una_receta_parada_por_el_nivel_de_la_plaza_no_produce_y_las_demas_siguen() {
+        let cat = Reglas::cargar().catalogo;
+        let mut a = Almacen::nuevo(400_000);
+        a.poner(Recurso::Uva, 100_000);
+        a.poner(Recurso::Cebada, 100_000);
+        let mut e = vec![Edificio { receta: Some(Recurso::Uva), ..activo(1, Tipo::Bodega) }, Edificio { receta: Some(Recurso::Cebada), ..activo(2, Tipo::Bodega) }];
+        e[1].pausado_por_almacen = true;
+        let m = mano_de_obra(&cat, &e, 3, 6, 0);
+        let c = Contexto { recetas_paradas: &[2], ..ctx(&[], &[]) };
+        assert_eq!(recetas(&cat, &mut e, &mut a, &m, &c, &[0; N]), vec![(Recurso::Vino, 1_000)], "la cerveza, parada");
+        assert_eq!((a.cantidad(Recurso::Cebada), e[1].pausado_por_almacen), (100_000, false));
     }
 
     #[test]

@@ -312,7 +312,10 @@ pub fn entidad_contrato(mercenario: u64) -> u64 {
 /// (`codec_economia`); las monedas del héroe, un solo número en vez de bronce, plata y oro (`codec_militar`); el prestigio de cada Facción (`codec_politica`); los combates entre
 /// cada par de Facciones para los rendimientos decrecientes de las monedas (`codec_combate`) y los informes de región de la taberna (`memoria`). BAN58 y anteriores ya no se admiten: sus listas
 /// de recursos son de 29 y la partida es nueva.
-const MAGIA: &[u8; 5] = b"BAN59";
+///
+/// BAN60: BAN59 con los cultivos de las zonas húmedas (2026-11-09): los tres recursos nuevos (41 en cada almacén, flujo y tendencia: cebada, cerveza y sésamo) y la
+/// receta activa de cada bodega y prensa (`codec_economia`). BAN59 y anteriores ya no se admiten: sus listas de recursos son de 38 y la partida es nueva.
+const MAGIA: &[u8; 5] = b"BAN60";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -1450,12 +1453,17 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN59`): los cuatro primeros dicen la familia («BAN5» es el formato 50; «BAN4», «BAN3», «BAN2» y «BAN1», los formatos 40 a 49, 30 a 39,
-        // 20 a 29 y 10 a 19, ya no admitidos) y el quinto el formato. Solo se admite BAN59.
+        // La cabecera es de 5 bytes (`BAN60`): los cuatro primeros dicen la familia («BAN6» es el formato 60; «BAN5», «BAN4», «BAN3», «BAN2» y «BAN1», los formatos 50 a 59,
+        // 40 a 49, 30 a 39, 20 a 29 y 10 a 19, ya no admitidos) y el quinto el formato. Solo se admite BAN60.
         let magia = r.magia()?;
         if magia == MAGIA[..4] {
             match r.u8()? {
-                b'9' => {}
+                b'0' => {}
+                _ => return Err(ErrorFormato("no es un estado del núcleo")),
+            }
+        } else if magia == *b"BAN5" {
+            match r.u8()? {
+                b'9' => return Err(ErrorFormato("foto del formato BAN59 (38 recursos en cada almacén, sin la cebada, la cerveza y el sésamo, y sin la receta activa de las bodegas y las prensas): ya no se admite")),
                 b'0'..=b'8' => return Err(ErrorFormato("foto de un formato de BAN50 a BAN58 (29 recursos en cada almacén, sin el cultivo de las aldeas, el buey de los molinos ni el prestigio de las Facciones): ya no se admite")),
                 _ => return Err(ErrorFormato("no es un estado del núcleo")),
             }

@@ -14,6 +14,8 @@
 
 > **Campos de la tanda 69 (2026-11-08, contrato 0.19.0).** `Heroe.monedas` (un solo saldo de monedas, aparte del oro de las plazas; sustituye a `Monedas { bronce, plata, oro }`, que desaparece, y `Botin.monedas` es ahora un número); `Faccion.prestigio` y `Faccion.tope_alianzas` (públicos); `Edificio.buey` (el molino con su buey); `Pueblo.cultivo` (`trigo`, `vid` u `oliva`, solo en la aldea) y el almacén local de la aldea con más recursos; `TarifaMercenario.monedas` (la tarifa del tablón en monedas); nueve recursos nuevos de la comida (38 en total) y seis tipos de edificio nuevos (molino, horno, quesera, bodega, prensa y estatua). Las capas nuevas del mundo (`region`, `fertilidad_vid`, `fertilidad_oliva`) están en [`06_Contrato_de_Mundo.md`](06_Contrato_de_Mundo.md). Las fotos anteriores a `BAN59` ya no se leen.
 
+> **Campos de la cebada y el sésamo (2026-11-09, contrato 0.20.0).** `Edificio.receta` y `Edificio.receta_parada` (la receta que trabaja una bodega o una prensa, por su insumo, y si está parada porque la plaza bajó de nivel); `Pueblo.cultivo` admite además `cebada` y `sesamo`; tres recursos nuevos (cebada, cerveza y sésamo: 41 en total); la orden `elegir_receta` (187). Las capas nuevas del mundo (`fertilidad_cebada`, `fertilidad_sesamo`) están en [`06_Contrato_de_Mundo.md`](06_Contrato_de_Mundo.md). Las fotos anteriores a `BAN60` ya no se leen.
+
 ## 1. Reglas del modelo
 
 1. **Entidad con identidad** = mensaje con `id` y `version` (la versión de mundo del último cambio). Es lo que el almacén del cliente guarda por id.
