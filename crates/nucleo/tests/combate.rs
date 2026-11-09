@@ -1130,10 +1130,11 @@ fn saquear_un_pueblo_se_lleva_lo_que_hay_por_encima_de_la_mitad_y_la_guarnicion_
     let m = con_mundo!();
     let (mut e, pueblo) = con_pueblo(m, 7);
     let madre = e.a;
-    e.avanzar(HORA);
+    // A 10 por minuto (desde el 2026-11-09), en media hora pasa de la mitad sin llenar el carro (500), que se lo llevaría.
+    e.avanzar(30 * MIN);
     let sitio = e.n.posicion_de_pueblo(pueblo).unwrap();
     let guardado = e.n.pueblo(pueblo).unwrap().1.almacen.cantidad(Cobre);
-    assert!(guardado > 250_000 && guardado < 500_000, "tras una hora hay más de la mitad: {guardado}");
+    assert!(guardado > 250_000 && guardado < 500_000, "tras media hora hay más de la mitad: {guardado}");
     let saqueador = e.ejercito("beto", 2, sitio, &[Tropa::ArquerosCompuesto, Tropa::EspadachinesBronce]);
     let solo = e.ejercito("gus", 3, sitio, &[]);
     assert_eq!(e.n.estado().combate.guarniciones.len(), 0, "la guarnición de serie nace la primera vez que se la necesita");
