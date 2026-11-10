@@ -3,8 +3,8 @@ import { createRng, derivarSeed } from './rng';
 import { anilloEn, FACTOR, type Anillo, type Campamento } from './campamentos';
 
 /**
- * Estaño y oro por gradiente (Doc 1.9c, decidido el 2026-10-13): foco 5 % (una muestra en el borde del foco, un tercio de
- * cantidad), frontera 25 % (aislados), tierra lejana 70 % (vetas de estaño con 0-2 de oro; el resto del oro, aislado).
+ * Estaño y oro por gradiente (Doc 1.9c, decidido el 2026-10-13): foco 5 % (una muestra en el borde del foco; el oro con un
+ * tercio de cantidad), frontera 25 % (aislados), tierra lejana 70 % (vetas de estaño con 0-2 de oro; el resto del oro, aislado).
  */
 export type Metal = 'estano' | 'oro';
 
@@ -13,7 +13,11 @@ export const PARAMETROS_METALES = {
   reparto: { foco: 0.05, frontera: 0.25, lejana: 0.7 } as Record<Anillo, number>,
   /** El foco se siembra en su borde exterior (distancia estratégica al campamento). */
   bordeFoco: { min: 100, max: 150 },
-  cantidadFoco: 1 / 3,
+  /**
+   * Fracción de la cantidad normal en el foco. El estaño, entero desde el 2026-11-10 (decisión del autor: es escaso y sus nodos
+   * tienen que ser grandes; con un tercio, el del foco pasaba más tiempo regenerándose que sacando). El oro sigue con un tercio.
+   */
+  cantidadFoco: { estano: 1, oro: 1 / 3 } as Record<Metal, number>,
   /** Separación entre nodos aislados del mismo metal (estratégicas). Con 64 de estaño (16 en frontera) en la semilla 42 no cabe a 110: 100 es el mayor valor que cabe. */
   espacioAislado: 100,
   /** Dentro de una veta: separación mínima entre nodos y radio máximo (estratégicas). */
@@ -86,7 +90,7 @@ export function repartirMetales(
       const mejor = (preferidos.length ? preferidos : aptos).sort((a, b) => valor(b, tipo) - valor(a, tipo))[0];
       if (!mejor) throw new Error(`Metales: sin sitio en el borde del foco para ${tipo} (${n + 1}/${cuota[tipo].foco})`);
       usados.add(mejor.campamento);
-      nodos.push({ id: nuevoId(tipo, 'foco'), tipo, posicion: mejor.s.posicion, anillo: 'foco', cantidadFactor: p.cantidadFoco });
+      nodos.push({ id: nuevoId(tipo, 'foco'), tipo, posicion: mejor.s.posicion, anillo: 'foco', cantidadFactor: p.cantidadFoco[tipo] });
     }
   }
 

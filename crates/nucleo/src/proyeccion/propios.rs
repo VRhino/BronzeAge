@@ -999,7 +999,8 @@ pub fn pueblo(n: &Nucleo, madre: u64, p: &Pueblo) -> pb::Pueblo {
         guarnicion_repone_en_ms: guarnicion.and_then(|g| g.repone_en),
         batalla_id: batalla_sobre(n, Ubicacion::Pueblo(p.id)),
         version_interior: n.version_interior(madre).unwrap_or(0),
-        nivel_aldea: p.es_aldea().then_some(p.nivel),
+        // El nivel del pueblo: de la aldea y, desde el 2026-11-10, también del extractor (Cantera y minas, 1 a 3).
+        nivel_aldea: Some(p.nivel),
         fertilidad: match p.sitio {
             asentamiento::pueblos::Sitio::Punto { fertilidad, .. } => Some(fertilidad / 1000),
             asentamiento::pueblos::Sitio::Nodo(_) => None,
@@ -1028,7 +1029,7 @@ fn requerido(costo: &[(Recurso, Mil)]) -> pb::Cantidades {
     cantidades(costo.iter().copied())
 }
 
-/// La obra de un pueblo que aún no está activo, o la subida de nivel de una aldea agrícola activa (`None`: activo y sin subida). DUDA: una vez que arranca
+/// La obra de un pueblo que aún no está activo, o la subida de nivel de un pueblo activo (aldea o, desde el 2026-11-10, extractor; las dos con `OBRA_MEJORA_ALDEA`) (`None`: activo y sin subida). DUDA: una vez que arranca
 /// (`EnObra`) el núcleo ya no guarda lo pedido y lo entregado: salen vacíos y queda `termina_en_ms`.
 pub fn obra_de_pueblo(n: &Nucleo, madre: u64, p: &Pueblo) -> Option<pb::ObraDeMapa> {
     let (estado, tipo, destino) = match (&p.estado, &p.mejora) {

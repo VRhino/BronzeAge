@@ -929,6 +929,8 @@ message OrdenMarcarAldea {
   optional string cultivo = 4;
 }
 
+// Sube de nivel un pueblo activo: la aldea agrícola o, desde el 2026-11-10, un extractor (Cantera o mina, hasta el nivel 3 y no más que el nivel de
+// la plaza madre: `pueblo.nivel_insuficiente`). Deja una mejora pendiente de materiales (Economia_Construccion §14).
 message OrdenMejorarAldea {
   string heroe_id = 1;
   string pueblo_id = 2;

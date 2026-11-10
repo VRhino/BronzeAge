@@ -1714,7 +1714,7 @@ fn dentro_un_ciudadano_de_la_faccion_deja_escuadras_de_su_columna_de_guarnicion_
     let mut e = montar(m, 7, 2);
     let pueblo = e.pueblo_levantado();
     let cupo = e.n.cupo_de_guarnicion_de_pueblo(pueblo).unwrap();
-    assert_eq!(cupo, 30, "un extractor es siempre de nivel 1");
+    assert_eq!(cupo, 30, "un extractor de nivel 1");
     let caben = (cupo / coste(Tropa::MiliciaLanceros)) as usize;
     assert!(caben >= 1);
     let (c0, h0) = e.visita("ana", 1, pueblo);

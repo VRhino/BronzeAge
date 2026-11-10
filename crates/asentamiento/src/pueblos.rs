@@ -38,6 +38,32 @@ pub struct NivelAldea {
     pub obra_minutos: i64,
 }
 
+/// Un nivel de un pueblo extractor (Cantera o mina; `PUEBLOS_EXTRACTORES.extractor.niveles`, decisión del autor del 2026-11-10): cuánto multiplica
+/// la producción base y los trabajadores del extractor, el nivel de la plaza madre que pide y lo que cuesta llegar a él (el 1 es la obra del pueblo).
+#[derive(Clone, Debug)]
+pub struct NivelExtractor {
+    pub factor: i64,
+    pub nivel_madre: u32,
+    pub coste: Costo,
+    pub obra_minutos: i64,
+}
+
+/// `PUEBLOS_EXTRACTORES.extractor`: los niveles de la Cantera y las minas de pueblo.
+#[derive(Clone, Debug)]
+pub struct ReglasExtractor {
+    pub niveles: BTreeMap<u32, NivelExtractor>,
+}
+
+impl ReglasExtractor {
+    pub fn nivel_maximo(&self) -> u32 {
+        self.niveles.keys().next_back().copied().unwrap_or(1)
+    }
+
+    pub fn nivel(&self, n: u32) -> &NivelExtractor {
+        self.niveles.get(&n).unwrap_or_else(|| panic!("el extractor no tiene nivel {n} en PUEBLOS_EXTRACTORES"))
+    }
+}
+
 /// Una especie de rebaño (`ESPECIES`, §14.3): por corral, cuántas cabezas caben y cuántas se guardan para criar; cuánto crece el rebaño por hora,
 /// la leche que da sin sacrificarse y lo que da cada cabeza sacrificada. Las cabezas van en milésimas.
 #[derive(Clone, Debug)]
@@ -153,9 +179,11 @@ pub struct ReglasPueblos {
     pub mineros: u32,
     /// Minutos que tarda en volver cada minero (o granjero) de esa guarnición, uno a uno, desde la primera baja.
     pub minutos_por_minero: i64,
-    /// Guarnición de jugadores (§14.0.1): cupo de Liderazgo **por héroe** en un pueblo de nivel 1 (un extractor siempre lo es) y lo que suma cada nivel más de la aldea.
+    /// Guarnición de jugadores (§14.0.1): cupo de Liderazgo **por héroe** en un pueblo de nivel 1 y lo que suma cada nivel más (de la aldea o, desde
+    /// el 2026-11-10, del extractor).
     pub cupo_guarnicion: i64,
     pub cupo_guarnicion_por_nivel: i64,
+    pub extractor: ReglasExtractor,
     pub aldea: ReglasAldea,
 }
 
@@ -211,6 +239,18 @@ impl ReglasPueblos {
                 })
                 .collect(),
         };
+        let extractor = ReglasExtractor {
+            niveles: b["extractor"]["niveles"]
+                .as_object()
+                .expect("extractor.niveles")
+                .iter()
+                .map(|(k, v)| {
+                    let nivel_madre = v.get("nivelMadre").and_then(Value::as_u64).unwrap_or(1) as u32;
+                    let obra_minutos = v.get("obraMinutos").and_then(Value::as_i64).unwrap_or(0);
+                    (k.parse().expect("nivel"), NivelExtractor { factor: num(v, "factor") as i64, nivel_madre, coste: costo(v.get("coste")), obra_minutos })
+                })
+                .collect(),
+        };
         Self {
             nivel_madre_minimo: num(&b["nivelMadreMinimo"], "extractor") as u32,
             cupo_por_nivel: b["cupoPorNivel"].as_object().expect("cupoPorNivel").iter().map(|(k, v)| (k.parse().expect("nivel"), v.as_u64().expect("cupo") as u32)).collect(),
@@ -221,6 +261,7 @@ impl ReglasPueblos {
             minutos_por_minero: num(&b["mineros"], "minutosPorMinero") as i64,
             cupo_guarnicion: num(&b["guarnicionJugadores"], "cupo") as i64,
             cupo_guarnicion_por_nivel: num(&b["guarnicionJugadores"], "porNivel") as i64,
+            extractor,
             aldea,
         }
     }
@@ -257,10 +298,10 @@ pub struct Pueblo {
     /// El extractor del catálogo; la aldea agrícola es `Granja` (sobre un punto).
     pub tipo: Tipo,
     pub sitio: Sitio,
-    /// Nivel de la aldea (1 al levantarse); un extractor es siempre 1.
+    /// Nivel del pueblo (1 al levantarse): de la aldea, o del extractor (desde el 2026-11-10; antes siempre 1).
     pub nivel: u32,
     pub estado: EstadoPueblo,
-    /// La subida de nivel de una aldea activa (`Pendiente` o `EnObra`; nunca `Activo`): la aldea sigue produciendo con su nivel de antes.
+    /// La subida de nivel de un pueblo activo (`Pendiente` o `EnObra`; nunca `Activo`): sigue produciendo con su nivel de antes.
     pub mejora: Option<EstadoPueblo>,
     /// El rebaño de los corrales de una aldea activa (nace con la aldea); `None` en un extractor o mientras la aldea es una obra.
     pub rebano: Option<Rebano>,
@@ -401,11 +442,9 @@ pub enum ErrorPueblo {
     NadaQueEntregar,
     /// El punto de la aldea no llega a la fertilidad mínima.
     FertilidadInsuficiente,
-    /// La subida de nivel es de las aldeas.
-    NoEsAldea,
-    /// La aldea ya está en su último nivel.
+    /// El pueblo ya está en su último nivel.
     NivelMaximo,
-    /// La aldea ya tiene una subida de nivel marcada o en obra.
+    /// El pueblo ya tiene una subida de nivel marcada o en obra.
     MejoraEnCurso,
     NoEstaActivo,
     /// La plaza madre no tiene el nivel que pide el cultivo elegido (`cultivos.<cultivo>.nivelMadre`).
@@ -482,7 +521,7 @@ impl Asentamiento {
     }
 
     /// Trabajadores (pesants, milésimas) que piden los pueblos activos: se suman a los de los extractores de la ciudad. Una aldea pide los de
-    /// sus granjas y sus corrales.
+    /// sus granjas y sus corrales; un extractor, los de su tipo por el factor de su nivel.
     pub(crate) fn trabajadores_de_pueblos(&self, r: &Reglas) -> Mil {
         let de = |t: Tipo| r.catalogo.tipo(t).trabajadores;
         self.pueblos
@@ -493,7 +532,7 @@ impl Asentamiento {
                     let a = &r.pueblos.aldea;
                     i64::from(a.nivel(p.nivel).granjas) * de(Tipo::Granja) + i64::from(a.corrales(c, p.nivel)) * de(Tipo::Corral)
                 }
-                None => de(p.tipo),
+                None => de(p.tipo) * r.pueblos.extractor.nivel(p.nivel).factor,
             })
             .sum()
     }
@@ -547,25 +586,35 @@ impl Asentamiento {
         Ok(())
     }
 
-    /// Marca la subida de nivel de una aldea activa: otra obra de mapa pendiente de materiales (los del nivel siguiente). Mientras, la aldea
-    /// sigue produciendo con su nivel de ahora.
-    pub fn mejorar_aldea(&mut self, r: &Reglas, id: u64, ev: &mut Vec<Evento>) -> Result<(), ErrorPueblo> {
+    /// Marca la subida de nivel de un pueblo activo, aldea o extractor (este, desde el 2026-11-10): otra obra de mapa pendiente de materiales (los
+    /// del nivel siguiente). Mientras, el pueblo sigue produciendo con su nivel de ahora. El extractor pide además que la plaza madre tenga (en
+    /// su nivel operativo) el nivel que pide el siguiente (`extractor.niveles.<n>.nivelMadre`).
+    pub fn mejorar_pueblo(&mut self, r: &Reglas, id: u64, ev: &mut Vec<Evento>) -> Result<(), ErrorPueblo> {
+        let nivel_madre = self.nivel_actual();
         let p = self.pueblos.iter_mut().find(|p| p.id == id).ok_or(ErrorPueblo::NoExiste)?;
-        if !p.es_aldea() {
-            return Err(ErrorPueblo::NoEsAldea);
-        }
         if !p.activo() {
             return Err(ErrorPueblo::NoEstaActivo);
         }
         if p.mejora.is_some() {
             return Err(ErrorPueblo::MejoraEnCurso);
         }
-        if p.nivel >= r.pueblos.aldea.nivel_maximo() {
+        let aldea = p.es_aldea();
+        let maximo = if aldea { r.pueblos.aldea.nivel_maximo() } else { r.pueblos.extractor.nivel_maximo() };
+        if p.nivel >= maximo {
             return Err(ErrorPueblo::NivelMaximo);
         }
         let nivel = p.nivel + 1;
-        p.mejora = Some(pendiente(r.pueblos.aldea.nivel(nivel).coste.clone()));
-        ev.push(Evento::AldeaMejoraMarcada { id, nivel });
+        let coste = if aldea {
+            r.pueblos.aldea.nivel(nivel).coste.clone()
+        } else {
+            let n = r.pueblos.extractor.nivel(nivel);
+            if nivel_madre < n.nivel_madre {
+                return Err(ErrorPueblo::NivelInsuficiente);
+            }
+            n.coste.clone()
+        };
+        p.mejora = Some(pendiente(coste));
+        ev.push(if aldea { Evento::AldeaMejoraMarcada { id, nivel } } else { Evento::ExtractorMejoraMarcada { id, nivel } });
         Ok(())
     }
 
@@ -575,7 +624,8 @@ impl Asentamiento {
     pub fn entregar_a_pueblo(&mut self, t: Instante, r: &Reglas, id: u64, disponible: &[(Recurso, Mil)], ev: &mut Vec<Evento>) -> Result<Costo, ErrorPueblo> {
         let p = self.pueblos.iter().find(|p| p.id == id).ok_or(ErrorPueblo::NoExiste)?;
         let base = match (p.es_aldea(), p.activo()) {
-            (false, _) => r.catalogo.tipo(p.tipo).tiempo_minutos,
+            (false, false) => r.catalogo.tipo(p.tipo).tiempo_minutos,
+            (false, true) => r.pueblos.extractor.niveles.get(&(p.nivel + 1)).map_or(0, |n| n.obra_minutos),
             (true, false) => r.pueblos.aldea.nivel(1).obra_minutos,
             (true, true) => r.pueblos.aldea.niveles.get(&(p.nivel + 1)).map_or(0, |n| n.obra_minutos),
         };
@@ -624,7 +674,7 @@ impl Asentamiento {
             if matches!(p.mejora, Some(EstadoPueblo::EnObra { completa_en }) if t >= completa_en) {
                 p.mejora = None;
                 p.nivel += 1;
-                ev.push(Evento::AldeaSubio { id: p.id, nivel: p.nivel });
+                ev.push(if p.es_aldea() { Evento::AldeaSubio { id: p.id, nivel: p.nivel } } else { Evento::ExtractorSubio { id: p.id, nivel: p.nivel } });
             }
         }
     }
@@ -635,6 +685,8 @@ impl Asentamiento {
             let lleno = match p.sitio {
                 Sitio::Nodo(nodo) => {
                     let Some((recurso, base)) = r.catalogo.tipo(p.tipo).produccion else { continue };
+                    // El nivel del extractor multiplica su producción base (10 / 20 / 30 en las minas, 2026-11-10).
+                    let base = base * r.pueblos.extractor.nivel(p.nivel).factor;
                     let deseado = por(por(base, mano.pesants), (ctx.factor_tecnologia)(recurso));
                     let pedido = deseado.min(p.almacen.hueco(recurso));
                     let salido = if pedido > 0 { fuentes.extraer(nodo, pedido) } else { 0 };
@@ -1093,15 +1145,15 @@ mod pruebas {
         let r = Reglas::cargar();
         let mut a = con_aldea(&r);
         let mut ev = vec![];
-        assert_eq!(a.mejorar_aldea(&r, 1, &mut ev), Err(ErrorPueblo::NoEstaActivo));
+        assert_eq!(a.mejorar_pueblo(&r, 1, &mut ev), Err(ErrorPueblo::NoEstaActivo));
         a.entregar_a_pueblo(0, &r, 1, &[(Recurso::Madera, 100_000), (Recurso::Oro, 12_000)], &mut ev).unwrap();
         assert_eq!(a.pueblo(1).unwrap().estado, EstadoPueblo::EnObra { completa_en: 240 * MS_POR_MINUTO }, "4 h la del nivel 1");
         a.completar_pueblos(240 * MS_POR_MINUTO, &r, &mut ev);
         assert!(a.pueblo(1).unwrap().activo());
         ev.clear();
-        a.mejorar_aldea(&r, 1, &mut ev).unwrap();
+        a.mejorar_pueblo(&r, 1, &mut ev).unwrap();
         assert_eq!(ev, vec![Evento::AldeaMejoraMarcada { id: 1, nivel: 2 }]);
-        assert_eq!(a.mejorar_aldea(&r, 1, &mut ev), Err(ErrorPueblo::MejoraEnCurso));
+        assert_eq!(a.mejorar_pueblo(&r, 1, &mut ev), Err(ErrorPueblo::MejoraEnCurso));
         assert_eq!(a.pueblo(1).unwrap().falta(), vec![(Recurso::Madera, 180_000), (Recurso::Piedra, 60_000)]);
         assert!(a.pueblo(1).unwrap().activo(), "sigue activa mientras espera los materiales");
         let t = 1_000 * MS_POR_MINUTO;
@@ -1115,12 +1167,53 @@ mod pruebas {
         assert!(ev.contains(&Evento::AldeaSubio { id: 1, nivel: 2 }));
         assert_eq!(a.trabajadores_de_pueblos(&r), 24_000, "4 granjas y 2 corrales");
         a.pueblos[0].nivel = 3;
-        assert_eq!(a.mejorar_aldea(&r, 1, &mut ev), Err(ErrorPueblo::NivelMaximo));
-        // Un extractor no sube de nivel.
+        assert_eq!(a.mejorar_pueblo(&r, 1, &mut ev), Err(ErrorPueblo::NivelMaximo));
+    }
+
+    #[test]
+    fn el_extractor_sube_hasta_el_nivel_3_atado_al_de_la_madre_y_saca_10_20_y_30() {
+        let r = Reglas::cargar();
         let mut m = madre(&r);
-        marcar(&mut m, &r, 2, Tipo::MinaCobre).unwrap();
+        marcar(&mut m, &r, 2, Tipo::MinaEstano).unwrap();
+        let mut ev = vec![];
+        assert_eq!(m.mejorar_pueblo(&r, 2, &mut ev), Err(ErrorPueblo::NoEstaActivo));
         m.pueblos[0].estado = EstadoPueblo::Activo;
-        assert_eq!(m.mejorar_aldea(&r, 2, &mut ev), Err(ErrorPueblo::NoEsAldea));
+        let saca = |m: &mut Asentamiento| {
+            let mano = mano_de_obra(&r.catalogo, &m.edificios, 200, 0, m.trabajadores_de_pueblos(&r));
+            let antes = m.pueblo(2).unwrap().almacen.cantidad(Recurso::Estano);
+            m.extraer_pueblos(&r, &mano, &ctx(), &mut Mundo::default(), &mut vec![]);
+            m.pueblo(2).unwrap().almacen.cantidad(Recurso::Estano) - antes
+        };
+        assert_eq!((saca(&mut m), m.trabajadores_de_pueblos(&r)), (10_000, 8_000), "nivel 1: 10 por minuto, 8 trabajadores");
+        // La madre está en el nivel 1: el nivel 2 pide una madre de nivel 2.
+        m.nivel = 1;
+        m.medidor.nivel_actual = 1;
+        assert_eq!(m.mejorar_pueblo(&r, 2, &mut ev), Err(ErrorPueblo::NivelInsuficiente));
+        m.nivel = 2;
+        m.medidor.nivel_actual = 2;
+        ev.clear();
+        m.mejorar_pueblo(&r, 2, &mut ev).unwrap();
+        assert_eq!(ev, vec![Evento::ExtractorMejoraMarcada { id: 2, nivel: 2 }]);
+        assert_eq!(m.pueblo(2).unwrap().falta(), vec![(Recurso::Madera, 180_000), (Recurso::Piedra, 60_000)]);
+        assert_eq!(saca(&mut m), 10_000, "mientras espera los materiales sigue con su nivel");
+        let t = 1_000 * MS_POR_MINUTO;
+        m.entregar_a_pueblo(t, &r, 2, &[(Recurso::Madera, 180_000), (Recurso::Piedra, 60_000)], &mut ev).unwrap();
+        assert_eq!(m.pueblo(2).unwrap().mejora, Some(EstadoPueblo::EnObra { completa_en: t + 120 * MS_POR_MINUTO }), "2 h, no las 8 de la obra de la mina");
+        m.completar_pueblos(t + 120 * MS_POR_MINUTO, &r, &mut ev);
+        assert!(ev.contains(&Evento::ExtractorSubio { id: 2, nivel: 2 }));
+        assert_eq!((saca(&mut m), m.trabajadores_de_pueblos(&r)), (20_000, 16_000), "nivel 2: 20 por minuto, 16 trabajadores");
+        assert_eq!(m.mejorar_pueblo(&r, 2, &mut ev), Err(ErrorPueblo::NivelInsuficiente), "el nivel 3 pide una madre de nivel 3");
+        m.nivel = 3;
+        m.medidor.nivel_actual = 3;
+        m.mejorar_pueblo(&r, 2, &mut ev).unwrap();
+        assert_eq!(m.pueblo(2).unwrap().falta(), vec![(Recurso::Madera, 360_000), (Recurso::Piedra, 120_000)]);
+        m.entregar_a_pueblo(t, &r, 2, &[(Recurso::Madera, 360_000), (Recurso::Piedra, 120_000)], &mut ev).unwrap();
+        m.completar_pueblos(t + 120 * MS_POR_MINUTO, &r, &mut ev);
+        assert_eq!((saca(&mut m), m.trabajadores_de_pueblos(&r)), (30_000, 24_000), "nivel 3: 30 por minuto, 24 trabajadores");
+        assert_eq!(r.pueblos.cupo_de_guarnicion(m.pueblo(2).unwrap().nivel), 60, "la guarnición de jugadores crece como en la aldea");
+        m.nivel = 5;
+        m.medidor.nivel_actual = 5;
+        assert_eq!(m.mejorar_pueblo(&r, 2, &mut ev), Err(ErrorPueblo::NivelMaximo));
     }
     #[test]
     fn la_aldea_nace_con_su_pie_de_cria_y_el_saqueo_se_lleva_la_mitad_de_las_cabezas() {

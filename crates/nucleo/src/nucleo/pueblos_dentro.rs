@@ -9,7 +9,7 @@
 //!
 //! # La guarnición de jugadores
 //! Además de la guarnición de serie (mineros o granjeros sin dueño), cada héroe deja escuadras de su columna (`Contenedor::Pueblo`) con un cupo **por héroe** en Liderazgo:
-//! `PUEBLOS_EXTRACTORES.guarnicionJugadores.cupo` (30) en nivel 1 y `porNivel` (15) más por cada nivel de la aldea (un extractor es siempre de nivel 1). Comen como su campamento (de la plaza
+//! `PUEBLOS_EXTRACTORES.guarnicionJugadores.cupo` (30) en nivel 1 y `porNivel` (15) más por cada nivel del pueblo (la aldea o, desde el 2026-11-10, el extractor). Comen como su campamento (de la plaza
 //! donde reside su héroe) y defienden el pueblo en el saqueo, con o sin su héroe. Vuelven al campamento de su héroe, intactas, si el pueblo desaparece o el héroe deja de ser de la
 //! Facción de la madre (la deja, o la madre cambia de dueño).
 //!

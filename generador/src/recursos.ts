@@ -79,18 +79,22 @@ export const PARAMETROS_RECURSOS = {
   },
 };
 
-/** Unidades con las que nace cada tipo de yacimiento (rango sorteado). */
+/**
+ * Unidades con las que nace cada tipo de yacimiento (rango sorteado). El estaño, de 300 a 600 desde el 2026-11-10 (decisión del
+ * autor; antes de 50 a 150): un nodo vacío se queda 10 minutos sin dar nada, y con sus nodos pequeños el estaño rendía la mitad
+ * que los demás metales. Su escasez la da el número de nodos, no su tamaño.
+ */
 export const RANGO_CANTIDAD: Record<TipoRecurso, { min: number; max: number }> = {
   piedra: { min: 600, max: 1200 },
   cobre: { min: 100, max: 300 },
   hierro: { min: 100, max: 300 },
-  estano: { min: 50, max: 150 },
+  estano: { min: 300, max: 600 },
   oro: { min: 150, max: 400 },
 };
 
 /**
  * Cantidad inicial entera y determinista de un yacimiento, entre el mínimo y el máximo de su tipo (ambos incluidos),
- * multiplicada por `factor` (el foco lleva un tercio). Depende solo de (seed, tipo, id).
+ * multiplicada por `factor` (el oro del foco lleva un tercio). Depende solo de (seed, tipo, id).
  */
 export function cantidadInicial(tipo: TipoRecurso, id: string, seed = 0, factor = 1): number {
   const { min, max } = RANGO_CANTIDAD[tipo];

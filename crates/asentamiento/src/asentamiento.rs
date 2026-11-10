@@ -173,6 +173,10 @@ pub enum Evento {
     AldeaMejoraMarcada { id: u64, nivel: u32 },
     /// Acabó la obra de la subida: la aldea ya es de `nivel`.
     AldeaSubio { id: u64, nivel: u32 },
+    /// Se marcó la subida de un pueblo extractor a `nivel` (2026-11-10; otra obra de mapa pendiente de materiales).
+    ExtractorMejoraMarcada { id: u64, nivel: u32 },
+    /// Acabó la obra de la subida: el extractor ya es de `nivel`.
+    ExtractorSubio { id: u64, nivel: u32 },
     /// Se marcó la obra de una avanzada (levantar la atalaya, mejorarla o repararla): queda pendiente de materiales.
     AvanzadaObraMarcada { id: u64, tipo: TipoObra, posicion: Punto },
     /// Se entregaron materiales a la obra de una avanzada (`cantidad` en total).
