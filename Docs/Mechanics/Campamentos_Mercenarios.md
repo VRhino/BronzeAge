@@ -154,6 +154,7 @@ Con las cifras de hoy, un campamento típico (taberna, mercado, barracón y diez
 | Repostar víveres | cualquiera, gratis | `Comercio_Caravanas.md` §9.2b |
 | Aportar al fondo de refundación | ciudadano de una Facción **sin plazas**, dentro o con la columna a la puerta: del almacén personal residiendo allí, o del carro siendo su Líder (**implementado en Rust, 2026-10-24, 5G-b**: `aportarARefundacion` 153, `retirarDeRefundacion` 154, `comprarCaravanaDeRefundacion` 155; el fondo va por Facción en `CAMPAMENTO`) | `Fundacion_Y_Refundacion.md` §9 |
 | Intel de la taberna | cualquier héroe **de una Facción** | `Niebla_De_Guerra.md` |
+| Ver el campamento por dentro (mercado, tropas, tablón: el ámbito `CAMPAMENTO`) | cualquiera | dentro o, desde el 2026-11-10, con su columna **parada** a la puerta ([`Proyecciones_Y_Autorizacion.md`](Proyecciones_Y_Autorizacion.md), «Acciones a la puerta») |
 | Iniciar un combate a `radioProteccion` (10) | **nadie** (ni jugadores ni bandidos) | `Combate.md` §2 |
 | Abrir un alijo | héroe de una Facción **sin asentamientos** o sin Facción | `Generacion_Del_Mundo.md` §12 |
 

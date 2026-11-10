@@ -4,6 +4,8 @@
 //! # Quién y con qué
 //! Todo lo hace un héroe **dentro** del pueblo (`entrarEnPueblo`) y **ciudadano de la Facción de la plaza madre**; nadie reside en un pueblo, así que lo que mueve es la columna con la que
 //! entró, que lo espera dentro ([`Nucleo::columna_que_lleva`]). La administración no necesita estar dentro ni ser de la Facción, pero sí que el héroe traiga columna.
+//! La guarnición (`guarnecerPueblo` y `retirarDePueblo`) vale también **a la puerta** (decisión del autor del 2026-11-10): con el héroe a bordo de su columna a la puerta del pueblo, la
+//! columna es esa.
 //!
 //! # La guarnición de jugadores
 //! Además de la guarnición de serie (mineros o granjeros sin dueño), cada héroe deja escuadras de su columna (`Contenedor::Pueblo`) con un cupo **por héroe** en Liderazgo:
@@ -71,11 +73,36 @@ impl Nucleo {
         Ok((madre, columna))
     }
 
+    /// Como [`Nucleo::dentro_del_pueblo`], pero vale también **a su puerta** (decisión del autor del 2026-11-10, para la guarnición): el héroe va a bordo de su columna, que está a la puerta
+    /// del pueblo activo, y es ciudadano de la Facción de la plaza madre. Devuelve la madre y la columna: la suya a la puerta o, dentro, la que trajo.
+    fn en_el_pueblo_o_a_su_puerta(&self, t: Instante, p: &Peticion, heroe: u64, pueblo: u64) -> Result<(u64, u64), Respuesta> {
+        let dentro = self.heroe(heroe).is_some_and(|h| h.heroe.presencia.ubicacion == Ubicacion::Pueblo(pueblo));
+        if dentro || p.admin || !matches!(self.heroe(heroe).map(|h| h.heroe.presencia.ubicacion), Some(Ubicacion::Columna(_))) {
+            return self.dentro_del_pueblo(p, heroe, pueblo);
+        }
+        let v = self.estado.version;
+        let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
+        let (madre, pu) = self.pueblo(pueblo).ok_or_else(|| rechazo(rechazos::PUEBLO_DESCONOCIDO, ids::pueblo(pueblo)))?;
+        if !pu.activo() {
+            return Err(rechazo(rechazos::PUEBLO_NO_ESTA_ACTIVO, "el pueblo aún es una obra".into()));
+        }
+        self.autorizar_heroe(p, heroe, false)?;
+        let puerta = self.posicion_de_pueblo(pueblo).ok_or_else(|| rechazo(rechazos::SIN_MUNDO, "el núcleo no tiene mundo cargado".into()))?;
+        let (columna, e) = self.columna_a_bordo(heroe)?;
+        if e.posicion_en(t).dist(puerta) > self.radio_puerta() {
+            return Err(rechazo(rechazos::HEROE_NO_ESTA_EN_EL_PUEBLO, format!("el héroe no está dentro de {} ni con su columna a su puerta", ids::pueblo(pueblo))));
+        }
+        if self.heroe(heroe).expect("existe").faccion != Some(self.estado.asentamientos[&madre].faccion) {
+            return Err(rechazo(rechazos::PUEBLO_FACCION_AJENA, "solo los ciudadanos de la Facción de la plaza madre".into()));
+        }
+        Ok((madre, columna))
+    }
+
     /// Deja escuadras de la columna en la guarnición del pueblo, dentro del cupo del héroe.
     fn guarnecer_pueblo(&mut self, t: Instante, p: &Peticion, heroe: u64, pueblo: u64, escuadras: &[u64]) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
-        let (madre, cid) = self.dentro_del_pueblo(p, heroe, pueblo)?;
+        let (madre, cid) = self.en_el_pueblo_o_a_su_puerta(t, p, heroe, pueblo)?;
         if escuadras.is_empty() {
             return Err(rechazo(rechazos::SALIDA_SIN_ESCUADRAS, "hay que dejar al menos una escuadra".into()));
         }
@@ -117,7 +144,7 @@ impl Nucleo {
     fn retirar_de_pueblo(&mut self, t: Instante, p: &Peticion, heroe: u64, pueblo: u64, escuadras: &[u64]) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
-        let (madre, cid) = self.dentro_del_pueblo(p, heroe, pueblo)?;
+        let (madre, cid) = self.en_el_pueblo_o_a_su_puerta(t, p, heroe, pueblo)?;
         if escuadras.is_empty() {
             return Err(rechazo(rechazos::SALIDA_SIN_ESCUADRAS, "hay que recoger al menos una escuadra".into()));
         }

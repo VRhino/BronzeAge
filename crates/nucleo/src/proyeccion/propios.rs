@@ -1207,7 +1207,7 @@ pub(crate) fn de_su_faccion(n: &Nucleo, quien: Espectador, f: u32) -> bool {
 
 /// Los campos de la plaza propia vista desde fuera que van más allá de la ficha (pedido del autor del 2026-11-04: «desde fuera se debería poder ver el contenido del almacén a quienes sean de
 /// la misma Facción» y más datos para la ventana de Facción). Son los que cambia el paso de minuto: [`crate::sesiones`] los renueva en `FACCION` con esta máscara cuando avanza la secuencia interior.
-pub const CAMPOS_DE_PLAZA_PROPIA: [&str; 13] = [
+pub const CAMPOS_DE_PLAZA_PROPIA: [&str; 15] = [
     "version_interior",
     "racha_mantenimiento_sano",
     "poblacion",
@@ -1221,11 +1221,13 @@ pub const CAMPOS_DE_PLAZA_PROPIA: [&str; 13] = [
     "guarnicion",
     "cupo_guarnicion",
     "auto_construccion_pausada",
+    "politicas_activas",
+    "ultima_caravana_creada_en_ms",
 ];
 
 /// La plaza propia vista desde fuera por un héroe de su Facción: la `ficha` (con cargos y fundadores) más su secuencia interior, la población, el almacén con su tendencia, el medidor de
-/// mantenimiento, la nutrición, los edificios (estado, nivel, obra y mejora), el ascenso, quiénes residen, la guarnición con el dueño de cada tropa y su cupo, y si la auto-construcción
-/// está apagada: [`CAMPOS_DE_PLAZA_PROPIA`], tal como los da el interior. Sin el trazado, los recintos, quién está dentro, las aparcadas ni las misiones: eso sigue siendo de dentro.
+/// mantenimiento, la nutrición, los edificios (estado, nivel, obra y mejora), el ascenso, quiénes residen, la guarnición con el dueño de cada tropa y su cupo, si la auto-construcción
+/// está apagada y, para el Mercado desde la puerta (2026-11-10), las políticas activas y cuándo se creó la última caravana: [`CAMPOS_DE_PLAZA_PROPIA`], tal como los da el interior. Sin el trazado, los recintos, quién está dentro, las aparcadas ni las misiones: eso sigue siendo de dentro.
 pub fn plaza_propia(n: &Nucleo, id: u64, ficha: pb::Asentamiento) -> pb::Asentamiento {
     let Some(i) = super::interior::asentamiento(n, id) else { return ficha };
     pb::Asentamiento {
@@ -1242,6 +1244,8 @@ pub fn plaza_propia(n: &Nucleo, id: u64, ficha: pb::Asentamiento) -> pb::Asentam
         guarnicion: i.guarnicion,
         cupo_guarnicion: i.cupo_guarnicion,
         auto_construccion_pausada: i.auto_construccion_pausada,
+        politicas_activas: i.politicas_activas,
+        ultima_caravana_creada_en_ms: i.ultima_caravana_creada_en_ms,
         ..ficha
     }
 }

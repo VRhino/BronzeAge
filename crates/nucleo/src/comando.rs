@@ -675,6 +675,30 @@ const GOBERNADOR_O_TESORERO: &[Cargo] = &[Cargo::Gobernador, Cargo::Tesorero];
 const GOBERNADOR_TESORERO_O_MAESTRO_CARAVANAS: &[Cargo] = &[Cargo::Gobernador, Cargo::Tesorero, Cargo::MaestroCaravanas];
 
 impl Comando {
+    /// ¿Vale la orden con el héroe **a la puerta** de la plaza, a bordo de su columna, en vez de dentro? Las del mercado interno y la flota de la plaza propia (decisión del autor del
+    /// 2026-11-10, para el Mercado desde la puerta): las órdenes de mercado, las de la flota que manda su origen (no las de una caravana aparcada) y los encargos. La matriz es la misma (residir
+    /// y el cargo); solo cambia «estar dentro» por «dentro o a la puerta».
+    pub fn vale_desde_la_puerta(&self) -> bool {
+        matches!(
+            self,
+            Comando::ColocarOrdenMercado { .. }
+                | Comando::CancelarOrdenMercado { .. }
+                | Comando::CrearCaravana { .. }
+                | Comando::AnadirCarro { .. }
+                | Comando::AnadirAnimal { .. }
+                | Comando::MoverCarro { .. }
+                | Comando::ReservarCaravana { .. }
+                | Comando::RenombrarCaravana { .. }
+                | Comando::PrepararCaravana { .. }
+                | Comando::CancelarCaravana { .. }
+                | Comando::EncargarCaravana { .. }
+                | Comando::CambiarEncargo { .. }
+                | Comando::CancelarEncargo { .. }
+                | Comando::DetenerEncargo { .. }
+                | Comando::TomarOrdenADistancia { .. }
+        )
+    }
+
     /// Quién puede dar la orden ([`Autoriza`]). Cada variante se nombra a propósito (sin `_`): una orden nueva no compila hasta decidirlo.
     pub fn autoriza(&self) -> Autoriza {
         use Autoriza::*;

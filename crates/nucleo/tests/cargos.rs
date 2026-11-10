@@ -235,6 +235,48 @@ fn la_matriz_pide_el_titular_del_cargo_que_resida_y_este_dentro() {
     e.ok("admin", obra);
 }
 
+/// Acciones a la puerta (decisión del autor del 2026-11-10): el mercado interno y la flota de la plaza se mandan también con la columna a su puerta, sin entrar; con la misma matriz (residir y
+/// el cargo). Las demás órdenes de plaza, como las obras, siguen pidiendo estar dentro.
+#[test]
+fn el_mercado_y_la_flota_se_mandan_tambien_con_la_columna_a_la_puerta_y_las_obras_no() {
+    let m = con_mundo!();
+    let mut e = E::nuevo(m);
+    let (rey, ana, bea, plaza) = (e.rey, e.ana, e.bea, e.plaza);
+    assert!(e.asignar("rey", rey, Cargo::Gobernador, ana).aceptada());
+    assert!(e.asignar("ana", ana, Cargo::Tesorero, bea).aceptada());
+    e.ok("admin", Comando::DarRecursos { asentamiento: plaza, recurso: Recurso::Madera, cantidad: 400_000 });
+    e.ok("admin", Comando::AnadirEdificio { asentamiento: plaza, tipo: Tipo::Mercado });
+    let t = e.n.ahora() + 9 * 3_600_000;
+    e.n.avanzar_hasta(t);
+    assert!(e.n.economia(plaza).unwrap().edificios.iter().any(|x| x.tipo == Tipo::Mercado && x.activo()), "el Mercado, activo");
+    let orden = Comando::ColocarOrdenMercado { asentamiento: plaza, venta: true, recurso: Recurso::Madera, cantidad: 1_000, precio: None };
+    let obra = Comando::AnadirEdificio { asentamiento: plaza, tipo: Tipo::Vivienda };
+
+    // La Tesorera y la Gobernadora salen: a bordo de su columna, a la puerta, colocan y retiran órdenes y crean caravanas; no construyen.
+    e.salir("bea", bea);
+    e.salir("ana", ana);
+    assert!(matches!(e.ubicacion(bea), Ubicacion::Columna(_)));
+    let id = e.ok("bea", orden.clone()).creadas[0];
+    e.ok("ana", Comando::CancelarOrdenMercado { orden: id });
+    e.ok("bea", Comando::CrearCaravana { asentamiento: plaza });
+    assert_eq!(e.no("ana", obra.clone()), rechazos::NO_AUTORIZADO, "las obras, solo dentro");
+    assert_eq!(e.no("eli", Comando::ColocarOrdenMercado { asentamiento: plaza, venta: true, recurso: Recurso::Madera, cantidad: 1_000, precio: None }), rechazos::NO_AUTORIZADO, "sin el cargo, ni dentro");
+    // Sin el cargo o sin residir, ni a la puerta.
+    assert_eq!(e.no("cai", Comando::CrearCaravana { asentamiento: plaza }), rechazos::NO_AUTORIZADO, "de la Facción pero sin residir");
+
+    // Con la columna lejos de la puerta, no.
+    let radio = e.n.estado().reglas.economia.militar.movimiento.radio_puerta;
+    let puerta = e.n.estado().asentamientos[&plaza].posicion;
+    let t = e.n.ahora();
+    let lejos = e.n.crear_ejercito(t, "fay", 1, base::Punto { x: puerta.x + 3 * radio, y: puerta.y }, 500, 100_000).unwrap();
+    let fay = e.n.ejercito(lejos).unwrap().columna.lider;
+    e.ok("admin", Comando::FijarResidencia { heroe: fay, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
+    let r = e.ord("fay", Comando::CrearCaravana { asentamiento: plaza });
+    assert_eq!(codigo(&r), rechazos::NO_AUTORIZADO, "residente, pero lejos");
+    assert!(matches!(&r.resultado, Resultado::Rechazada { mensaje, .. } if mensaje.contains("columna a su puerta")), "{r:?}");
+    assert_eq!(e.no("fay", orden), rechazos::NO_AUTORIZADO);
+}
+
 #[test]
 fn la_puerta_por_defecto_cierra_a_neutrales_y_enemigos_la_fija_el_gobernador_o_el_rey_y_solo_el_gobernador_veta() {
     let m = con_mundo!();

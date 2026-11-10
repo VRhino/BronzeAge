@@ -630,6 +630,8 @@ async fn desde_fuera_quien_es_de_su_faccion_ve_el_almacen_y_lo_de_dentro_de_su_p
         x.n.crear_ejercito(t, cuenta, f, puerta, 500, 100_000).unwrap();
     }
     assert_eq!(x.n.estado().asentamientos[&plaza].faccion, 1);
+    // Una política activa: viaja también en la plaza propia (2026-11-10, el Mercado desde la puerta).
+    x.ok("admin", Comando::ActivarPolitica { asentamiento: plaza, politica: "racionamiento".into(), cargo: asentamiento::Cargo::Sacerdote });
     let paso = proximo_paso(&x.n, plaza);
     let w = arrancar_con(x.n).await;
     let (mut admin_c, _) = w.entrar("admin", TipoCliente::ClienteAdminWeb).await;
@@ -670,7 +672,12 @@ async fn desde_fuera_quien_es_de_su_faccion_ve_el_almacen_y_lo_de_dentro_de_su_p
     let dentro = interior::asentamiento(&n, plaza).unwrap();
     assert_eq!(antes, dentro.version_interior);
     let propia = nucleo::proyeccion::propios::plaza_propia(&n, plaza, pb::Asentamiento::default());
-    assert_eq!((propia.almacen, propia.edificios, propia.guarnicion), (dentro.almacen, dentro.edificios, dentro.guarnicion), "lo que se ve desde fuera es lo de dentro");
+    assert!(!dentro.politicas_activas.is_empty());
+    assert_eq!(
+        (propia.almacen, propia.edificios, propia.guarnicion, propia.politicas_activas, propia.ultima_caravana_creada_en_ms),
+        (dentro.almacen, dentro.edificios, dentro.guarnicion, dentro.politicas_activas, dentro.ultima_caravana_creada_en_ms),
+        "lo que se ve desde fuera es lo de dentro"
+    );
 }
 
 // ───────────────────────────── 3. Obras, mejoras y recintos en su instante ─────────────────────────────

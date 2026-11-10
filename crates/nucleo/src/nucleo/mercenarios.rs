@@ -231,7 +231,21 @@ impl Nucleo {
         if let Ubicacion::Mercenarios(c) = self.heroe(heroe)?.heroe.presencia.ubicacion {
             return Some(c);
         }
-        let aqui = self.columna_del_heroe(heroe)?.posicion_en(self.estado.ahora);
+        self.campamento_junto_a(self.columna_del_heroe(heroe)?.posicion_en(self.estado.ahora))
+    }
+
+    /// El campamento a cuya puerta está **parada** la columna `columna` (sin plan): el más cercano, si hay varios a la distancia de la puerta. Da el ámbito `CAMPAMENTO` a quien va a bordo
+    /// (2026-11-10): ver el mercado, las tropas y el tablón desde la puerta, sin entrar. Parada y no de paso, para que el ámbito cambie solo cuando cambia la columna (llega o arranca).
+    pub fn campamento_a_la_puerta(&self, columna: u64) -> Option<u32> {
+        let e = self.estado.ejercitos.get(&columna)?;
+        if !e.plan.vertices.is_empty() {
+            return None;
+        }
+        self.campamento_junto_a(e.posicion)
+    }
+
+    /// El campamento más cercano a cuya puerta está `aqui` (a `radio_puerta` o menos).
+    fn campamento_junto_a(&self, aqui: Punto) -> Option<u32> {
         let todos = 0..u32::try_from(self.geografia.as_ref()?.mapa.campamentos.len()).ok()?;
         todos.filter_map(|c| Some((aqui.dist(self.puerta_de_campamento(c)?), c))).filter(|&(d, _)| d <= self.radio_puerta()).min().map(|(_, c)| c)
     }

@@ -824,10 +824,12 @@ fn la_matriz_de_autorizacion_del_documento_es_la_del_codigo() {
             (sin(c[1]), sin(c[2]), c[3].trim().to_owned())
         })
         .collect();
-    let mut codigo: BTreeSet<(String, String, String)> = ordenes_traducidas().iter().map(|(o, c)| (en_el_contrato(&nombre(o)), nombre(c), quien(c.autoriza()).to_owned())).collect();
+    // Las que valen también con la columna a la puerta de la plaza lo dicen (`Comando::vale_desde_la_puerta`, 2026-11-10).
+    let quien_da = |c: &Comando| format!("{}{}", quien(c.autoriza()), if c.vale_desde_la_puerta() { " o con su columna a la puerta" } else { "" });
+    let mut codigo: BTreeSet<(String, String, String)> = ordenes_traducidas().iter().map(|(o, c)| (en_el_contrato(&nombre(o)), nombre(c), quien_da(c))).collect();
     for (o, c) in ordenes_de_administracion() {
         let Cuerpo::Administracion(a) = o else { unreachable!() };
-        codigo.insert((format!("administracion:{}", a.codigo), nombre(&c), quien(c.autoriza()).to_owned()));
+        codigo.insert((format!("administracion:{}", a.codigo), nombre(&c), quien_da(&c)));
     }
     // El canal del servidor de batalla (`MensajeDeServidorDeBatalla`): sus cinco comandos son `Autoriza::ServidorDeBatalla` en `Comando::autoriza`.
     for (m, c) in [("asignacion", "RegistrarAsignacion"), ("inicio", "ConfirmarInicio"), ("tokens", "RegistrarTokens"), ("salida", "RegistrarSalida"), ("resultado", "AplicarResultado")] {
