@@ -300,7 +300,8 @@ fn pueblos(x: &Entrada) -> Vec<Metrica> {
         v.pueblos_completados.values().map(|&t| base * (c.nucleo.ahora() - t) as f64 / MIN).sum()
     };
     let sacado = v.acarreo_sacado as f64;
-    let insolvente = rechazo(x, "SolicitarAscenso", "ascenso.insolvente");
+    // La solvencia del nivel siguiente es una advertencia desde el 2026-11-10 (ya no bloquea la subida): cuántas plazas la tienen al final.
+    let insolvente = e.asentamientos.values().filter(|a| !a.economia.aviso_solvencia.0.is_empty()).count() as f64;
     // Lo que el acarreo cuenta hoy en la solvencia del ascenso (C2): la media por minuto de lo que ingresó en las madres en las últimas 24 h, frente a la
     // producción nominal de los pueblos activos (lo que contaba antes de C2).
     let hora_fin = c.nucleo.ahora().div_euclid(60 * MIN as i64);
@@ -328,7 +329,7 @@ fn pueblos(x: &Entrada) -> Vec<Metrica> {
         metrica("plazas_nivel2_fin", "Plazas de nivel 2 al final", "plazas", INFO, Some(por_nivel(2)), "Doc 4.5", "Nivel alcanzado."),
         metrica("plazas_nivel3_fin", "Plazas de nivel 3 o más al final", "plazas", INFO, Some((3..=5).map(por_nivel).sum()), "Doc 4.5", "La Facción de nivel 8 da cupo de 4 plazas de nivel 2; el nivel 3 pide además edificios que el jugador no construye (Barracón, Galería de tiro)."),
         metrica("misiones_terminadas_pct", "Viajes de columna que terminan de vuelta en la plaza", "%", min(90.0), pct(c.misiones.values().map(|m| m.1 as usize).sum(), c.misiones.values().map(|m| m.0 as usize).sum()), "Movimiento_Ejercitos (marchas) y Comercio_Caravanas §9", &format!("Viajes de la columna al campamento (y a la obra o al mostrador) lanzados y terminados: {}.", c.misiones.iter().map(|(k, m)| format!("{k} {}/{}", m.1, m.0)).collect::<Vec<_>>().join(", "))),
-        metrica("ascenso_insolvente", "Peticiones de ascenso rechazadas por insolvencia", "peticiones", INFO, Some(insolvente), "Economia_Construccion §11.2 (solvencia)", "Desde C2 el acarreo cuenta por lo que ingresa en la madre en las últimas 24 h: un pueblo cuyo acarreo se pierde contra un almacén lleno ya no hace solvente a nadie."),
+        metrica("ascenso_insolvente", "Plazas con la advertencia de solvencia del nivel siguiente al final", "plazas", INFO, Some(insolvente), "Economia_Construccion §11.2 (solvencia)", "Desde el 2026-11-10 no bloquea la subida: es una advertencia. El acarreo cuenta como la media de lo que llega a la madre en las últimas 24 h."),
         multiplicador_distancia(x),
     ]
 }

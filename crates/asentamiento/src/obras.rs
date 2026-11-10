@@ -415,6 +415,25 @@ impl Asentamiento {
         true
     }
 
+    /// `pausarConsumo` (2026-11-10): pausa o reanuda el consumo de un bien de `BIENES_DE_CONSUMO` (el trigo no está y nunca se pausa). `Err(())` si el bien no se pausa;
+    /// `Ok(false)` si ya estaba así. La lista queda en el orden del bloque.
+    pub fn pausar_consumo(&mut self, r: &Reglas, recurso: Recurso, pausado: bool) -> Result<bool, ()> {
+        if !r.poblacion.bienes.iter().any(|b| b.recurso == recurso) {
+            return Err(());
+        }
+        if self.consumo_pausado.contains(&recurso) == pausado {
+            return Ok(false);
+        }
+        if pausado {
+            self.consumo_pausado.push(recurso);
+        } else {
+            self.consumo_pausado.retain(|&x| x != recurso);
+        }
+        let orden = |x: &Recurso| r.poblacion.bienes.iter().position(|b| b.recurso == *x);
+        self.consumo_pausado.sort_by_key(orden);
+        Ok(true)
+    }
+
     /// `calibrarReservaManual`: `clamp(round(valor), 0, reservaManualMaxima)`.
     pub fn calibrar_reserva(&mut self, r: &Reglas, recurso: Recurso, valor: Mil) {
         self.reserva_manual[recurso.indice()] = valor.clamp(0, r.construccion.necesidades.reserva_manual_maxima);

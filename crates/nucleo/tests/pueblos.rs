@@ -1250,7 +1250,7 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
     e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN60");
+    assert_eq!(&bytes[..5], b"BAN61");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
@@ -1316,7 +1316,7 @@ fn el_pueblo_ajeno_se_recuerda_como_una_ciudad_y_se_olvida_cuando_se_vuelve_a_mi
     e.ok("beto", Comando::MarcharA { ejercito: col, destino: lejos });
     let fin = e.n.ejercito(col).unwrap().plan.fin().unwrap();
     e.n.avanzar_hasta(fin + MIN);
-    let ficha = e.n.estado().memoria.fichas[&2][&Sitio::Pueblo(pueblo)];
+    let ficha = e.n.estado().memoria.fichas[&2][&Sitio::Pueblo(pueblo)].clone();
     assert_eq!((ficha.datos.faccion, ficha.datos.posicion), (1, sitio), "lo vio al pasar y lo recuerda");
     let id = nucleo::proyeccion::ids::pueblo(pueblo);
     let recordado = |n: &Nucleo| {

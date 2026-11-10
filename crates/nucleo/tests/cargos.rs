@@ -339,7 +339,7 @@ fn un_vetado_no_repone_en_la_plaza_ni_se_muda_a_ella() {
     let antes = e.no("cai", Comando::ReclutarTropa { asentamiento: plaza, heroe: cai, tropa: militar::catalogo::Tropa::MiliciaLanceros });
     e.ok("ana", Comando::VetarJugador { heroe: ana, asentamiento: plaza, vetado: cai, vetar: true });
     let despues = e.no("cai", Comando::ReclutarTropa { asentamiento: plaza, heroe: cai, tropa: militar::catalogo::Tropa::MiliciaLanceros });
-    assert_eq!((antes, despues), (rechazos::RECLUTAMIENTO_SOLO_REPONER, rechazos::RECLUTAMIENTO_NO_PUEDES), "el veto cambia el permiso: de solo reponer a no poder");
+    assert_eq!((antes, despues), (rechazos::HEROE_SIN_COLUMNA, rechazos::RECLUTAMIENTO_NO_PUEDES), "el veto cambia el permiso: de reclutar a su columna (y no la trajo) a no poder");
     // Ni se muda a ella.
     assert_eq!(e.no("cai", Comando::CambiarResidencia { heroe: cai, asentamiento: plaza }), rechazos::RESIDENCIA_VETADO);
 }
@@ -358,7 +358,7 @@ fn los_cargos_y_la_puerta_viajan_en_la_foto_ban33_y_la_ban32_se_rechaza() {
     e.ok("ana", Comando::VetarJugador { heroe: ana, asentamiento: plaza, vetado: cai, vetar: true });
     assert!(hash0 != hash1 && hash1 != hash2 && hash2 != e.n.hash_estado(), "cada pieza mueve el hash");
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN60");
+    assert_eq!(&bytes[..5], b"BAN61");
     let reglas = e.n.estado().reglas.clone();
     let vuelta = Estado::deserializar(&bytes, &reglas, &e.n.estado().mundo_hash).unwrap();
     let a = &vuelta.asentamientos[&plaza];
@@ -419,9 +419,9 @@ fn el_maestro_de_caravanas_viaja_en_la_foto_y_una_foto_ban51_ya_no_se_admite() {
     assert!(e.asignar("ana", ana, Cargo::Tesorero, bea).aceptada());
     let reglas = e.n.estado().reglas.clone();
     let hash = e.n.estado().mundo_hash.clone();
-    // Desde BAN60 (2026-11-09, 41 recursos) no se lee ningún formato anterior: una BAN51 o una BAN59 se rechazan sin mirar el resto.
+    // Desde BAN61 (2026-11-10) no se lee ningún formato anterior: una BAN51, una BAN59 o una BAN60 se rechazan sin mirar el resto.
     let mut vieja = e.n.estado().serializar();
-    for magia in [b"BAN51", b"BAN59"] {
+    for magia in [b"BAN51", b"BAN59", b"BAN60"] {
         vieja[..5].copy_from_slice(magia);
         assert!(Estado::deserializar(&vieja, &reglas, &hash).is_err_and(|ErrorFormato(m)| m.contains("ya no se admite")));
     }

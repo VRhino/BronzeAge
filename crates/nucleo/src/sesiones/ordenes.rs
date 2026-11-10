@@ -12,7 +12,7 @@
 //!
 //! La tabla orden ↔ comando, con lo que cada una ignora, está en `Docs/Mechanics/Comandos_Parametros.md`.
 
-use crate::comando::{rechazos, AccionReloj, Comando, LadoDelFondo, ObjetivoAtaque, OrigenIntel, PagarCon, Peticion, Respuesta, TipoInformeRegion, PETICION_ID_MAX};
+use crate::comando::{rechazos, AccionReloj, Comando, LadoDelFondo, ObjetivoAtaque, OrigenIntel, PagarCon, Peticion, Respuesta, TipoInformeRegion, TipoRumor, PETICION_ID_MAX};
 use crate::estado_militar::Relacion;
 use crate::nucleo::Nucleo;
 use crate::proyeccion::ids;
@@ -340,6 +340,13 @@ impl Ctx<'_> {
             "plazas" => Ok(TipoInformeRegion::Plazas),
             "ordenes" => Ok(TipoInformeRegion::Ordenes),
             _ => self.forma(format!("tipo de informe de región desconocido: {s}")),
+        }
+    }
+
+    fn tipo_de_rumor(&self, s: &str) -> R<TipoRumor> {
+        match s {
+            "vetas_estano" => Ok(TipoRumor::VetasEstano),
+            _ => self.forma(format!("tipo de rumor desconocido: {s}")),
         }
     }
 
@@ -691,6 +698,7 @@ impl Ctx<'_> {
             }
             Cuerpo::AlternarAutoConstruccion(o) => Comando::AlternarAutoConstruccion { asentamiento: self.plaza(&o.asentamiento_id)?, pausada: o.pausada },
             Cuerpo::AlternarReceta(o) => Comando::AlternarReceta { asentamiento: self.plaza(&o.asentamiento_id)?, recurso: self.recurso(&o.recurso)?, pausada: o.pausada },
+            Cuerpo::PausarConsumo(o) => Comando::PausarConsumo { asentamiento: self.plaza(&o.asentamiento_id)?, recurso: self.recurso(&o.recurso)?, pausado: o.pausado },
             Cuerpo::CalibrarReservaManual(o) => Comando::CalibrarReserva { asentamiento: self.plaza(&o.asentamiento_id)?, recurso: self.recurso(&o.recurso)?, valor: o.valor },
             Cuerpo::SolicitarAscenso(o) => Comando::SolicitarAscenso { asentamiento: self.plaza(&o.asentamiento_id)? },
             Cuerpo::ActivarPolitica(o) => Comando::ActivarPolitica { asentamiento: self.plaza(&o.asentamiento_id)?, politica: o.politica_id.clone(), cargo: self.cargo(&o.cargo)? },
@@ -857,6 +865,7 @@ impl Ctx<'_> {
             Cuerpo::CargarDePlaza(o) => Comando::CargarDePlaza { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad },
             Cuerpo::DejarEnPlaza(o) => Comando::DejarEnPlaza { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad },
             Cuerpo::CerrarAlmacenACiudadanos(o) => Comando::CerrarAlmacenACiudadanos { asentamiento: self.plaza(&o.asentamiento_id)?, cerrado: o.cerrado },
+            Cuerpo::CerrarReclutamientoACiudadanos(o) => Comando::CerrarReclutamientoACiudadanos { asentamiento: self.plaza(&o.asentamiento_id)?, cerrado: o.cerrado },
 
             // ── Mercenarios por contrato (entrada 48) ──
             Cuerpo::OfrecerseComoMercenario(_) => Comando::OfrecerseComoMercenario { heroe: self.mi_heroe()? },
@@ -888,6 +897,7 @@ impl Ctx<'_> {
             Cuerpo::ReclamarPremioDeRango(o) => Comando::ReclamarPremioDeRango { heroe: self.mi_heroe()?, tropa: self.tropa(&o.tropa_id)? },
             Cuerpo::ElegirTablon(o) => Comando::ElegirTablon { heroe: self.mi_heroe()?, dueno: self.dueno_de_mision(&o.dueno_id)?, diarias: o.diarias_ids.clone(), semanales: o.semanales_ids.clone() },
             Cuerpo::ComprarMirada(o) => Comando::ComprarMirada { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, centro: self.punto(o.centro.as_ref())? },
+            Cuerpo::ComprarRumor(o) => Comando::ComprarRumor { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, tipo: self.tipo_de_rumor(&o.tipo)? },
             Cuerpo::ComprarInformeRegion(o) => Comando::ComprarInformeRegion { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, tipo: self.tipo_de_informe_region(&o.tipo)? },
             Cuerpo::ComprarInformePlaza(o) => {
                 Comando::ComprarInformePlaza { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, asentamiento: self.plaza(&o.asentamiento_id)? }

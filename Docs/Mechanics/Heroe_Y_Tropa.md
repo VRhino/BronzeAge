@@ -241,7 +241,7 @@ Mientras una escuadra está en la guarnición, el héroe **no puede sacarla** de
 - `retirarGuarnicion` de una escuadra que guarnece esa plaza (de visita, o del campamento del residente con `enGuarnicion`) la **devuelve a la columna**, sin pasar de su Liderazgo (`liderazgo.superado`) ni sacar una reservada para una batalla; deja de estar en la guarnición.
 - Lejos de la puerta o sin columna, todo sigue como arriba (`guarnicion.sin_residencia`, `guarnicion.no_estas_dentro`).
 
-El campamento (todas las escuadras con `contenedor: campamento` de los residentes) **come del almacén de la plaza**: la ración de la guarnición (un **ritmo** de consumo contra la despensa del almacén, con eventos de umbral; antes `avanzarMantenimientoTropas`, tick paso 5) llama a `avanzarRacion(campamento, trigo del almacén)` con factor 1 y 0 participantes, y descuenta del almacén la carne y, si falta, el trigo consumidos (tanda 69: come primero carne y después trigo hasta su ración; [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md), [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §6.3).
+El campamento (todas las escuadras con `contenedor: campamento` de los residentes) **come del almacén de la plaza**: la ración de la guarnición (un **ritmo** de consumo contra la despensa del almacén, con eventos de umbral; antes `avanzarMantenimientoTropas`, tick paso 5) llama a `avanzarRacion(campamento, trigo del almacén)` con factor 1 y 0 participantes, y descuenta del almacén la carne y, si falta, el trigo consumidos (tanda 69: come primero carne y después trigo hasta su ración; [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md), [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §6.3). Con la **carne pausada** en la plaza (`pausarConsumo`, Rust, 2026-11-10, [`Economia_Construccion.md`](Economia_Construccion.md) §9.2) la guarnición no la toca y come solo trigo.
 
 ## 8. Orden de las escuadras (`ordenarEscuadras`)
 
@@ -296,7 +296,10 @@ El único origen de escuadras del motor (fuera del préstamo de un campamento de
 
 - **`todo`** si el héroe **reside** en la plaza: escuadra nueva, reposición y cualquier tropa que el edificio permita.
 - **`no`** si no reside y su Facción no es la de la plaza, **o** está vetado (`vetadosIds`).
-- **`solo_reponer`** si no reside, es ciudadano de la Facción de la plaza y no está vetado: solo repone una escuadra que ya tiene **aquí** (en su columna a la puerta); nunca una nueva.
+- **`ciudadano`** (Rust, 2026-11-10, decisión del autor) si no reside, es ciudadano de la Facción de la plaza, no está vetado y la plaza **no ha cerrado el reclutamiento a los ciudadanos**: escuadra nueva, que se va a **la columna con la que entró**, y reposición de las que tiene aquí.
+- **`solo_reponer`** si no reside, es ciudadano de la Facción de la plaza y no está vetado, pero la plaza **ha cerrado el reclutamiento a los ciudadanos**: solo repone una escuadra que ya tiene **aquí** (en su columna a la puerta); nunca una nueva. Hasta el 2026-11-10 era el permiso de todo ciudadano que no residía.
+
+**Cerrar el reclutamiento a los ciudadanos** (Rust, 2026-11-10): `cerrarReclutamientoACiudadanos { asentamientoId, cerrado }` (orden `cerrar_reclutamiento_a_ciudadanos`), del **Gobernador o un General** de la plaza, residente y dentro (es del ámbito militar, decisión del autor). Guarda `Asentamiento.reclutamiento_cerrado_a_ciudadanos` (foto, hash y campo 53 del contrato: interior y `ADMIN`); sin cambio, `sin_cambios`; evento `reclutamiento.cierre_a_ciudadanos { plaza, cerrado }`. Nace abierto y la conquista lo vuelve a abrir. Los residentes no se ven afectados.
 
 La autorización del comando exige además `heroeId === actor` y que `puedeReclutarEn ≠ 'no'` **y el héroe esté presente en la plaza**. Reclutar **no exige el cargo de General** (la residencia manda, Doc 2.5).
 
@@ -309,7 +312,8 @@ Todas lanzan `tropas.reclutamiento_invalido`:
 3. La **tecnología** que habilita la tropa no está adoptada por la **Facción de la plaza** (`tecnologiasDe(estado, plaza.faccionId).adoptadas`, Doc 6.1).
 4. El héroe no existe.
 5. `existente` = su escuadra de esa tropa (no prestada). Si está **reservada para una batalla** (`reservaBatalla`): rechazo (no se repone hasta que acabe). Si existe y **no es reponible aquí**: rechazo. Reponible aquí = `contenedor: campamento` y el héroe reside en esta plaza; o `contenedor: ejercito` y esa columna está a `≤ MOVIMIENTO.radioPuerta` de la plaza. En escolta o fuera del mundo: nunca.
-6. Permiso `solo_reponer` y no hay `existente`.
+6. Permiso `solo_reponer` y no hay `existente` (`reclutamiento.solo_reponer`).
+6b. (Rust, 2026-11-10) Permiso `ciudadano` y no hay `existente`: el héroe tiene que haber entrado **con una columna** (`heroe.sin_columna`) y la escuadra nueva tiene que **caber en su Liderazgo**: el Liderazgo comprometido de las escuadras que ya lleva fuera del campamento y de la guarnición de visita de esta plaza, más el coste de la tropa, no pasa de su `liderazgoBase` (`liderazgo.superado`), como al recogerlas.
 7. `cantidad = tropa.unidadesPorDefecto − (existente?.cantidad ?? 0)`; si `cantidad ≤ 0`, ya está al tope.
 8. **Población**: `poblacionDisponibleParaReclutar(plaza, origen) ≥ cantidad`, con `origen = poblacionDeTropa(tropa)`: escalón 1–2 → `pesants`, 3 → `artesanos`, 4–5 → `nobleza`.
    Disponible = nobleza → toda la nobleza; artesanos → `max(0, artesanos − trabajadoresRequeridosTransformacion)`; pesants → el excedente de mano de obra (`manoObraInfo.excedente`). No se recluta lo que ya hace falta para producir.
@@ -317,6 +321,7 @@ Todas lanzan `tropas.reclutamiento_invalido`:
 10. **Coste** (§11.3): el almacén lo cubre.
 11. **Reserva de trigo**: `almacén.trigo ≥ reservaDeTrigo(plaza, consumo del campamento actual, cantidad × MILITAR.racionPorSoldadoPorMinuto)`, con
     `reservaDeTrigo = (consumoComidaPoblacion + consumoTropas + consumoExtra) × RESERVA_CONSTRUCCION.horizonteMinutosComida` y `consumoTropas = Σ soldados del campamento × racionPorSoldadoPorMinuto`. Es la misma vara con la que construyen y salen los ejércitos.
+    En Rust (2026-11-10) el `consumoExtra` solo cuenta la escuadra que comerá del almacén: la que se va a una columna (la nueva de un ciudadano o la que se repone a la puerta) come de los víveres de esa columna y no entra en la reserva.
 
 ### 11.3 Coste
 
@@ -332,6 +337,7 @@ El oro y el equipo salen del **almacén de la plaza** (no del almacén personal 
 ### 11.4 Efecto
 
 - Si existe la escuadra: `cantidad += cantidad` (moral, nivel y experiencia **no cambian**). Si no: una nueva `escuadron-{plaza.id}-{ids.siguiente()}` con `PROGRESION_INICIAL` (nivel 1, experiencia 0, sin habilidades ni formaciones), `moral = 100`, `contenedor: campamento`, `enGuarnicion: false`.
+  La de un `ciudadano` (Rust, 2026-11-10) nace en `contenedor: ejercito {la columna con la que entró}` y la columna la apunta: recalcula su hambre y su velocidad, y la escuadra come de sus víveres desde ese momento. La paga igual la plaza (almacén y población), con la plaza como origen de la escuadra.
 - `plaza.poblacion[origen] −= cantidad`; `plaza.almacen −= coste`.
 - El comando suma a los contadores de la tecnología: `reclutados.escuadrones` si la escuadra es nueva, `reclutados.caballeria` (× 5 para `carros_guerra`) si es de Caballerizas, y `reclutados.{tropaId}` si esa tropa tiene logro cantado ([`Tecnologia_Aedas.md`](Tecnologia_Aedas.md)).
 - Anota en el historial del jugador `Recluta {n} de "{tropa}" en {plaza}` y emite `tropas.reclutadas { asentamientoId, heroeId, tropaId, origen, reclutados }` a la plaza.
@@ -892,7 +898,7 @@ Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; cont
 ```json
 [
   "heroe.almacen_personal", "heroe.creado", "heroe.herido", "heroe.puntos_repartidos", "heroe.reubicado", "heroe.sale_del_mundo", "heroe.se_desconecta", "heroe.viveres",
-  "heroe.vuelve_al_mundo", "tropas.desercion", "tropas.reclutadas"
+  "heroe.vuelve_al_mundo", "reclutamiento.cierre_a_ciudadanos", "tropas.desercion", "tropas.reclutadas"
 ]
 ```
 <!-- /eventos -->

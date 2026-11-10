@@ -244,18 +244,46 @@ fn la_mejora_automatica_no_arranca_sin_hueco_para_la_huella_nueva() {
 }
 
 #[test]
-fn el_ascenso_informa_todos_los_bloqueos_a_la_vez() {
+fn el_ascenso_informa_todos_los_bloqueos_a_la_vez_y_la_insolvencia_es_solo_una_advertencia() {
     let r = Reglas::cargar();
     let (mut a, mut s, mut w) = (Asentamiento::fundar(&r, 0, &[(Recurso::Madera, 50_000)], 3), SitiosLibres, SinMundo);
     let x = exterior!(&r, s, w);
-    let b = a.bloqueos_de_ascenso(0, &r, &x, false);
-    assert!(b.contains(&Bloqueo::FaltaPoblacion) && b.contains(&Bloqueo::FaltanEdificios) && b.contains(&Bloqueo::RecursosInsuficientes), "{b:?}");
-    assert!(b.iter().any(|x| matches!(x, Bloqueo::Insolvente(_))), "sin pueblo de cantera no hay ingreso de piedra para el nivel 2");
+    let b = a.bloqueos_de_ascenso(&r, false);
+    assert_eq!(b, vec![Bloqueo::FaltaPoblacion, Bloqueo::FaltanEdificios, Bloqueo::FaltaPueblo, Bloqueo::RecursosInsuficientes], "la insolvencia ya no bloquea (2026-11-10)");
+    // Sin pueblo de cantera no hay ingreso de piedra para el nivel 2: es la advertencia, con lo que llega y lo que pide.
+    let aviso = a.insolvencia_de_ascenso(0, &r, &x);
+    let piedra = aviso.iter().find(|f| f.recurso == Recurso::Piedra).expect("advierte de la piedra");
+    assert!(piedra.llega == 0 && piedra.pide > 0, "{piedra:?}");
     // Sin cupo de Facción: con el cupo del nivel 2 ocupado.
-    assert!(a.bloqueos_de_ascenso(0, &r, &x, true).contains(&Bloqueo::SinCupoDeFaccion));
-    // El techo provisional detiene en el nivel 4.
+    assert!(a.bloqueos_de_ascenso(&r, true).contains(&Bloqueo::SinCupoDeFaccion));
+    // El techo provisional detiene en el nivel 4, y allí no hay nivel siguiente del que advertir.
     a.nivel = 4;
-    assert!(a.bloqueos_de_ascenso(0, &r, &x, false).contains(&Bloqueo::NivelMaximo));
+    assert!(a.bloqueos_de_ascenso(&r, false).contains(&Bloqueo::NivelMaximo));
+    assert!(a.insolvencia_de_ascenso(0, &r, &x).is_empty());
+}
+
+#[test]
+fn una_plaza_que_no_cubre_el_mantenimiento_del_nivel_siguiente_sube_igual() {
+    let r = Reglas::cargar();
+    let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
+    // Cumple los requisitos del nivel 2: la población, los edificios (con su nivel) y un pueblo activo, una mina de cobre, que no trae piedra.
+    let req = &r.nivel.requisitos[&2];
+    (a.poblacion.pesants, a.poblacion.artesanos) = (req.pesants, req.artesanos);
+    let mut id = 500;
+    for (t, nivel) in req.edificios.iter().map(|&t| (t, req.nivel_interno_minimo.get(&t).copied().unwrap_or(1))).chain(req.con_nivel.iter().map(|(&t, &n)| (t, n))) {
+        let mut e = Edificio::nuevo(id, t, Estado::Activo);
+        e.nivel_interno = nivel;
+        a.edificios.push(e);
+        id += 1;
+    }
+    a.pueblos.push(pueblo_activo(&r, Tipo::MinaCobre, None));
+    assert_eq!(a.bloqueos_de_ascenso(&r, false), vec![], "nada bloquea la subida");
+    let x = exterior!(&r, s, w);
+    assert!(a.insolvencia_de_ascenso(0, &r, &x).iter().any(|f| f.recurso == Recurso::Piedra), "sin cantera no llega piedra");
+    drop(x);
+    let mut ev = vec![];
+    assert_eq!(a.solicitar_ascenso(0, &r, false, &mut ev), Ok(()), "la advertencia no impide subir");
+    assert_eq!(a.ascenso.map(|x| x.nivel_objetivo), Some(2));
 }
 
 #[test]
@@ -268,6 +296,21 @@ fn pausar_la_auto_construccion_y_las_recetas_es_idempotente() {
     assert!(a.alternar_receta(Recurso::LingoteCobre, false));
     a.calibrar_reserva(&r, Recurso::Madera, 5_000_000);
     assert_eq!(a.reserva_manual[Recurso::Madera.indice()], 999_000, "tope de la reserva manual");
+}
+
+#[test]
+fn pausar_el_consumo_vale_para_los_bienes_de_consumo_nunca_el_trigo_y_guarda_su_orden() {
+    let r = Reglas::cargar();
+    let mut a = Asentamiento::fundar(&r, 0, &[], 3);
+    assert_eq!(a.pausar_consumo(&r, Recurso::Trigo, true), Err(()), "el trigo nunca se pausa");
+    assert_eq!(a.pausar_consumo(&r, Recurso::Madera, true), Err(()), "la madera no es un bien de consumo");
+    assert_eq!(a.pausar_consumo(&r, Recurso::Aceite, true), Ok(true));
+    assert_eq!(a.pausar_consumo(&r, Recurso::Aceite, true), Ok(false), "ya estaba pausado");
+    assert_eq!(a.pausar_consumo(&r, Recurso::Carne, true), Ok(true));
+    let orden: Vec<Recurso> = r.poblacion.bienes.iter().map(|b| b.recurso).filter(|x| [Recurso::Aceite, Recurso::Carne].contains(x)).collect();
+    assert_eq!(a.consumo_pausado, orden, "en el orden de BIENES_DE_CONSUMO");
+    assert_eq!(a.pausar_consumo(&r, Recurso::Aceite, false), Ok(true));
+    assert_eq!(a.consumo_pausado, vec![Recurso::Carne]);
 }
 
 #[test]
@@ -297,9 +340,9 @@ fn lo_que_llega_por_acarreo_cuenta_en_la_solvencia_del_ascenso_y_el_pueblo_paga_
     let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
     let insolvente = |a: &Asentamiento, s: &mut SitiosLibres, w: &mut SinMundo| {
         let x = exterior!(&r, *s, *w);
-        a.bloqueos_de_ascenso(0, &r, &x, false).into_iter().find_map(|b| if let Bloqueo::Insolvente(v) = b { Some(v.into_iter().map(|f| f.recurso).collect::<Vec<_>>()) } else { None }).unwrap_or_default()
+        a.insolvencia_de_ascenso(0, &r, &x).into_iter().map(|f| f.recurso).collect::<Vec<_>>()
     };
-    // Al subir al nivel 2 se paga también piedra: sin ingreso de piedra no hay solvencia.
+    // Al subir al nivel 2 se paga también piedra: sin ingreso de piedra, la advertencia de solvencia la nombra.
     assert!(insolvente(&a, &mut s, &mut w).contains(&Recurso::Piedra));
     a.pueblos.push(pueblo_activo(&r, Tipo::Cantera, None));
     assert!(insolvente(&a, &mut s, &mut w).contains(&Recurso::Piedra), "un pueblo sin carro no entrega nada");

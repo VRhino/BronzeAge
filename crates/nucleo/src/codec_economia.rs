@@ -4,7 +4,7 @@
 //! Formato (BAN27: los almacenes guardan unidades enteras —cantidad múltiplo de 1000— y el resto oculto de sus flujos, en `(−1000, 1000)`; BAN20: BAN15 más los recintos de muralla de cada plaza, que ya no se guardan con su ciudad; BAN15 era BAN14, con la población entera, sus restos y la marca de recuperación del hambre, más las avanzadas de cada plaza; little endian, el de `codec`): `fundado_en i64 · nivel u32 · medidor{valor i64, racha u32, nivel_actual u32} ·
 //! población{pesants, artesanos, nobleza: i64 (habitantes enteros) · restos 3 × i64 (milésimas de habitante, uno por clase) · nutrición i64 · recuperando bool} · almacén{N × (cantidad i64, capacidad i64, resto i64)} · políticas{n u64 ·
 //! n × (id texto, cargo u8, expira_en i64)} · edificios{n u64 · n × edificio} · pueblos{n u64 · n × pueblo} · avanzadas{n u64 · n × avanzada} · recintos{n u64 · n × recinto} · ingresos_acarreo{n u64 · n × (recurso u8, hora i64, cantidad i64)} · siguiente_edificio u32 · ascenso{opt: nivel_objetivo u32,
-//! iniciado_en i64, completa_en i64} · recetas_pausadas{n u64 · n × recurso u8} · auto_pausada bool · reserva_manual N × i64 · ocupado
+//! iniciado_en i64, completa_en i64} · recetas_pausadas{n u64 · n × recurso u8} · consumo_pausado{n u64 · n × recurso u8} (BAN61) · auto_pausada bool · reserva_manual N × i64 · ocupado
 //! bool · completados_pendientes u32 · destruido bool · ultimo_minuto i64 · tendencia{almacén N × i64 · población 3 × i64}` (BAN22: la tendencia «+N/min» del último paso de minuto).
 //! Un edificio: `id u32 · tipo u8 · estado u8 · completa_en opt_i64 · prioridad i64 · nivel_interno u8 · mejora{bool, nivel u8,
 //! completa_en i64} · danado bool · fuente{u8: 0 ninguna, 1 nodo, 2 parcela; u32} · pausado_por_almacen bool · buey bool · receta{bool, recurso u8}` (BAN60: la receta activa de la bodega y la prensa).
@@ -279,6 +279,7 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
         siguiente_edificio,
         ascenso,
         recetas_pausadas,
+        consumo_pausado,
         auto_pausada,
         reserva_manual,
         ocupado,
@@ -286,6 +287,7 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
         destruido,
         ultimo_minuto,
         tendencia,
+        aviso_solvencia: _,
     } = a;
     w.i64(*fundado_en);
     w.u32(*nivel);
@@ -394,6 +396,8 @@ pub(crate) fn escribir(w: &mut Escritor, a: &Asentamiento) {
     }
     w.u64(recetas_pausadas.len() as u64);
     recetas_pausadas.iter().for_each(|&r| w.u8(recurso_a_u8(r)));
+    w.u64(consumo_pausado.len() as u64);
+    consumo_pausado.iter().for_each(|&r| w.u8(recurso_a_u8(r)));
     w.bool(*auto_pausada);
     reserva_manual.iter().for_each(|&x| w.i64(x));
     w.bool(*ocupado);
@@ -469,6 +473,7 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Asentamiento, ErrorFormato> {
     for _ in 0..r.cuenta()? {
         recetas_pausadas.push(recurso_de_u8(r.u8()?)?);
     }
+    let consumo_pausado = (0..r.cuenta()?).map(|_| recurso_de_u8(r.u8()?)).collect::<Result<Vec<_>, _>>()?;
     let auto_pausada = r.bool()?;
     let mut reserva_manual = [0; N];
     for x in reserva_manual.iter_mut() {
@@ -490,6 +495,7 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Asentamiento, ErrorFormato> {
         siguiente_edificio,
         ascenso,
         recetas_pausadas,
+        consumo_pausado,
         auto_pausada,
         reserva_manual,
         ocupado,
@@ -509,6 +515,7 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Asentamiento, ErrorFormato> {
             }
             t
         },
+        aviso_solvencia: Default::default(),
     })
 }
 

@@ -177,6 +177,7 @@ impl Nucleo {
             | Comando::ElegirReceta { .. }
             | Comando::AlternarAutoConstruccion { .. }
             | Comando::AlternarReceta { .. }
+            | Comando::PausarConsumo { .. }
             | Comando::CalibrarReserva { .. }
             | Comando::SolicitarAscenso { .. }
             | Comando::ActivarPolitica { .. }
@@ -279,6 +280,7 @@ impl Nucleo {
             | Comando::ComprarMirada { .. }
             | Comando::ComprarInformePlaza { .. }
             | Comando::ComprarInformeRegion { .. }
+            | Comando::ComprarRumor { .. }
             | Comando::GuardarEnAlmacenPersonal { .. }
             | Comando::SacarDelAlmacenPersonal { .. }
             | Comando::CargarCaravana { .. }
@@ -327,6 +329,7 @@ impl Nucleo {
             | Comando::CargarDePlaza { .. }
             | Comando::DejarEnPlaza { .. }
             | Comando::CerrarAlmacenACiudadanos { .. }
+            | Comando::CerrarReclutamientoACiudadanos { .. }
             | Comando::EncargarCaravana { .. }
             | Comando::TomarOrdenADistancia { .. }
             | Comando::CambiarEncargo { .. }

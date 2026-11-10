@@ -115,10 +115,10 @@ fn la_fundacion_pone_en_la_ciudad_los_mismos_edificios_iniciales_que_en_la_econo
 }
 
 #[test]
-fn el_gate_de_anclas_sin_ancla_de_industria_no_hay_sitio_en_nivel_1_y_en_el_nivel_2_nace_al_proponer() {
+fn el_gate_de_anclas_el_barrio_militar_espera_al_nivel_2_y_el_de_la_industria_nace_ya_en_el_1() {
     let re = ReglasEconomia::default();
     let mut urbe = Urbe::fundar(&re, 7, 1);
-    for t in [Tipo::Fundicion, Tipo::Armeria, Tipo::Curtiduria, Tipo::Barracon, Tipo::Carpinteria] {
+    for t in [Tipo::Barracon, Tipo::Carpinteria] {
         let mut ids = 100;
         let (cabe, anclas) = urbe.proponer(&re.urbanismo, t, &urbano(1), &mut ids);
         assert!(!cabe && anclas.is_empty() && ids == 100, "{t:?}: sin ancla de su barrio no hay sitio en el nivel 1, ni se crea");
@@ -127,25 +127,31 @@ fn el_gate_de_anclas_sin_ancla_de_industria_no_hay_sitio_en_nivel_1_y_en_el_nive
     for t in [Tipo::Almacen, Tipo::Vivienda] {
         assert_eq!(urbe.proponer(&re.urbanismo, t, &urbano(1), &mut 100), (true, vec![]), "{t:?}");
     }
-    // En el nivel 2, preguntar ya crea el ancla (como el TypeScript al proponer): un edificio gratuito con el id siguiente, que se queda
+    // El molino y el horno van con los talleres (autor, 2026-11-10), y el barrio de la industria crea su ancla desde el nivel 1
+    // (`nivelGateAnclasIndustria`): preguntar ya la crea (como el TypeScript al proponer), un edificio gratuito con el id siguiente que se queda
     // aunque el proyecto no se llegue a comprometer.
+    assert_eq!(re.urbanismo.clase(Tipo::Molino).map(|c| c.categoria), Some(Categoria::Industria));
+    assert_eq!(re.urbanismo.clase(Tipo::Horno).map(|c| c.categoria), Some(Categoria::Industria));
     let antes = urbe.ciudad().piezas().len();
     let mut ids = 50;
-    let (cabe, anclas) = urbe.proponer(&re.urbanismo, Tipo::Fundicion, &urbano(2), &mut ids);
+    let (cabe, anclas) = urbe.proponer(&re.urbanismo, Tipo::Molino, &urbano(1), &mut ids);
     assert!(cabe);
     assert_eq!((anclas.len(), anclas[0].id, anclas[0].tipo, ids), (1, 50, Tipo::PatioDeGremios, 51));
     assert_eq!(urbe.ciudad().piezas().len(), antes + 1, "el ancla ya está en la ciudad");
     let ancla = urbe.ciudad().pieza(50).unwrap();
     assert_eq!((ancla.rol, ancla.categoria), (Rol::AnclaSaturacion, Categoria::Industria));
     // Quien pregunta después encuentra el ancla: no nace otra.
-    assert_eq!(urbe.proponer(&re.urbanismo, Tipo::Armeria, &urbano(2), &mut ids), (true, vec![]));
+    assert_eq!(urbe.proponer(&re.urbanismo, Tipo::Horno, &urbano(1), &mut ids), (true, vec![]));
     assert_eq!(ids, 51);
-    // Al comprometer, la Fundición se coloca en su núcleo sin crear nada más.
-    let gratuitos = urbe.tomar(&re.urbanismo, 51, Tipo::Fundicion, &urbano(2), &mut 52).expect("hay sitio");
+    // Al comprometer, el molino se coloca en su núcleo sin crear nada más.
+    let gratuitos = urbe.tomar(&re.urbanismo, 51, Tipo::Molino, &urbano(1), &mut 52).expect("hay sitio");
     assert!(gratuitos.is_empty());
     assert_eq!(urbe.ciudad().pieza(51).unwrap().categoria, Categoria::Industria);
-    // Con el ancla puesta, la Armería ya cabe también en el nivel 1 (el gate solo vale para crear anclas).
-    assert!(urbe.proponer(&re.urbanismo, Tipo::Armeria, &urbano(1), &mut 52).0);
+    // Los demás barrios siguen esperando al nivel 2: allí el Barracón crea la Plaza de Armas al proponer.
+    let mut ids = 52;
+    let (cabe, anclas) = urbe.proponer(&re.urbanismo, Tipo::Barracon, &urbano(2), &mut ids);
+    assert!(cabe);
+    assert_eq!((anclas.len(), anclas[0].tipo, ids), (1, Tipo::PlazaDeArmas, 53));
 }
 
 #[test]
@@ -400,9 +406,9 @@ fn la_ciudad_se_guarda_en_la_foto_con_su_version_de_geometria_y_se_rechaza_otra(
     economia.recintos.push(asentamiento::recintos::Recinto { id: 1, nivel: 1, celdas: anillo, red_de_puertas: vec![trazado::CeldaDeRed { celda: Celda::new(42, 40), camino: false }], tras_pieza: 3, avance: 2, mejora: Some(asentamiento::recintos::Mejora { nivel: 2, avance: 0 }), siguiente_celda_en: Some(77), comprometido_en: 5, completado_en: Some(9) });
     urbe.set_recintos(asentamiento::recintos::proyeccion(&economia.recintos));
     assert_eq!(urbe.ciudad().recintos(), &[Recinto { muros: vec![Celda::new(40, 40), Celda::new(41, 40)], puertas: vec![Celda::new(42, 40)], red_de_puertas: vec![trazado::CeldaDeRed { celda: Celda::new(42, 40), camino: false }], tras_pieza: 3, completo: true }]);
-    s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, puerta: Default::default(), cargos: Default::default(), nombre: String::new(), capital_de: None, de_la_faccion_desde: 0, resto_tributo: 0, permite_reabastecer_aliados: false, almacen_cerrado_a_ciudadanos: false, fundadores: Vec::new() });
+    s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, puerta: Default::default(), cargos: Default::default(), nombre: String::new(), capital_de: None, de_la_faccion_desde: 0, resto_tributo: 0, permite_reabastecer_aliados: false, almacen_cerrado_a_ciudadanos: false, reclutamiento_cerrado_a_ciudadanos: false, fundadores: Vec::new() });
     let bytes = s.serializar();
-    assert_eq!(&bytes[..5], b"BAN60", "la foto es BAN60: ya no se admite ningún formato anterior");
+    assert_eq!(&bytes[..5], b"BAN61", "la foto es BAN61: ya no se admite ningún formato anterior");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "ida y vuelta idéntica");
     assert_eq!(vuelta.asentamientos, s.asentamientos);

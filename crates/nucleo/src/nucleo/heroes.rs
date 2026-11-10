@@ -64,7 +64,9 @@ fn rechazo_de_reclutamiento(e: ErrorReclutamiento) -> (&'static str, String) {
         ErrorReclutamiento::SinTecnologia => (RECLUTAMIENTO_SIN_TECNOLOGIA, "la Facción de la plaza no ha adoptado la tecnología de esa tropa".into()),
         ErrorReclutamiento::Reservada => (RECLUTAMIENTO_RESERVADA, "la escuadra está reservada para una batalla".into()),
         ErrorReclutamiento::YaLaTienesFuera(c) => (RECLUTAMIENTO_YA_LA_TIENES_FUERA, format!("ya tienes esa escuadra y no está aquí ({c:?}): solo se repone donde está")),
-        ErrorReclutamiento::SoloReponer => (RECLUTAMIENTO_SOLO_REPONER, "sin residir aquí solo se repone una escuadra que ya tienes en la plaza".into()),
+        ErrorReclutamiento::SoloReponer => (RECLUTAMIENTO_SOLO_REPONER, "la plaza ha cerrado el reclutamiento a los ciudadanos que no residen en ella: solo se repone una escuadra que ya tienes aquí".into()),
+        ErrorReclutamiento::SinColumna => (HEROE_SIN_COLUMNA, "sin residir aquí, la escuadra nueva va a la columna con la que entraste, y entraste sin columna".into()),
+        ErrorReclutamiento::SuperaLiderazgo => (LIDERAZGO_SUPERADO, "la escuadra nueva va a tu columna y pasa del Liderazgo del héroe".into()),
         ErrorReclutamiento::AlTope => (RECLUTAMIENTO_AL_TOPE, "la escuadra ya está completa".into()),
         ErrorReclutamiento::SinPoblacion { hacen_falta, disponibles, .. } => (RECLUTAMIENTO_SIN_POBLACION, format!("hacen falta {hacen_falta} y solo hay {disponibles} que no se necesiten para producir")),
         ErrorReclutamiento::SinEdificio => (RECLUTAMIENTO_SIN_EDIFICIO, "falta el edificio activo de ese nivel".into()),
@@ -465,9 +467,11 @@ impl Nucleo {
         self.autorizar_heroe(p, heroe, false)?;
         let h = self.heroe(heroe).expect("existe");
         let reside = h.heroe.residencia == Some(Residencia::Asentamiento(plaza32));
-        // Un vetado de la puerta de la plaza (5E) no repone en ella (`puedeReclutarEn`).
-        let vetado = self.estado.asentamientos[&asentamiento].puerta.vetados.contains(&heroe);
-        let permiso = reclutamiento::permiso(reside, h.faccion == Some(faccion), vetado);
+        // Un vetado de la puerta de la plaza (5E) no recluta ni repone en ella (`puedeReclutarEn`). Un ciudadano que no reside recluta escuadras nuevas, que se van a la columna con la
+        // que entró, salvo que la plaza lo haya cerrado a los ciudadanos (2026-11-10).
+        let a = &self.estado.asentamientos[&asentamiento];
+        let (vetado, cerrado) = (a.puerta.vetados.contains(&heroe), a.reclutamiento_cerrado_a_ciudadanos);
+        let permiso = reclutamiento::permiso(reside, h.faccion == Some(faccion), vetado, cerrado);
         if permiso == reclutamiento::Permiso::No {
             let (c, m) = rechazo_de_reclutamiento(ErrorReclutamiento::NoPuedes);
             return Err(Respuesta::rechazo(c, m, v));
@@ -476,6 +480,7 @@ impl Nucleo {
             return Err(Respuesta::rechazo(rechazos::HEROE_NO_ESTA_EN_LA_PLAZA, format!("el héroe no está dentro de as-{asentamiento}"), v));
         }
         let tecnologia_adoptada = self.tiene_tecnologia(faccion, &mr.tropas.tropa(tropa).tecnologia);
+        let columna = if reside { None } else { self.columna_que_lleva(heroe) };
         let soldados = self.soldados_del_campamento(asentamiento);
         let resumen = self
             .con_exterior(asentamiento, t, |eco, x| eco.resumen_de_reclutamiento(x.reglas, x))
@@ -494,7 +499,7 @@ impl Nucleo {
             consumo_poblacion: resumen.consumo_poblacion,
             soldados_en_el_campamento: soldados,
         };
-        let pedido = Pedido { heroe: &mut militar.heroes.get_mut(&heroe).expect("existe").heroe, tropa, permiso, reside, tecnologia_adoptada, distancia_de_columna: &distancia };
+        let pedido = Pedido { heroe: &mut militar.heroes.get_mut(&heroe).expect("existe").heroe, tropa, permiso, reside, tecnologia_adoptada, distancia_de_columna: &distancia, columna };
         let hecho = reclutamiento::reclutar(
             &mr,
             sitio,
@@ -510,6 +515,16 @@ impl Nucleo {
             Respuesta::rechazo(c, m, v)
         })?;
         self.tr.tocar(Clase::Asentamiento, asentamiento);
+        // La escuadra nueva de un ciudadano que no reside va en su columna: la columna la apunta y recalcula lo que come y su velocidad.
+        if let Some(cid) = hecho.columna {
+            let antes = self.velocidad_de_ejercito(cid).unwrap_or(0);
+            self.estado.ejercitos.get_mut(&cid).expect("es la columna que lleva").columna.escuadras.push(hecho.escuadra);
+            self.sincronizar_hambre(cid, t);
+            self.recomponer_columna(cid, t, antes);
+            self.tr.tocar(Clase::Ejercito, cid);
+            self.tr.tocar(Clase::Heroe, heroe);
+            self.tr.tocar(Clase::Escuadra, hecho.escuadra);
+        }
         // Los logros `reclutados.*` (6B), reponer incluido.
         self.contar(t, tecnologia::contador::reclutamiento(tropa.nombre(), mr.tropas.tropa(tropa).edificio, hecho.cantidad.max(0) as u64, hecho.nueva));
         self.avance_de_reclutamiento(t, heroe, mr.tropas.tropa(tropa).edificio, hecho.cantidad.max(0) as u64, hecho.nueva);
@@ -904,9 +919,11 @@ impl Nucleo {
             return;
         }
         let mr = self.estado.reglas.economia.militar.clone();
-        let bienes = self.estado.reglas.economia.datos.poblacion.guarnicion.clone();
+        let mut bienes = self.estado.reglas.economia.datos.poblacion.guarnicion.clone();
         let Estado { militar, asentamientos, .. } = &mut self.estado;
         let Some(a) = asentamientos.get_mut(&plaza) else { return };
+        // La carne pausada (`pausarConsumo`, 2026-11-10) tampoco la come la guarnición: se guarda entera.
+        bienes.retain(|b| !a.economia.consumo_pausado.contains(b));
         let almacen = &mut a.economia.almacen;
         let mut consumido = 0;
         for recurso in bienes.into_iter().chain([Recurso::Trigo]) {

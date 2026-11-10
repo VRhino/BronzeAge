@@ -47,7 +47,6 @@ fn clase(b: &Bloqueo) -> usize {
         Bloqueo::FaltanEdificios | Bloqueo::FaltaPueblo => 3,
         Bloqueo::SinCupoDeFaccion => 4,
         Bloqueo::RecursosInsuficientes => 5,
-        Bloqueo::Insolvente(_) => 6,
     }
 }
 
@@ -325,9 +324,13 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
     // La política del jugador: cada hora, si nada lo bloquea, pide la subida. Cada plaza es de una Facción distinta de nivel 1 (cupo ocupado 0: sin cupo solo si el cupo es 0).
     if minuto % CADA_MIN_ASCENSO == 0 && a.ascenso.is_none() {
         let sin_cupo = politica::nivel::cupo_nivel(&reglas_politica().nivel, 1, a.nivel + 1) == Some(0);
-        let bloqueos = a.bloqueos_de_ascenso(t, reglas, &x, sin_cupo);
+        let bloqueos = a.bloqueos_de_ascenso(reglas, sin_cupo);
         if a.nivel == 1 {
-            let clases: Vec<usize> = bloqueos.iter().map(clase).collect();
+            let mut clases: Vec<usize> = bloqueos.iter().map(clase).collect();
+            // La clase 6 es la advertencia de solvencia del nivel siguiente: desde el 2026-11-10 no bloquea la subida, pero se sigue midiendo.
+            if !a.insolvencia_de_ascenso(t, reglas, &x).is_empty() {
+                clases.push(6);
+            }
             reg.comprobaciones_n1 += 1;
             for k in 0..7 {
                 if clases.contains(&k) {
@@ -338,7 +341,7 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
             }
             reg.ultimos_bloqueos = clases;
         }
-        if bloqueos.is_empty() && a.solicitar_ascenso(t, reglas, &x, sin_cupo, &mut ev).is_ok() {
+        if bloqueos.is_empty() && a.solicitar_ascenso(t, reglas, sin_cupo, &mut ev).is_ok() {
             reg.ascenso_pedido.get_or_insert(minuto);
         }
     }

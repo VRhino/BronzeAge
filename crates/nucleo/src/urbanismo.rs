@@ -49,6 +49,8 @@ pub struct Urbanismo {
     granja: Vec<Huella>,
     /// `RADIO_CIUDAD` (T §12): inicial, crecimiento por edificio y tope por nivel, en unidades locales.
     radio: (i32, i32, [i32; 5]),
+    /// `NECESIDADES.nivelGateAnclasIndustria`: el nivel operativo desde el que el barrio de la industria crea su ancla (T §7.1).
+    gate_industria: u32,
 }
 
 fn huella_de(v: &serde_json::Value) -> Huella {
@@ -79,7 +81,7 @@ impl Urbanismo {
         let ul = |v: &serde_json::Value| v.as_i64().expect("RADIO_CIUDAD en unidades locales enteras") as i32;
         let topes: Vec<i32> = rc["maximoPorNivel"].as_array().expect("maximoPorNivel es una lista").iter().map(ul).collect();
         let radio = (ul(&rc["inicial"]), ul(&rc["crecimientoPorEdificio"]), topes.try_into().expect("maximoPorNivel: un tope por nivel 1-5"));
-        Self { defecto, por_tipo, forma_puesto, puestos_por_nivel, granja, radio }
+        Self { defecto, por_tipo, forma_puesto, puestos_por_nivel, granja, radio, gate_industria: eco.construccion.necesidades.nivel_gate_anclas_industria }
     }
 
     /// Huella sin girar de un tipo a ese nivel interno: la Granja por nivel, el puesto del Mercado por su forma, el resto por tipo.
@@ -107,9 +109,9 @@ impl Urbanismo {
             Tipo::Palacio | Tipo::Almacen | Tipo::Granero | Tipo::Lenera | Tipo::Taberna | Tipo::SalaConsejo => (Generico, Rol::Normal, true),
             Tipo::Vivienda => (Residencial, Rol::Normal, true),
             Tipo::Fundicion | Tipo::Curtiduria | Tipo::Armeria | Tipo::GranFundicion | Tipo::Maravilla => (Industria, Rol::Normal, true),
-            // El molino y el horno se hacen desde el nivel 1, cuando el barrio de la industria aún no tiene ancla (`nivelGateAnclas`): van sueltos.
-            Tipo::Molino | Tipo::Horno => (Generico, Rol::Normal, true),
-            Tipo::Quesera | Tipo::Bodega | Tipo::Prensa => (Industria, Rol::Normal, true),
+            // El molino y el horno van con los talleres (autor, 2026-11-10): se hacen desde el nivel 1, y el barrio de la industria crea su ancla
+            // desde ese nivel (`nivelGateAnclasIndustria`), antes que los demás.
+            Tipo::Molino | Tipo::Horno | Tipo::Quesera | Tipo::Bodega | Tipo::Prensa => (Industria, Rol::Normal, true),
             Tipo::Estatua => (Residencial, Rol::Normal, true),
             Tipo::Barracon | Tipo::GaleriaDeTiro | Tipo::Caballerizas | Tipo::Carpinteria => (Militar, Rol::Normal, true),
             Tipo::Mercado => (Mercado, Rol::AnclaPrimaria, true),
@@ -120,6 +122,17 @@ impl Urbanismo {
             Tipo::Cantera | Tipo::Mina | Tipo::MinaCobre | Tipo::MinaEstano | Tipo::MinaHierro => return None,
         };
         Some(Clase { categoria, rol, rota })
+    }
+
+    /// El nivel que el trazado compara con su gate de anclas (`nivelGateAnclas`) para un tipo de la categoría `c` en una plaza de nivel operativo
+    /// `nivel`. El barrio de la industria abre el suyo antes (`nivelGateAnclasIndustria`): desde ese nivel se le da por abierto.
+    fn nivel_para_anclas(&self, c: Categoria, nivel: u32, gate: u8) -> u8 {
+        let n = nivel.min(255) as u8;
+        if c == Categoria::Industria && nivel >= self.gate_industria {
+            n.max(gate)
+        } else {
+            n
+        }
     }
 
     /// Los tipos de ancla de saturación de una categoría, en el orden de T §7.1 (el sorteo indexa en él).
@@ -281,7 +294,7 @@ impl Urbe {
     }
 
     /// La clave de una consulta sobre un tipo (`None` = sin tipo concreto: la mudanza de una pieza ya colocada).
-    fn clave(&self, u: &Urbano, clase: Option<Clase>) -> Clave {
+    fn clave(&self, urb: &Urbanismo, u: &Urbano, clase: Option<Clase>) -> Clave {
         let prm = self.ciudad.params();
         let mut radio = radio_ciudad(prm, u.completados, u.nivel.min(255) as u8);
         let crea_ancla = clase.is_some_and(|c| c.rol == Rol::Normal && c.categoria.tiene_barrio() && c.categoria != Categoria::Mercado);
@@ -293,7 +306,7 @@ impl Urbe {
             rev: self.rev,
             radio,
             siguiente_id: if crea_ancla { u.siguiente_id } else { 0 },
-            gate_abierto: crea_ancla && u.nivel_operativo >= prm.nivel_gate_anclas as u32,
+            gate_abierto: crea_ancla && clase.is_some_and(|c| urb.nivel_para_anclas(c.categoria, u.nivel_operativo, prm.nivel_gate_anclas) >= prm.nivel_gate_anclas),
             perfil: self.perfil(u),
         }
     }
@@ -312,7 +325,7 @@ impl Urbe {
             return (false, vec![]);
         }
         let u = Urbano { siguiente_id: *ids, ..*u };
-        let k = self.clave(&u, Some(clase));
+        let k = self.clave(urb, &u, Some(clase));
         if let Some(r) = self.cache.buscar(Consulta::Cabe(tipo), k) {
             return (r, vec![]);
         }
@@ -320,7 +333,7 @@ impl Urbe {
         let mut anclas = vec![];
         if clase.rol == Rol::Normal && clase.categoria.tiene_barrio() {
             let antes = self.ciudad.piezas().to_vec();
-            if let Ancla::Creada(a) = self.ciudad.asegurar_ancla_para(&ped, *ids, u.nivel_operativo.min(255) as u8, &urb.opciones_ancla(clase.categoria)) {
+            if let Ancla::Creada(a) = self.ciudad.asegurar_ancla_para(&ped, *ids, urb.nivel_para_anclas(clase.categoria, u.nivel_operativo, self.ciudad.params().nivel_gate_anclas), &urb.opciones_ancla(clase.categoria)) {
                 anclas.push(Gratuito { id: a, tipo: TIPOS[self.ciudad.pieza(a).expect("recién creada").tipo as usize], nivel_interno: 1 });
                 *ids += 1;
             }
@@ -329,7 +342,7 @@ impl Urbe {
             }
         }
         let cabe = self.ciudad.siguiente_sitio(&ped).is_some();
-        let k = self.clave(&Urbano { siguiente_id: *ids, ..u }, Some(clase));
+        let k = self.clave(urb, &Urbano { siguiente_id: *ids, ..u }, Some(clase));
         self.cache.poner(Consulta::Cabe(tipo), k, cabe);
         (cabe, anclas)
     }
@@ -339,13 +352,13 @@ impl Urbe {
     /// y la ciudad queda intacta.
     pub fn tomar(&mut self, urb: &Urbanismo, id: u32, tipo: Tipo, u: &Urbano, ids: &mut u32) -> Option<Vec<Gratuito>> {
         let Some(clase) = urb.clase(tipo) else { return Some(vec![]) };
-        let k = self.clave(u, Some(clase));
+        let k = self.clave(urb, u, Some(clase));
         let ped = Self::pedido(urb, clase, id, tipo, 1, &k);
         let (mut gratuitos, mut sig) = (vec![], *ids);
         if clase.rol == Rol::Normal && clase.categoria.tiene_barrio() {
             // Sobre una copia: si luego no cabe, ni el ancla ni sus marcas de «llena» se quedan.
             let mut copia = self.ciudad.clone();
-            if let Ancla::Creada(a) = copia.asegurar_ancla_para(&ped, sig, u.nivel_operativo.min(255) as u8, &urb.opciones_ancla(clase.categoria)) {
+            if let Ancla::Creada(a) = copia.asegurar_ancla_para(&ped, sig, urb.nivel_para_anclas(clase.categoria, u.nivel_operativo, copia.params().nivel_gate_anclas), &urb.opciones_ancla(clase.categoria)) {
                 gratuitos.push(Gratuito { id: a, tipo: TIPOS[copia.pieza(a)?.tipo as usize], nivel_interno: 1 });
                 sig += 1;
             }
@@ -363,7 +376,7 @@ impl Urbe {
     /// silencio (Economia_Construccion §6.6).
     pub fn puestos(&mut self, urb: &Urbanismo, nivel_mercado: u8, u: &Urbano, ids: &mut u32) -> Vec<Gratuito> {
         let clase = urb.clase(Tipo::PuestoMercado).expect("el puesto del Mercado está en la rejilla");
-        let k = self.clave(u, Some(clase));
+        let k = self.clave(urb, u, Some(clase));
         let mut puestos = vec![];
         for &forma in urb.puestos(nivel_mercado) {
             let ped = Self::pedido(urb, clase, *ids, Tipo::PuestoMercado, forma, &k);
@@ -390,7 +403,7 @@ impl Urbe {
     /// pregunta cada minuto y no debe barrer el suelo cada vez.
     pub fn hueco_al_mejorar(&mut self, urb: &Urbanismo, id: u32, tipo: Tipo, nivel: u8, u: &Urbano) -> bool {
         let Some(h) = self.huella_nueva(urb, id, tipo, nivel) else { return true };
-        let k = self.clave(u, None);
+        let k = self.clave(urb, u, None);
         if let Some(r) = self.cache.buscar(Consulta::Mudar(id, nivel), k) {
             return r;
         }
@@ -402,7 +415,7 @@ impl Urbe {
     /// Muda el edificio a un hueco de su huella nueva (T §6.7), conservando su sitio en el orden de construcción. `false` = no hay hueco.
     pub fn reubicar(&mut self, urb: &Urbanismo, id: u32, tipo: Tipo, nivel: u8, u: &Urbano) -> bool {
         let Some(h) = self.huella_nueva(urb, id, tipo, nivel) else { return true };
-        let k = self.clave(u, None);
+        let k = self.clave(urb, u, None);
         if self.cache.buscar(Consulta::Mudar(id, nivel), k) == Some(false) {
             return false;
         }

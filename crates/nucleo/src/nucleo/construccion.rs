@@ -31,7 +31,7 @@ use crate::economia::{FuentesMundo, SitiosPlaza};
 use crate::estado::{SucesoCombate, PRIO_ASENTAMIENTO, PRIO_CADUCA_POLITICA, PRIO_FIN_DE_OBRAS};
 use crate::estado_combate::entidad_obra_de_avanzada;
 use base::MS_POR_MINUTO;
-use asentamiento::asentamiento::{Evento as EventoEco, Exterior, Tendencia};
+use asentamiento::asentamiento::{AvisoSolvencia, Evento as EventoEco, Exterior, Tendencia};
 use asentamiento::ascenso::Bloqueo;
 use asentamiento::catalogo::Tipo;
 use asentamiento::datos::UNO;
@@ -115,21 +115,7 @@ fn rechazo_de_bloqueo(b: &Bloqueo) -> (&'static str, String) {
         Bloqueo::FaltaPueblo => (ASCENSO_FALTA_ALDEA, "falta un pueblo activo: una aldea agrícola o un pueblo extractor".into()),
         Bloqueo::SinCupoDeFaccion => (ASCENSO_SIN_CUPO_DE_FACCION, "la Facción no tiene cupo para ese nivel".into()),
         Bloqueo::RecursosInsuficientes => (ASCENSO_RECURSOS_INSUFICIENTES, "faltan recursos para la obra de ascenso".into()),
-        Bloqueo::Insolvente(r) => (
-            ASCENSO_INSOLVENTE,
-            format!(
-                "no cubriría el mantenimiento del nivel nuevo: {}",
-                r.iter().map(|f| format!("{} (llegan {} por minuto y pide {})", f.recurso.nombre(), por_minuto(f.llega, false), por_minuto(f.pide, true))).collect::<Vec<_>>().join(", ")
-            ),
-        ),
     }
-}
-
-/// Una cifra por minuto en milésimas, con un decimal y coma: lo que llega, redondeado hacia abajo, y lo que se pide, hacia arriba, para que el
-/// mensaje nunca enseñe como suficiente lo que no lo es.
-fn por_minuto(mil: Mil, arriba: bool) -> String {
-    let decimas = if arriba { (mil.max(0) + 99) / 100 } else { mil.max(0) / 100 };
-    format!("{},{}", decimas / 10, decimas % 10)
 }
 
 fn rechazo_de_politica(e: ErrorPolitica) -> (&'static str, &'static str) {
@@ -355,6 +341,8 @@ impl Nucleo {
             let sucesos = eco.avanzar_minuto(t, x);
             let flujos = eco.almacen.tomar_flujos();
             eco.tendencia = Tendencia { producido: flujos.producido, consumido: flujos.consumido, produccion: flujos.produccion, ..Contadores::de(eco).tendencia(&antes) };
+            // La advertencia de solvencia del nivel siguiente (2026-11-10), para la proyección: ya no bloquea la subida.
+            eco.aviso_solvencia = AvisoSolvencia(eco.insolvencia_de_ascenso(t, x.reglas, x));
             (sucesos, x.racion_guarnicion)
         }) else {
             return;
@@ -614,6 +602,7 @@ impl Nucleo {
         | Comando::ElegirReceta { asentamiento, .. }
         | Comando::AlternarAutoConstruccion { asentamiento, .. }
         | Comando::AlternarReceta { asentamiento, .. }
+        | Comando::PausarConsumo { asentamiento, .. }
         | Comando::CalibrarReserva { asentamiento, .. }
         | Comando::SolicitarAscenso { asentamiento }
         | Comando::ActivarPolitica { asentamiento, .. }) = &p.comando
@@ -719,6 +708,14 @@ impl Nucleo {
                 }
                 self.emitir_propio(t, "construccion.receta_alternada", vec![id], vec![("recurso", recurso_a_u8(*recurso) as i64), ("pausada", *pausada as i64)]);
             }
+            Comando::PausarConsumo { recurso, pausado, .. } => {
+                match self.estado.asentamientos.get_mut(&id).expect("existe").economia.pausar_consumo(&datos, *recurso, *pausado) {
+                    Err(()) => return Err(rechazo(rechazos::CONSUMO_NO_SE_PAUSA, format!("{} no es un bien de consumo que se pueda pausar (el trigo nunca se pausa)", recurso.nombre()))),
+                    Ok(false) => return Err(sin_cambios()),
+                    Ok(true) => {}
+                }
+                self.emitir_propio(t, "consumo.pausado", vec![id], vec![("recurso", recurso_a_u8(*recurso) as i64), ("pausado", *pausado as i64)]);
+            }
             Comando::CalibrarReserva { recurso, valor, .. } => {
                 let eco = &mut self.estado.asentamientos.get_mut(&id).expect("existe").economia;
                 let antes = eco.reserva_manual[recurso.indice()];
@@ -735,7 +732,7 @@ impl Nucleo {
                 let (r, ev) = self
                     .con_exterior(id, t, |eco, x| {
                         let mut ev = vec![];
-                        (eco.solicitar_ascenso(t, x.reglas, x, sin_cupo, &mut ev), ev)
+                        (eco.solicitar_ascenso(t, x.reglas, sin_cupo, &mut ev), ev)
                     })
                     .expect("la plaza existe y hay mundo");
                 if let Err(bloqueos) = r {

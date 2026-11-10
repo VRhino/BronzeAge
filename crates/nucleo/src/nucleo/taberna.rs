@@ -8,12 +8,15 @@
 //! Desde la tanda 69 (§7) la taberna de una plaza vende también el **informe de una región** del relieve: las plazas de la región, que quedan en la memoria como fichas, o sus órdenes de mercado,
 //! que llegan en la `VISTA` mientras el informe vale y se pueden tomar a distancia (`encargos.rs`). Entran todas las plazas de la región menos las de la Facción y las de una Facción en guerra con ella.
 //!
+//! Desde el 2026-11-10 la taberna (de plaza o de campamento) vende también **rumores**: el de las vetas de estaño deja explorado, en la memoria de la Facción, el terreno alrededor de cada
+//! yacimiento de estaño de la región de la taberna que aún no tenía explorado.
+//!
 //! En una plaza compra el Rey, el Embajador o el Gobernador, **dentro** de ella (Niebla_De_Guerra §6.1, Proyecciones `compraIntel`; 5E): la columna a la puerta ya no basta.
 
 use super::*;
 use crate::estado::Asentamiento;
 use crate::estado_militar::Relacion;
-use crate::memoria::{DatosSitio, EdificioVisto, InformeDePlaza, Mirada, OrigenIntel, Sitio, TipoInformeRegion};
+use crate::memoria::{DatosSitio, EdificioVisto, InformeDePlaza, Mirada, OrigenIntel, Sitio, TipoInformeRegion, TipoRumor};
 use asentamiento::catalogo::Tipo;
 use asentamiento::edificio::Estado as EstadoEdificio;
 use asentamiento::Recurso;
@@ -162,7 +165,7 @@ impl Nucleo {
         Ok(())
     }
 
-    /// `ComprarMirada`, `ComprarInformePlaza` y `ComprarInformeRegion`. `Ok(Some(id))` = la Mirada comprada; `Ok(None)` = un Informe; los rechazos no tocan nada.
+    /// `ComprarMirada`, `ComprarInformePlaza`, `ComprarInformeRegion` y `ComprarRumor`. `Ok(Some(id))` = la Mirada comprada; `Ok(None)` = un Informe o un rumor; los rechazos no tocan nada.
     pub(super) fn ejecutar_taberna(&mut self, t: Instante, p: &Peticion) -> Result<Option<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: &str| Respuesta::rechazo(c, m, v);
@@ -245,6 +248,33 @@ impl Nucleo {
                     memoria.anotar(compra.faccion, sitio, datos, t);
                 }
                 // La Facción propia lleva sus informes de región (`Faccion.informes_region`).
+                self.tr.tocar(Clase::Faccion, u64::from(compra.faccion));
+                Ok(None)
+            }
+            Comando::ComprarRumor { heroe, origen, tipo } => {
+                let compra = self.resolver_compra(t, p, heroe, origen)?;
+                let region = self.region_en(compra.posicion).ok_or_else(|| rechazo(rechazos::SIN_MUNDO, "la taberna no cae en ninguna región del mundo"))?;
+                let vacia = self.estado.memoria.vacia().ok_or_else(|| rechazo(rechazos::SIN_MUNDO, "el núcleo no tiene mundo cargado"))?;
+                let (precio, radio, nodo) = match tipo {
+                    TipoRumor::VetasEstano => (ri.oro_rumor_estano, ri.radio_rumor_estano, Tipo::MinaEstano),
+                };
+                // Los yacimientos de ese tipo de la región de la taberna que la Facción aún no tiene explorados: sin ninguno, no hay nada que vender.
+                let geo = self.geografia.as_ref().expect("hay región, luego hay mundo");
+                let conocido = self.estado.memoria.exploracion.get(&compra.faccion);
+                let nuevos: Vec<Punto> = (geo.mapa.nodos.iter())
+                    .filter(|x| x.tipo == nodo && geo.region_en(x.pos) == Some(region))
+                    .map(|x| x.pos)
+                    .filter(|&x| !conocido.is_some_and(|m| m.explorado_en(x)))
+                    .collect();
+                if nuevos.is_empty() {
+                    return Err(rechazo(rechazos::RUMOR_SIN_NOVEDAD, "tu Facción ya conoce todo lo que cuenta ese rumor en esta región"));
+                }
+                self.cobrar(&compra.bolsa, precio)?;
+                // Lo que se cuenta queda explorado (no visto): como lo que anduvo una columna. No avisa a nadie.
+                let mascara = self.estado.memoria.exploracion.entry(compra.faccion).or_insert(vacia);
+                for x in nuevos {
+                    mascara.marcar_vision(x, radio);
+                }
                 self.tr.tocar(Clase::Faccion, u64::from(compra.faccion));
                 Ok(None)
             }
