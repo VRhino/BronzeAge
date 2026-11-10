@@ -439,16 +439,17 @@ fn renombrar_una_caravana_recorta_el_nombre_lo_proyecta_y_viaja_en_la_foto() {
     let nombre = |e: &Esc| e.n.caravana(k).unwrap().nombre.clone();
     let proyectado = |e: &Esc| nucleo::proyeccion::propios::caravana(&e.n, e.n.caravana(k).unwrap()).nombre;
     assert_eq!((nombre(&e), proyectado(&e)), (String::new(), None), "sin nombre se muestra su id");
-    // Lo da quien reside en el origen y está dentro: ana, que salió con su columna, no; beto, residente y dentro, sí.
-    assert_eq!(e.no("ana", Comando::RenombrarCaravana { caravana: k, nombre: "Fuera".into() }), rechazos::NO_AUTORIZADO);
+    // Lo da quien reside en el origen y está dentro o, desde el 2026-11-10, con su columna a la puerta: beto, residente pero en un campamento, no; dentro, sí; ana, que salió con su
+    // columna y espera a la puerta, también.
     let beto = e.heroe("beto", 0);
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: beto, faccion: Some(1) });
     e.ok("admin", Comando::FijarResidencia { heroe: beto, residencia: Some(Residencia::Asentamiento(a as u32)) });
+    assert_eq!(e.no("beto", Comando::RenombrarCaravana { caravana: k, nombre: "Fuera".into() }), rechazos::NO_AUTORIZADO);
     e.ok("admin", Comando::ColocarHeroe { heroe: beto, ubicacion: Ubicacion::Asentamiento(a as u32) });
     e.ok("beto", Comando::RenombrarCaravana { caravana: k, nombre: "  La de Tirinto  ".into() });
     assert_eq!((nombre(&e), proyectado(&e)), ("La de Tirinto".to_owned(), Some("La de Tirinto".to_owned())));
-    let r = e.ord("beto", Comando::RenombrarCaravana { caravana: k, nombre: "La de Tirinto".into() });
-    assert_eq!(r.resultado, Resultado::SinCambios);
+    let r = e.ord("ana", Comando::RenombrarCaravana { caravana: k, nombre: "La de Tirinto".into() });
+    assert_eq!(r.resultado, Resultado::SinCambios, "ana, a la puerta, la manda: el mismo nombre no cambia nada");
     let renombrada: Vec<_> = e.n.cambios_desde(0).unwrap().flat_map(|c| c.eventos.iter()).filter(|x| x.codigo == "comercio.caravana_renombrada").cloned().collect();
     assert_eq!(renombrada.len(), 1);
     assert_eq!((dato(&renombrada[0].datos, "caravana") as u64, renombrada[0].valores.clone()), (k, vec![("nombre", Dato::Texto("La de Tirinto".into()))]));
@@ -458,7 +459,7 @@ fn renombrar_una_caravana_recorta_el_nombre_lo_proyecta_y_viaja_en_la_foto() {
     // Viaja en la foto (BAN55).
     let (reglas, hash) = (Reglas::default(), m.0.hash().to_string());
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN60");
+    assert_eq!(&bytes[..5], b"BAN61");
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     assert_eq!(s.comercio.flota.iter().find(|c| c.id == k).unwrap().nombre, "á".repeat(32));
     // Vacío: se queda sin nombre.

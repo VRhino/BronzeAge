@@ -85,6 +85,15 @@ message OrdenAlternarReceta {
   bool pausada = 3;
 }
 
+// El Gobernador o el Tesorero pausa (o reanuda) el consumo de un bien de consumo en la plaza (2026-11-10): pausado, la población no lo come (pierde su empuje al
+// crecimiento) y la guarnición no come la carne; se acumula en el almacén para venderlo. Vale para carne, pan, queso, vino, cerveza y aceite; el trigo nunca se pausa.
+// Rechazos: `consumo.no_se_pausa`. Sin cambios: `SIN_CAMBIOS`.
+message OrdenPausarConsumo {
+  string asentamiento_id = 1;
+  string recurso = 2;  // id de catálogo: carne | pan | queso | vino | cerveza | aceite
+  bool pausado = 3;
+}
+
 message OrdenAnadirEdificioManualmente {
   string asentamiento_id = 1;
   string cargo = 2;  // gobernador | maestroObras
@@ -250,6 +259,19 @@ message OrdenComprarInformePlaza {
 message OrdenComprarInformeRegion {
   string asentamiento_id = 1;
   string tipo = 2;  // plazas | ordenes
+}
+
+// Compra un rumor en la taberna de una plaza de la Facción del héroe (dentro; Rey, Embajador o Gobernador; paga el almacén de la plaza) o en la de un campamento de mercenarios
+// (cualquier héroe con Facción; paga su almacén personal si reside allí o el carro de su columna) (2026-11-10). El único tipo por ahora, `vetas_estano`: el terreno alrededor de
+// cada yacimiento de estaño de la región del relieve de la taberna queda explorado para la Facción (`INTEL.rumores.vetasEstano`: precio en oro y radio). Si la Facción ya
+// tenía explorados todos esos sitios, se rechaza sin cobrar (`rumor.sin_novedad`).
+message OrdenComprarRumor {
+  message Origen {
+    string tipo = 1;  // asentamiento | campamento
+    string id = 2;
+  }
+  Origen origen = 1;
+  string tipo = 2;  // vetas_estano
 }
 
 message OrdenComprarMirada {
@@ -479,6 +501,13 @@ message OrdenDejarEnPlaza {
 
 // El Gobernador cierra (o abre) a los ciudadanos el sacar del almacén de la plaza al carro (`cargar_de_plaza`) (2026-10-29).
 message OrdenCerrarAlmacenACiudadanos {
+  string asentamiento_id = 1;
+  bool cerrado = 2;
+}
+
+// El Gobernador o un General cierra (o abre) a los ciudadanos que no residen en la plaza el reclutar escuadras nuevas en ella (`reclutar_tropa`; 2026-11-10). Cerrado
+// (`Asentamiento.reclutamiento_cerrado_a_ciudadanos`), solo reponen las que ya tienen allí. Sin cambios: `SIN_CAMBIOS`.
+message OrdenCerrarReclutamientoACiudadanos {
   string asentamiento_id = 1;
   bool cerrado = 2;
 }
@@ -1348,5 +1377,8 @@ message Orden {
     OrdenComprarInformeRegion comprar_informe_region = 185;
     OrdenTomarOrdenADistancia tomar_orden_a_distancia = 186;
     OrdenElegirReceta elegir_receta = 187;
+    OrdenCerrarReclutamientoACiudadanos cerrar_reclutamiento_a_ciudadanos = 188;
+    OrdenPausarConsumo pausar_consumo = 189;
+    OrdenComprarRumor comprar_rumor = 190;
   }
 }

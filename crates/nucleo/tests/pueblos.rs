@@ -1250,7 +1250,7 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
     e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN60");
+    assert_eq!(&bytes[..5], b"BAN61");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
@@ -1316,7 +1316,7 @@ fn el_pueblo_ajeno_se_recuerda_como_una_ciudad_y_se_olvida_cuando_se_vuelve_a_mi
     e.ok("beto", Comando::MarcharA { ejercito: col, destino: lejos });
     let fin = e.n.ejercito(col).unwrap().plan.fin().unwrap();
     e.n.avanzar_hasta(fin + MIN);
-    let ficha = e.n.estado().memoria.fichas[&2][&Sitio::Pueblo(pueblo)];
+    let ficha = e.n.estado().memoria.fichas[&2][&Sitio::Pueblo(pueblo)].clone();
     assert_eq!((ficha.datos.faccion, ficha.datos.posicion), (1, sitio), "lo vio al pasar y lo recuerda");
     let id = nucleo::proyeccion::ids::pueblo(pueblo);
     let recordado = |n: &Nucleo| {
@@ -1714,7 +1714,7 @@ fn dentro_un_ciudadano_de_la_faccion_deja_escuadras_de_su_columna_de_guarnicion_
     let mut e = montar(m, 7, 2);
     let pueblo = e.pueblo_levantado();
     let cupo = e.n.cupo_de_guarnicion_de_pueblo(pueblo).unwrap();
-    assert_eq!(cupo, 30, "un extractor es siempre de nivel 1");
+    assert_eq!(cupo, 30, "un extractor de nivel 1");
     let caben = (cupo / coste(Tropa::MiliciaLanceros)) as usize;
     assert!(caben >= 1);
     let (c0, h0) = e.visita("ana", 1, pueblo);
@@ -1727,7 +1727,6 @@ fn dentro_un_ciudadano_de_la_faccion_deja_escuadras_de_su_columna_de_guarnicion_
     e.avanzar(0);
     let (v, hash) = (e.n.version(), e.n.hash_estado());
     let guarnecer = |escuadras: &[u64]| Comando::GuarnecerPueblo { heroe: h0, pueblo, escuadras: escuadras.to_vec() };
-    assert_eq!(e.rechazada("ana", guarnecer(&escuadras[..1])), rechazos::HEROE_NO_ESTA_EN_EL_PUEBLO, "desde fuera, no");
     assert_eq!(e.rechazada("neu", Comando::GuarnecerPueblo { heroe: neutral, pueblo, escuadras: vec![suya] }), rechazos::PUEBLO_FACCION_AJENA, "solo los ciudadanos de la Facción de la madre");
     assert_eq!((e.n.version(), e.n.hash_estado()), (v, hash));
     e.ok("ana", Comando::EntrarEnPueblo { pueblo, heroe: h0 });
@@ -1774,6 +1773,40 @@ fn dentro_un_ciudadano_de_la_faccion_deja_escuadras_de_su_columna_de_guarnicion_
     e.ok("ana", Comando::DestruirPueblo { pueblo });
     assert!(escuadras[1..caben].iter().all(|&s| e.contenedor(h0, s) == Contenedor::Campamento));
     assert!(e.n.heroe(h0).unwrap().heroe.escuadras.iter().all(|s| s.cantidad == 25), "intactas");
+}
+
+#[test]
+fn a_la_puerta_con_su_columna_tambien_se_deja_y_se_recoge_la_guarnicion_del_pueblo() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let pueblo = e.pueblo_levantado();
+    let sitio = e.n.posicion_de_pueblo(pueblo).unwrap();
+    let (c0, h0) = e.visita("ana", 1, pueblo);
+    let suya = e.milicia(h0);
+    let (_, neutral) = e.visita("neu", 3, pueblo);
+    let de_neutral = e.milicia(neutral);
+    let radio = e.n.estado().reglas.economia.militar.movimiento.radio_puerta;
+    let lejos = e.columna("leo", 1, Punto { x: sitio.x + 3 * radio, y: sitio.y });
+    let leo = e.n.ejercito(lejos).unwrap().columna.lider;
+    let de_leo = e.milicia(leo);
+
+    // Los rechazos, sin rastro: la columna lejos de la puerta y quien no es de la Facción de la madre.
+    e.avanzar(0);
+    let (v, hash) = (e.n.version(), e.n.hash_estado());
+    assert_eq!(e.rechazada("leo", Comando::GuarnecerPueblo { heroe: leo, pueblo, escuadras: vec![de_leo] }), rechazos::HEROE_NO_ESTA_EN_EL_PUEBLO, "lejos de la puerta, no");
+    assert_eq!(e.rechazada("neu", Comando::GuarnecerPueblo { heroe: neutral, pueblo, escuadras: vec![de_neutral] }), rechazos::PUEBLO_FACCION_AJENA);
+    assert_eq!((e.n.version(), e.n.hash_estado()), (v, hash));
+
+    // A la puerta, sin entrar: la escuadra sale de su columna a la guarnición y vuelve a ella.
+    e.ok("ana", Comando::GuarnecerPueblo { heroe: h0, pueblo, escuadras: vec![suya] });
+    assert_eq!(e.ubicacion(h0), Ubicacion::Columna(c0), "sin entrar");
+    assert_eq!(e.contenedor(h0, suya), Contenedor::Pueblo(pueblo));
+    assert!(e.en_columna(c0).is_empty());
+    assert_eq!(e.n.guarnicion_de_jugadores_de_pueblo(pueblo).len(), 1);
+    e.ok("ana", Comando::RetirarDePueblo { heroe: h0, pueblo, escuadras: vec![suya] });
+    assert_eq!(e.contenedor(h0, suya), Contenedor::Ejercito(c0));
+    assert_eq!(e.en_columna(c0), vec![suya]);
+    assert!(e.n.guarnicion_de_jugadores_de_pueblo(pueblo).is_empty());
 }
 
 #[test]

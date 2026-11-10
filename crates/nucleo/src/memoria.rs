@@ -7,7 +7,7 @@
 //!
 //! Codificación (little endian, la de `codec`): `rejilla{hay bool · columnas u64 · filas u64 · tamaño i64} · exploración{n · n × (facción u32, bytes)} · personal{n · n × (héroe u64, bytes)} ·
 //! fichas{n · n × (facción u32 · m · m × (sitio, datos, conocido_en i64))} · vigías{n · n × (columna u64, desde i64, radio i64)} · sitios{n · n × (sitio, desde i64)}`, con
-//! `sitio = (clase u8: 0 plaza, 1 pueblo, 2 avanzada; id u64)` y `datos = (facción u32, posición, nivel u32, radio i64, estado u8: 0 activo, 1 en obra, 2 en ruinas)`; detrás, `miradas{n · n × (id u64, facción u32, origen, centro, radio i64,
+//! `sitio = (clase u8: 0 plaza, 1 pueblo, 2 avanzada; id u64)` y `datos = (facción u32, posición, nivel u32, radio i64, estado u8: 0 activo, 1 en obra, 2 en ruinas, nombre texto)` (BAN61: el nombre); detrás, `miradas{n · n × (id u64, facción u32, origen, centro, radio i64,
 //! comprada_en i64, expira_en i64, libre_en i64)} · informes{n · n × (facción u32 · m · m × (plaza u64, nivel u32, posición, conocido_en i64, edificios{k · k × (tipo u8, en_obra bool, nivel u8,
 //! hay bool, sitio)}, defensa))} · informes de región{n · n × (facción u32, región u8, tipo u8: 0 plazas, 1 órdenes, comprado_en i64)}`, con `origen = (0 plaza u64 | 1 campamento u32)`, el sitio de un edificio en milésimas de unidad local y la defensa como el contenido de un informe de inspección.
 
@@ -38,18 +38,20 @@ pub enum EstadoSitio {
 }
 
 /// Lo que se ve de un sitio desde fuera y se guarda en su ficha: de quién es (0: de nadie, las ruinas de una ciudadela sin dueño), dónde está, su nivel (la etapa de una avanzada; 0 en un pueblo),
-/// su radio (el de la zona de una plaza; 0 en los demás) y su estado.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// su radio (el de la zona de una plaza; 0 en los demás), su estado y, de una plaza, su nombre de entonces (2026-11-10, pedido del cliente: la lista del informe de región y el mapa de lo
+/// recordado enseñaban solo el id; vacío en los demás y en una plaza sin nombre).
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DatosSitio {
     pub faccion: u32,
     pub posicion: Punto,
     pub nivel: u32,
     pub radio: Mil,
     pub estado: EstadoSitio,
+    pub nombre: String,
 }
 
 /// La última foto de un sitio ajeno (`FichaConocida`): sus datos de cuando se vio por última vez y ese instante.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Ficha {
     pub datos: DatosSitio,
     pub conocido_en: Instante,
@@ -94,6 +96,20 @@ impl Mirada {
 pub enum TipoInformeRegion {
     Plazas,
     Ordenes,
+}
+
+/// Qué rumor vende la taberna (2026-11-10, decisión del autor). Por ahora uno: dónde están las vetas de estaño de la región del relieve de la taberna. Se escribe como `tipo as u8`
+/// (0 vetas de estaño) en el comando que lo compra; no se guarda: lo que deja es terreno explorado.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum TipoRumor {
+    VetasEstano,
+}
+
+pub(crate) fn tipo_rumor_leer(r: &mut Lector) -> Result<TipoRumor, ErrorFormato> {
+    match r.u8()? {
+        0 => Ok(TipoRumor::VetasEstano),
+        _ => Err(ErrorFormato("tipo de rumor desconocido")),
+    }
 }
 
 /// Un edificio de una plaza ajena tal como lo trae un Informe: su tipo, si está levantado o en obra, su nivel interno y su sitio en la ciudad (milésimas de unidad local, el centro de su huella).
@@ -198,13 +214,14 @@ pub(crate) fn escribir(w: &mut Escritor, m: &Memoria) {
         w.u64(de.len() as u64);
         for (&s, ficha) in de {
             sitio_escribir(w, s);
-            let Ficha { datos: DatosSitio { faccion, posicion, nivel, radio, estado }, conocido_en } = *ficha;
-            w.u32(faccion);
-            w.punto(posicion);
-            w.u32(nivel);
-            w.i64(radio);
-            w.u8(estado as u8);
-            w.i64(conocido_en);
+            let Ficha { datos: DatosSitio { faccion, posicion, nivel, radio, estado, nombre }, conocido_en } = ficha;
+            w.u32(*faccion);
+            w.punto(*posicion);
+            w.u32(*nivel);
+            w.i64(*radio);
+            w.u8(*estado as u8);
+            w.texto(nombre);
+            w.i64(*conocido_en);
         }
     }
     w.u64(vigias.len() as u64);
@@ -296,7 +313,7 @@ pub(crate) fn leer(r: &mut Lector) -> Result<Memoria, ErrorFormato> {
                 2 => EstadoSitio::EnRuinas,
                 _ => return Err(ErrorFormato("estado de una ficha desconocido")),
             };
-            let datos = DatosSitio { faccion, posicion, nivel, radio, estado };
+            let datos = DatosSitio { faccion, posicion, nivel, radio, estado, nombre: r.texto()? };
             de.insert(s, Ficha { datos, conocido_en: r.i64()? });
         }
     }

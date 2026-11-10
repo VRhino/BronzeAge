@@ -539,6 +539,23 @@ message Asentamiento {
   // Tanda 69 §8: el tablón de mercenarios de los campamentos de la región de la plaza, con la forma del `CampamentoMercenarios.tablon` y gratis. Solo de dentro (interior y `ADMIN`), y solo
   // si la plaza tiene una Taberna activa.
   repeated OfertaMercenario mercenarios_region = 51;
+  // 2026-11-10 (decisión del autor): la advertencia de solvencia del nivel siguiente. Los recursos del mantenimiento de ese nivel que lo que llega por minuto
+  // (producción, recaudación y la media del acarreo de las últimas 24 h) no cubre. Ya no bloquea la subida (antes era el rechazo `ascenso.insolvente`): es un
+  // aviso para el jugador y los bots. Vacía si cubre todo o si la plaza está en el nivel máximo. La calcula el paso de minuto: interior, plaza propia y `ADMIN`.
+  repeated Insolvencia insolvencia_ascenso = 52;
+  // 2026-11-10 (decisión del autor): si el Gobernador o un General cerró a los ciudadanos que no residen en la plaza el reclutar escuadras nuevas en ella
+  // (`cerrar_reclutamiento_a_ciudadanos`): solo reponen. Abierto, la escuadra nueva de un ciudadano que no reside va a la columna con la que entró. Interior y `ADMIN`.
+  bool reclutamiento_cerrado_a_ciudadanos = 53;
+  // 2026-11-10 (decisión del autor): los bienes de consumo cuyo consumo está pausado en la plaza (`pausar_consumo`; ids de catálogo, en el orden del catálogo):
+  // la población no los come y la guarnición no come la carne. Interior, plaza propia y `ADMIN`.
+  repeated string consumo_pausado = 54;
+}
+
+// Un recurso que no cubriría el mantenimiento del nivel siguiente (`Asentamiento.insolvencia_ascenso`), en milésimas por minuto.
+message Insolvencia {
+  string recurso = 1;
+  sint64 llega = 2;                      // lo que llega por minuto
+  sint64 pide = 3;                       // lo que pediría el mantenimiento por minuto en el nivel siguiente
 }
 
 // Rectángulo en UNIDADES LOCALES del asentamiento (esquina mínima y tamaño). El espacio local está centrado en el Centro Urbano.

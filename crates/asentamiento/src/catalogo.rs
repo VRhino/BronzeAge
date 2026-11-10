@@ -152,6 +152,9 @@ pub struct Necesidades {
     pub maximo_en_construccion_simultanea: usize,
     pub maximo_transformacion_por_nivel: BTreeMap<u32, u32>,
     pub nivel_gate_anclas: u32,
+    /// El nivel desde el que el barrio de la industria crea su ancla (el patio de gremios): antes que los demás, para que el molino y el horno,
+    /// que se hacen desde el nivel 1, vayan con los talleres (`nivelGateAnclasIndustria`, autor, 2026-11-10).
+    pub nivel_gate_anclas_industria: u32,
     pub reserva_manual_maxima: Mil,
 }
 
@@ -323,6 +326,7 @@ impl ReglasConstruccion {
                 maximo_en_construccion_simultanea: g(&n, "maximoEnConstruccionSimultanea") as usize,
                 maximo_transformacion_por_nivel: mapa_niveles(&n["maximoTransformacionPorNivel"]),
                 nivel_gate_anclas: g(&n, "nivelGateAnclas") as u32,
+                nivel_gate_anclas_industria: g(&n, "nivelGateAnclasIndustria") as u32,
                 reserva_manual_maxima: mil(g(&n, "reservaManualMaxima")),
             },
             bandas: Bandas {

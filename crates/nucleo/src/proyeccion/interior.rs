@@ -172,6 +172,7 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
     // Si abre su almacén a los aliados (5D) y cuándo creó su última caravana (el cooldown de crearlas, compartido con la Caravana de Fundación), desde 5H.
     p.permite_reabastecer_aliados = a.permite_reabastecer_aliados;
     p.almacen_cerrado_a_ciudadanos = a.almacen_cerrado_a_ciudadanos;
+    p.reclutamiento_cerrado_a_ciudadanos = a.reclutamiento_cerrado_a_ciudadanos;
     p.ultima_caravana_creada_en_ms = e.comercio.ultima_caravana.get(&id).copied();
     p.caravanas_aparcadas_ids = e.comercio.flota.iter().filter(|c| c.estado == comercio::caravana::EstadoCaravana::Aparcada && c.anfitriona.is_some_and(|x| u64::from(x) == id)).map(|c| ids::caravana(c.id)).collect();
     p.flota_ids = e.comercio.flota.iter().filter(|c| u64::from(c.origen) == id).map(|c| ids::caravana(c.id)).collect();
@@ -184,11 +185,13 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
         .map(|x| pb::PoliticaActiva { id: format!("pol-{id}-{}-{}", x.cargo.clave(), x.id), politica_id: x.id.clone(), cargo: x.cargo.clave().to_owned(), activada_en_ms: x.expira_en - duracion, expira_en_ms: x.expira_en })
         .collect();
     p.ascenso = eco.ascenso.map(|x| pb::AscensoEnCurso { nivel_objetivo: x.nivel_objetivo, iniciado_en_ms: x.iniciado_en, completa_en_ms: x.completa_en });
+    p.insolvencia_ascenso = eco.aviso_solvencia.0.iter().map(|f| pb::Insolvencia { recurso: f.recurso.nombre().to_owned(), llega: f.llega, pide: f.pide }).collect();
     p.ocupacion_hasta_ms = a.ocupada_hasta;
     p.protegida_hasta_ms = a.protegida_hasta;
     p.bandidos_reaparecen_en_ms = e.combate.reaparecen.get(&id).copied();
     p.auto_construccion_pausada = eco.auto_pausada;
     p.recetas_pausadas = eco.recetas_pausadas.iter().map(|r| r.nombre().to_owned()).collect();
+    p.consumo_pausado = eco.consumo_pausado.iter().map(|r| r.nombre().to_owned()).collect();
     p.reserva_manual = Some(cantidades(TODOS.iter().copied().zip(eco.reserva_manual).filter(|&(_, v)| v != 0)));
     p.misiones = super::propios::misiones(n, crate::misiones::Dueno::Asentamiento(id));
     p.tablon = super::propios::tablon(n, crate::misiones::Dueno::Asentamiento(id));

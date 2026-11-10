@@ -1056,6 +1056,8 @@ La red de caminos se poda sola al faltar un extremo (§7.4).
 
 Un id inexistente se deja pasar a propósito para que el comando devuelva el error específico, no un «sin permiso».
 
+**Desde la puerta (Rust, 2026-11-10, pedido del autor: el Mercado interno desde la puerta de la plaza propia).** Donde arriba se pide «dentro» del origen o de la plaza, las órdenes de mercado (`colocarOrdenMercado`, `cancelarOrdenMercado`), las de la flota que manda su origen (`crearCaravana`, `agregarCarroCaravana`, `comprarAnimalCaravana`, `moverCarroCaravana`, `reservarCaravana`, `renombrarCaravana`, `prepararCaravana`, `cancelarCaravana`) y los encargos (`encargarCaravana`, `cambiarEncargo`, `cancelarEncargo`, `detenerEncargo`, `tomarOrdenADistancia`) valen también **a bordo de una columna a la puerta** de esa plaza (a `radio_puerta` o menos), con los mismos cargos y la misma residencia. Los trueques, las de una caravana aparcada, la escolta y abrir el almacén a los aliados siguen pidiendo estar dentro. La matriz y sus filas: `Proyecciones_Y_Autorizacion.md` §5.1 y su párrafo «Acciones a la puerta».
+
 ## 12. Eventos y quién los consume
 
 | Evento | Quién lo emite | Quién lo lee |

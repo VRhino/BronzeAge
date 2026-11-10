@@ -76,6 +76,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `receta.no_se_elige` | `RECETA_NO_SE_ELIGE` | El edificio no elige receta: solo la bodega y la prensa trabajan una sola a la vez. |
 | `receta.desconocida` | `RECETA_DESCONOCIDA` | Ese insumo no es de ninguna receta del edificio. |
 | `receta.tope_por_plaza` | `RECETA_TOPE_POR_PLAZA` | La plaza ya trabaja tantas recetas distintas en ese tipo de edificio como permite su nivel (`TALLERES_DE_UNA_RECETA.recetasDistintasPorNivel`). |
+| `consumo.no_se_pausa` | `CONSUMO_NO_SE_PAUSA` | Ese recurso no es un bien de consumo que se pueda pausar: solo los de `BIENES_DE_CONSUMO` (carne, pan, queso, vino, cerveza y aceite), nunca el trigo (2026-11-10). |
 
 ### Ascenso (`Bloqueo`): el rechazo lleva el código del primero y todos en el mensaje
 
@@ -88,7 +89,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `ascenso.falta_aldea` | `ASCENSO_FALTA_ALDEA` | — |
 | `ascenso.sin_cupo_de_faccion` | `ASCENSO_SIN_CUPO_DE_FACCION` | — |
 | `ascenso.recursos_insuficientes` | `ASCENSO_RECURSOS_INSUFICIENTES` | — |
-| `ascenso.insolvente` | `ASCENSO_INSOLVENTE` | — |
+| `ascenso.insolvente` | `ASCENSO_INSOLVENTE` | Retirado el 2026-11-10 (decisión del autor): la solvencia del nivel siguiente ya no bloquea la subida; es la advertencia `Asentamiento.insolvencia_ascenso`. |
 
 ### Políticas (`ErrorPolitica`)
 
@@ -507,6 +508,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `intel.sin_informe_de_ordenes` | `INTEL_SIN_INFORME_DE_ORDENES` | Tomar una orden a distancia pide el informe vigente de las órdenes de la región de esa plaza (tanda 69 §7). |
 | `intel.informe_reciente` | `INTEL_INFORME_RECIENTE` | Ya tiene un Informe reciente de esa plaza o, en el informe de región, uno del mismo tipo de esa región. |
 | `intel.sin_oro` | `INTEL_SIN_ORO` | No hay oro para pagarla (en el almacén de la plaza, en el personal o en el carro). |
+| `rumor.sin_novedad` | `RUMOR_SIN_NOVEDAD` | La Facción ya tiene explorado todo lo que descubre el rumor (2026-11-10): no se cobra. |
 | `columna.en_batalla` | `COLUMNA_EN_BATALLA` | La columna está apartada por una batalla: no se mueve ni se le dan órdenes de movimiento, de persecución ni de inspección. |
 | `relacion.consigo_misma` | `RELACION_CONSIGO_MISMA` | — |
 

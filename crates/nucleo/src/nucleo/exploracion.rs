@@ -95,8 +95,8 @@ impl Ojos {
             self.por_sitio.quitar(s, d.posicion);
         }
         if let Some(d) = ahora {
-            self.sitios.insert(s, d);
             self.por_sitio.poner(s, d.posicion);
+            self.sitios.insert(s, d);
         }
     }
 
@@ -112,7 +112,7 @@ impl Ojos {
 
     /// Los sitios en la caja `[a, b]`.
     fn sitios_en(&self, a: Punto, b: Punto) -> impl Iterator<Item = (Sitio, DatosSitio)> + '_ {
-        self.por_sitio.en_caja(a, b).map(|s| (s, self.sitios[&s])).filter(move |(_, d)| (a.x..=b.x).contains(&d.posicion.x) && (a.y..=b.y).contains(&d.posicion.y))
+        self.por_sitio.en_caja(a, b).map(|s| (s, self.sitios[&s].clone())).filter(move |(_, d)| (a.x..=b.x).contains(&d.posicion.x) && (a.y..=b.y).contains(&d.posicion.y))
     }
 
     /// Los sitios a `≤ radio` de `centro`.
@@ -168,12 +168,12 @@ fn avistados<'a>(r: &'a [Vertice], radio: Mil, sitios: impl Iterator<Item = (Sit
 
 /// Lo que se ve de una plaza.
 fn datos_de_plaza(a: &crate::estado::Asentamiento) -> DatosSitio {
-    DatosSitio { faccion: a.faccion, posicion: a.posicion, nivel: a.nivel(), radio: a.radio, estado: EstadoSitio::Activo }
+    DatosSitio { faccion: a.faccion, posicion: a.posicion, nivel: a.nivel(), radio: a.radio, estado: EstadoSitio::Activo, nombre: a.nombre.clone() }
 }
 
 /// Lo que se ve de un pueblo de la Facción `faccion` en `posicion`: activo o, mientras espera materiales o se levanta, en obra.
 fn datos_de_pueblo(faccion: u32, posicion: Punto, p: &asentamiento::pueblos::Pueblo) -> DatosSitio {
-    DatosSitio { faccion, posicion, nivel: 0, radio: 0, estado: if p.activo() { EstadoSitio::Activo } else { EstadoSitio::EnObra } }
+    DatosSitio { faccion, posicion, nivel: 0, radio: 0, estado: if p.activo() { EstadoSitio::Activo } else { EstadoSitio::EnObra }, nombre: String::new() }
 }
 
 /// Lo que se ve de una avanzada de la Facción `faccion` (0: unas ruinas sin dueño): su etapa y, con una obra en marcha (levantarla, mejorarla o repararla), en obra; si no, en ruinas o activa.
@@ -185,7 +185,7 @@ fn datos_de_avanzada(faccion: u32, x: &Avanzada) -> DatosSitio {
     } else {
         EstadoSitio::Activo
     };
-    DatosSitio { faccion, posicion: x.posicion, nivel: x.etapa.indice() as u32 + 1, radio: 0, estado }
+    DatosSitio { faccion, posicion: x.posicion, nivel: x.etapa.indice() as u32 + 1, radio: 0, estado, nombre: String::new() }
 }
 
 impl Nucleo {
@@ -337,12 +337,13 @@ impl Nucleo {
             }
         }
         let cambiados: Vec<(Sitio, Option<DatosSitio>, Option<DatosSitio>)> =
-            sitios.iter().map(|&s| (s, viejos.sitios.get(&s).copied(), nuevos_sitios.get(&s).copied())).filter(|(_, antes, ahora)| antes != ahora).collect();
+            sitios.iter().map(|&s| (s, viejos.sitios.get(&s).cloned(), nuevos_sitios.get(&s).cloned())).filter(|(_, antes, ahora)| antes != ahora).collect();
         let fijos: Vec<(Sitio, Option<Fijo>, Option<Fijo>)> =
             sitios.iter().filter(|s| !matches!(s, Sitio::Pueblo(_))).map(|&s| (s, viejos.fijos.get(&s).copied(), nuevos_fijos.get(&s).copied())).filter(|(_, antes, ahora)| antes != ahora).collect();
 
         // 1. Lo que cada ojo ajeno vio de un sitio que cambia, con lo de antes; desde ahora su ficha vale lo nuevo.
-        for &(s, antes, ahora) in &cambiados {
+        for (s, antes, ahora) in &cambiados {
+            let s = *s;
             if let Some(d) = antes {
                 let tope = mem.sitios.get(&s).copied().unwrap_or(Instante::MIN);
                 for (id, ojo) in viejos.columnas.iter().filter(|(_, o)| o.faccion.is_some_and(|f| f != d.faccion)) {
@@ -351,18 +352,18 @@ impl Nucleo {
                         continue;
                     }
                     if let Some(en) = ultima_vez(&recorrido(&ojo.plan, ojo.quieto, v.desde.max(tope), t), d.posicion, v.radio) {
-                        mem.anotar(f, s, d, en);
+                        mem.anotar(f, s, d.clone(), en);
                     }
                 }
                 for o in viejos.fijos_que_ven(d.posicion) {
-                    mem.anotar(o.faccion, s, d, t);
+                    mem.anotar(o.faccion, s, d.clone(), t);
                 }
             }
             match ahora {
                 Some(_) => mem.sitios.insert(s, t),
                 None => mem.sitios.remove(&s),
             };
-            viejos.sitio(s, ahora);
+            viejos.sitio(s, ahora.clone());
         }
 
         // 2. Las columnas tocadas barren lo que anduvieron con lo que eran (también la que desaparece) y ven los sitios de su recorrido.
@@ -419,12 +420,13 @@ impl Nucleo {
         if !cambiados.is_empty() || !fijos.is_empty() {
             let columnas_ven: Vec<(u32, Punto, Mil)> =
                 if cambiados.is_empty() { Vec::new() } else { self.estado.ejercitos.values().filter_map(|e| Some((e.columna.faccion?, e.posicion_en(t), self.radio_de_vista(e)))).collect() };
-            for &(s, antes, ahora) in &cambiados {
-                let Some(p) = ahora.or(antes).map(|d| d.posicion) else { continue };
+            for (s, antes, ahora) in &cambiados {
+                let s = *s;
+                let Some(p) = ahora.as_ref().or(antes.as_ref()).map(|d| d.posicion) else { continue };
                 let fijos_ven = viejos.fijos_que_ven(p).into_iter().map(|o| (o.faccion, o.centro, o.radio));
                 for (f, _, _) in columnas_ven.iter().copied().filter(|(_, c, r)| cerca(*c, p, *r)).chain(fijos_ven) {
                     match ahora {
-                        Some(d) => mem.anotar(f, s, d, t),
+                        Some(d) => mem.anotar(f, s, d.clone(), t),
                         None => mem.olvidar(f, s),
                     }
                 }

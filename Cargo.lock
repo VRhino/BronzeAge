@@ -46,7 +46,7 @@ dependencies = [
 
 [[package]]
 name = "asentamiento"
-version = "0.18.0"
+version = "0.19.0"
 dependencies = [
  "base",
  "serde_json",
@@ -65,7 +65,7 @@ checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
 name = "batch"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "asentamiento",
  "base",
@@ -162,7 +162,7 @@ dependencies = [
 
 [[package]]
 name = "combate"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "asentamiento",
  "base",
@@ -189,7 +189,7 @@ checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
 
 [[package]]
 name = "contrato"
-version = "0.21.0"
+version = "0.22.0"
 dependencies = [
  "prost",
  "prost-build",
@@ -526,7 +526,7 @@ dependencies = [
 
 [[package]]
 name = "militar"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "asentamiento",
  "base",
@@ -565,7 +565,7 @@ dependencies = [
 
 [[package]]
 name = "nucleo"
-version = "0.32.0"
+version = "0.34.0"
 dependencies = [
  "asentamiento",
  "base",

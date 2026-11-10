@@ -281,8 +281,15 @@ fn el_informe_de_plazas_graba_las_fichas_de_la_region_sin_las_propias_ni_las_de_
 
     e.comprar_ok(TipoInformeRegion::Plazas);
     let f = fichas(&e);
-    let ficha = f[&Sitio::Plaza(p2)];
+    let ficha = f[&Sitio::Plaza(p2)].clone();
     assert_eq!((ficha.conocido_en, ficha.datos.faccion, ficha.datos.posicion), (e.n.ahora(), 2, e.n.estado().asentamientos[&p2].posicion), "fechada en la compra, como la grabaría una columna");
+    // Con su nombre de entonces (2026-11-10, pedido del cliente: la lista enseñaba solo el id), que la `VISTA` lleva en la ficha conocida.
+    let nombre = e.n.estado().asentamientos[&p2].nombre.clone();
+    assert!(!nombre.is_empty() && ficha.datos.nombre == nombre, "la ficha guarda el nombre de la plaza");
+    let v = Mirada::de(&e.n, Perspectiva::Faccion(1));
+    let conocida = v.contenido(None, todo(), &BTreeMap::new()).into_iter().find(|x| x.clave == (TipoEntidad::FichaConocida as i32, ids::asentamiento(p2))).and_then(|x| x.cuerpo());
+    let Some(contrato::v1::entidad::Cuerpo::FichaConocida(conocida)) = conocida else { panic!("la VISTA recuerda la plaza: {conocida:?}") };
+    assert_eq!(conocida.nombre.as_deref(), Some(nombre.as_str()));
     for (plaza, motivo) in [(p1, "la propia"), (p3, "la de la Facción en guerra"), (p4, "la de otra región")] {
         assert!(!f.contains_key(&Sitio::Plaza(plaza)), "{motivo} no entra");
     }
@@ -561,4 +568,74 @@ fn desde_la_taberna_un_campamento_de_otra_region_un_pago_que_no_es_de_la_plaza_o
     let (p1, eva) = (sin.p1, sin.eva);
     let c = Comando::ContratarMercenario { heroe: eva, mercenario: a, trabajo: mercenarios::Trabajo::Defender, objetivo: Objetivo::Plaza(p1), plazo: Some(1), residencia: None, pagar_con: None };
     assert_eq!(mc::rechazo(&mut sin.n, "eva", c), rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA, "una plaza sin Taberna no sirve");
+}
+
+// ───────────────────────────── Rumores: las vetas de estaño (2026-11-10) ─────────────────────────────
+
+/// Los yacimientos de estaño de la `region` y si la Facción 1 tiene explorado cada uno.
+fn estano_de(e: &E, region: u8) -> Vec<(Punto, bool)> {
+    let m = comun::real::mundo().expect("hay mundo");
+    let mem = &e.n.estado().memoria;
+    (m.0.nodos().iter())
+        .filter(|x| x.tipo == "estano")
+        .filter_map(|x| x.posicion.map(|p| Punto::new(p.x, p.y)))
+        .filter(|p| m.0.region_en(p.x, p.y) == Some(region))
+        .map(|p| (p, mem.exploracion.get(&1).is_some_and(|x| x.explorado_en(p))))
+        .collect()
+}
+
+/// 2026-11-10 (decisión del autor): el rumor de las vetas de estaño deja explorado para la Facción el terreno alrededor de cada yacimiento de estaño de la región de la taberna, por
+/// `INTEL.rumores.vetasEstano.oro` (80) del almacén de la plaza; lo compra quien compra la intel (el Rey, el Embajador o el Gobernador, dentro) y, si ya los conoce todos, se rechaza sin
+/// cobrar.
+#[test]
+fn el_rumor_de_las_vetas_de_estano_explora_los_yacimientos_de_la_region_y_no_se_cobra_dos_veces() {
+    let m = con_mundo!();
+    let mut e = escenario(m, true);
+    let (p1, eva, civ, region) = (e.p1, e.eva, e.civ, e.region);
+    let antes = estano_de(&e, region);
+    assert!(antes.iter().any(|&(_, explorado)| !explorado), "la región tiene estaño que la Facción no conoce: {antes:?}");
+    let rumor = |heroe| Comando::ComprarRumor { heroe, origen: nucleo::memoria::OrigenIntel::Plaza(p1), tipo: nucleo::memoria::TipoRumor::VetasEstano };
+    assert_eq!(mc::rechazo(&mut e.n, "civ", rumor(civ)), rechazos::NO_AUTORIZADO, "sin cargo no se compra");
+    let (oro0, precio) = (e.oro(p1), e.intel().oro_rumor_estano);
+    assert_eq!(precio, 80_000, "INTEL.rumores.vetasEstano.oro");
+    mc::ok(&mut e.n, "eva", rumor(eva));
+    assert_eq!(oro0 - e.oro(p1), precio, "paga el almacén de la plaza");
+    let despues = estano_de(&e, region);
+    assert!(despues.iter().all(|&(_, explorado)| explorado), "todos los yacimientos de la región quedan explorados: {despues:?}");
+    // Lo de otras regiones no: el rumor es de la región de la taberna.
+    let otra = e.n.estado().asentamientos[&e.p4].posicion;
+    let otra = m.0.region_en(otra.x, otra.y).unwrap();
+    let fuera = estano_de(&e, otra);
+    assert!(fuera.iter().any(|&(_, explorado)| !explorado), "el estaño de otra región sigue sin explorar: {fuera:?}");
+    // Ya no hay nada nuevo que contar: se rechaza sin cobrar.
+    assert_eq!(mc::rechazo(&mut e.n, "eva", rumor(eva)), rechazos::RUMOR_SIN_NOVEDAD);
+    // Viaja en la foto: es lo explorado de la Facción.
+    let vuelta = Estado::deserializar(&e.n.estado().serializar(), &e.n.estado().reglas, &e.n.estado().mundo_hash).unwrap();
+    assert_eq!(vuelta.memoria.exploracion.get(&1), e.n.estado().memoria.exploracion.get(&1));
+}
+
+/// En la taberna de un campamento lo compra cualquier héroe con Facción que esté dentro, con el oro de su almacén personal si reside allí; el rumor es de la región del campamento.
+#[test]
+fn el_rumor_tambien_se_compra_en_la_taberna_de_un_campamento_con_el_oro_del_heroe() {
+    let m = con_mundo!();
+    let mut e = escenario(m, false);
+    // Un campamento de una región con estaño que la Facción 1 aún no conoce.
+    let region_de = |i: usize| {
+        let c = comun::real::campamento(&m.0, i);
+        m.0.region_en(c.x, c.y)
+    };
+    let (i, region) = (0..m.0.campamentos().len())
+        .filter_map(|i| Some((i, region_de(i)?)))
+        .find(|&(_, r)| estano_de(&e, r).iter().any(|&(_, explorado)| !explorado))
+        .expect("algún campamento cae en una región con estaño por conocer");
+    let zoe = mc::heroe_en(&mut e.n, "zoe", i as u32, Controlador::Humano);
+    let rumor = Comando::ComprarRumor { heroe: zoe, origen: nucleo::memoria::OrigenIntel::Campamento(i as u32), tipo: nucleo::memoria::TipoRumor::VetasEstano };
+    assert_eq!(mc::rechazo(&mut e.n, "zoe", rumor.clone()), rechazos::INTEL_SIN_FACCION, "la intel es para una Facción");
+    mc::ok(&mut e.n, "admin", Comando::FijarFaccionDeHeroe { heroe: zoe, faccion: Some(1) });
+    assert_eq!(mc::rechazo(&mut e.n, "zoe", rumor.clone()), rechazos::INTEL_SIN_ORO, "sin oro en su almacén personal");
+    mc::ok(&mut e.n, "admin", Comando::DarAlmacenPersonal { heroe: zoe, recurso: Oro, cantidad: 100_000 });
+    mc::ok(&mut e.n, "zoe", rumor);
+    let oro = e.n.heroe(zoe).unwrap().almacen_personal.get(&Oro).copied().unwrap_or(0);
+    assert_eq!(oro, 100_000 - e.intel().oro_rumor_estano, "paga su almacén personal");
+    assert!(estano_de(&e, region).iter().all(|&(_, explorado)| explorado));
 }

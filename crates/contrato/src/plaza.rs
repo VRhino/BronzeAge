@@ -90,4 +90,7 @@ campos_de_la_plaza!(
     tablon,
     almacen_cerrado_a_ciudadanos,
     mercenarios_region,
+    insolvencia_ascenso,
+    reclutamiento_cerrado_a_ciudadanos,
+    consumo_pausado,
 );

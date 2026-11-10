@@ -226,7 +226,7 @@ fn la_ficha_de_una_plaza_ajena_es_lo_ultimo_que_se_vio_de_ella_y_cuando_y_nunca_
 
     // La plaza sube de nivel sin que nadie de F1 la vea: al grabarse lo que vio la columna, la ficha conserva el nivel de antes.
     e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: plaza, nivel: 3 });
-    let ficha = e.n.estado().memoria.fichas[&1][&Sitio::Plaza(plaza)];
+    let ficha = e.n.estado().memoria.fichas[&1][&Sitio::Plaza(plaza)].clone();
     assert_eq!(ficha.datos.nivel, nivel_antes, "lo que cambió después no se ve");
     assert!((ficha.conocido_en - visto).abs() <= 60, "{} frente a {visto}", ficha.conocido_en);
     assert_eq!(ficha.conocido_en, f.conocido_en_ms, "es lo que la vista enseñaba");
@@ -422,7 +422,7 @@ fn la_memoria_es_la_misma_con_sesiones_y_sin_ellas_y_avanzando_a_trozos_y_viaja_
     assert!(mem.exploracion.contains_key(&1) && mem.fichas.contains_key(&1) && !mem.personal.is_empty() && !mem.vigias.is_empty(), "la partida graba de todo");
 
     let bytes = a.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN60");
+    assert_eq!(&bytes[..5], b"BAN61");
     let vuelta = Estado::deserializar(&bytes, &reglas(), m.0.hash()).expect("la foto vuelve");
     assert_eq!(vuelta.memoria, *mem);
     assert_eq!(vuelta.serializar(), bytes);

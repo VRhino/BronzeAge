@@ -178,6 +178,9 @@ pub struct ReglasIntel {
     pub oro_region: Mil,
     pub enfriamiento_region: i64,
     pub caducidad_region: i64,
+    /// El rumor de las vetas de estaño (2026-11-10, `rumores.vetasEstano`): su precio y el radio que queda explorado alrededor de cada yacimiento de estaño de la región.
+    pub oro_rumor_estano: Mil,
+    pub radio_rumor_estano: Mil,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -300,6 +303,8 @@ impl Reglas {
                     oro_region: mil(num(&i, "region.oro")),
                     enfriamiento_region: entero(&i, "region.cooldownMinutos") * MS_POR_MINUTO,
                     caducidad_region: entero(&i, "region.caducidadMinutos") * MS_POR_MINUTO,
+                    oro_rumor_estano: mil(num(&i, "rumores.vetasEstano.oro")),
+                    radio_rumor_estano: mil(num(&i, "rumores.vetasEstano.radio")),
                 }
             },
             mercenarios: ReglasMercenarios {

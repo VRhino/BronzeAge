@@ -9,7 +9,7 @@ use asentamiento::catalogo::Tipo;
 use asentamiento::Recurso::{self, *};
 use base::{Instante, Punto, MS_POR_MINUTO};
 use comun::sesion::*;
-use contrato::v1::{self as pb, orden, Resultado as R, TipoCliente, TipoEntidad};
+use contrato::v1::{self as pb, mensaje_de_servidor as ms, orden, Resultado as R, TipoCliente, TipoEntidad};
 use militar::catalogo::Tropa;
 use militar::heroe::{Controlador, Residencia};
 use militar::presencia::Ubicacion;
@@ -206,6 +206,46 @@ async fn un_jugador_nuevo_crea_su_heroe_pide_tropa_sale_del_campamento_y_marcha_
     assert_eq!(rechazo(&r), "mercenarios.viveres_llenos", "sin campamento en la orden, el que tiene a la puerta (la marcha acaba de empezar): el núcleo dice que los víveres ya están llenos");
     let n = w.parar().await;
     assert_eq!(n.heroe_de_cuenta("carla").map(|h| ids::heroe(h.heroe.id)), Some(heroe.1));
+}
+
+/// Acciones a la puerta (decisión del autor del 2026-11-10): con su columna **parada** a la puerta de un campamento, el héroe tiene su `CAMPAMENTO` (el mercado, las tropas y el tablón) sin
+/// estar dentro. Salir del campamento no se lo quita; marchar, sí; parar otra vez a la puerta se lo devuelve.
+#[tokio::test]
+async fn con_la_columna_parada_a_la_puerta_de_un_campamento_se_tiene_su_ambito_y_al_marchar_se_pierde() {
+    let m = con_mundo!();
+    let w = arrancar_con(Prep::nuevo(m, false).n).await;
+    let (mut carla, _) = w.entrar("carla", TipoCliente::ClienteUnity).await;
+    let es = |m: &ms::Cuerpo, tipo: &str| {
+        let (que, a) = match m {
+            ms::Cuerpo::Foto(f) => ("foto", f.ambito.as_ref()),
+            ms::Cuerpo::Revocado(r) => ("revocado", r.ambito.as_ref()),
+            _ => return false,
+        };
+        que == tipo && a.is_some_and(|a| a.tipo == pb::AmbitoTipo::AmbitoCampamento as i32 && a.id == "camp-0")
+    };
+    let (_, r) = dar(&mut carla, "o1", orden::Cuerpo::CrearHeroe(pb::OrdenCrearHeroe { display_name: s("Carla"), campamento_id: s("camp-0"), class_definition_id: s("guerrero"), genero: s("femenino"), avatar: None })).await;
+    aceptada(&r);
+    let heroe = creadas(&r)[0].clone();
+    let (_, r) = dar(&mut carla, "o2", orden::Cuerpo::PedirPrestamo(pb::OrdenPedirPrestamo { tropa_ids: vec![s("milicia_lanceros")] })).await;
+    aceptada(&r);
+    let escuadra = creadas(&r)[0].clone();
+
+    // Sale con su columna: a la puerta, parada, sigue con el campamento.
+    let salir = orden::Cuerpo::SalirDelCampamento(pb::OrdenSalirDelCampamento { campamento_id: s("camp-0"), heroe_id: heroe.1.clone(), escuadron_ids: vec![escuadra.1.clone()], ..Default::default() });
+    let (previos, r) = dar_todo(&mut carla, "o3", salir).await;
+    aceptada(&r);
+    let columna = creadas(&r)[0].clone();
+    assert!(!previos.iter().any(|m| es(m, "revocado")), "a la puerta no lo pierde: {previos:?}");
+    // Marcha: lo pierde.
+    let cerca = comun::real::en_tierra(&m.0, campamento(&m.0, 0), 20_000, 0);
+    let (previos, r) = dar_todo(&mut carla, "o4", marchar_a(&heroe.1, cerca)).await;
+    aceptada(&r);
+    assert!(previos.iter().any(|m| es(m, "revocado")), "en marcha, sin campamento: {previos:?}");
+    // Para otra vez a la puerta (la marcha acaba de empezar): lo recupera, con su foto.
+    let (previos, r) = dar_todo(&mut carla, "o5", orden::Cuerpo::EstacionarEjercito(pb::OrdenEstacionarEjercito { ejercito_id: columna.1.clone() })).await;
+    aceptada(&r);
+    assert!(previos.iter().any(|m| es(m, "foto")), "parada a la puerta, otra vez con el campamento: {previos:?}");
+    w.parar().await;
 }
 
 // ───────────────────────────── Economía, acceso y murallas ─────────────────────────────

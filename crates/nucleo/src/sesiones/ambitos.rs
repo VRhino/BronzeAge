@@ -210,6 +210,8 @@ pub(super) fn derechos(n: &Nucleo, s: &Sesion) -> BTreeSet<Ambito> {
         Ubicacion::Mercenarios(c) => {
             d.insert(Ambito::Campamento(c));
         }
+        // A bordo de su columna parada a la puerta de un campamento, también lo ve desde fuera (2026-11-10): su mercado, sus tropas y su tablón, como dentro.
+        Ubicacion::Columna(c) => d.extend(n.campamento_a_la_puerta(c).map(Ambito::Campamento)),
         _ => {}
     }
     // Las batallas en que combate (el suyo o el héroe de campo de su cuenta), también las cerradas mientras el núcleo las conserve: así ve el resultado.
@@ -412,6 +414,13 @@ impl Mesa {
     /// Cuántas sesiones tienen su `VISTA` abierta.
     pub(super) fn vistas_abiertas(&self) -> usize {
         self.suscriptores.iter().filter(|(a, _)| matches!(a, Ambito::Vista(_))).map(|(_, ss)| ss.len()).sum()
+    }
+
+    /// Las sesiones cuyo héroe va a bordo de alguna de `columnas`: una columna que para a la puerta de un campamento o arranca de ella le da o le quita su `CAMPAMENTO` (2026-11-10). Sin tocar
+    /// al héroe, así que `cambia_derechos` no lo ve: se sincronizan solo estas.
+    pub(super) fn a_bordo_de(&self, n: &Nucleo, columnas: &BTreeSet<u64>) -> Vec<SesionId> {
+        let a_bordo = |s: &Sesion| s.heroe.and_then(|h| n.heroe(h)).is_some_and(|h| matches!(h.heroe.presencia.ubicacion, Ubicacion::Columna(c) if columnas.contains(&c)));
+        self.sesiones.iter().filter(|(_, s)| a_bordo(s)).map(|(&id, _)| id).collect()
     }
 
     pub(super) fn sesiones(&self) -> impl Iterator<Item = (SesionId, &Sesion)> {

@@ -308,9 +308,9 @@ fn cuellos(x: &Entrada) -> Vec<Metrica> {
         metrica("bloqueo_poblacion_dias", "Día mediano en que deja de faltar población para el nivel 2", "días", INFO, libre(2), "Doc 4.5 (requisito de pesants del nivel 2)", "Primera comprobación horaria sin el bloqueo «falta población» (las que nunca lo superan cuentan como el tope)."),
         metrica("bloqueo_edificios_dias", "Día mediano en que dejan de faltar edificios para el nivel 2", "días", INFO, libre(3), "Doc 4.5 (3 de los 7 tipos de extracción)", "Primera comprobación horaria sin el bloqueo «faltan edificios»."),
         metrica("bloqueo_recursos_dias", "Día mediano en que el almacén cubre el coste del ascenso", "días", INFO, libre(5), "Doc 4.5 (coste del ascenso)", "Primera comprobación horaria sin el bloqueo «recursos insuficientes»."),
-        metrica("bloqueo_solvencia_dias", "Día mediano en que la producción cubre el mantenimiento del nivel 2", "días", INFO, libre(6), "Doc 4.5 (solvencia en el nivel nuevo)", "Primera comprobación horaria sin el bloqueo «insolvente»."),
+        metrica("bloqueo_solvencia_dias", "Día mediano en que la producción cubre el mantenimiento del nivel 2", "días", INFO, libre(6), "Doc 4.5 (solvencia en el nivel nuevo)", "Primera comprobación horaria sin la advertencia «insolvente» (desde el 2026-11-10 no bloquea la subida)."),
     ];
-    metricas.push(metrica("atascadas_nivel1_pct", "Plazas que terminan en el nivel 1", "%", INFO, pct(en_n1, v.len()), "Doc 4.5", &format!("De ellas, a la última comprobación pesaba: falta población {}, faltan edificios {}, recursos insuficientes {}, insolvente {} (porcentaje de las atascadas).", fmt(atascadas(2)), fmt(atascadas(3)), fmt(atascadas(5)), fmt(atascadas(6)))));
+    metricas.push(metrica("atascadas_nivel1_pct", "Plazas que terminan en el nivel 1", "%", INFO, pct(en_n1, v.len()), "Doc 4.5", &format!("De ellas, a la última comprobación pesaba: falta población {}, faltan edificios {}, recursos insuficientes {}, con la advertencia de insolvencia {} (porcentaje de las atascadas).", fmt(atascadas(2)), fmt(atascadas(3)), fmt(atascadas(5)), fmt(atascadas(6)))));
     metricas
 }
 

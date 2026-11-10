@@ -1038,6 +1038,7 @@ impl Nucleo {
             | Comando::ElegirReceta { .. }
             | Comando::AlternarAutoConstruccion { .. }
             | Comando::AlternarReceta { .. }
+            | Comando::PausarConsumo { .. }
             | Comando::CalibrarReserva { .. }
             | Comando::SolicitarAscenso { .. }
             | Comando::ActivarPolitica { .. } => match self.ejecutar_economia(t, p) {
@@ -1057,7 +1058,8 @@ impl Nucleo {
             | Comando::SoltarCaravana { .. }
             | Comando::CargarDePlaza { .. }
             | Comando::DejarEnPlaza { .. }
-            | Comando::CerrarAlmacenACiudadanos { .. } => {
+            | Comando::CerrarAlmacenACiudadanos { .. }
+            | Comando::CerrarReclutamientoACiudadanos { .. } => {
                 match self.ejecutar_a_mano(t, p) {
                     Ok(ids) => creadas.extend(ids),
                     Err(r) => return r,
@@ -1099,7 +1101,7 @@ impl Nucleo {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },
-            Comando::ComprarMirada { .. } | Comando::ComprarInformePlaza { .. } | Comando::ComprarInformeRegion { .. } => match self.ejecutar_taberna(t, p) {
+            Comando::ComprarMirada { .. } | Comando::ComprarInformePlaza { .. } | Comando::ComprarInformeRegion { .. } | Comando::ComprarRumor { .. } => match self.ejecutar_taberna(t, p) {
                 Ok(Some(creada)) => creadas.push(creada),
                 Ok(None) => {}
                 Err(r) => return r,

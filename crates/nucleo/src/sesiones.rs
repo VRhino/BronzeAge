@@ -28,7 +28,7 @@ mod carga;
 mod ordenes;
 
 use crate::comando::{rechazos, Comando, Peticion, Resultado, Respuesta};
-use crate::estado::CambioVersion;
+use crate::estado::{CambioVersion, Clase};
 use crate::nucleo::Nucleo;
 use crate::proyeccion::ambito::Ambito;
 use crate::proyeccion::batalla::{incorporacion, ticket, SCHEMA_VERSION};
@@ -43,7 +43,7 @@ use contrato::v1 as pb;
 use pb::orden::Cuerpo;
 use sha2::{Digest, Sha256};
 use servidor::{ComandoSesion, Difusion, EstadoNucleo, FinDeSesion, PeticionAdmin, RelojCompartido, SesionId};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 use carga::Medidor;
 use tokio::sync::{mpsc, oneshot};
@@ -432,6 +432,14 @@ impl Actor {
                 if registros.iter().any(|cv| cambia_derechos(cv)) {
                     for id in self.mesa.ids() {
                         self.mesa.sincronizar(&self.nucleo, id, false, &mut envios);
+                    }
+                } else {
+                    // Una columna que para o arranca no toca a sus héroes, pero puede darles o quitarles el `CAMPAMENTO` de la puerta en que para (2026-11-10).
+                    let columnas: BTreeSet<u64> = registros.iter().flat_map(|cv| cv.tocados.de(Clase::Ejercito).iter().copied()).collect();
+                    if !columnas.is_empty() {
+                        for id in self.mesa.a_bordo_de(&self.nucleo, &columnas) {
+                            self.mesa.sincronizar(&self.nucleo, id, false, &mut envios);
+                        }
                     }
                 }
                 let mut cubos = self.mesa.repartir(&self.nucleo, registros.iter().copied(), None);

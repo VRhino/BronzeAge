@@ -258,7 +258,7 @@ fn reclutar_en_una_plaza_valida_en_orden_paga_del_almacen_y_resta_poblacion() {
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
     assert_eq!(e.rechazada("ana", reclutar(h, Tropa::MiliciaLanceros)), rechazos::HEROE_NO_ESTA_EN_LA_PLAZA, "hay que estar dentro de la plaza");
     e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(a as u32) });
-    assert_eq!(e.rechazada("ana", reclutar(h, Tropa::MiliciaLanceros)), rechazos::RECLUTAMIENTO_SOLO_REPONER, "ciudadano sin residir: solo repone lo que ya tiene aquí");
+    assert_eq!(e.rechazada("ana", reclutar(h, Tropa::MiliciaLanceros)), rechazos::HEROE_SIN_COLUMNA, "ciudadano sin residir: la escuadra nueva va a la columna con la que entró, y entró sin ella");
     e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(a as u32)) });
 
     // La tecnología se mira en la Facción de la plaza (antes que la población, el edificio o el coste).
@@ -290,6 +290,54 @@ fn reclutar_en_una_plaza_valida_en_orden_paga_del_almacen_y_resta_poblacion() {
     assert_eq!(madera1 - e.almacen(Madera), 21_000, "30 soldados × 1 de madera × 0,7");
     // Los logros (6B): dos escuadras nuevas reclutadas en la plaza (ni la milicia ni los leñadores tienen contador de soldados propio).
     assert_eq!(comun::logros_de_hechos(&e.n), vec![(tecnologia::Contador::ReclutadosEscuadrones, 2)]);
+}
+
+/// 2026-11-10 (decisión del autor): un ciudadano de la Facción de la plaza que no reside en ella recluta también escuadras nuevas, que se van a la columna con la que entró y comen de sus
+/// víveres; paga la plaza. El Gobernador o un General lo cierran a los ciudadanos, y entonces solo reponen, como antes.
+#[test]
+fn un_ciudadano_de_visita_recluta_escuadras_nuevas_a_su_columna_salvo_que_la_plaza_lo_cierre() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    e.avanzar(24 * HORA);
+    let a = e.a;
+    // «dora», de la Facción 1, recluta en la plaza, sale con su tropa, se muda al campamento de mercenarios y vuelve de visita con su columna.
+    let h = e.heroe_en_la_plaza("dora");
+    let milicia = e.ok("dora", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: Tropa::MiliciaLanceros }).creadas[0];
+    let col = e.ok("dora", Comando::SalirAlMundo { asentamiento: a, heroe: h, escuadras: vec![milicia], carga: vec![] }).creadas[0];
+    e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Campamento(0)) });
+    e.ok("dora", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: h });
+
+    // Una escuadra nueva: a la columna, pagada por la plaza, y sin comer del almacén.
+    let (madera0, pesants0) = (e.almacen(Madera), e.n.economia(a).unwrap().poblacion.pesants);
+    let reclutar = |tropa| Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa };
+    let r = e.ok("dora", reclutar(Tropa::Lenadores));
+    let lenadores = r.creadas[0];
+    let esc = e.n.escuadra(lenadores).unwrap().1.clone();
+    assert_eq!((esc.contenedor, esc.plaza_origen, esc.cantidad), (Contenedor::Ejercito(col), Some(a as u32), 30), "va a la columna con la que entró");
+    assert!(e.n.estado().ejercitos[&col].columna.escuadras.contains(&lenadores), "y la columna la lleva");
+    assert_eq!((madera0 - e.almacen(Madera), pesants0 - e.n.economia(a).unwrap().poblacion.pesants), (30_000, 30), "paga la plaza: el equipo y la población");
+    assert_eq!(e.n.soldados_del_campamento(a), 0, "no come del almacén: come de los víveres de la columna");
+    let h1 = hechos(&e.n, "tropas.reclutadas");
+    assert_eq!((dato(&h1[h1.len() - 1], "escuadra"), dato(&h1[h1.len() - 1], "nueva")), (lenadores as i64, 1));
+    assert_eq!(e.rechazada("dora", reclutar(Tropa::Lenadores)), rechazos::RECLUTAMIENTO_AL_TOPE, "una escuadra por tropa, y la columna está a la puerta");
+
+    // Cerrado a los ciudadanos (lo cierra el Gobernador o un General: la matriz lo prueba `sesiones`), solo repone.
+    let cerrar = |cerrado| Comando::CerrarReclutamientoACiudadanos { asentamiento: a, cerrado };
+    assert_eq!(e.rechazada("dora", cerrar(true)), rechazos::NO_AUTORIZADO, "sin cargo no se cierra");
+    e.ok("admin", cerrar(true));
+    assert_eq!(e.ord("admin", cerrar(true)).resultado, Resultado::SinCambios);
+    assert!(nucleo::proyeccion::interior::asentamiento(&e.n, a).unwrap().reclutamiento_cerrado_a_ciudadanos, "se ve dentro");
+    let cierres = hechos(&e.n, "reclutamiento.cierre_a_ciudadanos");
+    assert_eq!((cierres.len(), dato(&cierres[0], "cerrado")), (1, 1));
+    assert_eq!(e.rechazada("dora", reclutar(Tropa::Granjeros)), rechazos::RECLUTAMIENTO_SOLO_REPONER);
+    // Abierto otra vez, vuelve a poder.
+    e.ok("admin", cerrar(false));
+    let granjeros = e.ok("dora", reclutar(Tropa::Granjeros)).creadas[0];
+    assert_eq!(e.n.escuadra(granjeros).unwrap().1.contenedor, Contenedor::Ejercito(col));
+    // La foto lo guarda (BAN61).
+    e.ok("admin", cerrar(true));
+    let vuelta = nucleo::Estado::deserializar(&e.n.estado().serializar(), &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
+    assert!(vuelta.asentamientos[&a].reclutamiento_cerrado_a_ciudadanos);
 }
 
 // ───────────────────────────── 3. Reclutar en un campamento de mercenarios ─────────────────────────────
@@ -859,7 +907,6 @@ fn de_visita_en_una_plaza_de_su_faccion_guarnece_y_escolta_con_lo_que_trae_y_al_
     let contenedor = |e: &Escenario, id| e.n.escuadra(id).unwrap().1.contenedor;
     let guarnicion = |e: &Escenario| nucleo::proyeccion::interior::asentamiento(&e.n, a).unwrap();
     let asignar = |escuadra| Comando::AsignarGuarnicion { heroe: h, escuadra };
-    assert_eq!(e.rechazada("dora", asignar(lenadores)), rechazos::GUARNICION_SIN_RESIDENCIA, "fuera de la plaza, como siempre");
     e.ok("dora", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: h });
     assert_eq!((contenedor(&e, lenadores), contenedor(&e, milicia)), (Contenedor::Ejercito(col), Contenedor::Ejercito(col)));
 
@@ -891,8 +938,7 @@ fn de_visita_en_una_plaza_de_su_faccion_guarnece_y_escolta_con_lo_que_trae_y_al_
     assert!(e.n.estado().ejercitos[&col].columna.escuadras.is_empty(), "no se lleva lo que dejó");
     assert_eq!((contenedor(&e, lenadores), contenedor(&e, milicia)), (Contenedor::Plaza(a), Contenedor::Escolta(c)));
     assert_eq!(guarnicion(&e).guarnicion_ids, vec![esc.clone()], "la guarnición sigue en la plaza");
-    // Se recoge solo desde dentro.
-    assert_eq!(e.rechazada("dora", Comando::RetirarGuarnicion { heroe: h, escuadra: lenadores }), rechazos::GUARNICION_NO_ESTAS_DENTRO);
+    // Se recoge desde dentro o, con su columna a la puerta, a la columna (2026-11-10, `de_la_puerta_de_una_plaza_de_su_faccion_se_guarnece_y_se_recoge_con_la_columna`).
     e.ok("dora", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: h });
     e.ok("dora", Comando::RetirarGuarnicion { heroe: h, escuadra: lenadores });
     assert_eq!(contenedor(&e, lenadores), Contenedor::Ejercito(col));
@@ -905,6 +951,68 @@ fn de_visita_en_una_plaza_de_su_faccion_guarnece_y_escolta_con_lo_que_trae_y_al_
     e.ok("admin", Comando::QuitarEscolta { caravana: c, heroe: h, escuadras: None });
     assert_eq!(e.rechazada("dora", asignar(milicia)), rechazos::GUARNICION_FACCION_AJENA);
     let _ = ana;
+}
+
+/// Pedido del autor del 2026-11-10 (acciones a la puerta): con la columna a la puerta de una plaza de su Facción, sin entrar, el héroe deja escuadras de la columna en la guarnición y
+/// las recoge a ella. El residente las deja en su campamento de la plaza, de guarnición (su cupo de siempre); el que no reside, de visita (`Contenedor::Plaza`), como si entrara.
+#[test]
+fn de_la_puerta_de_una_plaza_de_su_faccion_se_guarnece_y_se_recoge_con_la_columna() {
+    let m = con_mundo!();
+    let (mut e, _) = escenario_de_escolta(m);
+    let a = e.a;
+    e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: a, nivel: 2 });
+    e.dar(a, Madera, 1_000_000);
+    e.ok("admin", Comando::AnadirEdificio { asentamiento: a, tipo: asentamiento::catalogo::Tipo::Barracon });
+    let activo = |e: &Escenario| e.n.economia(a).unwrap().edificios.iter().any(|x| x.tipo == asentamiento::catalogo::Tipo::Barracon && x.activo());
+    for _ in 0..80 {
+        if activo(&e) {
+            break;
+        }
+        e.avanzar(HORA);
+    }
+    assert_eq!(e.n.cupo_de_guarnicion(a), Some(7), "Barracón de nivel interno 1");
+    let contenedor = |e: &Escenario, id| e.n.escuadra(id).unwrap().1.clone();
+    let ubicacion = |e: &Escenario, h| e.n.heroe(h).unwrap().heroe.presencia.ubicacion;
+
+    // Ana reside en la plaza: sale con sus Leñadores y, desde la puerta, los deja de guarnición en su campamento.
+    let ana = e.heroe_en_la_plaza("ana");
+    let suyos = e.ok("ana", Comando::ReclutarTropa { asentamiento: a, heroe: ana, tropa: Tropa::Lenadores }).creadas[0];
+    let milicia = e.ok("ana", Comando::ReclutarTropa { asentamiento: a, heroe: ana, tropa: Tropa::MiliciaLanceros }).creadas[0];
+    let col = e.ok("ana", Comando::SalirAlMundo { asentamiento: a, heroe: ana, escuadras: vec![suyos, milicia], carga: vec![] }).creadas[0];
+    assert_eq!(e.rechazada("ana", Comando::AsignarGuarnicion { heroe: ana, escuadra: milicia }), rechazos::GUARNICION_SUPERA_EL_CUPO, "con el cupo de siempre");
+    e.ok("ana", Comando::AsignarGuarnicion { heroe: ana, escuadra: suyos });
+    assert_eq!(ubicacion(&e, ana), Ubicacion::Columna(col), "sin entrar");
+    let s = contenedor(&e, suyos);
+    assert_eq!((s.contenedor, s.en_guarnicion), (Contenedor::Campamento, true));
+    assert_eq!(e.n.estado().ejercitos[&col].columna.escuadras, vec![milicia], "sale de la columna");
+    assert_eq!(e.rechazada("ana", Comando::AsignarGuarnicion { heroe: ana, escuadra: suyos }), rechazos::GUARNICION_YA_ASIGNADA);
+    // Y la recoge a la columna.
+    e.ok("ana", Comando::RetirarGuarnicion { heroe: ana, escuadra: suyos });
+    let s = contenedor(&e, suyos);
+    assert_eq!((s.contenedor, s.en_guarnicion), (Contenedor::Ejercito(col), false));
+    assert_eq!(e.n.estado().ejercitos[&col].columna.escuadras, vec![milicia, suyos]);
+
+    // Dora, de la Facción 1, no reside: desde la puerta los deja de visita y los recoge igual.
+    let dora = e.heroe_en_la_plaza("dora");
+    let lenadores = e.ok("dora", Comando::ReclutarTropa { asentamiento: a, heroe: dora, tropa: Tropa::Lenadores }).creadas[0];
+    let suya = e.ok("dora", Comando::SalirAlMundo { asentamiento: a, heroe: dora, escuadras: vec![lenadores], carga: vec![] }).creadas[0];
+    e.ok("admin", Comando::FijarResidencia { heroe: dora, residencia: Some(Residencia::Campamento(0)) });
+    e.ok("dora", Comando::AsignarGuarnicion { heroe: dora, escuadra: lenadores });
+    assert_eq!(contenedor(&e, lenadores).contenedor, Contenedor::Plaza(a));
+    assert!(e.n.estado().ejercitos[&suya].columna.escuadras.is_empty());
+    assert_eq!(ubicacion(&e, dora), Ubicacion::Columna(suya));
+    e.ok("dora", Comando::RetirarGuarnicion { heroe: dora, escuadra: lenadores });
+    assert_eq!(contenedor(&e, lenadores).contenedor, Contenedor::Ejercito(suya));
+
+    // Lejos de la puerta, no.
+    let radio = e.n.estado().reglas.economia.militar.movimiento.radio_puerta;
+    let puerta = e.n.estado().asentamientos[&a].posicion;
+    let t = e.n.ahora();
+    let lejos = e.n.crear_ejercito(t, "leo", 1, Punto { x: puerta.x + 3 * radio, y: puerta.y }, 500, 100_000).unwrap();
+    let leo = e.n.ejercito(lejos).unwrap().columna.lider;
+    let de_leo = e.ok("admin", Comando::DarEscuadra { heroe: leo, tropa: Tropa::Lenadores, cantidad: 10 }).creadas[0];
+    assert_eq!(contenedor(&e, de_leo).contenedor, Contenedor::Ejercito(lejos));
+    assert_eq!(e.rechazada("leo", Comando::AsignarGuarnicion { heroe: leo, escuadra: de_leo }), rechazos::GUARNICION_SIN_RESIDENCIA);
 }
 
 #[test]
@@ -1140,7 +1248,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
     let reglas = Reglas::default();
     let base = estado_con_heroes();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN60");
+    assert_eq!(&bytes[..5], b"BAN61");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.militar, base.militar, "incluido el índice de residentes, que se reconstruye");

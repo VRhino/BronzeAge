@@ -440,8 +440,8 @@ fn las_ordenes_de_economia_y_sus_rechazos() {
     assert_eq!(codigo(&r), rechazos::ASCENSO_FALTA_POBLACION);
     let Resultado::Rechazada { mensaje, .. } = &r.resultado else { unreachable!() };
     assert!(mensaje.contains("faltan edificios") && mensaje.contains("faltan recursos"), "{mensaje}");
-    // La solvencia dice cuánto llega y cuánto pide por minuto (2026-11-03): sin Leñera activa ni pueblo de cantera no llega madera ni piedra.
-    assert!(mensaje.contains("no cubriría el mantenimiento del nivel nuevo: madera (llegan 0,0 por minuto y pide 1,7), piedra (llegan 0,0 por minuto y pide 3,3)"), "{mensaje}");
+    // La solvencia del nivel siguiente ya no bloquea (2026-11-10): no sale en el rechazo, sino en el interior como advertencia (ver más abajo).
+    assert!(!mensaje.contains("mantenimiento"), "{mensaje}");
 
     // Políticas.
     let pol = |i: &str, pol: &str, cargo| ana(i, Comando::ActivarPolitica { asentamiento: id, politica: pol.into(), cargo });
@@ -456,6 +456,12 @@ fn las_ordenes_de_economia_y_sus_rechazos() {
     assert_eq!(n.economia(id).unwrap().politicas.activas().len(), 1, "un milisegundo antes sigue activa");
     n.avanzar_hasta(150 * MIN);
     assert!(n.economia(id).unwrap().politicas.activas().is_empty());
+    // La advertencia de solvencia la deja el paso de minuto en el interior (y en la plaza propia): sin pueblo de cantera no llega piedra para el mantenimiento
+    // del nivel 2.
+    let interior = nucleo::proyeccion::interior::asentamiento(&n, id).expect("existe");
+    let piedra = interior.insolvencia_ascenso.iter().find(|f| f.recurso == "piedra").expect("advierte de la piedra");
+    assert!(piedra.llega == 0 && piedra.pide > 0, "{piedra:?}");
+    assert_eq!(nucleo::proyeccion::propios::plaza_propia(&n, id, Default::default()).insolvencia_ascenso, interior.insolvencia_ascenso, "la plaza propia lo lleva igual");
     assert_eq!(eventos(&n, "politica.expirada").iter().map(|(en, ..)| *en).collect::<Vec<_>>(), vec![150 * MIN]);
 
     // Una orden rechazada o sin cambios no deja rastro; las aceptadas, sí (versión y plaza tocada).
@@ -575,7 +581,7 @@ fn estado_con_una_plaza() -> Estado {
     let eco = &s.reglas.economia.datos;
     let economia = asentamiento::asentamiento::Asentamiento::fundar(eco, 0, &eco.materiales_iniciales, eco.viviendas_iniciales);
     let urbe = nucleo::urbanismo::Urbe::fundar(&s.reglas.economia, 7, 1);
-    s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, puerta: Default::default(), cargos: Default::default(), nombre: String::new(), capital_de: None, de_la_faccion_desde: 0, resto_tributo: 0, permite_reabastecer_aliados: false, almacen_cerrado_a_ciudadanos: false, fundadores: Vec::new() });
+    s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, puerta: Default::default(), cargos: Default::default(), nombre: String::new(), capital_de: None, de_la_faccion_desde: 0, resto_tributo: 0, permite_reabastecer_aliados: false, almacen_cerrado_a_ciudadanos: false, reclutamiento_cerrado_a_ciudadanos: true, fundadores: Vec::new() });
     s
 }
 
@@ -613,6 +619,7 @@ fn la_economia_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
         e.politicas = asentamiento::Politicas::desde_activas(vec![Activa { id: "racionamiento".into(), cargo: Cargo::Sacerdote, expira_en: 777 }]);
         e.ascenso = Some(Ascenso { nivel_objetivo: 2, iniciado_en: 5, completa_en: 6 });
         e.recetas_pausadas = vec![Recurso::Cuero, Recurso::ArmaBronce];
+        e.consumo_pausado = vec![Recurso::Carne, Recurso::Vino];
         e.reserva_manual[3] = 42;
         (e.poblacion.restos, e.poblacion.recuperando) = ([250, -400, 999], true);
         e.recintos = vec![anillo(|_| {}), anillo(|r| (r.id, r.nivel, r.avance, r.mejora, r.completado_en) = (2, 2, 1, None, None))];
@@ -662,6 +669,7 @@ fn la_economia_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
         ("siguiente_edificio", eco(|e| e.siguiente_edificio += 1)),
         ("ascenso", eco(|e| e.ascenso = Some(Ascenso { nivel_objetivo: 2, iniciado_en: 1, completa_en: 2 }))),
         ("recetas_pausadas", eco(|e| e.recetas_pausadas.push(Recurso::Cuero))),
+        ("consumo_pausado", eco(|e| e.consumo_pausado.push(Recurso::Pan))),
         ("auto_pausada", eco(|e| e.auto_pausada = true)),
         ("reserva_manual", eco(|e| e.reserva_manual[7] = 1)),
         ("ocupado", eco(|e| e.ocupado = true)),
@@ -1045,7 +1053,7 @@ fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash_y_el_formato_anterior_se
     let reglas = Reglas::default();
     let base = estado_con_una_plaza();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN60");
+    assert_eq!(&bytes[..5], b"BAN61");
     let viejo = [b"BAN13".as_slice(), &bytes[5..]].concat();
     let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN13 no debe admitirse") };
     assert!(e.to_string().contains("BAN13") && e.to_string().contains("población"), "{e}");

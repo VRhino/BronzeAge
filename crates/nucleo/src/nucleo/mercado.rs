@@ -75,7 +75,7 @@ fn rechazo_de_trueque(e: ErrorTrueque) -> (&'static str, &'static str) {
 fn rechazo_de_orden(e: ErrorOrden) -> (&'static str, &'static str) {
     use rechazos::*;
     match e {
-        ErrorOrden::NoAutorizado => (NO_AUTORIZADO, "el Mercado de la plaza es de su Tesorero o su Gobernador, residente y dentro"),
+        ErrorOrden::NoAutorizado => (NO_AUTORIZADO, "el Mercado de la plaza es de su Tesorero o su Gobernador, residente y dentro o con su columna a la puerta"),
         ErrorOrden::SinMercado => (MERCADO_SIN_MERCADO, "la plaza no tiene un Mercado activo"),
         ErrorOrden::CantidadNoPositiva => (ORDEN_CANTIDAD_NO_POSITIVA, "la cantidad debe ser mayor que cero"),
         ErrorOrden::SinStock => (ORDEN_SIN_STOCK, "el almacén no tiene esa cantidad para vender"),

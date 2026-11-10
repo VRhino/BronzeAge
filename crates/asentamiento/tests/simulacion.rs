@@ -139,7 +139,7 @@ fn correr_con(dias: i64, semilla_hambre: bool, apagar_en: Option<i64>) -> (Asent
         }
         // Un bot pide la subida en cuanto puede.
         if a.ascenso.is_none() && minuto % 60 == 0 {
-            let _ = a.solicitar_ascenso(t, &reglas, &x, false, &mut ev);
+            let _ = a.solicitar_ascenso(t, &reglas, false, &mut ev);
         }
         for e in ev {
             eventos.push((minuto, e));
