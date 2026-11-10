@@ -231,6 +231,20 @@ impl PartialEq for Tendencia {
 
 impl Eq for Tendencia {}
 
+/// La advertencia de solvencia del nivel siguiente ([`crate::ascenso::Insolvencia`], autor, 2026-11-10) del último paso de minuto, para la proyección. La escribe
+/// quien lleva el reloj de la plaza (el núcleo), como la [`Tendencia`]. Es un derivado: no viaja en la foto (tras recuperar está vacía hasta el siguiente paso) y no
+/// cuenta en la igualdad.
+#[derive(Clone, Debug, Default)]
+pub struct AvisoSolvencia(pub Vec<crate::ascenso::Insolvencia>);
+
+impl PartialEq for AvisoSolvencia {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl Eq for AvisoSolvencia {}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Asentamiento {
     pub fundado_en: Instante,
@@ -254,6 +268,9 @@ pub struct Asentamiento {
     pub siguiente_edificio: u32,
     pub ascenso: Option<Ascenso>,
     pub recetas_pausadas: Vec<Recurso>,
+    /// Los bienes de consumo cuyo consumo pausó el Gobernador o el Tesorero (`pausarConsumo`, 2026-11-10): la población no los come (y pierde su empuje al crecimiento) y la
+    /// guarnición no come la carne, así que se acumulan para venderlos. Nunca el trigo. En el orden de `BIENES_DE_CONSUMO`.
+    pub consumo_pausado: Vec<Recurso>,
     pub auto_pausada: bool,
     /// Reserva manual del Tesorero por recurso (milésimas); solo cuenta en el camino automático.
     pub reserva_manual: [Mil; N],
@@ -266,6 +283,8 @@ pub struct Asentamiento {
     pub ultimo_minuto: Instante,
     /// Lo que cambió el último paso de minuto (la tendencia «+N/min» del interior).
     pub tendencia: Tendencia,
+    /// La advertencia de solvencia del nivel siguiente del último paso de minuto (derivado).
+    pub aviso_solvencia: AvisoSolvencia,
 }
 
 impl Asentamiento {
@@ -296,6 +315,7 @@ impl Asentamiento {
             siguiente_edificio: id + 1,
             ascenso: None,
             recetas_pausadas: vec![],
+            consumo_pausado: vec![],
             auto_pausada: false,
             reserva_manual: [0; N],
             ocupado: false,
@@ -303,6 +323,7 @@ impl Asentamiento {
             destruido: false,
             ultimo_minuto: fundado_en,
             tendencia: Tendencia::default(),
+            aviso_solvencia: AvisoSolvencia::default(),
         }
     }
 
@@ -447,7 +468,7 @@ impl Asentamiento {
         // 2. Comida y hambre, crecimiento y recaudación.
         let entorno = self.entorno_poblacion(r, x);
         let mut sucesos = vec![];
-        let modificadores = self.poblacion.nutrir(&r.poblacion, &entorno, &mut self.almacen, &mut sucesos);
+        let modificadores = self.poblacion.nutrir(&r.poblacion, &entorno, &self.consumo_pausado, &mut self.almacen, &mut sucesos);
         self.poblacion.crecer(&r.poblacion, &entorno, modificadores, &mut sucesos);
         self.almacen.producir(Recurso::Oro, self.poblacion.recaudacion_por_minuto(&r.poblacion, &entorno));
         for s in sucesos {

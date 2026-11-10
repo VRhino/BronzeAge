@@ -3,11 +3,15 @@
 //!
 //! Una escuadra por (héroe, tropa) en toda la partida: reclutar la que ya se tiene **repone** hasta el tope (`unidades`) y solo donde está.
 //! Reclutar no exige cargo: manda la residencia. Todo sale del **almacén de la plaza** y de su población, no del héroe.
+//!
+//! Desde el 2026-11-10 (decisión del autor) un ciudadano de la Facción de la plaza que no reside en ella recluta también escuadras nuevas, que se van a la columna con la que
+//! entró (sin pasar de su Liderazgo), salvo que el Gobernador o un General lo haya cerrado a los ciudadanos: entonces, como antes, solo repone.
 
 use crate::catalogo::{DefTropa, Origen, Tropa};
 use crate::datos::Reglas;
 use crate::escuadra::{Contenedor, Escuadra};
 use crate::heroe::Heroe;
+use crate::liderazgo;
 use crate::racion;
 use crate::tipos::{AsentamientoId, ColumnaId, EscuadraId};
 use asentamiento::datos::por;
@@ -20,19 +24,24 @@ use base::{Instante, Mil};
 pub enum Permiso {
     /// Reside en ella: escuadra nueva, reposición y cualquier tropa que el edificio permita.
     Todo,
-    /// Ciudadano de la Facción de la plaza, sin residir y sin veto: solo repone una escuadra que ya tiene **aquí**.
+    /// Ciudadano de la Facción de la plaza, sin residir, sin veto y con el reclutamiento abierto a los ciudadanos: escuadra nueva, que se va a la columna con la que entró, y
+    /// reposición de las que tiene **aquí**.
+    Ciudadano,
+    /// Ciudadano de la Facción de la plaza, sin residir y sin veto, con el reclutamiento cerrado a los ciudadanos: solo repone una escuadra que ya tiene **aquí**.
     SoloReponer,
     No,
 }
 
-/// Residir manda; si no, hay que ser de la Facción de la plaza y no estar vetado.
-pub fn permiso(reside: bool, de_la_faccion: bool, vetado: bool) -> Permiso {
+/// Residir manda; si no, hay que ser de la Facción de la plaza y no estar vetado, y la plaza decide si sus ciudadanos reclutan escuadras nuevas (`cerrado_a_ciudadanos`).
+pub fn permiso(reside: bool, de_la_faccion: bool, vetado: bool, cerrado_a_ciudadanos: bool) -> Permiso {
     if reside {
         Permiso::Todo
     } else if !de_la_faccion || vetado {
         Permiso::No
-    } else {
+    } else if cerrado_a_ciudadanos {
         Permiso::SoloReponer
+    } else {
+        Permiso::Ciudadano
     }
 }
 
@@ -46,8 +55,12 @@ pub enum ErrorReclutamiento {
     Reservada,
     /// Ya tienes una escuadra de esa tropa y no está aquí: solo se repone donde está (en escolta o fuera del mundo, nunca).
     YaLaTienesFuera(Contenedor),
-    /// Fuera de tu residencia solo se repone lo que ya tienes aquí.
+    /// Fuera de tu residencia, con el reclutamiento cerrado a los ciudadanos, solo se repone lo que ya tienes aquí.
     SoloReponer,
+    /// Una escuadra nueva fuera de tu residencia va a la columna con la que entraste, y el héroe entró sin columna.
+    SinColumna,
+    /// Una escuadra nueva fuera de tu residencia va a la columna con la que entraste, y no cabe en el Liderazgo del héroe.
+    SuperaLiderazgo,
     AlTope,
     /// El pool de reclutamiento (la población que no hace falta para producir) no llega.
     SinPoblacion { origen: Origen, hacen_falta: i64, disponibles: i64 },
@@ -83,6 +96,8 @@ pub struct Pedido<'a> {
     pub tecnologia_adoptada: bool,
     /// A cuánto de la puerta de la plaza está una columna (`None` si no existe): una escuadra que va en una se repone con la columna a la puerta.
     pub distancia_de_columna: &'a dyn Fn(ColumnaId) -> Option<Mil>,
+    /// La columna con la que entró el héroe, si no reside aquí: a ella va la escuadra nueva de un [`Permiso::Ciudadano`].
+    pub columna: Option<ColumnaId>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -95,6 +110,8 @@ pub struct Reclutado {
     pub origen: Origen,
     /// Lo que se pagó del almacén (equipo y oro).
     pub costo: Costo,
+    /// La columna a la que se fue la escuadra nueva de un [`Permiso::Ciudadano`] (quien llama la apunta en la columna); `None` = al campamento, o se repuso.
+    pub columna: Option<ColumnaId>,
 }
 
 /// Qué cuesta reclutar `cantidad` soldados de esta tropa en una plaza: el equipo por soldado (× «Leva Forzosa») y, salvo en el Centro Urbano,
@@ -127,7 +144,7 @@ pub fn reserva_de_trigo(r: &Reglas, consumo_poblacion: Mil, soldados: i64) -> Mi
 /// escuadra (o repone la que hay: moral, nivel y experiencia no cambian). Un rechazo no deja rastro y no gasta ids (`nuevo_id` solo se llama
 /// al crear una escuadra).
 pub fn reclutar(r: &Reglas, plaza: Plaza, pedido: Pedido, nuevo_id: impl FnOnce() -> EscuadraId, ahora: Instante) -> Result<Reclutado, ErrorReclutamiento> {
-    let Pedido { heroe, tropa, permiso, reside, tecnologia_adoptada, distancia_de_columna } = pedido;
+    let Pedido { heroe, tropa, permiso, reside, tecnologia_adoptada, distancia_de_columna, columna } = pedido;
     let def = r.tropas.tropa(tropa);
     if permiso == Permiso::No {
         return Err(ErrorReclutamiento::NoPuedes);
@@ -151,6 +168,19 @@ pub fn reclutar(r: &Reglas, plaza: Plaza, pedido: Pedido, nuevo_id: impl FnOnce(
     } else if permiso == Permiso::SoloReponer {
         return Err(ErrorReclutamiento::SoloReponer);
     }
+    // La escuadra nueva de un ciudadano que no reside aquí se va a la columna con la que entró: tiene que haberla y caber en su Liderazgo (contando las escuadras que ya lleva
+    // fuera del campamento y de la guarnición de esta plaza, como al recogerlas).
+    let a_la_columna = match (existente, permiso) {
+        (None, Permiso::Ciudadano) => {
+            let c = columna.ok_or(ErrorReclutamiento::SinColumna)?;
+            let fuera = heroe.escuadras.iter().filter(|e| e.contenedor != Contenedor::Campamento && e.contenedor != Contenedor::Plaza(u64::from(plaza.id)));
+            if liderazgo::comprometido(r, fuera) + liderazgo::coste(r, tropa) > heroe.liderazgo_base {
+                return Err(ErrorReclutamiento::SuperaLiderazgo);
+            }
+            Some(c)
+        }
+        _ => None,
+    };
     let cantidad = def.unidades - existente.map_or(0, |e| e.cantidad);
     if cantidad <= 0 {
         return Err(ErrorReclutamiento::AlTope);
@@ -167,7 +197,10 @@ pub fn reclutar(r: &Reglas, plaza: Plaza, pedido: Pedido, nuevo_id: impl FnOnce(
     if !plaza.almacen.tiene(&costo) {
         return Err(ErrorReclutamiento::SinRecursos);
     }
-    let hacen_falta = reserva_de_trigo(r, plaza.consumo_poblacion, plaza.soldados_en_el_campamento + cantidad);
+    // La escuadra que va en una columna (la nueva de un ciudadano o la que se repone a la puerta) come de sus víveres, no del almacén: solo cuenta la del campamento.
+    let en_columna = a_la_columna.is_some() || existente.is_some_and(|e| matches!(e.contenedor, Contenedor::Ejercito(_)));
+    let comen_aqui = if en_columna { 0 } else { cantidad };
+    let hacen_falta = reserva_de_trigo(r, plaza.consumo_poblacion, plaza.soldados_en_el_campamento + comen_aqui);
     let hay = plaza.almacen.cantidad(Recurso::Trigo);
     if hay < hacen_falta {
         return Err(ErrorReclutamiento::SinReservaDeTrigo { hacen_falta, hay });
@@ -188,11 +221,15 @@ pub fn reclutar(r: &Reglas, plaza: Plaza, pedido: Pedido, nuevo_id: impl FnOnce(
         }
         None => {
             let id = nuevo_id();
-            heroe.escuadras.push(Escuadra::nueva(r, id, heroe.id, tropa, cantidad, Some(plaza.id), ahora));
+            let mut e = Escuadra::nueva(r, id, heroe.id, tropa, cantidad, Some(plaza.id), ahora);
+            if let Some(c) = a_la_columna {
+                e.contenedor = Contenedor::Ejercito(c);
+            }
+            heroe.escuadras.push(e);
             (id, true)
         }
     };
-    Ok(Reclutado { escuadra, cantidad, nueva, origen, costo })
+    Ok(Reclutado { escuadra, cantidad, nueva, origen, costo, columna: a_la_columna })
 }
 
 #[cfg(test)]
@@ -224,6 +261,7 @@ mod pruebas {
         columnas: Vec<(ColumnaId, Mil)>,
         reside: bool,
         permiso: Permiso,
+        columna: Option<ColumnaId>,
     }
 
     fn mundo() -> Mundo {
@@ -247,6 +285,7 @@ mod pruebas {
             columnas: vec![],
             reside: true,
             permiso: Permiso::Todo,
+            columna: None,
         }
     }
 
@@ -264,16 +303,43 @@ mod pruebas {
             consumo_poblacion: m.consumo_poblacion,
             soldados_en_el_campamento: m.soldados,
         };
-        let pedido = Pedido { heroe: &mut m.heroe, tropa, permiso: m.permiso, reside: m.reside, tecnologia_adoptada: m.adoptada, distancia_de_columna: &busca };
+        let pedido = Pedido { heroe: &mut m.heroe, tropa, permiso: m.permiso, reside: m.reside, tecnologia_adoptada: m.adoptada, distancia_de_columna: &busca, columna: m.columna };
         reclutar(&r, plaza, pedido, || 77, 5_000)
     }
 
     #[test]
     fn los_permisos_residir_manda_luego_la_faccion_y_el_veto() {
-        assert_eq!(permiso(true, false, true), Permiso::Todo, "un residente recluta aunque no lo parezca");
-        assert_eq!(permiso(false, true, false), Permiso::SoloReponer);
-        assert_eq!(permiso(false, false, false), Permiso::No, "otra Facción no recluta");
-        assert_eq!(permiso(false, true, true), Permiso::No, "el veto");
+        assert_eq!(permiso(true, false, true, true), Permiso::Todo, "un residente recluta aunque no lo parezca");
+        assert_eq!(permiso(false, true, false, false), Permiso::Ciudadano, "un ciudadano recluta con la plaza abierta");
+        assert_eq!(permiso(false, true, false, true), Permiso::SoloReponer, "con el reclutamiento cerrado a los ciudadanos, solo repone");
+        assert_eq!(permiso(false, false, false, false), Permiso::No, "otra Facción no recluta");
+        assert_eq!(permiso(false, true, true, false), Permiso::No, "el veto");
+    }
+
+    #[test]
+    fn un_ciudadano_que_no_reside_recluta_una_escuadra_nueva_a_su_columna_si_cabe_en_su_liderazgo() {
+        let r = r();
+        let mut m = mundo();
+        (m.permiso, m.reside) = (Permiso::Ciudadano, false);
+        assert_eq!(reclutar_de(&mut m, Tropa::MiliciaLanceros), Err(ErrorReclutamiento::SinColumna), "entró sin columna");
+        m.columna = Some(9);
+        // La reserva de trigo no cuenta a la escuadra que se va a la columna: con el campamento vacío basta la de la población (2 × 8 = 16).
+        m.almacen.poner(Recurso::Trigo, 16_000);
+        let res = reclutar_de(&mut m, Tropa::MiliciaLanceros).unwrap();
+        assert_eq!((res.escuadra, res.nueva, res.columna), (77, true, Some(9)));
+        let e = m.heroe.escuadra(77).unwrap();
+        assert_eq!((e.contenedor, e.plaza_origen, e.cantidad), (Contenedor::Ejercito(9), Some(4), 25), "a la columna, con la plaza como origen");
+        // Reponerla vale con su columna a la puerta, como siempre.
+        m.heroe.escuadra_mut(77).unwrap().cantidad = 5;
+        m.columnas = vec![(9, 1_000)];
+        assert_eq!(reclutar_de(&mut m, Tropa::MiliciaLanceros).map(|x| (x.cantidad, x.nueva, x.columna)), Ok((20, false, None)));
+        // El Liderazgo: lo que ya lleva fuera del campamento más la nueva no puede pasar de su base.
+        m.heroe.liderazgo_base = liderazgo::coste(&r, Tropa::MiliciaLanceros) + liderazgo::coste(&r, Tropa::Lenadores) - 1;
+        assert_eq!(reclutar_de(&mut m, Tropa::Lenadores), Err(ErrorReclutamiento::SuperaLiderazgo));
+        // Las del campamento y las que dejó de visita en esta plaza no cuentan.
+        m.heroe.escuadra_mut(77).unwrap().contenedor = Contenedor::Plaza(4);
+        assert!(reclutar_de(&mut m, Tropa::Lenadores).is_ok_and(|x| x.columna == Some(9)));
+        assert_eq!(m.heroe.escuadras.len(), 2);
     }
 
     #[test]
@@ -477,7 +543,7 @@ mod pruebas {
             consumo_poblacion: 0,
             soldados_en_el_campamento: 0,
         };
-        let pedido = Pedido { heroe: &mut m.heroe, tropa: Tropa::MiliciaLanceros, permiso: Permiso::Todo, reside: true, tecnologia_adoptada: true, distancia_de_columna: &busca };
+        let pedido = Pedido { heroe: &mut m.heroe, tropa: Tropa::MiliciaLanceros, permiso: Permiso::Todo, reside: true, tecnologia_adoptada: true, distancia_de_columna: &busca, columna: None };
         assert!(reclutar(&r, plaza, pedido, || { llamadas += 1; 1 }, 0).is_err());
         assert_eq!(llamadas, 0);
     }

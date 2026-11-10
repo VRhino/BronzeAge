@@ -87,3 +87,48 @@ fn la_guarnicion_come_primero_carne_y_despues_trigo_y_la_tendencia_lo_refleja() 
     assert_eq!(e.tendencia.consumido[Carne.indice()], 0);
     assert!(e.tendencia.consumido[Trigo.indice()] >= racion, "sin carne, el trigo pone la ración de la guarnición");
 }
+
+/// 2026-11-10 (decisión del autor): con la carne pausada (`pausarConsumo`, del Gobernador o el Tesorero) ni la población ni la guarnición la comen: se queda entera en el almacén y el
+/// trigo pone lo que falta, igual que en el mundo sin carne. Reanudarla la devuelve a la mesa. El trigo nunca se pausa, y lo pausado se ve dentro y en la plaza propia.
+#[test]
+fn con_la_carne_pausada_ni_la_poblacion_ni_la_guarnicion_la_comen_y_el_trigo_pone_lo_que_falta() {
+    let Some(m) = mundo() else {
+        eprintln!("sin artefacto de mundo real: se omite");
+        return;
+    };
+    let ((mut sin, a), (mut pausada, _)) = (plaza_con_guarnicion(m), plaza_con_guarnicion(m));
+    dar(&mut pausada, a, Carne, 1_000_000);
+    let orden = |n: &mut Nucleo, id: &str, c: Comando| {
+        let t = n.ahora();
+        n.aplicar_en(t, Peticion::nueva("admin", id, c).de_admin())
+    };
+    let pausar = |recurso, pausado| Comando::PausarConsumo { asentamiento: a, recurso, pausado };
+    let r = orden(&mut pausada, "p1", pausar(Carne, true));
+    assert!(r.aceptada(), "{r:?}");
+    assert_eq!(orden(&mut pausada, "p2", pausar(Carne, true)).resultado, nucleo::Resultado::SinCambios, "ya estaba pausada");
+    for (id, recurso) in [("p3", Trigo), ("p4", Madera)] {
+        let r = orden(&mut pausada, id, pausar(recurso, true));
+        assert!(format!("{:?}", r.resultado).contains(nucleo::rechazos::CONSUMO_NO_SE_PAUSA), "{recurso:?} no se pausa: {r:?}");
+    }
+    assert_eq!(pausada.economia(a).unwrap().consumo_pausado, vec![Carne]);
+    let dentro = nucleo::proyeccion::interior::asentamiento(&pausada, a).unwrap();
+    assert_eq!(dentro.consumo_pausado, vec!["carne".to_owned()], "se ve dentro");
+    assert_eq!(nucleo::proyeccion::propios::plaza_propia(&pausada, a, Default::default()).consumo_pausado, vec!["carne".to_owned()], "y en la plaza propia");
+
+    // Un minuto: con la carne pausada se come lo mismo que en el mundo sin carne, todo de trigo, y la carne no se mueve.
+    let t = pausada.ahora();
+    sin.avanzar_hasta(t + MIN);
+    pausada.avanzar_hasta(t + MIN);
+    let (ts, tp) = (sin.economia(a).unwrap().tendencia, pausada.economia(a).unwrap().tendencia);
+    assert_eq!(tp.consumido[Carne.indice()], 0, "ni la población ni la guarnición comen carne");
+    assert_eq!(pausada.economia(a).unwrap().almacen.disponible(Carne), 1_000_000, "se queda entera para venderla");
+    assert_eq!(tp.consumido[Trigo.indice()], ts.consumido[Trigo.indice()], "el trigo pone lo que pone sin carne");
+
+    // Reanudada, vuelve a comerse.
+    let r = orden(&mut pausada, "p5", pausar(Carne, false));
+    assert!(r.aceptada(), "{r:?}");
+    let t = pausada.ahora();
+    pausada.avanzar_hasta(t + MIN);
+    assert!(pausada.economia(a).unwrap().tendencia.consumido[Carne.indice()] > 0, "reanudada, se come otra vez");
+    assert!(pausada.economia(a).unwrap().consumo_pausado.is_empty());
+}

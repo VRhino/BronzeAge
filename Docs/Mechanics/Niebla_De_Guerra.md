@@ -121,6 +121,8 @@ para cada Facción con algún ojo propio (sus plazas + sus avanzadas + sus colum
     si no hubo novedad y la Facción ya tenía registro, se devuelve la misma memoria (un tick tranquilo no reescribe el estado)
 ```
 
+**El nombre de la plaza** (Rust, 2026-11-10, pedido del autor): la ficha guarda el nombre que la plaza tenía **cuando se vio** (`DatosSitio.nombre`, en la foto) y la `VISTA` lo manda en `FichaConocida.nombre` (campo 2) con las `asentamientosConocidos`; hasta entonces viajaba vacío y el cliente solo podía enseñar el id. Si la plaza se renombra, la ficha conserva el nombre viejo hasta que se la vuelve a ver. Los pueblos y las avanzadas no tienen nombre: el campo va ausente.
+
 **Se olvida lo de una plaza que ya no existe** (decidido el 2026-10-11): si la plaza de una ficha o de un informe ya no está entre los asentamientos del mundo **y** su sitio cae en el alcance de algún ojo propio, la ficha y el informe se borran de la memoria (el informe usa su `posicion`, o la de la ficha si es un informe anterior a ese campo). Mientras el sitio no se vuelve a ver, la foto vieja se queda. Una plaza que sigue en pie —aunque haya cambiado de dueño— nunca se olvida: su ficha se actualiza.
 
 Una Facción **sin ojos** (sin plazas, avanzadas ni columnas) no graba nada. Los **pueblos extractores** y las **avanzadas** ajenas se recuerdan como una ciudad (no aportan visión propia el pueblo; la avanzada sí, 24), **con su nivel o etapa y su estado tal como estaban cuando se vieron** (decisión del autor, 2026-10-24): *activo*; *en obra* (un pueblo que espera materiales o se levanta, una avanzada que se levanta, se mejora o se repara: la obra gana a las ruinas); *en ruinas* (una avanzada arruinada). Las **ruinas de una ciudadela sin dueño** también se recuerdan, como ficha de nadie. Lo que cambia después no se sabe hasta que se vuelve a ver. Las plazas **propias** no entran en `asentamientos` (viajan completas o como avistadas). Una columna **huérfana** (`faccionId == ''`) no graba en ninguna Facción.
@@ -254,6 +256,26 @@ efecto:  memoria.informes_region[(mi Facción, región, tipo)] = ahora
 - **Qué viaja**: los informes comprados van en la Facción propia (`Faccion.informes_region`, campo 26; `InformeRegion { region, tipo, comprado_en_ms, caduca_en_ms (solo el de órdenes), libre_en_ms }`), también en `ADMIN`; la forma pública de la Facción los lleva vacíos. Siguen en la lista hasta la próxima compra, aunque ya hayan caducado o pasado su enfriamiento. La foto guarda `(Facción, región, tipo, comprado_en)`.
 - **Rechazos, por este orden**: los de la compra en una taberna de plaza (`intel.sin_faccion`, `intel.plaza_ajena`, `no_autorizado`, `intel.no_presente`, `intel.sin_taberna`), `mundo.no_cargado`, `intel.informe_reciente` (el enfriamiento de ese tipo de esa región) e `intel.sin_oro`. No hay evento ni aviso a nadie.
 
+### 6.4 Rumores (`comprarRumor`)
+
+> **Implementado en Rust (2026-11-10, decisión del autor):** la orden `comprar_rumor` (`origen { tipo: asentamiento | campamento, id }`, `tipo`: `vetas_estano`; orden 190 → `ComprarRumor`, comando 220) en `nucleo/taberna.rs`. Cifras: `INTEL.rumores.vetasEstano` de §7 (`oro` 80, `radio` 10).
+
+Un cuarto producto, el espacio de **rumores**, en la taberna de una plaza **y** en la de un campamento de mercenarios. Por ahora hay uno, el de las **vetas de estaño**:
+
+```
+validar:  la compra en la taberna, como comprarMirada (§6.1): en una plaza de mi Facción con Taberna activa, dentro y Rey, Embajador o Gobernador (paga el almacén de la plaza);
+          o en un campamento, cualquier héroe con Facción dentro o a su puerta (paga su oro: el almacén personal si reside allí, si no el carro de su columna)
+region  = la región del relieve donde está la taberna (Geografia::region_en; sin mundo o fuera del mapa → mundo.no_cargado)
+nuevos  = los yacimientos de estaño (nodos `minaEstano` del mapa) de esa región cuyo sitio mi Facción aún no tiene explorado
+si nuevos está vacío → rumor.sin_novedad, sin cobrar
+precio  = rumores.vetasEstano.oro      ← fijo
+efecto:  para cada yacimiento nuevo, memoria.exploracion[mi Facción] marca explorado el disco de radio rumores.vetasEstano.radio alrededor del yacimiento
+```
+
+- **Explorado, no visto**: el rumor deja el terreno como si una columna lo hubiera andado (§2.1), así que el yacimiento aparece en el mapa de la Facción con lo que hay alrededor, pero no se graba ninguna ficha ni se ve lo que pase allí después. No avisa a nadie ni tiene evento; la Facción cambia (su máscara de exploración viaja en la `VISTA`).
+- **Cuántos yacimientos**: todos los de la región que falten, en una sola compra. Una región sin estaño, o con todo su estaño ya explorado, rechaza la compra sin cobrar.
+- **Rechazos, por este orden**: los de la compra en la taberna (de plaza: `intel.sin_faccion`, `intel.plaza_ajena`, `no_autorizado`, `intel.no_presente`, `intel.sin_taberna`; de campamento: `intel.sin_faccion`, `campamento.desconocido`, `intel.no_presente`, `heroe.sin_columna`), `mundo.no_cargado`, `rumor.sin_novedad` e `intel.sin_oro`.
+
 ## 7. Parámetros
 
 **Los bloques son los valores vigentes** (reescritos el 2026-10-19, decisión del autor para el sistema 4). Respecto al motor TypeScript cambian, tras la calibración (Calibracion_Distancias_Definicion §4.4-§4.5 y Guerra_Logistica):
@@ -313,6 +335,12 @@ efecto:  memoria.informes_region[(mi Facción, región, tipo)] = ahora
     "oro": 60,
     "cooldownMinutos": 360,
     "caducidadMinutos": 200
+  },
+  "rumores": {
+    "vetasEstano": {
+      "oro": 80,
+      "radio": 10
+    }
   }
 }
 ```

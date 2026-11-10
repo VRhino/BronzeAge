@@ -45,6 +45,7 @@ impl Nucleo {
             Comando::CargarDePlaza { heroe, asentamiento, recurso, cantidad } => self.mover_almacen_de_plaza(t, p, *heroe, *asentamiento, *recurso, *cantidad, true),
             Comando::DejarEnPlaza { heroe, asentamiento, recurso, cantidad } => self.mover_almacen_de_plaza(t, p, *heroe, *asentamiento, *recurso, *cantidad, false),
             Comando::CerrarAlmacenACiudadanos { asentamiento, cerrado } => self.cerrar_almacen_a_ciudadanos(t, p, *asentamiento, *cerrado),
+            Comando::CerrarReclutamientoACiudadanos { asentamiento, cerrado } => self.cerrar_reclutamiento_a_ciudadanos(t, p, *asentamiento, *cerrado),
             _ => unreachable!("solo se llama con las órdenes del almacén personal y de las caravanas a mano"),
         }
     }
@@ -242,6 +243,21 @@ impl Nucleo {
         a.almacen_cerrado_a_ciudadanos = cerrado;
         self.tr.tocar(Clase::Asentamiento, plaza);
         self.emitir_propio(t, "almacen.cierre_a_ciudadanos", vec![plaza], vec![("plaza", plaza as i64), ("cerrado", cerrado as i64)]);
+        Ok(vec![])
+    }
+
+    /// `cerrarReclutamientoACiudadanos` (2026-11-10, decisión del autor): el Gobernador o un General cierra (o abre) a los ciudadanos que no residen en la plaza el reclutar escuadras
+    /// nuevas en ella. Cerrado, solo reponen las que ya tienen allí, como antes del 2026-11-10.
+    fn cerrar_reclutamiento_a_ciudadanos(&mut self, t: Instante, p: &Peticion, plaza: u64, cerrado: bool) -> Result<Vec<u64>, Respuesta> {
+        self.plaza_o_rechazo(plaza)?;
+        self.autorizar_en_plaza(p, plaza, None)?;
+        let a = self.estado.asentamientos.get_mut(&plaza).expect("existe");
+        if a.reclutamiento_cerrado_a_ciudadanos == cerrado {
+            return Err(Respuesta::sin_cambios(self.estado.version));
+        }
+        a.reclutamiento_cerrado_a_ciudadanos = cerrado;
+        self.tr.tocar(Clase::Asentamiento, plaza);
+        self.emitir_propio(t, "reclutamiento.cierre_a_ciudadanos", vec![plaza], vec![("plaza", plaza as i64), ("cerrado", cerrado as i64)]);
         Ok(vec![])
     }
 

@@ -512,9 +512,9 @@ async fn el_marcado_abre_su_heroe_y_el_campamento_pero_no_su_faccion_y_su_vista_
     let ms::Cuerpo::Foto(f) = marcado.esperar().await.cuerpo.unwrap() else { panic!("se esperaba la Foto de la vista") };
     assert_eq!(ambito(&f.ambito), format!("VISTA:{h_bot}"));
 
-    // El Rey sí tiene su Facción, con el contrato y la marca del miembro, y todo lo suyo.
+    // El Rey sí tiene su Facción, con el contrato y la marca del miembro, y todo lo suyo; y, con su columna parada a la puerta del campamento 0, también el campamento (2026-11-10).
     let (_, _, mensajes) = w.conectar(hola("ok:rey", TipoCliente::ClienteUnity)).await;
-    assert_eq!(etiquetas(&mensajes), [format!("foto HEROE:{h_rey}"), "foto FACCION:f-1".to_owned()]);
+    assert_eq!(etiquetas(&mensajes), [format!("foto HEROE:{h_rey}"), "foto FACCION:f-1".to_owned(), format!("foto CAMPAMENTO:{camp}")]);
     let cuerpos_de_faccion = cuerpos(foto_de(&mensajes[1]));
     let f = la_faccion(&cuerpos_de_faccion);
     assert_eq!(f.contratos.iter().map(|c| c.mercenario_id.as_str()).collect::<Vec<_>>(), [h_bot.as_str()]);

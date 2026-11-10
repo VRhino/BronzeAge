@@ -88,6 +88,7 @@ pub fn aplicar_conquista(r: &Reglas, economia: &asentamiento::Reglas, a: &mut As
     a.reserva_manual = [0; N];
     a.auto_pausada = false;
     a.recetas_pausadas.clear();
+    a.consumo_pausado.clear();
     a.medidor.valor = economia.mantenimiento.medidor_inicial;
     a.ocupado = true;
     Conquistada {

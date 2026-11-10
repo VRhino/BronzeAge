@@ -1,6 +1,7 @@
 //! Ascenso de nivel de asentamiento (Doc 4.5, Economia_Construccion §11): lo pide el Gobernador, de uno en uno, con una obra de
-//! ascenso que se paga entera al empezar. Hacen falta a la vez los requisitos, el cupo de la Facción, el coste en el almacén y la
-//! solvencia en el nivel nuevo. Todos los bloqueos se informan juntos.
+//! ascenso que se paga entera al empezar. Hacen falta a la vez los requisitos, el cupo de la Facción y el coste en el almacén. Todos los
+//! bloqueos se informan juntos. La solvencia en el nivel nuevo ya no bloquea (autor, 2026-11-10: una plaza que vive del comercio no
+//! podría crecer): es una advertencia, [`Asentamiento::insolvencia_de_ascenso`].
 
 use crate::asentamiento::{Ascenso, Asentamiento, Evento, Exterior};
 use crate::catalogo::Tipo;
@@ -22,8 +23,6 @@ pub enum Bloqueo {
     FaltaPueblo,
     SinCupoDeFaccion,
     RecursosInsuficientes,
-    /// Lo que se produce y recauda por minuto no cubre el mantenimiento del nivel nuevo: los recursos que faltan, con lo que llega y lo que pide.
-    Insolvente(Vec<Insolvencia>),
 }
 
 /// Un recurso del mantenimiento del nivel nuevo que lo que llega por minuto no cubre (en milésimas por minuto).
@@ -71,7 +70,7 @@ impl Asentamiento {
 
     /// Todos los bloqueos para pedir la subida al nivel siguiente (vacío = se puede). `sin_cupo_de_faccion`: la Facción ya ocupa todo su cupo del nivel objetivo
     /// (`CUPO_NIVEL_ASENTAMIENTO`, que da el nivel de Facción: lo calcula quien conoce la Facción, `politica::nivel::cupo_nivel`, desde 5C).
-    pub fn bloqueos_de_ascenso(&self, t: Instante, r: &Reglas, x: &Exterior, sin_cupo_de_faccion: bool) -> Vec<Bloqueo> {
+    pub fn bloqueos_de_ascenso(&self, r: &Reglas, sin_cupo_de_faccion: bool) -> Vec<Bloqueo> {
         let objetivo = self.nivel + 1;
         let mut b = vec![];
         if self.nivel >= r.nivel.nivel_maximo || objetivo > r.nivel.nivel_techo_provisional {
@@ -96,21 +95,27 @@ impl Asentamiento {
                 b.push(Bloqueo::RecursosInsuficientes);
             }
         }
-        let faltan: Vec<Insolvencia> = self
-            .mantenimiento_en(r, x, objetivo)
-            .iter()
-            .map(|&(recurso, pide)| Insolvencia { recurso, llega: self.ingreso_bruto(t, r, x, recurso), pide })
-            .filter(|f| f.llega < f.pide)
-            .collect();
-        if !faltan.is_empty() {
-            b.push(Bloqueo::Insolvente(faltan));
-        }
         b
     }
 
+    /// La advertencia de solvencia del nivel siguiente (autor, 2026-11-10; hasta entonces era el bloqueo `ascenso.insolvente`): los recursos
+    /// del mantenimiento de ese nivel que lo que llega por minuto ([`Self::ingreso_bruto`], con el acarreo de media) no cubre, con lo que llega
+    /// y lo que pide. No impide subir; vacía en el nivel máximo.
+    pub fn insolvencia_de_ascenso(&self, t: Instante, r: &Reglas, x: &Exterior) -> Vec<Insolvencia> {
+        let objetivo = self.nivel + 1;
+        if self.nivel >= r.nivel.nivel_maximo || objetivo > r.nivel.nivel_techo_provisional {
+            return vec![];
+        }
+        self.mantenimiento_en(r, x, objetivo)
+            .iter()
+            .map(|&(recurso, pide)| Insolvencia { recurso, llega: self.ingreso_bruto(t, r, x, recurso), pide })
+            .filter(|f| f.llega < f.pide)
+            .collect()
+    }
+
     /// `iniciarAscenso`: si no hay bloqueos, cobra el coste entero del almacén y fija la obra.
-    pub fn solicitar_ascenso(&mut self, t: Instante, r: &Reglas, x: &Exterior, sin_cupo_de_faccion: bool, ev: &mut Vec<Evento>) -> Result<(), Vec<Bloqueo>> {
-        let bloqueos = self.bloqueos_de_ascenso(t, r, x, sin_cupo_de_faccion);
+    pub fn solicitar_ascenso(&mut self, t: Instante, r: &Reglas, sin_cupo_de_faccion: bool, ev: &mut Vec<Evento>) -> Result<(), Vec<Bloqueo>> {
+        let bloqueos = self.bloqueos_de_ascenso(r, sin_cupo_de_faccion);
         if !bloqueos.is_empty() {
             return Err(bloqueos);
         }

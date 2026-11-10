@@ -352,12 +352,12 @@ El **perfil** efectivo es `TRAZADO.perfilForzado ?? perfil de la política activ
 ### 6.1 Despacho por tipo (en este orden)
 
 1. **Afueras** (`granja`, `corral`) → §6.3.
-2. **Genéricos** (`palacio`, `almacen`, `granero`, `lenera`, `taberna`, `salaConsejo` y, en Rust, desde la tanda 69, el `molino` y el `horno`) → §6.4.
+2. **Genéricos** (`palacio`, `almacen`, `granero`, `lenera`, `taberna`, `salaConsejo`) → §6.4.
 3. Sin categoría (`CATEGORIA_POR_TIPO[tipo]` ausente) → **lista vacía**.
 4. **Ancla primaria de su categoría** (`mercado`) → nace por el árbol de anclas (§7.2): un único sitio, el de `crearAnclaNueva`.
-5. **Satélites** (vivienda, fundición, curtiduría, armería, gran fundición, maravilla, barracón, galería de tiro, caballerizas, carpintería, puestos de mercado, Albergue de caravanas) → §6.5.
+5. **Satélites** (vivienda, fundición, curtiduría, armería, gran fundición, maravilla, y en Rust el molino, el horno, la quesera, la bodega y la prensa, barracón, galería de tiro, caballerizas, carpintería, puestos de mercado, Albergue de caravanas) → §6.5.
 
-`CATEGORIA_POR_TIPO`: `residencial` (vivienda y, en Rust, la `estatua`) · `industria` (fundición, curtiduría, armería, gran fundición, maravilla y, en Rust, la `quesera`, la `bodega` y la `prensa`) · `militar` (barracón, galería de tiro, caballerizas, carpintería) · `mercado` (mercado, albergueCaravanas,
+`CATEGORIA_POR_TIPO`: `residencial` (vivienda y, en Rust, la `estatua`) · `industria` (fundición, curtiduría, armería, gran fundición, maravilla y, en Rust, el `molino`, el `horno`, la `quesera`, la `bodega` y la `prensa`) · `militar` (barracón, galería de tiro, caballerizas, carpintería) · `mercado` (mercado, albergueCaravanas,
 puestoMercado) · `almacenaje` (almacén, granero, leñera, corral).
 
 ### 6.2 El barrido de candidatos (`candidatosLibres`)
@@ -393,7 +393,7 @@ para col, row en [centro±maxCeldas]:
 
 ### 6.4 Genéricos (palacio, almacén, granero, leñera, taberna, Sala del Consejo)
 
-> **Implementado en Rust (2026-11-08, tanda 69):** el **molino** y el **horno** se colocan como genéricos —**sueltos en la ciudad, sin ancla de barrio**— (`crates/nucleo/src/urbanismo.rs`), porque se levantan desde el nivel 1 de la plaza y el barrio de la industria no tiene ancla hasta `NIVEL_GATE_ANCLAS` (2): como satélites no habrían tenido dónde ir. La quesera, la bodega y la prensa (nivel 2, 3 y 4) sí son satélites de la industria, y la estatua, del barrio residencial. Las huellas están en `EDIFICIO_TAMANO` (molino 2×2, horno 2×1, quesera 2×1, bodega 2×2, prensa 2×1); la estatua usa `EDIFICIO_TAMANO_POR_DEFECTO` (1×1). Sin cambios de algoritmo.
+> **Implementado en Rust (2026-11-08, tanda 69; molino y horno, 2026-11-10):** el **molino** y el **horno**, la quesera, la bodega y la prensa son satélites del barrio de la industria (`crates/nucleo/src/urbanismo.rs`), y la estatua, del barrio residencial. El molino y el horno se levantan desde el nivel 1 de la plaza, así que el barrio de la industria crea su ancla (el patio de gremios) **desde el nivel 1** (`NECESIDADES.nivelGateAnclasIndustria`, Economia_Construccion §14.2; autor, 2026-11-10); los demás barrios siguen esperando a `NIVEL_GATE_ANCLAS` (2). Hasta el 2026-11-10 el molino y el horno iban sueltos, como genéricos: los que ya estaban puestos no se mueven. Las huellas están en `EDIFICIO_TAMANO` (molino 2×2, horno 2×1, quesera 2×1, bodega 2×2, prensa 2×1); la estatua usa `EDIFICIO_TAMANO_POR_DEFECTO` (1×1). Sin cambios de algoritmo.
 
 Sin ancla ni barrio: todos los candidatos del radio urbano con `distanciaMinima = 0`, ordenados **del más cercano al origen** (desempate `semillaCandidato`), y después la preferencia intramuros (§6.6).
 
@@ -448,7 +448,7 @@ categoria := CATEGORIA_POR_TIPO[tipo]; si no hay → nada
                                                            // prueban y no sirven se devuelven como "recién llenas"
 marcar anclaLlena = true en las llenas
 si instancia ≠ null → fin
-si nivelActual < NIVEL_GATE_ANCLAS (= 2) → fin
+si nivelActual < NIVEL_GATE_ANCLAS (= 2) → fin                // en Rust, para la industria, `nivelGateAnclasIndustria` (= 1; 2026-11-10)
 tipoAncla := tipoAnclaParaCategoria(categoria, idNuevo)    // sorteo determinista entre las de saturación; null para mercado
 resultado := crearAnclaNueva(...)                           // §7.2
 si null → fin

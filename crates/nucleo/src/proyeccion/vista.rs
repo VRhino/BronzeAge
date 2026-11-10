@@ -436,9 +436,9 @@ impl<'n> Mirada<'n> {
             vistos.insert(Sitio::Avanzada(x.id));
             v.extend(self.avanzada_avistada(None, x, n.version_de(Clase::Avanzada, x.id)));
         }
-        for (&s, &f) in self.fichas.iter().filter(|(s, f)| !vistos.contains(s) && rect.contiene(f.datos.posicion)) {
+        for (&s, f) in self.fichas.iter().filter(|(s, f)| !vistos.contains(s) && rect.contiene(f.datos.posicion)) {
             let id = id_de_sitio(s);
-            let d = f.datos;
+            let d = &f.datos;
             nombradas.push(d.faccion);
             let sello = Sello(u64::from(d.faccion) << 32 | u64::from(d.nivel) << 2 | d.estado as u64, f.conocido_en ^ d.radio.rotate_left(20));
             v.push(visible(pb::TipoEntidad::FichaConocida, id.clone(), sello, move || Some(Cuerpo::FichaConocida(ficha_conocida(s, id.clone(), f)))));
@@ -919,7 +919,7 @@ fn id_de_sitio(s: Sitio) -> String {
 }
 
 /// La ficha de lo que se recuerda de un sitio ajeno.
-pub(crate) fn ficha_conocida(s: Sitio, id: String, f: Ficha) -> pb::FichaConocida {
+pub(crate) fn ficha_conocida(s: Sitio, id: String, f: &Ficha) -> pb::FichaConocida {
     let tipo = match s {
         Sitio::Plaza(_) => pb::TipoEntidad::Asentamiento,
         Sitio::Pueblo(_) => pb::TipoEntidad::Pueblo,
@@ -932,7 +932,7 @@ pub(crate) fn ficha_conocida(s: Sitio, id: String, f: Ficha) -> pb::FichaConocid
     };
     pb::FichaConocida {
         asentamiento_id: id,
-        nombre: None,
+        nombre: (!f.datos.nombre.is_empty()).then(|| f.datos.nombre.clone()),
         faccion_id: (f.datos.faccion > 0).then(|| ids::faccion(f.datos.faccion)).unwrap_or_default(),
         posicion: Some(punto(f.datos.posicion)),
         nivel: f.datos.nivel,
@@ -1018,7 +1018,7 @@ pub fn huellas_de_admin(n: &Nucleo) -> BTreeMap<ClaveAdmin, u64> {
                 Sitio::Pueblo(i) => (1, i),
                 Sitio::Avanzada(i) => (2, i),
             };
-            let d = x.datos;
+            let d = &x.datos;
             for y in [k, i, x.conocido_en as u64, u64::from(d.faccion), u64::from(d.nivel), d.estado as u64, d.radio as u64, d.posicion.x as u64, d.posicion.y as u64] {
                 h = mezclar(h, y);
             }
@@ -1058,7 +1058,7 @@ pub fn de_admin(n: &Nucleo, (tipo, id): &ClaveAdmin) -> Option<Cuerpo> {
                 faccion_id: id.clone(),
                 version: 0,
                 exploracion: mem.exploracion.get(&f).map(|m| m.bytes().to_vec()).unwrap_or_default(),
-                asentamientos: mem.fichas.get(&f).into_iter().flatten().map(|(&s, &x)| (id_de_sitio(s), ficha_conocida(s, id_de_sitio(s), x))).collect(),
+                asentamientos: mem.fichas.get(&f).into_iter().flatten().map(|(&s, x)| (id_de_sitio(s), ficha_conocida(s, id_de_sitio(s), x))).collect(),
                 informes: mem.informes.get(&f).into_iter().flatten().map(|(&p, i)| (ids::asentamiento(p), informe_de_plaza(p, i))).collect(),
             }))
         }

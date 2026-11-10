@@ -1,6 +1,6 @@
 [package]
 name = "combate"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 description = "Combate con números y ciclo de la batalla de Unity (Doc 5, Mechanics/Combate y Batalla_Unity_Ciclo): resolución, bajas, chatarra, botín, caravanas, bandidos, pueblos, avanzadas, conquista y la máquina de estados de la batalla. Reglas puras en enteros, sin reloj propio"
 

@@ -119,12 +119,13 @@ async fn un_cliente_que_solo_habla_el_contrato_nace_comercia_explora_funda_const
     let antes = explorado(&ana.almacen, "VISTA:f-1");
     let r = ana.aceptada(O::SalirDelCampamento(pb::OrdenSalirDelCampamento { campamento_id: camp.clone(), heroe_id: heroe.clone(), ..Default::default() })).await;
     let col = creada(&r, TipoEntidad::Ejercito);
-    assert!(!ana.almacen.ambitos.contains_key(&format!("CAMPAMENTO:{camp}")), "fuera del campamento, su ámbito se revoca");
+    assert!(ana.almacen.ambitos.contains_key(&format!("CAMPAMENTO:{camp}")), "con la columna parada a la puerta, sigue viendo el campamento (2026-11-10)");
 
-    // 4. Explora: marcha hasta un buen sitio; lo andado se explora y la niebla llega parcial.
+    // 4. Explora: marcha hasta un buen sitio; lo andado se explora y la niebla llega parcial. Al marchar, el ámbito del campamento se revoca.
     adm.aceptada(admin("dar_caravana_fundacion", vec![("ejercito_id", texto(&col))])).await;
     let marcha = |p: Punto| O::MarcharA(pb::OrdenMarcharA { heroe_id: heroe.clone(), objetivo: Some(pb::orden_marchar_a::Objetivo { tipo: Some(pb::orden_marchar_a::objetivo::Tipo::Punto(punto(p).unwrap())) }) });
     ana.aceptada(marcha(sitio)).await;
+    assert!(!ana.almacen.ambitos.contains_key(&format!("CAMPAMENTO:{camp}")), "en marcha, su ámbito se revoca");
     llegar(&mut adm, &mut ana, &heroe, &col).await;
     assert!(explorado(&ana.almacen, "VISTA:f-1") > antes, "lo andado se explora");
 

@@ -94,7 +94,7 @@ fn nombre(d: &impl std::fmt::Debug) -> String {
 }
 
 use asentamiento::pueblos::Cultivo;
-use asentamiento::Recurso::{Madera, Oro, Piedra, Trigo};
+use asentamiento::Recurso::{Carne, Madera, Oro, Piedra, Trigo};
 
 /// Una fila por orden del jugador que el núcleo tiene (y una más por cada orden que da dos comandos según la obra o el lugar): la orden del contrato y el comando que debe salir.
 fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
@@ -249,6 +249,10 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         ),
         (orden!(ComprarInformeRegion, OrdenComprarInformeRegion, asentamiento_id: s("as-3"), tipo: s("plazas")), Comando::ComprarInformeRegion { heroe: 7, asentamiento: 3, tipo: TipoInformeRegion::Plazas }),
         (orden!(ComprarInformeRegion, OrdenComprarInformeRegion, asentamiento_id: s("as-3"), tipo: s("ordenes")), Comando::ComprarInformeRegion { heroe: 7, asentamiento: 3, tipo: TipoInformeRegion::Ordenes }),
+        (
+            orden!(ComprarRumor, OrdenComprarRumor, origen: Some(pb::orden_comprar_rumor::Origen { tipo: s("campamento"), id: s("camp-2") }), tipo: s("vetas_estano")),
+            Comando::ComprarRumor { heroe: 7, origen: OrigenIntel::Campamento(2), tipo: TipoRumor::VetasEstano },
+        ),
         // ── Economía y construcción ──
         (orden!(AnadirEdificioManualmente, OrdenAnadirEdificioManualmente, asentamiento_id: s("as-3"), cargo: s("gobernador"), tipo: s("granja")), Comando::AnadirEdificio { asentamiento: 3, tipo: Tipo::Granja }),
         (orden!(QuitarDeCola, OrdenQuitarDeCola, asentamiento_id: s("as-3"), cargo: s("gobernador"), edificio_id: s("ed-3-7")), Comando::QuitarDeCola { asentamiento: 3, edificio: 7 }),
@@ -262,6 +266,7 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         ),
         (orden!(AlternarAutoConstruccion, OrdenAlternarAutoConstruccion, asentamiento_id: s("as-3"), pausada: true), Comando::AlternarAutoConstruccion { asentamiento: 3, pausada: true }),
         (orden!(AlternarReceta, OrdenAlternarReceta, asentamiento_id: s("as-3"), recurso: s("madera"), pausada: true), Comando::AlternarReceta { asentamiento: 3, recurso: Madera, pausada: true }),
+        (orden!(PausarConsumo, OrdenPausarConsumo, asentamiento_id: s("as-3"), recurso: s("carne"), pausado: true), Comando::PausarConsumo { asentamiento: 3, recurso: Carne, pausado: true }),
         (orden!(CalibrarReservaManual, OrdenCalibrarReservaManual, asentamiento_id: s("as-3"), recurso: s("trigo"), valor: 50_000), Comando::CalibrarReserva { asentamiento: 3, recurso: Trigo, valor: 50_000 }),
         (orden!(SolicitarAscenso, OrdenSolicitarAscenso, asentamiento_id: s("as-3")), Comando::SolicitarAscenso { asentamiento: 3 }),
         (orden!(ActivarPolitica, OrdenActivarPolitica, asentamiento_id: s("as-3"), cargo: s("general"), politica_id: s("leva_forzosa")), Comando::ActivarPolitica { asentamiento: 3, politica: "leva_forzosa".into(), cargo: Cargo::General }),
@@ -404,6 +409,7 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         (orden!(AdmitirOtrasFacciones, OrdenAdmitirOtrasFacciones, faccion_id: s("f-1"), admitir: true), Comando::AdmitirOtrasFacciones { heroe: 7, faccion: 1, admitir: true }),
         (orden!(AlternarReabastecerAliados, OrdenAlternarReabastecerAliados, asentamiento_id: s("as-3"), permitido: true), Comando::AlternarReabastecerAliados { asentamiento: 3, permitido: true }),
         (orden!(CerrarAlmacenACiudadanos, OrdenCerrarAlmacenACiudadanos, asentamiento_id: s("as-3"), cerrado: true), Comando::CerrarAlmacenACiudadanos { asentamiento: 3, cerrado: true }),
+        (orden!(CerrarReclutamientoACiudadanos, OrdenCerrarReclutamientoACiudadanos, asentamiento_id: s("as-3"), cerrado: true), Comando::CerrarReclutamientoACiudadanos { asentamiento: 3, cerrado: true }),
         (orden!(CargarDePlaza, OrdenCargarDePlaza, asentamiento_id: s("as-3"), recurso: s("madera"), cantidad: 20_000), Comando::CargarDePlaza { heroe: 7, asentamiento: 3, recurso: Recurso::Madera, cantidad: 20_000 }),
         (orden!(DejarEnPlaza, OrdenDejarEnPlaza, asentamiento_id: s("as-3"), recurso: s("oro"), cantidad: 3_000), Comando::DejarEnPlaza { heroe: 7, asentamiento: 3, recurso: Recurso::Oro, cantidad: 3_000 }),
         // ── Mercenarios por contrato (entrada 48) ──
@@ -705,6 +711,8 @@ fn un_id_sin_la_forma_de_su_entidad_o_un_valor_fuera_de_su_catalogo_se_rechazan_
         (orden!(ComprarMirada, OrdenComprarMirada, origen: Some(pb::orden_comprar_mirada::Origen { tipo: s("muelle"), id: s("as-3") }), centro: Some(pb::Punto { x: 1, y: 2 })), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(ComprarInformePlaza, OrdenComprarInformePlaza, origen: Some(pb::orden_comprar_informe_plaza::Origen { tipo: s("campamento"), id: s("as-3") }), asentamiento_id: s("as-8")), rechazos::CAMPAMENTO_DESCONOCIDO),
         (orden!(ComprarInformeRegion, OrdenComprarInformeRegion, asentamiento_id: s("as-3"), tipo: s("mercenarios")), rechazos::ORDEN_FORMA_INVALIDA),
+        (orden!(ComprarRumor, OrdenComprarRumor, origen: Some(pb::orden_comprar_rumor::Origen { tipo: s("campamento"), id: s("camp-2") }), tipo: s("vetas_oro")), rechazos::ORDEN_FORMA_INVALIDA),
+        (orden!(PausarConsumo, OrdenPausarConsumo, asentamiento_id: s("as-3"), recurso: s("ambrosia"), pausado: true), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(TomarOrdenADistancia, OrdenTomarOrdenADistancia, asentamiento_id: s("as-3"), orden_id: s("as-9"), cantidad: 1), rechazos::ORDEN_DESCONOCIDA),
         (orden!(ContratarMercenario, OrdenContratarMercenario, mercenario_id: s("heroe-9"), trabajo: s("saquear"), objetivo: Some(pb::ObjetivoMercenario { tipo: Some(Mercenario::FaccionId(s("f-2"))) })), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(ContratarMercenario, OrdenContratarMercenario, mercenario_id: s("heroe-9"), trabajo: s("atacar")), rechazos::ORDEN_FORMA_INVALIDA),
@@ -746,7 +754,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let de_administracion: BTreeSet<String> = ordenes_de_administracion().iter().map(|(_, c)| nombre(c)).collect();
     let del_servidor_de_batalla: BTreeSet<String> = ["RegistrarAsignacion", "ConfirmarInicio", "RegistrarTokens", "RegistrarSalida", "AplicarResultado"].map(String::from).into();
     let todos = variantes_de_comando();
-    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (204, 179, 20, 5));
+    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (207, 182, 20, 5));
     let clasificados: Vec<&String> = del_jugador.iter().chain(&de_administracion).chain(&del_servidor_de_batalla).collect();
     assert_eq!(clasificados.len(), todos.len(), "una variante en dos orígenes");
     let sin_clasificar: Vec<&String> = todos.iter().filter(|v| !clasificados.contains(v)).collect();
@@ -758,7 +766,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let tabla: BTreeSet<String> = tabla.map(|c| nombre(&c)).collect();
     let proto = include_str!("../../../../../proto/bronzeage/v1/orders.proto");
     let en_el_contrato = proto.lines().skip_while(|l| !l.contains("oneof cuerpo {")).skip(1).take_while(|l| l.trim() != "}").map(str::trim).filter(|l| !l.starts_with("//") && l.ends_with(';')).count();
-    assert_eq!((tabla.len(), en_el_contrato), (178, 178), "una orden del contrato sin mapear ni clasificar como no disponible");
+    assert_eq!((tabla.len(), en_el_contrato), (181, 181), "una orden del contrato sin mapear ni clasificar como no disponible");
 }
 
 /// El nombre de una orden en el contrato (el campo del `oneof`): la variante de `Cuerpo` en serpiente (`MarcharA` → `marchar_a`).
@@ -790,6 +798,7 @@ fn quien(a: crate::comando::Autoriza) -> &'static str {
         Cargo([asentamiento::Cargo::Tesorero]) => "el Tesorero de la plaza, residente y dentro",
         Cargo([asentamiento::Cargo::Gobernador, asentamiento::Cargo::MaestroObras]) => "el Gobernador o el Maestro de Obras de la plaza, residente y dentro",
         Cargo([asentamiento::Cargo::Gobernador, asentamiento::Cargo::Tesorero]) => "el Gobernador o el Tesorero de la plaza, residente y dentro",
+        Cargo([asentamiento::Cargo::Gobernador, asentamiento::Cargo::General]) => "el Gobernador o un General de la plaza, residente y dentro",
         Cargo([asentamiento::Cargo::Gobernador, asentamiento::Cargo::Tesorero, asentamiento::Cargo::MaestroCaravanas]) => "el Gobernador, el Tesorero o el Maestro de Caravanas de la plaza, residente y dentro",
         Cargo(otros) => unreachable!("sin texto para los cargos {otros:?}"),
         CargoDeLaOrden => "el titular del cargo de la orden, residente y dentro",
@@ -824,10 +833,12 @@ fn la_matriz_de_autorizacion_del_documento_es_la_del_codigo() {
             (sin(c[1]), sin(c[2]), c[3].trim().to_owned())
         })
         .collect();
-    let mut codigo: BTreeSet<(String, String, String)> = ordenes_traducidas().iter().map(|(o, c)| (en_el_contrato(&nombre(o)), nombre(c), quien(c.autoriza()).to_owned())).collect();
+    // Las que valen también con la columna a la puerta de la plaza lo dicen (`Comando::vale_desde_la_puerta`, 2026-11-10).
+    let quien_da = |c: &Comando| format!("{}{}", quien(c.autoriza()), if c.vale_desde_la_puerta() { " o con su columna a la puerta" } else { "" });
+    let mut codigo: BTreeSet<(String, String, String)> = ordenes_traducidas().iter().map(|(o, c)| (en_el_contrato(&nombre(o)), nombre(c), quien_da(c))).collect();
     for (o, c) in ordenes_de_administracion() {
         let Cuerpo::Administracion(a) = o else { unreachable!() };
-        codigo.insert((format!("administracion:{}", a.codigo), nombre(&c), quien(c.autoriza()).to_owned()));
+        codigo.insert((format!("administracion:{}", a.codigo), nombre(&c), quien_da(&c)));
     }
     // El canal del servidor de batalla (`MensajeDeServidorDeBatalla`): sus cinco comandos son `Autoriza::ServidorDeBatalla` en `Comando::autoriza`.
     for (m, c) in [("asignacion", "RegistrarAsignacion"), ("inicio", "ConfirmarInicio"), ("tokens", "RegistrarTokens"), ("salida", "RegistrarSalida"), ("resultado", "AplicarResultado")] {
@@ -838,5 +849,5 @@ fn la_matriz_de_autorizacion_del_documento_es_la_del_codigo() {
     let faltan: Vec<String> = codigo.difference(&documento).map(fila).collect();
     let sobran: Vec<String> = documento.difference(&codigo).map(fila).collect();
     assert!(faltan.is_empty() && sobran.is_empty(), "la matriz del documento no es la del código.\nFaltan o no coinciden (como las dice el código):\n{}\nSobran (como las dice el documento):\n{}", faltan.join("\n"), sobran.join("\n"));
-    assert_eq!(codigo.len(), 179 + 20 + 5, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
+    assert_eq!(codigo.len(), 182 + 20 + 5, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
 }

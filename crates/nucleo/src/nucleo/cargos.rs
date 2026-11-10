@@ -20,18 +20,43 @@
 use super::*;
 use crate::estado::Dato;
 use militar::heroe::Residencia;
-use politica::autorizacion::Actor;
+use politica::autorizacion::{Actor, Vista};
 use politica::cargos::ErrorCargo;
 use politica::puerta::{ErrorPuerta, Visitante};
 use politica::Grupos;
+
+/// La matriz para las órdenes que valen desde la puerta ([`Comando::vale_desde_la_puerta`], 2026-11-10): como la del núcleo, pero «presente» es estar dentro de la plaza o ir a bordo
+/// de una columna que está a su puerta.
+struct DesdeLaPuerta<'a>(&'a Nucleo);
+
+impl Vista for DesdeLaPuerta<'_> {
+    fn duena(&self, a: u32) -> Option<u32> {
+        self.0.duena(a)
+    }
+    fn residente(&self, h: u64, a: u32) -> bool {
+        self.0.residente(h, a)
+    }
+    fn presente(&self, h: u64, a: u32) -> bool {
+        self.0.presente(h, a) || self.0.a_la_puerta_de_plaza(h, u64::from(a))
+    }
+    fn cargos(&self, a: u32) -> politica::Cargos {
+        self.0.cargos(a)
+    }
+}
 
 impl Nucleo {
     // ───────────────────────────── La matriz ─────────────────────────────
 
     /// ¿Cumple el héroe `yo` lo que pide la orden sobre la plaza `a`? Solo para las clases de [`Autoriza`] que miran una plaza.
     fn cumple(&self, comando: &Comando, yo: u64, a: u64) -> bool {
-        let x = Actor { yo, politica: &self.estado.politica, vista: self };
-        let a = a as u32;
+        if comando.vale_desde_la_puerta() {
+            return Self::matriz(comando, Actor { yo, politica: &self.estado.politica, vista: &DesdeLaPuerta(self) }, a as u32);
+        }
+        Self::matriz(comando, Actor { yo, politica: &self.estado.politica, vista: self }, a as u32)
+    }
+
+    /// La matriz de [`Comando::autoriza`] con los predicados de `x`, sobre la plaza `a`.
+    fn matriz<V: Vista>(comando: &Comando, x: Actor<V>, a: u32) -> bool {
         match comando.autoriza() {
             Autoriza::Cargo(cargos) => x.algun_cargo(a, cargos),
             Autoriza::CargoDeLaOrden => match comando {
@@ -67,7 +92,8 @@ impl Nucleo {
         if puede {
             return Ok(());
         }
-        Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, format!("en as-{a} no tienes lo que pide la orden: {}", quien_la_da(p.comando.autoriza())), self.estado.version))
+        let puerta = if p.comando.vale_desde_la_puerta() { " (o con tu columna a su puerta)" } else { "" };
+        Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, format!("en as-{a} no tienes lo que pide la orden: {}{puerta}", quien_la_da(p.comando.autoriza())), self.estado.version))
     }
 
     /// `puedeOperarAparcada`: un héroe de la cuenta reside en el `origen` de la caravana y está dentro de la plaza `aparcada` donde está aparcada.
@@ -90,6 +116,13 @@ impl Nucleo {
             return Ok(());
         }
         en_la_plaza
+    }
+
+    /// ¿Va el héroe a bordo de una columna que está ahora a la puerta de la plaza `plaza`?
+    pub(super) fn a_la_puerta_de_plaza(&self, heroe: u64, plaza: u64) -> bool {
+        let (Some(h), Some(a)) = (self.heroe(heroe), self.estado.asentamientos.get(&plaza)) else { return false };
+        let militar::presencia::Ubicacion::Columna(c) = h.heroe.presencia.ubicacion else { return false };
+        self.estado.ejercitos.get(&c).is_some_and(|e| e.posicion_en(self.estado.ahora).dist(a.posicion) <= self.radio_puerta())
     }
 
     /// Los héroes de la cuenta que están en el mundo, por el índice cuenta → héroes.

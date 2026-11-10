@@ -11,8 +11,8 @@ use crate::codec_contratos;
 use crate::codec_politica::{sigilo_escribir, sigilo_leer};
 use crate::codec_militar::{controlador_a_u8, controlador_de_u8, objetivo_escribir, objetivo_leer, relacion_a_u8, relacion_de_u8, residencia_escribir, residencia_leer, tropa_a_u8, tropa_de_u8, ubicacion_escribir, ubicacion_leer};
 use crate::estado_militar::Relacion;
-pub use crate::memoria::{OrigenIntel, TipoInformeRegion};
-use crate::memoria::tipo_informe_region_leer;
+pub use crate::memoria::{OrigenIntel, TipoInformeRegion, TipoRumor};
+use crate::memoria::{tipo_informe_region_leer, tipo_rumor_leer};
 use asentamiento::pueblos::Cultivo;
 use asentamiento::{Cargo, Recurso, Tipo};
 use base::{Instante, Mil, Punto};
@@ -137,6 +137,9 @@ pub enum Comando {
     AlternarAutoConstruccion { asentamiento: u64, pausada: bool },
     /// Para o reanuda una receta por el recurso que produce, en todos los talleres.
     AlternarReceta { asentamiento: u64, recurso: Recurso, pausada: bool },
+    /// Pausa o reanuda el consumo de un bien de comida en la plaza (2026-11-10): con él pausado, ni la población ni la guarnición lo comen, y se puede guardar para venderlo. Solo los
+    /// bienes de `BIENES_DE_CONSUMO` (nunca el trigo). El Gobernador o el Tesorero.
+    PausarConsumo { asentamiento: u64, recurso: Recurso, pausado: bool },
     /// Reserva manual del Tesorero para un recurso (milésimas; se recorta al máximo).
     CalibrarReserva { asentamiento: u64, recurso: Recurso, valor: Mil },
     /// Pide la subida al nivel siguiente (obra de ascenso).
@@ -412,6 +415,9 @@ pub enum Comando {
     /// Compra en la taberna de la plaza `asentamiento` (de la Facción del héroe, que está dentro) el informe de `tipo` de la región del relieve donde está esa plaza (tanda 69 §7): las plazas de
     /// la región que no son de la Facción ni de una en guerra con ella, o las órdenes de mercado de esas plazas. Paga el almacén de la plaza.
     ComprarInformeRegion { heroe: u64, asentamiento: u64, tipo: TipoInformeRegion },
+    /// Compra un rumor en la taberna de `origen` (2026-11-10): `VetasEstano` deja explorado, en la memoria de la Facción, el terreno de cada yacimiento de estaño de la región del relieve de
+    /// la taberna. Quién compra y con qué oro, como una Mirada. No se cobra si la Facción ya los conoce todos.
+    ComprarRumor { heroe: u64, origen: OrigenIntel, tipo: TipoRumor },
     // ── Almacén personal y caravanas a mano (5G-a, 2026-10-24; Movimiento_Ejercitos §3.3 y §9, Heroe_Y_Tropa §4.4). Los códigos empiezan en el 138: del 128 al 137 quedan para 5B. Todo en
     //    unidades enteras: lo que se mueve se redondea hacia abajo (C3b). ──
     /// Del carro al almacén personal del héroe, hasta su capacidad: dentro de su residencia, o el Líder con la columna a su puerta.
@@ -536,6 +542,8 @@ pub enum Comando {
     DejarEnPlaza { heroe: u64, asentamiento: u64, recurso: Recurso, cantidad: Mil },
     /// El Gobernador cierra (o abre) a los ciudadanos el sacar del almacén de la plaza al carro (`CargarDePlaza`). No toca repostar, las caravanas ni la salida.
     CerrarAlmacenACiudadanos { asentamiento: u64, cerrado: bool },
+    /// El Gobernador o el General cierran (o abren) a los ciudadanos que no residen el reclutar escuadras nuevas en la plaza (2026-11-10): cerrado, solo reponen lo que ya tienen aquí.
+    CerrarReclutamientoACiudadanos { asentamiento: u64, cerrado: bool },
     // ── Los encargos de las caravanas: rutas y envíos automáticos (2026-10-31; Comercio_Caravanas §5.8). Códigos 195 a 197. ──
     /// El Maestro de Caravanas, el Tesorero o el Gobernador del origen de la caravana, residente y dentro, le da un encargo de transporte: una ruta entre dos plazas de su Facción o un
     /// envío de una ida y vuelta a cualquier plaza, con lo que deja y recoge en cada punta.
@@ -673,8 +681,33 @@ const TESORERO: &[Cargo] = &[Cargo::Tesorero];
 const GOBERNADOR_O_MAESTRO: &[Cargo] = &[Cargo::Gobernador, Cargo::MaestroObras];
 const GOBERNADOR_O_TESORERO: &[Cargo] = &[Cargo::Gobernador, Cargo::Tesorero];
 const GOBERNADOR_TESORERO_O_MAESTRO_CARAVANAS: &[Cargo] = &[Cargo::Gobernador, Cargo::Tesorero, Cargo::MaestroCaravanas];
+const GOBERNADOR_O_GENERAL: &[Cargo] = &[Cargo::Gobernador, Cargo::General];
 
 impl Comando {
+    /// ¿Vale la orden con el héroe **a la puerta** de la plaza, a bordo de su columna, en vez de dentro? Las del mercado interno y la flota de la plaza propia (decisión del autor del
+    /// 2026-11-10, para el Mercado desde la puerta): las órdenes de mercado, las de la flota que manda su origen (no las de una caravana aparcada) y los encargos. La matriz es la misma (residir
+    /// y el cargo); solo cambia «estar dentro» por «dentro o a la puerta».
+    pub fn vale_desde_la_puerta(&self) -> bool {
+        matches!(
+            self,
+            Comando::ColocarOrdenMercado { .. }
+                | Comando::CancelarOrdenMercado { .. }
+                | Comando::CrearCaravana { .. }
+                | Comando::AnadirCarro { .. }
+                | Comando::AnadirAnimal { .. }
+                | Comando::MoverCarro { .. }
+                | Comando::ReservarCaravana { .. }
+                | Comando::RenombrarCaravana { .. }
+                | Comando::PrepararCaravana { .. }
+                | Comando::CancelarCaravana { .. }
+                | Comando::EncargarCaravana { .. }
+                | Comando::CambiarEncargo { .. }
+                | Comando::CancelarEncargo { .. }
+                | Comando::DetenerEncargo { .. }
+                | Comando::TomarOrdenADistancia { .. }
+        )
+    }
+
     /// Quién puede dar la orden ([`Autoriza`]). Cada variante se nombra a propósito (sin `_`): una orden nueva no compila hasta decidirlo.
     pub fn autoriza(&self) -> Autoriza {
         use Autoriza::*;
@@ -832,7 +865,9 @@ impl Comando {
             | Comando::RechazarTrueque { .. }
             | Comando::ColocarOrdenMercado { .. }
             | Comando::CancelarOrdenMercado { .. }
-            | Comando::AlternarReabastecerAliados { .. } => Cargo(GOBERNADOR_O_TESORERO),
+            | Comando::AlternarReabastecerAliados { .. }
+            | Comando::PausarConsumo { .. } => Cargo(GOBERNADOR_O_TESORERO),
+            Comando::CerrarReclutamientoACiudadanos { .. } => Cargo(GOBERNADOR_O_GENERAL),
             Comando::EncargarCaravana { .. } | Comando::CambiarEncargo { .. } | Comando::CancelarEncargo { .. } | Comando::DetenerEncargo { .. } | Comando::TomarOrdenADistancia { .. } => Cargo(GOBERNADOR_TESORERO_O_MAESTRO_CARAVANAS),
             Comando::CrearCaravana { .. }
             | Comando::AnadirCarro { .. }
@@ -845,7 +880,7 @@ impl Comando {
             Comando::MoverCargaAparcada { .. } | Comando::EnviarCaravanaAlOrigen { .. } => OperaAparcada,
             Comando::AsignarCargoLocal { .. } => AsignaCargoLocal,
             Comando::FijarPuerta { .. } => FijaPuerta,
-            Comando::ComprarMirada { .. } | Comando::ComprarInformePlaza { .. } | Comando::ComprarInformeRegion { .. } => CompraIntel,
+            Comando::ComprarMirada { .. } | Comando::ComprarInformePlaza { .. } | Comando::ComprarInformeRegion { .. } | Comando::ComprarRumor { .. } => CompraIntel,
             Comando::ComprarTecnologiaAeda { .. } => CompraTecnologiaAeda,
             Comando::EmpezarEpica { .. } | Comando::AbandonarEpica { .. } => DirigeAedas,
             Comando::ReclamarRecompensa { .. } => ReclamaMision,
@@ -1019,7 +1054,7 @@ impl Comando {
                 i.ejercitos.push(*ejercito);
                 i.caravanas.push(*caravana);
             }
-            Comando::ComprarMirada { heroe, origen, .. } | Comando::ComprarInformePlaza { heroe, origen, .. } => {
+            Comando::ComprarMirada { heroe, origen, .. } | Comando::ComprarInformePlaza { heroe, origen, .. } | Comando::ComprarRumor { heroe, origen, .. } => {
                 i.heroes.push(*heroe);
                 if let OrigenIntel::Plaza(a) = origen {
                     i.asentamientos.push(*a);
@@ -1076,6 +1111,7 @@ impl Comando {
             | Comando::ElegirReceta { asentamiento, .. }
             | Comando::AlternarAutoConstruccion { asentamiento, .. }
             | Comando::AlternarReceta { asentamiento, .. }
+            | Comando::PausarConsumo { asentamiento, .. }
             | Comando::CalibrarReserva { asentamiento, .. }
             | Comando::SolicitarAscenso { asentamiento }
             | Comando::ActivarPolitica { asentamiento, .. }
@@ -1185,7 +1221,9 @@ impl Comando {
             // Una épica no es una orden sobre la batalla: solo el héroe que la dirige lleva el candado.
             | Comando::EmpezarEpica { heroe, .. }
             | Comando::AbandonarEpica { heroe, .. } => i.heroes.push(*heroe),
-            Comando::AlternarReabastecerAliados { asentamiento, .. } | Comando::CerrarAlmacenACiudadanos { asentamiento, .. } => i.asentamientos.push(*asentamiento),
+            Comando::AlternarReabastecerAliados { asentamiento, .. } | Comando::CerrarAlmacenACiudadanos { asentamiento, .. } | Comando::CerrarReclutamientoACiudadanos { asentamiento, .. } => {
+                i.asentamientos.push(*asentamiento)
+            }
             Comando::OfrecerseComoMercenario { heroe } | Comando::RetirarOferta { heroe } | Comando::ReclamarPremioDeRango { heroe, .. } => i.heroes.push(*heroe),
             Comando::ProrrogarContrato { heroe, mercenario, .. } | Comando::DespedirMercenario { heroe, mercenario } | Comando::ValorarMercenario { heroe, mercenario, .. } => i.heroes.extend([*heroe, *mercenario]),
             Comando::ContratarMercenario { heroe, mercenario, residencia, .. } => {
@@ -2166,6 +2204,23 @@ impl Peticion {
                 w.u64(*asentamiento);
                 w.bool(*cerrado);
             }
+            Comando::CerrarReclutamientoACiudadanos { asentamiento, cerrado } => {
+                w.u8(218);
+                w.u64(*asentamiento);
+                w.bool(*cerrado);
+            }
+            Comando::PausarConsumo { asentamiento, recurso, pausado } => {
+                w.u8(219);
+                w.u64(*asentamiento);
+                w.u8(recurso_a_u8(*recurso));
+                w.bool(*pausado);
+            }
+            Comando::ComprarRumor { heroe, origen, tipo } => {
+                w.u8(220);
+                w.u64(*heroe);
+                origen_escribir(&mut w, *origen);
+                w.u8(*tipo as u8);
+            }
             Comando::EncargarCaravana { caravana, destino, modo, salir_en, en_origen, en_destino } => {
                 w.u8(195);
                 w.u64(*caravana);
@@ -2778,6 +2833,9 @@ impl Peticion {
             213 => Comando::CancelarConstruccion { asentamiento: r.u64()?, edificio: r.u32()? },
             214 => Comando::AsignarBuey { asentamiento: r.u64()?, edificio: r.u32()? },
             217 => Comando::ElegirReceta { asentamiento: r.u64()?, edificio: r.u32()?, insumo: recurso_de_u8(r.u8()?)? },
+            218 => Comando::CerrarReclutamientoACiudadanos { asentamiento: r.u64()?, cerrado: r.bool()? },
+            219 => Comando::PausarConsumo { asentamiento: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, pausado: r.bool()? },
+            220 => Comando::ComprarRumor { heroe: r.u64()?, origen: origen_leer(&mut r)?, tipo: tipo_rumor_leer(&mut r)? },
             198 => Comando::OfrecerseComoMercenario { heroe: r.u64()? },
             199 => Comando::RetirarOferta { heroe: r.u64()? },
             200 | 210 => Comando::ContratarMercenario {
@@ -2879,6 +2937,8 @@ pub mod rechazos {
     pub const RECETA_DESCONOCIDA: &str = "receta.desconocida";
     /// La plaza ya trabaja tantas recetas distintas en ese tipo de edificio como permite su nivel (`TALLERES_DE_UNA_RECETA.recetasDistintasPorNivel`).
     pub const RECETA_TOPE_POR_PLAZA: &str = "receta.tope_por_plaza";
+    /// Ese recurso no es un bien de consumo que se pueda pausar: solo los de `BIENES_DE_CONSUMO` (carne, pan, queso, vino, cerveza y aceite), nunca el trigo (2026-11-10).
+    pub const CONSUMO_NO_SE_PAUSA: &str = "consumo.no_se_pausa";
     // Ascenso (`Bloqueo`): el rechazo lleva el código del primero y todos en el mensaje.
     pub const ASCENSO_NIVEL_MAXIMO: &str = "ascenso.nivel_maximo";
     pub const ASCENSO_EN_CURSO: &str = "ascenso.en_curso";
@@ -2887,6 +2947,7 @@ pub mod rechazos {
     pub const ASCENSO_FALTA_ALDEA: &str = "ascenso.falta_aldea";
     pub const ASCENSO_SIN_CUPO_DE_FACCION: &str = "ascenso.sin_cupo_de_faccion";
     pub const ASCENSO_RECURSOS_INSUFICIENTES: &str = "ascenso.recursos_insuficientes";
+    /// Retirado el 2026-11-10 (decisión del autor): la solvencia del nivel siguiente ya no bloquea la subida; es la advertencia `Asentamiento.insolvencia_ascenso`.
     pub const ASCENSO_INSOLVENTE: &str = "ascenso.insolvente";
     // Políticas (`ErrorPolitica`).
     pub const POLITICA_DESCONOCIDA: &str = "politica.desconocida";
@@ -3306,6 +3367,8 @@ pub mod rechazos {
     pub const INTEL_INFORME_RECIENTE: &str = "intel.informe_reciente";
     /// No hay oro para pagarla (en el almacén de la plaza, en el personal o en el carro).
     pub const INTEL_SIN_ORO: &str = "intel.sin_oro";
+    /// La Facción ya tiene explorado todo lo que descubre el rumor (2026-11-10): no se cobra.
+    pub const RUMOR_SIN_NOVEDAD: &str = "rumor.sin_novedad";
     /// La columna está apartada por una batalla: no se mueve ni se le dan órdenes de movimiento, de persecución ni de inspección.
     pub const COLUMNA_EN_BATALLA: &str = "columna.en_batalla";
     pub const RELACION_CONSIGO_MISMA: &str = "relacion.consigo_misma";
@@ -3985,6 +4048,9 @@ mod pruebas {
             Comando::CargarDePlaza { heroe: 2, asentamiento: 5, recurso: Recurso::Madera, cantidad: 20_000 },
             Comando::DejarEnPlaza { heroe: 2, asentamiento: 5, recurso: Recurso::Oro, cantidad: 3_000 },
             Comando::CerrarAlmacenACiudadanos { asentamiento: 5, cerrado: true },
+            Comando::CerrarReclutamientoACiudadanos { asentamiento: 5, cerrado: true },
+            Comando::PausarConsumo { asentamiento: 5, recurso: Recurso::Carne, pausado: true },
+            Comando::ComprarRumor { heroe: 2, origen: OrigenIntel::Campamento(1), tipo: TipoRumor::VetasEstano },
             Comando::EncargarCaravana {
                 caravana: 4,
                 destino: 6,

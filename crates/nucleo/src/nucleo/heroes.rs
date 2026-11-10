@@ -64,7 +64,9 @@ fn rechazo_de_reclutamiento(e: ErrorReclutamiento) -> (&'static str, String) {
         ErrorReclutamiento::SinTecnologia => (RECLUTAMIENTO_SIN_TECNOLOGIA, "la Facción de la plaza no ha adoptado la tecnología de esa tropa".into()),
         ErrorReclutamiento::Reservada => (RECLUTAMIENTO_RESERVADA, "la escuadra está reservada para una batalla".into()),
         ErrorReclutamiento::YaLaTienesFuera(c) => (RECLUTAMIENTO_YA_LA_TIENES_FUERA, format!("ya tienes esa escuadra y no está aquí ({c:?}): solo se repone donde está")),
-        ErrorReclutamiento::SoloReponer => (RECLUTAMIENTO_SOLO_REPONER, "sin residir aquí solo se repone una escuadra que ya tienes en la plaza".into()),
+        ErrorReclutamiento::SoloReponer => (RECLUTAMIENTO_SOLO_REPONER, "la plaza ha cerrado el reclutamiento a los ciudadanos que no residen en ella: solo se repone una escuadra que ya tienes aquí".into()),
+        ErrorReclutamiento::SinColumna => (HEROE_SIN_COLUMNA, "sin residir aquí, la escuadra nueva va a la columna con la que entraste, y entraste sin columna".into()),
+        ErrorReclutamiento::SuperaLiderazgo => (LIDERAZGO_SUPERADO, "la escuadra nueva va a tu columna y pasa del Liderazgo del héroe".into()),
         ErrorReclutamiento::AlTope => (RECLUTAMIENTO_AL_TOPE, "la escuadra ya está completa".into()),
         ErrorReclutamiento::SinPoblacion { hacen_falta, disponibles, .. } => (RECLUTAMIENTO_SIN_POBLACION, format!("hacen falta {hacen_falta} y solo hay {disponibles} que no se necesiten para producir")),
         ErrorReclutamiento::SinEdificio => (RECLUTAMIENTO_SIN_EDIFICIO, "falta el edificio activo de ese nivel".into()),
@@ -301,6 +303,10 @@ impl Nucleo {
                 if let Some(plaza) = self.plaza_de_visita(*heroe) {
                     return self.guarnecer_de_visita(t, p, *heroe, plaza, *escuadra).map(|()| vec![]);
                 }
+                // A la puerta (2026-11-10): con la columna a la puerta de una plaza de su Facción, deja la escuadra de la columna en su guarnición.
+                if let Some((plaza, columna)) = self.plaza_propia_a_la_puerta(*heroe).filter(|&(_, c)| self.va_en_la_columna(*heroe, *escuadra, c)) {
+                    return self.guarnecer_desde_la_puerta(t, *heroe, plaza, columna, *escuadra).map(|()| vec![]);
+                }
                 let Some(Residencia::Asentamiento(plaza)) = self.heroe(*heroe).expect("existe").heroe.residencia else { return Err(de_heroe(ErrorHeroe::SinResidencia)) };
                 let cupo = self.cupo_de_guarnicion(plaza as u64).ok_or_else(|| de_heroe(ErrorHeroe::SinResidencia))?;
                 guarnicion::asignar(&mr, &mut self.heroe_mut(*heroe).heroe, plaza, cupo, *escuadra).map_err(de_heroe)?;
@@ -308,6 +314,10 @@ impl Nucleo {
             }
             Comando::RetirarGuarnicion { heroe, escuadra } => {
                 self.autorizar_heroe(p, *heroe, false)?;
+                // A la puerta (2026-11-10): la escuadra que guarnece esa plaza de su Facción vuelve a la columna.
+                if let Some((plaza, columna)) = self.plaza_propia_a_la_puerta(*heroe).filter(|&(plaza, _)| self.guarnece_la_plaza(*heroe, *escuadra, plaza)) {
+                    return self.recoger_a_la_columna(t, *heroe, plaza, columna, *escuadra).map(|()| vec![]);
+                }
                 if let Some(plaza) = self.heroe(*heroe).expect("existe").heroe.escuadra(*escuadra).and_then(|s| if let Contenedor::Plaza(x) = s.contenedor { Some(x) } else { None }) {
                     return self.recoger_de_visita(t, *heroe, plaza, *escuadra).map(|()| vec![]);
                 }
@@ -457,9 +467,11 @@ impl Nucleo {
         self.autorizar_heroe(p, heroe, false)?;
         let h = self.heroe(heroe).expect("existe");
         let reside = h.heroe.residencia == Some(Residencia::Asentamiento(plaza32));
-        // Un vetado de la puerta de la plaza (5E) no repone en ella (`puedeReclutarEn`).
-        let vetado = self.estado.asentamientos[&asentamiento].puerta.vetados.contains(&heroe);
-        let permiso = reclutamiento::permiso(reside, h.faccion == Some(faccion), vetado);
+        // Un vetado de la puerta de la plaza (5E) no recluta ni repone en ella (`puedeReclutarEn`). Un ciudadano que no reside recluta escuadras nuevas, que se van a la columna con la
+        // que entró, salvo que la plaza lo haya cerrado a los ciudadanos (2026-11-10).
+        let a = &self.estado.asentamientos[&asentamiento];
+        let (vetado, cerrado) = (a.puerta.vetados.contains(&heroe), a.reclutamiento_cerrado_a_ciudadanos);
+        let permiso = reclutamiento::permiso(reside, h.faccion == Some(faccion), vetado, cerrado);
         if permiso == reclutamiento::Permiso::No {
             let (c, m) = rechazo_de_reclutamiento(ErrorReclutamiento::NoPuedes);
             return Err(Respuesta::rechazo(c, m, v));
@@ -468,6 +480,7 @@ impl Nucleo {
             return Err(Respuesta::rechazo(rechazos::HEROE_NO_ESTA_EN_LA_PLAZA, format!("el héroe no está dentro de as-{asentamiento}"), v));
         }
         let tecnologia_adoptada = self.tiene_tecnologia(faccion, &mr.tropas.tropa(tropa).tecnologia);
+        let columna = if reside { None } else { self.columna_que_lleva(heroe) };
         let soldados = self.soldados_del_campamento(asentamiento);
         let resumen = self
             .con_exterior(asentamiento, t, |eco, x| eco.resumen_de_reclutamiento(x.reglas, x))
@@ -486,7 +499,7 @@ impl Nucleo {
             consumo_poblacion: resumen.consumo_poblacion,
             soldados_en_el_campamento: soldados,
         };
-        let pedido = Pedido { heroe: &mut militar.heroes.get_mut(&heroe).expect("existe").heroe, tropa, permiso, reside, tecnologia_adoptada, distancia_de_columna: &distancia };
+        let pedido = Pedido { heroe: &mut militar.heroes.get_mut(&heroe).expect("existe").heroe, tropa, permiso, reside, tecnologia_adoptada, distancia_de_columna: &distancia, columna };
         let hecho = reclutamiento::reclutar(
             &mr,
             sitio,
@@ -502,6 +515,16 @@ impl Nucleo {
             Respuesta::rechazo(c, m, v)
         })?;
         self.tr.tocar(Clase::Asentamiento, asentamiento);
+        // La escuadra nueva de un ciudadano que no reside va en su columna: la columna la apunta y recalcula lo que come y su velocidad.
+        if let Some(cid) = hecho.columna {
+            let antes = self.velocidad_de_ejercito(cid).unwrap_or(0);
+            self.estado.ejercitos.get_mut(&cid).expect("es la columna que lleva").columna.escuadras.push(hecho.escuadra);
+            self.sincronizar_hambre(cid, t);
+            self.recomponer_columna(cid, t, antes);
+            self.tr.tocar(Clase::Ejercito, cid);
+            self.tr.tocar(Clase::Heroe, heroe);
+            self.tr.tocar(Clase::Escuadra, hecho.escuadra);
+        }
         // Los logros `reclutados.*` (6B), reponer incluido.
         self.contar(t, tecnologia::contador::reclutamiento(tropa.nombre(), mr.tropas.tropa(tropa).edificio, hecho.cantidad.max(0) as u64, hecho.nueva));
         self.avance_de_reclutamiento(t, heroe, mr.tropas.tropa(tropa).edificio, hecho.cantidad.max(0) as u64, hecho.nueva);
@@ -538,9 +561,14 @@ impl Nucleo {
     /// `asignarGuarnicion` de visita: deja una escuadra de la columna con la que entró en la guarnición de la plaza de su Facción (`Contenedor::Plaza`), dentro del mismo cupo por
     /// héroe que un residente (`cupo_de_guarnicion`) y contando solo lo que ya dejó en esa plaza.
     fn guarnecer_de_visita(&mut self, t: Instante, p: &Peticion, heroe: u64, plaza: u64, escuadra: u64) -> Result<(), Respuesta> {
+        let cid = self.columna_de_visita_en_su_faccion(p, heroe, plaza)?;
+        self.dejar_de_visita(t, heroe, plaza, cid, escuadra)
+    }
+
+    /// Deja la escuadra `escuadra` de la columna `cid` en la guarnición de visita de `plaza` (`Contenedor::Plaza`), dentro del cupo por héroe y contando solo lo que ya dejó en esa plaza.
+    fn dejar_de_visita(&mut self, t: Instante, heroe: u64, plaza: u64, cid: u64, escuadra: u64) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
-        let cid = self.columna_de_visita_en_su_faccion(p, heroe, plaza)?;
         let mr = self.estado.reglas.economia.militar.clone();
         let h = &self.heroe(heroe).expect("existe").heroe;
         let s = h.escuadra(escuadra).ok_or_else(|| rechazo(rechazos::ESCUADRA_AJENA, format!("la escuadra {escuadra} no es tuya")))?;
@@ -564,6 +592,88 @@ impl Nucleo {
         let antes = self.velocidad_de_ejercito(cid).unwrap_or(0);
         self.estado.ejercitos.get_mut(&cid).expect("existe").columna.escuadras.retain(|x| *x != escuadra);
         self.poner_escuadras_en(&[heroe], &[escuadra], Contenedor::Plaza(plaza), t);
+        self.recomponer_columna(cid, t, antes);
+        self.tr.tocar(Clase::Ejercito, cid);
+        self.tr.tocar(Clase::Escuadra, escuadra);
+        Ok(())
+    }
+
+    // ───────────────────────────── Guarnición desde la puerta (2026-11-10) ─────────────────────────────
+
+    /// La plaza de la Facción del héroe a cuya puerta está la columna en la que va (la más cercana, si hay varias), con esa columna. `None` si no va en una columna o no está a ninguna puerta.
+    pub(super) fn plaza_propia_a_la_puerta(&self, heroe: u64) -> Option<(u64, u64)> {
+        let h = self.heroe(heroe)?;
+        let Ubicacion::Columna(c) = h.heroe.presencia.ubicacion else { return None };
+        let f = h.faccion?;
+        let aqui = self.estado.ejercitos.get(&c)?.posicion_en(self.estado.ahora);
+        let r = self.radio_puerta();
+        self.estado.asentamientos.values().filter(|a| a.faccion == f).map(|a| (aqui.dist(a.posicion), a.id)).filter(|&(d, _)| d <= r).min().map(|(_, a)| (a, c))
+    }
+
+    /// ¿Va la escuadra `escuadra` del héroe en la columna `columna`?
+    fn va_en_la_columna(&self, heroe: u64, escuadra: u64, columna: u64) -> bool {
+        self.heroe(heroe).and_then(|h| h.heroe.escuadra(escuadra)).is_some_and(|s| s.contenedor == Contenedor::Ejercito(columna))
+    }
+
+    /// ¿Guarnece la escuadra `escuadra` del héroe la plaza `plaza`? La dejada de visita (`Contenedor::Plaza`) o, si reside en ella, la de su campamento asignada a la guarnición.
+    fn guarnece_la_plaza(&self, heroe: u64, escuadra: u64, plaza: u64) -> bool {
+        let Some(h) = self.heroe(heroe) else { return false };
+        let reside = h.heroe.residencia == Some(Residencia::Asentamiento(plaza as u32));
+        h.heroe.escuadra(escuadra).is_some_and(|s| s.contenedor == Contenedor::Plaza(plaza) || reside && s.contenedor == Contenedor::Campamento && s.en_guarnicion)
+    }
+
+    /// `asignarGuarnicion` con la columna `cid` a la puerta de `plaza`, de su Facción: la escuadra sale de la columna a la guarnición. Si el héroe reside en la plaza, entra en su campamento
+    /// asignada a la guarnición (la misma que la de dentro, con su cupo por héroe, contando también lo que dejó de visita); si no, queda de visita (`Contenedor::Plaza`) como la que deja
+    /// quien está dentro sin residir.
+    fn guarnecer_desde_la_puerta(&mut self, t: Instante, heroe: u64, plaza: u64, cid: u64, escuadra: u64) -> Result<(), Respuesta> {
+        if self.heroe(heroe).expect("existe").heroe.residencia != Some(Residencia::Asentamiento(plaza as u32)) {
+            return self.dejar_de_visita(t, heroe, plaza, cid, escuadra);
+        }
+        let v = self.estado.version;
+        let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
+        let mr = self.estado.reglas.economia.militar.clone();
+        let h = &self.heroe(heroe).expect("existe").heroe;
+        let s = h.escuadra(escuadra).expect("va en la columna");
+        if s.reserva_batalla.is_some() {
+            return Err(rechazo(rechazos::ESCUADRA_EN_BATALLA, format!("la escuadra {escuadra} está reservada para una batalla")));
+        }
+        if s.cantidad <= 0 {
+            return Err(rechazo(rechazos::ESCUADRA_ANIQUILADA, format!("la escuadra {escuadra} está aniquilada")));
+        }
+        let cupo = self.cupo_de_guarnicion(plaza).unwrap_or(0);
+        let guarnece = |x: &militar::escuadra::Escuadra| x.contenedor == Contenedor::Plaza(plaza) || x.contenedor == Contenedor::Campamento && x.en_guarnicion || x.id == escuadra;
+        let ocupado = liderazgo::comprometido(&mr, h.escuadras.iter().filter(|x| guarnece(x)));
+        if ocupado > cupo {
+            return Err(rechazo(rechazos::GUARNICION_SUPERA_EL_CUPO, format!("la guarnición pasaría a {ocupado} de un cupo de {cupo}")));
+        }
+        let antes = self.velocidad_de_ejercito(cid).unwrap_or(0);
+        self.estado.ejercitos.get_mut(&cid).expect("existe").columna.escuadras.retain(|x| *x != escuadra);
+        self.poner_escuadras_en(&[heroe], &[escuadra], Contenedor::Campamento, t);
+        self.heroe_mut(heroe).heroe.escuadra_mut(escuadra).expect("existe").en_guarnicion = true;
+        self.recomponer_columna(cid, t, antes);
+        self.tr.tocar(Clase::Ejercito, cid);
+        self.tr.tocar(Clase::Escuadra, escuadra);
+        Ok(())
+    }
+
+    /// `retirarGuarnicion` con la columna `cid` a la puerta de `plaza`: la escuadra que la guarnece vuelve a la columna, sin pasar del Liderazgo del héroe.
+    fn recoger_a_la_columna(&mut self, t: Instante, heroe: u64, plaza: u64, cid: u64, escuadra: u64) -> Result<(), Respuesta> {
+        let v = self.estado.version;
+        let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
+        let h = &self.heroe(heroe).expect("existe").heroe;
+        if h.escuadra(escuadra).is_some_and(|s| s.reserva_batalla.is_some()) {
+            return Err(rechazo(rechazos::ESCUADRA_EN_BATALLA, format!("la escuadra {escuadra} está reservada para una batalla")));
+        }
+        let mr = &self.estado.reglas.economia.militar;
+        let fuera = h.escuadras.iter().filter(|s| s.contenedor != Contenedor::Campamento && s.contenedor != Contenedor::Plaza(plaza) || s.id == escuadra);
+        if !liderazgo::puede_llevar(mr, h.liderazgo_base, fuera) {
+            return Err(rechazo(rechazos::LIDERAZGO_SUPERADO, "las escuadras pasan del Liderazgo del héroe".into()));
+        }
+        let antes = self.velocidad_de_ejercito(cid).unwrap_or(0);
+        self.estado.ejercitos.get_mut(&cid).expect("existe").columna.escuadras.push(escuadra);
+        self.poner_escuadras_en(&[heroe], &[escuadra], Contenedor::Ejercito(cid), t);
+        self.heroe_mut(heroe).heroe.escuadra_mut(escuadra).expect("existe").en_guarnicion = false;
+        self.sincronizar_hambre(cid, t);
         self.recomponer_columna(cid, t, antes);
         self.tr.tocar(Clase::Ejercito, cid);
         self.tr.tocar(Clase::Escuadra, escuadra);
@@ -809,9 +919,11 @@ impl Nucleo {
             return;
         }
         let mr = self.estado.reglas.economia.militar.clone();
-        let bienes = self.estado.reglas.economia.datos.poblacion.guarnicion.clone();
+        let mut bienes = self.estado.reglas.economia.datos.poblacion.guarnicion.clone();
         let Estado { militar, asentamientos, .. } = &mut self.estado;
         let Some(a) = asentamientos.get_mut(&plaza) else { return };
+        // La carne pausada (`pausarConsumo`, 2026-11-10) tampoco la come la guarnición: se guarda entera.
+        bienes.retain(|b| !a.economia.consumo_pausado.contains(b));
         let almacen = &mut a.economia.almacen;
         let mut consumido = 0;
         for recurso in bienes.into_iter().chain([Recurso::Trigo]) {
