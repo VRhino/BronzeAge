@@ -37,12 +37,12 @@ describe('estaño y oro por gradiente', () => {
   it('cada nodo está en el anillo que declara', () => {
     for (const n of nodos) expect(anilloEn(campamentos, n.posicion).anillo).toBe(n.anillo);
   });
-  it('el foco es una muestra en su borde exterior y con un tercio de cantidad', () => {
+  it('el foco es una muestra en su borde exterior; el oro con un tercio de cantidad y el estaño entero', () => {
     for (const n of nodos.filter(n => n.anillo === 'foco')) {
       const d = anilloEn(campamentos, n.posicion).distancia;
       expect(d).toBeGreaterThanOrEqual(P.bordeFoco.min);
       expect(d).toBeLessThanOrEqual(P.bordeFoco.max);
-      expect(n.cantidadFactor).toBeCloseTo(1 / 3);
+      expect(n.cantidadFactor).toBeCloseTo(n.tipo === 'oro' ? 1 / 3 : 1);
     }
   });
   it('vetas de 3 a 6 estaños con 0 a 2 oros, dentro del radio', () => {

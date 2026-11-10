@@ -42,9 +42,8 @@ fn rechazo_de_pueblo(e: ErrorPueblo) -> (&'static str, &'static str) {
         ErrorPueblo::NoEstaPendiente => (PUEBLO_NO_ESTA_PENDIENTE, "la obra no está pendiente de materiales"),
         ErrorPueblo::NadaQueEntregar => (PUEBLO_NADA_QUE_ENTREGAR, "la columna no lleva nada que la obra necesite"),
         ErrorPueblo::FertilidadInsuficiente => (PUEBLO_FERTILIDAD_INSUFICIENTE, "la tierra de ese punto no es bastante fértil para una aldea agrícola"),
-        ErrorPueblo::NoEsAldea => (PUEBLO_NO_ES_ALDEA, "solo las aldeas agrícolas suben de nivel"),
-        ErrorPueblo::NivelMaximo => (PUEBLO_NIVEL_MAXIMO, "la aldea ya está en su último nivel"),
-        ErrorPueblo::MejoraEnCurso => (PUEBLO_MEJORA_EN_CURSO, "la aldea ya tiene una subida de nivel en marcha"),
+        ErrorPueblo::NivelMaximo => (PUEBLO_NIVEL_MAXIMO, "el pueblo ya está en su último nivel"),
+        ErrorPueblo::MejoraEnCurso => (PUEBLO_MEJORA_EN_CURSO, "el pueblo ya tiene una subida de nivel en marcha"),
         ErrorPueblo::NoEstaActivo => (PUEBLO_NO_ESTA_ACTIVO, "el pueblo aún no está levantado"),
         ErrorPueblo::CultivoBloqueado => (PUEBLO_CULTIVO_BLOQUEADO, "ninguna plaza de la Facción tiene aún el nivel que pide ese cultivo"),
     }
@@ -224,10 +223,11 @@ impl Nucleo {
             }
             Comando::MejorarAldea { pueblo } => {
                 let (plaza, _) = self.pueblo(*pueblo).ok_or_else(|| de_pueblo(ErrorPueblo::NoExiste))?;
-                // El Gobernador o el Maestro de Obras de la madre, dentro de la plaza o dentro de la aldea (§14.0.1, 2026-10-29).
+                // El Gobernador o el Maestro de Obras de la madre, dentro de la plaza o dentro del pueblo (§14.0.1, 2026-10-29). Desde el 2026-11-10 suben
+                // también los extractores (Cantera y minas), hasta el nivel de la madre.
                 self.autorizar_en_plaza_o_en_pueblo(p, plaza, *pueblo, &[politica::Cargo::Gobernador, politica::Cargo::MaestroObras])?;
                 let mut ev = vec![];
-                self.estado.asentamientos.get_mut(&plaza).expect("existe").economia.mejorar_aldea(&datos, *pueblo, &mut ev).map_err(de_pueblo)?;
+                self.estado.asentamientos.get_mut(&plaza).expect("existe").economia.mejorar_pueblo(&datos, *pueblo, &mut ev).map_err(de_pueblo)?;
                 self.anotar_sucesos(plaza, t, &ev);
                 Ok(None)
             }

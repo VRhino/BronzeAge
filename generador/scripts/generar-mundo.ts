@@ -96,7 +96,7 @@ const trigoEn = (p: Point): number => {
     { altura: celdas.altura[i]!, pendiente: celdas.pendiente[i]!, humedad: celdas.humedad[i]! });
 };
 const mundo: MundoGenerado = {
-  seed, ancho, alto, generador: 'regional-19-costas-2+estrategico-3+cauce-1',
+  seed, ancho, alto, generador: 'regional-20-costas-2+estrategico-3+cauce-1',
   campamentos: e.campamentos, recursos, vetas: e.vetas, masas: e.masas, parcelas: e.parcelas, bandidos, alijos, rios, grafo,
   regiones: r.elevacion.regional.areas.map(a => ({ id: a.id, nombre: a.nombre })),
   muestras: {

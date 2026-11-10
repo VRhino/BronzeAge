@@ -187,7 +187,7 @@ pesants → el excedente; artesanos → `artesanos − trabajadoresTransformacio
 
 > **Una parcela produce más (decisión del autor del 2026-11-01).** Con el bosque en manchas del generador (`Generacion_Del_Mundo.md` §8) hay parcelas por todo el mapa, pero menos juntas: junto a los campamentos, una plaza nueva tiene ahora 2 parcelas libres en la zona de su techo del nivel 1 (10 u), donde antes lo normal eran 4. El autor no quiere más parcelas juntas: las 4 parcelas son todo el espacio inicial de una plaza, así que tenerlas debe ser raro. Una plaza debe **sobrevivir con 1 parcela, ir bien con 2, ir sobrada con 3 y sobradísima con 4**. Por eso sube lo que da cada parcela: `produccionBaseMadera` de la Leñera pasa de 5 a **8**. Con la densidad mediana de una parcela (0,63, igual que antes), una Leñera con toda su mano de obra da unos 5 de madera por minuto, el doble del mantenimiento de madera de una plaza con 40 edificios (~2,5); dos dan unos 10, lo que daba la madera potencial mediana de una plaza nueva antes del cambio (9,9). El umbral de plaza condenada (`MADERA_MINIMA_POTENCIAL`, 3 por minuto) no cambia; como se mide con la producción de la Leñera (`produccionBaseMadera × Σ densidades`), basta con una parcela de densidad 0,375. Medido con la semilla 42 (mundo `e5c637d4…`) en los sitios verdes a 50-160 u de cada campamento: la mediana de madera potencial pasa de unos 6.400 milésimas (con 5) a unos 10.200 (con 8).
 
-> **Todas las minas a 10 por minuto (decisión del autor del 2026-11-09).** La Mina (oro), la de cobre, la de estaño y la de hierro producen de base **10** por minuto, lo mismo que la Cantera (antes 4, 5, 3 y 5). La escasez del estaño ya la dan sus pocos yacimientos (máximo 2 vetas por región, `Generacion_Del_Mundo.md`), así que su mina no tiene por qué rendir además menos que las demás. Solo cambia la producción: el coste en madera, el tiempo de obra y los trabajadores de cada extractor siguen igual, y la Leñera (8 por la densidad de su parcela) y el Corral no se tocan.
+> **Todas las minas a 10 por minuto (decisión del autor del 2026-11-09).** La Mina (oro), la de cobre, la de estaño y la de hierro producen de base **10** por minuto, lo mismo que la Cantera (antes 4, 5, 3 y 5). La escasez del estaño ya la dan sus pocos yacimientos (máximo 2 vetas por región, `Generacion_Del_Mundo.md`), así que su mina no tiene por qué rendir además menos que las demás. Solo cambia la producción: el coste en madera, el tiempo de obra y los trabajadores de cada extractor siguen igual, y la Leñera (8 por la densidad de su parcela) y el Corral no se tocan. **2026-11-10:** sus nodos eran además los más pequeños (50 a 150) y, con 10 minutos de regeneración por cada vez que se vacían, el estaño sacaba de media la mitad que los demás; desde entonces nacen con 300 a 600 ([`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md), nodos de estaño grandes), y la Cantera y las minas suben hasta el nivel 3 (10 / 20 / 30 por minuto, §14).
 
 - **`fertilidadZona`** (`mejorFertilidadEnZona`): la mayor `mapa.fertilidadEn` de una lista de candidatos = la posición del asentamiento + `SITIO.muestrasFertilidad` (40) puntos `i = 0..39` en
   `(pos.x + cos(2π·i/40)·r, pos.y + sin(2π·i/40)·r)` con `r = ((i mod 5)/5) · radioPotencial`, quedándose con los que caen dentro del polígono de zona (o con todos si el polígono está vacío). Todas las Granjas
@@ -2418,6 +2418,7 @@ Ninguna abierta (las encontradas al documentar se resolvieron el 2026-10-11; ver
 - **Requisitos**: madre de **nivel 1 o más** (2 o más hasta el 2026-10-31), el nodo dentro de su zona y **con ruta por tierra hasta la madre** (decisión del autor, 2026-10-23: un pueblo sin ella no podría acarrear nunca, así que no se funda; rechazo `pueblo.sin_ruta`). **Cupo** por nivel de la madre: 2 / 3 / 4 / 5 / 6 pueblos (niveles 1 a 5; en el nivel 1 caben dos desde el 2026-11-01, la cantera y la aldea agrícola; del 2026-10-27 al 2026-11-01 cabía uno).
 - **Trabajadores**: pesants de la madre; el pueblo no tiene población propia ni crece.
 - **Extracción**: **ritmo** `produccionBase × ratioManoObra × factorTecnología` contra el almacén local; con el almacén lleno, la extracción para (evento «almacén lleno»). Con el nodo agotado espera a la regeneración (`REGENERACION_NODOS`) sin mudarse; los pueblos **no** entran en el reemplazo automático ni en `EXTRACCION_MAXIMOS`.
+- **Niveles (decisión del autor del 2026-11-10).** La Cantera y las cuatro minas tienen niveles **1 a 3** (`PUEBLOS_EXTRACTORES.extractor.niveles`): el `factor` del nivel (1 / 2 / 3) multiplica la `produccionBase` del extractor (las minas y la Cantera, **10 / 20 / 30** por minuto, antes de `ratioManoObra` y `factorTecnología`) y los trabajadores que pide (`trabajadores_de_pueblos`: una mina de 8 pide 16 y 24). Cada nivel pide la plaza madre en el nivel operativo `nivelMadre` (el 2, nivel 2; el 3, nivel 3). Se sube con la orden de la aldea, `MejorarAldea { pueblo }` (184, la misma autorización: Gobernador o Maestro de Obras de la madre, en la plaza o dentro del pueblo; `Asentamiento::mejorar_pueblo`): deja una mejora «pendiente de materiales» con el `coste` del nivel siguiente (2: 180 madera y 60 piedra; 3: 360 y 120, las cifras de la aldea), que se entrega con `EntregarMateriales`; entregada, obra de `obraMinutos` (120) por el `factorTiempoConstruccion` de la madre, y el pueblo **sigue extrayendo con su nivel de antes** mientras tanto. Rechazos: `pueblo.no_esta_activo`, `pueblo.mejora_en_curso`, `pueblo.nivel_maximo` y, con la madre por debajo, `pueblo.nivel_insuficiente`; `pueblo.no_es_aldea` ya no sale. Hechos nuevos: `pueblo.mejora_marcada` y `pueblo.subio` (pueblo, nivel; los de la aldea siguen siendo `aldea.mejora_marcada` y `aldea.subio`). El nivel ya iba en la foto (sin formato nuevo); el bloque nuevo cambia la huella de las reglas (**partida nueva**). En el contrato, el `Pueblo` lleva ahora su nivel en `nivel_aldea` (13) también en un extractor (antes ausente), y la mejora en marcha llega como `ObraDeMapa` de tipo `OBRA_MEJORA_ALDEA`, como la de la aldea. Si la madre baja de nivel, el pueblo conserva el suyo. Placeholders: costes, obras y factores. Prueba: `el_extractor_sube_hasta_el_nivel_3_atado_al_de_la_madre_y_saca_10_20_y_30` (`asentamiento`, `pueblos.rs`).
 - **Destruirlo a mano** libera el cupo y no recupera nada. Tamaño: como mucho **0,2 de mapa**.
 - **Conquista de la madre**: los pueblos pasan al conquistador; **ruina** de la madre: desaparecen.
 - **Solvencia** para subir de nivel (§11): lo que llega por acarreo cuenta como la media de lo que **llega a la madre** en una ventana de 24 h, quepa o no en su almacén, desde que llega (decidido el 2026-10-19, el 2026-11-01 y el 2026-11-03; ya no la producción nominal del pueblo).
@@ -2454,10 +2455,10 @@ Ninguna abierta (las encontradas al documentar se resolvieron el 2026-10-11; ver
 
 Todo se hace con el héroe **dentro** del pueblo o la aldea (`entrarEnPueblo`) y **ciudadano de la Facción de la plaza madre**. Nadie reside en un pueblo: lo que se mueve es la **columna con la que entró**, que lo espera dentro (sus escuadras, su carro). La administración no necesita estar dentro ni ser de la Facción. El corral y el rebaño siguen automáticos.
 
-- **Guarnición de jugadores** (`GuarnecerPueblo { heroe, pueblo, escuadras }` y `RetirarDePueblo`). Además de la de serie (mineros o granjeros), cada héroe deja escuadras **de su columna** en el pueblo, con un cupo **por héroe** en Liderazgo: `guarnicionJugadores.cupo` (30) en el nivel 1 y `porNivel` (15) más por cada nivel de la aldea (un extractor es siempre de nivel 1: 30). Las recoge a la misma columna, sin pasar de su Liderazgo. Comen como su campamento (el de la plaza donde reside su héroe) y **defienden el pueblo** en el saqueo y en la batalla, con o sin su héroe (después de la de serie). Vuelven **intactas al campamento de su héroe** si el pueblo desaparece (destruido a mano o en la ruina de la madre), si el héroe deja la Facción de la madre o si la madre cambia de dueño y él no es de la Facción nueva. Cambiar de residencia no las mueve. Hechos: `pueblo.guarnecido` (pueblo, heroe, escuadras, liderazgo) y `pueblo.guarnicion_retirada` (pueblo, heroe, escuadras).
+- **Guarnición de jugadores** (`GuarnecerPueblo { heroe, pueblo, escuadras }` y `RetirarDePueblo`). Además de la de serie (mineros o granjeros), cada héroe deja escuadras **de su columna** en el pueblo, con un cupo **por héroe** en Liderazgo: `guarnicionJugadores.cupo` (30) en el nivel 1 y `porNivel` (15) más por cada nivel del pueblo, aldea o (desde el 2026-11-10) extractor. Las recoge a la misma columna, sin pasar de su Liderazgo. Comen como su campamento (el de la plaza donde reside su héroe) y **defienden el pueblo** en el saqueo y en la batalla, con o sin su héroe (después de la de serie). Vuelven **intactas al campamento de su héroe** si el pueblo desaparece (destruido a mano o en la ruina de la madre), si el héroe deja la Facción de la madre o si la madre cambia de dueño y él no es de la Facción nueva. Cambiar de residencia no las mueve. Hechos: `pueblo.guarnecido` (pueblo, heroe, escuadras, liderazgo) y `pueblo.guarnicion_retirada` (pueblo, heroe, escuadras).
 - **Escolta del carro de acarreo desde dentro.** `AsignarEscolta` sobre el carro del pueblo, dado dentro, cede escuadras de la columna (no del campamento) con el mismo cupo de escolta de siempre (el del Mercado de la madre), sin tener que residir en ella; `QuitarEscolta` dado dentro las devuelve a la columna, sin pasar de su Liderazgo. El carro ya se repone solo (§14), así que no hay orden para cambiarlo.
 - **Carro de la columna y almacén local** (`CargarDePueblo { heroe, pueblo, recurso, cantidad }` y `DejarEnPueblo`). Se carga lo que haya en el almacén, hasta donde quepa en el carro de la columna. Solo se deja **lo que el pueblo produce** (su recurso; en la aldea, trigo y ganado), hasta la capacidad del almacén (`capacidadAlmacenLocal`, compartida en la aldea). Si al dejar tiene para llenar el carro de acarreo (500) y el carro está en casa, **sale** (hasta el 2026-11-05, con el almacén de 500, era lo mismo que llenarse). Hechos: `pueblo.cargado` y `pueblo.dejado` (pueblo, heroe, recurso, cantidad: lo que se movió de verdad).
-- **Mejorar la aldea desde dentro.** `MejorarAldea` la da también, dentro de la aldea, el Gobernador o el Maestro de Obras de la madre (residente en ella), además de desde la plaza.
+- **Mejorar el pueblo desde dentro.** `MejorarAldea` (que desde el 2026-11-10 sube también un extractor) la da también, dentro del pueblo, el Gobernador o el Maestro de Obras de la madre (residente en ella), además de desde la plaza.
 - **Rechazos nuevos**: `pueblo.escuadra_fuera_de_tu_columna`, `pueblo.escuadra_no_esta`, `pueblo.recurso_ajeno`, `pueblo.almacen_sin_sitio`, `pueblo.nada_que_cargar` y `pueblo.nada_que_dejar`; se reutilizan `pueblo.faccion_ajena`, `heroe.no_esta_en_el_pueblo`, `guarnicion.supera_el_cupo`, `liderazgo.superado`, `carro.no_cabe` y los de las escuadras.
 - **Contrato.** Órdenes `guarnecer_pueblo` (161), `retirar_de_pueblo` (162), `cargar_de_pueblo` (163) y `dejar_en_pueblo` (164); el `Pueblo` lleva `guarnicion_jugadores_ids` (18) y `cupo_guarnicion_por_heroe` (19), y un `Escuadron` de la guarnición, `contenedor.pueblo_id` (6).
 - **Placeholders**: el cupo (30 y 15 por nivel) lo fijó el autor; lo demás sale de reglas que ya existían.
@@ -2488,6 +2489,31 @@ Todo se hace con el héroe **dentro** del pueblo o la aldea (`entrarEnPueblo`) y
   "guarnicionJugadores": {
     "cupo": 30,
     "porNivel": 15
+  },
+  "extractor": {
+    "niveles": {
+      "1": {
+        "factor": 1
+      },
+      "2": {
+        "factor": 2,
+        "nivelMadre": 2,
+        "coste": {
+          "madera": 180,
+          "piedra": 60
+        },
+        "obraMinutos": 120
+      },
+      "3": {
+        "factor": 3,
+        "nivelMadre": 3,
+        "coste": {
+          "madera": 360,
+          "piedra": 120
+        },
+        "obraMinutos": 120
+      }
+    }
   },
   "aldea": {
     "fertilidadMinima": 0.3,
@@ -2668,7 +2694,7 @@ Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; cont
 <!-- eventos -->
 ```json
 [
-  "acarreo.carro_repuesto", "aldea.marcada", "aldea.mejora_marcada", "aldea.subio", "acarreo.llega", "acarreo.sale", "acarreo.vuelve", "asentamiento.ascenso_iniciado", "asentamiento.nivel", "asentamiento.nivel_subio",
+  "acarreo.carro_repuesto", "aldea.marcada", "aldea.mejora_marcada", "aldea.subio", "pueblo.mejora_marcada", "pueblo.subio", "acarreo.llega", "acarreo.sale", "acarreo.vuelve", "asentamiento.ascenso_iniciado", "asentamiento.nivel", "asentamiento.nivel_subio",
   "asentamiento.renombrado", "asentamiento.ruinas", "avanzada.adoptada", "avanzada.completada", "avanzada.deposito", "avanzada.guarnecida", "avanzada.guarnicion_retirada",
   "avanzada.materiales_entregados", "avanzada.obra_cancelada", "avanzada.obra_iniciada", "avanzada.obra_marcada", "avanzada.reabastecimiento", "avanzada.sin_dueno",
   "avanzada.traspasada", "avanzada.tropa_elegida", "construccion.auto_alternada", "construccion.buey_asignado", "construccion.cola_reordenada", "construccion.desencolada", "construccion.obra_cancelada",

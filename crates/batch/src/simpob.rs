@@ -303,7 +303,7 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
     // Y la sube de nivel en cuanto puede pagar el siguiente (tanda 69: la aldea no sube sola), con los materiales también al instante.
     if let Some(p) = comida::aldea_que_sube(a, reglas).filter(|_| minuto % CADA_MIN_ASCENSO == 0) {
         let (id, coste) = (p.id, reglas.pueblos.aldea.niveles[&(p.nivel + 1)].coste.clone());
-        if a.almacen.tiene(&coste) && a.mejorar_aldea(reglas, id, &mut ev).is_ok() {
+        if a.almacen.tiene(&coste) && a.mejorar_pueblo(reglas, id, &mut ev).is_ok() {
             a.almacen.pagar(&coste);
             let requerido = a.pueblo(id).expect("está").falta();
             a.entregar_a_pueblo(t, reglas, id, &requerido, &mut ev).expect("todo entregado");
