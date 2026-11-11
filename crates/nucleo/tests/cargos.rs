@@ -345,7 +345,7 @@ fn un_vetado_no_repone_en_la_plaza_ni_se_muda_a_ella() {
 }
 
 #[test]
-fn los_cargos_y_la_puerta_viajan_en_la_foto_ban33_y_la_ban32_se_rechaza() {
+fn los_cargos_y_la_puerta_viajan_en_la_foto() {
     let m = con_mundo!();
     let mut e = E::nuevo(m);
     let (rey, ana, bea, cai, plaza) = (e.rey, e.ana, e.bea, e.cai, e.plaza);
@@ -364,9 +364,6 @@ fn los_cargos_y_la_puerta_viajan_en_la_foto_ban33_y_la_ban32_se_rechaza() {
     let a = &vuelta.asentamientos[&plaza];
     assert_eq!((a.cargos.titular(Cargo::Gobernador), a.cargos.titular(Cargo::Tesorero), a.puerta.cerrada_a, a.puerta.vetados.len()), (Some(ana), Some(bea), Some(Grupos::de([Grupo::Enemigos])), 1));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.hash_estado()));
-    let vieja = [b"BAN33".as_slice(), &bytes[5..]].concat();
-    let error = Estado::deserializar(&vieja, &reglas, &e.n.estado().mundo_hash).err().expect("BAN33 se rechaza");
-    assert!(error.0.contains("BAN33") && error.0.contains("cargos"), "{}", error.0);
 }
 
 #[test]
@@ -411,7 +408,7 @@ fn el_maestro_de_caravanas_va_en_la_proyeccion_de_los_cargos() {
 }
 
 #[test]
-fn el_maestro_de_caravanas_viaja_en_la_foto_y_una_foto_ban51_ya_no_se_admite() {
+fn el_maestro_de_caravanas_viaja_en_la_foto_y_solo_se_lee_el_formato_vigente() {
     let m = con_mundo!();
     let mut e = E::nuevo(m);
     let (rey, ana, bea, eli, plaza) = (e.rey, e.ana, e.bea, e.eli, e.plaza);
@@ -419,12 +416,14 @@ fn el_maestro_de_caravanas_viaja_en_la_foto_y_una_foto_ban51_ya_no_se_admite() {
     assert!(e.asignar("ana", ana, Cargo::Tesorero, bea).aceptada());
     let reglas = e.n.estado().reglas.clone();
     let hash = e.n.estado().mundo_hash.clone();
-    // Desde BAN61 (2026-11-10) no se lee ningún formato anterior: una BAN51, una BAN59 o una BAN60 se rechazan sin mirar el resto.
+    // Solo se lee el formato vigente (BAN61): cualquier otro se rechaza sin mirar el resto, y lo que no empieza por «BAN» no es una foto del núcleo.
     let mut vieja = e.n.estado().serializar();
-    for magia in [b"BAN51", b"BAN59", b"BAN60"] {
+    for magia in [b"BAN10", b"BAN27", b"BAN51", b"BAN59", b"BAN60", b"BAN62", b"BAN71"] {
         vieja[..5].copy_from_slice(magia);
-        assert!(Estado::deserializar(&vieja, &reglas, &hash).is_err_and(|ErrorFormato(m)| m.contains("ya no se admite")));
+        assert!(Estado::deserializar(&vieja, &reglas, &hash).is_err_and(|ErrorFormato(m)| m.contains("BAN61") && m.contains("ya no se admite")), "{}", String::from_utf8_lossy(magia));
     }
+    vieja[..5].copy_from_slice(b"XXXXX");
+    assert!(Estado::deserializar(&vieja, &reglas, &hash).is_err_and(|ErrorFormato(m)| m == "no es un estado del núcleo"));
 
     // La foto guarda y lee al Maestro de Caravanas.
     assert!(e.asignar("ana", ana, Cargo::MaestroCaravanas, eli).aceptada());

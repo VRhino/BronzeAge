@@ -1460,65 +1460,10 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN61`): los cuatro primeros dicen la familia («BAN6» son los formatos 60 a 69; «BAN5», «BAN4», «BAN3», «BAN2» y «BAN1», los formatos 50 a 59,
-        // 40 a 49, 30 a 39, 20 a 29 y 10 a 19, ya no admitidos) y el quinto el formato. Solo se admite BAN61.
-        let magia = r.magia()?;
-        if magia == MAGIA[..4] {
-            match r.u8()? {
-                b'1' => {}
-                b'0' => return Err(ErrorFormato("foto del formato BAN60 (sin el cierre del reclutamiento a los ciudadanos, los bienes de consumo pausados ni el nombre de las plazas en las fichas): ya no se admite")),
-                _ => return Err(ErrorFormato("no es un estado del núcleo")),
-            }
-        } else if magia == *b"BAN5" {
-            match r.u8()? {
-                b'9' => return Err(ErrorFormato("foto del formato BAN59 (38 recursos en cada almacén, sin la cebada, la cerveza y el sésamo, y sin la receta activa de las bodegas y las prensas): ya no se admite")),
-                b'0'..=b'8' => return Err(ErrorFormato("foto de un formato de BAN50 a BAN58 (29 recursos en cada almacén, sin el cultivo de las aldeas, el buey de los molinos ni el prestigio de las Facciones): ya no se admite")),
-                _ => return Err(ErrorFormato("no es un estado del núcleo")),
-            }
-        } else if magia == *b"BAN4" {
-            return Err(ErrorFormato("foto de un formato de BAN40 a BAN49 (29 recursos en cada almacén, sin el cultivo de las aldeas, el buey de los molinos ni el prestigio de las Facciones): ya no se admite"));
-        } else if magia == *b"BAN3" {
-            match r.u8()? {
-                b'9' => return Err(ErrorFormato("foto del formato BAN39 (sin los Aedas residentes ni sus épicas: quién vive en cada plaza, la espera de las plazas con cupo libre, sus citas de llegada y las épicas cumplidas de cada Facción, que no se pueden deducir del estado): ya no se admite")),
-                b'8' => return Err(ErrorFormato("foto del formato BAN38 (sin los Aedas itinerantes ni los Aedas residentes: los itinerantes que ya habían nacido con lo que han recorrido, quién vive en cada plaza, la espera de las plazas con cupo libre, sus citas de llegada y las épicas cumplidas de cada Facción, que no se pueden deducir del estado): ya no se admite")),
-                b'7' => return Err(ErrorFormato("foto del formato BAN37 (sus tecnologías ya descubiertas no traen en la cola las citas de conocimiento ni del campamento, así que nunca se cantarían ni llegarían a los campamentos por plazo): ya no se admite")),
-                b'6' => return Err(ErrorFormato("foto del formato BAN36 (sin el estado de tecnología del mundo: ni la Era, ni los contadores de los logros, ni los logros cumplidos, ni las descubridoras, que no se pueden deducir del estado; las tecnologías de las Facciones eran las de la administración): ya no se admite")),
-                b'5' => return Err(ErrorFormato("foto del formato BAN35 (los héroes no dicen qué alijos abrieron): ya no se admite")),
-                b'4' => return Err(ErrorFormato("foto del formato BAN34 (las plazas no dicen quién las fundó): ya no se admite")),
-                b'3' => return Err(ErrorFormato("foto del formato BAN33 (las plazas no traen sus cargos locales y su puerta es el acceso provisional por relación, sin el grupo de los Aedas ni vetos): ya no se admite")),
-                b'2' => return Err(ErrorFormato("foto del formato BAN32 (no trae los títulos de prestigio de la última evaluación ni su plazo, y las plazas no traen sus cargos locales ni su puerta por grupos): ya no se admite")),
-                b'1' => return Err(ErrorFormato("foto del formato BAN31 (las plazas no dicen desde cuándo son de su Facción ni traen el resto de su tributo, y las relaciones son pares sin dirección del andamiaje de administración): ya no se admite")),
-                b'0' => return Err(ErrorFormato("foto del formato BAN30 (la Caravana de Fundación es una marca de la columna, sin titular, origen, coste que devolver ni caducidad, los campamentos no traen el fondo de refundación, las plazas no dicen desde cuándo son de su Facción y las relaciones son pares sin dirección): ya no se admite")),
-                _ => return Err(ErrorFormato("no es un estado del núcleo")),
-            }
-        } else if magia == *b"BAN2" {
-            match r.u8()? {
-                b'9' => return Err(ErrorFormato("foto del formato BAN29 (las plazas no traen nombre ni marca de capital, y el nivel de Facción fijado a mano no es experiencia): ya no se admite")),
-                b'8' => return Err(ErrorFormato("foto del formato BAN28 (la ciudad de las plazas es de la geometría LAYOUT_VERSION 5, con anillos de muralla de más de cuatro puertas o puertas de más de dos celdas): ya no se admite")),
-                b'7' => return Err(ErrorFormato("foto del formato BAN27 (las Facciones no existen como entidad: sin nombre, sigilo, Rey, Embajador ni orden de ingreso de sus ciudadanos, y los héroes no traen su último cambio de residencia): ya no se admite")),
-                b'6' => return Err(ErrorFormato("foto del formato BAN26 (los almacenes guardan milésimas sueltas, no unidades enteras, y no traen el resto oculto de sus flujos): ya no se admite")),
-                b'5' => return Err(ErrorFormato("foto del formato BAN25 (la ciudad de las plazas es de la geometría LAYOUT_VERSION 4, sus recintos no traen la red que conservan en sus puertas y la guarnición de serie de una avanzada se reponía entera a las 6 h): ya no se admite")),
-                b'4' => return Err(ErrorFormato("foto del formato BAN24 (los héroes no traen la foto del interior de las plazas de las que salieron al mundo, que no se puede deducir del estado): ya no se admite")),
-                b'3' => return Err(ErrorFormato("foto del formato BAN23 (la ciudad de las plazas es de la geometría LAYOUT_VERSION 3, la guarnición de un pueblo se reponía entera a las 6 h, la idempotencia no iba por cuenta y las fichas de la niebla no traían el estado del sitio): ya no se admite")),
-                b'2' => return Err(ErrorFormato("foto del formato BAN22 (sin la memoria de la niebla: lo explorado por cada Facción y las fichas de lo ajeno que vio, que no se pueden deducir del estado): ya no se admite")),
-                b'1' => return Err(ErrorFormato("foto del formato BAN21 (las plazas no traen la tendencia «+N/min» del último paso de minuto, que no se puede deducir del estado): ya no se admite")),
-                b'0' => return Err(ErrorFormato("foto del formato BAN20 (el ticket de una batalla no congela la plaza del asedio ni el nivel, la experiencia y la moral de cada escuadra, y el informe de inspección de una plaza no trae sus recintos): ya no se admite")),
-                _ => return Err(ErrorFormato("no es un estado del núcleo")),
-            }
-        } else {
-            match (magia == *b"BAN1").then(|| r.u8()).transpose()? {
-                Some(b'0') => return Err(ErrorFormato("foto del formato BAN10 (sin persecuciones ni informes de inspección, con los encuentros en un generador externo): ya no se admite")),
-                Some(b'1') => return Err(ErrorFormato("foto del formato BAN11 (sin estado de combate, sin protección ni ocupación de las plazas y con una huella de reglas que no incluye las del combate): ya no se admite")),
-                Some(b'2') => return Err(ErrorFormato("foto del formato BAN12 (sin batallas de Unity, sin la regla batallas_en_unity y con las columnas apartadas sin su plan en pausa): ya no se admite")),
-                Some(b'3') => return Err(ErrorFormato("foto del formato BAN13 (población continua en milésimas, sin resto ni marca de recuperación del hambre y sin las citas de fin de obra y de política): ya no se admite")),
-                Some(b'4') => return Err(ErrorFormato("foto del formato BAN14 (sin avanzadas, sin guarnición de avanzada en las escuadras y con una huella de reglas que no incluye las cifras de las avanzadas): ya no se admite")),
-                Some(b'5') => return Err(ErrorFormato("foto del formato BAN15 (el fin de la obra de una avanzada espera en la cita de su plaza, sin cita propia que se pueda cancelar, y con las cifras de las avanzadas de antes de su tamaño): ya no se admite")),
-                Some(b'6') => return Err(ErrorFormato("foto del formato BAN16 (las plazas no traen el acceso por relación de Entrar con todo): ya no se admite")),
-                Some(b'7') => return Err(ErrorFormato("foto del formato BAN17 (los héroes no pueden estar dentro de un pueblo extractor ni de una avanzada): ya no se admite")),
-                Some(b'8') => return Err(ErrorFormato("foto del formato BAN18 (el contexto de una batalla de caravana nombra una sola caravana, no la lista de las que se juegan): ya no se admite")),
-                Some(b'9') => return Err(ErrorFormato("foto del formato BAN19 (los recintos de muralla se guardan con la ciudad de la plaza, solo muros, puertas y si están completos, sin nivel, avance ni mejora): ya no se admite")),
-                _ => return Err(ErrorFormato("no es un estado del núcleo")),
-            }
+        // La cabecera es de 5 bytes (`BAN61`). Solo se lee el formato vigente: una foto de un formato anterior no se migra (la partida es nueva).
+        let (magia, formato) = (r.magia()?, r.u8()?);
+        if magia != MAGIA[..4] || formato != MAGIA[4] {
+            return Err(ErrorFormato(if magia.starts_with(b"BAN") { "foto de un formato que no es el vigente (BAN61): ya no se admite" } else { "no es un estado del núcleo" }));
         }
         if r.texto()? != mundo_hash {
             return Err(ErrorFormato("la foto es de otro mundo (hash del artefacto distinto)"));

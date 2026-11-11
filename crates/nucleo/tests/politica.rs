@@ -481,7 +481,7 @@ fn mismas_ordenes_dan_el_mismo_mundo_normal_y_a_trozos_y_nada_espera_en_la_cola(
 }
 
 #[test]
-fn la_politica_viaja_en_la_foto_ban32_y_las_ban31_ban30_ban29_y_ban27_se_rechazan_con_su_motivo() {
+fn la_politica_viaja_en_la_foto() {
     let m = con_mundo!();
     let e = guion(m, &|e, ms| e.avanzar(ms));
     let (reglas, hash) = (Reglas::default(), m.0.hash().to_string());
@@ -490,18 +490,6 @@ fn la_politica_viaja_en_la_foto_ban32_y_las_ban31_ban30_ban29_y_ban27_se_rechaza
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     assert_eq!((s.politica.clone(), s.hash()), (e.n.estado().politica.clone(), e.n.hash_estado()));
     assert!(s.politica.facciones.iter().count() == 2 && s.militar.heroes.values().any(|h| h.residencia_cambiada_en.is_some()));
-    let vieja = [b"BAN27".as_slice(), &bytes[5..]].concat();
-    let error = Estado::deserializar(&vieja, &reglas, &hash).err().expect("BAN27 se rechaza");
-    assert!(error.0.contains("BAN27") && error.0.contains("Facciones no existen como entidad"), "{}", error.0);
-    let vieja = [b"BAN31".as_slice(), &bytes[5..]].concat();
-    let error = Estado::deserializar(&vieja, &reglas, &hash).err().expect("BAN31 se rechaza");
-    assert!(error.0.contains("BAN31") && error.0.contains("relaciones son pares sin dirección"), "{}", error.0);
-    let vieja = [b"BAN30".as_slice(), &bytes[5..]].concat();
-    let error = Estado::deserializar(&vieja, &reglas, &hash).err().expect("BAN30 se rechaza");
-    assert!(error.0.contains("BAN30") && error.0.contains("desde cuándo son de su Facción"), "{}", error.0);
-    let vieja = [b"BAN29".as_slice(), &bytes[5..]].concat();
-    let error = Estado::deserializar(&vieja, &reglas, &hash).err().expect("BAN29 se rechaza");
-    assert!(error.0.contains("BAN29") && error.0.contains("nombre ni marca de capital"), "{}", error.0);
     // El nombre de la plaza y su marca de capital viajan en la foto y mueven el hash (5C).
     let plaza = *s.asentamientos.keys().next().unwrap();
     assert_eq!(s.asentamientos[&plaza].nombre, "Nueva Micenas");

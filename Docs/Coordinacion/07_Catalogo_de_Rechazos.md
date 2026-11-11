@@ -89,7 +89,6 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `ascenso.falta_aldea` | `ASCENSO_FALTA_ALDEA` | — |
 | `ascenso.sin_cupo_de_faccion` | `ASCENSO_SIN_CUPO_DE_FACCION` | — |
 | `ascenso.recursos_insuficientes` | `ASCENSO_RECURSOS_INSUFICIENTES` | — |
-| `ascenso.insolvente` | `ASCENSO_INSOLVENTE` | Retirado el 2026-11-10 (decisión del autor): la solvencia del nivel siguiente ya no bloquea la subida; es la advertencia `Asentamiento.insolvencia_ascenso`. |
 
 ### Políticas (`ErrorPolitica`)
 
@@ -209,7 +208,6 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `pueblo.fertilidad_insuficiente` | `PUEBLO_FERTILIDAD_INSUFICIENTE` | Aldea agrícola (§14.2): el punto no llega a la fertilidad mínima. |
 | `pueblo.demasiado_cerca` | `PUEBLO_DEMASIADO_CERCA` | Aldea agrícola: el punto está demasiado cerca de otro pueblo. |
 | `pueblo.fuera_de_su_anillo` | `PUEBLO_FUERA_DE_SU_ANILLO` | Aldea agrícola: el punto no cae en el anillo de la zona que toca a la siguiente aldea de la plaza (2026-11-01). |
-| `pueblo.no_es_aldea` | `PUEBLO_NO_ES_ALDEA` | Solo las aldeas agrícolas suben de nivel. |
 | `pueblo.nivel_maximo` | `PUEBLO_NIVEL_MAXIMO` | — |
 | `pueblo.mejora_en_curso` | `PUEBLO_MEJORA_EN_CURSO` | — |
 | `pueblo.cultivo_bloqueado` | `PUEBLO_CULTIVO_BLOQUEADO` | La plaza madre no tiene aún el nivel que pide ese cultivo (tanda 69 §12: la vid, el 3; la oliva, el 4). |
@@ -520,7 +518,6 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `combate.proteccion_de_campamento` | `COMBATE_PROTECCION_DE_CAMPAMENTO` | — |
 | `combate.lejos` | `COMBATE_LEJOS` | — |
 | `combate.propia` | `COMBATE_PROPIA` | — |
-| `combate.aliada` | `COMBATE_ALIADA` | Retirado en 5D (decisión Q2 del autor, 2026-10-24): atacar a un aliado con `declara_guerra` es una traición que rompe la alianza y declara la guerra; sin ella, `guerra.confirmar`. |
 | `combate.vasallaje` | `COMBATE_VASALLAJE` | Atacar a la propia señora o a la propia vasalla (5D): un vasallaje no se convierte en guerra; la vasalla se rebela (`rebelion_vasallo`) y la señora la libera (`romper_relacion`). |
 | `guerra.confirmar` | `GUERRA_CONFIRMAR` | `atacar` contra una Facción con la que no se está en guerra y sin `declara_guerra`: el cliente tiene que confirmarla (`Detalle::Guerra` dice contra quién). |
 | `combate.a_cubierto` | `COMBATE_A_CUBIERTO` | — |

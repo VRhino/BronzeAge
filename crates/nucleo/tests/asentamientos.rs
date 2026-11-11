@@ -1058,15 +1058,12 @@ fn con_ordenes_fuera_de_minuto_el_modo_normal_el_acelerado_y_a_trozos_dan_el_mis
 }
 
 #[test]
-fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash_y_el_formato_anterior_se_rechaza() {
+fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash() {
     use nucleo::Carga;
     let reglas = Reglas::default();
     let base = estado_con_una_plaza();
     let bytes = base.serializar();
     assert_eq!(&bytes[..5], b"BAN61");
-    let viejo = [b"BAN13".as_slice(), &bytes[5..]].concat();
-    let Err(e) = Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN13 no debe admitirse") };
-    assert!(e.to_string().contains("BAN13") && e.to_string().contains("población"), "{e}");
     let con = |carga: Carga, prioridad: u8, en: Instante| {
         let mut s = Estado::deserializar(&bytes, &reglas, "h").unwrap();
         let clave = s.generaciones.clave(1);
@@ -1125,9 +1122,6 @@ fn el_paso_de_minuto_guarda_su_tendencia_y_no_sube_la_version_con_o_sin_sesiones
     assert_eq!(vuelta.asentamientos[&id].economia.tendencia.produccion, [0; asentamiento::recurso::N], "la producción quepa o no, no viaja en la foto");
     assert_eq!(vuelta.asentamientos[&id].economia.tendencia, t, "y no cuenta en la igualdad");
     assert_eq!(vuelta.serializar(), bytes);
-    let viejo = [b"BAN21".as_slice(), &bytes[5..]].concat();
-    let Err(e) = Estado::deserializar(&viejo, &reglas, &m.0.hash().to_string()) else { panic!("BAN21 no debe admitirse") };
-    assert!(e.to_string().contains("BAN21") && e.to_string().contains("tendencia"), "{e}");
 
     // Con sesiones, igual (decisión del autor 2026-10-23): el paso de minuto no marca el interior ni sube la versión, y la secuencia propia de la plaza (`version_interior`) avanza de uno en uno,
     // los mismos pasos con sesiones que sin ellas.

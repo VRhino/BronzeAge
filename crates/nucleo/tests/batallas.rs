@@ -913,7 +913,7 @@ fn reglas_unity() -> Reglas {
 }
 
 #[test]
-fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_rechaza_el_formato_anterior_y_cada_campo_cambia_el_hash() {
+fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_y_cada_campo_cambia_el_hash() {
     let (n, id) = a_mitad();
     let reglas = reglas_unity();
     let bytes = n.estado().serializar();
@@ -922,10 +922,7 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_rechaza_el_formato_anterior_
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.batallas, n.estado().batallas);
     assert_eq!(vuelta.hash(), n.hash_estado());
-    // El formato anterior se rechaza con su motivo, y las reglas tienen que ser las mismas (el interruptor de los servidores de batalla es una regla).
-    let viejo = [b"BAN12".as_slice(), &bytes[5..]].concat();
-    let Err(e) = nucleo::Estado::deserializar(&viejo, &reglas, "hash-de-prueba") else { panic!("BAN12 no debe admitirse") };
-    assert!(e.to_string().contains("BAN12") && e.to_string().contains("batallas"), "{e}");
+    // Las reglas tienen que ser las mismas (el interruptor de los servidores de batalla es una regla).
     assert!(nucleo::Estado::deserializar(&bytes, &comun::reglas(), "hash-de-prueba").is_err(), "sin servidores de batalla las reglas no coinciden");
     assert!(nucleo::Estado::deserializar(&bytes[..bytes.len() - 7], &reglas, "hash-de-prueba").is_err(), "truncada");
 
@@ -2085,9 +2082,6 @@ fn los_bandidos_que_acosan_una_columna_con_dos_caravanas_juegan_las_dos_en_la_mi
         assert_eq!(&bytes[..5], b"BAN61");
         let vuelta = nucleo::Estado::deserializar(&bytes, &arranque_mundo(m, 7).reglas, &m.0.hash().to_string()).unwrap();
         assert_eq!((vuelta.serializar(), vuelta.batallas.clone()), (bytes.clone(), e.n.estado().batallas.clone()));
-        let viejo = [b"BAN18".as_slice(), &bytes[5..]].concat();
-        let Err(err) = nucleo::Estado::deserializar(&viejo, &arranque_mundo(m, 7).reglas, &m.0.hash().to_string()) else { panic!("BAN18 no debe admitirse") };
-        assert!(err.to_string().contains("BAN18") && err.to_string().contains("caravana"), "{err}");
 
         let mut res = resultado(&e.n, id, if gana_el_bandido { Lado::Atacante } else { Lado::Defensor }, 5);
         if gana_el_bandido {

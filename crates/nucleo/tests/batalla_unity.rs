@@ -971,7 +971,4 @@ fn la_foto_vuelve_igual(n: &Nucleo, m: &M) {
     assert_eq!(&bytes[..5], b"BAN61");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas(false), &m.0.hash().to_string()).expect("la foto vuelve");
     assert_eq!(vuelta.serializar(), bytes);
-    let viejo = [b"BAN20".as_slice(), &bytes[5..]].concat();
-    let Err(err) = nucleo::Estado::deserializar(&viejo, &reglas(false), &m.0.hash().to_string()) else { panic!("BAN20 no debe admitirse") };
-    assert!(err.to_string().contains("BAN20") && err.to_string().contains("plaza"), "{err}");
 }

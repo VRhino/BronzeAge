@@ -2947,8 +2947,6 @@ pub mod rechazos {
     pub const ASCENSO_FALTA_ALDEA: &str = "ascenso.falta_aldea";
     pub const ASCENSO_SIN_CUPO_DE_FACCION: &str = "ascenso.sin_cupo_de_faccion";
     pub const ASCENSO_RECURSOS_INSUFICIENTES: &str = "ascenso.recursos_insuficientes";
-    /// Retirado el 2026-11-10 (decisión del autor): la solvencia del nivel siguiente ya no bloquea la subida; es la advertencia `Asentamiento.insolvencia_ascenso`.
-    pub const ASCENSO_INSOLVENTE: &str = "ascenso.insolvente";
     // Políticas (`ErrorPolitica`).
     pub const POLITICA_DESCONOCIDA: &str = "politica.desconocida";
     pub const POLITICA_FUERA_DE_POOL: &str = "politica.fuera_de_pool";
@@ -3054,8 +3052,6 @@ pub mod rechazos {
     pub const PUEBLO_DEMASIADO_CERCA: &str = "pueblo.demasiado_cerca";
     /// Aldea agrícola: el punto no cae en el anillo de la zona que toca a la siguiente aldea de la plaza (2026-11-01).
     pub const PUEBLO_FUERA_DE_SU_ANILLO: &str = "pueblo.fuera_de_su_anillo";
-    /// Solo las aldeas agrícolas suben de nivel.
-    pub const PUEBLO_NO_ES_ALDEA: &str = "pueblo.no_es_aldea";
     pub const PUEBLO_NIVEL_MAXIMO: &str = "pueblo.nivel_maximo";
     pub const PUEBLO_MEJORA_EN_CURSO: &str = "pueblo.mejora_en_curso";
     /// La plaza madre no tiene aún el nivel que pide ese cultivo (tanda 69 §12: la vid, el 3; la oliva, el 4).
@@ -3377,8 +3373,6 @@ pub mod rechazos {
     pub const COMBATE_PROTECCION_DE_CAMPAMENTO: &str = "combate.proteccion_de_campamento";
     pub const COMBATE_LEJOS: &str = "combate.lejos";
     pub const COMBATE_PROPIA: &str = "combate.propia";
-    /// Retirado en 5D (decisión Q2 del autor, 2026-10-24): atacar a un aliado con `declara_guerra` es una traición que rompe la alianza y declara la guerra; sin ella, `guerra.confirmar`.
-    pub const COMBATE_ALIADA: &str = "combate.aliada";
     /// Atacar a la propia señora o a la propia vasalla (5D): un vasallaje no se convierte en guerra; la vasalla se rebela (`rebelion_vasallo`) y la señora la libera (`romper_relacion`).
     pub const COMBATE_VASALLAJE: &str = "combate.vasallaje";
     /// `atacar` contra una Facción con la que no se está en guerra y sin `declara_guerra`: el cliente tiene que confirmarla (`Detalle::Guerra` dice contra quién).

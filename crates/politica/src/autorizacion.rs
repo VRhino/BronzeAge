@@ -29,11 +29,6 @@ pub struct Actor<'a, V: Vista> {
 }
 
 impl<V: Vista> Actor<'_, V> {
-    /// `yo`: nadie actúa a nombre de otro.
-    pub fn es_yo(&self, h: HeroeId) -> bool {
-        h == self.yo
-    }
-
     fn existe(&self, f: FaccionId) -> bool {
         self.politica.facciones.existe(f)
     }
@@ -98,11 +93,6 @@ impl<V: Vista> Actor<'_, V> {
         !self.existe(f) || (self.ciudadano(f) && self.rey(f))
     }
 
-    /// `responderAnexion`: `rey(absorbida)`; Facción inexistente: verdadero.
-    pub fn rey_o_inexistente(&self, f: FaccionId) -> bool {
-        !self.existe(f) || self.rey(f)
-    }
-
     /// `reyDeLaPlaza(A)`: Rey de la Facción dueña, **sin** residir ni estar presente (designar Gobernador es un acto de nivel Facción); plaza inexistente: verdadero.
     pub fn rey_de_la_plaza(&self, a: AsentamientoId) -> bool {
         self.vista.duena(a).is_none_or(|f| self.rey_de_faccion(f))
@@ -138,11 +128,6 @@ impl<V: Vista> Actor<'_, V> {
     /// `vetarJugador`: solo el Gobernador residente y presente; **el Rey no** (asimetría con `fijarPuerta`, Presencia §8).
     pub fn veta(&self, a: AsentamientoId) -> bool {
         self.cargo(a, Cargo::Gobernador)
-    }
-
-    /// `puedeMoverTropaDe(A)` = residente ∧ presente (`movilizarEjercito`); plaza inexistente: verdadero.
-    pub fn mueve_tropa_de(&self, a: AsentamientoId) -> bool {
-        self.reside(a)
     }
 
     /// `puedeOperarAparcada(caravana, A)`: residente del **origen** de la caravana y presente **donde está aparcada**.

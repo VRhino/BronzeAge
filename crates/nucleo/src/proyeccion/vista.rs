@@ -15,7 +15,7 @@
 //! El tramo de lo ajeno se recorta a la unión de los discos de los ojos (decisión del autor, 2026-10-23: no al rectángulo de la vista, que enseñaría camino fuera del alcance); una caravana
 //! grande que solo se ve por llamar la atención, a sus 60 u. La columna se retira en el muestreo siguiente a que deje de verse.
 
-use super::propios::{self, Proyectada};
+use super::propios;
 use super::{ficha_de_asentamiento, ids, interior, mercenarios, plan, punto};
 use crate::estado::{Clase, Ejercito};
 
@@ -74,7 +74,6 @@ fn visible<'a>(tipo: pb::TipoEntidad, id: String, sello: Sello, cuerpo: impl Fn(
 /// Lo que se ve desde una perspectiva en un instante.
 pub struct Mirada<'n> {
     n: &'n Nucleo,
-    pub perspectiva: Perspectiva,
     faccion: Option<u32>,
     t: Instante,
     /// Todas las columnas con su posición en `t`: se calcula una vez por perspectiva y no una por sesión (4H T6).
@@ -237,7 +236,6 @@ impl<'n> Mirada<'n> {
         let (tramo_col, avistado_col) = (columnas.iter().map(|_| OnceLock::new()).collect(), columnas.iter().map(|_| OnceLock::new()).collect());
         Mirada {
             n,
-            perspectiva,
             faccion,
             t,
             columnas,
@@ -984,11 +982,6 @@ fn arista_en(a: &comercio::red_caminos::Arista, f: impl Fn(Punto) -> bool) -> bo
 /// El id de una arista de la red en el contrato: sus dos extremos en unidades enteras, `x1,y1:x2,y2` (los de la clave canónica, ordenados).
 fn id_de_arista(a: &comercio::red_caminos::Arista) -> String {
     format!("{},{}:{},{}", a.0 .0, a.0 .1, a.1 .0, a.1 .1)
-}
-
-/// Las entidades de una vista ya proyectadas (la `Foto`), en el orden de `contenido`.
-pub fn proyectar_todo(visibles: &[Visible<'_>]) -> Vec<Proyectada> {
-    visibles.iter().filter_map(|x| Some((pb::TipoEntidad::try_from(x.clave.0).ok()?, x.clave.1.clone(), x.cuerpo()?))).collect()
 }
 
 /// Una entidad de `ADMIN` que no tiene clase en el registro de cambios, por tipo e id del contrato.

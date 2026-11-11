@@ -387,7 +387,7 @@ fn con_la_canteria_adoptada_las_canteras_de_la_faccion_rinden_un_50_por_ciento_m
 // ───────────────────────────── 4. La foto y el determinismo ─────────────────────────────
 
 #[test]
-fn la_foto_ban38_lleva_las_citas_de_cada_descubrimiento_y_ban37_se_rechaza() {
+fn la_foto_lleva_las_citas_de_cada_descubrimiento() {
     let m = con_mundo!();
     let (e, _) = con_canteria(m);
     let reglas = e.n.estado().reglas.clone();
@@ -399,9 +399,6 @@ fn la_foto_ban38_lleva_las_citas_de_cada_descubrimiento_y_ban37_se_rechaza() {
     assert_eq!(vuelta.hash(), e.n.estado().hash());
     let citas: Vec<Carga> = vuelta.cola.volcar().into_iter().filter(|x| x.clave.entidad == entidad_tecnologia(e.tec("canteria"))).map(|x| x.carga).collect();
     assert_eq!(citas.len(), 2, "las dos citas viajan en la cola");
-    let vieja = [b"BAN37".as_slice(), &bytes[5..]].concat();
-    let error = Estado::deserializar(&vieja, &reglas, &mundo_hash).err().expect("BAN37 se rechaza");
-    assert!(error.0.contains("BAN37") && error.0.contains("citas"), "{}", error.0);
 }
 
 /// Funda, cumple el logro de la cantería y da y quita los escudos (dos descubrimientos con sus citas), y avanza 4 días: cubre la aparición, las dos citas de cada una y el canto.

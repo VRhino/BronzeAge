@@ -96,7 +96,7 @@ fn la_era_es_la_misma_normal_acelerada_y_a_trozos() {
 }
 
 #[test]
-fn la_foto_ban37_lleva_el_estado_de_tecnologia_cada_campo_cambia_el_hash_y_ban36_se_rechaza() {
+fn la_foto_lleva_el_estado_de_tecnologia_y_cada_campo_cambia_el_hash() {
     let mut n = mundo_quieto();
     admin(&mut n, "t", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["escudos_ligeros".into()] });
     let reglas = n.estado().reglas.clone();
@@ -108,9 +108,6 @@ fn la_foto_ban37_lleva_el_estado_de_tecnologia_cada_campo_cambia_el_hash_y_ban36
     assert_eq!((vuelta.tecnologia.clone(), vuelta.era_en), (n.estado().tecnologia.clone(), n.estado().era_en));
     assert!(vuelta.cola.volcar().iter().any(|e| e.carga == Carga::Era), "la cita de la Era viaja en la cola");
 
-    let vieja = [b"BAN36".as_slice(), &bytes[5..]].concat();
-    let error = Estado::deserializar(&vieja, &reglas, &mundo_hash).err().expect("BAN36 se rechaza");
-    assert!(error.0.contains("BAN36") && error.0.contains("tecnología"), "{}", error.0);
 
     type Cambio = (&'static str, Box<dyn Fn(&mut Estado)>);
     let cambios: Vec<Cambio> = vec![
