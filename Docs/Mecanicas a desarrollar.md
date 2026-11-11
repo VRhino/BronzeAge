@@ -27,6 +27,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 65 | INTEL / BOTS | Informes de taberna por niveles (diseño del 2026-10-31; `Docs/Disenos_Por_Implementar/Informes_De_Taberna.md`): el Informe de plaza se separa en Población, Guarnición, Tecnologías, Trazado y Rutas según la taberna del comprador, y Cuentas, Agravios, Corte y Planes, solo contra Facciones de bots, los vende el motor y los responde el servicio de bots | un solo `comprar_informe_plaza` |
 | 67 | MISIONES | Objetos como recompensa de misión (2026-11-01): un tipo `objeto` en la lista libre de recompensas de las misiones (Misiones §4.1). Parada hasta que haya catálogo de objetos e inventario real | nada |
 | 68 | MERCENARIOS | Huecos de los mercenarios por contrato tras implementarlos (2026-11-01): visión del objetivo enemigo, recursos del anillo para el temporal, sucesión en `militar`, auditoría, bienvenida, orden `atacar` inicial y objetos de los rangos 4 y 5. Sección «68» | entrada 48 en `main` (7aa44b9), `Docs/Mechanics/Mercenarios_Por_Contrato.md` |
+| 70 | MILITAR / HÉROE | Objetos del héroe (diseño del 2026-11-11; `Docs/Disenos_Por_Implementar/Objetos_Del_Heroe.md`): catálogo `OBJETOS` en el motor y stats en Conquest, clase del héroe, mochila y equipo guardados, órdenes equipar, desequipar, vender, comprar y forjar, equipo en el ticket, botín de Unity, tienda y forja | el contrato ya tiene `ItemInstancia` y `Equipamiento`; el motor no los guarda |
 | — | PARIDAD | Recortes temporales del motor Rust frente al TypeScript (sección «Paridad con TypeScript») | el motor no está migrado hasta cerrarlos |
 | — | DUDAS | Ninguna sin decisión desde el 2026-10-27 (sección «Dudas abiertas»: las `// DUDA:` que quedan en el código) | — |
 | — | FASE 7 | Todo lo que se dejó para los bots reales y la fase 7 (sección «Para la fase 7») | — |
@@ -242,3 +243,7 @@ La entrada 48 está en el motor (`Docs/Mechanics/Mercenarios_Por_Contrato.md`). 
 - **Bienvenida.** `Bienvenida.faccion_id` de un mercenario es la Facción que le paga, aunque no recibe el ámbito `FACCION`. Decidir si se queda así o se omite.
 - **Orden `atacar` inicial.** En el trabajo «Atacar un objetivo», si el mercenario no ataca en 24 h su orden caduca y se le vuelve a dar, con un `mercenarios.orden_caducada` cada vez.
 - **Objetos de los rangos 4 y 5.** Esperan a que exista su catálogo.
+
+## 70. Objetos del héroe (diseño del 2026-11-11)
+
+Diseño: `Docs/Disenos_Por_Implementar/Objetos_Del_Heroe.md`, con la lista de lo que falta en el motor, el contrato, el cliente jugador, Conquest, los bots y la administración, y lo que queda por decidir. Cuando se implemente cierra también la entrada 67 y el punto «Objetos de los rangos 4 y 5» de la 68.
