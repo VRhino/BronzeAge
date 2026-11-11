@@ -292,7 +292,7 @@ pub fn levantar_aldea_de(n: &mut Nucleo, cuenta: &str, plaza: u64, cultivo: Cult
     let faccion = n.estado().asentamientos[&plaza].faccion;
     let punto = n.sitio_de_aldea(plaza, cultivo)?;
     let t = n.ahora();
-    let r = n.aplicar_en(t, Peticion::nueva("admin", &format!("aldea-{plaza}"), Comando::MarcarAldea { asentamiento: plaza, punto, cultivo }).de_admin());
+    let r = n.aplicar_en(t, Peticion::nueva("admin", &format!("aldea-{plaza}-{}", cultivo.nombre()), Comando::MarcarAldea { asentamiento: plaza, punto, cultivo }).de_admin());
     assert!(r.aceptada(), "el sitio del panel se acepta: {r:?}");
     let pueblo = r.creadas[0];
     let sitio = n.posicion_de_pueblo(pueblo)?;

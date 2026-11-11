@@ -581,7 +581,7 @@ fn radio_que_ocupan(piezas: &[PiezaVista]) -> i32 {
 /// **el radio que necesiten sus piezas** (Economia_Construccion §14: la planta es un espacio interno; en el mapa el pueblo sigue ocupando 0,2).
 /// Función pura de la semilla del núcleo y del id del pueblo: no se guarda y el mismo pueblo da siempre la misma planta. Es lo que se ve dentro
 /// y el mapa de su batalla de saqueo. Los ids de las piezas son sus posiciones en la planta (el ancla es la 0), no ids de edificio de ninguna
-/// economía. Una aldea agrícola (§14.2) tiene una Granja por ancla y, en las afueras, el resto de sus `granjas` y sus `corrales` (`aldea`, los de su nivel):
+/// economía. Una aldea agrícola (§14.2) tiene una Granja por ancla (la ganadera, un Corral) y, en las afueras, el resto de sus `granjas` y sus `corrales` (`aldea`, los de su nivel):
 /// su planta cambia al subir de nivel.
 pub fn planta_de_pueblo(reglas: &crate::ReglasEconomia, semilla_nucleo: u64, id_pueblo: u64, extractor: Tipo, aldea: Option<(u32, u32)>) -> VistaCiudad {
     let urb = &reglas.urbanismo;
@@ -589,7 +589,8 @@ pub fn planta_de_pueblo(reglas: &crate::ReglasEconomia, semilla_nucleo: u64, id_
     let perfil = Perfil::por_tradicion(semilla);
     let base = urb.parametros(&reglas.datos);
     let casas = reglas.datos.pueblos.casas_de_la_planta as usize;
-    let (granjas, corrales) = aldea.map_or((0, 0), |(g, c)| (g.saturating_sub(1) as usize, c as usize));
+    // El ancla es una de las piezas de la aldea: una Granja o, en la ganadera, un Corral (2026-11-11).
+    let (granjas, corrales) = aldea.map_or((0, 0), |(g, c)| if extractor == Tipo::Corral { (g as usize, c.saturating_sub(1) as usize) } else { (g.saturating_sub(1) as usize, c as usize) });
     let resto: Vec<(Tipo, Categoria)> = std::iter::repeat_n((Tipo::Vivienda, Categoria::Residencial), casas)
         .chain([(Tipo::Almacen, Categoria::Generico), (Tipo::Corral, Categoria::Afueras)])
         .chain(std::iter::repeat_n((Tipo::Granja, Categoria::Afueras), granjas))
@@ -728,7 +729,8 @@ mod pruebas {
         assert_eq!(h(Tipo::Vivienda, 1), (1, 1), "sin entrada: la huella por defecto");
         assert_eq!(h(Tipo::Carpinteria, 1), (4, 2));
         assert_eq!(h(Tipo::Armeria, 1), (2, 3));
-        assert_eq!((h(Tipo::Granja, 1), h(Tipo::Granja, 2), h(Tipo::Granja, 3), h(Tipo::Granja, 4)), ((2, 2), (2, 3), (4, 3), (6, 6)));
+        // La Granja tiene un solo nivel desde el 2026-11-11: un nivel de más se queda en la huella del último.
+        assert_eq!((h(Tipo::Granja, 1), h(Tipo::Granja, 2)), ((2, 2), (2, 2)));
         assert_eq!((h(Tipo::PuestoMercado, 1), h(Tipo::PuestoMercado, 2), h(Tipo::PuestoMercado, 3)), ((1, 2), (1, 3), (1, 1)));
         let acumulado: Vec<usize> = (1..=3).scan(1, |piezas, n| { *piezas += u.puestos(n).len(); Some(*piezas) }).collect();
         assert_eq!(acumulado, vec![6, 13, 17], "la zona queda en 6, 13 y 17 piezas contando el Mercado");
@@ -756,6 +758,13 @@ mod pruebas {
         let tres = planta_de_pueblo(&r, 42, 7, Tipo::Granja, Some((6, 3)));
         assert_eq!((de(&tres, Tipo::Granja), de(&tres, Tipo::Corral)), (6, 4));
         assert!(tres.radio_ul >= uno.radio_ul);
+        // La de trigo, sin corrales desde el 2026-11-11: solo el del buey.
+        let trigo = planta_de_pueblo(&r, 42, 7, Tipo::Granja, Some((2, 0)));
+        assert_eq!((de(&trigo, Tipo::Granja), de(&trigo, Tipo::Corral)), (2, 1));
+        // La ganadera: un Corral de ancla y ninguna granja.
+        let ganadera = planta_de_pueblo(&r, 42, 7, Tipo::Corral, Some((0, 2)));
+        assert_eq!(ganadera.piezas[0].tipo, Tipo::Corral, "un Corral de ancla");
+        assert_eq!((de(&ganadera, Tipo::Granja), de(&ganadera, Tipo::Corral)), (0, 3), "2 corrales y el del buey");
     }
 
     #[test]

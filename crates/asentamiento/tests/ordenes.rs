@@ -43,6 +43,23 @@ fn rico(r: &Reglas) -> Asentamiento {
     a
 }
 
+/// Las reglas con la Granja de antes del 2026-11-11, que subía a los niveles 2, 3 y 4 (2×3, 4×3 y 6×6; 240, 480 y 960 minutos): la Granja de hoy no
+/// sube de nivel, pero las mejoras y la huella que crece siguen siendo reglas del motor y se prueban con ella.
+fn con_granja_mejorable() -> Reglas {
+    let mut r = Reglas::cargar();
+    let mut b = asentamiento::datos::bloque("EDIFICIO_CATALOGO");
+    let nivel = |trigo: i64, (ancho, alto): (i64, i64), (madera, piedra): (i64, i64), obra: i64| {
+        serde_json::json!({ "trabajadoresRequeridos": 4, "recetas": [], "produccionBaseTrigo": trigo, "tamano": { "ancho": ancho, "alto": alto },
+            "costoMejora": { "madera": madera, "piedra": piedra }, "obraMinutos": obra })
+    };
+    let niveles = b["granja"]["niveles"].as_object_mut().expect("niveles de la Granja");
+    niveles.insert("2".into(), nivel(180, (2, 3), (60, 20), 240));
+    niveles.insert("3".into(), nivel(240, (4, 3), (120, 40), 480));
+    niveles.insert("4".into(), nivel(360, (6, 6), (240, 80), 960));
+    r.catalogo = asentamiento::catalogo::Catalogo::de(&b);
+    r
+}
+
 /// Ocupa todas las cuadrillas con obras que no acabarán (así lo que se encargue después espera en la cola).
 fn ocupar_cuadrillas(a: &mut Asentamiento, r: &Reglas) {
     for k in 0..r.construccion.necesidades.maximo_en_construccion_simultanea as u32 {
@@ -192,8 +209,20 @@ fn mover_en_cola_intercambia_prioridades_con_el_vecino() {
 }
 
 #[test]
-fn una_mejora_manual_paga_ocupa_cuadrilla_y_sube_el_nivel_al_terminar() {
+fn la_granja_de_la_fundacion_no_sube_de_nivel() {
+    // 2026-11-11 (decisión del autor): la Granja tiene un solo nivel; ni a mano ni sola se mejora.
     let r = Reglas::cargar();
+    let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
+    let granja = a.edificios.iter().find(|e| e.tipo == Tipo::Granja).unwrap().id;
+    let mut x = exterior!(&r, s, w);
+    assert_eq!(a.mejorar_ahora(0, &r, &mut x, granja, &mut vec![]), Err(ErrorObra::NoEsMejorable));
+    a.avanzar_minuto(MS_POR_MINUTO, &mut x);
+    assert!(a.edificio(granja).unwrap().mejora.is_none(), "la auto-construcción tampoco la mejora");
+}
+
+#[test]
+fn una_mejora_manual_paga_ocupa_cuadrilla_y_sube_el_nivel_al_terminar() {
+    let r = con_granja_mejorable();
     let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
     let granja = a.edificios.iter().find(|e| e.tipo == Tipo::Granja).unwrap().id;
     let mut x = exterior!(&r, s, w);
@@ -230,7 +259,7 @@ impl Sitios for SinHuecoParaCrecer {
 
 #[test]
 fn la_mejora_automatica_no_arranca_sin_hueco_para_la_huella_nueva() {
-    let r = Reglas::cargar();
+    let r = con_granja_mejorable();
     let arranca = |sitios: &mut dyn Sitios| {
         let mut a = rico(&r);
         let granja = a.edificios.iter().find(|e| e.tipo == Tipo::Granja).unwrap().id;
@@ -266,7 +295,7 @@ fn el_ascenso_informa_todos_los_bloqueos_a_la_vez_y_la_insolvencia_es_solo_una_a
 fn una_plaza_que_no_cubre_el_mantenimiento_del_nivel_siguiente_sube_igual() {
     let r = Reglas::cargar();
     let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
-    // Cumple los requisitos del nivel 2: la población, los edificios (con su nivel) y un pueblo activo, una mina de cobre, que no trae piedra.
+    // Cumple los requisitos del nivel 2: la población, los edificios (con su nivel) y dos pueblos activos (2026-11-11), minas de cobre, que no traen piedra.
     let req = &r.nivel.requisitos[&2];
     (a.poblacion.pesants, a.poblacion.artesanos) = (req.pesants, req.artesanos);
     let mut id = 500;
@@ -277,6 +306,8 @@ fn una_plaza_que_no_cubre_el_mantenimiento_del_nivel_siguiente_sube_igual() {
         id += 1;
     }
     a.pueblos.push(pueblo_activo(&r, Tipo::MinaCobre, None));
+    assert_eq!(a.bloqueos_de_ascenso(&r, false), vec![Bloqueo::FaltaPueblo], "con un pueblo no basta");
+    a.pueblos.push(Pueblo { id: 8, sitio: Sitio::Nodo(2), ..pueblo_activo(&r, Tipo::MinaCobre, None) });
     assert_eq!(a.bloqueos_de_ascenso(&r, false), vec![], "nada bloquea la subida");
     let x = exterior!(&r, s, w);
     assert!(a.insolvencia_de_ascenso(0, &r, &x).iter().any(|f| f.recurso == Recurso::Piedra), "sin cantera no llega piedra");
@@ -420,7 +451,7 @@ fn e_fin(a: &Asentamiento, id: u32) -> i64 {
 
 #[test]
 fn una_mejora_y_un_ascenso_acaban_en_su_instante_exacto_y_el_paso_de_minuto_ya_no_los_cierra() {
-    let r = Reglas::cargar();
+    let r = con_granja_mejorable();
     let (mut a, mut s, mut w) = (rico(&r), SitiosLibres, SinMundo);
     let granja = a.edificios.iter().find(|e| e.tipo == Tipo::Granja).unwrap().id;
     let mut x = exterior!(&r, s, w);

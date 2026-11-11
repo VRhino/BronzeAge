@@ -443,8 +443,10 @@ impl Nucleo {
         self.tr.tocar(Clase::Asentamiento, id);
         self.misiones_de_sucesos(id, t, sucesos);
         // Un edificio que se completa o se mejora y un ascenso son disparadores de la aparición de su Facción (6C, `edificio` y `capitalEnNivel`).
-        // Un pueblo cuenta como la obra de su extractor (Cantera o mina, desde el 2026-11-01) y una aldea agrícola, como la de sus corrales.
-        let obra_de_pueblo: Vec<(u64, Tipo)> = self.estado.asentamientos.get(&id).map(|a| a.economia.pueblos.iter().map(|p| (p.id, if p.es_aldea() { Tipo::Corral } else { p.tipo })).collect()).unwrap_or_default();
+        // Un pueblo cuenta como la obra de su extractor (Cantera o mina, desde el 2026-11-01); la aldea ganadera, como la de sus corrales, y las demás aldeas,
+        // como la de su Granja (2026-11-11: antes toda aldea contaba como obra de corral).
+        let datos = &self.estado.reglas.economia.datos;
+        let obra_de_pueblo: Vec<(u64, Tipo)> = self.estado.asentamientos.get(&id).map(|a| a.economia.pueblos.iter().map(|p| (p.id, if p.tiene_corrales(datos) { Tipo::Corral } else { p.tipo })).collect()).unwrap_or_default();
         let tipo_de_pueblo = |p: u64| obra_de_pueblo.iter().find(|&&(x, _)| x == p).map(|&(_, t)| t);
         let pueblo_completado = sucesos.iter().any(|s| matches!(*s, EventoEco::PuebloCompletado { .. }));
         if pueblo_completado || sucesos.iter().any(|s| matches!(s, EventoEco::EdificioCompletado { .. } | EventoEco::MejoraCompletada { .. } | EventoEco::NivelSubio { .. })) {

@@ -1,6 +1,6 @@
 [package]
 name = "asentamiento"
-version = "0.19.0"
+version = "0.20.0"
 edition = "2021"
 description = "Población, economía y construcción de un asentamiento (Doc 4, Mechanics/Economia_Construccion): reglas puras en enteros, sin reloj propio"
 

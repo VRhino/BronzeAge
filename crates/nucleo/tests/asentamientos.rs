@@ -892,9 +892,19 @@ fn la_cuadrilla_liberada_arranca_la_siguiente_obra_de_la_cola_en_ese_mismo_insta
 fn una_mejora_y_una_politica_acaban_en_su_milisegundo() {
     let m = con_mundo!();
     let (mut n, id) = plaza_quieta(m, 0);
-    let granja = n.economia(id).unwrap().edificios.iter().find(|e| e.tipo == Tipo::Granja).unwrap().id;
-    let clic = 5 * MIN + 903;
+    // La Granja ya no sube de nivel (2026-11-11): se mejora un Granero, que se levanta antes y cuyo nivel 2 pide la plaza en el 2 (y madera y piedra de
+    // sobra para el mantenimiento de esas horas).
+    assert!(n.aplicar_en(0, admin("nivel", Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 2 })).aceptada());
+    for (recurso, cantidad) in [(Recurso::Madera, 3_000_000), (Recurso::Piedra, 3_000_000)] {
+        assert!(n.aplicar_en(0, admin(&format!("mas-{recurso:?}"), Comando::DarRecursos { asentamiento: id, recurso, cantidad })).aceptada());
+    }
+    let r = n.aplicar_en(0, ana("granero", Comando::AnadirEdificio { asentamiento: id, tipo: Tipo::Granero }));
+    assert!(r.aceptada(), "{r:?}");
+    let granja = r.creadas[0] as u32;
+    let listo = n.economia(id).unwrap().edificio(granja).unwrap().completa_en.expect("en obra");
+    let clic = listo + 5 * MIN + 903;
     n.avanzar_hasta(clic);
+    assert!(n.economia(id).unwrap().edificio(granja).unwrap().activo());
     let r = n.aplicar_en(clic, ana("mej", Comando::MejorarEdificio { asentamiento: id, edificio: granja }));
     assert!(r.aceptada(), "{r:?}");
     let r = n.aplicar_en(clic + 7, ana("pol", Comando::ActivarPolitica { asentamiento: id, politica: "racionamiento".into(), cargo: Cargo::Sacerdote }));
@@ -908,7 +918,7 @@ fn una_mejora_y_una_politica_acaban_en_su_milisegundo() {
     las_citas_cuadran(&n, id);
     assert_eq!(citas_de_la_plaza(&n, id), (vec![fin_mejora], vec![expira]));
 
-    // La política caduca antes (150 min) que la mejora (240).
+    // La política caduca antes (150 min) que la mejora (720, la del Granero).
     n.avanzar_hasta(expira - 1);
     assert_eq!(n.economia(id).unwrap().politicas.activas().len(), 1);
     n.avanzar_hasta(expira);

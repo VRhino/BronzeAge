@@ -382,11 +382,11 @@ mod pruebas {
         assert_eq!((vivienda.capacidad_pesants, vivienda.capacidad_artesanos, vivienda.tiempo_minutos), (15_000, 10_000, 10));
         assert_eq!(vivienda.costo, vec![(Recurso::Madera, 10_000)]);
         let granja = c.tipo(Tipo::Granja);
-        // El arranque rápido (2026-10-28): Vivienda 10, Granja 5 y Leñera 2 minutos a nivel 1; las mejoras de la Granja fijan sus 240 / 480 / 960 de antes.
+        // El arranque rápido (2026-10-28): Vivienda 10, Granja 5 y Leñera 2 minutos a nivel 1.
         assert_eq!((granja.trabajadores, granja.tiempo_minutos, c.tipo(Tipo::Lenera).tiempo_minutos), (4_000, 5, 2));
-        assert_eq!(granja.niveles.iter().map(|n| n.obra_minutos).collect::<Vec<_>>(), vec![None, Some(240), Some(480), Some(960)]);
+        // La Granja no sube de nivel y da 80 de trigo por minuto, 2/3 de los 120 de antes (2026-11-11, decisión del autor).
         let trigo: Vec<Mil> = granja.niveles.iter().map(|n| n.produccion_base_trigo).collect();
-        assert_eq!(trigo, vec![120_000, 180_000, 240_000, 360_000], "120 / 180 / 240 / 360 por minuto (el doble del TypeScript, 2026-10-27)");
+        assert_eq!(trigo, vec![80_000], "un solo nivel, 80 por minuto");
         assert_eq!(c.tipo(Tipo::Almacen).capacidad_por_recurso, 600_000, "almacenes al doble desde el 2026-11-05");
         assert_eq!(c.tipo(Tipo::Palacio).nivel(3).unwrap().capacidad_nobles, 400_000);
         assert_eq!(c.tipo(Tipo::Granero).nivel(4).unwrap().capacidad_trigo, 12_000_000);

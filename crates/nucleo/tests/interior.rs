@@ -686,7 +686,14 @@ async fn desde_fuera_quien_es_de_su_faccion_ve_el_almacen_y_lo_de_dentro_de_su_p
 #[tokio::test]
 async fn una_obra_termina_en_su_instante_con_la_cola_y_la_mejora_y_el_recinto_viajan_con_su_mascara() {
     let m = con_mundo!();
-    let x = aldea(m);
+    let mut x = aldea(m);
+    // La Granja ya no sube de nivel (2026-11-11): la plaza levanta antes un Granero, que es lo que se mejora.
+    let plaza = x.plaza;
+    let granero = x.ok("admin", Comando::AnadirEdificio { asentamiento: plaza, tipo: Tipo::Granero }).creadas[0] as u32;
+    let listo = x.n.economia(plaza).unwrap().edificio(granero).unwrap().completa_en.expect("en obra");
+    x.n.avanzar_hasta((listo / MIN + 1) * MIN + 1_000);
+    assert!(x.n.economia(plaza).unwrap().edificio(granero).unwrap().activo());
+    x.n.foto_ahora();
     let (plaza, as_) = (x.plaza, ids::asentamiento(x.plaza));
     let w = arrancar_con(x.n).await;
     let (mut admin_c, _) = w.entrar("admin", TipoCliente::ClienteAdminWeb).await;
@@ -694,14 +701,14 @@ async fn una_obra_termina_en_su_instante_con_la_cola_y_la_mejora_y_el_recinto_vi
     let (mut ana, _) = Dentro::entrar(&w, "ana", None).await;
     let (mut dora, _) = Dentro::entrar(&w, "dora", None).await;
 
-    // La granja de la fundación se mejora a mano (con la auto-construcción apagada no arranca sola desde el 2026-11-04): la mejora viaja con su fin exacto. Y una vivienda a mano arranca al
+    // El Granero se mejora a mano (con la auto-construcción apagada no arranca sola desde el 2026-11-04): la mejora viaja con su fin exacto. Y una vivienda a mano arranca al
     // instante de la orden, con el suyo; la delta de la plaza lleva solo los edificios (y lo que cambia con ellos).
-    let granja = ana.plaza.edificios.iter().find(|e| e.tipo == "granja").expect("la granja de la fundación").clone();
-    assert!(granja.mejora.is_none(), "con la auto-construcción apagada la granja no se mejora sola");
+    let granja = ana.plaza.edificios.iter().find(|e| e.tipo == "granero").expect("el granero").clone();
+    assert!(granja.mejora.is_none(), "con la auto-construcción apagada el granero no se mejora solo");
     let (_, r) = ana.dar("o0", orden::Cuerpo::MejorarEdificioAhora(pb::OrdenMejorarEdificioAhora { asentamiento_id: as_.clone(), cargo: s("gobernador"), edificio_id: granja.id.clone() })).await;
     aceptada(&r);
     let granja = edificio(&ana.plaza, &granja.id).clone();
-    let mejora = granja.mejora.expect("la granja se mejora a mano");
+    let mejora = granja.mejora.expect("el granero se mejora a mano");
     dora.al_dia().await;
     assert_eq!(mejora.nivel_objetivo, granja.nivel_interno.unwrap() + 1);
     let (deltas, r) = ana.dar("o1", orden::Cuerpo::AnadirEdificioManualmente(pb::OrdenAnadirEdificioManualmente { asentamiento_id: as_.clone(), cargo: s("gobernador"), tipo: s("vivienda") })).await;

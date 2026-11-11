@@ -912,7 +912,8 @@ impl Nucleo {
     // ───────────────────────────── La ración de la guarnición ─────────────────────────────
 
     /// La guarnición de la plaza come en el paso de su minuto, justo después de la población (Reloj_Y_Eventos §2: la población come antes que las
-    /// tropas): toma del almacén, hasta su ración, primero los bienes de `BIENES_DE_CONSUMO.guarnicion` (la carne) y después el trigo; con la ración entera la moral de cada escuadra sube y, sin ella, baja; con la moral a 0
+    /// tropas): toma del almacén, hasta su ración, la de cada bien de `BIENES_DE_CONSUMO.guarnicion` (la carne, a la ración por cabeza del bloque) y el trigo
+    /// el resto, a la vez, como la población (2026-11-11); con la ración entera la moral de cada escuadra sube y, sin ella, baja; con la moral a 0
     /// desertan `ceil(5 %)` de los soldados. `racion` es la del `Exterior` del mismo paso (`residentes_en_el_paso`): una plaza sin residentes con tropa no hace nada. No programa ningún evento.
     pub(super) fn alimentar_guarnicion(&mut self, plaza: u64, t: Instante, racion: Mil) {
         if racion == 0 {
@@ -920,14 +921,19 @@ impl Nucleo {
         }
         let mr = self.estado.reglas.economia.militar.clone();
         let mut bienes = self.estado.reglas.economia.datos.poblacion.guarnicion.clone();
-        let Estado { militar, asentamientos, .. } = &mut self.estado;
+        let Estado { militar, asentamientos, reglas, .. } = &mut self.estado;
         let Some(a) = asentamientos.get_mut(&plaza) else { return };
         // La carne pausada (`pausarConsumo`, 2026-11-10) tampoco la come la guarnición: se guarda entera.
         bienes.retain(|b| !a.economia.consumo_pausado.contains(b));
         let almacen = &mut a.economia.almacen;
+        // Como la población (2026-11-11, decisión del autor): cada bien de la guarnición tiene su ración por soldado (la de `BIENES_DE_CONSUMO`, la misma que por
+        // habitante) y se come a la vez que el trigo, que pone el resto de la ración; antes la guarnición comía toda la carne que podía y después trigo.
+        let soldados = racion / mr.militar.racion_por_soldado.max(1);
+        let raciones = &reglas.economia.datos.poblacion.bienes;
+        let pedido = |r: Recurso| if r == Recurso::Trigo { racion } else { raciones.iter().find(|b| b.recurso == r).map_or(0, |b| asentamiento::datos::por(soldados * 1000, b.racion)) };
         let mut consumido = 0;
         for recurso in bienes.into_iter().chain([Recurso::Trigo]) {
-            let comido = almacen.consumir(recurso, racion - consumido); // flujo por minuto: la fracción va al resto oculto
+            let comido = almacen.consumir(recurso, pedido(recurso).min(racion - consumido)); // flujo por minuto: la fracción va al resto oculto
             // Lo que come la guarnición es parte del paso de minuto: cuenta en la tendencia «+N/min» de cada recurso que come.
             a.economia.tendencia.almacen[recurso.indice()] -= comido;
             a.economia.tendencia.consumido[recurso.indice()] += comido;

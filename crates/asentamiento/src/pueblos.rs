@@ -87,11 +87,13 @@ pub enum Cultivo {
     // Los de las zonas húmedas (2026-11-09), al final por la foto.
     Cebada,
     Sesamo,
+    /// La aldea ganadera (2026-11-11): solo corrales, sin granjas. Va como un «cultivo» más para elegirla al marcar la aldea.
+    Ganado,
 }
 
 impl Cultivo {
     /// En el orden de la foto (la posición es su código).
-    pub const TODOS: [Cultivo; 5] = [Cultivo::Trigo, Cultivo::Vid, Cultivo::Oliva, Cultivo::Cebada, Cultivo::Sesamo];
+    pub const TODOS: [Cultivo; 6] = [Cultivo::Trigo, Cultivo::Vid, Cultivo::Oliva, Cultivo::Cebada, Cultivo::Sesamo, Cultivo::Ganado];
 
     /// El id que ven los clientes y que traen los bloques.
     pub fn nombre(self) -> &'static str {
@@ -101,6 +103,7 @@ impl Cultivo {
             Cultivo::Oliva => "oliva",
             Cultivo::Cebada => "cebada",
             Cultivo::Sesamo => "sesamo",
+            Cultivo::Ganado => "ganado",
         }
     }
 
@@ -109,12 +112,14 @@ impl Cultivo {
     }
 }
 
-/// `PUEBLOS_EXTRACTORES.aldea.cultivos`: lo que dan las granjas de un cultivo, desde qué nivel de la plaza madre se siembra y si la aldea lleva corrales.
+/// `PUEBLOS_EXTRACTORES.aldea.cultivos`: lo que dan las granjas de un cultivo, desde qué nivel de la plaza madre se siembra, si la aldea lleva corrales
+/// y si lleva granjas (`granjas`, por defecto sí; la ganadera no, 2026-11-11).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReglaCultivo {
     pub produce: Recurso,
     pub nivel_madre: u32,
     pub corrales: bool,
+    pub granjas: bool,
 }
 
 /// `PUEBLOS_EXTRACTORES.aldea`: las cifras de la aldea agrícola (§14.2).
@@ -154,6 +159,11 @@ impl ReglasAldea {
     /// Los corrales de una aldea de `cultivo` y `nivel`: los de su nivel si el cultivo los lleva, ninguno si no.
     pub fn corrales(&self, cultivo: Cultivo, nivel: u32) -> u32 {
         if self.cultivo(cultivo).corrales { self.nivel(nivel).corrales } else { 0 }
+    }
+
+    /// Las granjas de una aldea de `cultivo` y `nivel`: las de su nivel si el cultivo las lleva (la ganadera, ninguna).
+    pub fn granjas(&self, cultivo: Cultivo, nivel: u32) -> u32 {
+        if self.cultivo(cultivo).granjas { self.nivel(nivel).granjas } else { 0 }
     }
 
     fn nivel(&self, n: u32) -> &NivelAldea {
@@ -219,7 +229,7 @@ impl ReglasPueblos {
                 .iter()
                 .map(|(k, v)| {
                     let produce = v["produce"].as_str().and_then(Recurso::desde_nombre).unwrap_or_else(|| panic!("«produce» del cultivo «{k}»"));
-                    let regla = ReglaCultivo { produce, nivel_madre: num(v, "nivelMadre") as u32, corrales: v["corrales"].as_bool().expect("corrales") };
+                    let regla = ReglaCultivo { produce, nivel_madre: num(v, "nivelMadre") as u32, corrales: v["corrales"].as_bool().expect("corrales"), granjas: v.get("granjas").map_or(true, |g| g.as_bool().expect("granjas")) };
                     (Cultivo::desde_nombre(k).unwrap_or_else(|| panic!("cultivo «{k}» desconocido")), regla)
                 })
                 .collect(),
@@ -323,6 +333,11 @@ impl Pueblo {
         matches!(self.sitio, Sitio::Punto { .. })
     }
 
+    /// ¿Es una aldea con corrales (la ganadera, desde el 2026-11-11)?
+    pub fn tiene_corrales(&self, r: &Reglas) -> bool {
+        self.cultivo().is_some_and(|c| r.pueblos.aldea.cultivo(c).corrales)
+    }
+
     /// El nombre del tipo de pueblo que ven los clientes: el id de catálogo del extractor, o `aldeaAgricola`.
     pub fn nombre_de_tipo(&self) -> &'static str {
         if self.es_aldea() { "aldeaAgricola" } else { self.tipo.nombre() }
@@ -355,9 +370,10 @@ impl Pueblo {
     /// Lo que guarda el almacén local, en el orden en que lo carga el carro: el recurso del extractor, o el del cultivo de la aldea y, si lleva
     /// corrales, ganado, carne y leche.
     pub fn recursos(&self, r: &Reglas) -> Vec<Recurso> {
-        let corrales = self.cultivo().is_some_and(|c| r.pueblos.aldea.cultivo(c).corrales);
-        let mut recursos = vec![self.recurso(r)];
-        if corrales {
+        let regla = self.cultivo().map(|c| r.pueblos.aldea.cultivo(c));
+        // La ganadera no tiene granjas: solo lo del rebaño.
+        let mut recursos = if regla.is_some_and(|x| !x.granjas) { vec![] } else { vec![self.recurso(r)] };
+        if regla.is_some_and(|x| x.corrales) {
             recursos.extend([Recurso::Livestock, Recurso::Carne, Recurso::Leche]);
         }
         recursos
@@ -530,7 +546,7 @@ impl Asentamiento {
             .map(|p| match p.cultivo() {
                 Some(c) => {
                     let a = &r.pueblos.aldea;
-                    i64::from(a.nivel(p.nivel).granjas) * de(Tipo::Granja) + i64::from(a.corrales(c, p.nivel)) * de(Tipo::Corral)
+                    i64::from(a.granjas(c, p.nivel)) * de(Tipo::Granja) + i64::from(a.corrales(c, p.nivel)) * de(Tipo::Corral)
                 }
                 None => de(p.tipo) * r.pueblos.extractor.nivel(p.nivel).factor,
             })
@@ -696,7 +712,7 @@ impl Asentamiento {
                 Sitio::Punto { fertilidad, cultivo, .. } => {
                     let a = &r.pueblos.aldea;
                     let granja = r.catalogo.tipo(Tipo::Granja).nivel(1).map_or(0, |x| x.produccion_base_trigo);
-                    let cosecha = por(por(por(granja * i64::from(a.nivel(p.nivel).granjas), fertilidad), mano.pesants), ctx.factor_trigo);
+                    let cosecha = por(por(por(granja * i64::from(a.granjas(cultivo, p.nivel)), fertilidad), mano.pesants), ctx.factor_trigo);
                     // El almacén local de la aldea es uno para todo lo que produce: lo que ya hay de un recurso quita sitio a los demás.
                     let recursos = p.recursos(r);
                     let hueco = |al: &Almacen| (r.pueblos.capacidad_almacen - recursos.iter().map(|&x| al.disponible(x)).sum::<Mil>()).max(0);
@@ -813,11 +829,18 @@ mod pruebas {
         assert_eq!((a.nivel_madre_minimo, a.fertilidad_minima, a.separacion_minima, a.granjeros, a.nivel_maximo()), (1, 300_000, 3_000, 30, 3));
         assert_eq!(a.niveles.values().map(|n| (n.granjas, n.corrales)).collect::<Vec<_>>(), vec![(2, 1), (4, 2), (6, 3)]);
         // Tanda 69 §12: la vid desde el nivel 3 de la madre y la oliva desde el 4, las dos sin corrales; la cebada desde el 3 y el sésamo desde el 4
-        // (2026-11-09).
-        let cultivo = |c: Cultivo| (a.cultivos[&c].produce, a.cultivos[&c].nivel_madre, a.cultivos[&c].corrales);
+        // (2026-11-09). Desde el 2026-11-11 el trigo va sin corrales y la ganadera, desde el nivel 1, lleva corrales y ninguna granja.
+        let cultivo = |c: Cultivo| (a.cultivos[&c].produce, a.cultivos[&c].nivel_madre, a.cultivos[&c].corrales, a.cultivos[&c].granjas);
         assert_eq!(
             Cultivo::TODOS.map(cultivo),
-            [(Recurso::Trigo, 1, true), (Recurso::Uva, 3, false), (Recurso::Aceituna, 4, false), (Recurso::Cebada, 3, false), (Recurso::Sesamo, 4, false)]
+            [
+                (Recurso::Trigo, 1, false, true),
+                (Recurso::Uva, 3, false, true),
+                (Recurso::Aceituna, 4, false, true),
+                (Recurso::Cebada, 3, false, true),
+                (Recurso::Sesamo, 4, false, true),
+                (Recurso::Livestock, 1, true, false)
+            ]
         );
     }
 
@@ -984,9 +1007,9 @@ mod pruebas {
     }
 
     /// Una plaza de nivel 1 con una aldea marcada en un punto de fertilidad 0,5.
-    fn con_aldea(r: &Reglas) -> Asentamiento {
+    fn con_aldea(r: &Reglas, cultivo: Cultivo) -> Asentamiento {
         let mut a = Asentamiento::fundar(r, 0, &[], 3);
-        a.iniciar_aldea(r, 1, Punto::new(5_000, 0), 500_000, Cultivo::Trigo, 1, &carro(), &mut vec![]).unwrap();
+        a.iniciar_aldea(r, 1, Punto::new(5_000, 0), 500_000, cultivo, 1, &carro(), &mut vec![]).unwrap();
         a
     }
 
@@ -1008,18 +1031,40 @@ mod pruebas {
     }
 
     #[test]
-    fn la_aldea_cultiva_trigo_con_la_fertilidad_de_su_punto_y_saca_ganado_contra_un_almacen_compartido() {
+    fn la_aldea_de_trigo_cultiva_con_la_fertilidad_de_su_punto_sin_corrales_y_llena_su_almacen() {
         let r = Reglas::cargar();
-        let mut a = con_aldea(&r);
+        let mut a = con_aldea(&r, Cultivo::Trigo);
         a.pueblos[0].estado = EstadoPueblo::Activo;
-        a.pueblos[0].rebano = Some(Rebano { especie: "vacuno".into(), cabezas: 20_000 });
         assert_eq!(a.aldeas_activas(), 1);
         let (mut w, mut ev) = (Mundo::default(), vec![]);
-        assert_eq!(a.trabajadores_de_pueblos(&r), 12_000, "2 granjas y 1 corral, 4 cada uno");
+        // Desde el 2026-11-11 la aldea de trigo no lleva corrales (los tiene la ganadera).
+        assert_eq!(a.trabajadores_de_pueblos(&r), 8_000, "2 granjas, 4 cada una, y ningún corral");
         let mano = mano_de_obra(&r.catalogo, &a.edificios, 40, 0, a.trabajadores_de_pueblos(&r));
         a.extraer_pueblos(&r, &mano, &ctx(), &mut w, &mut ev);
         let p = &a.pueblos[0];
-        assert_eq!((p.almacen.cantidad(Recurso::Trigo), p.almacen.cantidad(Recurso::Livestock)), (120_000, 0), "2 × 120 × 0,5 de trigo; el pie de cría no se sacrifica");
+        assert_eq!((p.almacen.cantidad(Recurso::Trigo), p.almacen.cantidad(Recurso::Livestock), p.almacen.disponible(Recurso::Leche)), (80_000, 0, 0), "2 × 80 × 0,5 de trigo");
+        assert!(p.rebano.is_none() && w.0.is_empty(), "sin rebaño y sin tocar ningún nodo");
+        for _ in 0..30 {
+            a.extraer_pueblos(&r, &mano, &ctx(), &mut w, &mut ev);
+        }
+        let p = &a.pueblos[0];
+        assert_eq!(p.existencias(&r), 1_000_000, "se llena y para");
+        assert_eq!(ev, vec![Evento::PuebloLleno { id: 1 }]);
+        assert_eq!(p.carga_del_carro(&r, 500_000), vec![(Recurso::Trigo, 500_000)], "el carro se lleva su trigo");
+    }
+
+    #[test]
+    fn la_aldea_ganadera_cria_sin_granjas_y_da_ganado_carne_y_leche_contra_un_almacen_compartido() {
+        let r = Reglas::cargar();
+        let mut a = con_aldea(&r, Cultivo::Ganado);
+        a.pueblos[0].estado = EstadoPueblo::Activo;
+        a.pueblos[0].rebano = Some(Rebano { especie: "vacuno".into(), cabezas: 20_000 });
+        let (mut w, mut ev) = (Mundo::default(), vec![]);
+        assert_eq!(a.trabajadores_de_pueblos(&r), 4_000, "1 corral y ninguna granja");
+        let mano = mano_de_obra(&r.catalogo, &a.edificios, 40, 0, a.trabajadores_de_pueblos(&r));
+        a.extraer_pueblos(&r, &mano, &ctx(), &mut w, &mut ev);
+        let p = &a.pueblos[0];
+        assert_eq!((p.almacen.cantidad(Recurso::Trigo), p.almacen.cantidad(Recurso::Livestock)), (0, 0), "no cultiva; el pie de cría no se sacrifica");
         assert_eq!(p.rebano.as_ref().unwrap().cabezas, 20_050, "20 cabezas × 15 % por hora = 0,05 por minuto");
         // La leche sale del rebaño vivo, sin sacrificar: `cabezas × lechePorCabezaYHora / 60` por minuto, con la fracción en el resto del almacén.
         let leche = r.pueblos.aldea.especie("vacuno").leche_por_cabeza_y_hora;
@@ -1035,34 +1080,35 @@ mod pruebas {
         }
         assert_eq!((minutos, a.pueblos[0].almacen.cantidad(Recurso::Livestock), a.pueblos[0].rebano.as_ref().unwrap().cabezas), (20, 60_000, 20_016), "el rebaño crece sobre lo que ya creció");
         assert_eq!(a.pueblos[0].almacen.cantidad(Recurso::Carne), 60_000, "la carne sale al sacrificar, junto al ganado: 60 por cabeza (ESPECIES)");
-        for _ in 0..10 {
-            a.extraer_pueblos(&r, &mano, &ctx(), &mut w, &mut ev);
-        }
-        let p = &a.pueblos[0];
-        assert!(p.existencias(&r) >= 1_000_000 - 1_000, "el almacén local es uno para todos: lleno, salvo la unidad que queda a medio entrar en el resto");
-        assert_eq!(ev, vec![Evento::PuebloLleno { id: 1 }]);
-        assert_eq!(p.carga_del_carro(&r, 500_000).iter().map(|x| x.1).sum::<Mil>(), 500_000, "el carro se lo lleva todo");
-        assert_eq!(p.carga_del_carro(&r, 500_000)[0].0, Recurso::Trigo);
+        assert_eq!(a.pueblos[0].carga_del_carro(&r, 500_000)[0].0, Recurso::Livestock, "el carro empieza por el ganado");
     }
 
     #[test]
-    fn el_carro_de_una_aldea_de_trigo_lleva_sus_cuatro_recursos_y_el_de_una_de_vid_solo_su_uva() {
+    fn el_carro_de_cada_aldea_lleva_solo_lo_suyo() {
         let r = Reglas::cargar();
-        let mut a = con_aldea(&r);
-        let p = &mut a.pueblos[0];
-        for x in [Recurso::Trigo, Recurso::Livestock, Recurso::Carne, Recurso::Leche, Recurso::Uva] {
-            p.almacen.poner(x, 10_000);
+        let todo = [Recurso::Trigo, Recurso::Livestock, Recurso::Carne, Recurso::Leche, Recurso::Uva];
+        let mut ganadera = con_aldea(&r, Cultivo::Ganado);
+        let g = &mut ganadera.pueblos[0];
+        for x in todo {
+            g.almacen.poner(x, 10_000);
         }
-        assert_eq!(p.recursos(&r), vec![Recurso::Trigo, Recurso::Livestock, Recurso::Carne, Recurso::Leche]);
-        let carga = p.carga_del_carro(&r, 500_000);
-        assert_eq!(carga, vec![(Recurso::Trigo, 10_000), (Recurso::Livestock, 10_000), (Recurso::Carne, 10_000), (Recurso::Leche, 10_000)], "no lleva uva");
-        assert_eq!(p.carga_del_carro(&r, 25_000).iter().map(|x| x.1).sum::<Mil>(), 25_000, "el carro se llena en ese orden y no pasa de su capacidad");
+        assert_eq!((g.recurso(&r), g.recursos(&r)), (Recurso::Livestock, vec![Recurso::Livestock, Recurso::Carne, Recurso::Leche]));
+        let carga = g.carga_del_carro(&r, 500_000);
+        assert_eq!(carga, vec![(Recurso::Livestock, 10_000), (Recurso::Carne, 10_000), (Recurso::Leche, 10_000)], "ni trigo ni uva");
+        assert_eq!(g.carga_del_carro(&r, 25_000).iter().map(|x| x.1).sum::<Mil>(), 25_000, "el carro se llena en ese orden y no pasa de su capacidad");
+        let mut trigo = con_aldea(&r, Cultivo::Trigo);
+        let t = &mut trigo.pueblos[0];
+        for x in todo {
+            t.almacen.poner(x, 10_000);
+        }
+        assert_eq!(t.recursos(&r), vec![Recurso::Trigo]);
+        assert_eq!(t.carga_del_carro(&r, 500_000), vec![(Recurso::Trigo, 10_000)]);
         let mut vid = Asentamiento::fundar(&r, 0, &[], 3);
         vid.nivel = 3;
         vid.medidor.nivel_actual = 3;
         vid.iniciar_aldea(&r, 1, Punto::new(5_000, 0), UNO, Cultivo::Vid, 3, &carro(), &mut vec![]).unwrap();
         let v = &mut vid.pueblos[0];
-        for x in [Recurso::Trigo, Recurso::Livestock, Recurso::Uva] {
+        for x in todo {
             v.almacen.poner(x, 10_000);
         }
         assert_eq!(v.recursos(&r), vec![Recurso::Uva]);
@@ -1136,14 +1182,14 @@ mod pruebas {
         a.extraer_pueblos(&r, &mano, &ctx(), &mut Mundo::default(), &mut ev);
         let p = a.pueblo(1).unwrap();
         assert_eq!(p.recurso(&r), Recurso::Uva);
-        assert_eq!((p.almacen.cantidad(Recurso::Uva), p.almacen.cantidad(Recurso::Trigo)), (120_000, 0), "la misma fórmula que el trigo (2 × 120 × 0,5), en uva");
+        assert_eq!((p.almacen.cantidad(Recurso::Uva), p.almacen.cantidad(Recurso::Trigo)), (80_000, 0), "la misma fórmula que el trigo (2 × 80 × 0,5), en uva");
         assert_eq!((p.almacen.cantidad(Recurso::Livestock), p.almacen.disponible(Recurso::Leche)), (0, 0));
     }
 
     #[test]
     fn la_aldea_sube_de_nivel_con_otra_obra_de_mapa_sin_dejar_de_producir() {
         let r = Reglas::cargar();
-        let mut a = con_aldea(&r);
+        let mut a = con_aldea(&r, Cultivo::Trigo);
         let mut ev = vec![];
         assert_eq!(a.mejorar_pueblo(&r, 1, &mut ev), Err(ErrorPueblo::NoEstaActivo));
         a.entregar_a_pueblo(0, &r, 1, &[(Recurso::Madera, 100_000), (Recurso::Oro, 12_000)], &mut ev).unwrap();
@@ -1165,7 +1211,7 @@ mod pruebas {
         let p = a.pueblo(1).unwrap();
         assert_eq!((p.nivel, p.mejora.clone()), (2, None));
         assert!(ev.contains(&Evento::AldeaSubio { id: 1, nivel: 2 }));
-        assert_eq!(a.trabajadores_de_pueblos(&r), 24_000, "4 granjas y 2 corrales");
+        assert_eq!(a.trabajadores_de_pueblos(&r), 16_000, "4 granjas y ningún corral (la de trigo no tiene, 2026-11-11)");
         a.pueblos[0].nivel = 3;
         assert_eq!(a.mejorar_pueblo(&r, 1, &mut ev), Err(ErrorPueblo::NivelMaximo));
     }
@@ -1216,9 +1262,9 @@ mod pruebas {
         assert_eq!(m.mejorar_pueblo(&r, 2, &mut ev), Err(ErrorPueblo::NivelMaximo));
     }
     #[test]
-    fn la_aldea_nace_con_su_pie_de_cria_y_el_saqueo_se_lleva_la_mitad_de_las_cabezas() {
+    fn la_aldea_ganadera_nace_con_su_pie_de_cria_y_el_saqueo_se_lleva_la_mitad_de_las_cabezas() {
         let r = Reglas::cargar();
-        let mut a = con_aldea(&r);
+        let mut a = con_aldea(&r, Cultivo::Ganado);
         let mut ev = vec![];
         a.entregar_a_pueblo(0, &r, 1, &[(Recurso::Madera, 100_000), (Recurso::Oro, 12_000)], &mut ev).unwrap();
         assert!(a.pueblo(1).unwrap().rebano.is_none(), "en obra aún no hay rebaño");
