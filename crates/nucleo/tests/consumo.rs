@@ -53,14 +53,17 @@ fn dar(n: &mut Nucleo, plaza: u64, recurso: Recurso, cantidad: Mil) {
 }
 
 #[test]
-fn la_guarnicion_come_primero_carne_y_despues_trigo_y_la_tendencia_lo_refleja() {
+fn la_guarnicion_come_su_racion_de_carne_a_la_vez_que_el_trigo_y_la_tendencia_lo_refleja() {
     let Some(m) = mundo() else {
         eprintln!("sin artefacto de mundo real: se omite");
         return;
     };
-    // Dos mundos idénticos hasta que a uno se le da carne (1 000 unidades: para varios minutos de guarnición).
+    // Dos mundos idénticos hasta que a uno se le da carne (50 unidades: para unos minutos de guarnición y población).
     let ((mut sin, a), (mut con, _)) = (plaza_con_guarnicion(m), plaza_con_guarnicion(m));
-    dar(&mut con, a, Carne, 1_000_000);
+    dar(&mut con, a, Carne, 50_000);
+    // Con el trigo a 2/3 (2026-11-11) la Granja sola deja el almacén casi vacío tras un día: trigo de sobra para los dos mundos.
+    dar(&mut sin, a, Trigo, 7_000_000);
+    dar(&mut con, a, Trigo, 7_000_000);
     let soldados = con.soldados_del_campamento(a);
     assert_eq!(soldados, 55);
     let racion = soldados * RACION;
@@ -73,15 +76,18 @@ fn la_guarnicion_come_primero_carne_y_despues_trigo_y_la_tendencia_lo_refleja() 
     con.avanzar_hasta(t + MIN);
     let (ts, tc) = (sin.economia(a).unwrap().tendencia, con.economia(a).unwrap().tendencia);
     let comida_de_carne = tc.consumido[Carne.indice()];
-    // La guarnición come su ración entera de carne (no trigo) y la población lo suyo, con el factor de consumo de la política vigente (el de serie: 1).
-    assert_eq!(comida_de_carne, racion + habitantes * racion_de_carne / 1000, "la guarnición toma su ración entera de carne, y la población la suya");
+    // Como la población (2026-11-11): la guarnición come la ración de carne por cabeza del bloque y el trigo pone el resto de su ración, a la vez (antes comía toda
+    // la carne que podía y después trigo); la población lo suyo, con el factor de consumo de la política vigente (el de serie: 1).
+    assert!(soldados * racion_de_carne / 1000 < racion, "la carne es solo una parte de la ración");
+    assert_eq!(comida_de_carne, soldados * racion_de_carne / 1000 + habitantes * racion_de_carne / 1000, "la guarnición toma su ración de carne, y la población la suya");
+    assert!(tc.consumido[Trigo.indice()] > 0, "y el trigo se come a la vez");
     assert_eq!(carne_antes - con.economia(a).unwrap().almacen.disponible(Carne), comida_de_carne, "y sale del almacén");
     assert_eq!(tc.almacen[Carne.indice()], -comida_de_carne, "la tendencia de la carne es lo que se come");
     // Lo que se come de carne no se come de trigo, uno a uno: la guarnición y la población.
     assert_eq!(ts.consumido[Trigo.indice()] - tc.consumido[Trigo.indice()], comida_de_carne);
     assert_eq!(tc.almacen[Trigo.indice()] - ts.almacen[Trigo.indice()], comida_de_carne, "y la tendencia del trigo sube lo mismo");
-    // Cuando la carne se acaba, la guarnición sigue comiendo su ración, ya de trigo: no pasa hambre.
-    con.avanzar_hasta(t + 40 * MIN);
+    // Cuando la carne se acaba, la guarnición sigue comiendo su ración, ya toda de trigo: no pasa hambre.
+    con.avanzar_hasta(t + 15 * MIN);
     let e = con.economia(a).unwrap();
     assert_eq!(e.almacen.disponible(Carne), 0, "se comió toda");
     assert_eq!(e.tendencia.consumido[Carne.indice()], 0);

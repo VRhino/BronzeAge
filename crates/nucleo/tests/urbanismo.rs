@@ -298,9 +298,29 @@ fn muros_menos(c: &Ciudad, id: u32) -> Vec<Celda> {
     muros
 }
 
+/// Las reglas con la Granja de antes del 2026-11-11, que subía a los niveles 2, 3 y 4 (2×3, 4×3 y 6×6): la de hoy no sube, pero la huella que crece al
+/// mejorar sigue siendo una regla de la ciudad y se prueba con ella.
+fn con_granja_mejorable() -> ReglasEconomia {
+    let mut re = ReglasEconomia::default();
+    let mut datos = (*re.datos).clone();
+    let mut b = asentamiento::datos::bloque("EDIFICIO_CATALOGO");
+    let nivel = |trigo: i64, (ancho, alto): (i64, i64), (madera, piedra): (i64, i64), obra: i64| {
+        serde_json::json!({ "trabajadoresRequeridos": 4, "recetas": [], "produccionBaseTrigo": trigo, "tamano": { "ancho": ancho, "alto": alto },
+            "costoMejora": { "madera": madera, "piedra": piedra }, "obraMinutos": obra })
+    };
+    let niveles = b["granja"]["niveles"].as_object_mut().expect("niveles de la Granja");
+    niveles.insert("2".into(), nivel(180, (2, 3), (60, 20), 240));
+    niveles.insert("3".into(), nivel(240, (4, 3), (120, 40), 480));
+    niveles.insert("4".into(), nivel(360, (6, 6), (240, 80), 960));
+    datos.catalogo = asentamiento::catalogo::Catalogo::de(&b);
+    re.urbanismo = Arc::new(nucleo::urbanismo::Urbanismo::cargar(&datos));
+    re.datos = Arc::new(datos);
+    re
+}
+
 #[test]
 fn la_mejora_de_la_granja_la_muda_a_un_hueco_de_su_huella_nueva() {
-    let re = ReglasEconomia::default();
+    let re = con_granja_mejorable();
     let (mut a, mut urbe) = plaza_rica(&re);
     let granja = 4;
     let antes = urbe.ciudad().pieza(granja).unwrap().clone();
@@ -321,7 +341,7 @@ fn la_mejora_de_la_granja_la_muda_a_un_hueco_de_su_huella_nueva() {
 
 #[test]
 fn la_mejora_de_la_granja_espera_su_hueco_y_la_manual_lo_exige() {
-    let re = ReglasEconomia::default();
+    let re = con_granja_mejorable();
     let (mut a, mut urbe) = plaza_rica(&re);
     let granja = 4;
 

@@ -490,8 +490,11 @@ fn defender_la_plaza_con_guardar_da_defensa_ganada_al_momento_al_permanente_y_cu
     for (defensa, ataque, resiste) in [(&fuertes[..], &[Tropa::MiliciaLanceros][..], true), (&[Tropa::MiliciaLanceros][..], &fuertes[..], false)] {
         let mut e = E::nuevo(m);
         let (plaza, d) = (e.plaza, e.datos());
-        let bot = defensor_de_la_plaza(&mut e, "bot-1", defensa);
+        // Con el trigo a 2/3 (2026-11-11) la Granja sola no da para un día de guarnición (desertaría entera): el defensor entra al acabar la protección,
+        // con trigo de sobra para su ración.
         e.n.avanzar_hasta(e.n.protegida_hasta(plaza).expect("la fundación la protege"));
+        let bot = defensor_de_la_plaza(&mut e, "bot-1", defensa);
+        mc::ok(&mut e.n, "admin", Comando::DarRecursos { asentamiento: plaza, recurso: Recurso::Trigo, cantidad: 500_000 });
         assert_eq!(e.n.estado().contratos.contratos[&bot].orden.map(|o| (o.tipo, o.objetivo)), Some((TipoOrden::Guardar, Objetivo::Plaza(plaza))));
 
         asediar_la_plaza(&mut e, ataque);

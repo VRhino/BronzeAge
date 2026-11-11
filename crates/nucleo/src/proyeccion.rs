@@ -70,7 +70,7 @@ fn ejercito_base(e: &Ejercito) -> pb::Ejercito {
 }
 
 /// La plaza como ficha del contrato (la que va a `FACCION`; el interior es de `proyeccion::interior`). `zona` es el polígono real recortado (`Nucleo::poligono_zona`) y `batalla_id`, la batalla que se juega ahora contra ella (el asedio visible). Es la ficha: id, Facción,
-/// sitio, nivel, zona, los ids de sus pueblos y avanzadas, el asedio, si tiene muralla y si tiene Mercado activo (sin detalle).
+/// sitio, nivel, zona, los ids de sus pueblos y avanzadas, el asedio, hasta cuándo está protegida, si tiene muralla y si tiene Mercado activo (sin detalle).
 pub fn ficha_de_asentamiento(a: &Asentamiento, zona: &[base::Punto], batalla_id: Option<String>) -> pb::Asentamiento {
     pb::Asentamiento {
         id: ids::asentamiento(a.id),
@@ -80,6 +80,8 @@ pub fn ficha_de_asentamiento(a: &Asentamiento, zona: &[base::Punto], batalla_id:
         nivel: a.nivel(),
         nivel_actual: a.nivel_actual(),
         fundado_en_ms: a.fundado_en,
+        // Desde fuera también (2026-11-11): quien mira una plaza ajena sabe si puede atacarla, y la protección tras una conquista no se deduce de la fundación.
+        protegida_hasta_ms: a.protegida_hasta,
         radio_potencial: a.radio,
         zona: zona.iter().map(|&p| punto(p)).collect(),
         pueblos_ids: a.economia.pueblos.iter().map(|p| ids::pueblo(p.id)).collect(),

@@ -178,10 +178,10 @@ impl Nucleo {
         r
     }
 
-    /// Al cerrar la versión: las Facciones de la Liga de cada extremo de una relación tocada (5H). Al nacer una relación, la Liga nueva contiene a las dos de antes; al acabar, la de antes es
+    /// Al cerrar la versión: las Facciones de la Liga de cada extremo de una relación tocada que une en la Liga (5H; una guerra no la cambia, 2026-11-11). Al nacer una relación, la Liga nueva contiene a las dos de antes; al acabar, la de antes es
     /// la unión de las dos nuevas: marcar las Ligas de después basta. Una Facción que desaparece rompe sus relaciones, así que también pasa por aquí.
     pub(super) fn marcar_ligas(&mut self) {
-        let extremos: BTreeSet<u32> = self.tr.tocados.de(Clase::Relacion).iter().filter_map(|&id| self.estado.politica.relaciones.get(id)).flat_map(|r| [r.a, r.b]).collect();
+        let extremos: BTreeSet<u32> = self.tr.tocados.de(Clase::Relacion).iter().filter_map(|&id| self.estado.politica.relaciones.get(id)).filter(|r| politica::liga::une(r)).flat_map(|r| [r.a, r.b]).collect();
         let mut marcadas: BTreeSet<u32> = BTreeSet::new();
         for f in extremos {
             if marcadas.contains(&f) {

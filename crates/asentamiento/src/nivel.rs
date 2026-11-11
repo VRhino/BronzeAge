@@ -23,11 +23,11 @@ pub struct Requisito {
     /// Nivel mínimo del recinto de muralla (2 = de piedra), con integridad completa.
     pub recinto_nivel_minimo: Option<u32>,
     pub nivel_interno_minimo: BTreeMap<Tipo, u8>,
-    /// Edificios que hacen falta además de los de `edificios`, cada uno activo y con al menos ese nivel interno (`edificiosConNivel`; el nivel 2 pide una Granja a
-    /// nivel 2, decisión del autor del 2026-10-28).
+    /// Edificios que hacen falta además de los de `edificios`, cada uno activo y con al menos ese nivel interno (`edificiosConNivel`; el nivel 2 pidió una Granja a
+    /// nivel 2 del 2026-10-28 al 2026-11-11; hoy ningún nivel lo usa).
     pub con_nivel: BTreeMap<Tipo, u8>,
-    /// Pueblos activos que pide, aldea agrícola o pueblo extractor (`pueblosActivos`; el nivel 2 pide uno, decisión del autor del 2026-10-31: antes una aldea agrícola, y una
-    /// plaza sin tierra fértil pero con minas no podía subir).
+    /// Pueblos activos que pide, aldea agrícola o pueblo extractor (`pueblosActivos`; el nivel 2 pide dos desde el 2026-11-11, antes uno, decisión del autor del 2026-10-31:
+    /// antes una aldea agrícola, y una plaza sin tierra fértil pero con minas no podía subir).
     pub pueblos: u32,
 }
 
@@ -160,18 +160,17 @@ mod pruebas {
     }
 
     #[test]
-    fn el_nivel_2_pide_400_pesants_una_lenera_una_granja_a_nivel_2_y_un_pueblo_activo() {
+    fn el_nivel_2_pide_400_pesants_una_lenera_y_dos_pueblos_activos() {
         let r = Reglas::cargar().nivel;
         // Desde el 2026-11-01 la Cantera es de pueblo extractor: ni ella, ni el Corral ni las minas cuentan.
-        let uno = activos(&[(Tipo::Cantera, 1), (Tipo::Corral, 1), (Tipo::Mina, 1), (Tipo::Granja, 2)]);
-        assert_eq!(r.gates(2, &uno, 400, 0, 0, 1), Some(vec![Falta::Edificios]), "sin Leñera no se sube");
-        let dos = activos(&[(Tipo::Lenera, 1), (Tipo::Granja, 1), (Tipo::Granja, 2)]);
-        assert_eq!(r.gates(2, &dos, 400, 0, 0, 1), Some(vec![]));
-        // La Granja ha de estar a nivel 2 (2026-10-28): Leñera y Granjas a nivel 1 no bastan.
-        assert_eq!(r.gates(2, &activos(&[(Tipo::Lenera, 1), (Tipo::Granja, 1)]), 400, 0, 0, 1), Some(vec![Falta::Edificios]));
-        assert_eq!(r.gates(2, &activos(&[(Tipo::Granja, 2)]), 400, 0, 0, 1), Some(vec![Falta::Edificios]), "sin Leñera no se sube");
+        let uno = activos(&[(Tipo::Cantera, 1), (Tipo::Corral, 1), (Tipo::Mina, 1), (Tipo::Granja, 1)]);
+        assert_eq!(r.gates(2, &uno, 400, 0, 0, 2), Some(vec![Falta::Edificios]), "sin Leñera no se sube");
+        // Desde el 2026-11-11 la Granja no cuenta (ni sube de nivel) y hacen falta dos pueblos activos.
+        let dos = activos(&[(Tipo::Lenera, 1)]);
+        assert_eq!(r.gates(2, &dos, 400, 0, 0, 2), Some(vec![]));
+        assert_eq!(r.gates(2, &dos, 400, 0, 0, 1), Some(vec![Falta::Pueblo]), "con un solo pueblo no basta");
         assert_eq!(r.gates(2, &dos, 400, 0, 0, 0), Some(vec![Falta::Pueblo]));
-        assert_eq!(r.gates(2, &dos, 399, 0, 0, 1), Some(vec![Falta::Poblacion]));
+        assert_eq!(r.gates(2, &dos, 399, 0, 0, 2), Some(vec![Falta::Poblacion]));
         assert_eq!(r.gates(9, &dos, 0, 0, 0, 0), None);
         assert_eq!(r.requisitos[&3].pueblos, 0, "solo el nivel 2 pide el pueblo");
     }

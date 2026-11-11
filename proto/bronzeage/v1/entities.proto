@@ -615,8 +615,8 @@ message Pueblo {
   optional TrazadoUrbano trazado = 21;   // layout_version, unidades_por_celda, radio_ul, calles y caminos de la planta
   // El nivel alcanzado de su plaza madre, solo con la planta (el cliente pinta las casas con ese estilo, hasta el 3).
   optional uint32 nivel_madre = 22;
-  // El cultivo de la aldea agrícola (tanda 69 §12): trigo | vid | oliva | cebada | sesamo (2026-11-09). Se elige al marcarla y no cambia; ausente
-  // en un extractor.
+  // El cultivo de la aldea agrícola (tanda 69 §12): trigo | vid | oliva | cebada | sesamo (2026-11-09) | ganado (la aldea ganadera, 2026-11-11: solo
+  // corrales y rebaño, sin granjas; la de trigo ya no lleva corrales). Se elige al marcarla y no cambia; ausente en un extractor.
   optional string cultivo = 23;
 }
 

@@ -78,6 +78,8 @@ impl Geografia {
             Cultivo::Oliva => self.mundo.fertilidad_oliva_en(p.x, p.y),
             Cultivo::Cebada => self.mundo.fertilidad_cebada_en(p.x, p.y),
             Cultivo::Sesamo => self.mundo.fertilidad_sesamo_en(p.x, p.y),
+            // La ganadera pasta donde se daría el trigo (2026-11-11): su capa y su mínimo; la fertilidad no cambia la cría.
+            Cultivo::Ganado => self.mundo.fertilidad_en(p.x, p.y),
         };
         capa.map(|f| f as i64 * asentamiento::datos::UNO / 255)
     }

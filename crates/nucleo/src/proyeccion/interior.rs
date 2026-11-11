@@ -187,7 +187,6 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
     p.ascenso = eco.ascenso.map(|x| pb::AscensoEnCurso { nivel_objetivo: x.nivel_objetivo, iniciado_en_ms: x.iniciado_en, completa_en_ms: x.completa_en });
     p.insolvencia_ascenso = eco.aviso_solvencia.0.iter().map(|f| pb::Insolvencia { recurso: f.recurso.nombre().to_owned(), llega: f.llega, pide: f.pide }).collect();
     p.ocupacion_hasta_ms = a.ocupada_hasta;
-    p.protegida_hasta_ms = a.protegida_hasta;
     p.bandidos_reaparecen_en_ms = e.combate.reaparecen.get(&id).copied();
     p.auto_construccion_pausada = eco.auto_pausada;
     p.recetas_pausadas = eco.recetas_pausadas.iter().map(|r| r.nombre().to_owned()).collect();

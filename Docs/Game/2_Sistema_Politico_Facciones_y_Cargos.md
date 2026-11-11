@@ -4,7 +4,7 @@
 - **Héroe** (el personaje de cada Jugador en el mundo, uno por mundo, Doc 5.16): pertenece a 1 y solo 1 Facción, y reside en 1 y solo 1 sitio: un asentamiento o un campamento de mercenarios (Doc 2.5). Tiene como mucho un escuadrón de cada tropa en toda la partida (Doc 5.8); sus escuadrones son SUYOS, no del asentamiento (Doc 5.4), y su Liderazgo limita cuántos puede llevarse consigo (Doc 5.11).
 - **Asentamiento**: pertenece a 1 y solo 1 Facción.
 - **Facción**: entidad política soberana, agrupa héroes y asentamientos. Tiene cargos de nivel Facción (Rey, Embajador).
-- **Liga**: componente conexa del grafo de relaciones activas entre Facciones, de cualquier tipo (vasallaje, alianza e incluso guerra; mínimo 2 Facciones). NO tiene cargos ni ciudadanía propia.
+- **Liga**: componente conexa del grafo de relaciones activas de vasallaje y de alianza entre Facciones (la guerra no une; mínimo 2 Facciones). NO tiene cargos ni ciudadanía propia.
 - **Vasallo/Señor**: relación ATADA entre 2 Facciones.
 - **Aliado**: relación LIBRE y revocable entre 2 Facciones.
 - **Gran Rey**: título de PRESTIGIO (no cargo mecánico) del Rey cuya Facción domina otras Facciones enteras.

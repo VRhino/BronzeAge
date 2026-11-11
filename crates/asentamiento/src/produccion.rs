@@ -247,15 +247,16 @@ mod pruebas {
     }
 
     #[test]
-    fn la_granja_produce_120_de_trigo_a_plena_mano_de_obra_y_el_edicto_la_sube() {
+    fn la_granja_produce_80_de_trigo_a_plena_mano_de_obra_y_el_edicto_la_sube() {
         let cat = Reglas::cargar().catalogo;
         let (mut a, mut e, mut w) = (Almacen::nuevo(400_000), vec![activo(1, Tipo::Granja)], Mundo::default());
         let m = mano_de_obra(&cat, &e, 20, 0, 0);
         let p = extraer_y_cultivar(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &mut w);
-        assert_eq!((a.cantidad(Recurso::Trigo), p), (120_000, vec![(Recurso::Trigo, 120_000)]));
+        // 80 por minuto desde el 2026-11-11 (2/3 de los 120 de antes).
+        assert_eq!((a.cantidad(Recurso::Trigo), p), (80_000, vec![(Recurso::Trigo, 80_000)]));
         let c = Contexto { factor_trigo: 1_500_000, fertilidad: 500_000, ..ctx(&[], &[]) };
         extraer_y_cultivar(&cat, &mut e, &mut a, &m, &c, &mut w);
-        assert_eq!(a.cantidad(Recurso::Trigo), 120_000 + 90_000, "120 × fertilidad 0,5 × Edicto 1,5");
+        assert_eq!(a.cantidad(Recurso::Trigo), 80_000 + 60_000, "80 × fertilidad 0,5 × Edicto 1,5");
     }
 
     #[test]
@@ -483,10 +484,8 @@ mod pruebas {
     #[test]
     fn la_produccion_de_trigo_suma_las_granjas_activas() {
         let cat = Reglas::cargar().catalogo;
-        let mut g2 = activo(2, Tipo::Granja);
-        g2.nivel_interno = 2;
-        let e = vec![activo(1, Tipo::Granja), g2, Edificio::nuevo(3, Tipo::Granja, Estado::EnCola)];
+        let e = vec![activo(1, Tipo::Granja), activo(2, Tipo::Granja), Edificio::nuevo(3, Tipo::Granja, Estado::EnCola)];
         let m = mano_de_obra(&cat, &e, 20, 0, 0);
-        assert_eq!(produccion_trigo_por_minuto(&cat, &e, &m, UNO, UNO), 300_000, "120 + 180; la que está en cola no cuenta");
+        assert_eq!(produccion_trigo_por_minuto(&cat, &e, &m, UNO, UNO), 160_000, "80 + 80; la que está en cola no cuenta");
     }
 }

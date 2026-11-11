@@ -1605,7 +1605,7 @@ fn la_aldea_de_vid_da_uva_no_tiene_corrales_y_su_carro_lleva_uva() {
 }
 
 #[test]
-fn la_aldea_se_marca_en_tierra_fertil_nace_con_su_rebano_y_su_carro_lleva_trigo_y_ganado_a_la_madre() {
+fn la_aldea_se_marca_en_tierra_fertil_la_ganadera_nace_con_su_rebano_y_sus_carros_llevan_trigo_y_ganado_a_la_madre() {
     let m = con_mundo!();
     let ajustes = Ajustes { foto_cada: 0, latido_ms: 0, ..Ajustes::default() };
     let dir = tempfile::tempdir().unwrap();
@@ -1643,11 +1643,18 @@ fn la_aldea_se_marca_en_tierra_fertil_nace_con_su_rebano_y_su_carro_lleva_trigo_
     e.n.avanzar_hasta(completa_en + MIN);
     let p = e.pueblo(id);
     assert!(p.activo());
+    assert!(p.rebano.is_none(), "la de trigo no tiene corrales ni rebaño (2026-11-11)");
+    // La ganadera (2026-11-11), en la misma tierra: nace con el pie de cría de su corral.
+    let id = comun::levantar_aldea_de(&mut e.n, "ana", plaza, Cultivo::Ganado).expect("hay sitio para la ganadera en la zona");
+    let EstadoPueblo::EnObra { completa_en } = e.pueblo(id).estado else { panic!("con todo entregado, en obra") };
+    e.n.avanzar_hasta(completa_en + MIN);
+    let p = e.pueblo(id);
+    assert!(p.activo() && p.cultivo() == Some(Cultivo::Ganado));
     assert_eq!(p.rebano.as_ref().map(|r| (r.especie.as_str(), r.cabezas / 1_000)), Some(("vacuno", 20)), "nace con el pie de cría de su corral");
-    assert!(e.n.economia(plaza).unwrap().aldeas_activas() == 1);
+    assert!(e.n.economia(plaza).unwrap().aldeas_activas() == 2);
 
-    // Su carro sale con trigo, con la leche del rebaño y, cuando este pasa del pie de cría, también con ganado y carne; los cuatro entran en el almacén
-    // de la madre.
+    // El carro de la de trigo sale con trigo y el de la ganadera con la leche del rebaño y, cuando este pasa del pie de cría, también con ganado y
+    // carne; los cuatro entran en el almacén de la madre.
     let limite = e.n.ahora() + 12 * HORA;
     let trae = |e: &Escenario, r: Recurso| e.n.economia(plaza).unwrap().ingresos_acarreo.iter().any(|i| i.recurso == r);
     while !([Trigo, Livestock, Carne, Leche].iter().all(|&r| trae(&e, r))) {

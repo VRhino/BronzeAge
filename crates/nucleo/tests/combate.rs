@@ -740,6 +740,7 @@ fn un_asedio_que_gana_conquista_la_plaza_la_deja_protegida_y_ocupada_y_desaloja_
     assert_eq!(a.faccion, 1);
     assert_eq!((a.protegida_hasta, a.ocupada_hasta), (Some(t + 24 * HORA), Some(t + 90 * MIN)));
     assert!(a.economia.ocupado && s.e.n.plaza_protegida(b));
+    assert_eq!(nucleo::proyeccion::ficha_de_asentamiento(a, &[], None).protegida_hasta_ms, Some(t + 24 * HORA), "la protección tras la conquista también se ve desde fuera");
     assert!(a.economia.poblacion.pesants <= poblacion.pesants * 3 / 4 && a.economia.poblacion.restos == [0; 3], "pierde el 25 % y queda en personas enteras, sin restos");
     assert!(a.economia.edificios.iter().any(|x| x.danado), "algún edificio queda dañado");
     assert!(a.economia.edificios.iter().filter(|x| x.activo()).count() < edificios_activos);

@@ -153,8 +153,11 @@ impl Nucleo {
     pub fn planta_de_pueblo(&self, id: u64) -> Option<crate::urbanismo::VistaCiudad> {
         let (_, p) = self.pueblo(id)?;
         let r = &self.estado.reglas.economia;
-        let aldea = p.cultivo().map(|c| r.datos.pueblos.aldea.niveles.get(&p.nivel).map_or((1, 1), |n| (n.granjas, r.datos.pueblos.aldea.corrales(c, p.nivel))));
-        Some(crate::urbanismo::planta_de_pueblo(r, self.semilla, id, p.tipo, aldea))
+        let a = &r.datos.pueblos.aldea;
+        let aldea = p.cultivo().map(|c| (a.granjas(c, p.nivel), a.corrales(c, p.nivel)));
+        // La ganadera (sin granjas) tiene un Corral por ancla (2026-11-11).
+        let ancla = if aldea.is_some_and(|(g, _)| g == 0) { Tipo::Corral } else { p.tipo };
+        Some(crate::urbanismo::planta_de_pueblo(r, self.semilla, id, ancla, aldea))
     }
 
     // ───────────────────────────── Órdenes ─────────────────────────────
