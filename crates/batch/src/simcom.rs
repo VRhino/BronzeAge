@@ -390,6 +390,8 @@ impl Sim<'_> {
             let Some(&id) = r.creadas.first().filter(|_| r.aceptada()) else { continue };
             // 5E: las órdenes de la plaza las da su Gobernador de oficio, residente y dentro (`gobernador_de_oficio`, con su cuenta propia).
             gobernador_de_oficio(&mut self.n, t, id).expect("el Gobernador de oficio de la plaza");
+            // La columna que fundó entró en la plaza (Fundacion_Y_Refundacion §5.5): el jugador viaja en una columna nueva, a la puerta.
+            let Ok(columna) = self.n.crear_ejercito(t, &jugador(f), f, p, VELOCIDAD, VIVERES) else { continue };
             // Su héroe nace en el campamento más cercano y va en la columna; sin residencia, es un visitante de todos los campamentos.
             let (campamento, cuenta) = (self.campamento_mas_cercano(p), format!("{}-{k}", jugador(f)));
             let h = self.admin(t, "CrearHeroe", Comando::CrearHeroe { cuenta: cuenta.clone(), campamento, controlador: Controlador::Humano, nombre: None });

@@ -183,8 +183,8 @@ fn con_palacio_en(m: &M, mut n: Nucleo, cantidad: i64) -> Escenario {
         let ultimos: Vec<String> = e.n.cambios_desde(0).unwrap().flat_map(|c| c.eventos.iter()).map(|h| format!("{} {}", h.en, h.codigo)).collect();
         panic!("la plaza cayó: {:?}", &ultimos[ultimos.len().saturating_sub(15)..]);
     }
-    // El Rey entra en la plaza con su ejército fundador (está a la puerta).
-    e.ok("admin", Comando::Guarnecer { asentamiento: plaza, heroe: rey });
+    // El Rey ya está dentro: entró con su ejército fundador al fundarla.
+    assert!(e.n.heroe(rey).unwrap().columna.is_none(), "el Rey fundador está dentro");
     e
 }
 

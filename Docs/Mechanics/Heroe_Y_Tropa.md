@@ -40,7 +40,7 @@ se **recluta** en una plaza (la cadena de condiciones y el coste), cómo se cons
 > - **Tropa prestada y reclutas de campamento** (`mercenarios.rs`, véase [`Campamentos_Mercenarios.md`](Campamentos_Mercenarios.md)). `FijarResidencia` (y la reubicación de una ruina) suelta la guarnición y retira la tropa prestada de otro campamento de donde esté, también de una escolta.
 > - **Herido (§9):** `HerirHeroe` (administración, hasta el combate) pone `heridoHasta`; `Nucleo::heroe_herido` lo lee al mirar y no hay evento al curarse.
 > - **Presencia:** `Desconectarse` y `Conectarse` (véase [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md) §7).
-> - **Ruina de la plaza donde se reside:** sus residentes pasan a la plaza de su Facción más cercana a la ruina (si queda alguna) y, si no, al campamento de mercenarios más cercano; los héroes que estaban dentro quedan en ese campamento (`heroe.reubicado`); sueltan la guarnición. Ocurre antes de la cascada de comercio (Reloj_Y_Eventos §3.2).
+> - **Ruina de la plaza donde se reside:** sus residentes pasan a la plaza de su Facción más cercana a la ruina (si queda alguna) y, si no, al campamento de mercenarios más cercano; los héroes que estaban dentro (residentes o de visita) salen al mapa con todo lo suyo: con la columna con la que entraron o, si no trajeron ninguna, con una nueva en el sitio de la plaza, con su carro y sus víveres (las ruinas no se habitan; `nucleo/heroes.rs`, `reubicar_residentes`); cada uno emite `heroe.reubicado`; sueltan la guarnición. Ocurre antes de la cascada de comercio (Reloj_Y_Eventos §3.2).
 >
 > | Código | Orden | Rechazos propios (además de `no_autorizado`, `heroe.desconocido` y `heroe.fuera_del_mundo`) |
 > |---|---|---|
@@ -163,7 +163,7 @@ Como en Conquest (`HeroDataService.CreateNewHero`), pero **sin equipo inicial** 
 
 - **Nivel:** el servidor **no lo sube nunca** (no hay curva hasta que Conquest la publique, CQ-001; decidido 2026-09-15). Por tanto `puntosDeAtributoSinGastar` y `puntosDePerkSinGastar` nacen en 0 y **ningún camino los aumenta**: `repartirPuntos` solo puede gastar lo que traiga un snapshot cargado a mano.
 - **XP:** una batalla de Unity la suma tal cual (`experienciaHaciaSiguienteNivel += xpGanada` del héroe) y, por cada escuadra, `conExperiencia(e, xpGanada)` y `cantidad = supervivientesAlCierre`.
-- **Botín de Unity:** cada objeto va a una casilla libre del inventario (`BATALLA.casillasInventario`), como `tipo: 'visual'` y `precio: 0` (sin catálogo de objetos, CQ-004); las monedas se suman a `monedas` del héroe.
+- **Botín de Unity:** las monedas se suman a `monedas` del héroe. Los objetos se validan (que quepan en `BATALLA.casillasInventario` y que cada instancia sea nueva, [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §8.5) pero **se pierden**: el héroe aún no tiene inventario (**deuda**, CQ-004; anotada en la fila «Militar y combate (4A-1)» de `Docs/Mecanicas a desarrollar.md`).
 - **Equipar:** no existe el comando; el equipamiento solo cambia por la vía de Conquest.
 
 ### 4.4 Eventos del héroe

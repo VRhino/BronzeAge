@@ -587,9 +587,7 @@ impl Sim<'_> {
             self.admin(t, "DarCaravanaFundacion", Comando::DarCaravanaFundacion { ejercito: columna });
             let r = self.orden(t, &jugador(f), "Fundar", Comando::Fundar { ejercito: columna });
             let Some(&id) = r.creadas.first().filter(|_| r.aceptada()) else { continue };
-            // La columna de fundación entra en su plaza: su héroe de campo no es ningún bot.
-            let lider = self.n.ejercito(columna).map(|e| e.columna.lider).unwrap_or(0);
-            self.orden(t, &jugador(f), "Guarnecer", Comando::Guarnecer { asentamiento: id, heroe: lider });
+            // La columna de fundación entra sola en su plaza al fundarla (Fundacion_Y_Refundacion §5.5): su héroe de campo no es ningún bot.
             if self.pol.is_some() && suyas.is_empty() {
                 self.pol_rey_en_su_plaza(t, f, id);
             }

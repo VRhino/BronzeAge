@@ -134,6 +134,9 @@ fn al_gobernador_lo_nombra_el_rey_sin_estar_presente_y_a_los_demas_el_gobernador
     assert_eq!(e.titular(Cargo::Gobernador), Some(rey), "quien funda es su Gobernador de oficio");
     let h = e.hechos("cargo.local_asignado");
     assert_eq!((h.len(), h[0].dato("heroe"), h[0].asentamientos.clone()), (1, Some(rey as i64), vec![e.plaza]));
+    // Su columna entró al fundarla (Fundacion_Y_Refundacion §5.5); sale para nombrar desde fuera.
+    assert_eq!(e.ubicacion(rey), Ubicacion::Asentamiento(e.plaza as u32), "el Rey entró al fundar");
+    e.salir("rey", rey);
     assert!(matches!(e.ubicacion(rey), Ubicacion::Columna(_)), "el Rey está fuera, en su columna");
     // Deja de residir en ella: el cargo se vacía y la plaza se queda sin Gobernador.
     e.ok("admin", Comando::FijarResidencia { heroe: rey, residencia: Some(Residencia::Campamento(0)) });
