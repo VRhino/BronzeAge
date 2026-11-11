@@ -7,11 +7,12 @@ use std::{sync::Arc, time::Duration};
 use acceso::{Acceso, Config as ConfigAcceso, Coste};
 use base::{Punto, MS_POR_MINUTO};
 use combate::ciclo::EstadoBatalla;
-use contrato::v1::{AristaGrafo, GrafoNavegacion, NodoGrafo, Punto as PuntoPb, Resultado};
+use contrato::v1::{AristaGrafo, GrafoNavegacion, NodoGrafo, Punto as PuntoPb, Resultado, TipoCliente};
 use lanzador::{Config, Informe};
 use militar::{catalogo::Tropa, heroe::Controlador};
 use nucleo::{proyeccion::ids, Ajustes, Arranque, Comando, Nucleo, ObjetivoAtaque, Peticion, Relacion, Reglas};
 use rutas::Rutas;
+use servidor::prueba::{hola, ClientePrueba};
 use servidor::{servir_con_http, RelojCompartido};
 use tokio::sync::{mpsc, oneshot};
 
@@ -54,23 +55,28 @@ fn admin(n: &mut Nucleo, id: &str, c: Comando) -> Vec<u64> {
 /// Ana (F1, humana, espadachines) ataca a la columna de beto (F2, bot, milicia) en guerra: se abre una batalla de Unity sin convocatoria, que espera servidor.
 /// Devuelve el núcleo, la batalla, el héroe de ana y sus escuadras.
 fn nucleo_con_batalla() -> (Nucleo, u64, u64, Vec<u64>) {
+    nucleo_con_batalla_de("ana", [Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto])
+}
+
+/// La misma batalla con la cuenta y las dos tropas de ana que se quieran.
+fn nucleo_con_batalla_de(cuenta_ana: &str, tropas_ana: [Tropa; 2]) -> (Nucleo, u64, u64, Vec<u64>) {
     let arranque = Arranque { reglas: Reglas { batallas_en_unity: true, ..Reglas::default() }, ajustes: Ajustes::default(), semilla: 42, inicio: 0, rutas: reticula(40, 5), mundo_hash: "hash-de-prueba".into(), mundo: None };
     let mut n = Nucleo::nuevo(arranque);
     let columna = |n: &mut Nucleo, cuenta: &str, faccion: u32, p: Punto| {
         let id = n.crear_ejercito(n.ahora(), cuenta, faccion, p, 500, 350_000).unwrap();
         (id, n.ejercito(id).unwrap().columna.lider)
     };
-    let ana = columna(&mut n, "ana", 1, c(10, 2));
+    let ana = columna(&mut n, cuenta_ana, 1, c(10, 2));
     let beto = columna(&mut n, "beto", 2, Punto::new(c(10, 2).x + 1_000, c(10, 2).y));
     let completa = |t: Tropa| militar::Reglas::cargar().tropas.tropa(t).unidades;
     let mut suyas = Vec::new();
-    for (i, t) in [Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto].into_iter().enumerate() {
+    for (i, t) in tropas_ana.into_iter().enumerate() {
         suyas.extend(admin(&mut n, &format!("d{i}"), Comando::DarEscuadra { heroe: ana.1, tropa: t, cantidad: completa(t) }));
     }
     admin(&mut n, "d9", Comando::DarEscuadra { heroe: beto.1, tropa: Tropa::MiliciaLanceros, cantidad: completa(Tropa::MiliciaLanceros) });
     admin(&mut n, "humano", Comando::FijarControlador { heroe: ana.1, controlador: Controlador::Humano });
     admin(&mut n, "guerra", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Guerra) });
-    let r = n.aplicar_en(10 * MIN, Peticion::nueva("ana", "a1", Comando::Atacar { heroe: ana.1, objetivo: ObjetivoAtaque::Ejercito(beto.0), declara_guerra: false }));
+    let r = n.aplicar_en(10 * MIN, Peticion::nueva(cuenta_ana, "a1", Comando::Atacar { heroe: ana.1, objetivo: ObjetivoAtaque::Ejercito(beto.0), declara_guerra: false }));
     assert!(r.aceptada(), "{r:?}");
     let id = n.batallas().next().expect("se abrió una batalla").id;
     assert_eq!(n.batallas_pendientes(), vec![id], "espera servidor");
@@ -79,6 +85,7 @@ fn nucleo_con_batalla() -> (Nucleo, u64, u64, Vec<u64>) {
 
 /// El motor sirviendo el núcleo con el acceso real; la cuenta del lanzador registrada con el código de servidores.
 struct Motor {
+    acceso: Acceso,
     srv: servidor::Servidor,
     tx: mpsc::Sender<servidor::ComandoSesion>,
     actor: tokio::task::JoinHandle<Nucleo>,
@@ -88,12 +95,13 @@ async fn motor(n: Nucleo) -> Motor {
     let acceso = Acceso::en_memoria(ConfigAcceso { codigo_registro_servidores: Some("servidores".into()), coste: Coste::PRUEBAS, ..ConfigAcceso::default() });
     acceso.registrar("lanzador-1", CLAVE, Some("servidores")).await.unwrap();
     acceso.registrar("ana", CLAVE, None).await.unwrap();
+    let acceso_motor = acceso.clone();
     let reloj = RelojCompartido::nuevo(n.ahora());
     let (tx, rx) = mpsc::channel(1024);
     let actor = nucleo::sesiones::lanzar(n, reloj.clone(), rx);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let srv = servir_con_http(listener, tx.clone(), acceso.clone(), Arc::new(acceso), reloj, servidor::Config::default()).await;
-    Motor { srv, tx, actor }
+    Motor { acceso: acceso_motor, srv, tx, actor }
 }
 
 impl Motor {
@@ -210,4 +218,124 @@ async fn sin_cuenta_de_servidor_no_entra_y_un_proceso_que_no_existe_no_deja_la_b
     h.await.unwrap();
     let n = m.parar().await;
     assert_eq!(n.batalla(id).unwrap().estado, EstadoBatalla::Asignada, "asignada a un proceso que no arrancó: la vence el núcleo por su plazo");
+}
+
+// Con Conquest de verdad (Conquest_prototype, `Builds/PruebaRed/PruebaRed.exe`): el mismo camino, con el servidor de batalla de Unity en lugar del de mentira.
+// Solo corren con `CONQUEST_BATALLA=<ruta al ejecutable>`; sin ella se saltan. Ana lleva milicia y arqueros, que Conquest conoce (con una tropa que no
+// tiene, rechaza la batalla). Su cuenta es `u-2`, la que le da el acceso tras `lanzador-1`, para que vea su batalla al conectarse.
+
+/// El ejecutable de Conquest, o `None` (y la prueba se salta).
+fn conquest() -> Option<String> {
+    let ruta = std::env::var("CONQUEST_BATALLA").ok().filter(|r| !r.is_empty());
+    if ruta.is_none() {
+        eprintln!("CONQUEST_BATALLA no está: se salta la prueba con Conquest");
+    }
+    ruta
+}
+
+/// Un registro de Unity junto al ejecutable, para mirar qué pasó dentro.
+fn registro(exe: &str, nombre: &str) -> String {
+    std::path::Path::new(exe).with_file_name(format!("{nombre}.log")).to_string_lossy().into_owned()
+}
+
+fn config_conquest(m: &Motor, exe: &str, espera_s: u32, nombre: &str) -> Config {
+    let mut c = config(m, "lanzador-1");
+    c.proceso = exe.into();
+    c.argumentos = ["-batchmode", "-nographics", "-espera", &espera_s.to_string(), "-duracion", "120", "-logFile", &registro(exe, nombre)].map(String::from).to_vec();
+    c.espera_proceso = Duration::from_secs(120);
+    c
+}
+
+/// Lo que el núcleo aplicó: la batalla cerrada con el resultado de Conquest, y cuántos soldados le quedan a ana.
+fn aplicada(n: &Nucleo, id: u64, ana: u64, suyas: &[u64]) -> i64 {
+    let b = n.batalla(id).expect("retenida tras cerrarse");
+    assert_eq!(b.estado, EstadoBatalla::Aplicada, "{b:?}");
+    let a = b.asignacion.as_ref().unwrap();
+    assert!(a.intento.starts_with("lz-") && a.servidor == "u-1", "{a:?}");
+    suyas.iter().map(|e| n.heroe(ana).unwrap().heroe.escuadra(*e).map_or(0, |e| e.cantidad)).sum()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn con_conquest_sin_jugadores_la_ia_juega_la_batalla_y_el_resultado_se_aplica() {
+    let Some(exe) = conquest() else { return };
+    let (n, id, ana, suyas) = nucleo_con_batalla_de("u-2", [Tropa::MiliciaLanceros, Tropa::Arqueros]);
+    let antes: i64 = suyas.iter().map(|e| n.heroe(ana).unwrap().heroe.escuadra(*e).unwrap().cantidad).sum();
+    let m = motor(n).await;
+    let (mut rx, parar, h) = lanzar(config_conquest(&m, &exe, 2, "conquest-ia"));
+    let v = hasta_en(&mut rx, Duration::from_secs(180), |i| matches!(i, Informe::Terminada { .. })).await;
+    assert!(matches!(v.last(), Some(Informe::Terminada { con_resultado: true, .. })), "{v:#?}");
+    let aceptado = |mensaje: &str| v.iter().any(|i| matches!(i, Informe::Acuse { mensaje: x, resultado: Resultado::OrdenAceptada, .. } if x == mensaje));
+    assert!(aceptado("inicio") && aceptado("resultado"), "{v:#?}");
+    let _ = parar.send(());
+    h.await.unwrap();
+    let n = m.parar().await;
+    let despues = aplicada(&n, id, ana, &suyas);
+    eprintln!("ana: {antes} soldados antes, {despues} después");
+    assert!(despues < antes, "en Conquest se combate de verdad: algún soldado de ana cae");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn con_conquest_ana_entra_con_el_token_que_le_da_el_motor_y_lleva_a_su_heroe() {
+    let Some(exe) = conquest() else { return };
+    let (n, id, ana, suyas) = nucleo_con_batalla_de("u-2", [Tropa::MiliciaLanceros, Tropa::Arqueros]);
+    let m = motor(n).await;
+    let (mut rx, parar, h) = lanzar(config_conquest(&m, &exe, 60, "conquest-servidor"));
+
+    // Ana entra en el motor como jugadora y espera a que su batalla le traiga la asignación propia: la instancia y su token.
+    let sesion = m.acceso.entrar("ana", CLAVE).await.expect("login de ana");
+    let (mut cliente, _) = ClientePrueba::entrar(m.srv.direccion, hola(&sesion.token, TipoCliente::ClienteUnity)).await;
+    let (token, host, puerto) = tokio::time::timeout(Duration::from_secs(60), async {
+        loop {
+            let mensaje = cliente.esperar().await;
+            if let Some(a) = batallas(&mensaje).into_iter().find_map(|b| b.asignacion_propia.clone()) {
+                let i = a.instancia.expect("la instancia");
+                return (a.token, i.host, i.puerto);
+            }
+        }
+    })
+    .await
+    .expect("ana recibe su asignación");
+
+    // Su cliente de Conquest, con lo que le dio el motor.
+    let mut unity = tokio::process::Command::new(&exe)
+        .args(["-batchmode", "-nographics", "-red", "cliente", "-ip", &host, "-puerto", &puerto.to_string(), "-bot", "-token", &token, "-logFile", &registro(&exe, "conquest-cliente")])
+        .kill_on_drop(true)
+        .spawn()
+        .expect("arranca el cliente de Conquest");
+
+    let v = hasta_en(&mut rx, Duration::from_secs(240), |i| matches!(i, Informe::Terminada { .. })).await;
+    assert!(matches!(v.last(), Some(Informe::Terminada { con_resultado: true, .. })), "{v:#?}");
+    let _ = unity.kill().await;
+    cliente.cerrar().await;
+    let _ = parar.send(());
+    h.await.unwrap();
+    let n = m.parar().await;
+    aplicada(&n, id, ana, &suyas);
+    let servidor = std::fs::read_to_string(registro(&exe, "conquest-servidor")).unwrap_or_default();
+    assert!(servidor.contains(&format!("lleva a {}", ids::heroe(ana))), "el servidor de Conquest le dio a ana su héroe por el token");
+}
+
+/// Como `hasta`, con el plazo que se quiera: Unity tarda en arrancar y la batalla se juega de verdad.
+async fn hasta_en(rx: &mut mpsc::UnboundedReceiver<Informe>, plazo: Duration, fin: impl Fn(&Informe) -> bool) -> Vec<Informe> {
+    let limite = tokio::time::Instant::now() + plazo;
+    let mut v = Vec::new();
+    loop {
+        let i = tokio::time::timeout_at(limite, rx.recv()).await.unwrap_or_else(|_| panic!("sin el informe esperado; llegaron {v:#?}")).expect("el lanzador sigue");
+        let parar = fin(&i);
+        v.push(i);
+        if parar {
+            return v;
+        }
+    }
+}
+
+/// Las batallas que trae un mensaje del servidor, de cualquier ámbito.
+fn batallas(m: &contrato::v1::MensajeDeServidor) -> Vec<&contrato::v1::Batalla> {
+    use contrato::v1::{entidad::Cuerpo, mensaje_de_servidor::Cuerpo as Ms};
+    let entidades: Vec<&contrato::v1::Entidad> = match &m.cuerpo {
+        Some(Ms::Foto(f)) => f.entidades.iter().collect(),
+        Some(Ms::Delta(d)) => d.cambios.iter().filter_map(|c| c.datos.as_ref()).collect(),
+        _ => Vec::new(),
+    };
+    entidades.into_iter().filter_map(|e| if let Some(Cuerpo::Batalla(b)) = e.cuerpo.as_ref() { Some(b) } else { None }).collect()
 }
