@@ -374,6 +374,7 @@ Las **161 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `desarmar_caravana_fundacion` | `DesarmarCaravanaFundacion` | la cuenta del héroe | su titular (`fundacion.no_titular`), con la caravana suelta en su origen (`caravana.no_disponible`) (5G-b) |
 | `desconectarse` | `Desconectarse` | la cuenta del héroe | — |
 | `cerrar_sesion` | `CerrarSesion` | la cuenta del héroe | — (sin candado de batalla: combatiendo, sale al acabar la batalla) |
+| `elegir_formacion` | `ElegirFormacion` | la cuenta del héroe | una escuadra suya (`escuadra.ajena`); la familia del bloque `FORMACIONES` (`formacion.desconocida`) que permite la tecnología de su Facción (`formacion.sin_tecnologia`); sin héroe ni Facción, solo las que no piden tecnología (Heroe_Y_Tropa §10.4, 2026-11-11) |
 | `entrar_en_asentamiento` | `EntrarEnAsentamiento` | la cuenta del héroe | su columna a la puerta (`radioPuerta`); el acceso de la plaza (`acceso.cerrado`) |
 | `entrar_en_avanzada` | `EntrarEnAvanzada` | la cuenta del héroe | como `entrar_en_pueblo` |
 | `entrar_en_campamento` | `EntrarEnCampamento` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) si no va solo; su columna a la puerta (`radioPuerta`) |

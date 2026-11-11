@@ -57,6 +57,8 @@ pub struct Escuadra {
     pub reserva_batalla: Option<BatallaId>,
     /// Tropa prestada por un campamento de mercenarios: no es del héroe, no gana experiencia y se pierde al dejar de residir allí.
     pub prestada: Option<CampamentoId>,
+    /// La familia de formación elegida (posición en `FORMACIONES`; 0 = la de reposo, Heroe_Y_Tropa §10.4).
+    pub formacion: u8,
 }
 
 /// Nivel de una escuadra con esta experiencia acumulada: sube cada vez que llena lo que pide su nivel, hasta `nivelMaximoEscuadra`.
@@ -94,6 +96,7 @@ impl Escuadra {
             en_guarnicion: false,
             reserva_batalla: None,
             prestada: None,
+            formacion: crate::formaciones::REPOSO,
         }
     }
 
@@ -243,14 +246,14 @@ mod pruebas {
     }
 
     #[test]
-    fn el_poder_suma_un_uno_por_ciento_por_nivel() {
+    fn el_poder_suma_un_tres_por_ciento_por_nivel() {
         let r = r();
         let mut e = escuadra(Tropa::MiliciaLanceros); // 2 × 25 = 50
-        assert_eq!(e.poder(&r), 50_500, "el nivel 1 ya cuenta +1 %");
+        assert_eq!(e.poder(&r), 51_500, "el nivel 1 ya cuenta +3 %");
         e.nivel = 10;
-        assert_eq!(e.poder(&r), 55_000);
+        assert_eq!(e.poder(&r), 65_000);
         let compuesto = escuadra(Tropa::ArquerosCompuesto); // 15 × 12 = 180
-        assert_eq!(compuesto.poder(&r), 181_800);
+        assert_eq!(compuesto.poder(&r), 185_400);
         let mut vacia = escuadra(Tropa::Hequetai);
         vacia.cantidad = 0;
         assert_eq!(vacia.poder(&r), 0);

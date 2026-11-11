@@ -319,7 +319,10 @@ pub fn entidad_contrato(mercenario: u64) -> u64 {
 /// BAN61: BAN60 con lo del 2026-11-10: el cierre del reclutamiento a los ciudadanos de cada plaza (`Asentamiento::reclutamiento_cerrado_a_ciudadanos`, detrás de
 /// `almacen_cerrado_a_ciudadanos`), los bienes de consumo pausados de cada plaza (`codec_economia`) y el nombre de cada plaza en las fichas de la memoria (`memoria`). BAN60 y anteriores
 /// ya no se admiten.
-const MAGIA: &[u8; 5] = b"BAN61";
+///
+/// BAN62: BAN61 con la formación de cada escuadra (2026-11-11, Heroe_Y_Tropa §10.4): `Escuadra::formacion` al final de cada escuadra (`codec_militar`) y, en
+/// el ticket de cada batalla, la formación elegida y las familias permitidas de cada escuadra (`codec_batallas`). BAN61 y anteriores ya no se admiten.
+const MAGIA: &[u8; 5] = b"BAN62";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -1469,10 +1472,10 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN61`). Solo se lee el formato vigente: una foto de un formato anterior no se migra (la partida es nueva).
+        // La cabecera es de 5 bytes (`BAN62`). Solo se lee el formato vigente: una foto de un formato anterior no se migra (la partida es nueva).
         let (magia, formato) = (r.magia()?, r.u8()?);
         if magia != MAGIA[..4] || formato != MAGIA[4] {
-            return Err(ErrorFormato(if magia.starts_with(b"BAN") { "foto de un formato que no es el vigente (BAN61): ya no se admite" } else { "no es un estado del núcleo" }));
+            return Err(ErrorFormato(if magia.starts_with(b"BAN") { "foto de un formato que no es el vigente (BAN62): ya no se admite" } else { "no es un estado del núcleo" }));
         }
         if r.texto()? != mundo_hash {
             return Err(ErrorFormato("la foto es de otro mundo (hash del artefacto distinto)"));

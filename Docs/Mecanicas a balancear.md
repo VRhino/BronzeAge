@@ -29,7 +29,6 @@ referencias antiguas (§34, §39…) sigan valiendo.
 | 35b | MILITAR | Gran Fundición: `CHATARRA.fraccion`, producción, coste y trabajadores | batch; alcanzarla pide batches de más semanas (P3, **Fase 7**) |
 | 36 | HÉROE | Ritmo, prudencias y margen de los bots; cerebro «sin plaza» | **Fase 7** (bots en Rust) |
 | 36b | MILITAR | Convocatoria del asedio y formación de ejércitos en campo (`BATALLA.convocatoriaSegundos`, `FORMACION_EJERCITO`) | playtest |
-| 39 | MILITAR | Escala de XP de escuadra: Unity vs. números | espera a CQ-001 (Conquest) |
 | 40 | MUNDO | Cifras de `MERCENARIOS` (placeholder) | **Fase 7** (C6) |
 | 42 | TECNOLOGÍA | Cifras de `AEDAS` (retraso, itinerantes, estancia, precio de venta, residentes, épicas) | **Fase 7** (Q3, T1) |
 | 18 | INTEL | Cifras de `INTEL` (Mirada, Informe, cupos, coste de la Taberna) | batch / playtest |
@@ -71,12 +70,6 @@ en los del TypeScript, como lista para los nuevos:
   defensa inspeccionada antes de una campaña.
 
 Plan: `Docs/Arquitectura/12_NPC_Fuera_Del_Motor.md`.
-
-## 39. Escala de la experiencia de escuadra de Unity
-
-La curva de nivel de escuadra (Doc 5.16.3, `MILITAR.experienciaParaSubirEscuadra`) está calibrada para el combate con
-números, que da 1 de experiencia por victoria. La que trae una batalla de Unity (`xpGanada` por escuadra) entra en la
-misma curva: cuando Conquest publique su escala (CQ-001), comprobar que encaja o convertirla al entrar.
 
 ## 40. Campamentos de mercenarios: cifras
 

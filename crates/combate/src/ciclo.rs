@@ -89,12 +89,27 @@ pub struct EscuadraEnBatalla {
     pub experiencia: Mil,
     /// 0 a 100, en milésimas.
     pub moral: Mil,
+    /// La familia de formación elegida (posición en `FORMACIONES`; 0 = la de reposo), ya comprobada contra `formaciones` (Heroe_Y_Tropa §10.4).
+    pub formacion: u8,
+    /// Las familias que permitía la tecnología de la Facción del dueño al abrir, como máscara de bits por su posición en `FORMACIONES` (el bit 0, la
+    /// de reposo, siempre).
+    pub formaciones: u32,
 }
 
 impl EscuadraEnBatalla {
-    /// Una escuadra que no es de nadie (carreteros, bandidos): nivel 1, sin experiencia y con la moral al máximo; no persiste entre batallas.
+    /// Una escuadra que no es de nadie (carreteros, bandidos): nivel 1, sin experiencia, con la moral al máximo y en reposo; no persiste entre
+    /// batallas. Las familias que puede usar las pone el núcleo (`con_formaciones`).
     pub fn sin_dueno(id: EscuadraId, tropa: Tropa, efectivos: i64) -> Self {
-        Self { id, tropa, dueno: None, efectivos, nivel: 1, experiencia: 0, moral: MORAL_MAXIMA }
+        Self { id, tropa, dueno: None, efectivos, nivel: 1, experiencia: 0, moral: MORAL_MAXIMA, formacion: 0, formaciones: 1 }
+    }
+
+    /// La misma con las familias que se le permiten (máscara; la de reposo se añade siempre); la elegida que no esté entre ellas pasa a la de reposo.
+    pub fn con_formaciones(mut self, formaciones: u32) -> Self {
+        self.formaciones = formaciones | 1;
+        if self.formacion >= 32 || self.formaciones & (1 << self.formacion) == 0 {
+            self.formacion = 0;
+        }
+        self
     }
 }
 

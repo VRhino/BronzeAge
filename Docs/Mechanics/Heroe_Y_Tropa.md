@@ -50,6 +50,7 @@ se **recluta** en una plaza (la cadena de condiciones y el coste), cómo se cons
 > | 54-55 | `GuardarLoadout { heroe, loadout, nombre, escuadras, perks, activo }`, `BorrarLoadout` | `loadout.{sin_nombre, desconocido, perk_no_desbloqueado}`, `escuadra.{repetida, ajena}`, `liderazgo.superado` |
 > | 56 | `RepartirPuntos { heroe, fuerza, destreza, armadura, vitalidad }` | `heroe.{puntos_negativos, ningun_punto, puntos_insuficientes, tope_de_atributo}` |
 > | 57 | `OrdenarEscuadras { heroe, escuadras }` | `escuadra.{repetida, ajena}`; sin cambios si el orden ya es ese |
+> | 221 | `ElegirFormacion { heroe, escuadra, formacion }` (2026-11-11, §10.4) | `escuadra.ajena`, `formacion.{desconocida, sin_tecnologia}`; sin cambios si ya es esa |
 > | 58-59 | `AsignarGuarnicion`, `RetirarGuarnicion { heroe, escuadra }` | `guarnicion.{sin_residencia, no_en_campamento, ya_asignada, supera_el_cupo, no_asignada}`, `escuadra.{ajena, en_batalla}` |
 > | 60 | `PasarAViveres { heroe, cantidad }` | `heroe.sin_columna`, `cantidad.no_positiva`; sin cambios si no cabe o no hay trigo |
 > | 61-62 | `AsignarEscolta { caravana, heroe, escuadras }`, `QuitarEscolta { …, escuadras: Option }` | `caravana.{desconocida, escolta_invalida, cupo_de_escolta, no_disponible}` |
@@ -110,7 +111,8 @@ Uno por jugador y partida. Es el **dueño** de todo lo que antes se atribuía al
 | `cantidad` | Soldados. **Persiste a 0** (aniquilada) y se repone reclutando; nunca desaparece. |
 | `nivel`, `experiencia` | Nivel (1‥`nivelMaximoEscuadra`) y XP **acumulada** (§10.2). |
 | `moral` | 0–100. A 0 hay deserción continua (Movimiento §6.3). |
-| `habilidadesDesbloqueadas`, `formacionesDesbloqueadas`, `formacionSeleccionada` | Progresión táctica de Conquest; el servidor la guarda y la sirve, no la interpreta. Nacen `[]`, `[]`, `0`. |
+| `formacion` | La familia de formación que el héroe ha elegido para la escuadra (§10.4); nace en la de reposo. *Rust, 2026-11-11.* |
+| `habilidadesDesbloqueadas`, `formacionesDesbloqueadas`, `formacionSeleccionada` | Campos del contrato **sin uso**: viajan vacíos. Las habilidades las saca Unity del nivel de la escuadra (§10.2) y la formación va en `formacion` (§10.4). |
 | `contenedor` | `campamento` (en la plaza donde reside su héroe, o en ninguna si es huérfano) · `ejercito {ejercitoId}` · `escolta {caravanaId}` · `fuera` (con su héroe desconectado) · `plaza {asentamientoId}` (en la guarnición de una plaza de su Facción donde su héroe no reside, §7; Rust, 2026-11-04). |
 | `enGuarnicion` | En la guarnición de la plaza donde reside su héroe (§7). Solo con `contenedor: campamento`. |
 | `reservaBatalla?` | Candado `{battleId}` mientras está reservada para una batalla de Unity. |
@@ -271,7 +273,7 @@ conExperiencia(e, ganada) = e                                  si e.prestada
 poderEscuadron(e) = tropa.poderBase × e.cantidad × (1 + e.nivel × MILITAR.bonusPoderPorNivelEscuadra)
 ```
 
-Con la curva de hoy, 275 de XP llevan al nivel 10. El nivel da **+1 % por nivel al mismo escuadrón** (el nivel 1 ya cuenta) sin cambiar nunca su `tropaId`: «mejorar» una tropa es reclutar **otra** distinta y mejor cuando el edificio suba de nivel interno.
+Con la curva de hoy, 275 de XP llevan al nivel 10. El nivel da **+3 % por nivel al mismo escuadrón** en el combate con números (el nivel 1 ya cuenta; +1 % hasta el 2026-11-11, decisión del autor para acercarse a Unity) sin cambiar nunca su `tropaId`: «mejorar» una tropa es reclutar **otra** distinta y mejor cuando el edificio suba de nivel interno.
 
 ### 10.3 Chatarra de los caídos (`chatarra.ts`)
 
@@ -285,6 +287,18 @@ para cada (equipo, piezas) de tropa.costoEquipo:
 ```
 
 Sin equipo de metal (madera, cuero) no deja nada. `chatarraDeMuertos(tropaId, n)` = lo anterior × n (0 si n ≤ 0); `chatarraDeBajas(antes, despues)` suma los caídos de cada escuadra (cruzadas por `id`: `antes.cantidad − despues.cantidad`; una escuadra que no aparece en `despues` no pierde nada); `sumarChatarra` suma recursos. Quién la recoge y qué hace la Gran Fundición con ella: Combate y Economía.
+
+### 10.4 Formación de la escuadra (Rust, 2026-11-11)
+
+Decisión del autor del 2026-11-11. **Cómo es cada formación lo decide Conquest** (su forma, lo apretada que va, dónde va cada soldado y qué formaciones tiene cada tropa): el motor solo sabe **qué familias de formación permite la tecnología de la Facción** y **cuál ha elegido el héroe** para cada escuadra.
+
+- **Formación de reposo** (`reposo`, «En reposo»): la que adopta toda tropa al seguir a su héroe o al pararse. Es **de la tropa** (unos granjeros se colocan dispersos y desordenados; unos hoplitas, juntos y en orden) y está **siempre disponible**. Es la primera del bloque `FORMACIONES` y con la que nace toda escuadra.
+- **Desde el principio**, sin tecnología: línea, columna y dispersa.
+- **Con Disciplina de formación** (`disciplina_formacion`, Tecnologia_Aedas): las cerradas, muro de escudos, testudo, cuadro y cuña.
+
+**Elegir la formación** (`elegirFormacion { escuadra, formacion }`, orden `elegir_formacion`; `ElegirFormacion` en el núcleo): la cuenta del héroe, esté donde esté, salvo mientras combate (`batalla.bloqueado`, el candado de Batalla_Unity_Ciclo §5: el ticket ya congeló la suya). Rechaza: una escuadra que no es suya (`escuadra.ajena`), una familia que no existe (`formacion.desconocida`) y una que la tecnología de su Facción no permite (`formacion.sin_tecnologia`; un héroe sin Facción solo tiene las que no piden tecnología). La misma que ya tiene: `sin_cambios`. No emite hechos (como `ordenarEscuadras`); la escuadra viaja con su `formacion` en `HEROE`.
+
+**En el ticket** (`SquadSnapshot.formacion` y `formaciones_permitidas`, Batalla_Unity_Ciclo §4): se congelan al abrir la batalla las familias que permite **en ese instante** la Facción del dueño (la de reposo, la primera; una escuadra sin dueño, las que no piden tecnología) y la elegida, o la de reposo si la elegida ya no está permitida. Unity la usa si esa tropa la tiene y, si no, la de reposo; qué familias tiene cada tropa es suyo.
 
 ## 11. Reclutar tropa en una plaza (`reclutarTropa`)
 
@@ -834,6 +848,25 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
 ]
 ```
 <!-- /parametros -->
+
+<!-- parametros:FORMACIONES -->
+```json
+{
+  "familias": [
+    { "id": "reposo", "nombre": "En reposo", "tecnologia": null },
+    { "id": "linea", "nombre": "Línea", "tecnologia": null },
+    { "id": "columna", "nombre": "Columna", "tecnologia": null },
+    { "id": "dispersa", "nombre": "Dispersa", "tecnologia": null },
+    { "id": "muro_escudos", "nombre": "Muro de escudos", "tecnologia": "disciplina_formacion" },
+    { "id": "testudo", "nombre": "Testudo", "tecnologia": "disciplina_formacion" },
+    { "id": "cuadro", "nombre": "Cuadro", "tecnologia": "disciplina_formacion" },
+    { "id": "cuna", "nombre": "Cuña", "tecnologia": "disciplina_formacion" }
+  ]
+}
+```
+<!-- /parametros -->
+
+`FORMACIONES` (§10.4): las familias de formación de una escuadra, **en orden fijo** (el estado guarda la posición: solo se añaden al final); la primera es la de reposo y no pide tecnología.
 
 ## 13. Invariantes
 

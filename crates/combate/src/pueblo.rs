@@ -92,7 +92,7 @@ mod pruebas {
         let r = r();
         let g = guarnicion_de_serie(r, 5, false, 0);
         assert_eq!((g.tropa, g.cantidad, g.heroe, g.prestada, g.plaza_origen), (Tropa::Mineros, 30, SIN_DUENO, None, None));
-        assert_eq!(g.poder(&r.militar), 30_300, "30 mineros de poder 1, con el +1 % del nivel 1");
+        assert_eq!(g.poder(&r.militar), 30_900, "30 mineros de poder 1, con el +3 % del nivel 1");
     }
 
     #[test]
@@ -162,7 +162,7 @@ mod pruebas {
         rng.siguiente();
         let jd = crate::resolucion::tirada(r, &mut rng);
         let u = UNO as i128;
-        assert_eq!(inf.defensor.poder, (30_300i128 * jd as i128 * 1_250_000 * 1_050_000 / (u * u * u)) as Mil);
+        assert_eq!(inf.defensor.poder, (30_900i128 * jd as i128 * 1_250_000 * 1_050_000 / (u * u * u)) as Mil);
     }
 
     #[test]

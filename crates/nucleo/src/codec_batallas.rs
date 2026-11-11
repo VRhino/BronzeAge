@@ -15,7 +15,8 @@
 //!   1 fuerte, 2 ciudadela), punto`.
 //! - Bando: `facción opt_u64 · capacidad u64 · participantes{n u64 · n × participante} · sin_héroe{n u64 · n × escuadra}`.
 //! - Participante: `héroe u64 · facción opt_u64 · controlador u8 (el de `codec_militar`) · casillas_libres u32 · escuadras{n u64 · n × escuadra}`.
-//!   Escuadra de batalla: `id u64 · tropa u8 · dueño opt_u64 · efectivos i64 · nivel u8 · experiencia i64 · moral i64` (los tres últimos, del instante de abrir).
+//!   Escuadra de batalla: `id u64 · tropa u8 · dueño opt_u64 · efectivos i64 · nivel u8 · experiencia i64 · moral i64` (los tres últimos, del instante de abrir)
+//!   `· formación u8 · formaciones u32` (BAN62: la elegida y la máscara de las familias permitidas al abrir, por posición en `FORMACIONES`).
 //! - Bloqueo: `ejércitos{n u64 · n × u64} · caravanas{n u64 · n × u64} · asentamiento opt_u64 · campamento opt_u64 · pueblo opt_u64 · avanzada opt_u64`.
 //! - Asignación: `intento texto · servidor texto · revisión u32 · instancia{host texto, puerto u16, protocolo texto} · tokens{n u64 · n × (héroe u64, token texto,
 //!   expira_en i64)}`.
@@ -186,7 +187,7 @@ fn contexto_leer(r: &mut Lector) -> Result<Contexto, ErrorFormato> {
 }
 
 fn escuadra_escribir(w: &mut Escritor, e: &EscuadraEnBatalla) {
-    let EscuadraEnBatalla { id, tropa, dueno, efectivos, nivel, experiencia, moral } = e;
+    let EscuadraEnBatalla { id, tropa, dueno, efectivos, nivel, experiencia, moral, formacion, formaciones } = e;
     w.u64(*id);
     w.u8(tropa_a_u8(*tropa));
     w.opt_u64(*dueno);
@@ -194,10 +195,12 @@ fn escuadra_escribir(w: &mut Escritor, e: &EscuadraEnBatalla) {
     w.u8(*nivel);
     w.i64(*experiencia);
     w.i64(*moral);
+    w.u8(*formacion);
+    w.u32(*formaciones);
 }
 
 fn escuadra_leer(r: &mut Lector) -> Result<EscuadraEnBatalla, ErrorFormato> {
-    Ok(EscuadraEnBatalla { id: r.u64()?, tropa: tropa_de_u8(r.u8()?)?, dueno: r.opt_u64()?, efectivos: r.i64()?, nivel: r.u8()?, experiencia: r.i64()?, moral: r.i64()? })
+    Ok(EscuadraEnBatalla { id: r.u64()?, tropa: tropa_de_u8(r.u8()?)?, dueno: r.opt_u64()?, efectivos: r.i64()?, nivel: r.u8()?, experiencia: r.i64()?, moral: r.i64()?, formacion: r.u8()?, formaciones: r.u32()? })
 }
 
 fn participante_escribir(w: &mut Escritor, p: &Participante) {

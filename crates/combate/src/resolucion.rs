@@ -251,20 +251,20 @@ mod pruebas {
         let r = r();
         assert_eq!(poder_de_bando(&r, &[], 1), 15_000, "un héroe solo vale 15 (Doc 5.1)");
         let milicia = escuadra(1, 1, Tropa::MiliciaLanceros);
-        assert_eq!(poder_de_bando(&r, std::slice::from_ref(&milicia), 0), 50_500, "milicia completa: 25 × 2 con el +1 % del nivel 1");
-        assert_eq!(poder_de_bando(&r, std::slice::from_ref(&milicia), 1), 65_500, "el héroe suma además de sus escuadras");
+        assert_eq!(poder_de_bando(&r, std::slice::from_ref(&milicia), 0), 51_500, "milicia completa: 25 × 2 con el +3 % del nivel 1");
+        assert_eq!(poder_de_bando(&r, std::slice::from_ref(&milicia), 1), 66_500, "el héroe suma además de sus escuadras");
         let compuesto = escuadra(2, 1, Tropa::ArquerosCompuesto);
-        assert_eq!(poder_total(&r, std::slice::from_ref(&compuesto), false), 181_800);
+        assert_eq!(poder_total(&r, std::slice::from_ref(&compuesto), false), 185_400);
     }
 
     #[test]
     fn la_cohesion_solo_cuenta_con_mas_de_una_escuadra_con_soldados() {
         let r = r();
         let (a, b, c) = (escuadra(1, 1, Tropa::MiliciaLanceros), escuadra(2, 1, Tropa::MiliciaLanceros), con_cantidad(escuadra(3, 1, Tropa::MiliciaLanceros), 0));
-        assert_eq!(poder_total(&r, &[a.clone()], true), 50_500);
-        assert_eq!(poder_total(&r, &[a.clone(), b.clone()], true), 111_100, "101 000 × 1,1");
-        assert_eq!(poder_total(&r, &[a.clone(), b.clone(), c.clone()], true), 111_100, "la aniquilada no cuenta ni suma cohesión");
-        assert_eq!(poder_total(&r, &[a, b], false), 101_000);
+        assert_eq!(poder_total(&r, &[a.clone()], true), 51_500);
+        assert_eq!(poder_total(&r, &[a.clone(), b.clone()], true), 113_300, "103 000 × 1,1");
+        assert_eq!(poder_total(&r, &[a.clone(), b.clone(), c.clone()], true), 113_300, "la aniquilada no cuenta ni suma cohesión");
+        assert_eq!(poder_total(&r, &[a, b], false), 103_000);
     }
 
     #[test]
@@ -290,8 +290,8 @@ mod pruebas {
         let jd = tirada(&r, &mut espejo);
         let inf = resolver_combate(&r, Bando { escuadras: &mut a, heroes: &[] }, Bando { escuadras: &mut d, heroes: &[] }, UNO, &mut rng).unwrap();
         assert_eq!(rng.estado(), espejo.estado());
-        assert_eq!(inf.atacante.poder, (50_500i128 * ja as i128 / UNO as i128) as Mil);
-        assert_eq!(inf.defensor.poder, (50_500i128 * jd as i128 * 1_050_000 / (UNO as i128 * UNO as i128)) as Mil);
+        assert_eq!(inf.atacante.poder, (51_500i128 * ja as i128 / UNO as i128) as Mil);
+        assert_eq!(inf.defensor.poder, (51_500i128 * jd as i128 * 1_050_000 / (UNO as i128 * UNO as i128)) as Mil);
     }
 
     #[test]

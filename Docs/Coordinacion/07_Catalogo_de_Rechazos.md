@@ -366,6 +366,8 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `escuadra.ajena` | `ESCUADRA_AJENA` | — |
 | `escuadra.fuera_de_tu_columna` | `ESCUADRA_FUERA_DE_TU_COLUMNA` | De visita en una plaza de tu Facción (2026-11-04): la escuadra que dejas en su guarnición o cedes de escolta tiene que ir en la columna con la que entraste. |
 | `escuadra.en_batalla` | `ESCUADRA_EN_BATALLA` | — |
+| `formacion.desconocida` | `FORMACION_DESCONOCIDA` | `elegirFormacion`: no hay ninguna familia de formación con ese id en `FORMACIONES` (Heroe_Y_Tropa §10.4). |
+| `formacion.sin_tecnologia` | `FORMACION_SIN_TECNOLOGIA` | `elegirFormacion`: la tecnología de la Facción del héroe no permite esa familia de formación (las cerradas piden Disciplina de formación). |
 | `liderazgo.superado` | `LIDERAZGO_SUPERADO` | — |
 | `guarnicion.sin_residencia` | `GUARNICION_SIN_RESIDENCIA` | — |
 | `guarnicion.no_en_campamento` | `GUARNICION_NO_EN_CAMPAMENTO` | — |

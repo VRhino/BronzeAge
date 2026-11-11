@@ -119,9 +119,14 @@ message SquadSnapshot {
   uint32 nivel = 5;
   sint64 experiencia = 6;
   sint64 moral = 7;
-  repeated string habilidades_desbloqueadas = 8;
-  repeated uint32 formaciones_desbloqueadas = 9;
-  uint32 formacion_seleccionada = 10;
+  repeated string habilidades_desbloqueadas = 8;   // sin uso: vacío (Unity saca las habilidades del nivel)
+  repeated uint32 formaciones_desbloqueadas = 9;   // sin uso: vacío (ver `formaciones_permitidas`)
+  uint32 formacion_seleccionada = 10;              // sin uso: 0 (ver `formacion`)
+  // 2026-11-11 (Heroe_Y_Tropa §10.4): la familia de formación elegida, por su id de `FORMACIONES` (`reposo` si no se eligió otra o ya no se permite),
+  // y las familias que permitía la tecnología de la Facción del dueño al abrir, en el orden del bloque (`reposo`, la primera). Unity usa la elegida si
+  // esa tropa la tiene y, si no, la de reposo.
+  string formacion = 11;
+  repeated string formaciones_permitidas = 12;
 }
 
 message BattleParticipantSnapshot {

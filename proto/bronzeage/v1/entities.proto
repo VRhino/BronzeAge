@@ -866,13 +866,16 @@ message Escuadron {
   uint32 nivel = 8;
   sint64 experiencia = 9;
   Ritmo moral = 10;                      // 0..100
-  repeated string habilidades_desbloqueadas = 11;
-  repeated uint32 formaciones_desbloqueadas = 12;
-  uint32 formacion_seleccionada = 13;
+  repeated string habilidades_desbloqueadas = 11;  // sin uso: vacío (Unity saca las habilidades del nivel)
+  repeated uint32 formaciones_desbloqueadas = 12;  // sin uso: vacío (ver `formacion`)
+  uint32 formacion_seleccionada = 13;              // sin uso: 0 (ver `formacion`)
   ContenedorEscuadron contenedor = 14;
   bool en_guarnicion = 15;
   optional ReservaBatalla reserva_batalla = 16;
   optional string prestada_por_campamento_id = 17;
+  // 2026-11-11: la familia de formación elegida, por su id de `FORMACIONES` (Heroe_Y_Tropa §10.4); nace en `reposo`. Las que permite la tecnología de
+  // la Facción se derivan de `TecnologiasFaccion` y del bloque.
+  string formacion = 18;
 }
 
 // ───────────────────────────── Columnas y caravanas ─────────────────────────────

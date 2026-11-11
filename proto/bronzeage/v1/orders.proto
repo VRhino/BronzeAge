@@ -638,6 +638,12 @@ message OrdenOrdenarEscuadras {
   repeated string escuadron_ids = 1;
 }
 
+// 2026-11-11 (Heroe_Y_Tropa §10.4): la familia de formación de una escuadra propia, por su id de `FORMACIONES`.
+message OrdenElegirFormacion {
+  string escuadron_id = 1;
+  string formacion = 2;
+}
+
 message OrdenOrganizarEjercito {
   string heroe_id = 1;
   string politica_de_union = 2;  // aceptar | preguntar
@@ -1380,5 +1386,6 @@ message Orden {
     OrdenCerrarReclutamientoACiudadanos cerrar_reclutamiento_a_ciudadanos = 188;
     OrdenPausarConsumo pausar_consumo = 189;
     OrdenComprarRumor comprar_rumor = 190;
+    OrdenElegirFormacion elegir_formacion = 191;
   }
 }

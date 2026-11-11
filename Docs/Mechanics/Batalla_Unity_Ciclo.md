@@ -76,7 +76,8 @@ BattleParticipantSnapshot { heroeId, faccionId: id|null, controlador: 'humano'|'
 HeroSnapshot        { displayName, classDefinitionId, nivel, genero, avatar, perksDesbloqueados, equipamiento,
                       atributosEfectivos, casillasInventarioLibres }
 SquadSnapshot       { squadId, heroeId: id|null, tropaId, efectivosAutorizados, nivel, experiencia, moral,
-                      habilidadesDesbloqueadas, formacionesDesbloqueadas, formacionSeleccionada }
+                      habilidadesDesbloqueadas, formacionesDesbloqueadas, formacionSeleccionada,   (sin uso desde el 2026-11-11)
+                      formacion, formacionesPermitidas }                                             (Rust, 2026-11-11)
 mapa                { tipo:'mapa', mapaId, centro }  |  SettlementBattleSnapshot (solo asedio, §3.3)
 reglas              { duracionMaximaSegundos, versionBalance, versionCatalogoTropas, versionCatalogoHeroe, versionCatalogoObjetos }
 IncorporacionBatalla { schemaVersion, battleId, secuencia (1, 2, 3…), lado, participante }
@@ -91,9 +92,10 @@ Botin               { objetos[{itemDefinitionId,cantidad,itemInstanceId?,estadis
 ```
 
 - **`faccionId` de un bando** es `null` cuando el bando no es de nadie: los bandidos y **una columna sin bandera** (un recién llegado sin Facción, cuya columna lleva la Facción vacía `''`: se traduce a `null`, `bandoDeColumna`). El esquema rechaza la cadena vacía.
-- **`SquadSnapshot` de lo que no es de nadie** (bandidos, carreteros): `heroeId: null`, nivel 1, experiencia 0, moral 100, formación 0 (`tropaSinDueno`); no persisten entre batallas.
+- **`SquadSnapshot` de lo que no es de nadie** (bandidos, carreteros): `heroeId: null`, nivel 1, experiencia 0, moral 100, formación 0 (`tropaSinDueno`); no persisten entre batallas. En Rust (2026-11-11), en la de reposo y con las formaciones que no piden tecnología.
 - **`HeroSnapshot.atributosEfectivos` = `atributosBase`** (`ponytail:`): hasta que Conquest publique el catálogo de objetos (CQ-004) el equipo no suma. `casillasInventarioLibres = BATALLA.casillasInventario − ocupadas` (cuánto botín cabe).
 - **`efectivosAutorizados`** = la **cantidad** de la escuadra al abrir: la fuerza **reservada**. El resultado cierra sobre esto, no sobre lo `desplegado`.
+> **Implementado en Rust (2026-11-11): la progresión de la escuadra en Unity** (decisiones del autor del 2026-11-11). **Una sola curva, la del motor.** El nivel de una escuadra va de 1 a `MILITAR.nivelMaximoEscuadra` (10) y lo calcula siempre el motor desde su experiencia **acumulada** con `MILITAR.experienciaParaSubirEscuadra` (lo que pide cada nivel: 5, 10, 20, 40 y 40 hasta el 10, 275 en total; [`Combate.md`](Combate.md) §3.3, publicado en `GET /v1/datos`). `SquadSnapshot.nivel` es ese nivel y `experiencia`, la acumulada en puntos. `ResultadoEscuadra.xpGanada` va **en la misma escala** (puntos que se suman a la acumulada; la tropa prestada no gana) y el servidor de batalla **no sube niveles**: usa el del ticket. **Lo que da el nivel dentro de la batalla es de Unity** (vida, daño, defensa y velocidad, en sus datos, sobre los 10 niveles del motor, con el 10 como su techo, ×2), y **las habilidades también**: Unity las saca del nivel con su tabla de cada tropa y el motor no las guarda (`habilidadesDesbloqueadas` viaja vacío). **La formación** va en `formacion` (la elegida, o la de reposo si ya no se permite) y `formacionesPermitidas` (las familias que permite la tecnología de la Facción del dueño al abrir, la de reposo la primera): [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §10.4. **La moral** viaja, pero Unity la ignora por ahora. **Reponer** no toca nivel ni experiencia ([`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §14). Con números, el nivel pesa +3 % de poder por nivel.
 - Los catálogos: `versionCatalogoTropas` es `VERSION_CATALOGO_TROPAS` (`contratos/v1/catalogoTropas.ts`, que se sube a mano al cambiar cualquier tropa; un test impide regenerar el JSON sin subirla); `versionBalance` = `BALANCE_VERSION`; `versionCatalogoHeroe`/`Objetos` son cadenas fijas de `BATALLA` hasta que Conquest las publique.
 
 ### 3.3 `SettlementBattleSnapshot` (el mapa de un asedio)

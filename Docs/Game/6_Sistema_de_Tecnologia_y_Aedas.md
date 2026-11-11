@@ -146,7 +146,7 @@ extractores): hoy solo `canteria`, que se pensó para la piedra del nivel 3 (Doc
 | `bronce_calidad_militar` | Arma de Bronce de Calidad y Armadura de Bronce (Armería 3); Shardana | X piezas de equipo de bronce fabricadas (Dendra) | Armería 3 |
 | `forja_hierro_temprana` | Mina de hierro, Lingote de Hierro (Fundición 2), Arma de Hierro (Armería 2); guerreros filisteos | X caravanas destruidas o capturadas (colapso del estaño) | Fundición 2 + yacimiento de hierro en su territorio |
 | `panoplia_bronce` | lanceros pesados micénicos, Hequetai | X escuadrones reclutados (Vaso de los Guerreros) | `bronce_calidad_militar` + Barracón 3 |
-| `disciplina_formacion` | formaciones cerradas (táctico, en la batalla) | X asedios resistidos en combate (Batalla del Delta); no cuentan los rebotes por protección ni las plazas sin defensores | Barracón 2 |
+| `disciplina_formacion` | formaciones cerradas (táctico, en la batalla): muro de escudos, testudo, cuadro y cuña (desde el 2026-11-11, Doc 5.3) | X asedios resistidos en combate (Batalla del Delta); no cuentan los rebotes por protección ni las plazas sin defensores | Barracón 2 |
 | `arco_compuesto` | arqueros con arco compuesto | X arqueros reclutados | Carpintería 2 + Galería 3 |
 | `equitacion_militar` | jinetes asirios | X soldados de caballería reclutados, **cada soldado de carro de guerra vale por 5 de jinete** (Assurnasirpal) | Caballerizas activas |
 | `carpinteria_militar` | escalas y defensas de campaña (equipo) | primera conquista de una plaza con muralla completa (Dapur) | Carpintería 2 |

@@ -228,6 +228,8 @@ pub struct Reglas {
     pub logistica: ReglasLogistica,
     pub movimiento: ReglasMovimiento,
     pub formacion: ReglasFormacion,
+    /// Las familias de formación de una escuadra en una batalla de Unity (`FORMACIONES`, Heroe_Y_Tropa §10.4).
+    pub formaciones: crate::formaciones::ReglasFormaciones,
     pub vision: ReglasVision,
     pub militar: ReglasMilitar,
     pub presencia: ReglasPresencia,
@@ -246,6 +248,7 @@ impl Reglas {
         let enteros = |v: Vec<f64>| v.into_iter().map(|x| x as i64).collect::<Vec<_>>();
         Reglas {
             tropas: Catalogo::de(&bloque(HEROE_Y_TROPA, "TROPAS_RECLUTABLES")),
+            formaciones: crate::formaciones::ReglasFormaciones::de(&bloque(HEROE_Y_TROPA, "FORMACIONES")),
             liderazgo: ReglasLiderazgo { base: entero(&l, "base"), coste_por_escalon: por_escalon(&l["costePorEscalon"]).map(|x| x as i64) },
             heroe: ReglasHeroe { monedas_iniciales: entero(&h, "monedasIniciales"), tope_atributo: entero(&h, "topeAtributo"), herido: entero(&h, "heridoMinutos") * MS_POR_MINUTO },
             guarnicion: ReglasGuarnicion {
@@ -395,7 +398,7 @@ mod pruebas {
     fn la_ficha_militar_de_las_escuadras() {
         let m = Reglas::cargar().militar;
         assert_eq!((m.racion_por_soldado, m.regeneracion_moral, m.degradacion_moral), (150, 5_000, 20_000));
-        assert_eq!((m.desercion, m.bonus_poder_por_nivel, m.nivel_maximo), (50_000, 10_000, 10));
+        assert_eq!((m.desercion, m.bonus_poder_por_nivel, m.nivel_maximo), (50_000, 30_000, 10));
         assert_eq!(m.experiencia_para_subir, vec![5_000, 10_000, 20_000, 40_000, 40_000, 40_000, 40_000, 40_000, 40_000]);
     }
 

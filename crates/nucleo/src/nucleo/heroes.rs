@@ -297,6 +297,23 @@ impl Nucleo {
                 }
                 Ok(vec![])
             }
+            Comando::ElegirFormacion { heroe, escuadra, formacion } => {
+                // Heroe_Y_Tropa §10.4: qué familias permite la tecnología de su Facción (sin Facción, las que no piden tecnología). La escuadra reservada
+                // para una batalla también: el ticket ya congeló la suya.
+                self.autorizar_heroe(p, *heroe, false)?;
+                let f = mr.formaciones.por_id(formacion).ok_or_else(|| rechazo(rechazos::FORMACION_DESCONOCIDA, format!("no hay ninguna formación «{formacion}»")))?;
+                let faccion = self.heroe(*heroe).and_then(|h| h.faccion);
+                if !mr.formaciones.permitida(f, |tec| faccion.is_some_and(|x| self.estado.tiene_tecnologia(x, tec))) {
+                    return Err(rechazo(rechazos::FORMACION_SIN_TECNOLOGIA, format!("tu Facción no tiene la tecnología de la formación «{formacion}»")));
+                }
+                let e = self.heroe_mut(*heroe).heroe.escuadra_mut(*escuadra).ok_or_else(|| rechazo(rechazos::ESCUADRA_AJENA, format!("la escuadra {escuadra} no es tuya")))?;
+                if e.formacion == f {
+                    return Err(sin_cambios());
+                }
+                e.formacion = f;
+                self.tr.tocar(Clase::Escuadra, *escuadra);
+                Ok(vec![])
+            }
             Comando::AsignarGuarnicion { heroe, escuadra } => {
                 self.autorizar_heroe(p, *heroe, false)?;
                 // De visita en una plaza (2026-11-04): deja la escuadra de la columna con la que entró, si la plaza es de su Facción.
