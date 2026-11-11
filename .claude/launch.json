@@ -21,6 +21,22 @@
       "cwd": "."
     },
     {
+      "name": "bronzeage-lanzador",
+      "runtimeExecutable": "cargo",
+      "runtimeArgs": [
+        "run",
+        "--release",
+        "-p",
+        "lanzador",
+        "--bin",
+        "bronzeage-lanzador"
+      ],
+      "env": {
+        "LANZADOR_PROCESO": "mentira",
+        "LANZADOR_ARGUMENTOS": "--espera-ms 30000"
+      }
+    },
+    {
       "name": "bronzeage-bots",
       "runtimeExecutable": "cargo",
       "runtimeArgs": [

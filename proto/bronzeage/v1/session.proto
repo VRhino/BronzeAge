@@ -307,6 +307,20 @@ message MensajeParaServidorDeBatalla {
   }
 }
 
+// El lanzador de servidores de batalla (`bronzeage-lanzador`, Batalla_Unity_Ciclo §8.8; 2026-11-11) es quien abre la sesión `CLIENTE_SERVIDOR_BATALLA`, reclama las
+// batallas y arranca un proceso de batalla (Conquest como servidor dedicado) por cada una. Habla con cada proceso por un socket TCP local con mensajes delimitados
+// por su longitud (un varint delante, como `WriteDelimitedTo`/`ParseDelimitedFrom` de Protobuf). Al proceso le manda estos; el proceso le contesta con
+// `MensajeDeServidorDeBatalla` (`inicio`, `salida` y `resultado`: la asignación y los tokens los pone el lanzador, y los que mande el proceso se descartan).
+message MensajeParaProcesoDeBatalla {
+  oneof cuerpo {
+    BattleTicket ticket = 1;               // el primero; otra vez si la revisión sube (una salida `no_conectado` antes de empezar)
+    BattleServerAssignment asignacion = 2; // tras cada ticket: la que el lanzador registró para él (su instancia y los tokens de los humanos)
+    IncorporacionBatalla incorporacion = 3;
+    TokensBatalla tokens = 4;              // tras una incorporación de un humano: su token
+    AcuseBatalla acuse = 5;                // la respuesta del núcleo a un mensaje suyo
+  }
+}
+
 // La respuesta del servidor a un mensaje del servidor de batalla (antes un `Aviso` cuando era un rechazo; ahora también se sabe lo aceptado).
 message AcuseBatalla {
   string mensaje = 1;                    // cuál: asignacion | inicio | tokens | salida | resultado

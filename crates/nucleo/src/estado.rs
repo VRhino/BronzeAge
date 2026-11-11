@@ -1501,6 +1501,13 @@ impl Estado {
                 reglas.economia.clone()
             },
         };
+        if guardadas.batallas_en_unity != reglas.batallas_en_unity {
+            return Err(ErrorFormato(if guardadas.batallas_en_unity {
+                "la partida se creó con las batallas en Unity y se arranca con números (BRONZEAGE_BATALLAS_EN_UNITY): es una regla de la partida, no se cambia"
+            } else {
+                "la partida se creó con las batallas con números y se arranca en Unity (BRONZEAGE_BATALLAS_EN_UNITY): es una regla de la partida, no se cambia"
+            }));
+        }
         if &guardadas != reglas {
             return Err(ErrorFormato("las reglas de la foto no coinciden con las pedidas"));
         }

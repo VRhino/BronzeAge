@@ -319,6 +319,17 @@ fn bot_contra_bot_abre_batalla_en_unity_y_sin_servidores_de_batalla_se_resuelve_
 }
 
 #[test]
+fn las_batallas_en_unity_son_una_regla_de_la_partida_y_una_foto_no_se_arranca_con_la_otra() {
+    for creada in [false, true] {
+        let reglas = Reglas { batallas_en_unity: creada, ..Reglas::default() };
+        let bytes = nucleo::Estado::nuevo(reglas.clone(), "h".into(), 1, 0).serializar();
+        assert!(nucleo::Estado::deserializar(&bytes, &reglas, "h").is_ok());
+        let Err(e) = nucleo::Estado::deserializar(&bytes, &Reglas { batallas_en_unity: !creada, ..Reglas::default() }, "h") else { panic!("arrancó con la otra regla") };
+        assert!(e.0.contains("BRONZEAGE_BATALLAS_EN_UNITY") && e.0.contains(if creada { "se creó con las batallas en Unity" } else { "se creó con las batallas con números" }), "{}", e.0);
+    }
+}
+
+#[test]
 fn las_validaciones_del_combate_con_numeros_valen_tambien_para_abrir_y_una_rechazada_no_deja_rastro() {
     let mut x = choque();
     let (ana, beto) = (x.ana, x.beto);

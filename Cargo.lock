@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "acceso"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "argon2",
  "contrato",
@@ -490,6 +490,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "lanzador"
+version = "0.1.0"
+dependencies = [
+ "acceso",
+ "base",
+ "combate",
+ "contrato",
+ "futures-util",
+ "getrandom 0.2.17",
+ "militar",
+ "nucleo",
+ "prost",
+ "rutas",
+ "serde_json",
+ "servidor",
+ "tokio",
+ "tokio-tungstenite",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.190"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -946,7 +966,7 @@ dependencies = [
 
 [[package]]
 name = "servicio"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "acceso",
  "asentamiento",
