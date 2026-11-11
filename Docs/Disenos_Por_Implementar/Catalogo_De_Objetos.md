@@ -62,13 +62,15 @@ Cambio del autor (2026-11-11, hilo de clases de héroe): hay **cinco clases** y 
 | hierro temprano | `forja_hierro_temprana` |
 | hierro | `forja_hierro_estandarizada` |
 
-| Clase (inspiración) | Arma (un solo objeto, en el hueco `arma`) | Armaduras |
+La clase se llama como el arma que lleva (los héroes de la Antigüedad solo sirvieron de inspiración al autor):
+
+| Clase = arma (un solo objeto, en el hueco `arma`) | id de la clase | Armaduras |
 | --- | --- | --- |
-| Leónidas | lanza y escudo grande redondo | pesada |
-| Aquiles | espada corta y escudo mediano | pesada, media |
-| Ulises | arco compuesto y lanza | ligera, media |
-| Ayax | por decidir | media |
-| por decidir | dagas | ligera |
+| lanza y escudo grande redondo | `lanza_escudo_redondo` | pesada |
+| espada corta y escudo mediano | `espada_escudo_mediano` | pesada, media |
+| arco compuesto y lanza | `arco_lanza` | ligera, media |
+| hacha a dos manos | `hacha_dos_manos` | media |
+| dagas (espía, asesino) | `dagas` | ligera |
 
 Ids: `{arma}_{tier}`, por ejemplo `lanza_escudo_redondo_cobre` o `dagas_hierro_temprano`. Cinco armas por cuatro tiers son veinte; el catálogo inicial puede traer solo el cobre (cinco) y los demás tiers entrar a la vez que su tecnología. Los stats de cada arma (§4) se definen clase a clase en el hilo de clases.
 
@@ -142,6 +144,7 @@ Forma propuesta, para Mechanics cuando se implemente:
     "lanza_escudo_redondo": { "armaduras": ["pesada"] },
     "espada_escudo_mediano": { "armaduras": ["pesada", "media"] },
     "arco_lanza": { "armaduras": ["ligera", "media"] },
+    "hacha_dos_manos": { "armaduras": ["media"] },
     "dagas": { "armaduras": ["ligera"] }
   },
   "objetos": [
