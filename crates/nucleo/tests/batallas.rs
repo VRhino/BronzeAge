@@ -328,7 +328,7 @@ fn cancelar_antes_de_empezar_lo_hace_quien_la_inicio_y_nadie_pierde_nada() {
     x.n.avanzar_hasta(11 * MIN);
     let antes = rastro(&x.n);
     let cancela = |x: &mut Choque, t: Instante, actor: &str, i: &str, heroe: u64| x.n.aplicar_en(t, Peticion::nueva(actor, i, Comando::CancelarBatalla { heroe, batalla: id }));
-    assert_eq!(codigo(&cancela(&mut x, 11 * MIN, "beto", "c1", beto.1)), rechazos::BATALLA_INVALIDA, "solo quien la inició");
+    assert_eq!(codigo(&cancela(&mut x, 11 * MIN, "beto", "c1", beto.1)), rechazos::BATALLA_NO_PUEDE_CANCELAR, "solo quien la inició");
     assert_eq!(codigo(&cancela(&mut x, 11 * MIN, "beto", "c2", ana.1)), rechazos::NO_AUTORIZADO, "ni con el héroe de otro");
     assert_eq!(codigo(&x.n.aplicar_en(11 * MIN, Peticion::nueva("ana", "c3", Comando::CancelarBatalla { heroe: ana.1, batalla: id + 100 }))), rechazos::BATALLA_NO_EXISTE);
     assert_eq!(rastro(&x.n), antes);
@@ -354,7 +354,7 @@ fn no_se_cancela_una_partida_que_ya_empezo() {
     let (mut x, id) = batalla_abierta();
     en_curso(&mut x.n, id, 11 * MIN, &[x.ana.1]);
     let r = x.n.aplicar_en(12 * MIN, Peticion::nueva("ana", "c1", Comando::CancelarBatalla { heroe: x.ana.1, batalla: id }));
-    assert_eq!(codigo(&r), rechazos::BATALLA_INVALIDA);
+    assert_eq!(codigo(&r), rechazos::BATALLA_NO_PUEDE_CANCELAR);
     assert_eq!(x.n.batalla(id).unwrap().estado, EstadoBatalla::EnCurso);
 }
 
@@ -373,10 +373,10 @@ fn el_ciclo_completo_con_los_cinco_mensajes_sus_rechazos_y_su_idempotencia() {
     let r = x.n.aplicar_en(11 * MIN, Peticion::nueva("ana", "m0", Comando::RegistrarAsignacion { batalla: id, asignacion: asignacion("a1", 0, &[ana.1]) }));
     assert_eq!(rastro(&x.n), antes);
     assert_eq!(codigo(&r), rechazos::BATALLA_SIN_CREDENCIAL, "ni la sesión de un jugador ni la administración");
-    assert_eq!(rechazado(&mut x.n, 11 * MIN, "m1", Comando::RegistrarAsignacion { batalla: id, asignacion: asignacion("a1", 0, &[beto.1]) }), rechazos::BATALLA_INVALIDA, "los bot no se conectan: no llevan token");
-    assert_eq!(rechazado(&mut x.n, 11 * MIN, "m2", Comando::RegistrarAsignacion { batalla: id, asignacion: asignacion("a1", 3, &[ana.1]) }), rechazos::BATALLA_INVALIDA, "otra revisión del ticket");
+    assert_eq!(rechazado(&mut x.n, 11 * MIN, "m1", Comando::RegistrarAsignacion { batalla: id, asignacion: asignacion("a1", 0, &[beto.1]) }), rechazos::BATALLA_TOKEN_INVALIDO, "los bot no se conectan: no llevan token");
+    assert_eq!(rechazado(&mut x.n, 11 * MIN, "m2", Comando::RegistrarAsignacion { batalla: id, asignacion: asignacion("a1", 3, &[ana.1]) }), rechazos::BATALLA_REVISION_VIEJA, "otra revisión del ticket");
     assert_eq!(rechazado(&mut x.n, 11 * MIN, "m3", Comando::RegistrarAsignacion { batalla: id + 100, asignacion: asignacion("a1", 0, &[ana.1]) }), rechazos::BATALLA_NO_EXISTE);
-    assert_eq!(rechazado(&mut x.n, 11 * MIN, "m4", Comando::ConfirmarInicio { batalla: id, intento: "a1".into(), revision: 0 }), rechazos::BATALLA_INVALIDA, "sin asignación no hay inicio");
+    assert_eq!(rechazado(&mut x.n, 11 * MIN, "m4", Comando::ConfirmarInicio { batalla: id, intento: "a1".into(), revision: 0 }), rechazos::BATALLA_SERVIDOR_AJENO, "sin asignación no hay inicio");
 
     let r = msg(&mut x.n, 11 * MIN, "asignar", Comando::RegistrarAsignacion { batalla: id, asignacion: asignacion("a1", 0, &[ana.1]) });
     assert!(r.aceptada(), "{r:?}");
@@ -403,9 +403,9 @@ fn el_ciclo_completo_con_los_cinco_mensajes_sus_rechazos_y_su_idempotencia() {
     x.n.avanzar_hasta(12 * MIN);
     let antes = rastro(&x.n);
     let r = x.n.aplicar_en(12 * MIN, Peticion::de_servidor_de_batalla("otro", "m6", Comando::ConfirmarInicio { batalla: id, intento: "a1".into(), revision: 0 }));
-    assert_eq!((rastro(&x.n), codigo(&r)), (antes, rechazos::BATALLA_INVALIDA), "no es su asignación");
-    assert_eq!(rechazado(&mut x.n, 12 * MIN, "m7", Comando::ConfirmarInicio { batalla: id, intento: "a2".into(), revision: 0 }), rechazos::BATALLA_INVALIDA, "otro intento");
-    assert_eq!(rechazado(&mut x.n, 12 * MIN, "m8", Comando::ConfirmarInicio { batalla: id, intento: "a1".into(), revision: 1 }), rechazos::BATALLA_INVALIDA, "otra revisión");
+    assert_eq!((rastro(&x.n), codigo(&r)), (antes, rechazos::BATALLA_SERVIDOR_AJENO), "no es su asignación");
+    assert_eq!(rechazado(&mut x.n, 12 * MIN, "m7", Comando::ConfirmarInicio { batalla: id, intento: "a2".into(), revision: 0 }), rechazos::BATALLA_SERVIDOR_AJENO, "otro intento");
+    assert_eq!(rechazado(&mut x.n, 12 * MIN, "m8", Comando::ConfirmarInicio { batalla: id, intento: "a1".into(), revision: 1 }), rechazos::BATALLA_REVISION_VIEJA, "otra revisión");
     let r = msg(&mut x.n, 12 * MIN, "inicio", Comando::ConfirmarInicio { batalla: id, intento: "a1".into(), revision: 0 });
     assert!(r.aceptada(), "{r:?}");
     let b = x.n.batalla(id).unwrap();
@@ -415,8 +415,8 @@ fn el_ciclo_completo_con_los_cinco_mensajes_sus_rechazos_y_su_idempotencia() {
 
     // 3. Tokens: solo de humanos, el nuevo sustituye al anterior y no deja hecho.
     let t = |h: u64, token: &str| Token { heroe: h, token: token.into(), expira_en: 1 };
-    assert_eq!(rechazado(&mut x.n, 13 * MIN, "m9", Comando::RegistrarTokens { batalla: id, intento: "a1".into(), tokens: vec![t(beto.1, "x")] }), rechazos::BATALLA_INVALIDA);
-    assert_eq!(rechazado(&mut x.n, 13 * MIN, "m10", Comando::RegistrarTokens { batalla: id, intento: "a2".into(), tokens: vec![t(ana.1, "x")] }), rechazos::BATALLA_INVALIDA, "solo del servidor de la asignación activa");
+    assert_eq!(rechazado(&mut x.n, 13 * MIN, "m9", Comando::RegistrarTokens { batalla: id, intento: "a1".into(), tokens: vec![t(beto.1, "x")] }), rechazos::BATALLA_TOKEN_INVALIDO);
+    assert_eq!(rechazado(&mut x.n, 13 * MIN, "m10", Comando::RegistrarTokens { batalla: id, intento: "a2".into(), tokens: vec![t(ana.1, "x")] }), rechazos::BATALLA_SERVIDOR_AJENO, "solo del servidor de la asignación activa");
     let eventos0 = x.n.cambios_desde(0).unwrap().map(|c| c.eventos.len()).sum::<usize>();
     let r = msg(&mut x.n, 13 * MIN, "tokens", Comando::RegistrarTokens { batalla: id, intento: "a1".into(), tokens: vec![t(ana.1, "nuevo")] });
     assert!(r.aceptada(), "{r:?}");
@@ -435,20 +435,20 @@ fn el_ciclo_completo_con_los_cinco_mensajes_sus_rechazos_y_su_idempotencia() {
         assert_eq!(rastro(&x.n), antes, "un resultado rechazado no cambia nada: {r:?}");
         codigo(&r)
     };
-    assert_eq!(malo(&mut x, "r1", &|r| r.intento = "a2".into()), rechazos::BATALLA_INVALIDA);
-    assert_eq!(malo(&mut x, "r2", &|r| r.revision = 1), rechazos::BATALLA_INVALIDA);
-    assert_eq!(malo(&mut x, "r3", &|r| r.por_escuadra.push(r.por_escuadra[0].clone())), rechazos::BATALLA_INVALIDA);
+    assert_eq!(malo(&mut x, "r1", &|r| r.intento = "a2".into()), rechazos::BATALLA_RESULTADO_INVALIDO);
+    assert_eq!(malo(&mut x, "r2", &|r| r.revision = 1), rechazos::BATALLA_RESULTADO_INVALIDO);
+    assert_eq!(malo(&mut x, "r3", &|r| r.por_escuadra.push(r.por_escuadra[0].clone())), rechazos::BATALLA_RESULTADO_INVALIDO);
     assert_eq!(malo(&mut x, "r4", &|r| {
         r.por_escuadra.pop();
-    }), rechazos::BATALLA_INVALIDA);
+    }), rechazos::BATALLA_RESULTADO_INVALIDO);
     assert_eq!(malo(&mut x, "r5", &|r| {
         r.por_heroe.pop();
-    }), rechazos::BATALLA_INVALIDA);
-    assert_eq!(malo(&mut x, "r6", &|r| r.por_escuadra[0].muertos += 1), rechazos::BATALLA_INVALIDA, "no cierra sobre lo autorizado");
-    assert_eq!(malo(&mut x, "r7", &|r| (r.razon, r.ganador) = (Razon::TiempoAgotado, Lado::Atacante)), rechazos::BATALLA_INVALIDA);
-    assert_eq!(malo(&mut x, "r8", &|r| r.fin = r.inicio + 15 * MIN + 1), rechazos::BATALLA_INVALIDA, "dura más que la duración máxima");
-    assert_eq!(malo(&mut x, "r9", &|r| r.por_heroe[1].botin = Some(Botin { objetos: vec![], monedas: -1 })), rechazos::BATALLA_INVALIDA);
-    assert_eq!(malo(&mut x, "r10", &|r| r.carros_perdidos = vec!["1:0".into()]), rechazos::BATALLA_INVALIDA, "no hay carros que perder fuera de una caravana");
+    }), rechazos::BATALLA_RESULTADO_INVALIDO);
+    assert_eq!(malo(&mut x, "r6", &|r| r.por_escuadra[0].muertos += 1), rechazos::BATALLA_RESULTADO_INVALIDO, "no cierra sobre lo autorizado");
+    assert_eq!(malo(&mut x, "r7", &|r| (r.razon, r.ganador) = (Razon::TiempoAgotado, Lado::Atacante)), rechazos::BATALLA_RESULTADO_INVALIDO);
+    assert_eq!(malo(&mut x, "r8", &|r| r.fin = r.inicio + 15 * MIN + 1), rechazos::BATALLA_RESULTADO_INVALIDO, "dura más que la duración máxima");
+    assert_eq!(malo(&mut x, "r9", &|r| r.por_heroe[1].botin = Some(Botin { objetos: vec![], monedas: -1 })), rechazos::BATALLA_RESULTADO_INVALIDO);
+    assert_eq!(malo(&mut x, "r10", &|r| r.carros_perdidos = vec!["1:0".into()]), rechazos::BATALLA_RESULTADO_INVALIDO, "no hay carros que perder fuera de una caravana");
     let r = x.n.aplicar_en(14 * MIN, Peticion::nueva("ana", "r11", Comando::AplicarResultado { batalla: id, resultado: bueno.clone() }));
     assert_eq!(codigo(&r), rechazos::BATALLA_SIN_CREDENCIAL);
 
@@ -464,7 +464,7 @@ fn el_ciclo_completo_con_los_cinco_mensajes_sus_rechazos_y_su_idempotencia() {
     otro.ganador = Lado::Defensor;
     let antes = rastro(&x.n);
     let r = aplicar(&mut x.n, 15 * MIN, "resultado-otro", id, otro);
-    assert_eq!(codigo(&r), rechazos::BATALLA_INVALIDA);
+    assert_eq!(codigo(&r), rechazos::BATALLA_OTRO_RESULTADO);
     assert!(matches!(&r.resultado, Resultado::Rechazada { mensaje, .. } if mensaje.contains("otro resultado")), "{r:?}");
     assert_eq!(rastro(&x.n), antes);
     // Una cerrada rechaza todo mensaje salvo ese resultado repetido: 404 en la asignación, el inicio, los tokens y la salida.
@@ -626,7 +626,7 @@ fn una_asignada_que_nadie_inicia_y_una_en_curso_sin_resultado_fallan_cuando_venc
     let r = resultado(&x.n, id, Lado::Atacante, 1);
     let (v, h) = (x.n.version(), x.n.hash_estado());
     let tarde = aplicar(&mut x.n, 31 * MIN, "tarde", id, r);
-    assert_eq!(codigo(&tarde), rechazos::BATALLA_INVALIDA);
+    assert_eq!(codigo(&tarde), rechazos::BATALLA_ESTADO_INVALIDO);
     assert_eq!(x.n.batalla(id).unwrap().estado, EstadoBatalla::Fallida);
     assert!(x.n.version() > v && x.n.hash_estado() != h, "lo que cambió fue el vencimiento, no el rechazo");
     libres(&x);
@@ -662,9 +662,9 @@ fn quien_no_llega_a_conectarse_sale_sin_castigo_la_revision_sube_y_sin_humanos_s
     x.n.avanzar_hasta(12 * MIN);
     let antes = rastro(&x.n);
     let sale = |x: &mut Choque, i: &str, s: SalidaBatalla| msg(&mut x.n, 12 * MIN, i, Comando::RegistrarSalida { batalla: id, salida: s });
-    assert_eq!(codigo(&sale(&mut x, "s0", salida("a1", 0, 9_999, MotivoSalida::NoConectado, false, vec![]))), rechazos::BATALLA_INVALIDA, "no combate en ella");
-    assert_eq!(codigo(&sale(&mut x, "s1", salida("a2", 0, beto.1, MotivoSalida::NoConectado, false, vec![]))), rechazos::BATALLA_INVALIDA, "otro intento");
-    assert_eq!(codigo(&sale(&mut x, "s2", salida("a1", 0, beto.1, MotivoSalida::Eliminado, false, vec![]))), rechazos::BATALLA_INVALIDA, "eliminado solo con la partida en curso");
+    assert_eq!(codigo(&sale(&mut x, "s0", salida("a1", 0, 9_999, MotivoSalida::NoConectado, false, vec![]))), rechazos::BATALLA_NO_COMBATE, "no combate en ella");
+    assert_eq!(codigo(&sale(&mut x, "s1", salida("a2", 0, beto.1, MotivoSalida::NoConectado, false, vec![]))), rechazos::BATALLA_SERVIDOR_AJENO, "otro intento");
+    assert_eq!(codigo(&sale(&mut x, "s2", salida("a1", 0, beto.1, MotivoSalida::Eliminado, false, vec![]))), rechazos::BATALLA_ESTADO_INVALIDO, "eliminado solo con la partida en curso");
     assert_eq!(rastro(&x.n), antes);
     // Beto (un bot) no llega: la batalla vuelve a `convocando` con el ticket sin él y una revisión más; su columna queda libre.
     let r = sale(&mut x, "s3", salida("a1", 0, beto.1, MotivoSalida::NoConectado, false, vec![]));
@@ -686,7 +686,7 @@ fn quien_no_llega_a_conectarse_sale_sin_castigo_la_revision_sube_y_sin_humanos_s
     assert!(x.n.aplicar_en(12 * MIN + 1, Peticion::nueva("gus", "u0", Comando::UnirseABatalla { heroe: beto.1, batalla: id, lado: None })).resultado != Resultado::Aceptada);
     let _ = gus;
     // La asignación vieja ya no vale; la nueva, con la revisión 1.
-    assert_eq!(codigo(&msg(&mut x.n, 13 * MIN, "as-vieja", Comando::RegistrarAsignacion { batalla: id, asignacion: asignacion("a3", 0, &[ana.1]) })), rechazos::BATALLA_INVALIDA);
+    assert_eq!(codigo(&msg(&mut x.n, 13 * MIN, "as-vieja", Comando::RegistrarAsignacion { batalla: id, asignacion: asignacion("a3", 0, &[ana.1]) })), rechazos::BATALLA_REVISION_VIEJA);
     assert!(msg(&mut x.n, 13 * MIN, "as-nueva", Comando::RegistrarAsignacion { batalla: id, asignacion: asignacion("a3", 1, &[ana.1]) }).aceptada());
     // Ana, el último humano, tampoco llega: se cancela sin castigo y se sueltan todos los candados.
     let r = sale(&mut x, "s4", salida("a3", 1, ana.1, MotivoSalida::NoConectado, false, vec![]));
@@ -709,11 +709,11 @@ fn con_la_partida_en_curso_la_salida_aplica_las_bajas_hiere_al_derrotado_y_el_re
     let (fuerte0, debil) = (x.fuerte[0], x.debil);
     let mala = |e: Vec<EscuadraDeSalida>| salida("a1", 0, beto.1, MotivoSalida::Eliminado, true, e);
     let e = |escuadra: u64, supervivientes: i64, muertos: i64| EscuadraDeSalida { escuadra, supervivientes, muertos };
-    assert_eq!(codigo(&sale(&mut x, "s1", mala(vec![e(fuerte0, 1, 1)]))), rechazos::BATALLA_INVALIDA, "la escuadra es de ana");
-    assert_eq!(codigo(&sale(&mut x, "s2", mala(vec![e(debil, 1, 1), e(debil, 1, 1)]))), rechazos::BATALLA_INVALIDA, "repetida");
-    assert_eq!(codigo(&sale(&mut x, "s3", mala(vec![e(debil, 1, 1)]))), rechazos::BATALLA_INVALIDA, "no cierra sobre lo autorizado");
+    assert_eq!(codigo(&sale(&mut x, "s1", mala(vec![e(fuerte0, 1, 1)]))), rechazos::BATALLA_SALIDA_INVALIDA, "la escuadra es de ana");
+    assert_eq!(codigo(&sale(&mut x, "s2", mala(vec![e(debil, 1, 1), e(debil, 1, 1)]))), rechazos::BATALLA_SALIDA_INVALIDA, "repetida");
+    assert_eq!(codigo(&sale(&mut x, "s3", mala(vec![e(debil, 1, 1)]))), rechazos::BATALLA_SALIDA_INVALIDA, "no cierra sobre lo autorizado");
     assert_eq!(codigo(&sale(&mut x, "s3b", mala(vec![]))), rechazos::BATALLA_SALIDA_INCOMPLETA, "tiene que nombrar todas sus escuadras");
-    assert_eq!(codigo(&sale(&mut x, "s4", salida("a1", 0, beto.1, MotivoSalida::NoConectado, false, vec![]))), rechazos::BATALLA_INVALIDA, "no_conectado solo antes de empezar");
+    assert_eq!(codigo(&sale(&mut x, "s4", salida("a1", 0, beto.1, MotivoSalida::NoConectado, false, vec![]))), rechazos::BATALLA_ESTADO_INVALIDO, "no_conectado solo antes de empezar");
     assert_eq!(rastro(&x.n), antes);
     let r = sale(&mut x, "s5", mala(vec![e(debil, 10, autorizadas - 10)]));
     assert!(r.aceptada(), "{r:?}");
@@ -727,7 +727,7 @@ fn con_la_partida_en_curso_la_salida_aplica_las_bajas_hiere_al_derrotado_y_el_re
     // El resultado final cubre solo a los que siguen combatiendo.
     let mut con_todos = resultado(&x.n, id, Lado::Atacante, 3);
     con_todos.por_heroe.push(ResultadoHeroe { heroe: beto.1, participo: true, sobrevivio_al_cierre: false, xp_ganada: 0, derrotado: None, botin: None });
-    assert_eq!(codigo(&aplicar(&mut x.n, 13 * MIN, "r1", id, con_todos)), rechazos::BATALLA_INVALIDA);
+    assert_eq!(codigo(&aplicar(&mut x.n, 13 * MIN, "r1", id, con_todos)), rechazos::BATALLA_RESULTADO_INVALIDO);
     let bueno = resultado(&x.n, id, Lado::Atacante, 3);
     assert_eq!((bueno.por_heroe.len(), bueno.por_escuadra.len()), (1, 2), "ana y sus dos escuadras");
     assert!(aplicar(&mut x.n, 13 * MIN, "r2", id, bueno).aceptada());
@@ -789,14 +789,14 @@ fn contra_un_campamento_de_bandidos_se_juega_un_evento_pve_cualquiera_se_une_com
     let une = |x: &mut Bandidos, t: Instante, actor: &str, i: &str, heroe: u64, lado: Option<Lado>| x.n.aplicar_en(t, Peticion::nueva(actor, i, Comando::UnirseABatalla { heroe, batalla: id, lado }));
     x.n.avanzar_hasta(11 * MIN);
     let antes = rastro(&x.n);
-    assert_eq!(codigo(&une(&mut x, 11 * MIN, "ana", "u1", ana.1, None)), rechazos::BATALLA_INVALIDA, "ya combate");
+    assert_eq!(codigo(&une(&mut x, 11 * MIN, "ana", "u1", ana.1, None)), rechazos::BATALLA_YA_COMBATE, "ya combate");
     assert_eq!(codigo(&une(&mut x, 11 * MIN, "gus", "u2", ana.1, None)), rechazos::NO_AUTORIZADO, "el héroe es de otro");
-    assert_eq!(codigo(&une(&mut x, 11 * MIN, "gus", "u3", otra.1, Some(Lado::Defensor))), rechazos::BATALLA_INVALIDA, "nadie ayuda a los bandidos");
+    assert_eq!(codigo(&une(&mut x, 11 * MIN, "gus", "u3", otra.1, Some(Lado::Defensor))), rechazos::BATALLA_NADIE_AYUDA_A_BANDIDOS, "nadie ayuda a los bandidos");
     assert_eq!(codigo(&x.n.aplicar_en(11 * MIN, Peticion::nueva("gus", "u4", Comando::UnirseABatalla { heroe: otra.1, batalla: id + 100, lado: None }))), rechazos::BATALLA_NO_EXISTE);
     assert_eq!(rastro(&x.n), antes);
     let lejos = columna(&mut x.n, "hugo", 2, c(30, 2));
     dar(&mut x.n, "dh", lejos.1, Tropa::EspadachinesBronce);
-    assert_eq!(codigo(&une(&mut x, 11 * MIN, "hugo", "u5", lejos.1, None)), rechazos::BATALLA_INVALIDA, "a más de radioEncuentro de la batalla");
+    assert_eq!(codigo(&une(&mut x, 11 * MIN, "hugo", "u5", lejos.1, None)), rechazos::BATALLA_LEJOS, "a más de radioEncuentro de la batalla");
     assert!(x.n.aplicar_en(11 * MIN, admin("h", Comando::HerirHeroe { heroe: otra.1 })).aceptada());
     assert_eq!(codigo(&une(&mut x, 11 * MIN, "gus", "u6", otra.1, None)), rechazos::BATALLA_INVALIDA, "herido");
     assert!(x.n.aplicar_en(11 * MIN, admin("h2", Comando::HerirHeroe { heroe: lejos.1 })).aceptada());
@@ -827,7 +827,7 @@ fn contra_un_campamento_de_bandidos_se_juega_un_evento_pve_cualquiera_se_une_com
         if k < 3 {
             assert!(r.aceptada(), "{r:?}");
         } else {
-            assert_eq!(codigo(&r), rechazos::BATALLA_INVALIDA, "ese bando está lleno");
+            assert_eq!(codigo(&r), rechazos::BATALLA_LADO_LLENO, "ese bando está lleno");
         }
     }
     assert_eq!(x.n.batalla(id).unwrap().incorporaciones.len(), 4);
@@ -867,7 +867,7 @@ fn en_una_batalla_campal_nadie_de_fuera_se_une_y_la_persecucion_pide_bando() {
     x.n.avanzar_hasta(11 * MIN);
     let antes = rastro(&x.n);
     let r = x.n.aplicar_en(11 * MIN, Peticion::nueva("gus", "u1", Comando::UnirseABatalla { heroe: otra.1, batalla: id, lado: Some(Lado::Atacante) }));
-    assert_eq!(codigo(&r), rechazos::BATALLA_INVALIDA);
+    assert_eq!(codigo(&r), rechazos::BATALLA_NADIE_DE_FUERA);
     assert!(matches!(&r.resultado, Resultado::Rechazada { mensaje, .. } if mensaje.contains("nadie de fuera")), "{r:?}");
     assert_eq!(rastro(&x.n), antes);
 }
@@ -913,7 +913,7 @@ fn reglas_unity() -> Reglas {
 }
 
 #[test]
-fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_rechaza_el_formato_anterior_y_cada_campo_cambia_el_hash() {
+fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_y_cada_campo_cambia_el_hash() {
     let (n, id) = a_mitad();
     let reglas = reglas_unity();
     let bytes = n.estado().serializar();
@@ -922,10 +922,7 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_rechaza_el_formato_anterior_
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.batallas, n.estado().batallas);
     assert_eq!(vuelta.hash(), n.hash_estado());
-    // El formato anterior se rechaza con su motivo, y las reglas tienen que ser las mismas (el interruptor de los servidores de batalla es una regla).
-    let viejo = [b"BAN12".as_slice(), &bytes[5..]].concat();
-    let Err(e) = nucleo::Estado::deserializar(&viejo, &reglas, "hash-de-prueba") else { panic!("BAN12 no debe admitirse") };
-    assert!(e.to_string().contains("BAN12") && e.to_string().contains("batallas"), "{e}");
+    // Las reglas tienen que ser las mismas (el interruptor de los servidores de batalla es una regla).
     assert!(nucleo::Estado::deserializar(&bytes, &comun::reglas(), "hash-de-prueba").is_err(), "sin servidores de batalla las reglas no coinciden");
     assert!(nucleo::Estado::deserializar(&bytes[..bytes.len() - 7], &reglas, "hash-de-prueba").is_err(), "truncada");
 
@@ -1395,7 +1392,7 @@ fn un_asedio_tiene_convocatoria_de_30_segundos_quien_se_une_entra_en_el_ticket_y
     // En la convocatoria no se publica ni se asigna.
     assert!(e.n.batallas_pendientes().is_empty() && e.n.ticket_publicado(id).is_none(), "el ticket no se publica durante la convocatoria");
     let revision = e.n.batalla(id).unwrap().ticket.revision;
-    assert_eq!(rechazado(&mut e.n, t + 10_000, "as0", Comando::RegistrarAsignacion { batalla: id, asignacion: asignacion("a1", revision, &[ana.1]) }), rechazos::BATALLA_INVALIDA);
+    assert_eq!(rechazado(&mut e.n, t + 10_000, "as0", Comando::RegistrarAsignacion { batalla: id, asignacion: asignacion("a1", revision, &[ana.1]) }), rechazos::BATALLA_EN_CONVOCATORIA);
     // El residente que está dentro no entra de oficio: se une él, con su loadout, y en la convocatoria entra en el ticket.
     e.n.avanzar_hasta(t + 10_000);
     let r = e.n.aplicar_en(t + 10_000, Peticion::nueva("beto", "ub", Comando::UnirseABatalla { heroe: beto, batalla: id, lado: None }));
@@ -1811,7 +1808,7 @@ fn una_caravana_atacada_por_un_humano_se_juega_en_unity_y_unity_dice_que_carros_
     // Un carro que no existe se rechaza entero.
     let mut mala = res.clone();
     mala.carros_perdidos = vec![format!("{ca}:2")];
-    assert_eq!(rechazado(&mut e.n, t + MIN, "mala", Comando::AplicarResultado { batalla: id, resultado: mala }), rechazos::BATALLA_INVALIDA);
+    assert_eq!(rechazado(&mut e.n, t + MIN, "mala", Comando::AplicarResultado { batalla: id, resultado: mala }), rechazos::BATALLA_RESULTADO_INVALIDO);
     assert!(aplicar(&mut e.n, t + 2 * MIN, "res", id, res).aceptada());
     let k = e.n.caravana(ca).unwrap();
     assert_eq!((k.carros.len(), k.contenido[&Cobre], k.estado), (1, 30_000, EstadoCaravana::EnTransito), "pierde el carro y el 70 % de la carga, y sigue su viaje");
@@ -2077,7 +2074,7 @@ fn los_bandidos_que_acosan_una_columna_con_dos_caravanas_juegan_las_dos_en_la_mi
             let mut mala = resultado(&e.n, id, Lado::Atacante, 5);
             // El último es válido por sí solo pero repetido con otro igual.
             mala.carros_perdidos = if k == 4 { vec![carro.clone(), carro] } else { vec![carro] };
-            assert_eq!(rechazado(&mut e.n, t + (k as i64 + 1) * 1_000, &format!("mala{k}"), Comando::AplicarResultado { batalla: id, resultado: mala }), rechazos::BATALLA_INVALIDA, "caso {k}");
+            assert_eq!(rechazado(&mut e.n, t + (k as i64 + 1) * 1_000, &format!("mala{k}"), Comando::AplicarResultado { batalla: id, resultado: mala }), rechazos::BATALLA_RESULTADO_INVALIDO, "caso {k}");
         }
 
         // La foto a mitad de la batalla lleva las dos caravanas y vuelve idéntica; la del formato anterior (una sola caravana) se rechaza con su motivo.
@@ -2085,9 +2082,6 @@ fn los_bandidos_que_acosan_una_columna_con_dos_caravanas_juegan_las_dos_en_la_mi
         assert_eq!(&bytes[..5], b"BAN61");
         let vuelta = nucleo::Estado::deserializar(&bytes, &arranque_mundo(m, 7).reglas, &m.0.hash().to_string()).unwrap();
         assert_eq!((vuelta.serializar(), vuelta.batallas.clone()), (bytes.clone(), e.n.estado().batallas.clone()));
-        let viejo = [b"BAN18".as_slice(), &bytes[5..]].concat();
-        let Err(err) = nucleo::Estado::deserializar(&viejo, &arranque_mundo(m, 7).reglas, &m.0.hash().to_string()) else { panic!("BAN18 no debe admitirse") };
-        assert!(err.to_string().contains("BAN18") && err.to_string().contains("caravana"), "{err}");
 
         let mut res = resultado(&e.n, id, if gana_el_bandido { Lado::Atacante } else { Lado::Defensor }, 5);
         if gana_el_bandido {

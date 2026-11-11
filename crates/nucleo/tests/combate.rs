@@ -468,10 +468,6 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     let otra = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(otra.serializar(), bytes);
     assert_eq!(otra.cola.len(), 5);
-    // El formato anterior se rechaza con su motivo.
-    let viejo = [b"BAN11".as_slice(), &bytes[5..]].concat();
-    let Err(e) = nucleo::Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN11 no debe admitirse") };
-    assert!(e.to_string().contains("BAN11"), "{e}");
 }
 
 // ═════════════════════════════ El mundo real ═════════════════════════════

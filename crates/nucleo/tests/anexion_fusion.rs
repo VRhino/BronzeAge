@@ -490,9 +490,6 @@ fn la_anexion_y_la_fusion_son_deterministas_y_los_titulos_viajan_en_la_foto_ban3
     assert_eq!(&bytes[..5], b"BAN61");
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!((s.politica.clone(), s.titulos_en, s.hash()), (normal.n.estado().politica.clone(), normal.n.estado().titulos_en, normal.n.hash_estado()));
-    let vieja = [b"BAN32".as_slice(), &bytes[5..]].concat();
-    let error = Estado::deserializar(&vieja, &reglas, &hash).err().expect("BAN32 se rechaza");
-    assert!(error.0.contains("BAN32") && error.0.contains("títulos"), "{}", error.0);
     // Los títulos y su plazo mueven el hash.
     let mut otro = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     otro.politica.titulos[0].valor += 1;

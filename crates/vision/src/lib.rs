@@ -51,7 +51,6 @@ pub mod radios {
     use base::Mil;
     pub const EJERCITO: Mil = 30_000;
     pub const JUGADOR_SOLO: Mil = 15_000;
-    pub const MIRADA: Mil = 30_000;
     pub const CARAVANA_GRANDE: Mil = 60_000;
     /// Horizonte corto del plan ajeno (contrato 05).
     pub const HORIZONTE_MS: i64 = 30_000;

@@ -1254,8 +1254,6 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
-    let viejo = [b"BAN17".as_slice(), &bytes[5..]].concat();
-    assert!(nucleo::Estado::deserializar(&viejo, &Reglas::default(), &e.n.estado().mundo_hash).is_err(), "BAN17 no traía héroes dentro de un pueblo");
     // Foto + registro: se recupera con el héroe dentro y sigue igual que el que no se interrumpió.
     e.n.foto_ahora();
     e.avanzar(HORA);

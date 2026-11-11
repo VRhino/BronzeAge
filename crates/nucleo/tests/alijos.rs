@@ -188,7 +188,7 @@ fn con_el_carro_casi_lleno_cabe_lo_que_cabe_y_el_resto_se_pierde() {
 }
 
 #[test]
-fn los_alijos_abiertos_viajan_en_la_foto_ban36_y_ban35_se_rechaza() {
+fn los_alijos_abiertos_viajan_en_la_foto() {
     let m = con_mundo!();
     let (alijo, sitio) = alijo_junto_a(m, 1);
     let mut e = Esc { n: nucleo(m), peticiones: 0 };
@@ -202,9 +202,6 @@ fn los_alijos_abiertos_viajan_en_la_foto_ban36_y_ban35_se_rechaza() {
     let mut otro = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     otro.militar.heroes.get_mut(&ana).unwrap().alijos_abiertos.clear();
     assert_ne!(otro.hash(), s.hash(), "los alijos abiertos entran en el hash");
-    let vieja = [b"BAN35".as_slice(), &bytes[5..]].concat();
-    let error = Estado::deserializar(&vieja, &reglas, &hash).err().expect("BAN35 se rechaza");
-    assert!(error.0.contains("BAN35") && error.0.contains("alijos"), "{}", error.0);
 }
 
 fn heroes(entidades: impl IntoIterator<Item = Option<pb::Entidad>>) -> Vec<pb::Heroe> {

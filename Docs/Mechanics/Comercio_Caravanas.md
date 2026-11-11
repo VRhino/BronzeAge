@@ -398,21 +398,21 @@ caravana **adjunta** (`cargarCaravanaAdjunta`), la de una **aparcada** y `capaci
 {
   "buey": {
     "factorCarga": 1,
-    "velocidad": 16,
+    "velocidad": 24,
     "costo": {
       "oro": 12
     }
   },
   "caballo": {
     "factorCarga": 0.5,
-    "velocidad": 24,
+    "velocidad": 36,
     "costo": {
       "oro": 60
     }
   },
   "camello": {
     "factorCarga": 0.75,
-    "velocidad": 19,
+    "velocidad": 28.5,
     "costo": {
       "oro": 40
     }
@@ -1231,7 +1231,7 @@ Cada pueblo extractor (Economia_Construccion §pueblos) tiene un carro propio: u
 - **Si se destruye**, se compra otro en la plaza madre solo si el pueblo no tiene ninguno, al coste de carro + buey (20 madera + ~12 oro). Mientras no tenga carro, el pueblo acumula hasta llenar el almacén y la extracción para.
 - La **solvencia** de la madre (Doc 4.5) cuenta lo que llega por acarreo como la media de las llegadas en 24 h o como la producción del pueblo.
 
-Valores calibrados (2026-10-12): `COMISION.distanciaParaBonusMax` y `ASIGNACION_CARAVANA.distanciaReferencia` 600 → **120** (desde el 2026-10-28 los bloques de arriba ya llevan 120, 8 y 100; antes eran los de TypeScript y el código los sobrescribía); velocidades ×1,5; `NAVEGACION.espaciadoMin` 45 → **8** y vados cada 100.
+Valores calibrados (2026-10-12): `COMISION.distanciaParaBonusMax` y `ASIGNACION_CARAVANA.distanciaReferencia` 600 → **120** (desde el 2026-10-28 los bloques de arriba ya llevan 120, 8 y 100; antes eran los de TypeScript y el código los sobrescribía); velocidades de los animales ×1,5 (desde el 2026-11-11 el bloque `ANIMAL_CATALOGO` ya lleva las calibradas, 24, 36 y 28,5, y el código las lee tal cual); `NAVEGACION.espaciadoMin` 45 → **8** y vados cada 100.
 
 > **Implementado en Rust (2026-10-20, fase 4D: el combate de las caravanas).** Se retira `cerrar_comercio_por_conquista`: la conquista de una plaza llama al cierre interno con `Motivo::Conquista` (flota y pueblos pasan al conquistador, los trueques se anulan, la caravana aparcada en la plaza se destruye). Una caravana suelta o adjunta que pierde carros lo hace con `aplicar_perdida_de_carros` (la carga se pierde en proporción; si no queda ningún carro desaparece). El asalto A (la caravana resiste sola o con escolta) y el B (columna adjunta) se deciden con `Nucleo::en_zona` en el instante del ataque. Los campamentos de bandidos acosan a las caravanas que pasan a ≤ `radioAtaqueCaravana` (una vez por cruce); la escolta destruida pierde soldados. **Provisional:** una escolta sin soldados cuenta como sin escolta; si queda un solo carro, la carga salvada vuelve al origen.
 >

@@ -16,8 +16,15 @@ use mundo::Mundo;
 use std::collections::BTreeSet;
 use territorio::{Disco, DistanciasDeFundacion, Motivo, Terreno, Viabilidad};
 
-/// Muestras de la fertilidad de una zona (`SITIO.muestrasFertilidad`).
+/// Muestras de la fertilidad de una zona (`SITIO.muestrasFertilidad`). Va fija en el código porque sus direcciones son una tabla de enteros (el paso
+/// tiene que ser determinista en cualquier máquina); una prueba comprueba que es la del documento.
 pub(super) const MUESTRAS_FERTILIDAD: usize = 40;
+
+/// `ZONA_INFLUENCIA.segmentosPoligono`: los lados del polígono de la zona que se enseña (`Asentamiento.zona`).
+fn lados_del_poligono() -> usize {
+    static LADOS: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    *LADOS.get_or_init(|| asentamiento::datos::bloque("ZONA_INFLUENCIA")["segmentosPoligono"].as_u64().expect("ZONA_INFLUENCIA.segmentosPoligono") as usize)
+}
 /// Coseno y seno de `i/40·2π` en ppm: las direcciones de las muestras, en enteros para que el paso sea determinista en cualquier máquina.
 const DIRECCIONES_FERTILIDAD: [(i64, i64); MUESTRAS_FERTILIDAD] = [(1000000, 0), (987688, 156434), (951057, 309017), (891007, 453990), (809017, 587785), (707107, 707107), (587785, 809017), (453990, 891007), (309017, 951057), (156434, 987688), (0, 1000000), (-156434, 987688), (-309017, 951057), (-453990, 891007), (-587785, 809017), (-707107, 707107), (-809017, 587785), (-891007, 453990), (-951057, 309017), (-987688, 156434), (-1000000, 0), (-987688, -156434), (-951057, -309017), (-891007, -453990), (-809017, -587785), (-707107, -707107), (-587785, -809017), (-453990, -891007), (-309017, -951057), (-156434, -987688), (0, -1000000), (156434, -987688), (309017, -951057), (453990, -891007), (587785, -809017), (707107, -707107), (809017, -587785), (891007, -453990), (951057, -309017), (987688, -156434)];
 
@@ -203,11 +210,11 @@ impl Nucleo {
         puntos.iter().map(|&p| suelo(p)).collect()
     }
 
-    /// Polígono de la zona real (presentación: `Asentamiento.zona`). 48 lados, como `ZONA_INFLUENCIA.segmentosPoligono`.
+    /// Polígono de la zona real (presentación: `Asentamiento.zona`), con `ZONA_INFLUENCIA.segmentosPoligono` lados.
     pub fn poligono_zona(&self, id: u64) -> Vec<Punto> {
         let Some(a) = self.estado.asentamientos.get(&id) else { return vec![] };
         let vecinos: Vec<Disco> = self.discos().into_iter().filter(|&(o, _)| o != id).map(|(_, d)| d).collect();
-        territorio::poligono(&self.disco_de(a), &vecinos, 48)
+        territorio::poligono(&self.disco_de(a), &vecinos, lados_del_poligono())
     }
 
     /// La ciudad de una plaza (solo lectura): sus piezas con el rectángulo de cada edificio, las calles y los caminos. Para pintar, véase
@@ -516,6 +523,12 @@ impl Nucleo {
 #[cfg(test)]
 mod pruebas {
     use super::*;
+
+    #[test]
+    fn las_muestras_de_fertilidad_son_las_del_documento() {
+        assert_eq!(asentamiento::datos::bloque("SITIO")["muestrasFertilidad"].as_u64(), Some(MUESTRAS_FERTILIDAD as u64), "SITIO.muestrasFertilidad es la tabla de direcciones del código");
+        assert_eq!(lados_del_poligono(), 48);
+    }
     use crate::economia::NodoMapa;
     use asentamiento::Tipo;
     use base::Rng;

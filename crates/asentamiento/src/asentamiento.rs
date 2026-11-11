@@ -549,15 +549,6 @@ impl Asentamiento {
         std::mem::take(&mut self.completados_pendientes)
     }
 
-    /// Para pruebas y proyecciones: ¿cubre la producción de trigo el consumo?
-    pub fn trigo_neto_por_minuto(&self, r: &Reglas, x: &Exterior) -> Mil {
-        let (p, a, _) = self.poblacion.enteros();
-        let mano = produccion::mano_de_obra(&r.catalogo, &self.edificios, p, a, self.trabajadores_de_pueblos(r));
-        let factor = self.politicas.factor(&r.politicas, "factorProduccionTrigo");
-        produccion::produccion_trigo_por_minuto(&r.catalogo, &self.edificios, &mano, x.fertilidad, factor)
-            - self.poblacion.consumo_por_minuto(&r.poblacion, &self.entorno_poblacion(r, x))
-            - x.racion_guarnicion
-    }
 }
 
 /// Sitio inagotable para pruebas y baterías: siempre hay sitio y ninguna fuente.

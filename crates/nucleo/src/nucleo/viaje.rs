@@ -123,6 +123,11 @@ impl Nucleo {
         red.camino_compartido_abierto(&self.estado.reglas.economia.comercio.red, &|p| discos.iter().any(|d| territorio::en_zona(p, d, discos.iter())))
     }
 
+    /// Lo que cabe en el carro de un héroe (`LOGISTICA.capacidadCarroPorJugador`): lo que admite el carro con que sale quien sale de un lugar sin columna.
+    pub(super) fn capacidad_carro(&self) -> Mil {
+        self.estado.reglas.economia.militar.logistica.capacidad_carro
+    }
+
     /// Capacidad de carga de una columna (Movimiento_Ejercitos §9): el carro de cada uno de sus participantes más el **hueco libre** de cada caravana adjunta: su capacidad
     /// efectiva («Carga Ampliada» del origen) menos lo que ya lleva (decisión del autor del 2026-10-24, 5G-a-4: un carro nunca se llena por encima de su límite, así que una
     /// adjunta llena no da espacio a la columna).

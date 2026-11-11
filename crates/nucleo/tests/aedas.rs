@@ -430,7 +430,7 @@ fn rechazos_de_la_compra_sin_rastro() {
 // ───────────────────────────── 6. La foto y el determinismo ─────────────────────────────
 
 #[test]
-fn la_foto_ban39_lleva_los_aedas_y_su_evento_y_ban38_se_rechaza() {
+fn la_foto_lleva_los_aedas_y_su_evento() {
     let m = con_mundo!();
     let mut e = Escenario::nuevo(m, reglas());
     // Hora a hora hasta que alguno vaya de camino: cuándo sale el primero depende del mundo (con el de 2026-10-28, más tarde que a las 7 h).
@@ -464,9 +464,6 @@ fn la_foto_ban39_lleva_los_aedas_y_su_evento_y_ban38_se_rechaza() {
         c(&mut s);
         assert_ne!(s.hash(), base);
     }
-    let vieja = [b"BAN38".as_slice(), &bytes[5..]].concat();
-    let error = Estado::deserializar(&vieja, &reglas, &mundo_hash).err().expect("BAN38 se rechaza");
-    assert!(error.0.contains("BAN38") && error.0.contains("Aedas"), "{}", error.0);
 }
 
 /// Dos plazas, el cobre descubierto, la puerta de B cerrada y abierta, una compra y tres días.

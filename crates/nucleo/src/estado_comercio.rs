@@ -157,11 +157,6 @@ impl EstadoComercio {
         self.flota.iter().filter(move |c| c.tipo == TipoCaravana::Comercial && c.origen as u64 == plaza)
     }
 
-    /// ¿Cita alguna caravana este trueque? (lo que `podar` respeta).
-    pub fn citado_por_caravana(&self, acuerdo: AcuerdoId) -> bool {
-        self.flota.iter().any(|c| c.origen_acuerdo.is_some_and(|(a, _)| a == acuerdo))
-    }
-
     /// Valor de la reputación de una Facción en `t` (ppm de punto; 0 si no consta).
     pub fn reputacion_en(&self, faccion: u32, t: Instante) -> i64 {
         self.reputacion.get(&faccion).map_or(0, |r| r.valor_en(t))

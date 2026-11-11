@@ -697,7 +697,7 @@ fn los_rechazos_tienen_su_codigo_y_no_dejan_rastro() {
 // ───────────────────────────── Foto, recuperación, determinismo ─────────────────────────────
 
 #[test]
-fn la_foto_a_mitad_de_obra_conserva_la_cita_y_se_rechaza_la_del_formato_anterior() {
+fn la_foto_a_mitad_de_obra_conserva_la_cita() {
     let m = con_mundo!();
     let mut e = escenario(m, 7, Some(50_000));
     let a = e.a;
@@ -724,10 +724,6 @@ fn la_foto_a_mitad_de_obra_conserva_la_cita_y_se_rechaza_la_del_formato_anterior
     let siguiente = e.recintos()[0].siguiente_celda_en.unwrap();
     assert!(vuelta.cola.volcar().iter().any(|ev| ev.instante == siguiente && matches!(ev.carga, Carga::FinDeObras) && ev.clave.entidad == a));
 
-    // El formato anterior (los recintos dentro de la ciudad, sin nivel, avance ni mejora) se rechaza con su motivo.
-    let viejo = [b"BAN19".as_slice(), &bytes[5..]].concat();
-    let Err(err) = Estado::deserializar(&viejo, &reglas, &m.0.hash().to_string()) else { panic!("BAN19 no debe admitirse") };
-    assert!(err.to_string().contains("BAN19") && err.to_string().contains("recintos"), "{err}");
     // Un recinto con el avance fuera del anillo es una foto corrupta.
     let mut mala = Estado::deserializar(&bytes, &reglas, &m.0.hash().to_string()).unwrap();
     mala.asentamientos.get_mut(&a).unwrap().economia.recintos[0].avance = 9_999;

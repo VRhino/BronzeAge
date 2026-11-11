@@ -208,6 +208,9 @@ pub struct Reglas {
     /// `FUNDACION.pendienteMaximaParaFundar`, en milésimas (m/m): con más pendiente no se funda (decisión del autor del 2026-10-31,
     /// que sustituye a la prohibición de fundar en cima: se funda según la pendiente, no según la altura).
     pub pendiente_maxima_fundar: Mil,
+    /// `OCUPACION.fraccionCosteReconstruccion` (de `Murallas.md`), en ppm: lo que cuesta y tarda reconstruir un edificio dañado por un saqueo,
+    /// sobre su coste y su tiempo de catálogo (y lo que devuelve quitarlo de la cola).
+    pub fraccion_reconstruccion: i64,
 }
 
 /// `TAMANOS_MAPA` (Economia_Construccion §14.1, decisión del autor del 2026-10-27): el diámetro, en milésimas de unidad de mapa, del disco que ocupa cada elemento en el mapa del mundo.
@@ -246,7 +249,7 @@ impl TamanosMapa {
 
 impl Reglas {
     pub fn cargar() -> Self {
-        Self::de(&|n| if n == "MURALLA" { bloque_de(MURALLAS, n).unwrap_or_else(|e| panic!("{e}")) } else { bloque(n) })
+        Self::de(&|n| if n == "MURALLA" || n == "OCUPACION" { bloque_de(MURALLAS, n).unwrap_or_else(|e| panic!("{e}")) } else { bloque(n) })
     }
 
     fn de(b: &dyn Fn(&str) -> Value) -> Self {
@@ -323,6 +326,7 @@ impl Reglas {
             caducidad_caravana: num(&fundacion, "caducidadCaravanaHoras") as i64 * 3_600_000,
             densidad_bosque_maxima_fundar: mil(num(&fundacion, "densidadBosqueMaximaParaFundar")),
             pendiente_maxima_fundar: mil(num(&fundacion, "pendienteMaximaParaFundar")),
+            fraccion_reconstruccion: ppm(num(&b("OCUPACION"), "fraccionCosteReconstruccion")),
             poblacion,
             politicas,
             capacidad_inicial: mil(num(&b("ALMACEN"), "capacidadInicialPorRecurso")),

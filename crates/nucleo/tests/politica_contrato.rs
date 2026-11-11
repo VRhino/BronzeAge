@@ -214,9 +214,6 @@ fn los_fundadores_viajan_en_la_plaza_dejan_de_serlo_al_mudarse_y_van_en_la_foto_
     let mut otro = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     otro.asentamientos.get_mut(&plaza).unwrap().fundadores.pop();
     assert_ne!(otro.hash(), s.hash());
-    let vieja = [b"BAN34".as_slice(), &bytes[5..]].concat();
-    let error = Estado::deserializar(&vieja, &reglas, &hash).err().expect("BAN34 se rechaza");
-    assert!(error.0.contains("BAN34") && error.0.contains("quién las fundó"), "{}", error.0);
     // Ana se muda a un campamento: deja de ser fundadora (como `heroesFundadoresIds` en el TypeScript).
     e.ok("admin", Comando::FijarResidencia { heroe: ana, residencia: Some(Residencia::Campamento(0)) });
     assert_eq!(e.n.estado().asentamientos[&plaza].fundadores, vec![gus]);

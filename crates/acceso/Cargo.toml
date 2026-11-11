@@ -16,4 +16,3 @@ tokio = { version = "1.53.2", features = ["rt", "sync", "time"] }
 [dev-dependencies]
 tempfile = "3"
 tokio = { version = "1.53.2", features = ["rt-multi-thread", "macros", "net", "io-util", "time"] }
-prost = "0.13"

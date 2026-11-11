@@ -246,11 +246,6 @@ impl Ciudad {
         self.recintos = recintos;
         self.reconstruir();
     }
-    /// Recalcula la red desde cero. Solo hace falta tras tocar piezas por fuera de [`Ciudad::colocar`].
-    pub fn recalcular_red(&mut self) {
-        self.reconstruir();
-    }
-
     pub fn es_calle(&self, c: Celda) -> bool {
         idx(c).is_some_and(|i| self.suelo.red[i] == CALLE)
     }

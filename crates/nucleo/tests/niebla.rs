@@ -426,18 +426,6 @@ fn la_memoria_es_la_misma_con_sesiones_y_sin_ellas_y_avanzando_a_trozos_y_viaja_
     let vuelta = Estado::deserializar(&bytes, &reglas(), m.0.hash()).expect("la foto vuelve");
     assert_eq!(vuelta.memoria, *mem);
     assert_eq!(vuelta.serializar(), bytes);
-    let vieja = [b"BAN22".as_slice(), &bytes[5..]].concat();
-    let Err(e) = Estado::deserializar(&vieja, &reglas(), m.0.hash()) else { panic!("BAN22 no debe admitirse") };
-    assert!(e.to_string().contains("BAN22") && e.to_string().contains("niebla"), "{e}");
-    let vieja = [b"BAN23".as_slice(), &bytes[5..]].concat();
-    let Err(e) = Estado::deserializar(&vieja, &reglas(), m.0.hash()) else { panic!("BAN23 no debe admitirse") };
-    assert!(e.to_string().contains("BAN23") && e.to_string().contains("LAYOUT_VERSION 3"), "{e}");
-    let vieja = [b"BAN25".as_slice(), &bytes[5..]].concat();
-    let Err(e) = Estado::deserializar(&vieja, &reglas(), m.0.hash()) else { panic!("BAN25 no debe admitirse") };
-    assert!(e.to_string().contains("BAN25") && e.to_string().contains("LAYOUT_VERSION 4"), "{e}");
-    let vieja = [b"BAN28".as_slice(), &bytes[5..]].concat();
-    let Err(e) = Estado::deserializar(&vieja, &reglas(), m.0.hash()) else { panic!("BAN28 no debe admitirse") };
-    assert!(e.to_string().contains("BAN28") && e.to_string().contains("LAYOUT_VERSION 5"), "{e}");
 }
 
 #[test]

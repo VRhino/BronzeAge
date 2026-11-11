@@ -8,7 +8,6 @@ version = "0.2.0"
 dependencies = [
  "argon2",
  "contrato",
- "prost",
  "serde",
  "serde_json",
  "servidor",
@@ -46,7 +45,7 @@ dependencies = [
 
 [[package]]
 name = "asentamiento"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "base",
  "serde_json",
@@ -162,7 +161,7 @@ dependencies = [
 
 [[package]]
 name = "combate"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "asentamiento",
  "base",
@@ -174,7 +173,7 @@ dependencies = [
 
 [[package]]
 name = "comercio"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "asentamiento",
  "base",
@@ -565,7 +564,7 @@ dependencies = [
 
 [[package]]
 name = "nucleo"
-version = "0.35.0"
+version = "0.36.0"
 dependencies = [
  "asentamiento",
  "base",
@@ -646,7 +645,7 @@ checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
 name = "politica"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "asentamiento",
  "base",
@@ -1149,7 +1148,7 @@ dependencies = [
 
 [[package]]
 name = "trazado"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "base",
 ]
@@ -1190,7 +1189,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vision"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "base",
  "contrato",

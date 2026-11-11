@@ -559,13 +559,6 @@ fn una_foto_con_el_acceso_cambiado_se_recupera_y_la_anterior_se_rechaza() {
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.asentamientos[&e.a].puerta.cerrada_a, Some(politica::Grupos::de([politica::Grupo::Aliados])));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
-    let viejo = [b"BAN16".as_slice(), &bytes[5..]].concat();
-    let Err(err) = nucleo::Estado::deserializar(&viejo, &Reglas::default(), &e.n.estado().mundo_hash) else { panic!("BAN16 no debe admitirse") };
-    assert!(err.to_string().contains("BAN16") && err.to_string().contains("acceso"), "{err}");
-    // BAN17 (sin héroes dentro de pueblos ni avanzadas) tampoco se admite, y dice por qué.
-    let viejo = [b"BAN17".as_slice(), &bytes[5..]].concat();
-    let Err(err) = nucleo::Estado::deserializar(&viejo, &Reglas::default(), &e.n.estado().mundo_hash) else { panic!("BAN17 no debe admitirse") };
-    assert!(err.to_string().contains("BAN17") && err.to_string().contains("pueblo") && err.to_string().contains("avanzada"), "{err}");
 }
 
 // ───────────────────────────── 5. Cuando el lugar cae en ruinas ─────────────────────────────

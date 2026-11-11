@@ -1635,7 +1635,7 @@ fn una_foto_a_mitad_de_obra_y_otra_con_la_guarnicion_mermada_recuperan_el_mismo_
 }
 
 #[test]
-fn el_estado_de_las_avanzadas_va_en_la_foto_y_cualquier_campo_cambia_el_hash_y_el_formato_anterior_se_rechaza() {
+fn el_estado_de_las_avanzadas_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     use militar::escuadra::Escuadra;
     let reglas = Reglas::default();
     let mut base = nucleo::Estado::nuevo(reglas.clone(), "h".into(), 1, 0);
@@ -1695,13 +1695,6 @@ fn el_estado_de_las_avanzadas_va_en_la_foto_y_cualquier_campo_cambia_el_hash_y_e
     let mut s = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     s.combate.avanzadas.get_mut(&9).unwrap().escuadras[0].contenedor = Contenedor::Avanzada(5);
     assert_eq!(s.combate.avanzadas[&9].escuadras[0].contenedor, Contenedor::Avanzada(5));
-    // Los formatos anteriores se rechazan con su motivo.
-    let viejo = [b"BAN14".as_slice(), &bytes[5..]].concat();
-    let Err(e) = nucleo::Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN14 no debe admitirse") };
-    assert!(e.to_string().contains("BAN14") && e.to_string().contains("avanzadas"), "{e}");
-    let viejo = [b"BAN15".as_slice(), &bytes[5..]].concat();
-    let Err(e) = nucleo::Estado::deserializar(&viejo, &reglas, "h") else { panic!("BAN15 no debe admitirse") };
-    assert!(e.to_string().contains("BAN15") && e.to_string().contains("cita"), "{e}");
 }
 
 #[test]

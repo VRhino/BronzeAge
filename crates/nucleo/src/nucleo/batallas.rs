@@ -159,37 +159,38 @@ fn rechazo_de_batalla(e: ErrorBatalla, v: u64) -> Respuesta {
     let (codigo, mensaje) = match e {
         ErrorBatalla::NoActiva => (BATALLA_NO_EXISTE, "la batalla no existe o ya no está activa".to_string()),
         ErrorBatalla::YaAsignada => (BATALLA_YA_ASIGNADA, "otro servidor ya tiene esta batalla".into()),
-        ErrorBatalla::EnConvocatoria => (BATALLA_INVALIDA, "un asedio en convocatoria no se publica ni se asigna".into()),
-        ErrorBatalla::RevisionVieja => (BATALLA_INVALIDA, "la revisión del ticket no es la vigente".into()),
-        ErrorBatalla::EstadoInvalido => (BATALLA_INVALIDA, "el estado de la batalla no admite esta operación".into()),
-        ErrorBatalla::ServidorAjeno => (BATALLA_INVALIDA, "no es el servidor de la asignación activa".into()),
-        ErrorBatalla::TokenInvalido(h) => (BATALLA_INVALIDA, format!("el héroe {h} no es un humano de esta batalla: no lleva token")),
-        ErrorBatalla::NoCombate(h) => (BATALLA_INVALIDA, format!("el héroe {h} no combate en esta batalla")),
-        ErrorBatalla::LadoLleno => (BATALLA_INVALIDA, "ese bando está lleno".into()),
-        ErrorBatalla::YaSalio(h) => (BATALLA_INVALIDA, format!("el héroe {h} ya salió de esta batalla y no vuelve a entrar")),
-        ErrorBatalla::YaCombate(h) => (BATALLA_INVALIDA, format!("el héroe {h} ya combate en esta batalla")),
-        ErrorBatalla::NoPuedeCancelar => (BATALLA_INVALIDA, "solo quien la inició puede cancelarla, y antes de que empiece la partida".into()),
-        ErrorBatalla::SalidaInvalida => (BATALLA_INVALIDA, "la salida trae una escuadra que no es del héroe, repetida o que no cierra sobre lo autorizado".into()),
+        ErrorBatalla::EnConvocatoria => (BATALLA_EN_CONVOCATORIA, "un asedio en convocatoria no se publica ni se asigna".into()),
+        ErrorBatalla::RevisionVieja => (BATALLA_REVISION_VIEJA, "la revisión del ticket no es la vigente".into()),
+        ErrorBatalla::EstadoInvalido => (BATALLA_ESTADO_INVALIDO, "el estado de la batalla no admite esta operación".into()),
+        ErrorBatalla::ServidorAjeno => (BATALLA_SERVIDOR_AJENO, "no es el servidor de la asignación activa".into()),
+        ErrorBatalla::TokenInvalido(h) => (BATALLA_TOKEN_INVALIDO, format!("el héroe {h} no es un humano de esta batalla: no lleva token")),
+        ErrorBatalla::NoCombate(h) => (BATALLA_NO_COMBATE, format!("el héroe {h} no combate en esta batalla")),
+        ErrorBatalla::LadoLleno => (BATALLA_LADO_LLENO, "ese bando está lleno".into()),
+        ErrorBatalla::YaSalio(h) => (BATALLA_YA_SALIO, format!("el héroe {h} ya salió de esta batalla y no vuelve a entrar")),
+        ErrorBatalla::YaCombate(h) => (BATALLA_YA_COMBATE, format!("el héroe {h} ya combate en esta batalla")),
+        ErrorBatalla::NoPuedeCancelar => (BATALLA_NO_PUEDE_CANCELAR, "solo quien la inició puede cancelarla, y antes de que empiece la partida".into()),
+        ErrorBatalla::SalidaInvalida => (BATALLA_SALIDA_INVALIDA, "la salida trae una escuadra que no es del héroe, repetida o que no cierra sobre lo autorizado".into()),
         ErrorBatalla::SalidaIncompleta => (BATALLA_SALIDA_INCOMPLETA, "la salida no nombra todas las escuadras autorizadas del héroe".into()),
-        ErrorBatalla::Resultado(e) => (BATALLA_INVALIDA, format!("resultado inválido: {e:?}")),
-        ErrorBatalla::OtroResultado => (BATALLA_INVALIDA, "la batalla ya se aplicó con otro resultado".into()),
+        ErrorBatalla::Resultado(e) => (BATALLA_RESULTADO_INVALIDO, format!("resultado inválido: {e:?}")),
+        ErrorBatalla::OtroResultado => (BATALLA_OTRO_RESULTADO, "la batalla ya se aplicó con otro resultado".into()),
     };
     Respuesta::rechazo(codigo, mensaje, v)
 }
 
 fn rechazo_de_union(e: ErrorUnion, v: u64) -> Respuesta {
-    let mensaje = match e {
-        ErrorUnion::NadieDeFuera => "en una batalla campal entre ejércitos no entra nadie de fuera".to_string(),
-        ErrorUnion::SoloColumnasPersonales => "una persecución solo admite columnas personales".into(),
-        ErrorUnion::LadoObligatorio => "en una persecución hay que elegir bando".into(),
-        ErrorUnion::NadieAyudaALosBandidos => "nadie ayuda a los bandidos".into(),
-        ErrorUnion::SinFaccion => "hace falta Facción para unirse a esta batalla".into(),
-        ErrorUnion::NoCombateAqui => "tu Facción no combate aquí".into(),
-        ErrorUnion::LadoDistinto(l) => format!("a ti te toca el bando {l:?}"),
-        ErrorUnion::HayQueEstarDentro => "para defender hay que estar dentro (haber entrado): a la puerta, en el mapa, solo se ataca".into(),
-        ErrorUnion::HayQueEstarFuera => "para atacar hay que estar fuera, en el mapa: desde dentro de un lugar no se ataca".into(),
+    use rechazos::*;
+    let (codigo, mensaje) = match e {
+        ErrorUnion::NadieDeFuera => (BATALLA_NADIE_DE_FUERA, "en una batalla campal entre ejércitos no entra nadie de fuera".to_string()),
+        ErrorUnion::SoloColumnasPersonales => (BATALLA_SOLO_PERSONALES, "una persecución solo admite columnas personales".into()),
+        ErrorUnion::LadoObligatorio => (BATALLA_LADO_OBLIGATORIO, "en una persecución hay que elegir bando".into()),
+        ErrorUnion::NadieAyudaALosBandidos => (BATALLA_NADIE_AYUDA_A_BANDIDOS, "nadie ayuda a los bandidos".into()),
+        ErrorUnion::SinFaccion => (BATALLA_SIN_FACCION, "hace falta Facción para unirse a esta batalla".into()),
+        ErrorUnion::NoCombateAqui => (BATALLA_NO_COMBATE_AQUI, "tu Facción no combate aquí".into()),
+        ErrorUnion::LadoDistinto(l) => (BATALLA_LADO_DISTINTO, format!("a ti te toca el bando {l:?}")),
+        ErrorUnion::HayQueEstarDentro => (BATALLA_INVALIDA, "para defender hay que estar dentro (haber entrado): a la puerta, en el mapa, solo se ataca".into()),
+        ErrorUnion::HayQueEstarFuera => (BATALLA_INVALIDA, "para atacar hay que estar fuera, en el mapa: desde dentro de un lugar no se ataca".into()),
     };
-    Respuesta::rechazo(rechazos::BATALLA_INVALIDA, mensaje, v)
+    Respuesta::rechazo(codigo, mensaje, v)
 }
 
 fn sin_cambios(v: u64) -> Respuesta {
@@ -916,27 +917,27 @@ impl Nucleo {
     /// saber qué podría hacer ([`Nucleo::lado_para_unirse`]).
     pub(super) fn elegibilidad(&self, t: Instante, heroe: u64, b: &Batalla, pedido: Option<Lado>) -> Result<(Lado, Donde, Option<u64>), Respuesta> {
         let v = self.estado.version;
-        let invalida = |m: &str| Respuesta::rechazo(rechazos::BATALLA_INVALIDA, m, v);
+        let rechazo = |codigo: &'static str, m: &str| Respuesta::rechazo(codigo, m, v);
         let hn = self.heroe(heroe).ok_or_else(|| Respuesta::rechazo(rechazos::HEROE_DESCONOCIDO, ids::heroe(heroe), v))?;
         if self.heroe_herido(heroe) {
-            return Err(invalida("estás herido: no puedes entrar en batalla"));
+            return Err(rechazo(rechazos::BATALLA_INVALIDA, "estás herido: no puedes entrar en batalla"));
         }
         let bloqueos = self.bloqueos();
         if bloqueos.heroes.contains(&heroe) {
-            return Err(invalida("ya estás en una batalla"));
+            return Err(rechazo(rechazos::BATALLA_YA_COMBATE, "ya estás en una batalla"));
         }
         let donde = donde_esta(hn.heroe.presencia.ubicacion, &b.ticket.contexto);
         let columna = self.estado.ejercito_de_heroe(heroe);
         // Quien está fuera llega con su columna y a su alcance; quien está dentro está donde se disputa y no necesita ni columna ni distancia.
         if donde != Donde::Dentro {
-            let Some(c) = columna else { return Err(invalida("hay que llegar con tu columna")) };
+            let Some(c) = columna else { return Err(rechazo(rechazos::BATALLA_SIN_COLUMNA, "hay que llegar con tu columna")) };
             let radio = self.estado.reglas.economia.militar.logistica.radio_encuentro;
             if self.estado.ejercitos[&c].posicion_en(t).dist(b.punto) > radio {
-                return Err(invalida(&format!("hay que estar a {radio} o menos de la batalla")));
+                return Err(rechazo(rechazos::BATALLA_LEJOS, &format!("hay que estar a {radio} o menos de la batalla")));
             }
         }
         if columna.is_some_and(|c| bloqueos.ejercitos.contains(&c)) {
-            return Err(invalida("tu columna ya está en una batalla"));
+            return Err(rechazo(rechazos::BATALLA_YA_COMBATE, "tu columna ya está en una batalla"));
         }
         let aliadas = |a: u32, b: u32| matches!(self.estado.relacion(a, b), Some(Relacion::Alianza | Relacion::Vasallaje));
         let personal = columna.is_some_and(|c| self.estado.ejercitos[&c].columna.tipo == TipoColumna::Personal);

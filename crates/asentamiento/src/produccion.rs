@@ -6,7 +6,7 @@
 use crate::almacen::Almacen;
 use crate::catalogo::{Catalogo, Tipo};
 use crate::datos::{por, razon, UNO};
-use crate::edificio::{Edificio, Edificios, Fuente};
+use crate::edificio::{Edificio, Fuente};
 use crate::recetas_unicas;
 use crate::recurso::{Costo, Recurso, N};
 use base::Mil;
@@ -183,11 +183,6 @@ pub fn produccion_trigo_por_minuto(cat: &Catalogo, edificios: &[Edificio], mano:
 /// Pesants y artesanos que no hacen falta para producir: el pool de reclutamiento (`poblacionDisponibleParaReclutar`).
 pub fn disponibles_para_reclutar(mano: &Mano, pesants_enteros: i64, artesanos_enteros: i64) -> (i64, i64) {
     (((pesants_enteros * 1000 - mano.requeridos_pesants) / 1000).max(0), ((artesanos_enteros * 1000 - mano.requeridos_artesanos) / 1000).max(0))
-}
-
-/// Cuántos extractores activos de un tipo hay (útil para las pruebas y el reemplazo de fuentes).
-pub fn activos_de(edificios: &[Edificio], t: Tipo) -> usize {
-    edificios.activos(t)
 }
 
 #[cfg(test)]

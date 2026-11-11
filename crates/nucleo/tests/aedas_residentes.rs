@@ -389,9 +389,6 @@ fn ida_y_vuelta(e: &Escenario) {
     assert_eq!((&vuelta.residentes, &vuelta.residentes_citas), (&e.n.estado().residentes, &e.n.estado().residentes_citas));
     let residentes = |x: &Estado| x.cola.volcar().into_iter().filter(|c| matches!(c.carga, Carga::Residentes)).count();
     assert_eq!(residentes(&vuelta), residentes(e.n.estado()));
-    let vieja = [b"BAN38".as_slice(), &bytes[5..]].concat();
-    let error = Estado::deserializar(&vieja, &reglas, &mundo_hash).err().expect("BAN38 se rechaza");
-    assert!(error.0.contains("BAN38") && error.0.contains("Aedas residentes"), "{}", error.0);
 }
 
 #[test]

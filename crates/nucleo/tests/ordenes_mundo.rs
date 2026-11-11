@@ -497,7 +497,7 @@ async fn quien_esta_dentro_de_una_plaza_asediada_se_une_a_la_batalla_de_unity_po
     aceptada(&r);
     // Quien ya está en la batalla no puede cancelarla: solo quien la inició (y ana no es la cuenta de este héroe).
     let (_, r) = dar(&mut c_beto, "u3", orden::Cuerpo::CancelarBatalla(pb::OrdenCancelarBatalla { battle_id: uuid })).await;
-    assert_eq!(rechazo(&r), "batalla.invalida");
+    assert_eq!(rechazo(&r), "batalla.no_puede_cancelar");
     let n = w.parar().await;
     assert!(n.heroe_en_batalla(beto), "beto defiende en la batalla del asedio");
 }

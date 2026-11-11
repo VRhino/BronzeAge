@@ -347,7 +347,7 @@ módulos y salían transversales amontonadas o ausentes.
 `sitiosParaTipo(asentamiento, edificios, tipo, nivelInterno?, perfil)` devuelve la **lista ordenada** de sitios posibles `{ punto, rotado }`; el mejor es el primero (`sitioParaTipo`). Vacía = no cabe.
 El resultado depende solo de `(id, edificios, recintos con su avance, radioCiudad, tipo, nivelInterno, perfil)`.
 
-El **perfil** efectivo es `TRAZADO.perfilForzado ?? perfil de la política activa ?? perfilPorTradicion(id)` (§8).
+El **perfil** efectivo es el de la política activa, si la hay, y si no `perfilPorTradicion(id)` (§8).
 
 ### 6.1 Despacho por tipo (en este orden)
 
@@ -492,7 +492,7 @@ El perfil es una **permutación del orden de desempate** de los satélites, no u
 | `compacta` | centro, hueco, nivel, borde, bordeAfin |
 | `gremial` | bordeAfin, hueco, nivel, borde, centro |
 
-Precedencia: `TRAZADO.perfilForzado` (solo laboratorio y batch) > perfil de la política activa (`perfilTrazadoDePolitica`; hoy «Postura Defensiva» → `compacta`) > `perfilPorTradicion(id)`.
+Precedencia (el `TRAZADO.perfilForzado` del laboratorio del TypeScript se quitó el 2026-11-11: el motor no lo leía): perfil de la política activa (`perfilTrazadoDePolitica`; hoy «Postura Defensiva» → `compacta`) > `perfilPorTradicion(id)`.
 Un quinto perfil («palatina», dominado por `borde`) se descartó: `borde` solo tiene señal con hueco 0 y salía idéntico a `nucleos`.
 
 ## 9. Cachés (no cambian ningún resultado)
@@ -546,7 +546,6 @@ origen** `(0,0)`, encima del Centro Urbano: el fallback es defensivo); contexto 
 <!-- parametros:TRAZADO -->
 ```json
 {
-  "perfilForzado": null,
   "largoFilaMin": 4,
   "largoFilaMax": 8,
   "radioAfuerasMin": 60,

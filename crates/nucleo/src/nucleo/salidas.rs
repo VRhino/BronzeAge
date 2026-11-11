@@ -30,7 +30,6 @@
 
 use super::*;
 use crate::estado_militar::{EdificioRecordado, PlazaRecordada};
-use crate::nucleo::mercado::CAPACIDAD_CARRO;
 use asentamiento::almacen::Almacen;
 use asentamiento::Recurso;
 use comercio::{total, Carga as Mercancia};
@@ -164,7 +163,7 @@ impl Nucleo {
         }
         // El carro nunca lleva más de su capacidad: cuenta el que trajo a su residencia (y, si conserva su columna, lo que ella lleve).
         let ocupado = total(&hn.carro) + columna.and_then(|c| self.estado.ejercitos.get(&c)).map_or(0, |c| total(&c.columna.carga));
-        let hueco = (CAPACIDAD_CARRO - ocupado).max(0);
+        let hueco = (self.capacidad_carro() - ocupado).max(0);
         if total(&pedido) > hueco {
             return Err(rechazo(rechazos::CARRO_LLENO, format!("el carro admite {hueco} y se piden {}", total(&pedido))));
         }

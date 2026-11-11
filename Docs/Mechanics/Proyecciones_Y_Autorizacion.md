@@ -523,7 +523,7 @@ Las **161 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 
 La autorización del motor TypeScript (`session/comandos/autorizacion.ts`, verificada contra `3d19d31`): con cargos, residencia y presencia. En Rust aún no existe (§5.1); queda aquí como la regla que el sistema 5 tiene que traer. Las secciones siguientes son sus filas.
 
-> **Implementado en Rust (2026-10-24, 5A, solo los predicados):** `crates/politica::autorizacion` (`Actor` sobre una `Vista` de las plazas que dará el núcleo): `ciudadano`, `rey`, `rey_o_embajador`, `residente`, `presente`, `reside`, `cargo`, `algun_cargo`, `autoridad_diplomatica`, `rey_de_faccion`, `rey_de_la_plaza`, `responde_solicitudes` (fail-closed), `asigna_rey`, `asigna_cargo_local`, `fija_puerta`, `veta`, `mueve_tropa_de`, `opera_aparcada`, `dirige_aedas`, `compra_intel_en`, `compra_tecnologia_aeda`, `se_muda_a` y `ciudadano_o_sin_faccion`, con el fail-open de §4.2. La matriz de §5.1 no cambia hasta 5E, que retira `manda_en` y pasa cada orden a su fila de esta sección.
+> **Implementado en Rust (2026-10-24, 5A, solo los predicados):** `crates/politica::autorizacion` (`Actor` sobre una `Vista` de las plazas que dará el núcleo): `ciudadano`, `rey`, `rey_o_embajador`, `residente`, `presente`, `reside`, `cargo`, `algun_cargo`, `autoridad_diplomatica`, `rey_de_faccion`, `rey_de_la_plaza`, `responde_solicitudes` (fail-closed), `asigna_rey`, `asigna_cargo_local`, `fija_puerta`, `veta`, `opera_aparcada`, `dirige_aedas`, `compra_intel_en`, `compra_tecnologia_aeda`, `se_muda_a` y `ciudadano_o_sin_faccion`, con el fail-open de §4.2. La matriz de §5.1 no cambia hasta 5E, que retira `manda_en` y pasa cada orden a su fila de esta sección.
 
 > **Implementado en Rust (2026-10-25, 5E):** las filas de esta sección son las de §5.1 (ver su nota). `moverCargaCaravanaAparcada` y `enviarCaravanaAlOrigen` miran la plaza donde está aparcada (la de la
 > caravana, no un `asentamientoId` de la orden); `asignarEscolta` y `quitarEscolta` siguen siendo de la cuenta del héroe con la regla de la orden (escuadras suyas en el campamento del origen).
@@ -868,21 +868,7 @@ Confirmadas por el autor al cerrar las dudas abiertas (doc «Dudas abiertas del 
 
 ## 8. Parámetros
 
-<!-- parametros:DIFUSION -->
-```json
-{
-  "coalescerMs": 100,
-  "umbralLentoBytes": 262144,
-  "umbralRecuperadoBytes": 32768,
-  "lentoMaxMs": 15000,
-  "maxSuscripcionesPorSocket": 64,
-  "minMsEntreFotos": 2000,
-  "ritmoMaximo": 60
-}
-```
-<!-- /parametros -->
-
-Son cifras de **infraestructura** (`constantsInfra.ts`): no alteran lo que ve nadie, solo cuánto tarda en llegar. La duración de la sesión (`ACCESO.duracionSesionMs`, §2.1) y `INFRA.limiteIdempotencia` (§3, [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §8) son las otras dos. Las del juego que intervienen en lo que se ve (`VISION`, `INSPECCION`, `INTEL`, `ALMACEN_PERSONAL`…) están en [`Niebla_De_Guerra.md`](Niebla_De_Guerra.md) §7.
+Las cifras de **infraestructura** de la difusión (cuánto tarda en llegar lo que se ve, no lo que se ve) son las del servidor (`servidor::Config`, `nucleo::Ajustes`); el bloque `DIFUSION` del TypeScript (`coalescerMs`, los umbrales de cliente lento, `minMsEntreFotos`…) se quitó el 2026-11-11 porque el motor no lo leía. La duración de la sesión (`ACCESO.duracionSesionMs`, §2.1) y `INFRA.limiteIdempotencia` (§3, [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §8) son las otras dos. Las del juego que intervienen en lo que se ve (`VISION`, `INSPECCION`, `INTEL`, `ALMACEN_PERSONAL`…) están en [`Niebla_De_Guerra.md`](Niebla_De_Guerra.md) §7.
 
 ## 9. Invariantes
 
