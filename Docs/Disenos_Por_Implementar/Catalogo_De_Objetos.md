@@ -5,7 +5,7 @@ Diseño **aprobado por el autor el 2026-11-11** («si me cuadra todo esto», 18:
 - variación con sentido dentro del tier II (20:46 y 20:48, §4);
 - las cifras de combate, ajustadas a sus referencias para el héroe. El autor dio el diseño por cerrado a las 21:14; las reglas y la escala están en [`Cifras_De_Combate.md`](Cifras_De_Combate.md).
 
-Quedan abiertos los rangos de la forja, los objetos varios (trofeos, cofres, aspecto) y la tecnología `acero_templado`, que espera a las Eras IV y V.
+Quedan abiertos los rangos de la forja (hay una propuesta en §6b), los objetos varios (trofeos, cofres, aspecto) y la tecnología `acero_templado`, que espera a las Eras IV y V.
 
 Las cinco clases del autor (`Clases_De_Heroe.md`, cerrado) son la base de §3.2, §4 y §5. Este catálogo cierra el punto 1 (y en parte el 2, el 8 y el 10) de §4 de [`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md). Parte de las plantillas de Conquest (`Assets/Resources/Items`, `HeroClassSelector.FillBaseItemIdsForClass`, `BasicArmorStatGenerator`, `BasicWeaponStatGenerator`, `ItemPricingService`) y las lleva a la Edad del Bronce con los materiales y tecnologías que el motor ya usa en la Armería (cuero, cobre, bronce y hierro; [`Economia_Construccion.md`](../Mechanics/Economia_Construccion.md)).
 
@@ -246,9 +246,11 @@ El hueco del arma nunca queda vacío: `desequipar` el arma se rechaza, solo se c
 
 La compatibilidad y la armadura inicial de cada clase viven en el bloque `CLASES_HEROE` del diseño de clases (`Clases_De_Heroe.md`). Se sirve junto a `OBJETOS` pero con **su propia versión** (`bronzeage-clases-1`), porque las clases cambian poco y el catálogo mucho (autor, 2026-11-11). En `OBJETOS` cada arma solo dice su clase, por id, y su tier; el motor comprueba al cargar que esa clase existe.
 
-## 6. Precios
+## 6. Precios y tienda
 
 El héroe nace con 1.500 monedas, gana 500 por una batalla ganada contra otra Facción y 50-100 por un campamento de bandidos. El precio de Conquest (24 una armadura, 30 un arma) no pesa nada en esa escala, así que se sube y se separa por peso. El precio sube con el tier: ×1, ×2, ×3,5, ×5 y ×7 del I al V. Los dos metales del tier II cuestan lo mismo.
+
+**La tienda solo vende los tiers I y II** (autor, 2026-11-11 21:31). Los tiers III, IV y V no se compran: salen de la forja y del botín. Todo se puede vender a la tienda al 50 %, así que en los tiers III-V el precio solo sirve para saber por cuánto se vende.
 
 | Pieza (tier I) | Compra | Venta (50 %) |
 | --- | --- | --- |
@@ -257,7 +259,7 @@ El héroe nace con 1.500 monedas, gana 500 por una batalla ganada contra otra Fa
 | armadura pesada (torso 450) | 300 | 150 |
 | arma | 200 | 100 |
 
-Un juego, con casco desde el tier II:
+Un juego, con casco desde el tier II (del III al V, solo para vender, a la mitad):
 
 | Juego | I | II | III | IV | V |
 | --- | --- | --- | --- | --- | --- |
@@ -270,9 +272,17 @@ No hay un multiplicador de rareza aparte, porque la rareza es el tier.
 
 ## 6b. Coste de fabricación (forja)
 
-Lo que cuesta **forjar** una pieza. La forja es la del diseño de objetos: el motor tira los valores dentro de los rangos de la receta, y los rangos están por decidir. Lo paga el almacén personal del héroe, como decidió el autor. Los materiales son los recursos que ya fabrican la Fundición y la Curtiduría.
+Lo que cuesta **forjar** una pieza. La forja es la del diseño de objetos: el motor tira los valores dentro de los rangos de la receta (propuesta abajo, en «La calidad»). Lo paga el almacén personal del héroe, como decidió el autor. Los materiales son los recursos que ya fabrican la Fundición y la Curtiduría.
 
-**El tier I no se forja:** lo vende la tienda.
+**Se forjan todos los tiers del II al V** (autor, 2026-11-11 21:31: «forjar se pueden todas»). Para los tiers III, IV y V, la forja y el botín son la única fuente. El tier I, el equipo de inicio, no se forja: lo vende la tienda (autor, 19:59).
+
+### La calidad (propuesta, sin decidir)
+
+- Cada pieza forjada sale con una **calidad del 90 al 110 %**, que multiplica todas sus cifras (atributos, defensas, salud, daño y penetración, redondeadas). Antes de forjar, el jugador ve el rango.
+- La tienda y el botín dan la pieza al 100 %, con las cifras de §4.
+- Con el héroe de `Cifras_De_Combate.md` §6, una pieza forjada al 110 % nunca aguanta como una normal del tier siguiente. En golpe, solo el arma de cobre del tier II llega a pegar como la de bronce, aunque penetra menos.
+- La pega: un legendario forjado al 110 % pasa en un 10 % el tope de las referencias del autor (unos 7.500 de vida efectiva y 195 de golpe con armadura media).
+- Alternativas: que cada cifra tire por su lado, o que la forja no tenga azar.
 
 ### El plano y el crisol
 
@@ -356,6 +366,7 @@ Forma propuesta, para Mechanics cuando se implemente:
 {
   "version": "bronzeage-objetos-1",
   "ventaPct": 50,
+  "tiendaHastaTier": 2,
   "rarezas": { "1": "comun", "2": "pocoComun", "3": "rara", "4": "epica", "5": "legendaria" },
   "metales": { "inicio": null, "cobre": "metalurgia_cobre", "hierro_temprano": "forja_hierro_temprana", "bronce": "aleacion_bronce", "hierro": "forja_hierro_estandarizada", "bronce_laminado": "bronce_laminado", "acero": "acero_templado" },
   "objetos": [
@@ -369,7 +380,7 @@ Forma propuesta, para Mechanics cuando se implemente:
 }
 ```
 
-- `tier` va del 1 al 5, y `rarezas` dice qué rareza de Conquest es cada uno.
+- `tier` va del 1 al 5, y `rarezas` dice qué rareza de Conquest es cada uno. La tienda vende hasta el tier de `tiendaHastaTier`.
 - `metales` dice qué tecnología abre cada metal; el de inicio no pide ninguna.
 - `combate` lleva las cifras de §4, enteras como `Estadistica.valor`.
 - `forja` lleva la receta de §6b; los rangos de la forja, cuando se decidan, irán ahí. El tier I no tiene receta.

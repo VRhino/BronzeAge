@@ -81,7 +81,7 @@ Regla de reparto: el motor guarda el estado persistente y las reglas fuera de la
 
 1. El catálogo inicial: las 16 piezas de Conquest más los cascos, con sus stats y precios.
 2. A cuánto se vende (Conquest, 50 %).
-3. Dónde están la tienda y la forja (propuesto: la Armería de la plaza) y qué vende la tienda.
+3. Dónde están la tienda y la forja (propuesto: la Armería de la plaza). Qué vende la tienda: solo los tiers I y II (autor, 2026-11-11 21:31; `Catalogo_De_Objetos.md` §6).
 4. Las recetas de forja: piezas, materiales y rangos.
 5. Dónde puede equiparse el héroe: en cualquier sitio o solo donde reside.
 6. Si la clase limita el arma (Conquest no lo hace).
