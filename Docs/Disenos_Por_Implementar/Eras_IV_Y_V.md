@@ -119,10 +119,10 @@ Toda tecnología con logro tiene su épica (lo exige una prueba del motor), con 
 | Cuerpo de hipaspistas | Canto de los portadores de escudo | obra de Palacio · 2 defensas · 3 batallas · 1 adopción · obra de Barracón · 2 batallas · 1 conquista | 11 | 60 h |
 | Formación en cuña | Canto de los que corren delante | obra de Caballerizas · 3 caravanas · 2 batallas · 1 adopción · 2 caravanas · 2 batallas · 1 conquista | 12 | 66 h |
 | Compañeros reales | Canto de Gaugamela | obra de Caballerizas · 3 batallas · 1 adopción · obra de Palacio · 3 batallas · 2 conquistas · 1 subida de nivel | 12 | 66 h |
-| Acero templado | Canto del hierro templado | obra de Fundición · 3 caravanas · obra de Armería · 1 adopción · 2 batallas · 1 subida de nivel · 2 caravanas | 11 | 60 h |
+| Acero templado | Canto del acero templado | obra de Fundición · 3 caravanas · obra de Armería · 1 adopción · 2 batallas · 1 subida de nivel · 2 caravanas | 11 | 60 h |
 
 - **Ocho de las doce piden una conquista**, como cinco de las nueve de la Era III: una Facción que no conquista nunca solo llega a ellas por hito. Las que no la piden son Ejército permanente, Logística de campaña, Hostigadores profesionales y Acero templado.
-- **El nombre de la de Acero templado se parece al de Forja de hierro estandarizada** (Era III, «Canto del acero templado»); se puede cambiar si confunde.
+- **Nombres del hierro y del acero** (autor, 2026-11-11 23:33: «habría que cambiar el hierro estandarizado en todo caso»): la épica de Forja de hierro estandarizada (Era III) se llama hoy «Canto del acero templado», que no es suyo, porque es hierro. Pasa a llamarse **«Canto de los cálibes»** (el pueblo del Ponto que los griegos tenían por los primeros herreros del hierro; propuesta) y el «Canto del acero templado» queda para Acero templado (Era V), que deja «Canto del hierro templado».
 
 ## 6. Las tropas
 
@@ -150,7 +150,7 @@ Diez, con los datos que el autor cerró en la Armería (vista «Tropas y héroe�
 
 ## 7. Lo que toca en el motor
 
-- **Datos** (`Docs/Mechanics`, al implementar): `ERAS` y `TARIFA_ADOPCION` con las dos Eras; las 12 tecnologías en `TECNOLOGIAS` y sus épicas en `EPICAS`; las 10 tropas en `TROPAS_RECLUTABLES` y los soldados de Cifras §4 en las 27 de hoy (§6); los bienes de la obra del nivel 5 en `ASCENSO_ASENTAMIENTO` y fuera `nivelTechoProvisional`; la receta de sésamo de la Prensa con `aceiteSesamo` y su entrada en `BIENES_DE_CONSUMO` (§2b).
+- **Datos** (`Docs/Mechanics`, al implementar): `ERAS` y `TARIFA_ADOPCION` con las dos Eras; las 12 tecnologías en `TECNOLOGIAS` y sus épicas en `EPICAS`, y en la de `forja_hierro_estandarizada` el nombre nuevo (§5); las 10 tropas en `TROPAS_RECLUTABLES` y los soldados de Cifras §4 en las 27 de hoy (§6); los bienes de la obra del nivel 5 en `ASCENSO_ASENTAMIENTO` y fuera `nivelTechoProvisional`; la receta de sésamo de la Prensa con `aceiteSesamo` y su entrada en `BIENES_DE_CONSUMO` (§2b).
 - **`asentamiento`:** el recurso `aceiteSesamo` (de 41 a 42 recursos en `recurso.rs`), que cambia la foto (un BAN nuevo), y las pruebas de recetas y de consumo.
 - **`militar`:** las 10 tropas en el enum, el campo `poblacion` y quitar la prueba del tamaño por escalón.
 - **`tecnologia`:** los 12 contadores (los arrays de 24 pasan a 36 en `tecnologia`, `nucleo` y `batch`), las 6 condiciones de hito con su lectura, y un resumen de la batalla con lo que miran los contadores de §3.
