@@ -1,7 +1,7 @@
 //! La Liga y el Gran Rey (Diplomacia_Facciones §5.7, Doc 2.3): no se guardan. Una Liga es una componente conexa (≥ 2 Facciones) del grafo de relaciones
-//! **activas** de cualquier clase, la guerra incluida; el Gran Rey es la señora de un vasallaje de la Liga que no es vasalla dentro de ella. Bajo demanda (decisión 13).
+//! **activas** de alianza y de vasallaje (la guerra no une: decisión del autor del 2026-11-11); el Gran Rey es la señora de un vasallaje de la Liga que no es vasalla dentro de ella. Bajo demanda (decisión 13).
 
-use crate::relaciones::{Relaciones, TipoRelacion};
+use crate::relaciones::{RelacionPolitica, Relaciones, TipoRelacion};
 use crate::tipos::FaccionId;
 use std::collections::BTreeMap;
 
@@ -11,6 +11,11 @@ pub struct Liga {
     pub miembros: Vec<FaccionId>,
     pub tiene_vasallaje: bool,
     pub gran_rey: Option<FaccionId>,
+}
+
+/// Si la relación une en la Liga: la alianza y el vasallaje sí, la guerra no (2026-11-11).
+pub fn une(r: &RelacionPolitica) -> bool {
+    r.tipo != TipoRelacion::Guerra
 }
 
 fn raiz(padre: &mut BTreeMap<FaccionId, FaccionId>, mut x: FaccionId) -> FaccionId {
@@ -25,7 +30,7 @@ fn raiz(padre: &mut BTreeMap<FaccionId, FaccionId>, mut x: FaccionId) -> Faccion
 /// `computeLigas`, en orden de su miembro menor. El Gran Rey es la primera señora (por id de relación) que no es vasalla en la Liga.
 pub fn ligas(relaciones: &Relaciones, facciones: impl IntoIterator<Item = FaccionId>) -> Vec<Liga> {
     let mut padre: BTreeMap<FaccionId, FaccionId> = facciones.into_iter().map(|f| (f, f)).collect();
-    let pares: Vec<_> = relaciones.activas().filter(|r| padre.contains_key(&r.a) && padre.contains_key(&r.b)).map(|r| (r.a, r.b)).collect();
+    let pares: Vec<_> = relaciones.activas().filter(|r| une(r) && padre.contains_key(&r.a) && padre.contains_key(&r.b)).map(|r| (r.a, r.b)).collect();
     for (a, b) in pares {
         let (ra, rb) = (raiz(&mut padre, a), raiz(&mut padre, b));
         if ra != rb {
@@ -56,7 +61,7 @@ pub fn liga_de(relaciones: &Relaciones, f: FaccionId, existe: impl Fn(FaccionId)
     let mut miembros = vec![f];
     let mut i = 0;
     while let Some(&x) = miembros.get(i) {
-        for o in relaciones.activas().filter(|r| r.incluye(x)).map(|r| r.otra(x)) {
+        for o in relaciones.activas().filter(|r| une(r) && r.incluye(x)).map(|r| r.otra(x)) {
             if existe(o) && !miembros.contains(&o) {
                 miembros.push(o);
             }
@@ -73,15 +78,20 @@ mod pruebas {
     use crate::relaciones::pruebas::facciones;
 
     #[test]
-    fn componentes_conexas_con_la_guerra_incluida_y_el_gran_rey_en_la_cima() {
+    fn componentes_conexas_sin_la_guerra_y_el_gran_rey_en_la_cima() {
         let fs = facciones(6);
         let mut rs = Relaciones::default();
-        // 1 señora de 2, 2 señora de 3 (antes de ser vasalla); 4 en guerra con 3. 5 y 6, sueltas.
+        // 1 señora de 2, 2 señora de 3 (antes de ser vasalla); 4 en guerra con 3: la guerra no la mete. 5 y 6, sueltas.
         rs.crear(&fs, 1, TipoRelacion::Vasallaje, 2, 3, None, 0).unwrap();
         rs.crear(&fs, 2, TipoRelacion::Vasallaje, 1, 2, None, 0).unwrap();
         rs.crear(&fs, 3, TipoRelacion::Guerra, 4, 3, None, 0).unwrap();
         let l = ligas(&rs, fs.iter().map(|f| f.id));
-        assert_eq!(l, vec![Liga { miembros: vec![1, 2, 3, 4], tiene_vasallaje: true, gran_rey: Some(1) }]);
+        assert_eq!(l, vec![Liga { miembros: vec![1, 2, 3], tiene_vasallaje: true, gran_rey: Some(1) }]);
+        // Solo una guerra: ninguna Liga.
+        let mut rs = Relaciones::default();
+        rs.crear(&fs, 1, TipoRelacion::Guerra, 5, 6, None, 0).unwrap();
+        assert!(ligas(&rs, fs.iter().map(|f| f.id)).is_empty());
+        assert_eq!(liga_de(&rs, 5, |x| fs.existe(x)), None);
         // Solo alianzas: sin Gran Rey.
         let mut rs = Relaciones::default();
         rs.crear(&fs, 1, TipoRelacion::Alianza, 5, 6, None, 0).unwrap();

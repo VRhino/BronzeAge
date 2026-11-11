@@ -400,6 +400,7 @@ fn la_plaza_se_proyecta_al_contrato() {
     assert_eq!((e.id.as_str(), e.faccion_id.as_str(), e.nivel), (format!("as-{id}").as_str(), "f-1", 1));
     assert_eq!(e.radio_potencial, 12_000);
     assert_eq!(e.zona.len(), 48, "sin vecinas, el polígono es el disco entero");
+    assert!(e.protegida_hasta_ms.is_some() && e.protegida_hasta_ms == a.protegida_hasta, "la ficha de fuera dice hasta cuándo está protegida (2026-11-11)");
 }
 
 #[test]

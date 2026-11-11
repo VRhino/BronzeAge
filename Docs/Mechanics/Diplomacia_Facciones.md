@@ -618,7 +618,7 @@ Queda **una `RelacionPolitica` por Facción alcanzada**, todas con el mismo cont
 Por cada vasallaje activo con tributo (decidido el 2026-10-11): el pactado `cantidadPorMinuto` se **reparte a partes iguales entre todos los asentamientos de la vasalla**; cada uno paga `min(su stock del recurso, su parte)` (si es > 0) y todo se suma al almacén de la **capital de la señora** (`encontrarCapital`, §3.7; topado por capacidad: el exceso se pierde). Un evento `diplomacia.tributo_pagado` por plaza que paga (`señoraId` = la capital). Sin capital o sin plazas de la vasalla, no hay pago.
 
 ### 5.7 Liga y Gran Rey (`computeLigas`)
-No se guarda. Componentes conexas del grafo de relaciones **activas** (cualquier tipo, la guerra incluida) con ≥ 2 Facciones. `tieneVasallaje`: hay un vasallaje activo dentro. **Gran Rey:** la Facción señora de la
+No se guarda. Componentes conexas del grafo de relaciones **activas de alianza y de vasallaje** con ≥ 2 Facciones: **la guerra no une** (decisión del autor del 2026-11-11; antes contaba cualquier tipo, la guerra incluida). Dos Facciones en guerra pueden estar en la misma Liga solo si las une otro camino de alianzas o vasallajes (`politica::liga::une`; una guerra que nace o acaba no marca ninguna Liga). `tieneVasallaje`: hay un vasallaje activo dentro. **Gran Rey:** la Facción señora de la
 Liga que **nunca es vasalla** dentro de esa misma Liga (la primera que cumple).
 
 ### 5.8 Predicados de relación (en `pertenencia.ts`)
