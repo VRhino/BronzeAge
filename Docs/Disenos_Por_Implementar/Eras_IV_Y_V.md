@@ -30,7 +30,7 @@ Doce, seis en cada Era. **Los umbrales son provisionales** (autor, 23:14): puest
 
 **Cuerpo de oficiales no da Liderazgo.** BA-006 (EIV-1) le daba +10 %, pero el autor lo quitó el 2026-11-11 a las 23:14: «el Liderazgo no se muta desde tecnologías».
 
-**Los víveres ×1,5 son una lectura.** BA-006 dice «carro de suministros de los ejércitos ×1,5 (Doc 5.13)», y en Doc 5.13 el suministro son los víveres, no el carro de carga. Pendiente de que el autor lo confirme (§9).
+**Los víveres ×1,5** (confirmado por el autor el 2026-11-11 a las 23:28): BA-006 dice «carro de suministros de los ejércitos ×1,5 (Doc 5.13)», y en Doc 5.13 el suministro son los víveres, no el carro de carga.
 
 ### Era V — Hegemonía macedónica
 
@@ -102,22 +102,27 @@ Las tres de cantidades que cambian sin ningún disparador de la aparición (escu
 
 ## 5. Épicas
 
-Toda tecnología con logro tiene su épica, con 3 capítulos en la Era I, 4 en la II y 5 en la III (Doc 6.3). **Propuesta, sin ver por el autor:** 6 capítulos en la Era IV y 7 en la V, con los mismos tipos de hecho.
+Una épica es la otra vía para que una tecnología aparezca a una Facción, además del hito (Tecnologia_Aedas §7.2). La empieza un Aeda residente cuando el logro del servidor ya se cumplió, la Era ha empezado y a la Facción aún no le ha aparecido; avanza con hechos de la Facción o de la plaza del Aeda (una obra, una batalla ganada, una defensa, una conquista, una subida de nivel, una adopción, una caravana comercial de 100 o más), uno cada 6 horas como mucho. Al cerrar el último capítulo, la tecnología aparece sin hito. Sirve a la Facción que no llega al hito, y no le ahorra la tarifa.
 
-| Tecnología | Épica |
-| --- | --- |
-| Ejército permanente | Canto de los que nunca vuelven al arado |
-| Cuerpo de oficiales | Canto de los capitanes |
-| Logística de campaña | Canto de los carros de víveres |
-| Infantería profesional | Canto de Leuctra |
-| Hostigadores profesionales | Canto de Lequeo |
-| Carga de caballería | Canto de los jinetes de Tesalia |
-| Reforma macedónica | Canto de Filipo |
-| Falange de sarisas | Canto de Queronea |
-| Cuerpo de hipaspistas | Canto de los portadores de escudo |
-| Formación en cuña | Canto de los que corren delante |
-| Compañeros reales | Canto de Gaugamela |
-| Acero templado | Canto del hierro templado |
+Toda tecnología con logro tiene su épica (lo exige una prueba del motor), con 3 capítulos en la Era I, 4 en la II y 5 en la III (Doc 6.3). **Propuesta, sin ver por el autor:** 6 capítulos en la Era IV y 7 en la V, con los mismos tipos de hecho. Cada capítulo pide una cantidad de hechos de un tipo; «obra» pide además un edificio. Lo mínimo son los hechos menos uno, por 6 horas; las de la Era III llevan entre 7 y 10 hechos (36 a 54 horas).
+
+| Tecnología | Épica | Capítulos | Hechos | Mínimo |
+| --- | --- | --- | ---: | ---: |
+| Ejército permanente | Canto de los que nunca vuelven al arado | obra de Barracón · 2 batallas · 2 defensas · 1 adopción · 2 batallas · 1 subida de nivel | 9 | 48 h |
+| Cuerpo de oficiales | Canto de los capitanes | 2 batallas · 1 adopción · obra de Barracón · 2 batallas · 1 defensa · 1 conquista | 8 | 42 h |
+| Logística de campaña | Canto de los carros de víveres | 3 caravanas · obra de Mercado · 3 caravanas · 1 batalla · 1 subida de nivel · 2 caravanas | 11 | 60 h |
+| Infantería profesional | Canto de Leuctra | obra de Barracón · 3 batallas · 2 defensas · 1 adopción · 2 batallas · 1 conquista | 10 | 54 h |
+| Hostigadores profesionales | Canto de Lequeo | obra de Galería de tiro · 3 batallas · 1 defensa · 1 adopción · 2 batallas · 2 caravanas | 10 | 54 h |
+| Carga de caballería | Canto de los jinetes de Tesalia | obra de Caballerizas · 2 batallas · 2 caravanas · 1 adopción · 3 batallas · 1 conquista | 10 | 54 h |
+| Reforma macedónica | Canto de Filipo | 2 adopciones · obra de Barracón · 3 batallas · obra de Caballerizas · 1 conquista · 1 subida de nivel · 3 batallas | 12 | 66 h |
+| Falange de sarisas | Canto de Queronea | obra de Barracón · 3 batallas · 2 defensas · 1 adopción · 3 batallas · 1 conquista · 2 defensas | 13 | 72 h |
+| Cuerpo de hipaspistas | Canto de los portadores de escudo | obra de Palacio · 2 defensas · 3 batallas · 1 adopción · obra de Barracón · 2 batallas · 1 conquista | 11 | 60 h |
+| Formación en cuña | Canto de los que corren delante | obra de Caballerizas · 3 caravanas · 2 batallas · 1 adopción · 2 caravanas · 2 batallas · 1 conquista | 12 | 66 h |
+| Compañeros reales | Canto de Gaugamela | obra de Caballerizas · 3 batallas · 1 adopción · obra de Palacio · 3 batallas · 2 conquistas · 1 subida de nivel | 12 | 66 h |
+| Acero templado | Canto del hierro templado | obra de Fundición · 3 caravanas · obra de Armería · 1 adopción · 2 batallas · 1 subida de nivel · 2 caravanas | 11 | 60 h |
+
+- **Ocho de las doce piden una conquista**, como cinco de las nueve de la Era III: una Facción que no conquista nunca solo llega a ellas por hito. Las que no la piden son Ejército permanente, Logística de campaña, Hostigadores profesionales y Acero templado.
+- **El nombre de la de Acero templado se parece al de Forja de hierro estandarizada** (Era III, «Canto del acero templado»); se puede cambiar si confunde.
 
 ## 6. Las tropas
 
@@ -140,11 +145,12 @@ Diez, con los datos que el autor cerró en la Armería (vista «Tropas y héroe�
 
 - **Las falangitas salen de los artesanos** aunque son de escalón 4: es la excepción de BA-006. `TROPAS_RECLUTABLES` gana un campo `poblacion` para la tropa que no sigue a su escalón.
 - **Los soldados** son los de `Cifras_De_Combate.md` §4, así que no siguen la regla «cuanto más de élite, menos cuerpos». Se quita la prueba `el_tamano_de_la_escuadra_baja_con_el_escalon`, como ya decidió el autor el 2026-11-11 a las 20:15.
+- **Las 27 tropas de hoy pasan también a sus soldados de `Cifras_De_Combate.md` §4 en la misma tanda** (autor, 23:28), para que las de élite nuevas no queden con más cuerpos que las viejas (los hequetai pasan de 12 a 18).
 - **Sus cifras de combate** (vida, daño, defensa…) son las de `Cifras_De_Combate.md` §7 y llegan con la entrada 72.
 
 ## 7. Lo que toca en el motor
 
-- **Datos** (`Docs/Mechanics`, al implementar): `ERAS` y `TARIFA_ADOPCION` con las dos Eras; las 12 tecnologías en `TECNOLOGIAS` y sus épicas en `EPICAS`; las 10 tropas en `TROPAS_RECLUTABLES`; los bienes de la obra del nivel 5 en `ASCENSO_ASENTAMIENTO` y fuera `nivelTechoProvisional`; la receta de sésamo de la Prensa con `aceiteSesamo` y su entrada en `BIENES_DE_CONSUMO` (§2b).
+- **Datos** (`Docs/Mechanics`, al implementar): `ERAS` y `TARIFA_ADOPCION` con las dos Eras; las 12 tecnologías en `TECNOLOGIAS` y sus épicas en `EPICAS`; las 10 tropas en `TROPAS_RECLUTABLES` y los soldados de Cifras §4 en las 27 de hoy (§6); los bienes de la obra del nivel 5 en `ASCENSO_ASENTAMIENTO` y fuera `nivelTechoProvisional`; la receta de sésamo de la Prensa con `aceiteSesamo` y su entrada en `BIENES_DE_CONSUMO` (§2b).
 - **`asentamiento`:** el recurso `aceiteSesamo` (de 41 a 42 recursos en `recurso.rs`), que cambia la foto (un BAN nuevo), y las pruebas de recetas y de consumo.
 - **`militar`:** las 10 tropas en el enum, el campo `poblacion` y quitar la prueba del tamaño por escalón.
 - **`tecnologia`:** los 12 contadores (los arrays de 24 pasan a 36 en `tecnologia`, `nucleo` y `batch`), las 6 condiciones de hito con su lectura, y un resumen de la batalla con lo que miran los contadores de §3.
@@ -161,8 +167,6 @@ Las 10 tropas como escuadras, con los modelos y las cifras de combate de la entr
 ## 9. Pendiente
 
 - **Del autor:**
-  - si las 27 tropas de hoy pasan también a los soldados de `Cifras_De_Combate.md` §4 en la misma tanda (recomendado; si no, las nuevas de élite llevarían 20 y los hequetai seguirían con 12);
-  - si «carro de suministros ×1,5» son los víveres del ejército (§2);
   - el modificador del aceite de sésamo (§2b): propuesto ×1,25, como la cerveza junto al vino; la otra opción es ×1,5, igual que el de oliva;
   - las épicas de 6 y 7 capítulos y sus nombres (§5).
 - **En la fase 7:** medir los umbrales con bots.
