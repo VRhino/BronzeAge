@@ -41,7 +41,7 @@ es la lista de mensajes de orden que hay que cubrir.
 | `pedirPrestamo` | `tropaIds`: string[] |
 | `reponerPrestamo` | — |
 | `abrirAlijo` | `alijoId`: string |
-| `reclamarRecompensa` | `duenoId`: string (`heroe-N`, `as-N` o `faccion-N`)<br>`misionId`: string |
+| `reclamarRecompensa` | `duenoId`: string (`heroe-N`, `as-N` o `f-N`)<br>`misionId`: string |
 | `reclutarEnCampamento` | `tropaId`: string<br>`pagarCon?`: "almacenPersonal"|"carro" |
 | `residirEnCampamento` | `heroeId`: string<br>`campamentoId`: string |
 | `dejarResidencia` | `heroeId`: string |

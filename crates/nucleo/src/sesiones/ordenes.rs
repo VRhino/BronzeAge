@@ -215,7 +215,7 @@ impl Ctx<'_> {
     fn faccion(&self, s: &str) -> R<u32> {
         self.id(ids::parse_faccion, rechazos::ORDEN_FORMA_INVALIDA, s)
     }
-    /// El dueño de una misión: `heroe-N`, `as-N` o `faccion-N` (Misiones §4).
+    /// El dueño de una misión: `heroe-N`, `as-N` o `f-N` (Misiones §4).
     fn dueno_de_mision(&self, s: &str) -> R<crate::misiones::Dueno> {
         use crate::misiones::Dueno;
         if let Some(h) = ids::parse_heroe(s) {

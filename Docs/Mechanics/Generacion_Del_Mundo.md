@@ -1334,7 +1334,7 @@ Todos los de `worldgen/config.ts` están **congelados** (no se editan en calient
 - **La regeneración empieza al detectar**, no al agotar. Un yacimiento que se agota y se detecta en el mismo instante tarda exactamente el cooldown; uno agotado entre dos ejecuciones del paso 7 se retrasa a la siguiente.
 - **El anillo de bandidos sin sitio gasta tiradas todos los ticks** (hasta 40) mientras no encuentre un punto: es la única vía por la que el generador de la partida avanza sin que ocurra nada visible.
 - **Los bandidos de un asentamiento miran el centro del bosque**, no su círculo, para decidir si está reclamado (misma simplificación que `posicionLibreParaFundar`): un bosque cuyo centro queda fuera de toda zona pero cuyo borde la toca cuenta como libre.
-- **El campamento de bandidos de un asentamiento no bloquea el bosque que ocupa**; solo amenaza las caravanas que pasen a menos de 40.
+- **El campamento de bandidos de un asentamiento no bloquea el bosque que ocupa**; solo amenaza las caravanas que pasen a 7 o menos (`radioAtaqueCaravana`, bloque `CAMPAMENTOS_BANDIDOS`).
 - **`margenBorde` se aplica al punto sorteado, antes de pegarlo a un bosque**: pegarse al borde de un bosque puede acercarlo al perímetro del mapa unas decenas de unidades por debajo del margen (solo se exige `dentroDelMapa`). La separación mínima, en cambio, se comprueba sobre el punto **ya pegado**.
 - **Fuera del mapa todo está definido**: ruido, elevación, fertilidad y bioma se pueden evaluar en cualquier punto (los muestreos en anillo se salen). `Mapa.dentroDelMapa` es la única comprobación de límites y es inclusiva.
 - **El agua infranqueable no está en `costeEnPunto`**: el coste 15 del agua no se usa; el grafo descarta cualquier arista con un punto no transitable.

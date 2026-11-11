@@ -12,6 +12,7 @@ use crate::economia::Mapa;
 use crate::estado::Asentamiento;
 use asentamiento::pueblos::Cultivo;
 use base::Instante;
+use militar::columna::TipoColumna;
 use mundo::Mundo;
 use std::collections::BTreeSet;
 use territorio::{Disco, DistanciasDeFundacion, Motivo, Terreno, Viabilidad};
@@ -475,7 +476,6 @@ impl Nucleo {
         self.gastar_fundacion(caravana);
         self.tr.tocar(Clase::Ejercito, ejercito);
         // Pasan a residir en ella (dejan la plaza o el campamento donde vivieran; su campamento se traslada con ellos). No es una orden suya: no cuenta para el cooldown de residencia.
-        // La columna sigue en el mapa, a la puerta: que se deshaga dentro (§5.5) es deuda de la Caravana de Fundación (5G).
         for &h in &fundadores {
             self.mudar_de_residencia(h, Some(militar::heroe::Residencia::Asentamiento(id as u32)));
         }
@@ -505,6 +505,7 @@ impl Nucleo {
             let (datos, valores) = (vec![("asentamiento", id as i64), ("faccion", i64::from(faccion)), ("heroe", lider as i64)], vec![("cargo", crate::estado::Dato::Texto(asentamiento::Cargo::Gobernador.clave().to_owned()))]);
             self.tr.emitir(&self.estado, EventoNucleo { valores, asentamientos: vec![id], ..EventoNucleo::nuevo("cargo.local_asignado", t, datos) });
         }
+        self.entrar_al_fundar(t, ejercito, id);
         self.asegurar_tablon(t, Dueno::Asentamiento(id));
         self.asegurar_tablon(t, Dueno::Faccion(faccion));
         self.avance(t, Dueno::Faccion(faccion), "fundaciones", 1);
@@ -517,6 +518,22 @@ impl Nucleo {
         self.dar_prestigio(t, faccion, self.estado.reglas.economia.politica.prestigio.fundacion, super::prestigio::motivo::FUNDACION);
         self.contactos_nuevos(id, t);
         Ok(Some(id))
+    }
+
+    /// La columna que funda entra en la plaza que acaba de levantar (Fundacion_Y_Refundacion §5.5, decisión del autor del 2026-11-02), como lo haría a su puerta: una
+    /// columna de un solo héroe entra con `entrarEnAsentamiento`; un ejército o una columna con compañía se desarma y cada héroe entra como lo haría solo (como `guarnecer`).
+    /// Los fundadores entran en su residencia (la tropa al campamento, el carro se queda con el héroe); quien la plaza no deja entrar se queda fuera con su columna.
+    fn entrar_al_fundar(&mut self, t: Instante, ejercito: u64, plaza: u64) {
+        let Some(e) = self.estado.ejercitos.get(&ejercito) else { return };
+        let heroes = Self::participantes_de(e);
+        if heroes.len() > 1 || e.columna.tipo != TipoColumna::Personal {
+            self.desarmar_columna(t, ejercito);
+        }
+        for h in heroes {
+            if self.estado.ejercito_de_heroe(h).is_some() && self.puede_entrar_en_plaza(h, plaza) {
+                self.entrar_en_plaza(t, h, plaza);
+            }
+        }
     }
 }
 

@@ -723,10 +723,7 @@ fn un_residente_de_la_madre_cede_a_mano_escolta_al_carro_de_acarreo_y_viaja_con_
     let m = con_mundo!();
     let mut e = montar(m, 7, 2);
     let plaza = e.plaza;
-    // El cupo de escolta de la madre es el de su Mercado (como en cualquier caravana suya): sin Mercado, ninguno.
-    e.dar(Madera, 350_000);
-    e.ok("ana", Comando::AnadirEdificio { asentamiento: plaza, tipo: Tipo::Mercado });
-    e.avanzar(9 * HORA);
+    // La madre no tiene Mercado: el carro de acarreo admite igualmente 100 de escolta (Doc 3.13.8; con Mercado, el cupo de su nivel).
     let id = e.pueblo_levantado();
     let carro = e.pueblo(id).carro.unwrap();
     // Carla reside en la madre y está dentro: cede una escuadra de su campamento al carro parado en el pueblo. No hay escolta automática.

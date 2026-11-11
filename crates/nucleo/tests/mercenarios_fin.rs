@@ -498,10 +498,9 @@ fn va_en(n: &Nucleo, columna: u64) -> Vec<u64> {
 fn la_plaza_veta_a_un_permanente_residente_y_este_vuelve_a_su_campamento_con_el_contrato() {
     let m = con_mundo!();
     let mut e = E::nuevo(m);
-    // El Gobernador de oficio, dentro de su plaza, es quien veta.
+    // El Gobernador de oficio, dentro de su plaza (entró al fundarla), es quien veta.
     let (rey, plaza) = (e.rey, e.plaza);
     let gobernador = e.n.faccion(1).unwrap().ciudadanos.iter().copied().find(|&h| h != rey).expect("el fundador");
-    mc::ok(&mut e.n, "fundador", Comando::Guarnecer { asentamiento: plaza, heroe: gobernador });
     let (bot, ciudadano) = (e.bot("bot-1"), e.ciudadano("ana"));
     mc::ok(&mut e.n, "rey", Comando::ContratarMercenario { heroe: rey, mercenario: bot, trabajo: Trabajo::Permanente, objetivo: Objetivo::Faccion(1), plazo: None, residencia: Some(plaza), pagar_con: None });
     mc::ok(&mut e.n, "admin", Comando::ColocarHeroe { heroe: bot, ubicacion: Ubicacion::Asentamiento(plaza as u32) });

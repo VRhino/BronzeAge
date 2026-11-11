@@ -115,7 +115,9 @@ fn fundar_y_sus_rechazos() {
     assert_eq!(n.radio_zona(id), Some(12_000));
     assert_eq!(n.estado().fundacion.de_columna(e), None, "la caravana se gasta");
     assert_eq!(eventos(&n, "fundacion.asentamiento_fundado"), vec![(MIN, vec![id])]);
-    assert_eq!(codigo(&n.aplicar_en(MIN, Peticion::nueva("ana", "f3", Comando::Fundar { ejercito: e }))), rechazos::SIN_CARAVANA);
+    // La columna que funda entra en la plaza (Fundacion_Y_Refundacion §5.5): ya no está para fundar otra vez.
+    assert!(n.ejercito(e).is_none(), "la columna entra en la plaza");
+    assert_eq!(codigo(&n.aplicar_en(MIN, Peticion::nueva("ana", "f3", Comando::Fundar { ejercito: e }))), rechazos::EJERCITO_DESCONOCIDO);
 
     // Cerca de una plaza (a 16: fuera de su zona inicial de 12 y a menos de la separación de 20, en el primer rumbo con suelo fundable; el doble desde el 2026-11-05) y dentro de su zona (encima).
     let cerca = (0..36)

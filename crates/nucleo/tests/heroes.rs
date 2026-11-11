@@ -1148,10 +1148,10 @@ fn al_arruinarse_la_plaza_sus_residentes_pasan_a_la_plaza_hermana_mas_cercana_o_
     assert_eq!(e.n.ejercito(e.n.heroe(ana).unwrap().columna.unwrap()).unwrap().columna.faccion, Some(1), "el residente sale con la bandera de su Facción");
     assert_eq!(e.n.ejercito(e.n.heroe(beto).unwrap().columna.unwrap()).unwrap().columna.faccion, None, "el de visita sale sin bandera");
     assert!(e.n.estado().militar.residentes_de(a).next().is_none());
-    assert_eq!(e.n.estado().militar.residentes_de(c).map(|x| x.heroe.id).collect::<Vec<_>>(), vec![fa, fc, ana], "el fundador de A, que estaba en su columna, también se muda a C");
+    assert_eq!(e.n.estado().militar.residentes_de(c).map(|x| x.heroe.id).collect::<Vec<_>>(), vec![fa, fc, ana], "el fundador de A, que estaba dentro desde que la fundó, también se muda a C");
     let reubicados = hechos(&e.n, "heroe.reubicado");
     assert_eq!(reubicados.len(), 4);
-    assert!(reubicados.iter().all(|r| r.0 == ruina && dato(r, "ruina") == a as i64 && dato(r, "alMapa") == i64::from(dato(r, "heroe") != fa as i64)));
+    assert!(reubicados.iter().all(|r| r.0 == ruina && dato(r, "ruina") == a as i64 && dato(r, "alMapa") == 1), "todos estaban dentro, el fundador también (entró al fundar): salen al mapa");
     // La Facción de C oye a quien acoge (con su destino); quien va al campamento no lleva destino.
     let de = |id: u64| reubicados.iter().find(|r| dato(r, "heroe") == id as i64).unwrap();
     assert_eq!((dato(de(ana), "destino"), de(ana).1.clone()), (c as i64, vec![c]));

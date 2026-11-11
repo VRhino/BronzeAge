@@ -6,7 +6,7 @@
 use crate::almacen::Almacen;
 use crate::catalogo::{Catalogo, Tipo};
 use crate::datos::{por, razon, UNO};
-use crate::edificio::{Edificio, Fuente};
+use crate::edificio::{Edificio, Edificios, Fuente};
 use crate::recetas_unicas;
 use crate::recurso::{Costo, Recurso, N};
 use base::Mil;
@@ -141,7 +141,10 @@ pub fn recetas(cat: &Catalogo, edificios: &mut [Edificio], almacen: &mut Almacen
             if insumo_activo.is_some_and(|ins| !rc.consume_por_unidad.iter().any(|&(i, _)| i == ins)) {
                 continue;
             }
-            if ctx.recetas_pausadas.contains(&rc.produce) || rc.tecnologia.as_deref().is_some_and(|t| !(ctx.tiene_tecnologia)(t)) {
+            if ctx.recetas_pausadas.contains(&rc.produce)
+                || rc.tecnologia.as_deref().is_some_and(|t| !(ctx.tiene_tecnologia)(t))
+                || rc.requiere_edificio.is_some_and(|(t, n)| !edificios.hay_activo_con_nivel(t, n))
+            {
                 continue;
             }
             let mut cantidad = por(por(por(rc.produccion_base, ratio), ctx.factor_talleres), factor_buey);
@@ -348,6 +351,27 @@ mod pruebas {
         let antes = a.cantidad(Recurso::Cobre);
         recetas(&cat, &mut e, &mut a, &m, &ctx(&[Recurso::LingoteCobre], &[]), &[0; N]);
         assert_eq!(a.cantidad(Recurso::Cobre), antes, "pausada por el Gobernador");
+    }
+
+    #[test]
+    fn el_arma_de_hierro_de_calidad_pide_una_fundicion_de_nivel_3() {
+        let cat = Reglas::cargar().catalogo;
+        assert_eq!(cat.tipo(Tipo::Armeria).nivel(3).unwrap().recetas.iter().find(|r| r.produce == Recurso::ArmaHierroCalidad).unwrap().requiere_edificio, Some((Tipo::Fundicion, 3)));
+        let mut armeria = activo(1, Tipo::Armeria);
+        armeria.nivel_interno = 3;
+        let mut fundicion = activo(2, Tipo::Fundicion);
+        fundicion.nivel_interno = 2;
+        let mut e = vec![armeria, fundicion];
+        let m = mano_de_obra(&cat, &e, 0, 100, 0);
+        let c = ctx(&[], &["forja_hierro_estandarizada"]);
+        let mut a = Almacen::nuevo(400_000);
+        a.poner(Recurso::LingoteHierro, 100_000);
+        a.poner(Recurso::Madera, 100_000);
+        recetas(&cat, &mut e, &mut a, &m, &c, &[0; N]);
+        assert_eq!(a.cantidad(Recurso::ArmaHierroCalidad), 0, "con la Fundición a nivel 2 no se fabrica");
+        e[1].nivel_interno = 3;
+        recetas(&cat, &mut e, &mut a, &m, &c, &[0; N]);
+        assert!(a.cantidad(Recurso::ArmaHierroCalidad) > 0, "con la Fundición a nivel 3, sí");
     }
 
     #[test]

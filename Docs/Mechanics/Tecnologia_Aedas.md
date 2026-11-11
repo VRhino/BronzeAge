@@ -191,7 +191,7 @@ si no, y está detenido (hasta > instante) y (su plaza existe ∨ no tiene plaza
 si no → partir
 llegado(plaza): posicion = plaza.posicion;  hasta = instante + estanciaMinutos;  recientes = (recientes sin esa plaza) + plaza, últimas memoriaVisitas
 partir:  candidatos = plazas distintas de la actual que los aceptan;  frescos = los no incluidos en recientes (si no hay ninguno, todos los candidatos);
-         ordenados por distancia a su posición y, si empata, por id;  sale hacia el primero al que `calcularRuta` encuentre camino (pesos de la red de caminos, pasos de río en las posiciones de las plazas);
+         ordenados por distancia a su posición y, si empata, por id;  sale hacia el primero al que `calcularRuta` encuentre camino (pesos de la red de caminos; los ríos, solo por los vados);
          si ninguno tiene camino → se queda otra estancia (hasta = instante + estanciaMinutos)
 ```
 
