@@ -10,3 +10,4 @@ Diseños **cerrados con el autor pero sin implementar**. Aquí viven mientras no
 | [`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) | 2026-11-11 | `Mecanicas a desarrollar.md` 70 |
 | [`Clases_De_Heroe.md`](Clases_De_Heroe.md) | 2026-11-11 | `Mecanicas a desarrollar.md` 71 |
 | [`Catalogo_De_Objetos.md`](Catalogo_De_Objetos.md) | 2026-11-11 | `Mecanicas a desarrollar.md` 70 |
+| [`Cifras_De_Combate.md`](Cifras_De_Combate.md) | 2026-11-11 | `Mecanicas a desarrollar.md` 72 |

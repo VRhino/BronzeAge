@@ -265,3 +265,7 @@ Diseño: `Docs/Disenos_Por_Implementar/Objetos_Del_Heroe.md`, con la lista de lo
 ## 71. Clases del héroe (diseño del 2026-11-11)
 
 Diseño: `Docs/Disenos_Por_Implementar/Clases_De_Heroe.md`. Va con la entrada 70 (la clase sale del arma, que es un objeto) y se implementa con su paso 1. Atributos, habilidades y perks cerrados clase a clase el 2026-11-11; lo que hacen en combate lo fija Conquest.
+
+## 72. Cifras de combate de las tropas y del héroe (diseño del 2026-11-11)
+
+Diseño: `Docs/Disenos_Por_Implementar/Cifras_De_Combate.md`. Cada tropa gana un tier de combate (I-V), aparte de su escalón, un bloque `combate` en `TROPAS_RECLUTABLES` y sus propios soldados por escuadra; hay que quitar la prueba `el_tamano_de_la_escuadra_baja_con_el_escalon`. Las reglas del héroe las pone Conquest. Va con la entrada 70, porque las cifras del héroe salen de sus objetos. Las 11 tropas de las Eras IV y V esperan a esas Eras.
