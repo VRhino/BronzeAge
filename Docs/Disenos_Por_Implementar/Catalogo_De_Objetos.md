@@ -5,7 +5,7 @@ Diseño **aprobado por el autor el 2026-11-11** («si me cuadra todo esto», 18:
 - variación con sentido dentro del tier II (20:46 y 20:48, §4);
 - las cifras de combate, ajustadas a sus referencias para el héroe. El autor dio el diseño por cerrado a las 21:14; las reglas y la escala están en [`Cifras_De_Combate.md`](Cifras_De_Combate.md).
 
-Los objetos varios los cerró el autor a las 22:32 (§3.3). Quedan abiertos la tecnología `acero_templado`, que espera a las Eras IV y V, y de dónde salen las medallas de experiencia, que va con las curvas de progresión ([`Progresion_Tropas_Y_Heroe.md`](Progresion_Tropas_Y_Heroe.md) §5).
+Los objetos varios los cerró el autor a las 22:32 (§3.3). Quedan abiertos la tecnología `acero_templado`, diseñada en [`Eras_IV_Y_V.md`](Eras_IV_Y_V.md) §2 como la última de la Era V, y de dónde salen las medallas de experiencia, que va con las curvas de progresión ([`Progresion_Tropas_Y_Heroe.md`](Progresion_Tropas_Y_Heroe.md) §5).
 
 Las cinco clases del autor (`Clases_De_Heroe.md`, cerrado) son la base de §3.2, §4 y §5. Este catálogo cierra el punto 1 (y en parte el 2, el 8 y el 10) de §4 de [`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md). Parte de las plantillas de Conquest (`Assets/Resources/Items`, `HeroClassSelector.FillBaseItemIdsForClass`, `BasicArmorStatGenerator`, `BasicWeaponStatGenerator`, `ItemPricingService`) y las lleva a la Edad del Bronce con los materiales y tecnologías que el motor ya usa en la Armería (cuero, cobre, bronce y hierro; [`Economia_Construccion.md`](../Mechanics/Economia_Construccion.md)).
 
@@ -43,7 +43,7 @@ Todo es Común. Un solo generador al azar para las armaduras (defensa perforante
 - **Tier II tiene dos metales,** cobre y hierro temprano, con las mismas cifras totales repartidas de otra forma (§4).
 - **Las armas y las armaduras no ordenan igual los metales.** El hierro temprano protegía peor que el bronce (autor, 20:40), y en la Antigüedad la mejor armadura siguió siendo de bronce (la coraza del hoplita) mientras el hierro iba a las armas.
 - **Bronce laminado** es «el bronce bueno» de las armaduras: la tecnología que ya abre la `armaduraBronceCalidad` de las tropas.
-- **Acero** encaja al final de la Era V: el temple del hierro se conoce en Grecia desde Homero, y el acero nórico y el indio (wootz) aparecen hacia el 300 a. C. Depende de que existan las Eras IV y V, hoy sin implementar.
+- **Acero** encaja al final de la Era V: el temple del hierro se conoce en Grecia desde Homero, y el acero nórico y el indio (wootz) aparecen hacia el 300 a. C. Depende de que existan las Eras IV y V, hoy sin implementar; su logro y su hito están en [`Eras_IV_Y_V.md`](Eras_IV_Y_V.md) §2.
 
 La tecnología de cada metal **solo limita comprar y forjar** (autor, 2026-11-11): un arma o una armadura que ya se tiene se puede llevar siempre.
 

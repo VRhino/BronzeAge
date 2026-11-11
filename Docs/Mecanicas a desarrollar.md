@@ -19,7 +19,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 
 | # | Área | Mecánica | Código hoy |
 |---|---|---|---|
-| 20 | TECNOLOGÍA | Eras IV y V (pospuestas con el motor nuevo) | Eras I-III en canon y en Rust |
+| 20 | TECNOLOGÍA | Eras IV y V (pospuestas con el motor nuevo; diseñadas para el motor el 2026-11-11, entrada 74) | Eras I-III en canon y en Rust |
 | 39 | POLÍTICA | Elección del Rey de Facción por voto entre representantes (decidido el 2026-10-17: queda aquí, no implementada) | el Rey se asigna, sin votación |
 | 61 | MISIONES | H13 «Forjar al héroe» no tiene camino: el héroe no gana puntos de atributo porque el servidor no sube su nivel (visto al probar las misiones una a una, 2026-10-28). **Parada** hasta que haya Unity para los perks (decisión del autor del 2026-10-28) | la misión existe y se prueba que repartir sin puntos no cuenta |
 | 62 | MERCENARIOS | El campamento visto desde la puerta (2026-10-28): el héroe con la columna parada a la puerta (≤ `radioPuerta`) recibe el ámbito `CAMPAMENTO` como si estuviera dentro (stock y precios del mercado, reclutas, tropas que ofrece) y se le quita al alejarse; la sesión recalcula ese derecho cuando la columna para o arranca. Pendiente de decidir si desde fuera se recorta la lista de residentes y presentes. El cliente de jugador enseña mercado y reclutar con ese ámbito, dentro o fuera. Aparcada por el autor el 2026-10-28 | las órdenes ya se aceptan a la puerta (`comprarEnCampamento`, `reclutarEnCampamento`, repostar), pero `CAMPAMENTO` solo se abre dentro: desde fuera el jugador no ve qué hay |
@@ -30,6 +30,9 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 69 | POLÍTICA / MAPA | Marcas de Facción en el mapa (pedidas por el autor el 2026-10-29; acotadas en la sección «69»; rescatadas el 2026-11-11 de una rama que no llegó a `main`, donde eran la 63) | nada: el cliente de jugador no tiene dónde guardarlas |
 | 70 | MILITAR / HÉROE | Objetos del héroe (diseño del 2026-11-11; `Docs/Disenos_Por_Implementar/Objetos_Del_Heroe.md`): catálogo `OBJETOS` en el motor y stats en Conquest, clase del héroe, mochila y equipo guardados, órdenes equipar, desequipar, vender, comprar y forjar, equipo en el ticket, botín de Unity, tienda y forja | el contrato ya tiene `ItemInstancia` y `Equipamiento`; el motor no los guarda |
 | 71 | MILITAR / HÉROE | Clases del héroe (diseño del 2026-11-11; `Docs/Disenos_Por_Implementar/Clases_De_Heroe.md`): cinco clases, el arma define la clase, tiers de arma por tecnología, armaduras que admite cada clase, atributos = base de la clase + puntos repartidos, equipo inicial, y los atributos, habilidades y perks de cada clase | `crear_heroe` ignora la clase; va con la entrada 70 |
+| 72 | MILITAR / HÉROE | Cifras de combate de las tropas y del héroe (diseño del 2026-11-11; `Docs/Disenos_Por_Implementar/Cifras_De_Combate.md`): tier de combate I-V aparte del escalón, bloque `combate` y soldados propios por escuadra | todas las escuadras con el tamaño de su escalón |
+| 73 | MILITAR / HÉROE | Progresión de las tropas y del héroe (diseño del 2026-11-11; `Docs/Disenos_Por_Implementar/Progresion_Tropas_Y_Heroe.md`): curva de escuadra más larga, experiencia de Unity, nivel del héroe en el motor y Liderazgo por nivel | escuadra 1-10 con la curva corta; el héroe no sube de nivel |
+| 74 | TECNOLOGÍA | Eras IV y V en el motor (diseño del 2026-11-11; `Docs/Disenos_Por_Implementar/Eras_IV_Y_V.md`): dos Eras, doce tecnologías con `acero_templado`, doce contadores, seis tipos de hito, épicas, diez tropas y la subida al nivel 5 con vino, cerveza y los dos aceites, que pasan a ser dos bienes | Eras I-III; techo provisional en el nivel 4; un solo aceite |
 | — | PARIDAD | Recortes temporales del motor Rust frente al TypeScript (sección «Paridad con TypeScript») | el motor no está migrado hasta cerrarlos |
 | — | DUDAS | Ninguna sin decisión desde el 2026-10-27 (sección «Dudas abiertas»: las `// DUDA:` que quedan en el código) | — |
 | — | FASE 7 | Todo lo que se dejó para los bots reales y la fase 7 (sección «Para la fase 7») | — |
@@ -45,9 +48,9 @@ diseño).
 
 **Estado: Eras I-III en el canon (Doc 6) y en el núcleo Rust (sistema 6, 2026-10-25/26).** Falta:
 
-- **Eras IV y V — POSPUESTAS** (decisión del usuario, 2026-10-05): el alcance se queda en las Eras I-III. Catálogo, roster y
+- **Eras IV y V — DISEÑADAS PARA EL MOTOR el 2026-11-11** (entrada 74, `Docs/Disenos_Por_Implementar/Eras_IV_Y_V.md`), sin implementar. Lo que sigue es el estado de antes. **POSPUESTAS** (decisión del usuario, 2026-10-05): el alcance se queda en las Eras I-III. Catálogo, roster y
   logros siguen en la revisión (`Consideraciones/BA-006_Revision_Tecnologia_Eras.md`, EV-1 a EV-7). La subida 4 → 5 la tiene
-  que desbloquear una tecnología de la Era V (D54): hasta entonces el código mantiene el techo provisional en el nivel 4
+  que desbloquear una tecnología de la Era V (D54; el 2026-11-11 el autor la cambió por una obra con vino, cerveza y los dos aceites, sin tecnología, ver la entrada 74): hasta entonces el código mantiene el techo provisional en el nivel 4
   (`ASCENSO_ASENTAMIENTO.nivelTechoProvisional`), que es lo esperado mientras la Era V esté fuera. El núcleo no conoce el número de Eras: la III es la última (sin cita de plazo) mientras los bloques de la IV y la V no existan.
 - **Logro de `logistica_campana` (Era IV) — POSPUESTO** con la Era IV: la condición ya existe como consulta pura en el TypeScript,
   `caminoCompartidoAbierto` (`engine/redCaminos.ts`); se engancha al catálogo al escribir la Era IV.
@@ -273,3 +276,7 @@ Diseño: `Docs/Disenos_Por_Implementar/Cifras_De_Combate.md`. Cada tropa gana un
 ## 73. Progresión de las tropas y del héroe (diseño del 2026-11-11)
 
 Diseño: `Docs/Disenos_Por_Implementar/Progresion_Tropas_Y_Heroe.md`. La escuadra sigue del 1 al 10 con una curva más larga, y en Unity gana 4 por victoria y 2 por derrota. El héroe sube de nivel en el motor (cierra CQ-001 por este lado): 100 + 20 por nivel hasta el 30 y luego 680 sin fin; cada nivel hasta el 30 da un punto de atributo y 3 de Liderazgo (de 14 a 100), y gana experiencia también con números. Va con las entradas 70 y 71 (las medallas y lo que se abre con el nivel). Pide partida nueva.
+
+## 74. Las Eras IV y V en el motor (diseño del 2026-11-11)
+
+Diseño: `Docs/Disenos_Por_Implementar/Eras_IV_Y_V.md`. Dos Eras (Profesionalización, 8 semanas, y Hegemonía macedónica, 26), seis tecnologías en cada una (la última de la V es `acero_templado`, que espera a los objetos de la entrada 70 para tener efecto), doce contadores nuevos, seis tipos de hito, épicas de 6 y 7 capítulos y diez tropas con las cifras de la entrada 72; el Batallón Sagrado, el equipo de asedio y sus tecnologías quedan fuera. La subida de una plaza al nivel 5 deja de esperar a una tecnología: pide sus costes de hoy más 1.000 de vino, de cerveza, de aceite de oliva y de aceite de sésamo (el aceite se separa en dos bienes: `aceite`, el de oliva, y `aceiteSesamo`), y se quita el techo provisional del nivel 4 (cierra EV-2 de BA-006). Cierra la entrada 20 cuando se implemente. Umbrales provisionales, a medir con bots en la fase 7. Pide partida nueva.

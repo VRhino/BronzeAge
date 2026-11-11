@@ -178,7 +178,7 @@ Cada clase con su armadura inicial y sin puntos repartidos (vida efectiva / golp
 
 ## 7. Las tropas
 
-Borrador. Las cifras salen de §2-§5 y se ajustarán cuando el autor revise tropa a tropa. Las marcadas con * son de las Eras IV y V: están diseñadas en `Consideraciones/BA-006_Revision_Tecnologia_Eras.md`, pero no están en `TROPAS_RECLUTABLES`, que solo tiene las 27 de las Eras I-III.
+Borrador. Las cifras salen de §2-§5 y se ajustarán cuando el autor revise tropa a tropa. Las marcadas con * son de las Eras IV y V: están diseñadas en `Consideraciones/BA-006_Revision_Tecnologia_Eras.md`, pero no están en `TROPAS_RECLUTABLES`, que solo tiene las 27 de las Eras I-III. Diez de ellas entran con [`Eras_IV_Y_V.md`](Eras_IV_Y_V.md) §6 (2026-11-11); el Batallón Sagrado queda fuera.
 
 Columnas (cada terna va en el orden perforante/cortante/contundente):
 - **Esc.:** escalón;
@@ -268,7 +268,7 @@ Las de distancia llevan además `precision` y `municion`. El ticket lleva la ver
 - **En el motor:**
   - el `tier` y el bloque `combate` de cada tropa (§8);
   - los soldados de §4, y quitar la prueba `el_tamano_de_la_escuadra_baja_con_el_escalon`;
-  - las 11 tropas de las Eras IV y V. Necesitan las Eras IV y V y sus tecnologías, que el motor no tiene. Es un trabajo aparte.
+  - las tropas de las Eras IV y V. Necesitan las Eras IV y V y sus tecnologías, que el motor no tiene. Van en [`Eras_IV_Y_V.md`](Eras_IV_Y_V.md): diez, sin el Batallón Sagrado.
 - **En Conquest:**
   - leer estas cifras del motor en lugar de las de sus `SquadData`;
   - la rareza de escuadra sale del tier (§1);
