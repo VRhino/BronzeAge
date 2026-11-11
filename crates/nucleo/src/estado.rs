@@ -339,9 +339,18 @@ pub struct Reglas {
     pub economia: ReglasEconomia,
 }
 
+/// `INFRA.limiteIdempotenciaPorCuenta` de `Reloj_Y_Eventos.md` (se lee una vez).
+fn limite_idempotencia_del_documento() -> usize {
+    static LIMITE: OnceLock<usize> = OnceLock::new();
+    *LIMITE.get_or_init(|| {
+        let infra = asentamiento::datos::bloque_de(include_str!("../../../Docs/Mechanics/Reloj_Y_Eventos.md"), "INFRA").unwrap_or_else(|e| panic!("{e}"));
+        infra["limiteIdempotenciaPorCuenta"].as_u64().expect("INFRA.limiteIdempotenciaPorCuenta") as usize
+    })
+}
+
 impl Default for Reglas {
     fn default() -> Self {
-        Self { viveres_bajos_pct: 25, limite_idempotencia: 64, batallas_en_unity: false, territorio: ReglasTerritorio::default(), economia: ReglasEconomia::default() }
+        Self { viveres_bajos_pct: 25, limite_idempotencia: limite_idempotencia_del_documento(), batallas_en_unity: false, territorio: ReglasTerritorio::default(), economia: ReglasEconomia::default() }
     }
 }
 

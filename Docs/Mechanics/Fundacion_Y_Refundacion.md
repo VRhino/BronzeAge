@@ -175,8 +175,6 @@ A partir de ahí es la misma entidad: se engancha, se funda con `fundar` (§5), 
   "maxJugadoresFundacionGrupal": 5,
   "minFundadoresParaFaccionNueva": 1,
   "exigeCiudadaniaPrevia": false,
-  "distanciaMinimaAparicion": 200,
-  "intentosDeAparicion": 200,
   "materialesIniciales": {
     "madera": 50,
     "piedra": 20,

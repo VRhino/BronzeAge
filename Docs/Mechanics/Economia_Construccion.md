@@ -213,8 +213,8 @@ pesants → el excedente; artesanos → `artesanos − trabajadoresTransformacio
   **Implementado en Rust (paridad P8, 2026-10-27):** el stock vivo es `economia::StockNodo` y la regeneración se aplica **al volver a extraer** pasado el cooldown (contado desde el instante en que se agotó), no con un barrido: como los extractores piden cada minuto,
   el nodo vuelve en el primer paso de la plaza tras el cooldown. El paso anota `construccion.yacimiento_agotado { nodo, recurso, edificio, tipo }` (o `{ nodo, recurso, pueblo, tipo }` si lo explota un pueblo; recurso y tipo por su índice) cuando una extracción deja el nodo a 0
   y `mapa.yacimiento_regenerado { nodo, recurso }` cuando un nodo vacío vuelve a dar; los oye la Facción de la plaza que extrae. Un nodo agotado que nadie vuelve a explotar no emite el regenerado hasta que alguien lo explote. Prueba: `la_extraccion_anota_el_nodo_que_se_agota_y_el_que_se_regenera` (`economia.rs`).
-- **Bosques** (en la reconstrucción: parcelas, ver nota en `Generacion_Del_Mundo.md` §10.3): un bosque admite 1, 2 o 3 Leñeras según su radio (`LENERA_POR_BOSQUE`: ≥ `umbral3` → 3, ≥ `umbral2` → 2, si no 1). La Leñera se coloca en el espacio de la ciudad, pero su
-  `fuenteId` es el bosque.
+- **Bosques** (en la reconstrucción: parcelas, ver nota en `Generacion_Del_Mundo.md` §10.3): en el TypeScript un bosque admitía 1, 2 o 3 Leñeras según su radio (`LENERA_POR_BOSQUE`); en Rust cada Leñera explota
+  una parcela y su producción depende de la densidad de esa parcela (el bloque `LENERA_POR_BOSQUE` se quitó el 2026-11-11: el motor no lo leía).
 - **Nodos reclamados**: un yacimiento lo explota un solo extractor de **todo el mundo** (`reclamosDeFuentes`: conjunto de `fuenteId` de todos los asentamientos; las Leñeras se cuentan aparte por bosque).
 
 ### 5.3 Recetas (`avanzarRecetas`)
@@ -1857,15 +1857,6 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
 ```
 <!-- /parametros -->
 
-<!-- parametros:LENERA_POR_BOSQUE -->
-```json
-{
-  "umbral2": 45,
-  "umbral3": 65
-}
-```
-<!-- /parametros -->
-
 <!-- parametros:REGENERACION_NODOS -->
 ```json
 {
@@ -1939,8 +1930,6 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
   "maxJugadoresFundacionGrupal": 5,
   "minFundadoresParaFaccionNueva": 1,
   "exigeCiudadaniaPrevia": false,
-  "distanciaMinimaAparicion": 200,
-  "intentosDeAparicion": 200,
   "materialesIniciales": {
     "madera": 50,
     "piedra": 20,

@@ -175,16 +175,7 @@ Una columna o una caravana que participa en una batalla activa (`convocando`, `a
 
 ## 9. Parámetros
 
-El reloj de mundo ya no tiene tick. `SIMULACION.duracionTickMs` (60 000) queda solo como equivalencia de las cifras heredadas (1 minuto) mientras las constantes de juego viven en `constants.ts`; en el archivo común de datos (Reconstrucción §3) se expresan en instantes y en unidades por minuto.
-
-<!-- parametros:SIMULACION -->
-```json
-{
-  "epocaInicial": "2026-01-01T00:00:00.000Z",
-  "duracionTickMs": 60000
-}
-```
-<!-- /parametros -->
+El reloj de mundo no tiene tick: las cifras de juego se expresan en instantes y en unidades por minuto (el bloque `SIMULACION` del TypeScript, con la época inicial y la duración del tick, se quitó el 2026-11-11 porque el motor no lo leía).
 
 <!-- parametros:PRESENCIA -->
 ```json
@@ -195,14 +186,12 @@ El reloj de mundo ya no tiene tick. `SIMULACION.duracionTickMs` (60 000) queda s
 ```
 <!-- /parametros -->
 
-Cifras de **infraestructura** (en `constantsInfra.ts`; no alteran el resultado de una simulación). `ticksMaximosPorPasada` pertenece al reloj por tick y desaparece; `limiteIdempotenciaPorCuenta` (claves que el servidor recuerda **de cada cuenta**: las últimas 64; en el TypeScript, `limiteIdempotencia`, 500 por partida; decisión del autor, 2026-10-24, para que un reintento tras reconectar no se aplique dos veces por muchos jugadores que haya; va en la foto, `BAN24`) y `eventosMaximosEnMemoria` (recorte del registro en memoria) se conservan.
+Cifra de **infraestructura** (no altera el resultado de una simulación): `limiteIdempotenciaPorCuenta`, las claves que el servidor recuerda **de cada cuenta** (las últimas 64; en el TypeScript, `limiteIdempotencia`, 500 por partida; decisión del autor, 2026-10-24, para que un reintento tras reconectar no se aplique dos veces por muchos jugadores que haya). La lee `Reglas::default` del núcleo y va en la foto. `ticksMaximosPorPasada` (del reloj por tick) y `eventosMaximosEnMemoria` (recorte del registro del TypeScript) se quitaron el 2026-11-11: el motor no los leía.
 
 <!-- parametros:INFRA -->
 ```json
 {
-  "ticksMaximosPorPasada": 5,
-  "limiteIdempotenciaPorCuenta": 64,
-  "eventosMaximosEnMemoria": 5000
+  "limiteIdempotenciaPorCuenta": 64
 }
 ```
 <!-- /parametros -->

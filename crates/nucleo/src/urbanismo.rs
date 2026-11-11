@@ -51,6 +51,11 @@ pub struct Urbanismo {
     radio: (i32, i32, [i32; 5]),
     /// `NECESIDADES.nivelGateAnclasIndustria`: el nivel operativo desde el que el barrio de la industria crea su ancla (T §7.1).
     gate_industria: u32,
+    /// `TRAZADO` (T §12): las filas, la banda de las afueras, la separación de las anclas, el ancho de las calles y los topes de los corredores.
+    /// El resto de los [`Parametros`] son las dos constantes locales del crate `trazado` o vienen de la economía y de `RADIO_CIUDAD`.
+    trazado: Parametros,
+    /// `MERCENARIOS.layout` (Campamentos_Mercenarios §7): el radio de la planta de un campamento, en unidades locales, y el nivel de su Mercado.
+    campamento: (i32, u8),
 }
 
 fn huella_de(v: &serde_json::Value) -> Huella {
@@ -81,7 +86,26 @@ impl Urbanismo {
         let ul = |v: &serde_json::Value| v.as_i64().expect("RADIO_CIUDAD en unidades locales enteras") as i32;
         let topes: Vec<i32> = rc["maximoPorNivel"].as_array().expect("maximoPorNivel es una lista").iter().map(ul).collect();
         let radio = (ul(&rc["inicial"]), ul(&rc["crecimientoPorEdificio"]), topes.try_into().expect("maximoPorNivel: un tope por nivel 1-5"));
-        Self { defecto, por_tipo, forma_puesto, puestos_por_nivel, granja, radio, gate_industria: eco.construccion.necesidades.nivel_gate_anclas_industria }
+        let t = b("TRAZADO");
+        let entero = |k: &str| t[k].as_i64().unwrap_or_else(|| panic!("falta «TRAZADO.{k}»"));
+        let trazado = Parametros {
+            largo_fila_min: entero("largoFilaMin") as i32,
+            largo_fila_max: entero("largoFilaMax") as i32,
+            radio_afueras_min_ul: entero("radioAfuerasMin") as i32,
+            ancho_banda_afueras_ul: entero("anchoBandaAfueras") as i32,
+            separacion_minima_anclas: entero("separacionMinimaAnclas") as i32,
+            separacion_seguridad_anclas: entero("separacionSeguridadAnclas") as i32,
+            ancho_calle: entero("anchoCalle") as i32,
+            cap_corredor_urbano: entero("capCorredorUrbano") as u16,
+            cap_corredor_afueras: entero("capCorredorAfueras") as u16,
+            ..Parametros::default()
+        };
+        let layout = &militar::datos::bloque(militar::datos::CAMPAMENTOS, "MERCENARIOS")["layout"];
+        let campamento = (
+            layout["radioLocal"].as_i64().expect("MERCENARIOS.layout.radioLocal en unidades locales enteras") as i32,
+            layout["nivelMercado"].as_u64().expect("MERCENARIOS.layout.nivelMercado") as u8,
+        );
+        Self { defecto, por_tipo, forma_puesto, puestos_por_nivel, granja, radio, gate_industria: eco.construccion.necesidades.nivel_gate_anclas_industria, trazado, campamento }
     }
 
     /// Huella sin girar de un tipo a ese nivel interno: la Granja por nivel, el puesto del Mercado por su forma, el resto por tipo.
@@ -147,7 +171,7 @@ impl Urbanismo {
     }
 
     /// Los parámetros de la geometría con los valores de la economía que los comparten (el gate de las anclas y las Viviendas de la
-    /// fundación) y el `RADIO_CIUDAD` del documento; el resto, los de T §12.
+    /// fundación), el `RADIO_CIUDAD` y el `TRAZADO` del documento (T §12).
     pub fn parametros(&self, eco: &asentamiento::Reglas) -> Parametros {
         let (radio_inicial_ul, crecimiento_por_edificio_ul, maximo_por_nivel_ul) = self.radio;
         Parametros {
@@ -156,7 +180,7 @@ impl Urbanismo {
             radio_inicial_ul,
             crecimiento_por_edificio_ul,
             maximo_por_nivel_ul,
-            ..Parametros::default()
+            ..self.trazado
         }
     }
 }
@@ -615,11 +639,6 @@ pub fn planta_de_pueblo(reglas: &crate::ReglasEconomia, semilla_nucleo: u64, id_
 
 // ───────────────────────────── La planta de un campamento de mercenarios ─────────────────────────────
 
-/// Radio de la planta de un campamento, en unidades locales (`MERCENARIOS.layout.radioLocal`).
-const RADIO_DE_CAMPAMENTO_UL: i32 = 60;
-/// Nivel del Mercado de un campamento para sus puestos (`MERCENARIOS.layout.nivelMercado`).
-const NIVEL_MERCADO_DE_CAMPAMENTO: u8 = 1;
-
 /// La planta de un campamento de mercenarios con su empalizada (decorativa: dentro no hay combate), en unidades locales.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PlantaCampamento {
@@ -637,15 +656,16 @@ pub fn planta_de_campamento(reglas: &crate::ReglasEconomia, semilla_nucleo: u64,
     let urb = &reglas.urbanismo;
     let semilla = trazado::hash(semilla_nucleo, "campamento", &[i64::from(campamento)]);
     let perfil = Perfil::por_tradicion(semilla);
-    let params = Parametros { radio_inicial_ul: RADIO_DE_CAMPAMENTO_UL, ..urb.parametros(&reglas.datos) };
+    let (radio_ul, nivel_mercado) = urb.campamento;
+    let params = Parametros { radio_inicial_ul: radio_ul, ..urb.parametros(&reglas.datos) };
     let mut ciudad = Ciudad::vacia(semilla, params);
     let mut ids = 0u32;
-    let taberna = Pedido { id: 0, tipo: tipo_a_u16(Tipo::Taberna), categoria: Categoria::Residencial, rol: Rol::Centro, huella: urb.huella(Tipo::CentroUrbano, 1), permitir_rotacion: false, perfil, radio_ul: RADIO_DE_CAMPAMENTO_UL };
+    let taberna = Pedido { id: 0, tipo: tipo_a_u16(Tipo::Taberna), categoria: Categoria::Residencial, rol: Rol::Centro, huella: urb.huella(Tipo::CentroUrbano, 1), permitir_rotacion: false, perfil, radio_ul };
     ciudad.colocar(&taberna, Colocacion { rect: Rect::desde_centro(Punto::new(0, 0), taberna.huella), rotado: false }).expect("la planta vacía admite su taberna");
     ids += 1;
     let colocar = |ciudad: &mut Ciudad, tipo: Tipo, nivel_interno: u8, ids: &mut u32| {
         let Some(c) = urb.clase(tipo) else { return };
-        let pedido = |id| Pedido { id, tipo: tipo_a_u16(tipo), categoria: c.categoria, rol: c.rol, huella: urb.huella(tipo, nivel_interno), permitir_rotacion: c.rota, perfil, radio_ul: RADIO_DE_CAMPAMENTO_UL };
+        let pedido = |id| Pedido { id, tipo: tipo_a_u16(tipo), categoria: c.categoria, rol: c.rol, huella: urb.huella(tipo, nivel_interno), permitir_rotacion: c.rota, perfil, radio_ul };
         if c.rol == Rol::Normal && c.categoria.tiene_barrio() {
             if let Ancla::Creada(_) = ciudad.asegurar_ancla_para(&pedido(*ids), *ids, u8::MAX, &urb.opciones_ancla(c.categoria)) {
                 *ids += 1;
@@ -656,14 +676,14 @@ pub fn planta_de_campamento(reglas: &crate::ReglasEconomia, semilla_nucleo: u64,
         }
     };
     colocar(&mut ciudad, Tipo::Mercado, 1, &mut ids);
-    for &forma in urb.puestos(NIVEL_MERCADO_DE_CAMPAMENTO) {
+    for &forma in urb.puestos(nivel_mercado) {
         colocar(&mut ciudad, Tipo::PuestoMercado, forma, &mut ids);
     }
     colocar(&mut ciudad, militar, 1, &mut ids);
     for _ in 0..viviendas {
         colocar(&mut ciudad, Tipo::Vivienda, 1, &mut ids);
     }
-    let mut vista = Urbe::desde_ciudad(ciudad).vista(RADIO_DE_CAMPAMENTO_UL, &[]);
+    let mut vista = Urbe::desde_ciudad(ciudad).vista(radio_ul, &[]);
     vista.radio_ul = vista.radio_ul.max(radio_que_ocupan(&vista.piezas));
     let (muro, puerta) = empalizada_alrededor(vista.piezas.iter().map(|p| &p.rect).chain(&vista.calles));
     PlantaCampamento { vista, muro, puerta }
@@ -697,6 +717,21 @@ fn empalizada_alrededor<'a>(huellas: impl Iterator<Item = &'a RectLocal>) -> (Ve
 mod pruebas {
     use super::*;
     use crate::ReglasEconomia;
+
+    /// El lado de la celda de la rejilla va fijo en el crate `trazado` (`CELDA_UL`, una constante de la geometría); tiene que ser el del documento.
+    #[test]
+    fn la_celda_del_trazado_es_la_del_documento() {
+        let rejilla = bloque_de(DOC_TRAZADO, "REJILLA_ASENTAMIENTO").unwrap();
+        assert_eq!(rejilla["tamanoCelda"].as_i64(), Some(i64::from(CELDA_UL)), "REJILLA_ASENTAMIENTO.tamanoCelda");
+    }
+
+    /// `TRAZADO` y `MERCENARIOS.layout` salen del documento, con los valores de siempre.
+    #[test]
+    fn el_trazado_y_la_planta_del_campamento_salen_del_documento() {
+        let urb = &ReglasEconomia::default().urbanismo;
+        assert_eq!(Parametros { radio_inicial_ul: 0, crecimiento_por_edificio_ul: 0, maximo_por_nivel_ul: [0; 5], nivel_gate_anclas: 0, viviendas_iniciales: 0, ..urb.trazado }, Parametros { radio_inicial_ul: 0, crecimiento_por_edificio_ul: 0, maximo_por_nivel_ul: [0; 5], nivel_gate_anclas: 0, viviendas_iniciales: 0, ..Parametros::default() });
+        assert_eq!(urb.campamento, (60, 1));
+    }
 
     #[test]
     fn la_planta_de_un_campamento_sale_de_su_indice_con_la_taberna_de_ancla_y_su_empalizada() {

@@ -161,7 +161,7 @@ dependencies = [
 
 [[package]]
 name = "combate"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "asentamiento",
  "base",
@@ -173,7 +173,7 @@ dependencies = [
 
 [[package]]
 name = "comercio"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "asentamiento",
  "base",

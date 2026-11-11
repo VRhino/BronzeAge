@@ -22,7 +22,6 @@ use comercio::{de, sumar, total, Carga as Mercancia};
 use militar::convocatoria::Lugar;
 use militar::heroe::Residencia;
 use militar::presencia::Ubicacion;
-use crate::nucleo::mercado::CAPACIDAD_CARRO;
 
 /// Quita `n` de `r` de la carga, borrando la línea que queda a cero.
 fn quitar(carga: &mut Mercancia, r: Recurso, n: Mil) {
@@ -67,7 +66,7 @@ impl Nucleo {
         let (columna, capacidad) = if dentro {
             match hn.columna.filter(|c| self.estado.ejercitos.contains_key(c)) {
                 Some(c) => (Some(c), self.capacidad_de_carga(c).unwrap_or(0)),
-                None => (None, CAPACIDAD_CARRO),
+                None => (None, self.capacidad_carro()),
             }
         } else {
             let (c, e) = self.columna_a_bordo(heroe)?;
@@ -138,7 +137,7 @@ impl Nucleo {
         }
         Ok(match hn.columna.filter(|c| self.estado.ejercitos.contains_key(c)) {
             Some(c) => (Some(c), self.capacidad_de_carga(c).unwrap_or(0)),
-            None => (None, CAPACIDAD_CARRO),
+            None => (None, self.capacidad_carro()),
         })
     }
 

@@ -868,21 +868,7 @@ Confirmadas por el autor al cerrar las dudas abiertas (doc «Dudas abiertas del 
 
 ## 8. Parámetros
 
-<!-- parametros:DIFUSION -->
-```json
-{
-  "coalescerMs": 100,
-  "umbralLentoBytes": 262144,
-  "umbralRecuperadoBytes": 32768,
-  "lentoMaxMs": 15000,
-  "maxSuscripcionesPorSocket": 64,
-  "minMsEntreFotos": 2000,
-  "ritmoMaximo": 60
-}
-```
-<!-- /parametros -->
-
-Son cifras de **infraestructura** (`constantsInfra.ts`): no alteran lo que ve nadie, solo cuánto tarda en llegar. La duración de la sesión (`ACCESO.duracionSesionMs`, §2.1) y `INFRA.limiteIdempotencia` (§3, [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §8) son las otras dos. Las del juego que intervienen en lo que se ve (`VISION`, `INSPECCION`, `INTEL`, `ALMACEN_PERSONAL`…) están en [`Niebla_De_Guerra.md`](Niebla_De_Guerra.md) §7.
+Las cifras de **infraestructura** de la difusión (cuánto tarda en llegar lo que se ve, no lo que se ve) son las del servidor (`servidor::Config`, `nucleo::Ajustes`); el bloque `DIFUSION` del TypeScript (`coalescerMs`, los umbrales de cliente lento, `minMsEntreFotos`…) se quitó el 2026-11-11 porque el motor no lo leía. La duración de la sesión (`ACCESO.duracionSesionMs`, §2.1) y `INFRA.limiteIdempotencia` (§3, [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §8) son las otras dos. Las del juego que intervienen en lo que se ve (`VISION`, `INSPECCION`, `INTEL`, `ALMACEN_PERSONAL`…) están en [`Niebla_De_Guerra.md`](Niebla_De_Guerra.md) §7.
 
 ## 9. Invariantes
 

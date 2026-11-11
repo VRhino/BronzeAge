@@ -9,9 +9,6 @@ use crate::edificio::{Edificio, Edificios, Estado, Mejora};
 use crate::recurso::{Costo, Recurso, N};
 use base::{Instante, Mil, MS_POR_MINUTO};
 
-/// Fracción del coste (y del tiempo) de una reconstrucción tras un saqueo (`OCUPACION.fraccionCosteReconstruccion`).
-const FRACCION_RECONSTRUCCION: i64 = 500_000;
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ErrorObra {
     TecnologiaFaltante,
@@ -113,12 +110,12 @@ impl Asentamiento {
             let def = r.catalogo.tipo(tipo);
             let mut factor = factor_tiempo;
             if danado {
-                // Cobra la mitad del coste (redondeando hacia arriba) al arrancar; si no hay con qué, espera.
-                let mitad: Costo = def.costo.iter().map(|&(rec, n)| (rec, (n * FRACCION_RECONSTRUCCION + UNO - 1) / UNO)).collect();
+                // Cobra `fraccionCosteReconstruccion` del coste (redondeando hacia arriba) al arrancar; si no hay con qué, espera.
+                let mitad: Costo = def.costo.iter().map(|&(rec, n)| (rec, (n * r.fraccion_reconstruccion + UNO - 1) / UNO)).collect();
                 if !self.almacen.pagar(&mitad) {
                     continue;
                 }
-                factor = crate::datos::por(factor, FRACCION_RECONSTRUCCION);
+                factor = crate::datos::por(factor, r.fraccion_reconstruccion);
             }
             let e = &mut self.edificios[i];
             let completa_en = t + minutos(def.tiempo_minutos, factor) * MS_POR_MINUTO;
@@ -311,7 +308,7 @@ impl Asentamiento {
     }
 
     /// `quitarDeCola`: solo un edificio `en_cola`. Devuelve el coste completo más la mejora de cada nivel interno 2..n; si estaba
-    /// dañado, la mitad de cada recurso redondeada hacia abajo. Lo que no quepa en el almacén se pierde.
+    /// dañado, `fraccionCosteReconstruccion` de cada recurso redondeada hacia abajo. Lo que no quepa en el almacén se pierde.
     pub fn quitar_de_cola(&mut self, r: &Reglas, id: u32) -> Result<(), ErrorObra> {
         let i = self.edificios.iter().position(|e| e.id == id).ok_or(ErrorObra::NoExiste)?;
         if self.edificios[i].estado != Estado::EnCola {
@@ -329,7 +326,7 @@ impl Asentamiento {
             }
         }
         if danado {
-            total.iter_mut().for_each(|(_, n)| *n = *n * FRACCION_RECONSTRUCCION / UNO);
+            total.iter_mut().for_each(|(_, n)| *n = *n * r.fraccion_reconstruccion / UNO);
         }
         self.almacen.devolver(&total);
         self.edificios.remove(i);

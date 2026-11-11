@@ -44,11 +44,6 @@ use comercio::reputacion::Suceso;
 use comercio::trueque::{podar, AcuerdoTrueque, ErrorTrueque, Vencimiento};
 use comercio::{total, Carga as Mercancia, Lado};
 
-/// Capacidad del carro de una columna (`LOGISTICA.capacidadCarroPorJugador`: 500).
-/// La capacidad total de la columna (`participantes × capacidadCarroPorJugador`, más las caravanas adjuntas y «Carga Ampliada») es
-/// `Nucleo::capacidad_de_carga`; esta es la de un héroe, que es lo que cabe en el carro con que sale quien sale de un lugar.
-pub(super) const CAPACIDAD_CARRO: Mil = 500_000;
-
 /// Los ids de plaza del crate `comercio` son `u32`; los del núcleo, `u64` de un contador que no llega a ese tope.
 pub(super) fn id32(id: u64) -> u32 {
     id as u32
@@ -496,7 +491,7 @@ impl Nucleo {
                 if *cantidad <= 0 {
                     return Err(rechazo(rechazos::CANTIDAD_NO_POSITIVA, "la cantidad debe ser mayor que cero".into()));
                 }
-                let capacidad = self.capacidad_de_carga(*ejercito).unwrap_or(CAPACIDAD_CARRO);
+                let capacidad = self.capacidad_de_carga(*ejercito).unwrap_or(self.capacidad_carro());
                 let carro = &mut self.estado.ejercitos.get_mut(ejercito).expect("existe").columna.carga;
                 let n = base::entero((*cantidad).min((capacidad - total(carro)).max(0))); // unidades enteras (C3b)
                 if n == 0 {
@@ -532,7 +527,7 @@ impl Nucleo {
             factor_comision_externa: factor,
         };
         let antes = self.ordenes_del_libro();
-        let capacidad = self.capacidad_de_carga(ejercito).unwrap_or(CAPACIDAD_CARRO);
+        let capacidad = self.capacidad_de_carga(ejercito).unwrap_or(self.capacidad_carro());
         let Estado { comercio, asentamientos, ejercitos, .. } = &mut self.estado;
         let suministro = ejercitos.get(&ejercito).map(|e| e.columna.carga.clone()).unwrap_or_default();
         let carro = Carro { oro: comercio::de(&suministro, Recurso::Oro), oro_ocupa: true, recurso: comercio::de(&suministro, recurso), espacio: (capacidad - total(&suministro)).max(0) };

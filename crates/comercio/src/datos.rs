@@ -4,10 +4,10 @@
 //! (0,0005 por minuto no cabe en milésimas).
 //!
 //! **Valores calibrados** (Comercio_Caravanas, final, y Doc 3): `distanciaParaBonusMax` y `distanciaReferencia` son **120** (600 en
-//! TypeScript; desde el 2026-10-28 el bloque ya lo dice). Las velocidades de los animales van ×1,5; `NAVEGACION.espaciadoMin` es 8 y los vados
-//! cada 100. Se aplican al cargar y las fija un test.
+//! TypeScript) y las velocidades de los animales van ×1,5 sobre las del TypeScript. Desde el 2026-11-11 los bloques ya llevan esos valores y el
+//! código los lee tal cual (antes los pisaba al cargar); los fija un test.
 
-use asentamiento::datos::{bloque_de, mil, por, ppm, texto_de_parametros_de};
+use asentamiento::datos::{bloque_de, mil, ppm, texto_de_parametros_de};
 use asentamiento::Recurso;
 use base::{Mil, MS_POR_MINUTO};
 use serde_json::Value;
@@ -19,10 +19,6 @@ pub const MOVIMIENTO: &str = include_str!("../../../Docs/Mechanics/Movimiento_Ej
 
 /// Un punto de reputación en ppm.
 pub const PUNTO: i64 = 1_000_000;
-/// Distancia vigente (120 unidades) para el bonus de la comisión y para la cercanía del reparto (el bloque dice 600).
-pub const DISTANCIA_VIGENTE: Mil = 120_000;
-/// Calibración de velocidades: ×1,5 sobre las del bloque `ANIMAL_CATALOGO`.
-pub const FACTOR_VELOCIDAD_CALIBRADA: i64 = 1_500_000;
 
 /// Los bloques de parámetros de los tres documentos, para la identidad de las reglas (hash del núcleo).
 pub fn texto_de_parametros() -> String {
@@ -222,15 +218,10 @@ pub struct ReglasMercenarios {
     pub fuera_de_venta: Vec<Recurso>,
 }
 
-/// Lo que el comercio lee de `NAVEGACION` (el grafo lo construye `crates/rutas`); con los valores vigentes.
+/// Lo que el comercio lee de `NAVEGACION`: la atracción de la red de caminos. El grafo de navegación viene hecho en el artefacto de mundo (lo construye el
+/// generador), así que las cifras de su construcción (`espaciadoMin`, `nodosPorLado`, los vados…) no las lee el motor.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Navegacion {
-    pub espaciado_min: Mil,
-    pub nodos_por_lado: u32,
-    pub muestreo_max: Mil,
-    pub separacion_vados_min: Mil,
-    pub vados_por_lado: u32,
-    pub radio_paso_ciudad_min: Mil,
     pub atraccion_por_peso: i64,
     pub atraccion_min: i64,
     /// `COSTE_MOVIMIENTO.factorCamino` (ppm): sobre una arista de la red de caminos el coste del tramo se multiplica por esto.
@@ -266,8 +257,7 @@ impl Reglas {
             tasa_misma_faccion: ppm(num(&c, "tasaMismaFaccion")),
             tasa_externa: ppm(num(&c, "tasaExterna")),
             bonus_por_distancia_max: ppm(num(&c, "bonusPorDistanciaMax")),
-            // Vigente (Comercio_Caravanas, valores calibrados): 120, no las 600 del bloque.
-            distancia_para_bonus_max: DISTANCIA_VIGENTE,
+            distancia_para_bonus_max: mil(num(&c, "distanciaParaBonusMax")),
         };
         let pb = b("PRECIO_BASE");
         let base = pb
@@ -286,14 +276,13 @@ impl Reglas {
             peso_urgencia_expiracion: ppm(num(&a, "pesoUrgenciaExpiracion")),
             peso_urgencia_volumen: ppm(num(&a, "pesoUrgenciaVolumen")),
             peso_cercania: ppm(num(&a, "pesoCercania")),
-            // Vigente: 120, no las 600 del bloque.
-            distancia_referencia: DISTANCIA_VIGENTE,
+            distancia_referencia: mil(num(&a, "distanciaReferencia")),
         };
         let (cc, ac) = (b("CARRO_CATALOGO"), b("ANIMAL_CATALOGO"));
         let carro = |k: &str| DefCarro { capacidad_base: mil(num(&cc, &format!("{k}.capacidadBase"))), costo: costo(&cc[k]["costo"]), exige_carpinteria: cc[k]["fabrica"] == "carpinteria" };
         let animal = |k: &str| DefAnimal {
             factor_carga: ppm(num(&ac, &format!("{k}.factorCarga"))),
-            velocidad: por(mil(num(&ac, &format!("{k}.velocidad"))), FACTOR_VELOCIDAD_CALIBRADA),
+            velocidad: mil(num(&ac, &format!("{k}.velocidad"))),
             costo: costo(&ac[k]["costo"]),
         };
         let (cat, esc, prep, cool) = (b("CARAVANA_CATALOGO"), b("CARAVANA_ESCOLTA"), b("CARAVANA_PREPARACION"), b("CARAVANA_COOLDOWN"));
@@ -367,13 +356,6 @@ impl Reglas {
         };
         let nv = b("NAVEGACION");
         let navegacion = Navegacion {
-            // Vigente: espaciadoMin 45 → 8 y vados cada 100.
-            espaciado_min: 8_000,
-            nodos_por_lado: num(&nv, "nodosPorLado") as u32,
-            muestreo_max: mil(num(&nv, "muestreoMax")),
-            separacion_vados_min: 100_000,
-            vados_por_lado: num(&nv, "vadosPorLado") as u32,
-            radio_paso_ciudad_min: mil(num(&nv, "radioPasoCiudadMin")),
             atraccion_por_peso: ppm(num(&nv, "atraccionPorPeso")),
             atraccion_min: ppm(num(&nv, "atraccionMin")),
             factor_camino: ppm(num(&b("COSTE_MOVIMIENTO"), "factorCamino")),
@@ -453,7 +435,6 @@ mod pruebas {
         assert_eq!((m.capacidad_almacen_personal, m.capacidad_viveres_por_heroe), (2_000_000, 350_000), "almacén personal al doble desde el 2026-11-05");
         assert_eq!((m.porcentaje_refundacion, m.excluidos_refundacion.as_slice()), (400_000, [Recurso::Oro].as_slice()), "la refundación no pide oro (tanda 69)");
         let n = &r.navegacion;
-        assert_eq!((n.espaciado_min, n.separacion_vados_min), (8_000, 100_000));
         assert_eq!((n.atraccion_por_peso, n.atraccion_min, n.factor_camino), (100_000, 500_000, 500_000));
     }
 
