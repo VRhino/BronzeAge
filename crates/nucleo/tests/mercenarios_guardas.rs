@@ -356,7 +356,7 @@ fn unirse_a_una_batalla_en_defensa_pide_guardar_lo_que_se_defiende_o_atacar_a_qu
     assert_eq!(mc::rechazo(&mut e.n, "bot-e", une(acompana, None)), sin_orden);
     assert_eq!(mc::rechazo(&mut e.n, "bot-d", une(caza_otro, None)), sin_orden);
     // El permiso no cambia el bando que le toca: dentro de la plaza solo se defiende, y eso lo dice la batalla, no el contrato.
-    assert_eq!(mc::rechazo(&mut e.n, "bot-g", une(guarda, Some(Lado::Atacante))), rechazos::BATALLA_INVALIDA);
+    assert_eq!(mc::rechazo(&mut e.n, "bot-g", une(guarda, Some(Lado::Atacante))), rechazos::BATALLA_LADO_DISTINTO);
 
     // Con `guardar` de la plaza asediada, defiende; con `atacar` de quien la asedia, también: pelea contra él, que está en el otro bando.
     mc::ok(&mut e.n, "bot-g", une(guarda, None));

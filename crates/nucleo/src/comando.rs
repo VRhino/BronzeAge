@@ -3403,32 +3403,51 @@ pub mod rechazos {
     pub const BATALLA_BLOQUEADO: &str = "batalla.bloqueado";
     /// No existe, está cerrada o su plazo venció (404).
     pub const BATALLA_NO_EXISTE: &str = "batalla.no_existe";
-    /// No puede unirse: está herido, ya combate, su columna ya combate, hay que estar a ≤ `radioEncuentro` del punto o el bando está lleno.
+    /// No puede unirse por otra razón (está herido, o le toca defender y no está dentro, o atacar y no está fuera), o el mensaje del servidor de batalla no se entiende (id, lado, cifra, esquema, motivo o razón desconocidos).
     pub const BATALLA_INVALIDA: &str = "batalla.invalida";
+    /// Desde fuera hay que llegar con la columna para unirse.
     pub const BATALLA_SIN_COLUMNA: &str = "batalla.sin_columna";
+    /// La columna está a más de `radioEncuentro` del punto de la batalla.
     pub const BATALLA_LEJOS: &str = "batalla.lejos";
+    /// El bando se pasaría de su capacidad: si está lleno, no entra.
     pub const BATALLA_LADO_LLENO: &str = "batalla.lado_lleno";
+    /// El héroe o su columna ya están en una batalla.
     pub const BATALLA_YA_COMBATE: &str = "batalla.ya_combate";
+    /// El héroe ya salió de esta batalla y no vuelve a entrar.
     pub const BATALLA_YA_SALIO: &str = "batalla.ya_salio";
+    /// En una batalla campal entre ejércitos no entra nadie de fuera.
     pub const BATALLA_NADIE_DE_FUERA: &str = "batalla.nadie_de_fuera";
+    /// Una persecución solo admite columnas personales.
     pub const BATALLA_SOLO_PERSONALES: &str = "batalla.solo_personales";
+    /// En una persecución hay que elegir bando.
     pub const BATALLA_LADO_OBLIGATORIO: &str = "batalla.lado_obligatorio";
+    /// Contra un campamento de bandidos solo se ataca.
     pub const BATALLA_NADIE_AYUDA_A_BANDIDOS: &str = "batalla.nadie_ayuda_a_bandidos";
+    /// Hace falta Facción para unirse a un asedio, una caravana, un pueblo o una avanzada.
     pub const BATALLA_SIN_FACCION: &str = "batalla.sin_faccion";
+    /// Su Facción no combate aquí (en una caravana, si el Rey atacante no admite a otras Facciones).
     pub const BATALLA_NO_COMBATE_AQUI: &str = "batalla.no_combate_aqui";
+    /// Pidió un bando distinto del que le toca (el mensaje dice cuál).
     pub const BATALLA_LADO_DISTINTO: &str = "batalla.lado_distinto";
+    /// Solo quien la inició la cancela, y antes de que empiece la partida.
     pub const BATALLA_NO_PUEDE_CANCELAR: &str = "batalla.no_puede_cancelar";
     /// Otro servidor la tiene: gana la primera asignación.
     pub const BATALLA_YA_ASIGNADA: &str = "batalla.ya_asignada";
+    /// Un asedio en convocatoria no se publica ni se asigna.
     pub const BATALLA_EN_CONVOCATORIA: &str = "batalla.en_convocatoria";
+    /// La revisión del ticket no es la vigente.
     pub const BATALLA_REVISION_VIEJA: &str = "batalla.revision_vieja";
+    /// El estado de la batalla no admite esa operación (una salida que no toca en ese momento, un resultado o un token a destiempo).
     pub const BATALLA_ESTADO_INVALIDO: &str = "batalla.estado_invalido";
     /// No es el servidor de la asignación activa.
     pub const BATALLA_SERVIDOR_AJENO: &str = "batalla.servidor_ajeno";
     /// El mensaje no viene con la credencial de un servidor de batalla (`batalla-servidor:<id>`).
     pub const BATALLA_SIN_CREDENCIAL: &str = "batalla.sin_credencial";
+    /// Un token, en la asignación o después, para un héroe que no es un humano de esta batalla (los bots no se conectan).
     pub const BATALLA_TOKEN_INVALIDO: &str = "batalla.token_invalido";
+    /// La salida nombra a un héroe que no combate en esta batalla.
     pub const BATALLA_NO_COMBATE: &str = "batalla.no_combate";
+    /// La salida trae una escuadra que no es del héroe, repetida o que no cierra sobre lo autorizado.
     pub const BATALLA_SALIDA_INVALIDA: &str = "batalla.salida_invalida";
     /// La salida de una partida en curso omite alguna de las escuadras autorizadas del héroe (Batalla_Unity_Ciclo §8.4).
     pub const BATALLA_SALIDA_INCOMPLETA: &str = "batalla.salida_incompleta";

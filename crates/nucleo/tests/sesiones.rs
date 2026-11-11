@@ -269,7 +269,7 @@ async fn los_mensajes_del_servidor_de_batalla_llegan_por_su_sesion_y_el_nucleo_l
     }));
     // Lo rechazado vuelve como un aviso con el código estable: inicio sin asignación, batalla que no es de esta partida, esquema de otra versión.
     svc.enviar(inicio(0)).await;
-    assert_eq!(rechazo_del_acuse(&mut svc).await, "batalla.invalida");
+    assert_eq!(rechazo_del_acuse(&mut svc).await, "batalla.servidor_ajeno");
     svc.enviar(de_batalla(Cuerpo::Inicio(pb::InicioBatalla { schema_version: 1, battle_id: "00000000-0000-0000-0000-000000000000".into(), ticket_revision: 0, intento_asignacion_id: "a1".into() }))).await;
     assert_eq!(rechazo_del_acuse(&mut svc).await, "batalla.no_existe");
     svc.enviar(de_batalla(Cuerpo::Inicio(pb::InicioBatalla { schema_version: 2, battle_id: uuid.clone(), ticket_revision: 0, intento_asignacion_id: "a1".into() }))).await;
@@ -304,7 +304,7 @@ async fn los_mensajes_del_servidor_de_batalla_llegan_por_su_sesion_y_el_nucleo_l
     svc.enviar(de_batalla(Cuerpo::Resultado(mal))).await;
     assert_eq!(rechazo_del_acuse(&mut svc).await, "batalla.invalida");
     svc.enviar(de_batalla(Cuerpo::Resultado(resultado.clone()))).await; // las cifras (5 + 0 ≠ lo autorizado) no cierran
-    assert_eq!(rechazo_del_acuse(&mut svc).await, "batalla.invalida");
+    assert_eq!(rechazo_del_acuse(&mut svc).await, "batalla.resultado_invalido");
     silencio(&mut svc).await;
     let n = w.parar().await;
     let b = n.batalla(id).unwrap();

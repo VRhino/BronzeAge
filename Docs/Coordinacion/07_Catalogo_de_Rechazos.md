@@ -545,29 +545,29 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 |---|---|---|
 | `batalla.bloqueado` | `BATALLA_BLOQUEADO` | Lo que toca la orden está en una batalla activa (§5): ni el héroe, ni su columna, ni la plaza asediada, ni el objetivo reciben órdenes. |
 | `batalla.no_existe` | `BATALLA_NO_EXISTE` | No existe, está cerrada o su plazo venció (404). |
-| `batalla.invalida` | `BATALLA_INVALIDA` | No puede unirse: está herido, ya combate, su columna ya combate, hay que estar a ≤ `radioEncuentro` del punto o el bando está lleno. |
-| `batalla.sin_columna` | `BATALLA_SIN_COLUMNA` | — |
-| `batalla.lejos` | `BATALLA_LEJOS` | — |
-| `batalla.lado_lleno` | `BATALLA_LADO_LLENO` | — |
-| `batalla.ya_combate` | `BATALLA_YA_COMBATE` | — |
-| `batalla.ya_salio` | `BATALLA_YA_SALIO` | — |
-| `batalla.nadie_de_fuera` | `BATALLA_NADIE_DE_FUERA` | — |
-| `batalla.solo_personales` | `BATALLA_SOLO_PERSONALES` | — |
-| `batalla.lado_obligatorio` | `BATALLA_LADO_OBLIGATORIO` | — |
-| `batalla.nadie_ayuda_a_bandidos` | `BATALLA_NADIE_AYUDA_A_BANDIDOS` | — |
-| `batalla.sin_faccion` | `BATALLA_SIN_FACCION` | — |
-| `batalla.no_combate_aqui` | `BATALLA_NO_COMBATE_AQUI` | — |
-| `batalla.lado_distinto` | `BATALLA_LADO_DISTINTO` | — |
-| `batalla.no_puede_cancelar` | `BATALLA_NO_PUEDE_CANCELAR` | — |
+| `batalla.invalida` | `BATALLA_INVALIDA` | No puede unirse por otra razón (está herido, o le toca defender y no está dentro, o atacar y no está fuera), o el mensaje del servidor de batalla no se entiende (id, lado, cifra, esquema, motivo o razón desconocidos). |
+| `batalla.sin_columna` | `BATALLA_SIN_COLUMNA` | Desde fuera hay que llegar con la columna para unirse. |
+| `batalla.lejos` | `BATALLA_LEJOS` | La columna está a más de `radioEncuentro` del punto de la batalla. |
+| `batalla.lado_lleno` | `BATALLA_LADO_LLENO` | El bando se pasaría de su capacidad: si está lleno, no entra. |
+| `batalla.ya_combate` | `BATALLA_YA_COMBATE` | El héroe o su columna ya están en una batalla. |
+| `batalla.ya_salio` | `BATALLA_YA_SALIO` | El héroe ya salió de esta batalla y no vuelve a entrar. |
+| `batalla.nadie_de_fuera` | `BATALLA_NADIE_DE_FUERA` | En una batalla campal entre ejércitos no entra nadie de fuera. |
+| `batalla.solo_personales` | `BATALLA_SOLO_PERSONALES` | Una persecución solo admite columnas personales. |
+| `batalla.lado_obligatorio` | `BATALLA_LADO_OBLIGATORIO` | En una persecución hay que elegir bando. |
+| `batalla.nadie_ayuda_a_bandidos` | `BATALLA_NADIE_AYUDA_A_BANDIDOS` | Contra un campamento de bandidos solo se ataca. |
+| `batalla.sin_faccion` | `BATALLA_SIN_FACCION` | Hace falta Facción para unirse a un asedio, una caravana, un pueblo o una avanzada. |
+| `batalla.no_combate_aqui` | `BATALLA_NO_COMBATE_AQUI` | Su Facción no combate aquí (en una caravana, si el Rey atacante no admite a otras Facciones). |
+| `batalla.lado_distinto` | `BATALLA_LADO_DISTINTO` | Pidió un bando distinto del que le toca (el mensaje dice cuál). |
+| `batalla.no_puede_cancelar` | `BATALLA_NO_PUEDE_CANCELAR` | Solo quien la inició la cancela, y antes de que empiece la partida. |
 | `batalla.ya_asignada` | `BATALLA_YA_ASIGNADA` | Otro servidor la tiene: gana la primera asignación. |
-| `batalla.en_convocatoria` | `BATALLA_EN_CONVOCATORIA` | — |
-| `batalla.revision_vieja` | `BATALLA_REVISION_VIEJA` | — |
-| `batalla.estado_invalido` | `BATALLA_ESTADO_INVALIDO` | — |
+| `batalla.en_convocatoria` | `BATALLA_EN_CONVOCATORIA` | Un asedio en convocatoria no se publica ni se asigna. |
+| `batalla.revision_vieja` | `BATALLA_REVISION_VIEJA` | La revisión del ticket no es la vigente. |
+| `batalla.estado_invalido` | `BATALLA_ESTADO_INVALIDO` | El estado de la batalla no admite esa operación (una salida que no toca en ese momento, un resultado o un token a destiempo). |
 | `batalla.servidor_ajeno` | `BATALLA_SERVIDOR_AJENO` | No es el servidor de la asignación activa. |
 | `batalla.sin_credencial` | `BATALLA_SIN_CREDENCIAL` | El mensaje no viene con la credencial de un servidor de batalla (`batalla-servidor:<id>`). |
-| `batalla.token_invalido` | `BATALLA_TOKEN_INVALIDO` | — |
-| `batalla.no_combate` | `BATALLA_NO_COMBATE` | — |
-| `batalla.salida_invalida` | `BATALLA_SALIDA_INVALIDA` | — |
+| `batalla.token_invalido` | `BATALLA_TOKEN_INVALIDO` | Un token, en la asignación o después, para un héroe que no es un humano de esta batalla (los bots no se conectan). |
+| `batalla.no_combate` | `BATALLA_NO_COMBATE` | La salida nombra a un héroe que no combate en esta batalla. |
+| `batalla.salida_invalida` | `BATALLA_SALIDA_INVALIDA` | La salida trae una escuadra que no es del héroe, repetida o que no cierra sobre lo autorizado. |
 | `batalla.salida_incompleta` | `BATALLA_SALIDA_INCOMPLETA` | La salida de una partida en curso omite alguna de las escuadras autorizadas del héroe (Batalla_Unity_Ciclo §8.4). |
 | `batalla.resultado_invalido` | `BATALLA_RESULTADO_INVALIDO` | El checklist de §8.5 rechaza el resultado entero (el mensaje dice cuál de sus puntos). |
 | `batalla.otro_resultado` | `BATALLA_OTRO_RESULTADO` | «Ya se aplicó con otro resultado» (409). |

@@ -584,7 +584,7 @@ async fn dos_servidores_compiten_por_la_asignacion_y_cada_combatiente_recibe_su_
     assert_eq!(i1.battle_id, uuid);
     perdedor.sin_nada().await;
     let dos = [h_carla.as_str(), h_fede.as_str()];
-    assert_eq!(rechazado(&perdedor.mandar(tokens(&uuid, intento, &dos)).await, "tokens"), "batalla.invalida", "no es el servidor de la asignación");
+    assert_eq!(rechazado(&perdedor.mandar(tokens(&uuid, intento, &dos)).await, "tokens"), "batalla.servidor_ajeno", "no es el servidor de la asignación");
     aceptado(&ganador.mandar(tokens(&uuid, intento, &dos)).await, "tokens");
     assert_eq!(ganador.mandar(tokens(&uuid, intento, &dos)).await.resultado, pb::Resultado::OrdenDuplicada as i32, "repetir los mismos tokens");
     for (c, heroe, lado) in [(&mut carla, &h_carla, pb::LadoId::Defensor), (&mut fede, &h_fede, pb::LadoId::Atacante)] {
@@ -594,7 +594,7 @@ async fn dos_servidores_compiten_por_la_asignacion_y_cada_combatiente_recibe_su_
     }
 
     // El inicio: solo el servidor de la asignación; repetirlo es un duplicado.
-    assert_eq!(rechazado(&perdedor.mandar(inicio(&uuid, "intento-p")).await, "inicio"), "batalla.invalida");
+    assert_eq!(rechazado(&perdedor.mandar(inicio(&uuid, "intento-p")).await, "inicio"), "batalla.servidor_ajeno");
     aceptado(&ganador.mandar(inicio(&uuid, intento)).await, "inicio");
     assert_eq!(ganador.mandar(inicio(&uuid, intento)).await.resultado, pb::Resultado::OrdenDuplicada as i32);
     for c in [&mut ana, &mut beto] {
@@ -961,7 +961,7 @@ async fn quien_no_llega_a_conectarse_reabre_la_batalla_con_un_ticket_nuevo_para_
 
     // El segundo servidor puede tomarla ahora (la revisión vigente es la 1) y el primero ya no la tiene.
     aceptado(&sb.mandar(asignacion(&uuid, "intento-b", 1, &[h_ana.as_str(), h_nora.as_str()])).await, "asignacion");
-    assert_eq!(rechazado(&sa.mandar(inicio(&uuid, "intento-a")).await, "inicio"), "batalla.invalida");
+    assert_eq!(rechazado(&sa.mandar(inicio(&uuid, "intento-a")).await, "inicio"), "batalla.servidor_ajeno");
     w.parar().await;
 }
 
