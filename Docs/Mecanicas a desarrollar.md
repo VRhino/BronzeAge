@@ -269,3 +269,7 @@ Diseño: `Docs/Disenos_Por_Implementar/Clases_De_Heroe.md`. Va con la entrada 70
 ## 72. Cifras de combate de las tropas y del héroe (diseño del 2026-11-11)
 
 Diseño: `Docs/Disenos_Por_Implementar/Cifras_De_Combate.md`. Cada tropa gana un tier de combate (I-V), aparte de su escalón, un bloque `combate` en `TROPAS_RECLUTABLES` y sus propios soldados por escuadra; hay que quitar la prueba `el_tamano_de_la_escuadra_baja_con_el_escalon`. Las reglas del héroe las pone Conquest. Va con la entrada 70, porque las cifras del héroe salen de sus objetos. Las 11 tropas de las Eras IV y V esperan a esas Eras.
+
+## 73. Progresión de las tropas y del héroe (diseño del 2026-11-11)
+
+Diseño: `Docs/Disenos_Por_Implementar/Progresion_Tropas_Y_Heroe.md`. La escuadra sigue del 1 al 10 con una curva más larga, y en Unity gana 4 por victoria y 2 por derrota. El héroe sube de nivel en el motor (cierra CQ-001 por este lado): 100 + 20 por nivel hasta el 30 y luego 680 sin fin; cada nivel hasta el 30 da un punto de atributo y 3 de Liderazgo (de 14 a 100), y gana experiencia también con números. Va con las entradas 70 y 71 (las medallas y lo que se abre con el nivel). Pide partida nueva.

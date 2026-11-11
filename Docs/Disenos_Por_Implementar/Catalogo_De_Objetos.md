@@ -5,7 +5,7 @@ Diseño **aprobado por el autor el 2026-11-11** («si me cuadra todo esto», 18:
 - variación con sentido dentro del tier II (20:46 y 20:48, §4);
 - las cifras de combate, ajustadas a sus referencias para el héroe. El autor dio el diseño por cerrado a las 21:14; las reglas y la escala están en [`Cifras_De_Combate.md`](Cifras_De_Combate.md).
 
-Los objetos varios los cerró el autor a las 22:32 (§3.3). Quedan abiertos la tecnología `acero_templado`, que espera a las Eras IV y V, y de dónde salen las medallas de experiencia, que se decide con las curvas de progresión de tropas y héroes.
+Los objetos varios los cerró el autor a las 22:32 (§3.3). Quedan abiertos la tecnología `acero_templado`, que espera a las Eras IV y V, y de dónde salen las medallas de experiencia, que va con las curvas de progresión ([`Progresion_Tropas_Y_Heroe.md`](Progresion_Tropas_Y_Heroe.md) §5).
 
 Las cinco clases del autor (`Clases_De_Heroe.md`, cerrado) son la base de §3.2, §4 y §5. Este catálogo cierra el punto 1 (y en parte el 2, el 8 y el 10) de §4 de [`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md). Parte de las plantillas de Conquest (`Assets/Resources/Items`, `HeroClassSelector.FillBaseItemIdsForClass`, `BasicArmorStatGenerator`, `BasicWeaponStatGenerator`, `ItemPricingService`) y las lleva a la Edad del Bronce con los materiales y tecnologías que el motor ya usa en la Armería (cuero, cobre, bronce y hierro; [`Economia_Construccion.md`](../Mechanics/Economia_Construccion.md)).
 
@@ -131,7 +131,7 @@ Lista del autor (2026-11-11 22:16) y cerrada a las 22:32. Ninguno se usa en bata
 - **Del héroe:** dan el 5, el 10, el 25 y el 50 % de la experiencia que pide su nivel, para que valgan igual a cualquier nivel. Piden la curva del héroe en el motor (ver abajo).
 - Ids: `medalla_tropa_muy_pequena` … `medalla_tropa_grande` y `medalla_heroe_muy_pequena` … `medalla_heroe_grande`.
 - La tienda no las vende, pero se le pueden vender a ella.
-- **Pendiente:** de dónde salen y cuántas. Se decide con las curvas de progresión de tropas y héroes, que el autor sumó a esta fase de diseño a las 22:32. Hoy el héroe no sube de nivel en el motor (espera la curva de Conquest, CQ-001), y la escuadra sube del 1 al 10 con 275 de experiencia, a 1 por victoria y 0,5 por derrota.
+- **De dónde salen y cuántas:** con las curvas de progresión de tropas y héroes, que el autor sumó a esta fase de diseño a las 22:32: [`Progresion_Tropas_Y_Heroe.md`](Progresion_Tropas_Y_Heroe.md) §5. Si la curva de la tropa se alarga ×2,5, las medallas de tropa suben igual (§3 de ese documento).
 
 **Monturas.** En Conquest el héroe ya monta, pero todos llevan el mismo caballo, con las cifras fijas de `MountTuning` (vida 1200, trote 6 m/s, galope 11 m/s, aguante 100). Pasa a ser un objeto del motor:
 - Hueco nuevo `montura` en el equipo del héroe; viaja en el ticket y Conquest usa sus cifras en lugar de las fijas.
