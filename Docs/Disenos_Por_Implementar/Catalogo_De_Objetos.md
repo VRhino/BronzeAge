@@ -203,7 +203,23 @@ Además de los materiales, cada forja pide **un plano de su tier y crisoles** (a
 - **Planos por tier** (`plano_1` … `plano_5`, «Plano de tier II», etc.): uno sirve para cualquier pieza o arma de ese tier. Para forjar una pieza de tier 2 hace falta un plano de tier 2, sus crisoles y sus materiales.
 - `crisol`, «Crisol»: una forja gasta **tantos crisoles como el número de su tier**: 1 en cobre, 2 en bronce, 3 en hierro temprano, 4 en hierro y 5 en el quinto.
 - Los dos son objetos de la mochila, **apilables**, sin hueco, de un tipo nuevo `material` (junto a arma, armadura, consumible y visual). No se usan en batalla.
-- **Por decidir:** si el plano se gasta en cada forja o se queda, y de dónde salen planos y crisoles (en el chat con el autor).
+- **Son escasos a propósito** (autor, 2026-11-11 17:52): son el único freno a que un jugador forje cientos de piezas al día. Por eso ni se fabrican en la plaza ni se compran.
+- **El plano se gasta** en cada forja, uno por pieza; si se quedara, solo repetiría el freno de la tecnología.
+- **Comercio** (autor, 2026-11-11): de inicio solo se pueden **vender a la tienda**, por monedas; ni se compran en ella ni se cambian entre jugadores. Venta: crisol 25 monedas; plano 50 × el número de su tier.
+
+#### De dónde salen (propuesta, pendiente del sí)
+
+Objetivo: un jugador activo forja **una o dos piezas de tier I o II al día**, unas pocas de III y IV a la semana y alguna de V en la season. Todas las fuentes van atadas a algo que ya tiene freno en el motor (la ventana de 24 h de los bandidos, las misiones diarias, los alijos que se abren una vez, los rangos de los mercenarios).
+
+| Fuente | Crisoles | Planos |
+| --- | --- | --- |
+| Campamento de bandidos destruido (por héroe, solo las 8 completas de su ventana de 24 h) | 1 crisol con un 25 % en nivel 1, 35 % en nivel 2 y 50 % en nivel 3 | 10 % de plano I en nivel 1, 10 % de plano II en nivel 2, 3 % de plano III en nivel 3 |
+| Misión diaria cumplida | 1 | — |
+| Batalla de Unity (botín de cada héroe) | 1, y otro más si gana | 10 % de plano III, 3 % de plano IV, 0,5 % de plano V |
+| Alijo abierto (una vez) | 3 | uno de tier III o IV |
+| Premio de rango de un mercenario | — | rango 4: plano IV; rango 5: plano V |
+
+Las misiones del tablón no dan ni planos ni crisoles: las paga quien las publica, y eso sería cambiarlos entre jugadores. Cuenta de un día activo: 8 campamentos dan unos 2-3 crisoles y menos de un plano, y la misión diaria 1 crisol más; con eso salen una o dos piezas de tier I o II. Las tablas del botín de Unity las tendría el motor y no Conquest, porque la escasez es de economía (duda 7 de `Objetos_Del_Heroe.md`).
 
 ### Materiales
 
