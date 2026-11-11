@@ -79,16 +79,16 @@ Regla de reparto: el motor guarda el estado persistente y las reglas fuera de la
 
 ## 4. Por decidir
 
-1. El catálogo inicial: las 16 piezas de Conquest más los cascos, con sus stats y precios.
-2. A cuánto se vende (Conquest, 50 %).
+1. ~~El catálogo inicial~~: cerrado el 2026-11-11 en `Catalogo_De_Objetos.md` (30 armas y 87 armaduras en cinco tiers).
+2. ~~A cuánto se vende~~: al 50 %, como en Conquest (`Catalogo_De_Objetos.md` §6).
 3. Dónde están la tienda y la forja (propuesto: la Armería de la plaza). Qué vende la tienda: solo los tiers I y II (autor, 2026-11-11 21:31; `Catalogo_De_Objetos.md` §6).
-4. Las recetas de forja: piezas, materiales y rangos.
+4. ~~Las recetas de forja~~: plano del tier, crisoles y materiales (`Catalogo_De_Objetos.md` §6b).
 5. Dónde puede equiparse el héroe: en cualquier sitio o solo donde reside.
-6. Si la clase limita el arma (Conquest no lo hace).
-7. Quién decide el botín de Unity: tablas en el motor o en Conquest.
+6. ~~Si la clase limita el arma~~: el arma define la clase (`Clases_De_Heroe.md` §4).
+7. ~~Quién decide el botín de Unity~~: las tablas las tiene el motor (`Catalogo_De_Objetos.md` §6b).
 8. Si una armadura da Liderazgo (lo decide la curva de Liderazgo).
 9. Si se pierde equipo al perder una batalla (propuesto: no; Conquest no tiene durabilidad).
-10. Consumibles en batalla: fuera por ahora (G6 de Conquest).
+10. ~~Consumibles en batalla~~: fuera (autor, 2026-11-11 22:32).
 
 ## 5. Orden propuesto
 

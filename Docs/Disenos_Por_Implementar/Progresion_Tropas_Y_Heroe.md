@@ -1,6 +1,6 @@
 # Progresión de las tropas y del héroe
 
-Diseño del autor del 2026-11-11, sin implementar. Lo sumó a la fase de diseño de los objetos a las 22:32 y decidió las curvas a las 22:47. **Falta por cerrar** la curva de la tropa con la actividad nueva (§3) y que el autor confirme la actividad al día (§2).
+Diseño del autor del 2026-11-11, sin implementar. Lo sumó a la fase de diseño de los objetos a las 22:32 y decidió las curvas entre las 22:47 y las 22:59. Lo cerró a las 22:59, salvo de dónde salen las medallas (§5).
 
 Va con [`Cifras_De_Combate.md`](Cifras_De_Combate.md) (lo que vale cada tropa), [`Catalogo_De_Objetos.md`](Catalogo_De_Objetos.md) §3.3 (las medallas de experiencia) y [`Clases_De_Heroe.md`](Clases_De_Heroe.md) (las habilidades y los perks que se abren con el nivel).
 
@@ -18,7 +18,7 @@ Va con [`Cifras_De_Combate.md`](Cifras_De_Combate.md) (lo que vale cada tropa), 
 
 **El héroe gana lo mismo que sus escuadras** en cada combate en el que está: 1 o 0,5 con números, 4 o 2 en Unity. Lo gana una vez por combate, no una vez por escuadra. Con números también gana, cosa que hoy no pasa.
 
-**Actividad al día.** Estimación del 2026-11-11 a las 22:5x, corregida al alza porque el autor dijo que la anterior se quedaba corta. **Pendiente de que el autor la confirme.**
+**Actividad al día.** Estimación corregida al alza porque el autor dijo que la anterior se quedaba corta, y dada por buena por él el 2026-11-11 a las 22:56.
 
 | Actividad | Experiencia | Casual | Activo | Muy activo |
 | --- | --- | ---: | ---: | ---: |
@@ -32,27 +32,28 @@ Va con [`Cifras_De_Combate.md`](Cifras_De_Combate.md) (lo que vale cada tropa), 
 
 **El nivel pesa lo mismo en Unity que con números:** un 3 % más de valor por nivel, ×1,03 en el 1 y ×1,30 en el 10 (autor, 22:47, la opción A). En Unity deja de doblar en el 10. Valor es aguante × daño, como en `Cifras_De_Combate.md` §2. Propuesta para Conquest: repartirlo a partes iguales, +1,5 % de aguante y +1,5 % de daño por nivel.
 
-**La curva** que eligió el autor a las 22:47 se pensó para unos 12 de experiencia al día. Con la actividad de §2, un jugador activo sube una escuadra al 10 en tres semanas. **Pendiente:** seguir con ella o multiplicarla por 2,5 para que tarde unas 7 semanas, más o menos una Era (recomendada).
+**La curva** es la de 1.375 de experiencia, 2,5 veces la de 550 que el autor eligió a las 22:47. Aquella se pensó para unos 12 de experiencia al día; con la actividad de §2, un jugador activo habría subido una escuadra al 10 en tres semanas. Con esta tarda unas 7 semanas, más o menos una Era (autor, 22:59).
 
-| Nivel | Curva elegida: pide | Acumula | Activo | Curva ×2,5: pide | Acumula | Activo |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 2 | 5 | 5 | el primer día | 10 | 10 | el primer día |
-| 3 | 10 | 15 | el primer día | 25 | 35 | 1 día |
-| 4 | 20 | 35 | 1 día | 50 | 85 | 3 días |
-| 5 | 40 | 75 | 3 días | 100 | 185 | 7 días |
-| 6 | 60 | 135 | 5 días | 150 | 335 | 12 días |
-| 7 | 80 | 215 | 8 días | 200 | 535 | 3 semanas |
-| 8 | 100 | 315 | 11 días | 250 | 785 | 4 semanas |
-| 9 | 110 | 425 | 2 semanas | 275 | 1.060 | 6 semanas |
-| 10 | 125 | 550 | 3 semanas | 315 | 1.375 | 7 semanas |
+| Nivel | Para subir a él | Acumulado | Casual | Activo | Muy activo | Valor |
+| ---: | ---: | ---: | --- | --- | --- | ---: |
+| 1 | — | 0 | — | — | — | ×1,03 |
+| 2 | 10 | 10 | 1 día | el primer día | el primer día | ×1,06 |
+| 3 | 25 | 35 | 4 días | 1 día | el primer día | ×1,09 |
+| 4 | 50 | 85 | 10 días | 3 días | 2 días | ×1,12 |
+| 5 | 100 | 185 | 3 semanas | 7 días | 3 días | ×1,15 |
+| 6 | 150 | 335 | 6 semanas | 12 días | 6 días | ×1,18 |
+| 7 | 200 | 535 | 2,1 meses | 3 semanas | 10 días | ×1,21 |
+| 8 | 250 | 785 | 3,1 meses | 4 semanas | 2 semanas | ×1,24 |
+| 9 | 275 | 1.060 | 4,2 meses | 6 semanas | 3 semanas | ×1,27 |
+| 10 | 315 | 1.375 | 5,5 meses | 7 semanas | 4 semanas | ×1,30 |
 
-Con la curva ×2,5, las medallas de tropa suben igual: 5, 12, 25 y 50 en lugar de 2, 5, 10 y 20.
+**Las medallas de tropa suben en la misma proporción:** 5, 12, 25 y 50 de experiencia, en lugar de 2, 5, 10 y 20 (`Catalogo_De_Objetos.md` §3.3).
 
 La tropa prestada por un campamento de mercenarios sigue sin ganar experiencia. Reponer soldados no toca el nivel.
 
 ## 4. El héroe: del nivel 1 al 30, y después sin fin
 
-**La curva** es la del autor (22:47): 100 para pasar del 1 al 2 y 20 más cada nivel hasta el 30, **11.020 en total**. Desde el 30 cada nivel pide 680, lo mismo siempre, y **el nivel sigue subiendo sin abrir nada**.
+**La curva** es la del autor (22:47, aclarada a las 22:56): del 1 al 2 pide 100, del 2 al 3 120, del 3 al 4 140, y así 20 más cada nivel hasta el paso del 29 al 30, que pide 660: **11.020 en total**. Desde el 30 cada nivel pide 680, lo mismo siempre, y **el nivel sigue subiendo sin abrir nada**.
 
 ```
 pide(n) = 100 + 20 · (min(n, 30) − 1)     lo que cuesta pasar del nivel n al n+1
@@ -116,5 +117,5 @@ Desde el 31 no da nada: ni puntos, ni Liderazgo, ni habilidades.
 
 ## 8. Pendiente
 
-- **Del autor:** la curva de la tropa (§3), confirmar la actividad al día (§2) y las fuentes de las medallas (§5).
+- **Del autor:** de dónde salen las medallas y el cofre de monturas (§5).
 - **Al implementar:** si el motor recorta un `xpGanada` que traiga Unity por encima de 4, o si lo pone él sabiendo quién ganó.

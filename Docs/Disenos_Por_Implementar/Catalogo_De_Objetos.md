@@ -127,11 +127,11 @@ Lista del autor (2026-11-11 22:16) y cerrada a las 22:32. Ninguno se usa en bata
 
 **Medallas de experiencia,** en cuatro tamaños: muy pequeña, pequeña, mediana y grande.
 - Se usan desde la mochila, fuera de batalla, con una orden nueva del motor (`usar_objeto`).
-- **De tropa:** sobre una escuadra del héroe, no sobre una prestada. Dan 2, 5, 10 y 20 de experiencia, lo mismo a cualquier nivel, así que ayudan más a una escuadra nueva. Una escuadra en el nivel máximo no puede usarlas, y lo que sobre al llegar a él se pierde.
-- **Del héroe:** dan el 5, el 10, el 25 y el 50 % de la experiencia que pide su nivel, para que valgan igual a cualquier nivel. Piden la curva del héroe en el motor (ver abajo).
+- **De tropa:** sobre una escuadra del héroe, no sobre una prestada. Dan 5, 12, 25 y 50 de experiencia (con la curva de 1.375 de [`Progresion_Tropas_Y_Heroe.md`](Progresion_Tropas_Y_Heroe.md) §3), lo mismo a cualquier nivel, así que ayudan más a una escuadra nueva. Una escuadra en el nivel máximo no puede usarlas, y lo que sobre al llegar a él se pierde.
+- **Del héroe:** dan el 5, el 10, el 25 y el 50 % de la experiencia que pide su nivel, para que valgan igual a cualquier nivel. Piden la curva del héroe en el motor ([`Progresion_Tropas_Y_Heroe.md`](Progresion_Tropas_Y_Heroe.md) §4); desde el nivel 30, el porcentaje es de 680.
 - Ids: `medalla_tropa_muy_pequena` … `medalla_tropa_grande` y `medalla_heroe_muy_pequena` … `medalla_heroe_grande`.
 - La tienda no las vende, pero se le pueden vender a ella.
-- **De dónde salen y cuántas:** con las curvas de progresión de tropas y héroes, que el autor sumó a esta fase de diseño a las 22:32: [`Progresion_Tropas_Y_Heroe.md`](Progresion_Tropas_Y_Heroe.md) §5. Si la curva de la tropa se alarga ×2,5, las medallas de tropa suben igual (§3 de ese documento).
+- **De dónde salen y cuántas:** con las curvas de progresión de tropas y héroes, que el autor sumó a esta fase de diseño a las 22:32: [`Progresion_Tropas_Y_Heroe.md`](Progresion_Tropas_Y_Heroe.md) §5.
 
 **Monturas.** En Conquest el héroe ya monta, pero todos llevan el mismo caballo, con las cifras fijas de `MountTuning` (vida 1200, trote 6 m/s, galope 11 m/s, aguante 100). Pasa a ser un objeto del motor:
 - Hueco nuevo `montura` en el equipo del héroe; viaja en el ticket y Conquest usa sus cifras en lugar de las fijas.
