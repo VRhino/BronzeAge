@@ -1,8 +1,8 @@
 # Catálogo inicial de objetos del héroe
 
-Diseño **aprobado por el autor el 2026-11-11** («si me cuadra todo esto», 18:12), sin implementar. Quedan abiertos el daño de las armas (§4.2, por discutir), los rangos de la forja y la tecnología `acero_templado`, que espera a las Eras IV y V. Cambiada el mismo día con las cinco clases del autor, cuyo diseño (`Clases_De_Heroe.md`, cerrado) es la base de §3.2, §4 y §5. Cierra el punto 1 (y en parte el 2, el 8 y el 10) de §4 de [`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md). Parte de las plantillas de Conquest (`Assets/Resources/Items`, `HeroClassSelector.FillBaseItemIdsForClass`, `BasicArmorStatGenerator`, `BasicWeaponStatGenerator`, `ItemPricingService`) y las lleva a la Edad del Bronce con los materiales y tecnologías que el motor ya usa en la Armería (cuero, cobre, bronce y hierro; [`Economia_Construccion.md`](../Mechanics/Economia_Construccion.md)).
+Diseño **aprobado por el autor el 2026-11-11** («si me cuadra todo esto», 18:12), sin implementar. Quedan abiertos el daño de las armas y la escala del héroe frente a las tropas (§4.2, por discutir), los rangos de la forja y la tecnología `acero_templado`, que espera a las Eras IV y V. Cambiada el mismo día con las cinco clases del autor, cuyo diseño (`Clases_De_Heroe.md`, cerrado) es la base de §3.2, §4 y §5. Cierra el punto 1 (y en parte el 2, el 8 y el 10) de §4 de [`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md). Parte de las plantillas de Conquest (`Assets/Resources/Items`, `HeroClassSelector.FillBaseItemIdsForClass`, `BasicArmorStatGenerator`, `BasicWeaponStatGenerator`, `ItemPricingService`) y las lleva a la Edad del Bronce con los materiales y tecnologías que el motor ya usa en la Armería (cuero, cobre, bronce y hierro; [`Economia_Construccion.md`](../Mechanics/Economia_Construccion.md)).
 
-Reparto (de `Objetos_Del_Heroe.md` §2): la **ficha** de cada objeto (§3 y §6) es del motor y va en `OBJETOS` de `GET /v1/datos`; lo que hace **en combate** (§4) es de Conquest, que lo carga con el mismo id. Las cifras de §4 son una propuesta para Conquest, no un bloque del motor.
+Reparto (decidido por el autor el 2026-11-11, 18:30; cambia el de `Objetos_Del_Heroe.md` §2): **datos en el motor, reglas en Conquest.** La ficha de cada objeto (§3 y §6) y sus cifras de combate (§4) son del motor y van en `OBJETOS` de `GET /v1/datos`; las cifras de combate de las tropas también pasan al motor. Conquest se queda con cómo se aplican (las fases del daño, los coeficientes de cada clase, los rasgos del golpe, las animaciones y el aspecto) y lee las cifras por versión al arrancar el servidor de batalla. Así el cliente jugador saca los tooltips del motor, la forja tira sobre cifras que el motor conoce y el héroe se equilibra contra las tropas con los dos lados en el mismo sitio.
 
 ## 1. De dónde se parte (Conquest)
 
@@ -91,7 +91,7 @@ Fuera del catálogo inicial (`Objetos_Del_Heroe.md` §4.10). La bolsa de bronce 
 Cifras fijas, enteras (`Estadistica.valor` es entero), sin generador. Hay dos clases de cifras:
 
 - **Atributos** (fuerza, destreza, armadura, vitalidad), que se suman a los de la clase (10 puntos de base entre los cuatro). El equipo da **mucho**, y por eso cada clase solo admite unos pesos (§4.1).
-- **Defensas, daño, penetración y salud**, que Conquest decide si llegan al combate o solo salen en el tooltip (`Objetos_Del_Heroe.md` §3.4).
+- **Defensas, daño, penetración y salud**, que llegan al combate como modificadores de la pila de Conquest (hoy solo pasan los atributos; ver §8).
 
 ### 4.1 Armaduras
 
@@ -109,7 +109,7 @@ Totales de un juego entero de cinco piezas en el tier de referencia; cada tier l
 | media | 6 | 6 | 9 | 9 | 35 | 35 | 35 | 100 |
 | pesada | 2 | 0 | 16 | 12 | 50 | 50 | 30 | 150 |
 
-Cada juego da 30 puntos de atributos, tres veces la base de una clase (10), así que el equipo cuenta tanto como la clase o más. Las defensas y la salud, Conquest decide si llegan al combate o solo salen en el tooltip.
+Cada juego da 30 puntos de atributos, tres veces la base de una clase (10), así que el equipo cuenta tanto como la clase o más. Lo que vale cada punto en la batalla es una regla de Conquest (§4.2).
 
 Por pieza:
 
@@ -144,6 +144,8 @@ Por pieza:
 | botas | 0/0/2/2 · 8/8/5 · 23 | 0/0/3/2 · 9/9/6 · 28 | 0/0/4/3 · 11/11/7 · 34 | 1/0/4/3 · 13/13/8 · 39 | 1/0/5/4 · 15/15/9 · 45 |
 
 ### 4.2 Armas (provisional: el autor quiere discutirlo)
+
+> **Regla del autor (2026-11-11, 18:38):** un héroe vale lo que **una unidad de una tropa de tier V**, no más; el arma y la armadura lo complementan, y como mucho aguanta algo más que esa unidad. Las cifras de esta sección, revisadas contra el código de daño de Conquest, lo dejaban muy por encima, así que cambian. En el hilo hay una propuesta sin aprobar: escala de las tropas por tier (vida y daño con la raíz del `poderBase`, el tier III con las cifras de hoy de Conquest), el héroe con equipo de cobre como una unidad de tier III y con el de tier 5 como una de tier V, el arma con unos 85 de daño base en cobre y un 7,5 % más por tier, y lo que vale cada punto en batalla (fuerza o destreza 0,75 de daño y 0,5 de penetración, vitalidad 30 de vida, defensa 0,25 % de alivio).
 
 Cada clase tiene un perfil, sacado de cómo pelea en `Clases_De_Heroe.md` §3.1, y el tier lo multiplica: daño y penetración ×1 en cobre, ×1,25 en bronce, ×1,5 en hierro temprano, ×1,75 en hierro y ×2 en acero (redondeado). El atributo que da el arma es el mismo en todos los tiers: el tier mejora el filo, no al héroe.
 
@@ -265,18 +267,23 @@ Forma propuesta, para Mechanics cuando se implemente:
   "rarezas": ["comun", "pocoComun", "rara", "epica", "legendaria"],
   "tiers": { "cobre": "metalurgia_cobre", "bronce": "aleacion_bronce", "hierro_temprano": "forja_hierro_temprana", "hierro": "forja_hierro_estandarizada", "bronce_laminado": "bronce_laminado", "acero": "acero_templado" },
   "objetos": [
-    { "id": "torso_pesada_bronce", "nombre": "Coraza de bronce", "hueco": "torso", "tipoArmadura": "pesada", "tier": "bronce", "rareza": "comun", "apilable": false, "precio": 900 },
-    { "id": "lanza_escudo_redondo_cobre", "nombre": "Lanza de cobre y escudo redondo", "hueco": "arma", "clase": "lanza_escudo_redondo", "tier": "cobre", "rareza": "comun", "apilable": false, "precio": 200 }
+    { "id": "torso_pesada_bronce", "nombre": "Coraza de bronce", "hueco": "torso", "tipoArmadura": "pesada", "tier": "bronce", "rareza": "comun", "apilable": false, "precio": 900,
+      "combate": { "atributos": { "fuerza": 1, "destreza": 0, "armadura": 6, "vitalidad": 5 }, "defensa": { "perforante": 19, "cortante": 19, "contundente": 11 }, "salud": 56 } },
+    { "id": "lanza_escudo_redondo_cobre", "nombre": "Lanza de cobre y escudo redondo", "hueco": "arma", "clase": "lanza_escudo_redondo", "tier": "cobre", "rareza": "comun", "apilable": false, "precio": 200,
+      "combate": { "atributos": { "armadura": 2 }, "dano": { "perforante": 14, "cortante": 0, "contundente": 4 }, "penetracion": { "perforante": 4, "cortante": 0, "contundente": 0 } } }
   ]
 }
 ```
 
-`version` sustituye a `conquest-items-1` en el ticket, que lleva además la versión de `CLASES_HEROE`. La clase del ticket sale del arma puesta; la compatibilidad y el equipo inicial, de `CLASES_HEROE`.
+`combate` lleva las cifras de §4 (las del arma, provisionales hasta cerrar §4.2), enteras como `Estadistica.valor`. `version` sustituye a `conquest-items-1` en el ticket, que lleva además la versión de `CLASES_HEROE` y la del catálogo de tropas; Conquest rechaza un ticket con una versión que no tenga. La clase del ticket sale del arma puesta; la compatibilidad y el equipo inicial, de `CLASES_HEROE`.
 
 ## 8. Lo que toca en Conquest
 
 - Renombrar los `_id` de las 12 armaduras a las de tier cobre de §3.1 y crear las 60 de los demás tiers, cascos incluidos (con su `visualPartId`).
 - Pasar de cuatro clases a cinco y crear sus armas por tier (§3.2); la clase sale del arma.
-- Cambiar el generador por las cifras fijas de §4.
+- Leer las cifras de §4 del bloque `OBJETOS` del motor, por versión, en lugar del generador.
+- Aplicar todas las cifras del objeto (atributos, daño, penetración, defensa o alivio, y salud) como modificadores de la pila por `StatId` (su pendiente P1); hoy solo pasan los cuatro atributos.
+- Leer del motor las cifras de combate de las tropas en lugar de las de sus `SquadData`.
+- Ajustar sus coeficientes de clase a lo que se cierre en §4.2: cuánto daño, penetración y vida vale cada punto de atributo.
 - `HeroClassSelector.FillBaseItemIdsForClass` con los ids nuevos y el casco.
 - Quitar del modo conectado la bolsa de bronce y el cofre.

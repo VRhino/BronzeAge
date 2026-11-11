@@ -13,15 +13,17 @@ Diseño cerrado con el autor el 2026-11-11 (hilo «Evaluar objetos y armaduras d
 
 Regla de reparto: el motor guarda el estado persistente y las reglas fuera de la batalla; el servidor de batallas (Conquest) guarda lo táctico. Un solo dueño por número.
 
-1. **Catálogo partido con el mismo id.** El motor tiene la ficha de cada objeto: id, hueco, categoría de arma o tipo de armadura, rareza, si se apila y precio (y si da Liderazgo, si lo decide la curva de Liderazgo). Va versionado y se sirve en `GET /v1/datos`. Conquest tiene lo que hace en combate y su aspecto, y rechaza un ticket con un id o una versión que no tenga.
-2. **Stats fijos por pieza** en el catálogo de Conquest. Las piezas **forjadas** llevan valores tirados por el motor y guardados en su instancia (`item_instance_id`, `estadisticas`).
-3. **Qué da cada pieza en combate es de Conquest.**
+> **Cambiado por el autor el 2026-11-11, 18:30** (hilo del catálogo, [`Catalogo_De_Objetos.md`](Catalogo_De_Objetos.md)): **datos en el motor, reglas en Conquest.** Las cifras de combate de los objetos y de las tropas (atributos, daño, penetración, defensa, alivio y vida) son datos del motor, que las publica con su versión en `GET /v1/datos`. Conquest se queda con cómo se calculan (las fases del daño, los coeficientes de cada clase, los rasgos del golpe, las animaciones y el aspecto) y lee las cifras al arrancar el servidor de batalla. Motivos: el cliente jugador solo habla con el motor y las necesita para los tooltips; la forja tira los valores en el motor; y el equilibrio del héroe contra las tropas pide tener las dos cifras en el mismo sitio. Cambia los puntos 1, 2, 3 y 9.
+
+1. **Catálogo partido con el mismo id.** El motor tiene la ficha de cada objeto: id, hueco, categoría de arma o tipo de armadura, rareza, si se apila y precio (y si da Liderazgo, si lo decide la curva de Liderazgo). Va versionado y se sirve en `GET /v1/datos`. Conquest tiene su aspecto y las reglas de combate, y rechaza un ticket con un id o una versión que no tenga. *(Desde las 18:30, las cifras de combate también son de la ficha del motor.)*
+2. **Stats fijos por pieza** en el catálogo del motor (en Conquest hasta las 18:30). Las piezas **forjadas** llevan valores tirados por el motor y guardados en su instancia (`item_instance_id`, `estadisticas`).
+3. **Qué da cada pieza en combate:** la cifra es del motor y la regla que la aplica, de Conquest (hasta las 18:30, todo de Conquest).
 4. **Fuentes:** botín de Unity, recompensa de misión, tienda de monedas y forja.
 5. **Moneda:** el saldo único del héroe (`monedas`). El bronce, la plata y el oro de Conquest no existen en modo conectado.
 6. **Órdenes del motor:** equipar, desequipar, vender, comprar y forjar, con la regla de huecos y la de compatibilidad. El equipo llega a la batalla en el ticket, nunca desde el cliente.
 7. **Equipo inicial** según la clase, por ids.
 8. **El equipo no cuenta en las batallas con números.**
-9. **Los atributos efectivos los suma el servidor de batallas.** El motor manda los base y el equipo. El cliente jugador enseña los stats leyendo un fichero que exporta Conquest, solo para mirar.
+9. **Los atributos efectivos los suma el servidor de batallas.** El motor manda los base y el equipo. El cliente jugador enseña los stats leyendo `OBJETOS` del motor, solo para mirar (antes, un fichero que exportaba Conquest).
 
 ## 3. Lo que falta
 
@@ -50,19 +52,19 @@ Regla de reparto: el motor guarda el estado persistente y las reglas fuera de la
 
 - La ventana de equipo deja de ser solo para mirar: equipar, quitar y vender, con aviso de incompatibilidad.
 - Tienda y forja (con los rangos antes de forjar).
-- Tooltips con stats, del fichero que exporta Conquest.
+- Tooltips con stats, de `OBJETOS` del motor.
 - El equipo de otros héroes en su ficha, y los objetos del botín en los avisos.
 
 ### 3.4 Conquest como servidor de batallas
 
 - Los ids de `ItemDataSO` iguales a los del catálogo del motor, y los cascos que faltan.
-- Stats fijos por pieza en lugar del generador, con ligera, media y pesada distintas.
+- Leer los stats fijos de cada pieza del bloque `OBJETOS` del motor (por versión) en lugar del generador, con ligera, media y pesada distintas.
 - Rechazar un ticket con un objeto o una versión de catálogo que no tenga, como ya hace con `tropaId`.
 - Montar el héroe desde el `HeroSnapshot`: clase, atributos base y equipo (hoy solo id, bando y si es bot). Depende de pasar el juego a red (punto 1 de «Lo que falta» de su `22_Servidor_De_Batalla_Red`).
 - Usar los valores de las piezas forjadas que vengan en el ticket.
-- Decidir si las defensas, el daño y la penetración del equipo llegan al combate o el equipo solo da atributos.
+- Que las defensas, el daño, la penetración y la vida del equipo lleguen al combate como modificadores de la pila (`StatId`; su pendiente P1), no solo los atributos.
 - El botín en el resultado.
-- Exportar el fichero de stats para los tooltips del cliente jugador.
+- Leer también del motor las cifras de combate de las tropas en lugar de las de sus `SquadData`.
 - Actualizar CQ-004 con este reparto.
 
 ### 3.5 Conquest como cliente del jugador (Unity)
