@@ -28,14 +28,14 @@ Leído el 2026-11-11 de `VRhino/conquest_prototype` (commit `562ac34c`).
 
 1. **Cinco clases**, cada una con un héroe como inspiración para tomar las decisiones (§3). La inspiración no es el nombre: **la clase se llama por el arma que lleva**.
 2. **El arma define la clase**, como en Conquest. La clase no limita el arma: el héroe es de la clase del arma que lleva puesta.
-3. **Las armas tienen tiers** (cobre, bronce, hierro temprano, hierro) que se abren con la tecnología. Una espada y escudo de cobre y una de hierro son la misma clase.
+3. **Las armas tienen tiers**, del I (el arma de inicio) al V, que son las rarezas de Conquest y se abren con la tecnología de su metal (`Catalogo_De_Objetos.md` §2). Una espada y escudo de cobre y una de hierro son la misma clase.
 4. **Cada clase admite unos pesos de armadura**, y se empieza con el más ligero de ellos.
 5. **El escudo va con el arma**, en la misma pieza y el mismo hueco, como en Conquest.
 6. **El arco y lanza cambia de arma en batalla**, y eso lo resuelve Conquest.
 7. **El hueco del arma nunca queda vacío**: el arma solo se cambia por otra.
 8. **Atributos = base de la clase del arma + puntos repartidos.** Todas las clases suman 10 de base (§3.1).
 9. **Sin topes por clase** por ahora: sigue el tope global.
-10. **Equipo inicial según la clase**: el arma de cobre y la armadura más ligera que admite.
+10. **Equipo inicial según la clase**: el arma de inicio (tier I) y la armadura más ligera que admite.
 11. **El Liderazgo es el mismo para todas las clases.**
 12. **Reparto:** el motor tiene la ficha de cada clase; Conquest, lo que hace en combate.
 13. **Ids del motor**; Conquest se adapta a ellos.
@@ -133,7 +133,7 @@ Se cierran una a una con el autor. **Todas las clases suman 10 puntos de atribut
 - **El hueco del arma nunca queda vacío.** `desequipar` el arma se rechaza; `equipar` otra arma la cambia y la vieja va a la mochila (si no cabe, se rechaza: mochila llena).
 - **Cambiar de arma es cambiar de clase**: de atributos base (§5), de armaduras que admite, de habilidades y de perks. Se puede donde se pueda equipar (duda 5 de `Objetos_Del_Heroe.md` §4, todavía abierta).
 - **Armadura incompatible.** Al equipar un arma cuya clase no admite alguna pieza puesta, esa pieza pasa a la mochila; si no cabe, la orden se rechaza. Al equipar una armadura, se rechaza si la clase del arma no admite su peso. Es la regla de `Objetos_Del_Heroe.md` §3.1, punto 5.
-- **Tiers.** Cada tier lo abre una tecnología de la Facción: cobre `metalurgia_cobre`, bronce `aleacion_bronce`, hierro temprano `forja_hierro_temprana` y hierro `forja_hierro_estandarizada`. La tecnología solo decide qué se puede **comprar o forjar** (tienda y forja); un arma que ya se tiene se puede llevar siempre.
+- **Tiers.** El tier de un arma es su rareza en Conquest, del I al V, y cada metal lo abre una tecnología de la Facción (la tabla está en `Catalogo_De_Objetos.md` §2; el arma de inicio no pide ninguna). La tecnología solo decide qué se puede **comprar o forjar** (tienda y forja); un arma que ya se tiene se puede llevar siempre.
 - **El ticket** manda en `class_definition_id` la clase del arma. Conquest rechaza un ticket con una clase que no conozca, como ya hace con `tropaId`.
 - **Proyección.** `Heroe.class_definition_id` y el del héroe público salen del arma. No hace falta campo nuevo.
 
@@ -151,7 +151,7 @@ atributos(héroe) = CLASES_HEROE[claseDe(héroe)].atributosBase + héroe.puntosR
 ## 6. Crear el héroe
 
 - `class_definition_id` de `crear_heroe` es el id de una clase (§3). Vacío o desconocido → `heroe.clase_desconocida` (nuevo en el catálogo 07).
-- **Equipo inicial**: el arma de tier cobre de esa clase y la armadura del peso con el que empieza (§3). Las piezas concretas (si lleva casco o no) las fija el catálogo de objetos. Van puestas, no en la mochila.
+- **Equipo inicial**: el arma de inicio (tier I) de esa clase y la armadura de inicio del peso con el que empieza (§3), sin casco (`Catalogo_De_Objetos.md` §5). Van puestas, no en la mochila.
 - Los bots y el AdminClient mandan la clase como un jugador más; BotsBrain la reparte entre sus héroes.
 - El cliente jugador pone un selector de las cinco clases al crear el héroe, con el nombre del arma.
 
@@ -172,7 +172,7 @@ Forma propuesta, para Mechanics cuando se implemente. Va en `GET /v1/datos` junt
 }
 ```
 
-El arma inicial no se escribe aquí: es la de tier `cobre` de la clase en `OBJETOS`. La compatibilidad con la armadura (`armaduras`) vive aquí y no en `OBJETOS`.
+El arma inicial no se escribe aquí: es la de metal `inicio` de la clase en `OBJETOS` (`{clase}_inicio`). La compatibilidad con la armadura (`armaduras`) vive aquí y no en `OBJETOS`.
 
 ## 8. Lo que se queda en Conquest
 
@@ -197,7 +197,7 @@ Leído en `VRhino/conquest_prototype` (`Docs/Mechanics/SkillsAndPerks.md`, `Dama
 1. **De cuatro clases a cinco con los ids del motor.** El enum `HeroClass` y los `HeroClassDefinition` de `Resources/Data/HeroClasses`, y los sitios que lo miran a mano: `HeroClassSelector` (equipo inicial por clase), `HeroHorseVisual` y `HeroMountPresenter` (jinete por clase), `SkillIconCatalog` y el panel de perks. Rechazar un ticket con una clase que no conozca.
 2. **La clase sale del arma del ticket**, no de `HeroData.classId`, y el héroe se monta desde el `HeroSnapshot` (hoy solo lee id, bando y si es bot; depende del paso a red).
 3. **Los atributos base vienen del motor** ya sumados. El `HeroClassDefinition` se queda con los coeficientes, la resiliencia, los `hitTraits` y la velocidad.
-4. **Arte:** las cinco armas en cuatro tiers y los dos escudos (redondo grande y mediano), y las armaduras del catálogo. Hoy todas las habilidades usan la misma animación de ataque provisional, así que cada clase necesita las suyas.
+4. **Arte:** las cinco armas en sus seis metales (inicio, cobre, hierro temprano, bronce, hierro y acero) y los dos escudos (redondo grande y mediano), y las armaduras del catálogo. Hoy todas las habilidades usan la misma animación de ataque provisional, así que cada clase necesita las suyas.
 5. **IA de héroes** (`HeroAISkillSystem`): que sepa usar las habilidades nuevas, cuándo cambiar del arco a la lanza y cómo ir por la espalda con las dagas.
 6. **El fichero de stats y descripciones** para los tooltips del cliente jugador (`Objetos_Del_Heroe.md` §2, punto 9).
 
@@ -261,6 +261,6 @@ Leído en `VRhino/conquest_prototype` (`Docs/Mechanics/SkillsAndPerks.md`, `Dama
 
 ## 10. Por decidir
 
-1. Lo que da cada arma en combate por tier (catálogo de objetos y Conquest).
-2. Si el equipo inicial lleva casco (catálogo de objetos).
+1. ~~Lo que da cada arma en combate por tier~~: cerrado el 2026-11-11 en `Catalogo_De_Objetos.md` §4.2, con las reglas de `Cifras_De_Combate.md` §6.
+2. ~~Si el equipo inicial lleva casco~~: no lo lleva (`Catalogo_De_Objetos.md` §5).
 3. Dónde se puede cambiar de arma, que ahora es cambiar de clase (`Objetos_Del_Heroe.md` §4, duda 5).
