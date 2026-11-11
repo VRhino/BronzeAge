@@ -209,17 +209,17 @@ Además de los materiales, cada forja pide **un plano de su tier y crisoles** (a
 
 #### De dónde salen (propuesta, pendiente del sí)
 
-Objetivo: un jugador activo forja **una o dos piezas de tier I o II al día**, unas pocas de III y IV a la semana y alguna de V en la season. Todas las fuentes van atadas a algo que ya tiene freno en el motor (la ventana de 24 h de los bandidos, las misiones diarias, los alijos que se abren una vez, los rangos de los mercenarios).
+Objetivo: un jugador activo forja **una o dos piezas de tier I o II al día**, una de III a la semana, alguna de IV cada pocos meses y una o dos de V en la season. **Cuanto más alto el tier, más escaso el plano** (autor, 2026-11-11 18:01), en cada fuente y en el total. Todas las fuentes van atadas a algo que ya tiene freno en el motor (la ventana de 24 h de los bandidos, las misiones diarias, los alijos que se abren una vez, los rangos de los mercenarios).
 
 | Fuente | Crisoles | Planos |
 | --- | --- | --- |
-| Campamento de bandidos destruido (por héroe, solo las 8 completas de su ventana de 24 h) | 1 crisol con un 25 % en nivel 1, 35 % en nivel 2 y 50 % en nivel 3 | 10 % de plano I en nivel 1, 10 % de plano II en nivel 2, 3 % de plano III en nivel 3 |
+| Campamento de bandidos destruido (por héroe, solo las 8 completas de su ventana de 24 h) | 1 crisol con un 25 % en nivel 1, 35 % en nivel 2 y 50 % en nivel 3 | nivel 1: 12 % de plano I; nivel 2: 10 % de I y 5 % de II; nivel 3: 6 % de II y 2 % de III |
 | Misión diaria cumplida | 1 | — |
-| Batalla de Unity (botín de cada héroe) | 1, y otro más si gana | 10 % de plano III, 3 % de plano IV, 0,5 % de plano V |
-| Alijo abierto (una vez) | 3 | uno de tier III o IV |
+| Batalla de Unity (botín de cada héroe) | 1, y otro más si gana | 8 % de plano II, 4 % de III, 1 % de IV y 0,2 % de V |
+| Alijo abierto (una vez) | 3 | uno: tier III (70 %) o IV (30 %) |
 | Premio de rango de un mercenario | — | rango 4: plano IV; rango 5: plano V |
 
-Las misiones del tablón no dan ni planos ni crisoles: las paga quien las publica, y eso sería cambiarlos entre jugadores. Cuenta de un día activo: 8 campamentos dan unos 2-3 crisoles y menos de un plano, y la misión diaria 1 crisol más; con eso salen una o dos piezas de tier I o II. Las tablas del botín de Unity las tendría el motor y no Conquest, porque la escasez es de economía (duda 7 de `Objetos_Del_Heroe.md`).
+Las misiones del tablón no dan ni planos ni crisoles: las paga quien las publica, y eso sería cambiarlos entre jugadores. Cuenta de un jugador activo (8 campamentos al día, 3 de nivel 1, 3 de nivel 2 y 2 de nivel 3, y una batalla de Unity): unos 3-4 crisoles al día y, de planos, unos 4-5 de tier I a la semana, 2-3 de tier II, uno de tier III (más los alijos), uno de tier IV cada tres o cuatro meses (más los alijos y el rango 4) y casi ninguno de tier V fuera del rango 5 de un mercenario. Las tablas del botín de Unity las tendría el motor y no Conquest, porque la escasez es de economía (duda 7 de `Objetos_Del_Heroe.md`).
 
 ### Materiales
 
