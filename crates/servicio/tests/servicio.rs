@@ -97,7 +97,8 @@ async fn un_bot_entra_por_el_acceso_real_y_sigue_tras_un_reinicio() {
     assert_eq!(get(dir, "/v1/datos").await, (200, cuerpo.clone()));
     assert_eq!(get(dir, "/v1/datos/otra").await.0, 404);
     let v: Value = serde_json::from_slice(&cuerpo).unwrap();
-    assert!(v["documentos"]["Fundacion_Y_Refundacion"]["FUNDACION"].is_object(), "los bloques de Mechanics, por documento");
+    assert!(v["documentos"]["Fundacion_Y_Refundacion"]["CARAVANA_COOLDOWN"].is_object(), "los bloques de Mechanics, por documento");
+    assert!(v["documentos"]["Economia_Construccion"]["FUNDACION"].is_object());
     assert!(v["documentos"]["Proyecciones_Y_Autorizacion"]["ACCESO"]["duracionSesionMs"].is_number());
     assert_eq!(v["reglas"]["territorio"]["separacion_plazas"], json!(20_000), "FUNDACION.separacionPlazas: 20 u desde el 2026-11-05");
     assert_eq!(v["huella_reglas"].as_str().map(str::len), Some(64));

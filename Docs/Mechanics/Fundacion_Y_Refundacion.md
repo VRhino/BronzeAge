@@ -169,26 +169,7 @@ A partir de ahí es la misma entidad: se engancha, se funda con `fundar` (§5), 
 
 ## 10. Parámetros
 
-<!-- parametros:FUNDACION -->
-```json
-{
-  "maxJugadoresFundacionGrupal": 5,
-  "minFundadoresParaFaccionNueva": 1,
-  "exigeCiudadaniaPrevia": false,
-  "materialesIniciales": {
-    "madera": 50,
-    "piedra": 20,
-    "trigo": 100,
-    "oro": 100
-  },
-  "viviendasIniciales": 3,
-  "costoMaderaExtraCaravana": 50,
-  "caducidadCaravanaHoras": 48,
-  "densidadBosqueMaximaParaFundar": 0.7,
-  "pendienteMaximaParaFundar": 0.3
-}
-```
-<!-- /parametros -->
+El bloque `FUNDACION` vive en [`Economia_Construccion.md`](Economia_Construccion.md) §14.3, que es el que lee el motor (`asentamiento::datos`); desde el 2026-11-11 es un solo bloque: la copia que había aquí no la leía nadie y se había quedado sin `separacionPlazas`.
 
 El bloque `CAP_FUNDACION_POR_NIVEL` vive en [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) §3.5 (desde 5C, 2026-10-24, un solo bloque: `politica::nivel::cap_fundacion`).
 
