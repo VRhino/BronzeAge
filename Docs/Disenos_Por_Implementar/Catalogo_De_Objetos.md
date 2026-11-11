@@ -112,7 +112,11 @@ Escala: el héroe tiene sus cuatro atributos de 0 a `HEROE.topeAtributo` (100). 
 
 La compatibilidad es la columna «Armaduras» de §3.2, pieza a pieza (vale también para el casco). Como el arma define la clase, equipar un arma cambia la clase del héroe, y el motor no tiene que guardar la clase aparte: la saca del arma.
 
-Equipo inicial: el arma de tier cobre de la clase que elija al crear el héroe y un juego entero de la armadura más ligera que admita esa clase (pendiente de cerrar clase a clase).
+Equipo inicial: el arma de tier cobre de la clase que elija al crear el héroe y un juego entero de la armadura más ligera que admita esa clase: pesada para la lanza y escudo redondo, media para la espada y escudo mediano y para el hacha, ligera para el arco y lanza y para las dagas.
+
+El hueco del arma nunca queda vacío: `desequipar` el arma se rechaza, solo se cambia por otra. Al cambiar a un arma cuya clase no admite la armadura puesta, esa armadura pasa a la mochila, y si no cabe se rechaza el cambio.
+
+La compatibilidad y la armadura inicial de cada clase viven en el bloque `CLASES_HEROE` del diseño de clases (`Clases_De_Heroe.md`, rama `claude/project-thread-492isp`), servido junto a `OBJETOS` y con la misma versión. En `OBJETOS` cada arma solo dice su clase y su tier.
 
 ## 6. Precios
 
@@ -140,24 +144,14 @@ Forma propuesta, para Mechanics cuando se implemente:
   "ventaPct": 50,
   "rarezas": ["comun", "pocoComun", "rara", "epica", "legendaria"],
   "tiers": { "cobre": "metalurgia_cobre", "bronce": "aleacion_bronce", "hierro_temprano": "forja_hierro_temprana", "hierro": "forja_hierro_estandarizada" },
-  "clases": {
-    "lanza_escudo_redondo": { "armaduras": ["pesada"] },
-    "espada_escudo_mediano": { "armaduras": ["pesada", "media"] },
-    "arco_lanza": { "armaduras": ["ligera", "media"] },
-    "hacha_dos_manos": { "armaduras": ["media"] },
-    "dagas": { "armaduras": ["ligera"] }
-  },
   "objetos": [
     { "id": "coraza_bronce", "nombre": "Coraza de bronce", "hueco": "torso", "tipoArmadura": "pesada", "rareza": "comun", "apilable": false, "precio": 450 },
     { "id": "lanza_escudo_redondo_cobre", "nombre": "Lanza de cobre y escudo redondo", "hueco": "arma", "clase": "lanza_escudo_redondo", "tier": "cobre", "rareza": "comun", "apilable": false, "precio": 200 }
-  ],
-  "equipoInicial": {
-    "arco_lanza": ["arco_lanza_cobre", "gorro_cuero", "jubon_cuero", "brazales_cuero", "faldellin_cuero", "sandalias_cuero"]
-  }
+  ]
 }
 ```
 
-`version` sustituye a `conquest-items-1` en el ticket. La clase del ticket sale del arma puesta.
+`version` sustituye a `conquest-items-1` en el ticket. La clase del ticket sale del arma puesta; la compatibilidad y el equipo inicial, de `CLASES_HEROE`.
 
 ## 8. Lo que toca en Conquest
 
