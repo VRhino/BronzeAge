@@ -1,6 +1,6 @@
 # Catálogo inicial de objetos del héroe
 
-Propuesta del 2026-11-11, **pendiente del sí del autor** y sin implementar. Cambiada el mismo día con las cinco clases del autor (§3.2). Cierra el punto 1 (y en parte el 2, el 8 y el 10) de §4 de [`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md). Parte de las plantillas de Conquest (`Assets/Resources/Items`, `HeroClassSelector.FillBaseItemIdsForClass`, `BasicArmorStatGenerator`, `BasicWeaponStatGenerator`, `ItemPricingService`) y las lleva a la Edad del Bronce con los materiales que el motor ya usa en la Armería (cuero, cuero curtido, cobre y bronce; [`Economia_Construccion.md`](../Mechanics/Economia_Construccion.md)).
+Propuesta del 2026-11-11, **pendiente del sí del autor** y sin implementar. Cambiada el mismo día con las cinco clases del autor, cuyo diseño (`Clases_De_Heroe.md`, cerrado) es la base de §3.2, §4 y §5. Cierra el punto 1 (y en parte el 2, el 8 y el 10) de §4 de [`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md). Parte de las plantillas de Conquest (`Assets/Resources/Items`, `HeroClassSelector.FillBaseItemIdsForClass`, `BasicArmorStatGenerator`, `BasicWeaponStatGenerator`, `ItemPricingService`) y las lleva a la Edad del Bronce con los materiales que el motor ya usa en la Armería (cuero, cuero curtido, cobre y bronce; [`Economia_Construccion.md`](../Mechanics/Economia_Construccion.md)).
 
 Reparto (de `Objetos_Del_Heroe.md` §2): la **ficha** de cada objeto (§3 y §6) es del motor y va en `OBJETOS` de `GET /v1/datos`; lo que hace **en combate** (§4) es de Conquest, que lo carga con el mismo id. Las cifras de §4 son una propuesta para Conquest, no un bloque del motor.
 
@@ -72,7 +72,19 @@ La clase se llama como el arma que lleva (los héroes de la Antigüedad solo sir
 | hacha a dos manos | `hacha_dos_manos` | media |
 | dagas (espía, asesino) | `dagas` | ligera |
 
-Ids: `{arma}_{tier}`, por ejemplo `lanza_escudo_redondo_cobre` o `dagas_hierro_temprano`. Cinco armas por cuatro tiers son veinte; el catálogo inicial puede traer solo el cobre (cinco) y los demás tiers entrar a la vez que su tecnología. Los stats de cada arma (§4) se definen clase a clase en el hilo de clases.
+Las clases, sus armaduras, sus atributos base y sus habilidades están cerradas en `Clases_De_Heroe.md` (rama `claude/project-thread-492isp`); este catálogo pone las armas.
+
+Ids: `{clase}_{tier}`. Nombre: el de la clase con el material del tier. Cinco clases por cuatro tiers, **veinte armas**:
+
+| Clase | cobre | bronce | hierro temprano | hierro |
+| --- | --- | --- | --- | --- |
+| lanza y escudo grande redondo | `lanza_escudo_redondo_cobre` | `…_bronce` | `…_hierro_temprano` | `…_hierro` |
+| espada corta y escudo mediano | `espada_escudo_mediano_cobre` | `…_bronce` | `…_hierro_temprano` | `…_hierro` |
+| arco compuesto y lanza | `arco_lanza_cobre` | `…_bronce` | `…_hierro_temprano` | `…_hierro` |
+| hacha a dos manos | `hacha_dos_manos_cobre` | `…_bronce` | `…_hierro_temprano` | `…_hierro` |
+| dagas | `dagas_cobre` | `…_bronce` | `…_hierro_temprano` | `…_hierro` |
+
+Por ejemplo, «Lanza de bronce y escudo grande redondo», «Hacha de hierro temprano a dos manos», «Dagas de cobre». En el arco y lanza el tier es el de la punta de las flechas y de la lanza.
 
 ### 3.3 Consumibles
 
@@ -80,45 +92,72 @@ Fuera del catálogo inicial (`Objetos_Del_Heroe.md` §4.10). La bolsa de bronce 
 
 ## 4. Lo que da cada pieza en combate (propuesta para Conquest)
 
-Cifras fijas, sin generador. Cada tipo tiene un total por juego completo de cinco piezas, y cada hueco se lleva una parte: torso 30 %, casco 20 %, pantalones 20 %, guantes 15 % y botas 15 % (redondeado).
+Cifras fijas, enteras (`Estadistica.valor` es entero), sin generador. Hay dos clases de cifras:
 
-| Juego completo | armadura | vitalidad | destreza | fuerza | def. perforante | def. cortante | def. contundente | salud |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ligera (cuero) | 20 | 10 | 15 | 0 | 25 | 25 | 15 | 50 |
-| media (cobre) | 35 | 20 | 5 | 5 | 40 | 40 | 30 | 100 |
-| pesada (bronce) | 50 | 30 | 0 | 0 | 55 | 60 | 45 | 150 |
+- **Atributos** (fuerza, destreza, armadura, vitalidad), que se suman a los de la clase. Las clases suman **10 puntos de base** entre los cuatro (de 0 a 5 cada uno), así que el equipo da **poco**: un juego entero, de 2 a 8 puntos. Con más, el equipo pesaría más que la clase.
+- **Defensas, daño, penetración y salud**, que Conquest decide si llegan al combate o solo salen en el tooltip (`Objetos_Del_Heroe.md` §3.4).
 
-La ligera da destreza y poca defensa; la pesada, el doble y medio de armadura y nada de destreza; el metal frena mejor el corte que el golpe. Ninguna pieza resta: Conquest no tiene valores negativos.
+### 4.1 Armaduras
 
-Por pieza:
+| Juego completo | armadura | vitalidad | destreza | def. perforante | def. cortante | def. contundente | salud |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| ligera (cuero) | 1 | 1 | 2 | 25 | 25 | 15 | 50 |
+| media (cobre) | 3 | 2 | 1 | 40 | 40 | 30 | 100 |
+| pesada (bronce) | 5 | 3 | 0 | 55 | 60 | 45 | 150 |
 
-| Pieza | arm. | vit. | des. | fue. | perf. | cort. | cont. | salud |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| jubón de cuero | 6 | 3 | 4 | 0 | 8 | 8 | 4 | 15 |
-| gorro, faldellín de cuero | 4 | 2 | 3 | 0 | 5 | 5 | 3 | 10 |
-| brazales, sandalias de cuero | 3 | 2 | 2 | 0 | 4 | 4 | 2 | 8 |
-| coraza de escamas de cobre | 10 | 6 | 2 | 2 | 12 | 12 | 9 | 30 |
-| casco de colmillos, faldellín de tiras | 7 | 4 | 1 | 1 | 8 | 8 | 6 | 20 |
-| brazales tachonados, botas de cuero curtido | 5 | 3 | 1 | 1 | 6 | 6 | 4 | 15 |
-| coraza de bronce | 15 | 9 | 0 | 0 | 16 | 18 | 14 | 45 |
-| casco de bronce, faldar de bronce | 10 | 6 | 0 | 0 | 11 | 12 | 9 | 30 |
-| brazales de bronce, grebas de bronce | 8 | 4 | 0 | 0 | 8 | 9 | 7 | 22 |
+La ligera da destreza y poca defensa; la pesada, armadura y vitalidad y nada de destreza; el metal frena mejor el corte que el golpe. Ninguna pieza resta. Las defensas y la salud se reparten torso 30 %, casco y pantalones 20 %, guantes y botas 15 %; los atributos, a mano, porque son pocos:
 
-Armas: se definen clase a clase (§3.2).
+| Pieza | arm. | vit. | des. | perf. | cort. | cont. | salud |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| jubón de cuero | 1 | 0 | 0 | 8 | 8 | 4 | 15 |
+| gorro de cuero | 0 | 1 | 0 | 5 | 5 | 3 | 10 |
+| faldellín de cuero | 0 | 0 | 0 | 5 | 5 | 3 | 10 |
+| brazales de cuero | 0 | 0 | 1 | 4 | 4 | 2 | 8 |
+| sandalias de cuero | 0 | 0 | 1 | 4 | 4 | 2 | 8 |
+| coraza de escamas de cobre | 1 | 1 | 0 | 12 | 12 | 9 | 30 |
+| casco de colmillos de jabalí | 1 | 0 | 0 | 8 | 8 | 6 | 20 |
+| faldellín de tiras | 1 | 1 | 0 | 8 | 8 | 6 | 20 |
+| brazales tachonados de cobre | 0 | 0 | 1 | 6 | 6 | 4 | 15 |
+| botas de cuero curtido | 0 | 0 | 0 | 6 | 6 | 4 | 15 |
+| coraza de bronce | 2 | 1 | 0 | 16 | 18 | 14 | 45 |
+| casco de bronce | 1 | 1 | 0 | 11 | 12 | 9 | 30 |
+| faldar de bronce | 1 | 1 | 0 | 11 | 12 | 9 | 30 |
+| brazales de bronce | 1 | 0 | 0 | 8 | 9 | 7 | 22 |
+| grebas de bronce | 0 | 0 | 0 | 8 | 9 | 7 | 22 |
 
-Escala: el héroe tiene sus cuatro atributos de 0 a `HEROE.topeAtributo` (100). Un juego pesado entero suma 50 de armadura y 30 de vitalidad; los 30-60 por pieza del generador de hoy darían hasta 240 y se comerían los atributos. Que las defensas, el daño y la penetración lleguen al combate o solo salgan en el tooltip sigue siendo de Conquest (`Objetos_Del_Heroe.md` §3.4).
+### 4.2 Armas
+
+Cada clase tiene un perfil, sacado de cómo pelea en `Clases_De_Heroe.md` §3.1, y el tier lo multiplica: daño y penetración ×1 en cobre, ×1,25 en bronce, ×1,5 en hierro temprano y ×1,75 en hierro (redondeado). El atributo que da el arma es el mismo en todos los tiers: el tier mejora el filo, no al héroe.
+
+| Clase (tier cobre) | daño perf. | daño cort. | daño cont. | pen. perf. | pen. cort. | pen. cont. | atributo |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| lanza y escudo grande redondo | 14 | 0 | 4 | 4 | 0 | 0 | armadura +2 (el escudo grande) |
+| espada corta y escudo mediano | 6 | 12 | 0 | 2 | 3 | 0 | armadura +1 (el escudo mediano) |
+| arco compuesto y lanza | 16 | 0 | 0 | 5 | 0 | 0 | destreza +1 |
+| hacha a dos manos | 0 | 16 | 8 | 0 | 4 | 4 | fuerza +1 |
+| dagas | 8 | 8 | 0 | 3 | 3 | 0 | destreza +1 |
+
+| Clase | bronce | hierro temprano | hierro |
+| --- | --- | --- | --- |
+| lanza y escudo redondo | 18/0/5 · 5/0/0 | 21/0/6 · 6/0/0 | 24/0/7 · 7/0/0 |
+| espada y escudo mediano | 8/15/0 · 2/4/0 | 9/18/0 · 3/4/0 | 10/21/0 · 4/5/0 |
+| arco y lanza | 20/0/0 · 6/0/0 | 24/0/0 · 8/0/0 | 28/0/0 · 9/0/0 |
+| hacha a dos manos | 0/20/10 · 0/5/5 | 0/24/12 · 0/6/6 | 0/28/14 · 0/7/7 |
+| dagas | 10/10/0 · 4/4/0 | 12/12/0 · 4/4/0 | 14/14/0 · 5/5/0 |
+
+(daño perforante/cortante/contundente · penetración perforante/cortante/contundente). La lanza del arco y lanza la pone Conquest con el cambio de arma; aquí van las cifras del arco.
 
 ## 5. Compatibilidad y equipo inicial
 
 La compatibilidad es la columna «Armaduras» de §3.2, pieza a pieza (vale también para el casco). Como el arma define la clase, equipar un arma cambia la clase del héroe, y el motor no tiene que guardar la clase aparte: la saca del arma.
 
-Equipo inicial: el arma de tier cobre de la clase que elija al crear el héroe y un juego entero de la armadura más ligera que admita esa clase: pesada para la lanza y escudo redondo, media para la espada y escudo mediano y para el hacha, ligera para el arco y lanza y para las dagas.
+Equipo inicial: el arma de tier cobre de la clase que elija al crear el héroe y un juego entero, **casco incluido** (Conquest no lo trae porque no tiene cascos), de la armadura más ligera que admita esa clase: pesada para la lanza y escudo redondo, media para la espada y escudo mediano y para el hacha, ligera para el arco y lanza y para las dagas.
 
 El hueco del arma nunca queda vacío: `desequipar` el arma se rechaza, solo se cambia por otra. Al cambiar a un arma cuya clase no admite la armadura puesta, esa armadura pasa a la mochila, y si no cabe se rechaza el cambio.
 
 La compatibilidad y la armadura inicial de cada clase viven en el bloque `CLASES_HEROE` del diseño de clases (`Clases_De_Heroe.md`, rama `claude/project-thread-492isp`), servido junto a `OBJETOS` pero con **su propia versión** (`bronzeage-clases-1`), porque las clases cambian poco y el catálogo mucho (autor, 2026-11-11). En `OBJETOS` cada arma solo dice su clase, por id, y su tier; el motor comprueba al cargar que esa clase existe.
 
-La tecnología del tier **solo limita comprar y forjar** (autor, 2026-11-11): un arma que ya se tiene se puede llevar siempre.
+La tecnología del tier **solo limita comprar y forjar** (autor, 2026-11-11): un arma que ya se tiene se puede llevar siempre. Por eso la lanza y escudo redondo empieza con bronce aunque su Facción no tenga aún `aleacion_bronce`.
 
 ## 6. Precios
 
