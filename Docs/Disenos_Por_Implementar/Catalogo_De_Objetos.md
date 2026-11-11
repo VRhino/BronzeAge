@@ -1,6 +1,6 @@
 # Catálogo inicial de objetos del héroe
 
-Propuesta del 2026-11-11, **pendiente del sí del autor** y sin implementar. Cambiada el mismo día con las cinco clases del autor, cuyo diseño (`Clases_De_Heroe.md`, cerrado) es la base de §3.2, §4 y §5. Cierra el punto 1 (y en parte el 2, el 8 y el 10) de §4 de [`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md). Parte de las plantillas de Conquest (`Assets/Resources/Items`, `HeroClassSelector.FillBaseItemIdsForClass`, `BasicArmorStatGenerator`, `BasicWeaponStatGenerator`, `ItemPricingService`) y las lleva a la Edad del Bronce con los materiales y tecnologías que el motor ya usa en la Armería (cuero, cobre, bronce y hierro; [`Economia_Construccion.md`](../Mechanics/Economia_Construccion.md)).
+Diseño **aprobado por el autor el 2026-11-11** («si me cuadra todo esto», 18:12), sin implementar. Quedan abiertos el daño de las armas (§4.2, por discutir), los rangos de la forja y la tecnología `acero_templado`, que espera a las Eras IV y V. Cambiada el mismo día con las cinco clases del autor, cuyo diseño (`Clases_De_Heroe.md`, cerrado) es la base de §3.2, §4 y §5. Cierra el punto 1 (y en parte el 2, el 8 y el 10) de §4 de [`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md). Parte de las plantillas de Conquest (`Assets/Resources/Items`, `HeroClassSelector.FillBaseItemIdsForClass`, `BasicArmorStatGenerator`, `BasicWeaponStatGenerator`, `ItemPricingService`) y las lleva a la Edad del Bronce con los materiales y tecnologías que el motor ya usa en la Armería (cuero, cobre, bronce y hierro; [`Economia_Construccion.md`](../Mechanics/Economia_Construccion.md)).
 
 Reparto (de `Objetos_Del_Heroe.md` §2): la **ficha** de cada objeto (§3 y §6) es del motor y va en `OBJETOS` de `GET /v1/datos`; lo que hace **en combate** (§4) es de Conquest, que lo carga con el mismo id. Las cifras de §4 son una propuesta para Conquest, no un bloque del motor.
 
@@ -68,7 +68,7 @@ La clase se llama como el arma que lleva (los héroes de la Antigüedad solo sir
 | hacha a dos manos | `hacha_dos_manos` | media |
 | dagas (espía, asesino) | `dagas` | ligera |
 
-Las clases, sus armaduras, sus atributos base y sus habilidades están cerradas en `Clases_De_Heroe.md` (rama `claude/project-thread-492isp`); este catálogo pone las armas.
+Las clases, sus armaduras, sus atributos base y sus habilidades están cerradas en `Clases_De_Heroe.md`; este catálogo pone las armas.
 
 Ids: `{clase}_{tier}`. Nombre: el de la clase con el material del tier. Cinco clases por cinco tiers, **25 armas**:
 
@@ -173,7 +173,7 @@ Equipo inicial: el arma de tier cobre de la clase que elija al crear el héroe y
 
 El hueco del arma nunca queda vacío: `desequipar` el arma se rechaza, solo se cambia por otra. Al cambiar a un arma cuya clase no admite la armadura puesta, esa armadura pasa a la mochila, y si no cabe se rechaza el cambio.
 
-La compatibilidad y la armadura inicial de cada clase viven en el bloque `CLASES_HEROE` del diseño de clases (`Clases_De_Heroe.md`, ya en main), servido junto a `OBJETOS` pero con **su propia versión** (`bronzeage-clases-1`), porque las clases cambian poco y el catálogo mucho (autor, 2026-11-11). En `OBJETOS` cada arma solo dice su clase, por id, y su tier; el motor comprueba al cargar que esa clase existe.
+La compatibilidad y la armadura inicial de cada clase viven en el bloque `CLASES_HEROE` del diseño de clases (`Clases_De_Heroe.md`), servido junto a `OBJETOS` pero con **su propia versión** (`bronzeage-clases-1`), porque las clases cambian poco y el catálogo mucho (autor, 2026-11-11). En `OBJETOS` cada arma solo dice su clase, por id, y su tier; el motor comprueba al cargar que esa clase existe.
 
 La tecnología del tier **solo limita comprar y forjar** (autor, 2026-11-11): un arma o una armadura que ya se tiene se puede llevar siempre.
 
@@ -207,7 +207,7 @@ Además de los materiales, cada forja pide **un plano de su tier y crisoles** (a
 - **El plano se gasta** en cada forja, uno por pieza; si se quedara, solo repetiría el freno de la tecnología.
 - **Comercio** (autor, 2026-11-11): de inicio solo se pueden **vender a la tienda**, por monedas; ni se compran en ella ni se cambian entre jugadores. Venta: crisol 25 monedas; plano 50 × el número de su tier.
 
-#### De dónde salen (propuesta, pendiente del sí)
+#### De dónde salen
 
 Objetivo: un jugador activo forja **una o dos piezas de tier I o II al día**, una de III a la semana, alguna de IV cada pocos meses y una o dos de V en la season. **Cuanto más alto el tier, más escaso el plano** (autor, 2026-11-11 18:01), en cada fuente y en el total. Todas las fuentes van atadas a algo que ya tiene freno en el motor (la ventana de 24 h de los bandidos, las misiones diarias, los alijos que se abren una vez, los rangos de los mercenarios).
 
@@ -219,7 +219,7 @@ Objetivo: un jugador activo forja **una o dos piezas de tier I o II al día**, u
 | Alijo abierto (una vez) | 3 | uno: tier III (70 %) o IV (30 %) |
 | Premio de rango de un mercenario | — | rango 4: plano IV; rango 5: plano V |
 
-Las misiones del tablón no dan ni planos ni crisoles: las paga quien las publica, y eso sería cambiarlos entre jugadores. Cuenta de un jugador activo (8 campamentos al día, 3 de nivel 1, 3 de nivel 2 y 2 de nivel 3, y una batalla de Unity): unos 3-4 crisoles al día y, de planos, unos 4-5 de tier I a la semana, 2-3 de tier II, uno de tier III (más los alijos), uno de tier IV cada tres o cuatro meses (más los alijos y el rango 4) y casi ninguno de tier V fuera del rango 5 de un mercenario. Las tablas del botín de Unity las tendría el motor y no Conquest, porque la escasez es de economía (duda 7 de `Objetos_Del_Heroe.md`).
+Las misiones del tablón no dan ni planos ni crisoles: las paga quien las publica, y eso sería cambiarlos entre jugadores. Cuenta de un jugador activo (8 campamentos al día, 3 de nivel 1, 3 de nivel 2 y 2 de nivel 3, y una batalla de Unity): unos 3-4 crisoles al día y, de planos, unos 4-5 de tier I a la semana, 2-3 de tier II, uno de tier III (más los alijos), uno de tier IV cada tres o cuatro meses (más los alijos y el rango 4) y casi ninguno de tier V fuera del rango 5 de un mercenario. Las tablas del botín de Unity las tiene el motor y no Conquest, porque la escasez es de economía (duda 7 de `Objetos_Del_Heroe.md`).
 
 ### Materiales
 
