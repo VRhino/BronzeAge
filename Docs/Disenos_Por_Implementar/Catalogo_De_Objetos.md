@@ -1,6 +1,6 @@
 # Catálogo inicial de objetos del héroe
 
-Propuesta del 2026-11-11, **pendiente del sí del autor** y sin implementar. Cierra el punto 1 (y en parte el 2, el 8 y el 10) de §4 de [`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md). Parte de las plantillas de Conquest (`Assets/Resources/Items`, `HeroClassSelector.FillBaseItemIdsForClass`, `BasicArmorStatGenerator`, `BasicWeaponStatGenerator`, `ItemPricingService`) y las lleva a la Edad del Bronce con los materiales que el motor ya usa en la Armería (cuero, cuero curtido, cobre y bronce; [`Economia_Construccion.md`](../Mechanics/Economia_Construccion.md)).
+Propuesta del 2026-11-11, **pendiente del sí del autor** y sin implementar. Cambiada el mismo día con las cinco clases del autor (§3.2). Cierra el punto 1 (y en parte el 2, el 8 y el 10) de §4 de [`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md). Parte de las plantillas de Conquest (`Assets/Resources/Items`, `HeroClassSelector.FillBaseItemIdsForClass`, `BasicArmorStatGenerator`, `BasicWeaponStatGenerator`, `ItemPricingService`) y las lleva a la Edad del Bronce con los materiales que el motor ya usa en la Armería (cuero, cuero curtido, cobre y bronce; [`Economia_Construccion.md`](../Mechanics/Economia_Construccion.md)).
 
 Reparto (de `Objetos_Del_Heroe.md` §2): la **ficha** de cada objeto (§3 y §6) es del motor y va en `OBJETOS` de `GET /v1/datos`; lo que hace **en combate** (§4) es de Conquest, que lo carga con el mismo id. Las cifras de §4 son una propuesta para Conquest, no un bloque del motor.
 
@@ -51,18 +51,26 @@ Ids en `snake_case`, como las tropas. `hueco` es el de `Equipamiento`; ninguna p
 | `faldar_bronce` | Faldar de placas de bronce | pantalones | pesada | `PanHADef` |
 | `grebas_bronce` | Grebas de bronce | botas | pesada | `BootHADef` |
 
-### 3.2 Armas (4)
+### 3.2 Armas: cinco clases por cuatro tiers
 
-Una por clase de Conquest. Los nombres dependen del diseño de las clases (hilo aparte): si una clase cambia de arma, cambia aquí su fila.
+Cambio del autor (2026-11-11, hilo de clases de héroe): hay **cinco clases** y **el arma define la clase**, como en Conquest. La clase no limita el arma: el héroe es de la clase del arma que lleva puesta. Cada arma tiene **tiers** que se abren con la tecnología:
 
-| id | Nombre | categoría | Conquest de hoy |
-| --- | --- | --- | --- |
-| `arco_simple` | Arco de madera | arco | `WeaBBasic` |
-| `lanza_cobre` | Lanza con punta de cobre | lanza | `WeaSBasic` |
-| `hacha_doble_bronce` | Hacha de dos manos de bronce | dos_manos | `WeaS2HBasic` |
-| `espada_escudo_bronce` | Espada corta de bronce y escudo de cuero | espada_escudo | `WeaS&SBasic` |
+| Tier | Tecnología que lo abre |
+| --- | --- |
+| cobre | `metalurgia_cobre` |
+| bronce | `aleacion_bronce` |
+| hierro temprano | `forja_hierro_temprana` |
+| hierro | `forja_hierro_estandarizada` |
 
-El mandoble de Conquest se vuelve hacha de dos manos: las espadas largas de dos manos no son de la época. La categoría del motor deja de llamarse por el arma (`dos_manos` en vez de `TwoHandedSword`) para que un cambio de nombre no toque el contrato.
+| Clase (inspiración) | Arma (un solo objeto, en el hueco `arma`) | Armaduras |
+| --- | --- | --- |
+| Leónidas | lanza y escudo grande redondo | pesada |
+| Aquiles | espada corta y escudo mediano | pesada, media |
+| Ulises | arco compuesto y lanza | ligera, media |
+| Ayax | por decidir | media |
+| por decidir | dagas | ligera |
+
+Ids: `{arma}_{tier}`, por ejemplo `lanza_escudo_redondo_cobre` o `dagas_hierro_temprano`. Cinco armas por cuatro tiers son veinte; el catálogo inicial puede traer solo el cobre (cinco) y los demás tiers entrar a la vez que su tecnología. Los stats de cada arma (§4) se definen clase a clase en el hilo de clases.
 
 ### 3.3 Consumibles
 
@@ -94,37 +102,15 @@ Por pieza:
 | casco de bronce, faldar de bronce | 10 | 6 | 0 | 0 | 11 | 12 | 9 | 30 |
 | brazales de bronce, grebas de bronce | 8 | 4 | 0 | 0 | 8 | 9 | 7 | 22 |
 
-Armas:
-
-| Arma | daño perf. | daño cort. | daño cont. | pen. perf. | pen. cort. | pen. cont. | fuerza | destreza | armadura |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| arco de madera | 18 | 0 | 0 | 6 | 0 | 0 | 0 | 10 | 0 |
-| lanza con punta de cobre | 16 | 6 | 0 | 8 | 2 | 0 | 5 | 5 | 0 |
-| hacha de dos manos de bronce | 0 | 20 | 10 | 0 | 6 | 4 | 10 | 0 | 0 |
-| espada corta y escudo | 6 | 14 | 0 | 2 | 4 | 0 | 5 | 0 | 10 |
-
-El escudo da armadura, por eso la espada y escudo pega menos.
+Armas: se definen clase a clase (§3.2).
 
 Escala: el héroe tiene sus cuatro atributos de 0 a `HEROE.topeAtributo` (100). Un juego pesado entero suma 50 de armadura y 30 de vitalidad; los 30-60 por pieza del generador de hoy darían hasta 240 y se comerían los atributos. Que las defensas, el daño y la penetración lleguen al combate o solo salgan en el tooltip sigue siendo de Conquest (`Objetos_Del_Heroe.md` §3.4).
 
 ## 5. Compatibilidad y equipo inicial
 
-Compatibilidad arma/armadura, la de Conquest, pieza a pieza (vale también para el casco):
+La compatibilidad es la columna «Armaduras» de §3.2, pieza a pieza (vale también para el casco). Como el arma define la clase, equipar un arma cambia la clase del héroe, y el motor no tiene que guardar la clase aparte: la saca del arma.
 
-| Arma | Armaduras que admite |
-| --- | --- |
-| arco | ligera |
-| lanza, dos manos | ligera, media |
-| espada y escudo | ligera, media, pesada |
-
-Equipo inicial, el de Conquest con casco:
-
-| Clase (Conquest) | Arma | Armadura |
-| --- | --- | --- |
-| arco | `arco_simple` | las cinco de cuero |
-| lanza | `lanza_cobre` | las cinco de cobre |
-| dos manos | `hacha_doble_bronce` | las cinco de cobre |
-| espada y escudo | `espada_escudo_bronce` | las cinco de bronce |
+Equipo inicial: el arma de tier cobre de la clase que elija al crear el héroe y un juego entero de la armadura más ligera que admita esa clase (pendiente de cerrar clase a clase).
 
 ## 6. Precios
 
@@ -135,10 +121,12 @@ El héroe nace con 1.500 monedas, gana 500 por una batalla ganada contra otra Fa
 | pieza de cuero (torso 150) | 100 | 50 |
 | pieza de cobre (torso 300) | 200 | 100 |
 | pieza de bronce (torso 450) | 300 | 150 |
-| arco, lanza | 200 | 100 |
-| hacha de dos manos, espada y escudo | 300 | 150 |
+| arma de cobre | 200 | 100 |
+| arma de bronce | 400 | 200 |
+| arma de hierro temprano | 700 | 350 |
+| arma de hierro | 1.000 | 500 |
 
-Un juego de cuero entero cuesta 600 y uno de bronce 1.800. Las rarezas, cuando lleguen, multiplican como en Conquest: ×1, ×2,5, ×5, ×12,5 y ×25.
+Un juego de cuero entero cuesta 600 y uno de bronce 1.800. Si un arma vale más que otra del mismo tier, se ve clase a clase. Las rarezas, cuando lleguen, multiplican como en Conquest: ×1, ×2,5, ×5, ×12,5 y ×25.
 
 ## 7. El bloque `OBJETOS` del motor
 
@@ -149,27 +137,29 @@ Forma propuesta, para Mechanics cuando se implemente:
   "version": "bronzeage-objetos-1",
   "ventaPct": 50,
   "rarezas": ["comun", "pocoComun", "rara", "epica", "legendaria"],
-  "compatibilidad": {
-    "arco": ["ligera"],
-    "lanza": ["ligera", "media"],
-    "dos_manos": ["ligera", "media"],
-    "espada_escudo": ["ligera", "media", "pesada"]
+  "tiers": { "cobre": "metalurgia_cobre", "bronce": "aleacion_bronce", "hierro_temprano": "forja_hierro_temprana", "hierro": "forja_hierro_estandarizada" },
+  "clases": {
+    "lanza_escudo_redondo": { "armaduras": ["pesada"] },
+    "espada_escudo_mediano": { "armaduras": ["pesada", "media"] },
+    "arco_lanza": { "armaduras": ["ligera", "media"] },
+    "dagas": { "armaduras": ["ligera"] }
   },
   "objetos": [
     { "id": "coraza_bronce", "nombre": "Coraza de bronce", "hueco": "torso", "tipoArmadura": "pesada", "rareza": "comun", "apilable": false, "precio": 450 },
-    { "id": "lanza_cobre", "nombre": "Lanza con punta de cobre", "hueco": "arma", "categoria": "lanza", "rareza": "comun", "apilable": false, "precio": 200 }
+    { "id": "lanza_escudo_redondo_cobre", "nombre": "Lanza de cobre y escudo redondo", "hueco": "arma", "clase": "lanza_escudo_redondo", "tier": "cobre", "rareza": "comun", "apilable": false, "precio": 200 }
   ],
   "equipoInicial": {
-    "arco": ["arco_simple", "gorro_cuero", "jubon_cuero", "brazales_cuero", "faldellin_cuero", "sandalias_cuero"]
+    "arco_lanza": ["arco_lanza_cobre", "gorro_cuero", "jubon_cuero", "brazales_cuero", "faldellin_cuero", "sandalias_cuero"]
   }
 }
 ```
 
-`version` sustituye a `conquest-items-1` en el ticket. `equipoInicial` va por clase y espera al catálogo de clases.
+`version` sustituye a `conquest-items-1` en el ticket. La clase del ticket sale del arma puesta.
 
 ## 8. Lo que toca en Conquest
 
-- Renombrar los `_id` de los 16 `ItemDataSO` a los de §3 y crear los tres cascos (con su `visualPartId`).
+- Renombrar los `_id` de las 12 armaduras a los de §3.1 y crear los tres cascos (con su `visualPartId`).
+- Pasar de cuatro clases a cinco y crear sus armas por tier (§3.2); la clase sale del arma.
 - Cambiar el generador por las cifras fijas de §4.
 - `HeroClassSelector.FillBaseItemIdsForClass` con los ids nuevos y el casco.
 - Quitar del modo conectado la bolsa de bronce y el cofre.
