@@ -5,7 +5,7 @@ Diseño **aprobado por el autor el 2026-11-11** («si me cuadra todo esto», 18:
 - variación con sentido dentro del tier II (20:46 y 20:48, §4);
 - las cifras de combate, ajustadas a sus referencias para el héroe. El autor dio el diseño por cerrado a las 21:14; las reglas y la escala están en [`Cifras_De_Combate.md`](Cifras_De_Combate.md).
 
-Quedan abiertos los objetos varios (trofeos, cofres, aspecto) y la tecnología `acero_templado`, que espera a las Eras IV y V.
+Los objetos varios los cerró el autor a las 22:32 (§3.3). Quedan abiertos la tecnología `acero_templado`, que espera a las Eras IV y V, y de dónde salen las medallas de experiencia, que se decide con las curvas de progresión de tropas y héroes.
 
 Las cinco clases del autor (`Clases_De_Heroe.md`, cerrado) son la base de §3.2, §4 y §5. Este catálogo cierra el punto 1 (y en parte el 2, el 8 y el 10) de §4 de [`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md). Parte de las plantillas de Conquest (`Assets/Resources/Items`, `HeroClassSelector.FillBaseItemIdsForClass`, `BasicArmorStatGenerator`, `BasicWeaponStatGenerator`, `ItemPricingService`) y las lleva a la Edad del Bronce con los materiales y tecnologías que el motor ya usa en la Armería (cuero, cobre, bronce y hierro; [`Economia_Construccion.md`](../Mechanics/Economia_Construccion.md)).
 
@@ -112,9 +112,51 @@ Ids: `{clase}_{metal}`. Nombre: el de la clase con el material. Cinco clases por
 
 Por ejemplo, «Lanza de pacotilla y escudo grande redondo», «Hacha de hierro temprano a dos manos», «Dagas de acero». En el arco y lanza, el metal es el de la punta de las flechas y de la lanza.
 
-### 3.3 Consumibles
+### 3.3 Objetos varios
 
-Fuera del catálogo inicial (`Objetos_Del_Heroe.md` §4.10). La bolsa de bronce no hace falta: el botín ya suma monedas al héroe. El cofre de arma vuelve, si vuelve, con el botín.
+Lista del autor (2026-11-11 22:16) y cerrada a las 22:32. Ninguno se usa en batalla, y la tienda no vende ninguno salvo las monturas de tier I y II.
+
+| Objeto | Tipo | Se apila | Para qué |
+| --- | --- | --- | --- |
+| planos (`plano_2` … `plano_5`) y `crisol` | `material` | sí | la forja (§6b) |
+| medallas de experiencia de tropa | `consumible` | sí | dar experiencia a una escuadra |
+| medallas de experiencia del héroe | `consumible` | sí | dar experiencia al héroe |
+| cofre de monturas | `consumible` | sí | dar una montura de tier III a V |
+| monturas | `montura` | no | el caballo del héroe en batalla |
+| estandartes | `estandarte` | no | el aspecto del estandarte de una escuadra |
+
+**Medallas de experiencia,** en cuatro tamaños: muy pequeña, pequeña, mediana y grande.
+- Se usan desde la mochila, fuera de batalla, con una orden nueva del motor (`usar_objeto`).
+- **De tropa:** sobre una escuadra del héroe, no sobre una prestada. Dan 2, 5, 10 y 20 de experiencia, lo mismo a cualquier nivel, así que ayudan más a una escuadra nueva. Una escuadra en el nivel máximo no puede usarlas, y lo que sobre al llegar a él se pierde.
+- **Del héroe:** dan el 5, el 10, el 25 y el 50 % de la experiencia que pide su nivel, para que valgan igual a cualquier nivel. Piden la curva del héroe en el motor (ver abajo).
+- Ids: `medalla_tropa_muy_pequena` … `medalla_tropa_grande` y `medalla_heroe_muy_pequena` … `medalla_heroe_grande`.
+- La tienda no las vende, pero se le pueden vender a ella.
+- **Pendiente:** de dónde salen y cuántas. Se decide con las curvas de progresión de tropas y héroes, que el autor sumó a esta fase de diseño a las 22:32. Hoy el héroe no sube de nivel en el motor (espera la curva de Conquest, CQ-001), y la escuadra sube del 1 al 10 con 275 de experiencia, a 1 por victoria y 0,5 por derrota.
+
+**Monturas.** En Conquest el héroe ya monta, pero todos llevan el mismo caballo, con las cifras fijas de `MountTuning` (vida 1200, trote 6 m/s, galope 11 m/s, aguante 100). Pasa a ser un objeto del motor:
+- Hueco nuevo `montura` en el equipo del héroe; viaja en el ticket y Conquest usa sus cifras en lugar de las fijas.
+- El héroe nace con la de tier I, como el equipo de inicio. La tienda vende las de tier I y II, como con el resto. Las de III a V salen del cofre de monturas. No se forjan.
+- Cada tier, más vida, galope y aguante:
+
+| Tier | Montura | id | Vida | Trote | Galope | Aguante | Precio |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| I | caballo de tiro | `montura_tiro` | 1200 | 6 | 11 | 100 | 300 |
+| II | caballo de estepa | `montura_estepa` | 1500 | 6 | 11,5 | 120 | 600 |
+| III | caballo escita | `montura_escita` | 1800 | 6,5 | 12 | 140 | 1.050 |
+| IV | caballo tesalio | `montura_tesalia` | 2100 | 6,5 | 12,5 | 160 | 1.500 |
+| V | caballo niseo | `montura_nisea` | 2400 | 7 | 13 | 180 | 2.100 |
+
+El precio sigue la regla de §6 (×1, ×2, ×3,5, ×5 y ×7); del III al V solo sirve para venderla, a la mitad.
+
+**Cofre de monturas** (`cofre_monturas`): al abrirlo da una montura al azar, de tier III (70 %), IV (25 %) o V (5 %). Sale del botín de Unity y de los premios de rango de los mercenarios; cuántos, con las curvas de progresión.
+
+**Estandartes:** solo aspecto, sin ninguna cifra (autor, 22:32).
+- Hueco nuevo `estandarte` en la escuadra del motor (`Escuadron`) y en el contrato que va a Conquest (`SquadSnapshot`).
+- Tienen rareza, para el botín, pero no tier de combate. Cada estandarte se diseña con su arte.
+
+**Aspecto de las tropas:** solo el campo, en la escuadra y en el contrato (`aspecto`, vacío para el aspecto de serie), para tenerlo en cuenta cuando haya arte (autor, 22:16).
+
+**Fuera** (autor, 22:16): los cofres de botín por tier, los trofeos y el aspecto del héroe. Tampoco hacen falta la bolsa de monedas de Conquest (el botín ya suma monedas al héroe) ni su cofre de arma. Los consumibles de batalla siguen fuera (`Objetos_Del_Heroe.md` §4.10).
 
 ## 4. Lo que da cada pieza en combate
 
@@ -384,6 +426,7 @@ Forma propuesta, para Mechanics cuando se implemente:
 
 - `tier` va del 1 al 5, y `rarezas` dice qué rareza de Conquest es cada uno. La tienda vende hasta el tier de `tiendaHastaTier`.
 - `metales` dice qué tecnología abre cada metal; el de inicio no pide ninguna.
+- Cada objeto lleva su `tipo`: `arma`, `armadura`, `material`, `consumible`, `montura` o `estandarte` (§3.3).
 - `combate` lleva las cifras de §4, enteras como `Estadistica.valor`.
 - `forja` lleva la receta de §6b y el rango de calidad (`calidad: [90, 110]`, en %). El tier I no tiene receta.
 - `version` sustituye a `conquest-items-1` en el ticket. El ticket lleva además la versión de `CLASES_HEROE` y la del catálogo de tropas (`Cifras_De_Combate.md` §8), y Conquest rechaza un ticket con una versión que no tenga.
@@ -399,4 +442,6 @@ Forma propuesta, para Mechanics cuando se implemente:
 - Aplicar las reglas del héroe de `Cifras_De_Combate.md` §6: la vida, el alivio y el golpe.
 - Leer del motor las cifras de combate de las tropas en lugar de las de sus `SquadData` (`Cifras_De_Combate.md`).
 - `HeroClassSelector.FillBaseItemIdsForClass` con los ids de inicio, sin casco.
+- Leer la montura del héroe del ticket y usar sus cifras en lugar de las fijas de `MountTuning`.
+- Leer el estandarte y el aspecto de cada escuadra del ticket (`SquadSnapshot`), para cuando haya arte.
 - Quitar del modo conectado la bolsa de bronce y el cofre.
