@@ -196,13 +196,14 @@ Un juego ligero de cobre cuesta 450 y uno pesado de bronce, con casco, 3.600. Un
 
 Lo que cuesta **forjar** una pieza (la forja es la del diseño de objetos: el motor tira los valores dentro de los rangos de la receta; los rangos están por decidir). Lo paga el almacén personal del héroe, como decidió el autor. Los materiales son los recursos que ya fabrican la Fundición y la Curtiduría.
 
-### El crisol
+### El plano y el crisol
 
-Además de los materiales, **cada forja gasta crisoles** (autor, 2026-11-11: un objeto que se gaste con cada fabricación).
+Además de los materiales, cada forja pide **un plano de su tier y crisoles** (autor, 2026-11-11).
 
-- `crisol`, «Crisol»: un objeto de la mochila, **apilable**, sin hueco, de un tipo nuevo `material` (junto a arma, armadura, consumible y visual). No se usa en batalla.
-- Una forja gasta **tantos crisoles como el número de su tier**: 1 en cobre, 2 en bronce, 3 en hierro temprano, 4 en hierro y 5 en el quinto.
-- Se consigue en el botín de Unity, como recompensa de misión y en la tienda (50 monedas; se vende por 25).
+- **Planos por tier** (`plano_1` … `plano_5`, «Plano de tier II», etc.): uno sirve para cualquier pieza o arma de ese tier. Para forjar una pieza de tier 2 hace falta un plano de tier 2, sus crisoles y sus materiales.
+- `crisol`, «Crisol»: una forja gasta **tantos crisoles como el número de su tier**: 1 en cobre, 2 en bronce, 3 en hierro temprano, 4 en hierro y 5 en el quinto.
+- Los dos son objetos de la mochila, **apilables**, sin hueco, de un tipo nuevo `material` (junto a arma, armadura, consumible y visual). No se usan en batalla.
+- **Por decidir:** si el plano se gasta en cada forja o se queda, y de dónde salen planos y crisoles (en el chat con el autor).
 
 ### Materiales
 
@@ -235,7 +236,7 @@ Qué lingote y qué cuero pide cada tier:
 | V bronce laminado | `lingoteBronce` ×2 | `cueroCalidad` |
 | V acero | `lingoteHierro` ×2 | `cueroCalidad` |
 
-Ejemplos: la coraza de bronce (torso pesada bronce) pide 6 `lingoteBronce`, 4 `cueroCurtido` y 2 crisoles; las dagas de acero, 4 `lingoteHierro`, 1 `cueroCalidad` y 5 crisoles. Para comparar, la `armaduraBronceCalidad` de un soldado pide 2 `lingoteBronce` y 5 `cueroCalidad`.
+Ejemplos: la coraza de bronce (torso pesada bronce) pide un plano de tier II, 6 `lingoteBronce`, 4 `cueroCurtido` y 2 crisoles; las dagas de acero, un plano de tier V, 4 `lingoteHierro`, 1 `cueroCalidad` y 5 crisoles. Para comparar, la `armaduraBronceCalidad` de un soldado pide 2 `lingoteBronce` y 5 `cueroCalidad`.
 
 ## 7. El bloque `OBJETOS` del motor
 
