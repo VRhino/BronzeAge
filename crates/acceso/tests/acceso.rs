@@ -16,6 +16,7 @@ fn config() -> Config {
     Config {
         codigo_registro: Some("humanos".into()),
         codigo_registro_bots: Some("bots".into()),
+        codigo_registro_servidores: Some("servidores".into()),
         coste: Coste::PRUEBAS,
         ..Config::default()
     }
@@ -297,4 +298,55 @@ async fn delete_sesiones_actual_anula_el_token_por_http() {
     assert_eq!(http(dir, "GET", "/v1/sesiones/actual", &[("Authorization", &auth(otro))], "").await.0, 200);
     abrir(dir, otro, TipoCliente::ClienteBot).await.unwrap();
     srv.detener().await;
+}
+
+#[tokio::test]
+async fn la_cuenta_de_servidor_de_batalla_solo_abre_esa_sesion_nunca_es_admin_y_sobrevive_a_un_reinicio() {
+    let dir = tempfile::tempdir().unwrap();
+    {
+        let acceso = Acceso::abrir(dir.path(), config()).unwrap();
+        let (srv, _n) = arrancar(acceso.clone()).await;
+        let d = srv.direccion;
+        // Con el código de servidores, la cuenta es de servidor de batalla: entra con nick y clave como cualquiera y su token solo abre `CLIENTE_SERVIDOR_BATALLA`.
+        let s = registrar_y_entrar(d, "lanzador-1", "servidores").await;
+        assert_eq!((s["servidor"].as_bool(), s["bot"].as_bool(), s["admin"].as_bool()), (Some(true), Some(false), Some(false)));
+        let token = s["token"].as_str().unwrap();
+        abrir(d, token, TipoCliente::ClienteServidorBatalla).await.unwrap();
+        for otro in [TipoCliente::ClienteUnity, TipoCliente::ClienteBot, TipoCliente::ClienteAdminWeb] {
+            assert_eq!(abrir(d, token, otro).await, Err("rol_no_permitido".into()), "{otro:?}");
+        }
+        let i = acceso.identidad(token, ahora_ms()).unwrap();
+        assert_eq!((i.cliente_id.as_str(), i.roles.as_slice(), i.rol), ("u-1", &[TipoCliente::ClienteServidorBatalla][..], RolTecnico::Jugador));
+        let (e, c) = http(d, "GET", "/v1/sesiones/actual", &[("Authorization", &format!("sesion {token}"))], "").await;
+        assert_eq!((e, serde_json::from_str::<Value>(&c).unwrap()["servidor"].as_bool()), (200, Some(true)));
+        // Una humana sigue sin poder abrir la sesión de un servidor de batalla.
+        let h = registrar_y_entrar(d, "ana", "humanos").await;
+        assert_eq!(h["servidor"], json!(false));
+        assert_eq!(abrir(d, h["token"].as_str().unwrap(), TipoCliente::ClienteServidorBatalla).await, Err("rol_no_permitido".into()));
+        // Nunca es administrador, ni con la marca ni con el código de un solo uso.
+        assert_eq!(acceso.fijar_admin("lanzador-1", true).unwrap_err(), ErrorAdmin::EsServidor);
+        assert!(acceso.administrador(token, ahora_ms()).is_none());
+        assert_eq!((acceso.servidores(), acceso.bots(), acceso.cuentas()), (1, 0, 2));
+        srv.detener().await;
+    }
+    // La marca va en `cuentas.jsonl`.
+    let a = Acceso::abrir(dir.path(), config()).unwrap();
+    assert!(a.cuenta("u-1").unwrap().servidor && !a.cuenta("u-2").unwrap().servidor);
+    let s = a.entrar("lanzador-1", "una clave larga").await.unwrap();
+    assert_eq!(a.identidad(&s.token, ahora_ms()).unwrap().roles, vec![TipoCliente::ClienteServidorBatalla]);
+    let lineas = std::fs::read_to_string(dir.path().join("cuentas.jsonl")).unwrap();
+    assert!(lineas.lines().nth(1).is_some_and(|l| !l.contains("servidor")), "una cuenta que no es de servidor no lleva el campo");
+}
+
+#[tokio::test]
+async fn sin_codigo_de_servidores_no_hay_cuentas_de_servidor_de_batalla() {
+    let a = Acceso::en_memoria(Config { coste: Coste::PRUEBAS, ..Config::default() });
+    let c = a.registrar("lanzador", "una clave larga", Some("servidores")).await.unwrap();
+    assert!(!c.servidor && !c.bot);
+    let s = a.entrar("lanzador", "una clave larga").await.unwrap();
+    assert_eq!(a.identidad(&s.token, ahora_ms()).unwrap().roles, vec![TipoCliente::ClienteUnity]);
+    // Con los dos códigos iguales manda el de bots.
+    let a = Acceso::en_memoria(Config { codigo_registro_bots: Some("x".into()), codigo_registro_servidores: Some("x".into()), coste: Coste::PRUEBAS, ..Config::default() });
+    let c = a.registrar("quien", "una clave larga", Some("x")).await.unwrap();
+    assert!(c.bot && !c.servidor);
 }

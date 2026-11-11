@@ -6,8 +6,10 @@
 //! | `BRONZEAGE_MUNDO` | el artefacto de mundo, o una carpeta con un `mundo-*.bin`; su paquete de relieve (`relieve-<hash>.bin`), si está al lado, también se sirve | `generador/salida/mundo` |
 //! | `BRONZEAGE_DATOS` | la carpeta de datos (`mundo/` y `acceso/`) | `datos` |
 //! | `BRONZEAGE_SEMILLA` | la semilla de la partida (solo cuenta la primera vez) | `42` |
+//! | `BRONZEAGE_BATALLAS_EN_UNITY` | `1`: las batallas las juegan los servidores de batalla (`bronzeage-lanzador`), no se resuelven con números. Es una regla de la partida: arrancar una partida ya creada con el otro valor falla | — (con números) |
 //! | `CODIGO_REGISTRO` | código de invitación de las cuentas humanas; sin él, registro abierto | — |
 //! | `CODIGO_REGISTRO_BOTS` | código que marca la cuenta como bot; sin él, no hay bots | — |
+//! | `CODIGO_REGISTRO_SERVIDORES` | código que marca la cuenta como servidor de batalla (la del lanzador, `bronzeage-lanzador`); sin él, no hay ninguna | — |
 //! | `BRONZEAGE_IPS_ADMIN` | IPs, separadas por comas, desde las que se puede administrar (WebSocket de `CLIENTE_ADMIN_WEB` y `/v1/admin/`) además de esta máquina; siempre hace falta además la cuenta admin | solo esta máquina |
 //! | `BRONZEAGE_ORIGENES` | nombres de máquina, separados por comas, desde los que una página puede llamar al servidor (además de esta máquina y de la IP del servidor) | — |
 //!
@@ -38,6 +40,7 @@ async fn parar_por_la_entrada(acceso: &acceso::Acceso) {
                     let motivo = match e {
                         ErrorAdmin::NoExiste => "no existe esa cuenta",
                         ErrorAdmin::EsBot => "es una cuenta de bot",
+                        ErrorAdmin::EsServidor => "es una cuenta de servidor de batalla",
                         ErrorAdmin::UltimoAdministrador => "es el último administrador",
                         ErrorAdmin::Disco => "no se pudo guardar",
                     };
@@ -67,6 +70,11 @@ async fn correr() -> Result<(), String> {
     let mundo = PathBuf::from(var("BRONZEAGE_MUNDO").unwrap_or_else(|| "generador/salida/mundo".into()));
     let datos = PathBuf::from(var("BRONZEAGE_DATOS").unwrap_or_else(|| "datos".into()));
     let semilla: u64 = var("BRONZEAGE_SEMILLA").map_or(Ok(42), |s| s.parse()).map_err(|e| format!("BRONZEAGE_SEMILLA: {e}"))?;
+    let en_unity = match var("BRONZEAGE_BATALLAS_EN_UNITY").as_deref().map(str::trim) {
+        None | Some("0" | "no" | "false") => false,
+        Some("1" | "si" | "sí" | "true") => true,
+        Some(o) => return Err(format!("BRONZEAGE_BATALLAS_EN_UNITY: «{o}» no es 1 ni 0")),
+    };
     let ips_admin = var("BRONZEAGE_IPS_ADMIN")
         .map(|v| v.split(',').map(str::trim).filter(|s| !s.is_empty()).map(|s| s.parse::<IpAddr>().map_err(|e| format!("BRONZEAGE_IPS_ADMIN: «{s}» no es una IP ({e})"))).collect::<Result<Vec<_>, _>>())
         .transpose()?
@@ -74,6 +82,7 @@ async fn correr() -> Result<(), String> {
     let config = acceso::Config {
         codigo_registro: var("CODIGO_REGISTRO"),
         codigo_registro_bots: var("CODIGO_REGISTRO_BOTS"),
+        codigo_registro_servidores: var("CODIGO_REGISTRO_SERVIDORES"),
         origenes: var("BRONZEAGE_ORIGENES").map(|v| v.split(',').map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()).collect()).unwrap_or_default(),
         ips_admin,
         ..acceso::Config::default()
@@ -87,7 +96,8 @@ async fn correr() -> Result<(), String> {
         )
     })?;
     println!("mundo: {}", fichero.display());
-    let a = servicio::arranque_de(&fichero, semilla).map_err(|e| format!("artefacto de mundo: {e}"))?;
+    let mut a = servicio::arranque_de(&fichero, semilla).map_err(|e| format!("artefacto de mundo: {e}"))?;
+    a.arranque.reglas.batallas_en_unity = en_unity;
     // El paquete de relieve de los clientes 3D: si falta o no vale, el servidor arranca igual y no lo anuncia.
     let relieve = match servicio::relieve_junto_a(&fichero, &a.arranque) {
         Ok(Some(r)) => {
@@ -105,7 +115,7 @@ async fn correr() -> Result<(), String> {
     };
     let (s, i) = servicio::arrancar(a.arranque, Some(a.bytes), relieve, &datos, direccion, config.clone()).await.map_err(|e| format!("datos en {}: {e}", datos.display()))?;
     println!(
-        "escuchando en {} (WebSocket del contrato 05 y HTTP de acceso); mundo {}; versión {}, instante {} ms{}; {} cuentas; registro {}; bots {}; {} administradores",
+        "escuchando en {} (WebSocket del contrato 05 y HTTP de acceso); mundo {}; versión {}, instante {} ms{}; {} cuentas; registro {}; bots {}; servidores de batalla {}; batallas {}; {} administradores",
         s.direccion,
         i.mundo_hash,
         i.version,
@@ -114,6 +124,8 @@ async fn correr() -> Result<(), String> {
         i.cuentas,
         if config.codigo_registro.is_some() { "con código" } else { "abierto" },
         if config.codigo_registro_bots.is_some() { "permitidos" } else { "sin código: no hay" },
+        if config.codigo_registro_servidores.is_some() { "permitidos" } else { "sin código: no hay" },
+        if en_unity { "en Unity (las juegan los lanzadores)" } else { "con números" },
         s.acceso.administradores().len(),
     );
     if let Some(codigo) = &i.codigo_admin {

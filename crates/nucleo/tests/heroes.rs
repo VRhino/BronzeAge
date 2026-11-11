@@ -334,7 +334,7 @@ fn un_ciudadano_de_visita_recluta_escuadras_nuevas_a_su_columna_salvo_que_la_pla
     e.ok("admin", cerrar(false));
     let granjeros = e.ok("dora", reclutar(Tropa::Granjeros)).creadas[0];
     assert_eq!(e.n.escuadra(granjeros).unwrap().1.contenedor, Contenedor::Ejercito(col));
-    // La foto lo guarda (BAN61).
+    // La foto lo guarda (desde BAN61).
     e.ok("admin", cerrar(true));
     let vuelta = nucleo::Estado::deserializar(&e.n.estado().serializar(), &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert!(vuelta.asentamientos[&a].reclutamiento_cerrado_a_ciudadanos);
@@ -525,6 +525,44 @@ fn los_loadouts_el_orden_de_las_escuadras_y_el_reparto_de_puntos_validan_cada_un
     assert_eq!(e.rechazada("ana", reparto(-1, 1)), rechazos::HEROE_PUNTOS_NEGATIVOS);
     assert_eq!(e.rechazada("ana", reparto(2, 0)), rechazos::HEROE_PUNTOS_INSUFICIENTES);
     assert_eq!(e.rechazada("beto", reparto(1, 0)), rechazos::NO_AUTORIZADO);
+}
+
+#[test]
+fn la_formacion_de_una_escuadra_empieza_en_reposo_y_las_cerradas_piden_disciplina_de_formacion() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let h = e.heroe("ana", 0);
+    let beto = e.heroe("beto", 0);
+    let s = e.ok("ana", Comando::PedirPrestamo { heroe: h, tropas: vec![Tropa::MiliciaLanceros] }).creadas[0];
+    let formacion = |e: &Escenario| e.n.escuadra(s).unwrap().1.formacion;
+    let elegir = |heroe, formacion: &str| Comando::ElegirFormacion { heroe, escuadra: s, formacion: formacion.into() };
+    let reglas = e.n.estado().reglas.economia.militar.formaciones.clone();
+    assert_eq!(formacion(&e), militar::formaciones::REPOSO, "nace en la de reposo");
+    assert_eq!(nucleo::proyeccion::propios::escuadron(&e.n, e.n.escuadra(s).unwrap().1).formacion, "reposo");
+
+    // Sin Facción, las que no piden tecnología; repetir la misma no cambia nada.
+    e.ok("ana", elegir(h, "linea"));
+    assert_eq!(formacion(&e), reglas.por_id("linea").unwrap());
+    assert_eq!(e.ord("ana", elegir(h, "linea")).resultado, Resultado::SinCambios);
+    assert_eq!(e.rechazada("ana", elegir(h, "falange")), rechazos::FORMACION_DESCONOCIDA);
+    assert_eq!(e.rechazada("ana", elegir(h, "testudo")), rechazos::FORMACION_SIN_TECNOLOGIA);
+    assert_eq!(e.rechazada("beto", elegir(h, "columna")), rechazos::NO_AUTORIZADO, "solo la cuenta del héroe");
+    assert_eq!(e.rechazada("beto", elegir(beto, "columna")), rechazos::ESCUADRA_AJENA);
+    assert_eq!(formacion(&e), reglas.por_id("linea").unwrap(), "los rechazos no dejan rastro");
+
+    // Con una Facción que no tiene la tecnología, igual; cuando la adopta, las cerradas.
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
+    assert_eq!(e.rechazada("ana", elegir(h, "testudo")), rechazos::FORMACION_SIN_TECNOLOGIA);
+    e.ok("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["disciplina_formacion".into()] });
+    e.ok("ana", elegir(h, "testudo"));
+    assert_eq!(nucleo::proyeccion::propios::escuadron(&e.n, e.n.escuadra(s).unwrap().1).formacion, "testudo");
+    // Perder la tecnología no la cambia en la escuadra: el ticket la cambia por la de reposo si ya no se permite.
+    e.ok("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec![] });
+    assert_eq!(formacion(&e), reglas.por_id("testudo").unwrap());
+    // La foto la guarda (BAN62).
+    let vuelta = nucleo::Estado::deserializar(&e.n.estado().serializar(), &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
+    let guardada = vuelta.militar.heroes[&h].heroe.escuadras.iter().find(|x| x.id == s).unwrap().formacion;
+    assert_eq!(guardada, reglas.por_id("testudo").unwrap());
 }
 
 // ───────────────────────────── 6. Herido y presencia ─────────────────────────────
@@ -1248,7 +1286,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
     let reglas = Reglas::default();
     let base = estado_con_heroes();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN61");
+    assert_eq!(&bytes[..5], b"BAN62");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.militar, base.militar, "incluido el índice de residentes, que se reconstruye");
@@ -1311,6 +1349,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
         ("escuadra.reserva", Box::new(|m| h5(m).escuadras[0].reserva_batalla = None)),
         ("escuadra.prestada", Box::new(|m| h5(m).escuadras[4].prestada = Some(2))),
         ("escuadra.plaza_origen", Box::new(|m| h5(m).escuadras[1].plaza_origen = Some(9))),
+        ("escuadra.formacion", Box::new(|m| h5(m).escuadras[1].formacion = 2)),
         ("escuadra.orden", Box::new(|m| h5(m).escuadras.swap(0, 1))),
         ("otro.ubicacion", Box::new(|m| m.heroes.get_mut(&20).unwrap().heroe.presencia.ubicacion = Ubicacion::Desconectado(Punto::new(5, 7)))),
         ("heroe.nuevo", Box::new(|m| {

@@ -1168,6 +1168,7 @@ impl Nucleo {
             | Comando::BorrarLoadout { .. }
             | Comando::RepartirPuntos { .. }
             | Comando::OrdenarEscuadras { .. }
+            | Comando::ElegirFormacion { .. }
             | Comando::AsignarGuarnicion { .. }
             | Comando::RetirarGuarnicion { .. }
             | Comando::PasarAViveres { .. }

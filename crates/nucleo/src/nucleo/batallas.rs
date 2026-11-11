@@ -209,9 +209,10 @@ fn donde_esta(ubicacion: Ubicacion, contexto: &Contexto) -> Donde {
     }
 }
 
-/// Una escuadra como entra en el ticket: con su nivel, su experiencia y su moral de `t`, el instante de abrir.
+/// Una escuadra como entra en el ticket: con su nivel, su experiencia y su moral de `t`, el instante de abrir, y su formación (las familias las
+/// pone `Nucleo::con_formaciones`).
 fn escuadra_en_batalla(s: &Escuadra, t: Instante) -> EscuadraEnBatalla {
-    EscuadraEnBatalla { id: s.id, tropa: s.tropa, dueno: Some(s.heroe), efectivos: s.cantidad, nivel: s.nivel, experiencia: s.experiencia, moral: s.moral_en(t) }
+    EscuadraEnBatalla { id: s.id, tropa: s.tropa, dueno: Some(s.heroe), efectivos: s.cantidad, nivel: s.nivel, experiencia: s.experiencia, moral: s.moral_en(t), formacion: s.formacion, formaciones: 1 }
 }
 
 impl Nucleo {
@@ -366,7 +367,21 @@ impl Nucleo {
 
     fn participante(&self, h: &HeroeNucleo, escuadras: Vec<EscuadraEnBatalla>) -> Participante {
         // Los héroes todavía no tienen inventario: caben tantos objetos como casillas tiene la mochila (el botín de Unity no tiene dónde caer, CQ-004).
+        let escuadras = escuadras.into_iter().map(|e| self.con_formaciones(e)).collect();
         Participante { heroe: h.heroe.id, faccion: h.faccion, controlador: h.heroe.controlador, casillas_libres: self.estado.reglas.economia.combate.batalla.casillas_inventario, escuadras }
+    }
+
+    /// Las familias de formación que permite la tecnología de una Facción; sin Facción, las que no piden tecnología (Heroe_Y_Tropa §10.4).
+    pub(crate) fn formaciones_de_faccion(&self, faccion: Option<u32>) -> u32 {
+        self.estado.reglas.economia.militar.formaciones.mascara(|tec| faccion.is_some_and(|f| self.estado.tiene_tecnologia(f, tec)))
+    }
+
+    /// Una escuadra del ticket con las familias que le permite la Facción de su dueño en este instante (sin dueño, las que no piden tecnología) y su
+    /// elegida, o la de reposo si ya no está permitida.
+    fn con_formaciones(&self, e: EscuadraEnBatalla) -> EscuadraEnBatalla {
+        let faccion = e.dueno.and_then(|h| self.estado.militar.heroes.get(&h)).and_then(|h| h.faccion);
+        let formaciones = self.formaciones_de_faccion(faccion);
+        e.con_formaciones(formaciones)
     }
 
     fn bando_de_columna(&self, columna: u64, t: Instante) -> BandoDeTicket {
@@ -562,6 +577,12 @@ impl Nucleo {
         // Lo que no es de nadie (carreteros, bandidos) no está en ningún héroe, pero el resultado tiene que cubrirlo: lleva un id de la partida.
         for e in ap.atacante.sin_heroe.iter_mut().chain(ap.defensor.sin_heroe.iter_mut()).filter(|e| e.id == SIN_ID) {
             e.id = self.nuevo_id();
+        }
+        // Las escuadras sin héroe (guarnición, escolta, bandidos, carreteros) con las familias de formación de su dueño; las de los participantes ya
+        // las llevan (`participante`).
+        for bando in [&mut ap.atacante, &mut ap.defensor] {
+            let sin_heroe = std::mem::take(&mut bando.sin_heroe);
+            bando.sin_heroe = sin_heroe.into_iter().map(|e| self.con_formaciones(e)).collect();
         }
         let ticket = Ticket { plaza: ap.plaza, ..Ticket::nuevo(&cr, ap.contexto, ap.atacante, ap.defensor) };
         let b = Batalla::abrir(&cr, id, ap.iniciada_por, ap.punto, ticket, ap.bloqueo, t);

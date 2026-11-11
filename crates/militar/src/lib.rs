@@ -15,6 +15,7 @@ pub mod columna;
 pub mod convocatoria;
 pub mod datos;
 pub mod escuadra;
+pub mod formaciones;
 pub mod guarnicion;
 pub mod heroe;
 pub mod inspeccion;

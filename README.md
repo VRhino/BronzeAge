@@ -12,6 +12,7 @@ Plan y estado: [`Consideraciones/Reconstruccion_Definicion.md`](Consideraciones/
 | `Docs/Coordinacion/` | Contratos con Unity y los demás clientes; propuestas de Codex |
 | `proto/bronzeage/v1/` | El contrato 05 en Protobuf (`buf.yaml`: `buf lint`, `buf build`, `buf breaking`) |
 | `crates/contrato/` | Tipos Rust del contrato (`cargo test -p contrato`) |
+| `crates/lanzador/` | El lanzador de servidores de batalla (`bronzeage-lanzador`): reclama las batallas y arranca un proceso de Conquest por cada una (Batalla_Unity_Ciclo §8.8) |
 | `contratos/` | Ficheros dorados y pruebas entre Rust, C# y TypeScript |
 | `generador/` | Generador de mundo fuera de línea (TypeScript); produce el artefacto de mundo |
 | `Consideraciones/` | Decisiones y planes vigentes |

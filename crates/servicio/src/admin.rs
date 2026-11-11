@@ -5,7 +5,7 @@
 //!
 //! | Ruta | Qué |
 //! |---|---|
-//! | `GET /v1/admin/partida` | la partida que sirve el proceso: carpeta, id (`partida.id`, el `gameId` del contrato de batalla), hash del mundo, semilla, versión e instante del núcleo, cuentas y bots, código de registro |
+//! | `GET /v1/admin/partida` | la partida que sirve el proceso: carpeta, id (`partida.id`, el `gameId` del contrato de batalla), hash del mundo, semilla, versión e instante del núcleo, cuentas, bots y servidores de batalla, código de registro |
 //! | `GET /v1/admin/registro/codigo` | `{ codigo }`: el código de invitación vigente (`null`: registro abierto) |
 //! | `PUT /v1/admin/registro/codigo` | `{ codigo }` (texto, o `null` para abrir el registro): lo cambia en caliente, hasta el próximo reinicio (luego vuelve `CODIGO_REGISTRO`) |
 //! | `POST /v1/admin/respaldos` | respaldo ahora: foto y copia de `mundo/` y `acceso/` en `<datos>/respaldos/<id>/`; `201` con el respaldo |
@@ -14,7 +14,7 @@
 //! | `POST /v1/admin/carga` | `{ activo?, detalle? }` (booleanos): la enciende o la apaga en caliente, sin reiniciar; contesta como el `GET` |
 //! | `GET /v1/admin/misiones/catalogo` | el catálogo **vigente** de las misiones recurrentes (Misiones_Recurrentes §6), en el JSON que acepta la orden de administración `fijar_catalogo_misiones`: `{ asentamiento: [...], faccion: [...] }` |
 //! | `GET /v1/admin/administradores` | `{ administradores: [nick, ...] }`, ordenados |
-//! | `PUT /v1/admin/administradores` | `{ nick, admin }`: da (`true`) o quita (`false`) la marca de administrador a la cuenta; `200 { nick, admin }`. `404 no_encontrado` si no existe, `400 es_bot` si es de bot, `409 ultimo_administrador` si se quita al único |
+//! | `PUT /v1/admin/administradores` | `{ nick, admin }`: da (`true`) o quita (`false`) la marca de administrador a la cuenta; `200 { nick, admin }`. `404 no_encontrado` si no existe, `400 es_bot` si es de bot, `400 es_servidor` si es de servidor de batalla, `409 ultimo_administrador` si se quita al único |
 //!
 //! Un respaldo es `{ id, creado_ms, version, instante, mundo_hash, semilla, bytes }` (también en su `respaldo.json`). Restaurarlo es copiar sus `mundo/` y `acceso/` sobre los de la carpeta
 //! de datos con el servidor parado: lo hace el panel de arranque (`scripts/panel.mjs`), que es quien para y arranca el proceso.
@@ -118,7 +118,7 @@ impl Admin {
                     200,
                     json!({
                         "carpeta": carpeta.display().to_string(), "id": self.id_partida, "mundo_hash": self.mundo_hash, "semilla": self.semilla,
-                        "version": e.version, "instante": e.instante, "cuentas": self.acceso.cuentas(), "bots": self.acceso.bots(),
+                        "version": e.version, "instante": e.instante, "cuentas": self.acceso.cuentas(), "bots": self.acceso.bots(), "servidores": self.acceso.servidores(),
                         "codigo_registro": self.acceso.codigo_registro(), "respaldos": self.respaldos().len(),
                     })
                     .to_string(),
@@ -142,6 +142,7 @@ impl Admin {
                     Ok(c) => RespuestaHttp::json(200, json!({ "nick": c.nick, "admin": c.admin }).to_string()),
                     Err(ErrorAdmin::NoExiste) => error(404, "no_encontrado", "no hay ninguna cuenta con ese nick"),
                     Err(ErrorAdmin::EsBot) => error(400, "es_bot", "una cuenta de bot no puede ser administradora"),
+                    Err(ErrorAdmin::EsServidor) => error(400, "es_servidor", "una cuenta de servidor de batalla no puede ser administradora"),
                     Err(ErrorAdmin::UltimoAdministrador) => error(409, "ultimo_administrador", "no se puede quitar al último administrador"),
                     Err(ErrorAdmin::Disco) => error(500, "interno", "no se pudo guardar la cuenta"),
                 }

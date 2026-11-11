@@ -30,7 +30,13 @@ const VITE = (p) => ['--', '--port', p, '--strictPort'];
 // `secretos`: variables de entorno secretas que el servicio necesita; `secreto()` las resuelve al arrancarlo (ver más abajo).
 const SERVICIOS = {
   // `parar`: el servidor se apaga con su foto al leer esa línea por la entrada estándar (Windows no deja mandarle Ctrl+C).
-  'bronzeage-servidor': { tipo: 'backend', parar: 'parar\n', aviso: avisoMundo, secretos: ['CODIGO_REGISTRO_BOTS'], con: (p) => ({ env: { BRONZEAGE_DIRECCION: `127.0.0.1:${p}`, ...envPartida() } }) },
+  'bronzeage-servidor': { tipo: 'backend', parar: 'parar\n', aviso: avisoMundo, secretos: ['CODIGO_REGISTRO_BOTS', 'CODIGO_REGISTRO_SERVIDORES'], con: (p) => ({ env: { BRONZEAGE_DIRECCION: `127.0.0.1:${p}`, ...envPartida() } }) },
+  // El lanzador de servidores de batalla (2026-11-11): sin puerto propio (los de juego, 7777-7786, los abre cada batalla). Con la partida en Unity, entra con su cuenta
+  // `lanzador-local` (la da de alta solo con el código de servidores, que es secreto del panel como su clave). Qué proceso arranca por batalla lo dice launch.json:
+  // `LANZADOR_PROCESO=mentira` es el servidor de batalla de mentira que lleva dentro (dura lo que diga `LANZADOR_ARGUMENTOS`, nadie muere y gana el defensor); para
+  // Conquest, la ruta de su ejecutable y sus argumentos.
+  'bronzeage-lanzador': { tipo: 'backend', parar: 'parar\n', aviso: avisoLanzador, secretos: ['CODIGO_REGISTRO_SERVIDORES', 'LANZADOR_CLAVE'], con: (p, P) => ({ env: {
+    LANZADOR_MOTOR: `127.0.0.1:${P['bronzeage-servidor']}`, LANZADOR_NICK: 'lanzador-local' } }) },
   // Una tarea que termina sola: sin puerto. La semilla la elige POST /api/mundo.
   'generar-mundo': { tipo: 'tarea', con: () => ({ args: [String(mundo.semilla)] }) },
   // `BOTS_REGISTROS` (2026-11-03, aviso de los bots): la ruta absoluta de `partidas/`. Los bots guardan sus registros dentro de cada partida
@@ -47,6 +53,12 @@ const SERVICIOS = {
   'bronzeage-cliente-jugador': { tipo: 'cliente', con: (p, P) => ({ args: VITE(p), env: { BACKEND_URL: `http://localhost:${P['bronzeage-servidor']}` } }) },
 };
 
+// El lanzador solo sirve con una partida que juega las batallas en Unity (se elige al crearla).
+function avisoLanzador() {
+  const n = partidaActual();
+  if (!n) return 'no hay partida activa';
+  return infoPartida(n).batallas_en_unity ? null : `la partida ${n} resuelve las batallas con números: crea una con «batallas en Unity» para jugarlas con el lanzador`;
+}
 // El servidor necesita el artefacto de mundo (`BRONZEAGE_MUNDO`: un .bin o una carpeta con un mundo-*.bin; por defecto generador/salida/mundo).
 function avisoMundo(c) {
   if (!partidaActual()) return 'no hay partida activa: crea una o activa una de la lista (POST /api/partidas o /api/partidas/<nombre>/activar)';
@@ -88,15 +100,15 @@ function respaldosDe(n) {
 }
 function infoPartida(n) {
   const meta = leerJson(path.join(carpetaPartida(n), 'partida.json')) ?? {};
-  return { nombre: n, carpeta: carpetaPartida(n), semilla: meta.semilla ?? 42, mundo: meta.mundo ?? null, creada_ms: meta.creada_ms ?? null,
+  return { nombre: n, carpeta: carpetaPartida(n), semilla: meta.semilla ?? 42, mundo: meta.mundo ?? null, creada_ms: meta.creada_ms ?? null, batallas_en_unity: meta.batallas_en_unity === true,
     respaldos: respaldosDe(n).length, actual: n === partidaActual(), en_marcha: n === partidaActual() && enMarcha() };
 }
-// El entorno del servidor para la partida actual: su carpeta, su semilla, y su artefacto (si lo fijó al crearla).
+// El entorno del servidor para la partida actual: su carpeta, su semilla, si juega las batallas en Unity (una regla de la partida: se fija al crearla) y su artefacto (si lo fijó al crearla).
 function envPartida() {
   const n = partidaActual();
   if (!n) return {};
   const i = infoPartida(n);
-  return { BRONZEAGE_DATOS: i.carpeta, BRONZEAGE_SEMILLA: String(i.semilla), ...(i.mundo ? { BRONZEAGE_MUNDO: path.join(MUNDOS, i.mundo) } : {}) };
+  return { BRONZEAGE_DATOS: i.carpeta, BRONZEAGE_SEMILLA: String(i.semilla), BRONZEAGE_BATALLAS_EN_UNITY: i.batallas_en_unity ? '1' : '0', ...(i.mundo ? { BRONZEAGE_MUNDO: path.join(MUNDOS, i.mundo) } : {}) };
 }
 
 // La regeneración del mundo (la tarea «generar-mundo»): con qué semilla y cómo acabó la última.
@@ -226,12 +238,13 @@ th{color:var(--sub);font-weight:500;font-size:12px}td .fila{gap:6px}td button{pa
 <nav class="pestanas"><button data-vista="partidas">Mundo y partidas</button><button data-vista="servicios">Servicios</button></nav>
 <section class="vista" id="v-partidas">
 <details open data-seccion="partidas"><summary>Partidas<span class="cuenta" id="p-cuenta"></span></summary>
-<div class="card"><table><thead><tr><th>Partida</th><th>Semilla</th><th>Mundo</th><th>Creada</th><th>Estado</th><th></th></tr></thead><tbody id="p-lista"></tbody></table>
+<div class="card"><table><thead><tr><th>Partida</th><th>Semilla</th><th>Mundo</th><th>Batallas</th><th>Creada</th><th>Estado</th><th></th></tr></thead><tbody id="p-lista"></tbody></table>
 <div class="msg" id="p-msg"></div></div></details>
 <details open data-seccion="nueva"><summary>Nueva partida</summary>
 <div class="card"><div class="form"><label>Nombre<input id="n-nombre" placeholder="misiones" maxlength="40"></label>
 <label>Semilla<input id="n-semilla" type="number" min="0" value="42"></label>
 <label>Mundo<select id="n-mundo"></select></label>
+<label style="flex-direction:row;align-items:center" title="Las juega el lanzador (bronzeage-lanzador) en vez de resolverse con números. Es una regla de la partida: no se cambia después"><input id="n-unity" type="checkbox" style="width:auto"> batallas en Unity</label>
 <label style="flex-direction:row;align-items:center"><input id="n-activar" type="checkbox" checked style="width:auto"> activarla y arrancar el servidor</label>
 <button id="n-crear">Crear</button></div><div class="msg" id="n-msg"></div></div></details>
 <details open data-seccion="mundo"><summary>Mundo</summary>
@@ -277,7 +290,7 @@ async function pintarPartidas(){
   document.getElementById('p-cuenta').textContent='· '+d.partidas.length+(d.actual?' · activa: '+d.actual:' · ninguna activa');
   for(const p of d.partidas){
     const tr=document.createElement('tr'),n=encodeURIComponent(p.nombre);
-    celda(tr,p.nombre,p.actual?'activa':'');celda(tr,String(p.semilla));celda(tr,p.mundo?p.mundo.slice(6,18)+'…':'el último');celda(tr,fecha(p.creada_ms));
+    celda(tr,p.nombre,p.actual?'activa':'');celda(tr,String(p.semilla));celda(tr,p.mundo?p.mundo.slice(6,18)+'…':'el último');celda(tr,p.batallas_en_unity?'en Unity':'con números');celda(tr,fecha(p.creada_ms));
     celda(tr,p.actual?(p.en_marcha?'activa · servidor en marcha':'activa · servidor parado'):'guardada');
     const acc=celda(tr,'');acc.innerHTML='<div class="fila"></div>';
     if(!p.actual)boton(acc,'Activar',()=>api('POST','/api/partidas/'+n+'/activar',null,'p-msg'));
@@ -317,7 +330,7 @@ async function pintarPartidas(){
   document.getElementById('m-estado').textContent=m.generando?'generando con la semilla '+m.semilla+'…':m.ultima?('último: semilla '+m.ultima.semilla+(m.ultima.codigo===0?', bien':', falló (código '+m.ultima.codigo+'; mira su log en Servicios)')):'';
 }
 document.getElementById('n-crear').onclick=()=>api('POST','/api/partidas',{nombre:document.getElementById('n-nombre').value,semilla:Number(document.getElementById('n-semilla').value),
-  mundo:document.getElementById('n-mundo').value||undefined,activar:document.getElementById('n-activar').checked},'n-msg');
+  mundo:document.getElementById('n-mundo').value||undefined,batallas_en_unity:document.getElementById('n-unity').checked,activar:document.getElementById('n-activar').checked},'n-msg');
 document.getElementById('m-generar').onclick=()=>api('POST','/api/mundo',{semilla:Number(document.getElementById('m-semilla').value)},'m-msg');
 pintarPartidas();setInterval(pintarPartidas,4000);
 async function pintar(){
@@ -334,13 +347,13 @@ async function pintar(){
       c.querySelector('.token button').onclick=e=>navigator.clipboard.writeText(c.querySelector('.token code').textContent).then(()=>{e.target.textContent='Copiado';setTimeout(()=>e.target.textContent='Copiar',1500)});
       c.querySelector('.abrir').onclick=()=>window.open('http://localhost:'+c.querySelector('input').value,'_blank');
       c.querySelector('input').onchange=e=>post('/api/puerto/'+n+'/'+e.target.value);}
-    c.querySelector('.dot').style.background=d.escucha?'var(--on)':d.lanzado?'var(--wait)':'var(--off)';
+    c.querySelector('.dot').style.background=d.escucha||(d.lanzado&&!d.puerto&&d.tipo!=='tarea')?'var(--on)':d.lanzado?'var(--wait)':'var(--off)';
     c.querySelector('.nom').textContent=d.nombre;
-    c.querySelector('.est').textContent=d.falta?'sin carpeta':d.tipo==='tarea'?(d.lanzado?'en marcha…':'parada'):d.aviso&&!d.lanzado?'no puede arrancar':d.escucha?(d.lanzado?'encendido':'encendido (externo)'):d.lanzado?'arrancando…':'apagado';
+    c.querySelector('.est').textContent=d.falta?'sin carpeta':d.tipo==='tarea'?(d.lanzado?'en marcha…':'parada'):d.aviso&&!d.lanzado?'no puede arrancar':d.escucha?(d.lanzado?'encendido':'encendido (externo)'):d.lanzado?(d.puerto?'arrancando…':'en marcha'):'apagado';
     c.querySelector('.cmd').textContent=d.comando;
     c.querySelector('.aviso').textContent=d.aviso??'';
     c.querySelector('.token').hidden=!d.token_control;c.querySelector('.token code').textContent=d.token_control??'';
-    c.querySelector('label').style.display=d.tipo==='tarea'?'none':'';
+    c.querySelector('label').style.display=d.tipo==='tarea'||!d.puerto?'none':'';
     const inp=c.querySelector('input');
     if(document.activeElement!==inp)inp.value=d.puerto;
     inp.disabled=d.lanzado; // el puerto se fija al arrancar
@@ -387,7 +400,7 @@ async function apiPartidas(metodo, partes, cuerpo) {
     const semilla = Number(cuerpo?.semilla ?? 42);
     if (!Number.isSafeInteger(semilla) || semilla < 0) return [400, { error: 'datos_invalidos', mensaje: 'la semilla es un entero ≥ 0' }];
     mkdirSync(path.join(PARTIDAS, n), { recursive: true });
-    writeFileSync(path.join(PARTIDAS, n, 'partida.json'), JSON.stringify({ nombre: n, semilla, mundo: elegido.archivo, creada_ms: Date.now() }, null, 2));
+    writeFileSync(path.join(PARTIDAS, n, 'partida.json'), JSON.stringify({ nombre: n, semilla, mundo: elegido.archivo, batallas_en_unity: cuerpo?.batallas_en_unity === true, creada_ms: Date.now() }, null, 2));
     if (cuerpo?.activar !== false) { await pararServidor(); ponerActual(n); arrancar(servidor()); }
     return [201, { ...infoPartida(n), ...arranque() }];
   }

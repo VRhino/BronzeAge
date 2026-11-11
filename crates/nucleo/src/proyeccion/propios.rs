@@ -371,6 +371,7 @@ pub fn escuadron(n: &Nucleo, e: &Escuadra) -> pb::Escuadron {
         nivel: u32::from(e.nivel),
         experiencia: e.experiencia,
         moral: Some(ritmo(e.moral)),
+        formacion: n.estado().reglas.economia.militar.formaciones.id(e.formacion).to_owned(),
         contenedor: Some(pb::ContenedorEscuadron { donde: Some(contenedor) }),
         en_guarnicion: e.en_guarnicion,
         reserva_batalla: e.reserva_batalla.map(|b| pb::ReservaBatalla { battle_id: n.uuid_de_batalla(b) }),

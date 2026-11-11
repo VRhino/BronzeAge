@@ -249,6 +249,8 @@ pub enum Comando {
     RepartirPuntos { heroe: u64, fuerza: i64, destreza: i64, armadura: i64, vitalidad: i64 },
     /// Pone las escuadras pedidas primero, en ese orden: el orden en que entran en combate.
     OrdenarEscuadras { heroe: u64, escuadras: Vec<u64> },
+    /// Elige la familia de formación de una escuadra propia, por su id de `FORMACIONES` (Heroe_Y_Tropa §10.4, 2026-11-11).
+    ElegirFormacion { heroe: u64, escuadra: u64, formacion: String },
     /// Entrega una escuadra del campamento a la guarnición de la plaza donde reside el héroe, dentro de su cupo.
     AsignarGuarnicion { heroe: u64, escuadra: u64 },
     RetirarGuarnicion { heroe: u64, escuadra: u64 },
@@ -744,6 +746,7 @@ impl Comando {
             | Comando::BorrarLoadout { .. }
             | Comando::RepartirPuntos { .. }
             | Comando::OrdenarEscuadras { .. }
+            | Comando::ElegirFormacion { .. }
             | Comando::AsignarGuarnicion { .. }
             | Comando::RetirarGuarnicion { .. }
             | Comando::PasarAViveres { .. }
@@ -1158,6 +1161,7 @@ impl Comando {
             | Comando::BorrarLoadout { heroe, .. }
             | Comando::RepartirPuntos { heroe, .. }
             | Comando::OrdenarEscuadras { heroe, .. }
+            | Comando::ElegirFormacion { heroe, .. }
             | Comando::AsignarGuarnicion { heroe, .. }
             | Comando::RetirarGuarnicion { heroe, .. }
             | Comando::PasarAViveres { heroe, .. }
@@ -1820,6 +1824,12 @@ impl Peticion {
                 w.u8(209);
                 w.u64(*caravana);
                 w.texto(nombre);
+            }
+            Comando::ElegirFormacion { heroe, escuadra, formacion } => {
+                w.u8(221);
+                w.u64(*heroe);
+                w.u64(*escuadra);
+                w.texto(formacion);
             }
             Comando::FijarTecnologias { faccion, tecnologias } => {
                 w.u8(65);
@@ -2857,6 +2867,7 @@ impl Peticion {
             207 => Comando::CerrarSesion { heroe: r.u64()? },
             208 => Comando::ComprarEnCampamento { heroe: r.u64()?, campamento: r.u32()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()?, pagar_con: Some(pagar_con_de_u8(r.u8()?)?) },
             209 => Comando::RenombrarCaravana { caravana: r.u64()?, nombre: r.texto()? },
+            221 => Comando::ElegirFormacion { heroe: r.u64()?, escuadra: r.u64()?, formacion: r.texto()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -3225,6 +3236,10 @@ pub mod rechazos {
     /// De visita en una plaza de tu Facción (2026-11-04): la escuadra que dejas en su guarnición o cedes de escolta tiene que ir en la columna con la que entraste.
     pub const ESCUADRA_FUERA_DE_TU_COLUMNA: &str = "escuadra.fuera_de_tu_columna";
     pub const ESCUADRA_EN_BATALLA: &str = "escuadra.en_batalla";
+    /// `elegirFormacion`: no hay ninguna familia de formación con ese id en `FORMACIONES` (Heroe_Y_Tropa §10.4).
+    pub const FORMACION_DESCONOCIDA: &str = "formacion.desconocida";
+    /// `elegirFormacion`: la tecnología de la Facción del héroe no permite esa familia de formación (las cerradas piden Disciplina de formación).
+    pub const FORMACION_SIN_TECNOLOGIA: &str = "formacion.sin_tecnologia";
     pub const LIDERAZGO_SUPERADO: &str = "liderazgo.superado";
     pub const GUARNICION_SIN_RESIDENCIA: &str = "guarnicion.sin_residencia";
     pub const GUARNICION_NO_EN_CAMPAMENTO: &str = "guarnicion.no_en_campamento";
@@ -3966,6 +3981,7 @@ mod pruebas {
             Comando::Conectarse { heroe: 2 },
             Comando::CerrarSesion { heroe: 2 },
             Comando::RenombrarCaravana { caravana: 4, nombre: "La de Tirinto".into() },
+            Comando::ElegirFormacion { heroe: 2, escuadra: 5, formacion: "testudo".into() },
             Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["arco_compuesto".into(), "leva_comunal".into()] },
             Comando::FijarFaccionDeHeroe { heroe: 2, faccion: Some(3) },
             Comando::FijarFaccionDeHeroe { heroe: 2, faccion: None },

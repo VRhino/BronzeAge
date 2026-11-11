@@ -19,7 +19,7 @@
 //! Una ubicación: `u8 · payload`: 0 plaza (u32), 1 columna (u64), 2 campamento (u32), 3 desconectado (punto).
 //! Una escuadra: `id u64 · héroe u64 · tropa u8 (índice del catálogo) · origen u8 (0 pesants, 1 artesanos, 2 nobleza) · plaza_origen opt_u64 ·
 //! cantidad i64 · nivel u8 · experiencia i64 · moral{valor i64, t0 i64, por_minuto i64, máximo opt_i64, mínimo opt_i64} · contenedor{u8 · u64:
-//! 0 campamento, 1 columna, 2 escolta de una caravana, 3 fuera, 4 avanzada, 5 pueblo, 6 guarnición de una plaza de su Facción donde no reside (2026-11-04)} · en_guarnicion bool · reserva_batalla opt_u64 · prestada opt_u64`.
+//! 0 campamento, 1 columna, 2 escolta de una caravana, 3 fuera, 4 avanzada, 5 pueblo, 6 guarnición de una plaza de su Facción donde no reside (2026-11-04)} · en_guarnicion bool · reserva_batalla opt_u64 · prestada opt_u64 · formación u8` (BAN62: la familia de formación elegida, posición en `FORMACIONES`).
 //! Un informe de inspección: `objetivo{u8: 0 columna, 1 caravana, 2 plaza · u64} · visto_en i64 · expira_en i64 · donde punto · contenido{u8 · payload}`: 0
 //! columna `facción opt_u64 · héroes{n u64 · n × u64} · escuadras{n u64 · n × avistada}`, 1 caravana `escoltada bool · recursos{n u64 · n × u8}`, 2 plaza
 //! `facción u32 · héroes · guarnición{n u64 · n × avistada} · recintos{n u64 · n × (nivel u8, celdas{n u64 · n × (col i32, fila i32, clase u8)}, avance u32)}` (BAN21), con una avistada `tropa u8 · cantidad i64 · héroe u64`.
@@ -176,7 +176,7 @@ fn contenedor_leer(r: &mut Lector) -> Result<Contenedor, ErrorFormato> {
 }
 
 pub(crate) fn escuadra_escribir(w: &mut Escritor, e: &Escuadra) {
-    let Escuadra { id, heroe, tropa, origen, plaza_origen, cantidad, nivel, experiencia, moral, contenedor, en_guarnicion, reserva_batalla, prestada } = e;
+    let Escuadra { id, heroe, tropa, origen, plaza_origen, cantidad, nivel, experiencia, moral, contenedor, en_guarnicion, reserva_batalla, prestada, formacion } = e;
     w.u64(*id);
     w.u64(*heroe);
     w.u8(tropa_a_u8(*tropa));
@@ -190,6 +190,7 @@ pub(crate) fn escuadra_escribir(w: &mut Escritor, e: &Escuadra) {
     w.bool(*en_guarnicion);
     w.opt_u64(*reserva_batalla);
     w.opt_u64(prestada.map(u64::from));
+    w.u8(*formacion);
 }
 
 fn opt_u32(v: Option<u64>) -> Result<Option<u32>, ErrorFormato> {
@@ -199,7 +200,7 @@ fn opt_u32(v: Option<u64>) -> Result<Option<u32>, ErrorFormato> {
 pub(crate) fn escuadra_leer(r: &mut Lector) -> Result<Escuadra, ErrorFormato> {
     let (id, heroe, tropa, origen, plaza_origen, cantidad, nivel, experiencia) = (r.u64()?, r.u64()?, tropa_de_u8(r.u8()?)?, origen_de_u8(r.u8()?)?, opt_u32(r.opt_u64()?)?, r.i64()?, r.u8()?, r.i64()?);
     let moral = ritmo_leer(r)?;
-    Ok(Escuadra { id, heroe, tropa, origen, plaza_origen, cantidad, nivel, experiencia, moral, contenedor: contenedor_leer(r)?, en_guarnicion: r.bool()?, reserva_batalla: r.opt_u64()?, prestada: opt_u32(r.opt_u64()?)? })
+    Ok(Escuadra { id, heroe, tropa, origen, plaza_origen, cantidad, nivel, experiencia, moral, contenedor: contenedor_leer(r)?, en_guarnicion: r.bool()?, reserva_batalla: r.opt_u64()?, prestada: opt_u32(r.opt_u64()?)?, formacion: r.u8()? })
 }
 
 fn lista_u64_escribir(w: &mut Escritor, v: &[u64]) {

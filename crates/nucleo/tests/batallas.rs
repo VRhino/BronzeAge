@@ -243,6 +243,56 @@ fn atacar_con_un_humano_y_servidores_de_batalla_abre_una_batalla_en_lugar_de_res
 }
 
 #[test]
+fn el_ticket_congela_la_formacion_elegida_y_las_que_permite_la_tecnologia_de_la_faccion_al_abrir() {
+    let mut x = choque();
+    let ana = x.ana;
+    let f = x.n.estado().reglas.economia.militar.formaciones.clone();
+    let elegir = |n: &mut Nucleo, id: &str, escuadra: u64, formacion: &str| {
+        let r = n.aplicar_en(n.ahora(), Peticion::nueva("ana", id, Comando::ElegirFormacion { heroe: ana.1, escuadra, formacion: formacion.into() }));
+        assert!(r.aceptada(), "{r:?}");
+    };
+    let tecnologias = |n: &mut Nucleo, id: &str, tecnologias: Vec<String>| {
+        let r = n.aplicar_en(n.ahora(), admin(id, Comando::FijarTecnologias { faccion: 1, tecnologias }));
+        assert!(r.aceptada(), "{r:?}");
+    };
+    // F1 adopta Disciplina de formación: los espadachines, en testudo; los arqueros, en columna. La milicia de beto (F2) sigue en la de reposo.
+    tecnologias(&mut x.n, "t1", vec!["disciplina_formacion".into()]);
+    elegir(&mut x.n, "f1", x.fuerte[0], "testudo");
+    elegir(&mut x.n, "f2", x.fuerte[1], "columna");
+    assert!(atacar(&mut x.n, 10 * MIN, "ana", "a1", ana.1, ObjetivoAtaque::Ejercito(x.beto.0), false).aceptada());
+    let id = *x.n.batallas().map(|b| &b.id).next().unwrap();
+    let de = |n: &Nucleo, atacante: bool| {
+        let t = &n.batalla(id).unwrap().ticket;
+        let bando = if atacante { &t.atacante } else { &t.defensor };
+        bando.participantes[0].escuadras.iter().map(|e| (e.formacion, e.formaciones)).collect::<Vec<_>>()
+    };
+    let (testudo, columna) = (f.por_id("testudo").unwrap(), f.por_id("columna").unwrap());
+    assert_eq!(de(&x.n, true), vec![(testudo, 0xFF), (columna, 0xFF)], "con la tecnología, las ocho");
+    assert_eq!(de(&x.n, false), vec![(0, 0b1111)], "sin ella, la de reposo y las tres de siempre");
+    // En el contrato, por sus ids.
+    let t = nucleo::proyeccion::batalla::ticket(&x.n, x.n.batalla(id).unwrap());
+    let a = &t.atacante.as_ref().unwrap().participantes[0].escuadras[0];
+    assert_eq!((a.formacion.as_str(), a.formaciones_permitidas.len(), a.formaciones_permitidas[0].as_str()), ("testudo", 8, "reposo"));
+    let d = &t.defensor.as_ref().unwrap().participantes[0].escuadras[0];
+    assert_eq!((d.formacion.as_str(), d.formaciones_permitidas.clone()), ("reposo", ["reposo", "linea", "columna", "dispersa"].map(String::from).to_vec()));
+    // Congelado: perder la tecnología con la batalla abierta no toca el ticket; y un héroe que combate no elige otra (el candado de la batalla).
+    tecnologias(&mut x.n, "t2", vec![]);
+    assert_eq!(de(&x.n, true), vec![(testudo, 0xFF), (columna, 0xFF)]);
+    let r = x.n.aplicar_en(x.n.ahora(), Peticion::nueva("ana", "f3", Comando::ElegirFormacion { heroe: ana.1, escuadra: x.fuerte[1], formacion: "linea".into() }));
+    assert_eq!(codigo(&r), rechazos::BATALLA_BLOQUEADO);
+
+    // Una elegida que la Facción ya no permite al abrir viaja como la de reposo, sin tocar la de la escuadra.
+    let mut y = choque();
+    tecnologias(&mut y.n, "t1", vec!["disciplina_formacion".into()]);
+    elegir(&mut y.n, "f1", y.fuerte[0], "cuna");
+    tecnologias(&mut y.n, "t2", vec![]);
+    assert!(atacar(&mut y.n, 10 * MIN, "ana", "a1", ana.1, ObjetivoAtaque::Ejercito(y.beto.0), false).aceptada());
+    let b = y.n.batallas().next().unwrap();
+    assert_eq!(b.ticket.atacante.participantes[0].escuadras.iter().map(|e| (e.formacion, e.formaciones)).collect::<Vec<_>>(), vec![(0, 0b1111), (0, 0b1111)]);
+    assert_eq!(y.n.heroe(ana.1).unwrap().heroe.escuadra(y.fuerte[0]).unwrap().formacion, f.por_id("cuna").unwrap());
+}
+
+#[test]
 fn bot_contra_bot_abre_batalla_en_unity_y_sin_servidores_de_batalla_se_resuelve_con_numeros() {
     // Bot contra bot, con servidores de batalla: va a Unity igual (decisión del autor, cuarta ronda). Sin tokens, porque no hay ningún humano.
     let mut x = choque();
@@ -266,6 +316,17 @@ fn bot_contra_bot_abre_batalla_en_unity_y_sin_servidores_de_batalla_se_resuelve_
     assert!(n.aplicar_en(n.ahora(), admin("g", Comando::FijarRelacion { a: 1, b: 2, relacion: Some(Relacion::Guerra) })).aceptada());
     assert!(atacar(&mut n, 10 * MIN, "ana", "a1", ana.1, ObjetivoAtaque::Ejercito(beto.0), false).aceptada());
     assert_eq!((n.batallas().count(), hechos(&n, "combate.resuelto").len()), (0, 1));
+}
+
+#[test]
+fn las_batallas_en_unity_son_una_regla_de_la_partida_y_una_foto_no_se_arranca_con_la_otra() {
+    for creada in [false, true] {
+        let reglas = Reglas { batallas_en_unity: creada, ..Reglas::default() };
+        let bytes = nucleo::Estado::nuevo(reglas.clone(), "h".into(), 1, 0).serializar();
+        assert!(nucleo::Estado::deserializar(&bytes, &reglas, "h").is_ok());
+        let Err(e) = nucleo::Estado::deserializar(&bytes, &Reglas { batallas_en_unity: !creada, ..Reglas::default() }, "h") else { panic!("arrancó con la otra regla") };
+        assert!(e.0.contains("BRONZEAGE_BATALLAS_EN_UNITY") && e.0.contains(if creada { "se creó con las batallas en Unity" } else { "se creó con las batallas con números" }), "{}", e.0);
+    }
 }
 
 #[test]
@@ -917,7 +978,7 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_y_cada_campo_cambia_el_hash(
     let (n, id) = a_mitad();
     let reglas = reglas_unity();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN61");
+    assert_eq!(&bytes[..5], b"BAN62");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "hash-de-prueba").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.batallas, n.estado().batallas);
@@ -945,6 +1006,8 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_y_cada_campo_cambia_el_hash(
         ("escuadra.nivel", batalla(|b| b.ticket.atacante.participantes[0].escuadras[0].nivel += 1)),
         ("escuadra.experiencia", batalla(|b| b.ticket.atacante.participantes[0].escuadras[0].experiencia += 1)),
         ("escuadra.moral", batalla(|b| b.ticket.atacante.participantes[0].escuadras[0].moral -= 1)),
+        ("escuadra.formacion", batalla(|b| b.ticket.atacante.participantes[0].escuadras[0].formacion = 3)),
+        ("escuadra.formaciones", batalla(|b| b.ticket.atacante.participantes[0].escuadras[0].formaciones ^= 0b10)),
         ("plaza", batalla(|b| b.ticket.plaza = Some(combate::ciclo::PlazaCongelada { layout_version: 3, unidades_por_celda: 3, edificios: vec![], recintos: vec![] }))),
         ("sin_heroe", batalla(|b| b.ticket.defensor.sin_heroe[0].efectivos -= 1)),
         ("incorporacion.lado", batalla(|b| b.incorporaciones[0].lado = Lado::Defensor)),
@@ -2079,7 +2142,7 @@ fn los_bandidos_que_acosan_una_columna_con_dos_caravanas_juegan_las_dos_en_la_mi
 
         // La foto a mitad de la batalla lleva las dos caravanas y vuelve idéntica; la del formato anterior (una sola caravana) se rechaza con su motivo.
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN61");
+        assert_eq!(&bytes[..5], b"BAN62");
         let vuelta = nucleo::Estado::deserializar(&bytes, &arranque_mundo(m, 7).reglas, &m.0.hash().to_string()).unwrap();
         assert_eq!((vuelta.serializar(), vuelta.batallas.clone()), (bytes.clone(), e.n.estado().batallas.clone()));
 

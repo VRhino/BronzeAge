@@ -3,7 +3,7 @@
 //! puede cambiar mientras dura la batalla —el héroe, sus atributos y la carga de una caravana apartada— se lee del estado al proyectar.
 //!
 //! DUDA: el héroe sale con los valores por defecto de nombre, clase, género y avatar (decisión 4 del autor), sin equipo (CQ-004) y con los atributos efectivos iguales a los base; una escuadra no trae
-//! habilidades, formaciones ni formación elegida (Conquest); `experiencia` y `moral` de una escuadra viajan en puntos (como `xp_ganada` del resultado y como el contrato de TypeScript), no en milésimas;
+//! habilidades (Unity las saca del nivel) y sí su formación y las que permite la tecnología de su Facción (Heroe_Y_Tropa §10.4, 2026-11-11); `experiencia` y `moral` de una escuadra viajan en puntos (como `xp_ganada` del resultado y como el contrato de TypeScript), no en milésimas;
 //! `version_balance` y `version_catalogo_tropas` valen 1 mientras Rust no tenga su numeración; la carga de cada carro es la parte de la carga de la caravana proporcional a su capacidad
 //! (`Caravana::carga_por_carro`); el terreno de una batalla fuera de un asedio es el artefacto de mundo (`BattleMapReference`).
 
@@ -34,7 +34,8 @@ pub fn lado(l: Lado) -> pb::LadoId {
     }
 }
 
-fn escuadra(e: &EscuadraEnBatalla) -> pb::SquadSnapshot {
+fn escuadra(n: &Nucleo, e: &EscuadraEnBatalla) -> pb::SquadSnapshot {
+    let f = &n.estado().reglas.economia.militar.formaciones;
     pb::SquadSnapshot {
         squad_id: ids::escuadra(e.id),
         heroe_id: e.dueno.map(ids::heroe),
@@ -43,6 +44,8 @@ fn escuadra(e: &EscuadraEnBatalla) -> pb::SquadSnapshot {
         nivel: u32::from(e.nivel),
         experiencia: e.experiencia / MILESIMAS_POR_PUNTO,
         moral: e.moral / MILESIMAS_POR_PUNTO,
+        formacion: f.id(e.formacion).to_owned(),
+        formaciones_permitidas: f.de_mascara(e.formaciones).into_iter().map(|i| f.id(i).to_owned()).collect(),
         ..Default::default()
     }
 }
@@ -64,7 +67,7 @@ fn participante(n: &Nucleo, p: &Participante) -> pb::BattleParticipantSnapshot {
             casillas_inventario_libres: p.casillas_libres,
             ..Default::default()
         }),
-        escuadras: p.escuadras.iter().map(escuadra).collect(),
+        escuadras: p.escuadras.iter().map(|e| escuadra(n, e)).collect(),
     }
 }
 
@@ -73,7 +76,7 @@ fn bando(n: &Nucleo, b: &BandoDeTicket) -> pb::BattleSide {
         faccion_id: b.faccion.map(ids::faccion),
         capacidad_maxima: b.capacidad as u32,
         participantes: b.participantes.iter().map(|p| participante(n, p)).collect(),
-        escuadras_sin_heroe: b.sin_heroe.iter().map(escuadra).collect(),
+        escuadras_sin_heroe: b.sin_heroe.iter().map(|e| escuadra(n, e)).collect(),
     }
 }
 

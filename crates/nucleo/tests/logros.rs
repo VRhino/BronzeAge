@@ -102,7 +102,7 @@ fn la_foto_lleva_el_estado_de_tecnologia_y_cada_campo_cambia_el_hash() {
     let reglas = n.estado().reglas.clone();
     let mundo_hash = n.estado().mundo_hash.clone();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN61");
+    assert_eq!(&bytes[..5], b"BAN62");
     let vuelta = Estado::deserializar(&bytes, &reglas, &mundo_hash).unwrap();
     assert_eq!(vuelta.serializar(), bytes);
     assert_eq!((vuelta.tecnologia.clone(), vuelta.era_en), (n.estado().tecnologia.clone(), n.estado().era_en));

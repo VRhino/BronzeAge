@@ -104,7 +104,7 @@ De la columna entran **las escuadras de los héroes sanos**, y de ellos solo los
 poderEscuadron = poderBase(tropa) × cantidad × (1 + nivel × bonusPoderPorNivelEscuadra)
 poderBando     = Σ poderEscuadron  +  MILITAR.poderPorHeroe × (héroes sanos del bando que combaten)
 ```
-`poderBase` sale del catálogo `TROPAS_RECLUTABLES`. El nivel de escuadra (1‥`nivelMaximoEscuadra`) sube con experiencia (`experienciaParaSubirEscuadra`); la tropa **prestada** por un campamento de mercenarios no gana experiencia.
+`poderBase` sale del catálogo `TROPAS_RECLUTABLES`. El nivel de escuadra (1‥`nivelMaximoEscuadra`) sube con experiencia (`experienciaParaSubirEscuadra`); la tropa **prestada** por un campamento de mercenarios no gana experiencia. `bonusPoderPorNivelEscuadra` es **0,03** desde el 2026-11-11 (decisión del autor: +3 % por nivel, hasta +30 % en el 10, para acercarse a lo que pesa el nivel en una batalla de Unity; era 0,01).
 **El héroe suma 15** (`MILITAR.poderPorHeroe`, decidido el 2026-10-19, Doc 5.1): aditivo, por cada héroe sano que combate en ese bando, además de sus escuadras. Por eso un bando con héroes y sin una sola escuadra tiene poder, y una columna sin tropa puede combatir con números. El poder de los héroes entra en la suma **antes** de la cohesión, la varianza y las ventajas (§4), y **el héroe no cuenta para la cohesión**, que cuenta solo escuadras (decisión del autor, 2026-10-23).
 
 ## 4. La resolución (`resolverCombate`)
@@ -266,7 +266,7 @@ Si tras caer la plaza la Facción perdedora **no conserva ningún asentamiento**
   "regeneracionMoralPorMinuto": 5,
   "degradacionMoralSinRacion": 20,
   "desercionFraccionPorMinutoSinMoral": 0.05,
-  "bonusPoderPorNivelEscuadra": 0.01,
+  "bonusPoderPorNivelEscuadra": 0.03,
   "nivelMaximoEscuadra": 10,
   "experienciaParaSubirEscuadra": [
     5,

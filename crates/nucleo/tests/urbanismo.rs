@@ -428,7 +428,7 @@ fn la_ciudad_se_guarda_en_la_foto_con_su_version_de_geometria_y_se_rechaza_otra(
     assert_eq!(urbe.ciudad().recintos(), &[Recinto { muros: vec![Celda::new(40, 40), Celda::new(41, 40)], puertas: vec![Celda::new(42, 40)], red_de_puertas: vec![trazado::CeldaDeRed { celda: Celda::new(42, 40), camino: false }], tras_pieza: 3, completo: true }]);
     s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, puerta: Default::default(), cargos: Default::default(), nombre: String::new(), capital_de: None, de_la_faccion_desde: 0, resto_tributo: 0, permite_reabastecer_aliados: false, almacen_cerrado_a_ciudadanos: false, reclutamiento_cerrado_a_ciudadanos: false, fundadores: Vec::new() });
     let bytes = s.serializar();
-    assert_eq!(&bytes[..5], b"BAN61", "la foto es BAN61: ya no se admite ningún formato anterior");
+    assert_eq!(&bytes[..5], b"BAN62", "la foto es BAN62: ya no se admite ningún formato anterior");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "ida y vuelta idéntica");
     assert_eq!(vuelta.asentamientos, s.asentamientos);

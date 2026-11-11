@@ -451,6 +451,7 @@ impl Ctx<'_> {
                 Comando::RepartirPuntos { heroe: self.mi_heroe()?, fuerza: a.fuerza.unwrap_or(0), destreza: a.destreza.unwrap_or(0), armadura: a.armadura.unwrap_or(0), vitalidad: a.vitalidad.unwrap_or(0) }
             }
             Cuerpo::OrdenarEscuadras(o) => Comando::OrdenarEscuadras { heroe: self.mi_heroe()?, escuadras: self.escuadras(&o.escuadron_ids)? },
+            Cuerpo::ElegirFormacion(o) => Comando::ElegirFormacion { heroe: self.mi_heroe()?, escuadra: self.escuadra(&o.escuadron_id)?, formacion: o.formacion.clone() },
             Cuerpo::AsignarGuarnicion(o) => Comando::AsignarGuarnicion { heroe: self.mi_heroe()?, escuadra: self.escuadra(&o.squad_id)? },
             Cuerpo::RetirarGuarnicion(o) => Comando::RetirarGuarnicion { heroe: self.mi_heroe()?, escuadra: self.escuadra(&o.squad_id)? },
             Cuerpo::PasarAViveres(o) => Comando::PasarAViveres { heroe: self.mi_heroe()?, cantidad: o.cantidad },
