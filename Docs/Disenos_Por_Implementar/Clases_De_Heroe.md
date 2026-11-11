@@ -188,6 +188,45 @@ Todo lo que pasa dentro de la batalla, por clase: los coeficientes de `HeroStatF
 
 **Habilidades y perks:** los de §3.1. Nuevas en Conquest: Parada y respuesta, Lanzada de retirada, Parte escudos, Rompelíneas, Mole y todas las de las dagas (Sigilo pide poder ocultar a un héroe). Las demás salen de las suyas con otro nombre. Los perks desbloqueados se guardan en el héroe (`perksDesbloqueados`); al cambiar de arma se conservan y solo se usan los de la clase del arma puesta.
 
+### 8.1 Lo que necesita Conquest (revisado en su código el 2026-11-11)
+
+Leído en `VRhino/conquest_prototype` (`Docs/Mechanics/SkillsAndPerks.md`, `DamageMechanics.md`, `Docs/Por_Abordar/Habilidades_Perks.md` y el código de `Hero/`, `Skills/`, `Combat/` y `Visual/`).
+
+**Común a las cinco**
+
+1. **De cuatro clases a cinco con los ids del motor.** El enum `HeroClass` y los `HeroClassDefinition` de `Resources/Data/HeroClasses`, y los sitios que lo miran a mano: `HeroClassSelector` (equipo inicial por clase), `HeroHorseVisual` y `HeroMountPresenter` (jinete por clase), `SkillIconCatalog` y el panel de perks. Rechazar un ticket con una clase que no conozca.
+2. **La clase sale del arma del ticket**, no de `HeroData.classId`, y el héroe se monta desde el `HeroSnapshot` (hoy solo lee id, bando y si es bot; depende del paso a red).
+3. **Los atributos base vienen del motor** ya sumados. El `HeroClassDefinition` se queda con los coeficientes, la resiliencia, los `hitTraits` y la velocidad.
+4. **Arte:** las cinco armas en cuatro tiers y los dos escudos (redondo grande y mediano), y las armaduras del catálogo. Hoy todas las habilidades usan la misma animación de ataque provisional, así que cada clase necesita las suyas.
+5. **IA de héroes** (`HeroAISkillSystem`): que sepa usar las habilidades nuevas, cuándo cambiar del arco a la lanza y cómo ir por la espalda con las dagas.
+6. **El fichero de stats y descripciones** para los tooltips del cliente jugador (`Objetos_Del_Heroe.md` §2, punto 9).
+
+**Mecánicas que no existen** (en su lista de pendientes como H4 las tres primeras)
+
+| Mecánica | La piden |
+| --- | --- |
+| Silencio: impedir habilidades un tiempo (hoy la Flecha Silenciadora solo ralentiza) | Ardid |
+| Zonas que duran en el suelo | Flechas de fuego, Zona prohibida, Nadie pasa |
+| Daño por contacto | Nadie pasa (quien carga recibe daño) |
+| Cambio de arma en batalla | Arco compuesto y lanza, Lanzada de retirada |
+| Invisibilidad: que la IA no lo apunte y que el servidor no lo enseñe a los rivales | Sigilo |
+| Sangrado al golpear (el daño en el tiempo solo existe en habilidades de área) | Hoja sucia, Golpe por la espalda |
+| Contraataque al bloquear | Parada y respuesta |
+| Un instante en el que no se le puede acertar | Finta |
+| Inmunidad temporal a retroceso y derribo (hoy solo hay un permiso fijo por clase) | Mole, Nadie pasa |
+
+**Lo que ya tiene y basta con datos:** embestida (`Dash`), golpes en área y en cono, modificadores temporales (defensa, daño, velocidad de ataque y de movimiento), condición «quieto N segundos», bonos por flanco y espalda (`ApplyConditional` con direcciones), derribo como reacción de una habilidad, golpes que pasan el escudo (`blockDamageRatio`, `ignoresShield`), el bloqueo del héroe con escudo y los perks Línea inquebrantable, Orden de resistencia, Carga coordinada, Estocada desestabilizadora, Cobertura de hostigamiento y Flecha marcadora.
+
+**Por clase**
+
+| Clase | Ya existe | Nuevo |
+| --- | --- | --- |
+| Lanza y escudo grande redondo | Golpe de escudo, Estocada sobre el escudo, Escudos trabados, los dos perks | escudo en una clase de lanza; Nadie pasa (zona, contacto, inmunidad) |
+| Espada corta y escudo mediano | Acometida, Tres tajos, Furia del campeón, los dos perks | Parada y respuesta |
+| Arco compuesto y lanza | Disparo certero, Lluvia de flechas, Tirador apostado | cambio de arma, Lanzada de retirada, zona de Flechas de fuego, silencio de Ardid |
+| Hacha a dos manos | Molinete, Embestida brutal, Parte escudos (derribo y rasgos del arma), Rompelíneas (embestida, derribo y velocidad a la escuadra) | Mole (inmunidad), zona de Zona prohibida |
+| Dagas | Golpe por la espalda (bono de espalda), Danza de dagas (golpes en cono), Marca del cazador (como Flecha marcadora, a un solo objetivo) | toda la clase y sus animaciones; Sigilo, Finta, el sangrado de Hoja sucia |
+
 ## 9. Lo que falta
 
 ### 9.1 Motor
