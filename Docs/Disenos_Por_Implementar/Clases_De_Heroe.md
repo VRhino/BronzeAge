@@ -2,7 +2,7 @@
 
 Diseño cerrado con el autor el 2026-11-11 (hilo «Diseñar clases de héroe»), sin implementar. Entrada 71 de `Docs/Mecanicas a desarrollar.md`. Va con [`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md): sustituye su punto 2 de §3.1 («guardar la clase») y contesta su duda 6 de §4 («si la clase limita el arma»). Las armas y armaduras concretas están en el diseño del catálogo de objetos (`Catalogo_De_Objetos.md`, en su propio hilo).
 
-Quedan **por cerrar héroe a héroe**, como pidió el autor: los atributos base de cada clase (§5) y sus habilidades y perks (§8).
+Los atributos base, las habilidades y los perks de cada clase se cerraron **una a una** con el autor el mismo día (§3.1).
 
 ## 1. De dónde se parte
 
@@ -33,7 +33,7 @@ Leído el 2026-11-11 de `VRhino/conquest_prototype` (commit `562ac34c`).
 5. **El escudo va con el arma**, en la misma pieza y el mismo hueco, como en Conquest.
 6. **El arco y lanza cambia de arma en batalla**, y eso lo resuelve Conquest.
 7. **El hueco del arma nunca queda vacío**: el arma solo se cambia por otra.
-8. **Atributos = base de la clase del arma + puntos repartidos.** Los valores, héroe a héroe.
+8. **Atributos = base de la clase del arma + puntos repartidos.** Todas las clases suman 10 de base (§3.1).
 9. **Sin topes por clase** por ahora: sigue el tope global.
 10. **Equipo inicial según la clase**: el arma de cobre y la armadura más ligera que admite.
 11. **El Liderazgo es el mismo para todas las clases.**
@@ -41,7 +41,10 @@ Leído el 2026-11-11 de `VRhino/conquest_prototype` (commit `562ac34c`).
 13. **Ids del motor**; Conquest se adapta a ellos.
 14. **`crear_heroe` rechaza** una clase vacía o desconocida.
 15. **La clase no cuenta en las batallas con números**, como el equipo.
-16. **Habilidades y perks**, héroe a héroe.
+16. **Habilidades y perks**, cuatro habilidades y dos perks por clase (§3.1).
+17. **La tecnología del tier solo limita comprar y forjar**: un arma que ya se tiene se puede llevar siempre.
+18. **Las clases tienen su propio bloque y su propia versión**, aparte del catálogo de objetos, que cambia mucho más a menudo.
+19. **Las clases no dan nada en el mapa del mundo**: solo cuentan dentro de las batallas de Unity.
 
 ## 3. Las cinco clases
 
@@ -55,13 +58,82 @@ Leído el 2026-11-11 de `VRhino/conquest_prototype` (commit `562ac34c`).
 
 Los ids son los que usa el catálogo de objetos. Los nombres que ve el jugador son los del arma; la inspiración solo sirve para diseñar y, si acaso, para la descripción.
 
+### 3.1 Clase a clase
+
+Se cierran una a una con el autor. **Todas las clases suman 10 puntos de atributos base** (en Conquest suman entre 8 y 12), para que ninguna empiece más fuerte que otra. Los nombres de las habilidades y los perks son los del juego; entre paréntesis, la plantilla de Conquest de la que salen. Lo que hacen en combate (cifras, alcances, tiempos) lo fija Conquest.
+
+#### Lanza y escudo grande redondo (decidido el 2026-11-11)
+
+- **Atributos** (fuerza/destreza/armadura/vitalidad): 3/1/3/3.
+- **Cómo pelea:** lento, con un bloqueo frontal grande por el escudo, alcance de lanza, daño perforante y mucha resiliencia.
+- **Q, Golpe de escudo:** empuja al de delante y le rompe la formación (Shield Bash).
+- **E, Estocada sobre el escudo:** golpe perforante largo que atraviesa escudos (Precise Thrust).
+- **R, Escudos trabados:** más defensa para él y su escuadra mientras no se mueven (Reinforced Defense).
+- **Definitiva, Nadie pasa:** él y su escuadra no retroceden, ganan defensa, y quien les carga se frena y recibe daño (Unbreakable Wall y Spike Wall).
+- **Perk pasivo, Línea inquebrantable:** quieto 2 segundos, su escuadra recibe menos daño (Unbreakable Line).
+- **Perk activo, Orden de aguantar:** los aliados cercanos mitigan más daño durante 6 segundos (Endurance Order).
+
+#### Espada corta y escudo mediano (decidido el 2026-11-11)
+
+- **Atributos:** 3/3/2/2.
+- **Cómo pelea:** duelista que va a por el enemigo; más rápido que la lanza, golpes cortantes y estocadas, bloqueo y resiliencia medios.
+- **Q, Acometida:** salto corto hacia un enemigo y golpe de escudo que lo desequilibra (Interception).
+- **E, Tres tajos:** combo de tres golpes con daño creciente (Steel Rain).
+- **R, Parada y respuesta:** alza el escudo un instante y, si para un golpe, contraataca con daño extra (nueva).
+- **Definitiva, Furia del campeón:** unos segundos pega más y más rápido, y su escuadra gana ataque (Judgment of Steel).
+- **Perk pasivo, Primero en la brecha:** el primer golpe tras moverse hace más daño y frena al enemigo (Destabilizing Thrust).
+- **Perk activo, Carga conjunta:** si carga con su escuadra, todos hacen más daño (Coordinated Charge).
+
+#### Arco compuesto y lanza (decidido el 2026-11-11)
+
+- **Atributos:** 2/5/1/2.
+- **Cómo pelea:** rápido, daño perforante a distancia que baja con los metros; con la lanza se defiende, pero no es de primera línea. El cambio entre arco y lanza lo resuelve Conquest.
+- **Q, Disparo certero:** flecha que atraviesa armadura y hace mucho daño a los pesados (Focused Shot).
+- **E, Lluvia de flechas:** andanada sobre una zona que desordena las formaciones (Arrow Rain).
+- **R, Lanzada de retirada:** con la lanza, golpe que empuja al enemigo y le deja saltar atrás para volver al arco (nueva).
+- **Definitiva, Flechas de fuego:** una zona ardiendo que hace daño con el tiempo (Flaming Arrow).
+- **Perk pasivo, Tirador apostado:** quieto 3 segundos, sus flechas frenan al enemigo (Harassment Cover).
+- **Perk activo, Ardid:** una flecha que impide al objetivo usar habilidades un rato (Silencing Arrow, que en Conquest es habilidad).
+
+#### Hacha a dos manos (decidido el 2026-11-11)
+
+- **Atributos:** 5/1/1/3.
+- **Cómo pelea:** golpes lentos y muy duros, cortantes y contundentes; parte del daño pasa el bloqueo de los escudos y aturde bastante; sin escudo, resiliencia media.
+- **Q, Molinete:** golpe en círculo que abre hueco alrededor (Whirlwind Slash).
+- **E, Embestida brutal:** atraviesa enemigos y les desordena la línea (Brutal Charge).
+- **R, Parte escudos:** hachazo de arriba abajo que rompe el bloqueo y aturde (nueva).
+- **Definitiva, Rompelíneas:** carga en línea recta derribando a quien encuentra, y su escuadra le sigue más rápido (nueva).
+- **Perk pasivo, Mole:** mientras ataca no se le puede derribar ni hacer retroceder (nuevo).
+- **Perk activo, Zona prohibida:** marca el suelo; los enemigos que lo cruzan van más lentos y defienden peor (Exclusion Zone).
+
+#### Dagas (decidido el 2026-11-11)
+
+- **Atributos:** 3/5/0/2.
+- **Cómo pelea:** la más rápida; golpes cortos y seguidos, cortantes y perforantes, con mucho más daño por la espalda o el flanco; no bloquea, esquiva; resiliencia baja.
+- **Q, Golpe por la espalda:** mucho daño si está detrás del objetivo, y lo deja sangrando (nueva).
+- **E, Finta:** salto corto en cualquier dirección y un instante en el que cuesta acertarle (nueva).
+- **R, Sigilo:** se vuelve invisible durante un tiempo (nueva; Conquest necesita poder ocultar a un héroe).
+- **Definitiva, Danza de dagas:** una ráfaga de golpes muy rápidos sobre un objetivo (nueva).
+- **Perk pasivo, Hoja sucia:** sus golpes hacen sangrar, y el sangrado se acumula (nuevo).
+- **Perk activo, Marca del cazador:** marca a un enemigo, y él y su escuadra le hacen más daño (la idea de Marking Arrow).
+
+### 3.2 Resumen
+
+| Clase | F | D | A | V | Q | E | R | Definitiva | Perk pasivo | Perk activo |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Lanza y escudo grande redondo | 3 | 1 | 3 | 3 | Golpe de escudo | Estocada sobre el escudo | Escudos trabados | Nadie pasa | Línea inquebrantable | Orden de aguantar |
+| Espada corta y escudo mediano | 3 | 3 | 2 | 2 | Acometida | Tres tajos | Parada y respuesta | Furia del campeón | Primero en la brecha | Carga conjunta |
+| Arco compuesto y lanza | 2 | 5 | 1 | 2 | Disparo certero | Lluvia de flechas | Lanzada de retirada | Flechas de fuego | Tirador apostado | Ardid |
+| Hacha a dos manos | 5 | 1 | 1 | 3 | Molinete | Embestida brutal | Parte escudos | Rompelíneas | Mole | Zona prohibida |
+| Dagas | 3 | 5 | 0 | 2 | Golpe por la espalda | Finta | Sigilo | Danza de dagas | Hoja sucia | Marca del cazador |
+
 ## 4. El arma define la clase
 
 - **El héroe no guarda la clase.** Se saca del arma que lleva puesta: cada arma del catálogo `OBJETOS` lleva su `clase` y su `tier`. `claseDe(héroe) = OBJETOS[héroe.equipamiento.arma].clase`.
 - **El hueco del arma nunca queda vacío.** `desequipar` el arma se rechaza; `equipar` otra arma la cambia y la vieja va a la mochila (si no cabe, se rechaza: mochila llena).
 - **Cambiar de arma es cambiar de clase**: de atributos base (§5), de armaduras que admite, de habilidades y de perks. Se puede donde se pueda equipar (duda 5 de `Objetos_Del_Heroe.md` §4, todavía abierta).
 - **Armadura incompatible.** Al equipar un arma cuya clase no admite alguna pieza puesta, esa pieza pasa a la mochila; si no cabe, la orden se rechaza. Al equipar una armadura, se rechaza si la clase del arma no admite su peso. Es la regla de `Objetos_Del_Heroe.md` §3.1, punto 5.
-- **Tiers.** Cada tier lo abre una tecnología de la Facción: cobre `metalurgia_cobre`, bronce `aleacion_bronce`, hierro temprano `forja_hierro_temprana` y hierro `forja_hierro_estandarizada`. La tecnología decide qué se puede **comprar o forjar** (tienda y forja); un arma que ya se tiene se puede llevar siempre.
+- **Tiers.** Cada tier lo abre una tecnología de la Facción: cobre `metalurgia_cobre`, bronce `aleacion_bronce`, hierro temprano `forja_hierro_temprana` y hierro `forja_hierro_estandarizada`. La tecnología solo decide qué se puede **comprar o forjar** (tienda y forja); un arma que ya se tiene se puede llevar siempre.
 - **El ticket** manda en `class_definition_id` la clase del arma. Conquest rechaza un ticket con una clase que no conozca, como ya hace con `tropaId`.
 - **Proyección.** `Heroe.class_definition_id` y el del héroe público salen del arma. No hace falta campo nuevo.
 
@@ -74,7 +146,7 @@ atributos(héroe) = CLASES_HEROE[claseDe(héroe)].atributosBase + héroe.puntosR
 - El motor guarda solo los **puntos repartidos**. La base la pone la clase del arma de ese momento, así que cambiar de arma cambia los atributos sin perder los puntos.
 - `repartir_puntos` comprueba el tope global con la suma (base + puntos).
 - En el contrato, `atributos_base` del héroe y del ticket sigue llevando la suma, y Conquest no cambia. Si hace falta, se añade aparte lo repartido.
-- **Valores por clase: por decidir héroe a héroe.** Referencia de Conquest (assets de hoy, F/D/A/V): espada y escudo 3/1/2/4, mandoble 3/4/2/3, lanza 2/4/2/2 (la vieja; la de `Resources` está a 0) y arco 1/5/0/2. Las dagas no tienen referencia.
+- **Valores por clase:** los de §3.2, todos con 10 puntos. Conquest tenía (F/D/A/V) espada y escudo 3/1/2/4, mandoble 3/4/2/3, lanza 2/4/2/2 (la vieja; la de `Resources` está a 0) y arco 1/5/0/2.
 
 ## 6. Crear el héroe
 
@@ -85,16 +157,17 @@ atributos(héroe) = CLASES_HEROE[claseDe(héroe)].atributosBase + héroe.puntosR
 
 ## 7. El bloque `CLASES_HEROE` del motor
 
-Forma propuesta, para Mechanics cuando se implemente (los atributos, a 0 hasta cerrarlos héroe a héroe). Va en `GET /v1/datos` junto a `OBJETOS` y con la misma versión, porque la clase sale del arma: un cambio de clases es un cambio del catálogo de objetos.
+Forma propuesta, para Mechanics cuando se implemente. Va en `GET /v1/datos` junto a `OBJETOS`, con **su propia versión**: las clases cambian poco una vez definidas y el catálogo de objetos cambia a menudo, así que un precio nuevo no toca las clases ni al revés. Las armas de `OBJETOS` nombran su clase por id, y el motor comprueba al cargar que todas existen en `CLASES_HEROE`.
 
 ```json
 {
+  "version": "bronzeage-clases-1",
   "clases": [
-    { "id": "lanza_escudo_redondo",  "nombre": "Lanza y escudo grande redondo", "armaduras": ["pesada"],          "armaduraInicial": "pesada", "atributosBase": { "fuerza": 0, "destreza": 0, "armadura": 0, "vitalidad": 0 } },
-    { "id": "espada_escudo_mediano", "nombre": "Espada corta y escudo mediano", "armaduras": ["pesada", "media"], "armaduraInicial": "media",  "atributosBase": { "fuerza": 0, "destreza": 0, "armadura": 0, "vitalidad": 0 } },
-    { "id": "arco_lanza",            "nombre": "Arco compuesto y lanza",        "armaduras": ["ligera", "media"], "armaduraInicial": "ligera", "atributosBase": { "fuerza": 0, "destreza": 0, "armadura": 0, "vitalidad": 0 } },
-    { "id": "hacha_dos_manos",       "nombre": "Hacha a dos manos",             "armaduras": ["media"],           "armaduraInicial": "media",  "atributosBase": { "fuerza": 0, "destreza": 0, "armadura": 0, "vitalidad": 0 } },
-    { "id": "dagas",                 "nombre": "Dagas",                         "armaduras": ["ligera"],          "armaduraInicial": "ligera", "atributosBase": { "fuerza": 0, "destreza": 0, "armadura": 0, "vitalidad": 0 } }
+    { "id": "lanza_escudo_redondo",  "nombre": "Lanza y escudo grande redondo", "armaduras": ["pesada"],          "armaduraInicial": "pesada", "atributosBase": { "fuerza": 3, "destreza": 1, "armadura": 3, "vitalidad": 3 } },
+    { "id": "espada_escudo_mediano", "nombre": "Espada corta y escudo mediano", "armaduras": ["pesada", "media"], "armaduraInicial": "media",  "atributosBase": { "fuerza": 3, "destreza": 3, "armadura": 2, "vitalidad": 2 } },
+    { "id": "arco_lanza",            "nombre": "Arco compuesto y lanza",        "armaduras": ["ligera", "media"], "armaduraInicial": "ligera", "atributosBase": { "fuerza": 2, "destreza": 5, "armadura": 1, "vitalidad": 2 } },
+    { "id": "hacha_dos_manos",       "nombre": "Hacha a dos manos",             "armaduras": ["media"],           "armaduraInicial": "media",  "atributosBase": { "fuerza": 5, "destreza": 1, "armadura": 1, "vitalidad": 3 } },
+    { "id": "dagas",                 "nombre": "Dagas",                         "armaduras": ["ligera"],          "armaduraInicial": "ligera", "atributosBase": { "fuerza": 3, "destreza": 5, "armadura": 0, "vitalidad": 2 } }
   ]
 }
 ```
@@ -113,7 +186,7 @@ Todo lo que pasa dentro de la batalla, por clase: los coeficientes de `HeroStatF
 | `hacha_dos_manos` | `TwoHandedSword` con hacha en lugar de mandoble |
 | `dagas` | nueva del todo: sin plantilla, habilidades ni animaciones |
 
-**Habilidades y perks: por decidir héroe a héroe**, renombrados al tema. Los perks desbloqueados se guardan en el héroe (`perksDesbloqueados`); al cambiar de arma se conservan y solo se usan los de la clase del arma puesta.
+**Habilidades y perks:** los de §3.1. Nuevas en Conquest: Parada y respuesta, Lanzada de retirada, Parte escudos, Rompelíneas, Mole y todas las de las dagas (Sigilo pide poder ocultar a un héroe). Las demás salen de las suyas con otro nombre. Los perks desbloqueados se guardan en el héroe (`perksDesbloqueados`); al cambiar de arma se conservan y solo se usan los de la clase del arma puesta.
 
 ## 9. Lo que falta
 
@@ -124,7 +197,7 @@ Todo lo que pasa dentro de la batalla, por clase: los coeficientes de `HeroStatF
 3. El héroe guarda los puntos repartidos en lugar de los atributos (foto nueva, partida nueva).
 4. `crear_heroe` con clase y equipo inicial; rechazo `heroe.clase_desconocida`.
 5. Equipar y desequipar con las reglas de §4: el arma no se quita, la armadura incompatible va a la mochila.
-6. Proyección y ticket con la clase del arma y los atributos sumados.
+6. Proyección y ticket con la clase del arma, los atributos sumados y la versión de `CLASES_HEROE` junto a la del catálogo de objetos.
 7. `repartir_puntos` con el tope sobre la suma.
 8. Docs: Heroe_Y_Tropa §2.1, §3 y §4, Comandos_Parametros, Proyecciones, Batalla_Unity_Ciclo, 07, canon 5.16 y `Pendientes_Cliente_Jugador.md`. Versiones de `militar`, `nucleo` y `contrato`.
 
@@ -139,7 +212,8 @@ Todo lo que pasa dentro de la batalla, por clase: los coeficientes de `HeroStatF
 - Las cinco clases con los ids del motor (§8), y rechazar un ticket con una clase desconocida.
 - Montar el héroe con la clase y los atributos del ticket (hoy solo lee id, bando y si es bot).
 - El cambio de arma del arco y lanza.
-- La clase de las dagas, desde cero.
+- La clase de las dagas, desde cero, con la invisibilidad del Sigilo.
+- Las habilidades y los perks de §3.1, con sus nombres.
 
 ### 9.4 Bots y administración
 
@@ -148,8 +222,6 @@ Todo lo que pasa dentro de la batalla, por clase: los coeficientes de `HeroStatF
 
 ## 10. Por decidir
 
-1. Los atributos base de cada clase (héroe a héroe).
-2. Las habilidades y los perks de cada clase (héroe a héroe).
-3. Lo que da cada arma en combate por tier (catálogo de objetos y Conquest).
-4. Si el equipo inicial lleva casco (catálogo de objetos).
-5. Dónde se puede cambiar de arma, que ahora es cambiar de clase (`Objetos_Del_Heroe.md` §4, duda 5).
+1. Lo que da cada arma en combate por tier (catálogo de objetos y Conquest).
+2. Si el equipo inicial lleva casco (catálogo de objetos).
+3. Dónde se puede cambiar de arma, que ahora es cambiar de clase (`Objetos_Del_Heroe.md` §4, duda 5).

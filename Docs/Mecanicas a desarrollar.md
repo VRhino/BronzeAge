@@ -28,7 +28,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 67 | MISIONES | Objetos como recompensa de misión (2026-11-01): un tipo `objeto` en la lista libre de recompensas de las misiones (Misiones §4.1). Parada hasta que haya catálogo de objetos e inventario real | nada |
 | 68 | MERCENARIOS | Huecos de los mercenarios por contrato tras implementarlos (2026-11-01): visión del objetivo enemigo, recursos del anillo para el temporal, sucesión en `militar`, auditoría, bienvenida, orden `atacar` inicial y objetos de los rangos 4 y 5. Sección «68» | entrada 48 en `main` (7aa44b9), `Docs/Mechanics/Mercenarios_Por_Contrato.md` |
 | 70 | MILITAR / HÉROE | Objetos del héroe (diseño del 2026-11-11; `Docs/Disenos_Por_Implementar/Objetos_Del_Heroe.md`): catálogo `OBJETOS` en el motor y stats en Conquest, clase del héroe, mochila y equipo guardados, órdenes equipar, desequipar, vender, comprar y forjar, equipo en el ticket, botín de Unity, tienda y forja | el contrato ya tiene `ItemInstancia` y `Equipamiento`; el motor no los guarda |
-| 71 | MILITAR / HÉROE | Clases del héroe (diseño del 2026-11-11; `Docs/Disenos_Por_Implementar/Clases_De_Heroe.md`): cinco clases, el arma define la clase, tiers de arma por tecnología, armaduras que admite cada clase, atributos = base de la clase + puntos repartidos, equipo inicial; atributos, habilidades y perks por cerrar héroe a héroe | `crear_heroe` ignora la clase; va con la entrada 70 |
+| 71 | MILITAR / HÉROE | Clases del héroe (diseño del 2026-11-11; `Docs/Disenos_Por_Implementar/Clases_De_Heroe.md`): cinco clases, el arma define la clase, tiers de arma por tecnología, armaduras que admite cada clase, atributos = base de la clase + puntos repartidos, equipo inicial, y los atributos, habilidades y perks de cada clase | `crear_heroe` ignora la clase; va con la entrada 70 |
 | — | PARIDAD | Recortes temporales del motor Rust frente al TypeScript (sección «Paridad con TypeScript») | el motor no está migrado hasta cerrarlos |
 | — | DUDAS | Ninguna sin decisión desde el 2026-10-27 (sección «Dudas abiertas»: las `// DUDA:` que quedan en el código) | — |
 | — | FASE 7 | Todo lo que se dejó para los bots reales y la fase 7 (sección «Para la fase 7») | — |
@@ -251,4 +251,4 @@ Diseño: `Docs/Disenos_Por_Implementar/Objetos_Del_Heroe.md`, con la lista de lo
 
 ## 71. Clases del héroe (diseño del 2026-11-11)
 
-Diseño: `Docs/Disenos_Por_Implementar/Clases_De_Heroe.md`. Va con la entrada 70 (la clase sale del arma, que es un objeto) y se implementa con su paso 1. Quedan por cerrar, héroe a héroe, los atributos base y las habilidades y perks de cada clase.
+Diseño: `Docs/Disenos_Por_Implementar/Clases_De_Heroe.md`. Va con la entrada 70 (la clase sale del arma, que es un objeto) y se implementa con su paso 1. Atributos, habilidades y perks cerrados clase a clase el 2026-11-11; lo que hacen en combate lo fija Conquest.
