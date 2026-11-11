@@ -96,6 +96,8 @@ fn dos_plazas(x: &mut X, m: &M) -> (u64, u64) {
     let pb = sitio_rico(&x.n, &m.0, 3, 2);
     let b = real::fundar(&mut x.n, "beto", 2, pb);
     for p in [a, b] {
+        // Los fundadores de andamiaje no defienden: fuera de la plaza (entraron al fundarla).
+        comun::fundador_sale(&mut x.n, p);
         x.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: p, pausada: true });
         // De todo para días: sin auto-construcción la plaza no se sostiene sola.
         for r in asentamiento::recurso::TODOS {

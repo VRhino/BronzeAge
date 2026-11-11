@@ -505,7 +505,7 @@ fn entrar_en_la_propia_residencia_deja_el_carro_con_el_heroe_y_en_otra_plaza_la_
     assert_eq!(hn.carro[&Madera], 40_000, "el carro entra con él");
     assert_eq!(e.escuadra(h, milicia).contenedor, Contenedor::Campamento);
     assert_eq!(e.almacen(Madera), madera0 - 40_000, "el almacén de la plaza no recibe el carro (antes se vaciaba solo)");
-    assert_eq!(hechos(&e.n, "jugador.entra_en_asentamiento").len(), 1);
+    assert_eq!(hechos(&e.n, "jugador.entra_en_asentamiento").iter().filter(|x| dato(x, "heroe") == h as i64).count(), 1, "una entrada suya (la del fundador al fundar es otra)");
     assert_eq!(e.rechazada("ana", entrar.clone()), rechazos::HEROE_SIN_COLUMNA, "dentro de la plaza ya no va en ninguna columna");
 
     // Volver a salir: los víveres que lleva el héroe y el carro que trajo pasan a la columna nueva.

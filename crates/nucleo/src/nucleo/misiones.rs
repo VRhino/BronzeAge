@@ -12,7 +12,7 @@ use asentamiento::catalogo::Tipo;
 use asentamiento::asentamiento::Evento as EventoEco;
 use militar::heroe::Residencia;
 
-/// El id de un dueño en el contrato: `heroe-N`, `as-N` o `faccion-N`.
+/// El id de un dueño en el contrato: `heroe-N`, `as-N` o `f-N`.
 pub fn id_de_dueno(d: Dueno) -> String {
     match d {
         Dueno::Heroe(h) => ids::heroe(h),

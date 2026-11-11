@@ -109,7 +109,7 @@ Algunos edificios, niveles internos y recetas piden además una **tecnología ad
 | 3 (mejora) | nivel 4 | 400 | 2.500 madera + 2.500 piedra + 800 oro | 1 semana |
 
 **Vivienda** — auto-construcción. CUPO DIVIDIDO POR CLASE: cada Vivienda aporta cupos SEPARADOS, no un pool compartido — 15 espacios para Pesants + 10 espacios para Artesanos por unidad (escala linealmente: 2 Viviendas = 30+20, etc.). La Nobleza no usa Vivienda (cupo propio en el Palacio).
-- Coste: 10 madera. Obra: 4 horas.
+- Coste: 10 madera. Obra: 10 minutos (arranque rápido, 2026-10-28).
 - **Tope por nivel de asentamiento** (`maximoViviendasPorNivel`): el máximo útil de Viviendas en un nivel se deriva de la población (pesants Y artesanos, se toma el mayor de los dos cupos) que exige alcanzar el SIGUIENTE nivel — construir más de las que ese cupo necesita no sirve para nada hasta subir de nivel. **Se permiten 2 Viviendas de margen** sobre lo que exige el nivel siguiente (decidido el 2026-10-18): con el cupo justo la población, que crece de forma logística, se acerca al cupo sin tocarlo y no llegaría al requisito (40 Viviendas = 400 artesanos para un requisito de 400). Cifras en `typescript-final:Consideraciones/Fase_0_6_Definicion_Expansion_Niveles_Asentamiento.md` §7.
 
 ### Extracción de recursos
@@ -117,8 +117,8 @@ Algunos edificios, niveles internos y recetas piden además una **tecnología ad
 | Edificio | Recurso | Coste | Trabajadores | Tiempo | Producción base |
 |---|---|---|---|---|---|
 | Cantera | Piedra | 20 madera | 4 | 4 h | 10 piedra |
-| Leñera | Madera | 10 madera | 4 | 1 h | 8 madera (5 hasta el 2026-11-01) |
-| Granja | Trigo | 30 madera | 4 | 2 h | **80 trigo** (un solo nivel; 2/3 de lo de antes desde el 2026-11-11) |
+| Leñera | Madera | 10 madera | 4 | 2 min | 8 madera (5 hasta el 2026-11-01) |
+| Granja | Trigo | 30 madera | 4 | 5 min | **80 trigo** (un solo nivel; 2/3 de lo de antes desde el 2026-11-11) |
 | Corral | Livestock (ganado vacuno) | 30 madera | 4 | 4 h | 3 livestock (solo en la aldea agrícola de trigo desde el 2026-10-27 y en la ganadera desde el 2026-11-11: allí el ganado sale de la cría, 4.2.2) |
 | Mina de oro | Oro | 40 madera | 6 | 8 h | 10 oro (4 hasta el 2026-11-09) |
 | Mina de cobre | Cobre | 30 madera | 8 | 6 h | 10 cobre (5 hasta el 2026-11-09) |

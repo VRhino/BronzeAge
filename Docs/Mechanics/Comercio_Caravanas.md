@@ -57,7 +57,7 @@ peajes, red de caminos) y lo que ocurre con todo ello cuando una plaza cae en ru
 > - **Al llegar** vuelca en el almacén de la madre sin comisión ni trueque, **topado por su capacidad** (lo que no cabe se pierde: `acarreo.llega` lleva `perdido`; una plaza con 400 de capacidad por recurso pierde 100 de cada 500), y vuelve vacío desandando el camino (`acarreo.vuelve`). Si la madre ya no existe, el carro se pierde.
 > - **Si se destruye** (batalla, `DestruirPueblo`, ruina de la madre), el pueblo se queda sin carro: acumula hasta llenar el almacén y para. **La madre lo repone sola** (decisión del autor del 2026-10-27): en cada paso de minuto, cada pueblo activo sin carro lo compra (carro + buey: 20 de madera y 12 de oro) en cuanto la madre puede pagarlo, y sale en el acto si el almacén ya estaba lleno; mientras haya una batalla sobre el pueblo o sobre la madre, espera. `ReponerCarro` sigue sirviendo para comprarlo en el instante, solo si no tiene ninguno.
 > - **Sin ruta por tierra** entre el pueblo y la madre el carro no sale (DUDA).
-> - **Batalla.** Es una caravana normal para `caravana_entra_en_batalla`, `caravana_sale_de_batalla` y `aplicar_perdida_de_carros`, y para la rejilla de encuentros; la resolución (casi siempre B) es del sistema militar. **Escolta**: no hay escolta automática (decisión del autor del 2026-10-27). Un residente de la madre se la cede a mano con `AsignarEscolta`, con el carro parado en su pueblo y dentro del cupo de escolta de la madre (el de su Mercado: sin Mercado, ninguno), y la escolta **sigue con el carro de un viaje al siguiente** (la casa del carro es su pueblo) hasta que se la quitan con `QuitarEscolta`, con el carro en casa; si el carro se pierde, vuelve a su campamento.
+> - **Batalla.** Es una caravana normal para `caravana_entra_en_batalla`, `caravana_sale_de_batalla` y `aplicar_perdida_de_carros`, y para la rejilla de encuentros; la resolución (casi siempre B) es del sistema militar. **Escolta**: no hay escolta automática (decisión del autor del 2026-10-27). Un residente de la madre se la cede a mano con `AsignarEscolta`, con el carro parado en su pueblo y dentro del cupo de escolta del carro (el del Mercado de la madre si lo tiene, 100/200/300; **100** si no, §12; corregido en el motor el 2026-11-11; antes daba 0 sin Mercado), y la escolta **sigue con el carro de un viaje al siguiente** (la casa del carro es su pueblo) hasta que se la quitan con `QuitarEscolta`, con el carro en casa; si el carro se pierde, vuelve a su campamento.
 
 > **Batch de comercio (2026-10-19).** `batch comercio [--plazas 160] [--dias 30] [--semilla 42] [--decisiones crates/batch/decisiones/comercio.json]` corre el núcleo real con 146-160 plazas de Facciones de cuatro y un «jugador» mínimo (Mercado, caravana, trueques por doble coincidencia, pueblos de Cantera con materiales comprados a los mercenarios) y deja `batch/salida/comercio/informe.html`. Resultados de la primera corrida: los invariantes del comercio se cumplen (0 violaciones) y la corrida es determinista; lo medido que merece decisión (peaje y repescas, acarreo contra un almacén lleno, comisión de bienes sin precio, reputación que se borra en 1,74 días, comercio que se apaga sin sumideros) y las decisiones C1-C6 del autor están en `Consideraciones/Calibracion_Sistema4_Decisiones.md` («Primera calibración de `batch comercio`»).
 
@@ -779,11 +779,10 @@ VECINOS (col,fila) = [1,0] [−1,0] [0,1] [0,−1] [1,1] [−1,−1] [1,−1] [�
 **Coste de una arista** (`evaluarTramo(a, b)`): `n = max(1, ceil(largo / paso))`; si **alguno** de los `n + 1` puntos equiespaciados (extremos incluidos) no es transitable (`mapa.esTransitable`: agua,
 fuera del mapa) ⇒ `Infinity`. Si no: `coste = (largo / n) × Σ_{k=0..n−1} costeEnPunto(punto en (k+0,5)/n)`. Las 4 aristas de cada nodo (una de cada pareja) se calculan y se copian a su opuesta.
 
-**Ríos**: una arista que corta un cauce **fuera de un vado** queda en `crucesRio` con el punto del cruce y solo se puede usar si ese punto está a `≤ radioPasoCiudad` de la posición de algún asentamiento
-(`pasosRio` = todos los asentamientos del mundo). Hay vado en la distancia `s` desde el nacimiento si `s ≤ separacionVados / 2` (arroyo) o `|s − round(s / separacionVados) × separacionVados| ≤ espaciado`.
-`separacionVados = max(separacionVadosMin, ladoMayor / vadosPorLado)`; `radioPasoCiudad = max(radioPasoCiudadMin, 1,5 × espaciado)`.
+**Ríos**: solo se cruzan por los **vados** (D7, abajo); una ciudad ribereña no abre paso. Hay vado en la distancia `s` desde el nacimiento si `s ≤ separacionVados / 2` (arroyo) o `|s − round(s / separacionVados) × separacionVados| ≤ espaciado`.
+`separacionVados = max(separacionVadosMin, ladoMayor / vadosPorLado)`. (`radioPasoCiudadMin` sigue en el bloque y el motor no lo lee.)
 
-**`calcularRuta(mapa, origen, destino, {pesos?, pasosRio?})`** → polilínea `[origen, …nodos, destino]` o **`undefined`**:
+**`calcularRuta(mapa, origen, destino, {pesos?})`** → polilínea `[origen, …nodos, destino]` o **`undefined`**:
 
 1. Origen y destino deben ser transitables.
 2. Si `distancia(origen, destino) < espaciado`: tramo directo (`[origen, destino]`) si su coste es finito y su cruce de río está permitido; si no `undefined`.
@@ -828,7 +827,7 @@ fuera del mapa) ⇒ `Infinity`. Si no: `coste = (largo / n) × Σ_{k=0..n−1} c
 Se usa en **todo** lanzamiento de una comercial (reparto y manual) y en cada salida de una con encargo (§5.8.6), de ida y de vuelta.
 
 ```
-opciones = { pesos: pesosDeRed(red), pasosRio: posiciones de todos los asentamientos }
+opciones = { pesos: pesosDeRed(red) }                ; los ríos, solo por los vados
 pendientes = zonas de influencia de asentamientos  b  con  b ≠ origen,  b ≠ destino,  b.faccionId ≠ origen.faccionId     ; "ajenas" incluye aliadas y vasallas
 ruta = [origen] ; paradas = [] ; actual = origen
 bucle:

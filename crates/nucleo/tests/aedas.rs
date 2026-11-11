@@ -130,7 +130,10 @@ impl Escenario {
     /// El Rey de la Facción `f` (quien fundó su plaza), dentro de `plaza`.
     fn rey_dentro(&mut self, f: u32, plaza: u64) -> u64 {
         let rey = self.n.facciones().find(|x| x.id == f).and_then(|x| x.rey).unwrap();
-        // Entra con su columna (se deshace dentro); si ya no va en una, la administración lo coloca.
+        // Si fundó esa plaza ya está dentro (la columna que funda entra); si no, entra con su columna (se deshace dentro) o la administración lo coloca.
+        if self.n.heroe(rey).unwrap().heroe.presencia.ubicacion == militar::presencia::Ubicacion::Asentamiento(plaza as u32) {
+            return rey;
+        }
         let entra = if self.n.heroe(rey).unwrap().columna.is_some() {
             Comando::Guarnecer { asentamiento: plaza, heroe: rey }
         } else {

@@ -55,7 +55,7 @@ impl E {
         let plaza = fundar(&mut n, "fundador", 1, sa);
         let ajena = fundar(&mut n, "gus", 2, sb);
         let fundador = n.faccion(1).and_then(|f| f.ciudadanos.iter().copied().find(|&h| h != rey)).expect("el fundador es ciudadano");
-        mc::ok(&mut n, "fundador", Comando::Guarnecer { asentamiento: plaza, heroe: fundador });
+        // El fundador ya está dentro con su ejército: la columna que funda entra en la plaza (Fundacion_Y_Refundacion §5.5).
         E { n, rey, fundador, plaza, ajena }
     }
 
@@ -515,10 +515,9 @@ fn el_general_de_la_plaza_manda_al_permanente_que_firmo_el_rey_y_reside_en_ella_
     let m = con_mundo!();
     let mut e = E::nuevo(m);
     let (rey, fundador, plaza) = (e.rey, e.fundador, e.plaza);
-    // El fundador de la otra plaza es su Gobernador de oficio, una vez dentro.
+    // El fundador de la otra plaza es su Gobernador de oficio, y ya está dentro (entró al fundarla).
     let otra = e.otra_plaza(m);
     let de_otra = e.n.faccion(1).and_then(|f| f.ciudadanos.iter().copied().find(|&h| h != rey && h != fundador)).expect("quien fundó la otra plaza");
-    mc::ok(&mut e.n, "fundador-2", Comando::Guarnecer { asentamiento: otra, heroe: de_otra });
     assert!(e.n.estado().asentamientos[&otra].cargos.es_titular(Cargo::Gobernador, de_otra));
     let general = e.con_cargo("gen", Cargo::General);
     let bot = e.bot("bot-1");

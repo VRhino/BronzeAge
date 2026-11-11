@@ -27,7 +27,9 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 65 | INTEL / BOTS | Informes de taberna por niveles (diseño del 2026-10-31; `Docs/Disenos_Por_Implementar/Informes_De_Taberna.md`): el Informe de plaza se separa en Población, Guarnición, Tecnologías, Trazado y Rutas según la taberna del comprador, y Cuentas, Agravios, Corte y Planes, solo contra Facciones de bots, los vende el motor y los responde el servicio de bots | un solo `comprar_informe_plaza` |
 | 67 | MISIONES | Objetos como recompensa de misión (2026-11-01): un tipo `objeto` en la lista libre de recompensas de las misiones (Misiones §4.1). Parada hasta que haya catálogo de objetos e inventario real | nada |
 | 68 | MERCENARIOS | Huecos de los mercenarios por contrato tras implementarlos (2026-11-01): visión del objetivo enemigo, recursos del anillo para el temporal, sucesión en `militar`, auditoría, bienvenida, orden `atacar` inicial y objetos de los rangos 4 y 5. Sección «68» | entrada 48 en `main` (7aa44b9), `Docs/Mechanics/Mercenarios_Por_Contrato.md` |
+| 69 | POLÍTICA / MAPA | Marcas de Facción en el mapa (pedidas por el autor el 2026-10-29; acotadas en la sección «69»; rescatadas el 2026-11-11 de una rama que no llegó a `main`, donde eran la 63) | nada: el cliente de jugador no tiene dónde guardarlas |
 | 70 | MILITAR / HÉROE | Objetos del héroe (diseño del 2026-11-11; `Docs/Disenos_Por_Implementar/Objetos_Del_Heroe.md`): catálogo `OBJETOS` en el motor y stats en Conquest, clase del héroe, mochila y equipo guardados, órdenes equipar, desequipar, vender, comprar y forjar, equipo en el ticket, botín de Unity, tienda y forja | el contrato ya tiene `ItemInstancia` y `Equipamiento`; el motor no los guarda |
+| 71 | MILITAR / HÉROE | Clases del héroe (diseño del 2026-11-11; `Docs/Disenos_Por_Implementar/Clases_De_Heroe.md`): cinco clases, el arma define la clase, tiers de arma por tecnología, armaduras que admite cada clase, atributos = base de la clase + puntos repartidos, equipo inicial, y los atributos, habilidades y perks de cada clase | `crear_heroe` ignora la clase; va con la entrada 70 |
 | — | PARIDAD | Recortes temporales del motor Rust frente al TypeScript (sección «Paridad con TypeScript») | el motor no está migrado hasta cerrarlos |
 | — | DUDAS | Ninguna sin decisión desde el 2026-10-27 (sección «Dudas abiertas»: las `// DUDA:` que quedan en el código) | — |
 | — | FASE 7 | Todo lo que se dejó para los bots reales y la fase 7 (sección «Para la fase 7») | — |
@@ -244,6 +246,22 @@ La entrada 48 está en el motor (`Docs/Mechanics/Mercenarios_Por_Contrato.md`). 
 - **Orden `atacar` inicial.** En el trabajo «Atacar un objetivo», si el mercenario no ataca en 24 h su orden caduca y se le vuelve a dar, con un `mercenarios.orden_caducada` cada vez.
 - **Objetos de los rangos 4 y 5.** Esperan a que exista su catálogo.
 
+## 69. Marcas de Facción en el mapa
+
+Pedida por el autor el 2026-10-29 desde el cliente de jugador. Puntos en el mapa que solo ve la propia Facción: puntos de reunión, de interés, de peligro u objetivos.
+
+- **Quién las pone y las quita:** el Rey, el Embajador, los Generales y los Gobernadores de la Facción.
+- **Tope:** 5 marcas vivas por Facción, entre todos.
+- **Tipos:** reunión, interés, peligro y objetivo. Llevan un texto corto opcional.
+- **Duración:** no caducan; se quitan a mano.
+- **Quién las ve:** todos los ciudadanos de la Facción (ámbito `FACCION`); nadie de fuera.
+- **Pendiente de decidir al implementar:** si cualquiera de esos cargos puede quitar la marca de otro y si el tope cuenta por Facción o por cargo (el autor dijo «un número limitado de marcas (5)»; se lee por Facción).
+- **Toca:** una orden para poner y otra para quitar, la entidad en la proyección de la Facción y el panel y la capa del mapa en BronzeAgeClient.
+
 ## 70. Objetos del héroe (diseño del 2026-11-11)
 
 Diseño: `Docs/Disenos_Por_Implementar/Objetos_Del_Heroe.md`, con la lista de lo que falta en el motor, el contrato, el cliente jugador, Conquest, los bots y la administración, y lo que queda por decidir. Cuando se implemente cierra también la entrada 67 y el punto «Objetos de los rangos 4 y 5» de la 68.
+
+## 71. Clases del héroe (diseño del 2026-11-11)
+
+Diseño: `Docs/Disenos_Por_Implementar/Clases_De_Heroe.md`. Va con la entrada 70 (la clase sale del arma, que es un objeto) y se implementa con su paso 1. Atributos, habilidades y perks cerrados clase a clase el 2026-11-11; lo que hacen en combate lo fija Conquest.

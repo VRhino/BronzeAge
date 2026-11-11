@@ -392,7 +392,8 @@ impl<'n> Mirada<'n> {
                     v.extend(self.propia_a_la_puerta(viewer, a).unwrap_or_else(|| self.propias_de(Clase::Asentamiento, a.id, a.version)));
                 } else if dentro {
                     nombradas.push(a.faccion);
-                    v.push(visible(pb::TipoEntidad::Asentamiento, id, Sello(a.version, 1), move || Some(Cuerpo::Asentamiento(plaza_desde_dentro(n, a.id)))));
+                    // Su sello sigue también al interior: una obra o una celda de muralla que avanza se ve desde dentro.
+                    v.push(visible(pb::TipoEntidad::Asentamiento, id, Sello(n.version_de(Clase::Asentamiento, a.id), 1), move || Some(Cuerpo::Asentamiento(plaza_desde_dentro(n, a.id)))));
                 } else {
                     nombradas.push(a.faccion);
                     v.push(visible(pb::TipoEntidad::Asentamiento, id, Sello(a.version, 0), move || Some(Cuerpo::Asentamiento(plaza_avistada(n, a.id)))));
@@ -776,36 +777,29 @@ pub fn plaza_avistada(n: &Nucleo, id: u64) -> pb::Asentamiento {
     p
 }
 
-/// Los edificios activos de una plaza ajena, con su sitio en la ciudad: lo que se ve estando dentro (y antes del 2026-11-07, también desde fuera).
-fn edificios_activos(n: &Nucleo, id: u64) -> Vec<pb::Edificio> {
-    let a = &n.estado().asentamientos[&id];
-    let ciudad = n.vista_ciudad(id);
-    a.economia
-        .edificios
-        .iter()
-        .filter(|b| b.estado == EstadoEdificio::Activo)
-        .map(|b| {
-            let pieza = ciudad.as_ref().and_then(|c| c.piezas.iter().find(|x| x.id == b.id));
-            pb::Edificio {
-                id: ids::edificio(id, b.id),
-                tipo: b.tipo.nombre().to_owned(),
-                posicion: pieza.map(|x| punto(x.centro)),
-                estado: pb::EstadoEdificio::EdificioActivo as i32,
-                ambito: pb::AmbitoEdificio::Asentamiento as i32,
-                nivel_interno: Some(u32::from(b.nivel_interno)),
-                rotado: pieza.is_some_and(|x| x.rotado),
-                ancho: pieza.map_or(0, |x| x.rect.ancho.max(0) as u32),
-                alto: pieza.map_or(0, |x| x.rect.alto.max(0) as u32),
-                ..Default::default()
-            }
-        })
-        .collect()
+/// La plaza ajena vista desde dentro (2026-10-29; ampliada el 2026-11-02, decisión del autor: quien está dentro ve todo lo que vería con sus ojos al moverse por ella): la de fuera
+/// ([`plaza_avistada`]) con su trazado urbano, sus edificios en pie y en obra (con la obra y la mejora en curso y el daño; no los de la cola, que aún no están en el suelo) y sus recintos de
+/// muralla (lo levantado y lo comprometido, celda a celda). Nada más de su interior: ni la cola, ni lo parado por almacén lleno, ni de qué fuente sale cada uno, ni el almacén, la población, la
+/// puerta, los cargos o quién está dentro.
+/// Lo que está en el suelo: en pie, en obra, o en la cola pero dañado (la ruina que deja una conquista, `combate::conquista::aplicar_conquista`). Lo encargado
+/// que aún no se ha empezado no se ve.
+pub(crate) fn se_ve_desde_dentro(b: &asentamiento::edificio::Edificio) -> bool {
+    b.estado != EstadoEdificio::EnCola || b.danado
 }
 
-/// La plaza ajena vista desde dentro (2026-10-29): la de fuera ([`plaza_avistada`]) con sus edificios activos y su trazado urbano. Nada más de su interior (almacén, población, cola, puerta,
-/// cargos...).
 pub fn plaza_desde_dentro(n: &Nucleo, id: u64) -> pb::Asentamiento {
-    pb::Asentamiento { trazado: interior::trazado_de(n, id), edificios: edificios_activos(n, id), ..plaza_avistada(n, id) }
+    let mut p = pb::Asentamiento { trazado: interior::trazado_de(n, id), ..plaza_avistada(n, id) };
+    let eco = &n.estado().asentamientos[&id].economia;
+    if let Some(ciudad) = n.vista_ciudad(id) {
+        p.edificios = eco
+            .edificios
+            .iter()
+            .filter(|b| se_ve_desde_dentro(b))
+            .map(|b| pb::Edificio { fuente_id: None, prioridad: None, pausado_por_almacen_lleno: false, semilla_saturada: false, ancla_llena: false, ..interior::edificio(id, b, &ciudad) })
+            .collect();
+    }
+    p.recintos = interior::recintos(id, eco).into_iter().map(|r| pb::Recinto { siguiente_celda_en_ms: None, ..r }).collect();
+    p
 }
 
 /// El pueblo donde está el héroe de la sesión (2026-11-02, pedido del hilo de la vista 3D): lo de fuera —entero si es de su Facción (`propios::pueblo`), avistado si no— más su planta
@@ -1059,5 +1053,21 @@ pub fn de_admin(n: &Nucleo, (tipo, id): &ClaveAdmin) -> Option<Cuerpo> {
         pb::TipoEntidad::ZonaFaccion => Some(Cuerpo::ZonaFaccion(zona_faccion(n, ids::parse_faccion(id)?))),
         pb::TipoEntidad::RedCaminos => Some(Cuerpo::RedCaminos(red_caminos(n, &e.comercio.red.aristas().collect::<Vec<_>>(), |_| true))),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod pruebas_desde_dentro {
+    use super::*;
+    use asentamiento::catalogo::Tipo;
+    use asentamiento::edificio::Edificio;
+
+    #[test]
+    fn desde_dentro_se_ve_lo_que_esta_en_el_suelo_y_la_ruina_pero_no_la_cola() {
+        let con = |estado, danado| Edificio { danado, ..Edificio::nuevo(1, Tipo::Mercado, estado) };
+        assert!(se_ve_desde_dentro(&con(EstadoEdificio::Activo, false)));
+        assert!(se_ve_desde_dentro(&con(EstadoEdificio::EnConstruccion, false)));
+        assert!(se_ve_desde_dentro(&con(EstadoEdificio::EnCola, true)), "la ruina de una conquista sigue en pie");
+        assert!(!se_ve_desde_dentro(&con(EstadoEdificio::EnCola, false)), "lo encargado y sin empezar no se ve");
     }
 }
