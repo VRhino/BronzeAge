@@ -24,6 +24,15 @@ Partida nueva: la foto pasa a `BAN62`.
    - Referencia: Batalla_Unity_Ciclo §2-§8.
 4. Las respuestas de `POST /v1/registro` y `POST /v1/sesiones` traen además `servidor` (cuenta de servidor de batalla): el cliente lo puede ignorar.
 
+### Rescate de la rama de la revisión: fundar, plaza ajena desde dentro, escolta y recetas (2026-11-11, main ebfc4354)
+
+Sin cambios en el contrato ni partida nueva: cambia lo que el motor manda y lo que acepta.
+
+1. **La plaza ajena vista desde dentro.** Quien está dentro de una plaza ajena recibe en `VISTA` (`vista::plaza_desde_dentro`), además del trazado y las órdenes de mercado, **sus edificios en el suelo**: en pie, en obra y los dañados de la cola (la ruina que deja una conquista), cada uno con `completa_en_ms`, `mejora`, `danado`, `buey`, `ancho` y `alto`; y **sus recintos de muralla** (`recintos`: anillo, `avance` y mejora, sin `siguiente_celda_en_ms`). No llegan la cola sin empezar, la prioridad, la pausa, la fuente ni la receta. Qué haría el cliente: pintar esos edificios y murallas al recorrer la plaza ajena, como pinta los de la propia. Referencia: Niebla_De_Guerra §5.4, Proyecciones_Y_Autorizacion.
+2. **La columna que funda entra en su plaza.** Al fundar, la columna ya no se queda fuera: una columna de un solo héroe entra como con `entrarEnAsentamiento`, y un ejército se desarma y cada héroe entra como lo haría solo. Cada entrada emite `jugador.entra_en_asentamiento`. Qué haría el cliente: tras `fundar`, llevar al jugador al interior de la plaza nueva en lugar de dejarlo en el mapa. Referencia: Fundacion_Y_Refundacion §5.
+3. **Escolta del carro de acarreo.** El carro de acarreo admite **100** de escolta si la plaza madre no tiene Mercado (con Mercado, el cupo de su nivel); antes el motor daba 0. Qué haría el cliente: si calcula el cupo de escolta por su cuenta, dar 100 sin Mercado. Referencia: Comercio_Caravanas, el carro de acarreo («Batalla» y «Escolta»).
+4. **Recetas con requisito de edificio.** Una receta con `requiereEdificio` (en `GET /v1/datos`, catálogo de Economia_Construccion) no se fabrica si la plaza no tiene ese edificio activo con ese nivel; hoy, el Arma de Hierro de Calidad pide una Fundición de nivel 3. Qué haría el cliente: en el taller, decir qué edificio le falta a esa receta. Referencia: Economia_Construccion §5.3.
+
 ## Ya pasado
 
 Nada todavía.
