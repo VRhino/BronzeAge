@@ -116,7 +116,9 @@ Equipo inicial: el arma de tier cobre de la clase que elija al crear el héroe y
 
 El hueco del arma nunca queda vacío: `desequipar` el arma se rechaza, solo se cambia por otra. Al cambiar a un arma cuya clase no admite la armadura puesta, esa armadura pasa a la mochila, y si no cabe se rechaza el cambio.
 
-La compatibilidad y la armadura inicial de cada clase viven en el bloque `CLASES_HEROE` del diseño de clases (`Clases_De_Heroe.md`, rama `claude/project-thread-492isp`), servido junto a `OBJETOS` y con la misma versión. En `OBJETOS` cada arma solo dice su clase y su tier.
+La compatibilidad y la armadura inicial de cada clase viven en el bloque `CLASES_HEROE` del diseño de clases (`Clases_De_Heroe.md`, rama `claude/project-thread-492isp`), servido junto a `OBJETOS` pero con **su propia versión** (`bronzeage-clases-1`), porque las clases cambian poco y el catálogo mucho (autor, 2026-11-11). En `OBJETOS` cada arma solo dice su clase, por id, y su tier; el motor comprueba al cargar que esa clase existe.
+
+La tecnología del tier **solo limita comprar y forjar** (autor, 2026-11-11): un arma que ya se tiene se puede llevar siempre.
 
 ## 6. Precios
 
@@ -151,7 +153,7 @@ Forma propuesta, para Mechanics cuando se implemente:
 }
 ```
 
-`version` sustituye a `conquest-items-1` en el ticket. La clase del ticket sale del arma puesta; la compatibilidad y el equipo inicial, de `CLASES_HEROE`.
+`version` sustituye a `conquest-items-1` en el ticket, que lleva además la versión de `CLASES_HEROE`. La clase del ticket sale del arma puesta; la compatibilidad y el equipo inicial, de `CLASES_HEROE`.
 
 ## 8. Lo que toca en Conquest
 
