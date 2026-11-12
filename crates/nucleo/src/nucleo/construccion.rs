@@ -240,7 +240,7 @@ impl Nucleo {
             // El `bonusProduccion` de las adoptadas (6C: `canteria` ×1,5 la piedra), en plazas y pueblos, aplicado al ritmo antes del resto oculto.
             let factor_tecnologia = |rec: Recurso| tecnologia::adopcion::factor_produccion(rt, adoptadas, rec);
             let extra = factores_extra(rt, a.ocupada_hasta.map(|_| reglas.economia.combate.ocupacion.factor_crecimiento), residentes);
-            let mut fuentes = FuentesMundo { mapa: &geo.mapa, nodos: yacimientos, ahora: t, catalogo: &reglas.economia.datos.catalogo, contado: [0; 24], agotados: vec![], regenerados: vec![] };
+            let mut fuentes = FuentesMundo { mapa: &geo.mapa, nodos: yacimientos, ahora: t, catalogo: &reglas.economia.datos.catalogo, contado: [0; tecnologia::Contador::N], agotados: vec![], regenerados: vec![] };
             let mut sitios = SitiosPlaza {
                 mapa: &geo.mapa,
                 id,

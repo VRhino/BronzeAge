@@ -323,7 +323,7 @@ mod pruebas {
         let todas = ofrece(&r);
         assert!(!todas.contains(&Tropa::MiliciaLanceros) && !todas.contains(&Tropa::Mineros), "el Centro Urbano no existe aquí");
         assert!(todas.contains(&Tropa::Arqueros) && todas.contains(&Tropa::ArquerosCompuesto) && todas.contains(&Tropa::CarrosGuerra));
-        assert_eq!(todas.len(), 27 - 4, "las 23 tropas de Barracón, Galería y Caballerizas (nivel ≤ 3)");
+        assert_eq!(todas.len(), 37 - 4, "las 33 tropas de Barracón, Galería y Caballerizas (nivel ≤ 3), con las de las Eras IV y V");
         let solo_barracon = tropas_del_campamento(&r, &[Tipo::Barracon], &|_| true);
         assert!(solo_barracon.contains(&Tropa::Shardana) && !solo_barracon.contains(&Tropa::Arqueros));
         let sin_hierro = tropas_del_campamento(&r, &TODOS_LOS_EDIFICIOS, &|t| t != "forja_hierro_temprana" && t != "equitacion_militar");

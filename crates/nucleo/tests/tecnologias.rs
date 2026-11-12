@@ -394,7 +394,7 @@ fn la_foto_lleva_las_citas_de_cada_descubrimiento() {
     let reglas = e.n.estado().reglas.clone();
     let mundo_hash = e.n.estado().mundo_hash.clone();
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN62");
+    assert_eq!(&bytes[..5], b"BAN63");
     let vuelta = Estado::deserializar(&bytes, &reglas, &mundo_hash).unwrap();
     assert_eq!(vuelta.serializar(), bytes);
     assert_eq!(vuelta.hash(), e.n.estado().hash());
@@ -506,7 +506,7 @@ async fn por_la_sesion_el_heroe_ve_los_contadores_en_curso_y_le_llegan_al_dia_cu
     };
     let (mut c, _, recibido) = w.conectar(hola("ok:ana", TipoCliente::ClienteUnity)).await;
     let antes = recibido.iter().find_map(estado).expect("en su HEROE");
-    assert_eq!((antes.contadores.len(), antes.logros.is_empty()), (24, true), "los 24 contadores, sin qué tecnología abre cada logro");
+    assert_eq!((antes.contadores.len(), antes.logros.is_empty()), (36, true), "los 36 contadores, sin qué tecnología abre cada logro");
     let piedra = antes.contadores["extraido.piedra"];
     // La administración para el reloj y lo avanza tres minutos: el pueblo de cantera saca piedra.
     let (mut adm, _, _) = w.conectar(hola("ok:admin", TipoCliente::ClienteAdminWeb)).await;

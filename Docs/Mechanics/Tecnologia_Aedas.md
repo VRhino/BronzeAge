@@ -329,6 +329,18 @@ la Era de cada tecnología propia (decide lo que cuesta adoptarla o comprarla); 
     "nombre": "Polis e imperios",
     "minimoSemanas": 1,
     "plazoSemanas": 7
+  },
+  "profesionalizacion_imperial": {
+    "orden": 4,
+    "nombre": "Profesionalización",
+    "minimoSemanas": 1,
+    "plazoSemanas": 8
+  },
+  "hegemonia_macedonica": {
+    "orden": 5,
+    "nombre": "Hegemonía macedónica",
+    "minimoSemanas": 1,
+    "plazoSemanas": 26
   }
 }
 ```
@@ -348,6 +360,14 @@ la Era de cada tecnología propia (decide lo que cuesta adoptarla o comprarla); 
   "polis_imperios": {
     "oro": 600,
     "lingoteHierro": 30
+  },
+  "profesionalizacion_imperial": {
+    "oro": 1000,
+    "lingoteHierro": 50
+  },
+  "hegemonia_macedonica": {
+    "oro": 1500,
+    "lingoteHierro": 80
   }
 }
 ```
@@ -912,6 +932,280 @@ Cada entrada: `era`, `deArranque?`, `logro {contador, umbral | porPlaza, ademas?
         "nivelInterno": 2
       }
     ]
+  },
+  "ejercito_permanente": {
+    "nombre": "Ejército permanente",
+    "era": "profesionalizacion_imperial",
+    "logro": {
+      "contador": "escuadras.veteranas",
+      "porPlaza": 2
+    },
+    "hito": [
+      {
+        "tipo": "edificio",
+        "edificio": "barracon",
+        "nivelInterno": 3
+      },
+      {
+        "tipo": "escuadrasVivas",
+        "cantidad": 10
+      }
+    ]
+  },
+  "cuerpo_oficiales": {
+    "nombre": "Cuerpo de oficiales",
+    "era": "profesionalizacion_imperial",
+    "logro": {
+      "contador": "batallas.conTresHeroes",
+      "porPlaza": 1
+    },
+    "hito": [
+      {
+        "tipo": "heroesEnFaccion",
+        "cantidad": 5
+      }
+    ]
+  },
+  "logistica_campana": {
+    "nombre": "Logística de campaña",
+    "era": "profesionalizacion_imperial",
+    "logro": {
+      "contador": "caminos.compartidos",
+      "umbral": 1
+    },
+    "hito": [
+      {
+        "tipo": "plazaEnNivel",
+        "nivel": 4
+      },
+      {
+        "tipo": "nivelFaccion",
+        "nivel": 5
+      },
+      {
+        "tipo": "columnasEnMarcha",
+        "cantidad": 3
+      }
+    ]
+  },
+  "infanteria_profesional": {
+    "nombre": "Infantería profesional",
+    "era": "profesionalizacion_imperial",
+    "logro": {
+      "contador": "batallas.ganadasEnInferioridad",
+      "porPlaza": 1
+    },
+    "hito": [
+      {
+        "tipo": "tecnologia",
+        "id": "ejercito_permanente"
+      },
+      {
+        "tipo": "edificioEnPlazaDeNivel",
+        "edificio": "barracon",
+        "nivelInterno": 3,
+        "nivelPlaza": 4
+      }
+    ]
+  },
+  "hostigadores_profesionales": {
+    "nombre": "Hostigadores profesionales",
+    "era": "profesionalizacion_imperial",
+    "logro": {
+      "contador": "escuadras.eliteDestruidas",
+      "porPlaza": 2
+    },
+    "hito": [
+      {
+        "tipo": "tecnologia",
+        "id": "pantalla_escaramuzadores"
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "galeriaDeTiro",
+        "nivelInterno": 3
+      }
+    ]
+  },
+  "carga_caballeria": {
+    "nombre": "Carga de caballería",
+    "era": "profesionalizacion_imperial",
+    "logro": {
+      "contador": "batallas.campoAbiertoConCaballeria",
+      "porPlaza": 1
+    },
+    "hito": [
+      {
+        "tipo": "tecnologia",
+        "id": "caballeria_organizada"
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "caballerizas",
+        "nivelInterno": 3
+      }
+    ]
+  },
+  "reforma_macedonica": {
+    "nombre": "Reforma macedónica",
+    "era": "hegemonia_macedonica",
+    "logro": {
+      "contador": "batallas.armasCombinadas",
+      "porPlaza": 1
+    },
+    "hito": [
+      {
+        "tipo": "tecnologia",
+        "id": "forja_hierro_estandarizada"
+      },
+      {
+        "tipo": "tecnologia",
+        "id": "disciplina_formacion"
+      },
+      {
+        "tipo": "tecnologia",
+        "id": "infanteria_profesional"
+      },
+      {
+        "tipo": "tecnologia",
+        "id": "caballeria_organizada"
+      },
+      {
+        "tipo": "tecnologia",
+        "id": "logistica_campana"
+      },
+      {
+        "tipo": "tecnologia",
+        "id": "cuerpo_oficiales"
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "barracon",
+        "nivelInterno": 3
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "armeria",
+        "nivelInterno": 3
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "caballerizas",
+        "nivelInterno": 3
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "palacio",
+        "nivelInterno": 3
+      }
+    ]
+  },
+  "falange_sarisa": {
+    "nombre": "Falange de sarisas",
+    "era": "hegemonia_macedonica",
+    "logro": {
+      "contador": "batallas.contraCoalicion",
+      "umbral": 3
+    },
+    "hito": [
+      {
+        "tipo": "tecnologia",
+        "id": "reforma_macedonica"
+      },
+      {
+        "tipo": "edificioEnPlazaDeNivel",
+        "edificio": "barracon",
+        "nivelInterno": 2,
+        "nivelPlaza": 4
+      }
+    ]
+  },
+  "cuerpo_hipaspistas": {
+    "nombre": "Cuerpo de hipaspistas",
+    "era": "hegemonia_macedonica",
+    "logro": {
+      "contador": "batallas.conRey",
+      "umbral": 10
+    },
+    "hito": [
+      {
+        "tipo": "tecnologia",
+        "id": "falange_sarisa"
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "barracon",
+        "nivelInterno": 3
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "palacio",
+        "nivelInterno": 3
+      }
+    ]
+  },
+  "formacion_cuna": {
+    "nombre": "Formación en cuña",
+    "era": "hegemonia_macedonica",
+    "logro": {
+      "contador": "persecuciones.deCaballeria",
+      "porPlaza": 2
+    },
+    "hito": [
+      {
+        "tipo": "tecnologia",
+        "id": "reforma_macedonica"
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "caballerizas",
+        "nivelInterno": 2
+      }
+    ]
+  },
+  "companeros_reales": {
+    "nombre": "Compañeros reales",
+    "era": "hegemonia_macedonica",
+    "logro": {
+      "contador": "batallas.campoAbiertoConCaballeriaElite",
+      "porPlaza": 1
+    },
+    "hito": [
+      {
+        "tipo": "tecnologia",
+        "id": "formacion_cuna"
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "caballerizas",
+        "nivelInterno": 3
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "palacio",
+        "nivelInterno": 3
+      }
+    ]
+  },
+  "acero_templado": {
+    "nombre": "Acero templado",
+    "era": "hegemonia_macedonica",
+    "logro": {
+      "contador": "fabricado.armaHierroCalidad",
+      "porPlaza": 20
+    },
+    "hito": [
+      {
+        "tipo": "edificio",
+        "edificio": "fundicion",
+        "nivelInterno": 3
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "armeria",
+        "nivelInterno": 3
+      }
+    ]
   }
 }
 ```
@@ -1356,7 +1650,7 @@ Cada entrada: `era`, `deArranque?`, `logro {contador, umbral | porPlaza, ademas?
     ]
   },
   "forja_hierro_estandarizada": {
-    "nombre": "Canto del acero templado",
+    "nombre": "Canto de los cálibes",
     "capitulos": [
       {
         "hecho": "obra",
@@ -1457,6 +1751,394 @@ Cada entrada: `era`, `deArranque?`, `logro {contador, umbral | porPlaza, ademas?
       {
         "hecho": "conquista",
         "cantidad": 1
+      }
+    ]
+  },
+  "ejercito_permanente": {
+    "nombre": "Canto de los que nunca vuelven al arado",
+    "capitulos": [
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "barracon"
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 2
+      },
+      {
+        "hecho": "defensa",
+        "cantidad": 2
+      },
+      {
+        "hecho": "adopcion",
+        "cantidad": 1
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 2
+      },
+      {
+        "hecho": "ascenso",
+        "cantidad": 1
+      }
+    ]
+  },
+  "cuerpo_oficiales": {
+    "nombre": "Canto de los capitanes",
+    "capitulos": [
+      {
+        "hecho": "batalla",
+        "cantidad": 2
+      },
+      {
+        "hecho": "adopcion",
+        "cantidad": 1
+      },
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "barracon"
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 2
+      },
+      {
+        "hecho": "defensa",
+        "cantidad": 1
+      },
+      {
+        "hecho": "conquista",
+        "cantidad": 1
+      }
+    ]
+  },
+  "logistica_campana": {
+    "nombre": "Canto de los carros de víveres",
+    "capitulos": [
+      {
+        "hecho": "caravana",
+        "cantidad": 3
+      },
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "mercado"
+      },
+      {
+        "hecho": "caravana",
+        "cantidad": 3
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 1
+      },
+      {
+        "hecho": "ascenso",
+        "cantidad": 1
+      },
+      {
+        "hecho": "caravana",
+        "cantidad": 2
+      }
+    ]
+  },
+  "infanteria_profesional": {
+    "nombre": "Canto de Leuctra",
+    "capitulos": [
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "barracon"
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 3
+      },
+      {
+        "hecho": "defensa",
+        "cantidad": 2
+      },
+      {
+        "hecho": "adopcion",
+        "cantidad": 1
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 2
+      },
+      {
+        "hecho": "conquista",
+        "cantidad": 1
+      }
+    ]
+  },
+  "hostigadores_profesionales": {
+    "nombre": "Canto de Lequeo",
+    "capitulos": [
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "galeriaDeTiro"
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 3
+      },
+      {
+        "hecho": "defensa",
+        "cantidad": 1
+      },
+      {
+        "hecho": "adopcion",
+        "cantidad": 1
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 2
+      },
+      {
+        "hecho": "caravana",
+        "cantidad": 2
+      }
+    ]
+  },
+  "carga_caballeria": {
+    "nombre": "Canto de los jinetes de Tesalia",
+    "capitulos": [
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "caballerizas"
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 2
+      },
+      {
+        "hecho": "caravana",
+        "cantidad": 2
+      },
+      {
+        "hecho": "adopcion",
+        "cantidad": 1
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 3
+      },
+      {
+        "hecho": "conquista",
+        "cantidad": 1
+      }
+    ]
+  },
+  "reforma_macedonica": {
+    "nombre": "Canto de Filipo",
+    "capitulos": [
+      {
+        "hecho": "adopcion",
+        "cantidad": 2
+      },
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "barracon"
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 3
+      },
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "caballerizas"
+      },
+      {
+        "hecho": "conquista",
+        "cantidad": 1
+      },
+      {
+        "hecho": "ascenso",
+        "cantidad": 1
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 3
+      }
+    ]
+  },
+  "falange_sarisa": {
+    "nombre": "Canto de Queronea",
+    "capitulos": [
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "barracon"
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 3
+      },
+      {
+        "hecho": "defensa",
+        "cantidad": 2
+      },
+      {
+        "hecho": "adopcion",
+        "cantidad": 1
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 3
+      },
+      {
+        "hecho": "conquista",
+        "cantidad": 1
+      },
+      {
+        "hecho": "defensa",
+        "cantidad": 2
+      }
+    ]
+  },
+  "cuerpo_hipaspistas": {
+    "nombre": "Canto de los portadores de escudo",
+    "capitulos": [
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "palacio"
+      },
+      {
+        "hecho": "defensa",
+        "cantidad": 2
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 3
+      },
+      {
+        "hecho": "adopcion",
+        "cantidad": 1
+      },
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "barracon"
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 2
+      },
+      {
+        "hecho": "conquista",
+        "cantidad": 1
+      }
+    ]
+  },
+  "formacion_cuna": {
+    "nombre": "Canto de los que corren delante",
+    "capitulos": [
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "caballerizas"
+      },
+      {
+        "hecho": "caravana",
+        "cantidad": 3
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 2
+      },
+      {
+        "hecho": "adopcion",
+        "cantidad": 1
+      },
+      {
+        "hecho": "caravana",
+        "cantidad": 2
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 2
+      },
+      {
+        "hecho": "conquista",
+        "cantidad": 1
+      }
+    ]
+  },
+  "companeros_reales": {
+    "nombre": "Canto de Gaugamela",
+    "capitulos": [
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "caballerizas"
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 3
+      },
+      {
+        "hecho": "adopcion",
+        "cantidad": 1
+      },
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "palacio"
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 3
+      },
+      {
+        "hecho": "conquista",
+        "cantidad": 2
+      },
+      {
+        "hecho": "ascenso",
+        "cantidad": 1
+      }
+    ]
+  },
+  "acero_templado": {
+    "nombre": "Canto del acero templado",
+    "capitulos": [
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "fundicion"
+      },
+      {
+        "hecho": "caravana",
+        "cantidad": 3
+      },
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "armeria"
+      },
+      {
+        "hecho": "adopcion",
+        "cantidad": 1
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 2
+      },
+      {
+        "hecho": "ascenso",
+        "cantidad": 1
+      },
+      {
+        "hecho": "caravana",
+        "cantidad": 2
       }
     ]
   }

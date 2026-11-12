@@ -248,7 +248,7 @@ pub(crate) struct FuentesMundo<'a> {
     pub catalogo: &'a asentamiento::catalogo::Catalogo,
     /// Lo que salió de los nodos y lo que fabricaron las recetas, en milésimas, por contador de los logros (`tecnologia::Contador::indice`, 6B): se cuenta **en origen**, en plazas y
     /// pueblos (D17), y quien avanza la plaza lo suma al estado de tecnología.
-    pub contado: [Mil; 24],
+    pub contado: [Mil; tecnologia::Contador::N],
     /// Los nodos que se agotaron en este paso y los que volvieron a su cantidad inicial (la regeneración se aplica al volver a extraer, pasado su cooldown), en orden: los hechos
     /// `construccion.yacimiento_agotado` y `mapa.yacimiento_regenerado`.
     pub agotados: Vec<u32>,
@@ -375,7 +375,7 @@ mod pruebas {
         let catalogo = asentamiento::Reglas::cargar().catalogo;
         let mut nodos = BTreeMap::new();
         let mut paso = |ahora: Instante, pedido: Mil| {
-            let mut f = FuentesMundo { mapa: &mapa, nodos: &mut nodos, ahora, catalogo: &catalogo, contado: [0; 24], agotados: vec![], regenerados: vec![] };
+            let mut f = FuentesMundo { mapa: &mapa, nodos: &mut nodos, ahora, catalogo: &catalogo, contado: [0; tecnologia::Contador::N], agotados: vec![], regenerados: vec![] };
             let salido = f.extraer(0, pedido);
             (salido, f.agotados, f.regenerados)
         };

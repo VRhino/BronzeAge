@@ -713,7 +713,7 @@ fn la_foto_a_mitad_de_obra_conserva_la_cita() {
 
     let reglas = reglas(true, |_| {});
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN62");
+    assert_eq!(&bytes[..5], b"BAN63");
     let vuelta = Estado::deserializar(&bytes, &reglas, &m.0.hash().to_string()).unwrap();
     assert_eq!(vuelta.serializar(), bytes, "ida y vuelta idéntica");
     assert_eq!(vuelta.asentamientos, e.n.estado().asentamientos);

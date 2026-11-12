@@ -844,6 +844,161 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "velocidad": 18,
     "escalon": 4,
     "unidadesPorDefecto": 15
+  },
+  {
+    "id": "epilektoi",
+    "tecnologia": "infanteria_profesional",
+    "nombre": "Epílektoi",
+    "edificio": "barracon",
+    "nivelRequerido": 2,
+    "costoEquipo": {
+      "armaHierroCalidad": 1,
+      "armaduraBronce": 1
+    },
+    "poderBase": 10,
+    "velocidad": 24,
+    "escalon": 3,
+    "unidadesPorDefecto": 18
+  },
+  {
+    "id": "inmortales",
+    "tecnologia": "infanteria_profesional",
+    "nombre": "Inmortales",
+    "edificio": "barracon",
+    "nivelRequerido": 3,
+    "costoEquipo": {
+      "armaHierroCalidad": 1,
+      "armaBronce": 1,
+      "armaduraIntermedia": 1
+    },
+    "poderBase": 15,
+    "velocidad": 24,
+    "escalon": 5,
+    "unidadesPorDefecto": 15
+  },
+  {
+    "id": "peltastas_ificrates",
+    "tecnologia": "hostigadores_profesionales",
+    "nombre": "Peltastas de Ifícrates",
+    "edificio": "galeriaDeTiro",
+    "nivelRequerido": 3,
+    "costoEquipo": {
+      "armaHierroCalidad": 2,
+      "armaduraBasica": 1
+    },
+    "poderBase": 14,
+    "velocidad": 30,
+    "escalon": 4,
+    "unidadesPorDefecto": 20
+  },
+  {
+    "id": "caballeria_tesalia",
+    "tecnologia": "carga_caballeria",
+    "nombre": "Caballería tesalia",
+    "edificio": "caballerizas",
+    "nivelRequerido": 3,
+    "costoEquipo": {
+      "armaHierroCalidad": 1,
+      "armaduraIntermedia": 1
+    },
+    "caballos": 1,
+    "poderBase": 14,
+    "velocidad": 84,
+    "escalon": 4,
+    "unidadesPorDefecto": 15
+  },
+  {
+    "id": "caballeria_noble_persa",
+    "tecnologia": "carga_caballeria",
+    "nombre": "Caballería noble persa",
+    "edificio": "caballerizas",
+    "nivelRequerido": 3,
+    "costoEquipo": {
+      "armaHierro": 2,
+      "armaduraBronce": 1
+    },
+    "caballos": 1,
+    "poderBase": 17,
+    "velocidad": 84,
+    "escalon": 4,
+    "unidadesPorDefecto": 16
+  },
+  {
+    "id": "prodromos",
+    "tecnologia": "formacion_cuna",
+    "nombre": "Pródromos",
+    "edificio": "caballerizas",
+    "nivelRequerido": 2,
+    "costoEquipo": {
+      "armaHierro": 1
+    },
+    "caballos": 1,
+    "poderBase": 9,
+    "velocidad": 84,
+    "escalon": 3,
+    "unidadesPorDefecto": 18
+  },
+  {
+    "id": "falangitas",
+    "tecnologia": "falange_sarisa",
+    "nombre": "Falangitas",
+    "edificio": "barracon",
+    "nivelRequerido": 2,
+    "costoEquipo": {
+      "armaHierroCalidad": 1,
+      "armaduraIntermedia": 1
+    },
+    "poderBase": 14,
+    "velocidad": 18,
+    "escalon": 4,
+    "unidadesPorDefecto": 32,
+    "poblacion": "artesanos"
+  },
+  {
+    "id": "hipaspistas",
+    "tecnologia": "cuerpo_hipaspistas",
+    "nombre": "Hipaspistas",
+    "edificio": "barracon",
+    "nivelRequerido": 3,
+    "costoEquipo": {
+      "armaHierroCalidad": 1,
+      "armaduraBronceCalidad": 1
+    },
+    "poderBase": 17,
+    "velocidad": 24,
+    "escalon": 5,
+    "unidadesPorDefecto": 20
+  },
+  {
+    "id": "companeros",
+    "tecnologia": "companeros_reales",
+    "nombre": "Compañeros",
+    "edificio": "caballerizas",
+    "nivelRequerido": 3,
+    "costoEquipo": {
+      "armaHierroCalidad": 1,
+      "armaduraBronceCalidad": 1
+    },
+    "caballos": 1,
+    "poderBase": 17,
+    "velocidad": 84,
+    "escalon": 5,
+    "unidadesPorDefecto": 16
+  },
+  {
+    "id": "agrianos",
+    "tecnologia": "reforma_macedonica",
+    "nombre": "Agrianos",
+    "edificio": "galeriaDeTiro",
+    "nivelRequerido": 3,
+    "costoEquipo": {
+      "armaHierroCalidad": 2,
+      "armaduraBasica": 1
+    },
+    "poderBase": 17,
+    "velocidad": 30,
+    "escalon": 5,
+    "unidadesPorDefecto": 20
   }
 ]
 ```

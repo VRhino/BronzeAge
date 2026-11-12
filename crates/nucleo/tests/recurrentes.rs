@@ -285,7 +285,7 @@ fn aceptar_contar_desde_entonces_repartir_la_grupal_y_reclamar_despues_del_perio
 
     // La foto lleva los tablones (BAN50) y se lee igual.
     let bytes = x.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN62");
+    assert_eq!(&bytes[..5], b"BAN63");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas(Some(CATALOGO)), &x.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.recurrentes, x.n.estado().recurrentes);
     assert_eq!(vuelta.serializar(), bytes);

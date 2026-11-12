@@ -1,4 +1,4 @@
-//! Los 24 contadores de los logros del servidor (TA §2.1) y de qué vía sale cada uno. Decisión técnica 3 del plan: **se cuentan en origen**, tipados,
+//! Los 36 contadores de los logros del servidor (TA §2.1) y de qué vía sale cada uno. Decisión técnica 3 del plan: **se cuentan en origen**, tipados,
 //! sin reparsear los hechos de la versión; el núcleo llama a estas funciones donde ocurre el hecho (6B) y suma el [`Delta`] con
 //! [`crate::EstadoTecnologia::aplicar`]. Las vías de un solo contador (la caravana capturada o interceptada, el campamento de bandidos destruido, el
 //! animal comprado, el encuentro en campo abierto) son `Delta::uno`; las de varios tienen su función.
@@ -23,7 +23,9 @@ macro_rules! contadores {
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
         pub enum Contador { $($v),+ }
         impl Contador {
-            pub const TODOS: [Contador; 24] = [$(Contador::$v),+];
+            /// Cuántos hay: el tamaño de los arrays del estado y de la foto.
+            pub const N: usize = [$(Contador::$v),+].len();
+            pub const TODOS: [Contador; Contador::N] = [$(Contador::$v),+];
             /// Clave de los datos y del contrato (`"extraido.cobre"`).
             pub fn nombre(self) -> &'static str { match self { $(Contador::$v => $n),+ } }
             pub fn desde_nombre(s: &str) -> Option<Contador> { match s { $($n => Some(Contador::$v),)+ _ => None } }
@@ -42,6 +44,12 @@ contadores! {
     ReclutadosArqueros = "reclutados.arqueros", ReclutadosCaballeria = "reclutados.caballeria",
     ReclutadosEscaramuzadores = "reclutados.escaramuzadores_jabalina", ReclutadosArquerosCompuesto = "reclutados.arqueros_compuesto",
     ReclutadosJinetesAsirios = "reclutados.jinetes_asirios", PlazasEnNivel2 = "plazasEnNivel.2", PlazasEnNivel3 = "plazasEnNivel.3",
+    // Eras IV y V (Eras_IV_Y_V §3, 2026-11-11).
+    EscuadrasVeteranas = "escuadras.veteranas", BatallasConTresHeroes = "batallas.conTresHeroes", CaminosCompartidos = "caminos.compartidos",
+    BatallasGanadasEnInferioridad = "batallas.ganadasEnInferioridad", EscuadrasEliteDestruidas = "escuadras.eliteDestruidas",
+    BatallasCampoAbiertoConCaballeria = "batallas.campoAbiertoConCaballeria", BatallasArmasCombinadas = "batallas.armasCombinadas",
+    BatallasContraCoalicion = "batallas.contraCoalicion", BatallasConRey = "batallas.conRey", PersecucionesDeCaballeria = "persecuciones.deCaballeria",
+    BatallasCampoAbiertoConCaballeriaElite = "batallas.campoAbiertoConCaballeriaElite", FabricadoArmaHierroCalidad = "fabricado.armaHierroCalidad",
 }
 
 impl Contador {
@@ -65,8 +73,15 @@ impl Contador {
 }
 
 /// Lo que suma un hecho a cada contador (el `DeltaContadores` del TS).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Delta(pub [u64; 24]);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Delta(pub [u64; Contador::N]);
+
+/// A mano: un array de más de 32 no tiene `Default`.
+impl Default for Delta {
+    fn default() -> Self {
+        Delta([0; Contador::N])
+    }
+}
 
 impl Delta {
     pub fn uno(c: Contador) -> Delta {
@@ -216,7 +231,7 @@ mod pruebas {
 
     #[test]
     fn los_nombres_son_los_del_ts_y_hay_24() {
-        assert_eq!(Contador::TODOS.len(), 24);
+        assert_eq!(Contador::TODOS.len(), 36);
         for (i, c) in Contador::TODOS.into_iter().enumerate() {
             assert_eq!(c.indice(), i);
             assert_eq!(Contador::desde_nombre(c.nombre()), Some(c));

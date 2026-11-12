@@ -98,7 +98,7 @@ impl Nucleo {
     }
 
     /// Suma los flujos de un paso de la economía (milésimas por contador: lo extraído y lo fabricado).
-    pub(super) fn contar_flujos(&mut self, t: Instante, contado: &[Mil; 24]) {
+    pub(super) fn contar_flujos(&mut self, t: Instante, contado: &[Mil; Contador::N]) {
         let Estado { reglas, tecnologia, .. } = &mut self.estado;
         let mut fijados = Vec::new();
         for (i, &n) in contado.iter().enumerate().filter(|(_, &n)| n > 0) {

@@ -82,7 +82,7 @@ pub(super) struct Sesion {
     pub(super) informes: Option<BTreeSet<String>>,
     /// Los contadores de los logros que el cliente tiene en la forma pública del estado de tecnología de su `HEROE` (2026-11-06, pedido del autor: la barra «x / y» del logro). Suben sin que
     /// suba la versión (lo extraído y lo fabricado, con el paso de minuto). `None`: no se sabe (reanudó por deltas): se manda el estado.
-    pub(super) contadores: Option<[u64; 24]>,
+    pub(super) contadores: Option<[u64; tecnologia::Contador::N]>,
     /// Lo que el cliente tiene de lo que cobra su `CAMPAMENTO` (los precios del mercado y, al residente, los de reclutar: `interior::lo_que_cobra`), que cambia sin que cambie la versión.
     /// `None`: no se sabe (reanudó por deltas): se manda el campamento.
     pub(super) cobra: Option<Cobra>,
@@ -120,7 +120,7 @@ impl AdminVisto {
             era: t.era,
             era_desde: t.era_desde,
             contadores: t.contadores,
-            restos: [0; 24],
+            restos: [0; tecnologia::Contador::N],
             logros: t.logros.clone(),
             plazas_al_cumplir: t.plazas_al_cumplir.clone(),
             plazas: t.plazas,

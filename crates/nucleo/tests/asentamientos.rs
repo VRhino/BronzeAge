@@ -1064,7 +1064,7 @@ fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash() {
     let reglas = Reglas::default();
     let base = estado_con_una_plaza();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN62");
+    assert_eq!(&bytes[..5], b"BAN63");
     let con = |carga: Carga, prioridad: u8, en: Instante| {
         let mut s = Estado::deserializar(&bytes, &reglas, "h").unwrap();
         let clave = s.generaciones.clave(1);

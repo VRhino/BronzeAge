@@ -199,7 +199,7 @@ pub struct Buscador {
 #[derive(Clone, Debug)]
 struct Previo {
     t: Instante,
-    contadores: [u64; 24],
+    contadores: [u64; Contador::N],
     logros: Vec<Option<Instante>>,
     era: u8,
     era_desde: Instante,
@@ -214,9 +214,9 @@ pub struct Tec {
     pub buscadores: Vec<Buscador>,
     previo: Option<Previo>,
     /// Lo que los hechos leídos dicen que subió cada contador discreto, en total y en la observación anterior; y los contadores reales de entonces.
-    esperado: [u64; 24],
-    esperado_antes: [u64; 24],
-    real_antes: [u64; 24],
+    esperado: [u64; Contador::N],
+    esperado_antes: [u64; Contador::N],
+    real_antes: [u64; Contador::N],
     /// La Era según los hechos leídos (índice de `Reglas::eras`).
     era_hechos: u8,
     /// (héroe, alijo) abiertos según los hechos.
@@ -243,9 +243,9 @@ impl Tec {
             muestras: Vec::new(),
             buscadores: Vec::new(),
             previo: None,
-            esperado: [0; 24],
-            esperado_antes: [0; 24],
-            real_antes: [0; 24],
+            esperado: [0; Contador::N],
+            esperado_antes: [0; Contador::N],
+            real_antes: [0; Contador::N],
             era_hechos: 0,
             abiertos: BTreeSet::new(),
             emitida: Vec::new(),

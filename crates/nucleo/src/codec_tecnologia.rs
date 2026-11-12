@@ -1,7 +1,7 @@
 //! Serialización canónica del estado de tecnología del mundo (`tecnologia::EstadoTecnologia`) para el hash y las fotos (desde BAN36, tanda 6B). La estructura se desestructura **entera**
 //! (sin `..`): si el crate `tecnologia` añade un campo, esto deja de compilar y obliga a decidir cómo se guarda.
 //!
-//! Formato (little endian, el de `codec`): `era u8 · era_desde i64 · contadores{24 × u64} · restos{24 × u64} · logros{n u64 · n × opt_i64} · plazas_al_cumplir{n u64 · n × u32} (desde BAN58) · primeros{n u64 · n × (opt: facción u32, en i64)} ·
+//! Formato (little endian, el de `codec`): `era u8 · era_desde i64 · contadores{36 × u64} · restos{36 × u64} · logros{n u64 · n × opt_i64} · plazas_al_cumplir{n u64 · n × u32} (desde BAN58) · primeros{n u64 · n × (opt: facción u32, en i64)} ·
 //! cantadas u64 · por_faccion{n u64 · n × (facción u32, aparecidas u64, adoptadas u64, reveladas u64)}`. Las tecnologías van por índice del catálogo (el orden del bloque `TECNOLOGIAS`, que
 //! fija la huella de las reglas) y los conjuntos, como mapas de bits. `plazas` (N de los umbrales por plaza) es derivado y no se guarda: lo rehace el núcleo con el espacio.
 
@@ -12,7 +12,7 @@ use tecnologia::datos::HechoEpico;
 use tecnologia::epicas::Clave;
 use tecnologia::estado::Primero;
 use tecnologia::itinerantes::AedaItinerante;
-use tecnologia::{AedaResidente, Conjunto, Epica, EstadoTecnologia, Residentes, TecnologiasFaccion};
+use tecnologia::{AedaResidente, Conjunto, Contador, Epica, EstadoTecnologia, Residentes, TecnologiasFaccion};
 
 pub(crate) fn escribir(w: &mut Escritor, e: &EstadoTecnologia) {
     let EstadoTecnologia { era, era_desde, contadores, restos, logros, plazas_al_cumplir, plazas: _, primeros, cantadas, por_faccion } = e;
@@ -41,7 +41,7 @@ pub(crate) fn escribir(w: &mut Escritor, e: &EstadoTecnologia) {
 
 pub(crate) fn leer(r: &mut Lector) -> Result<EstadoTecnologia, ErrorFormato> {
     let (era, era_desde) = (r.u8()?, r.i64()?);
-    let (mut contadores, mut restos) = ([0u64; 24], [0u64; 24]);
+    let (mut contadores, mut restos) = ([0u64; Contador::N], [0u64; Contador::N]);
     for n in contadores.iter_mut().chain(restos.iter_mut()) {
         *n = r.u64()?;
     }

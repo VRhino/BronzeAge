@@ -40,7 +40,7 @@ fn los_contratos_y_las_marcas_dan_la_vuelta_por_la_foto() {
     s.contratos.terminados.insert((22, 1), Terminado { firmado_por: 10, renombre: 25, palabra: true, valorable_hasta: 9_000, valorado: false });
 
     let bytes = s.serializar();
-    assert_eq!(&bytes[..5], b"BAN62");
+    assert_eq!(&bytes[..5], b"BAN63");
     let vuelta = Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.contratos, s.contratos);
     assert_eq!(vuelta.politica, s.politica);

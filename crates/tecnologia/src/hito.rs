@@ -33,6 +33,13 @@ pub fn cumple(c: &Condicion, propias: &TecnologiasFaccion, v: &impl VistaFaccion
         Condicion::RecursoEnCapital(r) => v.recurso_en_capital(r),
         Condicion::CapitalEnNivel { nivel, con } => v.capital_en_nivel(nivel, con),
         Condicion::YacimientoEnTerritorio(r) => v.yacimiento_en_territorio(r),
+        // FASE0(T4): las condiciones de las Eras IV y V se leen pero aún no se evalúan; T4 pone su regla.
+        Condicion::EscuadrasVivas(_)
+        | Condicion::HeroesEnFaccion(_)
+        | Condicion::PlazaEnNivel(_)
+        | Condicion::NivelFaccion(_)
+        | Condicion::ColumnasEnMarcha(_)
+        | Condicion::EdificioEnPlazaDeNivel { .. } => false,
     }
 }
 
