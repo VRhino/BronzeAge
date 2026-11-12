@@ -5,7 +5,7 @@
 //! desde el 2026-11-03 (pedido del autor), también desde dentro del campamento donde reside: con su almacén personal o con el carro que tiene allí ([`Bolsa`]). Desde la tanda 69 puede
 //! pagar en cambio con sus monedas, a la tarifa en monedas (la de oro × `monedasPorOro`), en cualquier sitio.
 //! También se contrata desde la taberna de una plaza de su Facción (tanda 69 §8), sin ir al campamento, si éste cae en la región de la plaza: paga el almacén de la plaza, y firma entonces el
-//! Rey, el Embajador o el Gobernador, o con sus monedas. Prorrogar sigue siendo en persona.
+//! Rey, el Embajador o el Gobernador, o con sus monedas. Los mismos firman también con el fondo de monedas de la plaza, el del impuesto de su forja (Forja_En_Plazas §6). Prorrogar sigue siendo en persona.
 //! No elige con qué cargo: las reglas puras toman el de más rango que pueda firmar ese trabajo sobre ese objetivo. El pago en oro entra en el almacén personal del mercenario hasta llenarlo y
 //! lo que no cabe desaparece: es un sumidero, y nunca bloquea una firma (decisión 9 del plan); las monedas pagadas pasan a las del mercenario.
 
@@ -126,7 +126,9 @@ impl Nucleo {
             )),
             PagarCon::AlmacenPersonal => Ok(Bolsa::AlmacenPersonal),
             PagarCon::Monedas => Ok(Bolsa::Monedas),
-            PagarCon::AlmacenPlaza => Err(Respuesta::rechazo(rechazos::ORDEN_FORMA_INVALIDA, "el almacén de la plaza solo paga desde dentro de su taberna, no en el campamento", self.estado.version)),
+            PagarCon::AlmacenPlaza | PagarCon::FondoPlaza => {
+                Err(Respuesta::rechazo(rechazos::ORDEN_FORMA_INVALIDA, "el almacén y el fondo de la plaza solo pagan desde dentro de su taberna, no en el campamento", self.estado.version))
+            }
             PagarCon::Carro => Ok(match self.carro_en_campamento(heroe, campamento)?.0 {
                 Some(columna) => Bolsa::Columna(columna),
                 None => Bolsa::CarroPropio,
@@ -136,7 +138,8 @@ impl Nucleo {
 
     /// De dónde paga `heroe` por la oferta del campamento `campamento` (la del tablón al contratar): si está en el campamento, como siempre ([`Nucleo::bolsa_en_campamento`]); si no, desde dentro de una
     /// plaza de su Facción con Taberna activa (tanda 69 §8), que ha de tener el campamento en su región (`mercenario.fuera_de_la_region`), con el almacén de la plaza (la forma por defecto; la
-    /// firman el Rey, el Embajador o el Gobernador, como la intel de la taberna) o con sus monedas. Con otra forma de pago, o en otro sitio, no se llega a la puerta del campamento.
+    /// firman el Rey, el Embajador o el Gobernador, como la intel de la taberna), con el fondo de la plaza (los mismos, Forja_En_Plazas §6) o con sus monedas. Con otra forma de pago, o en
+    /// otro sitio, no se llega a la puerta del campamento.
     fn bolsa_de_firma(&self, t: Instante, heroe: u64, campamento: u32, pagar_con: Option<PagarCon>) -> Result<Bolsa, Respuesta> {
         if self.esta_en_el_campamento(heroe, campamento, t) {
             return self.bolsa_en_campamento(heroe, campamento, pagar_con);
@@ -152,24 +155,34 @@ impl Nucleo {
         if !self.campamentos_de_la_region(plaza).contains(&campamento) {
             return Err(Respuesta::rechazo(rechazos::MERCENARIO_FUERA_DE_LA_REGION, "ese campamento no cae en la región de la plaza", v));
         }
+        let firma_por_la_plaza = || (politica::autorizacion::Actor { yo: heroe, politica: &self.estado.politica, vista: self }).compra_intel_en(plaza as u32);
         match pagar_con.unwrap_or(PagarCon::AlmacenPlaza) {
             PagarCon::Monedas => Ok(Bolsa::Monedas),
-            PagarCon::AlmacenPlaza if (politica::autorizacion::Actor { yo: heroe, politica: &self.estado.politica, vista: self }).compra_intel_en(plaza as u32) => Ok(Bolsa::AlmacenPlaza(plaza)),
-            PagarCon::AlmacenPlaza => Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, "con el almacén de la plaza firma el Rey, el Embajador o el Gobernador, dentro de ella", v)),
+            PagarCon::AlmacenPlaza if firma_por_la_plaza() => Ok(Bolsa::AlmacenPlaza(plaza)),
+            PagarCon::FondoPlaza if firma_por_la_plaza() => Ok(Bolsa::FondoPlaza(plaza)),
+            PagarCon::AlmacenPlaza | PagarCon::FondoPlaza => Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, "con el almacén o el fondo de la plaza firma el Rey, el Embajador o el Gobernador, dentro de ella", v)),
             PagarCon::AlmacenPersonal | PagarCon::Carro => Err(fuera_de_la_puerta()),
         }
     }
 
     /// Lo que hay que pagar por `mercenario` a `plazo` (la tarifa de hoy) con la `bolsa` de `heroe`, quien firma, como `(oro, monedas)` (uno de los dos es 0): la tarifa en oro, o la
-    /// tarifa en monedas si paga con ellas. Si no tiene bastante, el rechazo `mercenarios.sin_oro` o, con monedas, `heroe.sin_monedas`, de la versión `v`.
+    /// tarifa en monedas si paga con las suyas o con el fondo de la plaza. Si no tiene bastante, el rechazo `mercenarios.sin_oro` o, con monedas, `heroe.sin_monedas` (`mercenarios.sin_fondo`
+    /// con el fondo), de la versión `v`.
     fn a_cobrar(&self, heroe: u64, bolsa: Bolsa, mercenario: u64, plazo: Option<u8>, v: u64) -> Result<(Mil, i64), Respuesta> {
         let oro = self.tarifa_de(mercenario, plazo);
+        let monedas = tarifa_en_monedas(&self.estado.reglas.economia.contratos, oro);
         let h = self.heroe(heroe).expect("quien firma existe");
         let (hay, donde) = match bolsa {
             Bolsa::Monedas => {
-                let monedas = tarifa_en_monedas(&self.estado.reglas.economia.contratos, oro);
                 if h.heroe.monedas < monedas {
                     return Err(Respuesta::rechazo(rechazos::HEROE_SIN_MONEDAS, format!("la tarifa es de {monedas} monedas y el héroe tiene {}", h.heroe.monedas), v));
+                }
+                return Ok((0, monedas));
+            }
+            Bolsa::FondoPlaza(plaza) => {
+                let fondo = self.estado.asentamientos[&plaza].forja.fondo;
+                if fondo < monedas {
+                    return Err(Respuesta::rechazo(rechazos::MERCENARIOS_SIN_FONDO, format!("la tarifa es de {monedas} monedas y el fondo de la plaza tiene {fondo}"), v));
                 }
                 return Ok((0, monedas));
             }
@@ -185,14 +198,17 @@ impl Nucleo {
     }
 
     /// Cobra de la `bolsa` de `heroe`, quien firma, el `(oro, monedas)` de [`Nucleo::a_cobrar`]. El oro se ingresa en el almacén personal de `mercenario` hasta donde quepa y el resto
-    /// desaparece (decisión 9 del plan); las monedas pasan a las del mercenario.
+    /// desaparece (decisión 9 del plan); las monedas, del héroe o del fondo de la plaza, pasan a las del mercenario.
     fn pagar(&mut self, heroe: u64, bolsa: Bolsa, mercenario: u64, (oro, monedas): (Mil, i64)) {
         let de_donde = match bolsa {
             Bolsa::Monedas => {
                 self.heroe_mut(heroe).heroe.monedas -= monedas;
-                let m = &mut self.heroe_mut(mercenario).heroe.monedas;
-                *m = m.saturating_add(monedas);
-                return;
+                return self.ingresar_monedas_al_mercenario(mercenario, monedas);
+            }
+            Bolsa::FondoPlaza(plaza) => {
+                self.estado.asentamientos.get_mut(&plaza).expect("la plaza del fondo existe").forja.fondo -= monedas;
+                self.tr.tocar(Clase::Asentamiento, plaza);
+                return self.ingresar_monedas_al_mercenario(mercenario, monedas);
             }
             Bolsa::AlmacenPlaza(plaza) => {
                 self.estado.asentamientos.get_mut(&plaza).expect("la plaza del almacén existe").economia.almacen.quitar(Recurso::Oro, oro);
@@ -217,6 +233,12 @@ impl Nucleo {
         let almacen = &mut self.heroe_mut(mercenario).almacen_personal;
         let cabe = base::entero((capacidad - total(almacen)).clamp(0, oro));
         *almacen.entry(Recurso::Oro).or_insert(0) += cabe;
+    }
+
+    /// Las monedas pagadas pasan a las del mercenario.
+    fn ingresar_monedas_al_mercenario(&mut self, mercenario: u64, monedas: i64) {
+        let m = &mut self.heroe_mut(mercenario).heroe.monedas;
+        *m = m.saturating_add(monedas);
     }
 
     // ───────────────────────────── Órdenes ─────────────────────────────
@@ -386,8 +408,8 @@ impl Nucleo {
             return Err(rechazo(CAMPAMENTO_FUERA_DE_LA_PUERTA, "prorrogar es en persona: en el campamento base del mercenario o con tu columna junto a la suya"));
         }
         let renombre = renombre_del_plazo(&d, c.trabajo, Some(plazo)).map_err(|e| rechazo_de_firma(e, v))?;
-        let bolsa = if pagar_con == Some(PagarCon::AlmacenPlaza) {
-            return Err(rechazo(ORDEN_FORMA_INVALIDA, "prorrogar es en persona: el almacén de la plaza no paga una prórroga"));
+        let bolsa = if matches!(pagar_con, Some(PagarCon::AlmacenPlaza | PagarCon::FondoPlaza)) {
+            return Err(rechazo(ORDEN_FORMA_INVALIDA, "prorrogar es en persona: ni el almacén ni el fondo de la plaza pagan una prórroga"));
         } else if pagar_con == Some(PagarCon::Monedas) {
             Bolsa::Monedas
         } else if en_el_campamento {
@@ -425,4 +447,6 @@ enum Bolsa {
     Monedas,
     /// El almacén de la plaza donde el héroe firma desde su taberna.
     AlmacenPlaza(u64),
+    /// El fondo de monedas de la plaza donde el héroe firma desde su taberna (Forja_En_Plazas §6).
+    FondoPlaza(u64),
 }

@@ -1355,6 +1355,8 @@ pub enum PagarCon {
     Monedas,
     /// El almacén de la plaza donde está la taberna (tanda 69 §8): solo al contratar a un mercenario desde dentro de una plaza, sin ir a su campamento.
     AlmacenPlaza,
+    /// El fondo de monedas de la plaza donde está la taberna, el del impuesto de su forja (Forja_En_Plazas §6): como [`PagarCon::AlmacenPlaza`], pero a la tarifa en monedas.
+    FondoPlaza,
 }
 
 /// De dónde sale o adónde va lo del fondo de refundación (Fundacion_Y_Refundacion §9.1, D39): el almacén personal (en el campamento donde se reside) o el carro (el que lleva dentro, o el
@@ -1371,6 +1373,7 @@ fn pagar_con_de_u8(i: u8) -> Result<PagarCon, ErrorFormato> {
         1 => Ok(PagarCon::Carro),
         2 => Ok(PagarCon::Monedas),
         3 => Ok(PagarCon::AlmacenPlaza),
+        4 => Ok(PagarCon::FondoPlaza),
         _ => Err(ErrorFormato("forma de pago desconocida")),
     }
 }
@@ -3232,6 +3235,8 @@ pub mod rechazos {
     pub const MERCENARIOS_SIN_STOCK: &str = "mercenarios.sin_stock";
     pub const MERCENARIOS_CUPO_AGOTADO: &str = "mercenarios.cupo_agotado";
     pub const MERCENARIOS_SIN_ORO: &str = "mercenarios.sin_oro";
+    /// `contratar_mercenario` con `pagar_con = fondoPlaza`: el fondo de la plaza no llega a la tarifa en monedas (Forja_En_Plazas §6).
+    pub const MERCENARIOS_SIN_FONDO: &str = "mercenarios.sin_fondo";
     pub const MERCENARIOS_SIN_SITIO: &str = "mercenarios.sin_sitio";
     pub const MERCENARIOS_VIVERES_LLENOS: &str = "mercenarios.viveres_llenos";
     // Reclutar en un campamento (`ErrorMercenarios`) y la tropa prestada.
@@ -4259,6 +4264,7 @@ mod pruebas {
             Comando::ProrrogarContrato { heroe: 2, mercenario: 8, plazo: 3, pagar_con: Some(PagarCon::AlmacenPersonal) },
             Comando::ContratarMercenario { heroe: 2, mercenario: 8, trabajo: Trabajo::Defender, objetivo: ObjetivoMercenario::Pueblo(4), plazo: Some(1), residencia: None, pagar_con: Some(PagarCon::Monedas) },
             Comando::ContratarMercenario { heroe: 2, mercenario: 8, trabajo: Trabajo::Defender, objetivo: ObjetivoMercenario::Pueblo(4), plazo: Some(1), residencia: None, pagar_con: Some(PagarCon::AlmacenPlaza) },
+            Comando::ContratarMercenario { heroe: 2, mercenario: 8, trabajo: Trabajo::Defender, objetivo: ObjetivoMercenario::Pueblo(4), plazo: Some(1), residencia: None, pagar_con: Some(PagarCon::FondoPlaza) },
             Comando::ProrrogarContrato { heroe: 2, mercenario: 8, plazo: 1, pagar_con: Some(PagarCon::Monedas) },
             Comando::OrdenarMercenario { heroe: 2, mercenarios: vec![8, 9], tipo: TipoOrden::IrA, objetivo: ObjetivoMercenario::Punto(Punto::new(-5, 9_000)) },
             Comando::OrdenarMercenario { heroe: 2, mercenarios: vec![8], tipo: TipoOrden::Unirse, objetivo: ObjetivoMercenario::Convocatoria(12) },

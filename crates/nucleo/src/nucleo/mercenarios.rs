@@ -362,7 +362,7 @@ impl Nucleo {
                     }
                     PagarCon::AlmacenPersonal => None,
                     PagarCon::Carro => Some(self.carro_en_campamento(*heroe, *campamento)?),
-                    PagarCon::Monedas | PagarCon::AlmacenPlaza => return Err(rechazo(rechazos::ORDEN_FORMA_INVALIDA, "las monedas y el almacén de la plaza solo pagan contratos de mercenario".into())),
+                    PagarCon::Monedas | PagarCon::AlmacenPlaza | PagarCon::FondoPlaza => return Err(rechazo(rechazos::ORDEN_FORMA_INVALIDA, "las monedas, el almacén y el fondo de la plaza solo pagan contratos de mercenario".into())),
                 };
                 let h = self.heroe(*heroe).expect("existe");
                 let cupo = h.cupo.restante(&cr.mercenarios, *recurso, t);
@@ -487,7 +487,7 @@ impl Nucleo {
                     (PagarCon::AlmacenPersonal, _) => (de(&self.heroe(*heroe).expect("existe").almacen_personal, Recurso::Oro), None),
                     (PagarCon::Carro, Some(c)) => (de(&self.estado.ejercitos[&c].columna.carga, Recurso::Oro), Some(c)),
                     (PagarCon::Carro, None) => return Err(rechazo(rechazos::HEROE_SIN_COLUMNA, "para pagar con el carro el héroe debe ir en una columna".into())),
-                    (PagarCon::Monedas | PagarCon::AlmacenPlaza, _) => return Err(rechazo(rechazos::ORDEN_FORMA_INVALIDA, "las monedas y el almacén de la plaza solo pagan contratos de mercenario".into())),
+                    (PagarCon::Monedas | PagarCon::AlmacenPlaza | PagarCon::FondoPlaza, _) => return Err(rechazo(rechazos::ORDEN_FORMA_INVALIDA, "las monedas, el almacén y el fondo de la plaza solo pagan contratos de mercenario".into())),
                 };
                 let (factor_reputacion, sin_asentamientos) = self.condiciones_de_recluta(*heroe, t);
                 let ofrece = self.tropas_que_ofrece_a(*heroe, campamento);

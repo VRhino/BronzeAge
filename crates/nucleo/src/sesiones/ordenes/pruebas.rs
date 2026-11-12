@@ -448,6 +448,10 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
             Comando::ContratarMercenario { heroe: 7, mercenario: 9, trabajo: Trabajo::Defender, objetivo: ObjetivoMercenario::Pueblo(4), plazo: Some(1), residencia: None, pagar_con: Some(PagarCon::AlmacenPlaza) },
         ),
         (
+            orden!(ContratarMercenario, OrdenContratarMercenario, mercenario_id: s("heroe-9"), trabajo: s("defender"), objetivo: Some(pb::ObjetivoMercenario { tipo: Some(Mercenario::PuebloId(s("pueblo-4"))) }), plazo_dias: Some(1), pagar_con: Some(s("fondoPlaza"))),
+            Comando::ContratarMercenario { heroe: 7, mercenario: 9, trabajo: Trabajo::Defender, objetivo: ObjetivoMercenario::Pueblo(4), plazo: Some(1), residencia: None, pagar_con: Some(PagarCon::FondoPlaza) },
+        ),
+        (
             orden!(ContratarMercenario, OrdenContratarMercenario, mercenario_id: s("heroe-9"), trabajo: s("defender"), objetivo: Some(pb::ObjetivoMercenario { tipo: Some(Mercenario::PuebloId(s("pueblo-4"))) }), plazo_dias: Some(1), pagar_con: Some(s("monedas"))),
             Comando::ContratarMercenario { heroe: 7, mercenario: 9, trabajo: Trabajo::Defender, objetivo: ObjetivoMercenario::Pueblo(4), plazo: Some(1), residencia: None, pagar_con: Some(PagarCon::Monedas) },
         ),

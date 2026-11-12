@@ -159,11 +159,12 @@ impl Ctx<'_> {
             Some(otro) => self.forma(format!("forma de pago desconocida: {otro}")),
         }
     }
-    /// `pagar_con` de un contrato de mercenario: además de las de [`Self::pagar_con`], `monedas` y `almacenPlaza`.
+    /// `pagar_con` de un contrato de mercenario: además de las de [`Self::pagar_con`], `monedas`, `almacenPlaza` y `fondoPlaza`.
     fn pagar_con_de_contrato(&self, s: Option<&str>) -> R<Option<PagarCon>> {
         match s {
             Some("monedas") => Ok(Some(PagarCon::Monedas)),
             Some("almacenPlaza") => Ok(Some(PagarCon::AlmacenPlaza)),
+            Some("fondoPlaza") => Ok(Some(PagarCon::FondoPlaza)),
             _ => self.pagar_con(s),
         }
     }

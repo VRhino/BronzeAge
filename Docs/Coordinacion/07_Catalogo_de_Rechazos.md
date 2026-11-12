@@ -286,6 +286,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `mercenarios.sin_stock` | `MERCENARIOS_SIN_STOCK` | — |
 | `mercenarios.cupo_agotado` | `MERCENARIOS_CUPO_AGOTADO` | — |
 | `mercenarios.sin_oro` | `MERCENARIOS_SIN_ORO` | — |
+| `mercenarios.sin_fondo` | `MERCENARIOS_SIN_FONDO` | `contratar_mercenario` con `pagar_con = fondoPlaza`: el fondo de la plaza no llega a la tarifa en monedas (Forja_En_Plazas §6). |
 | `mercenarios.sin_sitio` | `MERCENARIOS_SIN_SITIO` | — |
 | `mercenarios.viveres_llenos` | `MERCENARIOS_VIVERES_LLENOS` | — |
 

@@ -570,6 +570,67 @@ fn desde_la_taberna_un_campamento_de_otra_region_un_pago_que_no_es_de_la_plaza_o
     assert_eq!(mc::rechazo(&mut sin.n, "eva", c), rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA, "una plaza sin Taberna no sirve");
 }
 
+/// La tarifa de un día de `heroe` en el tablón de la taberna de `p1`, en oro y en monedas.
+fn tarifa_de_un_dia(e: &E, heroe: u64) -> (i64, i64) {
+    let plaza = interior::asentamiento(&e.n, e.p1).unwrap();
+    plaza.mercenarios_region.iter().find(|o| o.heroe_id == ids::heroe(heroe)).unwrap().tarifas.iter().find(|t| t.plazo_dias == Some(1)).map(|t| (t.oro, t.monedas)).unwrap()
+}
+
+/// El fondo de monedas de la plaza (el del impuesto de su forja).
+fn fondo(n: &Nucleo, plaza: u64) -> i64 {
+    n.estado().asentamientos[&plaza].forja.fondo
+}
+
+/// Con `pagar_con = fondoPlaza` (Forja_En_Plazas §6) el Rey paga desde la taberna la tarifa en monedas con el fondo de la plaza, que se llena a mano (ninguna forja ha pagado aún impuesto
+/// aquí): las monedas salen del fondo y pasan a las del mercenario, y ni el almacén de la plaza ni las monedas del héroe se tocan.
+#[test]
+fn con_el_fondo_de_la_plaza_se_paga_desde_la_taberna_la_tarifa_en_monedas_y_pasan_al_mercenario() {
+    let m = con_mundo!();
+    let mut e = escenario(m, true);
+    let (a, _, _) = tres_bots(&mut e);
+    let (p1, eva) = (e.p1, e.eva);
+    let (_, monedas) = tarifa_de_un_dia(&e, a);
+    let (n, _dir) = mc::retocado(m, &e.n, |s| s.asentamientos.get_mut(&p1).unwrap().forja.fondo = monedas + 7);
+    e.n = n;
+    let firma = Comando::ContratarMercenario { heroe: eva, mercenario: a, trabajo: mercenarios::Trabajo::Defender, objetivo: Objetivo::Plaza(p1), plazo: Some(1), residencia: None, pagar_con: Some(PagarCon::FondoPlaza) };
+    let (oro, del_bot, de_eva) = (e.oro(p1), e.n.heroe(a).unwrap().heroe.monedas, e.n.heroe(eva).unwrap().heroe.monedas);
+    mc::ok(&mut e.n, "eva", firma);
+    assert_eq!(fondo(&e.n, p1), 7, "la tarifa en monedas sale del fondo");
+    assert_eq!(e.n.heroe(a).unwrap().heroe.monedas - del_bot, monedas, "y pasa a las monedas del mercenario");
+    assert_eq!((e.oro(p1), mc::oro_personal(&e.n, a), e.n.heroe(eva).unwrap().heroe.monedas), (oro, 0, de_eva), "ni el almacén de la plaza, ni oro al mercenario, ni las monedas del Rey");
+    assert_eq!(mc::contrato(&e.n, a).map(|c| c.firmado_por), Some(eva));
+    let h = mc::hechos(&e.n, "mercenarios.contratado");
+    assert_eq!((h.len(), h[0].dato("monedas"), h[0].dato("oro")), (1, Some(monedas), Some(0)), "el hecho lleva las monedas");
+}
+
+/// Con el fondo de la plaza: si no llega a la tarifa, `mercenarios.sin_fondo` sin cambiar nada; quien no firmaría con el almacén de la plaza tampoco con su fondo (`no_autorizado`); y en el
+/// campamento o al prorrogar el fondo no paga (`orden.forma_invalida`), como el almacén de la plaza.
+#[test]
+fn el_fondo_de_la_plaza_corto_quien_no_firma_por_la_plaza_el_campamento_y_la_prorroga_se_rechazan() {
+    let m = con_mundo!();
+    let mut e = escenario(m, true);
+    let (a, _, c) = tres_bots(&mut e);
+    let (p1, eva, civ) = (e.p1, e.eva, e.civ);
+    let (_, monedas) = tarifa_de_un_dia(&e, a);
+    let (n, _dir) = mc::retocado(m, &e.n, |s| s.asentamientos.get_mut(&p1).unwrap().forja.fondo = monedas - 1);
+    e.n = n;
+    let firma = |heroe, mercenario| Comando::ContratarMercenario { heroe, mercenario, trabajo: mercenarios::Trabajo::Defender, objetivo: Objetivo::Plaza(p1), plazo: Some(1), residencia: None, pagar_con: Some(PagarCon::FondoPlaza) };
+
+    let del_bot = e.n.heroe(a).unwrap().heroe.monedas;
+    assert_eq!(mc::rechazo(&mut e.n, "eva", firma(eva, a)), rechazos::MERCENARIOS_SIN_FONDO, "al fondo le falta una moneda");
+    assert_eq!((fondo(&e.n, p1), e.n.heroe(a).unwrap().heroe.monedas, mc::ofrecido(&e.n, a)), (monedas - 1, del_bot, true), "y no cambia nada");
+    assert_eq!(mc::rechazo(&mut e.n, "civ", firma(civ, a)), rechazos::NO_AUTORIZADO, "con el fondo firman el Rey, el Embajador o el Gobernador");
+
+    mc::ok(&mut e.n, "admin", Comando::ColocarHeroe { heroe: civ, ubicacion: Ubicacion::Mercenarios(1) });
+    assert_eq!(mc::rechazo(&mut e.n, "civ", firma(civ, c)), rechazos::ORDEN_FORMA_INVALIDA, "en el campamento el fondo de la plaza no paga");
+
+    // Contratado con el almacén de la plaza, la prórroga es en persona, en su campamento base, y allí el fondo no la paga.
+    mc::ok(&mut e.n, "eva", Comando::ContratarMercenario { heroe: eva, mercenario: a, trabajo: mercenarios::Trabajo::Defender, objetivo: Objetivo::Plaza(p1), plazo: Some(1), residencia: None, pagar_con: None });
+    mc::ok(&mut e.n, "admin", Comando::ColocarHeroe { heroe: eva, ubicacion: Ubicacion::Mercenarios(0) });
+    assert_eq!(mc::rechazo(&mut e.n, "eva", Comando::ProrrogarContrato { heroe: eva, mercenario: a, plazo: 1, pagar_con: Some(PagarCon::FondoPlaza) }), rechazos::ORDEN_FORMA_INVALIDA);
+    assert_eq!(fondo(&e.n, p1), monedas - 1, "el fondo sigue igual");
+}
+
 // ───────────────────────────── Rumores: las vetas de estaño (2026-11-10) ─────────────────────────────
 
 /// Los yacimientos de estaño de la `region` y si la Facción 1 tiene explorado cada uno.

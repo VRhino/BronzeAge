@@ -797,7 +797,8 @@ message OrdenContratarMercenario {
   // reside sin columna, el almacén personal. `monedas` (tanda 69): las monedas del héroe, a la tarifa en monedas del tablón, en cualquier sitio; van a las monedas del mercenario
   // (`heroe.sin_monedas` si no bastan). `almacenPlaza` (tanda 69 §8): desde dentro de una plaza de su Facción con Taberna activa, sin ir al campamento, que ha de caer en la región de la plaza
   // (`mercenario.fuera_de_la_region`); paga el almacén de la plaza, que firma el Rey, el Embajador o el Gobernador, y es lo que se toma allí sin `pagar_con`. Con `almacenPersonal` o `carro`
-  // fuera del campamento, `campamento.fuera_de_la_puerta`.
+  // fuera del campamento, `campamento.fuera_de_la_puerta`. `fondoPlaza` (2026-11-12, Forja_En_Plazas §6): como `almacenPlaza`, desde la misma taberna y con los mismos firmantes, pero paga
+  // la tarifa en monedas del fondo de la plaza (el del impuesto de su forja), que pasan a las del mercenario (`mercenarios.sin_fondo` si no llega). En el campamento y al prorrogar, `orden.forma_invalida`.
   optional string pagar_con = 6;
 }
 
