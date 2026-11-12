@@ -7,3 +7,4 @@ Diseños **cerrados con el autor pero sin implementar**. Aquí viven mientras no
 | Documento | Diseño | Entrada |
 |---|---|---|
 | [`Informes_De_Taberna.md`](Informes_De_Taberna.md) | 2026-10-31 | `Mecanicas a desarrollar.md` 65 |
+| [`Forja_En_Plazas.md`](Forja_En_Plazas.md) | 2026-11-12 | `Mecanicas a desarrollar.md` 77 |

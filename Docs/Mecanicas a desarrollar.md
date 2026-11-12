@@ -29,6 +29,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 69 | POLÍTICA / MAPA | Marcas de Facción en el mapa (pedidas por el autor el 2026-10-29; acotadas en la sección «69»; rescatadas el 2026-11-11 de una rama que no llegó a `main`, donde eran la 63) | nada: el cliente de jugador no tiene dónde guardarlas |
 | 75 | MILITAR / HÉROE | Estandartes y aspecto de las escuadras (D20, 2026-11-12): un tipo de objeto `estandarte`, su sitio en la escuadra y una orden para elegirlo, cuando haya estandartes en el catálogo y arte. Sección «75» | `SquadSnapshot.estandarte` y `aspecto` viajan vacíos |
 | 76 | BOTS / ADMIN | Lo que piden la clase y los objetos del héroe a BotsBrain y al AdminClient (D21, 2026-11-12). Sección «76» | el motor rechaza un héroe sin clase |
+| 77 | HÉROE / ECONOMÍA | La forja de la Armería en cualquier plaza (diseño del 2026-11-12; `Docs/Disenos_Por_Implementar/Forja_En_Plazas.md`): abierta por grupo (aliados, neutrales, enemigos) por el Tesorero o el Gobernador, impuesto en monedas por tier con recargo por grupo a un fondo de la plaza que paga contratos de mercenarios, materiales del carro fuera de la residencia, y los tiers III a V atados a su Era | se forja solo en la plaza donde se reside, con el almacén personal |
 | — | PARIDAD | Recortes temporales del motor Rust frente al TypeScript (sección «Paridad con TypeScript») | el motor no está migrado hasta cerrarlos |
 | — | DUDAS | Ninguna sin decisión desde el 2026-10-27 (sección «Dudas abiertas»: las `// DUDA:` que quedan en el código) | — |
 | — | FASE 7 | Todo lo que se dejó para los bots reales y la fase 7 (sección «Para la fase 7») | — |
@@ -258,3 +259,7 @@ Desde el 2026-11-12 `crear_heroe` rechaza un héroe sin clase o con una que no e
 
 - **BotsBrain** tiene que mandar la clase al crear cada héroe y repartirla entre sus héroes. Sin equiparse ni comprar, sus héroes van a las batallas de Unity con el equipo de inicio de su clase; las órdenes de la Armería y del equipo son las de cualquier jugador (`Docs/Mechanics/Heroe_Y_Tropa.md` §4.5 y §4.6). Sus héroes nacen con 14 de Liderazgo, no con 100, y lo leen de su observación.
 - **AdminClient**: crear héroes con clase, ver la clase, la mochila, el almacén de objetos y el equipo de un héroe en su ficha (`ADMIN` los lleva) y, si se quiere, darle objetos para probar, que hoy no tiene orden de administración.
+
+## 77. La forja de la Armería en cualquier plaza (diseño del 2026-11-12)
+
+Diseño cerrado con el autor el 2026-11-12 y sin implementar: `Docs/Disenos_Por_Implementar/Forja_En_Plazas.md`. Cambia D1 de la tanda de objetos (hoy se forja solo en la plaza donde se reside, `Docs/Mechanics/Heroe_Y_Tropa.md` §4.6).
