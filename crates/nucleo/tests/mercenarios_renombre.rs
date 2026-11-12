@@ -478,7 +478,7 @@ fn defensor_de_la_plaza(e: &mut E, cuenta: &str, tropas: &[Tropa]) -> u64 {
     mc::ok(&mut e.n, "admin", Comando::ColocarHeroe { heroe: bot, ubicacion: Ubicacion::Asentamiento(plaza as u32) });
     let escuadras: Vec<u64> = tropas.iter().map(|&tropa| mc::ok(&mut e.n, "admin", Comando::DarEscuadra { heroe: bot, tropa, cantidad: completa(tropa) }).creadas[0]).collect();
     let loadout = e.n.heroe(bot).unwrap().heroe.loadouts[0].id;
-    mc::ok(&mut e.n, "admin", Comando::GuardarLoadout { heroe: bot, loadout: Some(loadout), nombre: "Default".into(), escuadras, perks: vec![], activo: Some(true) });
+    mc::ok(&mut e.n, "admin", Comando::GuardarLoadout { heroe: bot, loadout: Some(loadout), nombre: "Default".into(), escuadras, activo: Some(true) });
     bot
 }
 
@@ -841,10 +841,10 @@ fn resultado(n: &Nucleo, id: u64, ganador: Lado) -> ResultadoDeBatalla {
             .escuadras_de()
             .map(|e| {
                 let m = 2.min(e.efectivos);
-                ResultadoEscuadra { escuadra: e.id, desplegados: e.efectivos, supervivientes_al_cierre: e.efectivos - m, muertos: m, xp_ganada: 4 }
+                ResultadoEscuadra { escuadra: e.id, desplegados: e.efectivos, supervivientes_al_cierre: e.efectivos - m, muertos: m }
             })
             .collect(),
-        por_heroe: b.heroes_que_combaten().map(|h| ResultadoHeroe { heroe: h, participo: true, sobrevivio_al_cierre: true, xp_ganada: 7, derrotado: None, botin: None }).collect(),
+        por_heroe: b.heroes_que_combaten().map(|h| ResultadoHeroe { heroe: h, participo: true, sobrevivio_al_cierre: true, derrotado: None, botin: None }).collect(),
         version_servidor: "v1".into(),
         carros_perdidos: vec![],
     }

@@ -102,10 +102,10 @@ message ContextoEstrategico {
 message HeroSnapshot {
   string display_name = 1;
   string class_definition_id = 2;
-  uint32 nivel = 3;
+  uint32 nivel = 3;                      // el del héroe (Progresion_Tropas_Y_Heroe §4): Conquest abre con él sus habilidades y sus perks
   bool femenino = 4;
   Avatar avatar = 5;
-  repeated uint32 perks_desbloqueados = 6;
+  reserved 6;                            // antes `perks_desbloqueados`: desde el 2026-11-12 los perks se abren solos con el nivel (D15)
   Equipamiento equipamiento = 7;
   Atributos atributos_efectivos = 8;
   uint32 casillas_inventario_libres = 9;
@@ -302,14 +302,14 @@ message ResultadoEscuadra {
   uint32 desplegados = 2;
   uint32 supervivientes_al_cierre = 3;
   uint32 muertos = 4;
-  sint64 xp_ganada = 5;
+  reserved 5;                            // antes `xp_ganada`: desde el 2026-11-12 la experiencia la pone el motor (4 o 2 según gane el bando, D7)
 }
 
 message ResultadoHeroe {
   string heroe_id = 1;
   bool participo = 2;
   bool sobrevivio_al_cierre = 3;
-  sint64 xp_ganada = 4;
+  reserved 4;                            // antes `xp_ganada`: desde el 2026-11-12 la experiencia la pone el motor (4 o 2 según gane el bando, D7)
   optional bool derrotado = 5;
   optional Botin botin = 6;
 }

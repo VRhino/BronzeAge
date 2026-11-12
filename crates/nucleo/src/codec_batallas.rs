@@ -407,16 +407,15 @@ pub(crate) fn resultado_escribir(w: &mut Escritor, res: &Resultado) {
         w.u8(por.map_or(2, lado_a_u8));
     }
     w.u64(por_escuadra.len() as u64);
-    for ResultadoEscuadra { escuadra, desplegados, supervivientes_al_cierre, muertos, xp_ganada } in por_escuadra {
+    for ResultadoEscuadra { escuadra, desplegados, supervivientes_al_cierre, muertos } in por_escuadra {
         w.u64(*escuadra);
-        [desplegados, supervivientes_al_cierre, muertos, xp_ganada].into_iter().for_each(|&n| w.i64(n));
+        [desplegados, supervivientes_al_cierre, muertos].into_iter().for_each(|&n| w.i64(n));
     }
     w.u64(por_heroe.len() as u64);
-    for ResultadoHeroe { heroe, participo, sobrevivio_al_cierre, xp_ganada, derrotado, botin } in por_heroe {
+    for ResultadoHeroe { heroe, participo, sobrevivio_al_cierre, derrotado, botin } in por_heroe {
         w.u64(*heroe);
         w.bool(*participo);
         w.bool(*sobrevivio_al_cierre);
-        w.i64(*xp_ganada);
         w.u8(derrotado.map_or(2, u8::from));
         w.bool(botin.is_some());
         if let Some(b) = botin {
@@ -446,11 +445,11 @@ pub(crate) fn resultado_leer(r: &mut Lector) -> Result<Resultado, ErrorFormato> 
         }));
     }
     let por_escuadra = (0..r.cuenta()?)
-        .map(|_| Ok(ResultadoEscuadra { escuadra: r.u64()?, desplegados: r.i64()?, supervivientes_al_cierre: r.i64()?, muertos: r.i64()?, xp_ganada: r.i64()? }))
+        .map(|_| Ok(ResultadoEscuadra { escuadra: r.u64()?, desplegados: r.i64()?, supervivientes_al_cierre: r.i64()?, muertos: r.i64()? }))
         .collect::<Result<_, ErrorFormato>>()?;
     let mut por_heroe = Vec::new();
     for _ in 0..r.cuenta()? {
-        let (heroe, participo, sobrevivio_al_cierre, xp_ganada) = (r.u64()?, r.bool()?, r.bool()?, r.i64()?);
+        let (heroe, participo, sobrevivio_al_cierre) = (r.u64()?, r.bool()?, r.bool()?);
         let derrotado = match r.u8()? {
             0 => Some(false),
             1 => Some(true),
@@ -458,7 +457,7 @@ pub(crate) fn resultado_leer(r: &mut Lector) -> Result<Resultado, ErrorFormato> 
             _ => return Err(ErrorFormato("«derrotado» desconocido")),
         };
         let botin = if r.bool()? { Some(botin_leer(r)?) } else { None };
-        por_heroe.push(ResultadoHeroe { heroe, participo, sobrevivio_al_cierre, xp_ganada, derrotado, botin });
+        por_heroe.push(ResultadoHeroe { heroe, participo, sobrevivio_al_cierre, derrotado, botin });
     }
     let version_servidor = r.texto()?;
     let carros_perdidos = (0..r.cuenta()?).map(|_| r.texto()).collect::<Result<_, _>>()?;

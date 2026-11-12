@@ -116,10 +116,10 @@ fn resultado(n: &Nucleo, id: u64, ganador: Lado, muertos: i64) -> ResultadoDeBat
             .escuadras_de()
             .map(|e| {
                 let m = muertos.min(e.efectivos);
-                ResultadoEscuadra { escuadra: e.id, desplegados: e.efectivos, supervivientes_al_cierre: e.efectivos - m, muertos: m, xp_ganada: 4 }
+                ResultadoEscuadra { escuadra: e.id, desplegados: e.efectivos, supervivientes_al_cierre: e.efectivos - m, muertos: m }
             })
             .collect(),
-        por_heroe: b.heroes_que_combaten().map(|h| ResultadoHeroe { heroe: h, participo: true, sobrevivio_al_cierre: true, xp_ganada: 7, derrotado: None, botin: None }).collect(),
+        por_heroe: b.heroes_que_combaten().map(|h| ResultadoHeroe { heroe: h, participo: true, sobrevivio_al_cierre: true, derrotado: None, botin: None }).collect(),
         version_servidor: "v1".into(),
         carros_perdidos: vec![],
     }
@@ -567,15 +567,16 @@ fn el_resultado_deja_las_bajas_la_experiencia_el_botin_el_carro_y_la_chatarra_y_
     let (x, id) = jugada(5, &|x, r| r.por_heroe.iter_mut().find(|h| h.heroe == x.ana.1).unwrap().botin = Some(botin.clone()));
     let (ana, beto) = (x.ana, x.beto);
     let monedas0 = militar::Reglas::cargar().heroe.monedas_iniciales;
-    // Cada escuadra cierra sobre sus supervivientes, con la experiencia que dijo Unity (puntos enteros, guardados en milésimas).
-    for (h, e, antes) in [(ana.1, x.fuerte[0], completa(Tropa::EspadachinesBronce)), (ana.1, x.fuerte[1], completa(Tropa::ArquerosCompuesto)), (beto.1, x.debil, completa(Tropa::MiliciaLanceros))] {
+    // Cada escuadra cierra sobre sus supervivientes, con la experiencia que pone el motor (D7): 4 si su bando gana y 2 si pierde, en milésimas, diga lo que diga Unity.
+    for (h, e, antes, xp) in [(ana.1, x.fuerte[0], completa(Tropa::EspadachinesBronce), 4_000), (ana.1, x.fuerte[1], completa(Tropa::ArquerosCompuesto), 4_000), (beto.1, x.debil, completa(Tropa::MiliciaLanceros), 2_000)] {
         let s = x.n.heroe(h).unwrap().heroe.escuadra(e).unwrap();
-        assert_eq!((s.cantidad, s.experiencia, s.reserva_batalla), (antes - 5, 4_000, None), "supervivientes, 4 puntos y sin candado");
+        assert_eq!((s.cantidad, s.experiencia, s.reserva_batalla), (antes - 5, xp, None), "supervivientes, 4 o 2 puntos y sin candado");
     }
-    // El héroe suma su experiencia, las monedas del botín y las de ganar a otra Facción (`MONEDAS.ganador`; al perdedor, `MONEDAS.perdedor`); el objeto no tiene dónde caer (CQ-004) y el nivel no sube (CQ-001).
+    // El héroe suma su experiencia (la de su bando, una vez), las monedas del botín y las de ganar a otra Facción (`MONEDAS.ganador`; al perdedor, `MONEDAS.perdedor`); el objeto no tiene dónde caer (CQ-004).
     let monedas = combate::Reglas::cargar().monedas;
     let h = &x.n.heroe(ana.1).unwrap().heroe;
-    assert_eq!((h.experiencia, h.nivel, h.monedas), (7, 1, monedas0 + 8 + monedas.ganador));
+    assert_eq!((h.experiencia, h.nivel, h.monedas), (4_000, 1, monedas0 + 8 + monedas.ganador));
+    assert_eq!(x.n.heroe(beto.1).unwrap().heroe.experiencia, 2_000);
     assert_eq!(x.n.heroe(beto.1).unwrap().heroe.monedas, monedas0 + monedas.perdedor, "el perdedor de otra Facción también cobra");
     assert_eq!(x.n.estado().combate.encuentros.get(&(1, 2)).map(Vec::len), Some(1), "y el par anota su encuentro");
     // Heridos: el bando que pierde (sin `derrotado`); el que gana, no.
@@ -810,7 +811,7 @@ fn con_la_partida_en_curso_la_salida_aplica_las_bajas_hiere_al_derrotado_y_el_re
     assert_eq!(hechos(&x.n, "batalla.salida").len(), 1);
     // El resultado final cubre solo a los que siguen combatiendo.
     let mut con_todos = resultado(&x.n, id, Lado::Atacante, 3);
-    con_todos.por_heroe.push(ResultadoHeroe { heroe: beto.1, participo: true, sobrevivio_al_cierre: false, xp_ganada: 0, derrotado: None, botin: None });
+    con_todos.por_heroe.push(ResultadoHeroe { heroe: beto.1, participo: true, sobrevivio_al_cierre: false, derrotado: None, botin: None });
     assert_eq!(codigo(&aplicar(&mut x.n, 13 * MIN, "r1", id, con_todos)), rechazos::BATALLA_RESULTADO_INVALIDO);
     let bueno = resultado(&x.n, id, Lado::Atacante, 3);
     assert_eq!((bueno.por_heroe.len(), bueno.por_escuadra.len()), (1, 2), "ana y sus dos escuadras");
@@ -1349,7 +1350,7 @@ impl Esc {
     fn defensor(&mut self, heroe: u64, tropas: &[Tropa]) -> Vec<u64> {
         let ids: Vec<u64> = tropas.iter().map(|&t| self.ok("admin", Comando::DarEscuadra { heroe, tropa: t, cantidad: completa(t) }).creadas[0]).collect();
         let loadout = self.n.heroe(heroe).unwrap().heroe.loadouts[0].id;
-        self.ok("admin", Comando::GuardarLoadout { heroe, loadout: Some(loadout), nombre: "Default".into(), escuadras: ids.clone(), perks: vec![], activo: Some(true) });
+        self.ok("admin", Comando::GuardarLoadout { heroe, loadout: Some(loadout), nombre: "Default".into(), escuadras: ids.clone(), activo: Some(true) });
         ids
     }
     /// Un ejército de administración de `cuenta`/`faccion` a 2 u de `p`, con las tropas dadas y su héroe humano.

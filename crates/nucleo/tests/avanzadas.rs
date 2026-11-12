@@ -740,7 +740,9 @@ fn el_gobernador_elige_la_tropa_de_cada_escalon_entre_las_que_tiene_la_faccion()
 #[test]
 fn guarnecer_deja_escuadras_en_la_avanzada_dentro_del_cupo_comen_de_la_madre_y_se_recogen() {
     let m = con_mundo!();
-    let mut e = montar(m, 7, 2);
+    // Recoger la guarnición con la otra milicia en la columna pide 28 de Liderazgo, más de los 14 con que nace un héroe.
+    let a = arranque(m, 7);
+    let mut e = montar_con(Nucleo::nuevo(Arranque { reglas: comun::con_liderazgo_de_tope(a.reglas.clone()), ..a }), m, 2);
     let (plaza, pos) = (e.plaza, e.sitio());
     let (av, col, heroe) = e.colocar_en(pos);
     e.residir(heroe);
@@ -1154,10 +1156,10 @@ fn resultado(n: &Nucleo, id: u64, ganador: Lado, muertos: i64) -> ResultadoDeBat
             .escuadras_de()
             .map(|e| {
                 let m = muertos.min(e.efectivos);
-                ResultadoEscuadra { escuadra: e.id, desplegados: e.efectivos, supervivientes_al_cierre: e.efectivos - m, muertos: m, xp_ganada: 4 }
+                ResultadoEscuadra { escuadra: e.id, desplegados: e.efectivos, supervivientes_al_cierre: e.efectivos - m, muertos: m }
             })
             .collect(),
-        por_heroe: b.heroes_que_combaten().map(|h| ResultadoHeroe { heroe: h, participo: true, sobrevivio_al_cierre: true, xp_ganada: 7, derrotado: None, botin: None }).collect(),
+        por_heroe: b.heroes_que_combaten().map(|h| ResultadoHeroe { heroe: h, participo: true, sobrevivio_al_cierre: true, derrotado: None, botin: None }).collect(),
         version_servidor: "v1".into(),
         carros_perdidos: vec![],
     }

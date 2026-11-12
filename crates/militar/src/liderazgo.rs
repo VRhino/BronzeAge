@@ -54,7 +54,7 @@ mod pruebas {
     #[test]
     fn las_mezclas_del_canon_quedan_justo_en_el_techo() {
         let r = Reglas::cargar();
-        let l = r.liderazgo.base;
+        let l = r.liderazgo.tope; // el de un héroe en el nivel 30
         // 1 élite + 1 pesada + 1 veterana = 99; 2 pesadas + 1 veterana + 1 de línea = 100; 3 veteranas + 1 pesada = 98; 2 élites + 1 leva = 97.
         for (escalones, total) in [(&[5u8, 4, 3][..], 99), (&[4, 4, 3, 2], 100), (&[3, 3, 3, 4], 98), (&[5, 5, 1], 97)] {
             let m = mezcla(&r, escalones);

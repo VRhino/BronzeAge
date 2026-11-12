@@ -530,7 +530,7 @@ message OrdenGuardarLoadout {
   optional string loadout_id = 1;
   string display_name = 2;
   repeated string squad_ids = 3;
-  repeated int64 perks_seleccionados = 4;
+  reserved 4;          // antes `perks_seleccionados`: desde el 2026-11-12 los perks se abren solos con el nivel (D15)
   optional bool activo = 5;
 }
 

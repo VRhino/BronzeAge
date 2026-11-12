@@ -361,7 +361,6 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `loadout.nombre_largo` | `LOADOUT_NOMBRE_LARGO` | El nombre recortado del loadout pasa de `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres (el mismo tope que el de las plazas). |
 | `loadout.nombre_control` | `LOADOUT_NOMBRE_CONTROL` | El nombre del loadout lleva caracteres de control. |
 | `loadout.desconocido` | `LOADOUT_DESCONOCIDO` | — |
-| `loadout.perk_no_desbloqueado` | `LOADOUT_PERK_NO_DESBLOQUEADO` | — |
 | `escuadra.repetida` | `ESCUADRA_REPETIDA` | — |
 | `escuadra.ajena` | `ESCUADRA_AJENA` | — |
 | `escuadra.fuera_de_tu_columna` | `ESCUADRA_FUERA_DE_TU_COLUMNA` | De visita en una plaza de tu Facción (2026-11-04): la escuadra que dejas en su guarnición o cedes de escolta tiene que ir en la columna con la que entraste. |

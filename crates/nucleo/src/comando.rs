@@ -243,7 +243,7 @@ pub enum Comando {
     /// Repone gratis la tropa prestada que está en el campamento o en una columna a su puerta.
     ReponerPrestamo { heroe: u64 },
     /// Guarda un loadout (nuevo si `loadout` es `None`) o reescribe uno. `creadas` lleva el id del nuevo.
-    GuardarLoadout { heroe: u64, loadout: Option<u64>, nombre: String, escuadras: Vec<u64>, perks: Vec<u32>, activo: Option<bool> },
+    GuardarLoadout { heroe: u64, loadout: Option<u64>, nombre: String, escuadras: Vec<u64>, activo: Option<bool> },
     BorrarLoadout { heroe: u64, loadout: u64 },
     /// Reparte puntos de atributo (cada punto suma 1). Todo o nada.
     RepartirPuntos { heroe: u64, fuerza: i64, destreza: i64, armadura: i64, vitalidad: i64 },
@@ -1755,14 +1755,12 @@ impl Peticion {
                 w.u8(53);
                 w.u64(*heroe);
             }
-            Comando::GuardarLoadout { heroe, loadout, nombre, escuadras, perks, activo } => {
+            Comando::GuardarLoadout { heroe, loadout, nombre, escuadras, activo } => {
                 w.u8(54);
                 w.u64(*heroe);
                 w.opt_u64(*loadout);
                 w.texto(nombre);
                 lista_u64(&mut w, escuadras);
-                w.u64(perks.len() as u64);
-                perks.iter().for_each(|&k| w.u32(k));
                 w.u8(activo.map_or(2, u8::from));
             }
             Comando::BorrarLoadout { heroe, loadout } => {
@@ -2662,7 +2660,6 @@ impl Peticion {
                 loadout: r.opt_u64()?,
                 nombre: r.texto()?,
                 escuadras: leer_lista_u64(&mut r)?,
-                perks: (0..r.cuenta()?).map(|_| r.u32()).collect::<Result<_, _>>()?,
                 activo: match r.u8()? {
                     0 => Some(false),
                     1 => Some(true),
@@ -3230,7 +3227,6 @@ pub mod rechazos {
     /// El nombre del loadout lleva caracteres de control.
     pub const LOADOUT_NOMBRE_CONTROL: &str = "loadout.nombre_control";
     pub const LOADOUT_DESCONOCIDO: &str = "loadout.desconocido";
-    pub const LOADOUT_PERK_NO_DESBLOQUEADO: &str = "loadout.perk_no_desbloqueado";
     pub const ESCUADRA_REPETIDA: &str = "escuadra.repetida";
     pub const ESCUADRA_AJENA: &str = "escuadra.ajena";
     /// De visita en una plaza de tu Facción (2026-11-04): la escuadra que dejas en su guarnición o cedes de escolta tiene que ir en la columna con la que entraste.
@@ -3964,9 +3960,9 @@ mod pruebas {
             Comando::ReclutarEnCampamento { heroe: 2, tropa: Tropa::MiliciaLanceros, pagar_con: PagarCon::AlmacenPersonal },
             Comando::PedirPrestamo { heroe: 2, tropas: vec![Tropa::Granjeros, Tropa::Mineros] },
             Comando::ReponerPrestamo { heroe: 2 },
-            Comando::GuardarLoadout { heroe: 2, loadout: None, nombre: "Asalto".into(), escuadras: vec![5, 6], perks: vec![1, 9], activo: None },
-            Comando::GuardarLoadout { heroe: 2, loadout: Some(8), nombre: "Defensa".into(), escuadras: vec![], perks: vec![], activo: Some(true) },
-            Comando::GuardarLoadout { heroe: 2, loadout: Some(8), nombre: "Defensa".into(), escuadras: vec![5], perks: vec![], activo: Some(false) },
+            Comando::GuardarLoadout { heroe: 2, loadout: None, nombre: "Asalto".into(), escuadras: vec![5, 6], activo: None },
+            Comando::GuardarLoadout { heroe: 2, loadout: Some(8), nombre: "Defensa".into(), escuadras: vec![], activo: Some(true) },
+            Comando::GuardarLoadout { heroe: 2, loadout: Some(8), nombre: "Defensa".into(), escuadras: vec![5], activo: Some(false) },
             Comando::BorrarLoadout { heroe: 2, loadout: 8 },
             Comando::RepartirPuntos { heroe: 2, fuerza: 3, destreza: 0, armadura: 1, vitalidad: -2 },
             Comando::OrdenarEscuadras { heroe: 2, escuadras: vec![6, 5, 4] },
@@ -4153,18 +4149,17 @@ mod pruebas {
                     ganador: Lado::Defensor,
                     razon: Razon::TiempoAgotado,
                     objetivos: vec![("bandera".into(), None), ("torre".into(), Some(Lado::Atacante))],
-                    por_escuadra: vec![ResultadoEscuadra { escuadra: 8, desplegados: 10, supervivientes_al_cierre: 3, muertos: 7, xp_ganada: 4 }],
+                    por_escuadra: vec![ResultadoEscuadra { escuadra: 8, desplegados: 10, supervivientes_al_cierre: 3, muertos: 7 }],
                     por_heroe: vec![
-                        ResultadoHeroe { heroe: 4, participo: true, sobrevivio_al_cierre: false, xp_ganada: 9, derrotado: Some(true), botin: None },
+                        ResultadoHeroe { heroe: 4, participo: true, sobrevivio_al_cierre: false, derrotado: Some(true), botin: None },
                         ResultadoHeroe {
                             heroe: 5,
                             participo: true,
                             sobrevivio_al_cierre: true,
-                            xp_ganada: 1,
                             derrotado: None,
                             botin: Some(Botin { objetos: vec![ObjetoBotin { definicion: "espada".into(), cantidad: 1, instancia: Some("i-1".into()) }, ObjetoBotin { definicion: "oro".into(), cantidad: 5, instancia: None }], monedas: 7 }),
                         },
-                        ResultadoHeroe { heroe: 6, participo: false, sobrevivio_al_cierre: true, xp_ganada: 0, derrotado: Some(false), botin: None },
+                        ResultadoHeroe { heroe: 6, participo: false, sobrevivio_al_cierre: true, derrotado: Some(false), botin: None },
                     ],
                     version_servidor: "v1".into(),
                     carros_perdidos: vec!["0".into(), "2".into()],

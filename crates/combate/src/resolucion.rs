@@ -1,8 +1,9 @@
 //! La resolución numérica (Combate §3.3 y §4): el motor común de un choque que el servidor calcula con números (sin
 //! servidores de batalla). Dos tiradas del generador, **atacante primero**; las ramas sin combate no tocan el generador.
 //!
-//! Todo en enteros: poder en milésimas (`Escuadra::poder`), factores en ppm. Las bajas y la experiencia se aplican **en el sitio**, sobre las
-//! escuadras que el llamador presta; el informe dice qué le pasó a cada una.
+//! Todo en enteros: poder en milésimas (`Escuadra::poder`), factores en ppm. Las bajas se aplican **en el sitio**, sobre las escuadras que el
+//! llamador presta; el informe dice qué le pasó a cada una y la experiencia que ganó, que da el núcleo por su único punto de entrada (Ejército
+//! permanente y `escuadras.veteranas` miran el estado).
 
 use crate::datos::Reglas;
 use asentamiento::datos::UNO;
@@ -30,7 +31,7 @@ impl Lado {
     }
 }
 
-/// Un bando: las escuadras que combaten (se les aplican bajas y experiencia) y los héroes **sanos** que combaten con ellas, que suman
+/// Un bando: las escuadras que combaten (se les aplican bajas) y los héroes **sanos** que combaten con ellas, que suman
 /// `poderPorHeroe` cada uno aunque no lleven ninguna escuadra.
 pub struct Bando<'a> {
     pub escuadras: &'a mut [Escuadra],
@@ -50,6 +51,8 @@ pub struct Baja {
     pub tropa: Tropa,
     pub antes: i64,
     pub despues: i64,
+    /// La experiencia de combate que gana (milésimas): `experienciaGanadaPorVictoria` si su bando gana y `…PorDerrota` si pierde. No se le suma aquí.
+    pub experiencia: Mil,
 }
 
 /// Lo que le pasó a un bando.
@@ -126,20 +129,19 @@ fn redondear(cantidad: i64, fraccion: i64) -> i64 {
     (cantidad * fraccion + UNO / 2) / UNO
 }
 
-/// Aplica a las escuadras con soldados una fracción de bajas (`round(cantidad × fracción)`, sin bajar de 0) y la experiencia del resultado. La
-/// escuadra **persiste** a `cantidad` 0. La chatarra de los caídos se suma a `chatarra`.
+/// Aplica a las escuadras con soldados una fracción de bajas (`round(cantidad × fracción)`, sin bajar de 0) y anota en cada [`Baja`] la experiencia
+/// del resultado. La escuadra **persiste** a `cantidad` 0. La chatarra de los caídos se suma a `chatarra`.
 pub fn aplicar_bajas(r: &Reglas, escuadras: &mut [Escuadra], fraccion: i64, victoria: bool, chatarra: &mut Carga) -> Vec<Baja> {
     let xp = if victoria { r.poder.xp_victoria } else { r.poder.xp_derrota };
     let mut v = vec![];
     for e in escuadras.iter_mut().filter(|e| e.con_soldados()) {
         let antes = e.cantidad;
         let muertos = redondear(antes, fraccion).clamp(0, antes);
-        e.con_experiencia(&r.militar, xp);
         e.cantidad = antes - muertos;
         for (rec, n) in r.chatarra.de_muertos(e.tropa, muertos) {
             militar::sumar(chatarra, rec, n);
         }
-        v.push(Baja { escuadra: e.id, tropa: e.tropa, antes, despues: e.cantidad });
+        v.push(Baja { escuadra: e.id, tropa: e.tropa, antes, despues: e.cantidad, experiencia: xp });
     }
     v
 }
@@ -339,7 +341,7 @@ mod pruebas {
         let ratio = inf.ratio;
         assert!(ratio < 400_000);
         let esperado_perdedor = 300_000 + 400_000 * (UNO - ratio) / UNO;
-        assert_eq!(inf.defensor.bajas[0], Baja { escuadra: 3, tropa: Tropa::MiliciaLanceros, antes: 25, despues: 25 - (25 * esperado_perdedor + UNO / 2) / UNO });
+        assert_eq!(inf.defensor.bajas[0], Baja { escuadra: 3, tropa: Tropa::MiliciaLanceros, antes: 25, despues: 25 - (25 * esperado_perdedor + UNO / 2) / UNO, experiencia: 500 });
         let esperado_ganador = 50_000 + 150_000 * ratio / UNO;
         assert_eq!(inf.atacante.bajas[0].antes - inf.atacante.bajas[0].despues, (12 * esperado_ganador + UNO / 2) / UNO);
         assert!(inf.defensor.bajas[0].despues < 10 && inf.atacante.bajas[0].despues >= 11);
@@ -352,7 +354,8 @@ mod pruebas {
         let mut d = [escuadra(2, 2, Tropa::MiliciaLanceros)];
         let inf = resolver(&r, &mut a, &[], &mut d, &[], UNO, 5).unwrap();
         assert_eq!(inf.ganador, Lado::Atacante);
-        assert_eq!((a[0].experiencia, d[0].experiencia), (1_000, 500));
+        assert_eq!((inf.atacante.bajas[0].experiencia, inf.defensor.bajas[0].experiencia), (1_000, 500));
+        assert_eq!((a[0].experiencia, d[0].experiencia), (0, 0), "se la suma el núcleo");
     }
 
     #[test]

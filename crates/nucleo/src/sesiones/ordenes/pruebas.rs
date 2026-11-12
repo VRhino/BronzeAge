@@ -113,8 +113,8 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         (orden!(PedirPrestamo, OrdenPedirPrestamo, tropa_ids: v(&[tropa.nombre(), Tropa::Lenadores.nombre()])), Comando::PedirPrestamo { heroe: 7, tropas: vec![tropa, Tropa::Lenadores] }),
         (orden!(ReponerPrestamo, OrdenReponerPrestamo), Comando::ReponerPrestamo { heroe: 7 }),
         (
-            orden!(GuardarLoadout, OrdenGuardarLoadout, loadout_id: Some(s("loadout-12")), display_name: s("Plan B"), squad_ids: esc.clone(), perks_seleccionados: vec![3, 4], activo: Some(true)),
-            Comando::GuardarLoadout { heroe: 7, loadout: Some(12), nombre: "Plan B".into(), escuadras: vec![1, 2], perks: vec![3, 4], activo: Some(true) },
+            orden!(GuardarLoadout, OrdenGuardarLoadout, loadout_id: Some(s("loadout-12")), display_name: s("Plan B"), squad_ids: esc.clone(), activo: Some(true)),
+            Comando::GuardarLoadout { heroe: 7, loadout: Some(12), nombre: "Plan B".into(), escuadras: vec![1, 2], activo: Some(true) },
         ),
         (orden!(BorrarLoadout, OrdenBorrarLoadout, loadout_id: s("loadout-12")), Comando::BorrarLoadout { heroe: 7, loadout: 12 }),
         (
@@ -710,7 +710,6 @@ fn un_id_sin_la_forma_de_su_entidad_o_un_valor_fuera_de_su_catalogo_se_rechazan_
         (orden!(ReclutarEnCampamento, OrdenReclutarEnCampamento, tropa_id: s("milicia_lanceros"), pagar_con: Some(s("monedas"))), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(ComprarEnCampamento, OrdenComprarEnCampamento, recurso: s("madera"), cantidad: 2_000, campamento_id: Some(s("camp-9")), pagar_con: Some(s("monedas"))), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(SalirAlMundo, OrdenSalirAlMundo, asentamiento_id: s("as-3"), heroe_id: h(), carga: carga(&[("mithril", 1)])), rechazos::ORDEN_FORMA_INVALIDA),
-        (orden!(GuardarLoadout, OrdenGuardarLoadout, display_name: s("x"), perks_seleccionados: vec![-1]), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(ColocarAvanzada, OrdenColocarAvanzada, asentamiento_id: s("as-3"), heroe_id: h()), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(ComprarMirada, OrdenComprarMirada, centro: Some(pb::Punto { x: 1, y: 2 })), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(ComprarMirada, OrdenComprarMirada, origen: Some(pb::orden_comprar_mirada::Origen { tipo: s("muelle"), id: s("as-3") }), centro: Some(pb::Punto { x: 1, y: 2 })), rechazos::ORDEN_FORMA_INVALIDA),

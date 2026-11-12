@@ -656,6 +656,6 @@ fn el_loadout_de_una_partida_vieja_no_sirve_la_prestada_que_ya_se_retiro_y_se_vu
         (hn.heroe.loadouts[0].id, l.display_name.clone())
     };
     // El cliente reenvía lo que ve, y se guarda.
-    mc::ok(&mut n, "ana", Comando::GuardarLoadout { heroe: h, loadout: Some(id), nombre, escuadras: vec![propia], perks: vec![], activo: None });
+    mc::ok(&mut n, "ana", Comando::GuardarLoadout { heroe: h, loadout: Some(id), nombre, escuadras: vec![propia], activo: None });
     assert_eq!(n.heroe(h).unwrap().heroe.loadouts[0].escuadras, vec![propia]);
 }

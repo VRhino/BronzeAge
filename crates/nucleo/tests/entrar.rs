@@ -832,7 +832,7 @@ impl Escenario {
     /// El loadout activo del héroe lleva esas escuadras: las que defienden en persona.
     fn loadout(&mut self, h: u64, escuadras: Vec<u64>) {
         let loadout = self.n.heroe(h).unwrap().heroe.loadouts[0].id;
-        self.ok("admin", Comando::GuardarLoadout { heroe: h, loadout: Some(loadout), nombre: "Default".into(), escuadras, perks: vec![], activo: Some(true) });
+        self.ok("admin", Comando::GuardarLoadout { heroe: h, loadout: Some(loadout), nombre: "Default".into(), escuadras, activo: Some(true) });
     }
     /// Un Barracón en la plaza (que sube a nivel 2): el cupo de 7 de Liderazgo para la guarnición.
     fn con_barracon(&mut self) {

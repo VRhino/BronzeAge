@@ -64,9 +64,9 @@ fn resultado(b: &Batalla) -> Resultado {
         objetivos: vec![("bandera".into(), Some(Lado::Atacante))],
         por_escuadra: b
             .escuadras_de()
-            .map(|e| ResultadoEscuadra { escuadra: e.id, desplegados: e.efectivos, supervivientes_al_cierre: e.efectivos - 5, muertos: 5, xp_ganada: 3 })
+            .map(|e| ResultadoEscuadra { escuadra: e.id, desplegados: e.efectivos, supervivientes_al_cierre: e.efectivos - 5, muertos: 5 })
             .collect(),
-        por_heroe: b.heroes_que_combaten().map(|h| ResultadoHeroe { heroe: h, participo: true, sobrevivio_al_cierre: true, xp_ganada: 7, derrotado: None, botin: None }).collect(),
+        por_heroe: b.heroes_que_combaten().map(|h| ResultadoHeroe { heroe: h, participo: true, sobrevivio_al_cierre: true, derrotado: None, botin: None }).collect(),
         version_servidor: "v1".into(),
         carros_perdidos: vec![],
     }
@@ -464,8 +464,20 @@ fn un_resultado_valido_se_aplica_en_una_mutacion_y_devuelve_los_efectos() {
     assert_eq!(e.heridos, vec![2], "sin `derrotado`, el bando perdedor");
     assert_eq!(e.soltar, vec![10, 20]);
     let por_id = |id| e.escuadras.iter().find(|x| x.escuadra == id).unwrap();
-    assert_eq!((por_id(10).cantidad, por_id(10).xp, por_id(30).cantidad), (20, 3_000, 8), "xp en milésimas; la sin dueño también viene");
-    assert!(e.heroes.iter().all(|h| h.xp == 7 && h.botin.is_none()));
+    assert_eq!((por_id(10).cantidad, por_id(30).cantidad), (20, 8), "la sin dueño también viene");
+    assert_eq!((por_id(10).victoria, por_id(20).victoria, por_id(30).victoria), (Some(true), Some(false), Some(false)), "la experiencia según gane su bando, también a la sin héroe");
+    assert_eq!(e.heroes.iter().map(|h| (h.heroe, h.victoria, h.botin.is_none())).collect::<Vec<_>>(), vec![(1, Some(true), true), (2, Some(false), true)]);
+}
+
+#[test]
+fn quien_no_participo_no_gana_experiencia_ni_sus_escuadras() {
+    let mut b = en_curso(CAMPAL);
+    let mut res = resultado(&b);
+    res.por_heroe[1].participo = false;
+    let Ok(Efecto::Aplicado(e)) = b.aplicar_resultado(5_000, "srv", res, &sin_objetos) else { panic!() };
+    let por_id = |id| e.escuadras.iter().find(|x| x.escuadra == id).unwrap();
+    assert_eq!((por_id(20).cantidad, por_id(20).victoria, por_id(30).victoria), (20, None, Some(false)), "sus bajas sí; la guarnición sin héroe entró igual");
+    assert_eq!(e.heroes.iter().map(|h| (h.heroe, h.victoria)).collect::<Vec<_>>(), vec![(1, Some(true)), (2, None)]);
 }
 
 #[test]
@@ -518,7 +530,6 @@ fn el_checklist_rechaza_cada_fallo_y_nunca_aplica_a_medias() {
     assert_eq!(rechazo(|r| r.intento = "otro".into()), AsignacionNoVigente);
     assert_eq!(rechazo(|r| r.revision = 4), AsignacionNoVigente);
     assert_eq!(rechazo(|r| r.por_escuadra[0].muertos = -1), Forma);
-    assert_eq!(rechazo(|r| r.por_heroe[0].xp_ganada = -1), Forma);
     assert_eq!(rechazo(|r| r.por_escuadra[1] = r.por_escuadra[0].clone()), IdRepetido);
     assert_eq!(rechazo(|r| r.por_heroe[1] = r.por_heroe[0].clone()), IdRepetido);
     assert_eq!(rechazo(|r| drop(r.por_escuadra.pop())), EscuadrasIncompletas);

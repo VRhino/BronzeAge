@@ -90,7 +90,7 @@ Conquest tiene dos papeles:
    - **Golpe** = daño del arma × (1 + 1 % por punto del atributo de daño de la clase).
 6. **El nivel del héroe es el del ticket.** En modo conectado deja de usarse `HeroExperienceCalculator`.
    - Las habilidades se abren en los niveles 1, 3, 5 y 10, y los perks en el 7 y el 12.
-   - Los perks desbloqueados llegan en `perksDesbloqueados`.
+   - Los perks los abre el nivel (D15): el ticket ya no lleva `perksDesbloqueados` (campo `reserved`).
    - La experiencia es de 4 o 2, como la de la escuadra (decisión 7).
 7. **Las habilidades y los perks de cada clase**, con sus nombres (Clases §3.1). Las que ya existen solo piden datos. Las mecánicas que no existen son nueve:
 

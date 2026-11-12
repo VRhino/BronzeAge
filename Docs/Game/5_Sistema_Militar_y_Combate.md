@@ -19,7 +19,7 @@ Qué significa esa cifra, que es lo que dice si está bien puesta:
 
 Un héroe vale **menos de un tercio de la peor leva**. Frente a una columna no decide nada —Tropa > Héroe, intacto— y decide justo en el único combate que es suyo: **contra otro héroe solo**. Contra una caravana no: una caravana sin escolta se defiende de un héroe solo (Doc 3.10), a propósito.
 
-**El héroe no muere.** Al perder una batalla queda **herido** (5.16.4) y pierde las bajas de sus escuadrones; si fue en mundo abierto, entrega además **la mitad de su carro** (5.16.6). Gana nivel y experiencia según su desempeño en la batalla (5.16.3).
+**El héroe no muere.** Al perder una batalla queda **herido** (5.16.4) y pierde las bajas de sus escuadrones; si fue en mundo abierto, entrega además **la mitad de su carro** (5.16.6). Gana nivel y experiencia combatiendo (5.16.3).
 
 ## 5.2 Modalidades de batalla instanciadas (heredado de Iberia)
 El combate ocurre en INSTANCIAS separadas del mapa global (aunque se desencadenen en él), límites simétricos fijos, 2 bandos (Atacante/Defensor), sin empates.
@@ -62,7 +62,7 @@ Ciclo de vida propiamente dicho:
 - **El pool de reclutamiento es la población MENOS la ya ocupada en producción**, no la población total: reclutar no puede sacar pesants que cubren los trabajadores de Granja/Cantera/Leñera/minas/Corral/Molino/Horno, ni artesanos que cubren los de Fundición/Curtiduría/Armería/Carpintería/Quesera/Bodega/Prensa. Es simétrico entre pesants y artesanos, y aplica igual al reclutamiento de un jugador y al de la gobernanza NPC.
 
 ## 5.5 Progresión de las tropas (ver también Doc 4.1)
-Se recluta pagando equipo (5.8), y cada tropa sale de una clase de población según su escalón (5.8). Sus escuadrones suben de **nivel y experiencia** combatiendo de verdad, según su desempeño en la batalla (5.16.3).
+Se recluta pagando equipo (5.8), y cada tropa sale de una clase de población según su escalón (5.8). Sus escuadrones suben de **nivel y experiencia** combatiendo de verdad (5.16.3).
 
 ## 5.6 Attack Timer (heredado de Iberia, pospuesto a fase posterior a Fase 0)
 Asedios FORMALES en ventanas limitadas (ej. 2 veces/semana, horario fijo, ~1h de duración). Ataques logísticos (mundo abierto, caravanas) libres 24/7. Pospuesto a Fase 1+: requiere instanciado multijugador programado y un sistema de colas y horarios.
@@ -211,7 +211,7 @@ En un ejército de varios héroes, **cada uno se valida contra SU propio Lideraz
 | 4 — pesada | 32 | 15 | 3 | Carros de guerra, Lanceros pesados, Shardana, Espartiatas |
 | 5 — élite | 45 | 12 | 2 | Arqueros con arco compuesto, Hequetai, Arqueros escitas |
 
-Liderazgo base **100**.
+El Liderazgo **nace en 14** y sube **3 por cada nivel** del Héroe hasta el 30, sin pasar de **100** (2026-11-12): un héroe nuevo saca dos escuadras de leva o una de línea; uno de nivel 30, las combinaciones de abajo.
 
 **El tamaño del escuadrón es propio de cada tropa** (decidido el 2026-09-27; antes lo fijaba el escalón). De
 partida es el de la tabla —cuanto más de élite, menos cuerpos—, y al fijarlo hay que conservar ese orden: es lo que
@@ -242,7 +242,7 @@ Ninguna sobra ni falta por poco, y ninguna admite una unidad más. La cantidad s
 minutos**, mientras que dos escuadrones de élite (24 hombres) aguantan unas **nueve horas** (5.13). Catorce
 veces más alcance. **El eje de la decisión no es el poder, es el alcance.**
 
-El Liderazgo puede crecer por encima de la base con la progresión del Héroe (`liderazgoBase`).
+El Liderazgo crece con el nivel del Héroe (`liderazgoBase`), igual para todos los héroes del mismo nivel: ni la tecnología ni el equipo lo cambian (la armadura no da Liderazgo).
 
 ## 5.12 Ejércitos y movimiento por el mapa
 
@@ -803,7 +803,7 @@ El campamento es donde un héroe guarda las escuadras que no lleva consigo, y es
   | Recinto de muralla completo (el mejor, también mientras se mejora o se amplía): empalizada / piedra / adarve | +10 / +15 / +20 |
   | Política "Levas de guarnición" (General, Doc 4.4) | +14 |
 
-  Sin Barracón, Galería de tiro ni Caballerizas de nivel 2 no hay guarnición. Con Barracón, Galería, muralla con adarve y política al máximo son 78 —unas dos escuadras pesadas y una de leva—, por debajo de los 100 de Liderazgo que el héroe se lleva consigo. Como el cupo es por héroe, cuantos más residentes tenga una plaza, más guarnición puede tener.
+  Sin Barracón, Galería de tiro ni Caballerizas de nivel 2 no hay guarnición. Con Barracón, Galería, muralla con adarve y política al máximo son 78 —unas dos escuadras pesadas y una de leva—, por debajo de los 100 de Liderazgo que se lleva consigo un héroe de nivel 30. Como el cupo es por héroe, cuantos más residentes tenga una plaza, más guarnición puede tener.
 - Una escuadra en guarnición se **entrega a la IA**: la maneja la IA y el héroe no puede usarla mientras siga asignada, aunque esté presente en la batalla.
 - En un asedio entra directamente, sin ocupar plaza de héroe.
 - Si el cupo baja por debajo de lo que ya tiene asignado (expira la política, se daña un edificio), lo asignado se queda; solo se impide asignar más.
@@ -846,7 +846,7 @@ El detalle de datos del héroe está en `typescript-final:Docs/Coordinacion/01_M
 - Cada Jugador tiene **exactamente un Héroe en cada mundo**. El Héroe pertenece a esa partida, no a la cuenta: su progreso no pasa de un mundo a otro.
 - **No se cambia de héroe** dentro de una partida.
 - Todo lo que el Jugador hace dentro del mundo lo hace su Héroe: reside, lidera, tiene Liderazgo, está situado en el mundo, recuerda y explora, ocupa cargos y posee los escuadrones. El Jugador es la persona y su cuenta.
-- Trae de Conquest su estructura de personaje: clase, nivel y experiencia, puntos de atributo y puntos de perk por separado, atributos, perks, equipo, inventario y sus propias monedas. Esas monedas son **un solo saldo** del héroe, **aparte del oro** recurso de las plazas: no entran en la economía de una plaza (desde el 2026-11-08, 100 monedas valen 1 de oro solo al contratar mercenarios, Doc 7). Se ganan **combatiendo contra héroes de otra Facción** (cada héroe, 500 si su bando gana y 150 si pierde; las 8 primeras veces que esas dos Facciones se enfrentan en un día, completo; luego un 15 % menos cada vez y, desde la 14.ª, nada), **destruyendo campamentos de bandidos** (1.9) y en el botín de las batallas de Unity.
+- Trae de Conquest su estructura de personaje: clase, nivel y experiencia, puntos de atributo, atributos, perks (los abre el nivel: 7 y 12; los define Conquest), equipo, inventario y sus propias monedas. Esas monedas son **un solo saldo** del héroe, **aparte del oro** recurso de las plazas: no entran en la economía de una plaza (desde el 2026-11-08, 100 monedas valen 1 de oro solo al contratar mercenarios, Doc 7). Se ganan **combatiendo contra héroes de otra Facción** (cada héroe, 500 si su bando gana y 150 si pierde; las 8 primeras veces que esas dos Facciones se enfrentan en un día, completo; luego un 15 % menos cada vez y, desde la 14.ª, nada), **destruyendo campamentos de bandidos** (1.9) y en el botín de las batallas de Unity.
 
 ### 5.16.2 Sus escuadrones
 
@@ -858,9 +858,9 @@ El detalle de datos del héroe está en `typescript-final:Docs/Coordinacion/01_M
 ### 5.16.3 Progresión
 
 - Héroe y escuadrones progresan con **nivel y experiencia**, al estilo de Conquest.
-- **El nivel de un escuadrón va del 1 al 10** y cada nivel le da **+3% de poder** en el combate con números: el nivel 1 tiene +3% y el 10, el máximo, +30% (decisión del autor del 2026-11-11, para acercarse a lo que pesa el nivel en Unity; antes era +1%). Cada nivel pide una cantidad de experiencia; al llenarla, sube al siguiente. Los primeros piden poca y cada uno pide el doble que el anterior hasta el nivel 5; desde ahí todos piden lo mismo (`MILITAR.experienciaParaSubirEscuadra`: 5, 10, 20, 40 y luego 40 por nivel). En el combate con números, un escuadrón gana 1 de experiencia si su bando vence y 0,5 si pierde.
-- **La experiencia del Héroe depende de su desempeño en la batalla**: unidades y héroes abatidos, capturas de bandera, daño hecho y recibido, si fue el mejor de la partida, en qué puesto de la tabla de su bando terminó, entre otros factores. La calcula la propia partida (Unity), que es la única que ve esos datos. **La de los escuadrones también**: la calcula la partida con toda la información de la batalla.
-- **El botín también lo decide la partida**: qué objetos y cuántas monedas de botín gana cada héroe en una batalla jugada lo calcula Unity, igual que la experiencia, y el héroe lo guarda en su inventario y su saldo de monedas.
+- **El nivel de un escuadrón va del 1 al 10** y cada nivel le da **+3% de poder** en el combate con números: el nivel 1 tiene +3% y el 10, el máximo, +30% (decisión del autor del 2026-11-11, para acercarse a lo que pesa el nivel en Unity; antes era +1%). Cada nivel pide una cantidad de experiencia; al llenarla, sube al siguiente (`MILITAR.experienciaParaSubirEscuadra`: 10, 25, 50, 100, 150, 200, 250, 275 y 315, 1.375 hasta el 10; 2026-11-12). En el combate con números, un escuadrón gana 1 de experiencia si su bando vence y 0,5 si pierde; en una batalla de Unity, 4 o 2. Con **Ejército permanente** (Era V), los escuadrones de los héroes de la Facción ganan un 10 % más.
+- **La experiencia del Héroe la pone el motor** (2026-11-12): con números, lo mismo que sus escuadrones (1 o 0,5), una vez por combate; en Unity, 4 si su bando gana y 2 si pierde, solo si participó. Unity no la calcula. Cada nivel pide 20 más que el anterior (100 para pasar al 2, 120 al 3… 660 al 30; 11.020 en total) y desde el 30, 680 cada uno. Hasta el 30, cada nivel le da **un punto de atributo** y **3 de Liderazgo**; desde el 31 sube sin dar nada.
+- **El botín también lo decide la partida**: qué objetos y cuántas monedas de botín gana cada héroe en una batalla jugada lo calcula Unity, y el héroe lo guarda en su inventario y su saldo de monedas.
 
 ### 5.16.4 Herido
 

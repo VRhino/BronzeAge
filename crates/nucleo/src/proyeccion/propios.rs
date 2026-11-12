@@ -134,7 +134,6 @@ pub fn heroe(n: &Nucleo, h: &HeroeNucleo) -> pb::Heroe {
             display_name: l.nombre.clone(),
             // Solo las escuadras que aún son suyas: una partida de antes del 2026-11-03 pudo guardar en el loadout una prestada que ya se retiró.
             squad_ids: l.escuadras.iter().filter(|&&s| h.heroe.escuadra(s).is_some()).map(|&s| ids::escuadra(s)).collect(),
-            perks_seleccionados: l.perks.clone(),
             activo: l.activo,
             liderazgo_total: u32::try_from(h.heroe.liderazgo_de_loadout(r, l)).unwrap_or(0),
         })
@@ -154,11 +153,9 @@ pub fn heroe(n: &Nucleo, h: &HeroeNucleo) -> pb::Heroe {
         class_definition_id: CLASE_POR_DEFECTO.into(),
         avatar: Some(pb::Avatar::default()),
         nivel: h.heroe.nivel,
-        experiencia_hacia_siguiente_nivel: h.heroe.experiencia.max(0) as u64,
+        experiencia_hacia_siguiente_nivel: h.heroe.falta_para_subir(r).max(0) as u64,
         puntos_de_atributo_sin_gastar: h.heroe.puntos_de_atributo.max(0) as u32,
-        puntos_de_perk_sin_gastar: h.heroe.puntos_de_perk.max(0) as u32,
         atributos_base: Some(atributos(&h.heroe)),
-        perks_desbloqueados: h.heroe.perks_desbloqueados.clone(),
         liderazgo_base: h.heroe.liderazgo_base.max(0) as u32,
         ubicacion: Some(pb::UbicacionHeroe { donde: Some(ubicacion) }),
         almacen_personal: Some(carga(&h.almacen_personal)),

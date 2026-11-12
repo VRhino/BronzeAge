@@ -65,7 +65,7 @@ Funciones puras que producen la columna nueva y la plaza con el carro cargado.
 ### 3.1 Salir como ejército (`movilizarEjercito`)
 1. Solo un **residente** de la plaza sale desde ella (ahí están su campamento y su tropa).
 2. Escuadras: deben existir en el campamento, ser del héroe, tener `cantidad > 0` y **no estar en la guarnición**. Al menos una; se rechaza en vez de filtrar en silencio.
-3. **Liderazgo** (`exigirLiderazgo`): `puedeLlevar(héroe, [lo que ya tiene fuera] + [las nuevas])`, con `liderazgoDe(héroe) = héroe.liderazgoBase ?? LIDERAZGO.base` y el coste de la escuadra = `LIDERAZGO.costePorEscalon[escalón de su tropa]`, **sin mirar cuántos soldados quedan** (una escuadra mermada paga el precio completo, Doc 5.11.1). El tope es **por héroe**.
+3. **Liderazgo** (`exigirLiderazgo`): `puedeLlevar(héroe, [lo que ya tiene fuera] + [las nuevas])`, con `liderazgoDe(héroe) = héroe.liderazgoBase` (sube con su nivel, Heroe_Y_Tropa §5) y el coste de la escuadra = `LIDERAZGO.costePorEscalon[escalón de su tropa]`, **sin mirar cuántos soldados quedan** (una escuadra mermada paga el precio completo, Doc 5.11.1). El tope es **por héroe**.
 4. Carro: `cargarCarroElegido` (§6.2), con capacidad de un carro (`capacidadCarroPorJugador`).
 5. Nace `tipo: 'ejercito'`, **`estacionado` en la puerta**, un participante, sin plan: **no se le da destino al salir** (decisión del autor, 2026-10-08). Su Líder lo dirige con `marcharA`. Los víveres los llena quien llama (`llenarViveres`, §6.1).
 
@@ -311,20 +311,7 @@ Cada uno lo emite el comando que lo nombra, en la misma transición. «Plaza» e
 | `VISION.caravanaGrande.radio` | 300 | **60** |
 | `PERSECUCION.umbralRecalculo` | 30 | **retirado** (§7) |
 
-<!-- parametros:LIDERAZGO -->
-```json
-{
-  "base": 100,
-  "costePorEscalon": {
-    "1": 7,
-    "2": 14,
-    "3": 22,
-    "4": 32,
-    "5": 45
-  }
-}
-```
-<!-- /parametros -->
+El bloque `LIDERAZGO` vive solo en [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §12 (hasta el 2026-11-12 estaba repetido aquí): nace en 14 y sube 3 por nivel del héroe hasta 100.
 
 <!-- parametros:LOGISTICA -->
 ```json

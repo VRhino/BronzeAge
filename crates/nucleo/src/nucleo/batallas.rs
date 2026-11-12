@@ -1045,31 +1045,35 @@ impl Nucleo {
         let b = self.estado.batallas.batallas[&id].clone();
         let mr = self.estado.reglas.economia.militar.clone();
 
-        // 1-2. Lo que Unity dice de cada uno: supervivientes y experiencia de cada escuadra (las de los héroes, las de la guarnición de un pueblo), experiencia y
-        // monedas de cada héroe, y los candados fuera. El nivel del héroe no sube (CQ-001) y los objetos del botín no tienen dónde caer (CQ-004).
+        // 1-2. Lo que Unity dice de cada uno: los supervivientes de cada escuadra (las de los héroes, las de la guarnición de serie de un pueblo o una avanzada) y las monedas de
+        // cada héroe, y los candados fuera. La experiencia la pone el motor (D7): 4 o 2 según gane su bando, a cada escuadra que entró y a cada héroe que participó. Los objetos del
+        // botín no tienen dónde caer (CQ-004).
+        let xp = |victoria: Option<bool>| victoria.map_or(0, |v| if v { mr.militar.experiencia_unity_victoria } else { mr.militar.experiencia_unity_derrota });
         for e in &efectos.escuadras {
-            if let Some(s) = self.escuadra_mut(e.escuadra) {
+            let ganada = xp(e.victoria);
+            if let Some(mut s) = self.escuadra(e.escuadra).map(|(_, s)| s.clone()) {
                 s.cantidad = e.cantidad;
-                s.con_experiencia(&mr, e.xp);
+                self.experiencia_de_escuadra(t, &mut s, ganada);
+                self.volcar_escuadras(std::slice::from_ref(&s));
             } else if let Some((&pueblo, g)) = self.estado.combate.guarniciones.iter().find(|(_, g)| g.escuadra.id == e.escuadra) {
                 // La guarnición de serie de un pueblo no es de ningún héroe: queda por debajo de su número, empieza su reposición gratis.
                 let mut mineros = g.escuadra.clone();
                 mineros.cantidad = e.cantidad;
-                mineros.con_experiencia(&mr, e.xp);
+                self.experiencia_de_escuadra(t, &mut mineros, ganada);
                 self.guardar_guarnicion(pueblo, mineros, t);
             } else if let Some((&avanzada, g)) = self.estado.combate.avanzadas.iter().find(|(_, g)| g.escuadras.iter().any(|s| s.id == e.escuadra)) {
                 // Lo mismo con la guarnición de serie de una avanzada.
                 let mut escuadras = g.escuadras.clone();
                 let s = escuadras.iter_mut().find(|s| s.id == e.escuadra).expect("está");
                 s.cantidad = e.cantidad;
-                s.con_experiencia(&mr, e.xp);
+                self.experiencia_de_escuadra(t, s, ganada);
                 self.guardar_guarnicion_de_avanzada(avanzada, escuadras, t);
             }
         }
         for e in &efectos.heroes {
+            self.experiencia_de_heroe(t, e.heroe, xp(e.victoria));
             let Some(h) = self.estado.militar.heroes.get_mut(&e.heroe) else { continue };
             self.tr.tocar(Clase::Heroe, e.heroe);
-            h.heroe.experiencia += e.xp;
             if let Some(botin) = &e.botin {
                 h.heroe.monedas += botin.monedas;
             }
@@ -1424,8 +1428,8 @@ impl Nucleo {
             json!({
                 "resultadoId": r.resultado_id, "revision": r.revision, "intento": r.intento, "inicio": r.inicio, "fin": r.fin, "ganador": lado_json(r.ganador), "razon": format!("{:?}", r.razon),
                 "objetivos": r.objetivos.iter().map(|(o, l)| json!({ "objetivo": o, "lado": l.map(lado_json) })).collect::<Vec<_>>(),
-                "porEscuadra": r.por_escuadra.iter().map(|s| json!({ "escuadra": s.escuadra, "desplegados": s.desplegados, "supervivientes": s.supervivientes_al_cierre, "muertos": s.muertos, "xp": s.xp_ganada })).collect::<Vec<_>>(),
-                "porHeroe": r.por_heroe.iter().map(|h| json!({ "heroe": h.heroe, "participo": h.participo, "sobrevivio": h.sobrevivio_al_cierre, "xp": h.xp_ganada, "derrotado": h.derrotado })).collect::<Vec<_>>(),
+                "porEscuadra": r.por_escuadra.iter().map(|s| json!({ "escuadra": s.escuadra, "desplegados": s.desplegados, "supervivientes": s.supervivientes_al_cierre, "muertos": s.muertos })).collect::<Vec<_>>(),
+                "porHeroe": r.por_heroe.iter().map(|h| json!({ "heroe": h.heroe, "participo": h.participo, "sobrevivio": h.sobrevivio_al_cierre, "derrotado": h.derrotado })).collect::<Vec<_>>(),
                 "versionServidor": r.version_servidor, "carrosPerdidos": r.carros_perdidos,
             })
         });

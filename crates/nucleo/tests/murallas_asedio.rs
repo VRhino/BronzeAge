@@ -159,7 +159,7 @@ impl Esc {
         if !defensa.is_empty() {
             let ids: Vec<u64> = defensa.iter().map(|&t| self.ok("admin", Comando::DarEscuadra { heroe: h, tropa: t, cantidad: completa(t) }).creadas[0]).collect();
             let loadout = self.n.heroe(h).unwrap().heroe.loadouts[0].id;
-            self.ok("admin", Comando::GuardarLoadout { heroe: h, loadout: Some(loadout), nombre: "Default".into(), escuadras: ids, perks: vec![], activo: Some(true) });
+            self.ok("admin", Comando::GuardarLoadout { heroe: h, loadout: Some(loadout), nombre: "Default".into(), escuadras: ids, activo: Some(true) });
         }
         h
     }

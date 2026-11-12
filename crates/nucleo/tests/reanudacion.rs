@@ -95,7 +95,7 @@ impl Esc {
         comun::gobierna(&mut self.n, plaza, h);
         let escuadra = self.ok("admin", Comando::DarEscuadra { heroe: h, tropa: Tropa::MiliciaLanceros, cantidad: 10 }).creadas[0];
         let loadout = self.n.heroe(h).unwrap().heroe.loadouts[0].id;
-        self.ok("admin", Comando::GuardarLoadout { heroe: h, loadout: Some(loadout), nombre: "Default".into(), escuadras: vec![escuadra], perks: vec![], activo: Some(true) });
+        self.ok("admin", Comando::GuardarLoadout { heroe: h, loadout: Some(loadout), nombre: "Default".into(), escuadras: vec![escuadra], activo: Some(true) });
         (h, escuadra)
     }
 
@@ -368,8 +368,8 @@ fn resultado_de(t: &pb::BattleTicket, intento: &str, ganador: pb::LadoId) -> de_
         ganador: ganador as i32,
         razon: pb::RazonVictoria::Aniquilacion as i32,
         objetivos: vec![],
-        por_escuadra: escuadras.map(|e| pb::ResultadoEscuadra { squad_id: e.squad_id.clone(), desplegados: e.efectivos_autorizados, supervivientes_al_cierre: e.efectivos_autorizados.saturating_sub(1), muertos: e.efectivos_autorizados.min(1), xp_ganada: 2 }).collect(),
-        por_heroe: participantes.iter().map(|p| pb::ResultadoHeroe { heroe_id: p.heroe_id.clone(), participo: true, sobrevivio_al_cierre: true, xp_ganada: 3, derrotado: None, botin: None }).collect(),
+        por_escuadra: escuadras.map(|e| pb::ResultadoEscuadra { squad_id: e.squad_id.clone(), desplegados: e.efectivos_autorizados, supervivientes_al_cierre: e.efectivos_autorizados.saturating_sub(1), muertos: e.efectivos_autorizados.min(1) }).collect(),
+        por_heroe: participantes.iter().map(|p| pb::ResultadoHeroe { heroe_id: p.heroe_id.clone(), participo: true, sobrevivio_al_cierre: true, derrotado: None, botin: None }).collect(),
         version_servidor: "v1".into(),
         carros_perdidos: vec![],
     })

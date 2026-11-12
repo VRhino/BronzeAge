@@ -744,7 +744,7 @@ message Loadout {
   string id = 1;
   string display_name = 2;
   repeated string squad_ids = 3;
-  repeated uint32 perks_seleccionados = 4;
+  reserved 4;                            // antes `perks_seleccionados`: desde el 2026-11-12 los perks se abren solos con el nivel (D15)
   bool activo = 5;
   uint32 liderazgo_total = 6;            // derivado
 }
@@ -774,13 +774,13 @@ message Heroe {
   string class_definition_id = 6;
   bool femenino = 7;
   Avatar avatar = 8;
-  uint32 nivel = 9;
-  uint64 experiencia_hacia_siguiente_nivel = 10;
-  uint32 puntos_de_atributo_sin_gastar = 11;
-  uint32 puntos_de_perk_sin_gastar = 12;
+  uint32 nivel = 9;                      // sube con la experiencia acumulada (Progresion_Tropas_Y_Heroe §4: 100, 120… hasta el 30 y 680 desde ahí)
+  uint64 experiencia_hacia_siguiente_nivel = 10;  // 2026-11-12: lo que le falta para el siguiente nivel, en milésimas (antes, la experiencia sin curva)
+  uint32 puntos_de_atributo_sin_gastar = 11;      // uno por nivel hasta el 30
+  reserved 12;                           // antes `puntos_de_perk_sin_gastar`: desde el 2026-11-12 los perks se abren solos con el nivel (D15)
   Atributos atributos_base = 13;
-  repeated uint32 perks_desbloqueados = 14;
-  uint32 liderazgo_base = 15;
+  reserved 14;                           // antes `perks_desbloqueados`: desde el 2026-11-12 los perks se abren solos con el nivel (D15)
+  uint32 liderazgo_base = 15;            // 14 en el nivel 1 y 3 más por nivel hasta 100 en el 30 (`LIDERAZGO`)
   UbicacionHeroe ubicacion = 16;
   Cantidades almacen_personal = 17;      // vive donde se reside
   optional CupoCampamento cupo_campamento = 18;

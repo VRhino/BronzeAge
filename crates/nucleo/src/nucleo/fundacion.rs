@@ -592,6 +592,7 @@ impl Nucleo {
         let persecucion = tecnologia::contador::persecucion(&self.bando_de_batalla(&atac.heroes, atac.escuadras.iter().map(|s| (s.tropa, s.cantidad, s.cantidad))));
         let r = asalto::resolver_asalto(&cr, Bando { escuadras: &mut atac.escuadras, heroes: &atac.heroes }, Defensa::Base, modalidad, &mut self.estado.rng).expect("la columna lleva al menos un héroe sano");
         // Como el asalto a una caravana comercial (al integrar 5D): la experiencia de un combate digno (5C-3) y la defensa del vasallo, sin señora presente (§5.9).
+        self.experiencia_de_bando(t, &mut atac.escuadras, &r.bajas_atacante, &atac.heroes, r.gana_atacante);
         self.experiencia_de_asalto(t, &atac.heroes, r.poder_atacante, r.defensa);
         self.defensa_de_vasallo(t, dueno, &[], !r.gana_atacante);
         self.volcar_escuadras(&atac.escuadras);

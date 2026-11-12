@@ -442,7 +442,6 @@ impl Ctx<'_> {
                 loadout: o.loadout_id.as_deref().map(|s| self.loadout(s)).transpose()?,
                 nombre: o.display_name.clone(),
                 escuadras: self.escuadras(&o.squad_ids)?,
-                perks: o.perks_seleccionados.iter().map(|&p| self.entero_u32(p, "perk")).collect::<R<_>>()?,
                 activo: o.activo,
             },
             Cuerpo::BorrarLoadout(o) => Comando::BorrarLoadout { heroe: self.mi_heroe()?, loadout: self.loadout(&o.loadout_id)? },

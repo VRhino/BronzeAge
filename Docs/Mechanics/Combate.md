@@ -48,7 +48,7 @@ El motor común es `resolverCombate` (§4), salvo caravana y campamento, que com
 > - **Pueblo extractor** (§7.3): un ejército de otra Facción que la de la madre; el pueblo ha de estar activo. La guarnición de serie nace completa la primera vez que se la necesita (`EstadoCombate.guarniciones`) y, mermada, se repone **de uno en uno, un minero cada 12 minutos desde la primera baja** con una cita por minero (`SucesoCombate::ReponeGuarnicion`, prioridad 3, ligado a `entidad_guarnicion`; decisión del autor, 2026-10-23, §7.3). Si el atacante gana se lleva `saquear`: lo que el almacén guarda por encima de la mitad, hasta lo que cabe en el carro; si no, quedan heridos todos sus participantes. Con la guarnición a 0 el pueblo se saquea sin combate ni tirada; la chatarra, si el pueblo resiste, va al almacén de la madre (decisión del autor, 2026-10-23). Hechos: `combate.pueblo_saqueado` / `combate.pueblo_resiste`.
 > - **Avanzada**: ver la nota de la fase 4F, más abajo.
 >
-> Las tiradas son las del documento: 2 en columna, plaza con defensores y pueblo con guarnición; 1 en caravana, campamento y acoso; 0 en las ramas sin combate. La experiencia de escuadra (`aplicar_bajas`) y las bajas se vuelcan al estado, y cada columna que combatió **re-anota su consumo y su velocidad** (`recomponer_columna`, también reprograma su deserción). Sin Unity (la fase 4E la añade) todo se resuelve con números.
+> Las tiradas son las del documento: 2 en columna, plaza con defensores y pueblo con guarnición; 1 en caravana, campamento y acoso; 0 en las ramas sin combate. La experiencia de escuadra (la anota `aplicar_bajas` en cada `Baja` y la da el núcleo, §4.3) y las bajas se vuelcan al estado, y cada columna que combatió **re-anota su consumo y su velocidad** (`recomponer_columna`, también reprograma su deserción). Sin Unity (la fase 4E la añade) todo se resuelve con números.
 >
 > **Implementado en Rust (2026-10-22, quinta ronda).** Los bandidos no son bots ni jugadores. El **acoso** a una caravana sigue siendo una tirada con números (`resolver_acoso`) salvo que haya servidores de batalla **y** la caravana vaya adjunta a una columna con algún héroe sano: entonces se abre una batalla de caravana en Unity ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §4). Una caravana sin héroes (suelta, con o sin escolta de tropa cedida, o adjunta a una columna sin héroes sanos) se resuelve **siempre con números**, haya o no servidores. Sin servidores, todo con números como antes.
 
@@ -124,7 +124,7 @@ bajasPerdedor = 0,30 + 0,40 · (1 − ratio)
 - La **cohesión** (`bonusCohesionPorEscuadronExtra`) solo la lleva el **defensor** y solo si hay más de una escuadra; el atacante nunca.
 - `ventajaDefensor` (1,05) y el `multiplicadorDefensor` (muralla, §6) multiplican solo al defensor.
 - Con un bando **vacío** (sin escuadras con soldados y sin héroes sanos) lanza `CombateInvalidoError`.
-- **Bajas permanentes** (`aplicarBajas`): cada escuadra pierde `round(cantidad × fracción)` (mínimo 0 de cantidad). La escuadra **persiste como identidad** con `cantidad: 0`. Además cada escuadra gana experiencia: `experienciaGanadaPorVictoria` si su bando ganó, `experienciaGanadaPorDerrota` si no.
+- **Bajas permanentes** (`aplicarBajas`): cada escuadra pierde `round(cantidad × fracción)` (mínimo 0 de cantidad). La escuadra **persiste como identidad** con `cantidad: 0`. Además cada escuadra gana experiencia: `experienciaGanadaPorVictoria` si su bando ganó, `experienciaGanadaPorDerrota` si no (§4.3: también sus héroes, y el bonus de Ejército permanente).
 - **Consume exactamente dos `rng()`** por combate, en ese orden. Las ramas sin combate (plaza sin defensores, protegida) **no consumen aleatoriedad**: una partida sin asedios hace las mismas llamadas al RNG que antes de existir los asedios.
 - **Combate digno** (`esCombateDigno`): `min(poderA, poderD) ≥ NIVEL_FACCION.ratioCombateDigno × max(poderA, poderD)`. Solo un combate digno da experiencia de Facción, **sea cual sea el objetivo** (5C-3, decisión del autor del 2026-10-24: también el saqueo de un pueblo, el ataque a una avanzada y el asalto a una caravana; en este último, el poder del atacante contra la defensa de la caravana).
 - **Chatarra** (Doc 4.2.1): por cada soldado muerto, de cada bando, el metal de su equipo × `CHATARRA.fraccion`; se suma y la recoge quien gana.
@@ -142,6 +142,16 @@ bajasPerdedor = 0,30 + 0,40 · (1 − ratio)
 ### 4.2 Monedas del héroe por combatir
 
 > **Implementado en Rust (2026-11-08, tanda 69, T2):** cada héroe **con Facción** que combate contra héroes de **otra Facción** cobra monedas (`Heroe.monedas`, [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §1): `MONEDAS.ganador` (500) si su bando gana y `MONEDAS.perdedor` (150) si pierde. Vale en el encuentro entre columnas (§5), el asedio con números (§6), el saqueo de un pueblo (§7.3), el ataque a una avanzada (§7.4) y las batallas de Unity (todas salvo las de un campamento de bandidos; cobran los héroes que participaron). No cobra nadie contra bandidos (su botín es el de §7.2), ni entre héroes de la misma Facción, ni un héroe sin Facción. **Rendimientos decrecientes por par de Facciones** (`MONEDAS.rendimientos`, `EstadoCombate.encuentros`, en la foto): la ventana es de 24 h, las 8 primeras veces que esas dos Facciones se enfrentan pagan completo, cada una de las siguientes paga un 15 % menos y desde la 14.ª no paga monedas (solo experiencia). El factor de cada par se calcula **una vez por combate** y lo cobran todos sus héroes (si un héroe tiene varios pares, el mejor factor); las monedas son enteras hacia abajo. `Nucleo::monedas_de_combate` y `monedas_de_informe` (`nucleo/monedas.rs`), llamados desde `combates.rs`, `avanzadas.rs` y `batallas.rs`.
+
+### 4.3 Experiencia de las escuadras y de los héroes
+
+> **Implementado en Rust (2026-11-12, entrada 73; Progresion_Tropas_Y_Heroe §2-§4, Eras_IV_Y_V §2-§3).** La experiencia de combate pasa por **un solo punto de entrada** para la escuadra (`Nucleo::experiencia_de_escuadra`) y otro para el héroe (`Nucleo::experiencia_de_heroe`), en `crates/nucleo/src/nucleo/progresion.rs`:
+>
+> - **Con números**: `combate` anota en cada `Baja` la experiencia base (`experienciaGanadaPorVictoria` 1, `experienciaGanadaPorDerrota` 0,5) y el núcleo se la da a cada escuadra que combatió; **cada héroe sano que combatió con ellas gana lo mismo, una vez por combate** (no una por escuadra). Vale en el encuentro entre columnas (§5), el asedio (§6; no en las ramas sin combate), el asalto a una caravana y a la Caravana de Fundación (§7.1; la escolta cedida gana, sus héroes no, porque no están), el campamento de bandidos (§7.2, gana si lo destruye), la emboscada y el acoso de los bandidos, el saqueo de un pueblo (§7.3) y el ataque a una avanzada (§7.4).
+> - **En una batalla de Unity** ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §9): `experienciaUnityPorVictoria` (4) o `experienciaUnityPorDerrota` (2) según gane su bando, a cada escuadra que entró (las de los héroes que participaron y las guarniciones y escoltas del ticket) y a cada héroe que participó. El motor **no lee** la experiencia de Unity (D7: `xp_ganada` sale del contrato). Una salida anticipada no da nada.
+> - **Ejército permanente** (`bonusExperiencia`): las escuadras de los héroes de una Facción que tiene la tecnología ganan un 10 % más. El héroe, no.
+> - **`escuadras.veteranas`**: +1 al logro cada vez que una escuadra cruza el nivel 5.
+> - El héroe que sube de nivel emite `heroe.nivel_subio` ([`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §4.3). La tropa prestada no gana.
 
 ## 5. Encuentro entre columnas (`atacarColumna` / `encuentroEntreEjercitos`)
 
@@ -269,18 +279,29 @@ Si tras caer la plaza la Facción perdedora **no conserva ningún asentamiento**
   "bonusPoderPorNivelEscuadra": 0.03,
   "nivelMaximoEscuadra": 10,
   "experienciaParaSubirEscuadra": [
-    5,
     10,
-    20,
-    40,
-    40,
-    40,
-    40,
-    40,
-    40
+    25,
+    50,
+    100,
+    150,
+    200,
+    250,
+    275,
+    315
   ],
   "experienciaGanadaPorVictoria": 1,
   "experienciaGanadaPorDerrota": 0.5,
+  "experienciaUnityPorVictoria": 4,
+  "experienciaUnityPorDerrota": 2,
+  "nivelesHabilidadEscuadra": [
+    4,
+    7,
+    10
+  ],
+  "bonusExperiencia": {
+    "tecnologia": "ejercito_permanente",
+    "pct": 10
+  },
   "ventajaDefensor": 1.05,
   "bonusCohesionPorEscuadronExtra": 0.1,
   "varianzaCombate": 0.15,

@@ -55,7 +55,8 @@ fn reglas() -> Reglas {
         capitulos: vec![Capitulo { hecho: HechoEpico::Obra, cantidad: 1, edificio: Some(Tipo::Almacen) }, Capitulo { hecho: HechoEpico::Obra, cantidad: 1, edificio: None }],
     });
     t.indexar();
-    r
+    // Las misiones de combate sacan más tropa de la que cabe en los 14 con que nace un héroe.
+    comun::con_liderazgo_de_tope(r)
 }
 
 struct X {
@@ -565,7 +566,7 @@ fn asediar(x: &mut X, m: &M, b: u64, ataque: &[Tropa], defensa: &[Tropa]) {
     if !defensa.is_empty() {
         let ids: Vec<u64> = defensa.iter().map(|&t| x.ok("admin", Comando::DarEscuadra { heroe: h, tropa: t, cantidad: unidades(t) }).creadas[0]).collect();
         let loadout = x.n.heroe(h).unwrap().heroe.loadouts[0].id;
-        x.ok("admin", Comando::GuardarLoadout { heroe: h, loadout: Some(loadout), nombre: "Default".into(), escuadras: ids, perks: vec![], activo: Some(true) });
+        x.ok("admin", Comando::GuardarLoadout { heroe: h, loadout: Some(loadout), nombre: "Default".into(), escuadras: ids, activo: Some(true) });
     }
     let pb = x.posicion(b);
     let (_, ana) = x.columna("ana", 1, Punto::new(pb.x + 1_000, pb.y), 350_000);

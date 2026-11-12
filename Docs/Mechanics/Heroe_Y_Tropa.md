@@ -18,7 +18,7 @@ se **recluta** en una plaza (la cadena de condiciones y el coste), cómo se cons
   - El poder de una escuadra en un combate, las bajas y la experiencia que deja → [`Combate.md`](Combate.md) §3–§4. Aquí solo se repite la fórmula de nivel.
   - Reclutar y pedir prestada tropa en un campamento de mercenarios, y crear el héroe **dentro** de uno → [`Comercio_Caravanas.md`](Comercio_Caravanas.md) §9 y [`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md) §11.
   - Dónde está el héroe (conectarse, entrar y salir de una plaza, `ubicacion`) y sacar la tropa a campaña con `movilizarEjercito`, que **exige** el Liderazgo definido aquí → `Movimiento_Ejercitos.md`.
-  - El ciclo de la batalla de Unity, que aplica XP y botín al héroe (§4.3 resume lo que le hace).
+  - El ciclo de la batalla de Unity, que aplica la XP del motor y el botín al héroe (§4.3 resume lo que le hace).
   - El mantenimiento de la población que reclutar consume → [`Economia_Construccion.md`](Economia_Construccion.md) §9; las tecnologías que habilitan cada tropa → [`Tecnologia_Aedas.md`](Tecnologia_Aedas.md).
 
 > **Implementado en Rust (2026-10-19, fase 4A-1: reglas puras).** Es el crate `crates/militar`, que no depende del núcleo (lo integra la fase 4B-1, más abajo): `catalogo` (§12: las 27 tropas, con los Mineros, y la clase de población que sale del escalón), `escuadra` (§2.3 y §10.2: nivel, experiencia, poder y la **moral como ritmo**), `liderazgo` (§5), `heroe` (§2.1-§4, §6, §8 y §9: progresión inicial, repartir puntos, loadouts, orden de escuadras y herido), `guarnicion` (§7: cupo, asignar, retirar, soltar), `reclutamiento` (§11) y `mercenarios` (reclutar en un campamento y la tropa prestada, [`Campamentos_Mercenarios.md`](Campamentos_Mercenarios.md)). Las cifras son las de los bloques de este documento **sin correcciones en el código** (los bloques se reescribieron el 2026-10-19; la huella de las reglas de una foto cambia). Decisiones de la implementación:
@@ -28,7 +28,7 @@ se **recluta** en una plaza (la cadena de condiciones y el coste), cómo se cons
 >   *Implementado en Rust (2026-10-24, 5B):* la ciudadanía es de la Facción (`Estado::politica`; `HeroeNucleo::faccion` es su copia) y la residencia se cambia con `cambiarResidencia`, `residirEnCampamento` y `dejarResidencia`, con el cooldown de `CIUDADANIA.cooldownCambioResidenciaDias` (`HeroeNucleo::residencia_cambiada_en`); al mudarse se suelta la guarnición como siempre (`mudar_de_residencia`), y quien deja su casa estando dentro sale al mapa por su puerta con lo suyo. Los fundadores pasan a residir en la plaza que fundan.
 > - La escuadra guarda la **plaza donde se reclutó** (`plaza_origen`) para atribuirle los avisos de deserción: en TypeScript salía del id de texto.
 > - El **cupo de guarnición** recibe el nivel del mejor recinto completo (siempre 0 hasta el 2026-10-22; desde la segunda tanda de Murallas es el real, [`Murallas.md`](Murallas.md) §9.2) y el extra de «Levas de guarnición» como números.
-> - DUDA: el **XP** de una escuadra se guarda en milésimas de punto (el 0,5 de una derrota no cabe en un entero); el nivel de un **héroe** no sube (CQ-001).
+> - El **XP** de una escuadra y el de un **héroe** se guardan acumulados en milésimas de punto (el 0,5 de una derrota no cabe en un entero), con el nivel al lado. El héroe sube de nivel desde el 2026-11-12 (§4.3).
 
 > **Implementado en Rust (2026-10-20, fase 4B-1: héroes y tropa en el núcleo).** `crates/nucleo` integra `crates/militar`. Las columnas (salir al mundo, unir, separar, formar, convocar, desarmar) son la fase 4B-2 (nota de más abajo), la persecución es la 4C y el combate, la 4D.
 > - **Estado** (`estado_militar.rs`, `codec_militar.rs`; foto **`BAN9`** en la 4B-1, hoy `BAN11`): `Estado.militar` guarda cada héroe (`militar::Heroe` con **todas** sus escuadras, loadouts y víveres, más su `cuenta`, su `faccion`, su almacén personal y su cupo diario de compra en el mercado de mercenarios), los reclutas de los campamentos que alguien ha tocado (valor e instante: el que falta está lleno) y las tecnologías que la administración da a cada Facción. Los ids de héroe, escuadra y loadout salen del contador común de la partida (crear un héroe gasta dos: el suyo y el de su loadout «Default»). Un índice plaza → residentes (derivado, se reconstruye al recuperar) hace que el paso de minuto de una plaza sin residentes cueste una consulta. La huella de las reglas incluye los bloques de `militar` (este documento, Movimiento_Ejercitos, Combate, Presencia_Y_Convocatoria, Campamentos_Mercenarios y Tecnologia_Aedas); los de `combate` entrarán con la fase 4D.
@@ -47,7 +47,7 @@ se **recluta** en una plaza (la cadena de condiciones y el coste), cómo se cons
 > | 49 | `CrearHeroe { cuenta, campamento, controlador }` | `heroe.ya_existe`, `heroe.campamento_desconocido`; `no_autorizado` si la cuenta es ajena o pide `bot` sin ser administración |
 > | 50 | `ReclutarTropa { asentamiento, heroe, tropa }` | `reclutamiento.{no_puedes, sin_tecnologia, reservada, ya_la_tienes_fuera, solo_reponer, al_tope, sin_poblacion, sin_edificio, sin_recursos, sin_reserva_de_trigo}`, `heroe.no_esta_en_la_plaza` |
 > | 51-53 | `ReclutarEnCampamento`, `PedirPrestamo`, `ReponerPrestamo` | véase Campamentos_Mercenarios |
-> | 54-55 | `GuardarLoadout { heroe, loadout, nombre, escuadras, perks, activo }`, `BorrarLoadout` | `loadout.{sin_nombre, desconocido, perk_no_desbloqueado}`, `escuadra.{repetida, ajena}`, `liderazgo.superado` |
+> | 54-55 | `GuardarLoadout { heroe, loadout, nombre, escuadras, activo }`, `BorrarLoadout` | `loadout.{sin_nombre, desconocido}`, `escuadra.{repetida, ajena}`, `liderazgo.superado` |
 > | 56 | `RepartirPuntos { heroe, fuerza, destreza, armadura, vitalidad }` | `heroe.{puntos_negativos, ningun_punto, puntos_insuficientes, tope_de_atributo}` |
 > | 57 | `OrdenarEscuadras { heroe, escuadras }` | `escuadra.{repetida, ajena}`; sin cambios si el orden ya es ese |
 > | 221 | `ElegirFormacion { heroe, escuadra, formacion }` (2026-11-11, §10.4) | `escuadra.ajena`, `formacion.{desconocida, sin_tecnologia}`; sin cambios si ya es esa |
@@ -84,11 +84,11 @@ Uno por jugador y partida. Es el **dueño** de todo lo que antes se atribuía al
 | `id`, `jugadorId` | `heroe-{n}` (siguiente id de la partida) y la identidad de la cuenta (`acceso/`). La acción de un jugador sin héroe aún usa su `jugadorId` como actor (solo `crearHeroe`). |
 | `controlador` | `'humano'` por defecto; `'bot'` solo lo pone el servidor (no admite el esquema HTTP). Ya no decide si una batalla lleva Unity (con servidores toda batalla va a Unity, también bot contra bot, desde la cuarta ronda de Entrar con todo en Rust): solo si el héroe lleva token (los bots no se conectan). |
 | `displayName`, `classDefinitionId`, `genero`, `avatar` | Identidad y aspecto. El motor no los interpreta: la clase y el catálogo de cabezas, pelo, barba y cejas son de Conquest. |
-| `liderazgoBase` | Puntos de Liderazgo (§5). Nace en `LIDERAZGO.base`; **nada lo modifica hoy**. |
+| `liderazgoBase` | Puntos de Liderazgo (§5). Nace en `LIDERAZGO.base` (14) y cada nivel hasta `PROGRESION_HEROE.nivelDeTope` le suma `LIDERAZGO.porNivel` (3), sin pasar de `LIDERAZGO.tope` (100). Es su propio campo para sumarle modificadores más adelante; hoy no hay ninguno (ni tecnología ni equipo). |
 | `ubicacion` | `asentamiento` · `columna` · `mercenarios` · `desconectado`. Ver [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md). |
 | `escuadrones` | **Todas** sus escuadras, estén donde estén; `contenedor` dice dónde (§2.3). |
-| `nivel`, `experienciaHaciaSiguienteNivel` | Nivel y XP hacia el siguiente (no acumulada). |
-| `puntosDeAtributoSinGastar`, `puntosDePerkSinGastar`, `atributosBase`, `perksDesbloqueados` | Progresión traída de Conquest (§4). |
+| `nivel`, `experiencia` | Nivel y XP **acumulada**, en milésimas (§4.3). Lo que le falta para el siguiente nivel se calcula al proyectar (`experienciaHaciaSiguienteNivel` del contrato). |
+| `puntosDeAtributoSinGastar`, `atributosBase` | Los puntos que da el nivel y los que ya repartió (§4). Los perks se abren solos con el nivel y los define Conquest: el motor no los guarda (2026-11-12). |
 | `loadouts` | Selecciones de escuadras guardadas (§6). |
 | `inventario`, `equipamiento`, `monedas` | Objetos y las monedas del héroe, **aparte** del oro-recurso de las plazas. |
 
@@ -101,7 +101,7 @@ Uno por jugador y partida. Es el **dueño** de todo lo que antes se atribuía al
 
 ### 2.2 `Loadout`
 
-`{ id, displayName, squadIds[], perksSeleccionados[], activo }`. Una selección de escuadras (y perks) guardada para salir. El **activo** es el que defiende una plaza en persona (Combate §3.2). El Liderazgo que suma **no se guarda**: se deriva (§5).
+`{ id, displayName, squadIds[], activo }`. Una selección de escuadras guardada para salir (sin perks desde el 2026-11-12: los abre el nivel en Conquest). El **activo** es el que defiende una plaza en persona (Combate §3.2). El Liderazgo que suma **no se guarda**: se deriva (§5).
 
 ### 2.3 `Escuadron` (vive en su héroe)
 
@@ -145,9 +145,9 @@ Efecto: `heroe-{ids.siguiente()}`, `controlador = params.controlador ?? 'humano'
 ### 4.1 Con qué nace (`progresionInicial`)
 
 ```
-nivel = 1 ; experienciaHaciaSiguienteNivel = 0 ; puntosDeAtributoSinGastar = 0 ; puntosDePerkSinGastar = 0
-atributosBase = { fuerza: 0, destreza: 0, armadura: 0, vitalidad: 0 } ; perksDesbloqueados = []
-loadouts = [ { id: "{heroeId}-loadout-default", displayName: "Default", squadIds: [], perksSeleccionados: [], activo: true } ]
+nivel = 1 ; experiencia = 0 ; puntosDeAtributoSinGastar = 0 ; liderazgoBase = LIDERAZGO.base
+atributosBase = { fuerza: 0, destreza: 0, armadura: 0, vitalidad: 0 }
+loadouts = [ { id: "{heroeId}-loadout-default", displayName: "Default", squadIds: [], activo: true } ]
 inventario = [] ; equipamiento = todos los huecos a null
 monedas = HEROE.monedasIniciales
 ```
@@ -157,12 +157,24 @@ Como en Conquest (`HeroDataService.CreateNewHero`), pero **sin equipo inicial** 
 ### 4.2 Repartir puntos (`repartirPuntos`)
 
 `repartirAtributos(heroe, reparto)`: cada punto suma 1 a su atributo. Rechaza (`heroe.invalido`): alguna cantidad que no sea un entero ≥ 0; un reparto de **total 0**; un total mayor que `puntosDeAtributoSinGastar`; o dejar un atributo por encima de `HEROE.topeAtributo`
-(la comprobación es atributo a atributo y **tras** sumar, sin deshacer nada: el comando entero se aborta). Los perks esperan al catálogo de Conquest: no hay comando para gastarlos.
+(la comprobación es atributo a atributo y **tras** sumar, sin deshacer nada: el comando entero se aborta). Los perks no se gastan: se abren solos con el nivel (`PROGRESION_HEROE.perksEnNivel`) y los define Conquest.
 
 ### 4.3 Qué le suma el servidor
 
-- **Nivel:** el servidor **no lo sube nunca** (no hay curva hasta que Conquest la publique, CQ-001; decidido 2026-09-15). Por tanto `puntosDeAtributoSinGastar` y `puntosDePerkSinGastar` nacen en 0 y **ningún camino los aumenta**: `repartirPuntos` solo puede gastar lo que traiga un snapshot cargado a mano.
-- **XP:** una batalla de Unity la suma tal cual (`experienciaHaciaSiguienteNivel += xpGanada` del héroe) y, por cada escuadra, `conExperiencia(e, xpGanada)` y `cantidad = supervivientesAlCierre`.
+- **XP y nivel (2026-11-12, Progresion_Tropas_Y_Heroe §3):** la experiencia se acumula en milésimas y el nivel se guarda al lado, como en la escuadra. Subir del nivel `n` al `n + 1` pide `PROGRESION_HEROE.experienciaBase + experienciaPorNivel × (n − 1)` (100, 120, 140… 660 para pasar del 29 al 30) y desde el `nivelDeTope` (30) cada nivel pide lo mismo que el último (680). La acumulada para llegar al 30 es 11.020.
+
+  ```
+  experienciaParaNivel(n) = Σ_{k=1..min(n,30)−1} (100 + 20 × (k − 1))  +  max(0, n − 30) × 680
+  conExperienciaHeroe(h, ganada):
+      h.experiencia += ganada
+      mientras h.experiencia ≥ experienciaParaNivel(h.nivel + 1):
+          h.nivel++
+          si h.nivel ≤ nivelDeTope:  h.puntosDeAtributoSinGastar += 1 ; h.liderazgoBase = min(LIDERAZGO.tope, h.liderazgoBase + LIDERAZGO.porNivel)
+  ```
+
+  Desde el 31 el nivel sube pero no da nada. Al subir emite `heroe.nivel_subio { heroe, nivel }` (el nivel nuevo, una vez aunque cruce varios). `habilidadesEnNivel` y `perksEnNivel` solo se publican: las aplica Conquest.
+- **De dónde sale la XP:** solo del combate, por un único punto de entrada del núcleo ([`Combate.md`](Combate.md) §4.4): con números, lo mismo que sus escuadras (1 si su bando gana, 0,5 si pierde), una vez por combate; en una batalla de Unity, 4 o 2 según gane su bando si participó (`MILITAR.experienciaUnityPor…`, el motor **no lee** la experiencia que manda Unity), y `cantidad = supervivientesAlCierre` en cada escuadra.
+> **Implementado en Rust (2026-11-12, entrada 73).** `militar::Heroe` guarda `experiencia` acumulada (milésimas) y `nivel`; `Heroe::con_experiencia` sube los niveles que cruce con sus puntos y su Liderazgo, y `Heroe::falta_para_subir` es lo que proyecta `experiencia_hacia_siguiente_nivel` (ahora «lo que le falta», en milésimas). Los datos son el bloque `PROGRESION_HEROE` (§12) y `LIDERAZGO.porNivel`/`tope`. El núcleo da la experiencia por `Nucleo::experiencia_de_heroe` y `Nucleo::experiencia_de_escuadra` (`crates/nucleo/src/nucleo/progresion.rs`), que usan el combate con números y la batalla de Unity. Salen `puntos_de_perk`, `perks_desbloqueados` y los perks del loadout (sus campos del contrato quedan `reserved`, y el rechazo `loadout.perk_no_desbloqueado` desaparece). La foto sigue en `BAN63`.
 - **Botín de Unity:** las monedas se suman a `monedas` del héroe. Los objetos se validan (que quepan en `BATALLA.casillasInventario` y que cada instancia sea nueva, [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §8.5) pero **se pierden**: el héroe aún no tiene inventario (**deuda**, CQ-004; anotada en la fila «Militar y combate (4A-1)» de `Docs/Mecanicas a desarrollar.md`).
 - **Equipar:** no existe el comando; el equipamiento solo cambia por la vía de Conquest.
 
@@ -173,6 +185,7 @@ Sin plaza (globales del héroe):
 | Evento | Comando | Payload |
 |---|---|---|
 | `heroe.puntos_repartidos` | `repartirPuntos` | `{ heroeId, atributos }` |
+| `heroe.nivel_subio` | (el combate, §4.3) | `{ heroe, nivel }` (el nivel nuevo) |
 | `heroe.almacen_personal` | `guardarEnAlmacenPersonal` / `sacarDelAlmacenPersonal` | `{ heroeId, recurso, cantidad (lo movido), sentido: guarda \| saca }` |
 | `heroe.viveres` | `pasarAViveres` | `{ heroeId, cantidad (lo movido) }` |
 
@@ -192,7 +205,7 @@ disponible(héroe, esc)   = max(0, liderazgoDe(héroe) − comprometido(esc))
 ```
 
 El coste sigue al **escalón**, no al poder (`poderBase`): así el poder por punto de Liderazgo difiere entre tropas y elegir composición es una decisión. En un ejército de varios héroes, cada uno se valida contra **el suyo**; no hay tope agregado.
-Con los números de hoy (7/14/22/32/45): 1 élite + 1 pesada + 1 veterana = 99; 2 pesadas + 1 veterana + 1 de línea = 100.
+Con los números de hoy (7/14/22/32/45): un héroe de nivel 1 (14) lleva 2 de leva o 1 de línea; con el tope (100, nivel 30): 1 élite + 1 pesada + 1 veterana = 99; 2 pesadas + 1 veterana + 1 de línea = 100.
 
 ## 6. Loadouts (`guardarLoadout`, `borrarLoadout`)
 
@@ -203,7 +216,6 @@ Con los números de hoy (7/14/22/32/45): 1 élite + 1 pesada + 1 veterana = 99; 
 3. Sin escuadras repetidas.
 4. Todas las `squadIds` son **suyas** (están en `heroe.escuadrones`).
 5. `puedeLlevar`: las escuadras caben en su Liderazgo.
-6. Todo perk de `perksSeleccionados` está en `perksDesbloqueados`.
 
 Resultado: `id = anterior.id` o `loadout-{ids.siguiente()}`; `activo = datos.activo ?? anterior.activo ?? false`. **Marcarlo activo desactiva los demás.** Uno nuevo se **añade al final**. El comando devuelve `{ loadoutId, liderazgoTotal }` (el Liderazgo que suma, derivado). No emite eventos.
 
@@ -273,7 +285,7 @@ conExperiencia(e, ganada) = e                                  si e.prestada
 poderEscuadron(e) = tropa.poderBase × e.cantidad × (1 + e.nivel × MILITAR.bonusPoderPorNivelEscuadra)
 ```
 
-Con la curva de hoy, 275 de XP llevan al nivel 10. El nivel da **+3 % por nivel al mismo escuadrón** en el combate con números (el nivel 1 ya cuenta; +1 % hasta el 2026-11-11, decisión del autor para acercarse a Unity) sin cambiar nunca su `tropaId`: «mejorar» una tropa es reclutar **otra** distinta y mejor cuando el edificio suba de nivel interno.
+Con la curva de hoy (la de 1.375: 10, 25, 50, 100, 150, 200, 250, 275 y 315, 2026-11-12), 1.375 de XP llevan al nivel 10. El nivel da **+3 % por nivel al mismo escuadrón** en el combate con números (el nivel 1 ya cuenta; +1 % hasta el 2026-11-11, decisión del autor para acercarse a Unity) sin cambiar nunca su `tropaId`: «mejorar» una tropa es reclutar **otra** distinta y mejor cuando el edificio suba de nivel interno.
 
 ### 10.3 Chatarra de los caídos (`chatarra.ts`)
 
@@ -364,7 +376,9 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
 <!-- parametros:LIDERAZGO -->
 ```json
 {
-  "base": 100,
+  "base": 14,
+  "porNivel": 3,
+  "tope": 100,
   "costePorEscalon": {
     "1": 7,
     "2": 14,
@@ -382,6 +396,26 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
   "monedasIniciales": 1500,
   "topeAtributo": 100,
   "heridoMinutos": 2
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:PROGRESION_HEROE -->
+```json
+{
+  "experienciaBase": 100,
+  "experienciaPorNivel": 20,
+  "nivelDeTope": 30,
+  "habilidadesEnNivel": [
+    1,
+    3,
+    5,
+    10
+  ],
+  "perksEnNivel": [
+    7,
+    12
+  ]
 }
 ```
 <!-- /parametros -->
@@ -1029,7 +1063,7 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
 |---|---|
 | Un héroe por jugador y partida, dentro del campamento que elige y como residente; nace con nivel 1, sin puntos, 500 de bronce y el loadout «Default» vacío y activo | `session/__tests__/comandosHeroe.test.ts` |
 | Repartir puntos: +1 por punto, sin pasar de los que hay, sin negativos y sin pasar del tope | `comandosHeroe.test.ts` |
-| Loadouts: nuevo e inactivo; activar desactiva los demás; reescribir por id no crea otro; rechaza escuadras ajenas, pasarse de Liderazgo, perks que no tiene y ids que no existen | `comandosHeroe.test.ts` |
+| Loadouts: nuevo e inactivo; activar desactiva los demás; reescribir por id no crea otro; rechaza escuadras ajenas, pasarse de Liderazgo y ids que no existen | `comandosHeroe.test.ts` |
 | Guarnición: asigna dentro del cupo, rechaza pasarse, retirar la devuelve; sin Barracón ni Galería no hay cupo y quien no reside no tiene guarnición; mudarse la suelta | `comandosHeroe.test.ts`, `engine/__tests__/guarnicion.test.ts` |
 | Cupo: Caballerizas no dan nada en el nivel 1; suma edificios, recinto completo y «Levas de guarnición»; sin Barracón ni Galería no hay guarnición aunque haya muralla | `guarnicion.test.ts` |
 | Costes de Liderazgo por escalón (crecientes, independientes del poder, 0 para tropa desconocida); mezclas máximas; el límite es de salida; sin héroe usa el base; lo libre nunca es negativo | `engine/__tests__/liderazgo.test.ts` |
@@ -1045,8 +1079,8 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
 
 ## 14. Casos límite y decisiones que parecen raras
 
-- **El nivel del héroe no sube y los puntos nunca llegan**: es una decisión expresa (espera la curva de Conquest, CQ-001), no un olvido. La XP del héroe sí se acumula.
-- **`liderazgoBase` es por héroe pero nada lo cambia**: «el techo con equipo» queda para cuando exista la artesanía de armaduras.
+- **El héroe sube de nivel desde el 2026-11-12** (antes no subía, CQ-001): un punto de atributo y 3 de Liderazgo por nivel hasta el 30; desde el 31 el nivel sigue subiendo sin dar nada.
+- **`liderazgoBase` es por héroe pero solo lo cambia el nivel**: dos héroes del mismo nivel tienen el mismo Liderazgo (sin tecnología ni equipo: la armadura no da Liderazgo, D3). Es un campo propio para poder sumarle modificadores más adelante.
 - **Reclutar paga del almacén de la plaza, no del héroe**: el oro-recurso y el equipo son de la plaza; las monedas del héroe son otra economía.
 - **Una escuadra mermada paga el Liderazgo completo** (el coste mira el tipo, no la cantidad): anotado como punto abierto en el diseño del movimiento. Es lo que impide sacar a campaña élite «en dosis pequeñas».
 - **«Una por tropa» es por héroe, no por plaza**: dos héroes de la misma plaza tienen cada uno la suya. La tropa prestada de un campamento no cuenta.
@@ -1076,7 +1110,7 @@ Ninguna abierta.
 
 > **Implementado en Rust (2026-10-20, fase 4D).** La foto es `BAN12` (rechaza `BAN11`) y la huella de reglas incluye los bloques de `combate`. `DarEscuadra { heroe, tropa, cantidad }` (97, administración) da una escuadra a un héroe para montar ejércitos sin pasar por el reclutamiento. Los héroes heridos no atacan (`heroe.herido`); el héroe sano suma +15 al poder del bando (decisión Q2, aditivo). `DarSuministro` **se mantiene**: el botín real (`cargar_botin`) llena el carro de la columna vencedora, pero el suministro de la administración sigue siendo útil para montar escenarios y no se retira (fila de paridad).
 
-> **Implementado en Rust (2026-10-21, fase 4E).** El candado `reservaBatalla` ya lo pone y lo quita el ciclo de la batalla de Unity ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §4 y §9): al abrirse (y al unirse alguien) lo llevan las escuadras con dueño del ticket, incluidas las de la guarnición y la escolta (`Escuadra::reserva_batalla`), y se suelta al cerrarse la batalla, al salir su héroe o al vencer el plazo. Las rechaza `reponer`, `asignarGuarnicion` y `retirarGuarnicion` con `escuadra.en_batalla`. Una escuadra con bajas, experiencia o nueva cantidad por el resultado de Unity se actualiza por su id (`supervivientesAlCierre`), y la experiencia del héroe y sus monedas del botín también (el nivel no sube: CQ-001; los objetos no tienen dónde caer: CQ-004). La foto es `BAN13`.
+> **Implementado en Rust (2026-10-21, fase 4E).** El candado `reservaBatalla` ya lo pone y lo quita el ciclo de la batalla de Unity ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §4 y §9): al abrirse (y al unirse alguien) lo llevan las escuadras con dueño del ticket, incluidas las de la guarnición y la escolta (`Escuadra::reserva_batalla`), y se suelta al cerrarse la batalla, al salir su héroe o al vencer el plazo. Las rechaza `reponer`, `asignarGuarnicion` y `retirarGuarnicion` con `escuadra.en_batalla`. Una escuadra con bajas, experiencia o nueva cantidad por el resultado de Unity se actualiza por su id (`supervivientesAlCierre`), y la experiencia del héroe y sus monedas del botín también (los objetos no tienen dónde caer: CQ-004). Desde el 2026-11-12 la experiencia la pone el motor (4 o 2) y el héroe sube de nivel (§4.3). La foto es `BAN13`.
 
 ## Catálogo de eventos
 
@@ -1085,7 +1119,7 @@ Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; cont
 <!-- eventos -->
 ```json
 [
-  "heroe.almacen_personal", "heroe.creado", "heroe.herido", "heroe.puntos_repartidos", "heroe.reubicado", "heroe.sale_del_mundo", "heroe.se_desconecta", "heroe.viveres",
+  "heroe.almacen_personal", "heroe.creado", "heroe.herido", "heroe.nivel_subio", "heroe.puntos_repartidos", "heroe.reubicado", "heroe.sale_del_mundo", "heroe.se_desconecta", "heroe.viveres",
   "heroe.vuelve_al_mundo", "reclutamiento.cierre_a_ciudadanos", "tropas.desercion", "tropas.reclutadas"
 ]
 ```

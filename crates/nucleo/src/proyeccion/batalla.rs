@@ -3,7 +3,7 @@
 //! puede cambiar mientras dura la batalla —el héroe, sus atributos y la carga de una caravana apartada— se lee del estado al proyectar.
 //!
 //! DUDA: el héroe sale con los valores por defecto de nombre, clase, género y avatar (decisión 4 del autor), sin equipo (CQ-004) y con los atributos efectivos iguales a los base; una escuadra no trae
-//! habilidades (Unity las saca del nivel) y sí su formación y las que permite la tecnología de su Facción (Heroe_Y_Tropa §10.4, 2026-11-11); `experiencia` y `moral` de una escuadra viajan en puntos (como `xp_ganada` del resultado y como el contrato de TypeScript), no en milésimas;
+//! habilidades (Unity las saca del nivel) y sí su formación y las que permite la tecnología de su Facción (Heroe_Y_Tropa §10.4, 2026-11-11); `experiencia` y `moral` de una escuadra viajan en puntos (como el contrato de TypeScript), no en milésimas;
 //! `version_balance` y `version_catalogo_tropas` valen 1 mientras Rust no tenga su numeración; la carga de cada carro es la parte de la carga de la caravana proporcional a su capacidad
 //! (`Caravana::carga_por_carro`); el terreno de una batalla fuera de un asedio es el artefacto de mundo (`BattleMapReference`).
 
@@ -61,7 +61,6 @@ fn participante(n: &Nucleo, p: &Participante) -> pb::BattleParticipantSnapshot {
             class_definition_id: CLASE_POR_DEFECTO.to_owned(),
             nivel: h.map_or(1, |h| h.nivel),
             avatar: Some(pb::Avatar::default()),
-            perks_desbloqueados: h.map(|h| h.perks_desbloqueados.clone()).unwrap_or_default(),
             equipamiento: Some(pb::Equipamiento::default()),
             atributos_efectivos: h.map(atributos),
             casillas_inventario_libres: p.casillas_libres,
@@ -229,12 +228,12 @@ pub fn resultado(n: &Nucleo, b: &Batalla, r: &Resultado) -> pb::BattleResult {
         por_escuadra: r
             .por_escuadra
             .iter()
-            .map(|e| pb::ResultadoEscuadra { squad_id: ids::escuadra(e.escuadra), desplegados: e.desplegados.max(0) as u32, supervivientes_al_cierre: e.supervivientes_al_cierre.max(0) as u32, muertos: e.muertos.max(0) as u32, xp_ganada: e.xp_ganada })
+            .map(|e| pb::ResultadoEscuadra { squad_id: ids::escuadra(e.escuadra), desplegados: e.desplegados.max(0) as u32, supervivientes_al_cierre: e.supervivientes_al_cierre.max(0) as u32, muertos: e.muertos.max(0) as u32 })
             .collect(),
         por_heroe: r
             .por_heroe
             .iter()
-            .map(|h| pb::ResultadoHeroe { heroe_id: ids::heroe(h.heroe), participo: h.participo, sobrevivio_al_cierre: h.sobrevivio_al_cierre, xp_ganada: h.xp_ganada, derrotado: h.derrotado, botin: h.botin.as_ref().map(botin) })
+            .map(|h| pb::ResultadoHeroe { heroe_id: ids::heroe(h.heroe), participo: h.participo, sobrevivio_al_cierre: h.sobrevivio_al_cierre, derrotado: h.derrotado, botin: h.botin.as_ref().map(botin) })
             .collect(),
         version_servidor: r.version_servidor.clone(),
         carros_perdidos: r.carros_perdidos.clone(),

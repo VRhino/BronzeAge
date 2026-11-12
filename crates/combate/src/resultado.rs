@@ -1,12 +1,12 @@
 //! El resultado que manda Unity y su checklist (Batalla_Unity_Ciclo §8.5, §8.6 y §9): cualquier fallo rechaza el resultado **entero**, y lo que se
 //! aplica sale de él en una sola pasada. Los tipos son la forma del `BattleResult` del contrato (`battle.proto`), sin los campos que el servidor
-//! solo guarda y no interpreta.
+//! solo guarda y no interpreta. Del resultado se lee quién ganó, quién participó, quién sobrevivió y los soldados que quedan (D7): la experiencia
+//! la pone el motor, 4 o 2 según gane el bando, a cada escuadra que entró y a cada héroe que participó.
 
 use crate::ciclo::{Batalla, CaravanaEnBatalla, Contexto, EscuadraEnBatalla};
 use crate::resolucion::Lado;
-use base::Mil;
 use militar::{CaravanaId, EscuadraId, HeroeId};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Razon {
@@ -21,8 +21,6 @@ pub struct ResultadoEscuadra {
     pub desplegados: i64,
     pub supervivientes_al_cierre: i64,
     pub muertos: i64,
-    /// Puntos de experiencia que dice Unity.
-    pub xp_ganada: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -44,7 +42,6 @@ pub struct ResultadoHeroe {
     pub heroe: HeroeId,
     pub participo: bool,
     pub sobrevivio_al_cierre: bool,
-    pub xp_ganada: i64,
     /// Ausente = se decide por el bando perdedor; `Some(false)` protege al perdedor; `Some(true)` hiere aunque su bando ganara.
     pub derrotado: Option<bool>,
     pub botin: Option<Botin>,
@@ -102,15 +99,17 @@ pub struct EfectoEscuadra {
     pub escuadra: EscuadraId,
     /// `cantidad = supervivientesAlCierre`.
     pub cantidad: i64,
-    /// Experiencia en milésimas de punto (la tropa prestada no gana: lo decide `Escuadra::con_experiencia`).
-    pub xp: Mil,
+    /// Si gana la experiencia de Unity: `Some(gana su bando)` para las que entraron (las de los héroes que participaron y las sin héroe: guarniciones,
+    /// escolta, guarnición de serie de un pueblo o una avanzada); `None` para las de un héroe que no participó. La tropa prestada no gana: lo decide
+    /// `Escuadra::con_experiencia`.
+    pub victoria: Option<bool>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EfectoHeroe {
     pub heroe: HeroeId,
-    /// Puntos de experiencia hacia el siguiente nivel; el nivel no sube hasta que Conquest publique su curva (CQ-001).
-    pub xp: i64,
+    /// `Some(gana su bando)` si participó: gana la experiencia de Unity; `None` si no participó.
+    pub victoria: Option<bool>,
     pub botin: Option<Botin>,
 }
 
@@ -142,9 +141,7 @@ impl Batalla {
         use ErrorResultado::*;
         // Lo que el esquema valida por forma: enteros >= 0 y objetos con cantidad >= 1.
         let m = |b: &Botin| b.monedas < 0 || b.objetos.iter().any(|o| o.cantidad < 1);
-        if res.por_escuadra.iter().any(|e| e.desplegados < 0 || e.supervivientes_al_cierre < 0 || e.muertos < 0 || e.xp_ganada < 0)
-            || res.por_heroe.iter().any(|h| h.xp_ganada < 0 || h.botin.as_ref().is_some_and(m))
-        {
+        if res.por_escuadra.iter().any(|e| e.desplegados < 0 || e.supervivientes_al_cierre < 0 || e.muertos < 0) || res.por_heroe.iter().any(|h| h.botin.as_ref().is_some_and(m)) {
             return Err(Forma);
         }
         // 1. La asignación activa y la revisión vigente.
@@ -229,11 +226,16 @@ impl Batalla {
             .map(|h| h.heroe)
             .collect();
         heridos.sort_unstable();
+        // Las escuadras que entraron, con su bando: las sin héroe y las de los héroes que participaron (las de quien salió antes ya se cerraron sin experiencia).
+        let t = &self.ticket;
+        let sin_heroe = [(Lado::Atacante, &t.atacante), (Lado::Defensor, &t.defensor)].into_iter().flat_map(|(l, b)| b.sin_heroe.iter().map(move |e| (e.id, l)));
+        let de_heroes = res.por_heroe.iter().filter(|h| h.participo).filter_map(|h| Some((self.lado_de(h.heroe)?, self.participante(h.heroe)?))).flat_map(|(l, p)| p.escuadras.iter().map(move |e| (e.id, l)));
+        let entraron: BTreeMap<EscuadraId, Lado> = sin_heroe.chain(de_heroes).collect();
         Efectos {
             ganador: res.ganador,
             heridos,
-            escuadras: res.por_escuadra.iter().map(|e| EfectoEscuadra { escuadra: e.escuadra, cantidad: e.supervivientes_al_cierre, xp: e.xp_ganada * 1000 }).collect(),
-            heroes: res.por_heroe.iter().map(|h| EfectoHeroe { heroe: h.heroe, xp: h.xp_ganada, botin: h.botin.clone() }).collect(),
+            escuadras: res.por_escuadra.iter().map(|e| EfectoEscuadra { escuadra: e.escuadra, cantidad: e.supervivientes_al_cierre, victoria: entraron.get(&e.escuadra).map(|&l| l == res.ganador) }).collect(),
+            heroes: res.por_heroe.iter().map(|h| EfectoHeroe { heroe: h.heroe, victoria: h.participo.then(|| self.lado_de(h.heroe) == Some(res.ganador)), botin: h.botin.clone() }).collect(),
             carros_perdidos: self.carros_perdidos(res).expect("el resultado ya está validado"),
             soltar: self.escuadras_con_candado(),
         }

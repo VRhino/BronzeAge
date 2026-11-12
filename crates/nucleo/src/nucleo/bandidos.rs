@@ -400,6 +400,7 @@ impl Nucleo {
         let columnas = self.columnas_de(&tropa.escuadras);
         let participantes = Self::participantes_de(&self.estado.ejercitos[&columna]);
         let e = resolver_emboscada(&cr, nivel, Bando { escuadras: &mut tropa.escuadras, heroes: &tropa.heroes }, &mut self.estado.rng);
+        self.experiencia_de_bando(t, &mut tropa.escuadras, &e.bajas, &tropa.heroes, !e.gana_el_bandido);
         self.volcar_escuadras(&tropa.escuadras);
         self.recomponer_tras_bajas(&columnas, t);
         let origenes: Vec<u64> = caravanas.iter().filter_map(|&k| self.estado.comercio.caravana(k)).map(|k| k.origen as u64).collect();
@@ -514,6 +515,7 @@ impl Nucleo {
         let escoltada = escolta.iter().any(Escuadra::con_soldados);
         let defensa = if escoltada { Defensa::Escolta(&mut escolta) } else { Defensa::Base };
         let acoso = resolver_acoso(&cr, nivel, defensa, &mut self.estado.rng);
+        self.experiencia_de_bando(t, &mut escolta, &acoso.bajas_escolta, &[], !acoso.gana_el_bandido);
         self.participacion_de_batalla(t, &[origen], &defensores, &[]);
         self.tras_batalla(t, &Desenlace { atacados: &[Objetivo::Caravana(idk)], atacantes: &[], defensores: &defensores, gana_atacante: acoso.gana_el_bandido, nivel_bandidos: None });
         self.volcar_escuadras(&escolta);

@@ -165,7 +165,17 @@ fn fundar(n: &mut Nucleo, t: Instante, nombre: &str, dueno: &str, faccion: u32, 
 }
 
 fn escenario(m: &M, semilla: u64) -> Escenario {
-    let mut n = Nucleo::nuevo(arranque(m, semilla));
+    escenario_sobre(m, arranque(m, semilla))
+}
+
+/// Como [`escenario`], con los héroes nacidos con el Liderazgo del tope (`comun::con_liderazgo_de_tope`), para las pruebas que sacan más tropa de la que cabe en 14.
+fn escenario_de_tope(m: &M, semilla: u64) -> Escenario {
+    let a = arranque(m, semilla);
+    escenario_sobre(m, Arranque { reglas: comun::con_liderazgo_de_tope(a.reglas.clone()), ..a })
+}
+
+fn escenario_sobre(m: &M, a: Arranque) -> Escenario {
+    let mut n = Nucleo::nuevo(a);
     let p = sitio_rico(&n, &m.0, 0, 1);
     let a = fundar(&mut n, 0, "a", "ana", 1, p);
     Escenario { n, a, cuenta: 0 }
@@ -189,7 +199,7 @@ fn el_heroe_nace_en_un_campamento_con_su_progresion_inicial_y_cada_rechazo_tiene
     let h = e.heroe("ana", 2);
     let hn = e.n.heroe(h).unwrap();
     assert_eq!((hn.cuenta.as_str(), hn.faccion, hn.heroe.controlador), ("ana", None, Controlador::Humano));
-    assert_eq!((hn.heroe.nivel, hn.heroe.monedas, hn.heroe.liderazgo_base), (1, 1_500, 100));
+    assert_eq!((hn.heroe.nivel, hn.heroe.monedas, hn.heroe.liderazgo_base), (1, 1_500, 14));
     assert_eq!(hn.heroe.residencia, Some(Residencia::Campamento(2)), "nace dentro de un campamento, donde reside");
     assert_eq!(hn.heroe.presencia.ubicacion, Ubicacion::Mercenarios(2));
     assert!(hn.heroe.escuadras.is_empty() && hn.almacen_personal.is_empty());
@@ -297,7 +307,7 @@ fn reclutar_en_una_plaza_valida_en_orden_paga_del_almacen_y_resta_poblacion() {
 #[test]
 fn un_ciudadano_de_visita_recluta_escuadras_nuevas_a_su_columna_salvo_que_la_plaza_lo_cierre() {
     let m = con_mundo!();
-    let mut e = escenario(m, 7);
+    let mut e = escenario_de_tope(m, 7);
     e.avanzar(24 * HORA);
     let a = e.a;
     // «dora», de la Facción 1, recluta en la plaza, sale con su tropa, se muda al campamento de mercenarios y vuelve de visita con su columna.
@@ -478,12 +488,11 @@ fn los_loadouts_el_orden_de_las_escuadras_y_el_reparto_de_puntos_validan_cada_un
     let h = e.heroe("ana", 0);
     let ids = e.ok("ana", Comando::PedirPrestamo { heroe: h, tropas: vec![Tropa::Granjeros, Tropa::Lenadores, Tropa::MiliciaLanceros, Tropa::Mineros] }).creadas;
     let (s1, s2, s3, s4) = (ids[0], ids[1], ids[2], ids[3]);
-    let guardar = |loadout, nombre: &str, escuadras: &[u64], activo| Comando::GuardarLoadout { heroe: h, loadout, nombre: nombre.into(), escuadras: escuadras.to_vec(), perks: vec![], activo };
+    let guardar = |loadout, nombre: &str, escuadras: &[u64], activo| Comando::GuardarLoadout { heroe: h, loadout, nombre: nombre.into(), escuadras: escuadras.to_vec(), activo };
     assert_eq!(e.rechazada("ana", guardar(None, "  ", &[s1], None)), rechazos::LOADOUT_SIN_NOMBRE);
     assert_eq!(e.rechazada("ana", guardar(Some(55), "x", &[s1], None)), rechazos::LOADOUT_DESCONOCIDO);
     assert_eq!(e.rechazada("ana", guardar(None, "x", &[s1, s1], None)), rechazos::ESCUADRA_REPETIDA);
     assert_eq!(e.rechazada("ana", guardar(None, "x", &[s1, 99_999], None)), rechazos::ESCUADRA_AJENA);
-    assert_eq!(e.rechazada("ana", Comando::GuardarLoadout { heroe: h, loadout: None, nombre: "x".into(), escuadras: vec![s1], perks: vec![7], activo: None }), rechazos::LOADOUT_PERK_NO_DESBLOQUEADO);
     assert_eq!(e.n.heroe(h).unwrap().heroe.loadouts.len(), 1, "los rechazos no dejan rastro");
     // Como mucho 32 caracteres (no bytes, el tope de las plazas), recortado y sin caracteres de control.
     assert_eq!(e.rechazada("ana", guardar(None, &"x".repeat(33), &[s1], None)), rechazos::LOADOUT_NOMBRE_LARGO);
@@ -811,7 +820,7 @@ fn sin_trigo_baja_la_moral_y_con_la_moral_a_cero_desertan_los_soldados_hasta_que
 
 /// La plaza A con su Mercado (cupo de escolta 100) y una plaza B de otra Facción, 72 horas después de fundarse (ya hay población de sobra para reclutar).
 fn escenario_de_escolta(m: &M) -> (Escenario, u64) {
-    let mut e = escenario(m, 7);
+    let mut e = escenario_de_tope(m, 7);
     let a = e.a;
     e.dar(a, Madera, 350_000);
     e.ok("admin", Comando::AnadirEdificio { asentamiento: a, tipo: asentamiento::catalogo::Tipo::Mercado });
@@ -1225,10 +1234,8 @@ fn estado_con_heroes() -> nucleo::Estado {
     h.nivel = 3;
     h.experiencia = 11;
     h.puntos_de_atributo = 4;
-    h.puntos_de_perk = 2;
     h.atributos.armadura = 7;
-    h.perks_desbloqueados = vec![1, 4];
-    h.loadouts.push(Loadout { id: 9, nombre: "Asalto".into(), escuadras: vec![10, 11], perks: vec![4], activo: false });
+    h.loadouts.push(Loadout { id: 9, nombre: "Asalto".into(), escuadras: vec![10, 11], activo: false });
     h.monedas = 1_212;
     h.herido_hasta = Some(120_000);
     h.viveres = 33_000;
@@ -1314,12 +1321,9 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
         ("nivel", Box::new(|m| h5(m).nivel += 1)),
         ("experiencia", Box::new(|m| h5(m).experiencia += 1)),
         ("puntos_atributo", Box::new(|m| h5(m).puntos_de_atributo += 1)),
-        ("puntos_perk", Box::new(|m| h5(m).puntos_de_perk += 1)),
         ("atributos", Box::new(|m| h5(m).atributos.fuerza += 1)),
-        ("perks", Box::new(|m| h5(m).perks_desbloqueados.push(8))),
         ("loadout.nombre", Box::new(|m| h5(m).loadouts[1].nombre.push('!'))),
         ("loadout.escuadras", Box::new(|m| h5(m).loadouts[1].escuadras.reverse())),
-        ("loadout.perks", Box::new(|m| h5(m).loadouts[1].perks.clear())),
         ("loadout.activo", Box::new(|m| h5(m).loadouts[1].activo = true)),
         ("monedas", Box::new(|m| h5(m).monedas += 1)),
         ("herido_hasta", Box::new(|m| h5(m).herido_hasta = None)),
@@ -1400,7 +1404,7 @@ fn guion(e: &mut Escenario, avanzar: &dyn Fn(&mut Escenario, Instante)) {
     e.ok_en(base, "admin", Comando::DarAlmacenPersonal { heroe: beto, recurso: Oro, cantidad: 500_000 });
     let milicia = e.ok_en(base, "ana", Comando::ReclutarTropa { asentamiento: a, heroe: ana, tropa: Tropa::MiliciaLanceros }).creadas[0];
     let prestadas = e.ok_en(base, "beto", Comando::PedirPrestamo { heroe: beto, tropas: vec![Tropa::Granjeros, Tropa::Mineros] }).creadas;
-    e.ok_en(base, "beto", Comando::GuardarLoadout { heroe: beto, loadout: None, nombre: "Leva".into(), escuadras: prestadas.clone(), perks: vec![], activo: Some(true) });
+    e.ok_en(base, "beto", Comando::GuardarLoadout { heroe: beto, loadout: None, nombre: "Leva".into(), escuadras: prestadas.clone(), activo: Some(true) });
     e.ok_en(base, "beto", Comando::OrdenarEscuadras { heroe: beto, escuadras: vec![prestadas[1]] });
     avanzar(e, base + 10 * MIN);
     e.ok_en(base + 10 * MIN, "beto", Comando::Desconectarse { heroe: beto });

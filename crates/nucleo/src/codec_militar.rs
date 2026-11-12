@@ -6,9 +6,9 @@
 //! (6B, `codec_tecnologia`).
 //!
 //! Un héroe: `id u64 · cuenta texto · facción opt_u64 · controlador u8 (0 humano, 1 bot) · liderazgo_base i64 · presencia{ubicación ·
-//! desconecta_en opt_i64 · fuera bool} · residencia{u8: 0 ninguna, 1 plaza, 2 campamento · u32} · nivel u32 · experiencia i64 · puntos de
-//! atributo i64 · puntos de perk i64 · atributos{fuerza, destreza, armadura, vitalidad: 4 × i64} · perks{n u64 · n × u32} · loadouts{n u64 ·
-//! n × (id u64, nombre texto, escuadras{n u64 · n × u64}, perks{n u64 · n × u32}, activo bool)} · monedas i64 ·
+//! desconecta_en opt_i64 · fuera bool} · residencia{u8: 0 ninguna, 1 plaza, 2 campamento · u32} · nivel u32 · experiencia i64 (acumulada,
+//! en milésimas) · puntos de atributo i64 · atributos{fuerza, destreza, armadura, vitalidad: 4 × i64} · loadouts{n u64 · n × (id u64, nombre texto,
+//! escuadras{n u64 · n × u64}, activo bool)} (BAN63: sin los puntos de perk, los perks ni los perks del loadout, D15) · monedas i64 ·
 //! herido_hasta opt_i64 · víveres i64 · ración_en opt_i64 · almacén personal{carga} · cupo{día i64 · carga} · columna opt_u64 · carro{carga} · sintético bool ·
 //! informes{n u64 · n × informe} · plazas recordadas{n u64 · n × (plaza u32 · visto_en i64 · almacén{carga} · cola{n u64 · n × (id u32 · tipo u8 · nivel u8 · completa_en opt_i64)} ·
 //! guarnición{n u64 · n × u64})} (BAN25) · residencia_cambiada_en opt_i64 (BAN28) · alijos abiertos{n u64 · n × u32, en orden} (BAN36) ·
@@ -212,18 +212,13 @@ fn lista_u64_leer(r: &mut Lector) -> Result<Vec<u64>, ErrorFormato> {
     (0..r.cuenta()?).map(|_| r.u64()).collect()
 }
 
-fn lista_u32_escribir(w: &mut Escritor, v: &[u32]) {
-    w.u64(v.len() as u64);
-    v.iter().for_each(|&x| w.u32(x));
-}
-
 fn lista_u32_leer(r: &mut Lector) -> Result<Vec<u32>, ErrorFormato> {
     (0..r.cuenta()?).map(|_| r.u32()).collect()
 }
 
 fn heroe_escribir(w: &mut Escritor, h: &HeroeNucleo) {
     let HeroeNucleo { heroe, cuenta, faccion, almacen_personal, cupo, columna, carro, sintetico, informes, plazas_recordadas, residencia_cambiada_en, alijos_abiertos } = h;
-    let Heroe { id, controlador, liderazgo_base, presencia, residencia, nivel, experiencia, puntos_de_atributo, puntos_de_perk, atributos, perks_desbloqueados, loadouts, monedas, herido_hasta, viveres, racion_en, escuadras } = heroe;
+    let Heroe { id, controlador, liderazgo_base, presencia, residencia, nivel, experiencia, puntos_de_atributo, atributos, loadouts, monedas, herido_hasta, viveres, racion_en, escuadras } = heroe;
     w.u64(*id);
     w.texto(cuenta);
     w.opt_u64(faccion.map(u64::from));
@@ -237,16 +232,13 @@ fn heroe_escribir(w: &mut Escritor, h: &HeroeNucleo) {
     w.u32(*nivel);
     w.i64(*experiencia);
     w.i64(*puntos_de_atributo);
-    w.i64(*puntos_de_perk);
     let Atributos { fuerza, destreza, armadura, vitalidad } = atributos;
     [fuerza, destreza, armadura, vitalidad].into_iter().for_each(|&a| w.i64(a));
-    lista_u32_escribir(w, perks_desbloqueados);
     w.u64(loadouts.len() as u64);
-    for Loadout { id, nombre, escuadras, perks, activo } in loadouts {
+    for Loadout { id, nombre, escuadras, activo } in loadouts {
         w.u64(*id);
         w.texto(nombre);
         lista_u64_escribir(w, escuadras);
-        lista_u32_escribir(w, perks);
         w.bool(*activo);
     }
     w.i64(*monedas);
@@ -287,12 +279,11 @@ fn heroe_leer(r: &mut Lector) -> Result<HeroeNucleo, ErrorFormato> {
     let (id, cuenta, faccion, controlador, liderazgo_base) = (r.u64()?, r.texto()?, opt_u32(r.opt_u64()?)?, controlador_de_u8(r.u8()?)?, r.i64()?);
     let presencia = Presencia { ubicacion: ubicacion_leer(r)?, desconecta_en: r.opt_i64()?, fuera: r.bool()? };
     let residencia = residencia_leer(r)?;
-    let (nivel, experiencia, puntos_de_atributo, puntos_de_perk) = (r.u32()?, r.i64()?, r.i64()?, r.i64()?);
+    let (nivel, experiencia, puntos_de_atributo) = (r.u32()?, r.i64()?, r.i64()?);
     let atributos = Atributos { fuerza: r.i64()?, destreza: r.i64()?, armadura: r.i64()?, vitalidad: r.i64()? };
-    let perks_desbloqueados = lista_u32_leer(r)?;
     let mut loadouts = Vec::new();
     for _ in 0..r.cuenta()? {
-        loadouts.push(Loadout { id: r.u64()?, nombre: r.texto()?, escuadras: lista_u64_leer(r)?, perks: lista_u32_leer(r)?, activo: r.bool()? });
+        loadouts.push(Loadout { id: r.u64()?, nombre: r.texto()?, escuadras: lista_u64_leer(r)?, activo: r.bool()? });
     }
     let monedas = r.i64()?;
     let (herido_hasta, viveres, racion_en, almacen_personal) = (r.opt_i64()?, r.i64()?, r.opt_i64()?, carga_leer(r)?);
@@ -311,7 +302,7 @@ fn heroe_leer(r: &mut Lector) -> Result<HeroeNucleo, ErrorFormato> {
     for _ in 0..r.cuenta()? {
         escuadras.push(escuadra_leer(r)?);
     }
-    let heroe = Heroe { id, controlador, liderazgo_base, presencia, residencia, nivel, experiencia, puntos_de_atributo, puntos_de_perk, atributos, perks_desbloqueados, loadouts, monedas, herido_hasta, viveres, racion_en, escuadras };
+    let heroe = Heroe { id, controlador, liderazgo_base, presencia, residencia, nivel, experiencia, puntos_de_atributo, atributos, loadouts, monedas, herido_hasta, viveres, racion_en, escuadras };
     Ok(HeroeNucleo { heroe, cuenta, faccion, almacen_personal, cupo, columna, carro, sintetico, informes, plazas_recordadas, residencia_cambiada_en, alijos_abiertos })
 }
 

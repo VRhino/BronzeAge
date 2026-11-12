@@ -161,7 +161,7 @@ dependencies = [
 
 [[package]]
 name = "combate"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "asentamiento",
  "base",
@@ -188,7 +188,7 @@ checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
 
 [[package]]
 name = "contrato"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "prost",
  "prost-build",
@@ -491,7 +491,7 @@ dependencies = [
 
 [[package]]
 name = "lanzador"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "acceso",
  "base",

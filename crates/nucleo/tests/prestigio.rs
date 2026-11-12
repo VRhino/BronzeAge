@@ -161,8 +161,8 @@ fn resultado(n: &Nucleo, id: u64) -> ResultadoDeBatalla {
         ganador: Lado::Atacante,
         razon: Razon::ObjetivosCapturados,
         objetivos: vec![("bandera".into(), Some(Lado::Atacante))],
-        por_escuadra: b.escuadras_de().map(|e| ResultadoEscuadra { escuadra: e.id, desplegados: e.efectivos, supervivientes_al_cierre: e.efectivos - 5.min(e.efectivos), muertos: 5.min(e.efectivos), xp_ganada: 4 }).collect(),
-        por_heroe: b.heroes_que_combaten().map(|h| ResultadoHeroe { heroe: h, participo: true, sobrevivio_al_cierre: true, xp_ganada: 7, derrotado: None, botin: None }).collect(),
+        por_escuadra: b.escuadras_de().map(|e| ResultadoEscuadra { escuadra: e.id, desplegados: e.efectivos, supervivientes_al_cierre: e.efectivos - 5.min(e.efectivos), muertos: 5.min(e.efectivos) }).collect(),
+        por_heroe: b.heroes_que_combaten().map(|h| ResultadoHeroe { heroe: h, participo: true, sobrevivio_al_cierre: true, derrotado: None, botin: None }).collect(),
         version_servidor: "v1".into(),
         carros_perdidos: vec![],
     }
@@ -369,7 +369,7 @@ fn conquistar_una_plaza_defendida_suma_la_conquista_y_una_sola_victoria_aunque_g
     e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(b as u32) });
     let milicia = e.ok("admin", Comando::DarEscuadra { heroe: h, tropa: Tropa::MiliciaLanceros, cantidad: militar::Reglas::cargar().tropas.tropa(Tropa::MiliciaLanceros).unidades }).creadas[0];
     let loadout = e.n.heroe(h).unwrap().heroe.loadouts[0].id;
-    e.ok("admin", Comando::GuardarLoadout { heroe: h, loadout: Some(loadout), nombre: "Default".into(), escuadras: vec![milicia], perks: vec![], activo: Some(true) });
+    e.ok("admin", Comando::GuardarLoadout { heroe: h, loadout: Some(loadout), nombre: "Default".into(), escuadras: vec![milicia], activo: Some(true) });
     // El ejército de ana a la puerta, con dos héroes de F1: el segundo se coloca en la columna del primero.
     let ana = e.columna_en("ana", 1, b);
     for tropa in [Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto] {

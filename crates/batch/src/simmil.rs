@@ -6,7 +6,7 @@
 //! # Los bots (hipótesis del batch, deterministas por semilla)
 //! Cada plaza tiene un **Guardián**, un **Capitán**, un **Cazador** y un **Intendente** (qué cuenta hace cada papel lo sortea la semilla). Cada 15 minutos de mundo
 //! cada héroe mira dónde está y qué tiene a mano:
-//! - **En casa, todos** reclutan o reponen una escuadra por hora (la mejor tropa que la plaza sabe hacer y que cabe en su Liderazgo, hasta 4, 4, 2 y 1 escuadras
+//! - **En casa, todos** reclutan o reponen una escuadra por hora (la mejor tropa que la plaza sabe hacer y que cabe en su Liderazgo, que nace en 14 y sube con el nivel del héroe, hasta 4, 4, 2 y 1 escuadras
 //!   según el papel; mientras la plaza no llega al nivel 2, una por héroe y nada que la deje por debajo de los pesants del ascenso), dejan su loadout activo con
 //!   lo que tienen en el campamento (si la plaza es atacada, defienden en persona) y vacían en su almacén personal el carro que traen.
 //! - **El Guardián** no sale nunca: gobierna (pide el ascenso, construye el Mercado, el Barracón y la Galería de tiro, monta la flota de dos caravanas, marca un
@@ -967,7 +967,7 @@ impl Sim<'_> {
         let quiere = self.del_campamento(i);
         if actual != quiere || !l.activo {
             let heroe = self.bots[i].heroe;
-            self.suya(t, i, "GuardarLoadout", Comando::GuardarLoadout { heroe, loadout: Some(id), nombre: "Default".into(), escuadras: quiere, perks: vec![], activo: Some(true) });
+            self.suya(t, i, "GuardarLoadout", Comando::GuardarLoadout { heroe, loadout: Some(id), nombre: "Default".into(), escuadras: quiere, activo: Some(true) });
         }
     }
 

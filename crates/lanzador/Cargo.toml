@@ -1,6 +1,6 @@
 [package]
 name = "lanzador"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "El lanzador de servidores de batalla: abre la sesión CLIENTE_SERVIDOR_BATALLA con el motor, reclama las batallas y arranca un proceso de batalla por cada una (Batalla_Unity_Ciclo §8.8)"
 

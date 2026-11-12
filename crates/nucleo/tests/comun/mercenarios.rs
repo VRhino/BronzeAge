@@ -39,7 +39,8 @@ fn reglas_sin_estorbos() -> Reglas {
     let mut reglas = Reglas::default();
     let b = &mut Arc::make_mut(&mut reglas.economia.combate).bandidos;
     (b.radio_ataque_caravana, b.anillo_minimo, b.anillo_maximo) = (0, 0, 0);
-    reglas
+    // Los firmantes salen con más tropa de la que cabe en los 14 con que nace un héroe.
+    super::con_liderazgo_de_tope(reglas)
 }
 
 fn arranque(m: &M, reglas: Reglas) -> Arranque {

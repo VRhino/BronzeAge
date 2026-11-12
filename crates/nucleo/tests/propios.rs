@@ -410,7 +410,8 @@ async fn la_foto_inicial_de_heroe_y_faccion_lleva_todo_lo_propio_y_nada_de_otra_
     assert_eq!(h.residencia_id.as_deref(), Some(as_a.as_str()), "reside en su plaza");
     assert_eq!(h.escuadrones_ids, [ids::escuadra(escuadra)]);
     assert_eq!((h.loadouts.len(), h.loadouts[0].display_name.as_str(), h.loadouts[0].activo), (1, "Default", true));
-    assert!(h.liderazgo_base > 0);
+    // La progresión (Heroe_Y_Tropa §4.3): nace en el nivel 1 con 14 de Liderazgo, sin puntos y con los 100 que pide el nivel 2 por delante (en milésimas).
+    assert_eq!((h.liderazgo_base, h.puntos_de_atributo_sin_gastar, h.experiencia_hacia_siguiente_nivel), (14, 0, 100_000));
     assert_eq!(i64::from(h.cupo_guarnicion), cupo, "derivado: el cupo de la guarnición de su residencia");
     assert!(h.monedas > 0);
     let e = escuadrones(&propia.entidades);
@@ -536,7 +537,7 @@ async fn reclutar_y_guardar_un_loadout_llegan_a_su_heroe_y_a_nadie_mas() {
     vista_ana.aplicar(del_heroe[0]);
 
     // Guardar un loadout con esa escuadra: el héroe lo trae entero, con su Liderazgo derivado.
-    let loadout = orden::Cuerpo::GuardarLoadout(pb::OrdenGuardarLoadout { loadout_id: None, display_name: "Ofensivo".into(), squad_ids: vec![escuadra.id.clone()], perks_seleccionados: vec![], activo: None });
+    let loadout = orden::Cuerpo::GuardarLoadout(pb::OrdenGuardarLoadout { loadout_id: None, display_name: "Ofensivo".into(), squad_ids: vec![escuadra.id.clone()], activo: None });
     let (previos, r) = dar_todo(&mut ana, "r2", loadout).await;
     aceptada(&r);
     assert_eq!(TipoEntidad::try_from(r.creadas[0].entidad).unwrap(), TipoEntidad::Loadout);

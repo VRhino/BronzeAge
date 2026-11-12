@@ -164,6 +164,29 @@ fn una_columna_ataca_a_otra_y_el_derrotado_queda_herido_pierde_la_mitad_del_carr
     assert!(!x.n.heroe_herido(beto.1));
 }
 
+/// La experiencia de un héroe (milésimas).
+fn experiencia_de(n: &Nucleo, heroe: u64) -> i64 {
+    n.heroe(heroe).unwrap().heroe.experiencia
+}
+
+#[test]
+fn con_numeros_el_heroe_gana_lo_que_su_bando_una_vez_por_combate_y_ejercito_permanente_solo_a_sus_escuadras() {
+    // Combate §4.3: ana gana con dos escuadras y cobra 1 una vez, no una por escuadra; beto pierde y cobra 0,5.
+    let mut x = choque();
+    let (ana, beto) = (x.ana, x.beto);
+    assert!(atacar(&mut x.n, MIN, "ana", "a1", ana.1, ObjetivoAtaque::Ejercito(beto.0), false).aceptada());
+    assert_eq!((experiencia_de(&x.n, ana.1), experiencia_de(&x.n, beto.1)), (1_000, 500));
+
+    // Con Ejército permanente en la Facción de ana, sus escuadras ganan 1,1 y ella, 1.
+    let mut x = choque();
+    let (ana, beto) = (x.ana, x.beto);
+    assert!(x.n.aplicar_en(0, admin("t", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["ejercito_permanente".into()] })).aceptada());
+    assert!(atacar(&mut x.n, MIN, "ana", "a1", ana.1, ObjetivoAtaque::Ejercito(beto.0), false).aceptada());
+    let xp = |h: u64, e: u64| x.n.heroe(h).unwrap().heroe.escuadra(e).unwrap().experiencia;
+    assert_eq!((xp(ana.1, x.fuerte[0]), xp(ana.1, x.fuerte[1]), xp(beto.1, x.debil)), (1_100, 1_100, 500));
+    assert_eq!((experiencia_de(&x.n, ana.1), experiencia_de(&x.n, beto.1)), (1_000, 500));
+}
+
 /// Las monedas de un héroe.
 fn monedas_de(n: &Nucleo, heroe: u64) -> i64 {
     n.heroe(heroe).unwrap().heroe.monedas
@@ -628,7 +651,7 @@ impl Esc {
     fn defensor(&mut self, heroe: u64, tropas: &[Tropa]) -> Vec<u64> {
         let ids: Vec<u64> = tropas.iter().map(|&t| self.ok("admin", Comando::DarEscuadra { heroe, tropa: t, cantidad: completa(t) }).creadas[0]).collect();
         let loadout = self.n.heroe(heroe).unwrap().heroe.loadouts[0].id;
-        self.ok("admin", Comando::GuardarLoadout { heroe, loadout: Some(loadout), nombre: "Default".into(), escuadras: ids.clone(), perks: vec![], activo: Some(true) });
+        self.ok("admin", Comando::GuardarLoadout { heroe, loadout: Some(loadout), nombre: "Default".into(), escuadras: ids.clone(), activo: Some(true) });
         ids
     }
     /// Un ejército de administración de `cuenta`/`faccion` a 2 u de `p`, con las tropas dadas.
@@ -707,7 +730,8 @@ fn asedio(m: &'static M, semilla: u64, defensa: &[Tropa], ataque: &[Tropa]) -> A
     let mut reglas = Reglas::default();
     let combate = Arc::make_mut(&mut reglas.economia.combate);
     combate.bandidos.anillo_maximo = combate.bandidos.anillo_minimo;
-    let mut e = montar_sobre(Nucleo::nuevo(Arranque { reglas, ..arranque(m, semilla) }), m, false);
+    // El defensor lleva más de lo que cabe en los 14 con que nace un héroe.
+    let mut e = montar_sobre(Nucleo::nuevo(Arranque { reglas: comun::con_liderazgo_de_tope(reglas), ..arranque(m, semilla) }), m, false);
     e.sin_proteccion();
     let b = e.b;
     let beto = e.heroe_en(&m.0, "beto", 2, b);

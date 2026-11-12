@@ -47,7 +47,6 @@ fn rechazo_de_heroe(e: ErrorHeroe) -> (&'static str, String) {
         ErrorHeroe::EscuadraRepetida => (ESCUADRA_REPETIDA, "una escuadra no puede repetirse".into()),
         ErrorHeroe::EscuadraAjena => (ESCUADRA_AJENA, "la escuadra no es del héroe".into()),
         ErrorHeroe::SuperaLiderazgo => (LIDERAZGO_SUPERADO, "las escuadras pasan del Liderazgo del héroe".into()),
-        ErrorHeroe::PerkNoDesbloqueado => (LOADOUT_PERK_NO_DESBLOQUEADO, "el perk no está desbloqueado".into()),
         ErrorHeroe::SinResidencia => (GUARNICION_SIN_RESIDENCIA, "solo se guarnece la plaza donde se reside".into()),
         ErrorHeroe::EnBatalla => (ESCUADRA_EN_BATALLA, "la escuadra está reservada para una batalla".into()),
         ErrorHeroe::NoEnCampamento => (GUARNICION_NO_EN_CAMPAMENTO, "la escuadra no está en el campamento".into()),
@@ -250,10 +249,10 @@ impl Nucleo {
                 Ok(vec![id])
             }
             Comando::ReclutarTropa { asentamiento, heroe, tropa } => self.reclutar_en_plaza(t, p, *asentamiento, *heroe, *tropa),
-            Comando::GuardarLoadout { heroe, loadout, nombre, escuadras, perks, activo } => {
+            Comando::GuardarLoadout { heroe, loadout, nombre, escuadras, activo } => {
                 self.autorizar_heroe(p, *heroe, false)?;
                 self.exigir_nombre_de_jugador(nombre, "un loadout", rechazos::LOADOUT_NOMBRE_LARGO, rechazos::LOADOUT_NOMBRE_CONTROL)?;
-                let datos = DatosLoadout { id: *loadout, nombre: nombre.clone(), escuadras: escuadras.clone(), perks: perks.clone(), activo: *activo };
+                let datos = DatosLoadout { id: *loadout, nombre: nombre.clone(), escuadras: escuadras.clone(), activo: *activo };
                 let Estado { militar, siguiente_id, .. } = &mut self.estado;
                 let h = &mut militar.heroes.get_mut(heroe).expect("existe").heroe;
                 let mut nuevo = None;

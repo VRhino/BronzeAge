@@ -118,6 +118,14 @@ pub fn logros_de_hechos(n: &Nucleo) -> Vec<(tecnologia::Contador, u64)> {
     tecnologia::Contador::TODOS.into_iter().filter(|c| !c.es_record() && !flujo(c)).map(|c| (c, n.tecnologia().contador(c))).filter(|&(_, x)| x > 0).collect()
 }
 
+/// Las reglas con el Liderazgo de un héroe de nivel 30 desde que nace (Heroe_Y_Tropa §5: nace en 14 y sube 3 por nivel hasta 100), para las pruebas que sacan más tropa de la
+/// que cabe en 14: el héroe sube «tocando» las reglas del estado, ya que ningún comando da experiencia.
+pub fn con_liderazgo_de_tope(mut r: Reglas) -> Reglas {
+    let l = &mut Arc::make_mut(&mut r.economia.militar).liderazgo;
+    l.base = l.tope;
+    r
+}
+
 /// Las reglas de `arranque`.
 pub fn reglas() -> Reglas {
     Reglas { viveres_bajos_pct: 1, ..Reglas::default() }

@@ -1713,7 +1713,9 @@ impl Escenario {
 #[test]
 fn dentro_un_ciudadano_de_la_faccion_deja_escuadras_de_su_columna_de_guarnicion_con_su_cupo_y_las_recoge() {
     let m = con_mundo!();
-    let mut e = montar(m, 7, 2);
+    // Ana saca más milicia de la que cabe en el Liderazgo de un héroe de nivel 1 (14).
+    let a = arranque(m, 7);
+    let mut e = montar_con(Nucleo::nuevo(Arranque { reglas: comun::con_liderazgo_de_tope(a.reglas.clone()), ..a }), m, 2);
     let pueblo = e.pueblo_levantado();
     let cupo = e.n.cupo_de_guarnicion_de_pueblo(pueblo).unwrap();
     assert_eq!(cupo, 30, "un extractor de nivel 1");

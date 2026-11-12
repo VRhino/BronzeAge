@@ -339,13 +339,13 @@ mod pruebas {
         let a = resolver_acoso(r, 3, Defensa::Escolta(&mut cae), &mut Rng::nuevo(1));
         assert!(a.gana_el_bandido);
         assert_eq!(a.bajas_escolta[0].despues, 25 - 6);
-        assert_eq!((cae[0].cantidad, cae[0].experiencia), (0, 500), "queda a 0 y vuelve a su héroe, con su experiencia");
+        assert_eq!((cae[0].cantidad, a.bajas_escolta[0].experiencia), (0, 500), "queda a 0 y vuelve a su héroe, con la experiencia de perder");
 
         let mut aguanta = [escuadra(2, 5, Tropa::ArquerosCompuesto), escuadra(3, 5, Tropa::ArquerosCompuesto)];
         let a = resolver_acoso(r, 1, Defensa::Escolta(&mut aguanta), &mut Rng::nuevo(1));
         assert!(!a.gana_el_bandido);
         assert_eq!(a.bajas_escolta.iter().map(|b| b.antes - b.despues).collect::<Vec<_>>(), vec![1, 1]);
-        assert_eq!(aguanta[0].experiencia, 1_000);
+        assert_eq!(a.bajas_escolta[0].experiencia, 1_000);
     }
 
     #[test]
@@ -397,7 +397,7 @@ mod pruebas {
         let a = resolver_campamento(r, Bando { escuadras: &mut col, heroes: &[1] }, 3, &mut Rng::nuevo(2)).unwrap();
         assert!(a.destruido && a.heridos.is_empty());
         assert_eq!((a.poder_campamento, a.bajas[0].antes - a.bajas[0].despues), (120_000, 1), "round(12 × 0,05) = 1");
-        assert_eq!(col[0].experiencia, 1_000);
+        assert_eq!(a.bajas[0].experiencia, 1_000);
     }
 
     #[test]
@@ -407,7 +407,7 @@ mod pruebas {
         let a = resolver_campamento(r, Bando { escuadras: &mut col, heroes: &[1, 2] }, 3, &mut Rng::nuevo(2)).unwrap();
         assert!(!a.destruido);
         assert_eq!((a.bajas[0].despues, a.heridos), (25 - 6, vec![1, 2]));
-        assert_eq!(col[0].experiencia, 500);
+        assert_eq!(a.bajas[0].experiencia, 500);
     }
 
     #[test]

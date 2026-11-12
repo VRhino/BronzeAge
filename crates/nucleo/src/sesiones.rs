@@ -676,7 +676,7 @@ impl Actor {
                 let por_escuadra = r
                     .por_escuadra
                     .into_iter()
-                    .map(|e| Ok(ResultadoEscuadra { escuadra: escuadra(&e.squad_id)?, desplegados: i64::from(e.desplegados), supervivientes_al_cierre: i64::from(e.supervivientes_al_cierre), muertos: i64::from(e.muertos), xp_ganada: e.xp_ganada }))
+                    .map(|e| Ok(ResultadoEscuadra { escuadra: escuadra(&e.squad_id)?, desplegados: i64::from(e.desplegados), supervivientes_al_cierre: i64::from(e.supervivientes_al_cierre), muertos: i64::from(e.muertos) }))
                     .collect::<Result<Vec<_>, Respuesta>>()?;
                 let por_heroe = r
                     .por_heroe
@@ -689,7 +689,7 @@ impl Actor {
                                 Ok(Botin { objetos, monedas: entero(b.monedas)? })
                             })
                             .transpose()?;
-                        Ok(ResultadoHeroe { heroe: heroe(&h.heroe_id)?, participo: h.participo, sobrevivio_al_cierre: h.sobrevivio_al_cierre, xp_ganada: h.xp_ganada, derrotado: h.derrotado, botin })
+                        Ok(ResultadoHeroe { heroe: heroe(&h.heroe_id)?, participo: h.participo, sobrevivio_al_cierre: h.sobrevivio_al_cierre, derrotado: h.derrotado, botin })
                     })
                     .collect::<Result<Vec<_>, Respuesta>>()?;
                 let peticion = format!("resultado:{}:{}", r.battle_id, r.result_id);
