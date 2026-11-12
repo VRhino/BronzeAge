@@ -6,7 +6,7 @@
 //! - **En Unity**, 4 o 2 según gane su bando (`experienciaUnityPor…`, D7: el motor no lee la de Unity): a cada escuadra que entró y a cada héroe que participó (`aplicar_resultado`). Una
 //!   salida anticipada no da nada.
 //! - **Ejército permanente** (`bonusExperiencia`): las escuadras de los héroes de una Facción que la tiene ganan un 10 % más. El héroe, no.
-//! - **`escuadras.veteranas`**: suma 1 cada vez que una escuadra cruza el nivel 5.
+//! - **`escuadras.veteranas`**: suma 1 cada vez que una escuadra cruza el nivel 5, también con una medalla de tropa ([`Nucleo::sumar_experiencia_de_escuadra`]).
 //! - El héroe que sube de nivel emite `heroe.nivel_subio` con su nivel nuevo.
 
 use super::*;
@@ -20,11 +20,18 @@ const NIVEL_VETERANA: u8 = 5;
 
 impl Nucleo {
     /// El punto de entrada de la experiencia de combate de una escuadra (milésimas), sobre la copia que se volcará al estado: con el bonus de Ejército permanente si su héroe es de una
-    /// Facción que lo tiene, y `escuadras.veteranas` si cruza el nivel 5. La tropa prestada no gana (`Escuadra::con_experiencia`).
+    /// Facción que lo tiene, y lo demás como [`Nucleo::sumar_experiencia_de_escuadra`].
     pub(super) fn experiencia_de_escuadra(&mut self, t: Instante, e: &mut Escuadra, ganada: Mil) {
         let mr = &self.estado.reglas.economia.militar;
         let con_bonus = self.heroe(e.heroe).and_then(|h| h.faccion).is_some_and(|f| self.estado.tiene_tecnologia(f, &mr.militar.tecnologia_bonus_experiencia));
         let ganada = if con_bonus { por(ganada, UNO + mr.militar.bonus_experiencia) } else { ganada };
+        self.sumar_experiencia_de_escuadra(t, e, ganada);
+    }
+
+    /// La experiencia que gana una escuadra (milésimas), sin bonus: sube los niveles que cruce y cuenta `escuadras.veteranas` si cruza el nivel 5. La tropa prestada no gana
+    /// (`Escuadra::con_experiencia`). La usan el combate y la medalla de tropa (Catalogo_De_Objetos §3.3), que no lleva el bonus de Ejército permanente.
+    pub(super) fn sumar_experiencia_de_escuadra(&mut self, t: Instante, e: &mut Escuadra, ganada: Mil) {
+        let mr = &self.estado.reglas.economia.militar;
         let antes = e.nivel;
         e.con_experiencia(mr, ganada);
         if antes < NIVEL_VETERANA && e.nivel >= NIVEL_VETERANA {

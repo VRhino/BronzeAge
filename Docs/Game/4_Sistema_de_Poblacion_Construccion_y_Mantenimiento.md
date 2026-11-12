@@ -172,7 +172,7 @@ Van por AUTO-CONSTRUCCIÓN (como la Leñera y la Vivienda), disparadas en cuanto
 - Trabajadores: nivel 1 → 4; nivel 2 → 6; nivel 3 → 8 artesanos.
 - Producción base: nivel 1 → 8 Cuero; nivel 2 → 12 Cuero + 2 Cuero Curtido; nivel 3 → 6 Cuero + 3 Cuero Curtido + 1 Cuero de Calidad.
 
-**Armería** — fabricación de armas y armaduras.
+**Armería** — fabricación de armas y armaduras para la tropa y, desde el 2026-11-12, la tienda y la forja del héroe: dentro de una plaza con la Armería activa el héroe compra y vende objetos con sus monedas, y en la de la plaza donde reside los forja (`Docs/Mechanics/Heroe_Y_Tropa.md` §4.6).
 - Construcción: Asentamiento nivel 2. Nivel interno 2: Asentamiento nivel 2 + Fundición nivel 2. Nivel interno 3: Asentamiento nivel 3 + Fundición nivel 2 (el arma sale de la fundición; con el Palacio, el equipo de las Eras II-III llegaría en la IV).
 - Recetas nivel 1: 1 Lingote de Cobre + 1 madera → 1 Arma de Cobre (pide `metalurgia_cobre`); 5 Cuero → 1 Armadura Básica; 2 madera → 1 Arma de Madera.
 - Recetas nivel 2 (añade, sobre las de nivel 1): 1 Lingote de Bronce + 2 madera → 1 Arma de Bronce (pide `aleacion_bronce`); 1 Lingote de Cobre + 5 Cuero Curtido → 1 Armadura Intermedia; 1 Lingote de Hierro + 2 madera → 1 Arma de Hierro (pide `forja_hierro_temprana`).

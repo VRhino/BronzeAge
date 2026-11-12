@@ -192,6 +192,10 @@ Sin plaza (globales del héroe):
 | `heroe.puntos_repartidos` | `repartirPuntos` | `{ heroeId, atributos }` |
 | `heroe.nivel_subio` | (el combate, §4.3) | `{ heroe, nivel }` (el nivel nuevo) |
 | `heroe.equipo_cambiado` | `equiparObjeto` / `desequiparObjeto` (§4.5) | `{ heroe }` (el equipo nuevo va en la proyección `HEROE`) |
+| `heroe.objeto_comprado` | `comprarObjeto` (§4.6) | `{ heroe, plaza, precio, objeto }` (`objeto`, el id del catálogo, es un texto) |
+| `heroe.objeto_vendido` | `venderObjeto` (§4.6) | `{ heroe, plaza, cantidad, cobro, objeto }` |
+| `heroe.objeto_forjado` | `forjarObjeto` (§4.6) | `{ heroe, plaza, pieza (el N de obj-N), calidad (en %), objeto }` |
+| `heroe.objeto_usado` | `usarObjeto` (§4.6) | `{ heroe, objeto }`, con `escuadra` si es una medalla de tropa y `montura` y `destino` (`mochila` \| `almacen` \| `perdido`, textos) si es el cofre |
 | `heroe.almacen_personal` | `guardarEnAlmacenPersonal` / `sacarDelAlmacenPersonal` | `{ heroeId, recurso, cantidad (lo movido), sentido: guarda \| saca }` |
 | `heroe.viveres` | `pasarAViveres` | `{ heroeId, cantidad (lo movido) }` |
 
@@ -213,6 +217,24 @@ Cuatro órdenes del héroe de la cuenta (`orders.proto` 192 a 195; comandos 222 
 - **Rechazos de las reglas:** `objeto.desconocido`, `equipo.no_equipable` (un material o un consumible), `equipo.incompatible` (la clase del arma no admite ese peso), `equipo.arma_fija`, `equipo.hueco_vacio`, `mochila.llena`, `almacen_objetos.lleno`, `inventario.casilla_vacia`, `inventario.poca_cantidad` e `inventario.cantidad_invalida`. El `hueco` desconocido es `orden.forma_invalida` en la sesión.
 - **Hechos:** equipar y quitar emiten `heroe.equipo_cambiado { heroe }`; guardar y sacar no emiten nada (cambian solo lo que proyecta `HEROE`).
 - **Proyección:** `HEROE` lleva la clase, la mochila (`inventario`), el almacén (`almacen_objetos`, el 44 de `Heroe`), el equipo (`equipamiento`) y los atributos sumados; cada pieza con su `tipo` y su `precio` de la ficha y, si es forjada, su `item_instance_id` (`obj-N`) y sus cifras en `estadisticas`. La ficha pública de otro héroe lleva la clase y el equipo, y nada de la mochila, el almacén ni los atributos.
+
+### 4.6 La Armería y los consumibles (Rust, 2026-11-12)
+
+Cuatro órdenes más del héroe de la cuenta (`orders.proto` 196 a 199; comandos 226 a 229), en `crates/nucleo/src/nucleo/armeria.rs`. Las reglas son las del crate `objetos` ([`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §3.3 a §3.5), que no cambian nada si rechazan; el núcleo comprueba dónde está el héroe, pone las monedas, los materiales y el efecto, y emite el hecho.
+
+| Orden | Comando | Dónde | Qué hace |
+|---|---|---|---|
+| `comprar_objeto { objeto }` | `ComprarObjeto` (226) | D1: dentro de una plaza con la Armería activa | Compra la pieza (id de `OBJETOS`) al 100 % con sus monedas; llega a la mochila. El metal lo abre la tecnología de la Facción **de la plaza**. |
+| `vender_objeto { casilla, cantidad }` | `VenderObjeto` (227) | D1, igual | Vende `cantidad` de esa casilla de la mochila a `ventaPct` de la ficha (D18); cobra sus monedas. |
+| `forjar_objeto { objeto }` | `ForjarObjeto` (228) | D1: dentro de la plaza donde reside, con la Armería activa | Gasta un plano de su tier y sus crisoles de la mochila y los materiales de la receta de su almacén personal; tira la calidad (90 a 110 %) con el generador del estado. La pieza nace con id propio, `obj-N`, del contador de ids del estado (`siguiente_id`, que ya va en la foto), que solo se gasta si la forja se acepta. Todo o nada. |
+| `usar_objeto { casilla, escuadron_id? }` | `UsarObjeto` (229) | D2, como equipar (§4.5) | Gasta uno del consumible de esa casilla y aplica su efecto (abajo). |
+
+- **Medalla de tropa:** sobre `escuadron_id`, una escuadra suya (`escuadra.ajena` si falta o no es suya), no prestada (`escuadra.prestada`) y por debajo de `nivelMaximoEscuadra` (`escuadra.nivel_maximo`); se mira antes de gastarla. La experiencia entra como la del combate (`Nucleo::sumar_experiencia_de_escuadra`: sube los niveles que cruce y cuenta `escuadras.veteranas`) pero **sin** el bonus de Ejército permanente, que solo pone el combate. Lo que sobra al llegar al máximo no da nada.
+- **Medalla del héroe:** su porcentaje de lo que pide su nivel para el siguiente, `experienciaParaNivel(nivel + 1) − experienciaParaNivel(nivel)` (desde el 30, de 680), por `Nucleo::experiencia_de_heroe` (puede emitir `heroe.nivel_subio`). `escuadron_id` no se mira.
+- **Cofre de monturas:** una montura de tier III, IV o V por sus probabilidades, con el generador del estado; llega como lo que llega sin pedirlo (D17 y D22): a la mochila (si el cofre era el último de su pila, su casilla sirve), si no cabe al almacén de objetos y si tampoco, se pierde. El hecho dice dónde fue.
+- **Rechazos:** `armeria.sin_armeria` (sin estar dentro de una plaza con la Armería activa o, al forjar, sin ella en la plaza donde reside), `forja.fuera_de_tu_residencia` y `heroe.sin_residencia`, `armeria.no_se_vende`, `armeria.sin_tecnologia`, `heroe.sin_monedas`, `forja.sin_receta`, `forja.sin_plano`, `forja.sin_crisoles`, `forja.sin_materiales`, `objeto.no_se_usa`, los de la mochila (`objeto.desconocido`, `mochila.llena`, `inventario.casilla_vacia`, `inventario.poca_cantidad`, `inventario.cantidad_invalida`), los de D2 (`equipo.fuera_de_lugar`, `equipo.en_batalla`) y los de la medalla de tropa.
+- **Hechos:** `heroe.objeto_comprado`, `heroe.objeto_vendido`, `heroe.objeto_forjado` (con la calidad) y `heroe.objeto_usado` (§4.4).
+- Una prueba del núcleo comprueba que todos los materiales de las recetas de `OBJETOS` son recursos del motor (`nucleo::armeria::pruebas::los_materiales_de_las_recetas_son_recursos_del_motor`).
 
 ## 5. Liderazgo
 
@@ -1584,8 +1606,8 @@ Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; cont
 <!-- eventos -->
 ```json
 [
-  "heroe.almacen_personal", "heroe.creado", "heroe.equipo_cambiado", "heroe.herido", "heroe.nivel_subio", "heroe.puntos_repartidos", "heroe.reubicado", "heroe.sale_del_mundo", "heroe.se_desconecta", "heroe.viveres",
-  "heroe.vuelve_al_mundo", "reclutamiento.cierre_a_ciudadanos", "tropas.desercion", "tropas.reclutadas"
+  "heroe.almacen_personal", "heroe.creado", "heroe.equipo_cambiado", "heroe.herido", "heroe.nivel_subio", "heroe.objeto_comprado", "heroe.objeto_forjado", "heroe.objeto_usado",
+  "heroe.objeto_vendido", "heroe.puntos_repartidos", "heroe.reubicado", "heroe.sale_del_mundo", "heroe.se_desconecta", "heroe.viveres", "heroe.vuelve_al_mundo", "reclutamiento.cierre_a_ciudadanos", "tropas.desercion", "tropas.reclutadas"
 ]
 ```
 <!-- /eventos -->

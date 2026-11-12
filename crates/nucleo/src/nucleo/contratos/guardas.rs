@@ -224,6 +224,10 @@ impl Nucleo {
             | Comando::DesequiparObjeto { .. }
             | Comando::GuardarObjeto { .. }
             | Comando::SacarObjeto { .. }
+            | Comando::ComprarObjeto { .. }
+            | Comando::VenderObjeto { .. }
+            | Comando::ForjarObjeto { .. }
+            | Comando::UsarObjeto { .. }
             | Comando::AsignarGuarnicion { .. }
             | Comando::RetirarGuarnicion { .. }
             | Comando::PasarAViveres { .. }

@@ -381,8 +381,8 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 
 | Código | Constante | Qué dice |
 |---|---|---|
-| `equipo.fuera_de_lugar` | `EQUIPO_FUERA_DE_LUGAR` | `equipar_objeto` o `desequipar_objeto` fuera de una plaza, un pueblo o un campamento (D2): en una columna, en una avanzada o fuera del mundo. |
-| `equipo.en_batalla` | `EQUIPO_EN_BATALLA` | `equipar_objeto` o `desequipar_objeto` con una escuadra del héroe reservada para una batalla (D2). |
+| `equipo.fuera_de_lugar` | `EQUIPO_FUERA_DE_LUGAR` | `equipar_objeto`, `desequipar_objeto` o `usar_objeto` fuera de una plaza, un pueblo o un campamento (D2): en una columna, en una avanzada o fuera del mundo. |
+| `equipo.en_batalla` | `EQUIPO_EN_BATALLA` | `equipar_objeto`, `desequipar_objeto` o `usar_objeto` con una escuadra del héroe reservada para una batalla (D2). |
 | `objeto.desconocido` | `OBJETO_DESCONOCIDO` | La pieza no está en el catálogo `OBJETOS`. |
 | `equipo.no_equipable` | `EQUIPO_NO_EQUIPABLE` | Un material o un consumible: no va en ningún hueco. |
 | `equipo.incompatible` | `EQUIPO_INCOMPATIBLE` | La clase del arma puesta no admite el peso de esa armadura (Clases_De_Heroe §4). |
@@ -394,6 +394,22 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `inventario.casilla_vacia` | `INVENTARIO_CASILLA_VACIA` | La casilla de la mochila o del almacén de objetos está vacía o pasa de su capacidad. |
 | `inventario.poca_cantidad` | `INVENTARIO_POCA_CANTIDAD` | La casilla tiene menos de lo que se pide. |
 | `inventario.cantidad_invalida` | `INVENTARIO_CANTIDAD_INVALIDA` | Una cantidad de 0, o una pila que pasaría del máximo. |
+
+### La Armería y los consumibles: comprar, vender, forjar y usar un objeto (`ErrorTienda`, `ErrorForja` y `ErrorUso` del crate `objetos`; Heroe_Y_Tropa §4.6)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `armeria.sin_armeria` | `ARMERIA_SIN_ARMERIA` | `comprar_objeto` o `vender_objeto` sin estar dentro de una plaza con la Armería activa, o `forjar_objeto` sin ella en la plaza donde reside (D1). |
+| `armeria.no_se_vende` | `ARMERIA_NO_SE_VENDE` | `comprar_objeto`: la tienda no lo vende (no es arma, armadura ni montura, o pasa de `tiendaHastaTier`; Catalogo_De_Objetos §6). |
+| `armeria.sin_tecnologia` | `ARMERIA_SIN_TECNOLOGIA` | `comprar_objeto` o `forjar_objeto`: la Facción de la plaza no tiene la tecnología de su metal (D1). |
+| `forja.fuera_de_tu_residencia` | `FORJA_FUERA_DE_TU_RESIDENCIA` | `forjar_objeto` fuera de la plaza donde reside el héroe, que es donde forja (D1). |
+| `forja.sin_receta` | `FORJA_SIN_RECETA` | `forjar_objeto`: no tiene receta (no es arma ni armadura, o es de tier I; Catalogo_De_Objetos §6b). |
+| `forja.sin_plano` | `FORJA_SIN_PLANO` | `forjar_objeto`: no hay en la mochila un plano de su tier. |
+| `forja.sin_crisoles` | `FORJA_SIN_CRISOLES` | `forjar_objeto`: no hay en la mochila los crisoles de su tier. |
+| `forja.sin_materiales` | `FORJA_SIN_MATERIALES` | `forjar_objeto`: el almacén personal no tiene los materiales de la receta. |
+| `objeto.no_se_usa` | `OBJETO_NO_SE_USA` | `usar_objeto`: no es un consumible. |
+| `escuadra.prestada` | `ESCUADRA_PRESTADA` | `usar_objeto`: una medalla de tropa sobre tropa prestada, que no es del héroe (Catalogo_De_Objetos §3.3). |
+| `escuadra.nivel_maximo` | `ESCUADRA_NIVEL_MAXIMO` | `usar_objeto`: una medalla de tropa sobre una escuadra que ya está en `nivelMaximoEscuadra`. |
 
 ### Presencia: dónde está el héroe y si está en el mundo
 

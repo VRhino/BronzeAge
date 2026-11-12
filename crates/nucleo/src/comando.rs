@@ -262,6 +262,15 @@ pub enum Comando {
     GuardarObjeto { heroe: u64, casilla: u32, cantidad: u32 },
     /// Pasa `cantidad` de la casilla `casilla` de su almacén de objetos a su mochila, dentro de su residencia (D22).
     SacarObjeto { heroe: u64, casilla: u32, cantidad: u32 },
+    /// Compra en la Armería de la plaza donde está dentro una pieza del catálogo `OBJETOS`, al 100 %, con sus monedas (D1, Catalogo_De_Objetos §6).
+    ComprarObjeto { heroe: u64, objeto: String },
+    /// Vende a la Armería de la plaza donde está dentro `cantidad` de la casilla `casilla` de su mochila, a `ventaPct` de la ficha (D1 y D18).
+    VenderObjeto { heroe: u64, casilla: u32, cantidad: u32 },
+    /// Forja una pieza en la Armería de la plaza donde reside, estando dentro: el plano y los crisoles de su mochila, los materiales de su almacén personal (D1,
+    /// Catalogo_De_Objetos §6b).
+    ForjarObjeto { heroe: u64, objeto: String },
+    /// Usa el consumible de la casilla `casilla` de su mochila, donde se puede equipar (D2); `escuadra`, la suya que recibe una medalla de tropa (Catalogo_De_Objetos §3.3).
+    UsarObjeto { heroe: u64, casilla: u32, escuadra: Option<u64> },
     /// Entrega una escuadra del campamento a la guarnición de la plaza donde reside el héroe, dentro de su cupo.
     AsignarGuarnicion { heroe: u64, escuadra: u64 },
     RetirarGuarnicion { heroe: u64, escuadra: u64 },
@@ -762,6 +771,10 @@ impl Comando {
             | Comando::DesequiparObjeto { .. }
             | Comando::GuardarObjeto { .. }
             | Comando::SacarObjeto { .. }
+            | Comando::ComprarObjeto { .. }
+            | Comando::VenderObjeto { .. }
+            | Comando::ForjarObjeto { .. }
+            | Comando::UsarObjeto { .. }
             | Comando::AsignarGuarnicion { .. }
             | Comando::RetirarGuarnicion { .. }
             | Comando::PasarAViveres { .. }
@@ -1181,6 +1194,10 @@ impl Comando {
             | Comando::DesequiparObjeto { heroe, .. }
             | Comando::GuardarObjeto { heroe, .. }
             | Comando::SacarObjeto { heroe, .. }
+            | Comando::ComprarObjeto { heroe, .. }
+            | Comando::VenderObjeto { heroe, .. }
+            | Comando::ForjarObjeto { heroe, .. }
+            | Comando::UsarObjeto { heroe, .. }
             | Comando::AsignarGuarnicion { heroe, .. }
             | Comando::RetirarGuarnicion { heroe, .. }
             | Comando::PasarAViveres { heroe, .. }
@@ -1870,6 +1887,28 @@ impl Peticion {
                 w.u64(*heroe);
                 w.u32(*casilla);
                 w.u32(*cantidad);
+            }
+            Comando::ComprarObjeto { heroe, objeto } => {
+                w.u8(226);
+                w.u64(*heroe);
+                w.texto(objeto);
+            }
+            Comando::VenderObjeto { heroe, casilla, cantidad } => {
+                w.u8(227);
+                w.u64(*heroe);
+                w.u32(*casilla);
+                w.u32(*cantidad);
+            }
+            Comando::ForjarObjeto { heroe, objeto } => {
+                w.u8(228);
+                w.u64(*heroe);
+                w.texto(objeto);
+            }
+            Comando::UsarObjeto { heroe, casilla, escuadra } => {
+                w.u8(229);
+                w.u64(*heroe);
+                w.u32(*casilla);
+                w.opt_u64(*escuadra);
             }
             Comando::FijarTecnologias { faccion, tecnologias } => {
                 w.u8(65);
@@ -2911,6 +2950,10 @@ impl Peticion {
             223 => Comando::DesequiparObjeto { heroe: r.u64()?, hueco: hueco_de_u8(r.u8()?)? },
             224 => Comando::GuardarObjeto { heroe: r.u64()?, casilla: r.u32()?, cantidad: r.u32()? },
             225 => Comando::SacarObjeto { heroe: r.u64()?, casilla: r.u32()?, cantidad: r.u32()? },
+            226 => Comando::ComprarObjeto { heroe: r.u64()?, objeto: r.texto()? },
+            227 => Comando::VenderObjeto { heroe: r.u64()?, casilla: r.u32()?, cantidad: r.u32()? },
+            228 => Comando::ForjarObjeto { heroe: r.u64()?, objeto: r.texto()? },
+            229 => Comando::UsarObjeto { heroe: r.u64()?, casilla: r.u32()?, escuadra: r.opt_u64()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -3295,9 +3338,9 @@ pub mod rechazos {
     /// La escuadra que dejaste de visita se recoge desde dentro de esa plaza.
     pub const GUARNICION_NO_ESTAS_DENTRO: &str = "guarnicion.no_estas_dentro";
     // El equipo, la mochila y el almacén de objetos del héroe (`ErrorEquipo` y `ErrorInventario` del crate `objetos`; Heroe_Y_Tropa §4.5).
-    /// `equipar_objeto` o `desequipar_objeto` fuera de una plaza, un pueblo o un campamento (D2): en una columna, en una avanzada o fuera del mundo.
+    /// `equipar_objeto`, `desequipar_objeto` o `usar_objeto` fuera de una plaza, un pueblo o un campamento (D2): en una columna, en una avanzada o fuera del mundo.
     pub const EQUIPO_FUERA_DE_LUGAR: &str = "equipo.fuera_de_lugar";
-    /// `equipar_objeto` o `desequipar_objeto` con una escuadra del héroe reservada para una batalla (D2).
+    /// `equipar_objeto`, `desequipar_objeto` o `usar_objeto` con una escuadra del héroe reservada para una batalla (D2).
     pub const EQUIPO_EN_BATALLA: &str = "equipo.en_batalla";
     /// La pieza no está en el catálogo `OBJETOS`.
     pub const OBJETO_DESCONOCIDO: &str = "objeto.desconocido";
@@ -3321,6 +3364,29 @@ pub mod rechazos {
     pub const INVENTARIO_POCA_CANTIDAD: &str = "inventario.poca_cantidad";
     /// Una cantidad de 0, o una pila que pasaría del máximo.
     pub const INVENTARIO_CANTIDAD_INVALIDA: &str = "inventario.cantidad_invalida";
+    // La Armería y los consumibles: comprar, vender, forjar y usar un objeto (`ErrorTienda`, `ErrorForja` y `ErrorUso` del crate `objetos`; Heroe_Y_Tropa §4.6).
+    /// `comprar_objeto` o `vender_objeto` sin estar dentro de una plaza con la Armería activa, o `forjar_objeto` sin ella en la plaza donde reside (D1).
+    pub const ARMERIA_SIN_ARMERIA: &str = "armeria.sin_armeria";
+    /// `comprar_objeto`: la tienda no lo vende (no es arma, armadura ni montura, o pasa de `tiendaHastaTier`; Catalogo_De_Objetos §6).
+    pub const ARMERIA_NO_SE_VENDE: &str = "armeria.no_se_vende";
+    /// `comprar_objeto` o `forjar_objeto`: la Facción de la plaza no tiene la tecnología de su metal (D1).
+    pub const ARMERIA_SIN_TECNOLOGIA: &str = "armeria.sin_tecnologia";
+    /// `forjar_objeto` fuera de la plaza donde reside el héroe, que es donde forja (D1).
+    pub const FORJA_FUERA_DE_TU_RESIDENCIA: &str = "forja.fuera_de_tu_residencia";
+    /// `forjar_objeto`: no tiene receta (no es arma ni armadura, o es de tier I; Catalogo_De_Objetos §6b).
+    pub const FORJA_SIN_RECETA: &str = "forja.sin_receta";
+    /// `forjar_objeto`: no hay en la mochila un plano de su tier.
+    pub const FORJA_SIN_PLANO: &str = "forja.sin_plano";
+    /// `forjar_objeto`: no hay en la mochila los crisoles de su tier.
+    pub const FORJA_SIN_CRISOLES: &str = "forja.sin_crisoles";
+    /// `forjar_objeto`: el almacén personal no tiene los materiales de la receta.
+    pub const FORJA_SIN_MATERIALES: &str = "forja.sin_materiales";
+    /// `usar_objeto`: no es un consumible.
+    pub const OBJETO_NO_SE_USA: &str = "objeto.no_se_usa";
+    /// `usar_objeto`: una medalla de tropa sobre tropa prestada, que no es del héroe (Catalogo_De_Objetos §3.3).
+    pub const ESCUADRA_PRESTADA: &str = "escuadra.prestada";
+    /// `usar_objeto`: una medalla de tropa sobre una escuadra que ya está en `nivelMaximoEscuadra`.
+    pub const ESCUADRA_NIVEL_MAXIMO: &str = "escuadra.nivel_maximo";
     // Presencia: dónde está el héroe y si está en el mundo.
     pub const HEROE_FUERA_DEL_MUNDO: &str = "heroe.fuera_del_mundo";
     pub const HEROE_DESCONECTANDOSE: &str = "heroe.desconectandose";
@@ -4058,6 +4124,11 @@ mod pruebas {
             Comando::DesequiparObjeto { heroe: 2, hueco: Hueco::Montura },
             Comando::GuardarObjeto { heroe: 2, casilla: 3, cantidad: 7 },
             Comando::SacarObjeto { heroe: 2, casilla: 143, cantidad: 1 },
+            Comando::ComprarObjeto { heroe: 2, objeto: "dagas_cobre".into() },
+            Comando::VenderObjeto { heroe: 2, casilla: 4, cantidad: 3 },
+            Comando::ForjarObjeto { heroe: 2, objeto: "torso_pesada_bronce".into() },
+            Comando::UsarObjeto { heroe: 2, casilla: 0, escuadra: Some(5) },
+            Comando::UsarObjeto { heroe: 2, casilla: 1, escuadra: None },
             Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["arco_compuesto".into(), "leva_comunal".into()] },
             Comando::FijarFaccionDeHeroe { heroe: 2, faccion: Some(3) },
             Comando::FijarFaccionDeHeroe { heroe: 2, faccion: None },

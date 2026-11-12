@@ -667,6 +667,31 @@ message OrdenSacarObjeto {
   uint32 cantidad = 2;
 }
 
+// 2026-11-12 (D1, Catalogo_De_Objetos §6): el héroe de la cuenta compra, con sus monedas, una pieza del catálogo `OBJETOS` (su id) en la Armería de la plaza donde está
+// dentro; llega a su mochila al 100 %. Solo armas, armaduras y monturas hasta `tiendaHastaTier`, con el metal abierto por la tecnología de la Facción de la plaza.
+message OrdenComprarObjeto {
+  string objeto = 1;
+}
+
+// 2026-11-12 (D1 y D18): el héroe de la cuenta vende `cantidad` de la casilla `casilla` de su mochila a la Armería de la plaza donde está dentro, a `ventaPct` de la ficha.
+message OrdenVenderObjeto {
+  uint32 casilla = 1;
+  uint32 cantidad = 2;
+}
+
+// 2026-11-12 (D1, Catalogo_De_Objetos §6b): el héroe de la cuenta forja una pieza (id de `OBJETOS`, tiers II a V) en la Armería de la plaza donde reside, estando dentro: el
+// plano y los crisoles salen de su mochila y los materiales de su almacén personal. La pieza nace con calidad del 90 al 110 % y su `item_instance_id` (`obj-N`).
+message OrdenForjarObjeto {
+  string objeto = 1;
+}
+
+// 2026-11-12 (D2, Catalogo_De_Objetos §3.3): el héroe de la cuenta usa el consumible de la casilla `casilla` de su mochila (una medalla o el cofre de monturas), dentro de
+// una plaza, un pueblo o un campamento. `escuadron_id`: la escuadra suya que recibe una medalla de tropa; las demás no lo miran.
+message OrdenUsarObjeto {
+  uint32 casilla = 1;
+  optional string escuadron_id = 2;
+}
+
 message OrdenOrganizarEjercito {
   string heroe_id = 1;
   string politica_de_union = 2;  // aceptar | preguntar
@@ -1414,5 +1439,9 @@ message Orden {
     OrdenDesequiparObjeto desequipar_objeto = 193;
     OrdenGuardarObjeto guardar_objeto = 194;
     OrdenSacarObjeto sacar_objeto = 195;
+    OrdenComprarObjeto comprar_objeto = 196;
+    OrdenVenderObjeto vender_objeto = 197;
+    OrdenForjarObjeto forjar_objeto = 198;
+    OrdenUsarObjeto usar_objeto = 199;
   }
 }

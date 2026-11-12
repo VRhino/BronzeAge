@@ -29,9 +29,9 @@ impl From<ErrorInventario> for ErrorForja {
 }
 
 /// `forjar` el objeto con el id propio `id`: gasta de la mochila el plano y los crisoles, tira la calidad en el rango de la receta (los dos extremos
-/// dentro) y mete la pieza con sus cifras multiplicadas. Devuelve los materiales que cobra el núcleo, por recurso y en unidades. Si algo se rechaza,
-/// no gasta nada ni tira el generador; los materiales los comprueba quien llama antes de llamar.
-pub fn forjar(mochila: &mut Inventario, cat: &Catalogo, objeto: &str, id: u64, rng: &mut Rng, adoptada: impl Fn(&str) -> bool) -> Result<Vec<(String, i64)>, ErrorForja> {
+/// dentro) y mete la pieza con sus cifras multiplicadas. Devuelve los materiales que cobra el núcleo, por recurso y en unidades, y la calidad que salió
+/// (en %, para el hecho `heroe.objeto_forjado`). Si algo se rechaza, no gasta nada ni tira el generador; los materiales los comprueba quien llama.
+pub fn forjar(mochila: &mut Inventario, cat: &Catalogo, objeto: &str, id: u64, rng: &mut Rng, adoptada: impl Fn(&str) -> bool) -> Result<(Vec<(String, i64)>, i64), ErrorForja> {
     let combate = cat.objetos.get(objeto).ok_or(ErrorForja::Desconocido)?.de_combate();
     let (combate, receta) = combate.and_then(|c| Some((c, c.forja.as_ref()?))).ok_or(ErrorForja::SinReceta)?;
     if combate.tecnologia.as_deref().is_some_and(|t| !adoptada(t)) {
@@ -47,7 +47,7 @@ pub fn forjar(mochila: &mut Inventario, cat: &Catalogo, objeto: &str, id: u64, r
     let calidad = min + r.por_debajo((max - min + 1) as u64) as i64;
     m.meter(cat, Pieza { objeto: objeto.to_owned(), forjada: Some(Forjada { id, cifras: combate.cifras.por_calidad(calidad) }) }, 1)?;
     (*mochila, *rng) = (m, r);
-    Ok(receta.materiales.clone())
+    Ok((receta.materiales.clone(), calidad))
 }
 
 #[cfg(test)]
@@ -72,10 +72,11 @@ mod pruebas {
         let cat = Catalogo::default();
         let mut m = mochila(&cat, &[("plano_4", 1), ("crisol", 6)]);
         let mut rng = Rng::nuevo(7);
-        let materiales = forjar(&mut m, &cat, "torso_pesada_bronce", 3, &mut rng, |t| t == "aleacion_bronce").unwrap();
+        let (materiales, salio) = forjar(&mut m, &cat, "torso_pesada_bronce", 3, &mut rng, |t| t == "aleacion_bronce").unwrap();
         assert_eq!(materiales, vec![("cueroCurtido".to_owned(), 4), ("lingoteBronce".to_owned(), 9)]);
         assert_eq!(m.casillas.iter().map(|(n, c)| (*n, c.pieza.objeto.as_str(), c.cantidad)).collect::<Vec<_>>(), vec![(0, "torso_pesada_bronce", 1), (1, "crisol", 2)], "el plano se gasta entero y la pieza ocupa su casilla");
         let calidad = 90 + Rng::nuevo(7).por_debajo(21) as i64;
+        assert_eq!(salio, calidad, "devuelve la calidad que tiró");
         let x = |v: i64| (v * calidad + 50) / 100;
         let esperada = Cifras::Armadura { atributos: Atributos { fuerza: x(1), destreza: 0, armadura: x(8), vitalidad: x(6) }, defensa: PorDano { perforante: x(14), cortante: x(14), contundente: x(8) }, salud: x(948) };
         assert_eq!(m.casillas[&0].pieza.forjada, Some(Forjada { id: 3, cifras: esperada }));

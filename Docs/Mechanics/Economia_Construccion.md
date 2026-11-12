@@ -439,6 +439,8 @@ O sea, la obra base ×2 para el nivel 2, ×4 para el 3, ×8 para el 4, salvo los
 
 **Talleres de fabricación de prueba (decisión del autor del 2026-11-04).** Mientras se hacen pruebas, la Fundición, la Curtiduría, la Armería, la Carpintería y la Gran Fundición levantan su nivel 1 en **5 minutos** (`tiempoConstruccionMinutos`; antes 720, y 2.880 la Gran Fundición), y como no tienen `obraMinutos` sus mejoras bajan en proporción: 10 minutos el nivel 2 y 20 el 3 (antes 1.440 y 2.880). Los cuarteles (Barracón, Galería de tiro, Caballerizas) no cambian. Se vuelve a las de antes cuando acaben las pruebas.
 
+> **La Armería también es la tienda y la forja del héroe (2026-11-12, D1).** Una Armería **activa** (cualquier nivel interno) deja al héroe que está dentro de la plaza comprar y vender objetos con sus monedas (`comprar_objeto`, `vender_objeto`) y, en la plaza donde reside, forjarlos con los materiales de su almacén personal (`forjar_objeto`). El metal lo abre la tecnología de la Facción de la plaza. No cambia nada de sus recetas, sus artesanos ni su producción. Reglas y rechazos en [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §4.6.
+
 **Cada tick** (`avanzarMejoras`), dos pasos *(en Rust, el primero ocurre en el instante de fin de la mejora y el segundo en el paso de minuto)*:
 
 1. **Terminar**: para cada edificio con `mejora` y `instante ≥ completaEn` → `aplicarMejoraTerminada`: si la huella cambia de tamaño (lo hacía la Granja, 2×2, 2×3, 4×3, 6×6, hasta que el 2026-11-11 dejó de tener niveles; hoy ningún edificio del catálogo cambia de huella, pero la regla sigue y se prueba con una Granja de cuatro niveles) se muda a un hueco con `reubicarPorTamano`;

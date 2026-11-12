@@ -50,6 +50,7 @@ use std::thread::JoinHandle;
 mod a_mano;
 mod aedas;
 mod alijos;
+mod armeria;
 mod auditoria;
 mod avanzadas;
 mod bandidos;
@@ -1325,6 +1326,11 @@ impl Nucleo {
             }
             Comando::EquiparObjeto { .. } | Comando::DesequiparObjeto { .. } | Comando::GuardarObjeto { .. } | Comando::SacarObjeto { .. } => {
                 if let Err(r) = self.ejecutar_equipo(t, p) {
+                    return r;
+                }
+            }
+            Comando::ComprarObjeto { .. } | Comando::VenderObjeto { .. } | Comando::ForjarObjeto { .. } | Comando::UsarObjeto { .. } => {
+                if let Err(r) = self.ejecutar_armeria(t, p) {
                     return r;
                 }
             }

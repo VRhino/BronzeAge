@@ -293,6 +293,41 @@ fn el_heroe_nace_con_su_clase_y_su_equipo_y_cambia_de_equipo_y_guarda_objetos_po
     assert_eq!(e.n.heroe(h).unwrap().heroe.mochila.casillas.values().map(|c| c.pieza.objeto.as_str()).collect::<Vec<_>>(), ["botas_media_inicio", "montura_tiro"]);
 }
 
+/// D1 y D2: las cuatro órdenes de la Armería y de los consumibles, de punta a punta, en una plaza con su Armería levantada. Ninguna orden da aún planos, crisoles ni consumibles
+/// (es el botín), así que la forja y usar llegan aquí hasta su primera regla; sus caminos buenos y cada rechazo, en `nucleo::armeria`.
+#[test]
+fn en_la_armeria_se_compra_se_vende_se_forja_y_se_usa_por_orden() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let a = e.a;
+    let h = e.heroe_en_la_plaza("ana");
+    let comprar = |objeto: &str| Comando::ComprarObjeto { heroe: h, objeto: objeto.into() };
+    assert_eq!(e.rechazada("ana", comprar("montura_estepa")), rechazos::ARMERIA_SIN_ARMERIA, "aún no hay Armería");
+    e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: a, nivel: 2 });
+    e.dar(a, Madera, 1_000_000);
+    e.dar(a, Piedra, 1_000_000);
+    e.ok("admin", Comando::AnadirEdificio { asentamiento: a, tipo: asentamiento::catalogo::Tipo::Armeria });
+    let activa = |e: &Escenario| e.n.economia(a).unwrap().edificios.iter().any(|x| x.tipo == asentamiento::catalogo::Tipo::Armeria && x.activo());
+    for _ in 0..80 {
+        if activa(&e) {
+            break;
+        }
+        e.avanzar(HORA);
+    }
+    assert!(activa(&e), "la Armería acaba por levantarse");
+    e.ok("ana", comprar("montura_estepa"));
+    assert_eq!(e.n.heroe(h).unwrap().heroe.monedas, 1_500 - 600);
+    e.ok("ana", Comando::VenderObjeto { heroe: h, casilla: 0, cantidad: 1 });
+    assert_eq!(e.n.heroe(h).unwrap().heroe.monedas, 1_500 - 600 + 300, "a la mitad");
+    assert_eq!((hechos(&e.n, "heroe.objeto_comprado").len(), hechos(&e.n, "heroe.objeto_vendido").len()), (1, 1));
+    assert_eq!(e.rechazada("ana", Comando::ForjarObjeto { heroe: h, objeto: "dagas_cobre".into() }), rechazos::ARMERIA_SIN_TECNOLOGIA);
+    e.ok("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["metalurgia_cobre".into()] });
+    assert_eq!(e.rechazada("ana", Comando::ForjarObjeto { heroe: h, objeto: "dagas_cobre".into() }), rechazos::FORJA_SIN_PLANO);
+    e.ok("ana", Comando::DesequiparObjeto { heroe: h, hueco: objetos::datos::Hueco::Montura });
+    assert_eq!(e.rechazada("ana", Comando::UsarObjeto { heroe: h, casilla: 0, escuadra: None }), rechazos::OBJETO_NO_SE_USA, "la montura no se usa: se equipa");
+    assert_eq!(e.rechazada("ana", Comando::UsarObjeto { heroe: h, casilla: 1, escuadra: None }), rechazos::INVENTARIO_CASILLA_VACIA);
+}
+
 // ───────────────────────────── 2. Reclutar en una plaza ─────────────────────────────
 
 #[test]

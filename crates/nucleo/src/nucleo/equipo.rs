@@ -13,7 +13,7 @@ use objetos::equipo::ErrorEquipo;
 use objetos::inventario::ErrorInventario;
 
 /// El rechazo de una regla de la mochila o del almacén de objetos; `lleno` es el del inventario al que iba la pieza.
-fn rechazo_de_inventario(e: ErrorInventario, lleno: &'static str) -> (&'static str, &'static str) {
+pub(super) fn rechazo_de_inventario(e: ErrorInventario, lleno: &'static str) -> (&'static str, &'static str) {
     use rechazos::*;
     match e {
         ErrorInventario::Cantidad => (INVENTARIO_CANTIDAD_INVALIDA, "la cantidad es 0 o la pila pasaría del máximo"),
@@ -23,6 +23,9 @@ fn rechazo_de_inventario(e: ErrorInventario, lleno: &'static str) -> (&'static s
         ErrorInventario::PocaCantidad => (INVENTARIO_POCA_CANTIDAD, "la casilla tiene menos de lo que pides"),
     }
 }
+
+/// Guardar y sacar fuera de la residencia, donde está el almacén de objetos (D22).
+const FUERA_DEL_ALMACEN: (&str, &str) = (rechazos::ALMACEN_OBJETOS_FUERA_DE_TU_RESIDENCIA, "el almacén de objetos está en tu residencia: hay que estar dentro");
 
 fn rechazo_de_equipo(e: ErrorEquipo) -> (&'static str, &'static str) {
     use rechazos::*;
@@ -56,12 +59,12 @@ impl Nucleo {
                 self.emitir_propio(t, "heroe.equipo_cambiado", vec![], vec![("heroe", *heroe as i64)]);
             }
             Comando::GuardarObjeto { heroe, casilla, cantidad } => {
-                self.exigir_dentro_de_su_residencia(p, *heroe)?;
+                self.exigir_dentro_de_su_residencia(p, *heroe, FUERA_DEL_ALMACEN)?;
                 let h = &mut self.heroe_mut(*heroe).heroe;
                 h.mochila.pasar(&mut h.almacen_objetos, &mr.objetos, *casilla, *cantidad).map_err(|e| rechazo(rechazo_de_inventario(e, rechazos::ALMACEN_OBJETOS_LLENO)))?;
             }
             Comando::SacarObjeto { heroe, casilla, cantidad } => {
-                self.exigir_dentro_de_su_residencia(p, *heroe)?;
+                self.exigir_dentro_de_su_residencia(p, *heroe, FUERA_DEL_ALMACEN)?;
                 let h = &mut self.heroe_mut(*heroe).heroe;
                 h.almacen_objetos.pasar(&mut h.mochila, &mr.objetos, *casilla, *cantidad).map_err(|e| rechazo(rechazo_de_inventario(e, rechazos::MOCHILA_LLENA)))?;
             }
@@ -71,7 +74,7 @@ impl Nucleo {
     }
 
     /// D2: dentro de una plaza, un pueblo o un campamento, y sin ninguna escuadra reservada para una batalla.
-    fn exigir_lugar_de_equipar(&self, p: &Peticion, heroe: u64) -> Result<(), Respuesta> {
+    pub(super) fn exigir_lugar_de_equipar(&self, p: &Peticion, heroe: u64) -> Result<(), Respuesta> {
         self.autorizar_heroe(p, heroe, false)?;
         let (v, h) = (self.estado.version, &self.heroe(heroe).expect("existe").heroe);
         match h.presencia.ubicacion {
@@ -86,19 +89,20 @@ impl Nucleo {
         Ok(())
     }
 
-    /// D22: el almacén de objetos está en su residencia, y solo se usa estando dentro de ella (la plaza o el campamento donde reside).
-    fn exigir_dentro_de_su_residencia(&self, p: &Peticion, heroe: u64) -> Result<(), Respuesta> {
+    /// D22: el almacén de objetos está en su residencia, y solo se usa estando dentro de ella (la plaza o el campamento donde reside); la forja, también (D1). `fuera` es el
+    /// rechazo de estar fuera de ella. Devuelve la residencia.
+    pub(super) fn exigir_dentro_de_su_residencia(&self, p: &Peticion, heroe: u64, fuera: (&'static str, &'static str)) -> Result<Residencia, Respuesta> {
         self.autorizar_heroe(p, heroe, false)?;
         let (v, h) = (self.estado.version, &self.heroe(heroe).expect("existe").heroe);
-        let dentro = match h.residencia {
-            Some(Residencia::Asentamiento(a)) => h.presencia.ubicacion == Ubicacion::Asentamiento(a),
-            Some(Residencia::Campamento(c)) => h.presencia.ubicacion == Ubicacion::Mercenarios(c),
-            None => return Err(Respuesta::rechazo(rechazos::HEROE_SIN_RESIDENCIA, "sin residencia no hay almacén de objetos", v)),
+        let Some(residencia) = h.residencia else { return Err(Respuesta::rechazo(rechazos::HEROE_SIN_RESIDENCIA, "no tienes residencia", v)) };
+        let dentro = match residencia {
+            Residencia::Asentamiento(a) => h.presencia.ubicacion == Ubicacion::Asentamiento(a),
+            Residencia::Campamento(c) => h.presencia.ubicacion == Ubicacion::Mercenarios(c),
         };
         if !dentro {
-            return Err(Respuesta::rechazo(rechazos::ALMACEN_OBJETOS_FUERA_DE_TU_RESIDENCIA, "el almacén de objetos está en tu residencia: hay que estar dentro", v));
+            return Err(Respuesta::rechazo(fuera.0, fuera.1, v));
         }
-        Ok(())
+        Ok(residencia)
     }
 }
 

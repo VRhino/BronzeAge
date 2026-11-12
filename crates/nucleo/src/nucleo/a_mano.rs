@@ -24,7 +24,7 @@ use militar::heroe::Residencia;
 use militar::presencia::Ubicacion;
 
 /// Quita `n` de `r` de la carga, borrando la línea que queda a cero.
-fn quitar(carga: &mut Mercancia, r: Recurso, n: Mil) {
+pub(super) fn quitar(carga: &mut Mercancia, r: Recurso, n: Mil) {
     if let Some(x) = carga.get_mut(&r) {
         *x -= n;
         if *x <= 0 {
