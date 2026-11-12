@@ -118,6 +118,28 @@ impl Inventario {
     }
 }
 
+/// Adónde fue a parar lo que llega sin pedirlo, con [`entregar`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Destino {
+    Mochila,
+    Almacen,
+    Perdido,
+}
+
+/// Lo que llega sin pedirlo (el botín, una misión, la montura de un cofre; D17 y D22): a la mochila y, si no cabe, al almacén de objetos, aunque el
+/// héroe esté fuera; si tampoco cabe allí, se pierde. Cualquier otro error de [`Inventario::meter`] (un objeto desconocido o una cantidad rara) no
+/// mete nada y se devuelve.
+pub fn entregar(mochila: &mut Inventario, almacen: &mut Inventario, cat: &Catalogo, pieza: Pieza, cantidad: u32) -> Result<Destino, ErrorInventario> {
+    match mochila.meter(cat, pieza.clone(), cantidad) {
+        Err(ErrorInventario::NoCabe) => {}
+        r => return r.map(|()| Destino::Mochila),
+    }
+    match almacen.meter(cat, pieza, cantidad) {
+        Err(ErrorInventario::NoCabe) => Ok(Destino::Perdido),
+        r => r.map(|()| Destino::Almacen),
+    }
+}
+
 #[cfg(test)]
 mod pruebas {
     use super::*;
@@ -200,5 +222,19 @@ mod pruebas {
         assert_eq!(mochila.pasar(&mut almacen, &cat, 0, 1), Err(ErrorInventario::SinCasilla));
         assert_eq!(mochila.pasar(&mut almacen, &cat, 1, 2), Err(ErrorInventario::PocaCantidad));
         assert_eq!((mochila, almacen), antes, "un rechazo no mueve nada");
+    }
+
+    #[test]
+    fn entregar_va_a_la_mochila_luego_al_almacen_y_si_no_se_pierde() {
+        let cat = Catalogo::default();
+        let (mut mochila, mut almacen) = (Inventario::vacio(1), Inventario::vacio(1));
+        let mut dar = |objeto: &str, cantidad| entregar(&mut mochila, &mut almacen, &cat, Pieza::del_catalogo(objeto), cantidad);
+        assert_eq!(dar("crisol", 2), Ok(Destino::Mochila));
+        assert_eq!(dar("crisol", 1), Ok(Destino::Mochila), "a su pila");
+        assert_eq!(dar("plano_2", 1), Ok(Destino::Almacen), "la mochila está llena");
+        assert_eq!(dar("plano_3", 1), Ok(Destino::Perdido), "los dos están llenos");
+        assert_eq!(dar("crisol", 0), Err(ErrorInventario::Cantidad));
+        assert_eq!(dar("espada_de_madera", 1), Err(ErrorInventario::Desconocido));
+        assert_eq!((mochila.casillas[&0].cantidad, almacen.casillas[&0].pieza.objeto.as_str()), (3, "plano_2"));
     }
 }

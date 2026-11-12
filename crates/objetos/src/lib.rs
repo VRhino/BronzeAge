@@ -5,9 +5,9 @@
 //! comprueba dónde está y llama a estas funciones. El azar es solo el `base::Rng` que pasa quien llama (la calidad de la forja, el cofre y el botín);
 //! si una tecnología está adoptada se lo dice quien llama con una función.
 //!
-//! Módulos: `datos` (el catálogo: fichas, clases y tablas de botín, comprobados al cargar), `inventario` (la mochila y el almacén: meter y sacar),
-//! `equipo` (los siete huecos, la clase del arma, los atributos, el equipo inicial, equipar y quitar), `tienda` (comprar y vender), `forja`,
-//! `consumible` (usar uno) y `botin` (tirar una tabla).
+//! Módulos: `datos` (el catálogo: fichas, clases y tablas de botín, comprobados al cargar), `inventario` (la mochila y el almacén: meter, sacar,
+//! pasar y entregar lo que llega sin pedirlo), `equipo` (los siete huecos, la clase del arma, los atributos, el equipo inicial, equipar y quitar),
+//! `tienda` (comprar y vender), `forja`, `consumible` (usar uno) y `botin` (tirar una tabla).
 
 pub mod botin;
 pub mod consumible;
@@ -19,4 +19,4 @@ pub mod tienda;
 
 pub use datos::Catalogo;
 pub use equipo::Equipo;
-pub use inventario::{Inventario, Pieza};
+pub use inventario::{entregar, Destino, Inventario, Pieza};
