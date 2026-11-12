@@ -12,7 +12,7 @@ Conquest tiene dos papeles:
 **Cómo leer Conquest:** por su código (`Assets/Scripts/` y los `.asset`), no por su GDD ni su TDD, que están muy desactualizados.
 
 **Qué indica cada estado:**
-- **Listo en el motor:** el motor ya lo publica, así que Conquest puede empezar. Lleva el commit: los de la tanda de objetos, clases, cifras, progresión y Eras IV-V (2026-11-12) están en la rama `claude/project-thread-h9ahf4` (hasta `0c105c6`) y pasan a `main` con ella.
+- **Listo en el motor:** el motor ya lo publica, así que Conquest puede empezar. Lleva el commit: los de la tanda de objetos, clases, cifras, progresión y Eras IV-V (2026-11-12) están en `main` desde los PR #22 y #23 (merge `c82d6ed`).
 - **Espera al motor:** está diseñado, pero el motor aún no lo publica. Lleva el número de su entrada en `Docs/Mecanicas a desarrollar.md`.
 - **Espera una decisión:** falta que el autor lo cierre.
 

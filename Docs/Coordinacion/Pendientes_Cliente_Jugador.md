@@ -6,7 +6,13 @@ Los cambios del motor que el cliente jugador (BronzeAgeClient) tiene que recoger
 
 ## Pendiente
 
-### Objetos, clases, cifras, progresión y Eras IV-V (2026-11-12, rama `claude/project-thread-h9ahf4`, sin PR todavía)
+Nada todavía.
+
+## Ya pasado
+
+**Pasado al cliente jugador el 2026-11-12** (motor en main c82d6ed), por decisión del autor: las tres entradas que siguen.
+
+### Objetos, clases, cifras, progresión y Eras IV-V (2026-11-12, PR #22 y #23, main c82d6ed)
 
 Partida nueva: la foto pasa a `BAN63`.
 
@@ -148,7 +154,3 @@ Sin cambios en el contrato ni partida nueva: cambia lo que el motor manda y lo q
 2. **La columna que funda entra en su plaza.** Al fundar, la columna ya no se queda fuera: una columna de un solo héroe entra como con `entrarEnAsentamiento`, y un ejército se desarma y cada héroe entra como lo haría solo. Cada entrada emite `jugador.entra_en_asentamiento`. Qué haría el cliente: tras `fundar`, llevar al jugador al interior de la plaza nueva en lugar de dejarlo en el mapa. Referencia: Fundacion_Y_Refundacion §5.
 3. **Escolta del carro de acarreo.** El carro de acarreo admite **100** de escolta si la plaza madre no tiene Mercado (con Mercado, el cupo de su nivel); antes el motor daba 0. Qué haría el cliente: si calcula el cupo de escolta por su cuenta, dar 100 sin Mercado. Referencia: Comercio_Caravanas, el carro de acarreo («Batalla» y «Escolta»).
 4. **Recetas con requisito de edificio.** Una receta con `requiereEdificio` (en `GET /v1/datos`, catálogo de Economia_Construccion) no se fabrica si la plaza no tiene ese edificio activo con ese nivel; hoy, el Arma de Hierro de Calidad pide una Fundición de nivel 3. Qué haría el cliente: en el taller, decir qué edificio le falta a esa receta. Referencia: Economia_Construccion §5.3.
-
-## Ya pasado
-
-Nada todavía.
