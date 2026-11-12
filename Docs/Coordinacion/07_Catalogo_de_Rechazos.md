@@ -353,7 +353,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `heroe.nombre_en_uso` | `HEROE_NOMBRE_EN_USO` | Ya hay otro héroe con ese nombre (sin distinguir mayúsculas; 2026-11-06, pedido del autor). |
 | `heroe.sin_monedas` | `HEROE_SIN_MONEDAS` | El héroe no tiene las monedas que cuesta (tanda 69 §4). |
 | `heroe.campamento_desconocido` | `HEROE_CAMPAMENTO_DESCONOCIDO` | — |
-| `heroe.clase_desconocida` | `HEROE_CLASE_DESCONOCIDA` | `crear_heroe`: la clase está vacía o no es una de `CLASES_HEROE` (Clases_De_Heroe §6). |
+| `heroe.clase_desconocida` | `HEROE_CLASE_DESCONOCIDA` | `crear_heroe`: la clase está vacía o no es una de `CLASES_HEROE` (Heroe_Y_Tropa §3). |
 | `heroe.puntos_negativos` | `HEROE_PUNTOS_NEGATIVOS` | — |
 | `heroe.ningun_punto` | `HEROE_NINGUN_PUNTO` | — |
 | `heroe.puntos_insuficientes` | `HEROE_PUNTOS_INSUFICIENTES` | — |
@@ -385,7 +385,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `equipo.en_batalla` | `EQUIPO_EN_BATALLA` | `equipar_objeto`, `desequipar_objeto` o `usar_objeto` con una escuadra del héroe reservada para una batalla (D2). |
 | `objeto.desconocido` | `OBJETO_DESCONOCIDO` | La pieza no está en el catálogo `OBJETOS`. |
 | `equipo.no_equipable` | `EQUIPO_NO_EQUIPABLE` | Un material o un consumible: no va en ningún hueco. |
-| `equipo.incompatible` | `EQUIPO_INCOMPATIBLE` | La clase del arma puesta no admite el peso de esa armadura (Clases_De_Heroe §4). |
+| `equipo.incompatible` | `EQUIPO_INCOMPATIBLE` | La clase del arma puesta no admite el peso de esa armadura (Objetos_Del_Heroe §3.2). |
 | `equipo.arma_fija` | `EQUIPO_ARMA_FIJA` | El arma no se quita: solo se cambia por otra. |
 | `equipo.hueco_vacio` | `EQUIPO_HUECO_VACIO` | No hay nada puesto en ese hueco. |
 | `mochila.llena` | `MOCHILA_LLENA` | Lo que va a la mochila no cabe en ella (D17): no cambia nada. |
@@ -400,15 +400,15 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | Código | Constante | Qué dice |
 |---|---|---|
 | `armeria.sin_armeria` | `ARMERIA_SIN_ARMERIA` | `comprar_objeto` o `vender_objeto` sin estar dentro de una plaza con la Armería activa, o `forjar_objeto` sin ella en la plaza donde reside (D1). |
-| `armeria.no_se_vende` | `ARMERIA_NO_SE_VENDE` | `comprar_objeto`: la tienda no lo vende (no es arma, armadura ni montura, o pasa de `tiendaHastaTier`; Catalogo_De_Objetos §6). |
+| `armeria.no_se_vende` | `ARMERIA_NO_SE_VENDE` | `comprar_objeto`: la tienda no lo vende (no es arma, armadura ni montura, o pasa de `tiendaHastaTier`; Objetos_Del_Heroe §3.3). |
 | `armeria.sin_tecnologia` | `ARMERIA_SIN_TECNOLOGIA` | `comprar_objeto` o `forjar_objeto`: la Facción de la plaza no tiene la tecnología de su metal (D1). |
 | `forja.fuera_de_tu_residencia` | `FORJA_FUERA_DE_TU_RESIDENCIA` | `forjar_objeto` fuera de la plaza donde reside el héroe, que es donde forja (D1). |
-| `forja.sin_receta` | `FORJA_SIN_RECETA` | `forjar_objeto`: no tiene receta (no es arma ni armadura, o es de tier I; Catalogo_De_Objetos §6b). |
+| `forja.sin_receta` | `FORJA_SIN_RECETA` | `forjar_objeto`: no tiene receta (no es arma ni armadura, o es de tier I; Objetos_Del_Heroe §3.4). |
 | `forja.sin_plano` | `FORJA_SIN_PLANO` | `forjar_objeto`: no hay en la mochila un plano de su tier. |
 | `forja.sin_crisoles` | `FORJA_SIN_CRISOLES` | `forjar_objeto`: no hay en la mochila los crisoles de su tier. |
 | `forja.sin_materiales` | `FORJA_SIN_MATERIALES` | `forjar_objeto`: el almacén personal no tiene los materiales de la receta. |
 | `objeto.no_se_usa` | `OBJETO_NO_SE_USA` | `usar_objeto`: no es un consumible. |
-| `escuadra.prestada` | `ESCUADRA_PRESTADA` | `usar_objeto`: una medalla de tropa sobre tropa prestada, que no es del héroe (Catalogo_De_Objetos §3.3). |
+| `escuadra.prestada` | `ESCUADRA_PRESTADA` | `usar_objeto`: una medalla de tropa sobre tropa prestada, que no es del héroe (Objetos_Del_Heroe §3.5). |
 | `escuadra.nivel_maximo` | `ESCUADRA_NIVEL_MAXIMO` | `usar_objeto`: una medalla de tropa sobre una escuadra que ya está en `nivelMaximoEscuadra`. |
 
 ### Presencia: dónde está el héroe y si está en el mundo

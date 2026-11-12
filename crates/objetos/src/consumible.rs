@@ -1,4 +1,4 @@
-//! Usar un consumible de la mochila (`usar_objeto`, Catalogo_De_Objetos §3.3): gasta uno y devuelve su efecto, que aplica quien llama. Dónde se puede
+//! Usar un consumible de la mochila (`usar_objeto`, Objetos_Del_Heroe §3.5): gasta uno y devuelve su efecto, que aplica quien llama. Dónde se puede
 //! usar (D2) y si el efecto cabe (una escuadra en el nivel máximo no puede usar una medalla de tropa) lo comprueba quien llama antes.
 
 use crate::botin::uno_de;

@@ -1,4 +1,4 @@
-//! El equipo del héroe: siete huecos, con el arma siempre puesta (Clases_De_Heroe §4). El arma define la clase, y la clase, los atributos base y los
+//! El equipo del héroe: siete huecos, con el arma siempre puesta (Objetos_Del_Heroe §3.2). El arma define la clase, y la clase, los atributos base y los
 //! pesos de armadura que admite. Equipar y quitar trabajan sobre la mochila y no cambian nada si se rechazan (D17: con la mochila llena, antes de
 //! mover nada). Dónde se puede equipar (D2) lo comprueba quien llama.
 
@@ -20,7 +20,7 @@ pub struct Equipo {
 pub enum ErrorEquipo {
     /// Al sacar de la mochila o al meter en ella lo que se quita (`NoCabe`: mochila llena).
     Inventario(ErrorInventario),
-    /// La clase no existe (`heroe.clase_desconocida`, Clases_De_Heroe §6).
+    /// La clase no existe (`heroe.clase_desconocida`, Heroe_Y_Tropa §3).
     ClaseDesconocida,
     /// La pieza (la de la casilla o una puesta) no está en el catálogo.
     Desconocido,
@@ -41,12 +41,12 @@ impl From<ErrorInventario> for ErrorEquipo {
 }
 
 impl Equipo {
-    /// El equipo con el que nace un héroe de esa clase (Clases_De_Heroe §6): el arma de inicio, el juego de inicio de su peso sin casco y la montura de tier I.
+    /// El equipo con el que nace un héroe de esa clase (Objetos_Del_Heroe §3.2): el arma de inicio, el juego de inicio de su peso sin casco y la montura de tier I.
     pub fn inicial(cat: &Catalogo, clase: &str) -> Result<Equipo, ErrorEquipo> {
         cat.clases.get(clase).map(|c| c.inicial.clone()).ok_or(ErrorEquipo::ClaseDesconocida)
     }
 
-    /// La clase del héroe: la del arma puesta (`claseDe`, Clases_De_Heroe §4).
+    /// La clase del héroe: la del arma puesta (`claseDe`, Objetos_Del_Heroe §3.2).
     pub fn clase<'a>(&self, cat: &'a Catalogo) -> Result<&'a str, ErrorEquipo> {
         match cat.objetos.get(&self.arma.objeto).map(|f| &f.tipo) {
             Some(Tipo::Arma { clase, .. }) => Ok(clase),
@@ -59,7 +59,7 @@ impl Equipo {
         Ok(cat.clases.get(id).expect("toda arma nombra una clase que existe (comprobado al cargar)"))
     }
 
-    /// Los atributos del héroe (Clases_De_Heroe §5): la base de la clase del arma más los puntos repartidos.
+    /// Los atributos del héroe (Objetos_Del_Heroe §3.2): la base de la clase del arma más los puntos repartidos.
     pub fn atributos(&self, cat: &Catalogo, puntos: Atributos) -> Result<Atributos, ErrorEquipo> {
         Ok(self.ficha_de_clase(cat)?.atributos_base.mas(puntos))
     }
@@ -77,7 +77,7 @@ impl Equipo {
         }
     }
 
-    /// `equipar` desde la casilla `casilla` de la mochila (Clases_De_Heroe §4). Lo que estaba en el hueco va a la mochila. Un arma cambia la clase: las
+    /// `equipar` desde la casilla `casilla` de la mochila (Objetos_Del_Heroe §3.2). Lo que estaba en el hueco va a la mochila. Un arma cambia la clase: las
     /// armaduras puestas cuyo peso no admite la nueva van a la mochila. Una armadura se rechaza si la clase del arma puesta no admite su peso.
     pub fn equipar(&mut self, mochila: &mut Inventario, cat: &Catalogo, casilla: u32) -> Result<(), ErrorEquipo> {
         let (mut e, mut m) = (self.clone(), mochila.clone());
@@ -121,7 +121,7 @@ impl Equipo {
         Ok(())
     }
 
-    /// `desequipar`: lo puesto en ese hueco va a la mochila. El arma no se quita (Clases_De_Heroe §4).
+    /// `desequipar`: lo puesto en ese hueco va a la mochila. El arma no se quita (Objetos_Del_Heroe §3.2).
     pub fn quitar(&mut self, mochila: &mut Inventario, cat: &Catalogo, hueco: Hueco) -> Result<(), ErrorEquipo> {
         let r = self.ranura(hueco).ok_or(ErrorEquipo::ArmaFija)?;
         let p = r.as_ref().ok_or(ErrorEquipo::HuecoVacio)?;

@@ -441,7 +441,7 @@ mod pruebas {
         // Bebidas: una en los niveles 3 y 4, las dos en el 5; un nivel por debajo del primero usa el primero.
         assert_eq!([1, 2, 3, 4, 5].map(|n| bodega.recetas_distintas(n)), [1, 1, 1, 1, 2]);
         assert_eq!([1, 4, 5].map(|n| prensa.recetas_distintas(n)), [1, 1, 1], "el aceite, de una sola fuente");
-        // Las recetas: vino de uva y cerveza de cebada; aceite (de oliva) de aceituna y aceite de sésamo de sésamo (Eras_IV_Y_V §2b, dos bienes).
+        // Las recetas: vino de uva y cerveza de cebada; aceite (de oliva) de aceituna y aceite de sésamo de sésamo (Economia_Construccion §5.3, dos bienes).
         let recetas = |tipo: Tipo| r.catalogo.tipo(tipo).nivel(1).unwrap().recetas.iter().map(|rc| (rc.produce, rc.consume_por_unidad.clone())).collect::<Vec<_>>();
         assert_eq!(recetas(Tipo::Bodega), vec![(Recurso::Vino, vec![(Recurso::Uva, 2_000)]), (Recurso::Cerveza, vec![(Recurso::Cebada, 2_000)])]);
         assert_eq!(recetas(Tipo::Prensa), vec![(Recurso::Aceite, vec![(Recurso::Aceituna, 2_000)]), (Recurso::AceiteSesamo, vec![(Recurso::Sesamo, 2_000)])]);

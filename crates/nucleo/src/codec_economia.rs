@@ -541,7 +541,7 @@ mod pruebas {
 
     #[test]
     fn el_aceite_de_sesamo_el_recurso_42_entra_en_la_foto_al_escribir_y_al_leer() {
-        // Eras_IV_Y_V §2b: el último recurso del almacén y de la lista de consumo pausado.
+        // Economia_Construccion §2: el último recurso del almacén y de la lista de consumo pausado.
         let r = asentamiento::Reglas::cargar();
         let mut a = Asentamiento::fundar(&r, 0, &[(Recurso::AceiteSesamo, 300_000)], 3);
         a.consumo_pausado = vec![Recurso::AceiteSesamo];

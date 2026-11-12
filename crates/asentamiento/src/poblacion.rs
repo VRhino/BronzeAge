@@ -459,7 +459,7 @@ mod pruebas {
 
     #[test]
     fn la_nobleza_come_aceite_de_sesamo_a_una_centesima_por_cabeza_y_la_racion_entera_multiplica_1_25() {
-        // Eras_IV_Y_V §2b y D9: como la cerveza junto al vino.
+        // Economia_Construccion §9.2 y D9: como la cerveza junto al vino.
         let r = Reglas::cargar().poblacion;
         assert_eq!(bien(&r, Recurso::AceiteSesamo), (10_000, 1_250_000), "ración 0,01 y modificador 1,25 (BIENES_DE_CONSUMO)");
         let mut p = con(0, 0, 100, 100_000);

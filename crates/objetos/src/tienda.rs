@@ -1,4 +1,4 @@
-//! La tienda de la Armería (D1): comprar y vender con las monedas del héroe (Catalogo_De_Objetos §6). Dónde se puede comprar y vender lo comprueba
+//! La tienda de la Armería (D1): comprar y vender con las monedas del héroe (Objetos_Del_Heroe §3.3). Dónde se puede comprar y vender lo comprueba
 //! quien llama; si una tecnología está adoptada por la Facción de la plaza, también (`adoptada`).
 
 use crate::datos::{Catalogo, Tipo};

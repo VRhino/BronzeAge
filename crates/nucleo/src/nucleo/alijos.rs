@@ -120,7 +120,7 @@ impl Nucleo {
         let valores = vec![("alijo", Dato::Texto(id)), ("recurso", Dato::Texto(recurso.nombre().into()))];
         // Solo lo oye quien lo abre (decisión del autor), no los demás de la columna aunque lo que trae vaya al carro común.
         self.tr.emitir(&self.estado, EventoNucleo { heroes: vec![heroe], valores, ..EventoNucleo::nuevo("alijo.abierto", t, datos) });
-        // Y la tabla de objetos del alijo, a la mochila de quien lo abre (Catalogo_De_Objetos §6b y Progresion_Tropas_Y_Heroe §5).
+        // Y la tabla de objetos del alijo, a la mochila de quien lo abre (Objetos_Del_Heroe §3.7).
         self.botin_de_objetos(t, heroe, Fuente::Alijo);
         // La misión cuenta para todos los de la columna, no solo para quien lo abre (decisión del autor, 2026-10-31).
         let todos = self.estado.ejercitos.get(&columna).map(Self::participantes_de).unwrap_or_else(|| vec![heroe]);

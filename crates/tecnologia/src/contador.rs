@@ -49,7 +49,7 @@ contadores! {
     ReclutadosArqueros = "reclutados.arqueros", ReclutadosCaballeria = "reclutados.caballeria",
     ReclutadosEscaramuzadores = "reclutados.escaramuzadores_jabalina", ReclutadosArquerosCompuesto = "reclutados.arqueros_compuesto",
     ReclutadosJinetesAsirios = "reclutados.jinetes_asirios", PlazasEnNivel2 = "plazasEnNivel.2", PlazasEnNivel3 = "plazasEnNivel.3",
-    // Eras IV y V (Eras_IV_Y_V §3, 2026-11-11).
+    // Eras IV y V (Tecnologia_Aedas §2.1, 2026-11-11).
     EscuadrasVeteranas = "escuadras.veteranas", BatallasConTresHeroes = "batallas.conTresHeroes", CaminosCompartidos = "caminos.compartidos",
     BatallasGanadasEnInferioridad = "batallas.ganadasEnInferioridad", EscuadrasEliteDestruidas = "escuadras.eliteDestruidas",
     BatallasCampoAbiertoConCaballeria = "batallas.campoAbiertoConCaballeria", BatallasArmasCombinadas = "batallas.armasCombinadas",
@@ -63,7 +63,7 @@ impl Contador {
     }
 
     /// `plazasEnNivel.N` es un récord (el máximo de plazas a la vez con nivel actual ≥ N), no una suma (TA §2.1, §13); `caminos.compartidos` también: 0 o 1, a 1 cuando se
-    /// abre el primer camino compartido (Eras_IV_Y_V §3).
+    /// abre el primer camino compartido (Tecnologia_Aedas §2.1).
     pub fn es_record(self) -> bool {
         matches!(self, Contador::PlazasEnNivel2 | Contador::PlazasEnNivel3 | Contador::CaminosCompartidos)
     }
@@ -129,7 +129,7 @@ pub fn de_extraccion(r: Recurso) -> Option<Contador> {
 }
 
 /// `fabricado.*`: los contadores de lo fabricado de una receta. `equipoBronce` cuenta las cuatro piezas de bronce; `armaduraBronce`, solo esa; `armaHierroCalidad`, el arma de
-/// hierro de calidad (Eras_IV_Y_V §3).
+/// hierro de calidad (Tecnologia_Aedas §2.1).
 pub fn de_fabricacion(r: Recurso) -> &'static [Contador] {
     match r {
         Recurso::ArmaBronce | Recurso::ArmaBronceCalidad | Recurso::ArmaduraBronceCalidad => &[Contador::FabricadoEquipoBronce],
@@ -202,9 +202,9 @@ pub fn batalla_unity(contexto: ContextoBatalla, gana_el_atacante: bool, con_hopl
     }
 }
 
-/// `batallas.conTresHeroes`: algún bando lleva al menos estos héroes (Eras_IV_Y_V §3; el número es el nombre del contador).
+/// `batallas.conTresHeroes`: algún bando lleva al menos estos héroes (Tecnologia_Aedas §2.1; el número es el nombre del contador).
 pub const HEROES_DE_UNA_BATALLA_GRANDE: u32 = 3;
-/// El escalón desde el que una escuadra es de élite: `escuadras.eliteDestruidas` y `batallas.campoAbiertoConCaballeriaElite` (Eras_IV_Y_V §3: «escalón 4 o 5»).
+/// El escalón desde el que una escuadra es de élite: `escuadras.eliteDestruidas` y `batallas.campoAbiertoConCaballeriaElite` (Tecnologia_Aedas §2.1: «escalón 4 o 5»).
 pub const ESCALON_ELITE: u8 = 4;
 
 /// Una escuadra de la batalla, con lo que miran los contadores de las Eras IV y V: su edificio y su escalón (los de su tropa) y si acabó sin soldados. Solo las que empezaron con alguno.
@@ -230,7 +230,7 @@ impl BandoDeBatalla {
     }
 }
 
-/// El resumen puro de una batalla para los contadores de las Eras IV y V (Eras_IV_Y_V §3): lo arma el núcleo donde cuenta `batallas.libradas` (el encuentro con números y toda
+/// El resumen puro de una batalla para los contadores de las Eras IV y V (Tecnologia_Aedas §2.1): lo arma el núcleo donde cuenta `batallas.libradas` (el encuentro con números y toda
 /// batalla de Unity). `con_rey`: combate el Rey de alguna Facción; `campo_abierto`: el encuentro con números o la batalla de Unity de campo abierto.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResumenBatalla {
@@ -241,7 +241,7 @@ pub struct ResumenBatalla {
     pub campo_abierto: bool,
 }
 
-/// Los contadores de batalla de las Eras IV y V que sube una batalla (Eras_IV_Y_V §3), salvo `persecuciones.deCaballeria` ([`persecucion`]) y `escuadras.veteranas` (la
+/// Los contadores de batalla de las Eras IV y V que sube una batalla (Tecnologia_Aedas §2.1), salvo `persecuciones.deCaballeria` ([`persecucion`]) y `escuadras.veteranas` (la
 /// experiencia de la escuadra).
 pub fn de_batalla(b: &ResumenBatalla) -> Delta {
     let (ganador, perdedor) = if b.gana_el_atacante { (&b.atacante, &b.defensor) } else { (&b.defensor, &b.atacante) };
@@ -260,7 +260,7 @@ pub fn de_batalla(b: &ResumenBatalla) -> Delta {
     reglas.into_iter().filter(|&(_, si)| si).fold(Delta::default().con(Contador::EscuadrasEliteDestruidas, elite_destruidas), |d, (c, _)| d.con(c, 1))
 }
 
-/// `persecuciones.deCaballeria`: una columna que lleva alguna escuadra de Caballerizas ataca a otra columna o a una caravana, con números o en Unity, gane o pierda (Eras_IV_Y_V §3).
+/// `persecuciones.deCaballeria`: una columna que lleva alguna escuadra de Caballerizas ataca a otra columna o a una caravana, con números o en Unity, gane o pierda (Tecnologia_Aedas §2.1).
 pub fn persecucion(atacante: &BandoDeBatalla) -> Delta {
     if atacante.con(Tipo::Caballerizas, 0) {
         Delta::uno(Contador::PersecucionesDeCaballeria)

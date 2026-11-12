@@ -102,7 +102,7 @@ message ContextoEstrategico {
 message HeroSnapshot {
   string display_name = 1;
   string class_definition_id = 2;
-  uint32 nivel = 3;                      // el del héroe (Progresion_Tropas_Y_Heroe §4): Conquest abre con él sus habilidades y sus perks
+  uint32 nivel = 3;                      // el del héroe (Heroe_Y_Tropa §4.3): Conquest abre con él sus habilidades y sus perks
   bool femenino = 4;
   Avatar avatar = 5;
   reserved 6;                            // antes `perks_desbloqueados`: desde el 2026-11-12 los perks se abren solos con el nivel (D15)

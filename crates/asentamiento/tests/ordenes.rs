@@ -285,7 +285,7 @@ fn el_ascenso_informa_todos_los_bloqueos_a_la_vez_y_la_insolvencia_es_solo_una_a
     assert!(piedra.llega == 0 && piedra.pide > 0, "{piedra:?}");
     // Sin cupo de Facción: con el cupo del nivel 2 ocupado.
     assert!(a.bloqueos_de_ascenso(&r, true).contains(&Bloqueo::SinCupoDeFaccion));
-    // En el nivel máximo (el 5, sin techo provisional desde Eras_IV_Y_V §2b) no hay nivel siguiente del que advertir.
+    // En el nivel máximo (el 5, sin techo provisional desde Economia_Construccion §11.2) no hay nivel siguiente del que advertir.
     a.nivel = 5;
     assert!(a.bloqueos_de_ascenso(&r, false).contains(&Bloqueo::NivelMaximo));
     assert!(a.insolvencia_de_ascenso(0, &r, &x).is_empty());
@@ -331,7 +331,7 @@ fn lista_para_el_nivel_5(r: &Reglas) -> Asentamiento {
 
 #[test]
 fn del_nivel_4_se_sube_al_5_pagando_tambien_mil_de_vino_cerveza_y_los_dos_aceites() {
-    // Eras_IV_Y_V §2b (autor, 2026-11-11): sin techo provisional, la obra del nivel 5 cuesta además 1.000 de cada bien.
+    // Economia_Construccion §11.2 (autor, 2026-11-11): sin techo provisional, la obra del nivel 5 cuesta además 1.000 de cada bien.
     let r = Reglas::cargar();
     let bienes = [Recurso::Vino, Recurso::Cerveza, Recurso::Aceite, Recurso::AceiteSesamo];
     let mut a = lista_para_el_nivel_5(&r);

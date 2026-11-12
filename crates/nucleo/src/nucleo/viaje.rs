@@ -124,7 +124,7 @@ impl Nucleo {
     }
 
     /// Las reglas militares que valen para la Facción `faccion` (sin Facción, las de todos): con su capacidad de víveres por héroe, ×1,5 con la Logística de campaña adoptada
-    /// (`LOGISTICA.bonusViveres`, Eras_IV_Y_V §2). Las usa todo lo que llena o topa los víveres de un héroe o de una columna.
+    /// (`LOGISTICA.bonusViveres`, Movimiento_Ejercitos §6.1). Las usa todo lo que llena o topa los víveres de un héroe o de una columna.
     pub(super) fn militar_de(&self, faccion: Option<u32>) -> militar::Reglas {
         self.estado.reglas.economia.militar.de_faccion(|x| faccion.is_some_and(|f| self.estado.tiene_tecnologia(f, x)))
     }
@@ -302,7 +302,7 @@ impl Nucleo {
         let cambio = self.estado.comercio.red.registrar_ruta(id32(origen), id32(destino), faccion, ruta, t);
         if cambio.pesos_cambiados {
             self.cache.version_red += 1;
-            // `caminos.compartidos` (Eras_IV_Y_V §3): un récord que pasa a 1 con el primer camino compartido; después no se mira más.
+            // `caminos.compartidos` (Tecnologia_Aedas §2.1): un récord que pasa a 1 con el primer camino compartido; después no se mira más.
             if self.estado.tecnologia.contador(tecnologia::Contador::CaminosCompartidos) == 0 && self.camino_compartido_abierto() {
                 self.subir_record(t, tecnologia::Contador::CaminosCompartidos, 1);
             }

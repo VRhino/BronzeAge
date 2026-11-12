@@ -61,7 +61,7 @@ fn rechazo_de_uso(e: ErrorUso) -> (&'static str, &'static str) {
     }
 }
 
-/// La escuadra del héroe que recibe una medalla de tropa (Catalogo_De_Objetos §3.3): suya, no prestada y por debajo del nivel máximo. Se mira antes de gastar la medalla.
+/// La escuadra del héroe que recibe una medalla de tropa (Objetos_Del_Heroe §3.5): suya, no prestada y por debajo del nivel máximo. Se mira antes de gastar la medalla.
 fn escuadra_para_medalla(r: &militar::Reglas, h: &Heroe, escuadra: Option<u64>) -> Result<u64, (&'static str, &'static str)> {
     let e = escuadra.and_then(|id| h.escuadra(id)).ok_or((rechazos::ESCUADRA_AJENA, "una medalla de tropa se usa sobre una escuadra tuya"))?;
     if e.prestada.is_some() {

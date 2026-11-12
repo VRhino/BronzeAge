@@ -1,4 +1,4 @@
-//! El botín de objetos del héroe (entradas 67, 68 y 70; Progresion_Tropas_Y_Heroe §5 y Catalogo_De_Objetos §6b, D5 a D7, D17 y D22): de dónde llega, con su tabla de
+//! El botín de objetos del héroe (entradas 67, 68 y 70; Objetos_Del_Heroe §2.1 y §3.7, D5 a D7, D17 y D22): de dónde llega, con su tabla de
 //! `BOTIN_OBJETOS` tirada con el rng del estado, y adónde va: a la mochila; si no cabe, al almacén de objetos, aunque el héroe esté fuera; si tampoco cabe allí, se pierde.
 //! Las reglas (tirar una tabla y entregar) son del crate `objetos` (`Tabla::tirar` y `objetos::entregar`); aquí, qué tabla toca y el hecho `heroe.botin`, que dice de dónde
 //! llegó y qué fue a la mochila, qué al almacén y qué se perdió. Lo oye solo el héroe.

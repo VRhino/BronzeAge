@@ -1,4 +1,4 @@
-//! Tirar una tabla de `BOTIN_OBJETOS` (Progresion_Tropas_Y_Heroe §5, D5 y D6) con el generador que pasa quien llama. Qué tabla toca (el nivel del
+//! Tirar una tabla de `BOTIN_OBJETOS` (Objetos_Del_Heroe §3.6 y §3.7, D5 y D6) con el generador que pasa quien llama. Qué tabla toca (el nivel del
 //! campamento, el rango del mercenario, si el héroe ganó la batalla) y adónde va lo que sale (la mochila y, si no cabe, el almacén de objetos; D17)
 //! lo decide quien llama.
 

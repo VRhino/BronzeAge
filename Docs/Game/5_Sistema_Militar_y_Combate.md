@@ -127,9 +127,13 @@ Leñadores, granjeros y mineros son muy malos en combate y muy desorganizados: e
 | 2 | Guerreros filisteos (Peleset) | `forja_hierro_temprana` (II) | 1 Arma de Hierro + 1 Armadura Intermedia | 3 | 9 | 18 | 24 | 2 |
 | 2 | Shardana | `bronce_calidad_militar` (II) | 1 Arma de Bronce de Calidad + 1 Armadura Básica | 4 | 15 | 15 | 24 | 3 |
 | 2 | Hoplitas ciudadanos | `ciudadania_militar` (III) | 1 Arma de Hierro + 1 Armadura de Bronce | 3 | 10 | 18 | 24 | 3 |
+| 2 | Epílektoi | `infanteria_profesional` (IV) | 1 Arma de Hierro de Calidad + 1 Armadura de Bronce | 3 | 10 | 18 | 24 | 4 |
+| 2 | Falangitas (sarisa) | `falange_sarisa` (V) | 1 Arma de Hierro de Calidad + 1 Armadura Intermedia | 4 | 14 | 32 | 18 | 4 |
 | 3 | Lanceros pesados micénicos (escudos grandes) | `panoplia_bronce` (II) | 2 Arma de Bronce + 1 Armadura de Bronce | 4 | 14 | 15 | 18 | 3 |
 | 3 | Hequetai (guardia de bronce) | `panoplia_bronce` (II) | 1 Arma de Bronce de Calidad + 1 Armadura de Bronce | 5 | 17 | 18 | 18 | 3 |
 | 3 | Espartiatas | `falange_hoplita` (III) | 1 Arma de Hierro de Calidad + 1 Armadura de Bronce de Calidad | 4 | 17 | 16 | 18 | 4 |
+| 3 | Inmortales | `infanteria_profesional` (IV) | 1 Arma de Hierro de Calidad + 1 Arma de Bronce + 1 Armadura Intermedia | 5 | 15 | 15 | 24 | 4 |
+| 3 | Hipaspistas | `cuerpo_hipaspistas` (V) | 1 Arma de Hierro de Calidad + 1 Armadura de Bronce de Calidad | 5 | 17 | 20 | 24 | 4 |
 
 **Galería de tiro (a distancia):**
 
@@ -142,6 +146,8 @@ Leñadores, granjeros y mineros son muy malos en combate y muy desorganizados: e
 | 2 | Honderos rodios | `pantalla_escaramuzadores` (III) | 1 Arma de Hierro + 1 Armadura Básica | 3 | 9 | 20 | 30 | 2 |
 | 3 | Arqueros con arco compuesto | `arco_compuesto` (II) | 3 Arma de Bronce + 2 Armadura Intermedia | 5 | 15 | 20 | 18 | 3 |
 | 3 | Arqueros escitas | `arqueria_especializada` (III) | 1 Arma de Hierro + 1 Armadura Básica | 5 | 17 | 20 | 24 | 3 |
+| 3 | Peltastas de Ifícrates | `hostigadores_profesionales` (IV) | 2 Arma de Hierro de Calidad + 1 Armadura Básica | 4 | 14 | 20 | 30 | 4 |
+| 3 | Agrianos | `reforma_macedonica` (V) | 2 Arma de Hierro de Calidad + 1 Armadura Básica | 5 | 17 | 20 | 30 | 4 |
 
 **Caballerizas (caballería y carros):**
 
@@ -152,8 +158,12 @@ Leñadores, granjeros y mineros son muy malos en combate y muy desorganizados: e
 | 2 | Carros de guerra | `carros_guerra` (I) | 1 Carro de Guerra + 2 caballos + 1 Arma de Bronce | 4 | 13 | 15 | 30 | 3 |
 | 2 | Jinetes escitas | `caballeria_organizada` (III) | 1 Arma de Bronce + 1 Armadura Básica + 1 caballo | 3 | 8 | 20 | 84 | 2 |
 | 2 | Caballería asiria | `caballeria_organizada` (III) | 1 Arma de Hierro + 1 Armadura de Bronce + 1 caballo | 3 | 10 | 18 | 84 | 3 |
+| 2 | Pródromos | `formacion_cuna` (V) | 1 Arma de Hierro + 1 caballo | 3 | 9 | 18 | 84 | 2 |
+| 3 | Caballería tesalia | `carga_caballeria` (IV) | 1 Arma de Hierro de Calidad + 1 Armadura Intermedia + 1 caballo | 4 | 14 | 15 | 84 | 4 |
+| 3 | Caballería noble persa | `carga_caballeria` (IV) | 2 Arma de Hierro + 1 Armadura de Bronce + 1 caballo | 4 | 17 | 16 | 84 | 3 |
+| 3 | Compañeros (hetairoi) | `companeros_reales` (V) | 1 Arma de Hierro de Calidad + 1 Armadura de Bronce de Calidad + 1 caballo | 5 | 17 | 16 | 84 | 4 |
 
-Los exploradores a caballo son caballería de exploración, floja en combate. Una tropa puede depender de una tecnología y su arma de otra (los escaramuzadores esperan al Arma de Cobre de `metalurgia_cobre`, los jinetes asirios al Arma de Hierro de `forja_hierro_temprana`): es el patrón normal de las cuatro puertas.
+Los exploradores a caballo son caballería de exploración, floja en combate. Una tropa puede depender de una tecnología y su arma de otra (los escaramuzadores esperan al Arma de Cobre de `metalurgia_cobre`, los jinetes asirios al Arma de Hierro de `forja_hierro_temprana`): es el patrón normal de las cuatro puertas. Las tropas de las Eras IV y V (desde el 2026-11-12) se reclutan en los mismos tres edificios, sin niveles nuevos; casi todas piden el Arma de Hierro de Calidad, que llega con la Fundición 3 y por eso con el asentamiento de nivel 4 (Doc 4).
 
 `poderBase` es placeholder. Las unidades de cada escuadrón son un valor propio de cada tropa (decidido el 2026-09-27); desde el 2026-11-12 son las de las cifras de combate de cada tropa, que ya no bajan con el escalón: las de distancia, 20 todas (5.11.1). Cada tropa lleva además un **tier** de combate (I-V) y sus cifras de combate, que usa la batalla de Unity (`Docs/Mechanics/Heroe_Y_Tropa.md` §12).
 
@@ -161,7 +171,7 @@ Los exploradores a caballo son caballería de exploración, floja en combate. Un
 
 **Milicia de lanceros y Arma de Madera.** La Milicia de lanceros se recluta en el Centro Urbano y se paga con madera en bruto, sin pasar por la Armería: es de las más débiles del roster (poderBase 2) y existe para que el bucle de juego arranque pronto, no para ganar batallas. Para reclutarla basta con residir en el asentamiento (Doc 2.5) y tener los 25 soldados de población y los 50 de madera del escuadrón. "Lanceros con escudo de mimbre" y "Honderos" se pagan con Arma de Madera: si la cadena metalúrgica o del cuero completa fuera el único camino, casi ningún asentamiento tendría tropa pronto, porque muy pocos nacen con cobre o livestock en su zona.
 
-**Población que recluta cada escalón.** Los escalones 1 y 2 se reclutan con **Pesants**, el 3 con **Artesanos**, y el 4 y el 5 solo con **Nobleza**, sin excepciones. Muchas tropas de élite tempranas eran históricamente nobles (carros, guardias palaciales), y por eso el Palacio se adelanta al nivel 2 (Doc 4.2.1). Reclutar saca a los soldados de su clase de población, también a los nobles.
+**Población que recluta cada escalón.** Los escalones 1 y 2 se reclutan con **Pesants**, el 3 con **Artesanos**, y el 4 y el 5 con **Nobleza**. Hay una sola excepción, que la tropa declara en su propio campo `poblacion`: los **Falangitas** son de escalón 4 y se reclutan con Artesanos, porque la falange de sarisa era infantería de ciudadanos y no de nobles (desde el 2026-11-12). Muchas tropas de élite tempranas eran históricamente nobles (carros, guardias palaciales), y por eso el Palacio se adelanta al nivel 2 (Doc 4.2.1). Reclutar saca a los soldados de su clase de población, también a los nobles.
 
 **Relación entre tropas ya reclutadas y el edificio que las produjo**: NO existe ninguna relación posterior al reclutamiento. Una vez una tropa está reclutada y en el mundo, es independiente del edificio (Barracón/Galería de tiro) que la originó. Si el edificio sube de nivel después, los escuadrones ya existentes NO se ven afectados de ninguna forma — ni mejoran ni empeoran. "Mejorar" solo significa poder reclutar tropas nuevas de mayor nivel a partir de ese momento.
 
@@ -207,9 +217,9 @@ En un ejército de varios héroes, **cada uno se valida contra SU propio Lideraz
 |---|---|---|---|---|
 | 1 — leva | 7 | 25 | 14 | Leñadores, Granjeros, Mineros |
 | 2 — ligera / de línea | 14 | 20 | 7 | Milicia de lanceros, Lanceros con escudo de mimbre, Espadachines de cobre, Honderos, Exploradores a caballo, Jinetes asirios |
-| 3 — veterana | 22 | 18 | 4 | Hacheros ligeros, Hacheros armados, Espadachines de bronce, Escaramuzadores, Arqueros, Guerreros filisteos, Hoplitas ciudadanos, Peltastas, Honderos rodios, Jinetes escitas, Caballería asiria |
-| 4 — pesada | 32 | 15 | 3 | Carros de guerra, Lanceros pesados, Shardana, Espartiatas |
-| 5 — élite | 45 | 12 | 2 | Arqueros con arco compuesto, Hequetai, Arqueros escitas |
+| 3 — veterana | 22 | 18 | 4 | Hacheros ligeros, Hacheros armados, Espadachines de bronce, Escaramuzadores, Arqueros, Guerreros filisteos, Hoplitas ciudadanos, Peltastas, Honderos rodios, Jinetes escitas, Caballería asiria, Epílektoi, Pródromos |
+| 4 — pesada | 32 | 15 | 3 | Carros de guerra, Lanceros pesados, Shardana, Espartiatas, Peltastas de Ifícrates, Caballería tesalia, Caballería noble persa, Falangitas |
+| 5 — élite | 45 | 12 | 2 | Arqueros con arco compuesto, Hequetai, Arqueros escitas, Inmortales, Hipaspistas, Compañeros, Agrianos |
 
 El Liderazgo **nace en 14** y sube **3 por cada nivel** del Héroe hasta el 30, sin pasar de **100** (2026-11-12): un héroe nuevo saca dos escuadras de leva o una de línea; uno de nivel 30, las combinaciones de abajo.
 
@@ -369,10 +379,10 @@ Si el asedio **resiste**, el ejército se queda acampado fuera con sus escuadron
 
 | Clase | Tropas | Velocidad |
 |---|---|---|
-| **Montada** | Exploradores a caballo, Jinetes asirios, Jinetes escitas, Caballería asiria | **84** (42 hasta el 2026-10-27: el autor dobló la caballería y el héroe solo, que va a 66) |
-| **Ligera** | Milicia de lanceros, Leñadores, Granjeros, Honderos, Lanceros con escudo de mimbre, Escaramuzadores con jabalina, Peltastas, Honderos rodios, Carros de guerra | **30** |
-| **Media** | Espadachines de cobre, Espadachines de bronce, Hacheros ligeros, Arqueros, Guerreros filisteos, Shardana, Hoplitas ciudadanos, Arqueros escitas | **24** |
-| **Pesada** | Hacheros armados, Lanceros pesados micénicos, Arqueros con arco compuesto, Hequetai, Espartiatas | **18** |
+| **Montada** | Exploradores a caballo, Jinetes asirios, Jinetes escitas, Caballería asiria, Pródromos, Caballería tesalia, Caballería noble persa, Compañeros | **84** (42 hasta el 2026-10-27: el autor dobló la caballería y el héroe solo, que va a 66) |
+| **Ligera** | Milicia de lanceros, Leñadores, Granjeros, Honderos, Lanceros con escudo de mimbre, Escaramuzadores con jabalina, Peltastas, Honderos rodios, Carros de guerra, Peltastas de Ifícrates, Agrianos | **30** |
+| **Media** | Espadachines de cobre, Espadachines de bronce, Hacheros ligeros, Arqueros, Guerreros filisteos, Shardana, Hoplitas ciudadanos, Arqueros escitas, Epílektoi, Inmortales, Hipaspistas | **24** |
+| **Pesada** | Hacheros armados, Lanceros pesados micénicos, Arqueros con arco compuesto, Hequetai, Espartiatas, Falangitas | **18** |
 
 Dos reglas fijan esta tabla:
 
@@ -846,7 +856,7 @@ El detalle de datos del héroe está en `typescript-final:Docs/Coordinacion/01_M
 - Cada Jugador tiene **exactamente un Héroe en cada mundo**. El Héroe pertenece a esa partida, no a la cuenta: su progreso no pasa de un mundo a otro.
 - **No se cambia de héroe** dentro de una partida.
 - Todo lo que el Jugador hace dentro del mundo lo hace su Héroe: reside, lidera, tiene Liderazgo, está situado en el mundo, recuerda y explora, ocupa cargos y posee los escuadrones. El Jugador es la persona y su cuenta.
-- Trae de Conquest su estructura de personaje: clase, nivel y experiencia, puntos de atributo, atributos, perks (los abre el nivel: 7 y 12; los define Conquest), equipo, inventario y sus propias monedas. La clase la da el arma que lleva puesta, que no se quita (solo se cambia por otra); nace con el equipo de tier I de su clase. El equipo se cambia dentro de una plaza, un pueblo o un campamento y nunca con escuadras reservadas para una batalla; la mochila lo lleva consigo y el almacén de objetos se queda en su residencia, donde solo se usa estando dentro (decidido el 2026-11-12, `Docs/Mechanics/Heroe_Y_Tropa.md` §4.5). En la Armería de una plaza el héroe compra con sus monedas las piezas de los tiers I y II y vende cualquier objeto a la mitad de su precio; en la de la plaza donde reside forja las de los tiers II a V con un plano, crisoles y los materiales de su almacén personal, y la pieza sale con una calidad del 90 al 110 %. El metal que se compra o se forja lo abre la tecnología de la Facción de la plaza. Las medallas dan experiencia a una escuadra suya (no a la prestada) o al héroe, y el cofre de monturas da una montura de tier III a V; se usan donde se cambia el equipo (`Docs/Mechanics/Heroe_Y_Tropa.md` §4.6). Esas monedas son **un solo saldo** del héroe, **aparte del oro** recurso de las plazas: no entran en la economía de una plaza (desde el 2026-11-08, 100 monedas valen 1 de oro solo al contratar mercenarios, Doc 7). Se ganan **combatiendo contra héroes de otra Facción** (cada héroe, 500 si su bando gana y 150 si pierde; las 8 primeras veces que esas dos Facciones se enfrentan en un día, completo; luego un 15 % menos cada vez y, desde la 14.ª, nada), **destruyendo campamentos de bandidos** (1.9) y en el botín de las batallas de Unity.
+- Su estructura de personaje viene de Conquest, pero la guarda y la decide el motor (desde el 2026-11-12): clase, nivel y experiencia, puntos de atributo, atributos, equipo, una **mochila** de 72 casillas, un **almacén de objetos** de 144 en su residencia y sus propias monedas. Las habilidades y los perks se abren solos con el nivel (habilidades en los niveles 1, 3, 5 y 10; perks en el 7 y el 12) y los define y aplica Conquest: el motor no los guarda, solo publica esos niveles y manda la clase y el nivel en el ticket de la batalla. La clase la da el arma que lleva puesta, que no se quita (solo se cambia por otra); el jugador la elige al crear el héroe, y nace con el equipo de tier I de esa clase. El equipo se cambia dentro de una plaza, un pueblo o un campamento y nunca con escuadras reservadas para una batalla; la mochila lo lleva consigo y el almacén de objetos se queda en su residencia, donde solo se usa estando dentro (decidido el 2026-11-12, `Docs/Mechanics/Heroe_Y_Tropa.md` §4.5). En la Armería de una plaza el héroe compra con sus monedas las piezas de los tiers I y II y vende cualquier objeto a la mitad de su precio; en la de la plaza donde reside forja las de los tiers II a V con un plano, crisoles y los materiales de su almacén personal, y la pieza sale con una calidad del 90 al 110 %. El metal que se compra o se forja lo abre la tecnología de la Facción de la plaza. Las medallas dan experiencia a una escuadra suya (no a la prestada) o al héroe, y el cofre de monturas da una montura de tier III a V; se usan donde se cambia el equipo (`Docs/Mechanics/Heroe_Y_Tropa.md` §4.6). Esas monedas son **un solo saldo** del héroe, **aparte del oro** recurso de las plazas: no entran en la economía de una plaza (desde el 2026-11-08, 100 monedas valen 1 de oro solo al contratar mercenarios, Doc 7). Se ganan **combatiendo contra héroes de otra Facción** (cada héroe, 500 si su bando gana y 150 si pierde; las 8 primeras veces que esas dos Facciones se enfrentan en un día, completo; luego un 15 % menos cada vez y, desde la 14.ª, nada), **destruyendo campamentos de bandidos** (1.9) y en las batallas de Unity, que las pagan igual que el combate con números (5.16.3).
 
 ### 5.16.2 Sus escuadrones
 
@@ -858,7 +868,7 @@ El detalle de datos del héroe está en `typescript-final:Docs/Coordinacion/01_M
 ### 5.16.3 Progresión
 
 - Héroe y escuadrones progresan con **nivel y experiencia**, al estilo de Conquest.
-- **El nivel de un escuadrón va del 1 al 10** y cada nivel le da **+3% de poder** en el combate con números: el nivel 1 tiene +3% y el 10, el máximo, +30% (decisión del autor del 2026-11-11, para acercarse a lo que pesa el nivel en Unity; antes era +1%). Cada nivel pide una cantidad de experiencia; al llenarla, sube al siguiente (`MILITAR.experienciaParaSubirEscuadra`: 10, 25, 50, 100, 150, 200, 250, 275 y 315, 1.375 hasta el 10; 2026-11-12). En el combate con números, un escuadrón gana 1 de experiencia si su bando vence y 0,5 si pierde; en una batalla de Unity, 4 o 2. Con **Ejército permanente** (Era V), los escuadrones de los héroes de la Facción ganan un 10 % más.
+- **El nivel de un escuadrón va del 1 al 10** y cada nivel le da **+3% de poder** en el combate con números: el nivel 1 tiene +3% y el 10, el máximo, +30% (decisión del autor del 2026-11-11, para acercarse a lo que pesa el nivel en Unity; antes era +1%). Cada nivel pide una cantidad de experiencia; al llenarla, sube al siguiente (`MILITAR.experienciaParaSubirEscuadra`: 10, 25, 50, 100, 150, 200, 250, 275 y 315, 1.375 hasta el 10; 2026-11-12). En el combate con números, un escuadrón gana 1 de experiencia si su bando vence y 0,5 si pierde; en una batalla de Unity, 4 o 2. Con **Ejército permanente** (Era IV), los escuadrones de los héroes de la Facción ganan un 10 % más.
 - **La experiencia del Héroe la pone el motor** (2026-11-12): con números, lo mismo que sus escuadrones (1 o 0,5), una vez por combate; en Unity, 4 si su bando gana y 2 si pierde, solo si participó. Unity no la calcula. Cada nivel pide 20 más que el anterior (100 para pasar al 2, 120 al 3… 660 al 30; 11.020 en total) y desde el 30, 680 cada uno. Hasta el 30, cada nivel le da **un punto de atributo** y **3 de Liderazgo**; desde el 31 sube sin dar nada.
 - **El botín lo pone el motor, no la partida** (decidido el 2026-11-12): en una batalla de Unity, cada héroe que participó cobra las monedas como en el combate con números (500 o 150, con los mismos rendimientos) y una tirada de la tabla de objetos de Unity (crisoles, planos, medallas y el cofre; nunca piezas hechas), en la que algunas cosas solo caen si su bando gana. Unity ya no manda botín. Los objetos que llegan sin pedirlos (botín de Unity, de bandidos y de alijos, misiones, premio de rango de un mercenario) van a la **mochila**; lo que no cabe, al **almacén de objetos** de su residencia aunque el héroe esté fuera, y si tampoco cabe, se pierde (`Docs/Mechanics/Objetos_Del_Heroe.md` §3.7).
 
@@ -885,7 +895,7 @@ Un héroe derrotado en una partida real pierde **parte de las tropas que llevó 
 ### 5.16.7 Qué ven los demás de un héroe
 
 - **Público:** nombre, clase, nivel, si está herido (y hasta cuándo), los escuadrones que lleva consigo (tipo, unidades y nivel) y el equipo que lleva puesto (desde el 2026-11-12 la ficha pública lo lleva de verdad, con la clase que da su arma).
-- **Privado, solo para su jugador:** todo lo demás — experiencia, puntos sin gastar, atributos, perks, Liderazgo, residencia, los escuadrones de su campamento, loadouts, inventario (la mochila y el almacén de objetos de su residencia), monedas, género, avatar y si es humano o bot.
+- **Privado, solo para su jugador:** todo lo demás — experiencia, puntos sin gastar, atributos, Liderazgo, residencia, los escuadrones de su campamento, loadouts, inventario (la mochila y el almacén de objetos de su residencia), monedas, género, avatar y si es humano o bot.
 - **Entre compañeros de Facción:** cada ciudadano conoce el **nombre** de todos los demás ciudadanos de su Facción, los vea o no (decisión del usuario, 2026-09-14). El resto de su ficha sigue la regla de lo público.
 
 "Público" significa que lo ve cualquiera que pueda ver al héroe. Dónde está un héroe sigue sujeto a la niebla de guerra (5.12.7), y su memoria y exploración son solo suyas (5.12.8).

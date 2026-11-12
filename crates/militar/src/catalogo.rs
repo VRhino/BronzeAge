@@ -255,7 +255,7 @@ mod pruebas {
         assert_eq!(c.tropa(Tropa::Hipaspistas).origen(), Origen::Nobleza);
     }
 
-    /// El tier y el bloque `combate` son para Conquest y el cliente (Cifras_De_Combate §8): el motor no los lee, así que se comprueban sobre el JSON.
+    /// El tier y el bloque `combate` son para Conquest y el cliente (Heroe_Y_Tropa §12): el motor no los lee, así que se comprueban sobre el JSON.
     #[test]
     fn las_37_tropas_traen_su_tier_y_su_bloque_de_combate_completo() {
         let b = bloque(HEROE_Y_TROPA, "TROPAS_RECLUTABLES");

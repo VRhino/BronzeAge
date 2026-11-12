@@ -137,7 +137,7 @@ impl Nucleo {
     }
 
     /// El paso de minuto de la capital de `faccion` (plan §5.1): solo si una candidata pide algo que mira este paso (`recursoEnCapital`; de las Eras IV y V, las escuadras vivas, los héroes,
-    /// las columnas en marcha y el nivel de la Facción: Eras_IV_Y_V §4) y ya cumple su hito entero se marca la Facción. O(candidatas que lo piden).
+    /// las columnas en marcha y el nivel de la Facción: Tecnologia_Aedas §3.1) y ya cumple su hito entero se marca la Facción. O(candidatas que lo piden).
     pub(super) fn mirar_paso_de_capital(&mut self, faccion: u32) {
         let (r, e) = (&self.estado.reglas.economia.tecnologia, &self.estado.tecnologia);
         // Lo barato primero (es el paso de minuto): sin el logro de ninguna de las que piden la capital no hay nada que mirar, ni siquiera la Facción.

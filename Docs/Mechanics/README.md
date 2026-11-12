@@ -55,7 +55,7 @@ Si el canon y `Mechanics` se contradicen, gana `Mechanics` (decisión del autor,
 |---|---|---|
 | [`Trazado_Urbano.md`](Trazado_Urbano.md) | ✅ 2026-10-09 | rejilla, huellas, red de calles, colocación de edificios, anclas, perfiles |
 | [`Murallas.md`](Murallas.md) | ✅ 2026-10-09 | recintos: trazo, puertas y torres, obra, mejora, ampliación, defensa, mantenimiento, daño |
-✅ 2026-10-13 (reescrito para el mundo reactivo) | salir, rutas y velocidad, víveres y hambre, perseguir, repostar, caravanas adjuntas, unirse/separarse/formar, volver a casa, inspección |
+| [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) | ✅ 2026-10-13 (reescrito para el mundo reactivo) | salir, rutas y velocidad, víveres y hambre, perseguir, repostar, caravanas adjuntas, unirse/separarse/formar, volver a casa, inspección |
 | [`Combate.md`](Combate.md) | ✅ 2026-10-10 | `atacar`, resolución numérica, encuentros, caravanas, bandidos, asedio, conquista, desalojo, heridos |
 | [`Economia_Construccion.md`](Economia_Construccion.md) | ✅ 2026-10-10 | fundación y zona, almacén, producción y recetas, cola de obras y auto-construcción, mejoras, población y hambre, mantenimiento, nivel de asentamiento y su ascenso, políticas económicas |
 | [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) | ✅ 2026-10-13 (reescrito para el mundo reactivo; sustituye a `Tick.md`) | reloj de mundo, cola de eventos, qué pasa a ritmo, evento o muestreo, desempate del mismo instante, una orden, batallas, desconexión, generador aleatorio |

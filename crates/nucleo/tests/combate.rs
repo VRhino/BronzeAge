@@ -131,7 +131,7 @@ fn una_columna_ataca_a_otra_y_el_derrotado_queda_herido_pierde_la_mitad_del_carr
     assert_eq!(h.len(), 1);
     let h = &h[0];
     assert_eq!((h.0, h.1.clone(), dato(h, "ganaElAtacante")), (10 * MIN, vec![ana.0, beto.0], 1));
-    // Los logros (6B), contados en origen: una batalla librada y en campo abierto (el `combate.encuentro`), sin hoplitas; y combaten los Reyes (Eras_IV_Y_V §3: el primer ciudadano de
+    // Los logros (6B), contados en origen: una batalla librada y en campo abierto (el `combate.encuentro`), sin hoplitas; y combaten los Reyes (Tecnologia_Aedas §2.1: el primer ciudadano de
     // cada Facción de administración lo es).
     assert_eq!(comun::logros_de_hechos(&x.n), vec![(Contador::BatallasLibradas, 1), (Contador::BatallasCampoAbierto, 1), (Contador::BatallasConRey, 1)]);
     // Las bajas del perdedor van de 30 % a 70 % y el ganador pierde entre el 5 % y el 20 %.
@@ -444,7 +444,7 @@ fn el_botin_de_los_bandidos_cae_con_los_rendimientos_decrecientes_de_cada_heroe(
     assert!(madera(&n) - antes >= esperado(nivel1.botin_por_heroe, rend.solo_experiencia_desde - 1) / 1_000 * 1_000, "la ventana de 24 h se desliza");
 }
 
-/// Entrada 70 (Catalogo_De_Objetos §6b y Progresion_Tropas_Y_Heroe §5): cada campamento destruido da al héroe la tabla de objetos de su nivel, tirada con el rng del estado justo
+/// Entrada 70 (Objetos_Del_Heroe §3.7): cada campamento destruido da al héroe la tabla de objetos de su nivel, tirada con el rng del estado justo
 /// después del ataque, pero solo dentro de las destrucciones completas de su ventana de 24 h (`rendimientos.completas`); las siguientes ya no tiran la tabla.
 #[test]
 fn los_bandidos_dan_la_tabla_de_objetos_de_su_nivel_solo_dentro_de_las_completas_de_la_ventana() {
@@ -1053,7 +1053,7 @@ fn una_columna_con_caballeria_que_ataca_una_caravana_cuenta_una_persecucion() {
     e.n.avanzar_hasta(t0);
     let atacante = e.ejercito("beto", 2, e.pos(a), &[Tropa::JinetesAsirios]);
     assert!(e.atacar("beto", atacante.1, ObjetivoAtaque::Caravana(ca), true).aceptada());
-    // `persecuciones.deCaballeria` (Eras_IV_Y_V §3); un asalto a una caravana no es una batalla librada, así que no suma los demás de batalla.
+    // `persecuciones.deCaballeria` (Tecnologia_Aedas §2.1); un asalto a una caravana no es una batalla librada, así que no suma los demás de batalla.
     assert_eq!(e.n.tecnologia().contador(Contador::PersecucionesDeCaballeria), 1);
     assert_eq!(e.n.tecnologia().contador(Contador::BatallasLibradas), 0);
 }

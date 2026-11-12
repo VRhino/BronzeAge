@@ -4,7 +4,7 @@
 //! Disparadores de la aparición (plan §5.1, sin muestreo): al fijarse un logro o empezar una Era, todas las Facciones vivas; al completarse o mejorarse
 //! un edificio o subir de nivel una plaza, su Facción; al adoptar, la Facción; al crecer la zona de una plaza, su Facción; al ganar una plaza o cambiar
 //! de capital, la Facción; y en el paso de minuto de la capital solo si [`EstadoTecnologia::pide_paso_de_capital`] (el recurso en la capital, y de las Eras IV y V las escuadras
-//! vivas, los héroes, las columnas en marcha y el nivel de la Facción, que cambian sin ningún disparador; Eras_IV_Y_V §4). Perder algo no se mira: aparecer es para siempre. «Viva»
+//! vivas, los héroes, las columnas en marcha y el nivel de la Facción, que cambian sin ningún disparador; Tecnologia_Aedas §3.1). Perder algo no se mira: aparecer es para siempre. «Viva»
 //! (con algún asentamiento) lo comprueba el núcleo antes de llamar.
 
 use crate::datos::{Condicion, Reglas};
@@ -46,7 +46,7 @@ pub fn cumple(c: &Condicion, propias: &TecnologiasFaccion, v: &impl VistaFaccion
         Condicion::RecursoEnCapital(r) => v.recurso_en_capital(r),
         Condicion::CapitalEnNivel { nivel, con } => v.capital_en_nivel(nivel, con),
         Condicion::YacimientoEnTerritorio(r) => v.yacimiento_en_territorio(r),
-        // Las de las Eras IV y V (Eras_IV_Y_V §4).
+        // Las de las Eras IV y V (Tecnologia_Aedas §3.1).
         Condicion::EscuadrasVivas(n) => v.escuadras_vivas() >= n,
         Condicion::HeroesEnFaccion(n) => v.heroes() >= n,
         Condicion::PlazaEnNivel(nivel) => v.plaza_en_nivel(nivel),
@@ -252,7 +252,7 @@ pub(crate) mod pruebas {
         e.sumar(&r, Contador::ExtraidoCobre, 2_000, 0);
         assert!(e.pide_paso_de_capital(&r, 1));
         let v = Vista { edificios: vec![(Tipo::Fundicion, 2)], capital: vec![Recurso::Estano], ..Vista::default() };
-        // El paso de minuto de la capital mira solo las que piden la capital (la aleación del bronce y, de la Era IV, tres más: §4 de Eras_IV_Y_V), y solo si su hito ya se cumple.
+        // El paso de minuto de la capital mira solo las que piden la capital (la aleación del bronce y, de la Era IV, tres más: §3.1 de Tecnologia_Aedas), y solo si su hito ya se cumple.
         let bronce = t(&r, "aleacion_bronce");
         let piden: Vec<_> = r.piden_capital.iter().collect();
         assert_eq!(piden, vec![bronce, t(&r, "ejercito_permanente"), t(&r, "cuerpo_oficiales"), t(&r, "logistica_campana")]);

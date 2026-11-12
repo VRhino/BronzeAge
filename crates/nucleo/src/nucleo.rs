@@ -946,7 +946,7 @@ impl Nucleo {
                 // Andamiaje de administración: una columna con un héroe «de campo» (sin residencia ni loadout) de la cuenta dada, a la que obedece.
                 let (id, heroe) = (self.nuevo_id(), self.nuevo_id());
                 let mr = self.estado.reglas.economia.militar.clone();
-                // Su clase, la primera de `CLASES_HEROE` por id: un héroe de campo no la elige, pero nace con equipo como cualquiera (Clases_De_Heroe §6).
+                // Su clase, la primera de `CLASES_HEROE` por id: un héroe de campo no la elige, pero nace con equipo como cualquiera (Heroe_Y_Tropa §3).
                 let clase = mr.objetos.clases.keys().next().expect("CLASES_HEROE tiene clases (comprobado al cargar)");
                 let mut h = militar::heroe::Heroe::nuevo(&mr, heroe, militar::heroe::Controlador::Bot, 0, heroe, clase).expect("una clase del catálogo");
                 h.residencia = None;

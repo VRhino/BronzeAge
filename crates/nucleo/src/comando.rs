@@ -232,7 +232,7 @@ pub enum Comando {
     //    los suyos. Un héroe fuera del mundo solo puede conectarse. ──
     /// Crea el héroe de una cuenta dentro de un campamento de mercenarios, donde reside. `creadas` lleva su id. El controlador `Bot` solo lo
     /// pone la administración. `nombre`: el que eligió el jugador (ya validado: sin espacios a los lados, de 1 a [`NOMBRE_HEROE_MAX`] caracteres); sin él, «Héroe N».
-    /// `clase`: una de `CLASES_HEROE` (Clases_De_Heroe §6); nace con su equipo inicial puesto.
+    /// `clase`: una de `CLASES_HEROE` (Heroe_Y_Tropa §3); nace con su equipo inicial puesto.
     CrearHeroe { cuenta: String, campamento: u32, controlador: Controlador, nombre: Option<String>, clase: String },
     /// Recluta tropa en una plaza (las 11 condiciones de `reclutarTropa`) o repone la escuadra que ya se tiene. `creadas` lleva el id de la
     /// escuadra si es nueva.
@@ -253,7 +253,7 @@ pub enum Comando {
     OrdenarEscuadras { heroe: u64, escuadras: Vec<u64> },
     /// Elige la familia de formación de una escuadra propia, por su id de `FORMACIONES` (Heroe_Y_Tropa §10.4, 2026-11-11).
     ElegirFormacion { heroe: u64, escuadra: u64, formacion: String },
-    /// Se pone la pieza de la casilla `casilla` de su mochila (Clases_De_Heroe §4); lo que estaba en el hueco va a la mochila. Dentro de una plaza, un pueblo o un
+    /// Se pone la pieza de la casilla `casilla` de su mochila (Objetos_Del_Heroe §3.2); lo que estaba en el hueco va a la mochila. Dentro de una plaza, un pueblo o un
     /// campamento (D2).
     EquiparObjeto { heroe: u64, casilla: u32 },
     /// Se quita lo del hueco a la mochila (el arma no se quita), donde se puede equipar (D2).
@@ -262,14 +262,14 @@ pub enum Comando {
     GuardarObjeto { heroe: u64, casilla: u32, cantidad: u32 },
     /// Pasa `cantidad` de la casilla `casilla` de su almacén de objetos a su mochila, dentro de su residencia (D22).
     SacarObjeto { heroe: u64, casilla: u32, cantidad: u32 },
-    /// Compra en la Armería de la plaza donde está dentro una pieza del catálogo `OBJETOS`, al 100 %, con sus monedas (D1, Catalogo_De_Objetos §6).
+    /// Compra en la Armería de la plaza donde está dentro una pieza del catálogo `OBJETOS`, al 100 %, con sus monedas (D1, Objetos_Del_Heroe §3.3).
     ComprarObjeto { heroe: u64, objeto: String },
     /// Vende a la Armería de la plaza donde está dentro `cantidad` de la casilla `casilla` de su mochila, a `ventaPct` de la ficha (D1 y D18).
     VenderObjeto { heroe: u64, casilla: u32, cantidad: u32 },
     /// Forja una pieza en la Armería de la plaza donde reside, estando dentro: el plano y los crisoles de su mochila, los materiales de su almacén personal (D1,
-    /// Catalogo_De_Objetos §6b).
+    /// Objetos_Del_Heroe §3.4).
     ForjarObjeto { heroe: u64, objeto: String },
-    /// Usa el consumible de la casilla `casilla` de su mochila, donde se puede equipar (D2); `escuadra`, la suya que recibe una medalla de tropa (Catalogo_De_Objetos §3.3).
+    /// Usa el consumible de la casilla `casilla` de su mochila, donde se puede equipar (D2); `escuadra`, la suya que recibe una medalla de tropa (Objetos_Del_Heroe §3.5).
     UsarObjeto { heroe: u64, casilla: u32, escuadra: Option<u64> },
     /// Entrega una escuadra del campamento a la guarnición de la plaza donde reside el héroe, dentro de su cupo.
     AsignarGuarnicion { heroe: u64, escuadra: u64 },
@@ -3306,7 +3306,7 @@ pub mod rechazos {
     /// El héroe no tiene las monedas que cuesta (tanda 69 §4).
     pub const HEROE_SIN_MONEDAS: &str = "heroe.sin_monedas";
     pub const HEROE_CAMPAMENTO_DESCONOCIDO: &str = "heroe.campamento_desconocido";
-    /// `crear_heroe`: la clase está vacía o no es una de `CLASES_HEROE` (Clases_De_Heroe §6).
+    /// `crear_heroe`: la clase está vacía o no es una de `CLASES_HEROE` (Heroe_Y_Tropa §3).
     pub const HEROE_CLASE_DESCONOCIDA: &str = "heroe.clase_desconocida";
     pub const HEROE_PUNTOS_NEGATIVOS: &str = "heroe.puntos_negativos";
     pub const HEROE_NINGUN_PUNTO: &str = "heroe.ningun_punto";
@@ -3346,7 +3346,7 @@ pub mod rechazos {
     pub const OBJETO_DESCONOCIDO: &str = "objeto.desconocido";
     /// Un material o un consumible: no va en ningún hueco.
     pub const EQUIPO_NO_EQUIPABLE: &str = "equipo.no_equipable";
-    /// La clase del arma puesta no admite el peso de esa armadura (Clases_De_Heroe §4).
+    /// La clase del arma puesta no admite el peso de esa armadura (Objetos_Del_Heroe §3.2).
     pub const EQUIPO_INCOMPATIBLE: &str = "equipo.incompatible";
     /// El arma no se quita: solo se cambia por otra.
     pub const EQUIPO_ARMA_FIJA: &str = "equipo.arma_fija";
@@ -3367,13 +3367,13 @@ pub mod rechazos {
     // La Armería y los consumibles: comprar, vender, forjar y usar un objeto (`ErrorTienda`, `ErrorForja` y `ErrorUso` del crate `objetos`; Heroe_Y_Tropa §4.6).
     /// `comprar_objeto` o `vender_objeto` sin estar dentro de una plaza con la Armería activa, o `forjar_objeto` sin ella en la plaza donde reside (D1).
     pub const ARMERIA_SIN_ARMERIA: &str = "armeria.sin_armeria";
-    /// `comprar_objeto`: la tienda no lo vende (no es arma, armadura ni montura, o pasa de `tiendaHastaTier`; Catalogo_De_Objetos §6).
+    /// `comprar_objeto`: la tienda no lo vende (no es arma, armadura ni montura, o pasa de `tiendaHastaTier`; Objetos_Del_Heroe §3.3).
     pub const ARMERIA_NO_SE_VENDE: &str = "armeria.no_se_vende";
     /// `comprar_objeto` o `forjar_objeto`: la Facción de la plaza no tiene la tecnología de su metal (D1).
     pub const ARMERIA_SIN_TECNOLOGIA: &str = "armeria.sin_tecnologia";
     /// `forjar_objeto` fuera de la plaza donde reside el héroe, que es donde forja (D1).
     pub const FORJA_FUERA_DE_TU_RESIDENCIA: &str = "forja.fuera_de_tu_residencia";
-    /// `forjar_objeto`: no tiene receta (no es arma ni armadura, o es de tier I; Catalogo_De_Objetos §6b).
+    /// `forjar_objeto`: no tiene receta (no es arma ni armadura, o es de tier I; Objetos_Del_Heroe §3.4).
     pub const FORJA_SIN_RECETA: &str = "forja.sin_receta";
     /// `forjar_objeto`: no hay en la mochila un plano de su tier.
     pub const FORJA_SIN_PLANO: &str = "forja.sin_plano";
@@ -3383,7 +3383,7 @@ pub mod rechazos {
     pub const FORJA_SIN_MATERIALES: &str = "forja.sin_materiales";
     /// `usar_objeto`: no es un consumible.
     pub const OBJETO_NO_SE_USA: &str = "objeto.no_se_usa";
-    /// `usar_objeto`: una medalla de tropa sobre tropa prestada, que no es del héroe (Catalogo_De_Objetos §3.3).
+    /// `usar_objeto`: una medalla de tropa sobre tropa prestada, que no es del héroe (Objetos_Del_Heroe §3.5).
     pub const ESCUADRA_PRESTADA: &str = "escuadra.prestada";
     /// `usar_objeto`: una medalla de tropa sobre una escuadra que ya está en `nivelMaximoEscuadra`.
     pub const ESCUADRA_NIVEL_MAXIMO: &str = "escuadra.nivel_maximo";

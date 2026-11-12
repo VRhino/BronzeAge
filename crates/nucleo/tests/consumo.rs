@@ -139,7 +139,7 @@ fn con_la_carne_pausada_ni_la_poblacion_ni_la_guarnicion_la_comen_y_el_trigo_pon
     assert!(pausada.economia(a).unwrap().consumo_pausado.is_empty());
 }
 
-/// Eras_IV_Y_V §2b: el aceite de sésamo es un bien de consumo más, y `pausarConsumo` lo admite; lo pausado se ve dentro con su id de catálogo.
+/// Economia_Construccion §9.2: el aceite de sésamo es un bien de consumo más, y `pausarConsumo` lo admite; lo pausado se ve dentro con su id de catálogo.
 #[test]
 fn el_aceite_de_sesamo_se_pausa_y_se_reanuda_como_los_demas_bienes() {
     let Some(m) = mundo() else {

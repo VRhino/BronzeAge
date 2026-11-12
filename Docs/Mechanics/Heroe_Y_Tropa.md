@@ -21,7 +21,7 @@ se **recluta** en una plaza (la cadena de condiciones y el coste), cómo se cons
   - El ciclo de la batalla de Unity, que aplica la XP del motor y el botín al héroe (§4.3 resume lo que le hace).
   - El mantenimiento de la población que reclutar consume → [`Economia_Construccion.md`](Economia_Construccion.md) §9; las tecnologías que habilitan cada tropa → [`Tecnologia_Aedas.md`](Tecnologia_Aedas.md).
 
-> **Implementado en Rust (2026-10-19, fase 4A-1: reglas puras).** Es el crate `crates/militar`, que no depende del núcleo (lo integra la fase 4B-1, más abajo): `catalogo` (§12: las 27 tropas, con los Mineros, y la clase de población que sale del escalón), `escuadra` (§2.3 y §10.2: nivel, experiencia, poder y la **moral como ritmo**), `liderazgo` (§5), `heroe` (§2.1-§4, §6, §8 y §9: progresión inicial, repartir puntos, loadouts, orden de escuadras y herido), `guarnicion` (§7: cupo, asignar, retirar, soltar), `reclutamiento` (§11) y `mercenarios` (reclutar en un campamento y la tropa prestada, [`Campamentos_Mercenarios.md`](Campamentos_Mercenarios.md)). Las cifras son las de los bloques de este documento **sin correcciones en el código** (los bloques se reescribieron el 2026-10-19; la huella de las reglas de una foto cambia). Decisiones de la implementación:
+> **Implementado en Rust (2026-10-19, fase 4A-1: reglas puras).** Es el crate `crates/militar`, que no depende del núcleo (lo integra la fase 4B-1, más abajo): `catalogo` (§12: las 27 tropas de entonces, con los Mineros; 37 desde el 2026-11-12, y la clase de población que sale del escalón), `escuadra` (§2.3 y §10.2: nivel, experiencia, poder y la **moral como ritmo**), `liderazgo` (§5), `heroe` (§2.1-§4, §6, §8 y §9: progresión inicial, repartir puntos, loadouts, orden de escuadras y herido), `guarnicion` (§7: cupo, asignar, retirar, soltar), `reclutamiento` (§11) y `mercenarios` (reclutar en un campamento y la tropa prestada, [`Campamentos_Mercenarios.md`](Campamentos_Mercenarios.md)). Las cifras son las de los bloques de este documento **sin correcciones en el código** (los bloques se reescribieron el 2026-10-19; la huella de las reglas de una foto cambia). Decisiones de la implementación:
 > - Los ids son números (`HeroeId`, `EscuadraId`…) y la tropa es un `enum` con los ids de los datos (`"lanceros_mimbre"`); añadir una tropa (Eras IV-V) es añadir una variante y su fila del bloque.
 > - **La plaza entra por un resumen**, no por el `Asentamiento` entero: el pool de reclutamiento por clase (de `asentamiento::produccion::disponibles_para_reclutar`), el factor de «Leva Forzosa», el trigo que come la población y los soldados del campamento. `reclutar` valida en el orden de §11.2 y **no cambia nada si rechaza** (ni gasta el id de la escuadra).
 > - La **residencia** es mínima (una plaza o un campamento, `Residencia`); la ciudadanía, los cargos, las casas compradas y el cooldown son del sistema político (*reglas puras en Rust desde 5A, 2026-10-24:* `politica::residencia` —cooldown, `puede_mudarse`, y Q8: para la nobleza cuentan todos los residentes— y `politica::cargos` —Q4: solo se designa a quien reside—; el núcleo las usa desde 5B). El veto, la Facción y la tecnología adoptada llegan como datos del llamador.
@@ -114,7 +114,7 @@ Uno por jugador y partida. Es el **dueño** de todo lo que antes se atribuía al
 | `nivel`, `experiencia` | Nivel (1‥`nivelMaximoEscuadra`) y XP **acumulada** (§10.2). |
 | `moral` | 0–100. A 0 hay deserción continua (Movimiento §6.3). |
 | `formacion` | La familia de formación que el héroe ha elegido para la escuadra (§10.4); nace en la de reposo. *Rust, 2026-11-11.* |
-| `habilidadesDesbloqueadas`, `formacionesDesbloqueadas`, `formacionSeleccionada` | Campos del contrato **sin uso**: viajan vacíos. Las habilidades las saca Unity del nivel de la escuadra (§10.2) y la formación va en `formacion` (§10.4). |
+| `habilidadesDesbloqueadas`, `formacionesDesbloqueadas`, `formacionSeleccionada` | Campos del contrato **sin uso**: viajan vacíos. Las habilidades las saca Unity del nivel de la escuadra (§10.2): se abren en los niveles de `MILITAR.nivelesHabilidadEscuadra` (4, 7 y 10, desde el 2026-11-12), que el motor solo publica y la formación va en `formacion` (§10.4). |
 | `contenedor` | `campamento` (en la plaza donde reside su héroe, o en ninguna si es huérfano) · `ejercito {ejercitoId}` · `escolta {caravanaId}` · `fuera` (con su héroe desconectado) · `plaza {asentamientoId}` (en la guarnición de una plaza de su Facción donde su héroe no reside, §7; Rust, 2026-11-04). |
 | `enGuarnicion` | En la guarnición de la plaza donde reside su héroe (§7). Solo con `contenedor: campamento`. |
 | `reservaBatalla?` | Candado `{battleId}` mientras está reservada para una batalla de Unity. |
@@ -166,7 +166,7 @@ Como en Conquest (`HeroDataService.CreateNewHero`). Hasta el 2026-11-12 nacía s
 
 ### 4.3 Qué le suma el servidor
 
-- **XP y nivel (2026-11-12, Progresion_Tropas_Y_Heroe §3):** la experiencia se acumula en milésimas y el nivel se guarda al lado, como en la escuadra. Subir del nivel `n` al `n + 1` pide `PROGRESION_HEROE.experienciaBase + experienciaPorNivel × (n − 1)` (100, 120, 140… 660 para pasar del 29 al 30) y desde el `nivelDeTope` (30) cada nivel pide lo mismo que el último (680). La acumulada para llegar al 30 es 11.020.
+- **XP y nivel (2026-11-12, entrada 73):** la experiencia se acumula en milésimas y el nivel se guarda al lado, como en la escuadra. Subir del nivel `n` al `n + 1` pide `PROGRESION_HEROE.experienciaBase + experienciaPorNivel × (n − 1)` (100, 120, 140… 660 para pasar del 29 al 30) y desde el `nivelDeTope` (30) cada nivel pide lo mismo que el último (680). La acumulada para llegar al 30 es 11.020.
 
   ```
   experienciaParaNivel(n) = Σ_{k=1..min(n,30)−1} (100 + 20 × (k − 1))  +  max(0, n − 30) × 680
@@ -387,7 +387,7 @@ Todas lanzan `tropas.reclutamiento_invalido`:
 6. Permiso `solo_reponer` y no hay `existente` (`reclutamiento.solo_reponer`).
 6b. (Rust, 2026-11-10) Permiso `ciudadano` y no hay `existente`: el héroe tiene que haber entrado **con una columna** (`heroe.sin_columna`) y la escuadra nueva tiene que **caber en su Liderazgo**: el Liderazgo comprometido de las escuadras que ya lleva fuera del campamento y de la guarnición de visita de esta plaza, más el coste de la tropa, no pasa de su `liderazgoBase` (`liderazgo.superado`), como al recogerlas.
 7. `cantidad = tropa.unidadesPorDefecto − (existente?.cantidad ?? 0)`; si `cantidad ≤ 0`, ya está al tope.
-8. **Población**: `poblacionDisponibleParaReclutar(plaza, origen) ≥ cantidad`, con `origen = poblacionDeTropa(tropa)`: escalón 1–2 → `pesants`, 3 → `artesanos`, 4–5 → `nobleza`.
+8. **Población**: `poblacionDisponibleParaReclutar(plaza, origen) ≥ cantidad`, con `origen = poblacionDeTropa(tropa)`: escalón 1–2 → `pesants`, 3 → `artesanos`, 4–5 → `nobleza`, salvo que la tropa traiga su propio `poblacion` en `TROPAS_RECLUTABLES` (desde el 2026-11-12 solo los `falangitas`, de escalón 4 y de `artesanos`; `militar::catalogo`).
    Disponible = nobleza → toda la nobleza; artesanos → `max(0, artesanos − trabajadoresRequeridosTransformacion)`; pesants → el excedente de mano de obra (`manoObraInfo.excedente`). No se recluta lo que ya hace falta para producir.
 9. **Edificio**: el **primer** edificio `activo` de `tropa.edificio` tiene `nivelInterno ≥ tropa.nivelRequerido` (nivel interno 1 si no lo trae).
 10. **Coste** (§11.3): el almacén lo cubre.
@@ -417,7 +417,7 @@ El oro y el equipo salen del **almacén de la plaza** (no del almacén personal 
 
 ## 12. Parámetros
 
-Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19): las velocidades de las tropas son las calibradas (×1,5 sobre las del motor TypeScript: montada 42 (84 desde el 2026-10-27, decisión del autor: la caballería va al doble), ligera 30, media 24, pesada 18) y el catálogo incluye a los **Mineros** (27 tropas). Los números de balance de combate y de ración de `MILITAR` están en [`Combate.md`](Combate.md) §12.
+Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19): las velocidades de las tropas son las calibradas (×1,5 sobre las del motor TypeScript: montada 42 (84 desde el 2026-10-27, decisión del autor: la caballería va al doble), ligera 30, media 24, pesada 18) y el catálogo incluye a los **Mineros** (27 tropas; 37 desde el 2026-11-12, con las diez de las Eras IV y V). Los números de balance de combate y de ración de `MILITAR` están en [`Combate.md`](Combate.md) §12.
 
 <!-- parametros:LIDERAZGO -->
 ```json
@@ -1513,10 +1513,10 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
 ```
 <!-- /parametros -->
 
-`TROPAS_RECLUTABLES` lleva de cada tropa, además de lo que usa el motor, su **tier** de combate y su bloque **`combate`** (2026-11-12, entrada 72; `Cifras_De_Combate.md` §1, §7 y §8). Son datos para Conquest y el cliente, que los leen de `GET /v1/datos`: el motor no los usa.
+`TROPAS_RECLUTABLES` lleva de cada tropa, además de lo que usa el motor, su **tier** de combate y su bloque **`combate`** (2026-11-12, entrada 72). Son datos para Conquest y el cliente, que los leen de `GET /v1/datos`: el motor no los usa.
 - **`tier`**, del 1 (leva) al 5 (élite): la rareza de la escuadra en Conquest. Es otro número que el `escalon`, que sigue fijando el Liderazgo, el oro y la clase de población.
 - **`combate`**: `vida` por soldado; `dano`, `penetracion`, `defensa` y `alivio` (en %), cada uno con su terna `perforante`/`cortante`/`contundente`; `bloqueo` del escudo; `cadencia` (segundos entre golpes) y `alcance` (metros). Las tropas de distancia (`alcance` de más de 2) llevan además `precision` (1-100) y `municion`.
-- **`unidadesPorDefecto`** son los soldados de `Cifras_De_Combate.md` §4, propios de cada tropa y que ya no bajan con el escalón: las de distancia, 20 todas; las falangitas, 32; los hipaspistas, 20; los hequetai, 18; los espartiatas y las caballerías de tier V, 16.
+- **`unidadesPorDefecto`** son los soldados que fijó el autor el 2026-11-11, propios de cada tropa y que ya no bajan con el escalón: las de distancia, 20 todas; las falangitas, 32; los hipaspistas, 20; los hequetai, 18; los espartiatas y las caballerías de tier V, 16.
 
 <!-- parametros:VERSION_CATALOGO_TROPAS -->
 ```json

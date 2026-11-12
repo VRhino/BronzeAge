@@ -6,6 +6,109 @@ Los cambios del motor que el cliente jugador (BronzeAgeClient) tiene que recoger
 
 ## Pendiente
 
+### Objetos, clases, cifras, progresión y Eras IV-V (2026-11-12, rama `claude/project-thread-h9ahf4`, sin PR todavía)
+
+Partida nueva: la foto pasa a `BAN63`.
+
+1. **El aceite de sésamo y la subida al nivel 5.**
+   - Hay un recurso nuevo, `aceiteSesamo` («Aceite de sésamo»; ya son 42). `aceite` sigue con su id y ahora se llama «Aceite de oliva». La receta de sésamo de la Prensa da `aceiteSesamo` (antes daba `aceite`). La nobleza lo come con ×1,25 (`BIENES_DE_CONSUMO.bienes.aceiteSesamo`, en `Economia_Construccion`); con los dos aceites se suman los dos modificadores, como el vino y la cerveza. Se puede pausar con `pausar_consumo` y se comercia como cualquier recurso, con un precio base de 3.
+   - Las plazas suben ya al nivel 5 (`NIVEL_ASENTAMIENTO.nivelMaximo`). `ASCENSO_ASENTAMIENTO.nivelTechoProvisional` ya no existe. La obra del 5 cuesta, además de la madera, la piedra y el oro, 1.000 de vino, 1.000 de cerveza, 1.000 de aceite y 1.000 de aceite de sésamo (`porNivelObjetivo.5.costo`). Los requisitos no cambian.
+   - Qué haría el cliente: poner el recurso nuevo en el almacén, el mercado, las caravanas y el selector de `pausar_consumo`; cambiar el nombre visible de `aceite`; ofrecer la subida al 5 con su coste, sin tope en el 4. Referencia: Economia_Construccion §2, §5.3 y §9.2, y el ascenso.
+2. **Las Eras IV y V.**
+   - `ERAS` trae `profesionalizacion_imperial` («Profesionalización», 8 semanas) y `hegemonia_macedonica` («Hegemonía macedónica», 26 semanas). La V es la última: sin `era_minimo_hasta_ms` ni `era_plazo_hasta_ms`. `TARIFA_ADOPCION` trae las dos Eras.
+   - `TECNOLOGIAS` trae 12 tecnologías nuevas. En la IV: `ejercito_permanente`, `cuerpo_oficiales`, `logistica_campana`, `infanteria_profesional`, `hostigadores_profesionales` y `carga_caballeria`. En la V: `reforma_macedonica`, `falange_sarisa`, `cuerpo_hipaspistas`, `formacion_cuna`, `companeros_reales` y `acero_templado`. Sus hitos usan seis condiciones nuevas: `escuadrasVivas {cantidad}`, `heroesEnFaccion {cantidad}`, `plazaEnNivel {nivel}`, `nivelFaccion {nivel}`, `columnasEnMarcha {cantidad}` y `edificioEnPlazaDeNivel {edificio, nivelInterno, nivelPlaza}`. Llegan en `TecnologiaRevelada.cumplidas`, y el cliente compone la frase con el catálogo.
+   - Hay 12 contadores nuevos (36 en total) en `EstadoTecnologia.contadores` y en los logros: `fabricado.armaHierroCalidad`, `caminos.compartidos`, `escuadras.veteranas`, `batallas.conTresHeroes`, `batallas.ganadasEnInferioridad`, `escuadras.eliteDestruidas`, `batallas.campoAbiertoConCaballeria`, `batallas.campoAbiertoConCaballeriaElite`, `batallas.armasCombinadas`, `batallas.contraCoalicion`, `batallas.conRey` y `persecuciones.deCaballeria`. Tres logros llevan un umbral fijo y no por plaza: `logistica_campana` (1), `falange_sarisa` (3) y `cuerpo_hipaspistas` (10).
+   - `EPICAS` trae una épica para cada una de las nuevas: 6 capítulos en la IV y 7 en la V. La épica de `forja_hierro_estandarizada` pasa a llamarse «Canto de los cálibes», y «Canto del acero templado» es ahora la de `acero_templado`.
+   - Efectos que el cliente puede enseñar: con `logistica_campana`, los víveres por héroe se multiplican por 1,5 (`LOGISTICA.bonusViveres`, en `Movimiento_Ejercitos`); con `ejercito_permanente`, las escuadras ganan un 10 % más de experiencia en combate (`MILITAR.bonusExperiencia`).
+   - Qué haría el cliente: los textos de las dos Eras, de las 12 tecnologías, de los 12 contadores (para la barra «x / y») y de las seis condiciones de hito; no esperar un plazo en la Era V; y, si calcula por su cuenta los víveres máximos, aplicar el ×1,5. Referencia: Tecnologia_Aedas §2.1, §3.1 y §7.2.
+3. **Las tropas.**
+   - Hay 10 tropas nuevas en `TROPAS_RECLUTABLES`, cada una con su tecnología:
+     - del Barracón: `epilektoi` (`infanteria_profesional`), `inmortales` (`infanteria_profesional`), `falangitas` (`falange_sarisa`; se reclutan de artesanos, por su campo `poblacion`) e `hipaspistas` (`cuerpo_hipaspistas`);
+     - de la Galería de tiro: `peltastas_ificrates` (`hostigadores_profesionales`) y `agrianos` (`reforma_macedonica`);
+     - de las Caballerizas: `caballeria_tesalia` y `caballeria_noble_persa` (`carga_caballeria`), `prodromos` (`formacion_cuna`) y `companeros` (`companeros_reales`).
+   - Toda tropa lleva ahora `tier` (del 1 al 5, la rareza de Conquest; no es el `escalon`, que sigue fijando el Liderazgo, el oro y la población) y un bloque `combate`: `vida`; `dano`, `penetracion`, `defensa` y `alivio`, cada uno con `perforante`, `cortante` y `contundente`; `bloqueo`, `cadencia` y `alcance`; y `precision` y `municion` en las de distancia. El motor no usa estas cifras: son para Conquest y los clientes.
+   - Cambian los soldados por escuadra (`unidadesPorDefecto`): las de distancia tienen 20 todas (antes 12 o 18), los hequetai 18 y los espartiatas 16. `VERSION_CATALOGO_TROPAS` es 2 y va en `BattleRules.version_catalogo_tropas`.
+   - Cambia la curva de experiencia de las escuadras (`MILITAR.experienciaParaSubirEscuadra`): 10, 25, 50, 100, 150, 200, 250, 275 y 315, 1.375 hasta el nivel 10 (antes eran 275). En una batalla de Unity, el motor da 4 de experiencia si gana el bando y 2 si pierde (`experienciaUnityPorVictoria` y `experienciaUnityPorDerrota`). `MILITAR.nivelesHabilidadEscuadra` (4, 7 y 10) publica los niveles que abren habilidad (D8).
+   - Qué haría el cliente: las 10 tropas en el reclutamiento, cada una visible solo con su tecnología y su edificio; la ficha de combate con `tier` y `combate`; la barra de experiencia de la escuadra con la curva nueva; y, si quiere, «habilidad nueva en el nivel N». Referencia: Heroe_Y_Tropa §12 (`TROPAS_RECLUTABLES` y `VERSION_CATALOGO_TROPAS`) y Combate §3.3.
+4. **Crear un héroe exige una clase (D21).**
+   - `OrdenCrearHeroe.class_definition_id` tiene que ser un id de `CLASES_HEROE`: `lanza_escudo_redondo`, `espada_escudo_mediano`, `arco_lanza`, `hacha_dos_manos` o `dagas`. Vacía o desconocida, la orden se rechaza con `heroe.clase_desconocida`.
+   - El héroe nace con el equipo inicial de su clase puesto: el arma de tier I de la clase, las cuatro piezas de tier I de su `armaduraInicial` (torso, guantes, pantalones y botas, sin casco) y `montura_tiro`. Nace también con la mochila y el almacén de objetos vacíos.
+   - Qué haría el cliente: un selector de clase al crear el héroe, con `nombre`, `armaduras` y `atributosBase` de cada clase y su equipo inicial; sin clase, no se puede mandar la orden. Referencia: Heroe_Y_Tropa §3, Objetos_Del_Heroe §3.2.
+5. **El nivel y la experiencia del héroe; adiós a los perks.**
+   - El héroe sube de nivel. Subir del nivel n al n + 1 pide 100 + 20 × (n − 1) de experiencia (100, 120… 660 para pasar al 30). Desde el 30, cada nivel pide 680 (`PROGRESION_HEROE`, en `Heroe_Y_Tropa`). La experiencia sale solo del combate: con números, 1 si gana su bando y 0,5 si pierde, una vez por combate; en Unity, 4 o 2. La medalla del héroe da también experiencia (punto 7).
+   - `Heroe.experiencia_hacia_siguiente_nivel` (10) es ahora **lo que le falta** para el siguiente nivel, en milésimas. Antes era la experiencia sin curva.
+   - Cada nivel hasta el 30 da un punto de atributo (`puntos_de_atributo_sin_gastar`), que ya se puede gastar con `repartir_puntos`, y 3 de Liderazgo. El héroe **nace con 14 de Liderazgo** (`LIDERAZGO.base`, antes 100) y llega a 100 en el nivel 30 (`liderazgo_base`). Con 14 lleva 2 escuadras de leva o 1 de línea. Desde el 31 el nivel sigue subiendo sin dar nada.
+   - El bloque `LIDERAZGO` está ahora solo en `Heroe_Y_Tropa` (con `porNivel` y `tope`). El que había en `Movimiento_Ejercitos` ya no existe.
+   - Al subir de nivel llega el hecho `heroe.nivel_subio { heroe, nivel }`, con el nivel nuevo, una vez aunque cruce varios.
+   - Los perks desaparecen: `Heroe.puntos_de_perk_sin_gastar` (12), `Heroe.perks_desbloqueados` (14), `Loadout.perks_seleccionados` (4) y `OrdenGuardarLoadout.perks_seleccionados` (4) quedan `reserved`, y el rechazo `loadout.perk_no_desbloqueado` ya no existe. Los abre el nivel en Conquest: `PROGRESION_HEROE.perksEnNivel` (7 y 12) y `habilidadesEnNivel` (1, 3, 5 y 10) solo se publican.
+   - Qué haría el cliente: el nivel y la barra hacia el siguiente, sacada de `experiencia_hacia_siguiente_nivel` y de la curva; un aviso con `heroe.nivel_subio`; el botón de repartir puntos solo con puntos sin gastar; leer el Liderazgo de `liderazgo_base` y no del bloque; ofrecer al reclutar, al salir y en los loadouts solo lo que cabe en ese Liderazgo; y quitar los perks del loadout. Referencia: Heroe_Y_Tropa §4.3 y §5.
+6. **La clase, el equipo, la mochila y el almacén de objetos en `HEROE`.**
+   - `class_definition_id` es la clase real: la `clase` del arma puesta. Cambia si el héroe se pone un arma de otra clase.
+   - `atributos_base` es la suma de los `atributosBase` de la clase y de los puntos repartidos (D16). Lo que da el equipo no se suma, porque lo suma Conquest.
+   - `equipamiento` (29) trae el equipo puesto, con el hueco nuevo `montura` (7) además de `arma`, `casco`, `torso`, `guantes`, `pantalones` y `botas`. El arma está siempre puesta.
+   - `inventario` (28) es la mochila, con 72 casillas (`OBJETOS.casillasMochila`). `almacen_objetos` (44, nuevo) es el almacén de objetos de la residencia, con 144 casillas (`casillasAlmacen`). Las dos llegan solo en el héroe propio.
+   - Cada pieza es un `ItemInstancia`:
+     - `item_definition_id`, el id de `OBJETOS`;
+     - `tipo`, uno de `arma`, `armadura`, `montura`, `material` o `consumible` (antes se documentaban `consumible` y `visual`);
+     - `precio`, el de su ficha;
+     - `cantidad`, porque lo apilable va junto en una sola casilla;
+     - `casilla_inventario`, el número fijo de su casilla, de 0 a la capacidad menos 1, que es el que llevan las órdenes. Una pieza puesta lleva 0, que no significa nada.
+   - Solo una pieza **forjada** lleva `item_instance_id` (`obj-N`) y sus cifras ya multiplicadas por la calidad en `estadisticas`: `fuerza`, `destreza`, `armadura` y `vitalidad`; `danoPerforante`, `danoCortante`, `danoContundente`, `penetracionPerforante`, `penetracionCortante` y `penetracionContundente` en un arma; `defensaPerforante`, `defensaCortante`, `defensaContundente` y `salud` en una armadura. La de tienda o de botín es la ficha al 100 % y no lleva ni id ni cifras: las cifras se leen del `combate` de su ficha.
+   - **Otro héroe** (`HeroePublico`, en `VISTA`) muestra su clase y su equipo puesto. No muestra su mochila, su almacén de objetos ni sus atributos.
+   - En la batalla (`BATALLA`, `ticket`), `HeroSnapshot` trae la clase, el equipo real y `atributos_efectivos` (la misma suma), y `BattleRules` trae `version_catalogo_heroe` y `version_catalogo_objetos` (las `version` de `CLASES_HEROE` y `OBJETOS`).
+   - Qué haría el cliente: la pantalla de equipo (siete huecos), la mochila y el almacén por casillas, el tooltip de cada pieza con su ficha o, si es forjada, con sus `estadisticas`, y el equipo de otro héroe en su ficha. Referencia: Heroe_Y_Tropa §1 y §4.5, Objetos_Del_Heroe §3.1 y §3.2.
+7. **Ocho órdenes nuevas (192 a 199, en `orders.proto`).** Todas las da el héroe de la cuenta. Ninguna cambia nada si se rechaza.
+   - `equipar_objeto { casilla }` (192) se pone la pieza de esa casilla de la mochila. Lo que estaba en el hueco vuelve a la mochila. Si es un arma de otra clase, vuelven también las armaduras cuyo peso no admite la clase nueva.
+   - `desequipar_objeto { hueco }` (193) se quita la pieza de un hueco (`casco`, `torso`, `guantes`, `pantalones`, `botas` o `montura`) y la pasa a la mochila. El arma no se quita (`equipo.arma_fija`). Un hueco desconocido es `orden.forma_invalida`.
+   - Dónde se equipa y se quita (D2): dentro de una plaza (también ajena), de un pueblo o de un campamento. En una columna, en una avanzada o fuera del mundo, el rechazo es `equipo.fuera_de_lugar`; con alguna escuadra suya con `reserva_batalla`, `equipo.en_batalla`. Las dos órdenes emiten `heroe.equipo_cambiado { heroe }`, y el equipo nuevo llega en `HEROE`.
+   - Rechazos de equipar y quitar: `equipo.no_equipable` (un material o un consumible), `equipo.incompatible` (la clase del arma no admite ese peso: `CLASES_HEROE.armaduras` frente a `tipoArmadura`), `equipo.hueco_vacio`, `mochila.llena`, `objeto.desconocido`, `inventario.casilla_vacia`, `inventario.poca_cantidad` e `inventario.cantidad_invalida`.
+   - `guardar_objeto { casilla, cantidad }` (194) pasa piezas de la mochila al almacén de objetos, y `sacar_objeto { casilla, cantidad }` (195) del almacén a la mochila. Las dos se dan solo dentro de la residencia, donde está el almacén (D22): fuera, `almacen_objetos.fuera_de_tu_residencia`; sin residencia, `heroe.sin_residencia`. Otros rechazos: `almacen_objetos.lleno`, `mochila.llena` y los de las casillas de arriba. No emiten hecho; el cambio llega en `HEROE`.
+   - `comprar_objeto { objeto }` (196) compra una pieza al 100 %, con las monedas del héroe, y la mete en la mochila. `vender_objeto { casilla, cantidad }` (197) vende cualquier objeto de la mochila al 50 % del precio de su ficha (`ventaPct`), redondeando hacia abajo; una pieza forjada vale lo mismo (D18).
+   - Dónde se compra y se vende (D1): dentro de cualquier plaza con una Armería activa (`armeria.sin_armeria`). Solo se compran armas, armaduras y monturas hasta el tier `tiendaHastaTier` (2) (`armeria.no_se_vende`), y solo si la Facción **de la plaza** tiene la tecnología del metal (`OBJETOS.metales`; `inicio` y las monturas no piden ninguna; si no, `armeria.sin_tecnologia`). Otros rechazos: `heroe.sin_monedas` y `mochila.llena`. Hechos: `heroe.objeto_comprado { heroe, plaza, precio, objeto }` y `heroe.objeto_vendido { heroe, plaza, cantidad, cobro, objeto }`.
+   - `forjar_objeto { objeto }` (198) forja un arma o una armadura de los tiers II a V, solo dentro de la plaza donde reside el héroe y con su Armería activa (D1). Fuera de ella, el rechazo es `forja.fuera_de_tu_residencia`; si reside en un campamento o la plaza no tiene Armería, `armeria.sin_armeria`. Gasta de la mochila un `plano_{tier}` y los crisoles de la receta, y del almacén personal (`HEROE.almacen_personal`) los `materiales` de la receta, en unidades. La calidad sale entre el 90 y el 110 %, y la pieza nace con su `obj-N`. Rechazos: `forja.sin_receta`, `armeria.sin_tecnologia`, `forja.sin_plano`, `forja.sin_crisoles`, `forja.sin_materiales` y `mochila.llena`. Hecho: `heroe.objeto_forjado { heroe, plaza, pieza (el N de obj-N), calidad (%), objeto }`.
+   - `usar_objeto { casilla, escuadron_id? }` (199) usa un consumible de la mochila, donde se equipa (D2), con sus mismos rechazos. Lo que no es consumible da `objeto.no_se_usa`. Cada consumible tiene su efecto:
+     - una medalla de tropa da su `experienciaTropa` a `escuadron_id`, que tiene que ser una escuadra suya (`escuadra.ajena`), no prestada (`escuadra.prestada`) y por debajo del nivel 10 (`escuadra.nivel_maximo`), sin el bonus de Ejército permanente;
+     - una medalla del héroe da su `experienciaHeroePct` de lo que pide su nivel actual para subir, y puede emitir `heroe.nivel_subio`;
+     - el cofre de monturas da una montura de tier III, IV o V, que llega como el botín (punto 8).
+   - Hecho de `usar_objeto`: `heroe.objeto_usado { heroe, objeto }`, más `escuadra` si es una medalla de tropa, y `montura` y `destino` (`mochila`, `almacen` o `perdido`) si es el cofre.
+   - Qué haría el cliente (la regla de interfaz manda):
+     - **Equipar, quitar y usar**: solo en uno de esos tres sitios (`ubicacion`) y sin ninguna escuadra con `reserva_batalla`; «Equipar» solo en armas, armaduras de un peso que admite la clase y monturas; nunca «Quitar» en el arma.
+     - **Guardar y sacar**: solo con `ubicacion` igual a `residencia_id`.
+     - **La tienda**: solo dentro de una plaza con la Armería activa, con las piezas que se pueden comprar allí y las monedas que hacen falta.
+     - **La forja**: solo en la plaza de residencia con Armería, con las recetas cuyo plano, crisoles y materiales tiene el héroe; cada receta con su coste y su rango de calidad.
+     - **La medalla de tropa**: un selector con sus escuadras que la pueden recibir.
+     - **Mochila llena**: si no queda casilla libre en la mochila, no ofrecer comprar, forjar, sacar, quitar ni equipar algo que mande una pieza a la mochila.
+   - Referencia: Heroe_Y_Tropa §4.4 a §4.6, Proyecciones_Y_Autorizacion (la tabla de órdenes).
+8. **El botín de objetos.**
+   - Lo que llega sin pedirlo va a la mochila. Si no cabe, va al almacén de objetos, aunque el héroe esté fuera de su residencia; si tampoco cabe, se pierde (D17 y D22).
+   - Cada entrega emite `heroe.botin { heroe, origen, mochila, almacen, perdido }`, que oye solo el héroe. Las tres listas son de `[objeto, cantidad]`, con la forma de `recursos` en `mision.reclamada`. Los `origen` son:
+     - `unity`: cada héroe que participó en una batalla de Unity, con la tabla `unity`; lo de `soloSiGana` llega solo si ganó su bando;
+     - `bandidos`: quien cobra el botín de un campamento destruido, con la tabla de su nivel, dentro de las 8 primeras destrucciones completas de su ventana de 24 h;
+     - `diaria`: quien reclama una diaria **individual** del tablón, además de su recompensa;
+     - `alijo`: quien abre un alijo;
+     - `mercenario`: el mercenario que llega al rango 4 o al 5;
+     - `mision`: el objeto de una recompensa de misión personal.
+   - `RecompensaMision.tipo` puede ser `objeto`: `clave` es el id de `OBJETOS` y `cantidad`, piezas (no milésimas). Solo puede darlo una misión personal y nunca es un material. Hoy ninguna misión de los datos lo usa. Ese objeto no va en `mision.reclamada` sino en el `heroe.botin` que sale justo después.
+   - Qué haría el cliente: un aviso con `heroe.botin` que diga qué fue a la mochila, qué al almacén y qué se perdió. En la diaria individual, además, la tabla `misionDiaria` como premio (hoy un crisol, una medalla de tropa pequeña y una medalla del héroe muy pequeña). Y pintar el tipo `objeto` en la lista de recompensas de una misión. Referencia: Objetos_Del_Heroe §3.7, Misiones §4.1, Misiones_Recurrentes §5.
+9. **Los datos de los objetos en `GET /v1/datos`**, en el documento nuevo `Objetos_Del_Heroe`.
+   - **`OBJETOS`**: `version`, `ventaPct` (50), `tiendaHastaTier` (2), `casillasMochila` (72), `casillasAlmacen` (144), `rarezas` (el nombre de rareza de cada tier, de `comun` a `legendaria`), `metales` (la tecnología que abre cada metal) y `objetos`: 136 fichas (30 armas, 87 armaduras, 5 monturas, 5 materiales y 9 consumibles).
+   - Cada ficha lleva `id`, `nombre`, `tipo`, `tier` (`null` en los consumibles y en el crisol), `apilable` y `precio` en monedas. Las armas llevan además `clase`; las armaduras, `hueco` y `tipoArmadura` (`ligera`, `media` o `pesada`); las dos, `metal`, `combate` (las cifras del tooltip) y `forja` (`plano`, `crisoles`, `materiales` y `calidad`; `null` en el tier I). Los consumibles llevan `efecto`: `experienciaTropa`, `experienciaHeroePct` o `monturaDe`.
+   - **`CLASES_HEROE`**: `version` y las cinco clases, con `nombre`, `armaduras`, `armaduraInicial` y `atributosBase`.
+   - **`BOTIN_OBJETOS`**: las tablas `bandidos` (por nivel, del 1 al 3), `unity`, `misionDiaria`, `alijo` y `rangoMercenario` (rangos 4 y 5). Cada entrada es fija (`objeto`, `cantidad`, `probabilidad`, `soloSiGana`) o `unoDe`.
+   - Los precios bajos de lo que no es arma ni armadura (D19) son los que paga la tienda al venderle, la mitad del `precio` de la ficha:
+     - medallas de tropa: 2, 5, 10 y 20;
+     - medallas del héroe: 5, 10, 20 y 40;
+     - cofre de monturas: 50;
+     - crisol: 5;
+     - plano: 10 por su tier.
+     Ninguno se compra: la tienda solo vende armas, armaduras y monturas.
+   - Qué haría el cliente: los tooltips, la tienda, la forja y el selector de clase con estos tres bloques, sin copiar ninguna cifra. Referencia: Objetos_Del_Heroe §2 y §4.
+10. **Lo que sale del contrato y de los datos.** Por si el cliente lo leía:
+    - En `HEROE`: `Heroe` 12 y 14, `Loadout` 4 y `OrdenGuardarLoadout` 4, los de los perks (punto 5).
+    - En la batalla (`BATALLA`, `ticket` y `resultado`): `HeroSnapshot.perks_desbloqueados` (6) y `casillas_inventario_libres` (9); `ResultadoEscuadra.xp_ganada` (5); `ResultadoHeroe.xp_ganada` (4) y `botin` (6). Los mensajes `Botin` y `ObjetoBotin` ya no existen: la experiencia, las monedas y los objetos de una batalla de Unity los pone el motor (D6 y D7), y llegan por `HEROE` y `heroe.botin`.
+    - `SquadSnapshot` gana `estandarte` (13) y `aspecto` (14), que llegan vacíos (D20): el cliente los puede ignorar.
+    - En `GET /v1/datos`: desaparecen `BATALLA.casillasInventario`, `BATALLA.versionCatalogoHeroe` y `BATALLA.versionCatalogoObjetos` (en `Batalla_Unity_Ciclo`), `LIDERAZGO` de `Movimiento_Ejercitos` y `ASCENSO_ASENTAMIENTO.nivelTechoProvisional`.
+
 ### Formaciones, +3 % por nivel y batallas en Unity (2026-11-11, PR #18, main e89f8d3)
 
 Partida nueva: la foto pasa a `BAN62`.

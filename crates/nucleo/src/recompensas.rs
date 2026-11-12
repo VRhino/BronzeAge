@@ -64,7 +64,7 @@ impl Recompensa {
     /// Lee la fija de su clase (`participacion` en una de plaza, `xp` en una de Facción) y la lista `recompensas` de la misión `m`, y lo valida todo: la fija es mayor que 0,
     /// una de héroe lleva alguna recompensa, cada elemento tiene un `tipo` conocido y una cantidad mayor que 0 (entera en los recursos y el oro), la lista no repite nada ni la fija, solo una misión
     /// `personal` (individual o cadena de héroe) da tropa u objetos, una tropa no pide más soldados de los que lleva su escuadra y un objeto existe y no es material (ni crisol ni planos,
-    /// Catalogo_De_Objetos §6b).
+    /// Objetos_Del_Heroe §2.1).
     pub fn leer(m: &Value, clase: ClaseDueno, personal: bool, militar: &militar::Reglas) -> Result<Recompensa, String> {
         let id = m.get("id").and_then(Value::as_str).unwrap_or("?");
         let (clave_fija, ajenas): (Option<&str>, &[&str]) = match clase {

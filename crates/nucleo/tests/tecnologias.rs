@@ -238,7 +238,7 @@ fn el_recurso_en_la_capital_lo_mira_el_paso_de_minuto_de_la_capital() {
 #[test]
 fn las_columnas_en_marcha_las_mira_el_paso_de_minuto_de_la_capital_y_la_plaza_en_nivel_su_disparador() {
     let m = con_mundo!();
-    // La Logística de campaña y el Cuerpo de oficiales (Era IV), en la Era I para la prueba, con el logro de nivel 2 y una sola condición de hito cada una (Eras_IV_Y_V §4).
+    // La Logística de campaña y el Cuerpo de oficiales (Era IV), en la Era I para la prueba, con el logro de nivel 2 y una sola condición de hito cada una (Tecnologia_Aedas §3.1).
     let r = reglas(|r| {
         for (id, hito) in [("logistica_campana", vec![Condicion::ColumnasEnMarcha(1)]), ("cuerpo_oficiales", vec![Condicion::PlazaEnNivel(2)])] {
             con_logro_de_nivel_2(r, id);

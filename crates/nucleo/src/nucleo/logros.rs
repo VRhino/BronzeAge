@@ -9,7 +9,7 @@
 //! |---|---|
 //! | `extraido.*`, `fabricado.*` | el paso de minuto de la plaza (`con_exterior`): lo que sale de los nodos de la plaza y de sus pueblos (`FuentesMundo::extraer`, D17) y lo que fabrican sus recetas (`Fuentes::fabricado`), en milésimas con un resto oculto |
 //! | `batallas.libradas`, `.conHoplitas`, `.campoAbierto` | columna contra columna con números (el `combate.resuelto` y su `combate.encuentro`); toda batalla de Unity aplicada (`aplicar_resultado`, D10) |
-//! | los de batalla de las Eras IV y V (`batallas.conTresHeroes`, `.ganadasEnInferioridad`, `.campoAbiertoConCaballeria`, `.armasCombinadas`, `.contraCoalicion`, `.conRey`, `.campoAbiertoConCaballeriaElite`, `escuadras.eliteDestruidas`) | las mismas batallas, con su resumen (`bando_de_batalla`, `con_rey`; Eras_IV_Y_V §3) |
+//! | los de batalla de las Eras IV y V (`batallas.conTresHeroes`, `.ganadasEnInferioridad`, `.campoAbiertoConCaballeria`, `.armasCombinadas`, `.contraCoalicion`, `.conRey`, `.campoAbiertoConCaballeriaElite`, `escuadras.eliteDestruidas`) | las mismas batallas, con su resumen (`bando_de_batalla`, `con_rey`; Tecnologia_Aedas §2.1) |
 //! | `persecuciones.deCaballeria` | una columna con caballería que ataca a otra columna o a una caravana (también la de Fundación), con números o en Unity |
 //! | `caminos.compartidos` | récord, a 1 al registrar la ruta que abre el primer camino compartido (`registrar_ruta_en_red`) |
 //! | `asedios.*`, `conquistas.conMurallaCompleta` | el asedio con números (`resolver_asedio_con_numeros`); el asedio de Unity aplicado. Nunca `batalla.aplicada` |
@@ -90,7 +90,7 @@ impl Nucleo {
 
     // ───────────────────────────── El resumen de una batalla ─────────────────────────────
 
-    /// Un bando de una batalla para sus contadores (Eras_IV_Y_V §3): las Facciones de los héroes que combaten y cuántos son, y sus escuadras como (tropa, soldados al empezar, al acabar),
+    /// Un bando de una batalla para sus contadores (Tecnologia_Aedas §2.1): las Facciones de los héroes que combaten y cuántos son, y sus escuadras como (tropa, soldados al empezar, al acabar),
     /// solo las que empezaron con alguno.
     pub(super) fn bando_de_batalla(&self, heroes: &[u64], escuadras: impl IntoIterator<Item = (Tropa, i64, i64)>) -> BandoDeBatalla {
         let tropas = &self.estado.reglas.economia.militar.tropas;

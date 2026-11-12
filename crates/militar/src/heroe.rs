@@ -1,7 +1,7 @@
 //! El héroe como personaje (Doc 5.16, Heroe_Y_Tropa §2-§4, §6, §8 y §9): con qué nace, cómo sube de nivel y reparte sus puntos, sus loadouts,
 //! el orden de sus escuadras y estar herido. Sus escuadras viven en él (`escuadras`), estén donde estén.
 //!
-//! La clase sale del arma puesta y los atributos son la base de esa clase más los puntos repartidos (Clases_De_Heroe §4 y §5, D16): el héroe guarda solo
+//! La clase sale del arma puesta y los atributos son la base de esa clase más los puntos repartidos (Objetos_Del_Heroe §3.2, D16): el héroe guarda solo
 //! los puntos, su equipo, su mochila y su almacén de objetos (D22), y las reglas de los objetos son del crate `objetos`. El avatar y el género son de Conquest
 //! y no se modelan aquí. Las habilidades y los perks se abren solos con el nivel y los define Conquest (D15): el motor no los guarda.
 
@@ -60,7 +60,7 @@ pub struct DatosLoadout {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ErrorHeroe {
-    /// La clase pedida al crearlo no está en `CLASES_HEROE` (Clases_De_Heroe §6).
+    /// La clase pedida al crearlo no está en `CLASES_HEROE` (Heroe_Y_Tropa §3).
     ClaseDesconocida,
     /// Una cantidad de puntos negativa.
     PuntosNegativos,
@@ -102,7 +102,7 @@ pub struct Heroe {
     pub puntos_de_atributo: i64,
     /// Los puntos que ha repartido (D16): sus atributos son estos más la base de la clase de su arma ([`Heroe::atributos`]).
     pub puntos_repartidos: Atributos,
-    /// Lo que lleva puesto (Clases_De_Heroe §4): el arma, que define su clase, las cinco piezas de armadura y la montura.
+    /// Lo que lleva puesto (Objetos_Del_Heroe §3.2): el arma, que define su clase, las cinco piezas de armadura y la montura.
     pub equipo: Equipo,
     /// Su mochila (`OBJETOS.casillasMochila`): va con él.
     pub mochila: Inventario,
@@ -123,7 +123,7 @@ pub struct Heroe {
 impl Heroe {
     /// Un héroe recién creado (`crearHeroe`): nace dentro de un campamento de mercenarios y reside en él, sin columna, de nivel 1, sin puntos
     /// ni escuadras, con sus monedas iniciales, un loadout «Default» vacío y activo, el equipo inicial de su `clase` puesto y la mochila y el almacén de
-    /// objetos vacíos (Clases_De_Heroe §6). Una clase que no está en `CLASES_HEROE` se rechaza.
+    /// objetos vacíos (Heroe_Y_Tropa §3). Una clase que no está en `CLASES_HEROE` se rechaza.
     pub fn nuevo(r: &Reglas, id: HeroeId, controlador: Controlador, campamento: CampamentoId, loadout_inicial: LoadoutId, clase: &str) -> Result<Self, ErrorHeroe> {
         let equipo = Equipo::inicial(&r.objetos, clase).map_err(|_| ErrorHeroe::ClaseDesconocida)?;
         Ok(Self {
@@ -148,12 +148,12 @@ impl Heroe {
         })
     }
 
-    /// Su clase: la del arma puesta (Clases_De_Heroe §4).
+    /// Su clase: la del arma puesta (Objetos_Del_Heroe §3.2).
     pub fn clase<'a>(&self, r: &'a Reglas) -> &'a str {
         self.equipo.clase(&r.objetos).expect(ARMA_DEL_CATALOGO)
     }
 
-    /// Sus atributos (Clases_De_Heroe §5, D16): la base de la clase de su arma más los puntos repartidos. Lo que da el equipo no cuenta aquí: lo suma Conquest.
+    /// Sus atributos (Objetos_Del_Heroe §3.2, D16): la base de la clase de su arma más los puntos repartidos. Lo que da el equipo no cuenta aquí: lo suma Conquest.
     pub fn atributos(&self, r: &Reglas) -> Atributos {
         self.equipo.atributos(&r.objetos, self.puntos_repartidos).expect(ARMA_DEL_CATALOGO)
     }
@@ -176,7 +176,7 @@ impl Heroe {
         experiencia_para_nivel(r, self.nivel + 1) - self.experiencia
     }
 
-    /// Suma experiencia de combate (milésimas) y sube los niveles que cruce (Progresion_Tropas_Y_Heroe §4). Cada nivel hasta `nivelDeTope` da un punto de
+    /// Suma experiencia de combate (milésimas) y sube los niveles que cruce (Heroe_Y_Tropa §4.3). Cada nivel hasta `nivelDeTope` da un punto de
     /// atributo y `LIDERAZGO.porNivel` de Liderazgo, sin pasar de `LIDERAZGO.tope`; desde el siguiente, el nivel sube sin dar nada. Devuelve si subió.
     pub fn con_experiencia(&mut self, r: &Reglas, ganada: Mil) -> bool {
         let antes = self.nivel;
@@ -194,7 +194,7 @@ impl Heroe {
     }
 
     /// Reparte puntos de atributo (`fuerza, destreza, armadura, vitalidad`): cada punto suma 1. El tope de un atributo mira la suma con la base de la clase de su arma
-    /// (Clases_De_Heroe §5). Todo o nada.
+    /// (Objetos_Del_Heroe §3.2). Todo o nada.
     pub fn repartir_atributos(&mut self, r: &Reglas, reparto: Atributos) -> Result<(), ErrorHeroe> {
         let pedidos: i64 = como_lista(reparto).iter().sum();
         if como_lista(reparto).iter().any(|&p| p < 0) {
@@ -396,7 +396,7 @@ mod pruebas {
         assert_eq!((pide(1), pide(2), pide(3), pide(29)), (100_000, 120_000, 140_000, 660_000));
         assert_eq!(experiencia_para_nivel(&r, 30), 11_020_000, "11.020 en el 30");
         assert_eq!((pide(30), pide(31), pide(100)), (680_000, 680_000, 680_000), "desde el 30, 680 por nivel sin fin");
-        assert_eq!(experiencia_para_nivel(&r, 12), 2_200_000, "la tabla de Progresion_Tropas_Y_Heroe §4");
+        assert_eq!(experiencia_para_nivel(&r, 12), 2_200_000, "la curva de Heroe_Y_Tropa §4.3");
     }
 
     #[test]
@@ -441,7 +441,7 @@ mod pruebas {
         assert_eq!((h.puntos_repartidos.armadura, h.puntos_de_atributo), (0, 2), "un rechazo no deja rastro");
     }
 
-    /// Desde el 2026-11-12 el tope mira la suma con la base de la clase (Clases_De_Heroe §5): con la fuerza 3 de la espada, 96 puntos dan 99.
+    /// Desde el 2026-11-12 el tope mira la suma con la base de la clase (Objetos_Del_Heroe §3.2): con la fuerza 3 de la espada, 96 puntos dan 99.
     #[test]
     fn un_atributo_no_pasa_del_tope_contando_la_base_y_el_comando_entero_se_aborta() {
         let r = r();

@@ -1,5 +1,5 @@
-//! Objetos del héroe (entradas 70 y 71). Ver `Docs/Mechanics/Objetos_Del_Heroe.md` y los diseños `Objetos_Del_Heroe.md`, `Catalogo_De_Objetos.md` y
-//! `Clases_De_Heroe.md` de `Docs/Disenos_Por_Implementar/`.
+//! Objetos del héroe (entradas 70 y 71). Ver `Docs/Mechanics/Objetos_Del_Heroe.md`: los datos y
+//! de dónde salen sus cifras en §2, y cada regla en §3.
 //!
 //! **Reglas puras**, en enteros y sin héroes, plazas ni órdenes (D11): el núcleo guarda la mochila, el almacén de objetos y el equipo de cada héroe,
 //! comprueba dónde está y llama a estas funciones. El azar es solo el `base::Rng` que pasa quien llama (la calidad de la forja, el cofre y el botín);

@@ -415,7 +415,7 @@ impl Nucleo {
                 if !self.esta_en_el_campamento(*heroe, *campamento, t) {
                     return Err(rechazo(rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA, "el héroe no está en el campamento ni con la columna a su puerta".into()));
                 }
-                // Sin columna, hasta la capacidad de un héroe de su Facción (con la Logística de campaña, ×1,5: Eras_IV_Y_V §2).
+                // Sin columna, hasta la capacidad de un héroe de su Facción (con la Logística de campaña, ×1,5: Movimiento_Ejercitos §6.1).
                 let cap = self.militar_de(self.heroe(*heroe).and_then(|h| h.faccion)).logistica.capacidad_viveres;
                 let falta = match self.columna_que_lleva(*heroe) {
                     Some(c) => {

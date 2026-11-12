@@ -192,7 +192,7 @@ impl Nucleo {
 
     /// El botín que gana el héroe `heroe` al destruir un campamento de ese `origen` y ese `nivel`, con los rendimientos decrecientes de su ventana: devuelve
     /// los recursos (para el carro) y las monedas, que ya suma a las del héroe. Si es una de las completas de su ventana (`rendimientos.completas`, 8 en 24 h), además la tabla
-    /// de objetos de su nivel (`BOTIN_OBJETOS.bandidos`, Catalogo_De_Objetos §6b), a su mochila ([`Nucleo::botin_de_objetos`]). **El botín de los bandidos del anillo de un campamento de mercenarios solo lo
+    /// de objetos de su nivel (`BOTIN_OBJETOS.bandidos`, Objetos_Del_Heroe §3.7), a su mochila ([`Nucleo::botin_de_objetos`]). **El botín de los bandidos del anillo de un campamento de mercenarios solo lo
     /// cobran los héroes sin plaza** (Cal-5, 2026-10-24: el anillo existe para el jugador nuevo); los demás ganan solo experiencia, y esa destrucción no
     /// cuenta en su ventana. Los de plaza, vetas y administración pagan a todos.
     pub(super) fn botin_de_bandidos_para(&mut self, heroe: u64, origen: OrigenBandidos, nivel: u8, t: Instante) -> (Mercancia, i64) {

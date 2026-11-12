@@ -221,7 +221,7 @@ mod pruebas {
         assert_eq!((n(0.0), n(9.999), n(10.0), n(34.999), n(35.0), n(85.0), n(185.0)), (1, 1, 2, 2, 3, 4, 5));
         assert_eq!((n(335.0), n(535.0), n(785.0), n(1_060.0)), (6, 7, 8, 9));
         assert_eq!(n(1_374.999), 9, "falta una milésima para el máximo");
-        assert_eq!(n(1_375.0), 10, "1.375 de experiencia llevan al nivel 10 (Progresion_Tropas_Y_Heroe §3)");
+        assert_eq!(n(1_375.0), 10, "1.375 de experiencia llevan al nivel 10 (Heroe_Y_Tropa §10.2)");
         assert_eq!(n(10_000.0), 10, "el nivel no pasa del máximo");
     }
 

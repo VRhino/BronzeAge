@@ -731,7 +731,7 @@ message Equipamiento {
   optional ItemInstancia guantes = 4;
   optional ItemInstancia pantalones = 5;
   optional ItemInstancia botas = 6;
-  optional ItemInstancia montura = 7;    // 2026-11-12: el hueco de la montura (Catalogo_De_Objetos §3.3)
+  optional ItemInstancia montura = 7;    // 2026-11-12: el hueco de la montura (Objetos_Del_Heroe §3.2)
 }
 
 message Avatar {
@@ -775,7 +775,7 @@ message Heroe {
   string class_definition_id = 6;
   bool femenino = 7;
   Avatar avatar = 8;
-  uint32 nivel = 9;                      // sube con la experiencia acumulada (Progresion_Tropas_Y_Heroe §4: 100, 120… hasta el 30 y 680 desde ahí)
+  uint32 nivel = 9;                      // sube con la experiencia acumulada (Heroe_Y_Tropa §4.3: 100, 120… hasta el 30 y 680 desde ahí)
   uint64 experiencia_hacia_siguiente_nivel = 10;  // 2026-11-12: lo que le falta para el siguiente nivel, en milésimas (antes, la experiencia sin curva)
   uint32 puntos_de_atributo_sin_gastar = 11;      // uno por nivel hasta el 30
   reserved 12;                           // antes `puntos_de_perk_sin_gastar`: desde el 2026-11-12 los perks se abren solos con el nivel (D15)
@@ -1245,7 +1245,6 @@ message TecnologiaRevelada {
   repeated bool cumplidas = 3;
 }
 
-// Estado global de tecnología (Eras I-III; las IV y V se definen con el motor nuevo).
 // El directorio público de las Facciones (2026-10-29, `VISTA`, id `facciones`): todas las que existen, por id ascendente, también la propia. Cambia solo
 // cuando nace o desaparece una Facción o cambia algo de lo que lleva (nombre, sigilo, nivel, número de ciudadanos, derrota, si es de bots).
 message DirectorioFacciones {
@@ -1262,6 +1261,7 @@ message FaccionDelDirectorio {
   bool es_bot = 7;                       // su Rey es un bot (2026-11-01), como `Faccion.es_bot`
 }
 
+// Estado global de tecnología (Eras I a V).
 message EstadoTecnologia {
   string era = 1;
   int64 era_desde_ms = 2;

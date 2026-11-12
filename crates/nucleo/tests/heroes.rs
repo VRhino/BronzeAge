@@ -252,7 +252,7 @@ fn el_heroe_nace_en_un_campamento_con_su_progresion_inicial_y_cada_rechazo_tiene
     assert_eq!(camp.planta, nucleo::proyeccion::interior::campamento(&e.n, 2).unwrap().planta, "la planta no cambia: es del campamento");
 }
 
-/// Clases_De_Heroe §6 y D21: la clase es una de `CLASES_HEROE` y el héroe nace con su equipo inicial; las cuatro órdenes del equipo, la mochila y el almacén de objetos, de punta
+/// Heroe_Y_Tropa §3 y D21: la clase es una de `CLASES_HEROE` y el héroe nace con su equipo inicial; las cuatro órdenes del equipo, la mochila y el almacén de objetos, de punta
 /// a punta (sus reglas una a una, en `nucleo::equipo` y en el crate `objetos`).
 #[test]
 fn el_heroe_nace_con_su_clase_y_su_equipo_y_cambia_de_equipo_y_guarda_objetos_por_orden() {

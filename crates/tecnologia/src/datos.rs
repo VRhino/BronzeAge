@@ -99,7 +99,7 @@ pub enum Condicion {
 
 impl Condicion {
     /// ¿La mira el paso de minuto de la capital? Las que cambian sin ningún disparador de la aparición: el recurso en la capital (TA §3), las escuadras vivas, los héroes, las columnas en
-    /// marcha y el nivel de la Facción (Eras_IV_Y_V §4). Las demás las miran los disparadores de siempre.
+    /// marcha y el nivel de la Facción (Tecnologia_Aedas §3.1). Las demás las miran los disparadores de siempre.
     pub fn del_paso_de_capital(&self) -> bool {
         match self {
             Condicion::RecursoEnCapital(_) | Condicion::EscuadrasVivas(_) | Condicion::HeroesEnFaccion(_) | Condicion::ColumnasEnMarcha(_) | Condicion::NivelFaccion(_) => true,

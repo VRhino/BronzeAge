@@ -1,6 +1,6 @@
 //! Los 42 tipos de recurso de un almacén (`RECURSOS_TIPO`, Economia_Construccion §2): los 29 de siempre, los nueve de la comida de la tanda 69
 //! (harina, pan, carne, leche, queso, uva, aceituna, vino y aceite, 2026-11-08), los tres de las zonas húmedas (cebada, cerveza y sésamo,
-//! 2026-11-09) y el aceite de sésamo (Eras_IV_Y_V §2b, 2026-11-12).
+//! 2026-11-09) y el aceite de sésamo (Economia_Construccion §2, 2026-11-12).
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Recurso {
@@ -42,13 +42,13 @@ pub enum Recurso {
     Uva,
     Aceituna,
     Vino,
-    /// El aceite de oliva («Aceite de oliva»; el id sigue siendo `aceite`, Eras_IV_Y_V §2b).
+    /// El aceite de oliva («Aceite de oliva»; el id sigue siendo `aceite`, Economia_Construccion §2).
     Aceite,
     // Los cultivos de las zonas húmedas (2026-11-09).
     Cebada,
     Cerveza,
     Sesamo,
-    /// El aceite de sésamo, el recurso 42 (Eras_IV_Y_V §2b): el de la receta de sésamo de la Prensa.
+    /// El aceite de sésamo, el recurso 42 (Economia_Construccion §2): el de la receta de sésamo de la Prensa.
     AceiteSesamo,
 }
 

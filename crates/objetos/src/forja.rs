@@ -1,4 +1,4 @@
-//! La forja de la Armería (D1, Catalogo_De_Objetos §6b): una pieza de los tiers II a V con su receta. El plano y los crisoles salen de la mochila;
+//! La forja de la Armería (D1, Objetos_Del_Heroe §3.4): una pieza de los tiers II a V con su receta. El plano y los crisoles salen de la mochila;
 //! los materiales los cobra el núcleo del almacén personal del héroe. La calidad se tira con el generador que pasa quien llama y multiplica todas
 //! las cifras de la pieza, que nace con id propio (D13).
 

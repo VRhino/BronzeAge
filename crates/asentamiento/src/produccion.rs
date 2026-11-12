@@ -422,7 +422,7 @@ mod pruebas {
     fn la_bodega_hace_cerveza_de_cebada_si_esa_es_su_receta_y_la_prensa_aceite_de_sesamo() {
         let cat = Reglas::cargar().catalogo;
         // (edificio, insumo elegido, otro insumo del edificio, bien, bien por minuto): la receta elegida gasta 2 por unidad y la otra no se toca. El sésamo da
-        // aceite de sésamo y la aceituna, aceite de oliva (Eras_IV_Y_V §2b).
+        // aceite de sésamo y la aceituna, aceite de oliva (Economia_Construccion §5.3).
         let casos = [
             (Tipo::Bodega, Recurso::Cebada, Recurso::Uva, Recurso::Cerveza),
             (Tipo::Bodega, Recurso::Uva, Recurso::Cebada, Recurso::Vino),

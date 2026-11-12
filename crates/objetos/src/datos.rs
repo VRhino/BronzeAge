@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const OBJETOS_DEL_HEROE: &str = include_str!("../../../Docs/Mechanics/Objetos_Del_Heroe.md");
 
-/// El id del crisol (Catalogo_De_Objetos §6b): cada forja gasta tantos como su tier.
+/// El id del crisol (Objetos_Del_Heroe §3.4): cada forja gasta tantos como su tier.
 pub(crate) const CRISOL: &str = "crisol";
 
 fn bloque(nombre: &str) -> Value {
@@ -46,7 +46,7 @@ fn probabilidad(v: &Value) -> Mil {
     m as Mil
 }
 
-/// Los cuatro atributos del héroe (Clases_De_Heroe §5): los de una clase, los que da una pieza o los repartidos.
+/// Los cuatro atributos del héroe (Objetos_Del_Heroe §3.2): los de una clase, los que da una pieza o los repartidos.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Atributos {
     pub fuerza: i64,
@@ -89,12 +89,12 @@ impl PorDano {
     }
 }
 
-/// Una cifra por la calidad de la forja (en %), redondeada al entero más cercano (las mitades hacia arriba; Catalogo_De_Objetos §6b, «La calidad»).
+/// Una cifra por la calidad de la forja (en %), redondeada al entero más cercano (las mitades hacia arriba; Objetos_Del_Heroe §3.4).
 fn por_calidad(x: i64, pct: i64) -> i64 {
     (x * pct + 50).div_euclid(100)
 }
 
-/// Lo que da una pieza en combate (`combate` de la ficha, Catalogo_De_Objetos §4): el motor lo publica y Conquest lo aplica.
+/// Lo que da una pieza en combate (`combate` de la ficha, Objetos_Del_Heroe §2.1): el motor lo publica y Conquest lo aplica.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Cifras {
     Arma { atributos: Atributos, dano: PorDano, penetracion: PorDano },
@@ -111,7 +111,7 @@ impl Cifras {
     }
 }
 
-/// La receta de forja de una pieza (`forja`, Catalogo_De_Objetos §6b).
+/// La receta de forja de una pieza (`forja`, Objetos_Del_Heroe §3.4).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Receta {
     /// El id del plano de su tier (`plano_2` … `plano_5`); se gasta uno.
@@ -127,7 +127,7 @@ pub struct Receta {
 /// Lo que tienen en común un arma y una armadura: la tecnología que abre su metal (ninguna, el de inicio), sus cifras y su receta.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeCombate {
-    /// La tecnología de `metales` que abre comprarla y forjarla (Clases_De_Heroe §4: llevarla se puede siempre).
+    /// La tecnología de `metales` que abre comprarla y forjarla (Objetos_Del_Heroe §2.1: llevarla se puede siempre).
     pub tecnologia: Option<String>,
     pub cifras: Cifras,
     /// Solo en los tiers II a V.
@@ -153,7 +153,7 @@ impl Peso {
     }
 }
 
-/// Los siete huecos del equipo del héroe (Objetos_Del_Heroe §3.1, punto 3, y el de la montura de Catalogo_De_Objetos §3.3).
+/// Los siete huecos del equipo del héroe (Objetos_Del_Heroe §3.2).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Hueco {
     Arma,
@@ -181,7 +181,7 @@ impl Hueco {
     }
 }
 
-/// Lo que hace un consumible al usarlo (`efecto`, Catalogo_De_Objetos §3.3).
+/// Lo que hace un consumible al usarlo (`efecto`, Objetos_Del_Heroe §3.5).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Consumo {
     /// Experiencia para una escuadra del héroe (`experienciaTropa`).
@@ -226,14 +226,14 @@ impl Ficha {
     }
 }
 
-/// Una clase del héroe (`CLASES_HEROE`, Clases_De_Heroe §7).
+/// Una clase del héroe (`CLASES_HEROE`, Objetos_Del_Heroe §2).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Clase {
-    /// Los pesos de armadura que admite (Clases_De_Heroe §4).
+    /// Los pesos de armadura que admite (Objetos_Del_Heroe §3.2).
     pub armaduras: BTreeSet<Peso>,
     pub atributos_base: Atributos,
     /// El equipo con el que nace un héroe de esta clase: su arma de inicio, el juego de inicio de `armaduraInicial` sin casco y la montura de tier I
-    /// (Clases_De_Heroe §6, Catalogo_De_Objetos §3.3 y §5).
+    /// (Objetos_Del_Heroe §3.2).
     pub inicial: Equipo,
 }
 
@@ -246,7 +246,7 @@ pub enum Entrada {
     UnoDe(Vec<(String, Mil)>),
 }
 
-/// Una tabla de botín: cada entrada se tira por su lado (Progresion_Tropas_Y_Heroe §5).
+/// Una tabla de botín: cada entrada se tira por su lado (Objetos_Del_Heroe §3.7).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Tabla(pub Vec<Entrada>);
 
@@ -496,7 +496,7 @@ mod pruebas {
         assert_eq!(c.clases["espada_escudo_mediano"].armaduras, [Peso::Media, Peso::Pesada].into());
         for (id, clase) in &c.clases {
             let b = clase.atributos_base;
-            assert_eq!(b.fuerza + b.destreza + b.armadura + b.vitalidad, 10, "{id}: todas suman 10 (Clases_De_Heroe §3.1)");
+            assert_eq!(b.fuerza + b.destreza + b.armadura + b.vitalidad, 10, "{id}: todas suman 10 (Objetos_Del_Heroe §2)");
         }
     }
 

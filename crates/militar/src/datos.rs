@@ -50,7 +50,7 @@ fn por_escalon(v: &Value) -> [f64; 5] {
 pub struct ReglasLiderazgo {
     /// Liderazgo con el que nace un héroe, en el nivel 1 (`LIDERAZGO.base`).
     pub base: i64,
-    /// Lo que suma cada nivel que cruza hasta el de tope de la progresión (`porNivel`), sin pasar de `tope` (Progresion_Tropas_Y_Heroe §4).
+    /// Lo que suma cada nivel que cruza hasta el de tope de la progresión (`porNivel`), sin pasar de `tope` (Heroe_Y_Tropa §4.3).
     pub por_nivel: i64,
     pub tope: i64,
     /// Coste de una escuadra por escalón (1 a 5).
@@ -66,7 +66,7 @@ pub struct ReglasHeroe {
     pub herido: i64,
 }
 
-/// La curva del héroe (`PROGRESION_HEROE`, Progresion_Tropas_Y_Heroe §4): pasar del nivel `n` al `n + 1` pide `experienciaBase + experienciaPorNivel × (min(n, nivelDeTope) − 1)`.
+/// La curva del héroe (`PROGRESION_HEROE`, Heroe_Y_Tropa §4.3): pasar del nivel `n` al `n + 1` pide `experienciaBase + experienciaPorNivel × (min(n, nivelDeTope) − 1)`.
 /// Hasta `nivelDeTope` cada nivel da un punto de atributo y Liderazgo; desde ahí el nivel sigue subiendo sin dar nada.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReglasProgresion {
@@ -110,7 +110,7 @@ pub struct ReglasLogistica {
     /// Lo que pasa cada minuto la plaza a una columna personal de su Facción dentro de su zona, por cada unidad que esta come por minuto (ppm; repostaje automático, decisión
     /// del autor del 2026-10-27: algo más rápido de lo que se lo gasta).
     pub factor_repostaje_en_zona: i64,
-    /// `bonusViveres`: la tecnología que multiplica la capacidad de víveres por héroe de la Facción que la tiene adoptada (Logística de campaña, Eras_IV_Y_V §2).
+    /// `bonusViveres`: la tecnología que multiplica la capacidad de víveres por héroe de la Facción que la tiene adoptada (Logística de campaña, Movimiento_Ejercitos §6.1).
     pub bonus_viveres: BonusViveres,
 }
 
@@ -374,7 +374,7 @@ impl Reglas {
         }
     }
 
-    /// Las reglas que valen para una Facción: las de todos con la capacidad de víveres por héroe por `bonusViveres.factor` si `tiene` su tecnología (Logística de campaña, Eras_IV_Y_V
+    /// Las reglas que valen para una Facción: las de todos con la capacidad de víveres por héroe por `bonusViveres.factor` si `tiene` su tecnología (Logística de campaña, Movimiento_Ejercitos
     /// §2). Lo que llena o topa los víveres de un héroe o de una columna de esa Facción las usa.
     pub fn de_faccion(&self, tiene: impl Fn(&str) -> bool) -> Reglas {
         let mut r = self.clone();
@@ -442,7 +442,7 @@ mod pruebas {
         assert_eq!((r.liderazgo.base, r.liderazgo.por_nivel, r.liderazgo.tope, r.liderazgo.coste_por_escalon), (14, 3, 100, [7, 14, 22, 32, 45]));
         assert_eq!(r.progresion, ReglasProgresion { experiencia_base: 100_000, experiencia_por_nivel: 20_000, nivel_de_tope: 30 });
         assert_eq!((r.heroe.monedas_iniciales, r.heroe.tope_atributo, r.heroe.herido), (1_500, 100, 2 * MS_POR_MINUTO));
-        assert_eq!(r.version_catalogo_tropas, 2, "la de las cifras de combate de las tropas (Cifras_De_Combate §8)");
+        assert_eq!(r.version_catalogo_tropas, 2, "la de las cifras de combate de las tropas (Heroe_Y_Tropa §12)");
         assert_eq!(r.guarnicion.por_nivel_edificio, vec![7, 14, 22]);
         assert_eq!(r.guarnicion.por_nivel_caballerizas, vec![0, 14, 32]);
         assert_eq!(r.guarnicion.recinto_completo_por_nivel, vec![10, 15, 20]);
@@ -467,7 +467,7 @@ mod pruebas {
         let m = Reglas::cargar().militar;
         assert_eq!((m.racion_por_soldado, m.regeneracion_moral, m.degradacion_moral), (150, 5_000, 20_000));
         assert_eq!((m.desercion, m.bonus_poder_por_nivel, m.nivel_maximo), (50_000, 30_000, 10));
-        assert_eq!(m.experiencia_para_subir, vec![10_000, 25_000, 50_000, 100_000, 150_000, 200_000, 250_000, 275_000, 315_000], "la curva de 1.375 (Progresion_Tropas_Y_Heroe §3)");
+        assert_eq!(m.experiencia_para_subir, vec![10_000, 25_000, 50_000, 100_000, 150_000, 200_000, 250_000, 275_000, 315_000], "la curva de 1.375 (Heroe_Y_Tropa §10.2)");
         assert_eq!((m.experiencia_unity_victoria, m.experiencia_unity_derrota), (4_000, 2_000));
         assert_eq!((m.tecnologia_bonus_experiencia.as_str(), m.bonus_experiencia), ("ejercito_permanente", 100_000));
         assert!(Reglas::cargar().tecnologias.todas.contains(&m.tecnologia_bonus_experiencia), "la tecnología del bonus existe");

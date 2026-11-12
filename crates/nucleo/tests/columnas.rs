@@ -267,7 +267,7 @@ fn con_la_logistica_de_campana_cada_heroe_de_la_faccion_lleva_un_cincuenta_por_c
     let (antes, despues) = (e.heroe_en_la_plaza("ana"), e.heroe_en_la_plaza("beto"));
     let col = e.ok("ana", salir(antes)).creadas[0];
     assert_eq!(e.ejercito(col).columna.viveres.maximo, Some(mr().logistica.capacidad_viveres), "sin ella, 350 por héroe");
-    // Con la Logística de campaña adoptada (Eras_IV_Y_V §2: `LOGISTICA.bonusViveres`), la capacidad por héroe de la Facción es ×1,5.
+    // Con la Logística de campaña adoptada (Movimiento_Ejercitos §6.1: `LOGISTICA.bonusViveres`), la capacidad por héroe de la Facción es ×1,5.
     e.ok("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["logistica_campana".into()] });
     let col = e.ok("beto", salir(despues)).creadas[0];
     assert_eq!(e.ejercito(col).columna.viveres.maximo, Some(525_000));

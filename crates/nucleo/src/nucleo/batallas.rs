@@ -1175,7 +1175,7 @@ impl Nucleo {
     }
 
     /// Lo que una batalla de Unity suma a los logros del servidor (`contadoresDeBatalla` del TypeScript; Tecnologia_Aedas §2.1): lo mismo que un combate con números. La de una avanzada o
-    /// un saqueo de pueblo (contextos que el TypeScript no tenía) cuenta como batalla librada y nada más de entonces. Los de las Eras IV y V (Eras_IV_Y_V §3), en todas: el resumen con
+    /// un saqueo de pueblo (contextos que el TypeScript no tenía) cuenta como batalla librada y nada más de entonces. Los de las Eras IV y V (Tecnologia_Aedas §2.1), en todas: el resumen con
     /// los héroes que participaron y las escuadras del ticket con los soldados que Unity dice que quedan; y la persecución, si una columna ataca a otra (campo abierto) o a una caravana
     /// (no el acoso de unos bandidos, que no son una columna).
     fn contadores_de_batalla(&self, b: &Batalla, res: &ResultadoDeBatalla) -> tecnologia::contador::Delta {

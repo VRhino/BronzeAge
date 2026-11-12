@@ -604,7 +604,7 @@ fn el_resultado_deja_las_bajas_la_experiencia_el_botin_el_carro_y_la_chatarra_y_
     assert_eq!(x.n.estado().rng.estado(), rng.estado());
     // La experiencia de Facción de una batalla de Unity (5C): 2,5 por héroe que participó, a la Facción con la que entró, sin filtro de dignidad.
     assert_eq!((x.n.faccion(1).unwrap().experiencia, x.n.faccion(2).unwrap().experiencia), (2_500, 2_500));
-    // Los logros (6B, D10): los suma el resultado aplicado, no `batalla.aplicada` (D18): una librada en campo abierto, sin hoplitas; y combaten los Reyes (Eras_IV_Y_V §3: el primer
+    // Los logros (6B, D10): los suma el resultado aplicado, no `batalla.aplicada` (D18): una librada en campo abierto, sin hoplitas; y combaten los Reyes (Tecnologia_Aedas §2.1: el primer
     // ciudadano de cada Facción de administración lo es).
     assert_eq!(comun::logros_de_hechos(&x.n), vec![(Contador::BatallasLibradas, 1), (Contador::BatallasCampoAbierto, 1), (Contador::BatallasConRey, 1)]);
 }
@@ -954,7 +954,7 @@ fn contra_un_campamento_de_bandidos_se_juega_un_evento_pve_cualquiera_se_une_com
     assert_eq!([Madera, Piedra, Trigo].map(total), [5 * por_heroe; 3], "madera, piedra y trigo del nivel 2 por héroe, repartidos por rondas entre las cinco columnas");
     assert_eq!(total(Oro), 0, "los bandidos ya no dan oro");
     assert_eq!(hechos(&x.n, "evento_pve.aplicada").len(), 1);
-    // Y los de las Eras IV y V (Eras_IV_Y_V §3): el bando atacante lleva cinco héroes, y entre ellos el Rey de su Facción.
+    // Y los de las Eras IV y V (Tecnologia_Aedas §2.1): el bando atacante lleva cinco héroes, y entre ellos el Rey de su Facción.
     let logros = vec![(Contador::BandidosCampamentosDestruidos, 1), (Contador::BatallasLibradas, 1), (Contador::BatallasConTresHeroes, 1), (Contador::BatallasConRey, 1)];
     assert_eq!(comun::logros_de_hechos(&x.n), logros, "el campamento destruido por Unity cuenta (6B)");
     // Solo la experiencia de bandidos (1 ÷ nivel 1) para la Facción atacante, no la de la batalla: el mismo premio que con números (5C-4).

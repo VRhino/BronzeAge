@@ -406,7 +406,7 @@ mod pruebas {
         assert_eq!((bien(Recurso::Queso).clases, bien(Recurso::Vino).clases, bien(Recurso::Aceite).racion), ([false, true, false], [false, false, true], 10_000));
         // La cerveza (2026-11-09): de la nobleza, con la ración del vino y ×1,25.
         assert_eq!(bien(Recurso::Cerveza), &BienDeConsumo { recurso: Recurso::Cerveza, clases: [false, false, true], racion: 10_000, modificador: 1_250_000 });
-        // Con el aceite de sésamo (Eras_IV_Y_V §2b), siete bienes.
+        // Con el aceite de sésamo (Economia_Construccion §9.2), siete bienes.
         assert_eq!((p.bienes.len(), &p.guarnicion[..]), (7, &[Recurso::Carne][..]));
         assert_eq!(r.capacidad_inicial, 800_000, "almacenes al doble desde el 2026-11-05");
         assert_eq!(r.politicas.catalogo.len(), 16);

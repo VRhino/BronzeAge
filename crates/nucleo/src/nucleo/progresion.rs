@@ -1,4 +1,4 @@
-//! La experiencia de combate de las escuadras y de los héroes (Progresion_Tropas_Y_Heroe §2-§4; Eras_IV_Y_V §2 y §3): **un solo punto de entrada** para la escuadra
+//! La experiencia de combate de las escuadras y de los héroes (Combate §4.3, Heroe_Y_Tropa §4.3 y §10.2; Tecnologia_Aedas §2.1 y §4.1): **un solo punto de entrada** para la escuadra
 //! ([`Nucleo::experiencia_de_escuadra`]) y otro para el héroe ([`Nucleo::experiencia_de_heroe`]), por los que pasan el combate con números y la batalla de Unity.
 //!
 //! - **Con números**, 1 si su bando gana y 0,5 si pierde (`MILITAR.experienciaGanadaPor…`): a cada escuadra que combatió, la que anota su [`Baja`], y a cada héroe sano que combatió con
@@ -15,7 +15,7 @@ use combate::resolucion::{Baja, Informe, Lado};
 use militar::escuadra::Escuadra;
 use tecnologia::contador::{Contador, Delta};
 
-/// El nivel que cuenta para `escuadras.veteranas` (Eras_IV_Y_V §3: «una escuadra llega al nivel 5»): es la definición del contador, como los hoplitas de `batallas.conHoplitas`.
+/// El nivel que cuenta para `escuadras.veteranas` (Tecnologia_Aedas §2.1: «una escuadra llega al nivel 5»): es la definición del contador, como los hoplitas de `batallas.conHoplitas`.
 const NIVEL_VETERANA: u8 = 5;
 
 impl Nucleo {
@@ -29,7 +29,7 @@ impl Nucleo {
     }
 
     /// La experiencia que gana una escuadra (milésimas), sin bonus: sube los niveles que cruce y cuenta `escuadras.veteranas` si cruza el nivel 5. La tropa prestada no gana
-    /// (`Escuadra::con_experiencia`). La usan el combate y la medalla de tropa (Catalogo_De_Objetos §3.3), que no lleva el bonus de Ejército permanente.
+    /// (`Escuadra::con_experiencia`). La usan el combate y la medalla de tropa (Objetos_Del_Heroe §3.5), que no lleva el bonus de Ejército permanente.
     pub(super) fn sumar_experiencia_de_escuadra(&mut self, t: Instante, e: &mut Escuadra, ganada: Mil) {
         let mr = &self.estado.reglas.economia.militar;
         let antes = e.nivel;

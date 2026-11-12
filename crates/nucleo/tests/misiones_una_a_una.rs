@@ -380,8 +380,8 @@ fn h12_entregar_materiales_a_una_obra() {
 
 #[test]
 fn h13_repartir_los_puntos_de_atributo() {
-    // Hoy el héroe no gana puntos de atributo (el servidor no sube su nivel: `tests/heroes.rs`), así que H13 no tiene camino en la partida (parada hasta que haya
-    // Unity para los perks, decisión del autor del 2026-10-28). Lo que sí se prueba: sin
+    // Desde el 2026-11-12 el héroe gana un punto de atributo por nivel (Heroe_Y_Tropa §4.3), así que H13 ya tiene camino en la partida; esta prueba aún no lo
+    // recorre (la entrada 61 de `Docs/Mecanicas a desarrollar.md` estaba parada por decisión del autor del 2026-10-28). Lo que sí se prueba: sin
     // puntos, repartir se rechaza y no cuenta.
     let m = con_mundo!();
     let mut x = X::nuevo(m);
