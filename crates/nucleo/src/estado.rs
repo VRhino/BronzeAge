@@ -586,17 +586,17 @@ pub struct Asentamiento {
     /// `heroesFundadoresIds` (5H, 5B-9): quienes la fundaron y siguen residiendo en ella, en su orden (el Líder primero). Quien se muda deja de serlo y la conquista la deja sin ninguno, como en
     /// el TypeScript; el traslado de una Facción no los toca (la plaza se va con ellos).
     pub fundadores: Vec<u64>,
-    /// La forja de su Armería para los de fuera y el fondo de su impuesto (Forja_En_Plazas §2 y §6).
+    /// La forja de su Armería para los de fuera y el fondo de su impuesto (Heroe_Y_Tropa §4.6; el fondo, Mercenarios_Por_Contrato §5.1).
     pub forja: Forja,
 }
 
-/// La forja de la Armería de una plaza (Forja_En_Plazas): para cada grupo de fuera, si está abierta y su recargo, y el fondo de monedas donde entra el impuesto de forjar en ella.
+/// La forja de la Armería de una plaza (Heroe_Y_Tropa §4.6): para cada grupo de fuera, si está abierta y su recargo, y el fondo de monedas donde entra el impuesto de forjar en ella.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Forja {
     pub aliados: AperturaForja,
     pub neutrales: AperturaForja,
     pub enemigos: AperturaForja,
-    /// Monedas del impuesto de la forja (§6): pagan contratos de mercenarios firmados desde la Taberna de la plaza.
+    /// Monedas del impuesto de la forja: pagan contratos de mercenarios firmados desde la Taberna de la plaza (Mercenarios_Por_Contrato §5.1).
     pub fondo: i64,
 }
 
@@ -608,7 +608,7 @@ pub struct AperturaForja {
 }
 
 impl Forja {
-    /// La de una plaza nueva: cerrada a los tres grupos de fuera, con el recargo de partida, y el fondo vacío (§2).
+    /// La de una plaza nueva: cerrada a los tres grupos de fuera, con el recargo de partida, y el fondo vacío.
     pub fn de_partida(r: &objetos::datos::ReglasForja) -> Self {
         let cerrada = AperturaForja { abierta: false, recargo_pct: r.recargo_inicial_pct };
         Forja { aliados: cerrada, neutrales: cerrada, enemigos: cerrada, fondo: 0 }

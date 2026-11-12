@@ -293,7 +293,7 @@ fn el_heroe_nace_con_su_clase_y_su_equipo_y_cambia_de_equipo_y_guarda_objetos_po
     assert_eq!(e.n.heroe(h).unwrap().heroe.mochila.casillas.values().map(|c| c.pieza.objeto.as_str()).collect::<Vec<_>>(), ["botas_media_inicio", "montura_tiro"]);
 }
 
-/// D1 y D2: las cuatro órdenes de la Armería y de los consumibles, de punta a punta, en una plaza con su Armería levantada, y la forja en cualquier plaza (Forja_En_Plazas):
+/// D1 y D2: las cuatro órdenes de la Armería y de los consumibles, de punta a punta, en una plaza con su Armería levantada, y la forja en cualquier plaza (Heroe_Y_Tropa §4.6):
 /// `configurar_forja`, la forja cerrada y abierta a un neutral de visita, la Era y lo que se ve. Los planos, los crisoles y los consumibles son del botín, que aquí no sale, así
 /// que la forja y usar llegan hasta su primera regla; sus caminos buenos y cada rechazo, en `nucleo::armeria`.
 #[test]
@@ -328,7 +328,7 @@ fn en_la_armeria_se_compra_se_vende_se_forja_y_se_usa_por_orden() {
     assert_eq!(e.rechazada("ana", Comando::UsarObjeto { heroe: h, casilla: 0, escuadra: None }), rechazos::OBJETO_NO_SE_USA, "la montura no se usa: se equipa");
     assert_eq!(e.rechazada("ana", Comando::UsarObjeto { heroe: h, casilla: 1, escuadra: None }), rechazos::INVENTARIO_CASILLA_VACIA);
 
-    // La forja en cualquier plaza (Forja_En_Plazas): beto, sin Facción y de visita, es neutral; de partida la forja está cerrada a los de fuera.
+    // La forja en cualquier plaza (Heroe_Y_Tropa §4.6): beto, sin Facción y de visita, es neutral; de partida la forja está cerrada a los de fuera.
     let beto = e.heroe("beto", 0);
     e.ok("admin", Comando::ColocarHeroe { heroe: beto, ubicacion: Ubicacion::Asentamiento(a as u32) });
     let forjar = |heroe, objeto: &str| Comando::ForjarObjeto { heroe, objeto: objeto.into() };

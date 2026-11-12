@@ -581,7 +581,7 @@ fn fondo(n: &Nucleo, plaza: u64) -> i64 {
     n.estado().asentamientos[&plaza].forja.fondo
 }
 
-/// Con `pagar_con = fondoPlaza` (Forja_En_Plazas §6) el Rey paga desde la taberna la tarifa en monedas con el fondo de la plaza, que se llena a mano (ninguna forja ha pagado aún impuesto
+/// Con `pagar_con = fondoPlaza` (Mercenarios_Por_Contrato §5.1) el Rey paga desde la taberna la tarifa en monedas con el fondo de la plaza, que se llena a mano (ninguna forja ha pagado aún impuesto
 /// aquí): las monedas salen del fondo y pasan a las del mercenario, y ni el almacén de la plaza ni las monedas del héroe se tocan.
 #[test]
 fn con_el_fondo_de_la_plaza_se_paga_desde_la_taberna_la_tarifa_en_monedas_y_pasan_al_mercenario() {

@@ -266,13 +266,13 @@ pub enum Comando {
     ComprarObjeto { heroe: u64, objeto: String },
     /// Vende a la Armería de la plaza donde está dentro `cantidad` de la casilla `casilla` de su mochila, a `ventaPct` de la ficha (D1 y D18).
     VenderObjeto { heroe: u64, casilla: u32, cantidad: u32 },
-    /// Forja una pieza en la Armería de la plaza donde está dentro, si su forja está abierta a su grupo (Forja_En_Plazas §2): el plano y los crisoles de su mochila; los
-    /// materiales, en su residencia del almacén personal y lo que falte del carro, y en otra plaza del carro con el que entró (§3); el impuesto, de sus monedas al fondo (§5).
+    /// Forja una pieza en la Armería de la plaza donde está dentro, si su forja está abierta a su grupo (Heroe_Y_Tropa §4.6): el plano y los crisoles de su mochila; los
+    /// materiales, en su residencia del almacén personal y lo que falte del carro, y en otra plaza del carro con el que entró; el impuesto, de sus monedas al fondo.
     ForjarObjeto { heroe: u64, objeto: String },
     /// Usa el consumible de la casilla `casilla` de su mochila, donde se puede equipar (D2); `escuadra`, la suya que recibe una medalla de tropa (Objetos_Del_Heroe §3.5).
     UsarObjeto { heroe: u64, casilla: u32, escuadra: Option<u64> },
     /// El Tesorero o el Gobernador de la plaza, residente y dentro, abre o cierra su forja a un grupo de fuera (aliados, neutrales o enemigos; nunca los Aedas) y le fija el
-    /// recargo sobre el impuesto, uno de `OBJETOS.forja.recargosPct` (Forja_En_Plazas §2).
+    /// recargo sobre el impuesto, uno de `OBJETOS.forja.recargosPct` (Heroe_Y_Tropa §4.6).
     ConfigurarForja { asentamiento: u64, grupo: politica::Grupo, abierta: bool, recargo_pct: u32 },
     /// Entrega una escuadra del campamento a la guarnición de la plaza donde reside el héroe, dentro de su cupo.
     AsignarGuarnicion { heroe: u64, escuadra: u64 },
@@ -1362,7 +1362,7 @@ pub enum PagarCon {
     Monedas,
     /// El almacén de la plaza donde está la taberna (tanda 69 §8): solo al contratar a un mercenario desde dentro de una plaza, sin ir a su campamento.
     AlmacenPlaza,
-    /// El fondo de monedas de la plaza donde está la taberna, el del impuesto de su forja (Forja_En_Plazas §6): como [`PagarCon::AlmacenPlaza`], pero a la tarifa en monedas.
+    /// El fondo de monedas de la plaza donde está la taberna, el del impuesto de su forja (Mercenarios_Por_Contrato §5.1): como [`PagarCon::AlmacenPlaza`], pero a la tarifa en monedas.
     FondoPlaza,
 }
 
@@ -1374,7 +1374,7 @@ pub enum LadoDelFondo {
     Carro,
 }
 
-/// El grupo de fuera de `ConfigurarForja`, en el registro; los Aedas no forjan (Forja_En_Plazas §2).
+/// El grupo de fuera de `ConfigurarForja`, en el registro; los Aedas no forjan (Heroe_Y_Tropa §4.6).
 fn grupo_de_forja_a_u8(g: politica::Grupo) -> u8 {
     match g {
         politica::Grupo::Neutrales => 0,
@@ -3269,7 +3269,7 @@ pub mod rechazos {
     pub const MERCENARIOS_SIN_STOCK: &str = "mercenarios.sin_stock";
     pub const MERCENARIOS_CUPO_AGOTADO: &str = "mercenarios.cupo_agotado";
     pub const MERCENARIOS_SIN_ORO: &str = "mercenarios.sin_oro";
-    /// `contratar_mercenario` con `pagar_con = fondoPlaza`: el fondo de la plaza no llega a la tarifa en monedas (Forja_En_Plazas §6).
+    /// `contratar_mercenario` con `pagar_con = fondoPlaza`: el fondo de la plaza no llega a la tarifa en monedas (Mercenarios_Por_Contrato §5.1).
     pub const MERCENARIOS_SIN_FONDO: &str = "mercenarios.sin_fondo";
     pub const MERCENARIOS_SIN_SITIO: &str = "mercenarios.sin_sitio";
     pub const MERCENARIOS_VIVERES_LLENOS: &str = "mercenarios.viveres_llenos";
@@ -3410,11 +3410,11 @@ pub mod rechazos {
     pub const ARMERIA_NO_SE_VENDE: &str = "armeria.no_se_vende";
     /// `comprar_objeto` o `forjar_objeto`: la Facción de la plaza no tiene la tecnología de su metal (D1).
     pub const ARMERIA_SIN_TECNOLOGIA: &str = "armeria.sin_tecnologia";
-    /// `forjar_objeto`: la forja de la plaza está cerrada al grupo del héroe (Forja_En_Plazas §2).
+    /// `forjar_objeto`: la forja de la plaza está cerrada al grupo del héroe (Heroe_Y_Tropa §4.6).
     pub const FORJA_CERRADA: &str = "forja.cerrada";
-    /// `forjar_objeto`: el tier de la pieza pide una Era que el mundo no ha alcanzado (`OBJETOS.forja.eraPorTier`; Forja_En_Plazas §4).
+    /// `forjar_objeto`: el tier de la pieza pide una Era que el mundo no ha alcanzado (`OBJETOS.forja.eraPorTier`; Objetos_Del_Heroe §3.4).
     pub const FORJA_ERA_CERRADA: &str = "forja.era_cerrada";
-    /// `configurar_forja`: el recargo no es uno de `OBJETOS.forja.recargosPct` (Forja_En_Plazas §2).
+    /// `configurar_forja`: el recargo no es uno de `OBJETOS.forja.recargosPct` (Heroe_Y_Tropa §4.6).
     pub const FORJA_RECARGO_INVALIDO: &str = "forja.recargo_invalido";
     /// `forjar_objeto`: no tiene receta (no es arma ni armadura, o es de tier I; Objetos_Del_Heroe §3.4).
     pub const FORJA_SIN_RECETA: &str = "forja.sin_receta";
@@ -3422,7 +3422,7 @@ pub mod rechazos {
     pub const FORJA_SIN_PLANO: &str = "forja.sin_plano";
     /// `forjar_objeto`: no hay en la mochila los crisoles de su tier.
     pub const FORJA_SIN_CRISOLES: &str = "forja.sin_crisoles";
-    /// `forjar_objeto`: el almacén personal (en su residencia) y el carro no tienen los materiales de la receta (Forja_En_Plazas §3).
+    /// `forjar_objeto`: el almacén personal (en su residencia) y el carro no tienen los materiales de la receta (Heroe_Y_Tropa §4.6).
     pub const FORJA_SIN_MATERIALES: &str = "forja.sin_materiales";
     /// `usar_objeto`: no es un consumible.
     pub const OBJETO_NO_SE_USA: &str = "objeto.no_se_usa";

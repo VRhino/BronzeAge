@@ -180,7 +180,7 @@ Desde el 2026-11-12 hay tres puertas más, que no abren contenido sino que cambi
 
 - **Ejército permanente** (`ejercito_permanente`, Era IV): las escuadras de los héroes de la Facción ganan un 10 % más de experiencia (`MILITAR.bonusExperiencia`, [`Combate.md`](Combate.md) §4.3); el héroe, no.
 - **Logística de campaña** (`logistica_campana`, Era IV): los víveres por héroe de la Facción ×1,5 (`LOGISTICA.bonusViveres`, [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §6.1).
-- **Los metales de los objetos del héroe** (`OBJETOS.metales`, [`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §2.1): comprar y forjar una pieza en la Armería de una plaza pide que la Facción de la plaza tenga la tecnología de su metal (el acero, `acero_templado`, Era V). Llevar una pieza que ya se tiene no pide nada.
+- **Los metales de los objetos del héroe** (`OBJETOS.metales`, [`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §2.1): comprar y forjar una pieza en la Armería de una plaza pide que la Facción de la plaza tenga la tecnología de su metal (el acero, `acero_templado`, Era V). Forjarla en los tiers III a V pide además que el mundo haya llegado a la Era de su tier (`OBJETOS.forja.eraPorTier`, 2026-11-12; [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §4.6). Llevar una pieza que ya se tiene no pide nada.
 
 **Cuerpo de oficiales** (`cuerpo_oficiales`, Era IV) no hace nada por sí misma: es una de las tecnologías que pide el hito de la Reforma macedónica. No da Liderazgo, porque ninguna tecnología cambia el Liderazgo (decisión del autor del 2026-11-11). Las demás de las Eras IV y V abren tropas (`TROPAS_RECLUTABLES[..].tecnologia`, [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §12).
 

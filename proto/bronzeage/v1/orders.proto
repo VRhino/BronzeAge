@@ -680,7 +680,7 @@ message OrdenVenderObjeto {
   uint32 cantidad = 2;
 }
 
-// 2026-11-12 (D1, Objetos_Del_Heroe §3.4; Forja_En_Plazas): el héroe de la cuenta forja una pieza (id de `OBJETOS`, tiers II a V) en la Armería de la plaza donde está
+// 2026-11-12 (D1, Objetos_Del_Heroe §3.4; Heroe_Y_Tropa §4.6): el héroe de la cuenta forja una pieza (id de `OBJETOS`, tiers II a V) en la Armería de la plaza donde está
 // dentro, si su forja está abierta a su grupo (la misma Facción, siempre). El plano y los crisoles salen de su mochila; los materiales, en la plaza donde reside, de su almacén
 // personal y lo que falte del carro, y en las demás del carro con el que entró. Paga en monedas el impuesto de su tier con el recargo de su grupo, que va al fondo de la
 // plaza; los tiers III a V piden su Era del mundo. La pieza nace con calidad del 90 al 110 % y su `item_instance_id` (`obj-N`).
@@ -695,7 +695,7 @@ message OrdenUsarObjeto {
   optional string escuadron_id = 2;
 }
 
-// 2026-11-12 (Forja_En_Plazas §2): el Tesorero o el Gobernador de la plaza, residente y dentro, abre o cierra su forja a un grupo de fuera (aliados | neutrales |
+// 2026-11-12 (Heroe_Y_Tropa §4.6): el Tesorero o el Gobernador de la plaza, residente y dentro, abre o cierra su forja a un grupo de fuera (aliados | neutrales |
 // enemigos) y le fija el recargo sobre el impuesto (uno de `OBJETOS.forja.recargosPct`, en %).
 message OrdenConfigurarForja {
   string asentamiento_id = 1;
@@ -808,7 +808,7 @@ message OrdenContratarMercenario {
   // reside sin columna, el almacén personal. `monedas` (tanda 69): las monedas del héroe, a la tarifa en monedas del tablón, en cualquier sitio; van a las monedas del mercenario
   // (`heroe.sin_monedas` si no bastan). `almacenPlaza` (tanda 69 §8): desde dentro de una plaza de su Facción con Taberna activa, sin ir al campamento, que ha de caer en la región de la plaza
   // (`mercenario.fuera_de_la_region`); paga el almacén de la plaza, que firma el Rey, el Embajador o el Gobernador, y es lo que se toma allí sin `pagar_con`. Con `almacenPersonal` o `carro`
-  // fuera del campamento, `campamento.fuera_de_la_puerta`. `fondoPlaza` (2026-11-12, Forja_En_Plazas §6): como `almacenPlaza`, desde la misma taberna y con los mismos firmantes, pero paga
+  // fuera del campamento, `campamento.fuera_de_la_puerta`. `fondoPlaza` (2026-11-12, Mercenarios_Por_Contrato §5.1): como `almacenPlaza`, desde la misma taberna y con los mismos firmantes, pero paga
   // la tarifa en monedas del fondo de la plaza (el del impuesto de su forja), que pasan a las del mercenario (`mercenarios.sin_fondo` si no llega). En el campamento y al prorrogar, `orden.forma_invalida`.
   optional string pagar_con = 6;
 }

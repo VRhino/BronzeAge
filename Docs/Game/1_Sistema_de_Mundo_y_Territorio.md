@@ -273,11 +273,11 @@ De ahí salen consecuencias sin necesidad de más reglas: tu tropa come de **tus
 
 ### 1.10.4 Dentro de una plaza ajena se ve lo que ven los ojos
 
-Quien está dentro ve lo que vería paseando por ella: la ficha pública (zona), el mostrador de órdenes activas, su **trazado urbano** (las calles y dónde está cada edificio, desde el 2026-10-29) y, desde el 2026-11-11 (decisión del autor del 2026-11-02), **todos sus edificios en pie y en obra** (con su obra, su mejora en curso y su daño) y **sus murallas** (el anillo, lo levantado y la mejora). **Nunca** lo que no está a la vista: ni almacén, guarnición, colas de construcción (lo encargado que aún no está en el suelo), cargos ni políticas.
+Quien está dentro ve lo que vería paseando por ella: la ficha pública (zona), el mostrador de órdenes activas, su **trazado urbano** (las calles y dónde está cada edificio, desde el 2026-10-29) y, desde el 2026-11-11 (decisión del autor del 2026-11-02), **todos sus edificios en pie y en obra** (con su obra, su mejora en curso y su daño) y **sus murallas** (el anillo, lo levantado y la mejora), y desde el 2026-11-12 **su forja**: a qué grupos está abierta, con qué recargo, su fondo de monedas y los metales que abre su Armería (Doc 5.16.1). **Nunca** lo que no está a la vista: ni almacén, guarnición, colas de construcción (lo encargado que aún no está en el suelo), cargos ni políticas.
 
 Entrar es reconocimiento legítimo —ves si la ciudad es grande, rica y está amurallada— y por eso cerrar la puerta sigue siendo una defensa real sin que abrirla sea suicida.
 
-**Desde fuera, sin entrar** (2026-11-07), de una plaza ajena solo se sabe **si tiene muralla o no**, sin detalle: ni su tipo, ni cuánto lleva levantado. Una muralla empezada ya cuenta como que la tiene. El tipo y el avance se ven dentro o con una inspección. De sus edificios, desde fuera, solo se sabe **si tiene un Mercado activo** (para saber si se puede comerciar allí); la lista de edificios se ve dentro o en un informe.
+**Desde fuera, sin entrar** (2026-11-07), de una plaza ajena solo se sabe **si tiene muralla o no**, sin detalle: ni su tipo, ni cuánto lleva levantado. Una muralla empezada ya cuenta como que la tiene. El tipo y el avance se ven dentro o con una inspección. De sus edificios, desde fuera, solo se sabe **si tiene un Mercado activo** (para saber si se puede comerciar allí) y, desde el 2026-11-12, **si tiene una Armería activa** (para saber si se puede comprar o forjar allí, Doc 5.16.1); la lista de edificios se ve dentro o en un informe.
 
 ### 1.10.5 La puerta: el Gobernador y el Rey (el exilio)
 

@@ -93,7 +93,7 @@ pub fn ficha_de_asentamiento(a: &Asentamiento, zona: &[base::Punto], batalla_id:
         tiene_muralla: !a.economia.recintos.is_empty(),
         // Lo que se sabe del Mercado desde fuera (2026-11-07): si hay alguno activo, sin su nivel.
         mercado_activo: a.economia.edificios.activos(asentamiento::Tipo::Mercado) > 0,
-        // Y de la Armería (Forja_En_Plazas §7, 2026-11-12): si hay alguna activa, sin su nivel ni su forja.
+        // Y de la Armería (Heroe_Y_Tropa §4.6, 2026-11-12): si hay alguna activa, sin su nivel ni su forja.
         armeria_activa: a.economia.edificios.activos(asentamiento::Tipo::Armeria) > 0,
         ..Default::default()
     }

@@ -101,7 +101,7 @@ impl Nucleo {
             // y la apertura de su almacén a los aliados (5D) y su cierre a los ciudadanos (2026-10-29), como el acceso.
             a.de_la_faccion_desde = t;
             (a.resto_tributo, a.permite_reabastecer_aliados, a.almacen_cerrado_a_ciudadanos, a.reclutamiento_cerrado_a_ciudadanos) = (0, false, false, false);
-            // La forja vuelve a la de partida, cerrada a los de fuera con su recargo; su fondo pasa con la plaza (Forja_En_Plazas §2 y §6).
+            // La forja vuelve a la de partida, cerrada a los de fuera con su recargo; su fondo pasa con la plaza (Combate §8).
             a.forja = Forja { fondo: a.forja.fondo, ..forja_de_partida };
             // La marca de capital sobrevive al cambio de dueño y deja de valer (Diplomacia_Facciones §3.7).
             let c = aplicar_conquista(&cr, &datos, &mut a.economia, t);

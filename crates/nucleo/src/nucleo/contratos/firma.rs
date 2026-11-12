@@ -5,7 +5,7 @@
 //! desde el 2026-11-03 (pedido del autor), también desde dentro del campamento donde reside: con su almacén personal o con el carro que tiene allí ([`Bolsa`]). Desde la tanda 69 puede
 //! pagar en cambio con sus monedas, a la tarifa en monedas (la de oro × `monedasPorOro`), en cualquier sitio.
 //! También se contrata desde la taberna de una plaza de su Facción (tanda 69 §8), sin ir al campamento, si éste cae en la región de la plaza: paga el almacén de la plaza, y firma entonces el
-//! Rey, el Embajador o el Gobernador, o con sus monedas. Los mismos firman también con el fondo de monedas de la plaza, el del impuesto de su forja (Forja_En_Plazas §6). Prorrogar sigue siendo en persona.
+//! Rey, el Embajador o el Gobernador, o con sus monedas. Los mismos firman también con el fondo de monedas de la plaza, el del impuesto de su forja (§5.1). Prorrogar sigue siendo en persona.
 //! No elige con qué cargo: las reglas puras toman el de más rango que pueda firmar ese trabajo sobre ese objetivo. El pago en oro entra en el almacén personal del mercenario hasta llenarlo y
 //! lo que no cabe desaparece: es un sumidero, y nunca bloquea una firma (decisión 9 del plan); las monedas pagadas pasan a las del mercenario.
 
@@ -138,7 +138,7 @@ impl Nucleo {
 
     /// De dónde paga `heroe` por la oferta del campamento `campamento` (la del tablón al contratar): si está en el campamento, como siempre ([`Nucleo::bolsa_en_campamento`]); si no, desde dentro de una
     /// plaza de su Facción con Taberna activa (tanda 69 §8), que ha de tener el campamento en su región (`mercenario.fuera_de_la_region`), con el almacén de la plaza (la forma por defecto; la
-    /// firman el Rey, el Embajador o el Gobernador, como la intel de la taberna), con el fondo de la plaza (los mismos, Forja_En_Plazas §6) o con sus monedas. Con otra forma de pago, o en
+    /// firman el Rey, el Embajador o el Gobernador, como la intel de la taberna), con el fondo de la plaza (los mismos, §5.1) o con sus monedas. Con otra forma de pago, o en
     /// otro sitio, no se llega a la puerta del campamento.
     fn bolsa_de_firma(&self, t: Instante, heroe: u64, campamento: u32, pagar_con: Option<PagarCon>) -> Result<Bolsa, Respuesta> {
         if self.esta_en_el_campamento(heroe, campamento, t) {
@@ -447,6 +447,6 @@ enum Bolsa {
     Monedas,
     /// El almacén de la plaza donde el héroe firma desde su taberna.
     AlmacenPlaza(u64),
-    /// El fondo de monedas de la plaza donde el héroe firma desde su taberna (Forja_En_Plazas §6).
+    /// El fondo de monedas de la plaza donde el héroe firma desde su taberna (Mercenarios_Por_Contrato §5.1).
     FondoPlaza(u64),
 }

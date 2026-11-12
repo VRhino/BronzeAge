@@ -133,7 +133,7 @@ pub(crate) fn recintos(id: u64, eco: &asentamiento::asentamiento::Asentamiento) 
         .collect()
 }
 
-/// La forja de la plaza y los metales que abre su Armería (Forja_En_Plazas §7): van a quien está dentro, sea o no de su Facción, y a `ADMIN`. Los metales, los de `OBJETOS.metales`
+/// La forja de la plaza y los metales que abre su Armería (Heroe_Y_Tropa §4.6): van a quien está dentro, sea o no de su Facción, y a `ADMIN`. Los metales, los de `OBJETOS.metales`
 /// cuya tecnología tiene adoptada la Facción de la plaza (el de inicio, siempre); ninguno sin Armería activa.
 pub(crate) fn forja_de(n: &Nucleo, a: &crate::estado::Asentamiento) -> (pb::ForjaPlaza, Vec<String>) {
     use asentamiento::edificio::Edificios;

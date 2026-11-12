@@ -1,4 +1,4 @@
-//! La forja de la Armería (D1, Objetos_Del_Heroe §3.4; Forja_En_Plazas §4 y §5): una pieza de los tiers II a V con su receta. El plano y los crisoles
+//! La forja de la Armería (D1 y la forja en cualquier plaza, Objetos_Del_Heroe §3.4): una pieza de los tiers II a V con su receta. El plano y los crisoles
 //! salen de la mochila; los materiales y el impuesto los cobra el núcleo. La calidad se tira con el generador que pasa quien llama y multiplica todas
 //! las cifras de la pieza, que nace con id propio (D13).
 
@@ -16,7 +16,7 @@ pub enum ErrorForja {
     SinReceta,
     /// La Facción de la plaza no tiene adoptada la tecnología de su metal.
     MetalCerrado,
-    /// Su tier pide una Era (`OBJETOS.forja.eraPorTier`) que el mundo no ha alcanzado (Forja_En_Plazas §4).
+    /// Su tier pide una Era (`OBJETOS.forja.eraPorTier`) que el mundo no ha alcanzado (Objetos_Del_Heroe §3.4).
     EraCerrada,
     /// No hay en la mochila un plano de su tier.
     SinPlano,
@@ -56,7 +56,7 @@ pub fn forjar(mochila: &mut Inventario, cat: &Catalogo, objeto: &str, id: u64, e
     Ok((receta.materiales.clone(), calidad))
 }
 
-/// El impuesto de forjar una pieza de `tier` (Forja_En_Plazas §5), en monedas: la base del tier con el recargo del grupo de quien forja,
+/// El impuesto de forjar una pieza de `tier` (Objetos_Del_Heroe §3.4), en monedas: la base del tier con el recargo del grupo de quien forja,
 /// `base × (100 + recargo) / 100` (la misma Facción, sin recargo). `tier` es el de una pieza con receta, que tiene su base (comprobado al cargar).
 pub fn impuesto(r: &ReglasForja, tier: u8, recargo_pct: u32) -> i64 {
     let base = r.impuesto_por_tier.get(&tier).expect("una pieza con receta tiene su impuesto (comprobado al cargar)");

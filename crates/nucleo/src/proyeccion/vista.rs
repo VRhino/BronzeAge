@@ -779,7 +779,7 @@ pub fn plaza_avistada(n: &Nucleo, id: u64) -> pb::Asentamiento {
 
 /// La plaza ajena vista desde dentro (2026-10-29; ampliada el 2026-11-02, decisión del autor: quien está dentro ve todo lo que vería con sus ojos al moverse por ella): la de fuera
 /// ([`plaza_avistada`]) con su trazado urbano, sus edificios en pie y en obra (con la obra y la mejora en curso y el daño; no los de la cola, que aún no están en el suelo) y sus recintos de
-/// muralla (lo levantado y lo comprometido, celda a celda), y su forja con los metales de su Armería (Forja_En_Plazas §7). Nada más de su interior: ni la cola, ni lo parado por almacén lleno, ni de qué fuente sale cada uno, ni el almacén, la población, la
+/// muralla (lo levantado y lo comprometido, celda a celda), y su forja con los metales de su Armería (Heroe_Y_Tropa §4.6). Nada más de su interior: ni la cola, ni lo parado por almacén lleno, ni de qué fuente sale cada uno, ni el almacén, la población, la
 /// puerta, los cargos o quién está dentro.
 /// Lo que está en el suelo: en pie, en obra, o en la cola pero dañado (la ruina que deja una conquista, `combate::conquista::aplicar_conquista`). Lo encargado
 /// que aún no se ha empezado no se ve.
@@ -799,7 +799,7 @@ pub fn plaza_desde_dentro(n: &Nucleo, id: u64) -> pb::Asentamiento {
             .collect();
     }
     p.recintos = interior::recintos(id, eco).into_iter().map(|r| pb::Recinto { siguiente_celda_en_ms: None, ..r }).collect();
-    // Su forja y los metales de su Armería (Forja_En_Plazas §7): quien está dentro sabe si puede forjar y cuánto pagaría.
+    // Su forja y los metales de su Armería (Heroe_Y_Tropa §4.6): quien está dentro sabe si puede forjar y cuánto pagaría.
     let (forja, metales) = interior::forja_de(n, &n.estado().asentamientos[&id]);
     (p.forja, p.metales_armeria) = (Some(forja), metales);
     p

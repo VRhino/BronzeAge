@@ -286,7 +286,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `mercenarios.sin_stock` | `MERCENARIOS_SIN_STOCK` | — |
 | `mercenarios.cupo_agotado` | `MERCENARIOS_CUPO_AGOTADO` | — |
 | `mercenarios.sin_oro` | `MERCENARIOS_SIN_ORO` | — |
-| `mercenarios.sin_fondo` | `MERCENARIOS_SIN_FONDO` | `contratar_mercenario` con `pagar_con = fondoPlaza`: el fondo de la plaza no llega a la tarifa en monedas (Forja_En_Plazas §6). |
+| `mercenarios.sin_fondo` | `MERCENARIOS_SIN_FONDO` | `contratar_mercenario` con `pagar_con = fondoPlaza`: el fondo de la plaza no llega a la tarifa en monedas (Mercenarios_Por_Contrato §5.1). |
 | `mercenarios.sin_sitio` | `MERCENARIOS_SIN_SITIO` | — |
 | `mercenarios.viveres_llenos` | `MERCENARIOS_VIVERES_LLENOS` | — |
 
@@ -403,13 +403,13 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `armeria.sin_armeria` | `ARMERIA_SIN_ARMERIA` | `comprar_objeto`, `vender_objeto` o `forjar_objeto` sin estar dentro de una plaza con la Armería activa (D1). |
 | `armeria.no_se_vende` | `ARMERIA_NO_SE_VENDE` | `comprar_objeto`: la tienda no lo vende (no es arma, armadura ni montura, o pasa de `tiendaHastaTier`; Objetos_Del_Heroe §3.3). |
 | `armeria.sin_tecnologia` | `ARMERIA_SIN_TECNOLOGIA` | `comprar_objeto` o `forjar_objeto`: la Facción de la plaza no tiene la tecnología de su metal (D1). |
-| `forja.cerrada` | `FORJA_CERRADA` | `forjar_objeto`: la forja de la plaza está cerrada al grupo del héroe (Forja_En_Plazas §2). |
-| `forja.era_cerrada` | `FORJA_ERA_CERRADA` | `forjar_objeto`: el tier de la pieza pide una Era que el mundo no ha alcanzado (`OBJETOS.forja.eraPorTier`; Forja_En_Plazas §4). |
-| `forja.recargo_invalido` | `FORJA_RECARGO_INVALIDO` | `configurar_forja`: el recargo no es uno de `OBJETOS.forja.recargosPct` (Forja_En_Plazas §2). |
+| `forja.cerrada` | `FORJA_CERRADA` | `forjar_objeto`: la forja de la plaza está cerrada al grupo del héroe (Heroe_Y_Tropa §4.6). |
+| `forja.era_cerrada` | `FORJA_ERA_CERRADA` | `forjar_objeto`: el tier de la pieza pide una Era que el mundo no ha alcanzado (`OBJETOS.forja.eraPorTier`; Objetos_Del_Heroe §3.4). |
+| `forja.recargo_invalido` | `FORJA_RECARGO_INVALIDO` | `configurar_forja`: el recargo no es uno de `OBJETOS.forja.recargosPct` (Heroe_Y_Tropa §4.6). |
 | `forja.sin_receta` | `FORJA_SIN_RECETA` | `forjar_objeto`: no tiene receta (no es arma ni armadura, o es de tier I; Objetos_Del_Heroe §3.4). |
 | `forja.sin_plano` | `FORJA_SIN_PLANO` | `forjar_objeto`: no hay en la mochila un plano de su tier. |
 | `forja.sin_crisoles` | `FORJA_SIN_CRISOLES` | `forjar_objeto`: no hay en la mochila los crisoles de su tier. |
-| `forja.sin_materiales` | `FORJA_SIN_MATERIALES` | `forjar_objeto`: el almacén personal (en su residencia) y el carro no tienen los materiales de la receta (Forja_En_Plazas §3). |
+| `forja.sin_materiales` | `FORJA_SIN_MATERIALES` | `forjar_objeto`: el almacén personal (en su residencia) y el carro no tienen los materiales de la receta (Heroe_Y_Tropa §4.6). |
 | `objeto.no_se_usa` | `OBJETO_NO_SE_USA` | `usar_objeto`: no es un consumible. |
 | `escuadra.prestada` | `ESCUADRA_PRESTADA` | `usar_objeto`: una medalla de tropa sobre tropa prestada, que no es del héroe (Objetos_Del_Heroe §3.5). |
 | `escuadra.nivel_maximo` | `ESCUADRA_NIVEL_MAXIMO` | `usar_objeto`: una medalla de tropa sobre una escuadra que ya está en `nivelMaximoEscuadra`. |

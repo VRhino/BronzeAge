@@ -476,7 +476,7 @@ impl Ctx<'_> {
             Cuerpo::ForjarObjeto(o) => Comando::ForjarObjeto { heroe: self.mi_heroe()?, objeto: o.objeto.clone() },
             Cuerpo::UsarObjeto(o) => Comando::UsarObjeto { heroe: self.mi_heroe()?, casilla: o.casilla, escuadra: o.escuadron_id.as_deref().map(|e| self.escuadra(e)).transpose()? },
             Cuerpo::ConfigurarForja(o) => {
-                // La forja se abre a los tres grupos de fuera de la puerta; los Aedas no forjan (Forja_En_Plazas §2).
+                // La forja se abre a los tres grupos de fuera de la puerta; los Aedas no forjan (Heroe_Y_Tropa §4.6).
                 let grupo = match politica::Grupo::desde_nombre(&o.grupo) {
                     Some(g @ (politica::Grupo::Aliados | politica::Grupo::Neutrales | politica::Grupo::Enemigos)) => g,
                     Some(politica::Grupo::Aedas) | None => return self.forma(format!("grupo de la forja desconocido: {}", o.grupo)),

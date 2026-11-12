@@ -3,13 +3,13 @@
 //! nada si rechazan); aquí están dónde se puede (D1 y D2), el grupo de quien forja, las monedas, los materiales del almacén personal y del carro, el fondo de la plaza, el efecto
 //! de lo usado, los rechazos y los hechos.
 //!
-//! - **Comprar, vender y forjar** (D1; la forja, en cualquier plaza desde el 2026-11-12, Forja_En_Plazas): dentro de cualquier plaza con la Armería activa; el metal lo abre la
+//! - **Comprar, vender y forjar** (D1; la forja, en cualquier plaza desde el 2026-11-12): dentro de cualquier plaza con la Armería activa; el metal lo abre la
 //!   tecnología de la Facción **de esa plaza**. Pagan y cobran las monedas del héroe.
-//! - **Forjar** (Forja_En_Plazas §2 a §5): la misma Facción, siempre y a la base; cada grupo de fuera de la puerta, si la plaza le abrió su forja, con su recargo. Los tiers III a V
+//! - **Forjar** (2026-11-12): la misma Facción, siempre y a la base; cada grupo de fuera de la puerta, si la plaza le abrió su forja, con su recargo. Los tiers III a V
 //!   piden su Era del mundo. El plano y los crisoles salen de su mochila. Los materiales, en la plaza donde reside, de su almacén personal y lo que falte del carro; en cualquier
 //!   otra, del carro con el que entró ([`Nucleo::carro_dentro`]). El impuesto sale de sus monedas y entra en el fondo de la plaza. La calidad sale del generador del estado y la
 //!   pieza lleva `obj-N` del contador de ids del estado, que solo se gasta si la forja se acepta. Todo o nada.
-//! - **Configurar la forja** (§2): el Tesorero o el Gobernador, residente y dentro, abre o cierra la forja a un grupo de fuera con un recargo de `OBJETOS.forja.recargosPct`.
+//! - **Configurar la forja**: el Tesorero o el Gobernador, residente y dentro, abre o cierra la forja a un grupo de fuera con un recargo de `OBJETOS.forja.recargosPct`.
 //! - **Usar** (D2): donde se equipa. Una medalla de tropa, sobre una escuadra suya que no sea prestada ni esté en el nivel máximo, sin el bonus de Ejército permanente (lo que sobra
 //!   al llegar al máximo se pierde); una del héroe, su porcentaje de lo que pide su nivel para el siguiente; el cofre, una montura que llega como lo que llega sin pedirlo (D17 y
 //!   D22: a la mochila, si no cabe al almacén de objetos y si tampoco se pierde).
@@ -107,7 +107,7 @@ impl Nucleo {
                 let plaza = self.armeria_donde_esta(p, *heroe)?;
                 let a = &self.estado.asentamientos[&plaza];
                 let (faccion, aqui) = (a.faccion, Residencia::Asentamiento(plaza as u32));
-                // Forja_En_Plazas §2: la misma Facción, siempre y a la base; cada grupo de fuera, si la plaza le abrió su forja, con su recargo.
+                // Heroe_Y_Tropa §4.6: la misma Facción, siempre y a la base; cada grupo de fuera, si la plaza le abrió su forja, con su recargo.
                 let recargo = match grupo_de_puerta(&self.estado.politica.relaciones, self.heroe(*heroe).expect("existe").faccion, faccion) {
                     GrupoDePuerta::Propia => 0,
                     GrupoDePuerta::De(g) => match a.forja.de(g) {
@@ -226,7 +226,7 @@ impl Nucleo {
         self.estado.asentamientos.get(&plaza).is_some_and(|a| a.economia.edificios.activos(Edificio::Armeria) > 0)
     }
 
-    /// Una adopción de `faccion` cambia los metales de sus Armerías (Forja_En_Plazas §7): toca sus plazas con la Armería activa, para que lleguen también a quien está dentro de una
+    /// Una adopción de `faccion` cambia los metales de sus Armerías (Proyecciones_Y_Autorizacion §6.3): toca sus plazas con la Armería activa, para que lleguen también a quien está dentro de una
     /// de ellas sin ser de su Facción (la plaza ajena vista desde dentro solo se vuelve a mandar cuando cambia su versión).
     pub(super) fn tocar_armerias_de(&mut self, faccion: u32) {
         let plazas: Vec<u64> = self.estado.asentamientos.values().filter(|a| a.faccion == faccion).map(|a| a.id).filter(|&a| self.con_armeria(a)).collect();

@@ -265,7 +265,7 @@ pub struct Botin {
     pub rango_mercenario: BTreeMap<u8, Tabla>,
 }
 
-/// La forja en las plazas (`OBJETOS.forja`; Forja_En_Plazas §2, §4 y §5).
+/// La forja en las plazas (`OBJETOS.forja`; Objetos_Del_Heroe §2 y §3.4).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReglasForja {
     /// El impuesto base de forjar una pieza, en monedas, por su tier (II a V).
