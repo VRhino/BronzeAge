@@ -1,6 +1,58 @@
 # Objetos del héroe
 
-> **Nuevo el 2026-11-12.** Los datos del catálogo de objetos del héroe (`OBJETOS`), de sus clases (`CLASES_HEROE`) y del botín de objetos (`BOTIN_OBJETOS`), generados del catálogo de la Armería (`Docs/Disenos_Por_Implementar/Catalogo_De_Objetos.md`, `Clases_De_Heroe.md` §7 y `Progresion_Tropas_Y_Heroe.md` §5) y servidos en `GET /v1/datos`. Las reglas que los usan se describen aquí a medida que se implementan.
+> **Nuevo el 2026-11-12.** Los datos del catálogo de objetos del héroe (`OBJETOS`), de sus clases (`CLASES_HEROE`) y del botín de objetos (`BOTIN_OBJETOS`), generados del catálogo de la Armería (`Docs/Disenos_Por_Implementar/Catalogo_De_Objetos.md`, `Clases_De_Heroe.md` §7 y `Progresion_Tropas_Y_Heroe.md` §5) y servidos en `GET /v1/datos`. Las reglas puras que los usan viven en el crate `objetos` (D11, entradas 70 y 71), que solo depende de `base`; el héroe, las plazas y las órdenes que las llaman todavía no (tanda siguiente), así que aquí se describe lo que hace cada regla, no cuándo se aplica.
+
+## 1. Alcance y fuentes
+
+- Crate `objetos`: `datos` (carga y comprobación de los tres bloques), `inventario` (mochila y almacén de objetos), `equipo` (huecos, clase, atributos, equipo inicial, equipar y quitar), `tienda` (comprar y vender), `forja`, `consumible` (usar) y `botin` (tirar una tabla).
+- Todo en enteros. Las probabilidades de los bloques, decimales, pasan una vez al cargar a **milésimas**, y el azar es solo el `base::Rng` que pasa quien llama.
+- El crate no sabe de héroes, plazas ni órdenes. Quien llama comprueba dónde está el héroe (D1, D2 y D22), le da sus monedas y le dice, con una función, si una tecnología está adoptada por la Facción de la plaza. Toda regla que se rechaza no cambia nada: ni mochila, ni monedas, ni generador.
+
+## 2. Los bloques
+
+- **`OBJETOS`**: `ventaPct` (lo que paga la tienda al comprarte, en % del precio), `tiendaHastaTier`, `casillasMochila` (72) y `casillasAlmacen` (144, D22), `rarezas` (el nombre de la rareza de Conquest de cada tier, solo para los clientes), `metales` (la tecnología que abre cada metal; `inicio`, ninguna) y `objetos`: la ficha de cada uno, con su `id`, `tipo` (`arma`, `armadura`, `montura`, `material` o `consumible`), `tier` (1 a 5; los materiales y consumibles sin tier, `null`), `apilable` y `precio` en monedas. Las armas llevan `clase`; las armaduras, `hueco` y `tipoArmadura` (ligera, media o pesada); las dos, `metal`, `combate` (las cifras que aplica Conquest) y `forja` (la receta: `plano` es el tier del plano, `crisoles`, `materiales` por recurso del almacén y el rango de `calidad` en %; `null` en el tier I). Los consumibles llevan `efecto`: `experienciaTropa`, `experienciaHeroePct` o `monturaDe` (una montura al azar por sus probabilidades).
+- **`CLASES_HEROE`**: las cinco clases, con los pesos de armadura que admite cada una (`armaduras`), con cuál empieza (`armaduraInicial`) y sus `atributosBase`. Lleva su propia `version`.
+- **`BOTIN_OBJETOS`**: las tablas por fuente: `bandidos` por nivel del campamento (1 a 3), `unity` (el de cada héroe en una batalla de Unity), `misionDiaria` (D5), `alijo` y `rangoMercenario` por rango (4 y 5). Cada entrada es fija (`objeto`, `cantidad`, `probabilidad` y `soloSiGana`) o `unoDe` (una de la lista, siempre).
+
+**Al cargar** el motor se niega a arrancar (pánico con mensaje) si un objeto está dos veces, un metal no está en `metales`, una probabilidad no es una milésima exacta en (0, 1], un arma nombra una clase que no existe, una clase no tiene exactamente un arma de tier I y una pieza de tier I de su `armaduraInicial` en torso, guantes, pantalones y botas, no hay exactamente una montura de tier I, una receta está fuera de los tiers II a V o pide un plano (`plano_{tier}`) o un `crisol` que no sean materiales apilables del catálogo, una tabla o un `monturaDe` nombran un objeto que no existe, o un `unoDe` o un `monturaDe` no suman 1.
+
+## 3. Las reglas
+
+### 3.1 Mochila y almacén de objetos
+
+Los dos son el mismo inventario: casillas de número fijo, de 0 a la capacidad menos 1 (`ItemInstancia.casilla_inventario` del contrato), que pueden estar vacías u ocupadas. Una orden que nombra una casilla actúa siempre sobre la misma pieza, aunque entretanto se haya vaciado otra. **Lo apilable va junto**, en una sola casilla sin tope de cantidad; cada pieza que no se apila ocupa la suya. Una pieza es el id del catálogo y, solo si es forjada, su número propio (`obj-N`, del contador del estado) y sus cifras ya multiplicadas por la calidad (D13); la de tienda y botín es la ficha al 100 %.
+
+- **Meter** `cantidad` de una pieza: lo apilable se suma a su pila o, si no la hay, ocupa la casilla libre de número más bajo; lo que no se apila, una casilla libre por pieza, de la más baja hacia arriba. Si no cabe todo, no mete nada (`NoCabe`). Se rechaza un objeto que no está en el catálogo y una cantidad de 0 o de más de una pieza forjada.
+- **Sacar** `cantidad` de una casilla: la casilla que se vacía queda libre y las demás no se mueven. Se rechaza una casilla vacía o fuera de la capacidad, y más de lo que tiene.
+
+### 3.2 Equipo, clase y atributos
+
+Siete huecos: arma, casco, torso, guantes, pantalones, botas y montura. **El arma está siempre puesta** y define la clase (Clases_De_Heroe §4).
+
+- **Clase** del héroe: la `clase` del arma puesta.
+- **Atributos**: los `atributosBase` de esa clase más los puntos repartidos (Clases_De_Heroe §5); cambiar de arma cambia la base y conserva los puntos.
+- **Equipo inicial** de una clase: su arma de tier I, las cuatro piezas de tier I de su `armaduraInicial` (sin casco) y la montura de tier I (`montura_tiro`). Una clase vacía o desconocida se rechaza.
+- **Equipar** desde una casilla de la mochila. Un arma sustituye a la puesta, que va a la mochila, y manda también a la mochila cada armadura puesta cuyo peso no admite la clase nueva. Una armadura se rechaza si la clase del arma puesta no admite su peso; si no, sustituye a la del hueco, que va a la mochila. Una montura sustituye a la puesta. Un material o un consumible no se equipa. Si lo que va a la mochila no cabe (contando la casilla que deja libre lo que se equipa), se rechaza y no cambia nada (D17).
+- **Quitar** lo de un hueco a la mochila: el arma no se quita, un hueco vacío se rechaza y, con la mochila llena, la pieza se queda puesta.
+
+### 3.3 Tienda
+
+- **Comprar** una pieza al 100 %, a su `precio`: solo armas, armaduras y monturas hasta `tiendaHastaTier`, y solo si la Facción de la plaza tiene adoptada la tecnología de su metal (el de inicio y las monturas no piden ninguna). Se rechaza sin monedas y, sin cobrar, con la mochila llena.
+- **Vender** `cantidad` de una casilla: cada una a `ventaPct` del precio de su ficha, redondeado hacia abajo (el torso ligero de hierro, de 525, da 262). Una pieza forjada vale lo mismo que la ficha: la calidad no cambia el precio (D18). Se vende cualquier objeto.
+
+### 3.4 Forja
+
+**Forjar** una pieza con receta (arma o armadura de los tiers II a V), con la tecnología de su metal adoptada: gasta de la mochila un plano de su tier y sus crisoles, tira la calidad en el rango de la receta con los dos extremos dentro (una tirada: `mínimo + rng(máximo − mínimo + 1)`), multiplica por ella todas las cifras de `combate` redondeando al entero más cercano (las mitades hacia arriba) y mete la pieza en la mochila con su número propio. Devuelve los materiales de la receta, en unidades, para que el núcleo los cobre del almacén personal: comprobar que los hay es de quien llama. Se rechaza un objeto sin receta, el metal cerrado, sin plano del tier, sin los crisoles o con la mochila llena (después de gastar el plano y los crisoles), y entonces no gasta nada ni tira el generador.
+
+### 3.5 Consumibles
+
+**Usar** uno de una casilla gasta una unidad y devuelve su efecto, que aplica quien llama: la experiencia de una medalla de tropa, el porcentaje de la experiencia del nivel de una medalla del héroe o la montura que sale del cofre, con una tirada en milésimas por sus probabilidades. Se rechaza lo que no es consumible. Si el efecto cabe (una escuadra en el nivel máximo no usa una medalla de tropa) lo comprueba quien llama antes.
+
+### 3.6 Botín
+
+**Tirar una tabla**: cada entrada fija se tira por su lado, con una tirada en milésimas (también la que sale siempre), y las de `soloSiGana` solo cuentan para el que gana; cada `unoDe` da uno, siempre, con una sola tirada. Sale una lista de objetos y cantidades, en el orden de la tabla. Qué tabla toca y adónde va lo que sale (la mochila y, si no cabe, el almacén de objetos; D17) lo decide quien llama.
+
+## 4. Parámetros
 
 <!-- parametros:OBJETOS -->
 ```json
