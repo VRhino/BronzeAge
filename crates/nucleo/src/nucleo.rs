@@ -50,9 +50,11 @@ use std::thread::JoinHandle;
 mod a_mano;
 mod aedas;
 mod alijos;
+mod armeria;
 mod auditoria;
 mod avanzadas;
 mod bandidos;
+mod botin_de_objetos;
 mod batallas;
 mod cargos;
 mod columnas;
@@ -65,6 +67,7 @@ mod cronica;
 mod dentro;
 mod diplomacia;
 mod encargos;
+mod equipo;
 mod espacio;
 mod experiencia;
 mod exploracion;
@@ -80,6 +83,7 @@ mod murallas;
 mod persecuciones;
 mod pertenencias;
 mod prestigio;
+mod progresion;
 mod ciudadania;
 mod pueblos;
 mod pueblos_dentro;
@@ -942,14 +946,16 @@ impl Nucleo {
                 // Andamiaje de administración: una columna con un héroe «de campo» (sin residencia ni loadout) de la cuenta dada, a la que obedece.
                 let (id, heroe) = (self.nuevo_id(), self.nuevo_id());
                 let mr = self.estado.reglas.economia.militar.clone();
-                let mut h = militar::heroe::Heroe::nuevo(&mr, heroe, militar::heroe::Controlador::Bot, 0, heroe);
+                // Su clase, la primera de `CLASES_HEROE` por id: un héroe de campo no la elige, pero nace con equipo como cualquiera (Heroe_Y_Tropa §3).
+                let clase = mr.objetos.clases.keys().next().expect("CLASES_HEROE tiene clases (comprobado al cargar)");
+                let mut h = militar::heroe::Heroe::nuevo(&mr, heroe, militar::heroe::Controlador::Bot, 0, heroe, clase).expect("una clase del catálogo");
                 h.residencia = None;
                 h.loadouts.clear();
                 h.presencia = militar::presencia::Presencia::nueva(militar::presencia::Ubicacion::Columna(id));
                 self.estado.militar.insertar(HeroeNucleo { sintetico: true, ..HeroeNucleo::nuevo(h, cuenta, Some(*faccion)) });
                 self.otorgar_de_administracion(heroe, *faccion);
                 self.tr.tocar(Clase::Heroe, heroe);
-                let columna = militar::columna::Columna::salir(&mr, id, Some(*faccion), heroe, militar::columna::TipoColumna::Ejercito, militar::columna::Politica::Rechazar, vec![], Default::default(), *viveres, t, &|_| 0);
+                let columna = militar::columna::Columna::salir(&self.militar_de(Some(*faccion)), id, Some(*faccion), heroe, militar::columna::TipoColumna::Ejercito, militar::columna::Politica::Rechazar, vec![], Default::default(), *viveres, t, &|_| 0);
                 let mut e = self.columna_suelta(columna, *posicion);
                 e.velocidad_fija = Some(*velocidad);
                 self.alta_de_columna(t, e);
@@ -1316,6 +1322,16 @@ impl Nucleo {
             },
             Comando::GuarnecerPueblo { .. } | Comando::RetirarDePueblo { .. } | Comando::CargarDePueblo { .. } | Comando::DejarEnPueblo { .. } => {
                 if let Err(r) = self.ejecutar_dentro_de_pueblo(t, p) {
+                    return r;
+                }
+            }
+            Comando::EquiparObjeto { .. } | Comando::DesequiparObjeto { .. } | Comando::GuardarObjeto { .. } | Comando::SacarObjeto { .. } => {
+                if let Err(r) = self.ejecutar_equipo(t, p) {
+                    return r;
+                }
+            }
+            Comando::ComprarObjeto { .. } | Comando::VenderObjeto { .. } | Comando::ForjarObjeto { .. } | Comando::UsarObjeto { .. } | Comando::ConfigurarForja { .. } => {
+                if let Err(r) = self.ejecutar_armeria(t, p) {
                     return r;
                 }
             }

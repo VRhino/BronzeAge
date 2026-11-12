@@ -33,6 +33,7 @@
 
 use super::contratos::Desenlace;
 use super::*;
+use super::botin_de_objetos::Fuente;
 use crate::estado::{SucesoCombate, PRIO_BANDIDOS};
 use crate::estado_combate::{entidad_anillo, entidad_bandidos, es_entidad_bandidos, CampamentoBandidos, OrigenBandidos};
 use crate::estado_comercio::es_entidad_caravana;
@@ -190,7 +191,8 @@ impl Nucleo {
     }
 
     /// El botín que gana el héroe `heroe` al destruir un campamento de ese `origen` y ese `nivel`, con los rendimientos decrecientes de su ventana: devuelve
-    /// los recursos (para el carro) y las monedas, que ya suma a las del héroe. **El botín de los bandidos del anillo de un campamento de mercenarios solo lo
+    /// los recursos (para el carro) y las monedas, que ya suma a las del héroe. Si es una de las completas de su ventana (`rendimientos.completas`, 8 en 24 h), además la tabla
+    /// de objetos de su nivel (`BOTIN_OBJETOS.bandidos`, Objetos_Del_Heroe §3.7), a su mochila ([`Nucleo::botin_de_objetos`]). **El botín de los bandidos del anillo de un campamento de mercenarios solo lo
     /// cobran los héroes sin plaza** (Cal-5, 2026-10-24: el anillo existe para el jugador nuevo); los demás ganan solo experiencia, y esa destrucción no
     /// cuenta en su ventana. Los de plaza, vetas y administración pagan a todos.
     pub(super) fn botin_de_bandidos_para(&mut self, heroe: u64, origen: OrigenBandidos, nivel: u8, t: Instante) -> (Mercancia, i64) {
@@ -199,10 +201,15 @@ impl Nucleo {
         }
         let mut recientes = self.estado.combate.destruidos.get(&heroe).cloned().unwrap_or_default();
         let (recursos, monedas) = combate::bandidos::botin_de_bandidos(&self.estado.reglas.economia.combate, &mut recientes, nivel, t);
+        // La ventana ya podada y con esta destrucción: es completa si no pasa de las que lo son.
+        let completa = recientes.len() as i64 <= self.estado.reglas.economia.combate.bandidos.rendimientos.completas;
         self.estado.combate.destruidos.insert(heroe, recientes);
         if self.heroe(heroe).is_some() {
             let h = &mut self.heroe_mut(heroe).heroe;
             h.monedas = h.monedas.saturating_add(monedas);
+        }
+        if completa {
+            self.botin_de_objetos(t, heroe, Fuente::Bandidos(nivel));
         }
         (recursos, monedas)
     }
@@ -400,6 +407,7 @@ impl Nucleo {
         let columnas = self.columnas_de(&tropa.escuadras);
         let participantes = Self::participantes_de(&self.estado.ejercitos[&columna]);
         let e = resolver_emboscada(&cr, nivel, Bando { escuadras: &mut tropa.escuadras, heroes: &tropa.heroes }, &mut self.estado.rng);
+        self.experiencia_de_bando(t, &mut tropa.escuadras, &e.bajas, &tropa.heroes, !e.gana_el_bandido);
         self.volcar_escuadras(&tropa.escuadras);
         self.recomponer_tras_bajas(&columnas, t);
         let origenes: Vec<u64> = caravanas.iter().filter_map(|&k| self.estado.comercio.caravana(k)).map(|k| k.origen as u64).collect();
@@ -514,6 +522,7 @@ impl Nucleo {
         let escoltada = escolta.iter().any(Escuadra::con_soldados);
         let defensa = if escoltada { Defensa::Escolta(&mut escolta) } else { Defensa::Base };
         let acoso = resolver_acoso(&cr, nivel, defensa, &mut self.estado.rng);
+        self.experiencia_de_bando(t, &mut escolta, &acoso.bajas_escolta, &[], !acoso.gana_el_bandido);
         self.participacion_de_batalla(t, &[origen], &defensores, &[]);
         self.tras_batalla(t, &Desenlace { atacados: &[Objetivo::Caravana(idk)], atacantes: &[], defensores: &defensores, gana_atacante: acoso.gana_el_bandido, nivel_bandidos: None });
         self.volcar_escuadras(&escolta);

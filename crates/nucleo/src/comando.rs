@@ -9,7 +9,7 @@ use crate::codec_batallas::{asignacion_escribir, asignacion_leer, resultado_escr
 use crate::codec_columna::{politica_a_u8, politica_de_u8};
 use crate::codec_contratos;
 use crate::codec_politica::{sigilo_escribir, sigilo_leer};
-use crate::codec_militar::{controlador_a_u8, controlador_de_u8, objetivo_escribir, objetivo_leer, relacion_a_u8, relacion_de_u8, residencia_escribir, residencia_leer, tropa_a_u8, tropa_de_u8, ubicacion_escribir, ubicacion_leer};
+use crate::codec_militar::{controlador_a_u8, controlador_de_u8, hueco_a_u8, hueco_de_u8, objetivo_escribir, objetivo_leer, relacion_a_u8, relacion_de_u8, residencia_escribir, residencia_leer, tropa_a_u8, tropa_de_u8, ubicacion_escribir, ubicacion_leer};
 use crate::estado_militar::Relacion;
 pub use crate::memoria::{OrigenIntel, TipoInformeRegion, TipoRumor};
 use crate::memoria::{tipo_informe_region_leer, tipo_rumor_leer};
@@ -26,6 +26,7 @@ use militar::columna::Politica;
 use militar::heroe::{Controlador, Residencia};
 use militar::inspeccion::Objetivo;
 use militar::presencia::Ubicacion;
+use objetos::datos::Hueco;
 use mercenarios::{Objetivo as ObjetivoMercenario, TipoOrden, Trabajo};
 use politica::sigilo::Sigilo;
 use politica::Grupos;
@@ -231,7 +232,8 @@ pub enum Comando {
     //    los suyos. Un héroe fuera del mundo solo puede conectarse. ──
     /// Crea el héroe de una cuenta dentro de un campamento de mercenarios, donde reside. `creadas` lleva su id. El controlador `Bot` solo lo
     /// pone la administración. `nombre`: el que eligió el jugador (ya validado: sin espacios a los lados, de 1 a [`NOMBRE_HEROE_MAX`] caracteres); sin él, «Héroe N».
-    CrearHeroe { cuenta: String, campamento: u32, controlador: Controlador, nombre: Option<String> },
+    /// `clase`: una de `CLASES_HEROE` (Heroe_Y_Tropa §3); nace con su equipo inicial puesto.
+    CrearHeroe { cuenta: String, campamento: u32, controlador: Controlador, nombre: Option<String>, clase: String },
     /// Recluta tropa en una plaza (las 11 condiciones de `reclutarTropa`) o repone la escuadra que ya se tiene. `creadas` lleva el id de la
     /// escuadra si es nueva.
     ReclutarTropa { asentamiento: u64, heroe: u64, tropa: Tropa },
@@ -243,7 +245,7 @@ pub enum Comando {
     /// Repone gratis la tropa prestada que está en el campamento o en una columna a su puerta.
     ReponerPrestamo { heroe: u64 },
     /// Guarda un loadout (nuevo si `loadout` es `None`) o reescribe uno. `creadas` lleva el id del nuevo.
-    GuardarLoadout { heroe: u64, loadout: Option<u64>, nombre: String, escuadras: Vec<u64>, perks: Vec<u32>, activo: Option<bool> },
+    GuardarLoadout { heroe: u64, loadout: Option<u64>, nombre: String, escuadras: Vec<u64>, activo: Option<bool> },
     BorrarLoadout { heroe: u64, loadout: u64 },
     /// Reparte puntos de atributo (cada punto suma 1). Todo o nada.
     RepartirPuntos { heroe: u64, fuerza: i64, destreza: i64, armadura: i64, vitalidad: i64 },
@@ -251,6 +253,27 @@ pub enum Comando {
     OrdenarEscuadras { heroe: u64, escuadras: Vec<u64> },
     /// Elige la familia de formación de una escuadra propia, por su id de `FORMACIONES` (Heroe_Y_Tropa §10.4, 2026-11-11).
     ElegirFormacion { heroe: u64, escuadra: u64, formacion: String },
+    /// Se pone la pieza de la casilla `casilla` de su mochila (Objetos_Del_Heroe §3.2); lo que estaba en el hueco va a la mochila. Dentro de una plaza, un pueblo o un
+    /// campamento (D2).
+    EquiparObjeto { heroe: u64, casilla: u32 },
+    /// Se quita lo del hueco a la mochila (el arma no se quita), donde se puede equipar (D2).
+    DesequiparObjeto { heroe: u64, hueco: Hueco },
+    /// Pasa `cantidad` de la casilla `casilla` de su mochila a su almacén de objetos, dentro de su residencia (D22).
+    GuardarObjeto { heroe: u64, casilla: u32, cantidad: u32 },
+    /// Pasa `cantidad` de la casilla `casilla` de su almacén de objetos a su mochila, dentro de su residencia (D22).
+    SacarObjeto { heroe: u64, casilla: u32, cantidad: u32 },
+    /// Compra en la Armería de la plaza donde está dentro una pieza del catálogo `OBJETOS`, al 100 %, con sus monedas (D1, Objetos_Del_Heroe §3.3).
+    ComprarObjeto { heroe: u64, objeto: String },
+    /// Vende a la Armería de la plaza donde está dentro `cantidad` de la casilla `casilla` de su mochila, a `ventaPct` de la ficha (D1 y D18).
+    VenderObjeto { heroe: u64, casilla: u32, cantidad: u32 },
+    /// Forja una pieza en la Armería de la plaza donde está dentro, si su forja está abierta a su grupo (Heroe_Y_Tropa §4.6): el plano y los crisoles de su mochila; los
+    /// materiales, en su residencia del almacén personal y lo que falte del carro, y en otra plaza del carro con el que entró; el impuesto, de sus monedas al fondo.
+    ForjarObjeto { heroe: u64, objeto: String },
+    /// Usa el consumible de la casilla `casilla` de su mochila, donde se puede equipar (D2); `escuadra`, la suya que recibe una medalla de tropa (Objetos_Del_Heroe §3.5).
+    UsarObjeto { heroe: u64, casilla: u32, escuadra: Option<u64> },
+    /// El Tesorero o el Gobernador de la plaza, residente y dentro, abre o cierra su forja a un grupo de fuera (aliados, neutrales o enemigos; nunca los Aedas) y le fija el
+    /// recargo sobre el impuesto, uno de `OBJETOS.forja.recargosPct` (Heroe_Y_Tropa §4.6).
+    ConfigurarForja { asentamiento: u64, grupo: politica::Grupo, abierta: bool, recargo_pct: u32 },
     /// Entrega una escuadra del campamento a la guarnición de la plaza donde reside el héroe, dentro de su cupo.
     AsignarGuarnicion { heroe: u64, escuadra: u64 },
     RetirarGuarnicion { heroe: u64, escuadra: u64 },
@@ -747,6 +770,14 @@ impl Comando {
             | Comando::RepartirPuntos { .. }
             | Comando::OrdenarEscuadras { .. }
             | Comando::ElegirFormacion { .. }
+            | Comando::EquiparObjeto { .. }
+            | Comando::DesequiparObjeto { .. }
+            | Comando::GuardarObjeto { .. }
+            | Comando::SacarObjeto { .. }
+            | Comando::ComprarObjeto { .. }
+            | Comando::VenderObjeto { .. }
+            | Comando::ForjarObjeto { .. }
+            | Comando::UsarObjeto { .. }
             | Comando::AsignarGuarnicion { .. }
             | Comando::RetirarGuarnicion { .. }
             | Comando::PasarAViveres { .. }
@@ -869,6 +900,7 @@ impl Comando {
             | Comando::ColocarOrdenMercado { .. }
             | Comando::CancelarOrdenMercado { .. }
             | Comando::AlternarReabastecerAliados { .. }
+            | Comando::ConfigurarForja { .. }
             | Comando::PausarConsumo { .. } => Cargo(GOBERNADOR_O_TESORERO),
             Comando::CerrarReclutamientoACiudadanos { .. } => Cargo(GOBERNADOR_O_GENERAL),
             Comando::EncargarCaravana { .. } | Comando::CambiarEncargo { .. } | Comando::CancelarEncargo { .. } | Comando::DetenerEncargo { .. } | Comando::TomarOrdenADistancia { .. } => Cargo(GOBERNADOR_TESORERO_O_MAESTRO_CARAVANAS),
@@ -1162,6 +1194,14 @@ impl Comando {
             | Comando::RepartirPuntos { heroe, .. }
             | Comando::OrdenarEscuadras { heroe, .. }
             | Comando::ElegirFormacion { heroe, .. }
+            | Comando::EquiparObjeto { heroe, .. }
+            | Comando::DesequiparObjeto { heroe, .. }
+            | Comando::GuardarObjeto { heroe, .. }
+            | Comando::SacarObjeto { heroe, .. }
+            | Comando::ComprarObjeto { heroe, .. }
+            | Comando::VenderObjeto { heroe, .. }
+            | Comando::ForjarObjeto { heroe, .. }
+            | Comando::UsarObjeto { heroe, .. }
             | Comando::AsignarGuarnicion { heroe, .. }
             | Comando::RetirarGuarnicion { heroe, .. }
             | Comando::PasarAViveres { heroe, .. }
@@ -1225,7 +1265,10 @@ impl Comando {
             // Una épica no es una orden sobre la batalla: solo el héroe que la dirige lleva el candado.
             | Comando::EmpezarEpica { heroe, .. }
             | Comando::AbandonarEpica { heroe, .. } => i.heroes.push(*heroe),
-            Comando::AlternarReabastecerAliados { asentamiento, .. } | Comando::CerrarAlmacenACiudadanos { asentamiento, .. } | Comando::CerrarReclutamientoACiudadanos { asentamiento, .. } => {
+            Comando::AlternarReabastecerAliados { asentamiento, .. }
+            | Comando::CerrarAlmacenACiudadanos { asentamiento, .. }
+            | Comando::CerrarReclutamientoACiudadanos { asentamiento, .. }
+            | Comando::ConfigurarForja { asentamiento, .. } => {
                 i.asentamientos.push(*asentamiento)
             }
             Comando::OfrecerseComoMercenario { heroe } | Comando::RetirarOferta { heroe } | Comando::ReclamarPremioDeRango { heroe, .. } => i.heroes.push(*heroe),
@@ -1319,6 +1362,8 @@ pub enum PagarCon {
     Monedas,
     /// El almacén de la plaza donde está la taberna (tanda 69 §8): solo al contratar a un mercenario desde dentro de una plaza, sin ir a su campamento.
     AlmacenPlaza,
+    /// El fondo de monedas de la plaza donde está la taberna, el del impuesto de su forja (Mercenarios_Por_Contrato §5.1): como [`PagarCon::AlmacenPlaza`], pero a la tarifa en monedas.
+    FondoPlaza,
 }
 
 /// De dónde sale o adónde va lo del fondo de refundación (Fundacion_Y_Refundacion §9.1, D39): el almacén personal (en el campamento donde se reside) o el carro (el que lleva dentro, o el
@@ -1329,12 +1374,32 @@ pub enum LadoDelFondo {
     Carro,
 }
 
+/// El grupo de fuera de `ConfigurarForja`, en el registro; los Aedas no forjan (Heroe_Y_Tropa §4.6).
+fn grupo_de_forja_a_u8(g: politica::Grupo) -> u8 {
+    match g {
+        politica::Grupo::Neutrales => 0,
+        politica::Grupo::Aliados => 1,
+        politica::Grupo::Enemigos => 2,
+        politica::Grupo::Aedas => unreachable!("`ConfigurarForja` no lleva a los Aedas: la traducción y el registro los rechazan"),
+    }
+}
+
+fn grupo_de_forja_de_u8(i: u8) -> Result<politica::Grupo, ErrorFormato> {
+    Ok(match i {
+        0 => politica::Grupo::Neutrales,
+        1 => politica::Grupo::Aliados,
+        2 => politica::Grupo::Enemigos,
+        _ => return Err(ErrorFormato("grupo de la forja desconocido")),
+    })
+}
+
 fn pagar_con_de_u8(i: u8) -> Result<PagarCon, ErrorFormato> {
     match i {
         0 => Ok(PagarCon::AlmacenPersonal),
         1 => Ok(PagarCon::Carro),
         2 => Ok(PagarCon::Monedas),
         3 => Ok(PagarCon::AlmacenPlaza),
+        4 => Ok(PagarCon::FondoPlaza),
         _ => Err(ErrorFormato("forma de pago desconocida")),
     }
 }
@@ -1723,8 +1788,8 @@ impl Peticion {
                 w.u8(48);
                 w.u64(*pueblo);
             }
-            Comando::CrearHeroe { cuenta, campamento, controlador, nombre } => {
-                // Con nombre, la 180 (2026-10-27); sin él, la 49 de siempre, que el registro anterior sigue leyendo.
+            Comando::CrearHeroe { cuenta, campamento, controlador, nombre, clase } => {
+                // Con nombre, la 180 (2026-10-27); sin él, la 49. Las dos llevan la clase al final desde el 2026-11-12 (foto y registro nuevos, BAN63).
                 w.u8(if nombre.is_some() { 180 } else { 49 });
                 w.texto(cuenta);
                 w.u32(*campamento);
@@ -1732,6 +1797,7 @@ impl Peticion {
                 if let Some(x) = nombre {
                     w.texto(x);
                 }
+                w.texto(clase);
             }
             Comando::ReclutarTropa { asentamiento, heroe, tropa } => {
                 w.u8(50);
@@ -1755,14 +1821,12 @@ impl Peticion {
                 w.u8(53);
                 w.u64(*heroe);
             }
-            Comando::GuardarLoadout { heroe, loadout, nombre, escuadras, perks, activo } => {
+            Comando::GuardarLoadout { heroe, loadout, nombre, escuadras, activo } => {
                 w.u8(54);
                 w.u64(*heroe);
                 w.opt_u64(*loadout);
                 w.texto(nombre);
                 lista_u64(&mut w, escuadras);
-                w.u64(perks.len() as u64);
-                perks.iter().for_each(|&k| w.u32(k));
                 w.u8(activo.map_or(2, u8::from));
             }
             Comando::BorrarLoadout { heroe, loadout } => {
@@ -1830,6 +1894,57 @@ impl Peticion {
                 w.u64(*heroe);
                 w.u64(*escuadra);
                 w.texto(formacion);
+            }
+            Comando::EquiparObjeto { heroe, casilla } => {
+                w.u8(222);
+                w.u64(*heroe);
+                w.u32(*casilla);
+            }
+            Comando::DesequiparObjeto { heroe, hueco } => {
+                w.u8(223);
+                w.u64(*heroe);
+                w.u8(hueco_a_u8(*hueco));
+            }
+            Comando::GuardarObjeto { heroe, casilla, cantidad } => {
+                w.u8(224);
+                w.u64(*heroe);
+                w.u32(*casilla);
+                w.u32(*cantidad);
+            }
+            Comando::SacarObjeto { heroe, casilla, cantidad } => {
+                w.u8(225);
+                w.u64(*heroe);
+                w.u32(*casilla);
+                w.u32(*cantidad);
+            }
+            Comando::ComprarObjeto { heroe, objeto } => {
+                w.u8(226);
+                w.u64(*heroe);
+                w.texto(objeto);
+            }
+            Comando::VenderObjeto { heroe, casilla, cantidad } => {
+                w.u8(227);
+                w.u64(*heroe);
+                w.u32(*casilla);
+                w.u32(*cantidad);
+            }
+            Comando::ForjarObjeto { heroe, objeto } => {
+                w.u8(228);
+                w.u64(*heroe);
+                w.texto(objeto);
+            }
+            Comando::UsarObjeto { heroe, casilla, escuadra } => {
+                w.u8(229);
+                w.u64(*heroe);
+                w.u32(*casilla);
+                w.opt_u64(*escuadra);
+            }
+            Comando::ConfigurarForja { asentamiento, grupo, abierta, recargo_pct } => {
+                w.u8(230);
+                w.u64(*asentamiento);
+                w.u8(grupo_de_forja_a_u8(*grupo));
+                w.bool(*abierta);
+                w.u32(*recargo_pct);
             }
             Comando::FijarTecnologias { faccion, tecnologias } => {
                 w.u8(65);
@@ -2652,7 +2767,7 @@ impl Peticion {
             46 => Comando::EntregarMateriales { ejercito: r.u64()?, pueblo: r.u64()? },
             47 => Comando::DestruirPueblo { pueblo: r.u64()? },
             48 => Comando::ReponerCarro { pueblo: r.u64()? },
-            49 => Comando::CrearHeroe { cuenta: r.texto()?, campamento: r.u32()?, controlador: controlador_de_u8(r.u8()?)?, nombre: None },
+            49 => Comando::CrearHeroe { cuenta: r.texto()?, campamento: r.u32()?, controlador: controlador_de_u8(r.u8()?)?, nombre: None, clase: r.texto()? },
             50 => Comando::ReclutarTropa { asentamiento: r.u64()?, heroe: r.u64()?, tropa: tropa_de_u8(r.u8()?)? },
             51 => Comando::ReclutarEnCampamento { heroe: r.u64()?, tropa: tropa_de_u8(r.u8()?)?, pagar_con: pagar_con_de_u8(r.u8()?)? },
             52 => Comando::PedirPrestamo { heroe: r.u64()?, tropas: (0..r.cuenta()?).map(|_| tropa_de_u8(r.u8()?)).collect::<Result<_, _>>()? },
@@ -2662,7 +2777,6 @@ impl Peticion {
                 loadout: r.opt_u64()?,
                 nombre: r.texto()?,
                 escuadras: leer_lista_u64(&mut r)?,
-                perks: (0..r.cuenta()?).map(|_| r.u32()).collect::<Result<_, _>>()?,
                 activo: match r.u8()? {
                     0 => Some(false),
                     1 => Some(true),
@@ -2816,7 +2930,7 @@ impl Peticion {
             177 => Comando::EmpezarEpica { heroe: r.u64()?, asentamiento: r.u64()?, aeda: r.u32()?, tecnologia: r.u8()? },
             178 => Comando::AbandonarEpica { heroe: r.u64()?, asentamiento: r.u64()?, aeda: r.u32()? },
             179 => Comando::PrepararCaravana { caravana: r.u64()?, destino: r.u64()?, carga: leer_lineas(&mut r)?, salir_en: r.opt_i64()?, escolta: Some((r.u64()?, leer_lista_u64(&mut r)?)) },
-            180 => Comando::CrearHeroe { cuenta: r.texto()?, campamento: r.u32()?, controlador: controlador_de_u8(r.u8()?)?, nombre: Some(r.texto()?) },
+            180 => Comando::CrearHeroe { cuenta: r.texto()?, campamento: r.u32()?, controlador: controlador_de_u8(r.u8()?)?, nombre: Some(r.texto()?), clase: r.texto()? },
             181 => Comando::MarchaForzada { ejercito: r.u64()?, activa: r.bool()? },
             182 => Comando::ReclamarRecompensa { heroe: r.u64()?, dueno: crate::misiones::leer_dueno(&mut r)?, mision: r.texto()? },
             183 => Comando::MarcarAldea { asentamiento: r.u64()?, punto: r.punto()?, cultivo: *Cultivo::TODOS.get(usize::from(r.u8()?)).ok_or(ErrorFormato("cultivo de aldea desconocido"))? },
@@ -2868,6 +2982,15 @@ impl Peticion {
             208 => Comando::ComprarEnCampamento { heroe: r.u64()?, campamento: r.u32()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()?, pagar_con: Some(pagar_con_de_u8(r.u8()?)?) },
             209 => Comando::RenombrarCaravana { caravana: r.u64()?, nombre: r.texto()? },
             221 => Comando::ElegirFormacion { heroe: r.u64()?, escuadra: r.u64()?, formacion: r.texto()? },
+            222 => Comando::EquiparObjeto { heroe: r.u64()?, casilla: r.u32()? },
+            223 => Comando::DesequiparObjeto { heroe: r.u64()?, hueco: hueco_de_u8(r.u8()?)? },
+            224 => Comando::GuardarObjeto { heroe: r.u64()?, casilla: r.u32()?, cantidad: r.u32()? },
+            225 => Comando::SacarObjeto { heroe: r.u64()?, casilla: r.u32()?, cantidad: r.u32()? },
+            226 => Comando::ComprarObjeto { heroe: r.u64()?, objeto: r.texto()? },
+            227 => Comando::VenderObjeto { heroe: r.u64()?, casilla: r.u32()?, cantidad: r.u32()? },
+            228 => Comando::ForjarObjeto { heroe: r.u64()?, objeto: r.texto()? },
+            229 => Comando::UsarObjeto { heroe: r.u64()?, casilla: r.u32()?, escuadra: r.opt_u64()? },
+            230 => Comando::ConfigurarForja { asentamiento: r.u64()?, grupo: grupo_de_forja_de_u8(r.u8()?)?, abierta: r.bool()?, recargo_pct: r.u32()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -2948,7 +3071,7 @@ pub mod rechazos {
     pub const RECETA_DESCONOCIDA: &str = "receta.desconocida";
     /// La plaza ya trabaja tantas recetas distintas en ese tipo de edificio como permite su nivel (`TALLERES_DE_UNA_RECETA.recetasDistintasPorNivel`).
     pub const RECETA_TOPE_POR_PLAZA: &str = "receta.tope_por_plaza";
-    /// Ese recurso no es un bien de consumo que se pueda pausar: solo los de `BIENES_DE_CONSUMO` (carne, pan, queso, vino, cerveza y aceite), nunca el trigo (2026-11-10).
+    /// Ese recurso no es un bien de consumo que se pueda pausar: solo los de `BIENES_DE_CONSUMO` (carne, pan, queso, vino, cerveza, aceite y aceiteSesamo), nunca el trigo (2026-11-10).
     pub const CONSUMO_NO_SE_PAUSA: &str = "consumo.no_se_pausa";
     // Ascenso (`Bloqueo`): el rechazo lleva el código del primero y todos en el mensaje.
     pub const ASCENSO_NIVEL_MAXIMO: &str = "ascenso.nivel_maximo";
@@ -3146,6 +3269,8 @@ pub mod rechazos {
     pub const MERCENARIOS_SIN_STOCK: &str = "mercenarios.sin_stock";
     pub const MERCENARIOS_CUPO_AGOTADO: &str = "mercenarios.cupo_agotado";
     pub const MERCENARIOS_SIN_ORO: &str = "mercenarios.sin_oro";
+    /// `contratar_mercenario` con `pagar_con = fondoPlaza`: el fondo de la plaza no llega a la tarifa en monedas (Mercenarios_Por_Contrato §5.1).
+    pub const MERCENARIOS_SIN_FONDO: &str = "mercenarios.sin_fondo";
     pub const MERCENARIOS_SIN_SITIO: &str = "mercenarios.sin_sitio";
     pub const MERCENARIOS_VIVERES_LLENOS: &str = "mercenarios.viveres_llenos";
     // Reclutar en un campamento (`ErrorMercenarios`) y la tropa prestada.
@@ -3220,6 +3345,8 @@ pub mod rechazos {
     /// El héroe no tiene las monedas que cuesta (tanda 69 §4).
     pub const HEROE_SIN_MONEDAS: &str = "heroe.sin_monedas";
     pub const HEROE_CAMPAMENTO_DESCONOCIDO: &str = "heroe.campamento_desconocido";
+    /// `crear_heroe`: la clase está vacía o no es una de `CLASES_HEROE` (Heroe_Y_Tropa §3).
+    pub const HEROE_CLASE_DESCONOCIDA: &str = "heroe.clase_desconocida";
     pub const HEROE_PUNTOS_NEGATIVOS: &str = "heroe.puntos_negativos";
     pub const HEROE_NINGUN_PUNTO: &str = "heroe.ningun_punto";
     pub const HEROE_PUNTOS_INSUFICIENTES: &str = "heroe.puntos_insuficientes";
@@ -3230,7 +3357,6 @@ pub mod rechazos {
     /// El nombre del loadout lleva caracteres de control.
     pub const LOADOUT_NOMBRE_CONTROL: &str = "loadout.nombre_control";
     pub const LOADOUT_DESCONOCIDO: &str = "loadout.desconocido";
-    pub const LOADOUT_PERK_NO_DESBLOQUEADO: &str = "loadout.perk_no_desbloqueado";
     pub const ESCUADRA_REPETIDA: &str = "escuadra.repetida";
     pub const ESCUADRA_AJENA: &str = "escuadra.ajena";
     /// De visita en una plaza de tu Facción (2026-11-04): la escuadra que dejas en su guarnición o cedes de escolta tiene que ir en la columna con la que entraste.
@@ -3250,6 +3376,60 @@ pub mod rechazos {
     pub const GUARNICION_FACCION_AJENA: &str = "guarnicion.faccion_ajena";
     /// La escuadra que dejaste de visita se recoge desde dentro de esa plaza.
     pub const GUARNICION_NO_ESTAS_DENTRO: &str = "guarnicion.no_estas_dentro";
+    // El equipo, la mochila y el almacén de objetos del héroe (`ErrorEquipo` y `ErrorInventario` del crate `objetos`; Heroe_Y_Tropa §4.5).
+    /// `equipar_objeto`, `desequipar_objeto` o `usar_objeto` fuera de una plaza, un pueblo o un campamento (D2): en una columna, en una avanzada o fuera del mundo.
+    pub const EQUIPO_FUERA_DE_LUGAR: &str = "equipo.fuera_de_lugar";
+    /// `equipar_objeto`, `desequipar_objeto` o `usar_objeto` con una escuadra del héroe reservada para una batalla (D2).
+    pub const EQUIPO_EN_BATALLA: &str = "equipo.en_batalla";
+    /// La pieza no está en el catálogo `OBJETOS`.
+    pub const OBJETO_DESCONOCIDO: &str = "objeto.desconocido";
+    /// Un material o un consumible: no va en ningún hueco.
+    pub const EQUIPO_NO_EQUIPABLE: &str = "equipo.no_equipable";
+    /// La clase del arma puesta no admite el peso de esa armadura (Objetos_Del_Heroe §3.2).
+    pub const EQUIPO_INCOMPATIBLE: &str = "equipo.incompatible";
+    /// El arma no se quita: solo se cambia por otra.
+    pub const EQUIPO_ARMA_FIJA: &str = "equipo.arma_fija";
+    /// No hay nada puesto en ese hueco.
+    pub const EQUIPO_HUECO_VACIO: &str = "equipo.hueco_vacio";
+    /// Lo que va a la mochila no cabe en ella (D17): no cambia nada.
+    pub const MOCHILA_LLENA: &str = "mochila.llena";
+    /// `guardar_objeto`: no cabe en el almacén de objetos.
+    pub const ALMACEN_OBJETOS_LLENO: &str = "almacen_objetos.lleno";
+    /// `guardar_objeto` o `sacar_objeto` fuera de la residencia del héroe, donde está su almacén de objetos (D22).
+    pub const ALMACEN_OBJETOS_FUERA_DE_TU_RESIDENCIA: &str = "almacen_objetos.fuera_de_tu_residencia";
+    /// La casilla de la mochila o del almacén de objetos está vacía o pasa de su capacidad.
+    pub const INVENTARIO_CASILLA_VACIA: &str = "inventario.casilla_vacia";
+    /// La casilla tiene menos de lo que se pide.
+    pub const INVENTARIO_POCA_CANTIDAD: &str = "inventario.poca_cantidad";
+    /// Una cantidad de 0, o una pila que pasaría del máximo.
+    pub const INVENTARIO_CANTIDAD_INVALIDA: &str = "inventario.cantidad_invalida";
+    // La Armería y los consumibles: comprar, vender, forjar y usar un objeto (`ErrorTienda`, `ErrorForja` y `ErrorUso` del crate `objetos`; Heroe_Y_Tropa §4.6).
+    /// `comprar_objeto`, `vender_objeto` o `forjar_objeto` sin estar dentro de una plaza con la Armería activa (D1).
+    pub const ARMERIA_SIN_ARMERIA: &str = "armeria.sin_armeria";
+    /// `comprar_objeto`: la tienda no lo vende (no es arma, armadura ni montura, o pasa de `tiendaHastaTier`; Objetos_Del_Heroe §3.3).
+    pub const ARMERIA_NO_SE_VENDE: &str = "armeria.no_se_vende";
+    /// `comprar_objeto` o `forjar_objeto`: la Facción de la plaza no tiene la tecnología de su metal (D1).
+    pub const ARMERIA_SIN_TECNOLOGIA: &str = "armeria.sin_tecnologia";
+    /// `forjar_objeto`: la forja de la plaza está cerrada al grupo del héroe (Heroe_Y_Tropa §4.6).
+    pub const FORJA_CERRADA: &str = "forja.cerrada";
+    /// `forjar_objeto`: el tier de la pieza pide una Era que el mundo no ha alcanzado (`OBJETOS.forja.eraPorTier`; Objetos_Del_Heroe §3.4).
+    pub const FORJA_ERA_CERRADA: &str = "forja.era_cerrada";
+    /// `configurar_forja`: el recargo no es uno de `OBJETOS.forja.recargosPct` (Heroe_Y_Tropa §4.6).
+    pub const FORJA_RECARGO_INVALIDO: &str = "forja.recargo_invalido";
+    /// `forjar_objeto`: no tiene receta (no es arma ni armadura, o es de tier I; Objetos_Del_Heroe §3.4).
+    pub const FORJA_SIN_RECETA: &str = "forja.sin_receta";
+    /// `forjar_objeto`: no hay en la mochila un plano de su tier.
+    pub const FORJA_SIN_PLANO: &str = "forja.sin_plano";
+    /// `forjar_objeto`: no hay en la mochila los crisoles de su tier.
+    pub const FORJA_SIN_CRISOLES: &str = "forja.sin_crisoles";
+    /// `forjar_objeto`: el almacén personal (en su residencia) y el carro no tienen los materiales de la receta (Heroe_Y_Tropa §4.6).
+    pub const FORJA_SIN_MATERIALES: &str = "forja.sin_materiales";
+    /// `usar_objeto`: no es un consumible.
+    pub const OBJETO_NO_SE_USA: &str = "objeto.no_se_usa";
+    /// `usar_objeto`: una medalla de tropa sobre tropa prestada, que no es del héroe (Objetos_Del_Heroe §3.5).
+    pub const ESCUADRA_PRESTADA: &str = "escuadra.prestada";
+    /// `usar_objeto`: una medalla de tropa sobre una escuadra que ya está en `nivelMaximoEscuadra`.
+    pub const ESCUADRA_NIVEL_MAXIMO: &str = "escuadra.nivel_maximo";
     // Presencia: dónde está el héroe y si está en el mundo.
     pub const HEROE_FUERA_DEL_MUNDO: &str = "heroe.fuera_del_mundo";
     pub const HEROE_DESCONECTANDOSE: &str = "heroe.desconectandose";
@@ -3801,7 +3981,7 @@ impl Respuesta {
 mod pruebas {
     use super::*;
     use combate::ciclo::{EscuadraDeSalida, Instancia, MotivoSalida};
-    use combate::resultado::{Botin, ObjetoBotin, Razon, ResultadoEscuadra, ResultadoHeroe};
+    use combate::resultado::{Razon, ResultadoEscuadra, ResultadoHeroe};
     use comercio::encargo::{LineaDejar, LineaRecoger};
 
     /// 5E-12 (retirado en 5H): el 117 era el alias `FijarAcceso`; una petición vieja con él ya no se lee.
@@ -3956,17 +4136,17 @@ mod pruebas {
             Comando::FijarResidencia { heroe: 2, residencia: Some(Residencia::Asentamiento(3)) },
             Comando::FijarResidencia { heroe: 2, residencia: None },
             Comando::DarAlmacenPersonal { heroe: 2, recurso: Recurso::Oro, cantidad: 9 },
-            Comando::CrearHeroe { cuenta: "ana".into(), campamento: 4, controlador: Controlador::Bot, nombre: None },
-            Comando::CrearHeroe { cuenta: "ana".into(), campamento: 4, controlador: Controlador::Humano, nombre: Some("Arkanthos".into()) },
+            Comando::CrearHeroe { cuenta: "ana".into(), campamento: 4, controlador: Controlador::Bot, nombre: None, clase: "dagas".into() },
+            Comando::CrearHeroe { cuenta: "ana".into(), campamento: 4, controlador: Controlador::Humano, nombre: Some("Arkanthos".into()), clase: "arco_lanza".into() },
             Comando::MarchaForzada { ejercito: 7, activa: true },
             Comando::ReclutarTropa { asentamiento: 3, heroe: 2, tropa: Tropa::Espartiatas },
             Comando::ReclutarEnCampamento { heroe: 2, tropa: Tropa::LancerosMimbre, pagar_con: PagarCon::Carro },
             Comando::ReclutarEnCampamento { heroe: 2, tropa: Tropa::MiliciaLanceros, pagar_con: PagarCon::AlmacenPersonal },
             Comando::PedirPrestamo { heroe: 2, tropas: vec![Tropa::Granjeros, Tropa::Mineros] },
             Comando::ReponerPrestamo { heroe: 2 },
-            Comando::GuardarLoadout { heroe: 2, loadout: None, nombre: "Asalto".into(), escuadras: vec![5, 6], perks: vec![1, 9], activo: None },
-            Comando::GuardarLoadout { heroe: 2, loadout: Some(8), nombre: "Defensa".into(), escuadras: vec![], perks: vec![], activo: Some(true) },
-            Comando::GuardarLoadout { heroe: 2, loadout: Some(8), nombre: "Defensa".into(), escuadras: vec![5], perks: vec![], activo: Some(false) },
+            Comando::GuardarLoadout { heroe: 2, loadout: None, nombre: "Asalto".into(), escuadras: vec![5, 6], activo: None },
+            Comando::GuardarLoadout { heroe: 2, loadout: Some(8), nombre: "Defensa".into(), escuadras: vec![], activo: Some(true) },
+            Comando::GuardarLoadout { heroe: 2, loadout: Some(8), nombre: "Defensa".into(), escuadras: vec![5], activo: Some(false) },
             Comando::BorrarLoadout { heroe: 2, loadout: 8 },
             Comando::RepartirPuntos { heroe: 2, fuerza: 3, destreza: 0, armadura: 1, vitalidad: -2 },
             Comando::OrdenarEscuadras { heroe: 2, escuadras: vec![6, 5, 4] },
@@ -3982,6 +4162,19 @@ mod pruebas {
             Comando::CerrarSesion { heroe: 2 },
             Comando::RenombrarCaravana { caravana: 4, nombre: "La de Tirinto".into() },
             Comando::ElegirFormacion { heroe: 2, escuadra: 5, formacion: "testudo".into() },
+            Comando::EquiparObjeto { heroe: 2, casilla: 71 },
+            Comando::DesequiparObjeto { heroe: 2, hueco: Hueco::Casco },
+            Comando::DesequiparObjeto { heroe: 2, hueco: Hueco::Montura },
+            Comando::GuardarObjeto { heroe: 2, casilla: 3, cantidad: 7 },
+            Comando::SacarObjeto { heroe: 2, casilla: 143, cantidad: 1 },
+            Comando::ComprarObjeto { heroe: 2, objeto: "dagas_cobre".into() },
+            Comando::VenderObjeto { heroe: 2, casilla: 4, cantidad: 3 },
+            Comando::ForjarObjeto { heroe: 2, objeto: "torso_pesada_bronce".into() },
+            Comando::UsarObjeto { heroe: 2, casilla: 0, escuadra: Some(5) },
+            Comando::UsarObjeto { heroe: 2, casilla: 1, escuadra: None },
+            Comando::ConfigurarForja { asentamiento: 5, grupo: politica::Grupo::Aliados, abierta: true, recargo_pct: 0 },
+            Comando::ConfigurarForja { asentamiento: 5, grupo: politica::Grupo::Neutrales, abierta: false, recargo_pct: 500 },
+            Comando::ConfigurarForja { asentamiento: 5, grupo: politica::Grupo::Enemigos, abierta: true, recargo_pct: 200 },
             Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["arco_compuesto".into(), "leva_comunal".into()] },
             Comando::FijarFaccionDeHeroe { heroe: 2, faccion: Some(3) },
             Comando::FijarFaccionDeHeroe { heroe: 2, faccion: None },
@@ -4112,6 +4305,7 @@ mod pruebas {
             Comando::ProrrogarContrato { heroe: 2, mercenario: 8, plazo: 3, pagar_con: Some(PagarCon::AlmacenPersonal) },
             Comando::ContratarMercenario { heroe: 2, mercenario: 8, trabajo: Trabajo::Defender, objetivo: ObjetivoMercenario::Pueblo(4), plazo: Some(1), residencia: None, pagar_con: Some(PagarCon::Monedas) },
             Comando::ContratarMercenario { heroe: 2, mercenario: 8, trabajo: Trabajo::Defender, objetivo: ObjetivoMercenario::Pueblo(4), plazo: Some(1), residencia: None, pagar_con: Some(PagarCon::AlmacenPlaza) },
+            Comando::ContratarMercenario { heroe: 2, mercenario: 8, trabajo: Trabajo::Defender, objetivo: ObjetivoMercenario::Pueblo(4), plazo: Some(1), residencia: None, pagar_con: Some(PagarCon::FondoPlaza) },
             Comando::ProrrogarContrato { heroe: 2, mercenario: 8, plazo: 1, pagar_con: Some(PagarCon::Monedas) },
             Comando::OrdenarMercenario { heroe: 2, mercenarios: vec![8, 9], tipo: TipoOrden::IrA, objetivo: ObjetivoMercenario::Punto(Punto::new(-5, 9_000)) },
             Comando::OrdenarMercenario { heroe: 2, mercenarios: vec![8], tipo: TipoOrden::Unirse, objetivo: ObjetivoMercenario::Convocatoria(12) },
@@ -4153,18 +4347,11 @@ mod pruebas {
                     ganador: Lado::Defensor,
                     razon: Razon::TiempoAgotado,
                     objetivos: vec![("bandera".into(), None), ("torre".into(), Some(Lado::Atacante))],
-                    por_escuadra: vec![ResultadoEscuadra { escuadra: 8, desplegados: 10, supervivientes_al_cierre: 3, muertos: 7, xp_ganada: 4 }],
+                    por_escuadra: vec![ResultadoEscuadra { escuadra: 8, desplegados: 10, supervivientes_al_cierre: 3, muertos: 7 }],
                     por_heroe: vec![
-                        ResultadoHeroe { heroe: 4, participo: true, sobrevivio_al_cierre: false, xp_ganada: 9, derrotado: Some(true), botin: None },
-                        ResultadoHeroe {
-                            heroe: 5,
-                            participo: true,
-                            sobrevivio_al_cierre: true,
-                            xp_ganada: 1,
-                            derrotado: None,
-                            botin: Some(Botin { objetos: vec![ObjetoBotin { definicion: "espada".into(), cantidad: 1, instancia: Some("i-1".into()) }, ObjetoBotin { definicion: "oro".into(), cantidad: 5, instancia: None }], monedas: 7 }),
-                        },
-                        ResultadoHeroe { heroe: 6, participo: false, sobrevivio_al_cierre: true, xp_ganada: 0, derrotado: Some(false), botin: None },
+                        ResultadoHeroe { heroe: 4, participo: true, sobrevivio_al_cierre: false, derrotado: Some(true) },
+                        ResultadoHeroe { heroe: 5, participo: true, sobrevivio_al_cierre: true, derrotado: None },
+                        ResultadoHeroe { heroe: 6, participo: false, sobrevivio_al_cierre: true, derrotado: Some(false) },
                     ],
                     version_servidor: "v1".into(),
                     carros_perdidos: vec!["0".into(), "2".into()],
@@ -4182,8 +4369,9 @@ mod pruebas {
         let mut b = Peticion::nueva("a", "i", Comando::ReclutarEnCampamento { heroe: 1, tropa: Tropa::Arqueros, pagar_con: PagarCon::Carro }).codificar();
         *b.last_mut().unwrap() = 7;
         assert!(Peticion::decodificar(&b).is_err());
-        let mut b = Peticion::nueva("a", "i", Comando::CrearHeroe { cuenta: "a".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).codificar();
-        *b.last_mut().unwrap() = 7;
+        let mut b = Peticion::nueva("a", "i", Comando::CrearHeroe { cuenta: "a".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: String::new() }).codificar();
+        let n = b.len();
+        b[n - 5] = 7; // el controlador, justo antes de la clase vacía (su largo, en 4 bytes)
         assert!(Peticion::decodificar(&b).is_err());
         // Un lado de batalla desconocido tampoco.
         let mut b = Peticion::nueva("a", "i", Comando::UnirseABatalla { heroe: 1, batalla: 1, lado: None }).codificar();

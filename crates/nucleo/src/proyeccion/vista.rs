@@ -779,7 +779,7 @@ pub fn plaza_avistada(n: &Nucleo, id: u64) -> pb::Asentamiento {
 
 /// La plaza ajena vista desde dentro (2026-10-29; ampliada el 2026-11-02, decisión del autor: quien está dentro ve todo lo que vería con sus ojos al moverse por ella): la de fuera
 /// ([`plaza_avistada`]) con su trazado urbano, sus edificios en pie y en obra (con la obra y la mejora en curso y el daño; no los de la cola, que aún no están en el suelo) y sus recintos de
-/// muralla (lo levantado y lo comprometido, celda a celda). Nada más de su interior: ni la cola, ni lo parado por almacén lleno, ni de qué fuente sale cada uno, ni el almacén, la población, la
+/// muralla (lo levantado y lo comprometido, celda a celda), y su forja con los metales de su Armería (Heroe_Y_Tropa §4.6). Nada más de su interior: ni la cola, ni lo parado por almacén lleno, ni de qué fuente sale cada uno, ni el almacén, la población, la
 /// puerta, los cargos o quién está dentro.
 /// Lo que está en el suelo: en pie, en obra, o en la cola pero dañado (la ruina que deja una conquista, `combate::conquista::aplicar_conquista`). Lo encargado
 /// que aún no se ha empezado no se ve.
@@ -799,6 +799,9 @@ pub fn plaza_desde_dentro(n: &Nucleo, id: u64) -> pb::Asentamiento {
             .collect();
     }
     p.recintos = interior::recintos(id, eco).into_iter().map(|r| pb::Recinto { siguiente_celda_en_ms: None, ..r }).collect();
+    // Su forja y los metales de su Armería (Heroe_Y_Tropa §4.6): quien está dentro sabe si puede forjar y cuánto pagaría.
+    let (forja, metales) = interior::forja_de(n, &n.estado().asentamientos[&id]);
+    (p.forja, p.metales_armeria) = (Some(forja), metales);
     p
 }
 
@@ -836,17 +839,19 @@ pub(super) fn escuadra_que_lleva(n: &Nucleo, s: &Escuadra) -> pb::EscuadraQueLle
     pb::EscuadraQueLleva { tropa_id: tropas.tropa(s.tropa).nombre.clone(), cantidad: u32::try_from(s.cantidad.max(0)).unwrap_or(u32::MAX), nivel: u32::from(s.nivel) }
 }
 
-/// El héroe ajeno (`HeroePublico`): nombre, clase, nivel, hasta cuándo está herido y las escuadras que lleva en su columna y su Facción. Nada de su campamento, sus puntos, su Liderazgo ni si es humano o bot.
+/// El héroe ajeno (`HeroePublico`): nombre, clase, nivel, lo que lleva puesto (canon 5.16), hasta cuándo está herido y las escuadras que lleva en su columna y su Facción. Nada de su
+/// campamento, sus puntos, su Liderazgo, su mochila, su almacén de objetos ni si es humano o bot.
 /// Si es mercenario, además su marca y su ficha pública: rango, renombre y grado de cada medalla, nunca su historial ni su contrato (Mercenarios_Por_Contrato §10).
 pub fn heroe_publico(n: &Nucleo, id: u64) -> pb::Heroe {
-    let h = n.heroe(id).expect("el héroe existe");
+    let (h, r) = (n.heroe(id).expect("el héroe existe"), &n.estado().reglas.economia.militar);
     pb::Heroe {
         id: ids::heroe(id),
         version: h.heroe.escuadras.iter().map(|s| n.version_de(Clase::Escuadra, s.id)).fold(n.version_de(Clase::Heroe, id), u64::max),
         display_name: propios::nombre_de_heroe(n, id),
-        class_definition_id: propios::CLASE_POR_DEFECTO.into(),
+        class_definition_id: h.heroe.clase(r).to_owned(),
         avatar: Some(pb::Avatar::default()),
         nivel: h.heroe.nivel,
+        equipamiento: Some(propios::equipamiento(&r.objetos, &h.heroe.equipo)),
         herido_hasta_ms: h.heroe.herido_hasta,
         // Su ciudadanía es pública (decisión del autor del 2026-10-27): la dice su Facción en `ciudadanos_ids` y así se sabe también de un héroe que se ve sin columna.
         faccion_id: h.faccion.map(ids::faccion),

@@ -240,7 +240,7 @@ impl Nucleo {
             // El `bonusProduccion` de las adoptadas (6C: `canteria` ×1,5 la piedra), en plazas y pueblos, aplicado al ritmo antes del resto oculto.
             let factor_tecnologia = |rec: Recurso| tecnologia::adopcion::factor_produccion(rt, adoptadas, rec);
             let extra = factores_extra(rt, a.ocupada_hasta.map(|_| reglas.economia.combate.ocupacion.factor_crecimiento), residentes);
-            let mut fuentes = FuentesMundo { mapa: &geo.mapa, nodos: yacimientos, ahora: t, catalogo: &reglas.economia.datos.catalogo, contado: [0; 24], agotados: vec![], regenerados: vec![] };
+            let mut fuentes = FuentesMundo { mapa: &geo.mapa, nodos: yacimientos, ahora: t, catalogo: &reglas.economia.datos.catalogo, contado: [0; tecnologia::Contador::N], agotados: vec![], regenerados: vec![] };
             let mut sitios = SitiosPlaza {
                 mapa: &geo.mapa,
                 id,
@@ -295,9 +295,9 @@ impl Nucleo {
         // Lo extraído y lo fabricado cuentan para los logros en origen (6B), y un nivel actual nuevo, para el récord de plazas por nivel.
         self.contar_flujos(t, &contado);
         self.contar_nivel(t, faccion, Some(nivel_antes), Some(nivel_ahora));
-        // El paso de la capital mira `recursoEnCapital` si alguna candidata lo pide (6C, plan §5.1).
+        // El paso de la capital mira lo que cambia sin disparador (`recursoEnCapital` y las cifras de las Eras IV y V) si alguna candidata lo pide (6C, plan §5.1; Tecnologia_Aedas §3.1).
         if es_capital {
-            self.mirar_recurso_en_capital(faccion);
+            self.mirar_paso_de_capital(faccion);
         }
         Some(r)
     }

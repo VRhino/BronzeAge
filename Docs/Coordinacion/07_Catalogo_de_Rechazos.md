@@ -76,7 +76,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `receta.no_se_elige` | `RECETA_NO_SE_ELIGE` | El edificio no elige receta: solo la bodega y la prensa trabajan una sola a la vez. |
 | `receta.desconocida` | `RECETA_DESCONOCIDA` | Ese insumo no es de ninguna receta del edificio. |
 | `receta.tope_por_plaza` | `RECETA_TOPE_POR_PLAZA` | La plaza ya trabaja tantas recetas distintas en ese tipo de edificio como permite su nivel (`TALLERES_DE_UNA_RECETA.recetasDistintasPorNivel`). |
-| `consumo.no_se_pausa` | `CONSUMO_NO_SE_PAUSA` | Ese recurso no es un bien de consumo que se pueda pausar: solo los de `BIENES_DE_CONSUMO` (carne, pan, queso, vino, cerveza y aceite), nunca el trigo (2026-11-10). |
+| `consumo.no_se_pausa` | `CONSUMO_NO_SE_PAUSA` | Ese recurso no es un bien de consumo que se pueda pausar: solo los de `BIENES_DE_CONSUMO` (carne, pan, queso, vino, cerveza, aceite y aceiteSesamo), nunca el trigo (2026-11-10). |
 
 ### Ascenso (`Bloqueo`): el rechazo lleva el código del primero y todos en el mensaje
 
@@ -286,6 +286,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `mercenarios.sin_stock` | `MERCENARIOS_SIN_STOCK` | — |
 | `mercenarios.cupo_agotado` | `MERCENARIOS_CUPO_AGOTADO` | — |
 | `mercenarios.sin_oro` | `MERCENARIOS_SIN_ORO` | — |
+| `mercenarios.sin_fondo` | `MERCENARIOS_SIN_FONDO` | `contratar_mercenario` con `pagar_con = fondoPlaza`: el fondo de la plaza no llega a la tarifa en monedas (Mercenarios_Por_Contrato §5.1). |
 | `mercenarios.sin_sitio` | `MERCENARIOS_SIN_SITIO` | — |
 | `mercenarios.viveres_llenos` | `MERCENARIOS_VIVERES_LLENOS` | — |
 
@@ -353,6 +354,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `heroe.nombre_en_uso` | `HEROE_NOMBRE_EN_USO` | Ya hay otro héroe con ese nombre (sin distinguir mayúsculas; 2026-11-06, pedido del autor). |
 | `heroe.sin_monedas` | `HEROE_SIN_MONEDAS` | El héroe no tiene las monedas que cuesta (tanda 69 §4). |
 | `heroe.campamento_desconocido` | `HEROE_CAMPAMENTO_DESCONOCIDO` | — |
+| `heroe.clase_desconocida` | `HEROE_CLASE_DESCONOCIDA` | `crear_heroe`: la clase está vacía o no es una de `CLASES_HEROE` (Heroe_Y_Tropa §3). |
 | `heroe.puntos_negativos` | `HEROE_PUNTOS_NEGATIVOS` | — |
 | `heroe.ningun_punto` | `HEROE_NINGUN_PUNTO` | — |
 | `heroe.puntos_insuficientes` | `HEROE_PUNTOS_INSUFICIENTES` | — |
@@ -361,7 +363,6 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `loadout.nombre_largo` | `LOADOUT_NOMBRE_LARGO` | El nombre recortado del loadout pasa de `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres (el mismo tope que el de las plazas). |
 | `loadout.nombre_control` | `LOADOUT_NOMBRE_CONTROL` | El nombre del loadout lleva caracteres de control. |
 | `loadout.desconocido` | `LOADOUT_DESCONOCIDO` | — |
-| `loadout.perk_no_desbloqueado` | `LOADOUT_PERK_NO_DESBLOQUEADO` | — |
 | `escuadra.repetida` | `ESCUADRA_REPETIDA` | — |
 | `escuadra.ajena` | `ESCUADRA_AJENA` | — |
 | `escuadra.fuera_de_tu_columna` | `ESCUADRA_FUERA_DE_TU_COLUMNA` | De visita en una plaza de tu Facción (2026-11-04): la escuadra que dejas en su guarnición o cedes de escolta tiene que ir en la columna con la que entraste. |
@@ -376,6 +377,42 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `guarnicion.no_asignada` | `GUARNICION_NO_ASIGNADA` | — |
 | `guarnicion.faccion_ajena` | `GUARNICION_FACCION_AJENA` | De visita (2026-11-04): solo se guarnece una plaza de tu Facción. |
 | `guarnicion.no_estas_dentro` | `GUARNICION_NO_ESTAS_DENTRO` | La escuadra que dejaste de visita se recoge desde dentro de esa plaza. |
+
+### El equipo, la mochila y el almacén de objetos del héroe (`ErrorEquipo` y `ErrorInventario` del crate `objetos`; Heroe_Y_Tropa §4.5)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `equipo.fuera_de_lugar` | `EQUIPO_FUERA_DE_LUGAR` | `equipar_objeto`, `desequipar_objeto` o `usar_objeto` fuera de una plaza, un pueblo o un campamento (D2): en una columna, en una avanzada o fuera del mundo. |
+| `equipo.en_batalla` | `EQUIPO_EN_BATALLA` | `equipar_objeto`, `desequipar_objeto` o `usar_objeto` con una escuadra del héroe reservada para una batalla (D2). |
+| `objeto.desconocido` | `OBJETO_DESCONOCIDO` | La pieza no está en el catálogo `OBJETOS`. |
+| `equipo.no_equipable` | `EQUIPO_NO_EQUIPABLE` | Un material o un consumible: no va en ningún hueco. |
+| `equipo.incompatible` | `EQUIPO_INCOMPATIBLE` | La clase del arma puesta no admite el peso de esa armadura (Objetos_Del_Heroe §3.2). |
+| `equipo.arma_fija` | `EQUIPO_ARMA_FIJA` | El arma no se quita: solo se cambia por otra. |
+| `equipo.hueco_vacio` | `EQUIPO_HUECO_VACIO` | No hay nada puesto en ese hueco. |
+| `mochila.llena` | `MOCHILA_LLENA` | Lo que va a la mochila no cabe en ella (D17): no cambia nada. |
+| `almacen_objetos.lleno` | `ALMACEN_OBJETOS_LLENO` | `guardar_objeto`: no cabe en el almacén de objetos. |
+| `almacen_objetos.fuera_de_tu_residencia` | `ALMACEN_OBJETOS_FUERA_DE_TU_RESIDENCIA` | `guardar_objeto` o `sacar_objeto` fuera de la residencia del héroe, donde está su almacén de objetos (D22). |
+| `inventario.casilla_vacia` | `INVENTARIO_CASILLA_VACIA` | La casilla de la mochila o del almacén de objetos está vacía o pasa de su capacidad. |
+| `inventario.poca_cantidad` | `INVENTARIO_POCA_CANTIDAD` | La casilla tiene menos de lo que se pide. |
+| `inventario.cantidad_invalida` | `INVENTARIO_CANTIDAD_INVALIDA` | Una cantidad de 0, o una pila que pasaría del máximo. |
+
+### La Armería y los consumibles: comprar, vender, forjar y usar un objeto (`ErrorTienda`, `ErrorForja` y `ErrorUso` del crate `objetos`; Heroe_Y_Tropa §4.6)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `armeria.sin_armeria` | `ARMERIA_SIN_ARMERIA` | `comprar_objeto`, `vender_objeto` o `forjar_objeto` sin estar dentro de una plaza con la Armería activa (D1). |
+| `armeria.no_se_vende` | `ARMERIA_NO_SE_VENDE` | `comprar_objeto`: la tienda no lo vende (no es arma, armadura ni montura, o pasa de `tiendaHastaTier`; Objetos_Del_Heroe §3.3). |
+| `armeria.sin_tecnologia` | `ARMERIA_SIN_TECNOLOGIA` | `comprar_objeto` o `forjar_objeto`: la Facción de la plaza no tiene la tecnología de su metal (D1). |
+| `forja.cerrada` | `FORJA_CERRADA` | `forjar_objeto`: la forja de la plaza está cerrada al grupo del héroe (Heroe_Y_Tropa §4.6). |
+| `forja.era_cerrada` | `FORJA_ERA_CERRADA` | `forjar_objeto`: el tier de la pieza pide una Era que el mundo no ha alcanzado (`OBJETOS.forja.eraPorTier`; Objetos_Del_Heroe §3.4). |
+| `forja.recargo_invalido` | `FORJA_RECARGO_INVALIDO` | `configurar_forja`: el recargo no es uno de `OBJETOS.forja.recargosPct` (Heroe_Y_Tropa §4.6). |
+| `forja.sin_receta` | `FORJA_SIN_RECETA` | `forjar_objeto`: no tiene receta (no es arma ni armadura, o es de tier I; Objetos_Del_Heroe §3.4). |
+| `forja.sin_plano` | `FORJA_SIN_PLANO` | `forjar_objeto`: no hay en la mochila un plano de su tier. |
+| `forja.sin_crisoles` | `FORJA_SIN_CRISOLES` | `forjar_objeto`: no hay en la mochila los crisoles de su tier. |
+| `forja.sin_materiales` | `FORJA_SIN_MATERIALES` | `forjar_objeto`: el almacén personal (en su residencia) y el carro no tienen los materiales de la receta (Heroe_Y_Tropa §4.6). |
+| `objeto.no_se_usa` | `OBJETO_NO_SE_USA` | `usar_objeto`: no es un consumible. |
+| `escuadra.prestada` | `ESCUADRA_PRESTADA` | `usar_objeto`: una medalla de tropa sobre tropa prestada, que no es del héroe (Objetos_Del_Heroe §3.5). |
+| `escuadra.nivel_maximo` | `ESCUADRA_NIVEL_MAXIMO` | `usar_objeto`: una medalla de tropa sobre una escuadra que ya está en `nivelMaximoEscuadra`. |
 
 ### Presencia: dónde está el héroe y si está en el mundo
 

@@ -163,12 +163,23 @@ async fn un_jugador_nuevo_crea_su_heroe_pide_tropa_sale_del_campamento_y_marcha_
     assert!(f.entidades.is_empty());
 
     // Presencia: el héroe nace en un campamento (ids con la forma del contrato); uno por cuenta.
-    let (_, r) = dar(&mut carla, "o1", orden::Cuerpo::CrearHeroe(pb::OrdenCrearHeroe { display_name: s("Carla"), campamento_id: s("camp-0"), class_definition_id: s("guerrero"), genero: s("femenino"), avatar: None })).await;
+    let (_, r) = dar(&mut carla, "o1", orden::Cuerpo::CrearHeroe(pb::OrdenCrearHeroe { display_name: s("Carla"), campamento_id: s("camp-0"), class_definition_id: s("espada_escudo_mediano"), genero: s("femenino"), avatar: None })).await;
     aceptada(&r);
     let heroe = creadas(&r)[0].clone();
     assert_eq!(heroe.0, TipoEntidad::Heroe);
     let (_, r) = dar(&mut carla, "o2", orden::Cuerpo::CrearHeroe(pb::OrdenCrearHeroe { campamento_id: s("camp-0"), ..Default::default() })).await;
     assert_eq!(rechazo(&r), "heroe.ya_existe");
+    // El equipo y el almacén de objetos (2026-11-12): se quita la montura, la guarda en su almacén de objetos (reside en el campamento) y un hueco que no existe no se traduce.
+    let (_, r) = dar(&mut carla, "o2a", orden::Cuerpo::DesequiparObjeto(pb::OrdenDesequiparObjeto { hueco: s("montura") })).await;
+    aceptada(&r);
+    let (_, r) = dar(&mut carla, "o2b", orden::Cuerpo::GuardarObjeto(pb::OrdenGuardarObjeto { casilla: 0, cantidad: 1 })).await;
+    aceptada(&r);
+    let (_, r) = dar(&mut carla, "o2c", orden::Cuerpo::SacarObjeto(pb::OrdenSacarObjeto { casilla: 0, cantidad: 1 })).await;
+    aceptada(&r);
+    let (_, r) = dar(&mut carla, "o2d", orden::Cuerpo::EquiparObjeto(pb::OrdenEquiparObjeto { casilla: 0 })).await;
+    aceptada(&r);
+    let (_, r) = dar(&mut carla, "o2e", orden::Cuerpo::DesequiparObjeto(pb::OrdenDesequiparObjeto { hueco: s("anillo") })).await;
+    assert_eq!(rechazo(&r), "orden.forma_invalida");
     let (_, r) = dar(&mut carla, "o3", orden::Cuerpo::PedirPrestamo(pb::OrdenPedirPrestamo { tropa_ids: vec![s("milicia_lanceros")] })).await;
     aceptada(&r);
     let escuadra = creadas(&r)[0].clone();
@@ -223,7 +234,7 @@ async fn con_la_columna_parada_a_la_puerta_de_un_campamento_se_tiene_su_ambito_y
         };
         que == tipo && a.is_some_and(|a| a.tipo == pb::AmbitoTipo::AmbitoCampamento as i32 && a.id == "camp-0")
     };
-    let (_, r) = dar(&mut carla, "o1", orden::Cuerpo::CrearHeroe(pb::OrdenCrearHeroe { display_name: s("Carla"), campamento_id: s("camp-0"), class_definition_id: s("guerrero"), genero: s("femenino"), avatar: None })).await;
+    let (_, r) = dar(&mut carla, "o1", orden::Cuerpo::CrearHeroe(pb::OrdenCrearHeroe { display_name: s("Carla"), campamento_id: s("camp-0"), class_definition_id: s("espada_escudo_mediano"), genero: s("femenino"), avatar: None })).await;
     aceptada(&r);
     let heroe = creadas(&r)[0].clone();
     let (_, r) = dar(&mut carla, "o2", orden::Cuerpo::PedirPrestamo(pb::OrdenPedirPrestamo { tropa_ids: vec![s("milicia_lanceros")] })).await;
@@ -468,14 +479,14 @@ async fn quien_esta_dentro_de_una_plaza_asediada_se_une_a_la_batalla_de_unity_po
     p.avanzar(24 * HORA);
     // Pasado el día de protección con que nace la plaza (Doc 1.2), beto (humano, F2) defiende en persona dentro de su plaza con una escuadra; ana (humana, F1) la asedia con un ejército a su puerta.
     let campamento = (0..m.0.campamentos().len()).min_by_key(|&i| campamento(&m.0, i).dist2(sb)).unwrap() as u32;
-    let beto = p.ok("beto", Comando::CrearHeroe { cuenta: "beto".into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0];
+    let beto = p.ok("beto", Comando::CrearHeroe { cuenta: "beto".into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
     p.ok("admin", Comando::FijarFaccionDeHeroe { heroe: beto, faccion: Some(2) });
     p.ok("admin", Comando::FijarResidencia { heroe: beto, residencia: Some(Residencia::Asentamiento(b as u32)) });
     p.ok("admin", Comando::ColocarHeroe { heroe: beto, ubicacion: Ubicacion::Asentamiento(b as u32) });
     let cantidad = |t: Tropa| militar::Reglas::cargar().tropas.tropa(t).unidades;
     let defensa = p.ok("admin", Comando::DarEscuadra { heroe: beto, tropa: Tropa::MiliciaLanceros, cantidad: cantidad(Tropa::MiliciaLanceros) }).creadas[0];
     let loadout = p.n.heroe(beto).unwrap().heroe.loadouts[0].id;
-    p.ok("admin", Comando::GuardarLoadout { heroe: beto, loadout: Some(loadout), nombre: "Default".into(), escuadras: vec![defensa], perks: vec![], activo: Some(true) });
+    p.ok("admin", Comando::GuardarLoadout { heroe: beto, loadout: Some(loadout), nombre: "Default".into(), escuadras: vec![defensa], activo: Some(true) });
     let puerta = p.n.estado().asentamientos[&b].posicion;
     let (_, ana) = p.columna("ana", 1, Punto::new(puerta.x + 1_000, puerta.y));
     for t in [Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto] {

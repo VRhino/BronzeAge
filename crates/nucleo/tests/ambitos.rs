@@ -91,7 +91,7 @@ impl Aldea {
     }
 
     fn heroe(&mut self, cuenta: &str, faccion: u32, plaza: Option<u64>) -> u64 {
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(faccion) });
         if let Some(a) = plaza {
             self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(a as u32)) });
@@ -284,7 +284,7 @@ async fn el_heroe_nuevo_abre_su_ambito_en_caliente_y_gana_la_faccion_cuando_se_l
     assert!(b.ambitos.is_empty());
 
     // Al crear su héroe nace en el campamento: se le abren el suyo y el del campamento, antes del resultado (sin Facción aún no hay ámbito de Facción ni vista).
-    let crear = orden::Cuerpo::CrearHeroe(pb::OrdenCrearHeroe { display_name: "Nueva".into(), campamento_id: ids::campamento(0), class_definition_id: "guerrero".into(), genero: "femenino".into(), avatar: None });
+    let crear = orden::Cuerpo::CrearHeroe(pb::OrdenCrearHeroe { display_name: "Nueva".into(), campamento_id: ids::campamento(0), class_definition_id: "espada_escudo_mediano".into(), genero: "femenino".into(), avatar: None });
     let (previos, r) = dar_todo(&mut nueva, "c1", crear).await;
     let heroe = r.creadas[0].id.clone();
     assert_eq!(etiquetas(&previos), [format!("foto HEROE:{heroe}"), format!("foto CAMPAMENTO:{}", ids::campamento(0))]);

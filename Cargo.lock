@@ -45,7 +45,7 @@ dependencies = [
 
 [[package]]
 name = "asentamiento"
-version = "0.21.0"
+version = "0.22.0"
 dependencies = [
  "base",
  "serde_json",
@@ -64,7 +64,7 @@ checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
 name = "batch"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "asentamiento",
  "base",
@@ -161,7 +161,7 @@ dependencies = [
 
 [[package]]
 name = "combate"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "asentamiento",
  "base",
@@ -188,7 +188,7 @@ checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
 
 [[package]]
 name = "contrato"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "prost",
  "prost-build",
@@ -491,7 +491,7 @@ dependencies = [
 
 [[package]]
 name = "lanzador"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "acceso",
  "base",
@@ -545,10 +545,11 @@ dependencies = [
 
 [[package]]
 name = "militar"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "asentamiento",
  "base",
+ "objetos",
  "serde_json",
  "tecnologia",
  "trazado",
@@ -584,7 +585,7 @@ dependencies = [
 
 [[package]]
 name = "nucleo"
-version = "0.38.0"
+version = "0.39.0"
 dependencies = [
  "asentamiento",
  "base",
@@ -596,6 +597,7 @@ dependencies = [
  "mercenarios",
  "militar",
  "mundo",
+ "objetos",
  "persistencia",
  "politica",
  "prost",
@@ -612,6 +614,14 @@ dependencies = [
  "trazado",
  "vision",
  "zstd 0.14.3",
+]
+
+[[package]]
+name = "objetos"
+version = "0.1.0"
+dependencies = [
+ "base",
+ "serde_json",
 ]
 
 [[package]]
@@ -1079,7 +1089,7 @@ dependencies = [
 
 [[package]]
 name = "tecnologia"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "asentamiento",
  "base",

@@ -131,8 +131,9 @@ fn una_columna_ataca_a_otra_y_el_derrotado_queda_herido_pierde_la_mitad_del_carr
     assert_eq!(h.len(), 1);
     let h = &h[0];
     assert_eq!((h.0, h.1.clone(), dato(h, "ganaElAtacante")), (10 * MIN, vec![ana.0, beto.0], 1));
-    // Los logros (6B), contados en origen: una batalla librada y en campo abierto (el `combate.encuentro`), sin hoplitas.
-    assert_eq!(comun::logros_de_hechos(&x.n), vec![(Contador::BatallasLibradas, 1), (Contador::BatallasCampoAbierto, 1)]);
+    // Los logros (6B), contados en origen: una batalla librada y en campo abierto (el `combate.encuentro`), sin hoplitas; y combaten los Reyes (Tecnologia_Aedas §2.1: el primer ciudadano de
+    // cada Facción de administración lo es).
+    assert_eq!(comun::logros_de_hechos(&x.n), vec![(Contador::BatallasLibradas, 1), (Contador::BatallasCampoAbierto, 1), (Contador::BatallasConRey, 1)]);
     // Las bajas del perdedor van de 30 % a 70 % y el ganador pierde entre el 5 % y el 20 %.
     let (despues_a, despues_d) = (soldados(&x.n, ana.1, x.fuerte[0]), soldados(&x.n, beto.1, x.debil));
     let perdidos_d = antes_d - despues_d;
@@ -163,9 +164,46 @@ fn una_columna_ataca_a_otra_y_el_derrotado_queda_herido_pierde_la_mitad_del_carr
     assert!(!x.n.heroe_herido(beto.1));
 }
 
+/// La experiencia de un héroe (milésimas).
+fn experiencia_de(n: &Nucleo, heroe: u64) -> i64 {
+    n.heroe(heroe).unwrap().heroe.experiencia
+}
+
+#[test]
+fn con_numeros_el_heroe_gana_lo_que_su_bando_una_vez_por_combate_y_ejercito_permanente_solo_a_sus_escuadras() {
+    // Combate §4.3: ana gana con dos escuadras y cobra 1 una vez, no una por escuadra; beto pierde y cobra 0,5.
+    let mut x = choque();
+    let (ana, beto) = (x.ana, x.beto);
+    assert!(atacar(&mut x.n, MIN, "ana", "a1", ana.1, ObjetivoAtaque::Ejercito(beto.0), false).aceptada());
+    assert_eq!((experiencia_de(&x.n, ana.1), experiencia_de(&x.n, beto.1)), (1_000, 500));
+
+    // Con Ejército permanente en la Facción de ana, sus escuadras ganan 1,1 y ella, 1.
+    let mut x = choque();
+    let (ana, beto) = (x.ana, x.beto);
+    assert!(x.n.aplicar_en(0, admin("t", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["ejercito_permanente".into()] })).aceptada());
+    assert!(atacar(&mut x.n, MIN, "ana", "a1", ana.1, ObjetivoAtaque::Ejercito(beto.0), false).aceptada());
+    let xp = |h: u64, e: u64| x.n.heroe(h).unwrap().heroe.escuadra(e).unwrap().experiencia;
+    assert_eq!((xp(ana.1, x.fuerte[0]), xp(ana.1, x.fuerte[1]), xp(beto.1, x.debil)), (1_100, 1_100, 500));
+    assert_eq!((experiencia_de(&x.n, ana.1), experiencia_de(&x.n, beto.1)), (1_000, 500));
+}
+
 /// Las monedas de un héroe.
 fn monedas_de(n: &Nucleo, heroe: u64) -> i64 {
     n.heroe(heroe).unwrap().heroe.monedas
+}
+
+#[test]
+fn con_numeros_la_columna_con_caballeria_que_gana_a_campo_abierto_cuenta_los_contadores_de_las_eras_iv_y_v() {
+    // Ana suma carros de guerra (Caballerizas, escalón 4) a sus espadachines (Barracón) y arqueros (Galería de tiro).
+    let mut x = choque();
+    let (ana, beto) = (x.ana, x.beto);
+    dar(&mut x.n, "d4", ana.1, Tropa::CarrosGuerra, completa(Tropa::CarrosGuerra));
+    assert!(atacar(&mut x.n, 10 * MIN, "ana", "a1", ana.1, ObjetivoAtaque::Ejercito(beto.0), false).aceptada());
+    let c = |k: Contador| x.n.tecnologia().contador(k);
+    // Combaten los Reyes: el primer ciudadano de cada Facción de administración lo es.
+    let suben = [Contador::BatallasArmasCombinadas, Contador::BatallasCampoAbiertoConCaballeria, Contador::BatallasCampoAbiertoConCaballeriaElite, Contador::PersecucionesDeCaballeria, Contador::BatallasConRey];
+    assert_eq!(suben.map(c), [1; 5]);
+    assert_eq!([Contador::BatallasContraCoalicion, Contador::BatallasConTresHeroes, Contador::BatallasGanadasEnInferioridad].map(c), [0; 3]);
 }
 
 #[test]
@@ -338,7 +376,9 @@ fn atacar_un_campamento_de_bandidos_no_exige_guerra_gasta_una_tirada_y_su_oro_va
 
     let r = atacar(&mut n, 5 * MIN, "ana", "a1", ana.1, ObjetivoAtaque::Campamento(b), false);
     assert!(r.aceptada(), "{r:?}");
-    assert_eq!(n.estado().rng.estado(), rng_tras(1), "el ataque a un campamento gasta una tirada");
+    // Una tirada el ataque y una por entrada la tabla de objetos de su nivel (`BOTIN_OBJETOS.bandidos`, ninguna de `soloSiGana`).
+    let tabla = objetos::Catalogo::default().botin.bandidos[&2].0.len();
+    assert_eq!(n.estado().rng.estado(), rng_tras(1 + tabla), "el ataque a un campamento gasta una tirada, más las de su botín de objetos");
     let h = &hechos(&n, "combate.campamento_destruido")[0];
     assert_eq!((dato(h, "campamento"), dato(h, "nivel"), dato(h, "heridos")), (b as i64, 2, 0));
     assert!(n.campamento_de_bandidos(b).is_none(), "el campamento cae");
@@ -404,6 +444,37 @@ fn el_botin_de_los_bandidos_cae_con_los_rendimientos_decrecientes_de_cada_heroe(
     assert!(madera(&n) - antes >= esperado(nivel1.botin_por_heroe, rend.solo_experiencia_desde - 1) / 1_000 * 1_000, "la ventana de 24 h se desliza");
 }
 
+/// Entrada 70 (Objetos_Del_Heroe §3.7): cada campamento destruido da al héroe la tabla de objetos de su nivel, tirada con el rng del estado justo
+/// después del ataque, pero solo dentro de las destrucciones completas de su ventana de 24 h (`rendimientos.completas`); las siguientes ya no tiran la tabla.
+#[test]
+fn los_bandidos_dan_la_tabla_de_objetos_de_su_nivel_solo_dentro_de_las_completas_de_la_ventana() {
+    let mut n = nucleo(40, 5);
+    let ana = columna(&mut n, "ana", 1, c(10, 2));
+    dar(&mut n, "d1", ana.1, Tropa::ArquerosCompuesto, completa(Tropa::ArquerosCompuesto));
+    let completas = combate::Reglas::cargar().bandidos.rendimientos.completas as usize;
+    let tablas = objetos::Catalogo::default().botin.bandidos;
+    let mut esperado = Vec::new();
+    for k in 0..completas + 2 {
+        let nivel = (k % 2 + 1) as u8;
+        let b = colocar(&mut n, &format!("b{k}"), Punto::new(c(10, 2).x + 1_000, c(10, 2).y), nivel);
+        let mut rng = Rng::nuevo(n.estado().rng.estado());
+        rng.siguiente();
+        if k < completas {
+            let sale = tablas[&nivel].tirar(false, &mut rng);
+            if !sale.is_empty() {
+                esperado.push(comun::Botin { heroe: ana.1, origen: "bandidos".into(), mochila: sale, almacen: vec![], perdido: vec![] });
+            }
+        }
+        let r = atacar(&mut n, (k as i64 + 1) * MIN, "ana", &format!("a{k}"), ana.1, ObjetivoAtaque::Campamento(b), false);
+        assert!(r.aceptada() && n.campamento_de_bandidos(b).is_none(), "{r:?}");
+        assert_eq!(n.estado().rng.estado(), rng.estado(), "destrucción {}: la tirada del ataque y, si es completa, las de su tabla", k + 1);
+    }
+    assert!(!esperado.is_empty(), "con esta semilla sale algo");
+    assert_eq!(comun::botines(&n), esperado);
+    let piezas: u32 = n.heroe(ana.1).unwrap().heroe.mochila.casillas.values().map(|c| c.cantidad).sum();
+    assert_eq!(piezas, esperado.iter().flat_map(|b| &b.mochila).map(|(_, c)| c).sum::<u32>(), "todo a su mochila");
+}
+
 #[test]
 fn un_campamento_de_bandidos_no_se_ataca_ni_se_coloca_junto_a_otro_combate_prohibido() {
     // Sin mundo no hay campamentos de mercenarios: la protección se prueba en las pruebas del mundo real; aquí, la distancia.
@@ -433,7 +504,7 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.encuentros.insert((1, 2), vec![300, 400]);
     base.combate.encuentros.insert((2, 5), vec![500]);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN62");
+    assert_eq!(&bytes[..5], b"BAN63");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -603,7 +674,7 @@ impl Esc {
     /// Un héroe de la cuenta, ciudadano de `faccion`, que reside en la plaza y está dentro. Nace en el campamento más cercano.
     fn heroe_en(&mut self, m: &Mundo, cuenta: &str, faccion: u32, plaza: u64) -> u64 {
         let campamento = campamento_mas_cercano(m, self.pos(plaza));
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(faccion) });
         self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
         self.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(plaza as u32) });
@@ -613,7 +684,7 @@ impl Esc {
     fn defensor(&mut self, heroe: u64, tropas: &[Tropa]) -> Vec<u64> {
         let ids: Vec<u64> = tropas.iter().map(|&t| self.ok("admin", Comando::DarEscuadra { heroe, tropa: t, cantidad: completa(t) }).creadas[0]).collect();
         let loadout = self.n.heroe(heroe).unwrap().heroe.loadouts[0].id;
-        self.ok("admin", Comando::GuardarLoadout { heroe, loadout: Some(loadout), nombre: "Default".into(), escuadras: ids.clone(), perks: vec![], activo: Some(true) });
+        self.ok("admin", Comando::GuardarLoadout { heroe, loadout: Some(loadout), nombre: "Default".into(), escuadras: ids.clone(), activo: Some(true) });
         ids
     }
     /// Un ejército de administración de `cuenta`/`faccion` a 2 u de `p`, con las tropas dadas.
@@ -692,7 +763,8 @@ fn asedio(m: &'static M, semilla: u64, defensa: &[Tropa], ataque: &[Tropa]) -> A
     let mut reglas = Reglas::default();
     let combate = Arc::make_mut(&mut reglas.economia.combate);
     combate.bandidos.anillo_maximo = combate.bandidos.anillo_minimo;
-    let mut e = montar_sobre(Nucleo::nuevo(Arranque { reglas, ..arranque(m, semilla) }), m, false);
+    // El defensor lleva más de lo que cabe en los 14 con que nace un héroe.
+    let mut e = montar_sobre(Nucleo::nuevo(Arranque { reglas: comun::con_liderazgo_de_tope(reglas), ..arranque(m, semilla) }), m, false);
     e.sin_proteccion();
     let b = e.b;
     let beto = e.heroe_en(&m.0, "beto", 2, b);
@@ -821,7 +893,7 @@ fn un_asedio_que_pierde_hiere_a_todo_el_ejercito_y_la_chatarra_se_queda_en_la_pl
     // Un segundo héroe en el ejército de ana: también queda herido, hayan entrado en la batalla o no.
     let segundo = {
         let campamento = campamento_mas_cercano(&m.0, s.e.pos(b));
-        let h = s.e.ok("carla", Comando::CrearHeroe { cuenta: "carla".into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0];
+        let h = s.e.ok("carla", Comando::CrearHeroe { cuenta: "carla".into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
         s.e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
         s.e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Columna(ana.0) });
         h
@@ -969,6 +1041,21 @@ fn una_caravana_atacada_dentro_de_su_zona_es_un_aguante_pierde_el_70_por_ciento_
     assert!(k.escolta.is_empty());
     // El atacante gana: no queda herido.
     assert!(!e.n.heroe_herido(atacante.1));
+}
+
+#[test]
+fn una_columna_con_caballeria_que_ataca_una_caravana_cuenta_una_persecucion() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, true);
+    let a = e.a;
+    let ca = e.caravana("ana", a, 2);
+    let t0 = e.lanzar(ca);
+    e.n.avanzar_hasta(t0);
+    let atacante = e.ejercito("beto", 2, e.pos(a), &[Tropa::JinetesAsirios]);
+    assert!(e.atacar("beto", atacante.1, ObjetivoAtaque::Caravana(ca), true).aceptada());
+    // `persecuciones.deCaballeria` (Tecnologia_Aedas §2.1); un asalto a una caravana no es una batalla librada, así que no suma los demás de batalla.
+    assert_eq!(e.n.tecnologia().contador(Contador::PersecucionesDeCaballeria), 1);
+    assert_eq!(e.n.tecnologia().contador(Contador::BatallasLibradas), 0);
 }
 
 #[test]
@@ -1373,7 +1460,7 @@ fn la_cita_del_anillo_se_rehace_cuando_llega_o_se_va_un_residente() {
     let t = n.ahora();
     let heroes: Vec<u64> = (0..3)
         .map(|i| {
-            let r = n.aplicar_en(t, admin(&format!("h{i}"), Comando::CrearHeroe { cuenta: format!("res{i}"), campamento: 0, controlador: Controlador::Humano, nombre: None }));
+            let r = n.aplicar_en(t, admin(&format!("h{i}"), Comando::CrearHeroe { cuenta: format!("res{i}"), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }));
             assert!(r.aceptada(), "{r:?}");
             r.creadas[0]
         })
@@ -1420,6 +1507,7 @@ fn el_botin_de_los_bandidos_del_anillo_solo_lo_cobra_un_heroe_sin_plaza() {
     assert_eq!(botin(&e, b1.id), Some([0; 4]), "con plaza, el anillo no paga botín");
     assert_eq!(e.n.heroe(con.1).unwrap().heroe.monedas, militar::Reglas::cargar().heroe.monedas_iniciales, "ni monedas");
     assert!(!e.n.estado().combate.destruidos.contains_key(&con.1), "y no cuenta en su ventana");
+    assert!(comun::botines(&e.n).iter().all(|b| b.heroe != con.1), "ni objetos (entrada 70)");
     // Sin plaza: de una Facción sin plazas y residente en un campamento de mercenarios.
     let sin = e.ejercito("gus", 3, b2.posicion, &tropas);
     e.ok("admin", Comando::FijarResidencia { heroe: sin.1, residencia: Some(Residencia::Campamento(c2)) });

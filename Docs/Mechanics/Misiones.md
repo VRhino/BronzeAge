@@ -2,7 +2,7 @@
 
 > **Implementado en Rust el 2026-10-27** (mecánica 49; diseño acordado con el autor el 2026-10-26 y catálogo aprobado el 2026-10-27). Las recompensas y los umbrales son provisionales: se calibran con los batches y los bots. Código: `crates/nucleo/src/misiones.rs` (catálogo y estado) y `crates/nucleo/src/nucleo/misiones.rs` (de dónde sale cada avance, reclamar y la proyección).
 
-> **Revisión del 2026-10-28 (mecánica 59).** Cada misión tiene además una **explicación** en texto libre ([`Misiones_Textos.md`](Misiones_Textos.md)). F1 se cumple con la capital **efectiva** (la primera plaza de la Facción), no con la designada, que pide Palacio (decisión del autor; ver `capital` en §3). `FijarNivelAsentamiento` (administración) también mira el contador `nivel`. Pruebas: `crates/nucleo/tests/misiones_una_a_una.rs` cumple cada misión del catálogo haciendo lo que dice su texto, con el catálogo sin previas (35 de 36; **H13 no tiene camino hoy**: el héroe no gana puntos de atributo, apuntado en `Docs/Mecanicas a desarrollar.md`, 61), y una guarda exige una prueba por misión. H7 pide **20** de tiro (antes 25: la única tropa de tiro sin artesanos, los honderos, trae 20; decisión del autor del 2026-10-28; cambia la huella de las reglas); `tests/propios.rs` (`las_misiones_de_la_faccion_y_sus_cumplidas_llegan_a_cada_ciudadano…`) comprueba que las misiones de la Facción, cumplidas incluidas, llegan en `FACCION` a cada ciudadano, sea o no el Rey, y a ninguna otra Facción.
+> **Revisión del 2026-10-28 (mecánica 59).** Cada misión tiene además una **explicación** en texto libre ([`Misiones_Textos.md`](Misiones_Textos.md)). F1 se cumple con la capital **efectiva** (la primera plaza de la Facción), no con la designada, que pide Palacio (decisión del autor; ver `capital` en §3). `FijarNivelAsentamiento` (administración) también mira el contador `nivel`. Pruebas: `crates/nucleo/tests/misiones_una_a_una.rs` cumple cada misión del catálogo haciendo lo que dice su texto, con el catálogo sin previas (35 de 36; **H13 no tenía camino** porque el héroe no ganaba puntos de atributo; desde el 2026-11-12 los gana al subir de nivel ([`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §4.3), pero la prueba aún no lo recorre: apuntado en `Docs/Mecanicas a desarrollar.md`, 61), y una guarda exige una prueba por misión. H7 pide **20** de tiro (antes 25: la única tropa de tiro sin artesanos, los honderos, trae 20; decisión del autor del 2026-10-28; cambia la huella de las reglas); `tests/propios.rs` (`las_misiones_de_la_faccion_y_sus_cumplidas_llegan_a_cada_ciudadano…`) comprueba que las misiones de la Facción, cumplidas incluidas, llegan en `FACCION` a cada ciudadano, sea o no el Rey, y a ninguna otra Facción.
 
 > **Misiones recurrentes (mecánica 55, 2026-10-28).** Estas misiones son **únicas**: cada una se cumple una vez. Las que se repiten cada día o cada semana van aparte, en el tablón de cada plaza y cada Facción ([`Misiones_Recurrentes.md`](Misiones_Recurrentes.md)); comparten los contadores del héroe (§3), la orden `reclamarRecompensa` y las reglas de la recompensa (§4).
 
@@ -82,6 +82,7 @@ La fija es obligatoria y mayor que 0. La lista tiene elementos con su `tipo`; no
 | `oro` | `cantidad` | En todas |
 | `xp` | `cantidad` | En todas salvo las de Facción, donde es la fija |
 | `tropa` | `tropa`, `cantidad` (soldados) | Solo en las misiones **personales**: las cadenas de héroe y las recurrentes individuales |
+| `objeto` | `objeto`, `cantidad` (piezas) | Solo en las misiones **personales**, como la tropa. Vale cualquier objeto del catálogo ([`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md)) salvo los materiales: ni crisoles ni planos (decisión del 2026-11-12, mecánica 70) |
 
 ### 4.2 Adónde va
 
@@ -91,16 +92,18 @@ El destino lo decide quién cobra. Una misión **personal** (la cadena de héroe
 |---|---|---|---|
 | Recursos y oro | Almacén personal del héroe | Almacén de la plaza | Almacén de la capital efectiva de la Facción ([`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) §3.7) |
 | Tropa | Campamento donde reside el héroe | No se da | No se da |
+| Objetos | Mochila del héroe; lo que no cabe, a su almacén de objetos, y si tampoco, se pierde | No se da | No se da |
 | Experiencia, la de la lista o la fija | Facción del héroe (también en una individual del tablón de una plaza); en una individual del tablón de una Facción, esa Facción | Facción de la plaza | Esa Facción (es la fija) |
 | Participación fija | Solo en la individual del tablón de una plaza: al héroe, en esa plaza | Cadena: al héroe que reclama, y a nadie si reclama la administración sin héroe. Grupal: a partes iguales entre los que aportaron, sin los mercenarios contratados (división entera: el resto se pierde) | No hay |
 
 - **Tropa.** La escuadra nace en el **campamento** donde reside el héroe, nunca en su columna, y no mira el Liderazgo: se mira cuando el héroe sale con ella. Si el héroe ya tiene una escuadra de esa tropa (una por tropa), los soldados se suman a ella, esté donde esté, hasta el tope de la tropa; lo que sobra se pierde y no impide reclamar.
+- **Objetos.** Se entregan como todo botín ([`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §3.7): mochila, almacén de objetos o perdido, y lo dice el hecho `heroe.botin` con `origen: "mision"`. No miran la residencia ni impiden reclamar.
 - **Experiencia.** Va a la Facción con el motivo de misión (`faccion.experiencia`). Un héroe sin Facción no suma experiencia y cobra todo lo demás.
 - **Cantidades.** Los recursos y el oro van en unidades enteras, porque los almacenes solo guardan unidades enteras ([`Economia_Construccion.md`](Economia_Construccion.md), decisión C3b); la experiencia admite decimales (se guarda en milésimas); los soldados de una tropa son un entero.
 
 ### 4.3 Todo o nada
 
-Reclamar comprueba **todo antes de dar nada**: si una parte no cabe o no tiene dónde ir, se rechaza la reclamación entera y la misión sigue por reclamar. Los rechazos de dar la recompensa:
+Reclamar comprueba **todo antes de dar nada**: si una parte no cabe o no tiene dónde ir, se rechaza la reclamación entera y la misión sigue por reclamar. Los objetos no entran en esta cuenta: lo que no cabe se pierde, como la tropa que pasa del tope. Los rechazos de dar la recompensa:
 
 - `heroe.sin_residencia`: la recompensa lleva recursos, oro o tropa para un héroe sin residencia (no tiene almacén personal ni campamento).
 - `almacen_personal.lleno`: todo lo que va al almacén personal del héroe, recursos y oro **juntos**, no cabe en su capacidad.
@@ -112,7 +115,7 @@ Reclamar comprueba **todo antes de dar nada**: si una parte no cabe o no tiene d
 Cada dueño lleva sus misiones en su ámbito, en el campo `misiones` (`Mision`): `Heroe` en `HEROE` (el héroe propio), `Asentamiento` en `ASENTAMIENTO` (el interior, para quien está dentro o la gobierna) y `Faccion` en `FACCION` (la propia; la forma pública de una Facción ajena no las lleva). `ADMIN` las ve todas.
 
 - Viajan, en el orden del catálogo, las **activas**, las **cumplidas** (por reclamar) y las **reclamadas** (`EstadoMision`). Las que esperan a su previa y las deshabilitadas no.
-- Cada una lleva su `id`, su `previa`, sus condiciones (`contador`, `avance`, `umbral`; en una cumplida o reclamada el avance es el umbral) y su recompensa: la fija, que es `participacion` (una de plaza) o `recompensa_experiencia` (una de Facción, en milésimas, como `Faccion.experiencia`), y la lista `recompensas` (§4.1), de elementos `RecompensaMision { tipo, clave, cantidad }`: `clave` es el recurso o la tropa (los ids de los datos) y va vacía en el oro y la experiencia; `cantidad` va en milésimas, o en soldados si es una tropa. Una misión de héroe no lleva fija.
+- Cada una lleva su `id`, su `previa`, sus condiciones (`contador`, `avance`, `umbral`; en una cumplida o reclamada el avance es el umbral) y su recompensa: la fija, que es `participacion` (una de plaza) o `recompensa_experiencia` (una de Facción, en milésimas, como `Faccion.experiencia`), y la lista `recompensas` (§4.1), de elementos `RecompensaMision { tipo, clave, cantidad }`: `clave` es el recurso, la tropa o el objeto (los ids de los datos) y va vacía en el oro y la experiencia; `cantidad` va en milésimas, en soldados si es una tropa o en piezas si es un objeto. Una misión de héroe no lleva fija.
 - El avance viaja con su dueño: cada contador que cambia toca al héroe, a la plaza o a la Facción.
 
 Detalle en `Docs/Coordinacion/05_Contrato_de_Sesion.md`. Los títulos y textos de cada misión y el nombre de cada contador no viajan con el dueño: están en [`Misiones_Textos.md`](Misiones_Textos.md), que va en `GET /v1/datos` (fuera de la huella y de la foto).
@@ -120,7 +123,7 @@ Detalle en `Docs/Coordinacion/05_Contrato_de_Sesion.md`. Los títulos y textos d
 ### 5.1 Hechos
 
 - `mision.cumplida { mision, dueno }`: al dueño (el héroe; quien oye la plaza; la Facción).
-- `mision.reclamada { mision, dueno, ... }`: al héroe que la reclama y al dueño. Lleva solo lo que se dio: `participacion` (la de cada uno de los que la cobraron), `xp` (toda la que sumó la Facción, en milésimas), `oro` (en milésimas), `recursos` (lista de `[recurso, milésimas]`) y `escuadras` (lista de `[tropa, soldados, id de la escuadra]`; los soldados son los que de verdad se dieron, sin los que se perdieron por pasar del tope de la tropa).
+- `mision.reclamada { mision, dueno, ... }`: al héroe que la reclama y al dueño. Lleva solo lo que se dio: `participacion` (la de cada uno de los que la cobraron), `xp` (toda la que sumó la Facción, en milésimas), `oro` (en milésimas), `recursos` (lista de `[recurso, milésimas]`) y `escuadras` (lista de `[tropa, soldados, id de la escuadra]`; los soldados son los que de verdad se dieron, sin los que se perdieron por pasar del tope de la tropa). Los objetos no van en él: van en `heroe.botin` (`origen: "mision"`; [`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §3.7), que sale justo después.
 
 <!-- eventos -->
 ```json
@@ -134,9 +137,9 @@ Cada misión del bloque lleva su `id`, su `previa` (si es de una cadena), sus `c
 
 - falta la recompensa fija de su tipo o no es mayor que 0, o una misión de héroe no lleva nada en `recompensas`;
 - hay un `tipo` desconocido, una `cantidad` que no es mayor que 0 o un recurso u oro con decimales;
-- la lista repite un elemento (el mismo recurso, el oro, la experiencia o la misma tropa) o la recompensa fija, o lleva `"recurso": "oro"`;
-- una misión colectiva lleva `tropa`;
-- un recurso o una tropa no existen, o una tropa pide más soldados de los que lleva su escuadra;
+- la lista repite un elemento (el mismo recurso, el oro, la experiencia, la misma tropa o el mismo objeto) o la recompensa fija, o lleva `"recurso": "oro"`;
+- una misión colectiva lleva `tropa` u `objeto`;
+- un recurso, una tropa o un objeto no existen, una tropa pide más soldados de los que lleva su escuadra, un objeto es un material (crisol o plano) o su cantidad no es un entero;
 - lleva una clave de antes (`oro` o `recursos`) o la fija de otro tipo (`xp` en una de plaza, `participacion` en una de Facción): se rechaza en vez de perder la recompensa en silencio.
 
 <!-- parametros:MISIONES -->
@@ -203,5 +206,6 @@ Cada misión del bloque lleva su `id`, su `previa` (si es de una cadena), sus `c
 - **La experiencia de un héroe va a su Facción, no a la de la plaza.** En una misión personal, incluida una individual del tablón de una plaza, la cobra la Facción del héroe (decisión del 2026-11-01); antes la de una individual de plaza iba a la Facción de la plaza.
 - **Una Facción sin plazas no cobra recursos ni oro.** No tiene capital efectiva donde dejarlos: `mision.sin_capital`. Como reclamar es todo o nada, la misión entera, experiencia incluida, sigue por reclamar hasta que la Facción tenga una plaza (§4.3).
 - **La tropa no rechaza por estar completa.** Si el héroe ya tiene la escuadra al tope, los soldados se pierden y el resto de la recompensa se cobra (decisión del 2026-11-01).
+- **Los objetos tampoco.** Con la mochila y el almacén de objetos llenos, lo que no cabe se pierde y lo dice `heroe.botin` en `perdido` (mecánica 70).
 - **La administración reclama sin héroe.** Una cadena de plaza reclamada por la administración sin héroe da todo lo demás pero la participación fija no se apunta a nadie.
 - **Foto anterior.** Las recompensas flexibles cambian la huella de las reglas: una foto anterior no carga y hace falta partida nueva. La foto es hoy BAN60 (las anteriores ya no se leen).

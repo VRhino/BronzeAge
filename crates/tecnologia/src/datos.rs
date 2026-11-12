@@ -83,6 +83,29 @@ pub enum Condicion {
     CapitalEnNivel { nivel: u8, con: Tipo },
     /// Alguna zona de una plaza de la Facción contiene un nodo de ese recurso (con o sin stock).
     YacimientoEnTerritorio(Recurso),
+    /// La Facción tiene al menos `cantidad` escuadras vivas.
+    EscuadrasVivas(u32),
+    /// La Facción tiene al menos `cantidad` héroes.
+    HeroesEnFaccion(u32),
+    /// Alguna plaza de la Facción tiene nivel actual ≥ `nivel`.
+    PlazaEnNivel(u8),
+    /// La Facción tiene nivel ≥ `nivel`.
+    NivelFaccion(u8),
+    /// La Facción tiene al menos `cantidad` columnas en marcha a la vez.
+    ColumnasEnMarcha(u32),
+    /// Alguna plaza de la Facción con nivel actual ≥ `nivel_plaza` tiene ese edificio activo con `nivelInterno ≥ nivel_interno`.
+    EdificioEnPlazaDeNivel { tipo: Tipo, nivel_interno: u8, nivel_plaza: u8 },
+}
+
+impl Condicion {
+    /// ¿La mira el paso de minuto de la capital? Las que cambian sin ningún disparador de la aparición: el recurso en la capital (TA §3), las escuadras vivas, los héroes, las columnas en
+    /// marcha y el nivel de la Facción (Tecnologia_Aedas §3.1). Las demás las miran los disparadores de siempre.
+    pub fn del_paso_de_capital(&self) -> bool {
+        match self {
+            Condicion::RecursoEnCapital(_) | Condicion::EscuadrasVivas(_) | Condicion::HeroesEnFaccion(_) | Condicion::ColumnasEnMarcha(_) | Condicion::NivelFaccion(_) => true,
+            Condicion::Edificio { .. } | Condicion::Tecnologia(_) | Condicion::CapitalEnNivel { .. } | Condicion::YacimientoEnTerritorio(_) | Condicion::PlazaEnNivel(_) | Condicion::EdificioEnPlazaDeNivel { .. } => false,
+        }
+    }
 }
 
 /// Una parte del logro: un contador del servidor y su umbral. Con `por_plaza`, el umbral es `umbral × N`, con N las plazas vivas del mundo en ese momento (mínimo 1;
@@ -261,7 +284,7 @@ pub struct Reglas {
     pub por_contador: Vec<Vec<TecId>>,
     /// Las que tienen alguna parte del logro por plaza viva: lo único que se mira cuando cambia el número de plazas del mundo.
     pub por_plazas: Conjunto,
-    /// Las que piden `recursoEnCapital` en su hito: lo único que el paso de minuto de una capital mira (plan §5.1), sin recorrer el catálogo.
+    /// Las que piden en su hito algo que solo mira el paso de minuto de la capital ([`Condicion::del_paso_de_capital`]): lo único que ese paso mira (plan §5.1), sin recorrer el catálogo.
     pub piden_capital: Conjunto,
     /// Las que dan un `bonusProduccion`: el `factor_tecnologia` de una Facción que no ha adoptado ninguna es 1 sin mirar nada más.
     pub con_bonus: Conjunto,
@@ -362,7 +385,7 @@ impl Reglas {
     pub fn indexar(&mut self) {
         let de = |f: &dyn Fn(&Definicion) -> bool| self.catalogo.iter().enumerate().filter(|(_, d)| f(d)).map(|(i, _)| i as TecId).collect::<Conjunto>();
         (self.de_arranque, self.piden_capital, self.con_bonus) =
-            (de(&|d| d.de_arranque), de(&|d| d.hito.iter().any(|c| matches!(c, Condicion::RecursoEnCapital(_)))), de(&|d| d.bonus.is_some()));
+            (de(&|d| d.de_arranque), de(&|d| d.hito.iter().any(Condicion::del_paso_de_capital)), de(&|d| d.bonus.is_some()));
         self.por_plazas = de(&|d| d.logro.is_some_and(Logro::por_plazas));
         let mut por_contador = vec![Vec::new(); Contador::TODOS.len()];
         for (i, d) in self.catalogo.iter().enumerate() {
@@ -406,12 +429,19 @@ impl Default for Reglas {
 
 fn condicion(c: &Value, indice: &impl Fn(&str) -> TecId) -> Condicion {
     let nivel = |k: &str| c.get(k).and_then(Value::as_u64).unwrap_or(1) as u8;
+    let cantidad = || c.get("cantidad").and_then(Value::as_u64).expect("«cantidad» de la condición") as u32;
     match texto(c, "tipo").as_str() {
         "edificio" => Condicion::Edificio { tipo: edificio(&texto(c, "edificio")), nivel: nivel("nivelInterno") },
         "tecnologia" => Condicion::Tecnologia(indice(&texto(c, "id"))),
         "recursoEnCapital" => Condicion::RecursoEnCapital(recurso(&texto(c, "recurso"))),
         "capitalEnNivel" => Condicion::CapitalEnNivel { nivel: nivel("nivel"), con: edificio(&texto(c, "conEdificio")) },
         "yacimientoEnTerritorio" => Condicion::YacimientoEnTerritorio(recurso(&texto(c, "recurso"))),
+        "escuadrasVivas" => Condicion::EscuadrasVivas(cantidad()),
+        "heroesEnFaccion" => Condicion::HeroesEnFaccion(cantidad()),
+        "plazaEnNivel" => Condicion::PlazaEnNivel(nivel("nivel")),
+        "nivelFaccion" => Condicion::NivelFaccion(nivel("nivel")),
+        "columnasEnMarcha" => Condicion::ColumnasEnMarcha(cantidad()),
+        "edificioEnPlazaDeNivel" => Condicion::EdificioEnPlazaDeNivel { tipo: edificio(&texto(c, "edificio")), nivel_interno: nivel("nivelInterno"), nivel_plaza: nivel("nivelPlaza") },
         otro => panic!("condición de hito «{otro}» desconocida"),
     }
 }
@@ -441,9 +471,9 @@ mod pruebas {
     #[test]
     fn las_cifras_son_las_del_documento() {
         let r = Reglas::cargar();
-        assert_eq!(r.catalogo.len(), 26);
+        assert_eq!(r.catalogo.len(), 38);
         assert_eq!((r.catalogo[0].id.as_str(), r.catalogo[1].id.as_str(), r.catalogo[2].id.as_str()), ("leva_comunal", "hostigamiento_tribal", "metalurgia_cobre"), "orden del documento");
-        assert_eq!(r.eras.iter().map(|e| (e.id.as_str(), e.orden, e.plazo)).collect::<Vec<_>>(), vec![("reinos_palaciales", 1, 5 * SEMANA), ("crisis_adaptacion", 2, 6 * SEMANA), ("polis_imperios", 3, 7 * SEMANA)]);
+        assert_eq!(r.eras.iter().map(|e| (e.id.as_str(), e.orden, e.plazo)).collect::<Vec<_>>(), vec![("reinos_palaciales", 1, 5 * SEMANA), ("crisis_adaptacion", 2, 6 * SEMANA), ("polis_imperios", 3, 7 * SEMANA), ("profesionalizacion_imperial", 4, 8 * SEMANA), ("hegemonia_macedonica", 5, 26 * SEMANA)]);
         assert!(r.eras.iter().all(|e| e.minimo == SEMANA), "cada Era dura al menos una semana");
         assert_eq!(r.eras[0].tarifa, vec![(Recurso::Madera, 200_000), (Recurso::Oro, 100_000)]);
         assert_eq!(r.eras[2].tarifa, vec![(Recurso::LingoteHierro, 30_000), (Recurso::Oro, 600_000)]);
@@ -465,7 +495,7 @@ mod pruebas {
         let aleacion = Logro { ademas: Some(Parte { contador: Contador::ExtraidoEstano, umbral: 1_000, por_plaza: true }), ..Logro::por_plaza(Contador::ExtraidoCobre, 2_000) };
         assert_eq!(por_plaza("aleacion_bronce"), Some(aleacion));
         let ids: Vec<&str> = r.por_plazas.iter().map(|t| r.def(t).id.as_str()).collect();
-        assert_eq!(ids, ["metalurgia_cobre", "aleacion_bronce", "escudos_ligeros", "cria_caballar"]);
+        assert_eq!(ids, ["metalurgia_cobre", "aleacion_bronce", "escudos_ligeros", "cria_caballar", "ejercito_permanente", "cuerpo_oficiales", "infanteria_profesional", "hostigadores_profesionales", "carga_caballeria", "reforma_macedonica", "formacion_cuna", "companeros_reales", "acero_templado"]);
         let bronce = r.def(r.buscar("aleacion_bronce").unwrap());
         assert_eq!(bronce.hito, vec![Condicion::Edificio { tipo: Tipo::Fundicion, nivel: 2 }, Condicion::RecursoEnCapital(Recurso::Estano)]);
         let civicas = r.def(r.buscar("instituciones_civicas").unwrap());
@@ -519,7 +549,7 @@ mod pruebas {
     #[test]
     fn cada_contador_sabe_que_logros_mira() {
         let r = Reglas::cargar();
-        assert_eq!(r.por_contador.iter().map(Vec::len).sum::<usize>(), 25, "una parte por tecnología sin arranque, y la aleación con dos");
+        assert_eq!(r.por_contador.iter().map(Vec::len).sum::<usize>(), 37, "una parte por tecnología sin arranque, y la aleación con dos");
         let (cobre, bronce) = (r.buscar("metalurgia_cobre").unwrap(), r.buscar("aleacion_bronce").unwrap());
         assert_eq!(r.por_contador[Contador::ExtraidoCobre.indice()], vec![cobre, bronce], "en el orden del catálogo");
         assert_eq!(r.por_contador[Contador::ExtraidoEstano.indice()], vec![bronce]);
@@ -530,6 +560,6 @@ mod pruebas {
     fn reglas_tecnologias_de_siempre() {
         let t = ReglasTecnologias::cargar();
         assert_eq!(t.de_arranque, vec!["hostigamiento_tribal".to_owned(), "leva_comunal".to_owned()]);
-        assert_eq!(t.todas.len(), 26);
+        assert_eq!(t.todas.len(), 38);
     }
 }

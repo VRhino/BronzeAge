@@ -39,7 +39,8 @@ fn reglas_sin_estorbos() -> Reglas {
     let mut reglas = Reglas::default();
     let b = &mut Arc::make_mut(&mut reglas.economia.combate).bandidos;
     (b.radio_ataque_caravana, b.anillo_minimo, b.anillo_maximo) = (0, 0, 0);
-    reglas
+    // Los firmantes salen con más tropa de la que cabe en los 14 con que nace un héroe.
+    super::con_liderazgo_de_tope(reglas)
 }
 
 fn arranque(m: &M, reglas: Reglas) -> Arranque {
@@ -99,7 +100,7 @@ pub fn sin_cambios(n: &mut Nucleo, actor: &str, c: Comando) {
 /// Un héroe nuevo de la cuenta `cuenta` en el campamento `campamento`, residente y dentro. El bot lo crea la administración; el humano, su cuenta.
 pub fn heroe_en(n: &mut Nucleo, cuenta: &str, campamento: u32, controlador: Controlador) -> u64 {
     let actor = if controlador == Controlador::Bot { "admin" } else { cuenta };
-    ok(n, actor, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador, nombre: None }).creadas[0]
+    ok(n, actor, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0]
 }
 
 /// Un bot de la cuenta `cuenta` que reside en el campamento `campamento`, sin Facción, dentro de él y ya ofrecido en su tablón. Devuelve su id.

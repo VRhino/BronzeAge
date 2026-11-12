@@ -89,10 +89,6 @@ pub struct ReglasBatalla {
     pub conservar_cerradas: i64,
     /// La defensa de una caravana sin escolta cuando juega Unity: tropa y soldados.
     pub carreteros: (Tropa, i64),
-    pub casillas_inventario: u32,
-    /// Las versiones de los catálogos de Conquest que el ticket declara (`versionCatalogoHeroe` y `versionCatalogoObjetos`).
-    pub version_catalogo_heroe: String,
-    pub version_catalogo_objetos: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -328,9 +324,6 @@ impl Reglas {
                 margen: minutos(&ba, "margenMinutos"),
                 conservar_cerradas: minutos(&ba, "conservarCerradasMinutos"),
                 carreteros,
-                casillas_inventario: entero(&ba, "casillasInventario") as u32,
-                version_catalogo_heroe: ba["versionCatalogoHeroe"].as_str().expect("versionCatalogoHeroe").to_owned(),
-                version_catalogo_objetos: ba["versionCatalogoObjetos"].as_str().expect("versionCatalogoObjetos").to_owned(),
             },
             bandidos: ReglasBandidos {
                 niveles: [nivel_de_bandidos(&bd, "1"), nivel_de_bandidos(&bd, "2"), nivel_de_bandidos(&bd, "3")],
@@ -404,7 +397,7 @@ mod pruebas {
         assert_eq!((b.capacidad_asedio, b.capacidad_resto), (15, 5), "15 contra 15 en el asedio (2026-10-13)");
         assert_eq!((b.duracion_asedio, b.duracion_resto), (30 * MS_POR_MINUTO, 15 * MS_POR_MINUTO));
         assert_eq!((b.convocatoria, b.plazo_asignacion, b.plazo_inicio, b.margen), (30_000, 5 * MS_POR_MINUTO, 5 * MS_POR_MINUTO, 5 * MS_POR_MINUTO));
-        assert_eq!((b.conservar_cerradas, b.carreteros, b.casillas_inventario), (60 * MS_POR_MINUTO, (Tropa::MiliciaLanceros, 13), 72));
+        assert_eq!((b.conservar_cerradas, b.carreteros), (60 * MS_POR_MINUTO, (Tropa::MiliciaLanceros, 13)));
     }
 
     #[test]

@@ -132,7 +132,7 @@ impl Escenario {
     }
     /// El héroe de la cuenta, nacido en el campamento `campamento`.
     fn heroe(&mut self, cuenta: &str, campamento: u32) -> u64 {
-        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0]
+        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0]
     }
     /// Un héroe de la cuenta ya ciudadano de la Facción 1, residente y presente en la plaza.
     fn heroe_en_la_plaza(&mut self, cuenta: &str) -> u64 {
@@ -255,6 +255,22 @@ fn salir_al_mundo_valida_en_orden_carga_el_carro_llena_los_viveres_y_un_rechazo_
     let sale = hechos(&e.n, "jugador.sale_al_mundo");
     assert_eq!((sale.len(), sale[0].1.clone(), dato(&sale[0], "escuadras"), dato(&sale[0], "cargaTotal")), (1, vec![a], 1, 30_000));
     assert_eq!(e.rechazada("ana", salir(h, &[], &[])), rechazos::HEROE_YA_EN_COLUMNA, "no se sale dos veces");
+}
+
+#[test]
+fn con_la_logistica_de_campana_cada_heroe_de_la_faccion_lleva_un_cincuenta_por_ciento_mas_de_viveres() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    e.avanzar(24 * HORA);
+    let a = e.a;
+    let salir = |heroe| Comando::SalirAlMundo { asentamiento: a, heroe, escuadras: vec![], carga: vec![] };
+    let (antes, despues) = (e.heroe_en_la_plaza("ana"), e.heroe_en_la_plaza("beto"));
+    let col = e.ok("ana", salir(antes)).creadas[0];
+    assert_eq!(e.ejercito(col).columna.viveres.maximo, Some(mr().logistica.capacidad_viveres), "sin ella, 350 por héroe");
+    // Con la Logística de campaña adoptada (Movimiento_Ejercitos §6.1: `LOGISTICA.bonusViveres`), la capacidad por héroe de la Facción es ×1,5.
+    e.ok("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["logistica_campana".into()] });
+    let col = e.ok("beto", salir(despues)).creadas[0];
+    assert_eq!(e.ejercito(col).columna.viveres.maximo, Some(525_000));
 }
 
 /// Al salir al mundo desde su plaza el héroe se queda con la foto de su interior (Niebla_De_Guerra §4.5), ya sin la tropa ni la carga que se lleva: el almacén, la cola (lo que no está activo) y
@@ -472,7 +488,7 @@ fn la_marcha_forzada_va_un_cincuenta_por_ciento_mas_deprisa_come_el_doble_solo_m
     assert!(e.ejercito(col).plan.fin().unwrap() < fin_normal);
     // Va en la foto.
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN62");
+    assert_eq!(&bytes[..5], b"BAN63");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert!(vuelta.ejercitos[&col].columna.forzada, "la marcha forzada va en la foto");
     assert_eq!(vuelta.serializar(), bytes);
@@ -1146,7 +1162,7 @@ impl Escenario {
     }
     /// Un héroe de la Facción 1 en el campamento 0 con un préstamo de 30 granjeros y 30 mineros, creado en el instante `t`.
     fn leva_en(&mut self, t: Instante, cuenta: &str) -> (u64, Vec<u64>) {
-        let h = self.ok_en(t, cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
+        let h = self.ok_en(t, cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
         self.ok_en(t, "admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
         let ids = self.ok_en(t, cuenta, Comando::PedirPrestamo { heroe: h, tropas: vec![Tropa::Granjeros, Tropa::Mineros] }).creadas;
         (h, ids)

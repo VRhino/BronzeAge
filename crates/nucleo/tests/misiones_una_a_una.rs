@@ -55,7 +55,8 @@ fn reglas() -> Reglas {
         capitulos: vec![Capitulo { hecho: HechoEpico::Obra, cantidad: 1, edificio: Some(Tipo::Almacen) }, Capitulo { hecho: HechoEpico::Obra, cantidad: 1, edificio: None }],
     });
     t.indexar();
-    r
+    // Las misiones de combate sacan más tropa de la que cabe en los 14 con que nace un héroe.
+    comun::con_liderazgo_de_tope(r)
 }
 
 struct X {
@@ -105,7 +106,7 @@ impl X {
         assert!(self.cumplida(d, id), "{id} no se cumple con su hecho: {:?}", self.n.misiones_de(d));
     }
     fn heroe(&mut self, cuenta: &str, campamento: u32) -> u64 {
-        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0]
+        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0]
     }
     /// Una columna de administración de la cuenta en `p`: (columna, héroe).
     fn columna(&mut self, cuenta: &str, faccion: u32, p: Punto, viveres: i64) -> (u64, u64) {
@@ -379,8 +380,8 @@ fn h12_entregar_materiales_a_una_obra() {
 
 #[test]
 fn h13_repartir_los_puntos_de_atributo() {
-    // Hoy el héroe no gana puntos de atributo (el servidor no sube su nivel: `tests/heroes.rs`), así que H13 no tiene camino en la partida (parada hasta que haya
-    // Unity para los perks, decisión del autor del 2026-10-28). Lo que sí se prueba: sin
+    // Desde el 2026-11-12 el héroe gana un punto de atributo por nivel (Heroe_Y_Tropa §4.3), así que H13 ya tiene camino en la partida; esta prueba aún no lo
+    // recorre (la entrada 61 de `Docs/Mecanicas a desarrollar.md` estaba parada por decisión del autor del 2026-10-28). Lo que sí se prueba: sin
     // puntos, repartir se rechaza y no cuenta.
     let m = con_mundo!();
     let mut x = X::nuevo(m);
@@ -565,7 +566,7 @@ fn asediar(x: &mut X, m: &M, b: u64, ataque: &[Tropa], defensa: &[Tropa]) {
     if !defensa.is_empty() {
         let ids: Vec<u64> = defensa.iter().map(|&t| x.ok("admin", Comando::DarEscuadra { heroe: h, tropa: t, cantidad: unidades(t) }).creadas[0]).collect();
         let loadout = x.n.heroe(h).unwrap().heroe.loadouts[0].id;
-        x.ok("admin", Comando::GuardarLoadout { heroe: h, loadout: Some(loadout), nombre: "Default".into(), escuadras: ids, perks: vec![], activo: Some(true) });
+        x.ok("admin", Comando::GuardarLoadout { heroe: h, loadout: Some(loadout), nombre: "Default".into(), escuadras: ids, activo: Some(true) });
     }
     let pb = x.posicion(b);
     let (_, ana) = x.columna("ana", 1, Punto::new(pb.x + 1_000, pb.y), 350_000);

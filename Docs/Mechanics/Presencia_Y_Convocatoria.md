@@ -89,7 +89,7 @@ Comando `{ asentamientoId, heroeId, escuadronIds, carga }`. Elegir tropa, valida
 
 1. Crea la columna con id `ejercito-{ids.siguiente()}` y la añade; la plaza queda con la tropa fuera y la carga descontada.
 2. **Llena los víveres** del héroe (`conViveresLlenos`), **después** de elegir la carga y con la tropa ya fuera (Movimiento §6.1).
-3. **Toma la foto del interior** que deja atrás (`conFotoTomadaPor`): del asentamiento **ya sin** la tropa ni la carga que se lleva, guarda `{ vistoEn, almacen, cola (edificios no activos), guarnición }`. Lo `activo` no entra: viaja vivo con el héroe dentro (desde fuera, de una plaza ajena solo `mercado_activo` y `tiene_muralla`, 2026-11-07). Es lo que verá de esa plaza al volver a mirar de lejos.
+3. **Toma la foto del interior** que deja atrás (`conFotoTomadaPor`): del asentamiento **ya sin** la tropa ni la carga que se lleva, guarda `{ vistoEn, almacen, cola (edificios no activos), guarnición }`. Lo `activo` no entra: viaja vivo con el héroe dentro (desde fuera, de una plaza ajena solo `mercado_activo` y `tiene_muralla`, 2026-11-07, y `armeria_activa`, 2026-11-12). Es lo que verá de esa plaza al volver a mirar de lejos.
 4. `ubicacion = columna`. Evento `jugador.sale_al_mundo { ejercitoId, asentamientoId, heroeId, escuadronIds, liderazgoUsado, cargaTotal }` a la plaza.
 
 Está envuelto en `sinConvocatoria` (§9): quien está en un ejército en preparación no sale por su cuenta.

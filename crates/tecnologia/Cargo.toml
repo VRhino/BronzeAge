@@ -1,6 +1,6 @@
 [package]
 name = "tecnologia"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "Tecnología por Eras y Aedas (Doc 6, Mechanics/Tecnologia_Aedas): catálogo, contadores y logros del servidor, Eras, aparición por hito, adopción, Aedas itinerantes (revelar y vender), residentes y épicas, campamentos y alijos. Reglas puras en enteros, sin reloj propio ni generador aleatorio"
 

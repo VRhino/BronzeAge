@@ -12,7 +12,7 @@
 //! | la zona de una plaza crece (solo por obra) | su Facción (`agrandar_zona`) |
 //! | una plaza cambia de dueño, se funda o desaparece; se designa la capital | las Facciones de antes y de ahora (`situar_plaza`, `cambiar_plaza_de_faccion`, `DesignarCapital`) |
 //! | se adopta una tecnología (también por administración) | la Facción |
-//! | el paso de minuto de una capital, si una candidata pide `recursoEnCapital` y su hito ya se cumple | su Facción (`con_exterior`; solo mira `Reglas::piden_capital`, hoy una) |
+//! | el paso de minuto de una capital, si una candidata pide `recursoEnCapital`, `escuadrasVivas`, `heroesEnFaccion`, `columnasEnMarcha` o `nivelFaccion` y su hito ya se cumple | su Facción (`con_exterior`; solo mira `Reglas::piden_capital`) |
 //!
 //! Perder algo no se mira: aparecer es para siempre. La marca no se persiste: se vacía en cada cierre de versión, y una orden que no se acepta la descarta.
 //!
@@ -49,16 +49,24 @@ impl<'a> VistaDeFaccion<'a> {
     fn capital(&self) -> Option<&'a Asentamiento> {
         *self.capital.get_or_init(|| self.n.capital_de(self.faccion).and_then(|c| self.n.estado.asentamientos.get(&c)))
     }
+
+    /// ¿Tiene la plaza ese edificio activo con `nivelInterno ≥ nivel`? El Corral solo existe en las aldeas ganaderas (§14.0, 2026-11-11): cuenta una activa. La Cantera y las minas
+    /// solo se explotan con un pueblo extractor (Doc 4.2.2): cuenta uno activo de ese tipo (un extractor no tiene niveles).
+    fn tiene_activo(&self, a: &Asentamiento, tipo: Tipo, nivel: u8) -> bool {
+        let datos = &self.n.estado.reglas.economia.datos;
+        let corral = tipo == Tipo::Corral && a.economia.pueblos.iter().any(|p| p.activo() && p.tiene_corrales(datos));
+        let pueblo = tipo.es_de_pueblo() && a.economia.pueblos.iter().any(|p| p.tipo == tipo && p.activo());
+        a.economia.edificios.hay_activo_con_nivel(tipo, nivel) || corral || pueblo
+    }
+
+    fn ciudadanos(&self) -> &'a [u64] {
+        self.n.estado.politica.facciones.get(self.faccion).map_or(&[], |f| &f.ciudadanos)
+    }
 }
 
 impl VistaFaccion for VistaDeFaccion<'_> {
     fn edificio_activo(&self, tipo: Tipo, nivel: u8) -> bool {
-        // El Corral solo existe en las aldeas ganaderas (§14.0, 2026-11-11): cuenta una activa. La Cantera y las minas solo
-        // se explotan con un pueblo extractor (Doc 4.2.2): cuenta uno activo de ese tipo (un extractor no tiene niveles).
-        let datos = &self.n.estado.reglas.economia.datos;
-        let corral = |a: &Asentamiento| tipo == Tipo::Corral && a.economia.pueblos.iter().any(|p| p.activo() && p.tiene_corrales(datos));
-        let pueblo = |a: &Asentamiento| tipo.es_de_pueblo() && a.economia.pueblos.iter().any(|p| p.tipo == tipo && p.activo());
-        self.n.plazas_de(self.faccion).any(|a| a.economia.edificios.hay_activo_con_nivel(tipo, nivel) || corral(a) || pueblo(a))
+        self.n.plazas_de(self.faccion).any(|a| self.tiene_activo(a, tipo, nivel))
     }
 
     fn recurso_en_capital(&self, r: Recurso) -> bool {
@@ -77,6 +85,30 @@ impl VistaFaccion for VistaDeFaccion<'_> {
             let cerca = [mapa.piedra_en(a.posicion, a.radio), mapa.ganado_en(a.posicion, a.radio), mapa.minerales_en(a.posicion, a.radio)];
             cerca.iter().flatten().filter(|i| de_ese_recurso(i)).any(|&i| self.n.en_zona(a.id, mapa.nodos[i as usize].pos))
         })
+    }
+
+    fn escuadras_vivas(&self) -> u32 {
+        self.ciudadanos().iter().filter_map(|&h| self.n.heroe(h)).map(|h| h.heroe.escuadras.iter().filter(|s| s.con_soldados()).count() as u32).sum()
+    }
+
+    fn heroes(&self) -> u32 {
+        self.ciudadanos().len() as u32
+    }
+
+    fn plaza_en_nivel(&self, nivel: u8) -> bool {
+        self.n.plazas_de(self.faccion).any(|a| a.nivel_actual() >= u32::from(nivel))
+    }
+
+    fn nivel(&self) -> u32 {
+        self.n.nivel_de_faccion(self.faccion)
+    }
+
+    fn columnas_en_marcha(&self) -> u32 {
+        self.n.estado.ejercitos.values().filter(|e| e.columna.faccion == Some(self.faccion) && e.marchando() && self.n.columna_en_el_mapa(e)).count() as u32
+    }
+
+    fn edificio_en_plaza_de_nivel(&self, tipo: Tipo, nivel_interno: u8, nivel_plaza: u8) -> bool {
+        self.n.plazas_de(self.faccion).any(|a| a.nivel_actual() >= u32::from(nivel_plaza) && self.tiene_activo(a, tipo, nivel_interno))
     }
 }
 
@@ -104,8 +136,9 @@ impl Nucleo {
         self.aparicion_pendiente.extend(self.espacio.plazas_por_faccion.keys().copied());
     }
 
-    /// El paso de minuto de la capital de `faccion` (plan §5.1): solo si una candidata pide `recursoEnCapital` y ya cumple su hito entero se marca la Facción. O(candidatas que lo piden).
-    pub(super) fn mirar_recurso_en_capital(&mut self, faccion: u32) {
+    /// El paso de minuto de la capital de `faccion` (plan §5.1): solo si una candidata pide algo que mira este paso (`recursoEnCapital`; de las Eras IV y V, las escuadras vivas, los héroes,
+    /// las columnas en marcha y el nivel de la Facción: Tecnologia_Aedas §3.1) y ya cumple su hito entero se marca la Facción. O(candidatas que lo piden).
+    pub(super) fn mirar_paso_de_capital(&mut self, faccion: u32) {
         let (r, e) = (&self.estado.reglas.economia.tecnologia, &self.estado.tecnologia);
         // Lo barato primero (es el paso de minuto): sin el logro de ninguna de las que piden la capital no hay nada que mirar, ni siquiera la Facción.
         if r.piden_capital.iter().any(|t| e.logro_cumplido(t)) && !e.listas_por_hito(r, faccion, &VistaDeFaccion::de(self, faccion), r.piden_capital).is_empty() {
@@ -203,7 +236,8 @@ impl Nucleo {
 
     /// Las reveladas de la Facción, en el orden del catálogo, con su descubridora y, condición a condición de su hito, si ya la cumple (`TecnologiasFaccion.detalle_reveladas`).
     // Regla (decisión del autor, 2026-10-26, duda 5 de 6G): `recursoEnCapital` cambia con el paso de minuto de la capital, que no marca la Facción mientras el hito entero no se cumpla: esa
-    // condición puede ir atrasada hasta el siguiente cambio de la Facción (las demás, no: lo que miran marca la aparición, `apariciones`).
+    // condición puede ir atrasada hasta el siguiente cambio de la Facción, y lo mismo las que mira ese paso de las Eras IV y V (las escuadras vivas, los héroes, las columnas en marcha y el
+    // nivel de la Facción); las demás, no: lo que miran marca la aparición, `apariciones`.
     pub fn reveladas_con_detalle(&self, faccion: u32) -> Vec<(TecId, Option<u32>, Vec<bool>)> {
         let (r, e) = (&self.estado.reglas.economia.tecnologia, &self.estado.tecnologia);
         let propias = e.de(r, faccion);
@@ -269,6 +303,7 @@ impl Nucleo {
         self.tr.emitir(&self.estado, EventoNucleo { asentamientos: vec![capital], punto, valores, ..EventoNucleo::nuevo("tecnologia.adoptada", t, datos) });
         self.avance(t, Dueno::Faccion(faccion), "tecnologias", 1);
         self.tr.tocar(Clase::Asentamiento, capital);
+        self.tocar_armerias_de(faccion);
         // Una adopción puede dejar a la mitad de las vivas con ella (los campamentos) y cumplir una condición `tecnologia` de otro hito.
         self.tocar_todos_los_campamentos();
         self.mirar_aparicion(faccion);

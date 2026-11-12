@@ -285,8 +285,8 @@ fn el_ascenso_informa_todos_los_bloqueos_a_la_vez_y_la_insolvencia_es_solo_una_a
     assert!(piedra.llega == 0 && piedra.pide > 0, "{piedra:?}");
     // Sin cupo de Facción: con el cupo del nivel 2 ocupado.
     assert!(a.bloqueos_de_ascenso(&r, true).contains(&Bloqueo::SinCupoDeFaccion));
-    // El techo provisional detiene en el nivel 4, y allí no hay nivel siguiente del que advertir.
-    a.nivel = 4;
+    // En el nivel máximo (el 5, sin techo provisional desde Economia_Construccion §11.2) no hay nivel siguiente del que advertir.
+    a.nivel = 5;
     assert!(a.bloqueos_de_ascenso(&r, false).contains(&Bloqueo::NivelMaximo));
     assert!(a.insolvencia_de_ascenso(0, &r, &x).is_empty());
 }
@@ -317,6 +317,44 @@ fn una_plaza_que_no_cubre_el_mantenimiento_del_nivel_siguiente_sube_igual() {
     assert_eq!(a.ascenso.map(|x| x.nivel_objetivo), Some(2));
 }
 
+/// Una plaza de nivel 4 que cumple los requisitos del 5 (4.000 pesants, 3.200 artesanos y el Palacio 3) y tiene 5.000 de cada recurso.
+fn lista_para_el_nivel_5(r: &Reglas) -> Asentamiento {
+    let mut a = rico(r);
+    a.nivel = 4;
+    a.medidor.nivel_actual = 4;
+    (a.poblacion.pesants, a.poblacion.artesanos) = (4_000, 3_200);
+    let mut palacio = Edificio::nuevo(500, Tipo::Palacio, Estado::Activo);
+    palacio.nivel_interno = 3;
+    a.edificios.push(palacio);
+    a
+}
+
+#[test]
+fn del_nivel_4_se_sube_al_5_pagando_tambien_mil_de_vino_cerveza_y_los_dos_aceites() {
+    // Economia_Construccion §11.2 (autor, 2026-11-11): sin techo provisional, la obra del nivel 5 cuesta además 1.000 de cada bien.
+    let r = Reglas::cargar();
+    let bienes = [Recurso::Vino, Recurso::Cerveza, Recurso::Aceite, Recurso::AceiteSesamo];
+    let mut a = lista_para_el_nivel_5(&r);
+    assert_eq!(a.bloqueos_de_ascenso(&r, false), vec![]);
+    let mut ev = vec![];
+    assert_eq!(a.solicitar_ascenso(0, &r, false, &mut ev), Ok(()));
+    assert_eq!(a.ascenso.map(|x| x.nivel_objetivo), Some(5));
+    assert_eq!(bienes.map(|b| a.almacen.cantidad(b)), [4_000_000; 4], "cobra los 1.000 de cada bien");
+}
+
+#[test]
+fn sin_alguno_de_los_cuatro_bienes_no_se_sube_al_nivel_5() {
+    let r = Reglas::cargar();
+    for bien in [Recurso::Vino, Recurso::Cerveza, Recurso::Aceite, Recurso::AceiteSesamo] {
+        let mut a = lista_para_el_nivel_5(&r);
+        a.almacen.quitar(bien, 4_001_000);
+        assert_eq!(a.bloqueos_de_ascenso(&r, false), vec![Bloqueo::RecursosInsuficientes], "con 999 de {bien:?}");
+        assert_eq!(a.solicitar_ascenso(0, &r, false, &mut vec![]), Err(vec![Bloqueo::RecursosInsuficientes]));
+        assert!(a.ascenso.is_none());
+        assert_eq!((a.almacen.cantidad(Recurso::Madera), a.almacen.cantidad(bien)), (5_000_000, 999_000), "no cobra nada");
+    }
+}
+
 #[test]
 fn pausar_la_auto_construccion_y_las_recetas_es_idempotente() {
     let r = Reglas::cargar();
@@ -342,6 +380,14 @@ fn pausar_el_consumo_vale_para_los_bienes_de_consumo_nunca_el_trigo_y_guarda_su_
     assert_eq!(a.consumo_pausado, orden, "en el orden de BIENES_DE_CONSUMO");
     assert_eq!(a.pausar_consumo(&r, Recurso::Aceite, false), Ok(true));
     assert_eq!(a.consumo_pausado, vec![Recurso::Carne]);
+}
+
+#[test]
+fn el_aceite_de_sesamo_se_pausa_como_los_demas_bienes_de_consumo() {
+    let r = Reglas::cargar();
+    let mut a = Asentamiento::fundar(&r, 0, &[], 3);
+    assert_eq!(a.pausar_consumo(&r, Recurso::AceiteSesamo, true), Ok(true));
+    assert_eq!(a.consumo_pausado, vec![Recurso::AceiteSesamo]);
 }
 
 #[test]

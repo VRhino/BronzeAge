@@ -18,17 +18,17 @@ se **recluta** en una plaza (la cadena de condiciones y el coste), cómo se cons
   - El poder de una escuadra en un combate, las bajas y la experiencia que deja → [`Combate.md`](Combate.md) §3–§4. Aquí solo se repite la fórmula de nivel.
   - Reclutar y pedir prestada tropa en un campamento de mercenarios, y crear el héroe **dentro** de uno → [`Comercio_Caravanas.md`](Comercio_Caravanas.md) §9 y [`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md) §11.
   - Dónde está el héroe (conectarse, entrar y salir de una plaza, `ubicacion`) y sacar la tropa a campaña con `movilizarEjercito`, que **exige** el Liderazgo definido aquí → `Movimiento_Ejercitos.md`.
-  - El ciclo de la batalla de Unity, que aplica XP y botín al héroe (§4.3 resume lo que le hace).
+  - El ciclo de la batalla de Unity, que aplica la XP del motor y el botín al héroe (§4.3 resume lo que le hace).
   - El mantenimiento de la población que reclutar consume → [`Economia_Construccion.md`](Economia_Construccion.md) §9; las tecnologías que habilitan cada tropa → [`Tecnologia_Aedas.md`](Tecnologia_Aedas.md).
 
-> **Implementado en Rust (2026-10-19, fase 4A-1: reglas puras).** Es el crate `crates/militar`, que no depende del núcleo (lo integra la fase 4B-1, más abajo): `catalogo` (§12: las 27 tropas, con los Mineros, y la clase de población que sale del escalón), `escuadra` (§2.3 y §10.2: nivel, experiencia, poder y la **moral como ritmo**), `liderazgo` (§5), `heroe` (§2.1-§4, §6, §8 y §9: progresión inicial, repartir puntos, loadouts, orden de escuadras y herido), `guarnicion` (§7: cupo, asignar, retirar, soltar), `reclutamiento` (§11) y `mercenarios` (reclutar en un campamento y la tropa prestada, [`Campamentos_Mercenarios.md`](Campamentos_Mercenarios.md)). Las cifras son las de los bloques de este documento **sin correcciones en el código** (los bloques se reescribieron el 2026-10-19; la huella de las reglas de una foto cambia). Decisiones de la implementación:
+> **Implementado en Rust (2026-10-19, fase 4A-1: reglas puras).** Es el crate `crates/militar`, que no depende del núcleo (lo integra la fase 4B-1, más abajo): `catalogo` (§12: las 27 tropas de entonces, con los Mineros; 37 desde el 2026-11-12, y la clase de población que sale del escalón), `escuadra` (§2.3 y §10.2: nivel, experiencia, poder y la **moral como ritmo**), `liderazgo` (§5), `heroe` (§2.1-§4, §6, §8 y §9: progresión inicial, repartir puntos, loadouts, orden de escuadras y herido), `guarnicion` (§7: cupo, asignar, retirar, soltar), `reclutamiento` (§11) y `mercenarios` (reclutar en un campamento y la tropa prestada, [`Campamentos_Mercenarios.md`](Campamentos_Mercenarios.md)). Las cifras son las de los bloques de este documento **sin correcciones en el código** (los bloques se reescribieron el 2026-10-19; la huella de las reglas de una foto cambia). Decisiones de la implementación:
 > - Los ids son números (`HeroeId`, `EscuadraId`…) y la tropa es un `enum` con los ids de los datos (`"lanceros_mimbre"`); añadir una tropa (Eras IV-V) es añadir una variante y su fila del bloque.
 > - **La plaza entra por un resumen**, no por el `Asentamiento` entero: el pool de reclutamiento por clase (de `asentamiento::produccion::disponibles_para_reclutar`), el factor de «Leva Forzosa», el trigo que come la población y los soldados del campamento. `reclutar` valida en el orden de §11.2 y **no cambia nada si rechaza** (ni gasta el id de la escuadra).
 > - La **residencia** es mínima (una plaza o un campamento, `Residencia`); la ciudadanía, los cargos, las casas compradas y el cooldown son del sistema político (*reglas puras en Rust desde 5A, 2026-10-24:* `politica::residencia` —cooldown, `puede_mudarse`, y Q8: para la nobleza cuentan todos los residentes— y `politica::cargos` —Q4: solo se designa a quien reside—; el núcleo las usa desde 5B). El veto, la Facción y la tecnología adoptada llegan como datos del llamador.
 >   *Implementado en Rust (2026-10-24, 5B):* la ciudadanía es de la Facción (`Estado::politica`; `HeroeNucleo::faccion` es su copia) y la residencia se cambia con `cambiarResidencia`, `residirEnCampamento` y `dejarResidencia`, con el cooldown de `CIUDADANIA.cooldownCambioResidenciaDias` (`HeroeNucleo::residencia_cambiada_en`); al mudarse se suelta la guarnición como siempre (`mudar_de_residencia`), y quien deja su casa estando dentro sale al mapa por su puerta con lo suyo. Los fundadores pasan a residir en la plaza que fundan.
 > - La escuadra guarda la **plaza donde se reclutó** (`plaza_origen`) para atribuirle los avisos de deserción: en TypeScript salía del id de texto.
 > - El **cupo de guarnición** recibe el nivel del mejor recinto completo (siempre 0 hasta el 2026-10-22; desde la segunda tanda de Murallas es el real, [`Murallas.md`](Murallas.md) §9.2) y el extra de «Levas de guarnición» como números.
-> - DUDA: el **XP** de una escuadra se guarda en milésimas de punto (el 0,5 de una derrota no cabe en un entero); el nivel de un **héroe** no sube (CQ-001).
+> - El **XP** de una escuadra y el de un **héroe** se guardan acumulados en milésimas de punto (el 0,5 de una derrota no cabe en un entero), con el nivel al lado. El héroe sube de nivel desde el 2026-11-12 (§4.3).
 
 > **Implementado en Rust (2026-10-20, fase 4B-1: héroes y tropa en el núcleo).** `crates/nucleo` integra `crates/militar`. Las columnas (salir al mundo, unir, separar, formar, convocar, desarmar) son la fase 4B-2 (nota de más abajo), la persecución es la 4C y el combate, la 4D.
 > - **Estado** (`estado_militar.rs`, `codec_militar.rs`; foto **`BAN9`** en la 4B-1, hoy `BAN11`): `Estado.militar` guarda cada héroe (`militar::Heroe` con **todas** sus escuadras, loadouts y víveres, más su `cuenta`, su `faccion`, su almacén personal y su cupo diario de compra en el mercado de mercenarios), los reclutas de los campamentos que alguien ha tocado (valor e instante: el que falta está lleno) y las tecnologías que la administración da a cada Facción. Los ids de héroe, escuadra y loadout salen del contador común de la partida (crear un héroe gasta dos: el suyo y el de su loadout «Default»). Un índice plaza → residentes (derivado, se reconstruye al recuperar) hace que el paso de minuto de una plaza sin residentes cueste una consulta. La huella de las reglas incluye los bloques de `militar` (este documento, Movimiento_Ejercitos, Combate, Presencia_Y_Convocatoria, Campamentos_Mercenarios y Tecnologia_Aedas); los de `combate` entrarán con la fase 4D.
@@ -47,7 +47,7 @@ se **recluta** en una plaza (la cadena de condiciones y el coste), cómo se cons
 > | 49 | `CrearHeroe { cuenta, campamento, controlador }` | `heroe.ya_existe`, `heroe.campamento_desconocido`; `no_autorizado` si la cuenta es ajena o pide `bot` sin ser administración |
 > | 50 | `ReclutarTropa { asentamiento, heroe, tropa }` | `reclutamiento.{no_puedes, sin_tecnologia, reservada, ya_la_tienes_fuera, solo_reponer, al_tope, sin_poblacion, sin_edificio, sin_recursos, sin_reserva_de_trigo}`, `heroe.no_esta_en_la_plaza` |
 > | 51-53 | `ReclutarEnCampamento`, `PedirPrestamo`, `ReponerPrestamo` | véase Campamentos_Mercenarios |
-> | 54-55 | `GuardarLoadout { heroe, loadout, nombre, escuadras, perks, activo }`, `BorrarLoadout` | `loadout.{sin_nombre, desconocido, perk_no_desbloqueado}`, `escuadra.{repetida, ajena}`, `liderazgo.superado` |
+> | 54-55 | `GuardarLoadout { heroe, loadout, nombre, escuadras, activo }`, `BorrarLoadout` | `loadout.{sin_nombre, desconocido}`, `escuadra.{repetida, ajena}`, `liderazgo.superado` |
 > | 56 | `RepartirPuntos { heroe, fuerza, destreza, armadura, vitalidad }` | `heroe.{puntos_negativos, ningun_punto, puntos_insuficientes, tope_de_atributo}` |
 > | 57 | `OrdenarEscuadras { heroe, escuadras }` | `escuadra.{repetida, ajena}`; sin cambios si el orden ya es ese |
 > | 221 | `ElegirFormacion { heroe, escuadra, formacion }` (2026-11-11, §10.4) | `escuadra.ajena`, `formacion.{desconocida, sin_tecnologia}`; sin cambios si ya es esa |
@@ -83,25 +83,27 @@ Uno por jugador y partida. Es el **dueño** de todo lo que antes se atribuía al
 |---|---|
 | `id`, `jugadorId` | `heroe-{n}` (siguiente id de la partida) y la identidad de la cuenta (`acceso/`). La acción de un jugador sin héroe aún usa su `jugadorId` como actor (solo `crearHeroe`). |
 | `controlador` | `'humano'` por defecto; `'bot'` solo lo pone el servidor (no admite el esquema HTTP). Ya no decide si una batalla lleva Unity (con servidores toda batalla va a Unity, también bot contra bot, desde la cuarta ronda de Entrar con todo en Rust): solo si el héroe lleva token (los bots no se conectan). |
-| `displayName`, `classDefinitionId`, `genero`, `avatar` | Identidad y aspecto. El motor no los interpreta: la clase y el catálogo de cabezas, pelo, barba y cejas son de Conquest. |
-| `liderazgoBase` | Puntos de Liderazgo (§5). Nace en `LIDERAZGO.base`; **nada lo modifica hoy**. |
+| `displayName`, `classDefinitionId`, `genero`, `avatar` | Identidad y aspecto. Desde el 2026-11-12 la clase no se guarda: es la `clase` del arma puesta ([`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §3.2) y la proyección la lee de ahí. El género, el avatar y el catálogo de cabezas, pelo, barba y cejas son de Conquest y el motor no los interpreta. |
+| `liderazgoBase` | Puntos de Liderazgo (§5). Nace en `LIDERAZGO.base` (14) y cada nivel hasta `PROGRESION_HEROE.nivelDeTope` le suma `LIDERAZGO.porNivel` (3), sin pasar de `LIDERAZGO.tope` (100). Es su propio campo para sumarle modificadores más adelante; hoy no hay ninguno (ni tecnología ni equipo). |
 | `ubicacion` | `asentamiento` · `columna` · `mercenarios` · `desconectado`. Ver [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md). |
 | `escuadrones` | **Todas** sus escuadras, estén donde estén; `contenedor` dice dónde (§2.3). |
-| `nivel`, `experienciaHaciaSiguienteNivel` | Nivel y XP hacia el siguiente (no acumulada). |
-| `puntosDeAtributoSinGastar`, `puntosDePerkSinGastar`, `atributosBase`, `perksDesbloqueados` | Progresión traída de Conquest (§4). |
+| `nivel`, `experiencia` | Nivel y XP **acumulada**, en milésimas (§4.3). Lo que le falta para el siguiente nivel se calcula al proyectar (`experienciaHaciaSiguienteNivel` del contrato). |
+| `puntosDeAtributoSinGastar`, `puntosRepartidos` | Los puntos que da el nivel y los que ya repartió (§4; hasta el 2026-11-12, `atributosBase`). Sus atributos son los `atributosBase` de su clase más los repartidos (D16). Los perks se abren solos con el nivel y los define Conquest: el motor no los guarda (2026-11-12). |
 | `loadouts` | Selecciones de escuadras guardadas (§6). |
-| `inventario`, `equipamiento`, `monedas` | Objetos y las monedas del héroe, **aparte** del oro-recurso de las plazas. |
+| `inventario`, `almacenObjetos`, `equipamiento`, `monedas` | La mochila (`OBJETOS.casillasMochila`, 72 casillas), el almacén de objetos de su residencia (`OBJETOS.casillasAlmacen`, 144; D22), el equipo puesto y las monedas del héroe, **aparte** del oro-recurso de las plazas. Las reglas son del crate `objetos` ([`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §3.1 y §3.2). |
 
 > **Implementado en Rust (2026-11-08, tanda 69):** las tres monedas del héroe (`bronce`/`plata`/`oro`) son ahora **un solo saldo**, `Heroe.monedas` (`crates/militar/src/heroe.rs`; el campo `monedas_heroe` del contrato queda reservado y `Heroe.monedas` es el 43 de `entities.proto`). Nace con `HEROE.monedasIniciales` (1.500). Se suma por destruir un campamento de bandidos ([`Combate.md`](Combate.md) §7.2), por combatir contra héroes de otra Facción ([`Combate.md`](Combate.md) §4.2) y por el botín de una batalla de Unity; se gasta en contratar mercenarios y prorrogar su contrato ([`Mercenarios_Por_Contrato.md`](Mercenarios_Por_Contrato.md) §5.1): **100 monedas valen 1 de oro** (`MERCENARIOS_CONTRATO.monedasPorOro`). El oro de las plazas y las monedas del héroe no se convierten entre sí fuera de ese precio. La proyección propia del héroe lleva `monedas`.
 | `heridoHasta?` | Instante hasta el que está herido (§9). |
 | `desconectaEn?`, `fuera?` | Desconexión (Doc 1.10.6); `fuera` ausente = conectado. |
 | `viveres?`, `almacenPersonal?`, `exploracionPersonal?`, … | Ver sus documentos. |
 
-`AtributosHeroe = { fuerza, destreza, armadura, vitalidad }`; `Equipamiento` = 6 huecos (`arma`, `casco`, `torso`, `guantes`, `pantalones`, `botas`), cada uno un `ItemInstancia` o `null`.
+`AtributosHeroe = { fuerza, destreza, armadura, vitalidad }`; `Equipamiento` = 7 huecos (`arma`, `casco`, `torso`, `guantes`, `pantalones`, `botas` y, desde el 2026-11-12, `montura`, el 7 del contrato), cada uno un `ItemInstancia` o `null`. El arma está siempre puesta.
+
+> **Implementado en Rust (2026-11-12).** `militar::Heroe` (`crates/militar/src/heroe.rs`) guarda `puntos_repartidos`, `equipo` (`objetos::Equipo`), `mochila` y `almacen_objetos` (`objetos::Inventario`); `Heroe::clase` y `Heroe::atributos` leen la clase y la suma. Los atributos son `objetos::datos::Atributos` (el tipo propio de `militar` desaparece) y el catálogo vive en `militar::Reglas.objetos`, así que entra en el hash de las reglas. `militar` depende de `objetos`. La foto sigue en `BAN63`: el héroe guarda `puntos_repartidos · equipo · mochila · almacén` donde guardaba los atributos, con las cifras de las piezas forjadas.
 
 ### 2.2 `Loadout`
 
-`{ id, displayName, squadIds[], perksSeleccionados[], activo }`. Una selección de escuadras (y perks) guardada para salir. El **activo** es el que defiende una plaza en persona (Combate §3.2). El Liderazgo que suma **no se guarda**: se deriva (§5).
+`{ id, displayName, squadIds[], activo }`. Una selección de escuadras guardada para salir (sin perks desde el 2026-11-12: los abre el nivel en Conquest). El **activo** es el que defiende una plaza en persona (Combate §3.2). El Liderazgo que suma **no se guarda**: se deriva (§5).
 
 ### 2.3 `Escuadron` (vive en su héroe)
 
@@ -112,7 +114,7 @@ Uno por jugador y partida. Es el **dueño** de todo lo que antes se atribuía al
 | `nivel`, `experiencia` | Nivel (1‥`nivelMaximoEscuadra`) y XP **acumulada** (§10.2). |
 | `moral` | 0–100. A 0 hay deserción continua (Movimiento §6.3). |
 | `formacion` | La familia de formación que el héroe ha elegido para la escuadra (§10.4); nace en la de reposo. *Rust, 2026-11-11.* |
-| `habilidadesDesbloqueadas`, `formacionesDesbloqueadas`, `formacionSeleccionada` | Campos del contrato **sin uso**: viajan vacíos. Las habilidades las saca Unity del nivel de la escuadra (§10.2) y la formación va en `formacion` (§10.4). |
+| `habilidadesDesbloqueadas`, `formacionesDesbloqueadas`, `formacionSeleccionada` | Campos del contrato **sin uso**: viajan vacíos. Las habilidades las saca Unity del nivel de la escuadra (§10.2): se abren en los niveles de `MILITAR.nivelesHabilidadEscuadra` (4, 7 y 10, desde el 2026-11-12), que el motor solo publica y la formación va en `formacion` (§10.4). |
 | `contenedor` | `campamento` (en la plaza donde reside su héroe, o en ninguna si es huérfano) · `ejercito {ejercitoId}` · `escolta {caravanaId}` · `fuera` (con su héroe desconectado) · `plaza {asentamientoId}` (en la guarnición de una plaza de su Facción donde su héroe no reside, §7; Rust, 2026-11-04). |
 | `enGuarnicion` | En la guarnición de la plaza donde reside su héroe (§7). Solo con `contenedor: campamento`. |
 | `reservaBatalla?` | Candado `{battleId}` mientras está reservada para una batalla de Unity. |
@@ -137,34 +139,49 @@ Lo primero que hace un jugador. Validaciones, en este orden (cada una rechaza co
 2. Ya existe un héroe con `jugadorId === actor` o `id === actor` → `heroe.ya_existe` (uno por jugador y partida).
 3. El `campamentoId` no existe → `heroe.campamento_desconocido`.
 
-Efecto: `heroe-{ids.siguiente()}`, `controlador = params.controlador ?? 'humano'`, `liderazgoBase = LIDERAZGO.base`, `ubicacion = mercenarios {campamento}`, `escuadrones = []` y la progresión inicial (§4.1); el campamento añade al héroe a `residentesIds` y suma 1 a `eligieronComoInicial`. Evento `heroe.creado`. **No tiene columna en el mapa**: sale cuando quiera, como de su casa.
-`classDefinitionId` y `avatar` no se validan contra ningún catálogo (el esquema solo exige cadenas); `genero` ∈ `masculino | femenino`. Autorización: es el **único** comando de un actor sin héroe.
+4. Desde el 2026-11-12, `classDefinitionId` no es un id de `CLASES_HEROE` → `heroe.clase_desconocida` (no gasta id).
+
+Efecto: `heroe-{ids.siguiente()}`, `controlador = params.controlador ?? 'humano'`, `liderazgoBase = LIDERAZGO.base`, `ubicacion = mercenarios {campamento}`, `escuadrones = []` y la progresión inicial (§4.1), con el equipo inicial de la clase; el campamento añade al héroe a `residentesIds` y suma 1 a `eligieronComoInicial`. Evento `heroe.creado`. **No tiene columna en el mapa**: sale cuando quiera, como de su casa.
+`avatar` no se valida contra ningún catálogo (el esquema solo exige cadenas); `genero` ∈ `masculino | femenino`. En Rust el comando `CrearHeroe` (49, o 180 con nombre) lleva la clase al final. El héroe que crea `CrearEjercito` (andamiaje) lleva la primera clase del catálogo por id (`arco_lanza`). Autorización: es el **único** comando de un actor sin héroe.
 
 ## 4. Progresión del héroe
 
 ### 4.1 Con qué nace (`progresionInicial`)
 
 ```
-nivel = 1 ; experienciaHaciaSiguienteNivel = 0 ; puntosDeAtributoSinGastar = 0 ; puntosDePerkSinGastar = 0
-atributosBase = { fuerza: 0, destreza: 0, armadura: 0, vitalidad: 0 } ; perksDesbloqueados = []
-loadouts = [ { id: "{heroeId}-loadout-default", displayName: "Default", squadIds: [], perksSeleccionados: [], activo: true } ]
-inventario = [] ; equipamiento = todos los huecos a null
+nivel = 1 ; experiencia = 0 ; puntosDeAtributoSinGastar = 0 ; liderazgoBase = LIDERAZGO.base
+loadouts = [ { id: "{heroeId}-loadout-default", displayName: "Default", squadIds: [], activo: true } ]
+puntosRepartidos = { fuerza: 0, destreza: 0, armadura: 0, vitalidad: 0 }
+inventario = [] ; almacenObjetos = []
+equipamiento = el equipo inicial de la clase: su arma de tier I, las cuatro piezas de tier I de su armaduraInicial (sin casco) y montura_tiro
 monedas = HEROE.monedasIniciales
 ```
 
-Como en Conquest (`HeroDataService.CreateNewHero`), pero **sin equipo inicial** hasta que exista el catálogo de objetos.
+Como en Conquest (`HeroDataService.CreateNewHero`). Hasta el 2026-11-12 nacía sin equipo y con `atributosBase` a 0; ahora sus atributos son los `atributosBase` de su clase (`CLASES_HEROE`).
 
 ### 4.2 Repartir puntos (`repartirPuntos`)
 
 `repartirAtributos(heroe, reparto)`: cada punto suma 1 a su atributo. Rechaza (`heroe.invalido`): alguna cantidad que no sea un entero ≥ 0; un reparto de **total 0**; un total mayor que `puntosDeAtributoSinGastar`; o dejar un atributo por encima de `HEROE.topeAtributo`
-(la comprobación es atributo a atributo y **tras** sumar, sin deshacer nada: el comando entero se aborta). Los perks esperan al catálogo de Conquest: no hay comando para gastarlos.
+(desde el 2026-11-12 el tope se mira sobre la suma de la base de la clase y los puntos repartidos, D16; la comprobación es atributo a atributo y **tras** sumar, sin deshacer nada: el comando entero se aborta). Los perks no se gastan: se abren solos con el nivel (`PROGRESION_HEROE.perksEnNivel`) y los define Conquest.
 
 ### 4.3 Qué le suma el servidor
 
-- **Nivel:** el servidor **no lo sube nunca** (no hay curva hasta que Conquest la publique, CQ-001; decidido 2026-09-15). Por tanto `puntosDeAtributoSinGastar` y `puntosDePerkSinGastar` nacen en 0 y **ningún camino los aumenta**: `repartirPuntos` solo puede gastar lo que traiga un snapshot cargado a mano.
-- **XP:** una batalla de Unity la suma tal cual (`experienciaHaciaSiguienteNivel += xpGanada` del héroe) y, por cada escuadra, `conExperiencia(e, xpGanada)` y `cantidad = supervivientesAlCierre`.
-- **Botín de Unity:** las monedas se suman a `monedas` del héroe. Los objetos se validan (que quepan en `BATALLA.casillasInventario` y que cada instancia sea nueva, [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §8.5) pero **se pierden**: el héroe aún no tiene inventario (**deuda**, CQ-004; anotada en la fila «Militar y combate (4A-1)» de `Docs/Mecanicas a desarrollar.md`).
-- **Equipar:** no existe el comando; el equipamiento solo cambia por la vía de Conquest.
+- **XP y nivel (2026-11-12, entrada 73):** la experiencia se acumula en milésimas y el nivel se guarda al lado, como en la escuadra. Subir del nivel `n` al `n + 1` pide `PROGRESION_HEROE.experienciaBase + experienciaPorNivel × (n − 1)` (100, 120, 140… 660 para pasar del 29 al 30) y desde el `nivelDeTope` (30) cada nivel pide lo mismo que el último (680). La acumulada para llegar al 30 es 11.020.
+
+  ```
+  experienciaParaNivel(n) = Σ_{k=1..min(n,30)−1} (100 + 20 × (k − 1))  +  max(0, n − 30) × 680
+  conExperienciaHeroe(h, ganada):
+      h.experiencia += ganada
+      mientras h.experiencia ≥ experienciaParaNivel(h.nivel + 1):
+          h.nivel++
+          si h.nivel ≤ nivelDeTope:  h.puntosDeAtributoSinGastar += 1 ; h.liderazgoBase = min(LIDERAZGO.tope, h.liderazgoBase + LIDERAZGO.porNivel)
+  ```
+
+  Desde el 31 el nivel sube pero no da nada. Al subir emite `heroe.nivel_subio { heroe, nivel }` (el nivel nuevo, una vez aunque cruce varios). `habilidadesEnNivel` y `perksEnNivel` solo se publican: las aplica Conquest.
+- **De dónde sale la XP:** solo del combate, por un único punto de entrada del núcleo ([`Combate.md`](Combate.md) §4.4): con números, lo mismo que sus escuadras (1 si su bando gana, 0,5 si pierde), una vez por combate; en una batalla de Unity, 4 o 2 según gane su bando si participó (`MILITAR.experienciaUnityPor…`, el motor **no lee** la experiencia que manda Unity), y `cantidad = supervivientesAlCierre` en cada escuadra.
+> **Implementado en Rust (2026-11-12, entrada 73).** `militar::Heroe` guarda `experiencia` acumulada (milésimas) y `nivel`; `Heroe::con_experiencia` sube los niveles que cruce con sus puntos y su Liderazgo, y `Heroe::falta_para_subir` es lo que proyecta `experiencia_hacia_siguiente_nivel` (ahora «lo que le falta», en milésimas). Los datos son el bloque `PROGRESION_HEROE` (§12) y `LIDERAZGO.porNivel`/`tope`. El núcleo da la experiencia por `Nucleo::experiencia_de_heroe` y `Nucleo::experiencia_de_escuadra` (`crates/nucleo/src/nucleo/progresion.rs`), que usan el combate con números y la batalla de Unity. Salen `puntos_de_perk`, `perks_desbloqueados` y los perks del loadout (sus campos del contrato quedan `reserved`, y el rechazo `loadout.perk_no_desbloqueado` desaparece). La foto sigue en `BAN63`.
+- **Botín de Unity:** lo pone el motor, no Unity (2026-11-12, D6 y D7): a cada héroe que participó, las monedas de `MONEDAS` como en el combate con números ([`Combate.md`](Combate.md) §4.2) y la tabla `unity` de `BOTIN_OBJETOS` ([`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §3.7), con lo de `soloSiGana` solo si gana su bando. El resultado de Unity ya no trae botín ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §8.5).
+- **Equipar:** desde el 2026-11-12, por orden (§4.5).
 
 ### 4.4 Eventos del héroe
 
@@ -173,10 +190,61 @@ Sin plaza (globales del héroe):
 | Evento | Comando | Payload |
 |---|---|---|
 | `heroe.puntos_repartidos` | `repartirPuntos` | `{ heroeId, atributos }` |
+| `heroe.nivel_subio` | (el combate, §4.3) | `{ heroe, nivel }` (el nivel nuevo) |
+| `heroe.equipo_cambiado` | `equiparObjeto` / `desequiparObjeto` (§4.5) | `{ heroe }` (el equipo nuevo va en la proyección `HEROE`) |
+| `heroe.objeto_comprado` | `comprarObjeto` (§4.6) | `{ heroe, plaza, precio, objeto }` (`objeto`, el id del catálogo, es un texto) |
+| `heroe.objeto_vendido` | `venderObjeto` (§4.6) | `{ heroe, plaza, cantidad, cobro, objeto }` |
+| `heroe.objeto_forjado` | `forjarObjeto` (§4.6) | `{ heroe, plaza, pieza (el N de obj-N), calidad (en %), impuesto (monedas), objeto }` |
+| `heroe.objeto_usado` | `usarObjeto` (§4.6) | `{ heroe, objeto }`, con `escuadra` si es una medalla de tropa y `montura` y `destino` (`mochila` \| `almacen` \| `perdido`, textos) si es el cofre |
+| `heroe.botin` | (el botín: Unity, bandidos, diaria, alijo, mercenario, misión) | `{ heroe, origen, mochila, almacen, perdido }`, listas de `[objeto, cantidad]` ([`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §3.7) |
 | `heroe.almacen_personal` | `guardarEnAlmacenPersonal` / `sacarDelAlmacenPersonal` | `{ heroeId, recurso, cantidad (lo movido), sentido: guarda \| saca }` |
 | `heroe.viveres` | `pasarAViveres` | `{ heroeId, cantidad (lo movido) }` |
 
 > **Implementado en Rust (2026-10-24, 5G-a).** `guardarEnAlmacenPersonal` (138) y `sacarDelAlmacenPersonal` (139) existen: dentro de su residencia (con el carro que trajo) o, como Líder, con su columna a su puerta, el héroe mueve unidades enteras entre el carro y el almacén personal (hasta `ALMACEN_PERSONAL.capacidad` en total, o hasta lo que cabe en el carro). El hecho lleva `{ heroe, recurso, cantidad, sentido }` (`sentido` es un texto: `guarda` o `saca`). La proyección del héroe propio (`HEROE` y `ADMIN`) lleva `capacidad_almacen_personal` (milésimas). Reglas, rechazos y pruebas en [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §9. `DarAlmacenPersonal` (44) sigue como administración para montar escenarios.
+
+### 4.5 Equipo, mochila y almacén de objetos (Rust, 2026-11-12)
+
+Cuatro órdenes del héroe de la cuenta (`orders.proto` 192 a 195; comandos 222 a 225). Las reglas de cada pieza son del crate `objetos` ([`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §3.1 y §3.2) y, si rechazan, no cambia nada. El núcleo comprueba antes dónde está el héroe (`crates/nucleo/src/nucleo/equipo.rs`):
+
+| Orden | Comando | Dónde | Qué hace |
+|---|---|---|---|
+| `equipar_objeto { casilla }` | `EquiparObjeto` (222) | D2 | Equipa la pieza de esa casilla de la mochila; lo que sustituye (y las armaduras que la clase nueva no admite) va a la mochila. |
+| `desequipar_objeto { hueco }` | `DesequiparObjeto` (223) | D2 | Quita la pieza de ese hueco a la mochila. El arma no se quita. |
+| `guardar_objeto { casilla, cantidad }` | `GuardarObjeto` (224) | D22 | Pasa `cantidad` de esa casilla de la mochila al almacén de objetos. |
+| `sacar_objeto { casilla, cantidad }` | `SacarObjeto` (225) | D22 | Pasa `cantidad` de esa casilla del almacén de objetos a la mochila. |
+
+- **D2 (equipar y quitar):** el héroe tiene que estar en una plaza, un pueblo o un campamento; en una columna, en una avanzada o desconectado → `equipo.fuera_de_lugar`. Con alguna escuadra suya reservada para una batalla → `equipo.en_batalla`.
+- **D22 (guardar y sacar):** el almacén de objetos está en su residencia y solo se usa estando dentro de ella (la plaza donde reside, o el campamento si reside en uno). Sin residencia → `heroe.sin_residencia`; fuera de ella → `almacen_objetos.fuera_de_tu_residencia`. La administración no se salta esta regla.
+- **Rechazos de las reglas:** `objeto.desconocido`, `equipo.no_equipable` (un material o un consumible), `equipo.incompatible` (la clase del arma no admite ese peso), `equipo.arma_fija`, `equipo.hueco_vacio`, `mochila.llena`, `almacen_objetos.lleno`, `inventario.casilla_vacia`, `inventario.poca_cantidad` e `inventario.cantidad_invalida`. El `hueco` desconocido es `orden.forma_invalida` en la sesión.
+- **Hechos:** equipar y quitar emiten `heroe.equipo_cambiado { heroe }`; guardar y sacar no emiten nada (cambian solo lo que proyecta `HEROE`).
+- **Proyección:** `HEROE` lleva la clase, la mochila (`inventario`), el almacén (`almacen_objetos`, el 44 de `Heroe`), el equipo (`equipamiento`) y los atributos sumados; cada pieza con su `tipo` y su `precio` de la ficha y, si es forjada, su `item_instance_id` (`obj-N`) y sus cifras en `estadisticas`. La ficha pública de otro héroe lleva la clase y el equipo, y nada de la mochila, el almacén ni los atributos.
+
+### 4.6 La Armería y los consumibles (Rust, 2026-11-12)
+
+Cuatro órdenes más del héroe de la cuenta (`orders.proto` 196 a 199; comandos 226 a 229) y una de la plaza (`configurar_forja`, 200; comando 230), en `crates/nucleo/src/nucleo/armeria.rs`. Las reglas son las del crate `objetos` ([`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §3.3 a §3.5), que no cambian nada si rechazan; el núcleo comprueba dónde está el héroe, pone las monedas, los materiales y el efecto, y emite el hecho.
+
+| Orden | Comando | Dónde | Qué hace |
+|---|---|---|---|
+| `comprar_objeto { objeto }` | `ComprarObjeto` (226) | D1: dentro de una plaza con la Armería activa | Compra la pieza (id de `OBJETOS`) al 100 % con sus monedas; llega a la mochila. El metal lo abre la tecnología de la Facción **de la plaza**. |
+| `vender_objeto { casilla, cantidad }` | `VenderObjeto` (227) | D1, igual | Vende `cantidad` de esa casilla de la mochila a `ventaPct` de la ficha (D18); cobra sus monedas. |
+| `forjar_objeto { objeto }` | `ForjarObjeto` (228) | Dentro de cualquier plaza con la Armería activa, con su forja abierta a su grupo (2026-11-12, abajo) | Gasta un plano de su tier y sus crisoles de la mochila, los materiales de la receta (abajo) y el impuesto en monedas, que va al fondo de la plaza; tira la calidad (90 a 110 %) con el generador del estado. Los tiers III a V piden su Era del mundo. La pieza nace con id propio, `obj-N`, del contador de ids del estado (`siguiente_id`, que ya va en la foto), que solo se gasta si la forja se acepta. Todo o nada. |
+| `usar_objeto { casilla, escuadron_id? }` | `UsarObjeto` (229) | D2, como equipar (§4.5) | Gasta uno del consumible de esa casilla y aplica su efecto (abajo). |
+| `configurar_forja { asentamiento_id, grupo, abierta, recargo_pct }` | `ConfigurarForja` (230) | El Tesorero o el Gobernador de la plaza, residente y dentro | Abre o cierra la forja de la plaza a un grupo de fuera (`aliados`, `neutrales` o `enemigos`) y le fija el recargo, uno de `OBJETOS.forja.recargosPct` (`forja.recargo_invalido`); sin cambio, `sin_cambios`. Hecho `asentamiento.forja_configurada`. |
+
+- **Medalla de tropa:** sobre `escuadron_id`, una escuadra suya (`escuadra.ajena` si falta o no es suya), no prestada (`escuadra.prestada`) y por debajo de `nivelMaximoEscuadra` (`escuadra.nivel_maximo`); se mira antes de gastarla. La experiencia entra como la del combate (`Nucleo::sumar_experiencia_de_escuadra`: sube los niveles que cruce y cuenta `escuadras.veteranas`) pero **sin** el bonus de Ejército permanente, que solo pone el combate. Lo que sobra al llegar al máximo no da nada.
+- **Medalla del héroe:** su porcentaje de lo que pide su nivel para el siguiente, `experienciaParaNivel(nivel + 1) − experienciaParaNivel(nivel)` (desde el 30, de 680), por `Nucleo::experiencia_de_heroe` (puede emitir `heroe.nivel_subio`). `escuadron_id` no se mira.
+- **Cofre de monturas:** una montura de tier III, IV o V por sus probabilidades, con el generador del estado; llega como lo que llega sin pedirlo (D17 y D22): a la mochila (si el cofre era el último de su pila, su casilla sirve), si no cabe al almacén de objetos y si tampoco, se pierde. El hecho dice dónde fue.
+- **La forja en cualquier plaza** (diseño del autor del 2026-11-12, entrada 77; antes, D1 solo dejaba forjar en la plaza donde se reside, con los materiales del almacén personal):
+  - **Quién:** el grupo de la puerta (`politica::puerta::grupo_de_puerta`, con la Facción del héroe y la de la plaza). La misma Facción forja siempre y paga la base; los aliados (alianza o vasallaje en cualquier sentido), los neutrales (sin relación o sin Facción) y los enemigos (en guerra), si la plaza tiene su forja abierta a su grupo (`Asentamiento::forja`), con su recargo; cerrada, `forja.cerrada`. De partida, cerrada a los tres con +100 % (`Forja::de_partida`, al fundar). Para estar dentro hace falta además que la puerta lo deje entrar (`fijar_puerta`; de partida, cerrada a neutrales y enemigos). Un mercenario contratado es ciudadano con marca de la Facción que lo contrata ([`Mercenarios_Por_Contrato.md`](Mercenarios_Por_Contrato.md) §2), así que en las plazas de esa Facción forja como la misma Facción: siempre y a la base.
+  - **La Era:** la del mundo (`Nucleo::orden_era`), que es la misma para todas las Facciones, tiene que llegar a la del tier de la pieza (`OBJETOS.forja.eraPorTier`; `forja.era_cerrada`). La tecnología del metal sigue siendo la de la Facción de la plaza.
+  - **Los materiales:** en la plaza donde reside, primero de su almacén personal y lo que falte del carro (el de la columna que conserva o el que trajo sin columna); en cualquier otra, del carro de la columna con la que entró (`Nucleo::carro_dentro`). Sin carro allí, solo cuenta el almacén personal de su residencia (`forja.sin_materiales`).
+  - **El impuesto:** `objetos::forja::impuesto` con el recargo de su grupo (la misma Facción, 0) sobre la base del tier; sin monedas para pagarlo, `heroe.sin_monedas`. Se le quita al aceptar y entra en `forja.fondo` de la plaza.
+  - **El orden:** la Armería, el grupo, la receta (objeto, receta, metal, Era, plano, crisoles, mochila), los materiales y las monedas. Un rechazo no cambia nada: ni monedas, ni fondo, ni mochila, ni materiales, ni el id, ni el generador.
+  - **La conquista** devuelve la apertura y los recargos a los de partida; el fondo se queda con la plaza ([`Combate.md`](Combate.md), conquista).
+  - **Lo que se ve:** `Asentamiento.armeria_activa` en toda ficha, también la avistada desde fuera; dentro (el interior, la plaza ajena vista desde dentro en `VISTA`) y en `ADMIN`, `Asentamiento.forja` (la apertura y el recargo de los tres grupos y el fondo) y `metales_armeria`, los metales de `OBJETOS.metales` cuya tecnología tiene adoptada la Facción de la plaza (`inicio` incluido; vacío sin Armería activa). Con eso, `OBJETOS.forja` de `/v1/datos` y la Era del mundo, el cliente calcula qué puede forjar y cuánto pagaría. Una adopción de tecnología toca las plazas de la Facción con Armería activa para que sus metales lleguen también a quien está dentro sin ser de ella ([`Proyecciones_Y_Autorizacion.md`](Proyecciones_Y_Autorizacion.md)).
+- **Rechazos:** `armeria.sin_armeria` (sin estar dentro de una plaza con la Armería activa), `forja.cerrada`, `forja.era_cerrada`, `forja.recargo_invalido` (`configurar_forja`), `armeria.no_se_vende`, `armeria.sin_tecnologia`, `heroe.sin_monedas`, `forja.sin_receta`, `forja.sin_plano`, `forja.sin_crisoles`, `forja.sin_materiales`, `objeto.no_se_usa`, los de la mochila (`objeto.desconocido`, `mochila.llena`, `inventario.casilla_vacia`, `inventario.poca_cantidad`, `inventario.cantidad_invalida`), los de D2 (`equipo.fuera_de_lugar`, `equipo.en_batalla`) y los de la medalla de tropa.
+- **Hechos:** `heroe.objeto_comprado`, `heroe.objeto_vendido`, `heroe.objeto_forjado` (con la calidad y el impuesto) y `heroe.objeto_usado` (§4.4); `asentamiento.forja_configurada { plaza, grupo (texto: aliados \| neutrales \| enemigos), abierta (0 o 1), recargo (%) }`, atribuido a la plaza como los demás cambios de su configuración (`almacen.cierre_a_ciudadanos`, `logistica.reabastecer_aliados`).
+- Una prueba del núcleo comprueba que todos los materiales de las recetas de `OBJETOS` son recursos del motor (`nucleo::armeria::pruebas::los_materiales_de_las_recetas_son_recursos_del_motor`).
 
 ## 5. Liderazgo
 
@@ -192,7 +260,7 @@ disponible(héroe, esc)   = max(0, liderazgoDe(héroe) − comprometido(esc))
 ```
 
 El coste sigue al **escalón**, no al poder (`poderBase`): así el poder por punto de Liderazgo difiere entre tropas y elegir composición es una decisión. En un ejército de varios héroes, cada uno se valida contra **el suyo**; no hay tope agregado.
-Con los números de hoy (7/14/22/32/45): 1 élite + 1 pesada + 1 veterana = 99; 2 pesadas + 1 veterana + 1 de línea = 100.
+Con los números de hoy (7/14/22/32/45): un héroe de nivel 1 (14) lleva 2 de leva o 1 de línea; con el tope (100, nivel 30): 1 élite + 1 pesada + 1 veterana = 99; 2 pesadas + 1 veterana + 1 de línea = 100.
 
 ## 6. Loadouts (`guardarLoadout`, `borrarLoadout`)
 
@@ -203,7 +271,6 @@ Con los números de hoy (7/14/22/32/45): 1 élite + 1 pesada + 1 veterana = 99; 
 3. Sin escuadras repetidas.
 4. Todas las `squadIds` son **suyas** (están en `heroe.escuadrones`).
 5. `puedeLlevar`: las escuadras caben en su Liderazgo.
-6. Todo perk de `perksSeleccionados` está en `perksDesbloqueados`.
 
 Resultado: `id = anterior.id` o `loadout-{ids.siguiente()}`; `activo = datos.activo ?? anterior.activo ?? false`. **Marcarlo activo desactiva los demás.** Uno nuevo se **añade al final**. El comando devuelve `{ loadoutId, liderazgoTotal }` (el Liderazgo que suma, derivado). No emite eventos.
 
@@ -273,7 +340,7 @@ conExperiencia(e, ganada) = e                                  si e.prestada
 poderEscuadron(e) = tropa.poderBase × e.cantidad × (1 + e.nivel × MILITAR.bonusPoderPorNivelEscuadra)
 ```
 
-Con la curva de hoy, 275 de XP llevan al nivel 10. El nivel da **+3 % por nivel al mismo escuadrón** en el combate con números (el nivel 1 ya cuenta; +1 % hasta el 2026-11-11, decisión del autor para acercarse a Unity) sin cambiar nunca su `tropaId`: «mejorar» una tropa es reclutar **otra** distinta y mejor cuando el edificio suba de nivel interno.
+Con la curva de hoy (la de 1.375: 10, 25, 50, 100, 150, 200, 250, 275 y 315, 2026-11-12), 1.375 de XP llevan al nivel 10. El nivel da **+3 % por nivel al mismo escuadrón** en el combate con números (el nivel 1 ya cuenta; +1 % hasta el 2026-11-11, decisión del autor para acercarse a Unity) sin cambiar nunca su `tropaId`: «mejorar» una tropa es reclutar **otra** distinta y mejor cuando el edificio suba de nivel interno.
 
 ### 10.3 Chatarra de los caídos (`chatarra.ts`)
 
@@ -329,7 +396,7 @@ Todas lanzan `tropas.reclutamiento_invalido`:
 6. Permiso `solo_reponer` y no hay `existente` (`reclutamiento.solo_reponer`).
 6b. (Rust, 2026-11-10) Permiso `ciudadano` y no hay `existente`: el héroe tiene que haber entrado **con una columna** (`heroe.sin_columna`) y la escuadra nueva tiene que **caber en su Liderazgo**: el Liderazgo comprometido de las escuadras que ya lleva fuera del campamento y de la guarnición de visita de esta plaza, más el coste de la tropa, no pasa de su `liderazgoBase` (`liderazgo.superado`), como al recogerlas.
 7. `cantidad = tropa.unidadesPorDefecto − (existente?.cantidad ?? 0)`; si `cantidad ≤ 0`, ya está al tope.
-8. **Población**: `poblacionDisponibleParaReclutar(plaza, origen) ≥ cantidad`, con `origen = poblacionDeTropa(tropa)`: escalón 1–2 → `pesants`, 3 → `artesanos`, 4–5 → `nobleza`.
+8. **Población**: `poblacionDisponibleParaReclutar(plaza, origen) ≥ cantidad`, con `origen = poblacionDeTropa(tropa)`: escalón 1–2 → `pesants`, 3 → `artesanos`, 4–5 → `nobleza`, salvo que la tropa traiga su propio `poblacion` en `TROPAS_RECLUTABLES` (desde el 2026-11-12 solo los `falangitas`, de escalón 4 y de `artesanos`; `militar::catalogo`).
    Disponible = nobleza → toda la nobleza; artesanos → `max(0, artesanos − trabajadoresRequeridosTransformacion)`; pesants → el excedente de mano de obra (`manoObraInfo.excedente`). No se recluta lo que ya hace falta para producir.
 9. **Edificio**: el **primer** edificio `activo` de `tropa.edificio` tiene `nivelInterno ≥ tropa.nivelRequerido` (nivel interno 1 si no lo trae).
 10. **Coste** (§11.3): el almacén lo cubre.
@@ -359,12 +426,14 @@ El oro y el equipo salen del **almacén de la plaza** (no del almacén personal 
 
 ## 12. Parámetros
 
-Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19): las velocidades de las tropas son las calibradas (×1,5 sobre las del motor TypeScript: montada 42 (84 desde el 2026-10-27, decisión del autor: la caballería va al doble), ligera 30, media 24, pesada 18) y el catálogo incluye a los **Mineros** (27 tropas). Los números de balance de combate y de ración de `MILITAR` están en [`Combate.md`](Combate.md) §12.
+Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19): las velocidades de las tropas son las calibradas (×1,5 sobre las del motor TypeScript: montada 42 (84 desde el 2026-10-27, decisión del autor: la caballería va al doble), ligera 30, media 24, pesada 18) y el catálogo incluye a los **Mineros** (27 tropas; 37 desde el 2026-11-12, con las diez de las Eras IV y V). Los números de balance de combate y de ración de `MILITAR` están en [`Combate.md`](Combate.md) §12.
 
 <!-- parametros:LIDERAZGO -->
 ```json
 {
-  "base": 100,
+  "base": 14,
+  "porNivel": 3,
+  "tope": 100,
   "costePorEscalon": {
     "1": 7,
     "2": 14,
@@ -382,6 +451,26 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
   "monedasIniciales": 1500,
   "topeAtributo": 100,
   "heridoMinutos": 2
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:PROGRESION_HEROE -->
+```json
+{
+  "experienciaBase": 100,
+  "experienciaPorNivel": 20,
+  "nivelDeTope": 30,
+  "habilidadesEnNivel": [
+    1,
+    3,
+    5,
+    10
+  ],
+  "perksEnNivel": [
+    7,
+    12
+  ]
 }
 ```
 <!-- /parametros -->
@@ -458,7 +547,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 2,
     "velocidad": 30,
     "escalon": 2,
-    "unidadesPorDefecto": 25
+    "tier": 2,
+    "unidadesPorDefecto": 25,
+    "combate": {
+      "vida": 800,
+      "dano": { "perforante": 64, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "alivio": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "bloqueo": 0,
+      "cadencia": 1.5,
+      "alcance": 2
+    }
   },
   {
     "id": "lenadores",
@@ -472,7 +572,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 1,
     "velocidad": 30,
     "escalon": 1,
-    "unidadesPorDefecto": 30
+    "tier": 1,
+    "unidadesPorDefecto": 30,
+    "combate": {
+      "vida": 450,
+      "dano": { "perforante": 0, "cortante": 41, "contundente": 18 },
+      "penetracion": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "alivio": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "bloqueo": 0,
+      "cadencia": 1.6,
+      "alcance": 2
+    }
   },
   {
     "id": "granjeros",
@@ -484,7 +595,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 1,
     "velocidad": 30,
     "escalon": 1,
-    "unidadesPorDefecto": 30
+    "tier": 1,
+    "unidadesPorDefecto": 30,
+    "combate": {
+      "vida": 450,
+      "dano": { "perforante": 29, "cortante": 0, "contundente": 29 },
+      "penetracion": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "alivio": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "bloqueo": 0,
+      "cadencia": 1.6,
+      "alcance": 2
+    }
   },
   {
     "id": "mineros",
@@ -498,7 +620,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 1,
     "velocidad": 30,
     "escalon": 1,
-    "unidadesPorDefecto": 30
+    "tier": 1,
+    "unidadesPorDefecto": 30,
+    "combate": {
+      "vida": 450,
+      "dano": { "perforante": 35, "cortante": 0, "contundente": 23 },
+      "penetracion": { "perforante": 2, "cortante": 0, "contundente": 2 },
+      "defensa": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "alivio": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "bloqueo": 0,
+      "cadencia": 1.6,
+      "alcance": 2
+    }
   },
   {
     "id": "lanceros_mimbre",
@@ -512,7 +645,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 3,
     "velocidad": 30,
     "escalon": 2,
-    "unidadesPorDefecto": 25
+    "tier": 3,
+    "unidadesPorDefecto": 25,
+    "combate": {
+      "vida": 1200,
+      "dano": { "perforante": 85, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "alivio": { "perforante": 5, "cortante": 0, "contundente": 0 },
+      "bloqueo": 100,
+      "cadencia": 1.5,
+      "alcance": 2
+    }
   },
   {
     "id": "espadachines_cobre",
@@ -527,7 +671,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 4,
     "velocidad": 24,
     "escalon": 2,
-    "unidadesPorDefecto": 20
+    "tier": 3,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 1000,
+      "dano": { "perforante": 28, "cortante": 65, "contundente": 0 },
+      "penetracion": { "perforante": 5, "cortante": 5, "contundente": 0 },
+      "defensa": { "perforante": 5, "cortante": 5, "contundente": 5 },
+      "alivio": { "perforante": 5, "cortante": 5, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 1.4,
+      "alcance": 2
+    }
   },
   {
     "id": "hacheros_ligeros",
@@ -542,7 +697,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 7,
     "velocidad": 24,
     "escalon": 3,
-    "unidadesPorDefecto": 18
+    "tier": 3,
+    "unidadesPorDefecto": 18,
+    "combate": {
+      "vida": 850,
+      "dano": { "perforante": 0, "cortante": 101, "contundente": 43 },
+      "penetracion": { "perforante": 0, "cortante": 10, "contundente": 10 },
+      "defensa": { "perforante": 5, "cortante": 5, "contundente": 5 },
+      "alivio": { "perforante": 5, "cortante": 5, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 1.8,
+      "alcance": 2
+    }
   },
   {
     "id": "espadachines_bronce",
@@ -557,7 +723,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 9,
     "velocidad": 24,
     "escalon": 3,
-    "unidadesPorDefecto": 18
+    "tier": 3,
+    "unidadesPorDefecto": 18,
+    "combate": {
+      "vida": 1000,
+      "dano": { "perforante": 28, "cortante": 65, "contundente": 0 },
+      "penetracion": { "perforante": 10, "cortante": 10, "contundente": 0 },
+      "defensa": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "alivio": { "perforante": 15, "cortante": 10, "contundente": 10 },
+      "bloqueo": 250,
+      "cadencia": 1.4,
+      "alcance": 2
+    }
   },
   {
     "id": "lanceros_pesados",
@@ -572,7 +749,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 14,
     "velocidad": 18,
     "escalon": 4,
-    "unidadesPorDefecto": 15
+    "tier": 4,
+    "unidadesPorDefecto": 15,
+    "combate": {
+      "vida": 1800,
+      "dano": { "perforante": 98, "cortante": 17, "contundente": 0 },
+      "penetracion": { "perforante": 10, "cortante": 10, "contundente": 0 },
+      "defensa": { "perforante": 15, "cortante": 15, "contundente": 15 },
+      "alivio": { "perforante": 30, "cortante": 20, "contundente": 10 },
+      "bloqueo": 400,
+      "cadencia": 1.5,
+      "alcance": 2
+    }
   },
   {
     "id": "hacheros_armados",
@@ -587,7 +775,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 12,
     "velocidad": 18,
     "escalon": 3,
-    "unidadesPorDefecto": 15
+    "tier": 3,
+    "unidadesPorDefecto": 15,
+    "combate": {
+      "vida": 850,
+      "dano": { "perforante": 0, "cortante": 94, "contundente": 50 },
+      "penetracion": { "perforante": 0, "cortante": 10, "contundente": 10 },
+      "defensa": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "alivio": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 1.8,
+      "alcance": 2
+    }
   },
   {
     "id": "honderos",
@@ -601,7 +800,20 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 5,
     "velocidad": 30,
     "escalon": 2,
-    "unidadesPorDefecto": 20
+    "tier": 2,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 470,
+      "dano": { "perforante": 0, "cortante": 0, "contundente": 126 },
+      "penetracion": { "perforante": 0, "cortante": 0, "contundente": 2 },
+      "defensa": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "alivio": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "bloqueo": 0,
+      "cadencia": 1.8,
+      "alcance": 30,
+      "precision": 30,
+      "municion": 30
+    }
   },
   {
     "id": "escaramuzadores_jabalina",
@@ -616,7 +828,20 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 8,
     "velocidad": 30,
     "escalon": 3,
-    "unidadesPorDefecto": 18
+    "tier": 3,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 800,
+      "dano": { "perforante": 208, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 5, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 5, "cortante": 5, "contundente": 5 },
+      "alivio": { "perforante": 5, "cortante": 5, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 2.5,
+      "alcance": 20,
+      "precision": 60,
+      "municion": 4
+    }
   },
   {
     "id": "arqueros",
@@ -631,7 +856,20 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 9,
     "velocidad": 24,
     "escalon": 3,
-    "unidadesPorDefecto": 18
+    "tier": 3,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 700,
+      "dano": { "perforante": 193, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 10, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "alivio": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 2,
+      "alcance": 40,
+      "precision": 50,
+      "municion": 24
+    }
   },
   {
     "id": "arqueros_compuesto",
@@ -646,7 +884,20 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 15,
     "velocidad": 18,
     "escalon": 5,
-    "unidadesPorDefecto": 12
+    "tier": 4,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 1050,
+      "dano": { "perforante": 261, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 10, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "alivio": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 2,
+      "alcance": 55,
+      "precision": 60,
+      "municion": 24
+    }
   },
   {
     "id": "exploradores_caballo",
@@ -661,7 +912,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 3,
     "velocidad": 84,
     "escalon": 2,
-    "unidadesPorDefecto": 20
+    "tier": 2,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 540,
+      "dano": { "perforante": 48, "cortante": 20, "contundente": 0 },
+      "penetracion": { "perforante": 5, "cortante": 5, "contundente": 0 },
+      "defensa": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "alivio": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "bloqueo": 0,
+      "cadencia": 1.6,
+      "alcance": 2
+    }
   },
   {
     "id": "carros_guerra",
@@ -677,7 +939,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 13,
     "velocidad": 30,
     "escalon": 4,
-    "unidadesPorDefecto": 15
+    "tier": 4,
+    "unidadesPorDefecto": 15,
+    "combate": {
+      "vida": 1650,
+      "dano": { "perforante": 132, "cortante": 0, "contundente": 56 },
+      "penetracion": { "perforante": 10, "cortante": 0, "contundente": 10 },
+      "defensa": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "alivio": { "perforante": 15, "cortante": 15, "contundente": 5 },
+      "bloqueo": 0,
+      "cadencia": 2.2,
+      "alcance": 2
+    }
   },
   {
     "id": "jinetes_asirios",
@@ -692,7 +965,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 5,
     "velocidad": 84,
     "escalon": 2,
-    "unidadesPorDefecto": 20
+    "tier": 3,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 900,
+      "dano": { "perforante": 94, "cortante": 23, "contundente": 0 },
+      "penetracion": { "perforante": 20, "cortante": 20, "contundente": 0 },
+      "defensa": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "alivio": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "bloqueo": 0,
+      "cadencia": 1.6,
+      "alcance": 2
+    }
   },
   {
     "id": "guerreros_filisteos",
@@ -707,7 +991,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 9,
     "velocidad": 24,
     "escalon": 3,
-    "unidadesPorDefecto": 18
+    "tier": 3,
+    "unidadesPorDefecto": 18,
+    "combate": {
+      "vida": 1000,
+      "dano": { "perforante": 28, "cortante": 65, "contundente": 0 },
+      "penetracion": { "perforante": 20, "cortante": 20, "contundente": 0 },
+      "defensa": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "alivio": { "perforante": 15, "cortante": 10, "contundente": 10 },
+      "bloqueo": 250,
+      "cadencia": 1.4,
+      "alcance": 2
+    }
   },
   {
     "id": "shardana",
@@ -722,7 +1017,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 15,
     "velocidad": 24,
     "escalon": 4,
-    "unidadesPorDefecto": 15
+    "tier": 4,
+    "unidadesPorDefecto": 15,
+    "combate": {
+      "vida": 1500,
+      "dano": { "perforante": 32, "cortante": 94, "contundente": 0 },
+      "penetracion": { "perforante": 15, "cortante": 15, "contundente": 0 },
+      "defensa": { "perforante": 5, "cortante": 5, "contundente": 5 },
+      "alivio": { "perforante": 10, "cortante": 5, "contundente": 10 },
+      "bloqueo": 250,
+      "cadencia": 1.4,
+      "alcance": 2
+    }
   },
   {
     "id": "hequetai",
@@ -737,7 +1043,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 17,
     "velocidad": 18,
     "escalon": 5,
-    "unidadesPorDefecto": 12
+    "tier": 5,
+    "unidadesPorDefecto": 18,
+    "combate": {
+      "vida": 2480,
+      "dano": { "perforante": 86, "cortante": 86, "contundente": 0 },
+      "penetracion": { "perforante": 15, "cortante": 15, "contundente": 0 },
+      "defensa": { "perforante": 15, "cortante": 15, "contundente": 15 },
+      "alivio": { "perforante": 25, "cortante": 20, "contundente": 10 },
+      "bloqueo": 250,
+      "cadencia": 1.5,
+      "alcance": 2
+    }
   },
   {
     "id": "honderos_rodios",
@@ -752,7 +1069,20 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 9,
     "velocidad": 30,
     "escalon": 3,
-    "unidadesPorDefecto": 18
+    "tier": 3,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 700,
+      "dano": { "perforante": 0, "cortante": 0, "contundente": 168 },
+      "penetracion": { "perforante": 0, "cortante": 0, "contundente": 20 },
+      "defensa": { "perforante": 5, "cortante": 5, "contundente": 5 },
+      "alivio": { "perforante": 5, "cortante": 5, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 1.8,
+      "alcance": 45,
+      "precision": 45,
+      "municion": 30
+    }
   },
   {
     "id": "peltastas",
@@ -766,7 +1096,20 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 9,
     "velocidad": 30,
     "escalon": 3,
-    "unidadesPorDefecto": 18
+    "tier": 4,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 1200,
+      "dano": { "perforante": 281, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 20, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "alivio": { "perforante": 5, "cortante": 0, "contundente": 0 },
+      "bloqueo": 80,
+      "cadencia": 2.5,
+      "alcance": 20,
+      "precision": 70,
+      "municion": 4
+    }
   },
   {
     "id": "jinetes_escitas",
@@ -782,7 +1125,20 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 8,
     "velocidad": 84,
     "escalon": 3,
-    "unidadesPorDefecto": 18
+    "tier": 3,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 700,
+      "dano": { "perforante": 193, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 10, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 5, "cortante": 5, "contundente": 5 },
+      "alivio": { "perforante": 5, "cortante": 5, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 2,
+      "alcance": 35,
+      "precision": 50,
+      "municion": 24
+    }
   },
   {
     "id": "hoplitas_ciudadanos",
@@ -797,7 +1153,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 10,
     "velocidad": 24,
     "escalon": 3,
-    "unidadesPorDefecto": 18
+    "tier": 4,
+    "unidadesPorDefecto": 18,
+    "combate": {
+      "vida": 1800,
+      "dano": { "perforante": 103, "cortante": 0, "contundente": 11 },
+      "penetracion": { "perforante": 20, "cortante": 0, "contundente": 20 },
+      "defensa": { "perforante": 15, "cortante": 15, "contundente": 15 },
+      "alivio": { "perforante": 30, "cortante": 20, "contundente": 10 },
+      "bloqueo": 400,
+      "cadencia": 1.5,
+      "alcance": 2
+    }
   },
   {
     "id": "caballeria_asiria",
@@ -813,7 +1180,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 10,
     "velocidad": 84,
     "escalon": 3,
-    "unidadesPorDefecto": 18
+    "tier": 4,
+    "unidadesPorDefecto": 18,
+    "combate": {
+      "vida": 1500,
+      "dano": { "perforante": 113, "cortante": 49, "contundente": 0 },
+      "penetracion": { "perforante": 20, "cortante": 20, "contundente": 0 },
+      "defensa": { "perforante": 15, "cortante": 15, "contundente": 15 },
+      "alivio": { "perforante": 20, "cortante": 20, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 1.8,
+      "alcance": 2
+    }
   },
   {
     "id": "arqueros_escitas",
@@ -828,7 +1206,20 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 17,
     "velocidad": 24,
     "escalon": 5,
-    "unidadesPorDefecto": 12
+    "tier": 5,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 1580,
+      "dano": { "perforante": 348, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 20, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 5, "cortante": 5, "contundente": 5 },
+      "alivio": { "perforante": 5, "cortante": 5, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 2,
+      "alcance": 55,
+      "precision": 70,
+      "municion": 24
+    }
   },
   {
     "id": "espartiatas",
@@ -843,11 +1234,306 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 17,
     "velocidad": 18,
     "escalon": 4,
-    "unidadesPorDefecto": 15
+    "tier": 5,
+    "unidadesPorDefecto": 16,
+    "combate": {
+      "vida": 2700,
+      "dano": { "perforante": 130, "cortante": 23, "contundente": 0 },
+      "penetracion": { "perforante": 25, "cortante": 25, "contundente": 0 },
+      "defensa": { "perforante": 20, "cortante": 20, "contundente": 20 },
+      "alivio": { "perforante": 35, "cortante": 25, "contundente": 12 },
+      "bloqueo": 400,
+      "cadencia": 1.5,
+      "alcance": 2
+    }
+  },
+  {
+    "id": "epilektoi",
+    "tecnologia": "infanteria_profesional",
+    "nombre": "Epílektoi",
+    "edificio": "barracon",
+    "nivelRequerido": 2,
+    "costoEquipo": {
+      "armaHierroCalidad": 1,
+      "armaduraBronce": 1
+    },
+    "poderBase": 10,
+    "velocidad": 24,
+    "escalon": 3,
+    "tier": 4,
+    "unidadesPorDefecto": 18,
+    "combate": {
+      "vida": 1800,
+      "dano": { "perforante": 98, "cortante": 17, "contundente": 0 },
+      "penetracion": { "perforante": 25, "cortante": 25, "contundente": 0 },
+      "defensa": { "perforante": 15, "cortante": 15, "contundente": 15 },
+      "alivio": { "perforante": 30, "cortante": 20, "contundente": 10 },
+      "bloqueo": 400,
+      "cadencia": 1.5,
+      "alcance": 2
+    }
+  },
+  {
+    "id": "inmortales",
+    "tecnologia": "infanteria_profesional",
+    "nombre": "Inmortales",
+    "edificio": "barracon",
+    "nivelRequerido": 3,
+    "costoEquipo": {
+      "armaHierroCalidad": 1,
+      "armaBronce": 1,
+      "armaduraIntermedia": 1
+    },
+    "poderBase": 15,
+    "velocidad": 24,
+    "escalon": 5,
+    "tier": 4,
+    "unidadesPorDefecto": 15,
+    "combate": {
+      "vida": 1420,
+      "dano": { "perforante": 158, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 25, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "alivio": { "perforante": 15, "cortante": 10, "contundente": 10 },
+      "bloqueo": 100,
+      "cadencia": 1.6,
+      "alcance": 40,
+      "precision": 55,
+      "municion": 16
+    }
+  },
+  {
+    "id": "peltastas_ificrates",
+    "tecnologia": "hostigadores_profesionales",
+    "nombre": "Peltastas de Ifícrates",
+    "edificio": "galeriaDeTiro",
+    "nivelRequerido": 3,
+    "costoEquipo": {
+      "armaHierroCalidad": 2,
+      "armaduraBasica": 1
+    },
+    "poderBase": 14,
+    "velocidad": 30,
+    "escalon": 4,
+    "tier": 4,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 1200,
+      "dano": { "perforante": 281, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 25, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 5, "cortante": 5, "contundente": 5 },
+      "alivio": { "perforante": 10, "cortante": 5, "contundente": 10 },
+      "bloqueo": 80,
+      "cadencia": 2.5,
+      "alcance": 25,
+      "precision": 70,
+      "municion": 4
+    }
+  },
+  {
+    "id": "caballeria_tesalia",
+    "tecnologia": "carga_caballeria",
+    "nombre": "Caballería tesalia",
+    "edificio": "caballerizas",
+    "nivelRequerido": 3,
+    "costoEquipo": {
+      "armaHierroCalidad": 1,
+      "armaduraIntermedia": 1
+    },
+    "caballos": 1,
+    "poderBase": 14,
+    "velocidad": 84,
+    "escalon": 4,
+    "tier": 4,
+    "unidadesPorDefecto": 15,
+    "combate": {
+      "vida": 1500,
+      "dano": { "perforante": 138, "cortante": 24, "contundente": 0 },
+      "penetracion": { "perforante": 25, "cortante": 25, "contundente": 0 },
+      "defensa": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "alivio": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 1.8,
+      "alcance": 2
+    }
+  },
+  {
+    "id": "caballeria_noble_persa",
+    "tecnologia": "carga_caballeria",
+    "nombre": "Caballería noble persa",
+    "edificio": "caballerizas",
+    "nivelRequerido": 3,
+    "costoEquipo": {
+      "armaHierro": 2,
+      "armaduraBronce": 1
+    },
+    "caballos": 1,
+    "poderBase": 17,
+    "velocidad": 84,
+    "escalon": 4,
+    "tier": 5,
+    "unidadesPorDefecto": 16,
+    "combate": {
+      "vida": 2250,
+      "dano": { "perforante": 216, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 20, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 15, "cortante": 15, "contundente": 15 },
+      "alivio": { "perforante": 20, "cortante": 20, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 1.8,
+      "alcance": 2
+    }
+  },
+  {
+    "id": "prodromos",
+    "tecnologia": "formacion_cuna",
+    "nombre": "Pródromos",
+    "edificio": "caballerizas",
+    "nivelRequerido": 2,
+    "costoEquipo": {
+      "armaHierro": 1
+    },
+    "caballos": 1,
+    "poderBase": 9,
+    "velocidad": 84,
+    "escalon": 3,
+    "tier": 3,
+    "unidadesPorDefecto": 18,
+    "combate": {
+      "vida": 900,
+      "dano": { "perforante": 106, "cortante": 12, "contundente": 0 },
+      "penetracion": { "perforante": 20, "cortante": 20, "contundente": 0 },
+      "defensa": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "alivio": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "bloqueo": 0,
+      "cadencia": 1.6,
+      "alcance": 2
+    }
+  },
+  {
+    "id": "falangitas",
+    "tecnologia": "falange_sarisa",
+    "nombre": "Falangitas",
+    "edificio": "barracon",
+    "nivelRequerido": 2,
+    "costoEquipo": {
+      "armaHierroCalidad": 1,
+      "armaduraIntermedia": 1
+    },
+    "poderBase": 14,
+    "velocidad": 18,
+    "escalon": 4,
+    "tier": 4,
+    "unidadesPorDefecto": 32,
+    "poblacion": "artesanos",
+    "combate": {
+      "vida": 1800,
+      "dano": { "perforante": 115, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 25, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "alivio": { "perforante": 15, "cortante": 10, "contundente": 10 },
+      "bloqueo": 80,
+      "cadencia": 1.5,
+      "alcance": 2
+    }
+  },
+  {
+    "id": "hipaspistas",
+    "tecnologia": "cuerpo_hipaspistas",
+    "nombre": "Hipaspistas",
+    "edificio": "barracon",
+    "nivelRequerido": 3,
+    "costoEquipo": {
+      "armaHierroCalidad": 1,
+      "armaduraBronceCalidad": 1
+    },
+    "poderBase": 17,
+    "velocidad": 24,
+    "escalon": 5,
+    "tier": 5,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 2480,
+      "dano": { "perforante": 103, "cortante": 68, "contundente": 0 },
+      "penetracion": { "perforante": 25, "cortante": 25, "contundente": 0 },
+      "defensa": { "perforante": 20, "cortante": 20, "contundente": 20 },
+      "alivio": { "perforante": 35, "cortante": 25, "contundente": 12 },
+      "bloqueo": 400,
+      "cadencia": 1.5,
+      "alcance": 2
+    }
+  },
+  {
+    "id": "companeros",
+    "tecnologia": "companeros_reales",
+    "nombre": "Compañeros",
+    "edificio": "caballerizas",
+    "nivelRequerido": 3,
+    "costoEquipo": {
+      "armaHierroCalidad": 1,
+      "armaduraBronceCalidad": 1
+    },
+    "caballos": 1,
+    "poderBase": 17,
+    "velocidad": 84,
+    "escalon": 5,
+    "tier": 5,
+    "unidadesPorDefecto": 16,
+    "combate": {
+      "vida": 2250,
+      "dano": { "perforante": 173, "cortante": 43, "contundente": 0 },
+      "penetracion": { "perforante": 25, "cortante": 25, "contundente": 0 },
+      "defensa": { "perforante": 20, "cortante": 20, "contundente": 20 },
+      "alivio": { "perforante": 25, "cortante": 25, "contundente": 12 },
+      "bloqueo": 0,
+      "cadencia": 1.8,
+      "alcance": 2
+    }
+  },
+  {
+    "id": "agrianos",
+    "tecnologia": "reforma_macedonica",
+    "nombre": "Agrianos",
+    "edificio": "galeriaDeTiro",
+    "nivelRequerido": 3,
+    "costoEquipo": {
+      "armaHierroCalidad": 2,
+      "armaduraBasica": 1
+    },
+    "poderBase": 17,
+    "velocidad": 30,
+    "escalon": 5,
+    "tier": 5,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 1800,
+      "dano": { "perforante": 375, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 25, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 5, "cortante": 5, "contundente": 5 },
+      "alivio": { "perforante": 5, "cortante": 5, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 2.5,
+      "alcance": 25,
+      "precision": 80,
+      "municion": 4
+    }
   }
 ]
 ```
 <!-- /parametros -->
+
+`TROPAS_RECLUTABLES` lleva de cada tropa, además de lo que usa el motor, su **tier** de combate y su bloque **`combate`** (2026-11-12, entrada 72). Son datos para Conquest y el cliente, que los leen de `GET /v1/datos`: el motor no los usa.
+- **`tier`**, del 1 (leva) al 5 (élite): la rareza de la escuadra en Conquest. Es otro número que el `escalon`, que sigue fijando el Liderazgo, el oro y la clase de población.
+- **`combate`**: `vida` por soldado; `dano`, `penetracion`, `defensa` y `alivio` (en %), cada uno con su terna `perforante`/`cortante`/`contundente`; `bloqueo` del escudo; `cadencia` (segundos entre golpes) y `alcance` (metros). Las tropas de distancia (`alcance` de más de 2) llevan además `precision` (1-100) y `municion`.
+- **`unidadesPorDefecto`** son los soldados que fijó el autor el 2026-11-11, propios de cada tropa y que ya no bajan con el escalón: las de distancia, 20 todas; las falangitas, 32; los hipaspistas, 20; los hequetai, 18; los espartiatas y las caballerías de tier V, 16.
+
+<!-- parametros:VERSION_CATALOGO_TROPAS -->
+```json
+{ "version": 2 }
+```
+<!-- /parametros -->
+
+`VERSION_CATALOGO_TROPAS`: la versión de `TROPAS_RECLUTABLES`, que el ticket de una batalla de Unity manda en `BattleRules.version_catalogo_tropas` ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §3.2) para que Conquest sepa qué cifras leer. Se sube a mano al cambiar cualquier tropa. La 2 es la de las cifras de combate (2026-11-12); el 1 fijo era el de antes.
 
 <!-- parametros:FORMACIONES -->
 ```json
@@ -874,7 +1560,7 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
 |---|---|
 | Un héroe por jugador y partida, dentro del campamento que elige y como residente; nace con nivel 1, sin puntos, 500 de bronce y el loadout «Default» vacío y activo | `session/__tests__/comandosHeroe.test.ts` |
 | Repartir puntos: +1 por punto, sin pasar de los que hay, sin negativos y sin pasar del tope | `comandosHeroe.test.ts` |
-| Loadouts: nuevo e inactivo; activar desactiva los demás; reescribir por id no crea otro; rechaza escuadras ajenas, pasarse de Liderazgo, perks que no tiene y ids que no existen | `comandosHeroe.test.ts` |
+| Loadouts: nuevo e inactivo; activar desactiva los demás; reescribir por id no crea otro; rechaza escuadras ajenas, pasarse de Liderazgo y ids que no existen | `comandosHeroe.test.ts` |
 | Guarnición: asigna dentro del cupo, rechaza pasarse, retirar la devuelve; sin Barracón ni Galería no hay cupo y quien no reside no tiene guarnición; mudarse la suelta | `comandosHeroe.test.ts`, `engine/__tests__/guarnicion.test.ts` |
 | Cupo: Caballerizas no dan nada en el nivel 1; suma edificios, recinto completo y «Levas de guarnición»; sin Barracón ni Galería no hay guarnición aunque haya muralla | `guarnicion.test.ts` |
 | Costes de Liderazgo por escalón (crecientes, independientes del poder, 0 para tropa desconocida); mezclas máximas; el límite es de salida; sin héroe usa el base; lo libre nunca es negativo | `engine/__tests__/liderazgo.test.ts` |
@@ -890,8 +1576,8 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
 
 ## 14. Casos límite y decisiones que parecen raras
 
-- **El nivel del héroe no sube y los puntos nunca llegan**: es una decisión expresa (espera la curva de Conquest, CQ-001), no un olvido. La XP del héroe sí se acumula.
-- **`liderazgoBase` es por héroe pero nada lo cambia**: «el techo con equipo» queda para cuando exista la artesanía de armaduras.
+- **El héroe sube de nivel desde el 2026-11-12** (antes no subía, CQ-001): un punto de atributo y 3 de Liderazgo por nivel hasta el 30; desde el 31 el nivel sigue subiendo sin dar nada.
+- **`liderazgoBase` es por héroe pero solo lo cambia el nivel**: dos héroes del mismo nivel tienen el mismo Liderazgo (sin tecnología ni equipo: la armadura no da Liderazgo, D3). Es un campo propio para poder sumarle modificadores más adelante.
 - **Reclutar paga del almacén de la plaza, no del héroe**: el oro-recurso y el equipo son de la plaza; las monedas del héroe son otra economía.
 - **Una escuadra mermada paga el Liderazgo completo** (el coste mira el tipo, no la cantidad): anotado como punto abierto en el diseño del movimiento. Es lo que impide sacar a campaña élite «en dosis pequeñas».
 - **«Una por tropa» es por héroe, no por plaza**: dos héroes de la misma plaza tienen cada uno la suya. La tropa prestada de un campamento no cuenta.
@@ -921,7 +1607,7 @@ Ninguna abierta.
 
 > **Implementado en Rust (2026-10-20, fase 4D).** La foto es `BAN12` (rechaza `BAN11`) y la huella de reglas incluye los bloques de `combate`. `DarEscuadra { heroe, tropa, cantidad }` (97, administración) da una escuadra a un héroe para montar ejércitos sin pasar por el reclutamiento. Los héroes heridos no atacan (`heroe.herido`); el héroe sano suma +15 al poder del bando (decisión Q2, aditivo). `DarSuministro` **se mantiene**: el botín real (`cargar_botin`) llena el carro de la columna vencedora, pero el suministro de la administración sigue siendo útil para montar escenarios y no se retira (fila de paridad).
 
-> **Implementado en Rust (2026-10-21, fase 4E).** El candado `reservaBatalla` ya lo pone y lo quita el ciclo de la batalla de Unity ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §4 y §9): al abrirse (y al unirse alguien) lo llevan las escuadras con dueño del ticket, incluidas las de la guarnición y la escolta (`Escuadra::reserva_batalla`), y se suelta al cerrarse la batalla, al salir su héroe o al vencer el plazo. Las rechaza `reponer`, `asignarGuarnicion` y `retirarGuarnicion` con `escuadra.en_batalla`. Una escuadra con bajas, experiencia o nueva cantidad por el resultado de Unity se actualiza por su id (`supervivientesAlCierre`), y la experiencia del héroe y sus monedas del botín también (el nivel no sube: CQ-001; los objetos no tienen dónde caer: CQ-004). La foto es `BAN13`.
+> **Implementado en Rust (2026-10-21, fase 4E).** El candado `reservaBatalla` ya lo pone y lo quita el ciclo de la batalla de Unity ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §4 y §9): al abrirse (y al unirse alguien) lo llevan las escuadras con dueño del ticket, incluidas las de la guarnición y la escolta (`Escuadra::reserva_batalla`), y se suelta al cerrarse la batalla, al salir su héroe o al vencer el plazo. Las rechaza `reponer`, `asignarGuarnicion` y `retirarGuarnicion` con `escuadra.en_batalla`. Una escuadra con bajas, experiencia o nueva cantidad por el resultado de Unity se actualiza por su id (`supervivientesAlCierre`), y la experiencia del héroe y sus monedas del botín también (desde el 2026-11-12 el botín, monedas y objetos, lo pone el motor: §4.3). Desde el 2026-11-12 la experiencia la pone el motor (4 o 2) y el héroe sube de nivel (§4.3). La foto es `BAN13`.
 
 ## Catálogo de eventos
 
@@ -930,8 +1616,9 @@ Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; cont
 <!-- eventos -->
 ```json
 [
-  "heroe.almacen_personal", "heroe.creado", "heroe.herido", "heroe.puntos_repartidos", "heroe.reubicado", "heroe.sale_del_mundo", "heroe.se_desconecta", "heroe.viveres",
-  "heroe.vuelve_al_mundo", "reclutamiento.cierre_a_ciudadanos", "tropas.desercion", "tropas.reclutadas"
+  "asentamiento.forja_configurada", "heroe.almacen_personal", "heroe.botin", "heroe.creado", "heroe.equipo_cambiado", "heroe.herido", "heroe.nivel_subio", "heroe.objeto_comprado", "heroe.objeto_forjado",
+  "heroe.objeto_usado", "heroe.objeto_vendido", "heroe.puntos_repartidos", "heroe.reubicado", "heroe.sale_del_mundo", "heroe.se_desconecta", "heroe.viveres", "heroe.vuelve_al_mundo",
+  "reclutamiento.cierre_a_ciudadanos", "tropas.desercion", "tropas.reclutadas"
 ]
 ```
 <!-- /eventos -->

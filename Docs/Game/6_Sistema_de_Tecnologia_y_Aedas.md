@@ -43,7 +43,7 @@ La season (12 meses) se divide en cinco Eras, de ~1300 a 323 a. C. (hasta Alejan
 | IV | `profesionalizacion_imperial` | Profesionalización | 18-26 | cosas de nivel 3; meseta en el 4 |
 | V | `hegemonia_macedonica` | Hegemonía macedónica | 26-52 | concentrada en 3 y 4; primeras cosas de nivel 5 |
 
-- **Las Eras IV y V están definidas a medias y pendientes de implementar** (2026-10-11): hoy el servidor solo tiene las tres primeras, y todo lo que este documento dice de las IV y V (tarifas, niveles, la Maravilla) es el diseño al que se va, no lo que corre.
+- **Las Eras IV y V están implementadas** (2026-11-12): sus tarifas, tecnologías, logros, hitos y épicas corren en el servidor con las reglas de `Docs/Mechanics/Tecnologia_Aedas.md`, que manda si este documento dice otra cosa. Queda solo la Maravilla, que sigue siendo diseño, no lo que corre.
 - **El servidor arranca en la Era I**, con dos tecnologías adoptadas por todas las Facciones: `leva_comunal` y
   `hostigamiento_tribal`.
 - Cada Era tiene sus logros del servidor (6.3). **La Era siguiente empieza cuando se cumplen TODOS los logros de la
@@ -75,7 +75,8 @@ sube cuando se funda una plaza y baja cuando una cae, y una vez cumplido queda f
 servidor: todas las Facciones suman para todas. Así un servidor con poca población no se queda con logros imposibles ni
 uno grande con logros regalados. Hoy van por plaza `escudos_ligeros` (20 × N campamentos de bandidos destruidos),
 `metalurgia_cobre` (1.000 × N de cobre extraído), `cria_caballar` (5 × N animales comprados) y `aleacion_bronce`, que pide
-dos cosas a la vez: 2.000 × N de cobre extraído y 1.000 × N de estaño extraído.
+dos cosas a la vez: 2.000 × N de cobre extraído y 1.000 × N de estaño extraído. Desde el 2026-11-12 van también por plaza nueve de las doce tecnologías de las Eras IV y V; las otras tres
+(`logistica_campana`, `falange_sarisa` y `cuerpo_hipaspistas`) piden una cifra fija (6.6).
 
 Las cifras X de los logros se ajustan para que cada logro se cumpla en una semana concreta de su Era: los de cada
 Era se reparten por su tramo en el orden de adopción, y el último cae una semana antes del plazo. Ese es el objetivo; hoy
@@ -160,13 +161,37 @@ extractores): hoy solo `canteria`, que se pensó para la piedra del nivel 3 (Doc
 | `falange_hoplita` | Espartiatas | X batallas libradas usando hoplitas | `ciudadania_militar` + Barracón 3 |
 | `pantalla_escaramuzadores` | peltastas, honderos rodios | X escaramuzadores con jabalina reclutados | Galería 2 + Armería 2 |
 | `arqueria_especializada` | arqueros escitas | X arqueros con arco compuesto reclutados | Galería 3 |
-| `forja_hierro_estandarizada` | Fundición 3, Arma de Hierro de Calidad (Armería 3) | X de hierro extraído (acero templado) | Fundición 2 + Mina de hierro activa |
+| `forja_hierro_estandarizada` | Fundición 3, Arma de Hierro de Calidad (Armería 3) | X de hierro extraído (los cálibes) | Fundición 2 + Mina de hierro activa |
 | `bronce_laminado` | Armadura de Bronce de Calidad (Armería 3) | X armaduras de bronce fabricadas (coraza musculada) | Armería 3 |
 | `caballeria_organizada` | jinetes escitas, caballería asiria | X jinetes asirios reclutados (Tiglat-Pileser III) | Caballerizas 2 |
 | `trabajos_asedio` | equipo de asedio de Carpintería 2 | X asedios contra plazas con muralla completa (Laquis) | Carpintería 2 |
 
 Las escalas, las defensas de campaña y el equipo de asedio de Carpintería 2 no tienen efecto en el combate con números (decidido el
 2026-10-19): la tecnología se adopta y su equipo, si llega, será cosa de Unity.
+
+**Era IV — Profesionalización** (desde el 2026-11-12; N = plazas vivas del mundo, 6.3)
+
+| Tecnología | Desbloquea | Logro del servidor | Hito de la Facción |
+|---|---|---|---|
+| `ejercito_permanente` | los escuadrones de los héroes de la Facción ganan un 10 % más de experiencia | 2 × N escuadrones que llegan al nivel 5 | Barracón 3 + 10 escuadrones propios con soldados a la vez |
+| `cuerpo_oficiales` | nada propio: es una de las piezas de la Reforma macedónica (no da Liderazgo: el Liderazgo no lo cambia ninguna tecnología) | 1 × N batallas con 3 héroes o más en un bando | 5 héroes en la Facción |
+| `logistica_campana` | los víveres de los ejércitos de la Facción ×1,5 (Doc 5.13) | el primer camino compartido del mundo (1.0b) | una plaza de nivel 4 + la Facción en nivel 5 + 3 columnas en marcha a la vez |
+| `infanteria_profesional` | epílektoi, Inmortales | 1 × N batallas ganadas por el bando que empezó con menos soldados | `ejercito_permanente` + Barracón 3 en una plaza de nivel 4 |
+| `hostigadores_profesionales` | peltastas de Ifícrates | 2 × N escuadrones de escalón 4 o 5 destruidos, de cualquier bando | `pantalla_escaramuzadores` + Galería 3 |
+| `carga_caballeria` | caballería tesalia, caballería noble persa | 1 × N batallas a campo abierto ganadas con caballería | `caballeria_organizada` + Caballerizas 3 |
+
+**Era V — Hegemonía macedónica** (desde el 2026-11-12)
+
+| Tecnología | Desbloquea | Logro del servidor | Hito de la Facción |
+|---|---|---|---|
+| `reforma_macedonica` | agrianos | 1 × N batallas con escuadrones de Barracón, Galería y Caballerizas a la vez en un bando | `forja_hierro_estandarizada`, `disciplina_formacion`, `infanteria_profesional`, `caballeria_organizada`, `logistica_campana` y `cuerpo_oficiales` adoptadas + Barracón 3, Armería 3, Caballerizas 3 y Palacio 3 |
+| `falange_sarisa` | falangitas | 3 batallas ganadas por una sola Facción contra héroes de 2 Facciones o más | `reforma_macedonica` + Barracón 2 en una plaza de nivel 4 |
+| `cuerpo_hipaspistas` | hipaspistas | 10 batallas en las que combate el Rey de alguna Facción | `falange_sarisa` + Barracón 3 + Palacio 3 |
+| `formacion_cuna` | pródromos | 2 × N ataques de una columna con caballería a otra columna o a una caravana | `reforma_macedonica` + Caballerizas 2 |
+| `companeros_reales` | Compañeros | 1 × N batallas a campo abierto ganadas con caballería de escalón 4 o 5 | `formacion_cuna` + Caballerizas 3 + Palacio 3 |
+| `acero_templado` | comprar y forjar las piezas de acero del héroe (las armas de tier V, Doc 5.16) | 20 × N armas de hierro de calidad fabricadas | Fundición 3 + Armería 3 |
+
+Los umbrales de las Eras IV y V son provisionales, como los demás, y se miden con bots en la fase 7. Las tecnologías de asedio de estas Eras (maestría de asedio, maestros de obras militares y la catapulta de torsión) esperan a que haya equipo de asedio, y el Batallón Sagrado se quitó (`Docs/Mecanicas a desarrollar.md`, entrada 20).
 
 ## 6.7 Aedas
 
@@ -193,7 +218,7 @@ atacan ni se les ataca, no combaten y no se capturan ni se retienen. Son de dos 
   que conocen, de las **Eras I-III**, con el **logro del servidor ya cumplido** y la Era ya abierta. Cuesta **2 × el oro
   de la tarifa de adopción de su Era** (6.5; 200 / 600 / 1.200), que sale del almacén de esa plaza. La Facción se salta el
   hito y la tecnología le **aparece**; la adopción se paga igual, por el Rey en la capital. Las Eras IV y V no se pueden
-  comprar a un Aeda: solo llegan por hito propio (y, cuando se definan, por la épica que se les asigne).
+  comprar a un Aeda: solo llegan por hito propio o por la épica que se les asigna (6.7).
 - **Cantan** los logros del servidor (6.3) y los descubrimientos (crónica, abajo): hechos públicos, sin decir qué
   tecnología abre cada logro.
 
@@ -223,8 +248,8 @@ logro del servidor—. El Rey, el Gobernador o el Sacerdote de la plaza, present
   un Aeda por tecnología y Facción a la vez. Pueden estar solo reveladas (6.4).
 - **No cuesta oro**: al cumplirla la tecnología **le aparece** a la Facción y se adopta como siempre, pagando la tarifa
   (6.5).
-- **Contenido**: cada tecnología con logro tiene su épica (`EPICAS`): **3 capítulos** en la Era I, **4** en la II y **5** en
-  la III, de cantidades placeholder. Cada capítulo pide un número de hechos de un tipo.
+- **Contenido**: cada tecnología con logro tiene su épica (`EPICAS`): **3 capítulos** en la Era I, **4** en la II, **5** en
+  la III, **6** en la IV y **7** en la V, de cantidades placeholder. Cada capítulo pide un número de hechos de un tipo.
 
 | Hecho inspirador | Cuenta cuando | De quién |
 |---|---|---|

@@ -129,7 +129,10 @@ mod pruebas {
     #[test]
     fn el_multiplicador_del_recinto_solo_cambia_el_poder_del_defensor_y_con_uno_es_el_de_antes() {
         let r = r();
-        let (a0, d0) = ([escuadra(1, 1, Tropa::ArquerosCompuesto)], [escuadra(2, 2, Tropa::MiliciaLanceros), escuadra(4, 2, Tropa::MiliciaLanceros)]);
+        // 12 arqueros con arco compuesto (los de una escuadra completa hasta la entrada 72): bastan sin muralla y no con una sola puerta.
+        let mut compuesto = escuadra(1, 1, Tropa::ArquerosCompuesto);
+        compuesto.cantidad = 12;
+        let (a0, d0) = ([compuesto], [escuadra(2, 2, Tropa::MiliciaLanceros), escuadra(4, 2, Tropa::MiliciaLanceros)]);
         let resolver = |mult: i64| {
             let (mut a, mut d) = (a0.clone(), d0.clone());
             let mut rng = Rng::nuevo(6);

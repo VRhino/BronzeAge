@@ -86,11 +86,11 @@ message OrdenAlternarReceta {
 }
 
 // El Gobernador o el Tesorero pausa (o reanuda) el consumo de un bien de consumo en la plaza (2026-11-10): pausado, la población no lo come (pierde su empuje al
-// crecimiento) y la guarnición no come la carne; se acumula en el almacén para venderlo. Vale para carne, pan, queso, vino, cerveza y aceite; el trigo nunca se pausa.
+// crecimiento) y la guarnición no come la carne; se acumula en el almacén para venderlo. Vale para carne, pan, queso, vino, cerveza, aceite (de oliva) y aceite de sésamo; el trigo nunca se pausa.
 // Rechazos: `consumo.no_se_pausa`. Sin cambios: `SIN_CAMBIOS`.
 message OrdenPausarConsumo {
   string asentamiento_id = 1;
-  string recurso = 2;  // id de catálogo: carne | pan | queso | vino | cerveza | aceite
+  string recurso = 2;  // id de catálogo: carne | pan | queso | vino | cerveza | aceite | aceiteSesamo
   bool pausado = 3;
 }
 
@@ -340,6 +340,7 @@ message OrdenCrearHeroe {
   // El nombre del héroe, recortado: de 1 a 24 caracteres sin caracteres de control (`heroe.nombre_invalido`). Vacío deja el héroe sin nombre y se muestra «Héroe N».
   string display_name = 1;
   string campamento_id = 2;
+  // Desde el 2026-11-12, obligatoria (D21): un id de `CLASES_HEROE`; vacía o desconocida, `heroe.clase_desconocida`. El héroe nace con el equipo inicial de su clase.
   string class_definition_id = 3;
   string genero = 4;  // masculino | femenino
   Avatar avatar = 5;
@@ -530,7 +531,7 @@ message OrdenGuardarLoadout {
   optional string loadout_id = 1;
   string display_name = 2;
   repeated string squad_ids = 3;
-  repeated int64 perks_seleccionados = 4;
+  reserved 4;          // antes `perks_seleccionados`: desde el 2026-11-12 los perks se abren solos con el nivel (D15)
   optional bool activo = 5;
 }
 
@@ -644,6 +645,65 @@ message OrdenElegirFormacion {
   string formacion = 2;
 }
 
+// 2026-11-12 (Heroe_Y_Tropa §4.5, Objetos_Del_Heroe §3.2): el héroe de la cuenta se pone la pieza de una casilla de su mochila (`ItemInstancia.casilla_inventario`); lo que
+// estaba en el hueco, y con un arma la armadura que su clase no admite, va a la mochila. Dentro de una plaza, un pueblo o un campamento (D2).
+message OrdenEquiparObjeto {
+  uint32 casilla = 1;
+}
+
+// 2026-11-12: el héroe de la cuenta se quita lo de un hueco (casco | torso | guantes | pantalones | botas | montura; el arma no se quita) y va a su mochila.
+message OrdenDesequiparObjeto {
+  string hueco = 1;
+}
+
+// 2026-11-12 (D22): `cantidad` de la casilla `casilla` de la mochila del héroe de la cuenta a su almacén de objetos, dentro de su residencia.
+message OrdenGuardarObjeto {
+  uint32 casilla = 1;
+  uint32 cantidad = 2;
+}
+
+// 2026-11-12 (D22): `cantidad` de la casilla `casilla` de su almacén de objetos a su mochila, dentro de su residencia.
+message OrdenSacarObjeto {
+  uint32 casilla = 1;
+  uint32 cantidad = 2;
+}
+
+// 2026-11-12 (D1, Objetos_Del_Heroe §3.3): el héroe de la cuenta compra, con sus monedas, una pieza del catálogo `OBJETOS` (su id) en la Armería de la plaza donde está
+// dentro; llega a su mochila al 100 %. Solo armas, armaduras y monturas hasta `tiendaHastaTier`, con el metal abierto por la tecnología de la Facción de la plaza.
+message OrdenComprarObjeto {
+  string objeto = 1;
+}
+
+// 2026-11-12 (D1 y D18): el héroe de la cuenta vende `cantidad` de la casilla `casilla` de su mochila a la Armería de la plaza donde está dentro, a `ventaPct` de la ficha.
+message OrdenVenderObjeto {
+  uint32 casilla = 1;
+  uint32 cantidad = 2;
+}
+
+// 2026-11-12 (D1, Objetos_Del_Heroe §3.4; Heroe_Y_Tropa §4.6): el héroe de la cuenta forja una pieza (id de `OBJETOS`, tiers II a V) en la Armería de la plaza donde está
+// dentro, si su forja está abierta a su grupo (la misma Facción, siempre). El plano y los crisoles salen de su mochila; los materiales, en la plaza donde reside, de su almacén
+// personal y lo que falte del carro, y en las demás del carro con el que entró. Paga en monedas el impuesto de su tier con el recargo de su grupo, que va al fondo de la
+// plaza; los tiers III a V piden su Era del mundo. La pieza nace con calidad del 90 al 110 % y su `item_instance_id` (`obj-N`).
+message OrdenForjarObjeto {
+  string objeto = 1;
+}
+
+// 2026-11-12 (D2, Objetos_Del_Heroe §3.5): el héroe de la cuenta usa el consumible de la casilla `casilla` de su mochila (una medalla o el cofre de monturas), dentro de
+// una plaza, un pueblo o un campamento. `escuadron_id`: la escuadra suya que recibe una medalla de tropa; las demás no lo miran.
+message OrdenUsarObjeto {
+  uint32 casilla = 1;
+  optional string escuadron_id = 2;
+}
+
+// 2026-11-12 (Heroe_Y_Tropa §4.6): el Tesorero o el Gobernador de la plaza, residente y dentro, abre o cierra su forja a un grupo de fuera (aliados | neutrales |
+// enemigos) y le fija el recargo sobre el impuesto (uno de `OBJETOS.forja.recargosPct`, en %).
+message OrdenConfigurarForja {
+  string asentamiento_id = 1;
+  string grupo = 2;
+  bool abierta = 3;
+  uint32 recargo_pct = 4;
+}
+
 message OrdenOrganizarEjercito {
   string heroe_id = 1;
   string politica_de_union = 2;  // aceptar | preguntar
@@ -748,7 +808,8 @@ message OrdenContratarMercenario {
   // reside sin columna, el almacén personal. `monedas` (tanda 69): las monedas del héroe, a la tarifa en monedas del tablón, en cualquier sitio; van a las monedas del mercenario
   // (`heroe.sin_monedas` si no bastan). `almacenPlaza` (tanda 69 §8): desde dentro de una plaza de su Facción con Taberna activa, sin ir al campamento, que ha de caer en la región de la plaza
   // (`mercenario.fuera_de_la_region`); paga el almacén de la plaza, que firma el Rey, el Embajador o el Gobernador, y es lo que se toma allí sin `pagar_con`. Con `almacenPersonal` o `carro`
-  // fuera del campamento, `campamento.fuera_de_la_puerta`.
+  // fuera del campamento, `campamento.fuera_de_la_puerta`. `fondoPlaza` (2026-11-12, Mercenarios_Por_Contrato §5.1): como `almacenPlaza`, desde la misma taberna y con los mismos firmantes, pero paga
+  // la tarifa en monedas del fondo de la plaza (el del impuesto de su forja), que pasan a las del mercenario (`mercenarios.sin_fondo` si no llega). En el campamento y al prorrogar, `orden.forma_invalida`.
   optional string pagar_con = 6;
 }
 
@@ -862,7 +923,7 @@ message OrdenAsignarBuey {
 }
 
 // La receta activa de una bodega o una prensa (2026-11-09): cada una trabaja una sola a la vez, la que consume `insumo` (bodega: uva → vino,
-// cebada → cerveza; prensa: aceituna o sésamo → aceite). La plaza tiene un tope de recetas distintas por tipo y nivel (`TALLERES_DE_UNA_RECETA`):
+// cebada → cerveza; prensa: aceituna → aceite, sésamo → aceiteSesamo). La plaza tiene un tope de recetas distintas por tipo y nivel (`TALLERES_DE_UNA_RECETA`):
 // la bodega, una en los niveles 3 y 4 y dos en el 5; la prensa, siempre una. Rechazos: `receta.no_se_elige`, `receta.desconocida`,
 // `receta.tope_por_plaza`, `edificio.desconocido`.
 message OrdenElegirReceta {
@@ -1387,5 +1448,14 @@ message Orden {
     OrdenPausarConsumo pausar_consumo = 189;
     OrdenComprarRumor comprar_rumor = 190;
     OrdenElegirFormacion elegir_formacion = 191;
+    OrdenEquiparObjeto equipar_objeto = 192;
+    OrdenDesequiparObjeto desequipar_objeto = 193;
+    OrdenGuardarObjeto guardar_objeto = 194;
+    OrdenSacarObjeto sacar_objeto = 195;
+    OrdenComprarObjeto comprar_objeto = 196;
+    OrdenVenderObjeto vender_objeto = 197;
+    OrdenForjarObjeto forjar_objeto = 198;
+    OrdenUsarObjeto usar_objeto = 199;
+    OrdenConfigurarForja configurar_forja = 200;
   }
 }

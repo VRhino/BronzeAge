@@ -38,7 +38,7 @@ use ambitos::{cambia_derechos, delta, derechos, es_jugador, foto, plazas_de, rea
 use base::Punto;
 use combate::ciclo::{Asignacion, Batalla, EscuadraDeSalida, EstadoBatalla, Instancia, MotivoSalida, SalidaBatalla, Token};
 use combate::resolucion::Lado;
-use combate::resultado::{Botin, ObjetoBotin, Razon, Resultado as ResultadoDeBatalla, ResultadoEscuadra, ResultadoHeroe};
+use combate::resultado::{Razon, Resultado as ResultadoDeBatalla, ResultadoEscuadra, ResultadoHeroe};
 use contrato::v1 as pb;
 use pb::orden::Cuerpo;
 use sha2::{Digest, Sha256};
@@ -625,7 +625,6 @@ impl Actor {
             Ok(pb::LadoId::Defensor) => Ok(Lado::Defensor),
             _ => Err(invalido("lado desconocido")),
         };
-        let entero = |n: u64| i64::try_from(n).map_err(|_| invalido("cifra fuera de rango"));
         let tokens = |ts: Vec<pb::TokenParticipante>| ts.into_iter().map(|t| Ok(Token { heroe: heroe(&t.heroe_id)?, token: t.token, expira_en: t.expira_en_ms })).collect::<Result<Vec<_>, Respuesta>>();
         let version_de_esquema = |n: u32| if n == SCHEMA_VERSION { Ok(()) } else { Err(invalido(&format!("schemaVersion {n}: se esperaba {SCHEMA_VERSION}"))) };
         Ok(match m.cuerpo.ok_or_else(|| invalido("mensaje de batalla vacío"))? {
@@ -676,21 +675,12 @@ impl Actor {
                 let por_escuadra = r
                     .por_escuadra
                     .into_iter()
-                    .map(|e| Ok(ResultadoEscuadra { escuadra: escuadra(&e.squad_id)?, desplegados: i64::from(e.desplegados), supervivientes_al_cierre: i64::from(e.supervivientes_al_cierre), muertos: i64::from(e.muertos), xp_ganada: e.xp_ganada }))
+                    .map(|e| Ok(ResultadoEscuadra { escuadra: escuadra(&e.squad_id)?, desplegados: i64::from(e.desplegados), supervivientes_al_cierre: i64::from(e.supervivientes_al_cierre), muertos: i64::from(e.muertos) }))
                     .collect::<Result<Vec<_>, Respuesta>>()?;
                 let por_heroe = r
                     .por_heroe
                     .into_iter()
-                    .map(|h| {
-                        let botin = h
-                            .botin
-                            .map(|b| {
-                                let objetos = b.objetos.into_iter().map(|o| ObjetoBotin { definicion: o.item_definition_id, cantidad: i64::from(o.cantidad), instancia: o.item_instance_id }).collect();
-                                Ok(Botin { objetos, monedas: entero(b.monedas)? })
-                            })
-                            .transpose()?;
-                        Ok(ResultadoHeroe { heroe: heroe(&h.heroe_id)?, participo: h.participo, sobrevivio_al_cierre: h.sobrevivio_al_cierre, xp_ganada: h.xp_ganada, derrotado: h.derrotado, botin })
-                    })
+                    .map(|h| Ok(ResultadoHeroe { heroe: heroe(&h.heroe_id)?, participo: h.participo, sobrevivio_al_cierre: h.sobrevivio_al_cierre, derrotado: h.derrotado }))
                     .collect::<Result<Vec<_>, Respuesta>>()?;
                 let peticion = format!("resultado:{}:{}", r.battle_id, r.result_id);
                 let resultado = ResultadoDeBatalla {

@@ -48,7 +48,7 @@ El motor común es `resolverCombate` (§4), salvo caravana y campamento, que com
 > - **Pueblo extractor** (§7.3): un ejército de otra Facción que la de la madre; el pueblo ha de estar activo. La guarnición de serie nace completa la primera vez que se la necesita (`EstadoCombate.guarniciones`) y, mermada, se repone **de uno en uno, un minero cada 12 minutos desde la primera baja** con una cita por minero (`SucesoCombate::ReponeGuarnicion`, prioridad 3, ligado a `entidad_guarnicion`; decisión del autor, 2026-10-23, §7.3). Si el atacante gana se lleva `saquear`: lo que el almacén guarda por encima de la mitad, hasta lo que cabe en el carro; si no, quedan heridos todos sus participantes. Con la guarnición a 0 el pueblo se saquea sin combate ni tirada; la chatarra, si el pueblo resiste, va al almacén de la madre (decisión del autor, 2026-10-23). Hechos: `combate.pueblo_saqueado` / `combate.pueblo_resiste`.
 > - **Avanzada**: ver la nota de la fase 4F, más abajo.
 >
-> Las tiradas son las del documento: 2 en columna, plaza con defensores y pueblo con guarnición; 1 en caravana, campamento y acoso; 0 en las ramas sin combate. La experiencia de escuadra (`aplicar_bajas`) y las bajas se vuelcan al estado, y cada columna que combatió **re-anota su consumo y su velocidad** (`recomponer_columna`, también reprograma su deserción). Sin Unity (la fase 4E la añade) todo se resuelve con números.
+> Las tiradas son las del documento: 2 en columna, plaza con defensores y pueblo con guarnición; 1 en caravana, campamento y acoso; 0 en las ramas sin combate. La experiencia de escuadra (la anota `aplicar_bajas` en cada `Baja` y la da el núcleo, §4.3) y las bajas se vuelcan al estado, y cada columna que combatió **re-anota su consumo y su velocidad** (`recomponer_columna`, también reprograma su deserción). Sin Unity (la fase 4E la añade) todo se resuelve con números.
 >
 > **Implementado en Rust (2026-10-22, quinta ronda).** Los bandidos no son bots ni jugadores. El **acoso** a una caravana sigue siendo una tirada con números (`resolver_acoso`) salvo que haya servidores de batalla **y** la caravana vaya adjunta a una columna con algún héroe sano: entonces se abre una batalla de caravana en Unity ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §4). Una caravana sin héroes (suelta, con o sin escolta de tropa cedida, o adjunta a una columna sin héroes sanos) se resuelve **siempre con números**, haya o no servidores. Sin servidores, todo con números como antes.
 
@@ -124,7 +124,7 @@ bajasPerdedor = 0,30 + 0,40 · (1 − ratio)
 - La **cohesión** (`bonusCohesionPorEscuadronExtra`) solo la lleva el **defensor** y solo si hay más de una escuadra; el atacante nunca.
 - `ventajaDefensor` (1,05) y el `multiplicadorDefensor` (muralla, §6) multiplican solo al defensor.
 - Con un bando **vacío** (sin escuadras con soldados y sin héroes sanos) lanza `CombateInvalidoError`.
-- **Bajas permanentes** (`aplicarBajas`): cada escuadra pierde `round(cantidad × fracción)` (mínimo 0 de cantidad). La escuadra **persiste como identidad** con `cantidad: 0`. Además cada escuadra gana experiencia: `experienciaGanadaPorVictoria` si su bando ganó, `experienciaGanadaPorDerrota` si no.
+- **Bajas permanentes** (`aplicarBajas`): cada escuadra pierde `round(cantidad × fracción)` (mínimo 0 de cantidad). La escuadra **persiste como identidad** con `cantidad: 0`. Además cada escuadra gana experiencia: `experienciaGanadaPorVictoria` si su bando ganó, `experienciaGanadaPorDerrota` si no (§4.3: también sus héroes, y el bonus de Ejército permanente).
 - **Consume exactamente dos `rng()`** por combate, en ese orden. Las ramas sin combate (plaza sin defensores, protegida) **no consumen aleatoriedad**: una partida sin asedios hace las mismas llamadas al RNG que antes de existir los asedios.
 - **Combate digno** (`esCombateDigno`): `min(poderA, poderD) ≥ NIVEL_FACCION.ratioCombateDigno × max(poderA, poderD)`. Solo un combate digno da experiencia de Facción, **sea cual sea el objetivo** (5C-3, decisión del autor del 2026-10-24: también el saqueo de un pueblo, el ataque a una avanzada y el asalto a una caravana; en este último, el poder del atacante contra la defensa de la caravana).
 - **Chatarra** (Doc 4.2.1): por cada soldado muerto, de cada bando, el metal de su equipo × `CHATARRA.fraccion`; se suma y la recoge quien gana.
@@ -141,7 +141,17 @@ bajasPerdedor = 0,30 + 0,40 · (1 − ratio)
 
 ### 4.2 Monedas del héroe por combatir
 
-> **Implementado en Rust (2026-11-08, tanda 69, T2):** cada héroe **con Facción** que combate contra héroes de **otra Facción** cobra monedas (`Heroe.monedas`, [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §1): `MONEDAS.ganador` (500) si su bando gana y `MONEDAS.perdedor` (150) si pierde. Vale en el encuentro entre columnas (§5), el asedio con números (§6), el saqueo de un pueblo (§7.3), el ataque a una avanzada (§7.4) y las batallas de Unity (todas salvo las de un campamento de bandidos; cobran los héroes que participaron). No cobra nadie contra bandidos (su botín es el de §7.2), ni entre héroes de la misma Facción, ni un héroe sin Facción. **Rendimientos decrecientes por par de Facciones** (`MONEDAS.rendimientos`, `EstadoCombate.encuentros`, en la foto): la ventana es de 24 h, las 8 primeras veces que esas dos Facciones se enfrentan pagan completo, cada una de las siguientes paga un 15 % menos y desde la 14.ª no paga monedas (solo experiencia). El factor de cada par se calcula **una vez por combate** y lo cobran todos sus héroes (si un héroe tiene varios pares, el mejor factor); las monedas son enteras hacia abajo. `Nucleo::monedas_de_combate` y `monedas_de_informe` (`nucleo/monedas.rs`), llamados desde `combates.rs`, `avanzadas.rs` y `batallas.rs`.
+> **Implementado en Rust (2026-11-08, tanda 69, T2):** cada héroe **con Facción** que combate contra héroes de **otra Facción** cobra monedas (`Heroe.monedas`, [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §1): `MONEDAS.ganador` (500) si su bando gana y `MONEDAS.perdedor` (150) si pierde. Vale en el encuentro entre columnas (§5), el asedio con números (§6), el saqueo de un pueblo (§7.3), el ataque a una avanzada (§7.4) y las batallas de Unity (todas salvo las de un campamento de bandidos; cobran los héroes que participaron, con la Facción con la que entraron, por el mismo camino que con números: desde el 2026-11-12 son las únicas monedas de una batalla de Unity, que ya no manda botín; D7). No cobra nadie contra bandidos (su botín es el de §7.2), ni entre héroes de la misma Facción, ni un héroe sin Facción. **Rendimientos decrecientes por par de Facciones** (`MONEDAS.rendimientos`, `EstadoCombate.encuentros`, en la foto): la ventana es de 24 h, las 8 primeras veces que esas dos Facciones se enfrentan pagan completo, cada una de las siguientes paga un 15 % menos y desde la 14.ª no paga monedas (solo experiencia). El factor de cada par se calcula **una vez por combate** y lo cobran todos sus héroes (si un héroe tiene varios pares, el mejor factor); las monedas son enteras hacia abajo. `Nucleo::monedas_de_combate` y `monedas_de_informe` (`nucleo/monedas.rs`), llamados desde `combates.rs`, `avanzadas.rs` y `batallas.rs`.
+
+### 4.3 Experiencia de las escuadras y de los héroes
+
+> **Implementado en Rust (2026-11-12, entradas 73 y 74).** La experiencia de combate pasa por **un solo punto de entrada** para la escuadra (`Nucleo::experiencia_de_escuadra`) y otro para el héroe (`Nucleo::experiencia_de_heroe`), en `crates/nucleo/src/nucleo/progresion.rs`:
+>
+> - **Con números**: `combate` anota en cada `Baja` la experiencia base (`experienciaGanadaPorVictoria` 1, `experienciaGanadaPorDerrota` 0,5) y el núcleo se la da a cada escuadra que combatió; **cada héroe sano que combatió con ellas gana lo mismo, una vez por combate** (no una por escuadra). Vale en el encuentro entre columnas (§5), el asedio (§6; no en las ramas sin combate), el asalto a una caravana y a la Caravana de Fundación (§7.1; la escolta cedida gana, sus héroes no, porque no están), el campamento de bandidos (§7.2, gana si lo destruye), la emboscada y el acoso de los bandidos, el saqueo de un pueblo (§7.3) y el ataque a una avanzada (§7.4).
+> - **En una batalla de Unity** ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §9): `experienciaUnityPorVictoria` (4) o `experienciaUnityPorDerrota` (2) según gane su bando, a cada escuadra que entró (las de los héroes que participaron y las guarniciones y escoltas del ticket) y a cada héroe que participó. El motor **no lee** la experiencia de Unity (D7: `xp_ganada` sale del contrato). Una salida anticipada no da nada.
+> - **Ejército permanente** (`bonusExperiencia`): las escuadras de los héroes de una Facción que tiene la tecnología ganan un 10 % más. El héroe, no.
+> - **`escuadras.veteranas`**: +1 al logro cada vez que una escuadra cruza el nivel 5.
+> - El héroe que sube de nivel emite `heroe.nivel_subio` ([`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §4.3). La tropa prestada no gana.
 
 ## 5. Encuentro entre columnas (`atacarColumna` / `encuentroEntreEjercitos`)
 
@@ -203,6 +213,7 @@ Consecuencias que aplica `asediarPlaza`:
   - **Con servidores de batalla** y algún héroe sano en la columna, la emboscada es la batalla de caravana de Unity (sin cambios), y si la gana la columna el campamento cae con el mismo premio.
   - Antes, la columna defendía con el poder de sus escuadras **sin bajas**, una tirada por caravana, y el campamento no perdía nada aunque perdiera. Pruebas: `combate/src/bandidos.rs::en_la_emboscada_la_columna_combate_con_sus_heroes_y_sufre_bajas`, `nucleo/tests/combate.rs::una_caravana_adjunta_a_un_ejercito_se_defiende_en_una_emboscada_con_bajas…` y `…una_escolta_que_gana_el_acoso_destruye_el_campamento…`, y las de Unity en `batallas.rs` y `batalla_unity.rs`.
 - **Implementado en Rust (2026-11-08, tanda 69, T1):** **un campamento destruido ya no da oro.** Cada héroe que cobra recibe, del nivel del campamento (`CAMPAMENTOS_BANDIDOS.niveles.N`, [`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md) §13), `botinPorHeroe` de **cada uno** de madera, piedra y trigo (5 / 7 / 10 en los niveles 1 / 2 / 3; al carro de la columna, lo que quepa, o a la caravana si la escolta venció al campamento) y `monedasPorHeroe` **monedas** (50 / 75 / 100; van directas a `Heroe.monedas`, no al carro, y no se pierden con él), con el mismo factor de la ventana de 24 h (8 completas y −15 % cada una; las unidades, hacia abajo; solo experiencia desde la 14.ª). La regla del anillo no cambia. Los hechos `combate.campamento_destruido` y `bandidos.campamento_vencido` llevan `madera`, `piedra`, `trigo` (lo que cupo en el carro) y `monedas` en lugar de `oro`. `combate::bandidos::botin_de_bandidos` (devuelve recursos y monedas), `Nucleo::botin_de_bandidos_para` y `botin_de_los_heroes` (`nucleo/bandidos.rs`); vale con números y con Unity.
+- **Implementado en Rust (2026-11-12, entrada 70; [`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §3.7): los objetos.** Cada héroe que cobra el botín de un campamento destruido (con la regla del anillo: el que no lo cobra tampoco recibe objetos) y lo hace **dentro de las 8 completas de su ventana de 24 h** (`rendimientos.completas`; desde la 9.ª, ya no) recibe además la tabla de su nivel de `BOTIN_OBJETOS.bandidos` ([`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §3.7): crisoles, planos de tier II (y III en el nivel 3) y medallas muy pequeñas, cada entrada con su probabilidad y el rng del estado, justo después de la tirada del combate. Va a su mochila y, si no cabe, a su almacén de objetos; si tampoco, se pierde (D17 y D22), y lo cuenta el hecho `heroe.botin` (origen `bandidos`). Vale igual con números, en la emboscada, con la escolta y con Unity, porque cuelga de `Nucleo::botin_de_bandidos_para`, sin otra ventana. Pruebas: `nucleo/tests/combate.rs::los_bandidos_dan_la_tabla_de_objetos_de_su_nivel_solo_dentro_de_las_completas_de_la_ventana` y `…el_botin_de_los_bandidos_del_anillo_solo_lo_cobra_un_heroe_sin_plaza`.
 - XP de Facción: `NIVEL_FACCION.xp.bandidos / nivel de Facción` por campamento destruido (0 desde `nivelSinXpBandidos`), **sin exigir combate digno**. **En Rust desde 5C (2026-10-24)**, a la Facción de la columna (con números) o del bando atacante (Unity). **Es la única** (5C-4, decisión del autor del 2026-10-24): una batalla de Unity contra un campamento de bandidos no da además la experiencia de la batalla, para que el premio sea el mismo con Unity que con números.
 - **El botín de los bandidos del anillo de un campamento de mercenarios solo lo cobran los héroes sin plaza** (calibración 2, Cal-5, decisión del autor del 2026-10-24: el anillo existe para el jugador nuevo y protege su economía). Un héroe es **sin plaza** si reside en un campamento de mercenarios y su Facción no tiene plazas, o no tiene Facción: el mismo criterio que la demanda del anillo ([`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md) §13 B, `residentesSinPlaza`). Los demás destruyen el campamento igual y ganan solo experiencia (la de escuadra del combate y la de Facción de arriba): su botín es 0 y esa destrucción **no cuenta** en su ventana de rendimientos decrecientes. Los campamentos de una plaza, los de las vetas y los de administración pagan a todos como antes. Vale con números (`atacar_campamento`) y con Unity (`captura_de_batalla`), por héroe: `Nucleo::botin_de_bandidos_para`. Los del anillo siguen reapareciendo cada `anillo.reaparicionMinutos` (10 min). Prueba: `crates/nucleo/tests/combate.rs::el_oro_de_los_bandidos_del_anillo_solo_lo_cobra_un_heroe_sin_plaza`. En el batch militar (60 × 30, semilla 42) el oro de bandidos total baja de 28.241 a 23.946 (mediana por héroe 0 antes y después).
 
@@ -226,7 +237,7 @@ Pura y determinista (no usa RNG). La ciudad cambia de dueño entera:
 - **Edificios**: de los `activo`, ordenados por id, exentos el Centro Urbano y la **primera Granja y la primera Leñera** activas, los primeros `ceil(fraccionEdificiosDanados × n)` pasan a `en_cola` marcados `danado` (se reconstruyen por `fraccionCosteReconstruccion`). Un Almacén o Granero dañado deja de aportar capacidad y lo guardado que ya no cabe se pierde. **Un Molino dañado pierde su buey** (tanda 69, [`Economia_Construccion.md`](Economia_Construccion.md) §5.3; `aplicar_conquista`): el nuevo dueño tendrá que comprarlo otra vez.
 - **Recintos**: cada recinto completo y sin mejora en curso pierde `floor(fraccionDanoMuralla × celdas)` de `avance` (mínimo −1): no cae, deja de dar el multiplicador pleno, el cupo de guarnición y el requisito del nivel 4 hasta repararse solo por la obra normal, a costa del nuevo dueño; no se puede abandonar ([`Murallas.md`](Murallas.md) §9.6). El predicado «muralla completa» de los contadores de logros (`asentamiento::recintos::muralla_completa`: algún recinto con integridad ≥ 1) se calcula antes del daño; el hecho `asentamiento.conquistada` lleva `murallaCompleta` y `murallaDanada`. El daño es el mismo por los números y por el resultado de Unity (los dos pasan por `conquistar_plaza`), y la reparación empieza en ese instante (la primera celda sale en él, si hay con qué).
 - **La obra de ascenso en curso se pierde** sin devolución.
-- **Las decisiones del gobierno derrotado caen**: políticas activas, reserva manual del Tesorero, pausa de auto-construcción y recetas paradas.
+- **Las decisiones del gobierno derrotado caen**: políticas activas, reserva manual del Tesorero, pausa de auto-construcción y recetas paradas. **La forja de su Armería** vuelve a la de partida (cerrada a aliados, neutrales y enemigos, con el recargo de partida, `OBJETOS.forja.recargoInicialPct`; 2026-11-12, `conquistar_plaza`, [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §4.6); **su fondo de monedas pasa con la plaza** al conquistador ([`Mercenarios_Por_Contrato.md`](Mercenarios_Por_Contrato.md) §5.1).
 - `medidorMantenimiento = 100`; `protegidaHasta = ahora + proteccionMinutos` (inmune a otro asedio un día; **la misma protección nace con toda plaza fundada**, `protegida_hasta = fundado_en + proteccionMinutos`, sin ventana de ocupación: Doc 1.2, [`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md) §5); `ocupacionHasta = ahora + duracionMinutos` (recaudación y crecimiento al `factorRecaudacion` / `factorCrecimiento`, mantenimiento congelado).
 - **Queda sin guarnición**: nadie la guarnece por haberla ganado; si los conquistadores quieren defenderla, tienen que pasar a residir en ella.
 - **Sus pueblos extractores y sus avanzadas pasan al conquistador** con la zona (en una **ruina** de la madre, los pueblos y las atalayas/fuertes desaparecen y la ciudadela queda como ruina sin dueño). Las **caravanas aparcadas** en la plaza se destruyen (Doc 3.13.7).
@@ -269,18 +280,29 @@ Si tras caer la plaza la Facción perdedora **no conserva ningún asentamiento**
   "bonusPoderPorNivelEscuadra": 0.03,
   "nivelMaximoEscuadra": 10,
   "experienciaParaSubirEscuadra": [
-    5,
     10,
-    20,
-    40,
-    40,
-    40,
-    40,
-    40,
-    40
+    25,
+    50,
+    100,
+    150,
+    200,
+    250,
+    275,
+    315
   ],
   "experienciaGanadaPorVictoria": 1,
   "experienciaGanadaPorDerrota": 0.5,
+  "experienciaUnityPorVictoria": 4,
+  "experienciaUnityPorDerrota": 2,
+  "nivelesHabilidadEscuadra": [
+    4,
+    7,
+    10
+  ],
+  "bonusExperiencia": {
+    "tecnologia": "ejercito_permanente",
+    "pct": 10
+  },
   "ventajaDefensor": 1.05,
   "bonusCohesionPorEscuadronExtra": 0.1,
   "varianzaCombate": 0.15,

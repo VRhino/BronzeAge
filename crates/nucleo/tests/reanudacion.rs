@@ -87,7 +87,7 @@ impl Esc {
 
     /// Un héroe humano de `cuenta`, ciudadano de `faccion`, que reside en `plaza` y está dentro, con una escuadra de milicia en su loadout activo: (héroe, escuadra).
     fn residente(&mut self, cuenta: &str, faccion: u32, plaza: u64, nacer_en: u32) -> (u64, u64) {
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: nacer_en, controlador: Controlador::Humano, nombre: None }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: nacer_en, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(faccion) });
         self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
         self.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(plaza as u32) });
@@ -95,7 +95,7 @@ impl Esc {
         comun::gobierna(&mut self.n, plaza, h);
         let escuadra = self.ok("admin", Comando::DarEscuadra { heroe: h, tropa: Tropa::MiliciaLanceros, cantidad: 10 }).creadas[0];
         let loadout = self.n.heroe(h).unwrap().heroe.loadouts[0].id;
-        self.ok("admin", Comando::GuardarLoadout { heroe: h, loadout: Some(loadout), nombre: "Default".into(), escuadras: vec![escuadra], perks: vec![], activo: Some(true) });
+        self.ok("admin", Comando::GuardarLoadout { heroe: h, loadout: Some(loadout), nombre: "Default".into(), escuadras: vec![escuadra], activo: Some(true) });
         (h, escuadra)
     }
 
@@ -135,7 +135,7 @@ fn escenario(m: &'static M, semilla: u64, ajustes: Ajustes, dir: Option<&std::pa
     }
     (x.ana, x.escuadra_de_ana) = x.residente("ana", 1, x.a, ia as u32);
     x.beto = x.residente("beto", 2, x.b, ib as u32).0;
-    x.dora = x.ok("dora", Comando::CrearHeroe { cuenta: "dora".into(), campamento: ia as u32, controlador: Controlador::Humano, nombre: None }).creadas[0];
+    x.dora = x.ok("dora", Comando::CrearHeroe { cuenta: "dora".into(), campamento: ia as u32, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
     x.ok("admin", Comando::DarAlmacenPersonal { heroe: x.dora, recurso: asentamiento::Recurso::Oro, cantidad: 1_000_000 });
     x.nora = x.columna_junto_a_b(m, "nora", 3, 0);
     x.fede = x.columna_junto_a_b(m, "fede", 1, 2 * U);
@@ -368,8 +368,8 @@ fn resultado_de(t: &pb::BattleTicket, intento: &str, ganador: pb::LadoId) -> de_
         ganador: ganador as i32,
         razon: pb::RazonVictoria::Aniquilacion as i32,
         objetivos: vec![],
-        por_escuadra: escuadras.map(|e| pb::ResultadoEscuadra { squad_id: e.squad_id.clone(), desplegados: e.efectivos_autorizados, supervivientes_al_cierre: e.efectivos_autorizados.saturating_sub(1), muertos: e.efectivos_autorizados.min(1), xp_ganada: 2 }).collect(),
-        por_heroe: participantes.iter().map(|p| pb::ResultadoHeroe { heroe_id: p.heroe_id.clone(), participo: true, sobrevivio_al_cierre: true, xp_ganada: 3, derrotado: None, botin: None }).collect(),
+        por_escuadra: escuadras.map(|e| pb::ResultadoEscuadra { squad_id: e.squad_id.clone(), desplegados: e.efectivos_autorizados, supervivientes_al_cierre: e.efectivos_autorizados.saturating_sub(1), muertos: e.efectivos_autorizados.min(1) }).collect(),
+        por_heroe: participantes.iter().map(|p| pb::ResultadoHeroe { heroe_id: p.heroe_id.clone(), participo: true, sobrevivio_al_cierre: true, derrotado: None }).collect(),
         version_servidor: "v1".into(),
         carros_perdidos: vec![],
     })

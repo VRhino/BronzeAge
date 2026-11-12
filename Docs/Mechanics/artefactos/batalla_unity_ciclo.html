@@ -201,7 +201,7 @@ function ladoParaUnirse(c, h, pedido) {
   return { lado };
 }
 
-const BATALLA = {"capacidad":{"asedio":5,"resto":5},"duracionMinutos":{"asedio":30,"resto":15},"convocatoriaSegundos":30,"plazoAsignacionMinutos":5,"plazoInicioMinutos":5,"margenMinutos":5,"tropaCarreteros":{"tropaId":"milicia_lanceros","unidades":13},"casillasInventario":72,"versionCatalogoHeroe":"conquest-heroes-1","versionCatalogoObjetos":"conquest-items-1"};
+const BATALLA = {"capacidad":{"asedio":5,"resto":5},"duracionMinutos":{"asedio":30,"resto":15},"convocatoriaSegundos":30,"plazoAsignacionMinutos":5,"plazoInicioMinutos":5,"margenMinutos":5,"tropaCarreteros":{"tropaId":"milicia_lanceros","unidades":13},"versionCatalogoHeroe":"conquest-heroes-1","versionCatalogoObjetos":"conquest-items-1"};
 const $ = (s, r = document) => r.querySelector(s);
 const el = (t, p = {}, ...h) => { const e = Object.assign(document.createElement(t), p); h.flat().forEach((x) => e.append(x)); return e; };
 const chip = (txt, on) => { const b = document.createElement('button'); b.className = 'b'; b.textContent = txt; b.setAttribute('aria-pressed', String(on)); if (on) b.classList.add('pri'); return b; };

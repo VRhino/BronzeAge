@@ -6,9 +6,10 @@
 //! (6B, `codec_tecnologia`).
 //!
 //! Un héroe: `id u64 · cuenta texto · facción opt_u64 · controlador u8 (0 humano, 1 bot) · liderazgo_base i64 · presencia{ubicación ·
-//! desconecta_en opt_i64 · fuera bool} · residencia{u8: 0 ninguna, 1 plaza, 2 campamento · u32} · nivel u32 · experiencia i64 · puntos de
-//! atributo i64 · puntos de perk i64 · atributos{fuerza, destreza, armadura, vitalidad: 4 × i64} · perks{n u64 · n × u32} · loadouts{n u64 ·
-//! n × (id u64, nombre texto, escuadras{n u64 · n × u64}, perks{n u64 · n × u32}, activo bool)} · monedas i64 ·
+//! desconecta_en opt_i64 · fuera bool} · residencia{u8: 0 ninguna, 1 plaza, 2 campamento · u32} · nivel u32 · experiencia i64 (acumulada,
+//! en milésimas) · puntos de atributo i64 · puntos repartidos{atributos} · equipo · mochila{inventario} · almacén de objetos{inventario} (BAN63: los puntos repartidos en lugar de los
+//! atributos, y el equipo, la mochila y el almacén de objetos, D16 y D22) · loadouts{n u64 · n × (id u64, nombre texto,
+//! escuadras{n u64 · n × u64}, activo bool)} (BAN63: sin los puntos de perk, los perks ni los perks del loadout, D15) · monedas i64 ·
 //! herido_hasta opt_i64 · víveres i64 · ración_en opt_i64 · almacén personal{carga} · cupo{día i64 · carga} · columna opt_u64 · carro{carga} · sintético bool ·
 //! informes{n u64 · n × informe} · plazas recordadas{n u64 · n × (plaza u32 · visto_en i64 · almacén{carga} · cola{n u64 · n × (id u32 · tipo u8 · nivel u8 · completa_en opt_i64)} ·
 //! guarnición{n u64 · n × u64})} (BAN25) · residencia_cambiada_en opt_i64 (BAN28) · alijos abiertos{n u64 · n × u32, en orden} (BAN36) ·
@@ -24,6 +25,10 @@
 //! columna `facción opt_u64 · héroes{n u64 · n × u64} · escuadras{n u64 · n × avistada}`, 1 caravana `escoltada bool · recursos{n u64 · n × u8}`, 2 plaza
 //! `facción u32 · héroes · guarnición{n u64 · n × avistada} · recintos{n u64 · n × (nivel u8, celdas{n u64 · n × (col i32, fila i32, clase u8)}, avance u32)}` (BAN21), con una avistada `tropa u8 · cantidad i64 · héroe u64`.
 //! Una carga: `n u64 · n × (recurso u8, cantidad i64)`.
+//! Unos atributos: `fuerza, destreza, armadura, vitalidad: 4 × i64`; unas cifras por daño: `perforante, cortante, contundente: 3 × i64`. Un equipo: `arma{pieza} ·
+//! casco, torso, guantes, pantalones, botas y montura: 6 × (bool · pieza si lo hay)`. Un inventario: `capacidad u32 · casillas{n u64 · n × (casilla u32 · pieza ·
+//! cantidad u32)}`. Una pieza: `objeto texto · forjada bool` y, si lo es, `id u64 · cifras{u8: 0 arma (atributos · daño · penetración), 1 armadura (atributos ·
+//! defensa · salud i64)}` (D13).
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::codec_columna::{politica_a_u8, politica_de_u8, ritmo_escribir, ritmo_leer};
@@ -34,10 +39,133 @@ use comercio::mercenarios::CupoDiario;
 use militar::catalogo::{Origen, Tropa, TROPAS};
 use militar::convocatoria::{Convocatoria, Integrante, Lugar, Peticion, Seleccion};
 use militar::escuadra::{Contenedor, Escuadra};
-use militar::heroe::{Atributos, Controlador, Heroe, Loadout, Residencia};
+use militar::heroe::{Controlador, Heroe, Loadout, Residencia};
 use militar::inspeccion::{Avistada, Contenido, Informe, Objetivo, RecintoAvistado};
 use militar::mercenarios::Reclutas;
 use militar::presencia::{Presencia, Ubicacion};
+use objetos::datos::{Atributos, Cifras, Hueco, PorDano};
+use objetos::inventario::{Casilla, Forjada};
+use objetos::{Equipo, Inventario, Pieza};
+
+pub(crate) fn hueco_a_u8(h: Hueco) -> u8 {
+    match h {
+        Hueco::Arma => 0,
+        Hueco::Casco => 1,
+        Hueco::Torso => 2,
+        Hueco::Guantes => 3,
+        Hueco::Pantalones => 4,
+        Hueco::Botas => 5,
+        Hueco::Montura => 6,
+    }
+}
+
+pub(crate) fn hueco_de_u8(i: u8) -> Result<Hueco, ErrorFormato> {
+    Ok(match i {
+        0 => Hueco::Arma,
+        1 => Hueco::Casco,
+        2 => Hueco::Torso,
+        3 => Hueco::Guantes,
+        4 => Hueco::Pantalones,
+        5 => Hueco::Botas,
+        6 => Hueco::Montura,
+        _ => return Err(ErrorFormato("hueco del equipo desconocido")),
+    })
+}
+
+fn atributos_escribir(w: &mut Escritor, a: &Atributos) {
+    let Atributos { fuerza, destreza, armadura, vitalidad } = a;
+    [fuerza, destreza, armadura, vitalidad].into_iter().for_each(|&x| w.i64(x));
+}
+
+fn atributos_leer(r: &mut Lector) -> Result<Atributos, ErrorFormato> {
+    Ok(Atributos { fuerza: r.i64()?, destreza: r.i64()?, armadura: r.i64()?, vitalidad: r.i64()? })
+}
+
+fn por_dano_escribir(w: &mut Escritor, d: &PorDano) {
+    let PorDano { perforante, cortante, contundente } = d;
+    [perforante, cortante, contundente].into_iter().for_each(|&x| w.i64(x));
+}
+
+fn por_dano_leer(r: &mut Lector) -> Result<PorDano, ErrorFormato> {
+    Ok(PorDano { perforante: r.i64()?, cortante: r.i64()?, contundente: r.i64()? })
+}
+
+fn pieza_escribir(w: &mut Escritor, p: &Pieza) {
+    let Pieza { objeto, forjada } = p;
+    w.texto(objeto);
+    w.bool(forjada.is_some());
+    if let Some(Forjada { id, cifras }) = forjada {
+        w.u64(*id);
+        match cifras {
+            Cifras::Arma { atributos, dano, penetracion } => {
+                w.u8(0);
+                atributos_escribir(w, atributos);
+                por_dano_escribir(w, dano);
+                por_dano_escribir(w, penetracion);
+            }
+            Cifras::Armadura { atributos, defensa, salud } => {
+                w.u8(1);
+                atributos_escribir(w, atributos);
+                por_dano_escribir(w, defensa);
+                w.i64(*salud);
+            }
+        }
+    }
+}
+
+fn pieza_leer(r: &mut Lector) -> Result<Pieza, ErrorFormato> {
+    let objeto = r.texto()?;
+    let forjada = if r.bool()? {
+        let id = r.u64()?;
+        let cifras = match r.u8()? {
+            0 => Cifras::Arma { atributos: atributos_leer(r)?, dano: por_dano_leer(r)?, penetracion: por_dano_leer(r)? },
+            1 => Cifras::Armadura { atributos: atributos_leer(r)?, defensa: por_dano_leer(r)?, salud: r.i64()? },
+            _ => return Err(ErrorFormato("cifras de pieza desconocidas")),
+        };
+        Some(Forjada { id, cifras })
+    } else {
+        None
+    };
+    Ok(Pieza { objeto, forjada })
+}
+
+fn equipo_escribir(w: &mut Escritor, e: &Equipo) {
+    let Equipo { arma, casco, torso, guantes, pantalones, botas, montura } = e;
+    pieza_escribir(w, arma);
+    for hueco in [casco, torso, guantes, pantalones, botas, montura] {
+        w.bool(hueco.is_some());
+        if let Some(p) = hueco {
+            pieza_escribir(w, p);
+        }
+    }
+}
+
+fn equipo_leer(r: &mut Lector) -> Result<Equipo, ErrorFormato> {
+    let arma = pieza_leer(r)?;
+    let mut hueco = || -> Result<Option<Pieza>, ErrorFormato> { if r.bool()? { pieza_leer(r).map(Some) } else { Ok(None) } };
+    Ok(Equipo { arma, casco: hueco()?, torso: hueco()?, guantes: hueco()?, pantalones: hueco()?, botas: hueco()?, montura: hueco()? })
+}
+
+fn inventario_escribir(w: &mut Escritor, i: &Inventario) {
+    let Inventario { capacidad, casillas } = i;
+    w.u32(*capacidad);
+    w.u64(casillas.len() as u64);
+    for (n, Casilla { pieza, cantidad }) in casillas {
+        w.u32(*n);
+        pieza_escribir(w, pieza);
+        w.u32(*cantidad);
+    }
+}
+
+fn inventario_leer(r: &mut Lector) -> Result<Inventario, ErrorFormato> {
+    let capacidad = r.u32()?;
+    let mut casillas = std::collections::BTreeMap::new();
+    for _ in 0..r.cuenta()? {
+        let n = r.u32()?;
+        casillas.insert(n, Casilla { pieza: pieza_leer(r)?, cantidad: r.u32()? });
+    }
+    Ok(Inventario { capacidad, casillas })
+}
 
 pub(crate) fn tropa_a_u8(t: Tropa) -> u8 {
     t as u8
@@ -212,18 +340,13 @@ fn lista_u64_leer(r: &mut Lector) -> Result<Vec<u64>, ErrorFormato> {
     (0..r.cuenta()?).map(|_| r.u64()).collect()
 }
 
-fn lista_u32_escribir(w: &mut Escritor, v: &[u32]) {
-    w.u64(v.len() as u64);
-    v.iter().for_each(|&x| w.u32(x));
-}
-
 fn lista_u32_leer(r: &mut Lector) -> Result<Vec<u32>, ErrorFormato> {
     (0..r.cuenta()?).map(|_| r.u32()).collect()
 }
 
 fn heroe_escribir(w: &mut Escritor, h: &HeroeNucleo) {
     let HeroeNucleo { heroe, cuenta, faccion, almacen_personal, cupo, columna, carro, sintetico, informes, plazas_recordadas, residencia_cambiada_en, alijos_abiertos } = h;
-    let Heroe { id, controlador, liderazgo_base, presencia, residencia, nivel, experiencia, puntos_de_atributo, puntos_de_perk, atributos, perks_desbloqueados, loadouts, monedas, herido_hasta, viveres, racion_en, escuadras } = heroe;
+    let Heroe { id, controlador, liderazgo_base, presencia, residencia, nivel, experiencia, puntos_de_atributo, puntos_repartidos, equipo, mochila, almacen_objetos, loadouts, monedas, herido_hasta, viveres, racion_en, escuadras } = heroe;
     w.u64(*id);
     w.texto(cuenta);
     w.opt_u64(faccion.map(u64::from));
@@ -237,16 +360,15 @@ fn heroe_escribir(w: &mut Escritor, h: &HeroeNucleo) {
     w.u32(*nivel);
     w.i64(*experiencia);
     w.i64(*puntos_de_atributo);
-    w.i64(*puntos_de_perk);
-    let Atributos { fuerza, destreza, armadura, vitalidad } = atributos;
-    [fuerza, destreza, armadura, vitalidad].into_iter().for_each(|&a| w.i64(a));
-    lista_u32_escribir(w, perks_desbloqueados);
+    atributos_escribir(w, puntos_repartidos);
+    equipo_escribir(w, equipo);
+    inventario_escribir(w, mochila);
+    inventario_escribir(w, almacen_objetos);
     w.u64(loadouts.len() as u64);
-    for Loadout { id, nombre, escuadras, perks, activo } in loadouts {
+    for Loadout { id, nombre, escuadras, activo } in loadouts {
         w.u64(*id);
         w.texto(nombre);
         lista_u64_escribir(w, escuadras);
-        lista_u32_escribir(w, perks);
         w.bool(*activo);
     }
     w.i64(*monedas);
@@ -287,12 +409,11 @@ fn heroe_leer(r: &mut Lector) -> Result<HeroeNucleo, ErrorFormato> {
     let (id, cuenta, faccion, controlador, liderazgo_base) = (r.u64()?, r.texto()?, opt_u32(r.opt_u64()?)?, controlador_de_u8(r.u8()?)?, r.i64()?);
     let presencia = Presencia { ubicacion: ubicacion_leer(r)?, desconecta_en: r.opt_i64()?, fuera: r.bool()? };
     let residencia = residencia_leer(r)?;
-    let (nivel, experiencia, puntos_de_atributo, puntos_de_perk) = (r.u32()?, r.i64()?, r.i64()?, r.i64()?);
-    let atributos = Atributos { fuerza: r.i64()?, destreza: r.i64()?, armadura: r.i64()?, vitalidad: r.i64()? };
-    let perks_desbloqueados = lista_u32_leer(r)?;
+    let (nivel, experiencia, puntos_de_atributo) = (r.u32()?, r.i64()?, r.i64()?);
+    let (puntos_repartidos, equipo, mochila, almacen_objetos) = (atributos_leer(r)?, equipo_leer(r)?, inventario_leer(r)?, inventario_leer(r)?);
     let mut loadouts = Vec::new();
     for _ in 0..r.cuenta()? {
-        loadouts.push(Loadout { id: r.u64()?, nombre: r.texto()?, escuadras: lista_u64_leer(r)?, perks: lista_u32_leer(r)?, activo: r.bool()? });
+        loadouts.push(Loadout { id: r.u64()?, nombre: r.texto()?, escuadras: lista_u64_leer(r)?, activo: r.bool()? });
     }
     let monedas = r.i64()?;
     let (herido_hasta, viveres, racion_en, almacen_personal) = (r.opt_i64()?, r.i64()?, r.opt_i64()?, carga_leer(r)?);
@@ -311,7 +432,7 @@ fn heroe_leer(r: &mut Lector) -> Result<HeroeNucleo, ErrorFormato> {
     for _ in 0..r.cuenta()? {
         escuadras.push(escuadra_leer(r)?);
     }
-    let heroe = Heroe { id, controlador, liderazgo_base, presencia, residencia, nivel, experiencia, puntos_de_atributo, puntos_de_perk, atributos, perks_desbloqueados, loadouts, monedas, herido_hasta, viveres, racion_en, escuadras };
+    let heroe = Heroe { id, controlador, liderazgo_base, presencia, residencia, nivel, experiencia, puntos_de_atributo, puntos_repartidos, equipo, mochila, almacen_objetos, loadouts, monedas, herido_hasta, viveres, racion_en, escuadras };
     Ok(HeroeNucleo { heroe, cuenta, faccion, almacen_personal, cupo, columna, carro, sintetico, informes, plazas_recordadas, residencia_cambiada_en, alijos_abiertos })
 }
 

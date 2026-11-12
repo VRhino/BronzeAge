@@ -235,8 +235,7 @@ mod pruebas {
         let mut a = [escuadra(1, 1, Tropa::MiliciaLanceros)]; // 50,5 > 26 × 1,25 × 1,15 en el peor caso
         let res = resolver_asalto(r, Bando { escuadras: &mut a, heroes: &[1] }, Defensa::Base, Modalidad::Aguante, &mut Rng::nuevo(3)).unwrap();
         assert!(res.gana_atacante);
-        assert_eq!(res.bajas_atacante, vec![Baja { escuadra: 1, tropa: Tropa::MiliciaLanceros, antes: 25, despues: 24 }], "round(25 × 0,05) = 1");
-        assert_eq!(a[0].experiencia, 1_000);
+        assert_eq!(res.bajas_atacante, vec![Baja { escuadra: 1, tropa: Tropa::MiliciaLanceros, antes: 25, despues: 24, experiencia: 1_000 }], "round(25 × 0,05) = 1");
         assert!(res.heridos.is_empty() && res.bajas_escolta.is_empty());
     }
 
@@ -247,8 +246,8 @@ mod pruebas {
         let mut escolta = [escuadra(10, 7, Tropa::MiliciaLanceros)];
         let res = resolver_asalto(r, Bando { escuadras: &mut a, heroes: &[] }, Defensa::Escolta(&mut escolta), Modalidad::Disputa, &mut Rng::nuevo(8)).unwrap();
         assert!(res.gana_atacante);
-        assert_eq!(res.bajas_escolta[0], Baja { escuadra: 10, tropa: Tropa::MiliciaLanceros, antes: 25, despues: 25 - 6 }, "25 % de 25 = 6,25 → 6");
-        assert_eq!((escolta[0].cantidad, escolta[0].experiencia), (0, 500), "a cero, pero la escuadra persiste con su experiencia");
+        assert_eq!(res.bajas_escolta[0], Baja { escuadra: 10, tropa: Tropa::MiliciaLanceros, antes: 25, despues: 25 - 6, experiencia: 500 }, "25 % de 25 = 6,25 → 6");
+        assert_eq!(escolta[0].cantidad, 0, "a cero, pero la escuadra persiste");
     }
 
     #[test]
@@ -259,9 +258,9 @@ mod pruebas {
         let res = resolver_asalto(r, Bando { escuadras: &mut a, heroes: &[1, 2] }, Defensa::Escolta(&mut escolta), Modalidad::Disputa, &mut Rng::nuevo(8)).unwrap();
         assert!(!res.gana_atacante);
         assert_eq!(res.bajas_atacante[0].despues, 25 - 6);
-        assert_eq!(res.bajas_escolta[0].despues, 12 - 1, "round(12 × 0,05) = 1");
+        assert_eq!(res.bajas_escolta[0].despues, 20 - 1, "round(20 × 0,05) = 1");
         assert_eq!(res.heridos, vec![1, 2]);
-        assert_eq!((escolta[0].experiencia, a[0].experiencia), (1_000, 500));
+        assert_eq!((res.bajas_escolta[0].experiencia, res.bajas_atacante[0].experiencia), (1_000, 500));
         // La defensa de la escolta lleva cohesión: 2 escuadras ⇒ ×1,1.
         assert_eq!(res.defensa, poder_total(r, &[escuadra(10, 7, Tropa::ArquerosCompuesto), escuadra(11, 7, Tropa::ArquerosCompuesto)], true));
     }

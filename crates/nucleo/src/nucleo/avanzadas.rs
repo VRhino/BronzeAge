@@ -753,6 +753,9 @@ impl Nucleo {
             self.declarar_guerra(t, a, b);
         }
         let resultado = regla::resolver_ataque(&cr, estado, t, Bando { escuadras: &mut atac.escuadras, heroes: &atac.heroes }, Bando { escuadras: &mut defensa, heroes: &dentro.tropa.heroes }, &mut self.estado.rng);
+        if let Asedio::Combate(i) = &resultado {
+            self.experiencia_de_informe(t, i, &mut atac.escuadras, &mut defensa);
+        }
         self.volcar_escuadras(&atac.escuadras);
         self.volcar_escuadras(&defensa[n..]);
         if operativa {

@@ -37,7 +37,7 @@ fn plaza_con_guarnicion(m: &M) -> (Nucleo, u64) {
         r
     };
     orden(&mut n, Comando::AlternarAutoConstruccion { asentamiento: a, pausada: true });
-    let h = orden(&mut n, Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
+    let h = orden(&mut n, Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
     orden(&mut n, Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
     orden(&mut n, Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(a as u32)) });
     orden(&mut n, Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(a as u32) });
@@ -137,4 +137,24 @@ fn con_la_carne_pausada_ni_la_poblacion_ni_la_guarnicion_la_comen_y_el_trigo_pon
     pausada.avanzar_hasta(t + MIN);
     assert!(pausada.economia(a).unwrap().tendencia.consumido[Carne.indice()] > 0, "reanudada, se come otra vez");
     assert!(pausada.economia(a).unwrap().consumo_pausado.is_empty());
+}
+
+/// Economia_Construccion §9.2: el aceite de sésamo es un bien de consumo más, y `pausarConsumo` lo admite; lo pausado se ve dentro con su id de catálogo.
+#[test]
+fn el_aceite_de_sesamo_se_pausa_y_se_reanuda_como_los_demas_bienes() {
+    let Some(m) = mundo() else {
+        eprintln!("sin artefacto de mundo real: se omite");
+        return;
+    };
+    let (mut n, a) = plaza_con_guarnicion(m);
+    let pausar = |n: &mut Nucleo, id: &str, pausado| {
+        let t = n.ahora();
+        n.aplicar_en(t, Peticion::nueva("admin", id, Comando::PausarConsumo { asentamiento: a, recurso: AceiteSesamo, pausado }).de_admin())
+    };
+    let r = pausar(&mut n, "s1", true);
+    assert!(r.aceptada(), "{r:?}");
+    assert_eq!(n.economia(a).unwrap().consumo_pausado, vec![AceiteSesamo]);
+    assert_eq!(nucleo::proyeccion::interior::asentamiento(&n, a).unwrap().consumo_pausado, vec!["aceiteSesamo".to_owned()]);
+    assert!(pausar(&mut n, "s2", false).aceptada());
+    assert!(n.economia(a).unwrap().consumo_pausado.is_empty());
 }

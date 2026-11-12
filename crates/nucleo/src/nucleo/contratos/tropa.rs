@@ -5,6 +5,7 @@
 //! Los hechos de la ficha (`rango_subido`, `medalla`, `premio_reclamado`, `leva_recibida`) los oye solo el mercenario: su ficha es pública en su héroe, pero lo que la hizo crecer no (§10).
 
 use super::*;
+use crate::nucleo::botin_de_objetos::Fuente;
 use crate::codec_militar::tropa_a_u8;
 use crate::estado::Dato;
 use ::mercenarios::{Ficha, Medalla};
@@ -22,11 +23,13 @@ impl Nucleo {
         self.estado.contratos.fichas.get_mut(&heroe).expect("la ficha nace con el primer ofrecimiento")
     }
 
-    /// Suma renombre a la ficha de `heroe` (§8.3). Por cada rango nuevo la ficha suma su escuadra de premio y se cuenta `mercenarios.rango_subido`.
+    /// Suma renombre a la ficha de `heroe` (§8.3). Por cada rango nuevo la ficha suma su escuadra de premio y se cuenta `mercenarios.rango_subido`; el 4 y el 5 dan además su
+    /// tabla de objetos (`BOTIN_OBJETOS.rangoMercenario`, entrada 68), a su mochila.
     pub(super) fn apuntar_renombre(&mut self, t: Instante, heroe: u64, n: u32) {
         let d = self.estado.reglas.economia.contratos.clone();
         for rango in self.ficha_mut(heroe).sumar_renombre(&d, n) {
             self.emitir_nombrando(t, "mercenarios.rango_subido", vec![], vec![heroe], vec![("heroe", heroe as i64), ("rango", i64::from(rango))]);
+            self.botin_de_objetos(t, heroe, Fuente::Mercenario(rango));
         }
     }
 
@@ -128,7 +131,7 @@ mod pruebas {
         let reglas = Reglas::default();
         let rutas = Arc::new(Rutas::desde_grafo(&GrafoNavegacion::default()));
         let mut n = Nucleo::nuevo(Arranque { reglas: reglas.clone(), ajustes: Ajustes::default(), semilla: 1, inicio: 0, rutas, mundo_hash: "h".into(), mundo: None });
-        n.estado.militar.insertar(HeroeNucleo::nuevo(Heroe::nuevo(&reglas.economia.militar, BOT, Controlador::Bot, 0, 1), "bot", None));
+        n.estado.militar.insertar(HeroeNucleo::nuevo(Heroe::nuevo(&reglas.economia.militar, BOT, Controlador::Bot, 0, 1, "dagas").expect("una clase del catálogo"), "bot", None));
         n.estado.contratos.fichas.insert(BOT, Ficha::nueva());
         n
     }

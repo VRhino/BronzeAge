@@ -215,12 +215,13 @@ mod pruebas {
     }
 
     #[test]
-    fn el_nivel_sigue_la_curva_5_10_20_40_y_luego_40_por_nivel() {
+    fn el_nivel_sigue_la_curva_de_1375() {
         let r = r();
         let n = |puntos: f64| nivel_de_escuadra(&r, (puntos * 1000.0) as Mil);
-        assert_eq!((n(0.0), n(4.999), n(5.0), n(14.999), n(15.0), n(35.0), n(75.0)), (1, 1, 2, 2, 3, 4, 5));
-        assert_eq!(n(274.999), 9, "falta una milésima para el máximo");
-        assert_eq!(n(275.0), 10, "275 de experiencia llevan al nivel 10 (Heroe_Y_Tropa §10.2)");
+        assert_eq!((n(0.0), n(9.999), n(10.0), n(34.999), n(35.0), n(85.0), n(185.0)), (1, 1, 2, 2, 3, 4, 5));
+        assert_eq!((n(335.0), n(535.0), n(785.0), n(1_060.0)), (6, 7, 8, 9));
+        assert_eq!(n(1_374.999), 9, "falta una milésima para el máximo");
+        assert_eq!(n(1_375.0), 10, "1.375 de experiencia llevan al nivel 10 (Heroe_Y_Tropa §10.2)");
         assert_eq!(n(10_000.0), 10, "el nivel no pasa del máximo");
     }
 
@@ -228,12 +229,12 @@ mod pruebas {
     fn la_experiencia_se_acumula_con_victoria_y_derrota_y_sube_de_nivel() {
         let r = r();
         let mut e = escuadra(Tropa::Arqueros);
-        for _ in 0..5 {
+        for _ in 0..10 {
             e.con_experiencia(&r, 1_000); // victoria: 1
         }
-        assert_eq!((e.experiencia, e.nivel), (5_000, 2));
+        assert_eq!((e.experiencia, e.nivel), (10_000, 2));
         e.con_experiencia(&r, 500); // derrota: 0,5
-        assert_eq!((e.experiencia, e.nivel), (5_500, 2));
+        assert_eq!((e.experiencia, e.nivel), (10_500, 2));
     }
 
     #[test]
@@ -252,8 +253,8 @@ mod pruebas {
         assert_eq!(e.poder(&r), 51_500, "el nivel 1 ya cuenta +3 %");
         e.nivel = 10;
         assert_eq!(e.poder(&r), 65_000);
-        let compuesto = escuadra(Tropa::ArquerosCompuesto); // 15 × 12 = 180
-        assert_eq!(compuesto.poder(&r), 185_400);
+        let compuesto = escuadra(Tropa::ArquerosCompuesto); // 15 × 20 = 300
+        assert_eq!(compuesto.poder(&r), 309_000);
         let mut vacia = escuadra(Tropa::Hequetai);
         vacia.cantidad = 0;
         assert_eq!(vacia.poder(&r), 0);

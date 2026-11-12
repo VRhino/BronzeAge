@@ -28,6 +28,7 @@ use militar::columna::Politica;
 use militar::heroe::{Controlador, Residencia};
 use militar::inspeccion::Objetivo;
 use militar::presencia::Ubicacion;
+use objetos::datos::Hueco;
 use mercenarios::{Objetivo as ObjetivoMercenario, TipoOrden, Trabajo};
 use pb::orden::Cuerpo;
 use prost_types::{value::Kind, Struct};
@@ -158,13 +159,27 @@ impl Ctx<'_> {
             Some(otro) => self.forma(format!("forma de pago desconocida: {otro}")),
         }
     }
-    /// `pagar_con` de un contrato de mercenario: además de las de [`Self::pagar_con`], `monedas` y `almacenPlaza`.
+    /// `pagar_con` de un contrato de mercenario: además de las de [`Self::pagar_con`], `monedas`, `almacenPlaza` y `fondoPlaza`.
     fn pagar_con_de_contrato(&self, s: Option<&str>) -> R<Option<PagarCon>> {
         match s {
             Some("monedas") => Ok(Some(PagarCon::Monedas)),
             Some("almacenPlaza") => Ok(Some(PagarCon::AlmacenPlaza)),
+            Some("fondoPlaza") => Ok(Some(PagarCon::FondoPlaza)),
             _ => self.pagar_con(s),
         }
+    }
+    /// Un hueco del equipo (`arma` | `casco` | `torso` | `guantes` | `pantalones` | `botas` | `montura`); otro valor, `orden.forma_invalida`.
+    fn hueco(&self, s: &str) -> R<Hueco> {
+        Ok(match s {
+            "arma" => Hueco::Arma,
+            "casco" => Hueco::Casco,
+            "torso" => Hueco::Torso,
+            "guantes" => Hueco::Guantes,
+            "pantalones" => Hueco::Pantalones,
+            "botas" => Hueco::Botas,
+            "montura" => Hueco::Montura,
+            otro => return self.forma(format!("hueco del equipo desconocido: {otro}")),
+        })
     }
     /// El cultivo de una aldea (`trigo`, el de sin él, | `vid` | `oliva`); otro valor, `orden.forma_invalida`.
     fn cultivo(&self, s: Option<&str>) -> R<Cultivo> {
@@ -421,10 +436,11 @@ impl Ctx<'_> {
         Ok(match cuerpo {
             // ── Presencia y héroe ──
             Cuerpo::CrearHeroe(o) => {
-                // El nombre se guarda (2026-10-27; sin espacios a los lados, vacío = «Héroe N»). DUDA: clase, género y avatar se ignoran hasta que Conquest publique su catálogo (decisión 4
-                // de 4H): el núcleo no los guarda.
+                // El nombre se guarda (2026-10-27; sin espacios a los lados, vacío = «Héroe N») y la clase la valida el núcleo contra `CLASES_HEROE` (2026-11-12). DUDA: género y
+                // avatar se ignoran hasta que Conquest publique su catálogo (decisión 4 de 4H): el núcleo no los guarda.
                 let nombre = Some(o.display_name.trim().to_owned()).filter(|x| !x.is_empty());
-                Comando::CrearHeroe { cuenta: self.cliente.into(), campamento: self.campamento(&o.campamento_id)?, controlador: if self.bot { Controlador::Bot } else { Controlador::Humano }, nombre }
+                let controlador = if self.bot { Controlador::Bot } else { Controlador::Humano };
+                Comando::CrearHeroe { cuenta: self.cliente.into(), campamento: self.campamento(&o.campamento_id)?, controlador, nombre, clase: o.class_definition_id.clone() }
             }
             Cuerpo::ReclutarTropa(o) => Comando::ReclutarTropa { asentamiento: self.plaza(&o.asentamiento_id)?, heroe: self.heroe(&o.heroe_id)?, tropa: self.tropa(&o.tropa_id)? },
             Cuerpo::ReclutarEnCampamento(o) => {
@@ -442,7 +458,6 @@ impl Ctx<'_> {
                 loadout: o.loadout_id.as_deref().map(|s| self.loadout(s)).transpose()?,
                 nombre: o.display_name.clone(),
                 escuadras: self.escuadras(&o.squad_ids)?,
-                perks: o.perks_seleccionados.iter().map(|&p| self.entero_u32(p, "perk")).collect::<R<_>>()?,
                 activo: o.activo,
             },
             Cuerpo::BorrarLoadout(o) => Comando::BorrarLoadout { heroe: self.mi_heroe()?, loadout: self.loadout(&o.loadout_id)? },
@@ -452,6 +467,22 @@ impl Ctx<'_> {
             }
             Cuerpo::OrdenarEscuadras(o) => Comando::OrdenarEscuadras { heroe: self.mi_heroe()?, escuadras: self.escuadras(&o.escuadron_ids)? },
             Cuerpo::ElegirFormacion(o) => Comando::ElegirFormacion { heroe: self.mi_heroe()?, escuadra: self.escuadra(&o.escuadron_id)?, formacion: o.formacion.clone() },
+            Cuerpo::EquiparObjeto(o) => Comando::EquiparObjeto { heroe: self.mi_heroe()?, casilla: o.casilla },
+            Cuerpo::DesequiparObjeto(o) => Comando::DesequiparObjeto { heroe: self.mi_heroe()?, hueco: self.hueco(&o.hueco)? },
+            Cuerpo::GuardarObjeto(o) => Comando::GuardarObjeto { heroe: self.mi_heroe()?, casilla: o.casilla, cantidad: o.cantidad },
+            Cuerpo::SacarObjeto(o) => Comando::SacarObjeto { heroe: self.mi_heroe()?, casilla: o.casilla, cantidad: o.cantidad },
+            Cuerpo::ComprarObjeto(o) => Comando::ComprarObjeto { heroe: self.mi_heroe()?, objeto: o.objeto.clone() },
+            Cuerpo::VenderObjeto(o) => Comando::VenderObjeto { heroe: self.mi_heroe()?, casilla: o.casilla, cantidad: o.cantidad },
+            Cuerpo::ForjarObjeto(o) => Comando::ForjarObjeto { heroe: self.mi_heroe()?, objeto: o.objeto.clone() },
+            Cuerpo::UsarObjeto(o) => Comando::UsarObjeto { heroe: self.mi_heroe()?, casilla: o.casilla, escuadra: o.escuadron_id.as_deref().map(|e| self.escuadra(e)).transpose()? },
+            Cuerpo::ConfigurarForja(o) => {
+                // La forja se abre a los tres grupos de fuera de la puerta; los Aedas no forjan (Heroe_Y_Tropa §4.6).
+                let grupo = match politica::Grupo::desde_nombre(&o.grupo) {
+                    Some(g @ (politica::Grupo::Aliados | politica::Grupo::Neutrales | politica::Grupo::Enemigos)) => g,
+                    Some(politica::Grupo::Aedas) | None => return self.forma(format!("grupo de la forja desconocido: {}", o.grupo)),
+                };
+                Comando::ConfigurarForja { asentamiento: self.plaza(&o.asentamiento_id)?, grupo, abierta: o.abierta, recargo_pct: o.recargo_pct }
+            }
             Cuerpo::AsignarGuarnicion(o) => Comando::AsignarGuarnicion { heroe: self.mi_heroe()?, escuadra: self.escuadra(&o.squad_id)? },
             Cuerpo::RetirarGuarnicion(o) => Comando::RetirarGuarnicion { heroe: self.mi_heroe()?, escuadra: self.escuadra(&o.squad_id)? },
             Cuerpo::PasarAViveres(o) => Comando::PasarAViveres { heroe: self.mi_heroe()?, cantidad: o.cantidad },

@@ -9,7 +9,7 @@ mod comun;
 use base::{Instante, Punto, MS_POR_MINUTO};
 use combate::ciclo::{Asignacion, CaravanaEnBatalla, EscuadraDeSalida, EstadoBatalla, Instancia, MotivoSalida, SalidaBatalla, Token};
 use combate::resolucion::Lado;
-use combate::resultado::{Botin, ObjetoBotin, Razon, Resultado as ResultadoDeBatalla, ResultadoEscuadra, ResultadoHeroe};
+use combate::resultado::{Razon, Resultado as ResultadoDeBatalla, ResultadoEscuadra, ResultadoHeroe};
 use comun::c;
 use militar::catalogo::Tropa;
 use militar::heroe::Controlador;
@@ -116,10 +116,10 @@ fn resultado(n: &Nucleo, id: u64, ganador: Lado, muertos: i64) -> ResultadoDeBat
             .escuadras_de()
             .map(|e| {
                 let m = muertos.min(e.efectivos);
-                ResultadoEscuadra { escuadra: e.id, desplegados: e.efectivos, supervivientes_al_cierre: e.efectivos - m, muertos: m, xp_ganada: 4 }
+                ResultadoEscuadra { escuadra: e.id, desplegados: e.efectivos, supervivientes_al_cierre: e.efectivos - m, muertos: m }
             })
             .collect(),
-        por_heroe: b.heroes_que_combaten().map(|h| ResultadoHeroe { heroe: h, participo: true, sobrevivio_al_cierre: true, xp_ganada: 7, derrotado: None, botin: None }).collect(),
+        por_heroe: b.heroes_que_combaten().map(|h| ResultadoHeroe { heroe: h, participo: true, sobrevivio_al_cierre: true, derrotado: None }).collect(),
         version_servidor: "v1".into(),
         carros_perdidos: vec![],
     }
@@ -212,7 +212,7 @@ fn atacar_con_un_humano_y_servidores_de_batalla_abre_una_batalla_en_lugar_de_res
     assert_eq!((b.ticket.atacante.faccion, b.ticket.defensor.faccion), (Some(1), Some(2)));
     assert_eq!(b.ticket.atacante.participantes.len() + b.ticket.defensor.participantes.len(), 2);
     let a = &b.ticket.atacante.participantes[0];
-    assert_eq!((a.heroe, a.controlador, a.casillas_libres), (ana.1, Controlador::Humano, 72));
+    assert_eq!((a.heroe, a.controlador), (ana.1, Controlador::Humano));
     assert_eq!(a.escuadras.iter().map(|e| (e.id, e.efectivos, e.dueno)).collect::<Vec<_>>(), x.fuerte.iter().map(|&e| (e, soldados(&x.n, ana.1, e), Some(ana.1))).collect::<Vec<_>>());
     assert_eq!(b.bloqueo.ejercitos, vec![ana.0, beto.0]);
     // Lo que combate queda apartado: columnas fuera del espacio, escuadras con el candado de la batalla, nada que comer.
@@ -508,7 +508,6 @@ fn el_ciclo_completo_con_los_cinco_mensajes_sus_rechazos_y_su_idempotencia() {
     assert_eq!(malo(&mut x, "r6", &|r| r.por_escuadra[0].muertos += 1), rechazos::BATALLA_RESULTADO_INVALIDO, "no cierra sobre lo autorizado");
     assert_eq!(malo(&mut x, "r7", &|r| (r.razon, r.ganador) = (Razon::TiempoAgotado, Lado::Atacante)), rechazos::BATALLA_RESULTADO_INVALIDO);
     assert_eq!(malo(&mut x, "r8", &|r| r.fin = r.inicio + 15 * MIN + 1), rechazos::BATALLA_RESULTADO_INVALIDO, "dura más que la duración máxima");
-    assert_eq!(malo(&mut x, "r9", &|r| r.por_heroe[1].botin = Some(Botin { objetos: vec![], monedas: -1 })), rechazos::BATALLA_RESULTADO_INVALIDO);
     assert_eq!(malo(&mut x, "r10", &|r| r.carros_perdidos = vec!["1:0".into()]), rechazos::BATALLA_RESULTADO_INVALIDO, "no hay carros que perder fuera de una caravana");
     let r = x.n.aplicar_en(14 * MIN, Peticion::nueva("ana", "r11", Comando::AplicarResultado { batalla: id, resultado: bueno.clone() }));
     assert_eq!(codigo(&r), rechazos::BATALLA_SIN_CREDENCIAL);
@@ -563,19 +562,19 @@ fn jugada(muertos: i64, ajusta: &dyn Fn(&Choque, &mut ResultadoDeBatalla)) -> (C
 
 #[test]
 fn el_resultado_deja_las_bajas_la_experiencia_el_botin_el_carro_y_la_chatarra_y_las_columnas_vuelven_al_mundo() {
-    let botin = Botin { objetos: vec![ObjetoBotin { definicion: "espada".into(), cantidad: 1, instancia: Some("i-1".into()) }], monedas: 8 };
-    let (x, id) = jugada(5, &|x, r| r.por_heroe.iter_mut().find(|h| h.heroe == x.ana.1).unwrap().botin = Some(botin.clone()));
+    let (x, id) = jugada(5, &|_, _| {});
     let (ana, beto) = (x.ana, x.beto);
     let monedas0 = militar::Reglas::cargar().heroe.monedas_iniciales;
-    // Cada escuadra cierra sobre sus supervivientes, con la experiencia que dijo Unity (puntos enteros, guardados en milésimas).
-    for (h, e, antes) in [(ana.1, x.fuerte[0], completa(Tropa::EspadachinesBronce)), (ana.1, x.fuerte[1], completa(Tropa::ArquerosCompuesto)), (beto.1, x.debil, completa(Tropa::MiliciaLanceros))] {
+    // Cada escuadra cierra sobre sus supervivientes, con la experiencia que pone el motor (D7): 4 si su bando gana y 2 si pierde, en milésimas, diga lo que diga Unity.
+    for (h, e, antes, xp) in [(ana.1, x.fuerte[0], completa(Tropa::EspadachinesBronce), 4_000), (ana.1, x.fuerte[1], completa(Tropa::ArquerosCompuesto), 4_000), (beto.1, x.debil, completa(Tropa::MiliciaLanceros), 2_000)] {
         let s = x.n.heroe(h).unwrap().heroe.escuadra(e).unwrap();
-        assert_eq!((s.cantidad, s.experiencia, s.reserva_batalla), (antes - 5, 4_000, None), "supervivientes, 4 puntos y sin candado");
+        assert_eq!((s.cantidad, s.experiencia, s.reserva_batalla), (antes - 5, xp, None), "supervivientes, 4 o 2 puntos y sin candado");
     }
-    // El héroe suma su experiencia, las monedas del botín y las de ganar a otra Facción (`MONEDAS.ganador`; al perdedor, `MONEDAS.perdedor`); el objeto no tiene dónde caer (CQ-004) y el nivel no sube (CQ-001).
+    // El héroe suma su experiencia (la de su bando, una vez) y las monedas de ganar a otra Facción (`MONEDAS.ganador`; al perdedor, `MONEDAS.perdedor`): Unity no manda botín (D7).
     let monedas = combate::Reglas::cargar().monedas;
     let h = &x.n.heroe(ana.1).unwrap().heroe;
-    assert_eq!((h.experiencia, h.nivel, h.monedas), (7, 1, monedas0 + 8 + monedas.ganador));
+    assert_eq!((h.experiencia, h.nivel, h.monedas), (4_000, 1, monedas0 + monedas.ganador));
+    assert_eq!(x.n.heroe(beto.1).unwrap().heroe.experiencia, 2_000);
     assert_eq!(x.n.heroe(beto.1).unwrap().heroe.monedas, monedas0 + monedas.perdedor, "el perdedor de otra Facción también cobra");
     assert_eq!(x.n.estado().combate.encuentros.get(&(1, 2)).map(Vec::len), Some(1), "y el par anota su encuentro");
     // Heridos: el bando que pierde (sin `derrotado`); el que gana, no.
@@ -596,11 +595,57 @@ fn el_resultado_deja_las_bajas_la_experiencia_el_botin_el_carro_y_la_chatarra_y_
     }
     assert!(!x.n.heroe_en_batalla(ana.1) && x.n.bloqueos().ejercitos.is_empty());
     assert_eq!(x.n.batalla(id).unwrap().estado, EstadoBatalla::Aplicada);
-    assert_eq!(x.n.estado().rng.estado(), base::Rng::derivado(42, "nucleo").estado(), "Unity decide: ni abrir ni aplicar el resultado gastan una tirada");
+    // Unity decide la batalla: abrirla no gasta ninguna tirada y aplicar el resultado, solo las de la tabla `unity` de cada héroe que participó, en el orden de `porHeroe` (D6).
+    let mut rng = base::Rng::derivado(42, "nucleo");
+    let unity = &objetos::Catalogo::default().botin.unity;
+    for h in &x.n.batalla(id).unwrap().resultado.as_ref().unwrap().por_heroe {
+        unity.tirar(h.heroe == ana.1, &mut rng);
+    }
+    assert_eq!(x.n.estado().rng.estado(), rng.estado());
     // La experiencia de Facción de una batalla de Unity (5C): 2,5 por héroe que participó, a la Facción con la que entró, sin filtro de dignidad.
     assert_eq!((x.n.faccion(1).unwrap().experiencia, x.n.faccion(2).unwrap().experiencia), (2_500, 2_500));
-    // Los logros (6B, D10): los suma el resultado aplicado, no `batalla.aplicada` (D18): una librada en campo abierto, sin hoplitas.
-    assert_eq!(comun::logros_de_hechos(&x.n), vec![(Contador::BatallasLibradas, 1), (Contador::BatallasCampoAbierto, 1)]);
+    // Los logros (6B, D10): los suma el resultado aplicado, no `batalla.aplicada` (D18): una librada en campo abierto, sin hoplitas; y combaten los Reyes (Tecnologia_Aedas §2.1: el primer
+    // ciudadano de cada Facción de administración lo es).
+    assert_eq!(comun::logros_de_hechos(&x.n), vec![(Contador::BatallasLibradas, 1), (Contador::BatallasCampoAbierto, 1), (Contador::BatallasConRey, 1)]);
+}
+
+#[test]
+fn el_botin_de_unity_lo_tira_el_motor_con_la_tabla_unity_y_lo_de_ganar_solo_va_al_bando_ganador() {
+    // D6 y D7: Unity ya no manda botín; a cada héroe que participó, la tabla `unity` con el rng del estado, y lo de `soloSiGana` solo si gana su bando.
+    let (x, id) = jugada(5, &|_, _| {});
+    let (ana, beto) = (x.ana, x.beto);
+    let mut rng = base::Rng::derivado(42, "nucleo");
+    let unity = &objetos::Catalogo::default().botin.unity;
+    let esperado: Vec<comun::Botin> = x.n.batalla(id).unwrap().resultado.as_ref().unwrap().por_heroe.iter()
+        .map(|h| comun::Botin { heroe: h.heroe, origen: "unity".into(), mochila: unity.tirar(h.heroe == ana.1, &mut rng), almacen: vec![], perdido: vec![] })
+        .collect();
+    assert_eq!(comun::botines(&x.n), esperado, "un hecho por héroe, con lo de su tirada y todo a la mochila");
+    let crisoles = |h: u64| x.n.heroe(h).unwrap().heroe.mochila.casillas.values().filter(|c| c.pieza.objeto == "crisol").map(|c| c.cantidad).sum::<u32>();
+    assert_eq!((crisoles(ana.1), crisoles(beto.1)), (2, 1), "uno siempre y otro solo si gana");
+    let solo_si_gana = |o: &str| o.starts_with("medalla") || o == "cofre_monturas";
+    assert!(!x.n.heroe(beto.1).unwrap().heroe.mochila.casillas.values().any(|c| solo_si_gana(&c.pieza.objeto)), "el que pierde no saca medallas ni el cofre");
+}
+
+#[test]
+fn una_batalla_de_unity_cuenta_los_contadores_de_las_eras_iv_y_v_con_las_escuadras_que_dice_unity() {
+    // Ana suma carros de guerra (Caballerizas, escalón 4) a sus espadachines (Barracón) y arqueros (Galería de tiro); beto, otros carros, que Unity deja sin soldados.
+    let mut x = choque();
+    let (ana, beto) = (x.ana, x.beto);
+    dar(&mut x.n, "d4", ana.1, Tropa::CarrosGuerra);
+    let elite = dar(&mut x.n, "d5", beto.1, Tropa::CarrosGuerra);
+    assert!(atacar(&mut x.n, 10 * MIN, "ana", "a1", ana.1, ObjetivoAtaque::Ejercito(beto.0), false).aceptada());
+    let id = x.n.batallas().next().unwrap().id;
+    en_curso(&mut x.n, id, 11 * MIN, &[ana.1]);
+    let mut r = resultado(&x.n, id, Lado::Atacante, 0);
+    let e = r.por_escuadra.iter_mut().find(|e| e.escuadra == elite).unwrap();
+    (e.supervivientes_al_cierre, e.muertos) = (0, e.desplegados);
+    assert!(aplicar(&mut x.n, 20 * MIN, "res", id, r).aceptada());
+    // Gana a campo abierto con caballería de élite, con armas combinadas, persiguiendo con caballería, y cae una escuadra de élite; combaten los Reyes (el primer ciudadano de cada Facción
+    // de administración lo es). Sin coalición ni tres héroes.
+    let c = |k: Contador| x.n.tecnologia().contador(k);
+    let suben = [Contador::BatallasArmasCombinadas, Contador::BatallasCampoAbiertoConCaballeria, Contador::BatallasCampoAbiertoConCaballeriaElite, Contador::EscuadrasEliteDestruidas, Contador::PersecucionesDeCaballeria, Contador::BatallasConRey];
+    assert_eq!(suben.map(c), [1; 6]);
+    assert_eq!([Contador::BatallasContraCoalicion, Contador::BatallasConTresHeroes].map(c), [0; 2]);
 }
 
 #[test]
@@ -787,7 +832,7 @@ fn con_la_partida_en_curso_la_salida_aplica_las_bajas_hiere_al_derrotado_y_el_re
     assert_eq!(hechos(&x.n, "batalla.salida").len(), 1);
     // El resultado final cubre solo a los que siguen combatiendo.
     let mut con_todos = resultado(&x.n, id, Lado::Atacante, 3);
-    con_todos.por_heroe.push(ResultadoHeroe { heroe: beto.1, participo: true, sobrevivio_al_cierre: false, xp_ganada: 0, derrotado: None, botin: None });
+    con_todos.por_heroe.push(ResultadoHeroe { heroe: beto.1, participo: true, sobrevivio_al_cierre: false, derrotado: None });
     assert_eq!(codigo(&aplicar(&mut x.n, 13 * MIN, "r1", id, con_todos)), rechazos::BATALLA_RESULTADO_INVALIDO);
     let bueno = resultado(&x.n, id, Lado::Atacante, 3);
     assert_eq!((bueno.por_heroe.len(), bueno.por_escuadra.len()), (1, 2), "ana y sus dos escuadras");
@@ -909,7 +954,9 @@ fn contra_un_campamento_de_bandidos_se_juega_un_evento_pve_cualquiera_se_une_com
     assert_eq!([Madera, Piedra, Trigo].map(total), [5 * por_heroe; 3], "madera, piedra y trigo del nivel 2 por héroe, repartidos por rondas entre las cinco columnas");
     assert_eq!(total(Oro), 0, "los bandidos ya no dan oro");
     assert_eq!(hechos(&x.n, "evento_pve.aplicada").len(), 1);
-    assert_eq!(comun::logros_de_hechos(&x.n), vec![(Contador::BandidosCampamentosDestruidos, 1), (Contador::BatallasLibradas, 1)], "el campamento destruido por Unity cuenta (6B)");
+    // Y los de las Eras IV y V (Tecnologia_Aedas §2.1): el bando atacante lleva cinco héroes, y entre ellos el Rey de su Facción.
+    let logros = vec![(Contador::BandidosCampamentosDestruidos, 1), (Contador::BatallasLibradas, 1), (Contador::BatallasConTresHeroes, 1), (Contador::BatallasConRey, 1)];
+    assert_eq!(comun::logros_de_hechos(&x.n), logros, "el campamento destruido por Unity cuenta (6B)");
     // Solo la experiencia de bandidos (1 ÷ nivel 1) para la Facción atacante, no la de la batalla: el mismo premio que con números (5C-4).
     assert_eq!((x.n.faccion(1).map(|f| f.experiencia), x.n.faccion(3).map_or(0, |f| f.experiencia)), (Some(1_000), 0));
     assert!(!heridos0 && !x.n.heroe_herido(ana.1), "gana el atacante");
@@ -978,7 +1025,7 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_y_cada_campo_cambia_el_hash(
     let (n, id) = a_mitad();
     let reglas = reglas_unity();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN62");
+    assert_eq!(&bytes[..5], b"BAN63");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "hash-de-prueba").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.batallas, n.estado().batallas);
@@ -1000,7 +1047,6 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_y_cada_campo_cambia_el_hash(
         ("capacidad", batalla(|b| b.ticket.atacante.capacidad += 1)),
         ("faccion_del_bando", batalla(|b| b.ticket.defensor.faccion = Some(9))),
         ("controlador", batalla(|b| b.ticket.atacante.participantes[0].controlador = Controlador::Bot)),
-        ("casillas", batalla(|b| b.ticket.atacante.participantes[0].casillas_libres -= 1)),
         ("efectivos", batalla(|b| b.ticket.atacante.participantes[0].escuadras[0].efectivos -= 1)),
         ("tropa", batalla(|b| b.ticket.atacante.participantes[0].escuadras[0].tropa = Tropa::Arqueros)),
         ("escuadra.nivel", batalla(|b| b.ticket.atacante.participantes[0].escuadras[0].nivel += 1)),
@@ -1049,7 +1095,7 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_y_cada_campo_cambia_el_hash(
     let mut res = resultado(&n, id, Lado::Atacante, 1);
     e.batallas.batallas.get_mut(&id).unwrap().resultado = Some(res.clone());
     let h1 = e.hash();
-    res.por_heroe[0].botin = Some(Botin { objetos: vec![ObjetoBotin { definicion: "x".into(), cantidad: 2, instancia: None }], monedas: 1 });
+    res.por_heroe[0].derrotado = Some(true);
     e.batallas.batallas.get_mut(&id).unwrap().resultado = Some(res);
     assert_ne!(e.hash(), h1);
     assert_eq!(nucleo::Estado::deserializar(&e.serializar(), &reglas, "hash-de-prueba").unwrap().hash(), e.hash());
@@ -1314,7 +1360,7 @@ impl Esc {
     /// Un héroe humano de la cuenta, ciudadano de `faccion`, que reside en la plaza y está dentro.
     fn heroe_en(&mut self, m: &Mundo, cuenta: &str, faccion: u32, plaza: u64) -> u64 {
         let campamento = campamento_mas_cercano(m, self.pos(plaza));
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(faccion) });
         self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
         self.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(plaza as u32) });
@@ -1324,7 +1370,7 @@ impl Esc {
     fn defensor(&mut self, heroe: u64, tropas: &[Tropa]) -> Vec<u64> {
         let ids: Vec<u64> = tropas.iter().map(|&t| self.ok("admin", Comando::DarEscuadra { heroe, tropa: t, cantidad: completa(t) }).creadas[0]).collect();
         let loadout = self.n.heroe(heroe).unwrap().heroe.loadouts[0].id;
-        self.ok("admin", Comando::GuardarLoadout { heroe, loadout: Some(loadout), nombre: "Default".into(), escuadras: ids.clone(), perks: vec![], activo: Some(true) });
+        self.ok("admin", Comando::GuardarLoadout { heroe, loadout: Some(loadout), nombre: "Default".into(), escuadras: ids.clone(), activo: Some(true) });
         ids
     }
     /// Un ejército de administración de `cuenta`/`faccion` a 2 u de `p`, con las tropas dadas y su héroe humano.
@@ -2142,7 +2188,7 @@ fn los_bandidos_que_acosan_una_columna_con_dos_caravanas_juegan_las_dos_en_la_mi
 
         // La foto a mitad de la batalla lleva las dos caravanas y vuelve idéntica; la del formato anterior (una sola caravana) se rechaza con su motivo.
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN62");
+        assert_eq!(&bytes[..5], b"BAN63");
         let vuelta = nucleo::Estado::deserializar(&bytes, &arranque_mundo(m, 7).reglas, &m.0.hash().to_string()).unwrap();
         assert_eq!((vuelta.serializar(), vuelta.batallas.clone()), (bytes.clone(), e.n.estado().batallas.clone()));
 

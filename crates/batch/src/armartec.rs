@@ -161,7 +161,7 @@ fn invariantes(t: &Tec) -> Vec<Metrica> {
     let uno = |id: &str, nombre: &str, valor: u64, origen: &str, nota: &str| metrica(id, nombre, "violaciones", max(0.0), Some(valor as f64), origen, nota);
     vec![
         uno("inv_logro", "Logros que cambian, se fijan antes de su umbral o no se fijan al cruzarlo", v.logro, "Tecnologia_Aedas §2", "Tras cada orden: un logro fijado no cambia; uno nuevo se fijó en el tramo y con su contador cruzando el umbral en él; uno sin fijar no tiene el contador cruzado."),
-        uno("inv_contador", "Contadores que bajan", v.contador, "Tecnologia_Aedas §2.1", "Tras cada orden, los 24."),
+        uno("inv_contador", "Contadores que bajan", v.contador, "Tecnologia_Aedas §2.1", "Tras cada orden, los 36."),
         uno("inv_adoptadas", "Adoptadas sin aparecer o reveladas ya aparecidas", v.adoptadas, "Tecnologia_Aedas §1", "Tras cada orden, cada Facción."),
         uno("inv_era_cerrada", "Tecnologías aparecidas de una Era cerrada", v.era_cerrada, "Tecnologia_Aedas §3", "En cada `tecnologia.aparece`, `aedas.venta` y `aedas.epica_tecnologia`, contra la Era de los hechos leídos hasta él; y tras cada orden, en el estado."),
         uno("inv_era", "Eras fuera de su mínimo o de su plazo", v.era, "Tecnologia_Aedas §3 paso 2 (mínimo de 1 semana, decisión del autor 2026-10-25)", "Tras cada orden: la Era pasa de una en una, no antes de su mínimo ni después de su plazo, ni sigue pasado su plazo ni, con todos sus logros, pasados su mínimo y su último logro."),

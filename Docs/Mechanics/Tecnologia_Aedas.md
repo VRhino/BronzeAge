@@ -1,6 +1,6 @@
 # Tecnología por Eras y Aedas
 
-> **Reescrito el 2026-10-13 para el mundo reactivo.** Donde este documento dice «cada tick», léase **«en cada evaluación»**: los contadores suben **al ocurrir** el hecho (la extracción y la fabricación son ritmos y acumulan al cambiar de ritmo y en cada muestreo), la Era se mira al fijarse un logro y en una cita al fin de su plazo, la aparición se evalúa **al ocurrir lo que mira su hito** (los disparadores de `Docs/Arquitectura/Sistema6_Contraste_y_Plan.md` §5.1; sin muestreo), los Aedas itinerantes se mueven por **planes** con eventos de llegada y de fin de estancia, y los residentes llegan por eventos agendados ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §3). **Las Eras IV y V siguen pospuestas** (se definen con el motor nuevo). El «cómo funcionaba» por tick está en `typescript-final:Docs/Mechanics/Tecnologia_Aedas.md`.
+> **Reescrito el 2026-10-13 para el mundo reactivo.** Donde este documento dice «cada tick», léase **«en cada evaluación»**: los contadores suben **al ocurrir** el hecho (la extracción y la fabricación son ritmos y acumulan al cambiar de ritmo y en cada muestreo), la Era se mira al fijarse un logro y en una cita al fin de su plazo, la aparición se evalúa **al ocurrir lo que mira su hito** (los disparadores de `Docs/Arquitectura/Sistema6_Contraste_y_Plan.md` §5.1; sin muestreo), los Aedas itinerantes se mueven por **planes** con eventos de llegada y de fin de estancia, y los residentes llegan por eventos agendados ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §3). **Las Eras IV y V están implementadas desde el 2026-11-12** (entrada 74, diseño del autor del 2026-11-11): sus 12 tecnologías, los 12 contadores nuevos (§2.1), las 6 condiciones de hito nuevas (§3.1) y sus épicas de 6 y 7 capítulos (§7.2). El «cómo funcionaba» por tick está en `typescript-final:Docs/Mechanics/Tecnologia_Aedas.md`.
 
 Cómo llega una tecnología a una Facción (logro del servidor + hito propio, compra a un Aeda o épica de un residente), cómo avanzan las Eras, cómo se adopta y qué hacen los Aedas: itinerantes que revelan y venden,
 residentes que cantan épicas, y la crónica que narra los hechos públicos.
@@ -32,6 +32,8 @@ TecnologiasFaccion = { aparecidas[], adoptadas[] (⊆ aparecidas), reveladas? } 
 DefinicionTecnologia = { nombre, era, deArranque?, logro?: ParteLogro & { ademas?: ParteLogro }, hito: CondicionHito[], bonusProduccion?: { recurso, factor } }
 ParteLogro = { contador, umbral } (fijo) | { contador, porPlaza } (umbral = porPlaza × max(N, 1), N = plazas vivas del mundo; 2026-11-07)
 CondicionHito = edificio{edificio, nivelInterno?} | tecnologia{id} | recursoEnCapital{recurso} | capitalEnNivel{nivel, conEdificio} | yacimientoEnTerritorio{recurso}
+              | escuadrasVivas{cantidad} | heroesEnFaccion{cantidad} | plazaEnNivel{nivel} | nivelFaccion{nivel} | columnasEnMarcha{cantidad}
+              | edificioEnPlazaDeNivel{edificio, nivelInterno, nivelPlaza}                                          (las seis últimas, de las Eras IV y V)
 
 AedaItinerante = { id, posicion, enAsentamientoId?, hasta?, destinoId?, ruta?, progreso, recientes[] }
 AedaResidente  = { id, nombre, asentamientoId, faccionId (la dueña cuando llegó), llegadaEn, epica?: { tecnologiaId, capitulo, hechos, ultimoHechoEn?, claves[] } }
@@ -54,6 +56,7 @@ Cada logro cumplido emite el evento **público** `tecnologia.logro { contador, u
 | `metalurgia_cobre` | 1.000 × N de cobre extraído |
 | `cria_caballar` | 5 × N animales comprados |
 | `aleacion_bronce` | 2.000 × N de cobre extraído **y** 1.000 × N de estaño extraído (el cobre es el mismo contador acumulado que el de la metalurgia) |
+| Eras IV y V | todas menos `logistica_campana` (1 camino compartido), `falange_sarisa` (3 batallas contra una coalición) y `cuerpo_hipaspistas` (10 batallas con Rey), que van con umbral fijo |
 
 ### 2.1 De dónde sale cada contador
 
@@ -78,8 +81,22 @@ Todos los contadores se **suman** salvo `plazasEnNivel.N`, que es un **récord**
 | `reclutados.caballeria` | soldados reclutados de una tropa cuyo edificio es Caballerizas, **× 5** si es `carros_guerra`, × 1 el resto |
 | `reclutados.arqueros`, `.escaramuzadores_jabalina`, `.arqueros_compuesto`, `.jinetes_asirios` | los soldados reclutados de esa tropa (`reclutados.<tropaId>` si el contador existe) |
 | `plazasEnNivel.2 / .3` | **récord** de cuántas plazas del mundo han tenido a la vez `nivelActual ≥ N` (se actualiza cada tick) |
+| `fabricado.armaHierroCalidad` | lo fabricado de `armaHierroCalidad`, como los demás `fabricado.*` (Eras IV y V) |
+| `caminos.compartidos` | **récord**, 0 o 1: pasa a 1 cuando se abre el primer camino compartido (un tramo fuera de toda zona que pisan 10 rutas o más de 3 Facciones o más; `caminoCompartidoAbierto`, [`Comercio_Caravanas.md`](Comercio_Caravanas.md) §7.4). Se mira al registrar una ruta en la red, mientras sigue a 0 |
+| `escuadras.veteranas` | una escuadra que llega al nivel 5 (una vez por escuadra, al cruzarlo) |
+| `batallas.conTresHeroes` | en una batalla, algún bando lleva 3 héroes o más |
+| `batallas.ganadasEnInferioridad` | gana el bando que empezó con menos soldados |
+| `escuadras.eliteDestruidas` | 1 por cada escuadra de escalón 4 o 5, de cualquier bando, que acaba la batalla sin soldados |
+| `batallas.campoAbiertoConCaballeria` | gana a campo abierto un bando con alguna escuadra de Caballerizas |
+| `batallas.campoAbiertoConCaballeriaElite` | gana a campo abierto un bando con caballería de escalón 4 o 5 |
+| `batallas.armasCombinadas` | algún bando lleva a la vez escuadras de Barracón, de Galería de tiro y de Caballerizas (gane o pierda) |
+| `batallas.contraCoalicion` | gana un bando de héroes de una sola Facción a uno con héroes de 2 Facciones o más |
+| `batallas.conRey` | combate el Rey de alguna Facción |
+| `persecuciones.deCaballeria` | una columna con alguna escuadra de Caballerizas ataca a otra columna o a una caravana (también la de Fundación), con números o en Unity, gane o pierda |
 
 Todos los `reclutados.*` cuentan igual en una plaza y en un campamento de mercenarios (Q4 del autor, 2026-10-24; el TS solo contaba la plaza). La guarnición de serie de las avanzadas y la tropa prestada no cuentan.
+
+**Los contadores de batalla de las Eras IV y V** (todos los de arriba menos `fabricado.armaHierroCalidad`, `caminos.compartidos`, `escuadras.veteranas` y `persecuciones.deCaballeria`) se cuentan en las mismas batallas que `batallas.libradas`: el encuentro de dos columnas con números (que es a campo abierto) y toda batalla de Unity (a campo abierto la de contexto `campo_abierto`). En Rust el núcleo arma un **resumen puro** de la batalla (`tecnologia::contador::ResumenBatalla`): cada bando con las Facciones de los héroes que combaten (en Unity, los que `participo`), cuántos son, sus soldados al empezar y sus escuadras que empezaron con alguno, cada una con el edificio y el escalón de su tropa y si acabó sin soldados (en Unity, los `supervivientesAlCierre` del resultado); si combate un Rey; quién gana y si es a campo abierto. `de_batalla` dice qué contadores suben. `persecuciones.deCaballeria` (`persecucion`) mira solo el bando atacante, y cuenta también en el asalto a una caravana con números, que no es una batalla librada; en Unity, en las de campo abierto y de caravana con atacantes (el acoso de unos bandidos no es una columna). El escalón de élite (4) y los tres héroes son la definición de los contadores, no cifras de calibración.
 
 **En Rust (6B) se cuenta en origen**, nunca a partir de los hechos: cada sitio que produce el hecho suma lo suyo al ocurrir, así que un hecho que deja dos rastros (el asedio con números tras su convocatoria
 emite `combate.asedio_*` y `batalla.aplicada`) cuenta una vez. Lo extraído es lo que **sale del nodo**, en la plaza y en sus pueblos extractores (lo que el carro de acarreo vuelca después en la madre no
@@ -115,7 +132,7 @@ Las condiciones del hito se miran con el estado de la Facción **al empezar la e
 
 > **La Cantera y las minas son de pueblo (2026-11-01).** Como la Cantera ya no se construye en la ciudad (ni la primera) y los minerales tampoco, el hito `edificio` de una Cantera o una mina (el de `canteria`, con `edificio: cantera`, y la mina de hierro de `forja_hierro_estandarizada`) se cumple en una plaza con un **pueblo extractor activo de ese tipo**, y completar el pueblo anota el hecho de épica `obra` de su tipo y dispara la aparición de su Facción como un edificio completado ([`Economia_Construccion.md`](Economia_Construccion.md) §14).
 
-> **Implementado en Rust (2026-10-25, 6C): la aparición por disparadores** (`crates/nucleo/src/nucleo/tecnologias.rs`). Lo que cambia algo que mira un hito marca a la Facción y, al cerrar la versión, a cada Facción marcada que siga viva le aparecen sus candidatas con el hito cumplido (`tecnologia.aparece { faccion, primera; tecnologia }`, privado, atribuido a su capital), en la misma versión que su causa: fijarse un logro o empezar una Era (todas las vivas); completarse o mejorarse un edificio, subir el nivel actual de una plaza o crecer su zona (su Facción); fundar, conquistar, anexionar, fusionar, perder una plaza o designar la capital (las Facciones de antes y de ahora); adoptar (también por administración); y el paso de minuto de la capital solo si una candidata pide `recursoEnCapital`, tiene su logro y su hito ya se cumple (O(1) en el paso: hoy solo la aleación del bronce). Al registrarse la descubridora (por cualquier vía) se programan sus dos citas (§5 y §6.1). Paso 4, la crónica de descubrimientos: en la **cita de conocimiento** de cada tecnología (`primeros.en + retrasoConocimiento`, prioridad 10) y también al fijarse un logro o empezar una Era (una descubridora sin logro, por administración, o de una Era aún cerrada se canta en cuanto se puede); `aedas.canta_descubrimiento { faccion: la descubridora; tecnologia }` es público y va a la crónica.
+> **Implementado en Rust (2026-10-25, 6C): la aparición por disparadores** (`crates/nucleo/src/nucleo/tecnologias.rs`). Lo que cambia algo que mira un hito marca a la Facción y, al cerrar la versión, a cada Facción marcada que siga viva le aparecen sus candidatas con el hito cumplido (`tecnologia.aparece { faccion, primera; tecnologia }`, privado, atribuido a su capital), en la misma versión que su causa: fijarse un logro o empezar una Era (todas las vivas); completarse o mejorarse un edificio, subir el nivel actual de una plaza o crecer su zona (su Facción); fundar, conquistar, anexionar, fusionar, perder una plaza o designar la capital (las Facciones de antes y de ahora); adoptar (también por administración); y el paso de minuto de la capital solo si una candidata pide algo que solo mira ese paso, tiene su logro y su hito ya se cumple (O(candidatas) en el paso: la aleación del bronce con `recursoEnCapital` y, de la Era IV, el Ejército permanente, el Cuerpo de oficiales y la Logística de campaña, con las condiciones que cambian sin ningún disparador: `escuadrasVivas`, `heroesEnFaccion`, `columnasEnMarcha` y `nivelFaccion`; §3.1). `plazaEnNivel` y `edificioEnPlazaDeNivel` usan los disparadores de siempre (el nivel actual de una plaza que sube, el edificio que se completa o se mejora). Al registrarse la descubridora (por cualquier vía) se programan sus dos citas (§5 y §6.1). Paso 4, la crónica de descubrimientos: en la **cita de conocimiento** de cada tecnología (`primeros.en + retrasoConocimiento`, prioridad 10) y también al fijarse un logro o empezar una Era (una descubridora sin logro, por administración, o de una Era aún cerrada se canta en cuanto se puede); `aedas.canta_descubrimiento { faccion: la descubridora; tecnologia }` es público y va a la crónica.
 
 ### 3.1 Condiciones de hito (`cumpleCondicion`)
 
@@ -126,10 +143,18 @@ Las condiciones del hito se miran con el estado de la Facción **al empezar la e
 | `recursoEnCapital {recurso}` | el almacén de su capital (`encontrarCapital`) tiene `> 0` de ese recurso |
 | `capitalEnNivel {nivel, conEdificio}` | existe capital con `nivelActual ≥ nivel` **y** ese edificio activo en la propia capital |
 | `yacimientoEnTerritorio {recurso}` | alguna zona de influencia de un asentamiento de la Facción contiene algún nodo de ese recurso (con o sin stock) |
+| `escuadrasVivas {cantidad}` | los héroes de la Facción (sus ciudadanos) tienen a la vez al menos esas escuadras con soldados |
+| `heroesEnFaccion {cantidad}` | la Facción tiene al menos esos héroes (ciudadanos) |
+| `plazaEnNivel {nivel}` | alguna plaza de la Facción tiene `nivelActual ≥ nivel` |
+| `nivelFaccion {nivel}` | la Facción tiene nivel ≥ `nivel` ([`Politica_Facciones.md`](Politica_Facciones.md)) |
+| `columnasEnMarcha {cantidad}` | tiene a la vez al menos esas columnas o ejércitos de su bandera moviéndose por el mapa (con plan y en el mapa) |
+| `edificioEnPlazaDeNivel {edificio, nivelInterno, nivelPlaza}` | alguna plaza de la Facción con `nivelActual ≥ nivelPlaza` tiene ese edificio activo con `nivelInterno ≥ nivelInterno` (con las mismas reglas que `edificio` para el Corral y los pueblos) |
+
+Las cuatro de cantidades y nivel que cambian sin disparador (escuadras vivas, héroes, columnas en marcha y nivel de la Facción) se miran en el paso de minuto de la capital, como `recursoEnCapital` (§3), y solo si alguna candidata de la Facción las pide; por eso, como esa, pueden ir atrasadas en el detalle de las reveladas (§10) hasta el siguiente cambio de la Facción.
 
 ### 3.2 Eras
 
-El servidor arranca en la Era I (`reinos_palaciales`). Cada Era tiene un plazo (`ERAS[..].plazoSemanas`) que es un **techo** y un **tiempo mínimo** (`ERAS[..].minimoSemanas`, 1 semana en cada una; decisión del autor, 2026-10-25) que es un **suelo**: la siguiente empieza antes del plazo si se cumplen todos los logros de la vigente, pero nunca antes de su mínimo; si los logros se cumplen antes, la Era pasa al llegar al mínimo. Si empieza por plazo, los logros pendientes de la anterior **siguen abiertos**.
+El servidor arranca en la Era I (`reinos_palaciales`) y tiene cinco: I a III, IV (`profesionalizacion_imperial`, 8 semanas) y V (`hegemonia_macedonica`, 26 semanas), la última, sin cita de fin de plazo. Cada Era tiene un plazo (`ERAS[..].plazoSemanas`) que es un **techo** y un **tiempo mínimo** (`ERAS[..].minimoSemanas`, 1 semana en cada una; decisión del autor, 2026-10-25) que es un **suelo**: la siguiente empieza antes del plazo si se cumplen todos los logros de la vigente, pero nunca antes de su mínimo; si los logros se cumplen antes, la Era pasa al llegar al mínimo. Si empieza por plazo, los logros pendientes de la anterior **siguen abiertos**.
 **Una tecnología de una Era no puede aparecer, venderse ni empezar su épica antes de que esa Era empiece.**
 
 ## 4. Adopción (`adoptarTecnologia`)
@@ -150,6 +175,14 @@ Vale en todos los asentamientos de la Facción. **No hay descuento** por llegar 
 
 Una tecnología adoptada habilita —las «cuatro puertas» del Doc 6.1— construir un edificio (`EDIFICIO_CATALOGO[..].requiereTecnologia`), mejorar un nivel interno (`niveles[n].requiereTecnologia`), producir una receta (`receta.requiereTecnologia`) o reclutar una tropa (`TROPAS_RECLUTABLES[..].tecnologia`);
 y algunas dan un `bonusProduccion` (hoy solo `canteria`: ×1,5 la piedra que sacan las Canteras de la Facción, que en Rust son pueblos de cantera desde el 2026-11-01). Cada sistema comprueba contra `tecnologiasDe(estado, faccionId).adoptadas`.
+
+Desde el 2026-11-12 hay tres puertas más, que no abren contenido sino que cambian una cifra o un objeto del héroe:
+
+- **Ejército permanente** (`ejercito_permanente`, Era IV): las escuadras de los héroes de la Facción ganan un 10 % más de experiencia (`MILITAR.bonusExperiencia`, [`Combate.md`](Combate.md) §4.3); el héroe, no.
+- **Logística de campaña** (`logistica_campana`, Era IV): los víveres por héroe de la Facción ×1,5 (`LOGISTICA.bonusViveres`, [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §6.1).
+- **Los metales de los objetos del héroe** (`OBJETOS.metales`, [`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §2.1): comprar y forjar una pieza en la Armería de una plaza pide que la Facción de la plaza tenga la tecnología de su metal (el acero, `acero_templado`, Era V). Forjarla en los tiers III a V pide además que el mundo haya llegado a la Era de su tier (`OBJETOS.forja.eraPorTier`, 2026-11-12; [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §4.6). Llevar una pieza que ya se tiene no pide nada.
+
+**Cuerpo de oficiales** (`cuerpo_oficiales`, Era IV) no hace nada por sí misma: es una de las tecnologías que pide el hito de la Reforma macedónica. No da Liderazgo, porque ninguna tecnología cambia el Liderazgo (decisión del autor del 2026-11-11). Las demás de las Eras IV y V abren tropas (`TROPAS_RECLUTABLES[..].tecnologia`, [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §12).
 
 ## 5. Campamentos de mercenarios (`tecnologiasDelCampamento`)
 
@@ -268,7 +301,7 @@ si no (último capítulo) → la épica termina: cumplidas[facción] += 1; la te
 
 > **Implementado en Rust (2026-10-25, 6E): las épicas** (`crates/nucleo/src/nucleo/residentes.rs`). `EmpezarEpica` (177) y `AbandonarEpica` (178) con `dirigeAedas` y los rechazos finos `epica.*` de este apartado, en su orden (decisión técnica 9; `Proyecciones_Y_Autorizacion.md` §5.1). Los hechos inspiradores **no se sacan de los eventos**: se anotan tipados en la transición donde ocurren (decisión técnica 3) —la defensa y la conquista del asedio con números al resolverlo (con `enCombate` = hubo tirada), el encuentro entre columnas de Facciones distintas, la batalla de Unity al aplicar su resultado (nunca desde `batalla.aplicada`, D18), la obra y el ascenso de la plaza, la adopción y la llegada de una caravana **comercial** con carga total ≥ `cargaMinimaCaravana` (D9: la carga y el tipo los mira el núcleo en la llegada, no el hecho)— y se procesan al cerrar la versión, antes de la aparición por hito: a lo sumo uno por Aeda y versión, con el enfriamiento y las claves. Lo que aparece por una épica entra en la misma versión; si es la primera del mundo, programa sus dos citas (conocimiento y campamento) como cualquier descubrimiento. `aedas.epica_cumplida` es público y entra en la crónica (§8), sin nombrar la tecnología.
 
-`hacerAparecer(estado, facción, id, instante)` registra `primeros[id] = { faccionId, en: instante }` si nadie la tenía (un descubrimiento lo es sea cual sea la vía, decidido 2026-10-11): desde entonces los Aedas itinerantes la conocen tras el retraso, se canta y los campamentos la desbloquean. Cada tecnología con logro tiene su épica (`EPICAS`): 3 capítulos en la Era I, 4 en la II, 5 en la III.
+`hacerAparecer(estado, facción, id, instante)` registra `primeros[id] = { faccionId, en: instante }` si nadie la tenía (un descubrimiento lo es sea cual sea la vía, decidido 2026-10-11): desde entonces los Aedas itinerantes la conocen tras el retraso, se canta y los campamentos la desbloquean. Cada tecnología con logro tiene su épica (`EPICAS`): 3 capítulos en la Era I, 4 en la II, 5 en la III, 6 en la IV y 7 en la V (los nombres, en `EPICAS` de §11.2; la de la forja de hierro estandarizada es el «Canto de los cálibes» y el «Canto del acero templado» es del Acero templado).
 
 ## 8. Crónica (`entradasDeCronica`)
 
@@ -329,6 +362,18 @@ la Era de cada tecnología propia (decide lo que cuesta adoptarla o comprarla); 
     "nombre": "Polis e imperios",
     "minimoSemanas": 1,
     "plazoSemanas": 7
+  },
+  "profesionalizacion_imperial": {
+    "orden": 4,
+    "nombre": "Profesionalización",
+    "minimoSemanas": 1,
+    "plazoSemanas": 8
+  },
+  "hegemonia_macedonica": {
+    "orden": 5,
+    "nombre": "Hegemonía macedónica",
+    "minimoSemanas": 1,
+    "plazoSemanas": 26
   }
 }
 ```
@@ -348,6 +393,14 @@ la Era de cada tecnología propia (decide lo que cuesta adoptarla o comprarla); 
   "polis_imperios": {
     "oro": 600,
     "lingoteHierro": 30
+  },
+  "profesionalizacion_imperial": {
+    "oro": 1000,
+    "lingoteHierro": 50
+  },
+  "hegemonia_macedonica": {
+    "oro": 1500,
+    "lingoteHierro": 80
   }
 }
 ```
@@ -912,6 +965,280 @@ Cada entrada: `era`, `deArranque?`, `logro {contador, umbral | porPlaza, ademas?
         "nivelInterno": 2
       }
     ]
+  },
+  "ejercito_permanente": {
+    "nombre": "Ejército permanente",
+    "era": "profesionalizacion_imperial",
+    "logro": {
+      "contador": "escuadras.veteranas",
+      "porPlaza": 2
+    },
+    "hito": [
+      {
+        "tipo": "edificio",
+        "edificio": "barracon",
+        "nivelInterno": 3
+      },
+      {
+        "tipo": "escuadrasVivas",
+        "cantidad": 10
+      }
+    ]
+  },
+  "cuerpo_oficiales": {
+    "nombre": "Cuerpo de oficiales",
+    "era": "profesionalizacion_imperial",
+    "logro": {
+      "contador": "batallas.conTresHeroes",
+      "porPlaza": 1
+    },
+    "hito": [
+      {
+        "tipo": "heroesEnFaccion",
+        "cantidad": 5
+      }
+    ]
+  },
+  "logistica_campana": {
+    "nombre": "Logística de campaña",
+    "era": "profesionalizacion_imperial",
+    "logro": {
+      "contador": "caminos.compartidos",
+      "umbral": 1
+    },
+    "hito": [
+      {
+        "tipo": "plazaEnNivel",
+        "nivel": 4
+      },
+      {
+        "tipo": "nivelFaccion",
+        "nivel": 5
+      },
+      {
+        "tipo": "columnasEnMarcha",
+        "cantidad": 3
+      }
+    ]
+  },
+  "infanteria_profesional": {
+    "nombre": "Infantería profesional",
+    "era": "profesionalizacion_imperial",
+    "logro": {
+      "contador": "batallas.ganadasEnInferioridad",
+      "porPlaza": 1
+    },
+    "hito": [
+      {
+        "tipo": "tecnologia",
+        "id": "ejercito_permanente"
+      },
+      {
+        "tipo": "edificioEnPlazaDeNivel",
+        "edificio": "barracon",
+        "nivelInterno": 3,
+        "nivelPlaza": 4
+      }
+    ]
+  },
+  "hostigadores_profesionales": {
+    "nombre": "Hostigadores profesionales",
+    "era": "profesionalizacion_imperial",
+    "logro": {
+      "contador": "escuadras.eliteDestruidas",
+      "porPlaza": 2
+    },
+    "hito": [
+      {
+        "tipo": "tecnologia",
+        "id": "pantalla_escaramuzadores"
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "galeriaDeTiro",
+        "nivelInterno": 3
+      }
+    ]
+  },
+  "carga_caballeria": {
+    "nombre": "Carga de caballería",
+    "era": "profesionalizacion_imperial",
+    "logro": {
+      "contador": "batallas.campoAbiertoConCaballeria",
+      "porPlaza": 1
+    },
+    "hito": [
+      {
+        "tipo": "tecnologia",
+        "id": "caballeria_organizada"
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "caballerizas",
+        "nivelInterno": 3
+      }
+    ]
+  },
+  "reforma_macedonica": {
+    "nombre": "Reforma macedónica",
+    "era": "hegemonia_macedonica",
+    "logro": {
+      "contador": "batallas.armasCombinadas",
+      "porPlaza": 1
+    },
+    "hito": [
+      {
+        "tipo": "tecnologia",
+        "id": "forja_hierro_estandarizada"
+      },
+      {
+        "tipo": "tecnologia",
+        "id": "disciplina_formacion"
+      },
+      {
+        "tipo": "tecnologia",
+        "id": "infanteria_profesional"
+      },
+      {
+        "tipo": "tecnologia",
+        "id": "caballeria_organizada"
+      },
+      {
+        "tipo": "tecnologia",
+        "id": "logistica_campana"
+      },
+      {
+        "tipo": "tecnologia",
+        "id": "cuerpo_oficiales"
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "barracon",
+        "nivelInterno": 3
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "armeria",
+        "nivelInterno": 3
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "caballerizas",
+        "nivelInterno": 3
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "palacio",
+        "nivelInterno": 3
+      }
+    ]
+  },
+  "falange_sarisa": {
+    "nombre": "Falange de sarisas",
+    "era": "hegemonia_macedonica",
+    "logro": {
+      "contador": "batallas.contraCoalicion",
+      "umbral": 3
+    },
+    "hito": [
+      {
+        "tipo": "tecnologia",
+        "id": "reforma_macedonica"
+      },
+      {
+        "tipo": "edificioEnPlazaDeNivel",
+        "edificio": "barracon",
+        "nivelInterno": 2,
+        "nivelPlaza": 4
+      }
+    ]
+  },
+  "cuerpo_hipaspistas": {
+    "nombre": "Cuerpo de hipaspistas",
+    "era": "hegemonia_macedonica",
+    "logro": {
+      "contador": "batallas.conRey",
+      "umbral": 10
+    },
+    "hito": [
+      {
+        "tipo": "tecnologia",
+        "id": "falange_sarisa"
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "barracon",
+        "nivelInterno": 3
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "palacio",
+        "nivelInterno": 3
+      }
+    ]
+  },
+  "formacion_cuna": {
+    "nombre": "Formación en cuña",
+    "era": "hegemonia_macedonica",
+    "logro": {
+      "contador": "persecuciones.deCaballeria",
+      "porPlaza": 2
+    },
+    "hito": [
+      {
+        "tipo": "tecnologia",
+        "id": "reforma_macedonica"
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "caballerizas",
+        "nivelInterno": 2
+      }
+    ]
+  },
+  "companeros_reales": {
+    "nombre": "Compañeros reales",
+    "era": "hegemonia_macedonica",
+    "logro": {
+      "contador": "batallas.campoAbiertoConCaballeriaElite",
+      "porPlaza": 1
+    },
+    "hito": [
+      {
+        "tipo": "tecnologia",
+        "id": "formacion_cuna"
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "caballerizas",
+        "nivelInterno": 3
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "palacio",
+        "nivelInterno": 3
+      }
+    ]
+  },
+  "acero_templado": {
+    "nombre": "Acero templado",
+    "era": "hegemonia_macedonica",
+    "logro": {
+      "contador": "fabricado.armaHierroCalidad",
+      "porPlaza": 20
+    },
+    "hito": [
+      {
+        "tipo": "edificio",
+        "edificio": "fundicion",
+        "nivelInterno": 3
+      },
+      {
+        "tipo": "edificio",
+        "edificio": "armeria",
+        "nivelInterno": 3
+      }
+    ]
   }
 }
 ```
@@ -1356,7 +1683,7 @@ Cada entrada: `era`, `deArranque?`, `logro {contador, umbral | porPlaza, ademas?
     ]
   },
   "forja_hierro_estandarizada": {
-    "nombre": "Canto del acero templado",
+    "nombre": "Canto de los cálibes",
     "capitulos": [
       {
         "hecho": "obra",
@@ -1459,6 +1786,394 @@ Cada entrada: `era`, `deArranque?`, `logro {contador, umbral | porPlaza, ademas?
         "cantidad": 1
       }
     ]
+  },
+  "ejercito_permanente": {
+    "nombre": "Canto de los que nunca vuelven al arado",
+    "capitulos": [
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "barracon"
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 2
+      },
+      {
+        "hecho": "defensa",
+        "cantidad": 2
+      },
+      {
+        "hecho": "adopcion",
+        "cantidad": 1
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 2
+      },
+      {
+        "hecho": "ascenso",
+        "cantidad": 1
+      }
+    ]
+  },
+  "cuerpo_oficiales": {
+    "nombre": "Canto de los capitanes",
+    "capitulos": [
+      {
+        "hecho": "batalla",
+        "cantidad": 2
+      },
+      {
+        "hecho": "adopcion",
+        "cantidad": 1
+      },
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "barracon"
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 2
+      },
+      {
+        "hecho": "defensa",
+        "cantidad": 1
+      },
+      {
+        "hecho": "conquista",
+        "cantidad": 1
+      }
+    ]
+  },
+  "logistica_campana": {
+    "nombre": "Canto de los carros de víveres",
+    "capitulos": [
+      {
+        "hecho": "caravana",
+        "cantidad": 3
+      },
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "mercado"
+      },
+      {
+        "hecho": "caravana",
+        "cantidad": 3
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 1
+      },
+      {
+        "hecho": "ascenso",
+        "cantidad": 1
+      },
+      {
+        "hecho": "caravana",
+        "cantidad": 2
+      }
+    ]
+  },
+  "infanteria_profesional": {
+    "nombre": "Canto de Leuctra",
+    "capitulos": [
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "barracon"
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 3
+      },
+      {
+        "hecho": "defensa",
+        "cantidad": 2
+      },
+      {
+        "hecho": "adopcion",
+        "cantidad": 1
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 2
+      },
+      {
+        "hecho": "conquista",
+        "cantidad": 1
+      }
+    ]
+  },
+  "hostigadores_profesionales": {
+    "nombre": "Canto de Lequeo",
+    "capitulos": [
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "galeriaDeTiro"
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 3
+      },
+      {
+        "hecho": "defensa",
+        "cantidad": 1
+      },
+      {
+        "hecho": "adopcion",
+        "cantidad": 1
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 2
+      },
+      {
+        "hecho": "caravana",
+        "cantidad": 2
+      }
+    ]
+  },
+  "carga_caballeria": {
+    "nombre": "Canto de los jinetes de Tesalia",
+    "capitulos": [
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "caballerizas"
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 2
+      },
+      {
+        "hecho": "caravana",
+        "cantidad": 2
+      },
+      {
+        "hecho": "adopcion",
+        "cantidad": 1
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 3
+      },
+      {
+        "hecho": "conquista",
+        "cantidad": 1
+      }
+    ]
+  },
+  "reforma_macedonica": {
+    "nombre": "Canto de Filipo",
+    "capitulos": [
+      {
+        "hecho": "adopcion",
+        "cantidad": 2
+      },
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "barracon"
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 3
+      },
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "caballerizas"
+      },
+      {
+        "hecho": "conquista",
+        "cantidad": 1
+      },
+      {
+        "hecho": "ascenso",
+        "cantidad": 1
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 3
+      }
+    ]
+  },
+  "falange_sarisa": {
+    "nombre": "Canto de Queronea",
+    "capitulos": [
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "barracon"
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 3
+      },
+      {
+        "hecho": "defensa",
+        "cantidad": 2
+      },
+      {
+        "hecho": "adopcion",
+        "cantidad": 1
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 3
+      },
+      {
+        "hecho": "conquista",
+        "cantidad": 1
+      },
+      {
+        "hecho": "defensa",
+        "cantidad": 2
+      }
+    ]
+  },
+  "cuerpo_hipaspistas": {
+    "nombre": "Canto de los portadores de escudo",
+    "capitulos": [
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "palacio"
+      },
+      {
+        "hecho": "defensa",
+        "cantidad": 2
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 3
+      },
+      {
+        "hecho": "adopcion",
+        "cantidad": 1
+      },
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "barracon"
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 2
+      },
+      {
+        "hecho": "conquista",
+        "cantidad": 1
+      }
+    ]
+  },
+  "formacion_cuna": {
+    "nombre": "Canto de los que corren delante",
+    "capitulos": [
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "caballerizas"
+      },
+      {
+        "hecho": "caravana",
+        "cantidad": 3
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 2
+      },
+      {
+        "hecho": "adopcion",
+        "cantidad": 1
+      },
+      {
+        "hecho": "caravana",
+        "cantidad": 2
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 2
+      },
+      {
+        "hecho": "conquista",
+        "cantidad": 1
+      }
+    ]
+  },
+  "companeros_reales": {
+    "nombre": "Canto de Gaugamela",
+    "capitulos": [
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "caballerizas"
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 3
+      },
+      {
+        "hecho": "adopcion",
+        "cantidad": 1
+      },
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "palacio"
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 3
+      },
+      {
+        "hecho": "conquista",
+        "cantidad": 2
+      },
+      {
+        "hecho": "ascenso",
+        "cantidad": 1
+      }
+    ]
+  },
+  "acero_templado": {
+    "nombre": "Canto del acero templado",
+    "capitulos": [
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "fundicion"
+      },
+      {
+        "hecho": "caravana",
+        "cantidad": 3
+      },
+      {
+        "hecho": "obra",
+        "cantidad": 1,
+        "edificio": "armeria"
+      },
+      {
+        "hecho": "adopcion",
+        "cantidad": 1
+      },
+      {
+        "hecho": "batalla",
+        "cantidad": 2
+      },
+      {
+        "hecho": "ascenso",
+        "cantidad": 1
+      },
+      {
+        "hecho": "caravana",
+        "cantidad": 2
+      }
+    ]
   }
 }
 ```
@@ -1490,7 +2205,7 @@ Cada entrada: `era`, `deArranque?`, `logro {contador, umbral | porPlaza, ademas?
 
 ## 14. Divergencias
 
-Ninguna abierta. Las **Eras IV y V** son diseño a medias aún sin implementar (no es una divergencia: el código solo llega a la III).
+Ninguna abierta.
 
 Divergencia aprobada del TS (Q4 del autor, 2026-10-24): los reclutas de un campamento de mercenarios también suman a `reclutados.*` (§2.1).
 

@@ -135,6 +135,23 @@ fn se_abre_en_el_sitio_una_vez_por_heroe_y_lo_que_trae_sube_al_carro() {
     assert_eq!(e.lleva(col_b, r), base::entero(oro));
 }
 
+/// Entrada 70: quien abre un alijo recibe además la tabla `alijo` de BOTIN_OBJETOS, con el rng del estado, en su mochila (3 crisoles, un plano de tier III o IV y una medalla grande de tropa).
+#[test]
+fn quien_abre_un_alijo_recibe_su_tabla_de_objetos_en_la_mochila() {
+    let m = con_mundo!();
+    let (alijo, sitio) = alijo_junto_a(m, 0);
+    let mut e = Esc { n: nucleo(m), peticiones: 0 };
+    let (_, ana) = e.columna("ana", 1, sitio);
+    let mut rng = base::Rng::nuevo(e.n.estado().rng.estado());
+    let sale = objetos::Catalogo::default().botin.alijo.tirar(false, &mut rng);
+    e.ok("ana", Comando::AbrirAlijo { heroe: ana, alijo });
+    assert_eq!(e.n.estado().rng.estado(), rng.estado(), "solo las tiradas de su tabla");
+    assert_eq!(comun::botines(&e.n), vec![comun::Botin { heroe: ana, origen: "alijo".into(), mochila: sale.clone(), almacen: vec![], perdido: vec![] }]);
+    assert_eq!(sale.len(), 3);
+    let mochila = &e.n.heroe(ana).unwrap().heroe.mochila;
+    assert_eq!(mochila.casillas.values().map(|c| (c.pieza.objeto.clone(), c.cantidad)).collect::<Vec<_>>(), sale);
+}
+
 #[test]
 fn cada_rechazo_con_su_codigo_y_sin_rastro() {
     let m = con_mundo!();
@@ -196,7 +213,7 @@ fn los_alijos_abiertos_viajan_en_la_foto() {
     e.ok("ana", Comando::AbrirAlijo { heroe: ana, alijo });
     let (reglas, hash) = (e.n.estado().reglas.clone(), m.0.hash().to_string());
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN62");
+    assert_eq!(&bytes[..5], b"BAN63");
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     assert_eq!((s.militar.heroes[&ana].alijos_abiertos.iter().copied().collect::<Vec<_>>(), s.hash()), (vec![alijo], e.n.hash_estado()));
     let mut otro = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
@@ -215,7 +232,7 @@ async fn por_la_sesion_se_abre_un_alijo_y_el_heroe_lo_lleva_en_heroe_y_en_admin(
     let id = m.0.alijos()[alijo as usize].id.clone();
     let mut e = Esc { n: nucleo(m), peticiones: 0 };
     // Un héroe sin Facción que sale del campamento 0 y marcha hasta el alijo.
-    let ana = e.ok("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
+    let ana = e.ok("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
     let col = e.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: ana, escuadras: vec![], carga: vec![], politica: Politica::Rechazar, caravana_fundacion: None }).creadas[0];
     e.ok("ana", Comando::MarcharA { ejercito: col, destino: sitio });
     let fin = e.n.ejercito(col).unwrap().plan.fin().unwrap();

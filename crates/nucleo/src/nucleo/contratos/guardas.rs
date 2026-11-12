@@ -220,6 +220,14 @@ impl Nucleo {
             | Comando::RepartirPuntos { .. }
             | Comando::OrdenarEscuadras { .. }
             | Comando::ElegirFormacion { .. }
+            | Comando::EquiparObjeto { .. }
+            | Comando::DesequiparObjeto { .. }
+            | Comando::GuardarObjeto { .. }
+            | Comando::SacarObjeto { .. }
+            | Comando::ComprarObjeto { .. }
+            | Comando::VenderObjeto { .. }
+            | Comando::ForjarObjeto { .. }
+            | Comando::UsarObjeto { .. }
             | Comando::AsignarGuarnicion { .. }
             | Comando::RetirarGuarnicion { .. }
             | Comando::PasarAViveres { .. }
@@ -304,6 +312,7 @@ impl Nucleo {
             | Comando::RebelionVasallo { .. }
             | Comando::AdmitirOtrasFacciones { .. }
             | Comando::AlternarReabastecerAliados { .. }
+            | Comando::ConfigurarForja { .. }
             | Comando::AportarARefundacion { .. }
             | Comando::RetirarDeRefundacion { .. }
             | Comando::ComprarCaravanaDeRefundacion { .. }

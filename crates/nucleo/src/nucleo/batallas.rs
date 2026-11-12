@@ -38,6 +38,7 @@
 use super::combates::{de_su_columna, loadout_en_el_campamento};
 use super::contratos::Desenlace;
 use super::*;
+use super::botin_de_objetos::Fuente;
 use crate::comando::Implicados;
 use crate::estado::{Dato, SucesoBatalla, PRIO_BATALLA, PRIO_SALIDA, SIN_BANDERA};
 use crate::estado_batallas::entidad_batalla;
@@ -54,7 +55,6 @@ use militar::escuadra::{Contenedor, Escuadra};
 use militar::heroe::{Controlador, Residencia};
 use militar::presencia::Ubicacion;
 use militar::{sumar, Carga as Mercancia};
-use std::collections::BTreeSet;
 
 /// El id de una escuadra que aún no lo tiene (carreteros, bandidos): al abrir la batalla recibe uno de la partida.
 const SIN_ID: u64 = 0;
@@ -366,9 +366,8 @@ impl Nucleo {
     }
 
     fn participante(&self, h: &HeroeNucleo, escuadras: Vec<EscuadraEnBatalla>) -> Participante {
-        // Los héroes todavía no tienen inventario: caben tantos objetos como casillas tiene la mochila (el botín de Unity no tiene dónde caer, CQ-004).
         let escuadras = escuadras.into_iter().map(|e| self.con_formaciones(e)).collect();
-        Participante { heroe: h.heroe.id, faccion: h.faccion, controlador: h.heroe.controlador, casillas_libres: self.estado.reglas.economia.combate.batalla.casillas_inventario, escuadras }
+        Participante { heroe: h.heroe.id, faccion: h.faccion, controlador: h.heroe.controlador, escuadras }
     }
 
     /// Las familias de formación que permite la tecnología de una Facción; sin Facción, las que no piden tecnología (Heroe_Y_Tropa §10.4).
@@ -1034,44 +1033,44 @@ impl Nucleo {
     /// `aplicada` responde bien sin cambiar nada; otro distinto se rechaza.
     fn aplicar_resultado(&mut self, t: Instante, id: u64, servidor: &str, res: ResultadoDeBatalla) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
-        // Los `itemInstanceId` ya recibidos en otras batallas que se conservan: los héroes aún no tienen inventario donde mirar (CQ-004).
-        let existentes: BTreeSet<String> = self.batallas().filter(|b| b.id != id).filter_map(|b| b.resultado.as_ref()).flat_map(|r| r.por_heroe.iter()).filter_map(|h| h.botin.as_ref()).flat_map(|b| b.objetos.iter()).filter_map(|o| o.instancia.clone()).collect();
         self.tr.tocar(Clase::Batalla, id);
         let b = self.estado.batallas.batallas.get_mut(&id).ok_or_else(|| Respuesta::rechazo(rechazos::BATALLA_NO_EXISTE, format!("batalla-{id}"), v))?;
-        let efectos = match b.aplicar_resultado(t, servidor, res.clone(), &|i| existentes.contains(i)).map_err(|e| rechazo_de_batalla(e, v))? {
+        let efectos = match b.aplicar_resultado(t, servidor, res.clone()).map_err(|e| rechazo_de_batalla(e, v))? {
             Efecto::SinCambios => return Err(sin_cambios(v)),
             Efecto::Aplicado(e) => e,
         };
         let b = self.estado.batallas.batallas[&id].clone();
         let mr = self.estado.reglas.economia.militar.clone();
 
-        // 1-2. Lo que Unity dice de cada uno: supervivientes y experiencia de cada escuadra (las de los héroes, las de la guarnición de un pueblo), experiencia y
-        // monedas de cada héroe, y los candados fuera. El nivel del héroe no sube (CQ-001) y los objetos del botín no tienen dónde caer (CQ-004).
+        // 1-2. Lo que Unity dice de cada uno: los supervivientes de cada escuadra (las de los héroes, las de la guarnición de serie de un pueblo o una avanzada), y los candados
+        // fuera. La experiencia y el botín los pone el motor (D6 y D7): 4 o 2 de experiencia según gane su bando, a cada escuadra que entró y a cada héroe que participó, y a cada
+        // héroe que participó la tabla `unity` de BOTIN_OBJETOS (lo de `soloSiGana`, si gana su bando). Las monedas, con MONEDAS, más abajo.
+        let xp = |victoria: Option<bool>| victoria.map_or(0, |v| if v { mr.militar.experiencia_unity_victoria } else { mr.militar.experiencia_unity_derrota });
         for e in &efectos.escuadras {
-            if let Some(s) = self.escuadra_mut(e.escuadra) {
+            let ganada = xp(e.victoria);
+            if let Some(mut s) = self.escuadra(e.escuadra).map(|(_, s)| s.clone()) {
                 s.cantidad = e.cantidad;
-                s.con_experiencia(&mr, e.xp);
+                self.experiencia_de_escuadra(t, &mut s, ganada);
+                self.volcar_escuadras(std::slice::from_ref(&s));
             } else if let Some((&pueblo, g)) = self.estado.combate.guarniciones.iter().find(|(_, g)| g.escuadra.id == e.escuadra) {
                 // La guarnición de serie de un pueblo no es de ningún héroe: queda por debajo de su número, empieza su reposición gratis.
                 let mut mineros = g.escuadra.clone();
                 mineros.cantidad = e.cantidad;
-                mineros.con_experiencia(&mr, e.xp);
+                self.experiencia_de_escuadra(t, &mut mineros, ganada);
                 self.guardar_guarnicion(pueblo, mineros, t);
             } else if let Some((&avanzada, g)) = self.estado.combate.avanzadas.iter().find(|(_, g)| g.escuadras.iter().any(|s| s.id == e.escuadra)) {
                 // Lo mismo con la guarnición de serie de una avanzada.
                 let mut escuadras = g.escuadras.clone();
                 let s = escuadras.iter_mut().find(|s| s.id == e.escuadra).expect("está");
                 s.cantidad = e.cantidad;
-                s.con_experiencia(&mr, e.xp);
+                self.experiencia_de_escuadra(t, s, ganada);
                 self.guardar_guarnicion_de_avanzada(avanzada, escuadras, t);
             }
         }
         for e in &efectos.heroes {
-            let Some(h) = self.estado.militar.heroes.get_mut(&e.heroe) else { continue };
-            self.tr.tocar(Clase::Heroe, e.heroe);
-            h.heroe.experiencia += e.xp;
-            if let Some(botin) = &e.botin {
-                h.heroe.monedas += botin.monedas;
+            self.experiencia_de_heroe(t, e.heroe, xp(e.victoria));
+            if let Some(gana) = e.victoria {
+                self.botin_de_objetos(t, e.heroe, Fuente::Unity { gana });
             }
         }
         self.reservar(&efectos.soltar, None);
@@ -1082,7 +1081,7 @@ impl Nucleo {
         let defendieron: Vec<u64> = self.participantes_del_lado(&b, Lado::Defensor).iter().map(|q| q.heroe).filter(|&h| res.por_heroe.iter().any(|x| x.heroe == h && x.participo)).collect();
         self.defensa_de_vasallo(t, b.ticket.defensor.faccion, &defendieron, res.ganador == Lado::Defensor);
         // Los logros de la batalla (D10), con la plaza de un asedio tal como estaba antes de su conquista (que daña la muralla); nunca desde `batalla.aplicada` (D18).
-        let logros = self.contadores_de_batalla(&b, res.ganador);
+        let logros = self.contadores_de_batalla(&b, &res);
         // El hecho de épica de la batalla (6E), con las Facciones del ticket y por su id: se canta una vez aunque toque varias plazas.
         let contexto = match b.ticket.contexto {
             Contexto::CampoAbierto { .. } => tecnologia::epicas::ContextoUnity::CampoAbierto,
@@ -1176,23 +1175,48 @@ impl Nucleo {
     }
 
     /// Lo que una batalla de Unity suma a los logros del servidor (`contadoresDeBatalla` del TypeScript; Tecnologia_Aedas §2.1): lo mismo que un combate con números. La de una avanzada o
-    /// un saqueo de pueblo (contextos que el TypeScript no tenía) cuenta como batalla librada y nada más.
-    fn contadores_de_batalla(&self, b: &Batalla, ganador: Lado) -> tecnologia::contador::Delta {
-        use tecnologia::contador::{batalla_unity, combate_resuelto, ContextoBatalla};
+    /// un saqueo de pueblo (contextos que el TypeScript no tenía) cuenta como batalla librada y nada más de entonces. Los de las Eras IV y V (Tecnologia_Aedas §2.1), en todas: el resumen con
+    /// los héroes que participaron y las escuadras del ticket con los soldados que Unity dice que quedan; y la persecución, si una columna ataca a otra (campo abierto) o a una caravana
+    /// (no el acoso de unos bandidos, que no son una columna).
+    fn contadores_de_batalla(&self, b: &Batalla, res: &ResultadoDeBatalla) -> tecnologia::contador::Delta {
+        use tecnologia::contador::{batalla_unity, combate_resuelto, de_batalla, persecucion, ContextoBatalla, ResumenBatalla};
         let lados = [Lado::Atacante, Lado::Defensor];
         let escuadras = lados.iter().flat_map(|&l| self.participantes_del_lado(b, l).into_iter().flat_map(|p| p.escuadras.iter()).chain(&b.ticket.bando(l).sin_heroe).map(|e| e.tropa).collect::<Vec<_>>());
         let hoplitas = super::logros::con_hoplitas(escuadras);
         let contexto = match b.ticket.contexto {
-            Contexto::CampoAbierto { .. } => ContextoBatalla::CampoAbierto,
-            Contexto::Caravana { .. } => ContextoBatalla::Caravana,
-            Contexto::CampamentoBandidos { .. } => ContextoBatalla::CampamentoBandidos,
-            Contexto::Asedio { asentamiento } => ContextoBatalla::Asedio {
+            Contexto::CampoAbierto { .. } => Some(ContextoBatalla::CampoAbierto),
+            Contexto::Caravana { .. } => Some(ContextoBatalla::Caravana),
+            Contexto::CampamentoBandidos { .. } => Some(ContextoBatalla::CampamentoBandidos),
+            Contexto::Asedio { asentamiento } => Some(ContextoBatalla::Asedio {
                 muralla_completa: self.estado.asentamientos.get(&u64::from(asentamiento)).is_some_and(|a| asentamiento::recintos::muralla_completa(&a.economia.recintos)),
                 con_heroe_defensor: !self.participantes_del_lado(b, Lado::Defensor).is_empty(),
-            },
-            Contexto::Avanzada { .. } | Contexto::SaqueoPueblo { .. } => return combate_resuelto(hoplitas),
+            }),
+            Contexto::Avanzada { .. } | Contexto::SaqueoPueblo { .. } => None,
         };
-        batalla_unity(contexto, ganador == Lado::Atacante, hoplitas)
+        let mut d = match contexto {
+            Some(c) => batalla_unity(c, res.ganador == Lado::Atacante, hoplitas),
+            None => combate_resuelto(hoplitas),
+        };
+        let participo = |h: u64| res.por_heroe.iter().any(|x| x.heroe == h && x.participo);
+        let quedan = |e: u64| res.por_escuadra.iter().find(|x| x.escuadra == e).map_or(0, |x| x.supervivientes_al_cierre);
+        let heroes = |l: Lado| self.participantes_del_lado(b, l).into_iter().map(|p| p.heroe).filter(|&h| participo(h)).collect::<Vec<u64>>();
+        let bando = |l: Lado| {
+            let escuadras = self.participantes_del_lado(b, l).into_iter().flat_map(|p| p.escuadras.iter()).chain(&b.ticket.bando(l).sin_heroe);
+            self.bando_de_batalla(&heroes(l), escuadras.map(|e| (e.tropa, e.efectivos, quedan(e.id))))
+        };
+        let resumen = ResumenBatalla {
+            atacante: bando(Lado::Atacante),
+            defensor: bando(Lado::Defensor),
+            con_rey: self.con_rey(lados.iter().flat_map(|&l| heroes(l))),
+            gana_el_atacante: res.ganador == Lado::Atacante,
+            campo_abierto: matches!(b.ticket.contexto, Contexto::CampoAbierto { .. }),
+        };
+        d.sumar(&de_batalla(&resumen));
+        let columna_ataca = matches!(b.ticket.contexto, Contexto::CampoAbierto { .. } | Contexto::Caravana { .. }) && !self.participantes_del_lado(b, Lado::Atacante).is_empty();
+        if columna_ataca {
+            d.sumar(&persecucion(&resumen.atacante));
+        }
+        d
     }
 
     /// Lo que decide BronzeAge según dónde se combatió (§9, pasos 4 y 5). **Sin** la reputación por defender a un vasallo (5D) ni los contadores de logros (6B, `contadores_de_batalla`); la
@@ -1399,8 +1423,8 @@ impl Nucleo {
             json!({
                 "resultadoId": r.resultado_id, "revision": r.revision, "intento": r.intento, "inicio": r.inicio, "fin": r.fin, "ganador": lado_json(r.ganador), "razon": format!("{:?}", r.razon),
                 "objetivos": r.objetivos.iter().map(|(o, l)| json!({ "objetivo": o, "lado": l.map(lado_json) })).collect::<Vec<_>>(),
-                "porEscuadra": r.por_escuadra.iter().map(|s| json!({ "escuadra": s.escuadra, "desplegados": s.desplegados, "supervivientes": s.supervivientes_al_cierre, "muertos": s.muertos, "xp": s.xp_ganada })).collect::<Vec<_>>(),
-                "porHeroe": r.por_heroe.iter().map(|h| json!({ "heroe": h.heroe, "participo": h.participo, "sobrevivio": h.sobrevivio_al_cierre, "xp": h.xp_ganada, "derrotado": h.derrotado })).collect::<Vec<_>>(),
+                "porEscuadra": r.por_escuadra.iter().map(|s| json!({ "escuadra": s.escuadra, "desplegados": s.desplegados, "supervivientes": s.supervivientes_al_cierre, "muertos": s.muertos })).collect::<Vec<_>>(),
+                "porHeroe": r.por_heroe.iter().map(|h| json!({ "heroe": h.heroe, "participo": h.participo, "sobrevivio": h.sobrevivio_al_cierre, "derrotado": h.derrotado })).collect::<Vec<_>>(),
                 "versionServidor": r.version_servidor, "carrosPerdidos": r.carros_perdidos,
             })
         });

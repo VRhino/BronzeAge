@@ -1,6 +1,6 @@
 [package]
 name = "contrato"
-version = "0.23.0"
+version = "0.24.0"
 edition = "2021"
 description = "Contrato 05 de BronzeAge (bronzeage.v1) generado desde proto/"
 

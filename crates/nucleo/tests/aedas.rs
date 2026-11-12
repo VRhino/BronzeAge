@@ -446,7 +446,7 @@ fn la_foto_lleva_los_aedas_y_su_evento() {
     let reglas = e.n.estado().reglas.clone();
     let mundo_hash = e.n.estado().mundo_hash.clone();
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN62");
+    assert_eq!(&bytes[..5], b"BAN63");
     let vuelta = Estado::deserializar(&bytes, &reglas, &mundo_hash).unwrap();
     assert_eq!(vuelta.serializar(), bytes);
     assert_eq!(vuelta.hash(), e.n.estado().hash());
@@ -529,7 +529,7 @@ async fn por_la_sesion_el_rey_compra_al_aeda_de_su_plaza_y_su_faccion_oye_la_ven
     let mut e = todos_en_b(m, reglas());
     let (a, b) = (e.a, e.b);
     // Por la sesión se juega con un héroe de verdad: «bea» crea el suyo, entra en la Facción 2, el fundador le cede el trono y la administración lo pone dentro de B.
-    let r = e.ord("bea", Comando::CrearHeroe { cuenta: "bea".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None });
+    let r = e.ord("bea", Comando::CrearHeroe { cuenta: "bea".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() });
     let rey = r.creadas[0];
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: rey, faccion: Some(2) });
     let fundador = e.n.facciones().find(|f| f.id == 2).and_then(|f| f.rey).unwrap();
@@ -591,7 +591,7 @@ async fn por_la_sesion_cada_ambito_lleva_lo_suyo_de_la_tecnologia_y_de_los_aedas
     let m = con_mundo!();
     let mut e = todos_en_b(m, reglas());
     let b = e.b;
-    let r = e.ord("bea", Comando::CrearHeroe { cuenta: "bea".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None });
+    let r = e.ord("bea", Comando::CrearHeroe { cuenta: "bea".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() });
     let bea = r.creadas[0];
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: bea, faccion: Some(2) });
     e.ok("admin", Comando::ColocarHeroe { heroe: bea, ubicacion: militar::presencia::Ubicacion::Asentamiento(b as u32) });
@@ -614,7 +614,7 @@ async fn por_la_sesion_cada_ambito_lleva_lo_suyo_de_la_tecnologia_y_de_los_aedas
     let (a, t) = publicas[0];
     assert_eq!(a, &format!("HEROE:heroe-{bea}"));
     assert!(t.logros.is_empty(), "ni qué tecnología abre cada logro (Q6)");
-    assert_eq!((t.contadores.get("plazasEnNivel.2"), t.contadores.len()), (Some(&1), 24), "los contadores en curso sí (2026-11-06)");
+    assert_eq!((t.contadores.get("plazasEnNivel.2"), t.contadores.len()), (Some(&1), 36), "los contadores en curso sí (2026-11-06)");
     assert_eq!(t.logros_cumplidos.iter().map(|l| (l.contador.as_str(), l.umbral)).collect::<Vec<_>>(), [("plazasEnNivel.2", 1)]);
     assert_eq!(t.cantadas, ["metalurgia_cobre"]);
     let era = &e_reglas.eras[0];
@@ -649,7 +649,7 @@ async fn por_la_sesion_cada_ambito_lleva_lo_suyo_de_la_tecnologia_y_de_los_aedas
     let (mut adm, _, recibido) = w.conectar(hola("ok:admin", TipoCliente::ClienteAdminWeb)).await;
     let todo = cuerpos(&recibido);
     let t = todo.iter().find_map(|(_, x)| if let Cuerpo::EstadoTecnologia(t) = x { Some(t) } else { None }).expect("el estado entero en ADMIN");
-    assert_eq!((t.contadores.get("plazasEnNivel.2"), t.logros.contains_key("metalurgia_cobre"), t.contadores.len()), (Some(&1), true, 24));
+    assert_eq!((t.contadores.get("plazasEnNivel.2"), t.logros.contains_key("metalurgia_cobre"), t.contadores.len()), (Some(&1), true, 36));
     let enteros: Vec<&pb::AedaItinerante> = todo.iter().filter_map(|(_, x)| if let Cuerpo::AedaItinerante(x) = x { Some(x) } else { None }).collect();
     assert!(enteros.len() == 3 && enteros.iter().all(|x| x.hasta_ms.is_some() && x.recientes.last() == Some(&format!("as-{b}"))), "con su estancia y dónde estuvieron: {enteros:?}");
     let fin = enteros.iter().filter_map(|x| x.hasta_ms).min().unwrap();

@@ -32,7 +32,8 @@ fn reglas() -> Reglas {
     let b = &mut Arc::make_mut(&mut r.economia.combate).bandidos;
     (b.radio_ataque_caravana, b.anillo_minimo, b.anillo_maximo) = (0, 0, 0);
     Arc::make_mut(&mut r.economia.datos).capacidad_inicial = 100_000_000;
-    r
+    // Los defensores llevan más tropa de la que cabe en los 14 con que nace un héroe.
+    comun::con_liderazgo_de_tope(r)
 }
 
 struct X {
@@ -110,12 +111,12 @@ fn dos_plazas(x: &mut X, m: &M) -> (u64, u64) {
 
 /// Un defensor de «beto» que reside en B y está dentro con esas escuadras en su loadout activo.
 fn defensor(x: &mut X, b: u64, defensa: &[Tropa]) -> u64 {
-    let h = x.ok("beto", Comando::CrearHeroe { cuenta: "beto".into(), campamento: 3, controlador: Controlador::Humano, nombre: None }).creadas[0];
+    let h = x.ok("beto", Comando::CrearHeroe { cuenta: "beto".into(), campamento: 3, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
     x.residir(h, b);
     x.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(b as u32) });
     let escuadras: Vec<u64> = defensa.iter().map(|&t| x.ok("admin", Comando::DarEscuadra { heroe: h, tropa: t, cantidad: unidades(t) }).creadas[0]).collect();
     let loadout = x.n.heroe(h).unwrap().heroe.loadouts[0].id;
-    x.ok("admin", Comando::GuardarLoadout { heroe: h, loadout: Some(loadout), nombre: "Default".into(), escuadras, perks: vec![], activo: Some(true) });
+    x.ok("admin", Comando::GuardarLoadout { heroe: h, loadout: Some(loadout), nombre: "Default".into(), escuadras, activo: Some(true) });
     h
 }
 

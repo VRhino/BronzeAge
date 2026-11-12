@@ -1,4 +1,4 @@
-//! Los 24 contadores de los logros del servidor (TA §2.1) y de qué vía sale cada uno. Decisión técnica 3 del plan: **se cuentan en origen**, tipados,
+//! Los 36 contadores de los logros del servidor (TA §2.1) y de qué vía sale cada uno. Decisión técnica 3 del plan: **se cuentan en origen**, tipados,
 //! sin reparsear los hechos de la versión; el núcleo llama a estas funciones donde ocurre el hecho (6B) y suma el [`Delta`] con
 //! [`crate::EstadoTecnologia::aplicar`]. Las vías de un solo contador (la caravana capturada o interceptada, el campamento de bandidos destruido, el
 //! animal comprado, el encuentro en campo abierto) son `Delta::uno`; las de varios tienen su función.
@@ -13,9 +13,14 @@
 //! | `caravanas.destruidasOCapturadas`, `bandidos.campamentosDestruidos` | `Delta::uno`; [`batalla_unity`] |
 //! | `animales.comprados` | `Delta::uno` |
 //! | `reclutados.*` | [`reclutamiento`]: en una plaza (reponer incluido) **y en un campamento de mercenarios** (Q4 del autor) |
-//! | `plazasEnNivel.N` | récord, no suma: [`crate::EstadoTecnologia::subir_record`] |
+//! | `plazasEnNivel.N`, `caminos.compartidos` | récord, no suma: [`crate::EstadoTecnologia::subir_record`] |
+//! | `batallas.conTresHeroes`, `.ganadasEnInferioridad`, `.campoAbiertoConCaballeria`, `.armasCombinadas`, `.contraCoalicion`, `.conRey`, `.campoAbiertoConCaballeriaElite`, `escuadras.eliteDestruidas` | [`de_batalla`], con un [`ResumenBatalla`] |
+//! | `persecuciones.deCaballeria` | [`persecucion`], con el bando atacante |
+//! | `escuadras.veteranas` | la experiencia de la escuadra (lo cuenta el núcleo) |
 
+use crate::FaccionId;
 use asentamiento::{Recurso, Tipo};
+use std::collections::BTreeSet;
 
 macro_rules! contadores {
     ($($v:ident = $n:literal),+ $(,)?) => {
@@ -23,7 +28,9 @@ macro_rules! contadores {
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
         pub enum Contador { $($v),+ }
         impl Contador {
-            pub const TODOS: [Contador; 24] = [$(Contador::$v),+];
+            /// Cuántos hay: el tamaño de los arrays del estado y de la foto.
+            pub const N: usize = [$(Contador::$v),+].len();
+            pub const TODOS: [Contador; Contador::N] = [$(Contador::$v),+];
             /// Clave de los datos y del contrato (`"extraido.cobre"`).
             pub fn nombre(self) -> &'static str { match self { $(Contador::$v => $n),+ } }
             pub fn desde_nombre(s: &str) -> Option<Contador> { match s { $($n => Some(Contador::$v),)+ _ => None } }
@@ -42,6 +49,12 @@ contadores! {
     ReclutadosArqueros = "reclutados.arqueros", ReclutadosCaballeria = "reclutados.caballeria",
     ReclutadosEscaramuzadores = "reclutados.escaramuzadores_jabalina", ReclutadosArquerosCompuesto = "reclutados.arqueros_compuesto",
     ReclutadosJinetesAsirios = "reclutados.jinetes_asirios", PlazasEnNivel2 = "plazasEnNivel.2", PlazasEnNivel3 = "plazasEnNivel.3",
+    // Eras IV y V (Tecnologia_Aedas §2.1, 2026-11-11).
+    EscuadrasVeteranas = "escuadras.veteranas", BatallasConTresHeroes = "batallas.conTresHeroes", CaminosCompartidos = "caminos.compartidos",
+    BatallasGanadasEnInferioridad = "batallas.ganadasEnInferioridad", EscuadrasEliteDestruidas = "escuadras.eliteDestruidas",
+    BatallasCampoAbiertoConCaballeria = "batallas.campoAbiertoConCaballeria", BatallasArmasCombinadas = "batallas.armasCombinadas",
+    BatallasContraCoalicion = "batallas.contraCoalicion", BatallasConRey = "batallas.conRey", PersecucionesDeCaballeria = "persecuciones.deCaballeria",
+    BatallasCampoAbiertoConCaballeriaElite = "batallas.campoAbiertoConCaballeriaElite", FabricadoArmaHierroCalidad = "fabricado.armaHierroCalidad",
 }
 
 impl Contador {
@@ -49,9 +62,10 @@ impl Contador {
         self as usize
     }
 
-    /// `plazasEnNivel.N` es un récord (el máximo de plazas a la vez con nivel actual ≥ N), no una suma (TA §2.1, §13).
+    /// `plazasEnNivel.N` es un récord (el máximo de plazas a la vez con nivel actual ≥ N), no una suma (TA §2.1, §13); `caminos.compartidos` también: 0 o 1, a 1 cuando se
+    /// abre el primer camino compartido (Tecnologia_Aedas §2.1).
     pub fn es_record(self) -> bool {
-        matches!(self, Contador::PlazasEnNivel2 | Contador::PlazasEnNivel3)
+        matches!(self, Contador::PlazasEnNivel2 | Contador::PlazasEnNivel3 | Contador::CaminosCompartidos)
     }
 
     /// El récord de `plazasEnNivel.N`, para el índice de plazas por nivel que lleva el núcleo (decisión 5).
@@ -65,8 +79,15 @@ impl Contador {
 }
 
 /// Lo que suma un hecho a cada contador (el `DeltaContadores` del TS).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Delta(pub [u64; 24]);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Delta(pub [u64; Contador::N]);
+
+/// A mano: un array de más de 32 no tiene `Default`.
+impl Default for Delta {
+    fn default() -> Self {
+        Delta([0; Contador::N])
+    }
+}
 
 impl Delta {
     pub fn uno(c: Contador) -> Delta {
@@ -107,11 +128,13 @@ pub fn de_extraccion(r: Recurso) -> Option<Contador> {
     }
 }
 
-/// `fabricado.*`: los contadores de lo fabricado de una receta. `equipoBronce` cuenta las cuatro piezas de bronce; `armaduraBronce`, solo esa.
+/// `fabricado.*`: los contadores de lo fabricado de una receta. `equipoBronce` cuenta las cuatro piezas de bronce; `armaduraBronce`, solo esa; `armaHierroCalidad`, el arma de
+/// hierro de calidad (Tecnologia_Aedas §2.1).
 pub fn de_fabricacion(r: Recurso) -> &'static [Contador] {
     match r {
         Recurso::ArmaBronce | Recurso::ArmaBronceCalidad | Recurso::ArmaduraBronceCalidad => &[Contador::FabricadoEquipoBronce],
         Recurso::ArmaduraBronce => &[Contador::FabricadoEquipoBronce, Contador::FabricadoArmaduraBronce],
+        Recurso::ArmaHierroCalidad => &[Contador::FabricadoArmaHierroCalidad],
         _ => &[],
     }
 }
@@ -179,6 +202,73 @@ pub fn batalla_unity(contexto: ContextoBatalla, gana_el_atacante: bool, con_hopl
     }
 }
 
+/// `batallas.conTresHeroes`: algún bando lleva al menos estos héroes (Tecnologia_Aedas §2.1; el número es el nombre del contador).
+pub const HEROES_DE_UNA_BATALLA_GRANDE: u32 = 3;
+/// El escalón desde el que una escuadra es de élite: `escuadras.eliteDestruidas` y `batallas.campoAbiertoConCaballeriaElite` (Tecnologia_Aedas §2.1: «escalón 4 o 5»).
+pub const ESCALON_ELITE: u8 = 4;
+
+/// Una escuadra de la batalla, con lo que miran los contadores de las Eras IV y V: su edificio y su escalón (los de su tropa) y si acabó sin soldados. Solo las que empezaron con alguno.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EscuadraDeBatalla {
+    pub edificio: Tipo,
+    pub escalon: u8,
+    pub sin_soldados: bool,
+}
+
+/// Un bando de la batalla: las Facciones de sus héroes, cuántos héroes combaten, sus soldados al empezar y sus escuadras.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BandoDeBatalla {
+    pub facciones: BTreeSet<FaccionId>,
+    pub heroes: u32,
+    pub soldados: u64,
+    pub escuadras: Vec<EscuadraDeBatalla>,
+}
+
+impl BandoDeBatalla {
+    fn con(&self, edificio: Tipo, escalon: u8) -> bool {
+        self.escuadras.iter().any(|e| e.edificio == edificio && e.escalon >= escalon)
+    }
+}
+
+/// El resumen puro de una batalla para los contadores de las Eras IV y V (Tecnologia_Aedas §2.1): lo arma el núcleo donde cuenta `batallas.libradas` (el encuentro con números y toda
+/// batalla de Unity). `con_rey`: combate el Rey de alguna Facción; `campo_abierto`: el encuentro con números o la batalla de Unity de campo abierto.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResumenBatalla {
+    pub atacante: BandoDeBatalla,
+    pub defensor: BandoDeBatalla,
+    pub con_rey: bool,
+    pub gana_el_atacante: bool,
+    pub campo_abierto: bool,
+}
+
+/// Los contadores de batalla de las Eras IV y V que sube una batalla (Tecnologia_Aedas §2.1), salvo `persecuciones.deCaballeria` ([`persecucion`]) y `escuadras.veteranas` (la
+/// experiencia de la escuadra).
+pub fn de_batalla(b: &ResumenBatalla) -> Delta {
+    let (ganador, perdedor) = if b.gana_el_atacante { (&b.atacante, &b.defensor) } else { (&b.defensor, &b.atacante) };
+    let bandos = [&b.atacante, &b.defensor];
+    let elite_destruidas = bandos.iter().flat_map(|x| &x.escuadras).filter(|e| e.escalon >= ESCALON_ELITE && e.sin_soldados).count() as u64;
+    let armas_combinadas = bandos.iter().any(|x| [Tipo::Barracon, Tipo::GaleriaDeTiro, Tipo::Caballerizas].iter().all(|&t| x.con(t, 0)));
+    let reglas = [
+        (Contador::BatallasConTresHeroes, bandos.iter().any(|x| x.heroes >= HEROES_DE_UNA_BATALLA_GRANDE)),
+        (Contador::BatallasGanadasEnInferioridad, ganador.soldados < perdedor.soldados),
+        (Contador::BatallasCampoAbiertoConCaballeria, b.campo_abierto && ganador.con(Tipo::Caballerizas, 0)),
+        (Contador::BatallasArmasCombinadas, armas_combinadas),
+        (Contador::BatallasContraCoalicion, ganador.facciones.len() == 1 && perdedor.facciones.len() >= 2),
+        (Contador::BatallasConRey, b.con_rey),
+        (Contador::BatallasCampoAbiertoConCaballeriaElite, b.campo_abierto && ganador.con(Tipo::Caballerizas, ESCALON_ELITE)),
+    ];
+    reglas.into_iter().filter(|&(_, si)| si).fold(Delta::default().con(Contador::EscuadrasEliteDestruidas, elite_destruidas), |d, (c, _)| d.con(c, 1))
+}
+
+/// `persecuciones.deCaballeria`: una columna que lleva alguna escuadra de Caballerizas ataca a otra columna o a una caravana, con números o en Unity, gane o pierda (Tecnologia_Aedas §2.1).
+pub fn persecucion(atacante: &BandoDeBatalla) -> Delta {
+    if atacante.con(Tipo::Caballerizas, 0) {
+        Delta::uno(Contador::PersecucionesDeCaballeria)
+    } else {
+        Delta::default()
+    }
+}
+
 /// Un soldado de carro de guerra vale por 5 en `reclutados.caballeria` (TA §2.1; decisión del autor del 2026-10-01, `PESO_EN_CABALLERIA` del TS).
 pub const PESO_CARROS_GUERRA: u64 = 5;
 
@@ -215,14 +305,14 @@ mod pruebas {
     }
 
     #[test]
-    fn los_nombres_son_los_del_ts_y_hay_24() {
-        assert_eq!(Contador::TODOS.len(), 24);
+    fn los_nombres_son_los_del_ts_y_hay_36() {
+        assert_eq!(Contador::TODOS.len(), 36);
         for (i, c) in Contador::TODOS.into_iter().enumerate() {
             assert_eq!(c.indice(), i);
             assert_eq!(Contador::desde_nombre(c.nombre()), Some(c));
         }
         assert_eq!(Contador::desde_nombre("extraido.oro"), None);
-        assert!(PlazasEnNivel2.es_record() && PlazasEnNivel3.es_record() && !ExtraidoCobre.es_record());
+        assert!(PlazasEnNivel2.es_record() && PlazasEnNivel3.es_record() && CaminosCompartidos.es_record() && !ExtraidoCobre.es_record());
         assert_eq!((Contador::de_plazas_en_nivel(2), Contador::de_plazas_en_nivel(4)), (Some(PlazasEnNivel2), None));
     }
 
@@ -257,6 +347,118 @@ mod pruebas {
         assert_eq!(de_fabricacion(Recurso::ArmaduraBronce), &[FabricadoEquipoBronce, FabricadoArmaduraBronce]);
         assert_eq!(de_fabricacion(Recurso::ArmaBronceCalidad), &[FabricadoEquipoBronce]);
         assert!(de_fabricacion(Recurso::ArmaCobre).is_empty());
+    }
+
+    fn esc(edificio: Tipo, escalon: u8, sin_soldados: bool) -> EscuadraDeBatalla {
+        EscuadraDeBatalla { edificio, escalon, sin_soldados }
+    }
+
+    fn bando(facciones: &[FaccionId], heroes: u32, soldados: u64, escuadras: &[EscuadraDeBatalla]) -> BandoDeBatalla {
+        BandoDeBatalla { facciones: facciones.iter().copied().collect(), heroes, soldados, escuadras: escuadras.to_vec() }
+    }
+
+    /// Una batalla sin nada de las Eras IV y V: un héroe por bando, de dos Facciones, infantería de leva contra infantería de leva; gana el atacante, que es el más numeroso.
+    fn sencilla() -> ResumenBatalla {
+        ResumenBatalla {
+            atacante: bando(&[1], 1, 30, &[esc(Tipo::Barracon, 1, false)]),
+            defensor: bando(&[2], 1, 20, &[esc(Tipo::Barracon, 1, true)]),
+            con_rey: false,
+            gana_el_atacante: true,
+            campo_abierto: true,
+        }
+    }
+
+    #[test]
+    fn una_batalla_sin_nada_de_las_eras_iv_y_v_no_sube_ninguno() {
+        assert!(de_batalla(&sencilla()).es_vacio());
+        assert!(persecucion(&sencilla().atacante).es_vacio());
+    }
+
+    #[test]
+    fn tres_heroes_en_un_bando_cuentan_dos_no() {
+        let mut b = sencilla();
+        b.defensor.heroes = 2;
+        assert!(de_batalla(&b).es_vacio());
+        b.defensor.heroes = 3;
+        assert_eq!(de_batalla(&b), delta(&[(BatallasConTresHeroes, 1)]), "gane o pierda");
+    }
+
+    #[test]
+    fn gana_en_inferioridad_quien_empezo_con_menos_soldados() {
+        let mut b = sencilla();
+        b.gana_el_atacante = false;
+        assert_eq!(de_batalla(&b), delta(&[(BatallasGanadasEnInferioridad, 1)]));
+        b.defensor.soldados = 30;
+        assert!(de_batalla(&b).es_vacio(), "con los mismos soldados no es inferioridad");
+    }
+
+    #[test]
+    fn cada_escuadra_de_elite_de_cualquier_bando_que_acaba_sin_soldados_suma_una() {
+        let mut b = sencilla();
+        b.atacante.escuadras = vec![esc(Tipo::Barracon, 5, true), esc(Tipo::Caballerizas, 4, false)];
+        b.defensor.escuadras = vec![esc(Tipo::GaleriaDeTiro, 4, true), esc(Tipo::Barracon, 3, true)];
+        assert_eq!(de_batalla(&b).get(EscuadrasEliteDestruidas), 2, "la de escalón 3 y la que sigue en pie no cuentan");
+        b.atacante.escuadras = vec![esc(Tipo::Barracon, 5, false)];
+        b.defensor.escuadras = vec![esc(Tipo::Barracon, 3, true)];
+        assert!(de_batalla(&b).es_vacio());
+    }
+
+    #[test]
+    fn caballeria_que_gana_a_campo_abierto_y_la_de_elite() {
+        let mut b = sencilla();
+        b.atacante.escuadras.push(esc(Tipo::Caballerizas, 3, false));
+        assert_eq!(de_batalla(&b), delta(&[(BatallasCampoAbiertoConCaballeria, 1)]));
+        b.atacante.escuadras.push(esc(Tipo::Caballerizas, 4, false));
+        assert_eq!(de_batalla(&b), delta(&[(BatallasCampoAbiertoConCaballeria, 1), (BatallasCampoAbiertoConCaballeriaElite, 1)]));
+        // Fuera del campo abierto, o si la caballería pierde, no.
+        b.campo_abierto = false;
+        assert!(de_batalla(&b).es_vacio());
+        b.campo_abierto = true;
+        b.gana_el_atacante = false;
+        assert_eq!(de_batalla(&b), delta(&[(BatallasGanadasEnInferioridad, 1)]));
+    }
+
+    #[test]
+    fn armas_combinadas_pide_los_tres_edificios_en_un_mismo_bando() {
+        let mut b = sencilla();
+        b.atacante.escuadras = vec![esc(Tipo::Barracon, 1, false), esc(Tipo::GaleriaDeTiro, 1, false)];
+        b.defensor.escuadras = vec![esc(Tipo::Caballerizas, 2, false)];
+        assert!(de_batalla(&b).es_vacio(), "repartidos entre los dos bandos no cuentan");
+        b.defensor.escuadras = vec![esc(Tipo::Barracon, 1, false), esc(Tipo::GaleriaDeTiro, 1, false), esc(Tipo::Caballerizas, 2, false)];
+        assert_eq!(de_batalla(&b), delta(&[(BatallasArmasCombinadas, 1)]), "aunque pierda");
+    }
+
+    #[test]
+    fn contra_coalicion_gana_una_sola_faccion_a_un_bando_de_dos() {
+        let mut b = sencilla();
+        b.defensor.facciones = [2, 3].into_iter().collect();
+        assert_eq!(de_batalla(&b), delta(&[(BatallasContraCoalicion, 1)]));
+        let mut gana_la_coalicion = b.clone();
+        (gana_la_coalicion.gana_el_atacante, gana_la_coalicion.defensor.soldados) = (false, 40);
+        assert!(de_batalla(&gana_la_coalicion).es_vacio(), "si gana la coalición, no");
+        b.atacante.facciones = [1, 4].into_iter().collect();
+        assert!(de_batalla(&b).es_vacio(), "coalición contra coalición, tampoco");
+    }
+
+    #[test]
+    fn con_rey_suma_si_combate_un_rey() {
+        let mut b = sencilla();
+        b.con_rey = true;
+        assert_eq!(de_batalla(&b), delta(&[(BatallasConRey, 1)]));
+    }
+
+    #[test]
+    fn una_persecucion_cuenta_si_el_atacante_lleva_caballeria() {
+        let mut b = sencilla().atacante;
+        assert!(persecucion(&b).es_vacio());
+        b.escuadras.push(esc(Tipo::Caballerizas, 1, true));
+        assert_eq!(persecucion(&b), delta(&[(PersecucionesDeCaballeria, 1)]), "gane o pierda");
+    }
+
+    #[test]
+    fn el_arma_de_hierro_de_calidad_cuenta_y_la_de_hierro_no() {
+        assert_eq!(de_fabricacion(Recurso::ArmaHierroCalidad), &[FabricadoArmaHierroCalidad]);
+        assert!(de_fabricacion(Recurso::ArmaHierro).is_empty());
     }
 
     #[test]

@@ -54,9 +54,9 @@ Decidido por el autor el 2026-10-22 ([`Economia_Por_Minuto_Definicion.md`](../..
 RecursoAlmacenado = { cantidad, capacidad }          Asentamiento.almacen: Record<RecursoTipo, RecursoAlmacenado>
 ```
 
-41 tipos de recurso (`RECURSOS_TIPO`): madera, piedra, trigo, cobre, estano, oro, livestock, hierro; intermedios (lingoteCobre/Estano/Bronce/Hierro, cuero, cueroCurtido,
+42 tipos de recurso (`RECURSOS_TIPO`): madera, piedra, trigo, cobre, estano, oro, livestock, hierro; intermedios (lingoteCobre/Estano/Bronce/Hierro, cuero, cueroCurtido,
 cueroCalidad); equipo (armaMadera/Cobre/Bronce/BronceCalidad/Hierro/HierroCalidad, armaduraBasica/Intermedia/Bronce/BronceCalidad, carroGuerra); chatarra (Cobre/Bronce/Hierro);
-y **la comida de la tanda 69** (harina, pan, carne, leche, queso, uva, aceituna, vino y aceite) y **la de las zonas húmedas** (cebada, cerveza y sésamo, 2026-11-09). **Todos** nacen en el almacén (cantidad 0 o inicial, capacidad 800 desde el 2026-11-05, antes 400) para que la capacidad exista desde el principio.
+y **la comida de la tanda 69** (harina, pan, carne, leche, queso, uva, aceituna, vino y aceite), **la de las zonas húmedas** (cebada, cerveza y sésamo, 2026-11-09) y el **aceite de sésamo** (`aceiteSesamo`, el 42, 2026-11-12, entrada 74). El aceite son dos bienes: `aceite` es el **aceite de oliva** («Aceite de oliva»; el id no cambia, para no tocar a los bots ni a los clientes que ya lo leen) y `aceiteSesamo`, el **aceite de sésamo** («Aceite de sésamo»). **Todos** nacen en el almacén (cantidad 0 o inicial, capacidad 800 desde el 2026-11-05, antes 400) para que la capacidad exista desde el principio.
 
 ```
 Edificio = {
@@ -245,18 +245,18 @@ descontar  porUnidad × cantidad  de cada insumo;  añadir cantidad de receta.pr
 > | **Horno** | 1 | 4 de **pan** de 4 de harina (1 por unidad) | 2 pesants |
 > | **Quesera** | 2 | 2 de **queso** de 4 de leche (2 por unidad) | 2 artesanos |
 > | **Bodega** | 3 | 1 de **vino** de 2 de uva, o 1 de **cerveza** de 2 de cebada (2 por unidad; una de las dos, abajo) | 3 artesanos |
-> | **Prensa** | 4 | 1 de **aceite** de 2 de aceituna, o de 2 de sésamo (2 por unidad; una de las dos, abajo) | 3 artesanos |
+> | **Prensa** | 4 | 1 de **aceite** (de oliva) de 2 de aceituna, o 1 de **aceite de sésamo** de 2 de sésamo (2 por unidad; una de las dos, abajo; hasta el 2026-11-12 las dos daban `aceite`) | 3 artesanos |
 >
-> **Las cifras de las recetas son provisionales, a calibrar con el batch.** Se eligieron para que un edificio de nivel 1 cubra la ración (`BIENES_DE_CONSUMO`, §9.2) de unas 100 cabezas de la clase que come el bien (pan 100 × 0,04 = 4; queso 100 × 0,02 = 2; vino, cerveza y aceite 100 × 0,01 = 1); la harina, lo que gasta un horno (4). Como cualquier receta, produce solo lo que cabe en el almacén y lo que alcanzan los insumos (`disponible − reserva`).
+> **Las cifras de las recetas son provisionales, a calibrar con el batch.** Se eligieron para que un edificio de nivel 1 cubra la ración (`BIENES_DE_CONSUMO`, §9.2) de unas 100 cabezas de la clase que come el bien (pan 100 × 0,04 = 4; queso 100 × 0,02 = 2; vino, cerveza y los dos aceites 100 × 0,01 = 1); la harina, lo que gasta un horno (4). Como cualquier receta, produce solo lo que cabe en el almacén y lo que alcanzan los insumos (`disponible − reserva`).
 >
 > **El buey del molino.** Un molino admite **un buey**, que se compra con la orden `asignarBuey` (§13) al precio del buey de una caravana (`ANIMAL_CATALOGO.buey.costo`, 12 de oro; autor, 2026-11-08) y se queda allí: con él la receta produce `factorBuey` (2) veces más gastando lo mismo por unidad, y sigue limitada por el trigo que haya. `Edificio.buey` va en la foto (desde `BAN59`) y en la proyección (`Edificio.buey`). Se puede comprar con el molino **aún en obra** (no se mira el estado) y **se pierde con el molino**: al cancelar su obra (§6.4), en las ruinas de la plaza y, sin devolver nada, cuando una conquista lo deja **dañado** (`aplicar_conquista`, Combate §8; el molino reconstruido nace sin buey).
 
 >
-> **Una receta a la vez en la bodega y la prensa (autor, 2026-11-09).** La bodega tiene dos recetas (vino de uva, **cerveza de cebada**) y la prensa dos (aceite de aceituna, **aceite de sésamo**), pero cada edificio trabaja **una sola**: la de su **insumo activo** (`Edificio.receta`, en la foto desde `BAN60` y en la proyección), que elige el Gobernador o el Maestro de Obras con `elegirReceta` (§6.4, §13). `TALLERES_DE_UNA_RECETA` da el tope de edificios de cada tipo por plaza y cuántas recetas distintas puede trabajar la plaza según su nivel operativo (un nivel que no está usa el más alto por debajo; por debajo del primero, el primero). Código: `crates/asentamiento/src/recetas_unicas.rs`.
+> **Una receta a la vez en la bodega y la prensa (autor, 2026-11-09).** La bodega tiene dos recetas (vino de uva, **cerveza de cebada**) y la prensa dos (aceite de oliva de aceituna, **aceite de sésamo** de sésamo), pero cada edificio trabaja **una sola**: la de su **insumo activo** (`Edificio.receta`, en la foto desde `BAN60` y en la proyección), que elige el Gobernador o el Maestro de Obras con `elegirReceta` (§6.4, §13). `TALLERES_DE_UNA_RECETA` da el tope de edificios de cada tipo por plaza y cuántas recetas distintas puede trabajar la plaza según su nivel operativo (un nivel que no está usa el más alto por debajo; por debajo del primero, el primero). Código: `crates/asentamiento/src/recetas_unicas.rs`.
 >
 > - **Hasta 3 bodegas y 3 prensas por plaza** (`maximoPorPlaza`), de cualquier estado: la cuarta se rechaza al encargarla (`obra.tope_por_plaza`, §6.4).
-> - **Recetas distintas por plaza**: la bodega, **una** en los niveles 3 y 4 (vino **o** cerveza) y **las dos** en el 5; la prensa, **siempre una** (aceite de aceituna **o** de sésamo). Se mira **al elegir**: una elección que pasaría del tope se rechaza (`receta.tope_por_plaza`); cuentan los edificios de cualquier estado.
-> - **Receta de partida.** Un edificio nuevo nace con la receta que ya trabaja la plaza en ese tipo (la del de menor id que no esté parado) o, si no hay ninguno, con la primera del catálogo (vino; aceite de aceituna). Uno sin receta guardada trabaja también la primera.
+> - **Recetas distintas por plaza**: la bodega, **una** en los niveles 3 y 4 (vino **o** cerveza) y **las dos** en el 5; la prensa, **siempre una** (aceite de oliva **o** de sésamo). Se mira **al elegir**: una elección que pasaría del tope se rechaza (`receta.tope_por_plaza`); cuentan los edificios de cualquier estado.
+> - **Receta de partida.** Un edificio nuevo nace con la receta que ya trabaja la plaza en ese tipo (la del de menor id que no esté parado) o, si no hay ninguno, con la primera del catálogo (vino; aceite de oliva). Uno sin receta guardada trabaja también la primera.
 > - **Recetas paradas.** Si la plaza baja de nivel y trabaja más recetas distintas de las que caben (vino y cerveza al bajar del 5), siguen las primeras por el menor id de edificio que las usa y **paran** las demás: sus edificios no producen (siguen contando como puestos de trabajo) hasta que la plaza recupere el nivel o se les elija otra receta. No se guarda: se deriva cada minuto (`recetas_paradas`) y la proyección lo dice en `Edificio.receta_parada`.
 > - `alternarReceta` (§5.4) sigue valiendo encima: para por el recurso producido en todos los talleres.
 
@@ -394,7 +394,7 @@ La construcción **manual** y la mejora manual usan la reserva dinámica **sin**
 La pide un residente presente con el cargo `gobernador` o `maestroObras` (el motor solo exige que **alguien** tenga ese cargo; es el comando el que comprueba que el actor es ese titular). Cualquier tipo del catálogo menos el Centro Urbano y los puestos
 de Mercado. Validaciones, en orden:
 
-1. Hay alguien en ese cargo. 2. La Facción tiene la tecnología del tipo. 3. **La Maravilla pide el umbral de prestigio de la Facción** (`PRESTIGIO.maravilla`, Diplomacia_Facciones §3.5b), **en lugar de la Era** (`ordenEraMinimo` desaparece del catálogo y con él `obra.era_insuficiente`; antes pedía la Era V, que no existe): `obra.prestigio_insuficiente`. 3a. **La estatua** solo se levanta en la **capital** de la Facción (`obra.solo_en_capital`) y tantas como umbrales de `PRESTIGIO.estatuas` alcanza su prestigio, contando las hechas y las que están en obra (`obra.prestigio_insuficiente`); es decorativa, de un solo nivel, y no está en `EDIFICIOS_UNICOS`. 3b. No es `centroUrbano` ni `puestoMercado`. 3c (Rust). No es un extractor de pueblo (Cantera ni minas: `obra.solo_por_pueblo`, la Cantera también la primera desde el 2026-11-01) ni el Corral (`obra.solo_en_aldea`).
+1. Hay alguien en ese cargo. 2. La Facción tiene la tecnología del tipo. 3. **La Maravilla pide el umbral de prestigio de la Facción** (`PRESTIGIO.maravilla`, Diplomacia_Facciones §3.5b), **en lugar de la Era** (`ordenEraMinimo` desaparece del catálogo y con él `obra.era_insuficiente`; antes pedía la Era V, que entonces no existía; desde el 2026-11-12 la Era V existe y la Maravilla sigue sin pedirla): `obra.prestigio_insuficiente`. 3a. **La estatua** solo se levanta en la **capital** de la Facción (`obra.solo_en_capital`) y tantas como umbrales de `PRESTIGIO.estatuas` alcanza su prestigio, contando las hechas y las que están en obra (`obra.prestigio_insuficiente`); es decorativa, de un solo nivel, y no está en `EDIFICIOS_UNICOS`. 3b. No es `centroUrbano` ni `puestoMercado`. 3c (Rust). No es un extractor de pueblo (Cantera ni minas: `obra.solo_por_pueblo`, la Cantera también la primera desde el 2026-11-01) ni el Corral (`obra.solo_en_aldea`).
 4. Tipos **únicos** (`EDIFICIOS_UNICOS`, §14.2): ya hay uno (de cualquier estado). **La Granja es única desde el 2026-11-02** (decisión del autor): la de la fundación es la única de la ciudad y otra se rechaza con `obra.unico`; desde el 2026-11-11 no se mejora (un solo nivel: `obra.no_es_mejorable`).
 5. Tope de Almacenes; tope de Viviendas. 6. `nivelActual ≥ requisitoNivelAsentamientoConstruccion` del tipo. 6b (2026-11-03). Si el nivel 1 del tipo trae `requiereEdificio` (hoy solo el Albergue de caravanas: un Mercado), hay un edificio activo de ese tipo con `nivelInterno ≥ requiereEdificioNivel`; si no, `obra.falta_edificio`. 7. Tope de transformación. 7b (2026-11-09). Tope de bodegas y de prensas de la plaza (`TALLERES_DE_UNA_RECETA.maximoPorPlaza`, 3, de cualquier estado): `obra.tope_por_plaza`. Una bodega o una prensa nueva nace con su receta de partida (§5.3).
 8. **Gran Fundición**: nivel de Facción ≥ `nivelFaccionMinimo` (6), el asentamiento es la **capital**, y la Facción no tiene ya otra (ninguno de sus asentamientos).
@@ -438,6 +438,8 @@ la Facción tiene `siguiente.requiereTecnologia`; si hay `requiereEdificio`, **a
 O sea, la obra base ×2 para el nivel 2, ×4 para el 3, ×8 para el 4, salvo los `obraMinutos` propios (Taberna y Palacio; la Granja los tuvo del 2026-10-28 al 2026-11-11, 240, 480 y 960 minutos, hasta que dejó de tener mejoras).
 
 **Talleres de fabricación de prueba (decisión del autor del 2026-11-04).** Mientras se hacen pruebas, la Fundición, la Curtiduría, la Armería, la Carpintería y la Gran Fundición levantan su nivel 1 en **5 minutos** (`tiempoConstruccionMinutos`; antes 720, y 2.880 la Gran Fundición), y como no tienen `obraMinutos` sus mejoras bajan en proporción: 10 minutos el nivel 2 y 20 el 3 (antes 1.440 y 2.880). Los cuarteles (Barracón, Galería de tiro, Caballerizas) no cambian. Se vuelve a las de antes cuando acaben las pruebas.
+
+> **La Armería también es la tienda y la forja del héroe (2026-11-12, D1).** Una Armería **activa** (cualquier nivel interno) deja al héroe que está dentro de la plaza comprar y vender objetos con sus monedas (`comprar_objeto`, `vender_objeto`) y forjarlos (`forjar_objeto`): desde el 2026-11-12 en cualquier plaza con la Armería activa cuya forja esté abierta a su grupo, con un impuesto en monedas que va al fondo de la plaza (`Asentamiento::forja`, que fijan el Tesorero o el Gobernador con `configurar_forja`). El metal lo abre la tecnología de la Facción de la plaza. No cambia nada de sus recetas, sus artesanos ni su producción. Reglas y rechazos en [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §4.6.
 
 **Cada tick** (`avanzarMejoras`), dos pasos *(en Rust, el primero ocurre en el instante de fin de la mejora y el segundo en el paso de minuto)*:
 
@@ -488,11 +490,11 @@ Crecen las tres clases **solo** si la plaza puede crecer (§9.2: nutrición mayo
 
 ### 9.2 Comida y hambruna (`avanzarNutricionPoblacion`)
 
-> **Implementado en Rust (2026-11-08, tanda 69): la población come pan, queso, vino, aceite y carne** (y cerveza desde el 2026-11-09). `Poblacion::nutrir` y `Poblacion::crecer` (`crates/asentamiento/src/poblacion.rs`), con el bloque `BIENES_DE_CONSUMO` (§14.4) en lugar del trigo solo. **Cada minuto y en cada plaza** el consumo es mezclado:
+> **Implementado en Rust (2026-11-08, tanda 69): la población come pan, queso, vino, aceite y carne** (y cerveza desde el 2026-11-09 y aceite de sésamo desde el 2026-11-12). `Poblacion::nutrir` y `Poblacion::crecer` (`crates/asentamiento/src/poblacion.rs`), con el bloque `BIENES_DE_CONSUMO` (§14.4) en lugar del trigo solo. **Cada minuto y en cada plaza** el consumo es mezclado:
 >
 > ```
 > necesidad = total × consumoComidaPorHabitante × factorConsumoComida(políticas)          ; la de siempre (0,1 por habitante y minuto), la clase no importa
-> para cada bien de BIENES_DE_CONSUMO.bienes (carne, pan, queso, vino, cerveza, aceite; el orden no cambia nada, cada uno se reparte por su cuenta):
+> para cada bien de BIENES_DE_CONSUMO.bienes (carne, pan, queso, vino, cerveza, aceite, aceiteSesamo; el orden no cambia nada, cada uno se reparte por su cuenta):
 >     pedido[clase]  = la clase lo come ? habitantes[clase] × bien.racion × factorConsumoComida : 0
 >     cobertura      = min(1, lo que hay del bien / Σ pedido)                              ; un bien que no llega se reparte EN PROPORCIÓN a lo que pide cada clase
 >     come[clase]    = pedido[clase] × cobertura                                           ; sale del almacén; alimenta 1 a 1, como el trigo
@@ -508,11 +510,14 @@ Crecen las tres clases **solo** si la plaza puede crecer (§9.2: nutrición mayo
 > | Queso | artesanos | 0,02 | ×1,5 |
 > | Vino | nobleza | 0,01 | ×1,5 |
 > | Cerveza (2026-11-09) | nobleza | 0,01 | ×1,25 |
-> | Aceite | nobleza | 0,01 | ×1,5 |
+> | Aceite de oliva (`aceite`) | nobleza | 0,01 | ×1,5 |
+> | Aceite de sésamo (`aceiteSesamo`, 2026-11-12) | nobleza | 0,01 | ×1,25 |
+>
+> El aceite de sésamo va como la cerveza junto al vino (autor, 2026-11-12, D9): una plaza con los dos aceites le da a la nobleza los dos modificadores (×1,5 × ×1,25 = ×1,875), como con el vino y la cerveza. Pruebas: `la_nobleza_come_aceite_de_sesamo_…` y `con_los_dos_aceites_la_nobleza_suma_los_dos_modificadores` (`poblacion.rs`).
 >
 > Las raciones de una clase suman menos que su necesidad: **el trigo siempre hace falta**. Los modificadores de una clase **se multiplican** entre sí (pan ×2 por carne ×1,2 son ×2,4) y multiplican la tasa de crecimiento de su clase junto con los factores de siempre (§9.1: `tasa = tasaBase × comida × espacio × felicidad × modificador`); los «+1 sin dado» de los primeros artesanos y nobles no los usan. La **nutrición y el hambre** se miden como siempre, con la necesidad cubierta por todo lo consumido (bienes y trigo), no solo por el trigo. La **leche** no se consume: solo es materia prima de la quesera (§5.3). Ejemplo: 400 pesants necesitan 40 por minuto y piden 16 de pan y 8 de carne; con solo 8 de pan en el almacén el pan da ×1,5, la carne ×1,2 y se comen 8 de pan, 8 de carne y 24 de trigo; crecen ×1,8 (`el_ejemplo_del_diseno_…`, `poblacion.rs`). El consumo de bienes cuenta en el consumido y en la tendencia «+N/min» de cada recurso. Los **víveres de movimiento** (columnas, ejércitos y héroes) **solo usan trigo**, y la **guarnición** come como la población desde el 2026-11-11: su ración de carne por soldado (la de este bloque, 0,02) a la vez que el trigo, que pone el resto de su ración (Heroe_Y_Tropa §7; antes, toda la carne que podía y luego trigo). Pruebas: `crates/asentamiento/src/poblacion.rs` y `crates/nucleo/tests/consumo.rs`.
 
-> **Consumo pausado (2026-11-10, decisión del autor).** El Gobernador o el Tesorero de la plaza (residente y dentro) puede **pausar el consumo** de un bien de `BIENES_DE_CONSUMO` (carne, pan, queso, vino, cerveza o aceite; **el trigo nunca**, `consumo.no_se_pausa`) con `pausar_consumo` (§13), para acumularlo y venderlo. `Asentamiento.consumo_pausado` guarda la lista en el orden del catálogo (foto, hash y campo 54 del contrato: interior, plaza propia y `ADMIN`). Un bien pausado **no entra en el reparto de arriba**: nadie lo come, la clase **no recibe su modificador** y lo que su ración habría puesto lo pone el trigo (`necesidad − Σ lo comido`), así que la nutrición no baja si hay trigo. La guarnición tampoco come la carne pausada: pasa directa al trigo (Heroe_Y_Tropa §7). La pausa se mantiene hasta que la quiten y se borra con la conquista de la plaza. Evento `consumo.pausado { recurso, pausado }`; sin cambio, `sin_cambios`.
+> **Consumo pausado (2026-11-10, decisión del autor).** El Gobernador o el Tesorero de la plaza (residente y dentro) puede **pausar el consumo** de un bien de `BIENES_DE_CONSUMO` (carne, pan, queso, vino, cerveza, aceite de oliva o aceite de sésamo; **el trigo nunca**, `consumo.no_se_pausa`) con `pausar_consumo` (§13), para acumularlo y venderlo. `Asentamiento.consumo_pausado` guarda la lista en el orden del catálogo (foto, hash y campo 54 del contrato: interior, plaza propia y `ADMIN`). Un bien pausado **no entra en el reparto de arriba**: nadie lo come, la clase **no recibe su modificador** y lo que su ración habría puesto lo pone el trigo (`necesidad − Σ lo comido`), así que la nutrición no baja si hay trigo. La guarnición tampoco come la carne pausada: pasa directa al trigo (Heroe_Y_Tropa §7). La pausa se mantiene hasta que la quiten y se borra con la conquista de la plaza. Evento `consumo.pausado { recurso, pausado }`; sin cambio, `sin_cambios`.
 
 El bloque siguiente es el del TypeScript (solo trigo); en Rust el trigo es la parte que no cubren los bienes de arriba.
 
@@ -635,7 +640,7 @@ Devuelve `null` si el nivel no tiene requisito. `calcularNivelAsentamiento` enca
 
 *(Atajo de administración, `FijarNivelAsentamiento`: fija el nivel alcanzado y el operativo; una obra de ascenso en curso hacia un nivel que el atajo ya concede **se descarta**, porque al acabar bajaría el nivel. Decisión del autor, 2026-10-23.)*
 
-Solo el **Gobernador** (residente y presente). Bloqueos posibles, **todos a la vez**: `nivel_maximo` (también si `nivelObjetivo > ASCENSO_ASENTAMIENTO.nivelTechoProvisional`), `ascenso_en_curso`, `falta_poblacion`, `faltan_edificios`, `sin_cupo_de_faccion`,
+Solo el **Gobernador** (residente y presente). Bloqueos posibles, **todos a la vez**: `nivel_maximo` (la plaza ya está en `NIVEL_ASENTAMIENTO.nivelMaximo`, el 5; hasta el 2026-11-12 también si `nivelObjetivo > ASCENSO_ASENTAMIENTO.nivelTechoProvisional`, el 4, que ya no existe), `ascenso_en_curso`, `falta_poblacion`, `faltan_edificios`, `sin_cupo_de_faccion`,
 `recursos_insuficientes` (el coste de `porNivelObjetivo[objetivo]` no está entero en el almacén). Hasta el 2026-11-10 también `insolvente`: desde entonces la solvencia es una **advertencia** que no bloquea (abajo).
 
 - **Cupo de la Facción** (`cupoLibreParaNivel`): existe para los niveles objetivo 2 a 5 (el 4 y el 5 desde el 2026-11-04, decisión del autor: como mucho tres plazas en el 4 y una en el 5). Ocupan plaza los asentamientos de la Facción con `nivelActual == objetivo` **o** con una obra de ascenso hacia ese nivel; hay cupo si
@@ -643,6 +648,7 @@ Solo el **Gobernador** (residente y presente). Bloqueos posibles, **todos a la v
 - **Solvencia (advertencia, no bloqueo)**: desde el 2026-11-10 (decisión del autor) no impide pedir la subida, porque una plaza que vive del comercio compra lo que no produce y el bloqueo le impedía crecer; el paso de minuto la calcula y la deja en `Asentamiento.insolvencia_ascenso` (campo 52: por recurso, lo que llega y lo que pide por minuto, en milésimas; vacía si cubre todo o la plaza está en el nivel máximo), para el jugador y los bots (interior, plaza propia y `ADMIN`; `asentamiento::ascenso::insolvencia_de_ascenso`). La cuenta: para cada recurso del coste de mantenimiento **en el nivel objetivo** (`calcularCostoMantenimiento` con `nivel = nivelActual = objetivo`), el ingreso bruto por minuto —`Σ produccionPorMinuto` de sus edificios (con topes por stock del nodo y tecnologías)
   más, para el oro, `recaudacionOro`— debe ser ≥ ese coste. Es bruto a propósito: no descuenta lo que gasten recetas o tropas. Lo que llega por **acarreo** (§14, pueblos extractores) cuenta como la **media por minuto de lo que ingresó de verdad
   en la plaza en las últimas 24 h** (decidido por el autor el 2026-10-19; antes, la producción nominal de los pueblos con carro). **Desde el 2026-11-01 cuenta todo lo que llega, quepa o no** en el almacén (decisión del autor): antes contaba solo lo que entraba, y una plaza con el almacén de piedra lleno se quedaba insolvente para el nivel 2 aunque su cantera trajese de sobra. **Desde el 2026-11-03 es la media desde que llega** (decisión del autor): lo llegado en la ventana se divide entre los minutos que van desde el principio de la hora de su primera llegada en la ventana más una hora (lo que tarda el primer carro en llenarse y viajar), con 24 h como mucho; antes, siempre entre 1.440 minutos, y una cantera nueva no contaba entera hasta llevar un día entregando. Hasta el 2026-11-10 era el rechazo `ascenso.insolvente`, que decía por cada recurso que falta cuánto llega y cuánto pide por minuto («no cubriría el mantenimiento del nivel nuevo: piedra (llegan 2,1 por minuto y pide 4,3)»); ahora esas mismas cifras viajan en la advertencia.
+- **La subida al nivel 5 (autor, 2026-11-11, entrada 74; implementada el 2026-11-12):** sin tecnología ni edificio nuevo, la obra cuesta, además de 5.000 de madera, 5.000 de piedra y 2.500 de oro, **1.000 de vino, 1.000 de cerveza, 1.000 de aceite de oliva y 1.000 de aceite de sésamo** (`ASCENSO_ASENTAMIENTO.porNivelObjetivo.5`). Los requisitos siguen como estaban (4.000 pesants, 3.200 artesanos y el Palacio 3) y no depende de ninguna Era. Como una plaza de los niveles 3 y 4 hace una sola bebida y la Prensa un solo aceite (§5.3), la que sube trae de otra plaza o del mercado la otra bebida y el otro aceite. Pruebas: `del_nivel_4_se_sube_al_5_pagando_…` y `sin_alguno_de_los_cuatro_bienes_no_se_sube_al_nivel_5` (`asentamiento/tests/ordenes.rs`).
 - Si todo va bien: cobra el coste entero del almacén y fija `ascenso = { nivelObjetivo, iniciadoEn, completaEn: instante + obraMinutos }` (evento `asentamiento.ascenso_iniciado`).
 - **Duración de prueba (decisión del autor del 2026-11-02):** mientras se hacen pruebas, `obraMinutos` es **10** para todos los niveles objetivo (antes 4.320, 10.080, 20.160 y 30.240: 3 días, 1, 2 y 3 semanas). Se vuelve a las de antes cuando acaben las pruebas.
 
@@ -675,7 +681,7 @@ Los factores se **multiplican** entre las políticas activas del asentamiento (`
 | `mejorarEdificioAhora { …, edificioId }` | ídem | §7. `construccion.mejora_forzada` |
 | `alternarAutoConstruccion { asentamientoId, pausada }` | gobernador o maestroObras | Idempotente. `construccion.auto_alternada` |
 | `alternarReceta { asentamientoId, recurso, pausada }` | gobernador o maestroObras | Idempotente. `construccion.receta_alternada` |
-| `pausarConsumo { asentamientoId, recurso, pausado }` | `gobernador` o `tesorero` | §9.2 (2026-11-10, orden `pausar_consumo`). Un bien de consumo, nunca el trigo (`consumo.no_se_pausa`). Idempotente (`sin_cambios`). `consumo.pausado { recurso, pausado }` |
+| `pausarConsumo { asentamientoId, recurso, pausado }` | `gobernador` o `tesorero` | §9.2 (2026-11-10, orden `pausar_consumo`). Un bien de consumo (el aceite de sésamo también, 2026-11-12), nunca el trigo (`consumo.no_se_pausa`). Idempotente (`sin_cambios`). `consumo.pausado { recurso, pausado }` |
 | `calibrarReservaManual { asentamientoId, recurso, valor }` | `tesorero` (y debe haber uno) | `reservaManual[recurso] = clamp(round(valor), 0, NECESIDADES.reservaManualMaxima)`. Sin evento |
 | `renombrarAsentamiento { asentamientoId, nombre }` | cualquier residente | Nombre recortado; vacío = volver a mostrar el id. Como mucho `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres (`asentamiento.nombre_largo`) y **único** entre las plazas vivas del mundo, sin mirar tildes ni mayúsculas (`asentamiento.nombre_duplicado`) (5C-6, decisión del autor del 2026-10-24). `asentamiento.renombrado` (en Rust desde 5C: `RenombrarAsentamiento`, 143) |
 | `asignarBuey { asentamientoId, cargo, edificioId }` | `gobernador` o `maestroObras` | §6.4 (tanda 69, orden `asignar_buey`). Compra el buey de un molino. `construccion.buey_asignado { edificio }` |
@@ -1725,7 +1731,7 @@ Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMin
             }
           },
           {
-            "produce": "aceite",
+            "produce": "aceiteSesamo",
             "produccionBase": 1,
             "consumePorUnidad": {
               "sesamo": 2
@@ -2005,7 +2011,8 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
     "queso": { "clases": ["artesanos"], "racion": 0.02, "modificador": 1.5 },
     "vino": { "clases": ["nobleza"], "racion": 0.01, "modificador": 1.5 },
     "cerveza": { "clases": ["nobleza"], "racion": 0.01, "modificador": 1.25 },
-    "aceite": { "clases": ["nobleza"], "racion": 0.01, "modificador": 1.5 }
+    "aceite": { "clases": ["nobleza"], "racion": 0.01, "modificador": 1.5 },
+    "aceiteSesamo": { "clases": ["nobleza"], "racion": 0.01, "modificador": 1.25 }
   },
   "guarnicion": ["carne"]
 }
@@ -2152,12 +2159,15 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
       "costo": {
         "madera": 5000,
         "piedra": 5000,
-        "oro": 2500
+        "oro": 2500,
+        "vino": 1000,
+        "cerveza": 1000,
+        "aceite": 1000,
+        "aceiteSesamo": 1000
       },
       "obraMinutos": 10
     }
-  },
-  "nivelTechoProvisional": 4
+  }
 }
 ```
 <!-- /parametros -->

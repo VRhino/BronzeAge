@@ -399,7 +399,7 @@ impl Nucleo {
     /// sus escuadras (`fuera`), su parte del carro y sus víveres, y reaparecerá en su punto: si la columna es un ejército con más gente se separa con lo
     /// suyo y el mando pasa a quien dice [`Nucleo::sucesor_automatico`]; si iba solo, la columna deja de existir y sus caravanas adjuntas vuelven solas a su origen.
     pub(super) fn sale_del_mundo(&mut self, id: u64, t: Instante) {
-        let mr = self.estado.reglas.economia.militar.clone();
+        let mr = self.militar_de(self.heroe(id).and_then(|h| h.faccion));
         let residencia = self.heroe(id).and_then(|h| match h.heroe.residencia {
             Some(militar::heroe::Residencia::Asentamiento(a)) => Some(a as u64),
             _ => None,
@@ -449,7 +449,7 @@ impl Nucleo {
     /// El héroe vuelve al mundo (`conectarse` estando fuera). Dentro de un lugar solo recupera el control; si salió con su columna reaparece en su
     /// punto con una columna personal nueva, quieta, con sus escuadras, su carro y sus víveres. Devuelve el id de la columna nueva, si la hay.
     pub(super) fn volver_al_mundo(&mut self, t: Instante, id: u64) -> Vec<u64> {
-        let mr = self.estado.reglas.economia.militar.clone();
+        let mr = self.militar_de(self.heroe(id).and_then(|h| h.faccion));
         let hn = self.heroe(id).expect("existe");
         let residencia = match hn.heroe.residencia {
             Some(militar::heroe::Residencia::Asentamiento(a)) => Some(a as u64),

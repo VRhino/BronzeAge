@@ -70,7 +70,7 @@ fn ejercito_base(e: &Ejercito) -> pb::Ejercito {
 }
 
 /// La plaza como ficha del contrato (la que va a `FACCION`; el interior es de `proyeccion::interior`). `zona` es el polígono real recortado (`Nucleo::poligono_zona`) y `batalla_id`, la batalla que se juega ahora contra ella (el asedio visible). Es la ficha: id, Facción,
-/// sitio, nivel, zona, los ids de sus pueblos y avanzadas, el asedio, hasta cuándo está protegida, si tiene muralla y si tiene Mercado activo (sin detalle).
+/// sitio, nivel, zona, los ids de sus pueblos y avanzadas, el asedio, hasta cuándo está protegida, si tiene muralla y si tiene Mercado o Armería activos (sin detalle).
 pub fn ficha_de_asentamiento(a: &Asentamiento, zona: &[base::Punto], batalla_id: Option<String>) -> pb::Asentamiento {
     pb::Asentamiento {
         id: ids::asentamiento(a.id),
@@ -93,6 +93,8 @@ pub fn ficha_de_asentamiento(a: &Asentamiento, zona: &[base::Punto], batalla_id:
         tiene_muralla: !a.economia.recintos.is_empty(),
         // Lo que se sabe del Mercado desde fuera (2026-11-07): si hay alguno activo, sin su nivel.
         mercado_activo: a.economia.edificios.activos(asentamiento::Tipo::Mercado) > 0,
+        // Y de la Armería (Heroe_Y_Tropa §4.6, 2026-11-12): si hay alguna activa, sin su nivel ni su forja.
+        armeria_activa: a.economia.edificios.activos(asentamiento::Tipo::Armeria) > 0,
         ..Default::default()
     }
 }

@@ -6,7 +6,7 @@
 //! depende del núcleo: el núcleo guarda el estado, programa los eventos y llama a estas funciones.
 //!
 //! Módulos, en orden de dependencia: `datos` (cifras de los bloques, **vigentes** sin correcciones en el código), `catalogo` (las 27
-//! tropas), `escuadra` (nivel, moral y deserción), `liderazgo` (Doc 5.11), `presencia` (ubicación y conexión), `heroe` (progresión, loadouts,
+//! tropas), `escuadra` (nivel, moral y deserción), `liderazgo` (Doc 5.11), `presencia` (ubicación y conexión), `heroe` (progresión, clase, equipo y mochila con el crate `objetos`, loadouts,
 //! orden de escuadras y herido), `guarnicion` (cupo y asignación), `reclutamiento` (en una plaza) y `mercenarios` (en un campamento, y la
 //! tropa prestada), `racion` (víveres como ritmo), `columna` (unirse, separarse, formar, velocidad), `convocatoria`, `persecucion` e `inspeccion`.
 

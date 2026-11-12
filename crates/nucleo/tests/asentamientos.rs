@@ -582,7 +582,7 @@ fn estado_con_una_plaza() -> Estado {
     let eco = &s.reglas.economia.datos;
     let economia = asentamiento::asentamiento::Asentamiento::fundar(eco, 0, &eco.materiales_iniciales, eco.viviendas_iniciales);
     let urbe = nucleo::urbanismo::Urbe::fundar(&s.reglas.economia, 7, 1);
-    s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, puerta: Default::default(), cargos: Default::default(), nombre: String::new(), capital_de: None, de_la_faccion_desde: 0, resto_tributo: 0, permite_reabastecer_aliados: false, almacen_cerrado_a_ciudadanos: false, reclutamiento_cerrado_a_ciudadanos: true, fundadores: Vec::new() });
+    s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, puerta: Default::default(), cargos: Default::default(), nombre: String::new(), capital_de: None, de_la_faccion_desde: 0, resto_tributo: 0, permite_reabastecer_aliados: false, almacen_cerrado_a_ciudadanos: false, reclutamiento_cerrado_a_ciudadanos: true, fundadores: Vec::new(), forja: nucleo::Forja::de_partida(&s.reglas.economia.militar.objetos.forja) });
     s
 }
 
@@ -625,6 +625,7 @@ fn la_economia_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
         (e.poblacion.restos, e.poblacion.recuperando) = ([250, -400, 999], true);
         e.recintos = vec![anillo(|_| {}), anillo(|r| (r.id, r.nivel, r.avance, r.mejora, r.completado_en) = (2, 2, 1, None, None))];
         a.urbe.set_recintos(asentamiento::recintos::proyeccion(&a.economia.recintos));
+        (a.forja.neutrales.abierta, a.forja.enemigos.recargo_pct, a.forja.fondo) = (true, 500, 1_750);
     }
     rica.yacimientos.insert(3, nucleo::economia::StockNodo { stock: 5, vacio_desde: Some(77) });
     let rb = rica.serializar();
@@ -691,6 +692,9 @@ fn la_economia_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
         ("yacimientos", Box::new(|s| {
             s.yacimientos.insert(0, nucleo::economia::StockNodo { stock: 1, vacio_desde: None });
         })),
+        ("forja.abierta", Box::new(|s| s.asentamientos.get_mut(&1).unwrap().forja.aliados.abierta = true)),
+        ("forja.recargo", Box::new(|s| s.asentamientos.get_mut(&1).unwrap().forja.enemigos.recargo_pct = 200)),
+        ("forja.fondo", Box::new(|s| s.asentamientos.get_mut(&1).unwrap().forja.fondo = 100)),
     ];
     let h0 = base.hash();
     let mut vistos = std::collections::HashSet::from([h0]);
@@ -1064,7 +1068,7 @@ fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash() {
     let reglas = Reglas::default();
     let base = estado_con_una_plaza();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN62");
+    assert_eq!(&bytes[..5], b"BAN63");
     let con = |carga: Carga, prioridad: u8, en: Instante| {
         let mut s = Estado::deserializar(&bytes, &reglas, "h").unwrap();
         let clave = s.generaciones.clave(1);

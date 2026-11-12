@@ -65,7 +65,7 @@ Funciones puras que producen la columna nueva y la plaza con el carro cargado.
 ### 3.1 Salir como ejército (`movilizarEjercito`)
 1. Solo un **residente** de la plaza sale desde ella (ahí están su campamento y su tropa).
 2. Escuadras: deben existir en el campamento, ser del héroe, tener `cantidad > 0` y **no estar en la guarnición**. Al menos una; se rechaza en vez de filtrar en silencio.
-3. **Liderazgo** (`exigirLiderazgo`): `puedeLlevar(héroe, [lo que ya tiene fuera] + [las nuevas])`, con `liderazgoDe(héroe) = héroe.liderazgoBase ?? LIDERAZGO.base` y el coste de la escuadra = `LIDERAZGO.costePorEscalon[escalón de su tropa]`, **sin mirar cuántos soldados quedan** (una escuadra mermada paga el precio completo, Doc 5.11.1). El tope es **por héroe**.
+3. **Liderazgo** (`exigirLiderazgo`): `puedeLlevar(héroe, [lo que ya tiene fuera] + [las nuevas])`, con `liderazgoDe(héroe) = héroe.liderazgoBase` (sube con su nivel, Heroe_Y_Tropa §5) y el coste de la escuadra = `LIDERAZGO.costePorEscalon[escalón de su tropa]`, **sin mirar cuántos soldados quedan** (una escuadra mermada paga el precio completo, Doc 5.11.1). El tope es **por héroe**.
 4. Carro: `cargarCarroElegido` (§6.2), con capacidad de un carro (`capacidadCarroPorJugador`).
 5. Nace `tipo: 'ejercito'`, **`estacionado` en la puerta**, un participante, sin plan: **no se le da destino al salir** (decisión del autor, 2026-10-08). Su Líder lo dirige con `marcharA`. Los víveres los llena quien llama (`llenarViveres`, §6.1).
 
@@ -130,6 +130,7 @@ para cada tramo:   enCamino = el tramo es una arista de la red de caminos
 
 ### 6.1 Los víveres
 - Tope por héroe: `LOGISTICA.capacidadViveresPorHeroe` (350), derivado del radio operativo: **un jugador solo debe poder recorrer un cuarto del mapa ida y vuelta** (unas 1.333 unidades, 44 min a velocidad 30; la tropa prestada completa de un campamento más su héroe comen ~3,3 por minuto, 146 en ese trayecto: los 350 sobran, a recalibrar en batch). **En un ejército son unos víveres propios, cuya capacidad es la suma de sus héroes**; de ahí come todo el ejército.
+- **Logística de campaña** (Era IV, [`Tecnologia_Aedas.md`](Tecnologia_Aedas.md); confirmado por el autor el 2026-11-11): la Facción que la tiene adoptada lleva `LOGISTICA.bonusViveres.factor` (×1,5) víveres por héroe, 525. En Rust (`militar::Reglas::de_faccion`, `Nucleo::militar_de`) vale para todo lo que llena o topa los víveres de un héroe o de una columna de esa Facción: salir (de una plaza o de un campamento, con la ración gratis), volver al mundo, unirse, separarse, desarmar, entrar en la residencia y repostar en un campamento. Una columna que ya estaba fuera al adoptarla toma la capacidad nueva en su siguiente cambio de gente.
 - **Al unirse**, el héroe aporta sus víveres y su capacidad. **Al separarse o al desarmarse el ejército**, cada héroe se lleva una parte igual: víveres × su capacidad / la capacidad total.
 - Se llenan **solo**: (a) al salir, de la plaza (`llenarViveres`); (b) al repostar (§8); (c) con la ración del campamento de mercenarios (§3.3) o con `repostarEnCampamento` (gratis, cualquier héroe en un campamento, hasta el tope; no gasta el stock del mercado y no pasa por el carro); (d) desde el carro con `pasarAViveres` (solo el Líder; `min(pedido, trigo del carro, hueco)`; nunca al revés).
 - `sacarTrigoDe(plaza, consumoTropas, espacio)`: suelta `min(espacio, trigo − reservaDeTrigo)`; la reserva es lo que comen la población y la guarnición durante `RESERVA_CONSTRUCCION.horizonteMinutosComida`. Sacar una columna cuesta stock real pero no puede dejar la ciudad en hambruna.
@@ -310,20 +311,7 @@ Cada uno lo emite el comando que lo nombra, en la misma transición. «Plaza» e
 | `VISION.caravanaGrande.radio` | 300 | **60** |
 | `PERSECUCION.umbralRecalculo` | 30 | **retirado** (§7) |
 
-<!-- parametros:LIDERAZGO -->
-```json
-{
-  "base": 100,
-  "costePorEscalon": {
-    "1": 7,
-    "2": 14,
-    "3": 22,
-    "4": 32,
-    "5": 45
-  }
-}
-```
-<!-- /parametros -->
+El bloque `LIDERAZGO` vive solo en [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §12 (hasta el 2026-11-12 estaba repetido aquí): nace en 14 y sube 3 por nivel del héroe hasta 100.
 
 <!-- parametros:LOGISTICA -->
 ```json
@@ -334,7 +322,11 @@ Cada uno lo emite el comando que lo nombra, en la misma transición. «Plaza» e
   "factorConsumoEstacionado": 0.1,
   "umbralNarrarReposte": 0.5,
   "factorRepostajeEnZona": 1.25,
-  "radioEncuentro": 1
+  "radioEncuentro": 1,
+  "bonusViveres": {
+    "tecnologia": "logistica_campana",
+    "factor": 1.5
+  }
 }
 ```
 <!-- /parametros -->

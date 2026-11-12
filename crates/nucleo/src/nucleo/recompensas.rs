@@ -34,20 +34,22 @@ pub(super) struct Dado {
 
 impl Nucleo {
     /// Reclamar es todo o nada: comprueba que todo cabe y solo entonces lo da todo. Primero el destino de los recursos, el oro y la tropa (lo único que puede rechazar) y después la
-    /// participación y la experiencia, que no fallan. Devuelve lo que se dio de verdad.
+    /// participación, los objetos y la experiencia, que no fallan. Devuelve lo que se dio de verdad.
     pub(super) fn repartir(&mut self, t: Instante, r: &Recompensa, cobro: Cobro) -> Result<Dado, Respuesta> {
         let mut entregas = Vec::new();
         let mut tropas = Vec::new();
+        let mut objetos = Vec::new();
         let mut xp = match r.fija {
             Some(Fija::Experiencia(x)) => x,
             Some(Fija::Participacion(_)) | None => 0,
         };
-        for &e in &r.lista {
+        for e in &r.lista {
             match e {
-                Elemento::Recurso(rec, n) => entregas.push((rec, n)),
-                Elemento::Oro(n) => entregas.push((Recurso::Oro, n)),
-                Elemento::Experiencia(n) => xp += n,
-                Elemento::Tropa(tropa, n) => tropas.push((tropa, n)),
+                &Elemento::Recurso(rec, n) => entregas.push((rec, n)),
+                &Elemento::Oro(n) => entregas.push((Recurso::Oro, n)),
+                &Elemento::Experiencia(n) => xp += n,
+                &Elemento::Tropa(tropa, n) => tropas.push((tropa, n)),
+                Elemento::Objeto(o, n) => objetos.push((o.clone(), *n)),
             }
         }
         let mut dado = Dado { datos: Vec::new(), valores: Vec::new() };
@@ -71,6 +73,11 @@ impl Nucleo {
                 self.sumar_participacion(plaza, &heroes, parte);
                 dado.datos.push(("participacion", parte as i64));
             }
+        }
+        // Los objetos (solo en una misión personal, que paga al héroe): a su mochila y, si no caben, a su almacén de objetos; si tampoco, se pierden. No impiden reclamar
+        // y los cuenta su hecho `heroe.botin` (D17 y D22).
+        if let Destino::Heroe(h) = cobro.destino {
+            self.entregar_objetos(t, h, "mision", objetos);
         }
         if let (Some(f), true) = (cobro.faccion, xp > 0) {
             self.dar_experiencia(t, f, xp, super::experiencia::motivo::MISION);

@@ -94,7 +94,7 @@ mod pruebas {
 
     fn heroe_en(plaza: u32, tropas: &[Tropa]) -> Heroe {
         let r = r();
-        let mut h = Heroe::nuevo(&r, 1, Controlador::Humano, 1, 1);
+        let mut h = Heroe::nuevo(&r, 1, Controlador::Humano, 1, 1, "espada_escudo_mediano").expect("una clase del catálogo");
         h.residencia = Some(Residencia::Asentamiento(plaza));
         for (i, &t) in tropas.iter().enumerate() {
             h.escuadras.push(Escuadra::nueva(&r, 10 + i as u64, 1, t, 1, Some(plaza), 0));
@@ -133,6 +133,7 @@ mod pruebas {
     fn asignar_respeta_el_cupo_y_no_gasta_liderazgo() {
         let r = r();
         let mut h = heroe_en(5, &[Tropa::Hequetai, Tropa::Honderos, Tropa::Arqueros]); // 45, 14, 22
+        h.liderazgo_base = r.liderazgo.tope;
         assert_eq!(asignar(&r, &mut h, 5, 40, 10), Err(ErrorHeroe::SuperaElCupo { ocupado: 45, cupo: 40 }));
         assert_eq!(asignar(&r, &mut h, 5, 40, 11), Ok(()));
         assert_eq!(ocupada(&r, &h), 14);

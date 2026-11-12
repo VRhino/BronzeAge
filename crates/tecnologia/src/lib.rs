@@ -6,7 +6,7 @@
 //! (TA §3: determinista y sin azar). Las tecnologías van por **índice del catálogo** ([`TecId`], el orden del bloque `TECNOLOGIAS`) y los
 //! conjuntos de una Facción son mapas de bits ([`Conjunto`]).
 //!
-//! Módulos: `datos` (cifras de los bloques de TA; también [`datos::ReglasTecnologias`], que antes vivía en `militar`), `contador` (los 24
+//! Módulos: `datos` (cifras de los bloques de TA; también [`datos::ReglasTecnologias`], que antes vivía en `militar`), `contador` (los 36
 //! contadores y de qué vía sale cada uno), `estado` (estado del servidor: contadores con su siguiente umbral en O(1), logros, Eras, aparición,
 //! descubridoras y crónica de descubrimientos), `hito` (las condiciones sobre una [`hito::VistaFaccion`] que da el núcleo, revelar),
 //! `adopcion` (adoptar, vender, bonus de producción, tecnologías del campamento), `itinerantes` (objetivo, nacimiento, llegada y destinos),

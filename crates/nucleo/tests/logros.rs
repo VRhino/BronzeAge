@@ -59,11 +59,18 @@ fn la_era_cambia_por_plazo_en_su_cita_global_y_la_ultima_no_tiene_cita() {
     assert_eq!(n.estado().era_en, Some(plazo_1 + r.eras[1].plazo));
     n.avanzar_hasta(plazo_1 + r.eras[1].plazo);
     assert_eq!((n.tecnologia().era, hechos(&n, "era.comienza").len()), (2, 2));
-    // La III es la última mientras no existan los bloques de la IV y la V: sin cita, y la cola se queda vacía.
+    // Y así hasta la V, que es la última: sin cita, y la cola se queda vacía.
+    let mut desde = plazo_1 + r.eras[1].plazo;
+    for era in 2..4 {
+        assert_eq!(n.estado().era_en, Some(desde + r.eras[era].plazo));
+        desde += r.eras[era].plazo;
+        n.avanzar_hasta(desde);
+        assert_eq!(n.tecnologia().era as usize, era + 1);
+    }
     assert_eq!(n.estado().era_en, None);
-    n.avanzar_hasta(30 * SEMANA);
+    n.avanzar_hasta(desde + 30 * SEMANA);
     assert_eq!(n.eventos_en_cola(), 0);
-    assert_eq!(n.tecnologia().era, 2);
+    assert_eq!(n.tecnologia().era, 4);
 }
 
 #[test]
@@ -102,7 +109,7 @@ fn la_foto_lleva_el_estado_de_tecnologia_y_cada_campo_cambia_el_hash() {
     let reglas = n.estado().reglas.clone();
     let mundo_hash = n.estado().mundo_hash.clone();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN62");
+    assert_eq!(&bytes[..5], b"BAN63");
     let vuelta = Estado::deserializar(&bytes, &reglas, &mundo_hash).unwrap();
     assert_eq!(vuelta.serializar(), bytes);
     assert_eq!((vuelta.tecnologia.clone(), vuelta.era_en), (n.estado().tecnologia.clone(), n.estado().era_en));

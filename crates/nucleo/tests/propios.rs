@@ -120,7 +120,7 @@ impl Esc {
 
     /// Un héroe de la cuenta, ciudadano de `faccion`, en el campamento 0; con `plaza`, reside en ella y está dentro.
     fn heroe(&mut self, cuenta: &str, faccion: u32, plaza: Option<u64>) -> u64 {
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(faccion) });
         if let Some(p) = plaza {
             self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(p as u32)) });
@@ -405,12 +405,19 @@ async fn la_foto_inicial_de_heroe_y_faccion_lleva_todo_lo_propio_y_nada_de_otra_
     assert_eq!(h.len(), 1);
     let h = h[0];
     assert_eq!((h.id.as_str(), h.jugador_id.as_deref(), h.es_bot, h.nivel), (h_ana.as_str(), Some("ana"), false, 1));
-    assert_eq!((h.display_name.as_str(), h.class_definition_id.as_str(), h.femenino), (format!("Héroe {}", x.ana).as_str(), "default", false), "valores por defecto hasta que Conquest publique su catálogo");
+    assert_eq!((h.display_name.as_str(), h.femenino), (format!("Héroe {}", x.ana).as_str(), false), "valores por defecto hasta que Conquest publique su catálogo");
+    // La clase es la del arma de inicio y los atributos, la base de esa clase (2026-11-12, D16); nace con el equipo inicial puesto y la mochila y el almacén de objetos vacíos.
+    assert_eq!(h.class_definition_id, "espada_escudo_mediano");
+    assert_eq!(h.atributos_base, Some(pb::Atributos { fuerza: 3, destreza: 3, armadura: 2, vitalidad: 2 }));
+    let e = h.equipamiento.as_ref().unwrap();
+    assert_eq!((e.arma.as_ref().map(|p| p.item_definition_id.as_str()), e.casco.is_none(), e.torso.as_ref().map(|p| p.item_definition_id.as_str()), e.montura.as_ref().map(|p| p.item_definition_id.as_str())), (Some("espada_escudo_mediano_inicio"), true, Some("torso_media_inicio"), Some("montura_tiro")));
+    assert!(h.inventario.is_empty() && h.almacen_objetos.is_empty());
     assert_eq!(h.ubicacion.as_ref().and_then(|u| u.donde.clone()), Some(pb::ubicacion_heroe::Donde::AsentamientoId(as_a.clone())));
     assert_eq!(h.residencia_id.as_deref(), Some(as_a.as_str()), "reside en su plaza");
     assert_eq!(h.escuadrones_ids, [ids::escuadra(escuadra)]);
     assert_eq!((h.loadouts.len(), h.loadouts[0].display_name.as_str(), h.loadouts[0].activo), (1, "Default", true));
-    assert!(h.liderazgo_base > 0);
+    // La progresión (Heroe_Y_Tropa §4.3): nace en el nivel 1 con 14 de Liderazgo, sin puntos y con los 100 que pide el nivel 2 por delante (en milésimas).
+    assert_eq!((h.liderazgo_base, h.puntos_de_atributo_sin_gastar, h.experiencia_hacia_siguiente_nivel), (14, 0, 100_000));
     assert_eq!(i64::from(h.cupo_guarnicion), cupo, "derivado: el cupo de la guarnición de su residencia");
     assert!(h.monedas > 0);
     let e = escuadrones(&propia.entidades);
@@ -536,7 +543,7 @@ async fn reclutar_y_guardar_un_loadout_llegan_a_su_heroe_y_a_nadie_mas() {
     vista_ana.aplicar(del_heroe[0]);
 
     // Guardar un loadout con esa escuadra: el héroe lo trae entero, con su Liderazgo derivado.
-    let loadout = orden::Cuerpo::GuardarLoadout(pb::OrdenGuardarLoadout { loadout_id: None, display_name: "Ofensivo".into(), squad_ids: vec![escuadra.id.clone()], perks_seleccionados: vec![], activo: None });
+    let loadout = orden::Cuerpo::GuardarLoadout(pb::OrdenGuardarLoadout { loadout_id: None, display_name: "Ofensivo".into(), squad_ids: vec![escuadra.id.clone()], activo: None });
     let (previos, r) = dar_todo(&mut ana, "r2", loadout).await;
     aceptada(&r);
     assert_eq!(TipoEntidad::try_from(r.creadas[0].entidad).unwrap(), TipoEntidad::Loadout);

@@ -118,6 +118,59 @@ pub fn logros_de_hechos(n: &Nucleo) -> Vec<(tecnologia::Contador, u64)> {
     tecnologia::Contador::TODOS.into_iter().filter(|c| !c.es_record() && !flujo(c)).map(|c| (c, n.tecnologia().contador(c))).filter(|&(_, x)| x > 0).collect()
 }
 
+/// Un hecho `heroe.botin` (entradas 67, 68 y 70), leído: el héroe, de dónde, y lo que fue a la mochila, al almacén de objetos y lo que se perdió, cada cosa como (objeto, cantidad).
+#[derive(Debug, PartialEq, Eq)]
+pub struct Botin {
+    pub heroe: u64,
+    pub origen: String,
+    pub mochila: Vec<(String, u32)>,
+    pub almacen: Vec<(String, u32)>,
+    pub perdido: Vec<(String, u32)>,
+}
+
+/// Los hechos `heroe.botin` del registro de cambios que se conserva (desde la foto, si el núcleo salió de una), en orden.
+pub fn botines(n: &Nucleo) -> Vec<Botin> {
+    use nucleo::Dato;
+    let valor = |e: &nucleo::EventoNucleo, k: &str| e.valores.iter().find(|(c, _)| *c == k).map(|(_, d)| d.clone()).unwrap_or_else(|| panic!("heroe.botin sin «{k}»"));
+    let lista = |e: &nucleo::EventoNucleo, k: &str| match valor(e, k) {
+        Dato::Lista(l) => l
+            .into_iter()
+            .map(|d| match d {
+                Dato::Lista(par) => match par.as_slice() {
+                    [Dato::Texto(o), Dato::Numero(c)] => (o.clone(), *c as u32),
+                    otro => panic!("{otro:?}"),
+                },
+                otro => panic!("{otro:?}"),
+            })
+            .collect(),
+        otro => panic!("{otro:?}"),
+    };
+    let desde = (0..=n.version()).find(|&v| n.cambios_desde(v).is_some()).expect("el registro de cambios llega a la versión de ahora");
+    n.cambios_desde(desde)
+        .unwrap()
+        .flat_map(|c| c.eventos.iter())
+        .filter(|e| e.codigo == "heroe.botin")
+        .map(|e| Botin {
+            heroe: e.dato("heroe").unwrap() as u64,
+            origen: match valor(e, "origen") {
+                Dato::Texto(o) => o,
+                otro => panic!("{otro:?}"),
+            },
+            mochila: lista(e, "mochila"),
+            almacen: lista(e, "almacen"),
+            perdido: lista(e, "perdido"),
+        })
+        .collect()
+}
+
+/// Las reglas con el Liderazgo de un héroe de nivel 30 desde que nace (Heroe_Y_Tropa §5: nace en 14 y sube 3 por nivel hasta 100), para las pruebas que sacan más tropa de la
+/// que cabe en 14: el héroe sube «tocando» las reglas del estado, ya que ningún comando da experiencia.
+pub fn con_liderazgo_de_tope(mut r: Reglas) -> Reglas {
+    let l = &mut Arc::make_mut(&mut r.economia.militar).liderazgo;
+    l.base = l.tope;
+    r
+}
+
 /// Las reglas de `arranque`.
 pub fn reglas() -> Reglas {
     Reglas { viveres_bajos_pct: 1, ..Reglas::default() }

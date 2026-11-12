@@ -1,6 +1,6 @@
 [package]
 name = "nucleo"
-version = "0.38.0"
+version = "0.39.0"
 edition = "2021"
 description = "Núcleo de un solo hilo: aplica órdenes y eventos en (instante, prioridad, secuencia); modo acelerado y en vivo; persistencia por registro y fotos; sesiones del contrato 05 (fase 5)"
 
@@ -16,6 +16,7 @@ territorio = { path = "../territorio" }
 asentamiento = { path = "../asentamiento" }
 comercio = { path = "../comercio" }
 militar = { path = "../militar" }
+objetos = { path = "../objetos" }
 combate = { path = "../combate" }
 rayon = "1"
 politica = { path = "../politica" }

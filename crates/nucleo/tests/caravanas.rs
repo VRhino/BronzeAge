@@ -184,7 +184,7 @@ impl Escenario {
     }
     /// Un héroe de la cuenta, residente en el campamento `casa`, que va en la columna `columna` (la administración lo coloca: aún no hay `salirAlMundo`).
     fn heroe_en_columna(&mut self, cuenta: &str, casa: u32, columna: u64) -> u64 {
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: casa, controlador: militar::heroe::Controlador::Humano, nombre: None }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: casa, controlador: militar::heroe::Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
         self.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: militar::presencia::Ubicacion::Columna(columna) });
         h
     }
@@ -928,6 +928,7 @@ fn un_camino_compartido_abierto_pide_diez_rutas_de_tres_facciones_fuera_de_las_z
     }
     e.avanzar(9 * HORA);
     assert!(!e.n.camino_compartido_abierto(), "sin rutas no hay camino compartido");
+    assert_eq!(e.n.tecnologia().contador(tecnologia::Contador::CaminosCompartidos), 0);
     let t = e.n.ahora();
     for &(plaza, f, _) in &plazas {
         assert!(e.n.economia(plaza).is_some(), "la plaza sigue viva");
@@ -947,9 +948,12 @@ fn un_camino_compartido_abierto_pide_diez_rutas_de_tres_facciones_fuera_de_las_z
     assert!(max >= 10, "el corredor entre los dos grupos lo pisan al menos 10 rutas (máximo {max})");
     assert_eq!(e.n.red_de_caminos().rutas().count(), 18);
     assert!(e.n.camino_compartido_abierto(), "10 rutas de 3 Facciones sobre una arista fuera de toda zona");
-    // Pasado el plazo, las rutas caducan y el logro deja de cumplirse.
+    // El récord `caminos.compartidos` (Tecnologia_Aedas §2.1) pasa a 1 con la ruta que lo abre.
+    assert_eq!(e.n.tecnologia().contador(tecnologia::Contador::CaminosCompartidos), 1);
+    // Pasado el plazo, las rutas caducan y el camino deja de estar abierto; el récord, no.
     e.avanzar_hasta(t + HORA + 4_320 * MIN);
     assert!(!e.n.camino_compartido_abierto());
+    assert_eq!(e.n.tecnologia().contador(tecnologia::Contador::CaminosCompartidos), 1);
 }
 
 
@@ -1134,7 +1138,7 @@ fn una_personal_no_lleva_caravanas_el_ejercito_que_guarnece_entra_con_ellas_y_sa
     let mut e = escenario(m, 7);
     e.avanzar(24 * HORA);
     let a = e.a;
-    let h = e.ok("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None }).creadas[0];
+    let h = e.ok("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
     e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(militar::heroe::Residencia::Asentamiento(a as u32)) });
     e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: militar::presencia::Ubicacion::Asentamiento(a as u32) });

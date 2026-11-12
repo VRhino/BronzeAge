@@ -6,7 +6,6 @@
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::recompensas::Recompensa;
-use militar::catalogo::Catalogo;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -60,13 +59,13 @@ pub struct Reglas {
 }
 
 impl Reglas {
-    pub fn cargar(tropas: &Catalogo) -> Self {
+    pub fn cargar(militar: &militar::Reglas) -> Self {
         let v = asentamiento::datos::bloque_de(DOC_MISIONES, "MISIONES").unwrap_or_else(|e| panic!("{e}"));
-        Self::desde(&v, tropas).unwrap_or_else(|e| panic!("bloque MISIONES: {e}"))
+        Self::desde(&v, militar).unwrap_or_else(|e| panic!("bloque MISIONES: {e}"))
     }
 
-    /// Lee y valida el catálogo; `tropas` es el de las tropas que puede dar una recompensa.
-    pub fn desde(v: &Value, tropas: &Catalogo) -> Result<Self, String> {
+    /// Lee y valida el catálogo; `militar` trae las tropas y los objetos que puede dar una recompensa.
+    pub fn desde(v: &Value, militar: &militar::Reglas) -> Result<Self, String> {
         let mut misiones = Vec::new();
         let mut previas = Vec::new();
         for (clave, clase) in [("heroe", ClaseDueno::Heroe), ("asentamiento", ClaseDueno::Asentamiento), ("faccion", ClaseDueno::Faccion)] {
@@ -80,7 +79,7 @@ impl Reglas {
                     .map(|(k, n)| n.as_u64().filter(|&n| n > 0).map(|n| (k.clone(), n)).ok_or_else(|| format!("{id}: umbral de «{k}»")))
                     .collect::<Result<_, _>>()?;
                 // Una cadena de héroe es una misión personal: solo ella puede dar tropa.
-                let recompensa = Recompensa::leer(m, clase, clase == ClaseDueno::Heroe, tropas)?;
+                let recompensa = Recompensa::leer(m, clase, clase == ClaseDueno::Heroe, militar)?;
                 previas.push(m.get("previa").and_then(Value::as_str).map(str::to_owned));
                 let habilitada = m.get("habilitada").and_then(Value::as_bool).unwrap_or(true);
                 misiones.push(Mision { id, clase, previa: None, habilitada, condiciones, recompensa });
@@ -115,7 +114,7 @@ impl Reglas {
 impl Default for Reglas {
     fn default() -> Self {
         static R: std::sync::OnceLock<Reglas> = std::sync::OnceLock::new();
-        R.get_or_init(|| Reglas::cargar(&militar::Reglas::cargar().tropas)).clone()
+        R.get_or_init(|| Reglas::cargar(&militar::Reglas::cargar())).clone()
     }
 }
 
@@ -274,7 +273,7 @@ mod pruebas {
     use base::UNIDAD;
 
     fn cargar() -> Reglas {
-        Reglas::cargar(&militar::Reglas::cargar().tropas)
+        Reglas::cargar(&militar::Reglas::cargar())
     }
 
     #[test]

@@ -47,7 +47,7 @@ Si el canon y `Mechanics` se contradicen, gana `Mechanics` (decisión del autor,
 - **El generador de números aleatorios y su semilla** (decisión del autor, 2026-10-09: anotado, fuera de alcance). Los sistemas que lo usan lo indican, pero para
   una migración **bit-idéntica** de las simulaciones habrá que especificarlo aparte (`createRng`/`restaurarRng`, `worldgen`).
 - Los textos de presentación y la interfaz: son de los clientes.
-- **Las Eras IV y V** (tecnologías, tarifas de adopción, el techo de nivel 5 y la Maravilla): el canon las define a medias y el código solo llega a la III. Se documentarán cuando se implementen.
+- **La Maravilla de la Era V**: el canon la define a medias y no está ni documentada ni implementada. Lo demás de las Eras IV y V (Eras, tarifas, tecnologías, contadores, hitos y épicas) está en [`Tecnologia_Aedas.md`](Tecnologia_Aedas.md) e implementado.
 
 ## Índice
 
@@ -55,7 +55,7 @@ Si el canon y `Mechanics` se contradicen, gana `Mechanics` (decisión del autor,
 |---|---|---|
 | [`Trazado_Urbano.md`](Trazado_Urbano.md) | ✅ 2026-10-09 | rejilla, huellas, red de calles, colocación de edificios, anclas, perfiles |
 | [`Murallas.md`](Murallas.md) | ✅ 2026-10-09 | recintos: trazo, puertas y torres, obra, mejora, ampliación, defensa, mantenimiento, daño |
-✅ 2026-10-13 (reescrito para el mundo reactivo) | salir, rutas y velocidad, víveres y hambre, perseguir, repostar, caravanas adjuntas, unirse/separarse/formar, volver a casa, inspección |
+| [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) | ✅ 2026-10-13 (reescrito para el mundo reactivo) | salir, rutas y velocidad, víveres y hambre, perseguir, repostar, caravanas adjuntas, unirse/separarse/formar, volver a casa, inspección |
 | [`Combate.md`](Combate.md) | ✅ 2026-10-10 | `atacar`, resolución numérica, encuentros, caravanas, bandidos, asedio, conquista, desalojo, heridos |
 | [`Economia_Construccion.md`](Economia_Construccion.md) | ✅ 2026-10-10 | fundación y zona, almacén, producción y recetas, cola de obras y auto-construcción, mejoras, población y hambre, mantenimiento, nivel de asentamiento y su ascenso, políticas económicas |
 | [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) | ✅ 2026-10-13 (reescrito para el mundo reactivo; sustituye a `Tick.md`) | reloj de mundo, cola de eventos, qué pasa a ritmo, evento o muestreo, desempate del mismo instante, una orden, batallas, desconexión, generador aleatorio |
@@ -65,6 +65,7 @@ Si el canon y `Mechanics` se contradicen, gana `Mechanics` (decisión del autor,
 | [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) | ✅ 2026-10-11 | Facción (crear, entrar, salir, cargos, nivel, reputación, capital, sigilo), residencia y puerta, alianza/vasallaje/guerra/paz/rebelión/tributo, Liga y Gran Rey, anexión y fusión (traslado), derrota, títulos |
 | [`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md) | ✅ 2026-10-12 | `generarMapa` (orden y consumo del generador, ruido, elevación y borde, terreno, bioma, fertilidad, regiones, ríos, bosques, yacimientos), la fachada `Mapa` (stock, regeneración, coste, Leñeras), colocación de campamentos de mercenarios y alijos, aparición y acoso de bandidos |
 | [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) | ✅ 2026-10-12 | el héroe (crear, progresión, monedas, herido), Liderazgo, loadouts, guarnición y su cupo, orden de escuadras, la escuadra (modelo, vistas, nivel, chatarra) y reclutar tropa en una plaza (condiciones, coste, efecto) |
+| [`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) | ✅ 2026-11-12 | objetos del héroe: catálogo (`OBJETOS`), clases (`CLASES_HEROE`) y botín (`BOTIN_OBJETOS`), con sus comprobaciones al cargar; mochila y almacén de objetos, equipo y clase del arma, atributos, equipo inicial, equipar y quitar, tienda, forja, consumibles y tirar una tabla (reglas puras del crate `objetos`) |
 | [`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md) | ✅ 2026-10-12 | Caravana de Fundación (coste, lanzar desde una plaza, fundar, desarmar, caducar y volver sola, devolver), nombres de ciudades y refundación desde un campamento (fondo, aportar, retirar, comprar) |
 | [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md) | ✅ 2026-10-12 | dónde está un héroe (los cuatro sitios y el diagrama de transiciones), salir/entrar de plazas y campamentos, guarnecer, marchar, conectarse/desconectarse, fijar la puerta y vetar, y la convocatoria (ejército en preparación: convocar, unirse, petición, partir todo-o-nada) |
 | [`Campamentos_Mercenarios.md`](Campamentos_Mercenarios.md) | ✅ 2026-10-12 | índice de todo lo del campamento (dónde está cada cosa) y lo nuevo: población de reclutas, reclutar y su precio, tropa prestada y su retirada, y la planta |

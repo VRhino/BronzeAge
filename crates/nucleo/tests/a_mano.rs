@@ -93,7 +93,7 @@ impl Esc {
         self.n.avanzar_hasta(t);
     }
     fn heroe(&mut self, cuenta: &str, campamento: u32) -> u64 {
-        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0]
+        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0]
     }
     fn personal(&self, h: u64, r: Recurso) -> i64 {
         self.n.heroe(h).unwrap().almacen_personal.get(&r).copied().unwrap_or(0)
@@ -459,7 +459,7 @@ fn renombrar_una_caravana_recorta_el_nombre_lo_proyecta_y_viaja_en_la_foto() {
     // Viaja en la foto (BAN55).
     let (reglas, hash) = (Reglas::default(), m.0.hash().to_string());
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN62");
+    assert_eq!(&bytes[..5], b"BAN63");
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     assert_eq!(s.comercio.flota.iter().find(|c| c.id == k).unwrap().nombre, "á".repeat(32));
     // Vacío: se queda sin nombre.

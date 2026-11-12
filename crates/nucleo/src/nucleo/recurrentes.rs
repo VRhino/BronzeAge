@@ -7,6 +7,7 @@
 use super::misiones::id_de_dueno;
 use super::recompensas::{Cobro, Destino};
 use super::*;
+use super::botin_de_objetos::Fuente;
 use crate::estado::{entidad_tablon, Dato, PRIO_TABLON};
 use crate::misiones::Dueno;
 use crate::recurrentes::{Aceptacion, Ambito, Catalogo, Duracion, EnTablon, EstadoRecurrentes, Progreso, Situacion, Tablon, Tipo, CONTADORES, DIA, HUECOS};
@@ -262,7 +263,7 @@ impl Nucleo {
     pub(super) fn fijar_catalogo_misiones(&mut self, texto: &str) -> Result<bool, Respuesta> {
         let v = self.estado.version;
         let unicas: Vec<&str> = self.estado.reglas.economia.misiones.misiones.iter().map(|m| m.id.as_str()).collect();
-        let nuevo = Catalogo::desde_texto(texto, &unicas, &self.estado.reglas.economia.militar.tropas).map_err(|e| Respuesta::rechazo(rechazos::MISION_CATALOGO_INVALIDO, e, v))?;
+        let nuevo = Catalogo::desde_texto(texto, &unicas, &self.estado.reglas.economia.militar).map_err(|e| Respuesta::rechazo(rechazos::MISION_CATALOGO_INVALIDO, e, v))?;
         if *self.estado.recurrentes.catalogo == nuevo {
             return Ok(false);
         }
@@ -284,7 +285,8 @@ impl Nucleo {
 
     /// `reclamarRecompensa` de una recurrente (§5): la individual, el héroe que la cumplió (recursos, oro y tropa a él; la participación, si es de plaza); la grupal, el Gobernador (o un
     /// residente) o el Rey (a la plaza o a la capital de la Facción; la participación, a partes iguales entre los que aportaron). La `xp` va a la Facción del tablón, salvo en la individual de una plaza,
-    /// que va a la del héroe. Reparte todo o nada ([`Nucleo::repartir`]). Se reclama la más antigua cumplida; la vencida sin nada más por reclamar se va del tablón.
+    /// que va a la del héroe. Reparte todo o nada ([`Nucleo::repartir`]). Se reclama la más antigua cumplida; la vencida sin nada más por reclamar se va del tablón. Una diaria individual
+    /// da además la tabla `misionDiaria` de BOTIN_OBJETOS al héroe (D5).
     pub(super) fn reclamar_recurrente(&mut self, t: Instante, p: &Peticion, heroe: u64, dueno: Dueno, mision: &str) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
@@ -328,6 +330,10 @@ impl Nucleo {
         valores.extend(dado.valores);
         let evento = EventoNucleo { valores, heroes: vec![heroe], ..EventoNucleo::nuevo("mision.reclamada", t, dado.datos) };
         self.tr.emitir(&self.estado, self.hecho_de_tablon(dueno, evento));
+        // Una diaria individual da además su tabla de objetos al héroe que la cumplió (D5).
+        if individual && def.duracion == Duracion::Dia {
+            self.botin_de_objetos(t, heroe, Fuente::Diaria);
+        }
         Ok(())
     }
 }

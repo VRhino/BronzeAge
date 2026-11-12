@@ -235,6 +235,34 @@ fn el_recurso_en_la_capital_lo_mira_el_paso_de_minuto_de_la_capital() {
     assert!(a[0].en > dado && a[0].en <= dado + MIN && (a[0].en - e.n.estado().asentamientos[&plaza].fundado_en) % MIN == 0, "en el paso de minuto: {}", a[0].en);
 }
 
+#[test]
+fn las_columnas_en_marcha_las_mira_el_paso_de_minuto_de_la_capital_y_la_plaza_en_nivel_su_disparador() {
+    let m = con_mundo!();
+    // La Logística de campaña y el Cuerpo de oficiales (Era IV), en la Era I para la prueba, con el logro de nivel 2 y una sola condición de hito cada una (Tecnologia_Aedas §3.1).
+    let r = reglas(|r| {
+        for (id, hito) in [("logistica_campana", vec![Condicion::ColumnasEnMarcha(1)]), ("cuerpo_oficiales", vec![Condicion::PlazaEnNivel(2)])] {
+            con_logro_de_nivel_2(r, id);
+            let x = r.buscar(id).unwrap() as usize;
+            (r.catalogo[x].era, r.catalogo[x].hito) = (0, hito);
+        }
+    });
+    let mut e = Escenario::nuevo(m, r);
+    let (plaza, rey) = (e.plaza, e.rey);
+    // Subir la plaza al nivel 2 cumple los dos logros y es el disparador de la plaza en nivel: el Cuerpo de oficiales aparece ya; la Logística, sin columnas en marcha, no.
+    e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: plaza, nivel: 2 });
+    assert!(e.aparecida(1, "cuerpo_oficiales") && !e.aparecida(1, "logistica_campana"));
+    // El Rey sale y se pone en marcha: ninguna de las dos órdenes es un disparador, así que aparece en el siguiente paso de minuto de la capital.
+    e.ok("ana", Comando::SalirAlMundo { asentamiento: plaza, heroe: rey, escuadras: vec![], carga: vec![] });
+    let columna = e.n.heroe(rey).unwrap().columna.expect("sale en su columna");
+    let destino = real::sitio_rico(&e.n, &m.0, 3, 2);
+    e.ok("ana", Comando::MarcharA { ejercito: columna, destino });
+    assert!(!e.aparecida(1, "logistica_campana"));
+    let t = e.n.ahora();
+    e.n.avanzar_hasta(t + MIN);
+    let a = hechos(&e.n, "tecnologia.aparece").into_iter().find(|h| texto(h, "tecnologia").as_deref() == Some("logistica_campana")).expect("aparece en el paso de minuto");
+    assert!(a.en > t && a.en <= t + MIN && (a.en - e.n.estado().asentamientos[&plaza].fundado_en) % MIN == 0, "en el paso de minuto: {}", a.en);
+}
+
 // ───────────────────────────── 2. Las citas de un descubrimiento ─────────────────────────────
 
 /// La cantería aparecida a la Facción 1 (su logro de nivel 2 y el pueblo de cantera de la plaza), con su descubridora.
@@ -394,7 +422,7 @@ fn la_foto_lleva_las_citas_de_cada_descubrimiento() {
     let reglas = e.n.estado().reglas.clone();
     let mundo_hash = e.n.estado().mundo_hash.clone();
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN62");
+    assert_eq!(&bytes[..5], b"BAN63");
     let vuelta = Estado::deserializar(&bytes, &reglas, &mundo_hash).unwrap();
     assert_eq!(vuelta.serializar(), bytes);
     assert_eq!(vuelta.hash(), e.n.estado().hash());
@@ -455,7 +483,7 @@ async fn por_la_sesion_el_rey_adopta_en_la_capital_y_su_faccion_oye_el_hecho() {
     let (mut e, _) = con_canteria(m);
     let plaza = e.plaza;
     // Por la sesión se juega con un héroe de verdad (el de administración que fundó no es el de la cuenta): «ana» crea el suyo, entra en la Facción y el fundador le cede el trono.
-    let r = e.ord("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None });
+    let r = e.ord("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() });
     let rey = r.creadas[0];
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: rey, faccion: Some(1) });
     let fundador = e.rey;
@@ -493,7 +521,7 @@ async fn por_la_sesion_el_heroe_ve_los_contadores_en_curso_y_le_llegan_al_dia_cu
     use servidor::prueba::hola;
     let m = con_mundo!();
     let (mut e, _) = con_canteria(m);
-    e.ord("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None });
+    e.ord("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() });
     let desde = e.n.ahora();
     let w = arrancar_con(e.n).await;
     let estado = |m: &ms::Cuerpo| -> Option<pb::EstadoTecnologia> {
@@ -506,7 +534,7 @@ async fn por_la_sesion_el_heroe_ve_los_contadores_en_curso_y_le_llegan_al_dia_cu
     };
     let (mut c, _, recibido) = w.conectar(hola("ok:ana", TipoCliente::ClienteUnity)).await;
     let antes = recibido.iter().find_map(estado).expect("en su HEROE");
-    assert_eq!((antes.contadores.len(), antes.logros.is_empty()), (24, true), "los 24 contadores, sin qué tecnología abre cada logro");
+    assert_eq!((antes.contadores.len(), antes.logros.is_empty()), (36, true), "los 36 contadores, sin qué tecnología abre cada logro");
     let piedra = antes.contadores["extraido.piedra"];
     // La administración para el reloj y lo avanza tres minutos: el pueblo de cantera saca piedra.
     let (mut adm, _, _) = w.conectar(hola("ok:admin", TipoCliente::ClienteAdminWeb)).await;

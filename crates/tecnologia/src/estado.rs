@@ -47,10 +47,10 @@ pub struct EstadoTecnologia {
     pub era: u8,
     pub era_desde: Instante,
     /// Por [`Contador::indice`]. Nunca bajan.
-    pub contadores: [u64; 24],
+    pub contadores: [u64; Contador::N],
     /// Lo que va de la unidad siguiente de cada contador que crece por un flujo en milésimas (lo extraído y lo fabricado, [`EstadoTecnologia::sumar_milesimas`]), en `[0, 1000)`. Los
     /// demás contadores lo tienen a 0.
-    pub restos: [u64; 24],
+    pub restos: [u64; Contador::N],
     /// Por [`TecId`]: cuándo se cumplió el logro. Fijo para siempre.
     pub logros: Vec<Option<Instante>>,
     /// Por [`TecId`]: las plazas vivas del mundo cuando se cumplió el logro (0 si aún no se ha cumplido). Dicen con qué umbral se cumplió uno por plaza.
@@ -70,7 +70,7 @@ impl EstadoTecnologia {
     /// `estadoTecnologiaInicial`: el servidor arranca en la Era I, sin logros.
     pub fn nuevo(r: &Reglas, desde: Instante) -> Self {
         let n = r.catalogo.len();
-        EstadoTecnologia { era: 0, era_desde: desde, contadores: [0; 24], restos: [0; 24], logros: vec![None; n], plazas_al_cumplir: vec![0; n], plazas: 0, primeros: vec![None; n], cantadas: Conjunto::VACIO, por_faccion: BTreeMap::new() }
+        EstadoTecnologia { era: 0, era_desde: desde, contadores: [0; Contador::N], restos: [0; Contador::N], logros: vec![None; n], plazas_al_cumplir: vec![0; n], plazas: 0, primeros: vec![None; n], cantadas: Conjunto::VACIO, por_faccion: BTreeMap::new() }
     }
 
     /// `tecnologiasDe`.
@@ -398,7 +398,7 @@ pub(crate) mod pruebas {
     fn la_ultima_era_no_tiene_plazo() {
         let r = r();
         let mut e = EstadoTecnologia::nuevo(&r, 0);
-        e.era = 2;
+        e.era = 4;
         assert_eq!(e.fin_del_plazo(&r), None);
         assert_eq!(e.avanzar_era(&r, 100 * SEMANA), None);
     }

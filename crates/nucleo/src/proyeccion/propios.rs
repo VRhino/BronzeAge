@@ -5,8 +5,9 @@
 //!
 //! Qué ámbito recibe qué lo decide [`super::audiencia`]; aquí solo se dice **qué es** cada cosa en el contrato. Las entidades viajan completas (`reemplaza = true`, decisión 2).
 //!
-//! DUDA: el contrato trae más de lo que el núcleo guarda; hasta que existan sus sistemas, esos campos van a su valor por defecto: nombre, clase, género y avatar del héroe
-//! (decisión 4: «Héroe N», clase `default`), inventario y equipo (Conquest, CQ-004) y el titular de una caravana. (El almacén de una avanzada va por recurso desde el 2026-10-27.)
+//! DUDA: el contrato trae más de lo que el núcleo guarda; hasta que existan sus sistemas, esos campos van a su valor por defecto: género y avatar del héroe (decisión 4), la
+//! exploración personal y el titular de una caravana. (El almacén de una avanzada va por recurso desde el 2026-10-27; la clase, la mochila, el almacén de objetos y el equipo
+//! del héroe son los reales desde el 2026-11-12.)
 
 use super::{audiencia, batalla, ids, mercenarios, plan, punto, ritmo};
 use crate::estado::{Clase, Ejercito};
@@ -28,6 +29,8 @@ use contrato::v1 as pb;
 use militar::convocatoria::{Convocatoria, Lugar, Seleccion};
 use militar::escuadra::{Contenedor, Escuadra};
 use militar::heroe::Residencia;
+use objetos::datos::{Cifras, Tipo};
+use objetos::{Equipo, Inventario, Pieza};
 use militar::inspeccion::{Avistada, Contenido, Informe, Objetivo};
 use militar::presencia::Ubicacion;
 use militar::tipos::Carga;
@@ -100,20 +103,77 @@ pub(super) fn batalla_sobre(n: &Nucleo, lugar: Ubicacion) -> Option<String> {
 
 // ───────────────────────────── Héroe, escuadras, loadouts ─────────────────────────────
 
-/// La clase de un héroe hasta que Conquest publique su catálogo (decisión 4 del autor).
-pub(super) const CLASE_POR_DEFECTO: &str = "default";
-
 /// El nombre de un héroe: el que eligió el jugador al crearlo (2026-10-27) o, si no eligió ninguno, «Héroe N».
 pub(super) fn nombre_de_heroe(n: &Nucleo, id: u64) -> String {
     n.estado().militar.nombres.get(&id).cloned().unwrap_or_else(|| format!("Héroe {id}"))
 }
 
-/// Los atributos base de un héroe (sin equipo: el efectivo es el base hasta CQ-004).
-pub(super) fn atributos(h: &militar::heroe::Heroe) -> pb::Atributos {
-    pb::Atributos { fuerza: h.atributos.fuerza.max(0) as u32, destreza: h.atributos.destreza.max(0) as u32, armadura: h.atributos.armadura.max(0) as u32, vitalidad: h.atributos.vitalidad.max(0) as u32 }
+/// Los atributos de un héroe en el contrato (`atributos_base` del héroe y `atributos_efectivos` del ticket, D16): la base de la clase de su arma más los puntos repartidos.
+/// Lo que da el equipo lo suma Conquest.
+pub(super) fn atributos(r: &militar::Reglas, h: &militar::heroe::Heroe) -> pb::Atributos {
+    let a = h.atributos(r);
+    pb::Atributos { fuerza: a.fuerza.max(0) as u32, destreza: a.destreza.max(0) as u32, armadura: a.armadura.max(0) as u32, vitalidad: a.vitalidad.max(0) as u32 }
 }
 
-/// El héroe propio. DUDA: nombre, clase, género y avatar por defecto hasta que Conquest publique su catálogo (decisión 4 del autor); inventario, equipo y exploración personal, vacíos.
+/// Las cifras de una pieza forjada como `estadisticas` (D13): los cuatro atributos (`fuerza`, `destreza`, `armadura`, `vitalidad`) y, por tipo de daño, `dano…` y `penetracion…` en
+/// un arma o `defensa…` en una armadura (`danoPerforante`, `defensaContundente`…), más `salud` en una armadura: las cifras de `combate` de su ficha, por la calidad.
+fn estadisticas(c: &Cifras) -> Vec<pb::Estadistica> {
+    let e = |nombre: String, valor: i64| pb::Estadistica { nombre, valor };
+    let (atributos, por_dano, salud) = match c {
+        Cifras::Arma { atributos, dano, penetracion } => (atributos, vec![("dano", dano), ("penetracion", penetracion)], None),
+        Cifras::Armadura { atributos, defensa, salud } => (atributos, vec![("defensa", defensa)], Some(*salud)),
+    };
+    let mut v: Vec<pb::Estadistica> = [("fuerza", atributos.fuerza), ("destreza", atributos.destreza), ("armadura", atributos.armadura), ("vitalidad", atributos.vitalidad)].into_iter().map(|(n, x)| e(n.into(), x)).collect();
+    for (que, d) in por_dano {
+        v.extend([("Perforante", d.perforante), ("Cortante", d.cortante), ("Contundente", d.contundente)].into_iter().map(|(tipo, x)| e(format!("{que}{tipo}"), x)));
+    }
+    v.extend(salud.map(|x| e("salud".into(), x)));
+    v
+}
+
+/// Una pieza en el contrato (`ItemInstancia`): el id del catálogo, el tipo y el precio de su ficha, cuántas y en qué casilla; solo una forjada lleva su id propio (`obj-N`) y sus
+/// cifras (D13). La puesta va con la casilla 0, que no significa nada.
+fn pieza(cat: &objetos::Catalogo, p: &Pieza, cantidad: u32, casilla: u32) -> pb::ItemInstancia {
+    let ficha = cat.objetos.get(&p.objeto).expect("toda pieza que se guarda es del catálogo (la comprueban meter y equipar)");
+    let tipo = match ficha.tipo {
+        Tipo::Arma { .. } => "arma",
+        Tipo::Armadura { .. } => "armadura",
+        Tipo::Montura => "montura",
+        Tipo::Material => "material",
+        Tipo::Consumible(_) => "consumible",
+    };
+    pb::ItemInstancia {
+        item_definition_id: p.objeto.clone(),
+        tipo: tipo.into(),
+        cantidad,
+        item_instance_id: p.forjada.as_ref().map(|f| ids::objeto(f.id)),
+        estadisticas: p.forjada.as_ref().map(|f| estadisticas(&f.cifras)).unwrap_or_default(),
+        precio: u32::try_from(ficha.precio).unwrap_or(u32::MAX),
+        casilla_inventario: casilla,
+    }
+}
+
+/// Lo que lleva puesto el héroe (`Equipamiento`): en `HEROE`, en el héroe público de la `VISTA` (canon 5.16) y en el ticket.
+pub(super) fn equipamiento(cat: &objetos::Catalogo, e: &Equipo) -> pb::Equipamiento {
+    let puesta = |p: &Option<Pieza>| p.as_ref().map(|p| pieza(cat, p, 1, 0));
+    pb::Equipamiento {
+        arma: Some(pieza(cat, &e.arma, 1, 0)),
+        casco: puesta(&e.casco),
+        torso: puesta(&e.torso),
+        guantes: puesta(&e.guantes),
+        pantalones: puesta(&e.pantalones),
+        botas: puesta(&e.botas),
+        montura: puesta(&e.montura),
+    }
+}
+
+/// Las piezas de la mochila o del almacén de objetos, cada una con su casilla.
+fn inventario(cat: &objetos::Catalogo, i: &Inventario) -> Vec<pb::ItemInstancia> {
+    i.casillas.iter().map(|(&n, c)| pieza(cat, &c.pieza, c.cantidad, n)).collect()
+}
+
+/// El héroe propio, con su clase (la de su arma), sus atributos sumados, su mochila (`inventario`), su almacén de objetos y su equipo. DUDA: género y avatar por defecto hasta que
+/// Conquest publique su catálogo (decisión 4 del autor); la exploración personal, vacía.
 pub fn heroe(n: &Nucleo, h: &HeroeNucleo) -> pb::Heroe {
     let e = n.estado();
     let ubicacion = match h.heroe.presencia.ubicacion {
@@ -134,7 +194,6 @@ pub fn heroe(n: &Nucleo, h: &HeroeNucleo) -> pb::Heroe {
             display_name: l.nombre.clone(),
             // Solo las escuadras que aún son suyas: una partida de antes del 2026-11-03 pudo guardar en el loadout una prestada que ya se retiró.
             squad_ids: l.escuadras.iter().filter(|&&s| h.heroe.escuadra(s).is_some()).map(|&s| ids::escuadra(s)).collect(),
-            perks_seleccionados: l.perks.clone(),
             activo: l.activo,
             liderazgo_total: u32::try_from(h.heroe.liderazgo_de_loadout(r, l)).unwrap_or(0),
         })
@@ -151,14 +210,12 @@ pub fn heroe(n: &Nucleo, h: &HeroeNucleo) -> pb::Heroe {
         jugador_id: (!h.sintetico).then(|| h.cuenta.clone()),
         es_bot: h.heroe.controlador == militar::heroe::Controlador::Bot,
         display_name: nombre_de_heroe(n, h.heroe.id),
-        class_definition_id: CLASE_POR_DEFECTO.into(),
+        class_definition_id: h.heroe.clase(r).to_owned(),
         avatar: Some(pb::Avatar::default()),
         nivel: h.heroe.nivel,
-        experiencia_hacia_siguiente_nivel: h.heroe.experiencia.max(0) as u64,
+        experiencia_hacia_siguiente_nivel: h.heroe.falta_para_subir(r).max(0) as u64,
         puntos_de_atributo_sin_gastar: h.heroe.puntos_de_atributo.max(0) as u32,
-        puntos_de_perk_sin_gastar: h.heroe.puntos_de_perk.max(0) as u32,
-        atributos_base: Some(atributos(&h.heroe)),
-        perks_desbloqueados: h.heroe.perks_desbloqueados.clone(),
+        atributos_base: Some(atributos(r, &h.heroe)),
         liderazgo_base: h.heroe.liderazgo_base.max(0) as u32,
         ubicacion: Some(pb::UbicacionHeroe { donde: Some(ubicacion) }),
         almacen_personal: Some(carga(&h.almacen_personal)),
@@ -176,6 +233,9 @@ pub fn heroe(n: &Nucleo, h: &HeroeNucleo) -> pb::Heroe {
         fuera_carro: con_algo(&h.carro),
         escuadrones_ids: h.heroe.escuadras.iter().map(|s| ids::escuadra(s.id)).collect(),
         loadouts,
+        inventario: inventario(&r.objetos, &h.heroe.mochila),
+        almacen_objetos: inventario(&r.objetos, &h.heroe.almacen_objetos),
+        equipamiento: Some(equipamiento(&r.objetos, &h.heroe.equipo)),
         monedas: h.heroe.monedas.max(0) as u64,
         cupo_guarnicion: u32::try_from(cupo_guarnicion).unwrap_or(0),
         residencia_id: residencia,
@@ -196,11 +256,12 @@ fn residencia_id(r: Residencia) -> String {
     }
 }
 
-/// Un elemento de la lista de recompensas de una misión en el contrato (Misiones §5): su `tipo`, su `clave` (el recurso o la tropa) y su cantidad, en milésimas o en soldados.
-fn recompensa_mision(e: Elemento) -> pb::RecompensaMision {
+/// Un elemento de la lista de recompensas de una misión en el contrato (Misiones §5): su `tipo`, su `clave` (el recurso, la tropa o el objeto) y su cantidad, en milésimas, en soldados o en piezas.
+fn recompensa_mision(e: &Elemento) -> pb::RecompensaMision {
     let (tipo, clave) = e.clave();
-    let cantidad = match e {
+    let cantidad = match *e {
         Elemento::Recurso(_, n) | Elemento::Oro(n) | Elemento::Experiencia(n) | Elemento::Tropa(_, n) => n,
+        Elemento::Objeto(_, n) => i64::from(n),
     };
     pb::RecompensaMision { tipo: tipo.into(), clave: clave.into(), cantidad }
 }
@@ -240,7 +301,7 @@ pub fn misiones(n: &Nucleo, d: crate::misiones::Dueno) -> Vec<pb::Mision> {
                 previa: m.previa.map(|p| r.misiones[p as usize].id.clone()),
                 recompensa_experiencia,
                 participacion,
-                recompensas: m.recompensa.lista.iter().copied().map(recompensa_mision).collect(),
+                recompensas: m.recompensa.lista.iter().map(recompensa_mision).collect(),
             })
         })
         .collect()
@@ -263,7 +324,7 @@ fn definicion_recurrente(m: &crate::recurrentes::Recurrente) -> pb::DefinicionMi
         condiciones: m.condiciones.iter().map(|(c, u)| pb::CondicionMision { contador: c.clone(), avance: 0, umbral: *u }).collect(),
         participacion,
         experiencia,
-        recompensas: m.recompensa.lista.iter().copied().map(recompensa_mision).collect(),
+        recompensas: m.recompensa.lista.iter().map(recompensa_mision).collect(),
         titulo: m.titulo.clone(),
         texto: m.texto.clone(),
         explicacion: m.explicacion.clone(),

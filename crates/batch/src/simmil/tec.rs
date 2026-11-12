@@ -199,7 +199,7 @@ pub struct Buscador {
 #[derive(Clone, Debug)]
 struct Previo {
     t: Instante,
-    contadores: [u64; 24],
+    contadores: [u64; Contador::N],
     logros: Vec<Option<Instante>>,
     era: u8,
     era_desde: Instante,
@@ -214,9 +214,9 @@ pub struct Tec {
     pub buscadores: Vec<Buscador>,
     previo: Option<Previo>,
     /// Lo que los hechos leídos dicen que subió cada contador discreto, en total y en la observación anterior; y los contadores reales de entonces.
-    esperado: [u64; 24],
-    esperado_antes: [u64; 24],
-    real_antes: [u64; 24],
+    esperado: [u64; Contador::N],
+    esperado_antes: [u64; Contador::N],
+    real_antes: [u64; Contador::N],
     /// La Era según los hechos leídos (índice de `Reglas::eras`).
     era_hechos: u8,
     /// (héroe, alijo) abiertos según los hechos.
@@ -243,9 +243,9 @@ impl Tec {
             muestras: Vec::new(),
             buscadores: Vec::new(),
             previo: None,
-            esperado: [0; 24],
-            esperado_antes: [0; 24],
-            real_antes: [0; 24],
+            esperado: [0; Contador::N],
+            esperado_antes: [0; Contador::N],
+            real_antes: [0; Contador::N],
             era_hechos: 0,
             abiertos: BTreeSet::new(),
             emitida: Vec::new(),
@@ -273,7 +273,7 @@ impl Sim<'_> {
         for k in 0..BUSCADORES {
             let campamento = orden.get(k % orden.len().max(1)).copied().unwrap_or(0);
             let cuenta = format!("buscador-{k}");
-            let r = self.segura(t0, &cuenta, "CrearHeroe", Comando::CrearHeroe { cuenta: cuenta.clone(), campamento, controlador: Controlador::Humano, nombre: None });
+            let r = self.segura(t0, &cuenta, "CrearHeroe", Comando::CrearHeroe { cuenta: cuenta.clone(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() });
             let Some(&heroe) = r.creadas.first().filter(|_| r.aceptada()) else { continue };
             // Andamiaje declarado: el oro de los alijos (unas pocas unidades cada uno) no paga un recluta de campamento, así que la administración le da al nacer el de dos reclutas de la
             // tropa más barata de su campamento, para ejercitar la vía de Q4 (`reclutados.*` también en el campamento).
@@ -495,26 +495,37 @@ impl Sim<'_> {
     }
 
     /// El Gobernador de la capital levanta (o mejora) el primer edificio que pide el hito de una tecnología de una Era abierta que a su Facción no le ha aparecido y que ninguna plaza
-    /// suya tiene; uno por turno. Los rechazos (nivel, materiales, cupo) son del juego.
+    /// suya tiene (con `edificioEnPlazaDeNivel`, ninguna plaza suya de ese nivel; y solo si la capital lo tiene, porque la obra es en ella); uno por turno. Las demás condiciones no piden
+    /// obra. Los rechazos (nivel, materiales, cupo) son del juego.
     fn tec_obras(&mut self, t: Instante, i: usize, p: u64, f: u32) {
         let r = self.n.estado().reglas.economia.tecnologia.clone();
         let e = self.n.tecnologia();
         let propias = e.de(&r, f);
-        let mut pedidos: Vec<(Tipo, u8)> = Vec::new();
+        // (edificio, nivel interno, nivel de la plaza que lo tiene).
+        let mut pedidos: Vec<(Tipo, u8, u32)> = Vec::new();
         for x in 0..r.catalogo.len() as TecId {
             if propias.aparecidas.contiene(x) || !e.era_abierta(&r, x) {
                 continue;
             }
             for c in &r.def(x).hito {
                 match *c {
-                    Condicion::Edificio { tipo, nivel } => pedidos.push((tipo, nivel)),
-                    Condicion::CapitalEnNivel { con, .. } => pedidos.push((con, 1)),
-                    _ => {}
+                    Condicion::Edificio { tipo, nivel } => pedidos.push((tipo, nivel, 0)),
+                    Condicion::CapitalEnNivel { con, .. } => pedidos.push((con, 1, 0)),
+                    Condicion::EdificioEnPlazaDeNivel { tipo, nivel_interno, nivel_plaza } => pedidos.push((tipo, nivel_interno, u32::from(nivel_plaza))),
+                    Condicion::Tecnologia(_)
+                    | Condicion::RecursoEnCapital(_)
+                    | Condicion::YacimientoEnTerritorio(_)
+                    | Condicion::EscuadrasVivas(_)
+                    | Condicion::HeroesEnFaccion(_)
+                    | Condicion::PlazaEnNivel(_)
+                    | Condicion::NivelFaccion(_)
+                    | Condicion::ColumnasEnMarcha(_) => {}
                 }
             }
         }
-        for (tipo, nivel) in pedidos {
-            if self.n.plazas_de(f).any(|a| a.economia.edificios.hay_activo_con_nivel(tipo, nivel)) {
+        let nivel_capital = self.n.estado().asentamientos[&p].nivel_actual();
+        for (tipo, nivel, nivel_plaza) in pedidos {
+            if nivel_capital < nivel_plaza || self.n.plazas_de(f).any(|a| a.nivel_actual() >= nivel_plaza && a.economia.edificios.hay_activo_con_nivel(tipo, nivel)) {
                 continue;
             }
             // El primero que falta y se puede pedir; uno por turno.

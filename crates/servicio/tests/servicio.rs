@@ -170,7 +170,7 @@ async fn con_el_mundo_real_el_bot_crea_su_heroe_y_lo_conserva() {
     }
     assert_eq!(get(s.direccion, "/v1/mundo/otro-hash/relieve").await.0, 404);
     let camp = bot.bienvenida.campamentos_para_elegir.first().expect("un campamento para nacer").campamento_id.clone();
-    let r = bot.aceptada(O::CrearHeroe(pb::OrdenCrearHeroe { display_name: "Bot 1".into(), campamento_id: camp, ..Default::default() })).await;
+    let r = bot.aceptada(O::CrearHeroe(pb::OrdenCrearHeroe { display_name: "Bot 1".into(), campamento_id: camp, class_definition_id: "dagas".into(), ..Default::default() })).await;
     let heroe = r.creadas.iter().find(|c| c.entidad == TipoEntidad::Heroe as i32).expect("nació un héroe").id.clone();
     bot.sesion.cerrar().await;
     s.parar().await;

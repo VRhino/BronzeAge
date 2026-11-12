@@ -458,6 +458,35 @@ mod pruebas {
     }
 
     #[test]
+    fn la_nobleza_come_aceite_de_sesamo_a_una_centesima_por_cabeza_y_la_racion_entera_multiplica_1_25() {
+        // Economia_Construccion §9.2 y D9: como la cerveza junto al vino.
+        let r = Reglas::cargar().poblacion;
+        assert_eq!(bien(&r, Recurso::AceiteSesamo), (10_000, 1_250_000), "ración 0,01 y modificador 1,25 (BIENES_DE_CONSUMO)");
+        let mut p = con(0, 0, 100, 100_000);
+        let mut a = con_bienes(&[(Recurso::AceiteSesamo, 100_000), (Recurso::Trigo, 100_000)]);
+        assert_eq!(p.nutrir(&r, &entorno(), &[], &mut a, &mut vec![]), [UNO, UNO, 1_250_000]);
+        assert_eq!((a.disponible(Recurso::AceiteSesamo), a.disponible(Recurso::Trigo)), (99_000, 91_000), "1 de aceite de sésamo y 9 de trigo");
+    }
+
+    #[test]
+    fn con_los_dos_aceites_la_nobleza_suma_los_dos_modificadores() {
+        let r = Reglas::cargar().poblacion;
+        let mut p = con(0, 0, 100, 100_000);
+        let mut a = con_bienes(&[(Recurso::Aceite, 100_000), (Recurso::AceiteSesamo, 100_000), (Recurso::Trigo, 100_000)]);
+        assert_eq!(p.nutrir(&r, &entorno(), &[], &mut a, &mut vec![]), [UNO, UNO, 1_875_000], "1,5 × 1,25, como el vino y la cerveza");
+        assert_eq!([Recurso::Aceite, Recurso::AceiteSesamo, Recurso::Trigo].map(|x| a.disponible(x)), [99_000, 99_000, 92_000]);
+    }
+
+    #[test]
+    fn con_el_aceite_de_sesamo_pausado_la_nobleza_solo_toma_el_de_oliva() {
+        let r = Reglas::cargar().poblacion;
+        let mut p = con(0, 0, 100, 100_000);
+        let mut a = con_bienes(&[(Recurso::Aceite, 100_000), (Recurso::AceiteSesamo, 100_000), (Recurso::Trigo, 100_000)]);
+        assert_eq!(p.nutrir(&r, &entorno(), &[Recurso::AceiteSesamo], &mut a, &mut vec![]), [UNO, UNO, 1_500_000], "sin el ×1,25 del sésamo");
+        assert_eq!([Recurso::Aceite, Recurso::AceiteSesamo, Recurso::Trigo].map(|x| a.disponible(x)), [99_000, 100_000, 91_000], "el de sésamo se queda entero");
+    }
+
+    #[test]
     fn con_bienes_pero_sin_trigo_la_nutricion_baja_en_proporcion_a_lo_que_falta() {
         let r = Reglas::cargar().poblacion;
         let mut p = con(400, 0, 0, 100_000);

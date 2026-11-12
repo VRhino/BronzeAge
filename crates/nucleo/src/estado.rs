@@ -322,7 +322,12 @@ pub fn entidad_contrato(mercenario: u64) -> u64 {
 ///
 /// BAN62: BAN61 con la formación de cada escuadra (2026-11-11, Heroe_Y_Tropa §10.4): `Escuadra::formacion` al final de cada escuadra (`codec_militar`) y, en
 /// el ticket de cada batalla, la formación elegida y las familias permitidas de cada escuadra (`codec_batallas`). BAN61 y anteriores ya no se admiten.
-const MAGIA: &[u8; 5] = b"BAN62";
+///
+/// BAN63: BAN62 con lo de las Eras IV y V y los objetos del héroe (2026-11-12): los 36 contadores de tecnología (`codec_tecnologia`: 12 más en los
+/// contadores y en sus restos) y el recurso 42, el aceite de sésamo (42 en cada almacén, flujo y tendencia, `codec_economia`) y, en cada héroe, los puntos repartidos, el equipo, la mochila y el
+/// almacén de objetos donde iban los atributos (`codec_militar`; Heroe_Y_Tropa §4.5); y, en cada plaza, su forja (`Asentamiento::forja`, tras los fundadores: la apertura y el recargo de cada
+/// grupo de fuera y el fondo). BAN62 y anteriores ya no se admiten.
+const MAGIA: &[u8; 5] = b"BAN63";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -404,9 +409,9 @@ impl ReglasEconomia {
         let datos = asentamiento::Reglas::cargar();
         let urbanismo = Arc::new(Urbanismo::cargar(&datos));
         let militar = militar::Reglas::cargar();
-        let misiones = crate::misiones::Reglas::cargar(&militar.tropas);
+        let misiones = crate::misiones::Reglas::cargar(&militar);
         let unicas: Vec<&str> = misiones.misiones.iter().map(|m| m.id.as_str()).collect();
-        let recurrentes = crate::recurrentes::Catalogo::desde(&crate::recurrentes::Catalogo::cargar(&militar.tropas).a_json(), &unicas, &militar.tropas)
+        let recurrentes = crate::recurrentes::Catalogo::desde(&crate::recurrentes::Catalogo::cargar(&militar).a_json(), &unicas, &militar)
             .unwrap_or_else(|e| panic!("bloque MISIONES_RECURRENTES: {e}"));
         Self { datos: Arc::new(datos), urbanismo, comercio: Arc::new(comercio::Reglas::cargar()), militar: Arc::new(militar), combate: Arc::new(combate::Reglas::cargar()), politica: Arc::new(politica::Reglas::cargar()), tecnologia: Arc::new(tecnologia::Reglas::cargar()), misiones: Arc::new(misiones), participacion: Arc::new(crate::participacion::Reglas::cargar()), recurrentes: Arc::new(recurrentes), contratos: Arc::new(mercenarios::Datos::cargar()), huella }
     }
@@ -581,6 +586,54 @@ pub struct Asentamiento {
     /// `heroesFundadoresIds` (5H, 5B-9): quienes la fundaron y siguen residiendo en ella, en su orden (el Líder primero). Quien se muda deja de serlo y la conquista la deja sin ninguno, como en
     /// el TypeScript; el traslado de una Facción no los toca (la plaza se va con ellos).
     pub fundadores: Vec<u64>,
+    /// La forja de su Armería para los de fuera y el fondo de su impuesto (Heroe_Y_Tropa §4.6; el fondo, Mercenarios_Por_Contrato §5.1).
+    pub forja: Forja,
+}
+
+/// La forja de la Armería de una plaza (Heroe_Y_Tropa §4.6): para cada grupo de fuera, si está abierta y su recargo, y el fondo de monedas donde entra el impuesto de forjar en ella.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Forja {
+    pub aliados: AperturaForja,
+    pub neutrales: AperturaForja,
+    pub enemigos: AperturaForja,
+    /// Monedas del impuesto de la forja: pagan contratos de mercenarios firmados desde la Taberna de la plaza (Mercenarios_Por_Contrato §5.1).
+    pub fondo: i64,
+}
+
+/// La forja abierta o cerrada a un grupo de fuera y su recargo sobre el impuesto base, en % (uno de `OBJETOS.forja.recargosPct`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AperturaForja {
+    pub abierta: bool,
+    pub recargo_pct: u32,
+}
+
+impl Forja {
+    /// La de una plaza nueva: cerrada a los tres grupos de fuera, con el recargo de partida, y el fondo vacío.
+    pub fn de_partida(r: &objetos::datos::ReglasForja) -> Self {
+        let cerrada = AperturaForja { abierta: false, recargo_pct: r.recargo_inicial_pct };
+        Forja { aliados: cerrada, neutrales: cerrada, enemigos: cerrada, fondo: 0 }
+    }
+
+    /// La apertura de un grupo de fuera de la puerta (`politica::puerta::grupo_de_puerta`). Los Aedas no forjan: `grupo_de_puerta` nunca los da para un héroe y
+    /// `configurar_forja` no los admite.
+    pub(crate) fn de(&self, g: politica::Grupo) -> AperturaForja {
+        match g {
+            politica::Grupo::Aliados => self.aliados,
+            politica::Grupo::Neutrales => self.neutrales,
+            politica::Grupo::Enemigos => self.enemigos,
+            politica::Grupo::Aedas => unreachable!("la forja no tiene apertura para los Aedas: no son el grupo de un héroe ni se configuran"),
+        }
+    }
+
+    /// La de [`Forja::de`], para cambiarla.
+    pub(crate) fn de_mut(&mut self, g: politica::Grupo) -> &mut AperturaForja {
+        match g {
+            politica::Grupo::Aliados => &mut self.aliados,
+            politica::Grupo::Neutrales => &mut self.neutrales,
+            politica::Grupo::Enemigos => &mut self.enemigos,
+            politica::Grupo::Aedas => unreachable!("la forja no tiene apertura para los Aedas: no son el grupo de un héroe ni se configuran"),
+        }
+    }
 }
 
 impl Asentamiento {
@@ -1323,6 +1376,12 @@ impl Estado {
             w.bool(a.reclutamiento_cerrado_a_ciudadanos);
             w.u64(a.fundadores.len() as u64);
             a.fundadores.iter().for_each(|&h| w.u64(h));
+            let Forja { aliados, neutrales, enemigos, fondo } = &a.forja;
+            for g in [aliados, neutrales, enemigos] {
+                w.bool(g.abierta);
+                w.u32(g.recargo_pct);
+            }
+            w.i64(*fondo);
         }
         w.u64(self.yacimientos.len() as u64);
         for (&nodo, st) in &self.yacimientos {
@@ -1472,10 +1531,10 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN62`). Solo se lee el formato vigente: una foto de un formato anterior no se migra (la partida es nueva).
+        // La cabecera es de 5 bytes (`BAN63`). Solo se lee el formato vigente: una foto de un formato anterior no se migra (la partida es nueva).
         let (magia, formato) = (r.magia()?, r.u8()?);
         if magia != MAGIA[..4] || formato != MAGIA[4] {
-            return Err(ErrorFormato(if magia.starts_with(b"BAN") { "foto de un formato que no es el vigente (BAN62): ya no se admite" } else { "no es un estado del núcleo" }));
+            return Err(ErrorFormato(if magia.starts_with(b"BAN") { "foto de un formato que no es el vigente (BAN63): ya no se admite" } else { "no es un estado del núcleo" }));
         }
         if r.texto()? != mundo_hash {
             return Err(ErrorFormato("la foto es de otro mundo (hash del artefacto distinto)"));
@@ -1551,6 +1610,9 @@ impl Estado {
             let (resto_tributo, permite_reabastecer_aliados) = (r.i64()?, r.bool()?);
             let (almacen_cerrado_a_ciudadanos, reclutamiento_cerrado_a_ciudadanos) = (r.bool()?, r.bool()?);
             let fundadores = (0..r.cuenta()?).map(|_| r.u64()).collect::<Result<Vec<_>, _>>()?;
+            let mut apertura = || -> Result<AperturaForja, ErrorFormato> { Ok(AperturaForja { abierta: r.bool()?, recargo_pct: r.u32()? }) };
+            let (aliados, neutrales, enemigos) = (apertura()?, apertura()?, apertura()?);
+            let forja = Forja { aliados, neutrales, enemigos, fondo: r.i64()? };
             for e in &economia.edificios {
                 if let Some(asentamiento::edificio::Fuente::Nodo(n)) = e.fuente {
                     s.nodos_reclamados.insert(n, id);
@@ -1559,7 +1621,7 @@ impl Estado {
             for n in economia.pueblos.iter().filter_map(|p| p.nodo()) {
                 s.nodos_reclamados.insert(n, id);
             }
-            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe, protegida_hasta, ocupada_hasta, puerta, cargos, nombre, capital_de, de_la_faccion_desde, resto_tributo, permite_reabastecer_aliados, almacen_cerrado_a_ciudadanos, reclutamiento_cerrado_a_ciudadanos, fundadores });
+            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe, protegida_hasta, ocupada_hasta, puerta, cargos, nombre, capital_de, de_la_faccion_desde, resto_tributo, permite_reabastecer_aliados, almacen_cerrado_a_ciudadanos, reclutamiento_cerrado_a_ciudadanos, fundadores, forja });
         }
         for _ in 0..r.cuenta()? {
             let nodo = r.u32()?;
@@ -1599,7 +1661,7 @@ impl Estado {
         }
         s.misiones = crate::misiones::leer(&mut r, &s.reglas.economia.misiones)?;
         s.participacion = crate::participacion::leer(&mut r)?;
-        s.recurrentes = crate::recurrentes::leer(&mut r, &s.reglas.economia.militar.tropas)?;
+        s.recurrentes = crate::recurrentes::leer(&mut r, &s.reglas.economia.militar)?;
         s.contratos = crate::codec_contratos::leer(&mut r)?;
 
         let mut gens = Vec::new();

@@ -255,7 +255,7 @@ mod pruebas {
     }
 
     fn heroe() -> Heroe {
-        let mut h = Heroe::nuevo(&r(), 1, Controlador::Humano, 3, 1);
+        let mut h = Heroe::nuevo(&r(), 1, Controlador::Humano, 3, 1, "espada_escudo_mediano").expect("una clase del catálogo");
         h.residencia = Some(Residencia::Campamento(3));
         h
     }
@@ -323,7 +323,7 @@ mod pruebas {
         let todas = ofrece(&r);
         assert!(!todas.contains(&Tropa::MiliciaLanceros) && !todas.contains(&Tropa::Mineros), "el Centro Urbano no existe aquí");
         assert!(todas.contains(&Tropa::Arqueros) && todas.contains(&Tropa::ArquerosCompuesto) && todas.contains(&Tropa::CarrosGuerra));
-        assert_eq!(todas.len(), 27 - 4, "las 23 tropas de Barracón, Galería y Caballerizas (nivel ≤ 3)");
+        assert_eq!(todas.len(), 37 - 4, "las 33 tropas de Barracón, Galería y Caballerizas (nivel ≤ 3), con las de las Eras IV y V");
         let solo_barracon = tropas_del_campamento(&r, &[Tipo::Barracon], &|_| true);
         assert!(solo_barracon.contains(&Tropa::Shardana) && !solo_barracon.contains(&Tropa::Arqueros));
         let sin_hierro = tropas_del_campamento(&r, &TODOS_LOS_EDIFICIOS, &|t| t != "forja_hierro_temprana" && t != "equitacion_militar");
@@ -429,7 +429,7 @@ mod pruebas {
         m.h.escuadra_mut(50).unwrap().contenedor = Contenedor::Ejercito(8);
         assert_eq!(recluta(&mut m, Tropa::Arqueros, 0), Err(ErrorMercenarios::YaLaTienesFuera(Contenedor::Ejercito(8))));
         m.columnas = vec![(8, 1_999)];
-        assert_eq!(recluta(&mut m, Tropa::Arqueros, 0).map(|x| x.cantidad), Ok(8));
+        assert_eq!(recluta(&mut m, Tropa::Arqueros, 0).map(|x| x.cantidad), Ok(10));
         m.h.escuadra_mut(50).unwrap().cantidad = 1;
         m.h.escuadra_mut(50).unwrap().contenedor = Contenedor::Escolta(2);
         assert_eq!(recluta(&mut m, Tropa::Arqueros, 0), Err(ErrorMercenarios::YaLaTienesFuera(Contenedor::Escolta(2))), "en escolta, nunca");
@@ -437,10 +437,11 @@ mod pruebas {
 
     #[test]
     fn la_escuadra_nueva_se_une_a_la_columna_del_lider_si_le_cabe_en_el_liderazgo() {
+        let r = r();
         let mut m = mundo();
         m.columna = Some(8);
-        // Lleva fuera 3 pesadas (96) del Liderazgo de 100: una veterana más (22) no cabe, una leva... tampoco (103); sin nada fuera cabe todo.
-        let r = r();
+        m.h.liderazgo_base = r.liderazgo.tope;
+        // Lleva fuera 3 pesadas (96) del Liderazgo de 100 (el del nivel 30): una veterana más (22) no cabe, una leva... tampoco (103); sin nada fuera cabe todo.
         for (i, t) in [Tropa::Shardana, Tropa::Espartiatas, Tropa::LancerosPesados].into_iter().enumerate() {
             let mut e = Escuadra::nueva(&r, 10 + i as u64, 1, t, 15, None, 0);
             e.contenedor = Contenedor::Ejercito(8);
@@ -452,6 +453,7 @@ mod pruebas {
         // Sin lo que llevaba fuera, cabe y nace ya en la columna.
         let mut m = mundo();
         m.columna = Some(8);
+        m.h.liderazgo_base = r.liderazgo.tope;
         let res = recluta(&mut m, Tropa::Arqueros, 0).unwrap();
         assert_eq!(res.se_une, Some(8));
         assert_eq!(m.h.escuadra(50).unwrap().contenedor, Contenedor::Ejercito(8));
@@ -545,7 +547,7 @@ mod pruebas {
         pedir_prestamo(&r, &mut h, 3, &[Tropa::Granjeros, Tropa::Lenadores], &mut ids(), 0).unwrap();
         h.escuadras.push(Escuadra::nueva(&r, 9, 1, Tropa::Arqueros, 18, Some(2), 0));
         h.loadouts[0].escuadras = vec![101, 9, 102];
-        h.loadouts.push(crate::heroe::Loadout { id: 7, nombre: "Prestadas".into(), escuadras: vec![102], perks: vec![], activo: false });
+        h.loadouts.push(crate::heroe::Loadout { id: 7, nombre: "Prestadas".into(), escuadras: vec![102], activo: false });
         retirar_prestamos_ajenos(&mut h, &|_| false);
         assert_eq!(h.loadouts.iter().map(|l| (l.id, l.escuadras.clone())).collect::<Vec<_>>(), vec![(h.loadouts[0].id, vec![9]), (7, vec![])], "queda la propia, en su orden; el loadout no se borra");
     }

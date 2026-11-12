@@ -478,7 +478,7 @@ fn defensor_de_la_plaza(e: &mut E, cuenta: &str, tropas: &[Tropa]) -> u64 {
     mc::ok(&mut e.n, "admin", Comando::ColocarHeroe { heroe: bot, ubicacion: Ubicacion::Asentamiento(plaza as u32) });
     let escuadras: Vec<u64> = tropas.iter().map(|&tropa| mc::ok(&mut e.n, "admin", Comando::DarEscuadra { heroe: bot, tropa, cantidad: completa(tropa) }).creadas[0]).collect();
     let loadout = e.n.heroe(bot).unwrap().heroe.loadouts[0].id;
-    mc::ok(&mut e.n, "admin", Comando::GuardarLoadout { heroe: bot, loadout: Some(loadout), nombre: "Default".into(), escuadras, perks: vec![], activo: Some(true) });
+    mc::ok(&mut e.n, "admin", Comando::GuardarLoadout { heroe: bot, loadout: Some(loadout), nombre: "Default".into(), escuadras, activo: Some(true) });
     bot
 }
 
@@ -540,6 +540,25 @@ fn el_renombre_que_apunta_el_contrato_sube_de_rango_y_da_el_premio_de_ese_rango(
     assert_eq!((f.rango, f.premios), (2, 1), "cruzó el rango 2 con el renombre del contrato y ganó su escuadra de premio");
     let h = mc::hechos(&e.n, "mercenarios.rango_subido");
     assert_eq!((h.len(), h[0].dato("rango"), h[0].heroes.clone()), (1, Some(2), vec![bot]));
+}
+
+/// Entrada 68: el rango 4 y el 5 dan además su tabla de objetos (`BOTIN_OBJETOS.rangoMercenario`) en el momento en que se alcanzan, a la mochila del mercenario; los demás rangos, no.
+#[test]
+fn el_rango_cuatro_da_su_tabla_de_objetos_al_alcanzarlo() {
+    let m = con_mundo!();
+    let mut e = E::nuevo(m);
+    let (bot, rey, plaza) = (e.bot("bot-1"), e.rey, e.plaza);
+    let d = e.datos();
+    // A 10 del rango 4 sin haber pasado del 1: el contrato le hace saltar el 2, el 3 y el 4 de golpe.
+    let (n, _dir) = mc::retocado(m, &e.n, |s| s.contratos.fichas.get_mut(&bot).unwrap().renombre = d.rangos[3].renombre - 10);
+    e.n = n;
+    e.contrata(rey, bot, Trabajo::Defender, Objetivo::Plaza(plaza), 3);
+    e.hasta_el_fin(bot);
+    assert_eq!(e.ficha(bot).rango, 4);
+    let cuarto = objetos::Catalogo::default().botin.rango_mercenario[&4].tirar(false, &mut base::Rng::nuevo(0));
+    assert_eq!(comun::botines(&e.n), vec![comun::Botin { heroe: bot, origen: "mercenario".into(), mochila: cuarto.clone(), almacen: vec![], perdido: vec![] }], "solo el rango 4 tiene tabla");
+    let mochila = &e.n.heroe(bot).unwrap().heroe.mochila;
+    assert!(cuarto.iter().all(|(o, n)| mochila.casillas.values().any(|c| c.pieza.objeto == *o && c.cantidad >= *n)));
 }
 
 // ───────────────────────────── Leal ─────────────────────────────
@@ -841,10 +860,10 @@ fn resultado(n: &Nucleo, id: u64, ganador: Lado) -> ResultadoDeBatalla {
             .escuadras_de()
             .map(|e| {
                 let m = 2.min(e.efectivos);
-                ResultadoEscuadra { escuadra: e.id, desplegados: e.efectivos, supervivientes_al_cierre: e.efectivos - m, muertos: m, xp_ganada: 4 }
+                ResultadoEscuadra { escuadra: e.id, desplegados: e.efectivos, supervivientes_al_cierre: e.efectivos - m, muertos: m }
             })
             .collect(),
-        por_heroe: b.heroes_que_combaten().map(|h| ResultadoHeroe { heroe: h, participo: true, sobrevivio_al_cierre: true, xp_ganada: 7, derrotado: None, botin: None }).collect(),
+        por_heroe: b.heroes_que_combaten().map(|h| ResultadoHeroe { heroe: h, participo: true, sobrevivio_al_cierre: true, derrotado: None }).collect(),
         version_servidor: "v1".into(),
         carros_perdidos: vec![],
     }

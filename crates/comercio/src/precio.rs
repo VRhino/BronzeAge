@@ -150,6 +150,8 @@ mod pruebas {
         assert_eq!(en_base(Recurso::Cuero), 500_000, "la receta de la Curtiduría nivel 3 (0,25 de ganado) es la más barata");
         assert_eq!(en_base(Recurso::ArmaduraBasica), 2_500_000, "5 de cuero");
         assert_eq!(en_base(Recurso::ArmaduraBronce), 21_600_000 + 5 * 3_500_000, "un lingote de bronce y 5 de cuero de calidad");
+        // Comercio_Caravanas §3.1: el aceite de sésamo tiene el precio del aceite (de oliva): 2 de sésamo y 2 de aceituna, a 1,5.
+        assert_eq!((en_base(Recurso::Aceite), en_base(Recurso::AceiteSesamo)), (3_000_000, 3_000_000));
         // Las materias primas conservan su precio de `PRECIO_BASE`, y lo que no se fabrica ni cotiza (oro, chatarra) sigue en 0.
         assert_eq!(en_base(Recurso::Cobre), 3_000_000);
         assert_eq!((en_base(Recurso::Oro), en_base(Recurso::ChatarraBronce)), (0, 0));

@@ -116,7 +116,7 @@ fn escenario(m: &M) -> Esc {
         x.ok("admin", Comando::AgrandarZona { asentamiento: plaza });
     }
     x.radio = x.n.estado().asentamientos[&plaza].radio;
-    x.ana = x.ok("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
+    x.ana = x.ok("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
     let ana = x.ana;
     x.ok("admin", Comando::FijarFaccionDeHeroe { heroe: ana, faccion: Some(1) });
     x.ok("admin", Comando::FijarResidencia { heroe: ana, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
@@ -125,7 +125,7 @@ fn escenario(m: &M) -> Esc {
     let (centro, radio) = (x.centro, x.radio);
     x.gus = x.n.crear_ejercito(x.n.ahora(), "gus", 2, en_tierra(&m.0, centro, -(radio + 12 * U), 0), 500, 100_000).unwrap();
     x.nora = x.n.crear_ejercito(x.n.ahora(), "nora", 3, en_tierra(&m.0, centro, 0, radio + 150 * U), 500, 100_000).unwrap();
-    x.dora = x.ok("dora", Comando::CrearHeroe { cuenta: "dora".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
+    x.dora = x.ok("dora", Comando::CrearHeroe { cuenta: "dora".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
     let t = x.n.ahora();
     x.n.avanzar_hasta((t / MS_POR_MINUTO + 1) * MS_POR_MINUTO + 1_000);
     x.ok("admin", Comando::Reloj(AccionReloj::Pausar));
@@ -648,7 +648,7 @@ fn quien_esta_dentro_de_una_plaza_ajena_ve_su_trazado_y_sus_ordenes_de_mercado_a
     x.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: plaza, pausada: true });
     let orden = x.ok("ana", Comando::ColocarOrdenMercado { asentamiento: plaza, venta: true, recurso: asentamiento::Recurso::Madera, cantidad: 10_000, precio: None }).creadas[0];
     // Eva, de F2, en el campamento 0.
-    let eva = x.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
+    let eva = x.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
     x.ok("admin", Comando::FijarFaccionDeHeroe { heroe: eva, faccion: Some(2) });
     let (id_plaza, id_orden) = (ids::asentamiento(plaza), ids::orden_de_mercado(orden));
     let mira = |n: &Nucleo, quien: u64, f: u32| {
@@ -764,7 +764,7 @@ fn quien_esta_dentro_de_una_plaza_ajena_ve_su_muralla_y_sus_obras_pero_no_su_col
     x.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: plaza, pausada: false });
     let t = x.n.ahora() + 2 * MS_POR_MINUTO;
     x.n.avanzar_hasta(t);
-    let eva = x.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
+    let eva = x.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
     x.ok("admin", Comando::FijarFaccionDeHeroe { heroe: eva, faccion: Some(2) });
     x.ok("admin", Comando::ColocarHeroe { heroe: eva, ubicacion: Ubicacion::Asentamiento(plaza as u32) });
     let mirada = Mirada::de(&x.n, Perspectiva::Faccion(2));

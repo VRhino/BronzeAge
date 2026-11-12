@@ -133,6 +133,22 @@ pub(crate) fn recintos(id: u64, eco: &asentamiento::asentamiento::Asentamiento) 
         .collect()
 }
 
+/// La forja de la plaza y los metales que abre su Armería (Heroe_Y_Tropa §4.6): van a quien está dentro, sea o no de su Facción, y a `ADMIN`. Los metales, los de `OBJETOS.metales`
+/// cuya tecnología tiene adoptada la Facción de la plaza (el de inicio, siempre); ninguno sin Armería activa.
+pub(crate) fn forja_de(n: &Nucleo, a: &crate::estado::Asentamiento) -> (pb::ForjaPlaza, Vec<String>) {
+    use asentamiento::edificio::Edificios;
+    let e = n.estado();
+    let apertura = |x: &crate::estado::AperturaForja| Some(pb::AperturaForja { abierta: x.abierta, recargo_pct: x.recargo_pct });
+    let f = &a.forja;
+    let forja = pb::ForjaPlaza { aliados: apertura(&f.aliados), neutrales: apertura(&f.neutrales), enemigos: apertura(&f.enemigos), fondo: f.fondo };
+    let metales = if a.economia.edificios.activos(asentamiento::Tipo::Armeria) > 0 {
+        e.reglas.economia.militar.objetos.metales.iter().filter(|(_, t)| t.as_ref().is_none_or(|t| e.tiene_tecnologia(a.faccion, t))).map(|(m, _)| m.clone()).collect()
+    } else {
+        Vec::new()
+    };
+    (forja, metales)
+}
+
 /// La plaza completa para quien está dentro, o `None` si ya no existe.
 pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
     let e = n.estado();
@@ -184,6 +200,8 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
     p.permite_reabastecer_aliados = a.permite_reabastecer_aliados;
     p.almacen_cerrado_a_ciudadanos = a.almacen_cerrado_a_ciudadanos;
     p.reclutamiento_cerrado_a_ciudadanos = a.reclutamiento_cerrado_a_ciudadanos;
+    let (forja, metales) = forja_de(n, a);
+    (p.forja, p.metales_armeria) = (Some(forja), metales);
     p.ultima_caravana_creada_en_ms = e.comercio.ultima_caravana.get(&id).copied();
     p.caravanas_aparcadas_ids = e.comercio.flota.iter().filter(|c| c.estado == comercio::caravana::EstadoCaravana::Aparcada && c.anfitriona.is_some_and(|x| u64::from(x) == id)).map(|c| ids::caravana(c.id)).collect();
     p.flota_ids = e.comercio.flota.iter().filter(|c| u64::from(c.origen) == id).map(|c| ids::caravana(c.id)).collect();

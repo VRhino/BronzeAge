@@ -1,5 +1,5 @@
 //! Las cifras del sistema militar. Fuente única: los bloques `<!-- parametros:NOMBRE -->` de `Docs/Mechanics/{Heroe_Y_Tropa, Movimiento_Ejercitos,
-//! Combate, Presencia_Y_Convocatoria, Campamentos_Mercenarios, Niebla_De_Guerra}.md`, incrustados en el binario. Los decimales pasan una sola vez a enteros:
+//! Combate, Presencia_Y_Convocatoria, Campamentos_Mercenarios, Niebla_De_Guerra}.md` (y el catálogo de `Objetos_Del_Heroe.md`, que carga el crate `objetos`), incrustados en el binario. Los decimales pasan una sola vez a enteros:
 //! **ppm** para tasas y factores, **milésimas** (`Mil`) para cantidades, distancias y velocidades.
 //!
 //! **Los bloques son los valores vigentes** (decisión del autor, 2026-10-19): a diferencia de lo que ocurría en el comercio, no hay
@@ -7,7 +7,7 @@
 //! columna 30 y 15, el catálogo trae a los Mineros y el poder de un héroe en un combate con números es 15.
 
 use crate::catalogo::Catalogo;
-use asentamiento::datos::{bloque_de, mil, ppm, texto_de_parametros_de};
+use asentamiento::datos::{bloque_de, mil, por, ppm, texto_de_parametros_de};
 use asentamiento::Tipo;
 use base::{Mil, MS_POR_MINUTO};
 use serde_json::Value;
@@ -22,7 +22,7 @@ pub const TECNOLOGIA: &str = include_str!("../../../Docs/Mechanics/Tecnologia_Ae
 
 /// Los bloques de parámetros de los documentos, para la identidad de las reglas (hash del núcleo).
 pub fn texto_de_parametros() -> String {
-    [HEROE_Y_TROPA, MOVIMIENTO, COMBATE, PRESENCIA, CAMPAMENTOS, NIEBLA, TECNOLOGIA].iter().map(|d| texto_de_parametros_de(d)).collect()
+    [HEROE_Y_TROPA, MOVIMIENTO, COMBATE, PRESENCIA, CAMPAMENTOS, NIEBLA, TECNOLOGIA, objetos::datos::OBJETOS_DEL_HEROE].iter().map(|d| texto_de_parametros_de(d)).collect()
 }
 
 pub fn bloque(doc: &str, nombre: &str) -> Value {
@@ -48,8 +48,11 @@ fn por_escalon(v: &Value) -> [f64; 5] {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReglasLiderazgo {
-    /// Liderazgo de un héroe que no lo ha subido (`liderazgoBase`).
+    /// Liderazgo con el que nace un héroe, en el nivel 1 (`LIDERAZGO.base`).
     pub base: i64,
+    /// Lo que suma cada nivel que cruza hasta el de tope de la progresión (`porNivel`), sin pasar de `tope` (Heroe_Y_Tropa §4.3).
+    pub por_nivel: i64,
+    pub tope: i64,
     /// Coste de una escuadra por escalón (1 a 5).
     pub coste_por_escalon: [i64; 5],
 }
@@ -61,6 +64,16 @@ pub struct ReglasHeroe {
     pub tope_atributo: i64,
     /// Cuánto dura estar herido (ms de mundo).
     pub herido: i64,
+}
+
+/// La curva del héroe (`PROGRESION_HEROE`, Heroe_Y_Tropa §4.3): pasar del nivel `n` al `n + 1` pide `experienciaBase + experienciaPorNivel × (min(n, nivelDeTope) − 1)`.
+/// Hasta `nivelDeTope` cada nivel da un punto de atributo y Liderazgo; desde ahí el nivel sigue subiendo sin dar nada.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReglasProgresion {
+    /// En milésimas de punto, como la experiencia que guarda el héroe.
+    pub experiencia_base: Mil,
+    pub experiencia_por_nivel: Mil,
+    pub nivel_de_tope: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -97,6 +110,15 @@ pub struct ReglasLogistica {
     /// Lo que pasa cada minuto la plaza a una columna personal de su Facción dentro de su zona, por cada unidad que esta come por minuto (ppm; repostaje automático, decisión
     /// del autor del 2026-10-27: algo más rápido de lo que se lo gasta).
     pub factor_repostaje_en_zona: i64,
+    /// `bonusViveres`: la tecnología que multiplica la capacidad de víveres por héroe de la Facción que la tiene adoptada (Logística de campaña, Movimiento_Ejercitos §6.1).
+    pub bonus_viveres: BonusViveres,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BonusViveres {
+    pub tecnologia: String,
+    /// ppm.
+    pub factor: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -150,6 +172,12 @@ pub struct ReglasMilitar {
     pub nivel_maximo: u8,
     /// Experiencia que pide cada nivel para subir al siguiente (milésimas de punto).
     pub experiencia_para_subir: Vec<Mil>,
+    /// La de una batalla de Unity a cada escuadra que entró y a cada héroe que participó, según gane o pierda su bando (milésimas; D7: la pone el motor, no Unity).
+    pub experiencia_unity_victoria: Mil,
+    pub experiencia_unity_derrota: Mil,
+    /// La tecnología que da más experiencia de combate a las escuadras de los héroes de su Facción, y cuánto más (ppm; `bonusExperiencia`: Ejército permanente, +10 %).
+    pub tecnologia_bonus_experiencia: String,
+    pub bonus_experiencia: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -221,8 +249,11 @@ pub use tecnologia::datos::ReglasTecnologias;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Reglas {
     pub tropas: Catalogo,
+    /// La versión de `TROPAS_RECLUTABLES` (`VERSION_CATALOGO_TROPAS`, Heroe_Y_Tropa §12), que el ticket de una batalla de Unity manda a Conquest.
+    pub version_catalogo_tropas: u32,
     pub liderazgo: ReglasLiderazgo,
     pub heroe: ReglasHeroe,
+    pub progresion: ReglasProgresion,
     pub guarnicion: ReglasGuarnicion,
     pub reclutamiento: ReglasReclutamiento,
     pub logistica: ReglasLogistica,
@@ -237,6 +268,8 @@ pub struct Reglas {
     pub intel: ReglasIntel,
     pub mercenarios: ReglasMercenarios,
     pub tecnologias: ReglasTecnologias,
+    /// El catálogo de los objetos del héroe y de sus clases (`OBJETOS`, `CLASES_HEROE` y `BOTIN_OBJETOS` de Objetos_Del_Heroe; crate `objetos`).
+    pub objetos: objetos::Catalogo,
 }
 
 impl Reglas {
@@ -248,9 +281,14 @@ impl Reglas {
         let enteros = |v: Vec<f64>| v.into_iter().map(|x| x as i64).collect::<Vec<_>>();
         Reglas {
             tropas: Catalogo::de(&bloque(HEROE_Y_TROPA, "TROPAS_RECLUTABLES")),
+            version_catalogo_tropas: entero(&bloque(HEROE_Y_TROPA, "VERSION_CATALOGO_TROPAS"), "version") as u32,
             formaciones: crate::formaciones::ReglasFormaciones::de(&bloque(HEROE_Y_TROPA, "FORMACIONES")),
-            liderazgo: ReglasLiderazgo { base: entero(&l, "base"), coste_por_escalon: por_escalon(&l["costePorEscalon"]).map(|x| x as i64) },
+            liderazgo: ReglasLiderazgo { base: entero(&l, "base"), por_nivel: entero(&l, "porNivel"), tope: entero(&l, "tope"), coste_por_escalon: por_escalon(&l["costePorEscalon"]).map(|x| x as i64) },
             heroe: ReglasHeroe { monedas_iniciales: entero(&h, "monedasIniciales"), tope_atributo: entero(&h, "topeAtributo"), herido: entero(&h, "heridoMinutos") * MS_POR_MINUTO },
+            progresion: {
+                let p = bloque(HEROE_Y_TROPA, "PROGRESION_HEROE");
+                ReglasProgresion { experiencia_base: mil(num(&p, "experienciaBase")), experiencia_por_nivel: mil(num(&p, "experienciaPorNivel")), nivel_de_tope: entero(&p, "nivelDeTope") as u32 }
+            },
             guarnicion: ReglasGuarnicion {
                 por_nivel_edificio: enteros(lista(&g, "cupoPorNivelEdificio")),
                 por_nivel_caballerizas: enteros(lista(&g, "cupoPorNivelCaballerizas")),
@@ -269,6 +307,10 @@ impl Reglas {
                 radio_encuentro: mil(num(&lg, "radioEncuentro")),
                 umbral_narrar_reposte: ppm(num(&lg, "umbralNarrarReposte")),
                 factor_repostaje_en_zona: ppm(num(&lg, "factorRepostajeEnZona")),
+                bonus_viveres: BonusViveres {
+                    tecnologia: lg["bonusViveres"]["tecnologia"].as_str().expect("bonusViveres.tecnologia").to_owned(),
+                    factor: ppm(num(&lg, "bonusViveres.factor")),
+                },
             },
             movimiento: ReglasMovimiento {
                 velocidad_jugador: mil(num(&mv, "velocidadJugador")),
@@ -289,6 +331,10 @@ impl Reglas {
                 bonus_poder_por_nivel: ppm(num(&mi, "bonusPoderPorNivelEscuadra")),
                 nivel_maximo: entero(&mi, "nivelMaximoEscuadra") as u8,
                 experiencia_para_subir: lista(&mi, "experienciaParaSubirEscuadra").into_iter().map(mil).collect(),
+                experiencia_unity_victoria: mil(num(&mi, "experienciaUnityPorVictoria")),
+                experiencia_unity_derrota: mil(num(&mi, "experienciaUnityPorDerrota")),
+                tecnologia_bonus_experiencia: mi["bonusExperiencia"]["tecnologia"].as_str().expect("bonusExperiencia.tecnologia").to_owned(),
+                bonus_experiencia: ppm(num(&mi, "bonusExperiencia.pct") / 100.0),
             },
             presencia: ReglasPresencia { retardo_desconexion: entero(&pr, "retardoDesconexionMs"), tope_aplazamiento: entero(&pr, "topeAplazamientoMs") },
             inspeccion: ReglasInspeccion { informe: entero(&bloque(NIEBLA, "INSPECCION"), "informeMinutos") * MS_POR_MINUTO },
@@ -324,7 +370,18 @@ impl Reglas {
                 racion_cada: entero(&me, "racion.cadaMinutos") * MS_POR_MINUTO,
             },
             tecnologias: ReglasTecnologias::cargar(),
+            objetos: objetos::Catalogo::default(),
         }
+    }
+
+    /// Las reglas que valen para una Facción: las de todos con la capacidad de víveres por héroe por `bonusViveres.factor` si `tiene` su tecnología (Logística de campaña, Movimiento_Ejercitos
+    /// §2). Lo que llena o topa los víveres de un héroe o de una columna de esa Facción las usa.
+    pub fn de_faccion(&self, tiene: impl Fn(&str) -> bool) -> Reglas {
+        let mut r = self.clone();
+        if tiene(&r.logistica.bonus_viveres.tecnologia) {
+            r.logistica.capacidad_viveres = por(r.logistica.capacidad_viveres, r.logistica.bonus_viveres.factor);
+        }
+        r
     }
 }
 
@@ -338,7 +395,7 @@ mod pruebas {
     use super::*;
     use std::collections::BTreeMap;
 
-    /// Los bloques con el mismo nombre en dos documentos (`LIDERAZGO` está en Heroe_Y_Tropa y en Movimiento_Ejercitos…) deben decir lo mismo.
+    /// Los bloques con el mismo nombre en dos documentos (`HEROE` está en Heroe_Y_Tropa y en Combate…) deben decir lo mismo.
     fn bloques_de(doc: &str) -> BTreeMap<String, Value> {
         let mut m = BTreeMap::new();
         let mut resto = doc;
@@ -368,14 +425,24 @@ mod pruebas {
                 }
             }
         }
-        assert!(repetidos >= 6, "LIDERAZGO, HEROE, CHATARRA, VISION, PRESENCIA y MERCENARIOS están en dos documentos ({repetidos})");
+        assert!(repetidos >= 5, "HEROE, CHATARRA, VISION, PRESENCIA y MERCENARIOS están en dos documentos ({repetidos})");
+    }
+
+    #[test]
+    fn la_logistica_de_campana_da_a_su_faccion_un_50_por_ciento_mas_de_viveres_por_heroe() {
+        let r = Reglas::cargar();
+        assert_eq!(r.de_faccion(|t| t == "logistica_campana").logistica.capacidad_viveres, 525_000);
+        assert_eq!(r.de_faccion(|t| t == "cuerpo_oficiales").logistica.capacidad_viveres, 350_000, "otra tecnología no");
+        assert_eq!(r.de_faccion(|t| t == "logistica_campana").logistica.capacidad_carro, r.logistica.capacidad_carro, "solo los víveres");
     }
 
     #[test]
     fn las_cifras_vigentes_son_las_de_los_bloques_sin_correcciones() {
         let r = Reglas::cargar();
-        assert_eq!((r.liderazgo.base, r.liderazgo.coste_por_escalon), (100, [7, 14, 22, 32, 45]));
+        assert_eq!((r.liderazgo.base, r.liderazgo.por_nivel, r.liderazgo.tope, r.liderazgo.coste_por_escalon), (14, 3, 100, [7, 14, 22, 32, 45]));
+        assert_eq!(r.progresion, ReglasProgresion { experiencia_base: 100_000, experiencia_por_nivel: 20_000, nivel_de_tope: 30 });
         assert_eq!((r.heroe.monedas_iniciales, r.heroe.tope_atributo, r.heroe.herido), (1_500, 100, 2 * MS_POR_MINUTO));
+        assert_eq!(r.version_catalogo_tropas, 2, "la de las cifras de combate de las tropas (Heroe_Y_Tropa §12)");
         assert_eq!(r.guarnicion.por_nivel_edificio, vec![7, 14, 22]);
         assert_eq!(r.guarnicion.por_nivel_caballerizas, vec![0, 14, 32]);
         assert_eq!(r.guarnicion.recinto_completo_por_nivel, vec![10, 15, 20]);
@@ -385,6 +452,7 @@ mod pruebas {
         assert_eq!((r.logistica.capacidad_carro, r.logistica.capacidad_viveres, r.logistica.radio_encuentro), (500_000, 350_000, 1_000));
         assert_eq!((r.logistica.umbral_narrar_reposte, r.logistica.factor_repostaje_en_zona), (500_000, 1_250_000));
         assert_eq!((r.logistica.factor_marcha, r.logistica.factor_estacionado), (250_000, 100_000));
+        assert_eq!(r.logistica.bonus_viveres, BonusViveres { tecnologia: "logistica_campana".into(), factor: 1_500_000 });
         assert_eq!((r.movimiento.velocidad_jugador, r.movimiento.consumo_por_participante, r.movimiento.radio_puerta), (66_000, 500, 2_000));
         assert_eq!((r.movimiento.vida_peticion_union, r.movimiento.radio_inspeccion, r.inspeccion.informe), (10_000, 8_000, 10 * MS_POR_MINUTO));
         assert_eq!((r.formacion.minimo, r.formacion.plazo), (3, 10 * MS_POR_MINUTO));
@@ -399,7 +467,10 @@ mod pruebas {
         let m = Reglas::cargar().militar;
         assert_eq!((m.racion_por_soldado, m.regeneracion_moral, m.degradacion_moral), (150, 5_000, 20_000));
         assert_eq!((m.desercion, m.bonus_poder_por_nivel, m.nivel_maximo), (50_000, 30_000, 10));
-        assert_eq!(m.experiencia_para_subir, vec![5_000, 10_000, 20_000, 40_000, 40_000, 40_000, 40_000, 40_000, 40_000]);
+        assert_eq!(m.experiencia_para_subir, vec![10_000, 25_000, 50_000, 100_000, 150_000, 200_000, 250_000, 275_000, 315_000], "la curva de 1.375 (Heroe_Y_Tropa §10.2)");
+        assert_eq!((m.experiencia_unity_victoria, m.experiencia_unity_derrota), (4_000, 2_000));
+        assert_eq!((m.tecnologia_bonus_experiencia.as_str(), m.bonus_experiencia), ("ejercito_permanente", 100_000));
+        assert!(Reglas::cargar().tecnologias.todas.contains(&m.tecnologia_bonus_experiencia), "la tecnología del bonus existe");
     }
 
     #[test]

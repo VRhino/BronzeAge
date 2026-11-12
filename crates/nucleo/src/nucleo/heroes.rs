@@ -29,7 +29,8 @@ use comercio::evento::Evento as EventoComercio;
 use militar::catalogo::Tropa;
 use militar::escuadra::Contenedor;
 use militar::guarnicion;
-use militar::heroe::{Atributos, DatosLoadout, ErrorHeroe, Heroe, Residencia};
+use militar::heroe::{DatosLoadout, ErrorHeroe, Heroe, Residencia};
+use objetos::datos::Atributos;
 use militar::liderazgo;
 use militar::presencia::{Conexion, Salida, Ubicacion};
 use militar::racion;
@@ -38,6 +39,7 @@ use militar::reclutamiento::{self, ErrorReclutamiento, Pedido, Plaza};
 fn rechazo_de_heroe(e: ErrorHeroe) -> (&'static str, String) {
     use rechazos::*;
     match e {
+        ErrorHeroe::ClaseDesconocida => (HEROE_CLASE_DESCONOCIDA, "la clase no es una de CLASES_HEROE".into()),
         ErrorHeroe::PuntosNegativos => (HEROE_PUNTOS_NEGATIVOS, "los puntos a repartir no pueden ser negativos".into()),
         ErrorHeroe::NingunPunto => (HEROE_NINGUN_PUNTO, "el reparto suma 0".into()),
         ErrorHeroe::PuntosInsuficientes { pedidos, sin_gastar } => (HEROE_PUNTOS_INSUFICIENTES, format!("se piden {pedidos} puntos y solo hay {sin_gastar} sin gastar")),
@@ -47,7 +49,6 @@ fn rechazo_de_heroe(e: ErrorHeroe) -> (&'static str, String) {
         ErrorHeroe::EscuadraRepetida => (ESCUADRA_REPETIDA, "una escuadra no puede repetirse".into()),
         ErrorHeroe::EscuadraAjena => (ESCUADRA_AJENA, "la escuadra no es del héroe".into()),
         ErrorHeroe::SuperaLiderazgo => (LIDERAZGO_SUPERADO, "las escuadras pasan del Liderazgo del héroe".into()),
-        ErrorHeroe::PerkNoDesbloqueado => (LOADOUT_PERK_NO_DESBLOQUEADO, "el perk no está desbloqueado".into()),
         ErrorHeroe::SinResidencia => (GUARNICION_SIN_RESIDENCIA, "solo se guarnece la plaza donde se reside".into()),
         ErrorHeroe::EnBatalla => (ESCUADRA_EN_BATALLA, "la escuadra está reservada para una batalla".into()),
         ErrorHeroe::NoEnCampamento => (GUARNICION_NO_EN_CAMPAMENTO, "la escuadra no está en el campamento".into()),
@@ -215,7 +216,7 @@ impl Nucleo {
             rechazo(c, m)
         };
         match &p.comando {
-            Comando::CrearHeroe { cuenta, campamento, controlador, nombre } => {
+            Comando::CrearHeroe { cuenta, campamento, controlador, nombre, clase } => {
                 // El controlador no lo elige el cliente: lo pone la sesión según la cuenta (una de bot abre `CLIENTE_BOT` y su héroe nace bot; Proyecciones §4, 2026-11-01).
                 if !p.admin && cuenta != &p.actor {
                     return Err(rechazo(rechazos::NO_AUTORIZADO, "solo la administración crea héroes ajenos".into()));
@@ -233,8 +234,8 @@ impl Nucleo {
                     return Err(rechazo(rechazos::HEROE_NOMBRE_EN_USO, format!("«{x}»: ya hay un héroe con ese nombre")));
                 }
                 let (id, loadout) = (self.estado.siguiente_id, self.estado.siguiente_id + 1);
+                let heroe = Heroe::nuevo(&mr, id, *controlador, *campamento, loadout, clase).map_err(de_heroe)?;
                 self.estado.siguiente_id += 2;
-                let heroe = Heroe::nuevo(&mr, id, *controlador, *campamento, loadout);
                 self.estado.militar.insertar(HeroeNucleo::nuevo(heroe, cuenta, None));
                 if let Some(x) = nombre {
                     self.estado.militar.nombres.insert(id, x.clone());
@@ -250,10 +251,10 @@ impl Nucleo {
                 Ok(vec![id])
             }
             Comando::ReclutarTropa { asentamiento, heroe, tropa } => self.reclutar_en_plaza(t, p, *asentamiento, *heroe, *tropa),
-            Comando::GuardarLoadout { heroe, loadout, nombre, escuadras, perks, activo } => {
+            Comando::GuardarLoadout { heroe, loadout, nombre, escuadras, activo } => {
                 self.autorizar_heroe(p, *heroe, false)?;
                 self.exigir_nombre_de_jugador(nombre, "un loadout", rechazos::LOADOUT_NOMBRE_LARGO, rechazos::LOADOUT_NOMBRE_CONTROL)?;
-                let datos = DatosLoadout { id: *loadout, nombre: nombre.clone(), escuadras: escuadras.clone(), perks: perks.clone(), activo: *activo };
+                let datos = DatosLoadout { id: *loadout, nombre: nombre.clone(), escuadras: escuadras.clone(), activo: *activo };
                 let Estado { militar, siguiente_id, .. } = &mut self.estado;
                 let h = &mut militar.heroes.get_mut(heroe).expect("existe").heroe;
                 let mut nuevo = None;
@@ -435,11 +436,12 @@ impl Nucleo {
                         // Se suma como participante (con sus víveres) a una columna que no tiene por qué admitirlo; si ya la tenía, la retoma.
                         let antes = self.velocidad_de_ejercito(*c).unwrap_or(0);
                         let viveres = std::mem::take(&mut self.heroe_mut(*heroe).heroe.viveres);
+                        let de_la_columna = self.militar_de(self.estado.ejercitos[c].columna.faccion);
                         let Estado { ejercitos, militar, .. } = &mut self.estado;
                         let e = ejercitos.get_mut(c).expect("existe");
                         let mut heroes = Self::participantes_de(e);
                         heroes.push(*heroe);
-                        e.columna.admitir(&mr, *heroe, viveres, t, &|ids| militar.soldados_de(&heroes, ids));
+                        e.columna.admitir(&de_la_columna, *heroe, viveres, t, &|ids| militar.soldados_de(&heroes, ids));
                         self.ubicar_en_columna(*heroe, *c);
                         self.recomponer_columna(*c, t, antes);
                         return Ok(vec![]);

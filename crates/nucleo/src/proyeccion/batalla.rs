@@ -2,25 +2,28 @@
 //! combatientes en `Batalla.ticket`. El ticket de `combate::ciclo` lleva lo que se congeló al abrir (los bandos, el nivel, la experiencia y la moral de cada escuadra, la plaza de un asedio); lo que no
 //! puede cambiar mientras dura la batalla —el héroe, sus atributos y la carga de una caravana apartada— se lee del estado al proyectar.
 //!
-//! DUDA: el héroe sale con los valores por defecto de nombre, clase, género y avatar (decisión 4 del autor), sin equipo (CQ-004) y con los atributos efectivos iguales a los base; una escuadra no trae
-//! habilidades (Unity las saca del nivel) y sí su formación y las que permite la tecnología de su Facción (Heroe_Y_Tropa §10.4, 2026-11-11); `experiencia` y `moral` de una escuadra viajan en puntos (como `xp_ganada` del resultado y como el contrato de TypeScript), no en milésimas;
-//! `version_balance` y `version_catalogo_tropas` valen 1 mientras Rust no tenga su numeración; la carga de cada carro es la parte de la carga de la caravana proporcional a su capacidad
+//! El héroe sale con su clase (la de su arma), su equipo real (las piezas forjadas con sus cifras en `estadisticas`, D13) y en `atributos_efectivos` la base de su clase más sus puntos (D16:
+//! lo del equipo lo suma Conquest); las versiones de `CLASES_HEROE` y de `OBJETOS` van en `version_catalogo_heroe` y `version_catalogo_objetos`.
+//! DUDA: el nombre, el género y el avatar van con los valores por defecto (decisión 4 del autor); una escuadra no trae
+//! habilidades (Unity las saca del nivel) y sí su formación y las que permite la tecnología de su Facción (Heroe_Y_Tropa §10.4, 2026-11-11); `experiencia` y `moral` de una escuadra viajan en puntos (como el contrato de TypeScript), no en milésimas;
+//! `version_balance` vale 1 mientras Rust no tenga su numeración y `version_catalogo_tropas` es `VERSION_CATALOGO_TROPAS` (Heroe_Y_Tropa §12); el estandarte y el aspecto de una escuadra
+//! viajan vacíos (D20); la carga de cada carro es la parte de la carga de la caravana proporcional a su capacidad
 //! (`Caravana::carga_por_carro`); el terreno de una batalla fuera de un asedio es el artefacto de mundo (`BattleMapReference`).
 
-use super::propios::{atributos, celdas, nombre_de_heroe, CLASE_POR_DEFECTO};
+use super::propios::{atributos, celdas, equipamiento, nombre_de_heroe};
 use super::{ids, punto};
 use crate::nucleo::Nucleo;
 use combate::caravana::Modalidad;
 use combate::ciclo::{Asignacion, BandoDeTicket, Batalla, CaravanaEnBatalla, Contexto, EscuadraEnBatalla, Incorporacion, Participante, PlazaCongelada};
 use combate::resolucion::Lado;
-use combate::resultado::{Botin, Razon, Resultado};
+use combate::resultado::{Razon, Resultado};
 use contrato::v1 as pb;
 use militar::heroe::Controlador;
 
 /// La versión del esquema del contrato de batalla que habla este servidor (`SCHEMA_VERSION`).
 pub const SCHEMA_VERSION: u32 = 1;
 
-/// Hasta que Rust numere sus catálogos y su balance (el contrato de TypeScript los tomaba de `BALANCE_VERSION` y `VERSION_CATALOGO_TROPAS`).
+/// Hasta que Rust numere su balance (el contrato de TypeScript lo tomaba de `BALANCE_VERSION`).
 const VERSION_POR_DEFECTO: u32 = 1;
 
 /// Milésimas de punto a puntos enteros (la experiencia y la moral de un `SquadSnapshot`).
@@ -51,20 +54,18 @@ fn escuadra(n: &Nucleo, e: &EscuadraEnBatalla) -> pb::SquadSnapshot {
 }
 
 fn participante(n: &Nucleo, p: &Participante) -> pb::BattleParticipantSnapshot {
-    let h = n.heroe(p.heroe).map(|h| &h.heroe);
+    let (h, r) = (n.heroe(p.heroe).map(|h| &h.heroe), &n.estado().reglas.economia.militar);
     pb::BattleParticipantSnapshot {
         heroe_id: ids::heroe(p.heroe),
         faccion_id: p.faccion.map(ids::faccion),
         es_bot: p.controlador == Controlador::Bot,
         heroe: Some(pb::HeroSnapshot {
             display_name: nombre_de_heroe(n, p.heroe),
-            class_definition_id: CLASE_POR_DEFECTO.to_owned(),
+            class_definition_id: h.map(|h| h.clase(r).to_owned()).unwrap_or_default(),
             nivel: h.map_or(1, |h| h.nivel),
             avatar: Some(pb::Avatar::default()),
-            perks_desbloqueados: h.map(|h| h.perks_desbloqueados.clone()).unwrap_or_default(),
-            equipamiento: Some(pb::Equipamiento::default()),
-            atributos_efectivos: h.map(atributos),
-            casillas_inventario_libres: p.casillas_libres,
+            equipamiento: h.map(|h| equipamiento(&r.objetos, &h.equipo)),
+            atributos_efectivos: h.map(|h| atributos(r, h)),
             ..Default::default()
         }),
         escuadras: p.escuadras.iter().map(|e| escuadra(n, e)).collect(),
@@ -157,7 +158,7 @@ fn mapa_de_plaza(plaza: u64, p: &PlazaCongelada) -> pb::SettlementBattleSnapshot
 /// El `BattleTicket` de una batalla, tal como se congeló al abrir (con la revisión vigente).
 pub fn ticket(n: &Nucleo, b: &Batalla) -> pb::BattleTicket {
     let t = &b.ticket;
-    let c = &n.estado().reglas.economia.combate.batalla;
+    let cat = &n.estado().reglas.economia.militar.objetos;
     let mapa = match (&t.contexto, &t.plaza) {
         (&Contexto::Asedio { asentamiento }, Some(p)) => pb::battle_ticket::Mapa::MapaAsentamiento(mapa_de_plaza(u64::from(asentamiento), p)),
         _ => pb::battle_ticket::Mapa::MapaReferencia(pb::BattleMapReference { mapa_id: n.mundo_hash().to_owned(), centro: Some(punto(b.punto)) }),
@@ -174,9 +175,9 @@ pub fn ticket(n: &Nucleo, b: &Batalla) -> pb::BattleTicket {
         reglas: Some(pb::BattleRules {
             duracion_maxima_segundos: (t.duracion_maxima / 1_000) as u32,
             version_balance: VERSION_POR_DEFECTO,
-            version_catalogo_tropas: VERSION_POR_DEFECTO,
-            version_catalogo_heroe: c.version_catalogo_heroe.clone(),
-            version_catalogo_objetos: c.version_catalogo_objetos.clone(),
+            version_catalogo_tropas: n.estado().reglas.economia.militar.version_catalogo_tropas,
+            version_catalogo_heroe: cat.version_clases.clone(),
+            version_catalogo_objetos: cat.version_objetos.clone(),
         }),
     }
 }
@@ -211,10 +212,6 @@ pub(super) fn razon(r: Razon) -> pb::RazonVictoria {
 
 /// El resultado aplicado, tal como lo mandó Unity (se guarda entero en la batalla).
 pub fn resultado(n: &Nucleo, b: &Batalla, r: &Resultado) -> pb::BattleResult {
-    let botin = |b: &Botin| pb::Botin {
-        objetos: b.objetos.iter().map(|o| pb::ObjetoBotin { item_definition_id: o.definicion.clone(), cantidad: o.cantidad.max(0) as u32, item_instance_id: o.instancia.clone(), estadisticas: Vec::new() }).collect(),
-        monedas: b.monedas.max(0) as u64,
-    };
     pb::BattleResult {
         schema_version: SCHEMA_VERSION,
         battle_id: n.uuid_de_batalla(b.id),
@@ -229,12 +226,12 @@ pub fn resultado(n: &Nucleo, b: &Batalla, r: &Resultado) -> pb::BattleResult {
         por_escuadra: r
             .por_escuadra
             .iter()
-            .map(|e| pb::ResultadoEscuadra { squad_id: ids::escuadra(e.escuadra), desplegados: e.desplegados.max(0) as u32, supervivientes_al_cierre: e.supervivientes_al_cierre.max(0) as u32, muertos: e.muertos.max(0) as u32, xp_ganada: e.xp_ganada })
+            .map(|e| pb::ResultadoEscuadra { squad_id: ids::escuadra(e.escuadra), desplegados: e.desplegados.max(0) as u32, supervivientes_al_cierre: e.supervivientes_al_cierre.max(0) as u32, muertos: e.muertos.max(0) as u32 })
             .collect(),
         por_heroe: r
             .por_heroe
             .iter()
-            .map(|h| pb::ResultadoHeroe { heroe_id: ids::heroe(h.heroe), participo: h.participo, sobrevivio_al_cierre: h.sobrevivio_al_cierre, xp_ganada: h.xp_ganada, derrotado: h.derrotado, botin: h.botin.as_ref().map(botin) })
+            .map(|h| pb::ResultadoHeroe { heroe_id: ids::heroe(h.heroe), participo: h.participo, sobrevivio_al_cierre: h.sobrevivio_al_cierre, derrotado: h.derrotado })
             .collect(),
         version_servidor: r.version_servidor.clone(),
         carros_perdidos: r.carros_perdidos.clone(),

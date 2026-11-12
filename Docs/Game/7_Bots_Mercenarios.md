@@ -32,7 +32,7 @@ campamento, también desde dentro, con su almacén personal o con el carro que t
 el juego por el nivel del héroe y lo que vale su tropa, multiplicada por el plazo y por su rango; el permanente es caro a propósito. **Desde el 2026-11-08 la tarifa es la cuarta parte** de lo que era (factor de oro del 25 %, provisional) y se puede pagar de dos maneras: **en oro** (el de su carro o su almacén personal, como arriba) o **con las monedas del héroe que firma**, en cualquier sitio y sin carro ni almacén, a 100 monedas por cada oro de la tarifa. El oro va al almacén personal del mercenario hasta
 llenarlo (lo que no cabe se pierde) y nunca se devuelve; las monedas pagadas pasan a las del mercenario. Vale al contratar y al prorrogar.
 
-**Contratar desde la taberna (2026-11-08).** La **taberna activa de una plaza** enseña, **gratis**, el tablón de los mercenarios de todos los campamentos de su región del mapa, cada oferta con el campamento donde se ofrece, y se les puede contratar desde allí sin ir al campamento, estando dentro de la plaza. Se paga con el **almacén de la plaza** (es lo que se toma por defecto; firma entonces el Rey, el Embajador o el Gobernador, como la intel de la taberna) o con las **monedas** del héroe que firma (el cargo que alcance el trabajo, como siempre). No se puede pagar allí con el almacén personal ni con el carro, el campamento ha de caer en la región de la plaza, y **prorrogar sigue siendo en persona**. El mercenario contratado recibe su primera orden y se pone en camino solo.
+**Contratar desde la taberna (2026-11-08).** La **taberna activa de una plaza** enseña, **gratis**, el tablón de los mercenarios de todos los campamentos de su región del mapa, cada oferta con el campamento donde se ofrece, y se les puede contratar desde allí sin ir al campamento, estando dentro de la plaza. Se paga con el **almacén de la plaza** (es lo que se toma por defecto; firma entonces el Rey, el Embajador o el Gobernador, como la intel de la taberna), con el **fondo de la plaza** (desde el 2026-11-12: las monedas del impuesto de su forja, Doc 5.16.1, a la tarifa en monedas; firman los mismos) o con las **monedas** del héroe que firma (el cargo que alcance el trabajo, como siempre). No se puede pagar allí con el almacén personal ni con el carro, el campamento ha de caer en la región de la plaza, y **prorrogar sigue siendo en persona**. El mercenario contratado recibe su primera orden y se pone en camino solo.
 
 | Trabajo | Tipo | Quién lo firma |
 |---|---|---|
@@ -75,7 +75,7 @@ momento. Quien lo firmó o el Rey lo **valora** al acabar: buena suma la mitad o
 | Rango | Le da |
 |---|---|
 | 1. A sueldo | al ofrecerse por primera vez, una escuadra suya de cada tropa de la leva (lanceros de milicia, granjeros, mineros y leñadores) |
-| 2. Lanza · 3. Capitán · 4. Veterano · 5. Señor de la guerra | una **escuadra de premio** gratis por rango, la **licencia** de reclutar en su campamento las tropas de su edificio hasta ese escalón en cuanto alguien en el mundo descubre su tecnología, y una tarifa más alta |
+| 2. Lanza · 3. Capitán · 4. Veterano · 5. Señor de la guerra | una **escuadra de premio** gratis por rango, la **licencia** de reclutar en su campamento las tropas de su edificio hasta ese escalón en cuanto alguien en el mundo descubre su tecnología, y una tarifa más alta; al llegar a Veterano y a Señor de la guerra, además, una tirada de la tabla de objetos de su rango, a su mochila (decidido el 2026-11-12) |
 
 **El Liderazgo no cambia con el rango**: es igual para todos los héroes.
 

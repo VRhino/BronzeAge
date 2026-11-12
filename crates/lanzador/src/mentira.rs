@@ -2,8 +2,8 @@
 //! `bronzeage-batalla-de-mentira` y el propio `bronzeage-lanzador mentira` (el que arranca el lanzador con `LANZADOR_PROCESO=mentira`).
 //!
 //! El lanzador lo arranca con `--batalla <uuid> --lanzador 127.0.0.1:<p> --puerto <n>`. Se conecta a ese socket, lee el ticket y la asignación (`MensajeParaProcesoDeBatalla`,
-//! delimitados), manda `inicio`, espera `--espera-ms` (200 por defecto) y manda el `resultado`: nadie muere, cada escuadra gana `--xp` puntos (2 por defecto), todos los héroes
-//! participan y sobreviven, y gana el defensor por tiempo agotado. Sale cuando el núcleo le acusa el resultado. Con `--sin-resultado`, sale tras el inicio sin mandarlo.
+//! delimitados), manda `inicio`, espera `--espera-ms` (200 por defecto) y manda el `resultado`: nadie muere, todos los héroes participan y sobreviven, y gana el defensor por tiempo
+//! agotado (la experiencia la pone el motor, D7). Sale cuando el núcleo le acusa el resultado. Con `--sin-resultado`, sale tras el inicio sin mandarlo.
 
 use std::{collections::BTreeSet, time::Duration};
 
@@ -22,7 +22,7 @@ fn ahora_ms() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64)
 }
 
-fn resultado(t: &pb::BattleTicket, incorporaciones: &[pb::IncorporacionBatalla], a: &pb::BattleServerAssignment, inicio: i64, xp: i64) -> pb::BattleResult {
+fn resultado(t: &pb::BattleTicket, incorporaciones: &[pb::IncorporacionBatalla], a: &pb::BattleServerAssignment, inicio: i64) -> pb::BattleResult {
     let lados = [&t.atacante, &t.defensor];
     let participantes: Vec<&pb::BattleParticipantSnapshot> =
         lados.iter().filter_map(|b| b.as_ref()).flat_map(|b| &b.participantes).chain(incorporaciones.iter().filter_map(|i| i.participante.as_ref())).collect();
@@ -41,11 +41,11 @@ fn resultado(t: &pb::BattleTicket, incorporaciones: &[pb::IncorporacionBatalla],
         razon: pb::RazonVictoria::TiempoAgotado as i32,
         objetivos: vec![],
         por_escuadra: escuadras
-            .map(|e| pb::ResultadoEscuadra { squad_id: e.squad_id.clone(), desplegados: e.efectivos_autorizados, supervivientes_al_cierre: e.efectivos_autorizados, muertos: 0, xp_ganada: xp })
+            .map(|e| pb::ResultadoEscuadra { squad_id: e.squad_id.clone(), desplegados: e.efectivos_autorizados, supervivientes_al_cierre: e.efectivos_autorizados, muertos: 0 })
             .collect(),
         por_heroe: participantes
             .iter()
-            .map(|p| pb::ResultadoHeroe { heroe_id: p.heroe_id.clone(), participo: true, sobrevivio_al_cierre: true, xp_ganada: 0, derrotado: Some(false), botin: None })
+            .map(|p| pb::ResultadoHeroe { heroe_id: p.heroe_id.clone(), participo: true, sobrevivio_al_cierre: true, derrotado: Some(false) })
             .collect(),
         version_servidor: format!("batalla-de-mentira {}", env!("CARGO_PKG_VERSION")),
         carros_perdidos: vec![],
@@ -55,11 +55,10 @@ fn resultado(t: &pb::BattleTicket, incorporaciones: &[pb::IncorporacionBatalla],
 /// Juega la batalla de los argumentos del proceso y vuelve al acabar.
 pub async fn correr() {
     let (Some(lanzador), Some(batalla)) = (arg("--lanzador"), arg("--batalla")) else {
-        eprintln!("uso: bronzeage-batalla-de-mentira --batalla <uuid> --lanzador <host:puerto> --puerto <n> [--espera-ms N] [--xp N] [--sin-resultado]");
+        eprintln!("uso: bronzeage-batalla-de-mentira --batalla <uuid> --lanzador <host:puerto> --puerto <n> [--espera-ms N] [--sin-resultado]");
         std::process::exit(2);
     };
     let espera = arg("--espera-ms").and_then(|e| e.parse().ok()).unwrap_or(200);
-    let xp = arg("--xp").and_then(|e| e.parse().ok()).unwrap_or(2);
     let sin_resultado = std::env::args().any(|a| a == "--sin-resultado");
     let tcp = TcpStream::connect(&lanzador).await.expect("conectar con el lanzador");
     let (lectura, mut escritura) = tcp.into_split();
@@ -95,7 +94,7 @@ pub async fn correr() {
                     return;
                 }
                 let (a, inicio) = empezada.take().unwrap();
-                let r = resultado(ticket.as_ref().unwrap(), &incorporaciones, &a, inicio, xp);
+                let r = resultado(ticket.as_ref().unwrap(), &incorporaciones, &a, inicio);
                 marco::escribir(&mut escritura, &mandar(de_srv::Cuerpo::Resultado(r))).await.expect("escribir");
                 fin = tokio::time::Instant::now() + Duration::from_secs(3600);
             }

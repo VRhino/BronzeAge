@@ -1,6 +1,6 @@
 [package]
 name = "batch"
-version = "0.8.1"
+version = "0.9.0"
 edition = "2021"
 description = "Batch de validación por sistema (fase 6): simulación acelerada del núcleo con una población sintética y el informe resultante"
 

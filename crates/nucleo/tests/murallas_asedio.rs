@@ -151,7 +151,7 @@ impl Esc {
     /// «beto» (humano, F2) dentro de la plaza B, que la defiende en persona con una escuadra de cada tropa dada.
     fn beto_dentro(&mut self, m: &Mundo, defensa: &[Tropa]) -> u64 {
         let campamento = campamento_mas_cercano(m, self.pos(self.b));
-        let h = self.ok("beto", Comando::CrearHeroe { cuenta: "beto".into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0];
+        let h = self.ok("beto", Comando::CrearHeroe { cuenta: "beto".into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
         let b = self.b as u32;
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(2) });
         self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(b)) });
@@ -159,7 +159,7 @@ impl Esc {
         if !defensa.is_empty() {
             let ids: Vec<u64> = defensa.iter().map(|&t| self.ok("admin", Comando::DarEscuadra { heroe: h, tropa: t, cantidad: completa(t) }).creadas[0]).collect();
             let loadout = self.n.heroe(h).unwrap().heroe.loadouts[0].id;
-            self.ok("admin", Comando::GuardarLoadout { heroe: h, loadout: Some(loadout), nombre: "Default".into(), escuadras: ids, perks: vec![], activo: Some(true) });
+            self.ok("admin", Comando::GuardarLoadout { heroe: h, loadout: Some(loadout), nombre: "Default".into(), escuadras: ids, activo: Some(true) });
         }
         h
     }
@@ -617,7 +617,7 @@ fn guion(m: &M, avanzar: &dyn Fn(&mut Nucleo, Instante)) -> Nucleo {
         n.aplicar_en(ataque, if actor == "admin" { p.de_admin() } else { p })
     };
     let campamento = campamento_mas_cercano(&m.0, n.estado().asentamientos[&ib].posicion);
-    let beto = ord(&mut n, "beto", "h-beto", Comando::CrearHeroe { cuenta: "beto".into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0];
+    let beto = ord(&mut n, "beto", "h-beto", Comando::CrearHeroe { cuenta: "beto".into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
     ord(&mut n, "admin", "f-beto", Comando::FijarFaccionDeHeroe { heroe: beto, faccion: Some(2) });
     ord(&mut n, "admin", "r-beto", Comando::FijarResidencia { heroe: beto, residencia: Some(Residencia::Asentamiento(ib as u32)) });
     ord(&mut n, "admin", "c-beto", Comando::ColocarHeroe { heroe: beto, ubicacion: Ubicacion::Asentamiento(ib as u32) });
