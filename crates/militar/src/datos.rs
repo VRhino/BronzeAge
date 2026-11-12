@@ -249,6 +249,8 @@ pub use tecnologia::datos::ReglasTecnologias;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Reglas {
     pub tropas: Catalogo,
+    /// La versión de `TROPAS_RECLUTABLES` (`VERSION_CATALOGO_TROPAS`, Heroe_Y_Tropa §12), que el ticket de una batalla de Unity manda a Conquest.
+    pub version_catalogo_tropas: u32,
     pub liderazgo: ReglasLiderazgo,
     pub heroe: ReglasHeroe,
     pub progresion: ReglasProgresion,
@@ -277,6 +279,7 @@ impl Reglas {
         let enteros = |v: Vec<f64>| v.into_iter().map(|x| x as i64).collect::<Vec<_>>();
         Reglas {
             tropas: Catalogo::de(&bloque(HEROE_Y_TROPA, "TROPAS_RECLUTABLES")),
+            version_catalogo_tropas: entero(&bloque(HEROE_Y_TROPA, "VERSION_CATALOGO_TROPAS"), "version") as u32,
             formaciones: crate::formaciones::ReglasFormaciones::de(&bloque(HEROE_Y_TROPA, "FORMACIONES")),
             liderazgo: ReglasLiderazgo { base: entero(&l, "base"), por_nivel: entero(&l, "porNivel"), tope: entero(&l, "tope"), coste_por_escalon: por_escalon(&l["costePorEscalon"]).map(|x| x as i64) },
             heroe: ReglasHeroe { monedas_iniciales: entero(&h, "monedasIniciales"), tope_atributo: entero(&h, "topeAtributo"), herido: entero(&h, "heridoMinutos") * MS_POR_MINUTO },
@@ -436,6 +439,7 @@ mod pruebas {
         assert_eq!((r.liderazgo.base, r.liderazgo.por_nivel, r.liderazgo.tope, r.liderazgo.coste_por_escalon), (14, 3, 100, [7, 14, 22, 32, 45]));
         assert_eq!(r.progresion, ReglasProgresion { experiencia_base: 100_000, experiencia_por_nivel: 20_000, nivel_de_tope: 30 });
         assert_eq!((r.heroe.monedas_iniciales, r.heroe.tope_atributo, r.heroe.herido), (1_500, 100, 2 * MS_POR_MINUTO));
+        assert_eq!(r.version_catalogo_tropas, 2, "la de las cifras de combate de las tropas (Cifras_De_Combate §8)");
         assert_eq!(r.guarnicion.por_nivel_edificio, vec![7, 14, 22]);
         assert_eq!(r.guarnicion.por_nivel_caballerizas, vec![0, 14, 32]);
         assert_eq!(r.guarnicion.recinto_completo_por_nivel, vec![10, 15, 20]);

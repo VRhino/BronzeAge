@@ -127,6 +127,10 @@ message SquadSnapshot {
   // esa tropa la tiene y, si no, la de reposo.
   string formacion = 11;
   repeated string formaciones_permitidas = 12;
+  // 2026-11-12 (D20): el estandarte y el aspecto de la escuadra, vacíos: el motor no los guarda ni tiene orden para elegirlos hasta que haya un
+  // estandarte en el catálogo y arte.
+  string estandarte = 13;
+  string aspecto = 14;
 }
 
 message BattleParticipantSnapshot {

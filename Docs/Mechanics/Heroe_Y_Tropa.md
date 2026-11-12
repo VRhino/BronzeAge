@@ -492,7 +492,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 2,
     "velocidad": 30,
     "escalon": 2,
-    "unidadesPorDefecto": 25
+    "tier": 2,
+    "unidadesPorDefecto": 25,
+    "combate": {
+      "vida": 800,
+      "dano": { "perforante": 64, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "alivio": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "bloqueo": 0,
+      "cadencia": 1.5,
+      "alcance": 2
+    }
   },
   {
     "id": "lenadores",
@@ -506,7 +517,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 1,
     "velocidad": 30,
     "escalon": 1,
-    "unidadesPorDefecto": 30
+    "tier": 1,
+    "unidadesPorDefecto": 30,
+    "combate": {
+      "vida": 450,
+      "dano": { "perforante": 0, "cortante": 41, "contundente": 18 },
+      "penetracion": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "alivio": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "bloqueo": 0,
+      "cadencia": 1.6,
+      "alcance": 2
+    }
   },
   {
     "id": "granjeros",
@@ -518,7 +540,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 1,
     "velocidad": 30,
     "escalon": 1,
-    "unidadesPorDefecto": 30
+    "tier": 1,
+    "unidadesPorDefecto": 30,
+    "combate": {
+      "vida": 450,
+      "dano": { "perforante": 29, "cortante": 0, "contundente": 29 },
+      "penetracion": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "alivio": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "bloqueo": 0,
+      "cadencia": 1.6,
+      "alcance": 2
+    }
   },
   {
     "id": "mineros",
@@ -532,7 +565,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 1,
     "velocidad": 30,
     "escalon": 1,
-    "unidadesPorDefecto": 30
+    "tier": 1,
+    "unidadesPorDefecto": 30,
+    "combate": {
+      "vida": 450,
+      "dano": { "perforante": 35, "cortante": 0, "contundente": 23 },
+      "penetracion": { "perforante": 2, "cortante": 0, "contundente": 2 },
+      "defensa": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "alivio": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "bloqueo": 0,
+      "cadencia": 1.6,
+      "alcance": 2
+    }
   },
   {
     "id": "lanceros_mimbre",
@@ -546,7 +590,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 3,
     "velocidad": 30,
     "escalon": 2,
-    "unidadesPorDefecto": 25
+    "tier": 3,
+    "unidadesPorDefecto": 25,
+    "combate": {
+      "vida": 1200,
+      "dano": { "perforante": 85, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "alivio": { "perforante": 5, "cortante": 0, "contundente": 0 },
+      "bloqueo": 100,
+      "cadencia": 1.5,
+      "alcance": 2
+    }
   },
   {
     "id": "espadachines_cobre",
@@ -561,7 +616,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 4,
     "velocidad": 24,
     "escalon": 2,
-    "unidadesPorDefecto": 20
+    "tier": 3,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 1000,
+      "dano": { "perforante": 28, "cortante": 65, "contundente": 0 },
+      "penetracion": { "perforante": 5, "cortante": 5, "contundente": 0 },
+      "defensa": { "perforante": 5, "cortante": 5, "contundente": 5 },
+      "alivio": { "perforante": 5, "cortante": 5, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 1.4,
+      "alcance": 2
+    }
   },
   {
     "id": "hacheros_ligeros",
@@ -576,7 +642,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 7,
     "velocidad": 24,
     "escalon": 3,
-    "unidadesPorDefecto": 18
+    "tier": 3,
+    "unidadesPorDefecto": 18,
+    "combate": {
+      "vida": 850,
+      "dano": { "perforante": 0, "cortante": 101, "contundente": 43 },
+      "penetracion": { "perforante": 0, "cortante": 10, "contundente": 10 },
+      "defensa": { "perforante": 5, "cortante": 5, "contundente": 5 },
+      "alivio": { "perforante": 5, "cortante": 5, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 1.8,
+      "alcance": 2
+    }
   },
   {
     "id": "espadachines_bronce",
@@ -591,7 +668,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 9,
     "velocidad": 24,
     "escalon": 3,
-    "unidadesPorDefecto": 18
+    "tier": 3,
+    "unidadesPorDefecto": 18,
+    "combate": {
+      "vida": 1000,
+      "dano": { "perforante": 28, "cortante": 65, "contundente": 0 },
+      "penetracion": { "perforante": 10, "cortante": 10, "contundente": 0 },
+      "defensa": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "alivio": { "perforante": 15, "cortante": 10, "contundente": 10 },
+      "bloqueo": 250,
+      "cadencia": 1.4,
+      "alcance": 2
+    }
   },
   {
     "id": "lanceros_pesados",
@@ -606,7 +694,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 14,
     "velocidad": 18,
     "escalon": 4,
-    "unidadesPorDefecto": 15
+    "tier": 4,
+    "unidadesPorDefecto": 15,
+    "combate": {
+      "vida": 1800,
+      "dano": { "perforante": 98, "cortante": 17, "contundente": 0 },
+      "penetracion": { "perforante": 10, "cortante": 10, "contundente": 0 },
+      "defensa": { "perforante": 15, "cortante": 15, "contundente": 15 },
+      "alivio": { "perforante": 30, "cortante": 20, "contundente": 10 },
+      "bloqueo": 400,
+      "cadencia": 1.5,
+      "alcance": 2
+    }
   },
   {
     "id": "hacheros_armados",
@@ -621,7 +720,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 12,
     "velocidad": 18,
     "escalon": 3,
-    "unidadesPorDefecto": 15
+    "tier": 3,
+    "unidadesPorDefecto": 15,
+    "combate": {
+      "vida": 850,
+      "dano": { "perforante": 0, "cortante": 94, "contundente": 50 },
+      "penetracion": { "perforante": 0, "cortante": 10, "contundente": 10 },
+      "defensa": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "alivio": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 1.8,
+      "alcance": 2
+    }
   },
   {
     "id": "honderos",
@@ -635,7 +745,20 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 5,
     "velocidad": 30,
     "escalon": 2,
-    "unidadesPorDefecto": 20
+    "tier": 2,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 470,
+      "dano": { "perforante": 0, "cortante": 0, "contundente": 126 },
+      "penetracion": { "perforante": 0, "cortante": 0, "contundente": 2 },
+      "defensa": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "alivio": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "bloqueo": 0,
+      "cadencia": 1.8,
+      "alcance": 30,
+      "precision": 30,
+      "municion": 30
+    }
   },
   {
     "id": "escaramuzadores_jabalina",
@@ -650,7 +773,20 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 8,
     "velocidad": 30,
     "escalon": 3,
-    "unidadesPorDefecto": 18
+    "tier": 3,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 800,
+      "dano": { "perforante": 208, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 5, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 5, "cortante": 5, "contundente": 5 },
+      "alivio": { "perforante": 5, "cortante": 5, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 2.5,
+      "alcance": 20,
+      "precision": 60,
+      "municion": 4
+    }
   },
   {
     "id": "arqueros",
@@ -665,7 +801,20 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 9,
     "velocidad": 24,
     "escalon": 3,
-    "unidadesPorDefecto": 18
+    "tier": 3,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 700,
+      "dano": { "perforante": 193, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 10, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "alivio": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 2,
+      "alcance": 40,
+      "precision": 50,
+      "municion": 24
+    }
   },
   {
     "id": "arqueros_compuesto",
@@ -680,7 +829,20 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 15,
     "velocidad": 18,
     "escalon": 5,
-    "unidadesPorDefecto": 12
+    "tier": 4,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 1050,
+      "dano": { "perforante": 261, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 10, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "alivio": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 2,
+      "alcance": 55,
+      "precision": 60,
+      "municion": 24
+    }
   },
   {
     "id": "exploradores_caballo",
@@ -695,7 +857,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 3,
     "velocidad": 84,
     "escalon": 2,
-    "unidadesPorDefecto": 20
+    "tier": 2,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 540,
+      "dano": { "perforante": 48, "cortante": 20, "contundente": 0 },
+      "penetracion": { "perforante": 5, "cortante": 5, "contundente": 0 },
+      "defensa": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "alivio": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "bloqueo": 0,
+      "cadencia": 1.6,
+      "alcance": 2
+    }
   },
   {
     "id": "carros_guerra",
@@ -711,7 +884,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 13,
     "velocidad": 30,
     "escalon": 4,
-    "unidadesPorDefecto": 15
+    "tier": 4,
+    "unidadesPorDefecto": 15,
+    "combate": {
+      "vida": 1650,
+      "dano": { "perforante": 132, "cortante": 0, "contundente": 56 },
+      "penetracion": { "perforante": 10, "cortante": 0, "contundente": 10 },
+      "defensa": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "alivio": { "perforante": 15, "cortante": 15, "contundente": 5 },
+      "bloqueo": 0,
+      "cadencia": 2.2,
+      "alcance": 2
+    }
   },
   {
     "id": "jinetes_asirios",
@@ -726,7 +910,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 5,
     "velocidad": 84,
     "escalon": 2,
-    "unidadesPorDefecto": 20
+    "tier": 3,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 900,
+      "dano": { "perforante": 94, "cortante": 23, "contundente": 0 },
+      "penetracion": { "perforante": 20, "cortante": 20, "contundente": 0 },
+      "defensa": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "alivio": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "bloqueo": 0,
+      "cadencia": 1.6,
+      "alcance": 2
+    }
   },
   {
     "id": "guerreros_filisteos",
@@ -741,7 +936,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 9,
     "velocidad": 24,
     "escalon": 3,
-    "unidadesPorDefecto": 18
+    "tier": 3,
+    "unidadesPorDefecto": 18,
+    "combate": {
+      "vida": 1000,
+      "dano": { "perforante": 28, "cortante": 65, "contundente": 0 },
+      "penetracion": { "perforante": 20, "cortante": 20, "contundente": 0 },
+      "defensa": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "alivio": { "perforante": 15, "cortante": 10, "contundente": 10 },
+      "bloqueo": 250,
+      "cadencia": 1.4,
+      "alcance": 2
+    }
   },
   {
     "id": "shardana",
@@ -756,7 +962,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 15,
     "velocidad": 24,
     "escalon": 4,
-    "unidadesPorDefecto": 15
+    "tier": 4,
+    "unidadesPorDefecto": 15,
+    "combate": {
+      "vida": 1500,
+      "dano": { "perforante": 32, "cortante": 94, "contundente": 0 },
+      "penetracion": { "perforante": 15, "cortante": 15, "contundente": 0 },
+      "defensa": { "perforante": 5, "cortante": 5, "contundente": 5 },
+      "alivio": { "perforante": 10, "cortante": 5, "contundente": 10 },
+      "bloqueo": 250,
+      "cadencia": 1.4,
+      "alcance": 2
+    }
   },
   {
     "id": "hequetai",
@@ -771,7 +988,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 17,
     "velocidad": 18,
     "escalon": 5,
-    "unidadesPorDefecto": 12
+    "tier": 5,
+    "unidadesPorDefecto": 18,
+    "combate": {
+      "vida": 2480,
+      "dano": { "perforante": 86, "cortante": 86, "contundente": 0 },
+      "penetracion": { "perforante": 15, "cortante": 15, "contundente": 0 },
+      "defensa": { "perforante": 15, "cortante": 15, "contundente": 15 },
+      "alivio": { "perforante": 25, "cortante": 20, "contundente": 10 },
+      "bloqueo": 250,
+      "cadencia": 1.5,
+      "alcance": 2
+    }
   },
   {
     "id": "honderos_rodios",
@@ -786,7 +1014,20 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 9,
     "velocidad": 30,
     "escalon": 3,
-    "unidadesPorDefecto": 18
+    "tier": 3,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 700,
+      "dano": { "perforante": 0, "cortante": 0, "contundente": 168 },
+      "penetracion": { "perforante": 0, "cortante": 0, "contundente": 20 },
+      "defensa": { "perforante": 5, "cortante": 5, "contundente": 5 },
+      "alivio": { "perforante": 5, "cortante": 5, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 1.8,
+      "alcance": 45,
+      "precision": 45,
+      "municion": 30
+    }
   },
   {
     "id": "peltastas",
@@ -800,7 +1041,20 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 9,
     "velocidad": 30,
     "escalon": 3,
-    "unidadesPorDefecto": 18
+    "tier": 4,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 1200,
+      "dano": { "perforante": 281, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 20, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "alivio": { "perforante": 5, "cortante": 0, "contundente": 0 },
+      "bloqueo": 80,
+      "cadencia": 2.5,
+      "alcance": 20,
+      "precision": 70,
+      "municion": 4
+    }
   },
   {
     "id": "jinetes_escitas",
@@ -816,7 +1070,20 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 8,
     "velocidad": 84,
     "escalon": 3,
-    "unidadesPorDefecto": 18
+    "tier": 3,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 700,
+      "dano": { "perforante": 193, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 10, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 5, "cortante": 5, "contundente": 5 },
+      "alivio": { "perforante": 5, "cortante": 5, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 2,
+      "alcance": 35,
+      "precision": 50,
+      "municion": 24
+    }
   },
   {
     "id": "hoplitas_ciudadanos",
@@ -831,7 +1098,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 10,
     "velocidad": 24,
     "escalon": 3,
-    "unidadesPorDefecto": 18
+    "tier": 4,
+    "unidadesPorDefecto": 18,
+    "combate": {
+      "vida": 1800,
+      "dano": { "perforante": 103, "cortante": 0, "contundente": 11 },
+      "penetracion": { "perforante": 20, "cortante": 0, "contundente": 20 },
+      "defensa": { "perforante": 15, "cortante": 15, "contundente": 15 },
+      "alivio": { "perforante": 30, "cortante": 20, "contundente": 10 },
+      "bloqueo": 400,
+      "cadencia": 1.5,
+      "alcance": 2
+    }
   },
   {
     "id": "caballeria_asiria",
@@ -847,7 +1125,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 10,
     "velocidad": 84,
     "escalon": 3,
-    "unidadesPorDefecto": 18
+    "tier": 4,
+    "unidadesPorDefecto": 18,
+    "combate": {
+      "vida": 1500,
+      "dano": { "perforante": 113, "cortante": 49, "contundente": 0 },
+      "penetracion": { "perforante": 20, "cortante": 20, "contundente": 0 },
+      "defensa": { "perforante": 15, "cortante": 15, "contundente": 15 },
+      "alivio": { "perforante": 20, "cortante": 20, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 1.8,
+      "alcance": 2
+    }
   },
   {
     "id": "arqueros_escitas",
@@ -862,7 +1151,20 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 17,
     "velocidad": 24,
     "escalon": 5,
-    "unidadesPorDefecto": 12
+    "tier": 5,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 1580,
+      "dano": { "perforante": 348, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 20, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 5, "cortante": 5, "contundente": 5 },
+      "alivio": { "perforante": 5, "cortante": 5, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 2,
+      "alcance": 55,
+      "precision": 70,
+      "municion": 24
+    }
   },
   {
     "id": "espartiatas",
@@ -877,7 +1179,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 17,
     "velocidad": 18,
     "escalon": 4,
-    "unidadesPorDefecto": 15
+    "tier": 5,
+    "unidadesPorDefecto": 16,
+    "combate": {
+      "vida": 2700,
+      "dano": { "perforante": 130, "cortante": 23, "contundente": 0 },
+      "penetracion": { "perforante": 25, "cortante": 25, "contundente": 0 },
+      "defensa": { "perforante": 20, "cortante": 20, "contundente": 20 },
+      "alivio": { "perforante": 35, "cortante": 25, "contundente": 12 },
+      "bloqueo": 400,
+      "cadencia": 1.5,
+      "alcance": 2
+    }
   },
   {
     "id": "epilektoi",
@@ -892,7 +1205,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 10,
     "velocidad": 24,
     "escalon": 3,
-    "unidadesPorDefecto": 18
+    "tier": 4,
+    "unidadesPorDefecto": 18,
+    "combate": {
+      "vida": 1800,
+      "dano": { "perforante": 98, "cortante": 17, "contundente": 0 },
+      "penetracion": { "perforante": 25, "cortante": 25, "contundente": 0 },
+      "defensa": { "perforante": 15, "cortante": 15, "contundente": 15 },
+      "alivio": { "perforante": 30, "cortante": 20, "contundente": 10 },
+      "bloqueo": 400,
+      "cadencia": 1.5,
+      "alcance": 2
+    }
   },
   {
     "id": "inmortales",
@@ -908,7 +1232,20 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 15,
     "velocidad": 24,
     "escalon": 5,
-    "unidadesPorDefecto": 15
+    "tier": 4,
+    "unidadesPorDefecto": 15,
+    "combate": {
+      "vida": 1420,
+      "dano": { "perforante": 158, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 25, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "alivio": { "perforante": 15, "cortante": 10, "contundente": 10 },
+      "bloqueo": 100,
+      "cadencia": 1.6,
+      "alcance": 40,
+      "precision": 55,
+      "municion": 16
+    }
   },
   {
     "id": "peltastas_ificrates",
@@ -923,7 +1260,20 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 14,
     "velocidad": 30,
     "escalon": 4,
-    "unidadesPorDefecto": 20
+    "tier": 4,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 1200,
+      "dano": { "perforante": 281, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 25, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 5, "cortante": 5, "contundente": 5 },
+      "alivio": { "perforante": 10, "cortante": 5, "contundente": 10 },
+      "bloqueo": 80,
+      "cadencia": 2.5,
+      "alcance": 25,
+      "precision": 70,
+      "municion": 4
+    }
   },
   {
     "id": "caballeria_tesalia",
@@ -939,7 +1289,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 14,
     "velocidad": 84,
     "escalon": 4,
-    "unidadesPorDefecto": 15
+    "tier": 4,
+    "unidadesPorDefecto": 15,
+    "combate": {
+      "vida": 1500,
+      "dano": { "perforante": 138, "cortante": 24, "contundente": 0 },
+      "penetracion": { "perforante": 25, "cortante": 25, "contundente": 0 },
+      "defensa": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "alivio": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 1.8,
+      "alcance": 2
+    }
   },
   {
     "id": "caballeria_noble_persa",
@@ -955,7 +1316,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 17,
     "velocidad": 84,
     "escalon": 4,
-    "unidadesPorDefecto": 16
+    "tier": 5,
+    "unidadesPorDefecto": 16,
+    "combate": {
+      "vida": 2250,
+      "dano": { "perforante": 216, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 20, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 15, "cortante": 15, "contundente": 15 },
+      "alivio": { "perforante": 20, "cortante": 20, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 1.8,
+      "alcance": 2
+    }
   },
   {
     "id": "prodromos",
@@ -970,7 +1342,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 9,
     "velocidad": 84,
     "escalon": 3,
-    "unidadesPorDefecto": 18
+    "tier": 3,
+    "unidadesPorDefecto": 18,
+    "combate": {
+      "vida": 900,
+      "dano": { "perforante": 106, "cortante": 12, "contundente": 0 },
+      "penetracion": { "perforante": 20, "cortante": 20, "contundente": 0 },
+      "defensa": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "alivio": { "perforante": 0, "cortante": 0, "contundente": 0 },
+      "bloqueo": 0,
+      "cadencia": 1.6,
+      "alcance": 2
+    }
   },
   {
     "id": "falangitas",
@@ -985,8 +1368,19 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 14,
     "velocidad": 18,
     "escalon": 4,
+    "tier": 4,
     "unidadesPorDefecto": 32,
-    "poblacion": "artesanos"
+    "poblacion": "artesanos",
+    "combate": {
+      "vida": 1800,
+      "dano": { "perforante": 115, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 25, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 10, "cortante": 10, "contundente": 10 },
+      "alivio": { "perforante": 15, "cortante": 10, "contundente": 10 },
+      "bloqueo": 80,
+      "cadencia": 1.5,
+      "alcance": 2
+    }
   },
   {
     "id": "hipaspistas",
@@ -1001,7 +1395,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 17,
     "velocidad": 24,
     "escalon": 5,
-    "unidadesPorDefecto": 20
+    "tier": 5,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 2480,
+      "dano": { "perforante": 103, "cortante": 68, "contundente": 0 },
+      "penetracion": { "perforante": 25, "cortante": 25, "contundente": 0 },
+      "defensa": { "perforante": 20, "cortante": 20, "contundente": 20 },
+      "alivio": { "perforante": 35, "cortante": 25, "contundente": 12 },
+      "bloqueo": 400,
+      "cadencia": 1.5,
+      "alcance": 2
+    }
   },
   {
     "id": "companeros",
@@ -1017,7 +1422,18 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 17,
     "velocidad": 84,
     "escalon": 5,
-    "unidadesPorDefecto": 16
+    "tier": 5,
+    "unidadesPorDefecto": 16,
+    "combate": {
+      "vida": 2250,
+      "dano": { "perforante": 173, "cortante": 43, "contundente": 0 },
+      "penetracion": { "perforante": 25, "cortante": 25, "contundente": 0 },
+      "defensa": { "perforante": 20, "cortante": 20, "contundente": 20 },
+      "alivio": { "perforante": 25, "cortante": 25, "contundente": 12 },
+      "bloqueo": 0,
+      "cadencia": 1.8,
+      "alcance": 2
+    }
   },
   {
     "id": "agrianos",
@@ -1032,11 +1448,37 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
     "poderBase": 17,
     "velocidad": 30,
     "escalon": 5,
-    "unidadesPorDefecto": 20
+    "tier": 5,
+    "unidadesPorDefecto": 20,
+    "combate": {
+      "vida": 1800,
+      "dano": { "perforante": 375, "cortante": 0, "contundente": 0 },
+      "penetracion": { "perforante": 25, "cortante": 0, "contundente": 0 },
+      "defensa": { "perforante": 5, "cortante": 5, "contundente": 5 },
+      "alivio": { "perforante": 5, "cortante": 5, "contundente": 10 },
+      "bloqueo": 0,
+      "cadencia": 2.5,
+      "alcance": 25,
+      "precision": 80,
+      "municion": 4
+    }
   }
 ]
 ```
 <!-- /parametros -->
+
+`TROPAS_RECLUTABLES` lleva de cada tropa, además de lo que usa el motor, su **tier** de combate y su bloque **`combate`** (2026-11-12, entrada 72; `Cifras_De_Combate.md` §1, §7 y §8). Son datos para Conquest y el cliente, que los leen de `GET /v1/datos`: el motor no los usa.
+- **`tier`**, del 1 (leva) al 5 (élite): la rareza de la escuadra en Conquest. Es otro número que el `escalon`, que sigue fijando el Liderazgo, el oro y la clase de población.
+- **`combate`**: `vida` por soldado; `dano`, `penetracion`, `defensa` y `alivio` (en %), cada uno con su terna `perforante`/`cortante`/`contundente`; `bloqueo` del escudo; `cadencia` (segundos entre golpes) y `alcance` (metros). Las tropas de distancia (`alcance` de más de 2) llevan además `precision` (1-100) y `municion`.
+- **`unidadesPorDefecto`** son los soldados de `Cifras_De_Combate.md` §4, propios de cada tropa y que ya no bajan con el escalón: las de distancia, 20 todas; las falangitas, 32; los hipaspistas, 20; los hequetai, 18; los espartiatas y las caballerías de tier V, 16.
+
+<!-- parametros:VERSION_CATALOGO_TROPAS -->
+```json
+{ "version": 2 }
+```
+<!-- /parametros -->
+
+`VERSION_CATALOGO_TROPAS`: la versión de `TROPAS_RECLUTABLES`, que el ticket de una batalla de Unity manda en `BattleRules.version_catalogo_tropas` ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §3.2) para que Conquest sepa qué cifras leer. Se sube a mano al cambiar cualquier tropa. La 2 es la de las cifras de combate (2026-11-12); el 1 fijo era el de antes.
 
 <!-- parametros:FORMACIONES -->
 ```json

@@ -4,7 +4,8 @@
 //!
 //! DUDA: el héroe sale con los valores por defecto de nombre, clase, género y avatar (decisión 4 del autor), sin equipo (CQ-004) y con los atributos efectivos iguales a los base; una escuadra no trae
 //! habilidades (Unity las saca del nivel) y sí su formación y las que permite la tecnología de su Facción (Heroe_Y_Tropa §10.4, 2026-11-11); `experiencia` y `moral` de una escuadra viajan en puntos (como el contrato de TypeScript), no en milésimas;
-//! `version_balance` y `version_catalogo_tropas` valen 1 mientras Rust no tenga su numeración; la carga de cada carro es la parte de la carga de la caravana proporcional a su capacidad
+//! `version_balance` vale 1 mientras Rust no tenga su numeración y `version_catalogo_tropas` es `VERSION_CATALOGO_TROPAS` (Heroe_Y_Tropa §12); el estandarte y el aspecto de una escuadra
+//! viajan vacíos (D20); la carga de cada carro es la parte de la carga de la caravana proporcional a su capacidad
 //! (`Caravana::carga_por_carro`); el terreno de una batalla fuera de un asedio es el artefacto de mundo (`BattleMapReference`).
 
 use super::propios::{atributos, celdas, nombre_de_heroe, CLASE_POR_DEFECTO};
@@ -20,7 +21,7 @@ use militar::heroe::Controlador;
 /// La versión del esquema del contrato de batalla que habla este servidor (`SCHEMA_VERSION`).
 pub const SCHEMA_VERSION: u32 = 1;
 
-/// Hasta que Rust numere sus catálogos y su balance (el contrato de TypeScript los tomaba de `BALANCE_VERSION` y `VERSION_CATALOGO_TROPAS`).
+/// Hasta que Rust numere su balance (el contrato de TypeScript lo tomaba de `BALANCE_VERSION`).
 const VERSION_POR_DEFECTO: u32 = 1;
 
 /// Milésimas de punto a puntos enteros (la experiencia y la moral de un `SquadSnapshot`).
@@ -173,7 +174,7 @@ pub fn ticket(n: &Nucleo, b: &Batalla) -> pb::BattleTicket {
         reglas: Some(pb::BattleRules {
             duracion_maxima_segundos: (t.duracion_maxima / 1_000) as u32,
             version_balance: VERSION_POR_DEFECTO,
-            version_catalogo_tropas: VERSION_POR_DEFECTO,
+            version_catalogo_tropas: n.estado().reglas.economia.militar.version_catalogo_tropas,
             version_catalogo_heroe: c.version_catalogo_heroe.clone(),
             version_catalogo_objetos: c.version_catalogo_objetos.clone(),
         }),

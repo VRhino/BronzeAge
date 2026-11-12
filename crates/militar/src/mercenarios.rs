@@ -429,7 +429,7 @@ mod pruebas {
         m.h.escuadra_mut(50).unwrap().contenedor = Contenedor::Ejercito(8);
         assert_eq!(recluta(&mut m, Tropa::Arqueros, 0), Err(ErrorMercenarios::YaLaTienesFuera(Contenedor::Ejercito(8))));
         m.columnas = vec![(8, 1_999)];
-        assert_eq!(recluta(&mut m, Tropa::Arqueros, 0).map(|x| x.cantidad), Ok(8));
+        assert_eq!(recluta(&mut m, Tropa::Arqueros, 0).map(|x| x.cantidad), Ok(10));
         m.h.escuadra_mut(50).unwrap().cantidad = 1;
         m.h.escuadra_mut(50).unwrap().contenedor = Contenedor::Escolta(2);
         assert_eq!(recluta(&mut m, Tropa::Arqueros, 0), Err(ErrorMercenarios::YaLaTienesFuera(Contenedor::Escolta(2))), "en escolta, nunca");

@@ -253,8 +253,8 @@ mod pruebas {
         assert_eq!(e.poder(&r), 51_500, "el nivel 1 ya cuenta +3 %");
         e.nivel = 10;
         assert_eq!(e.poder(&r), 65_000);
-        let compuesto = escuadra(Tropa::ArquerosCompuesto); // 15 × 12 = 180
-        assert_eq!(compuesto.poder(&r), 185_400);
+        let compuesto = escuadra(Tropa::ArquerosCompuesto); // 15 × 20 = 300
+        assert_eq!(compuesto.poder(&r), 309_000);
         let mut vacia = escuadra(Tropa::Hequetai);
         vacia.cantidad = 0;
         assert_eq!(vacia.poder(&r), 0);

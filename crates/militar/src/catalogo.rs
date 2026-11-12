@@ -255,6 +255,32 @@ mod pruebas {
         assert_eq!(c.tropa(Tropa::Hipaspistas).origen(), Origen::Nobleza);
     }
 
+    /// El tier y el bloque `combate` son para Conquest y el cliente (Cifras_De_Combate §8): el motor no los lee, así que se comprueban sobre el JSON.
+    #[test]
+    fn las_37_tropas_traen_su_tier_y_su_bloque_de_combate_completo() {
+        let b = bloque(HEROE_Y_TROPA, "TROPAS_RECLUTABLES");
+        let tropas = b.as_array().unwrap();
+        assert_eq!(tropas.len(), 37);
+        for t in tropas {
+            let id = t["id"].as_str().unwrap();
+            assert!(t["tier"].as_u64().is_some_and(|n| (1..=5).contains(&n)), "{id}: tier del 1 al 5");
+            let c = &t["combate"];
+            for k in ["vida", "bloqueo", "cadencia", "alcance"] {
+                assert!(c[k].is_number(), "{id}: falta combate.{k}");
+            }
+            for k in ["dano", "penetracion", "defensa", "alivio"] {
+                for tipo in ["perforante", "cortante", "contundente"] {
+                    assert!(c[k][tipo].is_number(), "{id}: falta combate.{k}.{tipo}");
+                }
+                assert_eq!(c[k].as_object().unwrap().len(), 3, "{id}: combate.{k} es una terna");
+            }
+            let distancia = c["alcance"].as_f64().unwrap() > 2.0;
+            for k in ["precision", "municion"] {
+                assert_eq!(c[k].is_number(), distancia, "{id}: combate.{k} solo si alcance pasa de 2");
+            }
+        }
+    }
+
     #[test]
     fn caballos_y_equipo_de_ejemplos_del_canon() {
         let c = catalogo();

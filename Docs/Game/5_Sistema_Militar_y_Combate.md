@@ -128,20 +128,20 @@ Leñadores, granjeros y mineros son muy malos en combate y muy desorganizados: e
 | 2 | Shardana | `bronce_calidad_militar` (II) | 1 Arma de Bronce de Calidad + 1 Armadura Básica | 4 | 15 | 15 | 24 | 3 |
 | 2 | Hoplitas ciudadanos | `ciudadania_militar` (III) | 1 Arma de Hierro + 1 Armadura de Bronce | 3 | 10 | 18 | 24 | 3 |
 | 3 | Lanceros pesados micénicos (escudos grandes) | `panoplia_bronce` (II) | 2 Arma de Bronce + 1 Armadura de Bronce | 4 | 14 | 15 | 18 | 3 |
-| 3 | Hequetai (guardia de bronce) | `panoplia_bronce` (II) | 1 Arma de Bronce de Calidad + 1 Armadura de Bronce | 5 | 17 | 12 | 18 | 3 |
-| 3 | Espartiatas | `falange_hoplita` (III) | 1 Arma de Hierro de Calidad + 1 Armadura de Bronce de Calidad | 4 | 17 | 15 | 18 | 4 |
+| 3 | Hequetai (guardia de bronce) | `panoplia_bronce` (II) | 1 Arma de Bronce de Calidad + 1 Armadura de Bronce | 5 | 17 | 18 | 18 | 3 |
+| 3 | Espartiatas | `falange_hoplita` (III) | 1 Arma de Hierro de Calidad + 1 Armadura de Bronce de Calidad | 4 | 17 | 16 | 18 | 4 |
 
 **Galería de tiro (a distancia):**
 
 | Nivel | Tropa | Tecnología (Era) | Costo (por soldado) | Escalón | poderBase | Unidades | Velocidad | Asent. |
 |---|---|---|---|---|---|---|---|---|
 | 1 | Honderos (escaramuzadores) | `hostigamiento_tribal` (I) | 1 Arma de Madera | 2 | 5 | 20 | 30 | 2 |
-| 2 | Escaramuzadores con jabalina | `hostigamiento_tribal` (I) | 1 Arma de Cobre + 1 Armadura Básica | 3 | 8 | 18 | 30 | 2 |
-| 2 | Arqueros | `arqueria_palacial` (I) | 1 Arma de Bronce + 1 Armadura Intermedia | 3 | 9 | 18 | 24 | 2 |
-| 2 | Peltastas | `pantalla_escaramuzadores` (III) | 2 Arma de Hierro (jabalinas), sin armadura | 3 | 9 | 18 | 30 | 2 |
-| 2 | Honderos rodios | `pantalla_escaramuzadores` (III) | 1 Arma de Hierro + 1 Armadura Básica | 3 | 9 | 18 | 30 | 2 |
-| 3 | Arqueros con arco compuesto | `arco_compuesto` (II) | 3 Arma de Bronce + 2 Armadura Intermedia | 5 | 15 | 12 | 18 | 3 |
-| 3 | Arqueros escitas | `arqueria_especializada` (III) | 1 Arma de Hierro + 1 Armadura Básica | 5 | 17 | 12 | 24 | 3 |
+| 2 | Escaramuzadores con jabalina | `hostigamiento_tribal` (I) | 1 Arma de Cobre + 1 Armadura Básica | 3 | 8 | 20 | 30 | 2 |
+| 2 | Arqueros | `arqueria_palacial` (I) | 1 Arma de Bronce + 1 Armadura Intermedia | 3 | 9 | 20 | 24 | 2 |
+| 2 | Peltastas | `pantalla_escaramuzadores` (III) | 2 Arma de Hierro (jabalinas), sin armadura | 3 | 9 | 20 | 30 | 2 |
+| 2 | Honderos rodios | `pantalla_escaramuzadores` (III) | 1 Arma de Hierro + 1 Armadura Básica | 3 | 9 | 20 | 30 | 2 |
+| 3 | Arqueros con arco compuesto | `arco_compuesto` (II) | 3 Arma de Bronce + 2 Armadura Intermedia | 5 | 15 | 20 | 18 | 3 |
+| 3 | Arqueros escitas | `arqueria_especializada` (III) | 1 Arma de Hierro + 1 Armadura Básica | 5 | 17 | 20 | 24 | 3 |
 
 **Caballerizas (caballería y carros):**
 
@@ -150,12 +150,12 @@ Leñadores, granjeros y mineros son muy malos en combate y muy desorganizados: e
 | 1 | Exploradores a caballo | `cria_caballar` (I) | 1 Arma de Cobre + 1 caballo | 2 | 3 | 20 | 84 | 2 |
 | 1 | Jinetes asirios | `equitacion_militar` (II) | 1 Arma de Hierro + 1 caballo | 2 | 5 | 20 | 84 | 2 |
 | 2 | Carros de guerra | `carros_guerra` (I) | 1 Carro de Guerra + 2 caballos + 1 Arma de Bronce | 4 | 13 | 15 | 30 | 3 |
-| 2 | Jinetes escitas | `caballeria_organizada` (III) | 1 Arma de Bronce + 1 Armadura Básica + 1 caballo | 3 | 8 | 18 | 84 | 2 |
+| 2 | Jinetes escitas | `caballeria_organizada` (III) | 1 Arma de Bronce + 1 Armadura Básica + 1 caballo | 3 | 8 | 20 | 84 | 2 |
 | 2 | Caballería asiria | `caballeria_organizada` (III) | 1 Arma de Hierro + 1 Armadura de Bronce + 1 caballo | 3 | 10 | 18 | 84 | 3 |
 
 Los exploradores a caballo son caballería de exploración, floja en combate. Una tropa puede depender de una tecnología y su arma de otra (los escaramuzadores esperan al Arma de Cobre de `metalurgia_cobre`, los jinetes asirios al Arma de Hierro de `forja_hierro_temprana`): es el patrón normal de las cuatro puertas.
 
-`poderBase` es placeholder. Las unidades de cada escuadrón son un valor propio de cada tropa (decidido el 2026-09-27); de partida, las que daba su escalón (5.11.1).
+`poderBase` es placeholder. Las unidades de cada escuadrón son un valor propio de cada tropa (decidido el 2026-09-27); desde el 2026-11-12 son las de las cifras de combate de cada tropa, que ya no bajan con el escalón: las de distancia, 20 todas (5.11.1). Cada tropa lleva además un **tier** de combate (I-V) y sus cifras de combate, que usa la batalla de Unity (`Docs/Mechanics/Heroe_Y_Tropa.md` §12).
 
 **Unidades por defecto** (`unidadesPorDefecto`): es el TOPE del escuadrón, el jugador nunca elige cuántos soldados reclutar. `costoEquipo` sigue siendo por soldado. Reclutar desde cero cuesta "Costo (por soldado)" × "Unidades" de la tabla — ej. Milicia de lanceros cuesta 2 Madera/soldado × 25 = 50 Madera. Si el escuadrón ya existe y está por debajo del tope (bajas de combate, Doc 5.4), reclutar de nuevo REPONE solo las unidades que faltan hasta el tope, al mismo costo por soldado — no es un bloque nuevo completo (ver el párrafo "Escuadrón por héroe" más abajo). Antes de confirmar, la interfaz muestra el coste de ESTE reclutamiento, que puede ser parcial.
 
@@ -213,10 +213,10 @@ En un ejército de varios héroes, **cada uno se valida contra SU propio Lideraz
 
 El Liderazgo **nace en 14** y sube **3 por cada nivel** del Héroe hasta el 30, sin pasar de **100** (2026-11-12): un héroe nuevo saca dos escuadras de leva o una de línea; uno de nivel 30, las combinaciones de abajo.
 
-**El tamaño del escuadrón es propio de cada tropa** (decidido el 2026-09-27; antes lo fijaba el escalón). De
-partida es el de la tabla —cuanto más de élite, menos cuerpos—, y al fijarlo hay que conservar ese orden: es lo que
-hace que subir de escalón sea *calidad* y no *cantidad*, y lo que ordena el rendimiento por punto de Liderazgo de
-mayor (leva) a menor (élite).
+**El tamaño del escuadrón es propio de cada tropa** (decidido el 2026-09-27; antes lo fijaba el escalón). La columna
+«de partida» de la tabla es la que tenía cada escalón al principio. Desde el 2026-11-12 ya no tiene que bajar con el
+escalón (decisión del autor del 2026-11-11): las tropas de distancia llevan 20 soldados todas, la falange macedónica 32
+y la élite entre 16 y 20 (las tablas de 5.8).
 
 **Por qué no se deriva del poder.** Un coste proporcional al poder nominal daría **el mismo poder por punto de
 Liderazgo a todas las tropas**: cinco milicias rendirían lo mismo que un lancero pesado, y la élite no sería

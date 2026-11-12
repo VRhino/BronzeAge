@@ -258,7 +258,7 @@ mod pruebas {
         let res = resolver_asalto(r, Bando { escuadras: &mut a, heroes: &[1, 2] }, Defensa::Escolta(&mut escolta), Modalidad::Disputa, &mut Rng::nuevo(8)).unwrap();
         assert!(!res.gana_atacante);
         assert_eq!(res.bajas_atacante[0].despues, 25 - 6);
-        assert_eq!(res.bajas_escolta[0].despues, 12 - 1, "round(12 × 0,05) = 1");
+        assert_eq!(res.bajas_escolta[0].despues, 20 - 1, "round(20 × 0,05) = 1");
         assert_eq!(res.heridos, vec![1, 2]);
         assert_eq!((res.bajas_escolta[0].experiencia, res.bajas_atacante[0].experiencia), (1_000, 500));
         // La defensa de la escolta lleva cohesión: 2 escuadras ⇒ ×1,1.

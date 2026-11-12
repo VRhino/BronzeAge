@@ -256,7 +256,7 @@ mod pruebas {
         assert_eq!(poder_de_bando(&r, std::slice::from_ref(&milicia), 0), 51_500, "milicia completa: 25 × 2 con el +3 % del nivel 1");
         assert_eq!(poder_de_bando(&r, std::slice::from_ref(&milicia), 1), 66_500, "el héroe suma además de sus escuadras");
         let compuesto = escuadra(2, 1, Tropa::ArquerosCompuesto);
-        assert_eq!(poder_total(&r, std::slice::from_ref(&compuesto), false), 185_400);
+        assert_eq!(poder_total(&r, std::slice::from_ref(&compuesto), false), 309_000, "20 × 15 con el +3 % del nivel 1");
     }
 
     #[test]
