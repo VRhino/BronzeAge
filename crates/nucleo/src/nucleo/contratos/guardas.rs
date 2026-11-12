@@ -220,6 +220,10 @@ impl Nucleo {
             | Comando::RepartirPuntos { .. }
             | Comando::OrdenarEscuadras { .. }
             | Comando::ElegirFormacion { .. }
+            | Comando::EquiparObjeto { .. }
+            | Comando::DesequiparObjeto { .. }
+            | Comando::GuardarObjeto { .. }
+            | Comando::SacarObjeto { .. }
             | Comando::AsignarGuarnicion { .. }
             | Comando::RetirarGuarnicion { .. }
             | Comando::PasarAViveres { .. }

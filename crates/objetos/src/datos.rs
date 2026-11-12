@@ -266,8 +266,12 @@ pub struct Botin {
 }
 
 /// El catálogo entero: los objetos, las clases y el botín.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Catalogo {
+    /// Las versiones de `OBJETOS` y de `CLASES_HEROE` (cada bloque lleva la suya): las declara el ticket de una batalla de Unity (`version_catalogo_objetos` y
+    /// `version_catalogo_heroe`).
+    pub version_objetos: String,
+    pub version_clases: String,
     /// Lo que paga la tienda por lo que le vende el héroe, en % del precio de la ficha (D18).
     pub venta_pct: i64,
     /// La tienda vende hasta este tier.
@@ -419,6 +423,8 @@ impl Catalogo {
             rango_mercenario: por_nivel(campo(&bo, "rangoMercenario"), &objetos),
         };
         Catalogo {
+            version_objetos: texto(&ob, "version"),
+            version_clases: texto(&cl, "version"),
             venta_pct: entero(&ob, "ventaPct"),
             tienda_hasta_tier: entero(&ob, "tiendaHastaTier") as u8,
             casillas_mochila: entero(&ob, "casillasMochila") as u32,
@@ -452,6 +458,7 @@ mod pruebas {
         assert_eq!(cuenta(&|t| matches!(t, Tipo::Consumible(_))), 9, "ocho medallas y el cofre");
         assert_eq!(c.clases.len(), 5);
         assert_eq!((c.venta_pct, c.tienda_hasta_tier, c.casillas_mochila, c.casillas_almacen), (50, 2, 72, 144));
+        assert_eq!((c.version_objetos.as_str(), c.version_clases.as_str()), ("bronzeage-objetos-1", "bronzeage-clases-1"), "cada bloque lleva su versión");
     }
 
     #[test]

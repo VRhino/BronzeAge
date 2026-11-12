@@ -377,6 +377,10 @@ Las **161 órdenes del contrato 05** (`orders.proto`), la orden genérica de adm
 | `desconectarse` | `Desconectarse` | la cuenta del héroe | — |
 | `cerrar_sesion` | `CerrarSesion` | la cuenta del héroe | — (sin candado de batalla: combatiendo, sale al acabar la batalla) |
 | `elegir_formacion` | `ElegirFormacion` | la cuenta del héroe | una escuadra suya (`escuadra.ajena`); la familia del bloque `FORMACIONES` (`formacion.desconocida`) que permite la tecnología de su Facción (`formacion.sin_tecnologia`); sin héroe ni Facción, solo las que no piden tecnología (Heroe_Y_Tropa §10.4, 2026-11-11) |
+| `equipar_objeto` | `EquiparObjeto` | la cuenta del héroe | dentro de una plaza, un pueblo o un campamento (`equipo.fuera_de_lugar`) y sin escuadras reservadas para una batalla (`equipo.en_batalla`, D2); las reglas de Clases_De_Heroe §4 (Heroe_Y_Tropa §4.5, 2026-11-12) |
+| `desequipar_objeto` | `DesequiparObjeto` | la cuenta del héroe | donde se equipa (D2); el arma no se quita (`equipo.arma_fija`) y lo quitado tiene que caber en la mochila (`mochila.llena`) |
+| `guardar_objeto` | `GuardarObjeto` | la cuenta del héroe | dentro de su residencia (`heroe.sin_residencia`, `almacen_objetos.fuera_de_tu_residencia`; D22): de la mochila al almacén de objetos (`almacen_objetos.lleno`) |
+| `sacar_objeto` | `SacarObjeto` | la cuenta del héroe | dentro de su residencia (D22): del almacén de objetos a la mochila (`mochila.llena`) |
 | `entrar_en_asentamiento` | `EntrarEnAsentamiento` | la cuenta del héroe | su columna a la puerta (`radioPuerta`); el acceso de la plaza (`acceso.cerrado`) |
 | `entrar_en_avanzada` | `EntrarEnAvanzada` | la cuenta del héroe | como `entrar_en_pueblo` |
 | `entrar_en_campamento` | `EntrarEnCampamento` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) si no va solo; su columna a la puerta (`radioPuerta`) |

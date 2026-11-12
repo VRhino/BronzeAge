@@ -143,7 +143,7 @@ impl Escenario {
     }
     /// El héroe de la cuenta, nacido en el campamento `campamento`.
     fn heroe(&mut self, cuenta: &str, campamento: u32) -> u64 {
-        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0]
+        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0]
     }
     /// Un héroe de la cuenta ya ciudadano de la Facción 1, residente y presente en la plaza.
     fn heroe_en_la_plaza(&mut self, cuenta: &str) -> u64 {
@@ -187,7 +187,7 @@ fn escenario_sobre(m: &M, a: Arranque) -> Escenario {
 fn el_heroe_nace_en_un_campamento_con_su_progresion_inicial_y_cada_rechazo_tiene_su_codigo() {
     let m = con_mundo!();
     let mut e = escenario(m, 7);
-    let crear = |cuenta: &str, campamento, controlador| Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador, nombre: None };
+    let crear = |cuenta: &str, campamento, controlador| Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador, nombre: None, clase: "espada_escudo_mediano".into() };
     // Pasada la aparición de los campamentos de bandidos de las plazas, nada más se mueve por sí solo.
     e.avanzar(HORA);
     let (v0, id0) = (e.n.version(), e.n.estado().siguiente_id);
@@ -220,7 +220,7 @@ fn el_heroe_nace_en_un_campamento_con_su_progresion_inicial_y_cada_rechazo_tiene
     // Cada campamento cuenta quién lo eligió para nacer (`eligieronComoInicial`, paridad P6): solo crece, aunque luego se mude.
     e.ok("admin", crear("carla", 2, Controlador::Humano));
     // El nombre que elige el jugador se guarda y se proyecta (2026-10-27); sin nombre, «Héroe N». Uno vacío, con espacios a los lados o demasiado largo se rechaza.
-    let con_nombre = |cuenta: &str, nombre: &str| Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 3, controlador: Controlador::Humano, nombre: Some(nombre.into()) };
+    let con_nombre = |cuenta: &str, nombre: &str| Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 3, controlador: Controlador::Humano, nombre: Some(nombre.into()), clase: "espada_escudo_mediano".into() };
     for malo in ["", " Vrhino", "Vrhino ", "abcdefghijklmnopqrstuvwxy"] {
         assert_eq!(e.rechazada("admin", con_nombre("dora", malo)), rechazos::HEROE_NOMBRE_INVALIDO, "«{malo}»");
     }
@@ -250,6 +250,47 @@ fn el_heroe_nace_en_un_campamento_con_su_progresion_inicial_y_cada_rechazo_tiene
     assert_eq!(camp.planta.iter().filter(|x| x.tipo == "vivienda").count(), 10);
     assert!(camp.trazado.is_some_and(|t| !t.calles.is_empty()) && camp.empalizada_puerta.len() == 1 && !camp.empalizada.is_empty());
     assert_eq!(camp.planta, nucleo::proyeccion::interior::campamento(&e.n, 2).unwrap().planta, "la planta no cambia: es del campamento");
+}
+
+/// Clases_De_Heroe §6 y D21: la clase es una de `CLASES_HEROE` y el héroe nace con su equipo inicial; las cuatro órdenes del equipo, la mochila y el almacén de objetos, de punta
+/// a punta (sus reglas una a una, en `nucleo::equipo` y en el crate `objetos`).
+#[test]
+fn el_heroe_nace_con_su_clase_y_su_equipo_y_cambia_de_equipo_y_guarda_objetos_por_orden() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let mr = e.n.estado().reglas.economia.militar.clone();
+    let con_clase = |cuenta: &str, clase: &str| Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: clase.into() };
+    let id0 = e.n.estado().siguiente_id;
+    for mala in ["", "guerrero", "mandoble"] {
+        assert_eq!(e.rechazada("ana", con_clase("ana", mala)), rechazos::HEROE_CLASE_DESCONOCIDA, "«{mala}»");
+    }
+    assert_eq!(e.n.estado().siguiente_id, id0, "el rechazo no gasta ids");
+    for (i, (clase, ficha)) in mr.objetos.clases.iter().enumerate() {
+        let cuenta = format!("c{i}");
+        let h = e.ok("admin", con_clase(&cuenta, clase)).creadas[0];
+        let hn = &e.n.heroe(h).unwrap().heroe;
+        assert_eq!((&hn.equipo, hn.clase(&mr), hn.mochila.casillas.len(), hn.almacen_objetos.casillas.len()), (&ficha.inicial, clase.as_str(), 0, 0), "{clase}: el equipo inicial puesto, la mochila y el almacén vacíos");
+    }
+
+    // ana, en el campamento donde reside: se quita la montura y el torso a la mochila, se pone el torso otra vez, guarda la montura en el almacén de objetos y la saca.
+    let h = e.heroe("ana", 0);
+    e.ok("ana", Comando::DesequiparObjeto { heroe: h, hueco: objetos::datos::Hueco::Montura });
+    e.ok("ana", Comando::DesequiparObjeto { heroe: h, hueco: objetos::datos::Hueco::Torso });
+    e.ok("ana", Comando::EquiparObjeto { heroe: h, casilla: 1 });
+    e.ok("ana", Comando::GuardarObjeto { heroe: h, casilla: 0, cantidad: 1 });
+    let hn = &e.n.heroe(h).unwrap().heroe;
+    assert_eq!((hn.equipo.montura.is_none(), hn.equipo.torso.is_some(), hn.mochila.casillas.len(), hn.almacen_objetos.casillas[&0].pieza.objeto.as_str()), (true, true, 0, "montura_tiro"));
+    assert_eq!(hechos(&e.n, "heroe.equipo_cambiado").iter().map(|x| dato(x, "heroe")).collect::<Vec<_>>(), vec![h as i64; 3], "guardar y sacar no cambian el equipo");
+    let propio = nucleo::proyeccion::propios::heroe(&e.n, e.n.heroe(h).unwrap());
+    assert_eq!((propio.inventario.len(), propio.almacen_objetos.iter().map(|p| (p.item_definition_id.as_str(), p.tipo.as_str(), p.casilla_inventario, p.precio)).collect::<Vec<_>>()), (0, vec![("montura_tiro", "montura", 0, 300)]));
+    // En una plaza donde no reside se equipa, pero el almacén de objetos está en su residencia.
+    let a = e.a as u32;
+    e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(a) });
+    assert_eq!(e.rechazada("ana", Comando::SacarObjeto { heroe: h, casilla: 0, cantidad: 1 }), rechazos::ALMACEN_OBJETOS_FUERA_DE_TU_RESIDENCIA);
+    e.ok("ana", Comando::DesequiparObjeto { heroe: h, hueco: objetos::datos::Hueco::Botas });
+    e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Mercenarios(0) });
+    e.ok("ana", Comando::SacarObjeto { heroe: h, casilla: 0, cantidad: 1 });
+    assert_eq!(e.n.heroe(h).unwrap().heroe.mochila.casillas.values().map(|c| c.pieza.objeto.as_str()).collect::<Vec<_>>(), ["botas_media_inicio", "montura_tiro"]);
 }
 
 // ───────────────────────────── 2. Reclutar en una plaza ─────────────────────────────
@@ -1227,14 +1268,22 @@ fn estado_con_heroes() -> nucleo::Estado {
     use militar::mercenarios::Reclutas;
     let mut s = nucleo::Estado::nuevo(Reglas::default(), "h".into(), 1, 0);
     let mr = s.reglas.economia.militar.clone();
-    let mut h = Heroe::nuevo(&mr, 5, Controlador::Humano, 3, 6);
+    let mut h = Heroe::nuevo(&mr, 5, Controlador::Humano, 3, 6, "espada_escudo_mediano").unwrap();
     h.residencia = Some(Residencia::Asentamiento(2));
     h.presencia.ubicacion = Ubicacion::Asentamiento(2);
     h.presencia.desconecta_en = Some(150_000);
     h.nivel = 3;
     h.experiencia = 11;
     h.puntos_de_atributo = 4;
-    h.atributos.armadura = 7;
+    h.puntos_repartidos.armadura = 7;
+    // La foto lleva el equipo, la mochila y el almacén de objetos, con una pieza forjada con sus cifras (D13).
+    use objetos::inventario::Forjada;
+    use objetos::Pieza;
+    let forjada = || Pieza { objeto: "dagas_cobre".into(), forjada: Some(Forjada { id: 3, cifras: objetos::datos::Cifras::Armadura { atributos: Default::default(), defensa: objetos::datos::PorDano { perforante: 1, cortante: 2, contundente: 3 }, salud: 40 } }) };
+    h.equipo.casco = Some(forjada());
+    h.mochila.meter(&mr.objetos, Pieza::del_catalogo("crisol"), 4).unwrap();
+    h.mochila.meter(&mr.objetos, forjada(), 1).unwrap();
+    h.almacen_objetos.meter(&mr.objetos, Pieza::del_catalogo("plano_2"), 2).unwrap();
     h.loadouts.push(Loadout { id: 9, nombre: "Asalto".into(), escuadras: vec![10, 11], activo: false });
     h.monedas = 1_212;
     h.herido_hasta = Some(120_000);
@@ -1253,7 +1302,7 @@ fn estado_con_heroes() -> nucleo::Estado {
     h.escuadras[4].prestada = Some(1);
     h.escuadras[4].plaza_origen = None;
     s.militar.insertar(nucleo::HeroeNucleo { almacen_personal: [(Oro, 8)].into_iter().collect(), cupo: CupoDiario { dia: 4, comprado: [(Madera, 9)].into_iter().collect() }, columna: Some(77), carro: [(Cobre, 3)].into_iter().collect(), ..nucleo::HeroeNucleo::nuevo(h, "ana", Some(1)) });
-    let mut otro = Heroe::nuevo(&mr, 20, Controlador::Bot, 1, 21);
+    let mut otro = Heroe::nuevo(&mr, 20, Controlador::Bot, 1, 21, "dagas").unwrap();
     otro.presencia.ubicacion = Ubicacion::Desconectado(Punto::new(5, -7));
     otro.presencia.fuera = true;
     s.militar.insertar(nucleo::HeroeNucleo::nuevo(otro, "bot", None));
@@ -1321,7 +1370,17 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
         ("nivel", Box::new(|m| h5(m).nivel += 1)),
         ("experiencia", Box::new(|m| h5(m).experiencia += 1)),
         ("puntos_atributo", Box::new(|m| h5(m).puntos_de_atributo += 1)),
-        ("atributos", Box::new(|m| h5(m).atributos.fuerza += 1)),
+        ("puntos_repartidos", Box::new(|m| h5(m).puntos_repartidos.fuerza += 1)),
+        ("equipo.arma", Box::new(|m| h5(m).equipo.arma = objetos::Pieza::del_catalogo("dagas_inicio"))),
+        ("equipo.montura", Box::new(|m| h5(m).equipo.montura = None)),
+        ("equipo.forjada", Box::new(|m| h5(m).equipo.casco.as_mut().unwrap().forjada.as_mut().unwrap().id += 1)),
+        ("mochila.cantidad", Box::new(|m| h5(m).mochila.casillas.get_mut(&0).unwrap().cantidad += 1)),
+        ("mochila.casilla", Box::new(|m| {
+            let c = h5(m).mochila.casillas.remove(&1).unwrap();
+            h5(m).mochila.casillas.insert(5, c);
+        })),
+        ("mochila.capacidad", Box::new(|m| h5(m).mochila.capacidad += 1)),
+        ("almacen_objetos", Box::new(|m| h5(m).almacen_objetos.casillas.get_mut(&0).unwrap().pieza = objetos::Pieza::del_catalogo("plano_3"))),
         ("loadout.nombre", Box::new(|m| h5(m).loadouts[1].nombre.push('!'))),
         ("loadout.escuadras", Box::new(|m| h5(m).loadouts[1].escuadras.reverse())),
         ("loadout.activo", Box::new(|m| h5(m).loadouts[1].activo = true)),
@@ -1358,7 +1417,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
         ("otro.ubicacion", Box::new(|m| m.heroes.get_mut(&20).unwrap().heroe.presencia.ubicacion = Ubicacion::Desconectado(Punto::new(5, 7)))),
         ("heroe.nuevo", Box::new(|m| {
             let mr = militar::Reglas::cargar();
-            m.insertar(nucleo::HeroeNucleo::nuevo(militar::heroe::Heroe::nuevo(&mr, 30, Controlador::Humano, 0, 31), "c", None));
+            m.insertar(nucleo::HeroeNucleo::nuevo(militar::heroe::Heroe::nuevo(&mr, 30, Controlador::Humano, 0, 31, "dagas").unwrap(), "c", None));
         })),
         ("reclutas.poblacion", Box::new(|m| m.reclutas.get_mut(&2).unwrap().poblacion += 1)),
         ("reclutas.en", Box::new(|m| m.reclutas.get_mut(&2).unwrap().en += 1)),
@@ -1396,7 +1455,7 @@ impl Escenario {
 fn guion(e: &mut Escenario, avanzar: &dyn Fn(&mut Escenario, Instante)) {
     let (a, base) = (e.a, 24 * HORA);
     avanzar(e, base);
-    let crear = |e: &mut Escenario, cuenta: &str, camp| e.ok_en(base, cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: camp, controlador: Controlador::Humano, nombre: None }).creadas[0];
+    let crear = |e: &mut Escenario, cuenta: &str, camp| e.ok_en(base, cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: camp, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
     let (ana, beto) = (crear(e, "ana", 0), crear(e, "beto", 0));
     e.ok_en(base, "admin", Comando::FijarFaccionDeHeroe { heroe: ana, faccion: Some(1) });
     e.ok_en(base, "admin", Comando::FijarResidencia { heroe: ana, residencia: Some(Residencia::Asentamiento(a as u32)) });

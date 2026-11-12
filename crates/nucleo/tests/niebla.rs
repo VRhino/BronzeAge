@@ -252,7 +252,7 @@ fn la_ficha_de_una_plaza_ajena_es_lo_ultimo_que_se_vio_de_ella_y_cuando_y_nunca_
 fn sin_bandera_lo_explorado_es_del_heroe_y_pasa_a_su_faccion_cuando_entra_en_una() {
     let m = con_mundo!();
     let mut e = Esc { n: nucleo(m), peticiones: 0 };
-    let h = e.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
+    let h = e.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
     let col = e.ok("eva", Comando::SalirDelCampamento { campamento: 0, heroe: h, escuadras: vec![], carga: vec![], politica: militar::columna::Politica::Rechazar, caravana_fundacion: None }).creadas[0];
     assert_eq!(e.n.ejercito(col).unwrap().columna.faccion, None, "un héroe sin Facción anda sin bandera");
     let p = e.n.ejercito(col).unwrap().posicion;
@@ -344,6 +344,10 @@ fn lo_ajeno_se_ve_redactado_y_el_tramo_ajeno_se_renueva_solo_cuando_le_quedan_me
     let Some(Cuerpo::Heroe(hp)) = contenido.iter().find(|v| v.clave == (TipoEntidad::Heroe as i32, nucleo::proyeccion::ids::heroe(h_gus))).and_then(|v| v.cuerpo()) else { panic!("el héroe ajeno se ve") };
     assert_eq!((hp.jugador_id.clone(), hp.ubicacion.clone(), hp.escuadrones_ids.len(), hp.escuadras_que_lleva.len()), (None, None, 0, 1));
     assert_eq!(hp.escuadras_que_lleva[0].cantidad, 10);
+    // Lo que lleva puesto es público (canon 5.16), con su clase; la mochila y el almacén de objetos no (2026-11-12). Un héroe de campo nace con la primera clase por id.
+    let arma = hp.equipamiento.as_ref().and_then(|x| x.arma.as_ref()).map(|p| p.item_definition_id.as_str());
+    assert_eq!((hp.class_definition_id.as_str(), arma), ("arco_lanza", Some("arco_lanza_inicio")));
+    assert!(hp.equipamiento.as_ref().is_some_and(|x| x.montura.is_some()) && hp.inventario.is_empty() && hp.almacen_objetos.is_empty() && hp.atributos_base.is_none());
     assert!(hp.faccion_id.is_some() && hp.faccion_id == e.n.heroe(h_gus).unwrap().faccion.map(nucleo::proyeccion::ids::faccion), "su Facción es pública (2026-10-27)");
 
     // Con el tramo que tiene el cliente aún le quedan más de 10 s: no se renueva (mismo sello). Cuando le quedan menos, sí, y sigue sin enseñar el destino.
@@ -397,7 +401,7 @@ fn partida(m: &M, sesiones: bool, trozos: i64) -> Nucleo {
     let sitio = sitio_rico(&e.n, &m.0, 1, 2);
     e.plaza("gus", 2, sitio);
     let col = e.columna("ana", 1, en_tierra(&m.0, sitio, -60 * U, 10 * U));
-    let h = e.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
+    let h = e.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
     let sola = e.ok("eva", Comando::SalirDelCampamento { campamento: 0, heroe: h, escuadras: vec![], carga: vec![], politica: militar::columna::Politica::Rechazar, caravana_fundacion: None }).creadas[0];
     let p = e.n.ejercito(sola).unwrap().posicion;
     for (k, destino) in [(0, en_tierra(&m.0, sitio, 70 * U, 10 * U)), (1, en_tierra(&m.0, sitio, 0, -40 * U)), (2, en_tierra(&m.0, sitio, -60 * U, 0))].into_iter() {

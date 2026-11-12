@@ -91,7 +91,7 @@ impl Esc {
         self.n.avanzar_hasta(t);
     }
     fn heroe(&mut self, cuenta: &str, campamento: u32) -> u64 {
-        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0]
+        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0]
     }
     fn almacen(&self, plaza: u64, r: Recurso) -> i64 {
         self.n.economia(plaza).unwrap().almacen.cantidad(r)

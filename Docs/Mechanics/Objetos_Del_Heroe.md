@@ -2,6 +2,8 @@
 
 > **Nuevo el 2026-11-12.** Los datos del catálogo de objetos del héroe (`OBJETOS`), de sus clases (`CLASES_HEROE`) y del botín de objetos (`BOTIN_OBJETOS`), generados del catálogo de la Armería (`Docs/Disenos_Por_Implementar/Catalogo_De_Objetos.md`, `Clases_De_Heroe.md` §7 y `Progresion_Tropas_Y_Heroe.md` §5) y servidos en `GET /v1/datos`. Las reglas puras que los usan viven en el crate `objetos` (D11, entradas 70 y 71), que solo depende de `base`; el héroe, las plazas y las órdenes que las llaman todavía no (tanda siguiente), así que aquí se describe lo que hace cada regla, no cuándo se aplica.
 
+> **Ya los usa el héroe (2026-11-12).** `militar::Heroe` guarda su equipo, su mochila y su almacén de objetos con los tipos de este crate, y las órdenes `equipar_objeto`, `desequipar_objeto`, `guardar_objeto` y `sacar_objeto` llaman a `Equipo::equipar`, `Equipo::quitar` e `Inventario::pasar` ([`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §4.5). `Inventario::pasar` mueve `cantidad` de una casilla de un inventario a otro y, si no cabe, no cambia ninguno. `Catalogo` guarda además `version_objetos` y `version_clases` (las `version` de `OBJETOS` y `CLASES_HEROE`), que van en el ticket de batalla. La tienda, la forja, los consumibles y el botín siguen sin orden.
+
 ## 1. Alcance y fuentes
 
 - Crate `objetos`: `datos` (carga y comprobación de los tres bloques), `inventario` (mochila y almacén de objetos), `equipo` (huecos, clase, atributos, equipo inicial, equipar y quitar), `tienda` (comprar y vender), `forja`, `consumible` (usar) y `botin` (tirar una tabla).
@@ -24,6 +26,7 @@ Los dos son el mismo inventario: casillas de número fijo, de 0 a la capacidad m
 
 - **Meter** `cantidad` de una pieza: lo apilable se suma a su pila o, si no la hay, ocupa la casilla libre de número más bajo; lo que no se apila, una casilla libre por pieza, de la más baja hacia arriba. Si no cabe todo, no mete nada (`NoCabe`). Se rechaza un objeto que no está en el catálogo y una cantidad de 0 o de más de una pieza forjada.
 - **Sacar** `cantidad` de una casilla: la casilla que se vacía queda libre y las demás no se mueven. Se rechaza una casilla vacía o fuera de la capacidad, y más de lo que tiene.
+- **Pasar** `cantidad` de una casilla a otro inventario: sacar de uno y meter en el otro, o nada si el otro no tiene sitio.
 
 ### 3.2 Equipo, clase y atributos
 

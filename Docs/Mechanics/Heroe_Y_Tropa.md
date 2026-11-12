@@ -83,21 +83,23 @@ Uno por jugador y partida. Es el **dueño** de todo lo que antes se atribuía al
 |---|---|
 | `id`, `jugadorId` | `heroe-{n}` (siguiente id de la partida) y la identidad de la cuenta (`acceso/`). La acción de un jugador sin héroe aún usa su `jugadorId` como actor (solo `crearHeroe`). |
 | `controlador` | `'humano'` por defecto; `'bot'` solo lo pone el servidor (no admite el esquema HTTP). Ya no decide si una batalla lleva Unity (con servidores toda batalla va a Unity, también bot contra bot, desde la cuarta ronda de Entrar con todo en Rust): solo si el héroe lleva token (los bots no se conectan). |
-| `displayName`, `classDefinitionId`, `genero`, `avatar` | Identidad y aspecto. El motor no los interpreta: la clase y el catálogo de cabezas, pelo, barba y cejas son de Conquest. |
+| `displayName`, `classDefinitionId`, `genero`, `avatar` | Identidad y aspecto. Desde el 2026-11-12 la clase no se guarda: es la `clase` del arma puesta ([`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §3.2) y la proyección la lee de ahí. El género, el avatar y el catálogo de cabezas, pelo, barba y cejas son de Conquest y el motor no los interpreta. |
 | `liderazgoBase` | Puntos de Liderazgo (§5). Nace en `LIDERAZGO.base` (14) y cada nivel hasta `PROGRESION_HEROE.nivelDeTope` le suma `LIDERAZGO.porNivel` (3), sin pasar de `LIDERAZGO.tope` (100). Es su propio campo para sumarle modificadores más adelante; hoy no hay ninguno (ni tecnología ni equipo). |
 | `ubicacion` | `asentamiento` · `columna` · `mercenarios` · `desconectado`. Ver [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md). |
 | `escuadrones` | **Todas** sus escuadras, estén donde estén; `contenedor` dice dónde (§2.3). |
 | `nivel`, `experiencia` | Nivel y XP **acumulada**, en milésimas (§4.3). Lo que le falta para el siguiente nivel se calcula al proyectar (`experienciaHaciaSiguienteNivel` del contrato). |
-| `puntosDeAtributoSinGastar`, `atributosBase` | Los puntos que da el nivel y los que ya repartió (§4). Los perks se abren solos con el nivel y los define Conquest: el motor no los guarda (2026-11-12). |
+| `puntosDeAtributoSinGastar`, `puntosRepartidos` | Los puntos que da el nivel y los que ya repartió (§4; hasta el 2026-11-12, `atributosBase`). Sus atributos son los `atributosBase` de su clase más los repartidos (D16). Los perks se abren solos con el nivel y los define Conquest: el motor no los guarda (2026-11-12). |
 | `loadouts` | Selecciones de escuadras guardadas (§6). |
-| `inventario`, `equipamiento`, `monedas` | Objetos y las monedas del héroe, **aparte** del oro-recurso de las plazas. |
+| `inventario`, `almacenObjetos`, `equipamiento`, `monedas` | La mochila (`OBJETOS.casillasMochila`, 72 casillas), el almacén de objetos de su residencia (`OBJETOS.casillasAlmacen`, 144; D22), el equipo puesto y las monedas del héroe, **aparte** del oro-recurso de las plazas. Las reglas son del crate `objetos` ([`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §3.1 y §3.2). |
 
 > **Implementado en Rust (2026-11-08, tanda 69):** las tres monedas del héroe (`bronce`/`plata`/`oro`) son ahora **un solo saldo**, `Heroe.monedas` (`crates/militar/src/heroe.rs`; el campo `monedas_heroe` del contrato queda reservado y `Heroe.monedas` es el 43 de `entities.proto`). Nace con `HEROE.monedasIniciales` (1.500). Se suma por destruir un campamento de bandidos ([`Combate.md`](Combate.md) §7.2), por combatir contra héroes de otra Facción ([`Combate.md`](Combate.md) §4.2) y por el botín de una batalla de Unity; se gasta en contratar mercenarios y prorrogar su contrato ([`Mercenarios_Por_Contrato.md`](Mercenarios_Por_Contrato.md) §5.1): **100 monedas valen 1 de oro** (`MERCENARIOS_CONTRATO.monedasPorOro`). El oro de las plazas y las monedas del héroe no se convierten entre sí fuera de ese precio. La proyección propia del héroe lleva `monedas`.
 | `heridoHasta?` | Instante hasta el que está herido (§9). |
 | `desconectaEn?`, `fuera?` | Desconexión (Doc 1.10.6); `fuera` ausente = conectado. |
 | `viveres?`, `almacenPersonal?`, `exploracionPersonal?`, … | Ver sus documentos. |
 
-`AtributosHeroe = { fuerza, destreza, armadura, vitalidad }`; `Equipamiento` = 6 huecos (`arma`, `casco`, `torso`, `guantes`, `pantalones`, `botas`), cada uno un `ItemInstancia` o `null`.
+`AtributosHeroe = { fuerza, destreza, armadura, vitalidad }`; `Equipamiento` = 7 huecos (`arma`, `casco`, `torso`, `guantes`, `pantalones`, `botas` y, desde el 2026-11-12, `montura`, el 7 del contrato), cada uno un `ItemInstancia` o `null`. El arma está siempre puesta.
+
+> **Implementado en Rust (2026-11-12).** `militar::Heroe` (`crates/militar/src/heroe.rs`) guarda `puntos_repartidos`, `equipo` (`objetos::Equipo`), `mochila` y `almacen_objetos` (`objetos::Inventario`); `Heroe::clase` y `Heroe::atributos` leen la clase y la suma. Los atributos son `objetos::datos::Atributos` (el tipo propio de `militar` desaparece) y el catálogo vive en `militar::Reglas.objetos`, así que entra en el hash de las reglas. `militar` depende de `objetos`. La foto sigue en `BAN63`: el héroe guarda `puntos_repartidos · equipo · mochila · almacén` donde guardaba los atributos, con las cifras de las piezas forjadas.
 
 ### 2.2 `Loadout`
 
@@ -137,8 +139,10 @@ Lo primero que hace un jugador. Validaciones, en este orden (cada una rechaza co
 2. Ya existe un héroe con `jugadorId === actor` o `id === actor` → `heroe.ya_existe` (uno por jugador y partida).
 3. El `campamentoId` no existe → `heroe.campamento_desconocido`.
 
-Efecto: `heroe-{ids.siguiente()}`, `controlador = params.controlador ?? 'humano'`, `liderazgoBase = LIDERAZGO.base`, `ubicacion = mercenarios {campamento}`, `escuadrones = []` y la progresión inicial (§4.1); el campamento añade al héroe a `residentesIds` y suma 1 a `eligieronComoInicial`. Evento `heroe.creado`. **No tiene columna en el mapa**: sale cuando quiera, como de su casa.
-`classDefinitionId` y `avatar` no se validan contra ningún catálogo (el esquema solo exige cadenas); `genero` ∈ `masculino | femenino`. Autorización: es el **único** comando de un actor sin héroe.
+4. Desde el 2026-11-12, `classDefinitionId` no es un id de `CLASES_HEROE` → `heroe.clase_desconocida` (no gasta id).
+
+Efecto: `heroe-{ids.siguiente()}`, `controlador = params.controlador ?? 'humano'`, `liderazgoBase = LIDERAZGO.base`, `ubicacion = mercenarios {campamento}`, `escuadrones = []` y la progresión inicial (§4.1), con el equipo inicial de la clase; el campamento añade al héroe a `residentesIds` y suma 1 a `eligieronComoInicial`. Evento `heroe.creado`. **No tiene columna en el mapa**: sale cuando quiera, como de su casa.
+`avatar` no se valida contra ningún catálogo (el esquema solo exige cadenas); `genero` ∈ `masculino | femenino`. En Rust el comando `CrearHeroe` (49, o 180 con nombre) lleva la clase al final. El héroe que crea `CrearEjercito` (andamiaje) lleva la primera clase del catálogo por id (`arco_lanza`). Autorización: es el **único** comando de un actor sin héroe.
 
 ## 4. Progresión del héroe
 
@@ -146,18 +150,19 @@ Efecto: `heroe-{ids.siguiente()}`, `controlador = params.controlador ?? 'humano'
 
 ```
 nivel = 1 ; experiencia = 0 ; puntosDeAtributoSinGastar = 0 ; liderazgoBase = LIDERAZGO.base
-atributosBase = { fuerza: 0, destreza: 0, armadura: 0, vitalidad: 0 }
 loadouts = [ { id: "{heroeId}-loadout-default", displayName: "Default", squadIds: [], activo: true } ]
-inventario = [] ; equipamiento = todos los huecos a null
+puntosRepartidos = { fuerza: 0, destreza: 0, armadura: 0, vitalidad: 0 }
+inventario = [] ; almacenObjetos = []
+equipamiento = el equipo inicial de la clase: su arma de tier I, las cuatro piezas de tier I de su armaduraInicial (sin casco) y montura_tiro
 monedas = HEROE.monedasIniciales
 ```
 
-Como en Conquest (`HeroDataService.CreateNewHero`), pero **sin equipo inicial** hasta que exista el catálogo de objetos.
+Como en Conquest (`HeroDataService.CreateNewHero`). Hasta el 2026-11-12 nacía sin equipo y con `atributosBase` a 0; ahora sus atributos son los `atributosBase` de su clase (`CLASES_HEROE`).
 
 ### 4.2 Repartir puntos (`repartirPuntos`)
 
 `repartirAtributos(heroe, reparto)`: cada punto suma 1 a su atributo. Rechaza (`heroe.invalido`): alguna cantidad que no sea un entero ≥ 0; un reparto de **total 0**; un total mayor que `puntosDeAtributoSinGastar`; o dejar un atributo por encima de `HEROE.topeAtributo`
-(la comprobación es atributo a atributo y **tras** sumar, sin deshacer nada: el comando entero se aborta). Los perks no se gastan: se abren solos con el nivel (`PROGRESION_HEROE.perksEnNivel`) y los define Conquest.
+(desde el 2026-11-12 el tope se mira sobre la suma de la base de la clase y los puntos repartidos, D16; la comprobación es atributo a atributo y **tras** sumar, sin deshacer nada: el comando entero se aborta). Los perks no se gastan: se abren solos con el nivel (`PROGRESION_HEROE.perksEnNivel`) y los define Conquest.
 
 ### 4.3 Qué le suma el servidor
 
@@ -175,8 +180,8 @@ Como en Conquest (`HeroDataService.CreateNewHero`), pero **sin equipo inicial** 
   Desde el 31 el nivel sube pero no da nada. Al subir emite `heroe.nivel_subio { heroe, nivel }` (el nivel nuevo, una vez aunque cruce varios). `habilidadesEnNivel` y `perksEnNivel` solo se publican: las aplica Conquest.
 - **De dónde sale la XP:** solo del combate, por un único punto de entrada del núcleo ([`Combate.md`](Combate.md) §4.4): con números, lo mismo que sus escuadras (1 si su bando gana, 0,5 si pierde), una vez por combate; en una batalla de Unity, 4 o 2 según gane su bando si participó (`MILITAR.experienciaUnityPor…`, el motor **no lee** la experiencia que manda Unity), y `cantidad = supervivientesAlCierre` en cada escuadra.
 > **Implementado en Rust (2026-11-12, entrada 73).** `militar::Heroe` guarda `experiencia` acumulada (milésimas) y `nivel`; `Heroe::con_experiencia` sube los niveles que cruce con sus puntos y su Liderazgo, y `Heroe::falta_para_subir` es lo que proyecta `experiencia_hacia_siguiente_nivel` (ahora «lo que le falta», en milésimas). Los datos son el bloque `PROGRESION_HEROE` (§12) y `LIDERAZGO.porNivel`/`tope`. El núcleo da la experiencia por `Nucleo::experiencia_de_heroe` y `Nucleo::experiencia_de_escuadra` (`crates/nucleo/src/nucleo/progresion.rs`), que usan el combate con números y la batalla de Unity. Salen `puntos_de_perk`, `perks_desbloqueados` y los perks del loadout (sus campos del contrato quedan `reserved`, y el rechazo `loadout.perk_no_desbloqueado` desaparece). La foto sigue en `BAN63`.
-- **Botín de Unity:** las monedas se suman a `monedas` del héroe. Los objetos se validan (que quepan en `BATALLA.casillasInventario` y que cada instancia sea nueva, [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §8.5) pero **se pierden**: el héroe aún no tiene inventario (**deuda**, CQ-004; anotada en la fila «Militar y combate (4A-1)» de `Docs/Mecanicas a desarrollar.md`).
-- **Equipar:** no existe el comando; el equipamiento solo cambia por la vía de Conquest.
+- **Botín de Unity:** las monedas se suman a `monedas` del héroe. Los objetos se validan (que quepan en `BATALLA.casillasInventario` y que cada instancia sea nueva, [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §8.5) pero **se pierden**: el héroe ya tiene mochila (2026-11-12), pero el botín aún no entra en ella (**deuda**, CQ-004; anotada en la fila «Militar y combate (4A-1)» de `Docs/Mecanicas a desarrollar.md`).
+- **Equipar:** desde el 2026-11-12, por orden (§4.5).
 
 ### 4.4 Eventos del héroe
 
@@ -186,10 +191,28 @@ Sin plaza (globales del héroe):
 |---|---|---|
 | `heroe.puntos_repartidos` | `repartirPuntos` | `{ heroeId, atributos }` |
 | `heroe.nivel_subio` | (el combate, §4.3) | `{ heroe, nivel }` (el nivel nuevo) |
+| `heroe.equipo_cambiado` | `equiparObjeto` / `desequiparObjeto` (§4.5) | `{ heroe }` (el equipo nuevo va en la proyección `HEROE`) |
 | `heroe.almacen_personal` | `guardarEnAlmacenPersonal` / `sacarDelAlmacenPersonal` | `{ heroeId, recurso, cantidad (lo movido), sentido: guarda \| saca }` |
 | `heroe.viveres` | `pasarAViveres` | `{ heroeId, cantidad (lo movido) }` |
 
 > **Implementado en Rust (2026-10-24, 5G-a).** `guardarEnAlmacenPersonal` (138) y `sacarDelAlmacenPersonal` (139) existen: dentro de su residencia (con el carro que trajo) o, como Líder, con su columna a su puerta, el héroe mueve unidades enteras entre el carro y el almacén personal (hasta `ALMACEN_PERSONAL.capacidad` en total, o hasta lo que cabe en el carro). El hecho lleva `{ heroe, recurso, cantidad, sentido }` (`sentido` es un texto: `guarda` o `saca`). La proyección del héroe propio (`HEROE` y `ADMIN`) lleva `capacidad_almacen_personal` (milésimas). Reglas, rechazos y pruebas en [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §9. `DarAlmacenPersonal` (44) sigue como administración para montar escenarios.
+
+### 4.5 Equipo, mochila y almacén de objetos (Rust, 2026-11-12)
+
+Cuatro órdenes del héroe de la cuenta (`orders.proto` 192 a 195; comandos 222 a 225). Las reglas de cada pieza son del crate `objetos` ([`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §3.1 y §3.2) y, si rechazan, no cambia nada. El núcleo comprueba antes dónde está el héroe (`crates/nucleo/src/nucleo/equipo.rs`):
+
+| Orden | Comando | Dónde | Qué hace |
+|---|---|---|---|
+| `equipar_objeto { casilla }` | `EquiparObjeto` (222) | D2 | Equipa la pieza de esa casilla de la mochila; lo que sustituye (y las armaduras que la clase nueva no admite) va a la mochila. |
+| `desequipar_objeto { hueco }` | `DesequiparObjeto` (223) | D2 | Quita la pieza de ese hueco a la mochila. El arma no se quita. |
+| `guardar_objeto { casilla, cantidad }` | `GuardarObjeto` (224) | D22 | Pasa `cantidad` de esa casilla de la mochila al almacén de objetos. |
+| `sacar_objeto { casilla, cantidad }` | `SacarObjeto` (225) | D22 | Pasa `cantidad` de esa casilla del almacén de objetos a la mochila. |
+
+- **D2 (equipar y quitar):** el héroe tiene que estar en una plaza, un pueblo o un campamento; en una columna, en una avanzada o desconectado → `equipo.fuera_de_lugar`. Con alguna escuadra suya reservada para una batalla → `equipo.en_batalla`.
+- **D22 (guardar y sacar):** el almacén de objetos está en su residencia y solo se usa estando dentro de ella (la plaza donde reside, o el campamento si reside en uno). Sin residencia → `heroe.sin_residencia`; fuera de ella → `almacen_objetos.fuera_de_tu_residencia`. La administración no se salta esta regla.
+- **Rechazos de las reglas:** `objeto.desconocido`, `equipo.no_equipable` (un material o un consumible), `equipo.incompatible` (la clase del arma no admite ese peso), `equipo.arma_fija`, `equipo.hueco_vacio`, `mochila.llena`, `almacen_objetos.lleno`, `inventario.casilla_vacia`, `inventario.poca_cantidad` e `inventario.cantidad_invalida`. El `hueco` desconocido es `orden.forma_invalida` en la sesión.
+- **Hechos:** equipar y quitar emiten `heroe.equipo_cambiado { heroe }`; guardar y sacar no emiten nada (cambian solo lo que proyecta `HEROE`).
+- **Proyección:** `HEROE` lleva la clase, la mochila (`inventario`), el almacén (`almacen_objetos`, el 44 de `Heroe`), el equipo (`equipamiento`) y los atributos sumados; cada pieza con su `tipo` y su `precio` de la ficha y, si es forjada, su `item_instance_id` (`obj-N`) y sus cifras en `estadisticas`. La ficha pública de otro héroe lleva la clase y el equipo, y nada de la mochila, el almacén ni los atributos.
 
 ## 5. Liderazgo
 
@@ -1561,7 +1584,7 @@ Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; cont
 <!-- eventos -->
 ```json
 [
-  "heroe.almacen_personal", "heroe.creado", "heroe.herido", "heroe.nivel_subio", "heroe.puntos_repartidos", "heroe.reubicado", "heroe.sale_del_mundo", "heroe.se_desconecta", "heroe.viveres",
+  "heroe.almacen_personal", "heroe.creado", "heroe.equipo_cambiado", "heroe.herido", "heroe.nivel_subio", "heroe.puntos_repartidos", "heroe.reubicado", "heroe.sale_del_mundo", "heroe.se_desconecta", "heroe.viveres",
   "heroe.vuelve_al_mundo", "reclutamiento.cierre_a_ciudadanos", "tropas.desercion", "tropas.reclutadas"
 ]
 ```

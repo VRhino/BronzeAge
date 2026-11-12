@@ -128,7 +128,7 @@ mod pruebas {
         let reglas = Reglas::default();
         let rutas = Arc::new(Rutas::desde_grafo(&GrafoNavegacion::default()));
         let mut n = Nucleo::nuevo(Arranque { reglas: reglas.clone(), ajustes: Ajustes::default(), semilla: 1, inicio: 0, rutas, mundo_hash: "h".into(), mundo: None });
-        n.estado.militar.insertar(HeroeNucleo::nuevo(Heroe::nuevo(&reglas.economia.militar, BOT, Controlador::Bot, 0, 1), "bot", None));
+        n.estado.militar.insertar(HeroeNucleo::nuevo(Heroe::nuevo(&reglas.economia.militar, BOT, Controlador::Bot, 0, 1, "dagas").expect("una clase del catálogo"), "bot", None));
         n.estado.contratos.fichas.insert(BOT, Ficha::nueva());
         n
     }

@@ -1,5 +1,5 @@
 //! Las cifras del sistema militar. Fuente única: los bloques `<!-- parametros:NOMBRE -->` de `Docs/Mechanics/{Heroe_Y_Tropa, Movimiento_Ejercitos,
-//! Combate, Presencia_Y_Convocatoria, Campamentos_Mercenarios, Niebla_De_Guerra}.md`, incrustados en el binario. Los decimales pasan una sola vez a enteros:
+//! Combate, Presencia_Y_Convocatoria, Campamentos_Mercenarios, Niebla_De_Guerra}.md` (y el catálogo de `Objetos_Del_Heroe.md`, que carga el crate `objetos`), incrustados en el binario. Los decimales pasan una sola vez a enteros:
 //! **ppm** para tasas y factores, **milésimas** (`Mil`) para cantidades, distancias y velocidades.
 //!
 //! **Los bloques son los valores vigentes** (decisión del autor, 2026-10-19): a diferencia de lo que ocurría en el comercio, no hay
@@ -22,7 +22,7 @@ pub const TECNOLOGIA: &str = include_str!("../../../Docs/Mechanics/Tecnologia_Ae
 
 /// Los bloques de parámetros de los documentos, para la identidad de las reglas (hash del núcleo).
 pub fn texto_de_parametros() -> String {
-    [HEROE_Y_TROPA, MOVIMIENTO, COMBATE, PRESENCIA, CAMPAMENTOS, NIEBLA, TECNOLOGIA].iter().map(|d| texto_de_parametros_de(d)).collect()
+    [HEROE_Y_TROPA, MOVIMIENTO, COMBATE, PRESENCIA, CAMPAMENTOS, NIEBLA, TECNOLOGIA, objetos::datos::OBJETOS_DEL_HEROE].iter().map(|d| texto_de_parametros_de(d)).collect()
 }
 
 pub fn bloque(doc: &str, nombre: &str) -> Value {
@@ -268,6 +268,8 @@ pub struct Reglas {
     pub intel: ReglasIntel,
     pub mercenarios: ReglasMercenarios,
     pub tecnologias: ReglasTecnologias,
+    /// El catálogo de los objetos del héroe y de sus clases (`OBJETOS`, `CLASES_HEROE` y `BOTIN_OBJETOS` de Objetos_Del_Heroe; crate `objetos`).
+    pub objetos: objetos::Catalogo,
 }
 
 impl Reglas {
@@ -368,6 +370,7 @@ impl Reglas {
                 racion_cada: entero(&me, "racion.cadaMinutos") * MS_POR_MINUTO,
             },
             tecnologias: ReglasTecnologias::cargar(),
+            objetos: objetos::Catalogo::default(),
         }
     }
 

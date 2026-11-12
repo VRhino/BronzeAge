@@ -88,7 +88,7 @@ impl E {
         codigo(&r)
     }
     fn heroe(&mut self, cuenta: &str, faccion: Option<u32>) -> u64 {
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
         if faccion.is_some() {
             self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion });
         }

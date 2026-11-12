@@ -99,7 +99,7 @@ async fn un_cliente_que_solo_habla_el_contrato_nace_comercia_explora_funda_const
     let mut ana = ClienteDeEjemplo::entrar(dir, hola("ok:ana", TipoCliente::ClienteUnity), Almacen::default()).await;
     assert!(ana.bienvenida.heroe_id.is_none() && ana.almacen.ambitos.is_empty());
     let camp = ana.bienvenida.campamentos_para_elegir.iter().find(|c| c.campamento_id == "camp-0").expect("el campamento 0 para nacer").campamento_id.clone();
-    let r = ana.aceptada(O::CrearHeroe(pb::OrdenCrearHeroe { display_name: "Ana".into(), campamento_id: camp.clone(), ..Default::default() })).await;
+    let r = ana.aceptada(O::CrearHeroe(pb::OrdenCrearHeroe { display_name: "Ana".into(), campamento_id: camp.clone(), class_definition_id: "dagas".into(), ..Default::default() })).await;
     let heroe = creada(&r, TipoEntidad::Heroe);
     assert!(ana.almacen.ambitos.contains_key(&format!("HEROE:{heroe}")) && ana.almacen.ambitos.contains_key(&format!("CAMPAMENTO:{camp}")), "{:?}", ana.almacen.ambitos.keys());
 
@@ -166,7 +166,7 @@ async fn un_cliente_que_solo_habla_el_contrato_nace_comercia_explora_funda_const
     // 8. La política, solo por el contrato (5H). Beto nace y pide entrar en la Facción de ana; ana, su Reina, le acepta; beto se muda a la plaza y ana le nombra su Gobernador sin estar en ella
     //    (Doc 2.2). Gus crea otra Facción, ana le propone una alianza y gus la acepta: la propuesta llega a las dos Facciones y sale al contestarla, y llega la relación con la Liga de las dos.
     let mut beto = ClienteDeEjemplo::entrar(dir, hola("ok:beto", TipoCliente::ClienteUnity), Almacen::default()).await;
-    let r = beto.aceptada(O::CrearHeroe(pb::OrdenCrearHeroe { display_name: "Beto".into(), campamento_id: camp.clone(), ..Default::default() })).await;
+    let r = beto.aceptada(O::CrearHeroe(pb::OrdenCrearHeroe { display_name: "Beto".into(), campamento_id: camp.clone(), class_definition_id: "dagas".into(), ..Default::default() })).await;
     let h_beto = creada(&r, TipoEntidad::Heroe);
     beto.aceptada(O::SolicitarIngreso(pb::OrdenSolicitarIngreso { faccion_id: "f-1".into() })).await;
     let suyo = |c: &ClienteDeEjemplo, h: &str| match entidad(&c.almacen, &format!("HEROE:{h}"), TipoEntidad::Heroe, h) {
@@ -192,7 +192,7 @@ async fn un_cliente_que_solo_habla_el_contrato_nace_comercia_explora_funda_const
     assert!(a.fundadores_ids == [heroe.clone()], "quien la fundó: {:?}", a.fundadores_ids);
     assert!(ana.almacen.hechos.iter().any(|(_, e)| matches!(&e.tipado, Some(Tipado::CargoAsignado(c)) if c.cargo == "gobernador" && c.heroe_id == h_beto)));
     let mut gus = ClienteDeEjemplo::entrar(dir, hola("ok:gus", TipoCliente::ClienteUnity), Almacen::default()).await;
-    gus.aceptada(O::CrearHeroe(pb::OrdenCrearHeroe { display_name: "Gus".into(), campamento_id: camp.clone(), ..Default::default() })).await;
+    gus.aceptada(O::CrearHeroe(pb::OrdenCrearHeroe { display_name: "Gus".into(), campamento_id: camp.clone(), class_definition_id: "dagas".into(), ..Default::default() })).await;
     let r = gus.aceptada(O::CrearFaccion(pb::OrdenCrearFaccion { nombre: "Tebas".into(), sigilo: None })).await;
     assert_eq!(creada(&r, TipoEntidad::Faccion), "f-2");
     let r = ana.aceptada(O::ProponerRelacion(pb::OrdenProponerRelacion { tipo: "alianza".into(), faccion_a_id: "f-1".into(), faccion_b_id: "f-2".into(), ..Default::default() })).await;

@@ -154,7 +154,7 @@ impl Esc {
     /// Un héroe humano de la cuenta, ciudadano de F2, que reside en la plaza B y está dentro, con su loadout activo de una escuadra de milicia.
     fn residente(&mut self, m: &Mundo, cuenta: &str) -> u64 {
         let campamento = campamento_mas_cercano(m, self.pos(self.b));
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
         let b = self.b as u32;
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(2) });
         self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(b)) });
@@ -470,13 +470,16 @@ async fn el_ticket_del_asedio_es_completo_congelado_y_va_a_todos_los_servidores_
     assert!(defensor.escuadras_sin_heroe.is_empty());
     let beto = &defensor.participantes[0];
     let hs = beto.heroe.as_ref().unwrap();
-    assert_eq!((beto.faccion_id.as_deref(), beto.es_bot, hs.nivel, hs.class_definition_id.as_str(), hs.femenino, hs.casillas_inventario_libres), (Some("f-2"), false, 1, "default", false, 72));
-    assert!(hs.display_name.starts_with("Héroe ") && hs.atributos_efectivos.is_some() && hs.equipamiento.is_some() && hs.avatar.is_some(), "valores por defecto de nombre, clase, género y avatar");
+    assert_eq!((beto.faccion_id.as_deref(), beto.es_bot, hs.nivel, hs.class_definition_id.as_str(), hs.femenino, hs.casillas_inventario_libres), (Some("f-2"), false, 1, "espada_escudo_mediano", false, 72));
+    assert!(hs.display_name.starts_with("Héroe ") && hs.avatar.is_some(), "valores por defecto de nombre, género y avatar");
+    // La clase del arma, sus atributos sumados con la base de la clase y su equipo real (2026-11-12, D16).
+    assert_eq!(hs.atributos_efectivos, Some(pb::Atributos { fuerza: 3, destreza: 3, armadura: 2, vitalidad: 2 }));
+    assert_eq!(hs.equipamiento.as_ref().and_then(|e| e.arma.as_ref()).map(|p| p.item_definition_id.as_str()), Some("espada_escudo_mediano_inicio"));
     let milicia = &beto.escuadras;
     assert_eq!(milicia.len(), 1);
     assert_eq!((milicia[0].tropa_id.as_str(), milicia[0].efectivos_autorizados as i64, milicia[0].nivel, milicia[0].experiencia, milicia[0].moral, milicia[0].heroe_id.as_deref()), ("milicia_lanceros", completa(Tropa::MiliciaLanceros), 1, 0, 100, Some(h_beto.as_str())));
     let reglas = t.reglas.as_ref().unwrap();
-    assert_eq!((reglas.duracion_maxima_segundos, reglas.version_catalogo_heroe.as_str(), reglas.version_catalogo_objetos.as_str()), (1_800, "conquest-heroes-1", "conquest-items-1"));
+    assert_eq!((reglas.duracion_maxima_segundos, reglas.version_catalogo_heroe.as_str(), reglas.version_catalogo_objetos.as_str()), (1_800, "bronzeage-clases-1", "bronzeage-objetos-1"), "las versiones de CLASES_HEROE y de OBJETOS");
     assert_eq!(reglas.version_catalogo_tropas, 2, "VERSION_CATALOGO_TROPAS (Heroe_Y_Tropa §12), no el 1 fijo");
     assert_eq!((milicia[0].estandarte.as_str(), milicia[0].aspecto.as_str()), ("", ""), "el estandarte y el aspecto, vacíos (D20)");
 
@@ -771,7 +774,7 @@ async fn los_bandidos_que_acosan_a_una_columna_de_bots_juegan_una_batalla_sin_hu
 fn residente_de_a(e: &mut Esc, m: &Mundo, cuenta: &str) -> (u64, u64) {
     let a = e.a;
     let campamento = campamento_mas_cercano(m, e.pos(a));
-    let h = e.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0];
+    let h = e.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
     e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(a as u32)) });
     e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(a as u32) });

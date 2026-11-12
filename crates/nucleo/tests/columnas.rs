@@ -132,7 +132,7 @@ impl Escenario {
     }
     /// El héroe de la cuenta, nacido en el campamento `campamento`.
     fn heroe(&mut self, cuenta: &str, campamento: u32) -> u64 {
-        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0]
+        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0]
     }
     /// Un héroe de la cuenta ya ciudadano de la Facción 1, residente y presente en la plaza.
     fn heroe_en_la_plaza(&mut self, cuenta: &str) -> u64 {
@@ -1162,7 +1162,7 @@ impl Escenario {
     }
     /// Un héroe de la Facción 1 en el campamento 0 con un préstamo de 30 granjeros y 30 mineros, creado en el instante `t`.
     fn leva_en(&mut self, t: Instante, cuenta: &str) -> (u64, Vec<u64>) {
-        let h = self.ok_en(t, cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
+        let h = self.ok_en(t, cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
         self.ok_en(t, "admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
         let ids = self.ok_en(t, cuenta, Comando::PedirPrestamo { heroe: h, tropas: vec![Tropa::Granjeros, Tropa::Mineros] }).creadas;
         (h, ids)

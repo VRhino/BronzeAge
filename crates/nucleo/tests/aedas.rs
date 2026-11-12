@@ -529,7 +529,7 @@ async fn por_la_sesion_el_rey_compra_al_aeda_de_su_plaza_y_su_faccion_oye_la_ven
     let mut e = todos_en_b(m, reglas());
     let (a, b) = (e.a, e.b);
     // Por la sesión se juega con un héroe de verdad: «bea» crea el suyo, entra en la Facción 2, el fundador le cede el trono y la administración lo pone dentro de B.
-    let r = e.ord("bea", Comando::CrearHeroe { cuenta: "bea".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None });
+    let r = e.ord("bea", Comando::CrearHeroe { cuenta: "bea".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() });
     let rey = r.creadas[0];
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: rey, faccion: Some(2) });
     let fundador = e.n.facciones().find(|f| f.id == 2).and_then(|f| f.rey).unwrap();
@@ -591,7 +591,7 @@ async fn por_la_sesion_cada_ambito_lleva_lo_suyo_de_la_tecnologia_y_de_los_aedas
     let m = con_mundo!();
     let mut e = todos_en_b(m, reglas());
     let b = e.b;
-    let r = e.ord("bea", Comando::CrearHeroe { cuenta: "bea".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None });
+    let r = e.ord("bea", Comando::CrearHeroe { cuenta: "bea".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() });
     let bea = r.creadas[0];
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: bea, faccion: Some(2) });
     e.ok("admin", Comando::ColocarHeroe { heroe: bea, ubicacion: militar::presencia::Ubicacion::Asentamiento(b as u32) });

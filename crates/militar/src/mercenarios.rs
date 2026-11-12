@@ -255,7 +255,7 @@ mod pruebas {
     }
 
     fn heroe() -> Heroe {
-        let mut h = Heroe::nuevo(&r(), 1, Controlador::Humano, 3, 1);
+        let mut h = Heroe::nuevo(&r(), 1, Controlador::Humano, 3, 1, "espada_escudo_mediano").expect("una clase del catálogo");
         h.residencia = Some(Residencia::Campamento(3));
         h
     }

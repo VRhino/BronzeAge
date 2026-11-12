@@ -113,7 +113,7 @@ fn reclamar(heroe: u64, dueno: Dueno, mision: &str) -> Comando {
 fn el_heroe_cumple_su_cadena_en_origen_y_reclama_el_oro_una_vez() {
     let m = con_mundo!();
     let mut x = X { n: nucleo(m), cuenta: 0 };
-    let h = x.ok("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
+    let h = x.ok("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
     let d = Dueno::Heroe(h);
     // El préstamo antes de salir no cuenta: H2 aún no está activa (pide H1).
     let escuadras = x.ok("ana", Comando::PedirPrestamo { heroe: h, tropas: vec![Tropa::Granjeros] }).creadas;
@@ -224,7 +224,7 @@ fn la_plaza_cumple_por_estado_al_completar_el_edificio_y_la_cadena_sigue_en_el_m
 fn reclamar_lo_de_una_plaza_es_de_su_gobernador_y_lo_de_una_faccion_de_su_rey() {
     let m = con_mundo!();
     let mut x = X { n: nucleo(m), cuenta: 0 };
-    let h = x.ok("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
+    let h = x.ok("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
     x.ok("ana", Comando::CrearFaccion { heroe: h, nombre: "Micenas".into(), sigilo: None });
     // Crear la Facción hace a su creador ciudadano: avanza la cadena del héroe (H5 pide H1, que aún no está).
     assert!(!x.cumplidas(Dueno::Heroe(h)).contains(&"H5".to_owned()));

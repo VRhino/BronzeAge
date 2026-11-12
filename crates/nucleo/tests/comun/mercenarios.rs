@@ -100,7 +100,7 @@ pub fn sin_cambios(n: &mut Nucleo, actor: &str, c: Comando) {
 /// Un héroe nuevo de la cuenta `cuenta` en el campamento `campamento`, residente y dentro. El bot lo crea la administración; el humano, su cuenta.
 pub fn heroe_en(n: &mut Nucleo, cuenta: &str, campamento: u32, controlador: Controlador) -> u64 {
     let actor = if controlador == Controlador::Bot { "admin" } else { cuenta };
-    ok(n, actor, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador, nombre: None }).creadas[0]
+    ok(n, actor, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0]
 }
 
 /// Un bot de la cuenta `cuenta` que reside en el campamento `campamento`, sin Facción, dentro de él y ya ofrecido en su tablón. Devuelve su id.

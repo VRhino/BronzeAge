@@ -37,6 +37,11 @@ ids! {
     u64, "prop", propuesta, parse_propuesta;
 }
 
+/// Una pieza forjada, `obj-N` (D13: solo las forjadas llevan id propio, del contador del estado).
+pub fn objeto(n: u64) -> String {
+    format!("obj-{n}")
+}
+
 /// Un Aeda itinerante, `aeda-N` (6D; decisión técnica 7 del plan del sistema 6).
 pub fn aeda(n: u32) -> String {
     format!("aeda-{n}")

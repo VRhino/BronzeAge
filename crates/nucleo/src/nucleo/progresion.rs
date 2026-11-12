@@ -85,7 +85,7 @@ mod pruebas {
         let reglas = Reglas::default();
         let rutas = Arc::new(Rutas::desde_grafo(&GrafoNavegacion::default()));
         let mut n = Nucleo::nuevo(Arranque { reglas: reglas.clone(), ajustes: Ajustes::default(), semilla: 1, inicio: 0, rutas, mundo_hash: "h".into(), mundo: None });
-        n.estado.militar.insertar(HeroeNucleo::nuevo(Heroe::nuevo(&reglas.economia.militar, HEROE, Controlador::Humano, 0, 1), "ana", Some(FACCION)));
+        n.estado.militar.insertar(HeroeNucleo::nuevo(Heroe::nuevo(&reglas.economia.militar, HEROE, Controlador::Humano, 0, 1, "dagas").expect("una clase del catálogo"), "ana", Some(FACCION)));
         n
     }
 

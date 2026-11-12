@@ -846,7 +846,7 @@ El detalle de datos del héroe está en `typescript-final:Docs/Coordinacion/01_M
 - Cada Jugador tiene **exactamente un Héroe en cada mundo**. El Héroe pertenece a esa partida, no a la cuenta: su progreso no pasa de un mundo a otro.
 - **No se cambia de héroe** dentro de una partida.
 - Todo lo que el Jugador hace dentro del mundo lo hace su Héroe: reside, lidera, tiene Liderazgo, está situado en el mundo, recuerda y explora, ocupa cargos y posee los escuadrones. El Jugador es la persona y su cuenta.
-- Trae de Conquest su estructura de personaje: clase, nivel y experiencia, puntos de atributo, atributos, perks (los abre el nivel: 7 y 12; los define Conquest), equipo, inventario y sus propias monedas. Esas monedas son **un solo saldo** del héroe, **aparte del oro** recurso de las plazas: no entran en la economía de una plaza (desde el 2026-11-08, 100 monedas valen 1 de oro solo al contratar mercenarios, Doc 7). Se ganan **combatiendo contra héroes de otra Facción** (cada héroe, 500 si su bando gana y 150 si pierde; las 8 primeras veces que esas dos Facciones se enfrentan en un día, completo; luego un 15 % menos cada vez y, desde la 14.ª, nada), **destruyendo campamentos de bandidos** (1.9) y en el botín de las batallas de Unity.
+- Trae de Conquest su estructura de personaje: clase, nivel y experiencia, puntos de atributo, atributos, perks (los abre el nivel: 7 y 12; los define Conquest), equipo, inventario y sus propias monedas. La clase la da el arma que lleva puesta, que no se quita (solo se cambia por otra); nace con el equipo de tier I de su clase. El equipo se cambia dentro de una plaza, un pueblo o un campamento y nunca con escuadras reservadas para una batalla; la mochila lo lleva consigo y el almacén de objetos se queda en su residencia, donde solo se usa estando dentro (decidido el 2026-11-12, `Docs/Mechanics/Heroe_Y_Tropa.md` §4.5). Esas monedas son **un solo saldo** del héroe, **aparte del oro** recurso de las plazas: no entran en la economía de una plaza (desde el 2026-11-08, 100 monedas valen 1 de oro solo al contratar mercenarios, Doc 7). Se ganan **combatiendo contra héroes de otra Facción** (cada héroe, 500 si su bando gana y 150 si pierde; las 8 primeras veces que esas dos Facciones se enfrentan en un día, completo; luego un 15 % menos cada vez y, desde la 14.ª, nada), **destruyendo campamentos de bandidos** (1.9) y en el botín de las batallas de Unity.
 
 ### 5.16.2 Sus escuadrones
 
@@ -884,8 +884,8 @@ Un héroe derrotado en una partida real pierde **parte de las tropas que llevó 
 
 ### 5.16.7 Qué ven los demás de un héroe
 
-- **Público:** nombre, clase, nivel, si está herido (y hasta cuándo), los escuadrones que lleva consigo (tipo, unidades y nivel) y el equipo que lleva puesto.
-- **Privado, solo para su jugador:** todo lo demás — experiencia, puntos sin gastar, atributos, perks, Liderazgo, residencia, los escuadrones de su campamento, loadouts, inventario, monedas, género, avatar y si es humano o bot.
+- **Público:** nombre, clase, nivel, si está herido (y hasta cuándo), los escuadrones que lleva consigo (tipo, unidades y nivel) y el equipo que lleva puesto (desde el 2026-11-12 la ficha pública lo lleva de verdad, con la clase que da su arma).
+- **Privado, solo para su jugador:** todo lo demás — experiencia, puntos sin gastar, atributos, perks, Liderazgo, residencia, los escuadrones de su campamento, loadouts, inventario (la mochila y el almacén de objetos de su residencia), monedas, género, avatar y si es humano o bot.
 - **Entre compañeros de Facción:** cada ciudadano conoce el **nombre** de todos los demás ciudadanos de su Facción, los vea o no (decisión del usuario, 2026-09-14). El resto de su ficha sigue la regla de lo público.
 
 "Público" significa que lo ve cualquiera que pueda ver al héroe. Dónde está un héroe sigue sujeto a la niebla de guerra (5.12.7), y su memoria y exploración son solo suyas (5.12.8).

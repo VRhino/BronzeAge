@@ -353,6 +353,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `heroe.nombre_en_uso` | `HEROE_NOMBRE_EN_USO` | Ya hay otro héroe con ese nombre (sin distinguir mayúsculas; 2026-11-06, pedido del autor). |
 | `heroe.sin_monedas` | `HEROE_SIN_MONEDAS` | El héroe no tiene las monedas que cuesta (tanda 69 §4). |
 | `heroe.campamento_desconocido` | `HEROE_CAMPAMENTO_DESCONOCIDO` | — |
+| `heroe.clase_desconocida` | `HEROE_CLASE_DESCONOCIDA` | `crear_heroe`: la clase está vacía o no es una de `CLASES_HEROE` (Clases_De_Heroe §6). |
 | `heroe.puntos_negativos` | `HEROE_PUNTOS_NEGATIVOS` | — |
 | `heroe.ningun_punto` | `HEROE_NINGUN_PUNTO` | — |
 | `heroe.puntos_insuficientes` | `HEROE_PUNTOS_INSUFICIENTES` | — |
@@ -375,6 +376,24 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `guarnicion.no_asignada` | `GUARNICION_NO_ASIGNADA` | — |
 | `guarnicion.faccion_ajena` | `GUARNICION_FACCION_AJENA` | De visita (2026-11-04): solo se guarnece una plaza de tu Facción. |
 | `guarnicion.no_estas_dentro` | `GUARNICION_NO_ESTAS_DENTRO` | La escuadra que dejaste de visita se recoge desde dentro de esa plaza. |
+
+### El equipo, la mochila y el almacén de objetos del héroe (`ErrorEquipo` y `ErrorInventario` del crate `objetos`; Heroe_Y_Tropa §4.5)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `equipo.fuera_de_lugar` | `EQUIPO_FUERA_DE_LUGAR` | `equipar_objeto` o `desequipar_objeto` fuera de una plaza, un pueblo o un campamento (D2): en una columna, en una avanzada o fuera del mundo. |
+| `equipo.en_batalla` | `EQUIPO_EN_BATALLA` | `equipar_objeto` o `desequipar_objeto` con una escuadra del héroe reservada para una batalla (D2). |
+| `objeto.desconocido` | `OBJETO_DESCONOCIDO` | La pieza no está en el catálogo `OBJETOS`. |
+| `equipo.no_equipable` | `EQUIPO_NO_EQUIPABLE` | Un material o un consumible: no va en ningún hueco. |
+| `equipo.incompatible` | `EQUIPO_INCOMPATIBLE` | La clase del arma puesta no admite el peso de esa armadura (Clases_De_Heroe §4). |
+| `equipo.arma_fija` | `EQUIPO_ARMA_FIJA` | El arma no se quita: solo se cambia por otra. |
+| `equipo.hueco_vacio` | `EQUIPO_HUECO_VACIO` | No hay nada puesto en ese hueco. |
+| `mochila.llena` | `MOCHILA_LLENA` | Lo que va a la mochila no cabe en ella (D17): no cambia nada. |
+| `almacen_objetos.lleno` | `ALMACEN_OBJETOS_LLENO` | `guardar_objeto`: no cabe en el almacén de objetos. |
+| `almacen_objetos.fuera_de_tu_residencia` | `ALMACEN_OBJETOS_FUERA_DE_TU_RESIDENCIA` | `guardar_objeto` o `sacar_objeto` fuera de la residencia del héroe, donde está su almacén de objetos (D22). |
+| `inventario.casilla_vacia` | `INVENTARIO_CASILLA_VACIA` | La casilla de la mochila o del almacén de objetos está vacía o pasa de su capacidad. |
+| `inventario.poca_cantidad` | `INVENTARIO_POCA_CANTIDAD` | La casilla tiene menos de lo que se pide. |
+| `inventario.cantidad_invalida` | `INVENTARIO_CANTIDAD_INVALIDA` | Una cantidad de 0, o una pila que pasaría del máximo. |
 
 ### Presencia: dónde está el héroe y si está en el mundo
 

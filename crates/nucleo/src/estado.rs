@@ -324,8 +324,8 @@ pub fn entidad_contrato(mercenario: u64) -> u64 {
 /// el ticket de cada batalla, la formación elegida y las familias permitidas de cada escuadra (`codec_batallas`). BAN61 y anteriores ya no se admiten.
 ///
 /// BAN63: BAN62 con lo de las Eras IV y V y los objetos del héroe (2026-11-12): los 36 contadores de tecnología (`codec_tecnologia`: 12 más en los
-/// contadores y en sus restos) y el recurso 42, el aceite de sésamo (42 en cada almacén, flujo y tendencia, `codec_economia`). BAN62 y anteriores ya no
-/// se admiten.
+/// contadores y en sus restos) y el recurso 42, el aceite de sésamo (42 en cada almacén, flujo y tendencia, `codec_economia`) y, en cada héroe, los puntos repartidos, el equipo, la mochila y el
+/// almacén de objetos donde iban los atributos (`codec_militar`; Heroe_Y_Tropa §4.5). BAN62 y anteriores ya no se admiten.
 const MAGIA: &[u8; 5] = b"BAN63";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se

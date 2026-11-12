@@ -549,6 +549,7 @@ version = "0.9.0"
 dependencies = [
  "asentamiento",
  "base",
+ "objetos",
  "serde_json",
  "tecnologia",
  "trazado",
@@ -596,6 +597,7 @@ dependencies = [
  "mercenarios",
  "militar",
  "mundo",
+ "objetos",
  "persistencia",
  "politica",
  "prost",

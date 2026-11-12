@@ -641,7 +641,7 @@ impl Esc {
     /// Un héroe de la cuenta, ciudadano de `faccion`, que reside en la plaza y está dentro. Nace en el campamento más cercano.
     fn heroe_en(&mut self, m: &Mundo, cuenta: &str, faccion: u32, plaza: u64) -> u64 {
         let campamento = campamento_mas_cercano(m, self.pos(plaza));
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(faccion) });
         self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
         self.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(plaza as u32) });
@@ -860,7 +860,7 @@ fn un_asedio_que_pierde_hiere_a_todo_el_ejercito_y_la_chatarra_se_queda_en_la_pl
     // Un segundo héroe en el ejército de ana: también queda herido, hayan entrado en la batalla o no.
     let segundo = {
         let campamento = campamento_mas_cercano(&m.0, s.e.pos(b));
-        let h = s.e.ok("carla", Comando::CrearHeroe { cuenta: "carla".into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0];
+        let h = s.e.ok("carla", Comando::CrearHeroe { cuenta: "carla".into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
         s.e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
         s.e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Columna(ana.0) });
         h
@@ -1427,7 +1427,7 @@ fn la_cita_del_anillo_se_rehace_cuando_llega_o_se_va_un_residente() {
     let t = n.ahora();
     let heroes: Vec<u64> = (0..3)
         .map(|i| {
-            let r = n.aplicar_en(t, admin(&format!("h{i}"), Comando::CrearHeroe { cuenta: format!("res{i}"), campamento: 0, controlador: Controlador::Humano, nombre: None }));
+            let r = n.aplicar_en(t, admin(&format!("h{i}"), Comando::CrearHeroe { cuenta: format!("res{i}"), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }));
             assert!(r.aceptada(), "{r:?}");
             r.creadas[0]
         })

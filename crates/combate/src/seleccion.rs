@@ -90,7 +90,7 @@ mod pruebas {
     #[test]
     fn el_candidato_suma_el_poder_de_sus_escuadras() {
         let r = r();
-        let mut h = Heroe::nuevo(&r.militar, 4, militar::heroe::Controlador::Bot, 1, 1);
+        let mut h = Heroe::nuevo(&r.militar, 4, militar::heroe::Controlador::Bot, 1, 1, "espada_escudo_mediano").expect("una clase del catálogo");
         h.nivel = 3;
         let (a, b) = (escuadra(1, 4, Tropa::MiliciaLanceros), escuadra(2, 4, Tropa::Arqueros));
         assert_eq!(Candidato::de(r, &h, &[&a, &b]), c(4, 3, a.poder(&r.militar) + b.poder(&r.militar)));

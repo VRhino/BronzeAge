@@ -215,7 +215,7 @@ async fn por_la_sesion_se_abre_un_alijo_y_el_heroe_lo_lleva_en_heroe_y_en_admin(
     let id = m.0.alijos()[alijo as usize].id.clone();
     let mut e = Esc { n: nucleo(m), peticiones: 0 };
     // Un héroe sin Facción que sale del campamento 0 y marcha hasta el alijo.
-    let ana = e.ok("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
+    let ana = e.ok("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
     let col = e.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: ana, escuadras: vec![], carga: vec![], politica: Politica::Rechazar, caravana_fundacion: None }).creadas[0];
     e.ok("ana", Comando::MarcharA { ejercito: col, destino: sitio });
     let fin = e.n.ejercito(col).unwrap().plan.fin().unwrap();

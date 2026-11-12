@@ -62,7 +62,7 @@ impl E {
         r
     }
     fn heroe(&mut self, cuenta: &str) -> u64 {
-        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0]
+        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0]
     }
     /// Una Facción nueva con su Rey (el héroe de la cuenta).
     fn faccion(&mut self, cuenta: &str, nombre: &str) -> (u32, u64) {

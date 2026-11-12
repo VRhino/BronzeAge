@@ -836,17 +836,19 @@ pub(super) fn escuadra_que_lleva(n: &Nucleo, s: &Escuadra) -> pb::EscuadraQueLle
     pb::EscuadraQueLleva { tropa_id: tropas.tropa(s.tropa).nombre.clone(), cantidad: u32::try_from(s.cantidad.max(0)).unwrap_or(u32::MAX), nivel: u32::from(s.nivel) }
 }
 
-/// El héroe ajeno (`HeroePublico`): nombre, clase, nivel, hasta cuándo está herido y las escuadras que lleva en su columna y su Facción. Nada de su campamento, sus puntos, su Liderazgo ni si es humano o bot.
+/// El héroe ajeno (`HeroePublico`): nombre, clase, nivel, lo que lleva puesto (canon 5.16), hasta cuándo está herido y las escuadras que lleva en su columna y su Facción. Nada de su
+/// campamento, sus puntos, su Liderazgo, su mochila, su almacén de objetos ni si es humano o bot.
 /// Si es mercenario, además su marca y su ficha pública: rango, renombre y grado de cada medalla, nunca su historial ni su contrato (Mercenarios_Por_Contrato §10).
 pub fn heroe_publico(n: &Nucleo, id: u64) -> pb::Heroe {
-    let h = n.heroe(id).expect("el héroe existe");
+    let (h, r) = (n.heroe(id).expect("el héroe existe"), &n.estado().reglas.economia.militar);
     pb::Heroe {
         id: ids::heroe(id),
         version: h.heroe.escuadras.iter().map(|s| n.version_de(Clase::Escuadra, s.id)).fold(n.version_de(Clase::Heroe, id), u64::max),
         display_name: propios::nombre_de_heroe(n, id),
-        class_definition_id: propios::CLASE_POR_DEFECTO.into(),
+        class_definition_id: h.heroe.clase(r).to_owned(),
         avatar: Some(pb::Avatar::default()),
         nivel: h.heroe.nivel,
+        equipamiento: Some(propios::equipamiento(&r.objetos, &h.heroe.equipo)),
         herido_hasta_ms: h.heroe.herido_hasta,
         // Su ciudadanía es pública (decisión del autor del 2026-10-27): la dice su Facción en `ciudadanos_ids` y así se sabe también de un héroe que se ve sin columna.
         faccion_id: h.faccion.map(ids::faccion),

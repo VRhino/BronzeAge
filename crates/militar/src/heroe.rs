@@ -1,8 +1,9 @@
 //! El héroe como personaje (Doc 5.16, Heroe_Y_Tropa §2-§4, §6, §8 y §9): con qué nace, cómo sube de nivel y reparte sus puntos, sus loadouts,
 //! el orden de sus escuadras y estar herido. Sus escuadras viven en él (`escuadras`), estén donde estén.
 //!
-//! Lo que el servidor guarda y sirve sin interpretar (clase, avatar, género, inventario, equipo y habilidades de las escuadras) es de
-//! Conquest y no se modela aquí. Las habilidades y los perks se abren solos con el nivel y los define Conquest (D15): el motor no los guarda.
+//! La clase sale del arma puesta y los atributos son la base de esa clase más los puntos repartidos (Clases_De_Heroe §4 y §5, D16): el héroe guarda solo
+//! los puntos, su equipo, su mochila y su almacén de objetos (D22), y las reglas de los objetos son del crate `objetos`. El avatar y el género son de Conquest
+//! y no se modelan aquí. Las habilidades y los perks se abren solos con el nivel y los define Conquest (D15): el motor no los guarda.
 
 use crate::datos::Reglas;
 use crate::escuadra::Escuadra;
@@ -10,6 +11,8 @@ use crate::liderazgo;
 use crate::presencia::{Presencia, Ubicacion};
 use crate::tipos::{AsentamientoId, CampamentoId, EscuadraId, HeroeId};
 use base::{Instante, Mil};
+use objetos::datos::Atributos;
+use objetos::{Equipo, Inventario};
 
 pub type LoadoutId = u64;
 
@@ -28,18 +31,11 @@ pub enum Residencia {
     Campamento(CampamentoId),
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Atributos {
-    pub fuerza: i64,
-    pub destreza: i64,
-    pub armadura: i64,
-    pub vitalidad: i64,
-}
+/// Lo que da por hecho quien lee la clase o los atributos de un héroe: su arma la puso el equipo inicial o `Equipo::equipar`, que solo ponen armas del catálogo.
+const ARMA_DEL_CATALOGO: &str = "el arma puesta es un arma del catálogo (la ponen el equipo inicial y equipar, que lo comprueban)";
 
-impl Atributos {
-    fn como_lista(&self) -> [i64; 4] {
-        [self.fuerza, self.destreza, self.armadura, self.vitalidad]
-    }
+fn como_lista(a: Atributos) -> [i64; 4] {
+    [a.fuerza, a.destreza, a.armadura, a.vitalidad]
 }
 
 /// Una selección de escuadras guardada para salir. El activo es el que defiende una plaza en persona. El Liderazgo que suma no se
@@ -64,6 +60,8 @@ pub struct DatosLoadout {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ErrorHeroe {
+    /// La clase pedida al crearlo no está en `CLASES_HEROE` (Clases_De_Heroe §6).
+    ClaseDesconocida,
     /// Una cantidad de puntos negativa.
     PuntosNegativos,
     /// El reparto suma 0.
@@ -102,7 +100,14 @@ pub struct Heroe {
     pub experiencia: Mil,
     /// Puntos de atributo sin gastar: uno por nivel hasta el de tope.
     pub puntos_de_atributo: i64,
-    pub atributos: Atributos,
+    /// Los puntos que ha repartido (D16): sus atributos son estos más la base de la clase de su arma ([`Heroe::atributos`]).
+    pub puntos_repartidos: Atributos,
+    /// Lo que lleva puesto (Clases_De_Heroe §4): el arma, que define su clase, las cinco piezas de armadura y la montura.
+    pub equipo: Equipo,
+    /// Su mochila (`OBJETOS.casillasMochila`): va con él.
+    pub mochila: Inventario,
+    /// Su almacén de objetos (`OBJETOS.casillasAlmacen`, D22): está en su residencia y se traslada con él.
+    pub almacen_objetos: Inventario,
     pub loadouts: Vec<Loadout>,
     /// Sus monedas (tanda 69, 2026-11-08): un solo saldo de monedas sueltas, aparte del oro de las plazas.
     pub monedas: i64,
@@ -117,9 +122,11 @@ pub struct Heroe {
 
 impl Heroe {
     /// Un héroe recién creado (`crearHeroe`): nace dentro de un campamento de mercenarios y reside en él, sin columna, de nivel 1, sin puntos
-    /// ni escuadras, con sus monedas iniciales y un loadout «Default» vacío y activo.
-    pub fn nuevo(r: &Reglas, id: HeroeId, controlador: Controlador, campamento: CampamentoId, loadout_inicial: LoadoutId) -> Self {
-        Self {
+    /// ni escuadras, con sus monedas iniciales, un loadout «Default» vacío y activo, el equipo inicial de su `clase` puesto y la mochila y el almacén de
+    /// objetos vacíos (Clases_De_Heroe §6). Una clase que no está en `CLASES_HEROE` se rechaza.
+    pub fn nuevo(r: &Reglas, id: HeroeId, controlador: Controlador, campamento: CampamentoId, loadout_inicial: LoadoutId, clase: &str) -> Result<Self, ErrorHeroe> {
+        let equipo = Equipo::inicial(&r.objetos, clase).map_err(|_| ErrorHeroe::ClaseDesconocida)?;
+        Ok(Self {
             id,
             controlador,
             liderazgo_base: r.liderazgo.base,
@@ -128,14 +135,27 @@ impl Heroe {
             nivel: 1,
             experiencia: 0,
             puntos_de_atributo: 0,
-            atributos: Atributos::default(),
+            puntos_repartidos: Atributos::default(),
+            equipo,
+            mochila: Inventario::vacio(r.objetos.casillas_mochila),
+            almacen_objetos: Inventario::vacio(r.objetos.casillas_almacen),
             loadouts: vec![Loadout { id: loadout_inicial, nombre: "Default".into(), escuadras: vec![], activo: true }],
             monedas: r.heroe.monedas_iniciales,
             herido_hasta: None,
             viveres: 0,
             racion_en: None,
             escuadras: vec![],
-        }
+        })
+    }
+
+    /// Su clase: la del arma puesta (Clases_De_Heroe §4).
+    pub fn clase<'a>(&self, r: &'a Reglas) -> &'a str {
+        self.equipo.clase(&r.objetos).expect(ARMA_DEL_CATALOGO)
+    }
+
+    /// Sus atributos (Clases_De_Heroe §5, D16): la base de la clase de su arma más los puntos repartidos. Lo que da el equipo no cuenta aquí: lo suma Conquest.
+    pub fn atributos(&self, r: &Reglas) -> Atributos {
+        self.equipo.atributos(&r.objetos, self.puntos_repartidos).expect(ARMA_DEL_CATALOGO)
     }
 
     pub fn escuadra(&self, id: EscuadraId) -> Option<&Escuadra> {
@@ -173,10 +193,11 @@ impl Heroe {
         self.nivel != antes
     }
 
-    /// Reparte puntos de atributo (`fuerza, destreza, armadura, vitalidad`): cada punto suma 1. Todo o nada.
+    /// Reparte puntos de atributo (`fuerza, destreza, armadura, vitalidad`): cada punto suma 1. El tope de un atributo mira la suma con la base de la clase de su arma
+    /// (Clases_De_Heroe §5). Todo o nada.
     pub fn repartir_atributos(&mut self, r: &Reglas, reparto: Atributos) -> Result<(), ErrorHeroe> {
-        let pedidos: i64 = reparto.como_lista().iter().sum();
-        if reparto.como_lista().iter().any(|&p| p < 0) {
+        let pedidos: i64 = como_lista(reparto).iter().sum();
+        if como_lista(reparto).iter().any(|&p| p < 0) {
             return Err(ErrorHeroe::PuntosNegativos);
         }
         if pedidos == 0 {
@@ -185,16 +206,11 @@ impl Heroe {
         if pedidos > self.puntos_de_atributo {
             return Err(ErrorHeroe::PuntosInsuficientes { pedidos, sin_gastar: self.puntos_de_atributo });
         }
-        let nuevo = Atributos {
-            fuerza: self.atributos.fuerza + reparto.fuerza,
-            destreza: self.atributos.destreza + reparto.destreza,
-            armadura: self.atributos.armadura + reparto.armadura,
-            vitalidad: self.atributos.vitalidad + reparto.vitalidad,
-        };
-        if nuevo.como_lista().iter().any(|&a| a > r.heroe.tope_atributo) {
+        let nuevo = self.puntos_repartidos.mas(reparto);
+        if como_lista(self.equipo.atributos(&r.objetos, nuevo).expect(ARMA_DEL_CATALOGO)).iter().any(|&a| a > r.heroe.tope_atributo) {
             return Err(ErrorHeroe::TopeDeAtributo);
         }
-        self.atributos = nuevo;
+        self.puntos_repartidos = nuevo;
         self.puntos_de_atributo -= pedidos;
         Ok(())
     }
@@ -324,8 +340,11 @@ mod pruebas {
         Reglas::cargar()
     }
 
+    /// La clase de los héroes de estas pruebas: base 3/3/2/2 y armaduras media y pesada.
+    const CLASE: &str = "espada_escudo_mediano";
+
     fn heroe() -> Heroe {
-        Heroe::nuevo(&r(), 1, Controlador::Humano, 3, 100)
+        Heroe::nuevo(&r(), 1, Controlador::Humano, 3, 100, CLASE).expect("una clase del catálogo")
     }
 
     /// Un héroe con el Liderazgo del tope (100), como si hubiera llegado al nivel 30: el de los loadouts con varias escuadras.
@@ -349,11 +368,24 @@ mod pruebas {
         let h = heroe();
         assert_eq!((h.nivel, h.experiencia, h.puntos_de_atributo), (1, 0, 0));
         assert_eq!(h.monedas, 1_500);
-        assert_eq!((h.liderazgo_base, h.atributos), (14, Atributos::default()), "nace con el Liderazgo del nivel 1");
+        assert_eq!((h.liderazgo_base, h.puntos_repartidos), (14, Atributos::default()), "nace con el Liderazgo del nivel 1");
         assert_eq!(h.presencia.ubicacion, Ubicacion::Mercenarios(3));
         assert_eq!(h.residencia, Some(Residencia::Campamento(3)));
         assert_eq!(h.loadouts, vec![Loadout { id: 100, nombre: "Default".into(), escuadras: vec![], activo: true }]);
         assert!(h.escuadras.is_empty() && h.herido_hasta.is_none());
+    }
+
+    #[test]
+    fn nace_con_el_equipo_inicial_de_su_clase_puesto_y_la_mochila_y_el_almacen_vacios() {
+        let r = r();
+        for (id, clase) in &r.objetos.clases {
+            let h = Heroe::nuevo(&r, 1, Controlador::Humano, 3, 100, id).unwrap();
+            assert_eq!((&h.equipo, h.clase(&r)), (&clase.inicial, id.as_str()), "{id}: la clase es la del arma de inicio");
+            assert_eq!(h.atributos(&r), clase.atributos_base, "{id}: sin puntos, la base de su clase");
+            assert_eq!((h.mochila, h.almacen_objetos), (Inventario::vacio(72), Inventario::vacio(144)));
+        }
+        assert_eq!(Heroe::nuevo(&r, 1, Controlador::Humano, 3, 100, "").unwrap_err(), ErrorHeroe::ClaseDesconocida);
+        assert_eq!(Heroe::nuevo(&r, 1, Controlador::Humano, 3, 100, "mandoble").unwrap_err(), ErrorHeroe::ClaseDesconocida, "la clase vieja de Conquest no está en CLASES_HEROE");
     }
 
     #[test]
@@ -401,23 +433,25 @@ mod pruebas {
         let mut h = heroe();
         h.puntos_de_atributo = 5;
         assert_eq!(h.repartir_atributos(&r, Atributos { fuerza: 2, vitalidad: 1, ..Default::default() }), Ok(()));
-        assert_eq!((h.atributos.fuerza, h.atributos.vitalidad, h.puntos_de_atributo), (2, 1, 2));
+        assert_eq!((h.puntos_repartidos.fuerza, h.puntos_repartidos.vitalidad, h.puntos_de_atributo), (2, 1, 2));
+        assert_eq!(h.atributos(&r), Atributos { fuerza: 5, destreza: 3, armadura: 2, vitalidad: 3 }, "la base de la clase más lo repartido");
         assert_eq!(h.repartir_atributos(&r, Atributos::default()), Err(ErrorHeroe::NingunPunto));
         assert_eq!(h.repartir_atributos(&r, Atributos { destreza: -1, fuerza: 3, ..Default::default() }), Err(ErrorHeroe::PuntosNegativos));
         assert_eq!(h.repartir_atributos(&r, Atributos { armadura: 3, ..Default::default() }), Err(ErrorHeroe::PuntosInsuficientes { pedidos: 3, sin_gastar: 2 }));
-        assert_eq!((h.atributos.armadura, h.puntos_de_atributo), (0, 2), "un rechazo no deja rastro");
+        assert_eq!((h.puntos_repartidos.armadura, h.puntos_de_atributo), (0, 2), "un rechazo no deja rastro");
     }
 
+    /// Desde el 2026-11-12 el tope mira la suma con la base de la clase (Clases_De_Heroe §5): con la fuerza 3 de la espada, 96 puntos dan 99.
     #[test]
-    fn un_atributo_no_pasa_del_tope_y_el_comando_entero_se_aborta() {
+    fn un_atributo_no_pasa_del_tope_contando_la_base_y_el_comando_entero_se_aborta() {
         let r = r();
         let mut h = heroe();
         h.puntos_de_atributo = 500;
-        h.atributos.fuerza = 99;
+        h.puntos_repartidos.fuerza = 96;
         assert_eq!(h.repartir_atributos(&r, Atributos { fuerza: 2, destreza: 1, ..Default::default() }), Err(ErrorHeroe::TopeDeAtributo));
-        assert_eq!((h.atributos.fuerza, h.atributos.destreza, h.puntos_de_atributo), (99, 0, 500));
+        assert_eq!((h.puntos_repartidos.fuerza, h.puntos_repartidos.destreza, h.puntos_de_atributo), (96, 0, 500));
         assert_eq!(h.repartir_atributos(&r, Atributos { fuerza: 1, ..Default::default() }), Ok(()));
-        assert_eq!(h.atributos.fuerza, 100);
+        assert_eq!((h.puntos_repartidos.fuerza, h.atributos(&r).fuerza), (97, 100));
     }
 
     #[test]
@@ -516,7 +550,7 @@ mod pruebas {
     #[test]
     fn herir_a_un_bando_y_listar_los_heridos() {
         let r = r();
-        let mut hs = vec![heroe(), Heroe::nuevo(&r, 2, Controlador::Bot, 3, 200), Heroe::nuevo(&r, 3, Controlador::Humano, 3, 300)];
+        let mut hs = vec![heroe(), Heroe::nuevo(&r, 2, Controlador::Bot, 3, 200, CLASE).unwrap(), Heroe::nuevo(&r, 3, Controlador::Humano, 3, 300, CLASE).unwrap()];
         hs[1].herir(&r, 0);
         let heridos = herir(&r, &mut hs, &[1, 2, 99], 1_000);
         assert_eq!(heridos, vec![1], "el 2 ya lo estaba y el 99 no existe");

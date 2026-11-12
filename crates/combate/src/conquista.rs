@@ -368,7 +368,7 @@ mod pruebas {
     #[test]
     fn el_resto_del_campamento_queda_a_cero_con_su_nivel_y_experiencia_menos_lo_que_sale_y_lo_que_va_fuera() {
         let r = r();
-        let mut h = Heroe::nuevo(&r.militar, 1, Controlador::Humano, 3, 1);
+        let mut h = Heroe::nuevo(&r.militar, 1, Controlador::Humano, 3, 1, "espada_escudo_mediano").expect("una clase del catálogo");
         h.residencia = Some(Residencia::Asentamiento(9));
         let mut en_guarnicion = escuadra(11, 1, Tropa::Arqueros);
         en_guarnicion.en_guarnicion = true;
@@ -392,7 +392,7 @@ mod pruebas {
     #[test]
     fn un_visitante_no_cambia_de_casa_ni_pierde_tropa() {
         let r = r();
-        let mut h = Heroe::nuevo(&r.militar, 4, Controlador::Bot, 3, 1);
+        let mut h = Heroe::nuevo(&r.militar, 4, Controlador::Bot, 3, 1, "espada_escudo_mediano").expect("una clase del catálogo");
         h.escuadras = vec![escuadra(1, 4, Tropa::Arqueros)];
         let antes = h.clone();
         aplicar_desalojo(&mut h, &Desalojo { heroe: 4, salida: Some(Salida::ALaColumna { columna: 7, escuadras: vec![] }), residencia: None });
@@ -403,7 +403,7 @@ mod pruebas {
     fn un_residente_con_su_columna_para_las_caravanas_sale_con_ella_y_con_las_escuadras_que_defendieron() {
         let r = r();
         let nueva = Residencia::Asentamiento(4);
-        let mut h = Heroe::nuevo(&r.militar, 1, Controlador::Humano, 3, 1);
+        let mut h = Heroe::nuevo(&r.militar, 1, Controlador::Humano, 3, 1, "espada_escudo_mediano").expect("una clase del catálogo");
         h.residencia = Some(Residencia::Asentamiento(9));
         h.escuadras = vec![escuadra(10, 1, Tropa::MiliciaLanceros), escuadra(11, 1, Tropa::Arqueros)];
         let residente = Afectado { heroe: 1, residente: true, dentro: true, columna: Some(77), lucharon: vec![10] };

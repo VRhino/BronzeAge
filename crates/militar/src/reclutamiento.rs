@@ -270,7 +270,7 @@ mod pruebas {
         for rec in asentamiento::recurso::TODOS {
             almacen.poner(rec, 10_000_000);
         }
-        let mut heroe = Heroe::nuevo(&r, 1, Controlador::Humano, 1, 1);
+        let mut heroe = Heroe::nuevo(&r, 1, Controlador::Humano, 1, 1, "espada_escudo_mediano").expect("una clase del catálogo");
         heroe.residencia = Some(Residencia::Asentamiento(4));
         Mundo {
             edificios: vec![edificio(0, Tipo::CentroUrbano, 1), edificio(1, Tipo::Barracon, 2), edificio(2, Tipo::GaleriaDeTiro, 1), edificio(3, Tipo::Caballerizas, 2)],

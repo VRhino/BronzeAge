@@ -75,7 +75,7 @@ impl E {
     }
     /// El héroe de la cuenta, nacido (y residente) dentro del campamento 0.
     fn heroe(&mut self, cuenta: &str) -> u64 {
-        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0]
+        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0]
     }
     fn crear(&mut self, cuenta: &str, heroe: u64, nombre: &str) -> u32 {
         self.ok(cuenta, Comando::CrearFaccion { heroe, nombre: nombre.into(), sigilo: None }).creadas[0] as u32
@@ -422,7 +422,7 @@ fn bots_con_bots_y_jugadores_con_jugadores_la_faccion_es_de_bots_si_su_rey_lo_es
     // Decisión del autor del 2026-11-01: una Facción es de bots si su Rey es un héroe bot; un jugador no entra en ella ni un bot en una que no lo es, ni pidiéndolo ni aceptándolo.
     let m = con_mundo!();
     let mut e = E::nuevo(m);
-    let bot = |e: &mut E, cuenta: &str| e.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Bot, nombre: None }).creadas[0];
+    let bot = |e: &mut E, cuenta: &str| e.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Bot, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
     let (rey_bot, otro_bot, ana, bea) = (bot(&mut e, "b1"), bot(&mut e, "b2"), e.heroe("ana"), e.heroe("bea"));
     let (de_bots, de_jugadores) = (e.crear("b1", rey_bot, "Hatti"), e.crear("ana", ana, "Micenas"));
     assert!(e.n.es_faccion_de_bots(de_bots) && !e.n.es_faccion_de_bots(de_jugadores));

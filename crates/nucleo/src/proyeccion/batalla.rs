@@ -2,13 +2,15 @@
 //! combatientes en `Batalla.ticket`. El ticket de `combate::ciclo` lleva lo que se congeló al abrir (los bandos, el nivel, la experiencia y la moral de cada escuadra, la plaza de un asedio); lo que no
 //! puede cambiar mientras dura la batalla —el héroe, sus atributos y la carga de una caravana apartada— se lee del estado al proyectar.
 //!
-//! DUDA: el héroe sale con los valores por defecto de nombre, clase, género y avatar (decisión 4 del autor), sin equipo (CQ-004) y con los atributos efectivos iguales a los base; una escuadra no trae
+//! El héroe sale con su clase (la de su arma), su equipo real (las piezas forjadas con sus cifras en `estadisticas`, D13) y en `atributos_efectivos` la base de su clase más sus puntos (D16:
+//! lo del equipo lo suma Conquest); las versiones de `CLASES_HEROE` y de `OBJETOS` van en `version_catalogo_heroe` y `version_catalogo_objetos`.
+//! DUDA: el nombre, el género y el avatar van con los valores por defecto (decisión 4 del autor); una escuadra no trae
 //! habilidades (Unity las saca del nivel) y sí su formación y las que permite la tecnología de su Facción (Heroe_Y_Tropa §10.4, 2026-11-11); `experiencia` y `moral` de una escuadra viajan en puntos (como el contrato de TypeScript), no en milésimas;
 //! `version_balance` vale 1 mientras Rust no tenga su numeración y `version_catalogo_tropas` es `VERSION_CATALOGO_TROPAS` (Heroe_Y_Tropa §12); el estandarte y el aspecto de una escuadra
 //! viajan vacíos (D20); la carga de cada carro es la parte de la carga de la caravana proporcional a su capacidad
 //! (`Caravana::carga_por_carro`); el terreno de una batalla fuera de un asedio es el artefacto de mundo (`BattleMapReference`).
 
-use super::propios::{atributos, celdas, nombre_de_heroe, CLASE_POR_DEFECTO};
+use super::propios::{atributos, celdas, equipamiento, nombre_de_heroe};
 use super::{ids, punto};
 use crate::nucleo::Nucleo;
 use combate::caravana::Modalidad;
@@ -52,18 +54,18 @@ fn escuadra(n: &Nucleo, e: &EscuadraEnBatalla) -> pb::SquadSnapshot {
 }
 
 fn participante(n: &Nucleo, p: &Participante) -> pb::BattleParticipantSnapshot {
-    let h = n.heroe(p.heroe).map(|h| &h.heroe);
+    let (h, r) = (n.heroe(p.heroe).map(|h| &h.heroe), &n.estado().reglas.economia.militar);
     pb::BattleParticipantSnapshot {
         heroe_id: ids::heroe(p.heroe),
         faccion_id: p.faccion.map(ids::faccion),
         es_bot: p.controlador == Controlador::Bot,
         heroe: Some(pb::HeroSnapshot {
             display_name: nombre_de_heroe(n, p.heroe),
-            class_definition_id: CLASE_POR_DEFECTO.to_owned(),
+            class_definition_id: h.map(|h| h.clase(r).to_owned()).unwrap_or_default(),
             nivel: h.map_or(1, |h| h.nivel),
             avatar: Some(pb::Avatar::default()),
-            equipamiento: Some(pb::Equipamiento::default()),
-            atributos_efectivos: h.map(atributos),
+            equipamiento: h.map(|h| equipamiento(&r.objetos, &h.equipo)),
+            atributos_efectivos: h.map(|h| atributos(r, h)),
             casillas_inventario_libres: p.casillas_libres,
             ..Default::default()
         }),
@@ -157,7 +159,7 @@ fn mapa_de_plaza(plaza: u64, p: &PlazaCongelada) -> pb::SettlementBattleSnapshot
 /// El `BattleTicket` de una batalla, tal como se congeló al abrir (con la revisión vigente).
 pub fn ticket(n: &Nucleo, b: &Batalla) -> pb::BattleTicket {
     let t = &b.ticket;
-    let c = &n.estado().reglas.economia.combate.batalla;
+    let cat = &n.estado().reglas.economia.militar.objetos;
     let mapa = match (&t.contexto, &t.plaza) {
         (&Contexto::Asedio { asentamiento }, Some(p)) => pb::battle_ticket::Mapa::MapaAsentamiento(mapa_de_plaza(u64::from(asentamiento), p)),
         _ => pb::battle_ticket::Mapa::MapaReferencia(pb::BattleMapReference { mapa_id: n.mundo_hash().to_owned(), centro: Some(punto(b.punto)) }),
@@ -175,8 +177,8 @@ pub fn ticket(n: &Nucleo, b: &Batalla) -> pb::BattleTicket {
             duracion_maxima_segundos: (t.duracion_maxima / 1_000) as u32,
             version_balance: VERSION_POR_DEFECTO,
             version_catalogo_tropas: n.estado().reglas.economia.militar.version_catalogo_tropas,
-            version_catalogo_heroe: c.version_catalogo_heroe.clone(),
-            version_catalogo_objetos: c.version_catalogo_objetos.clone(),
+            version_catalogo_heroe: cat.version_clases.clone(),
+            version_catalogo_objetos: cat.version_objetos.clone(),
         }),
     }
 }

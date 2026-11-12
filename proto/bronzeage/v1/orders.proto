@@ -644,6 +644,29 @@ message OrdenElegirFormacion {
   string formacion = 2;
 }
 
+// 2026-11-12 (Heroe_Y_Tropa §4.5, Clases_De_Heroe §4): el héroe de la cuenta se pone la pieza de una casilla de su mochila (`ItemInstancia.casilla_inventario`); lo que
+// estaba en el hueco, y con un arma la armadura que su clase no admite, va a la mochila. Dentro de una plaza, un pueblo o un campamento (D2).
+message OrdenEquiparObjeto {
+  uint32 casilla = 1;
+}
+
+// 2026-11-12: el héroe de la cuenta se quita lo de un hueco (casco | torso | guantes | pantalones | botas | montura; el arma no se quita) y va a su mochila.
+message OrdenDesequiparObjeto {
+  string hueco = 1;
+}
+
+// 2026-11-12 (D22): `cantidad` de la casilla `casilla` de la mochila del héroe de la cuenta a su almacén de objetos, dentro de su residencia.
+message OrdenGuardarObjeto {
+  uint32 casilla = 1;
+  uint32 cantidad = 2;
+}
+
+// 2026-11-12 (D22): `cantidad` de la casilla `casilla` de su almacén de objetos a su mochila, dentro de su residencia.
+message OrdenSacarObjeto {
+  uint32 casilla = 1;
+  uint32 cantidad = 2;
+}
+
 message OrdenOrganizarEjercito {
   string heroe_id = 1;
   string politica_de_union = 2;  // aceptar | preguntar
@@ -1387,5 +1410,9 @@ message Orden {
     OrdenPausarConsumo pausar_consumo = 189;
     OrdenComprarRumor comprar_rumor = 190;
     OrdenElegirFormacion elegir_formacion = 191;
+    OrdenEquiparObjeto equipar_objeto = 192;
+    OrdenDesequiparObjeto desequipar_objeto = 193;
+    OrdenGuardarObjeto guardar_objeto = 194;
+    OrdenSacarObjeto sacar_objeto = 195;
   }
 }

@@ -483,7 +483,7 @@ async fn por_la_sesion_el_rey_adopta_en_la_capital_y_su_faccion_oye_el_hecho() {
     let (mut e, _) = con_canteria(m);
     let plaza = e.plaza;
     // Por la sesión se juega con un héroe de verdad (el de administración que fundó no es el de la cuenta): «ana» crea el suyo, entra en la Facción y el fundador le cede el trono.
-    let r = e.ord("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None });
+    let r = e.ord("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() });
     let rey = r.creadas[0];
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: rey, faccion: Some(1) });
     let fundador = e.rey;
@@ -521,7 +521,7 @@ async fn por_la_sesion_el_heroe_ve_los_contadores_en_curso_y_le_llegan_al_dia_cu
     use servidor::prueba::hola;
     let m = con_mundo!();
     let (mut e, _) = con_canteria(m);
-    e.ord("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None });
+    e.ord("ana", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: militar::heroe::Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() });
     let desde = e.n.ahora();
     let w = arrancar_con(e.n).await;
     let estado = |m: &ms::Cuerpo| -> Option<pb::EstadoTecnologia> {

@@ -28,6 +28,7 @@ use militar::columna::Politica;
 use militar::heroe::{Controlador, Residencia};
 use militar::inspeccion::Objetivo;
 use militar::presencia::Ubicacion;
+use objetos::datos::Hueco;
 use mercenarios::{Objetivo as ObjetivoMercenario, TipoOrden, Trabajo};
 use pb::orden::Cuerpo;
 use prost_types::{value::Kind, Struct};
@@ -165,6 +166,19 @@ impl Ctx<'_> {
             Some("almacenPlaza") => Ok(Some(PagarCon::AlmacenPlaza)),
             _ => self.pagar_con(s),
         }
+    }
+    /// Un hueco del equipo (`arma` | `casco` | `torso` | `guantes` | `pantalones` | `botas` | `montura`); otro valor, `orden.forma_invalida`.
+    fn hueco(&self, s: &str) -> R<Hueco> {
+        Ok(match s {
+            "arma" => Hueco::Arma,
+            "casco" => Hueco::Casco,
+            "torso" => Hueco::Torso,
+            "guantes" => Hueco::Guantes,
+            "pantalones" => Hueco::Pantalones,
+            "botas" => Hueco::Botas,
+            "montura" => Hueco::Montura,
+            otro => return self.forma(format!("hueco del equipo desconocido: {otro}")),
+        })
     }
     /// El cultivo de una aldea (`trigo`, el de sin él, | `vid` | `oliva`); otro valor, `orden.forma_invalida`.
     fn cultivo(&self, s: Option<&str>) -> R<Cultivo> {
@@ -421,10 +435,11 @@ impl Ctx<'_> {
         Ok(match cuerpo {
             // ── Presencia y héroe ──
             Cuerpo::CrearHeroe(o) => {
-                // El nombre se guarda (2026-10-27; sin espacios a los lados, vacío = «Héroe N»). DUDA: clase, género y avatar se ignoran hasta que Conquest publique su catálogo (decisión 4
-                // de 4H): el núcleo no los guarda.
+                // El nombre se guarda (2026-10-27; sin espacios a los lados, vacío = «Héroe N») y la clase la valida el núcleo contra `CLASES_HEROE` (2026-11-12). DUDA: género y
+                // avatar se ignoran hasta que Conquest publique su catálogo (decisión 4 de 4H): el núcleo no los guarda.
                 let nombre = Some(o.display_name.trim().to_owned()).filter(|x| !x.is_empty());
-                Comando::CrearHeroe { cuenta: self.cliente.into(), campamento: self.campamento(&o.campamento_id)?, controlador: if self.bot { Controlador::Bot } else { Controlador::Humano }, nombre }
+                let controlador = if self.bot { Controlador::Bot } else { Controlador::Humano };
+                Comando::CrearHeroe { cuenta: self.cliente.into(), campamento: self.campamento(&o.campamento_id)?, controlador, nombre, clase: o.class_definition_id.clone() }
             }
             Cuerpo::ReclutarTropa(o) => Comando::ReclutarTropa { asentamiento: self.plaza(&o.asentamiento_id)?, heroe: self.heroe(&o.heroe_id)?, tropa: self.tropa(&o.tropa_id)? },
             Cuerpo::ReclutarEnCampamento(o) => {
@@ -451,6 +466,10 @@ impl Ctx<'_> {
             }
             Cuerpo::OrdenarEscuadras(o) => Comando::OrdenarEscuadras { heroe: self.mi_heroe()?, escuadras: self.escuadras(&o.escuadron_ids)? },
             Cuerpo::ElegirFormacion(o) => Comando::ElegirFormacion { heroe: self.mi_heroe()?, escuadra: self.escuadra(&o.escuadron_id)?, formacion: o.formacion.clone() },
+            Cuerpo::EquiparObjeto(o) => Comando::EquiparObjeto { heroe: self.mi_heroe()?, casilla: o.casilla },
+            Cuerpo::DesequiparObjeto(o) => Comando::DesequiparObjeto { heroe: self.mi_heroe()?, hueco: self.hueco(&o.hueco)? },
+            Cuerpo::GuardarObjeto(o) => Comando::GuardarObjeto { heroe: self.mi_heroe()?, casilla: o.casilla, cantidad: o.cantidad },
+            Cuerpo::SacarObjeto(o) => Comando::SacarObjeto { heroe: self.mi_heroe()?, casilla: o.casilla, cantidad: o.cantidad },
             Cuerpo::AsignarGuarnicion(o) => Comando::AsignarGuarnicion { heroe: self.mi_heroe()?, escuadra: self.escuadra(&o.squad_id)? },
             Cuerpo::RetirarGuarnicion(o) => Comando::RetirarGuarnicion { heroe: self.mi_heroe()?, escuadra: self.escuadra(&o.squad_id)? },
             Cuerpo::PasarAViveres(o) => Comando::PasarAViveres { heroe: self.mi_heroe()?, cantidad: o.cantidad },

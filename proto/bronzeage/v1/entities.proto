@@ -716,7 +716,7 @@ message Estadistica {
 
 message ItemInstancia {
   string item_definition_id = 1;
-  string tipo = 2;                       // arma | armadura | consumible | visual
+  string tipo = 2;                       // arma | armadura | montura | material | consumible (el `tipo` de su ficha en `OBJETOS`)
   uint32 cantidad = 3;
   optional string item_instance_id = 4;
   repeated Estadistica estadisticas = 5;
@@ -731,6 +731,7 @@ message Equipamiento {
   optional ItemInstancia guantes = 4;
   optional ItemInstancia pantalones = 5;
   optional ItemInstancia botas = 6;
+  optional ItemInstancia montura = 7;    // 2026-11-12: el hueco de la montura (Catalogo_De_Objetos §3.3)
 }
 
 message Avatar {
@@ -820,6 +821,9 @@ message Heroe {
   // Las monedas del héroe (tanda 69, 2026-11-08): un solo saldo de monedas sueltas, aparte del oro de las plazas (100 monedas = 1 de oro en los precios que
   // admiten las dos). Solo en el héroe propio (`HEROE`) y en `ADMIN`.
   uint64 monedas = 43;
+  // Su almacén de objetos (D22, 2026-11-12): las piezas que guarda en su residencia, cada una con su casilla (`casilla_inventario`), como la mochila en `inventario`.
+  // Solo en el héroe propio (`HEROE`) y en `ADMIN`.
+  repeated ItemInstancia almacen_objetos = 44;
 }
 
 // Una escuadra que un héroe ajeno lleva en su columna, tal como se ve (`HeroePublico.escuadrasQueLleva`).

@@ -106,6 +106,16 @@ impl Inventario {
         }
         Ok(pieza)
     }
+
+    /// Pasa `cantidad` de la casilla `casilla` a `destino`: de la mochila al almacén de objetos o al revés (D22). Sale como en [`Inventario::sacar`] y entra como
+    /// en [`Inventario::meter`]; si no cabe (`NoCabe`: el destino está lleno), no mueve nada.
+    pub fn pasar(&mut self, destino: &mut Inventario, cat: &Catalogo, casilla: u32, cantidad: u32) -> Result<(), ErrorInventario> {
+        let mut origen = self.clone();
+        let pieza = origen.sacar(casilla, cantidad)?;
+        destino.meter(cat, pieza, cantidad)?;
+        *self = origen;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -173,5 +183,22 @@ mod pruebas {
         assert_eq!(m.sacar(1, 2), Err(ErrorInventario::PocaCantidad));
         assert_eq!(m.sacar(1, 0), Err(ErrorInventario::Cantidad));
         assert_eq!(m.casillas.len(), 1);
+    }
+
+    #[test]
+    fn pasar_saca_de_una_casilla_y_mete_en_el_otro_o_no_mueve_nada() {
+        let cat = Catalogo::default();
+        let (mut mochila, mut almacen) = (Inventario::vacio(3), Inventario::vacio(1));
+        mochila.meter(&cat, Pieza::del_catalogo("crisol"), 5).unwrap();
+        mochila.meter(&cat, Pieza::del_catalogo("dagas_inicio"), 1).unwrap();
+        mochila.pasar(&mut almacen, &cat, 0, 2).unwrap();
+        assert_eq!((mochila.casillas[&0].cantidad, almacen.casillas[&0].pieza.objeto.as_str(), almacen.casillas[&0].cantidad), (3, "crisol", 2));
+        mochila.pasar(&mut almacen, &cat, 0, 3).unwrap();
+        assert_eq!((mochila.casillas.keys().copied().collect::<Vec<_>>(), almacen.casillas[&0].cantidad), (vec![1], 5), "se apila con lo que ya había y la casilla vaciada queda libre");
+        let antes = (mochila.clone(), almacen.clone());
+        assert_eq!(mochila.pasar(&mut almacen, &cat, 1, 1), Err(ErrorInventario::NoCabe), "el almacén está lleno");
+        assert_eq!(mochila.pasar(&mut almacen, &cat, 0, 1), Err(ErrorInventario::SinCasilla));
+        assert_eq!(mochila.pasar(&mut almacen, &cat, 1, 2), Err(ErrorInventario::PocaCantidad));
+        assert_eq!((mochila, almacen), antes, "un rechazo no mueve nada");
     }
 }

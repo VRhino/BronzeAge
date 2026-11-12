@@ -362,7 +362,7 @@ fn conquistar_una_plaza_defendida_suma_la_conquista_y_una_sola_victoria_aunque_g
     }
     // Beto defiende la B en persona, con una milicia.
     let campamento = 0;
-    let h = e.ok("beto", Comando::CrearHeroe { cuenta: "beto".into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0];
+    let h = e.ok("beto", Comando::CrearHeroe { cuenta: "beto".into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
     let b = e.b;
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(2) });
     e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(militar::heroe::Residencia::Asentamiento(b as u32)) });
@@ -375,7 +375,7 @@ fn conquistar_una_plaza_defendida_suma_la_conquista_y_una_sola_victoria_aunque_g
     for tropa in [Tropa::EspadachinesBronce, Tropa::ArquerosCompuesto] {
         dar(&mut e.n, &format!("d-{tropa:?}"), ana.1, tropa);
     }
-    let luis = e.ok("luis", Comando::CrearHeroe { cuenta: "luis".into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0];
+    let luis = e.ok("luis", Comando::CrearHeroe { cuenta: "luis".into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: luis, faccion: Some(1) });
     e.ok("admin", Comando::ColocarHeroe { heroe: luis, ubicacion: Ubicacion::Columna(ana.0) });
     dar(&mut e.n, "d-luis", luis, Tropa::EspadachinesBronce);

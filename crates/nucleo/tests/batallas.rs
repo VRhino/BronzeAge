@@ -1340,7 +1340,7 @@ impl Esc {
     /// Un héroe humano de la cuenta, ciudadano de `faccion`, que reside en la plaza y está dentro.
     fn heroe_en(&mut self, m: &Mundo, cuenta: &str, faccion: u32, plaza: u64) -> u64 {
         let campamento = campamento_mas_cercano(m, self.pos(plaza));
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(faccion) });
         self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
         self.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(plaza as u32) });

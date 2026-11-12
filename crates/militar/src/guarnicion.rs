@@ -94,7 +94,7 @@ mod pruebas {
 
     fn heroe_en(plaza: u32, tropas: &[Tropa]) -> Heroe {
         let r = r();
-        let mut h = Heroe::nuevo(&r, 1, Controlador::Humano, 1, 1);
+        let mut h = Heroe::nuevo(&r, 1, Controlador::Humano, 1, 1, "espada_escudo_mediano").expect("una clase del catálogo");
         h.residencia = Some(Residencia::Asentamiento(plaza));
         for (i, &t) in tropas.iter().enumerate() {
             h.escuadras.push(Escuadra::nueva(&r, 10 + i as u64, 1, t, 1, Some(plaza), 0));

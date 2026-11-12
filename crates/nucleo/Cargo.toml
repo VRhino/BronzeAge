@@ -16,6 +16,7 @@ territorio = { path = "../territorio" }
 asentamiento = { path = "../asentamiento" }
 comercio = { path = "../comercio" }
 militar = { path = "../militar" }
+objetos = { path = "../objetos" }
 combate = { path = "../combate" }
 rayon = "1"
 politica = { path = "../politica" }

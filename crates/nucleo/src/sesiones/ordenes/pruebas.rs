@@ -107,7 +107,7 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
     let pueblo = || s("pueblo-4");
     vec![
         // ── Presencia y héroe ──
-        (orden!(CrearHeroe, OrdenCrearHeroe, display_name: s("Aquiles"), campamento_id: s("camp-4"), class_definition_id: s("guerrero"), genero: s("masculino")), Comando::CrearHeroe { cuenta: "ana".into(), campamento: 4, controlador: Controlador::Humano, nombre: Some("Aquiles".into()) }),
+        (orden!(CrearHeroe, OrdenCrearHeroe, display_name: s("Aquiles"), campamento_id: s("camp-4"), class_definition_id: s("dagas"), genero: s("masculino")), Comando::CrearHeroe { cuenta: "ana".into(), campamento: 4, controlador: Controlador::Humano, nombre: Some("Aquiles".into()), clase: "dagas".into() }),
         (orden!(ReclutarTropa, OrdenReclutarTropa, asentamiento_id: s("as-3"), heroe_id: h.clone(), tropa_id: s(tropa.nombre()), origen: Some(s("pesants"))), Comando::ReclutarTropa { asentamiento: 3, heroe: 7, tropa }),
         (orden!(ReclutarEnCampamento, OrdenReclutarEnCampamento, tropa_id: s(tropa.nombre()), pagar_con: Some(s("carro"))), Comando::ReclutarEnCampamento { heroe: 7, tropa, pagar_con: PagarCon::Carro }),
         (orden!(PedirPrestamo, OrdenPedirPrestamo, tropa_ids: v(&[tropa.nombre(), Tropa::Lenadores.nombre()])), Comando::PedirPrestamo { heroe: 7, tropas: vec![tropa, Tropa::Lenadores] }),
@@ -123,6 +123,10 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         ),
         (orden!(OrdenarEscuadras, OrdenOrdenarEscuadras, escuadron_ids: v(&["esc-2", "esc-1"])), Comando::OrdenarEscuadras { heroe: 7, escuadras: vec![2, 1] }),
         (orden!(ElegirFormacion, OrdenElegirFormacion, escuadron_id: s("esc-2"), formacion: s("testudo")), Comando::ElegirFormacion { heroe: 7, escuadra: 2, formacion: "testudo".into() }),
+        (orden!(EquiparObjeto, OrdenEquiparObjeto, casilla: 4), Comando::EquiparObjeto { heroe: 7, casilla: 4 }),
+        (orden!(DesequiparObjeto, OrdenDesequiparObjeto, hueco: s("montura")), Comando::DesequiparObjeto { heroe: 7, hueco: objetos::datos::Hueco::Montura }),
+        (orden!(GuardarObjeto, OrdenGuardarObjeto, casilla: 4, cantidad: 3), Comando::GuardarObjeto { heroe: 7, casilla: 4, cantidad: 3 }),
+        (orden!(SacarObjeto, OrdenSacarObjeto, casilla: 140, cantidad: 1), Comando::SacarObjeto { heroe: 7, casilla: 140, cantidad: 1 }),
         (orden!(AsignarGuarnicion, OrdenAsignarGuarnicion, squad_id: s("esc-5")), Comando::AsignarGuarnicion { heroe: 7, escuadra: 5 }),
         (orden!(RetirarGuarnicion, OrdenRetirarGuarnicion, squad_id: s("esc-5")), Comando::RetirarGuarnicion { heroe: 7, escuadra: 5 }),
         (orden!(PasarAViveres, OrdenPasarAViveres, cantidad: 25_000), Comando::PasarAViveres { heroe: 7, cantidad: 25_000 }),
@@ -689,6 +693,7 @@ fn un_id_sin_la_forma_de_su_entidad_o_un_valor_fuera_de_su_catalogo_se_rechazan_
         (orden!(OrdenarEscuadras, OrdenOrdenarEscuadras, escuadron_ids: v(&["esc-1", "ej-2"])), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(AlternarReceta, OrdenAlternarReceta, asentamiento_id: s("as-3"), recurso: s("mithril")), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(ReclutarTropa, OrdenReclutarTropa, asentamiento_id: s("as-3"), heroe_id: h(), tropa_id: s("dragones")), rechazos::ORDEN_FORMA_INVALIDA),
+        (orden!(DesequiparObjeto, OrdenDesequiparObjeto, hueco: s("anillo")), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(ActivarPolitica, OrdenActivarPolitica, asentamiento_id: s("as-3"), cargo: s("rey"), politica_id: s("x")), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(ComprometerRecinto, OrdenComprometerRecinto, asentamiento_id: s("as-3"), cargo: s("gobernador"), nivel: s("alto")), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(ConvocarEjercito, OrdenConvocarEjercito, heroe_id: h(), politica_de_union: s("siempre")), rechazos::ORDEN_FORMA_INVALIDA),
@@ -758,7 +763,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let de_administracion: BTreeSet<String> = ordenes_de_administracion().iter().map(|(_, c)| nombre(c)).collect();
     let del_servidor_de_batalla: BTreeSet<String> = ["RegistrarAsignacion", "ConfirmarInicio", "RegistrarTokens", "RegistrarSalida", "AplicarResultado"].map(String::from).into();
     let todos = variantes_de_comando();
-    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (208, 183, 20, 5));
+    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (212, 187, 20, 5));
     let clasificados: Vec<&String> = del_jugador.iter().chain(&de_administracion).chain(&del_servidor_de_batalla).collect();
     assert_eq!(clasificados.len(), todos.len(), "una variante en dos orígenes");
     let sin_clasificar: Vec<&String> = todos.iter().filter(|v| !clasificados.contains(v)).collect();
@@ -770,7 +775,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let tabla: BTreeSet<String> = tabla.map(|c| nombre(&c)).collect();
     let proto = include_str!("../../../../../proto/bronzeage/v1/orders.proto");
     let en_el_contrato = proto.lines().skip_while(|l| !l.contains("oneof cuerpo {")).skip(1).take_while(|l| l.trim() != "}").map(str::trim).filter(|l| !l.starts_with("//") && l.ends_with(';')).count();
-    assert_eq!((tabla.len(), en_el_contrato), (182, 182), "una orden del contrato sin mapear ni clasificar como no disponible");
+    assert_eq!((tabla.len(), en_el_contrato), (186, 186), "una orden del contrato sin mapear ni clasificar como no disponible");
 }
 
 /// El nombre de una orden en el contrato (el campo del `oneof`): la variante de `Cuerpo` en serpiente (`MarcharA` → `marchar_a`).
@@ -853,5 +858,5 @@ fn la_matriz_de_autorizacion_del_documento_es_la_del_codigo() {
     let faltan: Vec<String> = codigo.difference(&documento).map(fila).collect();
     let sobran: Vec<String> = documento.difference(&codigo).map(fila).collect();
     assert!(faltan.is_empty() && sobran.is_empty(), "la matriz del documento no es la del código.\nFaltan o no coinciden (como las dice el código):\n{}\nSobran (como las dice el documento):\n{}", faltan.join("\n"), sobran.join("\n"));
-    assert_eq!(codigo.len(), 183 + 20 + 5, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
+    assert_eq!(codigo.len(), 187 + 20 + 5, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
 }

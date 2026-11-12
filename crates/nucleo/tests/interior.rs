@@ -95,7 +95,7 @@ impl Aldea {
     }
 
     fn heroe(&mut self, cuenta: &str, faccion: u32, residencia: Option<Residencia>, dentro: Option<Ubicacion>) -> u64 {
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(faccion) });
         if let Some(r) = residencia {
             self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(r) });

@@ -100,7 +100,7 @@ impl X {
     }
     /// Un héroe de la cuenta, ciudadano de la Facción de la plaza, que reside en ella y está dentro.
     fn heroe_en(&mut self, cuenta: &str, plaza: u64) -> u64 {
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
         let f = self.n.estado().asentamientos[&plaza].faccion;
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(f) });
         self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
@@ -225,7 +225,7 @@ fn aceptar_contar_desde_entonces_repartir_la_grupal_y_reclamar_despues_del_perio
     }
     let g = x.gobernador(a);
     let (h, h2) = (x.heroe_en("ana", a), x.heroe_en("carla", a));
-    let fuera = x.ok("beto", Comando::CrearHeroe { cuenta: "beto".into(), campamento: 3, controlador: Controlador::Humano, nombre: None }).creadas[0];
+    let fuera = x.ok("beto", Comando::CrearHeroe { cuenta: "beto".into(), campamento: 3, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
 
     // Los rechazos de aceptar.
     assert_eq!(x.rechazo("beto", aceptar(fuera, pa, "I1")), rechazos::MISION_FUERA_DE_AMBITO);

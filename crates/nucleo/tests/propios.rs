@@ -120,7 +120,7 @@ impl Esc {
 
     /// Un héroe de la cuenta, ciudadano de `faccion`, en el campamento 0; con `plaza`, reside en ella y está dentro.
     fn heroe(&mut self, cuenta: &str, faccion: u32, plaza: Option<u64>) -> u64 {
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(faccion) });
         if let Some(p) = plaza {
             self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(p as u32)) });
@@ -405,7 +405,13 @@ async fn la_foto_inicial_de_heroe_y_faccion_lleva_todo_lo_propio_y_nada_de_otra_
     assert_eq!(h.len(), 1);
     let h = h[0];
     assert_eq!((h.id.as_str(), h.jugador_id.as_deref(), h.es_bot, h.nivel), (h_ana.as_str(), Some("ana"), false, 1));
-    assert_eq!((h.display_name.as_str(), h.class_definition_id.as_str(), h.femenino), (format!("Héroe {}", x.ana).as_str(), "default", false), "valores por defecto hasta que Conquest publique su catálogo");
+    assert_eq!((h.display_name.as_str(), h.femenino), (format!("Héroe {}", x.ana).as_str(), false), "valores por defecto hasta que Conquest publique su catálogo");
+    // La clase es la del arma de inicio y los atributos, la base de esa clase (2026-11-12, D16); nace con el equipo inicial puesto y la mochila y el almacén de objetos vacíos.
+    assert_eq!(h.class_definition_id, "espada_escudo_mediano");
+    assert_eq!(h.atributos_base, Some(pb::Atributos { fuerza: 3, destreza: 3, armadura: 2, vitalidad: 2 }));
+    let e = h.equipamiento.as_ref().unwrap();
+    assert_eq!((e.arma.as_ref().map(|p| p.item_definition_id.as_str()), e.casco.is_none(), e.torso.as_ref().map(|p| p.item_definition_id.as_str()), e.montura.as_ref().map(|p| p.item_definition_id.as_str())), (Some("espada_escudo_mediano_inicio"), true, Some("torso_media_inicio"), Some("montura_tiro")));
+    assert!(h.inventario.is_empty() && h.almacen_objetos.is_empty());
     assert_eq!(h.ubicacion.as_ref().and_then(|u| u.donde.clone()), Some(pb::ubicacion_heroe::Donde::AsentamientoId(as_a.clone())));
     assert_eq!(h.residencia_id.as_deref(), Some(as_a.as_str()), "reside en su plaza");
     assert_eq!(h.escuadrones_ids, [ids::escuadra(escuadra)]);

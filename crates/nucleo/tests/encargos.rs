@@ -187,7 +187,7 @@ impl Escenario {
     }
     /// Un héroe de la Facción 1, residente en `plaza` y dentro de ella.
     fn heroe_residente(&mut self, cuenta: &str, plaza: u64) -> u64 {
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
         self.admin(Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
         self.admin(Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
         self.admin(Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(plaza as u32) });
