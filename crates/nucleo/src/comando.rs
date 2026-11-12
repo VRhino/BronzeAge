@@ -2948,7 +2948,7 @@ pub mod rechazos {
     pub const RECETA_DESCONOCIDA: &str = "receta.desconocida";
     /// La plaza ya trabaja tantas recetas distintas en ese tipo de edificio como permite su nivel (`TALLERES_DE_UNA_RECETA.recetasDistintasPorNivel`).
     pub const RECETA_TOPE_POR_PLAZA: &str = "receta.tope_por_plaza";
-    /// Ese recurso no es un bien de consumo que se pueda pausar: solo los de `BIENES_DE_CONSUMO` (carne, pan, queso, vino, cerveza y aceite), nunca el trigo (2026-11-10).
+    /// Ese recurso no es un bien de consumo que se pueda pausar: solo los de `BIENES_DE_CONSUMO` (carne, pan, queso, vino, cerveza, aceite y aceiteSesamo), nunca el trigo (2026-11-10).
     pub const CONSUMO_NO_SE_PAUSA: &str = "consumo.no_se_pausa";
     // Ascenso (`Bloqueo`): el rechazo lleva el código del primero y todos en el mensaje.
     pub const ASCENSO_NIVEL_MAXIMO: &str = "ascenso.nivel_maximo";

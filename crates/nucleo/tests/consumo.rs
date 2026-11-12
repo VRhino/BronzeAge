@@ -138,3 +138,23 @@ fn con_la_carne_pausada_ni_la_poblacion_ni_la_guarnicion_la_comen_y_el_trigo_pon
     assert!(pausada.economia(a).unwrap().tendencia.consumido[Carne.indice()] > 0, "reanudada, se come otra vez");
     assert!(pausada.economia(a).unwrap().consumo_pausado.is_empty());
 }
+
+/// Eras_IV_Y_V §2b: el aceite de sésamo es un bien de consumo más, y `pausarConsumo` lo admite; lo pausado se ve dentro con su id de catálogo.
+#[test]
+fn el_aceite_de_sesamo_se_pausa_y_se_reanuda_como_los_demas_bienes() {
+    let Some(m) = mundo() else {
+        eprintln!("sin artefacto de mundo real: se omite");
+        return;
+    };
+    let (mut n, a) = plaza_con_guarnicion(m);
+    let pausar = |n: &mut Nucleo, id: &str, pausado| {
+        let t = n.ahora();
+        n.aplicar_en(t, Peticion::nueva("admin", id, Comando::PausarConsumo { asentamiento: a, recurso: AceiteSesamo, pausado }).de_admin())
+    };
+    let r = pausar(&mut n, "s1", true);
+    assert!(r.aceptada(), "{r:?}");
+    assert_eq!(n.economia(a).unwrap().consumo_pausado, vec![AceiteSesamo]);
+    assert_eq!(nucleo::proyeccion::interior::asentamiento(&n, a).unwrap().consumo_pausado, vec!["aceiteSesamo".to_owned()]);
+    assert!(pausar(&mut n, "s2", false).aceptada());
+    assert!(n.economia(a).unwrap().consumo_pausado.is_empty());
+}

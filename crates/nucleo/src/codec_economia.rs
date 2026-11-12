@@ -538,4 +538,15 @@ mod pruebas {
         lector.fin().unwrap();
         assert_eq!(bytes_de(&leida), bytes);
     }
+
+    #[test]
+    fn el_aceite_de_sesamo_el_recurso_42_entra_en_la_foto_al_escribir_y_al_leer() {
+        // Eras_IV_Y_V §2b: el último recurso del almacén y de la lista de consumo pausado.
+        let r = asentamiento::Reglas::cargar();
+        let mut a = Asentamiento::fundar(&r, 0, &[(Recurso::AceiteSesamo, 300_000)], 3);
+        a.consumo_pausado = vec![Recurso::AceiteSesamo];
+        let bytes = bytes_de(&a);
+        let leida = leer(&mut Lector::nuevo(&bytes)).unwrap();
+        assert_eq!((leida.almacen.cantidad(Recurso::AceiteSesamo), &leida.consumo_pausado[..]), (300_000, &[Recurso::AceiteSesamo][..]));
+    }
 }

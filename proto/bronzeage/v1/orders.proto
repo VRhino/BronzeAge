@@ -86,11 +86,11 @@ message OrdenAlternarReceta {
 }
 
 // El Gobernador o el Tesorero pausa (o reanuda) el consumo de un bien de consumo en la plaza (2026-11-10): pausado, la población no lo come (pierde su empuje al
-// crecimiento) y la guarnición no come la carne; se acumula en el almacén para venderlo. Vale para carne, pan, queso, vino, cerveza y aceite; el trigo nunca se pausa.
+// crecimiento) y la guarnición no come la carne; se acumula en el almacén para venderlo. Vale para carne, pan, queso, vino, cerveza, aceite (de oliva) y aceite de sésamo; el trigo nunca se pausa.
 // Rechazos: `consumo.no_se_pausa`. Sin cambios: `SIN_CAMBIOS`.
 message OrdenPausarConsumo {
   string asentamiento_id = 1;
-  string recurso = 2;  // id de catálogo: carne | pan | queso | vino | cerveza | aceite
+  string recurso = 2;  // id de catálogo: carne | pan | queso | vino | cerveza | aceite | aceiteSesamo
   bool pausado = 3;
 }
 
@@ -862,7 +862,7 @@ message OrdenAsignarBuey {
 }
 
 // La receta activa de una bodega o una prensa (2026-11-09): cada una trabaja una sola a la vez, la que consume `insumo` (bodega: uva → vino,
-// cebada → cerveza; prensa: aceituna o sésamo → aceite). La plaza tiene un tope de recetas distintas por tipo y nivel (`TALLERES_DE_UNA_RECETA`):
+// cebada → cerveza; prensa: aceituna → aceite, sésamo → aceiteSesamo). La plaza tiene un tope de recetas distintas por tipo y nivel (`TALLERES_DE_UNA_RECETA`):
 // la bodega, una en los niveles 3 y 4 y dos en el 5; la prensa, siempre una. Rechazos: `receta.no_se_elige`, `receta.desconocida`,
 // `receta.tope_por_plaza`, `edificio.desconocido`.
 message OrdenElegirReceta {

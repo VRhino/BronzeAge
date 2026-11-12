@@ -76,7 +76,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `receta.no_se_elige` | `RECETA_NO_SE_ELIGE` | El edificio no elige receta: solo la bodega y la prensa trabajan una sola a la vez. |
 | `receta.desconocida` | `RECETA_DESCONOCIDA` | Ese insumo no es de ninguna receta del edificio. |
 | `receta.tope_por_plaza` | `RECETA_TOPE_POR_PLAZA` | La plaza ya trabaja tantas recetas distintas en ese tipo de edificio como permite su nivel (`TALLERES_DE_UNA_RECETA.recetasDistintasPorNivel`). |
-| `consumo.no_se_pausa` | `CONSUMO_NO_SE_PAUSA` | Ese recurso no es un bien de consumo que se pueda pausar: solo los de `BIENES_DE_CONSUMO` (carne, pan, queso, vino, cerveza y aceite), nunca el trigo (2026-11-10). |
+| `consumo.no_se_pausa` | `CONSUMO_NO_SE_PAUSA` | Ese recurso no es un bien de consumo que se pueda pausar: solo los de `BIENES_DE_CONSUMO` (carne, pan, queso, vino, cerveza, aceite y aceiteSesamo), nunca el trigo (2026-11-10). |
 
 ### Ascenso (`Bloqueo`): el rechazo lleva el código del primero y todos en el mensaje
 

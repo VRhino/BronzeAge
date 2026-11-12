@@ -44,7 +44,6 @@ pub struct ReglasNivel {
     /// Techo de población total por nivel alcanzado (milésimas de habitante).
     pub techo_poblacion: BTreeMap<u32, Mil>,
     pub ascenso: BTreeMap<u32, CostoAscenso>,
-    pub nivel_techo_provisional: u32,
 }
 
 /// Qué falta para cumplir los requisitos de un nivel.
@@ -86,7 +85,6 @@ impl ReglasNivel {
                 .into_iter()
                 .map(|(n, v)| (n, CostoAscenso { costo: costo(&v["costo"]), obra_minutos: v["obraMinutos"].as_f64().expect("obraMinutos") as i64 }))
                 .collect(),
-            nivel_techo_provisional: ascenso["nivelTechoProvisional"].as_f64().expect("nivelTechoProvisional") as u32,
         }
     }
 
@@ -156,7 +154,12 @@ mod pruebas {
         // 10 minutos cada subida mientras duren las pruebas (2026-11-02, decisión del autor; antes 4.320, 10.080, 20.160 y 30.240).
         assert_eq!((a2.obra_minutos, a2.costo.clone()), (10, vec![(Recurso::Madera, 600_000), (Recurso::Oro, 150_000), (Recurso::Piedra, 400_000)]));
         assert_eq!([3, 4, 5].map(|n| r.ascenso[&n].obra_minutos), [10, 10, 10]);
-        assert_eq!(r.nivel_techo_provisional, 4);
+        // Eras_IV_Y_V §2b (autor, 2026-11-11): la obra del nivel 5 pide además 1.000 de vino, de cerveza, de aceite de oliva y de aceite de sésamo.
+        let a5 = &r.ascenso[&5].costo;
+        for bien in [Recurso::Vino, Recurso::Cerveza, Recurso::Aceite, Recurso::AceiteSesamo] {
+            assert!(a5.contains(&(bien, 1_000_000)), "{bien:?}");
+        }
+        assert_eq!(a5.len(), 7, "con la madera, la piedra y el oro de siempre");
     }
 
     #[test]

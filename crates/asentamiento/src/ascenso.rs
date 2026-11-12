@@ -73,7 +73,7 @@ impl Asentamiento {
     pub fn bloqueos_de_ascenso(&self, r: &Reglas, sin_cupo_de_faccion: bool) -> Vec<Bloqueo> {
         let objetivo = self.nivel + 1;
         let mut b = vec![];
-        if self.nivel >= r.nivel.nivel_maximo || objetivo > r.nivel.nivel_techo_provisional {
+        if self.nivel >= r.nivel.nivel_maximo {
             b.push(Bloqueo::NivelMaximo);
         }
         if self.ascenso.is_some() {
@@ -103,7 +103,7 @@ impl Asentamiento {
     /// y lo que pide. No impide subir; vacía en el nivel máximo.
     pub fn insolvencia_de_ascenso(&self, t: Instante, r: &Reglas, x: &Exterior) -> Vec<Insolvencia> {
         let objetivo = self.nivel + 1;
-        if self.nivel >= r.nivel.nivel_maximo || objetivo > r.nivel.nivel_techo_provisional {
+        if self.nivel >= r.nivel.nivel_maximo {
             return vec![];
         }
         self.mantenimiento_en(r, x, objetivo)

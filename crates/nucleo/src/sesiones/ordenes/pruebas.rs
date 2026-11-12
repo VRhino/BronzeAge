@@ -268,6 +268,10 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         (orden!(AlternarAutoConstruccion, OrdenAlternarAutoConstruccion, asentamiento_id: s("as-3"), pausada: true), Comando::AlternarAutoConstruccion { asentamiento: 3, pausada: true }),
         (orden!(AlternarReceta, OrdenAlternarReceta, asentamiento_id: s("as-3"), recurso: s("madera"), pausada: true), Comando::AlternarReceta { asentamiento: 3, recurso: Madera, pausada: true }),
         (orden!(PausarConsumo, OrdenPausarConsumo, asentamiento_id: s("as-3"), recurso: s("carne"), pausado: true), Comando::PausarConsumo { asentamiento: 3, recurso: Carne, pausado: true }),
+        (
+            orden!(PausarConsumo, OrdenPausarConsumo, asentamiento_id: s("as-3"), recurso: s("aceiteSesamo"), pausado: true),
+            Comando::PausarConsumo { asentamiento: 3, recurso: Recurso::AceiteSesamo, pausado: true },
+        ),
         (orden!(CalibrarReservaManual, OrdenCalibrarReservaManual, asentamiento_id: s("as-3"), recurso: s("trigo"), valor: 50_000), Comando::CalibrarReserva { asentamiento: 3, recurso: Trigo, valor: 50_000 }),
         (orden!(SolicitarAscenso, OrdenSolicitarAscenso, asentamiento_id: s("as-3")), Comando::SolicitarAscenso { asentamiento: 3 }),
         (orden!(ActivarPolitica, OrdenActivarPolitica, asentamiento_id: s("as-3"), cargo: s("general"), politica_id: s("leva_forzosa")), Comando::ActivarPolitica { asentamiento: 3, politica: "leva_forzosa".into(), cargo: Cargo::General }),
