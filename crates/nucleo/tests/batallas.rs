@@ -954,6 +954,9 @@ fn contra_un_campamento_de_bandidos_se_juega_un_evento_pve_cualquiera_se_une_com
     assert_eq!([Madera, Piedra, Trigo].map(total), [5 * por_heroe; 3], "madera, piedra y trigo del nivel 2 por héroe, repartidos por rondas entre las cinco columnas");
     assert_eq!(total(Oro), 0, "los bandidos ya no dan oro");
     assert_eq!(hechos(&x.n, "evento_pve.aplicada").len(), 1);
+    // Los objetos: la tabla de bandidos de su nivel, a cada héroe, como con números; la tabla `unity` no se tira contra bandidos (decisión del autor del 2026-11-12).
+    let botines = comun::botines(&x.n);
+    assert!(botines.iter().all(|b| b.origen == "bandidos") && !botines.is_empty(), "{botines:?}");
     // Y los de las Eras IV y V (Tecnologia_Aedas §2.1): el bando atacante lleva cinco héroes, y entre ellos el Rey de su Facción.
     let logros = vec![(Contador::BandidosCampamentosDestruidos, 1), (Contador::BatallasLibradas, 1), (Contador::BatallasConTresHeroes, 1), (Contador::BatallasConRey, 1)];
     assert_eq!(comun::logros_de_hechos(&x.n), logros, "el campamento destruido por Unity cuenta (6B)");

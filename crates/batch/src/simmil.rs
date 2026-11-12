@@ -12,7 +12,9 @@
 //! - **El Guardián** no sale nunca: gobierna (pide el ascenso, construye el Mercado, el Barracón y la Galería de tiro, monta la flota de dos caravanas, marca un
 //!   pueblo extractor y una aldea de trigo que luego sube de nivel, encarga los talleres de la comida con el buey del molino y compromete una empalizada)
 //!   y pone su leva en la guarnición. En una plaza sin Guardián (una conquistada) gobierna cualquier residente.
-//! - **El Capitán** convoca un ejército en la plaza (o sale directamente y los demás se le unen en la puerta) y va a por lo que tiene más cerca: un ejército
+//! - **El Capitán**, cuando le toca ir a por bandidos (cada 12 h), convoca una **batida**: llama a los compañeros libres de la plaza, que se suman a la convocatoria con lo
+//!   que tienen, y van juntos al campamento más cercano que ganan juntos con el margen del asedio; después vuelven a casa. Si no, convoca un ejército en la plaza (o
+//!   sale directamente y los demás se le unen en la puerta) y va a por lo que tiene más cerca: un ejército
 //!   enemigo a la vista (lo persigue), una plaza enemiga (tras inspeccionarla, si su poder supera con margen la defensa que le supone), un pueblo con algo que
 //!   saquear, una avanzada o el campamento de bandidos más cercano a casa que su columna puede ganar (cada 12 h; ve su nivel, como un jugador), en un orden que sortea la semilla. Ataca con `declara_guerra` cuando hace falta. Si
 //!   conquista, se queda a residir en la plaza ganada (si no deja la suya con menos de dos residentes).
@@ -20,7 +22,11 @@
 //!   enemigas que ve y las ataca en el instante en que las tiene a tiro, y a veces ataca el campamento de bandidos más cercano que puede ganar. Uno de cada cuatro es
 //!   **temerario**: una vez al día sale solo, sin tropa, contra el campamento más cercano, sea del nivel que sea.
 //! - **El Intendente** lleva a la obra los materiales del pueblo (o de la subida de la aldea) y de la atalaya (los saca del almacén de su plaza al salir) y acompaña a las caravanas: o
-//!   cede una escuadra como escolta y la manda a una plaza hermana, o sale como ejército con la caravana adjunta, la aparca allí y la manda de vuelta.
+//!   cede sus escuadras como escolta y la manda a una plaza hermana, o sale como ejército con la caravana adjunta, la aparca allí, deja en la hermana lo que lleva y la
+//!   manda de vuelta (vacía, vuelve al instante). Mira los campamentos de bandidos cerca del camino y, mientras a la escolta o al convoy les falte la defensa que pide el
+//!   más fuerte con su mejor tirada, suma a los compañeros libres de la plaza: ceden escolta (la recuperan cuando la caravana vuelve) o se unen al convoy. Lo mismo con los
+//!   carros de los pueblos, que van y vienen solos: al que pasa cerca de un campamento que puede con los carreteros le pone escolta de grupo, que se queda con el carro
+//!   hasta que ya no hace falta.
 //! - **Fuera**, quien manda la columna vuelve a casa con los víveres por debajo del 35 % (antes pasa a víveres el trigo del carro), tras tres objetivos o si lo
 //!   hieren; en la puerta reposta o entra (`Guarnecer` / `EntrarEnAsentamiento`). Si la Facción pierde todas sus plazas, el héroe vuelve a su campamento.
 //! - Solo las Facciones **belicosas** atacan a otras Facciones sin estar ya en guerra; las pacíficas atacan bandidos y responden a quien les declaró la guerra.
@@ -107,6 +113,9 @@ pub const CARAVANA_CADA_H: i64 = 4;
 /// Trigo que el ejército saca de la plaza en su carro para pasarlo a víveres en campaña, y carga de cada caravana.
 pub const TRIGO_DE_CAMPANA: i64 = 60_000;
 pub const CARGA_DE_CARAVANA: i64 = 30_000;
+/// Lo que un bot mira alrededor del camino de su caravana para saber qué campamentos de bandidos pueden salirle al paso (milésimas de unidad; el radio de ataque de los bandidos
+/// es 7 unidades y el camino no va en línea recta).
+pub const CORREDOR_CARAVANA: i64 = 20_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Rol {
@@ -161,6 +170,8 @@ pub struct Bot {
     objetivos: u32,
     /// La convocatoria que abrió y desde cuándo.
     convocatoria: Option<(u64, Instante)>,
+    /// El campamento de bandidos al que va la batida que convocó.
+    batida: Option<u64>,
     proxima_salida: Instante,
     ultimo_temerario: Instante,
     ultimo_bandido: Instante,
@@ -269,6 +280,14 @@ pub struct Medidas {
     pub conquistas_con_convocatoria: u64,
     /// Ataques de un héroe sin soldados a un campamento de bandidos.
     pub ataques_solos: u64,
+    /// Compañeros que se unieron al convoy del Intendente o cedieron escolta a su caravana.
+    pub unidos_a_caravanas: u64,
+    /// Batidas que salieron a por su campamento de bandidos.
+    pub batidas: u64,
+    /// Escoltas cedidas al carro de un pueblo.
+    pub escoltas_de_carros: u64,
+    /// Acosos de bandidos según lo que defiende la caravana: una columna (con sus héroes), una escolta cedida o los carreteros; cuántos y cuántos ganan los bandidos.
+    pub acosos_por_defensa: [[u64; 2]; 3],
     pub persecuciones_sin_alcance: u64,
     pub reclutados_por_tropa: BTreeMap<Tropa, i64>,
     pub hechos: BTreeMap<String, u64>,
@@ -656,6 +675,7 @@ impl Sim<'_> {
                 cita: 0,
                 objetivos: 0,
                 convocatoria: None,
+                batida: None,
                 proxima_salida: 0,
                 ultimo_temerario: -DIA,
                 ultimo_bandido: -DIA,
@@ -875,6 +895,58 @@ impl Sim<'_> {
         (self.n.estado().reglas.economia.militar.logistica.capacidad_carro - militar::total(&h.carro) - columna).max(0)
     }
 
+    /// Los compañeros de `i` que pueden salir o ceder escolta con él: residentes de la plaza `p` y dentro de ella, sanos, con su salida libre, sin convocatoria ni tarea
+    /// política; nunca el Guardián, que no sale. Primero el Cazador, luego el Capitán y luego el Intendente.
+    fn companeros_libres(&self, t: Instante, i: usize, p: u64) -> Vec<usize> {
+        let dentro = (Ubicacion::Asentamiento(p as u32), Some(Residencia::Asentamiento(p as u32)));
+        let convocados: BTreeSet<u64> = self.n.convocatorias_del_lugar(Lugar::Asentamiento(p as u32)).iter().flat_map(|c| c.integrantes.iter().map(|x| x.heroe)).collect();
+        let mut v: Vec<usize> = (0..self.bots.len())
+            .filter(|&j| {
+                let b = &self.bots[j];
+                j != i && b.rol != Rol::Guardian && b.convocatoria.is_none() && t >= b.proxima_salida && !convocados.contains(&b.heroe) && !self.pol.as_ref().is_some_and(|x| x.ocupado(j, t))
+            })
+            .filter(|&j| self.heroe(j).is_some_and(|h| (h.heroe.presencia.ubicacion, h.heroe.residencia) == dentro && !h.heroe.esta_herido(t)))
+            .collect();
+        v.sort_by_key(|&j| match self.bots[j].rol {
+            Rol::Cazador => 0,
+            Rol::Capitan => 1,
+            _ => 2,
+        });
+        v
+    }
+
+    /// El poder que juntarían los héroes de `miembros` saliendo juntos con lo que tienen en su campamento.
+    fn poder_del_grupo(&self, miembros: impl Iterator<Item = usize>) -> i64 {
+        let (mut escuadras, mut heroes) = (Vec::new(), 0);
+        for j in miembros {
+            let ids = self.del_campamento(j);
+            escuadras.extend(self.heroe(j).into_iter().flat_map(|h| h.heroe.escuadras.iter().filter(|s| ids.contains(&s.id)).cloned()));
+            heroes += 1;
+        }
+        combate::resolucion::poder_de_bando(&self.n.estado().reglas.economia.combate, &escuadras, heroes)
+    }
+
+    /// El poder de unas escuadras del campamento del héroe de `j`, sin héroe (el de una escolta cedida).
+    fn poder_de_escuadras(&self, j: usize, ids: &[u64]) -> i64 {
+        let escuadras: Vec<militar::escuadra::Escuadra> = self.heroe(j).map(|h| h.heroe.escuadras.iter().filter(|s| ids.contains(&s.id)).cloned().collect()).unwrap_or_default();
+        combate::resolucion::poder_de_bando(&self.n.estado().reglas.economia.combate, &escuadras, 0)
+    }
+
+    /// Lo que tiene que reunir la defensa de una caravana que va de `p` a `hermana` para no perder contra ningún campamento de bandidos de los que ve cerca del camino (a
+    /// `CORREDOR_CARAVANA` de la recta entre las dos plazas, fuera de la protección de los mercenarios): el poder del más fuerte con su mejor tirada (`1 + varianza`). Sin ninguno, 0.
+    fn defensa_para_el_camino(&self, p: u64, hermana: u64) -> i64 {
+        let a = |id: u64| self.n.estado().asentamientos[&id].posicion;
+        self.defensa_entre(a(p), a(hermana))
+    }
+
+    /// [`Sim::defensa_para_el_camino`] entre dos puntos cualesquiera (el del carro de un pueblo va del pueblo a su madre).
+    fn defensa_entre(&self, a: Punto, b: Punto) -> i64 {
+        let n = &self.n;
+        let cr = &n.estado().reglas.economia.combate;
+        let nivel = n.campamentos_de_bandidos().filter(|x| !n.en_proteccion_de_campamento(x.posicion) && distancia_a_segmento(x.posicion, a, b) <= CORREDOR_CARAVANA).map(|x| x.nivel).max();
+        nivel.map_or(0, |k| combate::bandidos::nivel_de(cr, k).poder * (asentamiento::datos::UNO + cr.poder.varianza) / asentamiento::datos::UNO)
+    }
+
     fn poder_de_columna(&self, c: u64) -> i64 {
         let cr = &self.n.estado().reglas.economia.combate;
         let escuadras: Vec<militar::escuadra::Escuadra> = self.n.escuadras_de_columna(c).into_iter().cloned().collect();
@@ -917,6 +989,12 @@ impl Sim<'_> {
             }
         }
         self.loadout(t, i);
+        // La escolta que cedió a una caravana de la flota de la plaza que ya volvió (está disponible) vuelve a su campamento (la del carro de un pueblo la quita el Intendente).
+        let heroe = self.bots[i].heroe;
+        let con_la_mia: Vec<u64> = self.n.flota_de(p).iter().filter(|k| k.estado == EstadoCaravana::Disponible && k.escolta.iter().any(|e| e.heroe == heroe)).map(|k| k.id).collect();
+        for caravana in con_la_mia {
+            self.suya(t, i, "QuitarEscolta", Comando::QuitarEscolta { caravana, heroe, escuadras: None });
+        }
         // Lo que trajo en el carro (el botín) va a su almacén personal: así sale con el carro libre.
         let cabe = self.n.estado().reglas.economia.comercio.mercenarios.capacidad_almacen_personal;
         if self.heroe(i).is_some_and(|h| !h.carro.is_empty() && militar::total(&h.almacen_personal) < cabe) {
@@ -1145,7 +1223,17 @@ impl Sim<'_> {
         let heroe = self.bots[i].heroe;
         self.bots[i].convocatoria = None;
         let r = self.suya(t, i, "PartirConvocatoria", Comando::PartirConvocatoria { heroe, caravana_fundacion: None });
+        let batida = self.bots[i].batida.take();
         if let Some(&c) = r.creadas.first().filter(|_| r.aceptada()) {
+            // La batida va derecha a su campamento si sigue en pie y la columna lo gana con el margen; después vuelve a casa.
+            let cr = &self.n.estado().reglas.economia.combate;
+            let poder = self.poder_de_columna(c);
+            let destino = batida.and_then(|x| self.n.campamento_de_bandidos(x)).filter(|b| combate::bandidos::nivel_de(cr, b.nivel).poder * MARGEN_ASEDIO_PCT / 100 <= poder).map(|b| (b.posicion, b.id));
+            if let Some((punto, x)) = destino {
+                (self.bots[i].objetivos, self.bots[i].tarea) = (OBJETIVOS_POR_SALIDA - 1, Tarea::Libre);
+                self.medidas.batidas += 1;
+                return self.ir(t, i, c, punto, Meta::Atacar(ObjetivoAtaque::Campamento(x)));
+            }
             self.al_salir(t, i, c);
         } else if self.n.convocatoria(conv).is_some() {
             self.suya(t, i, "CancelarConvocatoria", Comando::CancelarConvocatoria { heroe });
@@ -1161,6 +1249,21 @@ impl Sim<'_> {
         let heroe = self.bots[i].heroe;
         // El trigo de campaña, hasta lo que le quepa en el carro (el que trajo a casa y no pudo vaciar va con él).
         let carga: Vec<(Recurso, i64)> = Some((Recurso::Trigo, TRIGO_DE_CAMPANA.min(self.libre_en_el_carro(i)))).filter(|x| x.1 > 0).into_iter().collect();
+        // La batida: cuando le toca ir a por bandidos, convoca a los compañeros libres de la plaza contra el campamento más cercano que pueden ganar juntos.
+        let companeros = self.companeros_libres(t, i, p);
+        let grupo = self.poder_del_grupo(std::iter::once(i).chain(companeros.iter().copied()));
+        if let Some((_, ObjetivoAtaque::Campamento(x))) = self.bandidos_cerca(t, i, Some(grupo)).filter(|_| !companeros.is_empty()) {
+            let r = self.con_gasto(t, i, p, "ConvocarBatida", Comando::ConvocarEjercito { heroe, escuadras, carga, politica: Politica::Aceptar });
+            if let Some(&conv) = r.creadas.first().filter(|_| r.aceptada()) {
+                (self.bots[i].convocatoria, self.bots[i].batida, self.bots[i].ultimo_bandido) = (Some((conv, t)), Some(x), t);
+                self.cita(t + 10 * MIN, i);
+                for j in companeros {
+                    let (otro, suyas) = (self.bots[j].heroe, self.del_campamento(j));
+                    self.suya(t, j, "UnirseABatida", Comando::UnirseAConvocatoria { heroe: otro, convocatoria: conv, escuadras: suyas, carga: vec![] });
+                }
+            }
+            return;
+        }
         if self.rng.por_debajo(100) < CONVOCA_PCT {
             let r = self.con_gasto(t, i, p, "ConvocarEjercito", Comando::ConvocarEjercito { heroe, escuadras, carga, politica: Politica::Aceptar });
             if let Some(&conv) = r.creadas.first().filter(|_| r.aceptada()) {
@@ -1224,6 +1327,8 @@ impl Sim<'_> {
             (a.economia.nivel_actual(), a.posicion, a.radio)
         };
         let capacidad = self.libre_en_el_carro(i);
+        // 0. Los carros de los pueblos, que van y vienen solos entre el pueblo y la plaza.
+        self.escoltar_carros(t, i, p);
         // 1. La obra de un pueblo, o la subida de nivel de la aldea, que espera materiales: los saca del almacén (hasta lo que cabe en el carro).
         let obra = self.n.pueblos_de(p).iter().find(|x| !x.falta().is_empty()).map(|x| (x.id, x.falta()));
         if let Some((pueblo, falta)) = obra {
@@ -1246,7 +1351,8 @@ impl Sim<'_> {
                 }
             }
         }
-        // 3. Una caravana a una plaza hermana, por turnos: escoltada (sale sola con una escuadra cedida) o adjunta al ejército del Intendente.
+        // 3. Una caravana a una plaza hermana, por turnos: escoltada (sale sola con escuadras cedidas) o adjunta al ejército del Intendente. En los dos casos el Intendente junta
+        //    a los compañeros libres de la plaza hasta tener la defensa que pide el campamento más fuerte que ve cerca del camino.
         if t < self.bots[i].proxima_caravana {
             return;
         }
@@ -1259,17 +1365,87 @@ impl Sim<'_> {
         }
         self.bots[i].adjunta = !self.bots[i].adjunta;
         let escuadras = self.del_campamento(i);
+        let hace_falta = self.defensa_para_el_camino(p, hermana);
         if self.bots[i].adjunta && !escuadras.is_empty() {
-            let r = self.con_gasto(t, i, p, "MovilizarEjercito", Comando::MovilizarEjercito { asentamiento: p, heroe, escuadras, carga: vec![], politica: Politica::Rechazar, caravana_fundacion: None });
+            // El convoy: los compañeros se le unen en la puerta mientras a la columna (con sus héroes) le falte defensa.
+            let r = self.con_gasto(t, i, p, "MovilizarEjercito", Comando::MovilizarEjercito { asentamiento: p, heroe, escuadras, carga: vec![], politica: Politica::Aceptar, caravana_fundacion: None });
             let Some(&c) = r.creadas.first().filter(|_| r.aceptada()) else { return };
             self.suya(t, i, "AdjuntarCaravana", Comando::AdjuntarCaravana { caravana, ejercito: c });
+            for j in self.companeros_libres(t, i, p) {
+                if self.poder_de_columna(c) >= hace_falta {
+                    break;
+                }
+                let (otro, suyas) = (self.bots[j].heroe, self.del_campamento(j));
+                if !suyas.is_empty() && self.con_gasto(t, j, p, "UnirseAlConvoy", Comando::UnirseAEjercito { asentamiento: p, heroe: otro, ejercito: c, escuadras: suyas, carga: vec![] }).aceptada() {
+                    self.medidas.unidos_a_caravanas += 1;
+                }
+            }
             let destino = self.n.estado().asentamientos[&hermana].posicion;
             return self.ir(t, i, c, destino, Meta::Aparcar { caravana, plaza: hermana });
         }
-        if let Some(&escolta) = escuadras.last() {
-            self.suya(t, i, "AsignarEscolta", Comando::AsignarEscolta { caravana, heroe, escuadras: vec![escolta] });
+        // La escolta de grupo: las escuadras del Intendente y, mientras falte defensa, las de los compañeros libres (vuelven a su campamento cuando la caravana vuelve).
+        let mut defensa = 0;
+        let cedentes: Vec<(usize, Vec<u64>)> = std::iter::once((i, escuadras)).chain(self.companeros_libres(t, i, p).into_iter().map(|j| (j, self.del_campamento(j)))).collect();
+        for (j, suyas) in cedentes {
+            if suyas.is_empty() || (j != i && defensa >= hace_falta) {
+                continue;
+            }
+            let poder = self.poder_de_escuadras(j, &suyas);
+            let otro = self.bots[j].heroe;
+            if self.suya(t, j, "AsignarEscolta", Comando::AsignarEscolta { caravana, heroe: otro, escuadras: suyas }).aceptada() {
+                defensa += poder;
+                self.medidas.unidos_a_caravanas += (j != i) as u64;
+            }
         }
         self.suya(t, i, "PrepararCaravana", Comando::PrepararCaravana { caravana, destino: hermana, carga: vec![(Recurso::Trigo, if self.tec.is_some() { tec::CARGA_DE_CARAVANA } else { CARGA_DE_CARAVANA })], salir_en: None, escolta: None });
+    }
+
+    /// Los carros de los pueblos de la plaza `p` que esperan en ella: al que va a cruzar cerca de un campamento de bandidos que puede con los carreteros, el Intendente le pone
+    /// escolta de grupo (la suya y la de los compañeros libres, hasta la defensa que pide el más fuerte con su mejor tirada); al que ya no lo necesita se la quitan sus dueños
+    /// que están en casa. La escolta se queda con el carro, que va y vuelve solo.
+    fn escoltar_carros(&mut self, t: Instante, i: usize, p: u64) {
+        let base = self.n.estado().reglas.economia.combate.poder.defensa_base_caravana;
+        let madre = self.n.estado().asentamientos[&p].posicion;
+        let carros: Vec<(u64, i64, Vec<u64>)> = self
+            .n
+            .pueblos_de(p)
+            .iter()
+            .filter_map(|x| {
+                let k = self.n.caravana(x.carro?).filter(|k| k.tipo == TipoCaravana::Acarreo && k.estado == EstadoCaravana::Disponible)?;
+                Some((k.id, self.defensa_entre(madre, self.n.posicion_de_pueblo(x.id)?), k.escolta.iter().map(|e| e.heroe).collect()))
+            })
+            .collect();
+        for (carro, hace_falta, duenos) in carros {
+            if !duenos.is_empty() {
+                // Ya no hace falta: cada dueño que está en casa recupera la suya.
+                if hace_falta <= base {
+                    let en_casa = |j: usize| self.heroe(j).is_some_and(|h| h.heroe.presencia.ubicacion == Ubicacion::Asentamiento(p as u32));
+                    for j in (0..self.bots.len()).filter(|&j| duenos.contains(&self.bots[j].heroe) && en_casa(j)).collect::<Vec<_>>() {
+                        let heroe = self.bots[j].heroe;
+                        self.suya(t, j, "QuitarEscoltaDelCarro", Comando::QuitarEscolta { caravana: carro, heroe, escuadras: None });
+                    }
+                }
+                continue;
+            }
+            if hace_falta <= base {
+                continue;
+            }
+            let mut defensa = 0;
+            let cedentes: Vec<(usize, Vec<u64>)> = std::iter::once(i).chain(self.companeros_libres(t, i, p)).map(|j| (j, self.del_campamento(j))).collect();
+            for (j, suyas) in cedentes {
+                if defensa >= hace_falta {
+                    break;
+                }
+                if suyas.is_empty() {
+                    continue;
+                }
+                let (poder, heroe) = (self.poder_de_escuadras(j, &suyas), self.bots[j].heroe);
+                if self.suya(t, j, "EscoltarCarro", Comando::AsignarEscolta { caravana: carro, heroe, escuadras: suyas }).aceptada() {
+                    defensa += poder;
+                    self.medidas.escoltas_de_carros += 1;
+                }
+            }
+        }
     }
 
     /// Lo que se puede sacar del almacén de la plaza de una lista, hasta la capacidad del carro.
@@ -1507,6 +1683,12 @@ impl Sim<'_> {
                 let sin_batalla = !b.asentamientos.contains(&(plaza as u32)) && !b.ejercitos.contains(&c) && !b.heroes.contains(&heroe);
                 if de_los_suyos && la_lleva && sin_batalla && self.esperada(t, i, "GuarnecerHermana", Comando::Guarnecer { asentamiento: plaza, heroe }).aceptada() {
                     if self.esperada(t, i, "AparcarCaravana", Comando::AparcarCaravana { caravana, asentamiento: plaza }).aceptada() {
+                        // Lo que lleva lo deja en la hermana: vacía vuelve a su origen al instante (`EnviarCaravanaAlOrigen`), en vez de cruzar sola el campo de los bandidos. Lo que
+                        // no quepa en el almacén de la hermana vuelve con ella, viajando.
+                        let lleva: Vec<(Recurso, i64)> = self.n.caravana(caravana).map(|k| k.contenido.iter().map(|(&r, &q)| (r, q)).collect()).unwrap_or_default();
+                        for (recurso, cantidad) in lleva {
+                            self.suya(t, i, "DescargarEnLaHermana", Comando::MoverCargaAparcada { caravana, recurso, cantidad, cargar: false });
+                        }
                         self.esperada(t, i, "EnviarCaravanaAlOrigen", Comando::EnviarCaravanaAlOrigen { caravana });
                     }
                     self.esperada(t, i, "SalirDeAsentamiento", Comando::SalirDeAsentamiento { asentamiento: plaza, heroe });
@@ -1808,7 +1990,14 @@ impl Sim<'_> {
                     *m.reclutados_por_tropa.entry(s.tropa).or_insert(0) += dato("reclutados");
                 }
             }
-            "bandidos.caravana_interceptada" | "bandidos.caravana_escapa" => m.combates.push(Combate { tipo: "acoso", gana_atacante: codigo == "bandidos.caravana_interceptada", poder_a: dato("poderBandido"), poder_d: dato("defensa"), t }),
+            "bandidos.caravana_interceptada" | "bandidos.caravana_escapa" => {
+                let gana = codigo == "bandidos.caravana_interceptada";
+                m.combates.push(Combate { tipo: "acoso", gana_atacante: gana, poder_a: dato("poderBandido"), poder_d: dato("defensa"), t });
+                let base = self.n.estado().reglas.economia.combate.poder.defensa_base_caravana;
+                let clase = if !ejercitos.is_empty() { 0 } else if dato("defensa") == base { 2 } else { 1 };
+                m.acosos_por_defensa[clase][0] += 1;
+                m.acosos_por_defensa[clase][1] += gana as u64;
+            }
             "pueblo.guarnicion_repuesta" => {
                 let pueblo = dato("pueblo") as u64;
                 if let Some((desde, perdidos)) = m.reponiendo.get_mut(&pueblo).and_then(|q| q.pop_front()) {
@@ -1922,6 +2111,14 @@ impl Sim<'_> {
             escuadras_por_heroe,
         });
     }
+}
+
+/// La distancia de `x` al segmento `a`-`b` (en milésimas de unidad).
+fn distancia_a_segmento(x: Punto, a: Punto, b: Punto) -> i64 {
+    let (dx, dy) = ((b.x - a.x) as f64, (b.y - a.y) as f64);
+    let largo = dx * dx + dy * dy;
+    let k = if largo == 0.0 { 0.0 } else { ((((x.x - a.x) as f64) * dx + ((x.y - a.y) as f64) * dy) / largo).clamp(0.0, 1.0) };
+    x.dist(Punto::new(a.x + (k * dx) as i64, a.y + (k * dy) as i64))
 }
 
 /// Los soldados de la guarnición de serie completa de una avanzada y cada cuánto vuelve uno (Combate §7.4).

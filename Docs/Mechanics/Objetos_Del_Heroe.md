@@ -88,7 +88,7 @@ Siete huecos: arma, casco, torso, guantes, pantalones, botas y montura. **El arm
 
 | Fuente (`origen`) | Tabla | Quién y cuándo |
 | --- | --- | --- |
-| `unity` | `unity` | Cada héroe que participó en una batalla de Unity, al aplicar su resultado, en el orden de `porHeroe`; lo de `soloSiGana`, si gana su bando ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §9). Unity ya no manda botín (D6 y D7). |
+| `unity` | `unity` | Cada héroe que participó en una batalla de Unity, al aplicar su resultado, en el orden de `porHeroe`; lo de `soloSiGana`, si gana su bando ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §9). Unity ya no manda botín (D6 y D7). **Contra bandidos no** (su campamento o su emboscada a una columna): solo la tabla `bandidos` de su nivel si caen, como con números (decisión del autor del 2026-11-12). |
 | `bandidos` | `bandidos` del nivel | Cada héroe que cobra el botín de un campamento destruido (con la regla del anillo), solo dentro de las 8 completas de su ventana de 24 h ([`Combate.md`](Combate.md) §7.2). |
 | `diaria` | `misionDiaria` | El héroe que reclama una diaria **individual** del tablón, además de su recompensa (D5; [`Misiones_Recurrentes.md`](Misiones_Recurrentes.md) §5). |
 | `alijo` | `alijo` | Quien abre un alijo ([`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md) §12). |
