@@ -119,8 +119,6 @@ pub struct Participante {
     /// `None`: sin bandera.
     pub faccion: Option<FaccionId>,
     pub controlador: Controlador,
-    /// Cuánto botín cabe en su inventario (`casillasInventario − ocupadas`).
-    pub casillas_libres: u32,
     pub escuadras: Vec<EscuadraEnBatalla>,
 }
 
@@ -705,8 +703,8 @@ impl Batalla {
 
     /// `aplicarResultado` (`en_curso → aplicada`): valida el checklist **entero** o no cambia nada; aplicarlo y pasar a `aplicada` es una sola
     /// mutación. Repetir el mismo resultado sobre una `aplicada` responde bien sin cambiar nada; otro distinto se rechaza. Devuelve lo que el núcleo
-    /// tiene que aplicar (heridos, escuadras, experiencia, botín, candados): ver [`Efectos`].
-    pub fn aplicar_resultado(&mut self, ahora: Instante, servidor: &str, res: Resultado, objeto_ya_existe: &dyn Fn(&str) -> bool) -> Result<Efecto<Efectos>, ErrorBatalla> {
+    /// tiene que aplicar (heridos, escuadras, experiencia, candados): ver [`Efectos`].
+    pub fn aplicar_resultado(&mut self, ahora: Instante, servidor: &str, res: Resultado) -> Result<Efecto<Efectos>, ErrorBatalla> {
         if self.estado == EstadoBatalla::Aplicada {
             return if self.resultado.as_ref() == Some(&res) { Ok(Efecto::SinCambios) } else { Err(ErrorBatalla::OtroResultado) };
         }
@@ -716,7 +714,7 @@ impl Batalla {
         if !self.activa(ahora) {
             return Err(ErrorBatalla::NoActiva);
         }
-        self.validar_resultado(servidor, &res, objeto_ya_existe).map_err(ErrorBatalla::Resultado)?;
+        self.validar_resultado(servidor, &res).map_err(ErrorBatalla::Resultado)?;
         let efectos = self.efectos_del_resultado(&res);
         self.resultado = Some(res);
         self.aplicada_en = Some(ahora);

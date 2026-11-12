@@ -45,7 +45,7 @@ fn resultado(t: &pb::BattleTicket, incorporaciones: &[pb::IncorporacionBatalla],
             .collect(),
         por_heroe: participantes
             .iter()
-            .map(|p| pb::ResultadoHeroe { heroe_id: p.heroe_id.clone(), participo: true, sobrevivio_al_cierre: true, derrotado: Some(false), botin: None })
+            .map(|p| pb::ResultadoHeroe { heroe_id: p.heroe_id.clone(), participo: true, sobrevivio_al_cierre: true, derrotado: Some(false) })
             .collect(),
         version_servidor: format!("batalla-de-mentira {}", env!("CARGO_PKG_VERSION")),
         carros_perdidos: vec![],

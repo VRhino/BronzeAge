@@ -38,6 +38,7 @@
 use super::combates::{de_su_columna, loadout_en_el_campamento};
 use super::contratos::Desenlace;
 use super::*;
+use super::botin_de_objetos::Fuente;
 use crate::comando::Implicados;
 use crate::estado::{Dato, SucesoBatalla, PRIO_BATALLA, PRIO_SALIDA, SIN_BANDERA};
 use crate::estado_batallas::entidad_batalla;
@@ -54,7 +55,6 @@ use militar::escuadra::{Contenedor, Escuadra};
 use militar::heroe::{Controlador, Residencia};
 use militar::presencia::Ubicacion;
 use militar::{sumar, Carga as Mercancia};
-use std::collections::BTreeSet;
 
 /// El id de una escuadra que aún no lo tiene (carreteros, bandidos): al abrir la batalla recibe uno de la partida.
 const SIN_ID: u64 = 0;
@@ -366,9 +366,8 @@ impl Nucleo {
     }
 
     fn participante(&self, h: &HeroeNucleo, escuadras: Vec<EscuadraEnBatalla>) -> Participante {
-        // Los héroes todavía no tienen inventario: caben tantos objetos como casillas tiene la mochila (el botín de Unity no tiene dónde caer, CQ-004).
         let escuadras = escuadras.into_iter().map(|e| self.con_formaciones(e)).collect();
-        Participante { heroe: h.heroe.id, faccion: h.faccion, controlador: h.heroe.controlador, casillas_libres: self.estado.reglas.economia.combate.batalla.casillas_inventario, escuadras }
+        Participante { heroe: h.heroe.id, faccion: h.faccion, controlador: h.heroe.controlador, escuadras }
     }
 
     /// Las familias de formación que permite la tecnología de una Facción; sin Facción, las que no piden tecnología (Heroe_Y_Tropa §10.4).
@@ -1034,20 +1033,18 @@ impl Nucleo {
     /// `aplicada` responde bien sin cambiar nada; otro distinto se rechaza.
     fn aplicar_resultado(&mut self, t: Instante, id: u64, servidor: &str, res: ResultadoDeBatalla) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
-        // Los `itemInstanceId` ya recibidos en otras batallas que se conservan: los héroes aún no tienen inventario donde mirar (CQ-004).
-        let existentes: BTreeSet<String> = self.batallas().filter(|b| b.id != id).filter_map(|b| b.resultado.as_ref()).flat_map(|r| r.por_heroe.iter()).filter_map(|h| h.botin.as_ref()).flat_map(|b| b.objetos.iter()).filter_map(|o| o.instancia.clone()).collect();
         self.tr.tocar(Clase::Batalla, id);
         let b = self.estado.batallas.batallas.get_mut(&id).ok_or_else(|| Respuesta::rechazo(rechazos::BATALLA_NO_EXISTE, format!("batalla-{id}"), v))?;
-        let efectos = match b.aplicar_resultado(t, servidor, res.clone(), &|i| existentes.contains(i)).map_err(|e| rechazo_de_batalla(e, v))? {
+        let efectos = match b.aplicar_resultado(t, servidor, res.clone()).map_err(|e| rechazo_de_batalla(e, v))? {
             Efecto::SinCambios => return Err(sin_cambios(v)),
             Efecto::Aplicado(e) => e,
         };
         let b = self.estado.batallas.batallas[&id].clone();
         let mr = self.estado.reglas.economia.militar.clone();
 
-        // 1-2. Lo que Unity dice de cada uno: los supervivientes de cada escuadra (las de los héroes, las de la guarnición de serie de un pueblo o una avanzada) y las monedas de
-        // cada héroe, y los candados fuera. La experiencia la pone el motor (D7): 4 o 2 según gane su bando, a cada escuadra que entró y a cada héroe que participó. Los objetos del
-        // botín no tienen dónde caer (CQ-004).
+        // 1-2. Lo que Unity dice de cada uno: los supervivientes de cada escuadra (las de los héroes, las de la guarnición de serie de un pueblo o una avanzada), y los candados
+        // fuera. La experiencia y el botín los pone el motor (D6 y D7): 4 o 2 de experiencia según gane su bando, a cada escuadra que entró y a cada héroe que participó, y a cada
+        // héroe que participó la tabla `unity` de BOTIN_OBJETOS (lo de `soloSiGana`, si gana su bando). Las monedas, con MONEDAS, más abajo.
         let xp = |victoria: Option<bool>| victoria.map_or(0, |v| if v { mr.militar.experiencia_unity_victoria } else { mr.militar.experiencia_unity_derrota });
         for e in &efectos.escuadras {
             let ganada = xp(e.victoria);
@@ -1072,10 +1069,8 @@ impl Nucleo {
         }
         for e in &efectos.heroes {
             self.experiencia_de_heroe(t, e.heroe, xp(e.victoria));
-            let Some(h) = self.estado.militar.heroes.get_mut(&e.heroe) else { continue };
-            self.tr.tocar(Clase::Heroe, e.heroe);
-            if let Some(botin) = &e.botin {
-                h.heroe.monedas += botin.monedas;
+            if let Some(gana) = e.victoria {
+                self.botin_de_objetos(t, e.heroe, Fuente::Unity { gana });
             }
         }
         self.reservar(&efectos.soltar, None);

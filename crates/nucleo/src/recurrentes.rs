@@ -9,7 +9,6 @@ use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::misiones::{escribir_dueno, leer_dueno, ClaseDueno, Dueno};
 use crate::recompensas::Recompensa;
 use base::Instante;
-use militar::catalogo::Catalogo as Tropas;
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -94,7 +93,7 @@ impl Recurrente {
         matches!(self.tipo, Tipo::Individual { .. })
     }
 
-    fn desde(ambito: Ambito, m: &Value, tropas: &Tropas) -> Result<Recurrente, String> {
+    fn desde(ambito: Ambito, m: &Value, militar: &militar::Reglas) -> Result<Recurrente, String> {
         let id = m.get("id").and_then(Value::as_str).filter(|s| !s.is_empty()).ok_or("misión sin id")?.to_owned();
         let texto = |c: &str| m.get(c).and_then(Value::as_str).map(str::to_owned).ok_or_else(|| format!("{id}: sin «{c}»"));
         let duracion = match m.get("duracion").and_then(Value::as_str) {
@@ -133,7 +132,7 @@ impl Recurrente {
                 n.as_u64().filter(|&n| n > 0).map(|n| (k.clone(), n)).ok_or_else(|| format!("{id}: umbral de «{k}»"))
             })
             .collect::<Result<_, _>>()?;
-        let recompensa = Recompensa::leer(m, ambito.clase(), matches!(tipo, Tipo::Individual { .. }), tropas)?;
+        let recompensa = Recompensa::leer(m, ambito.clase(), matches!(tipo, Tipo::Individual { .. }), militar)?;
         Ok(Recurrente { id: id.clone(), ambito, duracion, tipo, cargo, condiciones, recompensa, titulo: texto("titulo")?, texto: texto("texto")?, explicacion: texto("explicacion")? })
     }
 
@@ -171,13 +170,13 @@ pub struct Catalogo {
 
 impl Catalogo {
     /// El catálogo inicial (`MISIONES_RECURRENTES` de Misiones_Recurrentes.md).
-    pub fn cargar(tropas: &Tropas) -> Self {
+    pub fn cargar(militar: &militar::Reglas) -> Self {
         let v = asentamiento::datos::bloque_de(DOC_RECURRENTES, "MISIONES_RECURRENTES").unwrap_or_else(|e| panic!("{e}"));
-        Self::desde(&v, &[], tropas).unwrap_or_else(|e| panic!("bloque MISIONES_RECURRENTES: {e}"))
+        Self::desde(&v, &[], militar).unwrap_or_else(|e| panic!("bloque MISIONES_RECURRENTES: {e}"))
     }
 
-    /// Lee y valida un catálogo entero; `prohibidos` son ids que no puede usar (los de las misiones únicas) y `tropas`, el catálogo de las que puede dar una recompensa.
-    pub fn desde(v: &Value, prohibidos: &[&str], tropas: &Tropas) -> Result<Self, String> {
+    /// Lee y valida un catálogo entero; `prohibidos` son ids que no puede usar (los de las misiones únicas) y `militar`, las tropas y los objetos que puede dar una recompensa.
+    pub fn desde(v: &Value, prohibidos: &[&str], militar: &militar::Reglas) -> Result<Self, String> {
         let o = v.as_object().ok_or("el catálogo es un objeto con «asentamiento» y «faccion»")?;
         if let Some(k) = o.keys().find(|k| *k != "asentamiento" && *k != "faccion") {
             return Err(format!("ámbito desconocido «{k}»"));
@@ -189,7 +188,7 @@ impl Catalogo {
                 Some(l) => l.as_array().ok_or_else(|| format!("«{}» es una lista", ambito.clave()))?,
             };
             for m in lista {
-                misiones.push(Arc::new(Recurrente::desde(ambito, m, tropas)?));
+                misiones.push(Arc::new(Recurrente::desde(ambito, m, militar)?));
             }
         }
         // Un ámbito sin misiones dejaría su tablón vacío desde la siguiente renovación (decisión del autor del 2026-10-28: no se admite).
@@ -211,9 +210,9 @@ impl Catalogo {
     }
 
     /// Lee el JSON en texto.
-    pub fn desde_texto(s: &str, prohibidos: &[&str], tropas: &Tropas) -> Result<Self, String> {
+    pub fn desde_texto(s: &str, prohibidos: &[&str], militar: &militar::Reglas) -> Result<Self, String> {
         let v: Value = serde_json::from_str(s).map_err(|e| format!("JSON mal formado: {e}"))?;
-        Self::desde(&v, prohibidos, tropas)
+        Self::desde(&v, prohibidos, militar)
     }
 
     pub fn a_json(&self) -> Value {
@@ -242,7 +241,7 @@ impl Catalogo {
 impl Default for Catalogo {
     fn default() -> Self {
         static C: std::sync::OnceLock<Catalogo> = std::sync::OnceLock::new();
-        C.get_or_init(|| Catalogo::cargar(&militar::Reglas::cargar().tropas)).clone()
+        C.get_or_init(|| Catalogo::cargar(&militar::Reglas::cargar())).clone()
     }
 }
 
@@ -550,8 +549,8 @@ pub(crate) fn escribir(w: &mut Escritor, e: &EstadoRecurrentes) {
     }
 }
 
-pub(crate) fn leer(r: &mut Lector, tropas: &Tropas) -> Result<EstadoRecurrentes, ErrorFormato> {
-    let catalogo = Arc::new(Catalogo::desde_texto(&r.texto()?, &[], tropas).map_err(|_| ErrorFormato("catálogo de misiones recurrentes mal formado"))?);
+pub(crate) fn leer(r: &mut Lector, militar: &militar::Reglas) -> Result<EstadoRecurrentes, ErrorFormato> {
+    let catalogo = Arc::new(Catalogo::desde_texto(&r.texto()?, &[], militar).map_err(|_| ErrorFormato("catálogo de misiones recurrentes mal formado"))?);
     let (origen, renovacion_en) = (r.i64()?, r.opt_i64()?);
     let mut tablones = BTreeMap::new();
     for _ in 0..r.cuenta()? {
@@ -565,7 +564,7 @@ pub(crate) fn leer(r: &mut Lector, tropas: &Tropas) -> Result<EstadoRecurrentes,
         for _ in 0..r.cuenta()? {
             let v: Value = serde_json::from_str(&r.texto()?).map_err(|_| ErrorFormato("misión recurrente mal formada"))?;
             let ambito = if v.get("ambito").and_then(Value::as_str) == Some("faccion") { Ambito::Faccion } else { Ambito::Asentamiento };
-            let def = Arc::new(Recurrente::desde(ambito, &v["def"], tropas).map_err(|_| ErrorFormato("misión recurrente mal formada"))?);
+            let def = Arc::new(Recurrente::desde(ambito, &v["def"], militar).map_err(|_| ErrorFormato("misión recurrente mal formada"))?);
             let (desde, hasta) = (r.i64()?, r.i64()?);
             let progreso = match r.u8()? {
                 0 => {
@@ -599,28 +598,28 @@ pub(crate) fn leer(r: &mut Lector, tropas: &Tropas) -> Result<EstadoRecurrentes,
 mod pruebas {
     use super::*;
 
-    fn tropas() -> Tropas {
-        militar::Reglas::cargar().tropas
+    fn reglas() -> militar::Reglas {
+        militar::Reglas::cargar()
     }
 
     #[test]
     fn el_catalogo_inicial_se_lee_y_vuelve_igual_por_su_json() {
-        let c = Catalogo::cargar(&tropas());
+        let c = Catalogo::cargar(&reglas());
         assert_eq!(c.de(Ambito::Asentamiento, Duracion::Dia).count(), 10);
         assert_eq!(c.de(Ambito::Asentamiento, Duracion::Semana).count(), 10);
         assert_eq!(c.misiones.iter().filter(|m| m.ambito == Ambito::Faccion).count(), 8);
-        assert_eq!(Catalogo::desde(&c.a_json(), &[], &tropas()).unwrap(), c);
+        assert_eq!(Catalogo::desde(&c.a_json(), &[], &reglas()).unwrap(), c);
         // No choca con las únicas.
-        let unicas = crate::misiones::Reglas::cargar(&tropas());
+        let unicas = crate::misiones::Reglas::cargar(&reglas());
         let ids: Vec<&str> = unicas.misiones.iter().map(|m| m.id.as_str()).collect();
-        Catalogo::desde(&c.a_json(), &ids, &tropas()).unwrap();
+        Catalogo::desde(&c.a_json(), &ids, &reglas()).unwrap();
     }
 
     #[test]
     fn un_catalogo_mal_hecho_no_entra_y_dice_por_que() {
-        let mal = |s: &str| Catalogo::desde_texto(s, &["A1"], &tropas()).unwrap_err();
+        let mal = |s: &str| Catalogo::desde_texto(s, &["A1"], &reglas()).unwrap_err();
         let base = |extra: &str| format!(r#"{{"asentamiento":[{{"id":"X","duracion":"dia","tipo":"individual","limiteSemanal":3,"condiciones":{{"batallas":1}},"participacion":5,"titulo":"t","texto":"t","explicacion":"e"{extra}}}],"faccion":[{{"id":"Y","duracion":"semana","tipo":"grupal","condiciones":{{"batallas":1}},"xp":5,"titulo":"t","texto":"t","explicacion":"e"}}]}}"#);
-        assert!(Catalogo::desde_texto(&base(""), &[], &tropas()).is_ok());
+        assert!(Catalogo::desde_texto(&base(""), &[], &reglas()).is_ok());
         assert!(mal(&base(r#","cargo":"rey""#)).contains("cargo"));
         assert!(mal(&base(r#","condiciones":{"volar":1}"#)).contains("volar"));
         assert!(mal(&base(r#","limiteSemanal":0"#)).contains("limiteSemanal"));
@@ -640,7 +639,7 @@ mod pruebas {
 
     #[test]
     fn las_renovaciones_caen_a_las_00_00_y_la_semanal_cada_7_dias_desde_el_primer_dia() {
-        let e = EstadoRecurrentes::nuevo(Arc::new(Catalogo::cargar(&tropas())), 3 * DIA + 5_000);
+        let e = EstadoRecurrentes::nuevo(Arc::new(Catalogo::cargar(&reglas())), 3 * DIA + 5_000);
         assert_eq!(e.origen, 3 * DIA);
         assert_eq!(EstadoRecurrentes::siguiente_dia(3 * DIA + 5_000), 4 * DIA);
         assert_eq!(EstadoRecurrentes::siguiente_dia(4 * DIA), 5 * DIA);
@@ -650,7 +649,7 @@ mod pruebas {
 
     #[test]
     fn la_foto_de_ida_y_vuelta() {
-        let mut e = EstadoRecurrentes::nuevo(Arc::new(Catalogo::cargar(&tropas())), 0);
+        let mut e = EstadoRecurrentes::nuevo(Arc::new(Catalogo::cargar(&reglas())), 0);
         let mut t = e.tablon_nuevo(Dueno::Asentamiento(3), 1_000).unwrap();
         t.elegidas_semanales = Some(vec!["PS2".into()]);
         t.aceptadas_semana.insert("PD1".into(), 2);
@@ -665,7 +664,7 @@ mod pruebas {
         escribir(&mut w, &e);
         let bytes = w.0;
         let mut r = Lector::nuevo(&bytes);
-        assert_eq!(leer(&mut r, &tropas()).unwrap(), e);
+        assert_eq!(leer(&mut r, &reglas()).unwrap(), e);
         r.fin().unwrap();
     }
 }

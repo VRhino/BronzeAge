@@ -36,7 +36,7 @@ fn completa(tropa: Tropa) -> i64 {
     militar::Reglas::cargar().tropas.tropa(tropa).unidades
 }
 
-/// Las cadenas de la prueba, todas sin previa: las del héroe se cumplen al salir del campamento y las de la plaza al subir a nivel 2. `HNUEVA` y `HTOPE` dan tropa; `HCOMPLETA` da de todo.
+/// Las cadenas de la prueba, todas sin previa: las del héroe se cumplen al salir del campamento y las de la plaza al subir a nivel 2. `HNUEVA` y `HTOPE` dan tropa; `HCOMPLETA` da de todo; `HOBJ`, objetos (entrada 67).
 fn misiones() -> String {
     let tope = completa(Tropa::Arqueros);
     format!(
@@ -45,7 +45,8 @@ fn misiones() -> String {
     {{"id":"HNUEVA","condiciones":{{"salidas":1}},"recompensas":[{{"tipo":"tropa","tropa":"arqueros","cantidad":4}}]}},
     {{"id":"HTOPE","condiciones":{{"salidas":1}},"recompensas":[{{"tipo":"tropa","tropa":"arqueros","cantidad":{tope}}}]}},
     {{"id":"HSIN","condiciones":{{"salidas":1}},"recompensas":[{{"tipo":"xp","cantidad":3}},{{"tipo":"oro","cantidad":4}}]}},
-    {{"id":"HCOMPLETA","condiciones":{{"salidas":1}},"recompensas":[{{"tipo":"oro","cantidad":4}},{{"tipo":"recurso","recurso":"madera","cantidad":3}},{{"tipo":"xp","cantidad":2}},{{"tipo":"tropa","tropa":"honderos","cantidad":2}}]}}
+    {{"id":"HCOMPLETA","condiciones":{{"salidas":1}},"recompensas":[{{"tipo":"oro","cantidad":4}},{{"tipo":"recurso","recurso":"madera","cantidad":3}},{{"tipo":"xp","cantidad":2}},{{"tipo":"tropa","tropa":"honderos","cantidad":2}}]}},
+    {{"id":"HOBJ","condiciones":{{"salidas":1}},"recompensas":[{{"tipo":"objeto","objeto":"medalla_heroe_grande","cantidad":2}},{{"tipo":"objeto","objeto":"dagas_cobre","cantidad":1}}]}}
   ],
   "asentamiento": [
     {{"id":"AP","condiciones":{{"nivel":2}},"participacion":10,"recompensas":[{{"tipo":"recurso","recurso":"madera","cantidad":3}}]}},
@@ -72,8 +73,8 @@ const RECURRENTES: &str = r#"{
 /// Las reglas de siempre con las cadenas y las recurrentes de la prueba, almacenes grandes y sin bandidos que acosen o aparezcan solos.
 fn reglas() -> Reglas {
     let mut r = Reglas::default();
-    r.economia.misiones = Arc::new(nucleo::misiones::Reglas::desde(&serde_json::from_str(&misiones()).unwrap(), &r.economia.militar.tropas).unwrap());
-    r.economia.recurrentes = Arc::new(Catalogo::desde_texto(RECURRENTES, &[], &r.economia.militar.tropas).unwrap());
+    r.economia.misiones = Arc::new(nucleo::misiones::Reglas::desde(&serde_json::from_str(&misiones()).unwrap(), &r.economia.militar).unwrap());
+    r.economia.recurrentes = Arc::new(Catalogo::desde_texto(RECURRENTES, &[], &r.economia.militar).unwrap());
     let b = &mut Arc::make_mut(&mut r.economia.combate).bandidos;
     (b.radio_ataque_caravana, b.anillo_minimo, b.anillo_maximo) = (0, 0, 0);
     Arc::make_mut(&mut r.economia.datos).capacidad_inicial = 100_000_000;
@@ -375,6 +376,24 @@ fn la_cadena_de_plaza_da_10_de_participacion_a_quien_reclama_y_a_nadie_si_reclam
     let hechos = x.reclamadas();
     assert_eq!(lo_dado(&hechos[0]).0, vec![("participacion", 10)]);
     assert!(lo_dado(&hechos[1]).0.is_empty(), "sin nadie con quien repartir, el hecho no cuenta participación");
+}
+
+/// Entrada 67: una misión personal da objetos, a la mochila del héroe que cobra (aunque no tenga residencia: no van al almacén personal ni al campamento), con su hecho `heroe.botin`
+/// de origen `mision`. Los de la lista no se cuentan en `mision.reclamada`.
+#[test]
+fn una_mision_personal_da_objetos_a_la_mochila_de_quien_la_cobra() {
+    let m = con_mundo!();
+    let mut x = X::nuevo(m);
+    let (h, _) = x.saliendo("ana", None);
+    x.ok("admin", Comando::FijarResidencia { heroe: h, residencia: None });
+    let rng = x.n.estado().rng.estado();
+    x.ok("ana", reclamar(h, Dueno::Heroe(h), "HOBJ"));
+    assert_eq!(x.n.estado().rng.estado(), rng, "sin tabla: no tira nada");
+    let objetos = vec![("medalla_heroe_grande".to_owned(), 2), ("dagas_cobre".to_owned(), 1)];
+    assert_eq!(comun::botines(&x.n), vec![comun::Botin { heroe: h, origen: "mision".into(), mochila: objetos.clone(), almacen: vec![], perdido: vec![] }]);
+    let mochila = &x.n.heroe(h).unwrap().heroe.mochila;
+    assert_eq!(mochila.casillas.values().map(|c| (c.pieza.objeto.clone(), c.cantidad)).collect::<Vec<_>>(), objetos);
+    assert_eq!(lo_dado(&x.reclamadas()[0]), (vec![], vec![]));
 }
 
 #[test]

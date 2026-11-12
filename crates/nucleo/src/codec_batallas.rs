@@ -14,7 +14,7 @@
 //!   1 aguante) · 3 campamento de bandidos: campamento u32, punto · 4 saqueo de pueblo: pueblo u64, punto · 5 avanzada: avanzada u64, etapa u8 (0 atalaya,
 //!   1 fuerte, 2 ciudadela), punto`.
 //! - Bando: `facción opt_u64 · capacidad u64 · participantes{n u64 · n × participante} · sin_héroe{n u64 · n × escuadra}`.
-//! - Participante: `héroe u64 · facción opt_u64 · controlador u8 (el de `codec_militar`) · casillas_libres u32 · escuadras{n u64 · n × escuadra}`.
+//! - Participante: `héroe u64 · facción opt_u64 · controlador u8 (el de `codec_militar`) · escuadras{n u64 · n × escuadra}`.
 //!   Escuadra de batalla: `id u64 · tropa u8 · dueño opt_u64 · efectivos i64 · nivel u8 · experiencia i64 · moral i64` (los tres últimos, del instante de abrir)
 //!   `· formación u8 · formaciones u32` (BAN62: la elegida y la máscara de las familias permitidas al abrir, por posición en `FORMACIONES`).
 //! - Bloqueo: `ejércitos{n u64 · n × u64} · caravanas{n u64 · n × u64} · asentamiento opt_u64 · campamento opt_u64 · pueblo opt_u64 · avanzada opt_u64`.
@@ -22,9 +22,8 @@
 //!   expira_en i64)}`.
 //! - Resultado: `id texto · revisión u32 · intento texto · inicio i64 · fin i64 · ganador u8 · razón u8 (0 objetivos capturados, 1 aniquilación, 2 tiempo
 //!   agotado) · objetivos{n u64 · n × (id texto, capturado_por u8: 0 atacante, 1 defensor, 2 nadie)} · por_escuadra{n u64 · n × (escuadra u64, desplegados,
-//!   supervivientes, muertos, xp: i64)} · por_héroe{n u64 · n × (héroe u64, participó bool, sobrevivió bool, xp i64, derrotado u8: 0 no, 1 sí, 2 ausente, botín
-//!   opt{bool · botín})} · versión_servidor texto · carros_perdidos{n u64 · n × texto}`. Botín: `objetos{n u64 · n × (definición texto, cantidad i64,
-//!   instancia opt{bool · texto})} · monedas i64`.
+//!   supervivientes, muertos, xp: i64)} · por_héroe{n u64 · n × (héroe u64, participó bool, sobrevivió bool, xp i64, derrotado u8: 0 no, 1 sí, 2 ausente)}
+//!   · versión_servidor texto · carros_perdidos{n u64 · n × texto}`.
 
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::codec_economia::{escribir_celdas, leer_celdas};
@@ -35,7 +34,7 @@ use combate::avanzada::Etapa;
 use combate::caravana::Modalidad;
 use combate::ciclo::{Asignacion, Batalla, BandoDeTicket, Bloqueo, CaravanaEnBatalla, Contexto, EdificioCongelado, EscuadraDeSalida, EscuadraEnBatalla, EstadoBatalla, Incorporacion, Instancia, MotivoSalida, Participante, PlazaCongelada, RecintoCongelado, Salida, SalidaBatalla, Ticket, Token};
 use combate::resolucion::Lado;
-use combate::resultado::{Botin, ObjetoBotin, Razon, Resultado, ResultadoEscuadra, ResultadoHeroe};
+use combate::resultado::{Razon, Resultado, ResultadoEscuadra, ResultadoHeroe};
 
 fn lado_a_u8(l: Lado) -> u8 {
     match l {
@@ -204,11 +203,10 @@ fn escuadra_leer(r: &mut Lector) -> Result<EscuadraEnBatalla, ErrorFormato> {
 }
 
 fn participante_escribir(w: &mut Escritor, p: &Participante) {
-    let Participante { heroe, faccion, controlador, casillas_libres, escuadras } = p;
+    let Participante { heroe, faccion, controlador, escuadras } = p;
     w.u64(*heroe);
     w.opt_u64(faccion.map(u64::from));
     w.u8(controlador_a_u8(*controlador));
-    w.u32(*casillas_libres);
     w.u64(escuadras.len() as u64);
     escuadras.iter().for_each(|e| escuadra_escribir(w, e));
 }
@@ -216,9 +214,9 @@ fn participante_escribir(w: &mut Escritor, p: &Participante) {
 fn participante_leer(r: &mut Lector) -> Result<Participante, ErrorFormato> {
     let heroe = r.u64()?;
     let faccion = r.opt_u64()?.map(|f| u32_de(f, "Facción fuera de rango")).transpose()?;
-    let (controlador, casillas_libres) = (controlador_de_u8(r.u8()?)?, r.u32()?);
+    let controlador = controlador_de_u8(r.u8()?)?;
     let escuadras = (0..r.cuenta()?).map(|_| escuadra_leer(r)).collect::<Result<_, _>>()?;
-    Ok(Participante { heroe, faccion, controlador, casillas_libres, escuadras })
+    Ok(Participante { heroe, faccion, controlador, escuadras })
 }
 
 fn bando_escribir(w: &mut Escritor, b: &BandoDeTicket) {
@@ -367,27 +365,6 @@ pub(crate) fn salida_leer(r: &mut Lector) -> Result<SalidaBatalla, ErrorFormato>
     Ok(SalidaBatalla { intento, revision, heroe, motivo, derrotado, escuadras })
 }
 
-fn botin_escribir(w: &mut Escritor, b: &Botin) {
-    let Botin { objetos, monedas } = b;
-    w.u64(objetos.len() as u64);
-    for ObjetoBotin { definicion, cantidad, instancia } in objetos {
-        w.texto(definicion);
-        w.i64(*cantidad);
-        w.bool(instancia.is_some());
-        w.texto(instancia.as_deref().unwrap_or(""));
-    }
-    w.i64(*monedas);
-}
-
-fn botin_leer(r: &mut Lector) -> Result<Botin, ErrorFormato> {
-    let mut objetos = Vec::new();
-    for _ in 0..r.cuenta()? {
-        let (definicion, cantidad, hay, texto) = (r.texto()?, r.i64()?, r.bool()?, r.texto()?);
-        objetos.push(ObjetoBotin { definicion, cantidad, instancia: hay.then_some(texto) });
-    }
-    Ok(Botin { objetos, monedas: r.i64()? })
-}
-
 pub(crate) fn resultado_escribir(w: &mut Escritor, res: &Resultado) {
     let Resultado { resultado_id, revision, intento, inicio, fin, ganador, razon, objetivos, por_escuadra, por_heroe, version_servidor, carros_perdidos } = res;
     w.texto(resultado_id);
@@ -412,15 +389,11 @@ pub(crate) fn resultado_escribir(w: &mut Escritor, res: &Resultado) {
         [desplegados, supervivientes_al_cierre, muertos].into_iter().for_each(|&n| w.i64(n));
     }
     w.u64(por_heroe.len() as u64);
-    for ResultadoHeroe { heroe, participo, sobrevivio_al_cierre, derrotado, botin } in por_heroe {
+    for ResultadoHeroe { heroe, participo, sobrevivio_al_cierre, derrotado } in por_heroe {
         w.u64(*heroe);
         w.bool(*participo);
         w.bool(*sobrevivio_al_cierre);
         w.u8(derrotado.map_or(2, u8::from));
-        w.bool(botin.is_some());
-        if let Some(b) = botin {
-            botin_escribir(w, b);
-        }
     }
     w.texto(version_servidor);
     w.u64(carros_perdidos.len() as u64);
@@ -456,8 +429,7 @@ pub(crate) fn resultado_leer(r: &mut Lector) -> Result<Resultado, ErrorFormato> 
             2 => None,
             _ => return Err(ErrorFormato("«derrotado» desconocido")),
         };
-        let botin = if r.bool()? { Some(botin_leer(r)?) } else { None };
-        por_heroe.push(ResultadoHeroe { heroe, participo, sobrevivio_al_cierre, derrotado, botin });
+        por_heroe.push(ResultadoHeroe { heroe, participo, sobrevivio_al_cierre, derrotado });
     }
     let version_servidor = r.texto()?;
     let carros_perdidos = (0..r.cuenta()?).map(|_| r.texto()).collect::<Result<_, _>>()?;

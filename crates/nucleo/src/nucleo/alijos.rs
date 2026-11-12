@@ -5,6 +5,7 @@
 //! No tienen tick ni eventos: abrir es una orden y verlos es una consulta sobre una rejilla de 10 u (la de la economía, `economia::Rejilla`), que hará la proyección de 6G.
 
 use super::*;
+use super::botin_de_objetos::Fuente;
 use crate::economia::Rejilla;
 use crate::estado::Dato;
 use asentamiento::Recurso;
@@ -94,7 +95,7 @@ impl Nucleo {
     }
 
     /// `AbrirAlijo`: lo que trae el alijo, en unidades enteras, al carro de la columna del héroe (`cargar_botin_en`: lo que no cabe se pierde, decisión 10 del plan del sistema 6), y el alijo queda
-    /// abierto para él. Los rechazos no tocan nada.
+    /// abierto para él; los objetos de la tabla `alijo`, a su mochila. Los rechazos no tocan nada.
     pub(super) fn ejecutar_alijo(&mut self, t: Instante, p: &Peticion) -> Result<Vec<u64>, Respuesta> {
         let Comando::AbrirAlijo { heroe, alijo } = p.comando else { unreachable!("solo abrir un alijo") };
         let v = self.estado.version;
@@ -119,6 +120,8 @@ impl Nucleo {
         let valores = vec![("alijo", Dato::Texto(id)), ("recurso", Dato::Texto(recurso.nombre().into()))];
         // Solo lo oye quien lo abre (decisión del autor), no los demás de la columna aunque lo que trae vaya al carro común.
         self.tr.emitir(&self.estado, EventoNucleo { heroes: vec![heroe], valores, ..EventoNucleo::nuevo("alijo.abierto", t, datos) });
+        // Y la tabla de objetos del alijo, a la mochila de quien lo abre (Catalogo_De_Objetos §6b y Progresion_Tropas_Y_Heroe §5).
+        self.botin_de_objetos(t, heroe, Fuente::Alijo);
         // La misión cuenta para todos los de la columna, no solo para quien lo abre (decisión del autor, 2026-10-31).
         let todos = self.estado.ejercitos.get(&columna).map(Self::participantes_de).unwrap_or_else(|| vec![heroe]);
         self.avance_de_heroes(t, &todos, "alijos", 1);

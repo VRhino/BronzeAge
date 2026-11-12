@@ -180,7 +180,7 @@ Como en Conquest (`HeroDataService.CreateNewHero`). Hasta el 2026-11-12 nacía s
   Desde el 31 el nivel sube pero no da nada. Al subir emite `heroe.nivel_subio { heroe, nivel }` (el nivel nuevo, una vez aunque cruce varios). `habilidadesEnNivel` y `perksEnNivel` solo se publican: las aplica Conquest.
 - **De dónde sale la XP:** solo del combate, por un único punto de entrada del núcleo ([`Combate.md`](Combate.md) §4.4): con números, lo mismo que sus escuadras (1 si su bando gana, 0,5 si pierde), una vez por combate; en una batalla de Unity, 4 o 2 según gane su bando si participó (`MILITAR.experienciaUnityPor…`, el motor **no lee** la experiencia que manda Unity), y `cantidad = supervivientesAlCierre` en cada escuadra.
 > **Implementado en Rust (2026-11-12, entrada 73).** `militar::Heroe` guarda `experiencia` acumulada (milésimas) y `nivel`; `Heroe::con_experiencia` sube los niveles que cruce con sus puntos y su Liderazgo, y `Heroe::falta_para_subir` es lo que proyecta `experiencia_hacia_siguiente_nivel` (ahora «lo que le falta», en milésimas). Los datos son el bloque `PROGRESION_HEROE` (§12) y `LIDERAZGO.porNivel`/`tope`. El núcleo da la experiencia por `Nucleo::experiencia_de_heroe` y `Nucleo::experiencia_de_escuadra` (`crates/nucleo/src/nucleo/progresion.rs`), que usan el combate con números y la batalla de Unity. Salen `puntos_de_perk`, `perks_desbloqueados` y los perks del loadout (sus campos del contrato quedan `reserved`, y el rechazo `loadout.perk_no_desbloqueado` desaparece). La foto sigue en `BAN63`.
-- **Botín de Unity:** las monedas se suman a `monedas` del héroe. Los objetos se validan (que quepan en `BATALLA.casillasInventario` y que cada instancia sea nueva, [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §8.5) pero **se pierden**: el héroe ya tiene mochila (2026-11-12), pero el botín aún no entra en ella (**deuda**, CQ-004; anotada en la fila «Militar y combate (4A-1)» de `Docs/Mecanicas a desarrollar.md`).
+- **Botín de Unity:** lo pone el motor, no Unity (2026-11-12, D6 y D7): a cada héroe que participó, las monedas de `MONEDAS` como en el combate con números ([`Combate.md`](Combate.md) §4.2) y la tabla `unity` de `BOTIN_OBJETOS` ([`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §3.7), con lo de `soloSiGana` solo si gana su bando. El resultado de Unity ya no trae botín ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §8.5).
 - **Equipar:** desde el 2026-11-12, por orden (§4.5).
 
 ### 4.4 Eventos del héroe
@@ -196,6 +196,7 @@ Sin plaza (globales del héroe):
 | `heroe.objeto_vendido` | `venderObjeto` (§4.6) | `{ heroe, plaza, cantidad, cobro, objeto }` |
 | `heroe.objeto_forjado` | `forjarObjeto` (§4.6) | `{ heroe, plaza, pieza (el N de obj-N), calidad (en %), objeto }` |
 | `heroe.objeto_usado` | `usarObjeto` (§4.6) | `{ heroe, objeto }`, con `escuadra` si es una medalla de tropa y `montura` y `destino` (`mochila` \| `almacen` \| `perdido`, textos) si es el cofre |
+| `heroe.botin` | (el botín: Unity, bandidos, diaria, alijo, mercenario, misión) | `{ heroe, origen, mochila, almacen, perdido }`, listas de `[objeto, cantidad]` ([`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §3.7) |
 | `heroe.almacen_personal` | `guardarEnAlmacenPersonal` / `sacarDelAlmacenPersonal` | `{ heroeId, recurso, cantidad (lo movido), sentido: guarda \| saca }` |
 | `heroe.viveres` | `pasarAViveres` | `{ heroeId, cantidad (lo movido) }` |
 
@@ -1597,7 +1598,7 @@ Ninguna abierta.
 
 > **Implementado en Rust (2026-10-20, fase 4D).** La foto es `BAN12` (rechaza `BAN11`) y la huella de reglas incluye los bloques de `combate`. `DarEscuadra { heroe, tropa, cantidad }` (97, administración) da una escuadra a un héroe para montar ejércitos sin pasar por el reclutamiento. Los héroes heridos no atacan (`heroe.herido`); el héroe sano suma +15 al poder del bando (decisión Q2, aditivo). `DarSuministro` **se mantiene**: el botín real (`cargar_botin`) llena el carro de la columna vencedora, pero el suministro de la administración sigue siendo útil para montar escenarios y no se retira (fila de paridad).
 
-> **Implementado en Rust (2026-10-21, fase 4E).** El candado `reservaBatalla` ya lo pone y lo quita el ciclo de la batalla de Unity ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §4 y §9): al abrirse (y al unirse alguien) lo llevan las escuadras con dueño del ticket, incluidas las de la guarnición y la escolta (`Escuadra::reserva_batalla`), y se suelta al cerrarse la batalla, al salir su héroe o al vencer el plazo. Las rechaza `reponer`, `asignarGuarnicion` y `retirarGuarnicion` con `escuadra.en_batalla`. Una escuadra con bajas, experiencia o nueva cantidad por el resultado de Unity se actualiza por su id (`supervivientesAlCierre`), y la experiencia del héroe y sus monedas del botín también (los objetos no tienen dónde caer: CQ-004). Desde el 2026-11-12 la experiencia la pone el motor (4 o 2) y el héroe sube de nivel (§4.3). La foto es `BAN13`.
+> **Implementado en Rust (2026-10-21, fase 4E).** El candado `reservaBatalla` ya lo pone y lo quita el ciclo de la batalla de Unity ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §4 y §9): al abrirse (y al unirse alguien) lo llevan las escuadras con dueño del ticket, incluidas las de la guarnición y la escolta (`Escuadra::reserva_batalla`), y se suelta al cerrarse la batalla, al salir su héroe o al vencer el plazo. Las rechaza `reponer`, `asignarGuarnicion` y `retirarGuarnicion` con `escuadra.en_batalla`. Una escuadra con bajas, experiencia o nueva cantidad por el resultado de Unity se actualiza por su id (`supervivientesAlCierre`), y la experiencia del héroe y sus monedas del botín también (desde el 2026-11-12 el botín, monedas y objetos, lo pone el motor: §4.3). Desde el 2026-11-12 la experiencia la pone el motor (4 o 2) y el héroe sube de nivel (§4.3). La foto es `BAN13`.
 
 ## Catálogo de eventos
 
@@ -1606,8 +1607,9 @@ Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; cont
 <!-- eventos -->
 ```json
 [
-  "heroe.almacen_personal", "heroe.creado", "heroe.equipo_cambiado", "heroe.herido", "heroe.nivel_subio", "heroe.objeto_comprado", "heroe.objeto_forjado", "heroe.objeto_usado",
-  "heroe.objeto_vendido", "heroe.puntos_repartidos", "heroe.reubicado", "heroe.sale_del_mundo", "heroe.se_desconecta", "heroe.viveres", "heroe.vuelve_al_mundo", "reclutamiento.cierre_a_ciudadanos", "tropas.desercion", "tropas.reclutadas"
+  "heroe.almacen_personal", "heroe.botin", "heroe.creado", "heroe.equipo_cambiado", "heroe.herido", "heroe.nivel_subio", "heroe.objeto_comprado", "heroe.objeto_forjado",
+  "heroe.objeto_usado", "heroe.objeto_vendido", "heroe.puntos_repartidos", "heroe.reubicado", "heroe.sale_del_mundo", "heroe.se_desconecta", "heroe.viveres", "heroe.vuelve_al_mundo",
+  "reclutamiento.cierre_a_ciudadanos", "tropas.desercion", "tropas.reclutadas"
 ]
 ```
 <!-- /eventos -->

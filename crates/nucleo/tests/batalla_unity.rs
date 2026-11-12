@@ -372,7 +372,7 @@ fn resultado_de(ticket: &pb::BattleTicket, incorporaciones: &[pb::IncorporacionB
         razon: pb::RazonVictoria::ObjetivosCapturados as i32,
         objetivos: vec![pb::ObjetivoResultado { objetivo_id: "bandera".into(), capturado_por: Some(ganador as i32) }],
         por_escuadra: escuadras.map(|e| pb::ResultadoEscuadra { squad_id: e.squad_id.clone(), desplegados: e.efectivos_autorizados, supervivientes_al_cierre: e.efectivos_autorizados - 1, muertos: 1 }).collect(),
-        por_heroe: participantes.iter().map(|p| pb::ResultadoHeroe { heroe_id: p.heroe_id.clone(), participo: true, sobrevivio_al_cierre: true, derrotado: None, botin: None }).collect(),
+        por_heroe: participantes.iter().map(|p| pb::ResultadoHeroe { heroe_id: p.heroe_id.clone(), participo: true, sobrevivio_al_cierre: true, derrotado: None }).collect(),
         version_servidor: "v1".into(),
         carros_perdidos: vec![],
     })
@@ -470,7 +470,7 @@ async fn el_ticket_del_asedio_es_completo_congelado_y_va_a_todos_los_servidores_
     assert!(defensor.escuadras_sin_heroe.is_empty());
     let beto = &defensor.participantes[0];
     let hs = beto.heroe.as_ref().unwrap();
-    assert_eq!((beto.faccion_id.as_deref(), beto.es_bot, hs.nivel, hs.class_definition_id.as_str(), hs.femenino, hs.casillas_inventario_libres), (Some("f-2"), false, 1, "espada_escudo_mediano", false, 72));
+    assert_eq!((beto.faccion_id.as_deref(), beto.es_bot, hs.nivel, hs.class_definition_id.as_str(), hs.femenino), (Some("f-2"), false, 1, "espada_escudo_mediano", false));
     assert!(hs.display_name.starts_with("Héroe ") && hs.avatar.is_some(), "valores por defecto de nombre, género y avatar");
     // La clase del arma, sus atributos sumados con la base de la clase y su equipo real (2026-11-12, D16).
     assert_eq!(hs.atributos_efectivos, Some(pb::Atributos { fuerza: 3, destreza: 3, armadura: 2, vitalidad: 2 }));

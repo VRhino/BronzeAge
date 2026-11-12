@@ -46,7 +46,7 @@ const CATALOGO: &str = r#"{
 fn reglas(catalogo: Option<&str>) -> Reglas {
     let mut r = Reglas::default();
     if let Some(c) = catalogo {
-        r.economia.recurrentes = Arc::new(Catalogo::desde_texto(c, &[], &r.economia.militar.tropas).unwrap());
+        r.economia.recurrentes = Arc::new(Catalogo::desde_texto(c, &[], &r.economia.militar).unwrap());
     }
     let b = &mut Arc::make_mut(&mut r.economia.combate).bandidos;
     (b.radio_ataque_caravana, b.anillo_minimo, b.anillo_maximo) = (0, 0, 0);
@@ -257,6 +257,9 @@ fn aceptar_contar_desde_entonces_repartir_la_grupal_y_reclamar_despues_del_perio
     x.ok("ana", reclamar(h, pa, "I1"));
     assert_eq!((x.experiencia(1) - xp, x.oro_personal(h) - oro, x.participacion(a, h)), (2 * UNIDAD, 5 * UNIDAD, 10));
     assert_eq!(x.rechazo("ana", reclamar(h, pa, "I1")), rechazos::MISION_YA_RECLAMADA);
+    // Una diaria individual da además la tabla `misionDiaria` de BOTIN_OBJETOS a quien la cumplió (D5): un crisol, una medalla pequeña de tropa y una muy pequeña del héroe.
+    let diaria = objetos::Catalogo::default().botin.mision_diaria.tirar(false, &mut base::Rng::nuevo(0));
+    assert_eq!(comun::botines(&x.n), vec![comun::Botin { heroe: h, origen: "diaria".into(), mochila: diaria.clone(), almacen: vec![], perdido: vec![] }]);
 
     // La proyección lleva cada aceptación con su héroe y su estado, y lo que aportó cada uno a la grupal.
     let p = interior::asentamiento(&x.n, a).unwrap().tablon.unwrap();
@@ -276,6 +279,7 @@ fn aceptar_contar_desde_entonces_repartir_la_grupal_y_reclamar_despues_del_perio
     let xp = x.experiencia(1);
     x.ok("ana", reclamar(g, pa, "G1"));
     assert_eq!((x.participacion(a, h), x.participacion(a, h2), x.experiencia(1) - xp), (20, 10, 4 * UNIDAD));
+    assert_eq!(comun::botines(&x.n).len(), 1, "una grupal no da la tabla de la diaria");
     assert_eq!(x.n.tablon_de(pa).unwrap().misiones.iter().filter(|m| m.def.id == "G1").count(), 1, "la vencida ya reclamada se va");
     assert_eq!(x.rechazo("ana", reclamar(g, pa, "G1")), rechazos::MISION_NO_CUMPLIDA, "la de hoy no se ha cumplido");
     // La de la Facción: su Rey o la administración.
@@ -313,7 +317,7 @@ fn el_catalogo_se_cambia_en_caliente_y_vale_desde_la_siguiente_renovacion() {
     x.hasta(DIA + 1);
     assert_eq!(x.mision(pa, "I1").def.recompensa.fija, Some(Fija::Participacion(9)));
     // Una que se quita del catálogo deja de salir en la siguiente renovación.
-    let sin_g1 = Catalogo::desde_texto(&nuevo, &[], &x.n.estado().reglas.economia.militar.tropas).unwrap();
+    let sin_g1 = Catalogo::desde_texto(&nuevo, &[], &x.n.estado().reglas.economia.militar).unwrap();
     let mut v = sin_g1.a_json();
     v["asentamiento"].as_array_mut().unwrap().retain(|m| m["id"] != "G1");
     x.ok("admin", fijar(&v.to_string()));

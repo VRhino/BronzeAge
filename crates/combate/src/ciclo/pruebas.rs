@@ -1,6 +1,6 @@
 use super::*;
 use crate::resolucion::apoyo::r;
-use crate::resultado::{Botin, ObjetoBotin, Razon, ResultadoEscuadra, ResultadoHeroe};
+use crate::resultado::{Razon, ResultadoEscuadra, ResultadoHeroe};
 use base::MS_POR_MINUTO;
 
 const MIN: i64 = MS_POR_MINUTO;
@@ -12,7 +12,6 @@ fn part(heroe: HeroeId, controlador: Controlador, escuadras: &[(EscuadraId, i64)
         heroe,
         faccion: Some(heroe as u32),
         controlador,
-        casillas_libres: 2,
         escuadras: escuadras.iter().map(|&(id, efectivos)| EscuadraEnBatalla { dueno: Some(heroe), ..EscuadraEnBatalla::sin_dueno(id, Tropa::MiliciaLanceros, efectivos) }).collect(),
     }
 }
@@ -66,14 +65,10 @@ fn resultado(b: &Batalla) -> Resultado {
             .escuadras_de()
             .map(|e| ResultadoEscuadra { escuadra: e.id, desplegados: e.efectivos, supervivientes_al_cierre: e.efectivos - 5, muertos: 5 })
             .collect(),
-        por_heroe: b.heroes_que_combaten().map(|h| ResultadoHeroe { heroe: h, participo: true, sobrevivio_al_cierre: true, derrotado: None, botin: None }).collect(),
+        por_heroe: b.heroes_que_combaten().map(|h| ResultadoHeroe { heroe: h, participo: true, sobrevivio_al_cierre: true, derrotado: None }).collect(),
         version_servidor: "v1".into(),
         carros_perdidos: vec![],
     }
-}
-
-fn sin_objetos(_: &str) -> bool {
-    false
 }
 
 #[test]
@@ -394,7 +389,7 @@ fn eliminado_en_curso_aplica_las_bajas_hiere_si_derrotado_y_no_toca_el_ticket() 
     // El resultado final ya no lo repite: ni su héroe ni sus escuadras.
     let res = resultado(&b);
     assert!(res.por_heroe.iter().all(|h| h.heroe != 3) && res.por_escuadra.iter().all(|e| e.escuadra != 40));
-    assert_eq!(b.validar_resultado("srv", &res, &sin_objetos), Ok(()));
+    assert_eq!(b.validar_resultado("srv", &res), Ok(()));
 }
 
 #[test]
@@ -458,7 +453,7 @@ fn quien_la_inicio_la_cancela_antes_de_empezar_y_suelta_los_candados() {
 fn un_resultado_valido_se_aplica_en_una_mutacion_y_devuelve_los_efectos() {
     let mut b = en_curso(CAMPAL);
     let res = resultado(&b);
-    let Ok(Efecto::Aplicado(e)) = b.aplicar_resultado(5_000, "srv", res.clone(), &sin_objetos) else { panic!() };
+    let Ok(Efecto::Aplicado(e)) = b.aplicar_resultado(5_000, "srv", res.clone()) else { panic!() };
     assert_eq!((b.estado, b.aplicada_en, b.cerrada_en, b.resultado.as_ref()), (EstadoBatalla::Aplicada, Some(5_000), Some(5_000), Some(&res)));
     assert_eq!(e.ganador, Lado::Atacante);
     assert_eq!(e.heridos, vec![2], "sin `derrotado`, el bando perdedor");
@@ -466,7 +461,7 @@ fn un_resultado_valido_se_aplica_en_una_mutacion_y_devuelve_los_efectos() {
     let por_id = |id| e.escuadras.iter().find(|x| x.escuadra == id).unwrap();
     assert_eq!((por_id(10).cantidad, por_id(30).cantidad), (20, 8), "la sin dueño también viene");
     assert_eq!((por_id(10).victoria, por_id(20).victoria, por_id(30).victoria), (Some(true), Some(false), Some(false)), "la experiencia según gane su bando, también a la sin héroe");
-    assert_eq!(e.heroes.iter().map(|h| (h.heroe, h.victoria, h.botin.is_none())).collect::<Vec<_>>(), vec![(1, Some(true), true), (2, Some(false), true)]);
+    assert_eq!(e.heroes.iter().map(|h| (h.heroe, h.victoria)).collect::<Vec<_>>(), vec![(1, Some(true)), (2, Some(false))]);
 }
 
 #[test]
@@ -474,7 +469,7 @@ fn quien_no_participo_no_gana_experiencia_ni_sus_escuadras() {
     let mut b = en_curso(CAMPAL);
     let mut res = resultado(&b);
     res.por_heroe[1].participo = false;
-    let Ok(Efecto::Aplicado(e)) = b.aplicar_resultado(5_000, "srv", res, &sin_objetos) else { panic!() };
+    let Ok(Efecto::Aplicado(e)) = b.aplicar_resultado(5_000, "srv", res) else { panic!() };
     let por_id = |id| e.escuadras.iter().find(|x| x.escuadra == id).unwrap();
     assert_eq!((por_id(20).cantidad, por_id(20).victoria, por_id(30).victoria), (20, None, Some(false)), "sus bajas sí; la guarnición sin héroe entró igual");
     assert_eq!(e.heroes.iter().map(|h| (h.heroe, h.victoria)).collect::<Vec<_>>(), vec![(1, Some(true)), (2, None)]);
@@ -486,7 +481,7 @@ fn el_herido_sale_de_derrotado_y_no_del_bando() {
     let mut res = resultado(&b);
     res.por_heroe[0].derrotado = Some(true); // gana el atacante, pero Unity lo da por derrotado
     res.por_heroe[1].derrotado = Some(false); // pierde el defensor, pero explícitamente no
-    let Ok(Efecto::Aplicado(e)) = b.aplicar_resultado(5_000, "srv", res, &sin_objetos) else { panic!() };
+    let Ok(Efecto::Aplicado(e)) = b.aplicar_resultado(5_000, "srv", res) else { panic!() };
     assert_eq!(e.heridos, vec![1]);
 }
 
@@ -494,13 +489,13 @@ fn el_herido_sale_de_derrotado_y_no_del_bando() {
 fn repetir_el_mismo_resultado_no_cambia_nada_y_otro_distinto_se_rechaza() {
     let mut b = en_curso(CAMPAL);
     let res = resultado(&b);
-    b.aplicar_resultado(5_000, "srv", res.clone(), &sin_objetos).unwrap();
+    b.aplicar_resultado(5_000, "srv", res.clone()).unwrap();
     let foto = b.clone();
-    assert_eq!(b.aplicar_resultado(9_000, "srv", res.clone(), &sin_objetos), Ok(Efecto::SinCambios));
+    assert_eq!(b.aplicar_resultado(9_000, "srv", res.clone()), Ok(Efecto::SinCambios));
     assert_eq!(b, foto);
     let mut otro = res;
     otro.resultado_id = "res-2".into();
-    assert_eq!(b.aplicar_resultado(9_000, "srv", otro, &sin_objetos), Err(ErrorBatalla::OtroResultado));
+    assert_eq!(b.aplicar_resultado(9_000, "srv", otro), Err(ErrorBatalla::OtroResultado));
     assert_eq!(b, foto);
 }
 
@@ -509,11 +504,11 @@ fn sobre_una_cancelada_fallida_o_sin_empezar_se_rechaza_y_una_vencida_en_curso_t
     let res = resultado(&en_curso(CAMPAL));
     let mut cancelada = batalla(CAMPAL);
     cancelada.cancelar(1_100, 1).unwrap();
-    assert_eq!(cancelada.aplicar_resultado(1_200, "srv", res.clone(), &sin_objetos), Err(ErrorBatalla::EstadoInvalido));
-    assert_eq!(batalla(CAMPAL).aplicar_resultado(1_200, "srv", res.clone(), &sin_objetos), Err(ErrorBatalla::EstadoInvalido), "convocando");
+    assert_eq!(cancelada.aplicar_resultado(1_200, "srv", res.clone()), Err(ErrorBatalla::EstadoInvalido));
+    assert_eq!(batalla(CAMPAL).aplicar_resultado(1_200, "srv", res.clone()), Err(ErrorBatalla::EstadoInvalido), "convocando");
     let mut b = en_curso(CAMPAL);
     let tarde = b.expira_en;
-    assert_eq!(b.aplicar_resultado(tarde, "srv", res, &sin_objetos), Err(ErrorBatalla::NoActiva), "fuera de plazo");
+    assert_eq!(b.aplicar_resultado(tarde, "srv", res), Err(ErrorBatalla::NoActiva), "fuera de plazo");
     assert_eq!(b.estado, EstadoBatalla::EnCurso);
 }
 
@@ -521,7 +516,7 @@ fn rechazo(modifica: impl FnOnce(&mut Resultado)) -> ErrorResultado {
     let b = en_curso(CAMPAL);
     let mut res = resultado(&b);
     modifica(&mut res);
-    b.validar_resultado("srv", &res, &|i| i == "existente").unwrap_err()
+    b.validar_resultado("srv", &res).unwrap_err()
 }
 
 #[test]
@@ -534,7 +529,7 @@ fn el_checklist_rechaza_cada_fallo_y_nunca_aplica_a_medias() {
     assert_eq!(rechazo(|r| r.por_heroe[1] = r.por_heroe[0].clone()), IdRepetido);
     assert_eq!(rechazo(|r| drop(r.por_escuadra.pop())), EscuadrasIncompletas);
     assert_eq!(rechazo(|r| r.por_escuadra[0].escuadra = 99), EscuadrasIncompletas);
-    assert_eq!(rechazo(|r| drop(r.por_heroe.pop())), HeroesIncompletos);
+    assert_eq!(rechazo(|r| { r.por_heroe.pop(); }), HeroesIncompletos);
     assert_eq!(rechazo(|r| r.por_escuadra[0].supervivientes_al_cierre += 1), EscuadraNoCierra(10));
     assert_eq!(rechazo(|r| r.por_escuadra[0].desplegados = 26), EscuadraNoCierra(10));
     assert_eq!(rechazo(|r| r.razon = Razon::TiempoAgotado), TiempoAgotadoSinDefensor);
@@ -549,7 +544,7 @@ fn el_tiempo_agotado_lo_gana_el_defensor_y_la_duracion_maxima_es_valida() {
     res.razon = Razon::TiempoAgotado;
     res.ganador = Lado::Defensor;
     res.fin = res.inicio + 15 * MIN;
-    assert_eq!(b.validar_resultado("srv", &res, &sin_objetos), Ok(()));
+    assert_eq!(b.validar_resultado("srv", &res), Ok(()));
     let efectos = b.efectos_del_resultado(&res);
     assert_eq!(efectos.heridos, vec![1], "pierde el atacante");
 }
@@ -563,7 +558,7 @@ fn los_carros_perdidos_son_caravana_y_posicion_de_la_lista_sin_repetir() {
     let con = |carros: &[&str]| {
         let mut res = resultado(&b);
         res.carros_perdidos = carros.iter().map(|c| c.to_string()).collect();
-        b.validar_resultado("srv", &res, &sin_objetos).map(|()| b.efectos_del_resultado(&res).carros_perdidos)
+        b.validar_resultado("srv", &res).map(|()| b.efectos_del_resultado(&res).carros_perdidos)
     };
     assert_eq!(con(&["1:2", "1:0", "7:1"]), Ok(vec![(1, 2), (1, 0), (7, 1)]));
     assert_eq!(con(&["7:0"]), Ok(vec![(7, 0)]), "la posición 0 es de cada lista: la 7 también tiene un carro 0");
@@ -576,39 +571,13 @@ fn los_carros_perdidos_son_caravana_y_posicion_de_la_lista_sin_repetir() {
     let campal = en_curso(CAMPAL);
     let mut res = resultado(&campal);
     res.carros_perdidos = vec!["1:0".into()];
-    assert_eq!(campal.validar_resultado("srv", &res, &sin_objetos), Err(CarroInexistente("1:0".into())));
-}
-
-#[test]
-fn el_botin_exige_participar_objetos_nuevos_y_casillas() {
-    use ErrorResultado::*;
-    let objeto = |i: &str| ObjetoBotin { definicion: "espada".into(), cantidad: 1, instancia: Some(i.into()) };
-    let con = |objetos: Vec<ObjetoBotin>| Botin { objetos, monedas: 0 };
-    assert_eq!(rechazo(|r| r.por_heroe[0].botin = Some(con(vec![objeto("a"), objeto("a")]))), ObjetoRepetido("a".into()));
-    assert_eq!(rechazo(|r| r.por_heroe[0].botin = Some(con(vec![objeto("existente")]))), ObjetoRepetido("existente".into()));
-    assert_eq!(rechazo(|r| r.por_heroe[0].botin = Some(con(vec![objeto("a"), objeto("b"), objeto("c")]))), SinCasillas(1), "tenía 2 casillas libres");
-    assert_eq!(
-        rechazo(|r| {
-            r.por_heroe[0].participo = false;
-            r.por_heroe[0].botin = Some(con(vec![objeto("a")]));
-        }),
-        BotinSinParticipar(1)
-    );
-    assert_eq!(rechazo(|r| r.por_heroe[0].botin = Some(con(vec![ObjetoBotin { definicion: "x".into(), cantidad: 0, instancia: None }]))), Forma);
-    assert_eq!(rechazo(|r| r.por_heroe[0].botin = Some(Botin { objetos: vec![], monedas: -1 })), Forma);
-    // Un botín válido (con y sin identidad propia) pasa, y el mismo `itemInstanceId` en dos héroes no.
-    let b = en_curso(CAMPAL);
-    let mut res = resultado(&b);
-    res.por_heroe[0].botin = Some(con(vec![objeto("a"), ObjetoBotin { definicion: "poción".into(), cantidad: 3, instancia: None }]));
-    assert_eq!(b.validar_resultado("srv", &res, &sin_objetos), Ok(()));
-    res.por_heroe[1].botin = Some(con(vec![objeto("a")]));
-    assert_eq!(b.validar_resultado("srv", &res, &sin_objetos), Err(ObjetoRepetido("a".into())));
+    assert_eq!(campal.validar_resultado("srv", &res), Err(CarroInexistente("1:0".into())));
 }
 
 #[test]
 fn el_servidor_del_resultado_tiene_que_ser_el_de_la_asignacion() {
     let b = en_curso(CAMPAL);
-    assert_eq!(b.validar_resultado("otro", &resultado(&b), &sin_objetos), Err(ErrorResultado::AsignacionNoVigente));
+    assert_eq!(b.validar_resultado("otro", &resultado(&b)), Err(ErrorResultado::AsignacionNoVigente));
 }
 
 #[test]
@@ -674,7 +643,7 @@ fn ninguna_secuencia_de_mensajes_deja_la_batalla_incoherente() {
                 7 => {
                     let mut res = resultado(&b);
                     res.intento = format!("a{intento}");
-                    matches!(b.aplicar_resultado(ahora, "srv", res, &sin_objetos), Ok(Efecto::Aplicado(_)))
+                    matches!(b.aplicar_resultado(ahora, "srv", res), Ok(Efecto::Aplicado(_)))
                 }
                 _ => b.registrar_tokens(ahora, &format!("a{intento}"), "srv", vec![]).is_ok(),
             };

@@ -37,7 +37,7 @@ const CATALOGO: &str = r#"{
 
 fn nucleo(m: &real::M) -> Nucleo {
     let mut reglas = Reglas::default();
-    reglas.economia.recurrentes = Arc::new(Catalogo::desde_texto(CATALOGO, &[], &reglas.economia.militar.tropas).unwrap());
+    reglas.economia.recurrentes = Arc::new(Catalogo::desde_texto(CATALOGO, &[], &reglas.economia.militar).unwrap());
     Nucleo::nuevo(Arranque { reglas, ajustes: Ajustes::default(), semilla: 7, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) })
 }
 

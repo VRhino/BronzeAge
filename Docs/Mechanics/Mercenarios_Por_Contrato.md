@@ -300,7 +300,10 @@ es igual para todos los héroes.
 - **Licencia de reclutar.** En su campamento recluta, además de lo que el campamento ofrece a todos, las tropas **de su edificio militar** hasta el escalón de su rango **en cuanto
   alguien en el mundo ha descubierto su tecnología** (de arranque o con `campamento_libre_en`), sin esperar las 72 h ni a la mitad de las Facciones. No salta Eras y no cambia de
   edificio. No se guarda nada: se mira al reclutar.
-- **Objetos** de los rangos 4 y 5: reservados hasta que exista su catálogo.
+- **Objetos** de los rangos 4 y 5 (entrada 68, 2026-11-12): al alcanzar el rango 4 o el 5 (en el mismo momento que su escuadra de premio y su `rango_subido`; si salta varios,
+  cada uno el suyo), el mercenario recibe además la tabla de su rango de `BOTIN_OBJETOS.rangoMercenario` ([`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §3.7): un plano de tier IV
+  (o V en el rango 5), una medalla grande del héroe y un cofre de monturas. Va a su mochila y, si no cabe, a su almacén de objetos; si tampoco, se pierde (D17 y D22), y lo cuenta
+  el hecho `heroe.botin` (origen `mercenario`), que oye solo él. Los rangos 2 y 3 no tienen tabla.
 
 ## 9. Medallas
 
@@ -406,7 +409,7 @@ marca.
   ofrecerse) y las conductas de grupo (compañías con capitán).
 - **Clientes**: la pestaña «Mercenarios» de la Facción, contratar desde el tablón, ordenar, prorrogar, despedir y valorar.
 - **Calibración con bots**: tarifas y multiplicadores, renombre, umbrales de rangos y medallas, radio de defensa, plazos de orden, de recontrato y de valoración.
-- **Pendiente**: los objetos de los rangos 4 y 5 esperan su catálogo; el bot no ve más del objetivo enemigo que lo que alcanzan sus ojos.
+- **Pendiente**: el bot no ve más del objetivo enemigo que lo que alcanzan sus ojos.
 
 ## 15. Casos límite y decisiones que parecen raras
 

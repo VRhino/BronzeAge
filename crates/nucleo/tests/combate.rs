@@ -376,7 +376,9 @@ fn atacar_un_campamento_de_bandidos_no_exige_guerra_gasta_una_tirada_y_su_oro_va
 
     let r = atacar(&mut n, 5 * MIN, "ana", "a1", ana.1, ObjetivoAtaque::Campamento(b), false);
     assert!(r.aceptada(), "{r:?}");
-    assert_eq!(n.estado().rng.estado(), rng_tras(1), "el ataque a un campamento gasta una tirada");
+    // Una tirada el ataque y una por entrada la tabla de objetos de su nivel (`BOTIN_OBJETOS.bandidos`, ninguna de `soloSiGana`).
+    let tabla = objetos::Catalogo::default().botin.bandidos[&2].0.len();
+    assert_eq!(n.estado().rng.estado(), rng_tras(1 + tabla), "el ataque a un campamento gasta una tirada, más las de su botín de objetos");
     let h = &hechos(&n, "combate.campamento_destruido")[0];
     assert_eq!((dato(h, "campamento"), dato(h, "nivel"), dato(h, "heridos")), (b as i64, 2, 0));
     assert!(n.campamento_de_bandidos(b).is_none(), "el campamento cae");
@@ -440,6 +442,37 @@ fn el_botin_de_los_bandidos_cae_con_los_rendimientos_decrecientes_de_cada_heroe(
     let antes = madera(&n);
     assert!(atacar(&mut n, 25 * 60 * MIN, "ana", "az", ana.1, ObjetivoAtaque::Campamento(b), false).aceptada());
     assert!(madera(&n) - antes >= esperado(nivel1.botin_por_heroe, rend.solo_experiencia_desde - 1) / 1_000 * 1_000, "la ventana de 24 h se desliza");
+}
+
+/// Entrada 70 (Catalogo_De_Objetos §6b y Progresion_Tropas_Y_Heroe §5): cada campamento destruido da al héroe la tabla de objetos de su nivel, tirada con el rng del estado justo
+/// después del ataque, pero solo dentro de las destrucciones completas de su ventana de 24 h (`rendimientos.completas`); las siguientes ya no tiran la tabla.
+#[test]
+fn los_bandidos_dan_la_tabla_de_objetos_de_su_nivel_solo_dentro_de_las_completas_de_la_ventana() {
+    let mut n = nucleo(40, 5);
+    let ana = columna(&mut n, "ana", 1, c(10, 2));
+    dar(&mut n, "d1", ana.1, Tropa::ArquerosCompuesto, completa(Tropa::ArquerosCompuesto));
+    let completas = combate::Reglas::cargar().bandidos.rendimientos.completas as usize;
+    let tablas = objetos::Catalogo::default().botin.bandidos;
+    let mut esperado = Vec::new();
+    for k in 0..completas + 2 {
+        let nivel = (k % 2 + 1) as u8;
+        let b = colocar(&mut n, &format!("b{k}"), Punto::new(c(10, 2).x + 1_000, c(10, 2).y), nivel);
+        let mut rng = Rng::nuevo(n.estado().rng.estado());
+        rng.siguiente();
+        if k < completas {
+            let sale = tablas[&nivel].tirar(false, &mut rng);
+            if !sale.is_empty() {
+                esperado.push(comun::Botin { heroe: ana.1, origen: "bandidos".into(), mochila: sale, almacen: vec![], perdido: vec![] });
+            }
+        }
+        let r = atacar(&mut n, (k as i64 + 1) * MIN, "ana", &format!("a{k}"), ana.1, ObjetivoAtaque::Campamento(b), false);
+        assert!(r.aceptada() && n.campamento_de_bandidos(b).is_none(), "{r:?}");
+        assert_eq!(n.estado().rng.estado(), rng.estado(), "destrucción {}: la tirada del ataque y, si es completa, las de su tabla", k + 1);
+    }
+    assert!(!esperado.is_empty(), "con esta semilla sale algo");
+    assert_eq!(comun::botines(&n), esperado);
+    let piezas: u32 = n.heroe(ana.1).unwrap().heroe.mochila.casillas.values().map(|c| c.cantidad).sum();
+    assert_eq!(piezas, esperado.iter().flat_map(|b| &b.mochila).map(|(_, c)| c).sum::<u32>(), "todo a su mochila");
 }
 
 #[test]
@@ -1474,6 +1507,7 @@ fn el_botin_de_los_bandidos_del_anillo_solo_lo_cobra_un_heroe_sin_plaza() {
     assert_eq!(botin(&e, b1.id), Some([0; 4]), "con plaza, el anillo no paga botín");
     assert_eq!(e.n.heroe(con.1).unwrap().heroe.monedas, militar::Reglas::cargar().heroe.monedas_iniciales, "ni monedas");
     assert!(!e.n.estado().combate.destruidos.contains_key(&con.1), "y no cuenta en su ventana");
+    assert!(comun::botines(&e.n).iter().all(|b| b.heroe != con.1), "ni objetos (entrada 70)");
     // Sin plaza: de una Facción sin plazas y residente en un campamento de mercenarios.
     let sin = e.ejercito("gus", 3, b2.posicion, &tropas);
     e.ok("admin", Comando::FijarResidencia { heroe: sin.1, residencia: Some(Residencia::Campamento(c2)) });

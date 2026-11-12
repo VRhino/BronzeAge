@@ -4,7 +4,8 @@
 use crate::misiones::ClaseDueno;
 use asentamiento::Recurso;
 use base::{Mil, UNIDAD};
-use militar::catalogo::{Catalogo, Tropa};
+use militar::catalogo::Tropa;
+use objetos::datos::Tipo;
 use serde_json::{json, Map, Value};
 use std::collections::BTreeSet;
 
@@ -17,32 +18,36 @@ pub enum Fija {
     Experiencia(Mil),
 }
 
-/// Un elemento de la lista libre. Las cantidades van en milésimas, salvo los soldados de una tropa.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Un elemento de la lista libre. Las cantidades van en milésimas, salvo los soldados de una tropa y las piezas de un objeto.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Elemento {
     Recurso(Recurso, Mil),
     Oro(Mil),
     Experiencia(Mil),
     Tropa(Tropa, i64),
+    /// Un objeto del catálogo (`OBJETOS`) y cuántas piezas (entrada 67): va a la mochila del héroe que cobra (D17 y D22).
+    Objeto(String, u32),
 }
 
 impl Elemento {
-    /// El `tipo` del JSON y, en un recurso o una tropa, su nombre.
-    pub fn clave(self) -> (&'static str, &'static str) {
+    /// El `tipo` del JSON y, en un recurso, una tropa o un objeto, su id.
+    pub fn clave(&self) -> (&'static str, &str) {
         match self {
             Elemento::Recurso(r, _) => ("recurso", r.nombre()),
             Elemento::Oro(_) => ("oro", ""),
             Elemento::Experiencia(_) => ("xp", ""),
             Elemento::Tropa(t, _) => ("tropa", t.nombre()),
+            Elemento::Objeto(o, _) => ("objeto", o),
         }
     }
 
-    fn a_json(self) -> Value {
+    fn a_json(&self) -> Value {
         match self {
-            Elemento::Recurso(r, n) => json!({ "tipo": "recurso", "recurso": r.nombre(), "cantidad": mil_a_json(n) }),
-            Elemento::Oro(n) => json!({ "tipo": "oro", "cantidad": mil_a_json(n) }),
-            Elemento::Experiencia(n) => json!({ "tipo": "xp", "cantidad": mil_a_json(n) }),
+            Elemento::Recurso(r, n) => json!({ "tipo": "recurso", "recurso": r.nombre(), "cantidad": mil_a_json(*n) }),
+            Elemento::Oro(n) => json!({ "tipo": "oro", "cantidad": mil_a_json(*n) }),
+            Elemento::Experiencia(n) => json!({ "tipo": "xp", "cantidad": mil_a_json(*n) }),
             Elemento::Tropa(t, n) => json!({ "tipo": "tropa", "tropa": t.nombre(), "cantidad": n }),
+            Elemento::Objeto(o, n) => json!({ "tipo": "objeto", "objeto": o, "cantidad": n }),
         }
     }
 }
@@ -58,8 +63,9 @@ pub struct Recompensa {
 impl Recompensa {
     /// Lee la fija de su clase (`participacion` en una de plaza, `xp` en una de Facción) y la lista `recompensas` de la misión `m`, y lo valida todo: la fija es mayor que 0,
     /// una de héroe lleva alguna recompensa, cada elemento tiene un `tipo` conocido y una cantidad mayor que 0 (entera en los recursos y el oro), la lista no repite nada ni la fija, solo una misión
-    /// `personal` (individual o cadena de héroe) da tropa y una tropa no pide más soldados de los que lleva su escuadra.
-    pub fn leer(m: &Value, clase: ClaseDueno, personal: bool, tropas: &Catalogo) -> Result<Recompensa, String> {
+    /// `personal` (individual o cadena de héroe) da tropa u objetos, una tropa no pide más soldados de los que lleva su escuadra y un objeto existe y no es material (ni crisol ni planos,
+    /// Catalogo_De_Objetos §6b).
+    pub fn leer(m: &Value, clase: ClaseDueno, personal: bool, militar: &militar::Reglas) -> Result<Recompensa, String> {
         let id = m.get("id").and_then(Value::as_str).unwrap_or("?");
         let (clave_fija, ajenas): (Option<&str>, &[&str]) = match clase {
             ClaseDueno::Heroe => (None, &["participacion", "xp"]),
@@ -82,16 +88,17 @@ impl Recompensa {
         };
         let lista = match m.get("recompensas") {
             None => Vec::new(),
-            Some(l) => l.as_array().ok_or_else(|| format!("{id}: «recompensas» es una lista"))?.iter().map(|e| elemento(id, e, tropas)).collect::<Result<Vec<_>, _>>()?,
+            Some(l) => l.as_array().ok_or_else(|| format!("{id}: «recompensas» es una lista"))?.iter().map(|e| elemento(id, e, militar)).collect::<Result<Vec<_>, _>>()?,
         };
         if clase == ClaseDueno::Heroe && lista.is_empty() {
             return Err(format!("{id}: una misión de héroe no tiene recompensa fija: necesita alguna en «recompensas»"));
         }
         let mut vistas = BTreeSet::new();
-        for &e in &lista {
+        for e in &lista {
             match e {
                 Elemento::Experiencia(_) if clase == ClaseDueno::Faccion => return Err(format!("{id}: la xp ya es la recompensa fija de una misión de Facción")),
                 Elemento::Tropa(..) if !personal => return Err(format!("{id}: solo una misión personal (individual o de héroe) da tropa")),
+                Elemento::Objeto(..) if !personal => return Err(format!("{id}: solo una misión personal (individual o de héroe) da objetos")),
                 _ => {}
             }
             if !vistas.insert(e.clave()) {
@@ -119,7 +126,7 @@ impl Recompensa {
 }
 
 /// Un elemento de la lista, validado.
-fn elemento(id: &str, e: &Value, tropas: &Catalogo) -> Result<Elemento, String> {
+fn elemento(id: &str, e: &Value, militar: &militar::Reglas) -> Result<Elemento, String> {
     let texto = |k: &str| e.get(k).and_then(Value::as_str).ok_or_else(|| format!("{id}: un elemento de «recompensas» sin «{k}»"));
     let cantidad = e.get("cantidad").ok_or_else(|| format!("{id}: un elemento de «recompensas» sin «cantidad»"))?;
     let mil = || milesimas(cantidad).ok_or_else(|| format!("{id}: la «cantidad» de cada recompensa es mayor que 0"));
@@ -139,18 +146,28 @@ fn elemento(id: &str, e: &Value, tropas: &Catalogo) -> Result<Elemento, String> 
         "tropa" => {
             let nombre = texto("tropa")?;
             let t = Tropa::desde_nombre(nombre).ok_or_else(|| format!("{id}: la tropa «{nombre}» no existe"))?;
-            let tope = tropas.tropa(t).unidades;
+            let tope = militar.tropas.tropa(t).unidades;
             let n = cantidad.as_i64().filter(|&n| n > 0).ok_or_else(|| format!("{id}: los soldados de «{nombre}» son un entero mayor que 0"))?;
             if n > tope {
                 return Err(format!("{id}: una escuadra de «{nombre}» lleva como mucho {tope} soldados"));
             }
             Elemento::Tropa(t, n)
         }
-        otro => return Err(format!("{id}: el tipo de recompensa «{otro}» no existe (recurso, oro, xp o tropa)")),
+        "objeto" => {
+            let nombre = texto("objeto")?;
+            let ficha = militar.objetos.objetos.get(nombre).ok_or_else(|| format!("{id}: el objeto «{nombre}» no existe"))?;
+            // Los crisoles y los planos son escasos a propósito y solo salen del botín: una misión no los da.
+            if ficha.tipo == Tipo::Material {
+                return Err(format!("{id}: «{nombre}» es un material de la forja: una misión no da ni crisoles ni planos"));
+            }
+            let n = cantidad.as_u64().filter(|&n| n > 0).and_then(|n| u32::try_from(n).ok()).ok_or_else(|| format!("{id}: las piezas de «{nombre}» son un entero mayor que 0"))?;
+            Elemento::Objeto(nombre.to_owned(), n)
+        }
+        otro => return Err(format!("{id}: el tipo de recompensa «{otro}» no existe (recurso, oro, xp, tropa u objeto)")),
     })
 }
 
-fn describir(e: Elemento) -> String {
+fn describir(e: &Elemento) -> String {
     match e.clave() {
         (tipo, "") => format!("«{tipo}»"),
         (tipo, nombre) => format!("{tipo} «{nombre}»"),
@@ -175,12 +192,12 @@ fn mil_a_json(x: Mil) -> Value {
 mod pruebas {
     use super::*;
 
-    fn tropas() -> Catalogo {
-        militar::Reglas::cargar().tropas
+    fn reglas() -> militar::Reglas {
+        militar::Reglas::cargar()
     }
 
     fn leer(m: Value, clase: ClaseDueno, personal: bool) -> Result<Recompensa, String> {
-        Recompensa::leer(&m, clase, personal, &tropas())
+        Recompensa::leer(&m, clase, personal, &reglas())
     }
 
     #[test]
@@ -192,12 +209,13 @@ mod pruebas {
                 { "tipo": "xp", "cantidad": 2.5 },
                 { "tipo": "recurso", "recurso": "madera", "cantidad": 300 },
                 { "tipo": "oro", "cantidad": 5 },
-                { "tipo": "tropa", "tropa": tropa.nombre(), "cantidad": 1 }
+                { "tipo": "tropa", "tropa": tropa.nombre(), "cantidad": 1 },
+                { "tipo": "objeto", "objeto": "medalla_heroe_grande", "cantidad": 2 }
             ]
         });
         let r = leer(m.clone(), ClaseDueno::Asentamiento, true).unwrap();
         assert_eq!(r.fija, Some(Fija::Participacion(10)));
-        assert_eq!(r.lista, vec![Elemento::Experiencia(2_500), Elemento::Recurso(Recurso::Madera, 300 * UNIDAD), Elemento::Oro(5 * UNIDAD), Elemento::Tropa(tropa, 1)]);
+        assert_eq!(r.lista, vec![Elemento::Experiencia(2_500), Elemento::Recurso(Recurso::Madera, 300 * UNIDAD), Elemento::Oro(5 * UNIDAD), Elemento::Tropa(tropa, 1), Elemento::Objeto("medalla_heroe_grande".into(), 2)]);
         let mut vuelta = Map::new();
         vuelta.insert("id".into(), json!("PS1"));
         r.escribir(&mut vuelta);
@@ -209,7 +227,7 @@ mod pruebas {
     #[test]
     fn una_recompensa_mal_hecha_no_entra_y_dice_por_que() {
         let tropa = Tropa::Arqueros;
-        let tope = tropas().tropa(tropa).unidades;
+        let tope = reglas().tropas.tropa(tropa).unidades;
         let mal = |m: Value, clase: ClaseDueno, personal: bool| leer(m, clase, personal).unwrap_err();
         let plaza = |extra: Value| {
             let mut m = json!({ "id": "X", "participacion": 10 });
@@ -238,5 +256,17 @@ mod pruebas {
         assert!(mal(con(soldados(tope + 1)), ClaseDueno::Asentamiento, true).contains(&format!("como mucho {tope}")));
         assert!(mal(con(json!([{ "tipo": "tropa", "tropa": "dragones", "cantidad": 1 }])), ClaseDueno::Asentamiento, true).contains("«dragones» no existe"));
         assert!(leer(con(soldados(tope)), ClaseDueno::Asentamiento, true).is_ok());
+        // Un objeto (entrada 67): solo en una personal, que exista, que no sea material de la forja y en piezas enteras; no se repite.
+        let objeto = |o: &str, n: Value| json!([{ "tipo": "objeto", "objeto": o, "cantidad": n }]);
+        assert!(mal(con(objeto("dagas_cobre", json!(1))), ClaseDueno::Asentamiento, false).contains("solo una misión personal"));
+        assert!(mal(json!({ "id": "X", "xp": 5, "recompensas": objeto("dagas_cobre", json!(1)) }), ClaseDueno::Faccion, false).contains("da objetos"));
+        assert!(mal(con(objeto("crisol", json!(1))), ClaseDueno::Asentamiento, true).contains("ni crisoles ni planos"));
+        assert!(mal(con(objeto("plano_3", json!(1))), ClaseDueno::Asentamiento, true).contains("ni crisoles ni planos"));
+        assert!(mal(con(objeto("espada_de_madera", json!(1))), ClaseDueno::Asentamiento, true).contains("«espada_de_madera» no existe"));
+        assert!(mal(con(objeto("dagas_cobre", json!(0))), ClaseDueno::Asentamiento, true).contains("entero mayor que 0"));
+        assert!(mal(con(objeto("dagas_cobre", json!(1.5))), ClaseDueno::Asentamiento, true).contains("entero mayor que 0"));
+        let dagas = json!({ "tipo": "objeto", "objeto": "dagas_cobre", "cantidad": 1 });
+        assert!(mal(con(json!([dagas, dagas])), ClaseDueno::Asentamiento, true).contains("repite objeto «dagas_cobre»"));
+        assert!(leer(json!({ "id": "H", "recompensas": objeto("dagas_cobre", json!(2)) }), ClaseDueno::Heroe, true).is_ok());
     }
 }

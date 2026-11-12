@@ -24,27 +24,12 @@ pub struct ResultadoEscuadra {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ObjetoBotin {
-    pub definicion: String,
-    pub cantidad: i64,
-    /// Un objeto con identidad propia: tiene que ser nuevo en la partida.
-    pub instancia: Option<String>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Botin {
-    pub objetos: Vec<ObjetoBotin>,
-    pub monedas: i64,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResultadoHeroe {
     pub heroe: HeroeId,
     pub participo: bool,
     pub sobrevivio_al_cierre: bool,
     /// Ausente = se decide por el bando perdedor; `Some(false)` protege al perdedor; `Some(true)` hiere aunque su bando ganara.
     pub derrotado: Option<bool>,
-    pub botin: Option<Botin>,
 }
 
 /// El `BattleResult`. Se guarda **entero** en la batalla: repetir uno idéntico es idempotente, otro distinto se rechaza.
@@ -68,7 +53,7 @@ pub struct Resultado {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ErrorResultado {
-    /// Una cifra negativa o una `cantidad` de objeto menor que 1 (lo que el esquema rechaza por forma).
+    /// Una cifra negativa (lo que el esquema rechaza por forma).
     Forma,
     /// No es el servidor de la asignación activa, o es de otra revisión del ticket.
     AsignacionNoVigente,
@@ -83,12 +68,6 @@ pub enum ErrorResultado {
     TiempoAgotadoSinDefensor,
     /// `fin` no es posterior a `inicio` o la partida duró más que `duracionMaximaSegundos`.
     Duracion,
-    /// Botín de quien no participó.
-    BotinSinParticipar(HeroeId),
-    /// Un `itemInstanceId` repetido en el resultado o que ya existe en la partida.
-    ObjetoRepetido(String),
-    /// Más objetos que casillas libres tenía el héroe en el ticket.
-    SinCasillas(HeroeId),
     /// Un carro perdido que la caravana no tiene (o repetido), de una caravana que no está en la batalla, mal escrito, o carros perdidos en una batalla que no es de caravana.
     CarroInexistente(String),
 }
@@ -108,9 +87,8 @@ pub struct EfectoEscuadra {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EfectoHeroe {
     pub heroe: HeroeId,
-    /// `Some(gana su bando)` si participó: gana la experiencia de Unity; `None` si no participó.
+    /// `Some(gana su bando)` si participó: gana la experiencia de Unity y su botín (el de la tabla `unity`, que tira el motor: D6 y D7); `None` si no participó.
     pub victoria: Option<bool>,
-    pub botin: Option<Botin>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -136,12 +114,11 @@ fn cerrados<T: Ord + Clone>(a: impl Iterator<Item = T>, b: impl Iterator<Item = 
 }
 
 impl Batalla {
-    /// El checklist: cualquier fallo rechaza el resultado entero. `objeto_ya_existe` dice si un `itemInstanceId` ya está en inventarios y equipos.
-    pub fn validar_resultado(&self, servidor: &str, res: &Resultado, objeto_ya_existe: &dyn Fn(&str) -> bool) -> Result<(), ErrorResultado> {
+    /// El checklist: cualquier fallo rechaza el resultado entero.
+    pub fn validar_resultado(&self, servidor: &str, res: &Resultado) -> Result<(), ErrorResultado> {
         use ErrorResultado::*;
-        // Lo que el esquema valida por forma: enteros >= 0 y objetos con cantidad >= 1.
-        let m = |b: &Botin| b.monedas < 0 || b.objetos.iter().any(|o| o.cantidad < 1);
-        if res.por_escuadra.iter().any(|e| e.desplegados < 0 || e.supervivientes_al_cierre < 0 || e.muertos < 0) || res.por_heroe.iter().any(|h| h.botin.as_ref().is_some_and(m)) {
+        // Lo que el esquema valida por forma: enteros >= 0.
+        if res.por_escuadra.iter().any(|e| e.desplegados < 0 || e.supervivientes_al_cierre < 0 || e.muertos < 0) {
             return Err(Forma);
         }
         // 1. La asignación activa y la revisión vigente.
@@ -176,26 +153,7 @@ impl Batalla {
         if res.fin <= res.inicio || res.fin - res.inicio > self.ticket.duracion_maxima {
             return Err(Duracion);
         }
-        // 7. Botín: solo con `participo`, objetos nuevos y que quepan.
-        let mut instancias = BTreeSet::new();
-        for h in &res.por_heroe {
-            let Some(b) = &h.botin else { continue };
-            if !h.participo {
-                return Err(BotinSinParticipar(h.heroe));
-            }
-            for o in &b.objetos {
-                if let Some(i) = &o.instancia {
-                    if !instancias.insert(i.clone()) || objeto_ya_existe(i) {
-                        return Err(ObjetoRepetido(i.clone()));
-                    }
-                }
-            }
-            let libres = self.participante(h.heroe).map_or(0, |p| p.casillas_libres) as usize;
-            if b.objetos.len() > libres {
-                return Err(SinCasillas(h.heroe));
-            }
-        }
-        // 8. Carros perdidos (solo en un asalto de caravana): posiciones de la lista, sin repetir.
+        // 7. Carros perdidos (solo en un asalto de caravana): posiciones de la lista, sin repetir.
         self.carros_perdidos(res).map(|_| ())
     }
 
@@ -235,7 +193,7 @@ impl Batalla {
             ganador: res.ganador,
             heridos,
             escuadras: res.por_escuadra.iter().map(|e| EfectoEscuadra { escuadra: e.escuadra, cantidad: e.supervivientes_al_cierre, victoria: entraron.get(&e.escuadra).map(|&l| l == res.ganador) }).collect(),
-            heroes: res.por_heroe.iter().map(|h| EfectoHeroe { heroe: h.heroe, victoria: h.participo.then(|| self.lado_de(h.heroe) == Some(res.ganador)), botin: h.botin.clone() }).collect(),
+            heroes: res.por_heroe.iter().map(|h| EfectoHeroe { heroe: h.heroe, victoria: h.participo.then(|| self.lado_de(h.heroe) == Some(res.ganador)) }).collect(),
             carros_perdidos: self.carros_perdidos(res).expect("el resultado ya está validado"),
             soltar: self.escuadras_con_candado(),
         }

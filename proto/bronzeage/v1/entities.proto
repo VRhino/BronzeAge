@@ -194,9 +194,9 @@ message Mision {
 
 // Un elemento de la lista libre de una recompensa de misión (Misiones §4, Misiones_Recurrentes §5).
 message RecompensaMision {
-  string tipo = 1;      // recurso, oro, xp, tropa
-  string clave = 2;     // el recurso o la tropa (ids de los datos); vacío en oro y xp
-  sint64 cantidad = 3;  // milésimas (recurso, oro, xp) o soldados (tropa)
+  string tipo = 1;      // recurso, oro, xp, tropa, objeto
+  string clave = 2;     // el recurso, la tropa o el objeto (ids de los datos); vacío en oro y xp
+  sint64 cantidad = 3;  // milésimas (recurso, oro, xp), soldados (tropa) o piezas (objeto)
 }
 
 enum DuracionMision {

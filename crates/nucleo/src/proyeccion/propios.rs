@@ -256,11 +256,12 @@ fn residencia_id(r: Residencia) -> String {
     }
 }
 
-/// Un elemento de la lista de recompensas de una misión en el contrato (Misiones §5): su `tipo`, su `clave` (el recurso o la tropa) y su cantidad, en milésimas o en soldados.
-fn recompensa_mision(e: Elemento) -> pb::RecompensaMision {
+/// Un elemento de la lista de recompensas de una misión en el contrato (Misiones §5): su `tipo`, su `clave` (el recurso, la tropa o el objeto) y su cantidad, en milésimas, en soldados o en piezas.
+fn recompensa_mision(e: &Elemento) -> pb::RecompensaMision {
     let (tipo, clave) = e.clave();
-    let cantidad = match e {
+    let cantidad = match *e {
         Elemento::Recurso(_, n) | Elemento::Oro(n) | Elemento::Experiencia(n) | Elemento::Tropa(_, n) => n,
+        Elemento::Objeto(_, n) => i64::from(n),
     };
     pb::RecompensaMision { tipo: tipo.into(), clave: clave.into(), cantidad }
 }
@@ -300,7 +301,7 @@ pub fn misiones(n: &Nucleo, d: crate::misiones::Dueno) -> Vec<pb::Mision> {
                 previa: m.previa.map(|p| r.misiones[p as usize].id.clone()),
                 recompensa_experiencia,
                 participacion,
-                recompensas: m.recompensa.lista.iter().copied().map(recompensa_mision).collect(),
+                recompensas: m.recompensa.lista.iter().map(recompensa_mision).collect(),
             })
         })
         .collect()
@@ -323,7 +324,7 @@ fn definicion_recurrente(m: &crate::recurrentes::Recurrente) -> pb::DefinicionMi
         condiciones: m.condiciones.iter().map(|(c, u)| pb::CondicionMision { contador: c.clone(), avance: 0, umbral: *u }).collect(),
         participacion,
         experiencia,
-        recompensas: m.recompensa.lista.iter().copied().map(recompensa_mision).collect(),
+        recompensas: m.recompensa.lista.iter().map(recompensa_mision).collect(),
         titulo: m.titulo.clone(),
         texto: m.texto.clone(),
         explicacion: m.explicacion.clone(),

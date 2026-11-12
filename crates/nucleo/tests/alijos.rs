@@ -135,6 +135,23 @@ fn se_abre_en_el_sitio_una_vez_por_heroe_y_lo_que_trae_sube_al_carro() {
     assert_eq!(e.lleva(col_b, r), base::entero(oro));
 }
 
+/// Entrada 70: quien abre un alijo recibe además la tabla `alijo` de BOTIN_OBJETOS, con el rng del estado, en su mochila (3 crisoles, un plano de tier III o IV y una medalla grande de tropa).
+#[test]
+fn quien_abre_un_alijo_recibe_su_tabla_de_objetos_en_la_mochila() {
+    let m = con_mundo!();
+    let (alijo, sitio) = alijo_junto_a(m, 0);
+    let mut e = Esc { n: nucleo(m), peticiones: 0 };
+    let (_, ana) = e.columna("ana", 1, sitio);
+    let mut rng = base::Rng::nuevo(e.n.estado().rng.estado());
+    let sale = objetos::Catalogo::default().botin.alijo.tirar(false, &mut rng);
+    e.ok("ana", Comando::AbrirAlijo { heroe: ana, alijo });
+    assert_eq!(e.n.estado().rng.estado(), rng.estado(), "solo las tiradas de su tabla");
+    assert_eq!(comun::botines(&e.n), vec![comun::Botin { heroe: ana, origen: "alijo".into(), mochila: sale.clone(), almacen: vec![], perdido: vec![] }]);
+    assert_eq!(sale.len(), 3);
+    let mochila = &e.n.heroe(ana).unwrap().heroe.mochila;
+    assert_eq!(mochila.casillas.values().map(|c| (c.pieza.objeto.clone(), c.cantidad)).collect::<Vec<_>>(), sale);
+}
+
 #[test]
 fn cada_rechazo_con_su_codigo_y_sin_rastro() {
     let m = con_mundo!();

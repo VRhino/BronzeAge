@@ -108,7 +108,7 @@ message HeroSnapshot {
   reserved 6;                            // antes `perks_desbloqueados`: desde el 2026-11-12 los perks se abren solos con el nivel (D15)
   Equipamiento equipamiento = 7;
   Atributos atributos_efectivos = 8;
-  uint32 casillas_inventario_libres = 9;
+  reserved 9;                            // antes `casillas_inventario_libres`: desde el 2026-11-12 Unity no da botín; lo tira el motor y va a la mochila (D6, D7 y D17)
 }
 
 message SquadSnapshot {
@@ -251,19 +251,6 @@ message InicioBatalla {
   string intento_asignacion_id = 4;
 }
 
-message ObjetoBotin {
-  string item_definition_id = 1;
-  uint32 cantidad = 2;
-  optional string item_instance_id = 3;
-  repeated Estadistica estadisticas = 4;
-}
-
-message Botin {
-  repeated ObjetoBotin objetos = 1;
-  reserved 2;                            // antes `monedas` (bronce, plata y oro): desde la tanda 69 (2026-11-08), un solo número
-  uint64 monedas = 3;                    // las monedas del héroe que ganó en la batalla
-}
-
 enum MotivoSalida {
   MOTIVO_SALIDA_NO_ESPECIFICADO = 0;
   SALIDA_NO_CONECTADO = 1;
@@ -315,7 +302,7 @@ message ResultadoHeroe {
   bool sobrevivio_al_cierre = 3;
   reserved 4;                            // antes `xp_ganada`: desde el 2026-11-12 la experiencia la pone el motor (4 o 2 según gane el bando, D7)
   optional bool derrotado = 5;
-  optional Botin botin = 6;
+  reserved 6;                            // antes `botin`: desde el 2026-11-12 el botín lo tira el motor con BOTIN_OBJETOS y las monedas salen de MONEDAS (D6 y D7)
 }
 
 message BattleResult {

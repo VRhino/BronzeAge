@@ -408,9 +408,9 @@ impl ReglasEconomia {
         let datos = asentamiento::Reglas::cargar();
         let urbanismo = Arc::new(Urbanismo::cargar(&datos));
         let militar = militar::Reglas::cargar();
-        let misiones = crate::misiones::Reglas::cargar(&militar.tropas);
+        let misiones = crate::misiones::Reglas::cargar(&militar);
         let unicas: Vec<&str> = misiones.misiones.iter().map(|m| m.id.as_str()).collect();
-        let recurrentes = crate::recurrentes::Catalogo::desde(&crate::recurrentes::Catalogo::cargar(&militar.tropas).a_json(), &unicas, &militar.tropas)
+        let recurrentes = crate::recurrentes::Catalogo::desde(&crate::recurrentes::Catalogo::cargar(&militar).a_json(), &unicas, &militar)
             .unwrap_or_else(|e| panic!("bloque MISIONES_RECURRENTES: {e}"));
         Self { datos: Arc::new(datos), urbanismo, comercio: Arc::new(comercio::Reglas::cargar()), militar: Arc::new(militar), combate: Arc::new(combate::Reglas::cargar()), politica: Arc::new(politica::Reglas::cargar()), tecnologia: Arc::new(tecnologia::Reglas::cargar()), misiones: Arc::new(misiones), participacion: Arc::new(crate::participacion::Reglas::cargar()), recurrentes: Arc::new(recurrentes), contratos: Arc::new(mercenarios::Datos::cargar()), huella }
     }
@@ -1603,7 +1603,7 @@ impl Estado {
         }
         s.misiones = crate::misiones::leer(&mut r, &s.reglas.economia.misiones)?;
         s.participacion = crate::participacion::leer(&mut r)?;
-        s.recurrentes = crate::recurrentes::leer(&mut r, &s.reglas.economia.militar.tropas)?;
+        s.recurrentes = crate::recurrentes::leer(&mut r, &s.reglas.economia.militar)?;
         s.contratos = crate::codec_contratos::leer(&mut r)?;
 
         let mut gens = Vec::new();

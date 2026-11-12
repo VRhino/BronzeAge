@@ -75,7 +75,7 @@ momento. Quien lo firmó o el Rey lo **valora** al acabar: buena suma la mitad o
 | Rango | Le da |
 |---|---|
 | 1. A sueldo | al ofrecerse por primera vez, una escuadra suya de cada tropa de la leva (lanceros de milicia, granjeros, mineros y leñadores) |
-| 2. Lanza · 3. Capitán · 4. Veterano · 5. Señor de la guerra | una **escuadra de premio** gratis por rango, la **licencia** de reclutar en su campamento las tropas de su edificio hasta ese escalón en cuanto alguien en el mundo descubre su tecnología, y una tarifa más alta |
+| 2. Lanza · 3. Capitán · 4. Veterano · 5. Señor de la guerra | una **escuadra de premio** gratis por rango, la **licencia** de reclutar en su campamento las tropas de su edificio hasta ese escalón en cuanto alguien en el mundo descubre su tecnología, y una tarifa más alta; al llegar a Veterano y a Señor de la guerra, además, una tirada de la tabla de objetos de su rango, a su mochila (decidido el 2026-11-12) |
 
 **El Liderazgo no cambia con el rango**: es igual para todos los héroes.
 

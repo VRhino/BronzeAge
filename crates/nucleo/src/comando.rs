@@ -3938,7 +3938,7 @@ impl Respuesta {
 mod pruebas {
     use super::*;
     use combate::ciclo::{EscuadraDeSalida, Instancia, MotivoSalida};
-    use combate::resultado::{Botin, ObjetoBotin, Razon, ResultadoEscuadra, ResultadoHeroe};
+    use combate::resultado::{Razon, ResultadoEscuadra, ResultadoHeroe};
     use comercio::encargo::{LineaDejar, LineaRecoger};
 
     /// 5E-12 (retirado en 5H): el 117 era el alias `FijarAcceso`; una petición vieja con él ya no se lee.
@@ -4302,15 +4302,9 @@ mod pruebas {
                     objetivos: vec![("bandera".into(), None), ("torre".into(), Some(Lado::Atacante))],
                     por_escuadra: vec![ResultadoEscuadra { escuadra: 8, desplegados: 10, supervivientes_al_cierre: 3, muertos: 7 }],
                     por_heroe: vec![
-                        ResultadoHeroe { heroe: 4, participo: true, sobrevivio_al_cierre: false, derrotado: Some(true), botin: None },
-                        ResultadoHeroe {
-                            heroe: 5,
-                            participo: true,
-                            sobrevivio_al_cierre: true,
-                            derrotado: None,
-                            botin: Some(Botin { objetos: vec![ObjetoBotin { definicion: "espada".into(), cantidad: 1, instancia: Some("i-1".into()) }, ObjetoBotin { definicion: "oro".into(), cantidad: 5, instancia: None }], monedas: 7 }),
-                        },
-                        ResultadoHeroe { heroe: 6, participo: false, sobrevivio_al_cierre: true, derrotado: Some(false), botin: None },
+                        ResultadoHeroe { heroe: 4, participo: true, sobrevivio_al_cierre: false, derrotado: Some(true) },
+                        ResultadoHeroe { heroe: 5, participo: true, sobrevivio_al_cierre: true, derrotado: None },
+                        ResultadoHeroe { heroe: 6, participo: false, sobrevivio_al_cierre: true, derrotado: Some(false) },
                     ],
                     version_servidor: "v1".into(),
                     carros_perdidos: vec!["0".into(), "2".into()],

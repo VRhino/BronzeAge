@@ -1,10 +1,10 @@
 # Objetos del héroe
 
-> **Nuevo el 2026-11-12.** Los datos del catálogo de objetos del héroe (`OBJETOS`), de sus clases (`CLASES_HEROE`) y del botín de objetos (`BOTIN_OBJETOS`), generados del catálogo de la Armería (`Docs/Disenos_Por_Implementar/Catalogo_De_Objetos.md`, `Clases_De_Heroe.md` §7 y `Progresion_Tropas_Y_Heroe.md` §5) y servidos en `GET /v1/datos`. Las reglas puras que los usan viven en el crate `objetos` (D11, entradas 70 y 71), que solo depende de `base`; el héroe, las plazas y las órdenes que las llaman todavía no (tanda siguiente), así que aquí se describe lo que hace cada regla, no cuándo se aplica.
+> **Nuevo el 2026-11-12.** Los datos del catálogo de objetos del héroe (`OBJETOS`), de sus clases (`CLASES_HEROE`) y del botín de objetos (`BOTIN_OBJETOS`), generados del catálogo de la Armería (`Docs/Disenos_Por_Implementar/Catalogo_De_Objetos.md`, `Clases_De_Heroe.md` §7 y `Progresion_Tropas_Y_Heroe.md` §5) y servidos en `GET /v1/datos`. Las reglas puras que los usan viven en el crate `objetos` (D11, entradas 70 y 71), que solo depende de `base`; aquí se describe lo que hace cada regla, y en el núcleo, quién las llama.
 
-> **Ya los usa el héroe (2026-11-12).** `militar::Heroe` guarda su equipo, su mochila y su almacén de objetos con los tipos de este crate, y las órdenes `equipar_objeto`, `desequipar_objeto`, `guardar_objeto` y `sacar_objeto` llaman a `Equipo::equipar`, `Equipo::quitar` e `Inventario::pasar` ([`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §4.5). `Inventario::pasar` mueve `cantidad` de una casilla de un inventario a otro y, si no cabe, no cambia ninguno. `Catalogo` guarda además `version_objetos` y `version_clases` (las `version` de `OBJETOS` y `CLASES_HEROE`), que van en el ticket de batalla. El botín, todavía no da objetos.
+> **Ya los usa el héroe (2026-11-12).** `militar::Heroe` guarda su equipo, su mochila y su almacén de objetos con los tipos de este crate, y las órdenes `equipar_objeto`, `desequipar_objeto`, `guardar_objeto` y `sacar_objeto` llaman a `Equipo::equipar`, `Equipo::quitar` e `Inventario::pasar` ([`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §4.5). `Inventario::pasar` mueve `cantidad` de una casilla de un inventario a otro y, si no cabe, no cambia ninguno. `Catalogo` guarda además `version_objetos` y `version_clases` (las `version` de `OBJETOS` y `CLASES_HEROE`), que van en el ticket de batalla.
 
-> **La Armería y los consumibles, por orden (2026-11-12, T7).** `comprar_objeto`, `vender_objeto`, `forjar_objeto` y `usar_objeto` llaman a `tienda::comprar`, `tienda::vender`, `forja::forjar` y `consumible::usar`, y la montura del cofre llega con `entregar` ([`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §4.6). `forja::forjar` devuelve, además de los materiales, la calidad que salió (va en el hecho `heroe.objeto_forjado`).
+> **La Armería y los consumibles, por orden (2026-11-12).** `comprar_objeto`, `vender_objeto`, `forjar_objeto` y `usar_objeto` llaman a `tienda::comprar`, `tienda::vender`, `forja::forjar` y `consumible::usar`, y la montura del cofre llega con `entregar` ([`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §4.6). `forja::forjar` devuelve, además de los materiales, la calidad que salió (va en el hecho `heroe.objeto_forjado`).
 
 ## 1. Alcance y fuentes
 
@@ -56,6 +56,23 @@ Siete huecos: arma, casco, torso, guantes, pantalones, botas y montura. **El arm
 ### 3.6 Botín
 
 **Tirar una tabla**: cada entrada fija se tira por su lado, con una tirada en milésimas (también la que sale siempre), y las de `soloSiGana` solo cuentan para el que gana; cada `unoDe` da uno, siempre, con una sola tirada. Sale una lista de objetos y cantidades, en el orden de la tabla. Qué tabla toca y adónde va lo que sale (la mochila y, si no cabe, el almacén de objetos; D17) lo decide quien llama.
+
+**Entregar** lo que llega sin pedirlo (`objetos::entregar`; D17 y D22): a la mochila; si no cabe, al almacén de objetos, aunque el héroe esté fuera de su residencia; si tampoco cabe allí, se pierde. Dice adónde fue.
+
+### 3.7 De dónde sale el botín (el núcleo)
+
+> **Implementado en Rust (2026-11-12, entradas 67, 68 y 70; Catalogo_De_Objetos §6b, Progresion_Tropas_Y_Heroe §5, D5 a D7, D17 y D22).** Un solo camino, `crates/nucleo/src/nucleo/botin_de_objetos.rs`: `Nucleo::botin_de_objetos` tira la tabla de la fuente con el rng del estado (una tirada por entrada, salvo las de `soloSiGana` de quien no gana) y `Nucleo::entregar_objetos` da cada cosa al héroe con `objetos::entregar` y emite el hecho. Las fuentes:
+
+| Fuente (`origen`) | Tabla | Quién y cuándo |
+| --- | --- | --- |
+| `unity` | `unity` | Cada héroe que participó en una batalla de Unity, al aplicar su resultado, en el orden de `porHeroe`; lo de `soloSiGana`, si gana su bando ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §9). Unity ya no manda botín (D6 y D7). |
+| `bandidos` | `bandidos` del nivel | Cada héroe que cobra el botín de un campamento destruido (con la regla del anillo), solo dentro de las 8 completas de su ventana de 24 h ([`Combate.md`](Combate.md) §7.2). |
+| `diaria` | `misionDiaria` | El héroe que reclama una diaria **individual** del tablón, además de su recompensa (D5; [`Misiones_Recurrentes.md`](Misiones_Recurrentes.md) §5). |
+| `alijo` | `alijo` | Quien abre un alijo ([`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md) §12). |
+| `mercenario` | `rangoMercenario` del rango | El mercenario que alcanza el rango 4 o el 5 ([`Mercenarios_Por_Contrato.md`](Mercenarios_Por_Contrato.md) §8.3). |
+| `mision` | ninguna | El objeto de la recompensa de una misión personal (tipo `objeto`, [`Misiones.md`](Misiones.md) §4.1), al héroe que la cobra. |
+
+**Hecho `heroe.botin { heroe, origen, mochila, almacen, perdido }`**, solo si llega algo; lo oye solo el héroe. `origen` es la fuente de la tabla de arriba y las tres listas dicen qué fue a la mochila, qué al almacén de objetos y qué se perdió, cada cosa como `[objeto, cantidad]` (la forma de `recursos` en `mision.reclamada`). Un botín nunca rechaza nada: lo que no cabe se pierde y lo dice el hecho.
 
 ## 4. Parámetros
 

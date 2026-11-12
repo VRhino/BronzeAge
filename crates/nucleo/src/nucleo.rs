@@ -54,6 +54,7 @@ mod armeria;
 mod auditoria;
 mod avanzadas;
 mod bandidos;
+mod botin_de_objetos;
 mod batallas;
 mod cargos;
 mod columnas;

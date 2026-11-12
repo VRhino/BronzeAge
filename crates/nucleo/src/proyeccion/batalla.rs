@@ -16,7 +16,7 @@ use crate::nucleo::Nucleo;
 use combate::caravana::Modalidad;
 use combate::ciclo::{Asignacion, BandoDeTicket, Batalla, CaravanaEnBatalla, Contexto, EscuadraEnBatalla, Incorporacion, Participante, PlazaCongelada};
 use combate::resolucion::Lado;
-use combate::resultado::{Botin, Razon, Resultado};
+use combate::resultado::{Razon, Resultado};
 use contrato::v1 as pb;
 use militar::heroe::Controlador;
 
@@ -66,7 +66,6 @@ fn participante(n: &Nucleo, p: &Participante) -> pb::BattleParticipantSnapshot {
             avatar: Some(pb::Avatar::default()),
             equipamiento: h.map(|h| equipamiento(&r.objetos, &h.equipo)),
             atributos_efectivos: h.map(|h| atributos(r, h)),
-            casillas_inventario_libres: p.casillas_libres,
             ..Default::default()
         }),
         escuadras: p.escuadras.iter().map(|e| escuadra(n, e)).collect(),
@@ -213,10 +212,6 @@ pub(super) fn razon(r: Razon) -> pb::RazonVictoria {
 
 /// El resultado aplicado, tal como lo mandó Unity (se guarda entero en la batalla).
 pub fn resultado(n: &Nucleo, b: &Batalla, r: &Resultado) -> pb::BattleResult {
-    let botin = |b: &Botin| pb::Botin {
-        objetos: b.objetos.iter().map(|o| pb::ObjetoBotin { item_definition_id: o.definicion.clone(), cantidad: o.cantidad.max(0) as u32, item_instance_id: o.instancia.clone(), estadisticas: Vec::new() }).collect(),
-        monedas: b.monedas.max(0) as u64,
-    };
     pb::BattleResult {
         schema_version: SCHEMA_VERSION,
         battle_id: n.uuid_de_batalla(b.id),
@@ -236,7 +231,7 @@ pub fn resultado(n: &Nucleo, b: &Batalla, r: &Resultado) -> pb::BattleResult {
         por_heroe: r
             .por_heroe
             .iter()
-            .map(|h| pb::ResultadoHeroe { heroe_id: ids::heroe(h.heroe), participo: h.participo, sobrevivio_al_cierre: h.sobrevivio_al_cierre, derrotado: h.derrotado, botin: h.botin.as_ref().map(botin) })
+            .map(|h| pb::ResultadoHeroe { heroe_id: ids::heroe(h.heroe), participo: h.participo, sobrevivio_al_cierre: h.sobrevivio_al_cierre, derrotado: h.derrotado })
             .collect(),
         version_servidor: r.version_servidor.clone(),
         carros_perdidos: r.carros_perdidos.clone(),

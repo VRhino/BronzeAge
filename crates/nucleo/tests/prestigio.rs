@@ -162,7 +162,7 @@ fn resultado(n: &Nucleo, id: u64) -> ResultadoDeBatalla {
         razon: Razon::ObjetivosCapturados,
         objetivos: vec![("bandera".into(), Some(Lado::Atacante))],
         por_escuadra: b.escuadras_de().map(|e| ResultadoEscuadra { escuadra: e.id, desplegados: e.efectivos, supervivientes_al_cierre: e.efectivos - 5.min(e.efectivos), muertos: 5.min(e.efectivos) }).collect(),
-        por_heroe: b.heroes_que_combaten().map(|h| ResultadoHeroe { heroe: h, participo: true, sobrevivio_al_cierre: true, derrotado: None, botin: None }).collect(),
+        por_heroe: b.heroes_que_combaten().map(|h| ResultadoHeroe { heroe: h, participo: true, sobrevivio_al_cierre: true, derrotado: None }).collect(),
         version_servidor: "v1".into(),
         carros_perdidos: vec![],
     }

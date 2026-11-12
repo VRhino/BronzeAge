@@ -135,7 +135,7 @@ fn cerrar_batalla(n: &mut Nucleo, batalla: u64) {
     del_servidor(n, t, "inicio", Comando::ConfirmarInicio { batalla, intento: "a1".into(), revision });
     let b = n.batalla(batalla).unwrap();
     let por_escuadra = b.escuadras_de().map(|e| ResultadoEscuadra { escuadra: e.id, desplegados: e.efectivos, supervivientes_al_cierre: e.efectivos, muertos: 0 }).collect();
-    let por_heroe = b.heroes_que_combaten().map(|h| ResultadoHeroe { heroe: h, participo: true, sobrevivio_al_cierre: true, derrotado: None, botin: None }).collect();
+    let por_heroe = b.heroes_que_combaten().map(|h| ResultadoHeroe { heroe: h, participo: true, sobrevivio_al_cierre: true, derrotado: None }).collect();
     let resultado = ResultadoDeBatalla {
         resultado_id: format!("res-{batalla}"),
         revision,

@@ -294,7 +294,7 @@ async fn los_mensajes_del_servidor_de_batalla_llegan_por_su_sesion_y_el_nucleo_l
         razon: pb::RazonVictoria::ObjetivosCapturados as i32,
         objetivos: vec![pb::ObjetivoResultado { objetivo_id: "bandera".into(), capturado_por: Some(pb::LadoId::Atacante as i32) }],
         por_escuadra: escuadras.iter().map(|e| pb::ResultadoEscuadra { squad_id: format!("esc-{e}"), desplegados: 5, supervivientes_al_cierre: 5, muertos: 0 }).collect(),
-        por_heroe: [h_ana, h_beto].iter().map(|h| pb::ResultadoHeroe { heroe_id: format!("heroe-{h}"), participo: true, sobrevivio_al_cierre: true, derrotado: None, botin: None }).collect(),
+        por_heroe: [h_ana, h_beto].iter().map(|h| pb::ResultadoHeroe { heroe_id: format!("heroe-{h}"), participo: true, sobrevivio_al_cierre: true, derrotado: None }).collect(),
         version_servidor: "v1".into(),
         carros_perdidos: vec![],
     };
