@@ -212,7 +212,7 @@ impl Nucleo {
     /// Quien estaba dentro y no trajo columna sale a la calle con todo lo suyo (Combate §9, Entrar con todo): nace una columna personal quieta en `posicion`, con el
     /// carro que llevaba (el de su residencia), los víveres del héroe y las escuadras con que defendió y sobrevivieron. Devuelve su id.
     pub(super) fn columna_de_salida(&mut self, t: Instante, heroe: u64, posicion: Punto, faccion: Option<u32>, escuadras: &[u64]) -> u64 {
-        let mr = self.estado.reglas.economia.militar.clone();
+        let mr = self.militar_de(faccion);
         let id = self.nuevo_id();
         let hn = self.heroe_mut(heroe);
         let (viveres, carro) = (std::mem::take(&mut hn.heroe.viveres), std::mem::take(&mut hn.carro));

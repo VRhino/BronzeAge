@@ -131,8 +131,9 @@ fn una_columna_ataca_a_otra_y_el_derrotado_queda_herido_pierde_la_mitad_del_carr
     assert_eq!(h.len(), 1);
     let h = &h[0];
     assert_eq!((h.0, h.1.clone(), dato(h, "ganaElAtacante")), (10 * MIN, vec![ana.0, beto.0], 1));
-    // Los logros (6B), contados en origen: una batalla librada y en campo abierto (el `combate.encuentro`), sin hoplitas.
-    assert_eq!(comun::logros_de_hechos(&x.n), vec![(Contador::BatallasLibradas, 1), (Contador::BatallasCampoAbierto, 1)]);
+    // Los logros (6B), contados en origen: una batalla librada y en campo abierto (el `combate.encuentro`), sin hoplitas; y combaten los Reyes (Eras_IV_Y_V §3: el primer ciudadano de
+    // cada Facción de administración lo es).
+    assert_eq!(comun::logros_de_hechos(&x.n), vec![(Contador::BatallasLibradas, 1), (Contador::BatallasCampoAbierto, 1), (Contador::BatallasConRey, 1)]);
     // Las bajas del perdedor van de 30 % a 70 % y el ganador pierde entre el 5 % y el 20 %.
     let (despues_a, despues_d) = (soldados(&x.n, ana.1, x.fuerte[0]), soldados(&x.n, beto.1, x.debil));
     let perdidos_d = antes_d - despues_d;
@@ -166,6 +167,20 @@ fn una_columna_ataca_a_otra_y_el_derrotado_queda_herido_pierde_la_mitad_del_carr
 /// Las monedas de un héroe.
 fn monedas_de(n: &Nucleo, heroe: u64) -> i64 {
     n.heroe(heroe).unwrap().heroe.monedas
+}
+
+#[test]
+fn con_numeros_la_columna_con_caballeria_que_gana_a_campo_abierto_cuenta_los_contadores_de_las_eras_iv_y_v() {
+    // Ana suma carros de guerra (Caballerizas, escalón 4) a sus espadachines (Barracón) y arqueros (Galería de tiro).
+    let mut x = choque();
+    let (ana, beto) = (x.ana, x.beto);
+    dar(&mut x.n, "d4", ana.1, Tropa::CarrosGuerra, completa(Tropa::CarrosGuerra));
+    assert!(atacar(&mut x.n, 10 * MIN, "ana", "a1", ana.1, ObjetivoAtaque::Ejercito(beto.0), false).aceptada());
+    let c = |k: Contador| x.n.tecnologia().contador(k);
+    // Combaten los Reyes: el primer ciudadano de cada Facción de administración lo es.
+    let suben = [Contador::BatallasArmasCombinadas, Contador::BatallasCampoAbiertoConCaballeria, Contador::BatallasCampoAbiertoConCaballeriaElite, Contador::PersecucionesDeCaballeria, Contador::BatallasConRey];
+    assert_eq!(suben.map(c), [1; 5]);
+    assert_eq!([Contador::BatallasContraCoalicion, Contador::BatallasConTresHeroes, Contador::BatallasGanadasEnInferioridad].map(c), [0; 3]);
 }
 
 #[test]
@@ -969,6 +984,21 @@ fn una_caravana_atacada_dentro_de_su_zona_es_un_aguante_pierde_el_70_por_ciento_
     assert!(k.escolta.is_empty());
     // El atacante gana: no queda herido.
     assert!(!e.n.heroe_herido(atacante.1));
+}
+
+#[test]
+fn una_columna_con_caballeria_que_ataca_una_caravana_cuenta_una_persecucion() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, true);
+    let a = e.a;
+    let ca = e.caravana("ana", a, 2);
+    let t0 = e.lanzar(ca);
+    e.n.avanzar_hasta(t0);
+    let atacante = e.ejercito("beto", 2, e.pos(a), &[Tropa::JinetesAsirios]);
+    assert!(e.atacar("beto", atacante.1, ObjetivoAtaque::Caravana(ca), true).aceptada());
+    // `persecuciones.deCaballeria` (Eras_IV_Y_V §3); un asalto a una caravana no es una batalla librada, así que no suma los demás de batalla.
+    assert_eq!(e.n.tecnologia().contador(Contador::PersecucionesDeCaballeria), 1);
+    assert_eq!(e.n.tecnologia().contador(Contador::BatallasLibradas), 0);
 }
 
 #[test]

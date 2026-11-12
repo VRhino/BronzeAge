@@ -369,6 +369,8 @@ impl Nucleo {
         let hoplitas = super::logros::con_hoplitas(atac.escuadras.iter().chain(&def.escuadras).map(|s| s.tropa));
         let (participantes_a, participantes_d) = (Self::participantes_de(&self.estado.ejercitos[&id]), Self::participantes_de(&self.estado.ejercitos[&x]));
         let combatieron = [participantes_a.clone(), participantes_d.clone()].concat();
+        let al_empezar = |x: &[Escuadra]| x.iter().map(|s| s.cantidad).collect::<Vec<i64>>();
+        let (antes_a, antes_d) = (al_empezar(&atac.escuadras), al_empezar(&def.escuadras));
         if let Some((a, b)) = guerra {
             self.declarar_guerra(t, a, b);
         }
@@ -421,8 +423,19 @@ impl Nucleo {
         self.hecho_de_combate("combate.encuentro", t, vec![id, x], vec![], punto, datos);
         // El hecho de épica `batalla` entre Facciones distintas, de la ganadora (6E).
         self.hecho_epico(tecnologia::epicas::Hecho::batalla((id, banderas.0 as u32), (x, banderas.1 as u32), ganador == id, t));
-        // Los logros (6B): una batalla librada (con hoplitas, si los había) y en campo abierto (el encuentro).
-        self.contar(t, tecnologia::contador::combate_resuelto(hoplitas).con(tecnologia::Contador::BatallasCampoAbierto, 1));
+        // Los logros (6B): una batalla librada (con hoplitas, si los había) y en campo abierto (el encuentro); y los de las Eras IV y V, con su resumen (Eras_IV_Y_V §3).
+        let tras = |antes: &[i64], x: &[Escuadra]| antes.iter().zip(x).map(|(&n, s)| (s.tropa, n, s.cantidad)).collect::<Vec<_>>();
+        let resumen = tecnologia::contador::ResumenBatalla {
+            atacante: self.bando_de_batalla(&atac.heroes, tras(&antes_a, &atac.escuadras)),
+            defensor: self.bando_de_batalla(&def.heroes, tras(&antes_d, &def.escuadras)),
+            con_rey: self.con_rey(atac.heroes.iter().chain(&def.heroes).copied()),
+            gana_el_atacante: informe.ganador == Lado::Atacante,
+            campo_abierto: true,
+        };
+        let mut logros = tecnologia::contador::combate_resuelto(hoplitas).con(tecnologia::Contador::BatallasCampoAbierto, 1);
+        logros.sumar(&tecnologia::contador::de_batalla(&resumen));
+        logros.sumar(&tecnologia::contador::persecucion(&resumen.atacante));
+        self.contar(t, logros);
         self.avance_de_heroes(t, &combatieron, "batallas", 1);
         // La participación (Participacion §2): la batalla ganada, a los del bando ganador.
         let ganadores = if informe.ganador == Lado::Atacante { &participantes_a } else { &participantes_d };
@@ -493,6 +506,8 @@ impl Nucleo {
         // La participación (Participacion §2): la defienden los héroes de su escolta cedida; sin ella, los carreteros, que no suman.
         let defensores = self.heroes_de_escolta(&escolta);
         let defensa = if con_escolta { Defensa::Escolta(&mut escolta) } else { Defensa::Base };
+        // `persecuciones.deCaballeria` (Eras_IV_Y_V §3), con la columna tal como ataca.
+        let persecucion = tecnologia::contador::persecucion(&self.bando_de_batalla(&atac.heroes, atac.escuadras.iter().map(|s| (s.tropa, s.cantidad, s.cantidad))));
         let r = asalto::resolver_asalto(&cr, Bando { escuadras: &mut atac.escuadras, heroes: &atac.heroes }, defensa, modalidad, &mut self.estado.rng).expect("la columna lleva al menos un héroe sano");
         self.experiencia_de_asalto(t, &atac.heroes, r.poder_atacante, r.defensa);
         // Una caravana suelta no lleva héroes: la señora de su dueño nunca está presente (como el TypeScript).
@@ -529,6 +544,7 @@ impl Nucleo {
         if r.gana_atacante {
             self.contar(t, tecnologia::contador::Delta::uno(tecnologia::Contador::CaravanasDestruidasOCapturadas));
         }
+        self.contar(t, persecucion);
         self.participacion_de_batalla(t, &[origen], &defensores, if r.gana_atacante { &participantes } else { &defensores });
         self.tras_batalla(t, &Desenlace { atacados: &[Objetivo::Caravana(x)], atacantes: &participantes, defensores: &defensores, gana_atacante: r.gana_atacante, nivel_bandidos: None });
         Ok(())

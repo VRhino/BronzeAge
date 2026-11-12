@@ -928,6 +928,7 @@ fn un_camino_compartido_abierto_pide_diez_rutas_de_tres_facciones_fuera_de_las_z
     }
     e.avanzar(9 * HORA);
     assert!(!e.n.camino_compartido_abierto(), "sin rutas no hay camino compartido");
+    assert_eq!(e.n.tecnologia().contador(tecnologia::Contador::CaminosCompartidos), 0);
     let t = e.n.ahora();
     for &(plaza, f, _) in &plazas {
         assert!(e.n.economia(plaza).is_some(), "la plaza sigue viva");
@@ -947,9 +948,12 @@ fn un_camino_compartido_abierto_pide_diez_rutas_de_tres_facciones_fuera_de_las_z
     assert!(max >= 10, "el corredor entre los dos grupos lo pisan al menos 10 rutas (máximo {max})");
     assert_eq!(e.n.red_de_caminos().rutas().count(), 18);
     assert!(e.n.camino_compartido_abierto(), "10 rutas de 3 Facciones sobre una arista fuera de toda zona");
-    // Pasado el plazo, las rutas caducan y el logro deja de cumplirse.
+    // El récord `caminos.compartidos` (Eras_IV_Y_V §3) pasa a 1 con la ruta que lo abre.
+    assert_eq!(e.n.tecnologia().contador(tecnologia::Contador::CaminosCompartidos), 1);
+    // Pasado el plazo, las rutas caducan y el camino deja de estar abierto; el récord, no.
     e.avanzar_hasta(t + HORA + 4_320 * MIN);
     assert!(!e.n.camino_compartido_abierto());
+    assert_eq!(e.n.tecnologia().contador(tecnologia::Contador::CaminosCompartidos), 1);
 }
 
 

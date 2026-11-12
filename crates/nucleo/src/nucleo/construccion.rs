@@ -295,9 +295,9 @@ impl Nucleo {
         // Lo extraído y lo fabricado cuentan para los logros en origen (6B), y un nivel actual nuevo, para el récord de plazas por nivel.
         self.contar_flujos(t, &contado);
         self.contar_nivel(t, faccion, Some(nivel_antes), Some(nivel_ahora));
-        // El paso de la capital mira `recursoEnCapital` si alguna candidata lo pide (6C, plan §5.1).
+        // El paso de la capital mira lo que cambia sin disparador (`recursoEnCapital` y las cifras de las Eras IV y V) si alguna candidata lo pide (6C, plan §5.1; Eras_IV_Y_V §4).
         if es_capital {
-            self.mirar_recurso_en_capital(faccion);
+            self.mirar_paso_de_capital(faccion);
         }
         Some(r)
     }

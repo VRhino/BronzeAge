@@ -415,12 +415,14 @@ impl Nucleo {
                 if !self.esta_en_el_campamento(*heroe, *campamento, t) {
                     return Err(rechazo(rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA, "el héroe no está en el campamento ni con la columna a su puerta".into()));
                 }
+                // Sin columna, hasta la capacidad de un héroe de su Facción (con la Logística de campaña, ×1,5: Eras_IV_Y_V §2).
+                let cap = self.militar_de(self.heroe(*heroe).and_then(|h| h.faccion)).logistica.capacidad_viveres;
                 let falta = match self.columna_que_lleva(*heroe) {
                     Some(c) => {
                         let e = &self.estado.ejercitos[&c];
                         e.columna.viveres.maximo.unwrap_or(0) - e.columna.viveres.valor_en(t)
                     }
-                    None => mr.logistica.capacidad_viveres - self.heroe(*heroe).expect("existe").heroe.viveres,
+                    None => cap - self.heroe(*heroe).expect("existe").heroe.viveres,
                 };
                 if falta <= 0 {
                     return Err(de_mercenarios(ErrorMercenarios::VivereLlenos));
@@ -435,7 +437,7 @@ impl Nucleo {
                         self.evento("mercenarios.repostado", t, c, None, datos);
                     }
                     None => {
-                        self.heroe_mut(*heroe).heroe.viveres = mr.logistica.capacidad_viveres;
+                        self.heroe_mut(*heroe).heroe.viveres = cap;
                         self.emitir_propio(t, "mercenarios.repostado", vec![], datos);
                     }
                 }

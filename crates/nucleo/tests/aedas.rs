@@ -614,7 +614,7 @@ async fn por_la_sesion_cada_ambito_lleva_lo_suyo_de_la_tecnologia_y_de_los_aedas
     let (a, t) = publicas[0];
     assert_eq!(a, &format!("HEROE:heroe-{bea}"));
     assert!(t.logros.is_empty(), "ni qué tecnología abre cada logro (Q6)");
-    assert_eq!((t.contadores.get("plazasEnNivel.2"), t.contadores.len()), (Some(&1), 24), "los contadores en curso sí (2026-11-06)");
+    assert_eq!((t.contadores.get("plazasEnNivel.2"), t.contadores.len()), (Some(&1), 36), "los contadores en curso sí (2026-11-06)");
     assert_eq!(t.logros_cumplidos.iter().map(|l| (l.contador.as_str(), l.umbral)).collect::<Vec<_>>(), [("plazasEnNivel.2", 1)]);
     assert_eq!(t.cantadas, ["metalurgia_cobre"]);
     let era = &e_reglas.eras[0];
@@ -649,7 +649,7 @@ async fn por_la_sesion_cada_ambito_lleva_lo_suyo_de_la_tecnologia_y_de_los_aedas
     let (mut adm, _, recibido) = w.conectar(hola("ok:admin", TipoCliente::ClienteAdminWeb)).await;
     let todo = cuerpos(&recibido);
     let t = todo.iter().find_map(|(_, x)| if let Cuerpo::EstadoTecnologia(t) = x { Some(t) } else { None }).expect("el estado entero en ADMIN");
-    assert_eq!((t.contadores.get("plazasEnNivel.2"), t.logros.contains_key("metalurgia_cobre"), t.contadores.len()), (Some(&1), true, 24));
+    assert_eq!((t.contadores.get("plazasEnNivel.2"), t.logros.contains_key("metalurgia_cobre"), t.contadores.len()), (Some(&1), true, 36));
     let enteros: Vec<&pb::AedaItinerante> = todo.iter().filter_map(|(_, x)| if let Cuerpo::AedaItinerante(x) = x { Some(x) } else { None }).collect();
     assert!(enteros.len() == 3 && enteros.iter().all(|x| x.hasta_ms.is_some() && x.recientes.last() == Some(&format!("as-{b}"))), "con su estancia y dónde estuvieron: {enteros:?}");
     let fin = enteros.iter().filter_map(|x| x.hasta_ms).min().unwrap();

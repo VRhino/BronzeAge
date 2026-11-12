@@ -7,7 +7,7 @@
 //! columna 30 y 15, el catálogo trae a los Mineros y el poder de un héroe en un combate con números es 15.
 
 use crate::catalogo::Catalogo;
-use asentamiento::datos::{bloque_de, mil, ppm, texto_de_parametros_de};
+use asentamiento::datos::{bloque_de, mil, por, ppm, texto_de_parametros_de};
 use asentamiento::Tipo;
 use base::{Mil, MS_POR_MINUTO};
 use serde_json::Value;
@@ -97,6 +97,15 @@ pub struct ReglasLogistica {
     /// Lo que pasa cada minuto la plaza a una columna personal de su Facción dentro de su zona, por cada unidad que esta come por minuto (ppm; repostaje automático, decisión
     /// del autor del 2026-10-27: algo más rápido de lo que se lo gasta).
     pub factor_repostaje_en_zona: i64,
+    /// `bonusViveres`: la tecnología que multiplica la capacidad de víveres por héroe de la Facción que la tiene adoptada (Logística de campaña, Eras_IV_Y_V §2).
+    pub bonus_viveres: BonusViveres,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BonusViveres {
+    pub tecnologia: String,
+    /// ppm.
+    pub factor: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -269,6 +278,10 @@ impl Reglas {
                 radio_encuentro: mil(num(&lg, "radioEncuentro")),
                 umbral_narrar_reposte: ppm(num(&lg, "umbralNarrarReposte")),
                 factor_repostaje_en_zona: ppm(num(&lg, "factorRepostajeEnZona")),
+                bonus_viveres: BonusViveres {
+                    tecnologia: lg["bonusViveres"]["tecnologia"].as_str().expect("bonusViveres.tecnologia").to_owned(),
+                    factor: ppm(num(&lg, "bonusViveres.factor")),
+                },
             },
             movimiento: ReglasMovimiento {
                 velocidad_jugador: mil(num(&mv, "velocidadJugador")),
@@ -326,6 +339,16 @@ impl Reglas {
             tecnologias: ReglasTecnologias::cargar(),
         }
     }
+
+    /// Las reglas que valen para una Facción: las de todos con la capacidad de víveres por héroe por `bonusViveres.factor` si `tiene` su tecnología (Logística de campaña, Eras_IV_Y_V
+    /// §2). Lo que llena o topa los víveres de un héroe o de una columna de esa Facción las usa.
+    pub fn de_faccion(&self, tiene: impl Fn(&str) -> bool) -> Reglas {
+        let mut r = self.clone();
+        if tiene(&r.logistica.bonus_viveres.tecnologia) {
+            r.logistica.capacidad_viveres = por(r.logistica.capacidad_viveres, r.logistica.bonus_viveres.factor);
+        }
+        r
+    }
 }
 
 /// Una lista de textos del bloque.
@@ -372,6 +395,14 @@ mod pruebas {
     }
 
     #[test]
+    fn la_logistica_de_campana_da_a_su_faccion_un_50_por_ciento_mas_de_viveres_por_heroe() {
+        let r = Reglas::cargar();
+        assert_eq!(r.de_faccion(|t| t == "logistica_campana").logistica.capacidad_viveres, 525_000);
+        assert_eq!(r.de_faccion(|t| t == "cuerpo_oficiales").logistica.capacidad_viveres, 350_000, "otra tecnología no");
+        assert_eq!(r.de_faccion(|t| t == "logistica_campana").logistica.capacidad_carro, r.logistica.capacidad_carro, "solo los víveres");
+    }
+
+    #[test]
     fn las_cifras_vigentes_son_las_de_los_bloques_sin_correcciones() {
         let r = Reglas::cargar();
         assert_eq!((r.liderazgo.base, r.liderazgo.coste_por_escalon), (100, [7, 14, 22, 32, 45]));
@@ -385,6 +416,7 @@ mod pruebas {
         assert_eq!((r.logistica.capacidad_carro, r.logistica.capacidad_viveres, r.logistica.radio_encuentro), (500_000, 350_000, 1_000));
         assert_eq!((r.logistica.umbral_narrar_reposte, r.logistica.factor_repostaje_en_zona), (500_000, 1_250_000));
         assert_eq!((r.logistica.factor_marcha, r.logistica.factor_estacionado), (250_000, 100_000));
+        assert_eq!(r.logistica.bonus_viveres, BonusViveres { tecnologia: "logistica_campana".into(), factor: 1_500_000 });
         assert_eq!((r.movimiento.velocidad_jugador, r.movimiento.consumo_por_participante, r.movimiento.radio_puerta), (66_000, 500, 2_000));
         assert_eq!((r.movimiento.vida_peticion_union, r.movimiento.radio_inspeccion, r.inspeccion.informe), (10_000, 8_000, 10 * MS_POR_MINUTO));
         assert_eq!((r.formacion.minimo, r.formacion.plazo), (3, 10 * MS_POR_MINUTO));

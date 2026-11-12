@@ -115,12 +115,18 @@ impl Nucleo {
         self.estado.comercio.red.rutas().filter(move |x| x.vigente(r, ahora, &|id| extremo_de_ruta(plazas, acarreo, id)))
     }
 
-    /// `caminoCompartidoAbierto` (§7.4): ¿hay una arista fuera de toda zona que pisen ≥ 10 rutas de ≥ 3 Facciones? (la consulta del logro
-    /// `logistica_campana`, Era IV, aún sin quien la llame).
+    /// `caminoCompartidoAbierto` (§7.4): ¿hay una arista fuera de toda zona que pisen ≥ 10 rutas de ≥ 3 Facciones? (el récord `caminos.compartidos`, el logro de
+    /// `logistica_campana`, Era IV: `registrar_ruta_en_red`).
     pub fn camino_compartido_abierto(&self) -> bool {
         let red = self.red_vigente();
         let discos: Vec<Disco> = self.discos().into_iter().map(|(_, d)| d).collect();
         red.camino_compartido_abierto(&self.estado.reglas.economia.comercio.red, &|p| discos.iter().any(|d| territorio::en_zona(p, d, discos.iter())))
+    }
+
+    /// Las reglas militares que valen para la Facción `faccion` (sin Facción, las de todos): con su capacidad de víveres por héroe, ×1,5 con la Logística de campaña adoptada
+    /// (`LOGISTICA.bonusViveres`, Eras_IV_Y_V §2). Las usa todo lo que llena o topa los víveres de un héroe o de una columna.
+    pub(super) fn militar_de(&self, faccion: Option<u32>) -> militar::Reglas {
+        self.estado.reglas.economia.militar.de_faccion(|x| faccion.is_some_and(|f| self.estado.tiene_tecnologia(f, x)))
     }
 
     /// Lo que cabe en el carro de un héroe (`LOGISTICA.capacidadCarroPorJugador`): lo que admite el carro con que sale quien sale de un lugar sin columna.
@@ -296,6 +302,10 @@ impl Nucleo {
         let cambio = self.estado.comercio.red.registrar_ruta(id32(origen), id32(destino), faccion, ruta, t);
         if cambio.pesos_cambiados {
             self.cache.version_red += 1;
+            // `caminos.compartidos` (Eras_IV_Y_V §3): un récord que pasa a 1 con el primer camino compartido; después no se mira más.
+            if self.estado.tecnologia.contador(tecnologia::Contador::CaminosCompartidos) == 0 && self.camino_compartido_abierto() {
+                self.subir_record(t, tecnologia::Contador::CaminosCompartidos, 1);
+            }
         }
         if !cambio.nuevas.is_empty() {
             self.rehacer_planes_por_camino(&cambio.nuevas.into_iter().collect(), t, excepto);

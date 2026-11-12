@@ -94,7 +94,7 @@ impl Nucleo {
     pub(super) fn validar_salida(&mut self, t: Instante, heroe: u64, lugar: Lugar, elegidas: &[u64], carga: &[(Recurso, Mil)], exigir_escuadras: bool, reservas: &mut Reservas) -> Result<PlanDeSalida, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
-        let mr = self.estado.reglas.economia.militar.clone();
+        let mr = self.militar_de(self.heroe(heroe).and_then(|h| h.faccion));
         let hn = self.heroe(heroe).expect("el héroe existe");
         let (reside, presente, no_esta) = match lugar {
             Lugar::Asentamiento(a) => (hn.heroe.residencia == Some(Residencia::Asentamiento(a)), hn.heroe.presencia.ubicacion == Ubicacion::Asentamiento(a), rechazos::HEROE_NO_ESTA_EN_LA_PLAZA),
@@ -221,7 +221,7 @@ impl Nucleo {
     /// Ejecuta una salida ya comprobada y devuelve la columna en la que va el héroe. Con `Destino::Unirse` el héroe se suma al ejército dado
     /// (los integrantes de una convocatoria que parte) con lo que saca; si no, nace una columna (o se sale con la que trajo).
     pub(super) fn aplicar_salida(&mut self, t: Instante, plan: &PlanDeSalida, destino: Destino) -> u64 {
-        let mr = self.estado.reglas.economia.militar.clone();
+        let mr = self.militar_de(self.heroe(plan.heroe).and_then(|h| h.faccion));
         let PlanDeSalida { heroe, lugar, escuadras, carga, trigo, racion_gratis, retoma, .. } = plan;
         self.avance(t, Dueno::Heroe(*heroe), "salidas", 1);
         // 1. Lo que sale del almacén.
@@ -435,7 +435,7 @@ impl Nucleo {
         e.columna.escuadras.retain(|s| !propios.contains(s));
         let viveres = e.columna.viveres.valor_en(t);
         self.poner_escuadras_en(&[heroe], &propios, Contenedor::Campamento, t);
-        let cap = self.estado.reglas.economia.militar.logistica.capacidad_viveres;
+        let cap = self.militar_de(self.heroe(heroe).and_then(|h| h.faccion)).logistica.capacidad_viveres;
         let hn = self.heroe_mut(heroe);
         for (&r, &n) in &carga {
             *hn.carro.entry(r).or_insert(0) += n;

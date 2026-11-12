@@ -9,6 +9,9 @@
 //! |---|---|
 //! | `extraido.*`, `fabricado.*` | el paso de minuto de la plaza (`con_exterior`): lo que sale de los nodos de la plaza y de sus pueblos (`FuentesMundo::extraer`, D17) y lo que fabrican sus recetas (`Fuentes::fabricado`), en milésimas con un resto oculto |
 //! | `batallas.libradas`, `.conHoplitas`, `.campoAbierto` | columna contra columna con números (el `combate.resuelto` y su `combate.encuentro`); toda batalla de Unity aplicada (`aplicar_resultado`, D10) |
+//! | los de batalla de las Eras IV y V (`batallas.conTresHeroes`, `.ganadasEnInferioridad`, `.campoAbiertoConCaballeria`, `.armasCombinadas`, `.contraCoalicion`, `.conRey`, `.campoAbiertoConCaballeriaElite`, `escuadras.eliteDestruidas`) | las mismas batallas, con su resumen (`bando_de_batalla`, `con_rey`; Eras_IV_Y_V §3) |
+//! | `persecuciones.deCaballeria` | una columna con caballería que ataca a otra columna o a una caravana (también la de Fundación), con números o en Unity |
+//! | `caminos.compartidos` | récord, a 1 al registrar la ruta que abre el primer camino compartido (`registrar_ruta_en_red`) |
 //! | `asedios.*`, `conquistas.conMurallaCompleta` | el asedio con números (`resolver_asedio_con_numeros`); el asedio de Unity aplicado. Nunca `batalla.aplicada` |
 //! | `caravanas.destruidasOCapturadas` | la caravana interceptada con números (también la de Fundación), el acoso que ganan los bandidos y la batalla de caravana de Unity que gana el atacante |
 //! | `bandidos.campamentosDestruidos` | el campamento destruido con números y la batalla de Unity contra un campamento que gana el atacante |
@@ -28,7 +31,7 @@
 use super::*;
 use crate::estado::{entidad_era, Dato, PRIO_ERA};
 use militar::catalogo::Tropa;
-use tecnologia::contador::{Contador, Delta};
+use tecnologia::contador::{BandoDeBatalla, Contador, Delta, EscuadraDeBatalla};
 use tecnologia::{Conjunto, TecId};
 
 /// Niveles que lleva el índice de plazas por nivel actual (los de más se cuentan en el último).
@@ -85,6 +88,32 @@ impl Nucleo {
         }
     }
 
+    // ───────────────────────────── El resumen de una batalla ─────────────────────────────
+
+    /// Un bando de una batalla para sus contadores (Eras_IV_Y_V §3): las Facciones de los héroes que combaten y cuántos son, y sus escuadras como (tropa, soldados al empezar, al acabar),
+    /// solo las que empezaron con alguno.
+    pub(super) fn bando_de_batalla(&self, heroes: &[u64], escuadras: impl IntoIterator<Item = (Tropa, i64, i64)>) -> BandoDeBatalla {
+        let tropas = &self.estado.reglas.economia.militar.tropas;
+        let escuadras: Vec<(Tropa, i64, i64)> = escuadras.into_iter().filter(|&(_, antes, _)| antes > 0).collect();
+        BandoDeBatalla {
+            facciones: heroes.iter().filter_map(|&h| self.heroe(h)?.faccion).collect(),
+            heroes: heroes.len() as u32,
+            soldados: escuadras.iter().map(|&(_, antes, _)| antes as u64).sum(),
+            escuadras: escuadras
+                .iter()
+                .map(|&(t, _, despues)| {
+                    let d = tropas.tropa(t);
+                    EscuadraDeBatalla { edificio: d.edificio, escalon: d.escalon, sin_soldados: despues <= 0 }
+                })
+                .collect(),
+        }
+    }
+
+    /// ¿Combate el Rey de alguna Facción entre estos héroes? (`batallas.conRey`.)
+    pub(super) fn con_rey(&self, heroes: impl IntoIterator<Item = u64>) -> bool {
+        heroes.into_iter().any(|h| self.heroe(h).and_then(|x| x.faccion).and_then(|f| self.estado.politica.facciones.get(f)).is_some_and(|f| f.rey == Some(h)))
+    }
+
     // ───────────────────────────── Sumar ─────────────────────────────
 
     /// Suma lo que deja un hecho a los contadores y anuncia los logros que se cumplen.
@@ -94,6 +123,13 @@ impl Nucleo {
         }
         let r = self.estado.reglas.economia.tecnologia.clone();
         let fijados = self.estado.tecnologia.aplicar(&r, &d, t);
+        self.tras_logros(t, &fijados);
+    }
+
+    /// Sube un récord (`caminos.compartidos`) y anuncia los logros que se cumplen.
+    pub(super) fn subir_record(&mut self, t: Instante, c: Contador, valor: u64) {
+        let r = self.estado.reglas.economia.tecnologia.clone();
+        let fijados = self.estado.tecnologia.subir_record(&r, c, valor, t);
         self.tras_logros(t, &fijados);
     }
 

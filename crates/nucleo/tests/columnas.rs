@@ -257,6 +257,22 @@ fn salir_al_mundo_valida_en_orden_carga_el_carro_llena_los_viveres_y_un_rechazo_
     assert_eq!(e.rechazada("ana", salir(h, &[], &[])), rechazos::HEROE_YA_EN_COLUMNA, "no se sale dos veces");
 }
 
+#[test]
+fn con_la_logistica_de_campana_cada_heroe_de_la_faccion_lleva_un_cincuenta_por_ciento_mas_de_viveres() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    e.avanzar(24 * HORA);
+    let a = e.a;
+    let salir = |heroe| Comando::SalirAlMundo { asentamiento: a, heroe, escuadras: vec![], carga: vec![] };
+    let (antes, despues) = (e.heroe_en_la_plaza("ana"), e.heroe_en_la_plaza("beto"));
+    let col = e.ok("ana", salir(antes)).creadas[0];
+    assert_eq!(e.ejercito(col).columna.viveres.maximo, Some(mr().logistica.capacidad_viveres), "sin ella, 350 por héroe");
+    // Con la Logística de campaña adoptada (Eras_IV_Y_V §2: `LOGISTICA.bonusViveres`), la capacidad por héroe de la Facción es ×1,5.
+    e.ok("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["logistica_campana".into()] });
+    let col = e.ok("beto", salir(despues)).creadas[0];
+    assert_eq!(e.ejercito(col).columna.viveres.maximo, Some(525_000));
+}
+
 /// Al salir al mundo desde su plaza el héroe se queda con la foto de su interior (Niebla_De_Guerra §4.5), ya sin la tropa ni la carga que se lleva: el almacén, la cola (lo que no está activo) y
 /// la guarnición. Viaja en su `Heroe.plazas_recordadas`, no cambia mientras está fuera aunque la plaza siga viviendo, la siguiente salida la sustituye y vuelve de la foto (`BAN25`).
 #[test]

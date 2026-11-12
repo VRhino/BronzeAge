@@ -599,8 +599,31 @@ fn el_resultado_deja_las_bajas_la_experiencia_el_botin_el_carro_y_la_chatarra_y_
     assert_eq!(x.n.estado().rng.estado(), base::Rng::derivado(42, "nucleo").estado(), "Unity decide: ni abrir ni aplicar el resultado gastan una tirada");
     // La experiencia de Facción de una batalla de Unity (5C): 2,5 por héroe que participó, a la Facción con la que entró, sin filtro de dignidad.
     assert_eq!((x.n.faccion(1).unwrap().experiencia, x.n.faccion(2).unwrap().experiencia), (2_500, 2_500));
-    // Los logros (6B, D10): los suma el resultado aplicado, no `batalla.aplicada` (D18): una librada en campo abierto, sin hoplitas.
-    assert_eq!(comun::logros_de_hechos(&x.n), vec![(Contador::BatallasLibradas, 1), (Contador::BatallasCampoAbierto, 1)]);
+    // Los logros (6B, D10): los suma el resultado aplicado, no `batalla.aplicada` (D18): una librada en campo abierto, sin hoplitas; y combaten los Reyes (Eras_IV_Y_V §3: el primer
+    // ciudadano de cada Facción de administración lo es).
+    assert_eq!(comun::logros_de_hechos(&x.n), vec![(Contador::BatallasLibradas, 1), (Contador::BatallasCampoAbierto, 1), (Contador::BatallasConRey, 1)]);
+}
+
+#[test]
+fn una_batalla_de_unity_cuenta_los_contadores_de_las_eras_iv_y_v_con_las_escuadras_que_dice_unity() {
+    // Ana suma carros de guerra (Caballerizas, escalón 4) a sus espadachines (Barracón) y arqueros (Galería de tiro); beto, otros carros, que Unity deja sin soldados.
+    let mut x = choque();
+    let (ana, beto) = (x.ana, x.beto);
+    dar(&mut x.n, "d4", ana.1, Tropa::CarrosGuerra);
+    let elite = dar(&mut x.n, "d5", beto.1, Tropa::CarrosGuerra);
+    assert!(atacar(&mut x.n, 10 * MIN, "ana", "a1", ana.1, ObjetivoAtaque::Ejercito(beto.0), false).aceptada());
+    let id = x.n.batallas().next().unwrap().id;
+    en_curso(&mut x.n, id, 11 * MIN, &[ana.1]);
+    let mut r = resultado(&x.n, id, Lado::Atacante, 0);
+    let e = r.por_escuadra.iter_mut().find(|e| e.escuadra == elite).unwrap();
+    (e.supervivientes_al_cierre, e.muertos) = (0, e.desplegados);
+    assert!(aplicar(&mut x.n, 20 * MIN, "res", id, r).aceptada());
+    // Gana a campo abierto con caballería de élite, con armas combinadas, persiguiendo con caballería, y cae una escuadra de élite; combaten los Reyes (el primer ciudadano de cada Facción
+    // de administración lo es). Sin coalición ni tres héroes.
+    let c = |k: Contador| x.n.tecnologia().contador(k);
+    let suben = [Contador::BatallasArmasCombinadas, Contador::BatallasCampoAbiertoConCaballeria, Contador::BatallasCampoAbiertoConCaballeriaElite, Contador::EscuadrasEliteDestruidas, Contador::PersecucionesDeCaballeria, Contador::BatallasConRey];
+    assert_eq!(suben.map(c), [1; 6]);
+    assert_eq!([Contador::BatallasContraCoalicion, Contador::BatallasConTresHeroes].map(c), [0; 2]);
 }
 
 #[test]
@@ -909,7 +932,9 @@ fn contra_un_campamento_de_bandidos_se_juega_un_evento_pve_cualquiera_se_une_com
     assert_eq!([Madera, Piedra, Trigo].map(total), [5 * por_heroe; 3], "madera, piedra y trigo del nivel 2 por héroe, repartidos por rondas entre las cinco columnas");
     assert_eq!(total(Oro), 0, "los bandidos ya no dan oro");
     assert_eq!(hechos(&x.n, "evento_pve.aplicada").len(), 1);
-    assert_eq!(comun::logros_de_hechos(&x.n), vec![(Contador::BandidosCampamentosDestruidos, 1), (Contador::BatallasLibradas, 1)], "el campamento destruido por Unity cuenta (6B)");
+    // Y los de las Eras IV y V (Eras_IV_Y_V §3): el bando atacante lleva cinco héroes, y entre ellos el Rey de su Facción.
+    let logros = vec![(Contador::BandidosCampamentosDestruidos, 1), (Contador::BatallasLibradas, 1), (Contador::BatallasConTresHeroes, 1), (Contador::BatallasConRey, 1)];
+    assert_eq!(comun::logros_de_hechos(&x.n), logros, "el campamento destruido por Unity cuenta (6B)");
     // Solo la experiencia de bandidos (1 ÷ nivel 1) para la Facción atacante, no la de la batalla: el mismo premio que con números (5C-4).
     assert_eq!((x.n.faccion(1).map(|f| f.experiencia), x.n.faccion(3).map_or(0, |f| f.experiencia)), (Some(1_000), 0));
     assert!(!heridos0 && !x.n.heroe_herido(ana.1), "gana el atacante");

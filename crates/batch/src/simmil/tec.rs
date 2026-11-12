@@ -495,26 +495,37 @@ impl Sim<'_> {
     }
 
     /// El Gobernador de la capital levanta (o mejora) el primer edificio que pide el hito de una tecnología de una Era abierta que a su Facción no le ha aparecido y que ninguna plaza
-    /// suya tiene; uno por turno. Los rechazos (nivel, materiales, cupo) son del juego.
+    /// suya tiene (con `edificioEnPlazaDeNivel`, ninguna plaza suya de ese nivel; y solo si la capital lo tiene, porque la obra es en ella); uno por turno. Las demás condiciones no piden
+    /// obra. Los rechazos (nivel, materiales, cupo) son del juego.
     fn tec_obras(&mut self, t: Instante, i: usize, p: u64, f: u32) {
         let r = self.n.estado().reglas.economia.tecnologia.clone();
         let e = self.n.tecnologia();
         let propias = e.de(&r, f);
-        let mut pedidos: Vec<(Tipo, u8)> = Vec::new();
+        // (edificio, nivel interno, nivel de la plaza que lo tiene).
+        let mut pedidos: Vec<(Tipo, u8, u32)> = Vec::new();
         for x in 0..r.catalogo.len() as TecId {
             if propias.aparecidas.contiene(x) || !e.era_abierta(&r, x) {
                 continue;
             }
             for c in &r.def(x).hito {
                 match *c {
-                    Condicion::Edificio { tipo, nivel } => pedidos.push((tipo, nivel)),
-                    Condicion::CapitalEnNivel { con, .. } => pedidos.push((con, 1)),
-                    _ => {}
+                    Condicion::Edificio { tipo, nivel } => pedidos.push((tipo, nivel, 0)),
+                    Condicion::CapitalEnNivel { con, .. } => pedidos.push((con, 1, 0)),
+                    Condicion::EdificioEnPlazaDeNivel { tipo, nivel_interno, nivel_plaza } => pedidos.push((tipo, nivel_interno, u32::from(nivel_plaza))),
+                    Condicion::Tecnologia(_)
+                    | Condicion::RecursoEnCapital(_)
+                    | Condicion::YacimientoEnTerritorio(_)
+                    | Condicion::EscuadrasVivas(_)
+                    | Condicion::HeroesEnFaccion(_)
+                    | Condicion::PlazaEnNivel(_)
+                    | Condicion::NivelFaccion(_)
+                    | Condicion::ColumnasEnMarcha(_) => {}
                 }
             }
         }
-        for (tipo, nivel) in pedidos {
-            if self.n.plazas_de(f).any(|a| a.economia.edificios.hay_activo_con_nivel(tipo, nivel)) {
+        let nivel_capital = self.n.estado().asentamientos[&p].nivel_actual();
+        for (tipo, nivel, nivel_plaza) in pedidos {
+            if nivel_capital < nivel_plaza || self.n.plazas_de(f).any(|a| a.nivel_actual() >= nivel_plaza && a.economia.edificios.hay_activo_con_nivel(tipo, nivel)) {
                 continue;
             }
             // El primero que falta y se puede pedir; uno por turno.

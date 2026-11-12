@@ -26,9 +26,9 @@ impl Nucleo {
     /// La columna `otra` entra en `base` con lo que lleva (escuadras, carro y víveres), `unidoEn = t`: sus héroes pasan a ir en `base` y `otra`
     /// desaparece. Devuelve si una formación llegó con esto al mínimo y pasó a ser un ejército. No toca nada si no se puede (§10.2).
     pub(super) fn fusionar_columna(&mut self, t: Instante, base: u64, otra: u64) -> Result<bool, ErrorColumna> {
-        let mr = self.estado.reglas.economia.militar.clone();
         let antes = self.velocidad_de_ejercito(base).unwrap_or(0);
         let oe = self.estado.ejercitos.get(&otra).ok_or(ErrorColumna::NoVaDentro)?;
+        let mr = self.militar_de(oe.columna.faccion);
         let distancia = oe.posicion_en(t).dist(self.estado.ejercitos[&base].posicion_en(t));
         let (heroes_otra, escuadras_otra, columna_otra) = (Self::participantes_de(oe), oe.columna.escuadras.clone(), oe.columna.clone());
         let Estado { ejercitos, militar, .. } = &mut self.estado;
@@ -60,7 +60,7 @@ impl Nucleo {
     /// caravanas adjuntas), y cada otro nace como columna personal donde estaba con lo suyo (`Columna::desarmar`). Para quieta, si marchaba. Devuelve los ids de las
     /// columnas nuevas.
     pub(super) fn desarmar_columna(&mut self, t: Instante, id: u64) -> Vec<u64> {
-        let mr = self.estado.reglas.economia.militar.clone();
+        let mr = self.militar_de(self.estado.ejercitos[&id].columna.faccion);
         if self.estado.ejercitos[&id].marchando() {
             self.detener(id, t);
         }
@@ -110,8 +110,9 @@ impl Nucleo {
     /// `separarseDelEjercito`: `heroe` sale de su ejército con lo suyo y nace como columna personal quieta donde estaba; devuelve su id. Lo comprueba todo antes de tocar nada. Lo hace la orden
     /// y lo hace el fin del contrato de un mercenario (Mercenarios_Por_Contrato §7).
     pub(super) fn separar_del_ejercito(&mut self, t: Instante, heroe: u64) -> Result<u64, Respuesta> {
-        let (v, mr) = (self.estado.version, self.estado.reglas.economia.militar.clone());
+        let v = self.estado.version;
         let (id, e) = self.columna_a_bordo(heroe)?;
+        let mr = self.militar_de(e.columna.faccion);
         let nuevo = self.estado.siguiente_id;
         let suyas = self.escuadras_de_heroe_en(heroe, id);
         let posicion = e.posicion_en(t);

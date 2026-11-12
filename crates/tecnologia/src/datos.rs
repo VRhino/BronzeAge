@@ -97,6 +97,17 @@ pub enum Condicion {
     EdificioEnPlazaDeNivel { tipo: Tipo, nivel_interno: u8, nivel_plaza: u8 },
 }
 
+impl Condicion {
+    /// ¿La mira el paso de minuto de la capital? Las que cambian sin ningún disparador de la aparición: el recurso en la capital (TA §3), las escuadras vivas, los héroes, las columnas en
+    /// marcha y el nivel de la Facción (Eras_IV_Y_V §4). Las demás las miran los disparadores de siempre.
+    pub fn del_paso_de_capital(&self) -> bool {
+        match self {
+            Condicion::RecursoEnCapital(_) | Condicion::EscuadrasVivas(_) | Condicion::HeroesEnFaccion(_) | Condicion::ColumnasEnMarcha(_) | Condicion::NivelFaccion(_) => true,
+            Condicion::Edificio { .. } | Condicion::Tecnologia(_) | Condicion::CapitalEnNivel { .. } | Condicion::YacimientoEnTerritorio(_) | Condicion::PlazaEnNivel(_) | Condicion::EdificioEnPlazaDeNivel { .. } => false,
+        }
+    }
+}
+
 /// Una parte del logro: un contador del servidor y su umbral. Con `por_plaza`, el umbral es `umbral × N`, con N las plazas vivas del mundo en ese momento (mínimo 1;
 /// decisión del autor, 2026-11-07: los logros se adaptan al tamaño del servidor). En los datos, `"umbral": X` es fijo y `"porPlaza": X` es por plaza.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -273,7 +284,7 @@ pub struct Reglas {
     pub por_contador: Vec<Vec<TecId>>,
     /// Las que tienen alguna parte del logro por plaza viva: lo único que se mira cuando cambia el número de plazas del mundo.
     pub por_plazas: Conjunto,
-    /// Las que piden `recursoEnCapital` en su hito: lo único que el paso de minuto de una capital mira (plan §5.1), sin recorrer el catálogo.
+    /// Las que piden en su hito algo que solo mira el paso de minuto de la capital ([`Condicion::del_paso_de_capital`]): lo único que ese paso mira (plan §5.1), sin recorrer el catálogo.
     pub piden_capital: Conjunto,
     /// Las que dan un `bonusProduccion`: el `factor_tecnologia` de una Facción que no ha adoptado ninguna es 1 sin mirar nada más.
     pub con_bonus: Conjunto,
@@ -374,7 +385,7 @@ impl Reglas {
     pub fn indexar(&mut self) {
         let de = |f: &dyn Fn(&Definicion) -> bool| self.catalogo.iter().enumerate().filter(|(_, d)| f(d)).map(|(i, _)| i as TecId).collect::<Conjunto>();
         (self.de_arranque, self.piden_capital, self.con_bonus) =
-            (de(&|d| d.de_arranque), de(&|d| d.hito.iter().any(|c| matches!(c, Condicion::RecursoEnCapital(_)))), de(&|d| d.bonus.is_some()));
+            (de(&|d| d.de_arranque), de(&|d| d.hito.iter().any(Condicion::del_paso_de_capital)), de(&|d| d.bonus.is_some()));
         self.por_plazas = de(&|d| d.logro.is_some_and(Logro::por_plazas));
         let mut por_contador = vec![Vec::new(); Contador::TODOS.len()];
         for (i, d) in self.catalogo.iter().enumerate() {

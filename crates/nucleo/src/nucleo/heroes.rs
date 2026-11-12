@@ -435,11 +435,12 @@ impl Nucleo {
                         // Se suma como participante (con sus víveres) a una columna que no tiene por qué admitirlo; si ya la tenía, la retoma.
                         let antes = self.velocidad_de_ejercito(*c).unwrap_or(0);
                         let viveres = std::mem::take(&mut self.heroe_mut(*heroe).heroe.viveres);
+                        let de_la_columna = self.militar_de(self.estado.ejercitos[c].columna.faccion);
                         let Estado { ejercitos, militar, .. } = &mut self.estado;
                         let e = ejercitos.get_mut(c).expect("existe");
                         let mut heroes = Self::participantes_de(e);
                         heroes.push(*heroe);
-                        e.columna.admitir(&mr, *heroe, viveres, t, &|ids| militar.soldados_de(&heroes, ids));
+                        e.columna.admitir(&de_la_columna, *heroe, viveres, t, &|ids| militar.soldados_de(&heroes, ids));
                         self.ubicar_en_columna(*heroe, *c);
                         self.recomponer_columna(*c, t, antes);
                         return Ok(vec![]);

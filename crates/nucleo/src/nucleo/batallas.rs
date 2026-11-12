@@ -1082,7 +1082,7 @@ impl Nucleo {
         let defendieron: Vec<u64> = self.participantes_del_lado(&b, Lado::Defensor).iter().map(|q| q.heroe).filter(|&h| res.por_heroe.iter().any(|x| x.heroe == h && x.participo)).collect();
         self.defensa_de_vasallo(t, b.ticket.defensor.faccion, &defendieron, res.ganador == Lado::Defensor);
         // Los logros de la batalla (D10), con la plaza de un asedio tal como estaba antes de su conquista (que daña la muralla); nunca desde `batalla.aplicada` (D18).
-        let logros = self.contadores_de_batalla(&b, res.ganador);
+        let logros = self.contadores_de_batalla(&b, &res);
         // El hecho de épica de la batalla (6E), con las Facciones del ticket y por su id: se canta una vez aunque toque varias plazas.
         let contexto = match b.ticket.contexto {
             Contexto::CampoAbierto { .. } => tecnologia::epicas::ContextoUnity::CampoAbierto,
@@ -1176,23 +1176,48 @@ impl Nucleo {
     }
 
     /// Lo que una batalla de Unity suma a los logros del servidor (`contadoresDeBatalla` del TypeScript; Tecnologia_Aedas §2.1): lo mismo que un combate con números. La de una avanzada o
-    /// un saqueo de pueblo (contextos que el TypeScript no tenía) cuenta como batalla librada y nada más.
-    fn contadores_de_batalla(&self, b: &Batalla, ganador: Lado) -> tecnologia::contador::Delta {
-        use tecnologia::contador::{batalla_unity, combate_resuelto, ContextoBatalla};
+    /// un saqueo de pueblo (contextos que el TypeScript no tenía) cuenta como batalla librada y nada más de entonces. Los de las Eras IV y V (Eras_IV_Y_V §3), en todas: el resumen con
+    /// los héroes que participaron y las escuadras del ticket con los soldados que Unity dice que quedan; y la persecución, si una columna ataca a otra (campo abierto) o a una caravana
+    /// (no el acoso de unos bandidos, que no son una columna).
+    fn contadores_de_batalla(&self, b: &Batalla, res: &ResultadoDeBatalla) -> tecnologia::contador::Delta {
+        use tecnologia::contador::{batalla_unity, combate_resuelto, de_batalla, persecucion, ContextoBatalla, ResumenBatalla};
         let lados = [Lado::Atacante, Lado::Defensor];
         let escuadras = lados.iter().flat_map(|&l| self.participantes_del_lado(b, l).into_iter().flat_map(|p| p.escuadras.iter()).chain(&b.ticket.bando(l).sin_heroe).map(|e| e.tropa).collect::<Vec<_>>());
         let hoplitas = super::logros::con_hoplitas(escuadras);
         let contexto = match b.ticket.contexto {
-            Contexto::CampoAbierto { .. } => ContextoBatalla::CampoAbierto,
-            Contexto::Caravana { .. } => ContextoBatalla::Caravana,
-            Contexto::CampamentoBandidos { .. } => ContextoBatalla::CampamentoBandidos,
-            Contexto::Asedio { asentamiento } => ContextoBatalla::Asedio {
+            Contexto::CampoAbierto { .. } => Some(ContextoBatalla::CampoAbierto),
+            Contexto::Caravana { .. } => Some(ContextoBatalla::Caravana),
+            Contexto::CampamentoBandidos { .. } => Some(ContextoBatalla::CampamentoBandidos),
+            Contexto::Asedio { asentamiento } => Some(ContextoBatalla::Asedio {
                 muralla_completa: self.estado.asentamientos.get(&u64::from(asentamiento)).is_some_and(|a| asentamiento::recintos::muralla_completa(&a.economia.recintos)),
                 con_heroe_defensor: !self.participantes_del_lado(b, Lado::Defensor).is_empty(),
-            },
-            Contexto::Avanzada { .. } | Contexto::SaqueoPueblo { .. } => return combate_resuelto(hoplitas),
+            }),
+            Contexto::Avanzada { .. } | Contexto::SaqueoPueblo { .. } => None,
         };
-        batalla_unity(contexto, ganador == Lado::Atacante, hoplitas)
+        let mut d = match contexto {
+            Some(c) => batalla_unity(c, res.ganador == Lado::Atacante, hoplitas),
+            None => combate_resuelto(hoplitas),
+        };
+        let participo = |h: u64| res.por_heroe.iter().any(|x| x.heroe == h && x.participo);
+        let quedan = |e: u64| res.por_escuadra.iter().find(|x| x.escuadra == e).map_or(0, |x| x.supervivientes_al_cierre);
+        let heroes = |l: Lado| self.participantes_del_lado(b, l).into_iter().map(|p| p.heroe).filter(|&h| participo(h)).collect::<Vec<u64>>();
+        let bando = |l: Lado| {
+            let escuadras = self.participantes_del_lado(b, l).into_iter().flat_map(|p| p.escuadras.iter()).chain(&b.ticket.bando(l).sin_heroe);
+            self.bando_de_batalla(&heroes(l), escuadras.map(|e| (e.tropa, e.efectivos, quedan(e.id))))
+        };
+        let resumen = ResumenBatalla {
+            atacante: bando(Lado::Atacante),
+            defensor: bando(Lado::Defensor),
+            con_rey: self.con_rey(lados.iter().flat_map(|&l| heroes(l))),
+            gana_el_atacante: res.ganador == Lado::Atacante,
+            campo_abierto: matches!(b.ticket.contexto, Contexto::CampoAbierto { .. }),
+        };
+        d.sumar(&de_batalla(&resumen));
+        let columna_ataca = matches!(b.ticket.contexto, Contexto::CampoAbierto { .. } | Contexto::Caravana { .. }) && !self.participantes_del_lado(b, Lado::Atacante).is_empty();
+        if columna_ataca {
+            d.sumar(&persecucion(&resumen.atacante));
+        }
+        d
     }
 
     /// Lo que decide BronzeAge según dónde se combatió (§9, pasos 4 y 5). **Sin** la reputación por defender a un vasallo (5D) ni los contadores de logros (6B, `contadores_de_batalla`); la

@@ -3,8 +3,9 @@
 //!
 //! Disparadores de la aparición (plan §5.1, sin muestreo): al fijarse un logro o empezar una Era, todas las Facciones vivas; al completarse o mejorarse
 //! un edificio o subir de nivel una plaza, su Facción; al adoptar, la Facción; al crecer la zona de una plaza, su Facción; al ganar una plaza o cambiar
-//! de capital, la Facción; y en el paso de minuto de la capital solo si [`EstadoTecnologia::pide_recurso_en_capital`]. Perder algo no se mira: aparecer
-//! es para siempre. «Viva» (con algún asentamiento) lo comprueba el núcleo antes de llamar.
+//! de capital, la Facción; y en el paso de minuto de la capital solo si [`EstadoTecnologia::pide_paso_de_capital`] (el recurso en la capital, y de las Eras IV y V las escuadras
+//! vivas, los héroes, las columnas en marcha y el nivel de la Facción, que cambian sin ningún disparador; Eras_IV_Y_V §4). Perder algo no se mira: aparecer es para siempre. «Viva»
+//! (con algún asentamiento) lo comprueba el núcleo antes de llamar.
 
 use crate::datos::{Condicion, Reglas};
 use crate::estado::{EstadoTecnologia, TecnologiasFaccion};
@@ -23,6 +24,18 @@ pub trait VistaFaccion {
     fn capital_en_nivel(&self, nivel: u8, con: Tipo) -> bool;
     /// Alguna zona de influencia de una plaza de la Facción contiene un nodo de ese recurso (con o sin stock).
     fn yacimiento_en_territorio(&self, r: Recurso) -> bool;
+    /// Las escuadras con soldados que tienen ahora los héroes de la Facción.
+    fn escuadras_vivas(&self) -> u32;
+    /// Los héroes de la Facción.
+    fn heroes(&self) -> u32;
+    /// Alguna plaza de la Facción con nivel **actual** ≥ `nivel`.
+    fn plaza_en_nivel(&self, nivel: u8) -> bool;
+    /// El nivel de la Facción.
+    fn nivel(&self) -> u32;
+    /// Las columnas (personales o ejércitos) de la Facción que se mueven ahora por el mapa.
+    fn columnas_en_marcha(&self) -> u32;
+    /// Alguna plaza de la Facción con nivel actual ≥ `nivel_plaza` y ese edificio **activo** con `nivelInterno ≥ nivel_interno`.
+    fn edificio_en_plaza_de_nivel(&self, tipo: Tipo, nivel_interno: u8, nivel_plaza: u8) -> bool;
 }
 
 /// `cumpleCondicion`.
@@ -33,13 +46,13 @@ pub fn cumple(c: &Condicion, propias: &TecnologiasFaccion, v: &impl VistaFaccion
         Condicion::RecursoEnCapital(r) => v.recurso_en_capital(r),
         Condicion::CapitalEnNivel { nivel, con } => v.capital_en_nivel(nivel, con),
         Condicion::YacimientoEnTerritorio(r) => v.yacimiento_en_territorio(r),
-        // FASE0(T4): las condiciones de las Eras IV y V se leen pero aún no se evalúan; T4 pone su regla.
-        Condicion::EscuadrasVivas(_)
-        | Condicion::HeroesEnFaccion(_)
-        | Condicion::PlazaEnNivel(_)
-        | Condicion::NivelFaccion(_)
-        | Condicion::ColumnasEnMarcha(_)
-        | Condicion::EdificioEnPlazaDeNivel { .. } => false,
+        // Las de las Eras IV y V (Eras_IV_Y_V §4).
+        Condicion::EscuadrasVivas(n) => v.escuadras_vivas() >= n,
+        Condicion::HeroesEnFaccion(n) => v.heroes() >= n,
+        Condicion::PlazaEnNivel(nivel) => v.plaza_en_nivel(nivel),
+        Condicion::NivelFaccion(nivel) => v.nivel() >= u32::from(nivel),
+        Condicion::ColumnasEnMarcha(n) => v.columnas_en_marcha() >= n,
+        Condicion::EdificioEnPlazaDeNivel { tipo, nivel_interno, nivel_plaza } => v.edificio_en_plaza_de_nivel(tipo, nivel_interno, nivel_plaza),
     }
 }
 
@@ -71,15 +84,15 @@ impl EstadoTecnologia {
     }
 
     /// Las candidatas de la Facción de entre `entre` cuyo hito se cumple entero, en el orden del catálogo, sin hacerlas aparecer: el núcleo, cuya vista lee el mismo estado, las hace
-    /// aparecer después. Con `entre = Reglas::piden_capital` es lo que mira el paso de minuto de una capital (plan §5.1): O(candidatas), hoy una.
+    /// aparecer después. Con `entre = Reglas::piden_capital` es lo que mira el paso de minuto de una capital (plan §5.1): O(candidatas), y la vista solo se mira con alguna candidata.
     pub fn listas_por_hito(&self, r: &Reglas, f: FaccionId, v: &impl VistaFaccion, entre: crate::Conjunto) -> Vec<TecId> {
         let propias = self.de(r, f);
         entre.iter().filter(|&t| self.es_candidata(r, &propias, t) && r.def(t).hito.iter().all(|c| cumple(c, &propias, v))).collect()
     }
 
-    /// ¿Alguna candidata de la Facción pide `recursoEnCapital`? Solo entonces el paso de minuto de la capital evalúa la aparición (plan §5.1). Mira solo las que lo
-    /// piden (`Reglas::piden_capital`, hoy una).
-    pub fn pide_recurso_en_capital(&self, r: &Reglas, f: FaccionId) -> bool {
+    /// ¿Alguna candidata de la Facción pide algo que mira el paso de minuto de la capital ([`Condicion::del_paso_de_capital`])? Solo entonces ese paso evalúa la aparición (plan §5.1).
+    /// Mira solo las que lo piden (`Reglas::piden_capital`).
+    pub fn pide_paso_de_capital(&self, r: &Reglas, f: FaccionId) -> bool {
         let propias = self.de(r, f);
         r.piden_capital.iter().any(|t| self.es_candidata(r, &propias, t))
     }
@@ -113,13 +126,28 @@ pub(crate) mod pruebas {
     use crate::estado::pruebas::{r, t};
     use crate::estado::Primero;
 
-    /// Una vista de prueba: los edificios activos (tipo, nivel), lo que hay en la capital, el nivel de la capital con sus edificios y los yacimientos.
+    /// Una vista de prueba: los edificios activos (tipo, nivel), lo que hay en la capital, el nivel de la capital con sus edificios y los yacimientos; y las cifras de las Eras IV y V:
+    /// las escuadras vivas, los héroes, el nivel de cada plaza con sus edificios activos (nivel de la plaza, tipo, nivel interno), el nivel de la Facción y las columnas en marcha.
+    /// `miradas` cuenta las veces que se miró una cifra del paso de minuto de la capital.
     #[derive(Default)]
     pub struct Vista {
         pub edificios: Vec<(Tipo, u8)>,
         pub capital: Vec<Recurso>,
         pub nivel_capital: u8,
         pub yacimientos: Vec<Recurso>,
+        pub escuadras: u32,
+        pub heroes: u32,
+        pub plazas: Vec<(u8, Tipo, u8)>,
+        pub nivel: u32,
+        pub columnas: u32,
+        pub miradas: std::cell::Cell<u32>,
+    }
+
+    impl Vista {
+        fn mirada<T>(&self, x: T) -> T {
+            self.miradas.set(self.miradas.get() + 1);
+            x
+        }
     }
 
     impl VistaFaccion for Vista {
@@ -134,6 +162,24 @@ pub(crate) mod pruebas {
         }
         fn yacimiento_en_territorio(&self, r: Recurso) -> bool {
             self.yacimientos.contains(&r)
+        }
+        fn escuadras_vivas(&self) -> u32 {
+            self.mirada(self.escuadras)
+        }
+        fn heroes(&self) -> u32 {
+            self.mirada(self.heroes)
+        }
+        fn plaza_en_nivel(&self, nivel: u8) -> bool {
+            self.plazas.iter().any(|&(n, _, _)| n >= nivel)
+        }
+        fn nivel(&self) -> u32 {
+            self.mirada(self.nivel)
+        }
+        fn columnas_en_marcha(&self) -> u32 {
+            self.mirada(self.columnas)
+        }
+        fn edificio_en_plaza_de_nivel(&self, tipo: Tipo, nivel_interno: u8, nivel_plaza: u8) -> bool {
+            self.plazas.iter().any(|&(n, t, i)| n >= nivel_plaza && t == tipo && i >= nivel_interno)
         }
     }
 
@@ -200,20 +246,86 @@ pub(crate) mod pruebas {
     fn el_recurso_en_capital_solo_se_mira_si_una_candidata_lo_pide() {
         let r = r();
         let mut e = EstadoTecnologia::nuevo(&r, 0);
-        assert!(!e.pide_recurso_en_capital(&r, 1));
+        assert!(!e.pide_paso_de_capital(&r, 1));
         e.sumar(&r, Contador::ExtraidoEstano, 1_000, 0);
-        assert!(!e.pide_recurso_en_capital(&r, 1), "la aleación pide también el cobre");
+        assert!(!e.pide_paso_de_capital(&r, 1), "la aleación pide también el cobre");
         e.sumar(&r, Contador::ExtraidoCobre, 2_000, 0);
-        assert!(e.pide_recurso_en_capital(&r, 1));
+        assert!(e.pide_paso_de_capital(&r, 1));
         let v = Vista { edificios: vec![(Tipo::Fundicion, 2)], capital: vec![Recurso::Estano], ..Vista::default() };
-        // El paso de minuto de la capital mira solo las que piden la capital (hoy la aleación del bronce), y solo si su hito ya se cumple.
+        // El paso de minuto de la capital mira solo las que piden la capital (la aleación del bronce y, de la Era IV, tres más: §4 de Eras_IV_Y_V), y solo si su hito ya se cumple.
         let bronce = t(&r, "aleacion_bronce");
-        assert_eq!(r.piden_capital.iter().collect::<Vec<_>>(), vec![bronce]);
+        let piden: Vec<_> = r.piden_capital.iter().collect();
+        assert_eq!(piden, vec![bronce, t(&r, "ejercito_permanente"), t(&r, "cuerpo_oficiales"), t(&r, "logistica_campana")]);
         assert!(e.listas_por_hito(&r, 1, &Vista { edificios: vec![(Tipo::Fundicion, 2)], ..Vista::default() }, r.piden_capital).is_empty());
         assert_eq!(e.listas_por_hito(&r, 1, &v, r.piden_capital), vec![bronce]);
         assert_eq!(r.todas().len(), r.catalogo.len());
         assert_eq!(e.aparecer_por_hito(&r, 1, &v, 1).len(), 2, "también la metalurgia del cobre: su cobre ya está");
-        assert!(!e.pide_recurso_en_capital(&r, 1));
+        assert!(!e.pide_paso_de_capital(&r, 1));
+    }
+
+    /// Una Facción en la Era V (todas abiertas) con el logro de `id` cumplido a mano.
+    fn era_v_con_logro(r: &Reglas, id: &str) -> (EstadoTecnologia, TecId) {
+        let mut e = EstadoTecnologia::nuevo(r, 0);
+        e.era = 4;
+        let x = t(r, id);
+        e.logros[x as usize] = Some(0);
+        (e, x)
+    }
+
+    #[test]
+    fn las_escuadras_vivas_y_los_heroes_piden_esa_cantidad_a_la_vez() {
+        let r = r();
+        let (e, permanente) = era_v_con_logro(&r, "ejercito_permanente");
+        let v = Vista { edificios: vec![(Tipo::Barracon, 3)], escuadras: 9, ..Vista::default() };
+        assert!(e.listas_por_hito(&r, 1, &v, r.todas()).is_empty(), "9 escuadras no bastan");
+        let v = Vista { escuadras: 10, ..v };
+        assert_eq!(e.listas_por_hito(&r, 1, &v, r.todas()), vec![permanente]);
+        let (e, oficiales) = era_v_con_logro(&r, "cuerpo_oficiales");
+        assert!(e.listas_por_hito(&r, 1, &Vista { heroes: 4, ..Vista::default() }, r.todas()).is_empty());
+        assert_eq!(e.listas_por_hito(&r, 1, &Vista { heroes: 5, ..Vista::default() }, r.todas()), vec![oficiales]);
+    }
+
+    #[test]
+    fn la_logistica_pide_una_plaza_de_nivel_4_la_faccion_en_nivel_5_y_3_columnas_en_marcha() {
+        let r = r();
+        let (e, logistica) = era_v_con_logro(&r, "logistica_campana");
+        let v = Vista { plazas: vec![(4, Tipo::Mercado, 1)], nivel: 5, columnas: 3, ..Vista::default() };
+        assert_eq!(e.listas_por_hito(&r, 1, &v, r.todas()), vec![logistica]);
+        for (falta, x) in [("la plaza", Vista { plazas: vec![(3, Tipo::Mercado, 1)], nivel: 5, columnas: 3, ..Vista::default() }), ("el nivel", Vista { plazas: vec![(4, Tipo::Mercado, 1)], nivel: 4, columnas: 3, ..Vista::default() }), ("las columnas", Vista { plazas: vec![(4, Tipo::Mercado, 1)], nivel: 5, columnas: 2, ..Vista::default() })] {
+            assert!(e.listas_por_hito(&r, 1, &x, r.todas()).is_empty(), "sin {falta}");
+        }
+    }
+
+    #[test]
+    fn el_edificio_en_una_plaza_de_nivel_pide_los_dos_niveles_en_la_misma_plaza() {
+        let r = r();
+        let (mut e, infanteria) = era_v_con_logro(&r, "infanteria_profesional");
+        e.de_mut(&r, 1).adoptadas.poner(t(&r, "ejercito_permanente"));
+        let separadas = Vista { plazas: vec![(4, Tipo::Barracon, 2), (3, Tipo::Barracon, 3)], ..Vista::default() };
+        assert!(e.listas_por_hito(&r, 1, &separadas, r.todas()).is_empty(), "el Barracón 3 en una plaza de nivel 3 y la de nivel 4 con el 2");
+        let juntas = Vista { plazas: vec![(5, Tipo::Barracon, 3)], ..Vista::default() };
+        assert_eq!(e.listas_por_hito(&r, 1, &juntas, r.todas()), vec![infanteria]);
+    }
+
+    #[test]
+    fn el_paso_de_minuto_de_la_capital_no_mira_las_cifras_si_ninguna_candidata_las_pide() {
+        let r = r();
+        let v = Vista { edificios: vec![(Tipo::Barracon, 3)], escuadras: 10, heroes: 5, plazas: vec![(4, Tipo::Mercado, 1)], nivel: 5, columnas: 3, ..Vista::default() };
+        // Sin ningún logro no hay candidata: ni se miran.
+        let mut e = EstadoTecnologia::nuevo(&r, 0);
+        e.era = 4;
+        assert!(!e.pide_paso_de_capital(&r, 1));
+        assert!(e.listas_por_hito(&r, 1, &v, r.piden_capital).is_empty());
+        assert_eq!(v.miradas.get(), 0);
+        // Con el logro del cuerpo de oficiales, solo se miran los héroes; ya aparecida, nada.
+        let (mut e, oficiales) = era_v_con_logro(&r, "cuerpo_oficiales");
+        assert!(e.pide_paso_de_capital(&r, 1));
+        assert_eq!(e.listas_por_hito(&r, 1, &v, r.piden_capital), vec![oficiales]);
+        assert_eq!(v.miradas.get(), 1);
+        e.hacer_aparecer(&r, 1, oficiales, 0);
+        assert!(!e.pide_paso_de_capital(&r, 1));
+        assert!(e.listas_por_hito(&r, 1, &v, r.piden_capital).is_empty());
+        assert_eq!(v.miradas.get(), 1);
     }
 
     #[test]

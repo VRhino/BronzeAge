@@ -949,7 +949,7 @@ impl Nucleo {
                 self.estado.militar.insertar(HeroeNucleo { sintetico: true, ..HeroeNucleo::nuevo(h, cuenta, Some(*faccion)) });
                 self.otorgar_de_administracion(heroe, *faccion);
                 self.tr.tocar(Clase::Heroe, heroe);
-                let columna = militar::columna::Columna::salir(&mr, id, Some(*faccion), heroe, militar::columna::TipoColumna::Ejercito, militar::columna::Politica::Rechazar, vec![], Default::default(), *viveres, t, &|_| 0);
+                let columna = militar::columna::Columna::salir(&self.militar_de(Some(*faccion)), id, Some(*faccion), heroe, militar::columna::TipoColumna::Ejercito, militar::columna::Politica::Rechazar, vec![], Default::default(), *viveres, t, &|_| 0);
                 let mut e = self.columna_suelta(columna, *posicion);
                 e.velocidad_fija = Some(*velocidad);
                 self.alta_de_columna(t, e);

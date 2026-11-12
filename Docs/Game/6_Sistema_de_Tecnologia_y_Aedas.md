@@ -43,7 +43,7 @@ La season (12 meses) se divide en cinco Eras, de ~1300 a 323 a. C. (hasta Alejan
 | IV | `profesionalizacion_imperial` | Profesionalización | 18-26 | cosas de nivel 3; meseta en el 4 |
 | V | `hegemonia_macedonica` | Hegemonía macedónica | 26-52 | concentrada en 3 y 4; primeras cosas de nivel 5 |
 
-- **Las Eras IV y V están definidas a medias y pendientes de implementar** (2026-10-11): hoy el servidor solo tiene las tres primeras, y todo lo que este documento dice de las IV y V (tarifas, niveles, la Maravilla) es el diseño al que se va, no lo que corre.
+- **Las Eras IV y V están implementadas** (2026-11-12): sus tarifas, tecnologías, logros, hitos y épicas corren en el servidor con las reglas de `Docs/Mechanics/Tecnologia_Aedas.md`, que manda si este documento dice otra cosa. Queda solo la Maravilla, que sigue siendo diseño, no lo que corre.
 - **El servidor arranca en la Era I**, con dos tecnologías adoptadas por todas las Facciones: `leva_comunal` y
   `hostigamiento_tribal`.
 - Cada Era tiene sus logros del servidor (6.3). **La Era siguiente empieza cuando se cumplen TODOS los logros de la
@@ -193,7 +193,7 @@ atacan ni se les ataca, no combaten y no se capturan ni se retienen. Son de dos 
   que conocen, de las **Eras I-III**, con el **logro del servidor ya cumplido** y la Era ya abierta. Cuesta **2 × el oro
   de la tarifa de adopción de su Era** (6.5; 200 / 600 / 1.200), que sale del almacén de esa plaza. La Facción se salta el
   hito y la tecnología le **aparece**; la adopción se paga igual, por el Rey en la capital. Las Eras IV y V no se pueden
-  comprar a un Aeda: solo llegan por hito propio (y, cuando se definan, por la épica que se les asigne).
+  comprar a un Aeda: solo llegan por hito propio o por la épica que se les asigna (6.7).
 - **Cantan** los logros del servidor (6.3) y los descubrimientos (crónica, abajo): hechos públicos, sin decir qué
   tecnología abre cada logro.
 
