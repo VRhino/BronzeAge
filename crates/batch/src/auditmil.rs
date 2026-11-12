@@ -96,8 +96,8 @@ pub struct Antes {
     /// Héroe → hasta cuándo está herido.
     heridos: BTreeMap<u64, Option<Instante>>,
     recursos: [i64; N],
-    /// La caravana atacada: carros y carga total.
-    caravana: Option<(usize, i64)>,
+    /// La caravana atacada: carros, carga total y lo que salvaría un aguante (de cada recurso, lo que queda tras perder el 70 % en unidades enteras hacia abajo).
+    caravana: Option<(usize, i64, i64)>,
     recintos: Vec<Recinto>,
     serie: Option<(i64, bool)>,
     nacen: i64,
@@ -108,7 +108,11 @@ impl Antes {
     pub fn de(n: &Nucleo, columna: u64, objetivo: ObjetivoAtaque) -> Antes {
         let e = n.estado();
         let caravana = match objetivo {
-            ObjetivoAtaque::Caravana(k) => e.comercio.caravana(k).map(|c| (c.carros.len(), c.contenido.values().sum())),
+            ObjetivoAtaque::Caravana(k) => e.comercio.caravana(k).map(|c| {
+                let fraccion = e.reglas.economia.combate.numericas.carga_perdida_aguante;
+                let salva = c.contenido.values().map(|&q| q - base::entero((q as i128 * fraccion as i128 / UNO as i128) as Mil)).sum();
+                (c.carros.len(), c.contenido.values().sum(), salva)
+            }),
             _ => None,
         };
         let recintos = match objetivo {
@@ -295,13 +299,13 @@ pub fn comparar(n: &Nucleo, a: &Antes, t: Instante, columnas: &[u64], objetivo: 
     }
 
     // La caravana atacada: disputa, la mitad de los carros hacia arriba (sin carros, desaparece); aguante, los mismos pero nunca el último, y se salva el 30 % de la carga
-    // (recurso a recurso: una milésima de redondeo por recurso como mucho). Si resiste, no pierde nada.
-    if let (ObjetivoAtaque::Caravana(k), Some((carros, carga)), Some(h)) = (objetivo, a.caravana, combate) {
+    // (recurso a recurso: se pierde el 70 % en unidades enteras hacia abajo, Combate §7.1, y lo demás se queda). Si resiste, no pierde nada.
+    if let (ObjetivoAtaque::Caravana(k), Some((carros, carga, salva)), Some(h)) = (objetivo, a.caravana, combate) {
         let ahora = e.comercio.caravana(k).map(|c| (c.carros.len(), c.contenido.values().sum::<i64>()));
         let aguante = h.dato("aguante") == 1;
         let ok = if h.codigo == "combate.caravana_interceptada" {
             let perdidos = carros.div_ceil(2).min(if aguante { carros - 1 } else { carros });
-            let carga_ok = |c: i64| if aguante { (c - carga * 3 / 10).abs() <= TODOS.len() as i64 } else { c <= carga };
+            let carga_ok = |c: i64| if aguante { c == salva } else { c <= carga };
             h.dato("carros") == perdidos as i64 && h.dato("botin") <= carga && ahora.map_or(!aguante && perdidos == carros, |(q, c)| q == carros - perdidos && carga_ok(c))
         } else {
             ahora == Some((carros, carga))

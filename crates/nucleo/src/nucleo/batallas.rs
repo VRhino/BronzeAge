@@ -1044,8 +1044,11 @@ impl Nucleo {
 
         // 1-2. Lo que Unity dice de cada uno: los supervivientes de cada escuadra (las de los héroes, las de la guarnición de serie de un pueblo o una avanzada), y los candados
         // fuera. La experiencia y el botín los pone el motor (D6 y D7): 4 o 2 de experiencia según gane su bando, a cada escuadra que entró y a cada héroe que participó, y a cada
-        // héroe que participó la tabla `unity` de BOTIN_OBJETOS (lo de `soloSiGana`, si gana su bando). Las monedas, con MONEDAS, más abajo.
+        // héroe que participó la tabla `unity` de BOTIN_OBJETOS (lo de `soloSiGana`, si gana su bando). Las monedas, con MONEDAS, más abajo. Contra bandidos (su campamento o su
+        // emboscada a una columna) no hay tabla `unity`: el botín es el de bandidos de su nivel al caer, como con números (decisión del autor del 2026-11-12).
         let xp = |victoria: Option<bool>| victoria.map_or(0, |v| if v { mr.militar.experiencia_unity_victoria } else { mr.militar.experiencia_unity_derrota });
+        let acoso = matches!(b.ticket.contexto, Contexto::Caravana { .. }) && self.participantes_del_lado(&b, Lado::Atacante).is_empty();
+        let contra_bandidos = acoso || matches!(b.ticket.contexto, Contexto::CampamentoBandidos { .. });
         for e in &efectos.escuadras {
             let ganada = xp(e.victoria);
             if let Some(mut s) = self.escuadra(e.escuadra).map(|(_, s)| s.clone()) {
@@ -1069,7 +1072,7 @@ impl Nucleo {
         }
         for e in &efectos.heroes {
             self.experiencia_de_heroe(t, e.heroe, xp(e.victoria));
-            if let Some(gana) = e.victoria {
+            if let Some(gana) = e.victoria.filter(|_| !contra_bandidos) {
                 self.botin_de_objetos(t, e.heroe, Fuente::Unity { gana });
             }
         }
@@ -1103,7 +1106,6 @@ impl Nucleo {
             Contexto::CampamentoBandidos { campamento, .. } => self.estado.combate.bandidos.get(&u64::from(campamento)).map(|c| c.nivel),
             _ => None,
         };
-        let acoso = matches!(b.ticket.contexto, Contexto::Caravana { .. }) && self.participantes_del_lado(&b, Lado::Atacante).is_empty();
         let ganadores: Vec<u64> = if acoso { vec![] } else { self.participantes_del_lado(&b, res.ganador).iter().map(|q| q.heroe).filter(|&h| res.por_heroe.iter().any(|x| x.heroe == h && x.participo)).collect() };
         self.consecuencias_de_batalla(t, &b, &res, &efectos);
         self.participacion_de_batalla(t, &defendidas, &defendieron, &ganadores);

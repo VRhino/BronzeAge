@@ -82,7 +82,7 @@ Partida nueva: la foto pasa a `BAN63`.
 8. **El botín de objetos.**
    - Lo que llega sin pedirlo va a la mochila. Si no cabe, va al almacén de objetos, aunque el héroe esté fuera de su residencia; si tampoco cabe, se pierde (D17 y D22).
    - Cada entrega emite `heroe.botin { heroe, origen, mochila, almacen, perdido }`, que oye solo el héroe. Las tres listas son de `[objeto, cantidad]`, con la forma de `recursos` en `mision.reclamada`. Los `origen` son:
-     - `unity`: cada héroe que participó en una batalla de Unity, con la tabla `unity`; lo de `soloSiGana` llega solo si ganó su bando;
+     - `unity`: cada héroe que participó en una batalla de Unity contra otros héroes, con la tabla `unity`; lo de `soloSiGana` llega solo si ganó su bando. Contra bandidos no llega: solo `bandidos`;
      - `bandidos`: quien cobra el botín de un campamento destruido, con la tabla de su nivel, dentro de las 8 primeras destrucciones completas de su ventana de 24 h;
      - `diaria`: quien reclama una diaria **individual** del tablón, además de su recompensa;
      - `alijo`: quien abre un alijo;
