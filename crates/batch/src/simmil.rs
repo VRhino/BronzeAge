@@ -14,11 +14,11 @@
 //!   y pone su leva en la guarnición. En una plaza sin Guardián (una conquistada) gobierna cualquier residente.
 //! - **El Capitán** convoca un ejército en la plaza (o sale directamente y los demás se le unen en la puerta) y va a por lo que tiene más cerca: un ejército
 //!   enemigo a la vista (lo persigue), una plaza enemiga (tras inspeccionarla, si su poder supera con margen la defensa que le supone), un pueblo con algo que
-//!   saquear, una avanzada o el campamento de bandidos de casa (cada 12 h), en un orden que sortea la semilla. Ataca con `declara_guerra` cuando hace falta. Si
+//!   saquear, una avanzada o el campamento de bandidos más cercano a casa que su columna puede ganar (cada 12 h; ve su nivel, como un jugador), en un orden que sortea la semilla. Ataca con `declara_guerra` cuando hace falta. Si
 //!   conquista, se queda a residir en la plaza ganada (si no deja la suya con menos de dos residentes).
 //! - **El Cazador** sale con su columna personal a explorar, alrededor de casa o de la plaza enemiga más cercana; persigue columnas personales y caravanas
-//!   enemigas que ve y las ataca en el instante en que las tiene a tiro, y a veces ataca el campamento de bandidos de casa. Uno de cada cuatro es **temerario**:
-//!   una vez al día sale solo, sin tropa, contra ese campamento.
+//!   enemigas que ve y las ataca en el instante en que las tiene a tiro, y a veces ataca el campamento de bandidos más cercano que puede ganar. Uno de cada cuatro es
+//!   **temerario**: una vez al día sale solo, sin tropa, contra el campamento más cercano, sea del nivel que sea.
 //! - **El Intendente** lleva a la obra los materiales del pueblo (o de la subida de la aldea) y de la atalaya (los saca del almacén de su plaza al salir) y acompaña a las caravanas: o
 //!   cede una escuadra como escolta y la manda a una plaza hermana, o sale como ejército con la caravana adjunta, la aparca allí y la manda de vuelta.
 //! - **Fuera**, quien manda la columna vuelve a casa con los víveres por debajo del 35 % (antes pasa a víveres el trigo del carro), tras tres objetivos o si lo
@@ -292,6 +292,20 @@ pub struct Muestra {
     pub guerras: usize,
     pub heroes_exiliados: usize,
     pub bandidos: usize,
+    /// El nivel de los héroes bots: la mediana, el percentil 90 y el máximo.
+    pub nivel_heroe: [u32; 3],
+    /// El Liderazgo del héroe mediano y sus escuadras propias con soldados (las de la mediana).
+    pub liderazgo_mediano: i64,
+    pub escuadras_por_heroe: usize,
+}
+
+/// La mediana, el percentil 90 y el máximo de `v` (ordenándolo); ceros si está vacío.
+fn cuantiles<T: Copy + Ord + Default>(v: &mut [T]) -> [T; 3] {
+    v.sort_unstable();
+    match v.len() {
+        0 => [T::default(); 3],
+        n => [v[n / 2], v[n * 9 / 10], v[n - 1]],
+    }
 }
 
 pub struct Corrida {
@@ -802,12 +816,16 @@ impl Sim<'_> {
         candidatos.filter(|(p, _)| desde.dist(*p) <= radio).min_by_key(|(p, _)| desde.dist(*p))
     }
 
-    /// El campamento de bandidos más cercano a casa, a `RADIO_BANDIDOS` como mucho y fuera de la protección de los mercenarios, si al héroe le toca volver a por bandidos.
-    fn bandidos_cerca(&self, t: Instante, i: usize) -> Option<(Punto, ObjetivoAtaque)> {
+    /// El campamento de bandidos más cercano a casa, a `RADIO_BANDIDOS` como mucho y fuera de la protección de los mercenarios, si al héroe le toca volver a por bandidos. Con el
+    /// `poder` de su columna, solo uno al que le saque el margen de un asedio (`MARGEN_ASEDIO_PCT`), como haría un jugador que ve su nivel; sin él (el temerario, que va solo), cualquiera.
+    fn bandidos_cerca(&self, t: Instante, i: usize, poder: Option<i64>) -> Option<(Punto, ObjetivoAtaque)> {
         let n = &self.n;
         let casa = n.estado().asentamientos.get(&self.casa(i)?)?.posicion;
         (t >= self.bots[i].ultimo_bandido + BANDIDOS_CADA_H * HORA).then_some(())?;
-        Self::cercano(casa, RADIO_BANDIDOS, n.campamentos_de_bandidos().filter(|b| !n.en_proteccion_de_campamento(b.posicion)).map(|b| (b.posicion, ObjetivoAtaque::Campamento(b.id))))
+        let cr = &n.estado().reglas.economia.combate;
+        let a_su_alcance = |nivel: u8| poder.is_none_or(|p| combate::bandidos::nivel_de(cr, nivel).poder * MARGEN_ASEDIO_PCT / 100 <= p);
+        let campamentos = n.campamentos_de_bandidos().filter(|b| !n.en_proteccion_de_campamento(b.posicion) && a_su_alcance(b.nivel));
+        Self::cercano(casa, RADIO_BANDIDOS, campamentos.map(|b| (b.posicion, ObjetivoAtaque::Campamento(b.id))))
     }
 
     /// El objetivo enemigo de esa clase más cercano: una plaza no protegida, un pueblo activo o una avanzada operativa de una Facción enemiga.
@@ -1190,7 +1208,7 @@ impl Sim<'_> {
         let Some(&c) = r.creadas.first().filter(|_| r.aceptada()) else { return };
         if solo {
             self.bots[i].ultimo_temerario = t;
-            if let Some((destino, obj)) = self.bandidos_cerca(t, i) {
+            if let Some((destino, obj)) = self.bandidos_cerca(t, i, None) {
                 (self.bots[i].objetivos, self.bots[i].ultimo_bandido) = (OBJETIVOS_POR_SALIDA - 1, t);
                 return self.ir(t, i, c, destino, Meta::Atacar(obj));
             }
@@ -1356,14 +1374,15 @@ impl Sim<'_> {
             }
         }
         let aqui = self.n.ejercito(c).map_or_else(Punto::default, |e| e.posicion_en(t));
+        let poder = Some(self.poder_de_columna(c));
         let objetivo = match rol {
             // El Capitán prueba en un orden que sortea la semilla: plaza, pueblo, avanzada o bandidos.
             Rol::Capitan => {
                 let primero = self.rng.por_debajo(4) as usize;
-                (0..4).map(|k| (primero + k) % 4).find_map(|k| if k == 3 { self.bandidos_cerca(t, i) } else { self.enemigo_cerca(f, aqui, k, &self.bots[i].descartadas) })
+                (0..4).map(|k| (primero + k) % 4).find_map(|k| if k == 3 { self.bandidos_cerca(t, i, poder) } else { self.enemigo_cerca(f, aqui, k, &self.bots[i].descartadas) })
             }
             // El Cazador, el 30 % de las veces; el temerario solo va a por bandidos solo, en su salida del día.
-            _ => self.bandidos_cerca(t, i).filter(|_| !self.bots[i].temerario && self.rng.por_debajo(100) < 30),
+            _ => self.bandidos_cerca(t, i, poder).filter(|_| !self.bots[i].temerario && self.rng.por_debajo(100) < 30),
         };
         if let Some((_, ObjetivoAtaque::Campamento(_))) = objetivo {
             self.bots[i].ultimo_bandido = t;
@@ -1877,6 +1896,16 @@ impl Sim<'_> {
         let vivas: BTreeSet<u32> = e.asentamientos.values().map(|a| a.faccion).collect();
         let guerras = e.politica.relaciones.activas().filter(|r| r.tipo == politica::relaciones::TipoRelacion::Guerra).count();
         let exiliados = self.bots.iter().filter(|b| n.heroe(b.heroe).is_some_and(|h| matches!(h.heroe.residencia, Some(Residencia::Campamento(_))))).count();
+        // Los héroes bots: su nivel y su Liderazgo, y sus escuadras propias con soldados.
+        let mut niveles: Vec<u32> = Vec::new();
+        let mut liderazgos: Vec<i64> = Vec::new();
+        let mut escuadras_propias: Vec<usize> = Vec::new();
+        for h in self.bots.iter().filter_map(|b| n.heroe(b.heroe)) {
+            niveles.push(h.heroe.nivel);
+            liderazgos.push(h.heroe.liderazgo_base);
+            escuadras_propias.push(h.heroe.escuadras.iter().filter(|s| s.prestada.is_none() && s.cantidad > 0).count());
+        }
+        let (nivel_heroe, liderazgo_mediano, escuadras_por_heroe) = (cuantiles(&mut niveles), cuantiles(&mut liderazgos)[0], cuantiles(&mut escuadras_propias)[0]);
         self.muestras.push(Muestra {
             dia: dia as u32,
             soldados,
@@ -1888,6 +1917,9 @@ impl Sim<'_> {
             guerras,
             heroes_exiliados: exiliados,
             bandidos: n.campamentos_de_bandidos().count(),
+            nivel_heroe,
+            liderazgo_mediano,
+            escuadras_por_heroe,
         });
     }
 }
