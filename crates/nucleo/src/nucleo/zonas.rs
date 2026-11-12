@@ -9,7 +9,7 @@
 
 use super::*;
 use crate::economia::Mapa;
-use crate::estado::Asentamiento;
+use crate::estado::{Asentamiento, Forja};
 use asentamiento::pueblos::Cultivo;
 use base::Instante;
 use militar::columna::TipoColumna;
@@ -468,7 +468,7 @@ impl Nucleo {
         // Su ciudad nace con los mismos edificios iniciales que la economía (ids 0..=viviendas+1).
         let urbe = crate::urbanismo::Urbe::fundar(&self.estado.reglas.economia, self.semilla, id);
         let nombre = self.nombre_de_ciudad_libre(id);
-        self.estado.asentamientos.insert(id, Asentamiento { id, faccion, posicion: punto, fundado_en: t, radio, parcelas: BTreeSet::new(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, puerta: Default::default(), cargos: Default::default(), nombre: nombre.clone(), capital_de: None, de_la_faccion_desde: t, resto_tributo: 0, permite_reabastecer_aliados: false, almacen_cerrado_a_ciudadanos: false, reclutamiento_cerrado_a_ciudadanos: false, fundadores: Vec::new() });
+        self.estado.asentamientos.insert(id, Asentamiento { id, faccion, posicion: punto, fundado_en: t, radio, parcelas: BTreeSet::new(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, puerta: Default::default(), cargos: Default::default(), nombre: nombre.clone(), capital_de: None, de_la_faccion_desde: t, resto_tributo: 0, permite_reabastecer_aliados: false, almacen_cerrado_a_ciudadanos: false, reclutamiento_cerrado_a_ciudadanos: false, fundadores: Vec::new(), forja: Forja::de_partida(&self.estado.reglas.economia.militar.objetos.forja) });
         self.situar_plaza(id, punto, faccion);
         self.proteger_al_fundar(id, t);
         self.programar_minuto(id, t + base::MS_POR_MINUTO);

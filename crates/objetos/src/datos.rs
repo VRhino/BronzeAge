@@ -265,6 +265,45 @@ pub struct Botin {
     pub rango_mercenario: BTreeMap<u8, Tabla>,
 }
 
+/// La forja en las plazas (`OBJETOS.forja`; Forja_En_Plazas §2, §4 y §5).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReglasForja {
+    /// El impuesto base de forjar una pieza, en monedas, por su tier (II a V).
+    pub impuesto_por_tier: BTreeMap<u8, i64>,
+    /// Los recargos que una plaza puede poner a un grupo de fuera, en % sobre la base, de menor a mayor y empezando en 0 (sin recargo).
+    pub recargos_pct: Vec<u32>,
+    /// El recargo de partida de cada grupo de fuera (uno de `recargos_pct`).
+    pub recargo_inicial_pct: u32,
+    /// La Era mínima del mundo para forjar cada tier, por su `orden` en `ERAS`; un tier que no está no pide Era.
+    pub era_por_tier: BTreeMap<u8, u8>,
+}
+
+fn por_tier(v: &Value, k: &str) -> BTreeMap<u8, i64> {
+    campo(v, k)
+        .as_object()
+        .unwrap_or_else(|| panic!("«{k}» es un objeto por tier"))
+        .iter()
+        .map(|(t, n)| (t.parse().unwrap_or_else(|_| panic!("«{k}»: tier «{t}»")), n.as_i64().unwrap_or_else(|| panic!("«{k}»: el tier {t} no es un entero"))))
+        .collect()
+}
+
+impl ReglasForja {
+    fn leer(v: &Value, objetos: &BTreeMap<String, Ficha>) -> Self {
+        let recargos_pct: Vec<u32> = lista(v, "recargosPct").iter().map(|x| x.as_u64().and_then(|x| u32::try_from(x).ok()).expect("un recargo es un entero")).collect();
+        assert!(recargos_pct.first() == Some(&0) && recargos_pct.windows(2).all(|w| w[0] < w[1]), "«recargosPct» empieza en 0 y crece: {recargos_pct:?}");
+        let recargo_inicial_pct = entero(v, "recargoInicialPct") as u32;
+        assert!(recargos_pct.contains(&recargo_inicial_pct), "«recargoInicialPct» es uno de «recargosPct»");
+        let impuesto_por_tier = por_tier(v, "impuestoPorTier");
+        for (id, f) in objetos {
+            if f.de_combate().is_some_and(|c| c.forja.is_some()) {
+                assert!(f.tier.is_some_and(|t| impuesto_por_tier.contains_key(&t)), "{id}: su tier no tiene impuesto de forja");
+            }
+        }
+        let era_por_tier = por_tier(v, "eraPorTier").into_iter().map(|(t, e)| (t, u8::try_from(e).expect("una Era es su orden, de 1 a 5"))).collect();
+        ReglasForja { impuesto_por_tier, recargos_pct, recargo_inicial_pct, era_por_tier }
+    }
+}
+
 /// El catálogo entero: los objetos, las clases y el botín.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Catalogo {
@@ -284,6 +323,7 @@ pub struct Catalogo {
     /// Las clases, por id.
     pub clases: BTreeMap<String, Clase>,
     pub botin: Botin,
+    pub forja: ReglasForja,
 }
 
 fn uno_de(v: &Value, k: &str, objetos: &BTreeMap<String, Ficha>) -> Vec<(String, Mil)> {
@@ -422,6 +462,7 @@ impl Catalogo {
             alijo: tabla(campo(&bo, "alijo"), &objetos),
             rango_mercenario: por_nivel(campo(&bo, "rangoMercenario"), &objetos),
         };
+        let forja = ReglasForja::leer(campo(&ob, "forja"), &objetos);
         Catalogo {
             version_objetos: texto(&ob, "version"),
             version_clases: texto(&cl, "version"),
@@ -432,6 +473,7 @@ impl Catalogo {
             objetos,
             clases,
             botin,
+            forja,
         }
     }
 }
@@ -458,6 +500,9 @@ mod pruebas {
         assert_eq!(cuenta(&|t| matches!(t, Tipo::Consumible(_))), 9, "ocho medallas y el cofre");
         assert_eq!(c.clases.len(), 5);
         assert_eq!((c.venta_pct, c.tienda_hasta_tier, c.casillas_mochila, c.casillas_almacen), (50, 2, 72, 144));
+        let f = &c.forja;
+        assert_eq!((f.impuesto_por_tier.values().copied().collect::<Vec<_>>(), &f.recargos_pct[..], f.recargo_inicial_pct), (vec![100, 175, 250, 350], &[0, 100, 200, 500][..], 100));
+        assert_eq!(f.era_por_tier.iter().map(|(&t, &e)| (t, e)).collect::<Vec<_>>(), [(3, 3), (4, 4), (5, 5)], "del tier III al V, su Era; el II no pide");
         assert_eq!((c.version_objetos.as_str(), c.version_clases.as_str()), ("bronzeage-objetos-1", "bronzeage-clases-1"), "cada bloque lleva su versión");
     }
 

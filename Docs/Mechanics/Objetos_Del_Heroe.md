@@ -101,6 +101,12 @@ Siete huecos: arma, casco, torso, guantes, pantalones, botas y montura. **El arm
   "tiendaHastaTier": 2,
   "casillasMochila": 72,
   "casillasAlmacen": 144,
+  "forja": {
+    "impuestoPorTier": { "2": 100, "3": 175, "4": 250, "5": 350 },
+    "recargosPct": [0, 100, 200, 500],
+    "recargoInicialPct": 100,
+    "eraPorTier": { "3": 3, "4": 4, "5": 5 }
+  },
   "rarezas": {
     "1": "comun",
     "2": "pocoComun",

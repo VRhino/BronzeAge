@@ -325,7 +325,8 @@ pub fn entidad_contrato(mercenario: u64) -> u64 {
 ///
 /// BAN63: BAN62 con lo de las Eras IV y V y los objetos del héroe (2026-11-12): los 36 contadores de tecnología (`codec_tecnologia`: 12 más en los
 /// contadores y en sus restos) y el recurso 42, el aceite de sésamo (42 en cada almacén, flujo y tendencia, `codec_economia`) y, en cada héroe, los puntos repartidos, el equipo, la mochila y el
-/// almacén de objetos donde iban los atributos (`codec_militar`; Heroe_Y_Tropa §4.5). BAN62 y anteriores ya no se admiten.
+/// almacén de objetos donde iban los atributos (`codec_militar`; Heroe_Y_Tropa §4.5); y, en cada plaza, su forja (`Asentamiento::forja`, tras los fundadores: la apertura y el recargo de cada
+/// grupo de fuera y el fondo). BAN62 y anteriores ya no se admiten.
 const MAGIA: &[u8; 5] = b"BAN63";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
@@ -585,6 +586,33 @@ pub struct Asentamiento {
     /// `heroesFundadoresIds` (5H, 5B-9): quienes la fundaron y siguen residiendo en ella, en su orden (el Líder primero). Quien se muda deja de serlo y la conquista la deja sin ninguno, como en
     /// el TypeScript; el traslado de una Facción no los toca (la plaza se va con ellos).
     pub fundadores: Vec<u64>,
+    /// La forja de su Armería para los de fuera y el fondo de su impuesto (Forja_En_Plazas §2 y §6).
+    pub forja: Forja,
+}
+
+/// La forja de la Armería de una plaza (Forja_En_Plazas): para cada grupo de fuera, si está abierta y su recargo, y el fondo de monedas donde entra el impuesto de forjar en ella.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Forja {
+    pub aliados: AperturaForja,
+    pub neutrales: AperturaForja,
+    pub enemigos: AperturaForja,
+    /// Monedas del impuesto de la forja (§6): pagan contratos de mercenarios firmados desde la Taberna de la plaza.
+    pub fondo: i64,
+}
+
+/// La forja abierta o cerrada a un grupo de fuera y su recargo sobre el impuesto base, en % (uno de `OBJETOS.forja.recargosPct`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AperturaForja {
+    pub abierta: bool,
+    pub recargo_pct: u32,
+}
+
+impl Forja {
+    /// La de una plaza nueva: cerrada a los tres grupos de fuera, con el recargo de partida, y el fondo vacío (§2).
+    pub fn de_partida(r: &objetos::datos::ReglasForja) -> Self {
+        let cerrada = AperturaForja { abierta: false, recargo_pct: r.recargo_inicial_pct };
+        Forja { aliados: cerrada, neutrales: cerrada, enemigos: cerrada, fondo: 0 }
+    }
 }
 
 impl Asentamiento {
@@ -1327,6 +1355,12 @@ impl Estado {
             w.bool(a.reclutamiento_cerrado_a_ciudadanos);
             w.u64(a.fundadores.len() as u64);
             a.fundadores.iter().for_each(|&h| w.u64(h));
+            let Forja { aliados, neutrales, enemigos, fondo } = &a.forja;
+            for g in [aliados, neutrales, enemigos] {
+                w.bool(g.abierta);
+                w.u32(g.recargo_pct);
+            }
+            w.i64(*fondo);
         }
         w.u64(self.yacimientos.len() as u64);
         for (&nodo, st) in &self.yacimientos {
@@ -1555,6 +1589,9 @@ impl Estado {
             let (resto_tributo, permite_reabastecer_aliados) = (r.i64()?, r.bool()?);
             let (almacen_cerrado_a_ciudadanos, reclutamiento_cerrado_a_ciudadanos) = (r.bool()?, r.bool()?);
             let fundadores = (0..r.cuenta()?).map(|_| r.u64()).collect::<Result<Vec<_>, _>>()?;
+            let mut apertura = || -> Result<AperturaForja, ErrorFormato> { Ok(AperturaForja { abierta: r.bool()?, recargo_pct: r.u32()? }) };
+            let (aliados, neutrales, enemigos) = (apertura()?, apertura()?, apertura()?);
+            let forja = Forja { aliados, neutrales, enemigos, fondo: r.i64()? };
             for e in &economia.edificios {
                 if let Some(asentamiento::edificio::Fuente::Nodo(n)) = e.fuente {
                     s.nodos_reclamados.insert(n, id);
@@ -1563,7 +1600,7 @@ impl Estado {
             for n in economia.pueblos.iter().filter_map(|p| p.nodo()) {
                 s.nodos_reclamados.insert(n, id);
             }
-            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe, protegida_hasta, ocupada_hasta, puerta, cargos, nombre, capital_de, de_la_faccion_desde, resto_tributo, permite_reabastecer_aliados, almacen_cerrado_a_ciudadanos, reclutamiento_cerrado_a_ciudadanos, fundadores });
+            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe, protegida_hasta, ocupada_hasta, puerta, cargos, nombre, capital_de, de_la_faccion_desde, resto_tributo, permite_reabastecer_aliados, almacen_cerrado_a_ciudadanos, reclutamiento_cerrado_a_ciudadanos, fundadores, forja });
         }
         for _ in 0..r.cuenta()? {
             let nodo = r.u32()?;

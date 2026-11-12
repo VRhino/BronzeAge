@@ -193,7 +193,7 @@ mod pruebas {
     //! metido a mano en la mochila y en el almacén personal: ninguna orden da aún planos, crisoles ni consumibles. Las reglas de cada pieza las prueba el crate `objetos`; las
     //! órdenes de punta a punta, `tests/heroes.rs`.
     use super::*;
-    use crate::estado::Asentamiento;
+    use crate::estado::{Asentamiento, Forja};
     use crate::estado_militar::HeroeNucleo;
     use crate::{Ajustes, Arranque, Reglas, Resultado};
     use asentamiento::edificio::Estado as EstadoEdificio;
@@ -223,7 +223,7 @@ mod pruebas {
         let mut economia = asentamiento::asentamiento::Asentamiento::fundar(eco, 0, &eco.materiales_iniciales, eco.viviendas_iniciales);
         economia.edificios.push(asentamiento::edificio::Edificio::nuevo(99, Edificio::Armeria, EstadoEdificio::Activo));
         let urbe = crate::urbanismo::Urbe::fundar(&reglas.economia, semilla, PLAZA);
-        n.estado.asentamientos.insert(PLAZA, Asentamiento { id: PLAZA, faccion: FACCION, posicion: base::Punto::new(0, 0), fundado_en: 0, radio: 0, parcelas: BTreeSet::new(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, puerta: Default::default(), cargos: Default::default(), nombre: String::new(), capital_de: None, de_la_faccion_desde: 0, resto_tributo: 0, permite_reabastecer_aliados: false, almacen_cerrado_a_ciudadanos: false, reclutamiento_cerrado_a_ciudadanos: false, fundadores: Vec::new() });
+        n.estado.asentamientos.insert(PLAZA, Asentamiento { id: PLAZA, faccion: FACCION, posicion: base::Punto::new(0, 0), fundado_en: 0, radio: 0, parcelas: BTreeSet::new(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, puerta: Default::default(), cargos: Default::default(), nombre: String::new(), capital_de: None, de_la_faccion_desde: 0, resto_tributo: 0, permite_reabastecer_aliados: false, almacen_cerrado_a_ciudadanos: false, reclutamiento_cerrado_a_ciudadanos: false, fundadores: Vec::new(), forja: Forja::de_partida(&reglas.economia.militar.objetos.forja) });
         let mr = &reglas.economia.militar;
         let mut h = Heroe::nuevo(mr, HEROE, Controlador::Humano, 0, 1, "espada_escudo_mediano").expect("una clase del catálogo");
         (h.residencia, h.presencia.ubicacion) = (Some(Residencia::Asentamiento(PLAZA as u32)), Ubicacion::Asentamiento(PLAZA as u32));
