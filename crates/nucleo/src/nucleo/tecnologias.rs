@@ -303,6 +303,7 @@ impl Nucleo {
         self.tr.emitir(&self.estado, EventoNucleo { asentamientos: vec![capital], punto, valores, ..EventoNucleo::nuevo("tecnologia.adoptada", t, datos) });
         self.avance(t, Dueno::Faccion(faccion), "tecnologias", 1);
         self.tr.tocar(Clase::Asentamiento, capital);
+        self.tocar_armerias_de(faccion);
         // Una adopción puede dejar a la mitad de las vivas con ella (los campamentos) y cumplir una condición `tecnologia` de otro hito.
         self.tocar_todos_los_campamentos();
         self.mirar_aparicion(faccion);

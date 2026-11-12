@@ -475,6 +475,14 @@ impl Ctx<'_> {
             Cuerpo::VenderObjeto(o) => Comando::VenderObjeto { heroe: self.mi_heroe()?, casilla: o.casilla, cantidad: o.cantidad },
             Cuerpo::ForjarObjeto(o) => Comando::ForjarObjeto { heroe: self.mi_heroe()?, objeto: o.objeto.clone() },
             Cuerpo::UsarObjeto(o) => Comando::UsarObjeto { heroe: self.mi_heroe()?, casilla: o.casilla, escuadra: o.escuadron_id.as_deref().map(|e| self.escuadra(e)).transpose()? },
+            Cuerpo::ConfigurarForja(o) => {
+                // La forja se abre a los tres grupos de fuera de la puerta; los Aedas no forjan (Forja_En_Plazas §2).
+                let grupo = match politica::Grupo::desde_nombre(&o.grupo) {
+                    Some(g @ (politica::Grupo::Aliados | politica::Grupo::Neutrales | politica::Grupo::Enemigos)) => g,
+                    Some(politica::Grupo::Aedas) | None => return self.forma(format!("grupo de la forja desconocido: {}", o.grupo)),
+                };
+                Comando::ConfigurarForja { asentamiento: self.plaza(&o.asentamiento_id)?, grupo, abierta: o.abierta, recargo_pct: o.recargo_pct }
+            }
             Cuerpo::AsignarGuarnicion(o) => Comando::AsignarGuarnicion { heroe: self.mi_heroe()?, escuadra: self.escuadra(&o.squad_id)? },
             Cuerpo::RetirarGuarnicion(o) => Comando::RetirarGuarnicion { heroe: self.mi_heroe()?, escuadra: self.escuadra(&o.squad_id)? },
             Cuerpo::PasarAViveres(o) => Comando::PasarAViveres { heroe: self.mi_heroe()?, cantidad: o.cantidad },

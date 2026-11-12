@@ -680,8 +680,10 @@ message OrdenVenderObjeto {
   uint32 cantidad = 2;
 }
 
-// 2026-11-12 (D1, Objetos_Del_Heroe §3.4): el héroe de la cuenta forja una pieza (id de `OBJETOS`, tiers II a V) en la Armería de la plaza donde reside, estando dentro: el
-// plano y los crisoles salen de su mochila y los materiales de su almacén personal. La pieza nace con calidad del 90 al 110 % y su `item_instance_id` (`obj-N`).
+// 2026-11-12 (D1, Objetos_Del_Heroe §3.4; Forja_En_Plazas): el héroe de la cuenta forja una pieza (id de `OBJETOS`, tiers II a V) en la Armería de la plaza donde está
+// dentro, si su forja está abierta a su grupo (la misma Facción, siempre). El plano y los crisoles salen de su mochila; los materiales, en la plaza donde reside, de su almacén
+// personal y lo que falte del carro, y en las demás del carro con el que entró. Paga en monedas el impuesto de su tier con el recargo de su grupo, que va al fondo de la
+// plaza; los tiers III a V piden su Era del mundo. La pieza nace con calidad del 90 al 110 % y su `item_instance_id` (`obj-N`).
 message OrdenForjarObjeto {
   string objeto = 1;
 }
@@ -691,6 +693,15 @@ message OrdenForjarObjeto {
 message OrdenUsarObjeto {
   uint32 casilla = 1;
   optional string escuadron_id = 2;
+}
+
+// 2026-11-12 (Forja_En_Plazas §2): el Tesorero o el Gobernador de la plaza, residente y dentro, abre o cierra su forja a un grupo de fuera (aliados | neutrales |
+// enemigos) y le fija el recargo sobre el impuesto (uno de `OBJETOS.forja.recargosPct`, en %).
+message OrdenConfigurarForja {
+  string asentamiento_id = 1;
+  string grupo = 2;
+  bool abierta = 3;
+  uint32 recargo_pct = 4;
 }
 
 message OrdenOrganizarEjercito {
@@ -1445,5 +1456,6 @@ message Orden {
     OrdenVenderObjeto vender_objeto = 197;
     OrdenForjarObjeto forjar_objeto = 198;
     OrdenUsarObjeto usar_objeto = 199;
+    OrdenConfigurarForja configurar_forja = 200;
   }
 }

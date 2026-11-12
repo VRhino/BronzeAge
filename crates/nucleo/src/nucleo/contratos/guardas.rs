@@ -312,6 +312,7 @@ impl Nucleo {
             | Comando::RebelionVasallo { .. }
             | Comando::AdmitirOtrasFacciones { .. }
             | Comando::AlternarReabastecerAliados { .. }
+            | Comando::ConfigurarForja { .. }
             | Comando::AportarARefundacion { .. }
             | Comando::RetirarDeRefundacion { .. }
             | Comando::ComprarCaravanaDeRefundacion { .. }

@@ -1330,7 +1330,7 @@ impl Nucleo {
                     return r;
                 }
             }
-            Comando::ComprarObjeto { .. } | Comando::VenderObjeto { .. } | Comando::ForjarObjeto { .. } | Comando::UsarObjeto { .. } => {
+            Comando::ComprarObjeto { .. } | Comando::VenderObjeto { .. } | Comando::ForjarObjeto { .. } | Comando::UsarObjeto { .. } | Comando::ConfigurarForja { .. } => {
                 if let Err(r) = self.ejecutar_armeria(t, p) {
                     return r;
                 }

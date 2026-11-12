@@ -400,14 +400,16 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 
 | Código | Constante | Qué dice |
 |---|---|---|
-| `armeria.sin_armeria` | `ARMERIA_SIN_ARMERIA` | `comprar_objeto` o `vender_objeto` sin estar dentro de una plaza con la Armería activa, o `forjar_objeto` sin ella en la plaza donde reside (D1). |
+| `armeria.sin_armeria` | `ARMERIA_SIN_ARMERIA` | `comprar_objeto`, `vender_objeto` o `forjar_objeto` sin estar dentro de una plaza con la Armería activa (D1). |
 | `armeria.no_se_vende` | `ARMERIA_NO_SE_VENDE` | `comprar_objeto`: la tienda no lo vende (no es arma, armadura ni montura, o pasa de `tiendaHastaTier`; Objetos_Del_Heroe §3.3). |
 | `armeria.sin_tecnologia` | `ARMERIA_SIN_TECNOLOGIA` | `comprar_objeto` o `forjar_objeto`: la Facción de la plaza no tiene la tecnología de su metal (D1). |
-| `forja.fuera_de_tu_residencia` | `FORJA_FUERA_DE_TU_RESIDENCIA` | `forjar_objeto` fuera de la plaza donde reside el héroe, que es donde forja (D1). |
+| `forja.cerrada` | `FORJA_CERRADA` | `forjar_objeto`: la forja de la plaza está cerrada al grupo del héroe (Forja_En_Plazas §2). |
+| `forja.era_cerrada` | `FORJA_ERA_CERRADA` | `forjar_objeto`: el tier de la pieza pide una Era que el mundo no ha alcanzado (`OBJETOS.forja.eraPorTier`; Forja_En_Plazas §4). |
+| `forja.recargo_invalido` | `FORJA_RECARGO_INVALIDO` | `configurar_forja`: el recargo no es uno de `OBJETOS.forja.recargosPct` (Forja_En_Plazas §2). |
 | `forja.sin_receta` | `FORJA_SIN_RECETA` | `forjar_objeto`: no tiene receta (no es arma ni armadura, o es de tier I; Objetos_Del_Heroe §3.4). |
 | `forja.sin_plano` | `FORJA_SIN_PLANO` | `forjar_objeto`: no hay en la mochila un plano de su tier. |
 | `forja.sin_crisoles` | `FORJA_SIN_CRISOLES` | `forjar_objeto`: no hay en la mochila los crisoles de su tier. |
-| `forja.sin_materiales` | `FORJA_SIN_MATERIALES` | `forjar_objeto`: el almacén personal no tiene los materiales de la receta. |
+| `forja.sin_materiales` | `FORJA_SIN_MATERIALES` | `forjar_objeto`: el almacén personal (en su residencia) y el carro no tienen los materiales de la receta (Forja_En_Plazas §3). |
 | `objeto.no_se_usa` | `OBJETO_NO_SE_USA` | `usar_objeto`: no es un consumible. |
 | `escuadra.prestada` | `ESCUADRA_PRESTADA` | `usar_objeto`: una medalla de tropa sobre tropa prestada, que no es del héroe (Objetos_Del_Heroe §3.5). |
 | `escuadra.nivel_maximo` | `ESCUADRA_NIVEL_MAXIMO` | `usar_objeto`: una medalla de tropa sobre una escuadra que ya está en `nivelMaximoEscuadra`. |

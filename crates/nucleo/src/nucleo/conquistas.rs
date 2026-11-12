@@ -31,7 +31,7 @@
 //! cuenta (`faccion.derrotada`); qué hace después quien la gobierna, la reputación y la experiencia de Facción por conquistar son del sistema político. El traslado de los residentes no mira el cupo de viviendas del destino (Combate §9).
 
 use super::*;
-use crate::estado::{SucesoCombate, PRIO_ASENTAMIENTO};
+use crate::estado::{Forja, SucesoCombate, PRIO_ASENTAMIENTO};
 use crate::estado_combate::entidad_conquista;
 use combate::conquista::{aplicar_conquista, aplicar_desalojo, faccion_derrotada, planear_desalojo, refugio, residencia_tras_desalojo, Afectado, Salida};
 use comercio::ruina::Motivo as MotivoDeCierre;
@@ -89,6 +89,7 @@ impl Nucleo {
         self.tr.tocar(Clase::Faccion, u64::from(vieja));
         self.tr.tocar(Clase::Faccion, u64::from(conquistador));
         // 2. La ciudad cambia de dueño y se saquea; queda protegida y ocupada, con sus dos plazos en la cola.
+        let forja_de_partida = Forja::de_partida(&self.estado.reglas.economia.militar.objetos.forja);
         let c = {
             let a = self.estado.asentamientos.get_mut(&plaza).expect("existe");
             a.faccion = conquistador;
@@ -100,6 +101,8 @@ impl Nucleo {
             // y la apertura de su almacén a los aliados (5D) y su cierre a los ciudadanos (2026-10-29), como el acceso.
             a.de_la_faccion_desde = t;
             (a.resto_tributo, a.permite_reabastecer_aliados, a.almacen_cerrado_a_ciudadanos, a.reclutamiento_cerrado_a_ciudadanos) = (0, false, false, false);
+            // La forja vuelve a la de partida, cerrada a los de fuera con su recargo; su fondo pasa con la plaza (Forja_En_Plazas §2 y §6).
+            a.forja = Forja { fondo: a.forja.fondo, ..forja_de_partida };
             // La marca de capital sobrevive al cambio de dueño y deja de valer (Diplomacia_Facciones §3.7).
             let c = aplicar_conquista(&cr, &datos, &mut a.economia, t);
             (a.protegida_hasta, a.ocupada_hasta) = (Some(c.protegida_hasta), Some(c.ocupacion_hasta));

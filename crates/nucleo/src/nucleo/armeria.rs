@@ -1,11 +1,15 @@
-//! La Armería y los consumibles del héroe dentro del núcleo (Heroe_Y_Tropa §4.6; entradas 70 y 73): `comprar_objeto`, `vender_objeto`, `forjar_objeto` y `usar_objeto`. Las
-//! reglas son del crate `objetos` (`tienda::comprar`, `tienda::vender`, `forja::forjar`, `consumible::usar` y `entregar`, que no cambian nada si rechazan); aquí están dónde se
-//! puede (D1 y D2), las monedas, los materiales del almacén personal, el efecto de lo usado, los rechazos y los hechos.
+//! La Armería y los consumibles del héroe dentro del núcleo (Heroe_Y_Tropa §4.6; entradas 70, 73 y 77): `comprar_objeto`, `vender_objeto`, `forjar_objeto`, `usar_objeto` y
+//! `configurar_forja`. Las reglas son del crate `objetos` (`tienda::comprar`, `tienda::vender`, `forja::forjar`, `forja::impuesto`, `consumible::usar` y `entregar`, que no cambian
+//! nada si rechazan); aquí están dónde se puede (D1 y D2), el grupo de quien forja, las monedas, los materiales del almacén personal y del carro, el fondo de la plaza, el efecto
+//! de lo usado, los rechazos y los hechos.
 //!
-//! - **Comprar y vender** (D1): dentro de cualquier plaza con la Armería activa; el metal que se compra lo abre la tecnología de la Facción **de esa plaza**. Pagan y cobran las
-//!   monedas del héroe.
-//! - **Forjar** (D1): en la Armería de la plaza donde reside, estando dentro. El plano y los crisoles salen de su mochila y los materiales de su almacén personal; la calidad, del
-//!   generador del estado, y la pieza lleva `obj-N` del contador de ids del estado, que solo se gasta si la forja se acepta. Todo o nada.
+//! - **Comprar, vender y forjar** (D1; la forja, en cualquier plaza desde el 2026-11-12, Forja_En_Plazas): dentro de cualquier plaza con la Armería activa; el metal lo abre la
+//!   tecnología de la Facción **de esa plaza**. Pagan y cobran las monedas del héroe.
+//! - **Forjar** (Forja_En_Plazas §2 a §5): la misma Facción, siempre y a la base; cada grupo de fuera de la puerta, si la plaza le abrió su forja, con su recargo. Los tiers III a V
+//!   piden su Era del mundo. El plano y los crisoles salen de su mochila. Los materiales, en la plaza donde reside, de su almacén personal y lo que falte del carro; en cualquier
+//!   otra, del carro con el que entró ([`Nucleo::carro_dentro`]). El impuesto sale de sus monedas y entra en el fondo de la plaza. La calidad sale del generador del estado y la
+//!   pieza lleva `obj-N` del contador de ids del estado, que solo se gasta si la forja se acepta. Todo o nada.
+//! - **Configurar la forja** (§2): el Tesorero o el Gobernador, residente y dentro, abre o cierra la forja a un grupo de fuera con un recargo de `OBJETOS.forja.recargosPct`.
 //! - **Usar** (D2): donde se equipa. Una medalla de tropa, sobre una escuadra suya que no sea prestada ni esté en el nivel máximo, sin el bonus de Ejército permanente (lo que sobra
 //!   al llegar al máximo se pierde); una del héroe, su porcentaje de lo que pide su nivel para el siguiente; el cofre, una montura que llega como lo que llega sin pedirlo (D17 y
 //!   D22: a la mochila, si no cabe al almacén de objetos y si tampoco se pierde).
@@ -13,7 +17,7 @@
 use super::a_mano::quitar;
 use super::equipo::rechazo_de_inventario;
 use super::*;
-use crate::estado::Dato;
+use crate::estado::{AperturaForja, Dato};
 use asentamiento::edificio::Edificios;
 use asentamiento::{Recurso, Tipo as Edificio};
 use base::UNIDAD;
@@ -22,12 +26,10 @@ use militar::heroe::{experiencia_para_nivel, Heroe, Residencia};
 use militar::presencia::Ubicacion;
 use objetos::consumible::{usar, Efecto, ErrorUso};
 use objetos::datos::{Consumo, Tipo};
-use objetos::forja::{forjar, ErrorForja};
+use objetos::forja::{forjar, impuesto, ErrorForja};
 use objetos::tienda::{comprar, vender, ErrorTienda};
 use objetos::{entregar, Destino, Pieza};
-
-/// Forjar fuera de la plaza donde reside (D1).
-const FUERA_DE_LA_FORJA: (&str, &str) = (rechazos::FORJA_FUERA_DE_TU_RESIDENCIA, "se forja en la Armería de la plaza donde resides, estando dentro");
+use politica::puerta::{grupo_de_puerta, GrupoDePuerta};
 
 fn rechazo_de_tienda(e: ErrorTienda) -> (&'static str, &'static str) {
     use rechazos::*;
@@ -47,6 +49,7 @@ fn rechazo_de_forja(e: ErrorForja) -> (&'static str, &'static str) {
         ErrorForja::Desconocido => (OBJETO_DESCONOCIDO, "el objeto no está en el catálogo"),
         ErrorForja::SinReceta => (FORJA_SIN_RECETA, "ese objeto no se forja"),
         ErrorForja::MetalCerrado => (ARMERIA_SIN_TECNOLOGIA, "la Facción de esta plaza no tiene la tecnología de su metal"),
+        ErrorForja::EraCerrada => (FORJA_ERA_CERRADA, "su tier pide una Era que el mundo aún no ha alcanzado"),
         ErrorForja::SinPlano => (FORJA_SIN_PLANO, "no llevas en la mochila un plano de su tier"),
         ErrorForja::SinCrisoles => (FORJA_SIN_CRISOLES, "no llevas en la mochila los crisoles de su tier"),
     }
@@ -101,26 +104,78 @@ impl Nucleo {
                 self.hecho_de_objeto(t, "heroe.objeto_vendido", datos, &objeto, vec![]);
             }
             Comando::ForjarObjeto { heroe, objeto } => {
-                let plaza = match self.exigir_dentro_de_su_residencia(p, *heroe, FUERA_DE_LA_FORJA)? {
-                    Residencia::Asentamiento(a) if self.con_armeria(u64::from(a)) => u64::from(a),
-                    Residencia::Asentamiento(_) | Residencia::Campamento(_) => return Err(rechazo((rechazos::ARMERIA_SIN_ARMERIA, "no hay una Armería activa donde resides"))),
+                let plaza = self.armeria_donde_esta(p, *heroe)?;
+                let a = &self.estado.asentamientos[&plaza];
+                let (faccion, aqui) = (a.faccion, Residencia::Asentamiento(plaza as u32));
+                // Forja_En_Plazas §2: la misma Facción, siempre y a la base; cada grupo de fuera, si la plaza le abrió su forja, con su recargo.
+                let recargo = match grupo_de_puerta(&self.estado.politica.relaciones, self.heroe(*heroe).expect("existe").faccion, faccion) {
+                    GrupoDePuerta::Propia => 0,
+                    GrupoDePuerta::De(g) => match a.forja.de(g) {
+                        AperturaForja { abierta: true, recargo_pct } => recargo_pct,
+                        AperturaForja { abierta: false, .. } => return Err(rechazo((rechazos::FORJA_CERRADA, "la forja de esta plaza está cerrada a tu grupo"))),
+                    },
                 };
-                let faccion = self.estado.asentamientos[&plaza].faccion;
-                let (id, hn) = (self.estado.siguiente_id, self.heroe(*heroe).expect("existe"));
+                // El carro que trajo (la columna con la que entró o, en su residencia, la que conserva o el carro sin columna); sin él, `None`.
+                let carro = self.carro_dentro(*heroe, aqui).ok().map(|(columna, _)| columna);
+                let (id, era, hn) = (self.estado.siguiente_id, self.orden_era(), self.heroe(*heroe).expect("existe"));
+                let en_su_residencia = hn.heroe.residencia == Some(aqui);
                 let (mut mochila, mut rng) = (hn.heroe.mochila.clone(), self.estado.rng.clone());
-                let (materiales, calidad) = forjar(&mut mochila, cat, objeto, id, &mut rng, |tec| self.estado.tiene_tecnologia(faccion, tec)).map_err(|e| rechazo(rechazo_de_forja(e)))?;
+                let (materiales, calidad) = forjar(&mut mochila, cat, objeto, id, era, &mut rng, |tec| self.estado.tiene_tecnologia(faccion, tec)).map_err(|e| rechazo(rechazo_de_forja(e)))?;
                 // Los materiales de las recetas son recursos del motor (lo comprueba `pruebas::los_materiales_de_las_recetas_son_recursos_del_motor`), en unidades.
                 let materiales: Vec<(Recurso, Mil)> = materiales.iter().map(|(r, n)| (Recurso::desde_nombre(r).expect("un material de receta es un recurso del motor"), n * UNIDAD)).collect();
-                if materiales.iter().any(|&(r, n)| de(&hn.almacen_personal, r) < n) {
-                    return Err(rechazo((rechazos::FORJA_SIN_MATERIALES, "tu almacén personal no tiene los materiales de la receta")));
+                let en_el_carro = |r| match carro {
+                    Some(Some(c)) => de(&self.estado.ejercitos[&c].columna.carga, r),
+                    Some(None) => de(&hn.carro, r),
+                    None => 0,
+                };
+                let en_casa = |r| if en_su_residencia { de(&hn.almacen_personal, r) } else { 0 };
+                if materiales.iter().any(|&(r, n)| en_casa(r) + en_el_carro(r) < n) {
+                    let donde = if en_su_residencia { "tu almacén personal y tu carro no tienen" } else { "tu carro no tiene" };
+                    return Err(Respuesta::rechazo(rechazos::FORJA_SIN_MATERIALES, format!("{donde} los materiales de la receta"), v));
+                }
+                let impuesto = impuesto(&cat.forja, cat.objetos[objeto].tier.expect("una pieza con receta tiene tier (comprobado al cargar)"), recargo);
+                if hn.heroe.monedas < impuesto {
+                    return Err(Respuesta::rechazo(rechazos::HEROE_SIN_MONEDAS, format!("el impuesto de la forja es de {impuesto} monedas"), v));
                 }
                 (self.estado.siguiente_id, self.estado.rng) = (id + 1, rng);
-                let hn = self.heroe_mut(*heroe);
-                hn.heroe.mochila = mochila;
+                self.tr.tocar(Clase::Heroe, *heroe);
+                self.tr.tocar(Clase::Asentamiento, plaza);
+                let Estado { militar, ejercitos, asentamientos, .. } = &mut self.estado;
+                asentamientos.get_mut(&plaza).expect("existe").forja.fondo += impuesto;
+                let hn = militar.heroes.get_mut(heroe).expect("existe");
+                (hn.heroe.mochila, hn.heroe.monedas) = (mochila, hn.heroe.monedas - impuesto);
+                // Primero del almacén personal y lo que falte, del carro.
                 for (r, n) in materiales {
-                    quitar(&mut hn.almacen_personal, r, n);
+                    let de_casa = if en_su_residencia { n.min(de(&hn.almacen_personal, r)) } else { 0 };
+                    quitar(&mut hn.almacen_personal, r, de_casa);
+                    match carro {
+                        Some(Some(c)) => quitar(&mut ejercitos.get_mut(&c).expect("existe").columna.carga, r, n - de_casa),
+                        _ => quitar(&mut hn.carro, r, n - de_casa),
+                    }
                 }
-                self.hecho_de_objeto(t, "heroe.objeto_forjado", vec![("heroe", *heroe as i64), ("plaza", plaza as i64), ("pieza", id as i64), ("calidad", calidad)], objeto, vec![]);
+                if let Some(Some(c)) = carro {
+                    self.tr.tocar(Clase::Ejercito, c);
+                }
+                let datos = vec![("heroe", *heroe as i64), ("plaza", plaza as i64), ("pieza", id as i64), ("calidad", calidad), ("impuesto", impuesto)];
+                self.hecho_de_objeto(t, "heroe.objeto_forjado", datos, objeto, vec![]);
+            }
+            Comando::ConfigurarForja { asentamiento, grupo, abierta, recargo_pct } => {
+                self.plaza_o_rechazo(*asentamiento)?;
+                self.autorizar_en_plaza(p, *asentamiento, None)?;
+                if !cat.forja.recargos_pct.contains(recargo_pct) {
+                    return Err(Respuesta::rechazo(rechazos::FORJA_RECARGO_INVALIDO, format!("el recargo es uno de {:?} (%)", cat.forja.recargos_pct), v));
+                }
+                let a = self.estado.asentamientos.get_mut(asentamiento).expect("existe");
+                let nueva = AperturaForja { abierta: *abierta, recargo_pct: *recargo_pct };
+                if a.forja.de(*grupo) == nueva {
+                    return Err(Respuesta::sin_cambios(v));
+                }
+                *a.forja.de_mut(*grupo) = nueva;
+                let punto = Some(a.posicion);
+                self.tr.tocar(Clase::Asentamiento, *asentamiento);
+                let datos = vec![("plaza", *asentamiento as i64), ("abierta", *abierta as i64), ("recargo", i64::from(*recargo_pct))];
+                let valores = vec![("grupo", Dato::Texto(grupo.nombre().into()))];
+                self.tr.emitir(&self.estado, EventoNucleo { asentamientos: vec![*asentamiento], punto, valores, ..EventoNucleo::nuevo("asentamiento.forja_configurada", t, datos) });
             }
             Comando::UsarObjeto { heroe, casilla, escuadra } => {
                 self.exigir_lugar_de_equipar(p, *heroe)?;
@@ -161,7 +216,7 @@ impl Nucleo {
                 }
                 self.hecho_de_objeto(t, "heroe.objeto_usado", datos, &objeto, valores);
             }
-            _ => unreachable!("solo se llama con las órdenes de la Armería y de los consumibles"),
+            _ => unreachable!("solo se llama con las órdenes de la Armería, de su forja y de los consumibles"),
         }
         Ok(())
     }
@@ -171,12 +226,19 @@ impl Nucleo {
         self.estado.asentamientos.get(&plaza).is_some_and(|a| a.economia.edificios.activos(Edificio::Armeria) > 0)
     }
 
-    /// D1: la tienda de la Armería, dentro de una plaza que la tenga activa. Devuelve la plaza.
+    /// Una adopción de `faccion` cambia los metales de sus Armerías (Forja_En_Plazas §7): toca sus plazas con la Armería activa, para que lleguen también a quien está dentro de una
+    /// de ellas sin ser de su Facción (la plaza ajena vista desde dentro solo se vuelve a mandar cuando cambia su versión).
+    pub(super) fn tocar_armerias_de(&mut self, faccion: u32) {
+        let plazas: Vec<u64> = self.estado.asentamientos.values().filter(|a| a.faccion == faccion).map(|a| a.id).filter(|&a| self.con_armeria(a)).collect();
+        self.tr.tocar_todos(Clase::Asentamiento, plazas);
+    }
+
+    /// D1: la tienda y la forja de la Armería, dentro de una plaza que la tenga activa. Devuelve la plaza.
     fn armeria_donde_esta(&self, p: &Peticion, heroe: u64) -> Result<u64, Respuesta> {
         self.autorizar_heroe(p, heroe, false)?;
         match self.heroe(heroe).expect("existe").heroe.presencia.ubicacion {
             Ubicacion::Asentamiento(a) if self.con_armeria(u64::from(a)) => Ok(u64::from(a)),
-            _ => Err(Respuesta::rechazo(rechazos::ARMERIA_SIN_ARMERIA, "se compra y se vende dentro de una plaza con la Armería activa", self.estado.version)),
+            _ => Err(Respuesta::rechazo(rechazos::ARMERIA_SIN_ARMERIA, "se compra, se vende y se forja dentro de una plaza con la Armería activa", self.estado.version)),
         }
     }
 
@@ -194,6 +256,7 @@ mod pruebas {
     //! órdenes de punta a punta, `tests/heroes.rs`.
     use super::*;
     use crate::estado::{Asentamiento, Forja};
+    use crate::Relacion;
     use crate::estado_militar::HeroeNucleo;
     use crate::{Ajustes, Arranque, Reglas, Resultado};
     use asentamiento::edificio::Estado as EstadoEdificio;
@@ -214,7 +277,8 @@ mod pruebas {
     const FACCION: u32 = 1;
     const ESCUADRA: u64 = 20;
 
-    /// Un héroe de la Facción 2 que reside dentro de la plaza 50 (Facción 1, con la Armería activa), con esas piezas en su mochila, de la casilla 0 en adelante.
+    /// Un héroe de la Facción 2 que reside dentro de la plaza 50 (Facción 1, con la Armería activa y su forja abierta a los neutrales, con el recargo de partida, +100 %), con esas
+    /// piezas en su mochila, de la casilla 0 en adelante.
     fn nucleo(semilla: u64, piezas: &[(&str, u32)]) -> Nucleo {
         let reglas = Reglas::default();
         let rutas = Arc::new(Rutas::desde_grafo(&GrafoNavegacion::default()));
@@ -232,7 +296,28 @@ mod pruebas {
         }
         h.escuadras.push(Escuadra::nueva(mr, ESCUADRA, HEROE, Tropa::MiliciaLanceros, 10, None, 0));
         n.estado.militar.insertar(HeroeNucleo::nuevo(h, "ana", Some(2)));
+        forja(&mut n).neutrales.abierta = true;
         n
+    }
+
+    fn forja(n: &mut Nucleo) -> &mut Forja {
+        &mut n.estado.asentamientos.get_mut(&PLAZA).unwrap().forja
+    }
+
+    fn de_partida(n: &Nucleo) -> Forja {
+        Forja::de_partida(&n.estado.reglas.economia.militar.objetos.forja)
+    }
+
+    /// El mundo en la Era de ese `orden`.
+    fn en_la_era(n: &mut Nucleo, orden: u32) {
+        n.estado.tecnologia.era = n.estado.reglas.economia.tecnologia.eras.iter().position(|e| e.orden == orden).unwrap() as u8;
+    }
+
+    /// Una orden de la administración, aceptada.
+    fn admin(n: &mut Nucleo, c: Comando) {
+        static ID: AtomicU64 = AtomicU64::new(0);
+        let r = n.aplicar_en(0, Peticion::nueva("admin", &format!("a{}", ID.fetch_add(1, Ordering::Relaxed)), c).de_admin());
+        assert!(r.aceptada(), "{r:?}");
     }
 
     fn heroe(n: &mut Nucleo) -> &mut HeroeNucleo {
@@ -291,7 +376,7 @@ mod pruebas {
         combate.forja.as_ref().unwrap().materiales.iter().map(|(r, x)| (Recurso::desde_nombre(r).unwrap(), x * UNIDAD)).collect()
     }
 
-    /// Lo que pide la forja de `objeto`, a la puerta: el plano y los crisoles en la mochila (los da `nucleo`) y los materiales en el almacén personal.
+    /// Lo que pide la forja de `objeto` en su residencia: el plano y los crisoles en la mochila (los da `nucleo`) y los materiales en el almacén personal.
     fn con_materiales(n: &mut Nucleo, objeto: &str) {
         for (r, x) in receta(n, objeto) {
             comercio::sumar(&mut heroe(n).almacen_personal, r, x);
@@ -367,12 +452,13 @@ mod pruebas {
         let id = n.estado.siguiente_id;
         assert_eq!(orden(&mut n, forjar("dagas_cobre")), Ok(()));
         assert_eq!(n.estado.siguiente_id, id + 1);
+        assert_eq!((heroe(&mut n).heroe.monedas, forja(&mut n).fondo), (1_500 - 200, 200), "el impuesto del tier II, 100, con el +100 % de los neutrales, al fondo de la plaza");
         let h = heroe(&mut n);
         assert_eq!(objetos_de(&h.heroe.mochila), vec![(0, "dagas_cobre", 1), (1, "crisol", 1)], "el plano y dos crisoles, gastados; la pieza, en la casilla libre más baja");
         assert_eq!(h.heroe.mochila.casillas[&0].pieza.forjada.as_ref().map(|f| f.id), Some(id));
         assert_eq!(h.almacen_personal.clone().into_iter().collect::<Vec<_>>(), vec![(Recurso::Madera, 7 * UNIDAD)], "los materiales, del almacén personal; lo demás se queda");
         let e = &hechos(&n, "heroe.objeto_forjado")[0];
-        assert_eq!((texto(e, "objeto"), e.dato("pieza"), e.dato("plaza")), ("dagas_cobre", Some(id as i64), Some(PLAZA as i64)));
+        assert_eq!((texto(e, "objeto"), e.dato("pieza"), e.dato("plaza"), e.dato("impuesto")), ("dagas_cobre", Some(id as i64), Some(PLAZA as i64), Some(200)));
         assert!(e.dato("calidad").is_some_and(|c| (90..=110).contains(&c)), "{e:?}");
     }
 
@@ -381,6 +467,7 @@ mod pruebas {
         let mut n = nucleo(1, &[("plano_2", 1), ("crisol", 1)]);
         assert_eq!(orden(&mut n, forjar("dagas_cobre")), Err(rechazos::ARMERIA_SIN_TECNOLOGIA));
         abrir(&mut n, FACCION, &["metalurgia_cobre", "aleacion_bronce"]);
+        en_la_era(&mut n, 3);
         assert_eq!(orden(&mut n, forjar("espada_de_madera")), Err(rechazos::OBJETO_DESCONOCIDO));
         assert_eq!(orden(&mut n, forjar("dagas_inicio")), Err(rechazos::FORJA_SIN_RECETA));
         assert_eq!(orden(&mut n, forjar("dagas_bronce")), Err(rechazos::FORJA_SIN_PLANO), "el plano es de otro tier");
@@ -400,15 +487,186 @@ mod pruebas {
         mochila.meter(&cat, Pieza::del_catalogo("dagas_inicio"), 1).unwrap();
         assert_eq!(orden(&mut n, forjar("dagas_cobre")), Err(rechazos::MOCHILA_LLENA), "quedan un plano y un crisol: la pieza no cabe");
         heroe(&mut n).heroe.mochila.capacidad = 72;
-        // Fuera de la plaza donde reside, o residiendo en un campamento, no se forja.
+        heroe(&mut n).heroe.monedas = 199;
+        assert_eq!(orden(&mut n, forjar("dagas_cobre")), Err(rechazos::HEROE_SIN_MONEDAS), "el impuesto es de 200");
+        heroe(&mut n).heroe.monedas = 200;
+        forja(&mut n).neutrales.abierta = false;
+        assert_eq!(orden(&mut n, forjar("dagas_cobre")), Err(rechazos::FORJA_CERRADA));
+        forja(&mut n).neutrales.abierta = true;
+        // De visita en la plaza y sin carro, su almacén personal no está a mano; en un campamento no hay Armería.
         heroe(&mut n).heroe.residencia = Some(Residencia::Campamento(0));
-        assert_eq!(orden(&mut n, forjar("dagas_cobre")), Err(rechazos::FORJA_FUERA_DE_TU_RESIDENCIA));
+        assert_eq!(orden(&mut n, forjar("dagas_cobre")), Err(rechazos::FORJA_SIN_MATERIALES));
         heroe(&mut n).heroe.presencia.ubicacion = Ubicacion::Mercenarios(0);
         assert_eq!(orden(&mut n, forjar("dagas_cobre")), Err(rechazos::ARMERIA_SIN_ARMERIA), "en su campamento no hay Armería");
-        heroe(&mut n).heroe.residencia = None;
-        assert_eq!(orden(&mut n, forjar("dagas_cobre")), Err(rechazos::HEROE_SIN_RESIDENCIA));
         (heroe(&mut n).heroe.residencia, heroe(&mut n).heroe.presencia.ubicacion) = (Some(Residencia::Asentamiento(PLAZA as u32)), Ubicacion::Asentamiento(PLAZA as u32));
         assert_eq!(orden(&mut n, forjar("dagas_cobre")), Ok(()), "con todo, sí");
+        assert_eq!(heroe(&mut n).heroe.monedas, 0, "justo el impuesto");
+    }
+
+    #[test]
+    fn la_misma_faccion_forja_siempre_a_la_base_y_cada_grupo_de_fuera_si_su_forja_esta_abierta_con_su_recargo() {
+        let mut n = nucleo(1, &[("plano_2", 9), ("crisol", 18)]);
+        abrir(&mut n, FACCION, &["metalurgia_cobre"]);
+        *forja(&mut n) = de_partida(&n);
+        heroe(&mut n).heroe.monedas = 10_000;
+        con_materiales(&mut n, "dagas_cobre");
+        let cobrado = |n: &mut Nucleo| {
+            let antes = (heroe(n).heroe.monedas, forja(n).fondo);
+            con_materiales(n, "dagas_cobre");
+            assert_eq!(orden(n, forjar("dagas_cobre")), Ok(()));
+            let (monedas, fondo) = (heroe(n).heroe.monedas, forja(n).fondo);
+            assert_eq!(antes.0 - monedas, fondo - antes.1, "lo que paga entra en el fondo");
+            hechos(n, "heroe.objeto_forjado").last().unwrap().dato("impuesto").unwrap()
+        };
+        // De partida, cerrada a los tres grupos de fuera: la Facción 2, sin relación, es neutral.
+        assert_eq!(orden(&mut n, forjar("dagas_cobre")), Err(rechazos::FORJA_CERRADA));
+        for (recargo, impuesto) in [(0, 100), (100, 200), (200, 300), (500, 600)] {
+            forja(&mut n).neutrales = AperturaForja { abierta: true, recargo_pct: recargo };
+            assert_eq!(cobrado(&mut n), impuesto, "neutrales con +{recargo} %");
+        }
+        // Aliada: lo que diga el grupo de los aliados, no el de los neutrales.
+        admin(&mut n, Comando::FijarRelacion { a: FACCION, b: 2, relacion: Some(Relacion::Alianza) });
+        assert_eq!(orden(&mut n, forjar("dagas_cobre")), Err(rechazos::FORJA_CERRADA));
+        forja(&mut n).aliados = AperturaForja { abierta: true, recargo_pct: 0 };
+        assert_eq!(cobrado(&mut n), 100);
+        // La misma Facción: a la base aunque los tres grupos estén cerrados.
+        *forja(&mut n) = Forja { fondo: forja(&mut n).fondo, ..de_partida(&n) };
+        heroe(&mut n).faccion = Some(FACCION);
+        assert_eq!(cobrado(&mut n), 100);
+        // Sin Facción, neutral.
+        heroe(&mut n).faccion = None;
+        assert_eq!(orden(&mut n, forjar("dagas_cobre")), Err(rechazos::FORJA_CERRADA));
+        forja(&mut n).neutrales = AperturaForja { abierta: true, recargo_pct: 500 };
+        assert_eq!(cobrado(&mut n), 600);
+        assert_eq!(forja(&mut n).fondo, 100 + 200 + 300 + 600 + 100 + 100 + 600);
+    }
+
+    #[test]
+    fn el_enemigo_forja_si_la_plaza_abre_su_forja_a_los_enemigos() {
+        let mut n = nucleo(1, &[("plano_2", 1), ("crisol", 2)]);
+        abrir(&mut n, FACCION, &["metalurgia_cobre"]);
+        con_materiales(&mut n, "dagas_cobre");
+        admin(&mut n, Comando::FijarRelacion { a: FACCION, b: 2, relacion: Some(Relacion::Guerra) });
+        assert_eq!(orden(&mut n, forjar("dagas_cobre")), Err(rechazos::FORJA_CERRADA), "abierta a los neutrales, no a los enemigos");
+        forja(&mut n).enemigos = AperturaForja { abierta: true, recargo_pct: 200 };
+        assert_eq!(orden(&mut n, forjar("dagas_cobre")), Ok(()));
+        assert_eq!(forja(&mut n).fondo, 300);
+    }
+
+    #[test]
+    fn los_tiers_iii_a_v_piden_la_era_del_mundo_y_el_ii_no() {
+        let mut n = nucleo(1, &[("plano_2", 1), ("crisol", 5), ("plano_3", 1)]);
+        abrir(&mut n, FACCION, &["metalurgia_cobre", "aleacion_bronce"]);
+        con_materiales(&mut n, "dagas_bronce");
+        assert_eq!(n.orden_era(), 1);
+        assert_eq!(orden(&mut n, forjar("dagas_bronce")), Err(rechazos::FORJA_ERA_CERRADA), "el bronce está abierto, la Era III no");
+        en_la_era(&mut n, 2);
+        assert_eq!(orden(&mut n, forjar("dagas_bronce")), Err(rechazos::FORJA_ERA_CERRADA));
+        en_la_era(&mut n, 1);
+        con_materiales(&mut n, "dagas_cobre");
+        assert_eq!(orden(&mut n, forjar("dagas_cobre")), Ok(()), "el tier II, en la Era I");
+        en_la_era(&mut n, 3);
+        assert_eq!(orden(&mut n, forjar("dagas_bronce")), Ok(()));
+        assert_eq!(hechos(&n, "heroe.objeto_forjado").last().unwrap().dato("impuesto"), Some(350), "175 con el +100 % de los neutrales");
+    }
+
+    #[test]
+    fn configurar_forja_la_da_el_tesorero_o_el_gobernador_dentro_con_un_recargo_de_la_lista() {
+        let mut n = nucleo(1, &[]);
+        let configurar = |grupo, abierta, recargo_pct| Comando::ConfigurarForja { asentamiento: PLAZA, grupo, abierta, recargo_pct };
+        assert_eq!(orden(&mut n, configurar(politica::Grupo::Aliados, true, 0)), Err(rechazos::NO_AUTORIZADO), "sin cargo");
+        heroe(&mut n).faccion = Some(FACCION);
+        for cargo in [asentamiento::Cargo::Tesorero, asentamiento::Cargo::Gobernador] {
+            let cargos = &mut n.estado.asentamientos.get_mut(&PLAZA).unwrap().cargos;
+            *cargos = Default::default();
+            cargos.fijar(cargo, Some(HEROE));
+            let abierta = cargo == asentamiento::Cargo::Tesorero;
+            assert_eq!(orden(&mut n, configurar(politica::Grupo::Aliados, abierta, 200)), Ok(()), "{cargo:?}");
+            assert_eq!(forja(&mut n).aliados, AperturaForja { abierta, recargo_pct: 200 });
+        }
+        let e = hechos(&n, "asentamiento.forja_configurada");
+        assert_eq!(e.iter().map(|e| (texto(e, "grupo"), e.dato("plaza"), e.dato("abierta"), e.dato("recargo"))).collect::<Vec<_>>(), vec![("aliados", Some(PLAZA as i64), Some(1), Some(200)), ("aliados", Some(PLAZA as i64), Some(0), Some(200))]);
+        assert_eq!(e[0].asentamientos, vec![PLAZA]);
+        assert_eq!(orden(&mut n, configurar(politica::Grupo::Enemigos, true, 50)), Err(rechazos::FORJA_RECARGO_INVALIDO));
+        assert_eq!(orden(&mut n, configurar(politica::Grupo::Enemigos, true, 500)), Ok(()));
+        assert_eq!(*forja(&mut n), Forja { aliados: AperturaForja { abierta: false, recargo_pct: 200 }, neutrales: AperturaForja { abierta: true, recargo_pct: 100 }, enemigos: AperturaForja { abierta: true, recargo_pct: 500 }, fondo: 0 });
+        let r = n.aplicar_en(0, Peticion::nueva("ana", "igual", configurar(politica::Grupo::Enemigos, true, 500)));
+        assert_eq!(r.resultado, Resultado::SinCambios);
+        // Fuera de la plaza el cargo no se ejerce.
+        heroe(&mut n).heroe.presencia.ubicacion = Ubicacion::Pueblo(3);
+        assert_eq!(orden(&mut n, configurar(politica::Grupo::Neutrales, false, 0)), Err(rechazos::NO_AUTORIZADO));
+    }
+
+    #[test]
+    fn la_conquista_devuelve_la_forja_a_la_de_partida_y_el_fondo_se_queda_con_la_plaza() {
+        let mut n = nucleo(1, &[]);
+        *forja(&mut n) = Forja { aliados: AperturaForja { abierta: true, recargo_pct: 0 }, neutrales: AperturaForja { abierta: true, recargo_pct: 500 }, enemigos: AperturaForja { abierta: true, recargo_pct: 200 }, fondo: 1_234 };
+        n.conquistar_plaza(0, PLAZA, 3, 0, &[]);
+        let partida = de_partida(&n);
+        assert_eq!(*forja(&mut n), Forja { fondo: 1_234, ..partida });
+    }
+
+    #[test]
+    fn desde_fuera_se_ve_si_hay_armeria_y_desde_dentro_su_forja_y_sus_metales() {
+        let mut n = nucleo(1, &[]);
+        forja(&mut n).fondo = 75;
+        let fuera = crate::proyeccion::vista::plaza_avistada(&n, PLAZA);
+        assert!(fuera.armeria_activa && fuera.forja.is_none() && fuera.metales_armeria.is_empty(), "desde fuera, solo que la hay: {fuera:?}");
+        let esperada = Some(contrato::v1::ForjaPlaza {
+            aliados: Some(contrato::v1::AperturaForja { abierta: false, recargo_pct: 100 }),
+            neutrales: Some(contrato::v1::AperturaForja { abierta: true, recargo_pct: 100 }),
+            enemigos: Some(contrato::v1::AperturaForja { abierta: false, recargo_pct: 100 }),
+            fondo: 75,
+        });
+        let dentro = crate::proyeccion::vista::plaza_desde_dentro(&n, PLAZA);
+        assert_eq!((dentro.armeria_activa, &dentro.forja, &dentro.metales_armeria[..]), (true, &esperada, &["inicio".to_owned()][..]), "sin tecnologías, solo el de inicio");
+        abrir(&mut n, FACCION, &["metalurgia_cobre", "aleacion_bronce"]);
+        let interior = crate::proyeccion::interior::asentamiento(&n, PLAZA).unwrap();
+        assert_eq!((&interior.forja, interior.metales_armeria), (&esperada, vec!["bronce".to_owned(), "cobre".to_owned(), "inicio".to_owned()]));
+        // Sin Armería activa, ningún metal.
+        n.estado.asentamientos.get_mut(&PLAZA).unwrap().economia.edificios.last_mut().unwrap().estado = EstadoEdificio::EnConstruccion;
+        let dentro = crate::proyeccion::vista::plaza_desde_dentro(&n, PLAZA);
+        assert!(!dentro.armeria_activa && dentro.metales_armeria.is_empty() && dentro.forja == esperada);
+    }
+
+    #[test]
+    fn adoptar_una_tecnologia_toca_las_plazas_de_su_faccion_con_armeria() {
+        let mut n = nucleo(1, &[]);
+        let version = n.version_de(Clase::Asentamiento, PLAZA);
+        admin(&mut n, Comando::FijarTecnologias { faccion: 2, tecnologias: vec!["metalurgia_cobre".into()] });
+        assert_eq!(n.version_de(Clase::Asentamiento, PLAZA), version, "la de otra Facción no la toca");
+        admin(&mut n, Comando::FijarTecnologias { faccion: FACCION, tecnologias: vec!["metalurgia_cobre".into()] });
+        assert!(n.version_de(Clase::Asentamiento, PLAZA) > version, "sus metales cambiaron");
+    }
+
+    #[test]
+    fn en_su_residencia_forja_del_almacen_personal_y_del_carro_y_de_visita_del_carro_con_que_entro() {
+        let mut n = nucleo(1, &[("plano_2", 2), ("crisol", 4)]);
+        abrir(&mut n, FACCION, &["metalurgia_cobre"]);
+        let (primero, x) = receta(&n, "dagas_cobre")[0];
+        // En su residencia: lo que no hay en el almacén personal sale del carro que trajo.
+        con_materiales(&mut n, "dagas_cobre");
+        let hn = heroe(&mut n);
+        quitar(&mut hn.almacen_personal, primero, x / 2);
+        comercio::sumar(&mut hn.carro, primero, x);
+        assert_eq!(orden(&mut n, forjar("dagas_cobre")), Ok(()));
+        let hn = heroe(&mut n);
+        assert_eq!((hn.almacen_personal.get(&primero), de(&hn.carro, primero)), (None, x / 2), "primero el almacén personal y lo que falta, del carro");
+        // De visita en una plaza ajena con su Armería, solo del carro de la columna con la que entró: el almacén personal se queda en casa.
+        hn.carro.clear();
+        hn.heroe.residencia = Some(Residencia::Campamento(0));
+        let mr = n.estado.reglas.economia.militar.clone();
+        let carga = receta(&n, "dagas_cobre").into_iter().collect();
+        let columna = militar::columna::Columna::salir(&mr, 30, Some(2), HEROE, militar::columna::TipoColumna::Personal, militar::columna::Politica::Rechazar, vec![], carga, 0, 0, &|_| 0);
+        let columna = n.columna_suelta(columna, base::Punto::new(0, 0));
+        n.estado.ejercitos.insert(30, columna);
+        con_materiales(&mut n, "dagas_cobre");
+        heroe(&mut n).columna = Some(30);
+        let en_casa = heroe(&mut n).almacen_personal.clone();
+        assert_eq!(orden(&mut n, forjar("dagas_cobre")), Ok(()));
+        assert!(n.estado.ejercitos[&30].columna.carga.is_empty(), "la receta, de la carga de su columna");
+        assert_eq!(heroe(&mut n).almacen_personal, en_casa, "el almacén personal, intacto");
+        assert_eq!(hechos(&n, "heroe.objeto_forjado").len(), 2);
     }
 
     #[test]

@@ -423,6 +423,7 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         (orden!(AlternarReabastecerAliados, OrdenAlternarReabastecerAliados, asentamiento_id: s("as-3"), permitido: true), Comando::AlternarReabastecerAliados { asentamiento: 3, permitido: true }),
         (orden!(CerrarAlmacenACiudadanos, OrdenCerrarAlmacenACiudadanos, asentamiento_id: s("as-3"), cerrado: true), Comando::CerrarAlmacenACiudadanos { asentamiento: 3, cerrado: true }),
         (orden!(CerrarReclutamientoACiudadanos, OrdenCerrarReclutamientoACiudadanos, asentamiento_id: s("as-3"), cerrado: true), Comando::CerrarReclutamientoACiudadanos { asentamiento: 3, cerrado: true }),
+        (orden!(ConfigurarForja, OrdenConfigurarForja, asentamiento_id: s("as-3"), grupo: s("enemigos"), recargo_pct: 200), Comando::ConfigurarForja { asentamiento: 3, grupo: politica::Grupo::Enemigos, abierta: false, recargo_pct: 200 }),
         (orden!(CargarDePlaza, OrdenCargarDePlaza, asentamiento_id: s("as-3"), recurso: s("madera"), cantidad: 20_000), Comando::CargarDePlaza { heroe: 7, asentamiento: 3, recurso: Recurso::Madera, cantidad: 20_000 }),
         (orden!(DejarEnPlaza, OrdenDejarEnPlaza, asentamiento_id: s("as-3"), recurso: s("oro"), cantidad: 3_000), Comando::DejarEnPlaza { heroe: 7, asentamiento: 3, recurso: Recurso::Oro, cantidad: 3_000 }),
         // ── Mercenarios por contrato (entrada 48) ──
@@ -717,6 +718,8 @@ fn un_id_sin_la_forma_de_su_entidad_o_un_valor_fuera_de_su_catalogo_se_rechazan_
             rechazos::ORDEN_FORMA_INVALIDA,
         ),
         (orden!(FijarPuerta, OrdenFijarPuerta, asentamiento_id: s("as-3"), heroe_id: h(), cerrada_a: v(&["vecinos"])), rechazos::ORDEN_FORMA_INVALIDA),
+        (orden!(ConfigurarForja, OrdenConfigurarForja, asentamiento_id: s("as-3"), grupo: s("aedas"), abierta: true), rechazos::ORDEN_FORMA_INVALIDA),
+        (orden!(ConfigurarForja, OrdenConfigurarForja, asentamiento_id: s("as-3"), grupo: s("vecinos")), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(AsignarCargoLocal, OrdenAsignarCargoLocal, asentamiento_id: s("as-3"), cargo: s("rey"), heroe_id: h()), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(UnirseABatalla, OrdenUnirseABatalla, heroe_id: h(), battle_id: s("uuid-9"), lado: Some(s("espectador"))), rechazos::ORDEN_FORMA_INVALIDA),
         (orden!(ReclutarEnCampamento, OrdenReclutarEnCampamento, tropa_id: s("milicia_lanceros"), pagar_con: Some(s("honor"))), rechazos::ORDEN_FORMA_INVALIDA),
@@ -771,7 +774,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let de_administracion: BTreeSet<String> = ordenes_de_administracion().iter().map(|(_, c)| nombre(c)).collect();
     let del_servidor_de_batalla: BTreeSet<String> = ["RegistrarAsignacion", "ConfirmarInicio", "RegistrarTokens", "RegistrarSalida", "AplicarResultado"].map(String::from).into();
     let todos = variantes_de_comando();
-    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (216, 191, 20, 5));
+    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (217, 192, 20, 5));
     let clasificados: Vec<&String> = del_jugador.iter().chain(&de_administracion).chain(&del_servidor_de_batalla).collect();
     assert_eq!(clasificados.len(), todos.len(), "una variante en dos orígenes");
     let sin_clasificar: Vec<&String> = todos.iter().filter(|v| !clasificados.contains(v)).collect();
@@ -783,7 +786,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let tabla: BTreeSet<String> = tabla.map(|c| nombre(&c)).collect();
     let proto = include_str!("../../../../../proto/bronzeage/v1/orders.proto");
     let en_el_contrato = proto.lines().skip_while(|l| !l.contains("oneof cuerpo {")).skip(1).take_while(|l| l.trim() != "}").map(str::trim).filter(|l| !l.starts_with("//") && l.ends_with(';')).count();
-    assert_eq!((tabla.len(), en_el_contrato), (190, 190), "una orden del contrato sin mapear ni clasificar como no disponible");
+    assert_eq!((tabla.len(), en_el_contrato), (191, 191), "una orden del contrato sin mapear ni clasificar como no disponible");
 }
 
 /// El nombre de una orden en el contrato (el campo del `oneof`): la variante de `Cuerpo` en serpiente (`MarcharA` → `marchar_a`).
@@ -866,5 +869,5 @@ fn la_matriz_de_autorizacion_del_documento_es_la_del_codigo() {
     let faltan: Vec<String> = codigo.difference(&documento).map(fila).collect();
     let sobran: Vec<String> = documento.difference(&codigo).map(fila).collect();
     assert!(faltan.is_empty() && sobran.is_empty(), "la matriz del documento no es la del código.\nFaltan o no coinciden (como las dice el código):\n{}\nSobran (como las dice el documento):\n{}", faltan.join("\n"), sobran.join("\n"));
-    assert_eq!(codigo.len(), 191 + 20 + 5, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
+    assert_eq!(codigo.len(), 192 + 20 + 5, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
 }

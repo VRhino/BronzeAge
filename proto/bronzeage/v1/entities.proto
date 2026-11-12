@@ -549,6 +549,29 @@ message Asentamiento {
   // 2026-11-10 (decisión del autor): los bienes de consumo cuyo consumo está pausado en la plaza (`pausar_consumo`; ids de catálogo, en el orden del catálogo):
   // la población no los come y la guarnición no come la carne. Interior, plaza propia y `ADMIN`.
   repeated string consumo_pausado = 54;
+  // 2026-11-12 (Forja_En_Plazas §7, decisión del autor): si la plaza tiene alguna Armería activa, sin nivel, como `mercado_activo`. Va en toda ficha, también
+  // en la avistada desde fuera (`VISTA`).
+  bool armeria_activa = 55;
+  // 2026-11-12 (Forja_En_Plazas §2, §6 y §7): la forja de la plaza, la apertura y el recargo de cada grupo de fuera y su fondo de monedas. Solo de dentro
+  // (interior, la plaza ajena vista desde dentro en `VISTA`) y `ADMIN`. Con ella, `OBJETOS.forja` de `/v1/datos` y la Era del mundo, el cliente calcula cuánto pagaría.
+  ForjaPlaza forja = 56;
+  // 2026-11-12 (Forja_En_Plazas §4 y §7): los metales de `OBJETOS.metales` cuya tecnología tiene adoptada la Facción de la plaza (`inicio` incluido), por orden
+  // alfabético: los que abre su Armería para comprar y forjar (la Era la mira el cliente). Vacío sin Armería activa. Solo de dentro y `ADMIN`, como `forja`.
+  repeated string metales_armeria = 57;
+}
+
+// La forja de la Armería de una plaza (`Asentamiento.forja`, Forja_En_Plazas): la misma Facción forja siempre, a la base; cada grupo de fuera, si está abierta a él.
+message ForjaPlaza {
+  AperturaForja aliados = 1;
+  AperturaForja neutrales = 2;
+  AperturaForja enemigos = 3;
+  sint64 fondo = 4;                      // monedas del impuesto de su forja (Forja_En_Plazas §6)
+}
+
+// La forja de una plaza para un grupo de fuera: abierta o cerrada y su recargo sobre el impuesto base (uno de `OBJETOS.forja.recargosPct`, en %).
+message AperturaForja {
+  bool abierta = 1;
+  uint32 recargo_pct = 2;
 }
 
 // Un recurso que no cubriría el mantenimiento del nivel siguiente (`Asentamiento.insolvencia_ascenso`), en milésimas por minuto.

@@ -318,6 +318,8 @@ pub struct Catalogo {
     /// Las casillas de la mochila y del almacén de objetos (D22).
     pub casillas_mochila: u32,
     pub casillas_almacen: u32,
+    /// La tecnología que abre cada metal (`metales`; el de inicio, ninguna): con ella el cliente sabe qué metales hay en la Armería de una plaza.
+    pub metales: BTreeMap<String, Option<String>>,
     /// Las fichas, por id.
     pub objetos: BTreeMap<String, Ficha>,
     /// Las clases, por id.
@@ -470,6 +472,7 @@ impl Catalogo {
             tienda_hasta_tier: entero(&ob, "tiendaHastaTier") as u8,
             casillas_mochila: entero(&ob, "casillasMochila") as u32,
             casillas_almacen: entero(&ob, "casillasAlmacen") as u32,
+            metales,
             objetos,
             clases,
             botin,
@@ -499,6 +502,7 @@ mod pruebas {
         assert_eq!(cuenta(&|t| *t == Tipo::Material), 5, "el crisol y los planos II a V");
         assert_eq!(cuenta(&|t| matches!(t, Tipo::Consumible(_))), 9, "ocho medallas y el cofre");
         assert_eq!(c.clases.len(), 5);
+        assert_eq!((c.metales.len(), &c.metales["inicio"], c.metales["acero"].as_deref()), (7, &None, Some("acero_templado")), "el de inicio no pide tecnología");
         assert_eq!((c.venta_pct, c.tienda_hasta_tier, c.casillas_mochila, c.casillas_almacen), (50, 2, 72, 144));
         let f = &c.forja;
         assert_eq!((f.impuesto_por_tier.values().copied().collect::<Vec<_>>(), &f.recargos_pct[..], f.recargo_inicial_pct), (vec![100, 175, 250, 350], &[0, 100, 200, 500][..], 100));

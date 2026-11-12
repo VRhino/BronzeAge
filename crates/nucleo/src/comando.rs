@@ -266,11 +266,14 @@ pub enum Comando {
     ComprarObjeto { heroe: u64, objeto: String },
     /// Vende a la Armería de la plaza donde está dentro `cantidad` de la casilla `casilla` de su mochila, a `ventaPct` de la ficha (D1 y D18).
     VenderObjeto { heroe: u64, casilla: u32, cantidad: u32 },
-    /// Forja una pieza en la Armería de la plaza donde reside, estando dentro: el plano y los crisoles de su mochila, los materiales de su almacén personal (D1,
-    /// Objetos_Del_Heroe §3.4).
+    /// Forja una pieza en la Armería de la plaza donde está dentro, si su forja está abierta a su grupo (Forja_En_Plazas §2): el plano y los crisoles de su mochila; los
+    /// materiales, en su residencia del almacén personal y lo que falte del carro, y en otra plaza del carro con el que entró (§3); el impuesto, de sus monedas al fondo (§5).
     ForjarObjeto { heroe: u64, objeto: String },
     /// Usa el consumible de la casilla `casilla` de su mochila, donde se puede equipar (D2); `escuadra`, la suya que recibe una medalla de tropa (Objetos_Del_Heroe §3.5).
     UsarObjeto { heroe: u64, casilla: u32, escuadra: Option<u64> },
+    /// El Tesorero o el Gobernador de la plaza, residente y dentro, abre o cierra su forja a un grupo de fuera (aliados, neutrales o enemigos; nunca los Aedas) y le fija el
+    /// recargo sobre el impuesto, uno de `OBJETOS.forja.recargosPct` (Forja_En_Plazas §2).
+    ConfigurarForja { asentamiento: u64, grupo: politica::Grupo, abierta: bool, recargo_pct: u32 },
     /// Entrega una escuadra del campamento a la guarnición de la plaza donde reside el héroe, dentro de su cupo.
     AsignarGuarnicion { heroe: u64, escuadra: u64 },
     RetirarGuarnicion { heroe: u64, escuadra: u64 },
@@ -897,6 +900,7 @@ impl Comando {
             | Comando::ColocarOrdenMercado { .. }
             | Comando::CancelarOrdenMercado { .. }
             | Comando::AlternarReabastecerAliados { .. }
+            | Comando::ConfigurarForja { .. }
             | Comando::PausarConsumo { .. } => Cargo(GOBERNADOR_O_TESORERO),
             Comando::CerrarReclutamientoACiudadanos { .. } => Cargo(GOBERNADOR_O_GENERAL),
             Comando::EncargarCaravana { .. } | Comando::CambiarEncargo { .. } | Comando::CancelarEncargo { .. } | Comando::DetenerEncargo { .. } | Comando::TomarOrdenADistancia { .. } => Cargo(GOBERNADOR_TESORERO_O_MAESTRO_CARAVANAS),
@@ -1261,7 +1265,10 @@ impl Comando {
             // Una épica no es una orden sobre la batalla: solo el héroe que la dirige lleva el candado.
             | Comando::EmpezarEpica { heroe, .. }
             | Comando::AbandonarEpica { heroe, .. } => i.heroes.push(*heroe),
-            Comando::AlternarReabastecerAliados { asentamiento, .. } | Comando::CerrarAlmacenACiudadanos { asentamiento, .. } | Comando::CerrarReclutamientoACiudadanos { asentamiento, .. } => {
+            Comando::AlternarReabastecerAliados { asentamiento, .. }
+            | Comando::CerrarAlmacenACiudadanos { asentamiento, .. }
+            | Comando::CerrarReclutamientoACiudadanos { asentamiento, .. }
+            | Comando::ConfigurarForja { asentamiento, .. } => {
                 i.asentamientos.push(*asentamiento)
             }
             Comando::OfrecerseComoMercenario { heroe } | Comando::RetirarOferta { heroe } | Comando::ReclamarPremioDeRango { heroe, .. } => i.heroes.push(*heroe),
@@ -1365,6 +1372,25 @@ pub enum PagarCon {
 pub enum LadoDelFondo {
     Almacen,
     Carro,
+}
+
+/// El grupo de fuera de `ConfigurarForja`, en el registro; los Aedas no forjan (Forja_En_Plazas §2).
+fn grupo_de_forja_a_u8(g: politica::Grupo) -> u8 {
+    match g {
+        politica::Grupo::Neutrales => 0,
+        politica::Grupo::Aliados => 1,
+        politica::Grupo::Enemigos => 2,
+        politica::Grupo::Aedas => unreachable!("`ConfigurarForja` no lleva a los Aedas: la traducción y el registro los rechazan"),
+    }
+}
+
+fn grupo_de_forja_de_u8(i: u8) -> Result<politica::Grupo, ErrorFormato> {
+    Ok(match i {
+        0 => politica::Grupo::Neutrales,
+        1 => politica::Grupo::Aliados,
+        2 => politica::Grupo::Enemigos,
+        _ => return Err(ErrorFormato("grupo de la forja desconocido")),
+    })
 }
 
 fn pagar_con_de_u8(i: u8) -> Result<PagarCon, ErrorFormato> {
@@ -1912,6 +1938,13 @@ impl Peticion {
                 w.u64(*heroe);
                 w.u32(*casilla);
                 w.opt_u64(*escuadra);
+            }
+            Comando::ConfigurarForja { asentamiento, grupo, abierta, recargo_pct } => {
+                w.u8(230);
+                w.u64(*asentamiento);
+                w.u8(grupo_de_forja_a_u8(*grupo));
+                w.bool(*abierta);
+                w.u32(*recargo_pct);
             }
             Comando::FijarTecnologias { faccion, tecnologias } => {
                 w.u8(65);
@@ -2957,6 +2990,7 @@ impl Peticion {
             227 => Comando::VenderObjeto { heroe: r.u64()?, casilla: r.u32()?, cantidad: r.u32()? },
             228 => Comando::ForjarObjeto { heroe: r.u64()?, objeto: r.texto()? },
             229 => Comando::UsarObjeto { heroe: r.u64()?, casilla: r.u32()?, escuadra: r.opt_u64()? },
+            230 => Comando::ConfigurarForja { asentamiento: r.u64()?, grupo: grupo_de_forja_de_u8(r.u8()?)?, abierta: r.bool()?, recargo_pct: r.u32()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
         r.fin()?;
@@ -3370,21 +3404,25 @@ pub mod rechazos {
     /// Una cantidad de 0, o una pila que pasaría del máximo.
     pub const INVENTARIO_CANTIDAD_INVALIDA: &str = "inventario.cantidad_invalida";
     // La Armería y los consumibles: comprar, vender, forjar y usar un objeto (`ErrorTienda`, `ErrorForja` y `ErrorUso` del crate `objetos`; Heroe_Y_Tropa §4.6).
-    /// `comprar_objeto` o `vender_objeto` sin estar dentro de una plaza con la Armería activa, o `forjar_objeto` sin ella en la plaza donde reside (D1).
+    /// `comprar_objeto`, `vender_objeto` o `forjar_objeto` sin estar dentro de una plaza con la Armería activa (D1).
     pub const ARMERIA_SIN_ARMERIA: &str = "armeria.sin_armeria";
     /// `comprar_objeto`: la tienda no lo vende (no es arma, armadura ni montura, o pasa de `tiendaHastaTier`; Objetos_Del_Heroe §3.3).
     pub const ARMERIA_NO_SE_VENDE: &str = "armeria.no_se_vende";
     /// `comprar_objeto` o `forjar_objeto`: la Facción de la plaza no tiene la tecnología de su metal (D1).
     pub const ARMERIA_SIN_TECNOLOGIA: &str = "armeria.sin_tecnologia";
-    /// `forjar_objeto` fuera de la plaza donde reside el héroe, que es donde forja (D1).
-    pub const FORJA_FUERA_DE_TU_RESIDENCIA: &str = "forja.fuera_de_tu_residencia";
+    /// `forjar_objeto`: la forja de la plaza está cerrada al grupo del héroe (Forja_En_Plazas §2).
+    pub const FORJA_CERRADA: &str = "forja.cerrada";
+    /// `forjar_objeto`: el tier de la pieza pide una Era que el mundo no ha alcanzado (`OBJETOS.forja.eraPorTier`; Forja_En_Plazas §4).
+    pub const FORJA_ERA_CERRADA: &str = "forja.era_cerrada";
+    /// `configurar_forja`: el recargo no es uno de `OBJETOS.forja.recargosPct` (Forja_En_Plazas §2).
+    pub const FORJA_RECARGO_INVALIDO: &str = "forja.recargo_invalido";
     /// `forjar_objeto`: no tiene receta (no es arma ni armadura, o es de tier I; Objetos_Del_Heroe §3.4).
     pub const FORJA_SIN_RECETA: &str = "forja.sin_receta";
     /// `forjar_objeto`: no hay en la mochila un plano de su tier.
     pub const FORJA_SIN_PLANO: &str = "forja.sin_plano";
     /// `forjar_objeto`: no hay en la mochila los crisoles de su tier.
     pub const FORJA_SIN_CRISOLES: &str = "forja.sin_crisoles";
-    /// `forjar_objeto`: el almacén personal no tiene los materiales de la receta.
+    /// `forjar_objeto`: el almacén personal (en su residencia) y el carro no tienen los materiales de la receta (Forja_En_Plazas §3).
     pub const FORJA_SIN_MATERIALES: &str = "forja.sin_materiales";
     /// `usar_objeto`: no es un consumible.
     pub const OBJETO_NO_SE_USA: &str = "objeto.no_se_usa";
@@ -4134,6 +4172,9 @@ mod pruebas {
             Comando::ForjarObjeto { heroe: 2, objeto: "torso_pesada_bronce".into() },
             Comando::UsarObjeto { heroe: 2, casilla: 0, escuadra: Some(5) },
             Comando::UsarObjeto { heroe: 2, casilla: 1, escuadra: None },
+            Comando::ConfigurarForja { asentamiento: 5, grupo: politica::Grupo::Aliados, abierta: true, recargo_pct: 0 },
+            Comando::ConfigurarForja { asentamiento: 5, grupo: politica::Grupo::Neutrales, abierta: false, recargo_pct: 500 },
+            Comando::ConfigurarForja { asentamiento: 5, grupo: politica::Grupo::Enemigos, abierta: true, recargo_pct: 200 },
             Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["arco_compuesto".into(), "leva_comunal".into()] },
             Comando::FijarFaccionDeHeroe { heroe: 2, faccion: Some(3) },
             Comando::FijarFaccionDeHeroe { heroe: 2, faccion: None },

@@ -293,8 +293,9 @@ fn el_heroe_nace_con_su_clase_y_su_equipo_y_cambia_de_equipo_y_guarda_objetos_po
     assert_eq!(e.n.heroe(h).unwrap().heroe.mochila.casillas.values().map(|c| c.pieza.objeto.as_str()).collect::<Vec<_>>(), ["botas_media_inicio", "montura_tiro"]);
 }
 
-/// D1 y D2: las cuatro órdenes de la Armería y de los consumibles, de punta a punta, en una plaza con su Armería levantada. Ninguna orden da aún planos, crisoles ni consumibles
-/// (es el botín), así que la forja y usar llegan aquí hasta su primera regla; sus caminos buenos y cada rechazo, en `nucleo::armeria`.
+/// D1 y D2: las cuatro órdenes de la Armería y de los consumibles, de punta a punta, en una plaza con su Armería levantada, y la forja en cualquier plaza (Forja_En_Plazas):
+/// `configurar_forja`, la forja cerrada y abierta a un neutral de visita, la Era y lo que se ve. Los planos, los crisoles y los consumibles son del botín, que aquí no sale, así
+/// que la forja y usar llegan hasta su primera regla; sus caminos buenos y cada rechazo, en `nucleo::armeria`.
 #[test]
 fn en_la_armeria_se_compra_se_vende_se_forja_y_se_usa_por_orden() {
     let m = con_mundo!();
@@ -326,6 +327,29 @@ fn en_la_armeria_se_compra_se_vende_se_forja_y_se_usa_por_orden() {
     e.ok("ana", Comando::DesequiparObjeto { heroe: h, hueco: objetos::datos::Hueco::Montura });
     assert_eq!(e.rechazada("ana", Comando::UsarObjeto { heroe: h, casilla: 0, escuadra: None }), rechazos::OBJETO_NO_SE_USA, "la montura no se usa: se equipa");
     assert_eq!(e.rechazada("ana", Comando::UsarObjeto { heroe: h, casilla: 1, escuadra: None }), rechazos::INVENTARIO_CASILLA_VACIA);
+
+    // La forja en cualquier plaza (Forja_En_Plazas): beto, sin Facción y de visita, es neutral; de partida la forja está cerrada a los de fuera.
+    let beto = e.heroe("beto", 0);
+    e.ok("admin", Comando::ColocarHeroe { heroe: beto, ubicacion: Ubicacion::Asentamiento(a as u32) });
+    let forjar = |heroe, objeto: &str| Comando::ForjarObjeto { heroe, objeto: objeto.into() };
+    assert_eq!(e.rechazada("beto", forjar(beto, "dagas_cobre")), rechazos::FORJA_CERRADA);
+    // La abren el Tesorero o el Gobernador, residentes y dentro: el de la cuenta de ana, que la fundó; la de beto no tiene cargo.
+    let configurar = |grupo, abierta, recargo_pct| Comando::ConfigurarForja { asentamiento: a, grupo, abierta, recargo_pct };
+    assert_eq!(e.rechazada("beto", configurar(politica::Grupo::Neutrales, true, 0)), rechazos::NO_AUTORIZADO);
+    assert_eq!(e.rechazada("ana", configurar(politica::Grupo::Neutrales, true, 300)), rechazos::FORJA_RECARGO_INVALIDO);
+    e.ok("ana", configurar(politica::Grupo::Neutrales, true, 0));
+    assert_eq!(e.ord("ana", configurar(politica::Grupo::Neutrales, true, 0)).resultado, Resultado::SinCambios);
+    let h_cfg = &hechos(&e.n, "asentamiento.forja_configurada")[0];
+    assert_eq!((dato(h_cfg, "plaza"), dato(h_cfg, "abierta"), dato(h_cfg, "recargo")), (a as i64, 1, 0));
+    assert_eq!(e.rechazada("beto", forjar(beto, "dagas_cobre")), rechazos::FORJA_SIN_PLANO, "abierta: llega a la receta");
+    // Los tiers III a V piden su Era: el bronce abierto no basta en la Era I.
+    e.ok("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["metalurgia_cobre".into(), "aleacion_bronce".into()] });
+    assert_eq!(e.rechazada("beto", forjar(beto, "dagas_bronce")), rechazos::FORJA_ERA_CERRADA);
+    // Desde fuera se sabe que hay Armería; desde dentro, su forja y sus metales.
+    assert!(nucleo::proyeccion::vista::plaza_avistada(&e.n, a).armeria_activa);
+    let dentro = nucleo::proyeccion::vista::plaza_desde_dentro(&e.n, a);
+    let neutrales = dentro.forja.and_then(|f| f.neutrales).unwrap();
+    assert_eq!((neutrales.abierta, neutrales.recargo_pct, dentro.metales_armeria), (true, 0, vec!["bronce".to_owned(), "cobre".to_owned(), "inicio".to_owned()]));
 }
 
 // ───────────────────────────── 2. Reclutar en una plaza ─────────────────────────────

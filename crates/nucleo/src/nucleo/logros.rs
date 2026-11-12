@@ -284,6 +284,7 @@ impl Nucleo {
             self.registrar_aparicion(faccion, x, t);
         }
         self.estado.tecnologia.de_mut(&r, faccion).adoptadas = adoptadas;
+        self.tocar_armerias_de(faccion);
         // Lo adoptado es una condición `tecnologia` de otros hitos (6C).
         self.mirar_aparicion(faccion);
         Ok(true)

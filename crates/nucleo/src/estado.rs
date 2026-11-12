@@ -613,6 +613,27 @@ impl Forja {
         let cerrada = AperturaForja { abierta: false, recargo_pct: r.recargo_inicial_pct };
         Forja { aliados: cerrada, neutrales: cerrada, enemigos: cerrada, fondo: 0 }
     }
+
+    /// La apertura de un grupo de fuera de la puerta (`politica::puerta::grupo_de_puerta`). Los Aedas no forjan: `grupo_de_puerta` nunca los da para un héroe y
+    /// `configurar_forja` no los admite.
+    pub(crate) fn de(&self, g: politica::Grupo) -> AperturaForja {
+        match g {
+            politica::Grupo::Aliados => self.aliados,
+            politica::Grupo::Neutrales => self.neutrales,
+            politica::Grupo::Enemigos => self.enemigos,
+            politica::Grupo::Aedas => unreachable!("la forja no tiene apertura para los Aedas: no son el grupo de un héroe ni se configuran"),
+        }
+    }
+
+    /// La de [`Forja::de`], para cambiarla.
+    pub(crate) fn de_mut(&mut self, g: politica::Grupo) -> &mut AperturaForja {
+        match g {
+            politica::Grupo::Aliados => &mut self.aliados,
+            politica::Grupo::Neutrales => &mut self.neutrales,
+            politica::Grupo::Enemigos => &mut self.enemigos,
+            politica::Grupo::Aedas => unreachable!("la forja no tiene apertura para los Aedas: no son el grupo de un héroe ni se configuran"),
+        }
+    }
 }
 
 impl Asentamiento {
