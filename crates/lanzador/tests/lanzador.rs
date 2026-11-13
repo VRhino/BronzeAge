@@ -263,8 +263,22 @@ async fn con_conquest_sin_jugadores_la_ia_juega_la_batalla_y_el_resultado_se_apl
     let m = motor(n).await;
     let (mut rx, parar, h) = lanzar(config_conquest(&m, &exe, 2, "conquest-ia"));
     let v = hasta_en(&mut rx, Duration::from_secs(180), |i| matches!(i, Informe::Terminada { .. })).await;
-    assert!(matches!(v.last(), Some(Informe::Terminada { con_resultado: true, .. })), "{v:#?}");
     let aceptado = |mensaje: &str| v.iter().any(|i| matches!(i, Informe::Acuse { mensaje: x, resultado: Resultado::OrdenAceptada, .. } if x == mensaje));
+    // La batalla de verdad (`CONQUEST_BATALLA_REAL=1`) sigue el canon (Doc 5.15.1): quien no llega a conectarse sale sin castigo. Ana era la
+    // única humana, así que el motor cancela la batalla y el proceso acaba sin resultado, con los soldados de ana intactos.
+    if std::env::var("CONQUEST_BATALLA_REAL").as_deref() == Ok("1") {
+        assert!(aceptado("salida"), "{v:#?}");
+        assert!(matches!(v.last(), Some(Informe::Terminada { con_resultado: false, .. })), "{v:#?}");
+        let _ = parar.send(());
+        h.await.unwrap();
+        let n = m.parar().await;
+        assert_eq!(n.batalla(id).expect("retenida tras cancelarse").estado, EstadoBatalla::Cancelada);
+        let despues: i64 = suyas.iter().map(|e| n.heroe(ana).unwrap().heroe.escuadra(*e).map_or(0, |e| e.cantidad)).sum();
+        assert_eq!(despues, antes, "sale sin castigo");
+        return;
+    }
+    // Las cápsulas de prueba no tienen esa regla: pasada la espera, al héroe de ana lo juega la IA, y chocan siempre.
+    assert!(matches!(v.last(), Some(Informe::Terminada { con_resultado: true, .. })), "{v:#?}");
     assert!(aceptado("inicio") && aceptado("resultado"), "{v:#?}");
     let _ = parar.send(());
     h.await.unwrap();

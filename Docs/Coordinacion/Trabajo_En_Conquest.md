@@ -35,13 +35,17 @@ Conquest tiene dos papeles:
    - **Terreno:** sale del artefacto del mundo, por su hash y el centro, con la altura del paquete de relieve ([`06_Contrato_de_Mundo.md`](06_Contrato_de_Mundo.md) §4 y §8).
    - **Reglas:** la duración máxima y las versiones de los catálogos.
 7. **Incorporaciones:** quien se une con la batalla ya empezada.
-8. **Salidas:** `SalidaBatalla`, con el motivo, si quedó derrotado y los supervivientes y muertos de cada escuadra.
+8. **Salidas:** `SalidaBatalla`, con el motivo, si quedó derrotado y los supervivientes y muertos de cada escuadra. Cuándo saca Conquest a un héroe (decisiones del autor del 2026-11-12, sobre el Doc 5.15.1):
+   - **Se desconecta a media batalla:** la IA lleva a su héroe 60 s para que pueda volver; si no vuelve, sale (`desconexion`) con sus bajas y herido.
+   - **No llega a conectarse antes de empezar:** sale sin castigo (`no_conectado`) y el motor reabre la convocatoria sin él. No lo juega la IA.
+   - **Abandona:** una orden del jugador; sale (`abandono`) con sus bajas y herido.
+   - **Muere donde no se reaparece:** que el héroe reaparezca lo decide el tipo de batalla. **En campo abierto no reaparece:** al morir sale (`eliminado`), herido y con sus bajas. En asedio, caravana, campamento de bandidos, saqueo de pueblo y avanzada reaparece, igual los héroes de los jugadores que los de la IA.
 9. **El resultado:** ganador, razón y objetivos.
    - Por escuadra: desplegados, supervivientes al cierre y muertos.
-   - Por héroe: si participó, si sobrevivió y si quedó derrotado.
+   - Por héroe: si participó y si sobrevivió. **`derrotado` no se manda** (decisión del autor, 2026-11-12): el héroe gana o pierde con su bando, caiga o no en la batalla, y sin ese dato el motor hiere a los del bando perdedor ([`Batalla_Unity_Ciclo.md`](../Mechanics/Batalla_Unity_Ciclo.md) §9.1).
    - **Nada más** (D7, 2026-11-12): la experiencia y el botín los pone el motor (§7). `ResultadoEscuadra.xp_ganada` (5), `ResultadoHeroe.xp_ganada` (4) y `ResultadoHeroe.botin` (6) son `reserved`, y los mensajes `Botin` y `ObjetoBotin` ya no existen.
 10. **Rechazar el ticket** que traiga una tropa, una clase, un objeto o una versión de catálogo que no conozca. Las versiones van en `BattleRules`: `version_catalogo_tropas` (3, hoy 2: `VERSION_CATALOGO_TROPAS`), `version_catalogo_heroe` (4, la `version` de `CLASES_HEROE`, hoy `bronzeage-clases-1`) y `version_catalogo_objetos` (5, la de `OBJETOS`, hoy `bronzeage-objetos-1`, que sustituye a la fija `conquest-items-1`); los tres bloques se leen de `GET /v1/datos`.
-11. **IA:** maneja a los héroes con `controlador: bot` (también en bot contra bot) y a las escuadras sin héroe.
+11. **IA:** maneja a los héroes con `controlador: bot` (también en bot contra bot) y a las escuadras sin héroe. Cada escuadra sin héroe sale con un capitán de la IA que no figura en el resultado (decisión del autor, 2026-11-12).
 
 ## 2. Las tropas
 
