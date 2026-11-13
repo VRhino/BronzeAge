@@ -59,5 +59,5 @@
 
 ## 4. Cierre de las propuestas BA
 
-Las propuestas de `propuestas/` se absorben en este contrato; su cierre y la correspondencia con el `.proto` están en
-[`propuestas/CIERRE_FASE_2.md`](propuestas/CIERRE_FASE_2.md).
+Las propuestas BA-001 a BA-006 se absorbieron en este contrato. Su cierre y la correspondencia con el `.proto` están en el
+historial de git (`Docs/Coordinacion/propuestas/CIERRE_FASE_2.md`, retirado el 2026-11-13 con el modelo de cooperación).

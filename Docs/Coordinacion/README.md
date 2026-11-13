@@ -20,8 +20,7 @@ que rompa es `bronzeage.v2` con plan de migración.
 | **Mundo** (artefacto por hash y paquete de Unity) | `world.proto` | [`06_Contrato_de_Mundo.md`](06_Contrato_de_Mundo.md) |
 | **Cómo lo consumen otros repositorios** (bots, admin web, cliente de jugador): crate `contrato` por ruta o git, `buf generate` en TypeScript, revisión fija | `crates/contrato`, `contratos/ts` | [`08_Consumo_del_Contrato.md`](08_Consumo_del_Contrato.md) |
 | **Lo pendiente para el cliente jugador**: los cambios del motor que tiene que recoger, acumulados para pasárselos de golpe | — | [`Pendientes_Cliente_Jugador.md`](Pendientes_Cliente_Jugador.md) |
-| **Lo que falta en Conquest** para jugar las batallas del motor: red, tropas, clases, objetos, cliente y arte, con lo que espera al motor | — | [`Trabajo_En_Conquest.md`](Trabajo_En_Conquest.md) |
-| Propuestas entrantes de Codex/Conquest (`BA-*`) y su cierre | [`propuestas/`](propuestas/README.md) | [`propuestas/CIERRE_FASE_2.md`](propuestas/CIERRE_FASE_2.md) |
+| **Lo que falta en Conquest** para jugar las batallas del motor: red, tropas, clases, objetos, cliente y arte, con lo que espera al motor. El plan y el estado, en la hoja de ruta de Conquest (`Conquest_prototype/Docs/Hoja_De_Ruta.md`) | — | [`Trabajo_En_Conquest.md`](Trabajo_En_Conquest.md) |
 
 El contrato HTTP y de canales del servidor TypeScript (`01` modelo JSON, `02` HTTP, `03` tiempo real por segmentos, `04` migración) está en
 `typescript-final:Docs/Coordinacion/`.
