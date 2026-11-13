@@ -252,7 +252,7 @@ fn la_ficha_de_una_plaza_ajena_es_lo_ultimo_que_se_vio_de_ella_y_cuando_y_nunca_
 fn sin_bandera_lo_explorado_es_del_heroe_y_pasa_a_su_faccion_cuando_entra_en_una() {
     let m = con_mundo!();
     let mut e = Esc { n: nucleo(m), peticiones: 0 };
-    let h = e.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
+    let h = e.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into(), aspecto: Default::default() }).creadas[0];
     let col = e.ok("eva", Comando::SalirDelCampamento { campamento: 0, heroe: h, escuadras: vec![], carga: vec![], politica: militar::columna::Politica::Rechazar, caravana_fundacion: None }).creadas[0];
     assert_eq!(e.n.ejercito(col).unwrap().columna.faccion, None, "un héroe sin Facción anda sin bandera");
     let p = e.n.ejercito(col).unwrap().posicion;
@@ -401,7 +401,7 @@ fn partida(m: &M, sesiones: bool, trozos: i64) -> Nucleo {
     let sitio = sitio_rico(&e.n, &m.0, 1, 2);
     e.plaza("gus", 2, sitio);
     let col = e.columna("ana", 1, en_tierra(&m.0, sitio, -60 * U, 10 * U));
-    let h = e.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
+    let h = e.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into(), aspecto: Default::default() }).creadas[0];
     let sola = e.ok("eva", Comando::SalirDelCampamento { campamento: 0, heroe: h, escuadras: vec![], carga: vec![], politica: militar::columna::Politica::Rechazar, caravana_fundacion: None }).creadas[0];
     let p = e.n.ejercito(sola).unwrap().posicion;
     for (k, destino) in [(0, en_tierra(&m.0, sitio, 70 * U, 10 * U)), (1, en_tierra(&m.0, sitio, 0, -40 * U)), (2, en_tierra(&m.0, sitio, -60 * U, 0))].into_iter() {
@@ -428,7 +428,7 @@ fn la_memoria_es_la_misma_con_sesiones_y_sin_ellas_y_avanzando_a_trozos_y_viaja_
     assert!(mem.exploracion.contains_key(&1) && mem.fichas.contains_key(&1) && !mem.personal.is_empty() && !mem.vigias.is_empty(), "la partida graba de todo");
 
     let bytes = a.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN63");
+    assert_eq!(&bytes[..5], b"BAN64");
     let vuelta = Estado::deserializar(&bytes, &reglas(), m.0.hash()).expect("la foto vuelve");
     assert_eq!(vuelta.memoria, *mem);
     assert_eq!(vuelta.serializar(), bytes);

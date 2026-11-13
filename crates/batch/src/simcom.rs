@@ -394,7 +394,7 @@ impl Sim<'_> {
             let Ok(columna) = self.n.crear_ejercito(t, &jugador(f), f, p, VELOCIDAD, VIVERES) else { continue };
             // Su héroe nace en el campamento más cercano y va en la columna; sin residencia, es un visitante de todos los campamentos.
             let (campamento, cuenta) = (self.campamento_mas_cercano(p), format!("{}-{k}", jugador(f)));
-            let h = self.admin(t, "CrearHeroe", Comando::CrearHeroe { cuenta: cuenta.clone(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() });
+            let h = self.admin(t, "CrearHeroe", Comando::CrearHeroe { cuenta: cuenta.clone(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into(), aspecto: Default::default() });
             let Some(&heroe) = h.creadas.first().filter(|_| h.aceptada()) else { continue };
             self.admin(t, "FijarResidencia", Comando::FijarResidencia { heroe, residencia: None });
             self.admin(t, "ColocarHeroe", Comando::ColocarHeroe { heroe, ubicacion: Ubicacion::Columna(columna) });

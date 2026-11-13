@@ -351,6 +351,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 |---|---|---|
 | `heroe.ya_existe` | `HEROE_YA_EXISTE` | — |
 | `heroe.nombre_invalido` | `HEROE_NOMBRE_INVALIDO` | El nombre del héroe está vacío, empieza o acaba en espacio, pasa de 24 caracteres o lleva caracteres de control. |
+| `heroe.aspecto_invalido` | `HEROE_ASPECTO_INVALIDO` | Una pieza del avatar (cabeza, pelo, barba o cejas) trae un id sin forma de id: más de 32 caracteres o alguno que no sea letra ASCII, cifra, `_` o `-` (2026-11-13; aún no hay catálogo de piezas de Conquest). |
 | `heroe.nombre_en_uso` | `HEROE_NOMBRE_EN_USO` | Ya hay otro héroe con ese nombre (sin distinguir mayúsculas; 2026-11-06, pedido del autor). |
 | `heroe.sin_monedas` | `HEROE_SIN_MONEDAS` | El héroe no tiene las monedas que cuesta (tanda 69 §4). |
 | `heroe.campamento_desconocido` | `HEROE_CAMPAMENTO_DESCONOCIDO` | — |

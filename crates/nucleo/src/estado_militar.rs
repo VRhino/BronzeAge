@@ -140,6 +140,33 @@ pub enum Trato {
     Enemiga,
 }
 
+/// El aspecto del héroe (Heroe_Y_Tropa §3, 2026-11-13): el género y las piezas del avatar que eligió al crearlo en Conquest. El motor solo lo guarda y lo devuelve
+/// (en su `HEROE`, en el héroe público de la `VISTA` y en el ticket de batalla): no hay catálogo de piezas todavía, así que cada id se mira solo por su forma
+/// ([`Aspecto::pieza_valida`]). Vacío = la pieza por defecto de Conquest.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Aspecto {
+    pub femenino: bool,
+    pub cabeza: String,
+    pub pelo: String,
+    pub barba: String,
+    pub cejas: String,
+}
+
+impl Aspecto {
+    /// Lo más largo que puede ser el id de una pieza.
+    pub const PIEZA_MAX: usize = 32;
+
+    /// ¿Tiene forma de id de pieza? Vacío, o de 1 a [`Aspecto::PIEZA_MAX`] letras ASCII, cifras, `_` o `-` (los de Conquest son del estilo `head_00`).
+    pub fn pieza_valida(id: &str) -> bool {
+        id.len() <= Self::PIEZA_MAX && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+    }
+
+    /// Las cuatro piezas, con su nombre: para validar y para los mensajes.
+    pub fn piezas(&self) -> [(&'static str, &str); 4] {
+        [("cabeza", &self.cabeza), ("pelo", &self.pelo), ("barba", &self.barba), ("cejas", &self.cejas)]
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct EstadoMilitar {
     /// Todos los héroes, por id ascendente.
@@ -155,6 +182,9 @@ pub struct EstadoMilitar {
     pub eligieron: BTreeMap<u32, u32>,
     /// El nombre que eligió el jugador para cada héroe que lo tiene (`crearHeroe`, 2026-10-27; BAN43): el que falta se llama «Héroe N». Un héroe no se borra, así que nada lo quita.
     pub nombres: BTreeMap<u64, String>,
+    /// El aspecto que eligió el jugador para cada héroe que lo tiene (`crearHeroe`, 2026-11-13; BAN64): el género y las piezas del avatar de Conquest. El que falta es el
+    /// de por defecto (masculino, piezas vacías). Un héroe no se borra, así que nada lo quita.
+    pub aspectos: BTreeMap<u64, Aspecto>,
     /// Plaza → héroes que residen en ella. Es un índice de `Heroe::residencia`: se reconstruye al recuperar y solo lo toca [`EstadoMilitar::mudar`].
     /// Con él, el paso de un minuto de una plaza sin residentes cuesta una consulta.
     pub(crate) residentes: BTreeMap<u64, BTreeSet<u64>>,

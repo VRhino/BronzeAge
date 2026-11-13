@@ -2,8 +2,8 @@
 //! el orden de sus escuadras y estar herido. Sus escuadras viven en él (`escuadras`), estén donde estén.
 //!
 //! La clase sale del arma puesta y los atributos son la base de esa clase más los puntos repartidos (Objetos_Del_Heroe §3.2, D16): el héroe guarda solo
-//! los puntos, su equipo, su mochila y su almacén de objetos (D22), y las reglas de los objetos son del crate `objetos`. El avatar y el género son de Conquest
-//! y no se modelan aquí. Las habilidades y los perks se abren solos con el nivel y los define Conquest (D15): el motor no los guarda.
+//! los puntos, su equipo, su mochila y su almacén de objetos (D22), y las reglas de los objetos son del crate `objetos`. El avatar y el género los elige el jugador en Conquest
+//! y los guarda el núcleo (`estado_militar::Aspecto`), no este crate. Las habilidades y los perks se abren solos con el nivel y los define Conquest (D15): el motor no los guarda.
 
 use crate::datos::Reglas;
 use crate::escuadra::Escuadra;
@@ -177,7 +177,8 @@ impl Heroe {
     }
 
     /// Suma experiencia de combate (milésimas) y sube los niveles que cruce (Heroe_Y_Tropa §4.3). Cada nivel hasta `nivelDeTope` da un punto de
-    /// atributo y `LIDERAZGO.porNivel` de Liderazgo, sin pasar de `LIDERAZGO.tope`; desde el siguiente, el nivel sube sin dar nada. Devuelve si subió.
+    /// atributo; el Liderazgo pasa al de su nivel nuevo ([`liderazgo_para_nivel`], 100 en el `LIDERAZGO.nivelDelTope`) si es mayor; desde el siguiente al de tope, el nivel
+    /// sube sin dar nada. Devuelve si subió.
     pub fn con_experiencia(&mut self, r: &Reglas, ganada: Mil) -> bool {
         let antes = self.nivel;
         self.experiencia += ganada.max(0);
@@ -185,10 +186,8 @@ impl Heroe {
             self.nivel += 1;
             if self.nivel <= r.progresion.nivel_de_tope {
                 self.puntos_de_atributo += 1;
-                if self.liderazgo_base < r.liderazgo.tope {
-                    self.liderazgo_base = (self.liderazgo_base + r.liderazgo.por_nivel).min(r.liderazgo.tope);
-                }
             }
+            self.liderazgo_base = self.liderazgo_base.max(liderazgo_para_nivel(r, self.nivel));
         }
         self.nivel != antes
     }
@@ -310,13 +309,27 @@ impl Heroe {
     }
 }
 
-/// La experiencia acumulada con la que se llega al nivel `nivel` (1 o más): `pide(n) = experienciaBase + experienciaPorNivel × (min(n, nivelDeTope) − 1)` por cada
-/// nivel `n` por debajo. Con la curva de hoy, 11.020 en el 30 y 680 más por cada uno desde ahí.
-pub fn experiencia_para_nivel(r: &Reglas, nivel: u32) -> Mil {
+/// Lo que pide pasar del nivel `nivel` (1 o más) al siguiente (2026-11-13): `experienciaBase` del 1 al 2 y, desde ahí, lo del anterior más la `suma` del último tramo de
+/// `incrementos` que ha empezado; desde el `nivelDeTope`, lo mismo que en él. Con la curva de hoy: 3, 6… 27 (al 10), 37… 127 (al 20), 147… 727 (al 50) y 747 desde ahí.
+pub fn experiencia_para_subir(r: &Reglas, nivel: u32) -> Mil {
     let p = &r.progresion;
-    let curva = i64::from(nivel.min(p.nivel_de_tope).max(1) - 1);
-    let llano = i64::from(nivel.saturating_sub(p.nivel_de_tope));
-    curva * p.experiencia_base + p.experiencia_por_nivel * curva * (curva - 1) / 2 + llano * (p.experiencia_base + p.experiencia_por_nivel * i64::from(p.nivel_de_tope - 1))
+    (2..=nivel.min(p.nivel_de_tope)).fold(p.experiencia_base, |pide, n| pide + p.incrementos.iter().rev().find(|t| t.0 <= n).map_or(0, |t| t.1))
+}
+
+/// La experiencia acumulada con la que se llega al nivel `nivel` (1 o más): la suma de lo que pide cada nivel por debajo ([`experiencia_para_subir`]). Con la curva de hoy,
+/// 135 en el 10, 955 en el 20, 3.325 en el 30 y 14.065 en el 50.
+pub fn experiencia_para_nivel(r: &Reglas, nivel: u32) -> Mil {
+    let tope = r.progresion.nivel_de_tope;
+    let curva: Mil = (1..nivel.min(tope).max(1)).map(|n| experiencia_para_subir(r, n)).sum();
+    curva + i64::from(nivel.saturating_sub(tope)) * experiencia_para_subir(r, tope)
+}
+
+/// El Liderazgo del nivel `nivel` (2026-11-13): de `LIDERAZGO.base` en el 1 a `LIDERAZGO.tope` en el `nivelDelTope`, repartido a partes iguales y redondeado hacia abajo
+/// (14, 17, 21, 24… 100 en el 25 con los números de hoy).
+pub fn liderazgo_para_nivel(r: &Reglas, nivel: u32) -> i64 {
+    let l = &r.liderazgo;
+    let tramo = i64::from(l.nivel_del_tope.max(2) - 1);
+    l.base + (l.tope - l.base) * i64::from(nivel.clamp(1, l.nivel_del_tope) - 1) / tramo
 }
 
 /// Los ids de los héroes heridos en `ahora` (lo que los resolutores de combate necesitan para apartarlos).
@@ -347,7 +360,7 @@ mod pruebas {
         Heroe::nuevo(&r(), 1, Controlador::Humano, 3, 100, CLASE).expect("una clase del catálogo")
     }
 
-    /// Un héroe con el Liderazgo del tope (100), como si hubiera llegado al nivel 30: el de los loadouts con varias escuadras.
+    /// Un héroe con el Liderazgo del tope (100), como si hubiera llegado al nivel 25: el de los loadouts con varias escuadras.
     fn heroe_de_tope() -> Heroe {
         Heroe { liderazgo_base: r().liderazgo.tope, ..heroe() }
     }
@@ -389,42 +402,46 @@ mod pruebas {
     }
 
     #[test]
-    fn la_curva_pide_100_120_y_20_mas_cada_nivel_hasta_el_30_y_luego_680_sin_fin() {
+    fn la_curva_pide_3_y_3_mas_hasta_el_10_10_mas_hasta_el_20_y_20_mas_hasta_el_50_y_luego_747_sin_fin() {
         let r = r();
         let pide = |n: u32| experiencia_para_nivel(&r, n + 1) - experiencia_para_nivel(&r, n);
-        assert_eq!((experiencia_para_nivel(&r, 1), experiencia_para_nivel(&r, 2), experiencia_para_nivel(&r, 3)), (0, 100_000, 220_000));
-        assert_eq!((pide(1), pide(2), pide(3), pide(29)), (100_000, 120_000, 140_000, 660_000));
-        assert_eq!(experiencia_para_nivel(&r, 30), 11_020_000, "11.020 en el 30");
-        assert_eq!((pide(30), pide(31), pide(100)), (680_000, 680_000, 680_000), "desde el 30, 680 por nivel sin fin");
-        assert_eq!(experiencia_para_nivel(&r, 12), 2_200_000, "la curva de Heroe_Y_Tropa §4.3");
+        assert!((1..120).all(|n| pide(n) == experiencia_para_subir(&r, n)), "lo que pide cada nivel es la diferencia de las acumuladas");
+        assert_eq!((experiencia_para_nivel(&r, 1), experiencia_para_nivel(&r, 2), experiencia_para_nivel(&r, 3)), (0, 3_000, 9_000));
+        assert_eq!((pide(1), pide(2), pide(3), pide(9)), (3_000, 6_000, 9_000, 27_000), "de 3 en 3 hasta el 10");
+        assert_eq!((pide(10), pide(11), pide(19)), (37_000, 47_000, 127_000), "de 10 en 10 hasta el 20");
+        assert_eq!((pide(20), pide(21), pide(49)), (147_000, 167_000, 727_000), "de 20 en 20 hasta el 50");
+        assert_eq!((experiencia_para_nivel(&r, 10), experiencia_para_nivel(&r, 20), experiencia_para_nivel(&r, 30), experiencia_para_nivel(&r, 50)), (135_000, 955_000, 3_325_000, 14_065_000));
+        assert_eq!((pide(50), pide(51), pide(100)), (747_000, 747_000, 747_000), "desde el 50, 747 por nivel sin fin");
     }
 
     #[test]
-    fn subir_de_nivel_da_un_punto_y_3_de_liderazgo_hasta_el_30_y_despues_nada() {
+    fn subir_de_nivel_da_un_punto_hasta_el_50_y_despues_nada() {
         let r = r();
         let mut h = heroe();
-        assert!(!h.con_experiencia(&r, 99_999), "le falta una milésima");
+        assert!(!h.con_experiencia(&r, 2_999), "le falta una milésima");
         assert_eq!((h.nivel, h.falta_para_subir(&r)), (1, 1));
         assert!(h.con_experiencia(&r, 1));
-        assert_eq!((h.nivel, h.puntos_de_atributo, h.liderazgo_base, h.falta_para_subir(&r)), (2, 1, 17, 120_000));
-        // Del 2 al 30 de una vez: cada nivel cruzado cuenta.
-        assert!(h.con_experiencia(&r, experiencia_para_nivel(&r, 30) - h.experiencia));
-        assert_eq!((h.nivel, h.puntos_de_atributo, h.liderazgo_base, h.falta_para_subir(&r)), (30, 29, 100, 680_000), "14 + 29 × 3 no pasa de 100");
-        assert!(h.con_experiencia(&r, 680_000 * 3));
-        assert_eq!((h.nivel, h.puntos_de_atributo, h.liderazgo_base), (33, 29, 100), "desde el 31 el nivel sube sin dar nada");
+        assert_eq!((h.nivel, h.puntos_de_atributo, h.liderazgo_base, h.falta_para_subir(&r)), (2, 1, 17, 6_000));
+        // Del 2 al 50 de una vez: cada nivel cruzado cuenta.
+        assert!(h.con_experiencia(&r, experiencia_para_nivel(&r, 50) - h.experiencia));
+        assert_eq!((h.nivel, h.puntos_de_atributo, h.liderazgo_base, h.falta_para_subir(&r)), (50, 49, 100, 747_000));
+        assert!(h.con_experiencia(&r, 747_000 * 3));
+        assert_eq!((h.nivel, h.puntos_de_atributo, h.liderazgo_base), (53, 49, 100), "desde el 51 el nivel sube sin dar nada");
     }
 
     #[test]
-    fn el_liderazgo_sube_de_3_en_3_desde_14_hasta_100() {
+    fn el_liderazgo_va_de_14_a_100_en_el_25_de_3_o_4_por_nivel() {
         let r = r();
         let mut h = heroe();
         let mut vistos = vec![h.liderazgo_base];
-        for n in 2..=31 {
+        for n in 2..=27 {
             h.con_experiencia(&r, experiencia_para_nivel(&r, n) - h.experiencia);
             vistos.push(h.liderazgo_base);
         }
-        assert_eq!(&vistos[..4], &[14, 17, 20, 23]);
-        assert_eq!((vistos[9], vistos[11], vistos[28], vistos[29], vistos[30]), (41, 47, 98, 100, 100), "nivel 10, 12, 29, 30 y 31");
+        assert_eq!(&vistos[..6], &[14, 17, 21, 24, 28, 31]);
+        assert_eq!((vistos[9], vistos[19], vistos[23], vistos[24], vistos[25], vistos[26]), (46, 82, 96, 100, 100, 100), "nivel 10, 20, 24, 25, 26 y 27");
+        assert!(vistos.windows(2).take(24).all(|w| matches!(w[1] - w[0], 3 | 4)), "3 o 4 por nivel hasta el 25");
+        assert!((1..=60).all(|n| liderazgo_para_nivel(&r, n) == vistos.get(n as usize - 1).copied().unwrap_or(100)));
     }
 
     #[test]

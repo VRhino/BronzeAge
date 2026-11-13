@@ -573,7 +573,7 @@ fn el_resultado_deja_las_bajas_la_experiencia_el_botin_el_carro_y_la_chatarra_y_
     // El héroe suma su experiencia (la de su bando, una vez) y las monedas de ganar a otra Facción (`MONEDAS.ganador`; al perdedor, `MONEDAS.perdedor`): Unity no manda botín (D7).
     let monedas = combate::Reglas::cargar().monedas;
     let h = &x.n.heroe(ana.1).unwrap().heroe;
-    assert_eq!((h.experiencia, h.nivel, h.monedas), (4_000, 1, monedas0 + monedas.ganador));
+    assert_eq!((h.experiencia, h.nivel, h.monedas), (4_000, 2, monedas0 + monedas.ganador), "4 de experiencia pasan del 3 que pide el nivel 2");
     assert_eq!(x.n.heroe(beto.1).unwrap().heroe.experiencia, 2_000);
     assert_eq!(x.n.heroe(beto.1).unwrap().heroe.monedas, monedas0 + monedas.perdedor, "el perdedor de otra Facción también cobra");
     assert_eq!(x.n.estado().combate.encuentros.get(&(1, 2)).map(Vec::len), Some(1), "y el par anota su encuentro");
@@ -1028,7 +1028,7 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_y_cada_campo_cambia_el_hash(
     let (n, id) = a_mitad();
     let reglas = reglas_unity();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN63");
+    assert_eq!(&bytes[..5], b"BAN64");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "hash-de-prueba").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.batallas, n.estado().batallas);
@@ -1363,7 +1363,7 @@ impl Esc {
     /// Un héroe humano de la cuenta, ciudadano de `faccion`, que reside en la plaza y está dentro.
     fn heroe_en(&mut self, m: &Mundo, cuenta: &str, faccion: u32, plaza: u64) -> u64 {
         let campamento = campamento_mas_cercano(m, self.pos(plaza));
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into(), aspecto: Default::default() }).creadas[0];
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(faccion) });
         self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
         self.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(plaza as u32) });
@@ -2191,7 +2191,7 @@ fn los_bandidos_que_acosan_una_columna_con_dos_caravanas_juegan_las_dos_en_la_mi
 
         // La foto a mitad de la batalla lleva las dos caravanas y vuelve idéntica; la del formato anterior (una sola caravana) se rechaza con su motivo.
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN63");
+        assert_eq!(&bytes[..5], b"BAN64");
         let vuelta = nucleo::Estado::deserializar(&bytes, &arranque_mundo(m, 7).reglas, &m.0.hash().to_string()).unwrap();
         assert_eq!((vuelta.serializar(), vuelta.batallas.clone()), (bytes.clone(), e.n.estado().batallas.clone()));
 

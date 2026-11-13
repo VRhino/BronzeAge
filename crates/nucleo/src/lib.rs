@@ -106,7 +106,7 @@ pub use estado_batallas::{entidad_batalla, EstadoBatallas};
 pub use estado_combate::{entidad_avanzada, entidad_bandidos, entidad_conquista, entidad_guarnicion, es_entidad_avanzada, es_entidad_bandidos, CampamentoBandidos, EstadoCombate, GuarnicionDeAvanzada, GuarnicionDePueblo, OrigenBandidos};
 pub use estado_fundacion::{entidad_fundacion, CaravanaFundacion, EstadoFundacion, Origen as OrigenFundacion, Situacion as SituacionFundacion};
 pub use estado_comercio::{entidad_caravana, entidad_orden, entidad_reputacion, entidad_trueque, EstadoComercio};
-pub use estado_militar::{entidad_formacion, entidad_peticion_de_convocatoria, entidad_peticion_de_union, EstadoMilitar, HeroeNucleo, Relacion, Trato};
+pub use estado_militar::{entidad_formacion, entidad_peticion_de_convocatoria, entidad_peticion_de_union, Aspecto, EstadoMilitar, HeroeNucleo, Relacion, Trato};
 pub use generadores::{Cx, GeneradorDeEventos};
 pub use nucleo::{Alijo, Ajustes, Arranque, ErrorPresupuesto, InformeViabilidad, Miembro, Metricas, Nucleo, Presupuesto, RecintoEnPie, TokenDeJugador, HISTORICO_DE_BATALLAS};
 

@@ -50,8 +50,9 @@ fn por_escalon(v: &Value) -> [f64; 5] {
 pub struct ReglasLiderazgo {
     /// Liderazgo con el que nace un héroe, en el nivel 1 (`LIDERAZGO.base`).
     pub base: i64,
-    /// Lo que suma cada nivel que cruza hasta el de tope de la progresión (`porNivel`), sin pasar de `tope` (Heroe_Y_Tropa §4.3).
-    pub por_nivel: i64,
+    /// El nivel en que llega a `tope` (`nivelDelTope`, 2026-11-13): en el nivel `n` tiene `base + (tope − base) × (min(n, nivelDelTope) − 1) / (nivelDelTope − 1)`, redondeado hacia abajo
+    /// (Heroe_Y_Tropa §4.3).
+    pub nivel_del_tope: u32,
     pub tope: i64,
     /// Coste de una escuadra por escalón (1 a 5).
     pub coste_por_escalon: [i64; 5],
@@ -66,13 +67,15 @@ pub struct ReglasHeroe {
     pub herido: i64,
 }
 
-/// La curva del héroe (`PROGRESION_HEROE`, Heroe_Y_Tropa §4.3): pasar del nivel `n` al `n + 1` pide `experienciaBase + experienciaPorNivel × (min(n, nivelDeTope) − 1)`.
-/// Hasta `nivelDeTope` cada nivel da un punto de atributo y Liderazgo; desde ahí el nivel sigue subiendo sin dar nada.
+/// La curva del héroe (`PROGRESION_HEROE`, Heroe_Y_Tropa §4.3; 2026-11-13): pasar del nivel 1 al 2 pide `experienciaBase` y pasar del `n` al `n + 1` pide lo del anterior más la
+/// `suma` del último tramo de `incrementos` cuyo `desdeNivel` no pasa de `min(n, nivelDeTope)`. Hasta `nivelDeTope` cada nivel da un punto de atributo; desde ahí el nivel sigue
+/// subiendo sin dar nada y cada uno pide lo mismo.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReglasProgresion {
     /// En milésimas de punto, como la experiencia que guarda el héroe.
     pub experiencia_base: Mil,
-    pub experiencia_por_nivel: Mil,
+    /// `(desdeNivel, suma)` por `desdeNivel` ascendente; la suma en milésimas.
+    pub incrementos: Vec<(u32, Mil)>,
     pub nivel_de_tope: u32,
 }
 
@@ -283,11 +286,13 @@ impl Reglas {
             tropas: Catalogo::de(&bloque(HEROE_Y_TROPA, "TROPAS_RECLUTABLES")),
             version_catalogo_tropas: entero(&bloque(HEROE_Y_TROPA, "VERSION_CATALOGO_TROPAS"), "version") as u32,
             formaciones: crate::formaciones::ReglasFormaciones::de(&bloque(HEROE_Y_TROPA, "FORMACIONES")),
-            liderazgo: ReglasLiderazgo { base: entero(&l, "base"), por_nivel: entero(&l, "porNivel"), tope: entero(&l, "tope"), coste_por_escalon: por_escalon(&l["costePorEscalon"]).map(|x| x as i64) },
+            liderazgo: ReglasLiderazgo { base: entero(&l, "base"), nivel_del_tope: entero(&l, "nivelDelTope") as u32, tope: entero(&l, "tope"), coste_por_escalon: por_escalon(&l["costePorEscalon"]).map(|x| x as i64) },
             heroe: ReglasHeroe { monedas_iniciales: entero(&h, "monedasIniciales"), tope_atributo: entero(&h, "topeAtributo"), herido: entero(&h, "heridoMinutos") * MS_POR_MINUTO },
             progresion: {
                 let p = bloque(HEROE_Y_TROPA, "PROGRESION_HEROE");
-                ReglasProgresion { experiencia_base: mil(num(&p, "experienciaBase")), experiencia_por_nivel: mil(num(&p, "experienciaPorNivel")), nivel_de_tope: entero(&p, "nivelDeTope") as u32 }
+                let incrementos = p["incrementos"].as_array().expect("PROGRESION_HEROE.incrementos").iter().map(|t| (entero(t, "desdeNivel") as u32, mil(num(t, "suma")))).collect::<Vec<_>>();
+                assert!(incrementos.windows(2).all(|w| w[0].0 < w[1].0) && incrementos.first().is_some_and(|t| t.0 >= 2), "PROGRESION_HEROE.incrementos: desde el nivel 2 y por nivel ascendente");
+                ReglasProgresion { experiencia_base: mil(num(&p, "experienciaBase")), incrementos, nivel_de_tope: entero(&p, "nivelDeTope") as u32 }
             },
             guarnicion: ReglasGuarnicion {
                 por_nivel_edificio: enteros(lista(&g, "cupoPorNivelEdificio")),
@@ -439,8 +444,8 @@ mod pruebas {
     #[test]
     fn las_cifras_vigentes_son_las_de_los_bloques_sin_correcciones() {
         let r = Reglas::cargar();
-        assert_eq!((r.liderazgo.base, r.liderazgo.por_nivel, r.liderazgo.tope, r.liderazgo.coste_por_escalon), (14, 3, 100, [7, 14, 22, 32, 45]));
-        assert_eq!(r.progresion, ReglasProgresion { experiencia_base: 100_000, experiencia_por_nivel: 20_000, nivel_de_tope: 30 });
+        assert_eq!((r.liderazgo.base, r.liderazgo.nivel_del_tope, r.liderazgo.tope, r.liderazgo.coste_por_escalon), (14, 25, 100, [7, 14, 22, 32, 45]));
+        assert_eq!(r.progresion, ReglasProgresion { experiencia_base: 3_000, incrementos: vec![(2, 3_000), (10, 10_000), (20, 20_000)], nivel_de_tope: 50 });
         assert_eq!((r.heroe.monedas_iniciales, r.heroe.tope_atributo, r.heroe.herido), (1_500, 100, 2 * MS_POR_MINUTO));
         assert_eq!(r.version_catalogo_tropas, 2, "la de las cifras de combate de las tropas (Heroe_Y_Tropa §12)");
         assert_eq!(r.guarnicion.por_nivel_edificio, vec![7, 14, 22]);

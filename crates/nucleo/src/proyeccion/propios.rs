@@ -5,9 +5,9 @@
 //!
 //! Qué ámbito recibe qué lo decide [`super::audiencia`]; aquí solo se dice **qué es** cada cosa en el contrato. Las entidades viajan completas (`reemplaza = true`, decisión 2).
 //!
-//! DUDA: el contrato trae más de lo que el núcleo guarda; hasta que existan sus sistemas, esos campos van a su valor por defecto: género y avatar del héroe (decisión 4), la
+//! DUDA: el contrato trae más de lo que el núcleo guarda; hasta que existan sus sistemas, esos campos van a su valor por defecto: la
 //! exploración personal y el titular de una caravana. (El almacén de una avanzada va por recurso desde el 2026-10-27; la clase, la mochila, el almacén de objetos y el equipo
-//! del héroe son los reales desde el 2026-11-12.)
+//! del héroe son los reales desde el 2026-11-12, y su género y su avatar, desde el 2026-11-13.)
 
 use super::{audiencia, batalla, ids, mercenarios, plan, punto, ritmo};
 use crate::estado::{Clase, Ejercito};
@@ -106,6 +106,12 @@ pub(super) fn batalla_sobre(n: &Nucleo, lugar: Ubicacion) -> Option<String> {
 /// El nombre de un héroe: el que eligió el jugador al crearlo (2026-10-27) o, si no eligió ninguno, «Héroe N».
 pub(super) fn nombre_de_heroe(n: &Nucleo, id: u64) -> String {
     n.estado().militar.nombres.get(&id).cloned().unwrap_or_else(|| format!("Héroe {id}"))
+}
+
+/// El aspecto de un héroe en el contrato (2026-11-13): si es femenino y su avatar, los que eligió al crearlo (o los de por defecto: masculino y piezas vacías).
+pub(super) fn aspecto_de_heroe(n: &Nucleo, id: u64) -> (bool, pb::Avatar) {
+    let a = n.estado().militar.aspectos.get(&id).cloned().unwrap_or_default();
+    (a.femenino, pb::Avatar { cabeza_id: a.cabeza, pelo_id: a.pelo, barba_id: a.barba, cejas_id: a.cejas })
 }
 
 /// Los atributos de un héroe en el contrato (`atributos_base` del héroe y `atributos_efectivos` del ticket, D16): la base de la clase de su arma más los puntos repartidos.
@@ -211,7 +217,8 @@ pub fn heroe(n: &Nucleo, h: &HeroeNucleo) -> pb::Heroe {
         es_bot: h.heroe.controlador == militar::heroe::Controlador::Bot,
         display_name: nombre_de_heroe(n, h.heroe.id),
         class_definition_id: h.heroe.clase(r).to_owned(),
-        avatar: Some(pb::Avatar::default()),
+        femenino: aspecto_de_heroe(n, h.heroe.id).0,
+        avatar: Some(aspecto_de_heroe(n, h.heroe.id).1),
         nivel: h.heroe.nivel,
         experiencia_hacia_siguiente_nivel: h.heroe.falta_para_subir(r).max(0) as u64,
         puntos_de_atributo_sin_gastar: h.heroe.puntos_de_atributo.max(0) as u32,

@@ -106,7 +106,7 @@ impl X {
         assert!(self.cumplida(d, id), "{id} no se cumple con su hecho: {:?}", self.n.misiones_de(d));
     }
     fn heroe(&mut self, cuenta: &str, campamento: u32) -> u64 {
-        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0]
+        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into(), aspecto: Default::default() }).creadas[0]
     }
     /// Una columna de administración de la cuenta en `p`: (columna, héroe).
     fn columna(&mut self, cuenta: &str, faccion: u32, p: Punto, viveres: i64) -> (u64, u64) {

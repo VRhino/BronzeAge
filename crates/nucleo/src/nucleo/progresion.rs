@@ -103,14 +103,14 @@ mod pruebas {
     #[test]
     fn el_heroe_que_cruza_un_nivel_gana_su_punto_y_su_liderazgo_y_emite_nivel_subio() {
         let mut n = nucleo_con_heroe();
-        n.experiencia_de_heroe(0, HEROE, 99_500);
+        n.experiencia_de_heroe(0, HEROE, 2_500);
         let h = &n.heroe(HEROE).unwrap().heroe;
         assert_eq!((h.nivel, h.puntos_de_atributo, h.liderazgo_base), (1, 0, 14));
-        assert!(n.tr.eventos.iter().all(|e| e.codigo != "heroe.nivel_subio"), "aún no llega a 100");
+        assert!(n.tr.eventos.iter().all(|e| e.codigo != "heroe.nivel_subio"), "aún no llega a 3");
 
         n.experiencia_de_heroe(0, HEROE, 500);
         let h = &n.heroe(HEROE).unwrap().heroe;
-        assert_eq!((h.nivel, h.experiencia, h.puntos_de_atributo, h.liderazgo_base), (2, 100_000, 1, 17));
+        assert_eq!((h.nivel, h.experiencia, h.puntos_de_atributo, h.liderazgo_base), (2, 3_000, 1, 17));
         let subidos: Vec<_> = n.tr.eventos.iter().filter(|e| e.codigo == "heroe.nivel_subio").collect();
         assert_eq!((subidos.len(), subidos[0].dato("heroe"), subidos[0].dato("nivel")), (1, Some(HEROE as i64), Some(2)));
     }

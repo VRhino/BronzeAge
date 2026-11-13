@@ -6,7 +6,12 @@ Los cambios del motor que el cliente jugador (BronzeAgeClient) tiene que recoger
 
 ## Pendiente
 
-Nada todavía.
+### Héroe hasta el nivel 50 y su aspecto guardado (2026-11-13, directo a main; nucleo 0.41.0, militar 0.10.0, contrato 0.25.0, foto BAN64, partida nueva)
+
+1. **Curva del héroe** (`PROGRESION_HEROE`, en `Heroe_Y_Tropa`): `experienciaPorNivel` desaparece y llega `incrementos` (`[{desdeNivel, suma}]`). Pasar al 2 pide 3 y cada nivel 3 más hasta el 10 (27), 10 más hasta el 20 (127) y 20 más hasta el 50 (727); desde el 50, 747 cada uno. `nivelDeTope` es 50. Lo que le falta para subir sigue en `Heroe.experiencia_hacia_siguiente_nivel` (milésimas). Si el cliente muestra la curva o el total, que la calcule de los datos, no de la fórmula vieja.
+2. **Liderazgo** (`LIDERAZGO`): `porNivel` desaparece y llega `nivelDelTope` (25): de 14 a 100 en el 25, 3 o 4 por nivel. El valor del héroe sigue en `Heroe.liderazgo_base`.
+3. **Puntos de atributo:** uno por nivel hasta el 50. **Habilidades** en los niveles 1, 4, 8 y 16 y **perks** en el 11 y el 20 (`habilidadesEnNivel`, `perksEnNivel`), si se muestran.
+4. **Aspecto:** `crearHeroe` guarda `genero` (masculino, femenino o vacío = masculino; otro texto, `orden.forma_invalida`) y las cuatro piezas de `avatar` (vacías o con hasta 32 letras ASCII, cifras, `_` o `-`; si no, `heroe.aspecto_invalido`, rechazo nuevo). Salen en `Heroe.femenino` y `Heroe.avatar` del héroe propio y del público.
 
 ## Ya pasado
 

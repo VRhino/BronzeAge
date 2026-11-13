@@ -154,7 +154,7 @@ impl Esc {
     /// Un héroe humano de la cuenta, ciudadano de F2, que reside en la plaza B y está dentro, con su loadout activo de una escuadra de milicia.
     fn residente(&mut self, m: &Mundo, cuenta: &str) -> u64 {
         let campamento = campamento_mas_cercano(m, self.pos(self.b));
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into(), aspecto: Default::default() }).creadas[0];
         let b = self.b as u32;
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(2) });
         self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(b)) });
@@ -471,7 +471,7 @@ async fn el_ticket_del_asedio_es_completo_congelado_y_va_a_todos_los_servidores_
     let beto = &defensor.participantes[0];
     let hs = beto.heroe.as_ref().unwrap();
     assert_eq!((beto.faccion_id.as_deref(), beto.es_bot, hs.nivel, hs.class_definition_id.as_str(), hs.femenino), (Some("f-2"), false, 1, "espada_escudo_mediano", false));
-    assert!(hs.display_name.starts_with("Héroe ") && hs.avatar.is_some(), "valores por defecto de nombre, género y avatar");
+    assert!(hs.display_name.starts_with("Héroe ") && hs.avatar.is_some(), "sin nombre ni aspecto elegidos: «Héroe N», masculino y piezas vacías");
     // La clase del arma, sus atributos sumados con la base de la clase y su equipo real (2026-11-12, D16).
     assert_eq!(hs.atributos_efectivos, Some(pb::Atributos { fuerza: 3, destreza: 3, armadura: 2, vitalidad: 2 }));
     assert_eq!(hs.equipamiento.as_ref().and_then(|e| e.arma.as_ref()).map(|p| p.item_definition_id.as_str()), Some("espada_escudo_mediano_inicio"));
@@ -774,7 +774,7 @@ async fn los_bandidos_que_acosan_a_una_columna_de_bots_juegan_una_batalla_sin_hu
 fn residente_de_a(e: &mut Esc, m: &Mundo, cuenta: &str) -> (u64, u64) {
     let a = e.a;
     let campamento = campamento_mas_cercano(m, e.pos(a));
-    let h = e.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
+    let h = e.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into(), aspecto: Default::default() }).creadas[0];
     e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
     e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(a as u32)) });
     e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(a as u32) });
@@ -974,7 +974,7 @@ async fn quien_no_llega_a_conectarse_reabre_la_batalla_con_un_ticket_nuevo_para_
 /// La foto de un núcleo con un ticket de asedio congelado (plaza, edificios, recintos) y con un informe de inspección de una plaza vuelve igual; la de antes del cambio, no.
 fn la_foto_vuelve_igual(n: &Nucleo, m: &M) {
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN63");
+    assert_eq!(&bytes[..5], b"BAN64");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas(false), &m.0.hash().to_string()).expect("la foto vuelve");
     assert_eq!(vuelta.serializar(), bytes);
 }

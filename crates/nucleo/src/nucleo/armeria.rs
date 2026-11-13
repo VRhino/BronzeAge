@@ -22,7 +22,9 @@ use asentamiento::edificio::Edificios;
 use asentamiento::{Recurso, Tipo as Edificio};
 use base::UNIDAD;
 use comercio::de;
-use militar::heroe::{experiencia_para_nivel, Heroe, Residencia};
+use militar::heroe::{experiencia_para_subir, Heroe, Residencia};
+#[cfg(test)]
+use militar::heroe::experiencia_para_nivel;
 use militar::presencia::Ubicacion;
 use objetos::consumible::{usar, Efecto, ErrorUso};
 use objetos::datos::{Consumo, Tipo};
@@ -201,7 +203,7 @@ impl Nucleo {
                         datos.push(("escuadra", id as i64));
                     }
                     Efecto::ExperienciaHeroePct(pct) => {
-                        let pide = experiencia_para_nivel(&mr, nivel + 1) - experiencia_para_nivel(&mr, nivel);
+                        let pide = experiencia_para_subir(&mr, nivel);
                         self.experiencia_de_heroe(t, *heroe, pide * pct / 100);
                     }
                     Efecto::Montura(montura) => {
@@ -727,12 +729,12 @@ mod pruebas {
     fn la_medalla_del_heroe_da_su_porcentaje_de_lo_que_pide_su_nivel() {
         let mut n = nucleo(1, &[("medalla_heroe_pequena", 1), ("medalla_heroe_grande", 1)]);
         assert_eq!(orden(&mut n, usar(0, Some(ESCUADRA))), Ok(()), "la escuadra no la mira");
-        assert_eq!(heroe(&mut n).heroe.experiencia, 10_000, "el 10 % de los 100 del nivel 1");
+        assert_eq!(heroe(&mut n).heroe.experiencia, 300, "el 10 % de los 3 del nivel 1");
         let mr = n.estado.reglas.economia.militar.clone();
         let h = &mut heroe(&mut n).heroe;
-        (h.nivel, h.experiencia) = (30, experiencia_para_nivel(&mr, 30));
+        (h.nivel, h.experiencia) = (50, experiencia_para_nivel(&mr, 50));
         assert_eq!(orden(&mut n, usar(1, None)), Ok(()));
-        assert_eq!(heroe(&mut n).heroe.experiencia, experiencia_para_nivel(&mr, 30) + 340_000, "desde el 30, el 50 % de 680");
+        assert_eq!(heroe(&mut n).heroe.experiencia, experiencia_para_nivel(&mr, 50) + 373_500, "desde el 50, el 50 % de 747");
     }
 
     #[test]

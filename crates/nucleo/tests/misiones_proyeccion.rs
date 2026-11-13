@@ -54,7 +54,7 @@ fn la_cadena_de_heroe_lleva_su_lista_y_ninguna_fija() {
     let m = con_mundo!();
     let mut n = nucleo(m);
     let t = n.ahora();
-    let r = n.aplicar_en(t, Peticion::nueva("ana", "h", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }));
+    let r = n.aplicar_en(t, Peticion::nueva("ana", "h", Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into(), aspecto: Default::default() }));
     assert!(r.aceptada(), "{r:?}");
     let vistas = propios::misiones(&n, Dueno::Heroe(r.creadas[0]));
     let h1 = vistas.iter().find(|v| v.id == "H1").expect("H1 está activa");

@@ -10,7 +10,7 @@ use crate::codec_columna::{politica_a_u8, politica_de_u8};
 use crate::codec_contratos;
 use crate::codec_politica::{sigilo_escribir, sigilo_leer};
 use crate::codec_militar::{controlador_a_u8, controlador_de_u8, hueco_a_u8, hueco_de_u8, objetivo_escribir, objetivo_leer, relacion_a_u8, relacion_de_u8, residencia_escribir, residencia_leer, tropa_a_u8, tropa_de_u8, ubicacion_escribir, ubicacion_leer};
-use crate::estado_militar::Relacion;
+use crate::estado_militar::{Aspecto, Relacion};
 pub use crate::memoria::{OrigenIntel, TipoInformeRegion, TipoRumor};
 use crate::memoria::{tipo_informe_region_leer, tipo_rumor_leer};
 use asentamiento::pueblos::Cultivo;
@@ -232,8 +232,9 @@ pub enum Comando {
     //    los suyos. Un héroe fuera del mundo solo puede conectarse. ──
     /// Crea el héroe de una cuenta dentro de un campamento de mercenarios, donde reside. `creadas` lleva su id. El controlador `Bot` solo lo
     /// pone la administración. `nombre`: el que eligió el jugador (ya validado: sin espacios a los lados, de 1 a [`NOMBRE_HEROE_MAX`] caracteres); sin él, «Héroe N».
-    /// `clase`: una de `CLASES_HEROE` (Heroe_Y_Tropa §3); nace con su equipo inicial puesto.
-    CrearHeroe { cuenta: String, campamento: u32, controlador: Controlador, nombre: Option<String>, clase: String },
+    /// `clase`: una de `CLASES_HEROE` (Heroe_Y_Tropa §3); nace con su equipo inicial puesto. `aspecto`: el género y las piezas del avatar que eligió en Conquest
+    /// (2026-11-13); cada pieza, vacía o con forma de id ([`Aspecto::pieza_valida`]).
+    CrearHeroe { cuenta: String, campamento: u32, controlador: Controlador, nombre: Option<String>, clase: String, aspecto: Aspecto },
     /// Recluta tropa en una plaza (las 11 condiciones de `reclutarTropa`) o repone la escuadra que ya se tiene. `creadas` lleva el id de la
     /// escuadra si es nueva.
     ReclutarTropa { asentamiento: u64, heroe: u64, tropa: Tropa },
@@ -1788,8 +1789,8 @@ impl Peticion {
                 w.u8(48);
                 w.u64(*pueblo);
             }
-            Comando::CrearHeroe { cuenta, campamento, controlador, nombre, clase } => {
-                // Con nombre, la 180 (2026-10-27); sin él, la 49. Las dos llevan la clase al final desde el 2026-11-12 (foto y registro nuevos, BAN63).
+            Comando::CrearHeroe { cuenta, campamento, controlador, nombre, clase, aspecto } => {
+                // Con nombre, la 180 (2026-10-27); sin él, la 49. Las dos llevan la clase desde el 2026-11-12 (BAN63) y el aspecto al final desde el 2026-11-13 (foto y registro nuevos, BAN64).
                 w.u8(if nombre.is_some() { 180 } else { 49 });
                 w.texto(cuenta);
                 w.u32(*campamento);
@@ -1798,6 +1799,7 @@ impl Peticion {
                     w.texto(x);
                 }
                 w.texto(clase);
+                crate::codec_militar::aspecto_escribir(&mut w, aspecto);
             }
             Comando::ReclutarTropa { asentamiento, heroe, tropa } => {
                 w.u8(50);
@@ -2767,7 +2769,7 @@ impl Peticion {
             46 => Comando::EntregarMateriales { ejercito: r.u64()?, pueblo: r.u64()? },
             47 => Comando::DestruirPueblo { pueblo: r.u64()? },
             48 => Comando::ReponerCarro { pueblo: r.u64()? },
-            49 => Comando::CrearHeroe { cuenta: r.texto()?, campamento: r.u32()?, controlador: controlador_de_u8(r.u8()?)?, nombre: None, clase: r.texto()? },
+            49 => Comando::CrearHeroe { cuenta: r.texto()?, campamento: r.u32()?, controlador: controlador_de_u8(r.u8()?)?, nombre: None, clase: r.texto()?, aspecto: crate::codec_militar::aspecto_leer(&mut r)? },
             50 => Comando::ReclutarTropa { asentamiento: r.u64()?, heroe: r.u64()?, tropa: tropa_de_u8(r.u8()?)? },
             51 => Comando::ReclutarEnCampamento { heroe: r.u64()?, tropa: tropa_de_u8(r.u8()?)?, pagar_con: pagar_con_de_u8(r.u8()?)? },
             52 => Comando::PedirPrestamo { heroe: r.u64()?, tropas: (0..r.cuenta()?).map(|_| tropa_de_u8(r.u8()?)).collect::<Result<_, _>>()? },
@@ -2930,7 +2932,7 @@ impl Peticion {
             177 => Comando::EmpezarEpica { heroe: r.u64()?, asentamiento: r.u64()?, aeda: r.u32()?, tecnologia: r.u8()? },
             178 => Comando::AbandonarEpica { heroe: r.u64()?, asentamiento: r.u64()?, aeda: r.u32()? },
             179 => Comando::PrepararCaravana { caravana: r.u64()?, destino: r.u64()?, carga: leer_lineas(&mut r)?, salir_en: r.opt_i64()?, escolta: Some((r.u64()?, leer_lista_u64(&mut r)?)) },
-            180 => Comando::CrearHeroe { cuenta: r.texto()?, campamento: r.u32()?, controlador: controlador_de_u8(r.u8()?)?, nombre: Some(r.texto()?), clase: r.texto()? },
+            180 => Comando::CrearHeroe { cuenta: r.texto()?, campamento: r.u32()?, controlador: controlador_de_u8(r.u8()?)?, nombre: Some(r.texto()?), clase: r.texto()?, aspecto: crate::codec_militar::aspecto_leer(&mut r)? },
             181 => Comando::MarchaForzada { ejercito: r.u64()?, activa: r.bool()? },
             182 => Comando::ReclamarRecompensa { heroe: r.u64()?, dueno: crate::misiones::leer_dueno(&mut r)?, mision: r.texto()? },
             183 => Comando::MarcarAldea { asentamiento: r.u64()?, punto: r.punto()?, cultivo: *Cultivo::TODOS.get(usize::from(r.u8()?)).ok_or(ErrorFormato("cultivo de aldea desconocido"))? },
@@ -3340,6 +3342,8 @@ pub mod rechazos {
     pub const HEROE_YA_EXISTE: &str = "heroe.ya_existe";
     /// El nombre del héroe está vacío, empieza o acaba en espacio, pasa de 24 caracteres o lleva caracteres de control.
     pub const HEROE_NOMBRE_INVALIDO: &str = "heroe.nombre_invalido";
+    /// Una pieza del avatar (cabeza, pelo, barba o cejas) trae un id sin forma de id: más de 32 caracteres o alguno que no sea letra ASCII, cifra, `_` o `-` (2026-11-13; aún no hay catálogo de piezas de Conquest).
+    pub const HEROE_ASPECTO_INVALIDO: &str = "heroe.aspecto_invalido";
     /// Ya hay otro héroe con ese nombre (sin distinguir mayúsculas; 2026-11-06, pedido del autor).
     pub const HEROE_NOMBRE_EN_USO: &str = "heroe.nombre_en_uso";
     /// El héroe no tiene las monedas que cuesta (tanda 69 §4).
@@ -4136,8 +4140,8 @@ mod pruebas {
             Comando::FijarResidencia { heroe: 2, residencia: Some(Residencia::Asentamiento(3)) },
             Comando::FijarResidencia { heroe: 2, residencia: None },
             Comando::DarAlmacenPersonal { heroe: 2, recurso: Recurso::Oro, cantidad: 9 },
-            Comando::CrearHeroe { cuenta: "ana".into(), campamento: 4, controlador: Controlador::Bot, nombre: None, clase: "dagas".into() },
-            Comando::CrearHeroe { cuenta: "ana".into(), campamento: 4, controlador: Controlador::Humano, nombre: Some("Arkanthos".into()), clase: "arco_lanza".into() },
+            Comando::CrearHeroe { cuenta: "ana".into(), campamento: 4, controlador: Controlador::Bot, nombre: None, clase: "dagas".into(), aspecto: Default::default() },
+            Comando::CrearHeroe { cuenta: "ana".into(), campamento: 4, controlador: Controlador::Humano, nombre: Some("Arkanthos".into()), clase: "arco_lanza".into(), aspecto: crate::estado_militar::Aspecto { femenino: true, cabeza: "head_03".into(), pelo: "hair_01".into(), barba: String::new(), cejas: "eyebrows_02".into() } },
             Comando::MarchaForzada { ejercito: 7, activa: true },
             Comando::ReclutarTropa { asentamiento: 3, heroe: 2, tropa: Tropa::Espartiatas },
             Comando::ReclutarEnCampamento { heroe: 2, tropa: Tropa::LancerosMimbre, pagar_con: PagarCon::Carro },
@@ -4369,7 +4373,7 @@ mod pruebas {
         let mut b = Peticion::nueva("a", "i", Comando::ReclutarEnCampamento { heroe: 1, tropa: Tropa::Arqueros, pagar_con: PagarCon::Carro }).codificar();
         *b.last_mut().unwrap() = 7;
         assert!(Peticion::decodificar(&b).is_err());
-        let mut b = Peticion::nueva("a", "i", Comando::CrearHeroe { cuenta: "a".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: String::new() }).codificar();
+        let mut b = Peticion::nueva("a", "i", Comando::CrearHeroe { cuenta: "a".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: String::new(), aspecto: Default::default() }).codificar();
         let n = b.len();
         b[n - 5] = 7; // el controlador, justo antes de la clase vacía (su largo, en 4 bytes)
         assert!(Peticion::decodificar(&b).is_err());

@@ -216,7 +216,7 @@ impl Nucleo {
             rechazo(c, m)
         };
         match &p.comando {
-            Comando::CrearHeroe { cuenta, campamento, controlador, nombre, clase } => {
+            Comando::CrearHeroe { cuenta, campamento, controlador, nombre, clase, aspecto } => {
                 // El controlador no lo elige el cliente: lo pone la sesión según la cuenta (una de bot abre `CLIENTE_BOT` y su héroe nace bot; Proyecciones §4, 2026-11-01).
                 if !p.admin && cuenta != &p.actor {
                     return Err(rechazo(rechazos::NO_AUTORIZADO, "solo la administración crea héroes ajenos".into()));
@@ -233,6 +233,10 @@ impl Nucleo {
                 if let Some(x) = nombre.as_deref().filter(|x| self.estado.militar.nombre_en_uso(x)) {
                     return Err(rechazo(rechazos::HEROE_NOMBRE_EN_USO, format!("«{x}»: ya hay un héroe con ese nombre")));
                 }
+                // El aspecto (2026-11-13): sin catálogo de piezas de Conquest todavía, cada id se mira solo por su forma.
+                if let Some((pieza, x)) = aspecto.piezas().into_iter().find(|(_, x)| !crate::estado_militar::Aspecto::pieza_valida(x)) {
+                    return Err(rechazo(rechazos::HEROE_ASPECTO_INVALIDO, format!("{pieza} «{x}»: el id de una pieza lleva hasta {} letras, cifras, «_» o «-»", crate::estado_militar::Aspecto::PIEZA_MAX)));
+                }
                 let (id, loadout) = (self.estado.siguiente_id, self.estado.siguiente_id + 1);
                 let heroe = Heroe::nuevo(&mr, id, *controlador, *campamento, loadout, clase).map_err(de_heroe)?;
                 self.estado.siguiente_id += 2;
@@ -242,6 +246,9 @@ impl Nucleo {
                     if let Some(d) = &self.nombres {
                         d.poner(id, x);
                     }
+                }
+                if *aspecto != crate::estado_militar::Aspecto::default() {
+                    self.estado.militar.aspectos.insert(id, aspecto.clone());
                 }
                 *self.estado.militar.eligieron.entry(*campamento).or_insert(0) += 1;
                 self.tr.tocar(Clase::Campamento, u64::from(*campamento));

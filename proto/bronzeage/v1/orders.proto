@@ -342,7 +342,8 @@ message OrdenCrearHeroe {
   string campamento_id = 2;
   // Desde el 2026-11-12, obligatoria (D21): un id de `CLASES_HEROE`; vacía o desconocida, `heroe.clase_desconocida`. El héroe nace con el equipo inicial de su clase.
   string class_definition_id = 3;
-  string genero = 4;  // masculino | femenino
+  string genero = 4;  // masculino | femenino; vacío = masculino; otro, `orden.forma_invalida` (se guarda desde el 2026-11-13)
+  // Cada pieza vacía (la de por defecto) o con hasta 32 letras ASCII, cifras, `_` o `-` (`heroe.aspecto_invalido`); sin catálogo de piezas todavía.
   Avatar avatar = 5;
 }
 

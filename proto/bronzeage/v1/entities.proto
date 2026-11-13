@@ -796,15 +796,15 @@ message Heroe {
   bool es_bot = 4;
   string display_name = 5;
   string class_definition_id = 6;
-  bool femenino = 7;
+  bool femenino = 7;                     // 2026-11-13: el género y el avatar que eligió en `crearHeroe` (sin elegir, masculino y piezas vacías)
   Avatar avatar = 8;
-  uint32 nivel = 9;                      // sube con la experiencia acumulada (Heroe_Y_Tropa §4.3: 100, 120… hasta el 30 y 680 desde ahí)
+  uint32 nivel = 9;                      // sube con la experiencia acumulada (Heroe_Y_Tropa §4.3: 3, 6… hasta el 50 y 747 desde ahí; 2026-11-13)
   uint64 experiencia_hacia_siguiente_nivel = 10;  // 2026-11-12: lo que le falta para el siguiente nivel, en milésimas (antes, la experiencia sin curva)
-  uint32 puntos_de_atributo_sin_gastar = 11;      // uno por nivel hasta el 30
+  uint32 puntos_de_atributo_sin_gastar = 11;      // uno por nivel hasta el 50
   reserved 12;                           // antes `puntos_de_perk_sin_gastar`: desde el 2026-11-12 los perks se abren solos con el nivel (D15)
   Atributos atributos_base = 13;
   reserved 14;                           // antes `perks_desbloqueados`: desde el 2026-11-12 los perks se abren solos con el nivel (D15)
-  uint32 liderazgo_base = 15;            // 14 en el nivel 1 y 3 más por nivel hasta 100 en el 30 (`LIDERAZGO`)
+  uint32 liderazgo_base = 15;            // 14 en el nivel 1 y 3 o 4 más por nivel hasta 100 en el 25 (`LIDERAZGO`)
   UbicacionHeroe ubicacion = 16;
   Cantidades almacen_personal = 17;      // vive donde se reside
   optional CupoCampamento cupo_campamento = 18;

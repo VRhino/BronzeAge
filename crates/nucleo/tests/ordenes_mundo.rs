@@ -163,10 +163,15 @@ async fn un_jugador_nuevo_crea_su_heroe_pide_tropa_sale_del_campamento_y_marcha_
     assert!(f.entidades.is_empty());
 
     // Presencia: el héroe nace en un campamento (ids con la forma del contrato); uno por cuenta.
-    let (_, r) = dar(&mut carla, "o1", orden::Cuerpo::CrearHeroe(pb::OrdenCrearHeroe { display_name: s("Carla"), campamento_id: s("camp-0"), class_definition_id: s("espada_escudo_mediano"), genero: s("femenino"), avatar: None })).await;
+    let (deltas, r) = dar(&mut carla, "o1", orden::Cuerpo::CrearHeroe(pb::OrdenCrearHeroe { display_name: s("Carla"), campamento_id: s("camp-0"), class_definition_id: s("espada_escudo_mediano"), genero: s("femenino"), avatar: Some(pb::orden_crear_heroe::Avatar { cabeza_id: s("head_02"), pelo_id: s("hair_05"), barba_id: s(""), cejas_id: s("eyebrows_01") }) })).await;
     aceptada(&r);
     let heroe = creadas(&r)[0].clone();
     assert_eq!(heroe.0, TipoEntidad::Heroe);
+    // El género y el avatar que manda Conquest se guardan (2026-11-13); un género que no es masculino ni femenino es una orden mal formada.
+    let suyo = deltas.iter().flat_map(|d| d.cambios.iter().filter_map(|c| c.datos.as_ref())).find_map(|e| if let Some(pb::entidad::Cuerpo::Heroe(h)) = e.cuerpo.as_ref() { Some(h.clone()) } else { None }).expect("su héroe llega en la delta");
+    assert_eq!((suyo.femenino, suyo.avatar), (true, Some(pb::Avatar { cabeza_id: s("head_02"), pelo_id: s("hair_05"), barba_id: s(""), cejas_id: s("eyebrows_01") })));
+    let (_, r) = dar(&mut carla, "o1b", orden::Cuerpo::CrearHeroe(pb::OrdenCrearHeroe { campamento_id: s("camp-0"), genero: s("otro"), ..Default::default() })).await;
+    assert_eq!(rechazo(&r), "orden.forma_invalida");
     let (_, r) = dar(&mut carla, "o2", orden::Cuerpo::CrearHeroe(pb::OrdenCrearHeroe { campamento_id: s("camp-0"), ..Default::default() })).await;
     assert_eq!(rechazo(&r), "heroe.ya_existe");
     // El equipo y el almacén de objetos (2026-11-12): se quita la montura, la guarda en su almacén de objetos (reside en el campamento) y un hueco que no existe no se traduce.
@@ -479,7 +484,7 @@ async fn quien_esta_dentro_de_una_plaza_asediada_se_une_a_la_batalla_de_unity_po
     p.avanzar(24 * HORA);
     // Pasado el día de protección con que nace la plaza (Doc 1.2), beto (humano, F2) defiende en persona dentro de su plaza con una escuadra; ana (humana, F1) la asedia con un ejército a su puerta.
     let campamento = (0..m.0.campamentos().len()).min_by_key(|&i| campamento(&m.0, i).dist2(sb)).unwrap() as u32;
-    let beto = p.ok("beto", Comando::CrearHeroe { cuenta: "beto".into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
+    let beto = p.ok("beto", Comando::CrearHeroe { cuenta: "beto".into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into(), aspecto: Default::default() }).creadas[0];
     p.ok("admin", Comando::FijarFaccionDeHeroe { heroe: beto, faccion: Some(2) });
     p.ok("admin", Comando::FijarResidencia { heroe: beto, residencia: Some(Residencia::Asentamiento(b as u32)) });
     p.ok("admin", Comando::ColocarHeroe { heroe: beto, ubicacion: Ubicacion::Asentamiento(b as u32) });

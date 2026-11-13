@@ -111,7 +111,7 @@ fn dos_plazas(x: &mut X, m: &M) -> (u64, u64) {
 
 /// Un defensor de «beto» que reside en B y está dentro con esas escuadras en su loadout activo.
 fn defensor(x: &mut X, b: u64, defensa: &[Tropa]) -> u64 {
-    let h = x.ok("beto", Comando::CrearHeroe { cuenta: "beto".into(), campamento: 3, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
+    let h = x.ok("beto", Comando::CrearHeroe { cuenta: "beto".into(), campamento: 3, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into(), aspecto: Default::default() }).creadas[0];
     x.residir(h, b);
     x.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(b as u32) });
     let escuadras: Vec<u64> = defensa.iter().map(|&t| x.ok("admin", Comando::DarEscuadra { heroe: h, tropa: t, cantidad: unidades(t) }).creadas[0]).collect();

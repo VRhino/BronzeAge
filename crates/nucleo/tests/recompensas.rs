@@ -119,7 +119,7 @@ impl X {
     }
     /// Un héroe de la cuenta, ciudadano de la Facción de la plaza, que reside en ella y está dentro.
     fn heroe_en(&mut self, cuenta: &str, plaza: u64) -> u64 {
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into(), aspecto: Default::default() }).creadas[0];
         let f = self.n.estado().asentamientos[&plaza].faccion;
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(f) });
         self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
@@ -128,7 +128,7 @@ impl X {
     }
     /// Un héroe de la cuenta (de esa Facción) que reside en el campamento 0 y sale de él con un préstamo: va en una columna y ha cumplido las cadenas de héroe de la prueba. Devuelve (héroe, columna).
     fn saliendo(&mut self, cuenta: &str, faccion: Option<u32>) -> (u64, u64) {
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into(), aspecto: Default::default() }).creadas[0];
         if faccion.is_some() {
             self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion });
         }

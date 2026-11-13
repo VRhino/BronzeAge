@@ -327,7 +327,10 @@ pub fn entidad_contrato(mercenario: u64) -> u64 {
 /// contadores y en sus restos) y el recurso 42, el aceite de sésamo (42 en cada almacén, flujo y tendencia, `codec_economia`) y, en cada héroe, los puntos repartidos, el equipo, la mochila y el
 /// almacén de objetos donde iban los atributos (`codec_militar`; Heroe_Y_Tropa §4.5); y, en cada plaza, su forja (`Asentamiento::forja`, tras los fundadores: la apertura y el recargo de cada
 /// grupo de fuera y el fondo). BAN62 y anteriores ya no se admiten.
-const MAGIA: &[u8; 5] = b"BAN63";
+///
+/// BAN64: BAN63 con el aspecto de cada héroe que lo eligió (2026-11-13): género y piezas del avatar (`EstadoMilitar::aspectos`, al final del estado militar, `codec_militar`)
+/// y, en el registro, el aspecto al final de `CrearHeroe`. BAN63 y anteriores ya no se admiten.
+const MAGIA: &[u8; 5] = b"BAN64";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -1531,10 +1534,10 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN63`). Solo se lee el formato vigente: una foto de un formato anterior no se migra (la partida es nueva).
+        // La cabecera es de 5 bytes (`BAN64`). Solo se lee el formato vigente: una foto de un formato anterior no se migra (la partida es nueva).
         let (magia, formato) = (r.magia()?, r.u8()?);
         if magia != MAGIA[..4] || formato != MAGIA[4] {
-            return Err(ErrorFormato(if magia.starts_with(b"BAN") { "foto de un formato que no es el vigente (BAN63): ya no se admite" } else { "no es un estado del núcleo" }));
+            return Err(ErrorFormato(if magia.starts_with(b"BAN") { "foto de un formato que no es el vigente (BAN64): ya no se admite" } else { "no es un estado del núcleo" }));
         }
         if r.texto()? != mundo_hash {
             return Err(ErrorFormato("la foto es de otro mundo (hash del artefacto distinto)"));

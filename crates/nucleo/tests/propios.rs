@@ -120,7 +120,7 @@ impl Esc {
 
     /// Un héroe de la cuenta, ciudadano de `faccion`, en el campamento 0; con `plaza`, reside en ella y está dentro.
     fn heroe(&mut self, cuenta: &str, faccion: u32, plaza: Option<u64>) -> u64 {
-        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
+        let h = self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into(), aspecto: Default::default() }).creadas[0];
         self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(faccion) });
         if let Some(p) = plaza {
             self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(p as u32)) });
@@ -405,7 +405,7 @@ async fn la_foto_inicial_de_heroe_y_faccion_lleva_todo_lo_propio_y_nada_de_otra_
     assert_eq!(h.len(), 1);
     let h = h[0];
     assert_eq!((h.id.as_str(), h.jugador_id.as_deref(), h.es_bot, h.nivel), (h_ana.as_str(), Some("ana"), false, 1));
-    assert_eq!((h.display_name.as_str(), h.femenino), (format!("Héroe {}", x.ana).as_str(), false), "valores por defecto hasta que Conquest publique su catálogo");
+    assert_eq!((h.display_name.as_str(), h.femenino), (format!("Héroe {}", x.ana).as_str(), false), "sin aspecto elegido: masculino y piezas vacías");
     // La clase es la del arma de inicio y los atributos, la base de esa clase (2026-11-12, D16); nace con el equipo inicial puesto y la mochila y el almacén de objetos vacíos.
     assert_eq!(h.class_definition_id, "espada_escudo_mediano");
     assert_eq!(h.atributos_base, Some(pb::Atributos { fuerza: 3, destreza: 3, armadura: 2, vitalidad: 2 }));

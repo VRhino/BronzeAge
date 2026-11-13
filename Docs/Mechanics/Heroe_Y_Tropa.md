@@ -84,7 +84,7 @@ Uno por jugador y partida. Es el **dueño** de todo lo que antes se atribuía al
 | `id`, `jugadorId` | `heroe-{n}` (siguiente id de la partida) y la identidad de la cuenta (`acceso/`). La acción de un jugador sin héroe aún usa su `jugadorId` como actor (solo `crearHeroe`). |
 | `controlador` | `'humano'` por defecto; `'bot'` solo lo pone el servidor (no admite el esquema HTTP). Ya no decide si una batalla lleva Unity (con servidores toda batalla va a Unity, también bot contra bot, desde la cuarta ronda de Entrar con todo en Rust): solo si el héroe lleva token (los bots no se conectan). |
 | `displayName`, `classDefinitionId`, `genero`, `avatar` | Identidad y aspecto. Desde el 2026-11-12 la clase no se guarda: es la `clase` del arma puesta ([`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §3.2) y la proyección la lee de ahí. El género, el avatar y el catálogo de cabezas, pelo, barba y cejas son de Conquest y el motor no los interpreta. |
-| `liderazgoBase` | Puntos de Liderazgo (§5). Nace en `LIDERAZGO.base` (14) y cada nivel hasta `PROGRESION_HEROE.nivelDeTope` le suma `LIDERAZGO.porNivel` (3), sin pasar de `LIDERAZGO.tope` (100). Es su propio campo para sumarle modificadores más adelante; hoy no hay ninguno (ni tecnología ni equipo). |
+| `liderazgoBase` | Puntos de Liderazgo (§5). Nace en `LIDERAZGO.base` (14) y con cada nivel pasa al de ese nivel, de 3 o 4 en 4, hasta `LIDERAZGO.tope` (100) en el `LIDERAZGO.nivelDelTope` (25; §4.3, desde el 2026-11-13). Es su propio campo para sumarle modificadores más adelante; hoy no hay ninguno (ni tecnología ni equipo). |
 | `ubicacion` | `asentamiento` · `columna` · `mercenarios` · `desconectado`. Ver [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md). |
 | `escuadrones` | **Todas** sus escuadras, estén donde estén; `contenedor` dice dónde (§2.3). |
 | `nivel`, `experiencia` | Nivel y XP **acumulada**, en milésimas (§4.3). Lo que le falta para el siguiente nivel se calcula al proyectar (`experienciaHaciaSiguienteNivel` del contrato). |
@@ -142,7 +142,9 @@ Lo primero que hace un jugador. Validaciones, en este orden (cada una rechaza co
 4. Desde el 2026-11-12, `classDefinitionId` no es un id de `CLASES_HEROE` → `heroe.clase_desconocida` (no gasta id).
 
 Efecto: `heroe-{ids.siguiente()}`, `controlador = params.controlador ?? 'humano'`, `liderazgoBase = LIDERAZGO.base`, `ubicacion = mercenarios {campamento}`, `escuadrones = []` y la progresión inicial (§4.1), con el equipo inicial de la clase; el campamento añade al héroe a `residentesIds` y suma 1 a `eligieronComoInicial`. Evento `heroe.creado`. **No tiene columna en el mapa**: sale cuando quiera, como de su casa.
-`avatar` no se valida contra ningún catálogo (el esquema solo exige cadenas); `genero` ∈ `masculino | femenino`. En Rust el comando `CrearHeroe` (49, o 180 con nombre) lleva la clase al final. El héroe que crea `CrearEjercito` (andamiaje) lleva la primera clase del catálogo por id (`arco_lanza`). Autorización: es el **único** comando de un actor sin héroe.
+5. Desde el 2026-11-13, una pieza del `avatar` (`cabezaId`, `peloId`, `barbaId`, `cejasId`) que no tiene forma de id → `heroe.aspecto_invalido` (no gasta id). Sin catálogo de piezas de Conquest todavía, cada una vale vacía (la pieza por defecto) o con hasta 32 letras ASCII, cifras, `_` o `-` (`head_00`). Un `genero` que no sea `masculino`, `femenino` o vacío (= masculino) es una orden mal formada (`orden.forma_invalida`).
+
+**El aspecto (2026-11-13, pedido del autor):** el género y las cuatro piezas se **guardan** (`EstadoMilitar::aspectos`, solo si no es el de por defecto; foto `BAN64`) y salen en `Heroe.femenino` y `Heroe.avatar` del héroe propio (`HEROE`), del héroe público de la `VISTA` y en `HeroSnapshot.femenino`/`avatar` del ticket de batalla. Sin elegir, masculino y piezas vacías. No cambia nada del juego. En Rust el comando `CrearHeroe` (49, o 180 con nombre) lleva la clase y el aspecto al final. El héroe que crea `CrearEjercito` (andamiaje) lleva la primera clase del catálogo por id (`arco_lanza`). Autorización: es el **único** comando de un actor sin héroe.
 
 ## 4. Progresión del héroe
 
@@ -166,20 +168,23 @@ Como en Conquest (`HeroDataService.CreateNewHero`). Hasta el 2026-11-12 nacía s
 
 ### 4.3 Qué le suma el servidor
 
-- **XP y nivel (2026-11-12, entrada 73):** la experiencia se acumula en milésimas y el nivel se guarda al lado, como en la escuadra. Subir del nivel `n` al `n + 1` pide `PROGRESION_HEROE.experienciaBase + experienciaPorNivel × (n − 1)` (100, 120, 140… 660 para pasar del 29 al 30) y desde el `nivelDeTope` (30) cada nivel pide lo mismo que el último (680). La acumulada para llegar al 30 es 11.020.
+- **XP y nivel (2026-11-12, entrada 73; curva del 2026-11-13, decisión del autor: «los primeros niveles son demasiado complicados»):** la experiencia se acumula en milésimas y el nivel se guarda al lado, como en la escuadra. Pasar del 1 al 2 pide `PROGRESION_HEROE.experienciaBase` (3) y cada nivel siguiente pide lo del anterior más la `suma` del último tramo de `incrementos` que ha empezado: 3 más hasta llegar al 10 (3, 6, 9… 27), 10 más desde el 10 (37, 47… 127 para pasar al 20) y 20 más desde el 20 (147, 167… 727 para pasar al 50). Desde el `nivelDeTope` (50) cada nivel pide lo mismo (747). Acumulada: 135 en el 10, 955 en el 20, 3.325 en el 30 y 14.065 en el 50 (hasta el 2026-11-13: 100 + 20 × (n − 1) hasta el 30, 11.020 en total, y 680 desde ahí).
 
   ```
-  experienciaParaNivel(n) = Σ_{k=1..min(n,30)−1} (100 + 20 × (k − 1))  +  max(0, n − 30) × 680
+  pide(1) = experienciaBase ; pide(n) = pide(n − 1) + suma del último tramo con desdeNivel ≤ min(n, nivelDeTope)
+  experienciaParaNivel(n) = Σ_{k=1..min(n,50)−1} pide(k)  +  max(0, n − 50) × pide(50)
+  liderazgoParaNivel(n)   = LIDERAZGO.base + ⌊(tope − base) × (min(n, nivelDelTope) − 1) / (nivelDelTope − 1)⌋      ; 14, 17, 21, 24… 96 en el 24 y 100 en el 25
   conExperienciaHeroe(h, ganada):
       h.experiencia += ganada
       mientras h.experiencia ≥ experienciaParaNivel(h.nivel + 1):
           h.nivel++
-          si h.nivel ≤ nivelDeTope:  h.puntosDeAtributoSinGastar += 1 ; h.liderazgoBase = min(LIDERAZGO.tope, h.liderazgoBase + LIDERAZGO.porNivel)
+          si h.nivel ≤ nivelDeTope:  h.puntosDeAtributoSinGastar += 1
+          h.liderazgoBase = max(h.liderazgoBase, liderazgoParaNivel(h.nivel))
   ```
 
-  Desde el 31 el nivel sube pero no da nada. Al subir emite `heroe.nivel_subio { heroe, nivel }` (el nivel nuevo, una vez aunque cruce varios). `habilidadesEnNivel` y `perksEnNivel` solo se publican: las aplica Conquest.
+  Un punto de atributo por nivel hasta el 50 (49 en total). El Liderazgo llega a 100 en el 25 sumando 3 o 4 por nivel (decisión del autor del 2026-11-13; antes, 3 por nivel hasta el 30). Habilidades en los niveles 1, 4, 8 y 16 y perks en el 11 y el 20 (antes 1, 3, 5 y 10, y 7 y 12: lo que se abría del 1 al 30 estirado al 1-50). Desde el 51 el nivel sube pero no da nada. Al subir emite `heroe.nivel_subio { heroe, nivel }` (el nivel nuevo, una vez aunque cruce varios). `habilidadesEnNivel` y `perksEnNivel` solo se publican: las aplica Conquest.
 - **De dónde sale la XP:** solo del combate, por un único punto de entrada del núcleo ([`Combate.md`](Combate.md) §4.4): con números, lo mismo que sus escuadras (1 si su bando gana, 0,5 si pierde), una vez por combate; en una batalla de Unity, 4 o 2 según gane su bando si participó (`MILITAR.experienciaUnityPor…`, el motor **no lee** la experiencia que manda Unity), y `cantidad = supervivientesAlCierre` en cada escuadra.
-> **Implementado en Rust (2026-11-12, entrada 73).** `militar::Heroe` guarda `experiencia` acumulada (milésimas) y `nivel`; `Heroe::con_experiencia` sube los niveles que cruce con sus puntos y su Liderazgo, y `Heroe::falta_para_subir` es lo que proyecta `experiencia_hacia_siguiente_nivel` (ahora «lo que le falta», en milésimas). Los datos son el bloque `PROGRESION_HEROE` (§12) y `LIDERAZGO.porNivel`/`tope`. El núcleo da la experiencia por `Nucleo::experiencia_de_heroe` y `Nucleo::experiencia_de_escuadra` (`crates/nucleo/src/nucleo/progresion.rs`), que usan el combate con números y la batalla de Unity. Salen `puntos_de_perk`, `perks_desbloqueados` y los perks del loadout (sus campos del contrato quedan `reserved`, y el rechazo `loadout.perk_no_desbloqueado` desaparece). La foto sigue en `BAN63`.
+> **Implementado en Rust (2026-11-12, entrada 73).** `militar::Heroe` guarda `experiencia` acumulada (milésimas) y `nivel`; `Heroe::con_experiencia` sube los niveles que cruce con sus puntos y su Liderazgo, y `Heroe::falta_para_subir` es lo que proyecta `experiencia_hacia_siguiente_nivel` (ahora «lo que le falta», en milésimas). Los datos son el bloque `PROGRESION_HEROE` (§12) y `LIDERAZGO.nivelDelTope`/`tope` (desde el 2026-11-13; `militar::heroe::experiencia_para_subir`, `experiencia_para_nivel` y `liderazgo_para_nivel`). El núcleo da la experiencia por `Nucleo::experiencia_de_heroe` y `Nucleo::experiencia_de_escuadra` (`crates/nucleo/src/nucleo/progresion.rs`), que usan el combate con números y la batalla de Unity. Salen `puntos_de_perk`, `perks_desbloqueados` y los perks del loadout (sus campos del contrato quedan `reserved`, y el rechazo `loadout.perk_no_desbloqueado` desaparece). La foto sigue en `BAN63`.
 - **Botín de Unity:** lo pone el motor, no Unity (2026-11-12, D6 y D7): a cada héroe que participó, las monedas de `MONEDAS` como en el combate con números ([`Combate.md`](Combate.md) §4.2) y la tabla `unity` de `BOTIN_OBJETOS` ([`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §3.7), con lo de `soloSiGana` solo si gana su bando. Contra bandidos (su campamento o su emboscada) no hay tabla `unity`: la de bandidos de su nivel si caen, como con números (decisión del autor del 2026-11-12). El resultado de Unity ya no trae botín ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §8.5).
 - **Equipar:** desde el 2026-11-12, por orden (§4.5).
 
@@ -232,7 +237,7 @@ Cuatro órdenes más del héroe de la cuenta (`orders.proto` 196 a 199; comandos
 | `configurar_forja { asentamiento_id, grupo, abierta, recargo_pct }` | `ConfigurarForja` (230) | El Tesorero o el Gobernador de la plaza, residente y dentro | Abre o cierra la forja de la plaza a un grupo de fuera (`aliados`, `neutrales` o `enemigos`) y le fija el recargo, uno de `OBJETOS.forja.recargosPct` (`forja.recargo_invalido`); sin cambio, `sin_cambios`. Hecho `asentamiento.forja_configurada`. |
 
 - **Medalla de tropa:** sobre `escuadron_id`, una escuadra suya (`escuadra.ajena` si falta o no es suya), no prestada (`escuadra.prestada`) y por debajo de `nivelMaximoEscuadra` (`escuadra.nivel_maximo`); se mira antes de gastarla. La experiencia entra como la del combate (`Nucleo::sumar_experiencia_de_escuadra`: sube los niveles que cruce y cuenta `escuadras.veteranas`) pero **sin** el bonus de Ejército permanente, que solo pone el combate. Lo que sobra al llegar al máximo no da nada.
-- **Medalla del héroe:** su porcentaje de lo que pide su nivel para el siguiente, `experienciaParaNivel(nivel + 1) − experienciaParaNivel(nivel)` (desde el 30, de 680), por `Nucleo::experiencia_de_heroe` (puede emitir `heroe.nivel_subio`). `escuadron_id` no se mira.
+- **Medalla del héroe:** su porcentaje de lo que pide su nivel para el siguiente, `experienciaParaNivel(nivel + 1) − experienciaParaNivel(nivel)` (desde el 50, de 747), por `Nucleo::experiencia_de_heroe` (puede emitir `heroe.nivel_subio`). `escuadron_id` no se mira.
 - **Cofre de monturas:** una montura de tier III, IV o V por sus probabilidades, con el generador del estado; llega como lo que llega sin pedirlo (D17 y D22): a la mochila (si el cofre era el último de su pila, su casilla sirve), si no cabe al almacén de objetos y si tampoco, se pierde. El hecho dice dónde fue.
 - **La forja en cualquier plaza** (diseño del autor del 2026-11-12, entrada 77; antes, D1 solo dejaba forjar en la plaza donde se reside, con los materiales del almacén personal):
   - **Quién:** el grupo de la puerta (`politica::puerta::grupo_de_puerta`, con la Facción del héroe y la de la plaza). La misma Facción forja siempre y paga la base; los aliados (alianza o vasallaje en cualquier sentido), los neutrales (sin relación o sin Facción) y los enemigos (en guerra), si la plaza tiene su forja abierta a su grupo (`Asentamiento::forja`), con su recargo; cerrada, `forja.cerrada`. De partida, cerrada a los tres con +100 % (`Forja::de_partida`, al fundar). Para estar dentro hace falta además que la puerta lo deje entrar (`fijar_puerta`; de partida, cerrada a neutrales y enemigos). Un mercenario contratado es ciudadano con marca de la Facción que lo contrata ([`Mercenarios_Por_Contrato.md`](Mercenarios_Por_Contrato.md) §2), así que en las plazas de esa Facción forja como la misma Facción: siempre y a la base.
@@ -260,7 +265,7 @@ disponible(héroe, esc)   = max(0, liderazgoDe(héroe) − comprometido(esc))
 ```
 
 El coste sigue al **escalón**, no al poder (`poderBase`): así el poder por punto de Liderazgo difiere entre tropas y elegir composición es una decisión. En un ejército de varios héroes, cada uno se valida contra **el suyo**; no hay tope agregado.
-Con los números de hoy (7/14/22/32/45): un héroe de nivel 1 (14) lleva 2 de leva o 1 de línea; con el tope (100, nivel 30): 1 élite + 1 pesada + 1 veterana = 99; 2 pesadas + 1 veterana + 1 de línea = 100.
+Con los números de hoy (7/14/22/32/45): un héroe de nivel 1 (14) lleva 2 de leva o 1 de línea; con el tope (100, nivel 25): 1 élite + 1 pesada + 1 veterana = 99; 2 pesadas + 1 veterana + 1 de línea = 100.
 
 ## 6. Loadouts (`guardarLoadout`, `borrarLoadout`)
 
@@ -432,7 +437,7 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
 ```json
 {
   "base": 14,
-  "porNivel": 3,
+  "nivelDelTope": 25,
   "tope": 100,
   "costePorEscalon": {
     "1": 7,
@@ -458,18 +463,31 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
 <!-- parametros:PROGRESION_HEROE -->
 ```json
 {
-  "experienciaBase": 100,
-  "experienciaPorNivel": 20,
-  "nivelDeTope": 30,
+  "experienciaBase": 3,
+  "incrementos": [
+    {
+      "desdeNivel": 2,
+      "suma": 3
+    },
+    {
+      "desdeNivel": 10,
+      "suma": 10
+    },
+    {
+      "desdeNivel": 20,
+      "suma": 20
+    }
+  ],
+  "nivelDeTope": 50,
   "habilidadesEnNivel": [
     1,
-    3,
-    5,
-    10
+    4,
+    8,
+    16
   ],
   "perksEnNivel": [
-    7,
-    12
+    11,
+    20
   ]
 }
 ```
@@ -1576,7 +1594,7 @@ Los bloques son los **vigentes de la reconstrucción** (reescritos el 2026-10-19
 
 ## 14. Casos límite y decisiones que parecen raras
 
-- **El héroe sube de nivel desde el 2026-11-12** (antes no subía, CQ-001): un punto de atributo y 3 de Liderazgo por nivel hasta el 30; desde el 31 el nivel sigue subiendo sin dar nada.
+- **El héroe sube de nivel desde el 2026-11-12** (antes no subía, CQ-001): un punto de atributo por nivel hasta el 50 y el Liderazgo de 14 a 100 en el 25 (desde el 2026-11-13; antes, 3 de Liderazgo por nivel hasta el 30); desde el 51 el nivel sigue subiendo sin dar nada.
 - **`liderazgoBase` es por héroe pero solo lo cambia el nivel**: dos héroes del mismo nivel tienen el mismo Liderazgo (sin tecnología ni equipo: la armadura no da Liderazgo, D3). Es un campo propio para poder sumarle modificadores más adelante.
 - **Reclutar paga del almacén de la plaza, no del héroe**: el oro-recurso y el equipo son de la plaza; las monedas del héroe son otra economía.
 - **Una escuadra mermada paga el Liderazgo completo** (el coste mira el tipo, no la cantidad): anotado como punto abierto en el diseño del movimiento. Es lo que impide sacar a campaña élite «en dosis pequeñas».

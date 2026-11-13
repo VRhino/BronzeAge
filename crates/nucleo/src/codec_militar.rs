@@ -2,7 +2,7 @@
 //! **entera** (sin `..`): si el crate `militar` añade un campo, esto deja de compilar y obliga a decidir cómo se guarda.
 //!
 //! Formato (little endian, el de `codec`): `héroes{n u64 · n × héroe} · convocatorias{n u64 · n × convocatoria} · reclutas{n u64 · n ×
-//! (campamento u32, población i64, en i64)} · eligieron{n u64 · n × (campamento u32, cuántos u32)} · nombres{n u64 · n × (héroe u64, texto)}` (eligieron desde BAN41; los nombres, desde BAN43). Las relaciones viven en `Estado::politica` desde BAN32 (5D, `codec_politica`) y las tecnologías de las Facciones, en `Estado::tecnologia` desde BAN36
+//! (campamento u32, población i64, en i64)} · eligieron{n u64 · n × (campamento u32, cuántos u32)} · nombres{n u64 · n × (héroe u64, texto)} · aspectos{n u64 · n × (héroe u64, aspecto)}` (eligieron desde BAN41; los nombres, desde BAN43; los aspectos, desde BAN64: femenino bool y cabeza, pelo, barba y cejas como texto). Las relaciones viven en `Estado::politica` desde BAN32 (5D, `codec_politica`) y las tecnologías de las Facciones, en `Estado::tecnologia` desde BAN36
 //! (6B, `codec_tecnologia`).
 //!
 //! Un héroe: `id u64 · cuenta texto · facción opt_u64 · controlador u8 (0 humano, 1 bot) · liderazgo_base i64 · presencia{ubicación ·
@@ -34,7 +34,7 @@ use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::codec_columna::{politica_a_u8, politica_de_u8, ritmo_escribir, ritmo_leer};
 use crate::codec_comercio::{carga_escribir, carga_leer};
 use crate::codec_economia::{escribir_celdas, leer_celdas, recurso_a_u8, recurso_de_u8, tipo_a_u8, tipo_de_u8};
-use crate::estado_militar::{EdificioRecordado, EstadoMilitar, HeroeNucleo, PlazaRecordada, Relacion};
+use crate::estado_militar::{Aspecto, EdificioRecordado, EstadoMilitar, HeroeNucleo, PlazaRecordada, Relacion};
 use comercio::mercenarios::CupoDiario;
 use militar::catalogo::{Origen, Tropa, TROPAS};
 use militar::convocatoria::{Convocatoria, Integrante, Lugar, Peticion, Seleccion};
@@ -604,7 +604,7 @@ fn convocatoria_leer(r: &mut Lector) -> Result<Convocatoria, ErrorFormato> {
 }
 
 pub(crate) fn escribir(w: &mut Escritor, m: &EstadoMilitar) {
-    let EstadoMilitar { heroes, convocatorias, reclutas, eligieron, nombres, residentes: _, por_cuenta: _ } = m;
+    let EstadoMilitar { heroes, convocatorias, reclutas, eligieron, nombres, aspectos, residentes: _, por_cuenta: _ } = m;
     w.u64(heroes.len() as u64);
     heroes.values().for_each(|h| heroe_escribir(w, h));
     w.u64(convocatorias.len() as u64);
@@ -625,6 +625,20 @@ pub(crate) fn escribir(w: &mut Escritor, m: &EstadoMilitar) {
         w.u64(heroe);
         w.texto(nombre);
     }
+    w.u64(aspectos.len() as u64);
+    for (&heroe, a) in aspectos {
+        w.u64(heroe);
+        aspecto_escribir(w, a);
+    }
+}
+
+pub(crate) fn aspecto_escribir(w: &mut Escritor, a: &Aspecto) {
+    w.bool(a.femenino);
+    a.piezas().iter().for_each(|(_, p)| w.texto(p));
+}
+
+pub(crate) fn aspecto_leer(r: &mut Lector) -> Result<Aspecto, ErrorFormato> {
+    Ok(Aspecto { femenino: r.bool()?, cabeza: r.texto()?, pelo: r.texto()?, barba: r.texto()?, cejas: r.texto()? })
 }
 
 pub(crate) fn leer(r: &mut Lector) -> Result<EstadoMilitar, ErrorFormato> {
@@ -647,6 +661,10 @@ pub(crate) fn leer(r: &mut Lector) -> Result<EstadoMilitar, ErrorFormato> {
     for _ in 0..r.cuenta()? {
         let heroe = r.u64()?;
         m.nombres.insert(heroe, r.texto()?);
+    }
+    for _ in 0..r.cuenta()? {
+        let heroe = r.u64()?;
+        m.aspectos.insert(heroe, aspecto_leer(r)?);
     }
     Ok(m)
 }

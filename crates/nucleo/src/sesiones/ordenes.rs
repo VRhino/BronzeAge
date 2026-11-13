@@ -13,7 +13,7 @@
 //! La tabla orden ↔ comando, con lo que cada una ignora, está en `Docs/Mechanics/Comandos_Parametros.md`.
 
 use crate::comando::{rechazos, AccionReloj, Comando, LadoDelFondo, ObjetivoAtaque, OrigenIntel, PagarCon, Peticion, Respuesta, TipoInformeRegion, TipoRumor, PETICION_ID_MAX};
-use crate::estado_militar::Relacion;
+use crate::estado_militar::{Aspecto, Relacion};
 use crate::nucleo::Nucleo;
 use crate::proyeccion::ids;
 use asentamiento::pueblos::Cultivo;
@@ -436,11 +436,18 @@ impl Ctx<'_> {
         Ok(match cuerpo {
             // ── Presencia y héroe ──
             Cuerpo::CrearHeroe(o) => {
-                // El nombre se guarda (2026-10-27; sin espacios a los lados, vacío = «Héroe N») y la clase la valida el núcleo contra `CLASES_HEROE` (2026-11-12). DUDA: género y
-                // avatar se ignoran hasta que Conquest publique su catálogo (decisión 4 de 4H): el núcleo no los guarda.
+                // El nombre se guarda (2026-10-27; sin espacios a los lados, vacío = «Héroe N») y la clase la valida el núcleo contra `CLASES_HEROE` (2026-11-12). El género y
+                // el avatar se guardan desde el 2026-11-13 (pedido del autor): género vacío = masculino; las piezas las mira el núcleo por su forma, sin catálogo.
                 let nombre = Some(o.display_name.trim().to_owned()).filter(|x| !x.is_empty());
                 let controlador = if self.bot { Controlador::Bot } else { Controlador::Humano };
-                Comando::CrearHeroe { cuenta: self.cliente.into(), campamento: self.campamento(&o.campamento_id)?, controlador, nombre, clase: o.class_definition_id.clone() }
+                let femenino = match o.genero.as_str() {
+                    "" | "masculino" => false,
+                    "femenino" => true,
+                    otro => return self.forma(format!("género desconocido: {otro}")),
+                };
+                let a = o.avatar.clone().unwrap_or_default();
+                let aspecto = Aspecto { femenino, cabeza: a.cabeza_id, pelo: a.pelo_id, barba: a.barba_id, cejas: a.cejas_id };
+                Comando::CrearHeroe { cuenta: self.cliente.into(), campamento: self.campamento(&o.campamento_id)?, controlador, nombre, clase: o.class_definition_id.clone(), aspecto }
             }
             Cuerpo::ReclutarTropa(o) => Comando::ReclutarTropa { asentamiento: self.plaza(&o.asentamiento_id)?, heroe: self.heroe(&o.heroe_id)?, tropa: self.tropa(&o.tropa_id)? },
             Cuerpo::ReclutarEnCampamento(o) => {

@@ -221,7 +221,7 @@ En un ejército de varios héroes, **cada uno se valida contra SU propio Lideraz
 | 4 — pesada | 32 | 15 | 3 | Carros de guerra, Lanceros pesados, Shardana, Espartiatas, Peltastas de Ifícrates, Caballería tesalia, Caballería noble persa, Falangitas |
 | 5 — élite | 45 | 12 | 2 | Arqueros con arco compuesto, Hequetai, Arqueros escitas, Inmortales, Hipaspistas, Compañeros, Agrianos |
 
-El Liderazgo **nace en 14** y sube **3 por cada nivel** del Héroe hasta el 30, sin pasar de **100** (2026-11-12): un héroe nuevo saca dos escuadras de leva o una de línea; uno de nivel 30, las combinaciones de abajo.
+El Liderazgo **nace en 14** y sube **3 o 4 por cada nivel** del Héroe hasta **100 en el nivel 25** (2026-11-13; antes, 3 por nivel hasta el 30): un héroe nuevo saca dos escuadras de leva o una de línea; uno de nivel 25, las combinaciones de abajo.
 
 **El tamaño del escuadrón es propio de cada tropa** (decidido el 2026-09-27; antes lo fijaba el escalón). La columna
 «de partida» de la tabla es la que tenía cada escalón al principio. Desde el 2026-11-12 ya no tiene que bajar con el
@@ -813,7 +813,7 @@ El campamento es donde un héroe guarda las escuadras que no lleva consigo, y es
   | Recinto de muralla completo (el mejor, también mientras se mejora o se amplía): empalizada / piedra / adarve | +10 / +15 / +20 |
   | Política "Levas de guarnición" (General, Doc 4.4) | +14 |
 
-  Sin Barracón, Galería de tiro ni Caballerizas de nivel 2 no hay guarnición. Con Barracón, Galería, muralla con adarve y política al máximo son 78 —unas dos escuadras pesadas y una de leva—, por debajo de los 100 de Liderazgo que se lleva consigo un héroe de nivel 30. Como el cupo es por héroe, cuantos más residentes tenga una plaza, más guarnición puede tener.
+  Sin Barracón, Galería de tiro ni Caballerizas de nivel 2 no hay guarnición. Con Barracón, Galería, muralla con adarve y política al máximo son 78 —unas dos escuadras pesadas y una de leva—, por debajo de los 100 de Liderazgo que se lleva consigo un héroe de nivel 25. Como el cupo es por héroe, cuantos más residentes tenga una plaza, más guarnición puede tener.
 - Una escuadra en guarnición se **entrega a la IA**: la maneja la IA y el héroe no puede usarla mientras siga asignada, aunque esté presente en la batalla.
 - En un asedio entra directamente, sin ocupar plaza de héroe.
 - Si el cupo baja por debajo de lo que ya tiene asignado (expira la política, se daña un edificio), lo asignado se queda; solo se impide asignar más.
@@ -869,7 +869,7 @@ El detalle de datos del héroe está en `typescript-final:Docs/Coordinacion/01_M
 
 - Héroe y escuadrones progresan con **nivel y experiencia**, al estilo de Conquest.
 - **El nivel de un escuadrón va del 1 al 10** y cada nivel le da **+3% de poder** en el combate con números: el nivel 1 tiene +3% y el 10, el máximo, +30% (decisión del autor del 2026-11-11, para acercarse a lo que pesa el nivel en Unity; antes era +1%). Cada nivel pide una cantidad de experiencia; al llenarla, sube al siguiente (`MILITAR.experienciaParaSubirEscuadra`: 10, 25, 50, 100, 150, 200, 250, 275 y 315, 1.375 hasta el 10; 2026-11-12). En el combate con números, un escuadrón gana 1 de experiencia si su bando vence y 0,5 si pierde; en una batalla de Unity, 4 o 2. Con **Ejército permanente** (Era IV), los escuadrones de los héroes de la Facción ganan un 10 % más.
-- **La experiencia del Héroe la pone el motor** (2026-11-12): con números, lo mismo que sus escuadrones (1 o 0,5), una vez por combate; en Unity, 4 si su bando gana y 2 si pierde, solo si participó. Unity no la calcula. Cada nivel pide 20 más que el anterior (100 para pasar al 2, 120 al 3… 660 al 30; 11.020 en total) y desde el 30, 680 cada uno. Hasta el 30, cada nivel le da **un punto de atributo** y **3 de Liderazgo**; desde el 31 sube sin dar nada.
+- **La experiencia del Héroe la pone el motor** (2026-11-12): con números, lo mismo que sus escuadrones (1 o 0,5), una vez por combate; en Unity, 4 si su bando gana y 2 si pierde, solo si participó. Unity no la calcula. Desde el 2026-11-13 el tope es el **50** y los primeros niveles son baratos: 3 para pasar al 2 y 3 más cada nivel hasta el 10 (27), 10 más cada nivel hasta el 20 (127) y 20 más hasta el 50 (727); 14.065 en total, y desde el 50, 747 cada uno. Hasta el 50, cada nivel le da **un punto de atributo**; el Liderazgo llega a 100 en el 25; habilidades en los niveles 1, 4, 8 y 16 y perks en el 11 y el 20 (los aplica Conquest); desde el 51 sube sin dar nada.
 - **El botín lo pone el motor, no la partida** (decidido el 2026-11-12): en una batalla de Unity, cada héroe que participó cobra las monedas como en el combate con números (500 o 150, con los mismos rendimientos) y una tirada de la tabla de objetos de Unity (crisoles, planos, medallas y el cofre; nunca piezas hechas), en la que algunas cosas solo caen si su bando gana. Unity ya no manda botín. Los objetos que llegan sin pedirlos (botín de Unity, de bandidos y de alijos, misiones, premio de rango de un mercenario) van a la **mochila**; lo que no cabe, al **almacén de objetos** de su residencia aunque el héroe esté fuera, y si tampoco cabe, se pierde (`Docs/Mechanics/Objetos_Del_Heroe.md` §3.7).
 
 ### 5.16.4 Herido

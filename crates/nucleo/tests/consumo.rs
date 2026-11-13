@@ -37,7 +37,7 @@ fn plaza_con_guarnicion(m: &M) -> (Nucleo, u64) {
         r
     };
     orden(&mut n, Comando::AlternarAutoConstruccion { asentamiento: a, pausada: true });
-    let h = orden(&mut n, Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into() }).creadas[0];
+    let h = orden(&mut n, Comando::CrearHeroe { cuenta: "ana".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into(), aspecto: Default::default() }).creadas[0];
     orden(&mut n, Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
     orden(&mut n, Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(a as u32)) });
     orden(&mut n, Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(a as u32) });
