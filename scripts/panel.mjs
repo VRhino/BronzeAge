@@ -23,6 +23,26 @@ const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PUERTO = Number(process.env.PANEL_PUERTO ?? 3999);
 const { configurations } = JSON.parse(readFileSync(path.join(RAIZ, '.claude/launch.json'), 'utf8'));
 
+// Las batallas con Conquest (2026-11-14, pedido del autor): el botón «Arrancar con Conquest» del lanzador arranca el servidor si está parado y, cuando escucha,
+// el lanzador con el servidor de batalla de Conquest (`Builds/PruebaRed/PruebaRed.exe`, que se construye desde Conquest con el menú de `PruebaRedEditor`) en vez
+// del de mentira. Conquest está junto al motor (`../Conquest_prototype`) o donde diga `CONQUEST_RAIZ`. Va sin ventana y juega la batalla de verdad
+// (`CONQUEST_BATALLA_REAL=1`); `CONQUEST_DURACION` (segundos, opcional) la acorta. Lo que el lanzador pone detrás de cada batalla (`--batalla`, `--lanzador`,
+// `--puerto`) no se toca. «Arrancar» sigue arrancando el de mentira de launch.json.
+const CONQUEST = path.resolve(RAIZ, process.env.CONQUEST_RAIZ ?? '../Conquest_prototype');
+const PRUEBA_RED = path.join(CONQUEST, 'Builds', 'PruebaRed', process.platform === 'win32' ? 'PruebaRed.exe' : 'PruebaRed');
+// Qué lleva el lanzador en marcha ('mentira' o 'conquest') y la petición del botón mientras espera al servidor.
+const conquest = { modo: null, duracion: null, esperando: false, mensaje: null };
+function envConquest(duracion) {
+  const registro = path.join(CONQUEST, 'Logs', 'batalla_servidor.log');
+  // LANZADOR_ARGUMENTOS se parte por espacios: el registro solo va si su ruta no tiene ninguno (si no, Unity escribe en su Player.log de siempre).
+  const args = ['-batchmode', '-nographics', ...(/\s/.test(registro) ? [] : ['-logFile', registro])];
+  return { LANZADOR_PROCESO: PRUEBA_RED, LANZADOR_ARGUMENTOS: args.join(' '), CONQUEST_BATALLA_REAL: '1', ...(duracion ? { CONQUEST_DURACION: String(duracion) } : {}) };
+}
+function avisoConquest() {
+  if (!existsSync(PRUEBA_RED)) return `falta ${PRUEBA_RED}: constrúyelo desde Conquest (menú de PruebaRedEditor, o Unity -batchmode -quit -executeMethod ConquestTactics.Net.Editor.PruebaRedEditor.Construir con el editor cerrado), o pon CONQUEST_RAIZ con la carpeta de Conquest`;
+  return null;
+}
+
 // Cómo le dice el panel a cada servicio su puerto y el del servidor. P = los puertos elegidos ahora mismo.
 // El servidor sirve en un solo puerto el WebSocket del contrato 05 y el HTTP del acceso.
 const VITE = (p) => ['--', '--port', p, '--strictPort'];
@@ -142,10 +162,12 @@ function escucha(puerto) {
   });
 }
 
-function arrancar(c) {
+function arrancar(c, extra = {}) {
   if (procesos[c.name]?.hijo || !existsSync(carpeta(c)) || SERVICIOS[c.name]?.aviso?.(c)) return;
   const P = Object.fromEntries(Object.entries(puertos).map(([k, v]) => [k, String(v)]));
-  const { args = [], env = {} } = SERVICIOS[c.name]?.con(P[c.name], P) ?? {};
+  const { args = [], env: base = {} } = SERVICIOS[c.name]?.con(P[c.name], P) ?? {};
+  const env = { ...base, ...extra };
+  if (c.name === 'bronzeage-lanzador') { conquest.modo = extra.LANZADOR_PROCESO === PRUEBA_RED ? 'conquest' : 'mentira'; conquest.duracion = extra.CONQUEST_DURACION ?? null; }
   for (const k of SERVICIOS[c.name]?.secretos ?? []) env[k] = secreto(c, k);
   const p = { log: [] };
   // detached fuera de Windows: el hijo encabeza su grupo de procesos y parar() lo corta entero (shell:true deja un sh en medio).
@@ -183,6 +205,29 @@ function parar(nombre) {
   setTimeout(() => { if (procesos[nombre]?.hijo === h) matar(h, 'SIGKILL'); }, 20000);
 }
 
+// El botón «Arrancar con Conquest»: el servidor si hace falta (y si puede), y el lanzador con Conquest en cuanto el servidor escucha (cargo puede tardar en compilar).
+async function arrancarConquest(duracion) {
+  const s = configurations.find((x) => x.name === 'bronzeage-servidor'), l = configurations.find((x) => x.name === 'bronzeage-lanzador');
+  if (!s || !l || conquest.esperando || procesos[l.name]?.hijo) return;
+  const no = avisoConquest() ?? SERVICIOS[l.name].aviso?.(l);
+  if (no) { conquest.mensaje = no; return; }
+  conquest.esperando = true; conquest.mensaje = null;
+  try {
+    if (!(await escucha(puertos[s.name]))) {
+      const noServidor = SERVICIOS[s.name].aviso?.(s);
+      if (noServidor) { conquest.mensaje = `el servidor no puede arrancar: ${noServidor}`; return; }
+      arrancar(s);
+      const limite = Date.now() + 15 * 60_000;
+      while (!(await escucha(puertos[s.name]))) {
+        if (!procesos[s.name]?.hijo) { conquest.mensaje = 'el servidor se paró antes de escuchar: mira su registro'; return; }
+        if (Date.now() > limite) { conquest.mensaje = 'el servidor no escucha tras 15 min: mira su registro'; return; }
+        await new Promise((ok) => setTimeout(ok, 1000));
+      }
+    }
+    arrancar(l, envConquest(duracion));
+  } finally { conquest.esperando = false; }
+}
+
 async function estado() {
   return Promise.all(configurations.map(async (c) => {
     const p = procesos[c.name];
@@ -194,6 +239,8 @@ async function estado() {
       token_control: SERVICIOS[c.name]?.secretos?.includes('BOTS_TOKEN') ? secreto(c, 'BOTS_TOKEN') : null,
       falta: !existsSync(carpeta(c)), aviso: SERVICIOS[c.name]?.aviso?.(c) ?? null,
       escucha: puertos[c.name] ? await escucha(puertos[c.name]) : false, lanzado: !!p?.hijo, log: p?.log.slice(-200) ?? [],
+      ...(c.name === 'bronzeage-lanzador' ? { conquest: { exe: PRUEBA_RED, aviso: avisoConquest(), modo: p?.hijo ? conquest.modo : null, duracion: conquest.duracion,
+        esperando: conquest.esperando, mensaje: conquest.mensaje } } : {}),
     };
   }));
 }
@@ -342,7 +389,10 @@ async function pintar(){
       document.getElementById(d.tipo==='cliente'?'clientes':d.tipo==='tarea'?'tareas':'backend').append(c);
       c.innerHTML='<div class="top"><span class="dot"></span><span class="nom"></span><span class="est"></span></div><div class="cmd"></div><div class="aviso"></div><div class="token fila" hidden><span class="est">token de control</span><code></code><button>Copiar</button></div>'
         +'<div class="fila"><button data-a="arrancar">Arrancar</button><button data-a="parar">Parar</button><button class="abrir">Abrir ↗</button>'
-        +'<label>puerto <input type="number" min="1" max="65535"></label></div><pre></pre>';
+        +'<label>puerto <input type="number" min="1" max="65535"></label></div>'
+        +(d.conquest?'<div class="fila conquest"><button class="con">Arrancar con Conquest</button><label style="margin-left:0">duración (s) <input class="dur" type="number" min="10" placeholder="ticket"></label><span class="est cq"></span></div><div class="aviso cqa"></div>':'')
+        +'<pre></pre>';
+      if(d.conquest)c.querySelector('.con').onclick=()=>{const v=c.querySelector('.dur').value;post('/api/conquest/'+n+(v?'/'+v:''))};
       c.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>post('/api/'+b.dataset.a+'/'+n));
       c.querySelector('.token button').onclick=e=>navigator.clipboard.writeText(c.querySelector('.token code').textContent).then(()=>{e.target.textContent='Copiado';setTimeout(()=>e.target.textContent='Copiar',1500)});
       c.querySelector('.abrir').onclick=()=>window.open('http://localhost:'+c.querySelector('input').value,'_blank');
@@ -354,7 +404,12 @@ async function pintar(){
     c.querySelector('.aviso').textContent=d.aviso??'';
     c.querySelector('.token').hidden=!d.token_control;c.querySelector('.token code').textContent=d.token_control??'';
     c.querySelector('label').style.display=d.tipo==='tarea'||!d.puerto?'none':'';
-    const inp=c.querySelector('input');
+    if(d.conquest){const q=d.conquest;
+      c.querySelector('.con').disabled=!!q.aviso||!!d.aviso||d.lanzado||q.esperando;c.querySelector('.dur').disabled=d.lanzado||q.esperando;
+      c.querySelector('.cq').textContent=q.esperando?'arrancando el servidor y esperando a que escuche…':d.lanzado?(q.modo==='conquest'?'con Conquest'+(q.duracion?' · batallas de '+q.duracion+' s':''):'con el servidor de batalla de mentira'):'';
+      c.querySelector('.cqa').textContent=q.aviso??q.mensaje??'';
+      c.querySelector('.cmd').textContent=d.comando+(d.lanzado&&q.modo==='conquest'?'  [Conquest: '+q.exe+']':'');}
+    const inp=c.querySelector('label input');
     if(document.activeElement!==inp)inp.value=d.puerto;
     inp.disabled=d.lanzado; // el puerto se fija al arrancar
     c.querySelector('.abrir').classList.toggle('on',d.tipo==='cliente'&&d.escucha);
@@ -515,7 +570,12 @@ http.createServer(async (req, res) => {
   if (accion === 'estado') return json(200, await estado());
   const c = configurations.find((x) => x.name === (nombre ?? ''));
   if (req.method !== 'POST' || !c) { res.writeHead(404, cors); return res.end(); }
-  if (accion === 'arrancar') arrancar(c);
+  if (accion === 'arrancar') { if (c.name === 'bronzeage-lanzador') conquest.mensaje = null; arrancar(c); }
+  else if (accion === 'conquest' && c.name === 'bronzeage-lanzador') {
+    const d = valor === undefined ? null : Number(valor);
+    if (d !== null && (!Number.isInteger(d) || d < 10)) { res.writeHead(400, cors); return res.end(); }
+    arrancarConquest(d);
+  }
   else if (accion === 'parar') parar(c.name);
   else if (accion === 'puerto') {
     const p = Number(valor);
