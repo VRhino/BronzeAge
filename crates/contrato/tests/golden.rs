@@ -209,6 +209,14 @@ fn los_dorados_de_4h_dicen_lo_que_deben() {
     let Some(mensaje_para_servidor_de_batalla::Cuerpo::Ticket(t)) = m.cuerpo else { panic!() };
     assert!(t.battle_id.len() == 36 && t.battle_id.matches('-').count() == 4 && t.game_id.contains(':'), "{} {}", t.battle_id, t.game_id);
 
+    // El sigilo del estandarte de cada bando y de cada participante (2026-11-15): los bandidos, con el reservado; la Facción, con el suyo.
+    let ms::Cuerpo::Batalla(m) = de_servidor("batalla_ticket_de_caravana_con_dos") else { panic!() };
+    let Some(mensaje_para_servidor_de_batalla::Cuerpo::Ticket(t)) = m.cuerpo else { panic!() };
+    let (atacante, defensor) = (t.atacante.unwrap(), t.defensor.unwrap());
+    assert_eq!(atacante.sigilo.map(|s| (s.emblema_id, s.color_primario_id)), Some(("bandidos".to_owned(), "negro".to_owned())));
+    assert_eq!(defensor.sigilo.as_ref().map(|s| s.emblema_id.as_str()), Some("toro"));
+    assert_eq!(defensor.participantes[0].sigilo, defensor.sigilo);
+
     // Las órdenes nuevas.
     let orden_de = |nombre: &str| match de_cliente(nombre) {
         mc::Cuerpo::Orden(o) => o.cuerpo.unwrap(),

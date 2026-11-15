@@ -823,7 +823,7 @@ fn informes_de_region(n: &Nucleo, f: u32) -> Vec<pb::InformeRegion> {
 }
 
 /// El sigilo de una Facción en el contrato.
-fn sigilo(s: &politica::sigilo::Sigilo) -> pb::Sigilo {
+pub(super) fn sigilo(s: &politica::sigilo::Sigilo) -> pb::Sigilo {
     pb::Sigilo {
         forma_id: s.forma.clone(),
         campo_id: s.campo.clone(),

@@ -71,8 +71,10 @@ La forma exacta es `contratos.schema.json` (JSON Schema draft-07, una entrada po
 BattleTicket        { schemaVersion, battleId, gameId, ticketRevision, contextoEstrategico, bandos{atacante,defensor}, mapa, reglas }
 ContextoEstrategico  asedio { asentamientoId } | campo_abierto { punto, columnas: 'ejercitos'|'solitarios' }
                    | caravana { caravanaId, punto } | campamento_bandidos { campamentoId, punto }
-BattleSide          { faccionId: id|null, capacidadMaxima, participantes: BattleParticipantSnapshot[], escuadrasSinHeroe: SquadSnapshot[] }
-BattleParticipantSnapshot { heroeId, faccionId: id|null, controlador: 'humano'|'bot', heroe: HeroSnapshot, escuadras: SquadSnapshot[] }
+BattleSide          { faccionId: id|null, capacidadMaxima, participantes: BattleParticipantSnapshot[], escuadrasSinHeroe: SquadSnapshot[],
+                      sigilo }                                                                       (Rust, 2026-11-15)
+BattleParticipantSnapshot { heroeId, faccionId: id|null, controlador: 'humano'|'bot', heroe: HeroSnapshot, escuadras: SquadSnapshot[],
+                      sigilo }                                                                       (Rust, 2026-11-15)
 HeroSnapshot        { displayName, classDefinitionId, nivel, genero, avatar, equipamiento,
                       atributosEfectivos }                                                (9: `reserved` desde el 2026-11-12)
 SquadSnapshot       { squadId, heroeId: id|null, tropaId, efectivosAutorizados, nivel, experiencia, moral,
@@ -92,6 +94,7 @@ BattleResult        { schemaVersion, battleId, resultId, ticketRevision, intento
 ```
 
 - **`faccionId` de un bando** es `null` cuando el bando no es de nadie: los bandidos y **una columna sin bandera** (un recién llegado sin Facción, cuya columna lleva la Facción vacía `''`: se traduce a `null`, `bandoDeColumna`). El esquema rechaza la cadena vacía.
+- **`sigilo` de un bando y de un participante** (Rust, 2026-11-15, para pintar el estandarte en la batalla): siempre viene, con las ocho piezas de [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) §3.8. Es el de su Facción; los **bandidos** de un campamento (el bando sin Facción ni héroes de una batalla contra un campamento o de su acoso) llevan el reservado `bandidos` de `CATALOGO_SIGILO`; cualquier otro sin Facción (una columna sin bandera, un héroe sin Facción, unos carreteros cuya Facción ya no existe), el reservado `neutro`. Una Facción que desaparece mientras dura la batalla pasa a `neutro` en lo que se proyecte después (el ticket se proyecta del estado, no se congela con el sigilo).
 - **`SquadSnapshot` de lo que no es de nadie** (bandidos, carreteros): `heroeId: null`, nivel 1, experiencia 0, moral 100, formación 0 (`tropaSinDueno`); no persisten entre batallas. En Rust (2026-11-11), en la de reposo y con las formaciones que no piden tecnología.
 - **`HeroSnapshot.atributosEfectivos`** = los `atributosBase` de su clase más sus puntos repartidos (desde el 2026-11-12, D16; antes, solo lo repartido). `classDefinitionId` es la clase, la del arma puesta, y `equipamiento` es el equipo real: cada pieza con su `tipo` y su `precio` de la ficha y, si es forjada, su `itemInstanceId` (`obj-N`) y sus cifras ya multiplicadas por la calidad en `estadisticas` (las de la ficha las tiene Unity en el catálogo `OBJETOS`). Los nombres de `estadisticas` van en camelCase: `fuerza`, `destreza`, `armadura` y `vitalidad`; en un arma, `danoPerforante`, `danoCortante`, `danoContundente`, `penetracionPerforante`, `penetracionCortante` y `penetracionContundente`; en una armadura, `defensaPerforante`, `defensaCortante`, `defensaContundente` y `salud` (`proyeccion/propios.rs`, `estadisticas`). Desde el 2026-11-12 no lleva `casillasInventarioLibres` (9, `reserved`): Unity no da botín (D6 y D7).
 - **`efectivosAutorizados`** = la **cantidad** de la escuadra al abrir: la fuerza **reservada**. El resultado cierra sobre esto, no sobre lo `desplegado`.

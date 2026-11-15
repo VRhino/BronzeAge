@@ -212,6 +212,8 @@ los parecidos se permiten. `sigiloLibre(semilla, ocupados)`: toma `hash32(semill
 k·(k−1)·k·k colores) y prueba `+1` hasta dar con uno libre; desmezcla el número por restos sucesivos en el orden forma, campo, emblema, orla, color primario, secundario (saltando el primario), color del emblema,
 color de la orla.
 
+`reservados` son los sigilos del servidor, que ninguna Facción puede elegir (sus emblemas no están en `emblemas`): `neutro` (quien no tiene Facción), `bandidos` y `mercenarios`. En Rust (`politica::sigilo::Catalogo`, 2026-11-15) se leen del bloque y los usa el ticket de batalla: el estandarte de los bandidos de un campamento es `bandidos` y el de un bando o un participante sin Facción, `neutro` ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §3.2).
+
 <!-- parametros:CATALOGO_SIGILO -->
 ```json
 {

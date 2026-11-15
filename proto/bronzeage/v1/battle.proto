@@ -139,15 +139,20 @@ message BattleParticipantSnapshot {
   bool es_bot = 3;
   HeroSnapshot heroe = 4;
   repeated SquadSnapshot escuadras = 5;
+  // 2026-11-15: el sigilo bajo el que lucha, para pintar su estandarte: el de su Facción o, sin Facción, el reservado `neutro` de `CATALOGO_SIGILO`.
+  Sigilo sigilo = 6;
 }
 
 // Un bando. Sin Facción ni héroes (los bandidos, que no son bots ni jugadores) es válido: `faccion_id` ausente, `participantes` vacío y, en su lugar,
 // `escuadras_sin_heroe`.
+// 2026-11-15: `sigilo` es el del estandarte del bando y siempre viene: el de su Facción; el reservado `bandidos` de `CATALOGO_SIGILO` si son los
+// bandidos de un campamento; el reservado `neutro` si el bando no es de nadie y no son bandidos (una columna sin bandera, los carreteros sin Facción).
 message BattleSide {
   optional string faccion_id = 1;
   uint32 capacidad_maxima = 2;           // asedio: 15
   repeated BattleParticipantSnapshot participantes = 3;
   repeated SquadSnapshot escuadras_sin_heroe = 4;
+  Sigilo sigilo = 5;
 }
 
 // El terreno de la batalla sale del artefacto de mundo: Unity no lo inventa.
