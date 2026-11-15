@@ -245,8 +245,10 @@ async fn la_marca_de_administrador_se_da_se_quita_y_sobrevive_a_un_reinicio() {
 
 #[tokio::test]
 async fn con_un_solo_turno_de_argon_el_segundo_login_a_la_vez_recibe_ocupado_y_el_turno_se_suelta() {
-    let caro = Coste { memoria_kib: 8192, pasadas: 3 };
-    let a = Acceso::en_memoria(Config { coste: caro, argon_a_la_vez: 1, argon_espera: Duration::from_millis(5), ..Config::default() });
+    // Un hash que dure bastante más que la resolución del reloj de Windows (~15 ms): con el perfil `suite` (opt-level 1) uno de 8 MiB acababa antes de que venciera
+    // la espera y el segundo login cogía el turno. Con espera cero, quien no lo tiene libre al pedirlo recibe `Ocupado`.
+    let caro = Coste { memoria_kib: 65_536, pasadas: 3 };
+    let a = Acceso::en_memoria(Config { coste: caro, argon_a_la_vez: 1, argon_espera: Duration::ZERO, ..Config::default() });
     a.registrar("ana", "una clave larga", None).await.unwrap();
     let (x, y) = tokio::join!(a.entrar("ana", "una clave larga"), a.entrar("ana", "una clave larga"));
     assert!(x.is_ok(), "{x:?}");
