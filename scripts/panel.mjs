@@ -272,6 +272,31 @@ async function aplicarRed() {
   if (antes) await arrancarConquest(antes.duracion, antes.modo !== 'conquest');
 }
 
+// «Jugar» (pestaña Inicio, 2026-11-15): arranca lo que falte para jugar la partida activa: el servidor y, si la partida juega las batallas en Unity,
+// el lanzador con Conquest (con el de mentira si Conquest no está construido). No espera a cargo: el progreso lo enseña el estado. Devuelve por qué no puede, o null.
+// `conRed` (si viene) abre o cierra la red local antes; con la red abierta, abre el cortafuegos si hace falta (Windows pide permiso) y reinicia lo que arrancó con la red de antes.
+async function jugar(conRed) {
+  const n = partidaActual(), s = servidor();
+  if (!n) return 'no hay partida activa: elige una o crea una nueva';
+  if (!(await escucha(puertos[s.name])) && !procesos[s.name]?.hijo) { const no = SERVICIOS[s.name].aviso(s); if (no) return no; }
+  if (conRed !== undefined && conRed !== red.abierta) {
+    if (conRed && !red.ip) return 'este equipo no tiene ninguna IP de red local';
+    red.abierta = conRed === true;
+    guardarRed();
+  }
+  if (red.abierta && (await cortafuegos())?.some((r) => !r.ok)) { const no = await abrirCortafuegos(); if (no) return no; }
+  const seguir = async () => {
+    if (!infoPartida(n).batallas_en_unity) { if (!(await escucha(puertos[s.name]))) arrancar(s); return; }
+    conquest.mensaje = null;
+    arrancarConquest(null, !!avisoConquest()); // arranca también el servidor si hace falta
+  };
+  if (['bronzeage-servidor', 'bronzeage-lanzador'].some((x) => procesos[x]?.hijo && procesos[x].red !== redDe())) aplicarRed().then(seguir);
+  else await seguir();
+  return null;
+}
+// «Parar todo»: lo que lanzó el panel, menos una generación de mundo a medias.
+const pararTodo = () => Object.keys(procesos).filter((n) => n !== 'generar-mundo').forEach(parar);
+
 async function estado() {
   return Promise.all(configurations.map(async (c) => {
     const p = procesos[c.name];
@@ -324,9 +349,29 @@ th{color:var(--sub);font-weight:500;font-size:12px}td .fila{gap:6px}td button{pa
 .msg{font-size:12px;margin-top:10px;min-height:16px}.msg.error{color:var(--off)}.msg.ok{color:var(--on)}
 .activa{color:var(--on);font-weight:600}.peligro{border-color:var(--off);color:var(--off)}
 .respaldos td{font-size:12px;color:var(--sub)}
+#v-inicio .card{max-width:820px}.form input[type=checkbox]{min-width:0;width:auto}.pasos{list-style:none;margin:16px 0;padding:0;display:grid;gap:9px}
+.pasos li{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.pasos b{min-width:84px;font-weight:600}.pasos li button{padding:3px 10px;font-size:12px}
+.grande{font-size:16px;padding:10px 28px;background:var(--acento);color:#14110d;border-color:var(--acento);font-weight:600}.grande:hover:not(:disabled){filter:brightness(1.1)}
+select{background:#0d0b08;color:var(--txt);border:1px solid var(--borde);border-radius:6px;padding:6px;font:inherit}
+.reg{margin:0}.reg>summary{font-size:12px;text-transform:none;letter-spacing:0;border:none;margin:10px 0 0;padding:0}
+.interruptor{margin:14px 0 0;display:flex;gap:8px;align-items:center;font-size:14px;color:var(--txt);cursor:pointer}.interruptor input{width:auto;min-width:0}
+.enred{margin-top:10px;padding:10px 12px;border:1px dashed var(--acento);border-radius:8px;display:grid;gap:8px}.enred[hidden]{display:none}
+.enred code{font:13px ui-monospace,monospace;color:var(--txt);user-select:all}.enred button{padding:3px 10px;font-size:12px}
 .est{font-size:12px;color:var(--sub)}.aviso{color:var(--wait);font-size:12px;margin:0 0 8px}.aviso:empty{display:none}.nota{color:var(--sub);font-size:12px;margin-top:22px}
 </style></head><body><h1>⚒ Panel de arranque — BronzeAge</h1>
-<nav class="pestanas"><button data-vista="partidas">Mundo y partidas</button><button data-vista="servicios">Servicios</button></nav>
+<nav class="pestanas"><button data-vista="inicio">Inicio</button><button data-vista="partidas">Mundo y partidas</button><button data-vista="avanzado">Avanzado</button></nav>
+<section class="vista" id="v-inicio">
+<details open data-seccion="jugar"><summary>Jugar</summary>
+<div class="card"><div class="form"><label>Partida<select id="i-partida"></select></label></div>
+<label class="interruptor"><input type="checkbox" id="i-red"> Dejar entrar a otros equipos de mi red (wifi o cable)</label>
+<div class="enred" id="i-enred" hidden>
+<div class="fila"><span class="est">El otro equipo se conecta a</span><code id="i-url"></code><button data-copia="i-url">Copiar</button><span id="i-ips"></span></div>
+<div class="fila"><span class="est">Conquest compilado, en el otro equipo</span><code id="i-cmd"></code><button data-copia="i-cmd">Copiar</button></div>
+<div class="est">Con el editor de Unity: esa dirección en el campo «Servidor» de ConexionDeMundo (Inspector). La cuenta se crea con «Registrar».</div></div>
+<ul class="pasos" id="i-pasos"></ul>
+<div class="fila"><button class="grande" id="i-jugar">▶ Jugar</button><button id="i-parar">■ Parar todo</button></div><div class="msg" id="i-msg"></div></div></details>
+<details open data-seccion="abrir"><summary>Abrir</summary><div class="card"><div class="fila" id="i-clientes"></div><div class="est" style="margin-top:8px">Si no está en marcha, se arranca y se abre en cuanto responde.</div></div></details>
+</section>
 <section class="vista" id="v-partidas">
 <details open data-seccion="partidas"><summary>Partidas<span class="cuenta" id="p-cuenta"></span></summary>
 <div class="card"><table><thead><tr><th>Partida</th><th>Semilla</th><th>Mundo</th><th>Batallas</th><th>Creada</th><th>Estado</th><th></th></tr></thead><tbody id="p-lista"></tbody></table>
@@ -343,8 +388,8 @@ th{color:var(--sub);font-weight:500;font-size:12px}td .fila{gap:6px}td button{pa
 <span class="est" id="m-estado"></span></div>
 <table style="margin-top:12px"><thead><tr><th>Artefacto</th><th>Creado</th><th>Partidas</th><th></th></tr></thead><tbody id="m-lista"></tbody></table><div class="msg" id="m-msg"></div></div></details>
 </section>
-<section class="vista" id="v-servicios">
-<details open data-seccion="red"><summary>Jugar desde otro equipo<span class="cuenta" id="r-cuenta"></span></summary>
+<section class="vista" id="v-avanzado">
+<details open data-seccion="red"><summary>Red local (detalle)<span class="cuenta" id="r-cuenta"></span></summary>
 <div class="card"><div class="form"><label style="flex-direction:row;align-items:center"><input id="r-abierta" type="checkbox" style="width:auto"> abrir a la red local</label>
 <label>IP de este equipo<select id="r-ip"></select></label><button id="r-cortafuegos">Abrir cortafuegos</button><button id="r-aplicar">Aplicar (reinicia servidor y lanzador)</button></div>
 <div class="est" id="r-estado" style="margin-top:10px"></div><div class="aviso" id="r-aviso" style="margin-top:8px"></div>
@@ -366,14 +411,14 @@ async function post(u){await fetch(u,{method:'POST'});setTimeout(pintar,300)}
 function verVista(v){for(const b of document.querySelectorAll('.pestanas button'))b.classList.toggle('on',b.dataset.vista===v);
   for(const s of document.querySelectorAll('.vista'))s.classList.toggle('on',s.id==='v-'+v);try{localStorage.setItem('panel.vista',v)}catch{}}
 document.querySelectorAll('.pestanas button').forEach(b=>b.onclick=()=>verVista(b.dataset.vista));
-let vista='partidas';try{vista=localStorage.getItem('panel.vista')||vista}catch{}verVista(vista);
+let vista='inicio';try{vista=localStorage.getItem('panel.vista')||vista}catch{}verVista(['inicio','partidas','avanzado'].includes(vista)?vista:'inicio');
 // La API de partidas y mundo con JSON; deja el resultado en la línea de mensajes msg.
-async function api(metodo,u,cuerpo,msg){
-  const el=document.getElementById(msg);el.className='msg';el.textContent='…';
+async function api(metodo,u,cuerpo,msg,espera){
+  const el=document.getElementById(msg);el.className='msg';el.textContent=espera??'…';
   try{const r=await fetch(u,{method:metodo,headers:{'content-type':'application/json'},body:cuerpo?JSON.stringify(cuerpo):undefined});
     const v=await r.json().catch(()=>({}));
     if(!r.ok){el.className='msg error';el.textContent=v.mensaje||v.error||('error '+r.status);return null}
-    el.className='msg ok';el.textContent=v.aviso?('hecho; el servidor no arranca: '+v.aviso):'hecho';pintarPartidas();setTimeout(pintar,300);return v;
+    el.className='msg ok';el.textContent=v.aviso?('hecho; el servidor no arranca: '+v.aviso):'hecho';pintarPartidas();pintarRed();setTimeout(pintar,300);return v;
   }catch(e){el.className='msg error';el.textContent=String(e);return null}
 }
 const fecha=ms=>ms?new Date(ms).toLocaleString('es-ES',{dateStyle:'short',timeStyle:'short'}):'—';
@@ -382,6 +427,7 @@ const boton=(td,t,f,cl)=>{const b=document.createElement('button');b.textContent
 const abiertos=new Set(); // partidas con la lista de respaldos desplegada
 async function pintarPartidas(){
   let d,m;try{[d,m]=await Promise.all([(await fetch('/api/partidas')).json(),(await fetch('/api/mundo')).json()])}catch{return}
+  P=d;M=m;
   const lista=document.getElementById('p-lista');lista.textContent='';
   document.getElementById('p-cuenta').textContent='· '+d.partidas.length+(d.actual?' · activa: '+d.actual:' · ninguna activa');
   for(const p of d.partidas){
@@ -423,7 +469,7 @@ async function pintarPartidas(){
     ml.append(tr)}
   if(!m.artefactos.length){const tr=document.createElement('tr');celda(tr,'No hay ningún artefacto de mundo: genera uno.').colSpan=4;ml.append(tr)}
   document.getElementById('m-generar').disabled=m.generando;
-  document.getElementById('m-estado').textContent=m.generando?'generando con la semilla '+m.semilla+'…':m.ultima?('último: semilla '+m.ultima.semilla+(m.ultima.codigo===0?', bien':', falló (código '+m.ultima.codigo+'; mira su log en Servicios)')):'';
+  document.getElementById('m-estado').textContent=m.generando?'generando con la semilla '+m.semilla+'…':m.ultima?('último: semilla '+m.ultima.semilla+(m.ultima.codigo===0?', bien':', falló (código '+m.ultima.codigo+'; mira su registro en Avanzado)')):'';
 }
 document.getElementById('n-crear').onclick=()=>api('POST','/api/partidas',{nombre:document.getElementById('n-nombre').value,semilla:Number(document.getElementById('n-semilla').value),
   mundo:document.getElementById('n-mundo').value||undefined,batallas_en_unity:document.getElementById('n-unity').checked,activar:document.getElementById('n-activar').checked},'n-msg');
@@ -432,6 +478,7 @@ pintarPartidas();setInterval(pintarPartidas,4000);
 // La red local: el interruptor, la IP, el cortafuegos y qué falta para que entre otro equipo.
 async function pintarRed(){
   let r;try{r=await (await fetch('/api/red')).json()}catch{return}
+  RED=r;
   const ab=document.getElementById('r-abierta'),sel=document.getElementById('r-ip');ab.checked=r.abierta;
   if(document.activeElement!==sel){sel.textContent='';for(const x of r.ips){const o=document.createElement('option');o.value=x.ip;o.textContent=x.ip+' ('+x.nombre+')';sel.append(o)}sel.value=r.ip??''}
   const fw=r.cortafuegos,fwOk=!fw||fw.every(x=>x.ok);
@@ -449,8 +496,82 @@ document.getElementById('r-cortafuegos').onclick=()=>api('POST','/api/red/cortaf
 document.getElementById('r-aplicar').onclick=()=>api('POST','/api/red/aplicar',null,'r-msg').then(pintarRed);
 document.querySelector('#r-otro button').onclick=e=>navigator.clipboard.writeText(document.querySelector('#r-otro code').textContent).then(()=>{e.target.textContent='Copiado';setTimeout(()=>e.target.textContent='Copiar',1500)});
 pintarRed();setInterval(pintarRed,5000);
+// ───── Inicio: el estado de un vistazo y los botones de siempre ─────
+const NOMBRES={'bronzeage-servidor':'Servidor del mundo','bronzeage-lanzador':'Lanzador de batallas','generar-mundo':'Generar mundo','bronzeage-bots':'Bots',
+  'bronzeage-bots-mercenarios':'Bots mercenarios','bronzeage-admin':'Admin web','bronzeage-cliente-jugador':'Cliente jugador (web)'};
+let P=null,M=null,RED=null,ESTADO=[]; // lo último de /api/partidas, /api/mundo, /api/red y /api/estado
+function paso(ul,color,titulo,texto,accion){
+  const li=document.createElement('li');li.innerHTML='<span class="dot"></span><b></b><span class="est"></span>';
+  li.querySelector('.dot').style.background='var(--'+color+')';li.querySelector('b').textContent=titulo;li.querySelector('.est').textContent=texto;
+  if(accion){const b=document.createElement('button');b.textContent=accion[0];b.onclick=accion[1];li.append(b)}
+  ul.append(li);
+}
+function pintarInicio(datos){
+  ESTADO=datos;if(!P||!M)return;
+  const de=n=>datos.find(d=>d.nombre===n),s=de('bronzeage-servidor'),l=de('bronzeage-lanzador'),q=l?.conquest??{},p=P.partidas.find(x=>x.actual);
+  const sel=document.getElementById('i-partida');
+  if(document.activeElement!==sel){sel.textContent='';if(!p)sel.append(new Option('— ninguna activa —',''));
+    for(const x of P.partidas)sel.append(new Option(x.nombre+(x.batallas_en_unity?' · batallas en Unity':' · batallas con números'),x.nombre));
+    sel.append(new Option('+ Nueva partida…','+'));sel.value=p?.nombre??''}
+  const ul=document.getElementById('i-pasos');ul.textContent='';
+  if(!p)paso(ul,'off','Partida','no hay ninguna activa: elige una arriba o crea una nueva',['Nueva partida',()=>{verVista('partidas');document.getElementById('n-nombre').focus()}]);
+  else if(M.generando)paso(ul,'wait','Mundo','generándose con la semilla '+M.semilla+'… (unos 2 min)');
+  else if(p.mundo?M.artefactos.some(a=>a.archivo===p.mundo):M.artefactos.length)paso(ul,'on','Mundo','listo');
+  else if(p.mundo)paso(ul,'off','Mundo','falta el mundo de esta partida ('+p.mundo.slice(6,18)+'…): genéralo con su semilla',['Ir a Mundo',()=>verVista('partidas')]);
+  else paso(ul,'off','Mundo','no hay ningún mundo generado',['Generar mundo (2 min)',()=>api('POST','/api/mundo',{semilla:42},'i-msg')]);
+  if(s.escucha)paso(ul,'on','Servidor','en marcha en el puerto '+s.puerto+(s.red&&s.red!=='local'?' · abierto a la red':''));
+  else if(s.lanzado)paso(ul,'wait','Servidor','arrancando… (si hay que compilar, tarda unos minutos)');
+  else paso(ul,'off','Servidor','apagado');
+  if(p&&!p.batallas_en_unity)paso(ul,'sub','Batallas','se resuelven con números: no hace falta el lanzador');
+  else if(p&&l.lanzado)paso(ul,'on','Batallas',q.modo==='conquest'?'con Conquest':'con el servidor de batalla de mentira'+(q.aviso?' (Conquest no está construido)':''));
+  else if(p&&q.esperando)paso(ul,'wait','Batallas','esperando a que arranque el servidor…');
+  else if(p)paso(ul,'off','Batallas',q.mensaje||('apagado'+(q.aviso?' · Conquest no está construido: irán con el de mentira':'')));
+  const fwMal=!!RED?.abierta&&!!RED.cortafuegos?.some(x=>!x.ok),viejos=!!RED?.en_marcha.some(x=>x.red!==RED.con);
+  if(RED&&!RED.abierta)paso(ul,'sub','Red','solo este equipo'+(viejos?' · el servidor sigue abierto a la red: pulsa «Jugar» para cerrarla':''));
+  else if(RED)paso(ul,viejos||fwMal?'wait':'on','Red',viejos?'abierta, pero lo que está en marcha arrancó antes: pulsa «Jugar» para aplicarlo':fwMal?'abierta, pero el cortafuegos aún no deja entrar: se abre al pulsar «Jugar» (Windows pide permiso)':'abierta: el otro equipo puede entrar');
+  const rb=document.getElementById('i-red');if(RED&&document.activeElement!==rb)rb.checked=RED.abierta;
+  document.getElementById('i-enred').hidden=!RED?.abierta;
+  if(RED?.abierta){const url='http://'+RED.ip+':'+RED.puerto;document.getElementById('i-url').textContent=url;document.getElementById('i-cmd').textContent='Conquest.exe -servidor '+url;
+    const ips=document.getElementById('i-ips');
+    if(RED.ips.length>1&&!ips.contains(document.activeElement)){ips.innerHTML='<select></select>';const se=ips.firstChild;
+      for(const x of RED.ips)se.append(new Option(x.ip+' ('+x.nombre+')',x.ip));se.value=RED.ip;
+      se.onchange=()=>api('POST','/api/red',{ip:se.value},'i-msg').then(()=>{se.blur();if(ESTADO.some(d=>d.lanzado&&d.red&&d.red!=='local'))document.getElementById('i-msg').textContent='IP cambiada: pulsa «Jugar» para aplicarla'})}
+    else if(RED.ips.length<=1)ips.textContent='';}
+  const listo=p&&s.escucha&&(!p.batallas_en_unity||l.lanzado)&&!viejos&&!fwMal,arrancando=(s.lanzado&&!s.escucha)||q.esperando;
+  const jb=document.getElementById('i-jugar');jb.disabled=!p||listo||arrancando||M.generando;jb.textContent=listo?'✓ Todo en marcha':arrancando?'Arrancando…':'▶ Jugar';
+  document.getElementById('i-parar').disabled=!datos.some(d=>d.lanzado&&d.tipo!=='tarea');
+  const cl=document.getElementById('i-clientes');
+  for(const d of datos.filter(d=>d.tipo==='cliente')){let b=cl.querySelector('[data-n="'+d.nombre+'"]');
+    if(!b){b=document.createElement('button');b.dataset.n=d.nombre;b.onclick=()=>abrirCliente(d.nombre);cl.append(b)}
+    b.textContent=(NOMBRES[d.nombre]??d.nombre)+' ↗';b.disabled=d.falta;b.title=d.escucha?'ya está en marcha':'se arranca y se abre';}
+}
+// Abre un cliente web; si no está en marcha, lo arranca y lo abre cuando responde (la pestaña se abre ya para que el navegador no la bloquee).
+async function abrirCliente(n){
+  const w=window.open('about:blank','_blank'),m=document.getElementById('i-msg'),nom=NOMBRES[n]??n;
+  const busca=async()=>(await (await fetch('/api/estado')).json()).find(x=>x.nombre===n);
+  let d=await busca();
+  if(!d.escucha){await fetch('/api/arrancar/'+encodeURIComponent(n),{method:'POST'});m.className='msg';m.textContent='arrancando '+nom+'…';
+    for(let i=0;i<180&&!d.escucha;i++){await new Promise(r=>setTimeout(r,1000));d=await busca();
+      if(!d.lanzado&&i>2){w?.close();m.className='msg error';m.textContent=nom+' no arrancó: mira su registro en Avanzado';return}}}
+  m.textContent='';const url='http://localhost:'+d.puerto;if(w)w.location=url;else window.open(url,'_blank');
+}
+// «Jugar» manda también cómo está el interruptor de la red; si hay que abrir el cortafuegos, Windows pide permiso y la petición espera a que se conteste.
+document.getElementById('i-jugar').onclick=()=>{const on=document.getElementById('i-red').checked,fw=on&&RED?.cortafuegos?.some(x=>!x.ok);
+  api('POST','/api/jugar',{red:on},'i-msg',fw?'abriendo el cortafuegos: acepta el permiso de administrador de Windows…':'…').then(pintarRed)};
+// El interruptor: con el servidor o el lanzador en marcha lo aplica ya (los reinicia); si no, solo lo guarda para el próximo «Jugar».
+document.getElementById('i-red').onchange=e=>{const on=e.target.checked;e.target.blur();
+  if(!ESTADO.some(d=>(d.nombre==='bronzeage-servidor'||d.nombre==='bronzeage-lanzador')&&d.lanzado))return api('POST','/api/red',{abierta:on},'i-msg').then(pintarRed);
+  if(!confirm((on?'Abrir':'Cerrar')+' la red reinicia el servidor y el lanzador: quien esté jugando se desconecta un momento.'+(on&&RED?.cortafuegos?.some(x=>!x.ok)?' Windows pedirá permiso de administrador para abrir el cortafuegos.':'')+' ¿Seguir?')){e.target.checked=!on;return}
+  api('POST','/api/jugar',{red:on},'i-msg',on&&RED?.cortafuegos?.some(x=>!x.ok)?'abriendo el cortafuegos: acepta el permiso de administrador de Windows…':'…').then(pintarRed)};
+document.querySelectorAll('[data-copia]').forEach(b=>b.onclick=()=>navigator.clipboard.writeText(document.getElementById(b.dataset.copia).textContent).then(()=>{b.textContent='Copiado';setTimeout(()=>b.textContent='Copiar',1500)}));
+document.getElementById('i-parar').onclick=()=>{if(confirm('¿Parar todo? El servidor guarda su foto al apagarse; quien esté jugando se queda sin conexión.'))api('POST','/api/parar-todo',null,'i-msg')};
+document.getElementById('i-partida').onchange=e=>{const v=e.target.value;e.target.blur();
+  if(v==='+'){verVista('partidas');document.getElementById('n-nombre').focus();return}
+  if(v&&confirm('¿Activar la partida «'+v+'»? Si el servidor está en marcha, se para (con su foto) y arranca con ella.'))api('POST','/api/partidas/'+encodeURIComponent(v)+'/activar',null,'i-msg');};
+
 async function pintar(){
   const datos=await (await fetch('/api/estado')).json();
+  pintarInicio(datos);
   for(const d of datos){
     const n=encodeURIComponent(d.nombre);
     let c=document.getElementById(d.nombre);
@@ -460,16 +581,16 @@ async function pintar(){
         +'<div class="fila"><button data-a="arrancar">Arrancar</button><button data-a="parar">Parar</button><button class="abrir">Abrir ↗</button>'
         +'<label>puerto <input type="number" min="1" max="65535"></label></div>'
         +(d.conquest?'<div class="fila conquest"><button class="con">Arrancar con Conquest</button><label style="margin-left:0">duración (s) <input class="dur" type="number" min="10" placeholder="ticket"></label><span class="est cq"></span></div><div class="aviso cqa"></div>':'')
-        +'<pre></pre>';
+        +'<details class="reg"><summary>Registro</summary><pre></pre></details>';
       if(d.conquest)c.querySelector('.con').onclick=()=>{const v=c.querySelector('.dur').value;post('/api/conquest/'+n+(v?'/'+v:''))};
       c.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>post('/api/'+b.dataset.a+'/'+n));
       c.querySelector('.token button').onclick=e=>navigator.clipboard.writeText(c.querySelector('.token code').textContent).then(()=>{e.target.textContent='Copiado';setTimeout(()=>e.target.textContent='Copiar',1500)});
       c.querySelector('.abrir').onclick=()=>window.open('http://localhost:'+c.querySelector('input').value,'_blank');
       c.querySelector('input').onchange=e=>post('/api/puerto/'+n+'/'+e.target.value);}
     c.querySelector('.dot').style.background=d.escucha||(d.lanzado&&!d.puerto&&d.tipo!=='tarea')?'var(--on)':d.lanzado?'var(--wait)':'var(--off)';
-    c.querySelector('.nom').textContent=d.nombre;
+    c.querySelector('.nom').textContent=NOMBRES[d.nombre]??d.nombre;
     c.querySelector('.est').textContent=d.falta?'sin carpeta':d.tipo==='tarea'?(d.lanzado?'en marcha…':'parada'):d.aviso&&!d.lanzado?'no puede arrancar':d.escucha?(d.lanzado?'encendido':'encendido (externo)'):d.lanzado?(d.puerto?'arrancando…':'en marcha'):'apagado';
-    c.querySelector('.cmd').textContent=d.comando;
+    c.querySelector('.cmd').textContent=d.nombre+' · '+d.comando;
     c.querySelector('.aviso').textContent=d.aviso??'';
     c.querySelector('.token').hidden=!d.token_control;c.querySelector('.token code').textContent=d.token_control??'';
     c.querySelector('label').style.display=d.tipo==='tarea'||!d.puerto?'none':'';
@@ -477,7 +598,7 @@ async function pintar(){
       c.querySelector('.con').disabled=!!q.aviso||!!d.aviso||d.lanzado||q.esperando;c.querySelector('.dur').disabled=d.lanzado||q.esperando;
       c.querySelector('.cq').textContent=q.esperando?'arrancando el servidor y esperando a que escuche…':d.lanzado?(q.modo==='conquest'?'con Conquest'+(q.duracion?' · batallas de '+q.duracion+' s':''):'con el servidor de batalla de mentira'):'';
       c.querySelector('.cqa').textContent=q.aviso??q.mensaje??'';
-      c.querySelector('.cmd').textContent=d.comando+(d.lanzado&&q.modo==='conquest'?'  [Conquest: '+q.exe+']':'');}
+      c.querySelector('.cmd').textContent=d.nombre+' · '+d.comando+(d.lanzado&&q.modo==='conquest'?'  [Conquest: '+q.exe+']':'');}
     const inp=c.querySelector('label input');
     if(document.activeElement!==inp)inp.value=d.puerto;
     inp.disabled=d.lanzado; // el puerto se fija al arrancar
@@ -488,7 +609,7 @@ async function pintar(){
     pre.textContent=d.log.join('\\n');if(abajo)pre.scrollTop=pre.scrollHeight;
   }
   // En el título de cada sección, cuántos están en marcha: se ve aunque esté plegada.
-  for(const g of document.querySelectorAll('#v-servicios details[data-seccion]')){
+  for(const g of document.querySelectorAll('#v-avanzado details[data-seccion]:not([data-seccion=red])')){
     const de=datos.filter(d=>(d.tipo==='cliente'?'clientes':d.tipo==='tarea'?'tareas':'backend')===g.dataset.seccion);
     g.querySelector('.cuenta').textContent=de.length?'· '+de.filter(d=>d.escucha||d.lanzado).length+'/'+de.length+' en marcha':'';
   }
@@ -654,6 +775,8 @@ http.createServer(async (req, res) => {
     guardarRed();
     return json(200, { ...red, con: redDe() });
   }
+  if (req.method === 'POST' && partes[1] === 'jugar') { const no = await jugar((await leerCuerpo(req))?.red); return no ? json(409, { error: 'no_puede', mensaje: no }) : json(200, { ok: true }); }
+  if (req.method === 'POST' && partes[1] === 'parar-todo') { pararTodo(); return json(200, { ok: true }); }
   const [, accion, nombre, valor] = partes;
   if (accion === 'estado') return json(200, await estado());
   const c = configurations.find((x) => x.name === (nombre ?? ''));
