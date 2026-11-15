@@ -415,7 +415,9 @@ impl Asentamiento {
     /// No ocupa cuadrilla ni entra en la cola de edificios. Cada celda deja su cita en `siguiente_celda_en` y su [`Evento::RecintoCelda`].
     pub fn avanzar_recintos(&mut self, t: Instante, x: &mut Exterior, reserva: &[Mil; N], ev: &mut Vec<Evento>) {
         let r = x.reglas;
-        let factor = self.politicas.factor(&r.politicas, "factorTiempoMuralla");
+        // El factor propio de la muralla (Postura Defensiva) por el de construcción (Vía Rápida): desde el 2026-11-15, pedido del autor, toda obra
+        // usa `factorTiempoConstruccion`; la muralla lo combina con el suyo multiplicándolos.
+        let factor = por(self.politicas.factor(&r.politicas, "factorTiempoMuralla"), self.politicas.factor(&r.politicas, "factorTiempoConstruccion"));
         for i in 0..self.recintos.len() {
             let rec = &self.recintos[i];
             let Some((pagado, clase, mejorando)) = rec.siguiente().filter(|_| rec.vence(t)) else { continue };
@@ -679,6 +681,24 @@ mod pruebas {
         a.comprometer_recinto(0, 1, anillo(3, &[], 0), vec![], 0, &mut vec![]);
         let ev = pasada(&r, &mut a, 0, &[0; N]);
         assert_eq!(ev, vec![Evento::RecintoCelda { recinto: 1, levantadas: 1, siguiente_en: Some(675_000) }], "15 min × 0,75 = 11,25 min exactos");
+    }
+
+    #[test]
+    fn la_via_rapida_tambien_acorta_la_muralla_y_se_multiplica_con_la_postura_defensiva() {
+        // Pedido del autor (2026-11-15): toda obra usa `factorTiempoConstruccion`; la muralla lo multiplica por su `factorTiempoMuralla`.
+        let r = reglas();
+        let mut a = plaza(&r, 2);
+        let activa = |id: &str, cargo| Activa { id: id.into(), cargo, expira_en: i64::MAX };
+        a.politicas = Politicas::desde_activas(vec![activa("via_rapida", crate::politicas::Cargo::MaestroObras)]);
+        let rapida = a.politicas.factor(&r.politicas, "factorTiempoConstruccion");
+        a.comprometer_recinto(0, 1, anillo(3, &[], 0), vec![], 0, &mut vec![]);
+        let ev = pasada(&r, &mut a, 0, &[0; N]);
+        assert_eq!(ev, vec![Evento::RecintoCelda { recinto: 1, levantadas: 1, siguiente_en: Some(por(15 * MIN, rapida).max(1)) }], "solo la Vía Rápida");
+        let mut b = plaza(&r, 2);
+        b.politicas = Politicas::desde_activas(vec![activa("via_rapida", crate::politicas::Cargo::MaestroObras), activa("postura_defensiva", crate::politicas::Cargo::MaestroObras)]);
+        b.comprometer_recinto(0, 1, anillo(3, &[], 0), vec![], 0, &mut vec![]);
+        let ev = pasada(&r, &mut b, 0, &[0; N]);
+        assert_eq!(ev, vec![Evento::RecintoCelda { recinto: 1, levantadas: 1, siguiente_en: Some(por(15 * MIN, por(750_000, rapida)).max(1)) }], "las dos, multiplicadas");
     }
 
     #[test]

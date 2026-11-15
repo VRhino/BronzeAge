@@ -578,3 +578,21 @@ fn una_plaza_degradada_solo_recupera_el_nivel_con_cupo_de_su_faccion() {
     assert_eq!(a.medidor.nivel_actual, 2, "con cupo recupera en el minuto: la racha siguió contando");
     assert!(ev.contains(&Evento::MantenimientoRecuperado { nivel: 2 }));
 }
+
+#[test]
+fn la_via_rapida_acorta_la_subida_de_nivel_de_la_plaza_al_arrancar() {
+    // Economia_Construccion §11 (autor, 2026-11-15): toda obra usa `factorTiempoConstruccion`, también la subida de nivel de la plaza.
+    let r = Reglas::cargar();
+    let base = r.nivel.ascenso[&5].obra_minutos;
+    let mut sin = lista_para_el_nivel_5(&r);
+    sin.solicitar_ascenso(0, &r, false, &mut vec![]).unwrap();
+    assert_eq!(sin.ascenso.unwrap().completa_en, base * MS_POR_MINUTO, "sin política, la obra de catálogo");
+    let mut a = lista_para_el_nivel_5(&r);
+    let gobernador = asentamiento::Activador { cargo: asentamiento::Cargo::Gobernador, cargo_ocupado: true, nivel_faccion: 1, sala_consejo: false };
+    a.politicas.activar(&r.politicas, "via_rapida", &gobernador, 0).unwrap();
+    let factor = a.politicas.factor(&r.politicas, "factorTiempoConstruccion");
+    a.solicitar_ascenso(0, &r, false, &mut vec![]).unwrap();
+    let minutos = ((base as i128 * factor as i128 + UNO as i128 / 2) / UNO as i128).max(1) as i64;
+    assert!(minutos < base);
+    assert_eq!(a.ascenso.unwrap().completa_en, minutos * MS_POR_MINUTO);
+}

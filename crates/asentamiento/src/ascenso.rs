@@ -122,7 +122,8 @@ impl Asentamiento {
         let objetivo = self.nivel + 1;
         let a = &r.nivel.ascenso[&objetivo];
         self.almacen.pagar(&a.costo);
-        let completa_en = t + a.obra_minutos * MS_POR_MINUTO;
+        // Por el factor de construcción de la plaza (Vía Rápida), al arrancar, como cualquier obra (2026-11-15, pedido del autor).
+        let completa_en = t + self.minutos_de_obra(r, a.obra_minutos) * MS_POR_MINUTO;
         self.ascenso = Some(Ascenso { nivel_objetivo: objetivo, iniciado_en: t, completa_en });
         ev.push(Evento::AscensoIniciado { objetivo, completa_en });
         Ok(())

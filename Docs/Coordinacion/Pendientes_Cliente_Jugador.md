@@ -6,6 +6,13 @@ Los cambios del motor que el cliente jugador (BronzeAgeClient) tiene que recoger
 
 ## Pendiente
 
+### La Vía Rápida en toda obra (2026-11-15; asentamiento 0.23.0)
+
+Sin cambios en el contrato ni partida nueva: cambia lo que tardan dos obras.
+
+1. **Subida de nivel de la plaza.** Su duración es ahora `obraMinutos × factorTiempoConstruccion` (mínimo 1 minuto), como las demás obras: la Vía Rápida la acorta. El fin sigue llegando en el `completa_en` del ascenso. Qué haría el cliente: si muestra la duración antes de pedir la subida, aplicarle el factor de las políticas activas de la plaza.
+2. **Muralla.** Cada celda tarda `minutosPorCelda × factorTiempoMuralla × factorTiempoConstruccion`. Qué haría el cliente: lo mismo, si muestra lo que tarda cada celda o el recinto entero. Referencia: Economia_Construccion §11 y Murallas §5.
+
 ### Héroe hasta el nivel 50 y su aspecto guardado (2026-11-13, directo a main; nucleo 0.41.0, militar 0.10.0, contrato 0.25.0, foto BAN64, partida nueva)
 
 1. **Curva del héroe** (`PROGRESION_HEROE`, en `Heroe_Y_Tropa`): `experienciaPorNivel` desaparece y llega `incrementos` (`[{desdeNivel, suma}]`). Pasar al 2 pide 3 y cada nivel 3 más hasta el 10 (27), 10 más hasta el 20 (127) y 20 más hasta el 50 (727); desde el 50, 747 cada uno. `nivelDeTope` es 50. Lo que le falta para subir sigue en `Heroe.experiencia_hacia_siguiente_nivel` (milésimas). Si el cliente muestra la curva o el total, que la calcule de los datos, no de la fórmula vieja.
