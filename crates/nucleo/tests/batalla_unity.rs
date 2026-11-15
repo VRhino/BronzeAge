@@ -468,6 +468,13 @@ async fn el_ticket_del_asedio_es_completo_congelado_y_va_a_todos_los_servidores_
     assert_eq!(atacante.participantes.iter().map(|p| p.heroe_id.clone()).collect::<Vec<_>>(), [h_ana.clone(), h_nora.clone()], "ana, que abrió, y nora, que se unió desde fuera en la convocatoria");
     assert_eq!(defensor.participantes.iter().map(|p| p.heroe_id.clone()).collect::<Vec<_>>(), std::slice::from_ref(&h_beto), "beto, que se unió desde dentro; carla no se unió y no entra de oficio");
     assert!(defensor.escuadras_sin_heroe.is_empty());
+    // El estandarte de cada bando y de cada participante: el sigilo de su Facción (2026-11-15).
+    let cat = &politica::Reglas::default().sigilo;
+    let de = |s: &Option<pb::Sigilo>| s.clone().expect("con sigilo");
+    assert_eq!(de(&atacante.sigilo), de(&atacante.participantes[0].sigilo), "ana lucha bajo el sigilo de su Facción");
+    assert_eq!(de(&defensor.sigilo), de(&defensor.participantes[0].sigilo));
+    assert_ne!(de(&atacante.sigilo), de(&defensor.sigilo), "cada Facción, el suyo");
+    assert!(cat.emblemas.contains(&de(&atacante.sigilo).emblema_id) && cat.emblemas.contains(&de(&defensor.sigilo).emblema_id), "sigilos del catálogo, no reservados");
     let beto = &defensor.participantes[0];
     let hs = beto.heroe.as_ref().unwrap();
     assert_eq!((beto.faccion_id.as_deref(), beto.es_bot, hs.nivel, hs.class_definition_id.as_str(), hs.femenino), (Some("f-2"), false, 1, "espada_escudo_mediano", false));
@@ -751,6 +758,10 @@ async fn los_bandidos_que_acosan_a_una_columna_de_bots_juegan_una_batalla_sin_hu
     assert_eq!((c.caravanas[0].caravana_id.as_str(), c.caravanas[0].carros.iter().map(|k| k.carro_id.clone()).collect::<Vec<_>>()), (id_caravana.as_str(), vec![format!("{id_caravana}:0")]), "los carros se nombran con su caravana y su posición");
     let (atacante, defensor) = (ticket.atacante.as_ref().unwrap(), ticket.defensor.as_ref().unwrap());
     assert_eq!((atacante.faccion_id.clone(), atacante.participantes.len(), atacante.escuadras_sin_heroe.len()), (None, 0, 1), "los bandidos no son de nadie ni llevan héroes");
+    let reservados = &politica::Reglas::default().sigilo;
+    let bandera = |s: &Option<pb::Sigilo>| s.as_ref().map(|s| (s.emblema_id.clone(), s.color_primario_id.clone(), s.color_secundario_id.clone()));
+    assert_eq!(bandera(&atacante.sigilo), Some((reservados.bandidos.emblema.clone(), reservados.bandidos.color_primario.clone(), reservados.bandidos.color_secundario.clone())), "los bandidos, con su sigilo reservado");
+    assert!(reservados.emblemas.contains(&defensor.sigilo.as_ref().unwrap().emblema_id) && defensor.sigilo == defensor.participantes[0].sigilo, "la columna, con el de su Facción");
     let bandidos = &atacante.escuadras_sin_heroe[0];
     assert_eq!((bandidos.tropa_id.as_str(), bandidos.heroe_id.clone(), bandidos.nivel, bandidos.moral, bandidos.efectivos_autorizados as i64), ("milicia_lanceros", None, 1, 100, combate::Reglas::cargar().bandidos.niveles[2].unidades));
     assert_eq!((defensor.faccion_id.as_deref(), defensor.participantes.iter().map(|p| (p.heroe_id.clone(), p.es_bot)).collect::<Vec<_>>()), (Some("f-1"), vec![(ids::heroe(h_ana), true)]));
@@ -835,6 +846,7 @@ async fn la_caravana_de_fundacion_que_vuelve_sola_se_intercepta_en_una_batalla_d
     assert_eq!(carga, costo.values().sum::<i64>(), "el carro lleva lo que costó");
     let defensor = ticket.defensor.as_ref().unwrap();
     assert_eq!((defensor.faccion_id.as_deref(), defensor.participantes.len(), defensor.escuadras_sin_heroe.len()), (Some("f-1"), 0, 1), "los carreteros");
+    assert!(politica::Reglas::default().sigilo.emblemas.contains(&defensor.sigilo.as_ref().unwrap().emblema_id), "los carreteros de una Facción llevan su sigilo, no el de los bandidos");
 
     // Gana el atacante: se la lleva entera.
     let uuid = ticket.battle_id.clone();

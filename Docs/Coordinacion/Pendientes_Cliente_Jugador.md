@@ -6,6 +6,12 @@ Los cambios del motor que el cliente jugador (BronzeAgeClient) tiene que recoger
 
 ## Pendiente
 
+### El sigilo en el ticket de batalla (2026-11-15; contrato 0.26.0, nucleo 0.42.0, politica 0.7.0)
+
+Sin partida nueva: dos campos nuevos en el ticket, que el cliente ve en `Batalla.ticket`.
+
+1. **`BattleSide.sigilo` y `BattleParticipantSnapshot.sigilo`** (el `Sigilo` de `common.proto`, con sus ocho ids). Siempre vienen: el de la Facción del bando o del participante; para los bandidos de un campamento, el reservado `bandidos` de `CATALOGO_SIGILO`; sin Facción, el `neutro`. Qué haría el cliente: si enseña los bandos de una batalla (la ficha de espera, el informe), dibujar el sigilo de cada uno con lo que ya tiene en `src/sigilo/`, sin buscar la Facción; para los bandidos, el emblema `bandidos` tendría que tener dibujo (hoy `catalogoSigilos.json` lo trae, ver si `emblemas.ts` lo pinta). Referencia: Batalla_Unity_Ciclo §3.2.
+
 ### La Vía Rápida en toda obra (2026-11-15; asentamiento 0.23.0)
 
 Sin cambios en el contrato ni partida nueva: cambia lo que tardan dos obras.

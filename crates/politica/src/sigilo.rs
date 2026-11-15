@@ -26,6 +26,10 @@ pub struct Catalogo {
     pub orlas: Vec<String>,
     /// Ids de los colores.
     pub colores: Vec<String>,
+    /// Los reservados del servidor (`reservados`), que ninguna Facción puede elegir: el de quien no tiene Facción, el de los bandidos y el de los mercenarios.
+    pub neutro: Sigilo,
+    pub bandidos: Sigilo,
+    pub mercenarios: Sigilo,
 }
 
 /// Por qué no vale un sigilo.
@@ -50,6 +54,9 @@ impl Catalogo {
             emblemas: ids("emblemas"),
             orlas: ids("orlas"),
             colores: v["colores"].as_array().expect("colores").iter().map(|c| c["id"].as_str().expect("color").to_string()).collect(),
+            neutro: reservado(v, "neutro"),
+            bandidos: reservado(v, "bandidos"),
+            mercenarios: reservado(v, "mercenarios"),
         }
     }
 
@@ -109,6 +116,22 @@ impl Catalogo {
             }
         }
         panic!("no queda ningún sigilo libre en el catálogo")
+    }
+}
+
+/// Un sigilo reservado de `CATALOGO_SIGILO.reservados`, con sus claves de TypeScript (`formaId`...).
+fn reservado(v: &Value, k: &str) -> Sigilo {
+    let r = &v["reservados"][k];
+    let id = |c: &str| r[c].as_str().unwrap_or_else(|| panic!("CATALOGO_SIGILO.reservados.{k}.{c}")).to_string();
+    Sigilo {
+        forma: id("formaId"),
+        campo: id("campoId"),
+        emblema: id("emblemaId"),
+        color_primario: id("colorPrimarioId"),
+        color_secundario: id("colorSecundarioId"),
+        color_emblema: id("colorEmblemaId"),
+        orla: id("orlaId"),
+        color_orla: id("colorOrlaId"),
     }
 }
 
@@ -181,6 +204,17 @@ mod pruebas {
             }),
         ] {
             assert_eq!(c.motivo_rechazo(&s, [].iter()), Some(MotivoSigilo::Invalido), "{s:?}");
+        }
+    }
+
+    #[test]
+    fn los_reservados_se_leen_y_ninguno_se_puede_elegir() {
+        let c = cat();
+        assert_eq!((c.neutro.emblema.as_str(), c.neutro.color_primario.as_str()), ("sin_bandera", "gris"));
+        assert_eq!((c.bandidos.emblema.as_str(), c.bandidos.color_primario.as_str(), c.bandidos.color_secundario.as_str()), ("bandidos", "negro", "rojo"));
+        assert_eq!((c.mercenarios.emblema.as_str(), c.mercenarios.color_primario.as_str()), ("mercenarios", "marron"));
+        for s in [&c.neutro, &c.bandidos, &c.mercenarios] {
+            assert!(!c.es_del_catalogo(s), "{s:?}");
         }
     }
 

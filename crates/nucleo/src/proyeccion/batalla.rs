@@ -7,10 +7,11 @@
 //! El nombre, el género y el avatar son los que eligió al crearlo (el aspecto desde el 2026-11-13); una escuadra no trae
 //! habilidades (Unity las saca del nivel) y sí su formación y las que permite la tecnología de su Facción (Heroe_Y_Tropa §10.4, 2026-11-11); `experiencia` y `moral` de una escuadra viajan en puntos (como el contrato de TypeScript), no en milésimas;
 //! `version_balance` vale 1 mientras Rust no tenga su numeración y `version_catalogo_tropas` es `VERSION_CATALOGO_TROPAS` (Heroe_Y_Tropa §12); el estandarte y el aspecto de una escuadra
-//! viajan vacíos (D20); la carga de cada carro es la parte de la carga de la caravana proporcional a su capacidad
+//! viajan vacíos (D20); cada bando y cada participante llevan el sigilo de su estandarte (2026-11-15: el de su Facción, el reservado `bandidos` para los de un campamento y el
+//! `neutro` sin Facción); la carga de cada carro es la parte de la carga de la caravana proporcional a su capacidad
 //! (`Caravana::carga_por_carro`); el terreno de una batalla fuera de un asedio es el artefacto de mundo (`BattleMapReference`).
 
-use super::propios::{aspecto_de_heroe, atributos, celdas, equipamiento, nombre_de_heroe};
+use super::propios::{aspecto_de_heroe, atributos, celdas, equipamiento, nombre_de_heroe, sigilo};
 use super::{ids, punto};
 use crate::nucleo::Nucleo;
 use combate::caravana::Modalidad;
@@ -70,16 +71,31 @@ fn participante(n: &Nucleo, p: &Participante) -> pb::BattleParticipantSnapshot {
             ..Default::default()
         }),
         escuadras: p.escuadras.iter().map(|e| escuadra(n, e)).collect(),
+        sigilo: Some(sigilo_de(n, p.faccion)),
     }
 }
 
-fn bando(n: &Nucleo, b: &BandoDeTicket) -> pb::BattleSide {
+/// El sigilo de la Facción `faccion`; sin Facción (o si ya no existe), el reservado `neutro` del catálogo.
+fn sigilo_de(n: &Nucleo, faccion: Option<u32>) -> pb::Sigilo {
+    let cat = &n.estado().reglas.economia.politica.sigilo;
+    sigilo(faccion.and_then(|f| n.faccion(f)).map_or(&cat.neutro, |f| &f.sigilo))
+}
+
+/// `bandidos`: el bando son los bandidos de un campamento (sin Facción ni héroes en una batalla con campamento: el que se ataca o el que acosa). Llevan el sigilo
+/// reservado `bandidos`; cualquier otro bando sin Facción, el `neutro`.
+fn bando(n: &Nucleo, b: &BandoDeTicket, bandidos: bool) -> pb::BattleSide {
     pb::BattleSide {
         faccion_id: b.faccion.map(ids::faccion),
         capacidad_maxima: b.capacidad as u32,
         participantes: b.participantes.iter().map(|p| participante(n, p)).collect(),
         escuadras_sin_heroe: b.sin_heroe.iter().map(|e| escuadra(n, e)).collect(),
+        sigilo: Some(if bandidos { sigilo(&n.estado().reglas.economia.politica.sigilo.bandidos) } else { sigilo_de(n, b.faccion) }),
     }
+}
+
+/// ¿Son los bandidos de un campamento? Solo hay campamento en el bloqueo cuando se ataca uno o cuando uno acosa, y entonces el bando sin Facción ni héroes es el suyo.
+fn son_bandidos(b: &Batalla, bando: &BandoDeTicket) -> bool {
+    b.bloqueo.campamento.is_some() && bando.faccion.is_none() && bando.participantes.is_empty()
 }
 
 /// Los carros de una caravana con su id (`"<caravana>:<posición>"`) y su carga. Una caravana que ya no existe no trae carros.
@@ -170,8 +186,8 @@ pub fn ticket(n: &Nucleo, b: &Batalla) -> pb::BattleTicket {
         game_id: n.id_de_partida(),
         ticket_revision: t.revision,
         contexto_estrategico: Some(contexto(n, &t.contexto)),
-        atacante: Some(bando(n, &t.atacante)),
-        defensor: Some(bando(n, &t.defensor)),
+        atacante: Some(bando(n, &t.atacante, son_bandidos(b, &t.atacante))),
+        defensor: Some(bando(n, &t.defensor, son_bandidos(b, &t.defensor))),
         mapa: Some(mapa),
         reglas: Some(pb::BattleRules {
             duracion_maxima_segundos: (t.duracion_maxima / 1_000) as u32,
