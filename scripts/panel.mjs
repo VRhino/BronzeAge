@@ -18,6 +18,7 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statS
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import os from 'node:os';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PUERTO = Number(process.env.PANEL_PUERTO ?? 3999);
@@ -43,6 +44,41 @@ function avisoConquest() {
   return null;
 }
 
+// Jugar desde otro equipo de la red local (2026-11-15, pedido del autor). Con la red abierta, el servidor escucha en 0.0.0.0 (no solo en 127.0.0.1) y el lanzador
+// da a los jugadores la IP elegida como dirección de las batallas (`LANZADOR_HOST`). Se guarda en `partidas/red.json` y vale al arrancar: lo que ya esté en
+// marcha sigue como arrancó hasta «Aplicar». El cortafuegos de Windows se abre con un botón (pide permiso de administrador): el puerto del servidor en TCP y
+// los de las batallas en UDP. El panel sigue atendiendo solo a esta máquina.
+const RED = path.join(RAIZ, 'partidas', 'red.json');
+const ipsLocales = () => Object.entries(os.networkInterfaces()).flatMap(([nombre, ds]) => (ds ?? [])
+  .filter((d) => d.family === 'IPv4' && !d.internal && !d.address.startsWith('169.254.')).map((d) => ({ ip: d.address, nombre })));
+const red = { abierta: false, ip: null, ...(() => { try { return JSON.parse(readFileSync(RED, 'utf8')); } catch { return {}; } })() };
+if (!ipsLocales().some((x) => x.ip === red.ip)) red.ip = ipsLocales()[0]?.ip ?? null;
+const guardarRed = () => { mkdirSync(path.dirname(RED), { recursive: true }); writeFileSync(RED, JSON.stringify({ abierta: red.abierta, ip: red.ip }, null, 2)); };
+const redDe = () => (red.abierta ? `0.0.0.0 · ${red.ip}` : 'local'); // con qué red arranca ahora un servicio
+const puertosBatalla = () => configurations.find((c) => c.name === 'bronzeage-lanzador')?.env?.LANZADOR_PUERTOS || process.env.LANZADOR_PUERTOS || '7777-7786';
+const ejecutar = (cmd) => new Promise((ok) => exec(cmd, { windowsHide: true }, (e, out) => ok({ codigo: e ? e.code ?? 1 : 0, out: String(out) })));
+const REGLAS = () => [
+  { nombre: 'BronzeAge servidor', protocolo: 'TCP', puertos: String(puertos['bronzeage-servidor']) },
+  { nombre: 'BronzeAge batallas', protocolo: 'UDP', puertos: puertosBatalla() },
+];
+// Si cada regla existe y lleva sus puertos de ahora. Fuera de Windows no se mira (null).
+async function cortafuegos() {
+  if (process.platform !== 'win32') return null;
+  return Promise.all(REGLAS().map(async (r) => {
+    const { codigo, out } = await ejecutar(`netsh advfirewall firewall show rule name="${r.nombre}"`);
+    return { ...r, ok: codigo === 0 && out.includes(r.puertos) && out.includes(r.protocolo) };
+  }));
+}
+// Borra y vuelve a crear las dos reglas en un PowerShell elevado (Windows pide permiso). Devuelve null si fue bien o por qué no.
+async function abrirCortafuegos() {
+  if (process.platform !== 'win32') return 'el cortafuegos solo se abre desde aquí en Windows';
+  const ordenes = REGLAS().flatMap((r) => [`netsh advfirewall firewall delete rule name="${r.nombre}" | Out-Null`,
+    `netsh advfirewall firewall add rule name="${r.nombre}" dir=in action=allow protocol=${r.protocolo} localport=${r.puertos} profile=any`]).join('; ');
+  const b64 = Buffer.from(ordenes, 'utf16le').toString('base64');
+  const { codigo } = await ejecutar(`powershell -NoProfile -Command "Start-Process powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile','-EncodedCommand','${b64}'"`);
+  return codigo === 0 ? null : 'no se abrió: hace falta aceptar el permiso de administrador';
+}
+
 // Cómo le dice el panel a cada servicio su puerto y el del servidor. P = los puertos elegidos ahora mismo.
 // El servidor sirve en un solo puerto el WebSocket del contrato 05 y el HTTP del acceso.
 const VITE = (p) => ['--', '--port', p, '--strictPort'];
@@ -50,13 +86,13 @@ const VITE = (p) => ['--', '--port', p, '--strictPort'];
 // `secretos`: variables de entorno secretas que el servicio necesita; `secreto()` las resuelve al arrancarlo (ver más abajo).
 const SERVICIOS = {
   // `parar`: el servidor se apaga con su foto al leer esa línea por la entrada estándar (Windows no deja mandarle Ctrl+C).
-  'bronzeage-servidor': { tipo: 'backend', parar: 'parar\n', aviso: avisoMundo, secretos: ['CODIGO_REGISTRO_BOTS', 'CODIGO_REGISTRO_SERVIDORES'], con: (p) => ({ env: { BRONZEAGE_DIRECCION: `127.0.0.1:${p}`, ...envPartida() } }) },
+  'bronzeage-servidor': { tipo: 'backend', parar: 'parar\n', aviso: avisoMundo, secretos: ['CODIGO_REGISTRO_BOTS', 'CODIGO_REGISTRO_SERVIDORES'], con: (p) => ({ env: { BRONZEAGE_DIRECCION: `${red.abierta ? '0.0.0.0' : '127.0.0.1'}:${p}`, ...envPartida() } }) },
   // El lanzador de servidores de batalla (2026-11-11): sin puerto propio (los de juego, 7777-7786, los abre cada batalla). Con la partida en Unity, entra con su cuenta
   // `lanzador-local` (la da de alta solo con el código de servidores, que es secreto del panel como su clave). Qué proceso arranca por batalla lo dice launch.json:
   // `LANZADOR_PROCESO=mentira` es el servidor de batalla de mentira que lleva dentro (dura lo que diga `LANZADOR_ARGUMENTOS`, nadie muere y gana el defensor); para
   // Conquest, la ruta de su ejecutable y sus argumentos.
   'bronzeage-lanzador': { tipo: 'backend', parar: 'parar\n', aviso: avisoLanzador, secretos: ['CODIGO_REGISTRO_SERVIDORES', 'LANZADOR_CLAVE'], con: (p, P) => ({ env: {
-    LANZADOR_MOTOR: `127.0.0.1:${P['bronzeage-servidor']}`, LANZADOR_NICK: 'lanzador-local' } }) },
+    LANZADOR_MOTOR: `127.0.0.1:${P['bronzeage-servidor']}`, LANZADOR_NICK: 'lanzador-local', LANZADOR_HOST: red.abierta ? red.ip : '127.0.0.1' } }) },
   // Una tarea que termina sola: sin puerto. La semilla la elige POST /api/mundo.
   'generar-mundo': { tipo: 'tarea', con: () => ({ args: [String(mundo.semilla)] }) },
   // `BOTS_REGISTROS` (2026-11-03, aviso de los bots): la ruta absoluta de `partidas/`. Los bots guardan sus registros dentro de cada partida
@@ -169,7 +205,7 @@ function arrancar(c, extra = {}) {
   const env = { ...base, ...extra };
   if (c.name === 'bronzeage-lanzador') { conquest.modo = extra.LANZADOR_PROCESO === PRUEBA_RED ? 'conquest' : 'mentira'; conquest.duracion = extra.CONQUEST_DURACION ?? null; }
   for (const k of SERVICIOS[c.name]?.secretos ?? []) env[k] = secreto(c, k);
-  const p = { log: [] };
+  const p = { log: [], red: redDe() };
   // detached fuera de Windows: el hijo encabeza su grupo de procesos y parar() lo corta entero (shell:true deja un sh en medio).
   const hijo = spawn(c.runtimeExecutable, [...c.runtimeArgs, ...args], {
     cwd: carpeta(c), shell: true, detached: process.platform !== 'win32', env: { ...process.env, ...c.env, ...env, FORCE_COLOR: '0' },
@@ -206,10 +242,10 @@ function parar(nombre) {
 }
 
 // El botón «Arrancar con Conquest»: el servidor si hace falta (y si puede), y el lanzador con Conquest en cuanto el servidor escucha (cargo puede tardar en compilar).
-async function arrancarConquest(duracion) {
+async function arrancarConquest(duracion, mentira = false) {
   const s = configurations.find((x) => x.name === 'bronzeage-servidor'), l = configurations.find((x) => x.name === 'bronzeage-lanzador');
   if (!s || !l || conquest.esperando || procesos[l.name]?.hijo) return;
-  const no = avisoConquest() ?? SERVICIOS[l.name].aviso?.(l);
+  const no = (mentira ? null : avisoConquest()) ?? SERVICIOS[l.name].aviso?.(l);
   if (no) { conquest.mensaje = no; return; }
   conquest.esperando = true; conquest.mensaje = null;
   try {
@@ -224,8 +260,16 @@ async function arrancarConquest(duracion) {
         await new Promise((ok) => setTimeout(ok, 1000));
       }
     }
-    arrancar(l, envConquest(duracion));
+    arrancar(l, mentira ? {} : envConquest(duracion));
   } finally { conquest.esperando = false; }
+}
+
+// «Aplicar» de la red: vuelve a arrancar el servidor y el lanzador que estén en marcha, para que tomen la red de ahora (el lanzador, como estaba: con Conquest o de mentira).
+async function aplicarRed() {
+  const l = 'bronzeage-lanzador', antes = procesos[l]?.hijo ? { modo: conquest.modo, duracion: conquest.duracion } : null;
+  if (antes) { const p = procesos[l]; parar(l); await p.fin; }
+  if (await pararServidor()) arrancar(servidor());
+  if (antes) await arrancarConquest(antes.duracion, antes.modo !== 'conquest');
 }
 
 async function estado() {
@@ -238,7 +282,7 @@ async function estado() {
       // El token del canal de control de los bots, para pegarlo en el admin web (el código de registro no sale del panel).
       token_control: SERVICIOS[c.name]?.secretos?.includes('BOTS_TOKEN') ? secreto(c, 'BOTS_TOKEN') : null,
       falta: !existsSync(carpeta(c)), aviso: SERVICIOS[c.name]?.aviso?.(c) ?? null,
-      escucha: puertos[c.name] ? await escucha(puertos[c.name]) : false, lanzado: !!p?.hijo, log: p?.log.slice(-200) ?? [],
+      escucha: puertos[c.name] ? await escucha(puertos[c.name]) : false, lanzado: !!p?.hijo, log: p?.log.slice(-200) ?? [], red: p?.hijo ? p.red : null,
       ...(c.name === 'bronzeage-lanzador' ? { conquest: { exe: PRUEBA_RED, aviso: avisoConquest(), modo: p?.hijo ? conquest.modo : null, duracion: conquest.duracion,
         esperando: conquest.esperando, mensaje: conquest.mensaje } } : {}),
     };
@@ -300,6 +344,11 @@ th{color:var(--sub);font-weight:500;font-size:12px}td .fila{gap:6px}td button{pa
 <table style="margin-top:12px"><thead><tr><th>Artefacto</th><th>Creado</th><th>Partidas</th><th></th></tr></thead><tbody id="m-lista"></tbody></table><div class="msg" id="m-msg"></div></div></details>
 </section>
 <section class="vista" id="v-servicios">
+<details open data-seccion="red"><summary>Jugar desde otro equipo<span class="cuenta" id="r-cuenta"></span></summary>
+<div class="card"><div class="form"><label style="flex-direction:row;align-items:center"><input id="r-abierta" type="checkbox" style="width:auto"> abrir a la red local</label>
+<label>IP de este equipo<select id="r-ip"></select></label><button id="r-cortafuegos">Abrir cortafuegos</button><button id="r-aplicar">Aplicar (reinicia servidor y lanzador)</button></div>
+<div class="est" id="r-estado" style="margin-top:10px"></div><div class="aviso" id="r-aviso" style="margin-top:8px"></div>
+<div class="token fila" id="r-otro" hidden><span class="est">en el otro equipo</span><code></code><button>Copiar</button></div><div class="msg" id="r-msg"></div></div></details>
 <details open data-seccion="backend"><summary>Servicios<span class="cuenta"></span></summary><div class="grid" id="backend"></div></details>
 <details open data-seccion="tareas"><summary>Tareas<span class="cuenta"></span></summary><div class="grid" id="tareas"></div></details>
 <details open data-seccion="clientes"><summary>Clientes<span class="cuenta"></span></summary><div class="grid" id="clientes"></div></details>
@@ -380,6 +429,26 @@ document.getElementById('n-crear').onclick=()=>api('POST','/api/partidas',{nombr
   mundo:document.getElementById('n-mundo').value||undefined,batallas_en_unity:document.getElementById('n-unity').checked,activar:document.getElementById('n-activar').checked},'n-msg');
 document.getElementById('m-generar').onclick=()=>api('POST','/api/mundo',{semilla:Number(document.getElementById('m-semilla').value)},'m-msg');
 pintarPartidas();setInterval(pintarPartidas,4000);
+// La red local: el interruptor, la IP, el cortafuegos y qué falta para que entre otro equipo.
+async function pintarRed(){
+  let r;try{r=await (await fetch('/api/red')).json()}catch{return}
+  const ab=document.getElementById('r-abierta'),sel=document.getElementById('r-ip');ab.checked=r.abierta;
+  if(document.activeElement!==sel){sel.textContent='';for(const x of r.ips){const o=document.createElement('option');o.value=x.ip;o.textContent=x.ip+' ('+x.nombre+')';sel.append(o)}sel.value=r.ip??''}
+  const fw=r.cortafuegos,fwOk=!fw||fw.every(x=>x.ok);
+  document.getElementById('r-cortafuegos').disabled=!fw;
+  document.getElementById('r-cuenta').textContent=r.abierta?'· abierta en '+r.ip:'· solo este equipo';
+  document.getElementById('r-estado').textContent=fw?'Cortafuegos: '+fw.map(x=>x.nombre+' ('+x.protocolo+' '+x.puertos+') '+(x.ok?'abierto':'sin abrir')).join(' · '):'Cortafuegos: ábrelo a mano (no es Windows)';
+  const viejos=r.en_marcha.filter(x=>x.red!==r.con);
+  document.getElementById('r-aplicar').disabled=!viejos.length;
+  document.getElementById('r-aviso').textContent=viejos.length?viejos.map(x=>x.nombre).join(' y ')+' siguen con la red de antes: pulsa «Aplicar»':r.abierta&&!fwOk?'El cortafuegos no deja entrar: pulsa «Abrir cortafuegos» (Windows pedirá permiso de administrador)':'';
+  const otro=document.getElementById('r-otro');otro.hidden=!r.abierta;otro.querySelector('code').textContent='Conquest.exe -servidor http://'+r.ip+':'+r.puerto;
+}
+document.getElementById('r-abierta').onchange=e=>api('POST','/api/red',{abierta:e.target.checked},'r-msg').then(pintarRed);
+document.getElementById('r-ip').onchange=e=>api('POST','/api/red',{ip:e.target.value},'r-msg').then(pintarRed);
+document.getElementById('r-cortafuegos').onclick=()=>api('POST','/api/red/cortafuegos',null,'r-msg').then(pintarRed);
+document.getElementById('r-aplicar').onclick=()=>api('POST','/api/red/aplicar',null,'r-msg').then(pintarRed);
+document.querySelector('#r-otro button').onclick=e=>navigator.clipboard.writeText(document.querySelector('#r-otro code').textContent).then(()=>{e.target.textContent='Copiado';setTimeout(()=>e.target.textContent='Copiar',1500)});
+pintarRed();setInterval(pintarRed,5000);
 async function pintar(){
   const datos=await (await fetch('/api/estado')).json();
   for(const d of datos){
@@ -565,6 +634,25 @@ http.createServer(async (req, res) => {
     if (cuerpo === undefined) return json(400, { error: 'datos_invalidos', mensaje: 'el cuerpo es JSON' });
     try { return json(...(partes[1] === 'mundo' ? await apiMundo(req.method, cuerpo, partes[2]) : await apiPartidas(req.method, partes.slice(1), cuerpo))); }
     catch (e) { return json(500, { error: 'interno', mensaje: String(e?.message ?? e) }); }
+  }
+  if (partes[1] === 'red') {
+    // GET: cómo está la red; POST { abierta, ip }: la cambia (vale al arrancar); POST /api/red/cortafuegos: lo abre; POST /api/red/aplicar: reinicia lo que esté en marcha.
+    if (req.method === 'GET') return json(200, { ...red, ips: ipsLocales(), puerto: puertos['bronzeage-servidor'], cortafuegos: await cortafuegos(), con: redDe(),
+      en_marcha: ['bronzeage-servidor', 'bronzeage-lanzador'].filter((n) => procesos[n]?.hijo).map((n) => ({ nombre: n, red: procesos[n].red })) });
+    if (req.method !== 'POST') return json(405, { error: 'metodo_no_permitido' });
+    if (partes[2] === 'cortafuegos') { const no = await abrirCortafuegos(); return no ? json(409, { error: 'cortafuegos', mensaje: no }) : json(200, { cortafuegos: await cortafuegos() }); }
+    if (partes[2] === 'aplicar') { await aplicarRed(); return json(200, { con: redDe() }); }
+    const cuerpo = await leerCuerpo(req);
+    if (cuerpo?.ip !== undefined) {
+      if (!ipsLocales().some((x) => x.ip === cuerpo.ip)) return json(400, { error: 'datos_invalidos', mensaje: 'esa IP no es de este equipo' });
+      red.ip = cuerpo.ip;
+    }
+    if (cuerpo?.abierta !== undefined) {
+      if (cuerpo.abierta && !red.ip) return json(409, { error: 'sin_ip', mensaje: 'este equipo no tiene ninguna IP de red local' });
+      red.abierta = cuerpo.abierta === true;
+    }
+    guardarRed();
+    return json(200, { ...red, con: redDe() });
   }
   const [, accion, nombre, valor] = partes;
   if (accion === 'estado') return json(200, await estado());
