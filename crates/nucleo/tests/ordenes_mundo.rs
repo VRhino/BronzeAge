@@ -163,12 +163,18 @@ async fn un_jugador_nuevo_crea_su_heroe_pide_tropa_sale_del_campamento_y_marcha_
     assert!(f.entidades.is_empty());
 
     // Presencia: el héroe nace en un campamento (ids con la forma del contrato); uno por cuenta.
-    let (deltas, r) = dar(&mut carla, "o1", orden::Cuerpo::CrearHeroe(pb::OrdenCrearHeroe { display_name: s("Carla"), campamento_id: s("camp-0"), class_definition_id: s("espada_escudo_mediano"), genero: s("femenino"), avatar: Some(pb::orden_crear_heroe::Avatar { cabeza_id: s("head_02"), pelo_id: s("hair_05"), barba_id: s(""), cejas_id: s("eyebrows_01") }) })).await;
+    let (llegado, r) = dar_todo(&mut carla, "o1", orden::Cuerpo::CrearHeroe(pb::OrdenCrearHeroe { display_name: s("Carla"), campamento_id: s("camp-0"), class_definition_id: s("espada_escudo_mediano"), genero: s("femenino"), avatar: Some(pb::orden_crear_heroe::Avatar { cabeza_id: s("head_02"), pelo_id: s("hair_05"), barba_id: s(""), cejas_id: s("eyebrows_01") }) })).await;
     aceptada(&r);
     let heroe = creadas(&r)[0].clone();
     assert_eq!(heroe.0, TipoEntidad::Heroe);
     // El género y el avatar que manda Conquest se guardan (2026-11-13); un género que no es masculino ni femenino es una orden mal formada.
-    let suyo = deltas.iter().flat_map(|d| d.cambios.iter().filter_map(|c| c.datos.as_ref())).find_map(|e| if let Some(pb::entidad::Cuerpo::Heroe(h)) = e.cuerpo.as_ref() { Some(h.clone()) } else { None }).expect("su héroe llega en la delta");
+    // El héroe abre su ámbito HEROE: llega en la Foto de ese ámbito, no en una Delta.
+    let mut entidades = llegado.iter().flat_map(|m| match m {
+        ms::Cuerpo::Foto(f) => f.entidades.iter().collect::<Vec<_>>(),
+        ms::Cuerpo::Delta(d) => d.cambios.iter().filter_map(|c| c.datos.as_ref()).collect(),
+        _ => vec![],
+    });
+    let suyo = entidades.find_map(|e| if let Some(pb::entidad::Cuerpo::Heroe(h)) = e.cuerpo.as_ref() { Some(h.clone()) } else { None }).expect("su héroe llega al crearlo");
     assert_eq!((suyo.femenino, suyo.avatar), (true, Some(pb::Avatar { cabeza_id: s("head_02"), pelo_id: s("hair_05"), barba_id: s(""), cejas_id: s("eyebrows_01") })));
     let (_, r) = dar(&mut carla, "o1b", orden::Cuerpo::CrearHeroe(pb::OrdenCrearHeroe { campamento_id: s("camp-0"), genero: s("otro"), ..Default::default() })).await;
     assert_eq!(rechazo(&r), "orden.forma_invalida");
