@@ -190,10 +190,10 @@ function secreto(c, clave) {
   return guardados[clave];
 }
 
-function escucha(puerto) {
+function escucha(puerto, host = 'localhost') {
   return new Promise((ok) => {
-    // 'localhost' + autoSelectFamily: Vite escucha solo en ::1, el servidor en 127.0.0.1.
-    const s = net.connect({ port: puerto, host: 'localhost', autoSelectFamily: true });
+    // 'localhost' + autoSelectFamily: Vite escucha solo en ::1, el servidor en 127.0.0.1. Con `host` (la IP de la red), si se le alcanza desde fuera.
+    const s = net.connect({ port: puerto, host, autoSelectFamily: true });
     s.once('connect', () => { s.destroy(); ok(true); });
     s.once('error', () => ok(false));
     s.setTimeout(400, () => { s.destroy(); ok(false); });
@@ -538,6 +538,7 @@ function pintarInicio(datos){
   else if(p)paso(ul,'off','Batallas',q.mensaje||('apagado'+(q.aviso?' · Conquest no está construido: irán con el de mentira':'')));
   const fwMal=!!RED?.abierta&&!!RED.cortafuegos?.some(x=>!x.ok),viejos=!!RED?.en_marcha.some(x=>x.red!==RED.con);
   if(RED&&!RED.abierta)paso(ul,'sub','Red','solo este equipo'+(viejos?' · el servidor sigue abierto a la red: pulsa «Jugar» para cerrarla':''));
+  else if(RED&&RED.sordos?.length)paso(ul,'off','Red','abierta, pero '+RED.sordos.map(n=>NOMBRES[n]??n).join(' y ')+' solo escucha en este equipo'+(RED.sordos.some(n=>!ESTADO.find(d=>d.nombre===n)?.lanzado)?': se arrancó fuera del panel; ciérralo y pulsa «Jugar»':': pulsa «Jugar» para reiniciarlo'));
   else if(RED)paso(ul,viejos||fwMal?'wait':'on','Red',viejos?'abierta, pero lo que está en marcha arrancó antes: pulsa «Jugar» para aplicarlo':fwMal?'abierta, pero el cortafuegos aún no deja entrar: se abre al pulsar «Jugar» (Windows pide permiso)':'abierta: el otro equipo puede entrar');
   const rb=document.getElementById('i-red');if(RED&&document.activeElement!==rb)rb.checked=RED.abierta;
   document.getElementById('i-enred').hidden=!RED?.abierta;
@@ -548,7 +549,7 @@ function pintarInicio(datos){
       for(const x of RED.ips)se.append(new Option(x.ip+' ('+x.nombre+')',x.ip));se.value=RED.ip;
       se.onchange=()=>api('POST','/api/red',{ip:se.value},'i-msg').then(()=>{se.blur();if(ESTADO.some(d=>d.lanzado&&d.red&&d.red!=='local'))document.getElementById('i-msg').textContent='IP cambiada: pulsa «Jugar» para aplicarla'})}
     else if(RED.ips.length<=1)ips.textContent='';}
-  const listo=p&&s.escucha&&(!p.batallas_en_unity||l.lanzado)&&!viejos&&!fwMal&&(!RED?.abierta||!!de('bronzeage-cliente-jugador')?.escucha),arrancando=(s.lanzado&&!s.escucha)||q.esperando;
+  const listo=p&&s.escucha&&(!p.batallas_en_unity||l.lanzado)&&!viejos&&!fwMal&&!RED?.sordos?.length&&(!RED?.abierta||!!de('bronzeage-cliente-jugador')?.escucha),arrancando=(s.lanzado&&!s.escucha)||q.esperando;
   const jb=document.getElementById('i-jugar');jb.disabled=!p||listo||arrancando||M.generando;jb.textContent=listo?'✓ Todo en marcha':arrancando?'Arrancando…':'▶ Jugar';
   document.getElementById('i-parar').disabled=!datos.some(d=>d.lanzado&&d.tipo!=='tarea');
   const cl=document.getElementById('i-clientes');
@@ -769,7 +770,9 @@ http.createServer(async (req, res) => {
   }
   if (partes[1] === 'red') {
     // GET: cómo está la red; POST { abierta, ip }: la cambia (vale al arrancar); POST /api/red/cortafuegos: lo abre; POST /api/red/aplicar: reinicia lo que esté en marcha.
-    if (req.method === 'GET') return json(200, { ...red, ips: ipsLocales(), puerto: puertos['bronzeage-servidor'], cortafuegos: await cortafuegos(), con: redDe(),
+    // `sordos`: lo que escucha en este equipo pero no en la IP de la red (p. ej. arrancado a mano, fuera del panel, sin abrirlo a la red).
+    const sordos = red.abierta ? (await Promise.all(['bronzeage-servidor', 'bronzeage-cliente-jugador'].map(async (n) => (await escucha(puertos[n])) && !(await escucha(puertos[n], red.ip)) ? n : null))).filter(Boolean) : [];
+    if (req.method === 'GET') return json(200, { ...red, ips: ipsLocales(), puerto: puertos['bronzeage-servidor'], cortafuegos: await cortafuegos(), con: redDe(), sordos,
       en_marcha: CON_RED.filter((n) => procesos[n]?.hijo).map((n) => ({ nombre: n, red: procesos[n].red })) });
     if (req.method !== 'POST') return json(405, { error: 'metodo_no_permitido' });
     if (partes[2] === 'cortafuegos') { const no = await abrirCortafuegos(); return no ? json(409, { error: 'cortafuegos', mensaje: no }) : json(200, { cortafuegos: await cortafuegos() }); }
