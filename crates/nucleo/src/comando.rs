@@ -389,6 +389,9 @@ pub enum Comando {
     /// El héroe se baja de la batalla antes de que empiece la partida (2026-11-16): sin castigo y con su columna tal cual; la batalla sigue para los demás y solo se cancela si no
     /// queda ningún humano o el atacante se queda sin héroes. No lleva candado de batalla.
     BajarseDeBatalla { heroe: u64, batalla: u64 },
+    /// El héroe que ya combate en la batalla cambia sus escuadras elegidas antes de que empiece la partida (2026-11-16): las de la preparación de quien entró de oficio, como el
+    /// residente que defiende su plaza. Mismas reglas que `UnirseABatalla.escuadras`; solo esta batalla, sin tocar el loadout. No lleva candado de batalla.
+    ElegirEscuadrasDeBatalla { heroe: u64, batalla: u64, escuadras: Vec<u64> },
     // Lo que manda el servidor de batalla (§8): no es una orden de jugador sino un mensaje de Conquest con la credencial del servidor, y el actor de la petición
     // es `batalla-servidor:<id>` (`Peticion::de_servidor_de_batalla`). Repetir uno ya aplicado no cambia nada (`SinCambios`).
     RegistrarAsignacion { batalla: u64, asignacion: Asignacion },
@@ -837,6 +840,7 @@ impl Comando {
             | Comando::UnirseABatalla { .. }
             | Comando::CancelarBatalla { .. }
             | Comando::BajarseDeBatalla { .. }
+            | Comando::ElegirEscuadrasDeBatalla { .. }
             | Comando::GuarnecerAvanzada { .. }
             | Comando::RetirarDeAvanzada { .. }
             | Comando::GuardarEnAlmacenPersonal { .. }
@@ -997,6 +1001,7 @@ impl Comando {
             Comando::UnirseABatalla { .. }
                 | Comando::CancelarBatalla { .. }
                 | Comando::BajarseDeBatalla { .. }
+                | Comando::ElegirEscuadrasDeBatalla { .. }
                 | Comando::Conectarse { .. }
                 | Comando::Desconectarse { .. }
                 | Comando::CerrarSesion { .. }
@@ -1259,6 +1264,7 @@ impl Comando {
             | Comando::UnirseABatalla { heroe, .. }
             | Comando::CancelarBatalla { heroe, .. }
             | Comando::BajarseDeBatalla { heroe, .. }
+            | Comando::ElegirEscuadrasDeBatalla { heroe, .. }
             | Comando::CrearFaccion { heroe, .. }
             | Comando::SolicitarIngreso { heroe, .. }
             | Comando::DejarFaccion { heroe }
@@ -2185,6 +2191,12 @@ impl Peticion {
                 w.u64(*heroe);
                 w.u64(*batalla);
             }
+            Comando::ElegirEscuadrasDeBatalla { heroe, batalla, escuadras } => {
+                w.u8(236);
+                w.u64(*heroe);
+                w.u64(*batalla);
+                lista_u64(&mut w, escuadras);
+            }
             Comando::DarMonedas { heroe, cantidad } => {
                 w.u8(233);
                 w.u64(*heroe);
@@ -3040,6 +3052,7 @@ impl Peticion {
             228 => Comando::ForjarObjeto { heroe: r.u64()?, objeto: r.texto()? },
             229 => Comando::UsarObjeto { heroe: r.u64()?, casilla: r.u32()?, escuadra: r.opt_u64()? },
             232 => Comando::BajarseDeBatalla { heroe: r.u64()?, batalla: r.u64()? },
+            236 => Comando::ElegirEscuadrasDeBatalla { heroe: r.u64()?, batalla: r.u64()?, escuadras: leer_lista_u64(&mut r)? },
             233 => Comando::DarMonedas { heroe: r.u64()?, cantidad: r.i64()? },
             234 => Comando::DarFondoMonedas { asentamiento: r.u64()?, cantidad: r.i64()? },
             235 => Comando::ColocarAeda { asentamiento: r.u64()?, residente: r.bool()? },
@@ -4389,6 +4402,7 @@ mod pruebas {
             Comando::UnirseABatalla { heroe: 4, batalla: 77, lado: None, escuadras: vec![8, 9] },
             Comando::CancelarBatalla { heroe: 4, batalla: 77 },
             Comando::BajarseDeBatalla { heroe: 4, batalla: 77 },
+            Comando::ElegirEscuadrasDeBatalla { heroe: 4, batalla: 77, escuadras: vec![8, 9] },
             Comando::DarMonedas { heroe: 4, cantidad: 250 },
             Comando::DarFondoMonedas { asentamiento: 3, cantidad: 900 },
             Comando::ColocarAeda { asentamiento: 3, residente: false },

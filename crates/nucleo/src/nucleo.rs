@@ -1296,6 +1296,7 @@ impl Nucleo {
             | Comando::UnirseABatalla { .. }
             | Comando::CancelarBatalla { .. }
             | Comando::BajarseDeBatalla { .. }
+            | Comando::ElegirEscuadrasDeBatalla { .. }
             | Comando::RegistrarAsignacion { .. }
             | Comando::ConfirmarInicio { .. }
             | Comando::RegistrarTokens { .. }

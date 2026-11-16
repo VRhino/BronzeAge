@@ -724,6 +724,51 @@ impl Batalla {
         Ok(self.anotar_salida(r, ahora, heroe, MotivoSalida::Bajada, false, &suyas))
     }
 
+    /// Cambia las escuadras con las que `heroe` combate en la batalla por `nuevas` antes de que empiece la partida (2026-11-16: las elegidas de la preparación de quien entró de oficio,
+    /// como el residente que defiende su plaza). Solo esta batalla: el núcleo valida las escuadras y no toca el loadout. Con el ticket ya publicado o asignado sube la revisión y
+    /// vuelve a `convocando` sin asignación, como tras una salida previa al inicio. Devuelve las escuadras que dejan de combatir (para soltar su candado) y si se reabrió; con la misma
+    /// lista, `Efecto::SinCambios`.
+    pub fn cambiar_escuadras(&mut self, r: &Reglas, ahora: Instante, heroe: HeroeId, nuevas: Vec<EscuadraEnBatalla>) -> Result<Efecto<(Vec<EscuadraId>, bool)>, ErrorBatalla> {
+        if !self.activa(ahora) {
+            return Err(ErrorBatalla::NoActiva);
+        }
+        if self.salio(heroe) {
+            return Err(ErrorBatalla::YaSalio(heroe));
+        }
+        let antes: Vec<EscuadraId> = self.participante(heroe).ok_or(ErrorBatalla::NoCombate(heroe))?.escuadras.iter().map(|e| e.id).collect();
+        if self.estado == EstadoBatalla::EnCurso {
+            return Err(ErrorBatalla::YaEmpezada);
+        }
+        let mut viejas = antes.clone();
+        viejas.sort_unstable();
+        let mut ids: Vec<EscuadraId> = nuevas.iter().map(|e| e.id).collect();
+        ids.sort_unstable();
+        if viejas == ids {
+            return Ok(Efecto::SinCambios);
+        }
+        let t = &mut self.ticket;
+        let p = t
+            .atacante
+            .participantes
+            .iter_mut()
+            .chain(t.defensor.participantes.iter_mut())
+            .chain(self.incorporaciones.iter_mut().map(|i| &mut i.participante))
+            .find(|p| p.heroe == heroe)
+            .expect("combate en ella");
+        p.escuadras = nuevas;
+        let liberar = antes.into_iter().filter(|e| ids.binary_search(e).is_err()).collect();
+        let reabierta = self.estado == EstadoBatalla::Asignada || !self.en_convocatoria(ahora);
+        if reabierta {
+            self.ticket.revision += 1;
+            if self.estado == EstadoBatalla::Asignada {
+                self.estado = EstadoBatalla::Convocando;
+                self.asignacion = None;
+                self.expira_en = ahora + r.batalla.plazo_asignacion;
+            }
+        }
+        Ok(Efecto::Aplicado((liberar, reabierta)))
+    }
+
     /// Anota la salida de `heroe` (con las escuadras `suyas`, que se liberan) y, si iniciaba la batalla, la pasa al primer atacante que queda. Antes de empezar (`NoConectado` o
     /// `Bajada`) además lo quita del ticket y de las incorporaciones y, o se cancela (sin humanos, o sin atacantes si atacaba), o se reabre: con el ticket ya publicado o asignado,
     /// sube la revisión y vuelve a `convocando`.

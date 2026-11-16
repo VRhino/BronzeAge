@@ -6,6 +6,10 @@ Los cambios del motor que el cliente jugador (BronzeAgeClient) tiene que recoger
 
 ## Pendiente
 
+### Cambiar las escuadras elegidas en una batalla en que ya se combate (2026-11-16; contrato 0.29.0, nucleo 0.45.0, combate 0.12.0, sin partida nueva)
+
+**`OrdenElegirEscuadrasDeBatalla { battle_id, escuadron_ids }`** (campo 202 del oneof): quien ya combate (el residente que defiende su plaza entra de oficio con su loadout) cambia sus elegidas antes de que empiece la partida, con las mismas reglas que `OrdenUnirseABatalla.escuadron_ids`. Con la partida en curso, `batalla.ya_empezada`. Qué haría el cliente: en la preparación de una batalla en que ya combate, mandar esta orden con lo elegido (Batalla_Unity_Ciclo §7.3).
+
 ### Batallas: elegir escuadras, bajarse, el final de quien sale y el hecho de cierre (2026-11-16; contrato 0.28.0, nucleo 0.44.0, combate 0.11.0, sin partida nueva)
 
 Lo pidió el hilo de la migración a Unity. Qué cambia y qué tendría que hacer el cliente (Batalla_Unity_Ciclo §7, §7.2 y §10):

@@ -653,6 +653,7 @@ impl Ctx<'_> {
             },
             Cuerpo::CancelarBatalla(o) => Comando::CancelarBatalla { heroe: self.mi_heroe()?, batalla: self.batalla(&o.battle_id)? },
             Cuerpo::BajarseDeBatalla(o) => Comando::BajarseDeBatalla { heroe: self.mi_heroe()?, batalla: self.batalla(&o.battle_id)? },
+            Cuerpo::ElegirEscuadrasDeBatalla(o) => Comando::ElegirEscuadrasDeBatalla { heroe: self.mi_heroe()?, batalla: self.batalla(&o.battle_id)?, escuadras: self.escuadras(&o.escuadron_ids)? },
 
             // ── Avanzadas ──
             Cuerpo::ColocarAvanzada(o) => Comando::ColocarAvanzada { asentamiento: self.plaza(&o.asentamiento_id)?, heroe: self.heroe(&o.heroe_id)?, posicion: self.punto(o.posicion.as_ref())? },
