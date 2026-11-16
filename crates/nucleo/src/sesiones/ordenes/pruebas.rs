@@ -215,8 +215,10 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
             orden!(Atacar, OrdenAtacar, heroe_id: h.clone(), objetivo: Some(pb::orden_atacar::Objetivo { tipo: Some(Ataca::PuebloId(pueblo())) }), declara_guerra: Some(true)),
             Comando::Atacar { heroe: 7, objetivo: ObjetivoAtaque::Pueblo(4), declara_guerra: true },
         ),
-        (orden!(UnirseABatalla, OrdenUnirseABatalla, heroe_id: h.clone(), battle_id: s("uuid-9"), lado: Some(s("defensor"))), Comando::UnirseABatalla { heroe: 7, batalla: 9, lado: Some(Lado::Defensor) }),
+        (orden!(UnirseABatalla, OrdenUnirseABatalla, heroe_id: h.clone(), battle_id: s("uuid-9"), lado: Some(s("defensor"))), Comando::UnirseABatalla { heroe: 7, batalla: 9, lado: Some(Lado::Defensor), escuadras: vec![] }),
+        (orden!(UnirseABatalla, OrdenUnirseABatalla, heroe_id: h.clone(), battle_id: s("uuid-9"), escuadron_ids: esc.clone()), Comando::UnirseABatalla { heroe: 7, batalla: 9, lado: None, escuadras: vec![1, 2] }),
         (orden!(CancelarBatalla, OrdenCancelarBatalla, battle_id: s("uuid-9")), Comando::CancelarBatalla { heroe: 7, batalla: 9 }),
+        (orden!(BajarseDeBatalla, OrdenBajarseDeBatalla, battle_id: s("uuid-9")), Comando::BajarseDeBatalla { heroe: 7, batalla: 9 }),
         // ── Avanzadas ──
         (orden!(ColocarAvanzada, OrdenColocarAvanzada, asentamiento_id: s("as-3"), heroe_id: h.clone(), posicion: pb_punto(1_000, 2_000)), Comando::ColocarAvanzada { asentamiento: 3, heroe: 7, posicion: Punto::new(1_000, 2_000) }),
         (orden!(EntregarEnObra, OrdenEntregarEnObra, heroe_id: h.clone(), obra_id: s("obra-6"), materiales: carga(&[("madera", 1)])), Comando::EntregarMaterialesAAvanzada { ejercito: 70, avanzada: 6 }),
@@ -560,6 +562,10 @@ fn ordenes_de_administracion() -> Vec<(Cuerpo, Comando)> {
         (administracion("dar_escuadra", vec![("heroe_id", t("heroe-7")), ("tropa_id", t("milicia_lanceros")), ("cantidad", n(25))]), Comando::DarEscuadra { heroe: 7, tropa: Tropa::MiliciaLanceros, cantidad: 25 }),
         (administracion("fijar_controlador", vec![("heroe_id", t("heroe-7")), ("controlador", t("bot"))]), Comando::FijarControlador { heroe: 7, controlador: Controlador::Bot }),
         (administracion("fijar_catalogo_misiones", vec![("catalogo", t("{}"))]), Comando::FijarCatalogoMisiones { catalogo: "{}".into() }),
+        (administracion("dar_monedas", vec![("heroe_id", t("heroe-7")), ("cantidad", n(250))]), Comando::DarMonedas { heroe: 7, cantidad: 250 }),
+        (administracion("dar_fondo_monedas", vec![("asentamiento_id", t("as-3")), ("cantidad", n(1_000))]), Comando::DarFondoMonedas { asentamiento: 3, cantidad: 1_000 }),
+        (administracion("colocar_aeda", vec![("asentamiento_id", t("as-3"))]), Comando::ColocarAeda { asentamiento: 3, residente: false }),
+        (administracion("colocar_aeda", vec![("asentamiento_id", t("as-3")), ("residente", Kind::BoolValue(true))]), Comando::ColocarAeda { asentamiento: 3, residente: true }),
     ]
 }
 
@@ -604,7 +610,7 @@ fn las_ordenes_sin_comando_en_el_nucleo_se_rechazan_con_un_codigo_estable() {
 #[test]
 fn la_administracion_solo_se_traduce_en_una_sesion_de_administracion() {
     let filas = ordenes_de_administracion();
-    assert_eq!(filas.len(), 20);
+    assert_eq!(filas.len(), 24);
     for (cuerpo, esperado) in filas {
         assert_eq!(traduce(cuerpo.clone(), true), Ok(esperado), "{cuerpo:?}");
         assert_eq!(traduce(cuerpo.clone(), false), Err(rechazos::NO_AUTORIZADO), "un jugador no administra: {cuerpo:?}");
@@ -774,7 +780,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let de_administracion: BTreeSet<String> = ordenes_de_administracion().iter().map(|(_, c)| nombre(c)).collect();
     let del_servidor_de_batalla: BTreeSet<String> = ["RegistrarAsignacion", "ConfirmarInicio", "RegistrarTokens", "RegistrarSalida", "AplicarResultado"].map(String::from).into();
     let todos = variantes_de_comando();
-    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (217, 192, 20, 5));
+    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (221, 193, 23, 5));
     let clasificados: Vec<&String> = del_jugador.iter().chain(&de_administracion).chain(&del_servidor_de_batalla).collect();
     assert_eq!(clasificados.len(), todos.len(), "una variante en dos orígenes");
     let sin_clasificar: Vec<&String> = todos.iter().filter(|v| !clasificados.contains(v)).collect();
@@ -786,7 +792,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let tabla: BTreeSet<String> = tabla.map(|c| nombre(&c)).collect();
     let proto = include_str!("../../../../../proto/bronzeage/v1/orders.proto");
     let en_el_contrato = proto.lines().skip_while(|l| !l.contains("oneof cuerpo {")).skip(1).take_while(|l| l.trim() != "}").map(str::trim).filter(|l| !l.starts_with("//") && l.ends_with(';')).count();
-    assert_eq!((tabla.len(), en_el_contrato), (191, 191), "una orden del contrato sin mapear ni clasificar como no disponible");
+    assert_eq!((tabla.len(), en_el_contrato), (192, 192), "una orden del contrato sin mapear ni clasificar como no disponible");
 }
 
 /// El nombre de una orden en el contrato (el campo del `oneof`): la variante de `Cuerpo` en serpiente (`MarcharA` → `marchar_a`).
@@ -869,5 +875,5 @@ fn la_matriz_de_autorizacion_del_documento_es_la_del_codigo() {
     let faltan: Vec<String> = codigo.difference(&documento).map(fila).collect();
     let sobran: Vec<String> = documento.difference(&codigo).map(fila).collect();
     assert!(faltan.is_empty() && sobran.is_empty(), "la matriz del documento no es la del código.\nFaltan o no coinciden (como las dice el código):\n{}\nSobran (como las dice el documento):\n{}", faltan.join("\n"), sobran.join("\n"));
-    assert_eq!(codigo.len(), 192 + 20 + 5, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
+    assert_eq!(codigo.len(), 193 + 23 + 5, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
 }

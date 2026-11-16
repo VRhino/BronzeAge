@@ -125,8 +125,9 @@ es la lista de mensajes de orden que hay que cubrir.
 | `atacar` | `heroeId`: string<br>`objetivo`: {tipo: "ejercito", id: string}|{tipo: "caravana", id: string}|{tipo: "campamento"|"asentamiento", id: string} |
 | `perseguir` | `heroeId`: string<br>`objetivo`: {tipo: "ejercito", id: string}|{tipo: "caravana", id: string} |
 | `dejarDePerseguir` | `heroeId`: string |
-| `unirseABatalla` | `heroeId`: string<br>`battleId`: string<br>`lado?`: "atacante"|"defensor" |
+| `unirseABatalla` | `heroeId`: string<br>`battleId`: string<br>`lado?`: "atacante"|"defensor"<br>`escuadronIds?`: string[] (solo desde dentro, 2026-11-16) |
 | `cancelarBatalla` | `battleId`: string |
+| `bajarseDeBatalla` | `battleId`: string (2026-11-16) |
 | `cederLiderazgo` | `ejercitoId`: string<br>`heroeId`: string<br>`sucesorId`: string |
 | `entrarEnAsentamiento` | `asentamientoId`: string<br>`heroeId`: string |
 | `fijarPuerta` | `asentamientoId`: string<br>`heroeId`: string<br>`cerradaA`: "neutrales"|"aliados"|"enemigos"|"aedas"[] |
@@ -245,6 +246,9 @@ En las órdenes de obras y de murallas el `cargo` (Gobernador o Maestro de Obras
 | `dar_escuadra` | `heroe_id`, `tropa_id`, `cantidad` | `DarEscuadra` (97) |
 | `fijar_controlador` | `heroe_id`, `controlador` (`humano` o `bot`) | `FijarControlador` (98) |
 | `fijar_catalogo_misiones` | `catalogo` (texto: el JSON entero del catálogo, con la forma del bloque `MISIONES_RECURRENTES`) | `FijarCatalogoMisiones` (187; `mision.catalogo_invalido` con el motivo si no vale; el mismo catálogo, sin cambios) |
+| `dar_monedas` | `heroe_id`, `cantidad` (monedas enteras, > 0) | `DarMonedas` (233, 2026-11-16, solo pruebas) |
+| `dar_fondo_monedas` | `asentamiento_id`, `cantidad` (monedas enteras, > 0; el fondo de la plaza) | `DarFondoMonedas` (234, 2026-11-16, solo pruebas) |
+| `colocar_aeda` | `asentamiento_id`, `residente?` (bool; sin él, itinerante) | `ColocarAeda` (235, 2026-11-16, solo pruebas: para en la plaza al itinerante que ya está en ella o al más cercano, o nace uno; con `residente`, llega un residente aunque no haya Palacio) |
 
 **Códigos nuevos de rechazo**: `orden.no_disponible`, `orden.forma_invalida`, `obra_de_mapa.desconocida` y `repostar.sin_lugar`. Los ids nuevos del contrato: `nodo-<n>` (el nodo del artefacto de mundo).
 

@@ -726,8 +726,11 @@ pub fn batalla(n: &Nucleo, b: &Batalla, quien: Espectador) -> pb::Batalla {
         Espectador::Heroe(v) => (v, false),
         Espectador::Admin => (None, true),
     };
-    let propio = viewer.and_then(|v| b.heroes_que_combaten().find(|&h| e.militar.heroes.get(&h).is_some_and(|x| audiencia::principal(e, x) == Some(v))));
-    let entera = admin || propio.is_some();
+    let suyo = |h: u64| e.militar.heroes.get(&h).is_some_and(|x| viewer.is_some() && audiencia::principal(e, x) == viewer);
+    let propio = b.heroes_que_combaten().find(|&h| suyo(h));
+    // Quien salió la sigue viendo entera hasta que se retira (2026-11-16): así sabe cómo acabó.
+    let salida = b.salidas.iter().find(|s| suyo(s.heroe)).filter(|_| propio.is_none());
+    let entera = admin || propio.is_some() || salida.is_some();
     let asignacion_propia = propio.filter(|_| b.activa(n.ahora())).and_then(|h| match n.token_de_jugador(h, b.id) {
         TokenDeJugador::Token { instancia, token, expira_en } => Some(pb::AsignacionPropia { instancia: Some(pb::InstanciaDeBatalla { host: instancia.host, puerto: u32::from(instancia.puerto), protocolo: instancia.protocolo }), token, expira_en_ms: expira_en }),
         _ => None,
@@ -750,10 +753,11 @@ pub fn batalla(n: &Nucleo, b: &Batalla, quien: Espectador) -> pb::Batalla {
         resultado: b.resultado.as_ref().filter(|_| entera).map(|r| batalla::resultado(n, b, r)),
         aplicada_en_ms: b.aplicada_en,
         cerrada_en_ms: b.cerrada_en,
-        lado_propio: propio.and_then(|h| b.lado_de(h)).map(|l| batalla::lado(l) as i32),
-        lado_para_unirse: propio.is_none().then(|| viewer.and_then(|v| n.lado_para_unirse(v, b.id))).flatten().map(|l| batalla::lado(l) as i32),
+        lado_propio: propio.and_then(|h| b.lado_de(h)).or_else(|| salida.and_then(|s| b.lado_de_quien_salio(s.heroe))).map(|l| batalla::lado(l) as i32),
+        lado_para_unirse: (propio.is_none() && salida.is_none()).then(|| viewer.and_then(|v| n.lado_para_unirse(v, b.id))).flatten().map(|l| batalla::lado(l) as i32),
         asignacion_propia,
         asignacion: b.asignacion.as_ref().filter(|_| admin).map(|a| batalla::asignacion_sin_tokens(n, b, a)),
+        salida_propia: salida.map(|s| pb::SalidaPropia { motivo: batalla::motivo(s.motivo) as i32, derrotado: s.derrotado, en_ms: s.en }),
     }
 }
 

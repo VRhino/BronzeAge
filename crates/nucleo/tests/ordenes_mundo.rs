@@ -512,7 +512,7 @@ async fn quien_esta_dentro_de_una_plaza_asediada_se_une_a_la_batalla_de_unity_po
     let (mut c_beto, _) = w.entrar("beto", TipoCliente::ClienteUnity).await;
 
     // Un UUID que no es de esta partida no existe; el de la batalla del asedio sí, y el residente que está dentro se une a la defensa (sin lado: es el defensor).
-    let unirse = |battle_id: &str| orden::Cuerpo::UnirseABatalla(pb::OrdenUnirseABatalla { heroe_id: ids::heroe(beto), battle_id: battle_id.into(), lado: None });
+    let unirse = |battle_id: &str| orden::Cuerpo::UnirseABatalla(pb::OrdenUnirseABatalla { heroe_id: ids::heroe(beto), battle_id: battle_id.into(), lado: None, escuadron_ids: vec![] });
     let (_, r) = dar(&mut c_beto, "u1", unirse("00000000-0000-0000-0000-000000000000")).await;
     assert_eq!(rechazo(&r), "batalla.no_existe");
     let (_, r) = dar(&mut c_beto, "u2", unirse(&uuid)).await;

@@ -599,6 +599,8 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `batalla.no_combate_aqui` | `BATALLA_NO_COMBATE_AQUI` | Su Facción no combate aquí (en una caravana, si el Rey atacante no admite a otras Facciones). |
 | `batalla.lado_distinto` | `BATALLA_LADO_DISTINTO` | Pidió un bando distinto del que le toca (el mensaje dice cuál). |
 | `batalla.no_puede_cancelar` | `BATALLA_NO_PUEDE_CANCELAR` | Solo quien la inició la cancela, y antes de que empiece la partida. |
+| `batalla.ya_empezada` | `BATALLA_YA_EMPEZADA` | `bajarse_de_batalla` con la partida ya empezada: se sale desde dentro y la salida la cuenta el servidor de batalla (2026-11-16). |
+| `batalla.sin_elegir_escuadras` | `BATALLA_SIN_ELEGIR_ESCUADRAS` | `unirse_a_batalla` con escuadras elegidas fuera de su base: fuera de ella las elegidas son todas las que lleva (2026-11-16). |
 | `batalla.ya_asignada` | `BATALLA_YA_ASIGNADA` | Otro servidor la tiene: gana la primera asignación. |
 | `batalla.en_convocatoria` | `BATALLA_EN_CONVOCATORIA` | Un asedio en convocatoria no se publica ni se asigna. |
 | `batalla.revision_vieja` | `BATALLA_REVISION_VIEJA` | La revisión del ticket no es la vigente. |

@@ -163,7 +163,7 @@ impl Nucleo {
         }
     }
 
-    fn contar_residente(&mut self, plaza: u64, d: i32) {
+    pub(super) fn contar_residente(&mut self, plaza: u64, d: i32) {
         let n = self.espacio.residentes_por_plaza.entry(plaza).or_insert(0);
         *n = n.saturating_add_signed(d);
         if *n == 0 {
@@ -172,12 +172,12 @@ impl Nucleo {
     }
 
     /// Un residente cambió (llegó, se fue, cambió de dueña o su épica avanzó): viaja como `AedaResidente` a `FACCION` de su dueña (6G).
-    fn tocar_residente(&mut self, aeda: u32) {
+    pub(super) fn tocar_residente(&mut self, aeda: u32) {
         self.tr.tocar(Clase::Residente, u64::from(aeda));
     }
 
     /// Los residentes y sus épicas cambian la Facción (sus épicas posibles, Mecenas) y la felicidad de la plaza.
-    fn tocar_residentes(&mut self, faccion: u32, plaza: u64) {
+    pub(super) fn tocar_residentes(&mut self, faccion: u32, plaza: u64) {
         self.tr.tocar(Clase::Faccion, u64::from(faccion));
         self.tr.tocar(Clase::Asentamiento, plaza);
     }

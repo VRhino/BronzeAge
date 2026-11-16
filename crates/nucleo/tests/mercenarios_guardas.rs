@@ -349,7 +349,7 @@ fn unirse_a_una_batalla_en_defensa_pide_guardar_lo_que_se_defiende_o_atacar_a_qu
     }
     mc::ok(&mut e.n, "gus", Comando::Atacar { heroe: lider, objetivo: ObjetivoAtaque::Asentamiento(plaza), declara_guerra: false });
     let batalla = e.n.batallas().next().expect("se abrió el asedio").id;
-    let une = |heroe, lado| Comando::UnirseABatalla { heroe, batalla, lado };
+    let une = |heroe, lado| Comando::UnirseABatalla { heroe, batalla, lado, escuadras: vec![] };
     let sin_orden = rechazos::MERCENARIO_SIN_ORDEN;
 
     // Ni acompañar a un ejército ni atacar a otro que no está en la batalla dan permiso para defender la plaza.
@@ -383,7 +383,7 @@ fn unirse_a_una_batalla_en_ataque_pide_atacar_lo_que_se_asedia() {
     let (_, lider) = e.sitiador("sitia", 1, puerta);
     mc::ok(&mut e.n, "sitia", Comando::Atacar { heroe: lider, objetivo: ObjetivoAtaque::Asentamiento(ajena), declara_guerra: false });
     let batalla = e.n.batallas().next().expect("se abrió el asedio").id;
-    let une = |heroe| Comando::UnirseABatalla { heroe, batalla, lado: None };
+    let une = |heroe| Comando::UnirseABatalla { heroe, batalla, lado: None, escuadras: vec![] };
 
     // A la puerta, con la columna a su alcance, tiene el bando de los que asedian; pero solo quien tiene `atacar` de la plaza asediada lo ocupa.
     assert_eq!(mc::rechazo(&mut e.n, "bot-b", une(guarda)), rechazos::MERCENARIO_SIN_ORDEN);

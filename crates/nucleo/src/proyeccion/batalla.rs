@@ -15,7 +15,7 @@ use super::propios::{aspecto_de_heroe, atributos, celdas, equipamiento, nombre_d
 use super::{ids, punto};
 use crate::nucleo::Nucleo;
 use combate::caravana::Modalidad;
-use combate::ciclo::{Asignacion, BandoDeTicket, Batalla, CaravanaEnBatalla, Contexto, EscuadraEnBatalla, Incorporacion, Participante, PlazaCongelada};
+use combate::ciclo::{Asignacion, BandoDeTicket, Batalla, CaravanaEnBatalla, Contexto, EscuadraEnBatalla, Incorporacion, MotivoSalida, Participante, PlazaCongelada};
 use combate::resolucion::Lado;
 use combate::resultado::{Razon, Resultado};
 use contrato::v1 as pb;
@@ -215,6 +215,17 @@ pub fn asignacion_sin_tokens(n: &Nucleo, b: &Batalla, a: &Asignacion) -> pb::Bat
         instancia: Some(pb::InstanciaDeBatalla { host: i.host.clone(), puerto: u32::from(i.puerto), protocolo: i.protocolo.clone() }),
         tokens_participante: Vec::new(),
         servidor_id: a.servidor.clone(),
+    }
+}
+
+/// Por qué salió alguien de la batalla.
+pub fn motivo(m: MotivoSalida) -> pb::MotivoSalida {
+    match m {
+        MotivoSalida::NoConectado => pb::MotivoSalida::SalidaNoConectado,
+        MotivoSalida::Eliminado => pb::MotivoSalida::SalidaEliminado,
+        MotivoSalida::Abandono => pb::MotivoSalida::SalidaAbandono,
+        MotivoSalida::Desconexion => pb::MotivoSalida::SalidaDesconexion,
+        MotivoSalida::Bajada => pb::MotivoSalida::SalidaBajada,
     }
 }
 

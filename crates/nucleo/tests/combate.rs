@@ -932,7 +932,7 @@ fn un_asedio_con_numeros_abre_30_s_de_convocatoria_y_cae_con_todas_las_columnas_
     assert!(s.e.n.estado().ejercitos[&ana.0].en_batalla, "la columna queda apartada mientras dura la convocatoria");
     assert_eq!(s.e.n.estado().asentamientos[&b].faccion, 2, "abrir no resuelve");
     s.e.n.avanzar_hasta(t + 10_000);
-    s.e.ok("carla", Comando::UnirseABatalla { heroe: carla.1, batalla: id, lado: None });
+    s.e.ok("carla", Comando::UnirseABatalla { heroe: carla.1, batalla: id, lado: None, escuadras: vec![] });
     s.e.n.avanzar_hasta(t + 30_000 - 1);
     assert!(hechos(&s.e.n, "combate.asedio_conquista").is_empty() && hechos(&s.e.n, "combate.asedio_resistido").is_empty());
     s.e.n.avanzar_hasta(t + 30_000);
@@ -945,7 +945,7 @@ fn un_asedio_con_numeros_abre_30_s_de_convocatoria_y_cae_con_todas_las_columnas_
     assert!(!s.e.n.estado().ejercitos[&ana.0].en_batalla && !s.e.n.estado().ejercitos[&carla.0].en_batalla, "vuelven al mundo");
     // Pasada la convocatoria ya no se entra: la batalla está cerrada.
     let tarde = s.e.ejercito("dario", 1, s.e.pos(b), &[Tropa::EspadachinesBronce]);
-    assert_eq!(codigo(&s.e.ord("dario", Comando::UnirseABatalla { heroe: tarde.1, batalla: id, lado: None })), rechazos::BATALLA_NO_EXISTE);
+    assert_eq!(codigo(&s.e.ord("dario", Comando::UnirseABatalla { heroe: tarde.1, batalla: id, lado: None, escuadras: vec![] })), rechazos::BATALLA_NO_EXISTE);
 }
 
 #[test]

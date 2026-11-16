@@ -146,7 +146,7 @@ impl Nucleo {
             Comando::UnirseAEjercito { heroe, ejercito, .. } | Comando::UnirseEnCampo { heroe, ejercito } => self.pide_orden(*heroe, TipoOrden::Unirse, Objetivo::Ejercito(*ejercito)),
             Comando::UnirseAConvocatoria { heroe, convocatoria, .. } if self.es_marcado(*heroe) => self.pide_orden(*heroe, TipoOrden::Unirse, Objetivo::Convocatoria(*convocatoria)),
             Comando::UnirseAConvocatoria { convocatoria, .. } => self.de_mercenarios(*convocatoria),
-            Comando::UnirseABatalla { heroe, batalla, lado } => self.pide_orden_en_batalla(t, *heroe, *batalla, *lado),
+            Comando::UnirseABatalla { heroe, batalla, lado, .. } => self.pide_orden_en_batalla(t, *heroe, *batalla, *lado),
             Comando::AdjuntarCaravana { caravana, ejercito } => self.pide_orden(self.ejercito(*ejercito)?.columna.lider, TipoOrden::Guardar, Objetivo::Caravana(*caravana)),
             Comando::AsignarEscolta { caravana, heroe, .. } => self.pide_orden(*heroe, TipoOrden::Guardar, Objetivo::Caravana(*caravana)),
             Comando::GuarnecerAvanzada { heroe, avanzada, .. } => self.pide_orden(*heroe, TipoOrden::Guardar, Objetivo::Avanzada(*avanzada)),
@@ -261,8 +261,12 @@ impl Nucleo {
             | Comando::FijarRelacion { .. }
             | Comando::ColocarBandidos { .. }
             | Comando::DarEscuadra { .. }
+            | Comando::DarMonedas { .. }
+            | Comando::DarFondoMonedas { .. }
+            | Comando::ColocarAeda { .. }
             | Comando::FijarControlador { .. }
             | Comando::CancelarBatalla { .. }
+            | Comando::BajarseDeBatalla { .. }
             | Comando::RegistrarAsignacion { .. }
             | Comando::ConfirmarInicio { .. }
             | Comando::RegistrarTokens { .. }

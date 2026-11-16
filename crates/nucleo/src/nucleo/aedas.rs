@@ -68,7 +68,7 @@ impl Nucleo {
     }
 
     /// Programa el único evento del Aeda `i` (su llegada o el fin de su estancia) con su generación de ahora.
-    fn programar_aeda(&mut self, i: usize) {
+    pub(super) fn programar_aeda(&mut self, i: usize) {
         let a = &self.estado.aedas[i];
         let en = a.siguiente_evento().expect("un Aeda siempre tiene su siguiente evento").max(self.estado.ahora);
         let clave = self.estado.generaciones.clave(entidad_aeda(a.id));

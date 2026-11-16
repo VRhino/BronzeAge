@@ -177,7 +177,7 @@ pub(super) fn tablon_de(n: &Nucleo, cs: &[u32]) -> Vec<pb::OfertaMercenario> {
                 heroe_id: ids::heroe(heroe),
                 desde_ms: oferta.desde,
                 ficha: Some(ficha(&e.reglas.economia.contratos, f, true)),
-                tropa: h.heroe.escuadras.iter().filter(|s| s.prestada.is_none() && s.con_soldados()).map(|s| super::vista::escuadra_que_lleva(n, s)).collect(),
+                tropa: h.heroe.escuadras.iter().filter(|s| s.prestada.is_none() && s.con_soldados()).map(super::vista::escuadra_que_lleva).collect(),
                 herido_hasta_ms: h.heroe.herido_hasta,
                 tarifas: plazos
                     .clone()

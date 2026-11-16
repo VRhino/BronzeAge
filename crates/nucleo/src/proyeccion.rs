@@ -153,7 +153,8 @@ pub fn referencia_creada(tipo: TipoCreado, id: u64, uuid_de_batalla: &dyn Fn(u64
         TipoCreado::Mirada => (T::MiradaIntel, ids::mirada(id)),
         TipoCreado::Faccion => (T::Faccion, ids::faccion(u32::try_from(id).ok()?)),
         TipoCreado::Propuesta => (T::Propuesta, ids::propuesta(id)),
-        TipoCreado::Parcela => return None,
+        // El Aeda que coloca la administración: itinerante o residente, cada uno con su numeración; el contrato no lo devuelve en `creadas` (llega por su ámbito).
+        TipoCreado::Parcela | TipoCreado::Aeda => return None,
     };
     Some(pb::ReferenciaCreada { entidad: entidad as i32, id })
 }

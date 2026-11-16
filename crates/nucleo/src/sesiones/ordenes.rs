@@ -645,8 +645,14 @@ impl Ctx<'_> {
                 };
                 Comando::Atacar { heroe: self.heroe(&o.heroe_id)?, objetivo, declara_guerra: o.declara_guerra.unwrap_or(false) }
             }
-            Cuerpo::UnirseABatalla(o) => Comando::UnirseABatalla { heroe: self.heroe(&o.heroe_id)?, batalla: self.batalla(&o.battle_id)?, lado: o.lado.as_deref().map(|l| self.lado(l)).transpose()? },
+            Cuerpo::UnirseABatalla(o) => Comando::UnirseABatalla {
+                heroe: self.heroe(&o.heroe_id)?,
+                batalla: self.batalla(&o.battle_id)?,
+                lado: o.lado.as_deref().map(|l| self.lado(l)).transpose()?,
+                escuadras: self.escuadras(&o.escuadron_ids)?,
+            },
             Cuerpo::CancelarBatalla(o) => Comando::CancelarBatalla { heroe: self.mi_heroe()?, batalla: self.batalla(&o.battle_id)? },
+            Cuerpo::BajarseDeBatalla(o) => Comando::BajarseDeBatalla { heroe: self.mi_heroe()?, batalla: self.batalla(&o.battle_id)? },
 
             // ── Avanzadas ──
             Cuerpo::ColocarAvanzada(o) => Comando::ColocarAvanzada { asentamiento: self.plaza(&o.asentamiento_id)?, heroe: self.heroe(&o.heroe_id)?, posicion: self.punto(o.posicion.as_ref())? },
@@ -1011,6 +1017,15 @@ impl Ctx<'_> {
         }
     }
 
+    /// Un sí o no; sin el campo, no.
+    fn logico_opcional(&self, p: &Struct, k: &str) -> R<bool> {
+        match self.campo_opcional(p, k) {
+            None => Ok(false),
+            Some(Kind::BoolValue(b)) => Ok(*b),
+            Some(_) => self.forma(format!("«{k}» debe ser verdadero o falso")),
+        }
+    }
+
     fn punto_de(&self, p: &Struct, k: &str) -> R<Punto> {
         match self.campo(p, k)? {
             Kind::StructValue(s) => Ok(Punto::new(self.entero(s, "x")?, self.entero(s, "y")?)),
@@ -1080,6 +1095,9 @@ impl Ctx<'_> {
             }
             "colocar_bandidos" => Comando::ColocarBandidos { posicion: self.punto_de(p, "posicion")?, nivel: u8::try_from(n("nivel")?).map_or_else(|_| self.forma("nivel fuera de rango"), Ok)? },
             "dar_escuadra" => Comando::DarEscuadra { heroe: heroe()?, tropa: self.tropa(t("tropa_id")?)?, cantidad: n("cantidad")? },
+            "dar_monedas" => Comando::DarMonedas { heroe: heroe()?, cantidad: n("cantidad")? },
+            "dar_fondo_monedas" => Comando::DarFondoMonedas { asentamiento: plaza()?, cantidad: n("cantidad")? },
+            "colocar_aeda" => Comando::ColocarAeda { asentamiento: plaza()?, residente: self.logico_opcional(p, "residente")? },
             "fijar_controlador" => {
                 let controlador = match t("controlador")? {
                     "humano" => Controlador::Humano,

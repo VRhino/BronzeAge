@@ -368,15 +368,27 @@ pub enum Comando {
     /// Da al héroe una escuadra de `cantidad` soldados de esa tropa (nivel 1, la moral al máximo), sin pagar ni mirar el Liderazgo: en su columna si va a
     /// bordo y, si no, en su campamento. Solo administración; para escenarios y pruebas, igual que `CrearEjercito`. `creadas` lleva su id.
     DarEscuadra { heroe: u64, tropa: Tropa, cantidad: i64 },
+    /// Da al héroe `cantidad` monedas (2026-11-16). Solo administración; para pruebas.
+    DarMonedas { heroe: u64, cantidad: i64 },
+    /// Añade `cantidad` monedas al fondo de la plaza (el del impuesto de su forja, el que paga contratos de mercenarios desde su Taberna; 2026-11-16). Solo administración; para pruebas.
+    DarFondoMonedas { asentamiento: u64, cantidad: i64 },
+    /// Coloca un Aeda en la plaza (2026-11-16): con `residente`, uno residente nuevo (el cupo de la plaza sigue mandando en su siguiente revisión); sin él, el itinerante más
+    /// cercano para allí con su estancia entera (si no hay ninguno, nace uno). Solo administración; para pruebas. `creadas` lleva el número del Aeda.
+    ColocarAeda { asentamiento: u64, residente: bool },
     // ── Batallas de Unity (Batalla_Unity_Ciclo, fase 4E). No hay orden para abrirlas: las abre `Atacar` cuando el proceso tiene servidores de batalla
     //    (`Reglas::batallas_en_unity`), sea cual sea quien combata (bot contra bot también). `batalla` es el id de la partida (`Batalla::id`); el contrato lo nombra con
     //    su UUID (`uuid_de_batalla`). ──
     /// Pone a un héroe como humano o como bot. Solo administración; para escenarios y pruebas: los héroes de `CrearEjercito` nacen bot.
     FijarControlador { heroe: u64, controlador: Controlador },
     /// La columna del héroe entra en una batalla activa, en el bando que le toca (`lado` solo es obligatorio en una persecución). No lleva candado de batalla.
-    UnirseABatalla { heroe: u64, batalla: u64, lado: Option<Lado> },
+    /// `escuadras` (2026-11-16): con qué entra quien defiende desde **dentro** (el residente de su plaza, de las de su campamento y dentro de su Liderazgo; el visitante, de las
+    /// de su columna); vacía, con lo de siempre (su loadout activo o su columna entera). Desde fuera entra la columna entera y no se elige.
+    UnirseABatalla { heroe: u64, batalla: u64, lado: Option<Lado>, escuadras: Vec<u64> },
     /// Quien la inició se echa atrás antes de que empiece la partida: nadie pierde nada. No lleva candado de batalla.
     CancelarBatalla { heroe: u64, batalla: u64 },
+    /// El héroe se baja de la batalla antes de que empiece la partida (2026-11-16): sin castigo y con su columna tal cual; la batalla sigue para los demás y solo se cancela si no
+    /// queda ningún humano o el atacante se queda sin héroes. No lleva candado de batalla.
+    BajarseDeBatalla { heroe: u64, batalla: u64 },
     // Lo que manda el servidor de batalla (§8): no es una orden de jugador sino un mensaje de Conquest con la credencial del servidor, y el actor de la petición
     // es `batalla-servidor:<id>` (`Peticion::de_servidor_de_batalla`). Repetir uno ya aplicado no cambia nada (`SinCambios`).
     RegistrarAsignacion { batalla: u64, asignacion: Asignacion },
@@ -757,6 +769,9 @@ impl Comando {
             | Comando::FijarRelacion { .. }
             | Comando::ColocarBandidos { .. }
             | Comando::DarEscuadra { .. }
+            | Comando::DarMonedas { .. }
+            | Comando::DarFondoMonedas { .. }
+            | Comando::ColocarAeda { .. }
             | Comando::FijarControlador { .. }
             | Comando::FijarCatalogoMisiones { .. } => Administracion,
             Comando::RegistrarAsignacion { .. } | Comando::ConfirmarInicio { .. } | Comando::RegistrarTokens { .. } | Comando::RegistrarSalida { .. } | Comando::AplicarResultado { .. } => ServidorDeBatalla,
@@ -821,6 +836,7 @@ impl Comando {
             | Comando::Atacar { .. }
             | Comando::UnirseABatalla { .. }
             | Comando::CancelarBatalla { .. }
+            | Comando::BajarseDeBatalla { .. }
             | Comando::GuarnecerAvanzada { .. }
             | Comando::RetirarDeAvanzada { .. }
             | Comando::GuardarEnAlmacenPersonal { .. }
@@ -967,6 +983,7 @@ impl Comando {
             Comando::CrearFaccion { .. } => Faccion,
             Comando::ProponerRelacion { .. } | Comando::ProponerAnexion { .. } | Comando::ProponerFusion { .. } => Propuesta,
             Comando::ResponderFusion { .. } => Faccion,
+            Comando::ColocarAeda { .. } => Aeda,
             _ => return None,
         })
     }
@@ -979,6 +996,7 @@ impl Comando {
             self,
             Comando::UnirseABatalla { .. }
                 | Comando::CancelarBatalla { .. }
+                | Comando::BajarseDeBatalla { .. }
                 | Comando::Conectarse { .. }
                 | Comando::Desconectarse { .. }
                 | Comando::CerrarSesion { .. }
@@ -1158,6 +1176,8 @@ impl Comando {
             | Comando::TomarOrdenADistancia { asentamiento, .. }
             | Comando::CrearCaravana { asentamiento }
             | Comando::DarRecursos { asentamiento, .. }
+            | Comando::DarFondoMonedas { asentamiento, .. }
+            | Comando::ColocarAeda { asentamiento, .. }
             | Comando::MarcarPueblo { asentamiento, .. }
             | Comando::MarcarAldea { asentamiento, .. } => i.asentamientos.push(*asentamiento),
             Comando::ReclutarTropa { asentamiento, heroe, .. }
@@ -1234,9 +1254,11 @@ impl Comando {
             | Comando::PartirConvocatoria { heroe, .. }
             | Comando::DejarDePerseguir { heroe }
             | Comando::DarEscuadra { heroe, .. }
+            | Comando::DarMonedas { heroe, .. }
             | Comando::FijarControlador { heroe, .. }
             | Comando::UnirseABatalla { heroe, .. }
             | Comando::CancelarBatalla { heroe, .. }
+            | Comando::BajarseDeBatalla { heroe, .. }
             | Comando::CrearFaccion { heroe, .. }
             | Comando::SolicitarIngreso { heroe, .. }
             | Comando::DejarFaccion { heroe }
@@ -2139,8 +2161,9 @@ impl Peticion {
                 w.u64(*heroe);
                 w.u8(controlador_a_u8(*controlador));
             }
-            Comando::UnirseABatalla { heroe, batalla, lado } => {
-                w.u8(99);
+            Comando::UnirseABatalla { heroe, batalla, lado, escuadras } => {
+                // Sin escuadras elegidas, la 99 de siempre; con ellas, la 231 (2026-11-16), con la lista al final.
+                w.u8(if escuadras.is_empty() { 99 } else { 231 });
                 w.u64(*heroe);
                 w.u64(*batalla);
                 w.u8(match lado {
@@ -2148,11 +2171,34 @@ impl Peticion {
                     Some(Lado::Atacante) => 1,
                     Some(Lado::Defensor) => 2,
                 });
+                if !escuadras.is_empty() {
+                    lista_u64(&mut w, escuadras);
+                }
             }
             Comando::CancelarBatalla { heroe, batalla } => {
                 w.u8(100);
                 w.u64(*heroe);
                 w.u64(*batalla);
+            }
+            Comando::BajarseDeBatalla { heroe, batalla } => {
+                w.u8(232);
+                w.u64(*heroe);
+                w.u64(*batalla);
+            }
+            Comando::DarMonedas { heroe, cantidad } => {
+                w.u8(233);
+                w.u64(*heroe);
+                w.i64(*cantidad);
+            }
+            Comando::DarFondoMonedas { asentamiento, cantidad } => {
+                w.u8(234);
+                w.u64(*asentamiento);
+                w.i64(*cantidad);
+            }
+            Comando::ColocarAeda { asentamiento, residente } => {
+                w.u8(235);
+                w.u64(*asentamiento);
+                w.bool(*residente);
             }
             Comando::RegistrarAsignacion { batalla, asignacion } => {
                 w.u8(101);
@@ -2840,7 +2886,7 @@ impl Peticion {
             96 => Comando::ColocarBandidos { posicion: r.punto()?, nivel: r.u8()? },
             97 => Comando::DarEscuadra { heroe: r.u64()?, tropa: tropa_de_u8(r.u8()?)?, cantidad: r.i64()? },
             98 => Comando::FijarControlador { heroe: r.u64()?, controlador: controlador_de_u8(r.u8()?)? },
-            99 => Comando::UnirseABatalla {
+            n @ (99 | 231) => Comando::UnirseABatalla {
                 heroe: r.u64()?,
                 batalla: r.u64()?,
                 lado: match r.u8()? {
@@ -2849,6 +2895,7 @@ impl Peticion {
                     2 => Some(Lado::Defensor),
                     _ => return Err(ErrorFormato("lado de batalla desconocido")),
                 },
+                escuadras: if n == 231 { leer_lista_u64(&mut r)? } else { Vec::new() },
             },
             100 => Comando::CancelarBatalla { heroe: r.u64()?, batalla: r.u64()? },
             101 => Comando::RegistrarAsignacion { batalla: r.u64()?, asignacion: asignacion_leer(&mut r)? },
@@ -2992,6 +3039,10 @@ impl Peticion {
             227 => Comando::VenderObjeto { heroe: r.u64()?, casilla: r.u32()?, cantidad: r.u32()? },
             228 => Comando::ForjarObjeto { heroe: r.u64()?, objeto: r.texto()? },
             229 => Comando::UsarObjeto { heroe: r.u64()?, casilla: r.u32()?, escuadra: r.opt_u64()? },
+            232 => Comando::BajarseDeBatalla { heroe: r.u64()?, batalla: r.u64()? },
+            233 => Comando::DarMonedas { heroe: r.u64()?, cantidad: r.i64()? },
+            234 => Comando::DarFondoMonedas { asentamiento: r.u64()?, cantidad: r.i64()? },
+            235 => Comando::ColocarAeda { asentamiento: r.u64()?, residente: r.bool()? },
             230 => Comando::ConfigurarForja { asentamiento: r.u64()?, grupo: grupo_de_forja_de_u8(r.u8()?)?, abierta: r.bool()?, recargo_pct: r.u32()? },
             _ => return Err(ErrorFormato("comando desconocido")),
         };
@@ -3630,6 +3681,10 @@ pub mod rechazos {
     pub const BATALLA_LADO_DISTINTO: &str = "batalla.lado_distinto";
     /// Solo quien la inició la cancela, y antes de que empiece la partida.
     pub const BATALLA_NO_PUEDE_CANCELAR: &str = "batalla.no_puede_cancelar";
+    /// `bajarse_de_batalla` con la partida ya empezada: se sale desde dentro y la salida la cuenta el servidor de batalla (2026-11-16).
+    pub const BATALLA_YA_EMPEZADA: &str = "batalla.ya_empezada";
+    /// `unirse_a_batalla` con escuadras elegidas fuera de su base: fuera de ella las elegidas son todas las que lleva (2026-11-16).
+    pub const BATALLA_SIN_ELEGIR_ESCUADRAS: &str = "batalla.sin_elegir_escuadras";
     /// Otro servidor la tiene: gana la primera asignación.
     pub const BATALLA_YA_ASIGNADA: &str = "batalla.ya_asignada";
     /// Un asedio en convocatoria no se publica ni se asigna.
@@ -3920,6 +3975,8 @@ pub enum TipoCreado {
     Faccion,
     /// Una propuesta (`proponerRelacion`, `proponerAnexion`, `proponerFusion`): desde 5H, una clase del registro de cambios (`Clase::Propuesta`) que viaja a `FACCION` de las dos Facciones.
     Propuesta,
+    /// El Aeda que colocó la administración (`ColocarAeda`, andamiaje de pruebas): itinerante o residente por su número; ya se tocó al colocarlo.
+    Aeda,
 }
 
 impl TipoCreado {
@@ -3943,7 +4000,7 @@ impl TipoCreado {
             TipoCreado::Incorporacion { batalla } => vec![(Clase::Batalla, batalla)],
             TipoCreado::Edificio { plaza } | TipoCreado::Recinto { plaza } => vec![(Clase::Asentamiento, plaza)],
             // El loadout vive en el héroe que la orden nombra y la parcela, en la plaza que la orden nombra: ya van en `Comando::implicados`. La Mirada es de la memoria de la Facción.
-            TipoCreado::Loadout | TipoCreado::Parcela | TipoCreado::Mirada | TipoCreado::Propuesta => vec![],
+            TipoCreado::Loadout | TipoCreado::Parcela | TipoCreado::Mirada | TipoCreado::Propuesta | TipoCreado::Aeda => vec![],
         }
     }
 }
@@ -4326,10 +4383,16 @@ mod pruebas {
             Comando::ColocarBandidos { posicion: Punto::new(-5, 9_000), nivel: 3 },
             Comando::DarEscuadra { heroe: 4, tropa: Tropa::Arqueros, cantidad: 12 },
             Comando::FijarControlador { heroe: 4, controlador: Controlador::Humano },
-            Comando::UnirseABatalla { heroe: 4, batalla: 77, lado: None },
-            Comando::UnirseABatalla { heroe: 4, batalla: 77, lado: Some(Lado::Atacante) },
-            Comando::UnirseABatalla { heroe: 4, batalla: 77, lado: Some(Lado::Defensor) },
+            Comando::UnirseABatalla { heroe: 4, batalla: 77, lado: None, escuadras: vec![] },
+            Comando::UnirseABatalla { heroe: 4, batalla: 77, lado: Some(Lado::Atacante), escuadras: vec![] },
+            Comando::UnirseABatalla { heroe: 4, batalla: 77, lado: Some(Lado::Defensor), escuadras: vec![] },
+            Comando::UnirseABatalla { heroe: 4, batalla: 77, lado: None, escuadras: vec![8, 9] },
             Comando::CancelarBatalla { heroe: 4, batalla: 77 },
+            Comando::BajarseDeBatalla { heroe: 4, batalla: 77 },
+            Comando::DarMonedas { heroe: 4, cantidad: 250 },
+            Comando::DarFondoMonedas { asentamiento: 3, cantidad: 900 },
+            Comando::ColocarAeda { asentamiento: 3, residente: false },
+            Comando::ColocarAeda { asentamiento: 3, residente: true },
             Comando::RegistrarAsignacion {
                 batalla: 77,
                 asignacion: Asignacion { intento: "a1".into(), servidor: "srv".into(), revision: 2, instancia: Instancia { host: "10.0.0.1".into(), puerto: 7777, protocolo: "udp".into() }, tokens: vec![Token { heroe: 4, token: "t".into(), expira_en: 99 }] },
@@ -4378,7 +4441,7 @@ mod pruebas {
         b[n - 5] = 7; // el controlador, justo antes de la clase vacía (su largo, en 4 bytes)
         assert!(Peticion::decodificar(&b).is_err());
         // Un lado de batalla desconocido tampoco.
-        let mut b = Peticion::nueva("a", "i", Comando::UnirseABatalla { heroe: 1, batalla: 1, lado: None }).codificar();
+        let mut b = Peticion::nueva("a", "i", Comando::UnirseABatalla { heroe: 1, batalla: 1, lado: None, escuadras: vec![] }).codificar();
         *b.last_mut().unwrap() = 9;
         assert!(Peticion::decodificar(&b).is_err());
         // Un objetivo de ataque desconocido tampoco.

@@ -56,6 +56,18 @@ use militar::heroe::{Controlador, Residencia};
 use militar::presencia::Ubicacion;
 use militar::{sumar, Carga as Mercancia};
 
+/// Cómo estaba un héroe del resultado antes de aplicarlo (para su hecho de cierre).
+struct AntesDelCierre {
+    heroe: u64,
+    lado: Lado,
+    monedas: i64,
+    experiencia: i64,
+    herido_hasta: Option<Instante>,
+    columna: Option<u64>,
+    carro: Mercancia,
+    escuadras: Vec<(u64, (i64, i64))>,
+}
+
 /// El id de una escuadra que aún no lo tiene (carreteros, bandidos): al abrir la batalla recibe uno de la partida.
 const SIN_ID: u64 = 0;
 
@@ -169,6 +181,7 @@ fn rechazo_de_batalla(e: ErrorBatalla, v: u64) -> Respuesta {
         ErrorBatalla::YaSalio(h) => (BATALLA_YA_SALIO, format!("el héroe {h} ya salió de esta batalla y no vuelve a entrar")),
         ErrorBatalla::YaCombate(h) => (BATALLA_YA_COMBATE, format!("el héroe {h} ya combate en esta batalla")),
         ErrorBatalla::NoPuedeCancelar => (BATALLA_NO_PUEDE_CANCELAR, "solo quien la inició puede cancelarla, y antes de que empiece la partida".into()),
+        ErrorBatalla::YaEmpezada => (BATALLA_YA_EMPEZADA, "la partida ya empezó: se sale desde la batalla".into()),
         ErrorBatalla::SalidaInvalida => (BATALLA_SALIDA_INVALIDA, "la salida trae una escuadra que no es del héroe, repetida o que no cierra sobre lo autorizado".into()),
         ErrorBatalla::SalidaIncompleta => (BATALLA_SALIDA_INCOMPLETA, "la salida no nombra todas las escuadras autorizadas del héroe".into()),
         ErrorBatalla::Resultado(e) => (BATALLA_RESULTADO_INVALIDO, format!("resultado inválido: {e:?}")),
@@ -829,8 +842,9 @@ impl Nucleo {
         let v = self.estado.version;
         match &p.comando {
             Comando::FijarControlador { heroe, controlador } => self.fijar_controlador(*heroe, *controlador),
-            Comando::UnirseABatalla { heroe, batalla, lado } => self.unirse_a_batalla(t, p, *heroe, *batalla, *lado),
+            Comando::UnirseABatalla { heroe, batalla, lado, escuadras } => self.unirse_a_batalla(t, p, *heroe, *batalla, *lado, escuadras),
             Comando::CancelarBatalla { heroe, batalla } => self.cancelar_batalla(t, p, *heroe, *batalla),
+            Comando::BajarseDeBatalla { heroe, batalla } => self.bajarse_de_batalla(t, p, *heroe, *batalla),
             Comando::RegistrarAsignacion { batalla, asignacion } => {
                 let servidor = self.servidor_de(p)?;
                 let a = Asignacion { servidor, ..asignacion.clone() };
@@ -912,15 +926,32 @@ impl Nucleo {
     /// `unirseABatalla` (§7). Se defiende un asedio, un pueblo o una avanzada desde **dentro** (quien ha entrado y es de la Facción dueña, aliado o vasallo: residentes incluidos, que ya no
     /// entran de oficio) con lo que lleva encima, y se ataca desde **fuera**, en el mapa, con la columna entera, a ≤ `radioEncuentro` de la batalla: allí se admite a la Facción atacante y
     /// a los neutrales y enemigos del dueño, no a sus amigos (2026-10-22, tercera ronda). Quien está dentro de otro lugar no se une a ninguno de los dos bandos.
-    fn unirse_a_batalla(&mut self, t: Instante, p: &Peticion, heroe: u64, id: u64, pedido: Option<Lado>) -> Result<Vec<u64>, Respuesta> {
+    ///
+    /// `elegidas` (2026-11-16): con qué escuadras entra quien defiende desde dentro ([`Nucleo::escuadras_elegidas`]); vacía, con lo de siempre. Desde fuera entra la columna entera y elegir
+    /// se rechaza (`batalla.sin_elegir_escuadras`).
+    fn unirse_a_batalla(&mut self, t: Instante, p: &Peticion, heroe: u64, id: u64, pedido: Option<Lado>, elegidas: &[u64]) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         self.autorizar_heroe(p, heroe, false)?;
         let b = self.batalla_mut(id)?.clone();
         let (lado, donde, columna) = self.elegibilidad(t, heroe, &b, pedido)?;
         let hn = self.heroe(heroe).expect("autorizado");
         let entran = match donde {
-            Donde::Dentro => vec![self.defensor_de_dentro(t, hn, hn.heroe.presencia.ubicacion)],
-            _ => self.heroes_de_columna(columna.expect("comprobado"), t),
+            Donde::Dentro if elegidas.is_empty() => vec![self.defensor_de_dentro(t, hn, hn.heroe.presencia.ubicacion)],
+            Donde::Dentro => {
+                let escuadras = self.escuadras_elegidas(hn, elegidas)?;
+                vec![self.participante(hn, escuadras.into_iter().map(|s| escuadra_en_batalla(s, t)).collect())]
+            }
+            _ => {
+                let entran = self.heroes_de_columna(columna.expect("comprobado"), t);
+                // Fuera de su base las elegidas son las disponibles (Víctor, 2026-11-16): si manda la lista, tiene que ser todo lo suyo que va en la columna.
+                if !elegidas.is_empty() {
+                    let suyas: std::collections::BTreeSet<u64> = entran.iter().filter(|p| p.heroe == heroe).flat_map(|p| p.escuadras.iter().map(|e| e.id)).collect();
+                    if elegidas.iter().copied().collect::<std::collections::BTreeSet<u64>>() != suyas || elegidas.len() != suyas.len() {
+                        return Err(Respuesta::rechazo(rechazos::BATALLA_SIN_ELEGIR_ESCUADRAS, "fuera de tu base entras con todas las escuadras que llevas", v));
+                    }
+                }
+                entran
+            }
         };
         let reservadas: Vec<u64> = entran.iter().flat_map(|p| p.escuadras.iter().map(|e| e.id)).collect();
         let secuencias = self.batalla_mut(id)?.unirse(t, lado, entran, columna).map_err(|e| rechazo_de_batalla(e, v))?;
@@ -930,6 +961,63 @@ impl Nucleo {
         }
         self.hecho_de_batalla(t, id, Hecho::Refuerzos, None);
         Ok(secuencias.into_iter().map(u64::from).collect())
+    }
+
+    /// Las escuadras elegidas con las que entra a defender desde dentro (2026-11-16), comprobadas una a una como al salir de la plaza: suyas, sin repetir, con soldados, sin candado de
+    /// batalla y fuera de la guarnición. En su base (el residente en su plaza) las disponibles son las de su **campamento** y elige un subconjunto que, con lo que lleva fuera (columna,
+    /// escolta), cabe en su Liderazgo; fuera de ella (un visitante, o un residente dentro de un pueblo o una avanzada) las disponibles son las de **su columna** y entran todas. No toca el
+    /// loadout.
+    fn escuadras_elegidas<'a>(&self, hn: &'a HeroeNucleo, elegidas: &[u64]) -> Result<Vec<&'a Escuadra>, Respuesta> {
+        let v = self.estado.version;
+        let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
+        let en_su_plaza = matches!(hn.heroe.presencia.ubicacion, Ubicacion::Asentamiento(a) if hn.heroe.residencia == Some(Residencia::Asentamiento(a)));
+        let mut vistas: Vec<&Escuadra> = Vec::new();
+        for &id in elegidas {
+            let e = hn.heroe.escuadra(id).ok_or_else(|| rechazo(rechazos::ESCUADRA_AJENA, format!("la escuadra {id} no es tuya")))?;
+            if vistas.iter().any(|x| x.id == id) {
+                return Err(rechazo(rechazos::ESCUADRA_REPETIDA, format!("la escuadra {id} se repite")));
+            }
+            if en_su_plaza && e.contenedor != Contenedor::Campamento {
+                return Err(rechazo(rechazos::ESCUADRA_FUERA_DEL_CAMPAMENTO, format!("la escuadra {id} no está en tu campamento")));
+            }
+            if !en_su_plaza && !matches!(e.contenedor, Contenedor::Ejercito(_)) {
+                return Err(rechazo(rechazos::ESCUADRA_FUERA_DE_TU_COLUMNA, format!("la escuadra {id} no va en la columna con la que entraste")));
+            }
+            if !e.con_soldados() {
+                return Err(rechazo(rechazos::ESCUADRA_ANIQUILADA, format!("la escuadra {id} está aniquilada")));
+            }
+            if e.en_guarnicion {
+                return Err(rechazo(rechazos::ESCUADRA_EN_LA_GUARNICION, format!("la escuadra {id} está en la guarnición")));
+            }
+            if e.reserva_batalla.is_some() {
+                return Err(rechazo(rechazos::ESCUADRA_EN_BATALLA, format!("la escuadra {id} está reservada para una batalla")));
+            }
+            vistas.push(e);
+        }
+        // Fuera de su base (de visita, o dentro de un pueblo o una avanzada) las disponibles son las que trajo y entran todas (Víctor, 2026-11-16).
+        if !en_su_plaza && vistas.len() != de_su_columna(hn).len() {
+            return Err(rechazo(rechazos::BATALLA_SIN_ELEGIR_ESCUADRAS, "fuera de tu base entras con todas las escuadras que llevas".into()));
+        }
+        if en_su_plaza {
+            let mr = &self.estado.reglas.economia.militar;
+            let fuera = hn.heroe.escuadras.iter().filter(|e| e.contenedor != Contenedor::Campamento);
+            if !militar::liderazgo::puede_llevar(mr, hn.heroe.liderazgo_base, fuera.chain(vistas.iter().copied())) {
+                return Err(rechazo(rechazos::LIDERAZGO_SUPERADO, "las escuadras pasan del Liderazgo del héroe".into()));
+            }
+        }
+        Ok(vistas)
+    }
+
+    /// `bajarseDeBatalla` (2026-11-16): el héroe sale de la batalla antes de que empiece la partida, sin perder nada (`Batalla::bajarse`). Sus escuadras se sueltan y su columna deja
+    /// de estar quieta si no queda nadie más de ella en la batalla; la batalla sigue para los demás (con el ticket ya publicado o asignado, con la revisión subida y otra vez sin
+    /// asignar) y solo se cancela si no queda ningún humano o el atacante se queda sin héroes.
+    fn bajarse_de_batalla(&mut self, t: Instante, p: &Peticion, heroe: u64, id: u64) -> Result<Vec<u64>, Respuesta> {
+        let v = self.estado.version;
+        self.autorizar_heroe(p, heroe, false)?;
+        let cr = self.estado.reglas.economia.combate.clone();
+        let aplicada = self.batalla_mut(id)?.bajarse(&cr, t, heroe).map_err(|e| rechazo_de_batalla(e, v))?;
+        self.tras_la_salida(t, id, heroe, aplicada);
+        Ok(vec![])
     }
 
     /// Las condiciones de §7 para que `heroe` se una a `b`, en su orden: sano, sin estar ya en una batalla, a su alcance (con su columna si está fuera; dentro de lo que se disputa no hace falta
@@ -996,6 +1084,13 @@ impl Nucleo {
             Efecto::SinCambios => return Err(sin_cambios(v)),
             Efecto::Aplicado(a) => a,
         };
+        self.tras_la_salida(t, id, heroe, aplicada);
+        Ok(vec![])
+    }
+
+    /// Lo que cambia en el mundo al salir `heroe` de la batalla `id` (la del servidor de batalla y la del propio héroe al bajarse): las bajas de sus escuadras, los candados, la herida,
+    /// la cancelación o su columna, que deja de estar quieta si no queda nadie más de ella en la batalla; y lo cuenta.
+    fn tras_la_salida(&mut self, t: Instante, id: u64, heroe: u64, aplicada: combate::ciclo::SalidaAplicada) {
         // Las bajas de sus escuadras (la columna vuelve a anotar lo que come y a qué velocidad marcha cuando acabe la batalla).
         for &(escuadra, supervivientes) in &aplicada.bajas {
             if let Some(e) = self.escuadra_mut(escuadra) {
@@ -1008,7 +1103,7 @@ impl Nucleo {
         }
         if aplicada.cancelada {
             self.cerrar_batalla(t, id, &[], Hecho::Cancelada);
-            return Ok(vec![]);
+            return;
         }
         // Su columna deja de estar quieta si no queda nadie más de ella en la batalla.
         if let Some(columna) = self.estado.ejercito_de_heroe(heroe) {
@@ -1024,7 +1119,6 @@ impl Nucleo {
             self.programar_batalla(id);
         }
         self.hecho_de_batalla(t, id, if aplicada.reabierta { Hecho::Revisada } else { Hecho::Salida }, None);
-        Ok(vec![])
     }
 
     // ───────────────────────────── El resultado ─────────────────────────────
@@ -1041,6 +1135,9 @@ impl Nucleo {
         };
         let b = self.estado.batallas.batallas[&id].clone();
         let mr = self.estado.reglas.economia.militar.clone();
+        // Cómo estaba cada héroe del resultado antes de aplicarlo, para su hecho de cierre (2026-11-16).
+        let antes: Vec<AntesDelCierre> = res.por_heroe.iter().filter_map(|x| self.antes_del_cierre(&b, x.heroe)).collect();
+        let desde_evento = self.tr.eventos.len();
 
         // 1-2. Lo que Unity dice de cada uno: los supervivientes de cada escuadra (las de los héroes, las de la guarnición de serie de un pueblo o una avanzada), y los candados
         // fuera. La experiencia y el botín los pone el motor (D6 y D7): 4 o 2 de experiencia según gane su bando, a cada escuadra que entró y a cada héroe que participó, y a cada
@@ -1173,7 +1270,86 @@ impl Nucleo {
         self.devolver_al_mundo(t, id);
         self.programar_batalla(id);
         self.hecho_de_batalla(t, id, Hecho::Aplicada, Some(res.ganador));
+        for a in antes {
+            self.hecho_de_cierre(t, &b, &res, a, desde_evento);
+        }
         Ok(vec![])
+    }
+
+    /// Lo que hace falta de `heroe` antes de aplicar el resultado para contarle después lo que le cambió: sus monedas, su experiencia, si estaba herido, su columna y su carro, y la
+    /// cantidad y la experiencia de cada escuadra con la que combate. `None` si ya no existe o no combate.
+    fn antes_del_cierre(&self, b: &Batalla, heroe: u64) -> Option<AntesDelCierre> {
+        let (h, p) = (self.heroe(heroe)?, b.participante(heroe)?);
+        let columna = self.estado.ejercito_de_heroe(heroe);
+        let escuadras = p.escuadras.iter().map(|e| (e.id, h.heroe.escuadra(e.id).map_or((0, 0), |s| (s.cantidad, s.experiencia)))).collect();
+        Some(AntesDelCierre {
+            heroe,
+            lado: b.lado_de(heroe)?,
+            monedas: h.heroe.monedas,
+            experiencia: h.heroe.experiencia,
+            herido_hasta: h.heroe.herido_hasta,
+            columna,
+            carro: columna.and_then(|c| self.estado.ejercitos.get(&c)).map(|e| e.columna.carga.clone()).unwrap_or_default(),
+            escuadras,
+        })
+    }
+
+    /// El hecho de cierre de la batalla para un héroe del resultado (`heroe.cierre_batalla`, 2026-11-16), privado suyo: lo que le cambió al aplicarse, medido en la misma mutación (así el
+    /// informe no tiene que comparar fotos de antes y de después, que pueden cambiar por otra causa a la vez). Datos: `batalla`, `heroe`, `columna` (la suya al empezar el cierre, si iba en
+    /// una; en un ejército, el carro es de todos), `ganaSuBando` y `herido` (0 o 1), `monedas` y `experiencia` ganadas (la del héroe en milésimas de punto). Valores: `botin` y
+    /// `perdidoDelCarro` (lo que entró en el carro de su columna y lo que salió de él, `[recurso, cantidad]` en milésimas), `objetos` y `objetosPerdidos` (lo de los `heroe.botin` de este
+    /// cierre: lo que le llegó a la mochila o al almacén y lo que no cupo, `[objeto, cantidad]`) y `escuadras` (`[escuadraId, supervivientes, muertos, experiencia ganada en milésimas]`).
+    fn hecho_de_cierre(&mut self, t: Instante, b: &Batalla, res: &ResultadoDeBatalla, a: AntesDelCierre, desde_evento: usize) {
+        let Some(h) = self.heroe(a.heroe).map(|h| h.heroe.clone()) else { return };
+        let carro_despues = self.estado.ejercito_de_heroe(a.heroe).and_then(|c| self.estado.ejercitos.get(&c)).map(|e| e.columna.carga.clone()).unwrap_or_default();
+        let (mut botin, mut perdido) = (Vec::new(), Vec::new());
+        let recursos: std::collections::BTreeSet<_> = a.carro.keys().chain(carro_despues.keys()).copied().collect();
+        for r in recursos {
+            let d = carro_despues.get(&r).copied().unwrap_or(0) - a.carro.get(&r).copied().unwrap_or(0);
+            let linea = |n: i64| Dato::Lista(vec![Dato::Texto(r.nombre().into()), Dato::Numero(n)]);
+            match d.signum() {
+                1 => botin.push(linea(d)),
+                -1 => perdido.push(linea(-d)),
+                _ => {}
+            }
+        }
+        let (mut objetos, mut objetos_perdidos) = (Vec::new(), Vec::new());
+        for ev in self.tr.eventos[desde_evento..].iter().filter(|e| e.codigo == "heroe.botin" && e.heroes == [a.heroe]) {
+            for (clave, v) in &ev.valores {
+                match (*clave, v) {
+                    ("mochila" | "almacen", Dato::Lista(l)) => objetos.extend(l.iter().cloned()),
+                    ("perdido", Dato::Lista(l)) => objetos_perdidos.extend(l.iter().cloned()),
+                    _ => {}
+                }
+            }
+        }
+        let muertos = |e: u64| res.por_escuadra.iter().find(|x| x.escuadra == e).map_or(0, |x| x.muertos);
+        let escuadras = a
+            .escuadras
+            .iter()
+            .map(|&(e, (_, xp_antes))| {
+                let (cantidad, xp) = h.escuadra(e).map_or((0, xp_antes), |s| (s.cantidad, s.experiencia));
+                Dato::Lista(vec![Dato::Texto(ids::escuadra(e)), Dato::Numero(cantidad), Dato::Numero(muertos(e)), Dato::Numero((xp - xp_antes).max(0))])
+            })
+            .collect();
+        let herido = h.herido_hasta != a.herido_hasta && h.esta_herido(t);
+        let mut datos = vec![
+            ("batalla", b.id as i64),
+            ("heroe", a.heroe as i64),
+            ("ganaSuBando", (res.ganador == a.lado) as i64),
+            ("herido", herido as i64),
+            ("monedas", (h.monedas - a.monedas).max(0)),
+            ("experiencia", (h.experiencia - a.experiencia).max(0)),
+        ];
+        datos.extend(a.columna.map(|c| ("columna", c as i64)));
+        let valores = vec![
+            ("botin", Dato::Lista(botin)),
+            ("perdidoDelCarro", Dato::Lista(perdido)),
+            ("objetos", Dato::Lista(objetos)),
+            ("objetosPerdidos", Dato::Lista(objetos_perdidos)),
+            ("escuadras", Dato::Lista(escuadras)),
+        ];
+        self.tr.emitir(&self.estado, EventoNucleo { heroes: vec![a.heroe], valores, ..EventoNucleo::nuevo("heroe.cierre_batalla", t, datos) });
     }
 
     /// Lo que una batalla de Unity suma a los logros del servidor (`contadoresDeBatalla` del TypeScript; Tecnologia_Aedas §2.1): lo mismo que un combate con números. La de una avanzada o

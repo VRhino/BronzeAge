@@ -1805,7 +1805,7 @@ impl Sim<'_> {
         let Some((batalla, fin)) = self.n.batalla_sobre(Ubicacion::Asentamiento(p as u32)).and_then(|b| Some((b.id, b.convocatoria_hasta?))) else { return };
         for (j, _) in self.refuerzos(t, i, p) {
             let heroe = self.bots[j].heroe;
-            if self.suya(t, j, "UnirseABatalla", Comando::UnirseABatalla { heroe, batalla, lado: None }).aceptada() {
+            if self.suya(t, j, "UnirseABatalla", Comando::UnirseABatalla { heroe, batalla, lado: None, escuadras: vec![] }).aceptada() {
                 self.medidas.uniones_a_asedios += 1;
             }
         }

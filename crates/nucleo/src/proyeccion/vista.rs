@@ -845,9 +845,9 @@ pub fn pueblo_desde_dentro(n: &Nucleo, madre: u64, pid: u64, de_su_faccion: bool
 }
 
 /// Una escuadra tal como la ve quien no es su dueño (`EscuadraQueLleva`): su tropa, cuántos soldados quedan y su nivel.
-pub(super) fn escuadra_que_lleva(n: &Nucleo, s: &Escuadra) -> pb::EscuadraQueLleva {
-    let tropas = &n.estado().reglas.economia.militar.tropas;
-    pb::EscuadraQueLleva { tropa_id: tropas.tropa(s.tropa).nombre.clone(), cantidad: u32::try_from(s.cantidad.max(0)).unwrap_or(u32::MAX), nivel: u32::from(s.nivel) }
+/// Una escuadra ajena tal como se ve: su tropa por su id del catálogo (`miliciaLanceros`; hasta el 2026-11-16 viajaba el nombre, «Milicia de lanceros»), sus soldados y su nivel.
+pub(super) fn escuadra_que_lleva(s: &Escuadra) -> pb::EscuadraQueLleva {
+    pb::EscuadraQueLleva { tropa_id: s.tropa.nombre().to_owned(), cantidad: u32::try_from(s.cantidad.max(0)).unwrap_or(u32::MAX), nivel: u32::from(s.nivel) }
 }
 
 /// El héroe ajeno (`HeroePublico`): nombre, clase, nivel, lo que lleva puesto (canon 5.16), hasta cuándo está herido y las escuadras que lleva en su columna y su Facción. Nada de su
@@ -867,7 +867,7 @@ pub fn heroe_publico(n: &Nucleo, id: u64) -> pb::Heroe {
         herido_hasta_ms: h.heroe.herido_hasta,
         // Su ciudadanía es pública (decisión del autor del 2026-10-27): la dice su Facción en `ciudadanos_ids` y así se sabe también de un héroe que se ve sin columna.
         faccion_id: h.faccion.map(ids::faccion),
-        escuadras_que_lleva: h.heroe.escuadras.iter().filter(|s| matches!(s.contenedor, Contenedor::Ejercito(_))).map(|s| escuadra_que_lleva(n, s)).collect(),
+        escuadras_que_lleva: h.heroe.escuadras.iter().filter(|s| matches!(s.contenedor, Contenedor::Ejercito(_))).map(escuadra_que_lleva).collect(),
         ..mercenarios::del_heroe(n, id, false)
     }
 }
