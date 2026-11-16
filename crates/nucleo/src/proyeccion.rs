@@ -99,6 +99,11 @@ pub fn ficha_de_asentamiento(a: &Asentamiento, zona: &[base::Punto], batalla_id:
     }
 }
 
+/// El estilo de época de una plaza (Tecnologia_Aedas §4.2) tal como viaja.
+pub fn estilo_epoca(e: tecnologia::estilo::Estilo) -> pb::EstiloEpoca {
+    pb::EstiloEpoca { era: u32::from(e.era), grado: u32::from(e.grado) }
+}
+
 /// La entidad deja de formar parte del ámbito (`QUITA`: sin datos).
 pub fn cambio_quita(entidad: pb::TipoEntidad, id: String) -> pb::Cambio {
     pb::Cambio { tipo: pb::TipoCambio::CambioQuita as i32, entidad: entidad as i32, id, ..Default::default() }

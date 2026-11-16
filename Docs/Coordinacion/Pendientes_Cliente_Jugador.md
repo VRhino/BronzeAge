@@ -6,6 +6,16 @@ Los cambios del motor que el cliente jugador (BronzeAgeClient) tiene que recoger
 
 ## Pendiente
 
+### El estilo de época de cada plaza (2026-11-16; contrato 0.27.0, nucleo 0.43.0, tecnologia 0.4.0, foto BAN65, partida nueva)
+
+Lo pidió el hilo del cliente para la ciudad 3D. Un mensaje nuevo, `EstiloEpoca { era, grado }` (era 1 a 5, el orden de la Era; grado 1 a 3; la Era I llega siempre como (1, 3)), en tres sitios:
+
+1. **`Asentamiento.estilo_epoca`** (campo 58): a quien ve la plaza por dentro (interior, la plaza propia también en `FACCION`, la ajena vista desde dentro en `VISTA` y `ADMIN`); ausente en la avistada desde fuera. Entra en la máscara del cambio parcial (`contrato::plaza`).
+2. **`Pueblo.estilo_epoca_madre`** (campo 24): el de su plaza madre, solo con la planta, como `nivel_madre`.
+3. **`Avanzada.estilo_epoca_madre`** (campo 16): el de su plaza madre, a su Facción y a quien está dentro de una ajena; ausente en la avistada y en una ruina sin dueño.
+
+Es el máximo al que llegó la plaza y nunca baja (Tecnologia_Aedas §4.2). Qué haría el cliente: dibujar los edificios con ese estilo en vez de sacarlo de las adoptadas de la Facción (así vale también en la plaza ajena por dentro y en la conquistada).
+
 ### El sigilo en el ticket de batalla (2026-11-15; contrato 0.26.0, nucleo 0.42.0, politica 0.7.0)
 
 Sin partida nueva: dos campos nuevos en el ticket, que el cliente ve en `Batalla.ticket`.

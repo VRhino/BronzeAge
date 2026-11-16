@@ -558,6 +558,17 @@ message Asentamiento {
   // 2026-11-12 (Heroe_Y_Tropa §4.6): los metales de `OBJETOS.metales` cuya tecnología tiene adoptada la Facción de la plaza (`inicio` incluido), por orden
   // alfabético: los que abre su Armería para comprar y forjar (la Era la mira el cliente). Vacío sin Armería activa. Solo de dentro y `ADMIN`, como `forja`.
   repeated string metales_armeria = 57;
+  // 2026-11-16 (Tecnologia_Aedas §4.2, decisión del autor): el estilo de época de la plaza, el aspecto de sus edificios. El máximo al que llegó por las tecnologías adoptadas de su Facción
+  // (y de las que la tuvieron antes): nunca baja. Va a quien la ve por dentro: interior, plaza propia (su Facción, también en `FACCION`), la plaza ajena vista desde dentro en `VISTA` y
+  // `ADMIN`. Ausente en la avistada desde fuera.
+  optional EstiloEpoca estilo_epoca = 58;
+}
+
+// El estilo de época (Tecnologia_Aedas §4.2): `era`, el orden de la Era (1 a 5) más alta de la que la Facción tiene adoptada alguna tecnología, y `grado`, cuántas de esa
+// Era (1 primeros atisbos, 2 más cambiada, 3 del todo; nunca 0). La Era I es la base y va siempre entera: (1, 3). Se compara por la Era y luego por el grado.
+message EstiloEpoca {
+  uint32 era = 1;
+  uint32 grado = 2;
 }
 
 // La forja de la Armería de una plaza (`Asentamiento.forja`, Heroe_Y_Tropa §4.6): la misma Facción forja siempre, a la base; cada grupo de fuera, si está abierta a él.
@@ -641,6 +652,8 @@ message Pueblo {
   // El cultivo de la aldea agrícola (tanda 69 §12): trigo | vid | oliva | cebada | sesamo (2026-11-09) | ganado (la aldea ganadera, 2026-11-11: solo
   // corrales y rebaño, sin granjas; la de trigo ya no lleva corrales). Se elige al marcarla y no cambia; ausente en un extractor.
   optional string cultivo = 23;
+  // 2026-11-16 (Tecnologia_Aedas §4.2): el estilo de época de su plaza madre, solo con la planta, como `nivel_madre` (el cliente pinta las casas con ese estilo).
+  optional EstiloEpoca estilo_epoca_madre = 24;
 }
 
 enum EstadoAvanzada {
@@ -665,6 +678,9 @@ message Avanzada {
   repeated string guarnicion_jugadores_ids = 13;      // escuadrones de jugadores dejados con `guarnecer_avanzada` (dentro del cupo)
   optional string batalla_id = 14;       // asedio visible: el ataque que se juega ahora
   map<string, Existencia> almacen_por_recurso = 15; // fuerte y ciudadela: lo que hay de cada recurso (id de catálogo); la atalaya no tiene almacén
+  // 2026-11-16 (Tecnologia_Aedas §4.2): el estilo de época de su plaza madre, para la vista 3D de dentro. A su Facción (en `FACCION` y `VISTA`) y a quien está dentro de una ajena; ausente
+  // en la avistada desde fuera y en una ruina sin dueño.
+  optional EstiloEpoca estilo_epoca_madre = 16;
 }
 
 enum TipoObra {

@@ -582,7 +582,7 @@ fn estado_con_una_plaza() -> Estado {
     let eco = &s.reglas.economia.datos;
     let economia = asentamiento::asentamiento::Asentamiento::fundar(eco, 0, &eco.materiales_iniciales, eco.viviendas_iniciales);
     let urbe = nucleo::urbanismo::Urbe::fundar(&s.reglas.economia, 7, 1);
-    s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, puerta: Default::default(), cargos: Default::default(), nombre: String::new(), capital_de: None, de_la_faccion_desde: 0, resto_tributo: 0, permite_reabastecer_aliados: false, almacen_cerrado_a_ciudadanos: false, reclutamiento_cerrado_a_ciudadanos: true, fundadores: Vec::new(), forja: nucleo::Forja::de_partida(&s.reglas.economia.militar.objetos.forja) });
+    s.asentamientos.insert(1, nucleo::Asentamiento { id: 1, faccion: 1, posicion: Punto::new(1000, 2000), fundado_en: 0, radio: 6_000, parcelas: Default::default(), version: 0, economia, urbe, protegida_hasta: None, ocupada_hasta: None, puerta: Default::default(), cargos: Default::default(), nombre: String::new(), capital_de: None, de_la_faccion_desde: 0, resto_tributo: 0, permite_reabastecer_aliados: false, almacen_cerrado_a_ciudadanos: false, reclutamiento_cerrado_a_ciudadanos: true, fundadores: Vec::new(), forja: nucleo::Forja::de_partida(&s.reglas.economia.militar.objetos.forja), estilo: tecnologia::estilo::Estilo::BASE });
     s
 }
 
@@ -1068,7 +1068,7 @@ fn las_citas_de_fin_viajan_en_la_foto_y_cambian_el_hash() {
     let reglas = Reglas::default();
     let base = estado_con_una_plaza();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN64");
+    assert_eq!(&bytes[..5], b"BAN65");
     let con = |carga: Carga, prioridad: u8, en: Instante| {
         let mut s = Estado::deserializar(&bytes, &reglas, "h").unwrap();
         let clave = s.generaciones.clave(1);

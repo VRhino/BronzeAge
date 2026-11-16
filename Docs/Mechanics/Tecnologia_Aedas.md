@@ -184,6 +184,25 @@ Desde el 2026-11-12 hay tres puertas más, que no abren contenido sino que cambi
 
 **Cuerpo de oficiales** (`cuerpo_oficiales`, Era IV) no hace nada por sí misma: es una de las tecnologías que pide el hito de la Reforma macedónica. No da Liderazgo, porque ninguna tecnología cambia el Liderazgo (decisión del autor del 2026-11-11). Las demás de las Eras IV y V abren tropas (`TROPAS_RECLUTABLES[..].tecnologia`, [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §12).
 
+### 4.2 El estilo de época de cada plaza
+
+Lo adoptado también se ve (decisión del autor del 2026-11-16): el aspecto de los edificios de una plaza sale de las tecnologías de su Facción. Cada plaza guarda su **estilo de época**, un par (Era, grado):
+
+```
+estilo de una Facción:  E = la Era (su orden, 1 a 5) más alta de la que tiene adoptada al menos una tecnología
+                        grado = min(3, adoptadas de la Era E)        1 primeros atisbos · 2 más cambiada · 3 del todo (nunca 0: sería la Era anterior)
+                        si E es la Era I: grado 3 (la Era I es la base y va siempre entera; toda Facción nace con las de arranque, que son de la I)
+se comparan por la Era y luego por el grado:  (3, 1) > (2, 3) > (2, 1) > (1, 3)
+la plaza guarda el máximo al que llegó; nunca baja:
+  al adoptar su Facción una tecnología (por la orden o por administración)  → cada plaza de la Facción: máx(la suya, la de la Facción)
+  al fundarse                                                              → la de su Facción
+  al cambiar de dueño (conquista, anexión, fusión)                           → máx(la suya, la del nuevo dueño)
+```
+
+Quitar tecnologías por administración no lo baja, y una plaza conquistada conserva el suyo hasta que su nuevo dueño vaya por delante. Como una tecnología no aparece antes de que empiece su Era (§3), el estilo nunca pasa a la Era del mundo. Es presentación: no cambia ninguna regla.
+
+> **Implementado en Rust (2026-11-16):** `tecnologia::estilo` (`Estilo`, `estilo_de`); `Asentamiento::estilo` en el núcleo, en la foto `BAN65` (dos `u8` tras la forja de cada plaza). Sube en `ejecutar_adopcion`, `fijar_tecnologias`, `situar_plaza` y `cambiar_plaza_de_faccion` (por donde pasan la conquista, la anexión y la fusión, con las tecnologías de la Facción nueva ya puestas). Viaja como `EstiloEpoca { era, grado }`: en `Asentamiento.estilo_epoca` a quien ve la plaza por dentro (interior, plaza propia también en `FACCION`, la plaza ajena vista desde dentro en `VISTA` y `ADMIN`; no en la avistada desde fuera, porque lo adoptado por otra Facción es privado); en `Pueblo.estilo_epoca_madre` con la planta, como `nivel_madre`; y en `Avanzada.estilo_epoca_madre` a su Facción y a quien está dentro de una ajena (no en la avistada ni en una ruina sin dueño). Cuando sube, se marcan la plaza, sus pueblos y sus avanzadas.
+
 ## 5. Campamentos de mercenarios (`tecnologiasDelCampamento`)
 
 Un campamento no adopta nada: **desbloquea** cada tecnología —al instante y gratis— cuando se cumple lo que llegue antes de:

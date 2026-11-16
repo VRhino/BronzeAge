@@ -201,6 +201,8 @@ impl Nucleo {
         let (nivel, alcanzado) = self.estado.asentamientos.get(&id).map(|a| (a.nivel_actual(), a.nivel())).unzip();
         self.contar_nivel(self.estado.ahora, faccion, None, nivel);
         self.contar_alcanzado(None, alcanzado);
+        // Nace con el estilo de época de su Facción (Tecnologia_Aedas §4.2).
+        self.subir_estilo(id);
         self.tras_ganar_o_perder_plaza(&[faccion], nace);
     }
 
@@ -224,6 +226,10 @@ impl Nucleo {
         if let Some(a) = a {
             vivas_cambian |= !indice.contains_key(&a);
             indice.entry(a).or_default().insert(id);
+        }
+        // El estilo de época (Tecnologia_Aedas §4.2): con dueño nuevo, el suyo o el de la Facción nueva si va por delante (conquista, anexión, fusión).
+        if a.is_some() {
+            self.subir_estilo(id);
         }
         // Los Aedas de la plaza (6D): con dueño nuevo, el que está parado le revela lo suyo; si desaparece, el que estaba se va y el que venía elige otro destino.
         match a {
