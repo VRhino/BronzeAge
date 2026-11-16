@@ -267,6 +267,7 @@ impl Nucleo {
             | Comando::FijarControlador { .. }
             | Comando::CancelarBatalla { .. }
             | Comando::BajarseDeBatalla { .. }
+            | Comando::ElegirEscuadrasDeBatalla { .. }
             | Comando::RegistrarAsignacion { .. }
             | Comando::ConfirmarInicio { .. }
             | Comando::RegistrarTokens { .. }

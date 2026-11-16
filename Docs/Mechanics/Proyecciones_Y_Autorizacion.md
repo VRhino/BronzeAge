@@ -359,6 +359,7 @@ Las **190 órdenes del jugador del contrato 05** (`orders.proto`, cuenta al día
 | `cambiar_seleccion_de_convocatoria` | `CambiarSeleccionDeConvocatoria` | la cuenta del héroe | integrante |
 | `cancelar_batalla` | `CancelarBatalla` | la cuenta del héroe | quien la inició, antes de que empiece la partida (`batalla.no_puede_cancelar`) |
 | `bajarse_de_batalla` | `BajarseDeBatalla` | la cuenta del héroe | quien combate en ella, antes de que empiece la partida (`batalla.ya_empezada`); la batalla sigue para los demás (Batalla_Unity_Ciclo §7.2, 2026-11-16) |
+| `elegir_escuadras_de_batalla` | `ElegirEscuadrasDeBatalla` | la cuenta del héroe | quien combate en ella, antes de que empiece la partida (`batalla.ya_empezada`): cambia sus escuadras elegidas (Batalla_Unity_Ciclo §7.3, 2026-11-16) |
 | `cancelar_convocatoria` | `CancelarConvocatoria` | la cuenta del héroe, aunque esté fuera | el Líder de la convocatoria |
 | `cancelar_formacion` | `CancelarFormacion` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) |
 | `ceder_liderazgo` | `CederLiderazgo` | la cuenta del héroe | el Líder |

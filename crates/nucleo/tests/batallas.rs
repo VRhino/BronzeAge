@@ -2696,3 +2696,61 @@ fn en_su_base_el_heroe_elige_que_escuadras_de_su_campamento_lleva_y_fuera_de_ell
     let r = une(&mut e, "u5", "pablo", pablo.1, vec![de_pablo]);
     assert!(r.aceptada(), "{r:?}");
 }
+
+#[test]
+fn quien_ya_defiende_cambia_sus_escuadras_elegidas_antes_de_empezar_y_con_la_partida_en_curso_no() {
+    let m = con_mundo!();
+    let Asedio { mut e, beto, ana } = asedio(m, 7);
+    let b = e.b;
+    let segunda = e.ok("admin", Comando::DarEscuadra { heroe: beto, tropa: Tropa::MiliciaLanceros, cantidad: completa(Tropa::MiliciaLanceros) }).creadas[0];
+    let primera = e.n.heroe(beto).unwrap().heroe.loadouts[0].escuadras[0];
+    let de_ana = e.n.ejercito(ana.0).unwrap().columna.escuadras[0];
+    assert!(e.atacar("ana", ana.1, ObjetivoAtaque::Asentamiento(b), true).aceptada());
+    let id = e.n.batallas().next().unwrap().id;
+    let t = e.n.ahora();
+    let elige = |e: &mut Esc, k: &str, cuenta: &str, heroe: u64, escuadras: Vec<u64>, en: Instante| e.n.aplicar_en(en, Peticion::nueva(cuenta, k, Comando::ElegirEscuadrasDeBatalla { heroe, batalla: id, escuadras }));
+    assert_eq!(codigo(&elige(&mut e, "e0", "beto", beto, vec![segunda], t)), rechazos::BATALLA_NO_COMBATE, "aún no combate");
+    // Beto entra con su loadout (la primera milicia) y, en la preparación, cambia a la segunda.
+    assert!(e.n.aplicar_en(t, Peticion::nueva("beto", "u1", Comando::UnirseABatalla { heroe: beto, batalla: id, lado: None, escuadras: vec![] })).aceptada());
+    let antes = rastro(&e.n);
+    assert_eq!(codigo(&elige(&mut e, "e1", "beto", beto, vec![], t)), rechazos::BATALLA_INVALIDA, "al menos una");
+    assert_eq!(codigo(&elige(&mut e, "e2", "beto", beto, vec![de_ana], t)), rechazos::ESCUADRA_AJENA);
+    assert_eq!(codigo(&elige(&mut e, "e3", "ana", beto, vec![segunda], t)), rechazos::NO_AUTORIZADO);
+    assert_eq!(rastro(&e.n), antes);
+    assert_eq!(elige(&mut e, "e4", "beto", beto, vec![primera], t).resultado, Resultado::SinCambios, "la misma lista");
+    let revision = e.n.batalla(id).unwrap().ticket.revision;
+    let r = elige(&mut e, "e5", "beto", beto, vec![segunda], t);
+    assert!(r.aceptada(), "{r:?}");
+    let batalla = e.n.batalla(id).unwrap();
+    assert_eq!(batalla.participante(beto).unwrap().escuadras.iter().map(|x| x.id).collect::<Vec<_>>(), vec![segunda]);
+    assert_eq!(batalla.ticket.revision, revision, "en la convocatoria el ticket aún no se publicó");
+    let h = &e.n.heroe(beto).unwrap().heroe;
+    assert_eq!((h.escuadra(segunda).unwrap().reserva_batalla, h.escuadra(primera).unwrap().reserva_batalla), (Some(id), None), "candado nuevo, el viejo suelto");
+    assert_eq!(h.loadouts[0].escuadras, vec![primera], "el loadout no cambia");
+    // Con la batalla ya asignada, cambiar vuelve a convocarla con una revisión más.
+    let fin = e.n.batalla(id).unwrap().convocatoria_hasta.unwrap_or(t) + 1;
+    e.n.avanzar_hasta(fin);
+    let humanos: Vec<u64> = e.n.batalla(id).unwrap().heroes_que_combaten().collect();
+    let revision = e.n.batalla(id).unwrap().ticket.revision;
+    assert!(msg(&mut e.n, fin, "as", Comando::RegistrarAsignacion { batalla: id, asignacion: asignacion("a0", revision, &humanos) }).aceptada());
+    assert!(elige(&mut e, "e5b", "beto", beto, vec![primera], fin).aceptada());
+    let batalla = e.n.batalla(id).unwrap();
+    assert_eq!((batalla.estado, batalla.ticket.revision, batalla.asignacion.is_none()), (EstadoBatalla::Convocando, revision + 1, true));
+    // Con la partida en curso ya no se cambia.
+    en_curso(&mut e.n, id, fin, &humanos);
+    assert_eq!(codigo(&elige(&mut e, "e6", "beto", beto, vec![primera], fin)), rechazos::BATALLA_YA_EMPEZADA);
+}
+
+#[test]
+fn fuera_de_su_base_las_elegidas_son_todas_las_que_lleva_aunque_ya_combata() {
+    let (mut x, id) = batalla_abierta();
+    let ana = x.ana;
+    let revision = x.n.batalla(id).unwrap().ticket.revision;
+    assert!(msg(&mut x.n, 11 * MIN, "as", Comando::RegistrarAsignacion { batalla: id, asignacion: asignacion("a1", revision, &[ana.1]) }).aceptada());
+    // Fuera de su base, las elegidas son todo lo que lleva: otra lista se rechaza y la misma no cambia nada.
+    let elige = |x: &mut Choque, k: &str, escuadras: Vec<u64>| x.n.aplicar_en(12 * MIN, Peticion::nueva("ana", k, Comando::ElegirEscuadrasDeBatalla { heroe: ana.1, batalla: id, escuadras }));
+    let fuerte = x.fuerte.clone();
+    assert_eq!(codigo(&elige(&mut x, "e1", vec![fuerte[0]])), rechazos::BATALLA_SIN_ELEGIR_ESCUADRAS);
+    assert_eq!(elige(&mut x, "e2", fuerte).resultado, Resultado::SinCambios);
+    assert_eq!(x.n.batalla(id).unwrap().estado, EstadoBatalla::Asignada);
+}

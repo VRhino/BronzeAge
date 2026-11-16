@@ -128,6 +128,7 @@ es la lista de mensajes de orden que hay que cubrir.
 | `unirseABatalla` | `heroeId`: string<br>`battleId`: string<br>`lado?`: "atacante"|"defensor"<br>`escuadronIds?`: string[] (solo desde dentro, 2026-11-16) |
 | `cancelarBatalla` | `battleId`: string |
 | `bajarseDeBatalla` | `battleId`: string (2026-11-16) |
+| `elegirEscuadrasDeBatalla` | `battleId`: string<br>`escuadronIds`: string[] (2026-11-16) |
 | `cederLiderazgo` | `ejercitoId`: string<br>`heroeId`: string<br>`sucesorId`: string |
 | `entrarEnAsentamiento` | `asentamientoId`: string<br>`heroeId`: string |
 | `fijarPuerta` | `asentamientoId`: string<br>`heroeId`: string<br>`cerradaA`: "neutrales"|"aliados"|"enemigos"|"aedas"[] |

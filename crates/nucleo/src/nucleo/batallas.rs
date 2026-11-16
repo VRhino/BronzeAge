@@ -845,6 +845,7 @@ impl Nucleo {
             Comando::UnirseABatalla { heroe, batalla, lado, escuadras } => self.unirse_a_batalla(t, p, *heroe, *batalla, *lado, escuadras),
             Comando::CancelarBatalla { heroe, batalla } => self.cancelar_batalla(t, p, *heroe, *batalla),
             Comando::BajarseDeBatalla { heroe, batalla } => self.bajarse_de_batalla(t, p, *heroe, *batalla),
+            Comando::ElegirEscuadrasDeBatalla { heroe, batalla, escuadras } => self.elegir_escuadras_de_batalla(t, p, *heroe, *batalla, escuadras),
             Comando::RegistrarAsignacion { batalla, asignacion } => {
                 let servidor = self.servidor_de(p)?;
                 let a = Asignacion { servidor, ..asignacion.clone() };
@@ -938,7 +939,7 @@ impl Nucleo {
         let entran = match donde {
             Donde::Dentro if elegidas.is_empty() => vec![self.defensor_de_dentro(t, hn, hn.heroe.presencia.ubicacion)],
             Donde::Dentro => {
-                let escuadras = self.escuadras_elegidas(hn, elegidas)?;
+                let escuadras = self.escuadras_elegidas(hn, elegidas, None)?;
                 vec![self.participante(hn, escuadras.into_iter().map(|s| escuadra_en_batalla(s, t)).collect())]
             }
             _ => {
@@ -967,7 +968,7 @@ impl Nucleo {
     /// batalla y fuera de la guarnición. En su base (el residente en su plaza) las disponibles son las de su **campamento** y elige un subconjunto que, con lo que lleva fuera (columna,
     /// escolta), cabe en su Liderazgo; fuera de ella (un visitante, o un residente dentro de un pueblo o una avanzada) las disponibles son las de **su columna** y entran todas. No toca el
     /// loadout.
-    fn escuadras_elegidas<'a>(&self, hn: &'a HeroeNucleo, elegidas: &[u64]) -> Result<Vec<&'a Escuadra>, Respuesta> {
+    fn escuadras_elegidas<'a>(&self, hn: &'a HeroeNucleo, elegidas: &[u64], esta: Option<u64>) -> Result<Vec<&'a Escuadra>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         let en_su_plaza = matches!(hn.heroe.presencia.ubicacion, Ubicacion::Asentamiento(a) if hn.heroe.residencia == Some(Residencia::Asentamiento(a)));
@@ -989,7 +990,7 @@ impl Nucleo {
             if e.en_guarnicion {
                 return Err(rechazo(rechazos::ESCUADRA_EN_LA_GUARNICION, format!("la escuadra {id} está en la guarnición")));
             }
-            if e.reserva_batalla.is_some() {
+            if e.reserva_batalla.is_some() && e.reserva_batalla != esta {
                 return Err(rechazo(rechazos::ESCUADRA_EN_BATALLA, format!("la escuadra {id} está reservada para una batalla")));
             }
             vistas.push(e);
@@ -1006,6 +1007,50 @@ impl Nucleo {
             }
         }
         Ok(vistas)
+    }
+
+    /// `elegirEscuadrasDeBatalla` (2026-11-16): quien ya combate en la batalla (el residente que defiende su plaza, que entra de oficio con su loadout) cambia sus escuadras por las
+    /// elegidas en la preparación antes de que empiece la partida, con las reglas de `escuadras_elegidas` (las suyas que ya llevan el candado de esta batalla valen). Solo esta batalla:
+    /// el loadout no cambia. Las que dejan de combatir se sueltan y las nuevas reciben el candado; con el ticket ya publicado o asignado sube la revisión (`batalla.revisada`).
+    fn elegir_escuadras_de_batalla(&mut self, t: Instante, p: &Peticion, heroe: u64, id: u64, elegidas: &[u64]) -> Result<Vec<u64>, Respuesta> {
+        let v = self.estado.version;
+        self.autorizar_heroe(p, heroe, false)?;
+        {
+            let b = self.batalla_mut(id)?;
+            let previo = if !b.activa(t) {
+                Some(ErrorBatalla::NoActiva)
+            } else if b.salio(heroe) {
+                Some(ErrorBatalla::YaSalio(heroe))
+            } else if b.participante(heroe).is_none() {
+                Some(ErrorBatalla::NoCombate(heroe))
+            } else if b.estado == combate::ciclo::EstadoBatalla::EnCurso {
+                Some(ErrorBatalla::YaEmpezada)
+            } else {
+                None
+            };
+            if let Some(e) = previo {
+                return Err(rechazo_de_batalla(e, v));
+            }
+        }
+        if elegidas.is_empty() {
+            return Err(Respuesta::rechazo(rechazos::BATALLA_INVALIDA, "hay que elegir al menos una escuadra", v));
+        }
+        let hn = self.heroe(heroe).expect("autorizado");
+        let nuevas: Vec<EscuadraEnBatalla> = self.escuadras_elegidas(hn, elegidas, Some(id))?.into_iter().map(|s| escuadra_en_batalla(s, t)).collect();
+        let reservar: Vec<u64> = nuevas.iter().map(|e| e.id).collect();
+        let cr = self.estado.reglas.economia.combate.clone();
+        let (liberar, reabierta) = match self.batalla_mut(id)?.cambiar_escuadras(&cr, t, heroe, nuevas).map_err(|e| rechazo_de_batalla(e, v))? {
+            Efecto::SinCambios => return Err(sin_cambios(v)),
+            Efecto::Aplicado(x) => x,
+        };
+        self.reservar(&liberar, None);
+        self.reservar(&reservar, Some(id));
+        self.tr.tocar(Clase::Batalla, id);
+        if reabierta {
+            self.programar_batalla(id);
+            self.hecho_de_batalla(t, id, Hecho::Revisada, None);
+        }
+        Ok(vec![])
     }
 
     /// `bajarseDeBatalla` (2026-11-16): el héroe sale de la batalla antes de que empiece la partida, sin perder nada (`Batalla::bajarse`). Sus escuadras se sueltan y su columna deja

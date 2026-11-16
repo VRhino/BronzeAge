@@ -180,6 +180,15 @@ message OrdenBajarseDeBatalla {
   string battle_id = 1;
 }
 
+// El héroe de la sesión, que ya combate en la batalla, cambia sus escuadras elegidas antes de que empiece la partida (2026-11-16): las de la
+// preparación de quien entró de oficio, como el residente que defiende su plaza. Mismas reglas que `OrdenUnirseABatalla.escuadron_ids`: en su
+// base, un subconjunto de su campamento que cabe en su Liderazgo; fuera de ella, todas las que lleva. Solo esta batalla; no toca el loadout. Con
+// la partida en curso se rechaza (`batalla.ya_empezada`).
+message OrdenElegirEscuadrasDeBatalla {
+  string battle_id = 1;
+  repeated string escuadron_ids = 2;
+}
+
 message OrdenCancelarCaravana {
   string caravana_id = 1;
 }
@@ -1470,5 +1479,6 @@ message Orden {
     OrdenUsarObjeto usar_objeto = 199;
     OrdenConfigurarForja configurar_forja = 200;
     OrdenBajarseDeBatalla bajarse_de_batalla = 201;
+    OrdenElegirEscuadrasDeBatalla elegir_escuadras_de_batalla = 202;
   }
 }
