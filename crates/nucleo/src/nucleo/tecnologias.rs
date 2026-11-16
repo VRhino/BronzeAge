@@ -304,12 +304,44 @@ impl Nucleo {
         self.avance(t, Dueno::Faccion(faccion), "tecnologias", 1);
         self.tr.tocar(Clase::Asentamiento, capital);
         self.tocar_armerias_de(faccion);
+        self.subir_estilo_de_faccion(faccion);
         // Una adopción puede dejar a la mitad de las vivas con ella (los campamentos) y cumplir una condición `tecnologia` de otro hito.
         self.tocar_todos_los_campamentos();
         self.mirar_aparicion(faccion);
         // El hecho de épica `adopcion` (TA §7.2): lo recogen los Aedas residentes al cerrar la versión (6E).
         self.hecho_epico(Some(tecnologia::epicas::Hecho::adopcion(faccion, x)));
         Ok(vec![])
+    }
+
+    // ───────────────────────────── El estilo de época (§4.2) ─────────────────────────────
+
+    /// El estilo de época que dan las adoptadas de la Facción ahora (`tecnologia::estilo::estilo_de`).
+    pub(crate) fn estilo_de_faccion(&self, faccion: u32) -> tecnologia::estilo::Estilo {
+        let r = &self.estado.reglas.economia.tecnologia;
+        tecnologia::estilo::estilo_de(r, self.estado.tecnologia.de(r, faccion).adoptadas)
+    }
+
+    /// La plaza toma el máximo entre su estilo y el de su Facción (al fundarla y al cambiar de dueño: `situar_plaza` y `cambiar_plaza_de_faccion`). Nunca baja. Si sube, se marcan la plaza y sus
+    /// pueblos y avanzadas, que lo llevan como el de su madre.
+    // Regla (decisión del autor, 2026-11-16): se guarda el máximo al que llegó la plaza; una conquista no se lo quita y el nuevo dueño solo lo cambia si va por delante.
+    pub(super) fn subir_estilo(&mut self, id: u64) {
+        let Some(faccion) = self.estado.asentamientos.get(&id).map(|a| a.faccion) else { return };
+        let nuevo = self.estilo_de_faccion(faccion);
+        let a = self.estado.asentamientos.get_mut(&id).expect("existe");
+        if nuevo <= a.estilo {
+            return;
+        }
+        a.estilo = nuevo;
+        let (pueblos, avanzadas): (Vec<u64>, Vec<u64>) = (a.economia.pueblos.iter().map(|p| p.id).collect(), a.economia.avanzadas.iter().map(|v| v.id).collect());
+        self.tr.tocar(Clase::Asentamiento, id);
+        self.tr.tocar_todos(Clase::Pueblo, pueblos);
+        self.tr.tocar_todos(Clase::Avanzada, avanzadas);
+    }
+
+    /// Tras una adopción (también por administración): cada plaza de la Facción toma el máximo entre el suyo y el de la Facción.
+    pub(super) fn subir_estilo_de_faccion(&mut self, faccion: u32) {
+        let plazas: Vec<u64> = self.plazas_de(faccion).map(|a| a.id).collect();
+        plazas.into_iter().for_each(|id| self.subir_estilo(id));
     }
 
     // ───────────────────────────── Los campamentos ─────────────────────────────

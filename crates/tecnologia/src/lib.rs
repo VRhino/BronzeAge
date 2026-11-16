@@ -17,6 +17,7 @@ pub mod alijos;
 pub mod contador;
 pub mod datos;
 pub mod epicas;
+pub mod estilo;
 pub mod estado;
 pub mod hito;
 pub mod itinerantes;

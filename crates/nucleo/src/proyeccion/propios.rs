@@ -1091,6 +1091,7 @@ pub fn pueblo(n: &Nucleo, madre: u64, p: &Pueblo) -> pb::Pueblo {
         planta: Vec::new(),
         trazado: None,
         nivel_madre: None,
+        estilo_epoca_madre: None,
     }
 }
 
@@ -1155,6 +1156,8 @@ pub fn avanzada(n: &Nucleo, madre: Option<u64>, v: &Avanzada) -> pb::Avanzada {
             .filter(|&&r| v.almacen.capacidad(r) > 0)
             .map(|&r| (r.nombre().to_owned(), existencia(&v.almacen, r, None)))
             .collect(),
+        // El de su plaza madre, para la vista 3D de dentro (Tecnologia_Aedas §4.2); una ruina sin dueño no lleva.
+        estilo_epoca_madre: madre.and_then(|m| e.asentamientos.get(&m)).map(|a| super::estilo_epoca(a.estilo)),
         ..Default::default()
     }
 }
@@ -1320,6 +1323,7 @@ pub fn plaza_propia(n: &Nucleo, id: u64, ficha: pb::Asentamiento) -> pb::Asentam
         ultima_caravana_creada_en_ms: i.ultima_caravana_creada_en_ms,
         insolvencia_ascenso: i.insolvencia_ascenso,
         consumo_pausado: i.consumo_pausado,
+        estilo_epoca: i.estilo_epoca,
         ..ficha
     }
 }

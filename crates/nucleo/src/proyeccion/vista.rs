@@ -382,6 +382,11 @@ impl<'n> Mirada<'n> {
             Some(Ubicacion::Pueblo(p)) => Some(p),
             _ => None,
         };
+        // La avanzada donde está (2026-11-16): si es ajena, va con el estilo de época de su madre para la vista 3D de dentro, como la plaza ajena desde dentro.
+        let en_avanzada = match viewer.and_then(|h| n.heroe(h)).map(|h| h.heroe.presencia.ubicacion) {
+            Some(Ubicacion::Avanzada(x)) => Some(x),
+            _ => None,
+        };
         for a in e.asentamientos.values() {
             let duena = Some(a.faccion) == self.faccion;
             let dentro = dentro_de == Some(a.id);
@@ -423,17 +428,19 @@ impl<'n> Mirada<'n> {
                 }
             }
             for x in &a.economia.avanzadas {
-                if rect.contiene(x.posicion) && (duena || self.ve(x.posicion)) {
+                let dentro = en_avanzada == Some(x.id);
+                if dentro || (rect.contiene(x.posicion) && (duena || self.ve(x.posicion))) {
                     vistos.insert(Sitio::Avanzada(x.id));
                     let version = n.version_de(Clase::Avanzada, x.id);
                     nombradas.push(a.faccion);
-                    v.extend(if duena { self.propias_de(Clase::Avanzada, x.id, version) } else { self.avanzada_avistada(Some(a.id), x, version) });
+                    let estilo = (dentro && !duena).then(|| super::estilo_epoca(a.estilo));
+                    v.extend(if duena { self.propias_de(Clase::Avanzada, x.id, version) } else { self.avanzada_avistada(Some(a.id), x, version, estilo) });
                 }
             }
         }
         for x in n.avanzadas_huerfanas().filter(|x| rect.contiene(x.posicion) && self.ve(x.posicion)) {
             vistos.insert(Sitio::Avanzada(x.id));
-            v.extend(self.avanzada_avistada(None, x, n.version_de(Clase::Avanzada, x.id)));
+            v.extend(self.avanzada_avistada(None, x, n.version_de(Clase::Avanzada, x.id), None));
         }
         for (&s, f) in self.fichas.iter().filter(|(s, f)| !vistos.contains(s) && rect.contiene(f.datos.posicion)) {
             let id = id_de_sitio(s);
@@ -714,8 +721,8 @@ impl<'n> Mirada<'n> {
     }
 
     /// La avanzada ajena que se ve: de qué plaza, su etapa, si está en ruinas, su vista y si la asedian; sin almacén ni guarnición ni tropas elegidas. Con una obra en marcha, la obra sin lo pedido ni lo
-    /// entregado.
-    fn avanzada_avistada(&self, madre: Option<u64>, x: &asentamiento::avanzadas::Avanzada, version: u64) -> Vec<Visible<'_>> {
+    /// entregado. Con `estilo` (quien está dentro), el estilo de época de su madre, con otro sello: llega al entrar y se va al salir.
+    fn avanzada_avistada(&self, madre: Option<u64>, x: &asentamiento::avanzadas::Avanzada, version: u64, estilo: Option<pb::EstiloEpoca>) -> Vec<Visible<'_>> {
         let n = self.n;
         let (vid, madre_id, pos) = (x.id, madre.map(ids::asentamiento).unwrap_or_default(), x.posicion);
         let mut v = Vec::new();
@@ -726,7 +733,7 @@ impl<'n> Mirada<'n> {
                 _ => None,
             };
             let madre_id = madre_id.clone();
-            v.push(visible(pb::TipoEntidad::Avanzada, ids::avanzada(vid), Sello(version, 0), move || {
+            v.push(visible(pb::TipoEntidad::Avanzada, ids::avanzada(vid), Sello(version, i64::from(estilo.is_some())), move || {
                 Some(Cuerpo::Avanzada(pb::Avanzada {
                     id: ids::avanzada(vid),
                     version,
@@ -737,6 +744,7 @@ impl<'n> Mirada<'n> {
                     radio_vision: n.estado().reglas.economia.militar.vision.avanzada,
                     invulnerable_hasta_ms: invulnerable,
                     batalla_id: propios::batalla_sobre(n, Ubicacion::Avanzada(vid)),
+                    estilo_epoca_madre: estilo,
                     ..Default::default()
                 }))
             }));
@@ -802,6 +810,8 @@ pub fn plaza_desde_dentro(n: &Nucleo, id: u64) -> pb::Asentamiento {
     // Su forja y los metales de su Armería (Heroe_Y_Tropa §4.6): quien está dentro sabe si puede forjar y cuánto pagaría.
     let (forja, metales) = interior::forja_de(n, &n.estado().asentamientos[&id]);
     (p.forja, p.metales_armeria) = (Some(forja), metales);
+    // Su estilo de época (Tecnologia_Aedas §4.2): el aspecto de lo que se ve al recorrerla.
+    p.estilo_epoca = Some(super::estilo_epoca(n.estado().asentamientos[&id].estilo));
     p
 }
 
@@ -829,6 +839,7 @@ pub fn pueblo_desde_dentro(n: &Nucleo, madre: u64, pid: u64, de_su_faccion: bool
         planta: planta.piezas.iter().map(|x| interior::pieza_de_planta(&lugar, x)).collect(),
         trazado: Some(interior::trazado_de_vista(&planta)),
         nivel_madre: n.estado().asentamientos.get(&madre).map(|a| a.nivel()),
+        estilo_epoca_madre: n.estado().asentamientos.get(&madre).map(|a| super::estilo_epoca(a.estilo)),
         ..base
     }))
 }

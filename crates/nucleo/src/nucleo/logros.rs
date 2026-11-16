@@ -285,6 +285,8 @@ impl Nucleo {
         }
         self.estado.tecnologia.de_mut(&r, faccion).adoptadas = adoptadas;
         self.tocar_armerias_de(faccion);
+        // El estilo de época de sus plazas solo sube: quitar tecnologías por administración no lo baja.
+        self.subir_estilo_de_faccion(faccion);
         // Lo adoptado es una condición `tecnologia` de otros hitos (6C).
         self.mirar_aparicion(faccion);
         Ok(true)

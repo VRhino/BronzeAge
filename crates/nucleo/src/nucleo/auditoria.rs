@@ -43,7 +43,7 @@ impl Nucleo {
         let pueblos: Vec<_> = eco.pueblos.iter().map(|p| p.id).collect();
         let avanzadas: Vec<_> = eco.avanzadas.iter().map(|v| v.id).collect();
         huella(&(
-            (a.faccion, a.radio, vecinas, a.nivel(), a.nivel_actual(), a.protegida_hasta, a.ocupada_hasta, &a.puerta, a.cargos, &a.fundadores, (a.permite_reabastecer_aliados, a.almacen_cerrado_a_ciudadanos, a.reclutamiento_cerrado_a_ciudadanos, &a.forja), e.comercio.ultima_caravana.get(&a.id)),
+            (a.faccion, a.radio, vecinas, a.nivel(), a.nivel_actual(), a.protegida_hasta, a.ocupada_hasta, &a.puerta, a.cargos, &a.fundadores, (a.permite_reabastecer_aliados, a.almacen_cerrado_a_ciudadanos, a.reclutamiento_cerrado_a_ciudadanos, &a.forja, a.estilo), e.comercio.ultima_caravana.get(&a.id)),
             (edificios, &eco.recintos, &eco.politicas, eco.ascenso, &eco.recetas_pausadas, &eco.consumo_pausado, eco.auto_pausada, eco.reserva_manual),
             (residentes, presentes, guarnicion, flota, aparcadas, pueblos, avanzadas, self.batalla_sobre(militar::presencia::Ubicacion::Asentamiento(a.id as u32)).map(|b| b.id)),
             e.participacion.get(&a.id),
@@ -82,8 +82,9 @@ impl Nucleo {
         for a in e.asentamientos.values() {
             // Cualquier cambio de lo que ve quien está dentro marca la plaza o su interior (`huella_de_plaza`). Tampoco se mira el almacén de un pueblo, su marca `lleno` ni las cabezas de su rebaño: los cambia el paso de minuto, que no marca nada (va por la secuencia interior de la plaza).
             m.insert((Clase::Asentamiento, a.id), self.huella_de_plaza(a));
-            m.extend(a.economia.pueblos.iter().map(|p| ((Clase::Pueblo, p.id), huella(&(a.id, p.tipo, p.sitio, p.nivel, &p.estado, &p.mejora, p.rebano.as_ref().map(|r| &r.especie), p.carro, e.combate.guarniciones.get(&p.id))))));
-            m.extend(a.economia.avanzadas.iter().map(|v| ((Clase::Avanzada, v.id), huella(&(a.id, v, e.combate.avanzadas.get(&v.id))))));
+            // Con el estilo de época de la madre, que llevan sus pueblos y avanzadas.
+            m.extend(a.economia.pueblos.iter().map(|p| ((Clase::Pueblo, p.id), huella(&(a.id, a.estilo, p.tipo, p.sitio, p.nivel, &p.estado, &p.mejora, p.rebano.as_ref().map(|r| &r.especie), p.carro, e.combate.guarniciones.get(&p.id))))));
+            m.extend(a.economia.avanzadas.iter().map(|v| ((Clase::Avanzada, v.id), huella(&(a.id, a.estilo, v, e.combate.avanzadas.get(&v.id))))));
         }
         m.extend(e.combate.huerfanas.iter().map(|(&id, v)| ((Clase::Avanzada, id), huella(&(v, e.combate.avanzadas.get(&id))))));
         m.extend(e.combate.bandidos.iter().map(|(&id, b)| ((Clase::Bandidos, id), huella(b))));

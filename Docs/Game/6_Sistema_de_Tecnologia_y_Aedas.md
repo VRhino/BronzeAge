@@ -114,6 +114,8 @@ Las Facciones de bots siguen la misma regla (5.15.6).
 | IV | 1.000 | 50 lingotes de hierro |
 | V | 1.500 | 80 lingotes de hierro |
 
+**Lo adoptado se ve en la ciudad** (decisión del autor del 2026-11-16): el aspecto de los edificios de una plaza sale de la Era más alta de la que su Facción tiene alguna tecnología adoptada y de cuántas tiene de ella (una, primeros atisbos; dos, más cambiada; tres, del todo). Con solo las de la Era I, se ve de la Era I. Cada plaza guarda lo más alto a lo que llegó y nunca baja: una plaza conquistada conserva su aspecto hasta que su nuevo dueño vaya por delante. Detalle en Tecnologia_Aedas §4.2.
+
 ## 6.5b Tecnología propia de los campamentos de mercenarios (2026-10-02)
 
 Un campamento de mercenarios (Doc 1.9b) no adopta nada: **desbloquea cada tecnología el último**, al instante y gratis, cuando la tiene **adoptada** el **50 %** de las Facciones vivas (las que conservan algún asentamiento; los bots juegan por la misma vía que los humanos y cuentan igual) **o** han pasado **72 horas** desde que la primera Facción la desbloqueó, lo que llegue antes. Las de arranque ya están. Así se recluta allí lo que una Facción no alcanza por edificio o materiales (Doc 5.8), y la ventaja del primero dura unos días sin ser eterna. Una tecnología que nadie ha desbloqueado no está en el campamento. Cifras en `MERCENARIOS.tecnologia` (placeholder).

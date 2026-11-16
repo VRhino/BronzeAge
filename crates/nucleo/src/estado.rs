@@ -330,7 +330,10 @@ pub fn entidad_contrato(mercenario: u64) -> u64 {
 ///
 /// BAN64: BAN63 con el aspecto de cada héroe que lo eligió (2026-11-13): género y piezas del avatar (`EstadoMilitar::aspectos`, al final del estado militar, `codec_militar`)
 /// y, en el registro, el aspecto al final de `CrearHeroe`. BAN63 y anteriores ya no se admiten.
-const MAGIA: &[u8; 5] = b"BAN64";
+///
+/// BAN65: BAN64 con el estilo de época de cada plaza (2026-11-16, Tecnologia_Aedas §4.2): `Asentamiento::estilo`, la Era y el grado (dos `u8`) tras la forja. BAN64 y anteriores ya no se
+/// admiten.
+const MAGIA: &[u8; 5] = b"BAN65";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -591,6 +594,9 @@ pub struct Asentamiento {
     pub fundadores: Vec<u64>,
     /// La forja de su Armería para los de fuera y el fondo de su impuesto (Heroe_Y_Tropa §4.6; el fondo, Mercenarios_Por_Contrato §5.1).
     pub forja: Forja,
+    /// Su estilo de época (Tecnologia_Aedas §4.2, decisión del autor del 2026-11-16): el máximo (Era, grado) al que llegó por las tecnologías adoptadas de las Facciones que la tuvieron. Solo sube:
+    /// al adoptar su Facción, al fundarla (el de su Facción) y al cambiar de dueño (el del nuevo, si va por delante). Es presentación: el aspecto de sus edificios en el cliente.
+    pub estilo: tecnologia::estilo::Estilo,
 }
 
 /// La forja de la Armería de una plaza (Heroe_Y_Tropa §4.6): para cada grupo de fuera, si está abierta y su recargo, y el fondo de monedas donde entra el impuesto de forjar en ella.
@@ -1385,6 +1391,8 @@ impl Estado {
                 w.u32(g.recargo_pct);
             }
             w.i64(*fondo);
+            w.u8(a.estilo.era);
+            w.u8(a.estilo.grado);
         }
         w.u64(self.yacimientos.len() as u64);
         for (&nodo, st) in &self.yacimientos {
@@ -1534,10 +1542,10 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN64`). Solo se lee el formato vigente: una foto de un formato anterior no se migra (la partida es nueva).
+        // La cabecera es de 5 bytes (`BAN65`). Solo se lee el formato vigente: una foto de un formato anterior no se migra (la partida es nueva).
         let (magia, formato) = (r.magia()?, r.u8()?);
         if magia != MAGIA[..4] || formato != MAGIA[4] {
-            return Err(ErrorFormato(if magia.starts_with(b"BAN") { "foto de un formato que no es el vigente (BAN64): ya no se admite" } else { "no es un estado del núcleo" }));
+            return Err(ErrorFormato(if magia.starts_with(b"BAN") { "foto de un formato que no es el vigente (BAN65): ya no se admite" } else { "no es un estado del núcleo" }));
         }
         if r.texto()? != mundo_hash {
             return Err(ErrorFormato("la foto es de otro mundo (hash del artefacto distinto)"));
@@ -1616,6 +1624,10 @@ impl Estado {
             let mut apertura = || -> Result<AperturaForja, ErrorFormato> { Ok(AperturaForja { abierta: r.bool()?, recargo_pct: r.u32()? }) };
             let (aliados, neutrales, enemigos) = (apertura()?, apertura()?, apertura()?);
             let forja = Forja { aliados, neutrales, enemigos, fondo: r.i64()? };
+            let estilo = tecnologia::estilo::Estilo { era: r.u8()?, grado: r.u8()? };
+            if !estilo.valido(&reglas.economia.tecnologia) {
+                return Err(ErrorFormato("estilo de época de una plaza imposible"));
+            }
             for e in &economia.edificios {
                 if let Some(asentamiento::edificio::Fuente::Nodo(n)) = e.fuente {
                     s.nodos_reclamados.insert(n, id);
@@ -1624,7 +1636,7 @@ impl Estado {
             for n in economia.pueblos.iter().filter_map(|p| p.nodo()) {
                 s.nodos_reclamados.insert(n, id);
             }
-            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe, protegida_hasta, ocupada_hasta, puerta, cargos, nombre, capital_de, de_la_faccion_desde, resto_tributo, permite_reabastecer_aliados, almacen_cerrado_a_ciudadanos, reclutamiento_cerrado_a_ciudadanos, fundadores, forja });
+            s.asentamientos.insert(id, Asentamiento { id, faccion, posicion, fundado_en, radio, parcelas, version, economia, urbe, protegida_hasta, ocupada_hasta, puerta, cargos, nombre, capital_de, de_la_faccion_desde, resto_tributo, permite_reabastecer_aliados, almacen_cerrado_a_ciudadanos, reclutamiento_cerrado_a_ciudadanos, fundadores, forja, estilo });
         }
         for _ in 0..r.cuenta()? {
             let nodo = r.u32()?;

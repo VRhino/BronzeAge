@@ -96,4 +96,5 @@ campos_de_la_plaza!(
     insolvencia_ascenso,
     reclutamiento_cerrado_a_ciudadanos,
     consumo_pausado,
+    estilo_epoca,
 );

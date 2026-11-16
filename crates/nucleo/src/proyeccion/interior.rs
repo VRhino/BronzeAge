@@ -200,6 +200,7 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
     p.permite_reabastecer_aliados = a.permite_reabastecer_aliados;
     p.almacen_cerrado_a_ciudadanos = a.almacen_cerrado_a_ciudadanos;
     p.reclutamiento_cerrado_a_ciudadanos = a.reclutamiento_cerrado_a_ciudadanos;
+    p.estilo_epoca = Some(super::estilo_epoca(a.estilo));
     let (forja, metales) = forja_de(n, a);
     (p.forja, p.metales_armeria) = (Some(forja), metales);
     p.ultima_caravana_creada_en_ms = e.comercio.ultima_caravana.get(&id).copied();
