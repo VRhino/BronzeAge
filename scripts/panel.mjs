@@ -60,6 +60,7 @@ const ejecutar = (cmd) => new Promise((ok) => exec(cmd, { windowsHide: true }, (
 const REGLAS = () => [
   { nombre: 'BronzeAge servidor', protocolo: 'TCP', puertos: String(puertos['bronzeage-servidor']) },
   { nombre: 'BronzeAge batallas', protocolo: 'UDP', puertos: puertosBatalla() },
+  { nombre: 'BronzeAge cliente web', protocolo: 'TCP', puertos: String(puertos['bronzeage-cliente-jugador']) },
 ];
 // Si cada regla existe y lleva sus puertos de ahora. Fuera de Windows no se mira (null).
 async function cortafuegos() {
@@ -106,7 +107,8 @@ const SERVICIOS = {
   'bronzeage-admin': { tipo: 'cliente', con: (p, P) => ({ args: VITE(p), env: {
     BACKEND_URL: `http://localhost:${P['bronzeage-servidor']}`, BOTS_URL: `ws://localhost:${P['bronzeage-bots']}/control`,
     MERCS_URL: `ws://localhost:${P['bronzeage-bots-mercenarios']}/control`, PANEL_URL: `http://localhost:${PUERTO}` } }) },
-  'bronzeage-cliente-jugador': { tipo: 'cliente', con: (p, P) => ({ args: VITE(p), env: { BACKEND_URL: `http://localhost:${P['bronzeage-servidor']}` } }) },
+  // Con la red abierta escucha en todas las interfaces, para que otro equipo lo abra por la IP de este (llama al motor en esa misma IP, puerto 7878).
+  'bronzeage-cliente-jugador': { tipo: 'cliente', con: (p, P) => ({ args: [...VITE(p), ...(red.abierta ? ['--host', '0.0.0.0'] : [])], env: { BACKEND_URL: `http://localhost:${P['bronzeage-servidor']}` } }) },
 };
 
 // El lanzador solo sirve con una partida que juega las batallas en Unity (se elige al crearla).
@@ -264,8 +266,12 @@ async function arrancarConquest(duracion, mentira = false) {
   } finally { conquest.esperando = false; }
 }
 
-// «Aplicar» de la red: vuelve a arrancar el servidor y el lanzador que estén en marcha, para que tomen la red de ahora (el lanzador, como estaba: con Conquest o de mentira).
+// Lo que escucha distinto con la red abierta: si arrancó con la red de antes, «Aplicar» y «Jugar» lo reinician.
+const CON_RED = ['bronzeage-servidor', 'bronzeage-lanzador', 'bronzeage-cliente-jugador'];
+// «Aplicar» de la red: vuelve a arrancar el servidor, el lanzador y el cliente web que estén en marcha, para que tomen la red de ahora (el lanzador, como estaba: con Conquest o de mentira).
 async function aplicarRed() {
+  const c = 'bronzeage-cliente-jugador';
+  if (procesos[c]?.hijo) { const p = procesos[c]; parar(c); await p.fin; arrancar(configurations.find((x) => x.name === c)); }
   const l = 'bronzeage-lanzador', antes = procesos[l]?.hijo ? { modo: conquest.modo, duracion: conquest.duracion } : null;
   if (antes) { const p = procesos[l]; parar(l); await p.fin; }
   if (await pararServidor()) arrancar(servidor());
@@ -286,11 +292,14 @@ async function jugar(conRed) {
   }
   if (red.abierta && (await cortafuegos())?.some((r) => !r.ok)) { const no = await abrirCortafuegos(); if (no) return no; }
   const seguir = async () => {
+    // Con la red abierta, el cliente web también, para que el otro equipo entre por su puerto.
+    const cw = configurations.find((x) => x.name === 'bronzeage-cliente-jugador');
+    if (red.abierta && cw && !(await escucha(puertos[cw.name]))) arrancar(cw);
     if (!infoPartida(n).batallas_en_unity) { if (!(await escucha(puertos[s.name]))) arrancar(s); return; }
     conquest.mensaje = null;
     arrancarConquest(null, !!avisoConquest()); // arranca también el servidor si hace falta
   };
-  if (['bronzeage-servidor', 'bronzeage-lanzador'].some((x) => procesos[x]?.hijo && procesos[x].red !== redDe())) aplicarRed().then(seguir);
+  if (CON_RED.some((x) => procesos[x]?.hijo && procesos[x].red !== redDe())) aplicarRed().then(seguir);
   else await seguir();
   return null;
 }
@@ -365,7 +374,8 @@ select{background:#0d0b08;color:var(--txt);border:1px solid var(--borde);border-
 <div class="card"><div class="form"><label>Partida<select id="i-partida"></select></label></div>
 <label class="interruptor"><input type="checkbox" id="i-red"> Dejar entrar a otros equipos de mi red (wifi o cable)</label>
 <div class="enred" id="i-enred" hidden>
-<div class="fila"><span class="est">El otro equipo se conecta a</span><code id="i-url"></code><button data-copia="i-url">Copiar</button><span id="i-ips"></span></div>
+<div class="fila"><span class="est">Cliente web, en el navegador del otro equipo</span><code id="i-web"></code><button data-copia="i-web">Copiar</button><span id="i-ips"></span></div>
+<div class="fila"><span class="est">El motor, para Conquest</span><code id="i-url"></code><button data-copia="i-url">Copiar</button></div>
 <div class="fila"><span class="est">Conquest compilado, en el otro equipo</span><code id="i-cmd"></code><button data-copia="i-cmd">Copiar</button></div>
 <div class="est">Con el editor de Unity: esa dirección en el campo «Servidor» de ConexionDeMundo (Inspector). La cuenta se crea con «Registrar».</div></div>
 <ul class="pasos" id="i-pasos"></ul>
@@ -532,12 +542,13 @@ function pintarInicio(datos){
   const rb=document.getElementById('i-red');if(RED&&document.activeElement!==rb)rb.checked=RED.abierta;
   document.getElementById('i-enred').hidden=!RED?.abierta;
   if(RED?.abierta){const url='http://'+RED.ip+':'+RED.puerto;document.getElementById('i-url').textContent=url;document.getElementById('i-cmd').textContent='Conquest.exe -servidor '+url;
+    const cw=de('bronzeage-cliente-jugador');document.getElementById('i-web').textContent='http://'+RED.ip+':'+(cw?.puerto??5174);
     const ips=document.getElementById('i-ips');
     if(RED.ips.length>1&&!ips.contains(document.activeElement)){ips.innerHTML='<select></select>';const se=ips.firstChild;
       for(const x of RED.ips)se.append(new Option(x.ip+' ('+x.nombre+')',x.ip));se.value=RED.ip;
       se.onchange=()=>api('POST','/api/red',{ip:se.value},'i-msg').then(()=>{se.blur();if(ESTADO.some(d=>d.lanzado&&d.red&&d.red!=='local'))document.getElementById('i-msg').textContent='IP cambiada: pulsa «Jugar» para aplicarla'})}
     else if(RED.ips.length<=1)ips.textContent='';}
-  const listo=p&&s.escucha&&(!p.batallas_en_unity||l.lanzado)&&!viejos&&!fwMal,arrancando=(s.lanzado&&!s.escucha)||q.esperando;
+  const listo=p&&s.escucha&&(!p.batallas_en_unity||l.lanzado)&&!viejos&&!fwMal&&(!RED?.abierta||!!de('bronzeage-cliente-jugador')?.escucha),arrancando=(s.lanzado&&!s.escucha)||q.esperando;
   const jb=document.getElementById('i-jugar');jb.disabled=!p||listo||arrancando||M.generando;jb.textContent=listo?'✓ Todo en marcha':arrancando?'Arrancando…':'▶ Jugar';
   document.getElementById('i-parar').disabled=!datos.some(d=>d.lanzado&&d.tipo!=='tarea');
   const cl=document.getElementById('i-clientes');
@@ -759,7 +770,7 @@ http.createServer(async (req, res) => {
   if (partes[1] === 'red') {
     // GET: cómo está la red; POST { abierta, ip }: la cambia (vale al arrancar); POST /api/red/cortafuegos: lo abre; POST /api/red/aplicar: reinicia lo que esté en marcha.
     if (req.method === 'GET') return json(200, { ...red, ips: ipsLocales(), puerto: puertos['bronzeage-servidor'], cortafuegos: await cortafuegos(), con: redDe(),
-      en_marcha: ['bronzeage-servidor', 'bronzeage-lanzador'].filter((n) => procesos[n]?.hijo).map((n) => ({ nombre: n, red: procesos[n].red })) });
+      en_marcha: CON_RED.filter((n) => procesos[n]?.hijo).map((n) => ({ nombre: n, red: procesos[n].red })) });
     if (req.method !== 'POST') return json(405, { error: 'metodo_no_permitido' });
     if (partes[2] === 'cortafuegos') { const no = await abrirCortafuegos(); return no ? json(409, { error: 'cortafuegos', mensaje: no }) : json(200, { cortafuegos: await cortafuegos() }); }
     if (partes[2] === 'aplicar') { await aplicarRed(); return json(200, { con: redDe() }); }
