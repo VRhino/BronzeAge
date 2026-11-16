@@ -433,7 +433,7 @@ async fn asedio_listo(m: &'static M) -> Asedio {
     let uuid = previos.iter().find_map(|m| if let ms::Cuerpo::Foto(f) = m { Some(ambito(&f.ambito)).filter(|a| a.starts_with("BATALLA:")) } else { None }).expect("la foto de su batalla").trim_start_matches("BATALLA:").to_owned();
 
     // Durante la convocatoria se unen beto, desde dentro, y nora, desde fuera.
-    let unirse = |heroe: &str| orden::Cuerpo::UnirseABatalla(pb::OrdenUnirseABatalla { heroe_id: heroe.into(), battle_id: uuid.clone(), lado: None });
+    let unirse = |heroe: &str| orden::Cuerpo::UnirseABatalla(pb::OrdenUnirseABatalla { heroe_id: heroe.into(), battle_id: uuid.clone(), lado: None, escuadron_ids: vec![] });
     let (de_beto, r) = dar_todo(&mut beto_c, "u-beto", unirse(&h[1])).await;
     aceptada(&r);
     let (de_nora, r) = dar_todo(&mut nora_c, "u-nora", unirse(&h[3])).await;
@@ -545,7 +545,7 @@ fn tokens(uuid: &str, intento: &str, humanos: &[&str]) -> de_srv::Cuerpo {
 }
 
 fn unirse(uuid: &str, heroe: &str) -> orden::Cuerpo {
-    orden::Cuerpo::UnirseABatalla(pb::OrdenUnirseABatalla { heroe_id: heroe.into(), battle_id: uuid.into(), lado: None })
+    orden::Cuerpo::UnirseABatalla(pb::OrdenUnirseABatalla { heroe_id: heroe.into(), battle_id: uuid.into(), lado: None, escuadron_ids: vec![] })
 }
 
 /// El token que dice tener un combatiente para conectar con el servidor de batalla: el token, el host, el puerto y cuándo caduca.
@@ -947,7 +947,7 @@ async fn el_informe_de_inspeccion_de_una_columna_una_caravana_y_una_plaza_con_su
 }
 
 #[tokio::test]
-async fn quien_no_llega_a_conectarse_reabre_la_batalla_con_un_ticket_nuevo_para_todos_los_servidores_y_pierde_su_ambito() {
+async fn quien_no_llega_a_conectarse_reabre_la_batalla_con_un_ticket_nuevo_para_todos_los_servidores_y_sigue_viendola_con_su_salida() {
     let m = con_mundo!();
     let Asedio { w, uuid, mut beto, a, b, ticket, h, .. } = asedio_listo(m).await;
     let [h_ana, h_beto, _, h_nora, _] = h;
@@ -974,8 +974,11 @@ async fn quien_no_llega_a_conectarse_reabre_la_batalla_con_un_ticket_nuevo_para_
     assert_eq!(nuevo_a.ticket_revision, 1);
     assert!(nuevo_a.defensor.unwrap().participantes.is_empty(), "su participación se quita del ticket y no entra nadie en su lugar");
     assert_ne!(nuevo_a.ticket_revision, ticket.ticket_revision);
-    let revocado = leer_hasta(&mut beto, |m| matches!(m, ms::Cuerpo::Revocado(r) if ambito(&r.ambito) == ambito_b)).await;
-    assert!(matches!(revocado.last(), Some(ms::Cuerpo::Revocado(r)) if r.motivo == "sin_derecho"), "ya no combate: pierde el ámbito de la batalla");
+    // Ya no combate, pero sigue con el ámbito de la batalla y la ve con su salida (2026-11-16): así sabe cómo acaba.
+    let vista = batalla_hasta(&mut beto, &ambito_b, |b| b.salida_propia.is_some()).await;
+    let salida = vista.salida_propia.unwrap();
+    assert_eq!((salida.motivo, salida.derrotado, vista.lado_para_unirse), (pb::MotivoSalida::SalidaNoConectado as i32, false, None));
+    assert!(vista.ticket.is_some(), "la ve entera");
 
     // El segundo servidor puede tomarla ahora (la revisión vigente es la 1) y el primero ya no la tiene.
     aceptado(&sb.mandar(asignacion(&uuid, "intento-b", 1, &[h_ana.as_str(), h_nora.as_str()])).await, "asignacion");

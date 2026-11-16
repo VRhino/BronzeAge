@@ -396,7 +396,7 @@ fn no_se_acepta_si_un_heroe_de_las_dos_combate_incorporado_en_una_batalla_ajena(
     let id = e.n.batallas().find(|x| x.activa(e.n.ahora())).expect("el asedio es una batalla con convocatoria").id;
     let tk = &e.n.batalla(id).unwrap().ticket;
     assert_eq!((tk.atacante.faccion, tk.defensor.faccion), (Some(4), Some(3)), "ni F1 ni F2 son bando");
-    e.ok("dora", Comando::UnirseABatalla { heroe: dora, batalla: id, lado: None });
+    e.ok("dora", Comando::UnirseABatalla { heroe: dora, batalla: id, lado: None, escuadras: vec![] });
     assert!(e.n.batalla(id).unwrap().heroes_que_combaten().any(|h| h == dora), "dora combate incorporada");
     assert_eq!(e.no("beto", Comando::ResponderAnexion { heroe: r2, propuesta: p, aceptar: true }), rechazos::DIPLOMACIA_BATALLA_ABIERTA);
     // Con la batalla acabada, se acepta.

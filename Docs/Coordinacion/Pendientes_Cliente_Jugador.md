@@ -6,6 +6,16 @@ Los cambios del motor que el cliente jugador (BronzeAgeClient) tiene que recoger
 
 ## Pendiente
 
+### Batallas: elegir escuadras, bajarse, el final de quien sale y el hecho de cierre (2026-11-16; contrato 0.28.0, nucleo 0.44.0, combate 0.11.0, sin partida nueva)
+
+Lo pidió el hilo de la migración a Unity. Qué cambia y qué tendría que hacer el cliente (Batalla_Unity_Ciclo §7, §7.2 y §10):
+
+1. **`OrdenUnirseABatalla.escuadron_ids`** (campo 4): las elegidas en la preparación de la batalla. En su base (defender su plaza), un subconjunto de su campamento que quepa en su Liderazgo; fuera de ella, todas las que lleva (otra lista se rechaza con `batalla.sin_elegir_escuadras`). Vacío, como antes.
+2. **`OrdenBajarseDeBatalla { battle_id }`** (campo 201 del oneof): bajarse antes de que empiece la partida; la batalla sigue para los demás. Con la partida en curso, `batalla.ya_empezada`. El cliente puede ofrecer «Bajarse» mientras la batalla esté convocando o asignada.
+3. **`Batalla.salida_propia { motivo, derrotado, en_ms }`** (campo 22, motivo nuevo `SALIDA_BAJADA = 5`): quien salió sigue viendo la batalla entera hasta que se retira; el cliente puede enseñarle cómo acabó.
+4. **El hecho `heroe.cierre_batalla`**, privado del héroe, al aplicarse el resultado: monedas, experiencia, herido, botín y pérdida del carro, objetos y cada escuadra con supervivientes, muertos y experiencia. Sirve para el informe de después de la batalla.
+5. **`escuadras_que_lleva` de la vista** (columna ajena y ficha de mercenario) trae ahora el id de la tropa (`milicia_lanceros`) y no su nombre: el cliente tiene que traducirlo con su catálogo.
+
 ### El estilo de época de cada plaza (2026-11-16; contrato 0.27.0, nucleo 0.43.0, tecnologia 0.4.0, foto BAN65, partida nueva)
 
 Lo pidió el hilo del cliente para la ciudad 3D. Un mensaje nuevo, `EstiloEpoca { era, grado }` (era 1 a 5, el orden de la Era; grado 1 a 3; la Era I llega siempre como (1, 3)), en tres sitios:

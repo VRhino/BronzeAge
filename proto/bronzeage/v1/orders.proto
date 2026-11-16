@@ -173,6 +173,13 @@ message OrdenCancelarBatalla {
   string battle_id = 1;
 }
 
+// El héroe de la sesión se baja de la batalla antes de que empiece la partida (`convocando` o `asignada`; 2026-11-16): sale sin perder nada y
+// con su columna tal cual; la batalla sigue para los demás y solo se cancela si no queda ningún humano o el atacante se queda sin héroes. Con
+// la partida en curso se rechaza (`batalla.ya_empezada`): se sale desde la batalla y la salida la cuenta el servidor de batalla.
+message OrdenBajarseDeBatalla {
+  string battle_id = 1;
+}
+
 message OrdenCancelarCaravana {
   string caravana_id = 1;
 }
@@ -1162,6 +1169,10 @@ message OrdenUnirseABatalla {
   string heroe_id = 1;
   string battle_id = 2;
   optional string lado = 3;  // atacante | defensor
+  // Con qué escuadras entra quien defiende desde DENTRO (2026-11-16): el residente de su plaza, de las de su campamento y dentro de su Liderazgo;
+  // el visitante, de las de su columna. Vacía, con lo de siempre (su loadout activo o su columna entera). Desde fuera entra la columna entera:
+  // elegir se rechaza con `batalla.sin_elegir_escuadras`. No cambia el loadout.
+  repeated string escuadron_ids = 4;
 }
 
 message OrdenUnirseAConvocatoria {
@@ -1458,5 +1469,6 @@ message Orden {
     OrdenForjarObjeto forjar_objeto = 198;
     OrdenUsarObjeto usar_objeto = 199;
     OrdenConfigurarForja configurar_forja = 200;
+    OrdenBajarseDeBatalla bajarse_de_batalla = 201;
   }
 }

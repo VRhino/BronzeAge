@@ -262,6 +262,9 @@ enum MotivoSalida {
   SALIDA_ELIMINADO = 2;
   SALIDA_ABANDONO = 3;
   SALIDA_DESCONEXION = 4;
+  // Solo en `Batalla.salida_propia` (2026-11-16): el propio héroe se bajó antes de empezar (`bajarse_de_batalla`). Un servidor de batalla no la manda:
+  // en una `SalidaBatalla` se rechaza como un motivo desconocido.
+  SALIDA_BAJADA = 5;
 }
 
 message ResultadoEscuadraSalida {
@@ -366,4 +369,14 @@ message Batalla {
   // Solo en el ámbito ADMIN (4H T3e): la asignación que ganó (intento, revisión e instancia del servidor de batalla), con `tokens_participante`
   // SIEMPRE vacío: los tokens son de cada combatiente y ni la administración los ve.
   optional BattleServerAssignment asignacion = 21;
+  // Solo en la proyección y solo a quien salió de esta batalla (2026-11-16): cómo y cuándo salió. Quien sale la sigue viendo entera (el ticket, el resultado al
+  // aplicarse) hasta que se retira, para enseñarle el informe; ya sin `asignacion_propia`. `lado_propio` sigue diciendo su bando si salió con la partida
+  // en curso; si salió antes de empezar ya no está en el ticket y no lo lleva.
+  optional SalidaPropia salida_propia = 22;
+}
+
+message SalidaPropia {
+  MotivoSalida motivo = 1;
+  bool derrotado = 2;
+  int64 en_ms = 3;
 }

@@ -214,9 +214,11 @@ pub(super) fn derechos(n: &Nucleo, s: &Sesion) -> BTreeSet<Ambito> {
         Ubicacion::Columna(c) => d.extend(n.campamento_a_la_puerta(c).map(Ambito::Campamento)),
         _ => {}
     }
-    // Las batallas en que combate (el suyo o el héroe de campo de su cuenta), también las cerradas mientras el núcleo las conserve: así ve el resultado.
+    // Las batallas en que combate o de las que salió (el suyo o el héroe de campo de su cuenta; quien sale la sigue viendo, 2026-11-16), también las cerradas mientras el núcleo las conserve:
+    // así ve el resultado.
     let e = n.estado();
-    d.extend(n.batallas().filter(|b| b.heroes_que_combaten().any(|c| e.militar.heroes.get(&c).is_some_and(|x| principal(e, x) == Some(h.heroe.id)))).map(|b| Ambito::Batalla(b.id)));
+    let suyo = |c: u64| e.militar.heroes.get(&c).is_some_and(|x| principal(e, x) == Some(h.heroe.id));
+    d.extend(n.batallas().filter(|b| b.heroes_que_combaten().chain(b.salidas.iter().map(|s| s.heroe)).any(suyo)).map(|b| Ambito::Batalla(b.id)));
     d
 }
 

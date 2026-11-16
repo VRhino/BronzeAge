@@ -226,6 +226,8 @@ pub enum MotivoSalida {
     Eliminado,
     Abandono,
     Desconexion,
+    /// El propio héroe se baja antes de que empiece la partida (`bajarse_de_batalla`, 2026-11-16): sin castigo, como `NoConectado`, pero no lo manda el servidor de batalla.
+    Bajada,
 }
 
 /// Cómo acabó una escuadra de quien sale.
@@ -328,6 +330,8 @@ pub enum ErrorBatalla {
     YaCombate(HeroeId),
     /// Solo quien la inició puede cancelarla, y antes de que empiece.
     NoPuedeCancelar,
+    /// La partida ya empezó: quien se baja lo hace desde dentro, y la salida la cuenta el servidor de batalla con sus bajas.
+    YaEmpezada,
     /// Un escuadra de la salida que no es suya, repetida, o que no cierra sobre lo autorizado.
     SalidaInvalida,
     /// La salida de una partida en curso no nombra todas las escuadras autorizadas del héroe.
@@ -455,6 +459,28 @@ impl Batalla {
         self.participantes().find(|(_, p)| p.heroe == heroe).map(|(l, _)| l)
     }
 
+    /// La salida de `heroe` de esta batalla, si salió.
+    pub fn salida_de(&self, heroe: HeroeId) -> Option<&Salida> {
+        self.salidas.iter().find(|s| s.heroe == heroe)
+    }
+
+    /// El bando con el que combatió quien ya salió con la partida en curso (su participación sigue en el ticket o en las incorporaciones). Quien salió antes de empezar ya no está
+    /// en ninguno: `None`, como quien nunca combatió.
+    pub fn lado_de_quien_salio(&self, heroe: HeroeId) -> Option<Lado> {
+        let t = &self.ticket;
+        let en = |ps: &[Participante]| ps.iter().any(|p| p.heroe == heroe);
+        if !self.salio(heroe) {
+            return None;
+        }
+        if en(&t.atacante.participantes) {
+            return Some(Lado::Atacante);
+        }
+        if en(&t.defensor.participantes) {
+            return Some(Lado::Defensor);
+        }
+        self.incorporaciones.iter().find(|i| i.participante.heroe == heroe).map(|i| i.lado)
+    }
+
     /// Los héroes que combaten (`participacionesDe`): bloqueados, sin órdenes y sin salir del mundo.
     pub fn heroes_que_combaten(&self) -> impl Iterator<Item = HeroeId> + '_ {
         self.participantes().map(|(_, p)| p.heroe)
@@ -504,7 +530,8 @@ impl Batalla {
             self.ticket.bando_mut(lado).participantes.extend(entran);
             return Ok(vec![]);
         }
-        let base = self.incorporaciones.len() as u32;
+        // La siguiente a la mayor que hubo: quien sale antes de empezar se quita de las incorporaciones, y su número no se repite.
+        let base = self.incorporaciones.iter().map(|i| i.secuencia).max().unwrap_or(0);
         let secuencias = (1..=entran.len() as u32).map(|i| base + i).collect();
         self.incorporaciones.extend(entran.into_iter().enumerate().map(|(i, participante)| Incorporacion { secuencia: base + i as u32 + 1, lado, participante }));
         Ok(secuencias)
@@ -671,34 +698,67 @@ impl Batalla {
                 return Err(ErrorBatalla::SalidaIncompleta);
             }
         }
+        let herido = !antes_de_empezar && s.derrotado;
+        let mut aplicada = self.anotar_salida(r, ahora, s.heroe, s.motivo, s.derrotado, &suyas);
+        aplicada.bajas = bajas;
+        aplicada.herido = herido;
+        Ok(Efecto::Aplicado(aplicada))
+    }
+
+    /// `bajarse_de_batalla` (2026-11-16): el propio héroe sale de la batalla **antes de que empiece la partida** (`convocando` o `asignada`), sin castigo y con sus escuadras intactas
+    /// y libres, como una salida `NoConectado`: su participación se quita del ticket (o de las incorporaciones) y, si el ticket ya se había publicado (fuera de la convocatoria de un
+    /// asedio) o asignado, sube la revisión y vuelve a `convocando` sin la asignación ni los tokens; en la convocatoria nada se ha publicado y no sube. La batalla sigue para los demás:
+    /// solo se cancela, sin castigo, si ya no queda ningún humano o el atacante se queda sin héroes. Con la partida en curso se rechaza ([`ErrorBatalla::YaEmpezada`]): se sale desde
+    /// dentro y la salida la cuenta el servidor de batalla, con las bajas.
+    pub fn bajarse(&mut self, r: &Reglas, ahora: Instante, heroe: HeroeId) -> Result<SalidaAplicada, ErrorBatalla> {
+        if !self.activa(ahora) {
+            return Err(ErrorBatalla::NoActiva);
+        }
+        if self.salio(heroe) {
+            return Err(ErrorBatalla::YaSalio(heroe));
+        }
+        let suyas: Vec<EscuadraEnBatalla> = self.participante(heroe).ok_or(ErrorBatalla::NoCombate(heroe))?.escuadras.clone();
+        if self.estado == EstadoBatalla::EnCurso {
+            return Err(ErrorBatalla::YaEmpezada);
+        }
+        Ok(self.anotar_salida(r, ahora, heroe, MotivoSalida::Bajada, false, &suyas))
+    }
+
+    /// Anota la salida de `heroe` (con las escuadras `suyas`, que se liberan) y, si iniciaba la batalla, la pasa al primer atacante que queda. Antes de empezar (`NoConectado` o
+    /// `Bajada`) además lo quita del ticket y de las incorporaciones y, o se cancela (sin humanos, o sin atacantes si atacaba), o se reabre: con el ticket ya publicado o asignado,
+    /// sube la revisión y vuelve a `convocando`.
+    fn anotar_salida(&mut self, r: &Reglas, ahora: Instante, heroe: HeroeId, motivo: MotivoSalida, derrotado: bool, suyas: &[EscuadraEnBatalla]) -> SalidaAplicada {
+        let antes_de_empezar = matches!(motivo, MotivoSalida::NoConectado | MotivoSalida::Bajada);
         let liberar: Vec<EscuadraId> = suyas.iter().map(|e| e.id).collect();
-        let atacaba = self.lado_de(s.heroe) == Some(Lado::Atacante);
-        self.salidas.push(Salida { heroe: s.heroe, motivo: s.motivo, derrotado: s.derrotado, en: ahora });
-        if self.iniciada_por == s.heroe {
+        let atacaba = self.lado_de(heroe) == Some(Lado::Atacante);
+        self.salidas.push(Salida { heroe, motivo, derrotado, en: ahora });
+        if self.iniciada_por == heroe {
             let primero = self.participantes().find(|(l, _)| *l == Lado::Atacante).map(|(_, p)| p.heroe);
             if let Some(h) = primero {
                 self.iniciada_por = h;
             }
         }
-        let mut aplicada = SalidaAplicada { liberar, bajas, herido: !antes_de_empezar && s.derrotado, cancelada: false, reabierta: false };
+        let mut aplicada = SalidaAplicada { liberar, bajas: vec![], herido: false, cancelada: false, reabierta: false };
         if antes_de_empezar {
-            self.ticket.atacante.participantes.retain(|p| p.heroe != s.heroe);
-            self.ticket.defensor.participantes.retain(|p| p.heroe != s.heroe);
-            self.incorporaciones.retain(|i| i.participante.heroe != s.heroe);
+            self.ticket.atacante.participantes.retain(|p| p.heroe != heroe);
+            self.ticket.defensor.participantes.retain(|p| p.heroe != heroe);
+            self.incorporaciones.retain(|i| i.participante.heroe != heroe);
             if self.humanos() == 0 || (atacaba && self.en_el_lado(Lado::Atacante) == 0) {
                 aplicada.cancelada = true;
                 aplicada.liberar = self.escuadras_con_candado();
                 aplicada.liberar.extend(suyas.iter().map(|e| e.id));
                 self.cerrar(EstadoBatalla::Cancelada, ahora);
-            } else {
+            } else if self.estado == EstadoBatalla::Asignada || !self.en_convocatoria(ahora) {
                 aplicada.reabierta = true;
                 self.ticket.revision += 1;
-                self.estado = EstadoBatalla::Convocando;
-                self.asignacion = None;
-                self.expira_en = ahora + r.batalla.plazo_asignacion;
+                if self.estado == EstadoBatalla::Asignada {
+                    self.estado = EstadoBatalla::Convocando;
+                    self.asignacion = None;
+                    self.expira_en = ahora + r.batalla.plazo_asignacion;
+                }
             }
         }
-        Ok(Efecto::Aplicado(aplicada))
+        aplicada
     }
 
     /// `aplicarResultado` (`en_curso → aplicada`): valida el checklist **entero** o no cambia nada; aplicarlo y pasar a `aplicada` es una sola

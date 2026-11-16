@@ -80,6 +80,7 @@ fn motivo_a_u8(m: MotivoSalida) -> u8 {
         MotivoSalida::Eliminado => 1,
         MotivoSalida::Abandono => 2,
         MotivoSalida::Desconexion => 3,
+        MotivoSalida::Bajada => 4,
     }
 }
 
@@ -89,6 +90,7 @@ fn motivo_de_u8(i: u8) -> Result<MotivoSalida, ErrorFormato> {
         1 => MotivoSalida::Eliminado,
         2 => MotivoSalida::Abandono,
         3 => MotivoSalida::Desconexion,
+        4 => MotivoSalida::Bajada,
         _ => return Err(ErrorFormato("motivo de salida de batalla desconocido")),
     })
 }

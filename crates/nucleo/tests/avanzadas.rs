@@ -1210,7 +1210,7 @@ fn con_un_humano_el_ataque_abre_una_batalla_de_unity_sin_convocatoria_con_capaci
     let (_, otro) = e.atacante(Punto::new(pos.x + 1_000, pos.y), &[Tropa::MiliciaLanceros]);
     assert_eq!(e.rechazada("beto", Comando::Atacar { heroe: otro, objetivo: ObjetivoAtaque::Avanzada(av), declara_guerra: false }), rechazos::BATALLA_BLOQUEADO);
     // Una columna amiga a su puerta, en el mapa, no defiende: hay que estar dentro (haber entrado con `EntrarEnAvanzada`).
-    let r = e.ord("ana", Comando::UnirseABatalla { heroe: ana, batalla: id, lado: None });
+    let r = e.ord("ana", Comando::UnirseABatalla { heroe: ana, batalla: id, lado: None, escuadras: vec![] });
     assert_eq!(codigo(&r), rechazos::BATALLA_INVALIDA);
     assert!(matches!(&r.resultado, Resultado::Rechazada { mensaje, .. } if mensaje.contains("hay que estar dentro")), "{r:?}");
     assert!(e.n.batalla(id).unwrap().ticket.defensor.participantes.is_empty() && e.n.batalla(id).unwrap().incorporaciones.is_empty());
@@ -2046,20 +2046,20 @@ fn por_unity_de_oficio_solo_defiende_la_guarnicion_los_amigos_de_dentro_se_unen_
     assert_eq!(e.rechazada("neu", Comando::VaciarCarro { heroe: neutral.1 }), rechazos::BATALLA_BLOQUEADO);
     // La residente y el aliado, dentro, se unen a la defensa (la residente con las escuadras de su columna); el neutral no es amigo del dueño y desde dentro no ataca; el de la Facción atacante
     // que está dentro no se une al ataque desde dentro.
-    let r = e.ord("ana", Comando::UnirseABatalla { heroe: ana, batalla: id, lado: None });
+    let r = e.ord("ana", Comando::UnirseABatalla { heroe: ana, batalla: id, lado: None, escuadras: vec![] });
     assert!(r.aceptada(), "{r:?}");
     assert_eq!(e.n.batalla(id).unwrap().participante(ana).unwrap().escuadras.len(), ELITE.len());
-    let r = e.ord("alia", Comando::UnirseABatalla { heroe: aliado.1, batalla: id, lado: None });
+    let r = e.ord("alia", Comando::UnirseABatalla { heroe: aliado.1, batalla: id, lado: None, escuadras: vec![] });
     assert!(r.aceptada(), "{r:?}");
-    let r = e.ord("neu", Comando::UnirseABatalla { heroe: neutral.1, batalla: id, lado: None });
+    let r = e.ord("neu", Comando::UnirseABatalla { heroe: neutral.1, batalla: id, lado: None, escuadras: vec![] });
     assert!(matches!(&r.resultado, Resultado::Rechazada { mensaje, .. } if mensaje.contains("hay que estar fuera")), "{r:?}");
-    let r = e.ord("intr", Comando::UnirseABatalla { heroe: intruso.1, batalla: id, lado: None });
+    let r = e.ord("intr", Comando::UnirseABatalla { heroe: intruso.1, batalla: id, lado: None, escuadras: vec![] });
     assert_eq!(codigo(&r), rechazos::BATALLA_INVALIDA);
     assert!(matches!(&r.resultado, Resultado::Rechazada { mensaje, .. } if mensaje.contains("hay que estar fuera")), "{r:?}");
-    let r = e.ord("intr", Comando::UnirseABatalla { heroe: intruso.1, batalla: id, lado: Some(Lado::Atacante) });
+    let r = e.ord("intr", Comando::UnirseABatalla { heroe: intruso.1, batalla: id, lado: Some(Lado::Atacante), escuadras: vec![] });
     assert_eq!(codigo(&r), rechazos::BATALLA_INVALIDA, "pedir el bando atacante tampoco lo salva");
     // Quien está fuera, en el mapa, de la Facción atacante sí se une al ataque.
-    let r = e.ord("beto", Comando::UnirseABatalla { heroe: refuerzo, batalla: id, lado: None });
+    let r = e.ord("beto", Comando::UnirseABatalla { heroe: refuerzo, batalla: id, lado: None, escuadras: vec![] });
     assert!(r.aceptada(), "{r:?}");
     let b = e.n.batalla(id).unwrap();
     assert_eq!((b.lado_de(ana), b.lado_de(aliado.1), b.lado_de(refuerzo), b.lado_de(intruso.1), b.lado_de(neutral.1)), (Some(Lado::Defensor), Some(Lado::Defensor), Some(Lado::Atacante), None, None));
@@ -2102,13 +2102,13 @@ fn durante_el_ataque_a_una_avanzada_quien_esta_dentro_y_no_se_unio_solo_puede_sa
     let r = e.atacar(beto, ObjetivoAtaque::Avanzada(av));
     assert!(r.aceptada(), "{r:?}");
     let id = e.n.batallas().next().expect("se abrió una batalla").id;
-    let r = e.ord("alia", Comando::UnirseABatalla { heroe: aliado.1, batalla: id, lado: None });
+    let r = e.ord("alia", Comando::UnirseABatalla { heroe: aliado.1, batalla: id, lado: None, escuadras: vec![] });
     assert!(r.aceptada(), "{r:?}");
     assert_eq!(e.rechazada("alia", Comando::SalirDeAvanzada { avanzada: av, heroe: aliado.1 }), rechazos::BATALLA_BLOQUEADO, "el defensor unido no sale");
     assert_eq!(e.rechazada("neu", Comando::VaciarCarro { heroe: neutral.1 }), rechazos::BATALLA_BLOQUEADO, "dentro, sin unirse, solo se puede salir");
     e.ok("neu", Comando::SalirDeAvanzada { avanzada: av, heroe: neutral.1 });
     assert_eq!((e.ubicacion(neutral.1), e.n.en_el_mapa(neutral.0)), (Ubicacion::Columna(neutral.0), true));
-    let r = e.ord("neu", Comando::UnirseABatalla { heroe: neutral.1, batalla: id, lado: None });
+    let r = e.ord("neu", Comando::UnirseABatalla { heroe: neutral.1, batalla: id, lado: None, escuadras: vec![] });
     assert!(r.aceptada(), "fuera, el neutral se une al ataque: {r:?}");
     assert_eq!(e.n.batalla(id).unwrap().lado_de(neutral.1), Some(Lado::Atacante));
 }

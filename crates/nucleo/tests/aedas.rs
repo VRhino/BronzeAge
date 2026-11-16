@@ -665,3 +665,37 @@ async fn por_la_sesion_cada_ambito_lleva_lo_suyo_de_la_tecnologia_y_de_los_aedas
     adm.cerrar().await;
     w.parar().await;
 }
+
+#[test]
+fn las_ordenes_de_administracion_de_prueba_dan_monedas_llenan_el_fondo_y_colocan_un_aeda_itinerante_o_residente() {
+    let m = con_mundo!();
+    let mut x = Escenario::nuevo(m, reglas());
+    let (a, b) = (x.a, x.b);
+    let rey = x.n.facciones().find(|f| f.id == 1).and_then(|f| f.rey).unwrap();
+    let t = x.n.ahora() + MIN;
+    x.n.avanzar_hasta(t);
+    // Monedas al héroe y al fondo de la plaza; solo la administración y solo cantidades positivas.
+    let monedas0 = x.n.heroe(rey).unwrap().heroe.monedas;
+    assert_eq!(x.rechazo("ana", Comando::DarMonedas { heroe: rey, cantidad: 10 }), rechazos::NO_AUTORIZADO);
+    assert_eq!(x.rechazo("admin", Comando::DarMonedas { heroe: rey, cantidad: 0 }), rechazos::CANTIDAD_NO_POSITIVA);
+    assert_eq!(x.rechazo("admin", Comando::DarMonedas { heroe: 9_999_999, cantidad: 10 }), rechazos::HEROE_DESCONOCIDO);
+    x.ok("admin", Comando::DarMonedas { heroe: rey, cantidad: 250 });
+    assert_eq!(x.n.heroe(rey).unwrap().heroe.monedas, monedas0 + 250);
+    let fondo0 = x.n.estado().asentamientos[&a].forja.fondo;
+    assert_eq!(x.rechazo("admin", Comando::DarFondoMonedas { asentamiento: a, cantidad: -5 }), rechazos::CANTIDAD_NO_POSITIVA);
+    x.ok("admin", Comando::DarFondoMonedas { asentamiento: a, cantidad: 1_000 });
+    assert_eq!(x.n.estado().asentamientos[&a].forja.fondo, fondo0 + 1_000);
+    // Un itinerante: el más cercano se para en la plaza con su estancia entera; repetirlo deja al mismo.
+    assert!(x.en_plaza(b).is_empty());
+    let r = x.ord("admin", Comando::ColocarAeda { asentamiento: b, residente: false });
+    assert!(r.aceptada(), "{r:?}");
+    let aeda = r.creadas[0] as u32;
+    assert_eq!(x.en_plaza(b), vec![aeda]);
+    let total = x.n.aedas().len();
+    assert_eq!(x.ord("admin", Comando::ColocarAeda { asentamiento: b, residente: false }).creadas, vec![u64::from(aeda)]);
+    assert_eq!(x.n.aedas().len(), total, "no nace otro");
+    // Un residente: llega a la plaza aunque no tenga Palacio.
+    let r = x.ord("admin", Comando::ColocarAeda { asentamiento: a, residente: true });
+    assert!(r.aceptada(), "{r:?}");
+    assert_eq!(x.n.estado().residentes.de_plaza(a as u32).iter().map(|r| u64::from(r.id)).collect::<Vec<_>>(), r.creadas);
+}

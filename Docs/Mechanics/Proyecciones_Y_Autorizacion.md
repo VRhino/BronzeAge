@@ -358,6 +358,7 @@ Las **190 órdenes del jugador del contrato 05** (`orders.proto`, cuenta al día
 | `borrar_loadout` | `BorrarLoadout` | la cuenta del héroe | — |
 | `cambiar_seleccion_de_convocatoria` | `CambiarSeleccionDeConvocatoria` | la cuenta del héroe | integrante |
 | `cancelar_batalla` | `CancelarBatalla` | la cuenta del héroe | quien la inició, antes de que empiece la partida (`batalla.no_puede_cancelar`) |
+| `bajarse_de_batalla` | `BajarseDeBatalla` | la cuenta del héroe | quien combate en ella, antes de que empiece la partida (`batalla.ya_empezada`); la batalla sigue para los demás (Batalla_Unity_Ciclo §7.2, 2026-11-16) |
 | `cancelar_convocatoria` | `CancelarConvocatoria` | la cuenta del héroe, aunque esté fuera | el Líder de la convocatoria |
 | `cancelar_formacion` | `CancelarFormacion` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) |
 | `ceder_liderazgo` | `CederLiderazgo` | la cuenta del héroe | el Líder |
@@ -508,6 +509,9 @@ Las **190 órdenes del jugador del contrato 05** (`orders.proto`, cuenta al día
 | `administracion:dar_suministro` | `DarSuministro` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
 | `administracion:fijar_controlador` | `FijarControlador` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
 | `administracion:fijar_catalogo_misiones` | `FijarCatalogoMisiones` | administración | el catálogo de las misiones recurrentes en caliente (Misiones_Recurrentes §6); la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:dar_monedas` | `DarMonedas` | administración | solo pruebas (2026-11-16): monedas a un héroe; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:dar_fondo_monedas` | `DarFondoMonedas` | administración | solo pruebas (2026-11-16): el fondo de monedas de una plaza; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:colocar_aeda` | `ColocarAeda` | administración | solo pruebas (2026-11-16): un Aeda itinerante parado en una plaza o un residente; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
 | `administracion:fijar_faccion_de_heroe` | `FijarFaccionDeHeroe` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
 | `administracion:fijar_nivel_asentamiento` | `FijarNivelAsentamiento` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
 | `administracion:fijar_nivel_faccion` | `FijarNivelFaccion` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |

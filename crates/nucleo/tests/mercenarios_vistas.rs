@@ -318,7 +318,8 @@ fn el_tablon_lleva_a_cada_ofrecido_del_campamento_con_su_ficha_su_tropa_su_herid
     assert_eq!(a.ficha, su_heroe(&e.n, con_tropa).ficha_mercenario);
     assert!(a.ficha.as_ref().is_some_and(|f| f.historial.is_some()));
     // Su tropa, la suya, y si está herido.
-    let tropa_id = militar::Reglas::cargar().tropas.tropa(Tropa::MiliciaLanceros).nombre.clone();
+    // Su id del catálogo, no su nombre (2026-11-16).
+    let tropa_id = Tropa::MiliciaLanceros.nombre().to_owned();
     assert_eq!(a.tropa, [pb::EscuadraQueLleva { tropa_id, cantidad: 10, nivel: 1 }]);
     assert_eq!((b.tropa.len(), b.herido_hasta_ms), (0, None));
     assert_eq!(a.herido_hasta_ms, herido_hasta);

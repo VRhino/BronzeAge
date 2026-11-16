@@ -50,6 +50,7 @@ use std::thread::JoinHandle;
 mod a_mano;
 mod aedas;
 mod alijos;
+mod andamiaje;
 mod armeria;
 mod auditoria;
 mod avanzadas;
@@ -1294,6 +1295,7 @@ impl Nucleo {
             Comando::FijarControlador { .. }
             | Comando::UnirseABatalla { .. }
             | Comando::CancelarBatalla { .. }
+            | Comando::BajarseDeBatalla { .. }
             | Comando::RegistrarAsignacion { .. }
             | Comando::ConfirmarInicio { .. }
             | Comando::RegistrarTokens { .. }
@@ -1307,6 +1309,10 @@ impl Nucleo {
                 Err(r) => return r,
             },
             Comando::DarEscuadra { heroe, tropa, cantidad } => match self.dar_escuadra(t, *heroe, *tropa, *cantidad) {
+                Ok(ids) => creadas.extend(ids),
+                Err(r) => return r,
+            },
+            Comando::DarMonedas { .. } | Comando::DarFondoMonedas { .. } | Comando::ColocarAeda { .. } => match self.ejecutar_pruebas(t, p) {
                 Ok(ids) => creadas.extend(ids),
                 Err(r) => return r,
             },
