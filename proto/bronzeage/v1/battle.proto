@@ -1,0 +1,382 @@
+// Contrato 05 de BronzeAge — batalla de Unity.
+//
+// Es el contrato v1 de batalla (ticket, asignación, tokens, inicio, salida, resultado), traducido a Protobuf y ampliado
+// con las modalidades de la guerra logística. Los nombres de mensaje y de campo conservan el inglés del contrato v1
+// (BattleTicket, BattleResult...) para que Conquest/Unity no tenga que renombrar nada. BronzeAge decide que la batalla
+// ocurra, dónde, quién entra, quién sale y qué le queda a cada uno; Unity decide TODO lo que pasa dentro.
+syntax = "proto3";
+
+package bronzeage.v1;
+
+import "bronzeage/v1/common.proto";
+import "bronzeage/v1/entities.proto";
+
+option csharp_namespace = "BronzeAge.Contract.V1";
+
+enum LadoId {
+  LADO_NO_ESPECIFICADO = 0;
+  ATACANTE = 1;
+  DEFENSOR = 2;
+}
+
+enum EstadoBatalla {
+  ESTADO_BATALLA_NO_ESPECIFICADO = 0;
+  BATALLA_CONVOCANDO = 1;
+  BATALLA_ASIGNADA = 2;
+  BATALLA_EN_CURSO = 3;
+  BATALLA_APLICADA = 4;
+  BATALLA_CANCELADA = 5;
+  BATALLA_FALLIDA = 6;
+}
+
+// Modalidad de un asalto de caravana, decidida por el SERVIDOR según la zona donde está la caravana en el instante del
+// ataque (Doc 3.10): disputa de carros fuera de la zona del dueño o de sus aliados; aguante dentro de ella.
+enum ModalidadCaravana {
+  MODALIDAD_NO_ESPECIFICADA = 0;
+  MODALIDAD_DISPUTA = 1;
+  MODALIDAD_AGUANTE = 2;
+}
+
+// Un carro de una caravana. `carro_id` = `"<caravana_id>:<posición>"` (p. ej. `"car-7:0"`): la posición es la del carro en la lista de la caravana; es como
+// Unity nombra los carros perdidos en `BattleResult.carros_perdidos`.
+message CarroEnBatalla {
+  string carro_id = 1;
+  Cantidades carga = 2;
+}
+
+message ContextoAsedio {
+  string asentamiento_id = 1;
+}
+
+message ContextoCampoAbierto {
+  Punto punto = 1;
+  bool solitarios = 2;                   // persecución entre columnas personales; si no, campal entre ejércitos
+}
+
+// Una caravana que se juega en la batalla.
+message CaravanaEnJuego {
+  string caravana_id = 1;
+  repeated CarroEnBatalla carros = 2;
+}
+
+// Batalla de caravana. Si la acosan los bandidos entran TODAS las caravanas adjuntas a la columna: `caravanas` las lista (siempre viene, con una
+// sola si un ejército asalta una). `caravana_id` y `carros` son los de v1: la PRIMERA de la lista.
+message ContextoCaravana {
+  string caravana_id = 1;
+  Punto punto = 2;
+  ModalidadCaravana modalidad = 3;
+  repeated CarroEnBatalla carros = 4;
+  repeated CaravanaEnJuego caravanas = 5;
+}
+
+message ContextoCampamentoBandidos {
+  string campamento_id = 1;
+  Punto punto = 2;
+}
+
+// Saqueo de un pueblo extractor: nunca de conquista; el pueblo protege el 50 % de su capacidad.
+message ContextoSaqueoPueblo {
+  string pueblo_id = 1;
+  Punto punto = 2;
+  Cantidades protegido = 3;              // lo que NO se puede llevar el atacante (la mitad de la capacidad)
+}
+
+// Ataque a una avanzada: solo un ejército, 30 minutos; un mapa interior por etapa.
+message ContextoAvanzada {
+  string avanzada_id = 1;
+  uint32 etapa = 2;
+  Punto punto = 3;
+}
+
+message ContextoEstrategico {
+  oneof tipo {
+    ContextoAsedio asedio = 1;
+    ContextoCampoAbierto campo_abierto = 2;
+    ContextoCaravana caravana = 3;
+    ContextoCampamentoBandidos campamento_bandidos = 4;
+    ContextoSaqueoPueblo saqueo_pueblo = 5;
+    ContextoAvanzada avanzada = 6;
+  }
+}
+
+message HeroSnapshot {
+  string display_name = 1;
+  string class_definition_id = 2;
+  uint32 nivel = 3;                      // el del héroe (Heroe_Y_Tropa §4.3): Conquest abre con él sus habilidades y sus perks
+  bool femenino = 4;
+  Avatar avatar = 5;
+  reserved 6;                            // antes `perks_desbloqueados`: desde el 2026-11-12 los perks se abren solos con el nivel (D15)
+  Equipamiento equipamiento = 7;
+  Atributos atributos_efectivos = 8;
+  reserved 9;                            // antes `casillas_inventario_libres`: desde el 2026-11-12 Unity no da botín; lo tira el motor y va a la mochila (D6, D7 y D17)
+}
+
+message SquadSnapshot {
+  string squad_id = 1;
+  optional string heroe_id = 2;          // ausente = escuadra sin héroe (IA del juego)
+  string tropa_id = 3;
+  uint32 efectivos_autorizados = 4;
+  uint32 nivel = 5;
+  sint64 experiencia = 6;
+  sint64 moral = 7;
+  repeated string habilidades_desbloqueadas = 8;   // sin uso: vacío (Unity saca las habilidades del nivel)
+  repeated uint32 formaciones_desbloqueadas = 9;   // sin uso: vacío (ver `formaciones_permitidas`)
+  uint32 formacion_seleccionada = 10;              // sin uso: 0 (ver `formacion`)
+  // 2026-11-11 (Heroe_Y_Tropa §10.4): la familia de formación elegida, por su id de `FORMACIONES` (`reposo` si no se eligió otra o ya no se permite),
+  // y las familias que permitía la tecnología de la Facción del dueño al abrir, en el orden del bloque (`reposo`, la primera). Unity usa la elegida si
+  // esa tropa la tiene y, si no, la de reposo.
+  string formacion = 11;
+  repeated string formaciones_permitidas = 12;
+  // 2026-11-12 (D20): el estandarte y el aspecto de la escuadra, vacíos: el motor no los guarda ni tiene orden para elegirlos hasta que haya un
+  // estandarte en el catálogo y arte.
+  string estandarte = 13;
+  string aspecto = 14;
+}
+
+message BattleParticipantSnapshot {
+  string heroe_id = 1;
+  optional string faccion_id = 2;
+  bool es_bot = 3;
+  HeroSnapshot heroe = 4;
+  repeated SquadSnapshot escuadras = 5;
+  // 2026-11-15: el sigilo bajo el que lucha, para pintar su estandarte: el de su Facción o, sin Facción, el reservado `neutro` de `CATALOGO_SIGILO`.
+  Sigilo sigilo = 6;
+}
+
+// Un bando. Sin Facción ni héroes (los bandidos, que no son bots ni jugadores) es válido: `faccion_id` ausente, `participantes` vacío y, en su lugar,
+// `escuadras_sin_heroe`.
+// 2026-11-15: `sigilo` es el del estandarte del bando y siempre viene: el de su Facción; el reservado `bandidos` de `CATALOGO_SIGILO` si son los
+// bandidos de un campamento; el reservado `neutro` si el bando no es de nadie y no son bandidos (una columna sin bandera, los carreteros sin Facción).
+message BattleSide {
+  optional string faccion_id = 1;
+  uint32 capacidad_maxima = 2;           // asedio: 15
+  repeated BattleParticipantSnapshot participantes = 3;
+  repeated SquadSnapshot escuadras_sin_heroe = 4;
+  Sigilo sigilo = 5;
+}
+
+// El terreno de la batalla sale del artefacto de mundo: Unity no lo inventa.
+message BattleMapReference {
+  string mapa_id = 1;                    // hash del artefacto de mundo
+  Punto centro = 2;
+}
+
+message EdificioEnBatalla {
+  string edificio_id = 1;
+  string tipo = 2;
+  Punto posicion = 3;
+  uint32 ancho = 4;
+  uint32 alto = 5;
+  optional uint32 nivel_interno = 6;
+  EstadoEdificio estado = 7;
+  bool danado = 8;
+}
+
+message RecintoEnBatalla {
+  string recinto_id = 1;
+  uint32 nivel = 2;
+  repeated CeldaMuro celdas = 3;
+}
+
+message SettlementBattleSnapshot {
+  string settlement_id = 1;
+  uint32 layout_version = 2;
+  uint32 unidades_por_celda = 3;
+  repeated EdificioEnBatalla edificios = 4;
+  repeated RecintoEnBatalla recintos = 5;
+}
+
+message BattleRules {
+  uint32 duracion_maxima_segundos = 1;
+  uint32 version_balance = 2;
+  uint32 version_catalogo_tropas = 3;
+  string version_catalogo_heroe = 4;
+  string version_catalogo_objetos = 5;
+}
+
+message BattleTicket {
+  uint32 schema_version = 1;
+  string battle_id = 2;
+  string game_id = 3;
+  uint32 ticket_revision = 4;
+  ContextoEstrategico contexto_estrategico = 5;
+  BattleSide atacante = 6;
+  BattleSide defensor = 7;
+  oneof mapa {
+    BattleMapReference mapa_referencia = 8;
+    SettlementBattleSnapshot mapa_asentamiento = 9;
+  }
+  BattleRules reglas = 10;
+}
+
+message IncorporacionBatalla {
+  uint32 schema_version = 1;
+  string battle_id = 2;
+  uint32 secuencia = 3;
+  LadoId lado = 4;
+  BattleParticipantSnapshot participante = 5;
+}
+
+message TokenParticipante {
+  string heroe_id = 1;
+  string token = 2;
+  int64 expira_en_ms = 3;
+}
+
+message InstanciaDeBatalla {
+  string host = 1;
+  uint32 puerto = 2;
+  string protocolo = 3;
+}
+
+// Una batalla sin humanos (bot contra bot, bandidos contra una columna de bots) se asigna igual, con `tokens_participante` vacío.
+message BattleServerAssignment {
+  uint32 schema_version = 1;
+  string battle_id = 2;
+  uint32 ticket_revision = 3;
+  string intento_asignacion_id = 4;
+  InstanciaDeBatalla instancia = 5;
+  repeated TokenParticipante tokens_participante = 6;
+  // Qué servidor de batalla la tiene (4H T7): solo en `Batalla.asignacion` de `ADMIN`, que lo rellena el núcleo con el id de la credencial del servidor
+  // (`batalla-servidor:<id>`). El servidor de batalla lo deja vacío al asignarse: el núcleo lo sabe por su sesión.
+  string servidor_id = 7;
+}
+
+message TokensBatalla {
+  uint32 schema_version = 1;
+  string battle_id = 2;
+  string intento_asignacion_id = 3;
+  repeated TokenParticipante tokens_participante = 4;
+}
+
+message InicioBatalla {
+  uint32 schema_version = 1;
+  string battle_id = 2;
+  uint32 ticket_revision = 3;
+  string intento_asignacion_id = 4;
+}
+
+enum MotivoSalida {
+  MOTIVO_SALIDA_NO_ESPECIFICADO = 0;
+  SALIDA_NO_CONECTADO = 1;
+  SALIDA_ELIMINADO = 2;
+  SALIDA_ABANDONO = 3;
+  SALIDA_DESCONEXION = 4;
+  // Solo en `Batalla.salida_propia` (2026-11-16): el propio héroe se bajó antes de empezar (`bajarse_de_batalla`). Un servidor de batalla no la manda:
+  // en una `SalidaBatalla` se rechaza como un motivo desconocido.
+  SALIDA_BAJADA = 5;
+}
+
+message ResultadoEscuadraSalida {
+  string squad_id = 1;
+  uint32 supervivientes = 2;
+  uint32 muertos = 3;
+}
+
+message SalidaBatalla {
+  uint32 schema_version = 1;
+  string battle_id = 2;
+  uint32 ticket_revision = 3;
+  string intento_asignacion_id = 4;
+  string heroe_id = 5;
+  MotivoSalida motivo = 6;
+  bool derrotado = 7;
+  repeated ResultadoEscuadraSalida escuadras = 8;
+}
+
+enum RazonVictoria {
+  RAZON_NO_ESPECIFICADA = 0;
+  OBJETIVOS_CAPTURADOS = 1;
+  ANIQUILACION = 2;
+  TIEMPO_AGOTADO = 3;
+}
+
+message ObjetivoResultado {
+  string objetivo_id = 1;
+  optional LadoId capturado_por = 2;
+}
+
+message ResultadoEscuadra {
+  string squad_id = 1;
+  uint32 desplegados = 2;
+  uint32 supervivientes_al_cierre = 3;
+  uint32 muertos = 4;
+  reserved 5;                            // antes `xp_ganada`: desde el 2026-11-12 la experiencia la pone el motor (4 o 2 según gane el bando, D7)
+}
+
+message ResultadoHeroe {
+  string heroe_id = 1;
+  bool participo = 2;
+  bool sobrevivio_al_cierre = 3;
+  reserved 4;                            // antes `xp_ganada`: desde el 2026-11-12 la experiencia la pone el motor (4 o 2 según gane el bando, D7)
+  optional bool derrotado = 5;
+  reserved 6;                            // antes `botin`: desde el 2026-11-12 el botín lo tira el motor con BOTIN_OBJETOS y las monedas salen de MONEDAS (D6 y D7)
+}
+
+message BattleResult {
+  uint32 schema_version = 1;
+  string battle_id = 2;
+  string result_id = 3;
+  uint32 ticket_revision = 4;
+  string intento_asignacion_id = 5;
+  int64 inicio_ms = 6;
+  int64 fin_ms = 7;
+  LadoId ganador = 8;
+  RazonVictoria razon = 9;
+  repeated ObjetivoResultado objetivos = 10;
+  repeated ResultadoEscuadra por_escuadra = 11;
+  repeated ResultadoHeroe por_heroe = 12;
+  string version_servidor = 13;
+  // Guerra logística: Unity responde qué carros se perdieron (modalidades disputa y aguante), con el id de `CarroEnBatalla.carro_id`
+  // (`"<caravana_id>:<posición>"`, p. ej. `"car-7:0"`). Los carros no cambian de manos en el mundo: solo la carga. El servidor calcula la
+  // carga perdida y destruye esos carros con su animal.
+  repeated string carros_perdidos = 14;
+}
+
+// Cómo conecta el propio combatiente con el servidor de batalla (antes `GET .../batallas/:id/asignacion`). Es el token de ESE héroe: solo viaja a
+// su dueño, jamás a un espectador ni al administrador. BronzeAge no lo verifica: lo verifica Unity.
+message AsignacionPropia {
+  InstanciaDeBatalla instancia = 1;
+  string token = 2;
+  int64 expira_en_ms = 3;
+}
+
+// Estado de una batalla tal como lo guarda el servidor y lo proyecta a los clientes.
+message Batalla {
+  string id = 1;
+  uint64 version = 2;
+  EstadoBatalla estado = 3;
+  string iniciada_por = 4;               // vacío = sin iniciador (los bandidos que acosan una caravana, el mundo)
+  Punto punto = 5;
+  BattleTicket ticket = 6;
+  repeated IncorporacionBatalla incorporaciones = 7;
+  repeated string bloqueo_ejercito_ids = 8;
+  repeated string bloqueo_caravana_ids = 9;
+  optional string bloqueo_asentamiento_id = 10;
+  optional string bloqueo_campamento_id = 11;
+  int64 expira_en_ms = 12;
+  optional int64 convocatoria_hasta_ms = 13;
+  optional int64 iniciada_en_ms = 14;
+  optional BattleResult resultado = 15;
+  optional int64 aplicada_en_ms = 16;
+  optional int64 cerrada_en_ms = 17;
+  optional LadoId lado_propio = 18;      // solo en la proyección
+  // Solo en la proyección y por espectador: el lado al que el espectador PODRÍA unirse ahora (la regla de relación y de sitio de
+  // `unirse_a_batalla`). Ausente si no puede (ya combate, no llega, no es de ninguno). Con él el cliente ofrece la opción.
+  optional LadoId lado_para_unirse = 19;
+  // Solo en la proyección y solo al propio combatiente, cuando la batalla ya tiene asignación y token para él.
+  optional AsignacionPropia asignacion_propia = 20;
+  // Solo en el ámbito ADMIN (4H T3e): la asignación que ganó (intento, revisión e instancia del servidor de batalla), con `tokens_participante`
+  // SIEMPRE vacío: los tokens son de cada combatiente y ni la administración los ve.
+  optional BattleServerAssignment asignacion = 21;
+  // Solo en la proyección y solo a quien salió de esta batalla (2026-11-16): cómo y cuándo salió. Quien sale la sigue viendo entera (el ticket, el resultado al
+  // aplicarse) hasta que se retira, para enseñarle el informe; ya sin `asignacion_propia`. `lado_propio` sigue diciendo su bando si salió con la partida
+  // en curso; si salió antes de empezar ya no está en el ticket y no lo lleva.
+  optional SalidaPropia salida_propia = 22;
+}
+
+message SalidaPropia {
+  MotivoSalida motivo = 1;
+  bool derrotado = 2;
+  int64 en_ms = 3;
+}

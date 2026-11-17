@@ -1,0 +1,92 @@
+import type { Point } from './tipos';
+import type { Anillo, Campamento } from './campamentos';
+import type { Veta } from './metales';
+import type { MasaBosque, ParcelaBosque } from './parcelas';
+
+/**
+ * Contrato interno entre las piezas del generador y el escritor del artefacto (`world.proto`).
+ * Todas las posiciones y distancias van en UNIDADES DEL GENERADOR (1 unidad estratégica = `FACTOR` = 12 unidades del generador);
+ * el escritor del artefacto convierte a milésimas de unidad estratégica al serializar: `round(u * 1000 / 12)`.
+ */
+
+export type TipoRecurso = 'piedra' | 'cobre' | 'hierro' | 'estano' | 'oro';
+
+export interface RecursoMundo {
+  id: string;
+  tipo: TipoRecurso;
+  posicion: Point;
+  anillo: Anillo;
+  /** Cantidad inicial del yacimiento, en unidades de juego (enteros). */
+  cantidadInicial: number;
+  vetaId?: string;
+}
+
+export interface BandidosMundo {
+  id: string;
+  posicion: Point;
+  nivel: number;
+  /** Veta a la que guarda, si es de distrito minero. */
+  vetaId?: string;
+  anillo: Anillo;
+}
+
+export interface AlijoMundo {
+  id: string;
+  posicion: Point;
+  /** Lo único que contiene: oro o un recurso de fundar. */
+  recurso: 'oro' | 'madera' | 'piedra' | 'trigo';
+  /** Cuánto, en unidades enteras. */
+  cantidad: number;
+  anillo: Anillo;
+}
+
+export interface NodoGrafo { id: number; x: number; y: number }
+export interface AristaGrafo { a: number; b: number; costeMilesimas: number; vado: boolean }
+
+/** Grafo de navegación: la ÚNICA autoridad de rutas. `espaciado` en unidades del generador (4 estratégicas = 48). */
+export interface GrafoMundo { nodos: NodoGrafo[]; aristas: AristaGrafo[]; espaciado: number }
+
+export type ClaseTerreno = 'agua' | 'costa' | 'llano' | 'colina' | 'montana' | 'cima';
+
+/** Funciones de muestreo del relieve para rasterizar las capas. Los valores continuos van en 0..1. */
+export interface MuestrasRelieve {
+  altura(p: Point): number;
+  terreno(p: Point): ClaseTerreno;
+  fertilidad(p: Point): number;
+  /** Fertilidad de la vid y de la oliva (`cultivos.ts`). */
+  fertilidadVid(p: Point): number;
+  fertilidadOliva(p: Point): number;
+  /** Fertilidad de la cebada y del sésamo (`cultivos.ts`): la del trigo en la tierra húmeda, alta o baja. */
+  fertilidadCebada(p: Point): number;
+  fertilidadSesamo(p: Point): number;
+  /** Id de la región del relieve (`regionEn`); está en `MundoGenerado.regiones`. */
+  region(p: Point): number;
+  humedad(p: Point): number;
+  densidadBosque(p: Point): number;
+  transitable(p: Point): boolean;
+  /** Multiplicador de coste de movimiento en `p` (1 = llano); 0 si `p` no es transitable. */
+  coste(p: Point): number;
+}
+
+export interface RioMundo { id: string; puntos: Point[]; terminaEnLago: boolean; navegable: boolean; vados: Point[] }
+
+export interface MundoGenerado {
+  seed: number;
+  ancho: number;
+  alto: number;
+  generador: string;
+  campamentos: Campamento[];
+  recursos: RecursoMundo[];
+  vetas: Veta[];
+  masas: MasaBosque[];
+  parcelas: ParcelaBosque[];
+  bandidos: BandidosMundo[];
+  alijos: AlijoMundo[];
+  rios: RioMundo[];
+  /** Las regiones del relieve (las áreas de `regional.ts`): id y nombre. */
+  regiones: { id: number; nombre: string }[];
+  grafo: GrafoMundo;
+  muestras: MuestrasRelieve;
+}
+
+export type { Anillo };

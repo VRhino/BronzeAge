@@ -1,0 +1,452 @@
+//! Ofrecerse en el tablón de un campamento, contratar y prorrogar (Mercenarios_Por_Contrato §1 a §3, §5 y §6.2). Tarea T1 del plan.
+//!
+//! # Quién firma
+//! Firma el titular de un cargo ([`Nucleo::puestos_de`]) en persona: en el campamento del mercenario, dentro o con su columna a la puerta. Paga con el oro del carro de su columna o,
+//! desde el 2026-11-03 (pedido del autor), también desde dentro del campamento donde reside: con su almacén personal o con el carro que tiene allí ([`Bolsa`]). Desde la tanda 69 puede
+//! pagar en cambio con sus monedas, a la tarifa en monedas (la de oro × `monedasPorOro`), en cualquier sitio.
+//! También se contrata desde la taberna de una plaza de su Facción (tanda 69 §8), sin ir al campamento, si éste cae en la región de la plaza: paga el almacén de la plaza, y firma entonces el
+//! Rey, el Embajador o el Gobernador, o con sus monedas. Los mismos firman también con el fondo de monedas de la plaza, el del impuesto de su forja (§5.1). Prorrogar sigue siendo en persona.
+//! No elige con qué cargo: las reglas puras toman el de más rango que pueda firmar ese trabajo sobre ese objetivo. El pago en oro entra en el almacén personal del mercenario hasta llenarlo y
+//! lo que no cabe desaparece: es un sumidero, y nunca bloquea una firma (decisión 9 del plan); las monedas pagadas pasan a las del mercenario.
+
+use super::*;
+use crate::codec_contratos::trabajo_a_u8;
+use crate::comando::PagarCon;
+use crate::estado_militar::Relacion;
+use ::mercenarios::contrato::{ambito_de, duracion, objetivo_valido, orden_inicial, puesto_para_firmar, renombre_del_plazo, tarifa, tarifa_en_monedas, ErrorFirma};
+use ::mercenarios::{Contrato, Ficha, Oferta, Puesto, Situacion};
+use asentamiento::datos::UNO;
+use asentamiento::{Cargo, Recurso};
+use base::UNIDAD;
+use comercio::{de, total};
+use militar::heroe::Residencia;
+use militar::mercenarios::precio;
+use militar::presencia::Ubicacion;
+use politica::Marca;
+
+/// El rechazo de la versión `v` que corresponde a un fallo de las reglas puras de la firma.
+fn rechazo_de_firma(e: ErrorFirma, v: u64) -> Respuesta {
+    use rechazos::*;
+    let (codigo, mensaje) = match e {
+        ErrorFirma::ObjetivoInvalido => (MERCENARIO_OBJETIVO_INVALIDO, "el objetivo no es de una clase que admita ese trabajo o no vale para él"),
+        ErrorFirma::PlazoInvalido => (MERCENARIO_PLAZO_INVALIDO, "el temporal lleva uno de los plazos de la tabla y el permanente, ninguno"),
+        ErrorFirma::SinAlcance => (MERCENARIO_SIN_ALCANCE, "ninguno de tus cargos puede firmar ese trabajo sobre ese objetivo"),
+    };
+    Respuesta::rechazo(codigo, mensaje, v)
+}
+
+impl Nucleo {
+    // ───────────────────────────── Consultas ─────────────────────────────
+
+    /// Lo que las reglas puras necesitan saber de `o` para la Facción `faccion`, que firma u ordena (§3, §6.5). `None` si el objetivo no existe. Los bandidos solo dicen en
+    /// cuáles de las plazas de esa Facción caen en su zona: son las únicas que importan a quien manda.
+    pub(super) fn situacion(&self, faccion: u32, o: &Objetivo) -> Option<Situacion> {
+        let en_guerra = |duena: u32| self.estado.relacion(faccion, duena) == Some(Relacion::Guerra);
+        let de = |duena: u32, plaza: u64| Situacion { duena: Some(duena), plaza: Some(plaza), en_guerra: en_guerra(duena), ..Situacion::default() };
+        let de_la_plaza = |plaza: u64| self.estado.asentamientos.get(&plaza).map(|a| de(a.faccion, plaza));
+        match *o {
+            Objetivo::Plaza(id) => de_la_plaza(id),
+            Objetivo::Pueblo(id) => de_la_plaza(self.pueblo(id)?.0),
+            // Unas ruinas de ciudadela sin dueño existen, pero no son de nadie.
+            Objetivo::Avanzada(id) => Some(self.avanzada(id)?.0.and_then(de_la_plaza).unwrap_or_default()),
+            Objetivo::Caravana(id) => de_la_plaza(u64::from(self.caravana(id)?.origen)),
+            Objetivo::Bandidos(id) => {
+                let donde = self.campamento_de_bandidos(id)?.posicion;
+                Some(Situacion { en_zona_de: self.plazas_de(faccion).filter(|a| self.en_zona(a.id, donde)).map(|a| a.id).collect(), ..Situacion::default() })
+            }
+            Objetivo::Ejercito(id) => {
+                let e = self.ejercito(id).filter(|e| Self::es_ejercito(e))?;
+                Some(Situacion { duena: e.columna.faccion, en_guerra: e.columna.faccion.is_some_and(en_guerra), cabeza: Some(e.columna.lider), ..Situacion::default() })
+            }
+            Objetivo::Convocatoria(id) => {
+                let c = self.convocatoria(id)?;
+                Some(Situacion { duena: Some(c.faccion), en_guerra: en_guerra(c.faccion), cabeza: Some(c.lider), ..Situacion::default() })
+            }
+            Objetivo::Faccion(id) => self.faccion(id).map(|_| Situacion { duena: Some(id), ..Situacion::default() }),
+            Objetivo::Punto(_) => Some(Situacion::default()),
+        }
+    }
+
+    /// Los cargos con los que `heroe` firma u ordena (§3, §6.5), de más rango a menos: el trono y la embajada de su Facción y, si reside en una plaza suya, los cargos locales que
+    /// ocupa en ella. Un marcado no tiene ninguno.
+    pub(super) fn puestos_de(&self, heroe: u64) -> Vec<Puesto> {
+        let Some(h) = self.heroe(heroe) else { return Vec::new() };
+        let Some(f) = h.faccion.and_then(|f| self.faccion(f)) else { return Vec::new() };
+        let mut puestos = Vec::new();
+        if f.rey == Some(heroe) {
+            puestos.push(Puesto::Rey);
+        }
+        if f.embajador == Some(heroe) {
+            puestos.push(Puesto::Embajador);
+        }
+        if let Some(Residencia::Asentamiento(a)) = h.heroe.residencia {
+            let id = u64::from(a);
+            if let Some(plaza) = self.estado.asentamientos.get(&id).filter(|p| p.faccion == f.id) {
+                let locales = [(Cargo::General, Puesto::General(id)), (Cargo::Gobernador, Puesto::Gobernador(id)), (Cargo::MaestroCaravanas, Puesto::MaestroCaravanas(id))];
+                puestos.extend(locales.into_iter().filter(|&(cargo, _)| plaza.cargos.es_titular(cargo, heroe)).map(|(_, puesto)| puesto));
+            }
+        }
+        puestos
+    }
+
+    /// Lo que cobra hoy el tablón por contratar a `mercenario`: `plazo` son los días de un temporal, o `None` el permanente. Su valor es 20 de oro por nivel más lo que costaría
+    /// reclutar hoy cada escuadra suya, no prestada, con los soldados que tiene, sin recargo de reputación ni descuento (duda 1 del plan); lo demás lo hace
+    /// [`::mercenarios::contrato::tarifa`]. El plazo ha de ser uno de la tabla.
+    pub(crate) fn tarifa_de(&self, mercenario: u64, plazo: Option<u8>) -> Mil {
+        let e = &self.estado.reglas.economia;
+        let h = &self.heroe(mercenario).expect("el mercenario existe").heroe;
+        let valor_tropa = h.escuadras.iter().filter(|s| s.prestada.is_none()).map(|s| precio(&e.militar, e.militar.tropas.tropa(s.tropa), s.cantidad, UNO, false)).sum();
+        // Sin ficha todavía, el rango es el primero.
+        let rango = self.estado.contratos.fichas.get(&mercenario).map_or(1, |f| f.rango);
+        tarifa(&e.contratos, plazo, u8::try_from(h.nivel).unwrap_or(u8::MAX), valor_tropa, rango).expect("el plazo es uno de la tabla")
+    }
+
+    // ───────────────────────────── Ayudas ─────────────────────────────
+
+    /// Quita la oferta de `heroe` del tablón y se lo cuenta, si la tenía. La retira él, o se retira sola al mudarse de residencia (§3).
+    pub(in crate::nucleo) fn quitar_oferta(&mut self, t: Instante, heroe: u64) -> bool {
+        let Some(oferta) = self.estado.contratos.ofertas.remove(&heroe) else { return false };
+        self.tr.tocar(Clase::Heroe, heroe);
+        self.tr.tocar(Clase::Campamento, u64::from(oferta.campamento));
+        self.emitir_nombrando(t, "mercenarios.oferta_retirada", vec![], vec![heroe], vec![("heroe", heroe as i64), ("campamento", i64::from(oferta.campamento))]);
+        true
+    }
+
+    /// De dónde paga `heroe` en el campamento `campamento` (el del tablón al contratar, el base al prorrogar), donde ya se sabe que está: `pagar_con` o, sin él, el carro de la columna
+    /// que lleva si va en una y, si no (dentro del campamento donde reside), su almacén personal. El almacén personal solo vale en el campamento donde reside
+    /// (`almacen_personal.fuera_de_tu_residencia`); el carro, el que lleva dentro o el de su columna a la puerta (`heroe.sin_columna` si no trae ninguno).
+    fn bolsa_en_campamento(&self, heroe: u64, campamento: u32, pagar_con: Option<PagarCon>) -> Result<Bolsa, Respuesta> {
+        let residente = self.campamento_de_residencia(heroe) == Some(campamento);
+        let por_defecto = if residente && self.columna_que_lleva(heroe).is_none() { PagarCon::AlmacenPersonal } else { PagarCon::Carro };
+        match pagar_con.unwrap_or(por_defecto) {
+            PagarCon::AlmacenPersonal if !residente => Err(Respuesta::rechazo(
+                rechazos::ALMACEN_PERSONAL_FUERA_DE_TU_RESIDENCIA,
+                "el almacén personal está en el campamento donde se reside: aquí se paga con el carro",
+                self.estado.version,
+            )),
+            PagarCon::AlmacenPersonal => Ok(Bolsa::AlmacenPersonal),
+            PagarCon::Monedas => Ok(Bolsa::Monedas),
+            PagarCon::AlmacenPlaza | PagarCon::FondoPlaza => {
+                Err(Respuesta::rechazo(rechazos::ORDEN_FORMA_INVALIDA, "el almacén y el fondo de la plaza solo pagan desde dentro de su taberna, no en el campamento", self.estado.version))
+            }
+            PagarCon::Carro => Ok(match self.carro_en_campamento(heroe, campamento)?.0 {
+                Some(columna) => Bolsa::Columna(columna),
+                None => Bolsa::CarroPropio,
+            }),
+        }
+    }
+
+    /// De dónde paga `heroe` por la oferta del campamento `campamento` (la del tablón al contratar): si está en el campamento, como siempre ([`Nucleo::bolsa_en_campamento`]); si no, desde dentro de una
+    /// plaza de su Facción con Taberna activa (tanda 69 §8), que ha de tener el campamento en su región (`mercenario.fuera_de_la_region`), con el almacén de la plaza (la forma por defecto; la
+    /// firman el Rey, el Embajador o el Gobernador, como la intel de la taberna), con el fondo de la plaza (los mismos, §5.1) o con sus monedas. Con otra forma de pago, o en
+    /// otro sitio, no se llega a la puerta del campamento.
+    fn bolsa_de_firma(&self, t: Instante, heroe: u64, campamento: u32, pagar_con: Option<PagarCon>) -> Result<Bolsa, Respuesta> {
+        if self.esta_en_el_campamento(heroe, campamento, t) {
+            return self.bolsa_en_campamento(heroe, campamento, pagar_con);
+        }
+        let v = self.estado.version;
+        let fuera_de_la_puerta = || Respuesta::rechazo(rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA, "hay que estar en el campamento del mercenario, dentro o con la columna a su puerta, o dentro de una plaza tuya con Taberna", v);
+        let h = self.heroe(heroe).expect("quien firma existe");
+        let Ubicacion::Asentamiento(plaza) = h.heroe.presencia.ubicacion else { return Err(fuera_de_la_puerta()) };
+        let plaza = u64::from(plaza);
+        if !self.estado.asentamientos.get(&plaza).is_some_and(|a| Some(a.faccion) == h.faccion) || !self.tiene_taberna_activa(plaza) {
+            return Err(fuera_de_la_puerta());
+        }
+        if !self.campamentos_de_la_region(plaza).contains(&campamento) {
+            return Err(Respuesta::rechazo(rechazos::MERCENARIO_FUERA_DE_LA_REGION, "ese campamento no cae en la región de la plaza", v));
+        }
+        let firma_por_la_plaza = || (politica::autorizacion::Actor { yo: heroe, politica: &self.estado.politica, vista: self }).compra_intel_en(plaza as u32);
+        match pagar_con.unwrap_or(PagarCon::AlmacenPlaza) {
+            PagarCon::Monedas => Ok(Bolsa::Monedas),
+            PagarCon::AlmacenPlaza if firma_por_la_plaza() => Ok(Bolsa::AlmacenPlaza(plaza)),
+            PagarCon::FondoPlaza if firma_por_la_plaza() => Ok(Bolsa::FondoPlaza(plaza)),
+            PagarCon::AlmacenPlaza | PagarCon::FondoPlaza => Err(Respuesta::rechazo(rechazos::NO_AUTORIZADO, "con el almacén o el fondo de la plaza firma el Rey, el Embajador o el Gobernador, dentro de ella", v)),
+            PagarCon::AlmacenPersonal | PagarCon::Carro => Err(fuera_de_la_puerta()),
+        }
+    }
+
+    /// Lo que hay que pagar por `mercenario` a `plazo` (la tarifa de hoy) con la `bolsa` de `heroe`, quien firma, como `(oro, monedas)` (uno de los dos es 0): la tarifa en oro, o la
+    /// tarifa en monedas si paga con las suyas o con el fondo de la plaza. Si no tiene bastante, el rechazo `mercenarios.sin_oro` o, con monedas, `heroe.sin_monedas` (`mercenarios.sin_fondo`
+    /// con el fondo), de la versión `v`.
+    fn a_cobrar(&self, heroe: u64, bolsa: Bolsa, mercenario: u64, plazo: Option<u8>, v: u64) -> Result<(Mil, i64), Respuesta> {
+        let oro = self.tarifa_de(mercenario, plazo);
+        let monedas = tarifa_en_monedas(&self.estado.reglas.economia.contratos, oro);
+        let h = self.heroe(heroe).expect("quien firma existe");
+        let (hay, donde) = match bolsa {
+            Bolsa::Monedas => {
+                if h.heroe.monedas < monedas {
+                    return Err(Respuesta::rechazo(rechazos::HEROE_SIN_MONEDAS, format!("la tarifa es de {monedas} monedas y el héroe tiene {}", h.heroe.monedas), v));
+                }
+                return Ok((0, monedas));
+            }
+            Bolsa::FondoPlaza(plaza) => {
+                let fondo = self.estado.asentamientos[&plaza].forja.fondo;
+                if fondo < monedas {
+                    return Err(Respuesta::rechazo(rechazos::MERCENARIOS_SIN_FONDO, format!("la tarifa es de {monedas} monedas y el fondo de la plaza tiene {fondo}"), v));
+                }
+                return Ok((0, monedas));
+            }
+            Bolsa::Columna(c) => (de(&self.estado.ejercitos[&c].columna.carga, Recurso::Oro), "el carro lleva"),
+            Bolsa::CarroPropio => (de(&h.carro, Recurso::Oro), "el carro lleva"),
+            Bolsa::AlmacenPersonal => (de(&h.almacen_personal, Recurso::Oro), "el almacén personal tiene"),
+            Bolsa::AlmacenPlaza(plaza) => (self.estado.asentamientos[&plaza].economia.almacen.cantidad(Recurso::Oro), "el almacén de la plaza tiene"),
+        };
+        if hay < oro {
+            return Err(Respuesta::rechazo(rechazos::MERCENARIOS_SIN_ORO, format!("la tarifa es de {} de oro y {donde} {}", oro / UNIDAD, hay / UNIDAD), v));
+        }
+        Ok((oro, 0))
+    }
+
+    /// Cobra de la `bolsa` de `heroe`, quien firma, el `(oro, monedas)` de [`Nucleo::a_cobrar`]. El oro se ingresa en el almacén personal de `mercenario` hasta donde quepa y el resto
+    /// desaparece (decisión 9 del plan); las monedas, del héroe o del fondo de la plaza, pasan a las del mercenario.
+    fn pagar(&mut self, heroe: u64, bolsa: Bolsa, mercenario: u64, (oro, monedas): (Mil, i64)) {
+        let de_donde = match bolsa {
+            Bolsa::Monedas => {
+                self.heroe_mut(heroe).heroe.monedas -= monedas;
+                return self.ingresar_monedas_al_mercenario(mercenario, monedas);
+            }
+            Bolsa::FondoPlaza(plaza) => {
+                self.estado.asentamientos.get_mut(&plaza).expect("la plaza del fondo existe").forja.fondo -= monedas;
+                self.tr.tocar(Clase::Asentamiento, plaza);
+                return self.ingresar_monedas_al_mercenario(mercenario, monedas);
+            }
+            Bolsa::AlmacenPlaza(plaza) => {
+                self.estado.asentamientos.get_mut(&plaza).expect("la plaza del almacén existe").economia.almacen.quitar(Recurso::Oro, oro);
+                self.tr.tocar(Clase::Asentamiento, plaza);
+                return self.ingresar_al_mercenario(mercenario, oro);
+            }
+            Bolsa::Columna(c) => {
+                self.tr.tocar(Clase::Ejercito, c);
+                &mut self.estado.ejercitos.get_mut(&c).expect("la columna del carro existe").columna.carga
+            }
+            Bolsa::CarroPropio => &mut self.heroe_mut(heroe).carro,
+            Bolsa::AlmacenPersonal => &mut self.heroe_mut(heroe).almacen_personal,
+        };
+        *de_donde.entry(Recurso::Oro).or_insert(0) -= oro;
+        de_donde.retain(|_, n| *n > 0);
+        self.ingresar_al_mercenario(mercenario, oro);
+    }
+
+    /// El oro pagado entra en el almacén personal de `mercenario` hasta donde quepa; el resto desaparece (decisión 9 del plan).
+    fn ingresar_al_mercenario(&mut self, mercenario: u64, oro: Mil) {
+        let capacidad = self.estado.reglas.economia.comercio.mercenarios.capacidad_almacen_personal;
+        let almacen = &mut self.heroe_mut(mercenario).almacen_personal;
+        let cabe = base::entero((capacidad - total(almacen)).clamp(0, oro));
+        *almacen.entry(Recurso::Oro).or_insert(0) += cabe;
+    }
+
+    /// Las monedas pagadas pasan a las del mercenario.
+    fn ingresar_monedas_al_mercenario(&mut self, mercenario: u64, monedas: i64) {
+        let m = &mut self.heroe_mut(mercenario).heroe.monedas;
+        *m = m.saturating_add(monedas);
+    }
+
+    // ───────────────────────────── Órdenes ─────────────────────────────
+
+    /// `ofrecerse_como_mercenario` (§3): un bot sin Facción, residente de un campamento y dentro de él, se pone en su tablón. La primera vez nace su ficha y recibe su leva propia (§8.3): devuelve sus escuadras nuevas.
+    pub(super) fn ofrecerse_como_mercenario(&mut self, t: Instante, p: &Peticion, heroe: u64) -> Result<Vec<u64>, Respuesta> {
+        use rechazos::*;
+        self.autorizar_heroe(p, heroe, false)?;
+        let v = self.estado.version;
+        let rechazo = |c: &'static str, m: &str| Respuesta::rechazo(c, m, v);
+        let h = self.heroe(heroe).expect("autorizado");
+        if !self.es_bot(heroe) {
+            return Err(rechazo(MERCENARIO_SOLO_BOTS, "solo un bot se ofrece como mercenario"));
+        }
+        if h.faccion.is_some() {
+            return Err(rechazo(FACCION_YA_PERTENECE, "un mercenario ofrecido no tiene Facción"));
+        }
+        let campamento = self.campamento_de_residencia(heroe).ok_or_else(|| rechazo(MERCENARIOS_NO_RESIDES, "solo se ofrece quien reside en un campamento"))?;
+        if h.heroe.presencia.ubicacion != Ubicacion::Mercenarios(campamento) {
+            return Err(rechazo(CAMPAMENTO_FUERA_DE_LA_PUERTA, "hay que estar dentro del campamento donde se reside para ofrecerse en su tablón"));
+        }
+        if self.estado.contratos.ofertas.contains_key(&heroe) {
+            return Err(Respuesta::sin_cambios(v));
+        }
+        self.estado.contratos.ofertas.insert(heroe, Oferta { campamento, desde: t });
+        self.estado.contratos.fichas.entry(heroe).or_insert_with(Ficha::nueva);
+        self.tr.tocar(Clase::Heroe, heroe);
+        self.tr.tocar(Clase::Campamento, u64::from(campamento));
+        self.emitir_nombrando(t, "mercenarios.ofrecido", vec![], vec![heroe], vec![("heroe", heroe as i64), ("campamento", i64::from(campamento))]);
+        Ok(self.dar_leva_propia(t, heroe))
+    }
+
+    /// `retirar_oferta`: el héroe se quita del tablón.
+    pub(super) fn retirar_oferta(&mut self, t: Instante, p: &Peticion, heroe: u64) -> Result<Vec<u64>, Respuesta> {
+        self.autorizar_heroe(p, heroe, false)?;
+        if self.quitar_oferta(t, heroe) {
+            Ok(vec![])
+        } else {
+            Err(Respuesta::sin_cambios(self.estado.version))
+        }
+    }
+
+    /// `contratar_mercenario` (§3, §5): un cargo de una Facción humana contrata, en persona y pagando con el oro de su carro o de su almacén personal, o con sus monedas ([`Nucleo::bolsa_en_campamento`]), a
+    /// un bot del tablón de un campamento. El mercenario
+    /// entra en la Facción con su marca, con la orden inicial de su trabajo; el permanente pasa a residir en la plaza `residencia`, sin cooldown.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn contratar_mercenario(
+        &mut self,
+        t: Instante,
+        p: &Peticion,
+        heroe: u64,
+        mercenario: u64,
+        trabajo: Trabajo,
+        objetivo: Objetivo,
+        plazo: Option<u8>,
+        residencia: Option<u64>,
+        pagar_con: Option<PagarCon>,
+    ) -> Result<Vec<u64>, Respuesta> {
+        use rechazos::*;
+        self.autorizar_heroe(p, heroe, false)?;
+        let v = self.estado.version;
+        let rechazo = |c: &'static str, m: &str| Respuesta::rechazo(c, m, v);
+        let d = self.estado.reglas.economia.contratos.clone();
+        // Quién firma y a quién: una Facción humana, un mercenario del tablón sin Facción, en persona y sin espera tras un despido.
+        let faccion = self.heroe(heroe).and_then(|h| h.faccion).ok_or_else(|| rechazo(MERCENARIO_SIN_ALCANCE, "para contratar hay que pertenecer a una Facción"))?;
+        if self.es_faccion_de_bots(faccion) {
+            return Err(rechazo(MERCENARIO_FACCION_DE_BOTS, "las Facciones de bots no contratan"));
+        }
+        let oferta = *self.estado.contratos.ofertas.get(&mercenario).ok_or_else(|| rechazo(MERCENARIO_NO_OFRECIDO, "ese héroe no está en el tablón de ningún campamento"))?;
+        if self.heroe(mercenario).is_some_and(|h| h.faccion.is_some()) {
+            return Err(rechazo(FACCION_YA_PERTENECE, "el mercenario ya es ciudadano de una Facción"));
+        }
+        let bolsa = self.bolsa_de_firma(t, heroe, oferta.campamento, pagar_con)?;
+        if self.estado.contratos.esperas.get(&(mercenario, faccion)).is_some_and(|&hasta| t < hasta) {
+            return Err(rechazo(MERCENARIO_RECONTRATO_EN_ESPERA, "se le despidió hace poco: aún no se le puede recontratar en esta Facción"));
+        }
+        // El plazo y la residencia casan con el trabajo.
+        let renombre = renombre_del_plazo(&d, trabajo, plazo).map_err(|e| rechazo_de_firma(e, v))?;
+        let residencia = match (trabajo, residencia) {
+            (Trabajo::Permanente, Some(plaza)) if self.estado.asentamientos.get(&plaza).is_some_and(|a| a.faccion == faccion) => Some(plaza),
+            (Trabajo::Permanente, _) => return Err(rechazo(MERCENARIO_OBJETIVO_INVALIDO, "el permanente reside en una plaza de la Facción")),
+            (_, Some(_)) => return Err(rechazo(MERCENARIO_OBJETIVO_INVALIDO, "solo el permanente reside en una plaza")),
+            (_, None) => None,
+        };
+        // El objetivo existe, vale para ese trabajo, y alguno de sus cargos alcanza a firmarlo.
+        let s = self.situacion(faccion, &objetivo).ok_or_else(|| rechazo(MERCENARIO_OBJETIVO_INVALIDO, "el objetivo no existe"))?;
+        objetivo_valido(&d, trabajo, &objetivo, faccion, &s).map_err(|e| rechazo_de_firma(e, v))?;
+        let puesto = puesto_para_firmar(trabajo, &objetivo, &s, &self.puestos_de(heroe), heroe).map_err(|e| rechazo_de_firma(e, v))?;
+        // La tarifa, con el oro de donde paga.
+        let (oro, monedas) = self.a_cobrar(heroe, bolsa, mercenario, plazo, v)?;
+
+        self.pagar(heroe, bolsa, mercenario, (oro, monedas));
+        self.estado.contratos.ofertas.remove(&mercenario);
+        self.tr.tocar(Clase::Campamento, u64::from(oferta.campamento));
+        let marca = if trabajo == Trabajo::Permanente { Marca::Permanente } else { Marca::Temporal };
+        self.estado.politica.facciones.otorgar_marcado(faccion, mercenario, marca).expect("el mercenario no tiene Facción y la del firmante existe");
+        self.tras_cambiar_de_faccion(t, mercenario, None);
+        if let Some(plaza) = residencia {
+            self.mudar_de_residencia(mercenario, Some(Residencia::Asentamiento(plaza as u32)));
+        }
+        let mut contrato = Contrato {
+            mercenario,
+            faccion,
+            ambito: ambito_de(puesto),
+            trabajo,
+            objetivo,
+            plazo,
+            firmado_por: heroe,
+            puesto_firma: puesto,
+            firmado_en: t,
+            vence: plazo.map(|dias| t + duracion(dias)),
+            campamento_base: oferta.campamento,
+            orden: None,
+            fin_aplazado: None,
+            renombre,
+        };
+        contrato.orden = orden_inicial(&d, &contrato, residencia, s.duena, t);
+        if let Some(vence) = contrato.vence {
+            self.citar_contrato(mercenario, SucesoContrato::Vence, vence);
+        }
+        if let Some(vence) = contrato.orden.and_then(|o| o.vence) {
+            self.citar_contrato(mercenario, SucesoContrato::VenceOrden, vence);
+        }
+        contrato.orden.iter().map(|o| o.objetivo).chain([objetivo]).for_each(|o| self.tocar_objetivo(&o));
+        self.estado.contratos.contratos.insert(mercenario, contrato);
+        self.estado.contratos.fichas.get_mut(&mercenario).expect("la ficha nace con el primer ofrecimiento").historial.firmados += 1;
+        if trabajo == Trabajo::Permanente {
+            self.citar_leal(mercenario, t);
+        }
+        let datos = vec![
+            ("faccion", i64::from(faccion)),
+            ("mercenario", mercenario as i64),
+            ("firmante", heroe as i64),
+            ("trabajo", i64::from(trabajo_a_u8(trabajo))),
+            ("plazo", plazo.map_or(0, i64::from)),
+            ("oro", oro),
+            ("monedas", monedas),
+            ("campamento", i64::from(oferta.campamento)),
+        ];
+        self.tr.emitir(&self.estado, EventoNucleo { heroes: vec![mercenario], facciones: vec![faccion], ..EventoNucleo::nuevo("mercenarios.contratado", t, datos) });
+        Ok(vec![])
+    }
+
+    /// `prorrogar_contrato` (§6.2): quien podría firmar hoy el contrato temporal lo alarga `plazo` días, en persona y pagando la tarifa de ese plazo con el rango de hoy: en el campamento
+    /// base, como al contratar; con su columna junto a la del mercenario, con el carro de su columna.
+    pub(super) fn prorrogar_contrato(&mut self, t: Instante, p: &Peticion, heroe: u64, mercenario: u64, plazo: u8, pagar_con: Option<PagarCon>) -> Result<Vec<u64>, Respuesta> {
+        use rechazos::*;
+        self.autorizar_heroe(p, heroe, false)?;
+        let v = self.estado.version;
+        let rechazo = |c: &'static str, m: &str| Respuesta::rechazo(c, m, v);
+        let d = self.estado.reglas.economia.contratos.clone();
+        let faccion = self.heroe(heroe).and_then(|h| h.faccion);
+        let c = self.estado.contratos.contratos.get(&mercenario).filter(|c| Some(c.faccion) == faccion && c.fin_aplazado.is_none());
+        let c = c.cloned().ok_or_else(|| rechazo(MERCENARIO_SIN_CONTRATO, "ese mercenario no tiene un contrato vigente con tu Facción"))?;
+        if c.trabajo == Trabajo::Permanente {
+            return Err(rechazo(MERCENARIO_TIPO_DE_CONTRATO, "solo se prorroga un contrato temporal"));
+        }
+        let s = self.situacion(c.faccion, &c.objetivo).ok_or_else(|| rechazo(MERCENARIO_OBJETIVO_INVALIDO, "el objetivo del contrato ya no existe"))?;
+        puesto_para_firmar(c.trabajo, &c.objetivo, &s, &self.puestos_de(heroe), heroe).map_err(|e| rechazo_de_firma(e, v))?;
+        // En persona: en su campamento base o con la columna junto a la del mercenario.
+        let junto_a_el = match (self.columna_del_heroe(heroe), self.columna_del_heroe(mercenario)) {
+            (Some(a), Some(b)) => a.posicion_en(t).dist(b.posicion_en(t)) <= self.radio_puerta(),
+            _ => false,
+        };
+        let en_el_campamento = self.esta_en_el_campamento(heroe, c.campamento_base, t);
+        if !junto_a_el && !en_el_campamento {
+            return Err(rechazo(CAMPAMENTO_FUERA_DE_LA_PUERTA, "prorrogar es en persona: en el campamento base del mercenario o con tu columna junto a la suya"));
+        }
+        let renombre = renombre_del_plazo(&d, c.trabajo, Some(plazo)).map_err(|e| rechazo_de_firma(e, v))?;
+        let bolsa = if matches!(pagar_con, Some(PagarCon::AlmacenPlaza | PagarCon::FondoPlaza)) {
+            return Err(rechazo(ORDEN_FORMA_INVALIDA, "prorrogar es en persona: ni el almacén ni el fondo de la plaza pagan una prórroga"));
+        } else if pagar_con == Some(PagarCon::Monedas) {
+            Bolsa::Monedas
+        } else if en_el_campamento {
+            self.bolsa_en_campamento(heroe, c.campamento_base, pagar_con)?
+        } else if pagar_con == Some(PagarCon::AlmacenPersonal) {
+            return Err(rechazo(ALMACEN_PERSONAL_FUERA_DE_TU_RESIDENCIA, "el almacén personal está en el campamento donde se reside: junto al mercenario se paga con el carro"));
+        } else {
+            Bolsa::Columna(self.columna_que_lleva(heroe).ok_or_else(|| rechazo(HEROE_SIN_COLUMNA, "se paga con el oro del carro de tu columna: no vas en ninguna"))?)
+        };
+        let (oro, monedas) = self.a_cobrar(heroe, bolsa, mercenario, Some(plazo), v)?;
+
+        self.pagar(heroe, bolsa, mercenario, (oro, monedas));
+        let vence = c.vence.expect("un temporal tiene vencimiento") + duracion(plazo);
+        let guardado = self.estado.contratos.contratos.get_mut(&mercenario).expect("lo acabamos de leer");
+        guardado.vence = Some(vence);
+        guardado.renombre += renombre;
+        self.citar_contrato(mercenario, SucesoContrato::Vence, vence);
+        self.tr.tocar(Clase::Faccion, u64::from(c.faccion));
+        let datos = vec![("faccion", i64::from(c.faccion)), ("mercenario", mercenario as i64), ("firmante", heroe as i64), ("plazo", i64::from(plazo)), ("oro", oro), ("monedas", monedas)];
+        self.tr.emitir(&self.estado, EventoNucleo { heroes: vec![mercenario], facciones: vec![c.faccion], ..EventoNucleo::nuevo("mercenarios.prorrogado", t, datos) });
+        Ok(vec![])
+    }
+}
+
+/// De dónde sale el pago de una firma o de una prórroga.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Bolsa {
+    /// El carro de una columna: la que lleva a la puerta o dentro del campamento, o la que guarda en el campamento donde reside.
+    Columna(u64),
+    /// El carro del héroe dentro del campamento donde reside, sin columna.
+    CarroPropio,
+    /// Su almacén personal, en el campamento donde reside.
+    AlmacenPersonal,
+    /// Las monedas del héroe, estén donde estén.
+    Monedas,
+    /// El almacén de la plaza donde el héroe firma desde su taberna.
+    AlmacenPlaza(u64),
+    /// El fondo de monedas de la plaza donde el héroe firma desde su taberna (Mercenarios_Por_Contrato §5.1).
+    FondoPlaza(u64),
+}

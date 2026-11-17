@@ -1,0 +1,511 @@
+//! Producción de un asentamiento (Economia_Construccion §5): mano de obra, granjas, Leñeras, extractores y recetas de los
+//! talleres. Un paso es **un minuto**: cada edificio activo produce en el orden de la lista (importa si el almacén se llena a mitad
+//! del recorrido), siempre con tope de capacidad. Con el almacén lleno **se pausa**: un extractor no gasta el yacimiento por lo que
+//! no cabe y un taller no consume insumos por lo que no puede guardar.
+
+use crate::almacen::Almacen;
+use crate::catalogo::{Catalogo, Tipo};
+use crate::datos::{por, razon, UNO};
+use crate::edificio::{Edificio, Edificios, Fuente};
+use crate::recetas_unicas;
+use crate::recurso::{Costo, Recurso, N};
+use base::Mil;
+
+/// El mundo que ve la producción: los yacimientos finitos y las parcelas de bosque.
+pub trait Fuentes {
+    /// Densidad de la parcela de bosque de una Leñera, en ppm (1,0 = `UNO`). 0 si no existe.
+    fn densidad_parcela(&self, parcela: u32) -> i64;
+    /// Saca hasta `pedido` del nodo y devuelve lo que salió (`min(pedido, stock)`); solo se gasta lo que sale.
+    fn extraer(&mut self, nodo: u32, pedido: Mil) -> Mil;
+    /// Lo que fabricaron las recetas de los talleres este minuto, por recurso (milésimas): el mundo lo cuenta para los logros `fabricado.*` (Tecnologia_Aedas §2.1, sistema 6). Por
+    /// defecto no se cuenta.
+    fn fabricado(&mut self, _recurso: Recurso, _cantidad: Mil) {}
+}
+
+/// Lo que condiciona la producción y viene de fuera (zona, políticas, tecnologías).
+pub struct Contexto<'a> {
+    /// `fertilidadZona`: la mejor fertilidad del terreno de la zona, en ppm. Todas las Granjas comparten este valor.
+    pub fertilidad: i64,
+    /// `factorProduccionTrigo` de las políticas (Edicto de Cosecha ×1,5), ppm.
+    pub factor_trigo: i64,
+    /// `factorProduccionTalleres` (Barrios Gremiales ×1,1), ppm.
+    pub factor_talleres: i64,
+    /// Producto de los `bonusProduccion.factor` de las tecnologías adoptadas para ese recurso (ppm; `canteria` ×1,5 la piedra).
+    pub factor_tecnologia: &'a dyn Fn(Recurso) -> i64,
+    /// ¿La Facción tiene adoptada esa tecnología?
+    pub tiene_tecnologia: &'a dyn Fn(&str) -> bool,
+    /// Recetas paradas por el Gobernador o el Maestro de Obras (por el recurso que producen).
+    pub recetas_pausadas: &'a [Recurso],
+    /// Edificios de una sola receta cuya receta está parada porque la plaza bajó de nivel y ya no cabe (`recetas_unicas::recetas_paradas`, 2026-11-09).
+    pub recetas_paradas: &'a [u32],
+}
+
+/// Cuánto de lo que piden los edificios cubren los habitantes, en ppm.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Mano {
+    pub pesants: i64,
+    pub artesanos: i64,
+    /// Trabajadores que piden los edificios de pesants y los talleres (milésimas), para el pool de reclutamiento.
+    pub requeridos_pesants: Mil,
+    pub requeridos_artesanos: Mil,
+}
+
+/// `ratioManoObra`: `min(1, pesants / trabajadoresRequeridosTotal)` (1 si no se pide nadie), y lo mismo con los artesanos.
+/// No hay asignación por edificio: es una demanda agregada. Un extractor con el nodo agotado sigue contando. `pueblos` son los pesants que
+/// piden los pueblos extractores activos de la plaza (no tienen población propia: trabajan los de la madre).
+pub fn mano_de_obra(cat: &Catalogo, edificios: &[Edificio], pesants_enteros: i64, artesanos_enteros: i64, pueblos: Mil) -> Mano {
+    let activos = edificios.iter().filter(|e| e.activo());
+    let del_taller = |e: &Edificio| cat.tipo(e.tipo).nivel(e.nivel_interno).map_or(0, |n| n.trabajadores);
+    let requeridos_pesants: Mil = activos.clone().filter(|e| e.tipo.usa_pesants()).map(|e| cat.tipo(e.tipo).trabajadores).sum::<Mil>()
+        + activos.clone().filter(|e| e.tipo.taller_de_pesants()).map(del_taller).sum::<Mil>()
+        + pueblos;
+    let requeridos_artesanos: Mil = activos.filter(|e| e.tipo.pide_artesanos()).map(del_taller).sum();
+    let ratio = |habitantes: i64, requeridos: Mil| if requeridos <= 0 { UNO } else { razon(habitantes * 1000, requeridos).min(UNO) };
+    Mano { pesants: ratio(pesants_enteros, requeridos_pesants), artesanos: ratio(artesanos_enteros, requeridos_artesanos), requeridos_pesants, requeridos_artesanos }
+}
+
+/// Reserva mínima: lo que el mantenimiento y la comida van a cobrar en los próximos minutos (§6.3). Una obra, un taller o una
+/// mejora automáticos no pueden bajar un recurso de ahí. La reserva manual del Tesorero se suma aparte, solo en el camino automático.
+pub fn reserva_dinamica(coste_mantenimiento: &Costo, consumo_comida: Mil, horizonte_mantenimiento: i64, horizonte_comida: i64) -> [Mil; N] {
+    let mut r = [0; N];
+    for &(rec, n) in coste_mantenimiento {
+        r[rec.indice()] += n * horizonte_mantenimiento;
+    }
+    r[Recurso::Trigo.indice()] += consumo_comida * horizonte_comida;
+    r
+}
+
+/// Una pasada de extractores, granjas y Leñeras (un minuto). Devuelve lo producido por recurso (milésimas), para los logros.
+pub fn extraer_y_cultivar(cat: &Catalogo, edificios: &mut [Edificio], almacen: &mut Almacen, mano: &Mano, ctx: &Contexto, fuentes: &mut dyn Fuentes) -> Vec<(Recurso, Mil)> {
+    let mut producido: Vec<(Recurso, Mil)> = vec![];
+    let mut sumar = |r: Recurso, n: Mil| match producido.iter_mut().find(|(x, _)| *x == r) {
+        Some(p) => p.1 += n,
+        None => producido.push((r, n)),
+    };
+    for e in edificios.iter_mut().filter(|e| e.activo() && e.tipo.usa_pesants()) {
+        let def = cat.tipo(e.tipo);
+        match e.tipo {
+            Tipo::Granja => {
+                let base = def.nivel(e.nivel_interno).map_or(0, |n| n.produccion_base_trigo);
+                let deseado = por(por(por(base, ctx.fertilidad), mano.pesants), ctx.factor_trigo);
+                let entra = almacen.producir(Recurso::Trigo, deseado);
+                e.pausado_por_almacen = entra < deseado;
+                sumar(Recurso::Trigo, entra);
+            }
+            Tipo::Lenera => {
+                let Some((_, base)) = def.produccion else { continue };
+                let densidad = match e.fuente {
+                    Some(Fuente::Parcela(p)) => fuentes.densidad_parcela(p),
+                    _ => 0,
+                };
+                let deseado = por(por(base, densidad), mano.pesants);
+                let entra = almacen.producir(Recurso::Madera, deseado);
+                e.pausado_por_almacen = entra < deseado;
+                sumar(Recurso::Madera, entra);
+            }
+            _ => {
+                let (Some((recurso, base)), Some(Fuente::Nodo(nodo))) = (def.produccion, e.fuente) else { continue };
+                let deseado = por(por(base, mano.pesants), (ctx.factor_tecnologia)(recurso));
+                let pedido = deseado.min(almacen.hueco(recurso));
+                e.pausado_por_almacen = pedido < deseado;
+                almacen.apuntar_produccion(recurso, deseado - pedido);
+                let salido = if pedido > 0 { fuentes.extraer(nodo, pedido) } else { 0 };
+                sumar(recurso, almacen.producir(recurso, salido));
+            }
+        }
+    }
+    producido
+}
+
+/// Una pasada de recetas de los talleres (un minuto), en el orden de la lista y del catálogo: una receta puede consumir lo que otra
+/// produjo este mismo minuto. `reserva` es la misma de la auto-construcción más la manual.
+pub fn recetas(cat: &Catalogo, edificios: &mut [Edificio], almacen: &mut Almacen, mano: &Mano, ctx: &Contexto, reserva: &[Mil; N]) -> Vec<(Recurso, Mil)> {
+    let mut hecho: Vec<(Recurso, Mil)> = vec![];
+    // `requiereEdificio` se mide con el estado al empezar la pasada (un taller recién activo no se cuenta a sí mismo dos veces).
+    for i in 0..edificios.len() {
+        let e = &edificios[i];
+        if !e.activo() || !e.tipo.es_taller() {
+            continue;
+        }
+        if ctx.recetas_paradas.contains(&e.id) {
+            edificios[i].pausado_por_almacen = false; // una receta parada no llena el almacén
+            continue;
+        }
+        let Some(nivel) = cat.tipo(e.tipo).nivel(e.nivel_interno) else { continue };
+        let factor_buey = if e.buey { cat.tipo(e.tipo).factor_buey } else { UNO };
+        let insumo_activo = recetas_unicas::insumo_activo(cat, e);
+        let ratio = if e.tipo.taller_de_pesants() { mano.pesants } else { mano.artesanos };
+        let mut limitado = false;
+        for rc in &nivel.recetas {
+            // La bodega y la prensa solo trabajan la receta de su insumo activo (2026-11-09).
+            if insumo_activo.is_some_and(|ins| !rc.consume_por_unidad.iter().any(|&(i, _)| i == ins)) {
+                continue;
+            }
+            if ctx.recetas_pausadas.contains(&rc.produce)
+                || rc.tecnologia.as_deref().is_some_and(|t| !(ctx.tiene_tecnologia)(t))
+                || rc.requiere_edificio.is_some_and(|(t, n)| !edificios.hay_activo_con_nivel(t, n))
+            {
+                continue;
+            }
+            let mut cantidad = por(por(por(rc.produccion_base, ratio), ctx.factor_talleres), factor_buey);
+            for &(insumo, por_unidad) in &rc.consume_por_unidad {
+                let disponible = (almacen.disponible(insumo) - reserva[insumo.indice()]).max(0);
+                cantidad = cantidad.min(disponible * 1000 / por_unidad.max(1));
+            }
+            let espacio = almacen.hueco(rc.produce);
+            if cantidad > espacio {
+                cantidad = espacio;
+                limitado = true;
+            }
+            if cantidad <= 0 {
+                continue;
+            }
+            for &(insumo, por_unidad) in &rc.consume_por_unidad {
+                almacen.consumir(insumo, (por_unidad * cantidad + 999) / 1000); // hacia arriba: una receta nunca sale más barata
+            }
+            almacen.producir(rc.produce, cantidad);
+            match hecho.iter_mut().find(|(x, _)| *x == rc.produce) {
+                Some(p) => p.1 += cantidad,
+                None => hecho.push((rc.produce, cantidad)),
+            }
+        }
+        edificios[i].pausado_por_almacen = limitado;
+    }
+    hecho
+}
+
+/// Trigo por minuto que producen ahora las Granjas activas.
+pub fn produccion_trigo_por_minuto(cat: &Catalogo, edificios: &[Edificio], mano: &Mano, fertilidad: i64, factor_trigo: i64) -> Mil {
+    edificios
+        .iter()
+        .filter(|e| e.activo() && e.tipo == Tipo::Granja)
+        .map(|e| por(por(por(cat.tipo(e.tipo).nivel(e.nivel_interno).map_or(0, |n| n.produccion_base_trigo), fertilidad), mano.pesants), factor_trigo))
+        .sum()
+}
+
+/// Pesants y artesanos que no hacen falta para producir: el pool de reclutamiento (`poblacionDisponibleParaReclutar`).
+pub fn disponibles_para_reclutar(mano: &Mano, pesants_enteros: i64, artesanos_enteros: i64) -> (i64, i64) {
+    (((pesants_enteros * 1000 - mano.requeridos_pesants) / 1000).max(0), ((artesanos_enteros * 1000 - mano.requeridos_artesanos) / 1000).max(0))
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+    use crate::datos::Reglas;
+    use crate::edificio::Estado;
+    use std::collections::HashMap;
+
+    #[derive(Default)]
+    struct Mundo {
+        stock: HashMap<u32, Mil>,
+        parcelas: HashMap<u32, i64>,
+    }
+
+    impl Fuentes for Mundo {
+        fn densidad_parcela(&self, p: u32) -> i64 {
+            self.parcelas.get(&p).copied().unwrap_or(0)
+        }
+        fn extraer(&mut self, n: u32, pedido: Mil) -> Mil {
+            let s = self.stock.entry(n).or_insert(0);
+            let sale = pedido.min(*s);
+            *s -= sale;
+            sale
+        }
+    }
+
+    fn ctx<'a>(pausadas: &'a [Recurso], tecnologias: &'a [&'a str]) -> Contexto<'a> {
+        Contexto {
+            fertilidad: UNO,
+            factor_trigo: UNO,
+            factor_talleres: UNO,
+            factor_tecnologia: &|_| UNO,
+            tiene_tecnologia: Box::leak(Box::new(move |t: &str| tecnologias.contains(&t))),
+            recetas_pausadas: pausadas,
+            recetas_paradas: &[],
+        }
+    }
+
+    fn activo(id: u32, t: Tipo) -> Edificio {
+        Edificio::nuevo(id, t, Estado::Activo)
+    }
+
+    #[test]
+    fn la_mano_de_obra_es_una_demanda_agregada() {
+        let cat = Reglas::cargar().catalogo;
+        // Granja (4) + Leñera (4) + Cantera (4) piden 12 pesants; con 6 el ratio es 0,5.
+        let e = vec![activo(1, Tipo::Granja), activo(2, Tipo::Lenera), activo(3, Tipo::Cantera), activo(4, Tipo::Vivienda)];
+        let m = mano_de_obra(&cat, &e, 6, 0, 0);
+        assert_eq!((m.pesants, m.artesanos, m.requeridos_pesants), (500_000, UNO, 12_000));
+        assert_eq!(mano_de_obra(&cat, &e, 20, 0, 0).pesants, UNO, "con pesants de sobra el ratio no pasa de 1");
+        assert_eq!(disponibles_para_reclutar(&mano_de_obra(&cat, &e, 20, 0, 0), 20, 0), (8, 0), "los que sobran son el pool de reclutamiento");
+        // Un taller pide artesanos según su nivel interno.
+        let t = vec![activo(1, Tipo::Fundicion)];
+        assert_eq!(mano_de_obra(&cat, &t, 0, 2, 0).artesanos, 500_000, "2 de los 4 que pide la Fundición de nivel 1");
+        assert_eq!(mano_de_obra(&cat, &[], 0, 0, 0).pesants, UNO);
+    }
+
+    #[test]
+    fn la_granja_produce_80_de_trigo_a_plena_mano_de_obra_y_el_edicto_la_sube() {
+        let cat = Reglas::cargar().catalogo;
+        let (mut a, mut e, mut w) = (Almacen::nuevo(400_000), vec![activo(1, Tipo::Granja)], Mundo::default());
+        let m = mano_de_obra(&cat, &e, 20, 0, 0);
+        let p = extraer_y_cultivar(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &mut w);
+        // 80 por minuto desde el 2026-11-11 (2/3 de los 120 de antes).
+        assert_eq!((a.cantidad(Recurso::Trigo), p), (80_000, vec![(Recurso::Trigo, 80_000)]));
+        let c = Contexto { factor_trigo: 1_500_000, fertilidad: 500_000, ..ctx(&[], &[]) };
+        extraer_y_cultivar(&cat, &mut e, &mut a, &m, &c, &mut w);
+        assert_eq!(a.cantidad(Recurso::Trigo), 80_000 + 60_000, "80 × fertilidad 0,5 × Edicto 1,5");
+    }
+
+    #[test]
+    fn con_el_almacen_lleno_se_pausa_y_el_yacimiento_no_se_gasta() {
+        let cat = Reglas::cargar().catalogo;
+        let (mut a, mut w) = (Almacen::nuevo(400_000), Mundo::default());
+        w.stock.insert(7, 100_000);
+        let mut cantera = activo(1, Tipo::Cantera);
+        cantera.fuente = Some(Fuente::Nodo(7));
+        let mut e = vec![cantera];
+        let m = mano_de_obra(&cat, &e, 10, 0, 0);
+        a.poner(Recurso::Piedra, 395_000);
+        a.registrar_flujos();
+        extraer_y_cultivar(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &mut w);
+        assert_eq!(a.cantidad(Recurso::Piedra), 400_000);
+        assert_eq!(w.stock[&7], 95_000, "solo se gastan los 5 que cabían, no los 10 que sacaría");
+        assert!(e[0].pausado_por_almacen);
+        let f = a.tomar_flujos();
+        assert_eq!((f.producido[Recurso::Piedra.indice()], f.produccion[Recurso::Piedra.indice()]), (5_000, 10_000), "entran 5; la cantera rinde 10 (lo demás se pierde)");
+        a.registrar_flujos();
+        extraer_y_cultivar(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &mut w);
+        assert_eq!(w.stock[&7], 95_000, "lleno del todo: no extrae nada");
+        let f = a.tomar_flujos();
+        assert_eq!((f.producido[Recurso::Piedra.indice()], f.produccion[Recurso::Piedra.indice()]), (0, 10_000), "lleno del todo la producción sigue siendo la de la cantera");
+        a.quitar(Recurso::Piedra, 400_000);
+        extraer_y_cultivar(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &mut w);
+        assert!(!e[0].pausado_por_almacen);
+        assert_eq!(a.cantidad(Recurso::Piedra), 10_000);
+    }
+
+    #[test]
+    fn la_cantera_se_limita_al_stock_del_nodo_y_la_tecnologia_la_multiplica() {
+        let cat = Reglas::cargar().catalogo;
+        let (mut a, mut w) = (Almacen::nuevo(400_000), Mundo::default());
+        w.stock.insert(1, 12_000);
+        let mut cantera = activo(1, Tipo::Cantera);
+        cantera.fuente = Some(Fuente::Nodo(1));
+        let mut e = vec![cantera];
+        let m = mano_de_obra(&cat, &e, 10, 0, 0);
+        let c = Contexto { factor_tecnologia: &|r| if r == Recurso::Piedra { 1_500_000 } else { UNO }, ..ctx(&[], &[]) };
+        extraer_y_cultivar(&cat, &mut e, &mut a, &m, &c, &mut w);
+        assert_eq!(a.cantidad(Recurso::Piedra), 12_000, "pide 15 con canteria pero el nodo solo tiene 12");
+        extraer_y_cultivar(&cat, &mut e, &mut a, &m, &c, &mut w);
+        assert_eq!(a.cantidad(Recurso::Piedra), 12_000, "nodo agotado: nada hasta que se regenere");
+    }
+
+    #[test]
+    fn la_lenera_depende_de_la_densidad_de_su_parcela() {
+        let cat = Reglas::cargar().catalogo;
+        let (mut a, mut w) = (Almacen::nuevo(400_000), Mundo::default());
+        w.parcelas.insert(3, 800_000);
+        let mut l = activo(1, Tipo::Lenera);
+        l.fuente = Some(Fuente::Parcela(3));
+        let mut e = vec![l, activo(2, Tipo::Lenera)];
+        e[1].fuente = Some(Fuente::Parcela(99));
+        let m = mano_de_obra(&cat, &e, 8, 0, 0);
+        extraer_y_cultivar(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &mut w);
+        assert_eq!(a.cantidad(Recurso::Madera), 6_000, "8 × 0,8 = 6,4 de la primera (entran 6 unidades y 0,4 queda de resto); la segunda no tiene parcela");
+    }
+
+    #[test]
+    fn la_fundicion_convierte_cobre_en_lingotes_hasta_donde_llega_el_cobre_y_respeta_la_reserva() {
+        let cat = Reglas::cargar().catalogo;
+        let mut a = Almacen::nuevo(400_000);
+        let mut e = vec![activo(1, Tipo::Fundicion)];
+        let m = mano_de_obra(&cat, &e, 0, 4, 0);
+        a.poner(Recurso::Cobre, 6_000);
+        let c = ctx(&[], &[]);
+        let h = recetas(&cat, &mut e, &mut a, &m, &c, &[0; N]);
+        assert_eq!((a.cantidad(Recurso::Cobre), a.cantidad(Recurso::LingoteCobre)), (0, 3_000), "6 cobre → 3 lingotes (2 por 1), no los 5 del techo");
+        assert_eq!(h, vec![(Recurso::LingoteCobre, 3_000)]);
+        // Con 20 de cobre sale el techo de 5 lingotes (10 cobre).
+        a.poner(Recurso::Cobre, 20_000);
+        recetas(&cat, &mut e, &mut a, &m, &c, &[0; N]);
+        assert_eq!((a.cantidad(Recurso::Cobre), a.cantidad(Recurso::LingoteCobre)), (10_000, 8_000));
+        // Una reserva de 18 deja solo 2 de cobre utilizables → 1 lingote.
+        let mut reserva = [0; N];
+        reserva[Recurso::Cobre.indice()] = 18_000;
+        a.poner(Recurso::Cobre, 20_000);
+        let antes = a.cantidad(Recurso::LingoteCobre);
+        recetas(&cat, &mut e, &mut a, &m, &c, &reserva);
+        assert_eq!((a.cantidad(Recurso::Cobre), a.cantidad(Recurso::LingoteCobre) - antes), (18_000, 1_000));
+    }
+
+    #[test]
+    fn faltando_artesanos_se_produce_proporcionalmente_menos_y_una_receta_pausada_no_corre() {
+        let cat = Reglas::cargar().catalogo;
+        let mut a = Almacen::nuevo(400_000);
+        a.poner(Recurso::Cobre, 100_000);
+        let mut e = vec![activo(1, Tipo::Fundicion)];
+        let m = mano_de_obra(&cat, &e, 0, 2, 0);
+        recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; N]);
+        assert_eq!((a.cantidad(Recurso::LingoteCobre), a.disponible(Recurso::LingoteCobre)), (2_000, 2_500), "ratio 0,5 de los 5 del techo: 2 enteros y medio en el resto");
+        let antes = a.cantidad(Recurso::Cobre);
+        recetas(&cat, &mut e, &mut a, &m, &ctx(&[Recurso::LingoteCobre], &[]), &[0; N]);
+        assert_eq!(a.cantidad(Recurso::Cobre), antes, "pausada por el Gobernador");
+    }
+
+    #[test]
+    fn el_arma_de_hierro_de_calidad_pide_una_fundicion_de_nivel_3() {
+        let cat = Reglas::cargar().catalogo;
+        assert_eq!(cat.tipo(Tipo::Armeria).nivel(3).unwrap().recetas.iter().find(|r| r.produce == Recurso::ArmaHierroCalidad).unwrap().requiere_edificio, Some((Tipo::Fundicion, 3)));
+        let mut armeria = activo(1, Tipo::Armeria);
+        armeria.nivel_interno = 3;
+        let mut fundicion = activo(2, Tipo::Fundicion);
+        fundicion.nivel_interno = 2;
+        let mut e = vec![armeria, fundicion];
+        let m = mano_de_obra(&cat, &e, 0, 100, 0);
+        let c = ctx(&[], &["forja_hierro_estandarizada"]);
+        let mut a = Almacen::nuevo(400_000);
+        a.poner(Recurso::LingoteHierro, 100_000);
+        a.poner(Recurso::Madera, 100_000);
+        recetas(&cat, &mut e, &mut a, &m, &c, &[0; N]);
+        assert_eq!(a.cantidad(Recurso::ArmaHierroCalidad), 0, "con la Fundición a nivel 2 no se fabrica");
+        e[1].nivel_interno = 3;
+        recetas(&cat, &mut e, &mut a, &m, &c, &[0; N]);
+        assert!(a.cantidad(Recurso::ArmaHierroCalidad) > 0, "con la Fundición a nivel 3, sí");
+    }
+
+    #[test]
+    fn la_tecnologia_abre_recetas_y_el_almacen_lleno_pausa_el_taller() {
+        let cat = Reglas::cargar().catalogo;
+        let mut a = Almacen::nuevo(400_000);
+        let mut f = activo(1, Tipo::Fundicion);
+        f.nivel_interno = 2;
+        let mut e = vec![f];
+        let m = mano_de_obra(&cat, &e, 0, 8, 0);
+        a.poner(Recurso::Estano, 100_000);
+        recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; N]);
+        assert_eq!(a.cantidad(Recurso::LingoteEstano), 0, "sin aleacion_bronce no funde estaño");
+        recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &["aleacion_bronce"]), &[0; N]);
+        assert_eq!(a.cantidad(Recurso::LingoteEstano), 3_000);
+        // Con el producto lleno, no consume insumos y queda marcado.
+        a.poner(Recurso::LingoteEstano, 400_000);
+        let antes = a.cantidad(Recurso::Estano);
+        recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &["aleacion_bronce"]), &[0; N]);
+        assert_eq!(a.cantidad(Recurso::Estano), antes);
+        assert!(e[0].pausado_por_almacen);
+    }
+
+    #[test]
+    fn cada_receta_de_la_comida_convierte_su_materia_en_su_bien_con_la_mano_de_obra_entera() {
+        let cat = Reglas::cargar().catalogo;
+        // (edificio, materia, bien, bien por minuto, materia por unidad). Cifras provisionales de la tanda 69: un nivel 1 cubre la ración (`BIENES_DE_CONSUMO`) de 100 cabezas de la clase
+        // que come el bien: pan 100 × 0,04 = 4; queso 100 × 0,02 = 2; vino y aceite 100 × 0,01 = 1; la harina, lo que gasta el horno (4). El molino y el horno gastan 1 por unidad; los demás, 2.
+        let casos = [
+            (Tipo::Molino, Recurso::Trigo, Recurso::Harina, 4_000, 1_000),
+            (Tipo::Horno, Recurso::Harina, Recurso::Pan, 4_000, 1_000),
+            (Tipo::Quesera, Recurso::Leche, Recurso::Queso, 2_000, 2_000),
+            (Tipo::Bodega, Recurso::Uva, Recurso::Vino, 1_000, 2_000),
+            (Tipo::Prensa, Recurso::Aceituna, Recurso::Aceite, 1_000, 2_000),
+        ];
+        for (tipo, materia, bien, por_minuto, por_unidad) in casos {
+            let mut a = Almacen::nuevo(400_000);
+            a.poner(materia, 100_000);
+            let mut e = vec![activo(1, tipo)];
+            let m = mano_de_obra(&cat, &e, 3, 3, 0); // 3 pesants y 3 artesanos: más de los 2 o 3 que pide cada uno
+            let hecho = recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; N]);
+            assert_eq!(hecho, vec![(bien, por_minuto)], "{tipo:?}");
+            assert_eq!((a.cantidad(bien), a.cantidad(materia)), (por_minuto, 100_000 - por_minuto * por_unidad / 1_000), "{tipo:?}: produce su bien y gasta su materia");
+        }
+    }
+
+    #[test]
+    fn la_bodega_hace_cerveza_de_cebada_si_esa_es_su_receta_y_la_prensa_aceite_de_sesamo() {
+        let cat = Reglas::cargar().catalogo;
+        // (edificio, insumo elegido, otro insumo del edificio, bien, bien por minuto): la receta elegida gasta 2 por unidad y la otra no se toca. El sésamo da
+        // aceite de sésamo y la aceituna, aceite de oliva (Economia_Construccion §5.3).
+        let casos = [
+            (Tipo::Bodega, Recurso::Cebada, Recurso::Uva, Recurso::Cerveza),
+            (Tipo::Bodega, Recurso::Uva, Recurso::Cebada, Recurso::Vino),
+            (Tipo::Prensa, Recurso::Sesamo, Recurso::Aceituna, Recurso::AceiteSesamo),
+            (Tipo::Prensa, Recurso::Aceituna, Recurso::Sesamo, Recurso::Aceite),
+        ];
+        for (tipo, elegido, otro, bien) in casos {
+            let mut a = Almacen::nuevo(400_000);
+            a.poner(elegido, 100_000);
+            a.poner(otro, 100_000);
+            let mut e = vec![Edificio { receta: Some(elegido), ..activo(1, tipo) }];
+            let m = mano_de_obra(&cat, &e, 3, 3, 0);
+            let hecho = recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; N]);
+            assert_eq!(hecho, vec![(bien, 1_000)], "{tipo:?} con {elegido:?}: una sola receta, 1 por minuto");
+            assert_eq!((a.cantidad(elegido), a.cantidad(otro)), (98_000, 100_000), "{tipo:?}: gasta su insumo y no toca el otro");
+        }
+    }
+
+    #[test]
+    fn sin_receta_elegida_la_bodega_y_la_prensa_trabajan_la_primera_del_catalogo() {
+        let cat = Reglas::cargar().catalogo;
+        for (tipo, primero, segundo, bien) in [(Tipo::Bodega, Recurso::Uva, Recurso::Cebada, Recurso::Vino), (Tipo::Prensa, Recurso::Aceituna, Recurso::Sesamo, Recurso::Aceite)] {
+            let mut a = Almacen::nuevo(400_000);
+            a.poner(primero, 100_000);
+            a.poner(segundo, 100_000);
+            let mut e = vec![activo(1, tipo)];
+            assert_eq!(e[0].receta, None);
+            let m = mano_de_obra(&cat, &e, 3, 3, 0);
+            assert_eq!(recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; N]), vec![(bien, 1_000)], "{tipo:?}");
+            assert_eq!((a.cantidad(primero), a.cantidad(segundo)), (98_000, 100_000), "{tipo:?}");
+        }
+    }
+
+    #[test]
+    fn una_receta_parada_por_el_nivel_de_la_plaza_no_produce_y_las_demas_siguen() {
+        let cat = Reglas::cargar().catalogo;
+        let mut a = Almacen::nuevo(400_000);
+        a.poner(Recurso::Uva, 100_000);
+        a.poner(Recurso::Cebada, 100_000);
+        let mut e = vec![Edificio { receta: Some(Recurso::Uva), ..activo(1, Tipo::Bodega) }, Edificio { receta: Some(Recurso::Cebada), ..activo(2, Tipo::Bodega) }];
+        e[1].pausado_por_almacen = true;
+        let m = mano_de_obra(&cat, &e, 3, 6, 0);
+        let c = Contexto { recetas_paradas: &[2], ..ctx(&[], &[]) };
+        assert_eq!(recetas(&cat, &mut e, &mut a, &m, &c, &[0; N]), vec![(Recurso::Vino, 1_000)], "la cerveza, parada");
+        assert_eq!((a.cantidad(Recurso::Cebada), e[1].pausado_por_almacen), (100_000, false));
+    }
+
+    #[test]
+    fn el_molino_y_el_horno_los_trabajan_pesants_y_la_quesera_artesanos() {
+        let cat = Reglas::cargar().catalogo;
+        let e = [activo(1, Tipo::Molino), activo(2, Tipo::Horno), activo(3, Tipo::Quesera)];
+        let m = mano_de_obra(&cat, &e, 2, 2, 0);
+        assert_eq!((m.requeridos_pesants, m.requeridos_artesanos), (4_000, 2_000), "2 pesants por el molino y 2 por el horno; 2 artesanos por la quesera");
+        assert_eq!((m.pesants, m.artesanos), (500_000, UNO), "con 2 pesants, el molino y el horno van a medias");
+    }
+
+    #[test]
+    fn con_buey_el_molino_produce_el_doble_gastando_lo_mismo_por_unidad() {
+        let cat = Reglas::cargar().catalogo;
+        let m = mano_de_obra(&cat, &[activo(1, Tipo::Molino)], 2, 0, 0);
+        let molino = |buey: bool, trigo: Mil| {
+            let mut a = Almacen::nuevo(400_000);
+            a.poner(Recurso::Trigo, trigo);
+            let mut e = vec![Edificio { buey, ..activo(1, Tipo::Molino) }];
+            recetas(&cat, &mut e, &mut a, &m, &ctx(&[], &[]), &[0; N]);
+            (a.cantidad(Recurso::Harina), a.cantidad(Recurso::Trigo))
+        };
+        assert_eq!(molino(false, 100_000), (4_000, 96_000), "sin buey, la receta: 4 de harina por minuto");
+        assert_eq!(molino(true, 100_000), (8_000, 92_000), "con buey (`factorBuey` 2), el doble de harina con el mismo trigo por unidad");
+        assert_eq!(molino(true, 6_000), (6_000, 0), "y sigue limitado por el trigo que hay");
+    }
+
+    #[test]
+    fn la_reserva_cubre_ocho_minutos_de_mantenimiento_y_de_comida() {
+        let r = reserva_dinamica(&vec![(Recurso::Madera, 1_650), (Recurso::Piedra, 3_300)], 2_000, 8, 8);
+        assert_eq!((r[Recurso::Madera.indice()], r[Recurso::Piedra.indice()], r[Recurso::Trigo.indice()], r[Recurso::Oro.indice()]), (13_200, 26_400, 16_000, 0));
+    }
+
+    #[test]
+    fn la_produccion_de_trigo_suma_las_granjas_activas() {
+        let cat = Reglas::cargar().catalogo;
+        let e = vec![activo(1, Tipo::Granja), activo(2, Tipo::Granja), Edificio::nuevo(3, Tipo::Granja, Estado::EnCola)];
+        let m = mano_de_obra(&cat, &e, 20, 0, 0);
+        assert_eq!(produccion_trigo_por_minuto(&cat, &e, &m, UNO, UNO), 160_000, "80 + 80; la que está en cola no cuenta");
+    }
+}

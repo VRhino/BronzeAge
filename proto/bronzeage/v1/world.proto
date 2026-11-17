@@ -1,0 +1,177 @@
+// Contrato de mundo de BronzeAge: el ARTEFACTO de mundo y el paquete de Unity derivado.
+//
+// El mundo se produce FUERA DE LÍNEA por el generador regional (TypeScript, de Codex) y es INMUTABLE: se identifica por
+// el hash de su contenido. El servidor lo carga y no genera nada desde una semilla; Unity recibe un paquete derivado del
+// MISMO artefacto (×12). Si el hash difiere, el cliente no puede entrar: el servidor decide y Unity representa.
+//
+// Unidades: el artefacto está en unidades ESTRATÉGICAS (2.667 × 2.000), en milésimas (sint64). Unity usa el factor 12.
+// Los campos «raster» son rejillas de celdas cuadradas de `tamano_celda` milésimas, en orden por filas (fila 0 al norte).
+syntax = "proto3";
+
+package bronzeage.v1;
+
+import "bronzeage/v1/common.proto";
+import "bronzeage/v1/entities.proto";
+
+option csharp_namespace = "BronzeAge.Contract.V1";
+
+enum EncodingRaster {
+  ENCODING_NO_ESPECIFICADO = 0;
+  ENCODING_U8 = 1;
+  ENCODING_U16_LE = 2;
+  ENCODING_BITS = 3;                     // 1 bit por celda, mismo orden que la máscara de niebla
+}
+
+message Raster {
+  uint32 columnas = 1;
+  uint32 filas = 2;
+  uint32 tamano_celda = 3;               // milésimas de unidad estratégica
+  EncodingRaster encoding = 4;
+  bytes datos = 5;                       // comprimido con zstd si `zstd` es true
+  bool zstd = 6;
+}
+
+enum ClaseTerreno {
+  CLASE_TERRENO_NO_ESPECIFICADA = 0;
+  TERRENO_AGUA = 1;
+  TERRENO_COSTA = 2;
+  TERRENO_LLANO = 3;
+  TERRENO_COLINA = 4;
+  TERRENO_MONTANA = 5;
+  TERRENO_CIMA = 6;
+}
+
+// Anillo de tierra por distancia al campamento de mercenarios más cercano (Doc 1.9c).
+enum Anillo {
+  ANILLO_NO_ESPECIFICADO = 0;
+  ANILLO_FOCO = 1;                       // hasta 150
+  ANILLO_FRONTERA = 2;                   // 150-250
+  ANILLO_LEJANA = 3;                     // más de 250
+}
+
+message Rio {
+  string id = 1;
+  repeated Punto puntos = 2;
+  bool termina_en_lago = 3;
+  bool navegable = 4;
+  repeated Punto vados = 5;
+}
+
+// Veta de estaño (y oro): 3-6 nodos en un radio de ~20-30, con su campamento de bandidos y su alijo lejano.
+message Veta {
+  string id = 1;
+  Punto centro = 2;
+  repeated string nodos_ids = 3;
+  optional string campamento_bandidos_id = 4;
+  optional string alijo_id = 5;
+}
+
+message NodoGrafo {
+  uint32 id = 1;
+  Punto posicion = 2;
+}
+
+message AristaGrafo {
+  uint32 a = 1;
+  uint32 b = 2;
+  uint32 coste_milesimas = 3;            // coste de movimiento medio de la arista (1000 = llano)
+  bool vado = 4;
+}
+
+// Grafo de navegación: la ÚNICA autoridad de rutas (Unity no calcula rutas, solo pinta planes).
+message GrafoNavegacion {
+  repeated NodoGrafo nodos = 1;
+  repeated AristaGrafo aristas = 2;
+  uint32 espaciado_min = 3;              // milésimas; 8 unidades en el mundo calibrado
+}
+
+message Manifiesto {
+  string hash = 1;                       // sha256 del contenido canónico
+  uint32 version_formato = 2;
+  string generador = 3;                  // nombre y versión del generador regional
+  Punto tamano = 4;                      // 2.667 × 2.000 en milésimas
+  uint32 factor_unity = 5;               // 12
+  repeated CapaDeMundo capas = 6;
+}
+
+message CapaDeMundo {
+  string nombre = 1;                     // relieve, terreno, fertilidad, humedad, bosque, anillos, navegacion...
+  string archivo = 2;
+  string sha256 = 3;
+  uint64 bytes = 4;
+}
+
+// El artefacto completo (las capas raster y vectoriales). Se sirve por capas; este mensaje es su contenido lógico.
+message ArtefactoDeMundo {
+  Manifiesto manifiesto = 1;
+  Raster altura = 2;                     // u16: 0..65535 sobre el rango del generador
+  Raster terreno = 3;                    // u8: ClaseTerreno
+  Raster fertilidad = 4;                 // u8
+  Raster humedad = 5;                    // u8
+  Raster densidad_bosque = 6;            // u8: campo continuo
+  Raster anillos = 7;                    // u8: Anillo por celda
+  Raster transitable = 8;                // bits: 1 = se puede pisar
+  repeated Rio rios = 9;
+  repeated ZonaBosque bosques = 10;      // masas explotables con id y área
+  repeated NodoRecurso nodos = 11;       // yacimientos y ganado, con anillo y cantidad inicial
+  repeated Veta vetas = 12;
+  repeated CampamentoMercenarios campamentos = 13;   // colocados por el generador, centros de los focos (separación 600)
+  repeated CampamentoBandidos bandidos_iniciales = 14;
+  repeated Alijo alijos = 15;
+  GrafoNavegacion navegacion = 16;
+  repeated ParcelaBosque parcelas = 17;  // cupos de explotación de los bosques (separados >= 2·rp)
+  Raster coste = 18;                     // u16: coste de movimiento en el centro de la celda, en milésimas (1000 = llano;
+                                         // 0 = no transitable). Opcional: sin él, el servidor no suaviza las rutas
+  Raster region = 19;                    // u8: id de RegionDeMundo (la región del relieve del generador en el centro de la celda)
+  Raster fertilidad_vid = 20;            // u8
+  Raster fertilidad_oliva = 21;          // u8
+  repeated RegionDeMundo regiones = 22;  // las regiones del relieve, con su nombre
+  Raster fertilidad_cebada = 23;         // u8: la del trigo en la tierra húmeda (2026-11-09)
+  Raster fertilidad_sesamo = 24;         // u8: la del trigo en la tierra húmeda y baja (2026-11-09)
+}
+
+// Una región del relieve del generador («Altiplano interior», «Estepa abierta»...).
+message RegionDeMundo {
+  uint32 id = 1;
+  string nombre = 2;
+}
+
+// Paquete de Unity derivado del artefacto: terreno en sectores a escala ×12.
+message SectorUnity {
+  string id = 1;
+  Rectangulo rectangulo = 2;             // en unidades estratégicas
+  string archivo = 3;
+  string sha256 = 4;
+}
+
+message PaqueteUnity {
+  string hash_artefacto = 1;             // el del que deriva
+  string hash = 2;
+  uint32 factor = 3;                     // 12
+  repeated SectorUnity sectores = 4;
+}
+
+// Paquete de relieve (06 §8, 2026-10-30): la altura fina de todo el mapa para los clientes 3D. Lo escribe el mismo generador que el
+// artefacto, va aparte (el servidor solo lo valida y lo sirve) y se baja una vez por mundo, como el artefacto: el cliente lo guarda
+// por hash. Las muestras van en los vértices de una rejilla de `paso` (x = i · paso, y = j · paso) y valen lo que el raster `altura`.
+message PaqueteRelieve {
+  string hash = 1;                       // sha256 hex de la serialización con hash = ""
+  string hash_artefacto = 2;             // manifiesto.hash del artefacto del que deriva
+  uint32 paso = 3;                       // milésimas de unidad estratégica entre muestras: 500 (0,5 u)
+  uint32 lado_tesela = 4;                // intervalos por lado de tesela: 128 (64 u); cada tesela guarda (lado + 1)² muestras
+                                         // y comparte su última fila y su última columna con la vecina
+  uint32 columnas = 5;                   // muestras del mapa en x: ⌈ancho / paso⌉ + 1 (la primera en x = 0)
+  uint32 filas = 6;                      // muestras en y, fila 0 al norte
+  uint32 teselas_x = 7;                  // ⌈(columnas − 1) / lado_tesela⌉
+  uint32 teselas_y = 8;                  // ⌈(filas − 1) / lado_tesela⌉
+  repeated TeselaRelieve teselas = 9;    // teselas_x · teselas_y, por filas de teselas desde el noroeste. La parte de una tesela
+                                         // que pasa del borde del mapa repite la muestra del borde
+}
+
+message TeselaRelieve {
+  bytes altura = 1;                      // zstd de (lado + 1)² u16 LE en orden de filas (0..65535 como el raster `altura`), cada
+                                         // muestra guardada como su diferencia, módulo 2^16, con la predicción: izquierda + arriba
+                                         // − diagonal; solo la izquierda en la primera fila y solo la de arriba en la primera columna
+  bytes agua = 2;                        // zstd de (lado + 1)² bits de agua (mar y lagos; muestra i → byte i >> 3, bit i & 7,
+                                         // LSB primero); vacío si la tesela no tiene agua
+}

@@ -1,0 +1,9 @@
+[package]
+name = "objetos"
+version = "0.1.0"
+edition = "2021"
+description = "Objetos del héroe (Mechanics/Objetos_Del_Heroe): catálogo, clases, mochila y almacén de objetos, equipo, tienda, forja, consumibles y botín. Reglas puras en enteros, sin héroes, plazas ni órdenes"
+
+[dependencies]
+base = { path = "../base" }
+serde_json = "1"

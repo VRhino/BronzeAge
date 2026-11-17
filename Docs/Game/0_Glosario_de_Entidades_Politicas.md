@@ -5,21 +5,24 @@ Consultar este documento ante cualquier duda de terminología — el resto de do
 Persona real que juega. En cada mundo juega con **un único Héroe** (abajo): todo lo que hace dentro del mundo —residir, liderar, poseer escuadrones, ocupar cargos, combatir— lo hace su Héroe. Cuando el canon dice que un jugador hace algo en el mundo, lo hace a través de él.
 
 ## Héroe
-El personaje con el que un Jugador está en el mundo (Doc 5.16). **Cada Jugador tiene exactamente un Héroe en cada mundo**: pertenece a esa partida, no a la cuenta, y no se puede cambiar por otro dentro de ella. Pertenece a 1 y SOLO 1 Facción en todo momento, y reside en 1 y SOLO 1 asentamiento a la vez (Doc 2.5).
+El personaje con el que un Jugador está en el mundo (Doc 5.16). **Cada Jugador tiene exactamente un Héroe en cada mundo**: pertenece a esa partida, no a la cuenta, y no se puede cambiar por otro dentro de ella. Pertenece a como mucho una Facción (puede no tener) y reside en un único sitio: un asentamiento de su Facción o un campamento de mercenarios (Doc 2.5).
 
 Es el dueño de sus escuadrones: **los escuadrones son del Héroe, no del asentamiento** (Doc 5.4), estén donde estén, y tiene como mucho UNO de cada tropa (Doc 5.8). Tiene un valor de **Liderazgo** (Doc 5.11) que limita cuántos puede llevarse consigo a la vez.
 
-**Está SITUADO en el mundo** (Doc 1.10): en todo momento está dentro de un asentamiento, dentro de una columna en el mapa, o desconectado. No es un observador que flota sobre el mapa: **solo ve el interior del asentamiento en el que está físicamente**, y solo puede dar órdenes ahí. Nace en mundo abierto, en un punto aleatorio, y funda donde decide pararse.
+**Está SITUADO en el mundo** (Doc 1.10): en todo momento está dentro de un asentamiento, dentro de una columna en el mapa, dentro de un campamento de mercenarios, o desconectado. No es un observador que flota sobre el mapa: **solo ve el interior del asentamiento en el que está físicamente**, y solo puede dar órdenes ahí. Nace dentro de un campamento de mercenarios que elige; sale al mundo cuando quiere y funda con una Caravana de Fundación (Doc 1.3, 1.8).
 
 **Combate por sí mismo**, como un personaje de Conquest: clase, nivel y experiencia, atributos, perks, equipo e inventario (Doc 5.1 y 5.16). No muere: al perder una batalla queda **Herido** (abajo) y, si fue en mundo abierto, entrega la mitad de su carro.
 
 ## Héroe bot
-Héroe de una Facción NPC, manejado por la IA del juego. Nace como fundador del primer asentamiento de su Facción cuando el admin la crea (Doc 5.15.6), y vive en el servidor como un héroe más. Combate contra los héroes humanos en las partidas de Unity; NPC contra NPC se resuelve con números (Doc 5.15.6).
+Héroe que maneja un programa en vez de una persona (2026-10-04, D52-D58). Nace como cualquiera, dentro de un campamento de mercenarios (Doc 1.9b), y juega por los mismos comandos que un humano; ninguna Facción nace asentada ni es «NPC» (Doc 1.3, 5.15.6). En batalla lo maneja la IA de Conquest.
+
+## Mercenario contratado
+Héroe bot que un cargo de una Facción humana contrata en el tablón de un campamento de mercenarios (Doc 7). Es **ciudadano con marca** (temporal o permanente) de esa Facción mientras dura el contrato: nunca Rey ni cargo, no deja la Facción por su cuenta y solo ataca o se une a un ejército con la orden que se lo permite.
 
 ## Columna personal
-Un Héroe solo, moviéndose por el mapa. Nace cuando sale de su residencia por su cuenta (Doc 1.10), lleve tropas o no. Es la misma ENTIDAD que un Ejército en el motor, pero **no es un Ejército** a efectos de reglas: elige destino libremente y lo rectifica cuando quiera, no puede llevar caravanas adjuntas, y nadie puede unirse a ella — dos viajeros que se cruzan no forman un ejército (Doc 5.12.1).
+Un Héroe solo, moviéndose por el mapa. Nace cuando sale de su residencia por su cuenta (Doc 1.10), lleve tropas o no. Es la misma ENTIDAD que un Ejército en el motor, pero **no es un Ejército** a efectos de reglas: elige destino libremente y lo rectifica cuando quiera, no puede llevar caravanas adjuntas, y nadie puede unirse a ella: dos viajeros que se cruzan no forman un ejército por sí solos, aunque tres o más sí pueden organizar uno en campo (Doc 5.12.1, 5.14.4).
 
-Se disuelve al entrar en su residencia, o al fundirse en un Ejército que se cruce (Doc 5.14).
+Se disuelve al entrar en su residencia, o al unirse a un Ejército o a una formación en campo (Doc 5.14).
 
 ## Escuadrón / Tropa / Unidad
 Son **tres conceptos distintos** y conviene no mezclarlos — la jerarquía de entidades es **Héroe → Escuadrón → Unidad**, y "tropa" es el TIPO, no la instancia:
@@ -29,22 +32,25 @@ Son **tres conceptos distintos** y conviene no mezclarlos — la jerarquía de e
 - **Unidad:** cada soldado individual dentro de un escuadrón. Las bajas son permanentes (permadeath, Doc 5.4).
 
 > **"Tropa" se usa además en sentido colectivo** en todos los documentos ("las tropas consumen raciones", "mantenimiento de tropas", "reclutar tropas"), igual que en castellano corriente. Eso es deliberado y no choca: en singular y referido a un catálogo es el tipo; en plural y genérico es el colectivo. **La entidad contable es siempre el escuadrón** — y por eso lleva ese nombre, para que "tropa" quede libre para los otros dos usos.
+## Campamento de mercenarios
+Enclave neutral del mundo abierto (Doc 1.9b): no es de ninguna Facción, no tiene zona de influencia, no se puede atacar y no desaparece. Se puede residir en él, y es la casa de quien se queda sin asentamiento; también se puede reclutar, pedir tropa prestada, comprar y refundar desde él (Doc 1.9b). No confundir con el *Campamento* de un héroe (arriba) ni con un campamento de bandidos (Doc 1.9).
+
 ## Guarnición
 Los escuadrones que cada Héroe residente **asigna** a la guarnición de su asentamiento, dentro de un cupo por héroe que dan los edificios y las políticas de ese asentamiento; no gasta su Liderazgo. Los maneja la IA del juego y defienden aunque su héroe no esté. El resto de escuadrones guardados en el asentamiento no combaten sin su héroe. Un asentamiento recién conquistado queda sin guarnición (Doc 5.15.3 y 5.15.5).
 
 ## Campamento
-Donde un Héroe guarda los escuadrones que no lleva consigo; está en el asentamiento donde reside. Un Héroe sin residencia no tiene campamento: es huérfano (Doc 5.15.2).
+Donde un Héroe guarda los escuadrones que no lleva consigo; está en el asentamiento donde reside. Puede estar en un asentamiento o en un campamento de mercenarios (abajo). El estado de huérfano ya no existe (Doc 5.15.2).
 
 ## Ejército
-Una columna nacida de **movilizarse contra un destino** desde un asentamiento, que se mueve por el mapa como **una sola entidad** (Doc 5.12). Lo que la hace un Ejército es cómo salió, no cuántos van dentro: puede empezar con uno solo y crecer según se le suman los demás. Cada uno sigue limitado por su propio Liderazgo, y **todos son de la misma Facción**: ni aliados ni neutrales pueden marchar dentro de una columna ajena (Doc 5.14.1).
+Una columna nacida de **salir con su Líder** (con política de unión) desde un asentamiento, que se mueve por el mapa como **una sola entidad** (Doc 5.12). Lo que la hace un Ejército es cómo salió, no cuántos van dentro: puede empezar con uno solo y crecer según se le suman los demás. Cada uno sigue limitado por su propio Liderazgo, y **todos son de la misma Facción**: ni aliados ni neutrales pueden marchar dentro de una columna ajena (Doc 5.14.1).
 
-**Solo se origina en un asentamiento, nunca en campo abierto**, y **ser un Ejército es una identidad, no un recuento**: uno al que se le van separando miembros hasta quedar en uno solo **sigue siendo un Ejército** — conserva su ruta fija y sus caravanas. Lo contrario también: una Columna personal no se convierte en Ejército porque alguien se le sume. La diferencia práctica está en Doc 5.12.1.
+**Se origina en un asentamiento o se forma en campo con tres o más héroes** (Doc 5.14.4), y **ser un Ejército es una identidad, no un recuento**: uno al que se le van separando miembros hasta quedar en uno solo **sigue siendo un Ejército** — conserva su Líder, su identidad de ejército y sus caravanas. Lo contrario también: una Columna personal no se convierte en Ejército porque alguien se le sume. La diferencia práctica está en Doc 5.12.1.
 
-Un Ejército **nunca se queda vacío en campo abierto**: el último miembro es siempre su Líder y el Líder no puede separarse, así que la salida es cancelar y volver (Doc 5.14).
+Un Ejército **nunca se queda vacío en campo abierto**: el último miembro es siempre su Líder y el Líder no puede separarse, así que para deshacerlo se entra en una plaza o campamento (Doc 5.14).
 
-Mientras está en campaña, un ejército **no come del almacén de su asentamiento**: lleva su propio carro de suministros (Doc 5.13) — uno por Héroe, de capacidad fija. Puede además llevar **caravanas adjuntas** que amplían su alcance, y que pueden ir cargadas de mercancía (escolta de caravanas, Doc 5.13.2-5.13.3). Si el ejército es derrotado, entrega la mitad de su carro y las caravanas adjuntas se pierden con él.
+Mientras está en campaña, un ejército **no come del almacén de su asentamiento**: lleva sus víveres (tope por Héroe, Doc 5.13) y, aparte, un carro de carga por Héroe, de capacidad fija. Puede además llevar **caravanas adjuntas** que amplían su alcance, y que pueden ir cargadas de mercancía (escolta de caravanas, Doc 5.13.2-5.13.3). Si el ejército es derrotado, entrega la mitad de su carro y cada caravana adjunta pierde la mitad de sus carros con su carga, que van al botín del vencedor (la que se queda sin carros desaparece).
 
-Una marcha se puede **cancelar**, lo que dispara la vuelta por el mismo camino (Doc 5.12.6).
+Cancelar la marcha **detiene la columna donde está** (no hay vuelta automática); para deshacerla se entra en una plaza o campamento (Doc 5.12.6).
 
 ## Líder (de un Ejército)
 El Héroe que **formó** el Ejército. No es un cargo político —no tiene nada que ver con los de Doc 2.2— sino el mando de una columna concreta mientras dura su campaña.
@@ -56,15 +62,18 @@ Si se **desconecta**, el mando pasa solo al integrante con más antigüedad: no 
 Fija además la **política de unión** de su columna al formarla, responde las peticiones cuando esa política es *preguntar* —y si no contesta en 10 segundos, la petición se da por rechazada—, y es **el único que puede cancelar la marcha**: el resto, si no quiere seguir, se separa.
 
 ## Herido
-Estado de un Héroe tras perder una batalla. Lo sufren **todos los héroes del bando perdedor**, sea cual sea la batalla, y dura **2 minutos**. Mientras dura, nadie puede perseguirle ni atacarle, y él tampoco puede perseguir ni entrar en batallas: lo primero evita el acoso en cadena al mismo viajero; lo segundo, que la inmunidad se use de escudo para depredar sin riesgo. Como es por héroe, una columna se puede atacar mientras lleve algún héroe sano; si todos sus héroes están heridos, nadie puede tocarla (Doc 5.16.4).
+Estado de un Héroe tras perder una batalla. Lo sufre **todo héroe que Unity da por derrotado**, y dura **2 minutos**. Mientras dura, nadie puede perseguirle ni atacarle, y él tampoco puede perseguir ni entrar en batallas: lo primero evita el acoso en cadena al mismo viajero; lo segundo, que la inmunidad se use de escudo para depredar sin riesgo. Como es por héroe, una columna se puede atacar mientras lleve algún héroe sano; si todos sus héroes están heridos, nadie puede tocarla (Doc 5.16.4).
 
 Los escuadrones nunca quedan heridos: sus bajas son siempre permanentes.
 
 ## Batalla
-Un combate en el que interviene algún héroe humano se juega como una partida aparte en Unity; NPC contra NPC se resuelve con números (Doc 5.10). Mientras dura, **el mundo sigue**: solo queda bloqueado lo que interviene —la plaza asediada, o las columnas y la caravana que combaten, que en el mapa se ven como la batalla en su punto— y los héroes que combaten. Los héroes de la Facción de un bando pueden **unirse** a él mientras quede sitio. Quien la inició puede cancelarla antes de que empiece la partida (Doc 5.15.1). Los héroes del bando que pierde quedan **Heridos**.
+Con servidores de batalla, todo combate se juega como una partida aparte en Unity, también bot contra bot; sin ellos se resuelve con números (Doc 5.10). Mientras dura, **el mundo sigue**: solo queda bloqueado lo que interviene —la plaza asediada, o las columnas y la caravana que combaten, que en el mapa se ven como la batalla en su punto— y los héroes que combaten. Los héroes de la Facción de un bando pueden **unirse** a él mientras quede sitio. Quien la inició puede cancelarla antes de que empiece la partida (Doc 5.15.1). Los héroes del bando que pierde quedan **Heridos**.
 
 ## Huérfano
-Héroe sin residencia y, por tanto, sin campamento: sin sitio donde guardar escuadrones, reabastecer ni reclutar. Al perder su asentamiento, un héroe pasa a residir en el más cercano de su Facción; solo queda huérfano si su Facción no tiene ninguno (Doc 5.15.5). Sus escuadrones siguen siendo suyos, con su nivel y experiencia, y deja de ser huérfano en cuanto vuelve a residir en algún asentamiento (ciudadanía, Doc 2.5).
+**Ya no existe** (2026-10-02). Era el héroe sin residencia ni campamento. Ahora quien pierde su casa —por conquista, ruina o dejándola— pasa en el acto a residir en el campamento de mercenarios más cercano al sitio que perdió (Doc 1.9b, 5.15.5), con sus escuadrones. Solo quedan sin campamento los héroes aún sin Facción.
+
+## Almacén personal
+Lo que un Héroe guarda para sí: hasta 2000 unidades en total, de cualquier recurso (`ALMACEN_PERSONAL`, placeholder; 1000 hasta el 2026-11-05). Viaja con él en cada cambio de residencia —es lo único que se mueve sin caravana— y lo gasta quien lo tiene. Se llena y se vacía con el carro de su columna (Doc 2.5); nunca toca el almacén de una plaza.
 
 ## Liderazgo
 Valor del Héroe que limita **cuánto puede llevarse consigo a la vez** — no cuánto puede poseer. Cada tropa tiene un coste de Liderazgo según su escalón; la suma de lo que un Héroe se lleva no puede exceder su Liderazgo (Doc 5.11). Lo que se queda en su campamento no defiende: solo la guarnición que asigna, que tiene su propio cupo (ver Guarnición). La selección de qué llevarse se puede guardar como **loadout** (abajo).
@@ -76,13 +85,13 @@ Selección de escuadrones que un Héroe deja guardada para salir a mundo abierto
 
 La despensa general de un asentamiento es su **almacén** (`Asentamiento.almacen`): guarda todos los recursos, y su capacidad la amplía el edificio **Almacén**. De ahí come la población y la tropa que no está en campaña, y de ahí se carga el carro de un ejército.
 
-El **Granero** es un edificio que amplía solo la capacidad de **trigo**, mucho más que un Almacén (Doc 4.2.1). No confundir con el **rol** de especialización de un asentamiento que se dedica a producir trigo, que también se llama granero, junto a Aserradero, Cuenca Minera, Dehesa y Ciudad (`Consideraciones/Fase_0_5_Definicion_Especializacion_y_Cupos.md` §4): uno es un edificio; el otro, la vocación de un asentamiento entero.
+El **Granero** es un edificio que amplía solo la capacidad de **trigo**, mucho más que un Almacén (Doc 4.2.1). No confundir con el **rol** de especialización de un asentamiento que se dedica a producir trigo, que también se llama granero, junto a Aserradero, Cuenca Minera, Dehesa y Ciudad (`typescript-final:Consideraciones/Fase_0_5_Definicion_Especializacion_y_Cupos.md` §4): uno es un edificio; el otro, la vocación de un asentamiento entero.
 
 ## Asentamiento
-Unidad territorial con zona de influencia, edificios (auto-construidos), población NPC (Pesants/Artesanos/Nobleza), y cargos LOCALES (Gobernador, Tesorero, General, Maestro de Obras, Sacerdote). Pertenece a 1 y SOLO 1 Facción. Una Facción puede tener muchos asentamientos.
+Unidad territorial con zona de influencia, edificios (auto-construidos), población NPC (Pesants/Artesanos/Nobleza), y cargos LOCALES (Gobernador, Tesorero, General, Maestro de Obras, Sacerdote, Maestro de Caravanas). Pertenece a 1 y SOLO 1 Facción. Una Facción puede tener muchos asentamientos.
 
 ## Nivel de asentamiento / Obra de ascenso
-El nivel de un asentamiento (1 a 5) **no sube solo**. Cuando cumple los requisitos del nivel siguiente, su **Gobernador** puede pedir la subida: paga del almacén del asentamiento el coste de una **obra de ascenso**, y el nivel sube cuando la obra termina. Solo se puede pedir con cupo de la Facción libre y si el asentamiento es solvente en el nivel nuevo; si lo conquistan a mitad de obra, la obra se pierde (Doc 4.5). Distinto del nivel de Facción (sube por experiencia) y del nivel interno de un edificio.
+El nivel de un asentamiento (1 a 5) **no sube solo**. Cuando cumple los requisitos del nivel siguiente, su **Gobernador** puede pedir la subida: paga del almacén del asentamiento el coste de una **obra de ascenso**, y el nivel sube cuando la obra termina. Solo se puede pedir con cupo de la Facción libre (la solvencia en el nivel nuevo es, desde el 2026-11-10, una advertencia que no bloquea); si lo conquistan a mitad de obra, la obra se pierde (Doc 4.5). Distinto del nivel de Facción (sube por experiencia) y del nivel interno de un edificio.
 
 ## Facción (pieza central)
 Entidad política soberana que agrupa héroes y asentamientos. Una Facción puede tener muchos héroes y muchos asentamientos. Tiene cargos de NIVEL FACCIÓN: Rey y Embajador. La ciudadanía de un héroe se extiende a TODOS los asentamientos de su propia Facción (no a la Liga completa).
@@ -104,8 +113,8 @@ Título dinámico de PRESTIGIO (no cargo mecánico nuevo) otorgado al Rey de la 
 ---
 
 ## Cargos (nivel Facción)
-- **Rey:** autoridad sobre vasallaje, designación de Gobernadores, políticas superiores hacia los asentamientos de la Facción, y todas las funciones del Embajador. Por defecto en Liga-por-vasallaje; electo por voto en Liga-por-alianza. **Fase 0: una Facción SIEMPRE tiene Rey** — quien la crea lo es, y al abandonarla el trono pasa al siguiente ciudadano (ver Doc 2.2).
-- **Embajador:** crea alianzas y declara guerras. Designado por el Rey.
+- **Rey:** autoridad sobre vasallaje, designación de Gobernadores, políticas superiores hacia los asentamientos de la Facción, y todas las funciones del Embajador. Cargo de Facción: lo asigna el anterior Rey, sin votación (Doc 2.2). **Fase 0: una Facción SIEMPRE tiene Rey** — quien la crea lo es, y al abandonarla el trono pasa al siguiente ciudadano (ver Doc 2.2).
+- **Embajador:** crea alianzas y declara guerras (la guerra también la declara cualquier héroe al atacar con confirmación, Doc 2.4.1). Designado por el Rey.
 
 ## Cargos (nivel asentamiento, uno de cada por asentamiento)
 - **Gobernador:** máxima autoridad del asentamiento, designa al resto de cargos locales. Canónicamente electo por ciudadanos; **en Fase 0 lo designa el Rey de la Facción** (ver Doc 2.2).
@@ -113,15 +122,28 @@ Título dinámico de PRESTIGIO (no cargo mecánico nuevo) otorgado al Rey de la 
 - **General:** mando militar del asentamiento.
 - **Maestro de Obras:** gestiona prioridades de auto-construcción, bonus de tiempos de construcción.
 - **Sacerdote:** acelerador de aparición de nobleza + bonificación de felicidad.
+- **Maestro de Caravanas:** da, cambia y cancela los encargos de las caravanas de su plaza (el Tesorero y el Gobernador también pueden; sin políticas propias).
 
 ## Población NPC: Pesants / Artesanos / Nobleza
 Las 3 clases de población NPC de un asentamiento (distintas de los Héroes).
-- **Pesants:** base, crecimiento rápido; trabajan los recursos genéricos y se reclutan como tropa.
-- **Artesanos:** operan los edificios de transformación y también se reclutan como tropa.
-- **Nobleza:** crecimiento lento; aparece con Palacio y un mínimo de ciudadanos (Héroes) en el asentamiento. Es la clase que más oro recauda. No se recluta (Doc 5.8).
+- **Pesants:** base, crecimiento rápido; trabajan los recursos genéricos y se reclutan como tropa de escalón 1-2.
+- **Artesanos:** operan los edificios de transformación y se reclutan como tropa de escalón 3.
+- **Nobleza:** crecimiento lento; aparece con Palacio y un mínimo de ciudadanos (Héroes) en el asentamiento. Es la clase que más oro recauda y se recluta como tropa de escalón 4-5 (Doc 5.8).
 
 ## Aedas / Poetas
-Mismo rol: los NPCs viajantes que dan acceso a tecnología (itinerantes o residentes si hay nobleza) Y narran el lore/histórico del servidor (títulos de prestigio, hazañas).
+Mismo rol: NPCs de dos clases que dan acceso a la tecnología y narran el lore del servidor. **Itinerantes** (recorren los caminos): difunden y venden tecnología. **Residentes** (viven en un asentamiento con Palacio y Nobleza): desbloquean tecnología con una épica por capítulos. Ambos cantan la crónica: títulos de prestigio, descubrimientos, caídas, guerras y logros del servidor. Ver Doc 6.7.
+
+## Era
+Cada uno de los cinco tramos de la season (Reinos palaciales, Crisis y adaptación, Polis e imperios, Profesionalización, Hegemonía macedónica; de ~1300 a 323 a. C.). Una Era termina al cumplirse todos sus logros del servidor o al agotarse su plazo (Doc 6.2).
+
+## Tecnología
+Lo que adopta una Facción para desbloquear tropas, edificios, niveles internos o recetas. Es de una Era, está oculta hasta que aparece y la adopta el Rey en la capital (Doc 6).
+
+## Logro del servidor / Hito de la Facción
+Las dos condiciones de aparición de una tecnología: algo que ha pasado en todo el mundo (público, fijado para siempre, no dice qué tecnología abre) y algo que ha conseguido la propia Facción (Doc 6.3).
+
+## Capital
+El asentamiento de la Facción donde el Rey adopta tecnología y que paga su adopción; también es el centro de poder del mantenimiento por distancia (Doc 4.5). La designa el Rey en un asentamiento con Palacio (Doc 2.2); mientras no la designa, o si la pierde, es el asentamiento vivo más antiguo de la Facción.
 
 ## Oro
 Recurso/medio de intercambio: metal precioso en bruto pesado (no moneda acuñada), origen en minas ubicadas en el mapa. Se usa para servicios/NPCs (sueldos, mercenarios, tecnología) y también como recurso más de trueque entre Facciones. Es un recurso del **almacén del asentamiento**: no confundir con las monedas propias del héroe (bronce/plata/oro, Doc 5.16.1), que no tienen relación con él.

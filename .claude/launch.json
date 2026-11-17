@@ -2,50 +2,84 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "bronze-age-server",
-      "runtimeExecutable": "npm",
+      "name": "bronzeage-servidor",
+      "runtimeExecutable": "cargo",
       "runtimeArgs": [
         "run",
-        "server"
+        "--release",
+        "-p",
+        "servicio"
       ],
-      "env": {
-        "ADMINISTRADORES": "dev:jefa",
-        "INTERVALO_TICK_MS": "5000"
-      },
-      "port": 3000
+      "port": 7878
     },
     {
-      "name": "bronze-age-cliente",
+      "name": "generar-mundo",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "scripts/generar-mundo.mjs"
+      ],
+      "cwd": "."
+    },
+    {
+      "name": "bronzeage-lanzador",
+      "runtimeExecutable": "cargo",
+      "runtimeArgs": [
+        "run",
+        "--release",
+        "-p",
+        "lanzador",
+        "--bin",
+        "bronzeage-lanzador"
+      ],
+      "env": {
+        "LANZADOR_PROCESO": "mentira",
+        "LANZADOR_ARGUMENTOS": "--espera-ms 30000"
+      }
+    },
+    {
+      "name": "bronzeage-bots",
+      "runtimeExecutable": "cargo",
+      "runtimeArgs": [
+        "run",
+        "--release"
+      ],
+      "cwd": "../BronceAgeBotsBrain",
+      "port": 4000
+    },
+    {
+      "name": "bronzeage-bots-mercenarios",
+      "runtimeExecutable": "cargo",
+      "runtimeArgs": [
+        "run",
+        "--release"
+      ],
+      "cwd": "../BronceAgeBotsBrain",
+      "env": {
+        "BOTS_POBLACION": "mercenarios"
+      },
+      "port": 4001
+    },
+    {
+      "name": "bronzeage-admin",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
-        "--prefix",
-        "cliente",
         "run",
         "dev"
       ],
+      "cwd": "../BronceAgeAdminClient",
       "port": 5173,
       "autoPort": true
     },
     {
-      "name": "bronze-age-cliente-jugador",
+      "name": "bronzeage-cliente-jugador",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
-        "--prefix",
-        "../BronzeAgeClient",
         "run",
         "dev"
       ],
+      "cwd": "../BronzeAgeClient",
       "port": 5174,
       "autoPort": true
-    },
-    {
-      "name": "lab-trazado",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "run",
-        "lab"
-      ],
-      "port": 5180
     }
   ]
 }

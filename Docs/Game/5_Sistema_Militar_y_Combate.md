@@ -3,11 +3,11 @@
 ## 5.1 Principio general: héroe-comandante liderando tropa (heredado de Iberia)
 Cada Jugador está en el mundo como su **Héroe** (5.16), un comandante que lidera escuadrones de unidades NPC. Regla de oro: **Tropa > Héroe**. Puede llevar más de un regimiento a una batalla pero solo despliega uno a la vez, intercambiables en puntos tácticos de reabastecimiento dentro del combate.
 
-**El héroe combate por sí mismo.** En las batallas jugadas en Unity lo hace como un personaje de Conquest: clase, nivel, atributos, perks y equipo (5.16). En las que se resuelven con números (NPC contra NPC, 5.15.6) la regla de oro la hace cumplir esta cifra:
+**El héroe combate por sí mismo.** En las batallas jugadas en Unity lo hace como un personaje de Conquest: clase, nivel, atributos, perks y equipo (5.16). En las que se resuelven con números (las de una partida sin servidores de batalla, 5.15.6) la regla de oro la hace cumplir esta cifra:
 
 > **Un héroe solo vale lo que UNA unidad de la tropa de élite.**
 
-Se deriva del catálogo (5.8) en vez de escribirse a mano, por el mismo motivo que el coste de Liderazgo (5.11.1): `poderBase` es placeholder, y un número suelto se desincronizaría al recalibrar. Son **15**.
+Se deriva del catálogo (5.8) en vez de escribirse a mano, por el mismo motivo que el coste de Liderazgo (5.11.1): `poderBase` es placeholder, y un número suelto se desincronizaría al recalibrar. Son **15** (`MILITAR.poderPorHeroe`) y se **suman** al poder de su bando: cada héroe sano que combate aporta 15, además de sus escuadras (decidido el 2026-10-19). Un bando con héroes y sin una sola escuadra sí tiene poder.
 
 Qué significa esa cifra, que es lo que dice si está bien puesta:
 
@@ -19,18 +19,20 @@ Qué significa esa cifra, que es lo que dice si está bien puesta:
 
 Un héroe vale **menos de un tercio de la peor leva**. Frente a una columna no decide nada —Tropa > Héroe, intacto— y decide justo en el único combate que es suyo: **contra otro héroe solo**. Contra una caravana no: una caravana sin escolta se defiende de un héroe solo (Doc 3.10), a propósito.
 
-**El héroe no muere.** Al perder una batalla queda **herido** (5.16.4) y pierde las bajas de sus escuadrones; si fue en mundo abierto, entrega además **la mitad de su carro** (5.16.6). Gana nivel y experiencia según su desempeño en la batalla (5.16.3).
+**El héroe no muere.** Al perder una batalla queda **herido** (5.16.4) y pierde las bajas de sus escuadrones; si fue en mundo abierto, entrega además **la mitad de su carro** (5.16.6). Gana nivel y experiencia combatiendo (5.16.3).
 
 ## 5.2 Modalidades de batalla instanciadas (heredado de Iberia)
 El combate ocurre en INSTANCIAS separadas del mapa global (aunque se desencadenen en él), límites simétricos fijos, 2 bandos (Atacante/Defensor), sin empates.
 
-1. **Asedio de asentamientos**: atacante captura banderas/áreas vitales antes de que expire el tiempo; defensor gana resistiendo. Defienden los héroes que están dentro y la guarnición (5.12.4), más los héroes de la Facción de la plaza que se unan mientras quede sitio (5.15.1). Mortalidad severa (permadeath). Los héroes en cola rellenan la instancia a medida que caen otros; el tope de la batalla cuenta héroes (5.15.1).
+1. **Asedio de asentamientos**: atacante captura banderas/áreas vitales antes de que expire el tiempo; defensor gana resistiendo. Defienden los héroes que están dentro y la guarnición (5.12.4), más los héroes de la Facción de la plaza que, estando dentro, se unan mientras quede sitio (5.15.1). Mortalidad severa (permadeath). Los héroes en cola rellenan la instancia a medida que caen otros; el tope de la batalla cuenta héroes (5.15.1).
 2. **Mundo abierto**: choque de patrullas/ejércitos. Bandera/campamento transitorio; quien la pierde se retira, entrega la mitad de su carro y sus héroes quedan heridos (5.16.4). **Se declara, pero solo estando delante**: la proximidad ofrece atacar y el jugador decide; nadie es arrastrado a un combate por pasar cerca (5.12.3). Alcanzar a quien huye es lo que hace la persecución.
-3. **Defensa/intercepción de caravanas**: combate asimétrico móvil (ver Doc 3, sección 3.10). Igual que el anterior, la proximidad de una columna a una caravana ofrece interceptarla, y el jugador decide (5.12.3).
+3. **Defensa/intercepción de caravanas**: combate asimétrico móvil (ver Doc 3, sección 3.10). Igual que el anterior, la proximidad de una columna a una caravana ofrece interceptarla, y el jugador decide (5.12.3). Dos tipos según dónde esté respecto a su dueño: **A, disputa de carros**, y **B, aguante** (3.10).
+   - **3b. Saqueo de un pueblo extractor**: batalla propia de saqueo, nunca de conquista (4.2.2).
+   - **3c. Avanzada**: la abre solo un ejército y dura 30 minutos, como un asedio (5.17).
 4. **Entrenamiento/matchmaking** (pospuesto a una fase posterior a Fase 0/1): 15v15 puro, sin permadeath, para probar tácticas. Requiere lo mismo que el Attack Timer (5.6).
 ### 5.2.5 Resolución numérica y varianza de combate
 
-Las batallas que se resuelven con números (5.15.6) suman el poder de cada bando y **multiplican cada uno por un factor aleatorio de ±15%** (`MILITAR.varianzaCombate`). Gana quien saque el producto más alto. Cuanto más ajustado el resultado, más bajas sufre también el ganador; el perdedor siempre pierde más. El azar entra **una sola vez por bando y por combate** — no hay tiradas por unidad ni por ronda. El poder de cada escuadrón sube un **5% por cada nivel** que tenga (5.16.3).
+Las batallas que se resuelven con números (5.15.6) suman el poder de cada bando y **multiplican cada uno por un factor aleatorio de ±15%** (`MILITAR.varianzaCombate`). Gana quien saque el producto más alto. **El defensor tiene una pequeña ventaja**: su poder se multiplica además por `MILITAR.ventajaDefensor` (×1,05), y en un empate exacto gana él. **La muralla de una plaza multiplica además el poder de su defensor** (decidido el 2026-10-22): `1 + (bonoDefensaPorNivel − 1) × integridad / nº de puertas` (×1,3 / ×1,8 / ×2,5 de bono según empalizada, piedra o adarve), con la integridad del anillo, es decir, la fracción levantada. **Solo cuenta un recinto: el más exterior de los que han llegado a cerrarse**, de modo que mientras se mejora o se amplía la muralla sigue defendiendo el anillo en pie con su nivel de antes. Menos puertas, más ventaja: con el anillo entero y el bono del adarve (2,5) son ×2,5 con una puerta, ×1,75 con dos, ×1,5 con tres y ×1,38 con cuatro, que es el máximo de puertas de un anillo (Doc 4, decidido el 2026-10-24); un anillo a medio levantar (o dañado por una conquista) defiende casi nada, y nunca perjudica al defensor. **Solo vale en el asedio de una plaza resuelto con números** (sin servidores de batalla); en una batalla de Unity la muralla viaja como geometría y la decide Unity, y no se aplica a columnas, pueblos extractores, caravanas ni avanzadas. El equipo de asedio no la reduce. Cuanto más ajustado el resultado, más bajas sufre también el ganador; el perdedor siempre pierde más. El azar entra **una sola vez por bando y por combate** — no hay tiradas por unidad ni por ronda. El poder de cada escuadrón sube un **3% por cada nivel** que tenga, hasta el nivel 10 (5.16.3; era el 1% hasta el 2026-11-11).
 
 **Qué implica ese ±15%**: los multiplicadores van de 0.85 a 1.15, así que el cociente entre ambos bandos va de 0.74 a 1.35. Es decir, **un atacante necesita un 35% más de poder para tener la victoria garantizada**; por debajo de eso siempre puede perder. Ese margen no es un detalle de implementación: es lo que decide cuándo merece la pena atacar, sabiendo que marchar cuesta tiempo real, deja la ciudad descubierta, vacía el almacén y las bajas son permanentes.
 
@@ -38,6 +40,7 @@ Las batallas que se resuelven con números (5.15.6) suman el poder de cada bando
 - Romper formación penaliza duro (ej. arqueros dispersos -30% precisión, escuderos aislados -20% defensa, lanceros sin formación pierden bono anti-carga). Flanquear/aislar formaciones enemigas es táctica válida.
 - COHESIÓN ENTRE JUGADORES: varios jugadores anclando una línea juntos ganan Defensa Compartida, resistencia a rotura de moral, regeneración lenta de HP.
 - Jugador novato: útil desde el día 1 con infantería básica de escudo barata ("carne de línea") mientras veteranos flanquean.
+- **FORMACIONES DE LA ESCUADRA** (decisión del autor del 2026-11-11; Heroe_Y_Tropa §10.4): toda tropa tiene su **formación de reposo**, la que adopta al seguir a su héroe o al pararse, y refleja su disciplina: unos granjeros se colocan dispersos y desordenados, unos hoplitas juntos y en orden. Desde el principio hay además **línea, columna y dispersa**; con **Disciplina de formación** (Doc 6), las cerradas: **muro de escudos, testudo, cuadro y cuña**. El héroe deja elegida la de cada escuadra fuera de la batalla y entra con ella si su Facción aún la tiene (si no, en la de reposo). La forma de cada formación, dónde va cada soldado y qué formaciones tiene cada tropa los decide la batalla (Unity).
 
 ## 5.4 Ciclo de vida de unidades (heredado de Iberia)
 
@@ -45,27 +48,27 @@ Las batallas que se resuelven con números (5.15.6) suman el poder de cada bando
 
 - Al **conquistar** un asentamiento se aplica 5.15.5: cada héroe defensor queda fuera con los escuadrones que usó en la batalla; el resto de escuadrones de sus residentes, guarnición incluida, quedan a 0 unidades y se van con el campamento de su héroe al asentamiento más cercano de su Facción, donde pasa a residir. No hay captura de guarnición, y el asentamiento conquistado queda sin guarnición.
 - **Los antiguos residentes pierden la residencia y con ella los cargos locales**: la ciudad cambia de dueño entera, valga para los que estaban de campaña como para los que estaban en casa (Doc 2.5).
-- La ciudad **no se entrega intacta**: la conquista la saquea (población, edificios, murallas) y abre una **ventana de ocupación** de tiempo fijo — inmune a un nuevo asedio, recaudación y crecimiento a la mitad, mantenimiento congelado. El premio sigue siendo "un asentamiento en funcionamiento" (5.12.4), pero **es una inversión que tarda en rendir**, no un subidón inmediato. Detalle en 5.12.9.
+- La ciudad **no se entrega intacta**: la conquista la saquea (población, edificios, murallas), la **protege un día** contra nuevos asedios y abre una **ventana de ocupación** de tiempo fijo — recaudación y crecimiento a la mitad, mantenimiento congelado. El premio sigue siendo "un asentamiento en funcionamiento" (5.12.4), pero **es una inversión que tarda en rendir**, no un subidón inmediato. Detalle en 5.12.9.
 - Llevarse escuadrones a campaña los saca del campamento de verdad: dejan de comer del almacén (5.13). Los que se quedan en el campamento sin estar en guarnición no defienden (5.12.4).
-- **Un héroe cuya Facción se queda sin asentamientos queda HUÉRFANO** (Doc 0): conserva sus escuadrones, pero sin residencia — sin sitio donde guardarlos, reabastecer ni reclutar. Deja de serlo al volver a residir en algún asentamiento (ciudadanía, Doc 2.5).
+- **Un héroe cuya Facción se queda sin asentamientos pasa a residir en el campamento de mercenarios más cercano** (Doc 1.9b, 5.15.5): conserva sus escuadrones, y allí los guarda, reposta y recluta. Ya no hay huérfanos (Doc 0).
 
 Ciclo de vida propiamente dicho:
 
 - PERMADEATH individual (excepto modo entrenamiento): bajas son permanentes.
 - El SQUAD (nombre, nivel y experiencia) persiste aunque el regimiento sea aniquilado — se puede rellenar con nuevos reclutas conservando el progreso.
-- DESERCIÓN POR HAMBRE: tropas consumen raciones continuamente; sin suministro, la moral colapsa y desertan permanentemente (mismo efecto que perderlas en combate). **Es la misma regla en guarnición y en campaña** — solo cambia de qué despensa se come (5.13).
-- **La población civil come ANTES que las tropas.** Los civiles son quienes producen (Granja/Cantera/Fundición/...); las tropas no producen nada, así que bajo escasez sostenida el golpe lo absorbe primero la parte del sistema que no es productiva: la moral militar colapsa y empieza la deserción MUCHO antes de que la nutrición civil llegue a comprometerse. Para que los civiles se quedaran sin nada, la producción tendría que caer por debajo de SOLO su propio consumo. Está pensado para la escala multijugador real, donde el número de héroes por asentamiento y la presión militar crecen con el servidor mientras la producción de comida está acotada por el espacio construido (`Consideraciones/NPC_Gobernanza_Facciones_Controladas.md`).
-- **Reclutar exige reserva de trigo proyectada**: antes de aceptar un reclutamiento o una reposición, el trigo en almacén debe cubrir `RESERVA_CONSTRUCCION.horizonteTicksComida` (8) minutos del consumo YA PROYECTADO CON la tropa nueva sumada (civiles + tropas existentes + la que se está reclutando). Es regla del MOTOR, igual para NPC y jugador: igual que la Vivienda acota cuánta población civil puede aparecer, esto acota cuánta tropa puede sostenerse, sin importar cuántos héroes residan en el asentamiento. Si varios reclutan en el mismo minuto, los primeros agotan el margen y el resto falla limpio.
-- **El pool de reclutamiento es la población MENOS la ya ocupada en producción**, no la población total: reclutar no puede sacar pesants que cubren los trabajadores de Granja/Cantera/Leñera/minas/Corral, ni artesanos que cubren los de Fundición/Curtiduría/Armería/Carpintería. Es simétrico entre pesants y artesanos, y aplica igual al reclutamiento de un jugador y al de la gobernanza NPC.
+- DESERCIÓN POR HAMBRE: tropas consumen raciones continuamente; sin suministro, la moral colapsa y desertan permanentemente (mismo efecto que perderlas en combate). **Es la misma regla en guarnición y en campaña** — solo cambia de qué despensa se come (5.13). **La guarnición del campamento de una plaza come carne y trigo a la vez, como la población: su ración de carne por soldado y el trigo el resto de su ración** (desde el 2026-11-11; del 2026-11-08 al 2026-11-11 comía primero carne y después trigo); la columna en campaña sigue comiendo solo trigo (sus víveres).
+- **La población civil come ANTES que las tropas.** Los civiles son quienes producen (Granja/Cantera/Fundición/...); las tropas no producen nada, así que bajo escasez sostenida el golpe lo absorbe primero la parte del sistema que no es productiva: la moral militar colapsa y empieza la deserción MUCHO antes de que la nutrición civil llegue a comprometerse. Para que los civiles se quedaran sin nada, la producción tendría que caer por debajo de SOLO su propio consumo. Está pensado para la escala multijugador real, donde el número de héroes por asentamiento y la presión militar crecen con el servidor mientras la producción de comida está acotada por el espacio construido (`typescript-final:Consideraciones/NPC_Gobernanza_Facciones_Controladas.md`).
+- **Reclutar exige reserva de trigo proyectada**: antes de aceptar un reclutamiento o una reposición, el trigo en almacén debe cubrir `RESERVA_CONSTRUCCION.horizonteMinutosComida` (8) minutos del consumo YA PROYECTADO CON la tropa nueva sumada (civiles + tropas existentes + la que se está reclutando). Es regla del MOTOR, igual para NPC y jugador: igual que la Vivienda acota cuánta población civil puede aparecer, esto acota cuánta tropa puede sostenerse, sin importar cuántos héroes residan en el asentamiento. Si varios reclutan en el mismo minuto, los primeros agotan el margen y el resto falla limpio.
+- **El pool de reclutamiento es la población MENOS la ya ocupada en producción**, no la población total: reclutar no puede sacar pesants que cubren los trabajadores de Granja/Cantera/Leñera/minas/Corral/Molino/Horno, ni artesanos que cubren los de Fundición/Curtiduría/Armería/Carpintería/Quesera/Bodega/Prensa. Es simétrico entre pesants y artesanos, y aplica igual al reclutamiento de un jugador y al de la gobernanza NPC.
 
 ## 5.5 Progresión de las tropas (ver también Doc 4.1)
-Solo se reclutan Pesants y Artesanos, pagando equipo (5.8). Sus escuadrones suben de **nivel y experiencia** combatiendo de verdad, según su desempeño en la batalla (5.16.3). La Nobleza no se convierte en tropa.
+Se recluta pagando equipo (5.8), y cada tropa sale de una clase de población según su escalón (5.8). Sus escuadrones suben de **nivel y experiencia** combatiendo de verdad (5.16.3).
 
 ## 5.6 Attack Timer (heredado de Iberia, pospuesto a fase posterior a Fase 0)
 Asedios FORMALES en ventanas limitadas (ej. 2 veces/semana, horario fijo, ~1h de duración). Ataques logísticos (mundo abierto, caravanas) libres 24/7. Pospuesto a Fase 1+: requiere instanciado multijugador programado y un sistema de colas y horarios.
 
 ## 5.7 Reclutamiento por infraestructura física (adaptado a la Edad de Bronce)
-No hay árbol tecnológico abstracto — el tipo de unidad reclutable depende de la infraestructura física y NPCs residentes del asentamiento.
+El tipo de unidad reclutable depende de las **cuatro puertas** (Doc 6.1): la Era del servidor, la tecnología adoptada por la Facción, la infraestructura física del asentamiento (edificio y nivel interno) y la población, el equipo y los recursos disponibles.
 
 **Oficios/NPCs especialistas:**
 - Broncista/Fundidor: funde cobre+estaño → bronce; fabrica armas.
@@ -77,86 +80,127 @@ No hay árbol tecnológico abstracto — el tipo de unidad reclutable depende de
 
 **Edificios** (catálogo completo con costos/recetas en Doc 4.2.1, rediseño Fase 0):
 - Centro Urbano: reclutamiento de la defensa mínima (Milicia de lanceros, ver roster 5.8). La tropa de entrada no depende del Barracón, que exige nivel 2 (Doc 4.2.1), sino del único edificio que nace `activo` con el asentamiento, sin cola de construcción ni requisito: todo asentamiento puede defenderse desde el primer minuto, aunque sea con la unidad más débil del roster.
-- Fundición: fabricación de lingotes de cobre/estaño/bronce — auto-construcción (ver Doc 4.2).
+- Fundición: fabricación de lingotes de cobre, estaño, bronce y hierro — auto-construcción (ver Doc 4.2).
 - Curtiduría: tratamiento de cuero (livestock → cuero → cuero curtido → cuero de calidad).
 - Armería: fabricación de armas y armaduras a partir de lingotes y cuero — insumo directo del reclutamiento de Barracón/Galería de tiro.
-- Carpintería: recluta armas de asedio (ariete, torre de asedio) y habilita construir/mejorar Palacio, Armería, Barracón y Galería de tiro de nivel 2+.
+- Carpintería: fabrica equipo (la pieza de Carro de Guerra y, en las Eras II-III, escalas y equipo de asedio), no recluta. El equipo de asedio **no tiene efecto en el combate con números** (decidido el 2026-10-19). Habilita el nivel 2 de Barracón y Galería de tiro, y su nivel 2 el nivel 3 de Barracón, Galería de tiro y Caballerizas.
 - Barracón: reclutamiento de tropas cuerpo a cuerpo (ver roster 5.8). Adición MANUAL de Gobernador/Maestro de Obras a la cola (Doc 4.2).
 - Galería de tiro: reclutamiento de tropas a distancia (ver roster 5.8). Adición MANUAL de Gobernador/Maestro de Obras a la cola (Doc 4.2).
-- Mina de cobre: extractor de cobre (Doc 1.4/4.2.1) — único extractor de cobre del juego, insumo obligatorio de Fundición para todo equipo de bronce. Extractores finitos con reemplazo automático al agotarse (mecanismo completo en Doc 4.2, incluye número fijo por tipo — NO ligado al nivel de asentamiento).
-- Gran Fundición: edificio de élite; requiere nivel de Facción 3 (Doc 4.2.1).
-- **No hay carros de guerra en Fase 0**: se posponen a Fase 1, y con ellos los Establos.
+- Caballerizas: reclutamiento de caballería y carros de guerra (ver roster 5.8); pide `cria_caballar`. Adición MANUAL de Gobernador/Maestro de Obras a la cola (Doc 4.2).
+- Mina de cobre y Mina de hierro: extractores de cobre y de mineral de hierro (Doc 1.4/4.2.1), insumos de la Fundición. Extractores finitos con reemplazo automático al agotarse (mecanismo completo en Doc 4.2, incluye número fijo por tipo — NO ligado al nivel de asentamiento).
+- Gran Fundición: refundición, funde en lingotes la chatarra que dejan los soldados caídos en batalla; una por Facción, en su capital (Doc 4.2.1).
 
 **Materiales limitantes (clave anti-"ejército meta universal"):**
 - COBRE: relativamente abundante.
 - ESTAÑO: raro, concentrado en pocas ubicaciones (base histórica real: la disrupción de rutas de estaño es una teoría real del colapso de la Edad de Bronce). El bronce de calidad — y por tanto las tropas de tier alto — depende del acceso a estaño.
+- HIERRO: el mineral es mucho más abundante que el estaño. El hierro temprano es blando, abundante y barato, no mejor que el bronce; el de calidad llega con `forja_hierro_estandarizada`. **Solo hay armas de hierro**: las armaduras son de bronce en todas las Eras, así que el estaño nunca deja de importar.
+- CABALLOS: se compran con oro al reclutar (y al reponer): **5 de oro por caballo**, uno por jinete y dos por carro.
 
 ## 5.8 Roster de tropas (reclutamiento por edificio + nivel interno, ver Doc 4.2.1)
 
 Catálogo en `TROPAS_RECLUTABLES`. Terminología (Doc 0): son tres conceptos y la jerarquía de entidades es **Héroe → Escuadrón → Unidad**. Una **tropa** es el TIPO (ej. "Lanceros con escudo de mimbre") y las tablas de abajo son su catálogo; un **escuadrón** es la instancia que un héroe posee y comanda; una **unidad** es cada soldado individual dentro de él. El número de unidades **NO lo elige el jugador** (ver "Unidades por defecto" más abajo) — cada escuadrón reclutado añade siempre el mismo tamaño fijo.
 
-El roster no se organiza por Tier abstracto (inspiración Total War Troy, foco Egeo/Grecia) — cada tropa se recluta en Centro Urbano, Barracón o Galería de tiro, según el NIVEL INTERNO del edificio (1-3, ver Doc 4.2.1; Centro Urbano no tiene niveles), pagando el equipo correspondiente fabricado en Armería (ver catálogo completo de recetas en Doc 4.2.1). "Costo" en las tablas de abajo es POR SOLDADO — el costo real de reclutar es ese valor × "Unidades". Cada tropa tiene además un `poderBase` (placeholder) que usan las batallas que se resuelven con números (5.2.5).
+El roster no se organiza por Tier abstracto: cada tropa se recluta en Centro Urbano, Barracón, Galería de tiro o Caballerizas, según el NIVEL INTERNO del edificio (1-3, ver Doc 4.2.1; Centro Urbano no tiene niveles), con la tecnología adoptada por la Facción (Doc 6) y pagando el equipo correspondiente, fabricado en Armería, Carpintería o comprado (caballos). "Costo" en las tablas de abajo es POR SOLDADO — el costo real de reclutar es ese valor × "Unidades". Cada tropa tiene además un `poderBase` (placeholder) que usan las batallas que se resuelven con números (5.2.5). "Asent." es el nivel de asentamiento que hace falta de verdad: el mayor entre el del edificio y el del equipo.
 
-**Coste de oro por reclutar** (`Consideraciones/Economia_Del_Oro_Definicion.md`): además del equipo, reclutar cuesta **oro por soldado según el escalón de la tropa** (`RECLUTAMIENTO_ORO_POR_ESCALON` en `constants.ts`, PLACEHOLDER 1/2/4/7/11 para escalones 1-5 — curva que sube más deprisa que el poder, igual criterio que `LIDERAZGO.costePorEscalon`). **Única excepción: la Milicia de lanceros del Centro Urbano** (`tropa.edificio === 'centroUrbano'`), que cuesta solo madera: la defensa mínima no depende del tesoro. Todo lo del Barracón/Galería de tiro cuesta oro, escalón 1 incluido: sin oro solo tienes la milicia. Reponer bajas vuelve a pagar oro por los soldados repuestos. `factorCostoReclutamiento` ("Leva Forzosa", Doc 4.4) toca **solo el equipo, no el oro** — no se conscribe moneda. Regla de motor uniforme: se cobra igual a NPC y jugador.
+**Coste de oro por reclutar** (`typescript-final:Consideraciones/Economia_Del_Oro_Definicion.md`): además del equipo, reclutar cuesta **oro por soldado según el escalón de la tropa** (`RECLUTAMIENTO_ORO_POR_ESCALON` en `constants.ts`, PLACEHOLDER 1/2/4/7/11 para escalones 1-5 — curva que sube más deprisa que el poder, igual criterio que `LIDERAZGO.costePorEscalon`), más **5 de oro por caballo** en la caballería y los carros. **Única excepción: las tropas del Centro Urbano** (milicia de lanceros, leñadores, granjeros y mineros), que no pagan oro: la defensa mínima no depende del tesoro. Todo lo demás cuesta oro, escalón 1 incluido. Reponer bajas vuelve a pagar oro por los soldados repuestos. `factorCostoReclutamiento` ("Leva Forzosa", Doc 4.4) toca **solo el equipo, no el oro** — no se conscribe moneda. Regla de motor uniforme: se cobra igual a NPC y jugador.
 
-**Centro Urbano (defensa mínima, sin edificio dedicado) — carril Pesants + Artesanos:**
+**Centro Urbano (defensa mínima, sin edificio dedicado):**
 
-| Tropa | Costo (por soldado) | poderBase | Unidades |
-|---|---|---|---|
-| Milicia de lanceros | 2 Madera (en bruto, sin pasar por Armería) | 2 | 25 |
+| Tropa | Tecnología (Era) | Costo (por soldado) | Escalón | poderBase | Unidades | Velocidad | Asent. |
+|---|---|---|---|---|---|---|---|
+| Milicia de lanceros | `leva_comunal` (I) | 2 Madera (en bruto, sin pasar por Armería) | 2 | 2 | 25 | 30 | 1 |
+| Leñadores | `leva_comunal` (I) | 1 Madera (su hacha) | 1 | 1 | 30 | 30 | 1 |
+| Granjeros | `leva_comunal` (I) | nada (sus herramientas) | 1 | 1 | 30 | 30 | 1 |
+| Mineros | `leva_comunal` (I) | 1 Piedra (su pico), sin oro | 1 | 1 | 30 | 30 | 1 |
 
-**Barracón (cuerpo a cuerpo) — carril Pesants + Artesanos, combate real (Doc 4.1/5.5):**
+Leñadores, granjeros y mineros son muy malos en combate y muy desorganizados: en la batalla no forman (Unity). Los mineros entran también en la tropa prestada del campamento de mercenarios y son la guarnición de serie de los pueblos extractores (4.2.2).
 
-| Nivel | Tropa | Costo (por soldado) | poderBase | Unidades |
-|---|---|---|---|---|
-| 1 | Lanceros con escudo de mimbre | 1 Arma de Madera | 3 | 25 |
-| 1 | Espadachines de espada corta de cobre | 1 Arma de Cobre + 1 Armadura Básica | 4 | 20 |
-| 2 | Hacheros ligeros | 1 Arma de Bronce + 1 Armadura Básica | 7 | 18 |
-| 2 | Espadachines con espadas y escudos de bronce | 2 Arma de Bronce + 1 Armadura Intermedia | 9 | 18 |
-| 3 | Lanceros pesados micénicos (escudos grandes) | 2 Arma de Bronce + 2 Armadura Intermedia | 14 | 15 |
-| 3 | Hacheros armados (armadura media) | 1 Arma de Bronce + 1 Armadura Intermedia | 12 | 15 |
+**Barracón (cuerpo a cuerpo):**
 
-**Galería de tiro (a distancia) — carril Pesants + Artesanos, combate real:**
+| Nivel | Tropa | Tecnología (Era) | Costo (por soldado) | Escalón | poderBase | Unidades | Velocidad | Asent. |
+|---|---|---|---|---|---|---|---|---|
+| 1 | Lanceros con escudo de mimbre | `escudos_ligeros` (I) | 1 Arma de Madera | 2 | 3 | 25 | 30 | 2 |
+| 1 | Espadachines de espada corta de cobre | `armamento_palacial` (I) | 1 Arma de Cobre + 1 Armadura Básica | 2 | 4 | 20 | 24 | 2 |
+| 2 | Hacheros ligeros | `armamento_palacial` (I) | 1 Arma de Bronce + 1 Armadura Básica | 3 | 7 | 18 | 24 | 2 |
+| 2 | Espadachines con espadas y escudos de bronce | `aleacion_bronce` (I) | 2 Arma de Bronce + 1 Armadura Intermedia | 3 | 9 | 18 | 24 | 2 |
+| 2 | Hacheros armados (armadura media) | `aleacion_bronce` (I) | 1 Arma de Bronce + 1 Armadura Intermedia | 3 | 12 | 15 | 18 | 2 |
+| 2 | Guerreros filisteos (Peleset) | `forja_hierro_temprana` (II) | 1 Arma de Hierro + 1 Armadura Intermedia | 3 | 9 | 18 | 24 | 2 |
+| 2 | Shardana | `bronce_calidad_militar` (II) | 1 Arma de Bronce de Calidad + 1 Armadura Básica | 4 | 15 | 15 | 24 | 3 |
+| 2 | Hoplitas ciudadanos | `ciudadania_militar` (III) | 1 Arma de Hierro + 1 Armadura de Bronce | 3 | 10 | 18 | 24 | 3 |
+| 2 | Epílektoi | `infanteria_profesional` (IV) | 1 Arma de Hierro de Calidad + 1 Armadura de Bronce | 3 | 10 | 18 | 24 | 4 |
+| 2 | Falangitas (sarisa) | `falange_sarisa` (V) | 1 Arma de Hierro de Calidad + 1 Armadura Intermedia | 4 | 14 | 32 | 18 | 4 |
+| 3 | Lanceros pesados micénicos (escudos grandes) | `panoplia_bronce` (II) | 2 Arma de Bronce + 1 Armadura de Bronce | 4 | 14 | 15 | 18 | 3 |
+| 3 | Hequetai (guardia de bronce) | `panoplia_bronce` (II) | 1 Arma de Bronce de Calidad + 1 Armadura de Bronce | 5 | 17 | 18 | 18 | 3 |
+| 3 | Espartiatas | `falange_hoplita` (III) | 1 Arma de Hierro de Calidad + 1 Armadura de Bronce de Calidad | 4 | 17 | 16 | 18 | 4 |
+| 3 | Inmortales | `infanteria_profesional` (IV) | 1 Arma de Hierro de Calidad + 1 Arma de Bronce + 1 Armadura Intermedia | 5 | 15 | 15 | 24 | 4 |
+| 3 | Hipaspistas | `cuerpo_hipaspistas` (V) | 1 Arma de Hierro de Calidad + 1 Armadura de Bronce de Calidad | 5 | 17 | 20 | 24 | 4 |
 
-| Nivel | Tropa | Costo (por soldado) | poderBase | Unidades |
-|---|---|---|---|---|
-| 1 | Honderos (escaramuzadores) | 1 Arma de Madera | 5 | 20 |
-| 2 | Escaramuzadores con jabalina | 1 Arma de Bronce + 1 Armadura Básica | 8 | 18 |
-| 2 | Arqueros | 1 Arma de Bronce + 1 Armadura Intermedia | 9 | 18 |
-| 3 | Arqueros con arco compuesto | 3 Arma de Bronce + 2 Armadura Intermedia | 15 | 12 |
+**Galería de tiro (a distancia):**
 
-`poderBase` es placeholder. Las unidades de cada escuadrón las fija el escalón de su tropa (5.11.1).
+| Nivel | Tropa | Tecnología (Era) | Costo (por soldado) | Escalón | poderBase | Unidades | Velocidad | Asent. |
+|---|---|---|---|---|---|---|---|---|
+| 1 | Honderos (escaramuzadores) | `hostigamiento_tribal` (I) | 1 Arma de Madera | 2 | 5 | 20 | 30 | 2 |
+| 2 | Escaramuzadores con jabalina | `hostigamiento_tribal` (I) | 1 Arma de Cobre + 1 Armadura Básica | 3 | 8 | 20 | 30 | 2 |
+| 2 | Arqueros | `arqueria_palacial` (I) | 1 Arma de Bronce + 1 Armadura Intermedia | 3 | 9 | 20 | 24 | 2 |
+| 2 | Peltastas | `pantalla_escaramuzadores` (III) | 2 Arma de Hierro (jabalinas), sin armadura | 3 | 9 | 20 | 30 | 2 |
+| 2 | Honderos rodios | `pantalla_escaramuzadores` (III) | 1 Arma de Hierro + 1 Armadura Básica | 3 | 9 | 20 | 30 | 2 |
+| 3 | Arqueros con arco compuesto | `arco_compuesto` (II) | 3 Arma de Bronce + 2 Armadura Intermedia | 5 | 15 | 20 | 18 | 3 |
+| 3 | Arqueros escitas | `arqueria_especializada` (III) | 1 Arma de Hierro + 1 Armadura Básica | 5 | 17 | 20 | 24 | 3 |
+| 3 | Peltastas de Ifícrates | `hostigadores_profesionales` (IV) | 2 Arma de Hierro de Calidad + 1 Armadura Básica | 4 | 14 | 20 | 30 | 4 |
+| 3 | Agrianos | `reforma_macedonica` (V) | 2 Arma de Hierro de Calidad + 1 Armadura Básica | 5 | 17 | 20 | 30 | 4 |
+
+**Caballerizas (caballería y carros):**
+
+| Nivel | Tropa | Tecnología (Era) | Costo (por soldado) | Escalón | poderBase | Unidades | Velocidad | Asent. |
+|---|---|---|---|---|---|---|---|---|
+| 1 | Exploradores a caballo | `cria_caballar` (I) | 1 Arma de Cobre + 1 caballo | 2 | 3 | 20 | 84 | 2 |
+| 1 | Jinetes asirios | `equitacion_militar` (II) | 1 Arma de Hierro + 1 caballo | 2 | 5 | 20 | 84 | 2 |
+| 2 | Carros de guerra | `carros_guerra` (I) | 1 Carro de Guerra + 2 caballos + 1 Arma de Bronce | 4 | 13 | 15 | 30 | 3 |
+| 2 | Jinetes escitas | `caballeria_organizada` (III) | 1 Arma de Bronce + 1 Armadura Básica + 1 caballo | 3 | 8 | 20 | 84 | 2 |
+| 2 | Caballería asiria | `caballeria_organizada` (III) | 1 Arma de Hierro + 1 Armadura de Bronce + 1 caballo | 3 | 10 | 18 | 84 | 3 |
+| 2 | Pródromos | `formacion_cuna` (V) | 1 Arma de Hierro + 1 caballo | 3 | 9 | 18 | 84 | 2 |
+| 3 | Caballería tesalia | `carga_caballeria` (IV) | 1 Arma de Hierro de Calidad + 1 Armadura Intermedia + 1 caballo | 4 | 14 | 15 | 84 | 4 |
+| 3 | Caballería noble persa | `carga_caballeria` (IV) | 2 Arma de Hierro + 1 Armadura de Bronce + 1 caballo | 4 | 17 | 16 | 84 | 3 |
+| 3 | Compañeros (hetairoi) | `companeros_reales` (V) | 1 Arma de Hierro de Calidad + 1 Armadura de Bronce de Calidad + 1 caballo | 5 | 17 | 16 | 84 | 4 |
+
+Los exploradores a caballo son caballería de exploración, floja en combate. Una tropa puede depender de una tecnología y su arma de otra (los escaramuzadores esperan al Arma de Cobre de `metalurgia_cobre`, los jinetes asirios al Arma de Hierro de `forja_hierro_temprana`): es el patrón normal de las cuatro puertas. Las tropas de las Eras IV y V (desde el 2026-11-12) se reclutan en los mismos tres edificios, sin niveles nuevos; casi todas piden el Arma de Hierro de Calidad, que llega con la Fundición 3 y por eso con el asentamiento de nivel 4 (Doc 4).
+
+`poderBase` es placeholder. Las unidades de cada escuadrón son un valor propio de cada tropa (decidido el 2026-09-27); desde el 2026-11-12 son las de las cifras de combate de cada tropa, que ya no bajan con el escalón: las de distancia, 20 todas (5.11.1). Cada tropa lleva además un **tier** de combate (I-V) y sus cifras de combate, que usa la batalla de Unity (`Docs/Mechanics/Heroe_Y_Tropa.md` §12).
 
 **Unidades por defecto** (`unidadesPorDefecto`): es el TOPE del escuadrón, el jugador nunca elige cuántos soldados reclutar. `costoEquipo` sigue siendo por soldado. Reclutar desde cero cuesta "Costo (por soldado)" × "Unidades" de la tabla — ej. Milicia de lanceros cuesta 2 Madera/soldado × 25 = 50 Madera. Si el escuadrón ya existe y está por debajo del tope (bajas de combate, Doc 5.4), reclutar de nuevo REPONE solo las unidades que faltan hasta el tope, al mismo costo por soldado — no es un bloque nuevo completo (ver el párrafo "Escuadrón por héroe" más abajo). Antes de confirmar, la interfaz muestra el coste de ESTE reclutamiento, que puede ser parcial.
 
-**Milicia de lanceros y Arma de Madera.** La Milicia de lanceros se recluta en el Centro Urbano y se paga con madera en bruto, sin pasar por la Armería: es deliberadamente la más débil del roster (poderBase 2) y existe para que el bucle de juego arranque pronto, no para ganar batallas. Para reclutarla basta con residir en el asentamiento (Doc 2.5) y tener los 25 soldados de población y los 50 de madera del escuadrón. "Lanceros con escudo de mimbre" y "Honderos" se pagan con Arma de Madera: si la cadena metalúrgica o del cuero completa fuera el único camino, casi ningún asentamiento tendría tropa pronto, porque muy pocos nacen con cobre o livestock en su zona.
+**Milicia de lanceros y Arma de Madera.** La Milicia de lanceros se recluta en el Centro Urbano y se paga con madera en bruto, sin pasar por la Armería: es de las más débiles del roster (poderBase 2) y existe para que el bucle de juego arranque pronto, no para ganar batallas. Para reclutarla basta con residir en el asentamiento (Doc 2.5) y tener los 25 soldados de población y los 50 de madera del escuadrón. "Lanceros con escudo de mimbre" y "Honderos" se pagan con Arma de Madera: si la cadena metalúrgica o del cuero completa fuera el único camino, casi ningún asentamiento tendría tropa pronto, porque muy pocos nacen con cobre o livestock en su zona.
 
-**La Nobleza no se recluta.** Sigue existiendo como clase de población (crecimiento, requisito de Palacio, ciudadanos mínimos), pero no se convierte en tropa. El único carril de reclutamiento es el de equipo (Centro Urbano/Barracón/Galería de tiro), abierto a Pesants y Artesanos.
+**Población que recluta cada escalón.** Los escalones 1 y 2 se reclutan con **Pesants**, el 3 con **Artesanos**, y el 4 y el 5 con **Nobleza**. Hay una sola excepción, que la tropa declara en su propio campo `poblacion`: los **Falangitas** son de escalón 4 y se reclutan con Artesanos, porque la falange de sarisa era infantería de ciudadanos y no de nobles (desde el 2026-11-12). Muchas tropas de élite tempranas eran históricamente nobles (carros, guardias palaciales), y por eso el Palacio se adelanta al nivel 2 (Doc 4.2.1). Reclutar saca a los soldados de su clase de población, también a los nobles.
 
 **Relación entre tropas ya reclutadas y el edificio que las produjo**: NO existe ninguna relación posterior al reclutamiento. Una vez una tropa está reclutada y en el mundo, es independiente del edificio (Barracón/Galería de tiro) que la originó. Si el edificio sube de nivel después, los escuadrones ya existentes NO se ven afectados de ninguna forma — ni mejoran ni empeoran. "Mejorar" solo significa poder reclutar tropas nuevas de mayor nivel a partir de ese momento.
 
-**Una tropa reclutada JAMÁS cambia de identidad/tipo al ganar experiencia.** "Milicia de lanceros" que sube de nivel se queda siendo "Milicia de lanceros" con más poder — nunca pasa a ser "Hacheros" ni ningún otro `tropaId`. El pool de origen (Pesants/Artesanos) tampoco cambia. Subir de nivel hace más fuerte al MISMO escuadrón (5.16.3); "mejorar" de tropa solo ocurre reclutando una tropa DISTINTA y mejor cuando Barracón/Galería de tiro suba de nivel interno, y eso crea un escuadrón nuevo, no transforma el existente.
+**Una tropa reclutada JAMÁS cambia de identidad/tipo al ganar experiencia.** "Milicia de lanceros" que sube de nivel se queda siendo "Milicia de lanceros" con más poder — nunca pasa a ser "Hacheros" ni ningún otro `tropaId`. La clase de población de la que salió tampoco cambia. Subir de nivel hace más fuerte al MISMO escuadrón (5.16.3); "mejorar" de tropa solo ocurre reclutando una tropa DISTINTA y mejor cuando Barracón/Galería de tiro suba de nivel interno, y eso crea un escuadrón nuevo, no transforma el existente.
 **Escuadrón por héroe, no por asentamiento.** Cada héroe tiene como mucho **un escuadrón de cada tropa en toda la partida**, esté donde esté (en su campamento, en su columna o de escolta), con tope `unidadesPorDefecto`. Reclutar de nuevo una tropa que ya tiene repone el faltante si hay bajas (ver "Unidades por defecto" arriba); nunca crea un segundo escuadrón. Si ese escuadrón está fuera, no se puede reclutar otro de su tropa: solo reponerlo allí donde está. Reclutar no exige un General asignado: solo que el héroe resida en el asentamiento (fundador o casa comprada, Doc 2.5), y un héroe reside en un solo asentamiento a la vez.
 
 **Reclutar y mover tropa:**
 
 | Acción | Requisito |
 |---|---|
-| Reclutar un escuadrón **NUEVO** | Residir en el asentamiento **y** estar en él, y no tener ya un escuadrón de esa tropa en ninguna parte |
-| **Reponer** un escuadrón que ya tienes | Estar donde está el escuadrón (en tu campamento o en tu columna), dentro de una plaza **de tu Facción** que lo permita (`politicaDeAcceso` ≠ `cerrado`, sin veto). Gasta población y almacén de esa plaza, autolimitado por la reserva de trigo |
+| Reclutar un escuadrón **NUEVO** | Residir en el asentamiento **y** estar en él, y no tener ya un escuadrón de esa tropa en ninguna parte. **Desde el 2026-11-10** también un ciudadano de la Facción de la plaza que no reside en ella, dentro y sin veto: el escuadrón nuevo se va a la columna con la que entró (tiene que haber entrado con una y caber en su Liderazgo), lo paga la plaza y come de los víveres de la columna. El Gobernador o un General pueden cerrarlo a los ciudadanos (asunto militar): entonces solo reponen |
+| **Reponer** un escuadrón que ya tienes | Estar donde está el escuadrón (en tu campamento o en tu columna), dentro de una plaza **de tu Facción** que lo permita (sin veto). Gasta población y almacén de esa plaza, autolimitado por la reserva de trigo |
 | **Mover** escuadrones propios | Donde estén |
 
-Consolidar una plaza —reclutar escuadrones nuevos ahí, asignar guarnición, ejercer cargos, recaudación al 100%— exige residir en ella, es decir, trasladar allí el campamento (`cambiarResidencia`, Doc 2.5).
+**Reclutar en un campamento de mercenarios** (2026-10-02, Doc 1.9b; `reclutarEnCampamento`): el héroe tiene que residir en él. Solo se ofrecen las tropas de los **edificios del campamento** (barracón, galería de tiro o caballeriza, al nivel que fija `MERCENARIOS.nivelEdificios`; no la leva del Centro Urbano) cuya **tecnología desbloquee el campamento** (Doc 6.5b). Cuesta **solo oro** y **población del campamento**, sin equipo fabricado ni reserva de trigo: precio por soldado = oro de su escalón + caballos + el equipo a `MERCENARIOS.valorEquipoEnOro` la unidad → **×1,5** del campamento → recargo por reputación (Doc 2.7) → **×0,6** si la Facción no tiene asentamientos. Un escuadrón por tropa en toda la partida (arriba): si ya lo tiene, repone hasta el tope y solo cobra lo que falta; un escuadrón que va en una columna se repone con la columna a la puerta. Paga el residente con su almacén personal (Doc 2.5) o, siendo el Líder de una columna a la puerta, con el oro del carro. El escuadrón nuevo nace en su campamento, **salvo que su héroe sea el Líder de una columna a la puerta y le quede Liderazgo** (Doc 5.11, contando lo que ya lleva fuera del campamento): entonces se une a la columna, para no obligarle a entrar y volver a salir. Reponer un escuadrón que ya tiene no lo mueve. La población del campamento (tope = viviendas × `poblacionPorVivienda`, recupera `poblacionPorHora`) se calcula al mirar, no por tick.
+
+Consolidar una plaza —reclutar escuadrones nuevos para su campamento, asignar guarnición, ejercer cargos, recaudación al 100%— exige residir en ella, es decir, trasladar allí el campamento (`cambiarResidencia`, Doc 2.5).
 
 ## 5.9 Exilio como política de soberanía (heredado de Iberia, ver también Doc 2.8)
-El Gobernador puede decretar exilio de jugadores enemigos de su territorio; coste de reubicación (pérdida parcial de materiales, desplazamiento físico para recuperarlos).
+Bloquear la puerta de un asentamiento a neutrales, aliados o enemigos (Doc 2.8), sin coste. No confundir con la reubicación al perder la casa por conquista (5.15.5).
 
 ## 5.10 Dónde se resuelve el combate
-Las batallas con algún héroe humano se juegan como partidas reales en Unity (5.15). Las que no tienen ninguno —NPC contra NPC, bandidos contra una caravana— se resuelven con números (5.2.5, 5.15.6). En los dos casos la batalla nace en el mapa de BronzeAge: los ejércitos se mueven por el mundo (5.12), y el combate empieza donde se encuentran. La abre quien decide atacar (5.12.3): a una columna, a una caravana, a un campamento de bandidos o a una plaza. Qué queda bloqueado mientras se juega y quién puede unirse, en 5.15.1.
+Con servidores de batalla, **toda batalla se juega como una partida real en Unity** (5.15), también bot contra bot: el bot entra en la partida y Unity la resuelve como pueda (si gana a la guarnición, es cosa de Unity; BronzeAge nunca la resuelve con números en ese caso). Sin servidor de Unity, todas se resuelven con números (5.2.5, 5.15.6). En los dos casos la batalla nace en el mapa de BronzeAge: los ejércitos se mueven por el mundo (5.12), y el combate empieza donde se encuentran. La abre quien decide atacar (5.12.3): a una columna, a una caravana, a un campamento de bandidos o a una plaza. Qué queda bloqueado mientras se juega y quién puede unirse, en 5.15.1.
 
 ## 5.11 Liderazgo
 
 Cada Héroe tiene un valor de **Liderazgo**, y cada tropa (tipo) un **coste de Liderazgo**. Al salir a campaña, la suma de los costes de los escuadrones que ese Héroe se lleva no puede exceder su Liderazgo.
+
+**El Liderazgo solo lo afecta lo que el héroe carga consigo** (mundo abierto, batallas…). Cuando presta tropas de cualquier manera —guarnición (5.15.3), escolta de una caravana (Doc 3.13.4)— el coste lo asume quien las **recibe**, con su propio cupo, no el que presta.
 
 **Es un límite de SALIDA, no de posesión.** Se pueden poseer muchos más escuadrones de los que se pueden sacar de una vez. Lo que se queda en el campamento no defiende por sí solo: solo la guarnición que el héroe asigna, que tiene su propio cupo y no gasta Liderazgo (5.15.3). Esto convierte "¿qué me llevo?" en la decisión central de cada campaña. La selección se puede guardar como **loadout** (5.16.5).
 
@@ -167,22 +211,25 @@ En un ejército de varios héroes, **cada uno se valida contra SU propio Lideraz
 **A mayor calidad de la tropa, mayor coste de Liderazgo.** Las tropas se agrupan en
 **cinco escalones**, de leva a élite, y el coste es el de su escalón — no una fórmula sobre su poder.
 
-| Escalón | Coste | Soldados por escuadrón | Caben con 100 | Tropas |
+**El coste mira el tipo de tropa, no cuántos soldados quedan** (decidido el 2026-10-13): una escuadra mermada paga el Liderazgo completo (3 de 20 cuesta lo mismo que 20 de 20). Así no se puede sacar a campaña una élite parcial para pagar menos.
+
+| Escalón | Coste | Soldados por escuadrón (de partida) | Caben con 100 | Tropas |
 |---|---|---|---|---|
-| 1 — leva | 7 | 25 | 14 | Milicia de lanceros, Lanceros con escudo de mimbre |
-| 2 — tropa de línea | 14 | 20 | 7 | Espadachines de cobre, Honderos |
-| 3 — veterana | 22 | 18 | 4 | Hacheros ligeros, Escaramuzadores, Espadachines de bronce, Arqueros |
-| 4 — pesada | 32 | 15 | 3 | Hacheros armados, Lanceros pesados |
-| 5 — élite | 45 | 12 | 2 | Arqueros con arco compuesto |
+| 1 — leva | 7 | 25 | 14 | Leñadores, Granjeros, Mineros |
+| 2 — ligera / de línea | 14 | 20 | 7 | Milicia de lanceros, Lanceros con escudo de mimbre, Espadachines de cobre, Honderos, Exploradores a caballo, Jinetes asirios |
+| 3 — veterana | 22 | 18 | 4 | Hacheros ligeros, Hacheros armados, Espadachines de bronce, Escaramuzadores, Arqueros, Guerreros filisteos, Hoplitas ciudadanos, Peltastas, Honderos rodios, Jinetes escitas, Caballería asiria, Epílektoi, Pródromos |
+| 4 — pesada | 32 | 15 | 3 | Carros de guerra, Lanceros pesados, Shardana, Espartiatas, Peltastas de Ifícrates, Caballería tesalia, Caballería noble persa, Falangitas |
+| 5 — élite | 45 | 12 | 2 | Arqueros con arco compuesto, Hequetai, Arqueros escitas, Inmortales, Hipaspistas, Compañeros, Agrianos |
 
-Liderazgo base **100**.
+El Liderazgo **nace en 14** y sube **3 o 4 por cada nivel** del Héroe hasta **100 en el nivel 25** (2026-11-13; antes, 3 por nivel hasta el 30): un héroe nuevo saca dos escuadras de leva o una de línea; uno de nivel 25, las combinaciones de abajo.
 
-**El tamaño del escuadrón también va por escalón**: cuanto más de élite, menos cuerpos. No es decorativo — es
-lo que hace que subir de escalón sea *calidad* y no *cantidad*, y lo que ordena el rendimiento por punto de
-Liderazgo de mayor (leva) a menor (élite).
+**El tamaño del escuadrón es propio de cada tropa** (decidido el 2026-09-27; antes lo fijaba el escalón). La columna
+«de partida» de la tabla es la que tenía cada escalón al principio. Desde el 2026-11-12 ya no tiene que bajar con el
+escalón (decisión del autor del 2026-11-11): las tropas de distancia llevan 20 soldados todas, la falange macedónica 32
+y la élite entre 16 y 20 (las tablas de 5.8).
 
 **Por qué no se deriva del poder.** Un coste proporcional al poder nominal daría **el mismo poder por punto de
-Liderazgo a las once tropas**: cinco milicias rendirían lo mismo que un lancero pesado, y la élite no sería
+Liderazgo a todas las tropas**: cinco milicias rendirían lo mismo que un lancero pesado, y la élite no sería
 mejor por punto, solo vendría en envase más pequeño. Elegir composición no sería una decisión, sería aritmética.
 
 Con coste por escalón el precio crece **más deprisa que el poder**, y eso es lo buscado: la élite es
@@ -201,40 +248,39 @@ que la decisión duela:
 | Hueste de leva | 14 escuadrones |
 
 Ninguna sobra ni falta por poco, y ninguna admite una unidad más. La cantidad sigue siendo una estrategia
-—catorce escuadrones de leva son 350 hombres— pero se paga en suministro: esa hueste vacía un carro en **diez
-minutos**, mientras que dos escuadrones de élite (24 hombres) aguantan más de **dos horas** (5.13). Catorce
+—catorce escuadrones de leva son 350 hombres— pero se paga en suministro: esa hueste vacía un carro en marcha en unos **38
+minutos**, mientras que dos escuadrones de élite (24 hombres) aguantan unas **nueve horas** (5.13). Catorce
 veces más alcance. **El eje de la decisión no es el poder, es el alcance.**
 
-El Liderazgo puede crecer por encima de la base con la progresión del Héroe (`liderazgoBase`).
+El Liderazgo crece con el nivel del Héroe (`liderazgoBase`), igual para todos los héroes del mismo nivel: ni la tecnología ni el equipo lo cambian (la armadura no da Liderazgo).
 
 ## 5.12 Ejércitos y movimiento por el mapa
 
-Los ejércitos se mueven por el mapa del mundo para atacar, igual que las caravanas: siguen una ruta que rodea el terreno costoso, y tardan en llegar.
+Los ejércitos se mueven por el mapa del mundo para atacar, igual que las caravanas: siguen una ruta que rodea el terreno costoso, y tardan en llegar. El terreno les afecta igual que a las caravanas (Doc 1.6): el bosque los frena y los ríos solo se cruzan por un vado o por una ciudad ribereña. Sobre un camino de la red marchan más rápido, pero no lo crean, no le suman peso ni pagan peaje.
 
 ### 5.12.1 Columna personal y Ejército: la misma entidad, distintas reglas
 
 El Héroe puede salir **solo** (con las tropas que quiera, incluidas ninguna) o **junto a otros héroes**. En el motor son **la misma entidad** y comparten movimiento, suministro y combate. En las REGLAS no son lo mismo, y la línea que los separa **no es cuánta gente va dentro: es cómo salió la columna**.
 
-**Lo decide el acto de salir, y no cambia nunca:** salir *a lo tuyo* —sin destino— hace una Columna personal; **movilizarse contra un destino** hace un Ejército, aunque en ese primer momento vayas solo. Por eso "salir juntos" no necesita ninguna ceremonia aparte: uno moviliza y los demás se suman, en su plaza o en el campo (5.14).
+**Lo decide el acto de salir, y no cambia nunca** (con una sola excepción, reclamar la Caravana de Fundación que vuelve sola, 5.13.2): salir *a lo tuyo* hace una Columna personal; **movilizarse** (o partir una convocatoria, 5.14.5) hace un Ejército, aunque en ese primer momento vayas solo. Salir juntos se puede de tres maneras: uno moviliza y los demás se suman, en su plaza o en el campo (5.14); o se prepara el ejército dentro del lugar y parten todos a la vez (5.14.5).
 
 | | **Columna personal** | **Ejército** |
 |---|---|---|
-| Cómo nace | Se **sale al mundo** desde la residencia, **sin destino** | Se **moviliza** desde un asentamiento **contra un destino**, aunque salga uno solo |
-| Destino | **Se rectifica** en cualquier momento | Fijado al salir; cancelar es volver (5.12.6) |
-| Caravanas adjuntas | **No puede llevarlas** | Sí, y las conserva aunque baje a un miembro |
+| Cómo nace | Se **sale al mundo** desde la residencia | Se **moviliza** desde un asentamiento, se **parte una convocatoria** (5.14.5) o se **forma en campo** (5.14.4), aunque salga uno solo |
+| Quién dirige el rumbo | Él mismo, con sus clics | **Su Líder**, con sus clics, las veces que quiera; los demás acompañan |
+| Caravanas adjuntas | **No puede llevarlas**: la que reclama deja de serlo (5.13.2) | Sí, y las conserva aunque baje a un miembro |
 | Se le pueden unir otros | No | Sí, **solo de su misma Facción** (5.14) |
 | Separarse | No aplica: separarse es disolverla | Sí, **mientras quede alguien** (5.14) |
 
 Dos reglas cierran el modelo:
 
-- **Un Ejército solo se origina en un asentamiento, nunca en campo abierto.** Dos viajeros que se cruzan en el camino no forman un ejército; lo que sí puede hacer uno es unirse a un ejército que ya existe.
-- **Ser un Ejército es una identidad, no un recuento.** Uno al que se le separan miembros hasta quedar en uno solo **sigue siendo un Ejército**: conserva su ruta fija y sus caravanas. No recupera la libertad de movimiento por haberse quedado corto.
+- **Un Ejército se origina en un asentamiento o se forma en campo abierto con tres o más héroes** (5.14.4). Dos viajeros que se cruzan en el camino no forman un ejército; lo que sí puede hacer uno es unirse a un ejército que ya existe o a una formación en curso.
+- **Un Ejército y una Columna personal nunca combaten entre sí** (5.12.3): ni se persiguen ni se atacan, en ninguna dirección. Es la línea que decide qué clase de batalla se abre.
+- **Ser un Ejército es una identidad, no un recuento.** Uno al que se le separan miembros hasta quedar en uno solo **sigue siendo un Ejército**: conserva sus caravanas y se dirige por su Líder. Se mueve igual que una columna personal, pero no se le unen sin permiso ni se le persigue como a una.
 
-**Por qué el destino de un ejército no se toca.** Un jugador solo es libre de decidir porque decide por sí mismo; un ejército lleva a varios, así que su rumbo es un compromiso compartido y se fija al salir. Eso hace que **unirse a un ejército cueste la libertad de movimiento**, y que separarse la devuelva al instante — el precio de marchar acompañado, sin ninguna regla extra que lo imponga.
+**Un ejército no tiene destino fijo** (decisión del autor, 2026-10-08): la niebla de guerra hace que su Líder no pueda decidir un único rumbo de antemano. Por eso **sale quieto en la puerta** y **lo dirige su Líder con sus clics**, tantas veces como quiera y en cualquier momento, también a mitad de marcha (`marcharA`). Los demás miembros no dirigen: si piden un rumbo se les rechaza. **Acompañar sigue costando libertad**: quien se une cede la dirección al Líder, y separarse se la devuelve al instante.
 
-*(El compromiso es un compromiso, no una cárcel: un grupo que quiera cambiar de rumbo puede separarse, moverse y volver a unirse. Cambiar una decisión compartida exige que todos vuelvan a actuar, que es exactamente lo que debe costar.)*
-
-**Un Héroe puede unirse a un ejército ya en campaña** de dos formas distintas, con geometrías distintas: pasando el ejército por **su asentamiento**, de donde saca tropas frescas; o **cruzándoselo en el campo**, aportando lo que ya lleva encima (5.14). En ambos casos sus escuadrones se validan contra su propio Liderazgo.
+**Un Héroe puede unirse a un ejército ya en campaña** de dos formas distintas, con geometrías distintas: con el ejército en **la puerta de su asentamiento**, de donde saca tropas frescas; o **cruzándoselo en el campo**, aportando lo que ya lleva encima (5.14). En ambos casos sus escuadrones se validan contra su propio Liderazgo.
 
 ### 5.12.2 Identificación en el mapa
 
@@ -248,13 +294,13 @@ Una columna se acerca a algo y el juego le ofrece lo que puede hacer con ello; e
 
 | Sobre qué | Qué se le ofrece |
 |---|---|
-| Ejército o columna ajena | **Inspeccionar** · **Perseguir** |
-| Caravana ajena o neutral | **Inspeccionar** · **Interceptar** |
-| Asentamiento | En su puerta (10): **Entrar** · **Consultar** · **Comerciar** (Doc 3.3). A distancia de ataque (15), si es de otra Facción: **Atacar**, que es asediarla (5.12.4) |
-| Campamento de bandidos | **Atacar** |
-| Batalla en curso de tu Facción | **Unirse**, mientras quede sitio en su bando (5.15.1) |
+| Ejército ajeno (a un ejército) o Columna personal ajena (a una Columna personal) | **Inspeccionar** · **Perseguir** · **Atacar** a 1. Entre un ejército y una Columna personal solo se puede **Inspeccionar** |
+| Caravana ajena o neutral, no adjunta | **Inspeccionar** · **Interceptar**. Una caravana adjunta a un ejército es parte de él: solo otro ejército la ataca |
+| Asentamiento | En su puerta (2): **Entrar** · **Consultar** · **Comerciar** (Doc 3.3). Si es de otra Facción: desde 8, **Inspeccionar** su defensa; a distancia de ataque (1), **Atacar**, que es asediarla (5.12.4) y **solo lo hace un ejército**; una Columna personal puede **Unirse** a un asedio ya abierto (5.15.1) |
+| Campamento de bandidos | **Atacar**, un ejército o una Columna personal (evento PvE, 5.15.1) |
+| Batalla en curso | **Unirse** al bando que te corresponda, mientras quede sitio (5.15.1) |
 
-*Los bandidos son la excepción, y por el motivo obvio: un campamento no tiene a nadie que pulse. Los NPC siguen atacando caravanas por su cuenta — su intención es su política. Por lo mismo, una columna de héroes bot asedia al llegar a la plaza enemiga que tenía por destino y ataca al alcanzar a quien persigue: para el NPC, marchar contra una plaza o perseguir ya es la orden.*
+*Los bandidos son la excepción, y por el motivo obvio: un campamento no tiene a nadie que pulse. Siguen atacando caravanas por su cuenta — su intención es su política. No son bots ni jugadores y cuentan de otra manera (2026-10-22, quinta ronda): si acosan una caravana escoltada por héroes (adjunta a una columna con algún héroe a bordo) se dispara una batalla de caravana, que con servidores de batalla va a Unity como cualquier otra y sin ellos se resuelve con números; si acosan una caravana sin héroes —de un bot o de un jugador, también con escolta de tropa cedida— se resuelve siempre con números, haya o no servidores. Los héroes bot no lo son: juegan con las mismas reglas que un jugador, así que al llegar a la plaza enemiga o al alcanzar a quien persiguen se les ofrece atacar, y atacan si lo piden.*
 
 #### Los tres anillos
 
@@ -262,26 +308,30 @@ Cada distancia significa una cosa distinta, y las tres juntas son el corazón de
 
 | Distancia | Qué habilita | Quién se entera |
 |---|---|---|
-| **150 / 80** (columna con tropas / jugador solo) | Ves que hay algo y de quién es | Nadie |
-| **40 — inspección** | Ver la composición: qué tropas, de quién. De una caravana, si lleva escolta y **qué** recursos carga, nunca cuántos | **El inspeccionado recibe aviso** |
-| **15 — encuentro** | Se cierra una persecución y se ofrece atacar | Los dos |
+| **30 / 15** (columna con tropas / jugador solo) | Ves que hay algo y de quién es | Nadie |
+| **8 — inspección** | Ver la composición: qué tropas, de quién. De una caravana, si lleva escolta y **qué** recursos carga, nunca cuántos. De una plaza ajena, **su defensa**: la guarnición (qué tropa y cuánta) y los héroes que hay dentro; su almacén no | **El inspeccionado recibe aviso** (de una plaza, su Facción) |
+| **1 — encuentro** | Se cierra una persecución y se ofrece atacar | Los dos |
 
-**El anillo de inspección es lo que convierte el reconocimiento en un juego de dos.** Mirar cuesta ser visto mirando; y el que mira puede huir, porque va más rápido que una columna entera y porque no ha tenido que meterse hasta los 15. De lejos, un ejército ajeno sigue siendo lo que siempre fue: una bandera y unos estandartes, sin composición ni poder (5.12.7).
+**El anillo de inspección es lo que convierte el reconocimiento en un juego de dos.** Mirar cuesta ser visto mirando; y el que mira puede huir, porque va más rápido que una columna entera y porque no ha tenido que meterse hasta los 3. De lejos, un ejército ajeno sigue siendo lo que siempre fue: una bandera y unos estandartes, sin composición ni poder (5.12.7).
 
 #### Persecución
 
-Perseguir fija un objetivo **móvil** en vez de un punto: la ruta se recalcula hacia donde esté. Para inspeccionar no hace falta perseguir — basta con verlo. Una persecución termina de cuatro formas:
+Perseguir fija un objetivo **móvil** en vez de un punto: el servidor conoce el plan de la presa y recalcula el de quien persigue **cuando la presa cambia de plan** (un evento, no un sondeo; ya no hay umbral de recalculo). **Solo se persigue lo que se ve desde la propia columna**: la persecución solo se puede iniciar con la presa dentro del alcance de vista (30 con soldados, 15 sin ellos) y **si la presa sale de él, la persecución se cancela** (decidido el 2026-10-19). Un ejército solo persigue a otro ejército; una Columna personal, a otra Columna personal o a una caravana (no adjunta). **El motor lo exige** (2026-10-09): no se persigue a los tuyos ni a un aliado, ni a una caravana adjunta a un ejército, y **decide a quién persigue la columna su Líder**. Para inspeccionar no hace falta perseguir — basta con verlo. Una persecución termina de seis formas:
 
-- se llega a **15**, y ahí se ofrece atacar;
+- se llega a **1**, y ahí se ofrece atacar (quien persigue a un solitario abre una **persecución**; un ejército a otro, una **batalla campal**, 5.15.1);
 - el perseguidor **cambia de destino**;
 - el objetivo queda **herido** por haber sido derrotado (5.16.4);
-- o no llega a empezar, porque todos los héroes del objetivo ya estaban heridos.
+- o no llega a empezar, porque todos los héroes del objetivo ya estaban heridos;
+- **la presa sale del alcance de vista** del perseguidor: se suelta (`columna.presa_perdida`), porque si no la trayectoria del perseguidor revelaría dónde está bajo la niebla;
+- **la presa entra en una plaza o campamento**: se suelta y el perseguidor va hasta su puerta y acampa, donde se le ofrece lo de una plaza (`columna.presa_a_cubierto`).
 
 **El consentimiento es de una sola parte, y así debe ser:** el agresor elige perseguir, el perseguido no elige nada. Escapar depende de ser más rápido — lo que convierte la velocidad de tropa (5.12.5) en la estadística que decide quién puede forzar un combate.
 
 #### Derrota en campo abierto
 
-Quien pierde un choque en campo abierto entrega **la mitad de su carro** —igual una columna personal que un ejército, cuyo carro es el de todos sus miembros— y sus héroes quedan **heridos** 2 minutos (5.16.4). Con el carro vacío no hay botín: solo la herida.
+Quien pierde un choque en campo abierto entrega **la mitad de su carro** —igual una columna personal que un ejército, cuyo carro es el de todos sus miembros— y sus héroes quedan **heridos** 2 minutos (5.16.4). Con el carro vacío no hay botín: solo la herida. El vencedor se lleva además la **chatarra** de las bajas de los dos bandos, que no sale del carro del vencido sino de los caídos (Doc 4.2.1, Gran Fundición).
+
+**El botín se reparte a partes iguales entre las columnas del bando ganador** (decisión del autor, 2026-10-06), también cuando varias se unieron a la batalla: la mitad de carro de cada columna vencida, la carga de una caravana capturada y la chatarra. Lo que no le cabe a una columna pasa a las que tengan sitio, y si no cabe en ninguna se pierde. La chatarra de un asedio que gana el defensor va al almacén de la plaza.
 
 Esa mitad pasa al carro del vencedor, gane quien gane, y **cabe solo lo que quepa**: sus carros más los de sus caravanas adjuntas. Lo que no cabe se pierde.
 
@@ -291,24 +341,21 @@ Esa mitad pasa al carro del vencedor, gane quien gane, y **cabe solo lo que quep
 
 Elegir atacar no es teletransportarse: hay que estar delante. Cuando dos columnas sí se enfrentan, estas reglas acotan lo que pasa:
 
-- **Un encuentro por ejército y minuto.** Sin ese tope, tres columnas juntas se trituran en cascada dentro del mismo tick y el resultado depende de a quién se mire primero.
 - **Los aliados no se cruzan**, ni las columnas de la misma Facción. Compartir camino con un amigo no puede costar una masacre cada minuto.
 - **Un ejército enemigo manda sobre una caravana.** Con las dos cosas al alcance, se combate: dejar pasar la amenaza real para saquear un carro no tendría sentido.
 - **Una caravana escoltada no es un objetivo blando**: quien se topa con ella se topa con su ejército, y eso ya es un choque entre ejércitos (5.13.3).
 
-En un choque en campo abierto **no hay atacante ni defensor**: los dos iban a lo suyo, así que ninguno recibe el bonus de cohesión defensiva. Esa ventaja es de quien defiende una plaza, no de quien se topa con otro en un camino.
+En un choque en campo abierto **quien ordena atacar es el atacante**; el otro bando se resuelve como defensor del motor y recibe la cohesión defensiva (+10% por escuadra extra) y el ×1,05, aunque no defienda nada: el motor no distingue entre defender una plaza y toparse con otro en un camino.
 
-Al emboscar una caravana, el botín —el 50% de su carga, 3.10— **viaja en el carro del ejército**, con dos consecuencias: cabe solo lo que quepa, y llega a casa como el resto del carro —el sobrante vuelve al almacén de origen al replegarse (5.13)—. El carro no puede descargarse en ruta, así que esto no lo convierte en un transporte de mercancías: para eso están las caravanas adjuntas.
+Al emboscar una caravana, el botín —la carga de los carros perdidos o el 70% de la carga, lo que quepa en el carro del ejército, 3.10— **viaja en el carro del ejército**, con dos consecuencias: cabe solo lo que quepa, y viaja y se entrega como el resto del carro —va al almacén de la plaza donde su dueño entra a vivir (5.14.6)—. El carro no puede descargarse en ruta, así que esto no lo convierte en un transporte de mercancías: para eso están las caravanas adjuntas.
 
-Un ejército puede además quedarse **estacionado** en un punto indefinidamente — aparcar en un paso de montaña para cortarlo es una jugada legítima. Estacionado consume **una décima parte** de lo que consume en marcha, pero **nunca cero**.
-
-La cifra es lo que hace que estacionar signifique algo: a una décima parte, un carro lleno sostiene una posición diez veces más de lo que dura en marcha, y aparcar pasa a ser una jugada de verdad en vez de un aplazamiento contra el hambre.
+Un ejército puede además quedarse **estacionado** en un punto indefinidamente — aparcar en un paso de montaña para cortarlo es una jugada legítima. Estacionado consume **una décima parte** de lo que consume en marcha, pero **nunca cero** (5.13): a una décima parte, unos víveres llenos sostienen una posición diez veces más de lo que duran en marcha, y aparcar es una jugada de verdad en vez de un aplazamiento contra el hambre.
 
 ### 5.12.4 Quién defiende un asentamiento
 
-Un asentamiento lo defienden **los héroes que están dentro cuando lo atacan**, cada uno con las escuadras de su loadout activo (5.16.5) que tenga en el campamento, que ya caben en su Liderazgo, y **su guarnición**, que maneja la IA del juego (5.15). Los escuadrones que se quedaron en el campamento sin estar en guarnición no defienden. **Un asentamiento sin defensores presentes ni guarnición se asedia igual, sin defensores.** Esta es la tensión central de la mecánica: atacar cuesta dejar la casa descubierta, salvo lo que se deje en guarnición.
+Un asentamiento lo defienden **los héroes que están dentro cuando lo atacan** (**solo defiende lo que está dentro**, ver abajo), cada uno con las escuadras de su loadout activo (5.16.5) que tenga en el campamento, que ya caben en su Liderazgo, y **su guarnición**, que maneja la IA del juego (5.15). Los escuadrones que se quedaron en el campamento sin estar en guarnición no defienden. **Un asentamiento sin defensores presentes ni guarnición se asedia igual, sin defensores.** Esta es la tensión central de la mecánica: atacar cuesta dejar la casa descubierta, salvo lo que se deje en guarnición.
 
-**Llegar no es asediar.** Un ejército que llega **acampa delante**. Asediar es una decisión consciente: a distancia de ataque (15) de una plaza de otra Facción, entre lo que se ofrece al interactuar con ella aparece **Atacar**, y pulsarlo empieza la batalla (5.12.3; decisión del usuario, 2026-09-15).
+**Llegar no es asediar.** Un ejército que llega **acampa delante**. Asediar es una decisión consciente: a distancia de ataque (1) de una plaza de otra Facción, entre lo que se ofrece al interactuar con ella aparece **Atacar**, y pulsarlo empieza la batalla (5.12.3; decisión del usuario, 2026-09-15).
 
 Eso permite **plantarse frente a una ciudad enemiga sin atacarla.** Bloquear, sitiar sin asaltar, esperar refuerzos o negociar con el ejército a la vista son jugadas legítimas.
 
@@ -316,7 +363,9 @@ El asedio es **una sola batalla**, cuando se ordena. Un ejército acampado junto
 
 Si el asedio **resiste**, el ejército se queda acampado fuera con sus escuadrones. Si **conquista**, se aplica 5.15.5: la plaza queda **sin guarnición** y el ejército conquistador sigue siendo una columna fuera; sus héroes pueden trasladar allí su campamento y asignar guarnición. Ver 5.12.9.
 
-**Reforzar una plaza propia.** Un ejército en la puerta de una plaza de su Facción puede entrar: sus héroes quedan DENTRO con los escuadrones que llevan, y si atacan la plaza la defienden en persona. No se convierten en guarnición: la guarnición solo la asigna quien reside (5.15.3). Es la forma de **reforzar una frontera o defender una plaza amenazada marchando a ella** sin mudar la residencia. Las **caravanas adjuntas** quedan `'aparcadas'` en esa plaza (siguen siendo de su origen; ver Doc 3.13.7). Para volver a campaña se sale con `movilizarEjercito` (5.8).
+**Reforzar una plaza propia.** Un ejército en la puerta de una plaza de su Facción puede entrar (y en la de otra Facción si su dueño le abre la puerta, 2026-10-22): sus héroes quedan DENTRO con los escuadrones que llevan, y si atacan la plaza la defienden en persona. **Lo mismo vale para el héroe de una Facción aliada** (alianza, o vasallaje en cualquier sentido) que esté dentro de la plaza cuando la atacan: defiende con lo que trajo al entrar —su columna, que entró con él y ya no está en el mapa—, en el cupo de héroes que dejan los residentes (con números, o en Unity uniéndose a la batalla, como los residentes). Un neutral o un enemigo al que el dueño dejó entrar **no defiende nunca**, aunque esté dentro, y tampoco ataca desde dentro. No se convierten en guarnición por entrar: la asigna quien reside y, desde el 2026-11-04, quien está de visita en una plaza de su Facción con las escuadras de su columna (5.15.3). Es la forma de **reforzar una frontera o defender una plaza amenazada marchando a ella** sin mudar la residencia. Las **caravanas adjuntas entran con el ejército, sean de donde sean**, y salen con él (2026-10-22; antes quedaban `'aparcadas'` en la plaza; aparcarlas es ahora una orden explícita, Doc 3.13.7). Para volver a campaña se sale con `movilizarEjercito` (5.8).
+
+**«A la puerta» y «dentro» (decisión del autor, 2026-10-22).** Vale para todo lo que se puede entrar: una plaza, un campamento de mercenarios, un pueblo extractor, una avanzada o cualquier otro elemento en el que se pueda entrar. **A la puerta** es estar **fuera, en el mapa del mundo, muy cerca del elemento**; desde ahí se hacen las interacciones que no son defensa (entregar materiales, depositar, repostar, comerciar), pero **no se defiende**. Desde el 2026-11-10 (acciones a la puerta, pedido del autor), a la puerta de lo de tu Facción también se **deja y se recoge guarnición** con la tropa de tu columna (la plaza, y el pueblo o la aldea), y quien tiene el cargo **manda el Mercado interno y la flota** de la plaza (órdenes de mercado, caravanas y encargos); y con la columna **parada** a la puerta de un campamento de mercenarios se ve su mercado, sus tropas y su tablón como desde dentro (Proyecciones_Y_Autorizacion, «Acciones a la puerta»). **Dentro** es haber hecho la interacción de entrar. **Solo lo que está dentro cuenta para la defensa**: una columna amiga acampada junto a la plaza, el pueblo o la avanzada, en el mapa, no defiende —ni con números ni uniéndose a la batalla—; para defender hay que haber entrado. (El héroe que entra de visita entra **con todo**: su columna ya no está en el mapa, es lo que trajo consigo y cuenta como dentro; al salir se lo lleva. No existe la «columna aparcada a la puerta».) Una caravana no se entra, va por el mapa: la defienden su escolta y los que se unen desde el mapa. En los pueblos y las avanzadas se entra como en una plaza (`entrarEnPueblo`, `entrarEnAvanzada`, 2026-10-22): defienden su guarnición y los que están dentro, de la Facción de la plaza madre, aliados o vasallos. **A un lado solo se une quien está en su sitio**: al atacante, quien está **fuera** (en el mapa); al defensor, quien está **dentro**. Un héroe de la Facción atacante que está dentro (entró como neutral, por ejemplo) no se une al ataque desde dentro. **Unirse a la defensa no es automático (2026-10-22, tercera ronda)**: en una batalla de Unity entra la guarnición y los residentes y amigos de dentro se unen si quieren; desde fuera, en el mapa, el elemento se ve en asedio y pueden unirse al ataque los neutrales y enemigos de su dueño, no sus amigos. **Quien está dentro de un lugar atacado y no se ha unido a la defensa solo puede salir (2026-10-22, cuarta ronda)**: la orden de salir al mapa, con todo lo suyo, se admite mientras dura el asedio, el saqueo o el ataque; cualquier otra orden queda bloqueada hasta que acaba. Fuera, si es neutral o enemigo del dueño, puede unirse al ataque; quien se unió a la defensa combate y no sale hasta que acaba. La salida del residente de su propia plaza (`salirAlMundo`) cuenta como salir del lugar (2026-10-22, quinta ronda).
 
 **Y el premio justifica el riesgo**: conquistar entrega **un asentamiento en funcionamiento** — saqueado y bajo ocupación un tiempo (5.12.9), pero tuyo — y además **amplía los asentamientos de la Facción por encima del cupo de su nivel** (Doc Fase_0_5 §5; la ocupación no toca esa regla — un conquistado conserva su `nivel` sin verificar cupo). Conquistar es la única vía de crecer más allá del techo que marca el nivel de Facción — fundar sí respeta el cupo, conquistar no. Ese es el incentivo, y es lo que impide que la guerra sea un intercambio de pérdidas donde a nadie le compensa atacar.
 
@@ -326,63 +375,69 @@ Si el asedio **resiste**, el ejército se queda acampado fuera con sus escuadron
 
 **Y el agua no se cruza** (Doc 1.0b): un ejército la rodea, y si no hay camino por tierra hasta el destino, sencillamente **no se puede movilizar**. Tampoco replegarse, si el regreso quedara cortado. No hay embarque.
 
-**Cada tropa tiene velocidad propia.** Tres clases:
+**Cada tropa tiene velocidad propia.** Cuatro clases:
 
 | Clase | Tropas | Velocidad |
 |---|---|---|
-| **Ligera** | Milicia de lanceros, Honderos, Lanceros con escudo de mimbre, Escaramuzadores con jabalina | **20** |
-| **Media** | Espadachines de cobre, Espadachines de bronce, Hacheros ligeros, Arqueros | **16** |
-| **Pesada** | Hacheros armados, Lanceros pesados micénicos, Arqueros con arco compuesto | **12** |
+| **Montada** | Exploradores a caballo, Jinetes asirios, Jinetes escitas, Caballería asiria, Pródromos, Caballería tesalia, Caballería noble persa, Compañeros | **84** (42 hasta el 2026-10-27: el autor dobló la caballería y el héroe solo, que va a 66) |
+| **Ligera** | Milicia de lanceros, Leñadores, Granjeros, Honderos, Lanceros con escudo de mimbre, Escaramuzadores con jabalina, Peltastas, Honderos rodios, Carros de guerra, Peltastas de Ifícrates, Agrianos | **30** |
+| **Media** | Espadachines de cobre, Espadachines de bronce, Hacheros ligeros, Arqueros, Guerreros filisteos, Shardana, Hoplitas ciudadanos, Arqueros escitas, Epílektoi, Inmortales, Hipaspistas | **24** |
+| **Pesada** | Hacheros armados, Lanceros pesados micénicos, Arqueros con arco compuesto, Hequetai, Espartiatas, Falangitas | **18** |
 
 Dos reglas fijan esta tabla:
 
-1. **Una caravana inicial no puede ser más rápida que un ejército en movimiento.** La caravana comercial va a 16, así que ni siquiera un ejército medio se deja adelantar por ella.
-2. **Un jugador solo con infantería ligera tiene que poder alcanzar una caravana inicial.** Ligera 20 > comercial 16: la caza.
+1. **Una caravana inicial no puede ser más rápida que un ejército en movimiento.** La caravana comercial va a 24, así que ni siquiera un ejército medio se deja adelantar por ella.
+2. **Un jugador solo con infantería ligera tiene que poder alcanzar una caravana inicial.** Ligera 30 > comercial 24: la caza.
 
 Consecuencias que salen del `min` sin escribir ninguna regla más:
 
-- Un ejército **pesado (12) no alcanza a ninguna caravana**, y eso es correcto: un ejército de asedio no persigue mercaderes. La intercepción es cosa de tropa ligera.
-- **Meter un solo escuadrón pesado en una partida de incursión la frena a 12** y le quita la capacidad de cazar. Incursión y asedio pasan a ser composiciones distintas, no la misma fuerza con otra orden.
-- La caravana de **contrabando (24) sigue escapando de todo**, lo cual es deliberado: el contrabandista evade por diseño, y no es una caravana "inicial".
+- Un ejército **pesado (18) no alcanza a ninguna caravana**, y eso es correcto: un ejército de asedio no persigue mercaderes. La intercepción es cosa de tropa ligera.
+- **Meter un solo escuadrón pesado en una partida de incursión la frena a 18** y le quita la capacidad de cazar. Incursión y asedio pasan a ser composiciones distintas, no la misma fuerza con otra orden.
+- La caravana de **caballo (36) escapa de todo lo que va a pie**, lo cual es deliberado. **Solo la caballería (42) la alcanza**; los carros de guerra van a 30.
 
 ### 5.12.6 Cancelar la marcha
 
-Una marcha en curso **se puede cancelar en cualquier momento**, y hacerlo **dispara la vuelta**: el ejército pasa a `regresando` y desanda su ruta hacia el asentamiento de origen. No se teletransporta ni se desvanece — volver cuesta el mismo camino que costó ir, y sigue comiendo del carro durante el regreso.
+Una marcha en curso **se puede cancelar en cualquier momento**, y hacerlo **detiene al ejército donde está**: queda `estacionado`, quieto, y su Líder lo dirige de nuevo cuando quiera (5.12). **No hay vuelta a casa automática**: un ejército no tiene destino fijo ni plaza a la que regrese solo, y no se teletransporta ni se desvanece; para ir a un sitio, su Líder lo lleva con sus clics.
 
-**Esto vale para un EJÉRCITO. Una Columna personal no cancela: rectifica** (5.12.1). Un jugador solo hace clic en otro punto y su ruta se recalcula desde donde esté, tantas veces como quiera. Un ejército no tiene esa opción, y por eso cancelar —volver a casa— es su única salida de una marcha empezada: el rumbo lo acordaron varios.
+**Esto vale para un EJÉRCITO. Una Columna personal no cancela: rectifica** (5.12.1). Un ejército también puede rectificar —su Líder hace clic en otro punto—; cancelar es la orden de **detenerse**, distinta de cambiar de destino.
 
-**Cancelar es del Líder, y solo suyo** (5.14.3). El rumbo lo acordaron varios y deshacerlo no puede ser cosa de uno cualquiera. No atrapa a nadie: el que no quiera seguir **se separa**, que eso sí puede hacerlo cualquiera.
+**Cancelar es del Líder, y solo suyo** (5.14.3): como dirigir el rumbo, no puede ser cosa de uno cualquiera. No atrapa a nadie: el que no quiera seguir **se separa**, que eso sí puede hacerlo cualquiera.
 
-Y es la razón por la que **deshacer un ejército es replegarlo, no vaciarlo**: el último miembro no puede separarse (5.14), así que la vuelta es el camino.
+**Deshacer un ejército es llevarlo a la puerta de una plaza o de un campamento y desarmarlo** (5.14.6): el último miembro no puede separarse (5.14), así que el ejército no se vacía en campo abierto.
 
 ### 5.12.7 Qué ve el jugador — la vista
 
 Un jugador ve de lo AJENO lo que alcancen sus tres clases de ojos:
 
-1. **Sus plazas**, que vigilan su radio de influencia **más 60** unidades de mapa. La ciudad mira algo más allá de su frontera, como una atalaya.
-2. **Sus ejércitos en marcha**, que ven **150** a la redonda.
-3. **Él mismo, viajando solo**, que ve **80**. Menos que una columna a propósito: un hombre solo no despliega batidores. Es bastante para viajar sin caer a ciegas en una emboscada, y poco para que el explorador solitario sea la mejor unidad de información del juego.
+1. **Sus plazas**, que vigilan **solo su zona de influencia** (`VISION.margenAsentamiento` = 0): ni un paso más allá de su frontera. Lo de fuera lo ven las avanzadas (5.17).
+   - **Sus avanzadas**, cada una con un círculo de **24** unidades de mapa alrededor de sí (`VISION.avanzada`; 12 hasta el 2026-11-05, decisión del autor), fijo en las tres etapas e independiente del de la plaza. Puesta en la frontera, asoma 24 más allá; como solo se construye dentro de la zona, nunca ve más de 24 por fuera.
+2. **Sus ejércitos en marcha**, que ven **30** a la redonda.
+3. **Él mismo, viajando solo**, que ve **15**, más o menos el ancho de la pantalla. Menos que una columna a propósito: un hombre solo no despliega batidores. Es bastante para viajar sin caer a ciegas en una emboscada, y poco para que el explorador solitario sea la mejor unidad de información del juego.
 
-**Los dos números solo se entienden comparados.** Que la columna vea más lejos que la plaza es lo que mantiene el valor de explorar: un ejército divisa una ciudad mucho antes de que la ciudad lo divise a él, y conserva la iniciativa. Y el margen de la plaza coincide con la distancia a la que un ejército puede repostar en ella (5.13), lo que da una regla fácil de recordar: **si una columna está lo bastante cerca como para repostar en tu ciudad, tu ciudad la ve.**
+**Los dos números solo se entienden comparados.** Que la columna vea más lejos que la plaza es lo que mantiene el valor de explorar: un ejército divisa una ciudad mucho antes de que la ciudad lo divise a él, y conserva la iniciativa. Una columna puede repostar en una plaza que no la ve, y es aceptable: reponer víveres no depende de verla. Ganan valor las Miradas de la taberna (5.12.10) y la visión compartida entre aliados.
 
-Sobre el mundo de 2000×2000, los 150 del ejército son unas **dos provincias** (Doc 1.0a) — varias ciudades por delante si la geografía lo permite — y siguen muy por debajo del radio de cohesión de un reino (~5 provincias): ver no es lo mismo que controlar. Los 60 de margen **duplican el área vigilada de una plaza recién fundada**, así que se notan desde el primer minuto.
+Sobre el mundo de 2.667×2.000, los 30 del ejército son **un minuto de camino**: el anillo de plazas vecinas con un minuto de aviso, y siguen muy por debajo del radio de cohesión de un reino (~5 provincias): ver no es lo mismo que controlar.
 
-El margen de la plaza se mide sobre su **radio**, no sobre la silueta de su zona. La zona viene recortada por las fronteras con Facciones rivales (Doc 1.2), y ese recorte es político, no óptico: que un rival plante su frontera pegada a tu ciudad no ciega a tus vigías.
+La visión de la plaza se mide sobre su **radio**, no sobre la silueta de su zona. La zona viene recortada por las fronteras con Facciones rivales (Doc 1.2), y ese recorte es político, no óptico: que un rival plante su frontera pegada a tu ciudad no ciega a tus vigías.
 
-> **Consecuencia**: como el radio crece con el nivel (60 → 180), una plaza de **nivel 5 vigila 240 y ve más lejos que un ejército**. Es coherente con la ficción —una capital tiene atalayas— pero diluye la ventaja de explorar cerca de las grandes ciudades.
+> **Consecuencia** (con las zonas al doble desde el 2026-11-05, decisión del autor: la visión sigue ligada a la zona): una plaza joven (zona de 12 a 20) ve menos que un ejército (30), que gana iniciativa frente a ella; el día de protección tras fundar amortigua el arranque. Desde el nivel 2 (techo 30) una plaza puede ver tanto como un ejército, y una capital de nivel 5 (60) el doble; solo las avanzadas le dan ojos más allá de su frontera.
 
 De lo ajeno se ve **quién es y dónde está, nunca su interior**:
 
 | Lo avistado | Qué se sabe | Qué NO se sabe |
 |---|---|---|
 | **Ejército** | Dónde está, de qué Facción es, cuántos rombos lo componen (5.12.2) | Composición, poder, ruta, objetivo, suministro, de dónde salió |
-| **Asentamiento** | Nombre, Facción, posición y **nivel** | Almacén, guarnición, edificios, colas de construcción, cargos |
+| **Asentamiento** | Nombre, Facción, posición y **nivel**; si tiene muralla y si tiene Mercado o Armería activos (Doc 1.10.1) | Almacén, guarnición, la lista de edificios, colas de construcción, cargos |
 
 El **nivel** de una plaza sí se ve porque una ciudad grande se ve grande desde fuera; no dice cuánta tropa tiene dentro, que es lo que decidiría un ataque.
 
-**Salvo que te acerques a mirar.** Esa tabla describe lo que llega A DISTANCIA DE VISTA, y sigue siendo la regla general. Dentro del **anillo de inspección (40)** se puede pedir ver la composición de una columna ajena —qué tropas y de quién son— y de una caravana, si lleva escolta y qué recursos carga, nunca cuántos (5.12.3). No es gratis: **el inspeccionado recibe aviso de que lo están mirando**. La telemetría de rival que esta sección prohíbe se paga acercándose y delatándose, que es lo contrario de obtenerla desde el sofá.
+**Lo que se mira se guarda un rato** (2026-10-09): el resultado de inspeccionar no se pierde al recargar; queda como informe, con la fecha y el lugar donde se vio, durante `INSPECCION.informeMinutos` (10 minutos de mundo). Es solo del que miró, y para renovarlo hay que volver a acercarse y delatarse.
 
-**Las caravanas ajenas y neutrales solo se ven dentro del radio de visión.** Fuera de él están ocultas, y **sin memoria**: a diferencia de una ciudad, una caravana se mueve, así que una foto vieja no diría "aquí hubo una" — diría una mentira sobre dónde está ahora.
+**Salvo que te acerques a mirar.** Esa tabla describe lo que llega A DISTANCIA DE VISTA, y sigue siendo la regla general. Dentro del **anillo de inspección (8)** se puede pedir ver la composición de una columna ajena —qué tropas y de quién son—, de una caravana, si lleva escolta y qué recursos carga, nunca cuántos, y de una plaza ajena su defensa: la guarnición y los héroes que hay dentro, nunca su almacén (5.12.3). No es gratis: **el inspeccionado recibe aviso de que lo están mirando**. La telemetría de rival que esta sección prohíbe se paga acercándose y delatándose, que es lo contrario de obtenerla desde el sofá. **O pagándola en una taberna** (5.12.10): una Mirada presta ojos sobre una zona durante un rato y un Informe da la foto, con fecha, del layout y la defensa de una plaza.
+
+**Las caravanas ajenas y neutrales solo se ven dentro del radio de visión**, con una excepción por tamaño. Fuera de él están ocultas, y **sin memoria**: a diferencia de una ciudad, una caravana se mueve, así que una foto vieja no diría "aquí hubo una" — diría una mentira sobre dónde está ahora.
+
+**Las caravanas grandes llaman la atención** (2026-10-05, `VISION.caravanaGrande`, placeholder): una caravana comercial con **3 o más carros con animal** se ve desde cualquier plaza o columna de otra Facción —también las de quienes comparten tu visión, y desde el centro de una Mirada comprada— a **60** de ella, aunque no entre en su vista normal, **desde que está `preparando` en su plaza** y mientras viaja cargada. Es el gancho de conflicto de las caravanas: que otras Facciones salgan a interceptarlas. Una pequeña sigue bajo la niebla normal. Una que vuelve vacía, o va enganchada a una columna, no llama la atención por sí misma. Lo que se ve de ella es lo de siempre —dónde está, de quién es, si va escoltada y qué recursos lleva, nunca cuántos—; la composición, solo en el anillo de inspección (arriba). Una `preparando` sigue sin ser interceptable (está en su plaza, 3.13.3): se ve para que se salga a esperarla, no para atacarla en casa.
 
 ### 5.12.8 Qué recuerda el jugador — la memoria
 
@@ -396,7 +451,9 @@ De ahí salen los tres estados en que el jugador ve el mundo:
 | **No lo veo, pero lo vi antes** | La última foto que tomó, con la fecha en que la tomó |
 | **Lo estoy viendo** | La ficha en vivo. Al dejar de verlo, cae al estado anterior |
 
-**Lo recordado no caduca, se refresca.** No hace falta un plazo de caducidad porque el dato viejo se delata solo: la foto viaja con el instante en que se tomó, y la interfaz puede decir "última información: hace 3 horas". El jugador juzga si fiarse. Volver a ver la plaza actualiza la foto; borrar información que el jugador ya sabe se sentiría arbitrario, dejarla envejecer a la vista no.
+**Lo recordado no caduca, se refresca — salvo que ya no exista.** No hace falta un plazo de caducidad porque el dato viejo se delata solo: la foto viaja con el instante en que se tomó, y la interfaz puede decir "última información: hace 3 horas". El jugador juzga si fiarse. Volver a ver la plaza actualiza la foto; borrar información que el jugador ya sabe se sentiría arbitrario, dejarla envejecer a la vista no. La única excepción es una plaza que **ya no existe** (cayó en ruinas): su ficha, y el informe que se hubiera comprado de ella, se olvidan en cuanto la Facción **vuelve a ver el sitio** y no está (decidido el 2026-10-11); mientras no se vuelva a mirar, la foto vieja se queda.
+
+**Se recuerda todo lo que se vio, tal como estaba.** Un pueblo o una avanzada ajenos quedan en la foto con su nivel o etapa y su estado de entonces (activo, en obra, en ruinas), y unas ruinas de ciudadela sin dueño también se recuerdan; lo que cambie después no se sabe hasta volver a verlo (decidido el 2026-10-24).
 
 **La memoria es de la FACCIÓN, no del ciudadano.** Lo que uno explora lo saben todos los suyos — es lo coherente con que la Facción propia ya se vea entera desde dentro. Un héroe sin Facción lleva su propia memoria, que se funde con la de la Facción al entrar en una o al fundarla (Doc 1.3).
 
@@ -409,63 +466,127 @@ De ahí salen los tres estados en que el jugador ve el mundo:
 | **Camino comercial** | Lo has **explorado** | Es infraestructura estática, como el terreno: la calzada que recorriste sigue donde estaba aunque hoy no la mires |
 | **Campamento de bandidos** | Lo estás **viendo ahora** | Aparecen y desaparecen, así que no tienen memoria: recordarlos enseñaría el que nació después de que te fueras y el que ya arrasó otro |
 
-Un camino se conoce **entero o no se conoce**: haber recorrido un tramo revela qué dos plazas une, que es en la ficción lo que una calzada dice de sí misma.
+Un camino se conoce **tramo a tramo**: se ve cada tramo con algún extremo en tierra explorada (red de caminos, Doc 1.6), y lo visible llega fusionado en polilíneas enteras, con su escalón (sendero, camino, calzada).
 
 **Con la ciudad se ve su FRONTERA.** Una zona de influencia está marcada sobre el terreno, así que quien pasa por delante la ve — y lo que se ve es la línea de verdad, con su forma real, no un círculo idealizado. Lo que la acota es la misma niebla que acota todo lo demás: **del contorno solo llegas a ver el tramo que cae en tierra que has explorado.** Pasar cerca de una frontera te enseña ese tramo, no el mapa político entero.
 
 De una frontera que solo **recuerdas** queda hasta dónde llegaba, no su trazo exacto: la línea real está negociada con vecinos que quizá no conozcas, y de esos no sabes nada. Se dibuja aproximada, y se ve que lo es.
 
-**Y sabes en tierra de quién estás cuando marchas.** Una columna que entra en territorio ajeno lo nota, aunque no alcance a ver la ciudad que manda ahí — que es posible: una capital de nivel 5 vigila 240 y una columna ve 150, así que hay una franja en la que estás dentro de sus dominios sin haberla divisado. Lo que se sabe es **de qué Facción es el suelo**, nunca dónde tiene su capital.
+**Y sabes en tierra de quién estás cuando marchas.** Una columna que entra en territorio ajeno lo nota, aunque no alcance a ver la ciudad que manda ahí — que es posible: una columna ve 30 y una plaza de zona mayor que eso queda fuera de su vista cuando cruzas su frontera, así que hay una franja en la que estás dentro de sus dominios sin haberla divisado. Lo que se sabe es **de qué Facción es el suelo**, nunca dónde tiene su capital.
 
 > **El terreno lo tapa el cliente de jugador, no el servidor.** La geografía no es información táctica —es la misma para todos— así que el servidor solo dice QUÉ has explorado y cada cliente decide cómo pintarlo. El de administración no tapa nada: es una herramienta de operación, no un jugador.
 
 ### 5.12.9 Ocupación tras la conquista
 
-**Para qué sirve:** una plaza recién conquistada queda sin guarnición (5.15.5). La ventana de ocupación la protege durante un tiempo fijo para que no cambie de manos cada vez que pasa un ejército; pasado ese tiempo, quien quiera conservarla tiene que defenderla: trasladar allí su campamento y asignar guarnición, o estar dentro cuando la ataquen.
+**Para qué sirve:** una plaza recién conquistada queda sin guarnición (5.15.5). Al cambiar de dueño arrancan dos relojes distintos:
 
-Diseño en `Consideraciones/Ocupacion_Post_Conquista_Definicion.md`. Cifras placeholder en `OCUPACION`.
+- **La protección del nuevo dueño**, un día de mundo: nadie puede asediarla mientras se recupera y recluta con qué defenderse, para que no cambie de manos cada vez que pasa un ejército. Un asentamiento recién fundado nace con la misma protección (Doc 1.2). Pasado ese día, quien quiera conservarla tiene que defenderla: trasladar allí su campamento y asignar guarnición, o estar dentro cuando la ataquen.
+- **La ventana de ocupación**, más corta: el coste de haberla tomado.
+
+Diseño en `typescript-final:Consideraciones/Ocupacion_Post_Conquista_Definicion.md`. Cifras placeholder en `OCUPACION`.
 
 **Al conquistar**:
 
 1. **La plaza queda sin guarnición** (5.15.5): los escuadrones de los antiguos residentes, guarnición incluida, quedan a 0 unidades y se van con el campamento de su héroe; no hay captura. El ejército conquistador sigue siendo una columna fuera.
-2. **Saqueo determinista** (sin azar): `pesants` y `artesanos` pierden `OCUPACION.fraccionSaqueoPoblacion` (nobleza intacta, huye/negocia); una fracción `OCUPACION.fraccionEdificiosDanados` de los edificios activos —por orden de id, **exentos Centro Urbano y al menos una Granja y una Leñera**— pasan a la cola marcados `danado` (un Almacén o Granero dañado deja de aportar capacidad hasta reconstruirse, y lo guardado que ya no cabe se pierde); cada recinto de muralla completo pierde `OCUPACION.fraccionDanoMuralla` de su `avance` (la muralla no cae, deja de dar el multiplicador defensivo pleno hasta repararse por la vía normal de obra).
-3. `medidorMantenimiento` a 100 y se abre la **ventana de ocupación** (`Asentamiento.ocupacionHasta`, `OCUPACION.duracionMinutos`, mismo orden que el período de gracia de fundación).
+2. **Saqueo determinista** (sin azar): `pesants`, `artesanos` y `nobleza` pierden `OCUPACION.fraccionSaqueoPoblacion`; una fracción `OCUPACION.fraccionEdificiosDanados` de los edificios activos —por orden de id, **exentos Centro Urbano y al menos una Granja y una Leñera**— pasan a la cola marcados `danado` (un Almacén o Granero dañado deja de aportar capacidad hasta reconstruirse, y lo guardado que ya no cabe se pierde; un Molino dañado pierde su buey); cada recinto de muralla completo pierde `OCUPACION.fraccionDanoMuralla` de su `avance` (la muralla no cae: deja de dar el multiplicador defensivo pleno, el cupo y el requisito del nivel 4 hasta repararse sola por la vía normal de obra, a costa del nuevo dueño; un recinto en obra o en mejora no recibe daño).
+3. `medidorMantenimiento` a 100 y arrancan la **protección** (`Asentamiento.protegidaHasta`, `OCUPACION.proteccionMinutos`: un día de mundo) y la **ventana de ocupación** (`Asentamiento.ocupacionHasta`, `OCUPACION.duracionMinutos`, mismo orden que el período de gracia de fundación).
+4. **Las decisiones del gobierno derrotado caen con él** (decidido el 2026-10-02): se cancelan sus políticas activas, la reserva manual del Tesorero, la pausa de la auto-construcción y las recetas paradas. El nuevo dueño no hereda decisiones de quien ya no manda.
 
 **Un edificio `danado`** se reconstruye por la auto-construcción normal, pero al arrancar la obra cuesta solo `OCUPACION.fraccionCosteReconstruccion` del costo de catálogo y tarda esa misma fracción — se repara, no se levanta de cero. El flag se limpia al volver a activo.
 
-**Durante la ventana** (mientras `instante < ocupacionHasta`):
+**Durante la protección** (mientras `instante < protegidaHasta`) un asedio rebota sin combate ni azar, y el atacante acampa.
+
+**Durante la ventana de ocupación** (mientras `instante < ocupacionHasta`):
 
 | Efecto | Valor |
 |---|---|
-| Inmune a un nuevo asedio | rebota sin combate ni azar; el atacante acampa |
 | Recaudación de oro | `× OCUPACION.factorRecaudacion` |
 | Crecimiento de población | el factor de felicidad `× OCUPACION.factorCrecimiento` |
 | Mantenimiento | no degrada (misma rama que el período de gracia) |
 
-**Al vencer** (tiempo fijo, nada la acorta): se limpia `ocupacionHasta` y la plaza vuelve a las reglas normales. La defiende quien se haya instalado: los héroes conquistadores que trasladaron allí su campamento, con su guarnición y en persona. Sin nadie, un asedio se juega sin defensores (5.12.4). Consolidar la conquista —reclutar escuadrones nuevos ahí, asignar guarnición, ejercer cargos, recaudación al 100%— exige residir en la plaza tomada (`cambiarResidencia`, Doc 2.5).
+**Al vencer** cada reloj (tiempo fijo, nada los acorta) se limpia su campo y la plaza vuelve a las reglas normales. Pasada la protección, la defiende quien se haya instalado: los héroes conquistadores que trasladaron allí su campamento, con su guarnición y en persona. Sin nadie, un asedio se juega sin defensores (5.12.4). Consolidar la conquista —reclutar escuadrones nuevos ahí, asignar guarnición, ejercer cargos, recaudación al 100%— exige residir en la plaza tomada (`cambiarResidencia`, Doc 2.5).
 
 **Supervivencia:** el saqueo nunca toca el Centro Urbano ni deja al asentamiento sin una Granja y una Leñera activas, el mantenimiento queda suspendido toda la ventana y la reconstrucción es barata — para que un asentamiento pequeño saqueado no colapse por la penalización.
 
+### 5.12.10 Intel: lo que se compra en la taberna (2026-10-05)
+
+La niebla (5.12.7-8) tapa lo que queda fuera de tus ojos, y **saber qué pasa donde no ves vale oro**. La **taberna** vende esa información: no abre nada que la niebla no cierre para siempre, solo **presta ojos durante un rato** o **tira una foto** que luego envejece. Es el **sink recurrente de oro** del juego (Doc 3.1): una suscripción, no una compra de capital — se paga, caduca y se vuelve a pagar si todavía importa.
+
+Hay **dos productos**, los dos **exactos en el instante de la compra**: la información no lleva ruido ni miente, así que un bot y un jugador la usan igual. La taberna de una **plaza** vende además, a partir de la tanda 69, dos **informes de región** (más abajo).
+
+| | **Mirada** | **Informe de plaza** |
+|---|---|---|
+| Qué es | Un **ojo prestado** sobre un punto cualquiera del mapa, con el radio de una columna (`INTEL.mirada.radio`, 30) y una duración (`duracionMinutos`, 2 h) | La **foto con fecha** de una plaza ajena: sus **edificios** (tipo, sitio, nivel interno, si están en obra), sus **recintos** de muralla, su **guarnición** y los **héroes** que hay dentro |
+| Qué ves | Lo que verías con una columna ahí, **en vivo**: ejércitos, caravanas, campamentos de bandidos y fichas de plazas (nombre, Facción, posición y nivel, Doc 5.12.7). **Nunca interiores** | El layout y la defensa tal como estaban al comprarlo. **Nunca el almacén, las colas, los cargos ni las políticas** |
+| Memoria | **Ninguna**: entra en «lo que se ve ahora», no en lo explorado (igual que los ojos aliados, 5.12.8). Al caducar, lo que solo veías por ella vuelve a la niebla y no queda «último conocido» | Se **guarda en la memoria de la Facción**, el último de cada plaza, y **envejece a la vista**: viaja con su fecha, como una ficha conocida (5.12.8) |
+| Se comparte | **Con quienes comparten tu visión** (aliados y vasallaje, 5.12.8), en vivo y mientras dure la alianza. No viaja la compra, solo lo que ve | **No**: es memoria de la Facción compradora. Un aliado que lo quiera lo compra |
+| Precio | `oroBase` (40) más `oroPorUnidad` (0,5) por unidad de **distancia a tus ojos propios más cercanos** (tus plazas, tus columnas y la taberna donde compras): mirar lejos cuesta más | `oroPorNivel` (60) por **nivel de la plaza mirada**: una capital cuesta más que una aldea |
+| Freno | Un **cupo** de Miradas abiertas a la vez por taberna y, tras caducar, la **zona se enfría** (`cooldownMinutos`, 2 h): no se repite una Mirada con el centro a menos de un radio de otra reciente de la misma Facción | Un **cooldown** por plaza (`informe.cooldownMinutos`, 6 h): el mismo informe no se pide dos veces seguidas |
+
+**Cómo se mira.** El centro de una Mirada puede ser cualquier punto del mapa, explorado o no: comprar un ojo sobre tierra que nunca pisaste es justo para lo que sirve. Un Informe solo se pide de una plaza **que la Facción conoce** —tiene su ficha en la memoria o cae dentro de una Mirada abierta—, así que el camino natural es *mirar una zona, ver la plaza y pedir su informe*; no se puede recorrer el mundo probando identificadores. De la propia Facción no se pide.
+
+**Dónde y quién compra.**
+
+- **Taberna de plaza** (edificio, Doc 4.2.1). Compra el **Rey, el Embajador o el Gobernador** de esa plaza, **estando en ella**, y paga el **almacén de esa plaza**. El cupo de Miradas lo da su nivel interno: 1 / 2 / 3.
+- **Taberna de un campamento de mercenarios** (Doc 1.9b). Compra **cualquier héroe que pertenezca a una Facción**, dentro del campamento o con su columna a la puerta (como el resto de sus acciones), y paga con el oro de su **almacén personal** (si reside allí) o del **carro** de su columna (de visita). Es la vía de las Facciones sin plaza. El cupo es fijo (`INTEL.campamento.cupoMiradas`, 1 por Facción y campamento). La intel que compra es **de su Facción**: lo que un ciudadano mira, lo saben los suyos.
+- Un héroe **sin Facción** no compra: la intel es de una Facción, y sin ella no hay memoria donde guardar un informe ni aliados con quienes compartir una Mirada.
+
+**Informes de región (solo en la taberna de una plaza).** La taberna de una plaza vende información de **toda la región de relieve del mapa** en que está la plaza (Altiplano interior, Estepa abierta…), en dos tipos que se compran por separado:
+
+| | **Plazas de la región** | **Órdenes de la región** |
+|---|---|---|
+| Qué es | Las **fichas** (nombre, Facción, posición y nivel, 5.12.7) de las plazas de la región, aunque nunca las hayas visto | Las **órdenes de mercado en pie** de esas plazas (Doc 3.3), que ves mientras dura el informe |
+| Memoria | Se guardan en la memoria de la Facción y **envejecen a la vista** como cualquier ficha conocida (5.12.8); sirven para pedir luego el Informe de una de ellas | **Ninguna**: se ven en vivo, como si estuvieras dentro de cada plaza, y se dejan de ver al caducar (`INTEL.region.caducidadMinutos`, 200 min) |
+| Precio | **Fijo**, `INTEL.region.oro` (60), del almacén de la plaza: no depende del nivel de la plaza ni de cuántas plazas haya en la región (decisión del autor, 2026-11-08) | El mismo |
+| Freno | Un **cooldown** por Facción, región y tipo (`INTEL.region.cooldownMinutos`, 6 h) | El mismo |
+
+Entran **todas las plazas de la región menos las de tu Facción y las de una Facción en guerra con ella**: las aliadas, las vasallas, las de Facciones en paz y las de bots sí. Compra el **Rey, el Embajador o el Gobernador**, estando en la plaza; no hace falta conocer ninguna plaza antes, y **no avisa a nadie**. Con las órdenes a la vista se puede **tomar una a distancia** desde el Mercado de una plaza propia (Doc 3.13.9). Las dos compras de región se ven en la ficha de la Facción, con su caducidad y cuándo se pueden repetir. La taberna de un campamento no vende informes de región.
+
+**Rumores (2026-11-10).** La taberna, la de una plaza **y** la de un campamento de mercenarios, tiene además un espacio de **rumores**, con los mismos compradores y la misma forma de pago que la Mirada. El primero, el de las **vetas de estaño**, cuesta **80 de oro** (`INTEL.rumores.vetasEstano`) y descubre dónde están los yacimientos de estaño de la región de relieve de la taberna: el terreno alrededor de cada uno (10 unidades) queda **explorado** para la Facción, como si una columna lo hubiera recorrido, sin ver lo que pase allí después. Si la Facción ya los tiene todos explorados, la compra se rechaza **sin cobrar**. No avisa a nadie.
+
+**La víctima.** Un Informe **avisa a la Facción espiada** (`asentamiento.informe_pedido`, atribuido a su plaza): *«alguien ha pedido el plano y la defensa de Troya»*, **sin decir quién**. Es el mismo principio que la inspección a 8 (5.12.3) —obtener información de un rival delata— pero la compra es remota, así que el aviso es **anónimo**. La Mirada **no avisa a nadie**: es solo ver, y mirar un trozo de mapa no toca a nadie.
+
+**Qué no es.** No es espionaje general ni vuelve el score público menos público (Doc 2.7): la taberna da información **militar y de territorio** —dónde hay columnas y caravanas, cómo es y cómo se defiende una plaza—, siempre pagada, siempre con caducidad o con fecha. No toca la **tecnología ni el lore**, que son de los Aedas (Doc 6.7), ni los **acuerdos de comercio y la información de caravanas ajenas** que da el gremio de Ladrones (Doc 2.10): ese es un beneficio pasivo y propio de una sede escasa, este es un servicio de pago abierto a cualquiera que tenga taberna. Todo dentro de las Eras I-III: la taberna no pide tecnología.
+
 ## 5.13 Suministro en campaña
 
-**Un ejército en marcha NO come del almacén de su asentamiento.** Lleva su propio **carro de suministros** con la comida que consume mientras se mueve. Si se queda sin comida, la moral colapsa y los soldados desertan — exactamente la misma regla del hambre que en guarnición (5.4), solo cambia de qué despensa se come.
+**Un ejército en marcha NO come del almacén de su asentamiento.** Come de los **víveres** de sus héroes. Si se queda sin comida, la moral colapsa y los soldados desertan — exactamente la misma regla del hambre que en guarnición (5.4), solo cambia de qué despensa se come.
 
-- **Capacidad**: **FIJA e igual para todos los Héroes** — es un carro, no una abstracción proporcional a lo que llevas. Se **suma** al formar ejército: un ejército de cuatro lleva cuatro carros.
-- **Carga**: al salir o al unirse, cada Héroe **toma del asentamiento**. Si el almacén no llega, se sale con menos autonomía; no se bloquea la salida. Sacar un ejército **cuesta stock real** al asentamiento.
-- **Reabastecimiento en ruta**: al pasar por un asentamiento **propio**, siempre. Por uno **aliado**, solo si ese asentamiento tiene la opción activada. Por uno neutral u hostil, nunca. "Al pasar" es estar dentro del **radio de reabastecimiento**, el mismo que decide dónde puede un ejército recoger refuerzos (5.12.1): por dónde puede pasar a recogerte y dónde puede repostar son la misma geografía.
+**En marcha se come un cuarto de ración** (2026-10-08, decisión del usuario; primero fue la mitad): una columna en movimiento come la cuarta parte de lo que come esa tropa en guarnición (`LOGISTICA.factorConsumoEnMarcha`), sus soldados y sus héroes; **acampada, una décima parte de eso** (`LOGISTICA.factorConsumoEstacionado`). La guarnición sigue comiendo la ración entera del almacén.
 
-  Repostar rellena el carro con las **mismas dos reglas que cargarlo al salir**: hasta donde quepa, y sin bajar nunca de la reserva de comida de la plaza que lo da. Abrir el almacén a un aliado **cuesta stock real**, y por eso es una decisión suya y no un derecho del que pasa — quien manda o custodia el tesoro de esa plaza (Gobernador o Tesorero) la toma, y puede cerrarla cuando quiera. Cerrar no es retroactivo: lo repuesto está repuesto.
+Cada héroe lleva tres cosas distintas, y no se mezclan:
 
-  Sin límite de veces. Un ejército acampado junto a una plaza amiga repone cada tick, y **eso es lo que convierte "sostener un paso de montaña" en una posición** (5.12.3) en vez de una cuenta atrás.
-- **Regreso**: el sobrante **vuelve al almacén** del asentamiento de origen. **El carro NO se descarga en ruta ni en otro asentamiento** — si pudiera, el ejército sería un transporte de mercancías gratuito que dejaría sin sentido a las caravanas. Para mover carga está el punto siguiente.
+| | **Carro** | **Almacén personal** (Doc 2.5) | **Víveres** |
+|---|---|---|---|
+| Qué lleva | carga: botín, materiales, fondos | lo que guarda para sí | **solo trigo, para comer** |
+| Dónde está | con la columna | en su residencia; solo se usa desde dentro | **siempre con el héroe**, dentro o fuera |
+| Capacidad | fija por héroe; se suma en un ejército | fija | **fija por héroe** (`LOGISTICA.capacidadViveresPorHeroe`); en un ejército pasan a ser **los víveres del ejército** (abajo) — para llevar más están las caravanas (5.13.2) |
+
+- **Los víveres no son carga**: no se descargan nunca (ni al entrar en su plaza ni en el almacén personal), no se venden y **no se roban** — quien derrota a una columna se lleva la mitad del carro (5.12.3), no sus víveres.
+- **Los víveres van en unidades enteras** (2026-10-24, economía entera; Doc 4.3): lo que la columna come en marcha, acampada o en una batalla acumula un resto oculto y una unidad se gasta cuando se completa su consumo; se acaban cuando no queda nada de verdad, así que el hambre llega cuando llegaba. Lo que entra en ellos y la parte de cada héroe al separarse van en unidades enteras.
+- **Del carro a los víveres, nunca al revés.** El Líder de la columna puede pasar trigo del carro a los víveres, hasta llenarlos (`pasarAViveres`): en una columna personal, a los suyos; en un ejército, a **los víveres del ejército**. Así se come el trigo saqueado o el que traen las caravanas adjuntas.
+- **Los víveres del ejército.** En un ejército los víveres dejan de ser de cada héroe: el ejército tiene **unos víveres propios**, cuya capacidad es la suma de la de sus héroes y que **es lo único que se ve** mientras marchan juntos. De ahí come todo el ejército (soldados y héroes) al moverse y al acampar, y ahí entra todo lo que se repone.
+  - **Al unirse**, el héroe aporta sus víveres y su capacidad.
+  - **Al separarse, o al desarmarse el ejército** (5.14.2, 5.14.5), cada héroe se lleva **una parte igual**: víveres del ejército × su capacidad / la capacidad total (con todos a 350, el montón entre el número de héroes).
+- **Capacidad del carro**: **FIJA e igual para todos los Héroes** — es un carro, no una abstracción proporcional a lo que llevas. Se **suma** al formar ejército: un ejército de cuatro lleva cuatro carros.
+- **Llenar los víveres**: al salir o al unirse, cada Héroe **toma del asentamiento** hasta llenarlos. Si el almacén no llega, se sale con menos autonomía; no se bloquea la salida. Sacar un ejército **cuesta stock real** al asentamiento. Quien sale de su campamento de mercenarios los llena con la ración gratis (Doc 1.9b).
+- **Repostar** es llenar los víveres en ruta. Hay dos formas, según quién:
+  - **Columna personal: automático, dentro de la zona de influencia.** Mientras un héroe con su columna está **dentro de la zona de influencia** de un asentamiento donde puede repostar, sus víveres se rellenan solos de ese asentamiento, sin ninguna orden y sin límite de veces. Como las zonas no se solapan, siempre es una sola plaza: la dueña de la zona en la que está.
+  - **Ejército: con el botón «Repostar», en la puerta.** Un ejército **no reposta solo**. Su Líder, con el ejército en la puerta de un asentamiento donde pueda repostar (`MOVIMIENTO.radioPuerta`), pulsa **Repostar** y se rellenan los víveres del ejército de su almacén.
+  - **En una avanzada con almacén** (fuerte o ciudadela, 5.17): un ejército de la Facción reposta en su puerta, o desde dentro de ella (2026-11-07), con el mismo botón, y así se alarga el radio operativo de una campaña. Una columna personal de la Facción también puede hacerlo (decisión del autor, 2026-10-22), aunque dentro de la zona ya reposta sola de la plaza.
+  - **Dónde se puede**: en un asentamiento **propio**, siempre. En uno **aliado** —alianza o vasallaje, en cualquier dirección—, solo si ese asentamiento tiene la opción activada. En uno neutral u hostil, nunca. En un **campamento de mercenarios**, cualquiera y gratis (Doc 1.9b).
+  - **Con las mismas dos reglas que llenarlos al salir**: hasta donde quepa, y sin bajar nunca de la reserva de comida de la plaza que lo da.
+  - **Abrir el almacén a un aliado cuesta stock real**, y por eso es una decisión suya y no un derecho del que pasa. Quien manda o custodia el tesoro de esa plaza (Gobernador o Tesorero) la toma, y puede cerrarla cuando quiera. Cerrar no es retroactivo: lo repuesto está repuesto.
+- **El carro no se carga en movimiento; los víveres sí.** El carro solo se llena parado en un lugar: dentro de un asentamiento o de un campamento de mercenarios, o en su puerta para las acciones que se hacen desde ella (comprar, recoger tropas, cargar o entregar con una caravana adjunta, 5.13.3). Un héroe con su columna puede ir a otra plaza o a un campamento, comprar allí, llenar el carro e irse. En marcha solo se reponen los víveres, y solo una columna personal.
+- **Al entrar en la plaza donde reside** (5.14.6): el carro **se queda con el héroe** y los víveres también; vaciarlo es una acción **manual** (`vaciarCarro`), que pasa la carga a su **almacén personal** hasta donde quepa y deja en el carro lo que no cabe (decidido el 2026-10-22; antes pasaba sola al almacén de la plaza). **El carro NO se descarga en ruta ni en otro asentamiento** — si pudiera, el ejército sería un transporte de mercancías gratuito que dejaría sin sentido a las caravanas. Para mover carga está el punto siguiente.
 
 ### 5.13.1 El radio operativo es la constante de diseño
 
-La capacidad del carro **no es un número elegido, es una consecuencia**. La regla que la fija:
+La capacidad de los víveres **no es un número elegido, es una consecuencia**. La regla que la fija:
 
-> **Un jugador solo, con su carro, tiene que poder recorrer al menos un cuarto del mapa ida y vuelta con la comida que carga.**
+> **Un jugador solo, con sus víveres, tiene que poder recorrer al menos un cuarto del mapa ida y vuelta con la comida que lleva.**
 
-Sobre el mapa de 2000×2000 eso son 1.000 unidades de recorrido. Una carga máxima de Liderazgo son ~70 soldados, que a velocidad ligera (20) tardan 50 ticks en ese trayecto y comen `70 × 0.15 × 50 = 525`. De ahí sale la capacidad del carro.
+Sobre el mapa de 2.667×2.000 eso son unas 1.333 unidades de recorrido, 44 minutos a velocidad ligera (30). La tropa prestada completa de un campamento (85 soldados, Doc 1.9b) más su héroe comen en marcha `(85 × 0.15 + 0.5) × 0.25 ≈ 3,3` por minuto: 146 en ese trayecto. Los **350** de víveres por héroe se fijaron con el consumo a la mitad y se dejan así: hoy dan el doble de autonomía de la que exige la regla (a recalibrar con batch).
 
 Como la autonomía se mide en **ticks** y no en distancia, **la velocidad pasa a ser también un atributo logístico**: un ejército rápido cubre más mapa con la misma comida. Un ejército pesado tiene la mitad de alcance con el mismo carro — y por eso necesita caravanas.
 
@@ -474,11 +595,14 @@ Como la autonomía se mide en **ticks** y no en distancia, **la velocidad pasa a
 Un ejército puede llevar **caravanas adjuntas** que amplían su capacidad de carga más allá de la suma de los carros de sus héroes. Es la forma de proyectar una campaña lejos sin depender de que se unan más héroes.
 
 - La capacidad de una caravana es **igual o mayor que la del carro de un jugador** — si cargara menos, la caravana no tendría sentido como tren de suministros. Son iguales: 500.
-- **Se engancha y se suelta en marcha**, con cuatro condiciones: que sea de tu Facción, que esté **disponible** (una caravana ya despachada está cumpliendo un trueque y secuestrarla lo rompería), que esté al alcance —el mismo radio con el que se recogen refuerzos y se reposta— y que no vaya ya enganchada. Al soltarla se queda **donde esté la columna**: no vuelve sola a casa, igual que un ejército no se teletransporta al replegarse.
+- **Cada carro tiene un espacio fijo y nunca se llena por encima de su límite** (decisión del autor, 2026-10-24): una caravana adjunta solo amplía la capacidad del ejército con su **hueco libre** (su capacidad menos lo que ya lleva); una adjunta llena no da espacio. Lo que se carga o el botín van al hueco que quede, y lo que no cabe se pierde.
+- **Se engancha solo dentro del lugar donde está la caravana**: un asentamiento, o un campamento de mercenarios en el caso de la Caravana de Fundación (Doc 1.8). Nunca en mundo abierto: quien quiere llevar una caravana sale ya como ejército. Además, tiene que ser de tu Facción, estar **disponible** o aparcada (una caravana ya despachada está cumpliendo un trueque y secuestrarla lo rompería) y no ir ya enganchada.
+- **Se suelta solo dentro de una plaza** (decidido el 2026-10-19): no hay caravanas sueltas por el mapa. Soltarla en una plaza la deja **aparcada** allí (Doc 3.13.7); entrar con ella no la aparca (2026-10-22: entra y sale con la columna); la Caravana de Fundación se suelta solo dentro de su origen, la plaza o el campamento donde se enganchó, y queda suelta allí (2026-10-24, Doc 1.8). En mundo abierto no se puede soltar.
+- **Reclamar la Caravana de Fundación que vuelve sola.** En mundo abierto, un héroe de la misma Facción que la caravana, junto a ella, interactúa con ella y pulsa **Reclamar**: pasa a su columna y la lleva donde quiera. **Reclamarla convierte al instante su columna personal en un Ejército**, con él de Líder, la caravana adjunta, la política de unión que elija al reclamar; si ya iba en un ejército, la suma a ese. Vale solo para ella (Doc 1.8): las caravanas comerciales no quedan sueltas en el mapa.
 - Mientras va enganchada **viaja con el ejército**: su posición es la de la columna, no una ruta propia.
-- **Entran en el `min` de velocidad.** Una caravana comercial va a 16, así que adjuntarla baja un ejército ligero de 20 a 16 y **le quita la capacidad de cazar caravanas**. No se puede tener alcance profundo y velocidad de incursión a la vez.
+- **Entran en el `min` de velocidad.** Una caravana comercial va a 24, así que adjuntarla baja un ejército ligero de 30 a 24 y **le quita la capacidad de cazar caravanas**. No se puede tener alcance profundo y velocidad de incursión a la vez.
 - **Cuestan comercio.** El cupo de caravanas de un Mercado es 2/4/6 según su nivel (Doc 3): enganchar la flota a un ejército es apagar tu comercio mientras dure la campaña.
-- **Si el ejército es derrotado, las caravanas adjuntas se pierden.** Eso convierte el tren de suministros en un objetivo militar de verdad: cortar la retaguardia gana campañas sin asaltar una muralla. Se pierden igualmente si la columna **se disuelve** por quedarse sin nadie dentro (5.13.4): en los dos casos deja de existir en campo abierto, y lo que vuelve a casa son las *identidades* de sus escuadrones, no bienes físicos — una caravana sin nadie que la lleve no se teletransporta a ninguna parte. *(Distinto es que se quede sola porque su gente se desconectó sin llegar a disolverla: entonces vuelve a su origen, Doc 3.10.)*
+- **Si el ejército es derrotado, cada caravana adjunta pierde la mitad de sus carros con su carga**, que van al botín del vencedor; la que se queda sin carros desaparece. Eso convierte el tren de suministros en un objetivo militar de verdad: cortar la retaguardia gana campañas sin asaltar una muralla. **No** se pierden si la columna se queda sin nadie dentro porque su gente se desconectó: la caravana, que sí viaja por sí sola, vuelve a su origen (Doc 1.10.6, 3.10).
 
 ### 5.13.3 Escolta de caravanas
 
@@ -488,15 +612,15 @@ Una caravana adjunta **puede ir cargada de mercancía y hacer su entrega** mient
 
 En la práctica son tres actos del jugador:
 
-1. **Enganchar** una caravana disponible, estando la columna a su alcance.
-2. **Cargar** lo que quiera del almacén de una plaza que le abra la puerta — la propia siempre, una aliada si tiene la opción activa. La misma geografía con la que reposta el trigo.
-3. **Entregar**, al llegar: interactuando con un asentamiento se ven los **trueques activos**, cuánto falta **por tu parte** en cada uno, y se entrega de lo que la caravana lleve. Se entrega el menor de lo cargado y lo que falta, y el destino cobra su comisión exactamente igual que en una entrega automática — el camino manual no es una puerta trasera con otras reglas.
+1. **Enganchar** una caravana disponible, estando el ejército dentro del asentamiento donde está la caravana (5.13.2).
+2. **Cargar** lo que quiera del almacén de una plaza que le abra la puerta —la propia siempre, una aliada si tiene la opción activa—, con el ejército **en su puerta**. Son las mismas plazas donde puede repostar.
+3. **Entregar**, al llegar a la puerta del destino: interactuando con un asentamiento se ven los **trueques activos**, cuánto falta **por tu parte** en cada uno, y se entrega de lo que la caravana lleve. Se entrega el menor de lo cargado y lo que falta, y el destino cobra su comisión exactamente igual que en una entrega automática — el camino manual no es una puerta trasera con otras reglas.
 
-**Los bandidos atacan a la columna, no a la caravana**: una caravana escoltada se resuelve contra el poder de combate del ejército y no contra la defensa base fija. Si no, escoltar no protegería de los bandidos.
+**Los bandidos atacan a la columna, no a la caravana**: una caravana escoltada se resuelve contra el poder de combate del ejército y no contra la defensa base fija. Si no, escoltar no protegería de los bandidos. Con servidores de batalla y héroes en la columna, el acoso es una batalla de Unity entre los bandidos y esos héroes (5.2.5, 5.15.6).
 
 La regla de velocidad lo equilibra sola: escoltar baja el ejército a la velocidad de la caravana, así que **no se puede escoltar y depredar a la vez**.
 
-**Escolta SIN héroe (Doc 3.13.4).** Una tercera vía: un héroe residente del origen **cede escuadrones** a la caravana por viaje (`Caravana.escoltaIds`), sin marchar con ella. Salen de su campamento, cuentan Liderazgo, no comen ración y combaten manejados por la IA del juego. Siguen con la caravana hasta que termina el viaje o es destruida; si se destruye, quedan a 0 unidades y vuelven al campamento de su héroe (5.15.4). Es distinto de esta escolta por ejército (que exige un héroe en columna) y de la defensa base fija (Doc 3.10): tres capas de defensa.
+**Escolta SIN héroe (Doc 3.13.4).** Una tercera vía: un héroe residente del origen **cede escuadrones** a la caravana por viaje (`Caravana.escoltaIds`), sin marchar con ella; desde el 2026-11-04 también un héroe de la Facción del origen que está de visita dentro, con las escuadras de la columna con la que entró. Salen de su campamento (o de esa columna), cuentan Liderazgo, no comen ración y combaten manejados por la IA del juego. Siguen con la caravana hasta que termina el viaje o es destruida; si se destruye, quedan a 0 unidades y vuelven al campamento de su héroe (5.15.4). Es distinto de esta escolta por ejército (que exige un héroe en columna) y de la defensa base fija (Doc 3.10): tres capas de defensa.
 
 ### 5.13.4 Una columna se disuelve cuando no queda NADIE dentro
 
@@ -512,14 +636,10 @@ Son dos cosas distintas y confundirlas costaba las dos mitades:
 | Sus escuadrones caen todos | **Sigue existiendo.** Sus héroes están dentro, solo que ahora viajan sin tropa: a la velocidad del viajero (5.12.5) y comiendo su ración de héroe. Lo que no puede es combatir |
 | No queda ningún héroe dentro | **Se disuelve** |
 
-Al disolverse, las identidades de escuadrón —vacías pero con su nombre, su nivel y su experiencia— **vuelven
-al campamento de su héroe**, que es donde se pueden rellenar reclutando (5.4). No se pierden: lo que murió
-son las unidades, no el squad. Si su héroe no tiene campamento (huérfano, Doc 0), siguen con él hasta que
-vuelva a residir en algún asentamiento.
+**Un ejército no guarda tropa por su cuenta.** Es un conjunto de héroes que se mueven juntos con sus columnas y sus caravanas adjuntas: la tropa, el carro y los víveres son de cada héroe y salen con él al separarse o al desconectarse (Doc 1.10.6). Por eso, cuando no queda ningún héroe dentro, **no hay tropa que devolver**: el ejército simplemente deja de existir, y lo único que queda en el mapa son las caravanas adjuntas, que vuelven solas a su origen (5.13.3).
 
 **Quién vacía una columna, entonces:** separarse (5.14.2) y desconectarse (Doc 1.10.6) — y el último que
-queda no puede separarse, así que en la práctica una columna atendida no se disuelve nunca sola: vuelve a
-casa. La que se vacía de verdad es aquella cuya gente se desconectó, que es justo el caso que esta regla
+queda no puede separarse, así que en la práctica una columna atendida no se disuelve nunca sola: su Líder la desarma en una puerta (5.14.6). La que se vacía de verdad es aquella cuya gente se desconectó, que es justo el caso que esta regla
 nació para cerrar.
 
 ## 5.14 Unirse y separarse en campo
@@ -532,7 +652,7 @@ Es distinto de unirse pasando el ejército por tu asentamiento (5.12.1), y convi
 
 | | Unirse en tu plaza | Unirse en campo |
 |---|---|---|
-| Qué exige | Que el ejército pase cerca de **tu asentamiento** | Que estéis **uno junto al otro** en el mapa |
+| Qué exige | Que el ejército esté en **la puerta de tu asentamiento** | Que estéis **uno junto al otro** en el mapa |
 | Qué aportas | Tropas frescas sacadas **de casa** | Lo que **ya llevas encima**: tus escuadrones y tu carro |
 
 En ambos casos lo que aportas se valida contra tu propio Liderazgo (5.11).
@@ -557,19 +677,19 @@ Sin esto, un desconocido podría engancharse a tu marcha sin que pudieras negart
 
 **Y la distancia se comprueba al aceptar, no al pedir.** El que entra tiene que estar junto a la columna en ese momento, no donde estaba cuando lo pidió.
 
-**Y ahí está el precio:** al unirte adoptas un destino que ya no puedes cambiar (5.12.1). Marchar acompañado cuesta la libertad de movimiento.
+**Y ahí está el precio:** al unirte dejas de dirigir tu marcha (5.12.1): desde ese momento la dirige el Líder. Marchar acompañado cuesta la libertad de movimiento.
 
-**Solo se puede unir a un EJÉRCITO.** Dos Columnas personales que se cruzan no se fusionan — un ejército solo se origina en un asentamiento (5.12.1).
+**Solo se puede unir a un EJÉRCITO** (o a una formación en curso, 5.14.4). Dos Columnas personales que se cruzan no se fusionan por sí solas: para formar un ejército en campo hay que organizarlo (5.14.4).
 
 ### 5.14.2 Separarse
 
-Sales del Ejército con lo tuyo —tus escuadrones y **hasta un carro** de suministro, que es lo que aportaste— y naces como **Columna personal** en la posición donde estabas. Recuperas la libertad de movimiento al instante.
+Sales del Ejército con lo tuyo —tus escuadrones, **hasta un carro** de suministro, que es lo que aportaste, y **tu parte igual de los víveres del ejército** (5.13)— y naces como **Columna personal** en la posición donde estabas. Recuperas la libertad de movimiento al instante.
 
-**El origen NO cambia.** Tu columna nueva conserva el asentamiento del que salió el Ejército, no el tuyo: el destino puede cambiar, el origen no. Es donde te replegarás. *(Es también lo que ya ocurría al unirse pasando por tu plaza — un jugador que se suma a un ejército de otra ciudad vuelve con él a esa ciudad, no a la suya.)*
+**No hay plaza a la que replegarse sola.** Tu columna nueva nace donde estás, con tu tropa, tu carro y tu parte de los víveres, y se queda contigo: la tropa que va con su héroe nunca vuelve sola a ningún sitio.
 
 **El Líder no puede separarse.** Para irse tiene que **elevar a otro integrante a Líder**, y entonces sí.
 
-De esa regla sale sola otra que no hace falta escribir aparte: **un Ejército nunca se queda vacío en campo abierto**, porque el último que queda es siempre su Líder —los demás se fueron cediendo el mando o sin tenerlo—. Deshacerlo es **cancelar y volver** (5.12.6), no irse vaciándolo — si no, sus caravanas adjuntas, su suministro y sus escuadrones quedarían abandonados en mitad del mapa.
+De esa regla sale sola otra que no hace falta escribir aparte: **un Ejército nunca se queda vacío en campo abierto**, porque el último que queda es siempre su Líder —los demás se fueron cediendo el mando o sin tenerlo—. Deshacerlo es **llevarlo a una puerta y desarmarlo** (5.14.6), no irse vaciándolo — si no, sus caravanas adjuntas, su suministro y sus escuadrones quedarían abandonados en mitad del mapa.
 
 ### 5.14.3 El Líder
 
@@ -580,50 +700,120 @@ Es el Héroe que **formó** el Ejército. No es un cargo político (Doc 2.2): es
 3. **Cancela la marcha** — es suya en exclusiva (5.12.6).
 4. **No puede separarse** sin ceder antes el liderazgo (arriba).
 
-**Que cancelar sea solo suyo no atrapa a nadie**, porque cancelar no es la salida de la marcha: es hacer volver a todos. El que no quiera seguir **se separa**, y eso puede hacerlo cualquiera. Lo que el mando decide no es quién se queda, sino si la columna entera da media vuelta.
+**Que cancelar sea solo suyo no atrapa a nadie**, porque cancelar no es la salida de la marcha: es detener a todos. El que no quiera seguir **se separa**, y eso puede hacerlo cualquiera. Lo que el mando decide no es quién se queda, sino si la columna entera se detiene.
 
 **Si el Líder se desconecta, el mando pasa al integrante con más ANTIGÜEDAD** — y si ese también está fuera, al siguiente. No puede irse por su voluntad, pero sí puede caérsele la conexión, y una columna en campaña no puede quedarse sin nadie que la mande. **Nunca se queda sin candidato**: todos los que van dentro son de su misma Facción y cualquiera vale, así que mientras quede alguien hay Líder — y si no queda nadie, la columna ya se disolvió (Doc 1.10.6).
 
 Y como ser Ejército es una identidad y no un recuento (5.12.1), **el que se queda solo sigue en un Ejército**: mantiene la ruta fija y las caravanas. No hereda la libertad del viajero por quedarse sin compañía.
 
+### 5.14.4 Formar un ejército en campo
+
+Tres o más Columnas personales de la **misma Facción** pueden formar un ejército sin pasar por un asentamiento (decisión del autor, 2026-10-06):
+
+- **Empezar.** Un Héroe en Columna personal pulsa «organizar ejército». En su posición aparece una **formación**, quieta, de la que es Líder y cuya política de unión fija (aceptar o preguntar, 5.14.1).
+- **Unirse.** Otras Columnas personales de su Facción, junto a la formación, aportando lo que llevan encima (escuadras y carro), validado contra su propio Liderazgo.
+- **Con menos de 3** no se mueve, y **para el combate siguen siendo Columnas personales**: se les puede perseguir y atacar como a tales, así que formar no es un escudo.
+- **Si no llega a 3** en `FORMACION_EJERCITO.plazoMinutos` se deshace y cada uno vuelve a su Columna personal con lo suyo. Mientras tanto cualquiera puede salir; si sale el Líder, el mando pasa al más antiguo.
+- **Al llegar a 3** pasa a ser un Ejército: quieto, a la espera de que su Líder lo dirija (5.12.1). Si luego baja de 3 sigue siendo Ejército: el mínimo cuenta solo para formarlo.
+- **Sin origen:** un ejército no tiene casa a la que volver; cancelar la marcha lo deja donde está, y quien se separe nace donde está (5.14.2). **Caravanas:** nace sin ellas y puede engancharlas después.
+
+### 5.14.5 Preparar un ejército dentro de un lugar (2026-10-08)
+
+Un ejército también se puede preparar **antes de salir**, dentro de una plaza o de un campamento de mercenarios (decisión del autor, 2026-10-08). Nadie sale hasta que el Líder lo decide:
+
+- **Convocar.** Un Héroe **dentro** del lugar convoca un ejército y fija su política de unión (aceptar o preguntar, 5.14.1). Queda en preparación: nadie ha salido y no se ha movido ninguna escuadra ni recurso.
+- **Unirse.** Pueden unirse **solo Héroes de la misma Facción que estén dentro del mismo lugar** (la misma plaza o el mismo campamento). Cada uno elige, como al salir de una plaza o un campamento, las tropas de su campamento y la carga de su almacén con las que saldría; se valida como si saliera ya (Liderazgo, almacén, reserva de trigo). Con *preguntar*, el Líder acepta o rechaza, con la misma petición breve que en campo (5.14.1).
+- **Esperar.** Sin caducidad: dura hasta que el Líder **parte** o **cancela**. Mientras tanto un integrante puede **separarse**: sigue dentro, sin nada que devolver. El Líder no se separa (no cede el mando mientras se prepara): cancela.
+- **Cancelar.** No mueve nada: todos siguen dentro del lugar.
+- **Partir.** Salen **todos juntos, como un único ejército**, en la puerta del lugar, con el Líder de la convocatoria y su política. Sale quieto y su Líder lo dirige (5.12.1). Es todo o nada: si alguien ya no puede salir con lo que eligió (el almacén ya no da, su Liderazgo no llega), no sale nadie y se dice quién y por qué. Quien ya no esté dentro del lugar al partir se queda fuera de la salida.
+- **Cambiar la selección.** Cada integrante, también el Líder, cambia **su** selección —las escuadras, **en el orden en que quiere que entren en combate**, y la carga— sin separarse, con las mismas comprobaciones que al unirse. Nunca la de otro: la de los demás solo se ve.
+- **Quien va en una convocatoria no sale por su cuenta**: tiene que separarse o cancelar antes.
+
+Lo de antes sigue valiendo: unirse pasando el ejército por tu plaza (5.12.1) y unirse en campo (5.14.1). **La política de unión del Líder rige en ambos sitios** (decisión del autor, 2026-10-08): con *rechazar* nadie más se suma tampoco desde su plaza; quien ya va en el ejército sí puede reforzarlo con más tropa.
+
+### 5.14.6 Un ejército entra en una plaza o en un campamento (2026-10-08)
+
+Un ejército en la puerta de **una plaza que le abre su puerta** (`guarnecer`: la de su Facción siempre, la de otra según el acceso por relación que fije su dueño) o de **un campamento de mercenarios** (`entrarEnCampamento`) puede entrar (decisión del autor):
+
+- **Lo ordena su Líder** y se **desarma** en la puerta: cada héroe queda en una Columna personal con su parte del carro (a prorrata, como al separarse) y su parte igual de los víveres del ejército y entra como lo haría solo.
+- **Los que residen allí entran normal**: la tropa vuelve al campamento y el carro **se queda con ellos** (entrar no lo vacía; una orden lo pasa al almacén personal, hasta el tope, y lo que no cabe se queda en el carro; 2026-10-22).
+- **Los que no residen entran de visita, con todo**: dentro del lugar, con su columna entera, que sale con ellos. Una puerta cerrada les alcanza como a cualquiera.
+- **Caravanas adjuntas**: entran **todas**, de cualquier origen, y salen con él (2026-10-22); no se aparcan, siguen con la columna del Líder. Aparcar una caravana en su plaza (Doc 3.13.7) es una orden explícita.
+- Los víveres son de cada héroe y se quedan con él.
+
+Esto sustituye la regla del 2026-09-14 de guarnecer solo si todos los del ejército residían en la plaza.
+
+**Un pueblo o una avanzada también se entran** (2026-10-22): lo ordena el Líder (o el héroe solo, en una columna personal), se desarma el ejército y cada héroe entra como lo haría solo, con todo, de visita (en ellos nadie reside). Dentro de una avanzada se hace lo mismo que con la columna a su puerta (2026-11-07):
+dejar y recoger escuadras de la guarnición de jugadores, depositar en el almacén, repostar y, el Gobernador de la madre,
+elegir la tropa de la guarnición de serie. Si el lugar desaparece o cambia de dueño, o el dueño cierra la puerta a su relación, se sale al mapa con todo lo tuyo.
+
 ## 5.15 Batallas con héroes: quién combate, guarnición y campamento
 
-Las batallas se juegan como partidas reales en Unity. Los datos que se intercambian con Unity están en `Docs/Coordinacion/01_Modelo_de_datos_compartido.md`.
+Las batallas se juegan como partidas reales en Unity. Los datos que se intercambian con Unity están en `typescript-final:Docs/Coordinacion/01_Modelo_de_datos_compartido.md`.
 
 ### 5.15.1 Una escuadra combate con su héroe
 
-Las batallas no son automáticas, salvo NPC contra NPC, que se resuelve con números. **Una escuadra solo combate si su héroe entra en la batalla y la usa**, y cuántas lleva lo limita su Liderazgo (5.11). En un asedio atacan héroes con sus escuadras y defienden los héroes presentes en el asentamiento, cada uno con las escuadras que le permite su Liderazgo. El Liderazgo equilibra los dos bandos.
+Las batallas no son automáticas, salvo las de una partida sin servidores de batalla, que se resuelven con números. **Una escuadra solo combate si su héroe entra en la batalla y la usa**, y cuántas lleva lo limita su Liderazgo (5.11). En un asedio atacan héroes con sus escuadras y defienden los héroes presentes en el asentamiento, cada uno con las escuadras que le permite su Liderazgo. El Liderazgo equilibra los dos bandos.
 
 Las escuadras de un héroe que no está en la batalla no combaten, estén donde estén. Solo hay dos excepciones, en las que una escuadra combate sin su héroe, manejada por la IA del juego: la **guarnición** de un asentamiento (5.15.3) y la **escolta** de una caravana (5.15.4).
 
-Los topes de una batalla cuentan **héroes**: **15 por bando en un asedio**, y **5** en mundo abierto, contra una caravana o contra un campamento de bandidos. Los héroes que sobran esperan en cola y entran a medida que caen otros. Las escuadras sin héroe no ocupan plaza.
+Los topes de una batalla cuentan **héroes**: **15 por bando** en un asedio (y en una avanzada, que se juega como asedio) y **5 por bando** en el resto —batalla campal, contra una caravana, contra un campamento de bandidos o saqueo—. En una partida de Unity los que sobran esperan en cola y entran a medida que caen otros; en una que se resuelve con números (5.15.6) entran los de **más nivel** y, a igual nivel, los de **escuadras más fuertes**, y el resto no combate. Las escuadras sin héroe no ocupan plaza.
 
 Una partida dura como mucho **30 minutos en un asedio** y **15 en el resto**. Si agota su tiempo, **gana el defensor**, en cualquier batalla; el atacante es siempre quien inicia el combate. En un asedio gana la plaza (5.2); en campo abierto, el atacado; contra una caravana, la caravana; y contra un campamento de bandidos, los bandidos: los héroes que lo atacaron pierden.
 
 **Mientras se juega, el mundo sigue** (decisión del usuario, 2026-09-15). La batalla es una instancia aparte y solo se bloquea lo que interviene en ella:
 
-- **En un asedio, el asentamiento.** Nadie entra ni sale, y dentro no se dan órdenes (construir, reclutar, guarnición, residencia, mercado, caravanas). Su economía sigue produciendo. Un ejército que llega a una plaza asediada espera a la puerta.
+- **En un asedio, el asentamiento.** Nadie entra, y dentro no se dan órdenes (construir, reclutar, guarnición, residencia, mercado, caravanas); solo sale, al mapa y con todo lo suyo, quien está dentro y no se ha unido a la defensa (2026-10-22). Su economía sigue produciendo. Un ejército que llega a una plaza asediada espera a la puerta.
 - **En mundo abierto** (contra una columna, una caravana o un campamento de bandidos), las columnas y la caravana que combaten se quedan quietas y sin órdenes, y nadie más puede atacarlas ni perseguirlas. En el mapa se ve la batalla en su punto, bajo la niebla de guerra, en lugar de ellas.
 - **Los héroes que combaten** no pueden hacer nada más hasta que acaba. Quien la inició puede cancelarla antes de que empiece la partida, sin que nadie pierda nada.
-- **Unirse.** Mientras no haya terminado, un héroe sano de la Facción de un bando puede unirse a él con su columna si está a distancia de ataque (15) del punto de la batalla o de la plaza asediada y ese bando no está lleno. Si está lleno, no entra: la cola de arriba es solo para los que ya estaban al empezar. Sus escuadras quedan bloqueadas como las demás.
+- **Unirse.** Mientras no haya terminado, un héroe sano puede unirse con su columna si está a distancia de ataque (1) del punto de la batalla o de la plaza asediada, ya no está en otra batalla y el bando que le corresponde (5.15.1b) no está lleno. Si está lleno, no entra: la cola de arriba es solo para los que ya estaban al empezar. Sus escuadras quedan bloqueadas como las demás: mientras dura la batalla no se reponen ni entran o salen de la guarnición (los loadouts no se ven afectados: la misma escuadra puede estar en varios).
+- **Salir.** Quien Unity saca de la partida (muere sin reaparición, abandona, se desconecta) vuelve al mundo: sus escuadras y su columna quedan libres, y queda herido si Unity lo da por derrotado (5.16.4). Quien no llega a conectarse antes de empezar sale sin castigo.
+
+### 5.15.1b Tipos de batalla y quién puede unirse
+
+**BronzeAge decide que la batalla ocurra, dónde, quién entra, quién sale y qué le queda a cada uno; Unity decide todo lo que pasa dentro** (banderas, reaparición, rendición, cómo se gana y cómo cambian de manos las caravanas). Lo que sigue es lo que cambia en el mundo según la clase de columna (5.12.1):
+
+| Tipo | Lo abre | Quién puede unirse |
+|---|---|---|
+| **Asedio** | Un **ejército** que ataca una plaza enemiga | **Atacante:** primero los del ejército que lo abre; si queda sitio, su Facción y los héroes de Facciones **neutrales o enemigas del defensor**, **estando fuera** (en el mapa; el cliente ve la plaza en asedio), nunca un amigo suyo (2026-10-22: el Rey ya no decide aquí). **Defensor:** la guarnición, que entra sola, y su Facción y sus aliados, **estando dentro** de la plaza —los residentes también— y **solo si se unen** (a la puerta, en el mapa, solo se puede atacar). Pueden unirse ejércitos y Columnas personales |
+| **Batalla campal** | Un ejército que ataca a otro ejército | **Nadie de fuera** |
+| **Persecución** | Una Columna personal que alcanza a otra Columna personal | **Libre:** cualquier Columna personal, de cualquier Facción, al bando que elija |
+| **Asalto de caravana** (A, disputa; o B, aguante: lo decide el servidor por la zona, 3.10) | Un ejército o una Columna personal que ataca una caravana suelta | **Atacante:** su Facción y, si el Rey lo admite, neutrales o enemigos del defensor. **Defensor:** la Facción dueña de la caravana y sus aliados |
+| **Saqueo de un pueblo** | Un ejército que ataca un pueblo extractor (4.2.2) | **Atacante:** su Facción y los neutrales o enemigos del dueño del pueblo, **estando fuera** (2026-10-22: sin el Rey). **Defensor:** la Facción dueña del pueblo y sus aliados, **estando dentro y uniéndose** (los residentes también); defienden de oficio sus mineros |
+| **Avanzada** | Solo un ejército, 30 minutos (5.17) | Como el asedio: atacante y defensor igual que en una plaza, **estando fuera para atacar y dentro y uniéndose para defender**; defienden de oficio sus guarniciones |
+| **Campamento de bandidos** (evento PvE) | Un ejército o una Columna personal | Cualquier héroe, de cualquier Facción, **siempre en el bando atacante**. Nadie puede ayudar a los bandidos |
+
+- **Toda agresión entre Facciones exige guerra o la declara** (2.4.1); unirse a un asedio ajeno como atacante no la declara.
+- **Vasallo y señor cuentan como aliados para unirse a una batalla**: pueden defenderse entre sí, y ninguno puede unirse al ataque contra el otro.
+- **Solo un ejército abre un asedio.** Una Columna personal no puede asediar, pero sí unirse a un asedio abierto.
+- **Convocatoria del asedio.** Al abrirse hay **30 segundos** (`BATALLA.convocatoriaSegundos`) antes de que empiece la partida, en los que se une quien cumpla lo anterior y **entra como uno de los que estaban al empezar**. Quien la abrió puede cancelarla en ese tiempo. Quien llega después entra como refuerzo. **Al abrirse entra sola la guarnición**; los residentes y los amigos que están dentro (la Facción dueña, aliados, vasallos) **no entran de oficio**: se unen ellos, con lo que llevan encima, en esos 30 segundos o después (2026-10-22, tercera ronda; con números, sin Unity, defienden todos los de dentro como siempre). **Sin servidores de batalla la convocatoria es la misma** (decisión del autor, 2026-10-24): durante esos 30 segundos se unen al ataque las columnas que están a su alcance y, al acabar, el asedio se resuelve con números con todas ellas.
+- Si el ejército que abre un asedio ya llena el bando, no entra nadie más.
 
 ### 5.15.2 El campamento del héroe
 
-El campamento es donde un héroe guarda las escuadras que no lleva consigo, y está en el asentamiento donde reside. Si no reside en ninguno, no tiene campamento: es **huérfano**, y sus escuadras siguen siendo suyas, con su experiencia y su nivel, hasta que vuelva a residir en algún asentamiento.
+El campamento es donde un héroe guarda las escuadras que no lleva consigo, y está en el asentamiento donde reside. También puede estar en un campamento de mercenarios (Doc 1.9b), donde se reside sin límite y sin guarnición. Ya no hay huérfanos (2026-10-02): quien se queda sin casa pasa al campamento de mercenarios más cercano, con sus escuadras y su almacén personal (Doc 2.5).
+
+### 5.15.2b Tropa del héroe y tropa prestada (decidido el 2026-10-13)
+
+**La tropa que va con su héroe se queda con su héroe**: nunca vuelve sola a ningún sitio. Si el héroe saca una escuadra de una guarnición y se une a un ejército, y el ejército se desarma, la escuadra sigue con él.
+
+**Tropa prestada** es la que está fuera de la columna de su héroe: la guarnición de una plaza y la escolta de una caravana. Cuando ya no puede estar donde está prestada (cae la plaza, se destruye la caravana, la caravana termina su viaje), **vuelve sin viaje al campamento de su héroe**: con 0 soldados si la causa es una derrota (5.15.5, Doc 3.13.4), intacta si es un final normal. Mientras siga prestada y su sitio siga en pie, el héroe puede ir a buscarla y sacarla.
 
 ### 5.15.3 La guarnición
 
-- Un héroe puede asignar algunas de sus escuadras a la guarnición del asentamiento **donde reside**, y solo ahí.
+- Los **pueblos extractores** (4.2.2) y las **avanzadas** (5.17) tienen además una guarnición de serie manejada por la IA, fuera de cupo; las avanzadas admiten también guarnición de jugadores, por héroe residente de la madre.
+- Un héroe puede asignar algunas de sus escuadras a la guarnición del asentamiento **donde reside**. **De visita en un asentamiento de su Facción** (decidido el 2026-11-04) puede dejar además en su guarnición escuadras de la columna con la que entró, con el mismo cupo por héroe que un residente: no se van con él al salir, solo las recoge estando dentro, comen como su campamento (de la plaza donde reside) y vuelven intactas a su campamento si deja la Facción o el asentamiento cambia de dueño o cae en ruinas. En un asentamiento de otra Facción no puede.
 - Tiene un **cupo propio por héroe** que decide el asentamiento: sus edificios y políticas dan "liderazgo de guarnición" a cada héroe residente, en la misma escala que el coste de Liderazgo de las tropas (5.11.1: leva 7, línea 14, veterana 22, pesada 32, élite 45). **No gasta el Liderazgo del héroe**, que sigue siendo lo que lleva consigo.
 
   | Fuente | Cupo de guarnición |
   |---|---|
   | Barracón, nivel 1 / 2 / 3 | 7 / 14 / 22 |
   | Galería de tiro, nivel 1 / 2 / 3 | 7 / 14 / 22 |
-  | Recinto de muralla completo | +14 |
+  | Caballerizas, nivel 1 / 2 / 3 | 0 / 14 / 32 |
+  | Recinto de muralla completo (el mejor, también mientras se mejora o se amplía): empalizada / piedra / adarve | +10 / +15 / +20 |
   | Política "Levas de guarnición" (General, Doc 4.4) | +14 |
 
-  Sin Barracón ni Galería de tiro no hay guarnición. Con todo al máximo son 72 —unas dos escuadras pesadas y una de leva—, por debajo de los 100 de Liderazgo que el héroe se lleva consigo. Como el cupo es por héroe, cuantos más residentes tenga una plaza, más guarnición puede tener.
+  Sin Barracón, Galería de tiro ni Caballerizas de nivel 2 no hay guarnición. Con Barracón, Galería, muralla con adarve y política al máximo son 78 —unas dos escuadras pesadas y una de leva—, por debajo de los 100 de Liderazgo que se lleva consigo un héroe de nivel 25. Como el cupo es por héroe, cuantos más residentes tenga una plaza, más guarnición puede tener.
 - Una escuadra en guarnición se **entrega a la IA**: la maneja la IA y el héroe no puede usarla mientras siga asignada, aunque esté presente en la batalla.
 - En un asedio entra directamente, sin ocupar plaza de héroe.
 - Si el cupo baja por debajo de lo que ya tiene asignado (expira la política, se daña un edificio), lo asignado se queda; solo se impide asignar más.
@@ -637,30 +827,36 @@ Una escuadra cedida como escolta sigue con la caravana hasta que esta termina el
 
 Si los atacantes conquistan un asentamiento:
 
-- **Cada héroe defensor queda fuera**, en el mundo, junto al asentamiento, con las escuadras que usó en la batalla (las que sobrevivieron), en su propia columna y **con el carro vacío**.
-- **Nadie se queda dentro de un asentamiento enemigo** (decisión del usuario, 2026-09-14): los que estaban dentro sin defender también salen. Un visitante vuelve a la columna que dejó aparcada; un residente herido sale solo, y sus escuadras, que no combatieron, corren la suerte del resto del campamento.
-- **El resto de las escuadras de sus residentes, guarnición incluida, quedan a 0 unidades** y se van con el campamento de su héroe al asentamiento más cercano de su Facción, **donde el héroe pasa a residir**. Si la Facción no tiene ninguno, quedan a 0 unidades y sin asentamiento (huérfanas), pero siguen siendo de su héroe, con su experiencia y su nivel, hasta que el héroe traslade su campamento a otro asentamiento (ciudadanía, Doc 2.5).
+- **Cada héroe defensor queda fuera**, en el mundo, junto al asentamiento, con las escuadras que usó en la batalla (las que sobrevivieron), en su propia columna y con su carro (el que trajo dentro y no vació; antes salía «con el carro vacío», porque entrar lo vaciaba, 2026-10-22). **Todo defensor que perdió, residente o visitante amigo (aliado, vasallo o de la misma Facción), pierde la mitad de ese carro** (hacia abajo, recurso a recurso), que va al botín del vencedor: la regla del derrotado (5.16.6, pensada para el mundo abierto) aplicada por decisión del autor a todo el que defiende desde dentro y pierde (2026-10-22, tercera ronda; antes solo el residente). Sale con la columna con la que entró y las escuadras que usó y sobrevivieron.
+- **Nadie se queda dentro de un asentamiento enemigo** (decisión del usuario, 2026-09-14): los que estaban dentro sin defender también salen, **al mapa y con todo lo suyo, sin perder nada** (2026-10-22): un visitante sale con la columna con la que entró, también si era neutral o enemigo y por eso no defendió; un residente que no defendió sale con su carro y sus víveres, y sus escuadras, que no combatieron, corren la suerte del resto del campamento. Quien defendió queda sujeto a lo que le pase en la defensa. Los pueblos extractores y las avanzadas de la plaza pasan al conquistador con el acceso heredado de la plaza (2026-10-22): de los que estaban dentro de ellos salen al mapa, con todo lo suyo, solo quienes ese acceso ya no dejaría entrar con el dueño nuevo (sus enemigos y los que el acceso cierra); los demás se quedan dentro. **El acceso de la plaza conquistada vuelve al de por defecto** (todos menos los enemigos, respecto al dueño nuevo; 2026-10-22), y el nuevo dueño lo cambia luego; es el que heredan sus pueblos y avanzadas.
+- **El resto de las escuadras de sus residentes, guarnición incluida, quedan a 0 unidades** y se van con el campamento de su héroe al asentamiento más cercano de su Facción, **donde el héroe pasa a residir**. Si la Facción no tiene ninguno, quedan a 0 unidades y **se van con su héroe al campamento de mercenarios más cercano a la plaza perdida**, donde pasa a residir (Doc 1.9b, 2.5); siguen siendo suyas, con su experiencia y su nivel.
 - **No hay captura**: la guarnición no pasa al conquistador. Cae a 0 y sigue siendo de su héroe.
-- **El asentamiento conquistado queda sin guarnición**. Nadie lo guarnece solo por haberlo ganado: los héroes conquistadores pueden trasladar allí su campamento (pasar a residir) y asignar guarnición dentro del cupo que dé el asentamiento. **Si se quiere defender algo, hay que defenderlo activamente.** La ventana de ocupación (5.12.9) sigue dándole inmunidad durante un tiempo fijo; después, sin guarnición ni defensores presentes, un asedio se juega sin defensores.
+- **El asentamiento conquistado queda sin guarnición**. Nadie lo guarnece solo por haberlo ganado: los héroes conquistadores pueden trasladar allí su campamento (pasar a residir) y asignar guarnición dentro del cupo que dé el asentamiento. **Si se quiere defender algo, hay que defenderlo activamente.** La protección tras la conquista (5.12.9) le da un día de inmunidad; después, sin guarnición ni defensores presentes, un asedio se juega sin defensores.
 
-### 5.15.6 Facciones NPC
+### 5.15.6 Héroes bot
 
-Las Facciones NPC las crea el admin, ya asentadas, y así siguen hasta que se destruyen: una Facción de jugador nunca pasa a la IA. Tienen **héroes bot**, manejados por la IA del juego: nacen como los fundadores de su primer asentamiento (5, el primero como Rey) y viven en el servidor como un héroe más. Un humano que ataca a una Facción NPC combate contra sus héroes bot y su guarnición. NPC contra NPC se resuelve con números, sin partida en Unity. Los héroes bot no usan la guarnición: defienden su plaza con su loadout activo mientras están en ella.
+Un **héroe bot** es un héroe más (`controlador: 'bot'`) que juega desde fuera del servidor como un jugador (D52): ve lo que
+ve su héroe y actúa con los mismos comandos y la misma autorización, sin ningún poder ni información de más. Llega por un
+campamento como cualquiera (1.3), con su sesión de unas horas al día (1.10.6, D55), y según su perfil (D57) crea una
+Facción, pide entrar en una o llega tarde a una que ya existe; el Rey bot acepta las solicitudes. No hay Facciones «NPC»:
+una Facción de bots es una Facción cuyos ciudadanos son bots, con las reglas de todas. Si pierde su última plaza no se
+disuelve: sus héroes vuelven a un campamento y repiten el ciclo (D59). Quien ataca a una Facción de bots combate
+contra sus héroes bot y su guarnición; con servidores de batalla también bot contra bot es una partida en Unity (el bot entra y Unity la resuelve como pueda), y sin ellos se resuelve con números.
 
-**Un héroe que ataca un campamento de bandidos también combate en Unity**: su columna contra las tropas del campamento, manejadas por la IA del juego (Doc 1.9).
+**Un héroe que ataca un campamento de bandidos también combate en Unity**: su columna contra las tropas del campamento, manejadas por la IA del juego (Doc 1.9). **Los bandidos que acosan a una caravana escoltada por héroes** (adjunta a una columna con algún héroe a bordo) también: las tropas del campamento atacan y los héroes de la columna defienden, en una batalla de caravana (2026-10-22, quinta ronda); a una caravana sin héroes se le tira siempre con números, haya o no servidores de batalla.
 
-Un bando puede no tener ningún humano (solo héroes bot, solo guarnición o escolta, o nadie); la batalla necesita al menos un héroe humano en total.
+Un bando puede no tener ningún humano (solo héroes bot, solo guarnición o escolta, o nadie), y una batalla puede no tener ninguno en total (bot contra bot): con servidores de batalla se abre y se juega en Unity igual, sin tokens de jugador.
 
 ## 5.16 El Héroe
 
-El detalle de datos del héroe está en `Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §12-§14.
+El detalle de datos del héroe está en `typescript-final:Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §12-§14.
 
 ### 5.16.1 Un héroe por jugador y mundo
 
 - Cada Jugador tiene **exactamente un Héroe en cada mundo**. El Héroe pertenece a esa partida, no a la cuenta: su progreso no pasa de un mundo a otro.
 - **No se cambia de héroe** dentro de una partida.
 - Todo lo que el Jugador hace dentro del mundo lo hace su Héroe: reside, lidera, tiene Liderazgo, está situado en el mundo, recuerda y explora, ocupa cargos y posee los escuadrones. El Jugador es la persona y su cuenta.
-- Trae de Conquest su estructura de personaje: clase, nivel y experiencia, puntos de atributo y puntos de perk por separado, atributos, perks, equipo, inventario y sus propias monedas. Esas monedas **no tienen relación con el oro** recurso de BronzeAge.
+- Su estructura de personaje viene de Conquest, pero la guarda y la decide el motor (desde el 2026-11-12): clase, nivel y experiencia, puntos de atributo, atributos, equipo, una **mochila** de 72 casillas, un **almacén de objetos** de 144 en su residencia y sus propias monedas. Las habilidades y los perks se abren solos con el nivel (habilidades en los niveles 1, 3, 5 y 10; perks en el 7 y el 12) y los define y aplica Conquest: el motor no los guarda, solo publica esos niveles y manda la clase y el nivel en el ticket de la batalla. La clase la da el arma que lleva puesta, que no se quita (solo se cambia por otra); el jugador la elige al crear el héroe, y nace con el equipo de tier I de esa clase. El equipo se cambia dentro de una plaza, un pueblo o un campamento y nunca con escuadras reservadas para una batalla; la mochila lo lleva consigo y el almacén de objetos se queda en su residencia, donde solo se usa estando dentro (decidido el 2026-11-12, `Docs/Mechanics/Heroe_Y_Tropa.md` §4.5). En la Armería de una plaza el héroe compra con sus monedas las piezas de los tiers I y II y vende cualquier objeto a la mitad de su precio; forja las de los tiers II a V con un plano, crisoles y los materiales de la receta, y la pieza sale con una calidad del 90 al 110 %. El metal que se compra o se forja lo abre la tecnología de la Facción de la plaza. **Se forja en cualquier plaza con la Armería activa** (decidido el 2026-11-12): los de su Facción siempre, y los aliados, los neutrales y los enemigos solo si la plaza les abrió su forja, que de partida está cerrada a los tres y la abren el Tesorero o el Gobernador, grupo a grupo y con un recargo (sin recargo, +100, +200 o +500 %); una conquista la vuelve a cerrar. Cada forja paga en monedas un impuesto por el tier de la pieza (la base, la misma Facción; la base con su recargo, los de fuera) que entra en el **fondo de la plaza**, con el que el Rey, el Embajador o el Gobernador pagan contratos de mercenarios desde su taberna (Doc 7) y que pasa al conquistador con la plaza. En la plaza donde reside, los materiales salen de su almacén personal y del carro; en cualquier otra, del carro con el que entró. Los tiers III, IV y V piden además que el mundo esté en su Era (la III, la IV y la V; Doc 6), para que cada Era abra su tier. Desde fuera, la ficha de una plaza dice si tiene Armería activa (Doc 1.10.1). Las medallas dan experiencia a una escuadra suya (no a la prestada) o al héroe, y el cofre de monturas da una montura de tier III a V; se usan donde se cambia el equipo (`Docs/Mechanics/Heroe_Y_Tropa.md` §4.6). Esas monedas son **un solo saldo** del héroe, **aparte del oro** recurso de las plazas: no entran en la economía de una plaza (desde el 2026-11-08, 100 monedas valen 1 de oro solo al contratar mercenarios, Doc 7). Se ganan **combatiendo contra héroes de otra Facción** (cada héroe, 500 si su bando gana y 150 si pierde; las 8 primeras veces que esas dos Facciones se enfrentan en un día, completo; luego un 15 % menos cada vez y, desde la 14.ª, nada), **destruyendo campamentos de bandidos** (1.9) y en las batallas de Unity, que las pagan igual que el combate con números (5.16.3).
 
 ### 5.16.2 Sus escuadrones
 
@@ -672,14 +868,15 @@ El detalle de datos del héroe está en `Docs/Coordinacion/01_Modelo_de_datos_co
 ### 5.16.3 Progresión
 
 - Héroe y escuadrones progresan con **nivel y experiencia**, al estilo de Conquest.
-- **La experiencia del Héroe depende de su desempeño en la batalla**: unidades y héroes abatidos, capturas de bandera, daño hecho y recibido, si fue el mejor de la partida, en qué puesto de la tabla de su bando terminó, entre otros factores. La calcula la propia partida (Unity), que es la única que ve esos datos. **La de los escuadrones también**: la calcula la partida con toda la información de la batalla.
-- **El botín también lo decide la partida**: qué objetos y cuántas monedas gana cada héroe en una batalla lo calcula Unity, igual que la experiencia, y el héroe lo guarda en su inventario y sus monedas.
+- **El nivel de un escuadrón va del 1 al 10** y cada nivel le da **+3% de poder** en el combate con números: el nivel 1 tiene +3% y el 10, el máximo, +30% (decisión del autor del 2026-11-11, para acercarse a lo que pesa el nivel en Unity; antes era +1%). Cada nivel pide una cantidad de experiencia; al llenarla, sube al siguiente (`MILITAR.experienciaParaSubirEscuadra`: 10, 25, 50, 100, 150, 200, 250, 275 y 315, 1.375 hasta el 10; 2026-11-12). En el combate con números, un escuadrón gana 1 de experiencia si su bando vence y 0,5 si pierde; en una batalla de Unity, 4 o 2. Con **Ejército permanente** (Era IV), los escuadrones de los héroes de la Facción ganan un 10 % más.
+- **La experiencia del Héroe la pone el motor** (2026-11-12): con números, lo mismo que sus escuadrones (1 o 0,5), una vez por combate; en Unity, 4 si su bando gana y 2 si pierde, solo si participó. Unity no la calcula. Desde el 2026-11-13 el tope es el **50** y los primeros niveles son baratos: 3 para pasar al 2 y 3 más cada nivel hasta el 10 (27), 10 más cada nivel hasta el 20 (127) y 20 más hasta el 50 (727); 14.065 en total, y desde el 50, 747 cada uno. Hasta el 50, cada nivel le da **un punto de atributo**; el Liderazgo llega a 100 en el 25; habilidades en los niveles 1, 4, 8 y 16 y perks en el 11 y el 20 (los aplica Conquest); desde el 51 sube sin dar nada.
+- **El botín lo pone el motor, no la partida** (decidido el 2026-11-12): en una batalla de Unity, cada héroe que participó cobra las monedas como en el combate con números (500 o 150, con los mismos rendimientos) y una tirada de la tabla de objetos de Unity (crisoles, planos, medallas y el cofre; nunca piezas hechas), en la que algunas cosas solo caen si su bando gana. Unity ya no manda botín. Los objetos que llegan sin pedirlos (botín de Unity, de bandidos y de alijos, misiones, premio de rango de un mercenario) van a la **mochila**; lo que no cabe, al **almacén de objetos** de su residencia aunque el héroe esté fuera, y si tampoco cabe, se pierde (`Docs/Mechanics/Objetos_Del_Heroe.md` §3.7).
 
 ### 5.16.4 Herido
 
 "Herido" es un estado del **Héroe**, no de sus escuadrones ni de su columna:
 
-- Lo sufren **todos los héroes del bando que pierde una batalla**, sea cual sea: asedio, mundo abierto o caravana. No hace falta que nadie lo marque: sale del resultado.
+- Lo sufre **todo héroe que Unity da por derrotado**: lo trae el resultado de la batalla (`derrotado`), y también quien sale a mitad de partida sin reaparecer, sea del bando que sea. En el combate con números (bot contra bot) quedan heridos todos los del bando que pierde.
 - Dura **2 minutos** de tiempo de mundo.
 - Mientras dura, el héroe **no puede ser perseguido, no puede perseguir y no puede entrar en batallas**.
 - Como es por héroe, una columna se puede atacar mientras lleve algún héroe sano; los heridos no entran en esa batalla. Si todos los héroes de la columna están heridos, nadie puede tocarla.
@@ -697,8 +894,33 @@ Un héroe derrotado en una partida real pierde **parte de las tropas que llevó 
 
 ### 5.16.7 Qué ven los demás de un héroe
 
-- **Público:** nombre, clase, nivel, si está herido (y hasta cuándo), los escuadrones que lleva consigo (tipo, unidades y nivel) y el equipo que lleva puesto.
-- **Privado, solo para su jugador:** todo lo demás — experiencia, puntos sin gastar, atributos, perks, Liderazgo, residencia, los escuadrones de su campamento, loadouts, inventario, monedas, género, avatar y si es humano o bot.
+- **Público:** nombre, clase, nivel, si está herido (y hasta cuándo), los escuadrones que lleva consigo (tipo, unidades y nivel) y el equipo que lleva puesto (desde el 2026-11-12 la ficha pública lo lleva de verdad, con la clase que da su arma).
+- **Privado, solo para su jugador:** todo lo demás — experiencia, puntos sin gastar, atributos, Liderazgo, residencia, los escuadrones de su campamento, loadouts, inventario (la mochila y el almacén de objetos de su residencia), monedas, género, avatar y si es humano o bot.
 - **Entre compañeros de Facción:** cada ciudadano conoce el **nombre** de todos los demás ciudadanos de su Facción, los vea o no (decisión del usuario, 2026-09-14). El resto de su ficha sigue la regla de lo público.
 
 "Público" significa que lo ve cualquiera que pueda ver al héroe. Dónde está un héroe sigue sujeto a la niebla de guerra (5.12.7), y su memoria y exploración son solo suyas (5.12.8).
+
+## 5.17 Avanzadas (decidido el 2026-10-11)
+
+**Una avanzada es un puesto fortificado de la plaza madre, en el mapa.** Tres etapas, que son sus tres niveles: **atalaya → fuerte (empalizada) → ciudadela (piedra)** (nombres de etapa: una avanzada no tiene recintos de muralla, su fortaleza es su guarnición de serie). Siempre se empieza por la atalaya y se va subiendo; no se construye directamente un fuerte ni una ciudadela.
+
+- **Plaza madre**: atalaya y fuerte desde el **nivel 2**; ciudadela desde el **3** (como las murallas). **Cupo**: una avanzada por nivel de la madre (2 en nivel 2 … 5 en nivel 5).
+- **Ubicación**: donde quiera el jugador **dentro de la zona propia, nunca fuera**, sin pisar la ciudad de su plaza madre (que mide una vigésima del radio de su zona: una décima hasta el 2026-11-05, cuando las zonas pasaron al doble) ni ningún otro elemento del mapa: cada uno mide **como mucho 0,2 de mapa**, así que dos no se pisan si sus centros distan 0,2 o más. Se construye, se mejora y se repara como obra de mapa (4.2.2); una mejora o una reparación en marcha se puede **cancelar** (sin reembolso: lo entregado se pierde) y la avanzada sigue como estaba. **No genera zona de influencia.**
+- **Visión**: círculo fijo de **12** alrededor de sí (5.12.7). Es lo que ve la plaza fuera de su frontera.
+- **Guarnición de jugadores**: cupo **por héroe residente de la madre y por avanzada**, en puntos de Liderazgo: **14 / 45 / 90** (atalaya / fuerte / ciudadela). Las escuadras las llevan sus héroes hasta allí y comen el trigo de la madre.
+- **Guarnición de serie**, manejada por la IA y fuera de cupo, que se repone gratis **soldado a soldado, entera en 6 horas desde cero** (como los mineros de un pueblo; decisión del autor, 2026-10-24). **La tropa la elige el Gobernador de la madre** para cada escalón, solo entre las que la plaza madre puede reclutar (la tecnología de la Facción y el edificio activo al nivel que pide); por defecto, milicia de lanceros —la del escalón 2— en todos los escalones.
+
+  | Etapa | Escalón 2 | Escalón 3 | Escalón 4 |
+  |---|---|---|---|
+  | Atalaya | 1 escuadra | — | — |
+  | Fuerte | 3 | 2 | — |
+  | Ciudadela | — | 5 | 3 |
+
+- **Batalla**: la misma en las tres etapas; cambian el mapa interior (uno por etapa) y la guarnición de serie. **La abre solo un ejército y dura 30 minutos**, como un asedio. Atacarla es guerra o la declara (2.4.1). **Defiende solo lo que está dentro** (5.12.4): sus guarniciones y los héroes que han entrado en ella (`entrarEnAvanzada`: de la Facción de la madre, aliados o vasallos); una columna amiga a su puerta, en el mapa, no defiende.
+- **Almacén**: la atalaya no tiene; el fuerte, 2.000 **por recurso**; la ciudadela, 10.000 por recurso. Se llena con los carros de los héroes; un ejército o una columna personal de la Facción reposta en su puerta (5.13).
+- **Si gana el atacante**: la atalaya queda **destruida**. El fuerte queda **en ruinas**, con 1 día de invulnerabilidad; si pasado ese día sigue en ruinas, la atacan y gana el atacante, queda destruido. La ciudadela queda **en ruinas y nunca se destruye**. Del almacén, el atacante se lleva todo lo que le quepa en los carros. **En ruinas no funciona nada** (ni visión, ni guarnición, ni reabastecimiento); la guarnición de jugadores queda a 0 y vuelve al campamento de su héroe (5.15.5), y quien estaba dentro sale al mapa con lo suyo. Los defensores en persona quedan heridos y los que residen en la madre pierden la mitad del carro (5.15.5). **Reparar cuesta el 50 % de construir** la etapa.
+- **Destrucción manual** por quien la construyó, para reubicarla: atalaya y fuerte sí, la ciudadela no; no se recupera nada.
+- **Conquista de la madre**: pasan al conquistador. **Ruina de la madre**: atalaya y fuerte desaparecen; la ciudadela queda como ruina sin dueño, y quien tenga después esa zona puede repararla.
+- **Mantenimiento**: edificio activo de la madre. **Niebla**: se recuerda como una ciudad. **Tamaño**: como mucho 0,2 de mapa.
+
+Costes (placeholder, en viajes de carro de 500): atalaya 200 madera + 100 piedra, obra de 2 h; atalaya → fuerte 600 madera + 400 piedra + 50 oro, 12 h; fuerte → ciudadela 1.500 madera + 2.000 piedra + 300 oro, 2 días (unos 8 viajes: un ejército con caravana).

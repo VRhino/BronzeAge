@@ -1,0 +1,354 @@
+//! La aparición, la adopción y las citas de cada tecnología descubierta (sistema 6, tanda 6C; Tecnologia_Aedas §3-§6.1). Las reglas puras son del crate `tecnologia`; aquí están la vista del
+//! hito sobre las plazas de la Facción, los disparadores, la orden `AdoptarTecnologia` y las dos citas de cada descubrimiento.
+//!
+//! # La aparición, sin tick (plan del sistema 6, §5.1)
+//! Una tecnología solo puede aparecer cuando cambia algo que mira su hito: quien lo cambia marca a la Facción (`aparicion_pendiente`) y al cerrar la versión se evalúan las candidatas de cada
+//! Facción marcada que siga viva, con el estado ya cambiado (así el `tecnologia.aparece` entra en la misma versión que su causa). Los disparadores:
+//!
+//! | Ocurre | Se marca |
+//! |---|---|
+//! | se fija un logro; empieza una Era | todas las vivas (`tras_logros`, `mirar_era`) |
+//! | un edificio se completa o se mejora; la plaza sube de nivel | su Facción (`anotar_sucesos`; el nivel actual, en `contar_nivel`) |
+//! | la zona de una plaza crece (solo por obra) | su Facción (`agrandar_zona`) |
+//! | una plaza cambia de dueño, se funda o desaparece; se designa la capital | las Facciones de antes y de ahora (`situar_plaza`, `cambiar_plaza_de_faccion`, `DesignarCapital`) |
+//! | se adopta una tecnología (también por administración) | la Facción |
+//! | el paso de minuto de una capital, si una candidata pide `recursoEnCapital`, `escuadrasVivas`, `heroesEnFaccion`, `columnasEnMarcha` o `nivelFaccion` y su hito ya se cumple | su Facción (`con_exterior`; solo mira `Reglas::piden_capital`) |
+//!
+//! Perder algo no se mira: aparecer es para siempre. La marca no se persiste: se vacía en cada cierre de versión, y una orden que no se acepta la descarta.
+//!
+//! # Las citas de cada descubrimiento
+//! Al registrarse la descubridora de una tecnología (`primeros`, por cualquier vía: hito, administración, épica (6E) y, con 6D, compra) se programan sus dos citas (`Carga::Tecnologia`,
+//! prioridad 10, una entidad por tecnología, `entidad_tecnologia`): la de **conocimiento** a `primeros.en + retrasoConocimiento`, en la que los Aedas la cantan (`aedas.canta_descubrimiento`, público)
+//! y, con 6D, la revelan a las plazas con un Aeda parado; y la del **campamento** a `primeros.en + horasTrasLaPrimera`, en la que los campamentos de mercenarios la desbloquean. Como mucho dos por
+//! tecnología en toda la partida; nada más programa eventos. Los Aedas también cantan al fijarse un logro o empezar una Era (una tecnología puede tener descubridora antes que logro, por
+//! administración, o ser de una Era aún cerrada).
+
+use super::*;
+use crate::estado::{entidad_tecnologia, Asentamiento, Dato, SucesoTecnologia, PRIO_TECNOLOGIA};
+use asentamiento::catalogo::Tipo;
+use asentamiento::edificio::Edificios;
+use asentamiento::Recurso;
+use politica::autorizacion::{Actor, Vista};
+use std::cell::OnceCell;
+use tecnologia::adopcion::ErrorAdopcion;
+use tecnologia::hito::VistaFaccion;
+use tecnologia::{Conjunto, TecId};
+
+/// Lo que el hito mira de una Facción, sobre sus plazas (el índice de `Espacio`) y su capital efectiva (buscada una vez, si alguna condición la pide).
+pub(super) struct VistaDeFaccion<'a> {
+    n: &'a Nucleo,
+    faccion: u32,
+    capital: OnceCell<Option<&'a Asentamiento>>,
+}
+
+impl<'a> VistaDeFaccion<'a> {
+    pub(super) fn de(n: &'a Nucleo, faccion: u32) -> Self {
+        VistaDeFaccion { n, faccion, capital: OnceCell::new() }
+    }
+
+    fn capital(&self) -> Option<&'a Asentamiento> {
+        *self.capital.get_or_init(|| self.n.capital_de(self.faccion).and_then(|c| self.n.estado.asentamientos.get(&c)))
+    }
+
+    /// ¿Tiene la plaza ese edificio activo con `nivelInterno ≥ nivel`? El Corral solo existe en las aldeas ganaderas (§14.0, 2026-11-11): cuenta una activa. La Cantera y las minas
+    /// solo se explotan con un pueblo extractor (Doc 4.2.2): cuenta uno activo de ese tipo (un extractor no tiene niveles).
+    fn tiene_activo(&self, a: &Asentamiento, tipo: Tipo, nivel: u8) -> bool {
+        let datos = &self.n.estado.reglas.economia.datos;
+        let corral = tipo == Tipo::Corral && a.economia.pueblos.iter().any(|p| p.activo() && p.tiene_corrales(datos));
+        let pueblo = tipo.es_de_pueblo() && a.economia.pueblos.iter().any(|p| p.tipo == tipo && p.activo());
+        a.economia.edificios.hay_activo_con_nivel(tipo, nivel) || corral || pueblo
+    }
+
+    fn ciudadanos(&self) -> &'a [u64] {
+        self.n.estado.politica.facciones.get(self.faccion).map_or(&[], |f| &f.ciudadanos)
+    }
+}
+
+impl VistaFaccion for VistaDeFaccion<'_> {
+    fn edificio_activo(&self, tipo: Tipo, nivel: u8) -> bool {
+        self.n.plazas_de(self.faccion).any(|a| self.tiene_activo(a, tipo, nivel))
+    }
+
+    fn recurso_en_capital(&self, r: Recurso) -> bool {
+        self.capital().is_some_and(|a| a.economia.almacen.cantidad(r) > 0)
+    }
+
+    fn capital_en_nivel(&self, nivel: u8, con: Tipo) -> bool {
+        self.capital().is_some_and(|a| a.nivel_actual() >= u32::from(nivel) && a.economia.edificios.activos(con) > 0)
+    }
+
+    fn yacimiento_en_territorio(&self, r: Recurso) -> bool {
+        let Some(g) = self.n.geografia.as_ref() else { return false };
+        let (mapa, catalogo) = (&g.mapa, &self.n.estado.reglas.economia.datos.catalogo);
+        let de_ese_recurso = |&i: &u32| catalogo.tipo(mapa.nodos[i as usize].tipo).produccion.is_some_and(|(x, _)| x == r);
+        self.n.plazas_de(self.faccion).any(|a| {
+            let cerca = [mapa.piedra_en(a.posicion, a.radio), mapa.ganado_en(a.posicion, a.radio), mapa.minerales_en(a.posicion, a.radio)];
+            cerca.iter().flatten().filter(|i| de_ese_recurso(i)).any(|&i| self.n.en_zona(a.id, mapa.nodos[i as usize].pos))
+        })
+    }
+
+    fn escuadras_vivas(&self) -> u32 {
+        self.ciudadanos().iter().filter_map(|&h| self.n.heroe(h)).map(|h| h.heroe.escuadras.iter().filter(|s| s.con_soldados()).count() as u32).sum()
+    }
+
+    fn heroes(&self) -> u32 {
+        self.ciudadanos().len() as u32
+    }
+
+    fn plaza_en_nivel(&self, nivel: u8) -> bool {
+        self.n.plazas_de(self.faccion).any(|a| a.nivel_actual() >= u32::from(nivel))
+    }
+
+    fn nivel(&self) -> u32 {
+        self.n.nivel_de_faccion(self.faccion)
+    }
+
+    fn columnas_en_marcha(&self) -> u32 {
+        self.n.estado.ejercitos.values().filter(|e| e.columna.faccion == Some(self.faccion) && e.marchando() && self.n.columna_en_el_mapa(e)).count() as u32
+    }
+
+    fn edificio_en_plaza_de_nivel(&self, tipo: Tipo, nivel_interno: u8, nivel_plaza: u8) -> bool {
+        self.n.plazas_de(self.faccion).any(|a| a.nivel_actual() >= u32::from(nivel_plaza) && self.tiene_activo(a, tipo, nivel_interno))
+    }
+}
+
+fn rechazo_de_adopcion(e: ErrorAdopcion) -> (&'static str, &'static str) {
+    use rechazos::*;
+    match e {
+        ErrorAdopcion::SinCapital => (TECNOLOGIA_SIN_CAPITAL, "la Facción no tiene capital: no le queda ninguna plaza"),
+        ErrorAdopcion::ReyFueraDeLaCapital => (TECNOLOGIA_REY_FUERA_DE_LA_CAPITAL, "el Rey tiene que estar dentro de la capital"),
+        ErrorAdopcion::YaAdoptada => (TECNOLOGIA_YA_ADOPTADA, "la Facción ya la tiene adoptada"),
+        ErrorAdopcion::NoAparecida => (TECNOLOGIA_NO_APARECIDA, "a la Facción aún no le ha aparecido"),
+        ErrorAdopcion::SinTarifa => (TECNOLOGIA_SIN_TARIFA, "el almacén de la capital no tiene la tarifa de su Era"),
+    }
+}
+
+impl Nucleo {
+    // ───────────────────────────── Los disparadores ─────────────────────────────
+
+    /// Algo que mira el hito cambió para la Facción: se evalúa al cerrar la versión.
+    pub(super) fn mirar_aparicion(&mut self, faccion: u32) {
+        self.aparicion_pendiente.insert(faccion);
+    }
+
+    /// Se fijó un logro o empezó una Era: se evalúan todas las vivas.
+    pub(super) fn mirar_aparicion_de_todas(&mut self) {
+        self.aparicion_pendiente.extend(self.espacio.plazas_por_faccion.keys().copied());
+    }
+
+    /// El paso de minuto de la capital de `faccion` (plan §5.1): solo si una candidata pide algo que mira este paso (`recursoEnCapital`; de las Eras IV y V, las escuadras vivas, los héroes,
+    /// las columnas en marcha y el nivel de la Facción: Tecnologia_Aedas §3.1) y ya cumple su hito entero se marca la Facción. O(candidatas que lo piden).
+    pub(super) fn mirar_paso_de_capital(&mut self, faccion: u32) {
+        let (r, e) = (&self.estado.reglas.economia.tecnologia, &self.estado.tecnologia);
+        // Lo barato primero (es el paso de minuto): sin el logro de ninguna de las que piden la capital no hay nada que mirar, ni siquiera la Facción.
+        if r.piden_capital.iter().any(|t| e.logro_cumplido(t)) && !e.listas_por_hito(r, faccion, &VistaDeFaccion::de(self, faccion), r.piden_capital).is_empty() {
+            self.mirar_aparicion(faccion);
+        }
+    }
+
+    /// Al cerrar la versión: a cada Facción marcada que siga viva le aparecen las candidatas cuyo hito se cumple (`tecnologia.aparece { faccion, primera; tecnologia }`, privado, atribuido a
+    /// su capital).
+    // Regla (decisión del autor, 2026-10-25, duda 1 de 6C): se evalúa con todo lo que cambió la transición, al cerrarla (el TypeScript lo hacía en el tick siguiente); así lo que aparece
+    // va en la versión de su causa.
+    pub(super) fn apariciones(&mut self, t: Instante) {
+        if self.aparicion_pendiente.is_empty() {
+            return;
+        }
+        let r = self.estado.reglas.economia.tecnologia.clone();
+        for f in std::mem::take(&mut self.aparicion_pendiente) {
+            if !self.espacio.plazas_por_faccion.contains_key(&f) {
+                continue;
+            }
+            let listas = self.estado.tecnologia.listas_por_hito(&r, f, &VistaDeFaccion::de(self, f), r.todas());
+            if listas.is_empty() {
+                // 6G: lo que mira el hito cambió, así que las condiciones que la Facción ya cumple de cada revelada (`TecnologiasFaccion.detalle_reveladas`) pueden ser otras. Solo en una versión
+                // que ya se cierra por otra razón: la marca no puede crear una versión (el contador `version` es el mismo con sesiones y sin ellas).
+                let cierra = !self.tr.tocados.esta_vacio() || !self.tr.eventos.is_empty();
+                if cierra && !self.estado.tecnologia.de(&r, f).reveladas.is_empty() {
+                    self.tr.tocar(Clase::Faccion, u64::from(f));
+                }
+                continue;
+            }
+            let capital = self.capital_de(f);
+            let punto = capital.and_then(|c| self.estado.asentamientos.get(&c)).map(|a| a.posicion);
+            for x in listas {
+                let Some(primera) = self.registrar_aparicion(f, x, t) else { continue };
+                let datos = vec![("faccion", i64::from(f)), ("primera", primera as i64)];
+                let valores = vec![("tecnologia", Dato::Texto(r.def(x).id.clone()))];
+                self.tr.emitir(&self.estado, EventoNucleo { asentamientos: capital.into_iter().collect(), punto, valores, ..EventoNucleo::nuevo("tecnologia.aparece", t, datos) });
+            }
+            self.tr.tocar(Clase::Faccion, u64::from(f));
+        }
+    }
+
+    /// `hacerAparecer` por cualquier vía: si la Facción es la descubridora, programa las dos citas de la tecnología; las épicas de la Facción por ella sobran (6E). `None` si ya le había aparecido;
+    /// si no, si es la primera del mundo. (La épica cumplida la hace aparecer el crate y llama a lo mismo por partes, `residentes::avanzar_epicas`.)
+    pub(super) fn registrar_aparicion(&mut self, faccion: u32, x: TecId, t: Instante) -> Option<bool> {
+        let r = self.estado.reglas.economia.tecnologia.clone();
+        let primera = self.estado.tecnologia.hacer_aparecer(&r, faccion, x, t)?;
+        if primera {
+            self.citas_del_descubrimiento(x, t);
+        }
+        self.epicas_sobrantes(t, faccion, x);
+        Some(primera)
+    }
+
+    /// Las dos citas de una tecnología recién descubierta (la primera del mundo): conocimiento y campamento.
+    pub(super) fn citas_del_descubrimiento(&mut self, x: TecId, t: Instante) {
+        let r = &self.estado.reglas.economia.tecnologia;
+        let (conocimiento, campamento) = (t + r.aedas.retraso_conocimiento, t + r.campamento.tras_la_primera);
+        let clave = self.estado.generaciones.clave(entidad_tecnologia(x));
+        self.estado.cola.programar(conocimiento, PRIO_TECNOLOGIA, clave, Carga::Tecnologia(SucesoTecnologia::Conocimiento));
+        self.estado.cola.programar(campamento, PRIO_TECNOLOGIA, clave, Carga::Tecnologia(SucesoTecnologia::Campamento));
+    }
+
+    // ───────────────────────────── Las citas ─────────────────────────────
+
+    /// Vence una cita de una tecnología descubierta.
+    pub(super) fn cita_de_tecnologia(&mut self, suceso: SucesoTecnologia, t: Instante) {
+        match suceso {
+            // Con lo cantado, la revelación a las plazas con un Aeda itinerante parado (6D, Tecnologia_Aedas §6.3; la marca `cantar`).
+            SucesoTecnologia::Conocimiento => self.cantar(t),
+            // Lo que ofrecen los campamentos depende de sus tecnologías: no se guarda, se marca para quien lo mira.
+            SucesoTecnologia::Campamento => self.tocar_todos_los_campamentos(),
+        }
+    }
+
+    /// TA §3 paso 4: los Aedas cantan los descubrimientos que ya conocen y aún no cantaron (`aedas.canta_descubrimiento { faccion: la descubridora; tecnologia }`, público, a la crónica).
+    // Regla (decisión del autor, 2026-10-25, duda 2 de 6C): además de en la cita de conocimiento, al fijarse un logro o empezar una Era (una descubridora sin logro, por administración, o de
+    // una Era cerrada); el TS lo hacía en el tick siguiente.
+    pub(super) fn cantar(&mut self, t: Instante) {
+        let r = self.estado.reglas.economia.tecnologia.clone();
+        let cantadas = self.estado.tecnologia.cantar(&r, t);
+        for &(x, f) in &cantadas {
+            let valores = vec![("tecnologia", Dato::Texto(r.def(x).id.clone()))];
+            self.tr.emitir(&self.estado, EventoNucleo { valores, publico: true, ..EventoNucleo::nuevo("aedas.canta_descubrimiento", t, vec![("faccion", i64::from(f))]) });
+        }
+        // Una tecnología pasa a ser conocida por los Aedas justo cuando se canta: es lo único nuevo que pueden revelar los que ya están parados (6D). Lo cantado, con su descubridora, es
+        // público (la forma pública del estado de tecnología, 6G).
+        if !cantadas.is_empty() {
+            self.revelar_donde_hay_aedas();
+            self.tr.tocar(Clase::Tecnologia, 0);
+        }
+    }
+
+    // ───────────────────────────── Lo que ve la Facción (6G) ─────────────────────────────
+
+    /// Las reveladas de la Facción, en el orden del catálogo, con su descubridora y, condición a condición de su hito, si ya la cumple (`TecnologiasFaccion.detalle_reveladas`).
+    // Regla (decisión del autor, 2026-10-26, duda 5 de 6G): `recursoEnCapital` cambia con el paso de minuto de la capital, que no marca la Facción mientras el hito entero no se cumpla: esa
+    // condición puede ir atrasada hasta el siguiente cambio de la Facción, y lo mismo las que mira ese paso de las Eras IV y V (las escuadras vivas, los héroes, las columnas en marcha y el
+    // nivel de la Facción); las demás, no: lo que miran marca la aparición, `apariciones`.
+    pub fn reveladas_con_detalle(&self, faccion: u32) -> Vec<(TecId, Option<u32>, Vec<bool>)> {
+        let (r, e) = (&self.estado.reglas.economia.tecnologia, &self.estado.tecnologia);
+        let propias = e.de(r, faccion);
+        if propias.reveladas.is_empty() {
+            return Vec::new();
+        }
+        let vista = VistaDeFaccion::de(self, faccion);
+        propias
+            .reveladas
+            .iter()
+            .map(|x| {
+                let faltan = tecnologia::hito::faltan(r, x, &propias, &vista);
+                let cumplidas = (0..r.def(x).hito.len()).map(|i| !faltan.contains(&(i as u8))).collect();
+                (x, e.primeros[x as usize].map(|p| p.faccion), cumplidas)
+            })
+            .collect()
+    }
+
+    /// Las tecnologías cuya épica podría empezar ahora un Aeda residente de la Facción (`epicasPosibles` del TypeScript): con épica, su logro cumplido, su Era abierta, no aparecida a la Facción y
+    /// sin un Aeda suyo que ya la cante.
+    pub fn epicas_posibles(&self, faccion: u32) -> Conjunto {
+        let (r, e) = (&self.estado.reglas.economia.tecnologia, &self.estado.tecnologia);
+        let propias = e.de(r, faccion);
+        let mut cantan = Conjunto::VACIO;
+        self.estado.residentes.aedas.iter().filter(|a| a.faccion == faccion).filter_map(|a| a.epica.as_ref()).for_each(|x| cantan.poner(x.tec));
+        let mut v = Conjunto::VACIO;
+        (0..r.catalogo.len() as TecId).filter(|&x| r.def(x).epica.is_some() && e.logro_cumplido(x) && e.era_abierta(r, x) && !propias.aparecidas.contiene(x) && !cantan.contiene(x)).for_each(|x| v.poner(x));
+        v
+    }
+
+    // ───────────────────────────── La adopción ─────────────────────────────
+
+    /// `AdoptarTecnologia` (TA §4): el Rey, presente en la capital efectiva, adopta una tecnología aparecida y la paga el almacén de la capital con la tarifa de su Era (unidades enteras), al
+    /// instante (`tecnologia.adoptada { faccion, capital; tecnologia }`, privado, atribuido a la capital). Los rechazos no tocan nada.
+    pub(super) fn ejecutar_adopcion(&mut self, t: Instante, p: &Peticion) -> Result<Vec<u64>, Respuesta> {
+        let Comando::AdoptarTecnologia { heroe, faccion, tecnologia: x } = p.comando else { unreachable!("solo adoptar una tecnología") };
+        let v = self.estado.version;
+        let rechazo = |c: &'static str, m: &str| Respuesta::rechazo(c, m, v);
+        self.autorizar_heroe(p, heroe, false)?;
+        if !self.estado.politica.facciones.existe(faccion) {
+            return Err(rechazo(rechazos::FACCION_NO_EXISTE, "la Facción no existe"));
+        }
+        if !(Actor { yo: heroe, politica: &self.estado.politica, vista: self }).rey_de_faccion(faccion) {
+            return Err(rechazo(rechazos::NO_AUTORIZADO, "solo el Rey adopta una tecnología"));
+        }
+        let r = self.estado.reglas.economia.tecnologia.clone();
+        if usize::from(x) >= r.catalogo.len() {
+            return Err(rechazo(rechazos::TECNOLOGIA_DESCONOCIDA, "esa tecnología no existe"));
+        }
+        let capital = self.capital_de(faccion);
+        // Regla (decisión del autor, 2026-10-25, duda 3 de 6C): «el Rey está en la capital» (`estaEnAsentamiento`) es estar dentro de ella; con su columna a la puerta, no.
+        let en_capital = capital.is_some_and(|c| self.presente(heroe, c as u32));
+        let Estado { tecnologia, asentamientos, .. } = &mut self.estado;
+        let almacen = capital.map(|c| &mut asentamientos.get_mut(&c).expect("la capital existe").economia.almacen);
+        tecnologia.adoptar(&r, faccion, x, almacen, en_capital).map_err(|e| {
+            let (c, m) = rechazo_de_adopcion(e);
+            rechazo(c, m)
+        })?;
+        let capital = capital.expect("adoptada en la capital");
+        let punto = self.estado.asentamientos.get(&capital).map(|a| a.posicion);
+        let datos = vec![("faccion", i64::from(faccion)), ("capital", capital as i64)];
+        let valores = vec![("tecnologia", Dato::Texto(r.def(x).id.clone()))];
+        self.tr.emitir(&self.estado, EventoNucleo { asentamientos: vec![capital], punto, valores, ..EventoNucleo::nuevo("tecnologia.adoptada", t, datos) });
+        self.avance(t, Dueno::Faccion(faccion), "tecnologias", 1);
+        self.tr.tocar(Clase::Asentamiento, capital);
+        self.tocar_armerias_de(faccion);
+        self.subir_estilo_de_faccion(faccion);
+        // Una adopción puede dejar a la mitad de las vivas con ella (los campamentos) y cumplir una condición `tecnologia` de otro hito.
+        self.tocar_todos_los_campamentos();
+        self.mirar_aparicion(faccion);
+        // El hecho de épica `adopcion` (TA §7.2): lo recogen los Aedas residentes al cerrar la versión (6E).
+        self.hecho_epico(Some(tecnologia::epicas::Hecho::adopcion(faccion, x)));
+        Ok(vec![])
+    }
+
+    // ───────────────────────────── El estilo de época (§4.2) ─────────────────────────────
+
+    /// El estilo de época que dan las adoptadas de la Facción ahora (`tecnologia::estilo::estilo_de`).
+    pub(crate) fn estilo_de_faccion(&self, faccion: u32) -> tecnologia::estilo::Estilo {
+        let r = &self.estado.reglas.economia.tecnologia;
+        tecnologia::estilo::estilo_de(r, self.estado.tecnologia.de(r, faccion).adoptadas)
+    }
+
+    /// La plaza toma el máximo entre su estilo y el de su Facción (al fundarla y al cambiar de dueño: `situar_plaza` y `cambiar_plaza_de_faccion`). Nunca baja. Si sube, se marcan la plaza y sus
+    /// pueblos y avanzadas, que lo llevan como el de su madre.
+    // Regla (decisión del autor, 2026-11-16): se guarda el máximo al que llegó la plaza; una conquista no se lo quita y el nuevo dueño solo lo cambia si va por delante.
+    pub(super) fn subir_estilo(&mut self, id: u64) {
+        let Some(faccion) = self.estado.asentamientos.get(&id).map(|a| a.faccion) else { return };
+        let nuevo = self.estilo_de_faccion(faccion);
+        let a = self.estado.asentamientos.get_mut(&id).expect("existe");
+        if nuevo <= a.estilo {
+            return;
+        }
+        a.estilo = nuevo;
+        let (pueblos, avanzadas): (Vec<u64>, Vec<u64>) = (a.economia.pueblos.iter().map(|p| p.id).collect(), a.economia.avanzadas.iter().map(|v| v.id).collect());
+        self.tr.tocar(Clase::Asentamiento, id);
+        self.tr.tocar_todos(Clase::Pueblo, pueblos);
+        self.tr.tocar_todos(Clase::Avanzada, avanzadas);
+    }
+
+    /// Tras una adopción (también por administración): cada plaza de la Facción toma el máximo entre el suyo y el de la Facción.
+    pub(super) fn subir_estilo_de_faccion(&mut self, faccion: u32) {
+        let plazas: Vec<u64> = self.plazas_de(faccion).map(|a| a.id).collect();
+        plazas.into_iter().for_each(|id| self.subir_estilo(id));
+    }
+
+    // ───────────────────────────── Los campamentos ─────────────────────────────
+
+    /// Las tecnologías que desbloquean ahora los campamentos de mercenarios (TA §5): las de arranque; las demás, con descubridora y pasado su plazo, o adoptadas por la mitad de las vivas.
+    pub(super) fn tecnologias_de_los_campamentos(&self) -> Conjunto {
+        let vivas: Vec<u32> = self.espacio.plazas_por_faccion.keys().copied().collect();
+        self.estado.tecnologia.tecnologias_del_campamento(&self.estado.reglas.economia.tecnologia, &vivas, self.estado.ahora)
+    }
+}

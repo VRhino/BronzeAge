@@ -1,0 +1,13 @@
+[package]
+name = "persistencia"
+version = "0.1.0"
+edition = "2021"
+description = "Persistencia por registro de eventos y fotos, con recuperación determinista (fase 5, Arquitectura/13 §6)"
+
+[dependencies]
+base = { path = "../base" }
+sha2 = "0.10"
+zstd = "0.13"
+
+[dev-dependencies]
+tempfile = "3"

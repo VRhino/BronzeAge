@@ -1,0 +1,385 @@
+//! Lo poco de HTTP que comparte el puerto del WebSocket (7B): el servicio de acceso (`POST /v1/registro`, `POST /v1/sesiones`) y la salud. El contrato 05 no lo usa.
+//!
+//! Cada conexión empieza leyendo la cabecera de la petición. Si pide `Upgrade: websocket`, lo leído se devuelve al flujo ([`Rebobinado`]) y sigue el WebSocket de siempre; si no,
+//! se contesta una sola petición HTTP/1.1 y se cierra (`Connection: close`). `OPTIONS` se contesta aquí (el admin web y el cliente de jugador llaman desde el navegador).
+//!
+//! **Procedencia** (revisión de seguridad del 2026-11-03, hallazgo 1): un navegador manda `Origin` en toda petición de otra página y en el handshake del WebSocket. Si la trae, tiene
+//! que ser de un origen permitido ([`origen_permitido`]); si no, `403 origen_no_permitido` (y el WebSocket ni se abre). Sin `Origin` (bots, Unity, `curl`) no se mira. El CORS ya no
+//! es `*`: se devuelve el origen permitido que pidió, con `Vary: Origin`. Así una web ajena abierta en el navegador no puede registrar cuentas, entrar ni hablar el contrato 05.
+//!
+//! **Administración por IP**: cada petición lleva la IP del otro extremo ([`PeticionHttp::ip`]) y [`ip_de_administracion`] dice si desde ella se puede administrar (esta máquina o
+//! `BRONZEAGE_IPS_ADMIN`). Detrás de un proxy inverso en la misma máquina todas las conexiones parecen locales: entonces la protección es solo la cuenta.
+
+use std::{
+    future::Future,
+    io,
+    net::IpAddr,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+    time::Duration,
+};
+
+use tokio::{
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
+    net::TcpStream,
+    time::timeout,
+};
+
+/// Tamaño máximo de la cabecera de una petición.
+pub const MAX_CABECERA: usize = 16 << 10;
+/// Tamaño máximo del cuerpo de una petición HTTP.
+pub const MAX_CUERPO: usize = 64 << 10;
+/// Tamaño de cada trozo en que se escribe una respuesta: el tiempo máximo de escritura se aplica por trozo.
+const TROZO_ESCRITURA: usize = 64 << 10;
+
+/// Una petición HTTP ya leída.
+#[derive(Clone, Debug)]
+pub struct PeticionHttp {
+    pub metodo: String,
+    /// La ruta sin la consulta (`/v1/registro`).
+    pub ruta: String,
+    /// Las cabeceras con el nombre en minúsculas.
+    pub cabeceras: Vec<(String, String)>,
+    pub cuerpo: Vec<u8>,
+    /// La IP del otro extremo de la conexión; `None` si no se pudo leer.
+    pub ip: Option<IpAddr>,
+    /// La petición trae la llave de administración ([`trae_la_llave`]): vale como venir de una IP de administración.
+    pub con_llave: bool,
+}
+
+impl PeticionHttp {
+    pub fn cabecera(&self, nombre: &str) -> Option<&str> {
+        self.cabeceras.iter().find(|(k, _)| k == nombre).map(|(_, v)| v.as_str())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RespuestaHttp {
+    pub estado: u16,
+    pub tipo: &'static str,
+    /// Compartido: un artefacto grande se sirve clonando el `Arc`, sin copiar los bytes en cada petición.
+    pub cuerpo: Arc<Vec<u8>>,
+}
+
+impl RespuestaHttp {
+    pub fn json(estado: u16, cuerpo: impl Into<Vec<u8>>) -> Self {
+        Self { estado, tipo: "application/json", cuerpo: Arc::new(cuerpo.into()) }
+    }
+    pub fn texto(estado: u16, cuerpo: impl Into<Vec<u8>>) -> Self {
+        Self { estado, tipo: "text/plain; charset=utf-8", cuerpo: Arc::new(cuerpo.into()) }
+    }
+}
+
+/// Quien atiende las peticiones HTTP del puerto. Con la caja del futuro para poder guardarlo como `dyn`.
+pub trait Http: Send + Sync + 'static {
+    fn atender(&self, p: PeticionHttp) -> Pin<Box<dyn Future<Output = RespuestaHttp> + Send + '_>>;
+}
+
+/// Sin servicio HTTP: solo `GET /salud`; el resto, 404.
+pub struct SinHttp;
+
+impl Http for SinHttp {
+    fn atender(&self, _: PeticionHttp) -> Pin<Box<dyn Future<Output = RespuestaHttp> + Send + '_>> {
+        Box::pin(async { RespuestaHttp::texto(404, "no encontrado") })
+    }
+}
+
+/// El nombre de máquina de una autoridad (`host:puerto`, `[v6]:puerto` o `host`), en minúsculas y sin corchetes.
+fn nombre_de(autoridad: &str) -> String {
+    let a = autoridad.trim();
+    let nombre = match a.strip_prefix('[') {
+        Some(resto) => resto.split(']').next().unwrap_or(""),
+        None => a.split(':').next().unwrap_or(""),
+    };
+    nombre.to_ascii_lowercase()
+}
+
+/// Si se puede administrar desde `ip`: es de esta máquina (bucle local, también una IPv4 mapeada en IPv6 como `::ffff:127.0.0.1`) o está en `extra` (`BRONZEAGE_IPS_ADMIN`).
+pub fn ip_de_administracion(ip: IpAddr, extra: &[IpAddr]) -> bool {
+    let ip = ip.to_canonical();
+    ip.is_loopback() || extra.iter().any(|e| e.to_canonical() == ip)
+}
+
+/// Largo mínimo de la llave de administración (`BRONZEAGE_LLAVE_ADMIN`): una corta se adivina.
+pub const MIN_LLAVE_ADMIN: usize = 24;
+
+/// Si la petición trae la llave de administración `llave`: en la cabecera `X-Llave-Admin` o en la consulta (`?llave=…`, lo único que puede poner un navegador al abrir un
+/// WebSocket). Es para un servidor alojado detrás de un proxy, donde la IP del otro extremo es la del proxy y la lista de IPs no sirve: quien trae la llave administra desde
+/// cualquier IP (y además hace falta la cuenta admin, como siempre). Sin llave configurada, nadie la trae.
+pub fn trae_la_llave(objetivo: &str, cabeceras: &[(String, String)], llave: Option<&str>) -> bool {
+    let Some(llave) = llave else { return false };
+    let de_cabecera = cabeceras.iter().find(|(k, _)| k == "x-llave-admin").map(|(_, v)| v.as_str());
+    let de_consulta = objetivo.split_once('?').and_then(|(_, c)| c.split('&').find_map(|p| p.strip_prefix("llave=")));
+    // Comparación sin atajos: el tiempo no dice cuántos caracteres coinciden.
+    let igual = |v: &str| v.len() == llave.len() && v.bytes().zip(llave.bytes()).fold(0u8, |a, (x, y)| a | (x ^ y)) == 0;
+    de_cabecera.is_some_and(igual) || de_consulta.is_some_and(igual)
+}
+
+/// `localhost` o una IP de bucle local.
+fn es_local(nombre: &str) -> bool {
+    nombre == "localhost" || nombre.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback())
+}
+
+/// Si un navegador puede llamar desde `origen` (la cabecera `Origin`, `esquema://host[:puerto]`) a este servidor, al que llegó como `host` (la cabecera `Host`).
+///
+/// Se permite: una página de esta misma máquina (`localhost`, `127.0.0.1`, `[::1]`, en cualquier puerto: el admin web y el cliente en desarrollo); una página servida desde la misma
+/// **IP** con la que se llega al servidor (el cliente abierto por la IP de la red local); y los nombres de `extra` (`BRONZEAGE_ORIGENES`, para un dominio propio). Un nombre de dominio
+/// que no está en la lista no vale aunque coincida con `Host`: así un DNS que cambia a `127.0.0.1` (*DNS rebinding*) tampoco cuela. `null` (un fichero local, un iframe aislado) no vale.
+pub fn origen_permitido(origen: &str, host: Option<&str>, extra: &[String]) -> bool {
+    let Some((esquema, resto)) = origen.trim().split_once("://") else { return false };
+    if !matches!(esquema.to_ascii_lowercase().as_str(), "http" | "https") {
+        return false;
+    }
+    let nombre = nombre_de(resto.split('/').next().unwrap_or(""));
+    if nombre.is_empty() {
+        return false;
+    }
+    if es_local(&nombre) || extra.iter().any(|e| nombre_de(e) == nombre) {
+        return true;
+    }
+    nombre.parse::<std::net::IpAddr>().is_ok() && host.is_some_and(|h| nombre_de(h) == nombre)
+}
+
+/// Mira la procedencia de una petición: `Ok(None)` sin `Origin`, `Ok(Some(origen))` si viene de un origen permitido (el que se devuelve en el CORS), `Err` si no.
+fn procedencia(cabeceras: &[(String, String)], extra: &[String]) -> Result<Option<String>, ()> {
+    let cabecera = |n: &str| cabeceras.iter().find(|(k, _)| k == n).map(|(_, v)| v.as_str());
+    match cabecera("origin") {
+        None => Ok(None),
+        Some(o) if origen_permitido(o, cabecera("host"), extra) => Ok(Some(o.trim().to_owned())),
+        Some(_) => Err(()),
+    }
+}
+
+/// Lo que empezó la conexión.
+pub(crate) enum Inicio {
+    /// El WebSocket y la IP del otro extremo.
+    /// Con la IP del otro extremo y si trae la llave de administración.
+    WebSocket(Rebobinado, Option<IpAddr>, bool),
+    Http(TcpStream, PeticionHttp),
+    /// Un navegador desde un origen que no está permitido: se contesta `403` y se cierra.
+    Rechazada(TcpStream),
+    /// Mal formada, demasiado grande o cortada: se cierra sin más.
+    Nada,
+}
+
+/// Lee la cabecera (y, si no es un WebSocket, el cuerpo) de la primera petición.
+pub(crate) async fn leer_inicio(mut tcp: TcpStream, origenes: &[String], llave: Option<&str>) -> Inicio {
+    let ip = tcp.peer_addr().ok().map(|a| a.ip());
+    let mut buf = Vec::with_capacity(1024);
+    let fin = loop {
+        if let Some(i) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+            break i + 4;
+        }
+        if buf.len() > MAX_CABECERA {
+            return Inicio::Nada;
+        }
+        let mut trozo = [0u8; 2048];
+        match tcp.read(&mut trozo).await {
+            Ok(0) | Err(_) => return Inicio::Nada,
+            Ok(n) => buf.extend_from_slice(&trozo[..n]),
+        }
+    };
+    let Ok(cabecera) = std::str::from_utf8(&buf[..fin]) else { return Inicio::Nada };
+    let mut lineas = cabecera.split("\r\n");
+    let mut primera = lineas.next().unwrap_or("").split(' ');
+    let (Some(metodo), Some(objetivo)) = (primera.next(), primera.next()) else { return Inicio::Nada };
+    let ruta = objetivo.split('?').next().unwrap_or("").to_owned();
+    let cabeceras: Vec<(String, String)> = lineas
+        .filter_map(|l| l.split_once(':'))
+        .map(|(k, v)| (k.trim().to_ascii_lowercase(), v.trim().to_owned()))
+        .collect();
+    if procedencia(&cabeceras, origenes).is_err() {
+        return Inicio::Rechazada(tcp);
+    }
+    let con_llave = trae_la_llave(objetivo, &cabeceras, llave);
+    let es_ws = cabeceras.iter().any(|(k, v)| k == "upgrade" && v.eq_ignore_ascii_case("websocket"));
+    if es_ws {
+        return Inicio::WebSocket(Rebobinado { previo: buf, pos: 0, tcp }, ip, con_llave);
+    }
+    let largo = cabeceras.iter().find(|(k, _)| k == "content-length").and_then(|(_, v)| v.parse::<usize>().ok()).unwrap_or(0);
+    if largo > MAX_CUERPO {
+        return Inicio::Nada;
+    }
+    let mut cuerpo = buf[fin..].to_vec();
+    while cuerpo.len() < largo {
+        let mut trozo = vec![0u8; largo - cuerpo.len()];
+        match tcp.read(&mut trozo).await {
+            Ok(0) | Err(_) => return Inicio::Nada,
+            Ok(n) => cuerpo.extend_from_slice(&trozo[..n]),
+        }
+    }
+    cuerpo.truncate(largo);
+    Inicio::Http(tcp, PeticionHttp { metodo: metodo.to_owned(), ruta, cabeceras, cuerpo, ip, con_llave })
+}
+
+fn razon(estado: u16) -> &'static str {
+    match estado {
+        200 => "OK",
+        201 => "Created",
+        204 => "No Content",
+        400 => "Bad Request",
+        401 => "Unauthorized",
+        403 => "Forbidden",
+        404 => "Not Found",
+        405 => "Method Not Allowed",
+        409 => "Conflict",
+        503 => "Service Unavailable",
+        _ => "Internal Server Error",
+    }
+}
+
+/// Contesta `403 origen_no_permitido` a un navegador de otro origen y cierra, sin CORS: el navegador ni deja leer la respuesta.
+pub(crate) async fn rechazar(mut tcp: TcpStream) {
+    let cuerpo = br#"{"error":"origen_no_permitido","mensaje":"este servidor no atiende a paginas de ese origen"}"#;
+    let cabecera = format!("HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", cuerpo.len());
+    let _ = tcp.write_all(cabecera.as_bytes()).await;
+    let _ = tcp.write_all(cuerpo).await;
+    let _ = tcp.shutdown().await;
+}
+
+/// Atiende la petición (`OPTIONS` y `GET /salud` aquí; el resto, `http`) y cierra. La procedencia ya se miró en [`leer_inicio`]: si trae `Origin`, es uno permitido y es el que
+/// se devuelve en el CORS.
+///
+/// La escritura tiene un tiempo máximo **por trozo** de 64 KiB (`escritura`, el `timeout_escritura` del servidor), no para el total: un artefacto de decenas de MB a una conexión
+/// lenta pero que avanza llega entero, y un cliente que deja de leer pierde la conexión a los `escritura` (sin él retendría el socket para siempre; revisión de seguridad, hallazgo 4).
+pub(crate) async fn contestar(mut tcp: TcpStream, p: PeticionHttp, http: &dyn Http, escritura: Duration) {
+    let cors = match p.cabecera("origin") {
+        Some(o) => format!(
+            "Access-Control-Allow-Origin: {}\r\nVary: Origin\r\nAccess-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\nAccess-Control-Allow-Headers: content-type, authorization\r\n",
+            o.trim()
+        ),
+        None => String::new(),
+    };
+    let r = match (p.metodo.as_str(), p.ruta.as_str()) {
+        ("OPTIONS", _) => RespuestaHttp { estado: 204, tipo: "text/plain", cuerpo: Arc::default() },
+        ("GET", "/salud") => RespuestaHttp::texto(200, "ok"),
+        _ => http.atender(p).await,
+    };
+    let cabecera = format!("HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\n{cors}Connection: close\r\n\r\n", r.estado, razon(r.estado), r.tipo, r.cuerpo.len());
+    if escribir_por_trozos(&mut tcp, cabecera.as_bytes(), escritura).await.is_ok() && escribir_por_trozos(&mut tcp, &r.cuerpo, escritura).await.is_ok() {
+        let _ = timeout(escritura, tcp.shutdown()).await;
+    }
+}
+
+/// Escribe `datos` de `TROZO_ESCRITURA` en `TROZO_ESCRITURA` y vacía el búfer; cada trozo tiene `limite` para entrar. `Err` si el otro extremo falla o no avanza a tiempo.
+async fn escribir_por_trozos<W: AsyncWrite + Unpin>(w: &mut W, datos: &[u8], limite: Duration) -> io::Result<()> {
+    for trozo in datos.chunks(TROZO_ESCRITURA) {
+        timeout(limite, async { w.write_all(trozo).await?; w.flush().await }).await.map_err(|_| io::ErrorKind::TimedOut)??;
+    }
+    Ok(())
+}
+
+/// El flujo TCP con lo ya leído delante: el handshake del WebSocket vuelve a leer la cabecera.
+pub struct Rebobinado {
+    previo: Vec<u8>,
+    pos: usize,
+    tcp: TcpStream,
+}
+
+impl AsyncRead for Rebobinado {
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+        if self.pos < self.previo.len() {
+            let n = (self.previo.len() - self.pos).min(buf.remaining());
+            let desde = self.pos;
+            buf.put_slice(&self.previo[desde..desde + n]);
+            self.pos += n;
+            return Poll::Ready(Ok(()));
+        }
+        Pin::new(&mut self.tcp).poll_read(cx, buf)
+    }
+}
+
+impl AsyncWrite for Rebobinado {
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.tcp).poll_write(cx, buf)
+    }
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.tcp).poll_flush(cx)
+    }
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.tcp).poll_shutdown(cx)
+    }
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::{escribir_por_trozos, ip_de_administracion, origen_permitido, trae_la_llave};
+
+    #[test]
+    fn la_llave_de_administracion_vale_en_la_cabecera_o_en_la_consulta_y_solo_si_es_exacta() {
+        let llave = Some("una-llave-larga-de-verdad-123");
+        let cab = |v: &str| vec![("x-llave-admin".to_owned(), v.to_owned())];
+        assert!(trae_la_llave("/v1/admin/partida", &cab("una-llave-larga-de-verdad-123"), llave));
+        assert!(trae_la_llave("/?otra=1&llave=una-llave-larga-de-verdad-123", &[], llave));
+        assert!(!trae_la_llave("/?llave=una-llave-larga-de-verdad-124", &[], llave));
+        assert!(!trae_la_llave("/?llave=una-llave", &cab(""), llave));
+        assert!(!trae_la_llave("/v1/admin/partida", &[], llave));
+        assert!(!trae_la_llave("/?llave=", &cab(""), None), "sin llave configurada nadie la trae");
+    }
+    use std::{net::IpAddr, time::Duration};
+    use tokio::io::AsyncReadExt;
+
+    #[tokio::test]
+    async fn escribir_por_trozos_corta_al_cliente_que_no_lee_y_deja_pasar_al_que_avanza() {
+        let datos = vec![7u8; 1 << 20];
+        let (mut w, mut r) = tokio::io::duplex(1024);
+        let lector = tokio::spawn(async move {
+            let mut v = Vec::new();
+            r.read_to_end(&mut v).await.unwrap();
+            v
+        });
+        let t = Duration::from_millis(500);
+        escribir_por_trozos(&mut w, &datos, t).await.expect("un lector que avanza no se corta");
+        drop(w);
+        assert_eq!(lector.await.unwrap().len(), datos.len());
+        let (mut w, _r) = tokio::io::duplex(1024);
+        let e = escribir_por_trozos(&mut w, &datos, Duration::from_millis(50)).await.expect_err("sin leer, se corta");
+        assert_eq!(e.kind(), std::io::ErrorKind::TimedOut);
+    }
+
+    #[test]
+    fn administracion_solo_desde_esta_maquina_o_la_lista() {
+        let ip = |s: &str| s.parse::<IpAddr>().unwrap();
+        for s in ["127.0.0.1", "127.0.0.2", "::1", "::ffff:127.0.0.1"] {
+            assert!(ip_de_administracion(ip(s), &[]), "debía valer: {s}");
+        }
+        for s in ["192.168.1.10", "::ffff:192.168.1.10", "2001:db8::1"] {
+            assert!(!ip_de_administracion(ip(s), &[]), "no debía valer: {s}");
+        }
+        let extra = [ip("192.168.1.10")];
+        assert!(ip_de_administracion(ip("192.168.1.10"), &extra));
+        assert!(ip_de_administracion(ip("::ffff:192.168.1.10"), &extra));
+        assert!(!ip_de_administracion(ip("192.168.1.11"), &extra));
+    }
+
+    #[test]
+    fn origenes_permitidos_y_rechazados() {
+        let extra = ["juego.example".to_owned()];
+        let host = Some("192.168.1.10:7878");
+        let valen = [
+            "http://localhost:5174",
+            "http://127.0.0.1",
+            "http://[::1]:8080",
+            "https://LOCALHOST",
+            "http://192.168.1.10:5174",
+            "https://juego.example",
+        ];
+        for o in valen {
+            assert!(origen_permitido(o, host, &extra), "debía valer: {o}");
+        }
+        let no_valen = [
+            ("http://192.168.1.11:5174", host),
+            ("http://evil.com:7878", Some("evil.com:7878")),
+            ("null", host),
+            ("file:///index.html", host),
+            ("ftp://localhost", host),
+            ("", host),
+            ("http://", host),
+            ("http://192.168.1.10", None),
+        ];
+        for (o, h) in no_valen {
+            assert!(!origen_permitido(o, h, &extra), "no debía valer: {o} con Host {h:?}");
+        }
+    }
+}

@@ -1,0 +1,444 @@
+//! Las cifras del combate. Fuente única: los bloques `<!-- parametros:NOMBRE -->` de `Docs/Mechanics/{Combate, Batalla_Unity_Ciclo,
+//! Movimiento_Ejercitos, Murallas, Generacion_Del_Mundo}.md`, incrustados en el binario. Como en `militar`, **los bloques son lo vigente**
+//! (decisión del autor, 2026-10-19): ninguna cifra se corrige en el código. Decimales → **ppm** (tasas y factores) y **milésimas** (`Mil`).
+
+use asentamiento::datos::{bloque_de, mil, ppm, texto_de_parametros_de, UNO};
+use asentamiento::Recurso;
+use base::{Mil, MS_POR_MINUTO};
+use militar::datos::{bloque, entero, num};
+use asentamiento::Costo;
+use militar::Tropa;
+use serde_json::Value;
+
+pub const COMBATE: &str = militar::datos::COMBATE;
+pub const BATALLA_UNITY: &str = include_str!("../../../Docs/Mechanics/Batalla_Unity_Ciclo.md");
+const MURALLAS: &str = include_str!("../../../Docs/Mechanics/Murallas.md");
+const MUNDO: &str = include_str!("../../../Docs/Mechanics/Generacion_Del_Mundo.md");
+
+/// Los bloques de parámetros que lee este crate, para la identidad de las reglas (hash del núcleo). De Murallas, Movimiento y el mundo solo
+/// entran los bloques que se usan (el resto del documento no es de este crate).
+pub fn texto_de_parametros() -> String {
+    let suelto = |doc: &str, nombre: &str| format!("<!-- parametros:{nombre} -->\n{}\n<!-- /parametros -->\n", bloque(doc, nombre));
+    texto_de_parametros_de(COMBATE)
+        + &texto_de_parametros_de(BATALLA_UNITY)
+        + &suelto(MURALLAS, "OCUPACION")
+        + &suelto(militar::datos::MOVIMIENTO, "MOVIMIENTO")
+        + &suelto(MUNDO, "CAMPAMENTOS_BANDIDOS")
+}
+
+/// Poder, varianza y ventajas (`MILITAR`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReglasPoder {
+    /// Amplitud de la tirada de cada bando (ppm): ±15 %.
+    pub varianza: i64,
+    /// Ventaja de todo defensor (ppm).
+    pub ventaja_defensor: i64,
+    /// Bonus del defensor por cada escuadra de más (ppm).
+    pub cohesion: i64,
+    /// Lo que suma un héroe sano que combate (milésimas de poder).
+    pub poder_por_heroe: Mil,
+    /// Defensa de una caravana sin escolta ni ejército (milésimas de poder).
+    pub defensa_base_caravana: Mil,
+    /// Experiencia de escuadra por combate ganado y perdido (milésimas de punto).
+    pub xp_victoria: Mil,
+    pub xp_derrota: Mil,
+}
+
+/// Fracciones de bajas y demás cifras que antes vivían en el código (`COMBATE_NUMERICO`), todas en ppm.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReglasNumericas {
+    pub bajas_ganador_base: i64,
+    pub bajas_ganador_por_ratio: i64,
+    pub bajas_perdedor_base: i64,
+    pub bajas_perdedor_por_ratio: i64,
+    /// Combate contra una cifra (caravana, campamento): bajas del que gana y del que pierde.
+    pub bajas_fijas_ganador: i64,
+    pub bajas_fijas_perdedor: i64,
+    pub ventaja_aguante: i64,
+    pub carga_perdida_aguante: i64,
+    pub carros_perdidos: i64,
+    pub protegida_pueblo: i64,
+}
+
+/// Lo que ocurre con una plaza conquistada (`OCUPACION`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReglasOcupacion {
+    /// Cuánto es inatacable tras la conquista y cuánto dura la ocupación (ms).
+    pub proteccion: i64,
+    pub duracion: i64,
+    pub saqueo_poblacion: i64,
+    pub edificios_danados: i64,
+    /// Fracción de las celdas de cada recinto completo (y sin mejora en curso) que pierde la muralla al caer la plaza (ppm).
+    pub dano_muralla: i64,
+    pub factor_recaudacion: i64,
+    pub factor_crecimiento: i64,
+}
+
+/// El ciclo de una batalla de Unity (`BATALLA`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReglasBatalla {
+    pub capacidad_asedio: usize,
+    pub capacidad_resto: usize,
+    /// Duración máxima de la partida (ms).
+    pub duracion_asedio: i64,
+    pub duracion_resto: i64,
+    pub convocatoria: i64,
+    pub plazo_asignacion: i64,
+    pub plazo_inicio: i64,
+    pub margen: i64,
+    pub conservar_cerradas: i64,
+    /// La defensa de una caravana sin escolta cuando juega Unity: tropa y soldados.
+    pub carreteros: (Tropa, i64),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NivelBandidos {
+    pub poder: Mil,
+    pub unidades: i64,
+    /// Madera, piedra y trigo (de cada uno, milésimas) para cada héroe que lo destruye (`botinPorHeroe`, tanda 69).
+    pub botin_por_heroe: Mil,
+    /// Monedas para cada héroe que lo destruye (`monedasPorHeroe`, tanda 69).
+    pub monedas_por_heroe: i64,
+    /// Probabilidad de que un campamento nuevo sea de este nivel (ppm).
+    pub peso: i64,
+}
+
+/// Rendimientos decrecientes de algo que se cobra muchas veces (D22, D26, D27): en la `ventana`, completo las primeras `completas` veces, luego
+/// `caida_por_cada` menos por cada una más, y desde `solo_experiencia_desde`, nada. Los usan el botín de bandidos y las monedas de combate.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Rendimientos {
+    /// ms.
+    pub ventana: i64,
+    pub completas: i64,
+    /// ppm.
+    pub caida_por_cada: i64,
+    pub solo_experiencia_desde: i64,
+}
+
+impl Rendimientos {
+    fn de(v: &Value) -> Self {
+        Rendimientos {
+            ventana: entero(v, "ventanaHoras") * 60 * MS_POR_MINUTO,
+            completas: entero(v, "completas"),
+            caida_por_cada: ppm(num(v, "caidaPorCada")),
+            solo_experiencia_desde: entero(v, "soloExperienciaDesde"),
+        }
+    }
+}
+
+/// Las monedas del héroe por combatir contra héroes de otra Facción (`MONEDAS`, tanda 69): al ganador y al perdedor de cada bando, con rendimientos
+/// decrecientes por par de Facciones.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReglasMonedas {
+    pub ganador: i64,
+    pub perdedor: i64,
+    pub rendimientos: Rendimientos,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReglasBandidos {
+    /// Niveles 1, 2 y 3 (índice 0, 1, 2).
+    pub niveles: [NivelBandidos; 3],
+    /// Rendimientos decrecientes del botín por héroe.
+    pub rendimientos: Rendimientos,
+    /// Anillo de campamentos de mercenarios donde aparecen, y cuántos según la demanda.
+    pub anillo_min: Mil,
+    pub anillo_max: Mil,
+    pub bandidos_por_residente: i64,
+    pub anillo_minimo: i64,
+    pub anillo_maximo: i64,
+    pub reaparicion_anillo: i64,
+    /// A cuánto de su campamento acosan a una caravana.
+    pub radio_ataque_caravana: Mil,
+    /// Cuántos campamentos tiene como mucho cada plaza (`porPlaza`, 2026-11-02).
+    pub por_plaza: i64,
+    /// A cuánto del borde del disco de toda zona ha de quedar el centro del bosque de los bandidos de una plaza (`margenZonaPlaza`: 5 desde el 2026-11-05,
+    /// antes 10 escrito en el código).
+    pub margen_zona_plaza: Mil,
+    /// Tras destruirse un campamento de una plaza sin oleada pendiente, cuánto tarda la oleada que repone los que falten (ms).
+    pub respawn: i64,
+}
+
+/// Las avanzadas en combate (`AVANZADA`, Doc 5.17): lo que defiende cada etapa y cuánto cabe en su guarnición de jugadores.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReglasAvanzada {
+    /// Cuánto es invulnerable un fuerte en ruinas (ms).
+    pub invulnerabilidad: i64,
+    /// Cupo de la guarnición de jugadores por héroe residente de la madre y por avanzada, en puntos de Liderazgo (atalaya, fuerte, ciudadela).
+    pub cupo_guarnicion: [i64; 3],
+    /// Escuadras de serie de cada etapa por escalón, de menor a mayor escalón.
+    pub guarnicion_de_serie: [Vec<(u8, usize)>; 3],
+    /// La tropa de cada escalón mientras el Gobernador no elija otra.
+    pub tropa_por_defecto: Tropa,
+    /// Lo que tarda en reponerse gratis la guarnición de serie que cayó (ms).
+    pub reposicion: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReglasPueblos {
+    /// Mineros de la guarnición de serie y lo que tarda en volver cada uno, gratis (ms).
+    pub mineros: i64,
+    pub cada_minero: i64,
+    /// Granjeros de la guarnición de serie de una aldea agrícola (se reponen al mismo ritmo).
+    pub granjeros: i64,
+}
+
+/// El metal del equipo de cada tropa convertido en chatarra por soldado muerto (Doc 4.2.1): para cada tropa, `(recurso de chatarra,
+/// numerador)` con `chatarra = numerador × soldados / (1000 × UNO)` milésimas, para no redondear soldado a soldado.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Chatarra {
+    por_tropa: Vec<Vec<(Recurso, i128)>>,
+}
+
+impl Chatarra {
+    fn de(r: &militar::Reglas, fraccion: i64, recetas: &asentamiento::Catalogo) -> Self {
+        let chatarra_de = |lingote: Recurso| match lingote {
+            Recurso::LingoteCobre => Some(Recurso::ChatarraCobre),
+            Recurso::LingoteBronce => Some(Recurso::ChatarraBronce),
+            Recurso::LingoteHierro => Some(Recurso::ChatarraHierro),
+            _ => None,
+        };
+        // Los lingotes que gasta fabricar cada pieza: lo que piden sus recetas en Armería y Carpintería.
+        let lingotes = |equipo: Recurso| -> Costo {
+            use asentamiento::Tipo::{Armeria, Carpinteria};
+            [Armeria, Carpinteria]
+                .iter()
+                .flat_map(|&t| recetas.tipo(t).niveles.iter().flat_map(|n| n.recetas.iter()))
+                .filter(|re| re.produce == equipo)
+                .last()
+                .map(|re| re.consume_por_unidad.clone())
+                .unwrap_or_default()
+        };
+        let por_tropa = r
+            .tropas
+            .iter()
+            .map(|def| {
+                let mut v: Vec<(Recurso, i128)> = vec![];
+                for &(equipo, piezas) in &def.costo_equipo {
+                    for (lingote, por_pieza) in lingotes(equipo) {
+                        let Some(chatarra) = chatarra_de(lingote) else { continue };
+                        let n = piezas as i128 * por_pieza as i128 * fraccion as i128;
+                        match v.iter_mut().find(|(rec, _)| *rec == chatarra) {
+                            Some((_, x)) => *x += n,
+                            None => v.push((chatarra, n)),
+                        }
+                    }
+                }
+                v
+            })
+            .collect();
+        Self { por_tropa }
+    }
+
+    /// La chatarra de `muertos` soldados de una tropa.
+    pub fn de_muertos(&self, tropa: Tropa, muertos: i64) -> Vec<(Recurso, Mil)> {
+        if muertos <= 0 {
+            return vec![];
+        }
+        self.por_tropa[tropa as usize]
+            .iter()
+            .map(|&(rec, n)| (rec, (n * muertos as i128 / (1000 * UNO as i128)) as Mil))
+            .filter(|&(_, n)| n > 0)
+            .collect()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Reglas {
+    pub militar: militar::Reglas,
+    pub poder: ReglasPoder,
+    pub numericas: ReglasNumericas,
+    pub chatarra: Chatarra,
+    /// Fracción del carro del derrotado que se pierde (`MOVIMIENTO.fraccionRobada`, ppm).
+    pub fraccion_robada: i64,
+    pub ocupacion: ReglasOcupacion,
+    pub batalla: ReglasBatalla,
+    pub bandidos: ReglasBandidos,
+    pub monedas: ReglasMonedas,
+    pub pueblos: ReglasPueblos,
+    pub avanzada: ReglasAvanzada,
+}
+
+fn nivel_de_bandidos(b: &Value, nivel: &str) -> NivelBandidos {
+    let n = &b["niveles"][nivel];
+    NivelBandidos {
+        poder: mil(num(n, "poder")),
+        unidades: entero(n, "unidades"),
+        botin_por_heroe: mil(num(n, "botinPorHeroe")),
+        monedas_por_heroe: entero(n, "monedasPorHeroe"),
+        peso: ppm(num(n, "peso")),
+    }
+}
+
+impl Reglas {
+    pub fn cargar() -> Self {
+        let militar = militar::Reglas::cargar();
+        let (mi, nu, av) = (bloque(COMBATE, "MILITAR"), bloque(COMBATE, "COMBATE_NUMERICO"), bloque(COMBATE, "AVANZADA"));
+        let (ch, mv, oc) = (bloque(COMBATE, "CHATARRA"), bloque(militar::datos::MOVIMIENTO, "MOVIMIENTO"), bloque(MURALLAS, "OCUPACION"));
+        let (ba, bd) = (bloque(BATALLA_UNITY, "BATALLA"), bloque_de(MUNDO, "CAMPAMENTOS_BANDIDOS").unwrap_or_else(|e| panic!("{e}")));
+        let economia = asentamiento::Reglas::cargar();
+        let pueblos = asentamiento::pueblos::ReglasPueblos::de(&asentamiento::datos::bloque("PUEBLOS_EXTRACTORES"), &asentamiento::datos::bloque("ESPECIES"));
+        let minutos = |v: &Value, k: &str| entero(v, k) * MS_POR_MINUTO;
+        let carreteros = (Tropa::desde_nombre(ba["tropaCarreteros"]["tropaId"].as_str().expect("tropaCarreteros.tropaId")).expect("tropa de carreteros"), entero(&ba, "tropaCarreteros.unidades"));
+        Reglas {
+            poder: ReglasPoder {
+                varianza: ppm(num(&mi, "varianzaCombate")),
+                ventaja_defensor: ppm(num(&mi, "ventajaDefensor")),
+                cohesion: ppm(num(&mi, "bonusCohesionPorEscuadronExtra")),
+                poder_por_heroe: mil(num(&mi, "poderPorHeroe")),
+                defensa_base_caravana: mil(num(&mi, "defensaBaseCaravana")),
+                xp_victoria: mil(num(&mi, "experienciaGanadaPorVictoria")),
+                xp_derrota: mil(num(&mi, "experienciaGanadaPorDerrota")),
+            },
+            numericas: ReglasNumericas {
+                bajas_ganador_base: ppm(num(&nu, "bajasGanadorBase")),
+                bajas_ganador_por_ratio: ppm(num(&nu, "bajasGanadorPorRatio")),
+                bajas_perdedor_base: ppm(num(&nu, "bajasPerdedorBase")),
+                bajas_perdedor_por_ratio: ppm(num(&nu, "bajasPerdedorPorRatio")),
+                bajas_fijas_ganador: ppm(num(&nu, "bajasFijasGanador")),
+                bajas_fijas_perdedor: ppm(num(&nu, "bajasFijasPerdedor")),
+                ventaja_aguante: ppm(num(&nu, "ventajaAguante")),
+                carga_perdida_aguante: ppm(num(&nu, "fraccionCargaPerdidaAguante")),
+                carros_perdidos: ppm(num(&nu, "fraccionCarrosPerdidos")),
+                protegida_pueblo: ppm(num(&nu, "fraccionProtegidaPueblo")),
+            },
+            chatarra: Chatarra::de(&militar, ppm(num(&ch, "fraccion")), &economia.catalogo),
+            fraccion_robada: ppm(num(&mv, "fraccionRobada")),
+            ocupacion: ReglasOcupacion {
+                proteccion: minutos(&oc, "proteccionMinutos"),
+                duracion: minutos(&oc, "duracionMinutos"),
+                saqueo_poblacion: ppm(num(&oc, "fraccionSaqueoPoblacion")),
+                edificios_danados: ppm(num(&oc, "fraccionEdificiosDanados")),
+                dano_muralla: ppm(num(&oc, "fraccionDanoMuralla")),
+                factor_recaudacion: ppm(num(&oc, "factorRecaudacion")),
+                factor_crecimiento: ppm(num(&oc, "factorCrecimiento")),
+            },
+            batalla: ReglasBatalla {
+                capacidad_asedio: entero(&ba, "capacidad.asedio") as usize,
+                capacidad_resto: entero(&ba, "capacidad.resto") as usize,
+                duracion_asedio: minutos(&ba, "duracionMinutos.asedio"),
+                duracion_resto: minutos(&ba, "duracionMinutos.resto"),
+                convocatoria: entero(&ba, "convocatoriaSegundos") * 1000,
+                plazo_asignacion: minutos(&ba, "plazoAsignacionMinutos"),
+                plazo_inicio: minutos(&ba, "plazoInicioMinutos"),
+                margen: minutos(&ba, "margenMinutos"),
+                conservar_cerradas: minutos(&ba, "conservarCerradasMinutos"),
+                carreteros,
+            },
+            bandidos: ReglasBandidos {
+                niveles: [nivel_de_bandidos(&bd, "1"), nivel_de_bandidos(&bd, "2"), nivel_de_bandidos(&bd, "3")],
+                rendimientos: Rendimientos::de(&bd["rendimientos"]),
+                anillo_min: mil(num(&bd, "anillo.radioMin")),
+                anillo_max: mil(num(&bd, "anillo.radioMax")),
+                bandidos_por_residente: entero(&bd, "anillo.bandidosPorResidente"),
+                anillo_minimo: entero(&bd, "anillo.minimo"),
+                anillo_maximo: entero(&bd, "anillo.maximo"),
+                reaparicion_anillo: minutos(&bd, "anillo.reaparicionMinutos"),
+                radio_ataque_caravana: mil(num(&bd, "radioAtaqueCaravana")),
+                por_plaza: entero(&bd, "porPlaza"),
+                margen_zona_plaza: mil(num(&bd, "margenZonaPlaza")),
+                respawn: minutos(&bd, "respawnMinutos"),
+            },
+            monedas: {
+                let m = bloque(COMBATE, "MONEDAS");
+                ReglasMonedas { ganador: entero(&m, "ganador"), perdedor: entero(&m, "perdedor"), rendimientos: Rendimientos::de(&m["rendimientos"]) }
+            },
+            pueblos: ReglasPueblos { mineros: pueblos.mineros as i64, cada_minero: pueblos.minutos_por_minero * MS_POR_MINUTO, granjeros: pueblos.aldea.granjeros as i64 },
+            avanzada: ReglasAvanzada {
+                invulnerabilidad: minutos(&av, "invulnerabilidadMinutos"),
+                cupo_guarnicion: ["atalaya", "fuerte", "ciudadela"].map(|e| entero(&av, &format!("cupoGuarnicion.{e}"))),
+                guarnicion_de_serie: ["atalaya", "fuerte", "ciudadela"].map(|e| {
+                    let por_escalon = av["guarnicionDeSerie"][e].as_object().unwrap_or_else(|| panic!("guarnicionDeSerie.{e}"));
+                    por_escalon.iter().map(|(k, n)| (k.parse().expect("escalón"), n.as_u64().expect("escuadras") as usize)).collect()
+                }),
+                tropa_por_defecto: Tropa::desde_nombre(av["tropaPorDefecto"].as_str().expect("tropaPorDefecto")).expect("tropa por defecto de la guarnición de serie"),
+                reposicion: minutos(&av, "reposicionMinutos"),
+            },
+            militar,
+        }
+    }
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+
+    fn r() -> Reglas {
+        Reglas::cargar()
+    }
+
+    #[test]
+    fn las_cifras_vigentes_son_las_de_los_bloques_sin_correcciones() {
+        let r = r();
+        assert_eq!((r.poder.varianza, r.poder.ventaja_defensor, r.poder.cohesion), (150_000, 1_050_000, 100_000));
+        assert_eq!((r.poder.poder_por_heroe, r.poder.defensa_base_caravana, r.poder.xp_victoria, r.poder.xp_derrota), (15_000, 26_000, 1_000, 500));
+        let n = &r.numericas;
+        assert_eq!((n.bajas_ganador_base, n.bajas_ganador_por_ratio, n.bajas_perdedor_base, n.bajas_perdedor_por_ratio), (50_000, 150_000, 300_000, 400_000));
+        assert_eq!((n.bajas_fijas_ganador, n.bajas_fijas_perdedor), (50_000, 250_000));
+        assert_eq!((n.ventaja_aguante, n.carga_perdida_aguante, n.carros_perdidos, n.protegida_pueblo), (1_250_000, 700_000, 500_000, 500_000));
+        assert_eq!(r.fraccion_robada, 500_000);
+        assert_eq!(r.avanzada.invulnerabilidad, 1440 * MS_POR_MINUTO);
+    }
+
+    #[test]
+    fn las_avanzadas_traen_la_guarnicion_de_serie_y_el_cupo_del_canon() {
+        let a = r().avanzada;
+        assert_eq!(a.cupo_guarnicion, [14, 45, 90]);
+        assert_eq!(a.guarnicion_de_serie, [vec![(2, 1)], vec![(2, 3), (3, 2)], vec![(3, 5), (4, 3)]]);
+        assert_eq!((a.tropa_por_defecto, a.reposicion), (Tropa::MiliciaLanceros, 360 * MS_POR_MINUTO));
+    }
+
+    #[test]
+    fn la_ocupacion_y_el_ciclo_de_la_batalla() {
+        let r = r();
+        assert_eq!((r.ocupacion.proteccion, r.ocupacion.duracion), (1440 * MS_POR_MINUTO, 90 * MS_POR_MINUTO));
+        assert_eq!((r.ocupacion.saqueo_poblacion, r.ocupacion.edificios_danados, r.ocupacion.dano_muralla), (250_000, 250_000, 300_000));
+        let b = &r.batalla;
+        assert_eq!((b.capacidad_asedio, b.capacidad_resto), (15, 5), "15 contra 15 en el asedio (2026-10-13)");
+        assert_eq!((b.duracion_asedio, b.duracion_resto), (30 * MS_POR_MINUTO, 15 * MS_POR_MINUTO));
+        assert_eq!((b.convocatoria, b.plazo_asignacion, b.plazo_inicio, b.margen), (30_000, 5 * MS_POR_MINUTO, 5 * MS_POR_MINUTO, 5 * MS_POR_MINUTO));
+        assert_eq!((b.conservar_cerradas, b.carreteros), (60 * MS_POR_MINUTO, (Tropa::MiliciaLanceros, 13)));
+    }
+
+    #[test]
+    fn los_bandidos_traen_la_calibracion_de_distancias() {
+        let b = r().bandidos;
+        assert_eq!((b.radio_ataque_caravana, b.anillo_min, b.anillo_max), (7_000, 12_000, 25_000), "el anillo, a 12-25 u desde el 2026-10-27");
+        assert_eq!(b.niveles.clone().map(|n| (n.poder, n.unidades, n.peso)), [(20_000, 10, 500_000), (60_000, 30, 300_000), (120_000, 60, 200_000)]);
+        let rend = Rendimientos { ventana: 24 * 60 * MS_POR_MINUTO, completas: 8, caida_por_cada: 150_000, solo_experiencia_desde: 14 };
+        assert_eq!(b.rendimientos, rend);
+        assert_eq!(b.niveles.clone().map(|n| (n.botin_por_heroe, n.monedas_por_heroe)), [(5_000, 50), (7_000, 75), (10_000, 100)], "tanda 69");
+        assert_eq!(r().monedas, ReglasMonedas { ganador: 500, perdedor: 150, rendimientos: rend }, "las monedas de combate decrecen como el botín (D8)");
+        assert_eq!((b.bandidos_por_residente, b.anillo_minimo, b.anillo_maximo, b.reaparicion_anillo), (4, 5, 10, 10 * MS_POR_MINUTO), "4 por residente, de 5 a 10 (2026-11-03)");
+        assert_eq!((b.por_plaza, b.respawn), (10, 120 * MS_POR_MINUTO), "10 por plaza, de golpe cada 2 h (2026-11-02)");
+        assert_eq!(b.niveles.iter().map(|n| n.peso).sum::<i64>(), UNO, "los pesos suman 1");
+    }
+
+    #[test]
+    fn los_mineros_del_pueblo_y_los_granjeros_de_la_aldea() {
+        assert_eq!(r().pueblos, ReglasPueblos { mineros: 30, cada_minero: 12 * MS_POR_MINUTO, granjeros: 30 });
+    }
+
+    #[test]
+    fn la_chatarra_sale_del_metal_del_equipo() {
+        let r = r();
+        // Sin equipo de metal (madera, cuero) no deja nada.
+        assert!(r.chatarra.de_muertos(Tropa::MiliciaLanceros, 100).is_empty());
+        // Los espadachines de bronce llevan arma de bronce y armadura de metal: dejan chatarra de bronce.
+        let c = r.chatarra.de_muertos(Tropa::EspadachinesBronce, 10);
+        assert!(c.iter().all(|&(rec, n)| n > 0 && matches!(rec, Recurso::ChatarraCobre | Recurso::ChatarraBronce | Recurso::ChatarraHierro)));
+        assert!(!c.is_empty());
+        assert!(r.chatarra.de_muertos(Tropa::EspadachinesBronce, 0).is_empty());
+        assert_eq!(r.chatarra.de_muertos(Tropa::EspadachinesBronce, 20).iter().map(|x| x.1).sum::<Mil>(), 2 * c.iter().map(|x| x.1).sum::<Mil>(), "lineal en los caídos");
+    }
+
+    #[test]
+    fn la_identidad_son_los_bloques_que_lee_el_crate() {
+        let t = texto_de_parametros();
+        for nombre in ["COMBATE_NUMERICO", "AVANZADA", "BATALLA", "OCUPACION", "CAMPAMENTOS_BANDIDOS", "MOVIMIENTO", "CHATARRA"] {
+            assert!(t.contains(&format!("<!-- parametros:{nombre} -->")), "falta {nombre}");
+        }
+        assert!(!t.contains("worldgen") && !t.contains("RECURSO_RAREZA"), "no arrastra el resto del documento del mundo");
+        assert_eq!(t.matches("<!-- parametros:").count(), t.matches("<!-- /parametros -->").count());
+    }
+}

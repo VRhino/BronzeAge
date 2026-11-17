@@ -1,0 +1,366 @@
+//! Pruebas del trazo de recintos (Docs/Mechanics/Murallas.md §3, §4, §12). El TypeScript usa otro hash y no hay paridad celda a
+//! celda: se portan sus invariantes (`muralla.test.ts`) y se prueban propiedades sobre 20 ciudades sembradas.
+
+mod comun;
+
+use comun::*;
+use std::collections::{HashSet, VecDeque};
+use trazado::*;
+
+const P: ParametrosMuralla = ParametrosMuralla { franja_de_ronda: 1, paso_torres: [0, 8, 5], puertas_maximas: 4, ancho_maximo_puerta: 2, desplazamiento_maximo_puerta: 3 };
+
+/// 20 ciudades: semilla, perfil y tamaño distintos (de 35 a 140 piezas), menos las que no se pueden amurallar. Desde Cal2-1 (puertas de 2 celdas como mucho) una
+/// se queda fuera: la 17 (130 piezas), cuyas piezas solo salen por un paso de 4 celdas pegado al muro, que al estrecharse las dejaría sin salida.
+fn ciudades() -> Vec<Sim> {
+    let v: Vec<Sim> = (0..20u64).map(|k| ciudad_de(100 + k, Perfil::TODOS[k as usize % 4], 35 + 5 * k as usize)).filter(|s| trazar_recinto(&s.c, &P, 1).is_ok()).collect();
+    assert_eq!(v.len(), 19, "las 20 ciudades menos la 17 se pueden amurallar");
+    v
+}
+
+fn trazar(c: &Ciudad, nivel: u8) -> Trazo {
+    trazar_recinto(c, &P, nivel).unwrap_or_else(|e| panic!("sin trazo: {e:?}"))
+}
+
+fn celdas_de(t: &Trazo) -> HashSet<Celda> {
+    t.celdas.iter().map(|c| c.celda).collect()
+}
+
+/// Inundación 4-conexa con conjuntos (independiente de la rejilla del módulo) desde un marco por encima de la ventana.
+fn alcanzables_desde_fuera(muro: &HashSet<Celda>) -> HashSet<Celda> {
+    let m = MITAD + 1;
+    let mut vistas = HashSet::new();
+    let mut cola = VecDeque::new();
+    for i in -m..=m {
+        for c in [Celda::new(i, -m), Celda::new(i, m), Celda::new(-m, i), Celda::new(m, i)] {
+            if vistas.insert(c) {
+                cola.push_back(c);
+            }
+        }
+    }
+    while let Some(Celda { col, row }) = cola.pop_front() {
+        for (dc, dr) in [(0, -1), (1, 0), (0, 1), (-1, 0)] {
+            let n = Celda::new(col + dc, row + dr);
+            if n.col.abs() <= m && n.row.abs() <= m && !muro.contains(&n) && vistas.insert(n) {
+                cola.push_back(n);
+            }
+        }
+    }
+    vistas
+}
+
+fn red_de(c: &Ciudad) -> HashSet<Celda> {
+    c.calles().into_iter().chain(c.caminos()).collect()
+}
+
+#[test]
+fn el_trazo_cierra_no_pisa_y_encierra_al_centro_en_20_ciudades() {
+    for (k, s) in ciudades().iter().enumerate() {
+        let t = trazar(&s.c, 2);
+        let muro = celdas_de(&t);
+        assert_eq!(muro.len(), t.celdas.len(), "ciudad {k}: celdas repetidas");
+        // cierra: desde fuera, sin cruzar el anillo, no se llega al Centro Urbano
+        let fuera = alcanzables_desde_fuera(&muro);
+        let centro = s.c.piezas().iter().find(|p| p.rol == Rol::Centro).unwrap();
+        assert!(centro.rect.celdas().all(|c| !fuera.contains(&c)), "ciudad {k}: el anillo no aísla el Centro Urbano");
+        // no pisa ningún edificio
+        for p in s.c.piezas() {
+            assert!(p.rect.celdas().all(|c| !muro.contains(&c)), "ciudad {k}: el anillo pisa la pieza {}", p.id);
+        }
+        // toda celda del anillo cabe en la ventana
+        assert!(muro.iter().all(|c| c.col.abs() <= MITAD && c.row.abs() <= MITAD));
+        // dentro / fuera / afueras: el Centro dentro, las granjas fuera, y la mayor parte de la ciudad dentro
+        assert!(t.dentro.contains(&centro.id), "ciudad {k}");
+        assert!(t.afueras_dentro.is_empty(), "ciudad {k}: granjas dentro {:?}", t.afueras_dentro);
+        assert!(t.dentro.len() > t.fuera.len(), "ciudad {k}: {} dentro y {} fuera", t.dentro.len(), t.fuera.len());
+        let urbanas = s.c.piezas().iter().filter(|p| p.categoria != Categoria::Afueras).count();
+        assert_eq!(t.dentro.len() + t.fuera.len(), urbanas, "ciudad {k}");
+        // el interior es lo que el anillo deja dentro: ni una celda de más, y el área coincide
+        let interior = interior_de(&s.c, &t.celdas).expect("hay centro");
+        assert_eq!(interior.area(), t.area_encerrada, "ciudad {k}");
+        assert!(t.dentro.iter().all(|&id| s.c.pieza(id).unwrap().rect.celdas().all(|c| interior.contiene(c))));
+    }
+}
+
+#[test]
+fn el_anillo_es_la_capa_exterior_del_interior_y_se_recorre_sin_perder_celdas() {
+    for (k, s) in ciudades().iter().enumerate() {
+        let t = trazar(&s.c, 3);
+        let interior = interior_de(&s.c, &t.celdas).unwrap();
+        // el anillo = celdas fuera del interior con una vecina 4 dentro (impermeable y de una celda de grosor)
+        let mut capa = HashSet::new();
+        for col in -MITAD..=MITAD {
+            for row in -MITAD..=MITAD {
+                let c = Celda::new(col, row);
+                if interior.contiene(c) {
+                    for (dc, dr) in [(0, -1), (1, 0), (0, 1), (-1, 0)] {
+                        let n = Celda::new(col + dc, row + dr);
+                        if !interior.contiene(n) {
+                            capa.insert(n);
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(capa, celdas_de(&t), "ciudad {k}");
+        // el recorrido avanza por vecindad 8: como mucho unos pocos saltos (puntos gruesos donde el paseo se atasca; en las 20 ciudades salen 0-6)
+        let n = t.celdas.len();
+        let saltos = (0..n)
+            .filter(|&i| {
+                let (a, b) = (t.celdas[i].celda, t.celdas[(i + 1) % n].celda);
+                (a.col - b.col).abs() > 1 || (a.row - b.row).abs() > 1
+            })
+            .count();
+        assert!(saltos <= 6, "ciudad {k}: {saltos} saltos en un anillo de {n} celdas");
+    }
+}
+
+#[test]
+fn las_puertas_son_una_por_cruce_y_conectan_con_la_red() {
+    for (k, s) in ciudades().iter().enumerate() {
+        let t = trazar(&s.c, 1);
+        assert!(t.puertas() >= 1, "ciudad {k}: sin puertas");
+        let red = red_de(&s.c);
+        // puerta ⇒ la celda ya era calle o camino de la ciudad
+        for c in t.celdas.iter().filter(|c| c.clase == ClaseCelda::Puerta) {
+            assert!(red.contains(&c.celda), "ciudad {k}: la puerta {:?} no está en la red", c.celda);
+        }
+        // y una puerta por cruce no parte la red (LAYOUT_VERSION 5), tampoco con el tope de cuatro (6): rehecha con el muro, sigue siendo una pieza y toda pieza tiene salida
+        let mut c = s.c.clone();
+        c.set_recintos(vec![Recinto::desde_celdas(&t.celdas, &t.red_de_puertas, t.tras_pieza, false)]);
+        assert!(conexa(&c), "ciudad {k}: el muro parte la red");
+        let sin_salida: Vec<u32> = c.piezas().iter().filter(|p| p.rol != Rol::Centro && !p.rect.adyacentes().into_iter().any(|x| c.es_calle(x) || c.es_camino(x))).map(|p| p.id).collect();
+        assert!(sin_salida.is_empty(), "ciudad {k}: piezas sin salida {sin_salida:?}");
+        // cada cruce con la red deja al menos una puerta: toda tirada de celdas de red del anillo tiene una puerta
+        let con_red = t.celdas.iter().filter(|c| red.contains(&c.celda)).count();
+        assert!(t.puertas() <= con_red, "ciudad {k}");
+    }
+}
+
+#[test]
+fn con_el_anillo_puesto_la_red_sigue_siendo_un_solo_componente() {
+    for (k, s) in ciudades().iter().enumerate().step_by(3) {
+        let t = trazar(&s.c, 2);
+        let mut c = s.c.clone();
+        c.set_recintos(vec![Recinto::desde_celdas(&t.celdas, &t.red_de_puertas, t.tras_pieza, false)]);
+        // el muro ocupa y las puertas no
+        for cm in &t.celdas {
+            assert_eq!(
+                c.esta_ocupada(cm.celda) && !c.es_calle(cm.celda) && !c.es_camino(cm.celda),
+                cm.clase != ClaseCelda::Puerta,
+                "ciudad {k} {cm:?}"
+            );
+        }
+        verificar(&c, s.radio());
+        // y el trazo sobre la ciudad con su propio recinto es el mismo: se calcula sobre la ciudad sin recintos
+        assert_eq!(trazar_recinto(&c, &P, 2), Ok(t));
+    }
+}
+
+#[test]
+fn las_torres_no_existen_en_la_empalizada_y_estan_separadas_en_los_otros_niveles() {
+    for (k, s) in ciudades().iter().enumerate() {
+        assert_eq!(trazar(&s.c, 1).torres(), 0, "ciudad {k}");
+        for (nivel, paso) in [(2u8, 8usize), (3, 5)] {
+            let t = trazar(&s.c, nivel);
+            let pos: Vec<usize> = (0..t.celdas.len()).filter(|&i| t.celdas[i].clase == ClaseCelda::Torre).collect();
+            assert!(!pos.is_empty(), "ciudad {k} nivel {nivel}: sin torres");
+            assert!(pos.windows(2).all(|w| w[1] - w[0] >= paso), "ciudad {k} nivel {nivel}: torres juntas {pos:?}");
+            // la puerta manda: ninguna torre es una puerta, y el nivel no cambia ni el anillo ni las puertas
+            assert_eq!(t.puertas(), trazar(&s.c, 1).puertas(), "ciudad {k}");
+        }
+    }
+}
+
+#[test]
+fn al_mejorar_las_torres_se_recalculan_sobre_el_mismo_anillo_sin_juntarse() {
+    for (k, s) in ciudades().iter().enumerate() {
+        let (n2, n3) = (trazar(&s.c, 2), trazar(&s.c, 3));
+        let interior = interior_de(&s.c, &n2.celdas).unwrap();
+        let mut mejorado = n2.celdas.clone();
+        marcar_torres(&mut mejorado, &interior, &P, 3);
+        assert_eq!(mejorado, n3.celdas, "ciudad {k}: mejorar = trazar directamente al nivel nuevo");
+        let pos: Vec<usize> = (0..mejorado.len()).filter(|&i| mejorado[i].clase == ClaseCelda::Torre).collect();
+        assert!(pos.windows(2).all(|w| w[1] - w[0] >= 5), "ciudad {k}: torres juntas tras mejorar {pos:?}");
+        // y bajar a la empalizada las quita todas
+        marcar_torres(&mut mejorado, &interior, &P, 1);
+        assert!(mejorado.iter().all(|c| c.clase != ClaseCelda::Torre));
+    }
+}
+
+#[test]
+fn el_trazo_es_determinista_y_no_depende_de_como_se_reconstruya_la_ciudad() {
+    for s in ciudades().iter().step_by(4) {
+        let t = trazar(&s.c, 2);
+        assert_eq!(trazar(&s.c, 2), t);
+        let c = Ciudad::desde_partes(s.c.semilla(), *s.c.params(), LAYOUT_VERSION, s.c.piezas().to_vec(), Vec::new()).unwrap();
+        assert_eq!(trazar(&c, 2), t);
+    }
+}
+
+#[test]
+fn sin_centro_urbano_no_hay_trazo() {
+    let c = Ciudad::vacia(1, Parametros::default());
+    assert_eq!(trazar_recinto(&c, &P, 1), Err(ErrorMuralla::SinCentroUrbano));
+}
+
+/// Una cadena de viviendas de 1×1 cada 10 celdas por la fila 0 hasta la columna `ultima`; cada una se conecta a la anterior por su corredor.
+fn ciudad_con_brazo(ultima: i32) -> Ciudad {
+    let mut s = Sim::nueva(3, Perfil::Nucleos, 5);
+    let mut columnas: Vec<i32> = (10..ultima).step_by(10).collect();
+    columnas.push(ultima);
+    for (id, col) in (100..).zip(columnas) {
+        let ped = s.pedido(T_VIVIENDA, id);
+        s.c.colocar(&ped, Colocacion { rect: Rect::new(col, 0, 1, 1), rotado: false }).unwrap();
+    }
+    s.c
+}
+
+#[test]
+fn si_el_anillo_no_cabe_en_la_ventana_se_rechaza_sin_recortar() {
+    // la región llega a la columna 94 y el anillo a la 96: justo cabe
+    let cabe = ciudad_con_brazo(94);
+    let t = trazar_recinto(&cabe, &P, 1).expect("cabe");
+    assert!(t.celdas.iter().any(|c| c.celda.col == MITAD));
+    // una celda más y el anillo se saldría de la ventana
+    assert_eq!(trazar_recinto(&ciudad_con_brazo(95), &P, 1), Err(ErrorMuralla::FueraDeVentana));
+}
+
+#[test]
+fn ampliar_exige_envolver_estrictamente_al_anillo_anterior() {
+    let (mut envuelven, mut sin_trazo) = (0, 0);
+    for k in 0..12u64 {
+        let perfil = Perfil::TODOS[k as usize % 4];
+        // la misma ciudad (construcción determinista) cuando era pequeña y cuando ha crecido hasta 5 veces
+        let (pequena, grande) = (ciudad_de(200 + k, perfil, 40), ciudad_de(200 + k, perfil, 40 + 15 * (k as usize + 1)));
+        // Una ciudad que no se puede amurallar (Cal2-1: una puerta ancha que, estrechada, dejaría piezas sin salida) no entra.
+        let (Ok(viejo), Ok(nuevo)) = (trazar_recinto(&pequena.c, &P, 1), trazar_recinto(&grande.c, &P, 1)) else {
+            sin_trazo += 1;
+            continue;
+        };
+        assert!(!contiene_a(&viejo.celdas, &viejo.celdas), "k{k}: calcar el anillo no es ampliar");
+        // el extramuros del anillo viejo sobre la ciudad grande son los edificios que han crecido fuera
+        let afuera = edificios_extramuros(&grande.c, &interior_de(&grande.c, &viejo.celdas).unwrap());
+        assert!(afuera > 0, "k{k}");
+        if contiene_a(&nuevo.celdas, &viejo.celdas) {
+            envuelven += 1;
+            assert!(nuevo.area_encerrada > viejo.area_encerrada, "k{k}: el área encerrada nunca decrece");
+            assert!(!contiene_a(&viejo.celdas, &nuevo.celdas), "k{k}: el viejo no envuelve al nuevo");
+            assert!(afuera >= 6, "k{k}: una ampliación que envuelve deja ≥ 6 edificios fuera del viejo (hay {afuera})");
+        }
+    }
+    assert!(envuelven >= 4, "pocas ampliaciones que envuelvan: {envuelven}");
+    assert!(sin_trazo <= 2, "{sin_trazo} parejas sin trazo");
+}
+
+#[test]
+fn el_extramuros_de_un_anillo_son_los_edificios_urbanos_que_deja_fuera() {
+    for (k, s) in ciudades().iter().enumerate() {
+        let t = trazar(&s.c, 2);
+        let interior = interior_de(&s.c, &t.celdas).unwrap();
+        assert_eq!(edificios_extramuros(&s.c, &interior), t.fuera.len(), "ciudad {k}");
+    }
+}
+
+#[test]
+fn el_trazo_es_rapido() {
+    let s = ciudad_de(130, Perfil::Nucleos, 150);
+    let t0 = std::time::Instant::now();
+    let t = trazar(&s.c, 3);
+    let dt = t0.elapsed();
+    eprintln!("anillo de {} celdas en {dt:?}", t.celdas.len());
+    let tope = if cfg!(debug_assertions) { 5.0 } else { 0.5 };
+    assert!(dt.as_secs_f64() < tope, "demasiado lento: {dt:?}");
+}
+
+/// La empalizada temprana (Murallas M1, decisión del autor del 2026-10-24, `LAYOUT_VERSION` 5): en esta ciudad de 45 piezas el camino de las granjas corre pegado al
+/// anillo y la puerta que dejaba «una por cruce» daba a una bolsa; con el muro, las cuatro granjas se quedaban sin camino y fuera no quedaba red. Ahora la puerta es la
+/// que cruza de verdad y la red que conserva a cada lado se siembra conectada: las granjas siguen con su camino, hay calle fuera y la ciudad crece por fuera.
+#[test]
+fn con_la_empalizada_temprana_la_granja_conserva_su_camino_y_la_ciudad_crece_por_fuera() {
+    let mut s = ciudad_de(501, Perfil::TODOS[1], 45);
+    let t = trazar(&s.c, 1);
+    assert!(!t.red_de_puertas.is_empty() && t.tras_pieza == s.c.piezas().iter().map(|p| p.id).max().unwrap());
+    s.c.set_recintos(vec![Recinto::desde_celdas(&t.celdas, &t.red_de_puertas, t.tras_pieza, true)]);
+    let interior = interior_de(&s.c, &t.celdas).unwrap();
+    let anillo = celdas_de(&t);
+    let con_frente = |c: &Ciudad, p: &Pieza| p.rect.adyacentes().into_iter().any(|x| c.es_calle(x) || c.es_camino(x));
+    let granjas: Vec<&Pieza> = s.c.piezas().iter().filter(|p| p.categoria == Categoria::Afueras).collect();
+    assert!(granjas.len() >= 4 && granjas.iter().all(|p| con_frente(&s.c, p)), "las granjas conservan su camino");
+    let fuera = red_de(&s.c).into_iter().filter(|x| !interior.contiene(*x) && !anillo.contains(x)).count();
+    assert!(fuera > 0, "queda red fuera del anillo");
+    verificar(&s.c, s.radio());
+    // Lo que se coloca después da la misma red que reconstruir la ciudad entera (la red de las puertas entra tras la pieza `tras_pieza`).
+    let antes = s.c.piezas().len();
+    for i in 0..30 {
+        s.construir([T_VIVIENDA, T_ALMACEN, T_GRANJA][i % 3]);
+    }
+    let crece_fuera = s.c.piezas()[antes..].iter().filter(|p| p.categoria != Categoria::Afueras && !p.rect.celdas().all(|x| interior.contiene(x))).count();
+    assert!(crece_fuera > 0, "la ciudad crece por fuera del muro");
+    verificar(&s.c, s.radio());
+    let rehecha = Ciudad::desde_partes(s.c.semilla(), *s.c.params(), LAYOUT_VERSION, s.c.piezas().to_vec(), s.c.recintos().to_vec()).unwrap();
+    assert_eq!(red_de(&rehecha), red_de(&s.c), "colocar y reconstruir dan la misma red");
+}
+
+/// Cal-6 y Cal2-1 (decisiones del autor del 2026-10-24, `LAYOUT_VERSION` 6): en 200 ciudades (semillas, perfiles y tamaños de 35 a 140 piezas) ningún anillo pasa de
+/// `puertas_maximas` (4) puertas, ninguna puerta de `ancho_maximo_puerta` (2) celdas y, con el muro puesto, la red sigue siendo una pieza y toda pieza, Granjas incluidas, tiene salida. Imprime el reparto de
+/// puertas por anillo (`cargo test -p trazado --test muralla -- --nocapture`).
+#[test]
+fn ningun_anillo_pasa_de_cuatro_puertas_y_la_red_sigue_conectada_en_200_ciudades() {
+    // Una ciudad cuyo anillo no se puede cerrar no tiene recinto (Murallas §3) y no cuenta.
+    let con_trazo: Vec<(Sim, Trazo)> = (0..200u64).map(|k| ciudad_de(1000 + k, Perfil::TODOS[k as usize % 4], 35 + 5 * (k as usize % 22))).filter_map(|s| trazar_recinto(&s.c, &P, 1).ok().map(|t| (s, t))).collect();
+    let mut reparto = [0usize; 6];
+    con_trazo.iter().for_each(|(_, t)| reparto[t.puertas().min(5)] += 1);
+    eprintln!("puertas por anillo en {} de 200 ciudades: 0 → {}, 1 → {}, 2 → {}, 3 → {}, 4 → {}, más de 4 → {}", con_trazo.len(), reparto[0], reparto[1], reparto[2], reparto[3], reparto[4], reparto[5]);
+    assert!(con_trazo.len() >= 190, "solo {} de 200 ciudades se pueden amurallar", con_trazo.len());
+    let mut fallos = Vec::new();
+    for (k, (s, t)) in con_trazo.iter().enumerate() {
+        assert!((1..=P.puertas_maximas).contains(&t.puertas()), "ciudad {k}: {} puertas", t.puertas());
+        let anchas: Vec<usize> = aberturas(&t.celdas).iter().map(Vec::len).filter(|&n| n > P.ancho_maximo_puerta).collect();
+        assert!(anchas.is_empty(), "ciudad {k}: puertas de {anchas:?} celdas");
+        let mut c = s.c.clone();
+        c.set_recintos(vec![Recinto::desde_celdas(&t.celdas, &t.red_de_puertas, t.tras_pieza, true)]);
+        let sin_salida: Vec<u32> = c.piezas().iter().filter(|p| p.rol != Rol::Centro && !p.rect.adyacentes().into_iter().any(|x| c.es_calle(x) || c.es_camino(x))).map(|p| p.id).collect();
+        if !conexa(&c) || !sin_salida.is_empty() {
+            fallos.push((k, s.c.semilla(), t.puertas(), conexa(&c), sin_salida));
+        } else {
+            verificar(&c, s.radio());
+        }
+    }
+    assert!(fallos.is_empty(), "ciudades con la red partida o piezas sin salida (ciudad, semilla, puertas, red conexa, piezas sin salida): {fallos:?}");
+}
+
+/// ¿Tiene la abertura 2 celdas de muro (ni puerta ni torre) en línea recta a cada lado, en su fila o en su columna?
+fn tiene_dos_y_dos_rectas(t: &Trazo, abertura: &[usize]) -> bool {
+    let muro: HashSet<Celda> = t.celdas.iter().filter(|c| c.clase != ClaseCelda::Puerta).map(|c| c.celda).collect();
+    let celdas: Vec<Celda> = abertura.iter().map(|&k| t.celdas[k].celda).collect();
+    let (menor, mayor) = (*celdas.iter().min().unwrap(), *celdas.iter().max().unwrap());
+    let (en_fila, en_columna) = (celdas.iter().all(|c| c.row == menor.row), celdas.iter().all(|c| c.col == menor.col));
+    let lado = |desde: Celda, paso: (i32, i32)| (1..=2).all(|k| muro.contains(&Celda::new(desde.col + paso.0 * k, desde.row + paso.1 * k)));
+    (en_fila && lado(menor, (-1, 0)) && lado(mayor, (1, 0))) || (en_columna && lado(menor, (0, -1)) && lado(mayor, (0, 1)))
+}
+
+/// `LAYOUT_VERSION` 7 (Tanda Economía §14, autor 2026-11-08): toda puerta del trazo tiene 2 celdas de muro rectas a cada lado (`xxpxx`; una de 2 celdas, un tramo de 6),
+/// y el anillo sigue cerrado y sin pisar piezas. Las que no se pueden enderezar ni corriéndolas por su camino (y cortando las calles vecinas que el muro pise) sin tirar
+/// un edificio, partir la red o romper el tramo recto de otra puerta se quedan como estaban (`enderezar_puertas`): son una minoría (en 200 ciudades, 60 de 559; sin el
+/// enderezado, 560).
+/// Imprime cuántas (`-- --nocapture`).
+#[test]
+fn casi_toda_puerta_tiene_dos_celdas_rectas_de_muro_a_cada_lado_en_200_ciudades() {
+    let con_trazo: Vec<(Sim, Trazo)> = (0..200u64).map(|k| ciudad_de(1000 + k, Perfil::TODOS[k as usize % 4], 35 + 5 * (k as usize % 22))).filter_map(|s| trazar_recinto(&s.c, &P, 2).ok().map(|t| (s, t))).collect();
+    let (mut puertas, mut quebradas) = (0, Vec::new());
+    for (k, (s, t)) in con_trazo.iter().enumerate() {
+        let muro = celdas_de(t);
+        let fuera = alcanzables_desde_fuera(&muro);
+        let centro = s.c.piezas().iter().find(|p| p.rol == Rol::Centro).unwrap();
+        assert!(centro.rect.celdas().all(|c| !fuera.contains(&c)), "ciudad {k}: el anillo no aísla el Centro Urbano");
+        assert!(s.c.piezas().iter().all(|p| p.rect.celdas().all(|c| !muro.contains(&c))), "ciudad {k}: el anillo pisa una pieza");
+        for ab in aberturas(&t.celdas) {
+            puertas += 1;
+            if !tiene_dos_y_dos_rectas(t, &ab) {
+                quebradas.push((k, t.celdas[ab[0]].celda));
+            }
+        }
+    }
+    eprintln!("puertas sin 2+2 celdas rectas: {} de {puertas} en {} ciudades", quebradas.len(), con_trazo.len());
+    assert!(quebradas.len() * 8 <= puertas, "demasiadas puertas sin enderezar: {} de {puertas}", quebradas.len());
+}

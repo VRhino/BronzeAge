@@ -1,455 +1,263 @@
 # Mecánicas por desarrollar
 
 La **lista única de lo pendiente**. El estado completo de todas las mecánicas del juego —hechas, descartadas y
-estas— vive en `Consideraciones/Checklist_Mecanicas.md`, que para lo pendiente solo resume y apunta aquí.
-Re-contrastado contra `src/` el 2026-09-09.
+estas— vive en `typescript-final:Consideraciones/Checklist_Mecanicas.md`, que para lo pendiente solo resume y apunta aquí.
+Lo que solo necesita calibración con números (batch, mediciones) vive en `Docs/Mecanicas a balancear.md`. Las ideas
+aparcadas sin plan van a `Docs/Ideas a diseñar.md`.
 
 Cuando una entrada se cierra (diseño **y** implementación), se **borra entera** de este archivo: lo útil que
 no esté ya en el canon (`Docs/Game/`) o en una ficha de `Consideraciones/` se mueve allí primero. Mientras una
 mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí como notas.
 
+> **Revisado al cerrar la fase 6 (2026-10-26).** Se borró lo cerrado por los sistemas 1-6 y por las decisiones del autor
+> (`Consideraciones/Calibracion_Sistema4_Decisiones.md`, `Consideraciones/Dudas_Del_Codigo_Decisiones.md` y
+> `Consideraciones/Politica_Tecnologia_Decisiones.md`); quedan los recortes de paridad abiertos, las dudas sin decidir (cerradas el 2026-10-27) y,
+> reunido en un solo sitio, todo lo que se dejó **para la fase 7**. La prueba `crates/nucleo/tests/catalogo.rs` exige que
+> los códigos de evento del catálogo que el núcleo aún no emite tengan aquí su fila (hoy, los dos de los yacimientos).
+
 ## Índice
 
 | # | Área | Mecánica | Código hoy |
 |---|---|---|---|
-| 3 | CARAVANAS | Rutas de caravana avanzadas | ◐ solo el pathfinder base |
-| 5 | TRUEQUE | Trueque compuesto de varios materiales | ✘ nada |
-| 8 | CARAVANAS | Revamp de caravanas — solo los trozos diferidos (§8.1) | ◐ núcleo hecho; §8.1 no |
-| 9 | ASENTAMIENTO | Eventos de asentamiento | ✘ nada |
-| 10 | WORLDGEN | Landmarks reconocibles | ✘ nada |
-| 11 | JUGADOR | Progresión de Liderazgo del jugador | ✘ nada |
-| 13 | POLÍTICA | La capital como decisión del jugador | ✘ proxy placeholder |
-| 16 | JUGADOR | Qué hace un huésped: vida dentro de una Facción NPC | ✘ nada |
-| 18 | INTEL | Taberna + intel como asset con revelado temporal | ✘ nada |
-| 19 | POLÍTICA | El mapa político como entidad | ✘ nada |
-| 20 | TECNOLOGÍA | Tecnología: árbol de desarrollo propio, 3 vías, Aedas | ✘ nada |
-| 21 | POLÍTICA | Los 4 gremios escasos a nivel de servidor | ✘ nada |
-| 22 | POLÍTICA | Exilio como política de soberanía | ✘ nada |
-| 23 | RECURSOS | Materiales exóticos | ✘ nada |
-| 24 | SERVIDOR | Ciclo de servidor de 12 meses + Maravilla + legado NPC | ◐ solo el edificio |
-| 25 | POLÍTICA | Coste/beneficio mecánico de las ordenanzas de trazado | ◐ existen, sin coste propio |
-| 26 | CIUDADANÍA | Los beneficios de ciudadanía sin implementar | ◐ 2 de 5 |
-| 27 | AMBIENTACIÓN | Identidad visual y de audio | ✘ nada |
-| 28 | MILITAR | Declaración formal de guerra | ✘ nada |
-| 29 | ONBOARDING | Curva de progresión inicial gradual | ✘ nada |
-| 30 | MILITAR | Batallas con héroes: guarnición, campamento y héroes bot | ◐ canon de campamento, guarnición y conquista; ciclo de `Batalla` fases 1 y 2 (falta el canal de tiempo real) |
-| 31 | HÉROE | Modelo de Héroe: uno por jugador y mundo, dueño de los escuadrones | ◐ fases 1-3 y Herido en la rama `heroe-dominio`; faltan perks y equipo |
-| 32 | POLÍTICA | Cabos sueltos de diseño político | ✘ sin decidir |
-| 33 | COMERCIO | Cabos sueltos de diseño comercial | ✘ sin decidir |
-| 34 | SUMINISTRO | La economía no llena el carro de un ejército | ✘ sin decidir |
-| 35 | VARIOS | Cabos sueltos de mundo, población y militar | ✘ sin decidir |
-| 36 | HÉROE | Comportamiento de los héroes bot en el mundo | ✘ nada |
+| 20 | TECNOLOGÍA | Lo que falta de la tecnología tras las Eras I-V: la Maravilla y las tecnologías de asedio de las Eras IV y V | las cinco Eras en canon y en Rust desde el 2026-11-12 |
+| 39 | POLÍTICA | Elección del Rey de Facción por voto entre representantes (decidido el 2026-10-17: queda aquí, no implementada) | el Rey se asigna, sin votación |
+| 61 | MISIONES | H13 «Forjar al héroe» no tenía camino: el héroe no ganaba puntos de atributo porque el servidor no subía su nivel (visto al probar las misiones una a una, 2026-10-28). **Parada** hasta que hubiera Unity para los perks (decisión del autor del 2026-10-28). Desde el 2026-11-12 el héroe sube de nivel y gana un punto por nivel: falta que el autor la dé por cerrada y que la prueba una a una la cumpla | la misión existe y se prueba que repartir sin puntos no cuenta |
+| 62 | MERCENARIOS | El campamento visto desde la puerta (2026-10-28): el héroe con la columna parada a la puerta (≤ `radioPuerta`) recibe el ámbito `CAMPAMENTO` como si estuviera dentro (stock y precios del mercado, reclutas, tropas que ofrece) y se le quita al alejarse; la sesión recalcula ese derecho cuando la columna para o arranca. Pendiente de decidir si desde fuera se recorta la lista de residentes y presentes. El cliente de jugador enseña mercado y reclutar con ese ámbito, dentro o fuera. Aparcada por el autor el 2026-10-28 | las órdenes ya se aceptan a la puerta (`comprarEnCampamento`, `reclutarEnCampamento`, repostar), pero `CAMPAMENTO` solo se abre dentro: desde fuera el jugador no ve qué hay |
+| 63 | MUNDO / REGLAS | El mundo en 3D, lo que queda (2026-10-31): generador v2 (bosque, llanos, montañas, altiplanos, metales), revisión a fondo de las reglas del terreno para la vista 3D, el encuadre de la caravana grande y los cabos sueltos del cliente 3D. Sección «63» | cliente 3D en `main` (BronzeAgeClient 0.65.0); generador y reglas sin tocar |
+| 65 | INTEL / BOTS | Informes de taberna por niveles (diseño del 2026-10-31; `Docs/Disenos_Por_Implementar/Informes_De_Taberna.md`): el Informe de plaza se separa en Población, Guarnición, Tecnologías, Trazado y Rutas según la taberna del comprador, y Cuentas, Agravios, Corte y Planes, solo contra Facciones de bots, los vende el motor y los responde el servicio de bots | un solo `comprar_informe_plaza` |
+| 68 | MERCENARIOS | Huecos de los mercenarios por contrato tras implementarlos (2026-11-01): visión del objetivo enemigo, recursos del anillo para el temporal, sucesión en `militar`, auditoría, bienvenida, orden `atacar` inicial. Sección «68» | entrada 48 en `main` (7aa44b9), `Docs/Mechanics/Mercenarios_Por_Contrato.md` |
+| 69 | POLÍTICA / MAPA | Marcas de Facción en el mapa (pedidas por el autor el 2026-10-29; acotadas en la sección «69»; rescatadas el 2026-11-11 de una rama que no llegó a `main`, donde eran la 63) | nada: el cliente de jugador no tiene dónde guardarlas |
+| 75 | MILITAR / HÉROE | Estandartes y aspecto de las escuadras (D20, 2026-11-12): un tipo de objeto `estandarte`, su sitio en la escuadra y una orden para elegirlo, cuando haya estandartes en el catálogo y arte. Sección «75» | `SquadSnapshot.estandarte` y `aspecto` viajan vacíos |
+| 76 | BOTS / ADMIN | Lo que piden la clase y los objetos del héroe a BotsBrain y al AdminClient (D21, 2026-11-12). Sección «76» | el motor rechaza un héroe sin clase |
+| — | PARIDAD | Recortes temporales del motor Rust frente al TypeScript (sección «Paridad con TypeScript») | el motor no está migrado hasta cerrarlos |
+| — | DUDAS | Ninguna sin decisión desde el 2026-10-27 (sección «Dudas abiertas»: las `// DUDA:` que quedan en el código) | — |
+| — | FASE 7 | Todo lo que se dejó para los bots reales y la fase 7 (sección «Para la fase 7») | — |
 
-**Pospuesto explícitamente, fuera de esta lista:** el **Attack Timer** (Doc 5.6, decidido y aplazado a
+**Descartado** (decisión del usuario): los **landmarks** (antes §10, 2026-10-05), la **curva de progresión inicial gradual** (antes §29, 2026-10-06), el **bloqueo de la explotación del bosque por los campamentos de bandidos** y el **catálogo ampliado de políticas** (los dos, antes en los cabos sueltos §32/§35, 2026-10-06), y también, de los cabos sueltos §33/§35 (2026-10-06): la **riqueza acumulada** por comisiones, el **bonus por distancia en el mostrador**, **cortar rutas como guerra económica**, la **cola de prioridad de reclutamiento** y las **armas de asedio** como mecánica aparte (y, el 2026-10-19, todo efecto del equipo de asedio en el combate con números).
+
+**Pospuesto explícitamente, fuera de esta lista:** el **ciclo de servidor de 12 meses + Maravilla + legado NPC** (antiguo §24, 2026-10-06; su texto está en `Docs/Ideas a diseñar.md`), el **Attack Timer** (Doc 5.6, decidido y aplazado a
 fase posterior a Fase 0) y el **comercio marítimo / unidades navales** (fuera del alcance de Fase 0 por
-diseño). Los ajustes de calibración de mecánicas ya construidas viven en cada ficha de `Consideraciones/` y en
-`Preguntas_Abiertas.md`, no aquí. Lo ya cerrado (diseño + implementación) se retira de este archivo por
-completo; su estado queda en el checklist.
+diseño).
+
+## 20. Tecnología por Eras: lo que falta tras las Eras I-V
+
+**Estado: las cinco Eras en el canon (Doc 6) y en el núcleo Rust** (las I-III en el sistema 6, 2026-10-25/26; la IV y la V el 2026-11-12, con sus 12 tecnologías, sus 12 contadores, sus 6 condiciones de hito, sus épicas y sus 10 tropas: `Docs/Mechanics/Tecnologia_Aedas.md`). La subida 4 → 5 ya no espera a una tecnología: pide bienes (`Docs/Mechanics/Economia_Construccion.md` §11.2) y el techo provisional del nivel 4 desapareció. Falta:
+
+- **La Maravilla**: el canon la define a medias y no está ni documentada ni implementada (`Docs/Mechanics/README.md`, «Qué NO está aquí»).
+- **Las tecnologías de asedio de las Eras IV y V** (BA-006 EIV-3, EIV-4 y EV-4: Maestría de asedio, Maestros de obras militares y la catapulta de torsión) esperan a que el motor tenga equipo de asedio (decisión del autor del 2026-11-11): hoy la Carpintería solo fabrica el carro de guerra, ninguna de las tres haría nada y el logro de Maestros de obras («piezas de equipo de asedio fabricadas») no se podría cumplir.
+- **Otras vías** (conquista y comercio, Doc 6.1): descartadas el 2026-10-11 (van a `Docs/Ideas a diseñar.md`). El equipo de asedio (`carpinteria_militar`, `trabajos_asedio`) se adopta pero no tiene efecto en el combate con números (decidido el 2026-10-19); en Unity, si llega, lo decide la partida.
+- **Los umbrales de las Eras IV y V son provisionales** (autor, 2026-11-11): puestos al ritmo de las Eras II y III, se miden con bots en la fase 7, como los demás (Q3 de «Para la fase 7»). Las épicas de 6 y 7 capítulos y sus nombres los cerró el autor el 2026-11-12 (D10).
+- **Clientes**: en BronzeAgeClient, el panel de tecnología con las cinco Eras (`Docs/Coordinacion/Pendientes_Cliente_Jugador.md`); en Conquest, las definiciones de escuadra de las tropas nuevas y los modelos de los edificios nuevos (CQ-006; `Docs/Coordinacion/Trabajo_En_Conquest.md` §2 y §6).
+
+## 39. Elección del Rey por voto
+
+Decidido el 2026-10-17: la elección del Rey por voto entre representantes (antes ligada a la Liga por alianza) **no existe hoy** y queda como mecánica pendiente. Hoy el Rey de una Facción lo asigna el anterior (el primero es quien la crea; la sucesión sigue el orden de ingreso). La Liga no tiene Rey ni cargos (Doc 2.2, `Diplomacia_Facciones.md` §3.4 y §5.7).
+
+## Paridad con TypeScript: recortes temporales del motor Rust (2026-10-18)
+
+**Regla del autor:** los recortes de funcionalidad al implementar un sistema en Rust son **temporales**. El motor **no se considera migrado** hasta que tenga todas las funcionalidades de la versión TypeScript (`typescript-final`, ver su `Consideraciones/Checklist_Mecanicas.md`), adaptadas a los ritmos, eventos y demás del mundo reactivo. Cada vez que se recorta algo se anota aquí; al volver, se borra la fila. **Antes de retirar el TypeScript (fase 9) esta tabla debe estar vacía.** Los seis sistemas del canon están implementados desde el 2026-10-26 (fase 6); lo que sigue es lo que les falta.
+
+| Sistema | Recorte temporal hoy | Dónde vuelve |
+|---|---|---|
+| Territorio y fundación | `Fundar` no deshace la columna dentro de la plaza nueva (Fundacion §5.5-6; duda 9 de 5G-b, técnica: cambiaría cientos de pruebas que siguen usando la columna tras fundar). De la Caravana de Fundación queda que, adjunta a una columna con héroes y con servidores de batalla, entre en la batalla de acoso de Unity (hoy siempre se resuelve con números; P2 hizo la persecución, el acoso de bandidos y la velocidad de la columna) | Fundación (Doc 1.3, 1.8), Movimiento_Ejercitos §9, Combate §7.1 |
+| Población y construcción | El batch de población usa la ciudad real pero no construye Mercados (no se auto-construyen), así que no mide los puestos | Bots (fase 7) |
+| Población y construcción | Pueblos y obras de mapa: los materiales salen del carro común de la columna y de sus caravanas adjuntas (el héroe ciudadano que entrega da lo de toda la columna, no lo suyo: no hay carga por héroe); no hay panel (solo `candidatos_de_pueblo`); la obra pendiente no se puede atacar; un pueblo completado no agranda la zona de la madre | Héroes y columnas |
+| Población y construcción | Avanzadas, obras de mapa: sin panel (solo las consultas `avanzada`, `avanzadas_de`, `posicion_de_avanzada`); no hay orden para sacar cosas del almacén (solo repostar y el saqueo); costes, duraciones y cupo de guarnición son los placeholders del canon; sin planta de avanzada (su diámetro de `TAMANOS_MAPA`, 0,2 por ahora, solo evita que se pisen elementos; la ciudad de la madre se toma como una décima del radio de su zona, Calibración §4.2, y no hay una cifra de canon para ella) | Calibración con bots |
+| Población y construcción | Solvencia del ascenso con acarreo (C2): cuenta la media de lo ingresado en 24 h en cubos horarios (`BAN8`), por lo que un pueblo recién levantado no pesa del todo hasta tener un día de entregas y la ventana abarca 23-24 h; la división trunca y el divisor es siempre 1.440 min | Refinar con bots (fase 7) |
+| Comercio | Manufacturados (C4): el precio base se deriva de la receta más barata del catálogo y no se venden a los mercenarios (`BIENES_EN_VENTA` solo con `PRECIO_BASE`) | Fase 7 y bots que fabriquen y consuman |
+| Población y construcción | Murallas: falta medir la piedra (nivel 3) y la reparación tras una conquista (plan en `Docs/Arquitectura/Murallas_Contraste_y_Plan.md`); las cifras de la empalizada se mantienen (decisión M2) hasta medir con bots | Bots (fase 7) |
+| Población y construcción | Murallas, tercera tanda: las pruebas de `tests/urbanismo.rs` siguen usando muros inventados para bloquear sitio a propósito (la colocación con recintos reales se prueba en `tests/murallas_asedio.rs`) | `Murallas.md` |
+| Militar y combate (4A-1) | Héroe y escuadra, solo lo que las reglas interpretan: sin género ni avatar y sin habilidades de la escuadra (las saca Unity de su nivel, en los de `MILITAR.nivelesHabilidadEscuadra`; las formaciones, desde el 2026-11-11: Heroe_Y_Tropa §10.4). Desde el 2026-11-12 el héroe tiene clase, mochila, almacén de objetos y equipo, sube de nivel y cobra el botín de Unity del motor (los perks los abre el nivel en Conquest: el motor no los guarda) | Conquest (CQ-001 y CQ-004); el contrato proyecta el género y el avatar con valores por defecto |
+| Militar y combate (4C) | Encuentros: no hay estado «a la espera de combate» ni se recuerda que un par estaba cerca. Un par que ya estaba junto cuando cambia una condición (un herido que se cura, una alianza que se rompe) no deja encuentro nuevo hasta que se alejen y vuelvan. Radio fijo de 3 (`radioEncuentro`). Los de mercenarios siguen fuera de la rejilla | Refinar con bots |
+| Militar y combate (4B-1) | `crearHeroe` sin género ni avatar (la proyección los lleva por defecto, decisión 4 del autor; el nombre sí se guarda desde el 2026-10-27 y la clase, obligatoria, desde el 2026-11-12); los hechos de héroe llevan el héroe en `datos` | Conquest (CQ-001) |
+| Militar y combate (4B-1) | La reubicación por ruina y el desalojo por conquista solo alcanzan a residentes y presentes; los cargos que tenían en la plaza que dejan se vacían y nadie los reasigna solo; la residencia de héroes no tiene cupo de viviendas que el traslado pueda mirar | Política |
+| Militar y combate (4E) | Unirse a una batalla: la persecución entre columnas personales no se prueba contra un mundo real (solo el `Contexto`) | Pruebas |
+| Militar y combate (4E) | Candado de batalla: la administración no lo lleva (sus órdenes son andamiaje de escenarios); `Comando::implicados` mira los héroes, columnas, caravanas, plazas, pueblos y campamentos de bandidos que nombra cada orden, no el `actor` salvo por su héroe de cuenta (`heroe_de_cuenta`); no hay `sinCandadosVencidos` (el evento de prioridad 1 hace innecesario soltar a mano el candado de una vencida) | Revisar con la autorización por cargos (5E) |
+| Militar y combate (4E) | Batalla en curso y el resto del mundo: la columna apartada que pasa hambre sigue pasándola; el campamento de bandidos atacado sigue acosando a las caravanas que pasan a ≤ 7 u. mientras dura su batalla; la columna retoma su plan pero **no** la persecución que llevaba; una plaza asediada que cae en ruinas durante la batalla no la cancela (el resultado ya no conquista nada) | Refinar con bots |
+| Población y construcción | Obra de pueblo con precisión de un minuto (sin evento propio: la termina el paso de minuto de su plaza; los pueblos siguen por minuto por decisión del 2026-10-22); cobertura parcial de hambre y reemplazo de fuentes con regeneración resueltos por simplificación | Refinar con bots (fase 7) |
+| Población y construcción | Mejora que espera hueco (la Granja sin sitio): conserva su cuadrilla y se reintenta en cada paso de minuto, no en el instante en que se libera un hueco | Refinar si en las pruebas con bots pasa a menudo |
+| Batch | `batch territorio` simula plazas con economía propia: sus cifras de Leñera y tiempo ya no valen; se recorta a las invariantes de territorio | Informe de cada sistema |
+| Batch | `batch comercio` usa un «jugador» mínimo con andamiaje de administración (oro en el carro de las columnas, residencia y almacén personal del sondeo de cupo, Facciones de nivel 8): un héroe visitante sin tropa por plaza, sin guerra (ningún encuentro se resuelve), sin demanda de tropas ni obras que gasten los bienes escasos (el comercio se apaga a los 9 días), sin mostrador entre plazas más allá del sondeo de minerales, sin caravanas adjuntas ni aparcadas, solo pueblos de Cantera, y la conservación exacta solo cubre estaño y hierro. Las tecnologías llegan por la vía de juego desde 6H (el Rey pasa la corona al Gobernador de oficio de la capital) | Bots de la fase 7 |
+| Economía y comercio (3B-2) | Andamiaje provisional que queda: `DarRecursos` y `DarSuministro` (administración: montan escenarios sin salir de un lugar). Engancharse, aparcar y soltar caravanas son órdenes del Líder de la columna (desde el 2026-10-27), con la puerta de 2 u y la Facción comprobadas (la administración salta la puerta) | Héroes y columnas; Movimiento_Ejercitos §9-§11 |
+| Economía y comercio (3B-2) | Las órdenes de mercado de una plaza conquistada se quedan; el aviso de experiencia de Facción por trueque cumplido no lleva cifra (no está en ningún bloque); el umbral de reputación solo es el bajo (−40). (Los pasos de río se cerraron el 2026-10-27, D7: solo los vados del mapa, Comercio_Caravanas) | Facciones (Doc 2.2.1) |
+| Economía y comercio (3A) | Escolta cedida: la escolta destruida de una caravana pierde sus soldados; una escolta sin soldados cuenta como sin escolta. Falta decidir la escolta de la flota traspasada por una conquista (hoy vuelve a sus héroes; `// DUDA:` en `comercio/ruina.rs`) | Militar y combate |
+| Militar y combate (4B-2) | Un evento invalidado (`Desercion`, `Caduca*`, `Umbral`) permanece en la cola hasta que pasa su instante y entonces se descarta; no hay borrado activo | Medir con 500 bots (fase 7); si pesa, purga activa o cola con borrado |
+| Militar y combate (Entrar con todo) | Con servidores de batalla **toda batalla va a Unity, también bot contra bot**; sin servidores, todo con números. El lanzador (`bronzeage-lanzador`, 2026-11-11) ya las reclama y arranca un proceso por batalla (Batalla_Unity_Ciclo §8.8); falta Conquest como ese proceso, y que un bot cuya batalla no asigne nadie reintente (falla por plazo sin castigo) | Unity (CQ), bots (fase 7) |
+| Militar y combate (Entrar con todo) | La batalla de caravana contra bandidos (con algún héroe sano y servidores de batalla): falta del lado de Unity la IA que maneja a los bandidos (el prefijo de sus hechos, `batalla.`, lo decidió el autor el 2026-10-27, D11) | Unity (CQ) |
+| Batch militar (4G) | **Lo que `batch militar` no ejercita** (bots mínimos, `crates/batch/src/simmil.rs`): las batallas de Unity (corre sin servidores de batalla), la desconexión y la vuelta al mundo, el préstamo y el recluta de campamento, entrar en pueblos y avanzadas para defenderlos, la guarnición de jugadores de una avanzada, mejorar, reparar o cancelar avanzadas, mejorar recintos, el vasallaje, la intel de la taberna, `UnirseEnCampo` con `Preguntar`, `CederLiderazgo`, `SepararseDelEjercito` y las formaciones en campo. La ciudadanía, la residencia, las alianzas y el nivel de Facción son andamiaje de administración (P9) | Fase 7 (bots) |
+| Batch político (5I) | **Lo que `batch politica` no ejercita**: la Gran Fundición (P3), el tributo que no cabe en la capital, las batallas de Unity, la elección de Rey por voto y los gremios (no existen), el veto a un residente, retirar propuestas (`RetirarRelacion`, `RetirarAnexion`, `RetirarFusion`), `RenombrarAsentamiento`, `ResidirEnCampamento`, `DejarResidencia`, `LanzarCaravanaFundacion` y `DesarmarCaravanaFundacion`. **Andamiaje que queda:** el nivel de partida de las Facciones (`FijarNivelFaccion` a 3), la colonia de cada plaza (`crear_ejercito` + `DarCaravanaFundacion`) y colocar a cada héroe dentro de su plaza al nacer (`ColocarHeroe`). **Pruebas del núcleo** con el andamiaje de 5E (`tests/comun::mandaba`, `como_dueno`; `BRONZEAGE_SIN_ANDAMIAJE=1` lo apaga y mide): 179 de 539 pruebas en 20 binarios; la puerta de antes abierta a los neutrales (`comun::acceso`) en 7 binarios (42 usos) | Fase 7 (bots) |
+| Batch tecnológico (6H) | **Lo que `batch tecnologia` no ejercita**: las batallas de Unity, una épica cumplida (T1), el estaño y el bronce (T2), las Eras por todos sus logros y la III (42 días), la Gran Fundición y la Maravilla, comprar en una plaza ajena y el título «Mecenas de los Aedas» con épicas cumplidas. **Andamiaje que queda:** el del político, y el oro de los buscadores de alijos al nacer (`DarAlmacenPersonal`, declarado: el de los alijos no paga un recluta, T3) | Fase 7 (bots) |
+| Contrato (4H) | Lo que depende de Conquest o de mecánicas que no existen: del héroe, el género y el avatar (`crear_heroe` los ignora; el nombre se guarda desde el 2026-10-27 y la clase, el inventario y el equipo desde el 2026-11-12; el `Heroe` y el `HeroSnapshot` del ticket los llevan por defecto, decisión 4; CQ-001); `nombresDeCompaneros`/`nombresDeDirigentes`, el historial del héroe y `preciosReferencia`. Las órdenes sin héroe usan el de la cuenta: un jugador con varios héroes no existe aún | Conquest (CQ-001, CQ-004), columnas |
+| Contrato (4H) | **Recorte de la proyección que queda** (la paridad del 2026-10-27 cerró la escuadra en una avanzada, el almacén de la avanzada, los héroes de campo en el `HEROE` de su cuenta, la memoria de la niebla, las zonas y la red en `ADMIN` y la retirada del informe de inspección caducado): el almacén de un pueblo solo se refresca por minuto en `ASENTAMIENTO`; en `FACCION` llega con el último cambio discreto del pueblo (refrescarlo por minuto pediría recordar por sesión cada pueblo, como la plaza). Los pueblos van completos en cada delta del interior. No es un hueco frente al TypeScript, que no tenía almacén de pueblo | Proyecciones, cliente |
+| Aedas itinerantes (6D) | (1) el plan del viaje se fija al salir, con la red de caminos de ese instante: un camino que se abre a mitad del viaje no lo acelera (el TS avanzaba cada tick con las aristas del momento); (2) sin `pasosRio` en las posiciones de las plazas: el A* es el de las caravanas, con los vados del grafo. Decisión del autor (2026-10-25, duda 4 de 6D): dejarlo hasta medir con bots | Fase 7 |
+
+## Dudas abiertas
+
+**Ninguna sin decisión** (2026-10-27): el autor cerró las de 4H, T7, 5H, 6A, la crónica y la Granja inicial. Dos cambiaron (`movilizarEjercito` guarda el interior recordado; el héroe público lleva `faccion_id`) y el resto quedó como está, escrito como regla en `Proyecciones_Y_Autorizacion.md` y `Tecnologia_Aedas.md` («Decisiones del autor del 2026-10-27») y anotado en `Consideraciones/Dudas_Del_Codigo_Decisiones.md`.
+
+**`// DUDA:` que siguen en el código** (`git grep -n "DUDA" -- '*.rs'`, 23 marcas al 2026-10-27, tras cerrar las dudas abiertas y la paridad de la proyección). Ninguna espera decisión: marcan lo que depende de Conquest (valores por defecto del héroe, `proyeccion/batalla.rs`, `proyeccion/propios.rs`, `sesiones/ordenes.rs`), costes que se miden con bots (`nucleo/pertenencias.rs`, `distribuir` en `sesiones/ambitos.rs`) y detalles técnicos anotados: `combate/src/resolucion.rs` (el id 0 como héroe «sin dueño»), `comercio/src/red_caminos.rs` (dos puntos que redondean al mismo entero no son tramo), `comercio/src/ruina.rs` (escolta de la flota traspasada; caravana `EnBatalla`), `proyeccion.rs` (la obra de mapa antes de ser `Pueblo` o `Avanzada`), `proyeccion/ambito.rs` (id de la `VISTA`), `proyeccion/interior.rs` (el trazado en milésimas de unidad local), `proyeccion/propios.rs` (pueblos en `FACCION`; la obra de un pueblo en marcha; lo que `ADMIN` aún no lleva) y `sesiones/ambitos.rs` (lo que una entidad enseña de otra; el héroe de una cuenta con solo héroes de campo; los pueblos completos en cada delta).
+
+## Para la fase 7
+
+Todo lo que se ha ido dejando «para la fase 7» (bots en Rust y admin web, `Consideraciones/Reconstruccion_Definicion.md` §4) en las decisiones del autor y en la documentación, en un solo sitio. **La fase 7 no empieza sin una orden directa del autor.** Cada entrada lleva su origen.
+
+**Calibración con bots reales** (las reglas están hechas; faltan cifras medidas con jugadores que juegan de verdad):
+
+| Qué | Por qué espera a la fase 7 | Origen |
+|---|---|---|
+| Saqueo de pueblos extractores (el atacante gana siempre: 2.144 saqueos en 30 días) | Defenderlos es parte del juego; se vuelve a mirar con bots | M1, `Calibracion_Sistema4_Decisiones.md`; `Combate.md` §14 |
+| Equipo de las tropas de Barracón y Galería de tiro (ninguna escuadra en 30 días) | El bot de hoy no encarga armas a la Armería | M7, `Calibracion_Sistema4_Decisiones.md`; `militar.json` |
+| Reclutar gasta la población que pide el ascenso | Es la regla (decisión del jugador); los bots tienen que tenerlo en cuenta | M9; `Heroe_Y_Tropa.md` §14; `militar.json` |
+| Nivel 3 en el batch de población (ninguna plaza llega) | Pide Mercados, Barracón y Galería a mano y cupo de Facción | C1, `Calibracion_Sistema4_Decisiones.md`; `poblacion.json` |
+| Cifras de la empalizada (madera, piedra, puertas, minutos por celda, upkeep) | Se mantienen hasta medir con bots que compitan por la madera y con asedios; la empalizada temprana (M1) ya se arregló con `LAYOUT_VERSION` 5; falta medir la piedra (nivel 3) y la reparación tras una conquista | Murallas M2, `poblacion.json`; balancear «Murallas»; fila «Murallas» de Paridad |
+| Ganado (Corral en el 12-13 % de las plazas) | Se deja y se mide con comercio | P5 del batch de población, `poblacion.json` |
+| Reputación concentrada (una Facción a 99,7) | Esperar a bots que incumplan trueques | C1b, `comercio.json`; balancear §32 |
+| Salto de la reputación mediana con la economía entera (5,45 → 34,1) | Se investiga con C1b | EE-7, `Calibracion_Sistema4_Decisiones.md`; balancear §32 |
+| Reputación que no sube en el batch político (mediana 0) | Con EE-7 y C1b | P6, `politica.json`; `Politica_Tecnologia_Decisiones.md`; balancear §32 |
+| Comisión acuñada contra el oro lleno (0,44 % del valor) | Se deja (se pierde); medir con bots con sumideros de oro (taberna, tropas, obras) | C7, `comercio.json`; `Calibracion_Sistema4_Decisiones.md` |
+| Sumideros de bienes escasos (el comercio se apaga a los 9-13 días) | Bots con demanda de tropas y obras | C5 (2026-10-19), `Calibracion_Sistema4_Decisiones.md` |
+| Ventana del acarreo en la solvencia del ascenso (cuenta el 2,2 % del nominal) | Se medirá con un ascenso al nivel 3 | C2b, `comercio.json`; `Calibracion_Sistema4_Decisiones.md`; fila «Solvencia» de Paridad |
+| Peajes de `batch comercio` (22 % de la carga con el cupo nuevo de nivel 2; 28 % con la cantería desde 6H) | Se deja para la fase 7 | Calibración 5I (2026-10-25), `Politica_Tecnologia_Decisiones.md` |
+| Gran Fundición inalcanzable en 30 días | Batches de más semanas | P3, `politica.json`; balancear §35b |
+| Refundación en solitario lenta (más de un día para el fondo) | Es cosa de los bots | P8, `politica.json` |
+| Qué recurso sale cuando la carga no cabe | Abierta para la fase 7 | Cal-8, `Calibracion_Sistema4_Decisiones.md` |
+| Calibración de la reputación, cifras de mercenarios (`MERCENARIOS`) y caravanas del Mercado | Dejadas como están hasta medir con bots | `Docs/Arquitectura/Handoff_Fase6.md`; balancear §32, §40 |
+| Cobertura de metales por zonas (gradiente 5 / 25 / 70 % de estaño y oro) y Facciones sin plaza (26 %) | El batch nunca se aleja más de 120 u del campamento ni busca sitio más lejos | `Mecanicas a balancear.md` (territorio) |
+| **Tecnología, Q3:** las X de los logros (las del TS; las de las Eras II y III eran placeholder), la velocidad (20 u/min) y la estancia (360 min) de los Aedas itinerantes | Se portaron del TypeScript sin medir. El batch 6H dejó, con las X del TS (60 plazas, 42 días, semillas 42 / 7), la Era II **por plazo el día 35**; Era I: carros de guerra 3,1 / 4,7, arquería palacial 4,6 / 5,6, armamento palacial 5,5 / 5,5, metalurgia del cobre 15,6 / 22,2, cantería 18,7 / 20,2, cría caballar 24,6 / —, escudos ligeros 26,0 / —, aleación del bronce — (sin estaño); de las Eras II y III, casi ninguno | Q3, `Sistema6_Contraste_y_Plan.md` («Avance de 6H»); `tecnologia.json`; balancear §20 y §42 |
+| **T1** Ninguna épica se cumple (el hito llega antes que la épica) | La épica es la vía de quien no puede cumplir el hito; lo medirán los bots | T1, `tecnologia.json` (decisión del 2026-10-26) |
+| **T2** No se extrae estaño en este mundo con estos bots (sin aleación del bronce ni bronce) | Medir con bots que comercian el estaño o fundan cerca de él, con las X | T2, `tecnologia.json` (2026-10-26) |
+| **T3** Los alijos dan ≈ 4 u de oro y un recluta de campamento cuesta 300 u | Medir con la refundación y los héroes sin plaza de verdad | T3, `tecnologia.json` (2026-10-26) |
+| El viaje de los Aedas itinerantes con la red de caminos del momento y los pasos de río | Dejarlo hasta medir con bots | Duda 4 de 6D; fila «Aedas itinerantes (6D)» de Paridad |
+
+**Rendimiento con 500 bots:** la cola con eventos invalidados que no se borran (fila de Paridad «4B-2»), la vista que se reconcilia en cada reparto (≈ 15 ms por orden con 450 vistas: un techo de ≈ 65 órdenes/s; T6 de 4H) y el coste por orden de la forma pública de las Facciones (5H, duda 3). Medidas de referencia en `Docs/Arquitectura/Handoff_Fase6.md`.
+
+**Bots y lo que los batches no ejercitan:** las filas «Batch militar (4G)», «Batch político (5I)», «Batch tecnológico (6H)» y `batch comercio` de Paridad; los batches militar y de comercio siguen con el andamiaje de ciudadanía y residencia para seguir comparables (P9); el bot cuya batalla de Unity no asigna nadie tiene que reintentar (fila «Entrar con todo» de Paridad); los perfiles de bots que usan las órdenes del sistema 4 (`Docs/Arquitectura/Sistema4_Contraste_y_Plan.md`); comprometer el recinto como el TypeScript (`bots/cerebro/gobierno.ts`, `Murallas_Contraste_y_Plan.md`); la calibración de los cerebros de bot (ritmo, prudencias, margen y «sin plaza»; balancear §36); la lista de bots emergentes y sus reglas (`Docs/Arquitectura/12_NPC_Fuera_Del_Motor.md` §15-§16, con la rotación de guarnición del NPC y la política «Presión Fiscal», `Consideraciones/Fase1_Verificacion_B.md` Y5); el batch de territorio (D2 y D3, sin decidir).
+
+**Telemetría, auditoría e informe de carga del servidor (pendiente; anotado el 2026-10-26 por orden del autor, que pidió documentarlo y no acometerlo todavía).** El servicio Rust (`bronzeage-servidor`, `crates/servicio`) no expone nada de esto: solo `GET /salud`, y el núcleo cuenta en memoria `Metricas` (eventos, órdenes aceptadas, rechazadas, sin cambios y duplicadas, rutas calculadas) sin servirlas. El TypeScript (`typescript-final`) tenía tres piezas, que el admin web (7H) necesita para las pruebas de carga del panel:
+
+| Pieza del TS | Qué hacía | Lo que haría falta en Rust |
+|---|---|---|
+| `src/server/telemetria.ts` | Muestreo cada 10 s (apagado por defecto; `TELEMETRIA_INTERVALO_MS` o `PUT /admin/partidas/:gameId/playtest`): retraso del bucle, memoria, coste del tick y por canal de difusión (bytes, fotos, sockets lentos) en `<partida>.carga.jsonl`, con p50/p95/máx por ventana; no anotaba la partida ociosa | Muestras del actor del núcleo, del reparto de `sesiones` y del proceso, en un jsonl de la carpeta de datos; servidas como `GET /v1/telemetria` (y encenderla por petición) |
+| `src/server/auditoria.ts` | Quién pidió qué, desde qué sesión y con qué resultado, también los rechazos (la señal de moderación), en `<partida>.auditoria.jsonl` con poda por edad; `GET /admin/partidas/:gameId/auditoria` con filtros y el recuento por comando de `GET /admin/metricas` | Un registro por orden (cuenta, héroe, tipo de cliente, código de orden, resultado o código de rechazo, coste en µs) junto a la crónica; servido con filtros |
+| `src/server/informeDeCarga.ts` (+ `scripts/informe-carga.ts`) | Informe puro de una prueba de carga: agrega muestras y auditoría, compara bytes/min por cliente con el sondeo y dice qué mejora de rendimiento pide cada umbral (`UMBRALES`) | `GET /v1/telemetria/informe` (o el cálculo en el admin web a partir de las muestras) |
+
+Todo, solo para cuentas de administrador (`Authorization: sesion <token>` de una cuenta con la marca `admin`), y fuera del camino caliente del núcleo (bots y cargas de 500 jugadores, ver «Rendimiento con 500 bots» arriba). Las rutas y formatos son una propuesta, sin decidir: se cierran con el frente admin web cuando el autor dé la orden.
+
+## 63. El mundo en 3D: generador, reglas y lo que queda (2026-10-31)
+
+**Estado.** El modo mundo del cliente de jugador es 3D desde BronzeAgeClient 0.65.0 (`docs/Mundo_3D.md` del cliente). Las escalas y la
+cámara se decidieron con la mesa de escalas 3D (`Consideraciones/Escalas_Mundo_3D_Definicion.md`, §3, §5 y §7). El autor fijó el orden el
+2026-10-30: **primero la cámara y la visión (hecho), después el generador y las reglas de juego**. Esta sección reúne lo que quedó para
+entonces.
+
+**Hecho después (en el generador y las reglas, ver `Docs/Mechanics/Generacion_Del_Mundo.md`):** el 2026-10-31, la región alpina con
+altiplanos y pasos (§5.1), las reglas del terreno por pendiente (§5.2 y §5.4; 63.2), el bosque en manchas (§8) y los metales en la montaña
+lejana (§9); el 2026-11-01, las costas con acantilados, calas, farallones y estuarios (§5.1) y el estaño repartido en varias sierras (§9);
+el 2026-11-06, la piedra más separada por las zonas al doble (§9). Semilla 42: mundo `da9cc6de…`. Lo demás de 63.1 y 63.2 sigue abierto.
+
+### 63.1 Generador v2: el relieve, el bosque y los recursos
 
-## 3. Rutas de caravana avanzadas
-
-El pathfinder base ya está (`world/rutas.ts`, `engine/caminos.ts`): calcula por coste de terreno, el agua es
-infranqueable, y el camino generado da bonus de velocidad a las caravanas que lo siguen. Falta todo lo demás.
-
-El pathfinder de las rutas debe buscar evitar bosques (rodearlos) o ríos (no los puede atravesar).
-
-Cuando hay muchos caminos que pasan cerca en el mapa general debido a rutas de caravana se deberían juntar
-para formar caminos unificados; y si estos caminos, para ir de A a C, tienen a B justo en el camino o cruzan
-la zona de influencia de B, deben pasar por la ciudad B de camino a C y dejar una pequeña comisión. Cuando una
-caravana está cruzando una ciudad neutral o aliada no puede ser atacada.
-
-Cuando se forma un camino se evalúa la proximidad con otros caminos; cada otra caravana que use ese camino le
-agrega 1 punto. Mientras más puntos, más grande se ve en el mapa real y atrae con más fuerza a otras rutas
-para que se desvíen, aunque sea un poco, de su camino — creando caminos principales.
-
-*Relacionado:* que un río corte el paso necesita vados o puentes para no fragmentar el mapa
-(`Docs/Game/1` §1.6, `worldgen/costeMovimiento.ts`).
-
-## 5. Trueque compuesto de varios materiales
-
-`AcuerdoTrueque` es hoy un intercambio de **un** recurso por **un** recurso (`recursoA` / `recursoB`). Un
-acuerdo debería poder llevar varios materiales por lado.
-
-## 8. Revamp de caravanas — trozos diferidos
-
-El **núcleo está implementado** (2026-09-08, Pasos 1-5): la caravana `comercial` es un contenedor de carros
-con animal que deriva capacidad/velocidad, casco vacío + piezas, lanzamiento manual con estado `preparando`,
-y escolta sin héroe. Reglas en `Docs/Game/3` §3.13; decisiones, motor y plan en
-`Consideraciones/Revamp_Caravanas_Definicion.md`.
-
-### 8.1 Lo diferido — forma diseñada, implementación en un pase posterior
-
-El diseño de 2026-09-08 recortó seis piezas del enunciado original para no inflar el primer pase. Ninguna se
-descartó: se decidió su forma y se aparcó. Aquí queda cada una con lo que falta para abordarla.
-
-**a) Planificación horaria de caravanas.** El enunciado pide que una caravana no solo se lance ahora, sino
-que se deje *programada* para salir a cierta hora de mundo. Es un scheduler: una caravana `preparada` con
-carga/destino/escolta fijados y una hora de disparo. El motor ya tiene el gancho — la infra de *scheduled
-commands* está documentada como "aterriza con su primera mecánica de Fase 1" (roadmap D5, Doc 7). Este sería
-ese primer consumidor. Falta: el comando `programarCaravana(id, { …, dispararEn: Instante })`, el estado
-`programada` y su ejecución diferida en el reloj de mundo (`RunnerDePartida`).
-
-**b) Cría de animales de arrastre.** Hoy los animales solo se compran con oro. El enunciado quiere obtenerlos
-también por cría. El Corral (Doc 1.4/4.2.1) produce *livestock*, que es un recurso distinto — la cría de
-bueyes/caballos/camellos necesitaría su propio edificio o una receta que consuma livestock + trigo y tarde
-ticks. Falta: decidir si es un edificio nuevo o una función del Corral, el coste y el ritmo, y si cada tipo
-de animal exige condiciones (el camello, un bioma; el caballo, quizá un nivel de asentamiento).
-
-**c) Visibilidad por tamaño.** Las caravanas pequeñas no deberían aparecer en el mapa general salvo que haya
-un jugador cerca (regla de niebla actual); las grandes deberían **llamar la atención desde que se preparan**,
-al punto de ser visibles para asentamientos hasta cierta distancia, para que salgan a interceptarlas. Es el
-gancho de conflicto del enunciado. Falta: un umbral de tamaño (nº de carros y/o carga) que decida si la
-caravana entra en la proyección de niebla de otras Facciones y a qué radio, y que eso aplique **durante el
-estado `preparando`**, no solo en ruta. Engancha con Doc 5.12 (niebla de guerra).
-
-**d) Inmunidad del camello al desierto — POSPUESTO a fase posterior a Fase 0** (decisión del usuario,
-2026-09-09). El camello "no se muere en los desiertos"; buey y caballo sí. Pero no existe un bioma `desierto`
-de primera clase (el tipo es `agua|costa|estepa|llanuraFertil|colina|montana|cima`; la aridez del Nilo es
-`estepa` de fertilidad baja). Necesitaría o un `BiomaTipo` nuevo, o anclar el "desierto" a `estepa` bajo un
-umbral de fertilidad + una regla de *attrition* por tick sobre buey/caballo al cruzarlo. Es un cambio de
-worldgen que no aporta a Fase 0; se retoma cuando el mapa tenga terreno árido real. Mientras tanto el camello
-es una "opción media" a secas, aceptado.
-
-**e) Catálogo ampliado de carros.** El primer pase trae solo dos carros: el básico (Mercado) y uno
-"reforzado" (Carpintería) que solo da más capacidad. El enunciado habla de "varios tipos" fabricables en la
-Carpintería. Falta: los ejes que diferencian un carro de otro más allá de la capacidad — resistencia a la
-captura (un carro que sobrevive a una derrota), penalización de velocidad (un carro que no frena tanto al
-animal rápido), coste en recursos más caros. Se abre cuando la Carpintería tenga niveles internos que lo
-justifiquen.
-
-**f) Unificación con el carro de columna.** `Ejercito.suministro` (Doc 5.13) y los carros de una caravana son
-el mismo concepto físico: un vehículo con capacidad tirado para llevar carga por el mapa. Doc 5.13.3 ya dejó
-anotado que se unifican "cuando se diseñe el revamp". El revamp los deja **separados a propósito** en este
-pase —una caravana adjunta a un ejército sigue siendo su propia entidad— porque unificar el modelo físico es
-un refactor sin premio de juego inmediato. Falta: un tipo `Carro` compartido y que tanto `Ejercito` como
-`Caravana` lo compongan.
-
-## 9. Eventos de asentamiento
-
-Los asentamientos tienen eventos propios como, por ejemplo, ser sitiados por bandidos (y los jugadores tienen
-cierta cantidad de horas para formular la defensa y jugar la defensa). Pensar en otro tipo de eventos que
-mantengan entretenido el juego.
-
-*Base ya disponible:* los campamentos de bandidos existen y atacan caravanas cada tick
-(`engine/bandidos.ts`), pero nunca asedian un asentamiento.
-
-*Incluye:* **NPCs hostiles más allá de los bandidos** — hoy los bandidos son la única amenaza no-jugador del
-mundo. Fauna peligrosa, incursores estacionales, u otros agresores ambientales caben aquí.
-
-## 10. Landmarks
-
-Hay que añadir la creación de landmarks reconocibles en el mapa, de modo que el jugador que lo explora pueda
-reconocer por dónde va sin perderse del todo — algo que ayude a reconocer qué cosas están cerca de qué.
-
-## 11. Progresión de Liderazgo del jugador
-
-`Jugador` tiene hoy `liderazgoBase` y nada más. El propio código lo anota: *"el efectivo es base + progresión,
-pero la progresión todavía no está diseñada, así que hoy coinciden"* (`domain/types.ts`, `constants.ts` §1587).
-Un jugador sin registro usa `LIDERAZGO.base`.
-
-Falta decidir qué hace subir el liderazgo (combatir, ganar, tiempo al mando, cargo militar…) y con qué curva.
-Los **escuadrones** progresan por nivel y experiencia (Doc 5.16.3), sin cambiar nunca de tropa (Doc 5.8); el
-motor aún usa veteranía (§31). La mecánica de Liderazgo ya admite un efectivo > base sin tocar nada — solo falta la
-fuente.
-
-## 13. La capital como decisión del jugador
-
-La capital tiene que ser una **decisión consciente de los jugadores**, no algo heredado.
-
-Hoy no lo es. `encontrarCapital` (`engine/mantenimiento.ts`) devuelve **el asentamiento vivo más antiguo de la
-Facción** —literalmente `sort((a,b) => a.fundadoEn - b.fundadoEn)[0]`— y el propio código lo marca como
-*"placeholder = proxy de capital"*. De ahí salen tres problemas:
-
-1. **No se elige, se hereda.** El primer asentamiento es capital para siempre, aunque acabe siendo un
-   villorrio y la Facción tenga su verdadero centro de poder en otra parte. No hay forma de trasladarla.
-2. **El Palacio no pinta nada.** Existe el edificio `palacio` (Doc 4.2.1) y la capital lo ignora por completo.
-   Lo natural sería que la capital fuera *donde está el Palacio*, o que designarla lo exigiera.
-3. **Y sí tiene efecto mecánico real**, así que no es cosmético: el mantenimiento de cada asentamiento escala
-   con su distancia a la capital — `factorDistancia = 1 + min(1, dist/400) × (2-1)`, o sea ×1 en la capital y
-   hasta **×2 a distancia 400**, topado a partir de ahí. Es el mecanismo anti-snowball de "cohesión"
-   (Fase_0_5 §5.1).
-
-Dos cosas que hay que decidir con ello:
-
-- **Cómo se designa y qué cuesta trasladarla.** Si mover la capital es gratis, el jugador la reubica cada vez
-  que conquista algo y el factor de distancia deja de morder.
-- **El tope a 400 desactiva el anti-snowball.** Más allá de esa distancia no hay penalización adicional: un
-  imperio de punta a punta del mapa paga lo mismo que uno moderadamente disperso. Con provincias de radio ~76
-  (ver la escala del mundo), 400 son ~5 provincias — o sea que el "radio cómodo" de un reino ya está fijado en
-  el código sin que nadie lo decidiera.
-
-## 16. Qué hace un huésped: vida dentro de una Facción NPC
-
-**Estado: idea, sin diseñar.** Sale de la entrada al mundo
-(`Consideraciones/Entrada_Al_Mundo_Definicion.md` §5) y no es un adorno: **es el contenido del vestíbulo**.
-Sin ella, la fase de huésped —antes de poder fundar— se reduce a "espera", que es la peor versión de esto.
-
-La idea del usuario: **ganar posición dentro de una Facción IA haciendo cosas para ella** — escoltar sus
-caravanas, explorar, buscar cosas en el mapa de campaña. Acciones que sirven de tutorial y que dan recompensa
-dentro de esa misma Facción.
-
-**Lo que ya existe y reutilizaría:** la escolta de caravanas (`Caravana.escolta` / `adjuntarCaravana`, Doc
-5.13.3), la exploración (`engine/exploracion.ts`), la reputación de Facción y la experiencia (`REPUTACION`,
-`aplicarAjustesExperiencia`).
-
-**Lo que no existe, y es el corazón de la mecánica:** *standing por jugador dentro de una Facción*. Hoy la
-reputación y la experiencia son de la Facción entera, no de cada uno de sus miembros. Sin eso no hay nada que
-subir ni nada que recompensar.
-
-**Lo que hay que decidir:** qué encargos existen y quién los publica; qué se gana (¿acceso a reclutar? ¿casa?
-¿aval para fundar?); y si ese standing sobrevive a marcharse de la Facción.
-
-## 18. Taberna + intel como asset
-
-**Estado: idea, sin diseñar (`Consideraciones/Taberna_Intel_Definicion.md`, aún vacío).** Con la niebla de
-guerra ya en el juego, saber qué pasa en otro sitio gana valor — y ese valor es el **sink recurrente de oro**
-que la calibración de la economía del oro asume que va a llegar
-(`Economia_Del_Oro_Definicion.md`, "Fuera de este plan").
-
-La idea del usuario: un edificio nuevo, la **taberna**, donde se compra **intel** o **mapas** — información
-con **revelado temporal**: qué está pasando en otro sitio durante un tiempo limitado, o la situación actual
-de una Facción. No solo lo visual del mapa: también información interna de asentamientos. El **layout de un
-asentamiento** se puede comprar como asset, para preparar asedios a futuro.
-
-*Estado en código:* nada. No hay edificio `taberna` ni concepto de "intel como asset".
-
-## 19. El mapa político como entidad
-
-**Estado: idea, sin diseñar.** Las fronteras "de dónde a dónde llegan" como una entidad de primera clase, no
-algo que se recalcula al vuelo. Hoy las zonas de influencia y las fronteras ajenas se derivan
-(`engine/zones.ts`, fronteras ajenas 2026-09-05); no existe un "mapa político" consultable como objeto.
-
-## 20. Tecnología: árbol de desarrollo propio, 3 vías, Aedas
-
-**Estado: diseño en el canon (`Docs/Game/6_Sistema_de_Tecnologia_y_Aedas.md`), `código: ✘` — nada.** Ni
-árbol, ni las tres vías de acceso (comercio / desarrollo propio / Aedas), ni la compra de tecnología con oro,
-ni el sistema de Aedas. Lo único con el nombre "Aeda" en el código es la narración de cambios de título de
-servidor (`engine/titulos.ts`), que no tiene relación con esto.
-
-Sin decidir: si el árbol del desarrollo propio es estructurado o libre/emergente (checklist "Tecnología").
-
-## 21. Los 4 gremios escasos a nivel de servidor
-
-**Estado: diseño parcial en el canon (Doc 2.10), `código: ✘` — nada.** Los 4 gremios (Comerciantes,
-Artesanos, Constructores, Ladrones), escasos a nivel de servidor, con una tirada periódica sujeta a cuatro
-requisitos simultáneos (reputación > 90, título de servidor específico, nivel de asentamiento en el máximo,
-mantenimiento > 90 %), y su mecanismo de pérdida. El `patioDeGremios` de `constants.ts` es solo una parcela
-decorativa del trazado urbano, sin relación con esta mecánica.
-
-Pendiente de decidir (Preguntas_Abiertas §14): valores numéricos de cada requisito por gremio, el título de
-servidor asociado a cada uno, el detalle de beneficios de Comerciantes/Artesanos/Constructores, y si hay
-margen de gracia antes de perder el gremio.
-
-## 22. Exilio como política de soberanía
-
-**Estado: diseño cerrado en el canon (Doc 5.9 / 2.8), `código: ✘` — nada.** El exilio como palanca de
-soberanía de una Facción sobre sus miembros. Sin implementar.
-
-## 23. Materiales exóticos
-
-**Estado: `código: ✘` — no existe ese tipo de recurso.** Los pide el diseño de la Maravilla (Doc 6 / §24) y
-posiblemente el catálogo de commodities de Nobleza. Hoy la Maravilla se paga con un coste placeholder de
-recursos ya existentes. Falta: qué materiales son, de dónde salen (¿nodos raros? ¿bioma? ¿solo comercio de
-larga distancia?), y qué los consume además de la Maravilla.
-
-## 24. Ciclo de servidor de 12 meses + Maravilla + legado NPC
-
-**Estado: el EDIFICIO Maravilla implementado (único, nivel de asentamiento máximo, vía cola manual, coste
-placeholder); el CICLO no.** Diseño cerrado en `Consideraciones/Roadmap_Escalado.md` Eje 4 y
-`Preguntas_Abiertas.md` §14d: 12 meses de servidor, cierre anticipado por la primera Facción que complete la
-Maravilla, y la Facción ganadora persiste como Facción-legado NPC de solo mantenimiento y comercio.
-
-Requiere infraestructura de servidor / multi-instancia (reset, generación del nuevo mapa, destino de las
-Facciones no ganadoras, si la legado es atacable). Nada de eso tiene código. Ver la lista completa en el
-Roadmap.
-
-## 25. Coste/beneficio mecánico de las ordenanzas de trazado
-
-**Estado: las cuatro ordenanzas existen y funcionan (`código: ◐`), pero no tienen coste/beneficio propio.** Las
-cuatro ordenanzas de perfil de trazado del Maestro de Obras (`postura_defensiva` / `arterias_comerciales` /
-`barrios_gremiales` / `plazas_mayores`) orientan *cómo* se distribuye la ciudad, y ya
-compiten por el único slot de Maestro de Obras. Pero compiten en desventaja contra Vía Rápida (−25 % de tiempo
-de obra), que sí da un beneficio medible.
-
-Falta: darle a cada ordenanza un coste o un beneficio mecánico propio, de modo que elegir una sobre otra sea
-una decisión con precio. Anotado como pendiente en el propio `constants.ts`. Diseño del trazado en
-`Consideraciones/Vista_Asentamiento_Trazado_Urbano.md`.
-
-## 26. Los beneficios de ciudadanía sin implementar
-
-**Estado: `código: ◐` — 2 de 5.** La ciudadanía da hoy en el motor el nivel intermedio de comisiones y la
-residencia/reclutamiento. Los otros tres beneficios del diseño (residencia en cualquier asentamiento de la
-Facción, protección militar explícita, voz en política exterior) no están cableados. Doc 2 (`CIUDADANIA`).
-
-También sin cerrar:
-
-- **Cooldown de cambio de residencia**: `CIUDADANIA.cooldownCambioResidenciaDias` está reservado, sin valor ni
-  efecto. Frenaría mudarse en cada conquista para exprimir la recaudación.
-- **Dejar una casa sin tomar otra**: abandonar la Facción no libera la residencia ni los cargos locales, y no
-  hay forma de vender una casa a secas.
-
-## 27. Identidad visual y de audio
-
-**Estado: `código: ✘` — nada.** Sigilo / estandarte de Facción, identidad visual y de audio de imperios y
-títulos. Sin referencias estéticas concretas decididas (micénica, hitita, mesopotámica…). Preguntas_Abiertas
-§9. Es sobre todo trabajo de un repo de interfaz aparte, pero la *representación* (qué campo lleva el sigilo,
-dónde vive) toca este repo.
-
-## 28. Declaración formal de guerra
-
-**Estado: `código: ✘` — nada.** Hoy el combate es un cálculo puntual entre columnas y plazas; no existe un
-estado de "guerra activa" entre dos Facciones. Falta decidir si declarar la guerra requiere una condición
-previa (frontera compartida, casus belli) o es libre, y qué habilita (Preguntas_Abiertas §1). Bloquea el
-bloqueo/escolta militar de chokepoints que quedó a medias en Fase 0.3 (Preguntas_Abiertas §3).
-
-## 29. Curva de progresión inicial gradual
-
-**Estado: decisión de diseño real pendiente (Preguntas_Abiertas §14e), `código: ✘`.** El inicio del juego
-debe ser suave, con sistemas desbloqueándose progresivamente en vez de exponer los 7 cargos, la
-Liga/vasallaje, la reputación y los gremios desde el primer tick.
-
-Sin resolver: qué sistemas se difieren y cuáles no; si el desbloqueo se ata al nivel de asentamiento, al nivel
-de Facción, al tiempo o a una combinación; y si aplica solo a la interfaz (ocultar) o también a las reglas
-(bloquear). Distinto de §16 (contenido del vestíbulo) y del onboarding ya hecho (spawn + fundación grupal):
-esto es el ritmo de la primera hora una vez dentro.
-
-## 30. Batallas con héroes: guarnición, campamento y héroes bot
-
-**Estado: reglas principales cerradas (canon Doc 5.15, 2026-09-13), `código: ◐`.** Desde la fase 2 del Héroe
-(rama `heroe-dominio`, 2026-09-14) las escuadras viven en su héroe y el campamento sigue el canon: se guarnece
-solo si todos los que van dentro residen ahí; conquistar deja la plaza sin guarnición, el ejército acampado a
-la puerta y a los residentes vencidos con su campamento a 0 en la plaza más cercana de su Facción (huérfanos si
-no queda ninguna); cambiar de residencia traslada el campamento; la escolta de una caravana perdida vuelve a 0
-al campamento; y el Liderazgo suma la escolta a lo que el héroe lleva en columna (Doc 3.13.4). Desde la fase 3,
-también la guarnición: cada residente asigna escuadras a la de su residencia dentro de su cupo, y un asedio lo
-defienden la guarnición y el loadout activo de los residentes que están dentro; el resto del campamento no
-defiende. Los héroes bot no usan la guarnición, defienden con su loadout.
-
-**Ciclo de `Batalla` con Unity (BA-001), fase 1 de 3 hecha en la rama `heroe-dominio` (2026-09-15).** Con
-servidores de batalla declarados (`SERVIDORES_BATALLA`; sin ellos todo sigue con números, decisión del usuario),
-un combate con algún héroe humano abre una `Batalla` en vez de resolverse: `atacar` (también contra una plaza, que es
-asediarla) y, contra un humano, el ejército bot que llega a su plaza o la columna bot que alcanza a su presa
-(`session/batallas.ts`). El ticket se congela con la forma
-del contrato, las escuadras quedan reservadas, y lo que interviene se bloquea sin parar el mundo (Doc 5.15.1: la
-plaza asediada no abre puertas ni da órdenes, las columnas y la caravana no se mueven ni se pueden atacar, y la
-batalla se ve en el mapa en su lugar). Se unen compañeros de Facción mientras quede sitio (`unirseABatalla`),
-quien la inició la cancela antes de empezar (`cancelarBatalla`), y si vence un plazo queda `fallida` sin castigo.
-Una Facción NPC con algo en batalla no gobierna mientras dura (`ponytail:`, por plaza si se nota). Conquest habla por
-`/v1/batallas/*` con su propia credencial (`server/rutas/batallas.ts`: pendientes, ticket, incorporaciones,
-asignación, inicio y tokens, validados contra `contratos.schema.json`), y cada jugador recoge su token por
-`GET /v1/jugador/partidas/:gameId/batallas/:battleId/asignacion`. Fase 2 hecha el mismo día
-(`session/resultadoBatalla.ts`, `POST /v1/batallas/:battleId/resultado`): el checklist de doc 02 §3.3 entero o nada;
-cada escuadra queda con sus supervivientes y suma su XP, cada héroe suma su XP y su botín, y el nivel no cambia
-hasta que Conquest publique su curva (CQ-001); el bando que pierde queda herido; en mundo abierto pierde la mitad
-del carro, que va a la primera columna del que gana; y según el contexto cae la plaza (con el saqueo de siempre),
-la caravana o el campamento. Repetir el mismo resultado no cambia nada. Los objetos del botín se aceptan sin
-catálogo, como `visual` y a precio 0 (decisión del usuario, 2026-09-15; CQ-004). Falta: el canal de tiempo real
-(fase 3); sustituir un participante con una revisión nueva del ticket, que no tiene aún quién la dispare; y el
-botín para los que se unieron al bando ganador, que hoy va entero a la primera columna.
-
-Sigue distinto del canon, mientras no haya servidores de batalla: el asedio se resuelve con números
-(`iniciarAsedio`, `engine/combate.ts`); lo mismo el ataque a un campamento de bandidos, que ya se hace con la
-columna que llega a él (`atacar`, Doc 1.9, 2026-09-15), aunque los bots aún lo atacan desde su plaza (motor
-`atacarCampamentoBandidos`, hasta §36). El desalojo no mira el cupo de viviendas de la plaza que recibe a los
-vencidos (`desalojarResidentes`). La persecución no recalcula la ruta hacia la presa, aunque Doc 5.12.3 dice que
-sí: hoy solo marca a quién se ataca (bot) o de quién avisar (humano) si se cruzan a 15. CQ-002 en Conquest para la
-IA de escuadras sin héroe y de héroes bot; CQ-005 para las incorporaciones a una batalla en curso.
-
-Sin resolver:
-
-- La XP de las escuadras en batallas que se resuelven con números: hoy `experiencia` suma lo que sumaba la
-  veteranía (+1 al ganar, +0,5 al perder) y `nivel` se queda en 1; la curva se fija cuando Conquest publique
-  la suya (CQ-001).
-
-## 31. Modelo de Héroe
-
-**Estado: reglas principales cerradas (canon Doc 5.16 y glosario, 2026-09-11 y 2026-09-13), `código: ◐`.**
-Datos y orden de implementación en `Docs/Coordinacion/01_Modelo_de_datos_compartido.md` §12-§14 y BA-004.
-Hecho: el contrato (`src/contratos/v1/`) y, en la rama `heroe-dominio` (2026-09-14), la fase 1 —`Heroe` en el
-dominio con su identidad, `heroeId` como dueño en todo el motor, `crearHeroe`, y Facciones NPC creadas por el
-admin con héroes bot— y la fase 2 —las escuadras viven en `Heroe.escuadrones` con su `contenedor` (campamento,
-ejército o escolta), nivel y experiencia en vez de veteranía, sin `heridoHasta`; ejércitos y caravanas guardan
-solo ids—. La fase 3 añade la progresión del héroe (nace como en Conquest: nivel 1, sin puntos, 500 de bronce y el
-loadout "Default"), `repartirPuntos` (solo atributos), `guardarLoadout`/`borrarLoadout`,
-`asignarGuarnicion`/`retirarGuarnicion`, y en la proyección `heroe` (con el coste de Liderazgo de cada escuadra y la guarnición ocupada), `heroesVisibles`
-(`HeroePublico`) y `nombresDeCompaneros`. Y el estado Herido (Doc 5.16.4, 2026-09-14), que sustituye a la Tregua de
-columna: 2 minutos para todos los héroes del bando que pierde cualquier batalla; mientras dura no persiguen, no se
-les persigue ni entran en batallas, y sus escuadras no combaten. Falta: los perks y `equipar`, que esperan a los
-catálogos de Conquest (CQ-004; decisión del usuario 2026-09-14); de dónde salen los puntos de atributo (en Conquest
-ningún nivel los da) y la subida de nivel (CQ-001); y en el cliente de jugador (`BronzeAgeClient`, que ya tiene el
-panel del héroe y enseña el Herido) la pantalla de crear héroe definitiva, el equipo y la ficha de los héroes
-ajenos (su `docs/Features_Pendientes.md` §0).
-
-Sin resolver:
-
-- Lo que el botín deja abierto (preguntado a Conquest en CQ-004): si en batalla se gastan consumibles o se
-  pierde equipo, quién aplica la compatibilidad arma/armadura al equipar, y si el héroe tiene fuentes de
-  objetos y monedas fuera de la batalla (tienda, recompensas).
-
-## 32. Cabos sueltos de diseño político
-
-**Estado: preguntas abiertas que el canon (Docs 2 y 4) no cierra, `código: ✘`.** Piezas pequeñas, sin
-mecánica propia:
-
-- **Sucesión con Liga** (Doc 2.2): si el Rey de una Liga abandona su Facción, ¿se hereda el vasallaje? ¿se
-  re-vota en una federación? Depende de la votación real.
-- **Desarme del señor** (Doc 2.4): la condición exacta por la que un señor cuenta como "desarmado" y sus
-  vasallos quedan libres.
-- **Fusión/anexión** (Doc 2.6): si requiere aceptación mutua explícita, o si la anexión se puede forzar con
-  suficiente diferencia de poder.
-- **Reputación** (Doc 2.7): el valor de cada evento, la velocidad de decaimiento y los umbrales de cada uso.
-- **Cupo de nivel 4 y 5** (Doc 2.2.1): hoy no tienen cupo por Facción; falta decidir si deben tenerlo y con
-  qué curva.
-- **Catálogo de políticas** (Doc 4.4): las políticas concretas de cada pool más allá de las que existen, y si
-  son excluyentes entre sí dentro de un slot.
-- **Redistribución de Vivienda** (idea): una política que cambie la proporción fija 15/5 de Pesants/Artesanos
-  de cada Vivienda. Falta si desplaza cupo de una clase a otra o añade cupo extra, sus valores y de qué cargo
-  es (Maestro de Obras o Sacerdote).
-
-## 33. Cabos sueltos de diseño comercial
-
-**Estado: preguntas abiertas que el canon (Docs 1 y 3) no cierra.**
-
-- **Caravanas militar y de contrabando** (Doc 3.6): existen en `CARAVANA_CATALOGO` con capacidad y velocidad,
-  pero el motor nunca las instancia. Falta conectarlas: la militar, a llevar equipo antes de un asedio; la de
-  contrabando, a una mecánica de detección reducida.
-- **Riqueza acumulada** (Doc 3.5): en qué se usa el oro que las plazas acumulan por comisiones.
-- **Comisión intermedia** para Facciones aliadas o vasallas de la misma Liga (Doc 3.5 y §26).
-- **Bonus por distancia en el mostrador** (Doc 3.8): solo aplica al trueque; aplicarlo a las órdenes de
-  mercado es una decisión de diseño abierta.
-- **Intercambio directo entre jugadores** (Doc 3.7): cara a cara en mitad del mapa, sin plaza ni acuerdo de
-  por medio. No existe.
-- **Cortar rutas como guerra económica** (Doc 3.9): que el combate de caravanas interactúe con los acuerdos en
-  curso.
-- **Retirada del almacén al salir** (Doc 1.10.2): que el Tesorero pueda fijar cuánto material puede llevarse
-  cada héroe.
-
-## 34. La economía no llena el carro de un ejército
-
-**Estado: medido el 2026-09-04, sin decidir.** La capacidad del carro (Doc 5.13.1) se derivó del radio
-operativo sin comprobar que hubiera trigo con el que llenarlo. En batch, ningún asentamiento llegaba a llenar un
-carro y 26 de 28 no podían aportar ni un grano sin bajar de su reserva de comida. Después se dobló la
-producción de la Granja (Doc 4.2.1); falta volver a medir. Cifras, causa y las cuatro palancas posibles en
-`Consideraciones/Movimiento_Ejercitos_Definicion.md` §10.
-
-## 35. Cabos sueltos de mundo, población y militar
-
-- **Campamentos de bandidos** (Doc 1.9): si su poder debería escalar con la región o con la cercanía de
-  Facciones fuertes, y si deberían bloquear la explotación del bosque que ocupan.
-- **Cola de prioridad de reclutamiento** (Doc 4.1): con qué criterio se reparte el pool de población cuando la
-  demanda de reclutas lo supera.
-- **Gran Fundición** (Doc 4.2.1, 5.7): está en el catálogo (nivel de Facción 3) pero no tiene función desde que
-  la Nobleza dejó de reclutarse; falta decidir su papel junto a la Fundición.
-- **Armas de asedio** (Doc 4.2.1): la Carpintería está pensada para arietes y torres de asedio, que Fase 0 no
-  tiene.
-
-## 36. Comportamiento de los héroes bot en el mundo
-
-**Estado: sin diseñar, `código: ◐`.** Los héroes bot nacen como fundadores de su Facción NPC cuando el admin la
-crea (`crearFaccionNpc`, Doc 5.15.6, `Docs/Coordinacion/02` §4.2) y viven en la partida como cualquier otro
-héroe. Hoy la gobernanza NPC ya los usa como a sus residentes de siempre: ocupan cargos, reclutan y salen de
-campaña con sus escuadras, pero una campaña no los sitúa en la columna (su `ubicacion` se queda en el
-asentamiento). Falta decidir qué hacen en el mundo de BronzeAge: si salen con columnas en persona, defienden
-sus plazas, se unen a ejércitos...
-
-Su comportamiento EN batalla no es de BronzeAge: lo maneja la IA de Conquest (CQ-002).
+Lo que el autor vio en la mesa (ventana de la seed 42, mundo `71697908`) y lo que pidió:
+
+- **Bosque.** Hoy es una alfombra continua: el 50 % de la tierra, denso, en una sola mancha que tiene el 99 % del bosque denso. Se quiere
+  como el boceto de la mesa: manchas densas y separadas (117 manchas en la ventana, la mayor con el 13 %), y aún menos bosque. En 3D se
+  nota más, porque cada árbol se dibuja (copa de 0,3 u).
+- **Llano.** Demasiado plano: el 43 % de la tierra baja por debajo de 5°, frente al 11,5 % del boceto. Se quieren colinas suaves en casi
+  toda la tierra baja y llanuras de verdad solo en algunas regiones.
+- **Montaña.** Gustan los valles que abren los ríos. Hay que quitar las agujas sueltas (un punto llega a sobresalir 142 m de lo que tiene
+  a 4 u alrededor), que en 3D se leen como pinchos verticales.
+- **Altiplanos.** El boceto los tiene y gustan; el generador no hace ninguno. Mesetas altas con uno o dos accesos, que sirvan de posición
+  defensiva (ver 63.2: hoy las reglas los castigarían).
+- **Más relieve.** Acercarse al 43 % de laderas cerradas del boceto pide abrir collados en las crestas o subir el tope vertical de
+  1.000 m del raster (`ESCALA_TERRENO.metrosVerticalesPorElevacion`), que también limita las cumbres. Hoy, en la cordillera se ve un borde
+  recto con dientes que viene del generador.
+- **Metales en zonas montañosas** (pendiente desde el análisis del generador). Depende de qué sea «montaña» en el relieve nuevo y de la
+  revisión de 63.2.
+- **Ríos y vados.** En el mundo, 16 de los 7.360 recursos quedan en bolsas entre ríos sin vado, fuera de la red principal.
+- **Receta de partida.** La del boceto está en la ficha de escalas (§3.1): macizo, piedemonte de colinas, llano con lomas, valles
+  gaussianos alrededor de los ríos y bosque por manchas.
+- Cada cambio rehace el artefacto y su paquete de relieve: hay que volver a pasar las pruebas del núcleo que dependen de la geografía,
+  como se hizo con el mundo `71697908`.
+
+### 63.2 Revisión de las reglas del terreno (a fondo)
+
+Decisión del autor (2026-10-30): las reglas del terreno se pensaron con un generador más inmaduro y vistas solo en 2D; hay que
+modificarlas para llegar a modos de juego más interesantes y estratégicos. Puntos ya señalados:
+
+- **La clase de terreno sale solo de la altura** (umbrales: agua 375 m, costa 420, colina 545, montaña 600, cima 685). Un altiplano llano por
+  encima de 600 m cuesta ×3,5 al andar (`COSTE_MOVIMIENTO` de montaña), y por encima de 685 m no se puede fundar. Habría que contar también
+  la pendiente, o separar «alto» de «abrupto».
+- **Fundar en alto.** Hoy no se puede fundar en las cimas ni compensa hacerlo en la montaña; con altiplanos, una plaza en alto podría ser
+  una elección defensiva con su coste (accesos, abastecimiento).
+- **Pendientes.** El coste por pendiente es `1 + min(2; 0,45·pendiente)` y no se pasa de 0,7 (35°, `pendienteMaximaTransitable`). Se
+  miden con la exageración de altura (decisión del 2026-10-30): lo que se ve es lo que se anda. Revisar con el relieve nuevo.
+- **Bosque y tránsito.** Con bosques en manchas (63.1), revisar qué aportan al juego: cobertura, coste de paso y escondite de bandidos.
+- **Rutas del servidor.** Visto al probar el cliente 3D (2026-10-31): desde `camp-0`, un destino en tierra firme a 3 u al oeste y 5 al sur
+  se rechaza con «no hay ruta por tierra hasta el destino», mientras al este y al sureste sí hay ruta. El punto que manda el cliente es el
+  correcto. Hay que mirar si es la rejilla de navegación o la geografía del mundo nuevo.
+
+### 63.3 Cámara y visión: lo que quedó abierto
+
+- **Encuadre de la caravana grande** (visión 60 u, `VISION.caravanaGrande`). Las demás están decididas: héroe solo 15 u (en pantalla
+  15 / 22), con soldados 30 u (30 / 45). El cliente usa hoy, para cualquier otro radio, el radio y 1,5 veces.
+- Con la cámara inclinada se ve suelo más allá de la visión. La niebla no enseña de más (el servidor solo manda lo que se ve y el terreno
+  es público), pero la pantalla se llena de suelo en niebla; se valorará al revisar las reglas de visión.
+
+### 63.4 Cliente 3D: cabos sueltos
+
+Decisiones provisionales tomadas al construirlo, para revisar (detalle en `BronzeAgeClient/docs/Mundo_3D.md`):
+
+- Las columnas ajenas solo enseñan a sus héroes: su tropa no viaja en la proyección. Si se quiere verla, tiene que mandarla el servidor
+  (redactada).
+- Caminos (0,2 / 0,35 / 0,55 u) y fronteras van más anchos que en la realidad para que se lean; la zona propia va sin relleno.
+- Solo hay árboles en lo explorado.
+- Sin medir en una tarjeta gráfica de verdad: la escena va de 0,43 a 0,88 millones de triángulos según el encuadre.
+- Móvil y Unity: el prototipo es solo de sobremesa; el paso a Unity (CQ) usa los mismos valores y el mismo paquete de relieve.
+
+## 65. Informes de taberna por niveles (diseño del 2026-10-31)
+
+Diseño: `Docs/Disenos_Por_Implementar/Informes_De_Taberna.md`. Nace del libro de agravios de los bots, que vive entero en el servicio de bots: el motor no guarda relaciones ni rasgos de bots.
+
+Lo que toca al motor:
+
+- Orden `comprar_informe` con tipo y objetivo, que sustituye a `comprar_informe_plaza`.
+- Catálogo de tipos en `INTEL`, con nivel de taberna, precio y enfriamiento.
+- Informes de plaza separados por tipo, con residentes como cantidad, tecnologías y rutas.
+- Recibo firmado en los informes de bots, y aviso al objetivo con el tipo de informe.
+
+## 68. Mercenarios por contrato: huecos tras implementarlos (2026-11-01)
+
+La entrada 48 está en el motor (`Docs/Mechanics/Mercenarios_Por_Contrato.md`). Quedan estos huecos, ninguno bloquea:
+
+- **Visión del objetivo enemigo.** Un bot con orden `atacar` solo ve del objetivo lo que alcanzan sus ojos (su `VISTA`); el contrato no le enseña dónde está si cae en su niebla. Decidir si la orden debe darle la posición del objetivo.
+- **Recursos del anillo de bandidos.** Esos recursos (la madera, la piedra y el trigo del campamento caído desde la tanda 69; antes, oro) solo los cobran los héroes sin plaza (`Nucleo::sin_plaza`, Cal-5). Un temporal contratado por una Facción con plazas deja de cobrarlos y de contar en la demanda del anillo de su campamento mientras dura el contrato. Decidir si un temporal sigue contando como sin plaza.
+- **Sucesión en `militar`.** `Columna::separarse` elige al sucesor por antigüedad sin mirar la marca, así que un mercenario podría quedar al mando de una formación aunque haya alguien sin marca. La sucesión del núcleo (`sucesor_automatico`) ya prefiere a los ciudadanos sin marca.
+- **Auditoría.** `auditoria.rs` no comprueba las invariantes de los contratos (`Mercenarios_Por_Contrato.md` §16).
+- **Bienvenida.** `Bienvenida.faccion_id` de un mercenario es la Facción que le paga, aunque no recibe el ámbito `FACCION`. Decidir si se queda así o se omite.
+- **Orden `atacar` inicial.** En el trabajo «Atacar un objetivo», si el mercenario no ataca en 24 h su orden caduca y se le vuelve a dar, con un `mercenarios.orden_caducada` cada vez.
+
+## 69. Marcas de Facción en el mapa
+
+Pedida por el autor el 2026-10-29 desde el cliente de jugador. Puntos en el mapa que solo ve la propia Facción: puntos de reunión, de interés, de peligro u objetivos.
+
+- **Quién las pone y las quita:** el Rey, el Embajador, los Generales y los Gobernadores de la Facción.
+- **Tope:** 5 marcas vivas por Facción, entre todos.
+- **Tipos:** reunión, interés, peligro y objetivo. Llevan un texto corto opcional.
+- **Duración:** no caducan; se quitan a mano.
+- **Quién las ve:** todos los ciudadanos de la Facción (ámbito `FACCION`); nadie de fuera.
+- **Pendiente de decidir al implementar:** si cualquiera de esos cargos puede quitar la marca de otro y si el tope cuenta por Facción o por cargo (el autor dijo «un número limitado de marcas (5)»; se lee por Facción).
+- **Toca:** una orden para poner y otra para quitar, la entidad en la proyección de la Facción y el panel y la capa del mapa en BronzeAgeClient.
+
+## 75. Estandartes y aspecto de las escuadras (D20, 2026-11-12)
+
+El autor quiere estandartes como objetos que solo cambian el aspecto, sin ninguna cifra (2026-11-11, 22:32), y un aspecto propio de cada escuadra (vacío para el de serie, 22:16). Tienen rareza, para el botín, pero no tier de combate, y cada estandarte se diseña con su arte. Hoy (D20) solo existen los dos campos del contrato que va a Conquest, `SquadSnapshot.estandarte` (13) y `aspecto` (14), que viajan vacíos: el motor no tiene el tipo de objeto `estandarte` en `OBJETOS`, ni sitio en la escuadra (`Escuadron`), ni orden para ponerlo, ni ninguna fuente que lo dé. Se hace cuando haya un estandarte en el catálogo y su arte.
+
+## 76. La clase y los objetos del héroe en los bots y la administración (D21, 2026-11-12)
+
+Desde el 2026-11-12 `crear_heroe` rechaza un héroe sin clase o con una que no está en `CLASES_HEROE` (`heroe.clase_desconocida`). Se les avisa al pasar a `main`:
+
+- **BotsBrain** tiene que mandar la clase al crear cada héroe y repartirla entre sus héroes. Sin equiparse ni comprar, sus héroes van a las batallas de Unity con el equipo de inicio de su clase; las órdenes de la Armería y del equipo son las de cualquier jugador (`Docs/Mechanics/Heroe_Y_Tropa.md` §4.5 y §4.6). Sus héroes nacen con 14 de Liderazgo, no con 100, y lo leen de su observación.
+- **AdminClient**: crear héroes con clase, ver la clase, la mochila, el almacén de objetos y el equipo de un héroe en su ficha (`ADMIN` los lleva) y, si se quiere, darle objetos para probar, que hoy no tiene orden de administración.
+- **La forja en cualquier plaza (2026-11-12)**, para los dos (`Docs/Mechanics/Heroe_Y_Tropa.md` §4.6 y `Mercenarios_Por_Contrato.md` §5.1):
+  - **BotsBrain**: sus héroes forjan en cualquier plaza con la Armería activa cuya forja esté abierta a su grupo (la de su Facción, siempre) y pagan en monedas el impuesto de `OBJETOS.forja` con el recargo de su grupo (sin monedas, `heroe.sin_monedas`); fuera de su residencia los materiales salen del carro de la columna con la que entraron (`forja.sin_materiales` si no los trae), y los tiers III a V esperan a su Era (`forja.era_cerrada`). Lo que necesitan lo leen de la plaza donde están dentro (`forja` y `metales_armeria`) y, desde fuera, de `armeria_activa`. Sus Tesoreros y Gobernadores, residentes y dentro, pueden abrir o cerrar la forja de su plaza a aliados, neutrales y enemigos y fijarles el recargo con `configurar_forja` (200); de partida está cerrada a los tres con +100 %, y una conquista la devuelve a eso. Pagar contratos de mercenarios con el fondo de la plaza (`pagar_con = fondoPlaza`) no les toca: las Facciones de bots no contratan (`mercenario.faccion_de_bots`).
+  - **AdminClient**: `ADMIN` lleva en cada plaza `armeria_activa`, `forja` (la apertura y el recargo de cada grupo de fuera y el fondo de monedas) y `metales_armeria`; el hecho `asentamiento.forja_configurada` y el `impuesto` de `heroe.objeto_forjado`. Mostrarlos en la ficha de la plaza. No hay orden de administración para poner monedas en el fondo.

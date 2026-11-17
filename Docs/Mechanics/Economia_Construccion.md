@@ -1,0 +1,2672 @@
+# Economía y construcción de un asentamiento
+
+Cómo nace un asentamiento, qué produce, cómo se construye y se mejora, cómo crece y come su gente, qué cuesta mantenerlo y cómo sube (o baja) de nivel. Es el
+sistema que corre **dentro de cada asentamiento, con un paso de un minuto por plaza y los fines (obra, mejora, ascenso, política) en su instante exacto**; lo que ocurre entre asentamientos (comercio, caravanas) y la guerra están en otros documentos.
+
+- **Reescrito el 2026-10-13** para el mundo reactivo: §1 pasa de «orden dentro del tick» a ritmos y eventos, el crecimiento de población es continuo (sin redondeo estocástico) y se añaden los pueblos extractores y la calibración (§14). Las fórmulas «por tick» de las demás secciones son **ritmos por minuto**, idénticos; donde el texto diga «cada tick» léase «continuamente, con eventos en los umbrales». El «cómo funcionaba» por tick está en `typescript-final:Docs/Mechanics/Economia_Construccion.md`.
+- **Corregido el 2026-10-22** ([`Economia_Por_Minuto_Definicion.md`](../../Consideraciones/Economia_Por_Minuto_Definicion.md)): la economía **no** es continua. Sustituye al plan de «economía continua», descartado ese día. Se queda **un paso de un minuto por plaza** (producción, consumo, recaudación, mantenimiento, población y evaluación de la auto-construcción) y solo lo que el jugador nota va en su instante exacto: el inicio de una obra encargada a mano (al clic), el fin de obra, de mejora y de ascenso, y la caducidad de política. La población es **siempre entera**, con un resto oculto, y el hambre sigue D7 y D8 (§9.2). Donde el texto de abajo diga «ritmo» o «continuo» (reescritura del 2026-10-13) léase «por minuto»; §1 y §9 están al día.
+- **Corregido el 2026-10-24** (decisión C3b, [`Calibracion_Sistema4_Decisiones.md`](../../Consideraciones/Calibracion_Sistema4_Decisiones.md)): **todo lo almacenado va en enteros**. Los almacenes guardan unidades enteras y los flujos por minuto llevan un resto oculto por recurso (§4); lo discreto se redondea hacia abajo y los costes hacia arriba.
+- **Verificado contra:** `d406eed` (2026-10-10) y revisado el 2026-10-11 con las decisiones del usuario sobre las divergencias (piezas gratuitas, almacén lleno, Gran Fundición, reembolso de dañados, sin líneas de producción).
+- **Módulos:** `src/engine/construction.ts` (≈1.870 líneas: cola de obras, auto-construcción, producción, recetas, mejoras, comandos manuales),
+  `settlement.ts` (fundación y viabilidad), `almacen.ts` (primitivas de almacén), `asentamientoQuery.ts` (cupos, mano de obra, progreso de nivel),
+  `population.ts` (crecimiento, comida, impuestos), `mantenimiento.ts` (coste, medidor, nivel operativo, ruinas), `ascenso.ts` (subida de nivel),
+  `politicas.ts` (factores), `zones.ts` (zona de influencia), `tropas.ts` (`reservaDeTrigo`), `world/mapa.ts` (nodos, bosques, regeneración),
+  `session/comandos/construccion.ts` y `ascenso.ts` (comandos).
+- **Canon:** Doc 4 (4.1 población, 4.2 construcción y catálogo, 4.3 almacén, 4.4 políticas, 4.5 mantenimiento y nivel), Doc 1.2–1.3 (zona y fundación).
+- **Fuera de alcance aquí:** la colocación sobre la rejilla (dónde cae cada edificio) → [`Trazado_Urbano.md`](Trazado_Urbano.md); los recintos → [`Murallas.md`](Murallas.md);
+  la guarnición y las tropas (`avanzarMantenimientoTropas`, reclutar) → combate/militar; el comercio; el orden global del tick; la fertilidad y los nodos del mapa
+  (los genera `worldgen`, aquí son una caja negra: `fertilidadEn`, `bosque`, `stock`).
+
+> **Unidades.** La economía de una plaza avanza de **un minuto de mundo** en un minuto (el evento recurrente `Carga::Minuto`, con la fase de su fundación): toda tasa «por minuto» se aplica entera en cada paso, y un cambio a mitad de minuto (edificio terminado, política, reclutamiento) cuenta el minuto entero en el paso siguiente. Los tiempos de obra, mejora, ascenso y política son **instantes de fin con su propio evento** (§1).
+
+## 1. Cómo corre un asentamiento (un paso por minuto y fines exactos)
+
+Decidido por el autor el 2026-10-22 ([`Economia_Por_Minuto_Definicion.md`](../../Consideraciones/Economia_Por_Minuto_Definicion.md)): la economía no se convierte en curvas continuas (cuesta ~5 s de CPU por día con 1.000 plazas y no afecta a la experiencia). Se corrige solo lo que el jugador nota.
+
+| Qué | Cuándo |
+|---|---|
+| Gastos y entradas discretas: órdenes (pagar obra o mejora, reclutar, comprar), caravanas, entregas, botín, saqueo, acarreo | al instante de la orden o del evento |
+| **Inicio de una obra encargada a mano**, si hay cuadrilla libre | **al instante de la orden** |
+| **Fin de obra, de mejora y de ascenso** | **en su instante exacto**, con una cita propia en la cola (`Carga::FinDeObras`, prioridad 1: antes del paso de minuto del mismo instante) |
+| **Caducidad de política** | **en su instante exacto**, con cita propia (`Carga::CaducaPolitica`, prioridad 3: **después** del paso de minuto del mismo instante, para que una política de `d` minutos se aplique en `d` pasos; el fin de obra, en cambio, va antes del paso; decisión del autor, 2026-10-23) |
+| **Cuadrilla liberada y siguiente obra de la cola** | **en el mismo instante del fin** |
+| Producción, extracción, recetas, consumo de comida, recaudación, mantenimiento, guarnición, pueblos | en el paso de minuto |
+| Evaluación de necesidades de auto-construcción, mejoras automáticas, arranque de las obras comprometidas | en el paso de minuto |
+| Población (crecimiento y muertes) | en el paso de minuto, **siempre entera** (§9) |
+
+> **Implementado en Rust (2026-10-18; fines exactos y población entera, 2026-10-22).** Reglas puras en `crates/asentamiento` (población, almacén, producción, obras, auto-construcción, mantenimiento, ascenso, políticas); su estado y su reloj en `crates/nucleo`: `economia.rs` (mapa, yacimientos y sitios sobre el mundo real, compartidos con el batch), `codec_economia.rs` (serialización para el hash y las fotos), `nucleo/construccion.rs` (el paso, las citas y las órdenes) y `nucleo/zonas.rs` (la zona crece con cada edificio completado). Cada plaza avanza con un evento recurrente `Carga::Minuto` (prioridad 2, fase = su instante de fundación). **Fines exactos:** cada obra, mejora o ascenso que empieza programa una cita `Carga::FinDeObras` en su `completaEn` (la programa `anotar_sucesos` a partir de `ObraIniciada`, `MejoraIniciada` y `AscensoIniciado`, que ahora llevan `completaEn`) y cada política activada, una `Carga::CaducaPolitica` en su `expiraEn`; ambas llevan la generación de la plaza (la ruina las descarta), no son recurrentes y desaparecen al cumplirse. La cita llama a `Asentamiento::cumplir_fines` (obras, mejoras, ascenso y, si acabó una obra o una mejora, el arranque de la cola con la cuadrilla recién libre) o a `caducar_politicas`, y el núcleo agranda la zona por los edificios completados en ese mismo instante. Son idempotentes: una cita que llega con la plaza ya cambiada (una conquista descartó el ascenso, `FijarNivelAsentamiento` también) no encuentra nada que cumplir. Quien no tiene cola (pruebas y batch) usa `Asentamiento::avanzar_hasta`, que cumple los fines de `(ultimo_minuto, t]` en su instante y da el paso. Una **mejora que espera hueco** (la Granja) conserva su cuadrilla y la reintenta el paso de minuto. Población, almacén y medidor cambian el hash pero no la versión del mundo; esta solo sube si el paso o la cita dejan algo discreto (obra, mejora, ascenso, política, hambruna, déficit...) o cambia la zona. La foto es `BAN14`. Parte del `Exterior` sigue fija en el núcleo (un ciudadano, capital sin distancia); la fertilidad es la de la zona desde la paridad P8 (2026-10-27, §5); la tecnología de la Facción, la ración de la guarnición y los factores de la ocupación ya vienen de sus sistemas.
+>
+> **Implementado en Rust (2026-10-22, murallas, segunda tanda).** Los recintos de muralla son parte de `Asentamiento` (`recintos`, ver [`Murallas.md`](Murallas.md)): `Exterior.recinto_nivel` desaparece y el nivel del mejor recinto con integridad ≥ 1 sale de ellos (el gate del nivel 4 de `bloqueos_de_ascenso`; una mejora o una ampliación en obra no lo quita); `upkeepDeRecintos` entra, sin escala, en `coste_mantenimiento` (el paso de mantenimiento, la reserva de §6.3 y la solvencia del ascenso); y el Paso 8 (`avanzarObraDeRecintos`) corre en el paso de minuto como reintento (tras la auto-construcción y con la reserva del paso) y, sobre todo, en la cita de cada celda (`Carga::FinDeObras`, con la reserva calculada en ese instante). No ocupa cuadrilla ni cola. Desde la tercera tanda también retoma la **reparación** de un recinto dañado por una conquista: `conquistar_plaza` levanta ya la primera celda y deja la cita de la siguiente ([`Murallas.md`](Murallas.md) §9.6).
+
+**Desempate del mismo instante** (prioridad de tipo, [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §2): el fin de una obra, mejora o ascenso va **antes** del paso de minuto de la plaza (el edificio terminado cuenta ese minuto, como siempre: `completar_obras` iba primero); la caducidad de una política va **después** (una política de `d` minutos se aplica en `d` pasos, incluido el que cae en su instante de caducidad); la población come antes que las tropas; la recaudación usa la población ya crecida; el oro recaudado paga el mantenimiento del mismo instante; una ruina deja de existir para el comercio y los ejércitos de ese instante.
+
+**Auto-construcción:** `evaluarNecesidades` (§6.2) corre en el paso de minuto, con el estado al empezar el paso, y compromete proyectos (pagados, en cola) que arrancan en el paso siguiente si hay cuadrilla. Una obra encargada **a mano** no espera: arranca en el instante de la orden.
+
+**Consecuencias sobre los pasos de §6:**
+- Una obra encargada a mano arranca **en el instante de la orden** si hay cuadrilla libre; una comprometida por la auto-construcción en el paso *t* arranca en *t+1 min* (o antes, si una cuadrilla se libera a mitad del minuto); termina en `completaEn = inicio + duración`, en ese instante.
+- La medida de cuadrillas (§6.1) usa el estado **en el instante del evento**; una obra o una mejora que termina libera su cuadrilla en ese mismo instante y la **siguiente obra de la cola** (por prioridad) arranca entonces. **Ruptura de paridad con el TypeScript, decidida por el autor:** allí el Paso 2 medía las cuadrillas «al empezar el tick» y una obra que acababa no liberaba hueco hasta el tick siguiente (`ocupadasAlEmpezar`).
+- La experiencia de Facción por edificio completado y por ascenso se aplica **al ocurrir** el evento.
+- Los recintos ven su obra (Murallas §5) como cualquier otra obra de fin programado: una cita por celda.
+
+## 2. Modelo de datos
+
+```
+RecursoAlmacenado = { cantidad, capacidad }          Asentamiento.almacen: Record<RecursoTipo, RecursoAlmacenado>
+```
+
+42 tipos de recurso (`RECURSOS_TIPO`): madera, piedra, trigo, cobre, estano, oro, livestock, hierro; intermedios (lingoteCobre/Estano/Bronce/Hierro, cuero, cueroCurtido,
+cueroCalidad); equipo (armaMadera/Cobre/Bronce/BronceCalidad/Hierro/HierroCalidad, armaduraBasica/Intermedia/Bronce/BronceCalidad, carroGuerra); chatarra (Cobre/Bronce/Hierro);
+y **la comida de la tanda 69** (harina, pan, carne, leche, queso, uva, aceituna, vino y aceite), **la de las zonas húmedas** (cebada, cerveza y sésamo, 2026-11-09) y el **aceite de sésamo** (`aceiteSesamo`, el 42, 2026-11-12, entrada 74). El aceite son dos bienes: `aceite` es el **aceite de oliva** («Aceite de oliva»; el id no cambia, para no tocar a los bots ni a los clientes que ya lo leen) y `aceiteSesamo`, el **aceite de sésamo** («Aceite de sésamo»). **Todos** nacen en el almacén (cantidad 0 o inicial, capacidad 800 desde el 2026-11-05, antes 400) para que la capacidad exista desde el principio.
+
+```
+Edificio = {
+  id, tipo, posicion, ambito: 'asentamiento'|'mapa' (por defecto 'asentamiento'),
+  estado: 'en_cola' | 'en_construccion' | 'activo',
+  completaEn?       solo en_construccion: instante en que pasa a activo (fecha absoluta)
+  prioridad?        score con que se comprometió; ordena el arranque de obra
+  fuenteId?         nodo (cantera/minas/corral) o bosque (leñera) que explota
+  nivelInterno?     ausente = 1
+  mejora?           { nivelObjetivo, completaEn } mientras se mejora (sigue 'activo' y produciendo)
+  danado?           un saqueo lo dejó en cola para reconstruir (§8)
+  pausadoPorAlmacenLleno?   solo informativo (§5.5)
+  rotado?, anclaLlena?, semillaSaturada?   geometría (Trazado_Urbano.md)
+}
+```
+
+Campos de `Asentamiento` que usa este documento:
+
+| Campo | Significado |
+|---|---|
+| `nivel` | **Nivel alcanzado**: monótono, solo sube al terminar una obra de ascenso. Fija el techo de población y el radio máximo de zona. |
+| `nivelActual` | **Nivel operativo**: sube y baja con la salud del mantenimiento, nunca por encima de `nivel`. Decide qué se puede construir/mejorar y qué materiales cobra el mantenimiento. |
+| `rachaMantenimientoSano` | Ticks seguidos con el mantenimiento pagado entero (ausente = 0). |
+| `medidorMantenimiento` | 0–100, nace en 100. |
+| `nutricionPoblacion` | 0–100, ausente = 100. |
+| `poblacion` | `{ pesants, artesanos, nobleza }`. |
+| `radioPotencial` | Radio de la zona de influencia. |
+| `ascenso?` | `{ nivelObjetivo, iniciadoEn, completaEn }` — obra de ascenso en curso. |
+| `autoConstruccionPausada?`, `recetasPausadas?` (recursos), `reservaManual?` (por recurso, 0–`reservaManualMaxima`) | Controles del jugador. |
+| `extractoresTicksSinCupo?` | Contador anti-inanición por tipo de extractor (§6.2). |
+| `ocupacionHasta?`, `protegidaHasta?` | Ventanas tras una conquista o una fundación. |
+| `cargos` | `gobernadorId, tesoreroId, generalId, maestroObrasId, sacerdoteId, maestroCaravanasId`. |
+
+## 3. Fundación (`fundarAsentamiento`)
+
+Validaciones, en este orden (cada una lanza `FundacionInvalidaError`):
+
+1. Entre 1 y `FUNDACION.maxJugadoresFundacionGrupal` (5) héroes fundadores.
+2. La posición está dentro del mapa.
+3. `posicionLibreParaFundar`: el punto **no cae dentro de la zona real (recortada) de ningún asentamiento existente** (de cualquier Facción, también la propia) y está **a `FUNDACION.separacionPlazas` (20) o más de cualquier plaza** (Doc 1.0a). **Desde el 2026-11-04** (decisión del autor) la separación fue **10** (antes 30), y **20 desde el 2026-11-05**, y el motor lee las cifras del territorio de los bloques (`ZONA_INFLUENCIA`, `FUNDACION.separacionPlazas`, `MERCENARIOS.radioExclusionFundar`; antes iban escritas en el código, `ReglasTerritorio`). Con 20 y las zonas al doble, junto a una plaza de nivel 1 (zona de 12 a 20) manda la separación y junto a una más grande manda su zona (hasta 60 de radio): no se funda dentro de ella.
+4. El terreno no es `cima`, ni `agua`, ni una celda **no transitable** del artefacto (río sin vado, pendiente: la plaza quedaría incomunicada). En Rust las tres comprobaciones de terreno van antes que las de zona y distancia.
+5. La Facción existe y no ha llegado al tope de fundación `calcularCapFundacion(nivel de Facción)` (cuenta los asentamientos que ya tiene).
+
+`exigirPuertaDeFundacion` (mínimo de fundadores `FUNDACION.minFundadoresParaFaccionNueva`, ciudadanía previa `exigeCiudadaniaPrevia`) es una función aparte para fundar una **Facción
+nueva**; hoy está abierta (1 fundador, sin ciudadanía previa).
+
+Estado inicial:
+
+```
+id            = 'asentamiento-<nº de asentamientos existentes>-<round x>-<round y>-t<floor(fundadoEn / 60000)>'
+                (el minuto de mundo lo hace único si se refunda donde cayó otro; el id es además la semilla del trazado urbano)
+nivel = nivelActual = 1;  rachaMantenimientoSano = 0;  medidorMantenimiento = 100
+radioPotencial = ZONA_INFLUENCIA.radioInicial   (§3.1)
+poblacion      = { pesants: POBLACION.pesants.inicial, artesanos: 0, nobleza: 0 }
+almacen[tipo]  = { cantidad: FUNDACION.materialesIniciales[tipo] ?? 0, capacidad: ALMACEN.capacidadInicialPorRecurso }   (los 29 tipos)
+edificios      = centroUrbano (0,0) + FUNDACION.viviendasIniciales viviendas + 1 granja, todos 'activo' y de ámbito 'asentamiento',
+                 colocados con sitioEnBarrio sobre una ciudad que solo tiene el centro (ids: 'edificio-<id>-centro-urbano', '-vivienda-inicial-<i>', '-granja-inicial')
+cargos         = todos null;  casasCompradas = fundadores;  politicasActivas = []
+protegidaHasta = fundadoEn + OCUPACION.proteccionMinutos         (nace protegida un día, como una plaza recién conquistada)
+```
+
+A la Facción se le quita `derrotadaPor` (quien vuelve a tener un asentamiento ya no está derrotado), cada fundador recibe ciudadanía, se borran sus solicitudes de ingreso y, **si la Facción ya tenía
+algún asentamiento**, gana `NIVEL_FACCION.xp.fundacion` de experiencia (el primero no: es nacer, no crecer). La fundación no cobra nada al almacén (el gasto es el de la caravana de fundación, fuera de aquí).
+
+**Viabilidad** (`evaluarViabilidadFundacion`, solo lectura, **no impide** fundar): `fundable = dentroDelMapa ∧ posicionLibre ∧ terreno ∉ {cima, agua}`; `recomendable = fundable ∧ hay un bosque con hueco libre de
+Leñera en la zona real con que nacería ∧ hay ≥ 1 nodo de piedra sin explotar en esa zona`. «Zona real» = círculo del radio inicial recortado contra los asentamientos de **otras** Facciones
+(`zonaInicialDeFundacion`). Hay bosque libre si algún bosque cuyo borde toca la zona tiene menos Leñeras que su capacidad (`capacidadLeneras`, §5.2).
+
+**Madera a 10 u (plaza condenada, Rust).** El aviso cuenta además las parcelas libres en la **zona del techo del nivel 1** (10 u) y su madera potencial; sin ninguna o con menos de `MADERA_MINIMA_POTENCIAL`, la plaza «caerá en ruinas». Esa zona es el disco de 10 u recortado contra **las plazas de otras Facciones que tocan ese disco**, aunque no toquen el de 6 u (decidido por el autor el 2026-10-24; antes solo recortaban las que tocaban el disco inicial). Cada zona del aviso la recortan las plazas que tocan su propio disco.
+
+> **Rendimiento en Rust (2026-10-24):** `Nucleo::viabilidad` cuenta parcelas y piedra con la rejilla de 10 u del mapa (`economia::Mapa::parcelas_en` y `piedra_en`, la misma que usa la construcción) en lugar de recorrer el mundo entero: solo mira lo que cae en el disco, que es lo único que `en_zona` puede aceptar, así que el resultado es idéntico (prueba `la_rejilla_cuenta_lo_mismo_que_el_recorrido_lineal` y misma huella del `batch territorio`). No cambia ninguna regla. Medido en el `batch territorio` (400 Facciones × 30 días, tres corridas alternas): la llamada baja de ~800 µs a ~5 µs, el tiempo en `viabilidad` de 136-155 s a 0,7-1,0 s y la pared del escenario de 250-271 s a 92-121 s; lo que queda es la economía de las plazas (16,8 millones de eventos).
+
+### 3.1 Zona de influencia
+
+> **Implementado en Rust (2026-10-13)**: `crates/territorio/src/zona.rs` (reglas puras) y `crates/nucleo/src/nucleo/zonas.rs` (estado, órdenes y eventos).
+
+La zona es un **disco** (centro = la plaza). Nace con `radioInicial` (12) y **solo crece por obra, nunca por tiempo**: cada edificio completado la agranda `crecimientoPorEdificioCompletado` (2), sin pasar del **techo de su nivel** (`radioMaximoPorNivel`: 20 / 30 / 40 / 50 / 60). **Al doble desde el 2026-11-05** (decisión del autor: las zonas se quedaban pequeñas; las velocidades no cambian): antes 6, 1 y 10 / 15 / 20 / 25 / 30, así que el techo se alcanza con los mismos edificios. Subir de nivel solo levanta el techo: el radio no salta. La construcción llama a `AgrandarZona` al completar cada edificio (hasta entonces la administración); el ascenso, a `FijarNivelAsentamiento`.
+
+**Contacto.** Como el radio solo cambia en esos instantes, no hay eventos programados: al fundar y al agrandar una zona se comprueba qué plazas de **otra Facción** quedan tocándola (`distancia ≤ suma de radios`) y se anuncia una sola vez por pareja (`zona.frontera`, `Estado.contactos`). Las zonas nunca se encogen, así que un contacto no se deshace.
+
+**Fronteras duras.** Desde el contacto la zona de una plaza queda recortada por un semiplano contra cada vecina de otra Facción que la toca: la frontera pasa a `d · r_propio / (r_propio + r_rival)` del centro propio, perpendicular a la recta que une los centros, y **se mueve** cuando crece un radio. Los de la **misma** Facción no se recortan (se solapan). Pertenecer a la zona es una consulta exacta en enteros (`Nucleo::en_zona`: `(p − c)·(o − c)·(r + r') ≤ d²·r`, sin raíces); el polígono de 48 lados (`Nucleo::poligono_zona`, Sutherland-Hodgman) es solo presentación (`Asentamiento.zona`) y no entra en ninguna decisión ni en el hash.
+
+## 4. Almacén
+
+- `agregarRecurso(a, r, n)`: `cantidad = min(capacidad, cantidad + n)`. `agregarRecursoConSobrante` además devuelve lo que no cupo.
+- `descontarRecursos`: resta sin comprobar; un resultado entre −1e-9 y 0 se redondea a 0 (ruido de coma flotante); uno más negativo se deja negativo (lo vigila el test de invariantes).
+- `tieneRecursos`: todos los recursos del coste con `cantidad ≥ coste`.
+
+> **Economía entera (decisión C3b del autor y dudas EE-1/EE-2, 2026-10-24; implementado en Rust ese día, foto `BAN27`).** El almacén guarda **solo unidades enteras** (múltiplos de 1.000 milésimas). **Regla (EE-1): lo que se mueve se redondea hacia abajo; lo que se cobra, hacia arriba.** Hay dos formas de mover (`asentamiento::Almacen`):
+> - **Discreta** (`agregar`, `quitar`, `poner`, `devolver`): entran o salen unidades enteras, **redondeando hacia abajo** lo que llega con fracción (lo que no cabe o la fracción se pierde). Un **coste** (`tiene`, `pagar`) se cobra por línea **redondeado hacia arriba**: un coste fraccionario (la reparación al 50 %, una política) nunca sale más barato. El reembolso de una obra quitada de la cola va hacia abajo.
+> - **Flujo por minuto** (`producir`, `consumir`): producción de granjas, Leñeras y extractores, extracción de los pueblos, recetas (producto e insumos; los insumos de una receta se redondean hacia arriba a la milésima), comida de la población y de la guarnición, mantenimiento y recaudación. Cada recurso lleva un **resto oculto** en `(−1000, 1000)` milésimas, como la población entera (§9.1): positivo, una unidad a medio entrar; negativo, una unidad a medio consumir. Lo exacto es lo guardado más el resto. Una unidad **entra cuando el resto la completa y sale cuando se completa su consumo** (EE-2), no al empezar a consumirse: con 10 y un consumo de 0,5 por minuto sale una unidad cada dos minutos. El resto no se descarta al cambiar de signo (producción y consumo del mismo recurso se compensan en él); en N minutos entra o sale exactamente la suma entera. El flujo se para en la capacidad (`hueco = capacidad − exacto`), así que «almacén lleno» (§5.5) es `hueco = 0`.
+> - **Lo que se ve y lo que se mueve.** Lo que se ve (`Almacen::visible`, la proyección del interior y lo que un héroe recuerda de la plaza) es lo guardado, con la unidad que se está consumiendo. Lo que se mueve, se comercia, se carga o se paga (`Almacen::cantidad`) es lo que hay entero de verdad: lo guardado sin esa unidad empezada (puede ser una menos que lo que se ve). Lo que **lee** la economía para decidir (cobertura del mantenimiento, suministro de comida, insumos de una receta) usa lo exacto. La reserva (§6.3) se compara con lo que se mueve.
+> - La **tendencia** «+N/min» del interior (4H T3c) es el neto **exacto** del paso (con el resto), no el salto de las unidades, para que el contador no oscile entre +0 y +1.
+> - La foto guarda, por recurso, cantidad, capacidad y resto (`codec_economia`). La auditoría de cambios (`BRONZEAGE_AUDITAR_CAMBIOS=1`) y el batch comprueban en cada versión que **ninguna cantidad almacenada** (almacenes, carros, caravanas, almacén personal, existencias, lo pactado y entregado de un trueque, las órdenes del mercado) tenga fracción (`Nucleo::fracciones_almacenadas`).
+> - Diseño y reparto por operación: [`Docs/Arquitectura/Economia_Entera_Plan.md`](../Arquitectura/Economia_Entera_Plan.md).
+- `ampliarCapacidad(a, r, extra)`: `capacidad = max(0, capacidad + extra)` y `cantidad = min(cantidad, capacidad)` (lo que no cabe se pierde).
+- **Capacidad por edificio** (`aplicarCapacidadDeEdificio`, `signo` ±1): el Almacén suma `signo × capacidadPorRecursoAdicional` (600) a **cada recurso que exista**; el Granero suma `signo × capacidadTrigo[nivel]` (4.000 / 6.000 / 8.000 / 12.000) al trigo. **Los almacenes van al doble desde el 2026-11-05** (decisión del autor: se quedaban cortos): la base de la plaza `ALMACEN.capacidadInicialPorRecurso` 800 (antes 400), el Almacén +600 (antes +300; el tope de Almacenes por nivel no cambia), el Granero ×2 (antes 2.000 a 6.000), el almacén local de pueblos y aldeas 1.000 (antes 500), el de las avanzadas 4.000 el fuerte y 20.000 la ciudadela (antes 2.000 y 10.000) y el almacén personal del héroe 2.000 (antes 1.000; `Comercio_Caravanas.md` §9.2). Caravanas, carros y víveres no cambian.
+  Se suma al **entrar en servicio** (obra o reconstrucción terminada) y se resta al dejar de estarlo (daño de un saqueo). Una mejora de Granero suma el **delta** entre niveles.
+- Tope de Almacenes por nivel operativo: `NECESIDADES.maximoAlmacenesPorNivel[nivelActual]`, contando los de **cualquier estado**. Tope de Viviendas: §6.5.
+
+## 5. Producción
+
+Cada edificio `activo` produce cada tick, **en el orden del array `edificios`** (importa si el almacén se llena a mitad del recorrido). Todas las cantidades se añaden con tope de capacidad y, si no caben, la producción **se pausa** (§5.5).
+
+### 5.1 Mano de obra
+
+No hay asignación por edificio: hay una demanda agregada.
+
+```
+trabajadoresRequeridosTotal   = Σ EDIFICIO_CATALOGO[tipo].trabajadoresRequeridos   de los edificios ACTIVOS de tipo granja, cantera, lenera, mina, minaCobre, minaEstano, minaHierro, corral
+                                (el valor del tipo, no el del nivel interno; un extractor con el nodo agotado sigue contando)
+ratioManoObra                 = trabajadoresRequeridosTotal ≤ 0 ? 1 : min(1, pesants / trabajadoresRequeridosTotal)
+
+trabajadoresTransformacion    = Σ niveles[nivelInterno].trabajadoresRequeridos   de los ACTIVOS fundicion, curtiduria, armeria, carpinteria, granFundicion y, en Rust desde la tanda 69, molino, horno, quesera, bodega y prensa
+ratioManoObraArtesanos        = trabajadoresTransformacion ≤ 0 ? 1 : min(1, artesanos / trabajadoresTransformacion)
+```
+
+La Gran Fundición cuenta como los demás talleres (sus 12 artesanos). Los pesants que sobran (`pesants − trabajadoresRequeridosTotal`) son el pool de reclutamiento (`poblacionDisponibleParaReclutar`):
+pesants → el excedente; artesanos → `artesanos − trabajadoresTransformacion` (≥ 0); nobleza → toda.
+
+### 5.2 Extractores y granjas
+
+| Edificio | Producción por tick | Notas |
+|---|---|---|
+| Granja | `produccionTrigoDeGranja(nivelInterno) × fertilidadZona × ratioManoObra × factorProduccionTrigo` | `produccionTrigoDeGranja` = `niveles[nivel].produccionBaseTrigo`: **80**, y la Granja **no sube de nivel** (decisión del autor del 2026-11-11: un solo nivel y 2/3 de los 120 de antes; del 2026-10-27 al 2026-11-11 tenía cuatro niveles, 120/180/240/360, el doble de las del TypeScript, 60/90/120/180). Las granjas de las aldeas usan la misma cifra (§14.0) |
+| Leñera | `produccionBaseMadera × bosque.densidad × ratioManoObra` | no usa fertilidad ni tecnología; si el bosque no existe, no produce. `produccionBaseMadera` = **8** desde el 2026-11-01 (antes 5; nota de abajo) |
+| Cantera, Mina (oro), Mina de cobre / estaño / hierro, Corral (en Rust, todos fuera de la ciudad: la Cantera y las minas solo en un pueblo extractor, §14, la Cantera desde el 2026-11-01; el Corral, solo en la aldea agrícola desde el 2026-10-27, §14.0, que no usa esta fórmula) | `mapa.extraer(fuenteId, produccionBase × ratioManoObra × factorTecnologia)` | rinde piedra, oro, cobre, estaño, hierro, livestock. Solo si el nodo tiene stock. `produccionBase` = **10** en la Cantera y en las cuatro minas desde el 2026-11-09 (antes oro 4, cobre 5, estaño 3 y hierro 5; nota de abajo) |
+
+> **Una parcela produce más (decisión del autor del 2026-11-01).** Con el bosque en manchas del generador (`Generacion_Del_Mundo.md` §8) hay parcelas por todo el mapa, pero menos juntas: junto a los campamentos, una plaza nueva tiene ahora 2 parcelas libres en la zona de su techo del nivel 1 (10 u), donde antes lo normal eran 4. El autor no quiere más parcelas juntas: las 4 parcelas son todo el espacio inicial de una plaza, así que tenerlas debe ser raro. Una plaza debe **sobrevivir con 1 parcela, ir bien con 2, ir sobrada con 3 y sobradísima con 4**. Por eso sube lo que da cada parcela: `produccionBaseMadera` de la Leñera pasa de 5 a **8**. Con la densidad mediana de una parcela (0,63, igual que antes), una Leñera con toda su mano de obra da unos 5 de madera por minuto, el doble del mantenimiento de madera de una plaza con 40 edificios (~2,5); dos dan unos 10, lo que daba la madera potencial mediana de una plaza nueva antes del cambio (9,9). El umbral de plaza condenada (`MADERA_MINIMA_POTENCIAL`, 3 por minuto) no cambia; como se mide con la producción de la Leñera (`produccionBaseMadera × Σ densidades`), basta con una parcela de densidad 0,375. Medido con la semilla 42 (mundo `e5c637d4…`) en los sitios verdes a 50-160 u de cada campamento: la mediana de madera potencial pasa de unos 6.400 milésimas (con 5) a unos 10.200 (con 8).
+
+> **Todas las minas a 10 por minuto (decisión del autor del 2026-11-09).** La Mina (oro), la de cobre, la de estaño y la de hierro producen de base **10** por minuto, lo mismo que la Cantera (antes 4, 5, 3 y 5). La escasez del estaño ya la dan sus pocos yacimientos (máximo 2 vetas por región, `Generacion_Del_Mundo.md`), así que su mina no tiene por qué rendir además menos que las demás. Solo cambia la producción: el coste en madera, el tiempo de obra y los trabajadores de cada extractor siguen igual, y la Leñera (8 por la densidad de su parcela) y el Corral no se tocan. **2026-11-10:** sus nodos eran además los más pequeños (50 a 150) y, con 10 minutos de regeneración por cada vez que se vacían, el estaño sacaba de media la mitad que los demás; desde entonces nacen con 300 a 600 ([`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md), nodos de estaño grandes), y la Cantera y las minas suben hasta el nivel 3 (10 / 20 / 30 por minuto, §14).
+
+- **`fertilidadZona`** (`mejorFertilidadEnZona`): la mayor `mapa.fertilidadEn` de una lista de candidatos = la posición del asentamiento + `SITIO.muestrasFertilidad` (40) puntos `i = 0..39` en
+  `(pos.x + cos(2π·i/40)·r, pos.y + sin(2π·i/40)·r)` con `r = ((i mod 5)/5) · radioPotencial`, quedándose con los que caen dentro del polígono de zona (o con todos si el polígono está vacío). Todas las Granjas
+  del asentamiento comparten este único valor.
+  **Implementado en Rust (paridad P8, 2026-10-27):** `Nucleo::fertilidad_de_zona` (`nucleo/zonas.rs`), que el `Exterior` de cada paso lleva en ppm. La zona es la real (el disco recortado por las vecinas de otra Facción en contacto, como los sitios), el radio es el de la zona en
+  ese momento y los 40 senos y cosenos van en una tabla de enteros en ppm (el paso es determinista en cualquier máquina; una muestra puede caer a una milésima de donde la pone la coma flotante). El raster del artefacto es u8 (255 = 1,0); una muestra fuera del mapa no cuenta y,
+  si no queda ninguna, la fertilidad es 0. `SITIO.muestrasFertilidad` es una constante del núcleo (`MUESTRAS_FERTILIDAD`), no un parámetro cargado. Prueba: `las_granjas_rinden_con_la_mejor_fertilidad_de_la_zona` (`tests/territorio.rs`).
+
+<!-- parametros:SITIO -->
+```json
+{
+  "muestrasFertilidad": 40
+}
+```
+<!-- /parametros -->
+
+- **`factorTecnologia`** = producto de `bonusProduccion.factor` de las tecnologías adoptadas cuyo `bonusProduccion.recurso` coincide con el recurso del extractor (p. ej. `canteria` ×1,5 la piedra).
+  **Implementado en Rust (2026-10-25, 6C):** es el `factor_tecnologia` del `Exterior` de cada plaza (`tecnologia::adopcion::factor_produccion` sobre las adoptadas de su Facción), en ppm, que multiplica el ritmo de sus extractores y de los de sus pueblos antes del resto oculto (lo mismo mira el ingreso bruto del ascenso); sin ninguna adoptada con bonus vale 1 sin mirar más.
+- **Extracción**: el extractor pide `min(produccionBase × …, espacio libre del almacén para ese recurso)` y `mapa.extraer` devuelve `min(pedido, stock)`: **solo se gasta del yacimiento lo que cabe**. El stock es `cantidadInicial − extraído`. Si tras extraer el stock llega a 0, se emite
+  `construccion.yacimiento_agotado`.
+- **Regeneración** (`mapa.avanzarRegeneracion`, global del tick): un nodo con stock 0 que aún no tiene calendario agenda `instante + cooldown` (`REGENERACION_NODOS`: `livestock` 3 min; **todo lo demás** 10 min); cuando
+  `instante ≥ calendario` se borra lo extraído y el nodo vuelve a su cantidad inicial. Evento `mapa.yacimiento_regenerado`.
+  **Implementado en Rust (paridad P8, 2026-10-27):** el stock vivo es `economia::StockNodo` y la regeneración se aplica **al volver a extraer** pasado el cooldown (contado desde el instante en que se agotó), no con un barrido: como los extractores piden cada minuto,
+  el nodo vuelve en el primer paso de la plaza tras el cooldown. El paso anota `construccion.yacimiento_agotado { nodo, recurso, edificio, tipo }` (o `{ nodo, recurso, pueblo, tipo }` si lo explota un pueblo; recurso y tipo por su índice) cuando una extracción deja el nodo a 0
+  y `mapa.yacimiento_regenerado { nodo, recurso }` cuando un nodo vacío vuelve a dar; los oye la Facción de la plaza que extrae. Un nodo agotado que nadie vuelve a explotar no emite el regenerado hasta que alguien lo explote. Prueba: `la_extraccion_anota_el_nodo_que_se_agota_y_el_que_se_regenera` (`economia.rs`).
+- **Bosques** (en la reconstrucción: parcelas, ver nota en `Generacion_Del_Mundo.md` §10.3): en el TypeScript un bosque admitía 1, 2 o 3 Leñeras según su radio (`LENERA_POR_BOSQUE`); en Rust cada Leñera explota
+  una parcela y su producción depende de la densidad de esa parcela (el bloque `LENERA_POR_BOSQUE` se quitó el 2026-11-11: el motor no lo leía).
+- **Nodos reclamados**: un yacimiento lo explota un solo extractor de **todo el mundo** (`reclamosDeFuentes`: conjunto de `fuenteId` de todos los asentamientos; las Leñeras se cuentan aparte por bosque).
+
+### 5.3 Recetas (`avanzarRecetas`)
+
+Para cada edificio `activo` con `niveles` (fundicion, curtiduria, armeria, carpinteria, granFundicion y, en Rust, molino, horno, quesera, bodega y prensa), en el orden del array; para cada receta del **nivel interno actual** en el orden del catálogo
+(una receta puede consumir lo que otra produjo este mismo tick):
+
+```
+saltar si  recetasPausadas contiene receta.produce   ó  falta la tecnología  ó  receta.requiereEdificio no está (algún edificio activo de ese tipo con nivelInterno ≥ nivel)
+cantidad = produccionBase × ratioManoObraArtesanos × factorProduccionTalleres × (buey ? factorBuey : 1)       ; el buey solo existe en el molino (tanda 69)
+para cada insumo:  disponible = max(0, almacen[insumo].cantidad − reserva[insumo]);  cantidad = min(cantidad, disponible / porUnidad)
+espacio = capacidad − cantidad de receta.produce;  si cantidad > espacio: cantidad = espacio y el edificio queda marcado pausadoPorAlmacenLleno
+si cantidad ≤ 0: nada
+descontar  porUnidad × cantidad  de cada insumo;  añadir cantidad de receta.produce
+```
+
+- Con el producto sin sitio la receta **para**: solo se fabrica (y solo se consumen los insumos de) lo que cabe.
+- `reserva` es la misma de la auto-construcción (§6.3): un taller nunca baja un recurso por debajo de lo que el mantenimiento y la comida van a cobrar, más la reserva manual del Tesorero.
+- **No hay penalización por distancia** entre el taller y sus fuentes (se descartó el 2026-10-11): la posición de un edificio dentro de la ciudad no cambia lo que produce.
+- `factorProduccionTalleres` es el producto de las políticas activas (Barrios Gremiales ×1,1).
+- Las recetas devuelven además la cantidad fabricada por recurso, que alimenta los logros de Tecnología.
+
+> **Implementado en Rust (2026-11-08, tanda 69): los cinco edificios de la comida.** Cinco tipos nuevos del catálogo (§14.1) que se encargan **solo a mano** (la auto-construcción no propone ninguno, §6.2) y **sin tecnología** (autor, 2026-11-08: piden solo el nivel de la plaza; el árbol de tecnologías no cambia). Son talleres como los demás (`Tipo::es_taller`: `factorProduccionTalleres`, recetas pausables con `alternarReceta`) y tienen un solo nivel interno. **El molino y el horno los trabajan los pesants** (autor, 2026-11-08: de pesants para pesants; `Tipo::taller_de_pesants`): sus trabajadores cuentan con los de la Granja y la Leñera (`ratioManoObra` de los pesants) y no traen artesanos. La quesera, la bodega y la prensa los trabajan artesanos (`ratioManoObraArtesanos`). Código: `crates/asentamiento/src/{catalogo,produccion}.rs`.
+>
+> | Edificio | Nivel de plaza | Receta (por minuto, con la mano de obra entera) | Trabajadores |
+> |---|---|---|---|
+> | **Molino** | 1 | 4 de **harina** de 4 de trigo (1 por unidad) | 2 pesants |
+> | **Horno** | 1 | 4 de **pan** de 4 de harina (1 por unidad) | 2 pesants |
+> | **Quesera** | 2 | 2 de **queso** de 4 de leche (2 por unidad) | 2 artesanos |
+> | **Bodega** | 3 | 1 de **vino** de 2 de uva, o 1 de **cerveza** de 2 de cebada (2 por unidad; una de las dos, abajo) | 3 artesanos |
+> | **Prensa** | 4 | 1 de **aceite** (de oliva) de 2 de aceituna, o 1 de **aceite de sésamo** de 2 de sésamo (2 por unidad; una de las dos, abajo; hasta el 2026-11-12 las dos daban `aceite`) | 3 artesanos |
+>
+> **Las cifras de las recetas son provisionales, a calibrar con el batch.** Se eligieron para que un edificio de nivel 1 cubra la ración (`BIENES_DE_CONSUMO`, §9.2) de unas 100 cabezas de la clase que come el bien (pan 100 × 0,04 = 4; queso 100 × 0,02 = 2; vino, cerveza y los dos aceites 100 × 0,01 = 1); la harina, lo que gasta un horno (4). Como cualquier receta, produce solo lo que cabe en el almacén y lo que alcanzan los insumos (`disponible − reserva`).
+>
+> **El buey del molino.** Un molino admite **un buey**, que se compra con la orden `asignarBuey` (§13) al precio del buey de una caravana (`ANIMAL_CATALOGO.buey.costo`, 12 de oro; autor, 2026-11-08) y se queda allí: con él la receta produce `factorBuey` (2) veces más gastando lo mismo por unidad, y sigue limitada por el trigo que haya. `Edificio.buey` va en la foto (desde `BAN59`) y en la proyección (`Edificio.buey`). Se puede comprar con el molino **aún en obra** (no se mira el estado) y **se pierde con el molino**: al cancelar su obra (§6.4), en las ruinas de la plaza y, sin devolver nada, cuando una conquista lo deja **dañado** (`aplicar_conquista`, Combate §8; el molino reconstruido nace sin buey).
+
+>
+> **Una receta a la vez en la bodega y la prensa (autor, 2026-11-09).** La bodega tiene dos recetas (vino de uva, **cerveza de cebada**) y la prensa dos (aceite de oliva de aceituna, **aceite de sésamo** de sésamo), pero cada edificio trabaja **una sola**: la de su **insumo activo** (`Edificio.receta`, en la foto desde `BAN60` y en la proyección), que elige el Gobernador o el Maestro de Obras con `elegirReceta` (§6.4, §13). `TALLERES_DE_UNA_RECETA` da el tope de edificios de cada tipo por plaza y cuántas recetas distintas puede trabajar la plaza según su nivel operativo (un nivel que no está usa el más alto por debajo; por debajo del primero, el primero). Código: `crates/asentamiento/src/recetas_unicas.rs`.
+>
+> - **Hasta 3 bodegas y 3 prensas por plaza** (`maximoPorPlaza`), de cualquier estado: la cuarta se rechaza al encargarla (`obra.tope_por_plaza`, §6.4).
+> - **Recetas distintas por plaza**: la bodega, **una** en los niveles 3 y 4 (vino **o** cerveza) y **las dos** en el 5; la prensa, **siempre una** (aceite de oliva **o** de sésamo). Se mira **al elegir**: una elección que pasaría del tope se rechaza (`receta.tope_por_plaza`); cuentan los edificios de cualquier estado.
+> - **Receta de partida.** Un edificio nuevo nace con la receta que ya trabaja la plaza en ese tipo (la del de menor id que no esté parado) o, si no hay ninguno, con la primera del catálogo (vino; aceite de oliva). Uno sin receta guardada trabaja también la primera.
+> - **Recetas paradas.** Si la plaza baja de nivel y trabaja más recetas distintas de las que caben (vino y cerveza al bajar del 5), siguen las primeras por el menor id de edificio que las usa y **paran** las demás: sus edificios no producen (siguen contando como puestos de trabajo) hasta que la plaza recupere el nivel o se les elija otra receta. No se guarda: se deriva cada minuto (`recetas_paradas`) y la proyección lo dice en `Edificio.receta_parada`.
+> - `alternarReceta` (§5.4) sigue valiendo encima: para por el recurso producido en todos los talleres.
+
+<!-- parametros:TALLERES_DE_UNA_RECETA -->
+```json
+{
+  "bodega": { "maximoPorPlaza": 3, "recetasDistintasPorNivel": { "3": 1, "4": 1, "5": 2 } },
+  "prensa": { "maximoPorPlaza": 3, "recetasDistintasPorNivel": { "4": 1, "5": 1 } }
+}
+```
+<!-- /parametros -->
+
+
+### 5.4 Recetas pausadas
+
+`alternarReceta` añade o quita un recurso de `recetasPausadas`; la pausa vale para **todos** los talleres de la plaza que fabriquen ese recurso (incluida la Gran Fundición).
+
+### 5.5 Almacén lleno
+
+`pausadoPorAlmacenLleno` se pone a `true` en un edificio cuando su producción de este tick quedó limitada por el espacio del almacén y a `false` cuando no. Un **extractor** o una **receta** pausados no gastan
+yacimiento ni insumos por lo que no cabe (§5.2–5.3); la **Granja** y la **Leñera** (que no gastan nada) simplemente no suman lo que no cabe.
+
+## 6. Construcción
+
+### 6.1 Ciclo de una obra y orden dentro de `avanzarConstruccion`
+
+Estados: `en_cola` (pagado, esperando cuadrilla) → `en_construccion` (con `completaEn`) → `activo`. **El pago ocurre al encolar**, no al empezar.
+
+```
+Paso 1 — para cada edificio, en orden:
+    en_construccion:  si completaEn existe e instante < completaEn → sigue.
+                      si no (incl. completaEn ausente) → completa: evento construccion.edificio_completado; edificiosCompletados += 1;
+                      capacidad de Almacén/Granero (+, nivel 1 si es nuevo; el que conserve si es reconstrucción);
+                      si es 'mercado': nacen los puestos del nivel 1 (§6.6);   resultado: activo, completaEn y danado borrados.
+    en_cola:          se trata en el Paso 2.
+    activo:           produce (§5.2).
+Paso 2 — arranque de obra:
+    cupo = max(0, maximoEnConstruccionSimultanea − cuadrillasOcupadas(edificios AL EMPEZAR EL TICK))
+    para cada en_cola ordenado por prioridad desc (estable):
+        si cupo ≤ 0 y no es 'danado' → sigue en cola
+        si es 'danado': cobra ceil(costo × fraccionCosteReconstruccion) por recurso; si no hay → espera; factorDanado = fraccionCosteReconstruccion
+        evento construccion.iniciada;   estado = en_construccion;   completaEn = instante + max(1, round(tiempoConstruccionMinutos × factorTiempoConstruccion × factorDanado)) min
+        si no es 'danado': cupo −= 1
+Paso 3 — reserva = reservaDinamicaConstruccion(edificios ya actualizados, almacén actual, ración de guarnición) + reservaManual   (§6.3). Se calcula UNA vez y no se rehace.
+Paso 4 — recetas (§5.3), con esa reserva.
+Paso 5 — mejoras de nivel interno (§7), con esa reserva.
+Paso 6 — radioPotencial = min( radioMaximoPorNivel[nivel alcanzado], radioPotencial + crecimientoPorEdificioCompletado × obras terminadas en el Paso 1 )
+Paso 7 — si no autoConstruccionPausada: evaluarNecesidades (§6.2) → nuevos proyectos pagados y encolados; evento construccion.necesidad_detectada por cada uno.
+Paso 8 — avanzarObraDeRecintos (Murallas.md §5), con la misma reserva.
+Resultado: edificios = [edificiosBase, ...nuevosProyectos]   (el orden del array es el historial de crecimiento: NO se reordena, ver Trazado_Urbano.md)
+```
+
+> **En Rust (2026-10-22) los pasos 1 y 2 ya no son un bloque del paso de minuto**, y el bloque de arriba es el del TypeScript. Completar las obras (Paso 1) y terminar mejoras (Paso 5, primera mitad) y ascenso ocurren en su instante exacto con su cita (§1); el Paso 2 se ejecuta al fin de una obra o mejora (con la cuadrilla que libera), al encargar una obra a mano y en el paso de minuto (las comprometidas por la auto-construcción y las reconstrucciones), y **mide las cuadrillas en ese instante**, no «al empezar el tick» (`cupo = max(0, maximoEnConstruccionSimultanea − cuadrillasOcupadas ahora)`). Los pasos 3 a 8 siguen en el paso de minuto en ese orden.
+
+Consecuencias de orden que conviene saber (TypeScript):
+
+- Un proyecto comprometido en el tick *t* arranca como pronto en *t+1*; una obra de *m* minutos que arranca en *t+1* se completa en el primer tick con `instante ≥ completaEn` (= *t+1+m*).
+- El Paso 2 mide las cuadrillas con el estado **de principio de tick**: una obra que se completa en el Paso 1 no libera hueco hasta el tick siguiente. En cambio las mejoras (Paso 5) ven el estado ya actualizado. *(En Rust no: el hueco se libera en el instante del fin, §1.)*
+- `cuadrillasOcupadas` = edificios `en_construccion` **no `danado`** + edificios con `mejora` en curso.
+- El radio crece también por **reconstrucciones** terminadas, y estas también dan experiencia de Facción: `edificiosCompletados` no distingue.
+- Las **mejoras** que terminan no suman al radio ni a la experiencia.
+
+### 6.2 Auto-construcción (`evaluarNecesidades`)
+
+Cada candidato recibe `score = base de su banda + urgencia(0–100, recortada) + bonus` y se compromete en orden de score descendente mientras haya cupo y fondos. Las bandas no se solapan
+(`SCORE_BANDAS`): supervivencia 10000 > extractorBase 5000 > crecimiento 1000 > manual 900 > transformación 500. **En Rust, desde el 2026-11-01, sin la banda `extractorBase`**: la auto-construcción ya no propone ningún extractor (la Cantera, la última que proponía, solo se explota con un pueblo extractor, §14), y con ella se fue el bloque `EXTRACTOR_DESEMPATE` (el bonus por minutos sin cupo).
+
+**Reglas generales de elegibilidad de cualquier candidato:**
+- `puedePagar(tipo)`: la Facción tiene la tecnología que pide el tipo (`requiereTecnologia`) **y** `puedeIniciarConstruccion` sobre el almacén **entero** del tick (se pregunta *antes* de buscar sitio porque la colocación es lo más caro del tick; es conservador: solo descarta lo que el commit iba a rechazar igualmente).
+- `proyectoEnCurso(tipo)`: ya hay un edificio de ese tipo que no es `activo`, o ya se propuso uno en esta pasada (evita que dos ramas elijan el mismo bosque o nodo).
+- `puedeIniciarConstruccion(almacén, coste, tipo, reserva)`: `tieneRecursos` y, para cada recurso del coste con `reserva > 0`: `disponible − coste ≥ reserva`. **Exentos**: la Granja ignora la reserva de trigo y la Leñera la de madera
+  (`RECURSO_PROPIO`), porque son la única forma de recuperarlos.
+- Los ids nuevos son `edificio-<id asentamiento>-<contador>`, con el contador empezando en `edificios.length` y saltando los ya usados; **cada candidato propuesto consume un número**, se comprometa o no.
+
+**Candidatos, en el orden en que se proponen** (el orden de propuesta desempata scores iguales: el sort es estable):
+
+| # | Candidato | Condición | Score |
+|---|---|---|---|
+| 1 | **Granja**. **En Rust, ninguna desde el 2026-11-02** (decisión del autor, para darle sentido a la aldea agrícola): la ciudad tiene solo la Granja de la fundación, que **no se mejora desde el 2026-11-11** (un solo nivel en `EDIFICIO_CATALOGO`; antes se mejoraba como cualquier edificio, §7), y el trigo de más sale de las aldeas (§14.0). En el TypeScript: | `(granjas activas = 0 ∨ enDeficitProyectado)` ∧ ¬`hayMejoraGranjaDisponible` ∧ `granjasPendientes < límite` ∧ `puedePagar` ∧ hay sitio | supervivencia + (`granjas activas = 0` ? 100 : `deficitRatio × 100`) |
+| 2 | **Leñera** | leñeras **activas** `< EXTRACCION_MAXIMOS.porTipo` ∧ ¬`proyectoEnCurso` ∧ `puedePagar` ∧ hay bosque con hueco en la zona (`bosqueParaLenera`) ∧ hay sitio local | supervivencia + (0 activas → 100; `madera < reserva.madera` → 90; si no 30) |
+| 3 | **Extractores**: cantera, corral, minaCobre, mina, minaEstano, minaHierro (en este orden). **En Rust, ninguno desde el 2026-11-01**: los minerales y la Cantera, también la primera, solo se explotan con un pueblo extractor (§14; los minerales y las demás Canteras desde la fase 3C), y el Corral solo existe en la aldea agrícola desde el 2026-10-27 | `necesitaNuevoExtractor` ∧ ¬`proyectoEnCurso` ∧ `puedePagar` ∧ hay nodo libre y, si es interno (corral), sitio local | extractorBase + (alguna fuente viva ? 40 : 100) + `min(ticksSinCupo × bonusPorMinutoStarved, bonusMaximo)` |
+| 4 | **Vivienda** | (`capacidad de pesants = 0` ∨ `ocupaciónMáx ≥ umbralViviendaOcupada`) ∧ ¬pendiente ∧ ¬`alcanzoTopeDeViviendas` ∧ `puedePagar` | crecimiento + `ocupaciónMáx × 100` |
+| 5 | **Granero** | trigo `cantidad/capacidad ≥ umbralAlmacenAmpliacion` ∧ no hay granero activo ∧ ¬pendiente ∧ `puedePagar` | crecimiento + `ocupaciónTrigo × 100` |
+| 6 | **Almacén** | mayor ocupación de cualquier recurso con capacidad > 0 `≥ umbralAlmacenAmpliacion` ∧ ¬pendiente ∧ ¬`alcanzoTopeDeAlmacenes` ∧ `puedePagar` | crecimiento + `ocupaciónMáx × 100` |
+| 7 | **Curtiduría / Armería / Fundición** (a lo sumo **una** en vuelo de las tres, y solo **una** propuesta por pasada: el primero de la lista que valga) | `nivelActual ≥ requisitoNivelBase('fundicion')` (= 2) ∧ ninguna de las tres pendiente; para cada tipo en ese orden: ¬`alcanzoTopeDeTransformacion` ∧ `tieneInsumoDeArranque` ∧ `puedePagar` ∧ hay sitio | transformación (sin urgencia) |
+| 8 | **Carpintería** | `nivelActual ≥ requisitoNivelAsentamientoConstruccion` (2) ∧ ¬tope ∧ ¬pendiente ∧ `puedePagar` ∧ hay sitio | transformación |
+
+> **Implementado en Rust (2026-11-08, tanda 69):** la auto-construcción **no propone ninguno de los cinco edificios de la comida ni la estatua** (molino, horno, quesera, bodega, prensa y estatua solo se hacen a mano, §6.4); no están entre los candidatos de arriba. Prueba: `la_auto_construccion_nunca_levanta_ninguno_de_los_cinco_edificios_de_la_comida` (`crates/nucleo/tests/molino.rs`).
+
+Definiciones auxiliares:
+
+- **Déficit de trigo** (solo el TypeScript: en Rust no hay candidato Granja desde el 2026-11-02 y con él se fueron `maximoGranjasPendientesEnDeficit` y `hayMejoraGranjaDisponible`): `produccionActual = Σ por granja activa de produccionTrigoDeGranja(nivel) × fertilidadZona × ratioManoObra × factorProduccionTrigo`;
+  `consumoActual = consumoComidaPoblacion + ración de la guarnición`; `enDeficitTrigo = produccionActual < consumoActual`.
+  El **objetivo proyectado** usa una población `max(real, capacidad de Vivienda)` por clase: `enDeficitProyectado = produccionActual < consumoObjetivo`; `deficitRatio = (consumoObjetivo − produccionActual)/consumoObjetivo`.
+- **`granjasPendientes`** = granjas con estado ≠ activo; **`límite`** = `maximoGranjasPendientesEnDeficit` (3) si `enDeficitTrigo`, si no 1.
+- **`hayMejoraGranjaDisponible`**: queda al menos una cuadrilla libre *tras* reservar la de construir (`cuadrillasOcupadas < maximoEnConstruccionSimultanea − 1`) ∧ alguna granja activa, sin mejora en curso, tiene siguiente nivel y su `costoMejora` es pagable (con reserva).
+  Si es verdadera, **se prefiere mejorar a construir otra** (mejorar no diluye `ratioManoObra`).
+- **`necesitaNuevoExtractor`**: de los edificios de ese tipo (en cualquier estado) cuenta los que tienen fuente viva (`stock > 0`): si ninguno → sí; si no → `vivos < EXTRACCION_MAXIMOS.porTipo`.
+- **Sitio del extractor mineral/cantera/corral**: el nodo de ese tipo **más cercano a la posición del asentamiento** (empates por orden de generación del mundo) con stock, dentro del polígono de zona, no reclamado y cuyo terreno no sea `cima`. Cantera y minas se plantan en la posición del nodo (ámbito `mapa`); el Corral conserva el `fuenteId` pero se coloca en la ciudad.
+- **`ocupaciónMáx` de Vivienda**: `max(pesants/capacidadPesants, artesanos/capacidadArtesanos)`; una capacidad ≤ 0 cuenta como ocupación 1.
+- **`tieneInsumoDeArranque(tipo)`**: alguna receta del **nivel 1** del tipo consume un insumo con `cantidad > 0` en el almacén (sin recetas → verdadero). La Armería casi siempre pasa (Arma de Madera pide solo madera).
+- **Topes de transformación** (`MAXIMO_TRANSFORMACION_POR_NIVEL[nivelActual]`: 2→3, 3→5, 4→5, 5→5; nivel 1 sin tope): cuentan los edificios de ese tipo en cualquier estado.
+- **Anclas**: para los tipos con categoría de ancla (vivienda y transformación), antes de pedir sitio se llama a `asegurarAnclaPara`, que puede **crear un ancla nueva** (un edificio gratis y `activo`: plaza, pozo, parque, plaza de armas, patio de gremios; ver
+  [`Trazado_Urbano.md`](Trazado_Urbano.md)) si `nivelActual ≥ 2` (`NIVEL_GATE_ANCLAS`) y solo si luego cabe algún satélite del tipo pedido. **El ancla se conserva aunque el candidato no llegue a comprometerse.**
+
+**Commit único:**
+
+```
+cupo = max(0, maximoEnCola − nº de edificios en_cola)
+para cada candidato por score desc (estable):
+    si cupo ≤ 0 → fin
+    si es de transformación y alcanzoTopeDeTransformacion(contando los ya comprometidos aquí) → saltar
+    si !puedeIniciarConstruccion(almacén actual, coste, tipo, reserva) → saltar
+    si pisaCalleComprometida (revalidar el sitio contra la ciudad tal como queda realmente ordenada) → saltar
+    pagar (descontar el coste COMPLETO del catálogo);  nuevo edificio en_cola con prioridad = score;  registrarReclamo(fuente);  cupo −= 1
+extractoresTicksSinCupo[tipo] = (comprometido ? 0 : +1)   solo para los extractores PROPUESTOS este tick   (en Rust ya no existe desde el 2026-11-01: no se propone ningún extractor)
+```
+
+Un candidato que no se compromete **no deja rastro** (no hay placeholders atascados): se reevalúa el tick siguiente. La fuente de un extractor solo queda tomada cuando se paga.
+
+### 6.3 Reserva
+
+`reservaDinamicaConstruccion(asentamiento, capital, ración de guarnición)`:
+
+```
+para cada recurso r del coste de mantenimiento actual:   reserva[r] = costeMantenimiento[r] × RESERVA_CONSTRUCCION.horizonteMinutosMantenimiento
+reserva.trigo = (consumoComidaPoblacion + ración de guarnición [+ extra de reclutamiento]) × RESERVA_CONSTRUCCION.horizonteMinutosComida
+(+ reservaManual[r] del Tesorero, SOLO en el camino automático: recetas, mejoras automáticas, evaluarNecesidades, obra de recintos)
+```
+
+La construcción **manual** y la mejora manual usan la reserva dinámica **sin** la manual: son decisiones informadas y están exentas.
+
+### 6.4 Construcción manual (`anadirEdificioManualmente`)
+
+La pide un residente presente con el cargo `gobernador` o `maestroObras` (el motor solo exige que **alguien** tenga ese cargo; es el comando el que comprueba que el actor es ese titular). Cualquier tipo del catálogo menos el Centro Urbano y los puestos
+de Mercado. Validaciones, en orden:
+
+1. Hay alguien en ese cargo. 2. La Facción tiene la tecnología del tipo. 3. **La Maravilla pide el umbral de prestigio de la Facción** (`PRESTIGIO.maravilla`, Diplomacia_Facciones §3.5b), **en lugar de la Era** (`ordenEraMinimo` desaparece del catálogo y con él `obra.era_insuficiente`; antes pedía la Era V, que entonces no existía; desde el 2026-11-12 la Era V existe y la Maravilla sigue sin pedirla): `obra.prestigio_insuficiente`. 3a. **La estatua** solo se levanta en la **capital** de la Facción (`obra.solo_en_capital`) y tantas como umbrales de `PRESTIGIO.estatuas` alcanza su prestigio, contando las hechas y las que están en obra (`obra.prestigio_insuficiente`); es decorativa, de un solo nivel, y no está en `EDIFICIOS_UNICOS`. 3b. No es `centroUrbano` ni `puestoMercado`. 3c (Rust). No es un extractor de pueblo (Cantera ni minas: `obra.solo_por_pueblo`, la Cantera también la primera desde el 2026-11-01) ni el Corral (`obra.solo_en_aldea`).
+4. Tipos **únicos** (`EDIFICIOS_UNICOS`, §14.2): ya hay uno (de cualquier estado). **La Granja es única desde el 2026-11-02** (decisión del autor): la de la fundación es la única de la ciudad y otra se rechaza con `obra.unico`; desde el 2026-11-11 no se mejora (un solo nivel: `obra.no_es_mejorable`).
+5. Tope de Almacenes; tope de Viviendas. 6. `nivelActual ≥ requisitoNivelAsentamientoConstruccion` del tipo. 6b (2026-11-03). Si el nivel 1 del tipo trae `requiereEdificio` (hoy solo el Albergue de caravanas: un Mercado), hay un edificio activo de ese tipo con `nivelInterno ≥ requiereEdificioNivel`; si no, `obra.falta_edificio`. 7. Tope de transformación. 7b (2026-11-09). Tope de bodegas y de prensas de la plaza (`TALLERES_DE_UNA_RECETA.maximoPorPlaza`, 3, de cualquier estado): `obra.tope_por_plaza`. Una bodega o una prensa nueva nace con su receta de partida (§5.3).
+8. **Gran Fundición**: nivel de Facción ≥ `nivelFaccionMinimo` (6), el asentamiento es la **capital**, y la Facción no tiene ya otra (ninguno de sus asentamientos).
+9. `en_cola < maximoEnCola`. 10. `asegurarAnclaPara` y búsqueda de sitio (si no hay: «No hay sitio disponible dentro de la zona de influencia»).
+11. `puedeIniciarConstruccion` con la reserva dinámica (sin la manual).
+
+Paga el coste completo, crea el edificio `en_cola` con id `edificio-<id>-manual-<n>` (n = id de contexto del comando) y `prioridad = SCORE_BANDAS.manual` (900). No comprueba `tieneInsumoDeArranque`, ni `necesitaNuevoExtractor`, ni
+`autoConstruccionPausada`, ni `hayProyectoPendiente` de los tipos no únicos (se pueden encolar varias Viviendas hasta el tope de cola).
+
+`quitarDeCola(cargo, edificioId)`: solo un edificio `en_cola`; **devuelve el coste completo del catálogo** más el `costoMejora` de cada nivel interno 2..`nivelInterno`; **si el edificio está `danado` devuelve solo `OCUPACION.fraccionCosteReconstruccion` (la mitad) de cada recurso, redondeando hacia abajo**. Se añade con `agregarRecurso` (el tope de capacidad
+puede perder parte del reembolso). `moverEnCola(arriba|abajo)`: intercambia la `prioridad` con la del vecino de la lista ordenada por prioridad desc; en el extremo no hace nada.
+
+`asignarBuey(cargo, edificioId)` (tanda 69, §5.3): el Gobernador o el Maestro de Obras compran el buey de un **molino** (`molino.no_es_molino` si el edificio es de otro tipo, `molino.ya_tiene_buey` si ya lo tiene, `obra.recursos_insuficientes` si el almacén de la plaza no tiene su precio, 12 de oro; `edificio.desconocido` si la plaza no tiene tal edificio). Cobra del almacén y no mira el estado del molino (vale con la obra en curso). Evento `construccion.buey_asignado { edificio }`.
+
+`elegirReceta(cargo, edificioId, insumo)` (2026-11-09, §5.3): el Gobernador o el Maestro de Obras eligen la receta de una **bodega** o una **prensa** por el insumo que consume (`uva` o `cebada`; `aceituna` o `sesamo`). Rechazos: `edificio.desconocido` si la plaza no tiene tal edificio, `receta.no_se_elige` si no es una bodega ni una prensa, `receta.desconocida` si ninguna receta de su nivel interno consume ese insumo y `receta.tope_por_plaza` si, con el cambio, la plaza trabajaría en ese tipo más recetas distintas de las que caben en su nivel operativo; la misma que ya tiene, sin cambios. No mira el estado del edificio (vale con la obra en curso). Evento `construccion.receta_elegida { edificio, insumo }` (el insumo, por su índice de recurso, como `construccion.receta_alternada`).
+
+`cancelarConstruccion(cargo, edificioId)` (desde el 2026-11-06, pedido del autor): para la obra que **ya empezó** y **no devuelve nada**. Un edificio `en_construccion` (también la reconstrucción de uno `danado`) desaparece con su pieza del trazado y, si es una Leñera, su parcela; una mejora en curso se abandona y el edificio sigue activo en su nivel. La cuadrilla queda libre y la cola arranca **en ese mismo instante** lo que esperaba. Un edificio en la cola se quita con `quitarDeCola` (`obra.no_esta_en_curso`). Con la auto-construcción encendida, la necesidad que lo pidió puede volver a encolarlo en el paso de minuto siguiente.
+
+### 6.5 Topes por nivel
+
+- **Almacenes**: `NECESIDADES.maximoAlmacenesPorNivel[nivelActual]`.
+- **Viviendas** (`maximoViviendasPorNivel(n)`): si existe el requisito del nivel `n+1`: `max( ceil(pesants_{n+1}/capacidadPesants), ceil(artesanos_{n+1}/capacidadArtesanos) ) + MARGEN_VIVIENDAS (2)`; en el nivel máximo, `ceil(techoPoblacion[n]/capacidadPesants)`. **El margen de 2 se decidió el 2026-10-18**: con el cupo justo (40 Viviendas × 10 = 400 artesanos para un requisito de 400) la población logística se acerca al cupo sin tocarlo y el requisito no se cumpliría nunca; con el margen el cupo es 420.
+  Cuenta Viviendas de cualquier estado.
+
+  > **Implementado en Rust (2026-11-08, tanda 69):** como los requisitos de población y los techos van al doble (§11.1), los topes salen solos: con `capacidadPesants` 15 y `capacidadArtesanos` 10, **29 / 82 / 162 / 322 / 2.667** Viviendas en los niveles 1 a 5 (antes 16 / 42 / 82 / 162 / 1.334). El doble de Viviendas ocupa el doble de ciudad (cabida del trazado en la zona y separación de 20 u entre plazas) y sube el mantenimiento por edificio: se mide con el batch.
+
+### 6.6 Puestos del Mercado
+
+El Mercado es una **zona**: al completarse crea sus puestos del nivel 1 y al mejorar a cada nivel los de ese nivel, **gratis, ya `activo`**, sin pasar por la cola. Para cada forma de `MERCADO_PUESTOS_POR_NIVEL[nivel]` (en ese orden) busca sitio con
+`sitioEnTrazado(..., 'puestoMercado', forma)`; si no hay, **se salta en silencio**. El puesto lleva en `nivelInterno` su forma (no es progresión) y `PUESTO_MERCADO_FORMA[forma]` es su huella. Los puestos son edificios `activo`
+a todos los efectos (cuentan en el mantenimiento, §10.1).
+
+## 7. Mejoras de nivel interno
+
+Tipos que mejoran: `EDIFICIOS_CON_NIVELES` (§14.2).
+
+**Elegibilidad** (`elegibleParaMejora`): el edificio está `activo`, es de esos tipos, no tiene ya una `mejora`, existe el nivel siguiente y se cumple: `nivelActual del asentamiento ≥ siguiente.requisitoNivelAsentamiento`;
+la Facción tiene `siguiente.requiereTecnologia`; si hay `requiereEdificio`, **algún** edificio activo de ese tipo tiene `nivelInterno ≥ requiereEdificioNivel` (por defecto 1).
+
+**Duración** (`minutosDeMejora`): `max(1, round( (niveles[siguiente].obraMinutos ?? tiempoConstruccionMinutos × MEJORA_EDIFICIO.multiplicadorPorNivel^(siguiente − 1)) × factorTiempoConstruccion ))`.
+O sea, la obra base ×2 para el nivel 2, ×4 para el 3, ×8 para el 4, salvo los `obraMinutos` propios (Taberna y Palacio; la Granja los tuvo del 2026-10-28 al 2026-11-11, 240, 480 y 960 minutos, hasta que dejó de tener mejoras).
+
+**Talleres de fabricación de prueba (decisión del autor del 2026-11-04).** Mientras se hacen pruebas, la Fundición, la Curtiduría, la Armería, la Carpintería y la Gran Fundición levantan su nivel 1 en **5 minutos** (`tiempoConstruccionMinutos`; antes 720, y 2.880 la Gran Fundición), y como no tienen `obraMinutos` sus mejoras bajan en proporción: 10 minutos el nivel 2 y 20 el 3 (antes 1.440 y 2.880). Los cuarteles (Barracón, Galería de tiro, Caballerizas) no cambian. Se vuelve a las de antes cuando acaben las pruebas.
+
+> **La Armería también es la tienda y la forja del héroe (2026-11-12, D1).** Una Armería **activa** (cualquier nivel interno) deja al héroe que está dentro de la plaza comprar y vender objetos con sus monedas (`comprar_objeto`, `vender_objeto`) y forjarlos (`forjar_objeto`): desde el 2026-11-12 en cualquier plaza con la Armería activa cuya forja esté abierta a su grupo, con un impuesto en monedas que va al fondo de la plaza (`Asentamiento::forja`, que fijan el Tesorero o el Gobernador con `configurar_forja`). El metal lo abre la tecnología de la Facción de la plaza. No cambia nada de sus recetas, sus artesanos ni su producción. Reglas y rechazos en [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §4.6.
+
+**Cada tick** (`avanzarMejoras`), dos pasos *(en Rust, el primero ocurre en el instante de fin de la mejora y el segundo en el paso de minuto)*:
+
+1. **Terminar**: para cada edificio con `mejora` y `instante ≥ completaEn` → `aplicarMejoraTerminada`: si la huella cambia de tamaño (lo hacía la Granja, 2×2, 2×3, 4×3, 6×6, hasta que el 2026-11-11 dejó de tener niveles; hoy ningún edificio del catálogo cambia de huella, pero la regla sigue y se prueba con una Granja de cuatro niveles) se muda a un hueco con `reubicarPorTamano`;
+   **si no hay hueco, la mejora espera** (conserva `mejora` y su cuadrilla) y se reintenta el tick siguiente *(en Rust: el paso de minuto siguiente)*. Al terminar sube `nivelInterno`, borra `mejora`, y: Mercado → crea los puestos del nivel nuevo; Granero → `ampliarCapacidad(trigo, capacidadTrigo[nuevo] − capacidadTrigo[viejo])`.
+   Evento `construccion.mejora_completada`.
+2. **Empezar las automáticas**: `cuadrillasLibres = maximoEnConstruccionSimultanea − cuadrillasOcupadas − 1` (**siempre deja una libre para construir**). Recorre los edificios en orden del array mientras `cuadrillasLibres > 0`:
+   si es elegible, `puedeIniciarConstruccion(costoMejora)` (con la reserva) y, **si la huella cambia, ya hay hueco para reubicar** (como la manual; decisión del autor, 2026-10-23: el TypeScript arrancaba sin mirarlo y una Granja sin hueco retenía su cuadrilla), **paga**, fija `mejora = {nivelObjetivo, completaEn: instante + minutos}`, `cuadrillasLibres −= 1`, evento `construccion.mejora_iniciada`. Se mejora todo lo que se pueda pagar, de cualquier tipo.
+
+**Mejora manual** (`mejorarEdificioManualmente`, Gobernador o Maestro de Obras): el edificio está activo; tecnología; `estadoMejoraEdificio` (elegible + pagable con la reserva dinámica); **debe quedar una cuadrilla** (`cuadrillasOcupadas < maximoEnConstruccionSimultanea`, puede tomar la última);
+si la huella cambia, ya debe haber hueco para reubicar. Paga y arranca la mejora; el nivel sube al terminar.
+
+Mientras se mejora el edificio sigue activo y produciendo con su nivel actual; la mejora ocupa cuadrilla.
+
+## 8. Reconstrucción tras un saqueo
+
+La conquista (Combate.md) baja un porcentaje de edificios a `estado: 'en_cola'` con `danado: true` (conservando `nivelInterno`) y les quita su capacidad de almacén. En el Paso 2 (§6.1) un `danado`: **no ocupa cuadrilla ni espera turno**, cobra
+`ceil(coste de catálogo × fraccionCosteReconstruccion)` **al arrancar** (si no hay con qué, espera), y tarda `tiempoConstruccionMinutos × factorTiempoConstruccion × fraccionCosteReconstruccion`. Al terminar vuelve a `activo`, recupera su capacidad (con el nivel que conservó) y `danado` se borra.
+Quitar de la cola un `danado` devuelve la mitad del coste y de las mejoras (§6.4).
+
+## 9. Población
+
+### 9.1 Crecimiento (`crecerPoblacion`)
+
+Las tres clases usan la misma forma: `esperado = actual × tasa`, con `tasa = tasaBase × comidaFactor × espacioFactor × estabilidad(1) × felicidad` (en Rust, además, `× modificadorDeBienes` de su clase, §9.2, desde la tanda 69), y **población siempre entera** (decisión del 2026-10-22, que sustituye a la «población continua» del 2026-10-13): cada clase guarda **habitantes enteros y un resto oculto** en milésimas de habitante; **no hay tirada**. En cada paso de un minuto el incremento `actual × tasa` (con `actual` = habitantes **más su resto**, que es la población continua de siempre, así que el ritmo de crecimiento es el mismo) se suma al resto, y **entra una persona entera cada vez que el resto llega a 1**. Requisitos de nivel, mano de obra, recaudación y consumo leen los habitantes enteros (el resto no lo lee nadie).
+
+```
+comidaFactor = factorCrecimientoMinimo + (1 − factorCrecimientoMinimo) × nutricion/100
+felicidad    = factorCrecimientoPoblacion(políticas) × (ocupado ? OCUPACION.factorCrecimiento : 1) × (1 + AEDAS.residentes.bonoFelicidad × aedasResidentes)
+
+Pesants:   espacio = capacidadPesants ≤ 0 ? 0 : clamp(1 − pesants/capacidadPesants, 0, 1)      (capacidad = nº de Viviendas activas × 15)
+           tasa = pesants.tasaCrecimientoBase × comida × espacio × felicidad × modificadorDeBienes(pesants)
+Artesanos: solo si hay ALGÚN taller activo (fundicion, curtiduria, armeria, carpinteria; en Rust, cualquier taller de artesanos, `Tipo::pide_artesanos`: también granFundicion y, desde la tanda 69, quesera, bodega y prensa; el molino y el horno no, que los trabajan los pesants) y espacio > 0 (capacidad = Viviendas activas × 10):
+           si artesanos = 0 → +1 sin tirar el dado (evento poblacion.primeros_artesanos);  si no, tasa = artesanos.tasaCrecimientoBase × comida × espacio × felicidad × modificadorDeBienes(artesanos)
+Nobleza:   solo si residentes ≥ nobleza.minCiudadanos ∧ hay Palacio activo ∧ espacio > 0 (capacidad = capacidadNobles del nivel del Palacio, 80/240/400);
+           si nobleza = 0 → +1 sin dado (evento poblacion.primeros_nobles);  si no, tasa = nobleza.tasaCrecimientoBase × comida × espacio × felicidad × modificadorDeBienes(nobleza) × factorCrecimientoNobleza × (1 + AEDAS.residentes.bonoNobleza × aedasResidentes)
+Techo:     techo = techoPoblacion[nivel ALCANZADO];  espacioBajoTecho = max(0, techo − población total)
+           crecimientoBruto = suma de las tres;  factorTecho = (bruto > espacioBajoTecho ∧ bruto > 0) ? espacioBajoTecho/bruto : 1
+           resto de cada clase += incremento × factorTecho;  habitantes += resto entero;  resto = lo que sobra (0 ≤ resto < 1)       (nunca purga población ya asentada)
+```
+Crecen las tres clases **solo** si la plaza puede crecer (§9.2: nutrición mayor que 0 y fuera de la recuperación del hambre). Los «+1 sin dado» de artesanos y nobleza son una persona entera.
+
+> **Implementado en Rust (2026-10-24, 5B), los residentes de la nobleza (Q8).** `Exterior.ciudadanos` ya no es un 1 fijo: son todos los residentes de la plaza, fundadores y quienes se mudaron (`Nucleo::ciudadanos_de`, una consulta al índice de residentes; `politica::residencia::ciudadanos_para_nobleza`). Desde 5B los fundadores pasan a residir en la plaza que fundan (Fundacion_Y_Refundacion §5).
+
+> **Implementado en Rust (2026-10-25, 6E), los Aedas residentes.** `Exterior.felicidad_extra` es el **producto** de la ocupación (`OCUPACION.factorCrecimiento` mientras la plaza está ocupada, si no 1) y `1 + bonoFelicidad × aedasResidentes` (D11 del plan del sistema 6: antes iba uno **o** el otro), y `Exterior.nobleza_extra` es `1 + bonoNobleza × aedasResidentes`, en ppm (`nucleo/construccion.rs::factores_extra`). El número de residentes de la plaza sale de un índice derivado (`Espacio::residentes_por_plaza`): el paso de minuto no recorre los residentes. `factorCrecimientoPoblacion(políticas)` lo pone la plaza, como antes.
+
+**El crecimiento no consume el generador aleatorio.** Los eventos «primeros artesanos» y «primeros nobles» (+1 sin dado) se disparan al cumplirse la condición.
+
+### 9.2 Comida y hambruna (`avanzarNutricionPoblacion`)
+
+> **Implementado en Rust (2026-11-08, tanda 69): la población come pan, queso, vino, aceite y carne** (y cerveza desde el 2026-11-09 y aceite de sésamo desde el 2026-11-12). `Poblacion::nutrir` y `Poblacion::crecer` (`crates/asentamiento/src/poblacion.rs`), con el bloque `BIENES_DE_CONSUMO` (§14.4) en lugar del trigo solo. **Cada minuto y en cada plaza** el consumo es mezclado:
+>
+> ```
+> necesidad = total × consumoComidaPorHabitante × factorConsumoComida(políticas)          ; la de siempre (0,1 por habitante y minuto), la clase no importa
+> para cada bien de BIENES_DE_CONSUMO.bienes (carne, pan, queso, vino, cerveza, aceite, aceiteSesamo; el orden no cambia nada, cada uno se reparte por su cuenta):
+>     pedido[clase]  = la clase lo come ? habitantes[clase] × bien.racion × factorConsumoComida : 0
+>     cobertura      = min(1, lo que hay del bien / Σ pedido)                              ; un bien que no llega se reparte EN PROPORCIÓN a lo que pide cada clase
+>     come[clase]    = pedido[clase] × cobertura                                           ; sale del almacén; alimenta 1 a 1, como el trigo
+>     modificador[clase] ×= 1 + (bien.modificador − 1) × come[clase] / pedido[clase]       ; cobertura proporcional: media ración da la mitad del salto
+> trigo     = max(0, necesidad − Σ lo que han comido los bienes)                           ; lo que falte hasta la necesidad lo pone el trigo
+> suministro = min(1, (Σ bienes + trigo comido) / necesidad)                               ; entra en la nutrición como más abajo
+> ```
+>
+> | Bien | Clases que lo comen | Ración por cabeza y minuto | Modificador con la ración entera |
+> |---|---|---|---|
+> | Carne | pesants, artesanos y nobleza | 0,02 | ×1,2 |
+> | Pan | pesants | 0,04 | ×2 |
+> | Queso | artesanos | 0,02 | ×1,5 |
+> | Vino | nobleza | 0,01 | ×1,5 |
+> | Cerveza (2026-11-09) | nobleza | 0,01 | ×1,25 |
+> | Aceite de oliva (`aceite`) | nobleza | 0,01 | ×1,5 |
+> | Aceite de sésamo (`aceiteSesamo`, 2026-11-12) | nobleza | 0,01 | ×1,25 |
+>
+> El aceite de sésamo va como la cerveza junto al vino (autor, 2026-11-12, D9): una plaza con los dos aceites le da a la nobleza los dos modificadores (×1,5 × ×1,25 = ×1,875), como con el vino y la cerveza. Pruebas: `la_nobleza_come_aceite_de_sesamo_…` y `con_los_dos_aceites_la_nobleza_suma_los_dos_modificadores` (`poblacion.rs`).
+>
+> Las raciones de una clase suman menos que su necesidad: **el trigo siempre hace falta**. Los modificadores de una clase **se multiplican** entre sí (pan ×2 por carne ×1,2 son ×2,4) y multiplican la tasa de crecimiento de su clase junto con los factores de siempre (§9.1: `tasa = tasaBase × comida × espacio × felicidad × modificador`); los «+1 sin dado» de los primeros artesanos y nobles no los usan. La **nutrición y el hambre** se miden como siempre, con la necesidad cubierta por todo lo consumido (bienes y trigo), no solo por el trigo. La **leche** no se consume: solo es materia prima de la quesera (§5.3). Ejemplo: 400 pesants necesitan 40 por minuto y piden 16 de pan y 8 de carne; con solo 8 de pan en el almacén el pan da ×1,5, la carne ×1,2 y se comen 8 de pan, 8 de carne y 24 de trigo; crecen ×1,8 (`el_ejemplo_del_diseno_…`, `poblacion.rs`). El consumo de bienes cuenta en el consumido y en la tendencia «+N/min» de cada recurso. Los **víveres de movimiento** (columnas, ejércitos y héroes) **solo usan trigo**, y la **guarnición** come como la población desde el 2026-11-11: su ración de carne por soldado (la de este bloque, 0,02) a la vez que el trigo, que pone el resto de su ración (Heroe_Y_Tropa §7; antes, toda la carne que podía y luego trigo). Pruebas: `crates/asentamiento/src/poblacion.rs` y `crates/nucleo/tests/consumo.rs`.
+
+> **Consumo pausado (2026-11-10, decisión del autor).** El Gobernador o el Tesorero de la plaza (residente y dentro) puede **pausar el consumo** de un bien de `BIENES_DE_CONSUMO` (carne, pan, queso, vino, cerveza, aceite de oliva o aceite de sésamo; **el trigo nunca**, `consumo.no_se_pausa`) con `pausar_consumo` (§13), para acumularlo y venderlo. `Asentamiento.consumo_pausado` guarda la lista en el orden del catálogo (foto, hash y campo 54 del contrato: interior, plaza propia y `ADMIN`). Un bien pausado **no entra en el reparto de arriba**: nadie lo come, la clase **no recibe su modificador** y lo que su ración habría puesto lo pone el trigo (`necesidad − Σ lo comido`), así que la nutrición no baja si hay trigo. La guarnición tampoco come la carne pausada: pasa directa al trigo (Heroe_Y_Tropa §7). La pausa se mantiene hasta que la quiten y se borra con la conquista de la plaza. Evento `consumo.pausado { recurso, pausado }`; sin cambio, `sin_cambios`.
+
+El bloque siguiente es el del TypeScript (solo trigo); en Rust el trigo es la parte que no cubren los bienes de arriba.
+
+```
+consumo = total × consumoComidaPorHabitante × factorConsumoComida(políticas)          (por tick; la clase no importa)
+factorSuministro = consumo > 0 ? min(1, trigo/consumo) : 1
+trigo = max(0, trigo − consumo)                                                       (se consume lo que haya)
+nutricion = factorSuministro ≥ 1 ? min(100, n + regeneracionPorMinuto) : max(0, n − degradacionSinComida × (1 − factorSuministro))
+si nutricion ≤ umbralMuertePorHambre (0):
+    afectados = pesants + artesanos
+    comunes   = afectados > 0 ? min(afectados, ceil(afectados × fraccionMuertePorMinutoHambre)) : 0
+    muertesPesants = round(comunes × pesants/afectados);  muertesArtesanos = comunes − muertesPesants
+    muertesNobleza = nobleza > 0 ? ceil(nobleza × fraccionMuertePorMinutoHambreNobleza) : 0
+    evento poblacion.hambruna_muerte { muertes, muertesPesants, muertesArtesanos, muertesNobleza } (si muertes > 0)
+```
+
+La nutrición **no** degrada el medidor de mantenimiento: son dos medidores independientes.
+
+**Mortalidad entera y simétrica (2026-10-22).** El bloque anterior es el del TypeScript. En Rust, mientras `nutricion = 0`, cada minuto muere la fracción `fraccionMuertePorMinutoHambre` de los pesants y de los artesanos enteros (5 %) y `fraccionMuertePorMinutoHambreNobleza` de la nobleza entera (1 %), **sin redondear hacia arriba**: la fracción se suma al resto de la clase con el signo cambiado y **muere una persona entera cuando el resto llega a −1**. Con 10 habitantes y el 5 % por minuto muere una persona cada dos minutos. Un resto del signo contrario (de antes de que cambiara el régimen) se descarta. El suceso `poblacion.hambruna` lleva las **personas** muertas ese minuto por clase (`pesants`, `artesanos`, `nobleza`) y solo se emite si murió alguien. La cobertura de un minuto con déficit parcial es `stock > 0 ? 1 : min(1, producción/consumo)`.
+
+**Hambre: D7 y D8 (aprobadas por el autor el 2026-10-21).**
+- **D7.** Con nutrición 0 **no crece ninguna clase** (ni aparecen los primeros artesanos o nobles): solo hay mortalidad. El factor de crecimiento `factorCrecimientoMinimo` (0,2) solo se aplica con nutrición positiva (mayor que 0 y fuera de la recuperación).
+- **D8.** Al tocar nutrición 0 la plaza entra en **recuperación** y **no vuelve a crecer hasta recuperar la nutrición 100** (20 minutos con comida completa: `regeneracionPorMinuto` = 5). La mortalidad es solo mientras la nutrición esté en 0; **durante la recuperación con nutrición positiva la población queda quieta**. Si la nutrición vuelve a 0, vuelve la mortalidad y sigue pendiente llegar a 100. Una plaza que **no ha pasado hambre** crece con la nutrición intermedia como siempre (`comidaFactor` entre 0,2 y 1). La marca de recuperación (`recuperando`) se guarda en el estado (foto y hash); no se deduce de la nutrición.
+
+### 9.3 Recaudación de oro
+
+`recaudacionOro = (pesants × tasaPesants + artesanos × tasaArtesanos + nobleza × tasaNobleza) × factorRecaudacion(políticas) × (ocupado ? OCUPACION.factorRecaudacion : 1)`. No depende de la distancia a la capital ni del nivel. Se suma al almacén con tope de capacidad
+(§1, paso 7).
+
+## 10. Mantenimiento y nivel operativo
+
+### 10.1 Coste (`calcularCostoMantenimiento`)
+
+```
+nivel     = nivelActual
+edificios = Σ sobre los edificios con estado 'activo' de  pesoVivienda (0,5) si es vivienda · pesoPiezaGratuita (0,5) si es de `piezasGratuitas` (puestoMercado, plaza, plazaDeArmas, patioDeGremios, pozo, parque) · 1 el resto, incluido el centroUrbano
+escala    = (1 + edificios/edificiosReferencia) × (1 + distancia a la capital/escalaDistancia)           (distancia 0 si no hay capital)
+coste.madera = costoBase.madera × escala
+si nivel ≥ nivelParaPiedra: coste.piedra = piedraBase × escala
+si nivel ≥ nivelParaOro:    coste.oro    = oroBase × escala
++ upkeepDeRecintos(recintos)   (Murallas.md §9.4: las celdas en pie de cada anillo a su nivel, sumado sin escala)
+```
+
+El **trigo no forma parte** del coste (se descuenta una sola vez, donde se consume). La **capital** (`encontrarCapital`) es la designada (`capitalDeFaccionId == faccionId` y con un Palacio activo, `capitalDesignada`) y, si no hay,
+el asentamiento vivo más antiguo (`fundadoEn` menor) de la Facción.
+
+> **Implementado en Rust (2026-10-24, 5C):** el paso de minuto de cada plaza busca la capital de su Facción (`Nucleo::exterior_de_capital`, entre las plazas de la Facción) y pasa al `Exterior` `es_capital`, `distancia_capital` (la distancia entre las dos plazas en milésimas, 0 en la capital) y, en la capital, si la Facción tiene ya Gran Fundición en alguna plaza y en cualquier estado. Con `escalaDistancia` = 80 u, una plaza a 80 u pagaba el doble y una a 1.000 u, ×13,5. Empate de antigüedad: el id menor.
+
+> **Calibración del batch político (decisión del autor del 2026-10-25, P1):** `escalaDistancia` pasa de 80 u a **300 u** (la fórmula lineal no cambia: `1 + d/300`). Un reino sostiene **media región** (~300 u) alrededor de su capital —×2 a 300 u— y sigue limitado más allá: ×3 a 600 u, ×4,3 a 1.000 u. Prueba: `asentamiento::mantenimiento::pruebas::la_escala_de_distancia_vigente_es_300_media_region` (y `politica.rs::la_distancia_a_la_capital_sube_el_mantenimiento_de_la_plaza_lejana`, con la plaza lejana a más de 1.000 u). Desde el 2026-10-26 la cifra está en el bloque `MANTENIMIENTO` (§14.5) y el código la lee de él. Cifras medidas: P1 de `crates/batch/decisiones/politica.json` y `Docs/Arquitectura/Sistema5_Contraste_y_Plan.md` («Calibración del batch político»).
+
+### 10.2 Pago y medidor (`avanzarMantenimiento`)
+
+```
+si transcurrido(fundadoEn) < graciaMinutos  ó  estaOcupado → nada (ni cobra ni regenera)
+costo = calcularCostoMantenimiento;  cubierta = media aritmética sobre los recursos del coste de min(1, almacén/coste)     (coste vacío → 1)
+si cubierta ≥ 1: descontar el coste entero         si no: de cada recurso se descuenta min(disponible, coste)  (se paga todo lo que hay)
+
+cubierta ≥ 1 (sano):
+    racha += 1;  medidor = min(100, medidor + regeneracionSiPagoCompleto)
+    si racha ≥ minutosSanosParaRecuperarNivel ∧ nivelActual < nivel ∧ cupo libre de la Facción en nivelActual + 1:  nivelActual += 1, racha = 0, evento mantenimiento.recuperado
+cubierta < 1 (déficit):
+    racha = 0;  medidor = max(0, medidor − degradacionPorDeficitTotal × (1 − cubierta))
+    medidor ≤ 0:
+        nivelActual > 1 → nivelActual −= 1, medidor = medidorInicial, evento mantenimiento.colapsado
+        nivelActual = 1 → RUINAS: evento asentamiento.ruinas { faccionId, nombre, razon, faltantes[], fundadoEn, duro }, destruido = true
+    si no: evento mantenimiento.deficit (si el medidor bajó)
+```
+
+**Recuperar mira el cupo de la Facción** (2026-11-04, decisión del autor): una plaza degradada recupera el nivel siguiente solo si su Facción tiene cupo libre en él (`CUPO_NIVEL_ASENTAMIENTO`, §11.2: ocupan las demás plazas con ese nivel operativo o con la obra de subida hacia él). Sin cupo se queda en su nivel y la `racha` sigue contando: recupera en el primer minuto sano con el puesto libre. Lo calcula el núcleo (`Nucleo::cupo_para_recuperar`) y lo pasa en `Exterior.cupo_para_recuperar`; sin degradar no se mira. Así degradar una plaza para que otra suba ya no deja pasar del cupo al recuperarse.
+
+`racha` sigue creciendo sin tope mientras `nivelActual == nivel`. Al recuperar un nivel el medidor también regenera ese tick (la regeneración se aplica antes de subir el nivel) y la racha vuelve a 0.
+
+### 10.3 Reserva y lo que evita
+
+La reserva de §6.3 existe para que la obra, los talleres y las mejoras nunca dejen sin pagar el mantenimiento ni la comida de los próximos `horizonteMinutos*` ticks.
+
+### 10.4 Ruinas
+
+Cuando `avanzarMantenimiento` devuelve `destruido`, el asentamiento desaparece del estado y el tick resuelve todo lo que colgaba de él: sus residentes pasan a la plaza más cercana de su Facción (o al campamento de mercenarios más cercano), su campamento de
+bandidos se dispersa, sus trueques se cancelan sin penalizar y las caravanas que iban o venían vuelven o se pierden (`engine/ruina.ts`, ver [`Comercio_Caravanas.md`](Comercio_Caravanas.md) §10). Si era la última plaza de la Facción, queda derrotada sin ganador.
+
+## 11. Nivel de asentamiento
+
+### 11.1 Gates (`evaluarGatesDeNivel(a, nivelObjetivo)`)
+
+```
+poblacion = pesants ≥ req.pesants ∧ artesanos ≥ req.artesanos           (la nobleza no cuenta; la población es entera desde el 2026-10-22, así que ya no hay que redondear: antes se leía redondeada al entero más cercano)
+construidos = nº de tipos de req.edificios con algún edificio ACTIVO cuyo nivelInterno ≥ req.nivelInternoMinimo[tipo] (por defecto 1)
+cumpleRecinto = req.recintoCompletoNivelMinimo indefinido ∨ algún recinto con nivel ≥ ese mínimo e integridad ≥ 1      ; una mejora o una ampliación en obra no lo quita: cuenta el anillo en pie con su nivel de antes (Murallas.md §9.3)
+conNivel = para cada (tipo, n) de req.edificiosConNivel (por defecto vacío): algún edificio ACTIVO de ese tipo con nivelInterno ≥ n
+edificios = construidos ≥ (req.edificiosMinimo ?? req.edificios.length) ∧ cumpleRecinto ∧ conNivel
+pueblo = pueblos ACTIVOS de la plaza (aldeas agrícolas y extractores) ≥ req.pueblosActivos (por defecto 0)
+```
+
+**Implementado en Rust (2026-10-27, mecánica 50):** el nivel 2 pide **400 pesants (200 hasta la tanda 69, ver abajo) + 2 de {Cantera, Leñera, Granja} + una aldea agrícola activa** (`aldeasAgricolas: 1` en `NIVEL_ASENTAMIENTO`); las minas y el Corral salen de su lista. Es el primer gate que mira un pueblo: `ReglasNivel::gates` recibe las aldeas activas (`Asentamiento::aldeas_activas`) y devuelve `Falta::Aldea`; `bloqueos_de_ascenso` da `Bloqueo::FaltaAldea` y `SolicitarAscenso` rechaza con `ascenso.falta_aldea`. Una aldea pendiente, en obra o destruida no cuenta; la que sube de nivel sí (sigue activa).
+
+**Cambio del 2026-10-31 (decisión del autor):** el gate ya no pide una aldea agrícola sino **un pueblo activo, aldea agrícola o pueblo extractor** (`pueblosActivos: 1`; `Asentamiento::pueblos_activos`, `Falta::Pueblo`, `Bloqueo::FaltaPueblo`; el rechazo sigue siendo `ascenso.falta_aldea`, con el mensaje «falta un pueblo activo»). Así sube también una plaza sin tierra fértil pero con minas. Los pueblos extractores se fundan desde el **nivel 1** de la madre (`nivelMadreMinimo.extractor: 1`, antes 2); como el cupo del nivel 1 era uno, en el nivel 1 la plaza levantaba o una aldea o un extractor.
+
+**Cambio del 2026-11-01 (decisiones del autor):** la Cantera ya no es un edificio de la ciudad, así que el nivel 2 pide **400 pesants (200 hasta la tanda 69), una Leñera y una Granja a nivel 2 (las dos) y un pueblo activo** (`edificios: ["lenera", "granja"]` sin `edificiosMinimo`); la piedra del mantenimiento del nivel 2 (`nivelParaPiedra: 2`) sale de un **pueblo de cantera**, y por eso el cupo de pueblos del nivel 1 sube a **dos** (`cupoPorNivel` 2 / 3 / 4 / 5 / 6): la plaza levanta en el nivel 1 su cantera y su aldea agrícola. Prueba: `el_nivel_2_pide_400_pesants_una_lenera_una_granja_a_nivel_2_y_un_pueblo_activo` (`asentamiento`, `nivel.rs`) y `una_plaza_vive_sola_construye_crece_y_sube_al_nivel_2` (`tests/asentamientos.rs`).
+
+**Implementado en Rust (2026-10-28, mecánica 56):** el nivel 2 pide **además una Granja a nivel 2** (`edificiosConNivel: {"granja": 2}` en `NIVEL_ASENTAMIENTO`, `Requisito::con_nivel`), aparte de los dos tipos de {Cantera, Leñera, Granja}: con Cantera y Leñera y las Granjas a nivel 1 no se sube. Si falta, es `Falta::Edificios` (`ascenso.faltan_edificios`), como cualquier otro edificio. Leñera y Cantera no tienen niveles. Va con el **arranque rápido** del mismo día: el nivel 1 de Vivienda, Granja y Leñera tarda 10, 5 y 2 minutos (`EDIFICIO_CATALOGO`; antes 240, 120 y 60) y las mejoras de la Granja fijan sus 240 / 480 / 960 minutos de antes (`obraMinutos`). Batch de población de entonces (300 plazas, 30 días, semilla 42, mundo `43ccdaa2`; con el requisito de 200 pesants de esa fecha), antes → después: 200 pesants a los 2,2 → 0,36 días de mediana; se pide la subida al nivel 2 a los 2,2 → 0,6 días y se alcanza a los 5,2 → 3,6 (la obra del ascenso sigue en 3 días); 314 → 629 pesants y 46 → 72 edificios a los 7 días. Sin recalibrar: pendiente de la decisión del autor.
+
+**Cambio del 2026-11-11 (decisión del autor): el nivel 2 pide 400 pesants, una Leñera y dos pueblos activos.** La Granja sale del gate (ni en `edificios` ni en `edificiosConNivel`: la de la fundación ya no sube de nivel, §5.2) y `pueblosActivos` pasa de 1 a **2**, aldeas (de cualquier cultivo, la ganadera incluida) o pueblos extractores. Con el cupo de 2 del nivel 1 (que no cambia), la plaza llega al nivel 2 con dos pueblos y el jugador elige cuáles: la cantera de la piedra del mantenimiento, una aldea de trigo, una ganadera o una mina. Pruebas: `el_nivel_2_pide_400_pesants_una_lenera_y_dos_pueblos_activos` (`asentamiento`, `nivel.rs`), `una_plaza_que_no_cubre_el_mantenimiento_del_nivel_siguiente_sube_igual` (`asentamiento/tests/ordenes.rs`) y `la_granja_de_la_fundacion_no_sube_de_nivel` (ídem).
+
+**Implementado en Rust (2026-11-08, tanda 69): requisitos de población y techos al doble.** En lugar de bajar el crecimiento (descartado por el autor) se dobla **solo la población** de los requisitos de `NIVEL_ASENTAMIENTO` (los edificios, la Granja a nivel 2, el pueblo activo, el recinto y el coste y la obra del ascenso no cambian) y se doblan **todos los techos de población**. Cifras en el bloque `NIVEL_ASENTAMIENTO` (§14.5); el cambio, por nivel:
+
+| Nivel | Pesants | Artesanos | Techo de población |
+|---|---|---|---|
+| 1 | — | — | 300 → 600 |
+| 2 | 200 → 400 | 0 | 1.500 → 3.000 |
+| 3 | 500 → 1.000 | 400 → 800 | 6.000 → 12.000 |
+| 4 | 1.000 → 2.000 | 800 → 1.600 | 12.000 → 24.000 |
+| 5 | 2.000 → 4.000 | 1.600 → 3.200 | 20.000 → 40.000 |
+
+Código: `crates/asentamiento/src/nivel.rs` (lee el bloque); los topes de Viviendas que salen de ellos, en §6.5. La mortalidad, el crecimiento y el espacio de Viviendas no cambian de fórmula: con el mismo ritmo, llegar a cada requisito tarda más (el batch `poblacion` lo mide).
+
+Devuelve `null` si el nivel no tiene requisito. `calcularNivelAsentamiento` encadena los gates desde `nivel` y dice hasta dónde se cumplirían (la usan los bots para decidir si piden la subida; **no sube nada**).
+
+### 11.2 Pedir la subida (`evaluarAscenso` / `iniciarAscenso`)
+
+*(Atajo de administración, `FijarNivelAsentamiento`: fija el nivel alcanzado y el operativo; una obra de ascenso en curso hacia un nivel que el atajo ya concede **se descarta**, porque al acabar bajaría el nivel. Decisión del autor, 2026-10-23.)*
+
+Solo el **Gobernador** (residente y presente). Bloqueos posibles, **todos a la vez**: `nivel_maximo` (la plaza ya está en `NIVEL_ASENTAMIENTO.nivelMaximo`, el 5; hasta el 2026-11-12 también si `nivelObjetivo > ASCENSO_ASENTAMIENTO.nivelTechoProvisional`, el 4, que ya no existe), `ascenso_en_curso`, `falta_poblacion`, `faltan_edificios`, `sin_cupo_de_faccion`,
+`recursos_insuficientes` (el coste de `porNivelObjetivo[objetivo]` no está entero en el almacén). Hasta el 2026-11-10 también `insolvente`: desde entonces la solvencia es una **advertencia** que no bloquea (abajo).
+
+- **Cupo de la Facción** (`cupoLibreParaNivel`): existe para los niveles objetivo 2 a 5 (el 4 y el 5 desde el 2026-11-04, decisión del autor: como mucho tres plazas en el 4 y una en el 5). Ocupan plaza los asentamientos de la Facción con `nivelActual == objetivo` **o** con una obra de ascenso hacia ese nivel; hay cupo si
+  `ocupadas < calcularCupoNivel(nivel de Facción, objetivo)` (curvas `CUPO_NIVEL_ASENTAMIENTO.maxNivel2/3/4/5` en `Diplomacia_Facciones.md` §3.5, índice = `clamp(nivel de Facción, 1, 10) − 1`). Antes del 2026-11-04 los niveles 4 y 5 no tenían cupo.
+- **Solvencia (advertencia, no bloqueo)**: desde el 2026-11-10 (decisión del autor) no impide pedir la subida, porque una plaza que vive del comercio compra lo que no produce y el bloqueo le impedía crecer; el paso de minuto la calcula y la deja en `Asentamiento.insolvencia_ascenso` (campo 52: por recurso, lo que llega y lo que pide por minuto, en milésimas; vacía si cubre todo o la plaza está en el nivel máximo), para el jugador y los bots (interior, plaza propia y `ADMIN`; `asentamiento::ascenso::insolvencia_de_ascenso`). La cuenta: para cada recurso del coste de mantenimiento **en el nivel objetivo** (`calcularCostoMantenimiento` con `nivel = nivelActual = objetivo`), el ingreso bruto por minuto —`Σ produccionPorMinuto` de sus edificios (con topes por stock del nodo y tecnologías)
+  más, para el oro, `recaudacionOro`— debe ser ≥ ese coste. Es bruto a propósito: no descuenta lo que gasten recetas o tropas. Lo que llega por **acarreo** (§14, pueblos extractores) cuenta como la **media por minuto de lo que ingresó de verdad
+  en la plaza en las últimas 24 h** (decidido por el autor el 2026-10-19; antes, la producción nominal de los pueblos con carro). **Desde el 2026-11-01 cuenta todo lo que llega, quepa o no** en el almacén (decisión del autor): antes contaba solo lo que entraba, y una plaza con el almacén de piedra lleno se quedaba insolvente para el nivel 2 aunque su cantera trajese de sobra. **Desde el 2026-11-03 es la media desde que llega** (decisión del autor): lo llegado en la ventana se divide entre los minutos que van desde el principio de la hora de su primera llegada en la ventana más una hora (lo que tarda el primer carro en llenarse y viajar), con 24 h como mucho; antes, siempre entre 1.440 minutos, y una cantera nueva no contaba entera hasta llevar un día entregando. Hasta el 2026-11-10 era el rechazo `ascenso.insolvente`, que decía por cada recurso que falta cuánto llega y cuánto pide por minuto («no cubriría el mantenimiento del nivel nuevo: piedra (llegan 2,1 por minuto y pide 4,3)»); ahora esas mismas cifras viajan en la advertencia.
+- **La subida al nivel 5 (autor, 2026-11-11, entrada 74; implementada el 2026-11-12):** sin tecnología ni edificio nuevo, la obra cuesta, además de 5.000 de madera, 5.000 de piedra y 2.500 de oro, **1.000 de vino, 1.000 de cerveza, 1.000 de aceite de oliva y 1.000 de aceite de sésamo** (`ASCENSO_ASENTAMIENTO.porNivelObjetivo.5`). Los requisitos siguen como estaban (4.000 pesants, 3.200 artesanos y el Palacio 3) y no depende de ninguna Era. Como una plaza de los niveles 3 y 4 hace una sola bebida y la Prensa un solo aceite (§5.3), la que sube trae de otra plaza o del mercado la otra bebida y el otro aceite. Pruebas: `del_nivel_4_se_sube_al_5_pagando_…` y `sin_alguno_de_los_cuatro_bienes_no_se_sube_al_nivel_5` (`asentamiento/tests/ordenes.rs`).
+- Si todo va bien: cobra el coste entero del almacén y fija `ascenso = { nivelObjetivo, iniciadoEn, completaEn: instante + max(1, round(obraMinutos × factorTiempoConstruccion)) }` (evento `asentamiento.ascenso_iniciado`). El factor de la Vía Rápida cuenta desde el 2026-11-15 (pedido del autor: toda obra lo usa), al arrancar: una subida ya empezada no cambia. Prueba: `la_via_rapida_acorta_la_subida_de_nivel_de_la_plaza_al_arrancar` (`asentamiento`, `tests/ordenes.rs`).
+- **Duración de prueba (decisión del autor del 2026-11-02):** mientras se hacen pruebas, `obraMinutos` es **10** para todos los niveles objetivo (antes 4.320, 10.080, 20.160 y 30.240: 3 días, 1, 2 y 3 semanas). Se vuelve a las de antes cuando acaben las pruebas.
+
+### 11.3 Durante la obra
+
+El asentamiento funciona con normalidad. Si lo conquistan, la obra se pierde sin devolución (Combate.md).
+
+### 11.4 Terminar (`avanzarAscenso`)
+
+Si `instante ≥ completaEn`: `nivel = nivelObjetivo` y, **solo si `nivelActual == nivel` antes de subir**, también `nivelActual = nivelObjetivo` (un asentamiento degradado no se «cura» de golpe); borra `ascenso`; evento `asentamiento.nivel_subio`. No vuelve a mirar gates, cupo ni solvencia.
+
+## 12. Políticas que tocan la economía
+
+`activarPolitica(cargo, politicaId)`: la política existe; si el cargo no es el Gobernador, la política es de su pool (`def.cargo == cargo`); el cargo está ocupado; no está ya activa para ese cargo; hay slot libre
+(`slotsDisponibles`: Gobernador `min(maximo, base + floor(nivelFaccion / nivelFaccionPorSlotExtraGobernador)) + (Sala del Consejo activa ? slotSalaConsejo : 0)`; el resto, `base`). Dura `duracionMinutosPorDefecto`, no se cancela,
+y `avanzarPoliticas` la borra cuando `instante ≥ expiraEn` (evento `politica.expirada`).
+
+Los factores se **multiplican** entre las políticas activas del asentamiento (`productoFactor`; 1 si no hay ninguna) salvo `cupoCaravanaExtra` y `cupoGuarnicionExtra`, que se **suman**. Los que lee este documento: `factorConsumoComida` (Racionamiento ×0,8),
+`factorCrecimientoNobleza`, `factorTiempoConstruccion` (Vía Rápida ×0,01 **DE PRUEBA** desde el 2026-11-04, decisión del autor para agilizar las pruebas: un 99 % menos, con un mínimo de 1 minuto por obra; antes ×0,75, que se restaura al acabar las pruebas; afecta a obras **y** mejoras al arrancar; desde el 2026-11-06, pedido del autor, también a la obra de los pueblos y las aldeas de la plaza, a la subida de nivel de sus aldeas y a las obras de sus avanzadas, al arrancar con todo entregado; desde el 2026-11-15, pedido del autor, **a toda obra**: también la subida de nivel de la plaza y cada celda de sus murallas, donde se multiplica por `factorTiempoMuralla`), `factorProduccionTrigo` (Edicto de Cosecha ×1,5), `factorRecaudacion` y `factorCrecimientoPoblacion` (Presión Fiscal ×1,6 / ×0,8),
+`factorTiempoMuralla`, `factorProduccionTalleres`. Los demás (comisiones, caravanas, reclutamiento, guarnición, perfil de trazado) pertenecen a sus sistemas.
+
+## 13. Comandos
+
+| Comando | Quién (residente y presente) | Qué |
+|---|---|---|
+| `anadirEdificioManualmente { asentamientoId, cargo, tipo }` | `gobernador` o `maestroObras` | §6.4. Evento `construccion.encolada` |
+| `quitarDeCola { asentamientoId, cargo, edificioId }` | ídem | §6.4. `construccion.desencolada` |
+| `cancelarConstruccion { asentamientoId, cargo, edificioId }` | ídem | §6.4, sin reembolso. `construccion.obra_cancelada { edificio, mejora }` |
+| `moverEnCola { …, direccion }` | ídem | §6.4. `construccion.cola_reordenada` |
+| `mejorarEdificioAhora { …, edificioId }` | ídem | §7. `construccion.mejora_forzada` |
+| `alternarAutoConstruccion { asentamientoId, pausada }` | gobernador o maestroObras | Idempotente. `construccion.auto_alternada` |
+| `alternarReceta { asentamientoId, recurso, pausada }` | gobernador o maestroObras | Idempotente. `construccion.receta_alternada` |
+| `pausarConsumo { asentamientoId, recurso, pausado }` | `gobernador` o `tesorero` | §9.2 (2026-11-10, orden `pausar_consumo`). Un bien de consumo (el aceite de sésamo también, 2026-11-12), nunca el trigo (`consumo.no_se_pausa`). Idempotente (`sin_cambios`). `consumo.pausado { recurso, pausado }` |
+| `calibrarReservaManual { asentamientoId, recurso, valor }` | `tesorero` (y debe haber uno) | `reservaManual[recurso] = clamp(round(valor), 0, NECESIDADES.reservaManualMaxima)`. Sin evento |
+| `renombrarAsentamiento { asentamientoId, nombre }` | cualquier residente | Nombre recortado; vacío = volver a mostrar el id. Como mucho `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres (`asentamiento.nombre_largo`) y **único** entre las plazas vivas del mundo, sin mirar tildes ni mayúsculas (`asentamiento.nombre_duplicado`) (5C-6, decisión del autor del 2026-10-24). `asentamiento.renombrado` (en Rust desde 5C: `RenombrarAsentamiento`, 143) |
+| `asignarBuey { asentamientoId, cargo, edificioId }` | `gobernador` o `maestroObras` | §6.4 (tanda 69, orden `asignar_buey`). Compra el buey de un molino. `construccion.buey_asignado { edificio }` |
+| `elegirReceta { asentamientoId, cargo, edificioId, insumo }` | `gobernador` o `maestroObras` | §6.4 (2026-11-09, orden `elegir_receta`). La receta de una bodega o una prensa. `construccion.receta_elegida { edificio, insumo }` |
+| `solicitarAscenso { asentamientoId }` | `gobernador` | §11.2. Error `ascenso.invalido` con todos los bloqueos |
+
+> **Implementado en Rust (2026-10-23, 4H T5).** `AlternarAutoConstruccion` emite `construccion.auto_alternada { pausada }`, `AlternarReceta` `construccion.receta_alternada { recurso, pausada }` (el recurso por su índice) y `MejorarEdificio` (`mejorarEdificioAhora`) `construccion.mejora_forzada { edificio }` antes de su `construccion.mejora_iniciada`; los oyen la Facción de la plaza y quien está dentro. `construccion.yacimiento_agotado` se emite desde la paridad P8 (2026-10-27, §5) y `asentamiento.renombrado` desde 5C.
+
+La pausa de la auto-construcción detiene la **detección de necesidades nuevas** (§6.2) y las **mejoras automáticas** (desde el 2026-11-04, decisión del autor: antes seguían lanzándose con la pausa puesta); lo ya pagado (obras comprometidas y mejoras en curso), las recetas y la obra de recintos siguen. La mejora a mano (`mejorarEdificioAhora`) sigue disponible.
+
+> **Implementado en Rust (2026-10-24, correcciones de 5C):** `RenombrarAsentamiento` rechaza un nombre de más de `largoMaximo` caracteres (contados como caracteres, no bytes, tras recortar) con `asentamiento.nombre_largo` y uno que ya lleve otra plaza viva (comparado con `politica::nombres::normalizar`, sin tildes ni mayúsculas, como los nombres de la lista) con `asentamiento.nombre_duplicado`. La plaza que se llama así ya no cuenta contra sí misma.
+
+<!-- parametros:NOMBRE_ASENTAMIENTO -->
+```json
+{
+  "largoMaximo": 32
+}
+```
+<!-- /parametros -->
+
+## 14. Parámetros
+
+### 14.1 Catálogo de edificios
+
+Cada entrada: `costo` (recursos que se pagan al encolar), `tiempoConstruccionMinutos`, `requisitoNivelAsentamientoConstruccion` (nivel **operativo** mínimo para construirlo, ausente = 0), `requiereTecnologia`, las cifras propias del tipo
+(`capacidadPesants/Artesanos`, `produccionBase*`, `trabajadoresRequeridos`, `capacidadPorRecursoAdicional`, `nivelFaccionMinimo`) y, si mejora, `niveles` con `costoMejora`, `requisitoNivelAsentamiento`, `requiereEdificio(+Nivel)`, `requiereTecnologia`,
+`obraMinutos`, `recetas`, `capacidadNobles`, `cupoCaravanas`, `cupoCarros`, `cupoMiradas`, `capacidadTrigo`, `produccionBaseTrigo`, `tamano`. Los edificios sin coste (`centroUrbano`, `puestoMercado`, `plaza`, `plazaDeArmas`, `patioDeGremios`, `pozo`, `parque`) nunca pasan por la cola: nacen gratis
+(fundación, mejora del Mercado, ancla).
+
+> **Implementado en Rust (2026-11-08, tanda 69):** seis tipos nuevos al final del catálogo (38 en total, `Tipo` en `crates/asentamiento/src/catalogo.rs`). El **molino** (nivel de plaza 1; `factorBuey` 2), el **horno** (1), la **quesera** (2), la **bodega** (3) y la **prensa** (4) son los talleres de la comida de §5.3: `costo` en madera y piedra, 5 minutos de obra, un solo nivel con sus `trabajadoresRequeridos` y su receta, sin tecnología; la quesera, la bodega y la prensa piden desde el nivel de plaza de su cultivo (Pueblos §14.0). La **estatua** (100 de piedra, 60 minutos, sin nivel ni tecnología) es decorativa: la desbloquea el prestigio y solo se levanta en la capital (§6.4). La **Maravilla** pierde el `ordenEraMinimo` y pide en su lugar el umbral de prestigio (§6.4); sigue pidiendo el nivel de plaza 5. Las cifras de las recetas son provisionales, a calibrar con el batch.
+
+<!-- parametros:EDIFICIO_CATALOGO -->
+```json
+{
+  "centroUrbano": {
+    "costo": {},
+    "tiempoConstruccionMinutos": 0
+  },
+  "vivienda": {
+    "costo": {
+      "madera": 10
+    },
+    "tiempoConstruccionMinutos": 10,
+    "capacidadPesants": 15,
+    "capacidadArtesanos": 10
+  },
+  "granja": {
+    "costo": {
+      "madera": 30
+    },
+    "tiempoConstruccionMinutos": 5,
+    "produccionBaseTrigo": 80,
+    "trabajadoresRequeridos": 4,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 4,
+        "recetas": [],
+        "produccionBaseTrigo": 80,
+        "tamano": {
+          "ancho": 2,
+          "alto": 2
+        }
+      }
+    }
+  },
+  "cantera": {
+    "costo": {
+      "madera": 20
+    },
+    "tiempoConstruccionMinutos": 240,
+    "produccionBasePiedra": 10,
+    "trabajadoresRequeridos": 4
+  },
+  "lenera": {
+    "costo": {
+      "madera": 10
+    },
+    "tiempoConstruccionMinutos": 2,
+    "produccionBaseMadera": 8,
+    "trabajadoresRequeridos": 4
+  },
+  "almacen": {
+    "costo": {
+      "madera": 50
+    },
+    "tiempoConstruccionMinutos": 360,
+    "capacidadPorRecursoAdicional": 600
+  },
+  "granero": {
+    "costo": {
+      "madera": 50
+    },
+    "tiempoConstruccionMinutos": 360,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 0,
+        "recetas": [],
+        "capacidadTrigo": 4000
+      },
+      "2": {
+        "trabajadoresRequeridos": 0,
+        "recetas": [],
+        "capacidadTrigo": 6000,
+        "requisitoNivelAsentamiento": 2,
+        "costoMejora": {
+          "madera": 100,
+          "piedra": 30
+        }
+      },
+      "3": {
+        "trabajadoresRequeridos": 0,
+        "recetas": [],
+        "capacidadTrigo": 8000,
+        "requisitoNivelAsentamiento": 2,
+        "costoMejora": {
+          "madera": 200,
+          "piedra": 60
+        }
+      },
+      "4": {
+        "trabajadoresRequeridos": 0,
+        "recetas": [],
+        "capacidadTrigo": 12000,
+        "requisitoNivelAsentamiento": 3,
+        "costoMejora": {
+          "madera": 400,
+          "piedra": 120
+        }
+      }
+    }
+  },
+  "mina": {
+    "costo": {
+      "madera": 40
+    },
+    "tiempoConstruccionMinutos": 480,
+    "produccionBaseOro": 10,
+    "trabajadoresRequeridos": 6
+  },
+  "minaCobre": {
+    "costo": {
+      "madera": 30
+    },
+    "tiempoConstruccionMinutos": 360,
+    "produccionBaseCobre": 10,
+    "trabajadoresRequeridos": 8
+  },
+  "minaEstano": {
+    "costo": {
+      "madera": 50
+    },
+    "tiempoConstruccionMinutos": 480,
+    "produccionBaseEstano": 10,
+    "trabajadoresRequeridos": 8
+  },
+  "minaHierro": {
+    "costo": {
+      "madera": 30
+    },
+    "tiempoConstruccionMinutos": 360,
+    "produccionBaseHierro": 10,
+    "trabajadoresRequeridos": 8,
+    "requiereTecnologia": "forja_hierro_temprana"
+  },
+  "corral": {
+    "costo": {
+      "madera": 30
+    },
+    "tiempoConstruccionMinutos": 240,
+    "produccionBaseLivestock": 3,
+    "trabajadoresRequeridos": 4
+  },
+  "granFundicion": {
+    "costo": {
+      "madera": 150,
+      "piedra": 100,
+      "oro": 50
+    },
+    "tiempoConstruccionMinutos": 5,
+    "nivelFaccionMinimo": 6,
+    "requisitoNivelAsentamientoConstruccion": 4,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 12,
+        "recetas": [
+          {
+            "produce": "lingoteCobre",
+            "produccionBase": 4,
+            "consumePorUnidad": {
+              "chatarraCobre": 1
+            }
+          },
+          {
+            "produce": "lingoteBronce",
+            "produccionBase": 4,
+            "consumePorUnidad": {
+              "chatarraBronce": 1
+            }
+          },
+          {
+            "produce": "lingoteHierro",
+            "produccionBase": 4,
+            "consumePorUnidad": {
+              "chatarraHierro": 1
+            }
+          }
+        ]
+      }
+    }
+  },
+  "fundicion": {
+    "costo": {
+      "madera": 80,
+      "piedra": 40
+    },
+    "tiempoConstruccionMinutos": 5,
+    "requisitoNivelAsentamientoConstruccion": 2,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 4,
+        "recetas": [
+          {
+            "produce": "lingoteCobre",
+            "produccionBase": 5,
+            "consumePorUnidad": {
+              "cobre": 2
+            }
+          }
+        ]
+      },
+      "2": {
+        "requisitoNivelAsentamiento": 2,
+        "costoMejora": {
+          "madera": 150,
+          "piedra": 100
+        },
+        "trabajadoresRequeridos": 8,
+        "recetas": [
+          {
+            "produce": "lingoteCobre",
+            "produccionBase": 5,
+            "consumePorUnidad": {
+              "cobre": 2
+            }
+          },
+          {
+            "produce": "lingoteEstano",
+            "produccionBase": 3,
+            "consumePorUnidad": {
+              "estano": 5
+            },
+            "requiereTecnologia": "aleacion_bronce"
+          },
+          {
+            "produce": "lingoteBronce",
+            "produccionBase": 1,
+            "consumePorUnidad": {
+              "lingoteCobre": 1.6,
+              "lingoteEstano": 0.4
+            },
+            "requiereTecnologia": "aleacion_bronce"
+          },
+          {
+            "produce": "lingoteHierro",
+            "produccionBase": 5,
+            "consumePorUnidad": {
+              "hierro": 2,
+              "madera": 1
+            },
+            "requiereTecnologia": "forja_hierro_temprana"
+          }
+        ]
+      },
+      "3": {
+        "requisitoNivelAsentamiento": 4,
+        "requiereTecnologia": "forja_hierro_estandarizada",
+        "costoMejora": {
+          "madera": 300,
+          "piedra": 200
+        },
+        "trabajadoresRequeridos": 12,
+        "recetas": [
+          {
+            "produce": "lingoteCobre",
+            "produccionBase": 7.5,
+            "consumePorUnidad": {
+              "cobre": 2
+            }
+          },
+          {
+            "produce": "lingoteEstano",
+            "produccionBase": 4.5,
+            "consumePorUnidad": {
+              "estano": 5
+            },
+            "requiereTecnologia": "aleacion_bronce"
+          },
+          {
+            "produce": "lingoteBronce",
+            "produccionBase": 1.5,
+            "consumePorUnidad": {
+              "lingoteCobre": 1.6,
+              "lingoteEstano": 0.4
+            },
+            "requiereTecnologia": "aleacion_bronce"
+          },
+          {
+            "produce": "lingoteHierro",
+            "produccionBase": 7.5,
+            "consumePorUnidad": {
+              "hierro": 2,
+              "madera": 1
+            },
+            "requiereTecnologia": "forja_hierro_temprana"
+          }
+        ]
+      }
+    }
+  },
+  "curtiduria": {
+    "costo": {
+      "madera": 80,
+      "piedra": 30
+    },
+    "tiempoConstruccionMinutos": 5,
+    "requisitoNivelAsentamientoConstruccion": 2,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 4,
+        "recetas": [
+          {
+            "produce": "cuero",
+            "produccionBase": 8,
+            "consumePorUnidad": {
+              "livestock": 0.5
+            }
+          }
+        ]
+      },
+      "2": {
+        "requisitoNivelAsentamiento": 2,
+        "costoMejora": {
+          "madera": 150,
+          "piedra": 100
+        },
+        "trabajadoresRequeridos": 6,
+        "recetas": [
+          {
+            "produce": "cuero",
+            "produccionBase": 12,
+            "consumePorUnidad": {
+              "livestock": 0.3333333333333333
+            }
+          },
+          {
+            "produce": "cueroCurtido",
+            "produccionBase": 2,
+            "consumePorUnidad": {
+              "cuero": 3
+            }
+          }
+        ]
+      },
+      "3": {
+        "requisitoNivelAsentamiento": 3,
+        "costoMejora": {
+          "madera": 450,
+          "piedra": 200
+        },
+        "trabajadoresRequeridos": 8,
+        "recetas": [
+          {
+            "produce": "cuero",
+            "produccionBase": 6,
+            "consumePorUnidad": {
+              "livestock": 0.25
+            }
+          },
+          {
+            "produce": "cueroCurtido",
+            "produccionBase": 3,
+            "consumePorUnidad": {
+              "cuero": 3
+            }
+          },
+          {
+            "produce": "cueroCalidad",
+            "produccionBase": 1,
+            "consumePorUnidad": {
+              "cueroCurtido": 2,
+              "cuero": 1
+            }
+          }
+        ]
+      }
+    }
+  },
+  "armeria": {
+    "costo": {
+      "madera": 80,
+      "piedra": 30
+    },
+    "tiempoConstruccionMinutos": 5,
+    "requisitoNivelAsentamientoConstruccion": 2,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 4,
+        "recetas": [
+          {
+            "produce": "armaCobre",
+            "produccionBase": 3,
+            "consumePorUnidad": {
+              "lingoteCobre": 1,
+              "madera": 1
+            },
+            "requiereTecnologia": "metalurgia_cobre"
+          },
+          {
+            "produce": "armaduraBasica",
+            "produccionBase": 3,
+            "consumePorUnidad": {
+              "cuero": 5
+            }
+          },
+          {
+            "produce": "armaMadera",
+            "produccionBase": 2,
+            "consumePorUnidad": {
+              "madera": 2
+            }
+          }
+        ]
+      },
+      "2": {
+        "requisitoNivelAsentamiento": 2,
+        "requiereEdificio": "fundicion",
+        "requiereEdificioNivel": 2,
+        "costoMejora": {
+          "madera": 150,
+          "piedra": 100
+        },
+        "trabajadoresRequeridos": 8,
+        "recetas": [
+          {
+            "produce": "armaCobre",
+            "produccionBase": 3,
+            "consumePorUnidad": {
+              "lingoteCobre": 1,
+              "madera": 1
+            },
+            "requiereTecnologia": "metalurgia_cobre"
+          },
+          {
+            "produce": "armaduraBasica",
+            "produccionBase": 3,
+            "consumePorUnidad": {
+              "cuero": 5
+            }
+          },
+          {
+            "produce": "armaBronce",
+            "produccionBase": 2,
+            "consumePorUnidad": {
+              "lingoteBronce": 1,
+              "madera": 2
+            },
+            "requiereTecnologia": "aleacion_bronce"
+          },
+          {
+            "produce": "armaHierro",
+            "produccionBase": 2,
+            "consumePorUnidad": {
+              "lingoteHierro": 1,
+              "madera": 2
+            },
+            "requiereTecnologia": "forja_hierro_temprana"
+          },
+          {
+            "produce": "armaduraIntermedia",
+            "produccionBase": 2,
+            "consumePorUnidad": {
+              "lingoteCobre": 1,
+              "cueroCurtido": 5
+            }
+          },
+          {
+            "produce": "armaMadera",
+            "produccionBase": 2,
+            "consumePorUnidad": {
+              "madera": 2
+            }
+          }
+        ]
+      },
+      "3": {
+        "requisitoNivelAsentamiento": 3,
+        "requiereEdificio": "fundicion",
+        "requiereEdificioNivel": 2,
+        "costoMejora": {
+          "madera": 450,
+          "piedra": 200
+        },
+        "trabajadoresRequeridos": 20,
+        "recetas": [
+          {
+            "produce": "armaCobre",
+            "produccionBase": 3,
+            "consumePorUnidad": {
+              "lingoteCobre": 1,
+              "madera": 1
+            },
+            "requiereTecnologia": "metalurgia_cobre"
+          },
+          {
+            "produce": "armaduraBasica",
+            "produccionBase": 3,
+            "consumePorUnidad": {
+              "cuero": 5
+            }
+          },
+          {
+            "produce": "armaBronce",
+            "produccionBase": 2,
+            "consumePorUnidad": {
+              "lingoteBronce": 1,
+              "madera": 2
+            },
+            "requiereTecnologia": "aleacion_bronce"
+          },
+          {
+            "produce": "armaHierro",
+            "produccionBase": 2,
+            "consumePorUnidad": {
+              "lingoteHierro": 1,
+              "madera": 2
+            },
+            "requiereTecnologia": "forja_hierro_temprana"
+          },
+          {
+            "produce": "armaduraIntermedia",
+            "produccionBase": 2,
+            "consumePorUnidad": {
+              "lingoteCobre": 1,
+              "cueroCurtido": 5
+            }
+          },
+          {
+            "produce": "armaBronceCalidad",
+            "produccionBase": 1,
+            "consumePorUnidad": {
+              "lingoteBronce": 5,
+              "madera": 5
+            },
+            "requiereTecnologia": "bronce_calidad_militar"
+          },
+          {
+            "produce": "armaduraBronce",
+            "produccionBase": 1,
+            "consumePorUnidad": {
+              "lingoteBronce": 1,
+              "cueroCalidad": 5
+            },
+            "requiereTecnologia": "bronce_calidad_militar"
+          },
+          {
+            "produce": "armaHierroCalidad",
+            "produccionBase": 1,
+            "consumePorUnidad": {
+              "lingoteHierro": 2,
+              "madera": 3
+            },
+            "requiereTecnologia": "forja_hierro_estandarizada",
+            "requiereEdificio": {
+              "tipo": "fundicion",
+              "nivel": 3
+            }
+          },
+          {
+            "produce": "armaduraBronceCalidad",
+            "produccionBase": 1,
+            "consumePorUnidad": {
+              "lingoteBronce": 2,
+              "cueroCalidad": 5
+            },
+            "requiereTecnologia": "bronce_laminado"
+          },
+          {
+            "produce": "armaMadera",
+            "produccionBase": 2,
+            "consumePorUnidad": {
+              "madera": 2
+            }
+          }
+        ]
+      }
+    }
+  },
+  "carpinteria": {
+    "costo": {
+      "madera": 60,
+      "piedra": 20
+    },
+    "tiempoConstruccionMinutos": 5,
+    "requisitoNivelAsentamientoConstruccion": 2,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 0,
+        "recetas": []
+      },
+      "2": {
+        "requisitoNivelAsentamiento": 3,
+        "costoMejora": {
+          "madera": 120,
+          "piedra": 60
+        },
+        "trabajadoresRequeridos": 4,
+        "recetas": [
+          {
+            "produce": "carroGuerra",
+            "produccionBase": 1,
+            "consumePorUnidad": {
+              "madera": 20,
+              "cueroCurtido": 2,
+              "lingoteBronce": 1
+            },
+            "requiereTecnologia": "carros_guerra"
+          }
+        ]
+      }
+    }
+  },
+  "barracon": {
+    "costo": {
+      "madera": 30
+    },
+    "tiempoConstruccionMinutos": 720,
+    "requisitoNivelAsentamientoConstruccion": 2,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 0,
+        "recetas": []
+      },
+      "2": {
+        "requisitoNivelAsentamiento": 2,
+        "requiereEdificio": "carpinteria",
+        "costoMejora": {
+          "madera": 100,
+          "piedra": 60
+        },
+        "trabajadoresRequeridos": 0,
+        "recetas": []
+      },
+      "3": {
+        "requisitoNivelAsentamiento": 3,
+        "requiereEdificio": "carpinteria",
+        "requiereEdificioNivel": 2,
+        "costoMejora": {
+          "madera": 300,
+          "piedra": 200
+        },
+        "trabajadoresRequeridos": 0,
+        "recetas": []
+      }
+    }
+  },
+  "galeriaDeTiro": {
+    "costo": {
+      "madera": 50
+    },
+    "tiempoConstruccionMinutos": 720,
+    "requisitoNivelAsentamientoConstruccion": 2,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 0,
+        "recetas": []
+      },
+      "2": {
+        "requisitoNivelAsentamiento": 2,
+        "requiereEdificio": "carpinteria",
+        "costoMejora": {
+          "madera": 140,
+          "piedra": 20
+        },
+        "trabajadoresRequeridos": 0,
+        "recetas": []
+      },
+      "3": {
+        "requisitoNivelAsentamiento": 3,
+        "requiereEdificio": "carpinteria",
+        "requiereEdificioNivel": 2,
+        "costoMejora": {
+          "madera": 400,
+          "piedra": 100
+        },
+        "trabajadoresRequeridos": 0,
+        "recetas": []
+      }
+    }
+  },
+  "caballerizas": {
+    "costo": {
+      "madera": 30
+    },
+    "tiempoConstruccionMinutos": 720,
+    "requiereTecnologia": "cria_caballar",
+    "requisitoNivelAsentamientoConstruccion": 2,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 0,
+        "recetas": []
+      },
+      "2": {
+        "requisitoNivelAsentamiento": 2,
+        "requiereEdificio": "carpinteria",
+        "costoMejora": {
+          "madera": 100,
+          "piedra": 60
+        },
+        "trabajadoresRequeridos": 0,
+        "recetas": []
+      },
+      "3": {
+        "requisitoNivelAsentamiento": 3,
+        "requiereEdificio": "carpinteria",
+        "requiereEdificioNivel": 2,
+        "costoMejora": {
+          "madera": 300,
+          "piedra": 200
+        },
+        "trabajadoresRequeridos": 0,
+        "recetas": []
+      }
+    }
+  },
+  "salaConsejo": {
+    "costo": {
+      "madera": 800,
+      "piedra": 1200,
+      "oro": 300
+    },
+    "requiereTecnologia": "instituciones_civicas",
+    "tiempoConstruccionMinutos": 2880,
+    "requisitoNivelAsentamientoConstruccion": 3
+  },
+  "taberna": {
+    "costo": {
+      "madera": 150,
+      "piedra": 60
+    },
+    "tiempoConstruccionMinutos": 360,
+    "requisitoNivelAsentamientoConstruccion": 2,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 0,
+        "recetas": [],
+        "cupoMiradas": 1
+      },
+      "2": {
+        "requisitoNivelAsentamiento": 2,
+        "costoMejora": {
+          "madera": 250,
+          "piedra": 120
+        },
+        "obraMinutos": 720,
+        "trabajadoresRequeridos": 0,
+        "recetas": [],
+        "cupoMiradas": 2
+      },
+      "3": {
+        "requisitoNivelAsentamiento": 3,
+        "costoMejora": {
+          "madera": 500,
+          "piedra": 250
+        },
+        "obraMinutos": 1440,
+        "trabajadoresRequeridos": 0,
+        "recetas": [],
+        "cupoMiradas": 3
+      }
+    }
+  },
+  "palacio": {
+    "costo": {
+      "madera": 600,
+      "piedra": 400,
+      "oro": 100
+    },
+    "tiempoConstruccionMinutos": 4320,
+    "requisitoNivelAsentamientoConstruccion": 2,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 0,
+        "recetas": [],
+        "capacidadNobles": 80
+      },
+      "2": {
+        "requisitoNivelAsentamiento": 3,
+        "costoMejora": {
+          "madera": 1200,
+          "piedra": 1000,
+          "oro": 300
+        },
+        "obraMinutos": 7200,
+        "trabajadoresRequeridos": 0,
+        "recetas": [],
+        "capacidadNobles": 240
+      },
+      "3": {
+        "requisitoNivelAsentamiento": 4,
+        "costoMejora": {
+          "madera": 2500,
+          "piedra": 2500,
+          "oro": 800
+        },
+        "obraMinutos": 10080,
+        "trabajadoresRequeridos": 0,
+        "recetas": [],
+        "capacidadNobles": 400
+      }
+    }
+  },
+  "mercado": {
+    "costo": {
+      "madera": 100
+    },
+    "tiempoConstruccionMinutos": 480,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 0,
+        "recetas": [],
+        "cupoCaravanas": 2,
+        "cupoCarros": 3
+      },
+      "2": {
+        "requisitoNivelAsentamiento": 2,
+        "costoMejora": {
+          "madera": 150,
+          "piedra": 100
+        },
+        "trabajadoresRequeridos": 0,
+        "recetas": [],
+        "cupoCaravanas": 4,
+        "cupoCarros": 9
+      },
+      "3": {
+        "requisitoNivelAsentamiento": 3,
+        "costoMejora": {
+          "madera": 450,
+          "piedra": 200
+        },
+        "trabajadoresRequeridos": 0,
+        "recetas": [],
+        "cupoCaravanas": 6,
+        "cupoCarros": 18
+      }
+    }
+  },
+  "albergueCaravanas": {
+    "costo": {
+      "madera": 80
+    },
+    "tiempoConstruccionMinutos": 240,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 0,
+        "recetas": [],
+        "requiereEdificio": "mercado",
+        "cupoCaravanas": 3,
+        "cupoCarros": 5
+      },
+      "2": {
+        "requisitoNivelAsentamiento": 2,
+        "costoMejora": {
+          "madera": 120,
+          "piedra": 80
+        },
+        "requiereEdificio": "mercado",
+        "requiereEdificioNivel": 2,
+        "trabajadoresRequeridos": 0,
+        "recetas": [],
+        "cupoCaravanas": 6,
+        "cupoCarros": 10
+      },
+      "3": {
+        "requisitoNivelAsentamiento": 3,
+        "costoMejora": {
+          "madera": 300,
+          "piedra": 150
+        },
+        "requiereEdificio": "mercado",
+        "requiereEdificioNivel": 3,
+        "trabajadoresRequeridos": 0,
+        "recetas": [],
+        "cupoCaravanas": 12,
+        "cupoCarros": 22
+      }
+    }
+  },
+  "puestoMercado": {
+    "costo": {},
+    "tiempoConstruccionMinutos": 0
+  },
+  "plaza": {
+    "costo": {},
+    "tiempoConstruccionMinutos": 0
+  },
+  "plazaDeArmas": {
+    "costo": {},
+    "tiempoConstruccionMinutos": 0
+  },
+  "patioDeGremios": {
+    "costo": {},
+    "tiempoConstruccionMinutos": 0
+  },
+  "pozo": {
+    "costo": {},
+    "tiempoConstruccionMinutos": 0
+  },
+  "parque": {
+    "costo": {},
+    "tiempoConstruccionMinutos": 0
+  },
+  "maravilla": {
+    "costo": {
+      "madera": 5000,
+      "piedra": 5000,
+      "oro": 500,
+      "cobre": 300,
+      "estano": 200,
+      "livestock": 200
+    },
+    "tiempoConstruccionMinutos": 40320,
+    "requisitoNivelAsentamientoConstruccion": 5
+  },
+  "molino": {
+    "costo": {
+      "madera": 60,
+      "piedra": 20
+    },
+    "tiempoConstruccionMinutos": 5,
+    "requisitoNivelAsentamientoConstruccion": 1,
+    "factorBuey": 2,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 2,
+        "recetas": [
+          {
+            "produce": "harina",
+            "produccionBase": 4,
+            "consumePorUnidad": {
+              "trigo": 1
+            }
+          }
+        ]
+      }
+    }
+  },
+  "horno": {
+    "costo": {
+      "madera": 30,
+      "piedra": 30
+    },
+    "tiempoConstruccionMinutos": 5,
+    "requisitoNivelAsentamientoConstruccion": 1,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 2,
+        "recetas": [
+          {
+            "produce": "pan",
+            "produccionBase": 4,
+            "consumePorUnidad": {
+              "harina": 1
+            }
+          }
+        ]
+      }
+    }
+  },
+  "quesera": {
+    "costo": {
+      "madera": 40,
+      "piedra": 20
+    },
+    "tiempoConstruccionMinutos": 5,
+    "requisitoNivelAsentamientoConstruccion": 2,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 2,
+        "recetas": [
+          {
+            "produce": "queso",
+            "produccionBase": 2,
+            "consumePorUnidad": {
+              "leche": 2
+            }
+          }
+        ]
+      }
+    }
+  },
+  "bodega": {
+    "costo": {
+      "madera": 60,
+      "piedra": 30
+    },
+    "tiempoConstruccionMinutos": 5,
+    "requisitoNivelAsentamientoConstruccion": 3,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 3,
+        "recetas": [
+          {
+            "produce": "vino",
+            "produccionBase": 1,
+            "consumePorUnidad": {
+              "uva": 2
+            }
+          },
+          {
+            "produce": "cerveza",
+            "produccionBase": 1,
+            "consumePorUnidad": {
+              "cebada": 2
+            }
+          }
+        ]
+      }
+    }
+  },
+  "prensa": {
+    "costo": {
+      "madera": 50,
+      "piedra": 30
+    },
+    "tiempoConstruccionMinutos": 5,
+    "requisitoNivelAsentamientoConstruccion": 4,
+    "niveles": {
+      "1": {
+        "trabajadoresRequeridos": 3,
+        "recetas": [
+          {
+            "produce": "aceite",
+            "produccionBase": 1,
+            "consumePorUnidad": {
+              "aceituna": 2
+            }
+          },
+          {
+            "produce": "aceiteSesamo",
+            "produccionBase": 1,
+            "consumePorUnidad": {
+              "sesamo": 2
+            }
+          }
+        ]
+      }
+    }
+  },
+  "estatua": {
+    "costo": {
+      "piedra": 100
+    },
+    "tiempoConstruccionMinutos": 60
+  }
+}
+```
+<!-- /parametros -->
+
+### 14.2 Construcción y producción
+
+<!-- parametros:NECESIDADES -->
+```json
+{
+  "umbralViviendaOcupada": 0.85,
+  "umbralAlmacenAmpliacion": 0.9,
+  "maximoAlmacenesPorNivel": {
+    "1": 4,
+    "2": 8,
+    "3": 16,
+    "4": 24,
+    "5": 32
+  },
+  "maximoEnCola": 4,
+  "maximoEnConstruccionSimultanea": 2,
+  "maximoTransformacionPorNivel": {
+    "2": 3,
+    "3": 5,
+    "4": 5,
+    "5": 5
+  },
+  "nivelGateAnclas": 2,
+  "nivelGateAnclasIndustria": 1,
+  "reservaManualMaxima": 999
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:SCORE_BANDAS -->
+```json
+{
+  "supervivencia": 10000,
+  "crecimiento": 1000,
+  "manual": 900,
+  "transformacion": 500
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:EXTRACCION_MAXIMOS -->
+```json
+{
+  "porTipo": 10
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:MEJORA_EDIFICIO -->
+```json
+{
+  "multiplicadorPorNivel": 2
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:ALMACEN -->
+```json
+{
+  "capacidadInicialPorRecurso": 800
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:MERCADO_PUESTOS_POR_NIVEL -->
+```json
+{
+  "1": [
+    1,
+    1,
+    2,
+    2,
+    3
+  ],
+  "2": [
+    1,
+    1,
+    2,
+    2,
+    3,
+    3,
+    3
+  ],
+  "3": [
+    1,
+    2,
+    2,
+    3
+  ]
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:PUESTO_MERCADO_FORMA -->
+```json
+{
+  "1": {
+    "ancho": 1,
+    "alto": 2
+  },
+  "2": {
+    "ancho": 1,
+    "alto": 3
+  },
+  "3": {
+    "ancho": 1,
+    "alto": 1
+  }
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:REGENERACION_NODOS -->
+```json
+{
+  "metales": {
+    "cooldownMinutos": 10
+  },
+  "livestock": {
+    "cooldownMinutos": 3
+  }
+}
+```
+<!-- /parametros -->
+
+Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIOS_CON_NIVELES` y `RECURSO_PROPIO_DE_EDIFICIO` (el recurso que cada edificio de supervivencia no protege con la reserva).
+
+<!-- parametros:EDIFICIOS_UNICOS -->
+```json
+[
+  "granja",
+  "granero",
+  "barracon",
+  "galeriaDeTiro",
+  "caballerizas",
+  "palacio",
+  "salaConsejo",
+  "taberna",
+  "mercado",
+  "albergueCaravanas",
+  "granFundicion",
+  "maravilla"
+]
+```
+<!-- /parametros -->
+
+<!-- parametros:EDIFICIOS_CON_NIVELES -->
+```json
+[
+  "fundicion",
+  "curtiduria",
+  "armeria",
+  "carpinteria",
+  "barracon",
+  "galeriaDeTiro",
+  "caballerizas",
+  "palacio",
+  "mercado",
+  "albergueCaravanas",
+  "granja",
+  "granero",
+  "taberna"
+]
+```
+<!-- /parametros -->
+
+<!-- parametros:RECURSO_PROPIO_DE_EDIFICIO -->
+```json
+{
+  "granja": "trigo",
+  "lenera": "madera"
+}
+```
+<!-- /parametros -->
+
+`NECESIDADES.maximoTransformacionPorNivel` es el tope de cada tipo de transformación por nivel operativo (§6.2), `nivelGateAnclas` el nivel mínimo para crear un ancla nueva, `nivelGateAnclasIndustria` el del barrio de la industria (el patio de gremios nace ya en el nivel 1 para que el molino y el horno vayan con los talleres; autor, 2026-11-10) y `reservaManualMaxima` el recorte de la reserva manual (§13).
+
+### 14.3 Fundación y zona
+
+<!-- parametros:FUNDACION -->
+```json
+{
+  "maxJugadoresFundacionGrupal": 5,
+  "minFundadoresParaFaccionNueva": 1,
+  "exigeCiudadaniaPrevia": false,
+  "materialesIniciales": {
+    "madera": 50,
+    "piedra": 20,
+    "trigo": 100,
+    "oro": 100
+  },
+  "viviendasIniciales": 3,
+  "costoMaderaExtraCaravana": 50,
+  "caducidadCaravanaHoras": 48,
+  "densidadBosqueMaximaParaFundar": 0.7,
+  "pendienteMaximaParaFundar": 0.3,
+  "separacionPlazas": 20
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:ZONA_INFLUENCIA -->
+```json
+{
+  "radioInicial": 12,
+  "crecimientoPorEdificioCompletado": 2,
+  "radioMaximoPorNivel": {
+    "1": 20,
+    "2": 30,
+    "3": 40,
+    "4": 50,
+    "5": 60
+  },
+  "segmentosPoligono": 48,
+  "pasoFusionContorno": 1
+}
+```
+<!-- /parametros -->
+
+### 14.4 Población
+
+<!-- parametros:POBLACION -->
+```json
+{
+  "pesants": {
+    "inicial": 20,
+    "tasaCrecimientoBase": 0.12
+  },
+  "artesanos": {
+    "tasaCrecimientoBase": 0.15
+  },
+  "nobleza": {
+    "minCiudadanos": 3,
+    "tasaCrecimientoBase": 0.01
+  },
+  "consumoComidaPorHabitante": 0.1,
+  "hambre": {
+    "nutricionInicial": 100,
+    "regeneracionPorMinuto": 5,
+    "degradacionSinComida": 20,
+    "factorCrecimientoMinimo": 0.2,
+    "umbralMuertePorHambre": 0,
+    "fraccionMuertePorMinutoHambre": 0.05,
+    "fraccionMuertePorMinutoHambreNobleza": 0.01
+  }
+}
+```
+<!-- /parametros -->
+
+`BIENES_DE_CONSUMO` (tanda 69, §9.2): `bienes` da, por bien de comida, las clases que lo comen, su ración por cabeza y minuto y el modificador de crecimiento con la ración entera (el orden de los bienes no cambia nada: cada uno se reparte por su cuenta); `guarnicion` lista lo único que come la guarnición además del trigo (Heroe_Y_Tropa §7). Cifras aprobadas por el autor como punto de partida, a calibrar con el batch.
+
+<!-- parametros:BIENES_DE_CONSUMO -->
+```json
+{
+  "bienes": {
+    "carne": { "clases": ["pesants", "artesanos", "nobleza"], "racion": 0.02, "modificador": 1.2 },
+    "pan": { "clases": ["pesants"], "racion": 0.04, "modificador": 2 },
+    "queso": { "clases": ["artesanos"], "racion": 0.02, "modificador": 1.5 },
+    "vino": { "clases": ["nobleza"], "racion": 0.01, "modificador": 1.5 },
+    "cerveza": { "clases": ["nobleza"], "racion": 0.01, "modificador": 1.25 },
+    "aceite": { "clases": ["nobleza"], "racion": 0.01, "modificador": 1.5 },
+    "aceiteSesamo": { "clases": ["nobleza"], "racion": 0.01, "modificador": 1.25 }
+  },
+  "guarnicion": ["carne"]
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:IMPUESTOS -->
+```json
+{
+  "tasaPesants": 0.004,
+  "tasaArtesanos": 0.015,
+  "tasaNobleza": 0.06
+}
+```
+<!-- /parametros -->
+
+### 14.5 Mantenimiento y nivel
+
+<!-- parametros:MANTENIMIENTO -->
+```json
+{
+  "medidorInicial": 100,
+  "costoBase": {
+    "madera": 1.5
+  },
+  "nivelParaPiedra": 2,
+  "piedraBase": 3,
+  "nivelParaOro": 3,
+  "oroBase": 2,
+  "edificiosReferencia": 50,
+  "pesoVivienda": 0.5,
+  "pesoPiezaGratuita": 0.5,
+  "piezasGratuitas": [
+    "puestoMercado",
+    "plaza",
+    "plazaDeArmas",
+    "patioDeGremios",
+    "pozo",
+    "parque"
+  ],
+  "escalaDistancia": 300,
+  "degradacionPorDeficitTotal": 10,
+  "regeneracionSiPagoCompleto": 5,
+  "graciaMinutos": 1440,
+  "minutosSanosParaRecuperarNivel": 30
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:RESERVA_CONSTRUCCION -->
+```json
+{
+  "horizonteMinutosMantenimiento": 8,
+  "horizonteMinutosComida": 8
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:NIVEL_ASENTAMIENTO -->
+```json
+{
+  "nivelMaximo": 5,
+  "requisitos": {
+    "2": {
+      "pesants": 400,
+      "artesanos": 0,
+      "edificios": [
+        "lenera"
+      ],
+      "pueblosActivos": 2
+    },
+    "3": {
+      "pesants": 1000,
+      "artesanos": 800,
+      "edificios": [
+        "armeria",
+        "curtiduria",
+        "fundicion",
+        "barracon",
+        "galeriaDeTiro"
+      ]
+    },
+    "4": {
+      "pesants": 2000,
+      "artesanos": 1600,
+      "edificios": [
+        "salaConsejo"
+      ],
+      "recintoCompletoNivelMinimo": 2
+    },
+    "5": {
+      "pesants": 4000,
+      "artesanos": 3200,
+      "edificios": [
+        "palacio"
+      ],
+      "nivelInternoMinimo": {
+        "palacio": 3
+      }
+    }
+  },
+  "techoPoblacion": {
+    "1": 600,
+    "2": 3000,
+    "3": 12000,
+    "4": 24000,
+    "5": 40000
+  }
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:ASCENSO_ASENTAMIENTO -->
+```json
+{
+  "porNivelObjetivo": {
+    "2": {
+      "costo": {
+        "madera": 600,
+        "piedra": 400,
+        "oro": 150
+      },
+      "obraMinutos": 10
+    },
+    "3": {
+      "costo": {
+        "madera": 1200,
+        "piedra": 1000,
+        "oro": 400,
+        "lingoteBronce": 100
+      },
+      "obraMinutos": 10
+    },
+    "4": {
+      "costo": {
+        "madera": 2500,
+        "piedra": 2500,
+        "oro": 1000,
+        "lingoteBronce": 150
+      },
+      "obraMinutos": 10
+    },
+    "5": {
+      "costo": {
+        "madera": 5000,
+        "piedra": 5000,
+        "oro": 2500,
+        "vino": 1000,
+        "cerveza": 1000,
+        "aceite": 1000,
+        "aceiteSesamo": 1000
+      },
+      "obraMinutos": 10
+    }
+  }
+}
+```
+<!-- /parametros -->
+
+El bloque `CUPO_NIVEL_ASENTAMIENTO` vive en [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) §3.5 (desde 5C, 2026-10-24, un solo bloque: el cupo lo calcula `politica::nivel::cupo_nivel` con el nivel de Facción y la economía recibe si queda sitio).
+
+### 14.6 Políticas
+
+<!-- parametros:POLITICAS -->
+```json
+{
+  "slotsPorCargo": {
+    "gobernador": {
+      "base": 2,
+      "maximo": 5
+    },
+    "tesorero": {
+      "base": 2,
+      "maximo": 2
+    },
+    "general": {
+      "base": 1,
+      "maximo": 1
+    },
+    "maestroObras": {
+      "base": 1,
+      "maximo": 1
+    },
+    "sacerdote": {
+      "base": 1,
+      "maximo": 1
+    }
+  },
+  "nivelFaccionPorSlotExtraGobernador": 3,
+  "slotSalaConsejo": 1,
+  "duracionMinutosPorDefecto": 150
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:POLITICA_CATALOGO -->
+```json
+[
+  {
+    "id": "racionamiento",
+    "cargo": "sacerdote",
+    "nombre": "Racionamiento",
+    "factorConsumoComida": 0.8
+  },
+  {
+    "id": "culto_fertilidad",
+    "cargo": "sacerdote",
+    "nombre": "Culto a la Fertilidad",
+    "factorCrecimientoNobleza": 1.5
+  },
+  {
+    "id": "via_rapida",
+    "cargo": "maestroObras",
+    "nombre": "Vía Rápida de Construcción",
+    "factorTiempoConstruccion": 0.01
+  },
+  {
+    "id": "postura_defensiva",
+    "cargo": "maestroObras",
+    "nombre": "Postura Defensiva",
+    "perfilTrazado": "compacta",
+    "factorTiempoMuralla": 0.75
+  },
+  {
+    "id": "arterias_comerciales",
+    "cargo": "maestroObras",
+    "nombre": "Arterias Comerciales",
+    "perfilTrazado": "caminera",
+    "factorComisionExterna": 0.8
+  },
+  {
+    "id": "barrios_gremiales",
+    "cargo": "maestroObras",
+    "nombre": "Barrios Gremiales",
+    "perfilTrazado": "gremial",
+    "factorProduccionTalleres": 1.1
+  },
+  {
+    "id": "plazas_mayores",
+    "cargo": "maestroObras",
+    "nombre": "Plazas Mayores",
+    "perfilTrazado": "nucleos",
+    "factorCrecimientoPoblacion": 1.25
+  },
+  {
+    "id": "comercio_abierto",
+    "cargo": "tesorero",
+    "nombre": "Comercio Abierto",
+    "factorComisionExterna": 0.6
+  },
+  {
+    "id": "aranceles",
+    "cargo": "tesorero",
+    "nombre": "Aranceles Proteccionistas",
+    "factorComisionExterna": 1.5
+  },
+  {
+    "id": "leva_forzosa",
+    "cargo": "general",
+    "nombre": "Leva Forzosa",
+    "factorCostoReclutamiento": 0.7
+  },
+  {
+    "id": "levas_guarnicion",
+    "cargo": "general",
+    "nombre": "Levas de guarnición",
+    "cupoGuarnicionExtra": 14
+  },
+  {
+    "id": "cupo_caravana_extra",
+    "cargo": "tesorero",
+    "nombre": "Ampliación de Flota",
+    "cupoCaravanaExtra": 1
+  },
+  {
+    "id": "carga_ampliada",
+    "cargo": "tesorero",
+    "nombre": "Carga Ampliada",
+    "factorCapacidadCaravana": 1.5
+  },
+  {
+    "id": "rutas_rapidas",
+    "cargo": "tesorero",
+    "nombre": "Rutas Rápidas",
+    "factorVelocidadCaravana": 1.5
+  },
+  {
+    "id": "edicto_cosecha",
+    "cargo": "gobernador",
+    "nombre": "Edicto de Cosecha",
+    "factorProduccionTrigo": 1.5
+  },
+  {
+    "id": "presion_fiscal",
+    "cargo": "tesorero",
+    "nombre": "Presión Fiscal",
+    "factorRecaudacion": 1.6,
+    "factorCrecimientoPoblacion": 0.8
+  }
+]
+```
+<!-- /parametros -->
+
+Todas las cifras de este documento son **placeholder sin calibrar** salvo que el código diga lo contrario; el efecto conjunto se mide con batch (`Docs/Mecanicas a balancear.md`).
+
+## 15. Invariantes
+
+| Invariante | Dónde se vigila |
+|---|---|
+| El almacén nunca es negativo, ni NaN, ni supera su capacidad | `invariantes_simulacion_larga.test.ts` |
+| Todo lo almacenado va en unidades enteras y el resto oculto de cada recurso está en `(−1000, 1000)` (C3b, 2026-10-24) | Rust: `Nucleo::fracciones_almacenadas` en la auditoría de cambios y en el batch (`inv_fracciones`); `asentamiento::almacen` (pruebas) |
+| La población nunca es negativa ni NaN | ídem |
+| `medidorMantenimiento` siempre en [0, 100] | ídem |
+| `nivel` nunca baja; `nivelActual ≤ nivel` | ídem |
+| Un recurso nunca baja de la reserva por una obra o taller automáticos | `recetasTalleres.test.ts`, `regresiones_historicas.test.ts` |
+| El coste de mantenimiento escala con edificios activos (la Vivienda y las piezas gratuitas cuentan la mitad), con el nivel efectivo y con la distancia sin tope | `costoMantenimiento.test.ts` |
+| El colapso del medidor baja `nivelActual` un escalón; en nivel 1 es ruina | `eventosDominioMantenimiento.test.ts` |
+| La nutrición cae en `100/degradacionSinComida` ticks sin trigo y cuesta población solo desde 0 | `hambruna.test.ts` |
+| El cupo de Facción por nivel no se puede superar ni reservando | `cupo_nivel_invariante.test.ts`, `ascenso.test.ts` |
+| La capacidad de Almacén/Granero sigue a los edificios que funcionan (no se infla tras reconstruir) | `capacidadAlmacenaje.test.ts` |
+| Ningún edificio queda bajo una calle comprometida | `edificiosSobreCalle.test.ts` (Trazado_Urbano.md) |
+| La mejora manual exige cuadrilla libre y respeta gates | `mejoraManual.test.ts` |
+
+## 16. Casos límite y decisiones que parecen raras
+
+- **El pago es al encolar y se devuelve entero al quitar** de la cola; una vez `en_construccion` no hay vuelta atrás ni reembolso.
+- **El orden del array `edificios` no se toca** al ordenar la cola: lo que se reordena es `prioridad`. Permutar el array movería las calles (Trazado_Urbano.md).
+- **Un almacén lleno pausa**: ni el taller consume insumos ni el extractor gasta el yacimiento por lo que no cabe (§5.5).
+- **Los nodos se regeneran rápido** (3 / 10 min), así que «agotar» un yacimiento es un bache corto; mientras tanto el extractor sigue pidiendo trabajadores y cuenta en el mantenimiento.
+- **Todo edificio `activo` paga mantenimiento**: los normales y el Centro Urbano, 1; las Viviendas y las piezas gratuitas (puestos del Mercado, anclas), 0,5.
+- **`requiereEdificio`**, tanto de una mejora como de una receta, se cumple con **cualquier** edificio activo de ese tipo que tenga el nivel.
+- **La zona crece solo construyendo**: sin obras terminadas el radio no crece, aunque suba el nivel (solo sube su techo).
+- **`nivel` vs `nivelActual`**: el techo de población y el radio máximo usan el nivel **alcanzado**; construir, mejorar, el cupo de Almacenes/Viviendas/transformación y los materiales del mantenimiento usan el **operativo**.
+- **Gracia de mantenimiento** de un día desde `fundadoEn`; durante ella el medidor ni baja ni sube. La ocupación tras una conquista suspende el mantenimiento por completo (no cobra, no regenera).
+- **Las anclas pueden crearse sin llegar a construir nada** (§6.2): son suelo que ocupa un edificio gratuito.
+- **Cada candidato propuesto gasta un número de id** aunque no se comprometa.
+- **Las políticas expiran después de la construcción** del mismo tick (§1): el último tick de una política todavía la aplica.
+
+## 17. Divergencias
+
+Ninguna abierta (las encontradas al documentar se resolvieron el 2026-10-11; ver [`Divergencias.md`](Divergencias.md) para las demás áreas).
+
+## 14. Pueblos extractores y obras de mapa (guerra logística, Doc 4.2.2)
+
+> **Implementado en Rust (2026-10-19, fase 3C).** Reglas puras en `crates/asentamiento/src/pueblos.rs` (el pueblo y su obra, el cupo, los costes y la extracción contra el almacén local) y el bloque `PUEBLOS_EXTRACTORES` de más abajo (**entra en la huella de las reglas de las fotos**); integración en `crates/nucleo/src/nucleo/pueblos.rs` (órdenes, carro de acarreo, candidatos), `economia.rs` (el mapa indexa ahora también los nodos de mineral) y `urbanismo.rs` (la planta). Formato de foto **`BAN7`** con los pueblos y **`BAN8`** (2026-10-19, ventana del acarreo; `BAN7` se rechaza): cada plaza guarda sus pueblos y la ventana en `codec_economia`. Pruebas: `crates/nucleo/tests/pueblos.rs` y los módulos `pueblos` y `acarreo`.
+> - **Un pueblo no es un edificio de la ciudad.** Vive en `Asentamiento.pueblos` de su madre (por id ascendente; su id es de mundo, del mismo contador que ejércitos y plazas), no en `edificios`: no pasa por la cola, no ocupa cuadrilla, no tiene pieza en la ciudad y no agranda ni la ciudad ni la zona. Activo, cuenta como **un edificio activo más** en el mantenimiento de la madre y sus trabajadores (los del extractor del catálogo) entran en la demanda de pesants de `ratioManoObra`; mientras está pendiente o en obra no cuenta para nada. No cuenta en los gates de nivel (ninguno pide un mineral a partir del nivel 3).
+> - **Restricción de extracción.** `AnadirEdificio` rechaza con `obra.solo_por_pueblo` los minerales y **toda Cantera, también la primera desde el 2026-11-01** (hasta entonces la primera, en cualquier estado, era directa). La auto-construcción ya solo proponía la primera Cantera y el Corral (desde el 2026-10-27, solo la primera Cantera: el Corral es de la aldea agrícola y `AnadirEdificio` lo rechaza con `obra.solo_en_aldea`; desde el 2026-11-01, ninguna), y `Mapa::proponer` devuelve «sin sitio» a las minas y a la Cantera. Los pueblos no entran en `EXTRACCION_MAXIMOS` ni en el reemplazo automático. **Foto `BAN53`** (2026-11-01): sin los minutos sin cupo de los extractores de cada plaza, que ya no existen; `BAN52` se lee descartándolos.
+> - **Hitos y épicas (2026-11-01).** Un pueblo extractor activo cuenta como su edificio (Cantera o mina) para los hitos `edificio` de las tecnologías (`VistaFaccion::edificio_activo`), y completarlo anota la obra de su tipo en las épicas (la aldea, la de Corral): así la cantería aparece con la primera cantera de la Facción, que ya solo puede ser un pueblo, y su ×1,5 llega a la piedra que sacan sus pueblos (`factorTecnologia`).
+> - **Obra de mapa** (órdenes 45-48, con la autorización provisional de las demás órdenes de plaza: administración o propietario de una columna de la Facción de la madre). `MarcarPueblo { asentamiento, nodo }` exige un nodo de piedra o mineral **libre, dentro de la zona real** de la madre **y con ruta por tierra hasta ella** (el A\* del mapa sin la red de caminos; `pueblo.sin_ruta` si no la hay), madre de nivel operativo ≥ 1 (≥ 2 hasta el 2026-10-31), cupo (**2 / 3 / 4 / 5 / 6** por nivel desde el 2026-11-01, antes 1 / 3 / 4 / 5 / 6, contando pendientes y en obra y las aldeas agrícolas) y la tecnología del extractor; deja la obra «pendiente de materiales» (`pueblo.marcado`), reclama el nodo y **no cobra nada al almacén**. `EntregarMateriales { ejercito, pueblo }` lleva a la obra, con la columna **a `radioPuerta` (2 u)** de su nodo y de la misma Facción, y la da cualquier héroe de la columna que sea **ciudadano** de esa Facción, sea o no su Líder (Doc 4.2.2; paridad, 2026-10-27), lo que falta de lo que cargan su carro (`suministro`) y sus caravanas adjuntas (primero el carro, luego las caravanas por id), recurso a recurso; con todo entregado arranca la obra (`pueblo.obra_iniciada`, la duración del extractor del catálogo: Cantera 4 h, cobre y hierro 6 h, oro y estaño 8 h, por el `factorTiempoConstruccion` de la madre desde el 2026-11-06: la Vía Rápida la acorta, como la de una aldea, la subida de nivel de una aldea y las obras de una avanzada) y el primer paso de minuto de la plaza con `t >= completaEn` la termina (precisión de un minuto, sin evento propio). `DestruirPueblo { pueblo }` cancela la obra o destruye el pueblo: libera cupo y nodo y **no devuelve nada** (ni lo entregado ni lo almacenado); el carro se pierde con su carga. `ReponerCarro { pueblo }` compra en la madre un carro nuevo (carro + buey) solo si el pueblo activo no tiene ninguno; sin la orden, la madre lo repone sola en su paso de minuto en cuanto puede pagarlo (2026-10-27; `Comercio_Caravanas.md`, el carro de acarreo). `Nucleo::candidatos_de_pueblo(plaza)` es el panel: los nodos de la zona sin pueblo cuyo extractor puede levantar la Facción.
+> - **Coste.** `PUEBLOS_EXTRACTORES.costeAdicional` (50 madera) + el coste del extractor del catálogo + el carro con su buey de la flota (`comercio::acarreo::coste_reposicion`: 20 madera y 12 oro): una mina de cobre son **100 madera y 12 oro**, como dice el ejemplo de arriba.
+> - **Extracción.** Un minuto de extracción del pueblo activo es `produccionBase × ratioManoObra × factorTecnología` contra el almacén local (1.000 por recurso desde el 2026-11-05, antes 500: `capacidadAlmacenLocal`, que debe ser al menos la capacidad del carro). Con el almacén lleno para y avisa una sola vez (`pueblo.almacen_lleno`); con el nodo agotado espera a la regeneración (10 min) sin mudarse. Va dentro del paso de minuto de la plaza: no hay evento por pueblo, tampoco por el ocioso.
+> - **Solvencia del ascenso (2026-10-19, decidido por el autor).** Lo que llega por acarreo cuenta como la **media por minuto de lo que ingresó en el almacén de la madre en las últimas 24 h**, no como la producción nominal. `Asentamiento.ingresos_acarreo` guarda la ventana como cubos de una hora por recurso (`IngresoAcarreo { recurso, hora, cantidad }`, a lo sumo 24 por recurso): el carro, al llegar (`acarreo_llega`), anota en su hora **todo lo que trae, quepa o no** (desde el 2026-11-01, decisión del autor; antes solo lo que cupo, y lo perdido por almacén lleno no contaba) y descarta los cubos que salieron de la ventana. Es una acumulación en la llegada: ningún evento por pueblo ocioso y el paso de minuto no cambia. La solvencia suma los cubos con `hora ∈ (ahora − 24, ahora]` (la hora en curso y las 23 anteriores: entre 23 y 24 horas de historia) y divide, en enteros con división truncada, entre los minutos desde el principio de la hora del primer cubo de la ventana más 60, con 1.440 como mucho (desde el 2026-11-03, decisión del autor; hasta entonces, siempre entre 1.440, y un pueblo recién levantado no pesaba del todo hasta llevar un día entregando). Sin formato de foto nuevo: sale de los mismos cubos. `bloqueos_de_ascenso` recibe ahora el instante de la pregunta. Sin bloque de parámetros nuevo: **la huella de las reglas no cambia**; sí cambia el formato de foto (`BAN8`).
+> - **Ruina y conquista de la madre.** Los pueblos son de la plaza: en la ruina desaparecen con ella (sus nodos quedan libres y sus carros, que la tienen por origen, se pierden en la cascada de comercio); en la conquista pasan con la plaza (y su carro, en la flota traspasada) a quien la tenga.
+> - **Planta del pueblo.** `Nucleo::planta_de_pueblo(id)` / `urbanismo::planta_de_pueblo`: función pura del id (`hash(semilla, "pueblo", [id])`), no se guarda; el trazado de asentamientos una sola vez con el extractor como ancla en el origen, **6 casas** (`casasDeLaPlanta`), el almacén y el corral del buey. La planta interna toma **el radio que necesiten sus piezas** (decisión del autor, 2026-10-23: el tope de 8 u. que salía del «0,2 de mapa» no lo decidió nadie; ver Trazado_Urbano, nota de los pueblos); en el mapa del mundo el pueblo sigue ocupando 0,2.
+> - **Hechos nuevos** (datos entre paréntesis): `pueblo.marcado` (pueblo, tipo, nodo), `pueblo.materiales_entregados` (pueblo, cantidad), `pueblo.obra_iniciada` (pueblo, completaEn), `pueblo.completado`, `pueblo.almacen_lleno`, `pueblo.destruido` (pueblo), `acarreo.sale` (pueblo, caravana, carga), `acarreo.llega` (caravana, carga, perdido), `acarreo.vuelve` (pueblo, caravana) y `acarreo.carro_repuesto` (pueblo, caravana). Rechazos nuevos: `obra.solo_por_pueblo` y `pueblo.*` (desconocido, nodo_desconocido, nodo_no_extraible, nodo_ocupado, fuera_de_la_zona, sin_ruta (2026-10-23), tecnologia_faltante, nivel_insuficiente, sin_cupo, no_esta_pendiente, nada_que_entregar, faccion_ajena, fuera_de_la_puerta, no_esta_activo, ya_tiene_carro).
+> - **Desde 5E (2026-10-25):** marcar, destruir y reponer el carro de un pueblo son del panel de la plaza madre: su Gobernador o su Maestro de Obras, residente y dentro (Proyecciones §5.1); las órdenes de la economía de la plaza, del cargo de §5.2.5 (las obras, el Gobernador o el Maestro de Obras; la reserva, el Tesorero; el ascenso, el Gobernador; activar una política, el titular del cargo que nombra, que ya no se da por ocupado).
+> - **Provisional (DUDA en el código y filas de paridad en `Docs/Mecanicas a desarrollar.md`).** Los cargos y los ciudadanos de la Facción no existen: manda `manda_en` (administración, propietario de una columna o cuenta de un héroe ciudadano de la Facción) y entrega la cuenta de un héroe ciudadano de la Facción de la obra (paridad, 2026-10-27; antes, el propietario de una columna). Desde la fase 4B-1 las tecnologías de la Facción (requisitos de edificios, recetas y pueblos) las da la administración (`FijarTecnologias`) y la ración de la guarnición de los residentes entra en el `Exterior` de la plaza. La guarnición de 30 mineros (el dato está en el bloque) y el saqueo son del sistema militar. Las avanzadas (§5.17) son la fase 4F (§14.1). Un pueblo completado no agranda la zona de la madre. La planta es un espacio interno: el 0,2 de mapa es lo que ocupa en el mundo, no su radio interno.
+
+**La extracción mineral sale de la ciudad.** Los minerales (cobre, estaño, hierro, oro) y **toda Cantera, también la primera** (desde el 2026-11-01; antes la primera era directa) solo se explotan con un **pueblo extractor**; Granja y Leñera siguen dentro, y el Corral solo existe en la **aldea agrícola** (§14.0). La piedra del mantenimiento del nivel 2 sale de un pueblo de cantera, que la plaza puede levantar ya en el nivel 1. En nivel 1 ya no hay minas; el oro de esa etapa sale de la recaudación por población.
+
+- **Qué es**: el extractor de mapa (`ambito: 'mapa'`) sobre su nodo, **más un almacén local (500, placeholder), un carro con buey (Comercio §12) y una guarnición de serie de 30 mineros** (IA, sin dueño, fuera de cupo; se repone gratis **de uno en uno, un minero cada `mineros.minutosPorMinero` (12) minutos desde la primera baja**: 30 en 6 h; decisión del autor, 2026-10-23). No es un asentamiento: sin zona, nivel, cargos ni medidor; cuenta como **edificio activo de su plaza madre**, que paga su mantenimiento.
+- **Requisitos**: madre de **nivel 1 o más** (2 o más hasta el 2026-10-31), el nodo dentro de su zona y **con ruta por tierra hasta la madre** (decisión del autor, 2026-10-23: un pueblo sin ella no podría acarrear nunca, así que no se funda; rechazo `pueblo.sin_ruta`). **Cupo** por nivel de la madre: 2 / 3 / 4 / 5 / 6 pueblos (niveles 1 a 5; en el nivel 1 caben dos desde el 2026-11-01, la cantera y la aldea agrícola; del 2026-10-27 al 2026-11-01 cabía uno).
+- **Trabajadores**: pesants de la madre; el pueblo no tiene población propia ni crece.
+- **Extracción**: **ritmo** `produccionBase × ratioManoObra × factorTecnología` contra el almacén local; con el almacén lleno, la extracción para (evento «almacén lleno»). Con el nodo agotado espera a la regeneración (`REGENERACION_NODOS`) sin mudarse; los pueblos **no** entran en el reemplazo automático ni en `EXTRACCION_MAXIMOS`.
+- **Niveles (decisión del autor del 2026-11-10).** La Cantera y las cuatro minas tienen niveles **1 a 3** (`PUEBLOS_EXTRACTORES.extractor.niveles`): el `factor` del nivel (1 / 2 / 3) multiplica la `produccionBase` del extractor (las minas y la Cantera, **10 / 20 / 30** por minuto, antes de `ratioManoObra` y `factorTecnología`) y los trabajadores que pide (`trabajadores_de_pueblos`: una mina de 8 pide 16 y 24). Cada nivel pide la plaza madre en el nivel operativo `nivelMadre` (el 2, nivel 2; el 3, nivel 3). Se sube con la orden de la aldea, `MejorarAldea { pueblo }` (184, la misma autorización: Gobernador o Maestro de Obras de la madre, en la plaza o dentro del pueblo; `Asentamiento::mejorar_pueblo`): deja una mejora «pendiente de materiales» con el `coste` del nivel siguiente (2: 180 madera y 60 piedra; 3: 360 y 120, las cifras de la aldea), que se entrega con `EntregarMateriales`; entregada, obra de `obraMinutos` (120) por el `factorTiempoConstruccion` de la madre, y el pueblo **sigue extrayendo con su nivel de antes** mientras tanto. Rechazos: `pueblo.no_esta_activo`, `pueblo.mejora_en_curso`, `pueblo.nivel_maximo` y, con la madre por debajo, `pueblo.nivel_insuficiente`; `pueblo.no_es_aldea` ya no sale. Hechos nuevos: `pueblo.mejora_marcada` y `pueblo.subio` (pueblo, nivel; los de la aldea siguen siendo `aldea.mejora_marcada` y `aldea.subio`). El nivel ya iba en la foto (sin formato nuevo); el bloque nuevo cambia la huella de las reglas (**partida nueva**). En el contrato, el `Pueblo` lleva ahora su nivel en `nivel_aldea` (13) también en un extractor (antes ausente), y la mejora en marcha llega como `ObraDeMapa` de tipo `OBRA_MEJORA_ALDEA`, como la de la aldea. Si la madre baja de nivel, el pueblo conserva el suyo. Placeholders: costes, obras y factores. Prueba: `el_extractor_sube_hasta_el_nivel_3_atado_al_de_la_madre_y_saca_10_20_y_30` (`asentamiento`, `pueblos.rs`).
+- **Destruirlo a mano** libera el cupo y no recupera nada. Tamaño: como mucho **0,2 de mapa**.
+- **Conquista de la madre**: los pueblos pasan al conquistador; **ruina** de la madre: desaparecen.
+- **Solvencia** del nivel siguiente (§11.2; desde el 2026-11-10 es una advertencia, no bloquea la subida): lo que llega por acarreo cuenta como la media de lo que **llega a la madre** en una ventana de 24 h, quepa o no en su almacén, desde que llega (decidido el 2026-10-19, el 2026-11-01 y el 2026-11-03; ya no la producción nominal del pueblo).
+
+**Obras de mapa** (pueblos y avanzadas): no pasan por la cola de construcción. (1) Panel en la plaza madre (Gobernador o Maestro de Obras presentes): candidatos = nodos de la zona sin pueblo; una avanzada no tiene candidatos (la coloca el héroe en el sitio, dentro de la zona). (2) La obra aparece en el mapa **«pendiente de materiales»** y ocupa cupo. (3) Los materiales se **llevan físicamente** en los carros de las columnas o en caravanas adjuntas a un ejército, y se entregan con la columna a `radioPuerta`. (4) Con todo entregado arranca la obra (corta; evento de fin). (5) Cancelar o destruir no recupera lo entregado. Pendiente, se ve pero no se puede atacar. Costes (placeholder): pueblo = su extractor + 50 madera + carro (20 madera) + buey (12 oro), obra de 4-8 h.
+
+**Mineros**: tropa nueva del Centro Urbano (leva, escalón 1, 30 unidades, velocidad 30, 1 de piedra por soldado, sin oro); entran en la tropa prestada del campamento.
+
+### 14.0 La aldea agrícola y la cría (mecánicas 50 y 51)
+
+> **Implementado en Rust (2026-10-27).** Reglas puras en `crates/asentamiento/src/pueblos.rs` (`Sitio`, `ReglasAldea`, `Especie`, `Rebano`, `iniciar_aldea`, `mejorar_aldea`, la cría `criar` y `saquear_rebano`), `nivel.rs` (el gate) y los bloques `PUEBLOS_EXTRACTORES.aldea` y `ESPECIES` (**entran en la huella de las reglas: hace falta partida nueva**); integración en `crates/nucleo/src/nucleo/pueblos.rs` (órdenes, panel `Nucleo::sitio_de_aldea`, carro de todos los recursos de la aldea, saqueo del rebaño). Foto `BAN47` (los pueblos guardan sitio, nivel, mejora y rebaño; hoy `BAN60`, y las fotos anteriores a `BAN60` ya no se leen). Pruebas: los módulos `pueblos` y `nivel` de `asentamiento`, `crates/nucleo/tests/pueblos.rs` (la aldea de punta a punta, con foto) y `asentamientos.rs` (la plaza sube al nivel 2 con su aldea).
+
+- **Qué es.** Un pueblo más de la plaza madre (cuenta en el cupo, en su mantenimiento y en la mano de obra, se destruye y se conquista igual), con tipo de catálogo `Granja` y nombre `aldeaAgricola`. Lleva granjas por niveles fijos (`aldea.niveles`: 1 → 2 granjas; 2 → 4; 3 → 6) y acarrea lo que produce a la madre con el carro de siempre.
+
+> **Cambio del 2026-11-11 (decisión del autor): la aldea de trigo y la ganadera se separan.** La de trigo ya **no lleva corrales** (`cultivos.trigo.corrales: false`): solo cultiva. Los corrales y el rebaño pasan a la **aldea ganadera**, un «cultivo» más de `MarcarAldea` (`ganado`, `Cultivo::Ganado`, al final de la lista por la foto) con `"granjas": false` (campo nuevo de `cultivos.<cultivo>`, por defecto `true`): **ninguna granja**, los corrales de su nivel (`aldea.niveles`: 1 / 2 / 3) y la cría de siempre (pie de cría, leche, sacrificio en ganado y carne, saqueo de la mitad). Se marca desde el **nivel 1** de la madre (`nivelMadre: 1`), con el mismo coste, obra, niveles, anillos, separación y guarnición que cualquier aldea, y pide el mismo mínimo de fertilidad **en la capa del trigo** (`Geografia::fertilidad_en` con `Ganado` lee la de trigo: pasta donde se daría el trigo; la fertilidad no cambia la cría). Su recurso principal es el ganado (`Pueblo::recurso`) y su carro lleva ganado, carne y leche (`Pueblo::recursos`); pide 4 pesants por corral y ninguno por granja (`ReglasAldea::granjas`). Su planta tiene un **Corral por ancla** (`Nucleo::planta_de_pueblo`). El hito «Corral activo» y la «obra de corral» de la épica miran **solo las aldeas con corrales** (`Pueblo::tiene_corrales`); las demás aldeas cuentan como obra de su Granja. En el contrato, `Pueblo.cultivo` es `ganado` y `OrdenMarcarAldea.cultivo` lo acepta (sin cambio de `.proto`). Cambia la huella de las reglas: **partida nueva**. Pruebas: `la_aldea_de_trigo_cultiva_con_la_fertilidad_de_su_punto_sin_corrales_y_llena_su_almacen`, `la_aldea_ganadera_cria_sin_granjas_y_da_ganado_carne_y_leche_contra_un_almacen_compartido`, `el_carro_de_cada_aldea_lleva_solo_lo_suyo` y `la_aldea_ganadera_nace_con_su_pie_de_cria_y_el_saqueo_se_lleva_la_mitad_de_las_cabezas` (`asentamiento`, `pueblos.rs`); la planta, en `la_planta_de_una_aldea_lleva_sus_granjas_y_sus_corrales_y_crece_con_el_nivel` (`nucleo`, `urbanismo.rs`).
+
+> **Implementado en Rust (2026-11-08, tanda 69):** **cada aldea es de un solo cultivo**, que se elige al marcarla (`MarcarAldea { asentamiento, punto, cultivo }`: `trigo`, `vid`, `oliva` y, desde el 2026-11-09, `cebada` o `sesamo`; sin cultivo es trigo; otro nombre, `orden.forma_invalida`) y no cambia (`Sitio::Punto { pos, fertilidad, cultivo }`, `Cultivo` y `ReglaCultivo` en `crates/asentamiento/src/pueblos.rs`; el bloque `PUEBLOS_EXTRACTORES.aldea.cultivos`). Sus granjas dan el producto del cultivo: trigo, **uva** (vid), **aceituna** (oliva), **cebada** o **sésamo**. La vid y la cebada piden el nivel 3 y la oliva y el sésamo el 4 (`nivelMadre`; el trigo, el 1), y **desde el 2026-11-09 lo mira la Facción, no la madre** (decisión del autor): basta que **alguna plaza de la Facción** que exista ahora haya **alcanzado** ese nivel (`Asentamiento.nivel`, no el operativo; `Nucleo::nivel_maximo_de_plazas(faccion)`, que `iniciar_aldea` recibe como `nivel_en_faccion`), y la madre puede ser de cualquier nivel (su cupo de pueblos sigue siendo el suyo). Si esa plaza se pierde (una plaza en ruinas sale del estado), las aldeas que ya hay siguen; solo se cierran las nuevas de ese cultivo. Con menos, `MarcarAldea` rechaza con **`pueblo.cultivo_bloqueado`** (`ErrorPueblo::CultivoBloqueado`). **Solo la aldea de trigo lleva corrales** (`cultivos.<cultivo>.corrales`): las de los demás cultivos no tienen rebaño. *(Desde el 2026-11-11, solo la ganadera: ver la nota de arriba.)* La fertilidad del punto sale de **la capa del mundo de su cultivo** (`fertilidad`, `fertilidad_vid`, `fertilidad_oliva`, `fertilidad_cebada` o `fertilidad_sesamo`, Generación del mundo; `Geografia::fertilidad_en(punto, cultivo)` en `zonas.rs`), con el mismo mínimo de 0,3; el panel `Nucleo::sitio_de_aldea(plaza, cultivo)` busca el punto más fértil para el cultivo pedido. El nivel de plaza de la quesera, la bodega y la prensa es el de su cultivo (§5.3); la cerveza de la bodega y el aceite de sésamo de la prensa salen de las aldeas de cebada y de sésamo.
+- **Dónde.** En un **punto** de la zona real de la madre, sin nodo (`Pueblo.sitio` es `Nodo(n)` o `Punto { pos, fertilidad }`): tierra firme, fertilidad del artefacto en el punto ≥ `fertilidadMinima` (0,3), a `separacionMinima` (3 u) de toda plaza y todo pueblo de cualquier Facción y con ruta por tierra hasta la madre. Desde el **nivel 1** de la madre (`nivelMadreMinimo` es por tipo: `{extractor: 1, aldea: 1}` desde el 2026-10-31; el extractor pedía 2). Una plaza puede tener varias aldeas si el cupo se lo permite.
+- **Por anillos (2026-11-01, decisión del autor: que no se levanten todas juntas).** La aldea número k de la plaza (cuentan las que tiene en cualquier estado, no los pueblos extractores, que van donde está su nodo) va en el **anillo que añade a la zona el primer nivel cuyo cupo llega a k**: con el cupo 2 / 3 / 4 / 5 / 6 y los techos de la zona 20 / 30 / 40 / 50 / 60 u (`TERRITORIO.techos`; el doble desde el 2026-11-05), las dos primeras hasta 20 u de la plaza, la tercera de 20 a 30 u, la cuarta de 30 a 40 u, y así; el anillo es `(desde, hasta]` y lo recorta la zona real de la plaza. Fuera de su anillo, `MarcarAldea` rechaza con **`pueblo.fuera_de_su_anillo`** (se mira tras la zona y antes de la separación). `Nucleo::anillo_de_aldea`. Prueba: `las_aldeas_van_por_anillos_…` (`tests/pueblos.rs`).
+- **Coste y obra.** Como cualquier obra de mapa: su nivel 1 (`coste`, 30 madera) + `costeAdicional` (50 madera) + el carro con su buey (20 madera, 12 oro) = **100 madera y 12 oro** (`Asentamiento::costo_de_aldea`), llevados en una columna y entregados con `EntregarMateriales`; obra de 4 h.
+- **Subir de nivel** (`MejorarAldea { pueblo }`, aldea activa sin mejora en curso y con nivel siguiente): deja una mejora «pendiente de materiales» con el coste del nivel siguiente (2: 180 madera y 60 piedra; 3: 360 y 120; triplicados por decisión del autor del 2026-10-31, antes 60/20 y 120/40), que se entrega igual que una obra; entregada, obra de 2 h. **La aldea sigue produciendo mientras tanto** con su nivel de antes; al acabar sube (`aldea.subio`) y crecen granjas, corrales y el tope del rebaño.
+- **Producción.** Por minuto, el trigo es `granjas × produccionBaseTrigo(Granja, nivel 1) × fertilidad del punto × ratioManoObra × factorProduccionTrigo` (la fertilidad del punto, no la de la zona de la madre; **80** por granja desde el 2026-11-11, antes 120). Trabajan 4 pesants por granja y 4 por corral de la madre. **El almacén local es uno para todo lo que produce la aldea** (`capacidadAlmacenLocal`, 1.000 entre el producto del cultivo y, en la ganadera —en la de trigo hasta el 2026-11-11—, ganado, carne y leche): el cultivo entra primero y el rebaño con el hueco que queda. Las granjas de vid y de oliva cosechan con la misma fórmula (`produccionBaseTrigo` de la Granja × granjas × fertilidad del punto de su capa × `ratioManoObra` × `factorProduccionTrigo`), pero dan uva o aceituna.
+- **Cría (mecánica 51).** Al completarse la aldea nace su **rebaño** con el pie de cría de sus corrales (`ESPECIES.<especie>.pieDeCriaPorCorral × corrales`; `especieInicial` vacuno: 20 cabezas). Cada minuto crece `cabezas × crecimientoPorHora / 60 × ratioManoObra × factorTecnologia(ganado)` hasta el tope (`topePorCorral × corrales`), en milésimas de cabeza (crece continuo, sin azar). **Leche (2026-11-08, tanda 69):** cada minuto el rebaño vivo da además `cabezas × lechePorCabezaYHora / 60 × ratioManoObra × factorTecnologia(ganado)` de leche (`leche` es un recurso; vacuno: 3 por cabeza y hora, **provisional, a calibrar con el batch**) sin sacrificar nada; la leche entra primero en el almacén local y las cabezas con el hueco que queda. Las **cabezas enteras por encima del pie de cría** se sacrifican mientras quepan en el almacén local y dan los `productos` de su especie (vacuno: **60 de ganado, `livestock`, y 60 de `carne`** por cabeza; la carne, desde la tanda 69, también **provisional, a calibrar con el batch**). Solo hay vacuno; la especie va en el rebaño para cuando haya caballos y bueyes.
+- **El carro** sale cuando el almacén local suma su capacidad entre todos los recursos de la aldea y se lleva todo lo que produce, por el orden de `Pueblo::recursos` (el cultivo y, en la de trigo, ganado, carne y leche; `Pueblo::carga_del_carro`); al llegar, cada recurso entra en el almacén de la madre y en la ventana de la solvencia por su cuenta.
+- **Guarnición**: 30 **granjeros** de serie (`aldea.granjeros.escuadra`) en vez de mineros, con la misma reposición. **Saqueo**: quien gana en la aldea se lleva además la parte `saqueoRebano` (0,5) de sus cabezas enteras, hasta lo que quepa en sus carros, convertida en lo que da sacrificada (ganado y carne, 60 de cada por cabeza). La leche y la cosecha del almacén local no se saquean por esta vía.
+- **Ganado del mundo.** Los nodos de ganado desaparecen del mundo (el artefacto regenerado el 2026-10-27 no los trae): el ganado sale solo de los rebaños. `MarcarPueblo` sobre un nodo de ganado de un mundo viejo sigue dando `pueblo.nodo_no_extraible`.
+- **Tecnología.** El hito «Corral activo» de `cria_caballar` y el capítulo «obra de corral» de su épica miran ahora la aldea: cuenta como Corral activo de la plaza mientras tenga una aldea activa **con corrales** (desde el 2026-11-11, la ganadera), y completarla anota el hecho de la obra de corral (las demás aldeas, el de la obra de su Granja).
+- **Panel.** `Nucleo::sitio_de_aldea(plaza, cultivo)` propone el punto más fértil de la zona para el cultivo (anillos de 0,5 u y 24 rumbos desde la separación mínima) donde `MarcarAldea` se aceptaría ahora, y por eso dentro del anillo de la siguiente aldea; lo usa el batch.
+- **Órdenes** (de plaza: Gobernador o Maestro de Obras de la madre, como `MarcarPueblo`): `MarcarAldea { asentamiento, punto, cultivo }` (crea el pueblo; `cultivo` es trigo, vid, oliva, cebada, sésamo o, desde el 2026-11-11, `ganado`) y `MejorarAldea { pueblo }`. **Hechos**: `aldea.marcada` (pueblo, x, y), `aldea.mejora_marcada` (pueblo, nivel) y `aldea.subio` (pueblo, nivel); la obra y la entrega usan los de siempre (`pueblo.materiales_entregados`, `pueblo.obra_iniciada`, `pueblo.completado`). **Rechazos nuevos**: `pueblo.cultivo_bloqueado`, `pueblo.fertilidad_insuficiente`, `pueblo.demasiado_cerca`, `pueblo.no_es_aldea`, `pueblo.nivel_maximo`, `pueblo.mejora_en_curso`, `ascenso.falta_aldea` y `obra.solo_en_aldea`.
+- **Placeholders** (los decidió el estudio al implementar; los cambia el autor): fertilidad mínima 0,3, separación 3 u, costes y obras de los niveles, el rebaño (tope 40 y pie 20 por corral, 15 % por hora, 60 de ganado y 60 de carne por cabeza, 3 de leche por cabeza y hora) y el saqueo de la mitad.
+- **Batch.** El jugador de `batch poblacion` levanta la aldea en cuanto el almacén paga su obra (materiales al instante, fertilidad 1 al este de la plaza) y, desde el 2026-11-01, su pueblo de cantera en el nodo de piedra libre más cercano de su zona (materiales al instante; lo extraído pasa cada minuto al almacén de la plaza y a la ventana de la solvencia, sin carro); el de `batch comercio` marca la aldea en el sitio del panel y luego canteras desde el nivel 1, y lleva los materiales con su columna.
+
+### 14.0.1 Dentro del pueblo o de la aldea (2026-10-29)
+
+> **Implementado en Rust (2026-10-29, decisiones del autor del mismo día).** Integración en `crates/nucleo/src/nucleo/pueblos_dentro.rs` (las cuatro órdenes y la guarnición que vuelve), `heroes.rs` (la escolta del carro de acarreo desde dentro), `cargos.rs` y `pueblos.rs` (`MejorarAldea` desde la aldea), `combates.rs` y `batallas.rs` (la guarnición defiende); el contenedor `Contenedor::Pueblo(id)` de `militar` (etiqueta 5 del códec; **sin formato de foto nuevo** en su día) y el sub-bloque `PUEBLOS_EXTRACTORES.guarnicionJugadores` (**entra en la huella de las reglas**). Pruebas: `crates/nucleo/tests/pueblos.rs` (sección 9) y `combate.rs` (la guarnición de un jugador defiende el pueblo).
+
+Todo se hace con el héroe **dentro** del pueblo o la aldea (`entrarEnPueblo`) y **ciudadano de la Facción de la plaza madre**. Nadie reside en un pueblo: lo que se mueve es la **columna con la que entró**, que lo espera dentro (sus escuadras, su carro). La administración no necesita estar dentro ni ser de la Facción. El corral y el rebaño siguen automáticos.
+
+**La guarnición, también desde la puerta** (2026-11-10, pedido del autor: las acciones a la puerta de cada sitio). `GuarnecerPueblo` y `RetirarDePueblo` valen además con el héroe **a bordo de su columna a la puerta** del pueblo (a `radio_puerta` o menos de su posición), sin entrar: mismas reglas, con esa columna (la ciudadanía de la madre, el cupo por héroe y el Liderazgo al recoger). Lejos de la puerta, `heroe.no_esta_en_el_pueblo`. Las otras órdenes de esta sección siguen pidiendo estar dentro.
+
+- **Guarnición de jugadores** (`GuarnecerPueblo { heroe, pueblo, escuadras }` y `RetirarDePueblo`). Además de la de serie (mineros o granjeros), cada héroe deja escuadras **de su columna** en el pueblo, con un cupo **por héroe** en Liderazgo: `guarnicionJugadores.cupo` (30) en el nivel 1 y `porNivel` (15) más por cada nivel del pueblo, aldea o (desde el 2026-11-10) extractor. Las recoge a la misma columna, sin pasar de su Liderazgo. Comen como su campamento (el de la plaza donde reside su héroe) y **defienden el pueblo** en el saqueo y en la batalla, con o sin su héroe (después de la de serie). Vuelven **intactas al campamento de su héroe** si el pueblo desaparece (destruido a mano o en la ruina de la madre), si el héroe deja la Facción de la madre o si la madre cambia de dueño y él no es de la Facción nueva. Cambiar de residencia no las mueve. Hechos: `pueblo.guarnecido` (pueblo, heroe, escuadras, liderazgo) y `pueblo.guarnicion_retirada` (pueblo, heroe, escuadras).
+- **Escolta del carro de acarreo desde dentro.** `AsignarEscolta` sobre el carro del pueblo, dado dentro, cede escuadras de la columna (no del campamento) con el mismo cupo de escolta de siempre (el del Mercado de la madre), sin tener que residir en ella; `QuitarEscolta` dado dentro las devuelve a la columna, sin pasar de su Liderazgo. El carro ya se repone solo (§14), así que no hay orden para cambiarlo.
+- **Carro de la columna y almacén local** (`CargarDePueblo { heroe, pueblo, recurso, cantidad }` y `DejarEnPueblo`). Se carga lo que haya en el almacén, hasta donde quepa en el carro de la columna. Solo se deja **lo que el pueblo produce** (su recurso; en la aldea, trigo y ganado), hasta la capacidad del almacén (`capacidadAlmacenLocal`, compartida en la aldea). Si al dejar tiene para llenar el carro de acarreo (500) y el carro está en casa, **sale** (hasta el 2026-11-05, con el almacén de 500, era lo mismo que llenarse). Hechos: `pueblo.cargado` y `pueblo.dejado` (pueblo, heroe, recurso, cantidad: lo que se movió de verdad).
+- **Mejorar el pueblo desde dentro.** `MejorarAldea` (que desde el 2026-11-10 sube también un extractor) la da también, dentro del pueblo, el Gobernador o el Maestro de Obras de la madre (residente en ella), además de desde la plaza.
+- **Rechazos nuevos**: `pueblo.escuadra_fuera_de_tu_columna`, `pueblo.escuadra_no_esta`, `pueblo.recurso_ajeno`, `pueblo.almacen_sin_sitio`, `pueblo.nada_que_cargar` y `pueblo.nada_que_dejar`; se reutilizan `pueblo.faccion_ajena`, `heroe.no_esta_en_el_pueblo`, `guarnicion.supera_el_cupo`, `liderazgo.superado`, `carro.no_cabe` y los de las escuadras.
+- **Contrato.** Órdenes `guarnecer_pueblo` (161), `retirar_de_pueblo` (162), `cargar_de_pueblo` (163) y `dejar_en_pueblo` (164); el `Pueblo` lleva `guarnicion_jugadores_ids` (18) y `cupo_guarnicion_por_heroe` (19), y un `Escuadron` de la guarnición, `contenedor.pueblo_id` (6).
+- **Placeholders**: el cupo (30 y 15 por nivel) lo fijó el autor; lo demás sale de reglas que ya existían.
+
+<!-- parametros:PUEBLOS_EXTRACTORES -->
+```json
+{
+  "nivelMadreMinimo": {
+    "extractor": 1,
+    "aldea": 1
+  },
+  "cupoPorNivel": {
+    "1": 2,
+    "2": 3,
+    "3": 4,
+    "4": 5,
+    "5": 6
+  },
+  "capacidadAlmacenLocal": 1000,
+  "costeAdicional": {
+    "madera": 50
+  },
+  "casasDeLaPlanta": 6,
+  "mineros": {
+    "escuadra": 30,
+    "minutosPorMinero": 12
+  },
+  "guarnicionJugadores": {
+    "cupo": 30,
+    "porNivel": 15
+  },
+  "extractor": {
+    "niveles": {
+      "1": {
+        "factor": 1
+      },
+      "2": {
+        "factor": 2,
+        "nivelMadre": 2,
+        "coste": {
+          "madera": 180,
+          "piedra": 60
+        },
+        "obraMinutos": 120
+      },
+      "3": {
+        "factor": 3,
+        "nivelMadre": 3,
+        "coste": {
+          "madera": 360,
+          "piedra": 120
+        },
+        "obraMinutos": 120
+      }
+    }
+  },
+  "aldea": {
+    "fertilidadMinima": 0.3,
+    "separacionMinima": 3,
+    "granjeros": {
+      "escuadra": 30
+    },
+    "niveles": {
+      "1": {
+        "granjas": 2,
+        "corrales": 1,
+        "coste": {
+          "madera": 30
+        },
+        "obraMinutos": 240
+      },
+      "2": {
+        "granjas": 4,
+        "corrales": 2,
+        "coste": {
+          "madera": 180,
+          "piedra": 60
+        },
+        "obraMinutos": 120
+      },
+      "3": {
+        "granjas": 6,
+        "corrales": 3,
+        "coste": {
+          "madera": 360,
+          "piedra": 120
+        },
+        "obraMinutos": 120
+      }
+    },
+    "especieInicial": "vacuno",
+    "saqueoRebano": 0.5,
+    "cultivos": {
+      "trigo": { "produce": "trigo", "nivelMadre": 1, "corrales": false },
+      "vid": { "produce": "uva", "nivelMadre": 3, "corrales": false },
+      "oliva": { "produce": "aceituna", "nivelMadre": 4, "corrales": false },
+      "cebada": { "produce": "cebada", "nivelMadre": 3, "corrales": false },
+      "sesamo": { "produce": "sesamo", "nivelMadre": 4, "corrales": false },
+      "ganado": { "produce": "livestock", "nivelMadre": 1, "corrales": true, "granjas": false }
+    }
+  }
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:ESPECIES -->
+```json
+{
+  "vacuno": {
+    "topePorCorral": 40,
+    "pieDeCriaPorCorral": 20,
+    "crecimientoPorHora": 0.15,
+    "lechePorCabezaYHora": 3,
+    "productos": {
+      "livestock": 60,
+      "carne": 60
+    }
+  }
+}
+```
+<!-- /parametros -->
+
+### 14.1 Avanzadas (Doc 5.17, fase 4F)
+
+Una avanzada es la otra obra de mapa (§14, «Obras de mapa»). Reglas puras en `crates/asentamiento/src/avanzadas.rs` (la avanzada vive en `Asentamiento.avanzadas` de su plaza madre, como los pueblos); el ataque, las ruinas y la guarnición son de [`Combate.md`](Combate.md) §7.4 (bloque `AVANZADA`) y el núcleo las une en `crates/nucleo/src/nucleo/avanzadas.rs`.
+
+<!-- parametros:AVANZADAS -->
+```json
+{
+  "nivelMadre": {
+    "atalaya": 2,
+    "fuerte": 2,
+    "ciudadela": 3
+  },
+  "cupoPorNivelDeLaMadre": 1,
+  "capacidadAlmacen": {
+    "atalaya": 0,
+    "fuerte": 4000,
+    "ciudadela": 20000
+  },
+  "fraccionCiudadDeLaZona": 0.05,
+  "fraccionReparacion": 0.5,
+  "obras": {
+    "atalaya": {
+      "costo": {
+        "madera": 200,
+        "piedra": 100
+      },
+      "minutos": 120
+    },
+    "fuerte": {
+      "costo": {
+        "madera": 600,
+        "piedra": 400,
+        "oro": 50
+      },
+      "minutos": 720
+    },
+    "ciudadela": {
+      "costo": {
+        "madera": 1500,
+        "piedra": 2000,
+        "oro": 300
+      },
+      "minutos": 2880
+    }
+  }
+}
+```
+<!-- /parametros -->
+
+Las etapas son las tres de Doc 5.17 (atalaya → fuerte → ciudadela) y `obras` es el coste de **cada paso** (construir la atalaya, mejorarla a fuerte, mejorar el fuerte a ciudadela), con su duración en minutos de mundo: los «viajes de carro de 500» del documento son unidades de mapa, a **placeholder**. `nivelMadre` es el nivel operativo mínimo de la plaza madre para tener esa etapa y `cupoPorNivelDeLaMadre`, cuántas avanzadas admite por nivel (2 en el nivel 2 … 5 en el 5, contando las pendientes y las que están en ruinas). `capacidadAlmacen` es la cabida **por recurso** de cada etapa (la atalaya no tiene almacén). Lo que mide la avanzada en el mapa es su tamaño de `TAMANOS_MAPA` (abajo). `fraccionCiudadDeLaZona` es lo que mide la ciudad de la plaza en el mapa como fracción del radio de su zona (una vigésima desde el 2026-11-05, al doblar las zonas, para que la ciudad mida lo mismo que antes; antes una décima: «la ciudad nunca pasa de una décima de su provincia», Calibración de distancias §4.2): una avanzada no se coloca a menos de ese radio más la mitad de su tamaño del centro de la madre. `fraccionReparacion` es el 50 % del coste de la etapa que cuesta reparar unas ruinas.
+
+**Tamaños de los elementos del mapa** (decisión del autor del 2026-10-27). `TAMANOS_MAPA` dice cuánto mide cada elemento en el mapa del mundo: el **diámetro**, en unidades de mapa, del disco que ocupa. Sirven para **pintar y para colocar**, nunca para el movimiento: el A\* de las rutas solo mira el terreno y ningún elemento le estorba (`Movimiento_Ejercitos.md` §4). Al colocar una avanzada, dos elementos se pisan si sus centros distan menos de la media de sus diámetros; la ciudad de una plaza no tiene cifra aquí, porque mide `fraccionCiudadDeLaZona` del radio de su zona. Los elementos que se mueven (héroe, columna, ejército, caravana) y el nodo y el alijo solo los usan los clientes al pintar. Viajan en `/v1/datos` con los demás bloques. Las cifras de hoy son el «como mucho 0,2 de mapa» del canon (Doc 4.2.2 y 5.17) para todos: **placeholder**, para ajustar.
+
+<!-- parametros:TAMANOS_MAPA -->
+```json
+{
+  "avanzada": 0.2,
+  "pueblo": 0.2,
+  "campamentoMercenarios": 0.2,
+  "campamentoBandidos": 0.2,
+  "nodo": 0.2,
+  "alijo": 0.2,
+  "heroe": 0.2,
+  "columna": 0.2,
+  "ejercito": 0.2,
+  "caravana": 0.2
+}
+```
+<!-- /parametros -->
+
+> **Implementado en Rust (2026-10-22, fase 4F).** Foto `BAN15` (hoy `BAN16`).
+> - **Colocar** (`ColocarAvanzada { asentamiento, heroe, posicion }`, 106): el Gobernador o el Maestro de Obras de la madre, que reside en ella y está **dentro** (como al marcar la aldea, desde el 2026-11-04; antes con su columna en el sitio; o la administración), la marca en tierra firme (`avanzada.fuera_del_sitio`), dentro de la zona real de la madre, con ruta por tierra hasta ella (`avanzada.sin_ruta`), sin pisar su ciudad (`avanzada.dentro_del_asentamiento`: a menos de `radio de la zona × fraccionCiudadDeLaZona + TAMANOS_MAPA.avanzada / 2` de su centro) ni otro elemento del mapa (`avanzada.pisa_otro_elemento`: otra avanzada en cualquier estado, un pueblo sobre su nodo o un campamento de mercenarios o de bandidos a menos de la media de los dos diámetros de `TAMANOS_MAPA`). La madre ha de tener nivel operativo ≥ 2 y cupo. La obra queda **«pendiente de materiales»** (no se ve como puesto, no se ataca, no ve, ocupa cupo), no cobra nada al almacén y no pasa por la cola de construcción.
+> - **Entregar** (`EntregarMaterialesAAvanzada { ejercito, avanzada }`, 107): con la columna a la puerta de la obra y de la misma Facción, y dada por un héroe de la columna ciudadano de esa Facción (como en un pueblo), lo que lleva su carro y sus caravanas adjuntas, recurso a recurso, como en un pueblo. Con todo entregado arranca la obra y su **fin tiene cita propia** (`SucesoCombate::FinObraAvanzada`, ligada a la avanzada —`entidad_obra_de_avanzada`—, prioridad 1, en su instante exacto: no espera al paso de minuto).
+> - **Mejorar** (108) y **reparar** (109) son la misma obra con otro coste: pasar a la etapa siguiente (a nivel de la madre suficiente) o reparar unas ruinas de fuerte o ciudadela (la mitad del coste de la etapa, la duración entera). Mientras se mejora la avanzada sigue funcionando; mientras se repara sigue en ruinas. Un ataque que la derriba pierde la obra. **Cancelar** (`CancelarObraDeAvanzada { heroe, avanzada }`, 116): la mejora o la reparación, pendiente de materiales o ya en marcha, se abandona **sin reembolso** (lo entregado se pierde) y la avanzada sigue como estaba (operativa en su etapa, o en ruinas). Rechazos: `avanzada.nada_que_cancelar` (sin obra, o la primera, que se cancela destruyendo la avanzada), `avanzada.desconocida`, `no_autorizado`. Su cita de fin deja de ser vigente (sube la generación de la entidad de su obra: lo mismo que pasa al destruir la avanzada, derribarla un ataque o caer su madre) y el hecho es `avanzada.obra_cancelada` (avanzada, tipo).
+> - **Destruir a mano** (110): atalaya y fuerte, también si solo es una obra pendiente; la ciudadela no. No recupera nada.
+> - **Mantenimiento**: una avanzada operativa cuenta como un edificio activo de la madre (como un pueblo activo). Pendiente, en obra o en ruinas, no cuenta.
+> - **Almacén y guarnición**: el almacén es **por recurso** (decisión del autor, 2026-10-22: 2.000 por cada recurso en un fuerte, 10.000 en una ciudadela). `DepositarEnAvanzada` (115) y `RepostarEnAvanzada` (114) llenan y vacían el almacén ([`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §8); `GuarnecerAvanzada` (112), `RetirarDeAvanzada` (113) y `ElegirTropaDeAvanzada` (111) manejan la guarnición ([`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md), [`Combate.md`](Combate.md) §7.4).
+> - **Desde dentro (2026-11-07, decisión del autor: como en los pueblos).** Las cinco órdenes de la avanzada que pedían la columna a la puerta valen también con el héroe **dentro** de esa avanzada (`EntrarEnAvanzada`), con la columna con la que entró, que lo espera dentro fuera del mapa: `GuarnecerAvanzada` y `RetirarDeAvanzada` (sus escuadras van y vienen de esa columna), `DepositarEnAvanzada` (la columna de la orden, si algún participante de la cuenta está dentro con ella) y `RepostarEnAvanzada` (su Líder). `ElegirTropaDeAvanzada` la da el Gobernador de la madre dentro de la plaza, como siempre, o dentro de la avanzada (residente de la madre y Gobernador). Son las mismas órdenes, con las mismas reglas de residencia y Facción, sin cambio de contrato. Desde dentro de otra avanzada no valen (`heroe.sin_columna`: el héroe no va en columna en el mapa). `Nucleo::columna_en_avanzada` (privada); prueba `desde_dentro_de_la_avanzada_…` (`tests/avanzadas.rs`).
+> - **Ruinas y la madre**: una avanzada en ruinas no funciona (ni visión, ni guarnición, ni almacén, ni mantenimiento) y sigue ocupando cupo. Si la madre es **conquistada**, las avanzadas pasan con ella (su guarnición de jugadores se va con el desalojo y se reinician la de serie y las elecciones del Gobernador). Si la madre **cae en ruinas**, la atalaya y el fuerte desaparecen (la guarnición de jugadores vuelve intacta a su campamento) y la ciudadela queda como **ruina sin dueño** (`EstadoCombate::huerfanas`, con su almacén), que repara (`RepararAvanzada`) un héroe ciudadano de la Facción que tenga ahora su zona: la ruina pasa a esa plaza si tiene el nivel (3) y el cupo.
+> - **Hechos nuevos** (datos entre paréntesis): `avanzada.obra_marcada` (avanzada, tipo 0 construir / 1 mejorar / 2 reparar, x, y), `avanzada.materiales_entregados` (avanzada, cantidad), `avanzada.obra_iniciada` (avanzada, tipo, completaEn), `avanzada.obra_cancelada` (avanzada, tipo), `avanzada.completada` (avanzada, tipo, etapa), `avanzada.destruida` (avanzada, motivo: 0 a mano, 1 un ataque, 2 la ruina de la madre), `avanzada.sin_dueno`, `avanzada.adoptada`, `avanzada.tropa_elegida`, `avanzada.guarnecida` / `avanzada.guarnicion_retirada`, `avanzada.deposito`, `avanzada.reabastecimiento`, `avanzada.traspasada` (avanzada, faccion), `avanzada.encuentro` (una columna ajena junto a una avanzada que se puede atacar). Rechazos nuevos: `avanzada.*` (desconocida, nivel_insuficiente, sin_cupo, fuera_de_la_zona, dentro_del_asentamiento, fuera_del_sitio, faccion_ajena, fuera_de_la_puerta, no_esta_pendiente, nada_que_entregar, no_mejorable, no_reparable, ya_hay_obra, ciudadela_no_se_destruye, no_operativa, sin_almacen, almacen_lleno, nada_que_depositar, no_resides, escuadra_fuera_de_tu_columna, escuadra_no_esta, tropa_no_elegible, tropa_sin_tecnologia, tropa_sin_edificio, pisa_otro_elemento, nada_que_cancelar) y `combate.avanzada_*`.
+> - **Provisional** (filas de paridad): sin panel (desde 5E las obras de mapa las dan el Gobernador o el Maestro de Obras de la madre; colocar, desde dentro de la madre como la aldea desde el 2026-11-04: antes con su columna en el sitio, 5E-1); no hay planta de avanzada (el tamaño de 0,2 solo sirve para no pisar otros elementos del mapa).
+
+> **Implementado en Rust (2026-10-22, decisiones de 4F).** Foto `BAN16` (la cita de fin de la obra de una avanzada es `SucesoCombate::FinObraAvanzada`, de la entidad `entidad_obra_de_avanzada`, y las cifras de `AVANZADAS` cambian: `tamano` y `fraccionCiudadDeLaZona` sustituyen a `distanciaMinimaAlAsentamiento`). (1) **Colocación según el canon**: ni sobre la ciudad de la madre ni sobre otro elemento del mapa (`asentamiento::avanzadas::ReglasAvanzadas::comprobar_sitio`; el núcleo junta los centros con `elementos_de_mapa`). El «2 u» de la versión anterior era el radio de la puerta y no una regla de colocación. (2) **Cancelar una mejora o una reparación** (116), con la cita de fin descartada por generación. (3) **Elegir tropa** (`ElegirTropaDeAvanzada`, 111) solo entre lo que la madre puede reclutar: escalón elegible, tecnología de la Facción y edificio activo al nivel que pide la tropa (`avanzada.tropa_sin_edificio`); por defecto la milicia de lanceros del canon en los tres escalones. (4) **Sin duda**: almacén por recurso, botín de todo lo que quepa, reposición de 6 h y repostar con columna personal o ejército. (5) **Defender exige estar dentro** ([`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §11.1).
+
+Los bloques de parámetros de este documento venían del motor TypeScript. Valores vigentes para la reconstrucción (Calibracion_Distancias_Definicion §4.2). **Desde el 2026-10-28** los bloques `ZONA_INFLUENCIA` y `MERCENARIOS` ya llevan la columna «Vigente» (los publica `GET /v1/datos`; el código del motor ya usaba estas cifras):
+
+| Parámetro | Bloque (TypeScript) | Vigente |
+|---|---|---|
+| `ZONA_INFLUENCIA.radioInicial` | 30 | **12** (6 hasta el 2026-11-05) |
+| `ZONA_INFLUENCIA.radioMaximoPorNivel` | 60 / 90 / 120 / 150 / 180 | **20 / 30 / 40 / 50 / 60** (10 / 15 / 20 / 25 / 30 hasta el 2026-11-05) |
+| `ZONA_INFLUENCIA.crecimientoPorEdificioCompletado` | 5 | **2** (1 hasta el 2026-11-05) |
+| `FUNDACION.separacionPlazas` | — | **20** (Doc 1.0a; 30 hasta el 2026-11-04, 10 ese día; en el bloque desde entonces) |
+| `ZONA_INFLUENCIA.cuotaParcelasPorAsentamiento` | — | **se borra** (2026-11-06, decisión del autor: la frontera entre zonas ya reparte el bosque; antes 50 %, en el bloque desde el 2026-11-04) |
+| `MERCENARIOS.radioExclusionFundar` | 100 | **20** |
+| `ESCALA` / `radioUrbanoDe` | existían | **se borran**: el espacio local y el del mapa son independientes (Doc 1.0a). La ciudad usa su propio `radioCiudad` (30, +5 por edificio, máximos 60-180; `Trazado_Urbano.md`) |
+| `MANTENIMIENTO.escalaDistancia` | 400 | **300**, ya en el bloque desde el 2026-10-26 (80 hasta el 2026-10-25; P1 del batch político) |
+| `LINEAS_PRODUCCION` | 25 / 150 / 90 | **se elimina** (decisión previa del autor) |
+| `RECURSO_RAREZA.espacioMinimo` | 20 / 40 / 120 | **4 / 7 / 20** |
+| `LIVESTOCK.espacioMinimo` | 30 | **5** |
+| Ritmo de niveles 2-3 | — | aprobado (Doc 4.5); niveles 4-5 con las Eras IV-V, pospuestos |
+
+> **Implementado en Rust (2026-10-23, fase 4H T3c), el interior de la plaza por la sesión.** El almacén y la población se proyectan **en escalones** (sin interpolar): `Existencia.cantidad` con `en_escalones = true`, su tendencia «+N/min» en `por_minuto` y la población entera por clase (`Poblacion`, con la marca de recuperación del hambre). La tendencia es el **neto real del último paso de minuto** de la plaza —producción, recaudación, consumo, mantenimiento y lo que come la guarnición, no el gasto de las órdenes— y se guarda por plaza (`asentamiento::asentamiento::Tendencia` (campo `tendencia` de la economía de la plaza), foto `BAN22`; entonces 29 recursos, hoy 38, y 3 clases). Lo escribe `minuto_de_plaza` al cerrar el paso (la diferencia entre el estado antes y después de todo el paso) y ese paso **no marca nada ni sube la versión del mundo**, con sesiones o sin ellas (decisión del autor, 2026-10-23): lo que cambia dentro de la plaza (almacén, población, medidor, nutrición, edificios parados, tendencia y almacén local de sus pueblos) lleva su propia secuencia por plaza, `Nucleo::version_interior` = `(ultimo_minuto − fundado_en) / 60 s`, que viaja en `Asentamiento.version_interior` y sirve a la reanudación de `ASENTAMIENTO`; el contador `version` y el hash del mundo son los mismos con y sin sesiones. Los gastos de órdenes, el fin de obra y el fin de mejora, ascenso o política (en su instante) marcan la plaza como siempre y llegan en su milisegundo.
+>
+> **Producción y consumo por minuto (2026-10-28, mecánica 60).** Además del neto, cada `Existencia` del interior lleva `producido_por_minuto` (lo que entró por los flujos del paso: producción de edificios y pueblos, recaudación) y `consumido_por_minuto` (lo que salió: comida de la población, insumos de los talleres, mantenimiento y lo que come la guarnición de la plaza). Se cumple siempre `producido_por_minuto − consumido_por_minuto = por_minuto`. El almacén los suma mientras dura el paso (`Almacen::registrar_flujos` / `tomar_flujos`, solo lo que de verdad entró o salió, con el tope y la falta aplicados); las entradas y salidas sueltas (órdenes, comercio, botín, caravanas) no cuentan. Se guardan en la `Tendencia` de la plaza, en la foto **`BAN48`** (desde el 2026-11-09 solo se carga `BAN60`), para que tras una recuperación el panel muestre lo mismo. Pueblos y avanzadas los mandan a 0. Pruebas: `almacen.rs` (unitaria), `crates/nucleo/tests/asentamientos.rs` (`el_paso_de_minuto_guarda_su_tendencia…`, la igualdad en todos los recursos y la proyección) y `heroes.rs` (lo que come la guarnición suma al consumo del trigo).
+>
+> **Producción quepa o no (2026-11-03, pedido del autor).** Con el almacén lleno, `producido_por_minuto` bajaba a lo que dejaba sitio el consumo y el panel parecía decir que la plaza no producía o que perdía. Ahora cada `Existencia` lleva también `produccion_por_minuto` (campo 5, contrato 0.11.0): lo que **rindieron** los flujos de entrada del paso, quepa o no (`Flujos::produccion`: `Almacen::producir` apunta lo pedido y no solo lo que entró; el extractor que con el almacén lleno no saca del yacimiento lo que no cabe lo suma con `Almacen::apuntar_produccion`). Lo que no cabe se pierde, como antes; el yacimiento no se gasta por ello. Las recetas de los talleres cuentan lo que fabrican (con el almacén lleno paran y no gastan insumos). Sin almacén lleno vale lo mismo que `producido_por_minuto`. El neto real (`por_minuto`) y la igualdad de arriba no cambian. Va en la `Tendencia` de la plaza pero **no en la foto**: tras recuperar llega a 0 y la proyección envía `producido_por_minuto` hasta el siguiente paso de minuto. Prueba: `produccion.rs` (`con_el_almacen_lleno_se_pausa…`: entran 5, la Cantera rinde 10; lleno del todo, 0 y 10).
+
+## Catálogo de eventos
+
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. Todos se emiten: `asentamiento.renombrado` desde 5C (2026-10-24) y `construccion.yacimiento_agotado` desde la paridad P8 (2026-10-27).
+
+<!-- eventos -->
+```json
+[
+  "acarreo.carro_repuesto", "aldea.marcada", "aldea.mejora_marcada", "aldea.subio", "pueblo.mejora_marcada", "pueblo.subio", "acarreo.llega", "acarreo.sale", "acarreo.vuelve", "asentamiento.ascenso_iniciado", "asentamiento.nivel", "asentamiento.nivel_subio",
+  "asentamiento.renombrado", "asentamiento.ruinas", "avanzada.adoptada", "avanzada.completada", "avanzada.deposito", "avanzada.guarnecida", "avanzada.guarnicion_retirada",
+  "avanzada.materiales_entregados", "avanzada.obra_cancelada", "avanzada.obra_iniciada", "avanzada.obra_marcada", "avanzada.reabastecimiento", "avanzada.sin_dueno",
+  "avanzada.traspasada", "avanzada.tropa_elegida", "construccion.auto_alternada", "construccion.buey_asignado", "construccion.cola_reordenada", "construccion.desencolada", "construccion.obra_cancelada",
+  "construccion.edificio_completado", "construccion.edificio_gratuito", "construccion.encolada", "construccion.mejora_completada", "construccion.mejora_forzada",
+  "construccion.mejora_iniciada", "construccion.necesidad_detectada", "construccion.obra_iniciada", "construccion.receta_alternada", "construccion.receta_elegida", "construccion.yacimiento_agotado", "consumo.pausado",
+  "faccion.experiencia", "faccion.nivel", "mantenimiento.colapsado", "mantenimiento.deficit", "mantenimiento.recuperado", "parcela.liberada", "parcela.reclamada",
+  "poblacion.hambruna", "poblacion.primeros_artesanos", "poblacion.primeros_nobles", "politica.activada", "politica.expirada", "pueblo.almacen_lleno", "pueblo.cargado", "pueblo.completado",
+  "pueblo.dejado", "pueblo.destruido", "pueblo.guarnecido", "pueblo.guarnicion_retirada", "pueblo.marcado", "pueblo.materiales_entregados", "pueblo.obra_iniciada", "zona.frontera"
+]
+```
+<!-- /eventos -->

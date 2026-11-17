@@ -1,0 +1,787 @@
+# 07. Catálogo de rechazos
+
+El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`RechazoOrden.codigo` de `ResultadoOrden`, contrato 05 §6) o un mensaje del servidor de batalla (`AcuseBatalla.rechazo`). Decisión 7 de la fase 4H (`Docs/Arquitectura/4H_Contraste_y_Plan.md` §5): **un cliente decide por el código, nunca por el texto**, que es solo para personas y puede cambiar. Un código de esta lista no cambia de significado ni se reutiliza; uno que deje de usarse se marca aquí como retirado en lugar de borrarse.
+
+- **De dónde sale.** El bloque de abajo se escribe a partir del módulo `rechazos` de `crates/nucleo/src/comando.rs` (una constante por código, agrupadas por los comentarios del módulo, con lo que dice cada una). La prueba `cada_rechazo_del_nucleo_esta_en_el_catalogo_de_rechazos` (`crates/nucleo/tests/catalogo.rs`) falla si un rechazo del núcleo no está aquí, si aquí sobra alguno o si cambió lo que dice; `BRONZEAGE_REGENERAR=1 cargo test -p nucleo --test catalogo` lo reescribe. Todo rechazo del núcleo es una de estas constantes: un literal `"familia.nombre"` suelto en el código lo detecta la prueba del catálogo de eventos de la misma fuente.
+- **Detalle.** Algunos llevan además `RechazoOrden.detalle` (`google.protobuf.Struct`) con lo que el cliente necesita para actuar: hoy solo `guerra.confirmar` (`{ objetivo: "f-N", facciones: [...] }`, contrato 05 §6).
+- **Qué no está aquí.** Los errores de la sesión, que no son rechazos de una orden sino del protocolo (`ErrorSesion`: `hola.repetido`, `partida_no_disponible`, `acceso.*`...), y los códigos de `Aviso` (`reloj.cambiado`, `vista.invalida`, `vista.sin_derecho`): están en el contrato 05 (§2, §4 y §11). Tampoco los hechos de dominio, que tienen su propio catálogo en cada documento de `Docs/Mechanics` (bloques `<!-- eventos -->`).
+- **Duplicadas.** Una orden repetida con la misma `peticion_id` no es un rechazo: vuelve como `ORDEN_DUPLICADA` con la versión de entonces (contrato 05 §6).
+
+<!-- rechazos -->
+### Generales
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `no_autorizado` | `NO_AUTORIZADO` | — |
+| `version.obsoleta` | `VERSION_OBSOLETA` | — |
+| `ejercito.desconocido` | `EJERCITO_DESCONOCIDO` | — |
+| `heroe.desconocido` | `HEROE_DESCONOCIDO` | — |
+| `ruta.imposible` | `RUTA_IMPOSIBLE` | — |
+| `orden.no_soportada` | `ORDEN_NO_SOPORTADA` | Una orden vacía (sin cuerpo). |
+| `orden.no_disponible` | `ORDEN_NO_DISPONIBLE` | Una orden del contrato que el núcleo aún no tiene (política, tecnología, Aedas y refundación): se rechaza con este código estable en vez de descartarse. |
+| `orden.forma_invalida` | `ORDEN_FORMA_INVALIDA` | Un valor de la orden fuera de su catálogo cerrado, o un id que no tiene la forma de ninguna entidad (`orden.forma_invalida`). |
+| `peticion_id.largo` | `PETICION_ID_LARGO` | La `peticion_id` que manda el cliente pasa de `PETICION_ID_MAX` bytes (64): la orden no llega al núcleo ni se recuerda. |
+| `obra_de_mapa.desconocida` | `OBRA_DE_MAPA_DESCONOCIDA` | `obra-N` no es ningún pueblo ni ninguna avanzada. |
+| `repostar.sin_lugar` | `REPOSTAR_SIN_LUGAR` | `repostar` sin `lugar_id` y sin ninguna plaza ni avanzada operativa a la puerta de la columna. |
+| `objetivo.no_soportado` | `OBJETIVO_NO_SOPORTADO` | — |
+| `reloj.invalido` | `RELOJ_INVALIDO` | — |
+| `mundo.no_cargado` | `SIN_MUNDO` | — |
+| `asentamiento.desconocido` | `ASENTAMIENTO_DESCONOCIDO` | — |
+| `fundacion.sin_caravana` | `SIN_CARAVANA` | — |
+| `fundacion.sin_faccion` | `FUNDACION_SIN_FACCION` | — |
+| `fundacion.sin_fundadores` | `FUNDACION_SIN_FUNDADORES` | Ningún héroe de la columna es ciudadano de la Facción de la caravana: no hay fundadores (`minFundadoresParaFaccionNueva`, 1). |
+| `fundacion.cap_alcanzado` | `CAP_ALCANZADO` | — |
+| `nivel.invalido` | `NIVEL_INVALIDO` | — |
+| `parcela.sin_libres` | `PARCELA_SIN_LIBRES` | — |
+| `parcela.no_es_tuya` | `PARCELA_AJENA` | — |
+
+### Obras (`ErrorObra` del crate `asentamiento`)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `obra.tecnologia_faltante` | `OBRA_TECNOLOGIA_FALTANTE` | — |
+| `obra.tipo_no_manual` | `OBRA_TIPO_NO_MANUAL` | — |
+| `obra.unico` | `OBRA_UNICO` | — |
+| `obra.tope_almacenes` | `OBRA_TOPE_ALMACENES` | — |
+| `obra.tope_viviendas` | `OBRA_TOPE_VIVIENDAS` | — |
+| `obra.nivel_insuficiente` | `OBRA_NIVEL_INSUFICIENTE` | — |
+| `obra.falta_edificio` | `OBRA_FALTA_EDIFICIO` | Falta el edificio que pide para construirse, activo y con su nivel: el Albergue de caravanas pide un Mercado (2026-11-03). |
+| `obra.solo_por_pueblo` | `OBRA_SOLO_POR_PUEBLO` | — |
+| `obra.solo_en_aldea` | `OBRA_SOLO_EN_ALDEA` | El Corral solo existe en las aldeas agrícolas (§14.2). |
+| `obra.tope_transformacion` | `OBRA_TOPE_TRANSFORMACION` | — |
+| `obra.gran_fundicion` | `OBRA_GRAN_FUNDICION` | — |
+| `obra.cola_llena` | `OBRA_COLA_LLENA` | — |
+| `obra.sin_sitio` | `OBRA_SIN_SITIO` | — |
+| `obra.recursos_insuficientes` | `OBRA_RECURSOS_INSUFICIENTES` | — |
+| `edificio.desconocido` | `EDIFICIO_DESCONOCIDO` | — |
+| `obra.no_esta_en_cola` | `OBRA_NO_ESTA_EN_COLA` | — |
+| `obra.no_esta_en_curso` | `OBRA_NO_ESTA_EN_CURSO` | El edificio no tiene obra en curso que cancelar: ni en construcción ni mejorándose (2026-11-06). |
+| `obra.no_mejorable` | `OBRA_NO_MEJORABLE` | — |
+| `obra.sin_cuadrilla` | `OBRA_SIN_CUADRILLA` | — |
+| `obra.prestigio_insuficiente` | `OBRA_PRESTIGIO_INSUFICIENTE` | La Maravilla o la estatua piden más prestigio del que tiene la Facción (tanda 69 §13). |
+| `obra.solo_en_capital` | `OBRA_SOLO_EN_CAPITAL` | La estatua solo se levanta en la capital de la Facción (tanda 69 §13). |
+| `obra.tope_por_plaza` | `OBRA_TOPE_POR_PLAZA` | La plaza ya tiene todas las bodegas (o prensas) que caben en ella (`TALLERES_DE_UNA_RECETA.maximoPorPlaza`, 2026-11-09). |
+
+### El molino y su buey (tanda 69 §10)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `molino.no_es_molino` | `MOLINO_NO_ES_MOLINO` | El edificio al que se asigna el buey no es un molino. |
+| `molino.ya_tiene_buey` | `MOLINO_YA_TIENE_BUEY` | El molino ya tiene su buey. |
+
+### La receta de la bodega y de la prensa (2026-11-09)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `receta.no_se_elige` | `RECETA_NO_SE_ELIGE` | El edificio no elige receta: solo la bodega y la prensa trabajan una sola a la vez. |
+| `receta.desconocida` | `RECETA_DESCONOCIDA` | Ese insumo no es de ninguna receta del edificio. |
+| `receta.tope_por_plaza` | `RECETA_TOPE_POR_PLAZA` | La plaza ya trabaja tantas recetas distintas en ese tipo de edificio como permite su nivel (`TALLERES_DE_UNA_RECETA.recetasDistintasPorNivel`). |
+| `consumo.no_se_pausa` | `CONSUMO_NO_SE_PAUSA` | Ese recurso no es un bien de consumo que se pueda pausar: solo los de `BIENES_DE_CONSUMO` (carne, pan, queso, vino, cerveza, aceite y aceiteSesamo), nunca el trigo (2026-11-10). |
+
+### Ascenso (`Bloqueo`): el rechazo lleva el código del primero y todos en el mensaje
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `ascenso.nivel_maximo` | `ASCENSO_NIVEL_MAXIMO` | — |
+| `ascenso.en_curso` | `ASCENSO_EN_CURSO` | — |
+| `ascenso.falta_poblacion` | `ASCENSO_FALTA_POBLACION` | — |
+| `ascenso.faltan_edificios` | `ASCENSO_FALTAN_EDIFICIOS` | — |
+| `ascenso.falta_aldea` | `ASCENSO_FALTA_ALDEA` | — |
+| `ascenso.sin_cupo_de_faccion` | `ASCENSO_SIN_CUPO_DE_FACCION` | — |
+| `ascenso.recursos_insuficientes` | `ASCENSO_RECURSOS_INSUFICIENTES` | — |
+
+### Políticas (`ErrorPolitica`)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `politica.desconocida` | `POLITICA_DESCONOCIDA` | — |
+| `politica.fuera_de_pool` | `POLITICA_FUERA_DE_POOL` | — |
+| `politica.cargo_vacio` | `POLITICA_CARGO_VACIO` | — |
+| `politica.ya_activa` | `POLITICA_YA_ACTIVA` | — |
+| `politica.sin_slot` | `POLITICA_SIN_SLOT` | — |
+
+### Trueque (`ErrorTrueque`)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `trueque.desconocido` | `TRUEQUE_DESCONOCIDO` | — |
+| `trueque.mismo_asentamiento` | `TRUEQUE_MISMO_ASENTAMIENTO` | — |
+| `trueque.lado_vacio` | `TRUEQUE_LADO_VACIO` | — |
+| `trueque.cantidad_no_positiva` | `TRUEQUE_CANTIDAD_NO_POSITIVA` | — |
+| `trueque.recurso_repetido` | `TRUEQUE_RECURSO_REPETIDO` | — |
+| `trueque.no_esta_propuesto` | `TRUEQUE_NO_ESTA_PROPUESTO` | — |
+| `trueque.propuesta_vencida` | `TRUEQUE_PROPUESTA_VENCIDA` | — |
+| `trueque.no_activo` | `TRUEQUE_NO_ACTIVO` | — |
+
+### Mercado de la plaza (`ErrorOrden`) y mostrador (`ErrorMostrador`)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `mercado.sin_mercado` | `MERCADO_SIN_MERCADO` | — |
+| `orden.desconocida` | `ORDEN_DESCONOCIDA` | — |
+| `orden.no_activa` | `ORDEN_NO_ACTIVA` | — |
+| `orden.cantidad_no_positiva` | `ORDEN_CANTIDAD_NO_POSITIVA` | — |
+| `orden.sin_stock` | `ORDEN_SIN_STOCK` | — |
+| `mostrador.no_es_lider` | `MOSTRADOR_NO_ES_LIDER` | — |
+| `mostrador.orden_ajena` | `MOSTRADOR_ORDEN_AJENA` | — |
+| `mostrador.orden_caducada` | `MOSTRADOR_ORDEN_CADUCADA` | — |
+| `mostrador.fuera_de_la_puerta` | `MOSTRADOR_FUERA_DE_LA_PUERTA` | — |
+| `mostrador.cantidad_no_positiva` | `MOSTRADOR_CANTIDAD_NO_POSITIVA` | — |
+| `mostrador.precio_no_positivo` | `MOSTRADOR_PRECIO_NO_POSITIVO` | — |
+| `mostrador.recurso_oro` | `MOSTRADOR_RECURSO_ORO` | — |
+| `mostrador.nada_que_servir` | `MOSTRADOR_NADA_QUE_SERVIR` | — |
+
+### Caravanas (`ErrorCaravana`)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `caravana.desconocida` | `CARAVANA_DESCONOCIDA` | — |
+| `caravana.no_es_comercial` | `CARAVANA_NO_ES_COMERCIAL` | — |
+| `caravana.no_disponible` | `CARAVANA_NO_DISPONIBLE` | — |
+| `caravana.no_preparando` | `CARAVANA_NO_PREPARANDO` | — |
+| `caravana.no_aparcada` | `CARAVANA_NO_APARCADA` | — |
+| `caravana.estado_invalido` | `CARAVANA_ESTADO_INVALIDO` | — |
+| `caravana.sin_mercado` | `CARAVANA_SIN_MERCADO` | — |
+| `caravana.en_cooldown` | `CARAVANA_EN_COOLDOWN` | — |
+| `caravana.cupo_de_caravanas` | `CARAVANA_CUPO_DE_CARAVANAS` | — |
+| `caravana.cupo_de_carros` | `CARAVANA_CUPO_DE_CARROS` | — |
+| `caravana.sin_carpinteria` | `CARAVANA_SIN_CARPINTERIA` | — |
+| `caravana.sin_recursos` | `CARAVANA_SIN_RECURSOS` | — |
+| `caravana.carro_inexistente` | `CARAVANA_CARRO_INEXISTENTE` | — |
+| `caravana.carro_ya_tiene_animal` | `CARAVANA_CARRO_YA_TIENE_ANIMAL` | — |
+| `caravana.origen_distinto` | `CARAVANA_ORIGEN_DISTINTO` | — |
+| `caravana.sin_capacidad` | `CARAVANA_SIN_CAPACIDAD` | — |
+| `caravana.carga_invalida` | `CARAVANA_CARGA_INVALIDA` | — |
+| `caravana.sin_stock` | `CARAVANA_SIN_STOCK` | — |
+| `caravana.cupo_de_escolta` | `CARAVANA_CUPO_DE_ESCOLTA` | — |
+| `caravana.escolta_invalida` | `CARAVANA_ESCOLTA_INVALIDA` | — |
+| `caravana.sin_ruta` | `CARAVANA_SIN_RUTA` | — |
+| `caravana.salida_invalida` | `CARAVANA_SALIDA_INVALIDA` | — |
+| `caravana.no_ha_llegado` | `CARAVANA_NO_HA_LLEGADO` | — |
+| `caravana.sin_plan` | `CARAVANA_SIN_PLAN` | — |
+| `caravana.nada_que_mover` | `CARAVANA_NADA_QUE_MOVER` | — |
+| `caravana.fuera_de_la_puerta` | `CARAVANA_FUERA_DE_LA_PUERTA` | Adjuntar o aparcar con la columna lejos de la puerta de la plaza donde está la caravana. |
+| `caravana.faccion_ajena` | `CARAVANA_FACCION_AJENA` | Adjuntar a una columna de otra Facción. |
+| `caravana.plaza_ajena` | `CARAVANA_PLAZA_AJENA` | — |
+| `caravana.no_esta_adjunta` | `CARAVANA_NO_ESTA_ADJUNTA` | — |
+
+### Encargos de las caravanas (`ErrorEncargo` y lo que comprueba el núcleo; rutas de caravanas automáticas, 2026-10-31)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `encargo.mismo_origen` | `ENCARGO_MISMO_ORIGEN` | El destino del encargo es el origen de la caravana. |
+| `encargo.destino_ajeno` | `ENCARGO_DESTINO_AJENO` | Una ruta permanente a una plaza que no es de la Facción del origen (a una ajena solo va un envío). |
+| `encargo.linea_invalida` | `ENCARGO_LINEA_INVALIDA` | Una línea con cantidad o tope de menos de una unidad, un recurso repetido en la misma lista, precio en una plaza propia u oro en una ajena. |
+| `encargo.falta_precio` | `ENCARGO_FALTA_PRECIO` | Una línea en una plaza ajena sin precio máximo (al recoger) o mínimo (al dejar), o con un precio que no es positivo. |
+| `encargo.supera_capacidad` | `ENCARGO_SUPERA_CAPACIDAD` | Lo que se recoge en una parada pasa de la capacidad de la caravana. |
+| `encargo.ya_tiene` | `ENCARGO_YA_TIENE` | La caravana ya tiene un encargo: se cambia o se cancela. |
+| `encargo.no_tiene` | `ENCARGO_NO_TIENE` | La caravana no tiene encargo. |
+
+### Entrega manual (§4.5)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `entrega.invalida` | `ENTREGA_INVALIDA` | — |
+| `entrega.no_debe` | `ENTREGA_NO_DEBE` | — |
+| `entrega.fuera_de_la_puerta` | `ENTREGA_FUERA_DE_LA_PUERTA` | — |
+| `cantidad.no_positiva` | `CANTIDAD_NO_POSITIVA` | — |
+
+### Pueblos extractores y obras de mapa (`ErrorPueblo` y lo que el núcleo comprueba sobre el mapa)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `pueblo.desconocido` | `PUEBLO_DESCONOCIDO` | — |
+| `pueblo.nodo_desconocido` | `PUEBLO_NODO_DESCONOCIDO` | — |
+| `pueblo.nodo_no_extraible` | `PUEBLO_NODO_NO_EXTRAIBLE` | El nodo es de ganado (el ganado sale de los corrales de las aldeas agrícolas) o el tipo no va por pueblo. |
+| `pueblo.nodo_ocupado` | `PUEBLO_NODO_OCUPADO` | — |
+| `pueblo.fuera_de_la_zona` | `PUEBLO_FUERA_DE_LA_ZONA` | — |
+| `pueblo.sin_ruta` | `PUEBLO_SIN_RUTA` | El nodo no tiene ruta por tierra hasta la plaza madre: su carro no podría acarrear. |
+| `pueblo.tecnologia_faltante` | `PUEBLO_TECNOLOGIA_FALTANTE` | — |
+| `pueblo.nivel_insuficiente` | `PUEBLO_NIVEL_INSUFICIENTE` | — |
+| `pueblo.sin_cupo` | `PUEBLO_SIN_CUPO` | — |
+| `pueblo.no_esta_pendiente` | `PUEBLO_NO_ESTA_PENDIENTE` | — |
+| `pueblo.nada_que_entregar` | `PUEBLO_NADA_QUE_ENTREGAR` | — |
+| `pueblo.faccion_ajena` | `PUEBLO_FACCION_AJENA` | — |
+| `pueblo.fuera_de_la_puerta` | `PUEBLO_FUERA_DE_LA_PUERTA` | — |
+| `pueblo.no_esta_activo` | `PUEBLO_NO_ESTA_ACTIVO` | — |
+| `pueblo.ya_tiene_carro` | `PUEBLO_YA_TIENE_CARRO` | — |
+| `pueblo.fertilidad_insuficiente` | `PUEBLO_FERTILIDAD_INSUFICIENTE` | Aldea agrícola (§14.2): el punto no llega a la fertilidad mínima. |
+| `pueblo.demasiado_cerca` | `PUEBLO_DEMASIADO_CERCA` | Aldea agrícola: el punto está demasiado cerca de otro pueblo. |
+| `pueblo.fuera_de_su_anillo` | `PUEBLO_FUERA_DE_SU_ANILLO` | Aldea agrícola: el punto no cae en el anillo de la zona que toca a la siguiente aldea de la plaza (2026-11-01). |
+| `pueblo.nivel_maximo` | `PUEBLO_NIVEL_MAXIMO` | — |
+| `pueblo.mejora_en_curso` | `PUEBLO_MEJORA_EN_CURSO` | — |
+| `pueblo.cultivo_bloqueado` | `PUEBLO_CULTIVO_BLOQUEADO` | La plaza madre no tiene aún el nivel que pide ese cultivo (tanda 69 §12: la vid, el 3; la oliva, el 4). |
+
+### Dentro de un pueblo o una aldea (§14.0.1, 2026-10-29)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `pueblo.escuadra_fuera_de_tu_columna` | `PUEBLO_ESCUADRA_FUERA_DE_TU_COLUMNA` | La escuadra que se deja en la guarnición del pueblo no va en la columna con la que entró el héroe. |
+| `pueblo.escuadra_no_esta` | `PUEBLO_ESCUADRA_NO_ESTA` | La escuadra que se recoge no está en la guarnición de ese pueblo. |
+| `pueblo.recurso_ajeno` | `PUEBLO_RECURSO_AJENO` | Lo que se deja en el almacén local no es algo que ese pueblo produzca (la aldea, trigo y ganado; un extractor, su recurso). |
+| `pueblo.almacen_sin_sitio` | `PUEBLO_ALMACEN_SIN_SITIO` | El almacén local del pueblo no tiene sitio. |
+| `pueblo.nada_que_cargar` | `PUEBLO_NADA_QUE_CARGAR` | El almacén local no tiene nada de ese recurso que cargar. |
+| `pueblo.nada_que_dejar` | `PUEBLO_NADA_QUE_DEJAR` | El carro de la columna no lleva nada de ese recurso que dejar. |
+
+### Avanzadas (`ErrorAvanzada` y lo que el núcleo comprueba sobre el mapa, la columna y la guarnición; fase 4F)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `avanzada.desconocida` | `AVANZADA_DESCONOCIDA` | — |
+| `avanzada.nivel_insuficiente` | `AVANZADA_NIVEL_INSUFICIENTE` | — |
+| `avanzada.sin_cupo` | `AVANZADA_SIN_CUPO` | — |
+| `avanzada.fuera_de_la_zona` | `AVANZADA_FUERA_DE_LA_ZONA` | — |
+| `avanzada.dentro_del_asentamiento` | `AVANZADA_DENTRO_DEL_ASENTAMIENTO` | El sitio cae sobre la ciudad de la plaza madre (su radio es una décima del de su zona). |
+| `avanzada.pisa_otro_elemento` | `AVANZADA_PISA_OTRO_ELEMENTO` | El sitio pisa otra avanzada, un pueblo o un campamento (cada elemento del mapa mide 0,2). |
+| `avanzada.nada_que_cancelar` | `AVANZADA_NADA_QUE_CANCELAR` | No hay una mejora ni una reparación que cancelar. |
+| `avanzada.fuera_del_sitio` | `AVANZADA_FUERA_DEL_SITIO` | El sitio donde se pide colocarla no es tierra firme (desde el 2026-11-04 se coloca desde dentro de la madre, como la aldea; antes: la columna del héroe no estaba en el sitio). |
+| `avanzada.sin_ruta` | `AVANZADA_SIN_RUTA` | Del sitio no hay ruta por tierra hasta la plaza madre: no se le podrían llevar los materiales (2026-11-04). |
+| `avanzada.faccion_ajena` | `AVANZADA_FACCION_AJENA` | — |
+| `avanzada.fuera_de_la_puerta` | `AVANZADA_FUERA_DE_LA_PUERTA` | — |
+| `avanzada.no_esta_pendiente` | `AVANZADA_NO_ESTA_PENDIENTE` | — |
+| `avanzada.nada_que_entregar` | `AVANZADA_NADA_QUE_ENTREGAR` | — |
+| `avanzada.no_mejorable` | `AVANZADA_NO_MEJORABLE` | — |
+| `avanzada.no_reparable` | `AVANZADA_NO_REPARABLE` | — |
+| `avanzada.ya_hay_obra` | `AVANZADA_YA_HAY_OBRA` | — |
+| `avanzada.ciudadela_no_se_destruye` | `AVANZADA_CIUDADELA_NO_SE_DESTRUYE` | — |
+| `avanzada.no_operativa` | `AVANZADA_NO_OPERATIVA` | Solo funciona una avanzada operativa (no una obra ni unas ruinas). |
+| `avanzada.sin_almacen` | `AVANZADA_SIN_ALMACEN` | — |
+| `avanzada.almacen_lleno` | `AVANZADA_ALMACEN_LLENO` | — |
+| `avanzada.nada_que_depositar` | `AVANZADA_NADA_QUE_DEPOSITAR` | — |
+| `avanzada.no_resides` | `AVANZADA_NO_RESIDES` | — |
+| `avanzada.escuadra_fuera_de_tu_columna` | `AVANZADA_ESCUADRA_FUERA_DE_TU_COLUMNA` | — |
+| `avanzada.escuadra_no_esta` | `AVANZADA_ESCUADRA_NO_ESTA` | — |
+| `avanzada.tropa_no_elegible` | `AVANZADA_TROPA_NO_ELEGIBLE` | — |
+| `avanzada.tropa_sin_tecnologia` | `AVANZADA_TROPA_SIN_TECNOLOGIA` | — |
+| `avanzada.tropa_sin_edificio` | `AVANZADA_TROPA_SIN_EDIFICIO` | La plaza madre no tiene el edificio activo, al nivel que pide la tropa, para reclutarla. |
+
+### Murallas (`ErrorRecinto` del crate `asentamiento` y `ErrorMuralla` del trazo), en el orden en que se comprueban
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `murallas.sin_cargo` | `MURALLAS_SIN_CARGO` | El cargo que se invoca no es el Gobernador ni el Maestro de Obras. |
+| `murallas.nivel_inexistente` | `MURALLAS_NIVEL_INEXISTENTE` | — |
+| `murallas.nivel_de_plaza` | `MURALLAS_NIVEL_DE_PLAZA` | La plaza no tiene el nivel operativo que pide el nivel de recinto (empalizada 2, piedra 3, adarve 4). |
+| `murallas.en_obra` | `MURALLAS_EN_OBRA` | Hay un recinto sin cerrar (en obra, o dañado por una conquista). |
+| `murallas.arrabal` | `MURALLAS_ARRABAL` | Ampliar exige 6 edificios fuera del recinto exterior. |
+| `murallas.sin_centro_urbano` | `MURALLAS_SIN_CENTRO_URBANO` | — |
+| `murallas.no_se_puede_cerrar` | `MURALLAS_NO_SE_PUEDE_CERRAR` | — |
+| `murallas.fuera_de_la_ventana` | `MURALLAS_FUERA_DE_LA_VENTANA` | — |
+| `murallas.no_envuelve` | `MURALLAS_NO_ENVUELVE` | El anillo nuevo no envuelve estrictamente al anterior. |
+| `murallas.recinto_desconocido` | `MURALLAS_RECINTO_DESCONOCIDO` | — |
+| `murallas.incompleto` | `MURALLAS_INCOMPLETO` | Mejorar un recinto sin cerrar. |
+| `murallas.ya_mejorando` | `MURALLAS_YA_MEJORANDO` | — |
+| `murallas.en_el_maximo` | `MURALLAS_EN_EL_MAXIMO` | — |
+| `murallas.ya_cerrado` | `MURALLAS_YA_CERRADO` | Abandonar un recinto que alguna vez estuvo completo. |
+
+### Mercado de los campamentos de mercenarios (`ErrorMercenarios`)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `campamento.desconocido` | `CAMPAMENTO_DESCONOCIDO` | — |
+| `campamento.fuera_de_la_puerta` | `CAMPAMENTO_FUERA_DE_LA_PUERTA` | — |
+| `mercenarios.cantidad_invalida` | `MERCENARIOS_CANTIDAD_INVALIDA` | — |
+| `mercenarios.sin_precio` | `MERCENARIOS_SIN_PRECIO` | — |
+| `mercenarios.trigo_no_va_al_carro` | `MERCENARIOS_TRIGO_NO_VA_AL_CARRO` | — |
+| `mercenarios.sin_stock` | `MERCENARIOS_SIN_STOCK` | — |
+| `mercenarios.cupo_agotado` | `MERCENARIOS_CUPO_AGOTADO` | — |
+| `mercenarios.sin_oro` | `MERCENARIOS_SIN_ORO` | — |
+| `mercenarios.sin_fondo` | `MERCENARIOS_SIN_FONDO` | `contratar_mercenario` con `pagar_con = fondoPlaza`: el fondo de la plaza no llega a la tarifa en monedas (Mercenarios_Por_Contrato §5.1). |
+| `mercenarios.sin_sitio` | `MERCENARIOS_SIN_SITIO` | — |
+| `mercenarios.viveres_llenos` | `MERCENARIOS_VIVERES_LLENOS` | — |
+
+### Reclutar en un campamento (`ErrorMercenarios`) y la tropa prestada
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `mercenarios.no_resides` | `MERCENARIOS_NO_RESIDES` | — |
+| `mercenarios.tropa_no_disponible` | `MERCENARIOS_TROPA_NO_DISPONIBLE` | — |
+| `mercenarios.ya_la_tienes_fuera` | `MERCENARIOS_YA_LA_TIENES_FUERA` | — |
+| `mercenarios.al_tope` | `MERCENARIOS_AL_TOPE` | — |
+| `mercenarios.sin_reclutas` | `MERCENARIOS_SIN_RECLUTAS` | — |
+| `mercenarios.prestamo_sin_tropas` | `MERCENARIOS_PRESTAMO_SIN_TROPAS` | — |
+| `mercenarios.no_se_presta` | `MERCENARIOS_NO_SE_PRESTA` | — |
+| `mercenarios.prestamo_repetida` | `MERCENARIOS_PRESTAMO_REPETIDA` | — |
+| `mercenarios.ya_prestada` | `MERCENARIOS_YA_PRESTADA` | — |
+| `mercenarios.nada_que_reponer` | `MERCENARIOS_NADA_QUE_REPONER` | — |
+
+### Mercenarios por contrato (entrada 48, Mercenarios_Por_Contrato)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `mercenario.solo_bots` | `MERCENARIO_SOLO_BOTS` | Solo un héroe de bot se ofrece como mercenario. |
+| `mercenario.no_ofrecido` | `MERCENARIO_NO_OFRECIDO` | El héroe no está en el tablón de ningún campamento. |
+| `mercenario.faccion_de_bots` | `MERCENARIO_FACCION_DE_BOTS` | Una Facción de bots no contrata mercenarios. |
+| `mercenario.objetivo_invalido` | `MERCENARIO_OBJETIVO_INVALIDO` | El objetivo no es de una clase que admite el trabajo o la orden, no existe o no vale para él; o la residencia del permanente no es una plaza de la Facción. |
+| `mercenario.plazo_invalido` | `MERCENARIO_PLAZO_INVALIDO` | Un temporal sin uno de los plazos de la tabla, o un permanente con plazo. |
+| `mercenario.sin_alcance` | `MERCENARIO_SIN_ALCANCE` | Ningún cargo de quien firma, ordena o valora le alcanza para ese contrato, esa orden o esa valoración. |
+| `mercenario.recontrato_en_espera` | `MERCENARIO_RECONTRATO_EN_ESPERA` | La Facción lo despidió hace menos de `esperaRecontratoHoras`. |
+| `mercenario.sin_contrato` | `MERCENARIO_SIN_CONTRATO` | No tiene contrato vigente con la Facción de quien lo pide. |
+| `mercenario.tipo_de_contrato` | `MERCENARIO_TIPO_DE_CONTRATO` | Lo pedido no vale para su tipo de contrato (prorrogar un permanente, mudar a un temporal). |
+| `mercenario.sin_orden` | `MERCENARIO_SIN_ORDEN` | Un marcado intenta algo que solo hace con una orden que se lo permita. |
+| `mercenario.orden_fuera_de_contrato` | `MERCENARIO_ORDEN_FUERA_DE_CONTRATO` | La orden no es de las que admite su trabajo, o su objetivo cae fuera del contrato. |
+| `mercenario.orden_de_mas_rango` | `MERCENARIO_ORDEN_DE_MAS_RANGO` | Ya tiene una orden de un cargo de más rango que el de quien ordena. |
+| `mercenario.lista_invalida` | `MERCENARIO_LISTA_INVALIDA` | La lista de mercenarios de una orden está vacía, pasa de 16 o repite alguno. |
+| `mercenario.prohibido` | `MERCENARIO_PROHIBIDO` | Algo que un marcado no hace nunca (declarar la guerra, aceptar misiones del tablón de la Facción o de la plaza). |
+| `mercenario.convocatoria_de_mercenarios` | `MERCENARIO_CONVOCATORIA_DE_MERCENARIOS` | A la convocatoria de un mercenario solo se unen mercenarios de su Facción con la orden de unirse a ella, nunca un ciudadano sin marca. |
+| `mercenario.marcado` | `MERCENARIO_MARCADO` | El héroe es un mercenario con marca: no deja la Facción por su cuenta ni recibe cargos, trono ni mando. |
+| `mercenario.sin_valoracion` | `MERCENARIO_SIN_VALORACION` | No hay contrato terminado de ese mercenario con la Facción que se pueda valorar: no lo hubo, ya se valoró o pasó el plazo. |
+| `mercenario.sin_premio` | `MERCENARIO_SIN_PREMIO` | No le queda ninguna escuadra de premio de rango por reclamar. |
+| `mercenario.fuera_de_licencia` | `MERCENARIO_FUERA_DE_LICENCIA` | La tropa está por encima del escalón que permite su rango, o no es de su leva propia ni la recluta su campamento. |
+| `mercenario.fuera_de_la_region` | `MERCENARIO_FUERA_DE_LA_REGION` | Desde la taberna solo se contrata a los mercenarios de los campamentos de su región (tanda 69 §8). |
+
+### Reclutar en una plaza (`ErrorReclutamiento`), en el orden en que se comprueban
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `reclutamiento.no_puedes` | `RECLUTAMIENTO_NO_PUEDES` | — |
+| `reclutamiento.sin_tecnologia` | `RECLUTAMIENTO_SIN_TECNOLOGIA` | — |
+| `reclutamiento.reservada` | `RECLUTAMIENTO_RESERVADA` | — |
+| `reclutamiento.ya_la_tienes_fuera` | `RECLUTAMIENTO_YA_LA_TIENES_FUERA` | — |
+| `reclutamiento.solo_reponer` | `RECLUTAMIENTO_SOLO_REPONER` | — |
+| `reclutamiento.al_tope` | `RECLUTAMIENTO_AL_TOPE` | — |
+| `reclutamiento.sin_poblacion` | `RECLUTAMIENTO_SIN_POBLACION` | — |
+| `reclutamiento.sin_edificio` | `RECLUTAMIENTO_SIN_EDIFICIO` | — |
+| `reclutamiento.sin_recursos` | `RECLUTAMIENTO_SIN_RECURSOS` | — |
+| `reclutamiento.sin_reserva_de_trigo` | `RECLUTAMIENTO_SIN_RESERVA_DE_TRIGO` | — |
+
+### El héroe, sus puntos, loadouts, escuadras y guarnición (`ErrorHeroe`)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `heroe.ya_existe` | `HEROE_YA_EXISTE` | — |
+| `heroe.nombre_invalido` | `HEROE_NOMBRE_INVALIDO` | El nombre del héroe está vacío, empieza o acaba en espacio, pasa de 24 caracteres o lleva caracteres de control. |
+| `heroe.aspecto_invalido` | `HEROE_ASPECTO_INVALIDO` | Una pieza del avatar (cabeza, pelo, barba o cejas) trae un id sin forma de id: más de 32 caracteres o alguno que no sea letra ASCII, cifra, `_` o `-` (2026-11-13; aún no hay catálogo de piezas de Conquest). |
+| `heroe.nombre_en_uso` | `HEROE_NOMBRE_EN_USO` | Ya hay otro héroe con ese nombre (sin distinguir mayúsculas; 2026-11-06, pedido del autor). |
+| `heroe.sin_monedas` | `HEROE_SIN_MONEDAS` | El héroe no tiene las monedas que cuesta (tanda 69 §4). |
+| `heroe.campamento_desconocido` | `HEROE_CAMPAMENTO_DESCONOCIDO` | — |
+| `heroe.clase_desconocida` | `HEROE_CLASE_DESCONOCIDA` | `crear_heroe`: la clase está vacía o no es una de `CLASES_HEROE` (Heroe_Y_Tropa §3). |
+| `heroe.puntos_negativos` | `HEROE_PUNTOS_NEGATIVOS` | — |
+| `heroe.ningun_punto` | `HEROE_NINGUN_PUNTO` | — |
+| `heroe.puntos_insuficientes` | `HEROE_PUNTOS_INSUFICIENTES` | — |
+| `heroe.tope_de_atributo` | `HEROE_TOPE_DE_ATRIBUTO` | — |
+| `loadout.sin_nombre` | `LOADOUT_SIN_NOMBRE` | — |
+| `loadout.nombre_largo` | `LOADOUT_NOMBRE_LARGO` | El nombre recortado del loadout pasa de `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres (el mismo tope que el de las plazas). |
+| `loadout.nombre_control` | `LOADOUT_NOMBRE_CONTROL` | El nombre del loadout lleva caracteres de control. |
+| `loadout.desconocido` | `LOADOUT_DESCONOCIDO` | — |
+| `escuadra.repetida` | `ESCUADRA_REPETIDA` | — |
+| `escuadra.ajena` | `ESCUADRA_AJENA` | — |
+| `escuadra.fuera_de_tu_columna` | `ESCUADRA_FUERA_DE_TU_COLUMNA` | De visita en una plaza de tu Facción (2026-11-04): la escuadra que dejas en su guarnición o cedes de escolta tiene que ir en la columna con la que entraste. |
+| `escuadra.en_batalla` | `ESCUADRA_EN_BATALLA` | — |
+| `formacion.desconocida` | `FORMACION_DESCONOCIDA` | `elegirFormacion`: no hay ninguna familia de formación con ese id en `FORMACIONES` (Heroe_Y_Tropa §10.4). |
+| `formacion.sin_tecnologia` | `FORMACION_SIN_TECNOLOGIA` | `elegirFormacion`: la tecnología de la Facción del héroe no permite esa familia de formación (las cerradas piden Disciplina de formación). |
+| `liderazgo.superado` | `LIDERAZGO_SUPERADO` | — |
+| `guarnicion.sin_residencia` | `GUARNICION_SIN_RESIDENCIA` | — |
+| `guarnicion.no_en_campamento` | `GUARNICION_NO_EN_CAMPAMENTO` | — |
+| `guarnicion.ya_asignada` | `GUARNICION_YA_ASIGNADA` | — |
+| `guarnicion.supera_el_cupo` | `GUARNICION_SUPERA_EL_CUPO` | — |
+| `guarnicion.no_asignada` | `GUARNICION_NO_ASIGNADA` | — |
+| `guarnicion.faccion_ajena` | `GUARNICION_FACCION_AJENA` | De visita (2026-11-04): solo se guarnece una plaza de tu Facción. |
+| `guarnicion.no_estas_dentro` | `GUARNICION_NO_ESTAS_DENTRO` | La escuadra que dejaste de visita se recoge desde dentro de esa plaza. |
+
+### El equipo, la mochila y el almacén de objetos del héroe (`ErrorEquipo` y `ErrorInventario` del crate `objetos`; Heroe_Y_Tropa §4.5)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `equipo.fuera_de_lugar` | `EQUIPO_FUERA_DE_LUGAR` | `equipar_objeto`, `desequipar_objeto` o `usar_objeto` fuera de una plaza, un pueblo o un campamento (D2): en una columna, en una avanzada o fuera del mundo. |
+| `equipo.en_batalla` | `EQUIPO_EN_BATALLA` | `equipar_objeto`, `desequipar_objeto` o `usar_objeto` con una escuadra del héroe reservada para una batalla (D2). |
+| `objeto.desconocido` | `OBJETO_DESCONOCIDO` | La pieza no está en el catálogo `OBJETOS`. |
+| `equipo.no_equipable` | `EQUIPO_NO_EQUIPABLE` | Un material o un consumible: no va en ningún hueco. |
+| `equipo.incompatible` | `EQUIPO_INCOMPATIBLE` | La clase del arma puesta no admite el peso de esa armadura (Objetos_Del_Heroe §3.2). |
+| `equipo.arma_fija` | `EQUIPO_ARMA_FIJA` | El arma no se quita: solo se cambia por otra. |
+| `equipo.hueco_vacio` | `EQUIPO_HUECO_VACIO` | No hay nada puesto en ese hueco. |
+| `mochila.llena` | `MOCHILA_LLENA` | Lo que va a la mochila no cabe en ella (D17): no cambia nada. |
+| `almacen_objetos.lleno` | `ALMACEN_OBJETOS_LLENO` | `guardar_objeto`: no cabe en el almacén de objetos. |
+| `almacen_objetos.fuera_de_tu_residencia` | `ALMACEN_OBJETOS_FUERA_DE_TU_RESIDENCIA` | `guardar_objeto` o `sacar_objeto` fuera de la residencia del héroe, donde está su almacén de objetos (D22). |
+| `inventario.casilla_vacia` | `INVENTARIO_CASILLA_VACIA` | La casilla de la mochila o del almacén de objetos está vacía o pasa de su capacidad. |
+| `inventario.poca_cantidad` | `INVENTARIO_POCA_CANTIDAD` | La casilla tiene menos de lo que se pide. |
+| `inventario.cantidad_invalida` | `INVENTARIO_CANTIDAD_INVALIDA` | Una cantidad de 0, o una pila que pasaría del máximo. |
+
+### La Armería y los consumibles: comprar, vender, forjar y usar un objeto (`ErrorTienda`, `ErrorForja` y `ErrorUso` del crate `objetos`; Heroe_Y_Tropa §4.6)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `armeria.sin_armeria` | `ARMERIA_SIN_ARMERIA` | `comprar_objeto`, `vender_objeto` o `forjar_objeto` sin estar dentro de una plaza con la Armería activa (D1). |
+| `armeria.no_se_vende` | `ARMERIA_NO_SE_VENDE` | `comprar_objeto`: la tienda no lo vende (no es arma, armadura ni montura, o pasa de `tiendaHastaTier`; Objetos_Del_Heroe §3.3). |
+| `armeria.sin_tecnologia` | `ARMERIA_SIN_TECNOLOGIA` | `comprar_objeto` o `forjar_objeto`: la Facción de la plaza no tiene la tecnología de su metal (D1). |
+| `forja.cerrada` | `FORJA_CERRADA` | `forjar_objeto`: la forja de la plaza está cerrada al grupo del héroe (Heroe_Y_Tropa §4.6). |
+| `forja.era_cerrada` | `FORJA_ERA_CERRADA` | `forjar_objeto`: el tier de la pieza pide una Era que el mundo no ha alcanzado (`OBJETOS.forja.eraPorTier`; Objetos_Del_Heroe §3.4). |
+| `forja.recargo_invalido` | `FORJA_RECARGO_INVALIDO` | `configurar_forja`: el recargo no es uno de `OBJETOS.forja.recargosPct` (Heroe_Y_Tropa §4.6). |
+| `forja.sin_receta` | `FORJA_SIN_RECETA` | `forjar_objeto`: no tiene receta (no es arma ni armadura, o es de tier I; Objetos_Del_Heroe §3.4). |
+| `forja.sin_plano` | `FORJA_SIN_PLANO` | `forjar_objeto`: no hay en la mochila un plano de su tier. |
+| `forja.sin_crisoles` | `FORJA_SIN_CRISOLES` | `forjar_objeto`: no hay en la mochila los crisoles de su tier. |
+| `forja.sin_materiales` | `FORJA_SIN_MATERIALES` | `forjar_objeto`: el almacén personal (en su residencia) y el carro no tienen los materiales de la receta (Heroe_Y_Tropa §4.6). |
+| `objeto.no_se_usa` | `OBJETO_NO_SE_USA` | `usar_objeto`: no es un consumible. |
+| `escuadra.prestada` | `ESCUADRA_PRESTADA` | `usar_objeto`: una medalla de tropa sobre tropa prestada, que no es del héroe (Objetos_Del_Heroe §3.5). |
+| `escuadra.nivel_maximo` | `ESCUADRA_NIVEL_MAXIMO` | `usar_objeto`: una medalla de tropa sobre una escuadra que ya está en `nivelMaximoEscuadra`. |
+
+### Presencia: dónde está el héroe y si está en el mundo
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `heroe.fuera_del_mundo` | `HEROE_FUERA_DEL_MUNDO` | — |
+| `heroe.desconectandose` | `HEROE_DESCONECTANDOSE` | — |
+| `heroe.sin_columna` | `HEROE_SIN_COLUMNA` | — |
+| `heroe.en_columna` | `HEROE_EN_COLUMNA` | — |
+| `heroe.no_esta_en_la_plaza` | `HEROE_NO_ESTA_EN_LA_PLAZA` | — |
+| `heroe.sin_residencia` | `HEROE_SIN_RESIDENCIA` | — |
+| `heroe.ubicacion_invalida` | `HEROE_UBICACION_INVALIDA` | — |
+
+### Tecnologías (andamiaje de administración)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `tecnologia.desconocida` | `TECNOLOGIA_DESCONOCIDA` | — |
+
+### Columnas (`ErrorColumna`) y convocatorias (`ErrorConvocatoria`)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `columna.ya_vas_en_ella` | `COLUMNA_YA_VAS_EN_ELLA` | — |
+| `columna.no_admite` | `COLUMNA_NO_ADMITE` | — |
+| `columna.no_es_ejercito` | `COLUMNA_NO_ES_EJERCITO` | — |
+| `columna.solo_una_personal` | `COLUMNA_SOLO_UNA_PERSONAL` | — |
+| `columna.otra_faccion` | `COLUMNA_OTRA_FACCION` | — |
+| `columna.lejos` | `COLUMNA_LEJOS` | — |
+| `columna.no_pregunta` | `COLUMNA_NO_PREGUNTA` | — |
+| `columna.no_va_dentro` | `COLUMNA_NO_VA_DENTRO` | — |
+| `columna.de_una_personal_no_te_separas` | `COLUMNA_DE_UNA_PERSONAL_NO_TE_SEPARAS` | — |
+| `columna.el_lider_no_puede` | `COLUMNA_EL_LIDER_NO_PUEDE` | — |
+| `columna.es_el_ultimo` | `COLUMNA_ES_EL_ULTIMO` | — |
+| `columna.solo_el_lider` | `COLUMNA_SOLO_EL_LIDER` | — |
+| `columna.ya_eres_el_lider` | `COLUMNA_YA_ERES_EL_LIDER` | — |
+| `columna.sucesor_fuera` | `COLUMNA_SUCESOR_FUERA` | — |
+| `columna.no_hay_peticion` | `COLUMNA_NO_HAY_PETICION` | — |
+| `columna.peticion_caducada` | `COLUMNA_PETICION_CADUCADA` | — |
+| `columna.ya_es_ejercito` | `COLUMNA_YA_ES_EJERCITO` | — |
+| `columna.ya_organizando` | `COLUMNA_YA_ORGANIZANDO` | — |
+| `columna.no_esta_solo` | `COLUMNA_NO_ESTA_SOLO` | — |
+| `columna.politica_invalida` | `COLUMNA_POLITICA_INVALIDA` | — |
+| `columna.no_es_una_formacion` | `COLUMNA_NO_ES_UNA_FORMACION` | — |
+| `convocatoria.desconocida` | `CONVOCATORIA_DESCONOCIDA` | — |
+| `convocatoria.fuera_de_un_lugar` | `CONVOCATORIA_FUERA_DE_UN_LUGAR` | — |
+| `convocatoria.sin_faccion` | `CONVOCATORIA_SIN_FACCION` | — |
+| `convocatoria.ya_en_ella` | `CONVOCATORIA_YA_EN_ELLA` | — |
+| `convocatoria.politica_invalida` | `CONVOCATORIA_POLITICA_INVALIDA` | — |
+| `convocatoria.otro_lugar` | `CONVOCATORIA_OTRO_LUGAR` | — |
+| `convocatoria.otra_faccion` | `CONVOCATORIA_OTRA_FACCION` | — |
+| `convocatoria.no_estas` | `CONVOCATORIA_NO_ESTAS` | — |
+| `convocatoria.el_lider_cancela` | `CONVOCATORIA_EL_LIDER_CANCELA` | — |
+| `convocatoria.solo_el_lider` | `CONVOCATORIA_SOLO_EL_LIDER` | — |
+| `convocatoria.no_hay_peticion` | `CONVOCATORIA_NO_HAY_PETICION` | — |
+| `convocatoria.peticion_caducada` | `CONVOCATORIA_PETICION_CADUCADA` | — |
+| `convocatoria.lider_fuera` | `CONVOCATORIA_LIDER_FUERA` | — |
+| `convocatoria.no_puede_salir` | `CONVOCATORIA_NO_PUEDE_SALIR` | — |
+
+### Salir y entrar en un lugar, y repostar
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `heroe.ya_en_columna` | `HEROE_YA_EN_COLUMNA` | — |
+| `heroe.en_convocatoria` | `HEROE_EN_CONVOCATORIA` | — |
+| `heroe.no_esta_en_el_campamento` | `HEROE_NO_ESTA_EN_EL_CAMPAMENTO` | — |
+| `heroe.dentro_de_un_lugar` | `HEROE_DENTRO_DE_UN_LUGAR` | — |
+| `salida.solo_de_tu_residencia` | `SALIDA_SOLO_DE_TU_RESIDENCIA` | — |
+| `salida.desde_tu_residencia` | `SALIDA_DESDE_TU_RESIDENCIA` | — |
+| `salida.sin_escuadras` | `SALIDA_SIN_ESCUADRAS` | — |
+| `escuadra.aniquilada` | `ESCUADRA_ANIQUILADA` | — |
+| `escuadra.fuera_del_campamento` | `ESCUADRA_FUERA_DEL_CAMPAMENTO` | — |
+| `escuadra.en_la_guarnicion` | `ESCUADRA_EN_LA_GUARNICION` | — |
+| `carga.negativa` | `CARGA_NEGATIVA` | — |
+| `carro.no_cabe` | `CARRO_LLENO` | — |
+| `almacen.sin_existencias` | `ALMACEN_SIN_EXISTENCIAS` | — |
+| `columna.es_un_ejercito` | `COLUMNA_ES_UN_EJERCITO` | — |
+| `columna.en_formacion` | `COLUMNA_EN_FORMACION` | — |
+| `columna.personal_sin_caravanas` | `COLUMNA_PERSONAL_SIN_CARAVANAS` | — |
+| `columna.viveres_llenos` | `COLUMNA_VIVERES_LLENOS` | — |
+| `asentamiento.fuera_de_la_puerta` | `ASENTAMIENTO_FUERA_DE_LA_PUERTA` | — |
+| `puerta.cerrada` | `PUERTA_CERRADA` | — |
+| `heroe.no_esta_en_el_pueblo` | `HEROE_NO_ESTA_EN_EL_PUEBLO` | — |
+| `heroe.no_esta_en_la_avanzada` | `HEROE_NO_ESTA_EN_LA_AVANZADA` | — |
+| `carro.vaciar_solo_en_tu_residencia` | `VACIAR_SOLO_EN_TU_RESIDENCIA` | — |
+| `almacen_personal.lleno` | `ALMACEN_PERSONAL_LLENO` | — |
+| `almacen_personal.fuera_de_tu_residencia` | `ALMACEN_PERSONAL_FUERA_DE_TU_RESIDENCIA` | Guardar o sacar del almacén personal sin la columna a la puerta de la propia residencia, donde vive el almacén (5G-a); pagar con él (`pagar_con` = `almacenPersonal`) una compra del mercado de un campamento, una firma o una prórroga de un mercenario fuera del campamento donde se reside (2026-11-02 y 2026-11-03). |
+| `carro.no_lleva` | `CARRO_NO_LLEVA` | Guardar en el almacén personal un recurso que el carro de la columna no lleva (5G-a). |
+| `almacen.solo_ciudadanos` | `ALMACEN_SOLO_CIUDADANOS` | Sacar del almacén de una plaza al carro es de los ciudadanos de su Facción (2026-10-29). |
+| `almacen.cerrado` | `ALMACEN_CERRADO` | El Gobernador cerró a los ciudadanos el sacar del almacén al carro (2026-10-29). |
+| `almacen.ni_faccion_ni_aliada` | `ALMACEN_NI_FACCION_NI_ALIADA` | Dejar en el almacén de una plaza es de su Facción y de las aliadas o vasallas (2026-10-29). |
+| `almacen.sin_sitio` | `ALMACEN_SIN_SITIO` | El almacén de la plaza no tiene sitio para ese recurso (2026-10-29). |
+| `caravana.no_reclamable` | `CARAVANA_NO_RECLAMABLE` | Reclamar una caravana que no es la Caravana de Fundación que vuelve sola a su origen (5G-a): solo esa se reclama en mundo abierto. |
+| `caravana.soltar_solo_dentro` | `CARAVANA_SOLTAR_SOLO_DENTRO` | Soltar o aparcar una caravana con la columna fuera de una plaza (a la puerta o en mundo abierto): solo se deja dentro, donde la columna entró con todo (5G-a, decisión 5G-a-5). |
+| `repostar.plaza_cerrada` | `REPOSTAR_PLAZA_CERRADA` | — |
+| `repostar.sin_existencias` | `REPOSTAR_SIN_EXISTENCIAS` | — |
+
+### Persecución (`ErrorPersecucion`), inspección (`ErrorInspeccion`) y batalla
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `persecucion.sin_heroe_sano` | `PERSECUCION_SIN_HEROE_SANO` | — |
+| `persecucion.presa_sin_heroe_sano` | `PERSECUCION_PRESA_SIN_HEROE_SANO` | — |
+| `persecucion.clase_distinta` | `PERSECUCION_CLASE_DISTINTA` | — |
+| `persecucion.propia_o_aliada` | `PERSECUCION_PROPIA_O_ALIADA` | — |
+| `persecucion.caravana_adjunta` | `PERSECUCION_CARAVANA_ADJUNTA` | — |
+| `persecucion.ejercito_sin_caravanas` | `PERSECUCION_EJERCITO_SIN_CARAVANAS` | — |
+| `persecucion.a_si_misma` | `PERSECUCION_A_SI_MISMA` | — |
+| `persecucion.a_cubierto` | `PERSECUCION_A_CUBIERTO` | — |
+| `persecucion.fuera_de_vista` | `PERSECUCION_FUERA_DE_VISTA` | — |
+| `inspeccion.la_tuya` | `INSPECCION_LA_TUYA` | — |
+| `inspeccion.plaza_propia` | `INSPECCION_PLAZA_PROPIA` | — |
+| `inspeccion.lejos` | `INSPECCION_LEJOS` | — |
+| `inspeccion.a_cubierto` | `INSPECCION_A_CUBIERTO` | — |
+
+### La intel de las tabernas (4H T3d; Niebla_De_Guerra §6)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `intel.sin_faccion` | `INTEL_SIN_FACCION` | Quien compra intel tiene que ser ciudadano de una Facción (es para ella). |
+| `intel.plaza_ajena` | `INTEL_PLAZA_AJENA` | La taberna es de una plaza de otra Facción. |
+| `intel.no_presente` | `INTEL_NO_PRESENTE` | Hay que estar dentro del lugar de la taberna. |
+| `intel.sin_taberna` | `INTEL_SIN_TABERNA` | La plaza no tiene una Taberna levantada. |
+| `intel.fuera_del_mapa` | `INTEL_FUERA_DEL_MAPA` | — |
+| `intel.sin_cupo` | `INTEL_SIN_CUPO` | La taberna no admite Miradas (cupo 0). |
+| `intel.cupo_lleno` | `INTEL_CUPO_LLENO` | La taberna ya tiene abiertas todas las Miradas que admite. |
+| `intel.zona_reciente` | `INTEL_ZONA_RECIENTE` | La Facción miró esa zona hace poco: hay que esperar a que se enfríe. |
+| `intel.plaza_propia` | `INTEL_PLAZA_PROPIA` | — |
+| `intel.plaza_desconocida` | `INTEL_PLAZA_DESCONOCIDA` | La Facción no conoce esa plaza: ni tiene su ficha ni cae en una Mirada abierta. |
+| `intel.sin_informe_de_ordenes` | `INTEL_SIN_INFORME_DE_ORDENES` | Tomar una orden a distancia pide el informe vigente de las órdenes de la región de esa plaza (tanda 69 §7). |
+| `intel.informe_reciente` | `INTEL_INFORME_RECIENTE` | Ya tiene un Informe reciente de esa plaza o, en el informe de región, uno del mismo tipo de esa región. |
+| `intel.sin_oro` | `INTEL_SIN_ORO` | No hay oro para pagarla (en el almacén de la plaza, en el personal o en el carro). |
+| `rumor.sin_novedad` | `RUMOR_SIN_NOVEDAD` | La Facción ya tiene explorado todo lo que descubre el rumor (2026-11-10): no se cobra. |
+| `columna.en_batalla` | `COLUMNA_EN_BATALLA` | La columna está apartada por una batalla: no se mueve ni se le dan órdenes de movimiento, de persecución ni de inspección. |
+| `relacion.consigo_misma` | `RELACION_CONSIGO_MISMA` | — |
+
+### Combate con números (fase 4D)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `heroe.herido` | `HEROE_HERIDO` | — |
+| `combate.proteccion_de_campamento` | `COMBATE_PROTECCION_DE_CAMPAMENTO` | — |
+| `combate.lejos` | `COMBATE_LEJOS` | — |
+| `combate.propia` | `COMBATE_PROPIA` | — |
+| `combate.vasallaje` | `COMBATE_VASALLAJE` | Atacar a la propia señora o a la propia vasalla (5D): un vasallaje no se convierte en guerra; la vasalla se rebela (`rebelion_vasallo`) y la señora la libera (`romper_relacion`). |
+| `guerra.confirmar` | `GUERRA_CONFIRMAR` | `atacar` contra una Facción con la que no se está en guerra y sin `declara_guerra`: el cliente tiene que confirmarla (`Detalle::Guerra` dice contra quién). |
+| `combate.a_cubierto` | `COMBATE_A_CUBIERTO` | — |
+| `combate.clase_distinta` | `COMBATE_CLASE_DISTINTA` | — |
+| `combate.sin_heroe_sano` | `COMBATE_SIN_HEROE_SANO` | — |
+| `escuadra.cantidad_invalida` | `ESCUADRA_CANTIDAD_INVALIDA` | — |
+| `combate.sin_faccion` | `COMBATE_SIN_FACCION` | — |
+| `combate.sin_atacantes` | `COMBATE_SIN_ATACANTES` | — |
+| `combate.solo_un_ejercito` | `COMBATE_SOLO_UN_EJERCITO` | — |
+| `combate.caravana_adjunta` | `COMBATE_CARAVANA_ADJUNTA` | — |
+| `combate.plaza_protegida` | `COMBATE_PLAZA_PROTEGIDA` | — |
+| `combate.plaza_propia` | `COMBATE_PLAZA_PROPIA` | — |
+| `combate.pueblo_inactivo` | `COMBATE_PUEBLO_INACTIVO` | — |
+| `combate.avanzada_no_existe` | `COMBATE_AVANZADA_NO_EXISTE` | — |
+| `combate.avanzada_en_obra` | `COMBATE_AVANZADA_EN_OBRA` | La avanzada aún es una obra pendiente de materiales o en marcha: se ve en el mapa, pero no se puede atacar (Doc 4.2.2). |
+| `combate.avanzada_invulnerable` | `COMBATE_AVANZADA_INVULNERABLE` | Un fuerte en ruinas es invulnerable un día (Doc 5.17). |
+| `combate.avanzada_sin_dueno` | `COMBATE_AVANZADA_SIN_DUENO` | Unas ruinas de ciudadela sin dueño: no hay Facción con la que estar en guerra ni nada que defender. |
+| `bandidos.desconocido` | `CAMPAMENTO_DE_BANDIDOS_DESCONOCIDO` | — |
+| `bandidos.nivel_invalido` | `BANDIDOS_NIVEL_INVALIDO` | — |
+| `bandidos.sobre_una_zona` | `BANDIDOS_SOBRE_UNA_ZONA` | — |
+
+### Batallas de Unity (fase 4E; Batalla_Unity_Ciclo §5-§9). El contrato responde `404` a `batalla.no_existe` y `409` al resto
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `batalla.bloqueado` | `BATALLA_BLOQUEADO` | Lo que toca la orden está en una batalla activa (§5): ni el héroe, ni su columna, ni la plaza asediada, ni el objetivo reciben órdenes. |
+| `batalla.no_existe` | `BATALLA_NO_EXISTE` | No existe, está cerrada o su plazo venció (404). |
+| `batalla.invalida` | `BATALLA_INVALIDA` | No puede unirse por otra razón (está herido, o le toca defender y no está dentro, o atacar y no está fuera), o el mensaje del servidor de batalla no se entiende (id, lado, cifra, esquema, motivo o razón desconocidos). |
+| `batalla.sin_columna` | `BATALLA_SIN_COLUMNA` | Desde fuera hay que llegar con la columna para unirse. |
+| `batalla.lejos` | `BATALLA_LEJOS` | La columna está a más de `radioEncuentro` del punto de la batalla. |
+| `batalla.lado_lleno` | `BATALLA_LADO_LLENO` | El bando se pasaría de su capacidad: si está lleno, no entra. |
+| `batalla.ya_combate` | `BATALLA_YA_COMBATE` | El héroe o su columna ya están en una batalla. |
+| `batalla.ya_salio` | `BATALLA_YA_SALIO` | El héroe ya salió de esta batalla y no vuelve a entrar. |
+| `batalla.nadie_de_fuera` | `BATALLA_NADIE_DE_FUERA` | En una batalla campal entre ejércitos no entra nadie de fuera. |
+| `batalla.solo_personales` | `BATALLA_SOLO_PERSONALES` | Una persecución solo admite columnas personales. |
+| `batalla.lado_obligatorio` | `BATALLA_LADO_OBLIGATORIO` | En una persecución hay que elegir bando. |
+| `batalla.nadie_ayuda_a_bandidos` | `BATALLA_NADIE_AYUDA_A_BANDIDOS` | Contra un campamento de bandidos solo se ataca. |
+| `batalla.sin_faccion` | `BATALLA_SIN_FACCION` | Hace falta Facción para unirse a un asedio, una caravana, un pueblo o una avanzada. |
+| `batalla.no_combate_aqui` | `BATALLA_NO_COMBATE_AQUI` | Su Facción no combate aquí (en una caravana, si el Rey atacante no admite a otras Facciones). |
+| `batalla.lado_distinto` | `BATALLA_LADO_DISTINTO` | Pidió un bando distinto del que le toca (el mensaje dice cuál). |
+| `batalla.no_puede_cancelar` | `BATALLA_NO_PUEDE_CANCELAR` | Solo quien la inició la cancela, y antes de que empiece la partida. |
+| `batalla.ya_empezada` | `BATALLA_YA_EMPEZADA` | `bajarse_de_batalla` con la partida ya empezada: se sale desde dentro y la salida la cuenta el servidor de batalla (2026-11-16). |
+| `batalla.sin_elegir_escuadras` | `BATALLA_SIN_ELEGIR_ESCUADRAS` | `unirse_a_batalla` con escuadras elegidas fuera de su base: fuera de ella las elegidas son todas las que lleva (2026-11-16). |
+| `batalla.ya_asignada` | `BATALLA_YA_ASIGNADA` | Otro servidor la tiene: gana la primera asignación. |
+| `batalla.en_convocatoria` | `BATALLA_EN_CONVOCATORIA` | Un asedio en convocatoria no se publica ni se asigna. |
+| `batalla.revision_vieja` | `BATALLA_REVISION_VIEJA` | La revisión del ticket no es la vigente. |
+| `batalla.estado_invalido` | `BATALLA_ESTADO_INVALIDO` | El estado de la batalla no admite esa operación (una salida que no toca en ese momento, un resultado o un token a destiempo). |
+| `batalla.servidor_ajeno` | `BATALLA_SERVIDOR_AJENO` | No es el servidor de la asignación activa. |
+| `batalla.sin_credencial` | `BATALLA_SIN_CREDENCIAL` | El mensaje no viene con la credencial de un servidor de batalla (`batalla-servidor:<id>`). |
+| `batalla.token_invalido` | `BATALLA_TOKEN_INVALIDO` | Un token, en la asignación o después, para un héroe que no es un humano de esta batalla (los bots no se conectan). |
+| `batalla.no_combate` | `BATALLA_NO_COMBATE` | La salida nombra a un héroe que no combate en esta batalla. |
+| `batalla.salida_invalida` | `BATALLA_SALIDA_INVALIDA` | La salida trae una escuadra que no es del héroe, repetida o que no cierra sobre lo autorizado. |
+| `batalla.salida_incompleta` | `BATALLA_SALIDA_INCOMPLETA` | La salida de una partida en curso omite alguna de las escuadras autorizadas del héroe (Batalla_Unity_Ciclo §8.4). |
+| `batalla.resultado_invalido` | `BATALLA_RESULTADO_INVALIDO` | El checklist de §8.5 rechaza el resultado entero (el mensaje dice cuál de sus puntos). |
+| `batalla.otro_resultado` | `BATALLA_OTRO_RESULTADO` | «Ya se aplicó con otro resultado» (409). |
+
+### La Facción, la ciudadanía y la residencia (sistema 5, tanda 5B; `ErrorFaccion` y `ErrorResidencia` del crate `politica`)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `faccion.no_existe` | `FACCION_NO_EXISTE` | — |
+| `faccion.nombre_vacio` | `FACCION_NOMBRE_VACIO` | El nombre queda vacío tras recortarlo. |
+| `faccion.nombre_duplicado` | `FACCION_NOMBRE_DUPLICADO` | Otra Facción ya se llama así (sin mirar mayúsculas). |
+| `faccion.nombre_largo` | `FACCION_NOMBRE_LARGO` | El nombre recortado de la Facción (al crearla o al proponer una fusión) pasa de `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres (el mismo tope que el de las plazas). |
+| `faccion.nombre_control` | `FACCION_NOMBRE_CONTROL` | El nombre de la Facción (al crearla o al proponer una fusión) lleva caracteres de control. |
+| `faccion.sigilo_invalido` | `FACCION_SIGILO_INVALIDO` | Alguna pieza del sigilo no es del catálogo, o los dos colores del fondo son el mismo. |
+| `faccion.sigilo_duplicado` | `FACCION_SIGILO_DUPLICADO` | Otra Facción lleva un sigilo idéntico. |
+| `faccion.ya_pertenece` | `FACCION_YA_PERTENECE` | Ya es ciudadano de una Facción: 1 héroe, 1 Facción. |
+| `faccion.cooldown_creacion` | `FACCION_COOLDOWN_CREACION` | Dejó una Facción hace menos de `CIUDADANIA.cooldownCreacionFaccionDias`. |
+| `faccion.no_ha_pedido` | `FACCION_NO_HA_PEDIDO` | Responder a quien no ha pedido entrar. |
+| `faccion.no_pertenece` | `FACCION_NO_PERTENECE` | No es ciudadano de ninguna Facción. |
+| `faccion.en_ejercito` | `FACCION_EN_EJERCITO` | Dejar la Facción yendo en un ejército (aunque sea solo) o en uno en preparación (Q7): primero se separa. |
+| `faccion.no_ciudadano` | `FACCION_NO_CIUDADANO` | El designado para Rey o Embajador no es ciudadano de la Facción. |
+| `faccion.sin_rey` | `FACCION_SIN_REY` | Nombrar Embajador en una Facción sin Rey. |
+| `faccion.de_bots` | `FACCION_DE_BOTS` | Un héroe humano pide entrar (o se acepta su solicitud) en una Facción de bots, la que tiene un Rey bot (2026-11-01). |
+| `faccion.no_es_de_bots` | `FACCION_NO_ES_DE_BOTS` | Un héroe bot pide entrar (o se acepta su solicitud) en una Facción cuyo Rey no es bot (2026-11-01). |
+| `faccion.mercenario_ofrecido` | `FACCION_MERCENARIO_OFRECIDO` | Pide entrar en una Facción (o crearla) quien está en el tablón de un campamento como mercenario: primero retira su oferta. |
+| `residencia.cooldown` | `RESIDENCIA_COOLDOWN` | Cambió de residencia hace menos de `CIUDADANIA.cooldownCambioResidenciaDias`. |
+| `residencia.plaza_ajena` | `RESIDENCIA_PLAZA_AJENA` | Solo se reside en una plaza de la propia Facción. |
+| `residencia.ya_reside` | `RESIDENCIA_YA_RESIDE` | — |
+| `residencia.vetado` | `RESIDENCIA_VETADO` | La plaza lo ha vetado (los vetos llegan en 5E). |
+| `residencia.sin_plaza` | `RESIDENCIA_SIN_PLAZA` | Dejar la residencia sin residir en ninguna plaza (en un campamento de mercenarios se cambia de campamento o se muda a una plaza). |
+
+### La capital de la Facción (sistema 5, tanda 5C; `ErrorCapital` del crate `politica`)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `capital.plaza_ajena` | `CAPITAL_PLAZA_AJENA` | Designar capital una plaza que no es de la Facción. |
+| `capital.sin_palacio` | `CAPITAL_SIN_PALACIO` | La plaza no tiene un Palacio activo. |
+| `capital.ya_es_la_capital` | `CAPITAL_YA_ES_LA_CAPITAL` | La plaza ya es la capital (efectiva) de la Facción. |
+| `capital.cooldown` | `CAPITAL_COOLDOWN` | La capital designada sigue en pie y no han pasado `CAPITAL.cooldownDias` desde que se designó. |
+
+### El nombre de la plaza (correcciones del autor a 5C, 5C-6)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `asentamiento.nombre_largo` | `ASENTAMIENTO_NOMBRE_LARGO` | El nombre recortado pasa de `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres. |
+| `asentamiento.nombre_duplicado` | `ASENTAMIENTO_NOMBRE_DUPLICADO` | Otra plaza viva ya se llama así (sin mirar tildes ni mayúsculas). |
+
+### El nombre de una caravana (pedido del autor del 2026-11-02)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `caravana.nombre_largo` | `CARAVANA_NOMBRE_LARGO` | El nombre recortado de la caravana pasa de `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres (el mismo tope que el de las plazas; no tiene que ser único). |
+
+### Las relaciones entre Facciones (sistema 5, tanda 5D; `ErrorDiplomacia` y `ErrorPropuesta` del crate `politica`)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `diplomacia.ya_hay_relacion` | `DIPLOMACIA_YA_HAY_RELACION` | Ya hay una relación activa entre las dos (de cualquier clase, la guerra incluida): para cambiarla hay que romperla antes (o firmar la paz). |
+| `diplomacia.relacion_desconocida` | `DIPLOMACIA_RELACION_DESCONOCIDA` | `rel-N` no es ninguna relación. |
+| `diplomacia.relacion_rota` | `DIPLOMACIA_RELACION_ROTA` | La relación ya está rota (o la paz ya se firmó). |
+| `diplomacia.no_es_guerra` | `DIPLOMACIA_NO_ES_GUERRA` | La paz es de una guerra. |
+| `diplomacia.no_es_vasallaje` | `DIPLOMACIA_NO_ES_VASALLAJE` | La rebelión es de un vasallaje. |
+| `diplomacia.no_es_parte` | `DIPLOMACIA_NO_ES_PARTE` | Esa Facción no es parte de esa relación. |
+| `diplomacia.ya_ofrecio_paz` | `DIPLOMACIA_YA_OFRECIO_PAZ` | Esa Facción ya ofreció la paz: falta la otra. |
+| `diplomacia.guerra_no_se_rompe` | `DIPLOMACIA_GUERRA_NO_SE_ROMPE` | Una guerra no se rompe: se acaba con la paz. |
+| `diplomacia.solo_la_senora` | `DIPLOMACIA_SOLO_LA_SENORA` | Un vasallaje solo lo libera la señora; la vasalla se rebela. |
+| `diplomacia.sin_rey` | `DIPLOMACIA_SIN_REY` | Una de las dos Facciones no tiene Rey que pacte o conteste. |
+| `diplomacia.vasalla_de_tercera` | `DIPLOMACIA_VASALLA_DE_TERCERA` | Una de las dos ya es vasalla de una tercera (una Facción tiene como mucho una señora). |
+| `diplomacia.reputacion_baja` | `DIPLOMACIA_REPUTACION_BAJA` | Proponer una alianza con la reputación por debajo de `REPUTACION.umbralBajoParaEmbajador`. |
+| `diplomacia.tope_alianzas` | `DIPLOMACIA_TOPE_ALIANZAS` | Una de las dos ya tiene todas las alianzas activas que le deja su prestigio (una, y una más cada 100; tanda 69 §13). |
+| `diplomacia.ya_pendiente` | `DIPLOMACIA_YA_PENDIENTE` | Ya hay una propuesta de esa clase (relación, anexión o fusión) vigente entre las dos, en cualquier sentido. |
+| `diplomacia.propuesta_desconocida` | `DIPLOMACIA_PROPUESTA_DESCONOCIDA` | `prop-N` no es ninguna propuesta pendiente de la clase de la orden (relación, anexión o fusión), o ya se contestó o se retiró. |
+| `diplomacia.propuesta_caducada` | `DIPLOMACIA_PROPUESTA_CADUCADA` | La propuesta caducó (`RELACION_PROPUESTA`, `ANEXION` o `FUSION.caducidadDias`). |
+| `diplomacia.batalla_abierta` | `DIPLOMACIA_BATALLA_ABIERTA` | Aceptar una relación, una anexión o una fusión con una batalla abierta en la que combate alguna de las dos: se contesta cuando termine. |
+| `diplomacia.tributo_invalido` | `DIPLOMACIA_TRIBUTO_INVALIDO` | El tributo de un vasallaje es una cantidad por minuto de un recurso, no negativa. |
+
+### La anexión y la fusión (sistema 5, tanda 5F; `ErrorPropuesta` del crate `politica`; comparten los demás rechazos con las relaciones y con el nombre de una Facción)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `diplomacia.rey_no_valido` | `DIPLOMACIA_REY_NO_VALIDO` | El Rey de la Facción nueva de una fusión ha de ser el Rey de una de las dos. |
+| `diplomacia.proponente_ya_no_es_rey` | `DIPLOMACIA_PROPONENTE_YA_NO_ES_REY` | Al aceptar una fusión, el Rey de la Facción que la propuso ya no es quien la propuso: su consentimiento no vale. |
+
+### Refundación y Caravana de Fundación (sistema 5, tanda 5G-b; Fundacion_Y_Refundacion §4, §6 y §9)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `fundacion.no_resides` | `FUNDACION_NO_RESIDES` | Lanzar una Caravana de Fundación sin residir en la plaza o sin estar dentro de ella (Proyecciones §5.2.4). |
+| `fundacion.no_ciudadano` | `FUNDACION_NO_CIUDADANO` | El titular no es ciudadano de la Facción de la plaza de origen. |
+| `fundacion.nivel_insuficiente` | `FUNDACION_NIVEL_INSUFICIENTE` | La plaza de origen no está a nivel 2 (el operativo, no el alcanzado). |
+| `fundacion.no_titular` | `FUNDACION_NO_TITULAR` | Solo su titular desarma la Caravana de Fundación. |
+| `fundacion.no_esta_aqui` | `FUNDACION_NO_ESTA_AQUI` | La Caravana de Fundación que se quiere llevar al salir no espera dentro del lugar del que se sale. |
+| `refundacion.con_plazas` | `REFUNDACION_CON_PLAZAS` | Refundar desde un campamento es de una Facción sin ninguna plaza. |
+| `refundacion.ya_tiene_caravana` | `REFUNDACION_YA_TIENE_CARAVANA` | La Facción ya tiene una Caravana de Fundación. |
+| `refundacion.fondo_corto` | `REFUNDACION_FONDO_CORTO` | El fondo de la Facción en el campamento no cubre el coste de la caravana (el mensaje dice cuánto falta; `detalle.faltan`, por recurso en milésimas). |
+| `refundacion.no_resides` | `REFUNDACION_NO_RESIDES` | Aportar o retirar con el almacén personal sin residir en ese campamento: el almacén vive donde se reside (aquí, con el carro). |
+| `refundacion.sin_aporte` | `REFUNDACION_SIN_APORTE` | Retirar un recurso que el héroe no aportó al fondo de ese campamento. |
+| `caravana.lejos` | `CARAVANA_LEJOS` | Reclamar la Caravana de Fundación lejos de ella (a más de `radioEncuentro`). |
+
+### Cargos locales y puerta (sistema 5, tanda 5E; Diplomacia_Facciones §3.4 y §4.3)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `cargo.no_ciudadano` | `CARGO_NO_CIUDADANO` | El designado para un cargo local no es ciudadano de la Facción dueña de la plaza. |
+| `cargo.no_reside` | `CARGO_NO_RESIDE` | El designado para un cargo local no reside en la plaza (Q4: solo se designa a quien reside). |
+| `cargo.sin_gobernador` | `CARGO_SIN_GOBERNADOR` | Tesorero, General, Maestro de Obras y Sacerdote se designan cuando la plaza ya tiene Gobernador. |
+| `puerta.residente` | `PUERTA_RESIDENTE` | A un residente de la plaza no se le veta (sería el exilio). |
+
+### Los alijos (sistema 6, tanda 6F; Generacion_Del_Mundo §12)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `alijo.desconocido` | `ALIJO_DESCONOCIDO` | El id no es el de ningún alijo del artefacto de mundo. |
+| `alijo.no_puedes_buscar` | `ALIJO_NO_PUEDES_BUSCAR` | Los alijos solo los abre un héroe sin Facción o de una Facción sin plazas. |
+| `alijo.ya_abierto` | `ALIJO_YA_ABIERTO` | Cada héroe abre cada alijo una sola vez. |
+| `alijo.lejos` | `ALIJO_LEJOS` | Hay que estar en el sitio: la columna del héroe, en el mapa, a `radioPuerta` del alijo. |
+
+### La adopción de una tecnología (sistema 6, tanda 6C; Tecnologia_Aedas §4)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `tecnologia.no_aparecida` | `TECNOLOGIA_NO_APARECIDA` | La tecnología aún no le ha aparecido a la Facción (ni por su hito ni por un Aeda). |
+| `tecnologia.ya_adoptada` | `TECNOLOGIA_YA_ADOPTADA` | La Facción ya la tiene adoptada (también las de arranque). |
+| `tecnologia.sin_capital` | `TECNOLOGIA_SIN_CAPITAL` | La Facción no tiene capital: no le queda ninguna plaza. |
+| `tecnologia.rey_fuera_de_la_capital` | `TECNOLOGIA_REY_FUERA_DE_LA_CAPITAL` | El Rey tiene que estar dentro de la capital efectiva de su Facción. |
+| `tecnologia.sin_tarifa` | `TECNOLOGIA_SIN_TARIFA` | El almacén de la capital no tiene la tarifa de adopción de la Era de la tecnología. |
+
+### La compra a un Aeda itinerante (sistema 6, tanda 6D; Tecnologia_Aedas §6.4)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `aedas.no_hay_aeda` | `AEDAS_NO_HAY_AEDA` | No hay ningún Aeda itinerante parado en la plaza. |
+| `aedas.era_no_vendible` | `AEDAS_ERA_NO_VENDIBLE` | Los Aedas solo venden las tecnologías de las Eras hasta `AEDAS.venta.ordenEraMaximo`. |
+| `aedas.no_la_conoce` | `AEDAS_NO_LA_CONOCE` | El Aeda aún no la conoce: sin logro cumplido, sin descubridora, antes del retraso de conocimiento o de una Era que no ha empezado. |
+| `aedas.ya_aparecida` | `AEDAS_YA_APARECIDA` | A la Facción ya le ha aparecido. |
+| `aedas.sin_oro` | `AEDAS_SIN_ORO` | El almacén de la plaza no tiene el oro del precio. |
+
+### Las épicas de los Aedas residentes (sistema 6, tanda 6E; Tecnologia_Aedas §7.2, en el orden del TypeScript)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `epica.no_vive_aqui` | `EPICA_NO_VIVE_AQUI` | Ese Aeda no vive en esta plaza (o el id no es el de un residente, `aeda-rN`). |
+| `epica.sin_epica` | `EPICA_SIN_EPICA` | La tecnología no tiene épica (las de arranque). |
+| `epica.aeda_ajeno` | `EPICA_AEDA_AJENO` | El Aeda aún no se ha asentado con el dueño actual de la plaza. |
+| `epica.ya_canta` | `EPICA_YA_CANTA` | El Aeda ya canta otra épica: hay que abandonarla antes. |
+| `epica.sin_logro` | `EPICA_SIN_LOGRO` | El logro del servidor de esa tecnología aún no se ha cumplido. |
+| `epica.era_cerrada` | `EPICA_ERA_CERRADA` | La Era de esa tecnología aún no ha empezado. |
+| `epica.ya_aparecida` | `EPICA_YA_APARECIDA` | La tecnología ya le ha aparecido a la Facción. |
+| `epica.otro_la_canta` | `EPICA_OTRO_LA_CANTA` | Otro Aeda de la Facción ya canta la épica de esa tecnología. |
+| `epica.no_canta` | `EPICA_NO_CANTA` | Abandonar: el Aeda no canta ninguna épica. |
+
+### Las misiones (mecánica 49; Misiones §4)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `mision.desconocida` | `MISION_DESCONOCIDA` | No hay misión con ese id para esa clase de dueño (`duenoId` de un héroe, una plaza o una Facción). |
+| `mision.no_cumplida` | `MISION_NO_CUMPLIDA` | La misión aún no se ha cumplido. |
+| `mision.ya_reclamada` | `MISION_YA_RECLAMADA` | La recompensa de la misión ya se reclamó. |
+| `mision.almacen_lleno` | `MISION_ALMACEN_LLENO` | Los recursos o el oro de la recompensa no caben enteros en el almacén de la plaza o de la capital: se reclaman cuando haya sitio. |
+| `mision.sin_capital` | `MISION_SIN_CAPITAL` | La recompensa lleva recursos u oro para una Facción que no tiene plazas: no hay capital donde dejarlos. |
+
+### Las misiones recurrentes y el tablón (mecánica 55; Misiones_Recurrentes §3, §4 y §6)
+
+| Código | Constante | Qué dice |
+|---|---|---|
+| `mision.fuera_de_ambito` | `MISION_FUERA_DE_AMBITO` | Aceptar: el héroe no es residente de la plaza ni ciudadano de la Facción del tablón (Misiones_Recurrentes §3). |
+| `mision.no_disponible` | `MISION_NO_DISPONIBLE` | Aceptar: esa misión no está hoy en el tablón. |
+| `mision.grupal` | `MISION_GRUPAL` | Aceptar: la misión es grupal: no se acepta, cuenta lo de todos. |
+| `mision.pide_cargo` | `MISION_PIDE_CARGO` | Aceptar: la misión es del titular de un cargo que el héroe no tiene. |
+| `mision.ya_aceptada` | `MISION_YA_ACEPTADA` | Aceptar: el héroe ya la aceptó en este periodo. |
+| `mision.tope_semanal` | `MISION_TOPE_SEMANAL` | Aceptar: esa misión llegó a su tope de aceptaciones de esta semana en el tablón. |
+| `mision.catalogo_invalido` | `MISION_CATALOGO_INVALIDO` | `fijar_catalogo_misiones`: el catálogo no es válido (el mensaje dice por qué); no entra nada. |
+| `tablon.desconocido` | `TABLON_DESCONOCIDO` | El dueño no tiene tablón: no es una plaza ni una Facción que exista. |
+| `tablon.eleccion_invalida` | `TABLON_ELECCION_INVALIDA` | Elegir: más de 7 misiones en una lista, una repetida o una que no es del catálogo con ese ámbito y esa duración. |
+<!-- /rechazos -->

@@ -1,0 +1,14 @@
+version: v2
+modules:
+  - path: proto
+lint:
+  use:
+    - STANDARD
+  except:
+    # Convención propia: el valor 0 se llama «..._NO_ESPECIFICADO» y los valores no repiten el nombre del enum
+    # (p. ej. CLIENTE_UNITY, no TIPO_CLIENTE_CLIENTE_UNITY). Los enums de batalla conservan los nombres de la v1 de Unity.
+    - ENUM_VALUE_PREFIX
+    - ENUM_ZERO_VALUE_SUFFIX
+breaking:
+  use:
+    - FILE

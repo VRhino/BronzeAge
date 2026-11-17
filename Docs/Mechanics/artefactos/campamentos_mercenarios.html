@@ -1,0 +1,230 @@
+<title>Campamentos de Mercenarios</title>
+<style>
+/* Layout: tres láminas con pestañas (planta real generada por el motor, calculadora de reclutamiento, población de reclutas). */
+:root {
+  --bg: #eef1ee; --surface: #ffffff; --ink: #1c2a26; --muted: #5d6d68; --line: #cfd8d3;
+  --accent: #1f7a6d; --accent-soft: #d6ece8; --bronze: #9a5b1f; --bronze-soft: #f1e1cf;
+  --bad: #b3372c; --ok: #2f7d3b; --ok-soft: #dcefdc; --calle: #dfe5e0; --muro: #6b5a3c;
+  --c-taberna: #c98a3b; --c-mercado: #3b8f9c; --c-puesto: #8cc3cb; --c-vivienda: #9fb08c; --c-militar: #b25b4a; --c-plaza: #c9c3a0; --c-otro: #aab4ae;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1a17; --surface: #16231f; --ink: #e2ece8; --muted: #94a9a2; --line: #2b4039;
+    --accent: #4cc0ae; --accent-soft: #1b3b38; --bronze: #e0a266; --bronze-soft: #3a2b1b;
+    --bad: #ee8a7e; --ok: #82cf8c; --ok-soft: #1f3523; --calle: #26362f; --muro: #b99a62;
+    --c-taberna: #d9a050; --c-mercado: #4aa6b4; --c-puesto: #2f6670; --c-vivienda: #66794f; --c-militar: #c9705e; --c-plaza: #6f6c4e; --c-otro: #51615a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1a17; --surface: #16231f; --ink: #e2ece8; --muted: #94a9a2; --line: #2b4039;
+  --accent: #4cc0ae; --accent-soft: #1b3b38; --bronze: #e0a266; --bronze-soft: #3a2b1b;
+  --bad: #ee8a7e; --ok: #82cf8c; --ok-soft: #1f3523; --calle: #26362f; --muro: #b99a62;
+  --c-taberna: #d9a050; --c-mercado: #4aa6b4; --c-puesto: #2f6670; --c-vivienda: #66794f; --c-militar: #c9705e; --c-plaza: #6f6c4e; --c-otro: #51615a;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 "IBM Plex Sans", system-ui, sans-serif; padding-inline: 16px; padding-block: 20px 48px; }
+.wrap { max-width: 960px; margin: 0 auto; }
+h1, h2, h3 { font-family: "Newsreader", Georgia, serif; font-weight: 600; text-wrap: balance; margin: 0; }
+h1 { font-size: 2rem; letter-spacing: -0.01em; } h2 { font-size: 1.35rem; } h3 { font-size: 1.05rem; }
+.lede { color: var(--muted); max-width: 62ch; margin: 6px 0 20px; }
+code { font-family: "IBM Plex Mono", monospace; font-size: 0.86em; background: var(--accent-soft); padding: 1px 5px; border-radius: 3px; }
+.mono { font-family: "IBM Plex Mono", monospace; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+.tab { font: inherit; background: none; border: 0; border-bottom: 3px solid transparent; padding: 8px 12px; color: var(--muted); cursor: pointer; }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+.tab:focus-visible, select:focus-visible, input:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.panel { display: none; } .panel.on { display: block; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 760px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+label { display: block; font-size: 0.82rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; }
+select, input[type=range], input[type=number] { font: inherit; width: 100%; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 5px; padding: 6px 8px; }
+.ctrls { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.mapa { width: 100%; height: auto; display: block; background: var(--surface); }
+.mapa rect.calle { fill: var(--calle); }
+.mapa rect.muro { fill: var(--muro); }
+.mapa rect.puerta { fill: var(--bronze); }
+.mapa rect.el { stroke: var(--surface); stroke-width: 0.3; cursor: pointer; }
+.mapa rect.el:hover, .mapa rect.el.sel { stroke: var(--ink); stroke-width: 0.7; }
+.t-taberna { fill: var(--c-taberna); } .t-mercado { fill: var(--c-mercado); } .t-puestoMercado { fill: var(--c-puesto); } .t-vivienda { fill: var(--c-vivienda); }
+.t-barracon, .t-galeriaDeTiro, .t-caballerizas { fill: var(--c-militar); }
+.t-plazaDeArmas, .t-plaza, .t-pozo, .t-parque { fill: var(--c-plaza); }
+.leyenda { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 10px 0 0; font-size: 0.85rem; color: var(--muted); }
+.leyenda i { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.dato { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 10px 0 0; }
+.dato dt { color: var(--muted); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.05em; padding-top: 2px; }
+.dato dd { margin: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 500; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.tw { overflow-x: auto; }
+.pill { display: inline-block; font-size: 0.76rem; padding: 1px 8px; border-radius: 99px; background: var(--bronze-soft); color: var(--bronze); font-weight: 600; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.note { color: var(--muted); font-size: 0.88rem; margin-top: 10px; }
+.result { margin-top: 14px; padding: 12px 14px; border-radius: 6px; background: var(--accent-soft); border-left: 4px solid var(--accent); }
+.check { display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; letter-spacing: 0; font-size: 0.95rem; color: var(--ink); }
+footer { margin-top: 28px; color: var(--muted); font-size: 0.85rem; }
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:wght@500;600&display=swap">
+
+<div class="wrap">
+  <h1>Campamentos de Mercenarios</h1>
+  <p class="lede">La planta que genera el motor para cada campamento, lo que cuesta reclutar allí y cómo se recuperan sus reclutas. Los datos salen de <code>layoutCampamento</code> y de <code>constants.ts</code>, no de dibujos a mano.</p>
+
+  <div class="tabs" role="tablist" aria-label="Láminas">
+    <button class="tab" role="tab" id="t-planta" aria-selected="true" aria-controls="p-planta">La planta</button>
+    <button class="tab" role="tab" id="t-reclutar" aria-selected="false" aria-controls="p-reclutar">Reclutar y precio</button>
+    <button class="tab" role="tab" id="t-pob" aria-selected="false" aria-controls="p-pob">Reclutas disponibles</button>
+  </div>
+
+  <section class="panel on" id="p-planta" role="tabpanel" aria-labelledby="t-planta">
+    <div class="ctrls">
+      <div><label for="s-id">Campamento (su id es la semilla de su planta)</label><select id="s-id"><option>mercenarios-0</option><option>mercenarios-1</option><option>mercenarios-2</option><option>mercenarios-3</option><option>mercenarios-4</option></select></div>
+      <div><label for="s-mil">Edificio militar (elegido por su posición)</label><select id="s-mil"><option value="barracon">Barracón</option><option value="galeriaDeTiro">Galería de tiro</option><option value="caballerizas">Caballerizas</option></select></div>
+    </div>
+    <div class="grid2">
+      <div class="card"><svg id="mapa" class="mapa" role="img" aria-label="Planta del campamento"></svg>
+        <div class="leyenda" id="ley"></div></div>
+      <div class="card"><h3 id="el-titulo">Pasa el ratón por un edificio</h3><dl class="dato" id="el-datos"></dl>
+        <p class="note">Es presentación: ningún número cambia lo que hace el campamento. Se coloca una sola vez con el motor de trazado de asentamientos, con la taberna como ancla. La empalizada es decorativa; la puerta de dos celdas mira al sur.</p></div>
+    </div>
+  </section>
+
+  <section class="panel" id="p-reclutar" role="tabpanel" aria-labelledby="t-reclutar">
+    <div class="card">
+      <h2>¿Cuánto cuesta reclutar aquí?</h2>
+      <p class="note" style="margin-top:4px">Reproduce <code>precioPorSoldado</code>: oro del escalón + caballos + equipo a su valor en oro, por el recargo del campamento y la reputación; con descuento si tu Facción no tiene plazas.</p>
+      <div class="ctrls" style="margin-top:12px">
+        <div><label for="r-ed">Edificio militar del campamento</label><select id="r-ed"><option value="barracon">Barracón</option><option value="galeriaDeTiro">Galería de tiro</option><option value="caballerizas">Caballerizas</option></select></div>
+        <div><label for="r-rep">Reputación de tu Facción: <span id="r-repv" class="mono">0</span></label><input id="r-rep" type="range" min="-100" max="100" step="5" value="0"></div>
+        <div><label for="r-pla">Tu Facción</label><select id="r-pla"><option value="con">Tiene asentamientos</option><option value="sin">No tiene ninguno (puede recomponerse)</option></select></div>
+        <div><label for="r-ya">Soldados que ya tienes de esa tropa</label><select id="r-ya"><option value="0">Ninguna escuadra (reclutas una nueva)</option><option value="mitad">La mitad (repones)</option></select></div>
+      </div>
+      <div class="tw"><table><thead><tr><th>Tropa</th><th class="num">Escalón</th><th class="num">Oro / soldado</th><th class="num">Soldados</th><th class="num">Oro total</th></tr></thead><tbody id="r-filas"></tbody></table></div>
+      <div class="result" id="r-nota"></div>
+    </div>
+  </section>
+
+  <section class="panel" id="p-pob" role="tabpanel" aria-labelledby="t-pob">
+    <div class="card">
+      <h2>Reclutas disponibles</h2>
+      <p class="note" style="margin-top:4px">La población no se actualiza cada tick: se guarda un valor y un instante, y la de ahora se calcula al mirar. Crece <span id="pp-hora" class="mono"></span> por hora hasta el tope de sus viviendas.</p>
+      <div class="ctrls" style="margin-top:12px">
+        <div><label for="pp-p0">Reclutas tras el último reclutamiento: <span id="pp-p0v" class="mono">20</span></label><input id="pp-p0" type="range" min="0" max="100" step="1" value="20"></div>
+        <div><label for="pp-h">Horas desde entonces: <span id="pp-hv" class="mono">3</span></label><input id="pp-h" type="range" min="0" max="12" step="0.5" value="3"></div>
+        <div><label for="pp-viv">Viviendas del campamento</label><select id="pp-viv"><option value="10">10 (las de hoy: tope 100)</option><option value="5">5</option><option value="15">15</option></select></div>
+      </div>
+      <svg id="pp-svg" viewBox="0 0 720 230" role="img" aria-label="Recuperación de reclutas con el tiempo" style="width:100%;height:auto;min-width:520px"></svg>
+      <div class="result" id="pp-res"></div>
+    </div>
+  </section>
+
+  <footer>Datos generados el 2026-10-12 con <code>layoutCampamento</code> (planta, 5 campamentos × 3 edificios militares) y <code>constants.ts</code> (precios y población). Si cambia el trazado o las constantes, hay que regenerarlo.</footer>
+</div>
+
+<script>
+var DATA = {"T":3,"layouts":{"mercenarios-0|barracon":{"e":[["taberna",-6,-6,12,12],["mercado",-12,-21,6,9],["puestoMercado",-3,-15,3,6],["puestoMercado",-3,-21,3,6],["puestoMercado",-18,-18,3,9],["puestoMercado",-12,-27,9,3],["puestoMercado",-18,-21,3,3],["plazaDeArmas",15,3,6,6],["barracon",12,-6,6,6],["vivienda",-12,-3,3,3],["vivienda",-12,0,3,3],["vivienda",-3,9,3,3],["vivienda",0,9,3,3],["vivienda",-6,9,3,3],["vivienda",3,9,3,3],["vivienda",6,9,3,3],["vivienda",-9,9,3,3],["vivienda",0,-12,3,3],["vivienda",3,-12,3,3]],"c":[[-18,-24,18,3],[-15,-21,3,3],[-6,-21,3,3],[-15,-18,3,3],[-6,-18,3,3],[-15,-15,3,3],[-6,-15,3,3],[-15,-12,12,3],[-9,-9,18,3],[-12,-6,6,3],[6,-6,3,3],[-9,-3,3,3],[6,-3,3,3],[-9,0,3,3],[6,0,3,3],[12,0,12,3],[-12,3,6,3],[6,3,9,3],[21,3,3,3],[-9,6,18,3],[12,6,3,3],[21,6,3,3],[12,9,12,3]],"m":[[-24,-33,54,3],[-24,-30,3,3],[27,-30,3,3],[-24,-27,3,3],[27,-27,3,3],[-24,-24,3,3],[27,-24,3,3],[-24,-21,3,3],[27,-21,3,3],[-24,-18,3,3],[27,-18,3,3],[-24,-15,3,3],[27,-15,3,3],[-24,-12,3,3],[27,-12,3,3],[-24,-9,3,3],[27,-9,3,3],[-24,-6,3,3],[27,-6,3,3],[-24,-3,3,3],[27,-3,3,3],[-24,0,3,3],[27,0,3,3],[-24,3,3,3],[27,3,3,3],[-24,6,3,3],[27,6,3,3],[-24,9,3,3],[27,9,3,3],[-24,12,3,3],[27,12,3,3],[-24,15,24,3],[6,15,24,3]],"p":[[0,15,6,3]]},"mercenarios-1|barracon":{"e":[["taberna",-6,-6,12,12],["mercado",-21,3,9,6],["puestoMercado",-15,-3,6,3],["puestoMercado",-21,-3,6,3],["puestoMercado",-18,12,9,3],["puestoMercado",-27,0,3,9],["puestoMercado",-24,-3,3,3],["plazaDeArmas",15,3,6,6],["barracon",12,-6,6,6],["vivienda",-3,9,3,3],["vivienda",0,9,3,3],["vivienda",-6,9,3,3],["vivienda",3,9,3,3],["vivienda",6,9,3,3],["vivienda",0,-12,3,3],["vivienda",-3,-12,3,3],["vivienda",3,-12,3,3],["vivienda",-6,-12,3,3],["vivienda",6,-12,3,3]],"c":[[-9,-12,3,3],[-9,-9,18,3],[-9,-6,3,3],[6,-6,3,3],[-9,-3,3,3],[6,-3,3,3],[-24,0,18,3],[6,0,3,3],[12,0,12,3],[-24,3,3,3],[-12,3,6,3],[6,3,9,3],[21,3,3,3],[-24,6,3,3],[-12,6,21,3],[12,6,3,3],[21,6,3,3],[-24,9,18,3],[12,9,12,3]],"m":[[-33,-18,63,3],[-33,-15,3,3],[27,-15,3,3],[-33,-12,3,3],[27,-12,3,3],[-33,-9,3,3],[27,-9,3,3],[-33,-6,3,3],[27,-6,3,3],[-33,-3,3,3],[27,-3,3,3],[-33,0,3,3],[27,0,3,3],[-33,3,3,3],[27,3,3,3],[-33,6,3,3],[27,6,3,3],[-33,9,3,3],[27,9,3,3],[-33,12,3,3],[27,12,3,3],[-33,15,3,3],[27,15,3,3],[-33,18,30,3],[3,18,27,3]],"p":[[-3,18,6,3]]},"mercenarios-2|barracon":{"e":[["taberna",-6,-6,12,12],["mercado",-21,-6,9,6],["puestoMercado",-3,-12,6,3],["puestoMercado",-6,9,6,3],["puestoMercado",-12,-12,9,3],["puestoMercado",-12,3,3,9],["puestoMercado",-9,9,3,3],["plazaDeArmas",-3,-21,6,6],["barracon",9,-9,6,6],["vivienda",9,0,3,3],["vivienda",0,9,3,3],["vivienda",3,9,3,3],["vivienda",9,3,3,3],["vivienda",6,-12,3,3],["vivienda",12,0,3,3],["vivienda",0,12,3,3],["vivienda",-3,12,3,3],["vivienda",-15,3,3,3],["vivienda",12,3,3,3]],"c":[[-6,-24,12,3],[-6,-21,3,3],[3,-21,3,3],[-6,-18,3,3],[3,-18,3,3],[-6,-15,12,3],[3,-12,3,3],[-24,-9,33,3],[-24,-6,3,3],[-12,-6,6,3],[6,-6,3,3],[-24,-3,3,3],[-12,-3,6,3],[6,-3,9,3],[-24,0,18,3],[6,0,3,3],[-9,3,3,3],[6,3,3,3],[-9,6,24,3],[6,9,3,3],[3,12,6,3],[-3,15,9,3]],"m":[[-30,-30,51,3],[-30,-27,3,3],[18,-27,3,3],[-30,-24,3,3],[18,-24,3,3],[-30,-21,3,3],[18,-21,3,3],[-30,-18,3,3],[18,-18,3,3],[-30,-15,3,3],[18,-15,3,3],[-30,-12,3,3],[18,-12,3,3],[-30,-9,3,3],[18,-9,3,3],[-30,-6,3,3],[18,-6,3,3],[-30,-3,3,3],[18,-3,3,3],[-30,0,3,3],[18,0,3,3],[-30,3,3,3],[18,3,3,3],[-30,6,3,3],[18,6,3,3],[-30,9,3,3],[18,9,3,3],[-30,12,3,3],[18,12,3,3],[-30,15,3,3],[18,15,3,3],[-30,18,3,3],[18,18,3,3],[-30,21,24,3],[0,21,21,3]],"p":[[-6,21,6,3]]},"mercenarios-3|barracon":{"e":[["taberna",-6,-6,12,12],["mercado",-12,-18,9,6],["puestoMercado",0,-15,3,6],["puestoMercado",-15,-9,6,3],["puestoMercado",-18,-18,3,9],["puestoMercado",-9,-24,9,3],["puestoMercado",-12,-24,3,3],["plazaDeArmas",12,6,6,6],["barracon",9,-3,6,6],["vivienda",-12,-3,3,3],["vivienda",-12,-6,3,3],["vivienda",-3,9,3,3],["vivienda",0,9,3,3],["vivienda",-6,9,3,3],["vivienda",3,9,3,3],["vivienda",6,9,3,3],["vivienda",3,-12,3,3],["vivienda",6,-12,3,3],["vivienda",-12,3,3,3]],"c":[[-15,-21,15,3],[-15,-18,3,3],[-3,-18,6,3],[-15,-15,3,3],[-3,-15,3,3],[-15,-12,15,3],[-9,-9,18,3],[-9,-6,3,3],[6,-6,3,3],[-9,-3,3,3],[6,-3,3,3],[-12,0,6,3],[6,0,3,3],[-9,3,3,3],[6,3,15,3],[-9,6,21,3],[18,6,3,3],[-9,9,3,3],[9,9,3,3],[18,9,3,3],[9,12,12,3]],"m":[[-24,-30,51,3],[-24,-27,3,3],[24,-27,3,3],[-24,-24,3,3],[24,-24,3,3],[-24,-21,3,3],[24,-21,3,3],[-24,-18,3,3],[24,-18,3,3],[-24,-15,3,3],[24,-15,3,3],[-24,-12,3,3],[24,-12,3,3],[-24,-9,3,3],[24,-9,3,3],[-24,-6,3,3],[24,-6,3,3],[-24,-3,3,3],[24,-3,3,3],[-24,0,3,3],[24,0,3,3],[-24,3,3,3],[24,3,3,3],[-24,6,3,3],[24,6,3,3],[-24,9,3,3],[24,9,3,3],[-24,12,3,3],[24,12,3,3],[-24,15,3,3],[24,15,3,3],[-24,18,24,3],[6,18,21,3]],"p":[[0,18,6,3]]},"mercenarios-4|barracon":{"e":[["taberna",-6,-6,12,12],["mercado",-15,-15,6,9],["puestoMercado",-12,-3,3,6],["puestoMercado",-3,-12,6,3],["puestoMercado",-12,3,3,9],["puestoMercado",-15,-3,3,9],["puestoMercado",-3,-15,3,3],["plazaDeArmas",-18,6,6,6],["barracon",-3,9,6,6],["vivienda",9,-3,3,3],["vivienda",9,0,3,3],["vivienda",9,-6,3,3],["vivienda",9,3,3,3],["vivienda",3,-12,3,3],["vivienda",3,9,3,3],["vivienda",9,-9,3,3],["vivienda",6,-12,3,3],["vivienda",6,9,3,3],["vivienda",-9,9,3,3]],"c":[[-18,-18,12,3],[-18,-15,3,3],[-9,-15,6,3],[-18,-12,3,3],[-9,-12,6,3],[-18,-9,3,3],[-9,-9,18,3],[-18,-6,12,3],[6,-6,3,3],[-18,-3,3,3],[-9,-3,3,3],[6,-3,3,3],[-18,0,3,3],[-9,0,3,3],[6,0,3,3],[-21,3,6,3],[-9,3,3,3],[6,3,3,3],[-21,6,3,3],[-9,6,21,3],[-21,9,3,3],[-6,9,3,3],[-21,12,12,3],[-6,12,3,3]],"m":[[-27,-24,45,3],[-27,-21,3,3],[15,-21,3,3],[-27,-18,3,3],[15,-18,3,3],[-27,-15,3,3],[15,-15,3,3],[-27,-12,3,3],[15,-12,3,3],[-27,-9,3,3],[15,-9,3,3],[-27,-6,3,3],[15,-6,3,3],[-27,-3,3,3],[15,-3,3,3],[-27,0,3,3],[15,0,3,3],[-27,3,3,3],[15,3,3,3],[-27,6,3,3],[15,6,3,3],[-27,9,3,3],[15,9,3,3],[-27,12,3,3],[15,12,3,3],[-27,15,3,3],[15,15,3,3],[-27,18,21,3],[0,18,18,3]],"p":[[-6,18,6,3]]},"mercenarios-0|galeriaDeTiro":{"e":[["taberna",-6,-6,12,12],["mercado",-12,-21,6,9],["puestoMercado",-3,-15,3,6],["puestoMercado",-3,-21,3,6],["puestoMercado",-18,-18,3,9],["puestoMercado",-12,-27,9,3],["puestoMercado",-18,-21,3,3],["plazaDeArmas",15,3,6,6],["galeriaDeTiro",12,-6,12,6],["vivienda",-12,-3,3,3],["vivienda",-12,0,3,3],["vivienda",-3,9,3,3],["vivienda",0,9,3,3],["vivienda",-6,9,3,3],["vivienda",3,9,3,3],["vivienda",6,9,3,3],["vivienda",-9,9,3,3],["vivienda",0,-12,3,3],["vivienda",3,-12,3,3]],"c":[[-18,-24,18,3],[-15,-21,3,3],[-6,-21,3,3],[-15,-18,3,3],[-6,-18,3,3],[-15,-15,3,3],[-6,-15,3,3],[-15,-12,12,3],[-9,-9,18,3],[-12,-6,6,3],[6,-6,3,3],[-9,-3,3,3],[6,-3,3,3],[-9,0,3,3],[6,0,3,3],[12,0,12,3],[-12,3,6,3],[6,3,9,3],[21,3,3,3],[-9,6,18,3],[12,6,3,3],[21,6,3,3],[12,9,12,3]],"m":[[-24,-33,54,3],[-24,-30,3,3],[27,-30,3,3],[-24,-27,3,3],[27,-27,3,3],[-24,-24,3,3],[27,-24,3,3],[-24,-21,3,3],[27,-21,3,3],[-24,-18,3,3],[27,-18,3,3],[-24,-15,3,3],[27,-15,3,3],[-24,-12,3,3],[27,-12,3,3],[-24,-9,3,3],[27,-9,3,3],[-24,-6,3,3],[27,-6,3,3],[-24,-3,3,3],[27,-3,3,3],[-24,0,3,3],[27,0,3,3],[-24,3,3,3],[27,3,3,3],[-24,6,3,3],[27,6,3,3],[-24,9,3,3],[27,9,3,3],[-24,12,3,3],[27,12,3,3],[-24,15,24,3],[6,15,24,3]],"p":[[0,15,6,3]]},"mercenarios-1|galeriaDeTiro":{"e":[["taberna",-6,-6,12,12],["mercado",-21,3,9,6],["puestoMercado",-15,-3,6,3],["puestoMercado",-21,-3,6,3],["puestoMercado",-18,12,9,3],["puestoMercado",-27,0,3,9],["puestoMercado",-24,-3,3,3],["plazaDeArmas",15,3,6,6],["galeriaDeTiro",12,-6,12,6],["vivienda",-3,9,3,3],["vivienda",0,9,3,3],["vivienda",-6,9,3,3],["vivienda",3,9,3,3],["vivienda",6,9,3,3],["vivienda",0,-12,3,3],["vivienda",-3,-12,3,3],["vivienda",3,-12,3,3],["vivienda",-6,-12,3,3],["vivienda",6,-12,3,3]],"c":[[-9,-12,3,3],[-9,-9,18,3],[-9,-6,3,3],[6,-6,3,3],[-9,-3,3,3],[6,-3,3,3],[-24,0,18,3],[6,0,3,3],[12,0,12,3],[-24,3,3,3],[-12,3,6,3],[6,3,9,3],[21,3,3,3],[-24,6,3,3],[-12,6,21,3],[12,6,3,3],[21,6,3,3],[-24,9,18,3],[12,9,12,3]],"m":[[-33,-18,63,3],[-33,-15,3,3],[27,-15,3,3],[-33,-12,3,3],[27,-12,3,3],[-33,-9,3,3],[27,-9,3,3],[-33,-6,3,3],[27,-6,3,3],[-33,-3,3,3],[27,-3,3,3],[-33,0,3,3],[27,0,3,3],[-33,3,3,3],[27,3,3,3],[-33,6,3,3],[27,6,3,3],[-33,9,3,3],[27,9,3,3],[-33,12,3,3],[27,12,3,3],[-33,15,3,3],[27,15,3,3],[-33,18,30,3],[3,18,27,3]],"p":[[-3,18,6,3]]},"mercenarios-2|galeriaDeTiro":{"e":[["taberna",-6,-6,12,12],["mercado",-21,-6,9,6],["puestoMercado",-3,-12,6,3],["puestoMercado",-6,9,6,3],["puestoMercado",-12,-12,9,3],["puestoMercado",-12,3,3,9],["puestoMercado",-9,9,3,3],["plazaDeArmas",-3,-21,6,6],["galeriaDeTiro",9,-6,6,12],["vivienda",0,9,3,3],["vivienda",3,9,3,3],["vivienda",9,-9,3,3],["vivienda",6,-12,3,3],["vivienda",0,12,3,3],["vivienda",-3,12,3,3],["vivienda",-15,3,3,3],["vivienda",-6,12,3,3],["vivienda",9,9,3,3],["vivienda",9,-12,3,3]],"c":[[-6,-24,12,3],[-6,-21,3,3],[3,-21,3,3],[-6,-18,3,3],[3,-18,3,3],[-6,-15,18,3],[3,-12,3,3],[-24,-9,33,3],[-24,-6,3,3],[-12,-6,6,3],[6,-6,3,3],[-24,-3,3,3],[-12,-3,6,3],[6,-3,3,3],[-24,0,18,3],[6,0,3,3],[-9,3,3,3],[6,3,3,3],[-9,6,24,3],[6,9,3,3],[3,12,6,3],[-6,15,12,3]],"m":[[-30,-30,51,3],[-30,-27,3,3],[18,-27,3,3],[-30,-24,3,3],[18,-24,3,3],[-30,-21,3,3],[18,-21,3,3],[-30,-18,3,3],[18,-18,3,3],[-30,-15,3,3],[18,-15,3,3],[-30,-12,3,3],[18,-12,3,3],[-30,-9,3,3],[18,-9,3,3],[-30,-6,3,3],[18,-6,3,3],[-30,-3,3,3],[18,-3,3,3],[-30,0,3,3],[18,0,3,3],[-30,3,3,3],[18,3,3,3],[-30,6,3,3],[18,6,3,3],[-30,9,3,3],[18,9,3,3],[-30,12,3,3],[18,12,3,3],[-30,15,3,3],[18,15,3,3],[-30,18,3,3],[18,18,3,3],[-30,21,24,3],[0,21,21,3]],"p":[[-6,21,6,3]]},"mercenarios-3|galeriaDeTiro":{"e":[["taberna",-6,-6,12,12],["mercado",-12,-18,9,6],["puestoMercado",0,-15,3,6],["puestoMercado",-15,-9,6,3],["puestoMercado",-18,-18,3,9],["puestoMercado",-9,-24,9,3],["puestoMercado",-12,-24,3,3],["plazaDeArmas",12,6,6,6],["galeriaDeTiro",9,-3,12,6],["vivienda",-12,-3,3,3],["vivienda",-12,-6,3,3],["vivienda",-3,9,3,3],["vivienda",0,9,3,3],["vivienda",-6,9,3,3],["vivienda",3,9,3,3],["vivienda",6,9,3,3],["vivienda",3,-12,3,3],["vivienda",6,-12,3,3],["vivienda",-12,3,3,3]],"c":[[-15,-21,15,3],[-15,-18,3,3],[-3,-18,6,3],[-15,-15,3,3],[-3,-15,3,3],[-15,-12,15,3],[-9,-9,18,3],[-9,-6,3,3],[6,-6,3,3],[-9,-3,3,3],[6,-3,3,3],[-12,0,6,3],[6,0,3,3],[-9,3,3,3],[6,3,15,3],[-9,6,21,3],[18,6,3,3],[-9,9,3,3],[9,9,3,3],[18,9,3,3],[9,12,12,3]],"m":[[-24,-30,51,3],[-24,-27,3,3],[24,-27,3,3],[-24,-24,3,3],[24,-24,3,3],[-24,-21,3,3],[24,-21,3,3],[-24,-18,3,3],[24,-18,3,3],[-24,-15,3,3],[24,-15,3,3],[-24,-12,3,3],[24,-12,3,3],[-24,-9,3,3],[24,-9,3,3],[-24,-6,3,3],[24,-6,3,3],[-24,-3,3,3],[24,-3,3,3],[-24,0,3,3],[24,0,3,3],[-24,3,3,3],[24,3,3,3],[-24,6,3,3],[24,6,3,3],[-24,9,3,3],[24,9,3,3],[-24,12,3,3],[24,12,3,3],[-24,15,3,3],[24,15,3,3],[-24,18,24,3],[6,18,21,3]],"p":[[0,18,6,3]]},"mercenarios-4|galeriaDeTiro":{"e":[["taberna",-6,-6,12,12],["mercado",-15,-15,6,9],["puestoMercado",-12,-3,3,6],["puestoMercado",-3,-12,6,3],["puestoMercado",-12,3,3,9],["puestoMercado",-15,-3,3,9],["puestoMercado",-3,-15,3,3],["plazaDeArmas",-18,6,6,6],["galeriaDeTiro",-6,9,12,6],["vivienda",9,-3,3,3],["vivienda",9,0,3,3],["vivienda",9,-6,3,3],["vivienda",9,3,3,3],["vivienda",3,-12,3,3],["vivienda",9,-9,3,3],["vivienda",6,-12,3,3],["vivienda",6,9,3,3],["vivienda",-9,9,3,3],["vivienda",12,-3,3,3]],"c":[[-18,-18,12,3],[-18,-15,3,3],[-9,-15,6,3],[-18,-12,3,3],[-9,-12,6,3],[-18,-9,3,3],[-9,-9,18,3],[-18,-6,12,3],[6,-6,3,3],[-18,-3,3,3],[-9,-3,3,3],[6,-3,3,3],[-18,0,3,3],[-9,0,3,3],[6,0,3,3],[12,0,3,3],[-21,3,6,3],[-9,3,3,3],[6,3,3,3],[12,3,3,3],[-21,6,3,3],[-9,6,24,3],[-21,9,3,3],[-21,12,12,3]],"m":[[-27,-24,48,3],[-27,-21,3,3],[18,-21,3,3],[-27,-18,3,3],[18,-18,3,3],[-27,-15,3,3],[18,-15,3,3],[-27,-12,3,3],[18,-12,3,3],[-27,-9,3,3],[18,-9,3,3],[-27,-6,3,3],[18,-6,3,3],[-27,-3,3,3],[18,-3,3,3],[-27,0,3,3],[18,0,3,3],[-27,3,3,3],[18,3,3,3],[-27,6,3,3],[18,6,3,3],[-27,9,3,3],[18,9,3,3],[-27,12,3,3],[18,12,3,3],[-27,15,3,3],[18,15,3,3],[-27,18,21,3],[0,18,21,3]],"p":[[-6,18,6,3]]},"mercenarios-0|caballerizas":{"e":[["taberna",-6,-6,12,12],["mercado",-12,-21,6,9],["puestoMercado",-3,-15,3,6],["puestoMercado",-3,-21,3,6],["puestoMercado",-18,-18,3,9],["puestoMercado",-12,-27,9,3],["puestoMercado",-18,-21,3,3],["plazaDeArmas",15,3,6,6],["caballerizas",12,-6,9,6],["vivienda",-12,-3,3,3],["vivienda",-12,0,3,3],["vivienda",-3,9,3,3],["vivienda",0,9,3,3],["vivienda",-6,9,3,3],["vivienda",3,9,3,3],["vivienda",6,9,3,3],["vivienda",-9,9,3,3],["vivienda",0,-12,3,3],["vivienda",3,-12,3,3]],"c":[[-18,-24,18,3],[-15,-21,3,3],[-6,-21,3,3],[-15,-18,3,3],[-6,-18,3,3],[-15,-15,3,3],[-6,-15,3,3],[-15,-12,12,3],[-9,-9,18,3],[-12,-6,6,3],[6,-6,3,3],[-9,-3,3,3],[6,-3,3,3],[-9,0,3,3],[6,0,3,3],[12,0,12,3],[-12,3,6,3],[6,3,9,3],[21,3,3,3],[-9,6,18,3],[12,6,3,3],[21,6,3,3],[12,9,12,3]],"m":[[-24,-33,54,3],[-24,-30,3,3],[27,-30,3,3],[-24,-27,3,3],[27,-27,3,3],[-24,-24,3,3],[27,-24,3,3],[-24,-21,3,3],[27,-21,3,3],[-24,-18,3,3],[27,-18,3,3],[-24,-15,3,3],[27,-15,3,3],[-24,-12,3,3],[27,-12,3,3],[-24,-9,3,3],[27,-9,3,3],[-24,-6,3,3],[27,-6,3,3],[-24,-3,3,3],[27,-3,3,3],[-24,0,3,3],[27,0,3,3],[-24,3,3,3],[27,3,3,3],[-24,6,3,3],[27,6,3,3],[-24,9,3,3],[27,9,3,3],[-24,12,3,3],[27,12,3,3],[-24,15,24,3],[6,15,24,3]],"p":[[0,15,6,3]]},"mercenarios-1|caballerizas":{"e":[["taberna",-6,-6,12,12],["mercado",-21,3,9,6],["puestoMercado",-15,-3,6,3],["puestoMercado",-21,-3,6,3],["puestoMercado",-18,12,9,3],["puestoMercado",-27,0,3,9],["puestoMercado",-24,-3,3,3],["plazaDeArmas",15,3,6,6],["caballerizas",12,-6,9,6],["vivienda",-3,9,3,3],["vivienda",0,9,3,3],["vivienda",-6,9,3,3],["vivienda",3,9,3,3],["vivienda",6,9,3,3],["vivienda",0,-12,3,3],["vivienda",-3,-12,3,3],["vivienda",3,-12,3,3],["vivienda",-6,-12,3,3],["vivienda",6,-12,3,3]],"c":[[-9,-12,3,3],[-9,-9,18,3],[-9,-6,3,3],[6,-6,3,3],[-9,-3,3,3],[6,-3,3,3],[-24,0,18,3],[6,0,3,3],[12,0,12,3],[-24,3,3,3],[-12,3,6,3],[6,3,9,3],[21,3,3,3],[-24,6,3,3],[-12,6,21,3],[12,6,3,3],[21,6,3,3],[-24,9,18,3],[12,9,12,3]],"m":[[-33,-18,63,3],[-33,-15,3,3],[27,-15,3,3],[-33,-12,3,3],[27,-12,3,3],[-33,-9,3,3],[27,-9,3,3],[-33,-6,3,3],[27,-6,3,3],[-33,-3,3,3],[27,-3,3,3],[-33,0,3,3],[27,0,3,3],[-33,3,3,3],[27,3,3,3],[-33,6,3,3],[27,6,3,3],[-33,9,3,3],[27,9,3,3],[-33,12,3,3],[27,12,3,3],[-33,15,3,3],[27,15,3,3],[-33,18,30,3],[3,18,27,3]],"p":[[-3,18,6,3]]},"mercenarios-2|caballerizas":{"e":[["taberna",-6,-6,12,12],["mercado",-21,-6,9,6],["puestoMercado",-3,-12,6,3],["puestoMercado",-6,9,6,3],["puestoMercado",-12,-12,9,3],["puestoMercado",-12,3,3,9],["puestoMercado",-9,9,3,3],["plazaDeArmas",-3,-21,6,6],["caballerizas",9,-6,6,9],["vivienda",0,9,3,3],["vivienda",3,9,3,3],["vivienda",9,3,3,3],["vivienda",9,-9,3,3],["vivienda",6,-12,3,3],["vivienda",0,12,3,3],["vivienda",-3,12,3,3],["vivienda",-15,3,3,3],["vivienda",-6,12,3,3],["vivienda",12,3,3,3]],"c":[[-6,-24,12,3],[-6,-21,3,3],[3,-21,3,3],[-6,-18,3,3],[3,-18,3,3],[-6,-15,12,3],[3,-12,3,3],[-24,-9,33,3],[-24,-6,3,3],[-12,-6,6,3],[6,-6,3,3],[-24,-3,3,3],[-12,-3,6,3],[6,-3,3,3],[-24,0,18,3],[6,0,3,3],[-9,3,3,3],[6,3,3,3],[-9,6,24,3],[6,9,3,3],[3,12,6,3],[-6,15,12,3]],"m":[[-30,-30,51,3],[-30,-27,3,3],[18,-27,3,3],[-30,-24,3,3],[18,-24,3,3],[-30,-21,3,3],[18,-21,3,3],[-30,-18,3,3],[18,-18,3,3],[-30,-15,3,3],[18,-15,3,3],[-30,-12,3,3],[18,-12,3,3],[-30,-9,3,3],[18,-9,3,3],[-30,-6,3,3],[18,-6,3,3],[-30,-3,3,3],[18,-3,3,3],[-30,0,3,3],[18,0,3,3],[-30,3,3,3],[18,3,3,3],[-30,6,3,3],[18,6,3,3],[-30,9,3,3],[18,9,3,3],[-30,12,3,3],[18,12,3,3],[-30,15,3,3],[18,15,3,3],[-30,18,3,3],[18,18,3,3],[-30,21,24,3],[0,21,21,3]],"p":[[-6,21,6,3]]},"mercenarios-3|caballerizas":{"e":[["taberna",-6,-6,12,12],["mercado",-12,-18,9,6],["puestoMercado",0,-15,3,6],["puestoMercado",-15,-9,6,3],["puestoMercado",-18,-18,3,9],["puestoMercado",-9,-24,9,3],["puestoMercado",-12,-24,3,3],["plazaDeArmas",12,6,6,6],["caballerizas",9,-3,9,6],["vivienda",-12,-3,3,3],["vivienda",-12,-6,3,3],["vivienda",-3,9,3,3],["vivienda",0,9,3,3],["vivienda",-6,9,3,3],["vivienda",3,9,3,3],["vivienda",6,9,3,3],["vivienda",3,-12,3,3],["vivienda",6,-12,3,3],["vivienda",-12,3,3,3]],"c":[[-15,-21,15,3],[-15,-18,3,3],[-3,-18,6,3],[-15,-15,3,3],[-3,-15,3,3],[-15,-12,15,3],[-9,-9,18,3],[-9,-6,3,3],[6,-6,3,3],[-9,-3,3,3],[6,-3,3,3],[18,-3,3,3],[-12,0,6,3],[6,0,3,3],[18,0,3,3],[-9,3,3,3],[6,3,15,3],[-9,6,21,3],[18,6,3,3],[-9,9,3,3],[9,9,3,3],[18,9,3,3],[9,12,12,3]],"m":[[-24,-30,51,3],[-24,-27,3,3],[24,-27,3,3],[-24,-24,3,3],[24,-24,3,3],[-24,-21,3,3],[24,-21,3,3],[-24,-18,3,3],[24,-18,3,3],[-24,-15,3,3],[24,-15,3,3],[-24,-12,3,3],[24,-12,3,3],[-24,-9,3,3],[24,-9,3,3],[-24,-6,3,3],[24,-6,3,3],[-24,-3,3,3],[24,-3,3,3],[-24,0,3,3],[24,0,3,3],[-24,3,3,3],[24,3,3,3],[-24,6,3,3],[24,6,3,3],[-24,9,3,3],[24,9,3,3],[-24,12,3,3],[24,12,3,3],[-24,15,3,3],[24,15,3,3],[-24,18,24,3],[6,18,21,3]],"p":[[0,18,6,3]]},"mercenarios-4|caballerizas":{"e":[["taberna",-6,-6,12,12],["mercado",-15,-15,6,9],["puestoMercado",-12,-3,3,6],["puestoMercado",-3,-12,6,3],["puestoMercado",-12,3,3,9],["puestoMercado",-15,-3,3,9],["puestoMercado",-3,-15,3,3],["plazaDeArmas",-18,6,6,6],["caballerizas",-6,9,9,6],["vivienda",9,-3,3,3],["vivienda",9,0,3,3],["vivienda",9,-6,3,3],["vivienda",9,3,3,3],["vivienda",3,-12,3,3],["vivienda",3,9,3,3],["vivienda",9,-9,3,3],["vivienda",6,-12,3,3],["vivienda",6,9,3,3],["vivienda",-9,9,3,3]],"c":[[-18,-18,12,3],[-18,-15,3,3],[-9,-15,6,3],[-18,-12,3,3],[-9,-12,6,3],[-18,-9,3,3],[-9,-9,18,3],[-18,-6,12,3],[6,-6,3,3],[-18,-3,3,3],[-9,-3,3,3],[6,-3,3,3],[-18,0,3,3],[-9,0,3,3],[6,0,3,3],[-21,3,6,3],[-9,3,3,3],[6,3,3,3],[-21,6,3,3],[-9,6,21,3],[-21,9,3,3],[-21,12,12,3]],"m":[[-27,-24,45,3],[-27,-21,3,3],[15,-21,3,3],[-27,-18,3,3],[15,-18,3,3],[-27,-15,3,3],[15,-15,3,3],[-27,-12,3,3],[15,-12,3,3],[-27,-9,3,3],[15,-9,3,3],[-27,-6,3,3],[15,-6,3,3],[-27,-3,3,3],[15,-3,3,3],[-27,0,3,3],[15,0,3,3],[-27,3,3,3],[15,3,3,3],[-27,6,3,3],[15,6,3,3],[-27,9,3,3],[15,9,3,3],[-27,12,3,3],[15,12,3,3],[-27,15,3,3],[15,15,3,3],[-27,18,21,3],[0,18,18,3]],"p":[[-6,18,6,3]]}},"tropas":[{"id":"lanceros_mimbre","n":"Lanceros con escudo de mimbre","ed":"barracon","niv":1,"tec":"escudos_ligeros","esc":2,"cab":0,"u":25,"eq":1},{"id":"espadachines_cobre","n":"Espadachines de espada corta de cobre","ed":"barracon","niv":1,"tec":"armamento_palacial","esc":2,"cab":0,"u":20,"eq":2},{"id":"hacheros_ligeros","n":"Hacheros ligeros","ed":"barracon","niv":2,"tec":"armamento_palacial","esc":3,"cab":0,"u":18,"eq":2},{"id":"espadachines_bronce","n":"Espadachines con espadas y escudos de bronce","ed":"barracon","niv":2,"tec":"aleacion_bronce","esc":3,"cab":0,"u":18,"eq":3},{"id":"lanceros_pesados","n":"Lanceros pesados micénicos","ed":"barracon","niv":3,"tec":"panoplia_bronce","esc":4,"cab":0,"u":15,"eq":3},{"id":"hacheros_armados","n":"Hacheros armados","ed":"barracon","niv":2,"tec":"aleacion_bronce","esc":3,"cab":0,"u":15,"eq":2},{"id":"honderos","n":"Honderos","ed":"galeriaDeTiro","niv":1,"tec":"hostigamiento_tribal","esc":2,"cab":0,"u":20,"eq":1},{"id":"escaramuzadores_jabalina","n":"Escaramuzadores con jabalina","ed":"galeriaDeTiro","niv":2,"tec":"hostigamiento_tribal","esc":3,"cab":0,"u":18,"eq":2},{"id":"arqueros","n":"Arqueros","ed":"galeriaDeTiro","niv":2,"tec":"arqueria_palacial","esc":3,"cab":0,"u":18,"eq":2},{"id":"arqueros_compuesto","n":"Arqueros con arco compuesto","ed":"galeriaDeTiro","niv":3,"tec":"arco_compuesto","esc":5,"cab":0,"u":12,"eq":5},{"id":"exploradores_caballo","n":"Exploradores a caballo","ed":"caballerizas","niv":1,"tec":"cria_caballar","esc":2,"cab":1,"u":20,"eq":1},{"id":"carros_guerra","n":"Carros de guerra","ed":"caballerizas","niv":2,"tec":"carros_guerra","esc":4,"cab":2,"u":15,"eq":2},{"id":"jinetes_asirios","n":"Jinetes asirios","ed":"caballerizas","niv":1,"tec":"equitacion_militar","esc":2,"cab":1,"u":20,"eq":1},{"id":"guerreros_filisteos","n":"Guerreros filisteos (Peleset)","ed":"barracon","niv":2,"tec":"forja_hierro_temprana","esc":3,"cab":0,"u":18,"eq":2},{"id":"shardana","n":"Shardana","ed":"barracon","niv":2,"tec":"bronce_calidad_militar","esc":4,"cab":0,"u":15,"eq":2},{"id":"hequetai","n":"Hequetai","ed":"barracon","niv":3,"tec":"panoplia_bronce","esc":5,"cab":0,"u":12,"eq":2},{"id":"honderos_rodios","n":"Honderos rodios","ed":"galeriaDeTiro","niv":2,"tec":"pantalla_escaramuzadores","esc":3,"cab":0,"u":18,"eq":2},{"id":"peltastas","n":"Peltastas","ed":"galeriaDeTiro","niv":2,"tec":"pantalla_escaramuzadores","esc":3,"cab":0,"u":18,"eq":2},{"id":"jinetes_escitas","n":"Jinetes escitas","ed":"caballerizas","niv":2,"tec":"caballeria_organizada","esc":3,"cab":1,"u":18,"eq":2},{"id":"hoplitas_ciudadanos","n":"Hoplitas ciudadanos","ed":"barracon","niv":2,"tec":"ciudadania_militar","esc":3,"cab":0,"u":18,"eq":2},{"id":"caballeria_asiria","n":"Caballería asiria","ed":"caballerizas","niv":2,"tec":"caballeria_organizada","esc":3,"cab":1,"u":18,"eq":2},{"id":"arqueros_escitas","n":"Arqueros escitas","ed":"galeriaDeTiro","niv":3,"tec":"arqueria_especializada","esc":5,"cab":0,"u":12,"eq":2},{"id":"espartiatas","n":"Espartiatas","ed":"barracon","niv":3,"tec":"falange_hoplita","esc":4,"cab":0,"u":15,"eq":2}],"oroEsc":{"1":1,"2":2,"3":4,"4":7,"5":11},"oroCab":5,"valorEq":8,"recargo":1.5,"desc":0.6,"repUmbral":-40,"repFactor":1.5,"niv":3,"porVivienda":10,"porHora":10};
+(function () {
+  var tabs = document.querySelectorAll('.tab');
+  tabs.forEach(function (t) {
+    t.addEventListener('click', function () {
+      tabs.forEach(function (x) { x.setAttribute('aria-selected', x === t ? 'true' : 'false'); });
+      document.querySelectorAll('.panel').forEach(function (p) { p.classList.toggle('on', p.id === t.getAttribute('aria-controls')); });
+    });
+  });
+  var $ = function (id) { return document.getElementById(id); };
+  var NS = 'http://www.w3.org/2000/svg';
+  var NOMBRE = { taberna: 'Taberna', mercado: 'Mercado', puestoMercado: 'Puesto del mercado', vivienda: 'Vivienda', barracon: 'Barracón', galeriaDeTiro: 'Galería de tiro', caballerizas: 'Caballerizas', plazaDeArmas: 'Plaza de armas', plaza: 'Plaza', pozo: 'Pozo', parque: 'Parque' };
+  var QUE = {
+    taberna: 'Ancla principal del trazado; vende intel (Miradas e Informes) a los héroes de una Facción.',
+    mercado: 'Vende lo que se comercia en el mundo; el oro que cobra se destruye. Trae sus puestos de nivel 1.',
+    puestoMercado: 'Puesto del mercado (nivel 1: cinco puestos de 1×1, 1×1, 2×2, 2×2 y 3×3 celdas).',
+    vivienda: 'Cada una da 10 reclutas de tope; diez viviendas dan 100.',
+    barracon: 'Permite reclutar tropa de barracón (con la tecnología del campamento).',
+    galeriaDeTiro: 'Permite reclutar arqueros y honderos.',
+    caballerizas: 'Permite reclutar caballería y carros.',
+    plazaDeArmas: 'Ancla del edificio militar.', plaza: 'Plaza ancla.', pozo: 'Pozo ancla.', parque: 'Parque ancla.'
+  };
+  var T = DATA.T;
+
+  /* ---------- planta ---------- */
+  function planta() {
+    var d = DATA.layouts[$('s-id').value + '|' + $('s-mil').value];
+    var rects = [].concat(d.e.map(function (e) { return e.slice(1); }), d.c, d.m, d.p);
+    var minx = Math.min.apply(null, rects.map(function (r) { return r[0]; })), miny = Math.min.apply(null, rects.map(function (r) { return r[1]; }));
+    var maxx = Math.max.apply(null, rects.map(function (r) { return r[0] + r[2]; })), maxy = Math.max.apply(null, rects.map(function (r) { return r[1] + r[3]; }));
+    var pad = 4, svg = $('mapa');
+    svg.setAttribute('viewBox', (minx - pad) + ' ' + (miny - pad) + ' ' + (maxx - minx + 2 * pad) + ' ' + (maxy - miny + 2 * pad));
+    var h = '';
+    function r(cls, a, extra) { return '<rect class="' + cls + '" x="' + a[0] + '" y="' + a[1] + '" width="' + a[2] + '" height="' + a[3] + '"' + (extra || '') + '/>'; }
+    d.c.forEach(function (a) { h += r('calle', a); });
+    d.m.forEach(function (a) { h += r('muro', a); });
+    d.p.forEach(function (a) { h += r('puerta', a); });
+    d.e.forEach(function (e, i) { h += '<rect class="el t-' + e[0] + '" x="' + e[1] + '" y="' + e[2] + '" width="' + e[3] + '" height="' + e[4] + '" data-i="' + i + '" tabindex="0"><title>' + NOMBRE[e[0]] + '</title></rect>'; });
+    svg.innerHTML = h;
+    var cuenta = {}; d.e.forEach(function (e) { cuenta[e[0]] = (cuenta[e[0]] || 0) + 1; });
+    $('ley').innerHTML = Object.keys(cuenta).map(function (k) { return '<span><i class="t-' + k + '" style="background:var(--c-' + (k === 'taberna' ? 'taberna' : k === 'mercado' ? 'mercado' : k === 'puestoMercado' ? 'puesto' : k === 'vivienda' ? 'vivienda' : (k === 'barracon' || k === 'galeriaDeTiro' || k === 'caballerizas') ? 'militar' : 'plaza') + ')"></i>' + NOMBRE[k] + ' ×' + cuenta[k] + '</span>'; }).join('') + '<span><i style="background:var(--muro)"></i>Empalizada</span><span><i style="background:var(--bronze)"></i>Puerta (sur)</span>';
+    $('el-titulo').textContent = 'Pasa el ratón por un edificio';
+    $('el-datos').innerHTML = '<dt>Elementos</dt><dd>' + d.e.length + '</dd><dt>Tramos de calle</dt><dd>' + d.c.length + '</dd><dt>Tramos de empalizada</dt><dd>' + d.m.length + '</dd>';
+    svg.querySelectorAll('rect.el').forEach(function (el) {
+      function mostrar() {
+        var e = d.e[+el.getAttribute('data-i')];
+        svg.querySelectorAll('rect.el').forEach(function (x) { x.classList.remove('sel'); }); el.classList.add('sel');
+        $('el-titulo').textContent = NOMBRE[e[0]];
+        $('el-datos').innerHTML = '<dt>Qué es</dt><dd>' + QUE[e[0]] + '</dd><dt>Huella</dt><dd class="mono">' + e[3] / T + '×' + e[4] / T + ' celdas (' + e[3] + '×' + e[4] + ' u)</dd><dt>Posición</dt><dd class="mono">x ' + e[1] + ', y ' + e[2] + '</dd>';
+      }
+      el.addEventListener('mouseenter', mostrar); el.addEventListener('focus', mostrar); el.addEventListener('click', mostrar);
+    });
+  }
+  $('s-id').addEventListener('change', planta); $('s-mil').addEventListener('change', planta); planta();
+
+  /* ---------- reclutar ---------- */
+  function precio(t, rep, sinPlazas) {
+    var base = (DATA.oroEsc[t.esc] || 0) + t.cab * DATA.oroCab + t.eq * DATA.valorEq;
+    var f = rep <= DATA.repUmbral ? DATA.repFactor : 1;
+    var p = base * DATA.recargo * f;
+    return sinPlazas ? p * DATA.desc : p;
+  }
+  function reclutar() {
+    var ed = $('r-ed').value, rep = +$('r-rep').value, sin = $('r-pla').value === 'sin', mitad = $('r-ya').value === 'mitad';
+    $('r-repv').textContent = rep;
+    var filas = DATA.tropas.filter(function (t) { return t.ed === ed && t.niv <= DATA.niv; }).map(function (t) {
+      var p = precio(t, rep, sin), n = mitad ? t.u - Math.floor(t.u / 2) : t.u;
+      return '<tr><td>' + t.n + '</td><td class="num">' + t.esc + '</td><td class="num">' + p.toFixed(2) + '</td><td class="num">' + n + '</td><td class="num"><strong>' + Math.ceil(p * n) + '</strong></td></tr>';
+    });
+    $('r-filas').innerHTML = filas.join('');
+    var notas = [];
+    if (rep <= DATA.repUmbral) notas.push('Con reputación ≤ ' + DATA.repUmbral + ' pagas ×' + DATA.repFactor + '.');
+    if (sin) notas.push('Sin asentamientos pagas ×' + DATA.desc + ': una Facción puede recomponerse aquí.');
+    notas.push('Solo se ofrecen las tropas cuya tecnología ya desbloquea el campamento: la tiene el 50 % de las Facciones vivas o han pasado 72 h desde que la primera la desbloqueó. Esta tabla las muestra todas.');
+    $('r-nota').innerHTML = notas.join(' ');
+  }
+  ['r-ed', 'r-rep', 'r-pla', 'r-ya'].forEach(function (id) { $(id).addEventListener('input', reclutar); });
+  reclutar();
+
+  /* ---------- población ---------- */
+  function pob() {
+    var p0 = +$('pp-p0').value, h = +$('pp-h').value, tope = +$('pp-viv').value * DATA.porVivienda;
+    $('pp-p0v').textContent = p0; $('pp-hv').textContent = h; $('pp-hora').textContent = DATA.porHora;
+    var p0c = Math.min(p0, tope);
+    var actual = Math.min(tope, p0c + h * DATA.porHora);
+    var W = 720, H = 230, x0 = 46, x1 = 700, y0 = 20, y1 = 190, hmax = 12;
+    var X = function (v) { return x0 + (v / hmax) * (x1 - x0); }, Y = function (v) { return y1 - (v / Math.max(tope, 100)) * (y1 - y0); };
+    var s = '';
+    [0, 25, 50, 75, 100].filter(function (v) { return v <= Math.max(tope, 100); }).forEach(function (v) { s += '<line x1="' + x0 + '" x2="' + x1 + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="var(--line)"/><text x="' + (x0 - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="var(--muted)" font-family="IBM Plex Sans">' + v + '</text>'; });
+    for (var k = 0; k <= 12; k += 2) s += '<text x="' + X(k) + '" y="' + (y1 + 18) + '" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="IBM Plex Sans">' + k + ' h</text>';
+    s += '<line x1="' + x0 + '" x2="' + x1 + '" y1="' + Y(tope) + '" y2="' + Y(tope) + '" stroke="var(--bronze)" stroke-dasharray="5 4"/><text x="' + x1 + '" y="' + (Y(tope) - 6) + '" text-anchor="end" font-size="11" fill="var(--bronze)" font-family="IBM Plex Sans">tope: ' + tope + '</text>';
+    var tFull = (tope - p0c) / DATA.porHora;
+    var x2 = Math.min(hmax, tFull);
+    s += '<polyline fill="none" stroke="var(--accent)" stroke-width="2.5" points="' + X(0) + ',' + Y(p0c) + ' ' + X(x2) + ',' + Y(Math.min(tope, p0c + x2 * DATA.porHora)) + ' ' + X(hmax) + ',' + Y(Math.min(tope, p0c + hmax * DATA.porHora)) + '"/>';
+    s += '<line x1="' + X(h) + '" x2="' + X(h) + '" y1="' + y0 + '" y2="' + y1 + '" stroke="var(--ink)" stroke-dasharray="2 3"/><circle cx="' + X(h) + '" cy="' + Y(actual) + '" r="6" fill="var(--accent)"/>';
+    $('pp-svg').innerHTML = s;
+    var cabe = DATA.tropas.filter(function (t) { return t.niv <= DATA.niv && t.u <= actual; }).length;
+    $('pp-res').innerHTML = '<strong>' + Math.floor(actual) + ' reclutas ahora</strong> de ' + tope + '. ' + (actual >= tope ? 'Está lleno.' : 'Llega al tope en ' + ((tope - actual) / DATA.porHora).toFixed(1) + ' h más.') + ' Alcanza para reclutar una escuadra completa de ' + cabe + ' de las ' + DATA.tropas.length + ' tropas del catálogo de campamento (cada una gasta tantos reclutas como soldados tiene).';
+  }
+  ['pp-p0', 'pp-h', 'pp-viv'].forEach(function (id) { $(id).addEventListener('input', pob); });
+  pob();
+})();
+</script>

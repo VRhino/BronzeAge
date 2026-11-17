@@ -1,0 +1,1121 @@
+//! Las órdenes del jugador del contrato 05 (`orders.proto`) como comandos del núcleo, con sus ids de texto (`<prefijo>-<n>`, `proyeccion::ids`), y la orden genérica de administración.
+//!
+//! - La **autorización** no es de aquí: la aplica el núcleo con el actor de la petición (el cliente) y su `admin`. Lo único que esta traducción decide por su cuenta es que la
+//!   orden de administración (`OrdenDeAdministracion`) solo la da una sesión de administración (`no_autorizado` en cualquier otra).
+//! - Lo que el contrato deja implícito se resuelve preguntando al mundo ([`Consulta`]): el héroe de la cuenta (`fundar`, `guardar_loadout`, `pasar_a_viveres`…), su columna, la plaza
+//!   a la que se marcha, la plaza o avanzada donde repostar (la más cercana a la puerta si no viene `lugar_id`), el campamento donde está, el pueblo o la avanzada de una obra y la
+//!   batalla de un UUID.
+//! - Un id que no tiene la forma de su entidad se rechaza con el código de «desconocida» de esa entidad (`heroe.desconocido`…); un valor fuera de un catálogo cerrado (recurso, tropa,
+//!   cargo, política, tipo de carro…), con `orden.forma_invalida`. Lo demás (que la entidad exista, las cantidades) lo valida el núcleo.
+//! - Desde 6D y 6E (2026-10-25) toda orden del contrato tiene su comando en el núcleo: ya ninguna sale `orden.no_disponible` (el código sigue en el catálogo para una orden nueva del
+//!   contrato que aún no tenga sistema). El `match` sobre `Cuerpo` no tiene comodín: una orden nueva del contrato no compila hasta clasificarla.
+//!
+//! La tabla orden ↔ comando, con lo que cada una ignora, está en `Docs/Mechanics/Comandos_Parametros.md`.
+
+use crate::comando::{rechazos, AccionReloj, Comando, LadoDelFondo, ObjetivoAtaque, OrigenIntel, PagarCon, Peticion, Respuesta, TipoInformeRegion, TipoRumor, PETICION_ID_MAX};
+use crate::estado_militar::{Aspecto, Relacion};
+use crate::nucleo::Nucleo;
+use crate::proyeccion::ids;
+use asentamiento::pueblos::Cultivo;
+use asentamiento::{Cargo, Recurso, Tipo};
+use base::{Mil, Punto};
+use combate::resolucion::Lado;
+use comercio::caravana::{Animal, TipoCarro};
+use comercio::encargo::{LineaDejar, LineaRecoger, Modo, Parada};
+use contrato::v1 as pb;
+use militar::catalogo::Tropa;
+use militar::columna::Politica;
+use militar::heroe::{Controlador, Residencia};
+use militar::inspeccion::Objetivo;
+use militar::presencia::Ubicacion;
+use objetos::datos::Hueco;
+use mercenarios::{Objetivo as ObjetivoMercenario, TipoOrden, Trabajo};
+use pb::orden::Cuerpo;
+use prost_types::{value::Kind, Struct};
+
+/// Lo que es una obra de mapa del contrato (`obra-N`): el pueblo o la avanzada que se levanta, se mejora o se repara.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Obra {
+    Pueblo,
+    Avanzada,
+}
+
+/// Lo que la traducción pregunta al mundo para resolver lo que la orden deja implícito. Lo implementa [`Nucleo`]; las pruebas, un mundo de mentira.
+pub trait Consulta {
+    /// La versión del mundo, para el rechazo.
+    fn version(&self) -> u64;
+    /// El héroe de una cuenta (uno por cuenta y partida; no cuenta el de campo de la administración).
+    fn heroe_de_cuenta(&self, cuenta: &str) -> Option<u64>;
+    /// La columna del héroe.
+    fn columna_de(&self, heroe: u64) -> Option<u64>;
+    /// Dónde está la plaza: la posición donde termina una marcha «a un asentamiento» (queda dentro de la puerta).
+    fn posicion_de_plaza(&self, plaza: u64) -> Option<Punto>;
+    /// La plaza o la avanzada operativa más cercana a la puerta de la columna del héroe (`Ubicacion::Asentamiento` o `Ubicacion::Avanzada`).
+    fn lugar_de_repostar(&self, heroe: u64) -> Option<Ubicacion>;
+    /// El campamento de mercenarios donde está el héroe, dentro o a su puerta.
+    fn campamento_del_heroe(&self, heroe: u64) -> Option<u32>;
+    /// Si `id` es un pueblo, una avanzada o ninguno.
+    fn obra(&self, id: u64) -> Option<Obra>;
+    /// El id del núcleo de una batalla por su UUID.
+    fn batalla(&self, uuid: &str) -> Option<u64>;
+    /// El índice de un alijo del artefacto por su id (el del contrato).
+    fn alijo(&self, id: &str) -> Option<u32>;
+    /// El índice de una tecnología del catálogo por su id (el del contrato).
+    fn tecnologia(&self, id: &str) -> Option<u8>;
+}
+
+impl Consulta for Nucleo {
+    fn version(&self) -> u64 {
+        Nucleo::version(self)
+    }
+    fn heroe_de_cuenta(&self, cuenta: &str) -> Option<u64> {
+        Nucleo::heroe_de_cuenta(self, cuenta).map(|h| h.heroe.id)
+    }
+    fn columna_de(&self, heroe: u64) -> Option<u64> {
+        self.estado().ejercito_de_heroe(heroe)
+    }
+    fn posicion_de_plaza(&self, plaza: u64) -> Option<Punto> {
+        self.estado().asentamientos.get(&plaza).map(|a| a.posicion)
+    }
+    fn lugar_de_repostar(&self, heroe: u64) -> Option<Ubicacion> {
+        Nucleo::lugar_de_repostar(self, heroe)
+    }
+    fn campamento_del_heroe(&self, heroe: u64) -> Option<u32> {
+        Nucleo::campamento_del_heroe(self, heroe)
+    }
+    fn obra(&self, id: u64) -> Option<Obra> {
+        self.pueblo(id).map(|_| Obra::Pueblo).or_else(|| self.avanzada(id).map(|_| Obra::Avanzada))
+    }
+    fn batalla(&self, uuid: &str) -> Option<u64> {
+        self.id_de_batalla(uuid)
+    }
+    fn alijo(&self, id: &str) -> Option<u32> {
+        self.alijo_por_id(id)
+    }
+    fn tecnologia(&self, id: &str) -> Option<u8> {
+        self.estado().reglas.economia.tecnologia.buscar(id)
+    }
+}
+
+/// El sigilo de `crear_faccion`, pieza a pieza: que cada una sea del catálogo lo mira el núcleo (`faccion.sigilo_invalido`).
+fn sigilo(s: &pb::orden_crear_faccion::Sigilo) -> politica::sigilo::Sigilo {
+    politica::sigilo::Sigilo {
+        forma: s.forma_id.clone(),
+        campo: s.campo_id.clone(),
+        emblema: s.emblema_id.clone(),
+        color_primario: s.color_primario_id.clone(),
+        color_secundario: s.color_secundario_id.clone(),
+        color_emblema: s.color_emblema_id.clone(),
+        orla: s.orla_id.clone(),
+        color_orla: s.color_orla_id.clone(),
+    }
+}
+
+/// De la orden del contrato a la petición del núcleo. `Err` = rechazo sin pasar por el núcleo (no deja rastro). `bot`: la sesión es `CLIENTE_BOT` (una cuenta de bot): el héroe que
+/// crea nace bot (lo decide la cuenta, no el cliente; Proyecciones §4, 2026-11-01).
+pub fn traducir(mundo: &dyn Consulta, orden: &pb::Orden, cliente: &str, admin: bool, bot: bool) -> Result<Peticion, Respuesta> {
+    let x = Ctx { mundo, cliente, bot };
+    // La `peticion_id` que manda el cliente se guarda para la idempotencia: con tope. (Las que arma el núcleo para el servidor de batalla no pasan por aquí.)
+    if orden.peticion_id.len() > PETICION_ID_MAX {
+        return Err(x.no(rechazos::PETICION_ID_LARGO, format!("la peticion_id tiene como mucho {PETICION_ID_MAX} bytes")));
+    }
+    let Some(cuerpo) = &orden.cuerpo else { return Err(x.no(rechazos::ORDEN_NO_SOPORTADA, "orden vacía")) };
+    let comando = x.comando(cuerpo, admin)?;
+    Ok(Peticion { actor: cliente.into(), admin, peticion_id: orden.peticion_id.clone(), version_esperada: orden.version_esperada, comando })
+}
+
+type R<T> = Result<T, Respuesta>;
+
+struct Ctx<'a> {
+    mundo: &'a dyn Consulta,
+    cliente: &'a str,
+    bot: bool,
+}
+
+impl Ctx<'_> {
+    fn no(&self, codigo: &'static str, texto: impl Into<String>) -> Respuesta {
+        Respuesta::rechazo(codigo, texto, self.mundo.version())
+    }
+
+    fn forma<T>(&self, texto: impl Into<String>) -> R<T> {
+        Err(self.no(rechazos::ORDEN_FORMA_INVALIDA, texto))
+    }
+
+    fn id<T>(&self, parse: fn(&str) -> Option<T>, codigo: &'static str, texto: &str) -> R<T> {
+        parse(texto).ok_or_else(|| self.no(codigo, texto))
+    }
+
+    // ───────────────────────────── Entidades ─────────────────────────────
+
+    fn heroe(&self, s: &str) -> R<u64> {
+        self.id(ids::parse_heroe, rechazos::HEROE_DESCONOCIDO, s)
+    }
+    /// `pagar_con` de una orden que lo admite sin él (`almacenPersonal` | `carro`); otro valor, `orden.forma_invalida`.
+    fn pagar_con(&self, s: Option<&str>) -> R<Option<PagarCon>> {
+        match s {
+            None => Ok(None),
+            Some("almacenPersonal") => Ok(Some(PagarCon::AlmacenPersonal)),
+            Some("carro") => Ok(Some(PagarCon::Carro)),
+            Some(otro) => self.forma(format!("forma de pago desconocida: {otro}")),
+        }
+    }
+    /// `pagar_con` de un contrato de mercenario: además de las de [`Self::pagar_con`], `monedas`, `almacenPlaza` y `fondoPlaza`.
+    fn pagar_con_de_contrato(&self, s: Option<&str>) -> R<Option<PagarCon>> {
+        match s {
+            Some("monedas") => Ok(Some(PagarCon::Monedas)),
+            Some("almacenPlaza") => Ok(Some(PagarCon::AlmacenPlaza)),
+            Some("fondoPlaza") => Ok(Some(PagarCon::FondoPlaza)),
+            _ => self.pagar_con(s),
+        }
+    }
+    /// Un hueco del equipo (`arma` | `casco` | `torso` | `guantes` | `pantalones` | `botas` | `montura`); otro valor, `orden.forma_invalida`.
+    fn hueco(&self, s: &str) -> R<Hueco> {
+        Ok(match s {
+            "arma" => Hueco::Arma,
+            "casco" => Hueco::Casco,
+            "torso" => Hueco::Torso,
+            "guantes" => Hueco::Guantes,
+            "pantalones" => Hueco::Pantalones,
+            "botas" => Hueco::Botas,
+            "montura" => Hueco::Montura,
+            otro => return self.forma(format!("hueco del equipo desconocido: {otro}")),
+        })
+    }
+    /// El cultivo de una aldea (`trigo`, el de sin él, | `vid` | `oliva`); otro valor, `orden.forma_invalida`.
+    fn cultivo(&self, s: Option<&str>) -> R<Cultivo> {
+        match s {
+            None => Ok(Cultivo::Trigo),
+            Some(n) => Cultivo::desde_nombre(n).map_or_else(|| self.forma(format!("cultivo desconocido: {n}")), Ok),
+        }
+    }
+    fn ejercito(&self, s: &str) -> R<u64> {
+        self.id(ids::parse_ejercito, rechazos::EJERCITO_DESCONOCIDO, s)
+    }
+    fn plaza(&self, s: &str) -> R<u64> {
+        self.id(ids::parse_asentamiento, rechazos::ASENTAMIENTO_DESCONOCIDO, s)
+    }
+    fn caravana(&self, s: &str) -> R<u64> {
+        self.id(ids::parse_caravana, rechazos::CARAVANA_DESCONOCIDA, s)
+    }
+    fn escuadra(&self, s: &str) -> R<u64> {
+        self.id(ids::parse_escuadra, rechazos::ORDEN_FORMA_INVALIDA, s)
+    }
+    fn escuadras(&self, v: &[String]) -> R<Vec<u64>> {
+        v.iter().map(|s| self.escuadra(s)).collect()
+    }
+    fn acuerdo(&self, s: &str) -> R<u64> {
+        self.id(ids::parse_acuerdo, rechazos::TRUEQUE_DESCONOCIDO, s)
+    }
+    fn orden_de_mercado(&self, s: &str) -> R<u64> {
+        self.id(ids::parse_orden_de_mercado, rechazos::ORDEN_DESCONOCIDA, s)
+    }
+    fn pueblo(&self, s: &str) -> R<u64> {
+        self.id(ids::parse_pueblo, rechazos::PUEBLO_DESCONOCIDO, s)
+    }
+    fn avanzada(&self, s: &str) -> R<u64> {
+        self.id(ids::parse_avanzada, rechazos::AVANZADA_DESCONOCIDA, s)
+    }
+    fn convocatoria(&self, s: &str) -> R<u64> {
+        self.id(ids::parse_convocatoria, rechazos::CONVOCATORIA_DESCONOCIDA, s)
+    }
+    fn loadout(&self, s: &str) -> R<u64> {
+        self.id(ids::parse_loadout, rechazos::LOADOUT_DESCONOCIDO, s)
+    }
+    fn campamento(&self, s: &str) -> R<u32> {
+        self.id(ids::parse_campamento, rechazos::CAMPAMENTO_DESCONOCIDO, s)
+    }
+    fn bandidos(&self, s: &str) -> R<u64> {
+        self.id(ids::parse_bandidos, rechazos::CAMPAMENTO_DE_BANDIDOS_DESCONOCIDO, s)
+    }
+    fn faccion(&self, s: &str) -> R<u32> {
+        self.id(ids::parse_faccion, rechazos::ORDEN_FORMA_INVALIDA, s)
+    }
+    /// El dueño de una misión: `heroe-N`, `as-N` o `f-N` (Misiones §4).
+    fn dueno_de_mision(&self, s: &str) -> R<crate::misiones::Dueno> {
+        use crate::misiones::Dueno;
+        if let Some(h) = ids::parse_heroe(s) {
+            Ok(Dueno::Heroe(h))
+        } else if let Some(a) = ids::parse_asentamiento(s) {
+            Ok(Dueno::Asentamiento(a))
+        } else {
+            self.faccion(s).map(Dueno::Faccion)
+        }
+    }
+    fn relacion(&self, s: &str) -> R<u64> {
+        self.id(ids::parse_relacion, rechazos::DIPLOMACIA_RELACION_DESCONOCIDA, s)
+    }
+    fn propuesta(&self, s: &str) -> R<u64> {
+        self.id(ids::parse_propuesta, rechazos::DIPLOMACIA_PROPUESTA_DESCONOCIDA, s)
+    }
+    fn nodo(&self, s: &str) -> R<u32> {
+        self.id(ids::parse_nodo, rechazos::PUEBLO_NODO_DESCONOCIDO, s)
+    }
+    fn batalla(&self, uuid: &str) -> R<u64> {
+        self.mundo.batalla(uuid).ok_or_else(|| self.no(rechazos::BATALLA_NO_EXISTE, uuid))
+    }
+    fn alijo(&self, id: &str) -> R<u32> {
+        self.mundo.alijo(id).ok_or_else(|| self.no(rechazos::ALIJO_DESCONOCIDO, id))
+    }
+    fn tecnologia(&self, id: &str) -> R<u8> {
+        self.mundo.tecnologia(id).ok_or_else(|| self.no(rechazos::TECNOLOGIA_DESCONOCIDA, id))
+    }
+    /// `aeda-rN`: un Aeda residente (6E). Lo que no tiene esa forma no vive en ninguna plaza.
+    fn aeda_residente(&self, s: &str) -> R<u32> {
+        self.id(ids::parse_aeda_residente, rechazos::EPICA_NO_VIVE_AQUI, s)
+    }
+
+    /// `ed-<plaza>-<n>`: el edificio `n` de esa plaza.
+    fn edificio(&self, plaza: u64, s: &str) -> R<u32> {
+        match ids::parse_edificio(s) {
+            Some((p, n)) if p == plaza => Ok(n),
+            _ => Err(self.no(rechazos::EDIFICIO_DESCONOCIDO, s)),
+        }
+    }
+
+    /// `recinto-<plaza>-<n>`: el recinto `n` de esa plaza.
+    fn recinto(&self, plaza: u64, s: &str) -> R<u32> {
+        match ids::parse_recinto(s) {
+            Some((p, n)) if p == plaza => Ok(n),
+            _ => Err(self.no(rechazos::MURALLAS_RECINTO_DESCONOCIDO, s)),
+        }
+    }
+
+    /// `obra-N`: el pueblo o la avanzada de esa obra.
+    fn obra(&self, s: &str) -> R<(Obra, u64)> {
+        let id = self.id(ids::parse_obra, rechazos::OBRA_DE_MAPA_DESCONOCIDA, s)?;
+        self.mundo.obra(id).map(|o| (o, id)).ok_or_else(|| self.no(rechazos::OBRA_DE_MAPA_DESCONOCIDA, s))
+    }
+
+    /// El héroe de la cuenta que da la orden: la del contrato no lo nombra porque solo hay uno.
+    fn mi_heroe(&self) -> R<u64> {
+        self.mundo.heroe_de_cuenta(self.cliente).ok_or_else(|| self.no(rechazos::HEROE_DESCONOCIDO, "la cuenta no tiene héroe"))
+    }
+
+    fn columna(&self, heroe: u64) -> R<u64> {
+        self.mundo.columna_de(heroe).ok_or_else(|| self.no(rechazos::HEROE_SIN_COLUMNA, "el héroe no va en ninguna columna"))
+    }
+
+    // ───────────────────────────── Catálogos y cantidades ─────────────────────────────
+
+    fn recurso(&self, s: &str) -> R<Recurso> {
+        Recurso::desde_nombre(s).map_or_else(|| self.forma(format!("recurso desconocido: {s}")), Ok)
+    }
+
+    fn tropa(&self, s: &str) -> R<Tropa> {
+        Tropa::desde_nombre(s).map_or_else(|| self.forma(format!("tropa desconocida: {s}")), Ok)
+    }
+
+    fn cargo(&self, s: &str) -> R<Cargo> {
+        Cargo::desde_clave(s).map_or_else(|| self.forma(format!("cargo desconocido: {s}")), Ok)
+    }
+
+    fn politica(&self, s: &str) -> R<Politica> {
+        match s {
+            "rechazar" => Ok(Politica::Rechazar),
+            "aceptar" => Ok(Politica::Aceptar),
+            "preguntar" => Ok(Politica::Preguntar),
+            _ => self.forma(format!("política de unión desconocida: {s}")),
+        }
+    }
+
+    /// La política opcional de una salida: sin ella, nadie se une.
+    fn politica_o_rechazar(&self, s: Option<&str>) -> R<Politica> {
+        s.map_or(Ok(Politica::Rechazar), |s| self.politica(s))
+    }
+
+    /// `lado` de `aportar_a_refundacion` y `retirar_de_refundacion`: `almacen | carro`.
+    fn lado_del_fondo(&self, s: &str) -> R<LadoDelFondo> {
+        match s {
+            "almacen" => Ok(LadoDelFondo::Almacen),
+            "carro" => Ok(LadoDelFondo::Carro),
+            _ => self.forma(format!("lado del fondo desconocido: {s}")),
+        }
+    }
+
+    fn lado(&self, s: &str) -> R<Lado> {
+        match s {
+            "atacante" => Ok(Lado::Atacante),
+            "defensor" => Ok(Lado::Defensor),
+            _ => self.forma(format!("lado desconocido: {s}")),
+        }
+    }
+
+    /// `modo` de `encargar_caravana`: `ruta | envio`.
+    fn modo_de_encargo(&self, s: &str) -> R<Modo> {
+        match s {
+            "ruta" => Ok(Modo::Ruta),
+            "envio" => Ok(Modo::Envio),
+            _ => self.forma(format!("modo de encargo desconocido: {s}")),
+        }
+    }
+
+    /// `tipo` de `comprar_informe_region`: `plazas | ordenes`.
+    fn tipo_de_informe_region(&self, s: &str) -> R<TipoInformeRegion> {
+        match s {
+            "plazas" => Ok(TipoInformeRegion::Plazas),
+            "ordenes" => Ok(TipoInformeRegion::Ordenes),
+            _ => self.forma(format!("tipo de informe de región desconocido: {s}")),
+        }
+    }
+
+    fn tipo_de_rumor(&self, s: &str) -> R<TipoRumor> {
+        match s {
+            "vetas_estano" => Ok(TipoRumor::VetasEstano),
+            _ => self.forma(format!("tipo de rumor desconocido: {s}")),
+        }
+    }
+
+    /// Lo que hace la caravana en una punta del encargo; sin parada, no recoge ni deja nada.
+    fn parada(&self, p: Option<&pb::ParadaEncargo>) -> R<Parada> {
+        let Some(p) = p else { return Ok(Parada::default()) };
+        Ok(Parada {
+            recoger: p.recoger.iter().map(|l| Ok(LineaRecoger { recurso: self.recurso(&l.recurso)?, cantidad: l.cantidad, precio_max: l.precio_max })).collect::<R<_>>()?,
+            esperar_existencias: p.esperar_existencias,
+            dejar: p.dejar.iter().map(|l| Ok(LineaDejar { recurso: self.recurso(&l.recurso)?, tope: l.tope, precio_min: l.precio_min })).collect::<R<_>>()?,
+            desechar_sobrante: p.desechar_sobrante,
+        })
+    }
+
+    fn cantidades(&self, c: Option<&pb::Cantidades>) -> R<Vec<(Recurso, Mil)>> {
+        c.map_or(Ok(vec![]), |c| c.por_id.iter().map(|(r, n)| Ok((self.recurso(r)?, *n))).collect())
+    }
+
+    fn entero_u32(&self, n: i64, que: &str) -> R<u32> {
+        u32::try_from(n).map_or_else(|_| self.forma(format!("{que} fuera de rango: {n}")), Ok)
+    }
+
+    fn punto(&self, p: Option<&pb::Punto>) -> R<Punto> {
+        p.map_or_else(|| self.forma("falta la posición"), |p| Ok(Punto::new(p.x, p.y)))
+    }
+
+    /// `trabajo` de `contratar_mercenario`: `defender | escoltar | atacar | acompanar | permanente`.
+    fn trabajo(&self, s: &str) -> R<Trabajo> {
+        Trabajo::TODOS.into_iter().find(|t| t.id() == s).map_or_else(|| self.forma(format!("trabajo de mercenario desconocido: {s}")), Ok)
+    }
+
+    /// `tipo` de `ordenar_mercenario`: `guardar | ir_a | atacar | unirse`.
+    fn tipo_de_orden(&self, s: &str) -> R<TipoOrden> {
+        TipoOrden::desde_id(s).map_or_else(|| self.forma(format!("orden de mercenario desconocida: {s}")), Ok)
+    }
+
+    /// Los días de un plazo de contrato: que quepan en un byte; que sea uno de la tabla lo mira el núcleo (`mercenario.plazo_invalido`).
+    fn dias(&self, n: u32) -> R<u8> {
+        u8::try_from(n).map_or_else(|_| self.forma(format!("plazo fuera de rango: {n} días")), Ok)
+    }
+
+    /// El objetivo de un contrato o de una orden de mercenario (`ObjetivoMercenario`).
+    fn objetivo_mercenario(&self, o: Option<&pb::ObjetivoMercenario>) -> R<ObjetivoMercenario> {
+        use pb::objetivo_mercenario::Tipo;
+        Ok(match o.and_then(|x| x.tipo.as_ref()) {
+            Some(Tipo::AsentamientoId(s)) => ObjetivoMercenario::Plaza(self.plaza(s)?),
+            Some(Tipo::PuebloId(s)) => ObjetivoMercenario::Pueblo(self.pueblo(s)?),
+            Some(Tipo::AvanzadaId(s)) => ObjetivoMercenario::Avanzada(self.avanzada(s)?),
+            Some(Tipo::CaravanaId(s)) => ObjetivoMercenario::Caravana(self.caravana(s)?),
+            Some(Tipo::CampamentoId(s)) => ObjetivoMercenario::Bandidos(self.bandidos(s)?),
+            Some(Tipo::EjercitoId(s)) => ObjetivoMercenario::Ejercito(self.ejercito(s)?),
+            Some(Tipo::ConvocatoriaId(s)) => ObjetivoMercenario::Convocatoria(self.convocatoria(s)?),
+            Some(Tipo::FaccionId(s)) => ObjetivoMercenario::Faccion(self.faccion(s)?),
+            Some(Tipo::Punto(p)) => ObjetivoMercenario::Punto(Punto::new(p.x, p.y)),
+            None => return self.forma("la orden no trae objetivo"),
+        })
+    }
+
+    /// La taberna de una compra de intel: `{tipo: asentamiento | campamento, id}`.
+    fn origen_de_intel(&self, o: Option<(&str, &str)>) -> R<OrigenIntel> {
+        match o {
+            Some(("asentamiento", id)) => Ok(OrigenIntel::Plaza(self.plaza(id)?)),
+            Some(("campamento", id)) => Ok(OrigenIntel::Campamento(self.campamento(id)?)),
+            Some((otro, _)) => self.forma(format!("taberna desconocida: {otro}")),
+            None => self.forma("falta la taberna (origen)"),
+        }
+    }
+
+    // ───────────────────────────── El comando de cada orden ─────────────────────────────
+
+    fn comando(&self, cuerpo: &Cuerpo, admin: bool) -> R<Comando> {
+        Ok(match cuerpo {
+            // ── Presencia y héroe ──
+            Cuerpo::CrearHeroe(o) => {
+                // El nombre se guarda (2026-10-27; sin espacios a los lados, vacío = «Héroe N») y la clase la valida el núcleo contra `CLASES_HEROE` (2026-11-12). El género y
+                // el avatar se guardan desde el 2026-11-13 (pedido del autor): género vacío = masculino; las piezas las mira el núcleo por su forma, sin catálogo.
+                let nombre = Some(o.display_name.trim().to_owned()).filter(|x| !x.is_empty());
+                let controlador = if self.bot { Controlador::Bot } else { Controlador::Humano };
+                let femenino = match o.genero.as_str() {
+                    "" | "masculino" => false,
+                    "femenino" => true,
+                    otro => return self.forma(format!("género desconocido: {otro}")),
+                };
+                let a = o.avatar.clone().unwrap_or_default();
+                let aspecto = Aspecto { femenino, cabeza: a.cabeza_id, pelo: a.pelo_id, barba: a.barba_id, cejas: a.cejas_id };
+                Comando::CrearHeroe { cuenta: self.cliente.into(), campamento: self.campamento(&o.campamento_id)?, controlador, nombre, clase: o.class_definition_id.clone(), aspecto }
+            }
+            Cuerpo::ReclutarTropa(o) => Comando::ReclutarTropa { asentamiento: self.plaza(&o.asentamiento_id)?, heroe: self.heroe(&o.heroe_id)?, tropa: self.tropa(&o.tropa_id)? },
+            Cuerpo::ReclutarEnCampamento(o) => {
+                let pagar_con = match o.pagar_con.as_deref() {
+                    None | Some("almacenPersonal") => PagarCon::AlmacenPersonal,
+                    Some("carro") => PagarCon::Carro,
+                    Some(otro) => return self.forma(format!("forma de pago desconocida: {otro}")),
+                };
+                Comando::ReclutarEnCampamento { heroe: self.mi_heroe()?, tropa: self.tropa(&o.tropa_id)?, pagar_con }
+            }
+            Cuerpo::PedirPrestamo(o) => Comando::PedirPrestamo { heroe: self.mi_heroe()?, tropas: o.tropa_ids.iter().map(|t| self.tropa(t)).collect::<R<_>>()? },
+            Cuerpo::ReponerPrestamo(_) => Comando::ReponerPrestamo { heroe: self.mi_heroe()? },
+            Cuerpo::GuardarLoadout(o) => Comando::GuardarLoadout {
+                heroe: self.mi_heroe()?,
+                loadout: o.loadout_id.as_deref().map(|s| self.loadout(s)).transpose()?,
+                nombre: o.display_name.clone(),
+                escuadras: self.escuadras(&o.squad_ids)?,
+                activo: o.activo,
+            },
+            Cuerpo::BorrarLoadout(o) => Comando::BorrarLoadout { heroe: self.mi_heroe()?, loadout: self.loadout(&o.loadout_id)? },
+            Cuerpo::RepartirPuntos(o) => {
+                let a = o.atributos.unwrap_or_default();
+                Comando::RepartirPuntos { heroe: self.mi_heroe()?, fuerza: a.fuerza.unwrap_or(0), destreza: a.destreza.unwrap_or(0), armadura: a.armadura.unwrap_or(0), vitalidad: a.vitalidad.unwrap_or(0) }
+            }
+            Cuerpo::OrdenarEscuadras(o) => Comando::OrdenarEscuadras { heroe: self.mi_heroe()?, escuadras: self.escuadras(&o.escuadron_ids)? },
+            Cuerpo::ElegirFormacion(o) => Comando::ElegirFormacion { heroe: self.mi_heroe()?, escuadra: self.escuadra(&o.escuadron_id)?, formacion: o.formacion.clone() },
+            Cuerpo::EquiparObjeto(o) => Comando::EquiparObjeto { heroe: self.mi_heroe()?, casilla: o.casilla },
+            Cuerpo::DesequiparObjeto(o) => Comando::DesequiparObjeto { heroe: self.mi_heroe()?, hueco: self.hueco(&o.hueco)? },
+            Cuerpo::GuardarObjeto(o) => Comando::GuardarObjeto { heroe: self.mi_heroe()?, casilla: o.casilla, cantidad: o.cantidad },
+            Cuerpo::SacarObjeto(o) => Comando::SacarObjeto { heroe: self.mi_heroe()?, casilla: o.casilla, cantidad: o.cantidad },
+            Cuerpo::ComprarObjeto(o) => Comando::ComprarObjeto { heroe: self.mi_heroe()?, objeto: o.objeto.clone() },
+            Cuerpo::VenderObjeto(o) => Comando::VenderObjeto { heroe: self.mi_heroe()?, casilla: o.casilla, cantidad: o.cantidad },
+            Cuerpo::ForjarObjeto(o) => Comando::ForjarObjeto { heroe: self.mi_heroe()?, objeto: o.objeto.clone() },
+            Cuerpo::UsarObjeto(o) => Comando::UsarObjeto { heroe: self.mi_heroe()?, casilla: o.casilla, escuadra: o.escuadron_id.as_deref().map(|e| self.escuadra(e)).transpose()? },
+            Cuerpo::ConfigurarForja(o) => {
+                // La forja se abre a los tres grupos de fuera de la puerta; los Aedas no forjan (Heroe_Y_Tropa §4.6).
+                let grupo = match politica::Grupo::desde_nombre(&o.grupo) {
+                    Some(g @ (politica::Grupo::Aliados | politica::Grupo::Neutrales | politica::Grupo::Enemigos)) => g,
+                    Some(politica::Grupo::Aedas) | None => return self.forma(format!("grupo de la forja desconocido: {}", o.grupo)),
+                };
+                Comando::ConfigurarForja { asentamiento: self.plaza(&o.asentamiento_id)?, grupo, abierta: o.abierta, recargo_pct: o.recargo_pct }
+            }
+            Cuerpo::AsignarGuarnicion(o) => Comando::AsignarGuarnicion { heroe: self.mi_heroe()?, escuadra: self.escuadra(&o.squad_id)? },
+            Cuerpo::RetirarGuarnicion(o) => Comando::RetirarGuarnicion { heroe: self.mi_heroe()?, escuadra: self.escuadra(&o.squad_id)? },
+            Cuerpo::PasarAViveres(o) => Comando::PasarAViveres { heroe: self.mi_heroe()?, cantidad: o.cantidad },
+            Cuerpo::AsignarEscolta(o) => Comando::AsignarEscolta { caravana: self.caravana(&o.caravana_id)?, heroe: self.heroe(&o.heroe_id)?, escuadras: self.escuadras(&o.escuadron_ids)? },
+            Cuerpo::QuitarEscolta(o) => {
+                // Sin escuadrones, retira todas las que cedió.
+                let escuadras = if o.escuadron_ids.is_empty() { None } else { Some(self.escuadras(&o.escuadron_ids)?) };
+                Comando::QuitarEscolta { caravana: self.caravana(&o.caravana_id)?, heroe: self.heroe(&o.heroe_id)?, escuadras }
+            }
+            Cuerpo::Desconectarse(o) => Comando::Desconectarse { heroe: self.heroe(&o.heroe_id)? },
+            Cuerpo::Conectarse(o) => Comando::Conectarse { heroe: self.heroe(&o.heroe_id)? },
+            Cuerpo::CerrarSesion(o) => Comando::CerrarSesion { heroe: self.heroe(&o.heroe_id)? },
+            Cuerpo::ComprarEnCampamento(o) => {
+                let heroe = self.mi_heroe()?;
+                let campamento = self.campamento_o_el_del(heroe, o.campamento_id.as_deref())?;
+                let pagar_con = self.pagar_con(o.pagar_con.as_deref())?;
+                Comando::ComprarEnCampamento { heroe, campamento, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad, pagar_con }
+            }
+            Cuerpo::RepostarEnCampamento(o) => {
+                let heroe = self.mi_heroe()?;
+                Comando::RepostarEnCampamento { heroe, campamento: self.campamento_o_el_del(heroe, o.campamento_id.as_deref())? }
+            }
+
+            // ── Columnas y convocatorias ──
+            Cuerpo::MarcharA(o) => {
+                use pb::orden_marchar_a::objetivo::Tipo;
+                let heroe = self.heroe(&o.heroe_id)?;
+                // Marchar a un asentamiento es marchar a su plaza: queda dentro del `radioPuerta`.
+                let destino = match o.objetivo.as_ref().and_then(|x| x.tipo.as_ref()) {
+                    Some(Tipo::Punto(p)) => Punto::new(p.x, p.y),
+                    Some(Tipo::AsentamientoId(s)) => self.mundo.posicion_de_plaza(self.plaza(s)?).ok_or_else(|| self.no(rechazos::ASENTAMIENTO_DESCONOCIDO, s.as_str()))?,
+                    None => return self.forma("la marcha no trae objetivo"),
+                };
+                Comando::MarcharA { ejercito: self.columna(heroe)?, destino }
+            }
+            Cuerpo::EstacionarEjercito(o) => Comando::Estacionar { ejercito: self.ejercito(&o.ejercito_id)? },
+            Cuerpo::MarchaForzada(o) => Comando::MarchaForzada { ejercito: self.ejercito(&o.ejercito_id)?, activa: o.activa },
+            Cuerpo::ControlarReloj(c) => Comando::Reloj(match (c.accion.as_str(), c.factor_milesimas, c.hasta_ms) {
+                ("pausar", ..) => AccionReloj::Pausar,
+                ("reanudar", ..) => AccionReloj::Reanudar,
+                ("fijar_factor", Some(f), _) => match u32::try_from(f) {
+                    Ok(f) => AccionReloj::FijarFactor(f),
+                    Err(_) => return Err(self.no(rechazos::RELOJ_INVALIDO, "factor fuera de rango")),
+                },
+                ("avanzar_hasta", _, Some(h)) => AccionReloj::AvanzarHasta(h),
+                _ => return Err(self.no(rechazos::RELOJ_INVALIDO, "acción de reloj desconocida o incompleta")),
+            }),
+            Cuerpo::Fundar(_) => Comando::Fundar { ejercito: self.columna(self.mi_heroe()?)? },
+            Cuerpo::SalirAlMundo(o) => Comando::SalirAlMundo { asentamiento: self.plaza(&o.asentamiento_id)?, heroe: self.heroe(&o.heroe_id)?, escuadras: self.escuadras(&o.escuadron_ids)?, carga: self.cantidades(o.carga.as_ref())? },
+            Cuerpo::MovilizarEjercito(o) => {
+                // El ejército sale sin destino (Presencia_Y_Convocatoria): el `objetivo` de la orden se rechaza en vez de ignorarse; después, `marchar_a`.
+                if o.objetivo.is_some() {
+                    return Err(self.no(rechazos::OBJETIVO_NO_SOPORTADO, "el ejército sale sin destino: después, marchar_a"));
+                }
+                Comando::MovilizarEjercito {
+                    asentamiento: self.plaza(&o.asentamiento_id)?,
+                    heroe: self.heroe(&o.heroe_id)?,
+                    escuadras: self.escuadras(&o.escuadron_ids)?,
+                    carga: self.cantidades(o.carga.as_ref())?,
+                    politica: self.politica_o_rechazar(o.politica_de_union.as_deref())?,
+                    caravana_fundacion: o.caravana_fundacion_id.as_deref().map(|c| self.caravana(c)).transpose()?,
+                }
+            }
+            Cuerpo::SalirDelCampamento(o) => {
+                if o.objetivo.is_some() {
+                    return Err(self.no(rechazos::OBJETIVO_NO_SOPORTADO, "la columna sale sin destino: después, marchar_a"));
+                }
+                Comando::SalirDelCampamento {
+                    campamento: self.campamento(&o.campamento_id)?,
+                    heroe: self.heroe(&o.heroe_id)?,
+                    escuadras: self.escuadras(&o.escuadron_ids)?,
+                    carga: self.cantidades(o.carga.as_ref())?,
+                    politica: self.politica_o_rechazar(o.politica_de_union.as_deref())?,
+                    caravana_fundacion: o.caravana_fundacion_id.as_deref().map(|c| self.caravana(c)).transpose()?,
+                }
+            }
+            Cuerpo::EntrarEnAsentamiento(o) => Comando::EntrarEnAsentamiento { asentamiento: self.plaza(&o.asentamiento_id)?, heroe: self.heroe(&o.heroe_id)? },
+            Cuerpo::SalirDeAsentamiento(o) => Comando::SalirDeAsentamiento { asentamiento: self.plaza(&o.asentamiento_id)?, heroe: self.heroe(&o.heroe_id)? },
+            Cuerpo::Guarnecer(o) => Comando::Guarnecer { asentamiento: self.plaza(&o.asentamiento_id)?, heroe: self.heroe(&o.heroe_id)? },
+            Cuerpo::EntrarEnCampamento(o) => Comando::EntrarEnCampamento { campamento: self.campamento(&o.campamento_id)?, heroe: self.heroe(&o.heroe_id)? },
+            // `OrdenUnirseAEjercito` no trae carga (la del TypeScript tampoco): se une sin sacarla de su plaza.
+            Cuerpo::UnirseAEjercito(o) => {
+                Comando::UnirseAEjercito { asentamiento: self.plaza(&o.asentamiento_id)?, heroe: self.heroe(&o.heroe_id)?, ejercito: self.ejercito(&o.ejercito_id)?, escuadras: self.escuadras(&o.escuadron_ids)?, carga: vec![] }
+            }
+            Cuerpo::UnirseEnCampo(o) => Comando::UnirseEnCampo { heroe: self.heroe(&o.heroe_id)?, ejercito: self.ejercito(&o.ejercito_id)? },
+            Cuerpo::ResponderPeticionDeUnion(o) => {
+                Comando::ResponderPeticionDeUnion { heroe: self.heroe(&o.heroe_id)?, ejercito: self.ejercito(&o.ejercito_id)?, solicitante: self.heroe(&o.solicitante_id)?, aceptar: o.aceptar }
+            }
+            Cuerpo::SepararseDelEjercito(o) => Comando::SepararseDelEjercito { heroe: self.heroe(&o.heroe_id)? },
+            Cuerpo::CederLiderazgo(o) => Comando::CederLiderazgo { heroe: self.heroe(&o.heroe_id)?, sucesor: self.heroe(&o.sucesor_id)? },
+            Cuerpo::OrganizarEjercito(o) => Comando::OrganizarEjercito { heroe: self.heroe(&o.heroe_id)?, politica: self.politica(&o.politica_de_union)? },
+            Cuerpo::CancelarFormacion(o) => Comando::CancelarFormacion { heroe: self.heroe(&o.heroe_id)? },
+            Cuerpo::Repostar(o) => {
+                let heroe = self.heroe(&o.heroe_id)?;
+                match o.lugar_id.as_deref() {
+                    Some(s) if ids::parse_avanzada(s).is_some() => Comando::RepostarEnAvanzada { heroe, avanzada: self.avanzada(s)? },
+                    Some(s) => Comando::Repostar { heroe, asentamiento: self.plaza(s)? },
+                    None => match self.mundo.lugar_de_repostar(heroe) {
+                        Some(Ubicacion::Asentamiento(a)) => Comando::Repostar { heroe, asentamiento: u64::from(a) },
+                        Some(Ubicacion::Avanzada(avanzada)) => Comando::RepostarEnAvanzada { heroe, avanzada },
+                        _ => return Err(self.no(rechazos::REPOSTAR_SIN_LUGAR, "no hay ninguna plaza ni avanzada operativa a la puerta de la columna")),
+                    },
+                }
+            }
+            Cuerpo::ConvocarEjercito(o) => {
+                Comando::ConvocarEjercito { heroe: self.heroe(&o.heroe_id)?, escuadras: self.escuadras(&o.escuadron_ids)?, carga: self.cantidades(o.carga.as_ref())?, politica: self.politica(&o.politica_de_union)? }
+            }
+            Cuerpo::UnirseAConvocatoria(o) => {
+                Comando::UnirseAConvocatoria { heroe: self.heroe(&o.heroe_id)?, convocatoria: self.convocatoria(&o.convocatoria_id)?, escuadras: self.escuadras(&o.escuadron_ids)?, carga: self.cantidades(o.carga.as_ref())? }
+            }
+            Cuerpo::ResponderPeticionDeConvocatoria(o) => Comando::ResponderPeticionDeConvocatoria {
+                heroe: self.heroe(&o.heroe_id)?,
+                convocatoria: self.convocatoria(&o.convocatoria_id)?,
+                solicitante: self.heroe(&o.solicitante_id)?,
+                aceptar: o.aceptar,
+            },
+            Cuerpo::CambiarSeleccionDeConvocatoria(o) => Comando::CambiarSeleccionDeConvocatoria { heroe: self.heroe(&o.heroe_id)?, escuadras: self.escuadras(&o.escuadron_ids)?, carga: self.cantidades(o.carga.as_ref())? },
+            Cuerpo::SepararseDeConvocatoria(o) => Comando::SepararseDeConvocatoria { heroe: self.heroe(&o.heroe_id)? },
+            Cuerpo::CancelarConvocatoria(o) => Comando::CancelarConvocatoria { heroe: self.heroe(&o.heroe_id)? },
+            Cuerpo::PartirConvocatoria(o) => Comando::PartirConvocatoria { heroe: self.heroe(&o.heroe_id)?, caravana_fundacion: o.caravana_fundacion_id.as_deref().map(|c| self.caravana(c)).transpose()? },
+
+            // ── Encuentros, combate y batalla ──
+            Cuerpo::Perseguir(o) => {
+                use pb::orden_perseguir::objetivo::Tipo;
+                let objetivo = match o.objetivo.as_ref().and_then(|x| x.tipo.as_ref()) {
+                    Some(Tipo::EjercitoId(s)) => Objetivo::Ejercito(self.ejercito(s)?),
+                    Some(Tipo::CaravanaId(s)) => Objetivo::Caravana(self.caravana(s)?),
+                    None => return self.forma("la persecución no trae objetivo"),
+                };
+                Comando::Perseguir { heroe: self.heroe(&o.heroe_id)?, objetivo }
+            }
+            Cuerpo::DejarDePerseguir(o) => Comando::DejarDePerseguir { heroe: self.heroe(&o.heroe_id)? },
+            Cuerpo::Inspeccionar(o) => {
+                use pb::orden_inspeccionar::objetivo::Tipo;
+                let objetivo = match o.objetivo.as_ref().and_then(|x| x.tipo.as_ref()) {
+                    Some(Tipo::EjercitoId(s)) => Objetivo::Ejercito(self.ejercito(s)?),
+                    Some(Tipo::CaravanaId(s)) => Objetivo::Caravana(self.caravana(s)?),
+                    Some(Tipo::AsentamientoId(s)) => Objetivo::Asentamiento(self.plaza(s)?),
+                    None => return self.forma("la inspección no trae objetivo"),
+                };
+                Comando::Inspeccionar { heroe: self.heroe(&o.heroe_id)?, objetivo }
+            }
+            Cuerpo::Atacar(o) => {
+                use pb::orden_atacar::objetivo::Tipo;
+                let objetivo = match o.objetivo.as_ref().and_then(|x| x.tipo.as_ref()) {
+                    Some(Tipo::EjercitoId(s)) => ObjetivoAtaque::Ejercito(self.ejercito(s)?),
+                    Some(Tipo::CaravanaId(s)) => ObjetivoAtaque::Caravana(self.caravana(s)?),
+                    Some(Tipo::CampamentoId(s)) => ObjetivoAtaque::Campamento(self.bandidos(s)?),
+                    Some(Tipo::AsentamientoId(s)) => ObjetivoAtaque::Asentamiento(self.plaza(s)?),
+                    Some(Tipo::PuebloId(s)) => ObjetivoAtaque::Pueblo(self.pueblo(s)?),
+                    Some(Tipo::AvanzadaId(s)) => ObjetivoAtaque::Avanzada(self.avanzada(s)?),
+                    None => return self.forma("el ataque no trae objetivo"),
+                };
+                Comando::Atacar { heroe: self.heroe(&o.heroe_id)?, objetivo, declara_guerra: o.declara_guerra.unwrap_or(false) }
+            }
+            Cuerpo::UnirseABatalla(o) => Comando::UnirseABatalla {
+                heroe: self.heroe(&o.heroe_id)?,
+                batalla: self.batalla(&o.battle_id)?,
+                lado: o.lado.as_deref().map(|l| self.lado(l)).transpose()?,
+                escuadras: self.escuadras(&o.escuadron_ids)?,
+            },
+            Cuerpo::CancelarBatalla(o) => Comando::CancelarBatalla { heroe: self.mi_heroe()?, batalla: self.batalla(&o.battle_id)? },
+            Cuerpo::BajarseDeBatalla(o) => Comando::BajarseDeBatalla { heroe: self.mi_heroe()?, batalla: self.batalla(&o.battle_id)? },
+            Cuerpo::ElegirEscuadrasDeBatalla(o) => Comando::ElegirEscuadrasDeBatalla { heroe: self.mi_heroe()?, batalla: self.batalla(&o.battle_id)?, escuadras: self.escuadras(&o.escuadron_ids)? },
+
+            // ── Avanzadas ──
+            Cuerpo::ColocarAvanzada(o) => Comando::ColocarAvanzada { asentamiento: self.plaza(&o.asentamiento_id)?, heroe: self.heroe(&o.heroe_id)?, posicion: self.punto(o.posicion.as_ref())? },
+            Cuerpo::EntregarEnObra(o) => {
+                // `materiales` se ignora: el núcleo entrega lo que falta, hasta lo que lleve la columna y sus caravanas adjuntas.
+                let ejercito = self.columna(self.heroe(&o.heroe_id)?)?;
+                match self.obra(&o.obra_id)? {
+                    (Obra::Pueblo, pueblo) => Comando::EntregarMateriales { ejercito, pueblo },
+                    (Obra::Avanzada, avanzada) => Comando::EntregarMaterialesAAvanzada { ejercito, avanzada },
+                }
+            }
+            Cuerpo::CancelarObra(o) => {
+                let heroe = self.heroe(&o.heroe_id)?;
+                match self.obra(&o.obra_id)? {
+                    (Obra::Avanzada, avanzada) => Comando::CancelarObraDeAvanzada { heroe, avanzada },
+                    // La obra de un pueblo ya tiene su orden (`destruir_pueblo`, que además lo derriba una vez levantado): aquí se rechaza en vez de duplicarla.
+                    (Obra::Pueblo, _) => return Err(self.no(rechazos::OBJETIVO_NO_SOPORTADO, "la obra de un pueblo se cancela con destruir_pueblo")),
+                }
+            }
+            Cuerpo::MejorarAvanzada(o) => Comando::MejorarAvanzada { heroe: self.heroe(&o.heroe_id)?, avanzada: self.avanzada(&o.avanzada_id)? },
+            Cuerpo::RepararAvanzada(o) => Comando::RepararAvanzada { heroe: self.heroe(&o.heroe_id)?, avanzada: self.avanzada(&o.avanzada_id)? },
+            Cuerpo::DestruirAvanzada(o) => Comando::DestruirAvanzada { heroe: self.heroe(&o.heroe_id)?, avanzada: self.avanzada(&o.avanzada_id)? },
+            Cuerpo::ElegirTropaDeAvanzada(o) => Comando::ElegirTropaDeAvanzada { heroe: self.heroe(&o.heroe_id)?, avanzada: self.avanzada(&o.avanzada_id)?, tropa: self.tropa(&o.tropa_id)? },
+            Cuerpo::GuarnecerAvanzada(o) => Comando::GuarnecerAvanzada { heroe: self.heroe(&o.heroe_id)?, avanzada: self.avanzada(&o.avanzada_id)?, escuadras: self.escuadras(&o.escuadron_ids)? },
+            Cuerpo::RetirarDeAvanzada(o) => Comando::RetirarDeAvanzada { heroe: self.heroe(&o.heroe_id)?, avanzada: self.avanzada(&o.avanzada_id)?, escuadras: self.escuadras(&o.escuadron_ids)? },
+            Cuerpo::DepositarEnAvanzada(o) => {
+                Comando::DepositarEnAvanzada { ejercito: self.ejercito(&o.ejercito_id)?, avanzada: self.avanzada(&o.avanzada_id)?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad }
+            }
+            Cuerpo::EntrarEnAvanzada(o) => Comando::EntrarEnAvanzada { avanzada: self.avanzada(&o.avanzada_id)?, heroe: self.heroe(&o.heroe_id)? },
+            Cuerpo::SalirDeAvanzada(o) => Comando::SalirDeAvanzada { avanzada: self.avanzada(&o.avanzada_id)?, heroe: self.heroe(&o.heroe_id)? },
+
+            // ── Acceso y murallas ──
+            Cuerpo::FijarPuerta(o) => {
+                // `cerrada_a` son los grupos a los que se cierra (los vasallos y los señores van con los aliados); repetidos, una vez.
+                let grupos = o.cerrada_a.iter().map(|g| politica::Grupo::desde_nombre(g).map_or_else(|| self.forma(format!("grupo de la puerta desconocido: {g}")), Ok)).collect::<R<Vec<_>>>()?;
+                Comando::FijarPuerta { heroe: self.heroe(&o.heroe_id)?, asentamiento: self.plaza(&o.asentamiento_id)?, cerrada_a: politica::Grupos::de(grupos) }
+            }
+            Cuerpo::VetarJugador(o) => Comando::VetarJugador { heroe: self.heroe(&o.heroe_id)?, asentamiento: self.plaza(&o.asentamiento_id)?, vetado: self.heroe(&o.vetado_id)?, vetar: o.vetar },
+            Cuerpo::AsignarCargoLocal(o) => Comando::AsignarCargoLocal { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, cargo: self.cargo(&o.cargo)?, designado: self.heroe(&o.heroe_id)? },
+            Cuerpo::ComprometerRecinto(o) => {
+                let nivel = o.nivel.parse::<u8>().map_or_else(|_| self.forma(format!("nivel de recinto desconocido: {}", o.nivel)), Ok)?;
+                Comando::ComprometerRecinto { asentamiento: self.plaza(&o.asentamiento_id)?, cargo: self.cargo(&o.cargo)?, nivel }
+            }
+            Cuerpo::MejorarRecinto(o) => {
+                let plaza = self.plaza(&o.asentamiento_id)?;
+                Comando::MejorarRecinto { asentamiento: plaza, cargo: self.cargo(&o.cargo)?, recinto: self.recinto(plaza, &o.recinto_id)? }
+            }
+            Cuerpo::AbandonarRecinto(o) => {
+                let plaza = self.plaza(&o.asentamiento_id)?;
+                Comando::AbandonarRecinto { asentamiento: plaza, recinto: self.recinto(plaza, &o.recinto_id)? }
+            }
+
+            // ── Economía y construcción de una plaza ──
+            // El `cargo` de las órdenes de obras (Gobernador o Maestro de Obras) no viaja al núcleo: la matriz (5E) acepta al titular de cualquiera de los dos, residente y dentro; el de
+            // activar una política y el de las murallas, sí (la matriz comprueba que sea el titular de ese cargo y la orden, que sirva para lo que pide).
+            Cuerpo::AnadirEdificioManualmente(o) => {
+                let tipo = Tipo::desde_nombre(&o.tipo).map_or_else(|| self.forma(format!("tipo de edificio desconocido: {}", o.tipo)), Ok)?;
+                Comando::AnadirEdificio { asentamiento: self.plaza(&o.asentamiento_id)?, tipo }
+            }
+            Cuerpo::QuitarDeCola(o) => {
+                let plaza = self.plaza(&o.asentamiento_id)?;
+                Comando::QuitarDeCola { asentamiento: plaza, edificio: self.edificio(plaza, &o.edificio_id)? }
+            }
+            Cuerpo::CancelarConstruccion(o) => {
+                let plaza = self.plaza(&o.asentamiento_id)?;
+                Comando::CancelarConstruccion { asentamiento: plaza, edificio: self.edificio(plaza, &o.edificio_id)? }
+            }
+            Cuerpo::MoverEnCola(o) => {
+                let plaza = self.plaza(&o.asentamiento_id)?;
+                let arriba = match o.direccion.as_str() {
+                    "arriba" => true,
+                    "abajo" => false,
+                    otra => return self.forma(format!("dirección de la cola desconocida: {otra}")),
+                };
+                Comando::MoverEnCola { asentamiento: plaza, edificio: self.edificio(plaza, &o.edificio_id)?, arriba }
+            }
+            Cuerpo::MejorarEdificioAhora(o) => {
+                let plaza = self.plaza(&o.asentamiento_id)?;
+                Comando::MejorarEdificio { asentamiento: plaza, edificio: self.edificio(plaza, &o.edificio_id)? }
+            }
+            Cuerpo::AsignarBuey(o) => {
+                let plaza = self.plaza(&o.asentamiento_id)?;
+                Comando::AsignarBuey { asentamiento: plaza, edificio: self.edificio(plaza, &o.edificio_id)? }
+            }
+            Cuerpo::ElegirReceta(o) => {
+                let plaza = self.plaza(&o.asentamiento_id)?;
+                Comando::ElegirReceta { asentamiento: plaza, edificio: self.edificio(plaza, &o.edificio_id)?, insumo: self.recurso(&o.insumo)? }
+            }
+            Cuerpo::AlternarAutoConstruccion(o) => Comando::AlternarAutoConstruccion { asentamiento: self.plaza(&o.asentamiento_id)?, pausada: o.pausada },
+            Cuerpo::AlternarReceta(o) => Comando::AlternarReceta { asentamiento: self.plaza(&o.asentamiento_id)?, recurso: self.recurso(&o.recurso)?, pausada: o.pausada },
+            Cuerpo::PausarConsumo(o) => Comando::PausarConsumo { asentamiento: self.plaza(&o.asentamiento_id)?, recurso: self.recurso(&o.recurso)?, pausado: o.pausado },
+            Cuerpo::CalibrarReservaManual(o) => Comando::CalibrarReserva { asentamiento: self.plaza(&o.asentamiento_id)?, recurso: self.recurso(&o.recurso)?, valor: o.valor },
+            Cuerpo::SolicitarAscenso(o) => Comando::SolicitarAscenso { asentamiento: self.plaza(&o.asentamiento_id)? },
+            Cuerpo::ActivarPolitica(o) => Comando::ActivarPolitica { asentamiento: self.plaza(&o.asentamiento_id)?, politica: o.politica_id.clone(), cargo: self.cargo(&o.cargo)? },
+
+            // ── Comercio ──
+            Cuerpo::ProponerTrueque(o) => {
+                let lineas_a = o.lineas_a.iter().map(|l| Ok((self.recurso(&l.recurso)?, l.cantidad))).collect::<R<_>>()?;
+                let lineas_b = o.lineas_b.iter().map(|l| Ok((self.recurso(&l.recurso)?, l.cantidad))).collect::<R<_>>()?;
+                Comando::ProponerTrueque { a: self.plaza(&o.asentamiento_a_id)?, b: self.plaza(&o.asentamiento_b_id)?, lineas_a, lineas_b }
+            }
+            Cuerpo::AceptarTrueque(o) => Comando::AceptarTrueque { acuerdo: self.acuerdo(&o.acuerdo_id)? },
+            Cuerpo::RechazarTrueque(o) => Comando::RechazarTrueque { acuerdo: self.acuerdo(&o.acuerdo_id)? },
+            Cuerpo::ColocarOrdenMercado(o) => {
+                let venta = match o.tipo.as_str() {
+                    "venta" => true,
+                    "compra" => false,
+                    otro => return self.forma(format!("tipo de orden de mercado desconocido: {otro}")),
+                };
+                Comando::ColocarOrdenMercado { asentamiento: self.plaza(&o.asentamiento_id)?, venta, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad, precio: o.precio }
+            }
+            Cuerpo::CancelarOrdenMercado(o) => Comando::CancelarOrdenMercado { orden: self.orden_de_mercado(&o.orden_id)? },
+            Cuerpo::ComerciarEnPlaza(o) => Comando::ComerciarEnPlaza { ejercito: self.columna(self.heroe(&o.heroe_id)?)?, orden: self.orden_de_mercado(&o.orden_id)?, cantidad: o.cantidad },
+            Cuerpo::CrearCaravana(o) => Comando::CrearCaravana { asentamiento: self.plaza(&o.asentamiento_id)? },
+            Cuerpo::AgregarCarroCaravana(o) => {
+                let tipo = match o.tipo_carro.as_str() {
+                    "basico" => TipoCarro::Basico,
+                    "reforzado" => TipoCarro::Reforzado,
+                    otro => return self.forma(format!("tipo de carro desconocido: {otro}")),
+                };
+                Comando::AnadirCarro { caravana: self.caravana(&o.caravana_id)?, tipo }
+            }
+            Cuerpo::ComprarAnimalCaravana(o) => {
+                let animal = match o.tipo_animal.as_str() {
+                    "buey" => Animal::Buey,
+                    "caballo" => Animal::Caballo,
+                    "camello" => Animal::Camello,
+                    otro => return self.forma(format!("animal desconocido: {otro}")),
+                };
+                Comando::AnadirAnimal { caravana: self.caravana(&o.caravana_id)?, carro: self.entero_u32(o.carro_indice, "índice de carro")?, animal }
+            }
+            Cuerpo::MoverCarroCaravana(o) => {
+                Comando::MoverCarro { de: self.caravana(&o.desde_caravana_id)?, a: self.caravana(&o.hacia_caravana_id)?, carro: self.entero_u32(o.carro_indice, "índice de carro")? }
+            }
+            Cuerpo::ReservarCaravana(o) => Comando::ReservarCaravana { caravana: self.caravana(&o.caravana_id)?, reservada: o.reservada },
+            Cuerpo::RenombrarCaravana(o) => Comando::RenombrarCaravana { caravana: self.caravana(&o.caravana_id)?, nombre: o.nombre.clone() },
+            Cuerpo::PrepararCaravana(o) => {
+                // La escolta puede cederse en el mismo lanzamiento (como `asignar_escolta`, con `heroe_id` como quien cede); sin escuadras, no hay escolta nueva.
+                let escolta = if o.escolta_escuadron_ids.is_empty() { None } else { Some((self.heroe(&o.heroe_id)?, self.escuadras(&o.escolta_escuadron_ids)?)) };
+                Comando::PrepararCaravana { caravana: self.caravana(&o.caravana_id)?, destino: self.plaza(&o.destino_asentamiento_id)?, carga: self.cantidades(o.carga.as_ref())?, salir_en: o.salir_en, escolta }
+            }
+            Cuerpo::CancelarCaravana(o) => Comando::CancelarCaravana { caravana: self.caravana(&o.caravana_id)? },
+            Cuerpo::MoverCargaCaravanaAparcada(o) => {
+                let cargar = match o.sentido.as_str() {
+                    "cargar" => true,
+                    "descargar" => false,
+                    otro => return self.forma(format!("sentido desconocido: {otro}")),
+                };
+                Comando::MoverCargaAparcada { caravana: self.caravana(&o.caravana_id)?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad, cargar }
+            }
+            Cuerpo::EnviarCaravanaAlOrigen(o) => Comando::EnviarCaravanaAlOrigen { caravana: self.caravana(&o.caravana_id)? },
+            Cuerpo::EntregarDeCaravana(o) => Comando::EntregarDeCaravana { ejercito: self.ejercito(&o.ejercito_id)?, caravana: self.caravana(&o.caravana_id)?, acuerdo: self.acuerdo(&o.acuerdo_id)? },
+            Cuerpo::AdjuntarCaravana(o) => Comando::AdjuntarCaravana { caravana: self.caravana(&o.caravana_id)?, ejercito: self.ejercito(&o.ejercito_id)? },
+            Cuerpo::AparcarCaravana(o) => Comando::AparcarCaravana { caravana: self.caravana(&o.caravana_id)?, asentamiento: self.plaza(&o.asentamiento_id)? },
+            Cuerpo::EncargarCaravana(o) => Comando::EncargarCaravana {
+                caravana: self.caravana(&o.caravana_id)?,
+                destino: self.plaza(&o.destino_asentamiento_id)?,
+                modo: self.modo_de_encargo(&o.modo)?,
+                salir_en: o.salir_en_ms,
+                en_origen: self.parada(o.parada_origen.as_ref())?,
+                en_destino: self.parada(o.parada_destino.as_ref())?,
+            },
+            Cuerpo::CambiarEncargo(o) => Comando::CambiarEncargo {
+                caravana: self.caravana(&o.caravana_id)?,
+                destino: self.plaza(&o.destino_asentamiento_id)?,
+                salir_en: o.salir_en_ms,
+                en_origen: self.parada(o.parada_origen.as_ref())?,
+                en_destino: self.parada(o.parada_destino.as_ref())?,
+            },
+            Cuerpo::CancelarEncargo(o) => Comando::CancelarEncargo { caravana: self.caravana(&o.caravana_id)? },
+            Cuerpo::DetenerEncargo(o) => Comando::DetenerEncargo { caravana: self.caravana(&o.caravana_id)? },
+            Cuerpo::TomarOrdenADistancia(o) => Comando::TomarOrdenADistancia { asentamiento: self.plaza(&o.asentamiento_id)?, orden: self.orden_de_mercado(&o.orden_id)?, cantidad: o.cantidad },
+
+            // ── Pueblos extractores ──
+            Cuerpo::MarcarPueblo(o) => Comando::MarcarPueblo { asentamiento: self.plaza(&o.asentamiento_id)?, nodo: self.nodo(&o.nodo_id)? },
+            Cuerpo::DestruirPueblo(o) => Comando::DestruirPueblo { pueblo: self.pueblo(&o.pueblo_id)? },
+            Cuerpo::ReponerCarroDeAcarreo(o) => Comando::ReponerCarro { pueblo: self.pueblo(&o.pueblo_id)? },
+            Cuerpo::MarcarAldea(o) => Comando::MarcarAldea { asentamiento: self.plaza(&o.asentamiento_id)?, punto: self.punto(o.punto.as_ref())?, cultivo: self.cultivo(o.cultivo.as_deref())? },
+            Cuerpo::MejorarAldea(o) => Comando::MejorarAldea { pueblo: self.pueblo(&o.pueblo_id)? },
+            Cuerpo::EntrarEnPueblo(o) => Comando::EntrarEnPueblo { pueblo: self.pueblo(&o.pueblo_id)?, heroe: self.heroe(&o.heroe_id)? },
+            Cuerpo::SalirDePueblo(o) => Comando::SalirDePueblo { pueblo: self.pueblo(&o.pueblo_id)?, heroe: self.heroe(&o.heroe_id)? },
+            Cuerpo::VaciarCarro(o) => Comando::VaciarCarro { heroe: self.heroe(&o.heroe_id)? },
+
+            // ── Administración ──
+            Cuerpo::Administracion(o) => {
+                if !admin {
+                    return Err(self.no(rechazos::NO_AUTORIZADO, "solo una sesión de administración da órdenes de administración"));
+                }
+                self.administracion(&o.codigo, o.parametros.as_ref().unwrap_or(&Struct::default()))?
+            }
+
+            // ── La Facción, la ciudadanía y la residencia (sistema 5, 5B) ──
+            Cuerpo::CrearFaccion(o) => Comando::CrearFaccion { heroe: self.mi_heroe()?, nombre: o.nombre.clone(), sigilo: o.sigilo.as_ref().map(sigilo) },
+            Cuerpo::SolicitarIngreso(o) => Comando::SolicitarIngreso { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)? },
+            Cuerpo::DejarFaccion(_) => Comando::DejarFaccion { heroe: self.mi_heroe()? },
+            Cuerpo::ResponderSolicitud(o) => Comando::ResponderSolicitud { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, solicitante: self.heroe(&o.heroe_id)?, aceptar: o.aceptar },
+            Cuerpo::AsignarRey(o) => Comando::AsignarRey { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, designado: self.heroe(&o.heroe_id)? },
+            Cuerpo::AsignarEmbajador(o) => Comando::AsignarEmbajador { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, designado: self.heroe(&o.heroe_id)? },
+            Cuerpo::CambiarResidencia(o) => Comando::CambiarResidencia { heroe: self.heroe(&o.heroe_id)?, asentamiento: self.plaza(&o.destino_id)? },
+            Cuerpo::ResidirEnCampamento(o) => Comando::ResidirEnCampamento { heroe: self.heroe(&o.heroe_id)?, campamento: self.campamento(&o.campamento_id)? },
+            Cuerpo::DejarResidencia(o) => Comando::DejarResidencia { heroe: self.heroe(&o.heroe_id)? },
+            // ── La capital y el nombre de la plaza (5C) ──
+            Cuerpo::DesignarCapital(o) => Comando::DesignarCapital { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, asentamiento: self.plaza(&o.asentamiento_id)? },
+            Cuerpo::RenombrarAsentamiento(o) => Comando::RenombrarAsentamiento { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, nombre: o.nombre.clone() },
+
+            // ── Las relaciones entre Facciones (5D) ──
+            Cuerpo::ProponerRelacion(o) => {
+                let vasallaje = match o.tipo.as_str() {
+                    "alianza" => false,
+                    "vasallaje" => true,
+                    otro => return self.forma(format!("una propuesta es de alianza o de vasallaje, no «{otro}»")),
+                };
+                // Sin tributo, trigo a 0 (`proponerRelacion` sin `tributo`); con uno de los dos campos, el otro toma su valor por defecto.
+                let tributo = match (o.tributo_recurso.as_deref(), o.tributo_cantidad) {
+                    (None, None) => None,
+                    (r, n) => Some((r.map_or(Ok(Recurso::Trigo), |r| self.recurso(r))?, n.unwrap_or(0))),
+                };
+                Comando::ProponerRelacion { heroe: self.mi_heroe()?, a: self.faccion(&o.faccion_a_id)?, b: self.faccion(&o.faccion_b_id)?, vasallaje, tributo }
+            }
+            Cuerpo::ResponderRelacion(o) => Comando::ResponderRelacion { heroe: self.mi_heroe()?, propuesta: self.propuesta(&o.propuesta_id)?, aceptar: o.aceptar },
+            Cuerpo::RetirarRelacion(o) => Comando::RetirarRelacion { heroe: self.mi_heroe()?, propuesta: self.propuesta(&o.propuesta_id)? },
+            Cuerpo::DeclararGuerra(o) => Comando::DeclararGuerra { heroe: self.mi_heroe()?, a: self.faccion(&o.faccion_a_id)?, b: self.faccion(&o.faccion_b_id)? },
+            Cuerpo::ProponerPaz(o) => Comando::ProponerPaz { heroe: self.mi_heroe()?, relacion: self.relacion(&o.relacion_id)?, faccion: self.faccion(&o.faccion_id)? },
+            Cuerpo::RomperRelacion(o) => Comando::RomperRelacion { heroe: self.mi_heroe()?, relacion: self.relacion(&o.relacion_id)?, iniciador: self.faccion(&o.iniciador_faccion_id)? },
+            Cuerpo::RebelionVasallo(o) => Comando::RebelionVasallo { heroe: self.mi_heroe()?, relacion: self.relacion(&o.relacion_id)? },
+            Cuerpo::AdmitirOtrasFacciones(o) => Comando::AdmitirOtrasFacciones { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, admitir: o.admitir },
+            Cuerpo::AlternarReabastecerAliados(o) => Comando::AlternarReabastecerAliados { asentamiento: self.plaza(&o.asentamiento_id)?, permitido: o.permitido },
+
+            // ── La anexión y la fusión (5F) ──
+            Cuerpo::ProponerAnexion(o) => Comando::ProponerAnexion { heroe: self.mi_heroe()?, absorbente: self.faccion(&o.faccion_a_id)?, absorbida: self.faccion(&o.faccion_b_id)? },
+            Cuerpo::ResponderAnexion(o) => Comando::ResponderAnexion { heroe: self.mi_heroe()?, propuesta: self.propuesta(&o.propuesta_id)?, aceptar: o.aceptar },
+            Cuerpo::RetirarAnexion(o) => Comando::RetirarAnexion { heroe: self.mi_heroe()?, propuesta: self.propuesta(&o.propuesta_id)? },
+            Cuerpo::ProponerFusion(o) => Comando::ProponerFusion {
+                heroe: self.mi_heroe()?,
+                a: self.faccion(&o.faccion_a_id)?,
+                b: self.faccion(&o.faccion_b_id)?,
+                nombre: o.nuevo_nombre.clone(),
+                rey: self.heroe(&o.nuevo_rey_id)?,
+            },
+            Cuerpo::ResponderFusion(o) => Comando::ResponderFusion { heroe: self.mi_heroe()?, propuesta: self.propuesta(&o.propuesta_id)?, aceptar: o.aceptar },
+            Cuerpo::RetirarFusion(o) => Comando::RetirarFusion { heroe: self.mi_heroe()?, propuesta: self.propuesta(&o.propuesta_id)? },
+
+            // ── La tecnología, los Aedas y los alijos (sistema 6) ──
+            Cuerpo::ComprarTecnologiaAeda(o) => Comando::ComprarTecnologiaAeda { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, tecnologia: self.tecnologia(&o.tecnologia_id)? },
+            Cuerpo::EmpezarEpica(o) => Comando::EmpezarEpica { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, aeda: self.aeda_residente(&o.aeda_id)?, tecnologia: self.tecnologia(&o.tecnologia_id)? },
+            Cuerpo::AbandonarEpica(o) => Comando::AbandonarEpica { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, aeda: self.aeda_residente(&o.aeda_id)? },
+            Cuerpo::AdoptarTecnologia(o) => Comando::AdoptarTecnologia { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, tecnologia: self.tecnologia(&o.tecnologia_id)? },
+            Cuerpo::AbrirAlijo(o) => Comando::AbrirAlijo { heroe: self.mi_heroe()?, alijo: self.alijo(&o.alijo_id)? },
+            Cuerpo::ReclamarRecompensa(o) => Comando::ReclamarRecompensa { heroe: self.mi_heroe()?, dueno: self.dueno_de_mision(&o.dueno_id)?, mision: o.mision_id.clone() },
+            Cuerpo::AceptarMision(o) => Comando::AceptarMision { heroe: self.mi_heroe()?, dueno: self.dueno_de_mision(&o.dueno_id)?, mision: o.mision_id.clone() },
+            Cuerpo::GuarnecerPueblo(o) => Comando::GuarnecerPueblo { heroe: self.mi_heroe()?, pueblo: self.pueblo(&o.pueblo_id)?, escuadras: self.escuadras(&o.escuadron_ids)? },
+            Cuerpo::RetirarDePueblo(o) => Comando::RetirarDePueblo { heroe: self.mi_heroe()?, pueblo: self.pueblo(&o.pueblo_id)?, escuadras: self.escuadras(&o.escuadron_ids)? },
+            Cuerpo::CargarDePueblo(o) => Comando::CargarDePueblo { heroe: self.mi_heroe()?, pueblo: self.pueblo(&o.pueblo_id)?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad },
+            Cuerpo::DejarEnPueblo(o) => Comando::DejarEnPueblo { heroe: self.mi_heroe()?, pueblo: self.pueblo(&o.pueblo_id)?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad },
+            Cuerpo::CargarDePlaza(o) => Comando::CargarDePlaza { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad },
+            Cuerpo::DejarEnPlaza(o) => Comando::DejarEnPlaza { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad },
+            Cuerpo::CerrarAlmacenACiudadanos(o) => Comando::CerrarAlmacenACiudadanos { asentamiento: self.plaza(&o.asentamiento_id)?, cerrado: o.cerrado },
+            Cuerpo::CerrarReclutamientoACiudadanos(o) => Comando::CerrarReclutamientoACiudadanos { asentamiento: self.plaza(&o.asentamiento_id)?, cerrado: o.cerrado },
+
+            // ── Mercenarios por contrato (entrada 48) ──
+            Cuerpo::OfrecerseComoMercenario(_) => Comando::OfrecerseComoMercenario { heroe: self.mi_heroe()? },
+            Cuerpo::RetirarOferta(_) => Comando::RetirarOferta { heroe: self.mi_heroe()? },
+            Cuerpo::ContratarMercenario(o) => Comando::ContratarMercenario {
+                heroe: self.mi_heroe()?,
+                mercenario: self.heroe(&o.mercenario_id)?,
+                trabajo: self.trabajo(&o.trabajo)?,
+                objetivo: self.objetivo_mercenario(o.objetivo.as_ref())?,
+                plazo: o.plazo_dias.map(|n| self.dias(n)).transpose()?,
+                residencia: o.residencia_asentamiento_id.as_deref().map(|s| self.plaza(s)).transpose()?,
+                pagar_con: self.pagar_con_de_contrato(o.pagar_con.as_deref())?,
+            },
+            Cuerpo::ProrrogarContrato(o) => Comando::ProrrogarContrato {
+                heroe: self.mi_heroe()?,
+                mercenario: self.heroe(&o.mercenario_id)?,
+                plazo: self.dias(o.plazo_dias)?,
+                pagar_con: self.pagar_con_de_contrato(o.pagar_con.as_deref())?,
+            },
+            Cuerpo::OrdenarMercenario(o) => Comando::OrdenarMercenario {
+                heroe: self.mi_heroe()?,
+                mercenarios: o.mercenario_ids.iter().map(|s| self.heroe(s)).collect::<R<_>>()?,
+                tipo: self.tipo_de_orden(&o.tipo)?,
+                objetivo: self.objetivo_mercenario(o.objetivo.as_ref())?,
+            },
+            Cuerpo::MudarMercenario(o) => Comando::MudarMercenario { heroe: self.mi_heroe()?, mercenario: self.heroe(&o.mercenario_id)?, plaza: self.plaza(&o.asentamiento_id)? },
+            Cuerpo::DespedirMercenario(o) => Comando::DespedirMercenario { heroe: self.mi_heroe()?, mercenario: self.heroe(&o.mercenario_id)? },
+            Cuerpo::ValorarMercenario(o) => Comando::ValorarMercenario { heroe: self.mi_heroe()?, mercenario: self.heroe(&o.mercenario_id)?, buena: o.buena },
+            Cuerpo::ReclamarPremioDeRango(o) => Comando::ReclamarPremioDeRango { heroe: self.mi_heroe()?, tropa: self.tropa(&o.tropa_id)? },
+            Cuerpo::ElegirTablon(o) => Comando::ElegirTablon { heroe: self.mi_heroe()?, dueno: self.dueno_de_mision(&o.dueno_id)?, diarias: o.diarias_ids.clone(), semanales: o.semanales_ids.clone() },
+            Cuerpo::ComprarMirada(o) => Comando::ComprarMirada { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, centro: self.punto(o.centro.as_ref())? },
+            Cuerpo::ComprarRumor(o) => Comando::ComprarRumor { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, tipo: self.tipo_de_rumor(&o.tipo)? },
+            Cuerpo::ComprarInformeRegion(o) => Comando::ComprarInformeRegion { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.asentamiento_id)?, tipo: self.tipo_de_informe_region(&o.tipo)? },
+            Cuerpo::ComprarInformePlaza(o) => {
+                Comando::ComprarInformePlaza { heroe: self.mi_heroe()?, origen: self.origen_de_intel(o.origen.as_ref().map(|x| (x.tipo.as_str(), x.id.as_str())))?, asentamiento: self.plaza(&o.asentamiento_id)? }
+            }
+
+            // ── Refundación y Caravana de Fundación (5G-b) ──
+            Cuerpo::AportarARefundacion(o) => Comando::AportarARefundacion { heroe: self.mi_heroe()?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad, lado: self.lado_del_fondo(&o.lado)? },
+            Cuerpo::RetirarDeRefundacion(o) => Comando::RetirarDeRefundacion { heroe: self.mi_heroe()?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad, lado: self.lado_del_fondo(&o.lado)? },
+            Cuerpo::ComprarCaravanaDeRefundacion(_) => Comando::ComprarCaravanaDeRefundacion { heroe: self.mi_heroe()? },
+            Cuerpo::LanzarCaravanaFundacion(o) => Comando::LanzarCaravanaFundacion { heroe: self.mi_heroe()?, asentamiento: self.plaza(&o.origen_asentamiento_id)? },
+            Cuerpo::DesarmarCaravanaFundacion(o) => Comando::DesarmarCaravanaFundacion { heroe: self.mi_heroe()?, caravana: self.caravana(&o.caravana_id)? },
+
+            // ── Almacén personal y caravanas a mano (5G-a) ──
+            Cuerpo::GuardarEnAlmacenPersonal(o) => Comando::GuardarEnAlmacenPersonal { heroe: self.mi_heroe()?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad },
+            Cuerpo::SacarDelAlmacenPersonal(o) => Comando::SacarDelAlmacenPersonal { heroe: self.mi_heroe()?, recurso: self.recurso(&o.recurso)?, cantidad: o.cantidad },
+            Cuerpo::CargarCaravana(o) => Comando::CargarCaravana {
+                ejercito: self.ejercito(&o.ejercito_id)?,
+                caravana: self.caravana(&o.caravana_id)?,
+                asentamiento: self.plaza(&o.asentamiento_id)?,
+                recurso: self.recurso(&o.recurso)?,
+                cantidad: o.cantidad,
+            },
+            Cuerpo::ReclamarCaravana(o) => {
+                Comando::ReclamarCaravana { heroe: self.heroe(&o.heroe_id)?, caravana: self.caravana(&o.caravana_id)?, politica: self.politica_o_rechazar(o.politica_de_union.as_deref())? }
+            }
+            Cuerpo::SoltarCaravana(o) => Comando::SoltarCaravana { ejercito: self.ejercito(&o.ejercito_id)?, caravana: self.caravana(&o.caravana_id)?, heroe: self.heroe(&o.heroe_id)? },
+        })
+    }
+
+    /// El campamento de la orden o, si no lo dice, aquel en el que está el héroe.
+    fn campamento_o_el_del(&self, heroe: u64, id: Option<&str>) -> R<u32> {
+        match id {
+            Some(s) => self.campamento(s),
+            None => self.mundo.campamento_del_heroe(heroe).ok_or_else(|| self.no(rechazos::HEROE_NO_ESTA_EN_EL_CAMPAMENTO, "el héroe no está en ningún campamento")),
+        }
+    }
+
+    // ───────────────────────────── Administración ─────────────────────────────
+
+    fn campo<'p>(&self, p: &'p Struct, k: &str) -> R<&'p Kind> {
+        match p.fields.get(k).and_then(|v| v.kind.as_ref()) {
+            Some(Kind::NullValue(_)) | None => self.forma(format!("falta el parámetro «{k}»")),
+            Some(v) => Ok(v),
+        }
+    }
+
+    /// El parámetro opcional: ausente o nulo es `None`.
+    fn campo_opcional<'p>(&self, p: &'p Struct, k: &str) -> Option<&'p Kind> {
+        p.fields.get(k).and_then(|v| v.kind.as_ref()).filter(|v| !matches!(v, Kind::NullValue(_)))
+    }
+
+    fn texto<'p>(&self, p: &'p Struct, k: &str) -> R<&'p str> {
+        match self.campo(p, k)? {
+            Kind::StringValue(s) => Ok(s),
+            _ => self.forma(format!("«{k}» debe ser un texto")),
+        }
+    }
+
+    fn texto_opcional<'p>(&self, p: &'p Struct, k: &str) -> R<Option<&'p str>> {
+        match self.campo_opcional(p, k) {
+            None => Ok(None),
+            Some(Kind::StringValue(s)) => Ok(Some(s)),
+            Some(_) => self.forma(format!("«{k}» debe ser un texto")),
+        }
+    }
+
+    /// Un número entero (los `Struct` solo llevan `double`: exacto hasta 2⁵³).
+    fn entero(&self, p: &Struct, k: &str) -> R<i64> {
+        match self.campo(p, k)? {
+            Kind::NumberValue(n) if n.fract() == 0.0 && n.abs() <= 9_007_199_254_740_992.0 => Ok(*n as i64),
+            _ => self.forma(format!("«{k}» debe ser un entero")),
+        }
+    }
+
+    /// Un sí o no; sin el campo, no.
+    fn logico_opcional(&self, p: &Struct, k: &str) -> R<bool> {
+        match self.campo_opcional(p, k) {
+            None => Ok(false),
+            Some(Kind::BoolValue(b)) => Ok(*b),
+            Some(_) => self.forma(format!("«{k}» debe ser verdadero o falso")),
+        }
+    }
+
+    fn punto_de(&self, p: &Struct, k: &str) -> R<Punto> {
+        match self.campo(p, k)? {
+            Kind::StructValue(s) => Ok(Punto::new(self.entero(s, "x")?, self.entero(s, "y")?)),
+            _ => self.forma(format!("«{k}» debe ser un punto {{x, y}}")),
+        }
+    }
+
+    fn lista_de_textos(&self, p: &Struct, k: &str) -> R<Vec<String>> {
+        match self.campo(p, k)? {
+            Kind::ListValue(l) => l.values.iter().map(|v| if let Some(Kind::StringValue(s)) = &v.kind { Ok(s.clone()) } else { self.forma(format!("«{k}» debe ser una lista de textos")) }).collect(),
+            _ => self.forma(format!("«{k}» debe ser una lista de textos")),
+        }
+    }
+
+    /// La plaza, el campamento o la columna que nombra un id de texto, como sitio de un héroe.
+    fn sitio(&self, s: &str) -> R<Ubicacion> {
+        if let Some(a) = ids::parse_asentamiento(s) {
+            return u32::try_from(a).map_or_else(|_| self.forma(format!("sitio fuera de rango: {s}")), |a| Ok(Ubicacion::Asentamiento(a)));
+        }
+        if let Some(c) = ids::parse_campamento(s) {
+            return Ok(Ubicacion::Mercenarios(c));
+        }
+        ids::parse_ejercito(s).map_or_else(|| self.forma(format!("sitio desconocido: {s}")), |e| Ok(Ubicacion::Columna(e)))
+    }
+
+    /// Las órdenes de administración (`OrdenDeAdministracion.codigo`): una por comando de andamiaje del núcleo, con los ids del contrato y las cantidades en milésimas.
+    /// `Docs/Mechanics/Comandos_Parametros.md` lista los parámetros de cada una.
+    fn administracion(&self, codigo: &str, p: &Struct) -> R<Comando> {
+        let (t, n) = (|k| self.texto(p, k), |k| self.entero(p, k));
+        let heroe = || self.heroe(t("heroe_id")?);
+        let plaza = || self.plaza(t("asentamiento_id")?);
+        let ejercito = || self.ejercito(t("ejercito_id")?);
+        let recurso = || self.recurso(t("recurso")?);
+        Ok(match codigo {
+            "crear_ejercito" => Comando::CrearEjercito { cuenta: t("cuenta")?.into(), faccion: self.faccion(t("faccion_id")?)?, posicion: self.punto_de(p, "posicion")?, velocidad: n("velocidad")?, viveres: n("viveres")? },
+            "fijar_nivel_faccion" => Comando::FijarNivelFaccion { faccion: self.faccion(t("faccion_id")?)?, nivel: self.entero_u32(n("nivel")?, "nivel")? },
+            "dar_caravana_fundacion" => Comando::DarCaravanaFundacion { ejercito: ejercito()? },
+            "fijar_nivel_asentamiento" => Comando::FijarNivelAsentamiento { asentamiento: plaza()?, nivel: self.entero_u32(n("nivel")?, "nivel")? },
+            "agrandar_zona" => Comando::AgrandarZona { asentamiento: plaza()? },
+            "reclamar_parcela" => Comando::ReclamarParcela { asentamiento: plaza()? },
+            "soltar_parcela" => Comando::SoltarParcela { asentamiento: plaza()?, parcela: self.entero_u32(n("parcela")?, "parcela")? },
+            "dar_recursos" => Comando::DarRecursos { asentamiento: plaza()?, recurso: recurso()?, cantidad: n("cantidad")? },
+            "dar_suministro" => Comando::DarSuministro { ejercito: ejercito()?, recurso: recurso()?, cantidad: n("cantidad")? },
+            "dar_almacen_personal" => Comando::DarAlmacenPersonal { heroe: heroe()?, recurso: recurso()?, cantidad: n("cantidad")? },
+            "fijar_residencia" => {
+                let residencia = match self.sitio_opcional(p, "residencia")? {
+                    None => None,
+                    Some(Ubicacion::Asentamiento(a)) => Some(Residencia::Asentamiento(a)),
+                    Some(Ubicacion::Mercenarios(c)) => Some(Residencia::Campamento(c)),
+                    Some(_) => return self.forma("la residencia es una plaza o un campamento"),
+                };
+                Comando::FijarResidencia { heroe: heroe()?, residencia }
+            }
+            "fijar_tecnologias" => Comando::FijarTecnologias { faccion: self.faccion(t("faccion_id")?)?, tecnologias: self.lista_de_textos(p, "tecnologias")? },
+            "fijar_faccion_de_heroe" => Comando::FijarFaccionDeHeroe { heroe: heroe()?, faccion: self.texto_opcional(p, "faccion_id")?.map(|f| self.faccion(f)).transpose()? },
+            "colocar_heroe" => Comando::ColocarHeroe { heroe: heroe()?, ubicacion: self.sitio(t("ubicacion")?)? },
+            "herir_heroe" => Comando::HerirHeroe { heroe: heroe()? },
+            "fijar_relacion" => {
+                let relacion = match self.texto_opcional(p, "relacion")? {
+                    None => None,
+                    Some("alianza") => Some(Relacion::Alianza),
+                    Some("vasallaje") => Some(Relacion::Vasallaje),
+                    Some("guerra") => Some(Relacion::Guerra),
+                    Some(otra) => return self.forma(format!("relación desconocida: {otra}")),
+                };
+                Comando::FijarRelacion { a: self.faccion(t("faccion_a_id")?)?, b: self.faccion(t("faccion_b_id")?)?, relacion }
+            }
+            "colocar_bandidos" => Comando::ColocarBandidos { posicion: self.punto_de(p, "posicion")?, nivel: u8::try_from(n("nivel")?).map_or_else(|_| self.forma("nivel fuera de rango"), Ok)? },
+            "dar_escuadra" => Comando::DarEscuadra { heroe: heroe()?, tropa: self.tropa(t("tropa_id")?)?, cantidad: n("cantidad")? },
+            "dar_monedas" => Comando::DarMonedas { heroe: heroe()?, cantidad: n("cantidad")? },
+            "dar_fondo_monedas" => Comando::DarFondoMonedas { asentamiento: plaza()?, cantidad: n("cantidad")? },
+            "colocar_aeda" => Comando::ColocarAeda { asentamiento: plaza()?, residente: self.logico_opcional(p, "residente")? },
+            "fijar_controlador" => {
+                let controlador = match t("controlador")? {
+                    "humano" => Controlador::Humano,
+                    "bot" => Controlador::Bot,
+                    otro => return self.forma(format!("controlador desconocido: {otro}")),
+                };
+                Comando::FijarControlador { heroe: heroe()?, controlador }
+            }
+            "fijar_catalogo_misiones" => Comando::FijarCatalogoMisiones { catalogo: t("catalogo")?.to_owned() },
+            otro => return self.forma(format!("orden de administración desconocida: {otro}")),
+        })
+    }
+
+    fn sitio_opcional(&self, p: &Struct, k: &str) -> R<Option<Ubicacion>> {
+        self.texto_opcional(p, k)?.map(|s| self.sitio(s)).transpose()
+    }
+}
+
+#[cfg(test)]
+mod pruebas;

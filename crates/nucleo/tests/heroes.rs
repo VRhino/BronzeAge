@@ -1,0 +1,1653 @@
+//! Los héroes y su tropa en el núcleo (fase 4B-1, Heroe_Y_Tropa, Campamentos_Mercenarios, Presencia_Y_Convocatoria §7): crear al héroe, reclutar
+//! en una plaza y en un campamento, la tropa prestada, loadouts, guarnición con su ración, escolta de caravanas, herido, conectarse y
+//! desconectarse, la ruina de la plaza donde se reside, y determinismo y recuperación desde foto. Sobre el artefacto de mundo real
+//! (`generador/salida/mundo/mundo-*.bin`); las pruebas se omiten si no está.
+
+mod comun;
+use asentamiento::Recurso::{self, *};
+use base::{Instante, Punto, MS_POR_MINUTO};
+use militar::catalogo::Tropa;
+use militar::escuadra::Contenedor;
+use militar::heroe::{Controlador, Residencia};
+use militar::presencia::Ubicacion;
+use mundo::{Mundo, OpcionesValidacion};
+use nucleo::{rechazos, Ajustes, Arranque, Comando, Nucleo, PagarCon, Peticion, Reglas, Resultado, Respuesta};
+use rutas::Rutas;
+use std::sync::{Arc, OnceLock};
+use contrato::v1 as pb;
+
+const MIN: i64 = MS_POR_MINUTO;
+const HORA: i64 = 60 * MIN;
+
+type M = (Arc<Mundo>, Arc<Rutas>);
+
+fn mundo() -> Option<&'static M> {
+    static M: OnceLock<Option<M>> = OnceLock::new();
+    M.get_or_init(|| {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../generador/salida/mundo");
+        let f = std::fs::read_dir(dir).ok()?.flatten().find(|e| e.file_name().to_string_lossy().starts_with("mundo-"))?;
+        let m = Mundo::cargar(&std::fs::read(f.path()).ok()?, &OpcionesValidacion::default()).expect("artefacto válido");
+        let r = Arc::new(Rutas::desde_mundo(&m));
+        Some((Arc::new(m), r))
+    })
+    .as_ref()
+}
+
+macro_rules! con_mundo {
+    () => {
+        match mundo() {
+            Some(m) => m,
+            None => {
+                eprintln!("sin artefacto de mundo real: se omite");
+                return;
+            }
+        }
+    };
+}
+
+/// Las reglas por defecto sin acoso ni anillo de bandidos: estos tests miden otra cosa y se calibraron sin ellos (los de `combate.rs` miden los bandidos).
+fn sin_bandidos() -> Reglas {
+    let mut r = Reglas::default();
+    let b = &mut std::sync::Arc::make_mut(&mut r.economia.combate).bandidos;
+    (b.radio_ataque_caravana, b.anillo_minimo, b.anillo_maximo) = (0, 0, 0);
+    r
+}
+
+fn arranque(m: &M, semilla: u64) -> Arranque {
+    Arranque { reglas: sin_bandidos(), ajustes: Ajustes::default(), semilla, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) }
+}
+
+fn campamento(m: &Mundo, i: usize) -> Punto {
+    let p = m.campamentos()[i].posicion.unwrap();
+    Punto::new(p.x, p.y)
+}
+
+/// Un sitio verde con mucho bosque a 10 u cerca del campamento `i`: una plaza que no cae en ruinas por falta de madera.
+fn sitio_rico(n: &Nucleo, m: &Mundo, i: usize, faccion: u32) -> Punto {
+    let c = campamento(m, i);
+    for r in (0..8).map(|k| 50_000 + k * 10_000) {
+        for g in 0..360 {
+            let a = (g as f64).to_radians();
+            let p = Punto::new(c.x + (r as f64 * a.cos()) as i64, c.y + (r as f64 * a.sin()) as i64);
+            if n.viabilidad(p, faccion).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 3) {
+                return p;
+            }
+        }
+    }
+    panic!("sin sitio rico cerca del campamento {i}");
+}
+
+fn codigo(r: &Respuesta) -> &'static str {
+    match &r.resultado {
+        Resultado::Rechazada { codigo, .. } => codigo,
+        otro => panic!("se esperaba un rechazo: {otro:?}"),
+    }
+}
+
+type Hecho = (Instante, Vec<u64>, Vec<(&'static str, i64)>);
+
+/// Eventos en la cola salvo las citas de fin de obra, mejora, ascenso y política de las plazas, que nacen y se cumplen solas mientras el mundo avanza.
+/// Las citas de la cola sin las de las obras ni el plazo global de los títulos (5F: lo arma cualquier orden aceptada si no estaba armado).
+fn en_cola(n: &Nucleo) -> usize {
+    n.estado().cola.volcar().iter().filter(|e| !matches!(e.carga, nucleo::Carga::FinDeObras | nucleo::Carga::CaducaPolitica | nucleo::Carga::Titulos)).count()
+}
+
+fn hechos(n: &Nucleo, codigo: &str) -> Vec<Hecho> {
+    n.cambios_desde(0).unwrap().flat_map(|c| c.eventos.iter()).filter(|e| e.codigo == codigo).map(|e| (e.en, e.asentamientos.clone(), e.datos.clone())).collect()
+}
+
+fn dato(h: &Hecho, clave: &str) -> i64 {
+    h.2.iter().find(|(k, _)| *k == clave).unwrap_or_else(|| panic!("el hecho no lleva «{clave}»: {h:?}")).1
+}
+
+struct Escenario {
+    n: Nucleo,
+    /// La plaza de «ana» (Facción 1).
+    a: u64,
+    cuenta: u64,
+}
+
+impl Escenario {
+    fn peticion(&mut self, actor: &str, c: Comando) -> Peticion {
+        self.cuenta += 1;
+        let p = Peticion::nueva(actor, &format!("o{}", self.cuenta), c);
+        // Andamiaje (5E): una orden de plaza de quien mandaba en ella antes del sistema 5 se da como administración (`comun::mandaba`).
+        if actor == "admin" || comun::mandaba(&self.n, actor, &p.comando) {
+            p.de_admin()
+        } else {
+            p
+        }
+    }
+    fn ord(&mut self, actor: &str, c: Comando) -> Respuesta {
+        let (t, p) = (self.n.ahora(), self.peticion(actor, c));
+        self.n.aplicar_en(t, p)
+    }
+    fn ok(&mut self, actor: &str, c: Comando) -> Respuesta {
+        let r = self.ord(actor, c);
+        assert!(r.aceptada(), "{r:?}");
+        r
+    }
+    fn rechazada(&mut self, actor: &str, c: Comando) -> &'static str {
+        let r = self.ord(actor, c);
+        codigo(&r)
+    }
+    fn avanzar(&mut self, ms: i64) {
+        let t = self.n.ahora() + ms;
+        self.n.avanzar_hasta(t);
+    }
+    fn dar(&mut self, plaza: u64, recurso: Recurso, cantidad: i64) {
+        let r = self.ord("admin", Comando::DarRecursos { asentamiento: plaza, recurso, cantidad });
+        assert!(r.aceptada() || r.resultado == Resultado::SinCambios, "{r:?}");
+    }
+    fn almacen(&self, recurso: Recurso) -> i64 {
+        self.n.economia(self.a).unwrap().almacen.cantidad(recurso)
+    }
+    /// El héroe de la cuenta, nacido en el campamento `campamento`.
+    fn heroe(&mut self, cuenta: &str, campamento: u32) -> u64 {
+        self.ok(cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into(), aspecto: Default::default() }).creadas[0]
+    }
+    /// Un héroe de la cuenta ya ciudadano de la Facción 1, residente y presente en la plaza.
+    fn heroe_en_la_plaza(&mut self, cuenta: &str) -> u64 {
+        let h = self.heroe(cuenta, 0);
+        let a = self.a as u32;
+        self.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
+        self.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(a)) });
+        self.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(a) });
+        h
+    }
+}
+
+fn fundar(n: &mut Nucleo, t: Instante, nombre: &str, dueno: &str, faccion: u32, p: Punto) -> u64 {
+    let e = n.crear_ejercito(t, dueno, faccion, p, 500, 100_000).unwrap();
+    assert!(n.aplicar_en(t, Peticion::nueva("admin", &format!("c-{nombre}"), Comando::DarCaravanaFundacion { ejercito: e }).de_admin()).aceptada());
+    let r = n.aplicar_en(t, Peticion::nueva(dueno, &format!("f-{nombre}"), Comando::Fundar { ejercito: e }));
+    assert!(r.aceptada(), "{r:?}");
+    r.creadas[0]
+}
+
+fn escenario(m: &M, semilla: u64) -> Escenario {
+    escenario_sobre(m, arranque(m, semilla))
+}
+
+/// Como [`escenario`], con los héroes nacidos con el Liderazgo del tope (`comun::con_liderazgo_de_tope`), para las pruebas que sacan más tropa de la que cabe en 14.
+fn escenario_de_tope(m: &M, semilla: u64) -> Escenario {
+    let a = arranque(m, semilla);
+    escenario_sobre(m, Arranque { reglas: comun::con_liderazgo_de_tope(a.reglas.clone()), ..a })
+}
+
+fn escenario_sobre(m: &M, a: Arranque) -> Escenario {
+    let mut n = Nucleo::nuevo(a);
+    let p = sitio_rico(&n, &m.0, 0, 1);
+    let a = fundar(&mut n, 0, "a", "ana", 1, p);
+    Escenario { n, a, cuenta: 0 }
+}
+
+// ───────────────────────────── 1. Crear al héroe ─────────────────────────────
+
+#[test]
+fn el_heroe_nace_en_un_campamento_con_su_progresion_inicial_y_cada_rechazo_tiene_su_codigo() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let crear = |cuenta: &str, campamento, controlador| Comando::CrearHeroe { cuenta: cuenta.into(), campamento, controlador, nombre: None, clase: "espada_escudo_mediano".into(), aspecto: Default::default() };
+    // Pasada la aparición de los campamentos de bandidos de las plazas, nada más se mueve por sí solo.
+    e.avanzar(HORA);
+    let (v0, id0) = (e.n.version(), e.n.estado().siguiente_id);
+    assert_eq!(e.rechazada("ana", crear("beto", 0, Controlador::Humano)), rechazos::NO_AUTORIZADO, "nadie crea el héroe de otro");
+    // El controlador lo pone la sesión según la cuenta (una de bot crea su héroe bot; 2026-11-01): el núcleo ya no lo rechaza, y el cliente no puede elegirlo.
+    assert_eq!(e.rechazada("ana", crear("ana", 9_999, Controlador::Humano)), rechazos::HEROE_CAMPAMENTO_DESCONOCIDO);
+    assert_eq!((e.n.version(), e.n.estado().siguiente_id), (v0, id0), "un rechazo no deja rastro: ni versión ni ids");
+
+    let h = e.heroe("ana", 2);
+    let hn = e.n.heroe(h).unwrap();
+    assert_eq!((hn.cuenta.as_str(), hn.faccion, hn.heroe.controlador), ("ana", None, Controlador::Humano));
+    assert_eq!((hn.heroe.nivel, hn.heroe.monedas, hn.heroe.liderazgo_base), (1, 1_500, 14));
+    assert_eq!(hn.heroe.residencia, Some(Residencia::Campamento(2)), "nace dentro de un campamento, donde reside");
+    assert_eq!(hn.heroe.presencia.ubicacion, Ubicacion::Mercenarios(2));
+    assert!(hn.heroe.escuadras.is_empty() && hn.almacen_personal.is_empty());
+    assert_eq!(hn.heroe.loadouts.len(), 1);
+    assert_eq!((hn.heroe.loadouts[0].nombre.as_str(), hn.heroe.loadouts[0].activo, hn.heroe.loadouts[0].id), ("Default", true, h + 1), "el id del héroe y el de su loadout salen del contador común");
+    assert_eq!(e.n.estado().siguiente_id, id0 + 2);
+    assert_eq!(e.n.heroe_de_cuenta("ana").map(|x| x.heroe.id), Some(h));
+    assert!(!e.n.heroe_herido(h));
+    assert_eq!(e.rechazada("ana", crear("ana", 0, Controlador::Humano)), rechazos::HEROE_YA_EXISTE, "uno por cuenta y partida");
+
+    // La administración crea los bots, y la cuenta ajena.
+    let bot = e.ok("admin", crear("bot-1", 1, Controlador::Bot)).creadas[0];
+    assert_eq!(e.n.heroe(bot).unwrap().heroe.controlador, Controlador::Bot);
+    let creados = hechos(&e.n, "heroe.creado");
+    assert_eq!((creados.len(), dato(&creados[0], "heroe"), dato(&creados[0], "campamento")), (2, h as i64, 2));
+    // El héroe no tiene columna ni plaza: no hay nada que mover en el mapa.
+    assert_eq!(e.n.estado().ejercito_de_heroe(h), None);
+    // Cada campamento cuenta quién lo eligió para nacer (`eligieronComoInicial`, paridad P6): solo crece, aunque luego se mude.
+    e.ok("admin", crear("carla", 2, Controlador::Humano));
+    // El nombre que elige el jugador se guarda y se proyecta (2026-10-27); sin nombre, «Héroe N». Uno vacío, con espacios a los lados o demasiado largo se rechaza.
+    let con_nombre = |cuenta: &str, nombre: &str| Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 3, controlador: Controlador::Humano, nombre: Some(nombre.into()), clase: "espada_escudo_mediano".into(), aspecto: Default::default() };
+    for malo in ["", " Vrhino", "Vrhino ", "abcdefghijklmnopqrstuvwxy"] {
+        assert_eq!(e.rechazada("admin", con_nombre("dora", malo)), rechazos::HEROE_NOMBRE_INVALIDO, "«{malo}»");
+    }
+    let dora = e.ok("admin", con_nombre("dora", "Arkanthos")).creadas[0];
+    // Dos héroes no se llaman igual, sin distinguir mayúsculas (2026-11-06); el rechazo no gasta ids.
+    let id_antes = e.n.estado().siguiente_id;
+    for repetido in ["Arkanthos", "arkanthos", "ARKANTHOS"] {
+        assert_eq!(e.rechazada("admin", con_nombre("eva", repetido)), rechazos::HEROE_NOMBRE_EN_USO, "«{repetido}»");
+    }
+    assert_eq!(e.n.estado().siguiente_id, id_antes);
+    e.ok("admin", con_nombre("eva", "Arkanthos II"));
+    assert_eq!(nucleo::proyeccion::propios::heroe(&e.n, e.n.heroe(dora).unwrap()).display_name, "Arkanthos");
+    assert_eq!(nucleo::proyeccion::vista::heroe_publico(&e.n, dora).display_name, "Arkanthos", "también el héroe que ven los demás");
+    assert_eq!(nucleo::proyeccion::propios::heroe(&e.n, e.n.heroe(bot).unwrap()).display_name, format!("Héroe {bot}"));
+    let vuelta = nucleo::Estado::deserializar(&e.n.estado().serializar(), &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
+    assert_eq!(vuelta.militar.nombres.get(&dora).map(String::as_str), Some("Arkanthos"), "el nombre va en la foto (BAN43)");
+    // El aspecto que elige el jugador (2026-11-13): se guarda y se proyecta en su HEROE, en el héroe público y va en la foto. Sin catálogo de piezas, un id se mira por su forma.
+    let aspecto = nucleo::Aspecto { femenino: true, cabeza: "head_03".into(), pelo: "hair_01".into(), barba: String::new(), cejas: "eyebrows-2".into() };
+    let con_aspecto = |cuenta: &str, a: nucleo::Aspecto| Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 3, controlador: Controlador::Humano, nombre: None, clase: "dagas".into(), aspecto: a };
+    for (pieza, malo) in [("cabeza", "head 03"), ("pelo", "pelo/01"), ("barba", "ñ"), ("cejas", &"x".repeat(33))] {
+        let mut a = aspecto.clone();
+        match pieza { "cabeza" => a.cabeza = malo.into(), "pelo" => a.pelo = malo.into(), "barba" => a.barba = malo.into(), _ => a.cejas = malo.into() }
+        assert_eq!(e.rechazada("admin", con_aspecto("fede", a)), rechazos::HEROE_ASPECTO_INVALIDO, "{pieza} «{malo}»");
+    }
+    assert_eq!(e.n.estado().siguiente_id, id_antes + 2, "el rechazo no gasta ids");
+    let fede = e.ok("admin", con_aspecto("fede", aspecto.clone())).creadas[0];
+    let propio = nucleo::proyeccion::propios::heroe(&e.n, e.n.heroe(fede).unwrap());
+    let avatar = pb::Avatar { cabeza_id: "head_03".into(), pelo_id: "hair_01".into(), barba_id: String::new(), cejas_id: "eyebrows-2".into() };
+    assert_eq!((propio.femenino, propio.avatar.as_ref()), (true, Some(&avatar)));
+    let publico = nucleo::proyeccion::vista::heroe_publico(&e.n, fede);
+    assert_eq!((publico.femenino, publico.avatar.as_ref()), (true, Some(&avatar)), "también el héroe que ven los demás");
+    let sin = nucleo::proyeccion::propios::heroe(&e.n, e.n.heroe(dora).unwrap());
+    assert_eq!((sin.femenino, sin.avatar), (false, Some(pb::Avatar::default())), "sin aspecto elegido, masculino y piezas vacías");
+    assert!(!e.n.estado().militar.aspectos.contains_key(&dora), "el de por defecto no se guarda");
+    let vuelta = nucleo::Estado::deserializar(&e.n.estado().serializar(), &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
+    assert_eq!(vuelta.militar.aspectos.get(&fede), Some(&aspecto), "el aspecto va en la foto (BAN64)");
+    assert_eq!((e.n.eligieron_como_inicial(2), e.n.eligieron_como_inicial(1), e.n.eligieron_como_inicial(0)), (2, 1, 0));
+    e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Campamento(0)) });
+    assert_eq!(e.n.eligieron_como_inicial(2), 2);
+    let elegir: Vec<(u32, usize, u32)> = e.n.campamentos_para_elegir().into_iter().filter(|c| c.0 <= 2).map(|(c, _, _, residentes, eligieron)| (c, residentes, eligieron)).collect();
+    assert_eq!(elegir, vec![(0, 1, 0), (1, 1, 1), (2, 1, 2)]);
+    // El campamento en el contrato (paridad P7): los edificios en el orden del TypeScript, cuántos lo eligieron, el plazo de los bandidos de su anillo y su planta.
+    let camp = nucleo::proyeccion::interior::campamento(&e.n, 2).expect("el campamento 2");
+    assert_eq!((camp.edificios.first().map(String::as_str), camp.edificios.len(), camp.edificios[camp.edificios.len() - 2].as_str()), (Some("taberna"), 13, "mercado"));
+    assert_eq!((camp.eligieron_como_inicial, camp.bandidos_en_ms), (2, e.n.estado().combate.anillos.get(&2).copied()));
+    assert_eq!(camp.planta.first().map(|x| (x.id.as_str(), x.tipo.as_str())), Some(("camp-2-0", "taberna")));
+    assert_eq!(camp.planta.iter().filter(|x| x.tipo == "vivienda").count(), 10);
+    assert!(camp.trazado.is_some_and(|t| !t.calles.is_empty()) && camp.empalizada_puerta.len() == 1 && !camp.empalizada.is_empty());
+    assert_eq!(camp.planta, nucleo::proyeccion::interior::campamento(&e.n, 2).unwrap().planta, "la planta no cambia: es del campamento");
+}
+
+/// Heroe_Y_Tropa §3 y D21: la clase es una de `CLASES_HEROE` y el héroe nace con su equipo inicial; las cuatro órdenes del equipo, la mochila y el almacén de objetos, de punta
+/// a punta (sus reglas una a una, en `nucleo::equipo` y en el crate `objetos`).
+#[test]
+fn el_heroe_nace_con_su_clase_y_su_equipo_y_cambia_de_equipo_y_guarda_objetos_por_orden() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let mr = e.n.estado().reglas.economia.militar.clone();
+    let con_clase = |cuenta: &str, clase: &str| Comando::CrearHeroe { cuenta: cuenta.into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: clase.into(), aspecto: Default::default() };
+    let id0 = e.n.estado().siguiente_id;
+    for mala in ["", "guerrero", "mandoble"] {
+        assert_eq!(e.rechazada("ana", con_clase("ana", mala)), rechazos::HEROE_CLASE_DESCONOCIDA, "«{mala}»");
+    }
+    assert_eq!(e.n.estado().siguiente_id, id0, "el rechazo no gasta ids");
+    for (i, (clase, ficha)) in mr.objetos.clases.iter().enumerate() {
+        let cuenta = format!("c{i}");
+        let h = e.ok("admin", con_clase(&cuenta, clase)).creadas[0];
+        let hn = &e.n.heroe(h).unwrap().heroe;
+        assert_eq!((&hn.equipo, hn.clase(&mr), hn.mochila.casillas.len(), hn.almacen_objetos.casillas.len()), (&ficha.inicial, clase.as_str(), 0, 0), "{clase}: el equipo inicial puesto, la mochila y el almacén vacíos");
+    }
+
+    // ana, en el campamento donde reside: se quita la montura y el torso a la mochila, se pone el torso otra vez, guarda la montura en el almacén de objetos y la saca.
+    let h = e.heroe("ana", 0);
+    e.ok("ana", Comando::DesequiparObjeto { heroe: h, hueco: objetos::datos::Hueco::Montura });
+    e.ok("ana", Comando::DesequiparObjeto { heroe: h, hueco: objetos::datos::Hueco::Torso });
+    e.ok("ana", Comando::EquiparObjeto { heroe: h, casilla: 1 });
+    e.ok("ana", Comando::GuardarObjeto { heroe: h, casilla: 0, cantidad: 1 });
+    let hn = &e.n.heroe(h).unwrap().heroe;
+    assert_eq!((hn.equipo.montura.is_none(), hn.equipo.torso.is_some(), hn.mochila.casillas.len(), hn.almacen_objetos.casillas[&0].pieza.objeto.as_str()), (true, true, 0, "montura_tiro"));
+    assert_eq!(hechos(&e.n, "heroe.equipo_cambiado").iter().map(|x| dato(x, "heroe")).collect::<Vec<_>>(), vec![h as i64; 3], "guardar y sacar no cambian el equipo");
+    let propio = nucleo::proyeccion::propios::heroe(&e.n, e.n.heroe(h).unwrap());
+    assert_eq!((propio.inventario.len(), propio.almacen_objetos.iter().map(|p| (p.item_definition_id.as_str(), p.tipo.as_str(), p.casilla_inventario, p.precio)).collect::<Vec<_>>()), (0, vec![("montura_tiro", "montura", 0, 300)]));
+    // En una plaza donde no reside se equipa, pero el almacén de objetos está en su residencia.
+    let a = e.a as u32;
+    e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(a) });
+    assert_eq!(e.rechazada("ana", Comando::SacarObjeto { heroe: h, casilla: 0, cantidad: 1 }), rechazos::ALMACEN_OBJETOS_FUERA_DE_TU_RESIDENCIA);
+    e.ok("ana", Comando::DesequiparObjeto { heroe: h, hueco: objetos::datos::Hueco::Botas });
+    e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Mercenarios(0) });
+    e.ok("ana", Comando::SacarObjeto { heroe: h, casilla: 0, cantidad: 1 });
+    assert_eq!(e.n.heroe(h).unwrap().heroe.mochila.casillas.values().map(|c| c.pieza.objeto.as_str()).collect::<Vec<_>>(), ["botas_media_inicio", "montura_tiro"]);
+}
+
+/// D1 y D2: las cuatro órdenes de la Armería y de los consumibles, de punta a punta, en una plaza con su Armería levantada, y la forja en cualquier plaza (Heroe_Y_Tropa §4.6):
+/// `configurar_forja`, la forja cerrada y abierta a un neutral de visita, la Era y lo que se ve. Los planos, los crisoles y los consumibles son del botín, que aquí no sale, así
+/// que la forja y usar llegan hasta su primera regla; sus caminos buenos y cada rechazo, en `nucleo::armeria`.
+#[test]
+fn en_la_armeria_se_compra_se_vende_se_forja_y_se_usa_por_orden() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let a = e.a;
+    let h = e.heroe_en_la_plaza("ana");
+    let comprar = |objeto: &str| Comando::ComprarObjeto { heroe: h, objeto: objeto.into() };
+    assert_eq!(e.rechazada("ana", comprar("montura_estepa")), rechazos::ARMERIA_SIN_ARMERIA, "aún no hay Armería");
+    e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: a, nivel: 2 });
+    e.dar(a, Madera, 1_000_000);
+    e.dar(a, Piedra, 1_000_000);
+    e.ok("admin", Comando::AnadirEdificio { asentamiento: a, tipo: asentamiento::catalogo::Tipo::Armeria });
+    let activa = |e: &Escenario| e.n.economia(a).unwrap().edificios.iter().any(|x| x.tipo == asentamiento::catalogo::Tipo::Armeria && x.activo());
+    for _ in 0..80 {
+        if activa(&e) {
+            break;
+        }
+        e.avanzar(HORA);
+    }
+    assert!(activa(&e), "la Armería acaba por levantarse");
+    e.ok("ana", comprar("montura_estepa"));
+    assert_eq!(e.n.heroe(h).unwrap().heroe.monedas, 1_500 - 600);
+    e.ok("ana", Comando::VenderObjeto { heroe: h, casilla: 0, cantidad: 1 });
+    assert_eq!(e.n.heroe(h).unwrap().heroe.monedas, 1_500 - 600 + 300, "a la mitad");
+    assert_eq!((hechos(&e.n, "heroe.objeto_comprado").len(), hechos(&e.n, "heroe.objeto_vendido").len()), (1, 1));
+    assert_eq!(e.rechazada("ana", Comando::ForjarObjeto { heroe: h, objeto: "dagas_cobre".into() }), rechazos::ARMERIA_SIN_TECNOLOGIA);
+    e.ok("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["metalurgia_cobre".into()] });
+    assert_eq!(e.rechazada("ana", Comando::ForjarObjeto { heroe: h, objeto: "dagas_cobre".into() }), rechazos::FORJA_SIN_PLANO);
+    e.ok("ana", Comando::DesequiparObjeto { heroe: h, hueco: objetos::datos::Hueco::Montura });
+    assert_eq!(e.rechazada("ana", Comando::UsarObjeto { heroe: h, casilla: 0, escuadra: None }), rechazos::OBJETO_NO_SE_USA, "la montura no se usa: se equipa");
+    assert_eq!(e.rechazada("ana", Comando::UsarObjeto { heroe: h, casilla: 1, escuadra: None }), rechazos::INVENTARIO_CASILLA_VACIA);
+
+    // La forja en cualquier plaza (Heroe_Y_Tropa §4.6): beto, sin Facción y de visita, es neutral; de partida la forja está cerrada a los de fuera.
+    let beto = e.heroe("beto", 0);
+    e.ok("admin", Comando::ColocarHeroe { heroe: beto, ubicacion: Ubicacion::Asentamiento(a as u32) });
+    let forjar = |heroe, objeto: &str| Comando::ForjarObjeto { heroe, objeto: objeto.into() };
+    assert_eq!(e.rechazada("beto", forjar(beto, "dagas_cobre")), rechazos::FORJA_CERRADA);
+    // La abren el Tesorero o el Gobernador, residentes y dentro: el de la cuenta de ana, que la fundó; la de beto no tiene cargo.
+    let configurar = |grupo, abierta, recargo_pct| Comando::ConfigurarForja { asentamiento: a, grupo, abierta, recargo_pct };
+    assert_eq!(e.rechazada("beto", configurar(politica::Grupo::Neutrales, true, 0)), rechazos::NO_AUTORIZADO);
+    assert_eq!(e.rechazada("ana", configurar(politica::Grupo::Neutrales, true, 300)), rechazos::FORJA_RECARGO_INVALIDO);
+    e.ok("ana", configurar(politica::Grupo::Neutrales, true, 0));
+    assert_eq!(e.ord("ana", configurar(politica::Grupo::Neutrales, true, 0)).resultado, Resultado::SinCambios);
+    let h_cfg = &hechos(&e.n, "asentamiento.forja_configurada")[0];
+    assert_eq!((dato(h_cfg, "plaza"), dato(h_cfg, "abierta"), dato(h_cfg, "recargo")), (a as i64, 1, 0));
+    assert_eq!(e.rechazada("beto", forjar(beto, "dagas_cobre")), rechazos::FORJA_SIN_PLANO, "abierta: llega a la receta");
+    // Los tiers III a V piden su Era: el bronce abierto no basta en la Era I.
+    e.ok("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["metalurgia_cobre".into(), "aleacion_bronce".into()] });
+    assert_eq!(e.rechazada("beto", forjar(beto, "dagas_bronce")), rechazos::FORJA_ERA_CERRADA);
+    // Desde fuera se sabe que hay Armería; desde dentro, su forja y sus metales.
+    assert!(nucleo::proyeccion::vista::plaza_avistada(&e.n, a).armeria_activa);
+    let dentro = nucleo::proyeccion::vista::plaza_desde_dentro(&e.n, a);
+    let neutrales = dentro.forja.and_then(|f| f.neutrales).unwrap();
+    assert_eq!((neutrales.abierta, neutrales.recargo_pct, dentro.metales_armeria), (true, 0, vec!["bronce".to_owned(), "cobre".to_owned(), "inicio".to_owned()]));
+}
+
+// ───────────────────────────── 2. Reclutar en una plaza ─────────────────────────────
+
+#[test]
+fn reclutar_en_una_plaza_valida_en_orden_paga_del_almacen_y_resta_poblacion() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    e.avanzar(24 * HORA);
+    let (a, h) = (e.a, e.heroe("ana", 0));
+    let reclutar = |heroe, tropa| Comando::ReclutarTropa { asentamiento: a, heroe, tropa };
+    assert_eq!(e.rechazada("beto", reclutar(h, Tropa::MiliciaLanceros)), rechazos::NO_AUTORIZADO);
+    assert_eq!(e.rechazada("ana", reclutar(99, Tropa::MiliciaLanceros)), rechazos::HEROE_DESCONOCIDO);
+    assert_eq!(e.rechazada("ana", Comando::ReclutarTropa { asentamiento: 9_999, heroe: h, tropa: Tropa::MiliciaLanceros }), rechazos::ASENTAMIENTO_DESCONOCIDO);
+    assert_eq!(e.rechazada("ana", reclutar(h, Tropa::MiliciaLanceros)), rechazos::RECLUTAMIENTO_NO_PUEDES, "ni reside ni es de la Facción de la plaza");
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
+    assert_eq!(e.rechazada("ana", reclutar(h, Tropa::MiliciaLanceros)), rechazos::HEROE_NO_ESTA_EN_LA_PLAZA, "hay que estar dentro de la plaza");
+    e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(a as u32) });
+    assert_eq!(e.rechazada("ana", reclutar(h, Tropa::MiliciaLanceros)), rechazos::HEROE_SIN_COLUMNA, "ciudadano sin residir: la escuadra nueva va a la columna con la que entró, y entró sin ella");
+    e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(a as u32)) });
+
+    // La tecnología se mira en la Facción de la plaza (antes que la población, el edificio o el coste).
+    assert_eq!(e.rechazada("ana", reclutar(h, Tropa::LancerosMimbre)), rechazos::RECLUTAMIENTO_SIN_TECNOLOGIA);
+    e.ok("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["escudos_ligeros".into()] });
+    assert_eq!(e.rechazada("ana", reclutar(h, Tropa::LancerosMimbre)), rechazos::RECLUTAMIENTO_SIN_EDIFICIO, "la plaza no tiene Barracón");
+
+    // Milicia del Centro Urbano: 25 pesants y 2 de madera por soldado; la leva de arranque no pide tecnología.
+    let (madera0, pesants0, ids0, cola0) = (e.almacen(Madera), e.n.economia(a).unwrap().poblacion.pesants, e.n.estado().siguiente_id, en_cola(&e.n));
+    let r = e.ok("ana", reclutar(h, Tropa::MiliciaLanceros));
+    assert_eq!(r.creadas.len(), 1);
+    let esc = e.n.heroe(h).unwrap().heroe.escuadra(r.creadas[0]).unwrap().clone();
+    assert_eq!((esc.tropa, esc.cantidad, esc.nivel, esc.contenedor, esc.en_guarnicion, esc.plaza_origen), (Tropa::MiliciaLanceros, 25, 1, Contenedor::Campamento, false, Some(a as u32)));
+    assert_eq!(esc.moral_en(e.n.ahora()), 100_000);
+    assert_eq!(madera0 - e.almacen(Madera), 50_000, "2 de madera por soldado");
+    assert_eq!(pesants0 - e.n.economia(a).unwrap().poblacion.pesants, 25, "los soldados salen de la población de su clase");
+    assert_eq!(e.n.estado().siguiente_id, ids0 + 1, "una escuadra nueva gasta un id");
+    assert_eq!(en_cola(&e.n), cola0, "reclutar no programa ningún evento");
+    let h1 = hechos(&e.n, "tropas.reclutadas");
+    assert_eq!((h1.len(), h1[0].1.clone(), dato(&h1[0], "reclutados"), dato(&h1[0], "nueva")), (1, vec![a], 25, 1));
+    assert_eq!(e.n.soldados_del_campamento(a), 25);
+    assert_eq!(e.rechazada("ana", reclutar(h, Tropa::MiliciaLanceros)), rechazos::RECLUTAMIENTO_AL_TOPE, "una escuadra por tropa: ya está completa");
+    assert_eq!(e.n.estado().siguiente_id, ids0 + 1, "un rechazo no gasta ids");
+
+    // «Leva Forzosa» (General): el equipo cuesta el 70 %.
+    e.ok("admin", Comando::ActivarPolitica { asentamiento: a, politica: "leva_forzosa".into(), cargo: asentamiento::Cargo::General });
+    let madera1 = e.almacen(Madera);
+    e.ok("ana", reclutar(h, Tropa::Lenadores));
+    assert_eq!(madera1 - e.almacen(Madera), 21_000, "30 soldados × 1 de madera × 0,7");
+    // Los logros (6B): dos escuadras nuevas reclutadas en la plaza (ni la milicia ni los leñadores tienen contador de soldados propio).
+    assert_eq!(comun::logros_de_hechos(&e.n), vec![(tecnologia::Contador::ReclutadosEscuadrones, 2)]);
+}
+
+/// 2026-11-10 (decisión del autor): un ciudadano de la Facción de la plaza que no reside en ella recluta también escuadras nuevas, que se van a la columna con la que entró y comen de sus
+/// víveres; paga la plaza. El Gobernador o un General lo cierran a los ciudadanos, y entonces solo reponen, como antes.
+#[test]
+fn un_ciudadano_de_visita_recluta_escuadras_nuevas_a_su_columna_salvo_que_la_plaza_lo_cierre() {
+    let m = con_mundo!();
+    let mut e = escenario_de_tope(m, 7);
+    e.avanzar(24 * HORA);
+    let a = e.a;
+    // «dora», de la Facción 1, recluta en la plaza, sale con su tropa, se muda al campamento de mercenarios y vuelve de visita con su columna.
+    let h = e.heroe_en_la_plaza("dora");
+    let milicia = e.ok("dora", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: Tropa::MiliciaLanceros }).creadas[0];
+    let col = e.ok("dora", Comando::SalirAlMundo { asentamiento: a, heroe: h, escuadras: vec![milicia], carga: vec![] }).creadas[0];
+    e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Campamento(0)) });
+    e.ok("dora", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: h });
+
+    // Una escuadra nueva: a la columna, pagada por la plaza, y sin comer del almacén.
+    let (madera0, pesants0) = (e.almacen(Madera), e.n.economia(a).unwrap().poblacion.pesants);
+    let reclutar = |tropa| Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa };
+    let r = e.ok("dora", reclutar(Tropa::Lenadores));
+    let lenadores = r.creadas[0];
+    let esc = e.n.escuadra(lenadores).unwrap().1.clone();
+    assert_eq!((esc.contenedor, esc.plaza_origen, esc.cantidad), (Contenedor::Ejercito(col), Some(a as u32), 30), "va a la columna con la que entró");
+    assert!(e.n.estado().ejercitos[&col].columna.escuadras.contains(&lenadores), "y la columna la lleva");
+    assert_eq!((madera0 - e.almacen(Madera), pesants0 - e.n.economia(a).unwrap().poblacion.pesants), (30_000, 30), "paga la plaza: el equipo y la población");
+    assert_eq!(e.n.soldados_del_campamento(a), 0, "no come del almacén: come de los víveres de la columna");
+    let h1 = hechos(&e.n, "tropas.reclutadas");
+    assert_eq!((dato(&h1[h1.len() - 1], "escuadra"), dato(&h1[h1.len() - 1], "nueva")), (lenadores as i64, 1));
+    assert_eq!(e.rechazada("dora", reclutar(Tropa::Lenadores)), rechazos::RECLUTAMIENTO_AL_TOPE, "una escuadra por tropa, y la columna está a la puerta");
+
+    // Cerrado a los ciudadanos (lo cierra el Gobernador o un General: la matriz lo prueba `sesiones`), solo repone.
+    let cerrar = |cerrado| Comando::CerrarReclutamientoACiudadanos { asentamiento: a, cerrado };
+    assert_eq!(e.rechazada("dora", cerrar(true)), rechazos::NO_AUTORIZADO, "sin cargo no se cierra");
+    e.ok("admin", cerrar(true));
+    assert_eq!(e.ord("admin", cerrar(true)).resultado, Resultado::SinCambios);
+    assert!(nucleo::proyeccion::interior::asentamiento(&e.n, a).unwrap().reclutamiento_cerrado_a_ciudadanos, "se ve dentro");
+    let cierres = hechos(&e.n, "reclutamiento.cierre_a_ciudadanos");
+    assert_eq!((cierres.len(), dato(&cierres[0], "cerrado")), (1, 1));
+    assert_eq!(e.rechazada("dora", reclutar(Tropa::Granjeros)), rechazos::RECLUTAMIENTO_SOLO_REPONER);
+    // Abierto otra vez, vuelve a poder.
+    e.ok("admin", cerrar(false));
+    let granjeros = e.ok("dora", reclutar(Tropa::Granjeros)).creadas[0];
+    assert_eq!(e.n.escuadra(granjeros).unwrap().1.contenedor, Contenedor::Ejercito(col));
+    // La foto lo guarda (desde BAN61).
+    e.ok("admin", cerrar(true));
+    let vuelta = nucleo::Estado::deserializar(&e.n.estado().serializar(), &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
+    assert!(vuelta.asentamientos[&a].reclutamiento_cerrado_a_ciudadanos);
+}
+
+// ───────────────────────────── 3. Reclutar en un campamento de mercenarios ─────────────────────────────
+
+/// La huella del campamento (Generacion_Del_Mundo §11) y, con ella, su edificio militar: 0 Barracón, 1 Galería de tiro, 2 Caballerizas.
+fn edificio_militar(m: &Mundo, c: usize) -> i64 {
+    let p = campamento(m, c);
+    (p.x.div_euclid(1_000) * 31 + p.y.div_euclid(1_000) * 17 + c as i64).abs() % 3
+}
+
+#[test]
+fn el_edificio_militar_de_un_campamento_sale_de_su_posicion_y_con_el_la_tropa_que_ofrece() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let n = m.0.campamentos().len();
+    // Con las tecnologías de arranque solo se ofrecen los Honderos y los Escaramuzadores de la Galería de tiro.
+    let ofrecen = |e: &Escenario, tropa| (0..n).filter(|&c| e.n.tropas_del_campamento(c as u32).unwrap().contains(&tropa)).collect::<Vec<_>>();
+    let galerias: Vec<usize> = (0..n).filter(|&c| edificio_militar(&m.0, c) == 1).collect();
+    assert!(!galerias.is_empty() && galerias.len() < n);
+    assert_eq!(ofrecen(&e, Tropa::Honderos), galerias);
+    assert!((0..n).all(|c| !e.n.tropas_del_campamento(c as u32).unwrap().contains(&Tropa::MiliciaLanceros)), "la leva de arranque no se recluta en un campamento");
+    assert!(e.n.tropas_del_campamento(n as u32).is_none());
+    // Una tecnología que adopta la mitad de las Facciones vivas (aquí la única) la desbloquea en todos los campamentos que tienen su edificio.
+    assert!(ofrecen(&e, Tropa::LancerosMimbre).is_empty());
+    e.ok("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["escudos_ligeros".into()] });
+    let barracones: Vec<usize> = (0..n).filter(|&c| edificio_militar(&m.0, c) == 0).collect();
+    assert_eq!(ofrecen(&e, Tropa::LancerosMimbre), barracones);
+    assert_eq!(e.rechazada("ana", Comando::FijarTecnologias { faccion: 1, tecnologias: vec![] }), rechazos::NO_AUTORIZADO);
+    assert_eq!(e.rechazada("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["no_existe".into()] }), rechazos::TECNOLOGIA_DESCONOCIDA);
+    assert_eq!(e.ord("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["escudos_ligeros".into()] }).resultado, Resultado::SinCambios);
+    // Sobre las reglas reales (6B): aparecida y adoptada, sin logro, y F1 queda como su descubridora.
+    let rt = &e.n.estado().reglas.economia.tecnologia;
+    let escudos = rt.buscar("escudos_ligeros").unwrap();
+    let f1 = e.n.tecnologia().de(rt, 1);
+    assert!(f1.aparecidas.contiene(escudos) && f1.adoptadas.contiene(escudos) && !e.n.tecnologia().logro_cumplido(escudos));
+    assert_eq!(e.n.tecnologia().primeros[escudos as usize].map(|p| (p.faccion, p.en)), Some((1, e.n.ahora())));
+    assert!(e.n.tiene_tecnologia(1, "escudos_ligeros") && e.n.tiene_tecnologia(2, "leva_comunal") && !e.n.tiene_tecnologia(2, "escudos_ligeros"));
+}
+
+#[test]
+fn reclutar_en_un_campamento_cobra_oro_del_almacen_personal_o_del_carro_y_gasta_reclutas() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let n = m.0.campamentos().len();
+    let camp = (0..n).find(|&c| edificio_militar(&m.0, c) == 1).unwrap() as u32;
+    let mr = militar::Reglas::cargar();
+    let (h, beto) = (e.heroe("ana", camp), e.heroe("beto", camp));
+    let honderos = |heroe, pagar_con| Comando::ReclutarEnCampamento { heroe, tropa: Tropa::Honderos, pagar_con };
+    let personal = PagarCon::AlmacenPersonal;
+    assert_eq!(e.rechazada("beto", honderos(h, personal)), rechazos::NO_AUTORIZADO);
+    assert_eq!(e.rechazada("ana", Comando::ReclutarEnCampamento { heroe: h, tropa: Tropa::MiliciaLanceros, pagar_con: personal }), rechazos::MERCENARIOS_TROPA_NO_DISPONIBLE);
+    assert_eq!(e.rechazada("ana", honderos(h, personal)), rechazos::MERCENARIOS_SIN_ORO);
+    assert_eq!(e.rechazada("ana", honderos(h, PagarCon::Carro)), rechazos::HEROE_SIN_COLUMNA, "para pagar con el carro hay que ir en una columna");
+    assert_eq!(e.n.reclutas_de_campamento(camp), Some(100_000), "un campamento nace lleno: 10 viviendas × 10");
+
+    // Con el oro en el almacén personal: precio = (2 de escalón + 1 de arma de madera × 8) × 1,5 = 15 por soldado, 20 soldados.
+    e.ok("admin", Comando::DarAlmacenPersonal { heroe: h, recurso: Oro, cantidad: 1_000_000 });
+    let precio = militar::mercenarios::precio(&mr, mr.tropas.tropa(Tropa::Honderos), 20, asentamiento::datos::UNO, false);
+    assert_eq!(precio, 300_000);
+    let r = e.ok("ana", honderos(h, personal));
+    assert_eq!(r.creadas.len(), 1);
+    let hn = e.n.heroe(h).unwrap();
+    let esc = hn.heroe.escuadra(r.creadas[0]).unwrap();
+    assert_eq!((esc.tropa, esc.cantidad, esc.contenedor, esc.plaza_origen, esc.prestada), (Tropa::Honderos, 20, Contenedor::Campamento, None, None));
+    assert_eq!(hn.almacen_personal[&Oro], 1_000_000 - precio);
+    assert_eq!(e.n.reclutas_de_campamento(camp), Some(80_000));
+    let reclutado = hechos(&e.n, "mercenarios.reclutado");
+    assert_eq!((reclutado.len(), dato(&reclutado[0], "cantidad"), dato(&reclutado[0], "oro")), (1, 20, precio));
+    assert_eq!(e.rechazada("ana", honderos(h, personal)), rechazos::MERCENARIOS_AL_TOPE);
+    // Los reclutas se recuperan a 10 por hora, sin ningún evento.
+    let cola = en_cola(&e.n);
+    e.avanzar(HORA);
+    assert_eq!(e.n.reclutas_de_campamento(camp), Some(90_000));
+    assert!(en_cola(&e.n) <= cola, "reponer los reclutas no programa nada");
+
+    // Con el oro del carro de su columna, a la puerta del campamento.
+    let puerta = campamento(&m.0, camp as usize);
+    let t = e.n.ahora();
+    let col = e.n.crear_ejercito(t, "beto", 2, Punto::new(puerta.x + 1_000, puerta.y), 500, 100_000).unwrap();
+    e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Oro, cantidad: 400_000 });
+    e.ok("admin", Comando::ColocarHeroe { heroe: beto, ubicacion: Ubicacion::Columna(col) });
+    e.ok("beto", honderos(beto, PagarCon::Carro));
+    assert_eq!(e.n.suministro(col)[&Oro], 400_000 - precio);
+    assert_eq!(e.n.reclutas_de_campamento(camp), Some(70_000));
+    assert_eq!(e.n.soldados_del_campamento(e.a), 0, "los reclutas de un campamento no comen de ninguna plaza");
+
+    // Lejos del campamento no se recluta, y solo donde se reside.
+    e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(e.a as u32) });
+    assert_eq!(e.rechazada("ana", Comando::ReclutarEnCampamento { heroe: h, tropa: Tropa::Honderos, pagar_con: personal }), rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA);
+    e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: None });
+    assert_eq!(e.rechazada("ana", honderos(h, personal)), rechazos::MERCENARIOS_NO_RESIDES);
+    // Los logros (6B, Q4 del autor): los reclutas de un campamento también cuentan, aquí dos escuadras nuevas de honderos (sin contador de soldados propio).
+    assert_eq!(comun::logros_de_hechos(&e.n), vec![(tecnologia::Contador::ReclutadosEscuadrones, 2)]);
+}
+
+// ───────────────────────────── 4. La tropa prestada ─────────────────────────────
+
+#[test]
+fn la_tropa_prestada_es_gratis_de_leva_comunal_y_se_retira_al_dejar_de_residir() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let h = e.heroe("ana", 0);
+    let pedir = |tropas: &[Tropa]| Comando::PedirPrestamo { heroe: h, tropas: tropas.to_vec() };
+    assert_eq!(e.rechazada("ana", pedir(&[])), rechazos::MERCENARIOS_PRESTAMO_SIN_TROPAS);
+    assert_eq!(e.rechazada("ana", pedir(&[Tropa::Honderos])), rechazos::MERCENARIOS_NO_SE_PRESTA, "solo la leva comunal se presta");
+    assert_eq!(e.rechazada("ana", pedir(&[Tropa::Granjeros, Tropa::Granjeros])), rechazos::MERCENARIOS_PRESTAMO_REPETIDA);
+    assert!(e.n.heroe(h).unwrap().heroe.escuadras.is_empty(), "un rechazo no crea nada");
+    let ids0 = e.n.estado().siguiente_id;
+    let r = e.ok("ana", pedir(&[Tropa::Granjeros, Tropa::Mineros]));
+    assert_eq!(r.creadas.len(), 2);
+    assert_eq!(e.n.estado().siguiente_id, ids0 + 2);
+    for (id, tropa) in r.creadas.iter().zip([Tropa::Granjeros, Tropa::Mineros]) {
+        let esc = e.n.heroe(h).unwrap().heroe.escuadra(*id).unwrap();
+        assert_eq!((esc.tropa, esc.cantidad, esc.prestada, esc.contenedor, esc.experiencia), (tropa, 30, Some(0), Contenedor::Campamento, 0));
+    }
+    assert_eq!(e.rechazada("ana", pedir(&[Tropa::Lenadores, Tropa::Granjeros])), rechazos::MERCENARIOS_YA_PRESTADA);
+    assert_eq!(e.rechazada("ana", Comando::ReponerPrestamo { heroe: h }), rechazos::MERCENARIOS_NADA_QUE_REPONER, "ya están completas");
+    // Una prestada no cuenta para «una escuadra por tropa»: reclutar la propia de esa tropa no choca con ella.
+    assert!(e.n.heroe(h).unwrap().heroe.escuadra_de(Tropa::Granjeros).is_none());
+    // Fuera del campamento no se pide, y la tropa prestada solo es del campamento donde se reside.
+    e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Asentamiento(e.a as u32) });
+    assert_eq!(e.rechazada("ana", pedir(&[Tropa::Lenadores])), rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA);
+    e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Mercenarios(0) });
+    // Mudarse de campamento la retira, de donde esté, y lo cuenta.
+    e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Campamento(1)) });
+    assert!(e.n.heroe(h).unwrap().heroe.escuadras.is_empty());
+    let retiro = hechos(&e.n, "mercenarios.prestamo_retirado");
+    assert_eq!((retiro.len(), dato(&retiro[0], "escuadras")), (1, 2));
+    assert_eq!(hechos(&e.n, "mercenarios.prestamo").len(), 1);
+}
+
+// ───────────────────────────── 5. Loadouts, orden de las escuadras y puntos ─────────────────────────────
+
+#[test]
+fn los_loadouts_el_orden_de_las_escuadras_y_el_reparto_de_puntos_validan_cada_uno_lo_suyo() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let h = e.heroe("ana", 0);
+    let ids = e.ok("ana", Comando::PedirPrestamo { heroe: h, tropas: vec![Tropa::Granjeros, Tropa::Lenadores, Tropa::MiliciaLanceros, Tropa::Mineros] }).creadas;
+    let (s1, s2, s3, s4) = (ids[0], ids[1], ids[2], ids[3]);
+    let guardar = |loadout, nombre: &str, escuadras: &[u64], activo| Comando::GuardarLoadout { heroe: h, loadout, nombre: nombre.into(), escuadras: escuadras.to_vec(), activo };
+    assert_eq!(e.rechazada("ana", guardar(None, "  ", &[s1], None)), rechazos::LOADOUT_SIN_NOMBRE);
+    assert_eq!(e.rechazada("ana", guardar(Some(55), "x", &[s1], None)), rechazos::LOADOUT_DESCONOCIDO);
+    assert_eq!(e.rechazada("ana", guardar(None, "x", &[s1, s1], None)), rechazos::ESCUADRA_REPETIDA);
+    assert_eq!(e.rechazada("ana", guardar(None, "x", &[s1, 99_999], None)), rechazos::ESCUADRA_AJENA);
+    assert_eq!(e.n.heroe(h).unwrap().heroe.loadouts.len(), 1, "los rechazos no dejan rastro");
+    // Como mucho 32 caracteres (no bytes, el tope de las plazas), recortado y sin caracteres de control.
+    assert_eq!(e.rechazada("ana", guardar(None, &"x".repeat(33), &[s1], None)), rechazos::LOADOUT_NOMBRE_LARGO);
+    for malo in ["Asal\nto", "\u{7}", "As\0alto"] {
+        assert_eq!(e.rechazada("ana", guardar(None, malo, &[s1], None)), rechazos::LOADOUT_NOMBRE_CONTROL, "{malo:?}");
+    }
+    assert_eq!(e.n.heroe(h).unwrap().heroe.loadouts.len(), 1, "los rechazos no dejan rastro");
+    let largo = e.ok("ana", guardar(None, &format!(" {} ", "á".repeat(32)), &[s1], None)).creadas[0];
+    e.ok("ana", Comando::BorrarLoadout { heroe: h, loadout: largo });
+
+    // Uno nuevo se añade al final, inactivo, y su id sale del contador común.
+    let ids0 = e.n.estado().siguiente_id;
+    let asalto = e.ok("ana", guardar(None, "Asalto", &[s1, s2], None)).creadas[0];
+    assert_eq!(asalto, ids0);
+    let lo = &e.n.heroe(h).unwrap().heroe.loadouts;
+    assert_eq!((lo.len(), lo[1].id, lo[1].nombre.as_str(), lo[1].activo, lo[0].activo), (2, asalto, "Asalto", false, true));
+    // Reescribirlo por id conserva el id; marcarlo activo desactiva los demás.
+    let r = e.ok("ana", guardar(Some(asalto), "Asalto 2", &[s3], Some(true)));
+    assert!(r.creadas.is_empty());
+    let lo = &e.n.heroe(h).unwrap().heroe.loadouts;
+    assert_eq!((lo.len(), lo[1].nombre.as_str(), lo[1].escuadras.clone(), lo[1].activo, lo[0].activo), (2, "Asalto 2", vec![s3], true, false));
+    assert_eq!(e.n.heroe(h).unwrap().heroe.escuadras_del_loadout_activo(), &[s3]);
+    e.ok("ana", Comando::BorrarLoadout { heroe: h, loadout: asalto });
+    assert_eq!(e.rechazada("ana", Comando::BorrarLoadout { heroe: h, loadout: asalto }), rechazos::LOADOUT_DESCONOCIDO);
+    assert!(e.n.heroe(h).unwrap().heroe.escuadras_del_loadout_activo().is_empty(), "borrar el activo no activa otro");
+
+    // El orden: las pedidas primero y el resto como estaban; repetir el mismo orden no cambia nada.
+    let orden = |h: &nucleo::HeroeNucleo| h.heroe.escuadras.iter().map(|x| x.id).collect::<Vec<_>>();
+    e.ok("ana", Comando::OrdenarEscuadras { heroe: h, escuadras: vec![s3, s1] });
+    assert_eq!(orden(e.n.heroe(h).unwrap()), vec![s3, s1, s2, s4]);
+    assert_eq!(e.ord("ana", Comando::OrdenarEscuadras { heroe: h, escuadras: vec![s3, s1] }).resultado, Resultado::SinCambios);
+    assert_eq!(e.rechazada("ana", Comando::OrdenarEscuadras { heroe: h, escuadras: vec![s2, s2] }), rechazos::ESCUADRA_REPETIDA);
+    assert_eq!(e.rechazada("ana", Comando::OrdenarEscuadras { heroe: h, escuadras: vec![s2, 99_999] }), rechazos::ESCUADRA_AJENA);
+    assert_eq!(orden(e.n.heroe(h).unwrap()), vec![s3, s1, s2, s4]);
+
+    // Los puntos: el servidor no sube el nivel, así que no hay puntos sin gastar que repartir.
+    let reparto = |fuerza, destreza| Comando::RepartirPuntos { heroe: h, fuerza, destreza, armadura: 0, vitalidad: 0 };
+    assert_eq!(e.rechazada("ana", reparto(0, 0)), rechazos::HEROE_NINGUN_PUNTO);
+    assert_eq!(e.rechazada("ana", reparto(-1, 1)), rechazos::HEROE_PUNTOS_NEGATIVOS);
+    assert_eq!(e.rechazada("ana", reparto(2, 0)), rechazos::HEROE_PUNTOS_INSUFICIENTES);
+    assert_eq!(e.rechazada("beto", reparto(1, 0)), rechazos::NO_AUTORIZADO);
+}
+
+#[test]
+fn la_formacion_de_una_escuadra_empieza_en_reposo_y_las_cerradas_piden_disciplina_de_formacion() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let h = e.heroe("ana", 0);
+    let beto = e.heroe("beto", 0);
+    let s = e.ok("ana", Comando::PedirPrestamo { heroe: h, tropas: vec![Tropa::MiliciaLanceros] }).creadas[0];
+    let formacion = |e: &Escenario| e.n.escuadra(s).unwrap().1.formacion;
+    let elegir = |heroe, formacion: &str| Comando::ElegirFormacion { heroe, escuadra: s, formacion: formacion.into() };
+    let reglas = e.n.estado().reglas.economia.militar.formaciones.clone();
+    assert_eq!(formacion(&e), militar::formaciones::REPOSO, "nace en la de reposo");
+    assert_eq!(nucleo::proyeccion::propios::escuadron(&e.n, e.n.escuadra(s).unwrap().1).formacion, "reposo");
+
+    // Sin Facción, las que no piden tecnología; repetir la misma no cambia nada.
+    e.ok("ana", elegir(h, "linea"));
+    assert_eq!(formacion(&e), reglas.por_id("linea").unwrap());
+    assert_eq!(e.ord("ana", elegir(h, "linea")).resultado, Resultado::SinCambios);
+    assert_eq!(e.rechazada("ana", elegir(h, "falange")), rechazos::FORMACION_DESCONOCIDA);
+    assert_eq!(e.rechazada("ana", elegir(h, "testudo")), rechazos::FORMACION_SIN_TECNOLOGIA);
+    assert_eq!(e.rechazada("beto", elegir(h, "columna")), rechazos::NO_AUTORIZADO, "solo la cuenta del héroe");
+    assert_eq!(e.rechazada("beto", elegir(beto, "columna")), rechazos::ESCUADRA_AJENA);
+    assert_eq!(formacion(&e), reglas.por_id("linea").unwrap(), "los rechazos no dejan rastro");
+
+    // Con una Facción que no tiene la tecnología, igual; cuando la adopta, las cerradas.
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(1) });
+    assert_eq!(e.rechazada("ana", elegir(h, "testudo")), rechazos::FORMACION_SIN_TECNOLOGIA);
+    e.ok("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["disciplina_formacion".into()] });
+    e.ok("ana", elegir(h, "testudo"));
+    assert_eq!(nucleo::proyeccion::propios::escuadron(&e.n, e.n.escuadra(s).unwrap().1).formacion, "testudo");
+    // Perder la tecnología no la cambia en la escuadra: el ticket la cambia por la de reposo si ya no se permite.
+    e.ok("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec![] });
+    assert_eq!(formacion(&e), reglas.por_id("testudo").unwrap());
+    // La foto la guarda (BAN62).
+    let vuelta = nucleo::Estado::deserializar(&e.n.estado().serializar(), &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
+    let guardada = vuelta.militar.heroes[&h].heroe.escuadras.iter().find(|x| x.id == s).unwrap().formacion;
+    assert_eq!(guardada, reglas.por_id("testudo").unwrap());
+}
+
+// ───────────────────────────── 6. Herido y presencia ─────────────────────────────
+
+#[test]
+fn un_heroe_herido_lo_esta_dos_minutos_y_se_lee_al_mirar_sin_ningun_evento() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let h = e.heroe("ana", 0);
+    assert_eq!(e.rechazada("ana", Comando::HerirHeroe { heroe: h }), rechazos::NO_AUTORIZADO, "herir es del combate: hoy, de la administración");
+    assert_eq!(e.rechazada("admin", Comando::HerirHeroe { heroe: 99 }), rechazos::HEROE_DESCONOCIDO);
+    e.avanzar(10 * MIN);
+    let t = e.n.ahora();
+    let cola = en_cola(&e.n);
+    e.ok("admin", Comando::HerirHeroe { heroe: h });
+    assert_eq!(e.n.heroe(h).unwrap().heroe.herido_hasta, Some(t + 2 * MIN));
+    assert!(e.n.heroe_herido(h));
+    assert_eq!(en_cola(&e.n), cola, "curarse no programa nada: se mira al leer");
+    assert_eq!(e.ord("admin", Comando::HerirHeroe { heroe: h }).resultado, Resultado::SinCambios, "a un herido no se le alarga");
+    e.n.avanzar_hasta(t + 2 * MIN - 1);
+    assert!(e.n.heroe_herido(h));
+    e.n.avanzar_hasta(t + 2 * MIN);
+    assert!(!e.n.heroe_herido(h), "vence en el instante exacto");
+    e.ok("admin", Comando::HerirHeroe { heroe: h });
+    assert_eq!(hechos(&e.n, "heroe.herido").len(), 2);
+}
+
+#[test]
+fn cerrar_sesion_dentro_de_un_lugar_sale_ya_sin_mover_nada_y_conectarse_devuelve_el_control() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let h = e.heroe("ana", 0);
+    let (t, donde, cola) = (e.n.ahora(), e.n.heroe(h).unwrap().heroe.presencia.ubicacion, en_cola(&e.n));
+    e.ok("ana", Comando::CerrarSesion { heroe: h });
+    let p = e.n.heroe(h).unwrap().heroe.presencia;
+    assert_eq!((p.fuera, p.desconecta_en, p.ubicacion), (true, None, donde), "sale ya y sigue donde estaba");
+    assert_eq!(en_cola(&e.n), cola, "no programa ninguna salida");
+    let sale = hechos(&e.n, "heroe.sale_del_mundo");
+    assert_eq!((sale.len(), sale[0].0), (1, t));
+    assert_eq!(e.rechazada("ana", Comando::CerrarSesion { heroe: h }), rechazos::HEROE_FUERA_DEL_MUNDO);
+    assert_eq!(e.rechazada("ana", Comando::Desconectarse { heroe: h }), rechazos::HEROE_FUERA_DEL_MUNDO, "el socket que se cierra después no cambia nada");
+    e.ok("ana", Comando::Conectarse { heroe: h });
+    assert_eq!(e.n.heroe(h).unwrap().heroe.presencia.ubicacion, donde);
+}
+
+#[test]
+fn desconectarse_programa_la_salida_a_dos_minutos_y_medio_y_conectarse_la_cancela_o_vuelve() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let h = e.heroe("ana", 0);
+    let t = e.n.ahora();
+    let cola = en_cola(&e.n);
+    e.ok("ana", Comando::Desconectarse { heroe: h });
+    assert_eq!(e.n.heroe(h).unwrap().heroe.presencia.desconecta_en, Some(t + 150_000));
+    assert_eq!(en_cola(&e.n), cola + 1, "un solo evento, con prioridad 1");
+    assert!(e.n.estado().cola.volcar().iter().any(|ev| matches!(ev.carga, nucleo::Carga::SalidaDelMundo) && ev.prioridad == nucleo::PRIO_SALIDA && ev.instante == t + 150_000));
+    assert_eq!(e.ord("ana", Comando::Desconectarse { heroe: h }).resultado, Resultado::SinCambios, "pedirlo dos veces no cambia nada");
+    // Conectarse antes de que venza la cancela, sin eventos, y el evento viejo no hace nada.
+    e.ok("ana", Comando::Conectarse { heroe: h });
+    assert_eq!(e.n.heroe(h).unwrap().heroe.presencia.desconecta_en, None);
+    assert_eq!(e.ord("ana", Comando::Conectarse { heroe: h }).resultado, Resultado::SinCambios);
+    e.avanzar(10 * MIN);
+    assert!(!e.n.heroe(h).unwrap().heroe.presencia.fuera && hechos(&e.n, "heroe.sale_del_mundo").is_empty());
+
+    // Si vence, sale: fuera del mundo solo se puede conectar.
+    let t = e.n.ahora();
+    e.ok("ana", Comando::Desconectarse { heroe: h });
+    e.n.avanzar_hasta(t + 150_000 - 1);
+    assert!(!e.n.heroe(h).unwrap().heroe.presencia.fuera);
+    e.n.avanzar_hasta(t + 150_000);
+    assert!(e.n.heroe(h).unwrap().heroe.presencia.fuera);
+    let sale = hechos(&e.n, "heroe.sale_del_mundo");
+    assert_eq!((sale.len(), sale[0].0), (1, t + 150_000));
+    assert_eq!(e.rechazada("ana", Comando::PedirPrestamo { heroe: h, tropas: vec![Tropa::Granjeros] }), rechazos::HEROE_FUERA_DEL_MUNDO);
+    assert_eq!(e.rechazada("ana", Comando::Desconectarse { heroe: h }), rechazos::HEROE_FUERA_DEL_MUNDO);
+    assert_eq!(e.rechazada("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Mercenarios(1) }), rechazos::HEROE_FUERA_DEL_MUNDO);
+    e.ok("ana", Comando::Conectarse { heroe: h });
+    assert!(!e.n.heroe(h).unwrap().heroe.presencia.fuera);
+    assert_eq!(hechos(&e.n, "heroe.vuelve_al_mundo").len(), 1);
+    e.ok("ana", Comando::PedirPrestamo { heroe: h, tropas: vec![Tropa::Granjeros] });
+
+    // En campo (andamiaje de administración: el resto de las columnas está en `columnas.rs`): una columna admite a varios héroes, y cada uno va en una.
+    let puerta = campamento(&m.0, 0);
+    let t = e.n.ahora();
+    let col = e.n.crear_ejercito(t, "ana", 1, puerta, 500, 100_000).unwrap();
+    assert_eq!(e.rechazada("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Desconectado(puerta) }), rechazos::HEROE_UBICACION_INVALIDA);
+    e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Columna(col) });
+    assert_eq!(e.ord("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Columna(col) }).resultado, Resultado::SinCambios);
+    assert_eq!(e.n.heroe(h).unwrap().columna, Some(col));
+    let otra = e.n.crear_ejercito(t, "beto", 1, puerta, 500, 100_000).unwrap();
+    assert_eq!(e.rechazada("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Columna(otra) }), rechazos::HEROE_YA_EN_COLUMNA);
+    assert_eq!(e.rechazada("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Mercenarios(1) }), rechazos::HEROE_EN_COLUMNA, "de una columna se sale entrando en un lugar");
+    let otro = e.heroe("beto", 1);
+    e.ok("admin", Comando::ColocarHeroe { heroe: otro, ubicacion: Ubicacion::Columna(col) });
+    assert_eq!(e.n.ejercito(col).unwrap().columna.participantes.len(), 3, "el héroe de campo de la administración y los dos");
+    assert_eq!(e.rechazada("admin", Comando::ColocarHeroe { heroe: otro, ubicacion: Ubicacion::Columna(9_999) }), rechazos::EJERCITO_DESCONOCIDO);
+    assert_eq!(e.rechazada("admin", Comando::ColocarHeroe { heroe: otro, ubicacion: Ubicacion::Asentamiento(9_999) }), rechazos::ASENTAMIENTO_DESCONOCIDO);
+    assert_eq!(e.rechazada("admin", Comando::ColocarHeroe { heroe: otro, ubicacion: Ubicacion::Mercenarios(9_999) }), rechazos::CAMPAMENTO_DESCONOCIDO);
+}
+
+// ───────────────────────────── 7. Guarnición y ración ─────────────────────────────
+
+/// Un escenario con la ración de un soldado fijada (en milésimas de trigo por minuto; el valor vigente es 150): solo se toca la cifra, no la huella.
+fn escenario_con_racion(m: &M, semilla: u64, racion: i64) -> Escenario {
+    let mut a = arranque(m, semilla);
+    std::sync::Arc::make_mut(&mut a.reglas.economia.militar).militar.racion_por_soldado = racion;
+    let mut n = Nucleo::nuevo(a);
+    let p = sitio_rico(&n, &m.0, 0, 1);
+    let a = fundar(&mut n, 0, "a", "ana", 1, p);
+    Escenario { n, a, cuenta: 0 }
+}
+
+#[test]
+fn la_guarnicion_respeta_el_cupo_de_sus_edificios_y_se_retira_sin_gastar_liderazgo() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let a = e.a;
+    e.avanzar(24 * HORA);
+    let h = e.heroe_en_la_plaza("ana");
+    let milicia = e.ok("ana", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: Tropa::MiliciaLanceros }).creadas[0];
+    let lenadores = e.ok("ana", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: Tropa::Lenadores }).creadas[0];
+    let asignar = |escuadra| Comando::AsignarGuarnicion { heroe: h, escuadra };
+    // Sin Barracón, Galería ni Caballerizas no hay guarnición.
+    assert_eq!(e.n.cupo_de_guarnicion(a), Some(0));
+    assert_eq!(e.rechazada("ana", asignar(lenadores)), rechazos::GUARNICION_SUPERA_EL_CUPO);
+    // Un Barracón (la plaza sube al nivel 2 por la administración): cupo de 7 por héroe residente.
+    e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: a, nivel: 2 });
+    e.dar(a, Madera, 1_000_000);
+    e.ok("admin", Comando::AnadirEdificio { asentamiento: a, tipo: asentamiento::catalogo::Tipo::Barracon });
+    // Espera su turno en la cola de obras y tarda 12 h en levantarse.
+    let activo = |e: &Escenario| e.n.economia(a).unwrap().edificios.iter().any(|x| x.tipo == asentamiento::catalogo::Tipo::Barracon && x.activo());
+    for _ in 0..80 {
+        if activo(&e) {
+            break;
+        }
+        e.avanzar(HORA);
+    }
+    assert!(activo(&e), "el Barracón acaba por levantarse");
+    assert_eq!(e.n.cupo_de_guarnicion(a), Some(7), "Barracón de nivel interno 1");
+    assert_eq!(e.rechazada("ana", asignar(milicia)), rechazos::GUARNICION_SUPERA_EL_CUPO, "una escuadra de escalón 2 cuesta 14 de Liderazgo");
+    assert_eq!(e.rechazada("ana", asignar(99_999)), rechazos::ESCUADRA_AJENA);
+    e.ok("ana", asignar(lenadores));
+    assert!(e.n.escuadra(lenadores).unwrap().1.en_guarnicion);
+    assert_eq!(e.rechazada("ana", asignar(lenadores)), rechazos::GUARNICION_YA_ASIGNADA);
+    // «Levas de guarnición» (+14 al cupo de cada residente) mientras dure la política.
+    e.ok("admin", Comando::ActivarPolitica { asentamiento: a, politica: "levas_guarnicion".into(), cargo: asentamiento::Cargo::General });
+    assert_eq!(e.n.cupo_de_guarnicion(a), Some(21));
+    e.ok("ana", asignar(milicia));
+    // Retirar una escuadra la devuelve al campamento; una que no está en la guarnición no se retira.
+    assert_eq!(e.rechazada("ana", Comando::RetirarGuarnicion { heroe: h, escuadra: 99_999 }), rechazos::GUARNICION_NO_ASIGNADA);
+    e.ok("ana", Comando::RetirarGuarnicion { heroe: h, escuadra: milicia });
+    assert_eq!(e.rechazada("ana", Comando::RetirarGuarnicion { heroe: h, escuadra: milicia }), rechazos::GUARNICION_NO_ASIGNADA);
+    // Dejar de residir suelta la guarnición.
+    e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: None });
+    assert!(e.n.heroe(h).unwrap().heroe.escuadras.iter().all(|x| !x.en_guarnicion));
+    assert_eq!(e.n.soldados_del_campamento(a), 0, "sin residencia la tropa no come de la plaza");
+}
+
+#[test]
+fn el_campamento_de_la_plaza_come_del_almacen_justo_despues_de_la_poblacion_y_sin_eventos_nuevos() {
+    let m = con_mundo!();
+    // Dos mundos idénticos salvo la ración (4 y 6 de trigo por soldado y minuto): lo que el segundo se come de más es exactamente la diferencia. Con 2 de ración la
+    // Granja de la plaza producía más de lo que se comía y su almacén tocaba el techo, que recorta la entrada.
+    let hasta = |racion| {
+        let mut e = escenario_con_racion(m, 7, racion);
+        e.avanzar(24 * HORA);
+        e.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: e.a, pausada: true });
+        let h = e.heroe_en_la_plaza("ana");
+        let a = e.a;
+        e.ok("ana", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: Tropa::MiliciaLanceros });
+        e.ok("ana", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: Tropa::Lenadores });
+        e
+    };
+    let (mut poco, mut mucho) = (hasta(4_000), hasta(6_000));
+    assert_eq!(poco.n.soldados_del_campamento(poco.a), 55);
+    let (cola, antes) = (en_cola(&mucho.n), poco.almacen(Trigo));
+    assert_eq!(antes, mucho.almacen(Trigo), "hasta reclutar son idénticos");
+    for k in 1..=8 {
+        poco.avanzar(MIN);
+        mucho.avanzar(MIN);
+        assert_eq!(poco.almacen(Trigo) - mucho.almacen(Trigo), k * 55 * 2_000, "la guarnición come 55 soldados × ración por minuto, ni más ni menos ({k} min)");
+    }
+    assert_eq!(en_cola(&mucho.n), cola, "comer no programa ningún evento: lo hace el paso de minuto que ya existe");
+    // Lo que come la guarnición cuenta en lo consumido del trigo (mecánica 60), y lo producido no cambia.
+    let tendencia = |e: &Escenario| e.n.economia(e.a).unwrap().tendencia;
+    let (tp, tm) = (tendencia(&poco), tendencia(&mucho));
+    let i = Trigo.indice();
+    assert_eq!((tm.consumido[i] - tp.consumido[i], tm.producido[i]), (55 * 2_000, tp.producido[i]));
+    assert_eq!(mucho.n.economia(mucho.a).unwrap().poblacion, poco.n.economia(poco.a).unwrap().poblacion, "la población come antes y no nota la ración");
+}
+
+#[test]
+fn sin_trigo_baja_la_moral_y_con_la_moral_a_cero_desertan_los_soldados_hasta_que_vuelve_la_ración() {
+    let m = con_mundo!();
+    // Una ración de 7 de trigo por soldado y minuto (385 por minuto con 55 soldados) vacía el almacén; con el arranque rápido (2026-10-28) la Granja ya está a nivel 2 y
+    // con 4 de ración cubría casi todo, así que la moral apenas bajaba.
+    let mut e = escenario_con_racion(m, 7, 7_000);
+    let a = e.a;
+    e.avanzar(24 * HORA);
+    e.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: a, pausada: true });
+    let h = e.heroe_en_la_plaza("ana");
+    let milicia = e.ok("ana", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: Tropa::MiliciaLanceros }).creadas[0];
+    let lenadores = e.ok("ana", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: Tropa::Lenadores }).creadas[0];
+    let moral = |e: &Escenario, id| e.n.escuadra(id).unwrap().1.moral_en(e.n.ahora());
+    let cantidad = |e: &Escenario, id| e.n.escuadra(id).unwrap().1.cantidad;
+    // Mientras hay trigo para toda la ración, la moral no se mueve.
+    let mut hambre = None;
+    for _ in 0..200 {
+        e.avanzar(MIN);
+        if moral(&e, milicia) < 100_000 {
+            hambre = Some((e.n.ahora(), moral(&e, milicia)));
+            break;
+        }
+        assert_eq!(cantidad(&e, milicia), 25);
+    }
+    // El primer paso sin ración entera solo pierde en proporción a lo que faltó; mientras la ración sea mínima (lo que da la Granja), entre 10 y 20
+    // puntos por minuto según lo que falte. Hasta que la moral llega a cero no deserta nadie.
+    let (t0, m0) = hambre.expect("el almacén se acaba");
+    assert!((80_000..100_000).contains(&m0), "una ración incompleta quita menos que una ausente: {m0}");
+    let (mut anterior, mut k) = (m0, 0);
+    while anterior > 0 {
+        k += 1;
+        assert!(k <= 10, "con 10 a 20 puntos por minuto llega a cero en diez pasos como mucho");
+        e.n.avanzar_hasta(t0 + k * MIN);
+        let m = moral(&e, milicia);
+        assert!(m < anterior && anterior - m <= 20_000 && (m == 0 || anterior - m > 10_000), "minuto {k} de hambre: de {anterior} a {m}");
+        anterior = m;
+        let desertaron = if m == 0 { (23, 28) } else { (25, 30) };
+        assert_eq!((cantidad(&e, milicia), cantidad(&e, lenadores)), desertaron, "minuto {k}: la moral es {m}");
+    }
+    // Al llegar a cero, ese mismo minuto desertan ceil(5 %) de cada escuadra: ceil(25 × 0,05) = 2 y ceil(30 × 0,05) = 2.
+    let des = hechos(&e.n, "tropas.desercion");
+    assert_eq!(des.len(), 2);
+    assert!(des.iter().all(|d| d.0 == t0 + k * MIN && d.1 == vec![a] && dato(d, "desertores") == 2 && dato(d, "heroe") == h as i64));
+    e.n.avanzar_hasta(t0 + (k + 1) * MIN);
+    assert_eq!((cantidad(&e, milicia), cantidad(&e, lenadores)), (21, 26), "cada minuto con la moral a cero deserta otro 5 %");
+    // Vuelve el trigo: la moral sube 5 por minuto y no deserta nadie más.
+    e.dar(a, Trigo, 3_000_000);
+    let (c_milicia, desertados) = (cantidad(&e, milicia), hechos(&e.n, "tropas.desercion").len());
+    e.avanzar(4 * MIN);
+    assert_eq!(moral(&e, milicia), 20_000, "5 por minuto desde el minuto siguiente a la ración");
+    assert_eq!((cantidad(&e, milicia), hechos(&e.n, "tropas.desercion").len()), (c_milicia, desertados));
+}
+
+// ───────────────────────────── 8. Escolta de caravanas ─────────────────────────────
+
+/// La plaza A con su Mercado (cupo de escolta 100) y una plaza B de otra Facción, 72 horas después de fundarse (ya hay población de sobra para reclutar).
+fn escenario_de_escolta(m: &M) -> (Escenario, u64) {
+    let mut e = escenario_de_tope(m, 7);
+    let a = e.a;
+    e.dar(a, Madera, 350_000);
+    e.ok("admin", Comando::AnadirEdificio { asentamiento: a, tipo: asentamiento::catalogo::Tipo::Mercado });
+    let mercado = |e: &Escenario| e.n.economia(a).unwrap().edificios.iter().any(|x| x.tipo == asentamiento::catalogo::Tipo::Mercado && x.activo());
+    for _ in 0..80 {
+        if mercado(&e) && e.n.ahora() >= 72 * HORA {
+            break;
+        }
+        e.avanzar(HORA);
+    }
+    assert!(mercado(&e), "el Mercado acaba por levantarse");
+    let t = e.n.ahora();
+    let pb = sitio_rico(&e.n, &m.0, 3, 2);
+    let b = fundar(&mut e.n, t, "b", "beto", 2, pb);
+    (e, b)
+}
+
+#[test]
+fn la_escolta_se_cede_con_la_caravana_parada_en_su_origen_y_vuelve_al_campamento_por_cada_camino() {
+    let m = con_mundo!();
+    let (mut e, b) = escenario_de_escolta(m);
+    let a = e.a;
+    let h = e.heroe_en_la_plaza("ana");
+    let milicia = e.ok("ana", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: Tropa::MiliciaLanceros }).creadas[0];
+    let lenadores = e.ok("ana", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: Tropa::Lenadores }).creadas[0];
+    let caravana = |e: &mut Escenario| {
+        let c = e.ok("ana", Comando::CrearCaravana { asentamiento: a }).creadas[0];
+        e.ok("ana", Comando::AnadirCarro { caravana: c, tipo: comercio::caravana::TipoCarro::Basico });
+        e.ok("ana", Comando::AnadirAnimal { caravana: c, carro: 0, animal: comercio::caravana::Animal::Buey });
+        e.ok("ana", Comando::ReservarCaravana { caravana: c, reservada: true });
+        c
+    };
+    let c = caravana(&mut e);
+    assert_eq!(e.n.cupos_de_flota(a).unwrap().escolta, 100);
+    let asignar = |caravana, escuadras: &[u64]| Comando::AsignarEscolta { caravana, heroe: h, escuadras: escuadras.to_vec() };
+    let contenedor = |e: &Escenario, id| e.n.escuadra(id).unwrap().1.contenedor;
+
+    // Rechazos, cada uno con su código y sin dejar rastro.
+    assert_eq!(e.rechazada("beto", asignar(c, &[milicia])), rechazos::NO_AUTORIZADO, "cada residente cede lo suyo");
+    assert_eq!(e.rechazada("ana", asignar(99, &[milicia])), rechazos::CARAVANA_DESCONOCIDA);
+    assert_eq!(e.rechazada("ana", asignar(c, &[])), rechazos::CARAVANA_ESCOLTA_INVALIDA, "al menos una escuadra");
+    assert_eq!(e.rechazada("ana", asignar(c, &[milicia, milicia])), rechazos::CARAVANA_ESCOLTA_INVALIDA, "sin repetidas");
+    assert_eq!(e.rechazada("ana", asignar(c, &[99_999])), rechazos::CARAVANA_ESCOLTA_INVALIDA, "tiene que ser suya");
+    e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Campamento(0)) });
+    assert_eq!(e.rechazada("ana", asignar(c, &[milicia])), rechazos::CARAVANA_ESCOLTA_INVALIDA, "el héroe tiene que residir en el origen de la caravana");
+    e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(a as u32)) });
+    assert!(e.n.caravana(c).unwrap().escolta.is_empty() && contenedor(&e, milicia) == Contenedor::Campamento);
+
+    // Se ceden enteras, no gastan el Liderazgo de quien las presta y salen del campamento (de la ración de la plaza).
+    e.ok("ana", asignar(c, &[milicia, lenadores]));
+    assert_eq!((contenedor(&e, milicia), contenedor(&e, lenadores)), (Contenedor::Escolta(c), Contenedor::Escolta(c)));
+    assert_eq!(e.n.caravana(c).unwrap().escolta.iter().map(|x| (x.id, x.heroe, x.liderazgo)).collect::<Vec<_>>(), vec![(milicia, h, 14), (lenadores, h, 7)]);
+    assert_eq!(hechos(&e.n, "comercio.caravana_escolta_cedida").len(), 1);
+    assert_eq!(e.n.soldados_del_campamento(a), 0, "la escolta no consume la ración de la plaza");
+    assert_eq!(e.rechazada("ana", asignar(c, &[milicia])), rechazos::CARAVANA_ESCOLTA_INVALIDA, "ya no está en el campamento");
+    assert_eq!(e.rechazada("ana", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: Tropa::MiliciaLanceros }), rechazos::RECLUTAMIENTO_YA_LA_TIENES_FUERA, "una escuadra en escolta no se repone");
+
+    // Cada héroe retira solo las suyas; las retiradas vuelven al campamento.
+    assert_eq!(e.rechazada("beto", Comando::QuitarEscolta { caravana: c, heroe: h, escuadras: None }), rechazos::NO_AUTORIZADO);
+    assert_eq!(e.rechazada("ana", Comando::QuitarEscolta { caravana: c, heroe: h, escuadras: Some(vec![99_999]) }), rechazos::CARAVANA_ESCOLTA_INVALIDA);
+    e.ok("ana", Comando::QuitarEscolta { caravana: c, heroe: h, escuadras: Some(vec![milicia]) });
+    assert_eq!((contenedor(&e, milicia), contenedor(&e, lenadores)), (Contenedor::Campamento, Contenedor::Escolta(c)));
+    e.ok("ana", Comando::QuitarEscolta { caravana: c, heroe: h, escuadras: None });
+    assert_eq!(contenedor(&e, lenadores), Contenedor::Campamento);
+    assert_eq!(e.ord("ana", Comando::QuitarEscolta { caravana: c, heroe: h, escuadras: None }).resultado, Resultado::SinCambios);
+    assert_eq!(hechos(&e.n, "comercio.caravana_escolta_retirada").len(), 2);
+
+    // Cancelar la preparación la devuelve.
+    e.dar(a, Cobre, 100_000);
+    e.ok("ana", asignar(c, &[milicia]));
+    let salir = e.n.ahora() + HORA;
+    e.ok("ana", Comando::PrepararCaravana { caravana: c, destino: b, carga: vec![(Cobre, 20_000)], salir_en: Some(salir), escolta: None });
+    assert_eq!(contenedor(&e, milicia), Contenedor::Escolta(c));
+    assert_eq!(e.rechazada("ana", asignar(c, &[lenadores])), rechazos::CARAVANA_NO_DISPONIBLE, "solo con la caravana parada");
+    e.ok("ana", Comando::CancelarCaravana { caravana: c });
+    assert_eq!(contenedor(&e, milicia), Contenedor::Campamento);
+
+    // Viaja con la caravana y vuelve al campamento cuando la caravana llega a casa.
+    e.ok("ana", asignar(c, &[milicia, lenadores]));
+    e.avanzar(11 * MIN);
+    e.ok("ana", Comando::PrepararCaravana { caravana: c, destino: b, carga: vec![(Cobre, 20_000)], salir_en: None, escolta: None });
+    assert_eq!(e.n.caravana(c).unwrap().estado, comercio::caravana::EstadoCaravana::EnTransito);
+    let ida = e.n.caravana(c).unwrap().plan.as_ref().unwrap().fin().unwrap();
+    e.n.avanzar_hasta(ida - 1);
+    assert_eq!(contenedor(&e, milicia), Contenedor::Escolta(c));
+    e.n.avanzar_hasta(ida);
+    let vuelta = e.n.caravana(c).unwrap().plan.as_ref().unwrap().fin().unwrap();
+    assert_eq!((e.n.caravana(c).unwrap().estado, contenedor(&e, milicia)), (comercio::caravana::EstadoCaravana::Retornando, Contenedor::Escolta(c)), "durante la vuelta sigue cedida");
+    e.n.avanzar_hasta(vuelta);
+    assert_eq!(e.n.caravana(c).unwrap().estado, comercio::caravana::EstadoCaravana::Disponible);
+    assert_eq!((contenedor(&e, milicia), contenedor(&e, lenadores)), (Contenedor::Campamento, Contenedor::Campamento));
+    assert!(e.n.caravana(c).unwrap().escolta.is_empty());
+
+    // Si la caravana se pierde, la escolta vuelve a su campamento.
+    e.ok("ana", asignar(c, &[milicia]));
+    let t = e.n.ahora();
+    e.n.aplicar_perdida_de_carros(t, c, &[0]).expect("pierde su único carro");
+    assert!(e.n.caravana(c).is_none());
+    assert_eq!(contenedor(&e, milicia), Contenedor::Campamento);
+}
+
+/// Pedido del autor del 2026-11-04: de visita en una plaza de su Facción, el héroe usa la tropa que trae en su columna para la guarnición de la plaza (con el cupo de un residente)
+/// y para escoltar las caravanas de la plaza que están en casa; al salir no se lleva lo que dejó, que solo se recoge desde dentro y vuelve a su campamento si deja la Facción.
+#[test]
+fn de_visita_en_una_plaza_de_su_faccion_guarnece_y_escolta_con_lo_que_trae_y_al_salir_no_se_lo_lleva() {
+    let m = con_mundo!();
+    let (mut e, _) = escenario_de_escolta(m);
+    let a = e.a;
+    e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: a, nivel: 2 });
+    e.dar(a, Madera, 1_000_000);
+    e.ok("admin", Comando::AnadirEdificio { asentamiento: a, tipo: asentamiento::catalogo::Tipo::Barracon });
+    let activo = |e: &Escenario| e.n.economia(a).unwrap().edificios.iter().any(|x| x.tipo == asentamiento::catalogo::Tipo::Barracon && x.activo());
+    for _ in 0..80 {
+        if activo(&e) {
+            break;
+        }
+        e.avanzar(HORA);
+    }
+    assert_eq!(e.n.cupo_de_guarnicion(a), Some(7), "Barracón de nivel interno 1");
+    // Una caravana de la plaza, en casa.
+    let ana = e.heroe_en_la_plaza("ana");
+    let c = e.ok("ana", Comando::CrearCaravana { asentamiento: a }).creadas[0];
+    e.ok("ana", Comando::AnadirCarro { caravana: c, tipo: comercio::caravana::TipoCarro::Basico });
+    e.ok("ana", Comando::AnadirAnimal { caravana: c, carro: 0, animal: comercio::caravana::Animal::Buey });
+    // «dora», de la Facción 1, recluta en la plaza, sale con su tropa, se muda al campamento de mercenarios y vuelve de visita con su columna.
+    let h = e.heroe_en_la_plaza("dora");
+    let lenadores = e.ok("dora", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: Tropa::Lenadores }).creadas[0];
+    let milicia = e.ok("dora", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: Tropa::MiliciaLanceros }).creadas[0];
+    let col = e.ok("dora", Comando::SalirAlMundo { asentamiento: a, heroe: h, escuadras: vec![lenadores, milicia], carga: vec![] }).creadas[0];
+    e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Campamento(0)) });
+    let contenedor = |e: &Escenario, id| e.n.escuadra(id).unwrap().1.contenedor;
+    let guarnicion = |e: &Escenario| nucleo::proyeccion::interior::asentamiento(&e.n, a).unwrap();
+    let asignar = |escuadra| Comando::AsignarGuarnicion { heroe: h, escuadra };
+    e.ok("dora", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: h });
+    assert_eq!((contenedor(&e, lenadores), contenedor(&e, milicia)), (Contenedor::Ejercito(col), Contenedor::Ejercito(col)));
+
+    // La guarnición: con el cupo de un residente (la Milicia cuesta 14 de Liderazgo), de la columna con la que entró.
+    assert_eq!(e.rechazada("dora", asignar(milicia)), rechazos::GUARNICION_SUPERA_EL_CUPO);
+    assert_eq!(e.rechazada("dora", asignar(99_999)), rechazos::ESCUADRA_AJENA);
+    e.ok("dora", asignar(lenadores));
+    assert_eq!(contenedor(&e, lenadores), Contenedor::Plaza(a));
+    assert!(!e.n.estado().ejercitos[&col].columna.escuadras.contains(&lenadores), "sale de la columna");
+    assert_eq!(e.rechazada("dora", asignar(lenadores)), rechazos::GUARNICION_YA_ASIGNADA);
+    let p = guarnicion(&e);
+    let esc = format!("esc-{lenadores}");
+    assert_eq!(p.guarnicion_ids, vec![esc.clone()]);
+    let soldados = e.n.escuadra(lenadores).unwrap().1.cantidad as u32;
+    assert_eq!(p.guarnicion, vec![contrato::v1::GuarnicionInforme { tropa_id: "lenadores".into(), cantidad: soldados, heroe_id: format!("heroe-{h}") }], "de quién es cada escuadra");
+
+    // La escolta de una caravana de la plaza que está en casa, también de la columna; quitarla la devuelve a la columna.
+    let escoltar = |escuadras: &[u64]| Comando::AsignarEscolta { caravana: c, heroe: h, escuadras: escuadras.to_vec() };
+    assert_eq!(e.rechazada("dora", escoltar(&[lenadores])), rechazos::ESCUADRA_FUERA_DE_TU_COLUMNA);
+    e.ok("dora", escoltar(&[milicia]));
+    assert_eq!(contenedor(&e, milicia), Contenedor::Escolta(c));
+    e.ok("dora", Comando::QuitarEscolta { caravana: c, heroe: h, escuadras: None });
+    assert_eq!(contenedor(&e, milicia), Contenedor::Ejercito(col));
+    assert!(e.n.estado().ejercitos[&col].columna.escuadras.contains(&milicia));
+    e.ok("dora", escoltar(&[milicia]));
+
+    // Al salir, lo que dejó se queda: la columna sale vacía.
+    e.ok("dora", Comando::SalirDeAsentamiento { asentamiento: a, heroe: h });
+    assert!(e.n.estado().ejercitos[&col].columna.escuadras.is_empty(), "no se lleva lo que dejó");
+    assert_eq!((contenedor(&e, lenadores), contenedor(&e, milicia)), (Contenedor::Plaza(a), Contenedor::Escolta(c)));
+    assert_eq!(guarnicion(&e).guarnicion_ids, vec![esc.clone()], "la guarnición sigue en la plaza");
+    // Se recoge desde dentro o, con su columna a la puerta, a la columna (2026-11-10, `de_la_puerta_de_una_plaza_de_su_faccion_se_guarnece_y_se_recoge_con_la_columna`).
+    e.ok("dora", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: h });
+    e.ok("dora", Comando::RetirarGuarnicion { heroe: h, escuadra: lenadores });
+    assert_eq!(contenedor(&e, lenadores), Contenedor::Ejercito(col));
+    assert!(guarnicion(&e).guarnicion_ids.is_empty());
+
+    // Solo en una plaza de su Facción; si la deja, lo que tenía en la guarnición vuelve a su campamento.
+    e.ok("dora", asignar(lenadores));
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: h, faccion: Some(2) });
+    assert_eq!(contenedor(&e, lenadores), Contenedor::Campamento, "vuelve, intacta, a su campamento");
+    e.ok("admin", Comando::QuitarEscolta { caravana: c, heroe: h, escuadras: None });
+    assert_eq!(e.rechazada("dora", asignar(milicia)), rechazos::GUARNICION_FACCION_AJENA);
+    let _ = ana;
+}
+
+/// Pedido del autor del 2026-11-10 (acciones a la puerta): con la columna a la puerta de una plaza de su Facción, sin entrar, el héroe deja escuadras de la columna en la guarnición y
+/// las recoge a ella. El residente las deja en su campamento de la plaza, de guarnición (su cupo de siempre); el que no reside, de visita (`Contenedor::Plaza`), como si entrara.
+#[test]
+fn de_la_puerta_de_una_plaza_de_su_faccion_se_guarnece_y_se_recoge_con_la_columna() {
+    let m = con_mundo!();
+    let (mut e, _) = escenario_de_escolta(m);
+    let a = e.a;
+    e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: a, nivel: 2 });
+    e.dar(a, Madera, 1_000_000);
+    e.ok("admin", Comando::AnadirEdificio { asentamiento: a, tipo: asentamiento::catalogo::Tipo::Barracon });
+    let activo = |e: &Escenario| e.n.economia(a).unwrap().edificios.iter().any(|x| x.tipo == asentamiento::catalogo::Tipo::Barracon && x.activo());
+    for _ in 0..80 {
+        if activo(&e) {
+            break;
+        }
+        e.avanzar(HORA);
+    }
+    assert_eq!(e.n.cupo_de_guarnicion(a), Some(7), "Barracón de nivel interno 1");
+    let contenedor = |e: &Escenario, id| e.n.escuadra(id).unwrap().1.clone();
+    let ubicacion = |e: &Escenario, h| e.n.heroe(h).unwrap().heroe.presencia.ubicacion;
+
+    // Ana reside en la plaza: sale con sus Leñadores y, desde la puerta, los deja de guarnición en su campamento.
+    let ana = e.heroe_en_la_plaza("ana");
+    let suyos = e.ok("ana", Comando::ReclutarTropa { asentamiento: a, heroe: ana, tropa: Tropa::Lenadores }).creadas[0];
+    let milicia = e.ok("ana", Comando::ReclutarTropa { asentamiento: a, heroe: ana, tropa: Tropa::MiliciaLanceros }).creadas[0];
+    let col = e.ok("ana", Comando::SalirAlMundo { asentamiento: a, heroe: ana, escuadras: vec![suyos, milicia], carga: vec![] }).creadas[0];
+    assert_eq!(e.rechazada("ana", Comando::AsignarGuarnicion { heroe: ana, escuadra: milicia }), rechazos::GUARNICION_SUPERA_EL_CUPO, "con el cupo de siempre");
+    e.ok("ana", Comando::AsignarGuarnicion { heroe: ana, escuadra: suyos });
+    assert_eq!(ubicacion(&e, ana), Ubicacion::Columna(col), "sin entrar");
+    let s = contenedor(&e, suyos);
+    assert_eq!((s.contenedor, s.en_guarnicion), (Contenedor::Campamento, true));
+    assert_eq!(e.n.estado().ejercitos[&col].columna.escuadras, vec![milicia], "sale de la columna");
+    assert_eq!(e.rechazada("ana", Comando::AsignarGuarnicion { heroe: ana, escuadra: suyos }), rechazos::GUARNICION_YA_ASIGNADA);
+    // Y la recoge a la columna.
+    e.ok("ana", Comando::RetirarGuarnicion { heroe: ana, escuadra: suyos });
+    let s = contenedor(&e, suyos);
+    assert_eq!((s.contenedor, s.en_guarnicion), (Contenedor::Ejercito(col), false));
+    assert_eq!(e.n.estado().ejercitos[&col].columna.escuadras, vec![milicia, suyos]);
+
+    // Dora, de la Facción 1, no reside: desde la puerta los deja de visita y los recoge igual.
+    let dora = e.heroe_en_la_plaza("dora");
+    let lenadores = e.ok("dora", Comando::ReclutarTropa { asentamiento: a, heroe: dora, tropa: Tropa::Lenadores }).creadas[0];
+    let suya = e.ok("dora", Comando::SalirAlMundo { asentamiento: a, heroe: dora, escuadras: vec![lenadores], carga: vec![] }).creadas[0];
+    e.ok("admin", Comando::FijarResidencia { heroe: dora, residencia: Some(Residencia::Campamento(0)) });
+    e.ok("dora", Comando::AsignarGuarnicion { heroe: dora, escuadra: lenadores });
+    assert_eq!(contenedor(&e, lenadores).contenedor, Contenedor::Plaza(a));
+    assert!(e.n.estado().ejercitos[&suya].columna.escuadras.is_empty());
+    assert_eq!(ubicacion(&e, dora), Ubicacion::Columna(suya));
+    e.ok("dora", Comando::RetirarGuarnicion { heroe: dora, escuadra: lenadores });
+    assert_eq!(contenedor(&e, lenadores).contenedor, Contenedor::Ejercito(suya));
+
+    // Lejos de la puerta, no.
+    let radio = e.n.estado().reglas.economia.militar.movimiento.radio_puerta;
+    let puerta = e.n.estado().asentamientos[&a].posicion;
+    let t = e.n.ahora();
+    let lejos = e.n.crear_ejercito(t, "leo", 1, Punto { x: puerta.x + 3 * radio, y: puerta.y }, 500, 100_000).unwrap();
+    let leo = e.n.ejercito(lejos).unwrap().columna.lider;
+    let de_leo = e.ok("admin", Comando::DarEscuadra { heroe: leo, tropa: Tropa::Lenadores, cantidad: 10 }).creadas[0];
+    assert_eq!(contenedor(&e, de_leo).contenedor, Contenedor::Ejercito(lejos));
+    assert_eq!(e.rechazada("leo", Comando::AsignarGuarnicion { heroe: leo, escuadra: de_leo }), rechazos::GUARNICION_SIN_RESIDENCIA);
+}
+
+#[test]
+fn la_escolta_tambien_se_cede_al_preparar_la_caravana_y_si_algo_falla_no_se_cede_nada() {
+    // Paridad P5 (`prepararCaravana { heroeId, escoltaEscuadronIds }`): mismas condiciones y mismo cupo que `asignarEscolta`, en el mismo lanzamiento.
+    let m = con_mundo!();
+    let (mut e, b) = escenario_de_escolta(m);
+    let a = e.a;
+    let h = e.heroe_en_la_plaza("ana");
+    let milicia = e.ok("ana", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: Tropa::MiliciaLanceros }).creadas[0];
+    let lenadores = e.ok("ana", Comando::ReclutarTropa { asentamiento: a, heroe: h, tropa: Tropa::Lenadores }).creadas[0];
+    let c = e.ok("ana", Comando::CrearCaravana { asentamiento: a }).creadas[0];
+    e.ok("ana", Comando::AnadirCarro { caravana: c, tipo: comercio::caravana::TipoCarro::Basico });
+    e.ok("ana", Comando::AnadirAnimal { caravana: c, carro: 0, animal: comercio::caravana::Animal::Buey });
+    e.ok("ana", Comando::ReservarCaravana { caravana: c, reservada: true });
+    e.dar(a, Cobre, 100_000);
+    let contenedor = |e: &Escenario, id| e.n.escuadra(id).unwrap().1.contenedor;
+    let salir = e.n.ahora() + HORA;
+    let preparar = |carga: i64, escolta: Option<(u64, Vec<u64>)>| Comando::PrepararCaravana { caravana: c, destino: b, carga: vec![(Cobre, carga)], salir_en: Some(salir), escolta };
+
+    // Los rechazos de la escolta no dejan rastro: ni carga reservada ni escuadras fuera del campamento.
+    let cobre = e.n.economia(a).unwrap().almacen.cantidad(Cobre);
+    assert_eq!(e.rechazada("beto", preparar(20_000, Some((h, vec![milicia])))), rechazos::NO_AUTORIZADO, "cada residente cede lo suyo");
+    assert_eq!(e.rechazada("ana", preparar(20_000, Some((h, vec![99_999])))), rechazos::CARAVANA_ESCOLTA_INVALIDA, "tiene que ser suya");
+    assert_eq!(e.rechazada("ana", preparar(20_000, Some((h, vec![milicia, milicia])))), rechazos::CARAVANA_ESCOLTA_INVALIDA, "sin repetidas");
+    // Un fallo de la caravana (aquí, más carga de la que cabe) tampoco cede la escolta.
+    assert_ne!(e.rechazada("ana", preparar(10_000_000, Some((h, vec![milicia])))), "");
+    assert_eq!(e.n.economia(a).unwrap().almacen.cantidad(Cobre), cobre);
+    assert!(e.n.caravana(c).unwrap().escolta.is_empty() && contenedor(&e, milicia) == Contenedor::Campamento);
+
+    // Con todo en regla, sale preparándose ya escoltada, y cancelarla devuelve la escolta.
+    e.ok("ana", preparar(20_000, Some((h, vec![milicia, lenadores]))));
+    assert_eq!((contenedor(&e, milicia), contenedor(&e, lenadores)), (Contenedor::Escolta(c), Contenedor::Escolta(c)));
+    assert_eq!(e.n.caravana(c).unwrap().escolta.iter().map(|x| (x.id, x.heroe, x.liderazgo)).collect::<Vec<_>>(), vec![(milicia, h, 14), (lenadores, h, 7)]);
+    assert_eq!(hechos(&e.n, "comercio.caravana_escolta_cedida").len(), 1);
+    e.ok("ana", Comando::CancelarCaravana { caravana: c });
+    assert_eq!((contenedor(&e, milicia), contenedor(&e, lenadores)), (Contenedor::Campamento, Contenedor::Campamento));
+
+    // La que ya tenía cedida cuenta en el mismo cupo de la caravana.
+    e.ok("ana", Comando::AsignarEscolta { caravana: c, heroe: h, escuadras: vec![milicia] });
+    e.ok("ana", preparar(20_000, Some((h, vec![lenadores]))));
+    assert_eq!(e.n.caravana(c).unwrap().escolta.iter().map(|x| x.id).collect::<Vec<_>>(), vec![milicia, lenadores]);
+}
+
+// ───────────────────────────── 9. La ruina de la plaza donde se reside ─────────────────────────────
+
+#[test]
+fn al_arruinarse_la_plaza_sus_residentes_pasan_a_la_plaza_hermana_mas_cercana_o_al_campamento_y_los_de_visita_salen() {
+    let m = con_mundo!();
+    let mut n = Nucleo::nuevo(arranque(m, 7));
+    let pa = sitio_rico(&n, &m.0, 0, 1);
+    let a = fundar(&mut n, 0, "a", "ana", 1, pa);
+    assert!(n.aplicar_en(0, Peticion::nueva("admin", "nivel", Comando::FijarNivelFaccion { faccion: 1, nivel: 2 }).de_admin()).aceptada());
+    let pc = sitio_rico(&n, &m.0, 0, 1);
+    let c = fundar(&mut n, 0, "c", "ana", 1, pc);
+    // Cada plaza tiene ya a su fundador de residente (5B): el héroe de campo de la columna que la fundó.
+    let fundador = |n: &Nucleo, p: u64| -> u64 {
+        let v: Vec<u64> = n.estado().militar.residentes_de(p).map(|h| h.heroe.id).collect();
+        assert_eq!(v.len(), 1, "un fundador por plaza");
+        v[0]
+    };
+    let (fa, fc) = (fundador(&n, a), fundador(&n, c));
+    let mut e = Escenario { n, a, cuenta: 0 };
+    // La plaza A no construye nada: sin madera para su mantenimiento acabará en ruinas.
+    e.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: a, pausada: true });
+    let (ana, carla, beto) = (e.heroe_en_la_plaza("ana"), e.heroe("carla", 0), e.heroe("beto", 3));
+    e.ok("admin", Comando::FijarResidencia { heroe: carla, residencia: Some(Residencia::Asentamiento(a as u32)) });
+    e.ok("admin", Comando::ColocarHeroe { heroe: carla, ubicacion: Ubicacion::Asentamiento(a as u32) });
+    e.ok("admin", Comando::ColocarHeroe { heroe: beto, ubicacion: Ubicacion::Asentamiento(a as u32) });
+    assert_eq!(e.n.estado().militar.residentes_de(a).map(|h| h.heroe.id).collect::<Vec<_>>(), vec![fa, ana, carla]);
+
+    let mut ruina = None;
+    for dia in 1..=150 {
+        e.n.avanzar_hasta(dia * 24 * HORA);
+        if e.n.economia(a).is_none() {
+            ruina = Some(hechos(&e.n, "asentamiento.ruinas")[0].0);
+            break;
+        }
+    }
+    let ruina = ruina.expect("la plaza A cae en ruinas");
+    // «ana» es de la Facción 1 y queda la plaza C: reside allí. «carla» no tiene Facción: al campamento más cercano a la ruina.
+    let cercano = (0..m.0.campamentos().len()).min_by_key(|&i| (campamento(&m.0, i).dist2(pa), i)).unwrap() as u32;
+    let h = |id| e.n.heroe(id).unwrap().heroe.clone();
+    assert_eq!(h(ana).residencia, Some(Residencia::Asentamiento(c as u32)));
+    assert_eq!(h(carla).residencia, Some(Residencia::Campamento(cercano)));
+    assert_eq!(h(beto).residencia, Some(Residencia::Campamento(3)), "el que estaba de visita conserva su casa");
+    // Los que estaban dentro (Entrar con todo, 2026-10-22: antes quedaban en el campamento más cercano) salen al mapa, donde estaba la plaza, cada uno con su columna
+    // personal y sin perder nada; ya no hay lugar donde quedarse.
+    for id in [ana, carla, beto] {
+        let Ubicacion::Columna(c) = h(id).presencia.ubicacion else { panic!("el héroe {id} sale al mapa") };
+        let col = e.n.ejercito(c).expect("su columna");
+        assert_eq!((col.posicion, e.n.estado().militar.heroes[&id].columna), (pa, Some(c)));
+        assert!(e.n.en_el_mapa(c));
+    }
+    assert_eq!(e.n.ejercito(e.n.heroe(ana).unwrap().columna.unwrap()).unwrap().columna.faccion, Some(1), "el residente sale con la bandera de su Facción");
+    assert_eq!(e.n.ejercito(e.n.heroe(beto).unwrap().columna.unwrap()).unwrap().columna.faccion, None, "el de visita sale sin bandera");
+    assert!(e.n.estado().militar.residentes_de(a).next().is_none());
+    assert_eq!(e.n.estado().militar.residentes_de(c).map(|x| x.heroe.id).collect::<Vec<_>>(), vec![fa, fc, ana], "el fundador de A, que estaba dentro desde que la fundó, también se muda a C");
+    let reubicados = hechos(&e.n, "heroe.reubicado");
+    assert_eq!(reubicados.len(), 4);
+    assert!(reubicados.iter().all(|r| r.0 == ruina && dato(r, "ruina") == a as i64 && dato(r, "alMapa") == 1), "todos estaban dentro, el fundador también (entró al fundar): salen al mapa");
+    // La Facción de C oye a quien acoge (con su destino); quien va al campamento no lleva destino.
+    let de = |id: u64| reubicados.iter().find(|r| dato(r, "heroe") == id as i64).unwrap();
+    assert_eq!((dato(de(ana), "destino"), de(ana).1.clone()), (c as i64, vec![c]));
+    assert!(de(carla).1.is_empty() && de(carla).2.iter().all(|(k, _)| *k != "destino"));
+}
+
+// ───────────────────────────── 10. Las tecnologías de la administración y quién manda en la plaza ─────────────────────────────
+
+/// Un sitio fundable, verde y con mucho bosque, a `r` del punto `c`.
+/// Con tierra de cultivo en la zona inicial (algo de fertilidad a 6 u o menos): sin ella las Granjas no dan nada y la plaza se queda sin gente.
+fn fertil(m: &Mundo, p: Punto) -> bool {
+    (0..40).map(|i| (i as f64 / 40.0 * std::f64::consts::TAU, 6_000.0 * (i % 5) as f64 / 5.0)).any(|(a, r)| m.fertilidad_en(p.x + (r * a.cos()) as i64, p.y + (r * a.sin()) as i64).is_some_and(|f| f >= 77))
+}
+
+fn sitio_junto_a(n: &Nucleo, m: &Mundo, c: Punto, r: i64) -> Option<Punto> {
+    (0..36).map(|g| ((g * 10) as f64).to_radians()).map(|a| Punto::new(c.x + (r as f64 * a.cos()) as i64, c.y + (r as f64 * a.sin()) as i64)).find(|&p| {
+        n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 3 && !v.condenada) && fertil(m, p)
+    })
+}
+
+#[test]
+fn las_tecnologias_de_la_administracion_abren_las_obras_que_las_piden_y_un_heroe_ciudadano_manda_en_su_plaza() {
+    use asentamiento::catalogo::Tipo;
+    let m = con_mundo!();
+    let mapa = nucleo::economia::Mapa::de(&m.0);
+    let mut n = Nucleo::nuevo(arranque(m, 7));
+    let (hierro, sitio) = (0..mapa.nodos.len())
+        .filter(|&i| mapa.nodos[i].tipo == Tipo::MinaHierro)
+        .find_map(|i| sitio_junto_a(&n, &m.0, mapa.nodos[i].pos, 6_000).map(|p| (i as u32, p)))
+        .expect("hay un nodo de hierro junto a un sitio rico");
+    let a = fundar(&mut n, 0, "a", "ana", 1, sitio);
+    let mut e = Escenario { n, a, cuenta: 0 };
+    e.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: a, pausada: true });
+    e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: a, nivel: 2 });
+    for _ in 0..9 {
+        e.ok("admin", Comando::AgrandarZona { asentamiento: a });
+    }
+    assert!(e.n.en_zona(a, mapa.nodos[hierro as usize].pos));
+    // El hierro pide «forja_hierro_temprana»: sin ella no es candidato ni se marca.
+    assert!(!e.n.candidatos_de_pueblo(a).contains(&(hierro, Tipo::MinaHierro)));
+    assert_eq!(e.rechazada("ana", Comando::MarcarPueblo { asentamiento: a, nodo: hierro }), rechazos::PUEBLO_TECNOLOGIA_FALTANTE);
+    e.ok("admin", Comando::FijarTecnologias { faccion: 1, tecnologias: vec!["forja_hierro_temprana".into()] });
+    assert!(e.n.candidatos_de_pueblo(a).contains(&(hierro, Tipo::MinaHierro)), "con la tecnología de la Facción ya lo es");
+    e.ok("ana", Comando::MarcarPueblo { asentamiento: a, nodo: hierro });
+    // La tecnología es de la Facción: otra Facción sigue sin ella.
+    assert!(!e.n.tiene_tecnologia(2, "forja_hierro_temprana"));
+
+    // Quien no tiene columna ni héroe de la Facción no manda en la plaza; con un héroe ciudadano sí (la orden cae después, en las reglas del comercio).
+    let carla = e.heroe("carla", 0);
+    assert_eq!(e.rechazada("carla", Comando::CrearCaravana { asentamiento: a }), rechazos::NO_AUTORIZADO);
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: carla, faccion: Some(2) });
+    assert_eq!(e.rechazada("carla", Comando::CrearCaravana { asentamiento: a }), rechazos::NO_AUTORIZADO, "ciudadana de otra Facción");
+    e.ok("admin", Comando::FijarFaccionDeHeroe { heroe: carla, faccion: Some(1) });
+    assert_eq!(e.rechazada("carla", Comando::CrearCaravana { asentamiento: a }), rechazos::CARAVANA_SIN_MERCADO, "mandar, manda: lo que falta es el Mercado");
+    assert_eq!(e.ord("admin", Comando::FijarFaccionDeHeroe { heroe: carla, faccion: Some(1) }).resultado, Resultado::SinCambios);
+}
+
+// ───────────────────────────── 11. El estado militar en la foto y en el hash ─────────────────────────────
+
+fn estado_con_heroes() -> nucleo::Estado {
+    use comercio::mercenarios::CupoDiario;
+    use militar::escuadra::Escuadra;
+    use militar::heroe::{Heroe, Loadout};
+    use militar::mercenarios::Reclutas;
+    let mut s = nucleo::Estado::nuevo(Reglas::default(), "h".into(), 1, 0);
+    let mr = s.reglas.economia.militar.clone();
+    let mut h = Heroe::nuevo(&mr, 5, Controlador::Humano, 3, 6, "espada_escudo_mediano").unwrap();
+    h.residencia = Some(Residencia::Asentamiento(2));
+    h.presencia.ubicacion = Ubicacion::Asentamiento(2);
+    h.presencia.desconecta_en = Some(150_000);
+    h.nivel = 3;
+    h.experiencia = 11;
+    h.puntos_de_atributo = 4;
+    h.puntos_repartidos.armadura = 7;
+    // La foto lleva el equipo, la mochila y el almacén de objetos, con una pieza forjada con sus cifras (D13).
+    use objetos::inventario::Forjada;
+    use objetos::Pieza;
+    let forjada = || Pieza { objeto: "dagas_cobre".into(), forjada: Some(Forjada { id: 3, cifras: objetos::datos::Cifras::Armadura { atributos: Default::default(), defensa: objetos::datos::PorDano { perforante: 1, cortante: 2, contundente: 3 }, salud: 40 } }) };
+    h.equipo.casco = Some(forjada());
+    h.mochila.meter(&mr.objetos, Pieza::del_catalogo("crisol"), 4).unwrap();
+    h.mochila.meter(&mr.objetos, forjada(), 1).unwrap();
+    h.almacen_objetos.meter(&mr.objetos, Pieza::del_catalogo("plano_2"), 2).unwrap();
+    h.loadouts.push(Loadout { id: 9, nombre: "Asalto".into(), escuadras: vec![10, 11], activo: false });
+    h.monedas = 1_212;
+    h.herido_hasta = Some(120_000);
+    h.viveres = 33_000;
+    h.racion_en = Some(40_000);
+    for (i, (tropa, contenedor)) in [(Tropa::MiliciaLanceros, Contenedor::Campamento), (Tropa::Arqueros, Contenedor::Ejercito(4)), (Tropa::Honderos, Contenedor::Escolta(7)), (Tropa::Hequetai, Contenedor::Fuera), (Tropa::Granjeros, Contenedor::Campamento)].into_iter().enumerate() {
+        let mut e = Escuadra::nueva(&mr, 10 + i as u64, 5, tropa, 5 + i as i64, Some(2), 0);
+        e.contenedor = contenedor;
+        h.escuadras.push(e);
+    }
+    h.escuadras[0].en_guarnicion = true;
+    h.escuadras[0].reserva_batalla = Some(77);
+    h.escuadras[0].experiencia = 5_500;
+    h.escuadras[0].nivel = 2;
+    h.escuadras[0].moral = base::Ritmo { valor_en_t0: 60_000, t0: 10, por_minuto: -20_000, maximo: Some(100_000), minimo: Some(0) };
+    h.escuadras[4].prestada = Some(1);
+    h.escuadras[4].plaza_origen = None;
+    s.militar.insertar(nucleo::HeroeNucleo { almacen_personal: [(Oro, 8)].into_iter().collect(), cupo: CupoDiario { dia: 4, comprado: [(Madera, 9)].into_iter().collect() }, columna: Some(77), carro: [(Cobre, 3)].into_iter().collect(), ..nucleo::HeroeNucleo::nuevo(h, "ana", Some(1)) });
+    let mut otro = Heroe::nuevo(&mr, 20, Controlador::Bot, 1, 21, "dagas").unwrap();
+    otro.presencia.ubicacion = Ubicacion::Desconectado(Punto::new(5, -7));
+    otro.presencia.fuera = true;
+    s.militar.insertar(nucleo::HeroeNucleo::nuevo(otro, "bot", None));
+    s.militar.reclutas.insert(2, militar::mercenarios::Reclutas { poblacion: 40_000, en: 1_234 });
+    s.militar.eligieron.insert(2, 3);
+    s.militar.convocatorias.insert(
+        7,
+        militar::convocatoria::Convocatoria {
+            id: 7,
+            faccion: 1,
+            lugar: militar::convocatoria::Lugar::Asentamiento(2),
+            lider: 5,
+            politica: militar::columna::Politica::Preguntar,
+            integrantes: vec![militar::convocatoria::Integrante { heroe: 5, unido_en: 10, seleccion: militar::convocatoria::Seleccion { escuadras: vec![11, 10], carga: [(Oro, 5)].into_iter().collect() } }],
+            peticiones: vec![militar::convocatoria::Peticion { heroe: 20, pedido_en: 1, expira_en: 11, seleccion: Default::default() }],
+            creada_en: 3,
+        },
+    );
+    let clave = s.generaciones.clave(5);
+    s.cola.programar(150_000, nucleo::PRIO_SALIDA, clave, nucleo::Carga::SalidaDelMundo);
+    // Los cinco plazos militares viajan en la cola.
+    for (i, suceso) in [nucleo::SucesoMilitar::Desercion, nucleo::SucesoMilitar::CaducaFormacion, nucleo::SucesoMilitar::CaducaPeticion { columna: 4 }, nucleo::SucesoMilitar::CaducaPeticionDeConvocatoria { convocatoria: 7 }, nucleo::SucesoMilitar::PresaFueraDeVista { presa: 9, presa_generacion: 3 }].into_iter().enumerate() {
+        let clave = s.generaciones.clave(40 + i as u64);
+        s.cola.programar(200_000 + i as i64, nucleo::PRIO_UMBRAL, clave, nucleo::Carga::Militar(suceso));
+    }
+    let _ = Reclutas::llenos;
+    s
+}
+
+fn h5(m: &mut nucleo::EstadoMilitar) -> &mut militar::heroe::Heroe {
+    &mut m.heroes.get_mut(&5).unwrap().heroe
+}
+
+#[test]
+fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_hash() {
+    use nucleo::EstadoMilitar;
+    let reglas = Reglas::default();
+    let base = estado_con_heroes();
+    let bytes = base.serializar();
+    assert_eq!(&bytes[..5], b"BAN65");
+    let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
+    assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
+    assert_eq!(vuelta.militar, base.militar, "incluido el índice de residentes, que se reconstruye");
+    assert_eq!(vuelta.militar.residentes_de(2).map(|h| h.heroe.id).collect::<Vec<_>>(), vec![5]);
+    assert!(vuelta.cola.volcar().iter().any(|ev| matches!(ev.carga, nucleo::Carga::SalidaDelMundo) && ev.instante == 150_000 && ev.prioridad == nucleo::PRIO_SALIDA), "la salida pendiente viaja en la cola");
+    // Una foto cortada o con basura detrás no se admite.
+    assert!(nucleo::Estado::deserializar(&bytes[..bytes.len() - 3], &reglas, "h").is_err());
+    assert!(nucleo::Estado::deserializar(&[&bytes[..], &[0u8][..]].concat(), &reglas, "h").is_err());
+
+    type Cambio = (&'static str, Box<dyn Fn(&mut EstadoMilitar)>);
+    let cambios: Vec<Cambio> = vec![
+        ("cuenta", Box::new(|m| m.heroes.get_mut(&5).unwrap().cuenta = "otra".into())),
+        ("faccion", Box::new(|m| m.heroes.get_mut(&5).unwrap().faccion = Some(2))),
+        ("faccion.ninguna", Box::new(|m| m.heroes.get_mut(&5).unwrap().faccion = None)),
+        ("almacen_personal", Box::new(|m| *m.heroes.get_mut(&5).unwrap().almacen_personal.get_mut(&Oro).unwrap() += 1)),
+        ("cupo.dia", Box::new(|m| m.heroes.get_mut(&5).unwrap().cupo.dia += 1)),
+        ("cupo.comprado", Box::new(|m| *m.heroes.get_mut(&5).unwrap().cupo.comprado.get_mut(&Madera).unwrap() += 1)),
+        ("controlador", Box::new(|m| h5(m).controlador = Controlador::Bot)),
+        ("liderazgo", Box::new(|m| h5(m).liderazgo_base += 1)),
+        ("ubicacion", Box::new(|m| h5(m).presencia.ubicacion = Ubicacion::Columna(2))),
+        ("desconecta_en", Box::new(|m| h5(m).presencia.desconecta_en = None)),
+        ("fuera", Box::new(|m| h5(m).presencia.fuera = true)),
+        ("residencia", Box::new(|m| m.mudar(5, Some(Residencia::Campamento(2))))),
+        ("residencia.ninguna", Box::new(|m| m.mudar(5, None))),
+        ("nivel", Box::new(|m| h5(m).nivel += 1)),
+        ("experiencia", Box::new(|m| h5(m).experiencia += 1)),
+        ("puntos_atributo", Box::new(|m| h5(m).puntos_de_atributo += 1)),
+        ("puntos_repartidos", Box::new(|m| h5(m).puntos_repartidos.fuerza += 1)),
+        ("equipo.arma", Box::new(|m| h5(m).equipo.arma = objetos::Pieza::del_catalogo("dagas_inicio"))),
+        ("equipo.montura", Box::new(|m| h5(m).equipo.montura = None)),
+        ("equipo.forjada", Box::new(|m| h5(m).equipo.casco.as_mut().unwrap().forjada.as_mut().unwrap().id += 1)),
+        ("mochila.cantidad", Box::new(|m| h5(m).mochila.casillas.get_mut(&0).unwrap().cantidad += 1)),
+        ("mochila.casilla", Box::new(|m| {
+            let c = h5(m).mochila.casillas.remove(&1).unwrap();
+            h5(m).mochila.casillas.insert(5, c);
+        })),
+        ("mochila.capacidad", Box::new(|m| h5(m).mochila.capacidad += 1)),
+        ("almacen_objetos", Box::new(|m| h5(m).almacen_objetos.casillas.get_mut(&0).unwrap().pieza = objetos::Pieza::del_catalogo("plano_3"))),
+        ("loadout.nombre", Box::new(|m| h5(m).loadouts[1].nombre.push('!'))),
+        ("loadout.escuadras", Box::new(|m| h5(m).loadouts[1].escuadras.reverse())),
+        ("loadout.activo", Box::new(|m| h5(m).loadouts[1].activo = true)),
+        ("monedas", Box::new(|m| h5(m).monedas += 1)),
+        ("herido_hasta", Box::new(|m| h5(m).herido_hasta = None)),
+        ("viveres", Box::new(|m| h5(m).viveres += 1)),
+        ("racion_en", Box::new(|m| h5(m).racion_en = None)),
+        ("columna", Box::new(|m| m.heroes.get_mut(&5).unwrap().columna = None)),
+        ("carro", Box::new(|m| *m.heroes.get_mut(&5).unwrap().carro.get_mut(&Cobre).unwrap() += 1)),
+        ("sintetico", Box::new(|m| m.heroes.get_mut(&5).unwrap().sintetico = true)),
+        ("convocatoria.politica", Box::new(|m| m.convocatorias.get_mut(&7).unwrap().politica = militar::columna::Politica::Aceptar)),
+        ("convocatoria.lugar", Box::new(|m| m.convocatorias.get_mut(&7).unwrap().lugar = militar::convocatoria::Lugar::Campamento(2))),
+        ("convocatoria.seleccion.orden", Box::new(|m| m.convocatorias.get_mut(&7).unwrap().integrantes[0].seleccion.escuadras.reverse())),
+        ("convocatoria.seleccion.carga", Box::new(|m| m.convocatorias.get_mut(&7).unwrap().integrantes[0].seleccion.carga.clear())),
+        ("convocatoria.peticion", Box::new(|m| m.convocatorias.get_mut(&7).unwrap().peticiones[0].expira_en += 1)),
+        ("convocatoria.peticion.seleccion", Box::new(|m| m.convocatorias.get_mut(&7).unwrap().peticiones[0].seleccion.escuadras.push(1))),
+        ("convocatoria.cancelada", Box::new(|m| {
+            m.convocatorias.clear();
+        })),
+        ("convocatoria.creada_en", Box::new(|m| m.convocatorias.get_mut(&7).unwrap().creada_en += 1)),
+        ("escuadra.cantidad", Box::new(|m| h5(m).escuadras[1].cantidad += 1)),
+        ("escuadra.nivel", Box::new(|m| h5(m).escuadras[1].nivel += 1)),
+        ("escuadra.experiencia", Box::new(|m| h5(m).escuadras[1].experiencia += 1)),
+        ("escuadra.moral.valor", Box::new(|m| h5(m).escuadras[0].moral.valor_en_t0 += 1)),
+        ("escuadra.moral.t0", Box::new(|m| h5(m).escuadras[0].moral.t0 += 1)),
+        ("escuadra.moral.ritmo", Box::new(|m| h5(m).escuadras[0].moral.por_minuto += 1)),
+        ("escuadra.contenedor", Box::new(|m| h5(m).escuadras[1].contenedor = Contenedor::Ejercito(5))),
+        ("escuadra.en_guarnicion", Box::new(|m| h5(m).escuadras[0].en_guarnicion = false)),
+        ("escuadra.reserva", Box::new(|m| h5(m).escuadras[0].reserva_batalla = None)),
+        ("escuadra.prestada", Box::new(|m| h5(m).escuadras[4].prestada = Some(2))),
+        ("escuadra.plaza_origen", Box::new(|m| h5(m).escuadras[1].plaza_origen = Some(9))),
+        ("escuadra.formacion", Box::new(|m| h5(m).escuadras[1].formacion = 2)),
+        ("escuadra.orden", Box::new(|m| h5(m).escuadras.swap(0, 1))),
+        ("otro.ubicacion", Box::new(|m| m.heroes.get_mut(&20).unwrap().heroe.presencia.ubicacion = Ubicacion::Desconectado(Punto::new(5, 7)))),
+        ("heroe.nuevo", Box::new(|m| {
+            let mr = militar::Reglas::cargar();
+            m.insertar(nucleo::HeroeNucleo::nuevo(militar::heroe::Heroe::nuevo(&mr, 30, Controlador::Humano, 0, 31, "dagas").unwrap(), "c", None));
+        })),
+        ("reclutas.poblacion", Box::new(|m| m.reclutas.get_mut(&2).unwrap().poblacion += 1)),
+        ("reclutas.en", Box::new(|m| m.reclutas.get_mut(&2).unwrap().en += 1)),
+        ("reclutas.otro", Box::new(|m| {
+            m.reclutas.insert(3, militar::mercenarios::Reclutas { poblacion: 1, en: 0 });
+        })),
+        ("eligieron", Box::new(|m| {
+            m.eligieron.insert(2, 4);
+        })),
+    ];
+    let mut vistos = std::collections::HashSet::from([base.hash()]);
+    for (nombre, f) in cambios {
+        let mut s = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
+        f(&mut s.militar);
+        assert!(vistos.insert(s.hash()), "el hash no cambió (o coincidió con otro cambio) al tocar {nombre}");
+    }
+}
+
+// ───────────────────────────── 12. Determinismo y recuperación ─────────────────────────────
+
+impl Escenario {
+    fn ok_en(&mut self, t: Instante, actor: &str, c: Comando) -> Respuesta {
+        let p = self.peticion(actor, c);
+        let r = self.n.aplicar_en(t, p);
+        assert!(r.aceptada(), "{r:?}");
+        r
+    }
+    fn avanzar_hasta(&mut self, t: Instante) {
+        self.n.avanzar_hasta(t);
+    }
+}
+
+/// Un guion militar: dos héroes, tropa en la plaza y prestada, loadout, una salida pendiente, un herido, volver y mudarse. Todas las órdenes llevan
+/// su instante (como en el registro), de modo que da igual cuándo avance el reloj entre una y otra.
+fn guion(e: &mut Escenario, avanzar: &dyn Fn(&mut Escenario, Instante)) {
+    let (a, base) = (e.a, 24 * HORA);
+    avanzar(e, base);
+    let crear = |e: &mut Escenario, cuenta: &str, camp| e.ok_en(base, cuenta, Comando::CrearHeroe { cuenta: cuenta.into(), campamento: camp, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into(), aspecto: Default::default() }).creadas[0];
+    let (ana, beto) = (crear(e, "ana", 0), crear(e, "beto", 0));
+    e.ok_en(base, "admin", Comando::FijarFaccionDeHeroe { heroe: ana, faccion: Some(1) });
+    e.ok_en(base, "admin", Comando::FijarResidencia { heroe: ana, residencia: Some(Residencia::Asentamiento(a as u32)) });
+    e.ok_en(base, "admin", Comando::ColocarHeroe { heroe: ana, ubicacion: Ubicacion::Asentamiento(a as u32) });
+    e.ok_en(base, "admin", Comando::DarAlmacenPersonal { heroe: beto, recurso: Oro, cantidad: 500_000 });
+    let milicia = e.ok_en(base, "ana", Comando::ReclutarTropa { asentamiento: a, heroe: ana, tropa: Tropa::MiliciaLanceros }).creadas[0];
+    let prestadas = e.ok_en(base, "beto", Comando::PedirPrestamo { heroe: beto, tropas: vec![Tropa::Granjeros, Tropa::Mineros] }).creadas;
+    e.ok_en(base, "beto", Comando::GuardarLoadout { heroe: beto, loadout: None, nombre: "Leva".into(), escuadras: prestadas.clone(), activo: Some(true) });
+    e.ok_en(base, "beto", Comando::OrdenarEscuadras { heroe: beto, escuadras: vec![prestadas[1]] });
+    avanzar(e, base + 10 * MIN);
+    e.ok_en(base + 10 * MIN, "beto", Comando::Desconectarse { heroe: beto });
+    e.ok_en(base + 10 * MIN, "admin", Comando::HerirHeroe { heroe: ana });
+    avanzar(e, base + 30 * MIN);
+    e.ok_en(base + 30 * MIN, "ana", Comando::Desconectarse { heroe: ana });
+    avanzar(e, base + 31 * MIN);
+    e.ok_en(base + 31 * MIN, "ana", Comando::Conectarse { heroe: ana });
+    avanzar(e, base + 40 * MIN);
+    e.ok_en(base + 40 * MIN, "beto", Comando::Conectarse { heroe: beto });
+    e.ok_en(base + 40 * MIN, "admin", Comando::FijarResidencia { heroe: beto, residencia: Some(Residencia::Campamento(1)) });
+    avanzar(e, base + 3 * HORA);
+    e.n.avanzar_hasta(base + 3 * HORA);
+    assert_eq!(e.n.escuadra(milicia).unwrap().1.cantidad, 25);
+}
+
+fn correr(m: &M, semilla: u64, avanzar: &dyn Fn(&mut Escenario, Instante)) -> Nucleo {
+    let mut e = escenario(m, semilla);
+    guion(&mut e, avanzar);
+    e.n
+}
+
+#[test]
+fn mismas_ordenes_dan_el_mismo_hash_normal_acelerado_y_a_trozos() {
+    let m = con_mundo!();
+    let normal = correr(m, 3, &|e, t| e.avanzar_hasta(t));
+    assert_eq!(normal.hash_estado(), correr(m, 3, &|e, t| e.avanzar_hasta(t)).hash_estado(), "repetible");
+    assert_eq!(normal.hash_estado(), correr(m, 3, &|_, _| {}).hash_estado(), "acelerado de un golpe");
+    let a_trozos = correr(m, 3, &|e, t| {
+        let ahora = e.n.ahora();
+        for s in 1..=5 {
+            e.avanzar_hasta(ahora + (t - ahora).max(0) * s * s / 25);
+        }
+    });
+    assert_eq!(normal.hash_estado(), a_trozos.hash_estado(), "en pasos pequeños e irregulares, como el modo en vivo");
+    assert_ne!(normal.hash_estado(), correr(m, 4, &|e, t| e.avanzar_hasta(t)).hash_estado(), "otra semilla, otro mundo");
+    // El guion hizo de verdad lo que se espera.
+    let ana = normal.heroe_de_cuenta("ana").unwrap();
+    let beto = normal.heroe_de_cuenta("beto").unwrap();
+    assert_eq!(ana.heroe.escuadras.len(), 1);
+    assert_eq!((beto.heroe.escuadras.len(), beto.heroe.residencia), (0, Some(Residencia::Campamento(1))), "la prestada se retiró al mudarse");
+    assert!(beto.heroe.loadouts.iter().all(|l| l.escuadras.is_empty()), "y salió de su loadout, que se puede volver a guardar");
+    assert!(!hechos(&normal, "heroe.sale_del_mundo").is_empty() || !hechos(&normal, "heroe.vuelve_al_mundo").is_empty());
+    // El hash se mueve con el estado militar: el mismo mundo sin el guion da otro.
+    let mut sin_guion = escenario(m, 3);
+    sin_guion.avanzar(27 * HORA);
+    assert_ne!(normal.hash_estado(), sin_guion.n.hash_estado());
+}
+
+#[test]
+fn recuperar_desde_foto_con_tropa_guarnicion_herido_y_una_salida_pendiente_da_el_mismo_mundo() {
+    let m = con_mundo!();
+    let dir = tempfile::tempdir().unwrap();
+    let ajustes = Ajustes { foto_cada: 0, latido_ms: 0, ..Ajustes::default() };
+    let con = |ajustes: Ajustes| Arranque { ajustes, ..arranque(m, 9) };
+    // Antes de la foto: tropa propia y prestada, un herido y una desconexión a medias. Después: el hambre de la guarnición, la salida y volver.
+    let primera_mitad = |e: &mut Escenario| {
+        let a = e.a;
+        e.avanzar(24 * HORA);
+        let ana = e.heroe_en_la_plaza("ana");
+        let beto = e.heroe("beto", 0);
+        e.ok("ana", Comando::ReclutarTropa { asentamiento: a, heroe: ana, tropa: Tropa::MiliciaLanceros });
+        e.ok("beto", Comando::PedirPrestamo { heroe: beto, tropas: vec![Tropa::Granjeros, Tropa::Lenadores] });
+        e.ok("admin", Comando::HerirHeroe { heroe: ana });
+        e.avanzar(MIN);
+        e.ok("beto", Comando::Desconectarse { heroe: beto });
+        (ana, beto)
+    };
+    let segunda_mitad = |e: &mut Escenario, ana: u64, beto: u64| {
+        e.avanzar(4 * HORA);
+        assert!(!e.n.heroe_herido(ana) && e.n.heroe(beto).unwrap().heroe.presencia.fuera, "la salida pendiente venció tras recuperar");
+        e.ok("beto", Comando::Conectarse { heroe: beto });
+        e.ok("admin", Comando::FijarResidencia { heroe: beto, residencia: Some(Residencia::Campamento(2)) });
+        e.avanzar(2 * HORA);
+    };
+
+    let sin_parar = {
+        let mut e = escenario(m, 9);
+        let (ana, beto) = primera_mitad(&mut e);
+        e.avanzar(30 * MIN);
+        segunda_mitad(&mut e, ana, beto);
+        (e.n.hash_estado(), e.n.estado().militar.clone())
+    };
+    let (a_mitad, ana, beto, cuenta) = {
+        let n = Nucleo::con_persistencia(con(ajustes.clone()), dir.path(), Default::default()).unwrap();
+        let mut n = n;
+        let p = sitio_rico(&n, &m.0, 0, 1);
+        let a = fundar(&mut n, 0, "a", "ana", 1, p);
+        let mut e = Escenario { n, a, cuenta: 0 };
+        let (ana, beto) = primera_mitad(&mut e);
+        assert!(e.n.metricas().ordenes_aceptadas > 8, "las órdenes militares entran al registro");
+        e.n.foto_ahora();
+        e.avanzar(30 * MIN);
+        e.n.apagar().unwrap();
+        (e.n.hash_estado(), ana, beto, e.cuenta)
+    };
+    let n = Nucleo::con_persistencia(con(ajustes), dir.path(), Default::default()).unwrap();
+    assert!(n.recuperado());
+    assert_eq!(n.hash_estado(), a_mitad, "foto + registro reconstruyen el mismo mundo, con la tropa, el herido y la salida a medias");
+    let a = *n.estado().asentamientos.keys().next().unwrap();
+    let mut e = Escenario { n, a, cuenta };
+    assert!(e.n.heroe_herido(ana) || e.n.ahora() >= e.n.heroe(ana).unwrap().heroe.herido_hasta.unwrap());
+    segunda_mitad(&mut e, ana, beto);
+    assert_eq!(e.n.estado().militar, sin_parar.1, "el estado militar recuperado sigue igual que el que no se interrumpió");
+    assert_eq!(e.n.hash_estado(), sin_parar.0);
+    e.n.apagar().unwrap();
+}

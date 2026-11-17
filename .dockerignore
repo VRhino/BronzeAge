@@ -1,24 +1,16 @@
-node_modules
+# Fuera de la imagen todo lo que no hace falta para generar el mundo ni para compilar el servidor.
 .git
-.github
-.husky
 .claude
-
-# No entran en la imagen de runtime
-cliente
-lab
-scripts
-simulaciones-batch
-graphify-out
-Docs
-Consideraciones
-issues
-dist
-**/__tests__
-**/*.test.ts
-vitest.config.ts
-tsconfig.tsbuildinfo
-
-# Datos locales: en producción vienen del volumen o de ALMACEN_URL
+target
+**/node_modules
+generador/salida
+batch/salida
+datos
 partidas
-*.log
+demo
+contratos
+Consideraciones
+Docs/Game
+Docs/Arquitectura
+Docs/Coordinacion
+Docs/Disenos_Por_Implementar

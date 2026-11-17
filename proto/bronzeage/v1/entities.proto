@@ -1,0 +1,1529 @@
+// Contrato 05 de BronzeAge — modelo de datos COMPLETO: todas las entidades del dominio que cruzan el borde.
+//
+// Sale del canon (Docs/Game) y de Docs/Mechanics, no del código TypeScript: lo que ese código guardaba por culpa del tick
+// (progreso por tick, `ruta`/`progreso`, `extractoresTicksSinCupo`, `origenAsentamientoId`, estado `regresando`, caravanas
+// «militar» y «contrabando») NO existe aquí. Movimiento = `Plan`; economía y crecimiento = `Ritmo`.
+//
+// Cada entidad con identidad lleva `version` (la versión de mundo en que cambió por última vez): es lo que permite la
+// reanudación por versión (session.proto). FORMA DE UN CAMBIO (decisión del autor, 2026-10-22; ver `Cambio` en session.proto):
+// casi todas las entidades viajan COMPLETAS y sustituyen a la anterior; solo las dos grandes, el `Asentamiento` (la plaza y su
+// ciudad), se pueden actualizar de forma PARCIAL, con la máscara `Cambio.campos`.
+syntax = "proto3";
+
+package bronzeage.v1;
+
+import "bronzeage/v1/common.proto";
+
+option csharp_namespace = "BronzeAge.Contract.V1";
+
+// ───────────────────────────── Facción y política ─────────────────────────────
+
+// La Facción. En `FACCION` (la propia) y en `ADMIN`, entera. En `VISTA`, la de cada OTRA Facción que nombra lo que se ve (sus columnas, caravanas, plazas, pueblos, avanzadas,
+// fichas y batallas, y las relaciones y los títulos, que son públicos) como **forma pública** (5H; Proyecciones §6, «facciones: públicas en
+// la ficción»): `id`, `version`, `nombre`, `sigilo`, `nivel`, `reputacion`, `rey_id`, `embajador_id`, `ciudadanos_ids`, `solicitudes_ids`, `derrotada_por`, `admite_otras_en_ataques`
+// y `liga`; sin `experiencia`, `capital_designada_en_ms` ni `capital_id` (dónde está su capital es de la niebla).
+message Faccion {
+  string id = 1;
+  uint64 version = 2;
+  string nombre = 3;
+  Sigilo sigilo = 4;
+  optional string rey_id = 5;
+  optional string embajador_id = 6;
+  optional int64 capital_designada_en_ms = 7;
+  uint32 nivel = 8;
+  sint64 experiencia = 9;
+  repeated string ciudadanos_ids = 10;
+  repeated string solicitudes_ids = 11;
+  Ritmo reputacion = 12;                 // -100..100 (milésimas); decae como ritmo
+  optional string derrotada_por = 13;    // "" = colapsó sin ganador; ausente = no derrotada
+  bool admite_otras_en_ataques = 14;
+  optional string capital_id = 15;       // capital efectiva: la designada con Palacio activo o, si no, la plaza viva más antigua (ausente sin plazas)
+  // La Liga en que está (5H, Diplomacia §5.7): derivada de las relaciones activas; ausente si no está en ninguna.
+  optional LigaDeFaccion liga = 16;
+  // Sus misiones (Misiones §5): solo en la Facción propia (`FACCION`) y en `ADMIN`; vacío en la forma pública.
+  repeated Mision misiones = 17;
+  // Sus ciudadanos con su participación (Participacion §3), en orden de ingreso: solo en la Facción propia (`FACCION`) y en `ADMIN`; vacío en la forma pública.
+  repeated MiembroFaccion miembros = 18;
+  // Su tablón de misiones recurrentes (Misiones_Recurrentes §8): solo en la Facción propia (`FACCION`) y en `ADMIN`; ausente en la forma pública.
+  optional Tablon tablon = 19;
+  // Si es una Facción de bots: su Rey es un héroe bot (2026-11-01). Público. Sin Rey, falso. Un jugador no entra en una de bots ni un bot en una que no lo es.
+  bool es_bot = 20;
+  // Sus contratos de mercenarios vigentes (Mercenarios_Por_Contrato §10): solo en la Facción propia (`FACCION`, que un mercenario con marca no recibe) y en `ADMIN`; vacío en la forma
+  // pública.
+  repeated Contrato contratos = 21;
+  // Su cap de fundación con lo que lo gasta, y sus cupos de plazas por nivel (2 a 5) con las que los ocupan (2026-11-04, para la ventana de Facción): solo en la Facción propia
+  // (`FACCION`, que un mercenario con marca no recibe) y en `ADMIN`; ausente y vacío en la forma pública.
+  optional CapFundacion cap_fundacion = 22;
+  repeated CupoDeNivel cupos_de_nivel = 23;
+  // Su prestigio (tanda 69 §13: se acumula y no se gasta) y cuántas alianzas puede tener activas a la vez con él (una, y una más cada 100). Públicos.
+  int64 prestigio = 24;
+  uint32 tope_alianzas = 25;
+  // Los informes de región que compró en sus tabernas y aún no puede repetir (tanda 69 §7): solo en la Facción propia (`FACCION`) y en `ADMIN`; vacío en la forma pública.
+  repeated InformeRegion informes_region = 26;
+}
+
+// El cap de fundación de la Facción (Diplomacia §3.5, `CAP_FUNDACION_POR_NIVEL` por su nivel): lo gastan sus plazas de hoy (fundadas o no) y sus Caravanas de Fundación vivas. Con
+// `plazas + caravanas >= cap` no se lanza ni se compra otra caravana; al fundar se mira `plazas >= cap`.
+message CapFundacion {
+  uint32 cap = 1;
+  uint32 plazas = 2;
+  uint32 caravanas = 3;
+}
+
+// El cupo de plazas de la Facción en un nivel (Diplomacia §3.5, `CUPO_NIVEL_ASENTAMIENTO` por su nivel). Ocupan las plazas con ese nivel operativo y las que tienen la obra de subida
+// hacia él. Con `ocupadas >= cupo` no se pide la subida a ese nivel, ni una plaza degradada recupera ese nivel.
+message CupoDeNivel {
+  uint32 nivel = 1;      // 2 a 5
+  uint32 cupo = 2;
+  uint32 ocupadas = 3;
+}
+
+// Un ciudadano de la Facción (Participacion §3).
+message MiembroFaccion {
+  string heroe_id = 1;
+  optional string residencia_id = 2;   // la plaza (`as-N`) o el campamento (`camp-N`) donde reside; ausente sin residencia
+  repeated string cargos = 3;          // `rey`, `embajador` y los locales de su plaza de residencia como `gobernador@as-3`
+  uint64 participacion = 4;            // la suma de su participación en las plazas que son de la Facción hoy
+  optional string marca = 5;           // mercenario con contrato (Mercenarios_Por_Contrato §2): temporal | permanente; ausente en un ciudadano sin marca
+}
+
+// ───────────────────────────── Mercenarios por contrato (Mercenarios_Por_Contrato, 2026-11-01) ─────────────────────────────
+
+// Un contrato vigente: en `Faccion.contratos` (los de la Facción) y en el `Heroe.contrato` del propio mercenario.
+message Contrato {
+  string mercenario_id = 1;
+  string faccion_id = 2;
+  optional string asentamiento_id = 3;   // de la plaza que lo firmó con un cargo local; ausente si es de la Facción (lo firmó el Rey o el Embajador)
+  string trabajo = 4;                    // defender | escoltar | atacar | acompanar | permanente
+  ObjetivoMercenario objetivo = 5;
+  optional uint32 plazo_dias = 6;        // ausente en el permanente
+  string firmado_por_id = 7;
+  string puesto_firma = 8;               // rey | embajador | general@as-N | gobernador@as-N | maestroCaravanas@as-N
+  int64 firmado_en_ms = 9;
+  optional int64 vence_en_ms = 10;       // fin del temporal (se alarga al prorrogar); ausente en el permanente
+  string campamento_base_id = 11;        // el campamento de la firma, adonde vuelve el permanente al acabar
+  optional OrdenMercenario orden = 12;   // ausente: espera donde está hasta otra orden
+  optional string fin_aplazado = 13;     // plazo | despido | plaza_perdida | sin_ciudadanos | faccion_perdida: espera a que acabe su batalla
+  uint32 renombre = 14;                  // ganado con este contrato y aún sin apuntar (el temporal lo apunta al acabar)
+}
+
+// La orden vigente de un mercenario (§6.3).
+message OrdenMercenario {
+  string tipo = 1;                       // guardar | ir_a | atacar | unirse
+  ObjetivoMercenario objetivo = 2;
+  string dada_por_id = 3;
+  optional string puesto = 4;            // como `Contrato.puesto_firma`; sin él, la orden inicial del contrato, que no tiene rango
+  int64 dada_en_ms = 5;
+  optional int64 vence_en_ms = 6;        // ir_a y atacar
+  optional string contra_faccion_id = 7; // atacar: la dueña del objetivo al darla
+  bool unido = 8;                        // unirse: ya estuvo dentro de ese ejército o convocatoria
+}
+
+// Una medalla de un mercenario (§9). En la ficha pública, solo `id` y `grado`.
+message MedallaMercenario {
+  string id = 1;
+  uint32 grado = 2;                      // 0 sin medalla, 1 bronce, 2 plata, 3 oro
+  uint32 cuenta = 3;
+  optional uint32 siguiente_umbral = 4;  // ausente en el oro
+}
+
+// Lo que se cuenta de los contratos de un mercenario, sin nombres (§10).
+message HistorialMercenario {
+  uint32 firmados = 1;
+  uint32 terminados = 2;
+  uint32 despidos = 3;
+  uint32 buenas = 4;
+  uint32 malas = 5;
+}
+
+// La progresión de un mercenario (§8 y §9). Entera en su `HEROE` y en el tablón; en el héroe público, solo `rango`, `rango_id`, `renombre` y el grado de cada medalla.
+message FichaMercenario {
+  uint32 rango = 1;                      // 1 a 5; el más alto alcanzado
+  string rango_id = 2;                   // a_sueldo | lanza | capitan | veterano | senor_de_la_guerra
+  uint32 renombre = 3;
+  optional uint32 renombre_siguiente_rango = 4;
+  repeated MedallaMercenario medallas = 5;
+  optional HistorialMercenario historial = 6;
+  uint32 premios = 7;                    // escuadras de premio de rango sin reclamar
+}
+
+// Lo que cobra hoy un mercenario por un plazo, o por el permanente (`plazo_dias` ausente), en milésimas de oro (§3, duda 1 del plan), o su equivalente en monedas del héroe (tanda 69).
+message TarifaMercenario {
+  optional uint32 plazo_dias = 1;
+  sint64 oro = 2;
+  sint64 monedas = 3;
+}
+
+// Un mercenario en el tablón de su campamento (`CampamentoMercenarios.tablon`, solo en `CAMPAMENTO`; y, desde la tanda 69, `Asentamiento.mercenarios_region`).
+message OfertaMercenario {
+  string heroe_id = 1;
+  int64 desde_ms = 2;
+  FichaMercenario ficha = 3;
+  repeated EscuadraQueLleva tropa = 4;
+  optional int64 herido_hasta_ms = 5;
+  repeated TarifaMercenario tarifas = 6;
+  string campamento_id = 7;  // el campamento del tablón donde se ofrece: en el tablón de la región de una plaza vienen los de varios
+}
+
+enum EstadoMision {
+  ESTADO_MISION_NO_ESPECIFICADO = 0;
+  MISION_ACTIVA = 1;      // se puede cumplir: habilitada y con su previa cumplida
+  MISION_CUMPLIDA = 2;    // cumplida y sin reclamar: `reclamar_recompensa`
+  MISION_RECLAMADA = 3;
+}
+
+// Una condición de una misión: el contador, lo que lleva y lo que pide. En una cumplida, `avance` es el umbral.
+message CondicionMision {
+  string contador = 1;
+  uint64 avance = 2;
+  uint64 umbral = 3;
+}
+
+// Una misión de su dueño (el héroe, la plaza o la Facción; Misiones §5). Solo viajan las activas, las cumplidas y las reclamadas: las que esperan
+// a su previa y las deshabilitadas, no.
+message Mision {
+  string id = 1;                          // el del catálogo: H1, A4, F3...
+  EstadoMision estado = 2;
+  repeated CondicionMision condiciones = 3;
+  optional string previa = 4;
+  reserved 5;                             // antes `recompensa` (oro o recursos): desde las recompensas flexibles (2026-11-01) van en `recompensas`
+  sint64 recompensa_experiencia = 6;      // la recompensa fija de una de Facción: experiencia, en milésimas
+  uint64 participacion = 7;               // la recompensa fija de una de plaza: participación de quien la reclama
+  repeated RecompensaMision recompensas = 8;  // la lista libre (Misiones §4)
+}
+
+// Un elemento de la lista libre de una recompensa de misión (Misiones §4, Misiones_Recurrentes §5).
+message RecompensaMision {
+  string tipo = 1;      // recurso, oro, xp, tropa, objeto
+  string clave = 2;     // el recurso, la tropa o el objeto (ids de los datos); vacío en oro y xp
+  sint64 cantidad = 3;  // milésimas (recurso, oro, xp), soldados (tropa) o piezas (objeto)
+}
+
+enum DuracionMision {
+  DURACION_MISION_NO_ESPECIFICADA = 0;
+  MISION_DIARIA = 1;     // se renueva cada día a las 00:00 de mundo
+  MISION_SEMANAL = 2;    // se renueva en la renovación semanal
+}
+
+enum TipoMision {
+  TIPO_MISION_NO_ESPECIFICADO = 0;
+  MISION_INDIVIDUAL = 1;   // la acepta un héroe y cuenta lo suyo desde entonces
+  MISION_GRUPAL = 2;       // no se acepta: cuenta lo de todos los héroes del ámbito
+}
+
+enum EstadoMisionRecurrente {
+  ESTADO_MISION_RECURRENTE_NO_ESPECIFICADO = 0;
+  RECURRENTE_EN_CURSO = 1;   // aceptada (individual) o corriendo (grupal)
+  RECURRENTE_CUMPLIDA = 2;   // cumplida y sin reclamar: `reclamar_recompensa`
+  RECURRENTE_RECLAMADA = 3;
+  RECURRENTE_CADUCADA = 4;   // acabó su periodo sin cumplirse
+}
+
+// Una misión recurrente del catálogo, con sus textos (Misiones_Recurrentes §1 y §6).
+message DefinicionMisionRecurrente {
+  string id = 1;                           // PD1, FS3...
+  DuracionMision duracion = 2;
+  TipoMision tipo = 3;
+  uint32 limite_semanal = 4;               // individual: aceptaciones por semana en el tablón, entre todos (0 en una grupal)
+  optional string cargo = 5;               // solo la acepta su titular: gobernador, tesorero, general, maestroObras, sacerdote, maestroCaravanas; rey, embajador
+  repeated CondicionMision condiciones = 6; // con `avance` 0
+  sint64 experiencia = 7;                  // la recompensa fija de una de Facción: experiencia, en milésimas
+  uint64 participacion = 8;                // la recompensa fija de una de plaza: la del héroe (individual) o la que se reparte (grupal)
+  reserved 9;                              // antes `oro`: desde las recompensas flexibles (2026-11-01) va en `recompensas`
+  string titulo = 10;
+  string texto = 11;
+  string explicacion = 12;
+  repeated RecompensaMision recompensas = 13;  // la lista libre
+}
+
+// La misión individual de un héroe que la aceptó.
+message AceptacionMision {
+  string heroe_id = 1;
+  EstadoMisionRecurrente estado = 2;
+  repeated CondicionMision condiciones = 3;  // lo que lleva desde que la aceptó
+}
+
+// Una misión en el tablón con su periodo (Misiones_Recurrentes §8). Las vencidas siguen mientras queda algo cumplido por reclamar.
+message MisionRecurrente {
+  DefinicionMisionRecurrente definicion = 1;  // tal como salió (un cambio del catálogo vale desde la siguiente renovación)
+  int64 desde_ms = 2;
+  int64 hasta_ms = 3;
+  // Individual: cada aceptación, en orden de héroe, y cuántas lleva esta misión esta semana en el tablón (para el tope).
+  repeated AceptacionMision aceptaciones = 4;
+  uint32 aceptadas_semana = 5;
+  // Grupal: su estado, lo que llevan entre todos y lo que aportó cada héroe (id de héroe → avance).
+  EstadoMisionRecurrente estado = 6;
+  repeated CondicionMision condiciones = 7;
+  map<string, uint64> aportes = 8;
+}
+
+// El tablón de una plaza o de una Facción (Misiones_Recurrentes §4 y §8).
+message Tablon {
+  repeated MisionRecurrente misiones = 1;
+  repeated string diarias_ids = 2;              // las diarias que salen esta semana
+  repeated string semanales_ids = 3;            // las semanales de esta semana
+  bool con_eleccion = 4;                        // false: sin elección, salen las primeras del catálogo
+  repeated string elegidas_diarias_ids = 5;     // lo elegido para la próxima renovación semanal
+  repeated string elegidas_semanales_ids = 6;
+  int64 renovacion_diaria_ms = 7;               // las próximas 00:00 de mundo
+  int64 renovacion_semanal_ms = 8;              // la próxima renovación semanal
+  repeated DefinicionMisionRecurrente catalogo = 9;  // las del catálogo vigente de su ámbito, en orden, para elegir
+}
+
+// Una Liga (Diplomacia §5.7): la componente conexa de Facciones unidas por relaciones activas de cualquier clase (la guerra incluida). No tiene id propio: viaja en cada Facción miembro.
+message LigaDeFaccion {
+  repeated string miembros_ids = 1;      // por id, la propia incluida
+  bool tiene_vasallaje = 2;
+  optional string gran_rey_id = 3;       // la señora de un vasallaje de la Liga que no es vasalla en ella (también es el título «Gran Rey»)
+}
+
+enum TipoRelacion {
+  TIPO_RELACION_NO_ESPECIFICADO = 0;
+  RELACION_VASALLAJE = 1;   // a es la señora, b la vasalla
+  RELACION_ALIANZA = 2;
+  RELACION_GUERRA = 3;
+}
+
+enum EstadoRelacion {
+  ESTADO_RELACION_NO_ESPECIFICADO = 0;
+  RELACION_ACTIVA = 1;
+  RELACION_ROTA = 2;
+}
+
+message Tributo {
+  string recurso = 1;
+  sint64 cantidad_por_minuto = 2;        // milésimas; es un flujo continuo de la vasalla a la capital de la señora
+}
+
+message RelacionPolitica {
+  string id = 1;
+  uint64 version = 2;
+  TipoRelacion tipo = 3;
+  string faccion_a_id = 4;
+  string faccion_b_id = 5;
+  optional Tributo tributo = 6;
+  int64 creado_en_ms = 7;
+  EstadoRelacion estado = 8;
+  optional string rota_por = 9;
+  optional int64 rota_en_ms = 10;
+  optional string paz_propuesta_por = 11;
+}
+
+message Propuesta {
+  string id = 1;
+  uint64 version = 2;
+  string propuesta_por = 3;              // el HÉROE que la hizo (`heroe-N`; 5A-7, decidido en 5H: Diplomacia §2.4 y el TypeScript); la Facción que propone es la `a` de su clase
+  int64 creada_en_ms = 4;
+  int64 expira_en_ms = 5;
+  oneof clase {
+    PropuestaRelacion relacion = 10;
+    PropuestaAnexion anexion = 11;
+    PropuestaFusion fusion = 12;
+  }
+}
+
+message PropuestaRelacion {
+  TipoRelacion tipo = 1;                 // alianza o vasallaje
+  string faccion_a_id = 2;
+  string faccion_b_id = 3;
+  optional Tributo tributo = 4;
+}
+
+message PropuestaAnexion {
+  string absorbente_id = 1;
+  string absorbida_id = 2;
+}
+
+message PropuestaFusion {
+  string faccion_a_id = 1;
+  string faccion_b_id = 2;
+  string nuevo_nombre = 3;
+  string nuevo_rey_id = 4;
+}
+
+message Titulo {
+  string titulo_id = 1;
+  uint64 version = 2;
+  string nombre = 3;
+  string poseedor_id = 4;
+  sint64 valor_metrica = 5;
+}
+
+// ───────────────────────────── Asentamiento ─────────────────────────────
+
+enum EstadoEdificio {
+  ESTADO_EDIFICIO_NO_ESPECIFICADO = 0;
+  EDIFICIO_EN_COLA = 1;
+  EDIFICIO_EN_CONSTRUCCION = 2;
+  EDIFICIO_ACTIVO = 3;
+}
+
+enum AmbitoEdificio {
+  AMBITO_EDIFICIO_NO_ESPECIFICADO = 0;
+  AMBITO_EDIFICIO_ASENTAMIENTO = 1;
+  AMBITO_EDIFICIO_MAPA = 2;
+}
+
+message MejoraEnCurso {
+  uint32 nivel_objetivo = 1;
+  int64 completa_en_ms = 2;
+}
+
+message Edificio {
+  string id = 1;
+  string tipo = 2;                       // id de catálogo
+  Punto posicion = 3;                    // en el espacio LOCAL del asentamiento (200 locales por unidad de mapa)
+  EstadoEdificio estado = 4;
+  optional int64 completa_en_ms = 5;
+  AmbitoEdificio ambito = 6;
+  optional string fuente_id = 7;         // nodo de recurso o parcela de bosque que explota
+  optional uint32 nivel_interno = 8;
+  optional MejoraEnCurso mejora = 9;
+  bool rotado = 10;
+  bool semilla_saturada = 11;
+  bool ancla_llena = 12;
+  optional uint32 prioridad = 13;
+  bool pausado_por_almacen_lleno = 14;
+  bool danado = 15;
+  // Huella en UNIDADES LOCALES con la rotación ya aplicada (`rotado`): la pieza ocupa `posicion` ± la mitad. Es lo que el cliente dibuja
+  // (no ve celdas) junto con `TrazadoUrbano`.
+  uint32 ancho = 16;
+  uint32 alto = 17;
+  bool buey = 18;                        // el molino tiene su buey y produce el doble (tanda 69 §10)
+  // Bodega y prensa (2026-11-09): el insumo de su única receta activa (uva | cebada | aceituna | sesamo); `receta_parada` si la plaza bajó
+  // de nivel y esa receta ya no cabe en su tope de recetas distintas (no produce hasta que la plaza recupere el nivel o se elija otra).
+  optional string receta = 19;
+  bool receta_parada = 20;
+}
+
+enum ClaseCelda {
+  CLASE_CELDA_NO_ESPECIFICADA = 0;
+  CELDA_MURO = 1;
+  CELDA_PUERTA = 2;
+  CELDA_TORRE = 3;
+}
+
+message CeldaMuro {
+  sint32 col = 1;
+  sint32 fila = 2;
+  ClaseCelda clase = 3;
+}
+
+message Recinto {
+  string id = 1;                         // `recinto-<plaza>-<n>`
+  uint32 nivel = 2;
+  repeated CeldaMuro celdas = 3;
+  uint32 avance = 4;                     // celdas levantadas
+  optional uint32 mejorando_a = 5;
+  optional int64 siguiente_celda_en_ms = 6;
+  int64 comprometido_en_ms = 7;
+  optional int64 completado_en_ms = 8;
+  // Con una mejora en curso (`mejorando_a`), cuántas celdas, en el orden de `celdas`, ya son del nivel nuevo (paridad P7: el `avance` de la mejora del TypeScript).
+  optional uint32 mejoradas = 9;
+}
+
+message Cargos {
+  optional string gobernador_id = 1;
+  optional string tesorero_id = 2;
+  optional string general_id = 3;
+  optional string maestro_obras_id = 4;
+  optional string sacerdote_id = 5;
+  optional string maestro_caravanas_id = 6;  // da, cambia y cancela los encargos de las caravanas de la plaza (2026-10-31)
+}
+
+message PoliticaActiva {
+  string id = 1;
+  string politica_id = 2;
+  string cargo = 3;                      // gobernador | tesorero | general | maestroObras | sacerdote | maestroCaravanas
+  int64 activada_en_ms = 4;
+  int64 expira_en_ms = 5;
+}
+
+enum GrupoPuerta {
+  GRUPO_PUERTA_NO_ESPECIFICADO = 0;
+  GRUPO_NEUTRALES = 1;
+  GRUPO_ALIADOS = 2;
+  GRUPO_ENEMIGOS = 3;
+  GRUPO_AEDAS = 4;
+}
+
+message AscensoEnCurso {
+  uint32 nivel_objetivo = 1;
+  int64 iniciado_en_ms = 2;
+  int64 completa_en_ms = 3;
+}
+
+// La población es ENTERA (economía por minuto, decisión del autor del 2026-10-22): cada clase guarda habitantes enteros, así que
+// `valor_en_t0` es siempre múltiplo de 1.000 (milésimas de persona) y no hay nada que redondear. El crecimiento fraccionario que la
+// plaza lleva entre persona y persona (el «resto oculto») NO viaja. Cambia en el paso de minuto: `en_escalones = true` y `por_minuto`
+// es la tendencia de ese paso. (Sustituye a la regla v1 «continua, se lee entera con suelo».)
+message Poblacion {
+  Ritmo pesants = 1;
+  Ritmo artesanos = 2;
+  Ritmo nobleza = 3;
+  // La plaza tocó nutrición 0 y no vuelve a crecer hasta recuperar 100 (D8, economía por minuto): la marca de recuperación, que el cliente rotula junto a la nutrición. Es estado de juego (no se deduce de la nutrición).
+  bool en_recuperacion = 4;
+}
+
+message Asentamiento {
+  string id = 1;
+  uint64 version = 2;
+  optional string nombre = 3;
+  string faccion_id = 4;
+  repeated string fundadores_ids = 5;     // quienes la fundaron y siguen residiendo en ella (5H, 5B-9): al mudarse dejan de serlo; la conquista la deja sin ninguno. Interior, ficha propia y ADMIN
+  Punto posicion = 6;
+  uint32 nivel = 7;                      // alcanzado (monótono)
+  uint32 nivel_actual = 8;               // operativo (baja con el mantenimiento)
+  optional uint32 racha_mantenimiento_sano = 9;
+  int64 fundado_en_ms = 10;
+  sint64 radio_potencial = 11;           // zona de influencia, en milésimas de unidad de mapa
+  repeated Punto zona = 12;              // polígono real recortado por fronteras (derivado, solo lectura)
+  Poblacion poblacion = 13;
+  // Por id de recurso. Cambia en el paso de minuto: cada `Existencia.cantidad` viene `en_escalones = true`, con su tendencia «+N/min»
+  // en `por_minuto` (el cliente muestra el valor del servidor y esa tendencia, no interpola).
+  map<string, Existencia> almacen = 14;
+  repeated Edificio edificios = 15;
+  repeated Recinto recintos = 16;
+  Cargos cargos = 17;
+  repeated string casas_compradas = 18;  // héroes que residen
+  repeated GrupoPuerta puerta_cerrada_a = 19;
+  optional string capital_de_faccion_id = 20;
+  repeated string vetados_ids = 21;
+  repeated PoliticaActiva politicas_activas = 22;
+  optional int64 ocupacion_hasta_ms = 23;
+  optional int64 bandidos_reaparecen_en_ms = 24;
+  optional int64 protegida_hasta_ms = 25;
+  optional AscensoEnCurso ascenso = 26;
+  Ritmo medidor_mantenimiento = 27;      // 0..100
+  Ritmo nutricion = 28;                  // 0..100
+  bool auto_construccion_pausada = 29;
+  repeated string recetas_pausadas = 30;
+  bool permite_reabastecer_aliados = 31;
+  Cantidades reserva_manual = 32;
+  optional int64 ultima_caravana_creada_en_ms = 33;
+  // Guerra logística (Doc 4.2.2, 5.17):
+  repeated string pueblos_ids = 34;
+  repeated string avanzadas_ids = 35;
+  // La ciudad que el cliente dibuja: la calcula el servidor (el cliente no recalcula nada). Ausente en las plazas ajenas redactadas.
+  optional TrazadoUrbano trazado = 36;
+  // Asedio visible (3.ª ronda de «entrar con todo»): la batalla que se juega ahora contra esta plaza. Con ella el cliente ofrece unirse
+  // (`Batalla.lado_para_unirse`).
+  optional string batalla_id = 37;
+  // El interior visto desde dentro (4H T3c), todo en ids del contrato:
+  repeated string guarnicion_ids = 38;           // las escuadras (`esc-N`) en la guarnición de la plaza: las de sus residentes que se quedan dentro y, desde 2026-11-04, las que dejan los de su Facción de visita
+  uint32 cupo_guarnicion = 39;                   // cuántos soldados admite la guarnición (nivel, recintos completos, Palacio, políticas)
+  repeated string presentes_ids = 40;            // los héroes que están dentro ahora: residentes y visitantes (su ficha pública llega por `VISTA`; aquí solo quiénes)
+  repeated string caravanas_aparcadas_ids = 41;  // las caravanas aparcadas en la plaza, de quien sean
+  repeated string flota_ids = 42;                // las caravanas de la plaza (su origen), estén donde estén
+  // La secuencia propia del interior de la plaza (el contador de pasos de minuto): lo que cambia el paso de minuto (almacén, población, medidor,
+  // nutrición, edificios parados, tendencia y el almacén local de los pueblos) NO avanza `version` (la del mundo) sino esta. Avanza de uno en uno
+  // en cada paso de minuto de la plaza, igual con sesiones y sin ellas; un cambio parcial del paso de minuto la lleva siempre (máscara
+  // `version_interior`, detrás de `version`) y una reanudación la compara con la del cliente (`Hola.versiones_interiores_conocidas`).
+  uint64 version_interior = 43;
+  // Sus misiones (Misiones §5): interior (quien está dentro o la gobierna) y `ADMIN`.
+  repeated Mision misiones = 44;
+  // La participación de cada héroe en la plaza (Participacion §3; id de héroe → puntos), resida o no en ella: interior y `ADMIN`.
+  map<string, uint64> participacion = 45;
+  // Su tablón de misiones recurrentes (Misiones_Recurrentes §8): interior y `ADMIN`.
+  optional Tablon tablon = 46;
+  // Si el Gobernador cerró a los ciudadanos el sacar del almacén al carro (`cargar_de_plaza`, 2026-10-29): interior y `ADMIN`.
+  bool almacen_cerrado_a_ciudadanos = 47;
+  // La guarnición de la plaza escuadra a escuadra, en el orden de `guarnicion_ids`: tropa, soldados en pie y de qué héroe es (2026-11-04).
+  repeated GuarnicionInforme guarnicion = 48;
+  // 2026-11-07 (decisión del autor): si la plaza tiene muralla, sin más detalle (sin nivel, avance ni celdas). Cuenta un recinto empezado: verdadero en cuanto hay
+  // algún recinto comprometido o en pie. Va en toda ficha, también en la avistada desde fuera (`VISTA`); el detalle sigue en `recintos`, de dentro.
+  bool tiene_muralla = 49;
+  // 2026-11-07 (decisión del autor): si la plaza tiene algún Mercado activo, sin nivel. Desde fuera (`VISTA`, la avistada) es lo único que se sabe de sus
+  // edificios: la avistada ya no lleva `edificios`, que siguen viajando desde dentro, en la ficha propia y en los Informes.
+  bool mercado_activo = 50;
+  // Tanda 69 §8: el tablón de mercenarios de los campamentos de la región de la plaza, con la forma del `CampamentoMercenarios.tablon` y gratis. Solo de dentro (interior y `ADMIN`), y solo
+  // si la plaza tiene una Taberna activa.
+  repeated OfertaMercenario mercenarios_region = 51;
+  // 2026-11-10 (decisión del autor): la advertencia de solvencia del nivel siguiente. Los recursos del mantenimiento de ese nivel que lo que llega por minuto
+  // (producción, recaudación y la media del acarreo de las últimas 24 h) no cubre. Ya no bloquea la subida (antes era el rechazo `ascenso.insolvente`): es un
+  // aviso para el jugador y los bots. Vacía si cubre todo o si la plaza está en el nivel máximo. La calcula el paso de minuto: interior, plaza propia y `ADMIN`.
+  repeated Insolvencia insolvencia_ascenso = 52;
+  // 2026-11-10 (decisión del autor): si el Gobernador o un General cerró a los ciudadanos que no residen en la plaza el reclutar escuadras nuevas en ella
+  // (`cerrar_reclutamiento_a_ciudadanos`): solo reponen. Abierto, la escuadra nueva de un ciudadano que no reside va a la columna con la que entró. Interior y `ADMIN`.
+  bool reclutamiento_cerrado_a_ciudadanos = 53;
+  // 2026-11-10 (decisión del autor): los bienes de consumo cuyo consumo está pausado en la plaza (`pausar_consumo`; ids de catálogo, en el orden del catálogo):
+  // la población no los come y la guarnición no come la carne. Interior, plaza propia y `ADMIN`.
+  repeated string consumo_pausado = 54;
+  // 2026-11-12 (Heroe_Y_Tropa §4.6, decisión del autor): si la plaza tiene alguna Armería activa, sin nivel, como `mercado_activo`. Va en toda ficha, también
+  // en la avistada desde fuera (`VISTA`).
+  bool armeria_activa = 55;
+  // 2026-11-12 (Heroe_Y_Tropa §4.6): la forja de la plaza, la apertura y el recargo de cada grupo de fuera y su fondo de monedas. Solo de dentro
+  // (interior, la plaza ajena vista desde dentro en `VISTA`) y `ADMIN`. Con ella, `OBJETOS.forja` de `/v1/datos` y la Era del mundo, el cliente calcula cuánto pagaría.
+  ForjaPlaza forja = 56;
+  // 2026-11-12 (Heroe_Y_Tropa §4.6): los metales de `OBJETOS.metales` cuya tecnología tiene adoptada la Facción de la plaza (`inicio` incluido), por orden
+  // alfabético: los que abre su Armería para comprar y forjar (la Era la mira el cliente). Vacío sin Armería activa. Solo de dentro y `ADMIN`, como `forja`.
+  repeated string metales_armeria = 57;
+  // 2026-11-16 (Tecnologia_Aedas §4.2, decisión del autor): el estilo de época de la plaza, el aspecto de sus edificios. El máximo al que llegó por las tecnologías adoptadas de su Facción
+  // (y de las que la tuvieron antes): nunca baja. Va a quien la ve por dentro: interior, plaza propia (su Facción, también en `FACCION`), la plaza ajena vista desde dentro en `VISTA` y
+  // `ADMIN`. Ausente en la avistada desde fuera.
+  optional EstiloEpoca estilo_epoca = 58;
+}
+
+// El estilo de época (Tecnologia_Aedas §4.2): `era`, el orden de la Era (1 a 5) más alta de la que la Facción tiene adoptada alguna tecnología, y `grado`, cuántas de esa
+// Era (1 primeros atisbos, 2 más cambiada, 3 del todo; nunca 0). La Era I es la base y va siempre entera: (1, 3). Se compara por la Era y luego por el grado.
+message EstiloEpoca {
+  uint32 era = 1;
+  uint32 grado = 2;
+}
+
+// La forja de la Armería de una plaza (`Asentamiento.forja`, Heroe_Y_Tropa §4.6): la misma Facción forja siempre, a la base; cada grupo de fuera, si está abierta a él.
+message ForjaPlaza {
+  AperturaForja aliados = 1;
+  AperturaForja neutrales = 2;
+  AperturaForja enemigos = 3;
+  sint64 fondo = 4;                      // monedas del impuesto de su forja (Mercenarios_Por_Contrato §5.1)
+}
+
+// La forja de una plaza para un grupo de fuera: abierta o cerrada y su recargo sobre el impuesto base (uno de `OBJETOS.forja.recargosPct`, en %).
+message AperturaForja {
+  bool abierta = 1;
+  uint32 recargo_pct = 2;
+}
+
+// Un recurso que no cubriría el mantenimiento del nivel siguiente (`Asentamiento.insolvencia_ascenso`), en milésimas por minuto.
+message Insolvencia {
+  string recurso = 1;
+  sint64 llega = 2;                      // lo que llega por minuto
+  sint64 pide = 3;                       // lo que pediría el mantenimiento por minuto en el nivel siguiente
+}
+
+// Rectángulo en UNIDADES LOCALES del asentamiento (esquina mínima y tamaño). El espacio local está centrado en el Centro Urbano.
+message RectLocal {
+  sint32 x = 1;
+  sint32 y = 2;
+  uint32 ancho = 3;
+  uint32 alto = 4;
+}
+
+// Lo que el cliente necesita para dibujar la ciudad (Trazado_Urbano §10); los edificios con su huella están en `Asentamiento.edificios`
+// (`ancho`/`alto`) y los recintos de muralla en `Asentamiento.recintos` (sus celdas, de `unidades_por_celda` de lado).
+message TrazadoUrbano {
+  uint32 layout_version = 1;             // versión del algoritmo de trazado: un cliente que no la conozca dibuja, no recalcula
+  uint32 unidades_por_celda = 2;         // 3
+  sint32 radio_ul = 3;                   // `radioCiudad` actual: el disco urbano
+  repeated RectLocal calles = 4;
+  repeated RectLocal caminos = 5;
+}
+
+// Pueblo extractor: extractor de mapa + almacén local + carro de acarreo + guarnición de serie. No es un asentamiento.
+message Pueblo {
+  string id = 1;
+  uint64 version = 2;
+  string asentamiento_madre_id = 3;
+  string nodo_id = 4;                    // vacío en una aldea agrícola (está en un punto, sin nodo)
+  string tipo_extractor = 5;             // id de catálogo (cantera, mina, minaCobre...) o `aldeaAgricola`
+  Punto posicion = 6;
+  Existencia almacen_local = 7;          // cantidad como ritmo (extracción); capacidad 500
+  optional string carro_acarreo_id = 8;  // caravana de tipo acarreo; ausente = hay que reponerlo
+  optional string guarnicion_escuadron_id = 9;
+  optional int64 guarnicion_repone_en_ms = 10;
+  optional string batalla_id = 11;       // asedio visible: el saqueo que se juega ahora
+  // La secuencia interior de su plaza madre (`Asentamiento.version_interior`) en el momento en que se proyectó: el paso de minuto refresca el
+  // almacén local sin avanzar `version`, así que esta dice de qué minuto es. Solo `ASENTAMIENTO` lo refresca por minuto (en `FACCION` el
+  // almacén local llega con el último cambio discreto del pueblo).
+  uint64 version_interior = 12;
+  // El nivel del pueblo (1 a 3): de la aldea agrícola y, desde el 2026-11-10, también del extractor (antes ausente en él). Aldea agrícola
+  // (Economia_Construccion §14.2): la fertilidad del punto (milésimas: 1000 = 1,0) y su almacén
+  // local por recurso (trigo y ganado, que comparten la capacidad de `almacen_local`). `almacen_local` lleva el trigo.
+  optional uint32 nivel_aldea = 13;
+  optional sint64 fertilidad = 14;
+  map<string, Existencia> almacen_por_recurso = 15;
+  // Su rebaño (Economia_Construccion §14.3, la cría): la especie (id de `ESPECIES`, «vacuno») y las cabezas en milésimas (crece continuo). Ausentes en un
+  // extractor y en una aldea que aún no se ha completado. El tope y el pie de cría salen de `ESPECIES` por los corrales de su nivel.
+  optional string rebano_especie = 16;
+  optional sint64 rebano_cabezas = 17;
+  // La guarnición de jugadores (Economia_Construccion §14.0.1): escuadrones dejados con `guarnecer_pueblo` por ciudadanos de la Facción de la madre, y el cupo de
+  // Liderazgo de cada héroe (30 en nivel 1 y 15 más por nivel de la aldea).
+  repeated string guarnicion_jugadores_ids = 18;
+  int64 cupo_guarnicion_por_heroe = 19;
+  // La planta (2026-11-02, para la vista 3D del cliente): solo en la `VISTA` de quien está dentro de este pueblo, sea de su Facción o no; para los demás, vacíos.
+  // Presentación pura (`urbanismo::planta_de_pueblo`): siempre la misma para el mismo pueblo y nivel. Las piezas van como las del campamento: `id` = `pueblo-N-K`;
+  // `tipo` = el del ancla (cantera, mina, minaCobre…; la granja en una aldea), vivienda, almacen, corral o granja; `posicion` = el centro, y `ancho` y `alto`, en
+  // unidades locales; `rotado`.
+  repeated Edificio planta = 20;
+  optional TrazadoUrbano trazado = 21;   // layout_version, unidades_por_celda, radio_ul, calles y caminos de la planta
+  // El nivel alcanzado de su plaza madre, solo con la planta (el cliente pinta las casas con ese estilo, hasta el 3).
+  optional uint32 nivel_madre = 22;
+  // El cultivo de la aldea agrícola (tanda 69 §12): trigo | vid | oliva | cebada | sesamo (2026-11-09) | ganado (la aldea ganadera, 2026-11-11: solo
+  // corrales y rebaño, sin granjas; la de trigo ya no lleva corrales). Se elige al marcarla y no cambia; ausente en un extractor.
+  optional string cultivo = 23;
+  // 2026-11-16 (Tecnologia_Aedas §4.2): el estilo de época de su plaza madre, solo con la planta, como `nivel_madre` (el cliente pinta las casas con ese estilo).
+  optional EstiloEpoca estilo_epoca_madre = 24;
+}
+
+enum EstadoAvanzada {
+  ESTADO_AVANZADA_NO_ESPECIFICADO = 0;
+  AVANZADA_ACTIVA = 1;
+  AVANZADA_EN_RUINAS = 2;                // fuerte y ciudadela; no funciona nada
+}
+
+message Avanzada {
+  string id = 1;
+  uint64 version = 2;
+  string asentamiento_madre_id = 3;
+  uint32 etapa = 4;                      // 1 atalaya, 2 fuerte, 3 ciudadela
+  Punto posicion = 5;
+  EstadoAvanzada estado = 6;
+  sint64 radio_vision = 7;               // 12 unidades (en milésimas), fijo
+  Existencia almacen = 8;                // sin uso: el almacén de una avanzada es por recurso (`almacen_por_recurso`)
+  repeated string guarnicion_serie_ids = 9;    // escuadras de serie (IA, fuera de cupo)
+  optional string tropa_elegida_escalon2 = 10; // la elige el Gobernador de la madre (= `tropa_elegida_por_escalon[2]`; se conserva por v1)
+  optional int64 invulnerable_hasta_ms = 11;   // fuerte en ruinas: 1 día
+  map<uint32, string> tropa_elegida_por_escalon = 12; // escalón (2, 3 o 4) → tropa elegida de las que la madre recluta
+  repeated string guarnicion_jugadores_ids = 13;      // escuadrones de jugadores dejados con `guarnecer_avanzada` (dentro del cupo)
+  optional string batalla_id = 14;       // asedio visible: el ataque que se juega ahora
+  map<string, Existencia> almacen_por_recurso = 15; // fuerte y ciudadela: lo que hay de cada recurso (id de catálogo); la atalaya no tiene almacén
+  // 2026-11-16 (Tecnologia_Aedas §4.2): el estilo de época de su plaza madre, para la vista 3D de dentro. A su Facción (en `FACCION` y `VISTA`) y a quien está dentro de una ajena; ausente
+  // en la avistada desde fuera y en una ruina sin dueño.
+  optional EstiloEpoca estilo_epoca_madre = 16;
+}
+
+enum TipoObra {
+  TIPO_OBRA_NO_ESPECIFICADO = 0;
+  OBRA_PUEBLO = 1;
+  OBRA_AVANZADA = 2;
+  OBRA_MEJORA_AVANZADA = 3;
+  OBRA_REPARACION = 4;
+  OBRA_ALDEA = 5;                        // la aldea agrícola, pendiente de materiales o levantándose
+  OBRA_MEJORA_ALDEA = 6;                 // la subida de nivel de una aldea activa (destino_id: la aldea)
+}
+
+// Obra de mapa «pendiente de materiales»: se ve en el mapa pero no se puede atacar; ocupa cupo desde que se marca.
+message ObraDeMapa {
+  string id = 1;
+  uint64 version = 2;
+  string asentamiento_madre_id = 3;
+  TipoObra tipo = 4;
+  Punto posicion = 5;
+  optional string nodo_id = 6;           // pueblos extractores (la aldea agrícola no tiene nodo)
+  optional string destino_id = 7;        // mejora o reparación de una avanzada
+  Cantidades requerido = 8;
+  Cantidades entregado = 9;
+  optional int64 inicia_en_ms = 10;
+  optional int64 termina_en_ms = 11;     // presente cuando arranca la obra
+}
+
+message NodoRecurso {
+  string id = 1;
+  uint64 version = 2;
+  string tipo = 3;
+  string rareza = 4;                     // comun | intermedio | raro
+  Punto posicion = 5;
+  sint64 cantidad_inicial = 6;
+  Existencia stock = 7;
+  optional int64 regenera_en_ms = 8;
+  optional string anillo = 9;            // foco | frontera | lejana (del artefacto de mundo)
+}
+
+message ZonaBosque {
+  string id = 1;
+  Punto centro = 2;
+  sint64 radio = 3;
+  uint32 densidad_milesimas = 4;         // 0..1000
+  reserved 5;                            // antes `capacidad_lenera`: ahora el cupo son las parcelas
+  uint64 area = 6;                       // milésimas² de unidad estratégica
+}
+
+// Cupo de explotación de una masa de bosque (Doc 1.9c). Fija en el artefacto; ocupada cuando una Leñera la tiene en
+// `Edificio.fuente_id`. La Leñera se construye en la ciudad; la parcela solo dice de qué parte del bosque vive.
+message ParcelaBosque {
+  string id = 1;
+  string bosque_id = 2;
+  Punto centro = 3;
+  uint32 densidad_milesimas = 4;         // media de la densidad bajo la parcela
+  optional string anillo = 5;
+}
+
+// ───────────────────────────── Héroe y tropa ─────────────────────────────
+
+message Atributos {
+  uint32 fuerza = 1;
+  uint32 destreza = 2;
+  uint32 armadura = 3;
+  uint32 vitalidad = 4;
+}
+
+message Estadistica {
+  string nombre = 1;
+  sint64 valor = 2;
+}
+
+message ItemInstancia {
+  string item_definition_id = 1;
+  string tipo = 2;                       // arma | armadura | montura | material | consumible (el `tipo` de su ficha en `OBJETOS`)
+  uint32 cantidad = 3;
+  optional string item_instance_id = 4;
+  repeated Estadistica estadisticas = 5;
+  uint32 precio = 6;
+  uint32 casilla_inventario = 7;
+}
+
+message Equipamiento {
+  optional ItemInstancia arma = 1;
+  optional ItemInstancia casco = 2;
+  optional ItemInstancia torso = 3;
+  optional ItemInstancia guantes = 4;
+  optional ItemInstancia pantalones = 5;
+  optional ItemInstancia botas = 6;
+  optional ItemInstancia montura = 7;    // 2026-11-12: el hueco de la montura (Objetos_Del_Heroe §3.2)
+}
+
+message Avatar {
+  string cabeza_id = 1;
+  string pelo_id = 2;
+  string barba_id = 3;
+  string cejas_id = 4;
+}
+
+message Loadout {
+  string id = 1;
+  string display_name = 2;
+  repeated string squad_ids = 3;
+  reserved 4;                            // antes `perks_seleccionados`: desde el 2026-11-12 los perks se abren solos con el nivel (D15)
+  bool activo = 5;
+  uint32 liderazgo_total = 6;            // derivado
+}
+
+message UbicacionHeroe {
+  oneof donde {
+    string asentamiento_id = 1;          // dentro de una plaza
+    string ejercito_id = 2;              // en el mapa, en su columna
+    string campamento_id = 3;            // dentro de un campamento de mercenarios
+    Punto desconectado_en = 4;           // fuera del mundo (solo si salió con su columna)
+    string pueblo_id = 5;                // dentro de un pueblo extractor (entrar con todo: su columna queda fuera del mapa)
+    string avanzada_id = 6;              // dentro de una avanzada
+  }
+}
+
+message CupoCampamento {
+  uint32 dia = 1;
+  map<string, uint32> comprado = 2;
+}
+
+message Heroe {
+  string id = 1;
+  uint64 version = 2;
+  optional string jugador_id = 3;
+  bool es_bot = 4;
+  string display_name = 5;
+  string class_definition_id = 6;
+  bool femenino = 7;                     // 2026-11-13: el género y el avatar que eligió en `crearHeroe` (sin elegir, masculino y piezas vacías)
+  Avatar avatar = 8;
+  uint32 nivel = 9;                      // sube con la experiencia acumulada (Heroe_Y_Tropa §4.3: 3, 6… hasta el 50 y 747 desde ahí; 2026-11-13)
+  uint64 experiencia_hacia_siguiente_nivel = 10;  // 2026-11-12: lo que le falta para el siguiente nivel, en milésimas (antes, la experiencia sin curva)
+  uint32 puntos_de_atributo_sin_gastar = 11;      // uno por nivel hasta el 50
+  reserved 12;                           // antes `puntos_de_perk_sin_gastar`: desde el 2026-11-12 los perks se abren solos con el nivel (D15)
+  Atributos atributos_base = 13;
+  reserved 14;                           // antes `perks_desbloqueados`: desde el 2026-11-12 los perks se abren solos con el nivel (D15)
+  uint32 liderazgo_base = 15;            // 14 en el nivel 1 y 3 o 4 más por nivel hasta 100 en el 25 (`LIDERAZGO`)
+  UbicacionHeroe ubicacion = 16;
+  Cantidades almacen_personal = 17;      // vive donde se reside
+  optional CupoCampamento cupo_campamento = 18;
+  optional int64 racion_en_ms = 19;
+  optional Ritmo viveres = 20;           // los víveres propios (en un ejército, los del ejército; ver Ejercito.viveres)
+  repeated int64 bandidos_destruidos_en_ms = 21;
+  repeated string alijos_abiertos = 22;
+  optional int64 herido_hasta_ms = 23;
+  optional int64 desconecta_en_ms = 24;
+  optional Cantidades fuera_carro = 25;  // carro de quien salió del mundo con su columna
+  repeated string escuadrones_ids = 26;
+  repeated Loadout loadouts = 27;
+  repeated ItemInstancia inventario = 28;
+  Equipamiento equipamiento = 29;
+  reserved 30;                           // antes `monedas_heroe` (bronce, plata y oro): desde la tanda 69 (2026-11-08) es un solo saldo, `monedas`
+  uint32 cupo_guarnicion = 31;           // derivado
+  bytes exploracion_personal = 32;       // máscara de lo explorado sin bandera
+  map<string, InteriorRecordado> plazas_recordadas = 33;
+  // Dónde reside (4H T3b): la plaza (`as-N`) o el campamento de mercenarios (`camp-N`) donde guarda su almacén personal y cuenta su cupo diario. Ausente si no reside en ninguno.
+  optional string residencia_id = 34;
+  // El héroe ajeno visto en la `VISTA` (4H T3d, `HeroePublico`, Doc 5.16.7): solo `id`, `version`, `display_name`, `class_definition_id`, `avatar`, `nivel`,
+  // `herido_hasta_ms` y las escuadras que lleva consigo en su columna (tropa, cantidad y nivel). Nada de su campamento, sus puntos, su Liderazgo ni si es humano o bot.
+  repeated EscuadraQueLleva escuadras_que_lleva = 35;
+  // Cuánto cabe en total en su almacén personal (5G-a, derivado de `ALMACEN_PERSONAL.capacidad`; milésimas): lo que pueden llenar `guardar_en_almacen_personal` y las compras del residente.
+  sint64 capacidad_almacen_personal = 36;
+  // Su ciudadanía (5H, 5B-11): la Facción de la que es ciudadano (`f-N`); ausente sin bandera. En el héroe propio (`HEROE`), en `ADMIN` y, desde el 2026-10-27, también en el héroe público de la `VISTA`.
+  optional string faccion_id = 37;
+  // Las Facciones a las que ha pedido el ingreso y aún no han contestado (5H, Diplomacia §3.2): lo que el solicitante ve de sus solicitudes (la Facción las ve en `Faccion.solicitudes_ids`).
+  repeated string solicitudes_faccion_ids = 38;
+  // Sus misiones (Misiones §5): solo en el héroe propio (`HEROE`) y en `ADMIN`.
+  repeated Mision misiones = 39;
+  // Mercenarios por contrato (Mercenarios_Por_Contrato §10): su contrato vigente, solo en su propio `HEROE` (y en `ADMIN`); su ficha, entera en su `HEROE` y reducida en el héroe
+  // público; y `contratado`, público: temporal | permanente si tiene contrato. Un héroe que nunca se ofreció no lleva nada de esto.
+  optional Contrato contrato = 40;
+  optional FichaMercenario ficha_mercenario = 41;
+  optional string contratado = 42;
+  // Las monedas del héroe (tanda 69, 2026-11-08): un solo saldo de monedas sueltas, aparte del oro de las plazas (100 monedas = 1 de oro en los precios que
+  // admiten las dos). Solo en el héroe propio (`HEROE`) y en `ADMIN`.
+  uint64 monedas = 43;
+  // Su almacén de objetos (D22, 2026-11-12): las piezas que guarda en su residencia, cada una con su casilla (`casilla_inventario`), como la mochila en `inventario`.
+  // Solo en el héroe propio (`HEROE`) y en `ADMIN`.
+  repeated ItemInstancia almacen_objetos = 44;
+}
+
+// Una escuadra que un héroe ajeno lleva en su columna, tal como se ve (`HeroePublico.escuadrasQueLleva`).
+message EscuadraQueLleva {
+  string tropa_id = 1;
+  uint32 cantidad = 2;
+  uint32 nivel = 3;
+}
+
+// Foto del interior de una plaza al salir de ella.
+message InteriorRecordado {
+  int64 visto_en_ms = 1;
+  map<string, Existencia> almacen = 2;
+  repeated Edificio cola = 3;
+  repeated string guarnicion_escuadrones_ids = 4;
+}
+
+// Dónde está una escuadra. Regla: la tropa que va con su héroe se queda con su héroe; la que está fuera de su columna
+// (guarnición, escolta) es tropa PRESTADA y vuelve sin viaje al campamento de su héroe si no puede seguir donde está.
+message ContenedorEscuadron {
+  oneof donde {
+    bool campamento = 1;                 // en el campamento del héroe
+    string ejercito_id = 2;              // en su columna
+    string caravana_id = 3;              // escolta cedida
+    bool fuera = 4;                      // héroe desconectado
+    string avanzada_id = 5;              // en la guarnición de una avanzada (`guarnecer_avanzada`), fuera del campamento de su plaza
+    string pueblo_id = 6;                // en la guarnición de un pueblo o una aldea (`guarnecer_pueblo`), fuera del campamento de su plaza
+    string asentamiento_id = 7;          // en la guarnición de una plaza de su Facción donde no reside (`asignar_guarnicion` de visita, 2026-11-04)
+  }
+}
+
+message ReservaBatalla {
+  string battle_id = 1;
+}
+
+message Escuadron {
+  string id = 1;
+  uint64 version = 2;
+  string nombre = 3;
+  string heroe_id = 4;
+  string origen = 5;                     // pesants | artesanos | nobleza
+  string tropa_id = 6;
+  uint32 cantidad = 7;
+  uint32 nivel = 8;
+  sint64 experiencia = 9;
+  Ritmo moral = 10;                      // 0..100
+  repeated string habilidades_desbloqueadas = 11;  // sin uso: vacío (Unity saca las habilidades del nivel)
+  repeated uint32 formaciones_desbloqueadas = 12;  // sin uso: vacío (ver `formacion`)
+  uint32 formacion_seleccionada = 13;              // sin uso: 0 (ver `formacion`)
+  ContenedorEscuadron contenedor = 14;
+  bool en_guarnicion = 15;
+  optional ReservaBatalla reserva_batalla = 16;
+  optional string prestada_por_campamento_id = 17;
+  // 2026-11-11: la familia de formación elegida, por su id de `FORMACIONES` (Heroe_Y_Tropa §10.4); nace en `reposo`. Las que permite la tecnología de
+  // la Facción se derivan de `TecnologiasFaccion` y del bloque.
+  string formacion = 18;
+}
+
+// ───────────────────────────── Columnas y caravanas ─────────────────────────────
+
+enum EstadoColumna {
+  ESTADO_COLUMNA_NO_ESPECIFICADO = 0;
+  COLUMNA_MARCHANDO = 1;
+  COLUMNA_ESTACIONADA = 2;
+}
+
+enum TipoColumna {
+  TIPO_COLUMNA_NO_ESPECIFICADO = 0;
+  COLUMNA_PERSONAL = 1;
+  COLUMNA_EJERCITO = 2;
+}
+
+enum PoliticaUnion {
+  POLITICA_UNION_NO_ESPECIFICADA = 0;
+  UNION_RECHAZAR = 1;
+  UNION_ACEPTAR = 2;
+  UNION_PREGUNTAR = 3;
+}
+
+message Participante {
+  string heroe_id = 1;
+  int64 unido_en_ms = 2;
+}
+
+message PeticionUnion {
+  string heroe_id = 1;
+  int64 pedido_en_ms = 2;
+  int64 expira_en_ms = 3;
+}
+
+message Persecucion {
+  bool presa_es_caravana = 1;
+  string presa_id = 2;
+  optional Punto destino = 3;            // punto de intercepción calculado
+}
+
+// Una columna: personal o ejército (un conjunto de héroes con sus columnas, caravanas adjuntas y víveres propios).
+// NO tiene destino fijo ni origen: no vuelve sola a ningún sitio.
+message Ejercito {
+  string id = 1;
+  uint64 version = 2;
+  string faccion_id = 3;
+  repeated Participante participantes = 4;
+  TipoColumna tipo = 5;
+  string lider_id = 6;
+  PoliticaUnion politica_de_union = 7;
+  repeated PeticionUnion peticiones_de_union = 8;
+  repeated string escuadron_ids = 9;
+  Cantidades suministro = 10;            // el carro (carga)
+  // Trigo que se come; capacidad = suma de la de sus héroes. Va en unidades enteras con resto oculto (EE-3, 2026-10-24): el ritmo es el valor
+  // exacto y el cliente lo enseña redondeado HACIA ARRIBA a unidades (la unidad que se está comiendo sigue hasta acabarse); se acaban cuando el
+  // valor exacto llega a 0.
+  Ritmo viveres = 11;
+  sint64 capacidad_viveres = 12;
+  optional int64 formacion_expira_en_ms = 13;
+  optional Persecucion persiguiendo = 14;
+  repeated string caravanas_adjuntas_ids = 15;   // también en la columna ajena que se ve (2026-10-31)
+  EstadoColumna estado = 16;
+  Punto posicion = 17;                   // posición cuando no hay plan; con plan, la de su primer vértice (lo ajeno: donde empieza el tramo visible)
+  optional Plan plan = 18;               // lo propio viaja entero; lo ajeno, solo el tramo visible (horizonte corto)
+  bool te_sigue = 19;                    // solo en la proyección: persigue a una columna tuya
+  // La columna que entró en un lugar (plaza `as-N`, pueblo `pueblo-N`, avanzada `av-N` o campamento `camp-N`) ya no está en el mapa:
+  // queda dentro con todo lo suyo hasta que sale. Sin plan ni `posicion` válida mientras tanto.
+  optional string dentro_de = 20;
+  bool en_batalla = 21;                  // apartada por una batalla de Unity: no se mueve ni recibe órdenes
+  optional string batalla_id = 22;
+  // De quién es el suelo que pisa ahora (4H T7, `territorioPorEjercito` de Niebla_De_Guerra §5.4): la Facción dueña de la zona de influencia que contiene a la
+  // columna, de cualquier Facción y aunque su plaza no se vea, o vacío en tierra de nadie; nunca qué plaza. Solo en `VISTA` y solo de las columnas propias; ausente en los demás
+  // ámbitos y en lo ajeno. Se renueva en el muestreo de la vista cuando la columna cruza una frontera.
+  optional string territorio_faccion_id = 23;
+  // Marcha forzada (Movimiento_Ejercitos §marcha forzada): la columna va más deprisa y gasta más víveres mientras marcha. Solo en lo propio;
+  // lo ajeno siempre la lleva a false (las otras Facciones no la ven).
+  bool marcha_forzada = 24;
+  // La Caravana de Fundación (`car-N`) que lleva enganchada (Fundacion_Y_Refundacion §6.1), en lo propio y en lo ajeno avistado: el cliente la pinta pegada detrás. Las comerciales van en
+  // `caravanas_adjuntas_ids`.
+  optional string caravana_fundacion_id = 25;
+}
+
+enum EstadoCaravana {
+  ESTADO_CARAVANA_NO_ESPECIFICADO = 0;
+  CARAVANA_DISPONIBLE = 1;
+  CARAVANA_PREPARANDO = 2;
+  CARAVANA_ADJUNTA = 3;
+  CARAVANA_APARCADA = 4;                 // si cae la plaza anfitriona, se destruye
+  CARAVANA_EN_TRANSITO = 5;
+  CARAVANA_RETORNANDO = 6;
+  CARAVANA_ESPERANDO = 7;                // con encargo, dentro de una plaza (propia o ajena): no se ve ni se ataca
+}
+
+enum TipoCaravana {
+  TIPO_CARAVANA_NO_ESPECIFICADO = 0;
+  CARAVANA_COMERCIAL = 1;
+  CARAVANA_DE_FUNDACION = 2;
+  CARAVANA_DE_ACARREO = 3;               // ligada a un pueblo extractor; sale solo con el carro lleno
+}
+
+message CarroCaravana {
+  string tipo_carro = 1;                 // basico | reforzado
+  optional string animal = 2;            // buey | caballo | camello
+}
+
+message Peaje {
+  string asentamiento_id = 1;
+  int64 en_ms = 2;                       // instante en que el plan cruza esa zona
+}
+
+message Caravana {
+  string id = 1;
+  uint64 version = 2;
+  TipoCaravana tipo = 3;
+  string origen_asentamiento_id = 4;
+  optional string origen_campamento_id = 5;
+  optional string faccion_id = 6;
+  optional string destino_asentamiento_id = 7;
+  Cantidades contenido = 8;
+  Punto posicion = 9;
+  optional Plan plan = 10;
+  repeated Peaje peajes = 11;
+  optional string origen_acuerdo_id = 12;
+  optional string lado_acuerdo = 13;     // A | B
+  optional string titular_id = 14;
+  optional int64 caduca_en_ms = 15;
+  map<string, Cantidades> aportes = 16;
+  EstadoCaravana estado = 17;
+  repeated CarroCaravana carros = 18;
+  repeated string escolta_ids = 19;
+  bool reservada_manual = 20;
+  optional int64 prepara_hasta_ms = 21;
+  optional string pueblo_id = 22;        // acarreo
+  // Solo en la proyección: «llama la atención» (caravana grande), tramo visible, recursos sin cantidades.
+  bool escoltada = 23;
+  // La caravana ajena vista en la `VISTA` (4H T3d, `CaravanaAvistada`): solo `id`, `version`, `faccion_id`, `posicion`, el tramo visible del plan, `escoltada` y los
+  // recursos que lleva, por nombre, sin cantidades y ordenados (`contenido` va vacío).
+  repeated string recursos_avistados = 24;
+  // Solo en la proyección propia (2026-10-31): el encargo de transporte que tiene, si tiene.
+  optional Encargo encargo = 25;
+  // Solo en la proyección propia (2026-11-02, `renombrar_caravana`): su nombre; sin él, la caravana no tiene nombre y se muestra su id.
+  optional string nombre = 26;
+  // 2026-11-07 (pedido del cliente, aprobado por el autor): la escolta escuadra a escuadra, en el orden de `escolta_ids`: tropa, soldados y de qué héroe es
+  // (como `Asentamiento.guarnicion`). Viaja allí donde viaja `escolta_ids` (la caravana propia y el carro de acarreo); nunca en la avistada.
+  repeated GuarnicionInforme escolta = 27;
+}
+
+// El encargo de una caravana (rutas de caravanas automáticas, 2026-10-31).
+message Encargo {
+  string modo = 1;  // ruta | envio
+  string destino_asentamiento_id = 2;
+  optional int64 salir_en_ms = 3;
+  ParadaEncargo parada_origen = 4;
+  ParadaEncargo parada_destino = 5;
+  uint32 vueltas = 6;  // idas y vueltas hechas
+  string parada_actual = 7;  // origen | destino: donde espera, o hacia donde va
+  string fase = 8;  // espera | descarga | carga; solo cuenta con la caravana CARAVANA_ESPERANDO
+  optional int64 fin_paso_ms = 9;  // cuándo acaba la descarga o la carga en curso
+  bool cancelado = 10;  // cancelado en ruta: acaba el tramo sin comerciar, vuelve y deja todo en el origen
+  optional int64 inicio_paso_ms = 11;  // cuándo empezó la descarga o la carga en curso (2026-11-04): con fin_paso_ms, la barra de tiempo del paso
+  bool detener = 12;  // ruta detenida (2026-11-04, OrdenDetenerEncargo): acaba la ida y vuelta en curso y, al descargar en el origen, se queda sin encargo
+}
+
+message SeleccionDeSalida {
+  repeated string escuadron_ids = 1;
+  Cantidades carga = 2;
+  // La tropa de cada escuadrón, en el mismo orden que `escuadron_ids` (2026-10-29): el id del catálogo de `/v1/datos`, para pintar las escuadras de otros
+  // héroes sin conocerlas. Vacío si el escuadrón ya no existe.
+  repeated string tropa_ids = 3;
+}
+
+message IntegranteConvocatoria {
+  string heroe_id = 1;
+  int64 unido_en_ms = 2;
+  SeleccionDeSalida seleccion = 3;
+}
+
+message PeticionConvocatoria {
+  string heroe_id = 1;
+  int64 pedido_en_ms = 2;
+  int64 expira_en_ms = 3;
+  SeleccionDeSalida seleccion = 4;
+}
+
+message Convocatoria {
+  string id = 1;
+  uint64 version = 2;
+  string faccion_id = 3;
+  bool lugar_es_campamento = 4;
+  string lugar_id = 5;
+  string lider_id = 6;
+  PoliticaUnion politica_de_union = 7;   // aceptar | preguntar
+  repeated IntegranteConvocatoria integrantes = 8;
+  repeated PeticionConvocatoria peticiones = 9;
+  int64 creada_en_ms = 10;
+}
+
+// ───────────────────────────── Campamentos, bandidos, alijos ─────────────────────────────
+
+message CampamentoBandidos {
+  string id = 1;
+  uint64 version = 2;
+  Punto posicion = 3;
+  string bosque_id = 4;
+  optional string asentamiento_id = 5;
+  optional string campamento_mercenarios_id = 6;
+  optional string veta_id = 7;           // los de las vetas de estaño y oro
+  uint32 nivel = 8;                      // 1..3
+  uint32 poder = 9;
+}
+
+// Un alijo de exploración (Generacion_Del_Mundo §12): en el artefacto (`ArtefactoDeMundo.alijos`) y, desde 6G, en `HEROE` los que el héroe tiene a la vista
+// (si puede buscarlos y no los ha abierto: Niebla_De_Guerra §5.4), renovados con el muestreo de la vista. Trae una sola cosa: `recurso` (oro, madera, piedra o trigo)
+// y su `cantidad` en milésimas, la del artefacto. Hasta el 2026-10-28 solo traía oro y el campo 3 se llamaba `oro`.
+message Alijo {
+  string id = 1;
+  Punto posicion = 2;
+  sint64 cantidad = 3;
+  string recurso = 4;                    // oro | madera | piedra | trigo
+}
+
+message CampamentoMercenarios {
+  string id = 1;
+  uint64 version = 2;
+  Punto posicion = 3;
+  uint32 origen = 4;
+  repeated string edificios = 5;         // taberna, vivienda, mercado, barracon, galeriaDeTiro, caballerizas
+  repeated string residentes_ids = 6;
+  uint32 eligieron_como_inicial = 7;
+  optional int64 bandidos_en_ms = 8;
+  Ritmo poblacion = 9;                   // se recupera como ritmo
+  Cantidades mercado = 10;
+  map<string, Cantidades> fondos = 11;   // por facción
+  int64 creado_en_ms = 12;
+  int64 repone_en_ms = 13;               // próxima reposición del mercado
+  map<string, uint32> contadores_mercado = 14;
+  // El campamento visto desde dentro (4H T3c):
+  repeated string presentes_ids = 15;    // los héroes que están dentro ahora: residentes y visitantes
+  repeated string prestamos_ids = 16;    // las escuadras (`esc-N`) que este campamento tiene prestadas, estén donde estén
+  repeated string tropas_ofrecidas = 17; // las tropas que se pueden reclutar (su edificio militar, su nivel y las tecnologías desbloqueadas)
+  Cantidades cupo_diario = 18;           // el tope diario por bien con cupo (lo comprado hoy de cada héroe está en `Heroe.cupo_campamento`)
+  // La planta (paridad P7, `layoutCampamento`): presentación pura, siempre la misma para el mismo campamento. Las piezas van como los `Edificio` de una plaza
+  // (`id` = `camp-N-K`, `tipo`: taberna, mercado, puestoMercado, el militar, vivienda o un ancla como plazaDeArmas; `posicion`, `ancho` y `alto` en unidades
+  // locales; `rotado`); el trazado y la empalizada (decorativa: dentro no hay combate), también en unidades locales.
+  repeated Edificio planta = 19;
+  TrazadoUrbano trazado = 20;
+  repeated RectLocal empalizada = 21;
+  repeated RectLocal empalizada_puerta = 22;
+  // Lo que cobra el campamento, solo en `CAMPAMENTO` (2026-10-27; no en la `VISTA` ni en `ADMIN`). Se renueva cuando cambia, también sin cambiar la versión.
+  // El precio de cada bien del mercado en ppm de oro por unidad (`precio_referencia` sobre el stock global de todas las plazas × `MERCENARIOS.margen`):
+  // comprar `n` unidades cuesta ⌈n × precio / 1.000.000⌉ de oro, como `comprar_en_campamento`.
+  map<string, sint64> precios_mercado = 23;
+  // Solo para el residente: las tropas del edificio militar del campamento, con su precio para él y si están desbloqueadas.
+  repeated TropaDeCampamento reclutables = 24;
+  // Los mercenarios ofrecidos en este campamento (Mercenarios_Por_Contrato §3), solo en `CAMPAMENTO`.
+  repeated OfertaMercenario tablon = 25;
+}
+
+// Una tropa del edificio militar de un campamento tal como la recluta su residente (`reclutar_en_campamento`, 2026-10-27).
+message TropaDeCampamento {
+  string tropa_id = 1;
+  bool desbloqueada = 2;                 // su tecnología está desbloqueada en el campamento (las desbloqueadas son `tropas_ofrecidas`)
+  sint64 precio_por_soldado = 3;         // milésimas de oro, con el recargo, la reputación de su Facción y el descuento sin plazas, antes de redondear
+  sint64 precio_escuadra = 4;            // lo que cuesta una escuadra completa (`unidades` soldados), en milésimas, ya redondeado a oro entero
+  uint32 unidades = 5;                   // soldados de una escuadra completa; reclutar cobra ⌈precio_por_soldado × los que faltan / 1.000⌉ de oro
+}
+
+// ───────────────────────────── Comercio ─────────────────────────────
+
+message LineaTrueque {
+  string recurso = 1;
+  sint64 cantidad_total = 2;
+  sint64 cantidad_entregada = 3;
+}
+
+enum EstadoTrueque {
+  ESTADO_TRUEQUE_NO_ESPECIFICADO = 0;
+  TRUEQUE_PROPUESTO = 1;
+  TRUEQUE_ACTIVO = 2;
+  TRUEQUE_RECHAZADO = 3;
+  TRUEQUE_CUMPLIDO = 4;
+  TRUEQUE_EXPIRADO = 5;
+}
+
+message AcuerdoTrueque {
+  string id = 1;
+  uint64 version = 2;
+  string asentamiento_a_id = 3;
+  string asentamiento_b_id = 4;
+  repeated LineaTrueque lineas_a = 5;
+  repeated LineaTrueque lineas_b = 6;
+  int64 creado_en_ms = 7;
+  int64 expira_en_ms = 8;
+  EstadoTrueque estado = 9;
+}
+
+enum EstadoOrden {
+  ESTADO_ORDEN_NO_ESPECIFICADO = 0;
+  ORDEN_ACTIVA = 1;
+  ORDEN_CUMPLIDA = 2;
+  ORDEN_EXPIRADA = 3;
+}
+
+message OrdenMercado {
+  string id = 1;
+  uint64 version = 2;
+  string asentamiento_id = 3;
+  bool es_compra = 4;
+  string recurso = 5;
+  sint64 cantidad = 6;
+  sint64 cantidad_cumplida = 7;
+  sint64 precio_unitario = 8;
+  int64 creado_en_ms = 9;
+  int64 expira_en_ms = 10;
+  EstadoOrden estado = 11;
+}
+
+message RutaComercial {
+  string id = 1;
+  string origen_id = 2;
+  string destino_id = 3;
+  string faccion_id = 4;
+  repeated string aristas = 5;
+  int64 ultimo_lanzamiento_ms = 6;
+}
+
+message RedCaminos {
+  uint64 version = 1;
+  repeated string aristas = 2;
+  repeated RutaComercial rutas = 3;
+  // El escalón de cada arista (4H T7), en el mismo orden que `aristas`: 0 sendero, 1 camino, 2 calzada (`escalonDePeso`, Comercio_Caravanas). En `VISTA`, `rutas` lleva
+  // solo las de la propia Facción.
+  repeated uint32 escalones = 4;
+  // La red como se pinta (paridad P7, `tramosDeRed`): las mismas aristas fundidas en polilíneas, cada una de un solo escalón; un nodo de cruce corta el tramo.
+  repeated TramoDeRed tramos = 5;
+}
+
+message TramoDeRed {
+  string id = 1;                         // `tramo-N`, por orden: solo vale dentro de esta entidad
+  uint32 escalon = 2;                    // 0 sendero, 1 camino, 2 calzada
+  repeated Punto puntos = 3;
+}
+
+// ───────────────────────────── Tecnología, Aedas, intel ─────────────────────────────
+
+// Las tecnologías de la Facción propia (`FACCION`; las de un rival no viajan nunca). Los tres conjuntos, ordenados por id (las adoptadas: las de arranque y
+// después las demás); desde 6G, el detalle de cada revelada y las épicas que un Aeda residente de la Facción podría empezar ahora.
+message TecnologiasFaccion {
+  string faccion_id = 1;
+  uint64 version = 2;
+  repeated string aparecidas = 3;
+  repeated string adoptadas = 4;
+  repeated string reveladas = 5;
+  repeated TecnologiaRevelada detalle_reveladas = 6;  // una por cada `reveladas`, en su orden
+  repeated string epicas_posibles = 7;   // con épica, logro cumplido, Era abierta, no aparecida y sin un Aeda de la Facción que ya la cante
+}
+
+// Lo que un Aeda reveló a la Facción (Tecnologia_Aedas §6.3): quién la desbloqueó y, condición a condición de su hito (`TECNOLOGIAS.<id>.hito`, en su orden),
+// si la Facción ya la cumple. El cliente compone la frase con el catálogo.
+message TecnologiaRevelada {
+  string tecnologia_id = 1;
+  string descubridora_faccion_id = 2;
+  repeated bool cumplidas = 3;
+}
+
+// El directorio público de las Facciones (2026-10-29, `VISTA`, id `facciones`): todas las que existen, por id ascendente, también la propia. Cambia solo
+// cuando nace o desaparece una Facción o cambia algo de lo que lleva (nombre, sigilo, nivel, número de ciudadanos, derrota, si es de bots).
+message DirectorioFacciones {
+  repeated FaccionDelDirectorio facciones = 1;
+}
+
+message FaccionDelDirectorio {
+  string id = 1;                         // `f-N`
+  string nombre = 2;
+  optional Sigilo sigilo = 3;
+  uint32 nivel = 4;
+  uint32 ciudadanos = 5;                 // cuántos
+  bool derrotada = 6;
+  bool es_bot = 7;                       // su Rey es un bot (2026-11-01), como `Faccion.es_bot`
+}
+
+// Estado global de tecnología (Eras I a V).
+message EstadoTecnologia {
+  string era = 1;
+  int64 era_desde_ms = 2;
+  map<string, sint64> contadores = 3;
+  map<string, int64> logros = 4;
+  map<string, PrimeroEnLograr> primeros = 5;
+  repeated string cantadas = 6;
+  // 6G: los logros cumplidos como hechos del mundo (`contador` llegó a `umbral` en `en_ms`), por orden, sin decir qué tecnología abren. La forma pública
+  // (`HEROE`) lleva `era`, `era_desde_ms`, `logros_cumplidos`, `cantadas`, de `primeros` las ya cantadas y, desde el 2026-11-06, `contadores` (los en curso,
+  // para la barra «x / y» de cada logro; se renuevan con el muestreo de la vista cuando suben); `logros` (por id de tecnología) solo viaja a `ADMIN` (decisión Q6 del autor).
+  repeated LogroCumplido logros_cumplidos = 7;
+  // 6G, con la decisión del autor sobre 6B (cada Era dura un mínimo): desde cuándo puede empezar la siguiente si la vigente cumple todos sus logros
+  // (`era_desde_ms` + el mínimo) y cuándo empieza por plazo aunque no los cumpla. Ausentes en la última Era. Públicos: no dicen si los logros están cumplidos.
+  optional int64 era_minimo_hasta_ms = 8;
+  optional int64 era_plazo_hasta_ms = 9;
+  // 2026-11-07 (umbrales por plaza, decisión del autor): N, las plazas vivas del mundo ahora, con las que se calcula el umbral de los logros con `porPlaza`
+  // (`porPlaza × max(N, 1)`), y las partes de los logros aún pendientes con su umbral de ahora, en el orden del catálogo y sin decir qué tecnología abren
+  // (la aleación del bronce son dos: cobre y estaño). Públicos, como los contadores. Un logro cumplido queda con el umbral con que se cumplió (`logros_cumplidos`).
+  uint32 plazas = 10;
+  repeated LogroPendiente logros_pendientes = 11;
+}
+
+message LogroPendiente {
+  string contador = 1;
+  sint64 umbral = 2;
+}
+
+message LogroCumplido {
+  string contador = 1;                   // `extraido.cobre`, `plazasEnNivel.2`...
+  sint64 umbral = 2;
+  int64 en_ms = 3;
+}
+
+message PrimeroEnLograr {
+  string faccion_id = 1;
+  int64 en_ms = 2;
+}
+
+message EpicaEnCurso {
+  string tecnologia_id = 1;
+  uint32 capitulo = 2;
+  uint32 hechos = 3;
+  optional int64 ultimo_hecho_en_ms = 4;
+  repeated string claves = 5;           // solo en `ADMIN`: la memoria de hechos ya contados
+  uint32 capitulos = 6;                  // 6G: cuántos tiene la épica
+  uint32 hechos_necesarios = 7;          // 6G: los que pide el capítulo en curso
+}
+
+// Un Aeda residente (`aeda-rN`), en `FACCION` de la dueña de su plaza (los rivales no ven los suyos) y en `ADMIN`; su épica, sin `claves` salvo en `ADMIN` (6G).
+message AedaResidente {
+  string id = 1;
+  uint64 version = 2;
+  string nombre = 3;
+  string asentamiento_id = 4;
+  string faccion_id = 5;
+  int64 llegada_en_ms = 6;
+  optional EpicaEnCurso epica = 7;
+}
+
+// Un Aeda itinerante (`aeda-N`). En `VISTA`, redactado como una columna ajena (6G): `posicion`, el tramo visible de su `plan` (horizonte corto, renovado) y la plaza
+// en que está parado; nunca `hasta_ms`, `destino_id` ni `recientes`. En `ADMIN`, entero (`posicion` es donde se paró o de donde salió; con plan, el plan entero).
+message AedaItinerante {
+  string id = 1;
+  uint64 version = 2;
+  Punto posicion = 3;
+  optional string en_asentamiento_id = 4;
+  optional int64 hasta_ms = 5;
+  optional string destino_id = 6;
+  optional Plan plan = 7;
+  repeated string recientes = 8;
+}
+
+// Una Mirada de la taberna (Niebla_De_Guerra §6.1): viaja en la `VISTA` de su Facción mientras su zona se enfría (`libre_en_ms`); ve mientras `expira_en_ms` no ha pasado.
+message MiradaIntel {
+  string id = 1;
+  uint64 version = 2;
+  string faccion_id = 3;
+  string origen_id = 4;
+  Punto centro = 5;
+  sint64 radio = 6;
+  int64 comprada_en_ms = 7;
+  int64 expira_en_ms = 8;
+  int64 libre_en_ms = 9;
+}
+
+message EdificioInforme {
+  string tipo = 1;
+  Punto posicion = 2;
+  EstadoEdificio estado = 3;
+  optional uint32 nivel_interno = 4;
+  AmbitoEdificio ambito = 5;
+}
+
+message RecintoInforme {
+  uint32 nivel = 1;
+  repeated CeldaMuro celdas = 2;
+  uint32 avance = 3;
+}
+
+message GuarnicionInforme {
+  string tropa_id = 1;
+  uint32 cantidad = 2;
+  string heroe_id = 3;
+}
+
+// El último Informe de una plaza ajena que compró la Facción (§6.2), con su fecha: viaja en su `VISTA` (id `as-N`, clase `INFORME_PLAZA`).
+message InformePlaza {
+  string asentamiento_id = 1;
+  uint64 version = 2;
+  string faccion_id = 3;
+  optional string nombre = 4;
+  uint32 nivel = 5;
+  int64 conocido_en_ms = 6;
+  optional Punto posicion = 7;
+  repeated EdificioInforme edificios = 8;
+  repeated RecintoInforme recintos = 9;
+  repeated GuarnicionInforme guarnicion = 10;
+  repeated string heroes_ids = 11;
+}
+
+// Lo que un héroe sacó de mirar de cerca (`inspeccionar`, Doc 5.12.3): una columna ajena, una caravana o la defensa de una plaza. Vale
+// 10 minutos (`expira_en_ms`) y lo ve solo quien lo hizo. Lo que se ve envejece: el cliente lo enseña con su fecha y con `donde`.
+message InformeInspeccion {
+  string id = 1;                         // `insp-<heroe>-<objetivo>`: uno por héroe y objetivo (el último sustituye)
+  uint64 version = 2;
+  string heroe_id = 3;                   // quien inspeccionó
+  string objetivo_id = 4;                // `ej-N`, `car-N` o `as-N`
+  int64 visto_en_ms = 5;
+  int64 expira_en_ms = 6;
+  Punto donde = 7;                       // dónde estaba el objetivo cuando se miró
+  oneof contenido {
+    InspeccionColumna columna = 10;
+    InspeccionCaravana caravana = 11;
+    InspeccionPlaza plaza = 12;
+  }
+}
+
+message InspeccionColumna {
+  optional string faccion_id = 1;
+  repeated string heroes_ids = 2;
+  repeated GuarnicionInforme escuadras = 3;   // cada escuadra con soldados en pie: tropa, cantidad y héroe; sin nivel, moral ni experiencia
+}
+
+// Nunca cuánto: solo qué recursos lleva y si va escoltada.
+message InspeccionCaravana {
+  bool escoltada = 1;
+  repeated string recursos = 2;
+}
+
+// La defensa de una plaza ajena: sus residentes con tropa en guarnición, los héroes que hay dentro y los recintos de muralla (con su avance).
+// El almacén, no.
+message InspeccionPlaza {
+  string faccion_id = 1;
+  repeated string heroes_ids = 2;
+  repeated GuarnicionInforme guarnicion = 3;
+  repeated RecintoInforme recintos = 4;
+}
+
+// Ficha de un sitio ajeno que la Facción vio alguna vez (última foto, con su fecha): una plaza, un pueblo o una avanzada («se recuerdan como una ciudad»).
+// Cómo estaba un sitio recordado cuando se vio (4H, decisión del autor del 2026-10-24; Niebla_De_Guerra §4.1).
+enum EstadoSitio {
+  ESTADO_SITIO_NO_ESPECIFICADO = 0;
+  SITIO_ACTIVO = 1;
+  SITIO_EN_OBRA = 2;                     // un pueblo o una avanzada que se levanta, o una avanzada que se mejora o se repara
+  SITIO_EN_RUINAS = 3;                   // una avanzada arruinada (fuerte o ciudadela)
+}
+
+message FichaConocida {
+  string asentamiento_id = 1;            // el id del sitio: `as-N`, `pueblo-N` o `av-N` (4H T3d; v1 decía solo plazas)
+  optional string nombre = 2;
+  string faccion_id = 3;                 // vacío: no es de nadie (las ruinas de una ciudadela sin dueño)
+  Punto posicion = 4;
+  uint32 nivel = 5;                      // de una plaza, su nivel; de una avanzada, su etapa (1 atalaya, 2 fuerte, 3 ciudadela); de un pueblo, 0
+  int64 conocido_en_ms = 6;
+  optional sint64 radio_potencial = 7;   // solo de una plaza: hasta dónde llegaba su zona cuando se vio
+  TipoEntidad tipo = 8;                  // ASENTAMIENTO, PUEBLO o AVANZADA (sin especificar = ASENTAMIENTO, la de v1)
+  EstadoSitio estado = 9;                // tal como estaba cuando se vio
+}
+
+// Memoria de la Facción: lo explorado y lo conocido. Lo explorado es una máscara de bits sobre la rejilla (celda de 5
+// unidades; ver Niebla_De_Guerra.md); `exploracion` va en hexadecimal binario (bytes), 1 bit por celda.
+message MemoriaFaccion {
+  string faccion_id = 1;
+  uint64 version = 2;
+  bytes exploracion = 3;
+  map<string, FichaConocida> asentamientos = 4;
+  map<string, InformePlaza> informes = 5;
+}
+
+// Un informe de región comprado en una taberna (tanda 69 §7): de qué región del relieve y de qué tipo, cuándo se compró, cuándo caduca (solo el de órdenes) y cuándo se puede volver a comprar.
+message InformeRegion {
+  uint32 region = 1;
+  string tipo = 2;               // plazas | ordenes
+  int64 comprado_en_ms = 3;
+  optional int64 caduca_en_ms = 4;
+  int64 libre_en_ms = 5;
+}
+
+// Máscara de niebla que viaja con la vista: dos máscaras sobre la misma rejilla y su geometría.
+message NieblaProyectada {
+  uint32 tamano_celda = 1;               // en milésimas de unidad
+  uint32 columnas = 2;
+  uint32 filas = 3;
+  bytes celdas = 4;                      // explorado alguna vez
+  bytes visibles = 5;                    // visible ahora (incluye visión prestada)
+  // 4H T6: cambio parcial, solo en una `Delta` (una `Foto` la trae siempre entera). Con `parcial`, `celdas` y `visibles` vienen vacíos y el cliente sobrescribe,
+  // en las dos máscaras que ya tiene de este ámbito (con las mismas dimensiones), los bytes de cada tramo; lo que no está en un tramo no cambió.
+  bool parcial = 6;
+  repeated TramoDeNiebla tramos_celdas = 7;
+  repeated TramoDeNiebla tramos_visibles = 8;
+}
+
+// Los bytes de una máscara de niebla que cambiaron: a partir del byte `desde`, `datos` sustituye a los que había.
+message TramoDeNiebla {
+  uint32 desde = 1;
+  bytes datos = 2;
+}
+
+message ZonaFaccion {
+  string faccion_id = 1;
+  repeated ContornoZona contornos = 2;
+}
+
+message ContornoZona {
+  repeated Punto puntos = 1;
+}

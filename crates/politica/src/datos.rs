@@ -1,0 +1,223 @@
+//! Las cifras de la política. Fuente única: los bloques `<!-- parametros:NOMBRE -->` de `Docs/Mechanics/Diplomacia_Facciones.md`, incrustados en el
+//! binario. Los días pasan a milisegundos de mundo; la experiencia a **milésimas** (`xp.combate` es 2,5); el ratio del combate digno a ppm.
+//! Las cifras de reputación (umbral para proponer alianzas, ventana de la guerra tras romper) son de `comercio::datos::ReglasReputacion`.
+
+use crate::sigilo::Catalogo;
+use crate::tipos::{Grupo, Grupos};
+use asentamiento::datos::{bloque_de, mil, ppm, texto_de_parametros_de};
+use base::{Instante, Mil, MS_POR_MINUTO};
+use serde_json::Value;
+
+pub const DIPLOMACIA: &str = include_str!("../../../Docs/Mechanics/Diplomacia_Facciones.md");
+
+/// Un día de mundo en milisegundos.
+pub const DIA: Instante = 24 * 60 * MS_POR_MINUTO;
+
+/// Los bloques de parámetros del documento, para la identidad de las reglas (hash del núcleo, desde 5B).
+pub fn texto_de_parametros() -> String {
+    texto_de_parametros_de(DIPLOMACIA)
+}
+
+fn bloque(nombre: &str) -> Value {
+    bloque_de(DIPLOMACIA, nombre).unwrap_or_else(|e| panic!("{e}"))
+}
+
+fn num(v: &Value, ruta: &str) -> f64 {
+    ruta.split('.').try_fold(v, |v, k| v.get(k)).and_then(Value::as_f64).unwrap_or_else(|| panic!("falta el número «{ruta}»"))
+}
+
+fn dias(v: &Value, ruta: &str) -> Instante {
+    (num(v, ruta) * DIA as f64).round() as Instante
+}
+
+fn lista_u32(v: &Value) -> Vec<u32> {
+    v.as_array().expect("lista").iter().map(|x| x.as_u64().expect("entero") as u32).collect()
+}
+
+/// `NIVEL_FACCION.xp`: experiencia por hecho, en milésimas.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct XpPorHecho {
+    pub combate: Mil,
+    pub edificio_completado: Mil,
+    pub conquista: Mil,
+    pub ascenso_por_nivel: Mil,
+    pub fundacion: Mil,
+    pub trueque_cumplido: Mil,
+    pub bandidos: Mil,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReglasNivel {
+    pub nivel_maximo: u32,
+    /// Umbrales acumulados de experiencia (milésimas) para pasar del nivel `i + 1` al `i + 2`.
+    pub umbrales: Vec<Mil>,
+    pub xp: XpPorHecho,
+    /// Desde este nivel de Facción los bandidos ya no dan experiencia.
+    pub nivel_sin_xp_bandidos: u32,
+    /// `ratioCombateDigno` en ppm: el bando débil tiene al menos esta parte del poder del fuerte (el `Informe::digno` de `combate`).
+    pub ratio_combate_digno: i64,
+    /// `CAP_FUNDACION_POR_NIVEL`: plazas que la Facción puede fundar en total, por nivel 1..=10.
+    pub cap_fundacion: Vec<u32>,
+    /// `CUPO_NIVEL_ASENTAMIENTO.maxNivel2|maxNivel3|maxNivel4|maxNivel5`, por nivel de Facción 1..=10.
+    pub cupo_nivel2: Vec<u32>,
+    pub cupo_nivel3: Vec<u32>,
+    pub cupo_nivel4: Vec<u32>,
+    pub cupo_nivel5: Vec<u32>,
+}
+
+/// `PRESTIGIO` (tanda 69): lo que suma cada hecho al prestigio de la Facción y los umbrales que lo usan. El prestigio no se gasta ni se pierde.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReglasPrestigio {
+    pub victoria: i64,
+    pub conquista: i64,
+    pub fundacion: i64,
+    /// Por subir una plaza de nivel: esto por el nivel nuevo.
+    pub ascenso_por_nivel: i64,
+    pub comercio: i64,
+    /// Alianzas activas a la vez: `alianzas_base` y una más cada `alianza_cada` de prestigio.
+    pub alianzas_base: u32,
+    pub alianza_cada: i64,
+    /// Los umbrales que desbloquean cada estatua de la capital, crecientes.
+    pub estatuas: Vec<i64>,
+    /// El que pide la Maravilla.
+    pub maravilla: i64,
+}
+
+impl ReglasPrestigio {
+    /// Cuántas alianzas puede tener activas a la vez una Facción con ese prestigio.
+    pub fn tope_de_alianzas(&self, prestigio: i64) -> u32 {
+        self.alianzas_base.saturating_add(u32::try_from(prestigio.max(0) / self.alianza_cada).unwrap_or(u32::MAX))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Reglas {
+    /// `CIUDADANIA.cooldownCreacionFaccionDias` (ms): tras dejar una Facción no se crea otra hasta que pase.
+    pub cooldown_creacion: Instante,
+    /// `CIUDADANIA.cooldownCambioResidenciaDias` (ms).
+    pub cooldown_residencia: Instante,
+    /// `CAPITAL.cooldownDias` (ms).
+    pub cooldown_capital: Instante,
+    /// `PUERTA.cerradaAPorDefecto`.
+    pub puerta_por_defecto: Grupos,
+    /// Caducidad (ms) de las propuestas de relación, anexión y fusión.
+    pub caducidad_relacion: Instante,
+    pub caducidad_anexion: Instante,
+    pub caducidad_fusion: Instante,
+    /// `TITULOS.cadenciaMinutos` (ms): cada cuánto se recalculan los títulos mientras pasa algo en el mundo (§7, 5F).
+    pub cadencia_titulos: Instante,
+    /// `TITULOS.margenAspirante` (ppm): cuánto tiene que superar la aspirante a la poseedora para quitarle un título (§7, P2 del 2026-10-25).
+    pub margen_titulos: i64,
+    pub nivel: ReglasNivel,
+    pub prestigio: ReglasPrestigio,
+    pub sigilo: Catalogo,
+}
+
+impl Reglas {
+    pub fn cargar() -> Self {
+        let ciudadania = bloque("CIUDADANIA");
+        let nivel = bloque("NIVEL_FACCION");
+        let cupo = bloque("CUPO_NIVEL_ASENTAMIENTO");
+        let xp = |k: &str| mil(num(&nivel, &format!("xp.{k}")));
+        let puerta = bloque("PUERTA")["cerradaAPorDefecto"]
+            .as_array()
+            .expect("cerradaAPorDefecto")
+            .iter()
+            .map(|g| Grupo::desde_nombre(g.as_str().expect("grupo")).unwrap_or_else(|| panic!("grupo «{g}»")))
+            .collect::<Vec<_>>();
+        Self {
+            cooldown_creacion: dias(&ciudadania, "cooldownCreacionFaccionDias"),
+            cooldown_residencia: dias(&ciudadania, "cooldownCambioResidenciaDias"),
+            cooldown_capital: dias(&bloque("CAPITAL"), "cooldownDias"),
+            puerta_por_defecto: Grupos::de(puerta),
+            caducidad_relacion: dias(&bloque("RELACION_PROPUESTA"), "caducidadDias"),
+            caducidad_anexion: dias(&bloque("ANEXION"), "caducidadDias"),
+            caducidad_fusion: dias(&bloque("FUSION"), "caducidadDias"),
+            cadencia_titulos: (num(&bloque("TITULOS"), "cadenciaMinutos") * MS_POR_MINUTO as f64).round() as Instante,
+            margen_titulos: ppm(num(&bloque("TITULOS"), "margenAspirante")),
+            nivel: ReglasNivel {
+                nivel_maximo: num(&nivel, "nivelMaximo") as u32,
+                umbrales: nivel["xpParaNivel"].as_array().expect("xpParaNivel").iter().map(|x| mil(x.as_f64().expect("umbral"))).collect(),
+                xp: XpPorHecho {
+                    combate: xp("combate"),
+                    edificio_completado: xp("edificioCompletado"),
+                    conquista: xp("conquista"),
+                    ascenso_por_nivel: xp("ascensoPorNivel"),
+                    fundacion: xp("fundacion"),
+                    trueque_cumplido: xp("truequeCumplido"),
+                    bandidos: xp("bandidos"),
+                },
+                nivel_sin_xp_bandidos: num(&nivel, "nivelSinXpBandidos") as u32,
+                ratio_combate_digno: ppm(num(&nivel, "ratioCombateDigno")),
+                cap_fundacion: lista_u32(&bloque("CAP_FUNDACION_POR_NIVEL")),
+                cupo_nivel2: lista_u32(&cupo["maxNivel2"]),
+                cupo_nivel3: lista_u32(&cupo["maxNivel3"]),
+                cupo_nivel4: lista_u32(&cupo["maxNivel4"]),
+                cupo_nivel5: lista_u32(&cupo["maxNivel5"]),
+            },
+            prestigio: {
+                let p = bloque("PRESTIGIO");
+                let entero = |k: &str| num(&p, k) as i64;
+                ReglasPrestigio {
+                    victoria: entero("victoria"),
+                    conquista: entero("conquista"),
+                    fundacion: entero("fundacion"),
+                    ascenso_por_nivel: entero("ascensoPorNivel"),
+                    comercio: entero("comercio"),
+                    alianzas_base: entero("alianzas.base") as u32,
+                    alianza_cada: entero("alianzas.unaMasCada"),
+                    estatuas: lista_u32(&p["estatuas"]).into_iter().map(i64::from).collect(),
+                    maravilla: entero("maravilla"),
+                }
+            },
+            sigilo: Catalogo::de(&bloque("CATALOGO_SIGILO")),
+        }
+    }
+}
+
+impl Default for Reglas {
+    fn default() -> Self {
+        static REGLAS: std::sync::OnceLock<Reglas> = std::sync::OnceLock::new();
+        REGLAS.get_or_init(Reglas::cargar).clone()
+    }
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+
+    #[test]
+    fn las_cifras_son_las_del_documento() {
+        let r = Reglas::cargar();
+        assert_eq!((r.cooldown_creacion, r.cooldown_residencia, r.cooldown_capital), (7 * DIA, 3 * DIA, 14 * DIA));
+        assert_eq!((r.caducidad_relacion, r.caducidad_anexion, r.caducidad_fusion), (3 * DIA, 3 * DIA, 3 * DIA));
+        assert_eq!((r.cadencia_titulos, r.margen_titulos), (10 * MS_POR_MINUTO, 50_000), "P2: la aspirante supera a la poseedora en un 5 %");
+        assert_eq!(r.puerta_por_defecto, Grupos::de([Grupo::Neutrales, Grupo::Enemigos]), "Q1: cerrada a neutrales y enemigos");
+        let n = &r.nivel;
+        assert_eq!(n.nivel_maximo, 10);
+        assert_eq!(n.umbrales, [100, 180, 300, 480, 760, 1200, 1900, 3000, 4800].map(|x| x * 1000));
+        assert_eq!(
+            (n.xp.combate, n.xp.edificio_completado, n.xp.conquista, n.xp.ascenso_por_nivel, n.xp.fundacion, n.xp.trueque_cumplido, n.xp.bandidos),
+            (2_500, 1_000, 10_000, 30_000, 20_000, 2_000, 1_000)
+        );
+        assert_eq!((n.nivel_sin_xp_bandidos, n.ratio_combate_digno), (5, 500_000));
+        assert_eq!(n.cap_fundacion, vec![1, 2, 3, 3, 4, 5, 5, 6, 6, 7]);
+        assert_eq!(n.cupo_nivel2, vec![1, 1, 2, 2, 3, 3, 3, 4, 4, 5], "P4: dos tercios de las plazas");
+        assert_eq!(n.cupo_nivel3, vec![0, 0, 1, 1, 1, 2, 2, 2, 2, 3]);
+        assert_eq!(n.cupo_nivel4, vec![0, 0, 0, 0, 1, 1, 2, 2, 3, 3], "2026-11-04: como mucho tres plazas en nivel 4");
+        assert_eq!(n.cupo_nivel5, vec![0, 0, 0, 0, 0, 0, 0, 1, 1, 1], "2026-11-04: como mucho una plaza en nivel 5");
+        let p = &r.prestigio;
+        assert_eq!((p.victoria, p.conquista, p.fundacion, p.ascenso_por_nivel, p.comercio), (5, 50, 20, 10, 2), "tanda 69");
+        assert_eq!((p.alianzas_base, p.alianza_cada, p.estatuas.as_slice(), p.maravilla), (1, 100, [200, 500, 1000].as_slice(), 2000));
+        // Una alianza, y una más cada 100 de prestigio (tanda 69 §13).
+        assert_eq!([0, 99, 100, 250].map(|x| p.tope_de_alianzas(x)), [1, 1, 2, 3]);
+    }
+
+    #[test]
+    fn la_identidad_son_los_bloques_del_documento() {
+        let t = texto_de_parametros();
+        for nombre in ["CIUDADANIA", "CAPITAL", "PUERTA", "RELACION_PROPUESTA", "ANEXION", "FUSION", "CATALOGO_SIGILO", "NIVEL_FACCION", "TITULOS", "PRESTIGIO"] {
+            assert!(t.contains(&format!("<!-- parametros:{nombre} -->")), "falta {nombre}");
+        }
+    }
+}

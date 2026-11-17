@@ -1,23 +1,282 @@
 # 6. Sistema de Tecnología y Aedas
 
-## 6.1 Tres (+1) vías de acceso a tecnología
-1. **Comercio** con asentamientos que ya la poseen.
-2. **Desarrollo propio**: más costoso, genera un logro/lore ÚNICO registrado en el servidor.
-3. **NPCs viajantes (Aedas)**: ver 6.2.
+## 6.1 La tecnología es de la Facción
 
-## 6.2 Sistema de Aedas
-- Los Aedas SON los NPCs viajantes de la vía 3 — no es una vía nueva y separada.
-- **Itinerantes**: dan acceso puntual a tecnologías básicas (armas, armaduras, cultura, construcciones) al pasar por un asentamiento. Se compran con ORO.
-- **Residentes**: se vuelven residentes si el asentamiento tiene NOBLEZA (la presencia de nobles los atrae). Si el asentamiento pierde su nobleza, el Aeda residente se va. Cantidad de residentes posibles depende del tamaño/nivel del asentamiento o de políticas que lo permitan.
-- **Mecánica de desbloqueo**: épica narrada por CAPÍTULOS (progresión, no instantánea), que avanza con EVENTOS INSPIRADORES (ej. batallas).
-- **Bonificaciones como residentes**: felicidad, crecimiento de nobleza, desbloqueo de tecnologías, prestigio.
-- Las tecnologías se compran con ORO a los Aedas, una vez cumplidas las condiciones de aparición correspondientes.
+La tecnología la **adopta la Facción** y vale en todos sus asentamientos. Hay un catálogo cerrado de tecnologías, cada
+una de una **Era** (6.2), y cada una desbloquea tropas, edificios, niveles internos o recetas.
 
-## 6.3 Poetas = mismo rol que los Aedas (función de lore)
-Además de la función tecnológica, los Aedas/Poetas generan el LORE DEL SERVIDOR narrando los logros reales de los jugadores (asentamientos que caen, tecnologías descubiertas, guerras importantes, cambios de títulos de prestigio — ver Doc 2.9). Esta función corre en PARALELO, sin afectar el balance mecánico. Consultable vía interfaz dedicada Y eventos in-game.
+**Las cuatro puertas.** Cualquier asentamiento, sea de la cultura que sea, recluta una tropa si cumple a la vez:
 
-## 6.4 Reputación de Facción y Aedas
-Una Facción con score de confiabilidad muy bajo (ver Doc 2.7) tiene más difícil atraer Aedas residentes.
+```text
+Era permitida por el servidor
+  + tecnología adoptada por la Facción
+  + edificio y nivel interno en el asentamiento
+  + población, equipo, animales y recursos disponibles
+  = reclutamiento permitido
+```
 
-## 6.5 Fase 0: sin Aedas
-Fase 0 no tiene sistema de Aedas: solo aparecen como narradores de los cambios de título (Doc 2.9). Por eso ningún edificio exige "Planos de X" para construirse ni para mejorar de nivel interno (Doc 4.2.1): todos los requisitos se resuelven con nivel de asentamiento y/o edificios previos.
+Lo mismo vale para construir un edificio, mejorar un nivel interno o producir una receta que piden tecnología
+(Doc 4.2.1). **El roster es universal**: la cultura del asentamiento no da ni quita tropas ni tecnologías, solo
+aspecto. La tecnología dice qué existe; el equipo dice con qué se hace (una tropa puede depender de una tecnología
+y su arma de otra).
+
+Una tecnología pasa por cuatro estados para cada Facción: **oculta**, **revelada** (un Aeda se la ha mostrado: sabe que
+existe, qué le falta y quién la desbloqueó, pero aún no puede adoptarla), **aparecida** (cumplidas sus condiciones o
+comprada a un Aeda: puede adoptarla) y **adoptada**.
+
+**Dos vías para conseguirla:**
+1. **Desarrollo propio**: cumplir su logro del servidor y el hito de la Facción (6.3) y pagarla (6.5).
+2. **Aedas**: pagar oro a un Aeda itinerante que la conoce (6.7), o completar la épica de un Aeda residente (6.7).
+
+Los Aedas (venta y épica) **se saltan el hito de la Facción, nunca el logro del servidor**. En las dos vías la adopción se paga igual (6.5).
+Se descartaron (2026-10-11) el comercio entre Facciones y la conquista como vías de acceso a la tecnología: lo que una Facción no desarrolla lo compra a un Aeda o lo canta uno de los suyos.
+
+## 6.2 Eras
+
+La season (12 meses) se divide en cinco Eras, de ~1300 a 323 a. C. (hasta Alejandro Magno):
+
+| Era | Id | Nombre | Semanas | Niveles de asentamiento |
+|---|---|---|---|---|
+| I | `reinos_palaciales` | Reinos palaciales | 0-5 | 1 y 2; pocos en el 3 |
+| II | `crisis_adaptacion` | Crisis y adaptación | 5-11 | 1, 2 y 3; meseta en el 3 |
+| III | `polis_imperios` | Polis e imperios | 11-18 | concentrada en el 3; primeras cosas de nivel 4 |
+| IV | `profesionalizacion_imperial` | Profesionalización | 18-26 | cosas de nivel 3; meseta en el 4 |
+| V | `hegemonia_macedonica` | Hegemonía macedónica | 26-52 | concentrada en 3 y 4; primeras cosas de nivel 5 |
+
+- **Las Eras IV y V están implementadas** (2026-11-12): sus tarifas, tecnologías, logros, hitos y épicas corren en el servidor con las reglas de `Docs/Mechanics/Tecnologia_Aedas.md`, que manda si este documento dice otra cosa. Queda solo la Maravilla, que sigue siendo diseño, no lo que corre.
+- **El servidor arranca en la Era I**, con dos tecnologías adoptadas por todas las Facciones: `leva_comunal` y
+  `hostigamiento_tribal`.
+- Cada Era tiene sus logros del servidor (6.3). **La Era siguiente empieza cuando se cumplen TODOS los logros de la
+  Era, o cuando se agota su plazo**, lo que pase antes: el plazo es un techo. Cada Era dura además **un mínimo de 1 semana**:
+  aunque se cumplan todos sus logros antes, la siguiente no empieza hasta que pasa ese mínimo.
+- Si la Era siguiente empieza por tiempo, los logros pendientes de la anterior siguen abiertos y se pueden cumplir.
+- **Ninguna tecnología de una Era se puede adoptar antes de que esa Era empiece.**
+- **El techo de nivel de asentamiento de cada Era es derivado**: no hay una regla que prohíba subir, sino que la
+  subida pide algo que solo existe a partir de cierta Era (Doc 4.5). La tabla de niveles de arriba es la guía con la
+  que se reparte el contenido de cada Era.
+- La Maravilla ya no exige ninguna Era: pide 2.000 de prestigio de la Facción y el nivel 5 de la plaza (Doc 4.2.1, 2.2.2; decidido el 2026-11-08). La season termina por tiempo aunque nadie
+  la haya construido.
+
+## 6.3 Logro del servidor e hito de la Facción
+
+Para que una tecnología aparezca por desarrollo propio hacen falta dos cosas:
+
+- **El logro del servidor**: algo que ha pasado en todo el mundo entre todas las Facciones, las de bots incluidas (por
+  ejemplo, "X de estaño extraído en el mundo"). **Se fija para siempre** en cuanto se cumple.
+  **Es público**: lo canta un Aeda en la crónica, **sin decir qué tecnología desbloquea**.
+- **El hito de la Facción**: condiciones de la propia Facción (edificios, niveles, otras tecnologías adoptadas…).
+
+Cuando una Facción cumple el hito de una tecnología cuyo logro ya existe y cuya Era ya empezó, la tecnología **le
+aparece**. La primera Facción en conseguirla —por hito o por épica de un Aeda— queda en la crónica como su descubridora.
+
+**Logros que se adaptan al tamaño del servidor (decisión del autor, 2026-11-07).** Algunos logros no piden una X fija sino
+una X **por plaza viva del mundo** (N, las plazas de todas las Facciones que existen en ese momento, mínimo 1): el umbral
+sube cuando se funda una plaza y baja cuando una cae, y una vez cumplido queda fijo. El contador sigue siendo de todo el
+servidor: todas las Facciones suman para todas. Así un servidor con poca población no se queda con logros imposibles ni
+uno grande con logros regalados. Hoy van por plaza `escudos_ligeros` (20 × N campamentos de bandidos destruidos),
+`metalurgia_cobre` (1.000 × N de cobre extraído), `cria_caballar` (5 × N animales comprados) y `aleacion_bronce`, que pide
+dos cosas a la vez: 2.000 × N de cobre extraído y 1.000 × N de estaño extraído. Desde el 2026-11-12 van también por plaza nueve de las doce tecnologías de las Eras IV y V; las otras tres
+(`logistica_campana`, `falange_sarisa` y `cuerpo_hipaspistas`) piden una cifra fija (6.6).
+
+Las cifras X de los logros se ajustan para que cada logro se cumpla en una semana concreta de su Era: los de cada
+Era se reparten por su tramo en el orden de adopción, y el último cae una semana antes del plazo. Ese es el objetivo; hoy
+las X son las del servidor TypeScript y **no se vuelven a medir hasta la fase 7**, con bots reales (decisión del autor,
+2026-10-24): ver 6.6.
+
+Los reclutas cuentan para los logros de reclutamiento igual en un asentamiento (reponer incluido) que en un campamento
+de mercenarios (decisión del autor, 2026-10-24).
+
+## 6.4 Visibilidad
+
+- **Toda tecnología está oculta** hasta que se cumplen sus condiciones de aparición.
+- Cuando una Facción la desbloquea, le aparece solo a ella; **para el resto del servidor sigue oculta**.
+- Los **Aedas itinerantes** esparcen el conocimiento (6.7): al llegar a un asentamiento, le **revelan** las
+  tecnologías que conocen y la Facción aún no tiene aparecidas: cuáles son, qué requisitos de hito le faltan y quién
+  las desbloqueó.
+- **Lo público del avance** son los logros cumplidos (sin decir qué tecnología abren), la Era y, desde el 2026-11-06,
+  los contadores en curso de todo el servidor (para ver cuánto falta para cada logro) y, desde el 2026-11-07, las plazas
+  vivas del mundo y el umbral de ahora de cada logro pendiente (los que van por plaza cambian con ellas). Qué tecnología abre cada logro
+  solo lo ve la administración (decisión del autor, 2026-10-24).
+- **La ventaja del primero** es ese tiempo: los Aedas conocen una tecnología **24 horas** después de que alguien la
+  desbloquea (`AEDAS.retrasoConocimientoMinutos`, 24 · 60, placeholder), no antes. No hay descuento: todos pagan la misma tarifa.
+
+## 6.5 Adopción
+
+**La adopta el Rey, estando dentro de la capital (no basta su columna a la puerta), y la paga el almacén de la capital.** La adopción es instantánea. La capital
+la designa el Rey (Doc 2.2) y exige un Palacio activo, con enfriamiento entre designaciones; mientras no designe ninguna, o si la designada pierde el Palacio, es el asentamiento vivo más antiguo de la Facción.
+Las Facciones de bots siguen la misma regla (5.15.6).
+
+| Era de la tecnología | Oro | Bien de la Era |
+|---|---|---|
+| I | 100 | 200 madera |
+| II | 300 | 30 lingotes de bronce |
+| III | 600 | 30 lingotes de hierro |
+| IV | 1.000 | 50 lingotes de hierro |
+| V | 1.500 | 80 lingotes de hierro |
+
+**Lo adoptado se ve en la ciudad** (decisión del autor del 2026-11-16): el aspecto de los edificios de una plaza sale de la Era más alta de la que su Facción tiene alguna tecnología adoptada y de cuántas tiene de ella (una, primeros atisbos; dos, más cambiada; tres, del todo). Con solo las de la Era I, se ve de la Era I. Cada plaza guarda lo más alto a lo que llegó y nunca baja: una plaza conquistada conserva su aspecto hasta que su nuevo dueño vaya por delante. Detalle en Tecnologia_Aedas §4.2.
+
+## 6.5b Tecnología propia de los campamentos de mercenarios (2026-10-02)
+
+Un campamento de mercenarios (Doc 1.9b) no adopta nada: **desbloquea cada tecnología el último**, al instante y gratis, cuando la tiene **adoptada** el **50 %** de las Facciones vivas (las que conservan algún asentamiento; los bots juegan por la misma vía que los humanos y cuentan igual) **o** han pasado **72 horas** desde que la primera Facción la desbloqueó, lo que llegue antes. Las de arranque ya están. Así se recluta allí lo que una Facción no alcanza por edificio o materiales (Doc 5.8), y la ventaja del primero dura unos días sin ser eterna. Una tecnología que nadie ha desbloqueado no está en el campamento. Cifras en `MERCENARIOS.tecnologia` (placeholder).
+
+## 6.6 Catálogo
+
+Las X son las del servidor TypeScript: las de la Era I se calibraron con su batch (en otro mundo y con otra economía) y las de las Eras II y III eran provisionales (sus contadores dependen de qué tecnologías adopta cada Facción, y con jugadores NPC se adoptan pocas). **No se vuelven a medir hasta la fase 7**, con bots reales (decisión del autor, 2026-10-24). En el mundo de hoy, con los bots mínimos del batch tecnológico (2026-10-26), la Era II llega por plazo el día 35, los logros de la Era I caen entre el día 3 y el 26 (el del bronce no se cumple: no se extrae estaño) y los de las Eras II y III casi no se mueven. Siguen sin medida `carpinteria_militar`, `falange_hoplita`, `arqueria_especializada`, `bronce_laminado` y `trabajos_asedio`, cuyo contador no se mueve. "Edificio" en un hito = activo en cualquier asentamiento de la Facción. Las
+tropas de cada tecnología, con su edificio, equipo y escalón, en Doc 5.8. **Una tecnología también puede dar un
+bonus de producción** en vez de abrir contenido (`bonusProduccion`: un recurso y un factor sobre lo que sacan sus
+extractores): hoy solo `canteria`, que se pensó para la piedra del nivel 3 (Doc 4.5).
+
+**Era I — Reinos palaciales**
+
+| Tecnología | Desbloquea | Logro del servidor | Hito de la Facción |
+|---|---|---|---|
+| `leva_comunal` | milicia de lanceros, leñadores, granjeros | — (de arranque) | — |
+| `hostigamiento_tribal` | honderos, escaramuzadores con jabalina | — (de arranque) | — |
+| `metalurgia_cobre` | Arma de Cobre (Armería 1) | 1.000 × N de cobre extraído (N = plazas vivas del mundo, 6.3) | Fundición activa |
+| `aleacion_bronce` | Lingote de Estaño y de Bronce (Fundición 2), Arma de Bronce (Armería 2); espadachines de bronce, hacheros armados | 2.000 × N de cobre extraído y 1.000 × N de estaño extraído en el mundo (Uluburun) | Fundición 2 + estaño en el almacén de la capital |
+| `escudos_ligeros` | lanceros con escudo de mimbre | 20 × N campamentos de bandidos destruidos | Barracón activo |
+| `armamento_palacial` | espadachines de cobre, hacheros ligeros | X asentamientos en nivel 2 (lineal B) | Armería activa + `metalurgia_cobre` adoptada |
+| `arqueria_palacial` | arqueros | X batallas libradas | Galería de tiro activa |
+| `cria_caballar` | Caballerizas; exploradores a caballo | 5 × N animales comprados (caravanas incluidas) | Corral activo (el de una aldea agrícola, 4.2.2) |
+| `carros_guerra` | Carro de Guerra (Carpintería 2); carros de guerra | X batallas a campo abierto (Qadesh) | `cria_caballar` + Caballerizas 2 + Carpintería 2 |
+| `canteria` | las Canteras de la Facción sacan **1,5×** la piedra (en todos sus asentamientos) | X de piedra extraída en el mundo | Cantera activa (un pueblo de cantera, desde el 2026-11-01) |
+
+**Era II — Crisis y adaptación**
+
+| Tecnología | Desbloquea | Logro del servidor | Hito de la Facción |
+|---|---|---|---|
+| `bronce_calidad_militar` | Arma de Bronce de Calidad y Armadura de Bronce (Armería 3); Shardana | X piezas de equipo de bronce fabricadas (Dendra) | Armería 3 |
+| `forja_hierro_temprana` | Mina de hierro, Lingote de Hierro (Fundición 2), Arma de Hierro (Armería 2); guerreros filisteos | X caravanas destruidas o capturadas (colapso del estaño) | Fundición 2 + yacimiento de hierro en su territorio |
+| `panoplia_bronce` | lanceros pesados micénicos, Hequetai | X escuadrones reclutados (Vaso de los Guerreros) | `bronce_calidad_militar` + Barracón 3 |
+| `disciplina_formacion` | formaciones cerradas (táctico, en la batalla): muro de escudos, testudo, cuadro y cuña (desde el 2026-11-11, Doc 5.3) | X asedios resistidos en combate (Batalla del Delta); no cuentan los rebotes por protección ni las plazas sin defensores | Barracón 2 |
+| `arco_compuesto` | arqueros con arco compuesto | X arqueros reclutados | Carpintería 2 + Galería 3 |
+| `equitacion_militar` | jinetes asirios | X soldados de caballería reclutados, **cada soldado de carro de guerra vale por 5 de jinete** (Assurnasirpal) | Caballerizas activas |
+| `carpinteria_militar` | escalas y defensas de campaña (equipo) | primera conquista de una plaza con muralla completa (Dapur) | Carpintería 2 |
+
+**Era III — Polis e imperios**
+
+| Tecnología | Desbloquea | Logro del servidor | Hito de la Facción |
+|---|---|---|---|
+| `instituciones_civicas` | Sala del Consejo (requisito del nivel 4) | X asentamientos en nivel 3 (nacimiento de la polis) | capital en nivel 3 con Mercado activo |
+| `ciudadania_militar` | hoplitas ciudadanos | X asedios resistidos con los residentes dentro (reforma hoplita) | `instituciones_civicas` + Barracón 2 |
+| `falange_hoplita` | Espartiatas | X batallas libradas usando hoplitas | `ciudadania_militar` + Barracón 3 |
+| `pantalla_escaramuzadores` | peltastas, honderos rodios | X escaramuzadores con jabalina reclutados | Galería 2 + Armería 2 |
+| `arqueria_especializada` | arqueros escitas | X arqueros con arco compuesto reclutados | Galería 3 |
+| `forja_hierro_estandarizada` | Fundición 3, Arma de Hierro de Calidad (Armería 3) | X de hierro extraído (los cálibes) | Fundición 2 + Mina de hierro activa |
+| `bronce_laminado` | Armadura de Bronce de Calidad (Armería 3) | X armaduras de bronce fabricadas (coraza musculada) | Armería 3 |
+| `caballeria_organizada` | jinetes escitas, caballería asiria | X jinetes asirios reclutados (Tiglat-Pileser III) | Caballerizas 2 |
+| `trabajos_asedio` | equipo de asedio de Carpintería 2 | X asedios contra plazas con muralla completa (Laquis) | Carpintería 2 |
+
+Las escalas, las defensas de campaña y el equipo de asedio de Carpintería 2 no tienen efecto en el combate con números (decidido el
+2026-10-19): la tecnología se adopta y su equipo, si llega, será cosa de Unity.
+
+**Era IV — Profesionalización** (desde el 2026-11-12; N = plazas vivas del mundo, 6.3)
+
+| Tecnología | Desbloquea | Logro del servidor | Hito de la Facción |
+|---|---|---|---|
+| `ejercito_permanente` | los escuadrones de los héroes de la Facción ganan un 10 % más de experiencia | 2 × N escuadrones que llegan al nivel 5 | Barracón 3 + 10 escuadrones propios con soldados a la vez |
+| `cuerpo_oficiales` | nada propio: es una de las piezas de la Reforma macedónica (no da Liderazgo: el Liderazgo no lo cambia ninguna tecnología) | 1 × N batallas con 3 héroes o más en un bando | 5 héroes en la Facción |
+| `logistica_campana` | los víveres de los ejércitos de la Facción ×1,5 (Doc 5.13) | el primer camino compartido del mundo (1.0b) | una plaza de nivel 4 + la Facción en nivel 5 + 3 columnas en marcha a la vez |
+| `infanteria_profesional` | epílektoi, Inmortales | 1 × N batallas ganadas por el bando que empezó con menos soldados | `ejercito_permanente` + Barracón 3 en una plaza de nivel 4 |
+| `hostigadores_profesionales` | peltastas de Ifícrates | 2 × N escuadrones de escalón 4 o 5 destruidos, de cualquier bando | `pantalla_escaramuzadores` + Galería 3 |
+| `carga_caballeria` | caballería tesalia, caballería noble persa | 1 × N batallas a campo abierto ganadas con caballería | `caballeria_organizada` + Caballerizas 3 |
+
+**Era V — Hegemonía macedónica** (desde el 2026-11-12)
+
+| Tecnología | Desbloquea | Logro del servidor | Hito de la Facción |
+|---|---|---|---|
+| `reforma_macedonica` | agrianos | 1 × N batallas con escuadrones de Barracón, Galería y Caballerizas a la vez en un bando | `forja_hierro_estandarizada`, `disciplina_formacion`, `infanteria_profesional`, `caballeria_organizada`, `logistica_campana` y `cuerpo_oficiales` adoptadas + Barracón 3, Armería 3, Caballerizas 3 y Palacio 3 |
+| `falange_sarisa` | falangitas | 3 batallas ganadas por una sola Facción contra héroes de 2 Facciones o más | `reforma_macedonica` + Barracón 2 en una plaza de nivel 4 |
+| `cuerpo_hipaspistas` | hipaspistas | 10 batallas en las que combate el Rey de alguna Facción | `falange_sarisa` + Barracón 3 + Palacio 3 |
+| `formacion_cuna` | pródromos | 2 × N ataques de una columna con caballería a otra columna o a una caravana | `reforma_macedonica` + Caballerizas 2 |
+| `companeros_reales` | Compañeros | 1 × N batallas a campo abierto ganadas con caballería de escalón 4 o 5 | `formacion_cuna` + Caballerizas 3 + Palacio 3 |
+| `acero_templado` | comprar y forjar las piezas de acero del héroe (las armas de tier V, Doc 5.16) | 20 × N armas de hierro de calidad fabricadas | Fundición 3 + Armería 3 |
+
+Los umbrales de las Eras IV y V son provisionales, como los demás, y se miden con bots en la fase 7. Las tecnologías de asedio de estas Eras (maestría de asedio, maestros de obras militares y la catapulta de torsión) esperan a que haya equipo de asedio, y el Batallón Sagrado se quitó (`Docs/Mecanicas a desarrollar.md`, entrada 20).
+
+## 6.7 Aedas
+
+Los Aedas (o Poetas, mismo rol; Glosario) son NPCs que dan acceso a la tecnología y narran el lore del servidor. No
+atacan ni se les ataca, no combaten y no se capturan ni se retienen. Son de dos clases.
+
+**Frontera con la taberna** (Doc 5.12.10): los Aedas mueven tecnología y lore; la taberna vende inteligencia militar y de territorio (qué hay en una zona, cómo se defiende una plaza). Ninguno da lo del otro: un Aeda no dice dónde hay un ejército ni una taberna qué tecnología tiene un rival.
+
+### Itinerantes
+
+- **Cuántos**: uno por cada 3 Facciones vivas, con un mínimo de 3 (`AEDAS.itinerantes`, placeholder).
+- **Cómo se mueven**: recorren los asentamientos por la **red de caminos** (el grafo de navegación, Doc 1.6): sobre
+  camino van más rápido. Eligen el asentamiento más cercano que no han pisado hace poco y se detienen unas horas en
+  cada uno (`AEDAS.itinerantes.estanciaMinutos`) antes de seguir. Una plaza que **les ha cerrado la puerta con el
+  grupo `aedas`** (el exilio, Doc 2.8, que ahora distingue ese cuarto grupo) los deja fuera; el cierre por defecto, a
+  neutrales y enemigos, no los incluye. Si se la cierra con un Aeda dentro, el Aeda **sale al instante** hacia su
+  siguiente destino, y lo que ya reveló queda revelado (decisión del autor, 2026-10-24); el que llega a una plaza que se
+  la cerró mientras iba de camino no entra y sigue hacia la siguiente (2026-10-25).
+- **Se ven** como cualquier columna ajena, solo dentro del radio de visión de la Facción (Doc 5.12.7); no son
+  atacables ni retenibles.
+- **Difunden** (6.4): mientras están detenidos en un asentamiento le revelan a su Facción lo que conocen y aún no tiene
+  aparecido; lo que pasa a conocerse durante su estancia se revela en cuanto el retraso se cumple.
+- **Venden**: mientras están en un asentamiento, el Rey o el Gobernador de esa plaza puede comprarles una tecnología
+  que conocen, de las **Eras I-III**, con el **logro del servidor ya cumplido** y la Era ya abierta. Cuesta **2 × el oro
+  de la tarifa de adopción de su Era** (6.5; 200 / 600 / 1.200), que sale del almacén de esa plaza. La Facción se salta el
+  hito y la tecnología le **aparece**; la adopción se paga igual, por el Rey en la capital. Las Eras IV y V no se pueden
+  comprar a un Aeda: solo llegan por hito propio o por la épica que se les asigna (6.7).
+- **Cantan** los logros del servidor (6.3) y los descubrimientos (crónica, abajo): hechos públicos, sin decir qué
+  tecnología abre cada logro.
+
+### Residentes
+
+- **Dónde**: en un asentamiento con **Palacio** activo y **Nobleza**; si pierde toda su nobleza, los Aedas se van. Con el
+  Palacio desde el nivel 2 (Doc 4.2.1), pueden vivir allí desde ese nivel.
+- **Cupo por asentamiento** (por nivel actual): nivel 2, 1; nivel 3, 2; nivel 4, 3; nivel 5, 4
+  (`AEDAS.residentes.cupoPorNivel`). Si el nivel baja y sobran, se va el último en llegar.
+- **Llegada**: con cupo libre, llega uno cada 24 horas (`AEDAS.residentes.llegadaMinutos`, placeholder). Una Facción con
+  reputación de **−50 o menos** (Doc 2.7) los atrae **tres veces más despacio**.
+- **Conquista**: si la plaza cambia de dueño, el Aeda se queda mientras haya nobleza, pero **pierde la épica en curso**.
+- **Anexión y fusión** (Doc 2.6): los residentes pasan a la Facción que recoge **con su épica**, y sus épicas cumplidas se
+  suman. Si quedan dos Aedas cantando la misma tecnología, **se unifican**: sigue la más avanzada y el otro la pierde y
+  queda libre (decisión del autor, 2026-10-25).
+- **Qué dan**: cada residente suma un 5 % de crecimiento de población (la felicidad) y un 25 % de crecimiento de nobleza
+  (`AEDAS.residentes.bonoFelicidad` y `bonoNobleza`, placeholder), y cuenta para el título de prestigio **«Mecenas de los
+  Aedas»** (Doc 2.9): la Facción con mayor valor = épicas cumplidas × 10 + Aedas residentes. Sin efecto mecánico.
+
+#### Épica
+
+Un residente desbloquea tecnología con una **épica por capítulos** que sustituye al **hito** de la Facción —nunca al
+logro del servidor—. El Rey, el Gobernador o el Sacerdote de la plaza, presente, elige una tecnología para un Aeda
+(`empezarEpica`) o la abandona perdiendo lo avanzado (`abandonarEpica`).
+
+- **Qué tecnologías**: las que tienen el logro del servidor cumplido, la Era abierta y aún no han aparecido a la Facción;
+  un Aeda por tecnología y Facción a la vez. Pueden estar solo reveladas (6.4).
+- **No cuesta oro**: al cumplirla la tecnología **le aparece** a la Facción y se adopta como siempre, pagando la tarifa
+  (6.5).
+- **Contenido**: cada tecnología con logro tiene su épica (`EPICAS`): **3 capítulos** en la Era I, **4** en la II, **5** en
+  la III, **6** en la IV y **7** en la V, de cantidades placeholder. Cada capítulo pide un número de hechos de un tipo.
+
+| Hecho inspirador | Cuenta cuando | De quién |
+|---|---|---|
+| Defensa | se resiste un asedio **en combate** (no un rebote por protección ni una plaza sin defensores) | de **su plaza** |
+| Batalla | su Facción gana una batalla a campo abierto contra **otra Facción** | de su Facción |
+| Conquista | su Facción conquista una plaza **en combate** | de su Facción |
+| Obra | se completa o mejora en su plaza el **edificio** que pide el capítulo | de **su plaza** |
+| Ascenso | su plaza sube de nivel | de **su plaza** |
+| Adopción | su Facción adopta una tecnología | de su Facción |
+| Caravana | llega una caravana comercial de su plaza con al menos 100 de carga (`AEDAS.epica.cargaMinimaCaravana`) | de **su plaza** |
+
+- **Contra el farmeo**: cada hecho cuenta **una sola vez** por épica (tiene una clave irrepetible: una batalla, una obra de
+  ese edificio a ese nivel, una caravana), y entre un hecho y el siguiente de la misma épica pasan **6 horas**
+  (`AEDAS.epica.enfriamientoMinutos`). Un hecho de Facción avanza la épica de **cada** residente de la Facción; uno de
+  plaza, solo las de los residentes de esa plaza.
+- **Crónica**: al cumplirla, la crónica canta que el Aeda ha completado una épica, **sin decir qué tecnología abre**.
+
+### Lore y crónica
+
+Los Aedas narran los hechos públicos del servidor en una **crónica**: logros del servidor, comienzo de Era, cambios de
+títulos de prestigio (Doc 2.9), descubrimientos (el nombre de la primera Facción en desbloquear una tecnología, **cuando el
+retraso de 24 horas ya ha pasado**), épicas cumplidas, asentamientos fundados, caídos o conquistados, la primera ciudad del
+mundo en llegar a los niveles 3, 4 y 5, y guerras declaradas, rebeliones de vasallos, anexiones y fusiones.
+
+Cada entrada es un **evento público** (sin plaza atribuida), así que llega a todos los jugadores por el canal de eventos,
+y además **se guarda entera**, todo el historial y fuera de la foto del mundo, para que quien llega tarde la lea por
+páginas (`PedirCronica`, contrato 05 §8; decisión del autor, 2026-10-24). Lo privado se redacta: los rivales saben quién
+conquista qué plaza, no con qué ni desde dónde. **No afecta al balance.**

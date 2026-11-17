@@ -1,0 +1,28 @@
+[package]
+name = "servicio"
+version = "0.8.0"
+edition = "2021"
+description = "El proceso del servidor (fase 7, 7B): el artefacto de mundo, el núcleo persistente, el WebSocket del contrato 05 y el servicio de acceso en un solo puerto"
+
+[[bin]]
+name = "bronzeage-servidor"
+path = "src/main.rs"
+
+[dependencies]
+acceso = { path = "../acceso" }
+asentamiento = { path = "../asentamiento" }
+base64 = "0.22"
+mundo = { path = "../mundo" }
+nucleo = { path = "../nucleo" }
+persistencia = { path = "../persistencia" }
+rutas = { path = "../rutas" }
+serde_json = "1"
+sha2 = "0.10"
+servidor = { path = "../servidor" }
+tokio = { version = "1.53.2", features = ["rt-multi-thread", "macros", "sync", "net", "signal", "io-std", "io-util"] }
+ureq = "2"
+
+[dev-dependencies]
+contrato = { path = "../contrato" }
+tempfile = "3"
+tokio = { version = "1.53.2", features = ["rt-multi-thread", "macros", "net", "io-util", "time"] }

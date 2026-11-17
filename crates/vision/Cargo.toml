@@ -1,0 +1,11 @@
+[package]
+name = "vision"
+version = "0.2.1"
+edition = "2021"
+description = "Visión muestreada cada 250 ms por Facción, en paralelo (fase 5, Niebla_De_Guerra)"
+
+[dependencies]
+base = { path = "../base" }
+mundo = { path = "../mundo" }
+contrato = { path = "../contrato" }
+rayon = "1"

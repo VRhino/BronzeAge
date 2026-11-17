@@ -1,0 +1,116 @@
+//! Núcleo de un solo hilo del mundo reactivo (fase 5): aplica órdenes y eventos en `(instante, prioridad, secuencia)`, sin
+//! tick. Genérico: columnas con plan y víveres como ritmo; las reglas de juego completas llegan en la fase 6.
+//!
+//! - [`Nucleo`]: el bucle (modo acelerado y en vivo), las órdenes con idempotencia y `version_esperada`, la persistencia
+//!   por registro de peticiones + fotos, y `hash_estado()` determinista.
+//! - [`Estado`]: lo que entra en el hash y en las fotos. [`CambioVersion`]: el registro de cambios por versión. Lleva las entidades tocadas por clase ([`Clase`], [`Tocados`]) y `Nucleo::version_de` da la versión en que cambió
+//!   cada una; `Ajustes::auditar_cambios` (o `BRONZEAGE_AUDITAR_CAMBIOS=1` en las pruebas) comprueba que ninguna cambie sin quedar marcada.
+//! - [`GeneradorDeEventos`]: el hueco para lo que se enchufa al núcleo (la visión muestreada, `espacial`).
+//! - [`economia`]: cada plaza fundada lleva su economía (crate `asentamiento`) y avanza sola un minuto de mundo por evento
+//!   (`Carga::Minuto`); aquí están el mapa, los yacimientos y los sitios que comparten el núcleo y el batch de población.
+//! - [`urbanismo`]: la ciudad de cada plaza (crate `trazado`): dónde cae cada edificio, anclas, puestos del Mercado y reubicación de la Granja.
+//! - [`EstadoComercio`]: el comercio (fases 3B-1 y 3B-2): trueques, órdenes de mercado y mostrador, flota de caravanas que viajan por el mapa
+//!   (plan, peajes, reparto automático, red de caminos), mercado de mercenarios, reputación entre Facciones y sus plazos como eventos de prioridad 6 y 9 (`Carga::Comercio`, `Carga::Reputacion`); las reglas puras son el
+//!   crate `comercio`. Las órdenes están en `Comando` (códigos 21-40) y el cierre por ruina o conquista, en `Nucleo`.
+//! - Pueblos extractores (fase 3C): obra de mapa, extracción contra un almacén local y carro de acarreo hacia la plaza madre; las reglas
+//!   puras son `asentamiento::pueblos` y `comercio::acarreo`, y las órdenes (códigos 45-48), en `Nucleo`.
+//! - Héroes y tropa (fase 4B-1): [`EstadoMilitar`] guarda los héroes con sus escuadras, loadouts y almacén personal, los reclutas de los campamentos de
+//!   mercenarios y las tecnologías que da la administración; reclutar en una plaza y en un campamento, la tropa prestada, la guarnición (que come en
+//!   el paso de minuto de su plaza), la escolta de caravanas, conectarse y desconectarse (prioridad 1, `Carga::SalidaDelMundo`). Las reglas puras son el
+//!   crate `militar` y las órdenes (códigos 41-44 y 49-68), `Nucleo`.
+//! - Columnas completas (fase 4B-2): [`Ejercito`] es una [`militar::columna::Columna`] con su posición y su plan; salir y entrar en plazas y campamentos,
+//!   unir, separar, ceder el mando, formar un ejército, repostar, las caravanas adjuntas, la desconexión con la columna y las convocatorias (órdenes 69-90),
+//!   el hambre con su deserción (un evento por columna con hambre).
+//! - Encuentros, persecución e inspección (fase 4C): el espacio del mundo (`nucleo/espacio.rs`: columnas en el mapa, caravanas y plazas en una rejilla
+//!   espacio-temporal) programa cada encuentro como un evento exacto (`Carga::Encuentro`) y deja un hecho; `perseguir` rehace el plan de quien persigue cada
+//!   vez que la presa cambia el suyo; `inspeccionar` guarda un informe en el héroe (órdenes 91-94).
+//! - Combate con números (fase 4D): `atacar` (orden 95) con sus seis objetivos —columna, caravana (tipo A o B por la zona), campamento de bandidos, plaza,
+//!   pueblo y avanzada— y sus consecuencias (heridos, mitad del carro, botín, chatarra, experiencia de escuadra); la conquista
+//!   con su protección y su ocupación como eventos, el desalojo y la cascada del comercio; los bandidos como entidades fijas del espacio, con su aparición, su
+//!   reaparición y su acoso a las caravanas (`PRIO_BANDIDOS`, `Carga::Combate`); y la guarnición de serie de los pueblos. El estado nuevo es [`EstadoCombate`]
+//!   (foto `BAN12`, hoy `BAN32`); las reglas puras son el crate `combate`.
+//! - Ciclo de la batalla de Unity (fase 4E): `atacar` abre una batalla en lugar de resolver con números cuando el proceso tiene servidores de batalla
+//!   (`Reglas::batallas_en_unity`), también bot contra bot. [`EstadoBatallas`] guarda el ticket congelado, las incorporaciones, la asignación y
+//!   el resultado de cada batalla (foto `BAN13`, hoy `BAN32`); mientras dura, sus columnas y caravanas quedan apartadas (no se mueven, no comen, no se las toca), sus
+//!   escuadras llevan el candado `reserva_batalla` y ninguna orden puede tocar lo que combate (`rechazos::BATALLA_BLOQUEADO`). Sus plazos son eventos de
+//!   prioridad 1 (`Carga::Batalla`) y los cinco mensajes del servidor de batalla, órdenes con el actor `batalla-servidor:<id>` (códigos 101-105; unirse, cancelar y
+//!   el andamiaje `FijarControlador`, 98-100). Las reglas puras son `combate::{ciclo, resultado, union}`.
+//! - Avanzadas (fase 4F): puestos fortificados de la plaza madre (atalaya, fuerte, ciudadela), levantados como obra de mapa con su fin exacto en una cita propia (cancelable),
+//!   con visión de 12, almacén, guarnición de serie y de jugadores (`Contenedor::Avanzada`), ruinas con un día de invulnerabilidad (`SucesoCombate::FinInvulnerabilidad`) y
+//!   su sitio en la rejilla de encuentros como entidad fija. Se atacan con `atacar` (con números o con una batalla de Unity, capacidad de asedio y sin convocatoria).
+//!   Las órdenes son los códigos 106-116; la foto es `BAN19`. Las reglas puras son `asentamiento::avanzadas` y `combate::avanzada`.
+//! - Entrar con todo (2026-10-22): quien entra en un lugar lleva consigo tropa, carro, víveres y todas sus caravanas y al salir se lo lleva (no hay «columna aparcada a la
+//!   puerta»); el residente conserva su carro (`HeroeNucleo::carro`, `VaciarCarro` 118); el dueño de la plaza decide por relación quién entra (`FijarAcceso` 117,
+//!   hoy la puerta de 5E, `FijarPuerta`; el alias se retiró en 5H; pueblos y avanzadas lo heredan); defienden los de dentro de la misma Facción, aliados o vasallos; al caer el lugar salen al mapa con lo suyo. Foto `BAN17`.
+//! - Entrar en un pueblo o en una avanzada (2026-10-22): `EntrarEnPueblo`/`SalirDePueblo` (119, 120) y `EntrarEnAvanzada`/`SalirDeAvanzada` (121, 122) con el acceso de su plaza
+//!   madre; dentro se defiende con la regla de relación; cerrar la puerta (`FijarPuerta`) expulsa a quien ya no puede entrar; al atacante solo se une quien está fuera y al
+//!   defensor quien está dentro; el residente que defiende y pierde pierde la mitad de su carro. Foto `BAN18`.
+//! - Murallas (2026-10-22, tandas segunda y tercera): los recintos son parte de la economía de cada plaza (`asentamiento::recintos`) y se levantan celda a celda, cada una con su cita de fin
+//!   de obras (`Evento::RecintoCelda`), reintentada por el paso de minuto si faltan materiales. `ComprometerRecinto` (123, también amplía), `MejorarRecinto` (124) y
+//!   `AbandonarRecinto` (125), con rechazos `murallas.*`; `Nucleo::presupuesto_de_recinto` enseña el trazo y su coste antes de comprometer. La ciudad de la plaza guarda una
+//!   proyección derivada de sus recintos (no los persiste). El cupo de guarnición, el requisito del nivel 4 y el mantenimiento ya los leen de ahí. Foto `BAN20`.
+//!   Tercera tanda: el asedio a una plaza con números multiplica al defensor con su recinto de referencia (`Nucleo::multiplicador_de_plaza`; la columna, el pueblo, la caravana y
+//!   la avanzada siguen con 1), la conquista daña el 30 % de cada recinto completo y sin mejora (por números y por Unity) y la plaza repara sola, `Nucleo::recintos_en_pie` da a
+//!   Unity la geometría en pie y `VistaCiudad.murallas` la dibuja. El ticket del asedio y el informe de inspección con los recintos son de 4H (`Docs/Arquitectura/Murallas_Contraste_y_Plan.md`).
+//! - Alijos (sistema 6, 6F): `AbrirAlijo` (174) carga el oro de un alijo del artefacto en el carro de la columna (lo que no cabe se pierde); cada héroe guarda los que abrió
+//!   (`HeroeNucleo::alijos_abiertos`, foto `BAN36`). Reglas puras en `tecnologia::alijos` (6A), el núcleo en `nucleo/alijos.rs`; sin tick.
+//! - Tecnología (sistema 6, 6B y 6C): el estado de tecnología del mundo con sus contadores en origen, logros y Eras (`nucleo/logros.rs`, foto `BAN37`) y, desde 6C, la aparición por
+//!   disparadores al cerrar la versión, `AdoptarTecnologia` (175), el bonus de producción, los campamentos con `primeros` + 72 h y las dos citas de cada descubrimiento
+//!   (`Carga::Tecnologia`: conocimiento y campamento; `nucleo/tecnologias.rs`, foto `BAN38`). Reglas puras en el crate `tecnologia` (6A).
+//! - Aedas itinerantes (sistema 6, 6D): `Estado::aedas`, un evento por Aeda (`Carga::Aeda`: la llegada o el fin de la estancia), el viaje por la red de caminos, la puerta con el grupo `aedas`
+//!   (cerrarla con uno dentro lo hace salir, Q5), la revelación al cerrar la versión y `ComprarTecnologiaAeda` (176); `nucleo/aedas.rs`, foto `BAN39`.
+//! - Aedas residentes y épicas (sistema 6, 6E): el cupo de cada plaza, la cita de llegada solo mientras espera con cupo libre (`Carga::Residentes`), la salida al bajar el cupo, la
+//!   felicidad y la nobleza, `EmpezarEpica` (177) y `AbandonarEpica` (178) y los hechos de épica anotados en origen y procesados al cerrar la versión (`nucleo/residentes.rs`, foto `BAN40`).
+//! - [`sesiones::lanzar`]: el actor que habla con `servidor` (foto, deltas, resultado causal, reanudación). Cada sesión abre los ámbitos del contrato 05 §3 a los que tiene derecho (4H T3a, `sesiones/ambitos.rs`: `HEROE`, `FACCION`, `ASENTAMIENTO`, `CAMPAMENTO`, `VISTA`, `ADMIN`), con `Revocado` al perderlos y reanudación por versión de cada uno. `HEROE` y `FACCION` llevan su contenido completo (4H T3b): el núcleo apunta en el registro de cambios a qué ámbito pertenece cada entidad tocada y de cuáles salió (`Pertenencia`, `Nucleo::seguir_pertenencias`, `proyeccion::{audiencia, propios}`) y la sesión reparte `ACTUALIZA` y `QUITA` con ello. La batalla de Unity va de extremo a extremo por el contrato (4H T4, foto `BAN21`): el ámbito `BATALLA`, el ticket congelado (`proyeccion::batalla`), su publicación a todos los servidores de batalla conectados (gana la primera asignación), un `AcuseBatalla` por mensaje, el token propio de cada combatiente, el asedio visible (`batalla_id`) y el informe de inspección. `ASENTAMIENTO` y `CAMPAMENTO` llevan el interior de la plaza y del campamento (4H T3c, foto `BAN22`: la tendencia «+N/min» de cada plaza, `Tendencia`): `proyeccion::interior` proyecta la plaza completa (almacén y población en escalones, edificios y su cola, recintos, trazado, políticas, ascenso, guarnición, quiénes están dentro...) y la manda como cambio parcial con máscara de campos (`interior::{mascara, aplicar}`); el núcleo marca el interior (`Clase::Interior`) cuando alguien entra, sale o aparca (`nucleo/interiores.rs`), solo si hay sesiones; lo que cambia el paso de minuto dentro de la plaza no sube la versión del mundo sino una secuencia propia por plaza (`Nucleo::version_interior`, `Asentamiento.version_interior`), con lo que el contador `version` y el hash son los mismos con y sin sesiones, y la reanudación de `ASENTAMIENTO` compara las dos. `VISTA` lleva el mundo visible con niebla (4H T3d, foto `BAN23`: la [`memoria::Memoria`] de cada Facción y de cada héroe sin bandera en el estado): el núcleo graba lo explorado y las fichas de los sitios ajenos al cerrar cada versión (`nucleo/exploracion.rs`, con los ojos fijos en una caché que no se persiste), `proyeccion::vista::Mirada` decide qué ve cada perspectiva y lo redacta, y la sesión lo reconcilia por sellos tras cada reparto y en un muestreo de 250 ms de mundo que no toca el estado; la intel de la taberna (Miradas e Informes de plaza) está en `nucleo/taberna.rs`. `sesiones::ordenes` traduce las 145 órdenes del contrato 05 a los comandos del núcleo
+//!   (144 órdenes del jugador, que dan 146 comandos, y la de administración, con 19; ninguna se rechaza ya con `orden.no_disponible`; de los 170 comandos, los 5 restantes son del canal del
+//!   servidor de batalla; `Docs/Mechanics/Comandos_Parametros.md`).
+
+/// La versión del núcleo (la de su `Cargo.toml`): sube con cada cambio del crate (regla del autor, 2026-10-31); el servidor la dice al arrancar.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+mod codec;
+mod codec_batallas;
+mod codec_ciudad;
+mod codec_combate;
+mod codec_columna;
+mod codec_comercio;
+mod codec_contratos;
+mod codec_economia;
+mod codec_militar;
+mod codec_politica;
+mod codec_tecnologia;
+mod comando;
+mod estado;
+mod estado_batallas;
+mod estado_combate;
+mod estado_comercio;
+mod estado_fundacion;
+mod estado_militar;
+pub mod misiones;
+pub mod participacion;
+pub mod recompensas;
+pub mod recurrentes;
+mod generadores;
+pub mod memoria;
+mod nucleo;
+pub mod economia;
+pub mod espacial;
+pub mod proyeccion;
+pub mod sesiones;
+pub mod urbanismo;
+
+pub use codec::ErrorFormato;
+pub use comando::{rechazos, AccionReloj, Autoriza, Comando, Detalle, LadoDelFondo, ObjetivoAtaque, PagarCon, Peticion, Resultado, Respuesta, TipoCreado, ACTOR_SERVIDOR_DE_BATALLA};
+pub use estado::{entidad_aeda, entidad_contrato, entidad_era, entidad_residentes, entidad_tecnologia, entidad_precios, entidad_titulos, PRIO_AEDAS, PRIO_CONTRATO, PRIO_ERA, PRIO_PRECIOS, PRIO_RESIDENTES, PRIO_TECNOLOGIA, PRIO_TITULOS, SucesoContrato, SucesoTecnologia, Asentamiento, Forja, Carga, CambioVersion, CitaReputacion, Clase, Dato, Pertenencia, Tocados, Ejercito, Estado, EventoNucleo, PlanEnPausa, Reglas, ReglasEconomia, ReglasTerritorio, SucesoBatalla, SucesoComercio, SucesoCombate, SucesoFundacion, SucesoMilitar, SIN_BANDERA, PRIO_ASENTAMIENTO, PRIO_BANDIDOS, PRIO_BATALLA, PRIO_CADUCA_POLITICA, PRIO_COMERCIO, PRIO_FIN_DE_OBRAS, PRIO_LLEGADA, PRIO_REPUTACION, PRIO_SALIDA, PRIO_UMBRAL};
+pub use estado_batallas::{entidad_batalla, EstadoBatallas};
+pub use estado_combate::{entidad_avanzada, entidad_bandidos, entidad_conquista, entidad_guarnicion, es_entidad_avanzada, es_entidad_bandidos, CampamentoBandidos, EstadoCombate, GuarnicionDeAvanzada, GuarnicionDePueblo, OrigenBandidos};
+pub use estado_fundacion::{entidad_fundacion, CaravanaFundacion, EstadoFundacion, Origen as OrigenFundacion, Situacion as SituacionFundacion};
+pub use estado_comercio::{entidad_caravana, entidad_orden, entidad_reputacion, entidad_trueque, EstadoComercio};
+pub use estado_militar::{entidad_formacion, entidad_peticion_de_convocatoria, entidad_peticion_de_union, Aspecto, EstadoMilitar, HeroeNucleo, Relacion, Trato};
+pub use generadores::{Cx, GeneradorDeEventos};
+pub use nucleo::{Alijo, Ajustes, Arranque, ErrorPresupuesto, InformeViabilidad, Miembro, Metricas, Nucleo, Presupuesto, RecintoEnPie, TokenDeJugador, HISTORICO_DE_BATALLAS};
+
+/// sha256 en hexadecimal minúsculas.
+pub fn hex(h: &[u8; 32]) -> String {
+    h.iter().map(|b| format!("{b:02x}")).collect()
+}

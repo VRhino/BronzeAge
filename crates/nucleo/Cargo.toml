@@ -1,0 +1,36 @@
+[package]
+name = "nucleo"
+version = "0.45.0"
+edition = "2021"
+description = "Núcleo de un solo hilo: aplica órdenes y eventos en (instante, prioridad, secuencia); modo acelerado y en vivo; persistencia por registro y fotos; sesiones del contrato 05 (fase 5)"
+
+[dependencies]
+base = { path = "../base" }
+cola = { path = "../cola" }
+rutas = { path = "../rutas" }
+persistencia = { path = "../persistencia" }
+mundo = { path = "../mundo" }
+encuentros = { path = "../encuentros" }
+vision = { path = "../vision" }
+territorio = { path = "../territorio" }
+asentamiento = { path = "../asentamiento" }
+comercio = { path = "../comercio" }
+militar = { path = "../militar" }
+objetos = { path = "../objetos" }
+combate = { path = "../combate" }
+rayon = "1"
+politica = { path = "../politica" }
+mercenarios = { path = "../mercenarios" }
+tecnologia = { path = "../tecnologia" }
+trazado = { path = "../trazado" }
+serde_json = "1"
+contrato = { path = "../contrato" }
+servidor = { path = "../servidor" }
+prost = "0.13"
+prost-types = "0.13"
+sha2 = "0.10"
+tokio = { version = "1.53.2", features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
+
+[dev-dependencies]
+tempfile = "3"
+zstd = "0.14.2"

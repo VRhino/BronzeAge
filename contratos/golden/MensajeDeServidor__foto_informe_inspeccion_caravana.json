@@ -1,0 +1,1 @@
+{"secuencia":"16","foto":{"ambito":{"tipo":"AMBITO_HEROE","id":"heroe-3"},"version":"70","entidades":[{"informeInspeccion":{"id":"insp-heroe-3-car-4","version":"70","heroeId":"heroe-3","objetivoId":"car-4","vistoEnMs":"100000","expiraEnMs":"700000","donde":{"x":"100000","y":"200000"},"caravana":{"escoltada":true,"recursos":["madera","piedra"]}}}]}}

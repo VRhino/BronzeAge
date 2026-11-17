@@ -1,0 +1,943 @@
+# Proyecciones y autorización
+
+> **Reescrito el 2026-10-13** en lo que cambia con la reconstrucción; el resto es la autorización y la proyección tal como son y pasa al contrato 05. Ver §«Cambios de la reconstrucción» al final.
+
+> **Implementado en Rust (2026-10-20, fase 4B-1), autorización provisional de los héroes.** Cada orden de un héroe la da su `cuenta` (`Peticion.actor`) o la administración; «fuera del mundo» bloquea todo menos `conectarse` (`heroe.fuera_del_mundo`); la presencia que pide `reclutarTropa` es `ubicacion = asentamiento` de esa plaza. Los cargos, la ciudadanía como condición y los vetos son del sistema político; mientras, la cuenta de un héroe ciudadano de la Facción de una plaza **manda en ella** como el propietario de una columna (`manda_en`). Las proyecciones y los canales del héroe son de la fase 4H.
+
+> **Implementado en Rust (2026-10-20, fase 4B-2), autorización y proyección de las columnas.** Las 22 órdenes nuevas (69-90, `Movimiento_Ejercitos.md` y `Presencia_Y_Convocatoria.md`) las da la **cuenta del héroe** que las nombra (o la administración); un héroe fuera del mundo solo puede conectarse. Para una columna: `marcharA` y `estacionarEjercito` las da su **Líder** a bordo (no desde dentro de un lugar, no una formación, `columna.en_formacion`), la administración puede con todas; `comerciarEnPlaza` y `fundar`, también su Líder; `adjuntarCaravana`, `aparcarCaravana` y `entregarMateriales`, cualquier participante; las de convocatoria, la cuenta del héroe (cancelar, responder a una petición y partir son del Líder de la convocatoria). Lo demás (política, distancia, Facción, existencias) lo valida el núcleo antes de tocar nada y sus rechazos, con sus códigos propios, están en las notas de cada documento. **Una columna pertenece a las cuentas de todos sus participantes** (`sesiones`): las ve y recibe sus eventos cada una. La entidad `Ejercito` del contrato lleva `participantes`, `tipo`, `lider_id`, `politica_de_union`, `peticiones_de_union`, `escuadron_ids`, `suministro`, `viveres` y `capacidad_viveres`, `formacion_expira_en_ms`, `caravanas_adjuntas_ids`, el estado y el plan; los ids son `heroe-N` y `ej-N`. **Aún no:** la baja de una columna disuelta en un delta (las proyecciones y la fase 4H completa), la visión por bandera con soldados (`alcance_de_vista` ya la calcula), `ordenAtacar` y los eventos de combate.
+
+> **Implementado en Rust (2026-10-23, fase 4H T3a), los ámbitos de la sesión.** Los canales de vista de §7.3 pasan a ser los ámbitos del contrato 05 §3, que el servidor abre y cierra solo (`sesiones/ambitos.rs`): `HEROE` (el héroe de la cuenta), `FACCION`, `ASENTAMIENTO` (el interior: ciudadano de la Facción dueña y dentro, la regla de `vista/asentamiento/<id>`), `CAMPAMENTO` (dentro o, desde el 2026-11-10, con su columna parada a su puerta), `VISTA` (la Facción, con el rectángulo de `CambiarVista`; sin Facción no hay) y `ADMIN` (solo administración; nadie más ve `ADMIN`, y la administración no abre los demás). Perder el derecho (salir de la plaza, cambiar de Facción, la ruina de la plaza) manda `Revocado{sin_derecho | ya_no_existe}` en el mismo reparto que lo causa y ganarlo manda la `Foto`; la reanudación decide por ámbito con `Hola.versiones_conocidas` (foto si el héroe cambió desde esa versión en los que dependen del sitio). El jugador sin héroe recibe `campamentos_para_elegir`. **Aún no** (T3b-T3e): el contenido de `FACCION` y `CAMPAMENTO`, el interior completo de la plaza, la niebla en `VISTA`, el resto del estado en `ADMIN` y las audiencias de eventos (hoy solo por `HEROE`).
+>
+> **Implementado en Rust (2026-10-23, fase 4H T3b), el contenido de `HEROE` y `FACCION`.** Del `heroe`/`ejercitos`/`caravanas`/`convocatorias`/`ordenes`/`acuerdos` de §6.3 salen las entidades del contrato 05: el héroe de la sesión con sus escuadras y loadouts (`Heroe` con `cupo_guarnicion`, Liderazgo de cada loadout y residencia derivados; nombre, clase, género y avatar por defecto hasta que Conquest publique su catálogo), las columnas en que participa alguna cuenta del héroe, las caravanas adjuntas a ellas o que escolta con una escuadra suya y las batallas en que combate (`HEROE`); y la Facción con sus ciudadanos, relaciones y tecnologías del andamiaje, sus plazas en resumen, su flota completa, sus pueblos y avanzadas (con sus obras de mapa), sus trueques (de las dos Facciones), sus órdenes de mercado con historial y sus convocatorias con las peticiones redactadas (el Líder ve todas, cada solicitante la suya) (`FACCION`). **Quién recibe qué** lo decide una función pura del estado (`proyeccion::audiencia`) que el núcleo evalúa al cerrar cada versión y deja en el registro de cambios junto a los ámbitos de los que cada entidad salió (`CambioVersion.pertenencias`): así llega el `QUITA` de lo que desaparece (una columna disuelta, una caravana perdida) o cambia de dueño (una plaza conquistada). Los cambios viajan completos (`reemplaza = true`). La reanudación por versión de `HEROE` y `FACCION` es siempre por deltas. **Aún no** (T3d-T3e, T5; el interior, el ticket y el informe de inspección llegaron en T3c y T4): la niebla, lo ajeno redactado y las audiencias de eventos. Dudas y recortes: filas «Contrato (4H, T3b)» de `Docs/Mecanicas a desarrollar.md`.
+
+> **Implementado en Rust (2026-10-23, fase 4H T3c), el contenido de `ASENTAMIENTO` y `CAMPAMENTO`** (foto `BAN22`). `vista/asentamiento/<id>` del TypeScript (el interior sin `edificios` más `edificios` como colección y `trazado`) pasa a ser **una** `Asentamiento` completa más los `Pueblo` de la plaza, y `admin/campamento/<id>` / la escena del campamento, **un** `CampamentoMercenarios` (`proyeccion::interior`). La plaza viaja como **cambio parcial con máscara de campos** (decisión 2 del autor: la sesión recuerda la plaza que tiene el cliente y manda solo los campos que cambiaron; una reanudación, la plaza entera) y el campamento y lo demás, completos. El almacén y la población van en escalones con la tendencia «+N/min» (decisión 3: el neto real del último paso de minuto, `tendencia` de la economía de la plaza, que entra en la foto: `BAN22`). El paso de minuto **no marca nada ni sube la versión del mundo** (con sesiones o sin ellas): el interior de la plaza lleva su propia secuencia, `Asentamiento.version_interior` (`Nucleo::version_interior`), que la sesión compara con la que recuerda del cliente y con la que este trae al reanudar (`Hola.versiones_interiores_conocidas`; contrato 05 §7); quién entra, sale, se muda o aparca marca la plaza o el campamento donde cambió (`Clase::Interior`, `nucleo/interiores.rs`, solo con sesiones y dentro de una versión que ya se cierra por otra razón). `ASENTAMIENTO` y `CAMPAMENTO` se reanudan siempre por deltas. Dudas: filas «Contrato (4H, T3c)» de `Docs/Mecanicas a desarrollar.md`.
+
+> **Implementado en Rust (2026-10-23, fase 4H T3d), el ámbito `VISTA` con niebla** (foto `BAN23`). `vista/mapa` del TypeScript (§6.3, la capa «mapa», con lo de la capa «héroe» que es del mapa) pasa a ser el ámbito `VISTA` del contrato 05: `VISTA:f-N` para el ciudadano de una Facción y, sin bandera, `VISTA:heroe-N` (la niebla personal del héroe, que T3a dejaba sin vista), siempre dentro del rectángulo de `CambiarVista`. Lo que se ve lo decide `proyeccion::vista::Mirada` (una por perspectiva, para todas sus sesiones): los ojos propios y los de los aliados, las Miradas abiertas, lo explorado (la memoria más lo que cada columna propia lleva andado sin grabar) y lo recordado; `Mirada::contenido` da cada entidad con su **sello** (versión y, de lo ajeno que anda, dónde acaba el tramo que se le mandó) y la sesión recuerda los sellos que tiene el cliente (`Mapa`): **la `VISTA` no sale del registro de cambios** sino de comparar lo que se ve con lo que el cliente tiene, tras cada reparto y en un muestreo de 250 ms de mundo que no toca el estado (`ACTUALIZA` de lo que entra o cambia, `QUITA` de lo que sale de la vista o del rectángulo, `NieblaProyectada` cuando cambia). Lo propio viaja como en `FACCION`/`HEROE` (la columna entera, la ficha de la plaza, los pueblos y avanzadas con sus obras) y lo ajeno, con las formas públicas de la tabla de abajo (`EjercitoAvistado`, `CaravanaAvistada` → `Caravana.recursos_avistados`, `AsentamientoAvistado`, `HeroePublico` → `Heroe.escuadras_que_lleva`, `BatallaVisible` → `propios::batalla` del espectador) más `FichaConocida` (plazas, pueblos y avanzadas recordados), `CampamentoBandidos`, `CampamentoMercenarios` (los explorados y el suyo), `ZonaFaccion`, `RedCaminos` (aristas exploradas), `MiradaIntel` e `InformePlaza`. La vista no se reanuda: se pide con `CambiarVista` al reconectar. `comprarMirada` y `comprarInformePlaza` existen (comandos 126-127): las da la cuenta del héroe, que tiene que estar dentro del lugar de la taberna (una plaza de su Facción o un campamento); DUDA: el cargo (Rey, Embajador, Gobernador) de §5 es del sistema 5. Dudas y recortes: filas «Contrato (4H, T3d)» de `Docs/Mecanicas a desarrollar.md`.
+
+> **Implementado en Rust (2026-10-23, fase 4H T3e), el ámbito `ADMIN`** (sin cambio de foto; esquema aditivo: `Batalla.asignacion`). `vistaAdminDeEstado` y los canales `admin/*` de §6.1 y §7.3 pasan a ser **un** ámbito del contrato 05, `ADMIN:`, que solo abre una sesión `CLIENTE_ADMIN_WEB` (lo que otra clase de cliente diga conocer de él se ignora; la administración no abre ningún otro ni tiene vista). Lleva **todo el estado, sin niebla ni redacción**, con las proyecciones de los ámbitos de jugador vistas por la administración (`propios::Espectador::Admin`): cada plaza **con su interior** (lo que en el TypeScript era `admin/asentamiento/<id>`, con su secuencia interior y su máscara por minuto), todas las columnas, héroes (con sus escuadras, loadouts, almacén personal e informes de inspección), Facciones con sus tecnologías y relaciones, caravanas, pueblos, avanzadas y obras (también las huérfanas), trueques, órdenes de mercado con su historial, convocatorias con **todas** sus peticiones, campamentos de mercenarios (`admin/campamento/<id>`) y de bandidos, y batallas **enteras** (ticket, incorporaciones, resultado) con la asignación que ganó **sin tokens** (`tokensParticipante` vacío, como aquí; nunca `asignacion_propia`). Y todos los eventos (`admin/eventos`). Se reparte del registro de cambios (todo lo que toca cada versión; ninguna entidad entra ni sale de `ADMIN` sin cambiar) y se reanuda por deltas, con la secuencia interior de cada plaza en `Hola.versiones_interiores_conocidas` bajo `ASENTAMIENTO:as-N`. La versión y el hash del mundo son los mismos con sesiones de administración y sin ellas. **Aún no**: `preciosReferencia`, `relojDeMundoIntervaloMs` (el reloj va en la `Bienvenida` y en `Aviso{reloj.cambiado}`), `titulos`, Aedas, el historial de cada héroe (`admin/heroe/<id>`), la memoria de la niebla de cada Facción (lo explorado, las fichas, las Miradas y los Informes de plaza), `RedCaminos` y las zonas fundidas. **Un solo rol de administración** (§2.2). Dudas y recortes: filas «Contrato (4H, T3e)» de `Docs/Mecanicas a desarrollar.md`.
+
+> **Implementado en Rust (2026-10-25, 6G), la tecnología y los Aedas en el contrato** (sin cambio de foto; esquema aditivo; `Docs/Arquitectura/Sistema6_Contraste_y_Plan.md`, «Avance de 6G»). `tecnologia` de §6.3: en `FACCION`, `TecnologiasFaccion` entera (aparecidas, adoptadas, reveladas, el detalle de cada revelada con su descubridora y `cumplidas[i]`, y las épicas posibles), y en `HEROE` la **forma pública** del estado de tecnología del mundo (`EstadoTecnologia`, entidad nueva `ESTADO_TECNOLOGIA`: la Era, `era_desde_ms`, los logros cumplidos como `{contador, umbral, en}` sin id de tecnología, lo cantado con su descubridora y, desde el 2026-11-06 (pedido del autor), los contadores en curso, renovados con el muestreo de la vista cuando suben), la misma para todos; qué tecnología abre cada logro (`logros`), solo `ADMIN` (decisión Q6). `aedasResidentes`: `AedaResidente` en `FACCION` de la dueña (`Clase::Residente`, la 19.ª del registro), con su épica y sin `claves`. `aedasAvistados`: `AedaItinerante` en `VISTA`, redactado como una columna ajena (posición, tramo visible del plan y plaza; Niebla_De_Guerra §5.4), desde el muestreo. `alijos`: `Alijo` en `HEROE`, los que tiene a la vista si puede buscarlos, renovados con el muestreo de la vista. `ADMIN`: el estado de tecnología entero, los residentes con sus claves y los itinerantes enteros, comparados en cada reparto (no pasan por el registro). Diez hechos tipados nuevos cubren los quince códigos del sistema 6 (contrato 05 §8).
+
+> **Implementado en Rust (2026-10-27, fase 7, paridad con el TypeScript), lo que quedaba de la proyección** (sin cambio de foto; esquema aditivo). (1) Una escuadra dentro de una avanzada sale `ContenedorEscuadron.avanzada_id` (`av-N`), no «en el campamento». (2) `Avanzada.almacen_por_recurso`: el almacén de la avanzada por recurso, con los recursos que tienen capacidad (el campo `almacen`, una sola `Existencia`, queda sin uso). (3) Los héroes de campo de una cuenta llegan enteros al `HEROE` del héroe de la sesión de esa cuenta, como el suyo. (4) `ADMIN` lleva también lo que no es una clase del registro de cambios: la memoria de la niebla de cada Facción (`MemoriaFaccion` `f-N`: lo explorado en bytes, sus fichas por id de sitio y sus Informes de plaza), las Miradas que aún enfrían su zona, la `ZonaFaccion` fundida de cada Facción con plazas y la `RedCaminos` entera con todas las rutas vigentes. La sesión guarda una huella de cada una y en cada reparto manda `ACTUALIZA` de las que cambiaron y `QUITA` de las que ya no están (`vista::huellas_de_admin`). (5) Un informe de inspección caducado se retira con `QUITA` del `HEROE` que lo tenía. La ruta comercial del carro de acarreo de un pueblo lleva `destino_id = pueblo-N`. Queda un recorte: el almacén de un pueblo en `FACCION` solo se refresca con su último cambio discreto (fila «Contrato (4H)» de `Docs/Mecanicas a desarrollar.md`).
+
+> **Implementado en Rust (2026-10-24, fase 4H T7), la matriz y lo que faltaba proyectar.** La matriz de §5.1 es la autorización de hoy, orden a orden, declarada en `Comando::autoriza` y comprobada contra este documento por una prueba; la de administración la aplica una sola vez `Nucleo::ejecutar` (antes, cada orden en su sitio). Los rechazos son un catálogo estable (`Docs/Coordinacion/07_Catalogo_de_Rechazos.md`). La vista lleva ya el suelo bajo cada columna propia (`territorioPorEjercito`), el almacén de la plaza propia a cuya puerta se está (`detalleDeAvistados`), la zona de la Facción fundida y la red de caminos con su escalón y las rutas propias; el héroe, el interior que recuerda de su plaza (`plazasRecordadas`); la administración, qué servidor de batalla tiene cada batalla. Lo que falta (de los sistemas 5 y 6 o de Conquest): filas «Contrato (4H)» de `Docs/Mecanicas a desarrollar.md`.
+
+> **Implementado en Rust (2026-10-25, 5H), la política en el contrato.** Todo lo que el núcleo sabe de la política viaja, de forma aditiva (foto **`BAN35`** por los fundadores de cada plaza):
+> - **Propuestas** (relación, anexión y fusión): clase nueva del registro de cambios (`Clase::Propuesta`, la 18.ª), a `FACCION` de las dos Facciones de su par y a `ADMIN`, entera (`Propuesta` con su clase y,
+>   en `propuesta_por`, **el héroe que la hizo**: 5A-7, como Diplomacia §2.4 y el TypeScript). Viaja mientras está en el almacén, también caducada (caducar no es un hecho: el cliente la descarta por
+>   `expira_en_ms`); sale con `QUITA` al contestarla, retirarla, podarla (al añadir otra de su clase) o descartarla el traslado. Lo marca `Nucleo::con_lo_politico`, que compara el almacén antes y
+>   después de cada orden de política.
+> - **La Liga y el Gran Rey**: `Faccion.liga` (`LigaDeFaccion`: miembros, si tiene vasallaje y su Gran Rey), derivada de las relaciones activas (`politica::liga::liga_de`); cada relación que nace o
+>   acaba marca, al cerrar la versión, las Facciones de la Liga de sus dos extremos (`Nucleo::marcar_ligas`). El Gran Rey es además un título (5F).
+> - **La Facción ajena en `VISTA`**: la de cada otra Facción (entidad) que nombra lo que se ve (sus columnas, caravanas, plazas, pueblos, avanzadas, fichas y batallas, y las relaciones y los títulos, que
+>   son públicos) en su **forma pública** (`propios::faccion_publica`: la Facción sin `experiencia`, `capital_id` ni `capital_designada_en_ms`), sin niebla, reconciliada por su versión
+>   (su clave y su sello, una vez por perspectiva). La propia sigue entera en `FACCION`.
+> - **El héroe**: `Heroe.faccion_id` (5B-11) y `Heroe.solicitudes_faccion_ids` (las Facciones a las que pidió entrar), en `HEROE` y `ADMIN`; `con_lo_politico` marca al héroe cuyas solicitudes cambian.
+> - **La plaza**: `Asentamiento.fundadores_ids` (5B-9; estado nuevo `Asentamiento::fundadores`: quienes la fundaron y siguen residiendo, el Líder primero; quien se muda deja de serlo y la conquista los
+>   borra), en el interior, en la ficha propia de `FACCION` y en `ADMIN` (no en la plaza ajena de la `VISTA`); y en el interior, `permite_reabastecer_aliados` y `ultima_caravana_creada_en_ms`.
+> - **Ocho hechos tipados** de la política (`PropuestaDiplomatica`, `PropuestaResuelta`, `RelacionTerminada`, `FaccionesUnidas`, `CargoAsignado`, `TituloCambiado`, `SolicitudDeIngreso`,
+>   `CiudadaniaCambiada`), además de `GuerraDeclarada`: 23 tipados en total.
+> - **Se retira el alias `FijarAcceso`** (117, 5E-12): ninguna orden del contrato lo daba; el registro de peticiones ya no lo lee. No había campo del `.proto` que reservar.
+> Las relaciones rotas siguen sin proyectarse (5D-2: sale con `QUITA` y su hecho dice cómo acabó). Ninguna orden de política da ya `orden.no_disponible` (quedan las cinco del sistema 6).
+
+> **La plaza propia desde fuera (2026-11-04, pedido del autor; Rust).** «Desde fuera se debería poder ver el contenido del almacén a quienes sean de la misma Facción», y la ventana de Facción enseña más de sus plazas. En `FACCION`, al héroe de la Facción de la plaza (no a un mercenario marcado por ella) su ficha lleva además lo de dentro de [`propios::plaza_propia`]: la secuencia interior, la población, el **almacén con su tendencia**, el medidor de mantenimiento, la nutrición, los edificios (estado, nivel, obra y mejora), el ascenso, quiénes residen, la guarnición con el dueño de cada tropa y su cupo, y si la auto-construcción está apagada (`CAMPOS_DE_PLAZA_PROPIA`). Como el paso de minuto no sube la versión del mundo, `Mesa::propias_al_dia` manda en cada paso, por cada plaza cuya secuencia interior avanzó, un cambio parcial con esa máscara (`reemplaza = false`); la plaza se proyecta una vez por paso para todas las sesiones de la Facción. Sigue siendo solo de dentro (`ASENTAMIENTO`): el trazado, los recintos, quién está dentro, las aparcadas, las misiones y el tablón, la puerta y la reserva (las políticas activas y la espera entre caravanas viajan también desde el 2026-11-10: ver el párrafo siguiente). En la `VISTA` la plaza propia sigue con la ficha de siempre (y el almacén a la puerta, §6.3). Prueba: `desde_fuera_quien_es_de_su_faccion_ve_el_almacen_y_lo_de_dentro_de_su_plaza_y_se_le_renueva_por_minuto` (`tests/interior.rs`).
+
+> **Acciones a la puerta (2026-11-10, pedido del autor; Rust).** Lo que el héroe hace a la puerta de un sitio, a bordo de su columna y sin entrar (la puerta: a `radio_puerta` o menos de la posición de la plaza, el pueblo o la puerta del campamento):
+> - **El campamento de mercenarios:** con la columna **parada** (sin plan) a su puerta, el héroe tiene su `CAMPAMENTO` como si estuviera dentro: el mercado con sus precios, las tropas que recluta y el tablón (`Nucleo::campamento_a_la_puerta`, en `ambitos::derechos`). Salir del campamento con la columna no lo quita; marchar, sí (`Revocado{sin_derecho}`), y parar otra vez a la puerta lo devuelve con su `Foto`. Como parar y arrancar tocan la columna y no al héroe, el reparto sincroniza además los derechos de las sesiones cuyo héroe va a bordo de una columna tocada (`Mesa::a_bordo_de`). Las órdenes del campamento ya valían a su puerta (`campamento.lejos`).
+> - **El mercado interno y la flota de la plaza propia:** las órdenes de mercado (`colocar_orden_mercado`, `cancelar_orden_mercado`), las de la flota que manda su origen (crear, carros, animales, mover carros, reservar, renombrar, preparar y cancelar caravanas) y los encargos (`encargar_caravana`, `cambiar_encargo`, `cancelar_encargo`, `detener_encargo`, `tomar_orden_a_distancia`) valen también **con la columna a la puerta**: la matriz es la misma (residir y el cargo) y solo «estar dentro» pasa a «dentro o a bordo de una columna a su puerta» (`Comando::vale_desde_la_puerta`, la vista `DesdeLaPuerta` de `nucleo/cargos.rs`). Las de una caravana aparcada (`puedeOperarAparcada`), las obras y las demás órdenes de plaza siguen pidiendo estar dentro. Lo que el panel necesita le llega por `FACCION`: las órdenes y la flota ya iban; la ficha de la plaza propia lleva además `politicas_activas` y `ultima_caravana_creada_en_ms` (`CAMPOS_DE_PLAZA_PROPIA`).
+> - **La guarnición de la plaza propia:** `asignar_guarnicion` y `retirar_guarnicion` con la columna a la puerta de una plaza de su Facción ([`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §7).
+> - **La guarnición de un pueblo o aldea de su Facción:** `guarnecer_pueblo` y `retirar_de_pueblo` con la columna a la puerta del pueblo ([`Economia_Construccion.md`](Economia_Construccion.md) §14.0.1).
+>
+> Pruebas: `con_la_columna_parada_a_la_puerta_de_un_campamento_se_tiene_su_ambito_y_al_marchar_se_pierde` (`tests/ordenes_mundo.rs`), `el_mercado_y_la_flota_se_mandan_tambien_con_la_columna_a_la_puerta_y_las_obras_no` (`tests/cargos.rs`), `de_la_puerta_de_una_plaza_de_su_faccion_se_guarnece_y_se_recoge_con_la_columna` (`tests/heroes.rs`) y `a_la_puerta_con_su_columna_tambien_se_deja_y_se_recoge_la_guarnicion_del_pueblo` (`tests/pueblos.rs`).
+
+> **La taberna regional (2026-11-08, tanda 69; Rust).** (1) **`FACCION` propia lleva `Faccion.informes_region`** (campo 26): por cada informe de región comprado y no repetible aún, `InformeRegion { region, tipo (plazas | ordenes), comprado_en_ms, caduca_en_ms (solo el de órdenes), libre_en_ms }` (`proyeccion/propios.rs::informes_de_region`); comprar uno toca la Facción (`Clase::Faccion`) y la reparte a sus sesiones. La **forma pública** de otra Facción los lleva siempre vacíos (`faccion_publica`), como las misiones o los miembros; `ADMIN` los lleva. (2) **El interior de una plaza con Taberna activa lleva `Asentamiento.mercenarios_region`** (campo 51): el tablón gratis de los campamentos de su región (`OfertaMercenario`, con `campamento_id` nuevo, campo 7); solo en `ASENTAMIENTO` y `ADMIN`, nunca en la plaza avistada ni sin Taberna (`proyeccion/interior.rs`). (3) **Las órdenes ajenas en la `VISTA`** también por un informe de órdenes vigente (§10). Las filas de autorización de `comprar_informe_region` y `tomar_orden_a_distancia` están en §5.1; el permiso de contratar con `almacenPlaza` es el de `contratar_mercenario` más la condición de `compraIntel` de la plaza (Mercenarios_Por_Contrato §3.3), y desde el 2026-11-12 también el de contratar con `fondoPlaza`, el fondo de monedas de la plaza, con los mismos firmantes (el Rey, el Embajador o el Gobernador, dentro; §5.1 del mismo documento).
+
+> **Mercenarios por contrato (2026-11-01, en Rust; [`Mercenarios_Por_Contrato.md`](Mercenarios_Por_Contrato.md) §10).** Un mercenario contratado (marcado) **no abre el ámbito `FACCION`**: lo suyo le llega por su `HEROE`, que lleva su contrato y su orden (`Heroe.contrato`), su ficha entera (`Heroe.ficha_mercenario`), la `Faccion` que le paga en su forma pública (`propios::faccion_publica`) y las entidades **de esa Facción** a las que apuntan su contrato o su orden (plaza, pueblo, avanzada, caravana, ejército, convocatoria; `audiencia::de` mira solo los marcados de la Facción dueña). Le llegan al firmar o al recibir la orden y salen con `QUITA` al acabar (el núcleo toca el objetivo). Su `VISTA` es la personal. En `FACCION`, los ciudadanos sin marca reciben `Faccion.contratos` y la marca de cada miembro (`MiembroFaccion.marca`); en la `VISTA`, el héroe público lleva la marca (`Heroe.contratado`) y la ficha reducida; el `CAMPAMENTO` (desde dentro) lleva el tablón (`CampamentoMercenarios.tablon`) con la tarifa de cada plazo. Las nueve órdenes están en la matriz de §5.1.
+
+## 1. Alcance y fuentes
+
+Cubre **quién puede hacer qué** y **qué ve cada uno**: los roles técnicos y las superficies del servidor, el camino de un comando desde la petición hasta el motor, los predicados de pertenencia en los que se apoya la autorización, **la matriz de autorización** (en Rust, las 191 órdenes del contrato y los 217 comandos del núcleo, §5.1, cuentas al día el 2026-11-12; la del TypeScript, de 122 comandos, en §5.2), lo que el servidor proyecta a cada audiencia (administración, jugador, eventos) y cómo se reparte por los canales de tiempo real (foto + delta).
+
+- **Verificado contra:** `3d19d31` (2026-10-12).
+- **Fuentes:** `acceso/tipos.ts`, `acceso/rolesDePartida.ts`, `acceso/servicioAutenticacion.ts`, `engine/pertenencia.ts`, `session/comandos/autorizacion.ts`, `session/comandos/registro.ts`, `session/comandos/tipos.ts`, `session/proyecciones/jugador.ts`, `session/canales.ts`, `session/vistas/{segmentos,diff,movimiento}.ts`, `session/estado.ts` (`vistaAdminDeEstado`), `server/rutas/*.ts`, `server/difusion/{hub,difusorDeVistas}.ts`, `server/runnerDePartida.ts` (`ejecutar`).
+- **Canon:** [`Docs/Game/2_Sistema_Politico_Facciones_y_Cargos.md`](../Game/2_Sistema_Politico_Facciones_y_Cargos.md) 2.2 (cargos) y 2.5 (la ciudadanía habilita, la presencia ejerce), [`Docs/Game/1_Sistema_de_Mundo_y_Territorio.md`](../Game/1_Sistema_de_Mundo_y_Territorio.md) 1.10 (el héroe está situado). El contrato con los clientes está en `Docs/Coordinacion/` (`02`, `03`); la arquitectura de identidad, en `typescript-final:Docs/Arquitectura/5_Contratos_Identidad_Permisos.md`.
+- **No está aquí** (está en su documento):
+  - **Las reglas de la niebla** (qué se ve ahora, qué se recuerda, ojos, visión compartida, Miradas) → [`Niebla_De_Guerra.md`](Niebla_De_Guerra.md) §3–§5. Aquí solo se dice dónde encaja cada una en la proyección.
+  - **Qué hace cada comando por dentro** → el documento de su familia (la tabla de §5 dice cuál).
+  - **El ciclo de la batalla de Unity** (rutas `/v1/batallas/*` que usa el servidor de batalla, el candado, aplicar el resultado) → `Batalla_Unity_Ciclo` (pendiente). Aquí solo se nombra su lugar en el camino de un comando (§3).
+  - La persistencia, el diario, los respaldos, la auditoría en disco y la telemetría: son de despliegue, no del juego.
+  - El generador aleatorio: ninguna de estas piezas lo consume.
+
+## 2. Actores
+
+### 2.1 Identidad
+
+```
+Usuario            { id, creadoEn, deshabilitado }                 una cuenta, fuera de cualquier partida
+IdentidadVinculada { usuarioId, proveedor, sujetoId, email? }      N identidades por Usuario
+Sesion             { id, usuarioId, emitidaEn, expiraEn }          credencial activa; dura DURACION_SESION_MS
+Membresia          { usuarioId, gameId, jugadorId|null, rol, desde, hasta?, motivoFin? }
+                   — UNA por (Usuario, partida). Vigente si hasta == null ∨ hasta > ahora (`esVigente`).
+```
+
+- **Login** (`POST /v1/sesiones`, cabecera `Authorization: <esquema> <credencial>`): el proveedor del esquema verifica la credencial; se busca el `Usuario` de esa identidad externa y, si no existe, **se crea** (y se vincula la identidad). Un usuario `deshabilitado` es rechazado como credencial inválida. **Cada login emite una sesión nueva**; nunca reutiliza otra. Una credencial que falla, un esquema sin proveedor o una cabecera mal formada responden 401.
+- **Resolver la sesión** (`Authorization: sesion <id>`; en WebSocket también `?sesion=<id>`, porque un navegador no puede poner cabeceras en el *handshake*): la sesión existe, `expiraEn > ahora` (ISO 8601, comparación lexicográfica) y su usuario no está deshabilitado. Si no, no hay actor (401).
+- **Alta de cuenta** (`POST /v1/registro`, proveedor `clave`: nick + contraseña): el nick se normaliza (recortado, en minúsculas) y es la clave de búsqueda y el `sujetoId`. Con `CODIGO_REGISTRO_BOTS` configurado y coincidente, la cuenta es **de bot** (`bot: true`) y se salta el código de invitación; si no, con `CODIGO_REGISTRO` configurado hace falta que coincida (si no, 403); sin él el registro está abierto. No devuelve sesión: el cliente hace login después. Nick repetido = 409; datos inválidos = 400.
+> **Implementado en Rust (2026-10-26, fase 7, 7B): el servicio de acceso mínimo** (`crates/acceso`, servido por `bronzeage-servidor` en el mismo puerto que el WebSocket). Alta y login como arriba, con estas diferencias: el login es `POST /v1/sesiones` con `{nick, clave}` en el cuerpo JSON (no por cabecera) y devuelve `{token, cuenta_id, nick, bot, admin, expira_ms}` (`admin`, booleano, también en las respuestas de `POST /v1/registro` y `GET /v1/sesiones/actual`); el token es opaco (32 bytes al azar, en hexadecimal) y va en `Hola.token`; `GET /v1/sesiones/actual` con `Authorization: sesion <token>`; el nick tiene de 3 a 32 caracteres (letras, cifras, `_`, `-`, `.`) y la clave de 8 a 128 (decisión técnica); las claves con Argon2id. El id de la cuenta (`u-N`) es el `cliente_id` de la sesión y la cuenta del héroe. **Qué clase de cliente abre cada cuenta**: la de bot, solo `CLIENTE_BOT` (rol `jugador`, sin ningún privilegio); la humana, `CLIENTE_UNITY`; la humana con la marca `admin`, además `CLIENTE_ADMIN_WEB` como `administrador_global`. **La marca `admin` vive en la cuenta** (`cuentas.jsonl`, una línea por cada cambio); desde el 2026-11-08 ya no existe la variable de entorno `ADMINISTRADORES`. Un bot nunca es administrador, y la partida nunca se queda sin ninguno. **Cómo nace el primero**: si al arrancar no hay ninguna cuenta administradora, el servidor imprime en su consola un código de un solo uso (solo en memoria, no se guarda); quien se registra con ese código (`POST /v1/registro` con `codigo`) nace administrador y lo gasta. **Después**, un administrador da y quita la marca con `GET`/`PUT /v1/admin/administradores` o por la entrada estándar del proceso (`admin dar <nick>`, `admin quitar <nick>`). Aún no hay membresías por partida (el moderador y el administrador de la partida), ni cuentas deshabilitadas, ni cierre de sesión. Desde el 2026-11-08: `DELETE /v1/sesiones/actual` cierra la sesión y anula ese token (también tras un reinicio), y los cálculos de Argon2 van acotados a los núcleos del servidor (`503 ocupado` si no hay turno en 2 s).
+>
+> **Implementado en Rust (2026-11-11): las cuentas de servidor de batalla.** Con `CODIGO_REGISTRO_SERVIDORES` en el servidor, quien se registra con ese código tiene una cuenta **de servidor de batalla** (`servidor: true` en las respuestas de alta y login, en `cuentas.jsonl` y en `GET /v1/admin/partida`, que cuenta cuántas hay). Su token solo abre `CLIENTE_SERVIDOR_BATALLA` (rol `jugador`), nunca es administradora (`400 es_servidor` al darle la marca) y su id es el servidor de las batallas que asigna. Sin el código no hay ninguna. Es la cuenta del lanzador ([`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §8.8); sustituye a la lista `SERVIDORES_BATALLA` del TypeScript.
+
+> **Implementado en Rust (2026-10-26, fase 7): las rutas de administración del proceso** (`crates/servicio/src/admin.rs`), solo para una cuenta con la marca `admin` por `Authorization: sesion <token>` (`401 token_invalido` sin sesión, `403 no_autorizado` con otra cuenta): los datos de la partida (`GET /v1/admin/partida`), el código de invitación en caliente (`GET`/`PUT /v1/admin/registro/codigo`; el cambio dura hasta el siguiente reinicio) los respaldos (`POST`/`GET /v1/admin/respaldos`: foto y copia de `mundo/` y `acceso/` hecha por el núcleo entre dos órdenes) y el catálogo vigente de las misiones recurrentes (`GET /v1/admin/misiones/catalogo`, desde el 2026-10-28) y la medida de carga del motor (`GET`/`POST /v1/admin/carga`, desde el 2026-11-05: `Docs/Arquitectura/Medida_De_Carga.md`) y los administradores (`GET`/`PUT /v1/admin/administradores`, desde el 2026-11-08: `{ nick, admin }`; `404 no_encontrado`, `400 es_bot`, `409 ultimo_administrador`). Estas rutas, y el `Hola` de `CLIENTE_ADMIN_WEB`, solo se atienden desde la máquina del servidor o una IP de `BRONZEAGE_IPS_ADMIN` (`403 ip_no_permitida` / `rol_no_permitido`; detrás de un proxy inverso en la misma máquina todas las conexiones parecen locales y la protección es solo la cuenta), o desde cualquier IP con la llave de administración `BRONZEAGE_LLAVE_ADMIN` (2026-11-17: en la cabecera `X-Llave-Admin` o en la consulta `?llave=…`; para un servidor alojado detrás de un proxy ajeno, donde la IP que se ve es la del proxy). Restaurar, crear, cambiar y borrar partidas lo hace el panel de arranque, que para y arranca el proceso (`Docs/Coordinacion/08_Consumo_del_Contrato.md`).
+
+- **La Facción del actor no se guarda en la membresía**: se deriva siempre de `Faccion.ciudadanosIds` en el momento de preguntar (una anexión o fusión mueve ciudadanos de Facción y una copia quedaría vieja).
+- **`jugadorId`** de una membresía de jugador = el `id` del `Usuario`. El héroe del jugador es el que tiene `Heroe.jugadorId == jugadorId` (puede no existir todavía).
+
+<!-- parametros:ACCESO -->
+```json
+{
+  "duracionSesionMs": 43200000
+}
+```
+<!-- /parametros -->
+
+### 2.2 Los cinco roles técnicos
+
+`RolTecnico = jugador | administrador_partida | moderador | administrador_global | servicio_npc`. **Son un eje distinto del de los cargos del juego** (Rey, Gobernador…): un administrador no hereda ningún cargo ni puede actuar como jugador por serlo.
+
+> **En Rust, un solo rol de administración hasta el sistema 5** (decisión del autor, 2026-10-24): toda sesión `CLIENTE_ADMIN_WEB` ve lo mismo (el ámbito `ADMIN` entero) y da todas las órdenes de administración; `moderador` y `administrador_partida` no se distinguen hasta que el sistema 5 traiga las membresías.
+>
+> **Implementado en Rust (2026-10-25, 5E): los roles técnicos por membresía.** El servicio de acceso dice el rol de la membresía de la cuenta (`servidor::Identidad::rol`, `RolTecnico`: `jugador`, `administrador_partida`, `moderador`, `administrador_global`). En una sesión `CLIENTE_ADMIN_WEB` el **moderador ve el ámbito `ADMIN` y no da ninguna orden** (`no_autorizado`); el administrador de la partida y el global dan las de administración (el andamiaje de escenarios y el reloj: en Rust no hay `cancelarBatalla` de administrador, la batalla la cancela quien la inició). Para un jugador el rol no cuenta: lo que puede lo dice la matriz.
+
+`rolEnPartida(actor)`: **manda la `Membresia` vigente** de esa partida; solo si no hay ninguna cae a `administrador_global` (si el usuario figura como tal en la instancia); si tampoco, no tiene rol. (Un administrador global que **además** es jugador de esa partida actúa con el rol `jugador` en los comandos.)
+
+`administrador_global` **no es una membresía**: es una propiedad de la instancia, no repartible por partida. **En Rust (desde el 2026-11-08) es la marca `admin` de la cuenta**, que nace con el código de un solo uso del primer arranque y se reparte después entre cuentas humanas (§2.1); el diseño de membresías de arriba sigue sin implementar. (El diseño original, en TypeScript, la sacaba de una lista `proveedor:sujetoId` en la variable de entorno `ADMINISTRADORES`.) Sin ninguna cuenta administradora, **nadie** lo es. `servicio_npc` es el actor interno `'sistema'` (`ACTOR_SISTEMA`): el tick y los mensajes del servidor de batalla; **no pasa por la autorización de cliente**.
+
+| Rol | `puedeJugar` | `puedeAdministrar` | `puedeCrearPartida` | `puedeDescartarPartida` | `puedeGestionarMembresias` | Comandos de partida (matriz §5) |
+|---|:-:|:-:|:-:|:-:|:-:|---|
+| `jugador` | ✔ | – | – | – | – | los que la matriz le da |
+| `administrador_partida` | – | ✔ | – | ✔ | ✔ | solo `cancelarBatalla` |
+| `moderador` | – | ✔ | – | – | – | **ninguno** |
+| `administrador_global` | – | ✔ | ✔ | ✔ | ✔ | solo `cancelarBatalla` |
+| `servicio_npc` | – | – | – | – | – | no aplica (actor `'sistema'`) |
+
+- `puedeJugar(actor)` = la **membresía vigente** tiene rol `jugador`. Tener acceso técnico no es tener personaje: un administrador sin membresía de jugador no puede usar `/jugador/*`.
+- `puedeAdministrar(actor)` = `esAdministradorGlobal` ∨ membresía con rol `administrador_partida` o `moderador`.
+- `puedeDescartarPartida` = `esAdministradorGlobal` ∨ rol `administrador_partida` (el moderador queda fuera: no regenera el mundo). `puedeGestionarMembresias`, igual.
+- **Roles otorgables** por `POST /admin/partidas/:gameId/membresias`: `administrador_partida`, `moderador`. `jugador` solo se obtiene uniéndose (`/membresia`); `administrador_global` y `servicio_npc` no se reparten. Otorgar a quien ya tiene membresía (vigente o no) es 409: hay que revocar antes.
+- Quien **crea o reabre** una partida (solo `administrador_global`) recibe una membresía `administrador_partida` sobre ella si no tenía ninguna.
+
+### 2.3 Superficies (todas bajo `/v1`)
+
+| Superficie | Ruta | Exige |
+|---|---|---|
+| Sin sesión | `GET /salud` (fuera de `/v1`), `GET /v1/balance`, `GET /v1/openapi.json` | nada |
+| Sesión | `POST /sesiones`, `POST /registro` (código de invitación), `GET /sesiones/actual?gameId=` | credencial / sesión |
+| Jugador | `GET /jugador/partidas` (lista las abiertas con lo del propio usuario), `POST /jugador/partidas/:g/membresia` | sesión |
+| Jugador | `GET /jugador/partidas/:g` (proyección), `.../eventos?desde=`, `.../cronica`, `.../mapa/:mapaId`, `POST .../comandos`, `GET .../batallas/:b/asignacion`, WebSocket `.../tiempo-real` | `puedeJugar` (+ la partida abierta) |
+| Administración | `GET /admin/partidas/:g` (estado completo), `.../eventos`, `.../exportar`, `.../mapa/:mapaId`, `POST .../reloj` (acelerar, pausar o fijar el factor del reloj de mundo; sustituye a `POST .../tick`), `POST .../comandos`, `GET .../auditoria`, `PUT .../playtest`, `GET .../carga`, `GET .../membresias`, WebSocket `.../tiempo-real` | `puedeAdministrar` |
+| Administración | `POST` y `DELETE .../membresias[/:usuarioId]` | `puedeGestionarMembresias` |
+| Instancia | `GET /admin/partidas`, `POST /admin/partidas` (crear / reabrir), `GET` y `PUT /admin/registro/codigo`, `GET /admin/metricas`, `/admin/respaldos*` | `administrador_global` |
+| Instancia | `POST /admin/partidas` con `forzar`, `DELETE /admin/partidas/:g` | `administrador_global` ∧ `puedeDescartarPartida` |
+| Servidor de batalla | `/batallas/*` | cabecera con un token de servidor **declarado** (ni admin ni jugador) |
+
+Orden de las comprobaciones en cada ruta de partida: **sesión (401) → rol de la superficie (403) → partida abierta en este proceso (404)**. En administración se comprueba el rol antes de la existencia de la partida para no revelarla a quien no puede verla. Un `GET /jugador/partidas/:g/batallas/:b/asignacion` exige además combatir en esa batalla (403) y que ya exista su token (404).
+
+## 3. El camino de un comando
+
+```
+POST /jugador/partidas/:g/comandos   |   POST /admin/partidas/:g/comandos          { tipo, params, idempotencyKey? }
+
+ 1. sesión → membresía → puedeJugar / puedeAdministrar                              401 / 403 / 404
+ 2. validación del cuerpo contra `ESQUEMAS_PARAMS[tipo]` (un `oneOf` cerrado por comando; `additionalProperties: false`)
+                                                                                    400 (y queda auditado: causa 'esquema')
+ 3. el ACTOR se arma desde la sesión, nunca desde el cuerpo:
+      /jugador: { rol: 'jugador', heroeId: <su héroe o null> }
+                si tipo == crearHeroe y la cuenta es de bot → params.controlador = 'bot' (lo decide la cuenta, no el cliente)
+                (en Rust desde el 2026-11-01: `ordenes::traducir` recibe si la sesión es CLIENTE_BOT y crea el héroe bot; antes todo héroe del contrato nacía humano.
+                 `CrearHeroe` ya no rechaza el controlador bot de quien no es administración: el núcleo confía en la sesión, y el cliente no puede elegirlo)
+      /admin:   { rol: rolEnPartida(actor), heroeId: <su héroe, si tiene membresía de jugador> }
+ 4. verificarAutorizacion(tipo, params, estado, actor)                              403 { error: 'no autorizado (<motivo>)' }  (§4)
+ 5. runner.ejecutar(tipo, params, actorId, idempotencyKey)
+      – entra en la COLA SERIAL de la partida (el núcleo de un solo hilo; los eventos programados comparten esa cola)
+      – idempotencia: la clave es  actor ':' idempotencyKey ; un segundo intento (en curso o ya resuelto) devuelve LA MISMA promesa
+        sin volver a aplicar el comando. No se compara que el comando coincida. Recuerda las últimas `limiteIdempotencia` (500) claves. *(En Rust, las últimas `limiteIdempotenciaPorCuenta` (64) de cada cuenta: Reloj_Y_Eventos §9.)*
+ 6. GameSession.ejecutar → candado de batalla → manejador del comando                (Tick §3)
+      – el candado rechaza con `batalla.bloqueado` todo comando que toque algo en una batalla activa, salvo `unirseABatalla` y `cancelarBatalla`
+ 7. se difunden los eventos del comando por los canales de eventos (§7.2)
+ 8. respuesta 200 { gameId, instante, version, mapaId, resultado, [proyeccion] }   (`proyeccion` solo en /jugador: la del propio jugador ya actualizada)
+```
+
+- **Un rechazo del dominio NO es un error HTTP**: responde 200 con `resultado.ok == false`, `codigoError` (catálogo cerrado de `session/comandos/codigosDeError.ts`) y, si el motor da la causa concreta, `detalleError`. Un cliente decide por el código, nunca parseando el texto. Solo un fallo de persistencia (el comando se aplicó en memoria y no se guardó) responde 409.
+- **Tipo desconocido**: 400. La validación de forma del paso 2 ya lo cubre en HTTP; `ejecutarComandoHttp` repite la comprobación como red de seguridad.
+- **Actor en el motor** (`actorId`): el `id` del héroe; sin héroe todavía, el `jugadorId` que va a crearlo; en administración sin personaje, `admin:<usuarioId>`.
+- **Auditoría**: cada petición deja **una** línea en una de cuatro salidas: tipo inválido o forma inválida (`esquema`), no autorizado (`autorizacion`, con el motivo), ejecutado (aceptado, o rechazado por el dominio con `causa: 'dominio'` y su `codigoError`) y fallo de persistencia. Con `instante`, `version` y milisegundos. Un administrador queda distinguible de un jugador por su `actor`.
+
+## 4. La autorización de un comando
+
+### 4.1 Algoritmo (`verificarAutorizacion`)
+
+```
+verificarAutorizacion(tipo, params, estado, actor):
+  entrada = MATRIZ_AUTORIZACION[tipo]
+  si actor.rol ∉ entrada.rolesPermitidos             → denegado 'rol_insuficiente'
+  si actor.rol == 'jugador':
+      si actor.heroeId == null                       → (tipo == 'crearHeroe') ? autorizado : denegado 'condicion_dominio'
+      si tipo ≠ 'conectarse' ∧ héroe(actor).fuera    → denegado 'fuera_del_mundo'
+      si entrada.condicionJugador ∧ ¬condicionJugador(estado, heroeId, params)
+                                                     → denegado 'condicion_dominio'
+  autorizado
+```
+
+- **La condición de dominio solo se evalúa si el actor entra con el rol `jugador`.** Un administrador que pasa el filtro de rol (solo `cancelarBatalla`) no está sujeto a ella: para él el rol ya es autoridad completa.
+- **«Fuera del mundo»** (`Heroe.fuera`, el héroe desconectado, Presencia §7) bloquea **todo** menos `conectarse`.
+- **Exhaustividad**: la matriz es un tipo indexado `{ [T in TipoComando]: … }`: un comando nuevo sin fila no compila, y `autorizacionComandos.test.ts` compara las claves con el registro real.
+- **Lo que la matriz NO decide**: la autorización solo responde «¿tiene este actor, por su relación de juego con la entidad objetivo, derecho a *intentarlo*?». Las demás condiciones (hay oro, está a la puerta, la tropa cabe…) las comprueba el comando y las rechaza con su código de dominio.
+
+### 4.2 Fail-open: una entidad que no existe pasa la matriz
+
+Casi todos los resolutores devuelven «autorizado» cuando la entidad referenciada **no existe** (asentamiento, Facción, caravana, ejército, acuerdo, propuesta, relación, batalla, escuadra): el comando la rechaza después con su código (`asentamiento.no_existe`…), que dice mucho más que un «no tienes permiso» engañoso. Ninguna acción no autorizada llega a aplicarse, porque el comando no puede actuar sobre lo que no existe. **Excepción: `responderSolicitud` es fail-closed** (una Facción inexistente deniega: `faccion.reyId === héroe` es falso).
+
+### 4.3 Predicados
+
+Todos son funciones del estado y del héroe del actor (`yo`). Los de pertenencia viven en `engine/pertenencia.ts` y `engine/faccion.ts` (única definición); la matriz solo los combina.
+
+| Predicado | Definición |
+|---|---|
+| `ciudadano(F)` | `yo ∈ F.ciudadanosIds` |
+| `rey(F)` | `F.reyId == yo` |
+| `reyOEmbajador(F)` | `F.reyId == yo ∨ F.embajadorId == yo` |
+| `residente(A)` | `yo ∈ A.heroesFundadoresIds ∨ yo ∈ A.casasCompradas` |
+| `presente(A)` | `estaEnAsentamiento`: la ubicación del héroe (la registrada, o `ubicacionDeducida` si no hay) es `asentamiento` de **esa** plaza. Para las órdenes del mercado interno y la flota (`Comando::vale_desde_la_puerta`, 2026-11-10), también ir a bordo de una columna a su puerta |
+| `reside(A)` | `residente(A) ∧ presente(A)` — **si A no existe, verdadero** |
+| `cargo(A, c)` | `reside(A) ∧ A.cargos[c] == yo` — **si A no existe, verdadero**. Pregunta si *tú* eres el titular, no si el puesto está cubierto |
+| `autoridadDiplomatica(F)` | `ciudadano(F) ∧ reyOEmbajador(F)` (F inexistente: verdadero) |
+| `reyDeFaccion(F)` | `ciudadano(F) ∧ rey(F)` (F inexistente: verdadero) |
+| `reyDelAsentamiento(A)` | `reyDeFaccion(A.faccionId)` — **no exige residir ni estar presente**: designar Gobernador es un acto de nivel Facción, como designar Embajador |
+| `reyDeLaPlaza(A)` | lo mismo, con la Facción dueña de `A` |
+| `resideEnOrigen(caravana)` | `reside(caravana.origenAsentamientoId)` |
+| `puedeOperarAparcada(caravana, A)` | `residente(origen de la caravana) ∧ presente(A)`: es suya (origen) y está **donde está aparcada**, no en el origen del que marchó |
+| `puedeReclutarEnPlaza(A)` | `puedeReclutarEn(A, yo, mi Facción) ≠ 'no' ∧ presente(A)` (`'todo'` si resides; `'solo_reponer'` si eres de la Facción dueña y no estás vetado; si no, `'no'`) — detalle en [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) |
+| `puedeMoverTropaDe(A)` | `residente(A) ∧ presente(A)` (A inexistente: verdadero) |
+| `escuadrasPropias(ids)` | cada id que **existe** es una escuadra de `yo` (un id inexistente pasa) |
+| `enEjercito(e)` | `yo ∈ e.participantes` ∨ `yo` tiene una escuadra con contenedor `ejercito` en `e` (un viajero solo también va dentro, Doc 5.12.1). Ejército inexistente: verdadero |
+| `dirigeAedas(A)` | `presente(A)` ∧ (`rey(F de A)` ∨ `A.cargos.gobernador == yo` ∨ `A.cargos.sacerdote == yo`). No exige residir |
+| `compraIntel(origen)` | origen = campamento: verdadero (el comando mira que esté dentro); origen = plaza: `presente(A)` ∧ (`reyOEmbajador(F de A)` ∨ `A.cargos.gobernador == yo`) |
+| `yo` | `heroeId (actor) == params.heroeId`: nadie actúa a nombre de otro |
+
+## 5. La matriz de autorización
+
+### 5.1 En Rust: quién da cada orden hoy (4H T7, 2026-10-24)
+
+Las **190 órdenes del jugador del contrato 05** (`orders.proto`, cuenta al día el 2026-11-12), la orden genérica de administración y los cinco mensajes del canal del servidor de batalla, con el comando del núcleo que da cada una y quién puede darla. Desde 5E es la matriz de §5.2 (cargos, residencia y presencia); las órdenes que el TypeScript no tenía (pueblos, avanzadas, murallas) siguen su misma lógica.
+
+> **Implementado en Rust (2026-10-24, 5B):** las nueve órdenes de la Facción, la ciudadanía y la residencia (128-136) y dos clases nuevas de `Autoriza`: `ReyDeLaFaccion` (`responder_solicitud`, sin excepción, como `responderSolicitudes` de §5.2; `asignar_embajador`) y `CiudadanoDeLaFaccion` (`asignar_rey`: un ciudadano si no hay Rey; con Rey, solo él). Las comprueba el predicado del crate `politica` (`autorizacion::Actor`) sobre el núcleo (`Vista`, sin cargos hasta 5E). El resto de la matriz no cambia hasta 5E.
+
+> **Implementado en Rust (2026-10-24, 5C):** `designar_capital` (137, `ReyDeLaFaccion`) y `renombrar_asentamiento` (143, clase nueva `ResidenteDeLaPlaza`: la cuenta del héroe, que reside en la plaza; basta residir, como el TypeScript). Con 5G-a, quedan 27 órdenes no disponibles.
+
+> **Implementado en Rust (2026-10-25, 5F):** las seis órdenes de la anexión y la fusión (168-173; del 158 al 167 quedan para 5E), sin clase nueva de `Autoriza`: proponer y retirar una anexión, la autoridad diplomática de la absorbente (`AutoridadDiplomatica`); contestarla, el Rey de la absorbida; las tres de la fusión, el Rey (`ReyDeLaFaccion`) de A al proponer y retirar y de B al contestar (§5.2.7). Quedan 7 órdenes no disponibles.
+
+> **Implementado en Rust (2026-10-24, 5D):** las nueve órdenes de las relaciones entre Facciones (144-152; las 153-157 son de 5G-b) y una clase nueva de `Autoriza`, `AutoridadDiplomatica` (la cuenta del héroe, ciudadano y Rey o Embajador de la Facción que actúa: `politica::autorizacion::Actor::autoridad_diplomatica`). `responder_relacion` y `admitir_otras_facciones` son del Rey (`ReyDeLaFaccion`); `alternar_reabastecer_aliados`, de quien manda en la plaza hasta 5E. Con 5G-b, quedan 13 órdenes no disponibles.
+
+> **Implementado en Rust (2026-10-25, 6C):** `adoptar_tecnologia` (175, `ReyDeLaFaccion`: la cuenta del héroe, Rey de la Facción que nombra la orden), con los rechazos finos de `Tecnologia_Aedas.md` §4 en el orden del TypeScript; la tecnología va por su id del catálogo (una desconocida se rechaza en la traducción, `tecnologia.desconocida`). Quedan 3 órdenes no disponibles, las de los Aedas.
+
+> **Implementado en Rust (2026-10-25, 6D):** `comprar_tecnologia_aeda` (176, clase nueva de `Autoriza`, `CompraTecnologiaAeda`: la cuenta del héroe, dentro de la plaza y Rey de la Facción dueña o su Gobernador titular, `politica::autorizacion::Actor::compra_tecnologia_aeda`), con los rechazos finos de `Tecnologia_Aedas.md` §6.4 en el orden del TypeScript; paga el almacén de la plaza y se vende a su Facción dueña (decisión 16 del plan del sistema 6). Quedan 2 órdenes no disponibles, las épicas.
+
+> **Implementado en Rust (2026-10-25, 6E):** `empezar_epica` (177) y `abandonar_epica` (178), con una clase nueva de `Autoriza`, `DirigeAedas` (`dirigeAedas` de §4.3: el héroe de la cuenta dentro de la plaza y Rey de su Facción dueña, su Gobernador o su Sacerdote; no exige residir), y los nueve rechazos finos `epica.*` de `Tecnologia_Aedas.md` §7.2 en el orden del TypeScript. El Aeda va por su id `aeda-rN`; uno sin esa forma no vive en ninguna plaza (`epica.no_vive_aqui`, en la traducción). Con 6D (`comprar_tecnologia_aeda`) no queda ninguna orden no disponible.
+
+> **Implementado en Rust (2026-10-25, 6F):** `abrir_alijo` (174, `CuentaDelHeroe`: el héroe de la cuenta, que el contrato no nombra) con su condición de `Generacion_Del_Mundo.md` §12, en su propia fila (C7 del plan del sistema 6: antes iba agrupada con las órdenes de campamento). Quedan 4 órdenes no disponibles, las de tecnología y Aedas.
+
+> **Implementado en Rust (2026-10-25, 5E):** la matriz de las órdenes de plaza es la de §5.2. Se retiran `manda_en` y «ciudadano de la madre» (`colocar_avanzada` lo dejó el 2026-10-25, 5E-1: lo da el Gobernador o el Maestro de Obras de la madre con su columna en el sitio, `Autoriza::CargoEnElSitio`), y `Autoriza` gana
+> `Cargo(..)` (el titular de alguno de esos cargos, que reside en la plaza y está dentro: `cargo(A, c)`), `CargoDeLaOrden` (el que nombra la orden: `activar_politica`, `comprometer_recinto`, `mejorar_recinto`),
+> `ResidenteDentro` (`reside(A)`, `resideEnOrigen`), `OperaAparcada` (`puedeOperarAparcada`), `AsignaCargoLocal`, `FijaPuerta` y `CompraIntel`; las aplica una sola función (`Nucleo::autorizar_en_plaza`,
+> `crates/nucleo/src/nucleo/cargos.rs`) con los predicados de `politica::autorizacion::Actor`. Las órdenes de plaza no nombran héroe: vale cualquiera de los héroes de la cuenta (índice cuenta → héroes,
+> sin recorrer el mundo). Las obras de mapa (pueblos y la mejora, reparación, destrucción y cancelación de avanzadas) son del panel de la plaza madre (Doc 4.2.2): su Gobernador o su Maestro de Obras,
+> dentro; elegir la tropa de serie, el Gobernador; guarnecer y retirar de una avanzada, la cuenta del héroe (como `asignar_guarnicion`). Órdenes nuevas: `asignar_cargo_local` (158), `fijar_puerta`
+> (159, antes `FijarAcceso`, que se quedó en el núcleo como alias hasta 5H: retirado el 2026-10-25, 5E-12; el código 117 ya no se lee) y `vetar_jugador` (160); quedan 11 órdenes no disponibles. El `cargo` de las órdenes de obras no viaja al núcleo: vale el titular de
+> cualquiera de los dos (Gobernador o Maestro de Obras).
+
+- **Quién la da** es `Comando::autoriza` (`crates/nucleo/src/comando.rs`, un `match` sin comodín sobre los 196 comandos: un comando nuevo no compila hasta decidirlo). Cada orden comprueba la suya en su sitio y rechaza con `no_autorizado`; la de administración la comprueba una sola vez `Nucleo::ejecutar`. La administración (`Peticion.admin`) puede con todas salvo las del servidor de batalla, que exigen su credencial (`batalla-servidor:<id>`, `batalla.sin_credencial`).
+- **La sesión** añade dos filtros antes del núcleo (`sesiones::ordenes::traducir`, `sesiones.rs`): la orden genérica de administración y `controlar_reloj` solo los da una sesión `CLIENTE_ADMIN_WEB` (`no_autorizado` en cualquier otra), y los mensajes del canal de batalla solo llegan de una sesión `CLIENTE_SERVIDOR_BATALLA`. El actor de la petición es siempre la cuenta de la sesión, nunca un dato del cuerpo: las órdenes que no nombran héroe usan el de la cuenta.
+- **«Además»** es lo que la orden exige después de autorizarla, con su rechazo de dominio (el catálogo de códigos está en `Docs/Coordinacion/07_Catalogo_de_Rechazos.md`). Un héroe fuera del mundo solo puede `conectarse` (`heroe.fuera_del_mundo`), salvo `cancelar_convocatoria`. Una entidad que no existe se rechaza con su código de «desconocida», antes de mirar quién la manda (como el fail-open de §4.2).
+- **La prueba** `la_matriz_de_autorizacion_del_documento_es_la_del_codigo` (`crates/nucleo/src/sesiones/ordenes/pruebas.rs`) lee este bloque y lo compara con el código: falla si falta una orden, sobra una o no coincide su comando o quién la da. La columna «Además» no se compara.
+
+<!-- autorizacion -->
+
+**Los cargos de la plaza (sistema 5, 5E)**: titular del cargo, residente y dentro (`cargo(A, c)`); designar al Gobernador y fijar la puerta, también el Rey sin estar presente. De una caravana, la plaza de su origen; de un trueque, la A al proponerlo y la B al contestarlo; de una orden de mercado, la suya; de un pueblo o una avanzada, su plaza madre
+
+| Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
+|---|---|---|---|
+| `abandonar_epica` | `AbandonarEpica` | el Rey de la dueña, el Gobernador o el Sacerdote de la plaza, dentro | `dirigeAedas` (no exige residir); el Aeda vive en la plaza (`epica.no_vive_aqui`) y canta una épica (`epica.no_canta`) (6E) |
+| `abandonar_recinto` | `AbandonarRecinto` | el Gobernador de la plaza, residente y dentro | de la plaza |
+| `abrir_alijo` | `AbrirAlijo` | la cuenta del héroe | sin Facción o de una sin plazas, sin haberlo abierto, con su columna en el mapa a `radioPuerta` del alijo (6F) |
+| `aceptar_trueque` | `AceptarTrueque` | el Gobernador o el Tesorero de la plaza, residente y dentro | de la plaza B del acuerdo |
+| `activar_politica` | `ActivarPolitica` | el titular del cargo de la orden, residente y dentro | de la plaza; el cargo que nombra la orden (5E) |
+| `adoptar_tecnologia` | `AdoptarTecnologia` | la cuenta del héroe, Rey de la Facción | la Facción existe (`faccion.no_existe`); la tecnología del catálogo (`tecnologia.desconocida`); con capital (`tecnologia.sin_capital`), el Rey dentro de ella (`tecnologia.rey_fuera_de_la_capital`), no adoptada (`tecnologia.ya_adoptada`), aparecida (`tecnologia.no_aparecida`) y la tarifa de su Era en el almacén de la capital (`tecnologia.sin_tarifa`) (6C) |
+| `alternar_auto_construccion` | `AlternarAutoConstruccion` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza |
+| `alternar_reabastecer_aliados` | `AlternarReabastecerAliados` | el Gobernador o el Tesorero de la plaza, residente y dentro | de la plaza; sin cambio, `sin_cambios` |
+| `alternar_receta` | `AlternarReceta` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza |
+| `anadir_edificio_manualmente` | `AnadirEdificio` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza (el `cargo` de la orden no viaja al núcleo: vale cualquiera de los dos) |
+| `asignar_cargo_local` | `AsignarCargoLocal` | el Rey (Gobernador) o el Gobernador, residente y dentro (los demás) | de la plaza; el designado es ciudadano de la Facción dueña (`cargo.no_ciudadano`) y reside en la plaza (`cargo.no_reside`, Q4); los otros cinco, con Gobernador (`cargo.sin_gobernador`); ya titular, `sin_cambios` (5E) |
+| `pausar_consumo` | `PausarConsumo` | el Gobernador o el Tesorero de la plaza, residente y dentro | de la plaza; un bien de `BIENES_DE_CONSUMO`, nunca el trigo (`consumo.no_se_pausa`); sin cambio, `sin_cambios` (2026-11-10, Economia_Construccion §9.2) |
+| `calibrar_reserva_manual` | `CalibrarReserva` | el Tesorero de la plaza, residente y dentro | de la plaza |
+| `cambiar_encargo` | `CambiarEncargo` | el Gobernador, el Tesorero o el Maestro de Caravanas de la plaza, residente y dentro o con su columna a la puerta | del origen de la caravana, que tiene encargo (`encargo.no_tiene`); lo nuevo se valida como al encargar y vale para los pasos que no han empezado; el destino solo cambia con la caravana esperando en su origen (`caravana.no_disponible`); sin cambio, `sin_cambios`; si cambia el destino, hay ruta por tierra (`caravana.sin_ruta`) (Comercio_Caravanas §5.8.7) |
+| `cancelar_encargo` | `CancelarEncargo` | el Gobernador, el Tesorero o el Maestro de Caravanas de la plaza, residente y dentro o con su columna a la puerta | del origen de la caravana, que tiene encargo (`encargo.no_tiene`); ya cancelado, `sin_cambios` (Comercio_Caravanas §5.8.7) |
+| `detener_encargo` | `DetenerEncargo` | el Gobernador, el Tesorero o el Maestro de Caravanas de la plaza, residente y dentro o con su columna a la puerta | del origen de la caravana, que tiene encargo (`encargo.no_tiene`); un envío, ya cancelado o ya detenido, `sin_cambios` (Comercio_Caravanas §5.8.7, 2026-11-04) |
+| `tomar_orden_a_distancia` | `TomarOrdenADistancia` | el Gobernador, el Tesorero o el Maestro de Caravanas de la plaza, residente y dentro o con su columna a la puerta | de la plaza, con Mercado activo (`mercado.sin_mercado`); la orden existe (`orden.desconocida`), activa (`orden.no_activa`) y la cantidad positiva (`orden.cantidad_no_positiva`); un informe de órdenes vigente de la región de la plaza de la orden, que no es de la Facción ni de una en guerra (`intel.sin_informe_de_ordenes`); una caravana comercial libre con capacidad (`caravana.no_disponible`); y lo de `encargar_caravana` (tanda 69 §7) |
+| `cancelar_obra` | `CancelarObraDeAvanzada` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre; una mejora o reparación en curso |
+| `cancelar_orden_mercado` | `CancelarOrdenMercado` | el Gobernador o el Tesorero de la plaza, residente y dentro o con su columna a la puerta | de la plaza de la orden |
+| `colocar_orden_mercado` | `ColocarOrdenMercado` | el Gobernador o el Tesorero de la plaza, residente y dentro o con su columna a la puerta | de la plaza |
+| `comprometer_recinto` | `ComprometerRecinto` | el titular del cargo de la orden, residente y dentro | de la plaza |
+| `destruir_avanzada` | `DestruirAvanzada` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre |
+| `destruir_pueblo` | `DestruirPueblo` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre |
+| `elegir_tropa_de_avanzada` | `ElegirTropaDeAvanzada` | el Gobernador de la plaza, residente y dentro | de la plaza madre, o dentro de la avanzada (2026-11-07) |
+| `empezar_epica` | `EmpezarEpica` | el Rey de la dueña, el Gobernador o el Sacerdote de la plaza, dentro | `dirigeAedas` (no exige residir); la tecnología del catálogo (`tecnologia.desconocida`) y los ocho de `Tecnologia_Aedas.md` §7.2 en el orden del TypeScript: el Aeda vive en la plaza (`epica.no_vive_aqui`), la tecnología tiene épica (`epica.sin_epica`), el Aeda es de la dueña (`epica.aeda_ajeno`), no canta otra (`epica.ya_canta`), el logro cumplido (`epica.sin_logro`), la Era abierta (`epica.era_cerrada`), sin aparecer a la Facción (`epica.ya_aparecida`) y ningún otro Aeda suyo la canta (`epica.otro_la_canta`) (6E) |
+| `encargar_caravana` | `EncargarCaravana` | el Gobernador, el Tesorero o el Maestro de Caravanas de la plaza, residente y dentro o con su columna a la puerta | del origen de la caravana (`caravana.desconocida`); el destino existe (`asentamiento.desconocido`); sin encargo (`encargo.ya_tiene`); destino distinto del origen (`encargo.mismo_origen`), de la Facción si es una ruta (`encargo.destino_ajeno`); hora de salida solo en un envío y en `(ahora, ahora + maxProgramacionDias]` (`caravana.salida_invalida`); líneas válidas (`encargo.linea_invalida`), con precio en una plaza ajena (`encargo.falta_precio`) y que caben (`encargo.supera_capacidad`); la caravana, comercial (`caravana.no_es_comercial`), disponible (`caravana.no_disponible`) y con algún carro con animal (`caravana.sin_capacidad`); y ruta por tierra hasta el destino (`caravana.sin_ruta`), todo en ese orden (Comercio_Caravanas §5.8.3) |
+| `fijar_puerta` | `FijarPuerta` | el Gobernador, residente y dentro, o el Rey de la Facción | de la plaza; los grupos `neutrales`, `aliados`, `enemigos` y `aedas` (`orden.forma_invalida` si no); sin cambio, `sin_cambios`; no con un pueblo o una avanzada de la plaza en batalla (`batalla.bloqueado`); quien ya no puede entrar sale al mapa (5E). `FijarAcceso` (117) es su alias en el núcleo |
+| `marcar_aldea` | `MarcarAldea` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre (la aldea agrícola, Economia_Construccion §14.0) |
+| `marcar_pueblo` | `MarcarPueblo` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre (el panel de la madre, Doc 4.2.2) |
+| `mejorar_aldea` | `MejorarAldea` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre; también dentro de la aldea, residente de la madre y con el cargo (Economia_Construccion §14.0.1, 2026-10-29) |
+| `mejorar_avanzada` | `MejorarAvanzada` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre |
+| `mejorar_edificio_ahora` | `MejorarEdificio` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza |
+| `mejorar_recinto` | `MejorarRecinto` | el titular del cargo de la orden, residente y dentro | de la plaza |
+| `mover_en_cola` | `MoverEnCola` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza |
+| `proponer_trueque` | `ProponerTrueque` | el Gobernador o el Tesorero de la plaza, residente y dentro | de la plaza A |
+| `quitar_de_cola` | `QuitarDeCola` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza |
+| `cancelar_construccion` | `CancelarConstruccion` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza |
+| `asignar_buey` | `AsignarBuey` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza |
+| `elegir_receta` | `ElegirReceta` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza |
+| `rechazar_trueque` | `RechazarTrueque` | el Gobernador o el Tesorero de la plaza, residente y dentro | de la plaza B del acuerdo |
+| `reparar_avanzada` | `RepararAvanzada` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre (o de la plaza que tiene ahora la zona de una ciudadela sin dueño) |
+| `reponer_carro_de_acarreo` | `ReponerCarro` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | de la plaza madre |
+| `solicitar_ascenso` | `SolicitarAscenso` | el Gobernador de la plaza, residente y dentro | de la plaza |
+| `vetar_jugador` | `VetarJugador` | el Gobernador de la plaza, residente y dentro | de la plaza; a un residente no se le veta (`puerta.residente`); sin cambio, `sin_cambios`; vetar saca al mapa a quien está dentro de la plaza, de sus pueblos o de sus avanzadas (5E) |
+
+**Los residentes de la plaza (sistema 5, 5E)**: residir y estar dentro (`reside(A)`, `resideEnOrigen`, `puedeOperarAparcada`)
+
+| Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
+|---|---|---|---|
+| `agregar_carro_caravana` | `AnadirCarro` | un residente de la plaza, dentro o con su columna a la puerta | del origen de la caravana |
+| `cancelar_caravana` | `CancelarCaravana` | un residente de la plaza, dentro o con su columna a la puerta | del origen de la caravana |
+| `comprar_animal_caravana` | `AnadirAnimal` | un residente de la plaza, dentro o con su columna a la puerta | del origen de la caravana |
+| `crear_caravana` | `CrearCaravana` | un residente de la plaza, dentro o con su columna a la puerta | de la plaza |
+| `enviar_caravana_al_origen` | `EnviarCaravanaAlOrigen` | un residente del origen, dentro de la plaza donde está aparcada | de la caravana aparcada, como `mover_carga_caravana_aparcada` |
+| `mover_carga_caravana_aparcada` | `MoverCargaAparcada` | un residente del origen, dentro de la plaza donde está aparcada | de la caravana aparcada: residir en su origen y estar dentro de la plaza que la hospeda (`puedeOperarAparcada`); desde el 2026-11-04, descargar la que está en casa (`disponible` o `esperando` en su origen con encargo): residir en su origen y estar dentro (Comercio_Caravanas §5.7) |
+| `mover_carro_caravana` | `MoverCarro` | un residente de la plaza, dentro o con su columna a la puerta | del origen de la caravana de la que sale |
+| `preparar_caravana` | `PrepararCaravana` | un residente de la plaza, dentro o con su columna a la puerta | del origen de la caravana |
+| `reservar_caravana` | `ReservarCaravana` | un residente de la plaza, dentro o con su columna a la puerta | del origen de la caravana |
+| `renombrar_caravana` | `RenombrarCaravana` | un residente de la plaza, dentro o con su columna a la puerta | del origen de la caravana; el nombre se recorta y vacío la deja sin nombre; como mucho 32 caracteres (`caravana.nombre_largo`), sin mirar si otra se llama igual (2026-11-02) |
+
+**La columna**
+
+| Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
+|---|---|---|---|
+| `adjuntar_caravana` | `AdjuntarCaravana` | el Líder de la columna | a la puerta de la caravana |
+| `aparcar_caravana` | `AparcarCaravana` | el Líder de la columna | la caravana adjunta, con la columna dentro de la plaza (`caravana.soltar_solo_dentro`, como `soltar_caravana`) |
+| `cargar_caravana` | `CargarCaravana` | un participante de la columna | la caravana adjunta (`caravana.no_esta_adjunta`), a la puerta (`radioPuerta`) de una plaza de su Facción (`caravana.plaza_ajena`); hasta lo que le cabe (`caravana.sin_capacidad`) |
+| `comerciar_en_plaza` | `ComerciarEnPlaza` | el Líder de la columna | a la puerta de la plaza de la orden |
+| `depositar_en_avanzada` | `DepositarEnAvanzada` | un participante de la columna | a la puerta de la avanzada operativa, o un participante de la cuenta dentro de ella con la columna (2026-11-07) |
+| `entregar_de_caravana` | `EntregarDeCaravana` | un participante de la columna | la caravana adjunta, a la puerta de la plaza B |
+| `entregar_en_obra` | `EntregarMateriales` | un participante de la columna | a la puerta de la obra del pueblo; ciudadano de la Facción de la obra |
+| `entregar_en_obra` | `EntregarMaterialesAAvanzada` | un participante de la columna | a la puerta de la obra de la avanzada; ciudadano de la Facción de la obra |
+| `estacionar_ejercito` | `Estacionar` | el Líder de la columna | como `marchar_a` |
+| `marcha_forzada` | `MarchaForzada` | el Líder de la columna | como `marchar_a` |
+| `reclamar_recompensa` | `ReclamarRecompensa` | la cuenta del héroe: la suya, de su plaza si es su Gobernador (o residente sin Gobernador), de su Facción si es su Rey | Misiones §4; una recurrente individual, el héroe que la cumplió (Misiones_Recurrentes §5). Da la recompensa entera o la rechaza entera: `heroe.sin_residencia`, `almacen_personal.lleno`, `mision.almacen_lleno` y `mision.sin_capital` (Misiones §4.3) |
+| `aceptar_mision` | `AceptarMision` | la cuenta del héroe, residente de la plaza o ciudadano de la Facción del tablón | Misiones_Recurrentes §3; el cargo que pida la misión lo mira la orden |
+| `elegir_tablon` | `ElegirTablon` | la cuenta del héroe, Gobernador de la plaza o Rey de la Facción | Misiones_Recurrentes §4 |
+| `fundar` | `Fundar` | el Líder de la columna | con la Caravana de Fundación (`fundacion.sin_caravana`) y Facción |
+| `marchar_a` | `MarcharA` | el Líder de la columna | a bordo, no desde dentro de un lugar (`heroe.dentro_de_un_lugar`), no una formación (`columna.en_formacion`) |
+| `soltar_caravana` | `SoltarCaravana` | el Líder de la columna | el héroe va en ella; la caravana adjunta, con la columna dentro de una plaza de su Facción (`caravana.soltar_solo_dentro`): queda aparcada |
+
+**La cuenta del héroe**
+
+| Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
+|---|---|---|---|
+| `aportar_a_refundacion` | `AportarARefundacion` | la cuenta del héroe | en un campamento (dentro o con su columna a la puerta, `campamento.fuera_de_la_puerta`), ciudadano (`faccion.no_pertenece`) de una Facción sin plazas (`refundacion.con_plazas`); del almacén personal residiendo allí (`refundacion.no_resides`) o del carro: dentro, el que lleva (2026-11-02; `heroe.sin_columna` si no trajo ninguno); a la puerta, el de su columna siendo su Líder (`columna.solo_el_lider`) (5G-b) |
+| `asignar_escolta` | `AsignarEscolta` | la cuenta del héroe | escuadras suyas en el campamento del origen de la caravana o, de visita dentro del origen siendo de su Facción, en la columna con la que entró (2026-11-04); cupo de escolta |
+| `asignar_guarnicion` | `AsignarGuarnicion` | la cuenta del héroe | residente de la plaza o, de visita dentro de una plaza de su Facción, una escuadra de la columna con la que entró (2026-11-04); o, con la columna a la puerta de una plaza de su Facción, una escuadra de esa columna: a su campamento de guarnición si reside en ella, de visita si no (2026-11-10); cupo de guarnición |
+| `atacar` | `Atacar` | la cuenta del héroe | en guerra o con `declara_guerra` (`guerra.confirmar`); a la puerta del objetivo |
+| `borrar_loadout` | `BorrarLoadout` | la cuenta del héroe | — |
+| `cambiar_seleccion_de_convocatoria` | `CambiarSeleccionDeConvocatoria` | la cuenta del héroe | integrante |
+| `cancelar_batalla` | `CancelarBatalla` | la cuenta del héroe | quien la inició, antes de que empiece la partida (`batalla.no_puede_cancelar`) |
+| `bajarse_de_batalla` | `BajarseDeBatalla` | la cuenta del héroe | quien combate en ella, antes de que empiece la partida (`batalla.ya_empezada`); la batalla sigue para los demás (Batalla_Unity_Ciclo §7.2, 2026-11-16) |
+| `elegir_escuadras_de_batalla` | `ElegirEscuadrasDeBatalla` | la cuenta del héroe | quien combate en ella, antes de que empiece la partida (`batalla.ya_empezada`): cambia sus escuadras elegidas (Batalla_Unity_Ciclo §7.3, 2026-11-16) |
+| `cancelar_convocatoria` | `CancelarConvocatoria` | la cuenta del héroe, aunque esté fuera | el Líder de la convocatoria |
+| `cancelar_formacion` | `CancelarFormacion` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) |
+| `ceder_liderazgo` | `CederLiderazgo` | la cuenta del héroe | el Líder |
+| `colocar_avanzada` | `ColocarAvanzada` | el Gobernador o el Maestro de Obras de la plaza, residente y dentro | desde dentro de la madre, como la aldea, sin columna (2026-11-04, pedido del autor; antes, de 5E-1, con la columna del héroe en el sitio): el sitio, en tierra firme (`avanzada.fuera_del_sitio`), en su zona, sin pisar su ciudad ni otro elemento del mapa y con ruta por tierra hasta la madre (`avanzada.sin_ruta`) |
+| `comprar_caravana_de_refundacion` | `ComprarCaravanaDeRefundacion` | la cuenta del héroe | en un campamento, ciudadano de una Facción sin plazas (`refundacion.con_plazas`) ni otra Caravana de Fundación (`refundacion.ya_tiene_caravana`); el fondo de su Facción cubre el coste (`refundacion.fondo_corto`) (5G-b) |
+| `comprar_en_campamento` | `ComprarEnCampamento` | la cuenta del héroe | dentro del campamento o a su puerta; cupo diario; `pagar_con` (2026-11-02): el almacén personal solo residiendo allí (`almacen_personal.fuera_de_tu_residencia`), o el carro que lleva |
+| `comprar_informe_plaza` | `ComprarInformePlaza` | la cuenta del héroe; en una plaza, dentro y Rey, Embajador o Gobernador | como `comprar_mirada`; conocer la plaza |
+| `comprar_informe_region` | `ComprarInformeRegion` | la cuenta del héroe; en una plaza, dentro y Rey, Embajador o Gobernador | como `comprar_informe_plaza`, en la taberna de la plaza propia de la región; sin conocer plaza |
+| `comprar_rumor` | `ComprarRumor` | la cuenta del héroe; en una plaza, dentro y Rey, Embajador o Gobernador | como `comprar_mirada`; algo que la Facción aún no tenga explorado (`rumor.sin_novedad`, sin cobrar) (2026-11-10, Niebla_De_Guerra §6.4) |
+| `comprar_mirada` | `ComprarMirada` | la cuenta del héroe; en una plaza, dentro y Rey, Embajador o Gobernador | ciudadano, dentro de una plaza de su Facción con Taberna (el Rey, el Embajador o el Gobernador, `compraIntel`, 5E) o en un campamento |
+| `comprar_tecnologia_aeda` | `ComprarTecnologiaAeda` | la cuenta del héroe, dentro de la plaza y Rey o Gobernador | la plaza existe (`asentamiento.desconocido`); un Aeda itinerante parado en ella (`aedas.no_hay_aeda`); la tecnología del catálogo (`tecnologia.desconocida`), de una Era vendible (`aedas.era_no_vendible`), que el Aeda conoce (`aedas.no_la_conoce`), no aparecida a la Facción dueña (`aedas.ya_aparecida`) y el oro del precio en el almacén de la plaza (`aedas.sin_oro`) (6D) |
+| `conectarse` | `Conectarse` | la cuenta del héroe, aunque esté fuera | el único permitido fuera del mundo |
+| `convocar_ejercito` | `ConvocarEjercito` | la cuenta del héroe | dentro de la plaza o del campamento |
+| `crear_heroe` | `CrearHeroe` | su cuenta | una por cuenta (`heroe.ya_existe`); la administración crea los de otra cuenta y los bots |
+| `dejar_de_perseguir` | `DejarDePerseguir` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) |
+| `desarmar_caravana_fundacion` | `DesarmarCaravanaFundacion` | la cuenta del héroe | su titular (`fundacion.no_titular`), con la caravana suelta en su origen (`caravana.no_disponible`) (5G-b) |
+| `desconectarse` | `Desconectarse` | la cuenta del héroe | — |
+| `cerrar_sesion` | `CerrarSesion` | la cuenta del héroe | — (sin candado de batalla: combatiendo, sale al acabar la batalla) |
+| `elegir_formacion` | `ElegirFormacion` | la cuenta del héroe | una escuadra suya (`escuadra.ajena`); la familia del bloque `FORMACIONES` (`formacion.desconocida`) que permite la tecnología de su Facción (`formacion.sin_tecnologia`); sin héroe ni Facción, solo las que no piden tecnología (Heroe_Y_Tropa §10.4, 2026-11-11) |
+| `equipar_objeto` | `EquiparObjeto` | la cuenta del héroe | dentro de una plaza, un pueblo o un campamento (`equipo.fuera_de_lugar`) y sin escuadras reservadas para una batalla (`equipo.en_batalla`, D2); las reglas de Objetos_Del_Heroe §3.2 (Heroe_Y_Tropa §4.5, 2026-11-12) |
+| `desequipar_objeto` | `DesequiparObjeto` | la cuenta del héroe | donde se equipa (D2); el arma no se quita (`equipo.arma_fija`) y lo quitado tiene que caber en la mochila (`mochila.llena`) |
+| `guardar_objeto` | `GuardarObjeto` | la cuenta del héroe | dentro de su residencia (`heroe.sin_residencia`, `almacen_objetos.fuera_de_tu_residencia`; D22): de la mochila al almacén de objetos (`almacen_objetos.lleno`) |
+| `sacar_objeto` | `SacarObjeto` | la cuenta del héroe | dentro de su residencia (D22): del almacén de objetos a la mochila (`mochila.llena`) |
+| `comprar_objeto` | `ComprarObjeto` | la cuenta del héroe | dentro de una plaza con la Armería activa (`armeria.sin_armeria`, D1); el metal, con la tecnología de la Facción de la plaza (`armeria.sin_tecnologia`); sus monedas (`heroe.sin_monedas`) y sitio en la mochila (`mochila.llena`) (Heroe_Y_Tropa §4.6, 2026-11-12) |
+| `vender_objeto` | `VenderObjeto` | la cuenta del héroe | dentro de una plaza con la Armería activa (D1); una casilla de su mochila |
+| `forjar_objeto` | `ForjarObjeto` | la cuenta del héroe | dentro de una plaza con la Armería activa (`armeria.sin_armeria`, D1), con su forja abierta a su grupo (`forja.cerrada`; la misma Facción, siempre) y la Era del tier (`forja.era_cerrada`); plano y crisoles (mochila), materiales (almacén personal y carro en su residencia, carro en las demás) y el impuesto en monedas (`heroe.sin_monedas`) (Heroe_Y_Tropa §4.6, 2026-11-12) |
+| `usar_objeto` | `UsarObjeto` | la cuenta del héroe | donde se equipa (D2); una medalla de tropa, sobre una escuadra suya no prestada ni en el nivel máximo |
+| `entrar_en_asentamiento` | `EntrarEnAsentamiento` | la cuenta del héroe | su columna a la puerta (`radioPuerta`); el acceso de la plaza (`acceso.cerrado`) |
+| `entrar_en_avanzada` | `EntrarEnAvanzada` | la cuenta del héroe | como `entrar_en_pueblo` |
+| `entrar_en_campamento` | `EntrarEnCampamento` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) si no va solo; su columna a la puerta (`radioPuerta`) |
+| `entrar_en_pueblo` | `EntrarEnPueblo` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) si no va solo; su columna a la puerta (`radioPuerta`); el acceso heredado |
+| `guardar_loadout` | `GuardarLoadout` | la cuenta del héroe | — |
+| `guardar_en_almacen_personal` | `GuardarEnAlmacenPersonal` | la cuenta del héroe | dentro de su residencia; o el Líder de su columna (`columna.solo_el_lider`) con ella a la puerta de su residencia (`almacen_personal.fuera_de_tu_residencia`) |
+| `guarnecer` | `Guarnecer` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`); su columna a la puerta (`radioPuerta`) |
+| `guarnecer_avanzada` | `GuarnecerAvanzada` | la cuenta del héroe | residente de la plaza madre (`avanzada.no_resides`); su columna a la puerta (`radioPuerta`) de la avanzada, o él dentro con ella (2026-11-07) |
+| `inspeccionar` | `Inspeccionar` | la cuenta del héroe | el objetivo en el mapa (`inspeccion.a_cubierto`) y a su alcance |
+| `lanzar_caravana_fundacion` | `LanzarCaravanaFundacion` | la cuenta del héroe | ciudadano de la Facción de la plaza (`fundacion.no_ciudadano`) que reside y está en ella (`fundacion.no_resides`, Proy §5.2.4); nivel operativo 2 (`fundacion.nivel_insuficiente`), cooldown de caravanas (`caravana.en_cooldown`), cap con las caravanas vivas (`fundacion.cap_alcanzado`) y el coste (`caravana.sin_recursos`) (5G-b) |
+| `movilizar_ejercito` | `MovilizarEjercito` | la cuenta del héroe | como `salir_al_mundo` |
+| `ordenar_escuadras` | `OrdenarEscuadras` | la cuenta del héroe | — |
+| `organizar_ejercito` | `OrganizarEjercito` | la cuenta del héroe | el Líder |
+| `partir_convocatoria` | `PartirConvocatoria` | la cuenta del héroe | el Líder de la convocatoria |
+| `pasar_a_viveres` | `PasarAViveres` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) |
+| `pedir_prestamo` | `PedirPrestamo` | la cuenta del héroe | dentro del campamento |
+| `perseguir` | `Perseguir` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`) |
+| `quitar_escolta` | `QuitarEscolta` | la cuenta del héroe | las escuadras que él cedió |
+| `reclamar_caravana` | `ReclamarCaravana` | la cuenta del héroe | a bordo de su columna, en mundo abierto, a `radioEncuentro` (`caravana.lejos`) de la Caravana de Fundación de su Facción (`caravana.faccion_ajena`) que vuelve sola (`caravana.no_reclamable`); su columna personal pasa a ser un ejército (5G-b) |
+| `reclutar_en_campamento` | `ReclutarEnCampamento` | la cuenta del héroe | dentro del campamento o a su puerta |
+| `reclutar_tropa` | `ReclutarTropa` | la cuenta del héroe | dentro de la plaza; residente (todo) o de la Facción dueña sin veto: escuadra nueva, que va a la columna con la que entró (`heroe.sin_columna`, `liderazgo.superado`), y reponer; con el reclutamiento cerrado a los ciudadanos, solo reponer (`reclutamiento.solo_reponer`) (2026-11-10) |
+| `repartir_puntos` | `RepartirPuntos` | la cuenta del héroe | — |
+| `reponer_prestamo` | `ReponerPrestamo` | la cuenta del héroe | dentro del campamento |
+| `repostar` | `Repostar` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`); su columna a la puerta (`radioPuerta`) de la plaza (`repostar.sin_lugar`) |
+| `repostar` | `RepostarEnAvanzada` | la cuenta del héroe | el héroe es el Líder de su columna (`columna.solo_el_lider`); su columna a la puerta (`radioPuerta`) de la avanzada, o él dentro con ella (2026-11-07) |
+| `repostar_en_campamento` | `RepostarEnCampamento` | la cuenta del héroe | a la puerta del campamento |
+| `responder_peticion_de_convocatoria` | `ResponderPeticionDeConvocatoria` | la cuenta del héroe | el Líder de la convocatoria |
+| `responder_peticion_de_union` | `ResponderPeticionDeUnion` | la cuenta del héroe | el Líder de la columna |
+| `retirar_de_refundacion` | `RetirarDeRefundacion` | la cuenta del héroe | como `aportar_a_refundacion`, sin mirar las plazas; lo que aportó (`refundacion.sin_aporte`), hasta el hueco (5G-b) |
+| `retirar_de_avanzada` | `RetirarDeAvanzada` | la cuenta del héroe | escuadras suyas; su columna a la puerta (`radioPuerta`) de la avanzada, o él dentro con ella (2026-11-07) |
+| `retirar_guarnicion` | `RetirarGuarnicion` | la cuenta del héroe | la dejada de visita, desde dentro de esa plaza; con la columna a la puerta de una plaza de su Facción, la que la guarnece (de visita o de su campamento) vuelve a la columna, sin pasar de su Liderazgo (2026-11-10) |
+| `sacar_del_almacen_personal` | `SacarDelAlmacenPersonal` | la cuenta del héroe | como `guardar_en_almacen_personal`; hasta lo que cabe en el carro (`carro.no_cabe`) |
+| `salir_al_mundo` | `SalirAlMundo` | la cuenta del héroe | desde su residencia (`salida.solo_de_tu_residencia`); escuadras suyas |
+| `salir_de_asentamiento` | `SalirDeAsentamiento` | la cuenta del héroe | estar dentro |
+| `salir_de_avanzada` | `SalirDeAvanzada` | la cuenta del héroe | estar dentro |
+| `salir_de_pueblo` | `SalirDePueblo` | la cuenta del héroe | estar dentro |
+| `guarnecer_pueblo` | `GuarnecerPueblo` | la cuenta del héroe | dentro del pueblo o con la columna a su puerta (2026-11-10), ciudadano de la Facción de la madre, escuadrones de esa columna y dentro de su cupo (Economia_Construccion §14.0.1) |
+| `retirar_de_pueblo` | `RetirarDePueblo` | la cuenta del héroe | dentro del pueblo o con la columna a su puerta (2026-11-10), ciudadano de la Facción de la madre; a su columna sin pasar de su Liderazgo (§14.0.1) |
+| `cargar_de_pueblo` | `CargarDePueblo` | la cuenta del héroe | dentro del pueblo, ciudadano de la Facción de la madre; del almacén local al carro de su columna (§14.0.1) |
+| `dejar_en_pueblo` | `DejarEnPueblo` | la cuenta del héroe | dentro del pueblo, ciudadano de la Facción de la madre; solo lo que el pueblo produce (§14.0.1) |
+| `cargar_de_plaza` | `CargarDePlaza` | la cuenta del héroe | dentro de la plaza, ciudadano de su Facción (resida o no); si el Gobernador lo cerró, solo él (Movimiento_Ejercitos §9.1) |
+| `dejar_en_plaza` | `DejarEnPlaza` | la cuenta del héroe | dentro de la plaza, de su Facción o de una aliada o vasalla (Movimiento_Ejercitos §9.1) |
+| `cerrar_almacen_a_ciudadanos` | `CerrarAlmacenACiudadanos` | el Gobernador de la plaza, residente y dentro |
+| `cerrar_reclutamiento_a_ciudadanos` | `CerrarReclutamientoACiudadanos` | el Gobernador o un General de la plaza, residente y dentro | de la plaza; sin cambio, `sin_cambios`; cerrado, los ciudadanos que no residen solo reponen (2026-11-10, Heroe_Y_Tropa §11.1) |
+| `configurar_forja` | `ConfigurarForja` | el Gobernador o el Tesorero de la plaza, residente y dentro | de la plaza; el recargo, uno de `OBJETOS.forja.recargosPct` (`forja.recargo_invalido`); sin cambio, `sin_cambios` (Heroe_Y_Tropa §4.6, 2026-11-12) |
+| `ofrecerse_como_mercenario` | `OfrecerseComoMercenario` | la cuenta del héroe | bot (`mercenario.solo_bots`), sin Facción (`faccion.ya_pertenece`), residente de un campamento (`mercenarios.no_resides`) y dentro (`campamento.fuera_de_la_puerta`) (Mercenarios_Por_Contrato §3) |
+| `retirar_oferta` | `RetirarOferta` | la cuenta del héroe | sin oferta, `sin_cambios` (Mercenarios_Por_Contrato §3) |
+| `contratar_mercenario` | `ContratarMercenario` | la cuenta del héroe | con un cargo que alcance (`mercenario.sin_alcance`), Facción que no es de bots (`mercenario.faccion_de_bots`), mercenario ofrecido (`mercenario.no_ofrecido`), en su campamento (`campamento.fuera_de_la_puerta`), plazo y objetivo válidos, la tarifa en el carro o, en el campamento donde reside, en el almacén personal (`pagar_con`; `almacen_personal.fuera_de_tu_residencia`, `heroe.sin_columna`, `mercenarios.sin_oro`) (Mercenarios_Por_Contrato §3 a §5) |
+| `prorrogar_contrato` | `ProrrogarContrato` | la cuenta del héroe | contrato temporal con su Facción, quien podría firmarlo hoy, en persona y con el oro (Mercenarios_Por_Contrato §6.2) |
+| `ordenar_mercenario` | `OrdenarMercenario` | la cuenta del héroe | de 1 a 16 mercenarios con contrato con su Facción (`mercenario.lista_invalida`), un cargo que alcance y una orden que admita su trabajo (Mercenarios_Por_Contrato §6) |
+| `mudar_mercenario` | `MudarMercenario` | la cuenta del héroe | Rey o Embajador, un permanente (`mercenario.tipo_de_contrato`) y una plaza de la Facción (Mercenarios_Por_Contrato §6.2) |
+| `despedir_mercenario` | `DespedirMercenario` | la cuenta del héroe | quien podría firmar el contrato; si combate, el fin se aplaza (Mercenarios_Por_Contrato §7) |
+| `valorar_mercenario` | `ValorarMercenario` | la cuenta del héroe | quien lo firmó o el Rey, con un contrato acabado sin valorar y en plazo (`mercenario.sin_valoracion`) (Mercenarios_Por_Contrato §8.2) |
+| `reclamar_premio_de_rango` | `ReclamarPremioDeRango` | la cuenta del héroe | con un premio pendiente (`mercenario.sin_premio`), una tropa de su licencia (`mercenario.fuera_de_licencia`), en su campamento base (Mercenarios_Por_Contrato §8.3) |
+| `salir_del_campamento` | `SalirDelCampamento` | la cuenta del héroe | desde el campamento donde está |
+| `separarse_de_convocatoria` | `SepararseDeConvocatoria` | la cuenta del héroe | integrante |
+| `separarse_del_ejercito` | `SepararseDelEjercito` | la cuenta del héroe | participante |
+| `unirse_a_batalla` | `UnirseABatalla` | la cuenta del héroe | en el sitio del bando (dentro para defender, fuera para atacar) |
+| `unirse_a_convocatoria` | `UnirseAConvocatoria` | la cuenta del héroe | dentro del lugar de la convocatoria |
+| `unirse_a_ejercito` | `UnirseAEjercito` | la cuenta del héroe | su columna a la puerta (`radioPuerta`) de la columna; la política de unión |
+| `unirse_en_campo` | `UnirseEnCampo` | la cuenta del héroe | a la vista de la columna; la política de unión |
+| `vaciar_carro` | `VaciarCarro` | la cuenta del héroe | dentro de su residencia |
+
+**La Facción, la ciudadanía y la residencia (sistema 5, 5B)**
+
+| Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
+|---|---|---|---|
+| `asignar_embajador` | `AsignarEmbajador` | la cuenta del héroe, Rey de la Facción | el designado es ciudadano (`faccion.no_ciudadano`); la Facción existe (`faccion.no_existe`) |
+| `asignar_rey` | `AsignarRey` | la cuenta del héroe, ciudadano de la Facción (con Rey, solo él) | el designado es ciudadano (`faccion.no_ciudadano`) |
+| `cambiar_residencia` | `CambiarResidencia` | la cuenta del héroe | una plaza de su Facción (`residencia.plaza_ajena`) donde aún no reside (`residencia.ya_reside`); sin cooldown (`residencia.cooldown`) ni ejército en preparación (`heroe.en_convocatoria`); ni la plaza de destino ni la suya están en batalla (`batalla.bloqueado`, 5B-10) |
+| `crear_faccion` | `CrearFaccion` | la cuenta del héroe | nombre (`faccion.nombre_vacio`, `faccion.nombre_duplicado`), sigilo (`faccion.sigilo_invalido`, `faccion.sigilo_duplicado`), sin Facción (`faccion.ya_pertenece`) ni cooldown de creación (`faccion.cooldown_creacion`) |
+| `dejar_faccion` | `DejarFaccion` | la cuenta del héroe | es ciudadano (`faccion.no_pertenece`); no va en un ejército ni en uno en preparación (`faccion.en_ejercito`, Q7); su plaza no está en batalla (`batalla.bloqueado`, 5B-10) |
+| `dejar_residencia` | `DejarResidencia` | la cuenta del héroe | reside en una plaza (`residencia.sin_plaza`); sin cooldown ni ejército en preparación; su plaza no está en batalla (`batalla.bloqueado`, 5B-10) |
+| `residir_en_campamento` | `ResidirEnCampamento` | la cuenta del héroe | el campamento existe y aún no reside en él (`residencia.ya_reside`); sin cooldown ni ejército en preparación; su plaza no está en batalla (`batalla.bloqueado`, 5B-10) |
+| `responder_solicitud` | `ResponderSolicitud` | la cuenta del héroe, Rey de la Facción | sin excepción: si la Facción no existe, `faccion.no_existe`; el héroe lo pidió (`faccion.no_ha_pedido`) y no es ciudadano de otra; aceptar a quien va en un ejército, `faccion.en_ejercito` (5B-6) |
+| `solicitar_ingreso` | `SolicitarIngreso` | la cuenta del héroe | la Facción existe y no es ciudadano de ninguna (`faccion.ya_pertenece`); no va en un ejército (`faccion.en_ejercito`, 5B-6); pedir dos veces no cambia nada |
+
+**La capital y el nombre de la plaza (sistema 5, 5C)**
+
+| Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
+|---|---|---|---|
+| `designar_capital` | `DesignarCapital` | la cuenta del héroe, Rey de la Facción | la Facción existe (`faccion.no_existe`); una plaza suya (`capital.plaza_ajena`) con Palacio activo (`capital.sin_palacio`) que no es ya la capital (`capital.ya_es_la_capital`); con la designada en pie, `CAPITAL.cooldownDias` (`capital.cooldown`) |
+| `renombrar_asentamiento` | `RenombrarAsentamiento` | la cuenta del héroe, residente de la plaza | basta residir (§5.2.4); el nombre se recorta y vacío deja la plaza sin nombre; como mucho 32 caracteres (`asentamiento.nombre_largo`) y único entre las plazas vivas (`asentamiento.nombre_duplicado`, 5C-6) |
+
+**Las relaciones entre Facciones (sistema 5, 5D)**
+
+| Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
+|---|---|---|---|
+| `admitir_otras_facciones` | `AdmitirOtrasFacciones` | la cuenta del héroe, Rey de la Facción | la Facción existe (`faccion.no_existe`); sin cambio, `sin_cambios` |
+| `declarar_guerra` | `DeclararGuerra` | la cuenta del héroe, Rey o Embajador de la Facción | de `faccion_a_id`; sin relación activa entre las dos (`diplomacia.ya_hay_relacion`: a una aliada hay que romperle antes la alianza), las dos existen; arrastre por vasallaje; `guerraTrasRomperAlianza` si toca |
+| `proponer_paz` | `ProponerPaz` | la cuenta del héroe, Rey o Embajador de la Facción | de `faccion_id`; una guerra activa (`diplomacia.relacion_desconocida`, `diplomacia.relacion_rota`, `diplomacia.no_es_guerra`) de la que es parte (`diplomacia.no_es_parte`) y en la que aún no la ofreció (`diplomacia.ya_ofrecio_paz`) |
+| `proponer_relacion` | `ProponerRelacion` | la cuenta del héroe, Rey o Embajador de la Facción | de `faccion_a_id`; par válido (`diplomacia.ya_hay_relacion`), las dos con Rey (`diplomacia.sin_rey`), en un vasallaje ninguna vasalla de nadie (`diplomacia.vasalla_de_tercera`), en una alianza la reputación de A ≥ `umbralBajoParaEmbajador` (`diplomacia.reputacion_baja`); una sola pendiente por par (`diplomacia.ya_pendiente`); el tributo, solo en un vasallaje y no negativo (`diplomacia.tributo_invalido`) |
+| `rebelion_vasallo` | `RebelionVasallo` | la cuenta del héroe, Rey o Embajador de la Facción | de la vasalla de la relación; un vasallaje activo (`diplomacia.no_es_vasallaje`, `diplomacia.relacion_rota`) |
+| `responder_relacion` | `ResponderRelacion` | la cuenta del héroe, Rey de la Facción | de la Facción B de la propuesta; vigente (`diplomacia.propuesta_desconocida`, `diplomacia.propuesta_caducada`); aceptar revalida todo y exige que ninguna de las dos combata en una batalla abierta (`diplomacia.batalla_abierta`) |
+| `retirar_relacion` | `RetirarRelacion` | la cuenta del héroe, Rey o Embajador de la Facción | de la Facción que propuso; vigente |
+| `romper_relacion` | `RomperRelacion` | la cuenta del héroe, Rey o Embajador de la Facción | de `iniciador_faccion_id`; una alianza (cualquiera de las dos) o un vasallaje (solo la señora: `diplomacia.solo_la_senora`); una guerra no (`diplomacia.guerra_no_se_rompe`) |
+
+**La anexión y la fusión (sistema 5, 5F)**
+
+| Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
+|---|---|---|---|
+| `proponer_anexion` | `ProponerAnexion` | la cuenta del héroe, Rey o Embajador de la Facción | de la absorbente (`faccion_a_id`); distintas (`relacion.consigo_misma`) y existentes (`faccion.no_existe`), la absorbida con Rey (`diplomacia.sin_rey`) y no vasalla de una tercera (`diplomacia.vasalla_de_tercera`); una sola pendiente por par (`diplomacia.ya_pendiente`) |
+| `proponer_fusion` | `ProponerFusion` | la cuenta del héroe, Rey de la Facción | de `faccion_a_id`; las dos con Rey, el Rey nuevo el de una de las dos (`diplomacia.rey_no_valido`), el nombre no vacío (`faccion.nombre_vacio`) ni de una tercera (`faccion.nombre_duplicado`), ninguna vasalla de una tercera; una sola pendiente por par |
+| `responder_anexion` | `ResponderAnexion` | la cuenta del héroe, Rey de la Facción | de la absorbida; vigente (`diplomacia.propuesta_desconocida`, `diplomacia.propuesta_caducada`); aceptar revalida y exige que ninguna de las dos combata en una batalla abierta (`diplomacia.batalla_abierta`); el traslado, en el acto |
+| `responder_fusion` | `ResponderFusion` | la cuenta del héroe, Rey de la Facción | de la Facción B; vigente; aceptar revalida todo, que el Rey de A siga siendo quien la propuso (`diplomacia.proponente_ya_no_es_rey`) y sin batalla abierta; nace la Facción nueva (`creadas`) |
+| `retirar_anexion` | `RetirarAnexion` | la cuenta del héroe, Rey o Embajador de la Facción | de la absorbente; vigente |
+| `retirar_fusion` | `RetirarFusion` | la cuenta del héroe, Rey de la Facción | de la Facción A; vigente |
+
+**Administración y servidor de batalla**
+
+| Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
+|---|---|---|---|
+| `administracion:agrandar_zona` | `AgrandarZona` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:colocar_bandidos` | `ColocarBandidos` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:colocar_heroe` | `ColocarHeroe` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:crear_ejercito` | `CrearEjercito` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:dar_almacen_personal` | `DarAlmacenPersonal` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:dar_caravana_fundacion` | `DarCaravanaFundacion` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:dar_escuadra` | `DarEscuadra` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:dar_recursos` | `DarRecursos` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:dar_suministro` | `DarSuministro` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:fijar_controlador` | `FijarControlador` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:fijar_catalogo_misiones` | `FijarCatalogoMisiones` | administración | el catálogo de las misiones recurrentes en caliente (Misiones_Recurrentes §6); la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:dar_monedas` | `DarMonedas` | administración | solo pruebas (2026-11-16): monedas a un héroe; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:dar_fondo_monedas` | `DarFondoMonedas` | administración | solo pruebas (2026-11-16): el fondo de monedas de una plaza; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:colocar_aeda` | `ColocarAeda` | administración | solo pruebas (2026-11-16): un Aeda itinerante parado en una plaza o un residente; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:fijar_faccion_de_heroe` | `FijarFaccionDeHeroe` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:fijar_nivel_asentamiento` | `FijarNivelAsentamiento` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:fijar_nivel_faccion` | `FijarNivelFaccion` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:fijar_relacion` | `FijarRelacion` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:fijar_residencia` | `FijarResidencia` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:fijar_tecnologias` | `FijarTecnologias` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:herir_heroe` | `HerirHeroe` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:reclamar_parcela` | `ReclamarParcela` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `administracion:soltar_parcela` | `SoltarParcela` | administración | andamiaje hasta los sistemas 5 y 6; la orden genérica solo desde una sesión `CLIENTE_ADMIN_WEB` |
+| `controlar_reloj` | `Reloj` | administración | y solo desde una sesión `CLIENTE_ADMIN_WEB` (la sesión lo comprueba) |
+| `servidor:asignacion` | `RegistrarAsignacion` | servidor de batalla | por el canal del servidor de batalla (`MensajeDeServidorDeBatalla`), con su credencial; responde con un `AcuseBatalla` |
+| `servidor:inicio` | `ConfirmarInicio` | servidor de batalla | por el canal del servidor de batalla (`MensajeDeServidorDeBatalla`), con su credencial; responde con un `AcuseBatalla` |
+| `servidor:resultado` | `AplicarResultado` | servidor de batalla | por el canal del servidor de batalla (`MensajeDeServidorDeBatalla`), con su credencial; responde con un `AcuseBatalla` |
+| `servidor:salida` | `RegistrarSalida` | servidor de batalla | por el canal del servidor de batalla (`MensajeDeServidorDeBatalla`), con su credencial; responde con un `AcuseBatalla` |
+| `servidor:tokens` | `RegistrarTokens` | servidor de batalla | por el canal del servidor de batalla (`MensajeDeServidorDeBatalla`), con su credencial; responde con un `AcuseBatalla` |
+
+**Aún no disponibles (`orden.no_disponible`)**
+
+| Orden del contrato | Comando | Quién la da | Además (lo comprueba la orden, con su código) |
+|---|---|---|---|
+
+<!-- /autorizacion -->
+
+### 5.2 La matriz del TypeScript (lo que pedirá el sistema 5)
+
+La autorización del motor TypeScript (`session/comandos/autorizacion.ts`, verificada contra `3d19d31`): con cargos, residencia y presencia. En Rust aún no existe (§5.1); queda aquí como la regla que el sistema 5 tiene que traer. Las secciones siguientes son sus filas.
+
+> **Implementado en Rust (2026-10-24, 5A, solo los predicados):** `crates/politica::autorizacion` (`Actor` sobre una `Vista` de las plazas que dará el núcleo): `ciudadano`, `rey`, `rey_o_embajador`, `residente`, `presente`, `reside`, `cargo`, `algun_cargo`, `autoridad_diplomatica`, `rey_de_faccion`, `rey_de_la_plaza`, `responde_solicitudes` (fail-closed), `asigna_rey`, `asigna_cargo_local`, `fija_puerta`, `veta`, `opera_aparcada`, `dirige_aedas`, `compra_intel_en`, `compra_tecnologia_aeda`, `se_muda_a` y `ciudadano_o_sin_faccion`, con el fail-open de §4.2. La matriz de §5.1 no cambia hasta 5E, que retira `manda_en` y pasa cada orden a su fila de esta sección.
+
+> **Implementado en Rust (2026-10-25, 5E):** las filas de esta sección son las de §5.1 (ver su nota). `moverCargaCaravanaAparcada` y `enviarCaravanaAlOrigen` miran la plaza donde está aparcada (la de la
+> caravana, no un `asentamientoId` de la orden); `asignarEscolta` y `quitarEscolta` siguen siendo de la cuenta del héroe con la regla de la orden (escuadras suyas en el campamento del origen).
+
+Todas las filas admiten únicamente el rol `jugador` (más `cancelarBatalla`, §5.2.9). La columna «Condición» es lo que se evalúa **además** de «héroe existente y dentro del mundo».
+
+#### 5.2.1 Sin condición adicional (23)
+
+El actor es siempre el héroe de la sesión: estos comandos no reciben un `heroeId` con el que suplantar. Quién puede de verdad lo decide el comando.
+
+| Comando | Qué lo limita (en el comando, no aquí) | Documento |
+|---|---|---|
+| `crearHeroe` | único comando de quien aún no tiene héroe (`heroe.ya_existe` si ya lo tiene) | [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) |
+| `repartirPuntos`, `guardarLoadout`, `borrarLoadout`, `ordenarEscuadras`, `pasarAViveres` | siempre sobre el héroe del actor | [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md), [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) |
+| `asignarGuarnicion`, `retirarGuarnicion` | residir donde guarnece y el cupo | [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) |
+| `guardarEnAlmacenPersonal`, `sacarDelAlmacenPersonal` | ser el Líder de su columna | [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) |
+| `crearFaccion`, `solicitarIngreso`, `dejarFaccion` | «1 jugador, 1 Facción» y el cooldown son reglas de negocio de la partida (qué transición es válida), no de autorización | [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) |
+| `fundar` | ser el titular de la Caravana de Fundación que lleva (lo mira el comando) | [`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md) |
+| `aportarARefundacion`, `retirarDeRefundacion`, `comprarCaravanaDeRefundacion` | dónde está, que su Facción no tenga plazas y el fondo | [`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md) |
+| `reclutarEnCampamento`, `pedirPrestamo`, `reponerPrestamo`, `comprarEnCampamento`, `repostarEnCampamento` | residir en el campamento / estar dentro o a su puerta (`campamento.lejos`) y el pago | [`Campamentos_Mercenarios.md`](Campamentos_Mercenarios.md) |
+| `abrirAlijo` | ser de una Facción sin asentamientos o sin Facción (`buscaAlijos`), no haberlo abierto y la columna a `≤ radioPuerta` **del alijo** (no del campamento; C7 del plan del sistema 6) | [`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md) §12 |
+
+#### 5.2.2 Solo «yo» (29)
+
+Condición: `yo` (`params.heroeId == héroe del actor`). La geometría y el resto lo comprueba el comando.
+
+| Comando | Documento |
+|---|---|
+| `conectarse` (el único permitido con el héroe fuera del mundo), `desconectarse`, `cerrarSesion`, `salirDeAsentamiento`, `entrarEnAsentamiento`, `entrarEnCampamento`, `salirDelCampamento`, `guarnecer`, `marcharA`, `residirEnCampamento`, `dejarResidencia` | [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md), [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) |
+| `convocarEjercito`, `unirseAConvocatoria`, `responderPeticionDeConvocatoria`, `cambiarSeleccionDeConvocatoria`, `separarseDeConvocatoria`, `cancelarConvocatoria`, `partirConvocatoria` | [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md) §9 |
+| `unirseEnCampo`, `responderPeticionDeUnion`, `separarseDelEjercito`, `cederLiderazgo`, `organizarEjercito`, `cancelarFormacion` | [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) |
+| `inspeccionar`, `perseguir`, `dejarDePerseguir` | [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md), [`Niebla_De_Guerra.md`](Niebla_De_Guerra.md) |
+| `atacar` | [`Combate.md`](Combate.md) |
+| `comerciarEnPlaza` | [`Comercio_Caravanas.md`](Comercio_Caravanas.md): estar a la puerta con la columna lo comprueba el motor |
+| `unirseABatalla` | [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) |
+
+#### 5.2.3 «Yo» y algo más (12)
+
+| Comando | Condición |
+|---|---|
+| `cambiarResidencia` | `yo` ∧ (el destino no existe ∨ `ciudadano` de la Facción dueña del destino) |
+| `reclutarTropa` | `yo` ∧ `puedeReclutarEnPlaza(params.asentamientoId)` |
+| `salirAlMundo` | `yo` ∧ `reside(params.asentamientoId)` ∧ `escuadrasPropias(params.escuadronIds)` |
+| `movilizarEjercito` | `yo` ∧ `puedeMoverTropaDe(params.asentamientoId)` ∧ `escuadrasPropias(params.escuadronIds)` |
+| `unirseAEjercito` | `yo` ∧ `reside(params.asentamientoId)` ∧ `escuadrasPropias(params.escuadronIds)` |
+| `prepararCaravana`, `asignarEscolta`, `quitarEscolta` | `yo` ∧ `resideEnOrigen(params.caravanaId)` (la escolta la cede cada residente con lo suyo) |
+| `moverCargaCaravanaAparcada`, `enviarCaravanaAlOrigen` | `yo` ∧ `puedeOperarAparcada(params.caravanaId, params.asentamientoId)` |
+| `fijarPuerta` | `yo` ∧ (`cargo(A, gobernador)` ∨ `reyDeLaPlaza(A)`) — el Rey **no** tiene que estar presente |
+| `vetarJugador` | `yo` ∧ `cargo(A, gobernador)` — **el Rey no puede** (asimetría con `fijarPuerta`, ver [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md) §8) |
+
+#### 5.2.4 Residente presente (8)
+
+Condición: `reside(A)` — residente **y** dentro de la plaza. «La ciudadanía habilita, la presencia ejerce» (Doc 2.5): un Gobernador de campaña sigue siéndolo pero no gobierna desde el camino.
+
+| Comando | Plaza `A` | Documento |
+|---|---|---|
+| `lanzarCaravanaFundacion` | `origenAsentamientoId` | [`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md) |
+| `renombrarAsentamiento` | `asentamientoId` (basta residir: el canon deja abierto exigir un cargo) | [`Economia_Construccion.md`](Economia_Construccion.md) |
+| `crearCaravana` | `asentamientoId` | [`Comercio_Caravanas.md`](Comercio_Caravanas.md) |
+| `agregarCarroCaravana`, `comprarAnimalCaravana`, `reservarCaravana`, `cancelarCaravana` | `resideEnOrigen(caravanaId)` | [`Comercio_Caravanas.md`](Comercio_Caravanas.md) |
+| `moverCarroCaravana` | `resideEnOrigen(desdeCaravanaId)` | [`Comercio_Caravanas.md`](Comercio_Caravanas.md) |
+
+#### 5.2.5 Cargo local (18)
+
+Condición: `cargo(A, c)`. En los comandos con `params.cargo`, **el cliente declara con qué cargo actúa** y la matriz comprueba que sea el titular de **ese** cargo; que el cargo declarado sirva para esa acción lo rechaza el comando.
+
+| Comando | Cargo exigido |
+|---|---|
+| `activarPolitica`, `anadirEdificioManualmente`, `quitarDeCola`, `cancelarConstruccion`, `moverEnCola`, `mejorarEdificioAhora`, `comprometerRecinto`, `mejorarRecinto` | `params.cargo` |
+| `abandonarRecinto`, `solicitarAscenso` | `gobernador` (sin `cargo` en `params`: decisión de gobierno, no de obra) |
+| `alternarReabastecerAliados` | `gobernador` ∨ `tesorero` |
+| `alternarAutoConstruccion`, `alternarReceta` | `gobernador` ∨ `maestroObras` |
+| `calibrarReservaManual` | `tesorero` |
+| `proponerTrueque` (en `asentamientoAId`), `colocarOrdenMercado` | `tesorero` ∨ `gobernador` (decidido el 2026-10-12: el canon da el comercio al Tesorero y el Gobernador manda en la plaza) |
+| `aceptarTrueque`, `rechazarTrueque` | `tesorero` ∨ `gobernador` **del asentamiento `asentamientoBId` del acuerdo**: contesta el lado receptor, no quien propuso. Acuerdo inexistente: pasa |
+| `asignarCargoLocal` | si `params.cargo == 'gobernador'`: `reyDelAsentamiento(A)` (sin presencia); si no: `cargo(A, gobernador)` |
+
+Documentos: [`Economia_Construccion.md`](Economia_Construccion.md) (políticas, cola, mejoras, ascenso, auto-construcción, recetas, reserva), [`Comercio_Caravanas.md`](Comercio_Caravanas.md) (trueques y Mercado), [`Murallas.md`](Murallas.md), [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) (cargos), [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) (reabastecer aliados).
+
+#### 5.2.6 Tecnología e intel (6)
+
+| Comando | Condición | Documento |
+|---|---|---|
+| `adoptarTecnologia` | `rey(params.faccionId)` (Facción inexistente: verdadero). Que esté en la capital y pueda pagar, lo mira el motor | [`Tecnologia_Aedas.md`](Tecnologia_Aedas.md) |
+| `empezarEpica`, `abandonarEpica` | `dirigeAedas(params.asentamientoId)` | [`Tecnologia_Aedas.md`](Tecnologia_Aedas.md) |
+| `comprarTecnologiaAeda` | plaza y Facción existen ⇒ `presente(A)` ∧ (`rey(F)` ∨ `A.cargos.gobernador == yo`) | [`Tecnologia_Aedas.md`](Tecnologia_Aedas.md) |
+| `comprarMirada`, `comprarInformePlaza` | `compraIntel(params.origen)` | [`Niebla_De_Guerra.md`](Niebla_De_Guerra.md) §6 |
+| `comprarInformeRegion` (solo Rust, tanda 69) | `compraIntel` de la plaza de `params.asentamientoId` (nunca un campamento) | [`Niebla_De_Guerra.md`](Niebla_De_Guerra.md) §6.3 |
+
+#### 5.2.7 Facción y diplomacia (19)
+
+Todas con «F inexistente ⇒ pasa» salvo `responderSolicitud`.
+
+| Comando | Condición |
+|---|---|
+| `responderSolicitud` | `F.reyId == yo` (**fail-closed**) — `D31`, `D46` |
+| `asignarRey` | `ciudadano(F) ∧ (F.reyId == null ∨ rey(F))`: la primera asignación está abierta a cualquier ciudadano; una vez hay Rey, solo él traspasa el trono |
+| `designarCapital`, `admitirOtrasFacciones`, `asignarEmbajador` | `reyDeFaccion(params.faccionId)` |
+| `proponerRelacion`, `declararGuerra`, `proponerAnexion` | `autoridadDiplomatica(params.faccionAId)` (la que propone, declara o absorbe) |
+| `proponerPaz` | `autoridadDiplomatica(params.faccionId)` (la paz la ofrece cualquiera de las dos en guerra) |
+| `romperRelacion` | `autoridadDiplomatica(params.iniciadorFaccionId)` |
+| `rebelionVasallo` | `autoridadDiplomatica(relación.faccionBId)`: se rebela el **vasallo**, no el señor |
+| `responderRelacion` | `reyDeFaccion(propuesta.faccionBId)`: contesta **solo el Rey** de la otra Facción |
+| `retirarRelacion` | `autoridadDiplomatica(propuesta.faccionAId)` |
+| `responderAnexion` | `rey(propuesta.absorbidaId)` |
+| `retirarAnexion` | `autoridadDiplomatica(propuesta.absorbenteId)` |
+| `proponerFusion`, `retirarFusion` | `reyDeFaccion(faccionAId)` (en `retirarFusion`, la `faccionAId` de la propuesta) |
+| `responderFusion` | `reyDeFaccion(propuesta.faccionBId)` |
+| `desarmarCaravanaFundacion` | `ciudadano` de la Facción de la caravana (sin Facción derivable: pasa). Que además sea el titular lo mira el comando |
+
+Documento: [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) (y [`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md) para la última).
+
+#### 5.2.8 Dentro de un ejército (6)
+
+Condición: `enEjercito(params.ejercitoId)`. **No exige ser el Líder**: cualquier participante puede estacionar (la cesión de mando de una coalición no existe en esta fase); que el comando exija además ser el Líder (cancelar la marcha, Doc 5.14.3) lo comprueba el motor.
+
+`adjuntarCaravana`, `soltarCaravana`, `cargarCaravana`, `entregarDeCaravana`, `estacionarEjercito` — [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md).
+
+**No se adopta en Rust** (contraste del sistema 5, C16): que cualquier participante estacione choca con la decisión de la 4B-2 (lo da el Líder, [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md)); queda lo de §5.1.
+
+#### 5.2.9 Administración (1)
+
+| Comando | Roles | Condición (solo si entra como `jugador`) |
+|---|---|---|
+| `cancelarBatalla` | `jugador`, `administrador_partida`, `administrador_global` (**no** `moderador`) | la batalla no existe ∨ `batalla.iniciadaPor == yo`. El administrador cancela cualquiera |
+
+## 6. Qué ve cada audiencia
+
+La proyección es una **frontera de seguridad**, no una capa de presentación: lo que no sale del servidor no se puede leer en un DevTools. Lo que decide qué secciones viajan es siempre el servidor.
+
+### 6.1 Administración (`vistaAdminDeEstado`)
+
+`GET /admin/partidas/:g` y los canales `admin/*` (§7.3). **Todo el estado, sin niebla ni redacción**, menos:
+- `mapa` (viaja su identidad, `mapaId`; el mapa real se pide una vez por `GET …/mapa/:mapaId`) y `eventosDominio` (se piden con el cursor).
+- Los **tokens de entrada a una batalla** (`batallas[].asignacion.tokensParticipante` se manda vacío): son de cada jugador, ni el administrador los ve.
+- Se le suman los campos impuros que calcula el *runner*: `preciosReferencia`, `relojDeMundoIntervaloMs`, y la geometría de todos los asentamientos (`zonas`, `zonasFusionadas`, `trazadoPorAsentamiento`). `moderador` ve lo mismo que `administrador_partida`.
+
+### 6.2 Jugador sin héroe
+
+Si la membresía no tiene héroe, `GET /jugador/partidas/:g` y la respuesta de cualquier comando devuelven `{ gameId, instante, version, mapaId, sinHeroe: true, campamentos }`, con `campamentos = campamentosParaElegir`: de **cada** campamento de mercenarios, `{ id, posicion, origen, eligieronComoInicial, residentes (cuenta) }`. Es lo único que ve: dónde nacer.
+
+### 6.3 Jugador con héroe: tres lecturas, una sola regla
+
+`proyectarParaJugador(estado, heroeId, geometria)` se compone de dos mitades, y **los canales de tiempo real reparten esas mismas mitades**, de modo que la regla de qué se ve está escrita una vez y no puede separarse entre el `GET` y el empuje:
+
+```
+perspectiva = perspectivaDeMapa(estado, heroeId)           ← desde dónde se mira (Facción, columnas, explorado, aliados)
+mapa        = proyectarMapa(estado, perspectiva, geometria) ← lo del mundo; igual para quien tenga la misma perspectiva.clave   → vista/mapa
+{ajustes, dentroDe, personal} = proyectarPersonal(...)      ← lo de este héroe                                                   → vista/heroe
+proyección  = componerProyeccion(mapa, heroeId, ajustes) + personal + { asentamientos: dentroDe ? [dentroDe] : [], trazadoPorAsentamiento }
+              + (el runner añade) preciosReferencia, produccionDeAsentamiento*, ascensoDeAsentamiento*   (* solo si está dentro de una plaza)
+```
+
+**Perspectiva** (`PerspectivaDeMapa`):
+- `faccionId` = la Facción de la que es ciudadano (o `null`).
+- `ejercitosPropios` = columnas que `esColumnaDe`: **de su Facción**, **o** en las que va dentro (`participantes`), **o** en las que lleva una escuadra suya (un huérfano conserva las suyas). *Todos los miembros de una Facción ven enteras todas las columnas de la Facción.*
+- `faccionesQueComparten` = Facciones con alianza o vasallaje `activa` con la propia (`compartenVision`).
+- `explorado` = la memoria de la Facción fundida con `héroe.exploracionPersonal`.
+- **`clave`** = `f:<facciónId>|<aliadas ordenadas, separadas por coma>` si es **compartible**, y `h:<heroeId>` si no. Es compartible si `faccionId ≠ null` ∧ todas sus columnas propias son de la Facción ∧ `explorado` es idéntico a la memoria de la Facción (no ha explorado por su cuenta más que ella). Dos héroes con la misma clave reciben exactamente el mismo mapa.
+
+#### Cada campo, su capa y su regla
+
+La regla fina de cada cosa del mundo (qué se ve, redactado a qué, con memoria o sin ella) está en [`Niebla_De_Guerra.md`](Niebla_De_Guerra.md) §5.4; aquí, el mapa completo de qué campo viaja por dónde.
+
+| Campo | Capa | Quién lo recibe y qué | Forma |
+|---|---|---|---|
+| `mapaId`, `estadoMapa` | mapa | todos (el estado de los recursos del mapa) | escalar |
+| `facciones` | mapa | **todas**, sin redactar: nombre, nivel, reputación, Rey/Embajador, ciudadanía, solicitudes, sigilo — público en la ficción (en Rust, 5H: la forma pública en `VISTA`, sin la experiencia ni la capital) | colección |
+| `relaciones`, `titulos` | mapa | **todas**: la diplomacia y el ranking son públicos | colección |
+| `asentamientosAvistados` | mapa | las plazas que se **ven ahora**, redactadas a ficha (`AsentamientoAvistado`); incluye las propias y la que pisa (que `componerProyeccion` quita para el que está dentro) | colección |
+| `asentamientosConocidos` | mapa | la última foto de las vistas alguna vez (`FichaConocida` + `conocidoEn`), menos las que se ven ahora | colección |
+| `ejercitosAvistados`, `caravanasAvistadas`, `aedasAvistados` | mapa | lo ajeno que se ve ahora (una caravana `esperando` está dentro de su plaza y no se ve), redactado (en Rust, 6G, los Aedas como `AedaItinerante` en `VISTA`, con el tramo visible de su plan) | colección (móviles) |
+| `heroesVisibles` | mapa (+ héroe) | solo la parte pública (`HeroePublico`) de quienes van en una columna propia o avistada | colección |
+| `batallas` | mapa (+ héroe) | las que se ven; el bando propio (`ladoPropio`) lo añade la capa de héroe | colección |
+| `campamentosBandidos` | mapa | los que se ven **ahora**, sin memoria | colección |
+| `campamentosMercenarios` | mapa (+ héroe) | los explorados; la capa de héroe añade los suyos (casa y donde está dentro) aunque no los haya explorado | colección |
+| `caminos` | mapa | tramos de la red con algún extremo explorado, fusionados en polilíneas | colección |
+| `exploracion` | mapa | las dos máscaras (`celdas` exploradas, `visibles` ahora) que aplica el **cliente de jugador** | bloque |
+| `territorioPorEjercito` | mapa | por cada columna **propia**, la Facción cuya zona contiene su posición (solo el `faccionId`, nunca qué plaza); se resuelve en el servidor porque el cliente solo tiene las zonas de lo que ve | mapa `id → valor` |
+| `nombresDeDirigentes` | mapa | `heroeId → nombre` del Rey y del Embajador de **cada** Facción | mapa |
+| `nombresDeCompaneros` | mapa | `heroeId → nombre` de cada ciudadano de la Facción propia (se le vea o no) **y de quienes piden entrar** | mapa |
+| `zonas`, `zonasFusionadas` | mapa | **solo las de la Facción propia**: calcularlas exige las posiciones de todos los vecinos (entrada privilegiada) | colección |
+| `faccionId`, `miConvocatoriaId`, `plazaPisadaId` | héroe | escalares propios | escalar |
+| `heroe` | héroe | el héroe propio completo, **sin** `plazasRecordadas` ni `exploracionPersonal`, más lo derivado: `costeLiderazgo` por escuadra, `liderazgoTotal` por loadout, `cupoGuarnicion` y `guarnicionOcupada`, `capacidadAlmacenPersonal` (en Rust `capacidad_almacen_personal`, desde 5G-a), `residenciaId` | única |
+| `ejercitos` | héroe | las columnas propias **completas** (+ `capacidadCarga` derivado) | colección (móviles) |
+| `caravanas` | héroe | las propias **completas**: las de plazas propias, las de la Facción, y **las que tienen una plaza propia como destino** aunque sean ajenas; las comerciales de una plaza propia llevan `escoltaLiderazgo { usado, cupo }` y, si tienen un encargo (Comercio_Caravanas §5.8.9, 2026-10-31), `encargo`: `modo` (`ruta` o `envio`), `destino_asentamiento_id`, `salir_en_ms`, `vueltas`, `cancelado`, las dos paradas (`parada_origen` y `parada_destino`, con sus líneas de recoger y de dejar, sus interruptores y los recursos con su id de catálogo), `parada_actual` (`origen` o `destino`), `fase` (`espera`, `descarga` o `carga`) y `fin_paso_ms`. La proyección ajena (`caravanasAvistadas`) nunca lleva el encargo | colección (móviles) |
+| `acuerdos` | héroe | los trueques con alguna de las dos plazas propia | colección |
+| `ordenes` | héroe | todas las de las plazas propias (más el historial de cumplidas), y de una plaza ajena **en cuya puerta tiene columna**, solo las `activa` (el escaparate, no la contabilidad) | colección |
+| `informesDeInspeccion` | héroe | los suyos no caducados (`ahora < expiraEn`) | colección |
+| `convocatorias` | héroe | las de **su lugar** (plaza o campamento donde está) y de **su Facción**, más la propia; las peticiones: el Líder ve todas, cada solicitante la suya | colección |
+| `miradasIntel` | héroe | las de la Facción propia, abiertas o en cooldown (`libreEn > ahora`); las de los aliados no viajan, solo lo que ven | colección |
+| `propuestasAnexion`, `propuestasRelacion`, `propuestasFusion` | héroe | las vigentes que hace o recibe la Facción propia | colección |
+| `informesPlaza` | héroe | los de la memoria de la Facción (el último de cada plaza, con fecha) | colección |
+| `tarifasIntel` | héroe | las tarifas y cupos (para cotizar sin copiar la regla) | bloque |
+| `aedasResidentes` | héroe | los de las plazas propias, con su épica; los rivales no ven los suyos (en Rust, 6G, `AedaResidente` en `FACCION`) | colección |
+| `alijos` | héroe | los a la vista de su columna, solo si puede buscarlos (Facción sin asentamientos, o sin Facción) (en Rust, 6G, `Alijo` en `HEROE`, renovados con el muestreo de la vista) | colección |
+| `escenaCampamento`, `mercadoCampamento` | héroe | **solo dentro de un campamento de mercenarios**: la planta; los precios por unidad, el cupo que le queda hoy y (si reside) lo que se puede reclutar | bloque |
+| `historial` | héroe | las líneas de su historial personal | colección |
+| `tecnologia` | héroe | la Era, los logros del servidor (públicos, sin decir qué abren) con sus contadores en curso (desde el 2026-11-06), y las tecnologías de la Facción propia (las de un rival no viajan nunca) (en Rust, 6G: `EstadoTecnologia` público en `HEROE` y `TecnologiasFaccion` en `FACCION`; `eraDe` y `capitalId` no viajan: salen del catálogo y de `Faccion.capital_id`) | bloque |
+| `detalleDeAvistados` | héroe | de las plazas avistadas, lo que solo él ve: su `almacen` (si es de su Facción y su columna está a la puerta) e `interiorRecordado` | mapa |
+| `campamentosPropios`, `heroesVisiblesExtra`, `ladoPropioPorBatalla`, `batallasPropias` | héroe | los ajustes de §6.3: campamentos que conoce por vivir en ellos; héroes dentro de la plaza que pisa; su bando en cada batalla; las batallas en que combate aunque el mapa no las vea | varios |
+| `preciosReferencia` | runner | el precio de referencia por recurso (necesita el almacén de todas las plazas) | bloque |
+| `produccionDeAsentamiento`, `ascensoDeAsentamiento` | runner | **solo dentro de una plaza**, la que pisa | bloque |
+
+#### Lo que solo viaja si estás dentro de una plaza de tu Facción
+
+`asentamientos` es un array de **cero o un** elemento: el interior **completo** (`Asentamiento` entero: almacén, cola, cargos, políticas, edificios en obra, población…) de la plaza donde el héroe **está** (`ubicacion.tipo == 'asentamiento'`, la registrada o, si no hay, la deducida) **y** es de su Facción. Con él viaja el `trazadoPorAsentamiento` de las plazas propias. Dentro de una plaza **ajena** (aliada, neutral) no se ve ningún interior: la plaza aparece, si se ve, como ficha. El resto de plazas de la propia Facción, desde fuera, se ven como cualquier otra, más `cargos` y `politicasActivas` (público dentro de casa) y, con una columna a la puerta, el `almacen`.
+
+#### Lo redactado: formas públicas
+
+| Forma | Lleva | Deliberadamente NO lleva |
+|---|---|---|
+| `AsentamientoAvistado` | id, nombre, `faccionId`, posición, `nivel`, `zona` (polígono real, recortado contra todos los vecinos), `tiene_muralla` y `mercado_activo` (2026-11-07), `armeria_activa` (2026-11-12), `protegida_hasta_ms` (hasta cuándo es inatacable, por fundación o por conquista; 2026-11-11, sin cambio de contrato: antes solo lo llevaba el interior) (2026-11-07: la lista `edificios`, solo los `activo`, solo con el héroe dentro); si es propia: `cargos`, `politicasActivas`, y con columna a la puerta el `almacen`; `interiorRecordado` si el héroe la pisó | almacén (ajena), escuadras, la lista de edificios (desde fuera), edificios en obra, colas, cargos y políticas (ajena), trazado |
+| `EjercitoAvistado` | id, `tipo`, `faccionId`, posición, `enFormacion?`, nº de `participantes` (los rombos), `heroeIds`, `teSigue?` (solo a quien es perseguido) | composición, `ruta`, `objetivo`, `estado`, origen, suministro |
+| `CaravanaAvistada` | id, posición, `faccionId?` (por su plaza de origen), `escoltada`, `recursos` (nombres, **sin cantidades**, ordenados) | cantidades, ruta, destino |
+| `HeroePublico` | id, nombre, clase, nivel, `heridoHasta?`, `escuadrasQueLleva` (tropa, cantidad, nivel) y equipo puesto | campamento, puntos, Liderazgo, si es humano o bot |
+| `BatallaVisible` | id, estado, contexto, punto, por bando: Facción, nº de héroes y capacidad; `ladoPropio?` | tokens, escuadras, listas de héroes |
+| `AedaAvistado` | id, posición, `enAsentamientoId?` (en Rust, 6G, también el tramo visible de su plan, como una columna ajena) | qué sabe; hasta cuándo se queda, adónde va y dónde estuvo |
+| `ConvocatoriaProyectada` | lugar, Líder, política de unión, integrantes (escuadras con tropa, nivel, moral, cantidad; carga), peticiones, `soyLider`, `soyIntegrante` | – |
+
+> **La forja de la plaza (2026-11-12; [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §4.6).** `Asentamiento.armeria_activa` (55) va en toda ficha, también en la avistada: si tiene una Armería activa, sin más. `Asentamiento.forja` (56: la apertura y el recargo de aliados, neutrales y enemigos y el fondo de monedas) y `Asentamiento.metales_armeria` (57: los metales de `OBJETOS.metales` cuya tecnología tiene adoptada la Facción de la plaza, `inicio` incluido; vacío sin Armería activa) son de dentro: el interior (`ASENTAMIENTO`), la plaza ajena vista desde dentro en la `VISTA` (`vista::plaza_desde_dentro`) y `ADMIN`; no la ficha de `FACCION` ni la avistada. No se manda nada por espectador: el cliente saca su grupo, lo que pagaría y qué tier puede forjar con eso, `OBJETOS.forja` de `/v1/datos` y la Era del mundo. Como la plaza ajena vista desde dentro solo se vuelve a mandar cuando cambia su versión, una adopción de tecnología (`adoptar_tecnologia` y `FijarTecnologias`) toca las plazas de su Facción con Armería activa (`Nucleo::tocar_armerias_de`).
+
+> **El estilo de época (2026-11-16; [`Tecnologia_Aedas.md`](Tecnologia_Aedas.md) §4.2).** `Asentamiento.estilo_epoca` (58) va a quien ve la plaza por dentro: el interior (`ASENTAMIENTO`), la plaza propia (también la ficha de `FACCION`, `propios::plaza_propia`), la ajena vista desde dentro en la `VISTA` y `ADMIN`; no la avistada, porque lo adoptado por otra Facción es privado. `Pueblo.estilo_epoca_madre` (24) va con la planta, en `vista::pueblo_desde_dentro`; `Avanzada.estilo_epoca_madre` (16), en la avanzada propia y en la ajena donde está el héroe de la sesión (con otro sello: llega al entrar y se va al salir). Cuando sube, el núcleo toca la plaza, sus pueblos y sus avanzadas, y la auditoría lo mira en la huella de las tres.
+
+> **Fuga aceptada** (decisión del autor, 2026-09-05): la `zona` de una plaza vista está recortada contra *todos* sus vecinos, incluidos los que el jugador no ha visto; un lado plano en la frontera delata un tercero en esa dirección. Se prefiere «exacta con una pista de más» a «limpia pero falsa».
+
+### 6.4 Eventos
+
+- **Audiencia de un jugador** (`eventosVisiblesParaJugador`): le llegan los eventos **sin plaza** (`asentamientoId` ausente: globales), los de **una plaza de su Facción** y los que **nombran a su héroe** (`heroesNombrados`). *(En Rust, reglas del autor del 2026-10-24: un hecho sin plaza que nombra a alguien llega **solo a los nombrados y a sus Facciones**, no a todos —a todos, solo los públicos: la crónica y la reposición de los mercados—, y los de una plaza los oye su Facción y **quien esté dentro**, ciudadano o visitante; contrato 05 §8.)*
+- **`heroesNombrados(evento)`** = la unión de `payload.heroeId`, `payload.liderId` (a quién se le pide algo), `payload.heroesIds` y los `heroesIds` de cada lado (`atacante`, `defensor`) de un informe de combate. Hace falta porque la atribución por plaza no cubre una columna salida de un campamento (`asentamientoId: ''`) ni un combate entre Facciones (el evento va a la plaza de un solo bando). La misma función filtra el cursor HTTP y el canal `heroe/<id>`: no pueden separarse.
+- **Cursor**: `GET …/eventos?desde=<versión>` devuelve los de `version > desde`, ya filtrados. `desde` no entero o negativo = 400. Sin héroe: lista vacía. El historial **no viaja** en las lecturas de estado (solo crece y era casi toda la lectura): se pide una vez con `desde=0` y luego por cursor; los de los comandos propios ya vienen en `resultado.eventos`.
+- **Crónica** (`GET …/cronica`): los eventos `esDeCronica` (la entrada derivada `cronica.entrada` y los públicos de la lista: logros, Eras, títulos, descubrimientos y épicas, **siempre sin plaza**) — **la misma para todos**. `limite` (200 por defecto, entre 1 y 1000) las más recientes, en orden cronológico. Sin `desde` mira solo los eventos en memoria; con `desde`, el historial completo.
+- **Administración**: `GET …/eventos` sin filtro.
+
+> **Implementado en Rust (2026-10-23, 4H T5).** Sin cursor ni canales: los hechos viajan en las `Delta` de la sesión (contrato 05 §8). Quién oye cada uno se decide al emitirlo (`EventoNucleo::completar`): los nombrados (`heroesNombrados` por las claves `heroe` y `lider`, más los participantes de las columnas que nombra), las Facciones dueñas de sus plazas y las que nombran sus datos; y en la sesión (`Mesa::oyentes`) cada sesión lo recibe **una vez**, por el primero de sus ámbitos que lo oye: `ASENTAMIENTO` (quien está dentro), `BATALLA` (quien combate), `HEROE` (el nombrado), `FACCION` y la `VISTA` de quien ve la batalla. Los globales son solo los públicos (`cronica.entrada`, `mercenarios.repuesto`): un hecho sin plaza que nombra a alguien ya no es de todos (no puede revelar lo que la niebla oculta). La administración, todos (`ADMIN`). La crónica es la de Tecnologia_Aedas §8, como hechos públicos en las mismas `Delta`.
+
+## 7. Tiempo real
+
+Una conexión WebSocket por cliente y superficie —`/jugador/partidas/:g/tiempo-real`, `/admin/partidas/:g/tiempo-real`— con canales lógicos encima. **La autenticación va ANTES de completar el *handshake*** (`preValidation`): sin sesión, 401; sin el permiso de la superficie, 403; con la partida cerrada, 404 — como respuesta HTTP a la petición de *upgrade*, no como un socket que se abre y se cierra. No hay mensaje de «conectado»: lo es el evento `open`. **Al reconectar se pierden las suscripciones**: el cliente se suscribe de nuevo.
+
+Mensajes del cliente: `{ accion: 'suscribir' | 'desuscribir' | 'resincronizar', canal, ritmo? }`. Un mensaje que no es JSON o no tiene esa forma responde `error` con código `formato`.
+
+### 7.1 Presencia por la conexión
+
+Abrir el socket de jugador ejecuta `conectarse` para su héroe (si lo tiene); cerrar **el último** socket del jugador (varias pestañas cuentan) ejecuta `desconectarse`. Lo hace el servidor con el id del héroe como actor (no pasa por la matriz). Un fallo al anotarlo se registra y no tumba el socket: la presencia se corrige en la siguiente conexión. Apagar el servidor (un despliegue) **no** desconecta a nadie. Qué hacen ambos comandos: [`Presencia_Y_Convocatoria.md`](Presencia_Y_Convocatoria.md) §7.
+
+Cerrar el socket es la **caída** (salida a los 2:30). Quien cierra sesión a propósito desde el cliente manda antes la orden `cerrar_sesion` y sale del mundo al instante (decisión del autor del 2026-11-02); el socket que se cierra después ya no cambia nada.
+
+> **Implementado en Rust (2026-11-02).** Hasta ahora el servidor de Rust no hacía nada de esto: cerrar el cliente no sacaba a nadie del mundo y volver no lo conectaba. Ahora el actor de sesiones (`nucleo::sesiones`, `Actor::presencia`) lo aplica a las sesiones `CLIENTE_UNITY`: al abrir la sesión, antes de su foto, `Conectarse` del héroe de verdad de la cuenta (`Nucleo::heroe_de_cuenta`: un héroe de campo de la administración no cuenta), y al cerrarse la última sesión de esa cuenta, `Desconectarse`. La orden va con la cuenta como actor y un id `presencia:conecta:vN` o `presencia:desconecta:vN` (la versión de antes, que una aceptada siempre sube); un rechazo (sin héroe, ya conectado, ya fuera) no deja rastro. Solo un cierre es la caída: el servidor dice por qué terminó cada sesión (`ComandoSesion::Desconecta { sesion, fin }`, con `servidor::FinDeSesion` `Cierre`, `Reemplazada` o `Apagado`), y ni la sesión que otra del mismo cliente sustituye (abrir el juego en otro sitio) ni apagar el servidor desconectan a nadie. **Un bot (`CLIENTE_BOT`) lleva su presencia con sus propias órdenes** (`conectarse`, `desconectarse`, `cerrar_sesion`): su socket no la toca. Prueba en `crates/nucleo/tests/ambitos.rs` (`el_socket_de_unity_lleva_la_presencia_de_su_heroe_y_cerrar_sesion_le_saca_ya`).
+
+### 7.2 Canales de eventos (el *hub*)
+
+Un evento por canal, serializado una vez por evento y canal, y solo si alguien lo escucha. No hay foto ni versión de canal: es un canal de hechos.
+
+| Canal | Lleva | Quién puede suscribirse (`puedeSuscribirseA`) |
+|---|---|---|
+| `mapa/general` | eventos **sin** `asentamientoId` | cualquier jugador de la partida |
+| `asentamiento/<id>` | eventos de **esa** plaza | `ciudadano` de la Facción dueña. Plaza inexistente = no autorizado (no se distingue de «ajena») |
+| `batalla/<id>` | los `batalla.*` y `evento_pve.*` con ese `battleId` | `combateEn(batalla, héroe)` (también quien salió) ∨ la batalla está en `proyectarParaJugador(...).batallas` (la ve bajo la niebla). Batalla inexistente = no |
+| `heroe/<id>` | lo que nombra al héroe y **no** va ya por `mapa/general` | solo ese héroe |
+| `admin/eventos` | **todos** los eventos de la partida, sin filtro | `puedeAdministrar`, reevaluado al difundir |
+
+- **Canales de un evento** (`canalesDeEvento`): `canalDeEvento` (general si no tiene plaza; si no, el de la plaza) + el de la batalla si es un `batalla.*`/`evento_pve.*` con `battleId` + el `heroe/<id>` de **cada héroe nombrado**, **salvo** que el evento sea global (ya les llega por el general). Más `admin/eventos`.
+- **No se revalida una suscripción de jugador activa** (una anexión que cambie la Facción dueña de la plaza no la corta; el cliente se resuscribe al reconectar). **Sí** se revalida la de administración en cada difusión: si pierde el derecho, `revocado { motivo: 'sin_derecho' }` y fuera.
+- Un canal de forma desconocida, o que no existe: `no_autorizado` (los de jugador) — no se revela si existe.
+
+### 7.3 Canales de vista (foto y delta)
+
+Siete canales, dos audiencias. Un canal de una audiencia **no existe** para la otra (`canal_desconocido`: ni se revela su nombre).
+
+| Canal | Audiencia | Foto | `puedeVer` | Grupo (comparten foto, diff y serialización) |
+|---|---|---|---|---|
+| `admin/partida` | admin | la partida **ligera**: asentamientos sin `almacen`, `recintos` ni edificios no `mapa` (más `resumen`), héroes, campamentos de mercenarios sin `mercado`/`fondos`, ejércitos, caravanas, Facciones, relaciones, batallas, bandidos, Aedas, títulos, tecnología, red, acuerdos, órdenes, residentes, `preciosReferencia` | siempre | el propio canal |
+| `admin/asentamiento/<id>` | admin | el asentamiento entero + sus edificios como colección | el asentamiento existe | el propio canal |
+| `admin/campamento/<id>` | admin | el campamento (entidad única) | existe | el propio canal |
+| `admin/heroe/<id>` | admin | `almacenPersonal` + historial con ids sintéticos | existe | el propio canal |
+| `vista/mapa` | jugador | `MapaProyectado` de su perspectiva | tiene héroe | `vista/mapa|<perspectiva.clave>` |
+| `vista/heroe` | jugador | su capa personal + ajustes + impuros | tiene héroe | `vista/heroe|<heroeId>` |
+| `vista/asentamiento/<id>` | jugador | el interior: asentamiento (sin `edificios`), `edificios` como colección y `trazado` | ciudadano de la Facción dueña **y** pisándola (`ubicacion` = esa plaza) | el propio canal (la foto no depende de quien mira; el derecho se comprueba por suscriptor) |
+
+Sin héroe (aún) todos los `vista/*` de jugador son `no_autorizado`. Si lo mirado deja de existir (plaza destruida, héroe borrado) el canal se **revoca** con `ya_no_existe`.
+
+**Esquema de cada canal** (qué claves son colecciones con id, mapas, entidades únicas, escalares, bloques y cabecera): `admin/partida` — colecciones `asentamientos, heroes, campamentosMercenarios, ejercitos, caravanas, facciones, relaciones, batallas, campamentosBandidos, aedas, titulos (por tituloId), acuerdos, ordenes`; escalares `mapaId, estadoMapa`; móviles propios `ejercitos, caravanas`. `vista/mapa` — colecciones `ejercitosAvistados, caravanasAvistadas, asentamientosAvistados, asentamientosConocidos (por asentamientoId), aedasAvistados, batallas (por battleId), campamentosBandidos, campamentosMercenarios, heroesVisibles (por heroeId), facciones, zonas (por asentamientoId), zonasFusionadas (por faccionId), caminos, relaciones, titulos`; mapas `territorioPorEjercito, nombresDeCompaneros, nombresDeDirigentes`; escalares `mapaId, estadoMapa`; móviles **ajenos** `ejercitosAvistados, caravanasAvistadas`. `vista/heroe` — colecciones `ejercitos, caravanas, convocatorias, informesDeInspeccion (con id sintético `tipo:id` del objetivo), miradasIntel, informesPlaza (por asentamientoId), propuestas*, acuerdos, ordenes, aedasResidentes, historial (id sintético), alijos, campamentosPropios, heroesVisiblesExtra (por heroeId), batallasPropias (por battleId)`; mapas `detalleDeAvistados, ladoPropioPorBatalla`; única `heroe`; escalares `faccionId, miConvocatoriaId, plazaPisadaId`; móviles propios `ejercitos, caravanas`. Todo lo demás (`tecnologia`, `tarifasIntel`, `escenaCampamento`, `mercadoCampamento`, `preciosReferencia`, `produccionDeAsentamiento`, `ascensoDeAsentamiento`, `exploracion`) son **bloques**: se reemplazan enteros si cambian. En la cabecera de cada mensaje, no en `datos`: `instante`, `version`, `tick`.
+
+> El `historial` de `admin/heroe` y de `vista/heroe` se identifica con un id **sintético y estable**: `momento#<hash djb2 del texto en base 36>.<n>`, con `n` = cuántas líneas idénticas hay antes. Así dos líneas iguales del mismo instante no chocan.
+
+### 7.4 Foto, delta y su aplicación
+
+Cada grupo guarda **una** foto (ya filtrada para su audiencia) y una `version` (= `estado.version`). Un cambio del estado la reproyecta **una vez** y calcula **un** diff, serializado **una vez** para todos los del grupo. **El delta es siempre el diff de dos fotos ya filtradas para ese grupo**: nada de lo que el grupo no podía ver entra en ninguna.
+
+**Mensajes del servidor:**
+
+| Mensaje | Cuándo |
+|---|---|
+| `suscrito { canal, intervaloTickMs, ritmo }` | tras suscribirse (el `ritmo` es el aplicado) |
+| `foto { gameId, canal, version, instante, datos }` | al suscribirse, en `resincronizar`, tras recuperarse un socket lento, tras cambiar de grupo. `datos` sin `instante`/`version`/`tick` |
+| `delta { gameId, canal, desde, hasta, instante, cambios, escalares }` | en cada volcado con algo que contar, **o** si avanzó el reloj (cada tick manda al menos el latido) |
+| `resync { canal, motivo }` | seguida de una foto: motivos `visibilidad`, `cliente_lento`, `partida_reemplazada` |
+| `revocado { canal, motivo }` | `sin_derecho` o `ya_no_existe` |
+| `desuscrito { canal }` | tras desuscribir |
+| `error { canal?, error, codigo }` | `canal_desconocido`, `no_autorizado`, `demasiado_frecuente`, `formato` |
+
+**Diff** (`diferenciar(antes, despues, esquema)`), por cada clave del esquema:
+- *Escalar*: viaja en `escalares` solo si cambia; quitarlo es ponerlo a `null`.
+- *Entidad única*: `remove` si desaparece, `upsert` si aparece, y si cambia, un `patch` (o `upsert` si la entidad nueva tiene algún `null`).
+- *Colección con clave* (array de entidades, `id` por defecto): `remove` de las que faltan, `upsert` de las nuevas, y para las que están en las dos: ninguna operación si es la **misma referencia**; si no, `patch` con las claves de primer nivel que cambian (las que desaparecen van a `null`). **Una entidad con algún `null` legítimo se manda entera (`upsert`)**, para no confundir un valor con un borrado.
+- *Mapa* `id → valor`: `remove` de las claves que faltan, `upsert` de las nuevas o cambiadas.
+- *Bloque*: `set` entero si cambia.
+- **Orden de los cambios: primero todos los `remove`, luego `upsert`/`patch`** (así un id reutilizado no se borra tras reinsertarse). Las colecciones salen en el orden del esquema, las entidades en el de la foto nueva. Igualdad = estructural de JSON, cortada por identidad.
+
+**Aplicar** (`aplicarDiferencia`, lo que hace el cliente): `foto + N deltas ≡ foto final`. Un `patch` sobre una entidad que no existe es un **hueco** y falla; `null` en un `patch` borra la clave.
+
+**Movimiento** (`anotarMovimiento`): para las colecciones móviles, la `ruta` viaja una vez y luego solo `progreso` + `avancePorTick` (propios) o `posicionActual` + `desplazamientoPorTick` (ajenos, sin ruta). El avance **no sale de un cálculo nuevo**: es la diferencia con la foto anterior del mismo canal dividida por `ticksEntre` (= `round(Δinstante / duracionTickMs)`, mínimo 1; **0 si es el mismo instante**). Reglas: sin foto anterior no se anota; `estado == 'estacionado'` ⇒ `avancePorTick = 0`; con la **misma** `ruta` y `progreso` numérico en las dos fotos, el avance es la diferencia entre ellos; con otra ruta no se inventa (se espera al siguiente tick); **un comando entre dos ticks (mismo instante) hereda lo anotado en vez de poner cero**.
+
+### 7.5 Cuándo y a quién se entrega
+
+- **Coalescencia**: un cambio solo *programa* un volcado; como mucho **uno por partida cada `coalescerMs`**, y los cambios de dentro se juntan en un delta. Sin suscriptores no se proyecta nada.
+- **Reevaluación del derecho en cada volcado**, antes de proyectar para nadie: quien pierde el permiso (`derecho()` del socket) o ya no `puedeVer` recibe `revocado { sin_derecho }` y sale del grupo.
+- **Cambio de grupo**: si la clave de un suscriptor cambió (otra Facción, una alianza creada o rota, una columna que ya no es de la Facción, exploración propia) pasa a su grupo nuevo con `resync { visibilidad }` + la foto de ese grupo. **Nunca un delta entre grupos distintos.**
+- **Partida reemplazada** (`forzar`: la versión del estado es *menor* que la del grupo): foto nueva a todos con `resync { partida_reemplazada }`.
+- **Suscribir** a un grupo que ya existe lo vuelca primero, para que la foto que se da esté al día y la cadena `desde → hasta` no tenga hueco. Un `suscribir` repetido manda la foto otra vez pero no reinicia el reloj de `minMsEntreFotos` (que arranca en la primera alta).
+- **Ritmo** (`ritmo` al suscribir): se recorta a un entero en `[1, ritmoMaximo]` (sin pedirlo o no finito: 1). Con `ritmo > 1` el suscriptor recibe **un delta coalescido cada `ritmo` ticks**, calculado desde lo último que se le entregó; dos de ritmo lento a la par comparten el mensaje.
+- **Contrapresión**: si el búfer de un socket supera `umbralLentoBytes`, **no se le envía nada** (se marca desactualizado). Cuando baja de `umbralRecuperadoBytes` recibe `resync { cliente_lento }` + foto. Si sigue desactualizado más de `lentoMaxMs`, se cierra con el código **4408**.
+- **`resincronizar`**: foto de nuevo, a lo sumo **una por canal y socket cada `minMsEntreFotos`** (si no, `demasiado_frecuente`); sobre un canal al que no se está suscrito, `no_autorizado`.
+- **Tope** de `maxSuscripcionesPorSocket` canales por socket (`formato`).
+- **Borrar la partida** cierra todos los sockets con **4404** y descarta sus grupos.
+
+> **Implementado en Rust (2026-10-23, 4H T6).** Sin grupos ni diff de fotos: cada ámbito de cada sesión lleva su versión y el servidor reparte lo que dice el registro de cambios (contrato 05 §5-§7). Lo que aquí se garantiza con `aplicarDiferencia` («foto + N deltas ≡ foto final») lo prueba `crates/nucleo/tests/reanudacion.rs` en los siete ámbitos a la vez con mundos y órdenes aleatorios de semilla fija, y también que reanudar (todos los ámbitos a la vez, al día o con un hueco) deja lo mismo que una foto nueva. **Sin suscriptores no se proyecta nada**: sin ningún ámbito abierto el reparto no busca ni los oyentes de los hechos, y el ticket de una batalla solo se proyecta si hay un servidor de batalla que deba oírlo. La **coalescencia** es la del actor (un reparto por despertar, la vista también en cada muestreo de 250 ms) y la **contrapresión**, la de `servidor` (un cliente lento se descarta y reanuda). La niebla de la vista viaja como cambio parcial (los bytes que cambiaron de cada máscara) a quien tiene la anterior, y se calcula y se compara una vez por perspectiva. Con 500 sesiones (450 en el mapa con vista, 45 en su plaza, 5 de administración) repartir 5 minutos de mundo ocupa al actor 22 s (el 7 % de un núcleo en tiempo real; antes, 105-108 s) y cada orden 15 ms (antes, 54 ms), casi todo en la vista.
+
+## Decisiones del autor del 2026-10-27 (dudas abiertas del contrato)
+
+Confirmadas por el autor al cerrar las dudas abiertas (doc «Dudas abiertas del motor: propuesta de cierre»; detalle en `Consideraciones/Dudas_Del_Codigo_Decisiones.md`). Describen lo que hace el motor y pasan a ser la regla; se revisan si los bots o los clientes muestran un problema.
+
+- **Cambian:** el héroe público de la `VISTA` lleva `faccion_id` (la ciudadanía es pública); `movilizarEjercito` guarda el interior recordado como `salirAlMundo` (Niebla_De_Guerra §4.5).
+- **Retención y reparto (4H 1-6, 9-11):** se guardan 65.536 versiones (≈ 7 h sin órdenes, ≈ 22 min con 500 jugadores activos; más allá, `Foto`); la niebla parcial viaja en tramos; un cliente descartado por lento a mitad de un reparto puede perder un hecho de un ámbito (el estado le llega igual y el hecho queda en la crónica); la vista barre lo andado sin grabar en cada muestreo; un `QUITA` de lo que nació y murió dentro del tramo llega aunque el cliente no lo tuviera (lo ignora); las Facciones que nombran los datos de un hecho lo oyen entero; una caravana, un pueblo o una avanzada tocados buscan su plaza recorriéndolas; la `Batalla` entera llega a cada combatiente en cada cambio, la carga del carro en el ticket es proporcional a su capacidad y la experiencia y la moral de una escuadra viajan en puntos; las incorporaciones tras la asignación van solo al servidor de la asignación.
+- **Hechos (4H 7-8, T7 3-4):** la crónica de la caída sale de `asentamiento.conquistada` y la frase la compone el cliente; `jugador.marcha_fijada` lleva el destino como `objetivoX`/`objetivoY`; un pueblo no tiene nivel (su `ObraTerminada.nivel` va ausente); el contexto de `BatallaAbierta` se rehace de los datos del hecho y lo que el ticket no congela se lee del estado de ahora.
+- **Vista (T7 2, 5H 1-3):** en la `VISTA` viajan solo las rutas comerciales de la propia Facción (el escalón de cada arista cuenta todas) y solo las Facciones ajenas que nombra lo que se ve; la forma pública de una Facción ajena vuelve a viajar cuando cambia su versión; se acepta el coste por orden de 2,9-6,6 % con 500 vistas. Desde el 2026-10-29 (decisión del autor, opción ligera) viaja además el **directorio de las Facciones** (`DIRECTORIO_FACCIONES`, id `facciones`): todas, con nombre, sigilo, nivel, número de ciudadanos y si está derrotada, para quien tiene Facción también; su sello es la huella de lo que lleva (`vista::huella_del_directorio`), así que no viaja con cada cambio de versión de una Facción. Desde el mismo día (pedido del autor), quien está **dentro de una plaza ajena** (sea de la Facción que sea; desde fuera no) recibe en su `VISTA` esa plaza con su **trazado urbano** (`vista::plaza_desde_dentro`: la ficha de fuera más `trazado` y, desde el 2026-11-07, la lista de edificios activos, que la ficha de fuera ya no lleva: fuera solo `mercado_activo`, `tiene_muralla` y, desde el 2026-11-12, `armeria_activa`) y sus **órdenes de mercado abiertas**; el resto del interior sigue siendo solo de la Facción dueña. Desde el 2026-11-11 (decisión del autor del 2026-11-02, para la vista 3D de la ciudad: quien está dentro ve lo que vería con sus ojos) esa plaza lleva **todos sus edificios en el suelo** (en pie, en obra y los dañados en la cola; los demás de la cola no) con su obra (`completa_en_ms`), su mejora en curso y su daño, y sus **recintos de muralla** con su anillo, lo que está en pie (`avance`) y su mejora, sin la cita de la próxima celda; de cada edificio no lleva la prioridad, la pausa, la fuente ni la receta. Desde el 2026-11-02 (pedido del cliente de jugador para la vista 3D, aprobado por el autor), quien está **dentro de un pueblo** (extractor o aldea agrícola, de su Facción o ajeno) recibe en su `VISTA` ese pueblo siempre, aunque no se vea ni caiga en el rectángulo, con su **planta** (`vista::pueblo_desde_dentro`: lo de fuera —entero si es de su Facción, avistado si no— más `planta`, `trazado` y `nivel_madre`). La planta es presentación pura (`urbanismo::planta_de_pueblo`, la misma para el mismo pueblo y nivel): sus piezas van como las del campamento de mercenarios (`pueblo-N-K`, el tipo de cada una, su centro, su huella y si va girada). Llega con otro sello que la copia sin planta, así que entra al entrar y se va al salir.
+- **Nombre del héroe y lista de Facciones (2026-10-27, a petición del cliente):** el héroe guarda el `display_name` de `crearHeroe` (1-24 caracteres; foto BAN43; desde el 2026-11-06 único en la partida sin distinguir mayúsculas, `heroe.nombre_en_uso`) y lo enseñan su proyección, el héroe público, el ticket de batalla y la ADMIN; sin nombre sale «Héroe N». Una `VISTA` de quien no tiene Facción lleva **todas** las Facciones públicas (nombre, sigilo, colores, miembros y nivel), para que el jugador sin Facción pueda elegir a cuál pedir el ingreso; con Facción siguen viajando solo las que nombra lo que se ve.
+- **Nombres de los héroes en cada mensaje (2026-10-27, a petición del cliente):** el contrato nombra a los héroes por id en muchos sitios (la Facción y sus solicitudes, la convocatoria, las columnas, los cargos, las batallas, los informes, los hechos). Cada `MensajeDeServidor` lleva en `nombres_heroes` el nombre de los héroes con nombre cuyo `heroe-N` aparece en él; el que falta se pinta «Héroe N». Lo calcula la tarea de cada sesión sobre los bytes que envía (busca `heroe-N` y lo añade al final), fuera del hilo del núcleo, que solo apunta cada nombre nuevo en un directorio compartido (`servidor::NombresHeroes`).
+- **Precios del campamento (2026-10-27, a petición del cliente):** el `CampamentoMercenarios` del interior lleva, para el héroe que está dentro, `precios_mercado` (oro en millonésimas por unidad de cada bien) y `reclutables` (cada tropa del edificio con su estado y su precio por soldado y por escuadra, con su reputación); se comparan en cada reparto aunque el campamento no cambie de versión; los del mercado salen de la tabla de precios de cada minuto (Comercio_Caravanas §3.1), así que cambian como mucho una vez por minuto (Campamentos_Mercenarios).
+- **Misiones (2026-10-27, mecánica 49):** orden `reclamar_recompensa` (`dueno_id`, `mision_id`; el héroe es el de la cuenta) y hechos `mision.cumplida` y `mision.reclamada` (`Misiones.md`).
+- **Misiones recurrentes y tablón (2026-10-28, mecánica 55):** órdenes `aceptar_mision` (`dueno_id`, `mision_id`) y `elegir_tablon` (`dueno_id`, `diarias_ids`, `semanales_ids`), `reclamar_recompensa` también para las recurrentes, orden de administración `fijar_catalogo_misiones`; `Asentamiento.tablon` en el interior y `ADMIN`, `Faccion.tablon` en la propia y `ADMIN` (no en la forma pública); hechos `mision.aceptada` y `tablon.renovado` (`Misiones_Recurrentes.md`).
+- **Recompensas de misión flexibles (2026-11-01, mecánica 66):** `Mision` lleva la fija en `participacion` o `recompensa_experiencia` y la lista libre en `recompensas` (`RecompensaMision`; el campo `recompensa` se quitó), y `DefinicionMisionRecurrente` lleva `recompensas` (el `oro` se quitó); `mision.reclamada` cuenta lo que se dio (`participacion`, `xp`, `oro`, `recursos` y `escuadras`); rechazo nuevo `mision.sin_capital` (`Misiones.md` §4 y `Misiones_Recurrentes.md` §5).
+- **Marcha forzada (2026-10-27, decisión del autor):** orden `marcha_forzada` (`ejercito_id`, `activa`) del Líder de la columna; `Ejercito.marcha_forzada` la enseña solo en lo propio (Movimiento_Ejercitos §4.1).
+- **Política (5H 4-8):** las propuestas caducadas viajan hasta que otra de su clase las poda (el cliente las descarta por `expira_en_ms`); la Liga viaja dentro de cada Facción miembro; los fundadores solo en la plaza propia; `FijarAcceso` no deja `reserved` en el `.proto` (nunca fue orden del contrato); `PropuestaResuelta` tipa también la relación que fija la administración, sin `propuesta_id`.
+
+## 8. Parámetros
+
+Las cifras de **infraestructura** de la difusión (cuánto tarda en llegar lo que se ve, no lo que se ve) son las del servidor (`servidor::Config`, `nucleo::Ajustes`); el bloque `DIFUSION` del TypeScript (`coalescerMs`, los umbrales de cliente lento, `minMsEntreFotos`…) se quitó el 2026-11-11 porque el motor no lo leía. La duración de la sesión (`ACCESO.duracionSesionMs`, §2.1) y `INFRA.limiteIdempotencia` (§3, [`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md) §8) son las otras dos. Las del juego que intervienen en lo que se ve (`VISION`, `INSPECCION`, `INTEL`, `ALMACEN_PERSONAL`…) están en [`Niebla_De_Guerra.md`](Niebla_De_Guerra.md) §7.
+
+## 9. Invariantes
+
+| Invariante | Test |
+|---|---|
+| La matriz tiene exactamente una fila por cada comando del registro, y este documento nombra todos los comandos del registro en §5 | `session/__tests__/autorizacionComandos.test.ts`, `mecanicas/__tests__/matrizDocumentada.test.ts` |
+| Un rol no listado se rechaza sin evaluar la condición de dominio; un jugador sin héroe solo puede `crearHeroe` | `autorizacionComandos.test.ts` |
+| La Facción del actor se deriva de `ciudadanosIds`, no de la membresía | `autorizacionComandos.test.ts` |
+| Solo el Rey responde a las solicitudes de ingreso, designa la capital, decide la admisión de otras Facciones; `solicitarAscenso` es solo del Gobernador; `fijarPuerta`: Gobernador o Rey; `vetarJugador`: Gobernador; designar Gobernador es del Rey, los demás cargos del Gobernador vigente | `autorizacionComandos.test.ts` |
+| El cargo se comprueba sobre el titular, no sobre si el puesto está cubierto | `autorizacionComandos.test.ts` |
+| Nadie recluta (ni actúa) a nombre de otro | `autorizacionComandos.test.ts` |
+| Trueques y órdenes de Mercado, solo el Tesorero o el Gobernador (residente y dentro); las caravanas, cualquier residente | `autorizacionComandos.test.ts` |
+| `membresía` manda sobre `administrador_global`; `puedeJugar` solo con rol `jugador`; el moderador no descarta | `acceso/__tests__/rolesDePartida.test.ts` |
+| Un canal de evento de plaza solo lo abre un ciudadano de su Facción; el personal, solo su héroe; la batalla, quien combate o la ve | `session/__tests__/canales.test.ts`, `canalDeBatalla.test.ts` |
+| `foto + deltas ≡ foto final`, tick tras tick, y dos suscriptores del mismo grupo reciben el MISMO texto con UNA proyección | `server/difusion/__tests__/difusorDeVistas.test.ts`, `session/vistas/__tests__/diff.test.ts` |
+| `vista/mapa` + los ajustes de `vista/heroe` ≡ la proyección HTTP, para cada jugador de cada Facción | `server/difusion/__tests__/mapaPorFaccion.test.ts`, `server/__tests__/tiempoRealVistas.test.ts` |
+| Lo que una Facción no ve no está en su mapa, ni en la foto ni en los deltas; lo personal de un jugador no llega al mapa de su Facción | `mapaPorFaccion.test.ts` |
+| Perder el derecho revoca el canal en el mismo volcado; salir de la plaza revoca `vista/asentamiento` | `difusorDeVistas.test.ts`, `tiempoRealVistas.test.ts` |
+| Un jugador no ve los canales de administración (`canal_desconocido`); un administrador no puede nombrar `vista/*` | `tiempoRealVistas.test.ts`, `difusorDeVistas.test.ts` |
+| Ningún evento del ciclo de batalla lleva tokens, escuadras ni listas de héroes | `canalDeBatalla.test.ts` |
+| El avance por tick es la diferencia entre fotos; un comando entre ticks conserva lo anotado | `session/vistas/__tests__/movimiento.test.ts` |
+
+## 10. Casos límite y decisiones que parecen raras
+
+- **El administrador global que también juega** actúa con el rol `jugador` en los comandos (la membresía manda). Por `/admin/…/comandos` pasa entonces la condición de dominio de su héroe, no la de un administrador.
+- **`moderador` puede controlar el reloj a mano** (`POST …/reloj` pide `puedeAdministrar`) y leer todo, pero **no ejecuta ningún comando** (ni siquiera `cancelarBatalla`).
+- **La condición de `fijarPuerta` y `vetarJugador` difiere**: el Rey puede fijar la puerta de cualquier plaza de su Facción sin estar presente; no puede vetar.
+- **`asignarCargoLocal` de Gobernador no pide presencia, el resto de cargos sí**: designar Gobernador es un acto de la Facción; los demás cargos los designa el Gobernador *desde la plaza*.
+- **Un forastero con columna a la puerta de una plaza ajena ve su mostrador** (`ordenes` activas), pero no su interior.
+- **Las caravanas ajenas con destino en una plaza propia viajan completas** en `caravanas` (con su contenido): es lo que llega a tu puerta.
+- **Una caravana `esperando` no sale en el mapa de nadie** (Comercio_Caravanas §5.8.4, 2026-10-31): está dentro de su plaza, propia o ajena, como una `disponible`; ni su Facción ni quien tenga ojos sobre la plaza la ven en `VISTA`. Su Facción la sigue teniendo entera, con su `encargo`, en `FACCION`, como a las `disponible`. En `VISTA` solo salen las `preparando`, `en_transito` y `retornando`.
+- **Las órdenes de mercado activas de una plaza ajena llegan a la `VISTA` en tres casos** (Comercio_Caravanas §5.8.8, «Qué se ve», y §5.8.10): el héroe de la sesión está dentro de la plaza, una caravana de su Facción está `esperando` en ella con encargo, en su destino (`parada_actual = destino`), o (desde el 2026-11-08, tanda 69) la Facción tiene un **informe de órdenes vigente** de la región de la plaza (Niebla_De_Guerra §6.3: comprado hace menos de `INTEL.region.caducidadMinutos`, 200) y la plaza ni es de la Facción ni de una en guerra con ella (sí las aliadas, vasallas y de bots). Es la misma regla y las mismas órdenes (solo las `activa`); si se dan varios casos, la plaza no repite sus órdenes. No dependen del rectángulo de la vista. La lista de plazas con informe vigente se calcula una vez por perspectiva (`Mirada.con_informe_de_ordenes`, `proyeccion/vista.rs`) y se revisa en cada proyección: al caducar el informe, al cambiar la plaza de Facción o al entrar en guerra, dejan de llegar. Desde fuera, sin ninguno de los tres, no llega ninguna. Cuando la caravana se va, dejan de llegar.
+- **`dirigeAedas` y `comprarTecnologiaAeda` no exigen residir**, solo estar dentro de la plaza con el cargo.
+- **El mapa se agrupa por perspectiva, no por Facción**: un miembro que explora por su cuenta (o va en una columna que no es de la Facción) deja el grupo de su Facción y recibe su propia foto, con `resync { visibilidad }`.
+- **El mapa de una Facción sin aliados y el de la misma Facción con una alianza nueva** son grupos distintos: crear o romper una alianza rehace los grupos con foto nueva.
+- **La batalla en el mapa sustituye a sus participantes**: las columnas y caravanas que están en una batalla activa no viajan en `ejercitosAvistados`/`caravanasAvistadas`.
+- **Un `patch` sobre una entidad ausente es un hueco y falla en el cliente** (`aplicarDiferencia` lanza): por eso el difusor nunca manda un delta entre grupos y siempre foto al cambiar de grupo.
+- **Un id inexistente pasa la matriz** (§4.2): un `404` lógico (`*.no_existe`) llega del comando, no un 403.
+
+## 11. Divergencias
+
+Ninguna abierta. Las resueltas (2026-10-12): comerciar por la plaza es del Tesorero o del Gobernador (§5.2.5), y el rol `observador` («solo lectura») se retiró porque ninguna ruta lo admitía.
+
+## Cambios de la reconstrucción (2026-10-13)
+
+- **Sin tick.** Los canales de vista ya no mandan «progreso por tick» ni `avancePorTick`: lo propio viaja como **plan completo** (vértices con su instante) una vez, y un cambio de plan llega como plan nuevo que empieza donde está la columna; lo ajeno, solo el tramo dentro de la vista con horizonte corto (~30 s), renovado (Niebla §5.4). Las economías y obras viajan como `(cantidad en t₀, ritmo)` y «termina en t». Se conservan fotos + deltas por canal, agrupación por clave de visión, serialización única por grupo y `resync`/`revocado`. El `ritmo` de suscripción (§ de difusión) deja de existir: lo sustituye el reloj de mundo. Detalle: contrato 05 (fase 2).
+- **Comandos retirados**: `replegarEjercito` (no hay vuelta a casa; cancelar = `estacionarEjercito`), el `POST …/tick`.
+- **Comandos nuevos o ampliados** (parámetros por fijar en el contrato 05, ver [`Comandos_Parametros.md`](Comandos_Parametros.md)): `repostar` (el Líder, con el ejército en la puerta), `reclamarCaravana` (junto a una caravana suelta), `atacar` con `declaraGuerra: true` y los objetivos `pueblo` y `avanzada`, y los de las obras de mapa: marcar un pueblo, colocar una avanzada, entregar materiales en el sitio, cancelar o destruir una obra, mejorar y reparar una avanzada, elegir la tropa de serie de una avanzada, guarnecer una avanzada y reponer el carro de acarreo. Autorización: las obras de mapa las usan el Gobernador o el Maestro de Obras **presentes** en la plaza madre; entregar materiales, cualquier ciudadano de la Facción con la columna en el sitio.
+- **Proyección**: la plaza ve solo su zona y las avanzadas ven 24 (`VISION.avanzada`, Niebla §3); pueblos y avanzadas ajenos se recuerdan como una ciudad; la plaza deja de ver más allá de su frontera.
+- **Predicado nuevo**: «en guerra o declarable» para `atacar` (toda agresión entre Facciones exige guerra o la declara).
+

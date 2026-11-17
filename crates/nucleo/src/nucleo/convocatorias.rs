@@ -1,0 +1,277 @@
+//! Las convocatorias dentro del núcleo (Presencia_Y_Convocatoria §9): un ejército **en preparación dentro** de una plaza o de un campamento, antes de
+//! salir. Nadie ha salido todavía —las escuadras siguen en su campamento y el almacén intacto—, así que cancelar o separarse no devuelve nada, y la
+//! convocatoria espera **sin caducidad** a que su Líder parta o cancele. Las reglas de quién convoca, quién se une y quién parte son de
+//! `militar::convocatoria`; aquí se comprueba «saldría con lo que eligió» simulando la salida real de cada integrante ([`PlanDeSalida`]) y se
+//! parte de verdad con esos mismos planes.
+//!
+//! # Partir es todo o nada
+//! `partir` simula a todos los que siguen dentro, en orden, acumulando lo que gastan (`Reservas`): el almacén de la plaza lo comparten, y lo que saca el
+//! primero no lo tiene el segundo. Si alguien no puede salir no sale nadie y se dice quién y por qué. Si todos pueden, el Líder sale como un ejército
+//! quieto en la puerta con la política de la convocatoria y los demás se suman a él con lo que eligieron. Quien parte lo hace con todo lo que trajo (Entrar
+//! con todo, 2026-10-22): el residente, con el carro que no vació; el de visita, con su columna entera (tropa, carro, víveres), que ha de poder fundirse con
+//! la del Líder: personal, de la misma Facción y sin formación.
+//!
+//! # Los plazos
+//! Lo único con instante es la petición de unión de un integrante potencial (10 s con la política `Preguntar`, el silencio vale como un no): un evento
+//! `CaducaPeticionDeConvocatoria` por petición, que se descarta al contestarla. La convocatoria en sí no tiene ninguno.
+
+use super::*;
+use crate::estado::{SucesoMilitar, PRIO_LLEGADA};
+use crate::estado_militar::entidad_peticion_de_convocatoria;
+use crate::nucleo::salidas::{Destino, Reservas};
+use ::mercenarios::Objetivo;
+use asentamiento::Recurso;
+use militar::columna::TipoColumna;
+use militar::convocatoria::{lugar_de, Aspirante, Convocatoria, ErrorConvocatoria, ErrorPartir, Lugar, Seleccion, Union};
+
+fn rechazo_de_convocatoria(e: ErrorConvocatoria) -> (&'static str, &'static str) {
+    use rechazos::*;
+    match e {
+        ErrorConvocatoria::FueraDeUnLugar => (CONVOCATORIA_FUERA_DE_UN_LUGAR, "se convoca desde dentro de una plaza o de un campamento"),
+        ErrorConvocatoria::SinFaccion => (CONVOCATORIA_SIN_FACCION, "sin Facción no hay compañeros con quienes formar un ejército"),
+        ErrorConvocatoria::YaEnConvocatoria => (CONVOCATORIA_YA_EN_ELLA, "ya vas en una convocatoria"),
+        ErrorConvocatoria::PoliticaInvalida => (CONVOCATORIA_POLITICA_INVALIDA, "la política de una convocatoria es aceptar o preguntar"),
+        ErrorConvocatoria::OtroLugar => (CONVOCATORIA_OTRO_LUGAR, "solo se une quien está dentro del mismo lugar"),
+        ErrorConvocatoria::OtraFaccion => (CONVOCATORIA_OTRA_FACCION, "un ejército lo componen ciudadanos de una sola Facción"),
+        ErrorConvocatoria::NoEstas => (CONVOCATORIA_NO_ESTAS, "no vas en esa convocatoria"),
+        ErrorConvocatoria::ElLiderCancela => (CONVOCATORIA_EL_LIDER_CANCELA, "el Líder no se separa de su ejército: lo cancela"),
+        ErrorConvocatoria::SoloElLider => (CONVOCATORIA_SOLO_EL_LIDER, "solo el Líder puede hacerlo"),
+        ErrorConvocatoria::NoHayPeticion => (CONVOCATORIA_NO_HAY_PETICION, "no hay una petición de ese héroe"),
+        ErrorConvocatoria::PeticionCaducada => (CONVOCATORIA_PETICION_CADUCADA, "la petición caducó: el silencio vale como un no"),
+    }
+}
+
+impl Nucleo {
+    /// Las líneas `(recurso, cantidad)` de una carga, en el orden del mapa.
+    fn lineas_de(carga: &comercio::Carga) -> Vec<(Recurso, Mil)> {
+        carga.iter().map(|(&r, &n)| (r, n)).collect()
+    }
+
+    /// Las plazas a las que se atribuye un hecho de una convocatoria: la del lugar si es una plaza, ninguna si es un campamento.
+    fn plazas_del_lugar(lugar: Lugar) -> Vec<u64> {
+        match lugar {
+            Lugar::Asentamiento(a) => vec![a as u64],
+            Lugar::Campamento(_) => vec![],
+        }
+    }
+
+    /// Un hecho de la convocatoria `(faccion, lugar)`: lo oyen su Facción (el canon la reparte «a su lugar y su Facción»: también si se convoca en un campamento) y quien está dentro de su plaza.
+    /// En un campamento, `campamento` dice cuál.
+    fn hecho_de_convocatoria(&mut self, t: Instante, codigo: &'static str, (faccion, lugar): (u32, Lugar), mut datos: Vec<(&'static str, i64)>) {
+        if let Lugar::Campamento(c) = lugar {
+            datos.push(("campamento", c as i64));
+        }
+        let asentamientos = Self::plazas_del_lugar(lugar);
+        let punto = asentamientos.first().and_then(|p| self.estado.asentamientos.get(p)).map(|a| a.posicion);
+        self.tr.emitir(&self.estado, EventoNucleo { asentamientos, punto, facciones: vec![faccion], ..EventoNucleo::nuevo(codigo, t, datos) });
+    }
+
+    fn lugar_del_heroe(&self, heroe: u64) -> Option<Lugar> {
+        lugar_de(self.heroe(heroe)?.heroe.presencia.ubicacion)
+    }
+
+    /// La convocatoria en la que va el héroe, o el rechazo de que no va en ninguna.
+    fn convocatoria_del_heroe(&self, heroe: u64) -> Result<&Convocatoria, Respuesta> {
+        self.estado.militar.convocatoria_de(heroe).ok_or_else(|| Respuesta::rechazo(rechazos::CONVOCATORIA_NO_ESTAS, "no vas en ninguna convocatoria", self.estado.version))
+    }
+
+    /// `separarseDeConvocatoria`: el integrante se va mientras se prepara (el Líder cancela, no se separa). Lo hace la orden y lo hace el fin del contrato de un mercenario
+    /// (Mercenarios_Por_Contrato §7).
+    pub(super) fn separar_de_convocatoria(&mut self, t: Instante, heroe: u64) -> Result<(), Respuesta> {
+        let mut c = self.convocatoria_del_heroe(heroe)?.clone();
+        c.separarse(heroe).map_err(|e| respuesta_de(self.estado.version, e))?;
+        let (id, del) = (c.id, (c.faccion, c.lugar));
+        self.estado.militar.convocatorias.insert(id, c);
+        self.tr.tocar(Clase::Convocatoria, id);
+        self.hecho_de_convocatoria(t, "convocatoria.separado", del, vec![("convocatoria", id as i64), ("heroe", heroe as i64)]);
+        Ok(())
+    }
+
+    /// `cancelarConvocatoria`: el Líder cancela su convocatoria, y nadie pierde nada. Lo hace la orden y lo hace el fin del contrato de un mercenario que la lidera (Mercenarios_Por_Contrato §7).
+    /// Quien la acompañaba y seguía dentro cuenta una Campaña (§9).
+    pub(super) fn cancelar_convocatoria(&mut self, t: Instante, heroe: u64) -> Result<(), Respuesta> {
+        let c = self.convocatoria_del_heroe(heroe)?.clone();
+        let avisados = c.cancelar(heroe).map_err(|e| respuesta_de(self.estado.version, e))?;
+        let integrantes: Vec<u64> = c.integrantes.iter().map(|i| i.heroe).collect();
+        self.campana(t, &integrantes, Objetivo::Convocatoria(c.id));
+        self.estado.militar.convocatorias.remove(&c.id);
+        self.tr.tocar(Clase::Convocatoria, c.id);
+        c.peticiones.iter().for_each(|x| {
+            self.estado.generaciones.subir(entidad_peticion_de_convocatoria(x.heroe));
+        });
+        self.hecho_de_convocatoria(t, "convocatoria.cancelada", (c.faccion, c.lugar), vec![("convocatoria", c.id as i64), ("lider", heroe as i64), ("avisados", avisados.len() as i64)]);
+        Ok(())
+    }
+
+    /// Simula que el héroe saldría de su lugar con esta selección. No toca nada.
+    fn comprobar_seleccion(&mut self, t: Instante, heroe: u64, lugar: Lugar, seleccion: &Seleccion) -> Result<(), Respuesta> {
+        self.validar_salida(t, heroe, lugar, &seleccion.escuadras, &Self::lineas_de(&seleccion.carga), false, &mut Reservas::default()).map(|_| ())
+    }
+
+    fn lineas_a_seleccion(escuadras: &[u64], carga: &[(Recurso, Mil)]) -> Seleccion {
+        Seleccion { escuadras: escuadras.to_vec(), carga: carga.iter().filter(|(_, n)| *n != 0).fold(comercio::Carga::new(), |mut m, &(r, n)| {
+            *m.entry(r).or_insert(0) += n;
+            m
+        }) }
+    }
+
+    /// Las órdenes de convocatoria. `Ok(ids)` = cambió algo y creó esos ids; los rechazos salen como `Err` sin haber tocado el estado.
+    pub(super) fn ejecutar_convocatorias(&mut self, t: Instante, p: &Peticion) -> Result<Vec<u64>, Respuesta> {
+        let v = self.estado.version;
+        let de_convocatoria = |e: ErrorConvocatoria| respuesta_de(v, e);
+        let mr = self.estado.reglas.economia.militar.clone();
+        match &p.comando {
+            Comando::ConvocarEjercito { heroe, escuadras, carga, politica } => {
+                self.autorizar_heroe(p, *heroe, false)?;
+                let hn = self.heroe(*heroe).expect("existe");
+                let (lugar, faccion) = (self.lugar_del_heroe(*heroe), hn.faccion);
+                let todas: Vec<Convocatoria> = self.estado.militar.convocatorias.values().cloned().collect();
+                let seleccion = Self::lineas_a_seleccion(escuadras, carga);
+                let id = self.estado.siguiente_id;
+                let c = Convocatoria::convocar(&todas, id, *heroe, lugar, faccion, *politica, seleccion.clone(), t).map_err(de_convocatoria)?;
+                self.comprobar_seleccion(t, *heroe, c.lugar, &seleccion)?;
+                self.estado.siguiente_id += 1;
+                self.hecho_de_convocatoria(t, "convocatoria.convocada", (c.faccion, c.lugar), vec![("convocatoria", id as i64), ("lider", *heroe as i64), ("politica", crate::codec_columna::politica_a_u8(*politica) as i64)]);
+                self.estado.militar.convocatorias.insert(id, c);
+                self.tr.tocar(Clase::Convocatoria, id);
+                Ok(vec![id])
+            }
+            Comando::UnirseAConvocatoria { heroe, convocatoria, escuadras, carga } => {
+                self.autorizar_heroe(p, *heroe, false)?;
+                let mut c = self.estado.militar.convocatorias.get(convocatoria).cloned().ok_or_else(|| Respuesta::rechazo(rechazos::CONVOCATORIA_DESCONOCIDA, format!("convocatoria-{convocatoria}"), v))?;
+                let hn = self.heroe(*heroe).expect("existe");
+                let aspirante = Aspirante { heroe: *heroe, lugar: self.lugar_del_heroe(*heroe), faccion: hn.faccion, ya_en_convocatoria: self.estado.militar.convocatoria_de(*heroe).is_some() };
+                let seleccion = Self::lineas_a_seleccion(escuadras, carga);
+                let union = c.unirse(&mr, &aspirante, seleccion.clone(), t).map_err(de_convocatoria)?;
+                self.comprobar_seleccion(t, *heroe, c.lugar, &seleccion)?;
+                let del = (c.faccion, c.lugar);
+                self.estado.militar.convocatorias.insert(*convocatoria, c);
+                self.tr.tocar(Clase::Convocatoria, *convocatoria);
+                match union {
+                    Union::Unido => {
+                        self.hecho_de_convocatoria(t, "convocatoria.unido", del, vec![("convocatoria", *convocatoria as i64), ("heroe", *heroe as i64)]);
+                        self.avance(t, Dueno::Heroe(*heroe), "uniones", 1);
+                    }
+                    Union::Pedida { expira_en } => {
+                        self.estado.generaciones.subir(entidad_peticion_de_convocatoria(*heroe));
+                        let clave = self.estado.generaciones.clave(entidad_peticion_de_convocatoria(*heroe));
+                        self.estado.cola.programar(expira_en, PRIO_LLEGADA, clave, Carga::Militar(SucesoMilitar::CaducaPeticionDeConvocatoria { convocatoria: *convocatoria }));
+                        self.hecho_de_convocatoria(t, "convocatoria.union_pedida", del, vec![("convocatoria", *convocatoria as i64), ("heroe", *heroe as i64), ("expiraEn", expira_en)]);
+                    }
+                }
+                Ok(vec![])
+            }
+            Comando::ResponderPeticionDeConvocatoria { heroe, convocatoria, solicitante, aceptar } => {
+                self.autorizar_heroe(p, *heroe, false)?;
+                let mut c = self.estado.militar.convocatorias.get(convocatoria).cloned().ok_or_else(|| Respuesta::rechazo(rechazos::CONVOCATORIA_DESCONOCIDA, format!("convocatoria-{convocatoria}"), v))?;
+                let peticion = c.retirar_peticion(*heroe, *solicitante, t).map_err(de_convocatoria)?;
+                let del = (c.faccion, c.lugar);
+                if *aceptar {
+                    // Se revalida todo con la selección de la petición: sigue dentro del lugar, es de la misma Facción y puede salir.
+                    let hn = self.heroe(*solicitante).ok_or_else(|| Respuesta::rechazo(rechazos::HEROE_DESCONOCIDO, ids::heroe(*solicitante), v))?;
+                    let aspirante = Aspirante { heroe: *solicitante, lugar: self.lugar_del_heroe(*solicitante), faccion: hn.faccion, ya_en_convocatoria: self.estado.militar.convocatoria_de(*solicitante).is_some() };
+                    c.aceptar(&aspirante, peticion.seleccion.clone(), t).map_err(de_convocatoria)?;
+                    self.comprobar_seleccion(t, *solicitante, c.lugar, &peticion.seleccion)?;
+                }
+                self.estado.militar.convocatorias.insert(*convocatoria, c);
+                self.tr.tocar(Clase::Convocatoria, *convocatoria);
+                self.estado.generaciones.subir(entidad_peticion_de_convocatoria(*solicitante));
+                let codigo = if *aceptar { "convocatoria.unido" } else { "convocatoria.union_rechazada" };
+                self.hecho_de_convocatoria(t, codigo, del, vec![("convocatoria", *convocatoria as i64), ("heroe", *solicitante as i64)]);
+                if *aceptar {
+                    self.avance(t, Dueno::Heroe(*solicitante), "uniones", 1);
+                }
+                Ok(vec![])
+            }
+            Comando::CambiarSeleccionDeConvocatoria { heroe, escuadras, carga } => {
+                self.autorizar_heroe(p, *heroe, false)?;
+                let mut c = self.convocatoria_del_heroe(*heroe)?.clone();
+                let seleccion = Self::lineas_a_seleccion(escuadras, carga);
+                c.cambiar_seleccion(*heroe, seleccion.clone()).map_err(de_convocatoria)?;
+                self.comprobar_seleccion(t, *heroe, c.lugar, &seleccion)?;
+                let (id, del) = (c.id, (c.faccion, c.lugar));
+                self.estado.militar.convocatorias.insert(id, c);
+                self.tr.tocar(Clase::Convocatoria, id);
+                self.hecho_de_convocatoria(t, "convocatoria.seleccion_cambiada", del, vec![("convocatoria", id as i64), ("heroe", *heroe as i64)]);
+                Ok(vec![])
+            }
+            Comando::SepararseDeConvocatoria { heroe } => {
+                self.autorizar_heroe(p, *heroe, false)?;
+                self.separar_de_convocatoria(t, *heroe).map(|()| vec![])
+            }
+            Comando::CancelarConvocatoria { heroe } => {
+                self.autorizar_heroe(p, *heroe, true)?;
+                self.cancelar_convocatoria(t, *heroe).map(|()| vec![])
+            }
+            Comando::PartirConvocatoria { heroe, caravana_fundacion } => self.partir_convocatoria(t, p, *heroe, *caravana_fundacion),
+            _ => unreachable!("solo se llama con órdenes de convocatoria"),
+        }
+    }
+
+    /// `partirConvocatoria` (§9.4): todo o nada.
+    fn partir_convocatoria(&mut self, t: Instante, p: &Peticion, heroe: u64, caravana: Option<u64>) -> Result<Vec<u64>, Respuesta> {
+        let v = self.estado.version;
+        self.autorizar_heroe(p, heroe, false)?;
+        let c = self.convocatoria_del_heroe(heroe)?.clone();
+        // La Caravana de Fundación que espera dentro del lugar se la lleva el ejército al partir, con su Líder de titular (Fundacion_Y_Refundacion §6.1). Solo parte el Líder: si no lo es,
+        // el rechazo de `partir` va primero.
+        if let Some(k) = caravana.filter(|_| heroe == c.lider) {
+            self.validar_fundacion_al_salir(k, c.lugar, Some(c.faccion))?;
+        }
+        let dentro: Vec<u64> = c.integrantes.iter().map(|i| i.heroe).filter(|&h| self.heroe(h).is_some_and(|hn| !hn.heroe.presencia.fuera && lugar_de(hn.heroe.presencia.ubicacion) == Some(c.lugar))).collect();
+        let (mut planes, mut reservas) = (Vec::new(), Reservas::default());
+        let resultado = c.partir(heroe, &|h| dentro.contains(&h), &mut |i| {
+            let plan = self.validar_salida(t, i.heroe, c.lugar, &i.seleccion.escuadras, &Self::lineas_de(&i.seleccion.carga), false, &mut reservas)?;
+            // Quien parte con su columna —de visita, o la que conserva en su residencia para llevar sus caravanas— la suma al ejército: ha de poder fundirse con la del Líder.
+            if i.heroe != c.lider {
+                self.comprobar_fusion(&plan, c.faccion)?;
+            }
+            planes.push(plan);
+            Ok(())
+        });
+        match resultado {
+            Err(ErrorPartir::SoloElLider) => Err(respuesta_de(v, ErrorConvocatoria::SoloElLider)),
+            Err(ErrorPartir::LiderFuera) => Err(Respuesta::rechazo(rechazos::CONVOCATORIA_LIDER_FUERA, "el Líder ya no está dentro del lugar", v)),
+            Err(ErrorPartir::NoPuedeSalir { heroe: h, motivo: Respuesta { resultado: Resultado::Rechazada { codigo, mensaje, .. }, .. } }) => {
+                Err(Respuesta::rechazo(rechazos::CONVOCATORIA_NO_PUEDE_SALIR, format!("el héroe {h} no puede salir con lo elegido ({codigo}): {mensaje}"), v))
+            }
+            Err(ErrorPartir::NoPuedeSalir { .. }) => unreachable!("la simulación solo rechaza"),
+            Ok(_) => {
+                let (lider, otros) = planes.split_first().expect("el Líder sale el primero");
+                let base = self.aplicar_salida(t, lider, Destino::Columna { tipo: TipoColumna::Ejercito, politica: c.politica });
+                for plan in otros {
+                    self.aplicar_salida(t, plan, Destino::Unirse(base));
+                }
+                self.estado.militar.convocatorias.remove(&c.id);
+                self.tr.tocar(Clase::Convocatoria, c.id);
+                self.convocatoria_parte(c.id, base);
+                c.peticiones.iter().for_each(|x| {
+                    self.estado.generaciones.subir(entidad_peticion_de_convocatoria(x.heroe));
+                });
+                self.evento_de_columna("convocatoria.partio", t, base, Self::plazas_del_lugar(c.lugar), vec![("convocatoria", c.id as i64), ("heroes", planes.len() as i64)]);
+                if let Some(k) = caravana {
+                    self.llevar_fundacion_al_salir(t, k, base, c.lider);
+                }
+                Ok(vec![base])
+            }
+        }
+    }
+
+    /// Caduca la petición de unión a una convocatoria que `solicitante` le hizo: se retira y se avisa.
+    pub(super) fn caduca_peticion_de_convocatoria(&mut self, convocatoria: u64, solicitante: u64, t: Instante) {
+        let Some(c) = self.estado.militar.convocatorias.get_mut(&convocatoria) else { return };
+        let antes = c.peticiones.len();
+        c.peticiones.retain(|x| !(x.heroe == solicitante && t >= x.expira_en));
+        if c.peticiones.len() == antes {
+            return;
+        }
+        self.tr.tocar(Clase::Convocatoria, convocatoria);
+        let del = (c.faccion, c.lugar);
+        self.hecho_de_convocatoria(t, "convocatoria.peticion_caducada", del, vec![("convocatoria", convocatoria as i64), ("heroe", solicitante as i64)]);
+    }
+}
+
+fn respuesta_de(version: u64, e: ErrorConvocatoria) -> Respuesta {
+    let (c, m) = rechazo_de_convocatoria(e);
+    Respuesta::rechazo(c, m, version)
+}

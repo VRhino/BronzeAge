@@ -1,0 +1,1269 @@
+# Comercio y caravanas
+
+## 1. Alcance y fuentes
+
+Cubre todo lo que mueve mercancía u oro **entre** lugares sin que sea guerra: el **trueque** entre asentamientos, la **flota de caravanas comerciales** (cómo se compone, se lanza, viaja, se
+reconfigura y vuelve), sus **encargos** (rutas permanentes y envíos programados que hacen solas, §5.8), el **mercado de una plaza** (órdenes y mostrador), el **mercado de un campamento de mercenarios**, los precios y las comisiones, las **rutas** de las caravanas (trazado,
+peajes, red de caminos) y lo que ocurre con todo ello cuando una plaza cae en ruinas.
+
+- **Verificado contra:** `e83cb9b` (2026-10-11) más las decisiones de esa jornada (comisión, recargo por reputación, reparto, capacidad, reputación entre Facciones).
+- **Corregido el 2026-10-24: economía entera** (decisión C3b del autor y dudas EE-1 a EE-6 del mismo día; Rust, foto `BAN27`). Todo lo que se guarda o se mueve va en **unidades enteras** (múltiplos de 1.000 milésimas). **Regla (EE-1): lo que se mueve se redondea hacia abajo; lo que se cobra, hacia arriba**. Nunca se crea de más. En este documento:
+  - **Trueque** (§4.1): cada línea pactada se redondea hacia abajo al proponer; una línea de menos de una unidad es `cantidad_no_positiva`. Una línea solo se salda **entregada entera**: la regla del 2026-10-19 «faltar menos de una unidad salda la línea» **se retira** (EE-6, §4.4).
+  - **Reparto** (§4.3): cada línea carga `min(stock, faltante, capacidad libre)` redondeado hacia abajo a unidades (la capacidad de una caravana puede no ser entera).
+  - **Comisión y recargo** (§3.3): se calculan como siempre y se **acuñan en unidades enteras hacia abajo** (11,25 de comisión acuñan 11); el recargo que sale del origen es el mismo entero que entra en el destino (el oro se conserva).
+  - **Peaje** (§7.3, tanda 69): el **2 % del valor** de la carga a los precios de referencia, **en oro** y **redondeado hacia arriba** a unidades enteras; sale del almacén de la **capital** de la Facción dueña de la caravana y entra en el de la capital de la Facción de la ciudad cruzada. Lo que el oro de la capital no alcanza se cobra **en especie de la carga** y va a la ciudad cruzada: a la fracción de la tasa que queda sin pagar, con la regla de siempre (hacia abajo a unidades y **como mínimo una unidad** a toda caravana con carga, EE-4: si no llega a una unidad en ningún recurso, se cobra una del recurso que más lleva, y a igualdad el primero del catálogo). Pero **el peaje en especie nunca deja la carga en cero** (decisión del autor, 2026-10-24): una caravana de una sola unidad pasa sin pagar, así que la repesca de la última unidad de una línea llega y la salda.
+  - **Lanzar a mano, cargar y descargar una aparcada** (§5.6, §5.7): cada línea, en unidades enteras hacia abajo.
+  - **Mostrador** (§8.3): se sirven unidades enteras (`q` baja de unidad en unidad hasta cumplir los topes) y el oro de cada lote, `⌈q × precio neto⌉`, se cobra en **unidades enteras hacia arriba** (como en el campamento, §9.2): 50 unidades a 1,03 cuestan 52. Una orden (§8.1) se coloca con su cantidad hacia abajo.
+  - **Campamento** (§9): las compras ya eran enteras. La reposición (§9.3) se anota **por comercio**: `proporcionRepone` (3 %) de lo comerciado, en unidades enteras hacia abajo y **como mínimo una** por comercio (EE-5; `MercadoMercenario::repone`, que viaja en la foto); los contadores de lo comerciado siguen igual.
+  - **Pérdida de carros, Aguante y reparto de la carga entre carros** (§15, Combate §7.1): proporcional y hacia abajo **a unidades**, recurso a recurso; lo que deja el redondeo no va en ningún carro.
+  - El acarreo (§12) mueve la capacidad del carro (500, entera) y su almacén local va en enteros con resto oculto en la extracción.
+- **Fuentes:** `engine/trade.ts`, `engine/trueque.ts`, `engine/caravanas.ts`, `engine/market.ts`, `engine/mercadoMercenario.ts`, `engine/redCaminos.ts`, `engine/ruina.ts`, `engine/reputacion.ts`,
+  `engine/politicas.ts`, `engine/asentamientoQuery.ts` (cupos), `world/rutas.ts`, `world/grafoNavegacion.ts`, `session/comandos/comercio.ts`, `session/comandos/mercenarios.ts` (`comprarEnCampamento`),
+  `session/comandos/ejercitos.ts` (`entregarDeCaravana`), `session/comandos/autorizacion.ts`, `session/proyecciones/jugador.ts` (lo que se ve).
+- **Rust, encargos (2026-10-31):** `crates/comercio/src/encargo.rs` (el modelo, `validar`, lo que entra y sale del almacén, `carros_del_paso`), `caravana.rs` (`Esperando`, sus transiciones, `dar_encargo`, `salir_de_parada`, `terminar_encargo`, la llegada a una punta, los peajes de la vuelta y `regresar_a_origen`), `mostrador.rs` (`vender` y `comprar` en una plaza ajena), `ruina.rs` y `evento.rs`; `crates/nucleo/src/nucleo/{encargos,flota,mercado}.rs` (el ciclo, la conquista y la pérdida, los datos de los hechos), `proyeccion/{propios,vista}.rs`, `codec_comercio.rs` (foto `BAN52`), `sesiones/ordenes.rs` y `proto/bronzeage/v1/*.proto` (el contrato). Es lo que describe §5.8.
+- **Canon:** [`Docs/Game/3_Sistema_Economico_y_Comercio.md`](../Game/3_Sistema_Economico_y_Comercio.md) (y Doc 1.6 para la red de caminos, Doc 1.9b para el campamento de mercenarios).
+- **No está aquí** (está en su documento): la caravana **adjunta** a un ejército, sus víveres y su carga (→ [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §9); interceptar, capturar o ser atacada por
+  bandidos, y los tipos A/B según la zona (→ [`Combate.md`](Combate.md) §7.1); la **Caravana de Fundación** (→ [`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md)); el Mercado como edificio (costes, niveles,
+  puestos) y las políticas como sistema (→ `Economia_Construccion.md`); el generador aleatorio (el comercio **no consume** ninguna tirada).
+
+**Reescrito el 2026-10-13** para el mundo reactivo ([`Reloj_Y_Eventos.md`](Reloj_Y_Eventos.md)): las caravanas son **planes** con eventos de salida, de peaje y de llegada; los trueques y las órdenes de mercado caducan como **eventos** a su instante; la asignación automática se reevalúa cuando nace un trueque, queda libre una caravana o cambia el almacén de un lado. El «cómo funcionaba» por tick está en `typescript-final:Docs/Mechanics/Comercio_Caravanas.md`.
+
+> **Implementado en Rust (2026-10-19, fase 3B-1: la parte estática del comercio).** Las reglas puras son el crate `crates/comercio` (fase 3A); su integración en `crates/nucleo`:
+> - `estado_comercio.rs` (`Estado.comercio`: trueques, libro de órdenes con su historial, flota, reputación por Facción, `ultimaCaravanaCreadaEn` por plaza, contadores de ids, y —provisionales— el carro de cada columna y las caravanas adjuntas), `codec_comercio.rs` (serialización para el hash y las fotos; formato **`BAN5`**, `BAN4` se rechaza) y `nucleo/mercado.rs` y `nucleo/flota.rs` (órdenes, plazos, consultas y cierres). **La huella de las reglas de las fotos incluye los bloques de parámetros de `Comercio_Caravanas.md`, `Tecnologia_Aedas.md` y `Movimiento_Ejercitos.md`.**
+> - **Plazos como eventos** `Carga::Comercio` de prioridad 6: caducidad de un trueque (`propuesto` sin contestar → `expirado` sin penalizar; `activo` → vence y penaliza a cada lado en proporción a lo no entregado, solo entre Facciones distintas), caducidad de una orden de mercado y fin de la preparación de una caravana (de momento solo se registra: `comercio.preparacion_terminada`). Cada entidad lleva su propia generación (clave con etiqueta en los bits altos), y contestar, cancelar o cerrar invalida el plazo. **Orden dentro del mismo instante** (la cola solo ordena por prioridad): llegadas, fin de preparación, caducidades y reparto; un evento de rango `r` se reprograma `r` veces en ese instante, de modo que sale detrás de los que ya estaban. La reputación (`Carga::Reputacion`, prioridad 9) reprograma su cita tras cada cambio: cruce del 0 (reancla) o salida del umbral `-40`.
+> - **Órdenes** (`Comando`, códigos 21-40; cada rechazo lleva un código estable en `rechazos`): `ProponerTrueque`, `AceptarTrueque`, `RechazarTrueque`, `ColocarOrdenMercado`, `CancelarOrdenMercado`, `ComerciarEnPlaza`, `CrearCaravana`, `AnadirCarro`, `AnadirAnimal`, `MoverCarro`, `ReservarCaravana`, `PrepararCaravana`, `CancelarCaravana`, `MoverCargaAparcada`, `EnviarCaravanaAlOrigen`, `EntregarDeCaravana` (§4.5) y, como andamiaje de administración, `DarRecursos` y `DarSuministro` (`AdjuntarCaravana` y `AparcarCaravana` pasaron a ser órdenes reales en la fase 3B-2). **Autorización provisional**: la administración o el propietario de una columna de la Facción de la plaza (en el trueque, la del lado al que le toca); los cargos, la residencia y la presencia vendrán del sistema de héroes y residentes.
+> - **Contra el almacén real**: el mostrador, los carros, los animales, la carga de `prepararCaravana` y su cancelación (reingreso topado por la capacidad), la carga de una aparcada y la entrega mueven el almacén de la plaza; **el oro solo cambia por lo que el diseño acuña (la comisión de la entrega) o destruye (los animales, lo que no cabe, una caravana perdida)**: el recargo por mala reputación sale del oro del origen y entra en el del destino, y la comisión del mostrador se queda en la plaza. Los **cupos** de la flota salen del Mercado activo y de las políticas de la plaza (`FactoresPolitica`).
+> - **Ruina y conquista** (§10): `arruinar` llama a `comercio::ruina::cerrar_dependientes` y aplica el resultado (trueques `expirado` sin penalizar con `trueque_cancelado` a la socia, caravanas de la flota perdidas, las que iban a la plaza vuelven con su carga, las aparcadas se destruyen, órdenes borradas). `Nucleo::cerrar_comercio_por_conquista` hace lo de la conquista: la flota pasa con la plaza, los trueques se anulan igual y las que iban hacia ella regresan, y las aparcadas en ella se destruyen; el sistema militar la llamará.
+> - **Consultas**: `acuerdo`, `acuerdos_de`, `libro_ordenes`, `escaparate(plaza, presente)`, `flota_de`, `caravana`, `reputacion`, `suministro`, `cupos_de_flota`. `Nucleo::entregar_contenido` es el gancho de la llegada de una caravana (§4.4) con el que las pruebas entregan una carga sin esperar al viaje (el evento de llegada de la fase 3B-2 usa las mismas piezas).
+> - **Falta**: lo que cubre la nota siguiente (fase 3B-2). Pruebas de esta fase: `crates/nucleo/tests/comercio.rs`.
+
+> **Implementado en Rust (2026-10-19, fase 3B-2: las caravanas viajan).** Reglas puras en `crates/comercio` (con tres campos nuevos en `Caravana`: `costes`, el coste de cada tramo de su ruta, y `pausada_desde`; `Navegacion.factor_camino`; y `RedCaminos::registrar_ruta` devuelve qué aristas abre) y `crates/rutas` (`Opciones.atraccion`: la red de caminos como pesos que abaratan aristas en el A\*, y `a_plan_por_minuto`: plan con el coste de cada tramo y la velocidad en unidades por minuto). Integración en `crates/nucleo/src/nucleo/{viaje,mercenarios}.rs`; formato de foto **`BAN6`** (`BAN5` se rechaza).
+> - **Plan y generación.** Una caravana en viaje es un `Plan` cuya generación es la de su entidad en la tabla de la cola (`entidad_caravana`): cada plan nuevo la sube y descarta de golpe la llegada, el peaje y el fin de preparación programados con el anterior; el mismo número viaja en `Plan.generacion`, que es lo que ve la rejilla de encuentros. Tiempo de un tramo = `coste × espaciado × 60 / velocidad` ms, con el coste dividido por `factorCamino` sobre las aristas de la red. El regreso desanda la ida con las mismas duraciones (`invertir_plan`).
+> - **Trazado (§7.2).** `trazarRutaComercial` como está escrito: un A\* por cada zona de otra Facción que cruza (la zona es el disco recortado por las fronteras; la ruta pasa por el centro de la ciudad y deja un peaje pendiente), con la atracción de la red vigente. Los A\* se memorizan por `(extremos, época de la red)` y los pares sin ruta por tierra se recuerdan; la memoria no es estado. Un rechazo (o una consulta) no toca el estado: la poda de la red solo ocurre al registrar una ruta en una orden o un evento aceptados.
+> - **Eventos de la cola, prioridad 6** (`SucesoComercio`, rango dentro del instante): llegada y peaje (0), fin de preparación (1), caducidades (2), pulso del reparto y reposición de mercenarios (3). La ruina (el paso de minuto de la plaza, prioridad 2) va antes que todos: una caravana `preparando` hacia una plaza que cae en ese mismo instante no llega a salir.
+> - **Peajes** fijados al lanzar (las ciudades ajenas cruzadas, también aliadas y vasallas) y cobrados en el instante de paso: el 2 % del valor de lo que lleva en ese momento, en oro de la capital de su Facción hacia la de la ciudad cruzada, y en especie de la carga lo que ese oro no cubre (tanda 69, §7.3); el último se cobra antes de entregar; el regreso no paga.
+> - **Reparto automático (§4.3).** Se reevalúa al aceptar un trueque (las dos plazas), al quedar libre una caravana (animal montado, reserva quitada, carro movido, preparación cancelada, vuelta a casa, llegada tras una entrega) y con un **pulso de un minuto por plaza** que solo existe mientras haya un lado pendiente sin cargar y una caravana libre; se detiene solo y no recurre por plaza ociosa. Sale con cualquier carga positiva, y la urgencia cuenta desde la aceptación.
+> - **Red de caminos (§7.4).** Cada lanzamiento registra su ruta, también el que se cancela. La poda es perezosa: las consultas (`pesos_de_red`, `camino_compartido_abierto`) ya no ven las rutas con 4.320 min, y la red guardada se poda al registrar la siguiente. Una arista que entra por primera vez en la red hace que las caravanas que van por ella rehagan su plan desde donde están (conservan su pasado y sus peajes); la que acaba de registrarla no (el primer viaje abre el camino, el segundo va el doble de rápido).
+> - **Adjunta y aparcada.** `AdjuntarCaravana`/`AparcarCaravana` son órdenes del dueño de la columna, con la Facción y la puerta (2 u) comprobadas; la columna viaja a la velocidad del más lento y su plan se reescala al engancharse o soltarse. `Ejercito.suministro` (el carro) y `Ejercito.caravanas_adjuntas` viajan en la foto con la columna. Con carga, `EnviarCaravanaAlOrigen` viaja sin atracción ni peajes y vuelca al llegar.
+> - **Ruina y conquista con caravanas en ruta.** Las que iban hacia la plaza dan la vuelta con su carga por un plan nuevo desde su posición real (sin camino por tierra se pierden); las que salían de la ruina se pierden; las `preparando` vuelven al almacén; la aparcada en una plaza conquistada se destruye con todo, como en la ruina (decidido el 2026-10-19; antes volvía a su origen).
+> - **Mercenarios (§9).** `ComprarEnCampamento`, `RepostarEnCampamento` y, como andamiaje, `FijarResidencia` y `DarAlmacenPersonal` (códigos 41-44). El stock solo se guarda de los campamentos tocados; la reposición es una cita a la fase de siempre (`creación + k × 3 h`) que solo se programa si hay contadores o una pila por debajo de su tope. Lo comerciado entre Facciones (trueque cumplido y mostrador) suma a los contadores.
+> - **Batalla.** `Nucleo::caravana_entra_en_batalla`, `caravana_sale_de_batalla` (el plan se desplaza lo que duró la pausa) y `aplicar_perdida_de_carros` (si con los carros se va el animal más lento, **lo que le queda al plan en pausa se reajusta a la velocidad nueva** desde el instante de la pausa: dura `vAntes / vDespués` veces lo que duraba; decisión del autor, 2026-10-23; vale también para los carros que pierde por el resultado de Unity); la rejilla de encuentros deja el hecho `caravana.encuentro` entre dos caravanas o con una columna (desde la 4C, del núcleo y filtrado: Facciones distintas y no aliadas, la columna en el mapa y con un héroe sano). La resolución (combate A/B) es del sistema militar. Una caravana grande en tránsito se ve a 60 unidades (`VISION.caravanaGrande.radio` vigente).
+> - **Hechos nuevos** (no están en §12): `comercio.caravana_en_casa`, `comercio.caravana_en_batalla`, `comercio.caravana_sale_de_batalla`, `comercio.carros_perdidos`, `caravana.encuentro`, `mercenarios.repuesto`, `ejercito.caravana_adjuntada`, `ejercito.caravana_aparcada`. `comercio.preparacion_terminada` desaparece: el fin de preparación emite `comercio.caravana_sale`.
+> - **Falta:** del resto de sistemas (héroes, militar, política, niebla, contrato 05): véase «Paridad con TypeScript» en `Docs/Mecanicas a desarrollar.md`. Pruebas: `crates/nucleo/tests/caravanas.rs`.
+
+> **Implementado en Rust (2026-10-19, fase 3C: el carro de acarreo).** Los pueblos extractores y su obra están en `Economia_Construccion.md` §14; aquí, el carro. Reglas puras en `crates/comercio/src/acarreo.rs` (funciones sobre una [`Caravana`] de tipo `acarreo`, ya sin la estructura propia de la fase 3A) y, en `Caravana::llegar`, la llegada nueva `Llegada::Acarreo`; integración en `crates/nucleo/src/nucleo/{pueblos,viaje}.rs`. Sin cambio de formato de foto más allá del `BAN7` de los pueblos (hoy `BAN8`, ventana del acarreo; `Economia_Construccion.md` §14): el carro es una caravana más de la flota (`TipoCaravana::Acarreo`, ya serializable).
+> - **Es una caravana de la flota de la madre** (origen = la plaza madre, parada en el pueblo), con su plan, su generación y sus eventos `LlegadaCaravana` / `PeajeCaravana`; no cuenta contra `cupoCaravanas` ni `cupoCarros`, ni entra en el reparto automático ni en el trueque, y no le afectan «Carga Ampliada» ni «Rutas Rápidas» (capacidad 500, velocidad 24).
+> - **Sale lleno**, sin evento propio: en el paso de minuto de la plaza en que el almacén local tiene para llenarlo (500, la capacidad del carro), cuando el carro vuelve a casa y ya lo tiene, al reponerlo o cuando alguien deja en el pueblo. **Desde el 2026-11-05** el almacén local mide 1.000 (el doble que el carro, decisión del autor: almacenes al doble y carros igual), así que el carro ya no espera a que se llene ese almacén (`pueblo.almacen_lleno`): sale con 500 y lo que sigue extrayéndose mientras va y vuelve se guarda en los otros 500. Carga exactamente la capacidad y emprende la ruta pueblo → madre: el trazado de §7.2 (A\* con la atracción de la red de caminos, peajes de las zonas ajenas que cruce), el plan por tramos de `crates/rutas` y los mismos eventos de llegada y peaje. **La ruta se guarda** (decisión del autor del 2026-10-27; foto `BAN42`, `EstadoComercio::rutas_acarreo`): se traza una vez al levantarse el pueblo y entra en la red de caminos como la ruta madre → pueblo (la poda la da por viva mientras el pueblo tenga ruta guardada); cada salida la recorre sin trazarla otra vez y renueva su lanzamiento en la red. Solo se rehace si deja de valer: la madre cambió de Facción (sus peajes eran otros), ya no existe una ciudad de sus peajes o un punto dejó de ser transitable. Destruido el pueblo o arruinada la madre, la ruta se olvida (sus aristas, ya camino, se quedan). Una foto `BAN41` o `BAN40` llega sin rutas guardadas: cada carro traza y guarda la suya en su próxima salida.
+> - **Al llegar** vuelca en el almacén de la madre sin comisión ni trueque, **topado por su capacidad** (lo que no cabe se pierde: `acarreo.llega` lleva `perdido`; una plaza con 400 de capacidad por recurso pierde 100 de cada 500), y vuelve vacío desandando el camino (`acarreo.vuelve`). Si la madre ya no existe, el carro se pierde.
+> - **Si se destruye** (batalla, `DestruirPueblo`, ruina de la madre), el pueblo se queda sin carro: acumula hasta llenar el almacén y para. **La madre lo repone sola** (decisión del autor del 2026-10-27): en cada paso de minuto, cada pueblo activo sin carro lo compra (carro + buey: 20 de madera y 12 de oro) en cuanto la madre puede pagarlo, y sale en el acto si el almacén ya estaba lleno; mientras haya una batalla sobre el pueblo o sobre la madre, espera. `ReponerCarro` sigue sirviendo para comprarlo en el instante, solo si no tiene ninguno.
+> - **Sin ruta por tierra** entre el pueblo y la madre el carro no sale (DUDA).
+> - **Batalla.** Es una caravana normal para `caravana_entra_en_batalla`, `caravana_sale_de_batalla` y `aplicar_perdida_de_carros`, y para la rejilla de encuentros; la resolución (casi siempre B) es del sistema militar. **Escolta**: no hay escolta automática (decisión del autor del 2026-10-27). Un residente de la madre se la cede a mano con `AsignarEscolta`, con el carro parado en su pueblo y dentro del cupo de escolta del carro (el del Mercado de la madre si lo tiene, 100/200/300; **100** si no, §12; corregido en el motor el 2026-11-11; antes daba 0 sin Mercado), y la escolta **sigue con el carro de un viaje al siguiente** (la casa del carro es su pueblo) hasta que se la quitan con `QuitarEscolta`, con el carro en casa; si el carro se pierde, vuelve a su campamento.
+
+> **Batch de comercio (2026-10-19).** `batch comercio [--plazas 160] [--dias 30] [--semilla 42] [--decisiones crates/batch/decisiones/comercio.json]` corre el núcleo real con 146-160 plazas de Facciones de cuatro y un «jugador» mínimo (Mercado, caravana, trueques por doble coincidencia, pueblos de Cantera con materiales comprados a los mercenarios) y deja `batch/salida/comercio/informe.html`. Resultados de la primera corrida: los invariantes del comercio se cumplen (0 violaciones) y la corrida es determinista; lo medido que merece decisión (peaje y repescas, acarreo contra un almacén lleno, comisión de bienes sin precio, reputación que se borra en 1,74 días, comercio que se apaga sin sumideros) y las decisiones C1-C6 del autor están en `Consideraciones/Calibracion_Sistema4_Decisiones.md` («Primera calibración de `batch comercio`»).
+
+## 2. Modelo de datos
+
+### 2.1 `AcuerdoTrueque` (`estado.acuerdos`)
+
+| Campo | Significado |
+|---|---|
+| `id` | `trueque-{A}-{B}-{contador}` |
+| `asentamientoAId`, `asentamientoBId` | Los dos lados. Siempre asentamientos distintos. |
+| `lineasA`, `lineasB` | Lo que entrega cada lado: lista de `{recurso, cantidadTotal, cantidadEntregada}`. |
+| `creadoEn`, `expiraEn` | Instantes de mundo. Mientras está `propuesto`, `expiraEn` es el plazo para **contestar**; al aceptar se **recalcula** desde el instante de la aceptación. |
+| `estado` | `propuesto` → `activo` → `cumplido` \| `expirado`; o `propuesto` → `rechazado`. |
+
+Invariantes de las líneas (los comprueba `proponerTrueque`): cada lado tiene **al menos una** línea; toda `cantidad > 0`; **un lado no repite recurso** (se suman en una sola línea). El recurso puede
+ser cualquiera de `RECURSOS_TIPO`, **oro incluido**.
+
+### 2.2 `OrdenMercado` (`estado.ordenes` en pie; `estado.historialOrdenes` las cerradas)
+
+`id` (`orden-{asentamiento}-{contador}`), `asentamientoId`, `tipo` (`compra` = la plaza quiere comprar; `venta` = la plaza vende), `recurso`, `cantidad`, `cantidadCumplida`, `precioUnitario`, `creadoEn`,
+`expiraEn`, `estado` (`activa` → `cumplida` \| `expirada`).
+
+### 2.3 `Caravana` comercial (`estado.caravanas`)
+
+Una caravana es un contenedor de **carros** (cada uno con a lo sumo un animal) y de **escolta cedida** (solo ids). Campos que usa el comercio:
+
+| Campo | Significado |
+|---|---|
+| `tipo: 'comercial'` | La flota propia. Las otras (`construccion` = Fundación; `militar`, `contrabando` = solo datos) no pasan por aquí salvo donde se indica. |
+| `origenAsentamientoId` | Su casa para siempre. Nunca cambia, tampoco al viajar. |
+| `destinoAsentamientoId` | El destino de la entrega. **Se conserva durante el regreso** (§6.4): el destino ya entregado sigue siendo `destino`. |
+| `contenido` | Lo que lleva, `recurso → cantidad`. |
+| `carros[]` | `{tipoCarro: 'basico'\|'reforzado', animal?: 'buey'\|'caballo'\|'camello'}`. Siempre presente en una comercial. |
+| `estado` | `disponible` (parada en su origen, sin asignar) · `preparando` (lanzada a mano, esperando en el origen) · `en_transito` (hacia el destino) · `retornando` (de vuelta) · `adjunta` (enganchada a un ejército) · `aparcada` (dejada en una plaza de su Facción) · `esperando` (Rust: con encargo, dentro de su origen o de su destino, §5.8.4). |
+| `ruta`, `progreso`, `posicionActual`, `peajes[]` | La polilínea calculada al lanzar, el avance `0..1` sobre su longitud, y los pasos forzados por ciudades ajenas que aún no ha cruzado (`{asentamientoId, progreso}`). |
+| `origenAcuerdoId`, `ladoAcuerdo` | Solo en el reparto automático: a qué trueque y a qué lado sirve. |
+| `preparaHasta` | Solo en `preparando`: el instante en que sale. |
+| `escoltaIds[]` | Escuadrones cedidos (viven en su héroe con `contenedor: {tipo: 'escolta', caravanaId}`). |
+| `escolta[]` | En el contrato (`Caravana.escolta`, 27, 2026-11-07): la misma escolta escuadra a escuadra, en el orden de `escoltaIds`, con `{ tropa_id, cantidad, heroe_id }` (como la guarnición de una plaza), para decir de quién es cada una. Viaja donde viaja `escoltaIds` (la caravana propia y el carro de acarreo), nunca en la avistada. |
+| `reservadaManual` | `true` ⇒ fuera del reparto automático, sea cual sea su tamaño. |
+| `nombre` | Solo en Rust (2026-11-02): el que le pone quien reside en su origen (`renombrarCaravana`, §5.2); vacío = sin nombre. No cambia nada del juego: es para reconocerla. |
+| `encargo` | Solo en Rust: el encargo de transporte que tiene (`Option<Encargo>`, §5.8.2): modo, destino, hora de salida, las dos paradas, `vueltas`, `punta`, `fase`, `fin_paso` y `cancelado`. Mientras lo tiene, la caravana no está `disponible` y el reparto del trueque no la usa (§4.3). |
+
+`Asentamiento.ultimaCaravanaCreadaEn` guarda el instante de la última caravana creada desde él (comercial **o** de Fundación: el cooldown es compartido).
+
+### 2.4 Red de caminos (`estado.red: RedCaminos`)
+
+- `aristas: string[]` — claves canónicas `claveArista(a, b)` = `"x,y;x,y"` con los dos extremos **redondeados a entero** y ordenados como cadenas. Una arista entra cuando alguna ruta la pisa y **no sale nunca**.
+- `rutas: RutaComercial[]` — `{id: "{origen}>{destino}", origenId, destinoId, faccionId (la del origen al lanzar), aristas, ultimoLanzamiento}`. Una por par ordenado.
+
+### 2.5 Mercado de mercenarios
+
+`CampamentoMercenarios.mercado: Record<bien, unidades>` (el stock en venta de ese campamento) y `estado.mercadoMercenario: {contadores: Record<bien, número>, reponeEn: Instante}` (lo comerciado en el
+mundo desde la última reposición, y cuándo toca la siguiente; **global**, no de un campamento). `Heroe.cupoCampamento?: {dia, comprado}` lleva el cupo diario.
+
+## 3. Precio de referencia, comisión y bonificación
+
+### 3.1 Precio de referencia (`calcularPrecioReferencia(recurso, asentamientos)`)
+
+```
+base = PRECIO_BASE[recurso]            ; si no tiene (el oro) → 0  (no cotiza contra sí mismo)
+stock = Σ sobre TODOS los asentamientos del mundo de cantidadDisponible(almacén, recurso)
+factor = clamp( stockObjetivoGlobal / max(1, stock), factorMin, factorMax )
+precio = base × factor
+```
+
+Es **global** (suma todas las plazas de todas las Facciones, también de bots) y sin componente de distancia.
+
+> **Tabla de precios por minuto (decisión del autor del 2026-10-27).** El motor ya no suma el stock del mundo en cada orden, entrega o compra (con 500 plazas y unos 20 bienes eran ≈ 10.000 sumas cada vez, y la sesión de cada héroe dentro de un campamento las repetía en cada reparto). Calcula **una tabla con el precio de todos los bienes** (`Estado::precios`) y todo la lee: la orden de mercado sin precio, la comisión de una entrega, la compra en un campamento y lo que el campamento enseña. La tabla se rehace en un plazo **global** de la cola (`Carga::Precios`, prioridad 10, después de todo lo demás de su instante) **un minuto** después de que se arme; se arma como el de los títulos, con lo primero que pasa en el mundo (una orden aceptada o un evento de la cola que no sea él mismo) sin otro pendiente, y la primera vez calcula ya la tabla; si pasa algo mientras está pendiente, al vencer se rearma solo, así que con el mundo en marcha se rehace cada minuto y con el mundo quieto, nunca. Los plazos globales (títulos, Era, Aedas y el suyo) no lo arman. Un precio va así hasta un minuto por detrás del stock; el coste es una pasada por minuto, la miren cuántos la miren. La tabla y su plazo van en la foto (BAN44).
+
+> **Precio base de los manufacturados (2026-10-19, decidido por el autor).** `PRECIO_BASE` solo cubre las materias primas, así que armas, cuero, lingotes y armaduras valían 0 al calcular la comisión (`batch comercio`: 77,8 de oro en 519 entregas). Ahora todo bien con receta tiene un **precio base derivado: lo que consume su receta, a precio base, por unidad fabricada** (cuero con 0,25 de ganado = 0,5; arma de madera con 2 de madera = 2; lingote de bronce con 1,6 de lingote de cobre y 0,4 de estaño = 21,6). Se resuelve en cadena hasta que nada cambia (un lingote de bronce necesita antes los de cobre y estaño) y después sigue la misma fórmula (`base × factor` con el stock global de ese bien). Un bien cuyos insumos no cotizan (las chatarras) o el oro no tienen precio. Si un bien tiene recetas distintas por taller o nivel se toma la **más barata** (la más conservadora para la comisión). No hay bloque de parámetros nuevo: se deriva de `EDIFICIO_CATALOGO` al cargar (`ReglasPrecio::derivados`, `precios_derivados` en `crates/comercio/src/datos.rs`), así que **la huella de las reglas no cambia**. **Los mercenarios no venden los manufacturados**: `BIENES_EN_VENTA` sigue siendo solo `PRECIO_BASE` (§9.1).
+>
+> **El aceite de sésamo (2026-11-12, entrada 74)** cotiza como el aceite de oliva, por el mismo camino: es un manufacturado sin fila en `PRECIO_BASE` y su precio base sale de su receta de la Prensa, 2 de sésamo a 1,5 = **3**, el mismo que el aceite de oliva (2 de aceituna a 1,5). Se vende y se compra en el mercado y viaja en caravanas como cualquier recurso, sin reglas propias. Hasta ese día la Prensa sacaba `aceite` de las dos materias y el aceite cotizaba por la más barata (las dos daban 3). Prueba: `el_precio_de_un_manufacturado_sale_de_su_receta` (`crates/comercio/src/precio.rs`).
+
+### 3.2 Tasa de comisión
+
+```
+si origen.faccionId == destino.faccionId :  COMISION.tasaMismaFaccion
+si no                                    :  COMISION.tasaExterna × factorComisionExterna(destino)
+```
+
+`factorComisionExterna` es el **producto** de ese campo en las políticas activas del destino (`Comercio Abierto` ×0,6, `Aranceles Proteccionistas` ×1,5 y `Arterias Comerciales` ×0,8, esta del Maestro
+de Obras; 1 si no hay ninguna; ver `POLITICA_CATALOGO` en `Economia_Construccion.md`).
+
+### 3.3 Comisión de una entrega de trueque o de caravana manual (`comisionDeEntrega`)
+
+```
+valorTotal = Σ cantidad × calcularPrecioReferencia(recurso)       ; el oro vale 0
+distancia  = max(1, distancia en LÍNEA RECTA origen→destino)       ; no la longitud de la ruta
+bonus      = 1 + min(1, distancia / distanciaParaBonusMax) × (bonusPorDistanciaMax − 1)
+comisión   = origen.id == destino.id ? 0 : valorTotal × tasa × bonus
+```
+
+La comisión se **acuña**: se suma como oro al almacén de la **capital de la Facción del destino** (tanda 69; si esa Facción no tiene capital, o el destino ya lo es, al del propio destino; topada por la capacidad de oro de ese almacén; **lo que no cabe se pierde**, decisión del autor del 2026-10-24, C7) y no se resta de nadie. Es una de las fuentes de oro del juego (Doc 3.1). **Solo entre dos asentamientos
+distintos**: llevarse la carga a uno mismo no es comerciar (decidido el 2026-10-11).
+
+**Recargo por mala reputación** (`recargoPorReputacion`, decidido el 2026-10-11): si las Facciones de origen y destino son **distintas** y la reputación de la del **origen** es
+`≤ REPUTACION.umbralBajoParaComision`, esa Facción paga **de su bolsillo** un extra: `min( comisión × (factorComisionPorReputacionBaja − 1), oro del almacén de origen )`. Sale del oro del almacén
+de origen y se suma al del destino (no se acuña: se conserva). Entre plazas de la misma Facción no hay recargo. El mismo cálculo vale para la entrega manual (§4.5).
+
+> **Implementado en Rust (2026-11-08, tanda 69):** la comisión se acuña en la **capital de la Facción del destino** (`Nucleo::plaza_de_oro`), no en la plaza que recibe la carga; la carga y el recargo por reputación siguen entrando en el destino (el recargo sale del origen, como antes). Si la capital es otra plaza, `entregar` (`crates/comercio/src/entrega.rs`) recibe también su almacén y topa la comisión por **su** hueco de oro, no por el del destino. Una Facción sin capital (o un destino sin Facción) acuña en el propio destino. Vale para la entrega de un trueque, la manual y la de un encargo a plaza propia (`liquidar_entrega`, `nucleo/mercado.rs`).
+
+### 3.4 Comisión en el mostrador
+
+Distinta: se **conserva** (§8.3). No lleva bonus por distancia ni recargo por reputación.
+
+<!-- parametros:COMISION -->
+```json
+{
+  "tasaMismaFaccion": 0.03,
+  "tasaExterna": 0.08,
+  "bonusPorDistanciaMax": 1.5,
+  "distanciaParaBonusMax": 120
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:PRECIO_BASE -->
+```json
+{
+  "madera": 1,
+  "piedra": 1.2,
+  "trigo": 1.5,
+  "cobre": 3,
+  "estano": 6,
+  "hierro": 4,
+  "livestock": 2,
+  "carne": 1.8,
+  "leche": 1,
+  "uva": 1.5,
+  "aceituna": 1.5,
+  "cebada": 1.5,
+  "sesamo": 1.5
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:PRECIO_REFERENCIA -->
+```json
+{
+  "stockObjetivoGlobal": 500,
+  "factorMin": 0.4,
+  "factorMax": 3
+}
+```
+<!-- /parametros -->
+
+## 4. El trueque
+
+### 4.1 Proponer (`proponerTrueque`, comando del mismo nombre)
+
+Condiciones del motor: A ≠ B; los dos asentamientos existen; las líneas cumplen §2.1. Resultado: acuerdo `propuesto`, `expiraEn = ahora + TRUEQUE.plazoMinutosPorDefecto`, `id` con el siguiente
+contador de la sesión. **No se comprueba** ni Mercado, ni stock, ni relación política entre las Facciones, ni que sean de Facciones distintas: se puede proponer a cualquiera, y consigo mismo (entre dos
+plazas propias). Autoriza el comando: el Tesorero o el Gobernador del asentamiento A, residente y dentro (decidido el 2026-10-12; ver §11; el «basta residir» de TypeScript queda superado).
+
+### 4.2 Contestar (`aceptarTrueque`, `rechazarTrueque`)
+
+Solo mientras sigue `propuesto` (una vez), y solo el Tesorero o el Gobernador del asentamiento **B**, residente y dentro (§11).
+- **Aceptar**: `estado = activo`, `expiraEn = ahora + plazoMinutosPorDefecto` (el plazo **se cuenta desde el sí**). Aceptar no traza ningún camino.
+- **Rechazar**: `estado = rechazado` (queda, no se borra).
+- **Un trueque activo no se cancela** (decidido el 2026-10-12): una vez aceptado, o se cumple o vence. No hay comando para retirarlo; la única salida anticipada es la ruina de una de las dos plazas (§10, sin penalización).
+- Una propuesta que nadie contesta **caduca** en `asignarCaravanasATrueque` (§4.3) al cumplirse `expiraEn`: `estado = expirado`, evento `comercio.trueque_expirado`, **sin penalización**.
+
+### 4.3 El reparto automático (`asignarCaravanasATrueque`, dentro de `avanzarComercio`)
+
+Corre **después** de mover las caravanas (§6) y de podar la red. Para cada acuerdo, en el orden del array:
+
+1. `propuesto`: si `instante ≥ expiraEn` → caduca (arriba) y sigue.
+2. Si no está `activo`: se ignora.
+3. `activo` y `instante ≥ expiraEn` → **vence**: `expirado`, evento `comercio.trueque_expirado`, y por cada lado con `fraccionIncumplida > 0` un ajuste de reputación
+   `REPUTACION.penalizacionTruequeIncumplido × fraccionIncumplida` a la Facción de ese lado (§4.6). Lo ya entregado no se devuelve.
+4. `activo` vivo: se forman los dos **lados pendientes** (A: sale de A hacia B con las líneas de `lineasA` que faltan; B al revés). Un lado entra si le falta algo **y** no hay ya una caravana
+   `en_transito` con `origenAcuerdoId == acuerdo.id` y `ladoAcuerdo == lado` (un solo cargamento en ruta por lado; una `retornando` ya no cuenta, porque al entregar pierde esas marcas).
+
+Luego, **por asentamiento de origen** (en el orden en que aparecen):
+
+```
+disponibles = caravanas con tipo 'comercial', estado 'disponible', !reservadaManual, origen = este asentamiento, capacidadCaravana > 0    (en el orden del array de caravanas)
+             ; las que no tienen ningún carro con animal no cuentan: no pueden cargar nada ni ocupan el turno de las que sí
+si no hay → siguiente asentamiento
+para cada lado pendiente con destino existente: score ∈ [0,100]   ; orden DESCENDENTE (sort estable)
+idx = 0
+para cada (lado, destino) en ese orden:
+    si idx ≥ |disponibles| → fin
+    caravana = disponibles[idx]
+    libre = capacidadCaravana(caravana) × factorCapacidadCaravana(origen)
+    carga = {} ; para cada línea pendiente del lado, EN EL ORDEN DEL ACUERDO:
+        cantidad = min( cantidadDisponible(almacén origen, recurso), faltante, libre )
+        si cantidad > 0 : carga[recurso] = cantidad ; libre −= cantidad
+    si carga está vacía → continue                        ; NO avanza idx: la caravana se reintenta con el siguiente lado y el siguiente tick
+    trazado = trazarRutaComercial(origen → destino)       ; §7.2
+    si no hay trazado → continue                          ; sin camino por tierra no sale y NO gasta la caravana
+    idx++
+    red = registrarRuta(red, origen, destino, trazado.ruta, instante)
+    almacén origen −= carga
+    caravana → { estado en_transito, destino, contenido carga, origenAcuerdoId, ladoAcuerdo, posicionActual = origen.posicion, progreso 0, ruta, peajes }
+    evento comercio.caravana_sale
+```
+
+**Score** (`scoreAsignacion`): `urgenciaExpiracion × peso + urgenciaVolumen × peso + cercanía × peso`, con
+
+```
+urgenciaExpiracion = 100 × (1 − max(0, expiraEn − ahora) / (expiraEn − creadoEn))        ; 100 si el plazo total es 0
+urgenciaVolumen    = 100 × min(1, (total − entregado) / total)                             ; sumas de TODO el lado
+cercanía           = 100 × (1 − min(1, distanciaRecta / ASIGNACION_CARAVANA.distanciaReferencia))
+```
+
+Notas: **la urgencia se cuenta desde la aceptación** (decidido el 2026-10-18; el TypeScript no reescribía `creadoEn` y el tramo ya consumido del plazo contaba desde la propuesta): se guarda `aceptadoEn` y `urgenciaExpiracion` mide `expiraEn − aceptadoEn`; y el reparto **no mira Mercado ni cupos**: una caravana ya creada es
+reparto aunque el Mercado ya no esté. El reparto **no compone** caravanas ni asigna escolta; despacha la escolta que la caravana ya tenga cedida (`escoltaIds` se conserva). **Una caravana con encargo no entra en el reparto**: solo se eligen las `disponible` (`candidata_de_reparto`) y la que tiene encargo está `esperando`, `en_transito` o `retornando` (§5.8.3); al terminar su encargo queda `disponible` y se reevalúa el reparto de su origen.
+
+<!-- parametros:TRUEQUE -->
+```json
+{
+  "plazoMinutosPorDefecto": 1440,
+  "retencionTerminadosMinutos": 10080
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:ASIGNACION_CARAVANA -->
+```json
+{
+  "pesoUrgenciaExpiracion": 0.5,
+  "pesoUrgenciaVolumen": 0.3,
+  "pesoCercania": 0.2,
+  "distanciaReferencia": 120
+}
+```
+<!-- /parametros -->
+
+### 4.4 Entrega y cierre (`avanzarCaravanas` → `aplicarEntregaATrueque`)
+
+Al llegar al destino (§6.3) la caravana entrega todo su `contenido` (cada recurso con `agregarRecurso`, **topado por la capacidad** de ese recurso en el almacén del destino; **lo que no cabe se
+pierde**) más la comisión (§3.3), y emite `comercio.caravana_llega`. Si la caravana lleva `origenAcuerdoId`, se abona al trueque:
+
+```
+para cada (recurso, cantidad) en contenido :  línea del lado de esa caravana con ese recurso . cantidadEntregada += cantidad       ; lo que ninguna línea pide no suma
+si acuerdoSaldado (todas las líneas de los dos lados: cantidadEntregada ≥ cantidadTotal) :
+    estado = cumplido ; evento comercio.trueque_cumplido {entreFacciones: faccion(A) ≠ faccion(B), intercambiado: Σ cantidadTotal por recurso, de los dos lados}
+    si entreFacciones, para faccionId en [faccion(A), faccion(B)] :        ; la reputación y la experiencia son entre Facciones
+        reputación += REPUTACION.bonusTruequeCumplido
+        experiencia de Facción += NIVEL_FACCION.xp.truequeCumplido
+```
+
+El abono usa lo que la caravana **lleva al llegar**, es decir, tras los peajes (§7.3): si un peaje se cobró en especie (la capital no tenía oro bastante), la línea queda corta y hace falta otro viaje; el peaje pagado en oro no toca la carga.
+
+> **Retirada el 2026-10-24 (EE-6, economía entera): una línea solo se salda entregada entera** (`Linea::saldada` = entregado ≥ pactado, `faltante` = pactado − entregado). Lo que sigue es la regla anterior, por historia. **Línea saldada por resto (2026-10-19, decidido por el autor; `batch comercio` medía 3,35 salidas por trueque).** Una línea con algo entregado y **menos de una unidad por entregar** se daba por **saldada**: no se repesca y el resto queda en el almacén de origen. Con `Linea.faltante() = 0` el trueque se salda (`acuerdoSaldado`), no cuenta como incumplimiento (`fraccionIncumplida`) y deja de verse como pendiente para el reparto (`pendiente`, `entregable`, `ladoQueDebe`, urgencia por volumen). La regla es por línea y solo tras un abono (una línea sin tocar nunca se da por saldada, por pequeña que sea). Ejemplo: 32 u con un peaje del 2 % llegan 31,36 y falta 0,64 u: saldado en una sola salida (antes, una segunda de 0,64 u y una tercera de 0,01 u). Una entrega grande sigue necesitando repesca (1.000 u dejan 980 y faltan 20 u). El peaje no cambia (sigue siendo el 2 % de la carga). Implementado en `crates/comercio/src/trueque.rs` (`Linea::saldada`, `UNIDAD`); `abonar_a_trueque` del núcleo no cambia. Sin bloque de parámetros ni cambio de formato de foto.
+
+### 4.5 Entrega manual con una caravana adjunta (`entregarDeCaravana`)
+
+Cuando la caravana va **enganchada a un ejército** (`adjunta`) el reparto automático no la ve y la entrega la decide el jugador. Condiciones: la caravana va con ese ejército; el trueque está `activo` y
+**uno de sus lados lo debe la Facción del ejército** con líneas pendientes (`ladoPendienteParaEjercito`; el primer lado que lo cumpla, A antes que B); el ejército está en la **puerta** del asentamiento que **recibe** (`radioPuerta`; el radio de reabastecimiento desaparece, Movimiento_Ejercitos §8). Entrega por línea `min(lo que lleva, lo que falta)` (error `EntregaInvalidaError` si no entrega nada), cobra la **misma** comisión y el mismo recargo por reputación
+(§3.3, distancia recta origen→destino; el recargo se descuenta del almacén de origen) y cierra por la misma vía (§4.4). Emite `comercio.entrega_escoltada` (más `trueque_cumplido` si cierra). La caravana **sigue adjunta** y con lo que sobre.
+
+### 4.6 Reputación y experiencia, en una tabla
+
+| Hecho | Reputación | Experiencia de Facción |
+|---|---|---|
+| Trueque `cumplido` entre Facciones distintas | `+bonusTruequeCumplido` a la Facción de A **y** a la de B | `+xp.truequeCumplido` a cada lado |
+| Trueque `activo` que vence entre Facciones distintas | `penalizacionTruequeIncumplido × fraccionIncumplida` por lado | — |
+| Cualquiera de los dos entre plazas de la **misma** Facción | nada (la reputación es entre Facciones) | nada |
+| Propuesta sin contestar, rechazada, o cancelada por ruina | nada | nada |
+
+`fraccionIncumplida(lado) = 1 − min(Σ entregado por línea, cantidadTotal) / Σ cantidadTotal` (sumando cantidades de recursos distintos sin ponderar por precio).
+
+### 4.7 Poda (`podarAcuerdosTerminados`, fin del tick)
+
+Sale de `estado.acuerdos` el `cumplido`, `expirado` o `rechazado` con `instante > expiraEn + TRUEQUE.retencionTerminadosMinutos` **que ninguna caravana cite** (`origenAcuerdoId`). Devuelve el mismo
+array si no hay nada que quitar.
+
+## 5. La flota de caravanas comerciales
+
+### 5.1 Cupos (todos salen del **Mercado activo**, `edificiosPorTipoYEstado(…, 'mercado')[0]`, y valen 0 sin él)
+
+| Cupo | Valor | Se mide |
+|---|---|---|
+| `cupoCaravanas` | `niveles[nivelInterno].cupoCaravanas` del Mercado **+** el del **Albergue de caravanas** activo (si lo hay) **+** `cupoCaravanaExtra` de las políticas (suma; "Ampliación de Flota" +1) | al **crear**: caravanas `comercial` con `origenAsentamientoId == este` en **cualquier estado** |
+| `cupoCarros` | `niveles[nivelInterno].cupoCarros` del Mercado **+** el del Albergue de caravanas activo | al **fabricar** un carro: `carrosEnUso(asentamiento)` = Σ carros de las comerciales de ese origen (sin las nacidas en un campamento) |
+| `cupoEscolta` | `CARAVANA_ESCOLTA.liderazgoPorNivelMercado[nivelInterno − 1]` | **por caravana**, en puntos de Liderazgo |
+
+> **Albergue de caravanas (decisión del autor del 2026-11-03).** Edificio único de la categoría `mercado` (huella 2×3, junto al Mercado), de adición manual, que **suma** a los cupos del Mercado: **+3 caravanas y +5 carros** en su nivel 1, **+6 y +10** en el 2 y **+12 y +22** en el 3 (`cupoCaravanas` y `cupoCarros` de su nivel en el catálogo de `Economia_Construccion.md`). Se levanta con un Mercado activo (`requiereEdificio` de su nivel 1; si no, `obra.falta_edificio`) y su nivel 2 pide Mercado de nivel 2 y plaza de nivel 2, y su nivel 3, Mercado de nivel 3 y plaza de nivel 3. Sin Mercado activo no da nada (como el Mercado, sus cupos valen 0 sin él); en obra o dañado, tampoco. Coste provisional: 80 de madera y 4 h; mejoras 120 de madera y 80 de piedra, y 300 de madera y 150 de piedra. Lo pidió el autor para que las caravanas que llevan los materiales a pueblos y aldeas no se coman el cupo del nivel 1 y queden caravanas para trueques (`crates/comercio/src/flota.rs`, `cupos`).
+
+(Los valores de cada nivel están en el bloque `EDIFICIO_CATALOGO`, edificio `mercado`, de `Economia_Construccion.md`.) El cupo de carros es de la **flota entera** del asentamiento, repartido como se quiera; mover
+carros entre caravanas propias no lo toca.
+
+### 5.2 Crear (`crearCaravana`)
+
+Condiciones, en este orden: **Mercado activo**; `puedeCrearCaravana` (han pasado `CARAVANA_COOLDOWN.cooldownMinutos` desde `ultimaCaravanaCreadaEn`; sin marca previa, sí); cupo de caravanas no alcanzado.
+Resultado: un casco **vacío y gratis** `{carros: [], contenido: {}, estado: disponible, reservadaManual: false, posicionActual: la del asentamiento}` y `ultimaCaravanaCreadaEn = ahora`. No hay comando para
+desmantelarla: solo se pierde por captura, destrucción o ruina. `construirCaravanaComercial` (NPC de laboratorio, no un comando) encadena crear + 1 carro básico + 1 buey.
+
+**Ponerle nombre** (Rust, pedido del autor del 2026-11-02): `renombrarCaravana { caravanaId, nombre }` (comando 209). La da quien reside en el **origen** de la caravana y está dentro (como el resto de la flota, `ResidenteDentro`), esté la caravana donde esté. El nombre se recorta; vacío la deja sin nombre; como mucho `NOMBRE_ASENTAMIENTO.largoMaximo` caracteres (`caravana.nombre_largo`) y, a diferencia del de las plazas, no tiene que ser único. El mismo nombre que ya tiene es «sin cambios». Emite `comercio.caravana_renombrada` `{ caravana, nombre }`; el nombre sale en `Caravana.nombre` del contrato y viaja en la foto (desde BAN55).
+
+### 5.3 Carros y animales
+
+- **`agregarCarroCaravana`**: caravana comercial **`disponible`**; la flota no está en su `cupoCarros`; el `reforzado` exige una **Carpintería activa** en el origen (el `basico` solo el Mercado, que ya se
+  exige para crear); el almacén tiene el `costo` (se descuenta; no hay reserva previa). El carro nace **sin animal**.
+- **`comprarAnimalCaravana`**: caravana `disponible`; el índice de carro existe y **no tiene animal**; el almacén tiene el `costo` del animal (oro). Cuenta para el contador de logros `animales.comprados`.
+- **`moverCarroCaravana`**: las dos comerciales `disponibles`, distintas y **del mismo origen**; el carro (con su animal) pasa de una a otra. Sin coste, tiempo ni comprobación de cupo.
+- **`reservarCaravana`**: pone o quita `reservadaManual`. No comprueba estado.
+
+### 5.4 Lo que se deriva de los carros (`engine/caravanas.ts`)
+
+```
+carrosConTraccion   = carros con animal
+capacidadCaravana   = Σ  CARRO_CATALOGO[tipo].capacidadBase × ANIMAL_CATALOGO[animal].factorCarga       ; 0 sin carros con animal
+velocidadCaravana   = min  ANIMAL_CATALOGO[animal].velocidad                                              ; 0 sin carros con animal
+esCaravanaGrande    = tipo 'comercial' y |carrosConTraccion| ≥ VISION.caravanaGrande.carros              ; para ser vista (Niebla)
+```
+
+Los multiplicadores de política los aplica **quien llama**, siempre con las políticas del asentamiento de **origen**: `factorCapacidadCaravana` ("Carga Ampliada" ×1,5) al **cargar para viajar**
+(reparto automático y `prepararCaravana`) y `factorVelocidadCaravana` ("Rutas Rápidas" ×1,5) al **mover** una comercial (ida y vuelta). El multiplicador de capacidad vale para **toda** caravana propia
+(decidido el 2026-10-11): `capacidadEfectiva(caravana, asentamientos)` = `capacidadCaravana × factorCapacidadCaravana(origen)` es la que usan el reparto, `prepararCaravana`, la carga de una
+caravana **adjunta** (`cargarCaravanaAdjunta`), la de una **aparcada** y `capacidadCargaDe` de un ejército con caravanas (botín, mostrador, víveres). Si el origen ya no existe, sin política.
+
+<!-- parametros:CARRO_CATALOGO -->
+```json
+{
+  "basico": {
+    "capacidadBase": 500,
+    "costo": {
+      "madera": 20
+    },
+    "fabrica": "mercado"
+  },
+  "reforzado": {
+    "capacidadBase": 800,
+    "costo": {
+      "madera": 40
+    },
+    "fabrica": "carpinteria"
+  }
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:ANIMAL_CATALOGO -->
+```json
+{
+  "buey": {
+    "factorCarga": 1,
+    "velocidad": 24,
+    "costo": {
+      "oro": 12
+    }
+  },
+  "caballo": {
+    "factorCarga": 0.5,
+    "velocidad": 36,
+    "costo": {
+      "oro": 60
+    }
+  },
+  "camello": {
+    "factorCarga": 0.75,
+    "velocidad": 28.5,
+    "costo": {
+      "oro": 40
+    }
+  }
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:CARAVANA_COOLDOWN -->
+```json
+{
+  "cooldownMinutos": 10
+}
+```
+<!-- /parametros -->
+
+### 5.5 Escolta cedida (`asignarEscolta`, `quitarEscolta`, y dentro de `prepararCaravana`)
+
+> **Implementado en Rust (2026-10-20, fase 4B-1).** `AsignarEscolta { caravana, heroe, escuadras }` (61) y `QuitarEscolta { caravana, heroe, escuadras }` (62) usan `comercio::caravana::{seleccionar_escolta, asignar_escolta, quitar_escolta}` con las escuadras reales del héroe (`Contenedor::Escolta(caravana)`), el cupo de `Nucleo::cupos_de_flota` y la autorización del héroe (su cuenta o la administración). Las escuadras vuelven al campamento al llegar la caravana a casa (`Llegada::Casa`), al cancelar la preparación, al perderse (ruina o todos sus carros) y al retirarlas su héroe. Desde la paridad P5 (2026-10-27) también se cede en el mismo lanzamiento: `PrepararCaravana { …, escolta: Some((heroe, escuadras)) }` (etiqueta 179 del log; la 32 sigue siendo la de sin escolta; en el contrato, `heroe_id` y `escolta_escuadron_ids` de `OrdenPrepararCaravana`) aplica la misma selección, autorización y cupo que `AsignarEscolta`, contando la ya cedida, y si algo falla no se cede nada ni se reserva carga; al salir bien emite `comercio.caravana_escolta_cedida` además de `caravana_preparando`. **Provisional:** la baja de soldados de una escolta derrotada será del combate (4D).
+
+> **Implementado en Rust (2026-10-20, fase 4B-2).** La caravana adjunta ya vive en una columna real (`Ejercito.caravanas_adjuntas`, ids ascendentes). `AdjuntarCaravana` exige un **ejército** o una formación (una columna personal no las lleva: `columna.personal_sin_caravanas`) y manda en ella cualquier participante; `capacidad_de_carga` suma `participantes × capacidadCarroPorJugador` y la de cada adjunta. **Se sueltan solo dentro de una plaza** (`AparcarCaravana`; decidido 2026-10-19). Al **guarnecer**, todas las adjuntas han de ser de esa plaza y quedan aparcadas en ella (`ejercito.caravana_aparcada`; si alguna es de otra plaza, `caravana.ajena_al_lugar` y no se entra); al **entrar en un campamento** no se admite ninguna caravana comercial adjunta. Si la columna **se queda sin nadie** (el último se desconecta), sus caravanas comerciales vuelven solas a su origen por el camino y, si no hay por tierra, se pierden (`ejercito.disuelto`). **Provisional:** la Caravana de Fundación (§1.8) sigue siendo una marca de la columna (`caravana_fundacion`) que da la administración y que `Fundar` consume sin disolver la columna: no se engancha ni se suelta en un campamento ni se reclama (`reclamarCaravana`); tampoco existían `cargarCaravana` ni la derrota de la columna con sus caravanas (4D). *(Hechas `cargarCaravana` y `soltarCaravana` en 5G-a, 2026-10-24: órdenes 140 y 142, Movimiento_Ejercitos §9; `reclamarCaravana` (141) existe pero no hay aún Caravana de Fundación que reclamar.)* *(La Caravana de Fundación es una entidad desde 5G-b, 2026-10-24: se engancha con `AdjuntarCaravana`, vuelve sola y se reclama con `reclamarCaravana`; Fundacion_Y_Refundacion §2 y §7.)* *(Hecha la derrota, 2026-10-24: con números, cada adjunta de la columna derrotada pierde la mitad de sus carros con su carga, que va al botín del ganador, y se emite `ejercito.caravanas_perdidas`, Combate §5; por Unity pierde los carros que dice el resultado, `comercio.carros_perdidos`.)*
+
+- **Seleccionar** (`seleccionarEscoltaCaravana`): el héroe **reside en el origen** (su campamento está ahí) y cada escuadrón es **suyo**, está **en su campamento** (`contenedor.tipo == 'campamento'`),
+  **no** en la guarnición y no está aniquilado.
+- **Cupo**: `liderazgoComprometido(ya cedidas ∪ nuevas) ≤ cupoEscolta(origen)`. Cada escuadra suma su coste de Liderazgo por escalón (no depende de cuánta gente le quede) y se cede **entera**. El cupo
+  es de la caravana, lo comparten todos los residentes que ceden, y **no gasta el Liderazgo del que presta**.
+- **`asignarEscolta`**: caravana `comercial` y `disponible` en su origen, ≥ 1 escuadrón, sin repetidos; los escuadrones quedan `contenedor: escolta`. **`quitarEscolta`**: solo con la caravana `disponible`;
+  cada héroe retira únicamente los suyos (los ids por defecto son todos los suyos cedidos a esa caravana); vuelven al campamento. **Con encargo (Rust, §5.8.6)** las dos valen también con la caravana `esperando` **en su origen** (no en su destino ni en ruta).
+- Los cede cada residente por sí mismo (`heroeId` = el actor). La escolta **no consume ración**.
+- **De visita en el origen** (Rust, 2026-11-04, decisión del autor: «estando de visita en esa plaza debo poder usar estas tropas para escolta de caravanas presentes, pero solo si la plaza es de mi Facción»): un héroe **dentro** del origen de la caravana, que **no reside** en él y es **de la Facción del origen** (la administración no lo necesita), cede escuadras de la **columna con la que entró** (no de un campamento), con el mismo cupo y las mismas comprobaciones que dentro del pueblo de un carro de acarreo (Economia_Construccion §14.0.1): suya, en esa columna (`escuadra.fuera_de_tu_columna`), con soldados y sin reserva de batalla. `quitarEscolta` dado así, de visita en el origen, la devuelve a esa columna sin pasar de su Liderazgo; si la caravana vuelve a casa o se pierde, la escolta va al campamento de su héroe, como la de un residente. Un visitante de otra Facción sigue sin poder ceder escolta (`caravana.escolta_invalida`).
+- Vuelven al campamento: al terminar el regreso (§6.4), al cancelar la preparación, al perderse la caravana por ruina o por presencia (los casos de combate están en `Combate.md`). **Con encargo** la escolta no vuelve en cada vuelta: viaja en todas y vuelve al **terminar el encargo** (§5.8.6, §5.8.7) o al perderse la caravana (§10).
+
+<!-- parametros:CARAVANA_ESCOLTA -->
+```json
+{
+  "liderazgoPorNivelMercado": [
+    100,
+    200,
+    300
+  ]
+}
+```
+<!-- /parametros -->
+
+### 5.6 Lanzar a mano (`prepararCaravana`) y cancelar (`cancelarCaravana`)
+
+`prepararCaravanaManual(caravana, origen, destino, carga, escolta, yaCedidas, mapa, territorio, ahora, salirEn?)`. Validaciones, en este orden (cualquiera falla ⇒ `CaravanaInvalidaError`, no se
+cambia nada):
+
+1. La caravana es comercial con `carros`; está `disponible`; su origen es `origen`.
+2. `capacidad = capacidadCaravana × factorCapacidadCaravana(origen)` es > 0.
+3. `Σ carga > 0` y `≤ capacidad + 1e-6`; ninguna cantidad negativa; el almacén del origen tiene cada cantidad (sin reserva previa).
+4. Cupo de escolta (§5.5) con lo ya cedido más lo nuevo.
+5. Hay **ruta por tierra** (`trazarRutaComercial`, §7.2): sin ella se rechaza (el agua es infranqueable).
+6. Si hay `salirEn`: `salirEn > ahora` y `salirEn ≤ ahora + CARAVANA_PREPARACION.maxProgramacionDias` días.
+
+**El lanzamiento a mano conserva su preparación** (`kPorCarro`, arriba) con la llegada de los encargos (§5.8): no paga los tiempos de carga y descarga de §5.8.5, y exige la caravana `disponible`, así que una con encargo no se lanza a mano (`caravana.no_disponible`).
+
+**No se comprueba** nada del destino: puede ser el propio origen, una plaza de otra Facción, de un enemigo, o una ruina que aún no se haya limpiado. Tampoco el cargo ni la tecnología.
+
+Efecto:
+
+```
+prepMinutos = CARAVANA_PREPARACION.kPorCarro × max(0, |carros| − 1)          ; cuenta TODOS los carros, con o sin animal
+saleEn      = max( ahora + prepMinutos, salirEn si lo hay )
+estado      = saleEn > ahora ? 'preparando' : 'en_transito'
+almacén origen −= carga                 ; la carga se reserva YA
+caravana: destino, contenido (las cantidades > 0), posicionActual = origen, progreso 0, ruta, peajes (si hay), preparaHasta = saleEn (solo si preparando),
+          escoltaIds = ya cedidas ∪ nuevas (si hay)
+tropa: las nuevas escuadras pasan a contenedor 'escolta'
+red = registrarRuta(red, origen, destino, ruta, ahora)         ; la ruta entra en la red YA, aunque luego se cancele
+evento comercio.caravana_preparando
+```
+
+Salida inmediata (`en_transito` desde el comando): **no** hay evento `comercio.caravana_sale`; su plan empieza en ese instante. Con preparación, el **evento programado** a `preparaHasta` la pasa a
+`en_transito`, emite `comercio.caravana_sale` y le calcula el plan desde ese instante. Una caravana `preparando` está en su ciudad: no es interceptable.
+
+**`cancelarCaravana`** (solo `preparando`): la carga vuelve al almacén del origen (`agregarRecurso`, topada por capacidad), la caravana pasa a `disponible` sin destino/contenido/ruta/escolta y se devuelve
+la escolta al campamento. La ruta ya registrada en la red **no se retira**.
+
+<!-- parametros:CARAVANA_PREPARACION -->
+```json
+{
+  "kPorCarro": 2,
+  "maxProgramacionDias": 3
+}
+```
+<!-- /parametros -->
+
+### 5.7 Caravana aparcada
+
+Una caravana `aparcada` (dejada en una plaza de su Facción al entrar un ejército, `Movimiento_Ejercitos.md` §9) puede:
+
+- **Cargarse/descargarse** (`moverCargaCaravanaAparcada`) contra el almacén de la plaza anfitriona; hay que estar **presente** en ella siendo **residente del origen de la caravana**, y la caravana tiene que estar
+  exactamente en la posición de la plaza. `cargar`: `min(pedido, capacidadCaravana − ya cargado, disponible en el almacén)`; `descargar`: `min(pedido, lo que lleva, hueco del almacén de ese recurso)`;
+  si el resultado es ≤ 0 se rechaza. No hay reserva.
+- **Volver** (`enviarCaravanaAlOrigen`): **vacía** ⇒ pasa a `disponible` **al instante** en su origen (sin viaje). **Con carga** ⇒ `retornando` con `destinoAsentamientoId = la anfitriona`, ruta
+  `calcularRuta(anfitriona → origen)` **sin atracción de la red ni peajes**; al llegar vuelca el contenido en el almacén del origen (topado) y queda `disponible`. Sin ruta por tierra ⇒ error.
+
+**Descargar en casa** (pedido del autor del 2026-11-04, Rust). `moverCargaCaravanaAparcada` con `descargar` vale también para una caravana comercial **en casa**: `disponible`, o `esperando` en su origen con encargo (una ruta o un envío entre dos pasos, también mientras carga o descarga). Descarga en el almacén de **su origen**, con la misma cuenta: `min(pedido, lo que lleva, hueco del almacén de ese recurso)`, así que entra solo lo que el almacén admite y cabe; todo es pedir lo que lleva de cada recurso. La da quien reside en el origen y está dentro. El encargo sigue como estaba. Emite el mismo `comercio.carga_caravana_aparcada` (`cargar` 0) a la plaza. Cargar a mano sigue siendo solo de la aparcada; de camino o en el destino, `caravana.no_aparcada`. Prueba: `una_caravana_en_casa_se_descarga_a_mano_en_su_almacen_aunque_tenga_ruta` (`tests/encargos.rs`).
+
+### 5.8 Encargos: rutas y envíos automáticos
+
+> **Implementado en Rust (2026-10-31).** Reglas puras en `crates/comercio/src/{encargo,caravana,mostrador,ruina,evento}.rs` (el modelo y `validar`, lo que entra y sale del almacén, `carros_del_paso`, la máquina de estados, las cuentas de la plaza ajena y las caídas); el ciclo, en `crates/nucleo/src/nucleo/encargos.rs` (la conquista y la pérdida de la caravana, en `flota.rs`; los datos de los hechos y `tras_servir`, en `mercado.rs`); lo que se ve, en `crates/nucleo/src/proyeccion/{propios,vista}.rs`; la foto, **`BAN52`** (`codec_comercio.rs`; hoy `BAN60`: las fotos anteriores a `BAN60` ya no se leen). Contrato: órdenes 168-170 y comandos 195-197. Pruebas: `crates/nucleo/tests/{encargos,encargos_caidas,encargos_vista}.rs` y los `mod pruebas` de `crates/comercio`. **Las caídas están en §10 y los hechos en §12**; los permisos y la proyección, en [`Proyecciones_Y_Autorizacion.md`](Proyecciones_Y_Autorizacion.md). Este apartado no los repite.
+
+#### 5.8.1 Qué es y los dos modos
+
+Una caravana comercial de la flota recibe un **encargo** de transporte con dos paradas, su origen y un destino, y en cada una sabe qué deja y qué recoge. Mientras lo tiene va y viene sola, con la escolta que ya tuviera cedida: ni héroe ni columna. Hay dos modos (`modo`):
+
+| Modo | Qué hace | Destino |
+|---|---|---|
+| **Ruta** (`ruta`) | Va y viene entre dos plazas de la misma Facción sin parar, hasta que se cancela, el destino deja de valer o la destruyen | Una plaza de la Facción del origen. Nunca una de otra Facción, tampoco aliada ni vasalla |
+| **Envío** (`envio`) | Una sola ida y vuelta, ya o a la hora elegida; al volver deja lo que traiga y queda libre | Cualquier plaza distinta del origen con ruta por tierra; en una de otra Facción comercia con las órdenes de su mercado (§5.8.8) |
+
+#### 5.8.2 Los campos y las paradas
+
+`Caravana.encargo` (`Option<Encargo>`, `crates/comercio/src/encargo.rs`):
+
+| Campo | Ruta | Envío |
+|---|---|---|
+| `modo` | `ruta` | `envio` |
+| `destino` | Plaza de la Facción del origen, distinta de él | Cualquier plaza distinta del origen |
+| `salir_en` | No lleva: sale en cuanto se le da (con hora, `caravana.salida_invalida`) | Opcional: la hora de mundo a la que empieza a cargar en el origen, en `(ahora, ahora + CARAVANA_PREPARACION.maxProgramacionDias]`; sin ella, empieza ya |
+| `en_origen`, `en_destino` | La `Parada` de cada punta | Igual |
+| `vueltas` | Idas y vueltas hechas: sube en 1 cada vez que llega al origen | Igual |
+
+El ciclo (§5.8.4) apunta además `punta` (`origen` o `destino`: donde espera, o hacia donde va), `fase` (`espera`, `descarga` o `carga`; solo cuenta con la caravana `esperando`), `fin_paso` (cuándo acaba la descarga o la carga en curso) y `cancelado` (§5.8.7).
+
+Cada `Parada` lleva dos listas y dos interruptores. En cada parada **primero se deja y luego se recoge**:
+
+| Campo de la parada | Significado |
+|---|---|
+| `recoger` | Líneas `{recurso, cantidad, precio_max?}`. En una plaza propia, lo que se toma del almacén. En una ajena, comprar a sus órdenes de venta (§5.8.8) |
+| `esperar_existencias` | Con `true`, no carga hasta que el almacén tiene todo lo pedido, sin plazo (se ve qué falta y se cancela a mano); con `false`, carga lo que haya |
+| `dejar` | Líneas `{recurso, tope?, precio_min?}`; sin `tope` deja todo lo que lleve de ese recurso. En una plaza ajena, vender a sus órdenes de compra |
+| `desechar_sobrante` | Con `true`, lo que no cabe en el almacén se tira; con `false`, se queda a bordo. En una plaza ajena no cuenta |
+
+Qué líneas valen (`ErrorEncargo`; en este orden salen los rechazos de §5.8.3):
+
+- **`encargo.linea_invalida`:** cantidad o `tope` de menos de una unidad (1.000 milésimas); un recurso repetido dentro de una misma lista (puede estar a la vez en `recoger` y en `dejar`); un precio en una parada de plaza propia (el origen, y el destino si es de la Facción); oro en una parada de plaza ajena (el oro con que comprar se recoge en el origen como una línea más).
+- **`encargo.falta_precio`:** una línea de la parada de una plaza ajena sin precio, o con precio ≤ 0.
+- **`encargo.supera_capacidad`:** lo que se recoge en una parada pasa de la capacidad efectiva de la caravana (carros con animal × capacidad, con «Carga Ampliada» si la tiene).
+
+Sin parada, la caravana no recoge ni deja nada en esa punta.
+
+#### 5.8.3 Quién lo da y con qué caravana
+
+- **Quién:** el Gobernador, el Tesorero o el **Maestro de Caravanas** de la plaza de origen de la caravana, residente y dentro (también la administración). Lo mismo vale para cambiar y cancelar. La matriz y las filas de cada orden están en `Proyecciones_Y_Autorizacion.md` §5.1.
+- **El Maestro de Caravanas** (`Cargo::MaestroCaravanas`, clave `maestroCaravanas`) es el sexto cargo local de cada plaza, por debajo del Tesorero. Solo da, cambia y cancela los encargos de las caravanas de su plaza; todo lo demás del comercio (trueques, órdenes de mercado, reservas, abrir el almacén a los aliados) sigue siendo del Tesorero o del Gobernador. Lo nombra el Gobernador vigente, residente y dentro, como a los otros cuatro (`Diplomacia_Facciones.md` §3.4); el designado es ciudadano de la Facción y reside en la plaza. **No tiene huecos de políticas** (no está en `slotsPorCargo`). Un héroe puede ser a la vez Tesorero y Maestro de Caravanas. `Cargos` del contrato lleva `maestro_caravanas_id`.
+- **Qué caravana:** una **comercial** del origen, **`disponible`** y con al menos un carro con animal. No gasta cupo nuevo (ya cuenta en la flota) y no hay otro tope de rutas que el cupo de caravanas. Los carros, los animales y la escolta son los que ya tiene: se montan antes, con las órdenes de siempre.
+- **Mientras tiene encargo deja de estar `disponible`**, así que: no entra en el reparto automático del trueque (§4.3; solo mira las `disponible`), no se le añaden carros ni animales ni se le mueven carros (§5.3), no se lanza a mano (§5.6, `caravana.no_disponible`) y no se engancha a una columna (`caravana.estado_invalido`). La escolta se cede y se retira con ella `esperando` en su origen (§5.5). Una caravana que ya tiene encargo no recibe otro (`encargo.ya_tiene`).
+
+Rechazos, **en el orden en que salen** (los códigos y sus textos, en [`07_Catalogo_de_Rechazos.md`](../Coordinacion/07_Catalogo_de_Rechazos.md)):
+
+| Orden | Rechazos, por este orden |
+|---|---|
+| `encargar_caravana` | `caravana.desconocida`, `asentamiento.desconocido` (el origen), `no_autorizado`; `asentamiento.desconocido` (el destino); `encargo.ya_tiene`; `encargo.mismo_origen`, `encargo.destino_ajeno`, `caravana.salida_invalida`, `encargo.linea_invalida`, `encargo.falta_precio`, `encargo.supera_capacidad`; `caravana.no_es_comercial`, `caravana.no_disponible`, `caravana.sin_capacidad`; `caravana.sin_ruta` |
+| `cambiar_encargo` | `caravana.desconocida`, `asentamiento.desconocido` (el origen), `no_autorizado`; `asentamiento.desconocido` (el destino); `encargo.no_tiene`; `caravana.no_disponible` (si cambia el destino sin estar `esperando` en el origen); los seis de validar, como al encargar; `sin_cambios`; `caravana.sin_ruta` (solo si cambia el destino) |
+| `cancelar_encargo` | `caravana.desconocida`, `asentamiento.desconocido` (el origen), `no_autorizado`; `encargo.no_tiene`; `sin_cambios` (si ya está cancelado) |
+
+Al darlo, el núcleo comprueba que hay ruta por tierra hasta el destino (§7.2); un encargo no guarda su ruta: se traza al salir de cada punta (§5.8.6).
+
+#### 5.8.4 El ciclo y los estados
+
+La caravana empieza **cargando en el origen**; en cada parada primero deja y luego recoge.
+
+```
+origen: carga ──ida──▶ destino: descarga → carga ──vuelta, cargada──▶ origen: descarga ─┬─ ruta: carga y repite
+                                                                                        └─ envío: termina (cumplido)
+```
+
+1. **Dar el encargo.** La caravana pasa de `disponible` a `esperando` en su origen, sin tocar carga, escolta ni posición, y emite `comercio.encargo_dado`. Sin hora de salida empieza ya la carga (paso 4); con `salir_en` queda en `fase espera` y la carga empieza a esa hora.
+2. **Llegar a una punta** (los peajes ya cobrados; `vueltas + 1` si es el origen). La caravana queda `esperando` en ella. *En el origen:* si el destino ya no sigue vigente, el encargo termina (`destino_perdido`); si está cancelado, termina (`cancelado`); si no, descarga. *En el destino:* si está cancelado o ya no sigue vigente, sale ya de vuelta sin comerciar; si no, descarga (o vende, §5.8.8). El destino **sigue vigente** si existe y, en una ruta, es de la Facción del origen; en un envío basta con que exista.
+3. **Descargar** (§5.8.5). Acabada la descarga, un envío en su origen termina `cumplido`; en cualquier otro caso sigue la carga.
+4. **Cargar** (§5.8.5). Antes de cargar en el origen se vuelve a comprobar que el destino sigue vigente. Acabada la carga, la caravana sale.
+5. **Salir** hacia la otra punta con una ruta nueva (§5.8.6); emite `comercio.caravana_sale`. Del origen, sin destino vigente o sin ruta, el encargo termina (`destino_perdido`); del destino, sin ruta de vuelta, la caravana se pierde (`destruida`, §10).
+6. **Terminar** (§5.8.7).
+
+**Estados.** El encargo añade a la caravana el estado `esperando` y estas transiciones; las demás (`en_transito` y `retornando` ↔ `en_batalla`) siguen como en §2.3. Desde `esperando` no hay paso a `preparando`, `aparcada`, `adjunta` ni `en_batalla`.
+
+| Transición | Cuándo |
+|---|---|
+| `disponible → esperando` | Se da el encargo |
+| `esperando → en_transito` | Sale del origen hacia el destino |
+| `en_transito → esperando` | Llega al destino |
+| `esperando → retornando` | Sale del destino hacia el origen |
+| `retornando → esperando` | Llega al origen |
+| `esperando → disponible` | Termina el encargo; solo desde el origen |
+
+`esperando` es estar **dentro de una plaza**, propia o ajena, cargada o vacía: esperando su hora o las existencias, o mientras descarga y carga (en una ajena, mientras vende y compra). Mientras tanto la caravana no se ve en el mapa ni se ataca (no está en la rejilla de encuentros): la protege la plaza. Solo es vulnerable en ruta. Qué hace `fase` dentro de `esperando`: `espera` (su hora o las existencias), `descarga` o `carga`.
+
+#### 5.8.5 Tiempos, carga y entrega
+
+Cada descarga y cada carga tarda un tiempo **por carro del paso**: `fin_paso = ahora + tiempo × carros`. Los valores son minutos por carro, **placeholders por calibrar**:
+
+<!-- parametros:ENCARGO -->
+```json
+{
+  "tiempoCargaMinutosPorCarro": 2,
+  "tiempoDescargaMinutosPorCarro": 2
+}
+```
+<!-- /parametros -->
+
+`tiempoCarga` = `tiempoCargaMinutosPorCarro` y `tiempoDescarga` = `tiempoDescargaMinutosPorCarro` (`ReglasEncargo`, `crates/comercio/src/datos.rs`).
+
+**Los carros del paso** (`carros_del_paso`): `ceil(movido × carros con animal ÷ capacidad)`, con un mínimo de 1 si se mueve algo y un máximo de los carros con animal; **0 si no se mueve nada** (o la capacidad es nula). Una parada que no mueve nada no tarda. La capacidad es la efectiva («Carga Ampliada» incluida) y lo que vale como `movido` es lo que sube o baja de la caravana en el paso. Si la caravana pierde carros por el camino, los siguientes pasos cuentan los que le queden.
+
+| Paso | Qué hace | `movido` | Espera |
+|---|---|---|---|
+| **Descarga** en plaza propia | Por línea de `dejar`, en su orden: quiere dejar el `tope` (o todo lo que lleve) sin pasar de lo que lleva; **entra** lo que cabe en el almacén, en unidades enteras; el resto se **tira** con `desechar_sobrante` y, si no, sigue a bordo | Lo que entra más lo tirado | `tiempoDescarga` × carros |
+| **Carga** en plaza propia | Por línea de `recoger`, en su orden: toma la parte entera de lo pedido, topada por lo que hay en el almacén y por el hueco de la caravana (capacidad menos lo que lleva y lo ya tomado). Lo tomado sube a bordo **al empezar** la carga | Lo tomado | `tiempoCarga` × carros; sale al acabar |
+| **Carga con `esperar_existencias`** | Si a alguna línea le falta lo pedido en el almacén, no toma nada: `fase espera` y un pulso cada minuto que repite la carga con la parada vigente en ese momento. `comercio.caravana_espera` (con lo que falta) sale una sola vez, al empezar a esperar. En cuanto hay todo, empieza el tiempo de carga | — | Sin plazo |
+| **Descarga y carga** en plaza ajena | Vender y comprar contra las órdenes de su mercado (§5.8.8) | Lo vendido / lo comprado | Igual |
+
+- **Si la carga no mueve nada** (nada que tomar, o nada que comprar), la caravana sale en el acto y no emite `comercio.caravana_carga`. Si la descarga no mueve nada, sigue ya a la carga (el hecho `comercio.caravana_descarga` sale igual, con 0 carros).
+- **Primer paso:** al darse el encargo la caravana empieza por **cargar** en el origen (no hay descarga previa).
+- **Envío programado:** la carga empieza a su hora (`salir_en`) y la caravana sale al acabar la carga.
+- **Con `esperar_existencias` la espera solo mira el almacén**: si a bordo queda un sobrante que no cupo en la plaza donde descargó, la carga se topa por el hueco de la caravana y sale con menos de lo pedido.
+- **El lanzamiento a mano no cambia** (§5.6): conserva su preparación (`kPorCarro`) y no paga estos tiempos.
+
+#### 5.8.6 Comisión, peajes y escolta
+
+**Comisión.** El encargo cuida de no acuñar oro sin fin entre dos plazas propias:
+
+| Caso | Comisión |
+|---|---|
+| **Ruta**, en cualquier parada | Ninguna: lo que deja entra directo al almacén |
+| **Envío**, al dejar en el destino (plaza propia) | La de una entrega (§3.3): `tasaMismaFaccion` con el bonus por distancia en línea recta, sobre lo que entra, acuñada en la capital de la Facción del destino y topada por su hueco de oro. Sale en `comision` de `comercio.caravana_descarga`. No hay recargo por reputación (es la misma Facción) |
+| **Envío**, al volver y dejar en el origen | Ninguna |
+| **Envío** a una plaza ajena | No hay entrega sino comercio: la tasa del mostrador, que se queda en la plaza (§5.8.8). No se acuña nada |
+
+**Peajes.** Cada salida traza su ruta de nuevo (§7.2, con la red de caminos vigente) y la registra en la red (§7.4); el regreso **no desanda** la ida. Los peajes de las zonas ajenas que cruce el tramo se cobran (§7.3) **a la ida y a la vuelta**: el 2 % del valor de lo que lleve en ese momento, en oro de la capital de su Facción, así que un tramo sin carga no paga.
+
+**Escolta.** La escolta cedida antes del encargo (o después, con la caravana `esperando` en su origen, §5.5) **viaja en todas las vueltas** y no consume ración. Vuelve al campamento de su héroe **al terminar el encargo**, no en cada vuelta, y también si la caravana se pierde (§10).
+
+**Ataques.** En ruta es una caravana comercial más: se intercepta, entra en batalla y vuelve a su estado, y si pierde carros sigue con los que le queden. Sin carros desaparece y el encargo termina con ella (`destruida`, §10). La que está `esperando` no se ve ni se ataca (§5.8.4).
+
+#### 5.8.7 Cancelar, cambiar y fin
+
+**Cancelar** (`CancelarEncargo`):
+
+| La caravana está… | Efecto |
+|---|---|
+| `esperando` en el origen | El encargo termina ya (`cancelado`): lo de a bordo vuelve al almacén del origen y queda `disponible` |
+| `esperando` en el destino | Marca `cancelado` y **sale ya de vuelta**, sin dejar ni recoger más, aunque la descarga o la carga en curso no haya acabado. Al llegar al origen el encargo termina |
+| En ruta, a la ida | Marca `cancelado`: acaba el tramo, llega al destino sin comerciar y vuelve; al llegar al origen el encargo termina |
+| En ruta, a la vuelta | Marca `cancelado`: al llegar al origen el encargo termina, sin descargar ni cargar |
+| Ya cancelada | `sin_cambios` |
+
+**Detener la ruta** (`DetenerEncargo`, pedido del autor del 2026-11-04): el botón «detener ruta». A diferencia de cancelar, **acaba la ida y vuelta en curso comerciando como siempre**.
+
+| La caravana está… | Efecto |
+|---|---|
+| `esperando` en el origen | El encargo termina ya (`detenido`): lo de a bordo vuelve al almacén del origen y queda `disponible`, como al cancelar |
+| En ruta, o `esperando` en el destino | Marca `detener`: deja y recoge en el destino como siempre, vuelve, **deja en el origen** lo de su parada y, al acabar esa descarga, el encargo termina (`detenido`) en vez de volver a cargar |
+| Un envío | `sin_cambios`: ya acaba solo al volver |
+| Ya cancelada o ya detenida | `sin_cambios` |
+
+`CambiarEncargo` conserva `detener`. Pruebas: `detener_una_ruta_de_camino_acaba_la_ida_y_vuelta_comerciando_y_termina_al_descargar_en_el_origen` y `detener_esperando_en_el_origen_termina_ya_y_un_envio_no_cambia` (`tests/encargos.rs`).
+
+**Cambiar** (`CambiarEncargo`) sustituye el destino y las paradas; **el modo no cambia**. Se valida como al encargar y no emite hecho.
+
+| Qué | Regla |
+|---|---|
+| El destino | Solo cambia con la caravana `esperando` en su origen (si no, `caravana.no_disponible`); se vuelve a comprobar la ruta por tierra |
+| Las paradas | Valen para los pasos que no han empezado: el paso en curso sigue como estaba, y una espera de existencias usa la parada nueva en su próximo pulso |
+| La hora de salida | Solo cuenta mientras un envío espera su hora (sin vueltas, en `fase espera`, con la hora por llegar): la cambia y reprograma el comienzo de la carga; sin hora, empieza a cargar ya. En cualquier otro momento se ignora |
+| Lo que conserva | `vueltas`, `punta`, `fase`, `inicio_paso`, `fin_paso`, `cancelado` y `detener` |
+| Si no cambia nada | `sin_cambios` |
+
+**Fin del encargo** (`comercio.encargo_terminado`, motivos en §12). Al terminar, la caravana queda `disponible` en el origen sin encargo; **se vuelca todo lo de a bordo en el almacén del origen**, topado por su capacidad (lo que no cabe se pierde y sale en `perdido`); la escolta vuelve al campamento; y la caravana libre puede servir a un trueque (§4.3).
+
+| Motivo | Cuándo |
+|---|---|
+| `cumplido` (0) | Un envío vuelve al origen y acaba de dejar |
+| `cancelado` (1) | Se canceló y la caravana ya está en el origen; o el origen fue conquistado con ella esperando dentro (§10) |
+| `destino_perdido` (2) | Al llegar al origen, antes de cargar o al salir de él, el destino ya no sigue vigente (no existe, ya no es de la Facción en una ruta) o no hay ruta hasta él. **Un destino perdido gana a un encargo cancelado** |
+| `destruida` (3) | La caravana se pierde con encargo (§10): no pasa por el origen y no vuelca nada |
+| `detenido` (4) | Se detuvo la ruta (2026-11-04): esperando en el origen al detenerla, o al acabar de dejar en el origen tras la ida y vuelta en curso |
+
+#### 5.8.8 El comercio en una plaza ajena
+
+Es el caso de un **envío** cuyo destino es de otra Facción (también aliada o vasalla). La caravana no toca el almacén de la plaza: comercia con las **órdenes activas** que esa plaza ha puesto, con las cuentas del mostrador (§8.3), que se comparten (`servir`).
+
+- **Dejar es vender.** Por cada línea de `dejar`, en su orden: toma las órdenes de **compra** de ese recurso, activas y sin caducar, con precio ≥ `precio_min`, de la que mejor paga a la que peor (a igual precio, por id ascendente), hasta el `tope` (sin tope, todo lo que lleve).
+- **Recoger es comprar.** Por cada línea de `recoger`, en su orden: toma las órdenes de **venta** de ese recurso con precio ≤ `precio_max`, de la más barata a la más cara (a igual precio, por id ascendente), hasta la `cantidad` pedida. **No lleva oro**: paga con el de la **capital** de la Facción de su origen (la propia plaza de origen si la Facción no tiene capital) y lo que cobra entra en ella; el oro que lleve como mercancía no cuenta para pagar. Una compra con la capital sin oro se sirve hasta donde llegue.
+- **Primero vende y luego compra**, porque la descarga va antes que la carga: lo cobrado sirve para comprar en el mismo viaje. Una línea de oro o sin precio no comercia.
+- **Las cuentas** son las del mostrador (§8.3) con la tasa externa y el factor de las políticas de la plaza; la comisión **se queda en la plaza** y el oro se conserva. Topes: lo pendiente de cada orden, el almacén de la plaza que vende, el hueco y el oro de la plaza que compra, y el oro de la capital de la caravana y el espacio del carro (que solo ocupa la mercancía, no el oro). Una orden que el mostrador no puede servir se salta.
+- **`esperar_existencias` y `desechar_sobrante` no cuentan allí**: la caravana no espera órdenes y no tira ni regala nada; lo que no se vende vuelve a bordo. Si un aliado quiere recibir mercancía, pone una orden de compra.
+- **Sin Mercado activo** en la plaza al llegar, no comercia: sale ya con lo que lleva, sin los hechos de descarga ni de carga. Si el Mercado está pero ninguna orden casa, la descarga y la carga no mueven nada y tampoco tardan.
+- **Tiempos:** `carros_del_paso` de lo vendido y de lo comprado (§5.8.5).
+- **Hechos:** cada orden servida emite `mercado.comercio_en_plaza` con la `caravana` y `entreFacciones`, y suma al comercio entre Facciones que repone los campamentos de mercenarios (§9.3); la descarga y la carga llevan lo vendido y lo comprado (§12).
+- **Qué se ve.** Mientras la caravana espera dentro, su Facción ve las órdenes activas de esa plaza (§8.4). Las órdenes caducan a los 200 minutos y no reservan nada: el resultado es lo que haya al llegar.
+
+> **Implementado en Rust (2026-11-08, tanda 69):** la caravana con encargo **ya no lleva oro**. `vender` y `comprar` (`crates/comercio/src/mostrador.rs`) reciben una `bolsa` en lugar de leer el oro del carro: `Nucleo::comerciar_caravana` (`nucleo/encargos.rs`) la llena con el oro del almacén de la capital de la Facción del origen (`plaza_de_oro`), la caravana compra y vende contra ella, y al terminar la parada se ajusta ese almacén por lo comprado y lo cobrado (lo que no cabe en él se pierde). `Carro.oro_ocupa` es falso con la bolsa, así que el oro no cuenta para el espacio del carro y solo la mercancía lo llena; el comando de un héroe en persona (§8.3) sigue pagando con el oro de su carro (`oro_ocupa` verdadero). Una compra con la capital sin oro se sirve hasta donde llegue, y una orden que no se puede servir se salta.
+
+#### 5.8.9 El contrato
+
+Cuatro órdenes (la cuarta, `detener_encargo`, desde el 2026-11-04), un cargo, un estado y un campo nuevos. Los permisos y el detalle de lo que se ve están en `Proyecciones_Y_Autorizacion.md` (§5.1 y §10); los códigos de rechazo, en el catálogo (§5.8.3). Una quinta orden, `tomar_orden_a_distancia`, monta un envío a partir de una orden de mercado ajena (§5.8.10).
+
+| Pieza | Forma |
+|---|---|
+| `encargar_caravana` (orden 168 → `EncargarCaravana`, comando 195) | `caravana_id`, `destino_asentamiento_id`, `modo` (`ruta` o `envio`, si no `orden.forma_invalida`), `salir_en_ms?`, `parada_origen`, `parada_destino`. Cada parada: `recoger[{recurso, cantidad, precio_max?}]`, `esperar_existencias`, `dejar[{recurso, tope?, precio_min?}]`, `desechar_sobrante`. Sin parada no recoge ni deja nada; un recurso desconocido, `orden.forma_invalida` |
+| `cambiar_encargo` (169 → `CambiarEncargo`, 196) | Los mismos campos menos `modo` |
+| `cancelar_encargo` (170 → `CancelarEncargo`, 197) | `caravana_id` |
+| `detener_encargo` (182 → `DetenerEncargo`, 212; 2026-11-04) | `caravana_id` |
+| `Caravana.encargo` | El encargo tal cual, con `vueltas`, `parada_actual` (`origen` o `destino`), `fase` (`espera`, `descarga` o `carga`), `inicio_paso_ms` y `fin_paso_ms` (el paso de descarga o carga en curso, de su inicio a su fin: la barra de tiempo del cliente; `inicio_paso_ms` desde el 2026-11-04; los dos ausentes en `espera`), `cancelado` y `detener` (2026-11-04); solo en la proyección propia |
+| `EstadoCaravana.CARAVANA_ESPERANDO` | Dentro de una plaza con encargo |
+| `Cargos.maestro_caravanas_id` | Titular del Maestro de Caravanas; `asignar_cargo_local` acepta `maestroCaravanas` |
+| Hechos | `comercio.encargo_dado`, `comercio.caravana_espera`, `comercio.caravana_carga`, `comercio.caravana_descarga` y `comercio.encargo_terminado` (§12) |
+
+La foto es `BAN52`: guarda el encargo de cada caravana y el sexto cargo de cada plaza.
+
+#### 5.8.10 Tomar una orden a distancia
+
+> **Implementado en Rust (2026-11-08, tanda 69):** `tomar_orden_a_distancia` (orden 186 → `TomarOrdenADistancia`, comando 216; `crates/nucleo/src/nucleo/encargos.rs`, `tomar_orden_a_distancia`) monta un **envío** a la plaza de una orden de mercado ajena sin escribir las paradas a mano, y lo da por el mismo camino que `encargar_caravana` (mismas comprobaciones de ruta, cargos y capacidad). Cifras: ninguna propia; el informe de órdenes que lo permite está en `Niebla_De_Guerra.md` §6.3.
+
+Campos: `asentamiento_id` (la plaza propia de la que sale), `orden_id` (la orden de mercado que se toma) y `cantidad` (entera en milésimas, como las líneas de las paradas).
+
+- **Quién:** los mismos cargos que `encargar_caravana` (§5.8.3: el Gobernador, el Tesorero o el Maestro de Caravanas de la plaza, residente y dentro). Hace falta **Mercado activo** en la plaza.
+- **Qué orden:** una orden `activa` de una plaza que **no es de la Facción ni de una en guerra con ella** y que cae en una región de la que la Facción tiene un **informe de órdenes vigente** (`Niebla_De_Guerra.md` §6.3). Vale tanto de venta como de compra.
+- **Qué caravana:** la comercial `disponible` de la plaza de **menor id** cuya capacidad llega a `cantidad`; si no hay, `caravana.no_disponible`.
+- **Qué envío:** de una sola línea, hacia la plaza de la orden y con **el precio de la orden como tope**. Si la otra plaza **vende**, la caravana le compra allí (`recoger` con `precio_max` = el precio de la orden); si **compra**, la caravana lleva de la plaza lo que le vende (`recoger` en el origen sin precio y `dejar` en el destino con `tope` = la cantidad y `precio_min` = el precio de la orden). Sale al momento.
+- **La orden no se reserva:** la caravana comercia al llegar con las cuentas de §5.8.8, con lo que quede de la orden (puede ser menos de lo pedido, o nada). **La mercancía viaja y el oro no:** sale y entra en la capital de la Facción, como en el resto del comercio (nota de 2026-11-08 de §5.8.8).
+- **Rechazos, por este orden:** `asentamiento.desconocido`, `no_autorizado`, `mercado.sin_mercado`, `orden.desconocida`, `orden.no_activa`, `orden.cantidad_no_positiva`, `intel.sin_informe_de_ordenes`, `caravana.no_disponible` y luego los de `encargar_caravana` sobre la caravana elegida (las comprobaciones del encargo, `encargo.linea_invalida`, `encargo.supera_capacidad`…, y `caravana.sin_ruta`).
+- Los permisos están en la fila de `Proyecciones_Y_Autorizacion.md` §5.1.
+
+## 6. El viaje (el plan de la caravana)
+
+Una caravana en viaje es un **plan** (vértices con su instante de paso, [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §4.2) y se mueve por eventos, no por barrido:
+
+1. **`preparando`**: si `preparaHasta` definido e `instante ≥ preparaHasta` → `en_transito` (+ evento `comercio.caravana_sale`); si no, queda. No se mueve en ningún caso.
+2. **Sin `destinoAsentamientoId`** (Fundación, `disponible`, `adjunta`, `aparcada`): se deja pasar; la mueve su propio subsistema.
+3. **Origen inexistente**, o destino inexistente **y** no está `retornando`: la caravana **desaparece** (sin evento) y su escolta se libera al campamento. (Hoy solo ocurre con partidas guardadas antes de
+   `ruina.ts`, que cierra el caso al caer la plaza.)
+4. **Plan**: `velocidad = velocidadCaravana × (comercial ? factorVelocidadCaravana(origen) : 1)` (calibrada: buey 24, camello 28, caballo 36); el plan se construye de una vez con las **aristas de la red** (más rápido sobre camino, salvo el carro de acarreo, §12; fórmula en
+   `Movimiento_Ejercitos.md` §4.2). El plan se rehace si cambia la velocidad, se construye un camino en el trayecto o se engancha. `distanciaTotal = max(1, distancia recta entre los dos extremos del viaje)`; solo sirve para el bonus de la comisión.
+5. **Peajes** (a la ida, §7.3; con encargo, también a la vuelta cargada, §5.8.6): un evento en el instante exacto en que el plan cruza cada zona ajena.
+6. Al **evento de llegada** (el último vértice del plan):
+   - **Con encargo** (`en_transito` o `retornando`) ⇒ no hay entrega ni llegada a casa: la caravana queda `esperando` en el último punto del plan, sin plan, ruta, costes ni peajes, con su carga y su escolta intactas, y el núcleo atiende la parada (§5.8.4).
+   - Sin encargo, **`retornando`** ⇒ llegada a casa: el contenido que aún lleve (solo si vino de `enviarCaravanaAlOrigen`) se vuelca en el origen (topado); la caravana queda
+     `{estado: disponible, contenido: {}, destino: –, origenAcuerdoId: –, ladoAcuerdo: –, progreso: 0, posicionActual: origen, ruta: –, escoltaIds: –}` y su escolta vuelve al campamento.
+   - Sin encargo, **`en_transito`** ⇒ **entrega** (§4.4; vale igual sin trueque) y, si es `comercial`, pasa a `retornando` con `contenido {}`, `progreso 0`, `posicionActual = destino` y la **misma ruta invertida**.
+     El regreso **desanda el camino de ida**; no se recalcula. Una caravana de otro tipo que llegase aquí **se pierde** al entregar (la de Fundación y la de acarreo tienen su propio subsistema).
+
+Una caravana nunca se teletransporta salvo la vacía enviada a casa (§5.7). La que tiene encargo no desanda la ida: cada salida traza su ruta (§5.8.6).
+
+## 7. Rutas: trazado, peajes y red de caminos
+
+### 7.1 El grafo de navegación (`world/grafoNavegacion.ts`) y el A\* (`world/rutas.ts`)
+
+Se calcula **una vez por mundo** y se cachea (no se guarda). Es una rejilla 8-conexa sobre todo el mapa:
+
+```
+ladoMayor = max(ancho, alto)
+espaciado = max(NAVEGACION.espaciadoMin, round(ladoMayor / NAVEGACION.nodosPorLado))
+cols = floor(ancho / espaciado) + 1 ; filas = floor(alto / espaciado) + 1
+nodo(col,fila) = fila × cols + col  en (col × espaciado, fila × espaciado)
+paso = min(muestreoMax, espaciado / 3)
+VECINOS (col,fila) = [1,0] [−1,0] [0,1] [0,−1] [1,1] [−1,−1] [1,−1] [−1,1]       ; el opuesto de la dirección d es d XOR 1
+```
+
+**Coste de una arista** (`evaluarTramo(a, b)`): `n = max(1, ceil(largo / paso))`; si **alguno** de los `n + 1` puntos equiespaciados (extremos incluidos) no es transitable (`mapa.esTransitable`: agua,
+fuera del mapa) ⇒ `Infinity`. Si no: `coste = (largo / n) × Σ_{k=0..n−1} costeEnPunto(punto en (k+0,5)/n)`. Las 4 aristas de cada nodo (una de cada pareja) se calculan y se copian a su opuesta.
+
+**Ríos**: solo se cruzan por los **vados** (D7, abajo); una ciudad ribereña no abre paso. Hay vado en la distancia `s` desde el nacimiento si `s ≤ separacionVados / 2` (arroyo) o `|s − round(s / separacionVados) × separacionVados| ≤ espaciado`.
+`separacionVados = max(separacionVadosMin, ladoMayor / vadosPorLado)`. (`radioPasoCiudadMin` sigue en el bloque y el motor no lo lee.)
+
+**`calcularRuta(mapa, origen, destino, {pesos?})`** → polilínea `[origen, …nodos, destino]` o **`undefined`**:
+
+1. Origen y destino deben ser transitables.
+2. Si `distancia(origen, destino) < espaciado`: tramo directo (`[origen, destino]`) si su coste es finito y su cruce de río está permitido; si no `undefined`.
+3. **Enganches**: del origen a cada nodo de la ventana de 4×4 (`col0−1 … col0+2`, `fila0−1 … fila0+2`, con `col0 = floor(x / espaciado)`) con tramo recto de coste finito y cruce permitido (coste = el del tramo);
+   del destino igual, en sentido inverso. Sin enganches en alguno de los dos lados ⇒ `undefined`.
+4. A\* sobre los nodos más un nodo virtual `META`. `g` inicial de cada nodo de salida = coste de enganche. Heurística `h(nodo) = distancia(nodo, destino) × costeMinimo`, con `costeMinimo = atraccionMin`
+   si hay `pesos` y `1` si no. Al cerrar un nodo con enganche de llegada se relaja `META`. Para cada vecino de coste finito y cruce permitido, `coste' = coste × factorAtraccion(peso de esa arista)` con
+   `factorAtraccion(p) = p > 0 ? max(atraccionMin, 1 − atraccionPorPeso × p) : 1`.
+5. Se reconstruye desde `META`. Determinista: mismo mundo, puntos y opciones ⇒ misma ruta (el desempate es el orden del montículo binario).
+
+<!-- parametros:NAVEGACION -->
+```json
+{
+  "espaciadoMin": 8,
+  "nodosPorLado": 160,
+  "muestreoMax": 30,
+  "separacionVadosMin": 100,
+  "vadosPorLado": 16,
+  "radioPasoCiudadMin": 60,
+  "atraccionPorPeso": 0.1,
+  "atraccionMin": 0.5
+}
+```
+<!-- /parametros -->
+
+> **Desde el 2026-10-31 (decisión del autor):** el coste del terreno lo pone solo la pendiente, `1 + min(topePendiente; porPendiente · pendiente)` (`Generacion_Del_Mundo.md` §5.4); ya no hay coste por clase de terreno (antes llano 1, costa 1,1, colina 1,8, montaña 3,5, cima 12).
+
+<!-- parametros:COSTE_MOVIMIENTO -->
+```json
+{
+  "porPendiente": 3.6,
+  "topePendiente": 2.5,
+  "agua": 15,
+  "factorCamino": 0.5,
+  "bosquePorDensidad": 2
+}
+```
+<!-- /parametros -->
+
+### 7.2 Trazado de una ruta comercial (`trazarRutaComercial`)
+
+Se usa en **todo** lanzamiento de una comercial (reparto y manual) y en cada salida de una con encargo (§5.8.6), de ida y de vuelta.
+
+```
+opciones = { pesos: pesosDeRed(red) }                ; los ríos, solo por los vados
+pendientes = zonas de influencia de asentamientos  b  con  b ≠ origen,  b ≠ destino,  b.faccionId ≠ origen.faccionId     ; "ajenas" incluye aliadas y vasallas
+ruta = [origen] ; paradas = [] ; actual = origen
+bucle:
+    tramo = calcularRuta(actual → destino, opciones)           ; si undefined → TODA la ruta es undefined (no sale)
+    zona = el PRIMER punto de tramo[1..] que cae dentro de alguna zona pendiente  (la primera zona de `pendientes` que lo contiene)
+    ciudad = asentamiento de esa zona
+    hastaCiudad = calcularRuta(actual → ciudad)
+    si no hay zona, o no hay hastaCiudad :  ruta += tramo[1..] ; fin
+    ruta += hastaCiudad[1..] ; paradas += { ciudad, distancia acumulada de la ruta } ; quitar la zona de pendientes ; actual = ciudad
+peajes = paradas.map( { asentamientoId, progreso = distancia acumulada / longitud TOTAL de la ruta final } )
+```
+
+El trazado **no vuelve a examinar** el tramo hasta la ciudad: si roza otra zona ajena antes de llegar, no para en ella. Una ciudad se visita **una vez**.
+
+### 7.3 Peaje (en `avanzarCaravanas`, a la ida; con encargo, también a la vuelta)
+
+Tras mover, para cada `peajes[i]` con `progreso_i ≤ progreso` actual (en orden): `debido = ⌈ valor(contenido de ese momento, ya reducido por peajes anteriores) × PEAJE_PASO.tasa ⌉` **en oro** (valor a los precios de referencia, §2; unidades enteras hacia arriba). Lo paga la **capital** de la Facción dueña de la caravana (`pagado = min(debido, oro de esa capital)`) y lo cobra la **capital** de la Facción de la ciudad cruzada (topado por su almacén de oro; lo que no cabe se pierde). Lo que falta (`debido − pagado`) se cobra **en especie de la carga**, a la fracción de la tasa que queda sin pagar (`tasa × (debido − pagado) / debido`), con la regla de unidades enteras de abajo, y va al almacén de la propia ciudad cruzada (topado). Con la capital sin oro paga, pues, el 2 % entero en especie, como antes de la tanda 69; con oro de sobra, la carga no se toca. Una carga sin valor (sin precio de referencia) paga la tasa entera en especie. Una Facción sin capital (o una caravana sin Facción) paga con la plaza de origen, y una ciudad cruzada sin Facción o sin capital cobra en sí misma. Evento `comercio.peaje_paso` (con `asentamientoId` = la ciudad cruzada; lleva `oroPagado` y lo cobrado en especie por recurso; lo oyen la ciudad y las dos capitales). Después se
+descartan de `peajes` todos los ya alcanzados, se haya cobrado o no. **La ciudad no se detiene a nadie**: la caravana sigue de largo. El regreso va sin peajes (`peajes` solo se aplica a la ida) y vacío. **Con encargo (Rust)** los peajes se cruzan también en `retornando`: la vuelta se traza de nuevo, va cargada y paga lo mismo sobre el valor de lo que lleve en ese momento (una vuelta vacía no paga nada); ver §5.8.6. Dos peajes en el mismo instante gastan el mismo oro de la capital: el segundo paga lo que quede.
+
+> **Implementado en Rust (2026-11-08, tanda 69: el oro del comercio sale de la capital y entra en la capital).** `Caravana::cobrar_peajes(ahora, tasa, precios, &mut oro)` en `crates/comercio/src/caravana.rs` (con `CobroPeaje { ciudad, oro, cobrado }` y la función `cobrar_en_especie`) y `Nucleo::cobrar_peajes` en `crates/nucleo/src/nucleo/viaje.rs`; la capital de la Facción de una plaza la da `Nucleo::plaza_de_oro` (`nucleo/mercado.rs`: la capital efectiva o, sin ella, la propia plaza). Cifra: `PEAJE_PASO.tasa` (0,02, sin cambios). **Economía entera (2026-10-24):** la parte en especie va en unidades enteras hacia abajo y **cada peaje en especie cobra como mínimo una unidad** a toda caravana con carga (EE-4): si la tasa no llega a una unidad en ningún recurso, se cobra una del recurso que más lleva (a igualdad, el primero del catálogo). **El peaje en especie nunca deja la carga en cero** (decisión del autor, 2026-10-24): el mínimo vale para cualquier carga de dos unidades o más, y una caravana de una sola unidad pasa sin pagar. Pruebas: `crates/comercio/src/caravana.rs` (`el_peaje_se_paga_en_oro_y_la_especie_cubre_solo_lo_que_la_bolsa_no_alcanza`) y `crates/nucleo/tests/{caravanas,encargos}.rs`.
+
+<!-- parametros:PEAJE_PASO -->
+```json
+{
+  "tasa": 0.02
+}
+```
+<!-- /parametros -->
+
+### 7.4 La red de caminos (`engine/redCaminos.ts`)
+
+- **`registrarRuta`** (en cada lanzamiento): `id = "{origen}>{destino}"`; `aristas = aristasDeTrazado(ruta)` (las claves de cada par de puntos consecutivos, sin repetir); `ultimoLanzamiento = ahora`. La ruta
+  anterior del mismo par se **sustituye**; las aristas nuevas se añaden a `red.aristas`; las que la ruta nueva ya no pisa **siguen** en la red (como sendero).
+- **`pesosDeRed`** = para cada arista, cuántas rutas vigentes la contienen (las de peso 0 no aparecen). **`aristasDeRed`** = todas las aristas, con o sin peso: sobre cualquiera la caravana avanza más rápido.
+- **`podarRutas`** (cuando se registra o se usa una ruta, y como evento periódico de baja frecuencia): quita las rutas con `ahora − ultimoLanzamiento ≥ caducidadMinutos` o con un extremo que ya no existe. Devuelve la **misma** red si no cambia
+  nada (los derivados están cacheados por identidad del objeto).
+- **`escalonDePeso(p)`**: `p ≥ escalonCalzada → 2` (calzada); `p ≥ escalonCamino → 1` (camino); si no `0` (sendero). `tramosDeRed(red, visible)` encadena aristas contiguas del mismo escalón en polilíneas
+  (solo por nodos con exactamente 2 aristas de ese escalón) para pintarlas; `visible(a, b)` filtra por niebla (`Niebla_De_Guerra.md`).
+- **`caminoCompartidoAbierto(red, zonas)`**: ¿hay una arista, con su **punto medio fuera de toda zona**, que pisen ≥ `logroRutas` rutas de ≥ `logroFacciones` Facciones? Es la consulta del logro
+  `logistica_campana` (Era IV, aún sin código que la llame; ver `Tecnologia_Aedas.md`).
+
+<!-- parametros:RED_CAMINOS -->
+```json
+{
+  "caducidadMinutos": 4320,
+  "escalonCamino": 2,
+  "escalonCalzada": 6,
+  "logroRutas": 10,
+  "logroFacciones": 3
+}
+```
+<!-- /parametros -->
+
+## 8. El mercado de una plaza
+
+### 8.1 Colocar una orden (`colocarOrdenMercado`)
+
+Condiciones: el actor **reside** en el asentamiento; el asentamiento existe y tiene **Mercado activo**; `cantidad > 0`; si es `venta`, el almacén tiene hoy `≥ cantidad` de ese recurso. Resultado:
+`{id, tipo, recurso, cantidad, cantidadCumplida: 0, precioUnitario: precio dado ?? calcularPrecioReferencia, expiraEn: ahora + MERCADO.plazoOrdenMinutos, estado: activa}`.
+
+Lo que **no** hace: no reserva nada (ni la mercancía de una venta ni el oro de una compra), no valida el precio dado (cero o negativo se acepta y luego no se puede liquidar), no limita cuántas órdenes
+tiene una plaza, y no impide ordenar un recurso sin precio de referencia (el oro). Todo eso se comprueba **al liquidar**.
+
+### 8.2 Caducidad e historial
+
+En su instante de caducidad (**evento**): una orden `activa` con `instante ≥ expiraEn` pasa a `expirada` (evento `mercado.orden_expirada`); las que ya no están `activa` salen de `estado.ordenes`. Las cerradas
+se anexan a `historialOrdenes` (`anexarAlHistorialDeOrdenes`), que recuerda solo las **últimas `MERCADO.historialPorPlaza` de cada plaza**, del más viejo al más nuevo. No existe emparejamiento automático:
+nada cierra una orden salvo el mostrador o el plazo.
+
+### 8.3 El mostrador (`comerciarEnPlaza` → `comerciarEnPlaza` del motor)
+
+Un jugador toma una orden **en persona**. Condiciones (cada una es un `OrdenInvalidaError`): el actor es el **Líder** de la columna (`exigirColumnaDe(heroeId)`, la suya); la orden es de esa plaza, está
+`activa` y no ha caducado (`instante < expiraEn`; se busca también en el historial para dar el error correcto); la columna está **en la puerta** de la plaza
+(`distancia ≤ MOVIMIENTO.radioPuerta`); la plaza sigue teniendo Mercado activo; `cantidad > 0`; `precioUnitario > 0`.
+
+```
+tasa            = misma Facción ? tasaMismaFaccion : tasaExterna × factorComisionExterna(plaza)        ; sin factor de reputación ni bonus
+pendiente       = orden.cantidad − cantidadCumplida
+espacioCarro    = max(0, capacidadCargaDe(columna, caravanas) − Σ suministro)
+precioNeto      = venta ? precio × (1 + tasa) : precio × (1 − tasa)                                    ; comprando se paga de más, vendiendo se cobra de menos
+crecimiento/u   = venta ? 1 − precioNeto : precioNeto − 1                                              ; cuánto crece el carro por unidad
+topeCarro       = crecimiento/u > 0 ? espacioCarro / crecimiento/u : ∞
+si la plaza VENDE :  cantidad = min(pedida, pendiente, almacén plaza[recurso], oro del carro / precioNeto, topeCarro)
+si la plaza COMPRA:  cantidad = min(pedida, pendiente, carro[recurso], hueco del almacén de la plaza para ese recurso, almacén plaza[oro] / precioNeto, topeCarro)
+si cantidad ≤ 0 → error (no se devuelve "0 servido")
+valor = cantidad × precio ; comisión = valor × tasa ; oroMovido = cantidad × precioNeto
+VENDE : carro.oro −= oroMovido ; carro[recurso] += cantidad ; plaza[recurso] −= cantidad ; plaza.oro += oroMovido
+COMPRA: carro[recurso] −= cantidad ; carro.oro += oroMovido ; plaza.oro −= oroMovido ; plaza[recurso] += cantidad
+las entradas a 0 se borran del carro ; cantidadCumplida += cantidad ; estado = cumplida si cantidadCumplida ≥ cantidad
+```
+
+El **oro se conserva**: lo que la comisión quita a quien comercia se queda en la plaza (es lo que cuesta usar el mercado de otro). El oro ocupa carro como cualquier recurso. Una orden `cumplida` sale de
+`estado.ordenes` hacia el historial. El comando emite `mercado.comercio_en_plaza` con `entreFacciones` = el héroe es ciudadano de alguna Facción y **no** de la de la plaza (un héroe sin Facción cuenta como no
+`entreFacciones`). (El motor no emite evento propio: lo emite el comando.)
+
+Quién lo puede hacer: cualquier héroe (`rolesPermitidos: ['jugador']`) en su propio nombre; no exige residir ni estar dentro, solo estar en la puerta con su columna.
+
+En Rust, estas mismas cuentas (`servir`) las usa también una **caravana con encargo** en una plaza de otra Facción, sin héroe ni columna (§5.8.8): `vender` y `comprar` de `crates/comercio/src/mostrador.rs` las aplican línea a línea contra las órdenes de la plaza.
+
+### 8.4 Qué se ve
+
+La proyección del jugador incluye: los `acuerdos` donde **alguno de los dos lados es propio**; las `ordenes` **propias** (todas, también las cumplidas) más, de una plaza **ajena en la que está el héroe
+de la sesión** (dentro, 2026-10-29), solo las **`activa`** (también las de la plaza ajena donde una caravana suya está `esperando` en su destino, §5.8.8, y las de las plazas de una región de la que la Facción tiene un informe de órdenes vigente, §5.8.10); el `historialOrdenes` propio; y los `caminos` por **explorado** (`Niebla_De_Guerra.md`). Las caravanas ajenas y su visibilidad están en `Niebla_De_Guerra.md`.
+
+<!-- parametros:MERCADO -->
+```json
+{
+  "historialPorPlaza": 200,
+  "plazoOrdenMinutos": 200
+}
+```
+<!-- /parametros -->
+
+## 9. El mercado de un campamento de mercenarios
+
+### 9.1 Qué vende y a cuánto
+
+Solo **vende**. En venta: los bienes con `PRECIO_BASE` (`BIENES_EN_VENTA`); el oro no. Precio unitario = `calcularPrecioReferencia(recurso) × MERCENARIOS.mercado.margen` (parámetros al final de esta sección; también en `Tecnologia_Aedas.md`). Un bien sin precio no se vende. El **oro cobrado se destruye** (sumidero).
+
+Un campamento nace con `stockInicial` de cada bien en venta y, **sobre eso**, sus **pilas** propias (`madera`, `piedra`, `trigo`; las pilas sustituyen al stock inicial de esos tres).
+
+### 9.2 Comprar (`comprarEnCampamento`)
+
+El héroe tiene que estar **en el campamento** (dentro, o con su columna en la puerta: `MOVIMIENTO.radioPuerta`). Cantidades **enteras**: pedir menos de 1, o pedir oro, se rechaza.
+
+- **Reside en él** ⇒ compra cualquier bien en venta; lo comprado va a su **almacén personal**; con **cupo diario** por héroe en `cupoDiario` (madera y piedra; el día es `floor(instante / 86 400 000)`).
+- **No reside** ⇒ compra **cualquier bien en venta desde la puerta, salvo el trigo** (cobre, estaño, madera… decidido el 2026-10-11; el trigo se reposta gratis a víveres con `repostarEnCampamento` y nunca va al carro: pedirlo es un error), al mismo precio, **pagando con el oro de su carro** y llevándoselo **al carro de su
+  columna** (hace falta la columna); **sin cupo diario**, pero compite por el mismo stock. No toca su almacén personal.
+- **Con qué paga: `pagar_con`** (Rust, pedido del autor del 2026-11-02: el mercado del campamento ve también lo que hay en el carro). `almacenPersonal` o `carro`; sin él, el almacén personal si reside en el campamento y el carro si no (lo de arriba).
+  - `almacenPersonal` sin residir en el campamento ⇒ `almacen_personal.fuera_de_tu_residencia` (el almacén personal está donde se reside).
+  - `carro`: dentro del campamento es el carro que lleva aquí (`a_mano::carro_dentro`, como en una plaza, Movimiento_Ejercitos §9.1): la columna con la que entró o, si reside aquí, la columna que guardó o el carro del héroe (`CAPACIDAD_CARRO`); sin ninguno, `heroe.sin_columna`. A la puerta, su columna (sin ella, `heroe.sin_columna`). El oro sale del carro y lo comprado entra en él, con su hueco.
+  - El residente que paga con el carro **sigue con su cupo diario** y no puede llevarse trigo al carro (`mercenarios.trigo_no_va_al_carro`); el que no reside compra como arriba.
+
+**Residente:**
+
+```
+coste(n)   = ceil(n × precio)
+guardado   = almacén personal.oro ;  delAlmacén(n) = coste(n)                        ; ya no hay oro de botín aparte (2026-10-11)
+cantidad   = min( floor(pedida), floor(stock del campamento), cupo restante hoy, floor(guardado / precio) )
+sitio      : ALMACEN_PERSONAL.capacidad − total del almacén personal
+mientras  cantidad − delAlmacén(cantidad) > sitio : cantidad−−       ; en el almacén cada unidad ocupa 1 y libera lo que cuesta en oro
+mientras  coste(cantidad) > guardado : cantidad−−
+si cantidad ≤ 0 → error con el motivo (sin stock / cupo agotado / sin oro / almacén lleno)
+oro cobrado = coste(cantidad) ; stock −= cantidad
+```
+
+<!-- parametros:ALMACEN_PERSONAL -->
+```json
+{
+  "capacidad": 2000
+}
+```
+<!-- /parametros -->
+
+El almacén personal **es siempre el mismo y solo se traslada** (decisión del autor del 2026-10-26; Doc 2.5): una única capacidad, `ALMACEN_PERSONAL.capacidad`, resida el héroe en una plaza o en un campamento, y viaja con él en cada cambio de residencia.
+
+**No residente (de visita):**
+
+```
+oroCarro   = columna.suministro.oro
+libre      = capacidadCargaDe(columna, caravanas, asentamientos) − Σ suministro      ; con las caravanas adjuntas y «Carga Ampliada»
+cantidad   = min( floor(pedida), floor(stock), floor(oroCarro / precio) )                ; sin cupo
+mientras  cantidad − coste(cantidad) > libre : cantidad−−       ; cada unidad cambia coste de oro por una de mercancía: el carro solo crece si el precio es < 1
+mientras  coste(cantidad) > oroCarro : cantidad−−
+si cantidad ≤ 0 → error (sin stock / sin oro en el carro / carro lleno)
+carro.oro −= coste(cantidad) ; carro[recurso] += cantidad ; stock −= cantidad          ; el oro cobrado se destruye
+```
+
+### 9.2b Repostar gratis (`repostarEnCampamento`)
+
+Cualquier héroe, residente o no, en un campamento (dentro, o con su columna a la puerta) llena sus **víveres** hasta `LOGISTICA.capacidadViveresPorHeroe`, **gratis** y **sin gastar el stock** del mercado; falla si ya los tiene llenos. El trigo no pasa por el carro ni por el almacén personal.
+
+Emite `mercenarios.repostado { campamentoId, heroeId, cantidad }` (la cantidad cargada), sin plaza.
+
+### 9.3 Cómo se repone
+
+- **Qué cuenta como comercio del mundo** (`comerciadoDeEventos`, leído de los eventos de cada comando en `exito`): el `intercambiado` (por recurso) de cada `comercio.trueque_cumplido` con
+  `entreFacciones`, y la `cantidad` de cada `mercado.comercio_en_plaza` con `entreFacciones`. Se suma a `mercadoMercenario.contadores`. Lo que una Facción comercia consigo misma no cuenta.
+- **Reposición** (`reponerMercados`, evento agendado): si `instante ≥ reponeEn`: para cada campamento, el stock arranca como el suyo **con las pilas devueltas a su tope**, y a cada bien con contador
+  `> 0` y que **no sea una pila** se le suma `contador × proporcionRepone`, topado por `topePorBien`. Después los contadores vuelven a `{}` y `reponeEn = instante + cadaHoras × 60` min. Es una cita
+  agendada: los demás ticks solo comparan un instante. El primer `reponeEn` es `creación + cadaHoras` horas.
+- **Rust, economía entera (2026-10-24, EE-5).** Lo que sube cada bien se anota **por comercio** al registrarlo: `proporcionRepone` de lo comerciado, en unidades enteras hacia abajo y **como mínimo una** (`MercadoMercenario::repone`, vuelve a `{}` con los contadores). Un trueque de 30 de estaño repone 1 (el 3 % sería 0,9) y uno de 60 de cobre, 1 (1,8).
+
+Las cifras de `MERCENARIOS.mercado` (`cadaHoras`, `proporcionRepone`, `topePorBien`, `stockInicial`, `pilas`, `cupoDiario`, `margen`) están en el bloque `MERCENARIOS` de `Tecnologia_Aedas.md`.
+
+## 10. Cuando una plaza cae en ruinas (`cerrarDependientesDeRuina`)
+
+> **Cambio de dueño por conquista (decidido el 2026-10-18; antes solo estaba escrito el caso de ruina).** La **flota** y los **pueblos extractores** de la plaza pasan al conquistador junto con su zona. Los trueques con la plaza conquistada se **anulan sin penalizar a nadie** (como en la ruina) y las caravanas que iban hacia ella **regresan con su carga**; las **aparcadas** en ella **se destruyen** (decidido el 2026-10-19). La fusión o anexión de Facciones a mitad de trueque queda por decidir con la política.
+
+En el instante del evento de ruina (antes de cualquier evento de comercio del mismo instante, prioridad 5 frente a 6), para la plaza `R` destruida:
+
+- Su **campamento de bandidos** (el que nació de esa plaza, `asentamientoId = R`) desaparece con el evento `bandidos.campamento_disperso { campamentoId, asentamientoArruinadoId }`. **Implementado en Rust (2026-10-23, 4H T5):** se emite (`campamento`, `asentamientoArruinado` y su sitio); lo oye la Facción de la plaza arruinada, como el resto de la cascada: el núcleo recuerda durante la transición de quién era la plaza que ya no está (`Transicion::arruinadas`).
+- Sus **trueques** `activo` o `propuesto` pasan a `expirado` **sin penalizar a nadie** (evento `comercio.trueque_cancelado` a la plaza socia).
+- La caravana **`adjunta`** a un ejército cuyo **origen es `R`** **se pierde con su plaza** (decisión del autor del 2026-10-25, calibración del batch político P7; antes seguía enganchada para siempre, sin origen al que volver ni plaza donde soltarse): sale de la columna con sus carros y su carga (`comercio.caravana_perdida`) y **la carga sigue a los carros** (M10, [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §9): lo que la columna ya no puede llevar sin ellos se pierde con ella. La columna lo oye con `ejercito.caravanas_perdidas` `{ caravanas: 1, carros, carga, ruina }` (`carga` suma la de la caravana y lo que perdió la columna; `ruina`, la plaza). En la **conquista** la adjunta sigue con su columna. Prueba: `nucleo/tests/caravanas.rs::la_caravana_adjunta_cuya_plaza_de_origen_cae_en_ruinas_se_pierde_con_ella_y_con_lo_que_la_columna_llevaba_en_sus_carros`.
+- Las demás caravanas, salvo las `construccion` y las `adjunta` de otras plazas (siguen su propio camino):
+  - **Salían de `R`** ⇒ se **pierden** (`comercio.caravana_perdida`), su escolta vuelve al campamento.
+  - **Iban hacia `R`** (`en_transito` o `preparando`) o **estaban `aparcada`** en ella:
+    - `preparando` ⇒ la carga vuelve al almacén del origen y queda `disponible` (`comercio.caravana_vuelve`).
+    - en camino ⇒ `retornando` con plan `calcularRuta(posición actual → origen)` (**sin atracción**) y `destino = R`, con su carga (la vuelca en el origen al llegar); sin camino por tierra, o sin
+      origen, se pierde.
+    - **aparcada en `R`** ⇒ **se destruye** con sus carros, animales y carga, sin captura (decidido el 2026-10-13, Doc 3.13.7; **también en la conquista**, decidido el 2026-10-19).
+  - **Con encargo** (§5.8.4 y §5.8.7):
+    - **`esperando` en `R` como destino de su ruta** ⇒ **se destruye** con todo, como la aparcada (en la ruina y en la conquista).
+    - **`en_transito` hacia `R`** ⇒ regresa como cualquier otra que iba hacia ella, con la punta del encargo en el origen y el encargo `cancelado`. Al llegar al origen vuelca lo que lleva, devuelve la escolta y el encargo termina: con motivo `destino_perdido` (2) si el destino ya no es de la Facción del origen o no existe (la ruina, o la conquista de una ruta), y con `cancelado` (1) si sigue vigente (el envío a una plaza que cambió de dueño). Un destino perdido gana a un encargo cancelado.
+    - **Salía de `R`** ⇒ como las demás: en la ruina se pierde; en la conquista, si **espera dentro** de `R` cuenta como una caravana en casa: pasa con la flota al conquistador y su encargo termina allí (`cancelado`, 1), con lo de a bordo vuelto al almacén de la plaza y la escolta en el campamento. Las demás de la flota traspasada siguen su encargo.
+    - Toda caravana con encargo que se pierde (esta cascada, batalla, bandidos, pérdida de todos los carros o vuelta sin ruta) emite además `comercio.encargo_terminado` con motivo `destruida` (3) y `volcado` 0: no pasa por el origen y no vuelca nada. `perdido` es lo que llevaba a bordo al perderse, **salvo cuando se pierde por quedarse sin carros** (en una batalla o por el resultado de Unity): ahí la carga ya se había sacado de la caravana como carga perdida con los carros, así que `perdido` vale 0 (y `comercio.caravana_perdida` lleva `carga` 0). Tampoco hay `perdido` si ya no lleva nada, como la que espera en un destino que cae después de dejarlo todo.
+  - Las demás siguen como estaban.
+
+La red de caminos se poda sola al faltar un extremo (§7.4).
+
+## 11. Quién puede qué (`autorizacion.ts`)
+
+| Comando | Quién |
+|---|---|
+| `proponerTrueque` | **Tesorero o Gobernador** del asentamiento A, residente y dentro (decidido 2026-10-12; antes bastaba residir) |
+| `aceptarTrueque`, `rechazarTrueque` | Tesorero o Gobernador del asentamiento B, residente y dentro |
+| `colocarOrdenMercado` | Tesorero o Gobernador del asentamiento, residente y dentro |
+| `crearCaravana` | residente del asentamiento (las caravanas siguen abiertas a cualquier residente) |
+| `agregarCarroCaravana`, `comprarAnimalCaravana`, `reservarCaravana`, `cancelarCaravana`, `moverCarroCaravana`, `renombrarCaravana` (Rust) | residente del **origen** de la caravana |
+| `prepararCaravana`, `asignarEscolta`, `quitarEscolta` | el actor es el `heroeId` del comando **y** reside en el origen (desde el 2026-11-04, `asignarEscolta` y `quitarEscolta` también de visita dentro del origen siendo de su Facción, §5.5) |
+| `encargarCaravana`, `cambiarEncargo`, `cancelarEncargo`, `detenerEncargo` | Rust, sin equivalente en TypeScript: el Gobernador, el Tesorero o el Maestro de Caravanas del **origen** de la caravana, residente y dentro (§5.8.3) |
+| `moverCargaCaravanaAparcada`, `enviarCaravanaAlOrigen` | el actor es el `heroeId`; residente del **origen** de la caravana y **presente** en la plaza que la hospeda |
+| `comerciarEnPlaza` | el actor es el `heroeId`; el motor exige columna propia en la puerta |
+| `comprarEnCampamento`, `repostarEnCampamento` | cualquier héroe; el motor exige estar en el campamento |
+
+Un id inexistente se deja pasar a propósito para que el comando devuelva el error específico, no un «sin permiso».
+
+**Desde la puerta (Rust, 2026-11-10, pedido del autor: el Mercado interno desde la puerta de la plaza propia).** Donde arriba se pide «dentro» del origen o de la plaza, las órdenes de mercado (`colocarOrdenMercado`, `cancelarOrdenMercado`), las de la flota que manda su origen (`crearCaravana`, `agregarCarroCaravana`, `comprarAnimalCaravana`, `moverCarroCaravana`, `reservarCaravana`, `renombrarCaravana`, `prepararCaravana`, `cancelarCaravana`) y los encargos (`encargarCaravana`, `cambiarEncargo`, `cancelarEncargo`, `detenerEncargo`, `tomarOrdenADistancia`) valen también **a bordo de una columna a la puerta** de esa plaza (a `radio_puerta` o menos), con los mismos cargos y la misma residencia. Los trueques, las de una caravana aparcada, la escolta y abrir el almacén a los aliados siguen pidiendo estar dentro. La matriz y sus filas: `Proyecciones_Y_Autorizacion.md` §5.1 y su párrafo «Acciones a la puerta».
+
+## 12. Eventos y quién los consume
+
+| Evento | Quién lo emite | Quién lo lee |
+|---|---|---|
+| `comercio.trueque_propuesto`, `_aceptado`, `_rechazado` | comandos | narración |
+| `comercio.trueque_cumplido` | entrega (§4.4) | mercado de mercenarios (`entreFacciones`); xp y reputación se aplican en el mismo sitio |
+| `comercio.trueque_expirado` | reparto (§4.3) | narración |
+| `comercio.trueque_cancelado` | ruina (§10) | narración |
+| `comercio.caravana_construida`, `_carro_agregado`, `_carro_movido`, `_reserva`, `_renombrada`, `_preparando`, `_cancelada`, `_escolta_cedida`, `_escolta_retirada`, `carga_caravana_aparcada`, `caravana_enviada_al_origen` | comandos | narración |
+| `comercio.caravana_animal_comprado` | `comprarAnimalCaravana` | contador de logros `animales.comprados` (`Tecnologia_Aedas.md`) |
+| `comercio.caravana_sale`, `peaje_paso` (lleva `oroPagado`, el oro del peaje, y lo cobrado en especie por recurso), `caravana_llega` (esta lleva `comision` —la acuñada en la capital del destino, topada por el oro que cabe en ella—, `recargo`, `carga`, `perdido` y `valor`, el de lo que llevaba a precio vigente, sobre el que se calcula la comisión) | tick | `caravana_llega`: hecho `caravana` de las épicas (origen = plaza que cuenta; `comercial` con ≥ `AEDAS.epica.cargaMinimaCaravana` de carga) |
+| `comercio.entrega_escoltada` | `entregarDeCaravana` | narración |
+| `comercio.caravana_perdida`, `comercio.caravana_vuelve` | ruina (§10) y presencia (`Movimiento_Ejercitos.md`); `caravana_perdida` lleva `carga` y, si la caravana tenía encargo, la acompaña `comercio.encargo_terminado` con motivo 3 | narración |
+| `comercio.encargo_dado` `{ caravana, destino, modo }` (0 ruta, 1 envío) | `encargarCaravana` (§5.8.3) | narración |
+| `comercio.caravana_espera` `{ caravana, plaza, <recurso> }`, `comercio.caravana_carga` `{ caravana, plaza, <recurso>, carros, finPaso }`, `comercio.caravana_descarga` `{ caravana, plaza, <recurso>, tirado, aBordo, carros, finPaso, comision }` | ciclo del encargo (§5.8.4 y §5.8.5), oídos en la plaza de la parada y, si es otra, también en el origen de la caravana: `espera` al empezar a esperar existencias (`<recurso>` es lo que falta), `carga` solo si toma algo (lo tomado), `descarga` en cada llegada a una plaza propia (lo que entra; `finPaso` 0 si no hay espera; `comision` 0 en una ruta). En una plaza ajena con Mercado activo (§5.8.8) `descarga` lleva lo **vendido** por recurso en lugar de lo que entra, con `tirado` 0 y `comision` 0 (la comisión se queda en el precio), y `carga` lo **comprado** por recurso, solo si compra algo | narración |
+| `comercio.encargo_terminado` `{ caravana, motivo, volcado, perdido }` | ciclo del encargo (§5.8.7): `motivo` 0 cumplido, 1 cancelado, 2 destino perdido, 3 destruida, 4 detenido (2026-11-04); `volcado` es lo que entró en el almacén del origen y `perdido` lo que no cupo. Con motivo 3 (la caravana se pierde, §10) `volcado` es 0 y `perdido` lo que llevaba a bordo al perderse, o 0 si la pierde por quedarse sin carros, que ya perdió la carga con ellos | narración |
+| `mercado.orden_colocada`, `mercado.orden_expirada` | comando / tick | narración |
+| `mercado.comercio_en_plaza` `{ orden, cantidad, entreFacciones, valor, comision, oroMovido, ejercito` o `caravana }` | comando, o una caravana con encargo en una plaza ajena (una por orden servida; §5.8.8) | mercado de mercenarios (`entreFacciones`) |
+| `mercenarios.comprado` | `comprarEnCampamento` | narración |
+| `comercio.flota_traspasada` `{ caravanas }` | conquista (§10): las caravanas de la plaza conquistada pasan a la Facción que conquista | narración de la plaza |
+| `reputacion.cambio` `{ faccion, delta, valor }` | todo cambio de reputación de una Facción (trueques, vasallaje, rebelión; §4.6) | narración; `batch politica` |
+| `reputacion.umbral_bajo` `{ faccion, entra, valor }` | la reputación cruza el umbral bajo (−40): `entra` 1 al bajar de él, 0 al recuperarse | narración |
+| `faccion.experiencia` `{ faccion, motivo, cantidad, experiencia }` | toda experiencia de Facción (`motivo`: 1 trueque, 2 combate, 3 batalla, 4 edificio, 5 conquista, 6 ascenso, 7 fundación, 8 bandidos; `cantidad` y `experiencia` en milésimas) | narración; nivel de Facción (`Diplomacia_Facciones.md` §3.5) |
+
+El TypeScript emitía también `comercio.preparacion_terminada`; el motor Rust no: el fin de la preparación es la salida de la caravana (`comercio.caravana_sale`).
+
+## 13. Parámetros
+
+**Reputación (decidido el 2026-10-18):** el decaimiento baja de 0,2 a **0,002 por minuto** (placeholder a calibrar): con 0,2 un +5 o un −8 se borraban en 25-40 min y el umbral de −40 casi no se alcanzaba, contra el «decae lentamente» del canon (Doc 2.7). El bonus por minuto de alianza se reduce en la misma proporción (0,05 → 0,0005) para conservar la regla «por sí solo no sube la reputación por encima de ~0,05»: el bonus sigue por debajo del decaimiento (0,0005 < 0,002).
+
+Los bloques de las secciones anteriores son los de este sistema, también `ENCARGO` (§5.8.5: `tiempoCargaMinutosPorCarro` y `tiempoDescargaMinutosPorCarro`, placeholders por calibrar). Además, de otros documentos: `REPUTACION` (también en §4.6) y `NIVEL_FACCION.xp.truequeCumplido` (`Diplomacia_Facciones.md` §3.5), `LOGISTICA`
+(`Movimiento_Ejercitos.md`), `MERCENARIOS` (`Tecnologia_Aedas.md`), `POLITICA_CATALOGO` y `EDIFICIO_CATALOGO` (`Economia_Construccion.md`).
+
+<!-- parametros:REPUTACION -->
+```json
+{
+  "decaimientoPorMinuto": 0.002,
+  "bonusTruequeCumplido": 5,
+  "penalizacionTruequeIncumplido": -8,
+  "bonusLiberarVasalloVoluntario": 6,
+  "penalizacionRebelionParaSenora": -10,
+  "penalizacionRomperAlianza": -12,
+  "penalizacionAtacarAliado": -25,
+  "bonusDefenderVasallo": 15,
+  "penalizacionNoDefenderVasallo": -3,
+  "penalizacionGuerraTrasRomperAlianza": -15,
+  "ventanaGuerraTrasRomperAlianzaDias": 3,
+  "bonusPorMinutoAlianzaActiva": 0.0005,
+  "umbralBajoParaEmbajador": -40,
+  "umbralBajoParaComision": -40,
+  "factorComisionPorReputacionBaja": 1.5
+}
+```
+<!-- /parametros -->
+
+<!-- parametros:CARAVANA_CATALOGO -->
+```json
+{
+  "militar": {
+    "capacidad": 40,
+    "velocidad": 12
+  },
+  "construccion": {
+    "capacidad": 150,
+    "velocidad": 10
+  },
+  "contrabando": {
+    "capacidad": 20,
+    "velocidad": 24
+  }
+}
+```
+<!-- /parametros -->
+
+(`CARAVANA_CATALOGO` es el catálogo de las categorías **sin flota propia**: `construccion` la usa la Caravana de Fundación; `militar` y `contrabando` son solo datos sin ningún disparador.)
+
+## 14. Invariantes
+
+| Invariante | Test que lo vigila |
+|---|---|
+| Un trueque tiene ≥ 1 línea por lado, cantidades > 0 y sin recurso repetido en un lado | `truequeCompuesto.test.ts` («rechaza un lado vacío…») |
+| Lo pactado, lo entregado, lo que lleva una caravana o un carro y las existencias de un campamento son unidades enteras (C3b, 2026-10-24) | Rust: `Nucleo::fracciones_almacenadas` (auditoría de cambios y batch `inv_fracciones`) |
+| Cada recurso entregado se abona a su línea; el acuerdo se cierra solo con todas saldadas | `truequeCompuesto.test.ts` («abonos y cierre») |
+| Un cargamento por lado: líneas en orden hasta llenar la caravana; sin stock de una línea sale lo de las demás | `truequeCompuesto.test.ts` («un cargamento por lado») |
+| Vencer sin cumplir penaliza en proporción a lo no entregado | `truequeCompuesto.test.ts` («vencer sin cumplir») |
+| La ruta de una caravana empieza en **su** origen, en los dos sentidos | `caravanas.test.ts` («orientación de la ruta…») |
+| El cooldown de creación es compartido y se respeta | `caravanas.test.ts` («cooldown de creación…») |
+| Una comercial entregada pasa a `retornando`, avanza de verdad y solo al llegar queda `disponible`; no se reasigna mientras vuelve | `caravanas.test.ts` («retorno real…») |
+| La misma caravana sirve varios envíos del mismo trueque | `caravanas.test.ts` («reuso de caravana propia…») |
+| Capacidad = Σ por carro con animal; velocidad = animal más lento; sin animal no viaja | `caravanas.test.ts` («derivación…») |
+| El cupo de carros es de la flota; el reforzado exige Carpintería; el animal exige carro libre | `caravanas.test.ts` («composición por piezas») |
+| Lanzar a mano: preparación, salida programada, cancelación, rechazos | `caravanas.test.ts` («lanzamiento manual») |
+| Escolta: cupo de Liderazgo por Mercado, por escalón, de la caravana; ceder/quitar solo parada | `caravanas.test.ts` («escolta sin héroe») |
+| El mostrador: la plaza paga/cobra hasta el último gramo, sirve lo que puede, el carro es tope, hay que estar allí y ser el Líder, una orden sin precio no se liquida | `mostrador.test.ts` |
+| Las órdenes caducan y las cumplidas salen sin evento | `mostrador.test.ts` («las ofertas que nadie toma…») |
+| El historial recuerda solo las últimas por plaza | `historialOrdenes.test.ts` |
+| La poda quita lo terminado viejo salvo lo citado por una caravana | `podaAcuerdos.test.ts` |
+| Registrar una ruta mueve el peso pero deja las aristas; dos pares comparten arista; podar es idempotente | `redCaminos.test.ts` |
+| Paso forzado por una ciudad ajena, peaje, ciudad propia sin peaje | `redCaminos.test.ts` («paso forzado…») |
+| El mercado de mercenarios nace lleno salvo el oro, solo cuenta el comercio entre Facciones, repone con tope y pilas | `mercadoMercenario.test.ts` |
+| El A\* rodea agua y obstáculos, nunca cruza el mar, cruza ríos solo por vado o ciudad, y se arrima a la red | `world/__tests__/rutas.test.ts` |
+| Cada evento del comercio sale con su código | `eventosDominioComercio.test.ts` |
+| Los dependientes de una ruina se cierran sin penalizar | `ruinaDependientes.test.ts` |
+| Llevarse la carga al propio origen no acuña; la mala reputación paga el extra del almacén de origen (solo entre Facciones, sin pasarse del oro que tenga) | `comercioDecisiones.test.ts` |
+| La reputación y la experiencia del trueque son entre Facciones (cumplir y vencer) | `comercioDecisiones.test.ts` |
+| Un casco sin carros no bloquea el reparto; un destino inalcanzable no gasta la caravana | `comercioDecisiones.test.ts` |
+| «Carga Ampliada» vale para la caravana aparcada (y, con la misma función, adjunta y de ejército) | `comercioDecisiones.test.ts` |
+| Un encargo se valida en el orden `mismo_origen`, `destino_ajeno`, hora de salida, líneas, precios y capacidad | `comercio/src/encargo.rs` (`mod pruebas`) y `nucleo/tests/encargos.rs::cada_rechazo_del_encargo_sale_con_su_codigo_y_no_cambia_el_estado` |
+| Lo que entra al almacén al dejar y lo que se toma al recoger, en unidades enteras y topado; los carros del paso (mínimo 1 si se mueve algo, 0 si nada) | `comercio/src/encargo.rs` (`mod pruebas`) |
+| Una ruta entre dos plazas propias da varias vueltas sin comisión y no acuña ni pierde nada; un envío deja con la comisión de una entrega y termina `cumplido` | `nucleo/tests/encargos.rs` (`una_ruta_entre_dos_plazas_propias_da_varias_vueltas_sin_comision`, `un_envio_programado_a_otra_plaza_propia_…`) |
+| Esperar existencias espera con un pulso por minuto y carga en cuanto hay todo; sin esperar sale con lo que haya | `nucleo/tests/encargos.rs` (`esperar_existencias_espera_con_su_pulso_…`, `sin_esperar_existencias_sale_con_lo_que_haya`) |
+| Los peajes se cobran a la ida y a la vuelta cargada | `nucleo/tests/encargos.rs::una_plaza_ajena_en_el_camino_cobra_peaje_a_la_ida_y_a_la_vuelta_cargada` |
+| Cancelar esperando en el origen, esperando en el destino y en ruta; cambiar paradas, destino y hora | `nucleo/tests/encargos.rs` (sección «Cancelar» y `cambiar_…`) |
+| En una plaza ajena la caravana vende a la orden que mejor paga y compra a la más barata, respeta precios y topes, y el oro se conserva | `nucleo/tests/encargos.rs` (`en_una_plaza_ajena_…`, `el_oro_se_conserva_…`) |
+| Una caravana `esperando` no está en la rejilla de encuentros ni en el mapa de nadie; el Maestro de Caravanas da el encargo y el Sacerdote no | `nucleo/tests/encargos.rs`, `encargos_vista.rs` |
+| La plaza que cae: destino en ruinas o conquistado, origen en ruinas o conquistado, caravana destruida | `nucleo/tests/encargos_caidas.rs` |
+| Una foto con una caravana a mitad de encargo sigue el ciclo igual | `nucleo/tests/encargos.rs::recuperar_desde_foto_con_una_caravana_a_mitad_de_encargo_sigue_el_ciclo_igual` y `codec_comercio.rs` (`mod pruebas`) |
+
+## 15. Casos límite y decisiones que parecen raras
+
+- **El recargo por reputación solo cuenta entre Facciones y paga lo que haya**: con el almacén de origen sin oro, el castigo se queda en lo que tenga (nunca negativo). El mostrador no lo lleva.
+- **Lo que no cabe en el almacén del destino se pierde, y el trueque lo da por entregado.** `agregarRecurso` topa por capacidad; `aplicarEntregaATrueque` abona lo que la caravana llevaba, no lo que entró.
+  La comisión en oro se topa igual por la capacidad de oro.
+- **Una caravana que llega después de vencer el acuerdo** sigue abonando líneas (no mira el `estado`): si con ello se saldan los dos lados, el acuerdo `expirado` pasa a `cumplido` y reparte la
+  recompensa, aunque ya se hubiera penalizado el vencimiento (decisión del 2026-10-11: se deja así). El orden del tick (mover antes de caducar) permite que la que llega justo el tick del vencimiento cierre bien.
+- **Una manual puede llevar la carga a cualquier sitio** (otra Facción, un enemigo…): solo se mira que no sea el propio origen para cobrar comisión (§3.3). Regalar mercancía por esta vía es posible.
+- **El regreso desanda la ida entera, incluido un rodeo que ya no hace falta**, y no cobra peajes.
+- **Un peaje se calcula sobre lo que lleva en ese momento**: dos ciudades seguidas cobran el 2 % cada una del valor de lo que lleva; si el peaje de la primera se pagó en especie, la segunda lo calcula sobre lo que queda, y si se pagó en oro, la carga sigue entera (el oro de la capital que se gastó en la primera ya no está para la segunda).
+- **Las órdenes no reservan nada.** Una orden de venta puede quedarse sin mercancía y una de compra sin oro; el mostrador sirve lo que haya o falla.
+- **Una orden con precio 0 o negativo se coloca pero no se liquida** (`precioUnitario ≤ 0`), igual que cualquiera sobre el oro cuando no se da precio (en Rust, una orden sobre el oro no se liquida nunca: ver abajo).
+- **`prepararCaravana` registra la ruta en la red al lanzar, no al salir**: cancelar deja el camino.
+- **Los trueques entre plazas de la misma Facción no tocan la reputación, la experiencia ni el mercado de mercenarios** (decisión del 2026-09-27 para los dos últimos; del 2026-10-11 para la reputación). Sí pagan la comisión del 3 %.
+- **El oro vale 0 al calcular la comisión** (`PRECIO_BASE` no lo tiene): un trueque de oro por oro no acuña nada.
+- **El `distanciaTotal` del bonus es en línea recta**, no la longitud de la ruta ni los peajes.
+- **Un destino perdido gana a un encargo cancelado** (§5.8.7): una caravana cancelada que vuelve a un origen cuyo destino ya no vale termina con `destino_perdido`, no con `cancelado`.
+- **Cancelar esperando en el origen vuelca todo lo de a bordo**, también lo recién cargado, y lo que no cabe en el almacén se pierde (`perdido`).
+- **La ruta no cobra comisión nunca; el envío solo al dejar en un destino propio.** Al volver y dejar en el origen no hay comisión, y en una plaza ajena la tasa del mostrador se queda en la plaza (§5.8.6).
+- **Una parada que no mueve nada no tarda**, y una carga que no toma nada sale en el acto sin emitir `comercio.caravana_carga` (§5.8.5).
+- **Con `esperar_existencias` solo se mira el almacén**: con sobrante a bordo que no cupo al descargar, la carga se topa por el hueco de la caravana y sale con menos de lo pedido (§5.8.5).
+- **Una plaza aliada o vasalla es ajena para una ruta**: solo un envío va a ella, y allí comercia con sus órdenes como con cualquier otra (§5.8.8).
+- **Un encargo no guarda su ruta**: cada salida traza una nueva, la vuelta no desanda la ida y se registra en la red de caminos (§5.8.6). Si no hay ruta de vuelta, la caravana se pierde con su carga (`destruida`, §10).
+- **Las fotos anteriores a `BAN52` se leen**: ninguna caravana tiene encargo y ninguna plaza Maestro de Caravanas (§5.8.9).
+
+**Reglas del Rust decididas por el autor el 2026-10-23** (eran `// DUDA:` del código; se quedan como estaban):
+- **La carga perdida con los carros** es proporcional a la capacidad de cada carro con animal sobre la de todos, hacia abajo, recurso a recurso; la carga no está asignada a carros concretos (lo que deja el redondeo no va en ninguno; Unity recibe cada carro con ese reparto). Con números se pierden los últimos carros de la lista (Combate §7.1).
+- **Precio de los manufacturados** (§3.1): si un bien tiene varias recetas según el taller y el nivel, cotiza la **más barata**.
+- **El oro topado por lo que cabe** (§3.3, §8.3): la comisión de una entrega y el recargo por reputación se topan por el hueco de oro del destino, y el origen solo paga lo que entró; en el mostrador, una venta se topa también por el oro que cabe en el almacén de la plaza. El oro siempre se conserva.
+- **Una orden sobre el oro se rechaza en el mostrador aunque lleve precio** (el TypeScript solo la frenaba con el precio de referencia 0).
+- **El cupo diario de un campamento de mercenarios** (§9.2) se cuenta **por recurso** (madera 60, piedra 10), no con un solo contador.
+- **Trueque** (§4): una propuesta vencida (`ahora ≥ expiraEn`) no se acepta aunque el reparto aún no la haya cerrado; la fracción incumplida se mide **línea a línea** (lo que sobra en una no tapa lo que falta en otra); un acuerdo **cumplido** no se reabre ni vuelve a anunciar su cierre.
+- **Reputación**: un número **por Facción** (el que paga el recargo), no una relación entre dos; solo hay umbral **bajo** (−40): se anuncian el cruce del 0 y la entrada y salida del −40.
+- **Retirar una orden de mercado antes de plazo** (`CancelarOrdenMercado`) la deja como una expirada (no hay estado «cancelada») y avisa con su propio hecho, `mercado.orden_cancelada`; **la caravana que vuelve a casa** avisa con `comercio.caravana_en_casa` (§12; con lo volcado y lo perdido).
+
+## 16. Divergencias
+
+Ninguna abierta. Las del 2026-10-11 se resolvieron: comisión solo entre asentamientos distintos, recargo por reputación, reparto sin atascos, «Carga Ampliada» para toda caravana, reputación solo entre Facciones, código muerto retirado.
+
+## 12. Carro de acarreo (guerra logística, Doc 3.13.8)
+
+> Implementado en Rust el 2026-10-19 (fase 3C): véase la nota del principio del documento.
+
+Cada pueblo extractor (Economia_Construccion §pueblos) tiene un carro propio: una caravana de tipo `acarreo` ligada al pueblo.
+
+- **Un carro básico con buey** (500 de capacidad, velocidad **24**) y una **ruta fija** pueblo ↔ plaza madre, calculada una vez como cualquier plan.
+- **Sin la ventaja del camino** (decisión del autor del 2026-10-29): su ruta entra en la red de caminos y la aprovechan las demás caravanas, pero el carro de acarreo va siempre a los costes del terreno (24 u/min), sin `factorCamino`, y no rehace su plan cuando una arista de su trayecto pasa a ser camino. Antes iba al doble, porque su propia ruta lo convertía en camino desde el primer viaje.
+- **Solo sale con el carro lleno**: el evento de salida se programa cuando el almacén local del pueblo alcanza la capacidad del carro (o al reponerse el carro con almacén ya lleno). Vuelca en el almacén de la madre y vuelve vacío.
+- **No cuenta** contra los cupos de caravanas ni de carros del Mercado, ni exige Mercado. No entra en el reparto automático ni en el trueque.
+- **Escolta**: sin héroe, de los residentes de la madre (cupo del Mercado de la madre si lo tiene, 100/200/300; **100** si no) o por ejército (Movimiento §9).
+- **No le afectan** «Carga Ampliada» ni «Rutas Rápidas» (decidido el 2026-10-18): solo mueven a las caravanas comerciales (§6.4); con ×1,5 de capacidad el carro de 750 superaba el almacén de 500 del pueblo de entonces y «sale lleno» no se habría disparado nunca (con el de 1.000, desde el 2026-11-05, cabría, pero la regla sigue).
+- **Casi siempre lucha en B** (viaja dentro de la zona del dueño); si una frontera recorta la zona y la ruta sale de ella, ese tramo es A (Combate §7.1).
+- **Si se destruye**, se compra otro en la plaza madre solo si el pueblo no tiene ninguno, al coste de carro + buey (20 madera + ~12 oro). Mientras no tenga carro, el pueblo acumula hasta llenar el almacén y la extracción para.
+- La **solvencia** de la madre (Doc 4.5) cuenta lo que llega por acarreo como la media de las llegadas en 24 h o como la producción del pueblo.
+
+Valores calibrados (2026-10-12): `COMISION.distanciaParaBonusMax` y `ASIGNACION_CARAVANA.distanciaReferencia` 600 → **120** (desde el 2026-10-28 los bloques de arriba ya llevan 120, 8 y 100; antes eran los de TypeScript y el código los sobrescribía); velocidades de los animales ×1,5 (desde el 2026-11-11 el bloque `ANIMAL_CATALOGO` ya lleva las calibradas, 24, 36 y 28,5, y el código las lee tal cual); `NAVEGACION.espaciadoMin` 45 → **8** y vados cada 100.
+
+> **Implementado en Rust (2026-10-20, fase 4D: el combate de las caravanas).** Se retira `cerrar_comercio_por_conquista`: la conquista de una plaza llama al cierre interno con `Motivo::Conquista` (flota y pueblos pasan al conquistador, los trueques se anulan, la caravana aparcada en la plaza se destruye). Una caravana suelta o adjunta que pierde carros lo hace con `aplicar_perdida_de_carros` (la carga se pierde en proporción; si no queda ningún carro desaparece). El asalto A (la caravana resiste sola o con escolta) y el B (columna adjunta) se deciden con `Nucleo::en_zona` en el instante del ataque. Los campamentos de bandidos acosan a las caravanas que pasan a ≤ `radioAtaqueCaravana` (una vez por cruce); la escolta destruida pierde soldados. **Provisional:** una escolta sin soldados cuenta como sin escolta; si queda un solo carro, la carga salvada vuelve al origen.
+>
+> **Implementado en Rust (2026-10-22, quinta ronda de Entrar con todo).** El acoso de bandidos a una caravana **adjunta a una columna con algún héroe sano** se juega en Unity cuando hay servidores de batalla (la caravana queda `EnBatalla` y, al acabar, vuelve a `Adjunta` o desaparece según los carros que dé Unity por perdidos); a una caravana sin héroes (suelta, aun con escolta de tropa cedida) se le sigue tirando con números, con y sin servidores. Ver [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §4.
+
+> **Implementado en Rust (2026-10-22, decisiones del autor sobre la quinta ronda).** Foto `BAN19`. Cuando el acoso de bandidos va a Unity, entran **todas** las caravanas adjuntas a la columna que son presa, no solo una: todas quedan `EnBatalla`, Unity dice los carros perdidos de cada una, la que pierde todos desaparece (con su carga, que no se lleva nadie) y la escolta cedida de todas ellas queda a 0 si ganan los bandidos. Al acabar, las que siguen vuelven a `Adjunta`. Ver [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md) §4.
+
+> **Implementado en Rust (2026-10-21, fase 4E).** Contra una caravana atacada por un humano la batalla se juega en Unity: la caravana queda apartada (`apartar_caravana`: plan en pausa, `EnBatalla`) y al acabar vuelve a su viaje con el plan desplazado; si gana el atacante, Unity dice qué carros se pierden (`carros_perdidos`, por su posición en la lista de carros) y el servidor aplica `caer_caravana` con ellos: en una disputa (A) los carros perdidos con su animal y su carga, en un aguante (B) el 70 % de la carga y la mitad de los carros sin perder nunca el último (el 30 % salvado sigue en él, Combate §7.1), la escolta a 0 y de vuelta al campamento de su héroe y, sin carros (solo en A), la caravana desaparece. Detalle: [`Batalla_Unity_Ciclo.md`](Batalla_Unity_Ciclo.md).
+
+## Decisiones del autor del 2026-10-27 (paridad con TypeScript)
+
+Confirmadas por el autor al repasar las dudas de la paridad (plan «Paridad con TypeScript: plan de tandas», D1-D16): describen lo que ya hace el motor y pasan a ser la regla.
+
+- **D7, pasos de río:** solo se cruzan los ríos por los **vados del mapa**; una ciudad ribereña no abre un paso propio y `radioPasoCiudad` no se usa.
+- Descartado como recorte (el autor, 2026-10-27): la poda de los trueques vencidos es perezosa: se hace al tocarlos (proponer, vencer o cerrar un trueque), no al final de cada tick, que el motor no tiene. Para el jugador el resultado es el mismo.
+
+## Catálogo de eventos
+
+Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; contrato 05 §8). La prueba `crates/nucleo/tests/catalogo.rs` lee el bloque de cada documento de `Docs/Mechanics` y exige que todo código que emite el núcleo esté en alguno, y que los que el núcleo aún no emite figuren como paridad pendiente en `Docs/Mecanicas a desarrollar.md`. El núcleo los emite todos.
+
+<!-- eventos -->
+```json
+[
+  "comercio.caravana_animal_comprado", "comercio.caravana_cancelada", "comercio.caravana_carga", "comercio.caravana_carro_agregado", "comercio.caravana_carro_movido",
+  "comercio.caravana_construida", "comercio.caravana_descarga", "comercio.caravana_en_batalla", "comercio.caravana_en_casa", "comercio.caravana_enviada_al_origen",
+  "comercio.caravana_escolta_cedida", "comercio.caravana_escolta_retirada", "comercio.caravana_espera", "comercio.caravana_llega", "comercio.caravana_perdida",
+  "comercio.caravana_preparando", "comercio.caravana_renombrada", "comercio.caravana_reserva", "comercio.caravana_sale", "comercio.caravana_sale_de_batalla", "comercio.caravana_vuelve",
+  "comercio.carga_caravana_aparcada", "comercio.carros_perdidos", "comercio.encargo_dado", "comercio.encargo_terminado", "comercio.entrega_escoltada",
+  "comercio.flota_traspasada", "comercio.peaje_paso", "comercio.trueque_aceptado", "comercio.trueque_cancelado", "comercio.trueque_cumplido",
+  "comercio.trueque_expirado", "comercio.trueque_propuesto", "comercio.trueque_rechazado", "mercado.comercio_en_plaza", "mercado.orden_cancelada",
+  "mercado.orden_colocada", "mercado.orden_expirada", "mercenarios.comprado", "mercenarios.repuesto", "reputacion.cambio", "reputacion.umbral_bajo"
+]
+```
+<!-- /eventos -->

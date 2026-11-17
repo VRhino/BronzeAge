@@ -1,1 +1,4 @@
-npm run test:run
+# El servidor TypeScript ya no se toca (se reconstruye en Rust): el hook comprueba el contrato y pasa la suite del motor
+# con el script en paralelo (unos 4 min en vez de los 22 de `cargo test --workspace`; ver CLAUDE.md).
+export PATH="$PATH:$HOME/.cargo/bin:$LOCALAPPDATA/Microsoft/WinGet/Links"
+buf lint && buf build && node scripts/suite.mjs

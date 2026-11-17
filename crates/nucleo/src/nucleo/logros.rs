@@ -1,0 +1,294 @@
+//! La tecnología del mundo dentro del núcleo (sistema 6, tanda 6B; Tecnologia_Aedas §1-§3): los contadores de los logros, los logros y las Eras. Las reglas puras son del crate `tecnologia`;
+//! aquí están el estado (`Estado::tecnologia`), de dónde sale cada suma y la cita de la Era.
+//!
+//! # Contar en origen (decisión técnica 3 del plan, D18)
+//! Nada se cuenta a partir de los hechos: cada sitio que produce el hecho suma su [`Delta`] al ocurrir, así que un hecho que deja dos rastros (el asedio con números tras su convocatoria emite
+//! `combate.asedio_*` y `batalla.aplicada`) cuenta una vez. Las vías:
+//!
+//! | Contador | Dónde se suma |
+//! |---|---|
+//! | `extraido.*`, `fabricado.*` | el paso de minuto de la plaza (`con_exterior`): lo que sale de los nodos de la plaza y de sus pueblos (`FuentesMundo::extraer`, D17) y lo que fabrican sus recetas (`Fuentes::fabricado`), en milésimas con un resto oculto |
+//! | `batallas.libradas`, `.conHoplitas`, `.campoAbierto` | columna contra columna con números (el `combate.resuelto` y su `combate.encuentro`); toda batalla de Unity aplicada (`aplicar_resultado`, D10) |
+//! | los de batalla de las Eras IV y V (`batallas.conTresHeroes`, `.ganadasEnInferioridad`, `.campoAbiertoConCaballeria`, `.armasCombinadas`, `.contraCoalicion`, `.conRey`, `.campoAbiertoConCaballeriaElite`, `escuadras.eliteDestruidas`) | las mismas batallas, con su resumen (`bando_de_batalla`, `con_rey`; Tecnologia_Aedas §2.1) |
+//! | `persecuciones.deCaballeria` | una columna con caballería que ataca a otra columna o a una caravana (también la de Fundación), con números o en Unity |
+//! | `caminos.compartidos` | récord, a 1 al registrar la ruta que abre el primer camino compartido (`registrar_ruta_en_red`) |
+//! | `asedios.*`, `conquistas.conMurallaCompleta` | el asedio con números (`resolver_asedio_con_numeros`); el asedio de Unity aplicado. Nunca `batalla.aplicada` |
+//! | `caravanas.destruidasOCapturadas` | la caravana interceptada con números (también la de Fundación), el acoso que ganan los bandidos y la batalla de caravana de Unity que gana el atacante |
+//! | `bandidos.campamentosDestruidos` | el campamento destruido con números y la batalla de Unity contra un campamento que gana el atacante |
+//! | `animales.comprados` | `ComprarAnimalCaravana` |
+//! | `reclutados.*` | reclutar (y reponer) en una plaza y en un campamento de mercenarios (Q4); no la guarnición de serie de las avanzadas ni la tropa prestada |
+//! | `plazasEnNivel.N` | el récord, al subir el número de plazas con nivel actual ≥ N (el índice derivado `Espacio::plazas_por_nivel`) |
+//!
+//! # Umbrales por plaza (2026-11-07)
+//! Los logros con `porPlaza` piden `X × N`, con N las plazas vivas del mundo (mínimo 1), para que se adapten al tamaño del servidor. N es `EstadoTecnologia::plazas`, derivado del mismo índice
+//! (no va en la foto): se rehace con el espacio y cambia al nacer o caer una plaza (`contar_plazas`), que también puede cumplir un logro si N baja. Al cumplirse queda fijo, con el N de entonces.
+//!
+//! # La Era, sin tick
+//! Al fijar un logro se mira si la Era vigente tiene ya todos los suyos; y hay **una cita global** (`Carga::Era`, prioridad 10) al fin de su plazo. Se arma como el plazo de los títulos: al
+//! pasar algo en el mundo con alguna Facción, si no hay otra (`Estado::era_en`). Cada Era dura al menos su mínimo (`minimoSemanas`, 1 semana; decisión del autor, 2026-10-25): con todos sus
+//! logros, la cita se mueve al mínimo y pasa allí; si los tenía al empezar, pasa al cumplirlo. La última Era (la III, mientras no existan los bloques de la IV y la V) no tiene cita.
+
+use super::*;
+use crate::estado::{entidad_era, Dato, PRIO_ERA};
+use militar::catalogo::Tropa;
+use tecnologia::contador::{BandoDeBatalla, Contador, Delta, EscuadraDeBatalla};
+use tecnologia::{Conjunto, TecId};
+
+/// Niveles que lleva el índice de plazas por nivel actual (los de más se cuentan en el último).
+pub(super) const NIVELES_INDICE: usize = 8;
+
+/// ¿Va algún hoplita ciudadano entre estas tropas? (`batallas.conHoplitas`.)
+pub(super) fn con_hoplitas(mut tropas: impl Iterator<Item = Tropa>) -> bool {
+    tropas.any(|t| t == Tropa::HoplitasCiudadanos)
+}
+
+fn indice_de_nivel(nivel: u32) -> usize {
+    (nivel as usize).min(NIVELES_INDICE - 1)
+}
+
+impl Nucleo {
+    // ───────────────────────────── Consultas ─────────────────────────────
+
+    /// El estado de tecnología del mundo (Era, contadores, logros, descubridoras, tecnologías de cada Facción).
+    pub fn tecnologia(&self) -> &tecnologia::EstadoTecnologia {
+        &self.estado.tecnologia
+    }
+
+    /// ¿Tiene la Facción adoptada esa tecnología? Las de arranque las tiene toda Facción.
+    pub fn tiene_tecnologia(&self, faccion: u32, tecnologia: &str) -> bool {
+        self.estado.tiene_tecnologia(faccion, tecnologia)
+    }
+
+    /// El `orden` de la Era vigente.
+    pub fn orden_era(&self) -> u32 {
+        self.estado.reglas.economia.tecnologia.eras[self.estado.tecnologia.era as usize].orden
+    }
+
+    /// Las plazas del mundo con nivel actual ≥ `nivel` (el índice derivado de los récords `plazasEnNivel.N`).
+    pub fn plazas_en_nivel(&self, nivel: u32) -> u32 {
+        self.espacio.plazas_por_nivel[indice_de_nivel(nivel)..].iter().sum()
+    }
+
+    /// Las plazas del mundo con nivel alcanzado ≥ `nivel` (el índice derivado de la crónica).
+    pub(super) fn plazas_con_alcanzado(&self, nivel: u32) -> u32 {
+        self.espacio.plazas_por_alcanzado[indice_de_nivel(nivel)..].iter().sum()
+    }
+
+    /// Una plaza pasa del nivel alcanzado `antes` a `ahora` (`None`: no existía o ya no existe): mantiene el índice `Espacio::plazas_por_alcanzado`.
+    pub(super) fn contar_alcanzado(&mut self, antes: Option<u32>, ahora: Option<u32>) {
+        if antes == ahora {
+            return;
+        }
+        let indice = &mut self.espacio.plazas_por_alcanzado;
+        if let Some(n) = antes {
+            indice[indice_de_nivel(n)] -= 1;
+        }
+        if let Some(n) = ahora {
+            indice[indice_de_nivel(n)] += 1;
+        }
+    }
+
+    // ───────────────────────────── El resumen de una batalla ─────────────────────────────
+
+    /// Un bando de una batalla para sus contadores (Tecnologia_Aedas §2.1): las Facciones de los héroes que combaten y cuántos son, y sus escuadras como (tropa, soldados al empezar, al acabar),
+    /// solo las que empezaron con alguno.
+    pub(super) fn bando_de_batalla(&self, heroes: &[u64], escuadras: impl IntoIterator<Item = (Tropa, i64, i64)>) -> BandoDeBatalla {
+        let tropas = &self.estado.reglas.economia.militar.tropas;
+        let escuadras: Vec<(Tropa, i64, i64)> = escuadras.into_iter().filter(|&(_, antes, _)| antes > 0).collect();
+        BandoDeBatalla {
+            facciones: heroes.iter().filter_map(|&h| self.heroe(h)?.faccion).collect(),
+            heroes: heroes.len() as u32,
+            soldados: escuadras.iter().map(|&(_, antes, _)| antes as u64).sum(),
+            escuadras: escuadras
+                .iter()
+                .map(|&(t, _, despues)| {
+                    let d = tropas.tropa(t);
+                    EscuadraDeBatalla { edificio: d.edificio, escalon: d.escalon, sin_soldados: despues <= 0 }
+                })
+                .collect(),
+        }
+    }
+
+    /// ¿Combate el Rey de alguna Facción entre estos héroes? (`batallas.conRey`.)
+    pub(super) fn con_rey(&self, heroes: impl IntoIterator<Item = u64>) -> bool {
+        heroes.into_iter().any(|h| self.heroe(h).and_then(|x| x.faccion).and_then(|f| self.estado.politica.facciones.get(f)).is_some_and(|f| f.rey == Some(h)))
+    }
+
+    // ───────────────────────────── Sumar ─────────────────────────────
+
+    /// Suma lo que deja un hecho a los contadores y anuncia los logros que se cumplen.
+    pub(super) fn contar(&mut self, t: Instante, d: Delta) {
+        if d.es_vacio() {
+            return;
+        }
+        let r = self.estado.reglas.economia.tecnologia.clone();
+        let fijados = self.estado.tecnologia.aplicar(&r, &d, t);
+        self.tras_logros(t, &fijados);
+    }
+
+    /// Sube un récord (`caminos.compartidos`) y anuncia los logros que se cumplen.
+    pub(super) fn subir_record(&mut self, t: Instante, c: Contador, valor: u64) {
+        let r = self.estado.reglas.economia.tecnologia.clone();
+        let fijados = self.estado.tecnologia.subir_record(&r, c, valor, t);
+        self.tras_logros(t, &fijados);
+    }
+
+    /// Suma los flujos de un paso de la economía (milésimas por contador: lo extraído y lo fabricado).
+    pub(super) fn contar_flujos(&mut self, t: Instante, contado: &[Mil; Contador::N]) {
+        let Estado { reglas, tecnologia, .. } = &mut self.estado;
+        let mut fijados = Vec::new();
+        for (i, &n) in contado.iter().enumerate().filter(|(_, &n)| n > 0) {
+            fijados.extend(tecnologia.sumar_milesimas(&reglas.economia.tecnologia, Contador::TODOS[i], n as u64, t));
+        }
+        self.tras_logros(t, &fijados);
+    }
+
+    /// Una plaza de `faccion` pasa del nivel actual `antes` a `ahora` (`None`: no existía o ya no existe). Mantiene el índice y, si sube, los récords `plazasEnNivel.N` y la aparición de la
+    /// Facción (`capitalEnNivel`, 6C).
+    pub(super) fn contar_nivel(&mut self, t: Instante, faccion: u32, antes: Option<u32>, ahora: Option<u32>) {
+        if antes == ahora {
+            return;
+        }
+        // Cambian el cap y los cupos de nivel que ocupa la Facción (`Faccion.cap_fundacion`, `Faccion.cupos_de_nivel`).
+        self.tr.tocar(Clase::Faccion, u64::from(faccion));
+        let indice = &mut self.espacio.plazas_por_nivel;
+        if let Some(n) = antes {
+            indice[indice_de_nivel(n)] -= 1;
+        }
+        if let Some(n) = ahora {
+            indice[indice_de_nivel(n)] += 1;
+        }
+        if antes.is_none() || ahora.is_none() {
+            self.contar_plazas(t);
+        }
+        if ahora.unwrap_or(0) <= antes.unwrap_or(0) {
+            return;
+        }
+        self.mirar_aparicion(faccion);
+        let r = self.estado.reglas.economia.tecnologia.clone();
+        let mut fijados = Vec::new();
+        for nivel in 2..=3 {
+            let Some(c) = Contador::de_plazas_en_nivel(nivel as u8) else { continue };
+            fijados.extend(self.estado.tecnologia.subir_record(&r, c, u64::from(self.plazas_en_nivel(nivel)), t));
+        }
+        self.tras_logros(t, &fijados);
+    }
+
+    /// Nace o cae una plaza: cambia N, las plazas vivas del mundo, y con él el umbral de los logros por plaza (decisión del autor, 2026-11-07). Si baja, alguno puede cumplirse ya; la
+    /// forma pública del estado de tecnología cambia (las plazas y la barra «x / y» de los pendientes en `HEROE`).
+    fn contar_plazas(&mut self, t: Instante) {
+        let r = self.estado.reglas.economia.tecnologia.clone();
+        let plazas = self.plazas_en_nivel(0);
+        if plazas == self.estado.tecnologia.plazas {
+            return;
+        }
+        let fijados = self.estado.tecnologia.poner_plazas(&r, plazas, t);
+        self.tr.tocar(Clase::Tecnologia, 0);
+        self.tras_logros(t, &fijados);
+    }
+
+    /// Anuncia los logros recién fijados (`tecnologia.logro { contador, umbral }`, público, uno por parte del logro y con el umbral con que se cumplió: dice qué pasó, nunca qué
+    /// tecnología abre) y mira si con ellos empieza la Era siguiente.
+    fn tras_logros(&mut self, t: Instante, fijados: &[TecId]) {
+        if fijados.is_empty() {
+            return;
+        }
+        let r = self.estado.reglas.economia.tecnologia.clone();
+        for &x in fijados {
+            let partes: Vec<_> = self.estado.tecnologia.partes_del_logro(&r, x).collect();
+            for (contador, umbral) in partes {
+                let valores = vec![("contador", Dato::Texto(contador.nombre().to_owned()))];
+                self.tr.emitir(&self.estado, EventoNucleo { valores, publico: true, ..EventoNucleo::nuevo("tecnologia.logro", t, vec![("umbral", umbral as i64)]) });
+            }
+        }
+        self.tocar_lo_publico();
+        // 6C: con el logro, sus tecnologías pueden aparecer a cualquier Facción viva, y la que ya tenía descubridora, cantarse.
+        self.mirar_aparicion_de_todas();
+        self.cantar(t);
+        self.mirar_era(t);
+    }
+
+    /// Un logro o una Era nuevos (6G): la forma pública del estado de tecnología cambia (`HEROE` de todos) y, con ella, las épicas posibles de cada Facción (`TecnologiasFaccion.epicas_posibles`
+    /// mira los logros y la Era). Pocas veces en una partida (un logro por tecnología, una vez cada Era).
+    fn tocar_lo_publico(&mut self) {
+        self.tr.tocar(Clase::Tecnologia, 0);
+        let facciones = crate::proyeccion::audiencia::facciones(&self.estado);
+        self.tr.tocar_todos(Clase::Faccion, facciones.into_iter().map(u64::from));
+    }
+
+    // ───────────────────────────── La Era ─────────────────────────────
+
+    /// TA §3 paso 2: si la Era vigente tiene todos sus logros y pasó su mínimo, o se agotó su plazo, empieza la siguiente (`era.comienza { era, porPlazo }`, público) y se arma su cita. Si
+    /// aún no pasa pero el último logro adelantó cuándo puede (al mínimo), la cita se mueve allí.
+    fn mirar_era(&mut self, t: Instante) {
+        let r = self.estado.reglas.economia.tecnologia.clone();
+        let Some(cambio) = self.estado.tecnologia.avanzar_era(&r, t) else {
+            let antes = self.estado.tecnologia.proxima_era_en(&r).map(|en| en.max(t));
+            if self.estado.era_en.is_some() && self.estado.era_en != antes {
+                self.estado.generaciones.subir(entidad_era());
+                self.estado.era_en = None;
+                self.armar_era(t);
+            }
+            return;
+        };
+        let era = &r.eras[cambio.era as usize];
+        let datos = vec![("orden", i64::from(era.orden)), ("porPlazo", cambio.por_plazo as i64)];
+        self.tr.emitir(&self.estado, EventoNucleo { valores: vec![("era", Dato::Texto(era.id.clone()))], publico: true, ..EventoNucleo::nuevo("era.comienza", t, datos) });
+        self.tocar_lo_publico();
+        // 6C: las tecnologías de la Era nueva pueden aparecer y cantarse.
+        self.mirar_aparicion_de_todas();
+        self.cantar(t);
+        // La cita de la Era que acaba ya no vale.
+        self.estado.generaciones.subir(entidad_era());
+        self.estado.era_en = None;
+        self.armar_era(t);
+    }
+
+    /// Arma la cita de la Era si no hay una y hay alguna Facción: al fin del plazo de la vigente o, si ya tiene todos sus logros, al cumplirse su mínimo (1 semana; decisión del autor,
+    /// 2026-10-25: una Era que empieza con todos sus logros cumplidos dura su mínimo, no pasa en el acto).
+    pub(super) fn armar_era(&mut self, t: Instante) {
+        if self.estado.era_en.is_some() || self.estado.politica.facciones.iter().next().is_none() {
+            return;
+        }
+        let r = &self.estado.reglas.economia.tecnologia;
+        let Some(en) = self.estado.tecnologia.proxima_era_en(r) else { return };
+        let en = en.max(t);
+        let clave = self.estado.generaciones.clave(entidad_era());
+        self.estado.cola.programar(en, PRIO_ERA, clave, Carga::Era);
+        self.estado.era_en = Some(en);
+    }
+
+    /// Vence la cita de la Era.
+    pub(super) fn cita_de_era(&mut self, t: Instante) {
+        self.estado.era_en = None;
+        self.mirar_era(t);
+        self.armar_era(t);
+    }
+
+    // ───────────────────────────── Administración ─────────────────────────────
+
+    /// `FijarTecnologias` sobre las reglas reales (decisión técnica 8 del plan): las dadas pasan a aparecidas (con su descubridora si nadie la tenía) y las adoptadas de la Facción son las de
+    /// arranque más las dadas, sin tarifa. `Ok(false)`: no cambia nada. `Err` con la que no existe.
+    pub(super) fn fijar_tecnologias(&mut self, t: Instante, faccion: u32, tecnologias: &[String]) -> Result<bool, String> {
+        let r = self.estado.reglas.economia.tecnologia.clone();
+        let mut dadas = Conjunto::VACIO;
+        for x in tecnologias {
+            dadas.poner(r.buscar(x).ok_or_else(|| x.clone())?);
+        }
+        let antes = self.estado.tecnologia.de(&r, faccion);
+        let adoptadas = r.de_arranque.union(dadas);
+        if antes.adoptadas == adoptadas && dadas.es_subconjunto_de(antes.aparecidas) {
+            return Ok(false);
+        }
+        for x in dadas.iter() {
+            self.registrar_aparicion(faccion, x, t);
+        }
+        self.estado.tecnologia.de_mut(&r, faccion).adoptadas = adoptadas;
+        self.tocar_armerias_de(faccion);
+        // El estilo de época de sus plazas solo sube: quitar tecnologías por administración no lo baja.
+        self.subir_estilo_de_faccion(faccion);
+        // Lo adoptado es una condición `tecnologia` de otros hitos (6C).
+        self.mirar_aparicion(faccion);
+        Ok(true)
+    }
+}

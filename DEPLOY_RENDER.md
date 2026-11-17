@@ -1,79 +1,49 @@
-# Despliegue en Render (free) + Turso
+# El servidor en Render (plan gratis) con la partida en Turso
 
-Runbook para levantar el backend **gratis del todo** para el playtest. Lo genérico (Dockerfile, adaptador
-`AlmacenDeObjetos`/libSQL, `/salud`, lectura de `PORT`) está en `main`; esta rama solo añade
-[`render.yaml`](render.yaml) y este documento.
+Cómo se publica `bronzeage-servidor` sin pagar. Lo que hay en el repositorio: el [`Dockerfile`](Dockerfile) (genera el mundo y compila el servidor), el Blueprint
+[`render.yaml`](render.yaml) y el espejo de la carpeta de datos (`crates/servicio/src/espejo.rs`).
 
-## Por qué esta combinación
+## Por qué así
 
-Render free tiene dos límites:
+El plan gratis de Render tiene dos límites:
 
-1. **Disco efímero** — se borra en cada deploy y en cada arranque tras dormir. Por eso la persistencia NO va
-   a disco sino a **Turso** (SQLite en red, free tier siempre encendido) vía `ALMACEN_URL`. El backend usa el
-   adaptador `enLibsql` automáticamente en cuanto esa variable existe.
-2. **Duerme a los 15 min sin tráfico** — no se pierde nada (el reloj de mundo re-ancla a "ahora" al
-   despertar, `RunnerDePartida`), pero el tiempo de juego se queda atrás mientras nadie juega. Se resuelve
-   con un pinger externo (abajo) o se acepta.
+1. **El disco no dura**: se borra en cada despliegue y cada vez que el servicio arranca tras dormirse. El servidor guarda la partida en su carpeta de datos, así que con
+   `ALMACEN_URL` copia esa carpeta (registro, fotos, crónica y cuentas) a una base **libSQL de Turso**: la baja al arrancar con la carpeta vacía y la sube cada 5 s y al parar.
+   Una parada normal (despliegue, sueño) no pierde nada; si el proceso muere de golpe se pierde, como mucho, lo escrito desde la última copia.
+2. **Se duerme a los 15 min sin tráfico**. No se pierde nada (el reloj de mundo se para con el servidor y sigue al despertar), pero el mundo no avanza mientras duerme y el primero
+   que entra espera el arranque. Si se quiere despierto, un pinger externo a `/salud` cada 10 min (por ejemplo cron-job.org).
 
-Coste real: **$0**. Render free web service + Turso free.
+Memoria: el servidor con el mundo real ocupa unos 110 MB en reposo; el plan da 512 MB.
 
-## 1. Base de datos (Turso)
+## Variables del servicio
 
-```bash
-# instalar: https://docs.turso.tech/cli/installation
-turso auth login
-turso db create bronze-age
-turso db show bronze-age --url          # -> ALMACEN_URL  (libsql://bronze-age-<org>.turso.io)
-turso db tokens create bronze-age       # -> ALMACEN_TOKEN
-```
+| Variable | Qué |
+|---|---|
+| `ALMACEN_URL` | la URL de la base: `turso db show <base> --url` (`libsql://…`) |
+| `ALMACEN_TOKEN` | `turso db tokens create <base>` |
+| `CODIGO_REGISTRO` | el código que se pasa a los jugadores; sin él, cualquiera se registra |
+| `CODIGO_REGISTRO_BOTS` | el de las cuentas de bot; sin él, no hay bots |
+| `CODIGO_REGISTRO_SERVIDORES` | el de la cuenta del lanzador de batallas; solo con `BRONZEAGE_BATALLAS_EN_UNITY=1` (Render no da UDP: los servidores de batalla irían en otra máquina) |
+| `BRONZEAGE_LLAVE_ADMIN` | una llave de 24 caracteres o más. Detrás del proxy de Render la IP que ve el servidor es la del proxy, así que la lista de IPs no vale: se administra con la cuenta admin **y** esta llave, en la cabecera `X-Llave-Admin` o en la consulta (`?llave=…`, para el WebSocket de un navegador) |
+| `BRONZEAGE_ORIGENES` | nombres de máquina de las páginas web que pueden llamar al servidor desde otro dominio; una página abierta en `localhost` ya puede |
+| `BRONZEAGE_SEMILLA` | la semilla de la partida (solo cuenta al crearla) |
 
-## 2. Servicio en Render
+`PORT` lo pone Render; el servidor escucha entonces en `0.0.0.0:PORT`. La semilla del **mundo** es el argumento `SEMILLA_MUNDO` del `Dockerfile` (42).
 
-1. Repo conectado a Render → **New > Blueprint** → detecta `render.yaml`.
-2. Rellena los secretos que `render.yaml` deja como `sync: false`:
-   - `ALMACEN_URL`, `ALMACEN_TOKEN` — del paso 1.
-   - `ADMINISTRADORES` — p.ej. `dev:jefa`.
-   - `CODIGO_REGISTRO` — el código que les pasas a los 5 jugadores.
-   - `ORIGENES_PERMITIDOS` — solo si el cliente de jugador se sirve desde otro dominio (Cloudflare Pages,
-     Netlify). Formato: `https://tu-cliente.pages.dev`.
-3. Deploy. Render construye el `Dockerfile` y arranca. `PORT` lo inyecta Render solo.
+## La primera cuenta admin
 
-Comprobación: `curl https://<servicio>.onrender.com/salud` → `{"ok":true}`. En los logs debe decir
-`persistencia: libSQL (...)`, no `disco local`.
+Con la partida nueva no hay administradores: el servidor imprime en el registro de Render un **código de administrador de un solo uso**. Quien se registra con él es admin.
 
-## 3. El sleep de 15 minutos
+## Partida nueva
 
-**Opción A — pinger (recomendada).** Un cron externo que llama a `/salud` cada 10 min mantiene el servicio
-despierto y el reloj de mundo al día:
-
-- [cron-job.org](https://cron-job.org) (gratis, intervalos exactos): nueva tarea → URL
-  `https://<servicio>.onrender.com/salud`, cada 10 min.
-- O el workflow de GitHub Actions incluido en esta rama
-  ([`.github/workflows/keep-warm.yml`](.github/workflows/keep-warm.yml)): pon la URL en
-  *Settings → Secrets and variables → Actions → Variables* como `RENDER_URL`. Aviso: los cron de Actions se
-  retrasan bajo carga y se desactivan tras 60 días sin commits — cron-job.org es más fiable.
-
-**Opción B — aceptarlo.** Si el playtest es por sesiones acordadas, deja que duerma: al entrar el primer
-jugador arranca (~1 min de cold start) y el mundo sigue desde donde estaba.
-
-## 4. Mantenimiento y respaldos
-
-**No** configures `MANTENIMIENTO_INTERVALO_MS` en Render: `respaldos.ts` es de disco y en Render no hay disco.
-El respaldo lo da Turso (`turso db shell bronze-age .dump`, o los point-in-time del plan de pago).
-
-## 5. Cliente de jugador
-
-Es estático. Cloudflare Pages / Netlify, gratis:
+Cuando un cambio del motor pide partida nueva, hay que vaciar la copia antes de desplegar (si no, el servidor la baja y sigue la vieja):
 
 ```bash
-# en el repo BronzeAgeClient
-VITE_API_BASE=https://<servicio>.onrender.com npm run build
-npx wrangler pages deploy dist        # o: netlify deploy --prod --dir dist
+turso db shell <base> "DELETE FROM espejo"
 ```
 
-Y en Render: `ORIGENES_PERMITIDOS = https://<tu-pages>.pages.dev`.
+Si la carpeta de datos de una máquina y la copia tienen partidas distintas, el servidor no arranca: no pisa una con otra.
 
-## Desmontar
+## Comprobar
 
-- Render: dashboard → el servicio → Settings → Delete.
-- Turso: `turso db destroy bronze-age`.
+`curl https://<servicio>.onrender.com/salud` contesta `ok`. En el registro del arranque: `copia remota: …` y `escuchando en 0.0.0.0:<puerto>`; al parar, `copia remota al día`.

@@ -1,8 +1,7 @@
-# Render Blueprint. Sube este archivo y Render crea el servicio solo (o "New > Blueprint" en el dashboard).
-# Todo lo genérico (Dockerfile, puerto, /salud, adaptador libSQL) vive en `main`; aquí solo la config de Render.
+# Blueprint de Render para el servidor del motor (`bronzeage-servidor`). Los pasos, en DEPLOY_RENDER.md.
 #
-# Plan free: el servicio DUERME tras 15 min sin tráfico y el disco es EFÍMERO — por eso la persistencia va a
-# libSQL (`ALMACEN_URL`), no a disco. Ver DEPLOY_RENDER.md.
+# Plan gratis: el servicio se duerme a los 15 min sin tráfico y su disco se borra en cada arranque. Por eso la partida se copia a una base libSQL (Turso) con `ALMACEN_URL`: el
+# servidor la baja al arrancar y la sube cada pocos segundos y al parar. Con el servidor parado el reloj de mundo no corre.
 services:
   - type: web
     name: bronze-age-collapse
@@ -10,22 +9,24 @@ services:
     dockerfilePath: ./Dockerfile
     plan: free
     healthCheckPath: /salud
-    autoDeploy: true
+    # Al parar, el servidor cierra con su foto y hace la última copia a la base: se le da tiempo.
+    maxShutdownDelaySeconds: 120
+    # Cada despliegue recompila el servidor y regenera el mundo (unos 15 min de los minutos de compilación del plan): se despliega a mano, no en cada push.
+    autoDeploy: false
     envVars:
-      # --- Secretos: se ponen en el dashboard de Render (sync:false = no en este archivo) ---
-      - key: ALMACEN_URL        # libsql://<db>.turso.io  (crea la BD con `turso db create`)
+      # --- Secretos: se ponen en el panel de Render (sync: false = no van en este fichero) ---
+      - key: ALMACEN_URL                 # libsql://<base>.turso.io
         sync: false
-      - key: ALMACEN_TOKEN      # turso db tokens create <db>
+      - key: ALMACEN_TOKEN               # turso db tokens create <base>
         sync: false
-      - key: ADMINISTRADORES    # p.ej. dev:jefa
+      - key: CODIGO_REGISTRO             # código de invitación de los jugadores; sin él, registro abierto
         sync: false
-      - key: CODIGO_REGISTRO    # código de invitación del playtest
+      - key: CODIGO_REGISTRO_BOTS        # código de las cuentas de bot; sin él, no hay bots
         sync: false
-      - key: ORIGENES_PERMITIDOS  # https://<tu-cliente>.pages.dev  (si el front va en otro dominio)
+      - key: BRONZEAGE_LLAVE_ADMIN       # 24 caracteres o más: con ella (y la cuenta admin) se administra desde fuera
+        sync: false
+      - key: BRONZEAGE_ORIGENES          # nombres de máquina de las páginas que pueden llamar (un cliente web en otro dominio); vacío si no hay
         sync: false
       # --- No secreto ---
-      - key: INTERVALO_TICK_MS
-        value: "60000"          # 1 tick = 1 min real. Con el sleep de Render el mundo se queda atrás
-                                # mientras nadie juega — ver el pinger en DEPLOY_RENDER.md.
-      - key: NODE_ENV
-        value: production
+      - key: BRONZEAGE_SEMILLA           # la semilla de la partida; solo cuenta al crearla
+        value: "42"

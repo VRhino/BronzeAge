@@ -1,5 +1,7 @@
 # Ritmo de crecimiento de los asentamientos
 
+> **Estado (2026-10-13): historia.** El mecanismo y las cifras vigentes viven en `Docs/Game/4` §4.5 y `Docs/Mechanics/Economia_Construccion.md`. Aprobado: el ritmo de los niveles 2 y 3 y los objetivos por Era. Pospuesto con las Eras IV y V: gates, costes y obras de los niveles 4 y 5, los bienes de lujo y atar el 3 → 4 a `instituciones_civicas`. Las mediciones de abajo son del motor TypeScript (`typescript-final`) y se rehacen con el motor nuevo.
+
 **Abierto el 2026-09-25.** Sale de la revisión de BA-006: **D49** fija qué nivel de asentamiento le toca a cada
 Era, y **D34/D44/D48** fijan cuánto dura cada Era. Para saber si D49 es cierto hace falta saber **cuánto tarda
 de verdad un asentamiento en subir de nivel**, y eso hoy no está medido. Aquí está el mecanismo tal como vive
@@ -16,7 +18,7 @@ edificios. El nivel es monótono (nunca baja).
 |---|---|---|---|
 | 2 | 200 | 0 | 3 de 7 tipos de extracción (cantera, leñera, granja, mina, mina de cobre, mina de estaño, corral) |
 | 3 | 500 | 200 | **los 5**: armería, curtiduría, fundición, barracón, galería de tiro |
-| 4 | 1000 | 400 | un **recinto terminado** (la empalizada basta) |
+| 4 | 1000 | 400 | un **recinto terminado de piedra o superior** (la empalizada no basta: decidido el 2026-10-09, `Murallas.md` §9.3; esta tabla era la propuesta antigua) |
 | 5 | 2000 | 800 | **Palacio** |
 
 Las cifras de los niveles 4 y 5 están marcadas como PLACEHOLDER en el propio código, sin calibrar.
@@ -276,7 +278,7 @@ Y como el tope de Viviendas se calcula desde el gate siguiente, tocar los umbral
 | Umbrales de población por nivel | `NIVEL_ASENTAMIENTO.requisitos[n].pesants/.artesanos` | 200/0 · 500/200 · 1000/400 · 2000/800 |
 | Edificios exigidos por nivel | `.edificios` y `.edificiosMinimo` | 3 de 7 extractores · los 5 de transformación y militares · recinto · Palacio |
 | Gate de construcción de cada edificio exigido | `requisitoNivelAsentamientoConstruccion` | encadena niveles: el Palacio pide nivel 4 y es el gate del 5 |
-| Nivel mínimo para levantar recinto | `MURALLA.nivelMinimoConstruccion` | 3 |
+| Nivel mínimo para levantar recinto | `MURALLA.nivelMinimoConstruccion` | 3 (obsoleto: el gate es `nivelAsentamientoPorNivelDeRecinto`, 2 / 3 / 4, `Murallas.md`) |
 
 ### 7.4 La obra: cuánto se tarda en construir
 
@@ -606,3 +608,201 @@ arreglo del bosque y el NPC nuevo. Tardó 3 minutos.
   nivel 2), así que no hay cupo ni otras tropas. Es lo esperable en la semana 1.
 - **8 plazas sin ninguna defensa** al final: son las conquistadas, que se quedan sin residentes (pendiente de §4.9 del
   documento del NPC). Con menos conquistas pesa menos, pero sigue ahí.
+
+### 11.3 Era I completa (2026-09-26)
+
+Cinco semanas (`BATCH_SEED=7 BATCH_FACCIONES=12 BATCH_TICKS=50400`, checkpoint cada semana) con todo lo anterior
+más las cuadrillas (§11.1) y el arreglo de la capacidad del Almacén (la conquista la inflaba sin límite).
+
+| Semana | Vivos | Colapsos acum. | Nivel 1 / 2 / 3 | Conquistas acum. | Guarnición (escuadras) | Plazas sin defensa |
+|---|---|---|---|---|---|---|
+| 1 | 25 | 0 | 18 / 7 / 0 | 40 | 0 | 11 |
+| 2 | 29 | 2 | 20 / 9 / 0 | 276 | 61 | 11 |
+| 3 | 33 | 6 | 22 / 11 / 0 | 394 | 86 | 12 |
+| 4 | 33 | 9 | 22 / 11 / 0 | 587 | 96 | 12 |
+| 5 | 34 | 10 | 22 / 12 / 0 | 732 | 111 | 12 |
+
+- **Nivel 2**: el 52 % de los nacidos llega; mediana al pedirlo 2,8 días y al llegar **5,8 días** (mínimo 5,5). Por
+  debajo de la semana que pidió el usuario.
+- **Nivel 3: nadie lo pide.** De las 13 plazas de nivel 2 al final: las 3 que tienen los cinco edificios del gate no
+  tienen bronce (ni estaño); las 2 que tienen bronce (2 800, almacén lleno, con mina de estaño propia) no tienen
+  Curtiduría. Hacen falta cobre, estaño y ganado en la misma plaza, y el NPC no compra estaño ni bronce en el mercado.
+  Además, 8 son insolventes en oro al nivel 3 y 2 en piedra. D49 pide "pocos en 3" en la Era I: hoy son cero.
+- **Almacén**: madera y piedra medias estables en ~1 900 (antes subían sin límite hasta ~17 900).
+- **Guerra**: 732 conquistas y 2 826 campañas en 5 semanas, con 34 plazas vivas; 6 de 12 Facciones en nivel 10 desde
+  la semana 2. La guarnición se usa (111 escuadras), pero 12 plazas siguen sin defensa: las conquistadas sin
+  residentes. Ninguna muralla.
+- Tropas al final: milicia 189, honderos 110, lanceros de mimbre 110, espadachines de cobre 5.
+
+### 11.4 Era I con trueque para crecer y bloque de guerra (2026-09-27)
+
+Misma corrida que §11.3 más el trueque para crecer del NPC (decisión del usuario: el bronce llega comerciando) y el
+bloque GUERRA del batch (`scripts/batch/medidorGuerra.ts`).
+
+- **Nivel 3: 4 plazas (9 % de las nacidas)**, pedido a las 2,4 semanas y alcanzado a las 3,4 de mediana. Cuadra con
+  D49 ("pocos en 3" en la Era I). 21 trueques de bronce cumplidos. Tres plazas ya piden el nivel 4 a las 4,4 semanas y
+  levantan su empalizada, porque el 3→4 aún no está atado a `instituciones_civicas` (D54, pendiente).
+- Los trueques de ganado y cobre se proponen mucho y casi todos caducan (639 y 390 caducados contra 6 y 10 cumplidos).
+- **Guerra** (5 semanas): 615 conquistas, el 98 % de plazas sin un solo defensor. Solo 13 plazas cambian de dueño, y
+  10 de ellas más de 20 veces (una, 204): dos Facciones se pasan las mismas plazas vacías cada ~2 h, y el 96 % de las
+  conquistas las recupera un dueño anterior. En los 2 256 asedios contra una plaza defendida, el atacante gana el
+  0,4 %: poder mediano del atacante 0,2 veces el del defensor. Mueren ~80 000 soldados (milicia 42 700, lanceros de
+  mimbre 22 800, honderos 14 000).
+- **Experiencia de Facción**: combate ~182 000, conquista ~12 300, construcción ~7 800. Los campamentos de bandidos
+  (5 024 destruidos, uno cada 10 ticks) llevan a una Facción a nivel 8 en 10 horas y a nivel 10 en 1,2 días; cada
+  asedio suicida contra una plaza defendida también da experiencia a los dos bandos. 6 Facciones llegan a nivel 10;
+  5 no pasan del nivel 2 y no conquistan nada.
+
+### 11.5 Era I con la experiencia nueva y el NPC que ocupa lo que conquista (2026-09-27)
+
+Umbrales de nivel de Facción ×2, guerra a la mitad, solo combate digno (`ratioCombateDigno` 0,5), el NPC solo ataca
+lo que puede ganar y se queda en lo que conquista.
+
+- **La guerra cambió de naturaleza**: 11 conquistas en 5 semanas (antes 615), el 73 % en combate; el atacante gana
+  el 89 % de sus asedios (poder mediano 1,75 veces el del defensor). Ninguna plaza cae más de 3 veces, ninguna la
+  recupera un dueño anterior, cada dueño aguanta 5,8 días de mediana, y no queda ninguna plaza sin defensa. Toda la
+  guerra ocurre en las semanas 1-2; en las 3-5, ni una campaña.
+- **Pero la expansión se paró**: 13 plazas nacidas (antes 47) y 1 caravana de fundación. La experiencia de Facción
+  ya casi solo sale de construir (~30 en la primera semana, mediana 92 al final): los campamentos de bandidos se
+  siguen destruyendo (5 025), pero ninguno es un combate digno. 9 de 12 Facciones siguen en nivel 1 al final de la
+  Era, y el cap de fundación del nivel 1 es un asentamiento (`CAP_FUNDACION_POR_NIVEL`).
+- Solo 8 plazas vivas al final (5 colapsos) y 1 en nivel 3.
+
+### 11.6 Era I con experiencia por crecer en paz (2026-09-27)
+
+Ascenso 30 × nivel, fundación 20, trueque cumplido 2 por lado, bandidos 1 por campamento dividido por el nivel de la
+Facción (decisión del usuario).
+
+- **Vuelve la expansión**: 47 plazas nacidas y 53 caravanas de fundación (antes 13 y 1); 33 vivas al final. Nivel 2
+  a 6,2 días de mediana, nivel 3 en 5 plazas (11 %) a las 3,6 semanas.
+- **Niveles de Facción repartidos**: nivel 2 entre los días 0,7 y 6,9; al final hay Facciones en 2, 4, 5, 6, 7, 9 y
+  10 (una sola, al día 34). Experiencia de las 5 semanas: construcción 5 400, crecer 3 300, conquista 4 900,
+  combate y bandidos 700.
+- **Pero vuelve el ping-pong**: 485 conquistas, el 88 % de plazas vacías; las Facciones 7 y 12 se pasan las mismas
+  plazas (205 y 197 veces). Causa: con la expansión, las plazas quedan con 1-2 residentes y el héroe de una casa
+  con uno solo no puede mudarse a lo que conquista sin vaciarla. Arreglado en el NPC: no sale de campaña quien no
+  podría quedarse (documento del NPC §4.9). Hay ~75 héroes huérfanos, casi todos de Facciones que ya no tienen
+  plazas.
+
+### 11.7 Era I con "no conquista lo que no puede ocupar" (2026-09-27)
+
+- **Guerra**: 30 conquistas en 5 semanas (antes 485), el 47 % en plazas vacías; el atacante gana el 80 % de sus
+  asedios con combate (poder mediano 1,07 veces el del defensor, combates parejos). Ninguna plaza cae más de 5 veces
+  y solo el 13 % la recupera un dueño anterior. 0 plazas sin defensa al final, 93 escuadras en guarnición.
+- **Expansión**: 41 plazas nacidas, 35 caravanas de fundación, 31 vivas (10 colapsos).
+- **Ritmo**: nivel 2 a 6,0 días de mediana (46 % de las nacidas), nivel 3 en 5 plazas (12 %) a las 3,6 semanas, y 4
+  plazas piden el nivel 4 a las 4,6 semanas (pendiente de atarlo a `instituciones_civicas`, D54).
+- **Facciones**: la más rápida llega a nivel 8 el día 21,5 y ninguna a 10; las que expanden llegan a nivel 2 entre
+  los días 0,7 y 6,9. Experiencia en 5 semanas: construcción 2 100, crecer 5 200, conquista 300, combate y
+  bandidos 490.
+
+### 11.8 Era I con protección de un día y reparto de héroes (2026-09-27)
+
+Reglas nuevas desde §11.7: protección del nuevo dueño de un día (Doc 5.12.9), reparto de héroes NPC entre plazas,
+no atacar la última plaza de una Facción, artesanos ×1,5 y la nobleza sin inmunidad.
+
+- **Guerra**: 65 conquistas (22 + 35 en las semanas 1-2, luego 3, 2 y 3), el 55 % en plazas vacías. Ningún
+  conquistador pierde su plaza antes de un día (mediana 1,3 días); los fundadores, el 86 % en menos de un día: la
+  fundación nace con 5 héroes bot nuevos y sin tropa, y una campaña vecina la toma a los ~50 ticks.
+- **Expansión**: 49 plazas nacidas, 32 vivas (17 colapsos). Tres Facciones (8, 10, 12) pierden su última plaza por
+  colapso, sin ganador: sus 35 héroes se quedan en una plaza que ya no existe.
+- **Ritmo**: nivel 2 a 5,9 días de mediana (57 %), nivel 3 en 5 plazas (10 %) a las 3,55 semanas. Bloqueo principal al
+  final: insolvencia en piedra (18 de 32).
+- **Facciones**: la más rápida llega a nivel 7; ninguna a 8. 79 escuadras en guarnición y 0 plazas sin defensa.
+- **Reparto**: iguala las Facciones con sitio (1: 2/2/2/2/2/1/1/1/1), pero no las que tienen más héroes que casas
+  (4: 24 y 10 residentes con 12 casas; 6: 20 y 5). La acogida y la anexión no respetan el tope de casas.
+- **Trueques para crecer**: 867 peticiones de ganado caducadas contra 3 cumplidas.
+
+### 11.9 Era I con todas las reglas de la tanda y el código de las Eras (2026-09-30)
+
+Reglas nuevas desde §11.8: nivel de escuadra 1-10 (+1 %/nivel) y ventaja del defensor ×1,05, mantenimiento por edificios
+activos y nivel efectivo (Vivienda cuenta la mitad), Cantera 10 de piedra, campañas con varios héroes, bandidos con plazo de
+reaparición de 60 min por plaza y cazados con columna, trueques de 1 día con todas las caravanas del cupo, capitales
+separadas 400 y talleres que respetan la reserva de construcción. Semilla 7, 12 Facciones, una corrida por semana
+encadenando checkpoints, con la tecnología por Eras (BA-006) ya en el motor.
+
+| semana | plazas vivas | campañas | conquistas | atacante gana | poder atacante / defensor | resistidos | ruinas |
+|---|---|---|---|---|---|---|---|
+| 1 | 34 | 0 | 0 | — | — | 0 | 0 |
+| 2 | 39 | 55 | 33 | 80 % | 1,08 | 8 | 0 |
+| 3 | 43 | 27 | 17 | 68 % | 0,95 | 8 | 0 |
+| 4 | 48 | 37 | 8 | 24 % | 0,15 | 25 | 0 |
+| 5 | 49 | 4 | 3 | 75 % | 1,18 | 1 | 0 |
+
+- **Ruinas**: ninguna en toda la Era I (en §11.8 eran 6-7 por semana en las semanas 3-4, todas por madera). La reserva de los
+  talleres lo arregla.
+- **Guerra**: se apaga sola. Semana 2 explosiva (26 de 39 plazas cambian de dueño), semana 3 la mitad, semana 4 el atacante
+  pierde el 76 % de los asedios (poder mediano 0,15: defensa con protección, ventaja ×1,05 y guarniciones) y en la 5 casi
+  no hay campañas. Los dueños aguantan una mediana de 1-2 días hasta la semana 3 y 5,4 días en la 4.
+- **Expansión**: 49 plazas nacidas, todas vivas, 0 colapsos. 10 de 12 Facciones con más de una plaza.
+- **Ritmo**: nivel 2 en 35 de 49 plazas; **nivel 3 en ninguna**. Las plazas fundadas tarde llegan a nivel 2 cada vez más
+  despacio (medianas de 0,84 a 3,75 semanas desde la fundación). Bloqueo al final: recursos insuficientes (36 de 49),
+  insolvencia (24: oro 17, piedra 14) y falta de cupo de Facción (14). Ingreso mediano contra coste por minuto: piedra
+  10,0 frente a 13,4 (una sola Cantera), oro 8,4 frente a 9,8.
+- **Facciones**: la más rápida llega a nivel 8 el día 28 (la 1); las demás, a 6-7.
+- **Trueques para crecer**: 53 cumplidos (34 de cobre, 19 de ganado) y 3 caducados.
+- **Tecnología**: la Era II ("Crisis y adaptación") arranca el día 18,4, a las 2,6 semanas, cuando la Era I debe durar 5:
+  `aleacion_bronce` (20 caravanas con estaño) lleva 102 al cerrar la semana 5. Otros logros se cumplen muy pronto
+  (`escudos_ligeros` el día 0,1 con 26.945 campamentos destruidos; `metalurgia_cobre` el día 4,0). Las Facciones 4 y 7 son
+  las que menos tecnologías adoptan. Calibrar las X es trabajo de BA-006.
+
+### 11.10 Era I con Cantería y el Palacio desde el nivel 2 (2026-10-01)
+
+Reglas nuevas desde §11.9: tecnología `canteria` (Era I, Canteras ×1,5; logro de 1.000.000 de piedra extraída) y el NPC
+levanta el Palacio en cuanto la plaza está en nivel 2 (antes esperaba al 3). Misma semilla, una corrida por semana.
+
+| semana | conquistas | insolventes | en piedra | en oro | Palacios |
+|---|---|---|---|---|---|
+| 2 | 29 | — | 3 | 1 | 12 |
+| 3 | 18 | 14 (antes 20) | 7 (antes 10) | 7 (antes 14) | 20 |
+| 4 | 18 | 6 (antes 18) | 4 (antes 9) | 3 (antes 15) | 27 |
+| 5 | 1 | 7 (antes 24) | 3 (antes 14) | 2 (antes 17) | 32 |
+
+- **Cantería**: el logro se cumple el día 4,6 y las 12 Facciones la adoptan al empezar la semana 2.
+- **Insolvencia**: casi desaparece. Piedra y oro dejan de frenar el nivel 3.
+- **Nivel 3: ninguna plaza**, y ninguna lo pide. Ahora lo frena el **lingote de bronce** del coste (100): las 31 plazas
+  de nivel 2 tienen 0 al final de la semana 4. `aleacion_bronce` solo la adoptan 2 Facciones y nadie produce bronce:
+  la receta pide estaño y hay 5 Minas de estaño en el mapa. Es el techo derivado de D54 (Doc 6.2: "pocos en el 3"
+  en la Era I), que aquí se queda en cero.
+- **Expansión**: 48 plazas vivas al final, 33 en nivel 2, ninguna en ruinas.
+- **Guerra**: 29, 18, 18 y 1 conquistas en las semanas 2-5; se apaga igual que en §11.9.
+- **Era II**: empieza el día 24,4 (en §11.9, el 18,4).
+- **Duración**: la Era I entera en 45 minutos (semana 1 con el código anterior, 13 min; semanas 2-5 entre 6 y 9 min),
+  frente a ~17 horas antes de las optimizaciones del batch (commit `d9bed5c`).
+
+### 11.11 Era I con estaño de más (2026-10-01)
+
+Regla nueva desde §11.10: 40 yacimientos de estaño de frecuencia intermedia, además de los 24 raros (`ESTANO_EXTRA`, mapa
+v17). Misma semilla y mismas reglas; una corrida por semana.
+
+- **Minas de estaño**: 8, 9, 10, 10 y 13 al cerrar cada semana (en §11.10, 5 en toda la Era).
+- **El freno pasa al logro de `aleacion_bronce`** (20 caravanas llegadas con estaño): con estaño en casa casi nadie lo
+  compra por trueque, y al cerrar la semana 2 iba por 1. Se cumple el día 22,9 (en §11.9, el 18,4) y lo adoptan las
+  Facciones 1 y 3. Como era el último logro de la Era I, la Era II empieza ese mismo día.
+- **Primer nivel 3**: la capital `asentamiento-0` pide la subida el día 23,4 con sus 100 lingotes de bronce y llega el
+  día 30,4, tras la semana de obra. Es la única: al final no queda bronce en ningún almacén, aunque hay 5.300 lingotes
+  de estaño y 23.219 de estaño en bruto.
+- **Bloqueos al final**: recursos insuficientes (31 de 48, el bronce), sin cupo de Facción (17), insolvencia (11: piedra 7,
+  oro 3, madera 1).
+- **Expansión**: 48 plazas vivas, 30 en nivel 2 y 1 en nivel 3, sin ruinas; 30 Palacios.
+- **Guerra**: 28, 17, 9 y 5 conquistas en las semanas 2-5.
+- **Duración**: 25 minutos la Era entera (51 s la semana 1, 8 min 29 s la 5).
+
+### 11.12 Era I con el logro de estaño extraído (2026-10-01)
+
+Regla nueva desde §11.11: `aleacion_bronce` pasa de "20 caravanas con estaño" a **500.000 de estaño extraído en el mundo**
+(`extraido.estano`). Medida de la curva: 45.534, 245.433, 462.670, 688.299 y 946.508 de estaño acumulado al cierre de las
+semanas 1-5; extraer no depende de cuándo se adopte el bronce (462.670 en la semana 3 con X de 100.000 y de 500.000).
+
+- **El logro cae el día 22,1** y la Era II empieza ese día (en §11.11, el 22,9; en §11.9, el 18,4). Lo adoptan las
+  Facciones 1 y 6 el mismo día.
+- **Nivel 3**: 6 plazas al cierre (en §11.11, 1). 7 lo piden entre los días 20 y 28 y 6 llegan entre el 29 y el 31 (tras la
+  semana de obra), a 4,0-4,5 semanas desde su fundación. Quedan 26 plazas en nivel 2 y 16 en nivel 1.
+- **Bronce**: los trueques de lingotes de bronce pasan a existir: 39 cumplidos y 18 caducados. Es lo que mueve el bronce
+  entre plazas que lo fabrican y plazas que lo necesitan para el nivel 3.
+- **Bloqueos al final**: recursos insuficientes (32 de 48), sin cupo de Facción (21), insolvencia (10: piedra 5, oro 4,
+  madera 1).
+- **Facciones**: la 1 y la 12 llegan a nivel 8 los días 31,8 y 31,9; el resto, a 6-7.
+- **Expansión**: 48 plazas vivas, 11 Facciones con más de una plaza, sin ruinas; 29 Palacios; 13 Minas de estaño.
+- **Guerra**: 9 conquistas en la semana 4 y 5 en la 5.
+- **Duración**: 36 minutos la Era entera.
