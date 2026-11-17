@@ -1,0 +1,28 @@
+[package]
+name = "bronce-age-bots-brain"
+version = "0.1.0"
+edition = "2021"
+default-run = "bronce-age-bots-brain"
+
+[dependencies]
+# Contrato 05 del repo del servidor (ruta local mientras no haya remoto).
+contrato = { path = "../crates/contrato" }
+futures-util = "0.3.34"
+prost = "0.13"
+prost-types = "0.13"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1.53.2", features = ["rt-multi-thread", "macros", "net", "time", "io-util", "sync", "signal", "process"] }
+tokio-tungstenite = { version = "0.30.0", features = ["rustls-tls-webpki-roots"] }
+# TLS para entrar a un servidor publicado (https/wss). Proveedor `ring`: compila en Windows sin herramientas de más.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+webpki-roots = "1"
+zstd = "0.14.2"
+
+[dev-dependencies]
+tempfile = "3"
+
+
+# Fuera del workspace del motor: se compila aparte (ver DEPLOY_RENDER.md).
+[workspace]
