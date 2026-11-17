@@ -86,6 +86,8 @@ pub struct Config {
     pub origenes: Vec<String>,
     /// Las IPs desde las que se puede administrar además de esta máquina (`BRONZEAGE_IPS_ADMIN`); el proceso las pasa al servidor y a las rutas de administración.
     pub ips_admin: Vec<std::net::IpAddr>,
+    /// La llave de administración (`BRONZEAGE_LLAVE_ADMIN`): quien la trae administra desde cualquier IP; el proceso la pasa al servidor. `None`: solo por IP.
+    pub llave_admin: Option<String>,
     pub duracion_sesion_ms: i64,
     pub coste: Coste,
     /// Cuántos cálculos de Argon2 (altas y logins) pueden correr a la vez; cada uno usa `coste.memoria_kib`. Por defecto, los núcleos disponibles (mínimo 1).
@@ -102,6 +104,7 @@ impl Default for Config {
             codigo_registro_servidores: None,
             origenes: Vec::new(),
             ips_admin: Vec::new(),
+            llave_admin: None,
             duracion_sesion_ms: duracion_sesion_ms(),
             coste: Coste::PRODUCCION,
             argon_a_la_vez: std::thread::available_parallelism().map_or(1, usize::from),

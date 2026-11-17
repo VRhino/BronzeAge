@@ -159,6 +159,8 @@ struct Receptor {
     red: Arc<crate::MetricasRed>,
     /// La IP del otro extremo.
     ip: Option<IpAddr>,
+    /// La conexión trajo la llave de administración.
+    con_llave: bool,
 }
 
 impl Receptor {
@@ -250,8 +252,8 @@ async fn sesion<A: Autenticador>(ctx: Arc<Ctx<A>>, tcp: TcpStream) {
     let cfg = WebSocketConfig::default()
         .max_message_size(Some(ctx.config.max_trama_cliente))
         .max_frame_size(Some(ctx.config.max_trama_cliente));
-    let (flujo, ip) = match timeout(ctx.config.timeout_hola, http::leer_inicio(tcp, &ctx.config.origenes)).await {
-        Ok(Inicio::WebSocket(f, ip)) => (f, ip),
+    let (flujo, ip, con_llave) = match timeout(ctx.config.timeout_hola, http::leer_inicio(tcp, &ctx.config.origenes, ctx.config.llave_admin.as_deref())).await {
+        Ok(Inicio::WebSocket(f, ip, con_llave)) => (f, ip, con_llave),
         Ok(Inicio::Http(tcp, p)) => return http::contestar(tcp, p, ctx.http.as_ref(), ctx.config.timeout_escritura).await,
         Ok(Inicio::Rechazada(tcp)) => return http::rechazar(tcp).await,
         Ok(Inicio::Nada) | Err(_) => return,
@@ -270,7 +272,7 @@ async fn sesion<A: Autenticador>(ctx: Arc<Ctx<A>>, tcp: TcpStream) {
         nivel: ctx.config.nivel_zstd,
         nombres: ctx.config.nombres.clone(),
     };
-    let mut rx = Receptor { stream, max: ctx.config.max_trama_cliente, red: ctx.config.red.clone(), ip };
+    let mut rx = Receptor { stream, max: ctx.config.max_trama_cliente, red: ctx.config.red.clone(), ip, con_llave };
     let id = ctx.siguiente_id.fetch_add(1, Ordering::Relaxed);
     let (fin_tx, fin_rx) = watch::channel(false);
     let expulsar = Arc::new(Notify::new());
@@ -347,8 +349,8 @@ async fn handshake<A: Autenticador>(
         return None;
     }
 
-    if rol == TipoCliente::ClienteAdminWeb && !rx.ip.is_some_and(|ip| http::ip_de_administracion(ip, &ctx.config.ips_admin)) {
-        em.error(error(codigos::ROL_NO_PERMITIDO, "la administración solo se atiende desde la máquina del servidor o una IP de administración", true)).await;
+    if rol == TipoCliente::ClienteAdminWeb && !rx.con_llave && !rx.ip.is_some_and(|ip| http::ip_de_administracion(ip, &ctx.config.ips_admin)) {
+        em.error(error(codigos::ROL_NO_PERMITIDO, "la administración solo se atiende desde la máquina del servidor, una IP de administración o con la llave de administración", true)).await;
         return None;
     }
 

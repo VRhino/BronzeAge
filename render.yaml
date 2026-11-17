@@ -1,0 +1,32 @@
+# Blueprint de Render para el servidor del motor (`bronzeage-servidor`). Los pasos, en DEPLOY_RENDER.md.
+#
+# Plan gratis: el servicio se duerme a los 15 min sin tráfico y su disco se borra en cada arranque. Por eso la partida se copia a una base libSQL (Turso) con `ALMACEN_URL`: el
+# servidor la baja al arrancar y la sube cada pocos segundos y al parar. Con el servidor parado el reloj de mundo no corre.
+services:
+  - type: web
+    name: bronze-age-collapse
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /salud
+    # Al parar, el servidor cierra con su foto y hace la última copia a la base: se le da tiempo.
+    maxShutdownDelaySeconds: 120
+    # Cada despliegue recompila el servidor y regenera el mundo (unos 15 min de los minutos de compilación del plan): se despliega a mano, no en cada push.
+    autoDeploy: false
+    envVars:
+      # --- Secretos: se ponen en el panel de Render (sync: false = no van en este fichero) ---
+      - key: ALMACEN_URL                 # libsql://<base>.turso.io
+        sync: false
+      - key: ALMACEN_TOKEN               # turso db tokens create <base>
+        sync: false
+      - key: CODIGO_REGISTRO             # código de invitación de los jugadores; sin él, registro abierto
+        sync: false
+      - key: CODIGO_REGISTRO_BOTS        # código de las cuentas de bot; sin él, no hay bots
+        sync: false
+      - key: BRONZEAGE_LLAVE_ADMIN       # 24 caracteres o más: con ella (y la cuenta admin) se administra desde fuera
+        sync: false
+      - key: BRONZEAGE_ORIGENES          # nombres de máquina de las páginas que pueden llamar (un cliente web en otro dominio); vacío si no hay
+        sync: false
+      # --- No secreto ---
+      - key: BRONZEAGE_SEMILLA           # la semilla de la partida; solo cuenta al crearla
+        value: "42"

@@ -98,8 +98,8 @@ impl Admin {
     }
 
     pub async fn atender(&self, p: PeticionHttp) -> RespuestaHttp {
-        if !p.ip.is_some_and(|ip| ip_de_administracion(ip, &self.ips_admin)) {
-            return error(403, "ip_no_permitida", "la administración solo se atiende desde la máquina del servidor o una IP de BRONZEAGE_IPS_ADMIN");
+        if !p.con_llave && !p.ip.is_some_and(|ip| ip_de_administracion(ip, &self.ips_admin)) {
+            return error(403, "ip_no_permitida", "la administración solo se atiende desde la máquina del servidor, una IP de BRONZEAGE_IPS_ADMIN o con la llave de administración");
         }
         let Some(token) = token_de(&p) else { return error(401, "token_invalido", "falta Authorization: sesion <token>") };
         let ahora = ahora_ms();

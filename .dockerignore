@@ -1,0 +1,16 @@
+# Fuera de la imagen todo lo que no hace falta para generar el mundo ni para compilar el servidor.
+.git
+.claude
+target
+**/node_modules
+generador/salida
+batch/salida
+datos
+partidas
+demo
+contratos
+Consideraciones
+Docs/Game
+Docs/Arquitectura
+Docs/Coordinacion
+Docs/Disenos_Por_Implementar

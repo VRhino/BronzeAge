@@ -44,6 +44,8 @@ pub struct PeticionHttp {
     pub cuerpo: Vec<u8>,
     /// La IP del otro extremo de la conexión; `None` si no se pudo leer.
     pub ip: Option<IpAddr>,
+    /// La petición trae la llave de administración ([`trae_la_llave`]): vale como venir de una IP de administración.
+    pub con_llave: bool,
 }
 
 impl PeticionHttp {
@@ -99,6 +101,21 @@ pub fn ip_de_administracion(ip: IpAddr, extra: &[IpAddr]) -> bool {
     ip.is_loopback() || extra.iter().any(|e| e.to_canonical() == ip)
 }
 
+/// Largo mínimo de la llave de administración (`BRONZEAGE_LLAVE_ADMIN`): una corta se adivina.
+pub const MIN_LLAVE_ADMIN: usize = 24;
+
+/// Si la petición trae la llave de administración `llave`: en la cabecera `X-Llave-Admin` o en la consulta (`?llave=…`, lo único que puede poner un navegador al abrir un
+/// WebSocket). Es para un servidor alojado detrás de un proxy, donde la IP del otro extremo es la del proxy y la lista de IPs no sirve: quien trae la llave administra desde
+/// cualquier IP (y además hace falta la cuenta admin, como siempre). Sin llave configurada, nadie la trae.
+pub fn trae_la_llave(objetivo: &str, cabeceras: &[(String, String)], llave: Option<&str>) -> bool {
+    let Some(llave) = llave else { return false };
+    let de_cabecera = cabeceras.iter().find(|(k, _)| k == "x-llave-admin").map(|(_, v)| v.as_str());
+    let de_consulta = objetivo.split_once('?').and_then(|(_, c)| c.split('&').find_map(|p| p.strip_prefix("llave=")));
+    // Comparación sin atajos: el tiempo no dice cuántos caracteres coinciden.
+    let igual = |v: &str| v.len() == llave.len() && v.bytes().zip(llave.bytes()).fold(0u8, |a, (x, y)| a | (x ^ y)) == 0;
+    de_cabecera.is_some_and(igual) || de_consulta.is_some_and(igual)
+}
+
 /// `localhost` o una IP de bucle local.
 fn es_local(nombre: &str) -> bool {
     nombre == "localhost" || nombre.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback())
@@ -137,7 +154,8 @@ fn procedencia(cabeceras: &[(String, String)], extra: &[String]) -> Result<Optio
 /// Lo que empezó la conexión.
 pub(crate) enum Inicio {
     /// El WebSocket y la IP del otro extremo.
-    WebSocket(Rebobinado, Option<IpAddr>),
+    /// Con la IP del otro extremo y si trae la llave de administración.
+    WebSocket(Rebobinado, Option<IpAddr>, bool),
     Http(TcpStream, PeticionHttp),
     /// Un navegador desde un origen que no está permitido: se contesta `403` y se cierra.
     Rechazada(TcpStream),
@@ -146,7 +164,7 @@ pub(crate) enum Inicio {
 }
 
 /// Lee la cabecera (y, si no es un WebSocket, el cuerpo) de la primera petición.
-pub(crate) async fn leer_inicio(mut tcp: TcpStream, origenes: &[String]) -> Inicio {
+pub(crate) async fn leer_inicio(mut tcp: TcpStream, origenes: &[String], llave: Option<&str>) -> Inicio {
     let ip = tcp.peer_addr().ok().map(|a| a.ip());
     let mut buf = Vec::with_capacity(1024);
     let fin = loop {
@@ -174,9 +192,10 @@ pub(crate) async fn leer_inicio(mut tcp: TcpStream, origenes: &[String]) -> Inic
     if procedencia(&cabeceras, origenes).is_err() {
         return Inicio::Rechazada(tcp);
     }
+    let con_llave = trae_la_llave(objetivo, &cabeceras, llave);
     let es_ws = cabeceras.iter().any(|(k, v)| k == "upgrade" && v.eq_ignore_ascii_case("websocket"));
     if es_ws {
-        return Inicio::WebSocket(Rebobinado { previo: buf, pos: 0, tcp }, ip);
+        return Inicio::WebSocket(Rebobinado { previo: buf, pos: 0, tcp }, ip, con_llave);
     }
     let largo = cabeceras.iter().find(|(k, _)| k == "content-length").and_then(|(_, v)| v.parse::<usize>().ok()).unwrap_or(0);
     if largo > MAX_CUERPO {
@@ -191,7 +210,7 @@ pub(crate) async fn leer_inicio(mut tcp: TcpStream, origenes: &[String]) -> Inic
         }
     }
     cuerpo.truncate(largo);
-    Inicio::Http(tcp, PeticionHttp { metodo: metodo.to_owned(), ruta, cabeceras, cuerpo, ip })
+    Inicio::Http(tcp, PeticionHttp { metodo: metodo.to_owned(), ruta, cabeceras, cuerpo, ip, con_llave })
 }
 
 fn razon(estado: u16) -> &'static str {
@@ -285,7 +304,19 @@ impl AsyncWrite for Rebobinado {
 
 #[cfg(test)]
 mod pruebas {
-    use super::{escribir_por_trozos, ip_de_administracion, origen_permitido};
+    use super::{escribir_por_trozos, ip_de_administracion, origen_permitido, trae_la_llave};
+
+    #[test]
+    fn la_llave_de_administracion_vale_en_la_cabecera_o_en_la_consulta_y_solo_si_es_exacta() {
+        let llave = Some("una-llave-larga-de-verdad-123");
+        let cab = |v: &str| vec![("x-llave-admin".to_owned(), v.to_owned())];
+        assert!(trae_la_llave("/v1/admin/partida", &cab("una-llave-larga-de-verdad-123"), llave));
+        assert!(trae_la_llave("/?otra=1&llave=una-llave-larga-de-verdad-123", &[], llave));
+        assert!(!trae_la_llave("/?llave=una-llave-larga-de-verdad-124", &[], llave));
+        assert!(!trae_la_llave("/?llave=una-llave", &cab(""), llave));
+        assert!(!trae_la_llave("/v1/admin/partida", &[], llave));
+        assert!(!trae_la_llave("/?llave=", &cab(""), None), "sin llave configurada nadie la trae");
+    }
     use std::{net::IpAddr, time::Duration};
     use tokio::io::AsyncReadExt;
 

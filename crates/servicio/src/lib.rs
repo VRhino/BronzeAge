@@ -11,6 +11,7 @@
 
 pub mod admin;
 pub mod datos;
+pub mod espejo;
 
 use std::{
     future::Future,
@@ -195,6 +196,7 @@ pub async fn arrancar(
     n.fijar_id_de_partida(id_partida.clone());
     let origenes = acceso.origenes.clone();
     let ips_admin = acceso.ips_admin.clone();
+    let llave_admin = acceso.llave_admin.clone();
     let acceso = Acceso::abrir(&datos.join("acceso"), acceso)?;
     let informe = Informe { mundo_hash: n.mundo_hash().into(), version: n.version(), ahora: n.ahora(), recuperado: n.recuperado(), cuentas: acceso.cuentas(), codigo_admin: acceso.codigo_admin() };
     let reloj = RelojCompartido::nuevo(n.ahora());
@@ -213,6 +215,7 @@ pub async fn arrancar(
         red,
         origenes,
         ips_admin: ips_admin.clone(),
+        llave_admin,
         ..Config::default()
     };
     let admin = admin::Admin { acceso: acceso.clone(), nucleo: tx.clone(), carpeta: datos.to_owned(), mundo_hash: informe.mundo_hash.clone(), semilla, id_partida, ips_admin };
