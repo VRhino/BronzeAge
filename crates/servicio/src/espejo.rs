@@ -377,7 +377,8 @@ impl Turso {
             Some(("http" | "ws", resto)) => format!("http://{resto}"),
             _ => return Err(io::Error::new(io::ErrorKind::InvalidInput, "la URL de la base no es libsql://, https:// ni http://")),
         };
-        let agente = ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(10)).timeout(Duration::from_secs(60)).build();
+        // Sin conexiones guardadas entre peticiones: la base cierra las que quedan ociosas y la siguiente petición moría con un «Unexpected EOF» (visto en el primer despliegue).
+        let agente = ureq::AgentBuilder::new().max_idle_connections(0).timeout_connect(Duration::from_secs(10)).timeout(Duration::from_secs(60)).build();
         let mut t = Turso { agente, url: format!("{base}/v2/pipeline"), token };
         t.ejecutar(vec![json!({
             "sql": "CREATE TABLE IF NOT EXISTS espejo (ruta TEXT NOT NULL, trozo INTEGER NOT NULL, huella TEXT NOT NULL, datos BLOB NOT NULL, PRIMARY KEY (ruta, trozo))"
@@ -402,7 +403,12 @@ impl Turso {
             p = p.set("Authorization", &format!("Bearer {t}"));
         }
         let cuerpo = json!({ "requests": peticiones }).to_string();
-        let r = match p.send_string(&cuerpo) {
+        // Un corte de red antes de la respuesta se reintenta una vez: la petición es una transacción entera, y repetirla da lo mismo (poner un trozo o borrarlo dos veces no cambia nada).
+        let envio = match p.clone().send_string(&cuerpo) {
+            Err(ureq::Error::Transport(_)) => p.send_string(&cuerpo),
+            otro => otro,
+        };
+        let r = match envio {
             Ok(r) => r,
             Err(ureq::Error::Status(codigo, r)) => {
                 let detalle: String = r.into_string().unwrap_or_default().chars().take(300).collect();
