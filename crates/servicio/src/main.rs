@@ -179,10 +179,22 @@ async fn correr() -> Result<(), String> {
     if let Some(codigo) = &i.codigo_admin {
         println!("código de administrador (un solo uso, regístrate con él): {codigo}");
     }
+    let relevo = espejo.as_ref().map(|e| e.relevo());
+    let pedir_relevo = async {
+        match &relevo {
+            Some(r) => r.notified().await,
+            None => std::future::pending().await,
+        }
+    };
+    let mut cedida = false;
     tokio::select! {
         r = tokio::signal::ctrl_c() => r.map_err(|e| format!("señal: {e}"))?,
         _ = terminar() => {}
         _ = parar_por_la_entrada(&s.acceso) => {}
+        _ = pedir_relevo => {
+            println!("otra instancia del servidor pide la partida (un despliegue nuevo): se para y se le deja la última copia");
+            cedida = true;
+        }
     }
     println!("parando...");
     let n = s.parar().await;
@@ -191,6 +203,14 @@ async fn correr() -> Result<(), String> {
     if let Some(e) = espejo {
         let v = tokio::task::block_in_place(|| e.parar()).map_err(|e| format!("la última copia remota falló, lo escrito desde la anterior no está en la base: {e}"))?;
         println!("copia remota al día ({} trozos en la última vuelta)", v.trozos);
+    }
+    if cedida {
+        // El proceso no termina solo: la plataforma lo tomaría por una caída y lo volvería a arrancar, y pediría la partida de vuelta. Se queda sin servir hasta que lo paren.
+        println!("partida cedida; este proceso ya no sirve y espera a que lo paren");
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            _ = terminar() => {}
+        }
     }
     Ok(())
 }
