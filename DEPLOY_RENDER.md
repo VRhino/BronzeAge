@@ -13,6 +13,10 @@ El plan gratis de Render tiene dos límites:
 2. **Se duerme a los 15 min sin tráfico**. No se pierde nada (el reloj de mundo se para con el servidor y sigue al despertar), pero el mundo no avanza mientras duerme y el primero
    que entra espera el arranque. Si se quiere despierto, un pinger externo a `/salud` cada 10 min (por ejemplo cron-job.org).
 
+3. **Un despliegue arranca el contenedor nuevo antes de parar el viejo.** Para que no haya dos servidores con la misma partida, la base lleva quién es su dueño. El nuevo pide el
+   relevo y espera; el viejo lo ve en unos segundos, para, sube su última copia y suelta la partida; entonces el nuevo la baja y arranca. Durante ese relevo (unos segundos) el
+   servidor no atiende. Si el dueño murió sin soltarla, el nuevo espera 45 s y la toma.
+
 Memoria: el servidor con el mundo real ocupa unos 110 MB en reposo; el plan da 512 MB.
 
 ## Variables del servicio
